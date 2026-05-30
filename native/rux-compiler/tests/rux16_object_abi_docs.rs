@@ -62,12 +62,14 @@ fn rux16_object_abi_docs_define_freestanding_runtime_boundary() {
 
     for required in [
         "rux runtime rux16-startup -o <startup.o>",
+        "rux runtime rux16-memory-helpers -o <helpers.o>",
         "`_start`",
         "`main`",
         "`__rux16_memcpy`",
         "`__rux16_memset`",
         "`__rux16_memmove`",
         "Missing helper symbols are link-time errors",
+        "The helper object is not implicit",
         "The startup object writes the low byte of `main`'s `r0` return value to `debug::WRITE`",
     ] {
         assert!(

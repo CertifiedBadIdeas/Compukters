@@ -132,6 +132,14 @@ fn run_runtime(args: &[String]) -> Result<(), String> {
             fs::write(&args[2], bytes)
                 .map_err(|error| format!("failed to write {}: {error}", args[2]))
         }
+        "rux16-memory-helpers" => {
+            if args.len() != 3 || args[1] != "-o" {
+                return runtime_usage_error();
+            }
+            let bytes = rux16_runtime::rux16_memory_helpers_object();
+            fs::write(&args[2], bytes)
+                .map_err(|error| format!("failed to write {}: {error}", args[2]))
+        }
         _ => runtime_usage_error(),
     }
 }
@@ -480,7 +488,7 @@ fn parse_size(value: &str) -> Result<usize, String> {
 }
 
 fn usage_error() -> Result<(), String> {
-    Err("usage: rux check <input.rx>\n       rux compile [--target <bios|boot|kernel|program>] <input.rx> -o <output>\n       rux link [--target <boot|kernel|program>] <input.o>... -o <output.ruxe>\n       rux runtime rux16-startup -o <startup.o>\n       rux run <program.ruxe>\n       rux disasm --target <bios|boot|kernel|program> <input>\n       rux inspect <blob>\n       rux volume <create|init|put-boot|put-kernel> ...\n       rux fs <filesystem> ...".to_string())
+    Err("usage: rux check <input.rx>\n       rux compile [--target <bios|boot|kernel|program>] <input.rx> -o <output>\n       rux link [--target <boot|kernel|program>] <input.o>... -o <output.ruxe>\n       rux runtime <rux16-startup|rux16-memory-helpers> -o <output.o>\n       rux run <program.ruxe>\n       rux disasm --target <bios|boot|kernel|program> <input>\n       rux inspect <blob>\n       rux volume <create|init|put-boot|put-kernel> ...\n       rux fs <filesystem> ...".to_string())
 }
 
 fn check_usage_error() -> Result<(), String> {
@@ -504,7 +512,7 @@ fn link_usage_message() -> String {
 }
 
 fn runtime_usage_error() -> Result<(), String> {
-    Err("usage: rux runtime rux16-startup -o <startup.o>".to_string())
+    Err("usage: rux runtime <rux16-startup|rux16-memory-helpers> -o <output.o>".to_string())
 }
 
 fn run_usage_error() -> Result<(), String> {

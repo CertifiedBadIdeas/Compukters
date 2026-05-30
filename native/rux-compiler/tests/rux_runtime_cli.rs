@@ -165,6 +165,83 @@ fn rux_runtime_startup_does_not_hide_missing_helper_symbols() {
     assert!(!output_path.exists());
 }
 
+#[test]
+fn rux_runtime_memory_helpers_resolve_memcpy_and_execute_copy() {
+    let startup_path = temp_file("startup-helper-backed.o");
+    let helper_path = temp_file("memory-helpers.o");
+    let main_path = temp_file("main-calls-memcpy.o");
+    let output_path = temp_file("helper-backed.ruxe");
+    fs::write(
+        &main_path,
+        rux16_main_copying_three_bytes_with_memcpy_helper(),
+    )
+    .expect("main object writes");
+
+    let startup_output = Command::new(rux_binary())
+        .args([
+            "runtime",
+            "rux16-startup",
+            "-o",
+            startup_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("rux runtime startup runs");
+    assert!(
+        startup_output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&startup_output.stderr)
+    );
+
+    let helper_output = Command::new(rux_binary())
+        .args([
+            "runtime",
+            "rux16-memory-helpers",
+            "-o",
+            helper_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("rux runtime helpers runs");
+    assert!(
+        helper_output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&helper_output.stderr)
+    );
+
+    let link_output = Command::new(rux_binary())
+        .args([
+            "link",
+            "--target",
+            "program",
+            startup_path.to_str().unwrap(),
+            main_path.to_str().unwrap(),
+            helper_path.to_str().unwrap(),
+            "-o",
+            output_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("rux link runs");
+    assert!(
+        link_output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&link_output.stderr)
+    );
+
+    let run_output = Command::new(rux_binary())
+        .args(["run", output_path.to_str().unwrap()])
+        .output()
+        .expect("rux run runs");
+
+    assert!(
+        run_output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&run_output.stderr)
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&run_output.stdout),
+        "signal=halt debug_bytes=2a\n"
+    );
+}
+
 fn rux16_main_returning_42_object() -> Vec<u8> {
     rux16_object("main", &[0x01, 0xe0, 42, 0, 0, 0, 0x00, 0x90], None)
 }
@@ -174,6 +251,42 @@ fn rux16_main_calling_undefined_helper(helper: &str) -> Vec<u8> {
         "main",
         &[0x01, 0xee, 0, 0, 0, 0, 0x00, 0x8e, 0x00, 0x90],
         Some((2, 2, helper)),
+    )
+}
+
+fn rux16_main_copying_three_bytes_with_memcpy_helper() -> Vec<u8> {
+    let mut words = Vec::new();
+    words.extend(const32(4, 0x9000));
+    words.extend(const32(5, 10));
+    words.push(store8(4, 5));
+    words.extend(const32(4, 0x9001));
+    words.extend(const32(5, 20));
+    words.push(store8(4, 5));
+    words.extend(const32(4, 0x9002));
+    words.extend(const32(5, 12));
+    words.push(store8(4, 5));
+
+    words.extend(const32(1, 0x9010));
+    words.extend(const32(2, 0x9000));
+    words.extend(const32(3, 3));
+    let helper_relocation_offset = byte_len(&words) + 2;
+    words.extend(const32(14, 0));
+    words.push(call(14));
+
+    words.extend(const32(4, 0x9010));
+    words.push(load8(4, 4));
+    words.extend(const32(5, 0x9011));
+    words.push(load8(5, 5));
+    words.extend(const32(6, 0x9012));
+    words.push(load8(6, 6));
+    words.extend(add(0, 4, 5));
+    words.extend(add(0, 0, 6));
+    words.push(ret());
+
+    rux16_object(
+        "main",
+        &encode_words(&words),
+        Some((helper_relocation_offset, 2, "__rux16_memcpy")),
     )
 }
 
@@ -218,6 +331,48 @@ fn rux16_object(
     }
 
     elf_object(text, &rela, &symtab, &strtab, shstrtab)
+}
+
+fn encode_words(words: &[u16]) -> Vec<u8> {
+    words
+        .iter()
+        .flat_map(|word| word.to_le_bytes())
+        .collect::<Vec<_>>()
+}
+
+fn byte_len(words: &[u16]) -> u32 {
+    u32::try_from(words.len() * 2).expect("test object is small")
+}
+
+fn const32(register: u8, value: u32) -> [u16; 3] {
+    [
+        0xe001 | (u16::from(register) << 8),
+        (value & 0xffff) as u16,
+        (value >> 16) as u16,
+    ]
+}
+
+fn add(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
+    [
+        0x2000 | (u16::from(dst) << 8),
+        (u16::from(lhs) << 4) | u16::from(rhs),
+    ]
+}
+
+fn load8(dst: u8, addr: u8) -> u16 {
+    0x4000 | (u16::from(dst) << 8) | (u16::from(addr) << 4)
+}
+
+fn store8(addr: u8, src: u8) -> u16 {
+    0x5000 | (u16::from(addr) << 8) | (u16::from(src) << 4)
+}
+
+fn call(register: u8) -> u16 {
+    0x8000 | (u16::from(register) << 8)
+}
+
+fn ret() -> u16 {
+    0x9000
 }
 
 fn elf_object(text: &[u8], rela: &[u8], symtab: &[u8], strtab: &[u8], shstrtab: &[u8]) -> Vec<u8> {

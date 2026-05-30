@@ -49,6 +49,7 @@ The first freestanding startup object is generated with:
 
 ```text
 rux runtime rux16-startup -o <startup.o>
+rux runtime rux16-memory-helpers -o <helpers.o>
 ```
 
 The startup object defines `_start` and requires an application-defined `main`.
@@ -61,21 +62,21 @@ The startup object writes the low byte of `main`'s `r0` return value to
 initial return-42/add proof boundary. It is not a libc, an OS ABI, or a syscall
 surface.
 
-Reserved runtime helper symbol names:
+Runtime helper symbol names:
 
 ```text
-_start          provided by rux16-startup
-main            required application entry called by _start
-__rux16_memcpy  reserved memory helper, not provided in this slice
-__rux16_memset  reserved memory helper, not provided in this slice
-__rux16_memmove reserved memory helper, not provided in this slice
+`_start`          provided by rux16-startup
+`main`            required application entry called by _start
+`__rux16_memcpy`  provided by rux16-memory-helpers
+`__rux16_memset`  provided by rux16-memory-helpers
+`__rux16_memmove` provided by rux16-memory-helpers
 ```
 
 Missing helper symbols are link-time errors. The linker must not synthesize
 helper bodies, fall back to VM hooks, or ask the VM to resolve runtime helpers.
-When a backend starts emitting calls to `__rux16_memcpy`, `__rux16_memset`, or
-`__rux16_memmove`, those helpers must be added as explicit runtime object code
-and covered by linker/runtime tests in the same slice.
+Callers link helper support by passing the generated helper object as an
+ordinary `rux link` input beside startup and application objects. The helper
+object is not implicit.
 
 ## ELF Identification
 
