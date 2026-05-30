@@ -217,6 +217,55 @@ fn rux_disasm_prints_ltu_extended_instruction() {
 }
 
 #[test]
+fn rux_disasm_prints_canonical_integer_instruction_surface() {
+    let artifact_path = temp_file("bios-canonical-integer.flash");
+    let mut words = Vec::new();
+    words.extend(sub(3, 1, 2));
+    words.extend(and(4, 1, 2));
+    words.extend(or(5, 1, 2));
+    words.extend(xor(6, 1, 2));
+    words.extend(shl(7, 1, 2));
+    words.extend(shr(8, 1, 2));
+    words.extend(sar(9, 1, 2));
+    words.extend(eq(10, 1, 2));
+    words.extend(ne(11, 1, 2));
+    words.extend(ltu(12, 1, 2));
+    words.extend(lt_s(13, 1, 2));
+    words.extend([load16(14, 1), store16(1, 14), halt()]);
+    fs::write(&artifact_path, words_to_bytes(&words)).expect("artifact writes");
+
+    let output = Command::new(rux_binary())
+        .args([
+            "disasm",
+            "--target",
+            "bios",
+            artifact_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("rux disasm runs");
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("sub r3, r1, r2"), "stdout: {stdout}");
+    assert!(stdout.contains("and r4, r1, r2"), "stdout: {stdout}");
+    assert!(stdout.contains("or r5, r1, r2"), "stdout: {stdout}");
+    assert!(stdout.contains("xor r6, r1, r2"), "stdout: {stdout}");
+    assert!(stdout.contains("shl r7, r1, r2"), "stdout: {stdout}");
+    assert!(stdout.contains("shr r8, r1, r2"), "stdout: {stdout}");
+    assert!(stdout.contains("sar r9, r1, r2"), "stdout: {stdout}");
+    assert!(stdout.contains("eq r10, r1, r2"), "stdout: {stdout}");
+    assert!(stdout.contains("ne r11, r1, r2"), "stdout: {stdout}");
+    assert!(stdout.contains("ltu r12, r1, r2"), "stdout: {stdout}");
+    assert!(stdout.contains("lt_s r13, r1, r2"), "stdout: {stdout}");
+    assert!(stdout.contains("load16 r14, [r1]"), "stdout: {stdout}");
+    assert!(stdout.contains("store16 [r1], r14"), "stdout: {stdout}");
+}
+
+#[test]
 fn rux_disasm_prints_call_and_ret_instructions() {
     let artifact_path = temp_file("bios-call-ret.flash");
     fs::write(&artifact_path, words_to_bytes(&[call(1), ret(), halt()])).expect("artifact writes");
@@ -256,7 +305,8 @@ fn rux_disasm_prints_complete_instruction_surface_multiword_raw_words_and_branch
             const32(1, 0x0000_1234)[0],
             const32(1, 0x0000_1234)[1],
             const32(1, 0x0000_1234)[2],
-            add(2, 1, 1),
+            add(2, 1, 1)[0],
+            add(2, 1, 1)[1],
             eq(3, 1, 2)[0],
             eq(3, 1, 2)[1],
             test_bits(4, 3, 0x00f0)[0],
@@ -309,60 +359,60 @@ fn rux_disasm_prints_complete_instruction_surface_multiword_raw_words_and_branch
         "stdout: {stdout}"
     );
     assert!(
-        stdout.contains("fff0000c: 2211  add r2, r1, r1"),
+        stdout.contains("fff0000c: 2200 0011  add r2, r1, r1"),
         "stdout: {stdout}"
     );
     assert!(
-        stdout.contains("fff0000e: 3300 0012  eq r3, r1, r2"),
+        stdout.contains("fff00010: 2308 0012  eq r3, r1, r2"),
         "stdout: {stdout}"
     );
     assert!(
-        stdout.contains("fff00012: 3431 00f0  test_bits r4, r3, 0x00f0"),
+        stdout.contains("fff00014: 3431 00f0  test_bits r4, r3, 0x00f0"),
         "stdout: {stdout}"
     );
     assert!(
-        stdout.contains("fff00016: 3502 0012  ltu r5, r1, r2"),
+        stdout.contains("fff00018: 250a 0012  ltu r5, r1, r2"),
         "stdout: {stdout}"
     );
     assert!(
-        stdout.contains("fff0001a: 4670  load8 r6, [r7]"),
+        stdout.contains("fff0001c: 4670  load8 r6, [r7]"),
         "stdout: {stdout}"
     );
     assert!(
-        stdout.contains("fff0001c: 4672  load32 r6, [r7]"),
+        stdout.contains("fff0001e: 4672  load32 r6, [r7]"),
         "stdout: {stdout}"
     );
     assert!(
-        stdout.contains("fff0001e: 5760  store8 [r7], r6"),
+        stdout.contains("fff00020: 5760  store8 [r7], r6"),
         "stdout: {stdout}"
     );
     assert!(
-        stdout.contains("fff00020: 5762  store32 [r7], r6"),
+        stdout.contains("fff00022: 5762  store32 [r7], r6"),
         "stdout: {stdout}"
     );
     assert!(
-        stdout.contains("fff00022: 6101  branch_if_zero r1, L_fff00026"),
+        stdout.contains("fff00024: 6101  branch_if_zero r1, L_fff00028"),
         "stdout: {stdout}"
     );
     assert!(
-        stdout.contains("fff00024: 6110  branch_if_nonzero r1, L_fff00026"),
+        stdout.contains("fff00026: 6110  branch_if_nonzero r1, L_fff00028"),
         "stdout: {stdout}"
     );
-    assert!(stdout.contains("L_fff00026:"), "stdout: {stdout}");
+    assert!(stdout.contains("L_fff00028:"), "stdout: {stdout}");
     assert!(
-        stdout.contains("fff00028: 1209  const4 r2, 9"),
-        "stdout: {stdout}"
-    );
-    assert!(
-        stdout.contains("fff0002a: 7200  jump r2"),
+        stdout.contains("fff0002a: 1209  const4 r2, 9"),
         "stdout: {stdout}"
     );
     assert!(
-        stdout.contains("fff0002c: 8200  call r2"),
+        stdout.contains("fff0002c: 7200  jump r2"),
         "stdout: {stdout}"
     );
-    assert!(stdout.contains("fff0002e: 9000  ret"), "stdout: {stdout}");
-    assert!(stdout.contains("fff00030: 0001  halt"), "stdout: {stdout}");
+    assert!(
+        stdout.contains("fff0002e: 8200  call r2"),
+        "stdout: {stdout}"
+    );
+    assert!(stdout.contains("fff00030: 9000  ret"), "stdout: {stdout}");
+    assert!(stdout.contains("fff00032: 0001  halt"), "stdout: {stdout}");
 }
 
 fn temp_file(name: &str) -> PathBuf {
@@ -403,20 +453,57 @@ fn const4(register: u8, value: u8) -> u16 {
     0x1000 | (u16::from(register) << 8) | u16::from(value & 0x0f)
 }
 
-fn add(dst: u8, lhs: u8, rhs: u8) -> u16 {
-    0x2000 | (u16::from(dst) << 8) | (u16::from(lhs) << 4) | u16::from(rhs)
+fn add(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
+    alu_rrr(dst, 0x0, lhs, rhs)
+}
+
+fn sub(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
+    alu_rrr(dst, 0x1, lhs, rhs)
+}
+
+fn and(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
+    alu_rrr(dst, 0x2, lhs, rhs)
+}
+
+fn or(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
+    alu_rrr(dst, 0x3, lhs, rhs)
+}
+
+fn xor(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
+    alu_rrr(dst, 0x4, lhs, rhs)
+}
+
+fn shl(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
+    alu_rrr(dst, 0x5, lhs, rhs)
+}
+
+fn shr(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
+    alu_rrr(dst, 0x6, lhs, rhs)
+}
+
+fn sar(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
+    alu_rrr(dst, 0x7, lhs, rhs)
 }
 
 fn eq(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
-    [
-        0x3000 | (u16::from(dst) << 8),
-        (u16::from(lhs) << 4) | u16::from(rhs),
-    ]
+    alu_rrr(dst, 0x8, lhs, rhs)
+}
+
+fn ne(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
+    alu_rrr(dst, 0x9, lhs, rhs)
 }
 
 fn ltu(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
+    alu_rrr(dst, 0xa, lhs, rhs)
+}
+
+fn lt_s(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
+    alu_rrr(dst, 0xb, lhs, rhs)
+}
+
+fn alu_rrr(dst: u8, subop: u8, lhs: u8, rhs: u8) -> [u16; 2] {
     [
-        0x3002 | (u16::from(dst) << 8),
+        0x2000 | (u16::from(dst) << 8) | u16::from(subop),
         (u16::from(lhs) << 4) | u16::from(rhs),
     ]
 }
@@ -433,12 +520,20 @@ fn load32(dst: u8, addr: u8) -> u16 {
     0x4002 | (u16::from(dst) << 8) | (u16::from(addr) << 4)
 }
 
+fn load16(dst: u8, addr: u8) -> u16 {
+    0x4001 | (u16::from(dst) << 8) | (u16::from(addr) << 4)
+}
+
 fn store8(addr: u8, src: u8) -> u16 {
     0x5000 | (u16::from(addr) << 8) | (u16::from(src) << 4)
 }
 
 fn store32(addr: u8, src: u8) -> u16 {
     0x5002 | (u16::from(addr) << 8) | (u16::from(src) << 4)
+}
+
+fn store16(addr: u8, src: u8) -> u16 {
+    0x5001 | (u16::from(addr) << 8) | (u16::from(src) << 4)
 }
 
 fn const32(register: u8, value: u32) -> [u16; 3] {

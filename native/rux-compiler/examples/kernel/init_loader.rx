@@ -175,13 +175,13 @@ fn read_storage0_blocks(lba: i32, block_count: i32, buffer_addr: i32) -> i32 {
 fn probe_root_ruxfs_superblock(root_start_lba: i32) -> i32 {
     unsafe {
         if root_start_lba != 0 {
-            let mut status: i32 = read_storage0_blocks(root_start_lba, 1, 0x6000);
+            let mut status: i32 = read_storage0_blocks(root_start_lba, 1, 0x7800);
             if status == storage0::STATUS_DONE {
-                let mut magic: i32 = ptr<i32>(0x6000u32).load();
+                let mut magic: i32 = ptr<i32>(0x7800u32).load();
                 if magic == 0x46585552 {
-                    let mut tail: u8 = ptr<u8>(0x6004u32).load();
+                    let mut tail: u8 = ptr<u8>(0x7804u32).load();
                     if tail == 83u8 {
-                        let mut version: u8 = ptr<u8>(0x6005u32).load();
+                        let mut version: u8 = ptr<u8>(0x7805u32).load();
                         if version == 1u8 {
                             return 1;
                         }
@@ -196,13 +196,13 @@ fn probe_root_ruxfs_superblock(root_start_lba: i32) -> i32 {
 fn probe_root_ruxfs_inode(root_start_lba: i32) -> i32 {
     unsafe {
         if probe_root_ruxfs_superblock(root_start_lba) == 1 {
-            let mut inode_table_start_block: i32 = ptr<i32>(0x6018u32).load();
-            let mut root_inode_id: i32 = ptr<i32>(0x6020u32).load();
+            let mut inode_table_start_block: i32 = ptr<i32>(0x7818u32).load();
+            let mut root_inode_id: i32 = ptr<i32>(0x7820u32).load();
             if root_inode_id == 1 {
                 let mut inode_table_lba: i32 = root_start_lba + inode_table_start_block;
-                let mut status: i32 = read_storage0_blocks(inode_table_lba, 1, 0x6000);
+                let mut status: i32 = read_storage0_blocks(inode_table_lba, 1, 0x7800);
                 if status == storage0::STATUS_DONE {
-                    let mut root_inode_state: u8 = ptr<u8>(0x6040u32).load();
+                    let mut root_inode_state: u8 = ptr<u8>(0x7840u32).load();
                     if root_inode_state == 2u8 {
                         return 1;
                     }
@@ -216,13 +216,13 @@ fn probe_root_ruxfs_inode(root_start_lba: i32) -> i32 {
 fn find_bin_directory_inode(root_start_lba: i32) -> i32 {
     unsafe {
         if probe_root_ruxfs_inode(root_start_lba) == 1 {
-            let mut root_dir_start_block: i32 = ptr<i32>(0x6060u32).load();
+            let mut root_dir_start_block: i32 = ptr<i32>(0x7860u32).load();
             if root_dir_start_block != 0 {
                 let mut root_dir_lba: i32 = root_start_lba + root_dir_start_block;
-                let mut status: i32 = read_storage0_blocks(root_dir_lba, 1, 0x6000);
+                let mut status: i32 = read_storage0_blocks(root_dir_lba, 1, 0x7800);
                 if status == storage0::STATUS_DONE {
                     let mut index: u32 = 0u32;
-                    let mut entry_addr: u32 = 0x6000u32;
+                    let mut entry_addr: u32 = 0x7800u32;
                     while index < 8u32 {
                         let mut entry_state: u8 = ptr<u8>(entry_addr).load();
                         let mut name_len_addr: u32 = entry_addr + 1u32;
@@ -248,12 +248,12 @@ fn find_bin_directory_inode(root_start_lba: i32) -> i32 {
 fn find_init_ruxe_inode(root_start_lba: i32, bin_directory_inode: i32) -> i32 {
     unsafe {
         if bin_directory_inode != 0 && probe_root_ruxfs_superblock(root_start_lba) == 1 {
-            let mut inode_table_start_block: i32 = ptr<i32>(0x6018u32).load();
+            let mut inode_table_start_block: i32 = ptr<i32>(0x7818u32).load();
             let mut inode_table_lba: i32 = root_start_lba + inode_table_start_block;
-            let mut inode_status: i32 = read_storage0_blocks(inode_table_lba, 1, 0x6000);
+            let mut inode_status: i32 = read_storage0_blocks(inode_table_lba, 1, 0x7800);
             if inode_status == storage0::STATUS_DONE {
                 let mut inode_index: i32 = 0;
-                let mut inode_addr: u32 = 0x6000u32;
+                let mut inode_addr: u32 = 0x7800u32;
                 while inode_index != bin_directory_inode {
                     inode_addr = inode_addr + 64u32;
                     inode_index = inode_index + 1;
@@ -265,10 +265,10 @@ fn find_init_ruxe_inode(root_start_lba: i32, bin_directory_inode: i32) -> i32 {
                     let mut bin_dir_start_block: i32 = ptr<i32>(extent_addr).load();
                     if bin_dir_start_block != 0 {
                         let mut bin_dir_lba: i32 = root_start_lba + bin_dir_start_block;
-                        let mut dir_status: i32 = read_storage0_blocks(bin_dir_lba, 1, 0x6000);
+                        let mut dir_status: i32 = read_storage0_blocks(bin_dir_lba, 1, 0x7800);
                         if dir_status == storage0::STATUS_DONE {
                             let mut index: u32 = 0u32;
-                            let mut entry_addr: u32 = 0x6000u32;
+                            let mut entry_addr: u32 = 0x7800u32;
                             while index < 8u32 {
                                 let mut entry_state: u8 = ptr<u8>(entry_addr).load();
                                 let mut name_len_addr: u32 = entry_addr + 1u32;
@@ -302,12 +302,12 @@ fn find_init_ruxe_inode(root_start_lba: i32, bin_directory_inode: i32) -> i32 {
 fn load_init_ruxe_from_root_ruxfs(root_start_lba: i32, init_ruxe_inode: i32) -> i32 {
     unsafe {
         if init_ruxe_inode != 0 && probe_root_ruxfs_superblock(root_start_lba) == 1 {
-            let mut inode_table_start_block: i32 = ptr<i32>(0x6018u32).load();
+            let mut inode_table_start_block: i32 = ptr<i32>(0x7818u32).load();
             let mut inode_table_lba: i32 = root_start_lba + inode_table_start_block;
-            let mut inode_status: i32 = read_storage0_blocks(inode_table_lba, 1, 0x6000);
+            let mut inode_status: i32 = read_storage0_blocks(inode_table_lba, 1, 0x7800);
             if inode_status == storage0::STATUS_DONE {
                 let mut inode_index: i32 = 0;
-                let mut inode_addr: u32 = 0x6000u32;
+                let mut inode_addr: u32 = 0x7800u32;
                 while inode_index != init_ruxe_inode {
                     inode_addr = inode_addr + 64u32;
                     inode_index = inode_index + 1;

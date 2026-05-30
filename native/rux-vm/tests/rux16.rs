@@ -8,11 +8,10 @@ use rux_vm::rux16::{
 #[test]
 fn rux16_fetches_decodes_and_executes_words_from_guest_memory() {
     let mut bus = MachineBus::new(64).unwrap();
-    write_words(
-        &mut bus,
-        0,
-        &[const4(1, 2), const4(2, 5), add(3, 1, 2), halt()],
-    );
+    let mut program = vec![const4(1, 2), const4(2, 5)];
+    program.extend(add(3, 1, 2));
+    program.push(halt());
+    write_words(&mut bus, 0, &program);
     let mut cpu = Rux16Cpu::new(0);
 
     assert_eq!(
@@ -20,7 +19,7 @@ fn rux16_fetches_decodes_and_executes_words_from_guest_memory() {
         Rux16Signal::Halt,
     );
     assert_eq!(cpu.register(3), 7);
-    assert_eq!(cpu.pc(), 8);
+    assert_eq!(cpu.pc(), 10);
 }
 
 #[test]
@@ -57,14 +56,14 @@ fn rux16_uses_r15_as_stack_pointer_into_guest_ram() {
     program.extend(const32(1, u32::MAX - 3));
     program.extend(const32(2, 0x1122_3344));
     program.push(const4(4, 4));
-    program.push(add(
+    program.extend(add(
         RUX16_STACK_POINTER_REGISTER,
         RUX16_STACK_POINTER_REGISTER,
         1,
     ));
     program.push(store32(RUX16_STACK_POINTER_REGISTER, 2));
     program.push(load32(3, RUX16_STACK_POINTER_REGISTER));
-    program.push(add(
+    program.extend(add(
         RUX16_STACK_POINTER_REGISTER,
         RUX16_STACK_POINTER_REGISTER,
         4,
@@ -223,7 +222,9 @@ fn rux16_branch_if_nonzero_can_loop_with_negative_relative_offset() {
     let mut bus = MachineBus::new(64).unwrap();
     let mut program = vec![const4(1, 3), const4(2, 1), const4(3, 0)];
     program.extend(const32(4, u32::MAX));
-    program.extend([add(3, 3, 2), add(1, 1, 4), branch_if_nonzero(1, -3), halt()]);
+    program.extend(add(3, 3, 2));
+    program.extend(add(1, 1, 4));
+    program.extend([branch_if_nonzero(1, -5), halt()]);
     write_words(&mut bus, 0, &program);
     let mut cpu = Rux16Cpu::new(0);
 
@@ -270,6 +271,90 @@ fn rux16_ltu_builds_unsigned_less_than_condition() {
     );
     assert_eq!(cpu.register(4), 7);
     assert_eq!(cpu.register(5), 9);
+}
+
+#[test]
+fn rux16_executes_canonical_integer_register_ops() {
+    let mut bus = MachineBus::new(128).unwrap();
+    let mut program = Vec::new();
+    program.extend(const32(1, 0x0000_00f0));
+    program.extend(const32(2, 0x0000_000f));
+    program.extend(sub(3, 1, 2));
+    program.extend(and(4, 1, 2));
+    program.extend(or(5, 1, 2));
+    program.extend(xor(6, 1, 2));
+    program.extend(ne(7, 1, 2));
+    program.extend(ltu(8, 2, 1));
+    program.push(halt());
+    write_words(&mut bus, 0, &program);
+    let mut cpu = Rux16Cpu::new(0);
+
+    assert_eq!(
+        cpu.run_until_signal(&mut bus, 32).unwrap(),
+        Rux16Signal::Halt,
+    );
+    assert_eq!(cpu.register(3), 0x0000_00e1);
+    assert_eq!(cpu.register(4), 0x0000_0000);
+    assert_eq!(cpu.register(5), 0x0000_00ff);
+    assert_eq!(cpu.register(6), 0x0000_00ff);
+    assert_eq!(cpu.register(7), 1);
+    assert_eq!(cpu.register(8), 1);
+}
+
+#[test]
+fn rux16_executes_canonical_shift_and_signed_compare_ops() {
+    let mut bus = MachineBus::new(128).unwrap();
+    let mut program = Vec::new();
+    program.extend(const32(1, 0x8000_0000));
+    program.push(const4(2, 1));
+    program.extend(shl(3, 2, 2));
+    program.extend(shr(4, 1, 2));
+    program.extend(sar(5, 1, 2));
+    program.extend(lt_s(6, 1, 2));
+    program.extend(lt_s(7, 2, 1));
+    program.push(halt());
+    write_words(&mut bus, 0, &program);
+    let mut cpu = Rux16Cpu::new(0);
+
+    assert_eq!(
+        cpu.run_until_signal(&mut bus, 32).unwrap(),
+        Rux16Signal::Halt,
+    );
+    assert_eq!(cpu.register(3), 2);
+    assert_eq!(cpu.register(4), 0x4000_0000);
+    assert_eq!(cpu.register(5), 0xc000_0000);
+    assert_eq!(cpu.register(6), 1);
+    assert_eq!(cpu.register(7), 0);
+}
+
+#[test]
+fn rux16_load16_and_store16_access_two_little_endian_bytes() {
+    let mut bus = MachineBus::new(64).unwrap();
+    bus.store_u8(12, 0x34).unwrap();
+    bus.store_u8(13, 0x12).unwrap();
+    bus.store_u8(14, 0xaa).unwrap();
+    write_words(
+        &mut bus,
+        0,
+        &[
+            const4(1, 12),
+            load16(2, 1),
+            const4(3, 14),
+            store16(3, 2),
+            halt(),
+        ],
+    );
+    let mut cpu = Rux16Cpu::new(0);
+
+    assert_eq!(
+        cpu.run_until_signal(&mut bus, 16).unwrap(),
+        Rux16Signal::Halt,
+    );
+    assert_eq!(cpu.register(2), 0x1234);
+    assert_eq!(bus.load_u8(12).unwrap(), 0x34);
+    assert_eq!(bus.load_u8(13).unwrap(), 0x12);
+    assert_eq!(bus.load_u8(14).unwrap(), 0x34);
+    assert_eq!(bus.load_u8(15).unwrap(), 0x12);
 }
 
 #[test]
@@ -349,20 +434,57 @@ fn const32(register: u8, value: u32) -> [u16; 3] {
     ]
 }
 
-fn add(dst: u8, lhs: u8, rhs: u8) -> u16 {
-    0x2000 | (u16::from(dst) << 8) | (u16::from(lhs) << 4) | u16::from(rhs)
+fn add(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
+    alu_rrr(dst, 0x0, lhs, rhs)
+}
+
+fn sub(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
+    alu_rrr(dst, 0x1, lhs, rhs)
+}
+
+fn and(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
+    alu_rrr(dst, 0x2, lhs, rhs)
+}
+
+fn or(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
+    alu_rrr(dst, 0x3, lhs, rhs)
+}
+
+fn xor(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
+    alu_rrr(dst, 0x4, lhs, rhs)
 }
 
 fn eq(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
-    [
-        0x3000 | (u16::from(dst) << 8),
-        (u16::from(lhs) << 4) | u16::from(rhs),
-    ]
+    alu_rrr(dst, 0x8, lhs, rhs)
+}
+
+fn ne(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
+    alu_rrr(dst, 0x9, lhs, rhs)
 }
 
 fn ltu(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
+    alu_rrr(dst, 0xa, lhs, rhs)
+}
+
+fn lt_s(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
+    alu_rrr(dst, 0xb, lhs, rhs)
+}
+
+fn shl(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
+    alu_rrr(dst, 0x5, lhs, rhs)
+}
+
+fn shr(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
+    alu_rrr(dst, 0x6, lhs, rhs)
+}
+
+fn sar(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
+    alu_rrr(dst, 0x7, lhs, rhs)
+}
+
+fn alu_rrr(dst: u8, subop: u8, lhs: u8, rhs: u8) -> [u16; 2] {
     [
-        0x3002 | (u16::from(dst) << 8),
+        0x2000 | (u16::from(dst) << 8) | u16::from(subop),
         (u16::from(lhs) << 4) | u16::from(rhs),
     ]
 }
@@ -379,12 +501,20 @@ fn load32(dst: u8, addr: u8) -> u16 {
     0x4002 | (u16::from(dst) << 8) | (u16::from(addr) << 4)
 }
 
+fn load16(dst: u8, addr: u8) -> u16 {
+    0x4001 | (u16::from(dst) << 8) | (u16::from(addr) << 4)
+}
+
 fn store8(addr: u8, src: u8) -> u16 {
     0x5000 | (u16::from(addr) << 8) | (u16::from(src) << 4)
 }
 
 fn store32(addr: u8, src: u8) -> u16 {
     0x5002 | (u16::from(addr) << 8) | (u16::from(src) << 4)
+}
+
+fn store16(addr: u8, src: u8) -> u16 {
+    0x5001 | (u16::from(addr) << 8) | (u16::from(src) << 4)
 }
 
 fn jmp(register: u8) -> u16 {

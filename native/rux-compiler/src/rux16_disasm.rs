@@ -71,7 +71,8 @@ fn instruction_width(words: &[u16], index: usize) -> usize {
     let b = ((word >> 4) & 0x0f) as u8;
     let c = (word & 0x0f) as u8;
     match op {
-        0x3 if index + 1 < words.len() && (c == 0x1 || (b == 0x0 && (c == 0x0 || c == 0x2))) => 2,
+        0x2 if index + 1 < words.len() && b == 0x0 && c <= 0x0b => 2,
+        0x3 if index + 1 < words.len() && c == 0x1 => 2,
         0xe if index + 2 < words.len() && b == 0x0 && c == 0x1 => 3,
         _ => 1,
     }
@@ -100,15 +101,17 @@ fn disassemble_instruction(words: &[u16], index: usize, pc: u32) -> (String, usi
             _ => (format!(".word 0x{word:04x}"), 1),
         },
         0x1 => (format!("const4 r{a}, {c}"), 1),
-        0x2 => (format!("add r{a}, r{b}, r{c}"), 1),
+        0x2 => disassemble_alu_rrr(words, index, a, b, c, word),
         0x3 => disassemble_extended(words, index, a, b, c, word),
         0x4 => match c {
             0x0 => (format!("load8 r{a}, [r{b}]"), 1),
+            0x1 => (format!("load16 r{a}, [r{b}]"), 1),
             0x2 => (format!("load32 r{a}, [r{b}]"), 1),
             _ => (format!(".word 0x{word:04x}"), 1),
         },
         0x5 => match c {
             0x0 => (format!("store8 [r{a}], r{b}"), 1),
+            0x1 => (format!("store16 [r{a}], r{b}"), 1),
             0x2 => (format!("store32 [r{a}], r{b}"), 1),
             _ => (format!(".word 0x{word:04x}"), 1),
         },
@@ -143,6 +146,43 @@ fn disassemble_instruction(words: &[u16], index: usize, pc: u32) -> (String, usi
     }
 }
 
+fn disassemble_alu_rrr(
+    words: &[u16],
+    index: usize,
+    dst: u8,
+    category: u8,
+    subop: u8,
+    word: u16,
+) -> (String, usize) {
+    if category != 0 {
+        return (format!(".word 0x{word:04x}"), 1);
+    }
+    let Some(extension) = words.get(index + 1).copied() else {
+        return (format!(".word 0x{word:04x} ; missing alu_rrr operands"), 1);
+    };
+    if extension & 0xff00 != 0 {
+        return (format!(".word 0x{word:04x}"), 1);
+    }
+    let mnemonic = match subop {
+        0x0 => "add",
+        0x1 => "sub",
+        0x2 => "and",
+        0x3 => "or",
+        0x4 => "xor",
+        0x5 => "shl",
+        0x6 => "shr",
+        0x7 => "sar",
+        0x8 => "eq",
+        0x9 => "ne",
+        0xa => "ltu",
+        0xb => "lt_s",
+        _ => return (format!(".word 0x{word:04x}"), 1),
+    };
+    let lhs = ((extension >> 4) & 0x0f) as u8;
+    let rhs = (extension & 0x0f) as u8;
+    (format!("{mnemonic} r{dst}, r{lhs}, r{rhs}"), 2)
+}
+
 fn disassemble_extended(
     words: &[u16],
     index: usize,
@@ -155,17 +195,7 @@ fn disassemble_extended(
         return (format!(".word 0x{word:04x} ; missing extension"), 1);
     };
     match c {
-        0x0 if b == 0 => {
-            let lhs = ((extension >> 4) & 0x0f) as u8;
-            let rhs = (extension & 0x0f) as u8;
-            (format!("eq r{a}, r{lhs}, r{rhs}"), 2)
-        }
         0x1 => (format!("test_bits r{a}, r{b}, 0x{extension:04x}"), 2),
-        0x2 if b == 0 => {
-            let lhs = ((extension >> 4) & 0x0f) as u8;
-            let rhs = (extension & 0x0f) as u8;
-            (format!("ltu r{a}, r{lhs}, r{rhs}"), 2)
-        }
         _ => (format!(".word 0x{word:04x}"), 1),
     }
 }
