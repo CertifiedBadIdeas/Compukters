@@ -24,7 +24,7 @@ import net.minecraft.world.level.storage.LevelResource
 import ru.lazyhat.compukterkraft.common.computer.context.BlockEntityRuntimeDeviceHost
 import ru.lazyhat.compukterkraft.core.device.DeviceProperties
 import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeDevice
-import ru.lazyhat.compukterkraft.core.device.runtime.RuxRuntimeDevice
+import ru.lazyhat.compukterkraft.core.device.runtime.K16RuntimeDevice
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16BiosFlashWorkspace
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16ComputerRuntimeFactory
 import ru.lazyhat.compukterkraft.lang.runtime.storage.FileRuxVolumeStore
@@ -42,7 +42,7 @@ object ComputerRuntimeDeviceFactory {
         val worldRoot = level.server.getWorldPath(LevelResource.ROOT)
         val volumeStore = FileRuxVolumeStore(worldRoot)
         val workspace = worldRoot.resolve("compukterkraft").resolve("computers").resolve(deviceId.toString())
-        return RuxRuntimeDevice(
+        return K16RuntimeDevice(
             deviceId = deviceId,
             properties = DeviceProperties(tile.family, tile.label),
             endpointFactory = {

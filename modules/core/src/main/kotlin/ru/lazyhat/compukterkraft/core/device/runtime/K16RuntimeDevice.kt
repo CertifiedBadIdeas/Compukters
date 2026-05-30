@@ -39,7 +39,7 @@ interface RuntimeDeviceSerialEndpoint {
     fun clearSerialOutput()
 }
 
-class RuxRuntimeDevice(
+class K16RuntimeDevice(
     override val deviceId: Int,
     properties: DeviceProperties,
     private val endpointFactory: () -> K16ComputerEndpoint,
@@ -79,7 +79,7 @@ class RuxRuntimeDevice(
             } catch (error: Throwable) {
                 runtimeFailureMessageBacking = error.message ?: error::class.java.name
                 LOGGER.error(error) {
-                    "RuxRuntimeDevice $deviceId failed to start: $runtimeFailureMessageBacking"
+                    "K16RuntimeDevice $deviceId failed to start: $runtimeFailureMessageBacking"
                 }
                 stateSink.onPowerStateChanged(false)
                 return
