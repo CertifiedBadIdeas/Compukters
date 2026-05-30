@@ -2,6 +2,8 @@
 
 > Issue: [#127](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/127)
 
+> Strategy: [Rux16 Language Strategy](rux16-language-strategy.md)
+
 ## Current State
 
 Rux16 now has enough LLVM-facing infrastructure for a tiny freestanding C proof:
