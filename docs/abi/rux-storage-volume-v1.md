@@ -31,7 +31,7 @@ file header. The file length must be `16 + payload_size`.
 
 ## Guest-Visible Layout
 
-RUXVOL v1 uses the partitioned layout created by `rux volume init`:
+RUXVOL v1 uses the partitioned layout created by `k16 volume init`:
 
 ```text
 LBA 0        RUXPT partition table
@@ -39,27 +39,27 @@ LBA 1..32    BOOT partition
 LBA 33..end  ROOT partition
 ```
 
-In the partitioned layout, `rux volume put-boot` formats the `BOOT` partition
+In the partitioned layout, `k16 volume put-boot` formats the `BOOT` partition
 as RuxFS and writes the bootloader `RUXE` file to `/boot/loader.ruxe`.
-`rux volume put-kernel` writes the kernel `RUXE` file to `/boot/kernel.ruxe`
+`k16 volume put-kernel` writes the kernel `RUXE` file to `/boot/kernel.ruxe`
 inside the `ROOT` RuxFS partition. The partitioned layout does not use fixed
 `RUXB` or `RUXK` records.
 
-`rux volume create` creates an unpartitioned volume for non-boot data and tests.
+`k16 volume create` creates an unpartitioned volume for non-boot data and tests.
 Boot installation commands must reject unpartitioned volumes instead of writing
 fixed boot records.
 
-General filesystem operations are not part of `rux volume`. Tooling for RuxFS
-uses `rux fs ruxfs ...`; future filesystems should use their own `rux fs
+General filesystem operations are not part of `k16 volume`. Tooling for RuxFS
+uses `k16 fs ruxfs ...`; future filesystems should use their own `k16 fs
 <filesystem>` namespace. `put-boot` and `put-kernel` are boot-chain
 installation helpers for the current RuxFS-backed system volume layout.
 
-`rux volume` may copy partition bytes without interpreting their filesystem:
+`k16 volume` may copy partition bytes without interpreting their filesystem:
 
 ```text
-rux volume inspect <volume.ruxvol>
-rux volume extract-partition <volume.ruxvol> <partition> <output>
-rux volume replace-partition <volume.ruxvol> <partition> <input>
+k16 volume inspect <volume.kv>
+k16 volume extract-partition <volume.kv> <partition> <output>
+k16 volume replace-partition <volume.kv> <partition> <input>
 ```
 
 `inspect` prints the RUXVOL header summary and the decoded `RUXPT` partition
@@ -69,7 +69,7 @@ For format auto-detection across storage artifacts, use the read-only generic
 inspector:
 
 ```text
-rux inspect <blob>
+k16 inspect <blob>
 ```
 
 It identifies `RUXVOL`, standalone `RUXPT` media bytes, standalone `RUXFS`
@@ -84,17 +84,17 @@ rather than truncating or padding it.
 Example ROOT filesystem image workflow:
 
 ```text
-rux volume init storage0.ruxvol --size 65536
-rux volume inspect storage0.ruxvol
-rux fs ruxfs format root.ruxfs --blocks 95
-rux fs ruxfs mkdir root.ruxfs /boot
-rux fs ruxfs put root.ruxfs /boot/kernel.ruxe kernel.ruxe
-rux volume replace-partition storage0.ruxvol ROOT root.ruxfs
-rux volume extract-partition storage0.ruxvol ROOT check-root.ruxfs
-rux fs ruxfs get check-root.ruxfs /boot/kernel.ruxe check-kernel.ruxe
+k16 volume init storage0.kv --size 65536
+k16 volume inspect storage0.kv
+k16 fs ruxfs format root.kfs --blocks 95
+k16 fs ruxfs mkdir root.kfs /boot
+k16 fs ruxfs put root.kfs /boot/kernel.ruxe kernel.kx
+k16 volume replace-partition storage0.kv ROOT root.kfs
+k16 volume extract-partition storage0.kv ROOT check-root.kfs
+k16 fs ruxfs get check-root.kfs /boot/kernel.ruxe check-kernel.kx
 ```
 
-This workflow keeps `rux volume` responsible for partition bytes and `rux fs`
+This workflow keeps `k16 volume` responsible for partition bytes and `k16 fs`
 responsible for filesystem contents.
 
 ## RUXPT Partition Table
