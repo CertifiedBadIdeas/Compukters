@@ -20,6 +20,7 @@ const SHF_ALLOC: u32 = 0x2;
 const SHF_EXECINSTR: u32 = 0x4;
 
 const SHN_UNDEF: u16 = 0;
+const SHN_ABS: u16 = 0xfff1;
 
 const R_RUX16_NONE: u32 = 0;
 const R_RUX16_ABS32: u32 = 1;
@@ -101,7 +102,10 @@ fn link_objects(objects: &[ParsedObject], load_addr: u32) -> Result<LinkedImage,
     let mut defined_symbols = HashMap::new();
     for (object_index, object) in objects.iter().enumerate() {
         for symbol in &object.symbols {
-            if symbol.name.is_empty() || symbol.section_index == SHN_UNDEF {
+            if symbol.name.is_empty()
+                || symbol.section_index == SHN_UNDEF
+                || symbol.section_index == SHN_ABS
+            {
                 continue;
             }
             let section_index = usize::from(symbol.section_index);
