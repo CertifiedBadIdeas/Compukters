@@ -27,9 +27,9 @@ import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeDevice
 import ru.lazyhat.compukterkraft.core.device.runtime.K16RuntimeDevice
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16BiosFlashWorkspace
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16ComputerRuntimeFactory
-import ru.lazyhat.compukterkraft.lang.runtime.storage.FileRuxVolumeStore
+import ru.lazyhat.compukterkraft.lang.runtime.storage.FileK16VolumeStore
 import ru.lazyhat.compukterkraft.lang.runtime.storage.K16SystemVolumeWorkspace
-import ru.lazyhat.compukterkraft.lang.runtime.storage.RuxVolumeBlob
+import ru.lazyhat.compukterkraft.lang.runtime.storage.K16VolumeBlob
 import java.nio.file.Path
 
 object ComputerRuntimeDeviceFactory {
@@ -40,7 +40,7 @@ object ComputerRuntimeDeviceFactory {
     ): RuntimeDevice {
         val host = BlockEntityRuntimeDeviceHost(level, tile)
         val worldRoot = level.server.getWorldPath(LevelResource.ROOT)
-        val volumeStore = FileRuxVolumeStore(worldRoot)
+        val volumeStore = FileK16VolumeStore(worldRoot)
         val workspace = worldRoot.resolve("compukterkraft").resolve("computers").resolve(deviceId.toString())
         return K16RuntimeDevice(
             deviceId = deviceId,
@@ -59,7 +59,7 @@ object ComputerRuntimeDeviceFactory {
 
     private fun createK16ComputerEndpoint(
         biosFlashPath: Path,
-        storage0: RuxVolumeBlob,
+        storage0: K16VolumeBlob,
         snapshot: ByteArray?,
     ) =
         try {
