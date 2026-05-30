@@ -37,16 +37,16 @@ class RuxSystemVolumeWorkspaceTest {
     fun preparesStorage0VolumeFromBundledResourceBytes() {
         val workspace = createTempDirectory("rux-system-volume-workspace-")
         val bytes = "RUXVOL".encodeToByteArray() + byteArrayOf(1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0)
-        val loader = resourceClassLoader("firmware/test-storage0.ruxvol", bytes)
+        val loader = resourceClassLoader("firmware/test-storage0.kv", bytes)
 
         val path =
             RuxSystemVolumeWorkspace.prepareStorage0Volume(
                 workspace = workspace,
-                resourcePath = "firmware/test-storage0.ruxvol",
+                resourcePath = "firmware/test-storage0.kv",
                 classLoader = loader,
             )
 
-        assertEquals(workspace.resolve("volumes/storage0.ruxvol"), path)
+        assertEquals(workspace.resolve("volumes/storage0.kv"), path)
         assertTrue(path.exists())
         assertContentEquals(bytes, path.readBytes())
     }
@@ -54,15 +54,15 @@ class RuxSystemVolumeWorkspaceTest {
     @Test
     fun preservesExistingPerComputerStorage0Volume() {
         val workspace = createTempDirectory("rux-system-volume-workspace-")
-        val existing = workspace.resolve("volumes/storage0.ruxvol")
+        val existing = workspace.resolve("volumes/storage0.kv")
         existing.parent.createDirectories()
         existing.writeBytes(byteArrayOf(7, 8, 9))
-        val loader = resourceClassLoader("firmware/test-storage0.ruxvol", byteArrayOf(1, 2, 3))
+        val loader = resourceClassLoader("firmware/test-storage0.kv", byteArrayOf(1, 2, 3))
 
         val path =
             RuxSystemVolumeWorkspace.prepareStorage0Volume(
                 workspace = workspace,
-                resourcePath = "firmware/test-storage0.ruxvol",
+                resourcePath = "firmware/test-storage0.kv",
                 classLoader = loader,
             )
 
@@ -77,15 +77,15 @@ class RuxSystemVolumeWorkspaceTest {
         assertFailsWith<IllegalStateException> {
             RuxSystemVolumeWorkspace.prepareStorage0Volume(
                 workspace = workspace,
-                resourcePath = "firmware/missing-storage0.ruxvol",
-                classLoader = resourceClassLoader("firmware/other.ruxvol", byteArrayOf(1, 2)),
+                resourcePath = "firmware/missing-storage0.kv",
+                classLoader = resourceClassLoader("firmware/other.kv", byteArrayOf(1, 2)),
             )
         }
     }
 
     @Test
-    fun defaultStorage0VolumeResourceIsRuxvol() {
-        assertEquals("firmware/rux16-system-storage0.ruxvol", RuxSystemVolumeWorkspace.DEFAULT_STORAGE0_VOLUME_RESOURCE)
+    fun defaultStorage0VolumeResourceUsesKvExtension() {
+        assertEquals("firmware/rux16-system-storage0.kv", RuxSystemVolumeWorkspace.DEFAULT_STORAGE0_VOLUME_RESOURCE)
     }
 
     private fun resourceClassLoader(

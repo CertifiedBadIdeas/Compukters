@@ -37,7 +37,7 @@ class RuxVolumeStoreTest {
 
         store.openOrCreateComputerVolume(42, "storage0").use { blob ->
             assertEquals(DEFAULT_STORAGE0_VOLUME_SIZE, blob.size)
-            assertTrue(root.resolve("compukterkraft/computers/42/volumes/storage0.ruxvol").exists())
+            assertTrue(root.resolve("compukterkraft/computers/42/volumes/storage0.kv").exists())
         }
     }
 
@@ -167,5 +167,5 @@ class RuxVolumeStoreTest {
     }
 
     private fun volumePath(root: java.nio.file.Path) =
-        root.resolve("compukterkraft/computers/42/volumes/storage0.ruxvol")
+        root.resolve("compukterkraft/computers/42/volumes/storage0.kv")
 }

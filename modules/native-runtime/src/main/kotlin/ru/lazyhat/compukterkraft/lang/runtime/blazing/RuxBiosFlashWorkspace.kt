@@ -25,8 +25,8 @@ import kotlin.io.path.exists
 import kotlin.io.path.writeBytes
 
 object RuxBiosFlashWorkspace {
-    const val DEFAULT_BIOS_FLASH_RESOURCE: String = "firmware/rux16-bios.flash"
-    const val BIOS_FLASH_FILENAME: String = "bios.flash"
+    const val DEFAULT_BIOS_FLASH_RESOURCE: String = "firmware/rux16-bios.kflash"
+    const val BIOS_FLASH_FILENAME: String = "bios.kflash"
 
     fun prepareBiosFlash(
         workspace: Path,
