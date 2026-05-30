@@ -1,0 +1,3 @@
+[submodule "toolchains/Compukter-Kraft-llvm"]
+	path = toolchains/Compukter-Kraft-llvm
+	url = git@github.com:CertifiedBadIdeas/Compukter-Kraft-llvm.git

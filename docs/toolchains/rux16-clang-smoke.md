@@ -1,5 +1,7 @@
 # Rux16 Clang Smoke
 
+> Toolchain: [Rux16 LLVM Submodule](rux16-llvm-submodule.md)
+
 `tools/rux16-clang-smoke.sh` verifies the first freestanding C path for Rux16:
 
 - `clang --target=rux16 -ffreestanding -fno-builtin -nostdlib` compiles a tiny C
