@@ -21,10 +21,10 @@ Rux16 CPU/ABI
   -> hosted Rust std only after real OS services exist
 ```
 
-The existing Rux language is legacy. It can remain in the repository while
-Rust support is incomplete, but new guest code should not be written in Rux by
-default. BIOS, bootloader, kernel, and user-space source code should target
-Rust.
+The existing Rux language/compiler/source layer is legacy. It can remain only
+while Rust support is incomplete, and the goal is to retire it completely once
+Rust replacements exist. BIOS, bootloader, kernel, and user-space source code
+should target Rust.
 
 ## Rationale
 
@@ -42,11 +42,13 @@ Rust is the target language because a `no_std` kernel is a realistic way to
 write OS code without requiring hosted `std`, while still keeping access to a
 real compiler, type system, tooling culture, and future ecosystem path.
 
-## No New Rux Source
+## Rux Retirement
 
 Deprecating Rux does not mean deleting existing files immediately. It means:
 
 - no new Rux guest/source code by default;
+- existing Rux source, standard library, compiler frontend, and Rux-language
+  examples are retirement targets;
 - no new general-purpose Rux language features by default;
 - no Rux standard-library expansion as a strategic direction;
 - no new long-term application APIs designed primarily for Rux;
@@ -68,6 +70,25 @@ artifacts are:
 Those artifacts must not become a new Rux-language feature path. If a slice
 needs guest logic that cannot yet be written in Rust, prefer narrowing the
 slice to toolchain readiness over adding new `.rx` code.
+
+## What Is Being Retired
+
+The retirement target is the Rux language stack:
+
+- `.rx` source files;
+- the Rux parser/resolver/frontend;
+- Rux standard library modules;
+- Rux-language BIOS, bootloader, kernel, and program examples;
+- CLI behavior whose purpose is compiling Rux source.
+
+These pieces should be replaced by Rust-authored artifacts as the Rust target
+becomes capable enough. Until then they may remain only to preserve the current
+boot chain and to provide comparison fixtures.
+
+The current names `Rux16`, `RUXE`, `RUXVOL`, and `RuxFS` describe the machine
+and artifact formats in the existing ABI docs. Renaming those formats is a
+separate compatibility decision. This document retires Rux language/code, not
+the current machine format names by itself.
 
 ## Rust Target
 
@@ -110,7 +131,9 @@ Existing Rux bootstrap examples
   -> Rust runtime-helper coverage
   -> Rust no_std kernel
   -> Rust bootloader/kernel/user-space examples
-  -> Rux compiler retirement decision
+  -> remove Rux source examples
+  -> remove Rux compiler frontend
+  -> remove Rux-language CLI surfaces
 ```
 
 ## Roadmap Impact
@@ -126,3 +149,6 @@ Existing Rux bootstrap examples
   remains the right direction for future guest filesystem access.
 - [#27](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/27) should
   remain dropped; Rux stdlib growth is not the project direction.
+- [#138](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/138)
+  records the stronger goal: existing Rux language/compiler/source code should
+  be retired, not only frozen for new work.
