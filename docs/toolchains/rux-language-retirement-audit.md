@@ -61,7 +61,7 @@ features.
 The NeoForge module still generates bundled firmware and storage images from
 Rux source:
 
-- `rux16_bios.rx` -> `firmware/rux16-bios.kflash`;
+- `rux16_bios.rx` -> `firmware/k16-bios.kflash`;
 - `kernel_loader.rx` -> `kernel-loader.kb`;
 - `display_ok.rx` -> `display-ok.kx`.
 

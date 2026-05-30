@@ -82,7 +82,7 @@ class RuxBiosFlashWorkspaceTest {
 
     @Test
     fun defaultBiosFlashResourceUsesKflashExtension() {
-        assertEquals("firmware/rux16-bios.kflash", RuxBiosFlashWorkspace.DEFAULT_BIOS_FLASH_RESOURCE)
+        assertEquals("firmware/k16-bios.kflash", RuxBiosFlashWorkspace.DEFAULT_BIOS_FLASH_RESOURCE)
     }
 
     private fun resourceClassLoader(
