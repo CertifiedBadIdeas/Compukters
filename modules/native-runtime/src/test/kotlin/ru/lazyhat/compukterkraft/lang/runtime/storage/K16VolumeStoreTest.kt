@@ -81,8 +81,10 @@ class K16VolumeStoreTest {
         assertTrue(source.contains("class K16VolumeException"))
         assertTrue(source.contains("interface K16VolumeBlob"))
         assertTrue(source.contains("class FileK16VolumeStore"))
+        assertTrue(source.contains("const val K16_VOLUME_MAGIC = \"K16VOL\""))
         assertEquals(false, source.contains("RuxVolume"))
         assertEquals(false, source.contains("FileRuxVolume"))
+        assertEquals(false, source.contains("RUX_VOLUME"))
     }
 
     @Test
@@ -167,7 +169,7 @@ class K16VolumeStoreTest {
     @Test
     fun `unsupported version fails deterministically`() {
         val root = createTempDirectory("rux-volume-store-test-")
-        writeRawVolume(root, magic = "RUXVOL".encodeToByteArray(), version = 2, logicalSize = 16, payloadSize = 16)
+        writeRawVolume(root, magic = "K16VOL".encodeToByteArray(), version = 2, logicalSize = 16, payloadSize = 16)
 
         val failure = assertFailsWith<K16VolumeException> {
             FileK16VolumeStore(root).openOrCreateComputerVolume(42, "storage0")
@@ -192,7 +194,7 @@ class K16VolumeStoreTest {
     @Test
     fun `truncated payload fails deterministically`() {
         val root = createTempDirectory("rux-volume-store-test-")
-        writeRawVolume(root, magic = "RUXVOL".encodeToByteArray(), version = 1, logicalSize = 16, payloadSize = 8)
+        writeRawVolume(root, magic = "K16VOL".encodeToByteArray(), version = 1, logicalSize = 16, payloadSize = 8)
 
         val failure = assertFailsWith<K16VolumeException> {
             FileK16VolumeStore(root).openOrCreateComputerVolume(42, "storage0")
@@ -208,8 +210,8 @@ class K16VolumeStoreTest {
         logicalSize: Long,
         payloadSize: Int,
     ) {
-        val header = ByteArray(RUX_VOLUME_HEADER_SIZE)
-        magic.copyInto(header, endIndex = magic.size.coerceAtMost(RUX_VOLUME_MAGIC_BYTES.size))
+        val header = ByteArray(K16_VOLUME_HEADER_SIZE)
+        magic.copyInto(header, endIndex = magic.size.coerceAtMost(K16_VOLUME_MAGIC_BYTES.size))
         header[6] = (version and 0xff).toByte()
         header[7] = ((version ushr 8) and 0xff).toByte()
         var value = logicalSize

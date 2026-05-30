@@ -71,22 +71,22 @@
 - The bundled BIOS now loads `/boot/loader.kb` from the `BOOT` RuxFS
   partition in the partitioned boot path, validates `RUXE` ABI kind
   `bootloader`, and enters the bootloader `entry_pc`.
-- `rux volume put-boot` now accepts a `RUXE` boot artifact and writes the
+- `k16 volume put-boot` now accepts a `RUXE` boot artifact and writes the
   bootloader file to `BOOT`/RuxFS `/boot/loader.kb` for partitioned volumes.
   Kernel artifacts are rejected for boot media.
-- Added `rux volume put-kernel`, which writes the kernel `RUXE` file to
+- Added `k16 volume put-kernel`, which writes the kernel `RUXE` file to
   `ROOT`/RuxFS `/boot/kernel.kx` for the bootloader-to-kernel chain.
 - Retired the legacy fixed `RUXB` raw boot path from active BIOS and
   `put-boot` behavior. Partitioned `RUXPT` plus RuxFS is now the only supported
   boot path.
-- Added `rux volume init`, which creates a partitioned `RUXPT` volume with
+- Added `k16 volume init`, which creates a partitioned `RUXPT` volume with
   `BOOT` and `ROOT` partitions for the next filesystem-backed boot chain.
-- Added byte-level `rux volume extract-partition` and `replace-partition`
+- Added byte-level `k16 volume extract-partition` and `replace-partition`
   commands for moving partition images in and out of `RUXPT` volumes without
   filesystem-specific logic.
-- Added `rux volume inspect`, which prints the `RUXVOL` header summary and
+- Added `k16 volume inspect`, which prints the `K16VOL` header summary and
   decoded `RUXPT` partition layout.
-- Added CLI workflow coverage for building a partitioned `storage0.ruxvol`
+- Added CLI workflow coverage for building a partitioned `storage0.kv`
   with a RuxFS `ROOT` partition containing `/boot/kernel.kx`.
 - Added a host-side RuxFS volume reader that models the future bootloader read
   path from `RUXPT` `ROOT` to `/boot/kernel.kx`.
@@ -97,8 +97,8 @@
   directory creation, file creation, file reads, and directory listing over an
   in-memory filesystem image.
 - Added `k16 fs kfs`, keeping filesystem-specific commands separate from
-  `rux volume` so additional filesystems can be introduced explicitly.
-- Added `rux-storage-volume-v1.md` for the earlier fixed-record `RUXVOL`,
+  `k16 volume` so additional filesystems can be introduced explicitly.
+- Added `rux-storage-volume-v1.md` for the earlier fixed-record `K16VOL`,
   `RUXB`, and `RUXK` storage0 media layout.
 - Retired the previous host-decoded executable ABI package from active
   documentation.

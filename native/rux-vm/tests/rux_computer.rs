@@ -338,7 +338,7 @@ fn rux_computer_handle_rux16_bios_rejects_corrupt_boot_header_magic() {
 
 fn write_rux_volume(path: &std::path::Path, payload: &[u8]) {
     let mut bytes = Vec::new();
-    bytes.extend_from_slice(b"RUXVOL");
+    bytes.extend_from_slice(b"K16VOL");
     bytes.extend_from_slice(&1u16.to_le_bytes());
     bytes.extend_from_slice(&(payload.len() as u64).to_le_bytes());
     bytes.extend_from_slice(payload);
@@ -351,7 +351,7 @@ fn temp_volume_path(name: &str) -> std::path::PathBuf {
         .unwrap()
         .as_nanos();
     std::env::temp_dir().join(format!(
-        "rux-computer-{name}-{}-{nanos}.ruxvol",
+        "rux-computer-{name}-{}-{nanos}.kv",
         std::process::id()
     ))
 }

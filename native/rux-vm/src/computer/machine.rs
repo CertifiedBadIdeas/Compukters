@@ -1897,7 +1897,7 @@ mod tests {
 
     fn write_rux_volume(path: &std::path::Path, payload: &[u8]) {
         let mut bytes = Vec::new();
-        bytes.extend_from_slice(b"RUXVOL");
+        bytes.extend_from_slice(b"K16VOL");
         bytes.extend_from_slice(&1u16.to_le_bytes());
         bytes.extend_from_slice(&(payload.len() as u64).to_le_bytes());
         bytes.extend_from_slice(payload);
@@ -1910,7 +1910,7 @@ mod tests {
             .unwrap()
             .as_nanos();
         std::env::temp_dir().join(format!(
-            "rux-machine-{name}-{}-{nanos}.ruxvol",
+            "rux-machine-{name}-{}-{nanos}.kv",
             std::process::id()
         ))
     }

@@ -1,10 +1,10 @@
-# RUX Storage Volume v1
+# K16 Storage Volume v1
 
 ## Status
 
 Status: experimental.
 
-`RUXVOL` is the current block-media container used by `storage0` test and
+`K16VOL` is the current block-media container used by `storage0` test and
 tooling flows. The VM exposes the payload bytes as the storage device media;
 the 16-byte host file header is not visible to the guest.
 
@@ -22,7 +22,7 @@ offset  size  name
 Field values for v1:
 
 ```text
-magic    "RUXVOL"
+magic    "K16VOL"
 version  1
 ```
 
@@ -31,7 +31,7 @@ file header. The file length must be `16 + payload_size`.
 
 ## Guest-Visible Layout
 
-RUXVOL v1 uses the partitioned layout created by `k16 volume init`:
+K16VOL v1 uses the partitioned layout created by `k16 volume init`:
 
 ```text
 LBA 0        RUXPT partition table
@@ -62,7 +62,7 @@ k16 volume extract-partition <volume.kv> <partition> <output>
 k16 volume replace-partition <volume.kv> <partition> <input>
 ```
 
-`inspect` prints the RUXVOL header summary and the decoded `RUXPT` partition
+`inspect` prints the K16VOL header summary and the decoded `RUXPT` partition
 layout, including partition type, start LBA, block count, byte size, and name.
 
 For format auto-detection across storage artifacts, use the read-only generic
@@ -72,7 +72,7 @@ inspector:
 k16 inspect <blob>
 ```
 
-It identifies `RUXVOL`, standalone `RUXPT` media bytes, standalone `RUXFS`
+It identifies `K16VOL`, standalone `RUXPT` media bytes, standalone `RUXFS`
 filesystem images, and `RUXE` executables. Snapshot blobs are intentionally not
 reported here until the native ComputerMachine snapshot format is defined.
 

@@ -155,7 +155,7 @@ The current compiler crate provides:
 The host-side read path used to model future bootloader behavior is:
 
 ```text
-RUXVOL -> RUXPT ROOT partition -> RUXFS superblock -> /boot/kernel.kx
+K16VOL -> RUXPT ROOT partition -> RUXFS superblock -> /boot/kernel.kx
 ```
 
 This reader composes byte-level volume partition extraction with RuxFS absolute
@@ -170,7 +170,7 @@ storage0 media bytes -> RUXPT ROOT partition -> RUXFS superblock -> absolute pat
 ```
 
 This runtime reader starts at LBA0 of the storage media payload. It does not
-accept a host `.kv` path and does not strip the 16-byte `RUXVOL` host file
+accept a host `.kv` path and does not strip the 16-byte `K16VOL` host file
 header. The storage backend performs that file-to-media translation before the
 guest-visible storage path sees any bytes.
 

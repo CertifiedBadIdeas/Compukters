@@ -496,7 +496,7 @@ pub(crate) struct RuxVolumeFileStorageMedia {
 }
 
 impl RuxVolumeFileStorageMedia {
-    const MAGIC: &'static [u8; 6] = b"RUXVOL";
+    const MAGIC: &'static [u8; 6] = b"K16VOL";
     const VERSION: u16 = 1;
     const HEADER_SIZE: u64 = 16;
 
@@ -507,33 +507,33 @@ impl RuxVolumeFileStorageMedia {
             .open(path.as_ref())
             .map_err(|error| {
                 MemoryFault::new(format!(
-                    "failed to open RUXVOL file {}: {error}",
+                    "failed to open K16VOL file {}: {error}",
                     path.as_ref().display()
                 ))
             })?;
         let file_len = file
             .metadata()
-            .map_err(|error| MemoryFault::new(format!("failed to stat RUXVOL file: {error}")))?
+            .map_err(|error| MemoryFault::new(format!("failed to stat K16VOL file: {error}")))?
             .len();
         if file_len < Self::HEADER_SIZE {
             return Err(MemoryFault::new(format!(
-                "truncated RUXVOL header: file has {file_len} bytes",
+                "truncated K16VOL header: file has {file_len} bytes",
             )));
         }
 
         let mut header = [0; Self::HEADER_SIZE as usize];
         file.seek(SeekFrom::Start(0))
-            .map_err(|error| MemoryFault::new(format!("failed to seek RUXVOL header: {error}")))?;
+            .map_err(|error| MemoryFault::new(format!("failed to seek K16VOL header: {error}")))?;
         file.read_exact(&mut header)
-            .map_err(|error| MemoryFault::new(format!("failed to read RUXVOL header: {error}")))?;
+            .map_err(|error| MemoryFault::new(format!("failed to read K16VOL header: {error}")))?;
 
         if &header[0..6] != Self::MAGIC {
-            return Err(MemoryFault::new("invalid RUXVOL magic".to_string()));
+            return Err(MemoryFault::new("invalid K16VOL magic".to_string()));
         }
         let version = u16::from_le_bytes([header[6], header[7]]);
         if version != Self::VERSION {
             return Err(MemoryFault::new(format!(
-                "unsupported RUXVOL version {version}",
+                "unsupported K16VOL version {version}",
             )));
         }
         let len = u64::from_le_bytes([
@@ -542,15 +542,15 @@ impl RuxVolumeFileStorageMedia {
         ]);
         if len == 0 {
             return Err(MemoryFault::new(
-                "RUXVOL logical size must be positive".to_string(),
+                "K16VOL logical size must be positive".to_string(),
             ));
         }
         let expected_len = Self::HEADER_SIZE
             .checked_add(len)
-            .ok_or_else(|| MemoryFault::new("RUXVOL file length overflows u64".to_string()))?;
+            .ok_or_else(|| MemoryFault::new("K16VOL file length overflows u64".to_string()))?;
         if file_len != expected_len {
             return Err(MemoryFault::new(format!(
-                "RUXVOL file length {file_len} does not match logical size {len}",
+                "K16VOL file length {file_len} does not match logical size {len}",
             )));
         }
 
@@ -559,19 +559,19 @@ impl RuxVolumeFileStorageMedia {
 
     fn payload_offset(&self, offset: u64, len: usize) -> Result<u64, MemoryFault> {
         let len = u64::try_from(len)
-            .map_err(|_| MemoryFault::new("RUXVOL access length does not fit u64".to_string()))?;
+            .map_err(|_| MemoryFault::new("K16VOL access length does not fit u64".to_string()))?;
         let end = offset
             .checked_add(len)
-            .ok_or_else(|| MemoryFault::new("RUXVOL access range overflows u64".to_string()))?;
+            .ok_or_else(|| MemoryFault::new("K16VOL access range overflows u64".to_string()))?;
         if end > self.len {
             return Err(MemoryFault::new(format!(
-                "RUXVOL payload access {offset}..{end} exceeds logical size {}",
+                "K16VOL payload access {offset}..{end} exceeds logical size {}",
                 self.len,
             )));
         }
         Self::HEADER_SIZE
             .checked_add(offset)
-            .ok_or_else(|| MemoryFault::new("RUXVOL file offset overflows u64".to_string()))
+            .ok_or_else(|| MemoryFault::new("K16VOL file offset overflows u64".to_string()))
     }
 }
 
@@ -588,26 +588,26 @@ impl StorageMedia for RuxVolumeFileStorageMedia {
         let file_offset = self.payload_offset(offset, dst.len())?;
         self.file
             .seek(SeekFrom::Start(file_offset))
-            .map_err(|error| MemoryFault::new(format!("failed to seek RUXVOL read: {error}")))?;
+            .map_err(|error| MemoryFault::new(format!("failed to seek K16VOL read: {error}")))?;
         self.file
             .read_exact(dst)
-            .map_err(|error| MemoryFault::new(format!("failed to read RUXVOL payload: {error}")))
+            .map_err(|error| MemoryFault::new(format!("failed to read K16VOL payload: {error}")))
     }
 
     fn write_at(&mut self, offset: u64, src: &[u8]) -> Result<(), MemoryFault> {
         let file_offset = self.payload_offset(offset, src.len())?;
         self.file
             .seek(SeekFrom::Start(file_offset))
-            .map_err(|error| MemoryFault::new(format!("failed to seek RUXVOL write: {error}")))?;
+            .map_err(|error| MemoryFault::new(format!("failed to seek K16VOL write: {error}")))?;
         self.file
             .write_all(src)
-            .map_err(|error| MemoryFault::new(format!("failed to write RUXVOL payload: {error}")))
+            .map_err(|error| MemoryFault::new(format!("failed to write K16VOL payload: {error}")))
     }
 
     fn flush(&mut self) -> Result<(), MemoryFault> {
         self.file
             .sync_data()
-            .map_err(|error| MemoryFault::new(format!("failed to flush RUXVOL payload: {error}")))
+            .map_err(|error| MemoryFault::new(format!("failed to flush K16VOL payload: {error}")))
     }
 
     fn snapshot_bytes(&self) -> Option<Vec<u8>> {
@@ -1044,13 +1044,13 @@ mod tests {
 
         let error = RuxVolumeFileStorageMedia::open(&path).unwrap_err();
 
-        assert!(error.to_string().contains("invalid RUXVOL magic"));
+        assert!(error.to_string().contains("invalid K16VOL magic"));
         fs::remove_file(path).unwrap();
     }
 
     fn write_rux_volume(path: &std::path::Path, payload: &[u8]) {
         let mut bytes = Vec::new();
-        bytes.extend_from_slice(b"RUXVOL");
+        bytes.extend_from_slice(b"K16VOL");
         bytes.extend_from_slice(&1u16.to_le_bytes());
         bytes.extend_from_slice(&(payload.len() as u64).to_le_bytes());
         bytes.extend_from_slice(payload);
@@ -1062,9 +1062,6 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        std::env::temp_dir().join(format!(
-            "rux-vm-{name}-{}-{nanos}.ruxvol",
-            std::process::id()
-        ))
+        std::env::temp_dir().join(format!("rux-vm-{name}-{}-{nanos}.kv", std::process::id()))
     }
 }

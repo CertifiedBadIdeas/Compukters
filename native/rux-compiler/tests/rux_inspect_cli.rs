@@ -9,7 +9,7 @@ static TEMP_FILE_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
 #[test]
 fn rux_inspect_identifies_partitioned_volume() {
-    let path = temp_file("storage0.ruxvol");
+    let path = temp_file("storage0.kv");
     let media_path = temp_file("storage0-media.bin");
     assert!(Command::new(k16_binary())
         .args(["volume", "init", path.to_str().unwrap(), "--size", "65536"])
@@ -31,7 +31,7 @@ fn rux_inspect_identifies_partitioned_volume() {
     );
     assert_eq!(
         String::from_utf8(output.stdout).expect("inspect stdout is UTF-8"),
-        "kind=RUXVOL\nRUXVOL v1 payload=65536\nRUXPT v1 entries=2\nBOOT start_lba=1 blocks=32 bytes=16384 name=boot\nROOT start_lba=33 blocks=95 bytes=48640 name=root\n",
+        "kind=K16VOL\nK16VOL v1 payload=65536\nRUXPT v1 entries=2\nBOOT start_lba=1 blocks=32 bytes=16384 name=boot\nROOT start_lba=33 blocks=95 bytes=48640 name=root\n",
     );
 
     let media_output = Command::new(k16_binary())

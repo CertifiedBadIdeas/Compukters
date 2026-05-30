@@ -2,22 +2,22 @@ use crate::partition;
 use crate::ruxe;
 use crate::ruxfs;
 
-pub const RUXVOL_MAGIC: &[u8; 6] = b"RUXVOL";
-pub const RUXVOL_VERSION: u16 = 1;
-pub const RUXVOL_HEADER_SIZE: usize = 16;
-pub const RUXVOL_BOOT_PAYLOAD_OFFSET: usize = 512;
+pub const K16VOL_MAGIC: &[u8; 6] = b"K16VOL";
+pub const K16VOL_VERSION: u16 = 1;
+pub const K16VOL_HEADER_SIZE: usize = 16;
+pub const K16VOL_BOOT_PAYLOAD_OFFSET: usize = 512;
 
 pub fn create_empty_volume(size: usize) -> Result<Vec<u8>, String> {
-    if size < RUXVOL_BOOT_PAYLOAD_OFFSET {
+    if size < K16VOL_BOOT_PAYLOAD_OFFSET {
         return Err(format!(
-            "ruxvol size must be at least {RUXVOL_BOOT_PAYLOAD_OFFSET} bytes"
+            "k16vol size must be at least {K16VOL_BOOT_PAYLOAD_OFFSET} bytes"
         ));
     }
     let volume_size =
-        u64::try_from(size).map_err(|_| "ruxvol size does not fit u64".to_string())?;
-    let mut bytes = vec![0_u8; RUXVOL_HEADER_SIZE + size];
-    bytes[..6].copy_from_slice(RUXVOL_MAGIC);
-    bytes[6..8].copy_from_slice(&RUXVOL_VERSION.to_le_bytes());
+        u64::try_from(size).map_err(|_| "k16vol size does not fit u64".to_string())?;
+    let mut bytes = vec![0_u8; K16VOL_HEADER_SIZE + size];
+    bytes[..6].copy_from_slice(K16VOL_MAGIC);
+    bytes[6..8].copy_from_slice(&K16VOL_VERSION.to_le_bytes());
     write_u64(&mut bytes, 8, volume_size);
     Ok(bytes)
 }
@@ -25,20 +25,20 @@ pub fn create_empty_volume(size: usize) -> Result<Vec<u8>, String> {
 pub fn create_initialized_volume(size: usize) -> Result<Vec<u8>, String> {
     if size % partition::RUXPT_BLOCK_SIZE != 0 {
         return Err(format!(
-            "ruxvol init size must be a multiple of {} bytes",
+            "k16vol init size must be a multiple of {} bytes",
             partition::RUXPT_BLOCK_SIZE
         ));
     }
     let total_blocks = u32::try_from(size / partition::RUXPT_BLOCK_SIZE)
-        .map_err(|_| "ruxvol init block count does not fit u32".to_string())?;
+        .map_err(|_| "k16vol init block count does not fit u32".to_string())?;
     let table = partition::default_boot_root_table(total_blocks)?;
     let table_bytes = partition::encode_partition_table(&table)?;
     let mut bytes = create_empty_volume(size)?;
-    let table_start = RUXVOL_HEADER_SIZE;
+    let table_start = K16VOL_HEADER_SIZE;
     let table_end = table_start + table_bytes.len();
     bytes[table_start..table_end].copy_from_slice(&table_bytes);
     let root_entry = partition_entry_by_type(&table, partition::PartitionType::Root)?;
-    let root_start = RUXVOL_HEADER_SIZE
+    let root_start = K16VOL_HEADER_SIZE
         .checked_add(partition_byte_offset(root_entry.start_lba)?)
         .ok_or_else(|| "ROOT partition byte range overflows".to_string())?;
     let root_len = partition_byte_offset(root_entry.block_count)?;
@@ -116,7 +116,7 @@ pub fn inspect(volume: &[u8]) -> Result<String, String> {
     let payload = &volume[payload_range];
     let table = decode_payload_partition_table(payload)?;
 
-    let mut output = format!("RUXVOL v{RUXVOL_VERSION} payload={payload_size}\n");
+    let mut output = format!("K16VOL v{K16VOL_VERSION} payload={payload_size}\n");
     output.push_str(&format!(
         "RUXPT v{} entries={}\n",
         partition::RUXPT_VERSION,
@@ -163,7 +163,7 @@ pub fn inspect_boot_chain(volume: &[u8]) -> Result<String, String> {
 
     let root_bytes = partition_byte_offset(root_entry.block_count)?;
     let boot_bytes = partition_byte_offset(boot_entry.block_count)?;
-    let mut output = "RUXVOL boot-chain\n".to_string();
+    let mut output = "K16VOL boot-chain\n".to_string();
     output.push_str(&format!(
         "BOOT partition start_lba={} blocks={} bytes={} name={}\n",
         boot_entry.start_lba, boot_entry.block_count, boot_bytes, boot_entry.name
@@ -228,14 +228,14 @@ fn partition_entry_payload_range(
 
 fn decode_payload_partition_table(payload: &[u8]) -> Result<partition::RuxPartitionTable, String> {
     if payload.len() % partition::RUXPT_BLOCK_SIZE != 0 {
-        return Err("ruxvol payload size is not block-aligned".to_string());
+        return Err("k16vol payload size is not block-aligned".to_string());
     }
     let table_bytes = payload
         .get(..partition::RUXPT_BLOCK_SIZE)
-        .ok_or_else(|| "ruxvol payload is too small for RUXPT".to_string())?;
+        .ok_or_else(|| "k16vol payload is too small for RUXPT".to_string())?;
     let table = partition::decode_partition_table(table_bytes)?;
     let total_blocks = u32::try_from(payload.len() / partition::RUXPT_BLOCK_SIZE)
-        .map_err(|_| "ruxvol block count does not fit u32".to_string())?;
+        .map_err(|_| "k16vol block count does not fit u32".to_string())?;
     partition::validate_partition_table(&table, total_blocks)?;
     Ok(table)
 }
@@ -269,35 +269,35 @@ fn partition_byte_offset(blocks: u32) -> Result<usize, String> {
 }
 
 fn validate_volume_header(volume: &[u8]) -> Result<std::ops::Range<usize>, String> {
-    if volume.len() < RUXVOL_HEADER_SIZE {
-        return Err("ruxvol is smaller than the header".to_string());
+    if volume.len() < K16VOL_HEADER_SIZE {
+        return Err("k16vol is smaller than the header".to_string());
     }
-    if &volume[..6] != RUXVOL_MAGIC {
-        return Err("invalid ruxvol magic".to_string());
+    if &volume[..6] != K16VOL_MAGIC {
+        return Err("invalid k16vol magic".to_string());
     }
     let version = u16::from_le_bytes(volume[6..8].try_into().unwrap());
-    if version != RUXVOL_VERSION {
-        return Err(format!("unsupported ruxvol version {version}"));
+    if version != K16VOL_VERSION {
+        return Err(format!("unsupported k16vol version {version}"));
     }
     let declared_size = read_u64(volume, 8)?;
     let declared_size = usize::try_from(declared_size)
-        .map_err(|_| "ruxvol logical size does not fit usize".to_string())?;
-    let expected_size = RUXVOL_HEADER_SIZE
+        .map_err(|_| "k16vol logical size does not fit usize".to_string())?;
+    let expected_size = K16VOL_HEADER_SIZE
         .checked_add(declared_size)
-        .ok_or_else(|| "ruxvol file size overflows usize".to_string())?;
+        .ok_or_else(|| "k16vol file size overflows usize".to_string())?;
     if expected_size != volume.len() {
         return Err(format!(
-            "ruxvol header declares {declared_size} payload bytes but file has {} bytes",
+            "k16vol header declares {declared_size} payload bytes but file has {} bytes",
             volume.len()
         ));
     }
-    Ok(RUXVOL_HEADER_SIZE..expected_size)
+    Ok(K16VOL_HEADER_SIZE..expected_size)
 }
 
 fn read_u64(bytes: &[u8], offset: usize) -> Result<u64, String> {
     let value = bytes
         .get(offset..offset + 8)
-        .ok_or_else(|| "ruxvol header is truncated".to_string())?;
+        .ok_or_else(|| "k16vol header is truncated".to_string())?;
     Ok(u64::from_le_bytes(value.try_into().unwrap()))
 }
 
