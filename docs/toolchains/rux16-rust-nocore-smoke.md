@@ -9,7 +9,7 @@
 `tools/rux16-rust-nocore-smoke.sh` is the first intended Rust smoke path for
 Rux16. It compiles a tiny `#![no_core]` Rust program with an unmangled
 `extern "C" fn main() -> i32`, links it with `rux16-startup` and the explicit
-`rux16-memory-helpers` runtime object, executes the resulting program `RUXE`,
+`rux16-memory-helpers` runtime object, executes the resulting KX program,
 and expects `debug_bytes=2a`.
 
 `rux16-memory-helpers` is also Rust-owned: `k16 runtime rux16-memory-helpers`
@@ -44,6 +44,6 @@ Expected successful output includes:
 
 ```text
 Rust no_core object checks passed
-RUXE link and execution checks passed
+KX link and execution checks passed
 Rux16 Rust no_core smoke passed
 ```
