@@ -7,9 +7,10 @@ The project will retire the `Rux` name from the VM, architecture, artifact
 formats, command-line tools, and Rust target naming. The public architecture
 name is `Kraft16`; the short technical prefix is `K16`.
 
-This is broader than retiring the old Rux source language. Existing Rux source,
-compiler frontend, stdlib, and examples remain legacy retirement targets, but
-the machine/tooling names are now retirement targets too.
+The Rux language is the explicit exception. `.rx` source, the language frontend,
+language stdlib modules, `rux compile`, `rux check`, and Rux-language examples
+remain named `Rux` while they exist. This design renames the machine and tooling
+surfaces around the language, not the language itself.
 
 ## Naming Model
 
@@ -31,13 +32,18 @@ The intended mapping is:
 
 - `Rux16` -> `Kraft16` / `K16`;
 - `rux-vm` -> `k16-vm`;
-- `rux-compiler` -> a tooling crate, tentatively `k16-tools`;
-- `rux` CLI -> `k16`;
+- `rux-compiler` machine/tooling modules -> a tooling crate, tentatively
+  `k16-tools`;
+- `rux` machine/artifact CLI commands -> `k16`;
 - `RUXE` -> `K16E`;
 - `RUXVOL` -> `K16VOL`;
 - `RuxFS` -> `K16FS`;
 - `RUXSNAP` -> `K16SNAP`;
 - `rux16-unknown-ruxos` -> `k16-unknown-kraftos`.
+
+Rux-language commands and modules keep the `rux` name. If the language compiler
+is reorganized later, it should remain visibly a Rux-language component rather
+than being renamed as Kraft16 machine tooling.
 
 `KraftOS` is the future OS target name. It does not imply that an OS exists
 yet; it gives the Rust target triple a non-Rux system component.
@@ -64,10 +70,10 @@ from the internal `K16E` format name.
 
 ## Boundaries
 
-The reorganization must split language retirement from machine tooling:
+The reorganization must split the Rux language from Kraft16 machine tooling:
 
-- legacy Rux language code: `.rx` frontend, stdlib, source compiler behavior,
-  source advice, and Rux-authored guest examples;
+- Rux language code: `.rx` frontend, stdlib, source compiler behavior, source
+  advice, and Rux-authored guest examples;
 - Kraft16 machine tooling: ISA definitions, assembler/disassembler, object
   linker, executable packaging, volume/filesystem tools, runtime helper object
   generation, Rust/LLVM smoke support, and VM-facing artifact inspection;
@@ -95,22 +101,23 @@ changing persisted binary formats.
 1. Rename documentation and roadmap language so new work says `Kraft16`/`K16`.
 2. Split or rename host tooling boundaries so the Rust-first machine toolbox is
    not presented as `rux-compiler`.
-3. Rename CLI scripts and commands from `rux*` to `k16*`, keeping old names only
-   as explicitly tracked legacy removal work if atomic removal is too large.
+3. Rename CLI scripts and commands from `rux*` to `k16*` only where they operate
+   on machine/artifact surfaces. Keep Rux-language commands under the `rux`
+   name.
 4. Rename VM crate/package surfaces from `rux-vm` to `k16-vm`.
 5. Rename artifact format names and magic values in separate ABI slices:
    `RUXE`, `RUXVOL`, `RuxFS`, and snapshots.
 6. Rename Rust target components from `rux16-unknown-ruxos` to
    `k16-unknown-kraftos` once the compiler fork and repo tooling can move
    together.
-7. Remove old Rux language frontend/source code after Rust-authored BIOS,
-   bootloader, kernel, and user-space fixtures cover the boot chain.
+7. Leave Rux language naming intact. Any future decision about removing or
+   preserving the language is separate from this rename.
 
 ## Out Of Scope
 
 This design does not implement the rename. It only fixes the accepted direction
-and the order of work. It also does not require deleting all Rux language files
-before the Rust boot chain is ready.
+and the order of work. It does not rename the Rux language and does not require
+deleting Rux language files.
 
 ## Verification Expectations
 
