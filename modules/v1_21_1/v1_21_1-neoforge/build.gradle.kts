@@ -90,10 +90,10 @@ val ruxCompilerManifest = rootProject.layout.projectDirectory.file("native/rux-c
 val rux16BiosSource = rootProject.layout.projectDirectory.file("native/rux-compiler/examples/firmware/rux16_bios.rx")
 val rux16BootSource = rootProject.layout.projectDirectory.file("native/rux-compiler/examples/boot/kernel_loader.rx")
 val rux16KernelSource = rootProject.layout.projectDirectory.file("native/rux-compiler/examples/kernel/display_ok.rx")
-val rux16BiosFlashResource = generatedRuxFirmwareResources.map { it.file("firmware/rux16-bios.flash") }
-val rux16BootArtifact = generatedRuxFirmwareArtifacts.map { it.file("kernel-loader.boot.ruxe") }
-val rux16KernelArtifact = generatedRuxFirmwareArtifacts.map { it.file("display-ok.kernel.ruxe") }
-val rux16SystemStorage0Resource = generatedRuxFirmwareResources.map { it.file("firmware/rux16-system-storage0.ruxvol") }
+val rux16BiosFlashResource = generatedRuxFirmwareResources.map { it.file("firmware/rux16-bios.kflash") }
+val rux16BootArtifact = generatedRuxFirmwareArtifacts.map { it.file("kernel-loader.kb") }
+val rux16KernelArtifact = generatedRuxFirmwareArtifacts.map { it.file("display-ok.kx") }
+val rux16SystemStorage0Resource = generatedRuxFirmwareResources.map { it.file("firmware/rux16-system-storage0.kv") }
 
 val compileRux16BiosFlash =
     tasks.register<Exec>("compileRux16BiosFlash") {
@@ -198,7 +198,7 @@ val createRux16SystemStorage0 =
             "--manifest-path",
             ruxCompilerManifest.asFile.absolutePath,
             "--bin",
-            "rux",
+            "k16",
             "--",
             "volume",
             "init",
@@ -222,7 +222,7 @@ val putRux16SystemStorage0Boot =
             "--manifest-path",
             ruxCompilerManifest.asFile.absolutePath,
             "--bin",
-            "rux",
+            "k16",
             "--",
             "volume",
             "put-boot",
@@ -246,7 +246,7 @@ val compileRux16SystemStorage0 =
             "--manifest-path",
             ruxCompilerManifest.asFile.absolutePath,
             "--bin",
-            "rux",
+            "k16",
             "--",
             "volume",
             "put-kernel",

@@ -26,7 +26,7 @@ class RuxFirmwareResourceTest {
 
     @Test
     fun bundledRux16BiosFlashResourceIsRawFlash() {
-        val resource = javaClass.classLoader.getResourceAsStream("firmware/rux16-bios.flash")
+        val resource = javaClass.classLoader.getResourceAsStream("firmware/rux16-bios.kflash")
             ?: error("raw Rux16 BIOS flash resource should exist")
 
         val bytes = resource.use { it.readBytes() }
@@ -50,8 +50,8 @@ class RuxFirmwareResourceTest {
     @Test
     fun bundledRux16BiosFlashBootsBundledSystemStorage0Volume() {
         val workspace = createTempDirectory("rux-firmware-resource-test-")
-        val biosFlashPath = workspace.resolve("bios.flash")
-        val storage0Path = workspace.resolve("storage0.ruxvol")
+        val biosFlashPath = workspace.resolve("bios.kflash")
+        val storage0Path = workspace.resolve("storage0.kv")
         biosFlashPath.writeBytes(RuxBiosFlashWorkspace.loadBiosFlashResource(classLoader = javaClass.classLoader))
         storage0Path.writeBytes(RuxSystemVolumeWorkspace.loadStorage0VolumeResource(classLoader = javaClass.classLoader))
 

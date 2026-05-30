@@ -121,7 +121,7 @@ class FileRuxVolumeStore(
                     .resolve("computers")
                     .resolve(identity.computerId.toString())
                     .resolve("volumes")
-                    .resolve("${identity.slot}.ruxvol")
+                    .resolve("${identity.slot}.kv")
             }
         }
 

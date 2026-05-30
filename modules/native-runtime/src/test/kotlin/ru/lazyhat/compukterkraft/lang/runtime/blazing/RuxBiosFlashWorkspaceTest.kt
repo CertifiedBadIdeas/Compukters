@@ -35,16 +35,16 @@ class RuxBiosFlashWorkspaceTest {
     @Test
     fun preparesBiosFlashFromRawResourceBytes() {
         val workspace = createTempDirectory("rux-bios-workspace-")
-        val loader = resourceClassLoader("firmware/test-bios.flash", byteArrayOf(0x01, 0x10, 0x01, 0xe0.toByte()))
+        val loader = resourceClassLoader("firmware/test-bios.kflash", byteArrayOf(0x01, 0x10, 0x01, 0xe0.toByte()))
 
         val path =
             RuxBiosFlashWorkspace.prepareBiosFlash(
                 workspace = workspace,
-                resourcePath = "firmware/test-bios.flash",
+                resourcePath = "firmware/test-bios.kflash",
                 classLoader = loader,
             )
 
-        assertEquals(workspace.resolve("bios.flash"), path)
+        assertEquals(workspace.resolve("bios.kflash"), path)
         assertTrue(path.exists())
         assertContentEquals(byteArrayOf(0x01, 0x10, 0x01, 0xe0.toByte()), path.readBytes())
     }
@@ -52,14 +52,14 @@ class RuxBiosFlashWorkspaceTest {
     @Test
     fun preservesExistingPerComputerBiosFlash() {
         val workspace = createTempDirectory("rux-bios-workspace-")
-        val existing = workspace.resolve("bios.flash")
+        val existing = workspace.resolve("bios.kflash")
         existing.writeBytes(byteArrayOf(7, 8, 9))
-        val loader = resourceClassLoader("firmware/test-bios.flash", byteArrayOf(1, 2, 3))
+        val loader = resourceClassLoader("firmware/test-bios.kflash", byteArrayOf(1, 2, 3))
 
         val path =
             RuxBiosFlashWorkspace.prepareBiosFlash(
                 workspace = workspace,
-                resourcePath = "firmware/test-bios.flash",
+                resourcePath = "firmware/test-bios.kflash",
                 classLoader = loader,
             )
 
@@ -74,15 +74,15 @@ class RuxBiosFlashWorkspaceTest {
         assertFailsWith<IllegalStateException> {
             RuxBiosFlashWorkspace.prepareBiosFlash(
                 workspace = workspace,
-                resourcePath = "firmware/missing-bios.flash",
-                classLoader = resourceClassLoader("firmware/other.flash", byteArrayOf(1, 2)),
+                resourcePath = "firmware/missing-bios.kflash",
+                classLoader = resourceClassLoader("firmware/other.kflash", byteArrayOf(1, 2)),
             )
         }
     }
 
     @Test
-    fun defaultBiosFlashResourceIsRawFlash() {
-        assertEquals("firmware/rux16-bios.flash", RuxBiosFlashWorkspace.DEFAULT_BIOS_FLASH_RESOURCE)
+    fun defaultBiosFlashResourceUsesKflashExtension() {
+        assertEquals("firmware/rux16-bios.kflash", RuxBiosFlashWorkspace.DEFAULT_BIOS_FLASH_RESOURCE)
     }
 
     private fun resourceClassLoader(

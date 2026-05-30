@@ -13,7 +13,7 @@
 Compukter Kraft is a Minecraft mod that adds programmable computers backed
 by a Rust virtual machine (`native/rux-vm`). The mod ships a single
 player-facing computer item — **Notebook** — that starts a native
-`RuxComputer` from a per-computer `bios.flash` file. The BIOS executes on
+`RuxComputer` from a per-computer `bios.kflash` file. The BIOS executes on
 the Rux16 guest CPU, can inspect storage0 boot media, and exposes devices
 through memory-mapped peripherals.
 
@@ -32,7 +32,7 @@ through memory-mapped peripherals.
 | Crate            | Purpose                                                                  |
 |------------------|--------------------------------------------------------------------------|
 | `native/rux-vm`  | Rust virtual machine: Rux16 CPU, memory-mapped devices, `RuxComputer` handle, JNI exports |
-| `native/rux-compiler` | Rux language frontend plus `rux compile`, `rux disasm`, `rux volume`, and filesystem-specific `rux fs` tooling for Rux16 artifacts |
+| `native/rux-compiler` | Rux language frontend plus `rux compile`; K16 artifact tooling via `k16` for disassembly, volume, and filesystem commands |
 
 ## Module ownership rules
 
@@ -52,7 +52,7 @@ RuntimeDevice.boot()
   └─ NativeVmBindings.createRux16Computer(biosFlashPath, storage0Path, ...)
         └─ Rust RuxComputerHandle
               ├─ Rux16 CPU fetching instructions from mapped BIOS flash
-              ├─ storage0 ruxvol boot media
+              ├─ storage0 KV boot media
               ├─ flat RAM + MMIO bus (control, debug-serial, serial-input,
               │   text-display, storage0, bios-flash)
               └─ exposes control / debug / display snapshot over JNI
@@ -72,11 +72,11 @@ RuntimeDevice.close()
 ┌─────────────────────────────────────────────────────────────────────┐
 │  Rust Rux16 computer (driven on demand by JNI calls)                │
 │                                                                     │
-│  Rux16 BIOS executing from mapped bios.flash                        │
+│  Rux16 BIOS executing from mapped bios.kflash                       │
 │    ├─ MMIO control device  ──►  status / exit / panic registers      │
 │    ├─ MMIO debug serial    ──►  RuxComputerHandle.debug_output       │
 │    ├─ MMIO serial input    ◄──  player keyboard events               │
-│    ├─ MMIO storage0        ◄──► ruxvol boot media                    │
+│    ├─ MMIO storage0        ◄──► KV boot media                        │
 │    ├─ MMIO bios flash      ──►  read-only firmware mapping           │
 │    └─ MMIO text display    ──►  RuxComputerTextDisplaySnapshot       │
 └──────────────────────────────────────────┬──────────────────────────┘

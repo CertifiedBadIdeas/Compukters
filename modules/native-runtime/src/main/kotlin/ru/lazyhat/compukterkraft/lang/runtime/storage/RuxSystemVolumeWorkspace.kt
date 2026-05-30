@@ -25,8 +25,8 @@ import kotlin.io.path.exists
 import kotlin.io.path.writeBytes
 
 object RuxSystemVolumeWorkspace {
-    const val DEFAULT_STORAGE0_VOLUME_RESOURCE: String = "firmware/rux16-system-storage0.ruxvol"
-    const val STORAGE0_VOLUME_FILENAME: String = "storage0.ruxvol"
+    const val DEFAULT_STORAGE0_VOLUME_RESOURCE: String = "firmware/rux16-system-storage0.kv"
+    const val STORAGE0_VOLUME_FILENAME: String = "storage0.kv"
 
     fun prepareStorage0Volume(
         workspace: Path,
