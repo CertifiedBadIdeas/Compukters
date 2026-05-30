@@ -31,20 +31,71 @@ import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeRuxComputerDisplaySn
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16ComputerEndpoint
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
 import java.nio.ByteBuffer
+import java.nio.file.Path
 import java.util.UUID
+import kotlin.io.path.exists
+import kotlin.io.path.readText
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-class RuxRuntimeDeviceTest {
+class K16RuntimeDeviceTest {
+    private val root = generateSequence(Path.of(System.getProperty("user.dir")).toAbsolutePath()) { it.parent }
+        .first { it.resolve("gradle/libs.versions.toml").exists() }
+
     @Test
-    fun ownsRuxEndpointAndTicksItWhilePoweredOn() {
+    fun runtimeDeviceUsesK16TypeName() {
+        val k16RuntimeDevicePath =
+            root.resolve(
+                Path.of(
+                    "modules",
+                    "core",
+                    "src",
+                    "main",
+                    "kotlin",
+                    "ru",
+                    "lazyhat",
+                    "compukterkraft",
+                    "core",
+                    "device",
+                    "runtime",
+                    "K16RuntimeDevice.kt",
+                ),
+            )
+        val legacyRuntimeDevicePath =
+            root.resolve(
+                Path.of(
+                    "modules",
+                    "core",
+                    "src",
+                    "main",
+                    "kotlin",
+                    "ru",
+                    "lazyhat",
+                    "compukterkraft",
+                    "core",
+                    "device",
+                    "runtime",
+                    "RuxRuntimeDevice.kt",
+                ),
+            )
+
+        assertTrue(k16RuntimeDevicePath.exists())
+        assertFalse(legacyRuntimeDevicePath.exists())
+
+        val source = k16RuntimeDevicePath.readText()
+        assertTrue(source.contains("class K16RuntimeDevice"))
+        assertFalse(source.contains("class RuxRuntimeDevice"))
+    }
+
+    @Test
+    fun ownsK16EndpointAndTicksItWhilePoweredOn() {
         val endpoint = RecordingK16Endpoint()
         val powerChanges = mutableListOf<Boolean>()
         val device =
-            RuxRuntimeDevice(
+            K16RuntimeDevice(
                 deviceId = 7,
                 properties = DeviceProperties(DeviceFamily.NORMAL, label = "Rux"),
                 endpointFactory = { endpoint },
@@ -72,7 +123,7 @@ class RuxRuntimeDeviceTest {
     fun mapsPasteEventsToSerialBytesWithoutConsumingCallerBuffer() {
         val endpoint = RecordingK16Endpoint()
         val device =
-            RuxRuntimeDevice(
+            K16RuntimeDevice(
                 deviceId = 8,
                 properties = DeviceProperties(DeviceFamily.NORMAL, label = null),
                 endpointFactory = { endpoint },
@@ -92,7 +143,7 @@ class RuxRuntimeDeviceTest {
         val endpoint = RecordingK16Endpoint()
         val displayNetwork = RecordingDisplayNetworkBridge()
         val device =
-            RuxRuntimeDevice(
+            K16RuntimeDevice(
                 deviceId = 9,
                 properties = DeviceProperties(DeviceFamily.NORMAL, label = null),
                 endpointFactory = { endpoint },
@@ -121,7 +172,7 @@ class RuxRuntimeDeviceTest {
         val endpoint = RecordingK16Endpoint()
         val displayNetwork = RecordingDisplayNetworkBridge()
         val device =
-            RuxRuntimeDevice(
+            K16RuntimeDevice(
                 deviceId = 14,
                 properties = DeviceProperties(DeviceFamily.NORMAL, label = null),
                 endpointFactory = { endpoint },
@@ -160,7 +211,7 @@ class RuxRuntimeDeviceTest {
         val endpoint = RecordingK16Endpoint()
         val displayNetwork = RecordingDisplayNetworkBridge()
         val device =
-            RuxRuntimeDevice(
+            K16RuntimeDevice(
                 deviceId = 15,
                 properties = DeviceProperties(DeviceFamily.NORMAL, label = null),
                 endpointFactory = { endpoint },
@@ -196,7 +247,7 @@ class RuxRuntimeDeviceTest {
         val endpoint = RecordingK16Endpoint()
         val displayNetwork = RecordingDisplayNetworkBridge()
         val device =
-            RuxRuntimeDevice(
+            K16RuntimeDevice(
                 deviceId = 10,
                 properties = DeviceProperties(DeviceFamily.NORMAL, label = null),
                 endpointFactory = { endpoint },
@@ -220,7 +271,7 @@ class RuxRuntimeDeviceTest {
         val endpoint = RecordingK16Endpoint()
         val displayNetwork = RecordingDisplayNetworkBridge()
         val device =
-            RuxRuntimeDevice(
+            K16RuntimeDevice(
                 deviceId = 11,
                 properties = DeviceProperties(DeviceFamily.NORMAL, label = null),
                 endpointFactory = { endpoint },
@@ -241,7 +292,7 @@ class RuxRuntimeDeviceTest {
     fun dispatchesEnterKeyAsSerialNewline() {
         val endpoint = RecordingK16Endpoint()
         val device =
-            RuxRuntimeDevice(
+            K16RuntimeDevice(
                 deviceId = 12,
                 properties = DeviceProperties(DeviceFamily.NORMAL, label = null),
                 endpointFactory = { endpoint },
@@ -258,7 +309,7 @@ class RuxRuntimeDeviceTest {
     fun dispatchesBackspaceKeyAsSerialBackspace() {
         val endpoint = RecordingK16Endpoint()
         val device =
-            RuxRuntimeDevice(
+            K16RuntimeDevice(
                 deviceId = 13,
                 properties = DeviceProperties(DeviceFamily.NORMAL, label = null),
                 endpointFactory = { endpoint },
@@ -276,7 +327,7 @@ class RuxRuntimeDeviceTest {
         val endpoint = RecordingK16Endpoint()
         endpoint.runtimeSnapshot = byteArrayOf(0x52, 0x55, 0x58)
         val device =
-            RuxRuntimeDevice(
+            K16RuntimeDevice(
                 deviceId = 16,
                 properties = DeviceProperties(DeviceFamily.NORMAL, label = null),
                 endpointFactory = { endpoint },
@@ -299,7 +350,7 @@ class RuxRuntimeDeviceTest {
         var endpointFactoryCalls = 0
         val powerChanges = mutableListOf<Boolean>()
         val device =
-            RuxRuntimeDevice(
+            K16RuntimeDevice(
                 deviceId = 17,
                 properties = DeviceProperties(DeviceFamily.NORMAL, label = null),
                 endpointFactory = {
@@ -335,7 +386,7 @@ class RuxRuntimeDeviceTest {
 
         override fun tick(maxTurns: Int): NativeRuxComputerControl {
             tickCalls += 1
-            return NativeRuxComputerControl(status = RuxRuntimeDevice.STATUS_READY, exitCode = 0, panicCode = 0)
+            return NativeRuxComputerControl(status = K16RuntimeDevice.STATUS_READY, exitCode = 0, panicCode = 0)
         }
 
         override fun outputSnapshot(): ByteArray =
