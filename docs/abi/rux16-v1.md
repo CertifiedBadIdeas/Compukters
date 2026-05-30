@@ -51,6 +51,15 @@ Until the target backend and object pipeline exist, tooling must reject
 LLVM-facing requests explicitly instead of falling back to another execution
 path.
 
+Rux16 VM ownership remains independent from LLVM. The VM defines and executes
+the instruction set, CPU state, traps, memory accesses, and device-visible ABI.
+LLVM-facing code must live in compiler/toolchain layers that produce Rux16
+instructions and relocatable objects from outside the VM. The VM implementation
+must not depend on LLVM libraries, LLVM IR, LLVM object internals, target
+backend data structures, or special execution hooks for LLVM-generated code.
+If LLVM output cannot be represented as normal Rux16 code and ABI data, the
+toolchain must fail before the VM run boundary.
+
 The initial LLVM register classification is:
 
 ```text

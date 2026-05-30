@@ -5,7 +5,8 @@
 - Documented the initial LLVM-facing Rux16 target model, including the
   `rux16-unknown-ruxos` shape, register classification, caller-saved model,
   stack-passed argument boundary, required integer ISA families, and the
-  object-to-`RUXE` executable pipeline.
+  object-to-`RUXE` executable pipeline. The boundary explicitly keeps LLVM
+  backend/toolchain concerns outside the VM implementation.
 - Added experimental `RUXSNAP` v1 as the host-side `ComputerMachine` snapshot
   container. It records a versioned header, full RAM bytes, and Rux16 CPU
   continuation records; `control`, `debug`, `display0`, and serial input
