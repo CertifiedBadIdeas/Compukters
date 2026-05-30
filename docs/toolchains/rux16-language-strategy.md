@@ -21,9 +21,10 @@ Rux16 CPU/ABI
   -> hosted Rust std only after real OS services exist
 ```
 
-The existing Rux language is legacy/bootstrap tooling. It can remain in the
-repository while Rust support is incomplete, but it should not be the future
-application, firmware, kernel, or user-space language.
+The existing Rux language is legacy. It can remain in the repository while
+Rust support is incomplete, but new guest code should not be written in Rux by
+default. BIOS, bootloader, kernel, and user-space source code should target
+Rust.
 
 ## Rationale
 
@@ -41,21 +42,32 @@ Rust is the target language because a `no_std` kernel is a realistic way to
 write OS code without requiring hosted `std`, while still keeping access to a
 real compiler, type system, tooling culture, and future ecosystem path.
 
-## Rux Deprecation
+## No New Rux Source
 
-Deprecating Rux does not mean deleting it immediately. It means:
+Deprecating Rux does not mean deleting existing files immediately. It means:
 
+- no new Rux guest/source code by default;
 - no new general-purpose Rux language features by default;
 - no Rux standard-library expansion as a strategic direction;
 - no new long-term application APIs designed primarily for Rux;
-- new boot/kernel/program examples should move to Rust once Rust can build
-  equivalent Rux16 objects;
-- existing Rux examples may stay only as compatibility and tooling fixtures
-  until Rust replacements exist.
+- no new BIOS, bootloader, kernel, or user-space examples in Rux unless the
+  goal is explicitly to preserve an existing legacy behavior until it can be
+  replaced;
+- existing Rux examples may stay only as legacy compatibility fixtures until
+  Rust replacements exist.
 
-Rux can still be used temporarily for BIOS, bootloader, kernel-loader, VM,
-linker, RUXE, filesystem, and device tests while Rust support is incomplete.
-That use is transitional. It should not create new language commitments.
+Before the custom Rux16 Rust target is ready, new work should focus on the
+toolchain boundary rather than adding more Rux source. Acceptable temporary
+artifacts are:
+
+- raw Rux16 object fixtures for linker/VM tests;
+- LLVM IR or freestanding C smoke inputs when they validate the machine target;
+- host-side tooling needed to package, inspect, link, or run Rux16 artifacts;
+- documentation that explains how existing Rux code will be replaced.
+
+Those artifacts must not become a new Rux-language feature path. If a slice
+needs guest logic that cannot yet be written in Rust, prefer narrowing the
+slice to toolchain readiness over adding new `.rx` code.
 
 ## Rust Target
 
@@ -93,11 +105,11 @@ compatibility fixture or remove it in a scoped cleanup.
 This gives the project a clear replacement sequence:
 
 ```text
-Rux bootstrap examples
+Existing Rux bootstrap examples
   -> Rust no_core smoke
   -> Rust runtime-helper coverage
   -> Rust no_std kernel
-  -> Rust boot/user-space examples
+  -> Rust bootloader/kernel/user-space examples
   -> Rux compiler retirement decision
 ```
 
@@ -106,7 +118,8 @@ Rux bootstrap examples
 - [#132](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/132) is
   the next Rust proof: `rustc -> Rux16 object -> RUXE -> VM`.
 - [#133](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/133)
-  follows with explicit runtime helpers for compiler-generated calls.
+  should be framed as Rust target runtime/helper work, not Rux source runtime
+  expansion.
 - [#29](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/29) should
   define the panic/error boundary reused by Rust `panic=abort`.
 - [#57](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/57)
