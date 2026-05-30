@@ -111,6 +111,10 @@ class RuxComputerRuntimeFactoryTest {
 
         assertTrue(runtimeSource.contains("NativeK16ComputerRuntimeBindings"))
         assertFalse(runtimeSource.contains("NativeRux16ComputerRuntimeBindings"))
+        assertTrue(bindingsSource.contains("fun createK16ComputerFromBiosFlash("))
+        assertFalse(bindingsSource.contains("fun createRuxComputerFromBiosFlash("))
+        assertTrue(bindingsSource.contains("fun restoreK16ComputerFromBiosFlashSnapshot("))
+        assertFalse(bindingsSource.contains("fun restoreRuxComputerFromBiosFlashSnapshot("))
         assertTrue(bindingsSource.contains("fun runK16ComputerUntilSignal(handle: Long)"))
         assertFalse(bindingsSource.contains("fun runRux16ComputerUntilSignal(handle: Long)"))
     }
