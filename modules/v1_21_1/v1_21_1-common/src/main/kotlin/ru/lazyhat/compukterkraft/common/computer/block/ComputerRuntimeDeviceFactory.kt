@@ -25,10 +25,10 @@ import ru.lazyhat.compukterkraft.common.computer.context.BlockEntityRuntimeDevic
 import ru.lazyhat.compukterkraft.core.device.DeviceProperties
 import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeDevice
 import ru.lazyhat.compukterkraft.core.device.runtime.RuxRuntimeDevice
-import ru.lazyhat.compukterkraft.lang.runtime.blazing.RuxBiosFlashWorkspace
+import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16BiosFlashWorkspace
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.RuxComputerRuntimeFactory
 import ru.lazyhat.compukterkraft.lang.runtime.storage.FileRuxVolumeStore
-import ru.lazyhat.compukterkraft.lang.runtime.storage.RuxSystemVolumeWorkspace
+import ru.lazyhat.compukterkraft.lang.runtime.storage.K16SystemVolumeWorkspace
 import ru.lazyhat.compukterkraft.lang.runtime.storage.RuxVolumeBlob
 import java.nio.file.Path
 
@@ -46,9 +46,9 @@ object ComputerRuntimeDeviceFactory {
             deviceId = deviceId,
             properties = DeviceProperties(tile.family, tile.label),
             endpointFactory = {
-                RuxSystemVolumeWorkspace.prepareStorage0Volume(workspace)
+                K16SystemVolumeWorkspace.prepareStorage0Volume(workspace)
                 val storage0 = volumeStore.openOrCreateComputerVolume(deviceId, "storage0")
-                val biosFlashPath = RuxBiosFlashWorkspace.prepareBiosFlash(workspace)
+                val biosFlashPath = K16BiosFlashWorkspace.prepareBiosFlash(workspace)
                 val snapshot = tile.consumePendingRuntimeSnapshot()
                 createRuxComputerEndpoint(biosFlashPath, storage0, snapshot)
             },

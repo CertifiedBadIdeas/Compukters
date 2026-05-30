@@ -24,21 +24,21 @@ import kotlin.io.path.createDirectories
 import kotlin.io.path.exists
 import kotlin.io.path.writeBytes
 
-object RuxBiosFlashWorkspace {
+object K16BiosFlashWorkspace {
     const val DEFAULT_BIOS_FLASH_RESOURCE: String = "firmware/k16-bios.kflash"
     const val BIOS_FLASH_FILENAME: String = "bios.kflash"
 
     fun prepareBiosFlash(
         workspace: Path,
         resourcePath: String = DEFAULT_BIOS_FLASH_RESOURCE,
-        classLoader: ClassLoader = RuxBiosFlashWorkspace::class.java.classLoader,
+        classLoader: ClassLoader = K16BiosFlashWorkspace::class.java.classLoader,
     ): Path {
         val biosFlashPath = workspace.resolve(BIOS_FLASH_FILENAME)
         if (biosFlashPath.exists()) {
             return biosFlashPath
         }
         val bytes = loadBiosFlashResource(resourcePath, classLoader)
-        check(bytes.isNotEmpty()) { "Rux16 BIOS flash resource is empty: $resourcePath" }
+        check(bytes.isNotEmpty()) { "K16 BIOS flash resource is empty: $resourcePath" }
         workspace.createDirectories()
         biosFlashPath.writeBytes(bytes)
         return biosFlashPath
@@ -46,10 +46,10 @@ object RuxBiosFlashWorkspace {
 
     fun loadBiosFlashResource(
         resourcePath: String = DEFAULT_BIOS_FLASH_RESOURCE,
-        classLoader: ClassLoader = RuxBiosFlashWorkspace::class.java.classLoader,
+        classLoader: ClassLoader = K16BiosFlashWorkspace::class.java.classLoader,
     ): ByteArray =
         classLoader
             .getResourceAsStream(resourcePath)
             ?.use { it.readBytes() }
-            ?: error("Rux16 BIOS flash resource not found: $resourcePath")
+            ?: error("K16 BIOS flash resource not found: $resourcePath")
 }
