@@ -43,9 +43,9 @@ interface RuxComputerRuntimeBindings {
     fun free(handle: Long)
 }
 
-object NativeRux16ComputerRuntimeBindings : RuxComputerRuntimeBindings {
+object NativeK16ComputerRuntimeBindings : RuxComputerRuntimeBindings {
     override fun runUntilSignal(handle: Long): NativeRuxComputerSignal =
-        NativeVmBindings.runRux16ComputerUntilSignal(handle)
+        NativeVmBindings.runK16ComputerUntilSignal(handle)
 
     override fun control(handle: Long): NativeRuxComputerControl =
         NativeVmBindings.ruxComputerControl(handle)
@@ -89,7 +89,7 @@ object RuxComputerRuntimeFactory {
                 maxSteps = maxSteps,
                 storage0Path = storage0Path,
         )
-        return RuxComputerRuntime(handle, bindings = NativeRux16ComputerRuntimeBindings)
+        return RuxComputerRuntime(handle, bindings = NativeK16ComputerRuntimeBindings)
     }
 
     fun restoreFromBiosFlashSnapshot(
@@ -106,7 +106,7 @@ object RuxComputerRuntimeFactory {
                 storage0Path = storage0Path,
                 snapshot = snapshot,
             )
-        return RuxComputerRuntime(handle, bindings = NativeRux16ComputerRuntimeBindings)
+        return RuxComputerRuntime(handle, bindings = NativeK16ComputerRuntimeBindings)
     }
 }
 
@@ -128,7 +128,7 @@ interface RuxComputerEndpoint : AutoCloseable {
 
 class RuxComputerRuntime(
     private val handle: Long,
-    private val bindings: RuxComputerRuntimeBindings = NativeRux16ComputerRuntimeBindings,
+    private val bindings: RuxComputerRuntimeBindings = NativeK16ComputerRuntimeBindings,
     private val defaultMaxTurnsPerTick: Int = 8,
     private val storage0Sink: ((ByteArray) -> Unit)? = null,
 ) : RuxComputerEndpoint {

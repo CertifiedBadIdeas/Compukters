@@ -20,11 +20,16 @@
 package ru.lazyhat.compukterkraft.lang.runtime.blazing
 
 import java.nio.file.Path
+import kotlin.io.path.readText
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class RuxComputerRuntimeFactoryTest {
+    private val root = generateSequence(Path.of(System.getProperty("user.dir")).toAbsolutePath()) { it.parent }
+        .first { it.resolve("gradle/libs.versions.toml").toFile().exists() }
+
     @Test
     fun runtimeFactoryDoesNotExposeResourceOrImageStartup() {
         val methodNames = RuxComputerRuntimeFactory::class.java.methods.map { it.name }.toSet()
@@ -59,6 +64,55 @@ class RuxComputerRuntimeFactoryTest {
             }
 
         assertEquals(true, hasExplicitSnapshotRestore)
+    }
+
+    @Test
+    fun runtimeUsesK16KotlinBindingSurface() {
+        val runtimeSource =
+            root
+                .resolve(
+                    Path
+                        .of(
+                            "modules",
+                            "native-runtime",
+                            "src",
+                            "main",
+                            "kotlin",
+                            "ru",
+                            "lazyhat",
+                            "compukterkraft",
+                            "lang",
+                            "runtime",
+                            "blazing",
+                            "RuxComputerRuntime.kt",
+                        ),
+                )
+                .readText()
+        val bindingsSource =
+            root
+                .resolve(
+                    Path
+                        .of(
+                            "modules",
+                            "native-runtime",
+                            "src",
+                            "main",
+                            "kotlin",
+                            "ru",
+                            "lazyhat",
+                            "compukterkraft",
+                            "lang",
+                            "runtime",
+                            "blazing",
+                            "NativeVmBindings.kt",
+                        ),
+                )
+                .readText()
+
+        assertTrue(runtimeSource.contains("NativeK16ComputerRuntimeBindings"))
+        assertFalse(runtimeSource.contains("NativeRux16ComputerRuntimeBindings"))
+        assertTrue(bindingsSource.contains("fun runK16ComputerUntilSignal(handle: Long)"))
+        assertFalse(bindingsSource.contains("fun runRux16ComputerUntilSignal(handle: Long)"))
     }
 
     @Test
