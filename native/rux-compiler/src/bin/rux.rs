@@ -1,5 +1,7 @@
 use rux_compiler::artifact::Rux16ArtifactTarget;
-use rux_compiler::{advice, compile_rux16_artifact, inspect, rux16_disasm, ruxfs, volume};
+use rux_compiler::{
+    advice, compile_rux16_artifact, inspect, object_link, rux16_disasm, ruxfs, volume,
+};
 use std::env;
 use std::fs;
 use std::process::ExitCode;
@@ -20,6 +22,7 @@ fn run(args: Vec<String>) -> Result<(), String> {
     };
     match command.as_str() {
         "compile" => run_compile(&args[1..]),
+        "link" => run_link(&args[1..]),
         "check" => run_check(&args[1..]),
         "disasm" | "disassemble" => run_disasm(&args[1..]),
         "inspect" => run_inspect(&args[1..]),
@@ -65,6 +68,26 @@ fn run_compile(args: &[String]) -> Result<(), String> {
     let artifact = compile_rux16_artifact(&source, config.target)
         .map_err(|error| format!("compile error: {}", error.message))?;
     fs::write(&config.output_path, artifact.bytes)
+        .map_err(|error| format!("failed to write {}: {error}", config.output_path))
+}
+
+fn run_link(args: &[String]) -> Result<(), String> {
+    let config = parse_link_args(args)?;
+    let input_bytes = config
+        .input_paths
+        .iter()
+        .map(|path| {
+            fs::read(path)
+                .map(|bytes| (path.as_str(), bytes))
+                .map_err(|error| format!("failed to read {path}: {error}"))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let inputs = input_bytes
+        .iter()
+        .map(|(path, bytes)| object_link::Rux16LinkInput { name: path, bytes })
+        .collect::<Vec<_>>();
+    let bytes = object_link::link_rux16_objects_to_ruxe(&inputs, config.target)?;
+    fs::write(&config.output_path, bytes)
         .map_err(|error| format!("failed to write {}: {error}", config.output_path))
 }
 
@@ -117,6 +140,51 @@ struct CompileConfig {
     target: Rux16ArtifactTarget,
     source_path: String,
     output_path: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct LinkConfig {
+    target: Rux16ArtifactTarget,
+    input_paths: Vec<String>,
+    output_path: String,
+}
+
+fn parse_link_args(args: &[String]) -> Result<LinkConfig, String> {
+    let mut target = Rux16ArtifactTarget::Program;
+    let mut input_paths = Vec::new();
+    let mut output_path = None;
+    let mut index = 0;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--target" => {
+                let Some(value) = args.get(index + 1) else {
+                    return link_usage_error();
+                };
+                target = Rux16ArtifactTarget::parse(value)?;
+                index += 2;
+            }
+            "-o" => {
+                let Some(value) = args.get(index + 1) else {
+                    return link_usage_error();
+                };
+                output_path = Some(value.clone());
+                index += 2;
+            }
+            value if value.starts_with('-') => return link_usage_error(),
+            value => {
+                input_paths.push(value.to_string());
+                index += 1;
+            }
+        }
+    }
+    if input_paths.is_empty() {
+        return link_usage_error();
+    }
+    Ok(LinkConfig {
+        target,
+        input_paths,
+        output_path: output_path.ok_or_else(link_usage_message)?,
+    })
 }
 
 fn parse_compile_args(args: &[String]) -> Result<CompileConfig, String> {
@@ -350,7 +418,7 @@ fn parse_size(value: &str) -> Result<usize, String> {
 }
 
 fn usage_error() -> Result<(), String> {
-    Err("usage: rux check <input.rx>\n       rux compile [--target <bios|boot|kernel|program>] <input.rx> -o <output>\n       rux disasm --target <bios|boot|kernel|program> <input>\n       rux inspect <blob>\n       rux volume <create|init|put-boot|put-kernel> ...\n       rux fs <filesystem> ...".to_string())
+    Err("usage: rux check <input.rx>\n       rux compile [--target <bios|boot|kernel|program>] <input.rx> -o <output>\n       rux link [--target <boot|kernel|program>] <input.o>... -o <output.ruxe>\n       rux disasm --target <bios|boot|kernel|program> <input>\n       rux inspect <blob>\n       rux volume <create|init|put-boot|put-kernel> ...\n       rux fs <filesystem> ...".to_string())
 }
 
 fn check_usage_error() -> Result<(), String> {
@@ -363,6 +431,14 @@ fn compile_usage_error() -> Result<CompileConfig, String> {
 
 fn compile_usage_message() -> String {
     "usage: rux compile [--target <bios|boot|kernel|program>] <input.rx> -o <output>".to_string()
+}
+
+fn link_usage_error() -> Result<LinkConfig, String> {
+    Err(link_usage_message())
+}
+
+fn link_usage_message() -> String {
+    "usage: rux link [--target <boot|kernel|program>] <input.o>... -o <output.ruxe>".to_string()
 }
 
 fn disasm_usage_error() -> Result<DisasmConfig, String> {

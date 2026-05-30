@@ -2,6 +2,7 @@ pub mod advice;
 pub mod artifact;
 mod frontend;
 pub mod inspect;
+pub mod object_link;
 pub mod partition;
 mod runtime;
 mod rux16_asm;
