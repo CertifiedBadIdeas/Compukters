@@ -62,6 +62,62 @@ fn rux_runtime_startup_links_returning_main_and_exposes_return_byte() {
 }
 
 #[test]
+fn rux_run_executes_program_ruxe_and_prints_debug_output_hex() {
+    let startup_path = temp_file("run-startup.o");
+    let main_path = temp_file("run-main.o");
+    let output_path = temp_file("run-program.ruxe");
+    fs::write(&main_path, rux16_main_returning_42_object()).expect("main object writes");
+
+    let runtime_output = Command::new(rux_binary())
+        .args([
+            "runtime",
+            "rux16-startup",
+            "-o",
+            startup_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("rux runtime runs");
+    assert!(
+        runtime_output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&runtime_output.stderr)
+    );
+
+    let link_output = Command::new(rux_binary())
+        .args([
+            "link",
+            "--target",
+            "program",
+            startup_path.to_str().unwrap(),
+            main_path.to_str().unwrap(),
+            "-o",
+            output_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("rux link runs");
+    assert!(
+        link_output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&link_output.stderr)
+    );
+
+    let run_output = Command::new(rux_binary())
+        .args(["run", output_path.to_str().unwrap()])
+        .output()
+        .expect("rux run runs");
+
+    assert!(
+        run_output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&run_output.stderr)
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&run_output.stdout),
+        "signal=halt debug_bytes=2a\n"
+    );
+}
+
+#[test]
 fn rux_runtime_startup_does_not_hide_missing_helper_symbols() {
     let startup_path = temp_file("startup-helper-missing.o");
     let main_path = temp_file("main-needs-helper.o");
