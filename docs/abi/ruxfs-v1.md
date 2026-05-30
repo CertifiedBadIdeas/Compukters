@@ -159,7 +159,7 @@ RUXVOL -> RUXPT ROOT partition -> RUXFS superblock -> /boot/kernel.ruxe
 ```
 
 This reader composes byte-level volume partition extraction with RuxFS absolute
-path lookup. It is not a fallback path and does not make `rux volume`
+path lookup. It is not a fallback path and does not make `k16 volume`
 filesystem-aware.
 
 The VM runtime also has a read-only storage image reader for the guest-visible
@@ -170,7 +170,7 @@ storage0 media bytes -> RUXPT ROOT partition -> RUXFS superblock -> absolute pat
 ```
 
 This runtime reader starts at LBA0 of the storage media payload. It does not
-accept a host `.ruxvol` path and does not strip the 16-byte `RUXVOL` host file
+accept a host `.kv` path and does not strip the 16-byte `RUXVOL` host file
 header. The storage backend performs that file-to-media translation before the
 guest-visible storage path sees any bytes.
 
@@ -188,16 +188,16 @@ kinds as hard load failures.
 The public CLI namespace is filesystem-specific:
 
 ```text
-rux fs ruxfs format <image.ruxfs> --blocks <blocks>
-rux fs ruxfs mkdir <image.ruxfs> <path>
-rux fs ruxfs put <image.ruxfs> <path> <host-input>
-rux fs ruxfs get <image.ruxfs> <path> <host-output>
-rux fs ruxfs rm <image.ruxfs> <path>
-rux fs ruxfs ls <image.ruxfs> <path>
+k16 fs ruxfs format <image.kfs> --blocks <blocks>
+k16 fs ruxfs mkdir <image.kfs> <path>
+k16 fs ruxfs put <image.kfs> <path> <host-input>
+k16 fs ruxfs get <image.kfs> <path> <host-output>
+k16 fs ruxfs rm <image.kfs> <path>
+k16 fs ruxfs ls <image.kfs> <path>
 ```
 
-`rux volume` remains storage-container tooling. General filesystem operations
-must stay in `rux fs <filesystem>` subcommands. The current `put-boot` and
+`k16 volume` remains storage-container tooling. General filesystem operations
+must stay in `k16 fs <filesystem>` subcommands. The current `put-boot` and
 `put-kernel` commands are boot-chain installation helpers that write the
 standard system files into the active RuxFS-backed volume layout.
 
