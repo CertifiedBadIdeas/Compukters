@@ -8,6 +8,8 @@ chosen, but the files here are the current references for firmware and tooling.
 
 Current specifications:
 
+- `rux16-object-v1.md`: experimental ELF32 relocatable object ABI for external
+  Rux16 toolchains before final `RUXE` linking.
 - `ruxe-v1.md`: experimental guest-loadable executable container for Rux16
   bootloader, kernel, and user-space program images.
 - `rux16-v1.md`: experimental Rux16 CPU ABI, including the register file and
