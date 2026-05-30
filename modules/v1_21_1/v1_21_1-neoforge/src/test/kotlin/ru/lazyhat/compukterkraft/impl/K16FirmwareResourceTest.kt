@@ -5,29 +5,44 @@ import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16BiosFlashWorkspace
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.RuxComputerRuntimeFactory
 import ru.lazyhat.compukterkraft.lang.runtime.storage.K16SystemVolumeWorkspace
 import ru.lazyhat.compukterkraft.lang.runtime.storage.RUX_VOLUME_MAGIC_BYTES
+import java.nio.file.Path
 import kotlin.io.path.createTempDirectory
+import kotlin.io.path.readText
 import kotlin.io.path.writeBytes
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-class RuxFirmwareResourceTest {
+class K16FirmwareResourceTest {
     @Test
-    fun bundledRux16BiosFlashResourceExists() {
+    fun bundledK16FirmwareBuildUsesK16GradleSurface() {
+        val source = Path.of("build.gradle.kts").readText()
+
+        assertTrue(source.contains("generated/k16-firmware-resources"))
+        assertTrue(source.contains("generated/k16-firmware-artifacts"))
+        assertTrue(source.contains("tasks.register<Exec>(\"compileK16BiosFlash\")"))
+        assertTrue(source.contains("tasks.register<Exec>(\"compileK16SystemStorage0\")"))
+        assertFalse(source.contains("generated/rux-firmware-"))
+        assertFalse(source.contains("tasks.register<Exec>(\"compileRux16"))
+    }
+
+    @Test
+    fun bundledK16BiosFlashResourceExists() {
         val bytes =
             K16BiosFlashWorkspace.loadBiosFlashResource(
                 classLoader = javaClass.classLoader,
             )
 
-        assertTrue(bytes.size > 8, "Rux16 BIOS flash resource should not be empty")
-        assertEquals(0, bytes.size % 2, "Rux16 BIOS flash resource should contain whole words")
+        assertTrue(bytes.size > 8, "K16 BIOS flash resource should not be empty")
+        assertEquals(0, bytes.size % 2, "K16 BIOS flash resource should contain whole words")
     }
 
     @Test
-    fun bundledRux16BiosFlashResourceIsRawFlash() {
+    fun bundledK16BiosFlashResourceIsRawFlash() {
         val resource = javaClass.classLoader.getResourceAsStream("firmware/k16-bios.kflash")
-            ?: error("raw Rux16 BIOS flash resource should exist")
+            ?: error("raw K16 BIOS flash resource should exist")
 
         val bytes = resource.use { it.readBytes() }
         assertContentEquals(
@@ -37,19 +52,19 @@ class RuxFirmwareResourceTest {
     }
 
     @Test
-    fun bundledRux16SystemStorage0VolumeResourceExists() {
+    fun bundledK16SystemStorage0VolumeResourceExists() {
         val bytes =
             K16SystemVolumeWorkspace.loadStorage0VolumeResource(
                 classLoader = javaClass.classLoader,
             )
 
-        assertTrue(bytes.size > 512, "Rux16 system storage0 volume resource should not be empty")
+        assertTrue(bytes.size > 512, "K16 system storage0 volume resource should not be empty")
         assertContentEquals(RUX_VOLUME_MAGIC_BYTES, bytes.copyOfRange(0, RUX_VOLUME_MAGIC_BYTES.size))
     }
 
     @Test
-    fun bundledRux16BiosFlashBootsBundledSystemStorage0Volume() {
-        val workspace = createTempDirectory("rux-firmware-resource-test-")
+    fun bundledK16BiosFlashBootsBundledSystemStorage0Volume() {
+        val workspace = createTempDirectory("k16-firmware-resource-test-")
         val biosFlashPath = workspace.resolve("bios.kflash")
         val storage0Path = workspace.resolve("storage0.kv")
         biosFlashPath.writeBytes(K16BiosFlashWorkspace.loadBiosFlashResource(classLoader = javaClass.classLoader))
