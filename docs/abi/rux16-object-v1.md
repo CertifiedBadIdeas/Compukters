@@ -43,6 +43,40 @@ applies supported relocations, and emits a validated single-load-section
 `RUXE`. It does not emit raw BIOS flash; BIOS images remain a `rux compile`
 source-artifact path.
 
+## Freestanding Runtime Boundary
+
+The first freestanding startup object is generated with:
+
+```text
+rux runtime rux16-startup -o <startup.o>
+```
+
+The startup object defines `_start` and requires an application-defined `main`.
+The linker uses `_start` as the final `RUXE` entry symbol. At runtime `_start`
+initializes `sp` to the program stack top, calls `main`, then terminates through
+the first observable proof path.
+
+The startup object writes the low byte of `main`'s `r0` return value to
+`debug::WRITE`, then executes `halt`. This deliberately small behavior is the
+initial return-42/add proof boundary. It is not a libc, an OS ABI, or a syscall
+surface.
+
+Reserved runtime helper symbol names:
+
+```text
+_start          provided by rux16-startup
+main            required application entry called by _start
+__rux16_memcpy  reserved memory helper, not provided in this slice
+__rux16_memset  reserved memory helper, not provided in this slice
+__rux16_memmove reserved memory helper, not provided in this slice
+```
+
+Missing helper symbols are link-time errors. The linker must not synthesize
+helper bodies, fall back to VM hooks, or ask the VM to resolve runtime helpers.
+When a backend starts emitting calls to `__rux16_memcpy`, `__rux16_memset`, or
+`__rux16_memmove`, those helpers must be added as explicit runtime object code
+and covered by linker/runtime tests in the same slice.
+
 ## ELF Identification
 
 Rux16 object files use these ELF header values:
