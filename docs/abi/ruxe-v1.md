@@ -170,7 +170,7 @@ OS filesystem -> read RUXE file bytes into RAM -> exec service validates ABI kin
 The exec service receives bytes or guest RAM ranges, never a host-side path.
 The VM runtime provides the filesystem read and `program` ABI kind validation
 boundary for already-read bytes. The first guest-side kernel loader now
-exercises the same policy directly from storage: it reads `/bin/init.ruxe` from
+exercises the same policy directly from storage: it reads `/bin/init.kx` from
 the `ROOT` RuxFS partition, validates ABI kind `program`, copies the payload to
 `load_addr`, and jumps to `entry_pc`.
 
@@ -181,9 +181,9 @@ storage tooling installs fixed-image `RUXE` artifacts into the partitioned
 system volume:
 
 - `put-boot` accepts ABI kind `bootloader` and writes
-  `BOOT`/RuxFS `/boot/loader.ruxe`.
+  `BOOT`/RuxFS `/boot/loader.kb`.
 - `put-kernel` accepts ABI kind `kernel` and writes
-  `ROOT`/RuxFS `/boot/kernel.ruxe`.
+  `ROOT`/RuxFS `/boot/kernel.kx`.
 - `program` artifacts are not installed by `rux volume put-boot` or
   `put-kernel`; they belong in a filesystem such as `RuxFS` and are selected by
   OS policy.

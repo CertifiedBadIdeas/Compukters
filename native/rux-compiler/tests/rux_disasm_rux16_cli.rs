@@ -22,7 +22,7 @@ fn rux_disasm_requires_explicit_target() {
 
 #[test]
 fn rux_disasm_prints_program_artifact_from_program_load_base() {
-    let artifact_path = temp_file("program.ruxe");
+    let artifact_path = temp_file("program.kx");
     fs::write(
         &artifact_path,
         rux_compiler::ruxe::encode_rux16_executable(
@@ -60,7 +60,7 @@ fn rux_disasm_prints_program_artifact_from_program_load_base() {
 
 #[test]
 fn rux_disasm_prints_boot_artifact_from_boot_load_base() {
-    let artifact_path = temp_file("boot.ruxe");
+    let artifact_path = temp_file("boot.kb");
     fs::write(
         &artifact_path,
         rux_compiler::ruxe::encode_rux16_executable(
@@ -98,7 +98,7 @@ fn rux_disasm_prints_boot_artifact_from_boot_load_base() {
 
 #[test]
 fn rux_disasm_prints_kernel_artifact_from_kernel_load_base() {
-    let artifact_path = temp_file("kernel.ruxe");
+    let artifact_path = temp_file("kernel.kx");
     fs::write(
         &artifact_path,
         rux_compiler::ruxe::encode_rux16_executable(

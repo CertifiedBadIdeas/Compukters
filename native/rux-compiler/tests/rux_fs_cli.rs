@@ -5,8 +5,8 @@ use std::process::Command;
 #[test]
 fn rux_fs_ruxfs_formats_writes_lists_and_reads_file() {
     let fs_path = temp_file("root.ruxfs");
-    let input_path = temp_file("loader-input.ruxe");
-    let output_path = temp_file("loader-output.ruxe");
+    let input_path = temp_file("loader-input.kb");
+    let output_path = temp_file("loader-output.kb");
     fs::write(&input_path, b"BOOTLOADER").expect("input writes");
 
     assert_success(
@@ -35,7 +35,7 @@ fn rux_fs_ruxfs_formats_writes_lists_and_reads_file() {
                 "ruxfs",
                 "put",
                 fs_path.to_str().unwrap(),
-                "/boot/loader.ruxe",
+                "/boot/loader.kb",
                 input_path.to_str().unwrap(),
             ])
             .output()
@@ -49,7 +49,7 @@ fn rux_fs_ruxfs_formats_writes_lists_and_reads_file() {
     assert_success(ls_output.clone());
     assert_eq!(
         String::from_utf8(ls_output.stdout).expect("stdout is UTF-8"),
-        "loader.ruxe\n"
+        "loader.kb\n"
     );
 
     assert_success(
@@ -59,7 +59,7 @@ fn rux_fs_ruxfs_formats_writes_lists_and_reads_file() {
                 "ruxfs",
                 "get",
                 fs_path.to_str().unwrap(),
-                "/boot/loader.ruxe",
+                "/boot/loader.kb",
                 output_path.to_str().unwrap(),
             ])
             .output()
@@ -71,7 +71,7 @@ fn rux_fs_ruxfs_formats_writes_lists_and_reads_file() {
 #[test]
 fn rux_fs_ruxfs_removes_file() {
     let fs_path = temp_file("delete.ruxfs");
-    let input_path = temp_file("delete-input.ruxe");
+    let input_path = temp_file("delete-input.kb");
     fs::write(&input_path, b"BOOTLOADER").expect("input writes");
 
     assert_success(
@@ -100,7 +100,7 @@ fn rux_fs_ruxfs_removes_file() {
                 "ruxfs",
                 "put",
                 fs_path.to_str().unwrap(),
-                "/boot/loader.ruxe",
+                "/boot/loader.kb",
                 input_path.to_str().unwrap(),
             ])
             .output()
@@ -113,7 +113,7 @@ fn rux_fs_ruxfs_removes_file() {
                 "ruxfs",
                 "rm",
                 fs_path.to_str().unwrap(),
-                "/boot/loader.ruxe",
+                "/boot/loader.kb",
             ])
             .output()
             .expect("rm runs"),

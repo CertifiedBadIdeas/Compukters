@@ -65,17 +65,17 @@
   future OS exec path.
 - The runtime `RuxComputerHandle` can transfer an already-read `RUXE` program
   into guest RAM and start Rux16 execution at the executable `entry_pc`.
-- Added a guest-side kernel init loader that reads `/bin/init.ruxe` from
+- Added a guest-side kernel init loader that reads `/bin/init.kx` from
   `storage0` `ROOT`/RuxFS, validates `RUXE` ABI kind `program`, loads the
   payload, and enters the program `entry_pc`.
-- The bundled BIOS now loads `/boot/loader.ruxe` from the `BOOT` RuxFS
+- The bundled BIOS now loads `/boot/loader.kb` from the `BOOT` RuxFS
   partition in the partitioned boot path, validates `RUXE` ABI kind
   `bootloader`, and enters the bootloader `entry_pc`.
 - `rux volume put-boot` now accepts a `RUXE` boot artifact and writes the
-  bootloader file to `BOOT`/RuxFS `/boot/loader.ruxe` for partitioned volumes.
+  bootloader file to `BOOT`/RuxFS `/boot/loader.kb` for partitioned volumes.
   Kernel artifacts are rejected for boot media.
 - Added `rux volume put-kernel`, which writes the kernel `RUXE` file to
-  `ROOT`/RuxFS `/boot/kernel.ruxe` for the bootloader-to-kernel chain.
+  `ROOT`/RuxFS `/boot/kernel.kx` for the bootloader-to-kernel chain.
 - Retired the legacy fixed `RUXB` raw boot path from active BIOS and
   `put-boot` behavior. Partitioned `RUXPT` plus RuxFS is now the only supported
   boot path.
@@ -87,9 +87,9 @@
 - Added `rux volume inspect`, which prints the `RUXVOL` header summary and
   decoded `RUXPT` partition layout.
 - Added CLI workflow coverage for building a partitioned `storage0.ruxvol`
-  with a RuxFS `ROOT` partition containing `/boot/kernel.ruxe`.
+  with a RuxFS `ROOT` partition containing `/boot/kernel.kx`.
 - Added a host-side RuxFS volume reader that models the future bootloader read
-  path from `RUXPT` `ROOT` to `/boot/kernel.ruxe`.
+  path from `RUXPT` `ROOT` to `/boot/kernel.kx`.
 - Added experimental `RuxFS` v1 as the extent-based filesystem contract for
   the partitioned `ROOT` partition, with empty formatting and structural
   validation in compiler tooling.

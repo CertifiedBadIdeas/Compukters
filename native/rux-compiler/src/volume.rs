@@ -65,7 +65,7 @@ pub fn put_boot(volume: &mut [u8], boot: &[u8]) -> Result<(), String> {
         .map_err(|_| "BOOT partition block count does not fit u32".to_string())?;
     let mut boot_fs = ruxfs::format_empty_filesystem(boot_blocks)?;
     ruxfs::create_directory(&mut boot_fs, "/boot")?;
-    ruxfs::write_file(&mut boot_fs, "/boot/loader.ruxe", boot)?;
+    ruxfs::write_file(&mut boot_fs, "/boot/loader.kb", boot)?;
     payload[boot_range].copy_from_slice(&boot_fs);
     Ok(())
 }
@@ -80,7 +80,7 @@ pub fn put_kernel(volume: &mut [u8], kernel: &[u8]) -> Result<(), String> {
     let root_range = partition_payload_range(payload, "ROOT")?;
     let root = &mut payload[root_range];
     ensure_boot_directory(root)?;
-    ruxfs::write_file(root, "/boot/kernel.ruxe", kernel)
+    ruxfs::write_file(root, "/boot/kernel.kx", kernel)
 }
 
 pub fn extract_partition(volume: &[u8], selector: &str) -> Result<Vec<u8>, String> {
@@ -145,20 +145,20 @@ pub fn inspect_boot_chain(volume: &[u8]) -> Result<String, String> {
 
     let boot_range = partition_entry_payload_range(payload, boot_entry)?;
     let boot_fs = &payload[boot_range];
-    let bootloader_bytes = ruxfs::read_file(boot_fs, "/boot/loader.ruxe")
-        .map_err(|error| format!("BOOT/RuxFS /boot/loader.ruxe is not readable: {error}"))?;
+    let bootloader_bytes = ruxfs::read_file(boot_fs, "/boot/loader.kb")
+        .map_err(|error| format!("BOOT/RuxFS /boot/loader.kb is not readable: {error}"))?;
     let bootloader = ruxe::decode_rux16_executable(&bootloader_bytes)?;
     if bootloader.abi_kind != ruxe::RuxeAbiKind::Bootloader {
-        return Err("BOOT/RuxFS /boot/loader.ruxe is not a bootloader RUXE".to_string());
+        return Err("BOOT/RuxFS /boot/loader.kb is not a bootloader RUXE".to_string());
     }
 
     let root_range = partition_entry_payload_range(payload, root_entry)?;
     let root = &payload[root_range];
-    let kernel_bytes = ruxfs::read_file(root, "/boot/kernel.ruxe")
-        .map_err(|error| format!("ROOT/RuxFS /boot/kernel.ruxe is not readable: {error}"))?;
+    let kernel_bytes = ruxfs::read_file(root, "/boot/kernel.kx")
+        .map_err(|error| format!("ROOT/RuxFS /boot/kernel.kx is not readable: {error}"))?;
     let kernel = ruxe::decode_rux16_executable(&kernel_bytes)?;
     if kernel.abi_kind != ruxe::RuxeAbiKind::Kernel {
-        return Err("ROOT/RuxFS /boot/kernel.ruxe is not a kernel RUXE".to_string());
+        return Err("ROOT/RuxFS /boot/kernel.kx is not a kernel RUXE".to_string());
     }
 
     let root_bytes = partition_byte_offset(root_entry.block_count)?;
@@ -169,7 +169,7 @@ pub fn inspect_boot_chain(volume: &[u8]) -> Result<String, String> {
         boot_entry.start_lba, boot_entry.block_count, boot_bytes, boot_entry.name
     ));
     output.push_str(&format!(
-        "BOOT RuxFS /boot/loader.ruxe file_bytes={}\n",
+        "BOOT RuxFS /boot/loader.kb file_bytes={}\n",
         bootloader_bytes.len()
     ));
     output.push_str(&format!(
@@ -183,7 +183,7 @@ pub fn inspect_boot_chain(volume: &[u8]) -> Result<String, String> {
         root_entry.start_lba, root_entry.block_count, root_bytes, root_entry.name
     ));
     output.push_str(&format!(
-        "ROOT RuxFS /boot/kernel.ruxe file_bytes={}\n",
+        "ROOT RuxFS /boot/kernel.kx file_bytes={}\n",
         kernel_bytes.len()
     ));
     output.push_str(&format!(

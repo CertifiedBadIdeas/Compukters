@@ -8,8 +8,8 @@ fn rux_cli_builds_partitioned_storage0_with_ruxfs_root_kernel_file() {
     let volume_path = temp_file("storage0.ruxvol");
     let root_path = temp_file("root.ruxfs");
     let extracted_root_path = temp_file("extracted-root.ruxfs");
-    let kernel_path = temp_file("kernel.ruxe");
-    let extracted_kernel_path = temp_file("extracted-kernel.ruxe");
+    let kernel_path = temp_file("kernel.kx");
+    let extracted_kernel_path = temp_file("extracted-kernel.kx");
     let kernel_bytes =
         ruxe::encode_rux16_executable(&[0x01, 0x00], ruxe::RuxeAbiKind::Kernel, 0x4000, 0x4000)
             .expect("kernel RUXE encodes");
@@ -64,7 +64,7 @@ fn rux_cli_builds_partitioned_storage0_with_ruxfs_root_kernel_file() {
                 "ruxfs",
                 "put",
                 root_path.to_str().unwrap(),
-                "/boot/kernel.ruxe",
+                "/boot/kernel.kx",
                 kernel_path.to_str().unwrap(),
             ])
             .output()
@@ -101,7 +101,7 @@ fn rux_cli_builds_partitioned_storage0_with_ruxfs_root_kernel_file() {
                 "ruxfs",
                 "get",
                 extracted_root_path.to_str().unwrap(),
-                "/boot/kernel.ruxe",
+                "/boot/kernel.kx",
                 extracted_kernel_path.to_str().unwrap(),
             ])
             .output()

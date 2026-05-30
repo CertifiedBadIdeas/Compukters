@@ -270,7 +270,7 @@ fn find_boot_directory_inode(boot_start_lba: i32) -> i32 {
     }
 }
 
-fn find_loader_ruxe_inode(boot_start_lba: i32, boot_directory_inode: i32) -> i32 {
+fn find_loader_kb_inode(boot_start_lba: i32, boot_directory_inode: i32) -> i32 {
     unsafe {
         if boot_directory_inode != 0 && probe_boot_ruxfs_superblock(boot_start_lba) == 1 {
             let mut inode_table_start_block: i32 = ptr<i32>(0x6018u32).load();
@@ -298,7 +298,7 @@ fn find_loader_ruxe_inode(boot_start_lba: i32, boot_directory_inode: i32) -> i32
                                 let mut entry_state: u8 = ptr<u8>(entry_addr).load();
                                 let mut name_len_addr: u32 = entry_addr + 1u32;
                                 let mut name_len: u8 = ptr<u8>(name_len_addr).load();
-                                if entry_state == 1u8 && name_len == 11u8 {
+                                if entry_state == 1u8 && name_len == 9u8 {
                                     let mut name_addr: u32 = entry_addr + 8u32;
                                     let mut name0: i32 = ptr<i32>(name_addr).load();
                                     let mut name4_addr: u32 = name_addr + 4u32;
@@ -306,8 +306,8 @@ fn find_loader_ruxe_inode(boot_start_lba: i32, boot_directory_inode: i32) -> i32
                                     let mut name8_addr: u32 = name_addr + 8u32;
                                     let mut name8: i32 = ptr<i32>(name8_addr).load();
                                     if name0 == 0x64616f6c &&
-                                        name4 == 0x722e7265 &&
-                                        name8 == 0x00657875 {
+                                        name4 == 0x6b2e7265 &&
+                                        name8 == 0x00000062 {
                                         let mut inode_id_addr: u32 = entry_addr + 4u32;
                                         return ptr<i32>(inode_id_addr).load();
                                     }
@@ -324,16 +324,16 @@ fn find_loader_ruxe_inode(boot_start_lba: i32, boot_directory_inode: i32) -> i32
     }
 }
 
-fn load_loader_ruxe_from_boot_ruxfs(boot_start_lba: i32, loader_ruxe_inode: i32) -> i32 {
+fn load_loader_kb_from_boot_ruxfs(boot_start_lba: i32, loader_kb_inode: i32) -> i32 {
     unsafe {
-        if loader_ruxe_inode != 0 && probe_boot_ruxfs_superblock(boot_start_lba) == 1 {
+        if loader_kb_inode != 0 && probe_boot_ruxfs_superblock(boot_start_lba) == 1 {
             let mut inode_table_start_block: i32 = ptr<i32>(0x6018u32).load();
             let mut inode_table_lba: i32 = boot_start_lba + inode_table_start_block;
             let mut inode_status: i32 = read_storage0_blocks(inode_table_lba, 1, 0x6000);
             if inode_status == storage0::STATUS_DONE {
                 let mut inode_index: i32 = 0;
                 let mut inode_addr: u32 = 0x6000u32;
-                while inode_index != loader_ruxe_inode {
+                while inode_index != loader_kb_inode {
                     inode_addr = inode_addr + 64u32;
                     inode_index = inode_index + 1;
                 }
@@ -368,7 +368,7 @@ fn load_loader_ruxe_from_boot_ruxfs(boot_start_lba: i32, loader_ruxe_inode: i32)
     }
 }
 
-fn execute_loaded_bootloader_ruxe() {
+fn execute_loaded_bootloader_kb() {
     unsafe {
         let mut entry_pc: i32 = ptr<i32>(0x600cu32).load();
         let mut section_kind: i32 = ptr<i32>(0x6020u32).load();
@@ -408,17 +408,17 @@ fn load_partitioned_bootloader() {
     unsafe {
         let mut boot_start_lba: i32 = find_boot_partition_start_lba();
         let mut boot_directory_inode: i32 = find_boot_directory_inode(boot_start_lba);
-        let mut loader_ruxe_inode: i32 = find_loader_ruxe_inode(
+        let mut loader_kb_inode: i32 = find_loader_kb_inode(
             boot_start_lba,
             boot_directory_inode
         );
-        let mut loader_ruxe_present: i32 = load_loader_ruxe_from_boot_ruxfs(
+        let mut loader_kb_present: i32 = load_loader_kb_from_boot_ruxfs(
             boot_start_lba,
-            loader_ruxe_inode
+            loader_kb_inode
         );
-        if loader_ruxe_present == 1 {
+        if loader_kb_present == 1 {
             write_boot_loader_found();
-            execute_loaded_bootloader_ruxe();
+            execute_loaded_bootloader_kb();
         } else {
             write_no_bootable_device();
         }

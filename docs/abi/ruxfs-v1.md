@@ -155,7 +155,7 @@ The current compiler crate provides:
 The host-side read path used to model future bootloader behavior is:
 
 ```text
-RUXVOL -> RUXPT ROOT partition -> RUXFS superblock -> /boot/kernel.ruxe
+RUXVOL -> RUXPT ROOT partition -> RUXFS superblock -> /boot/kernel.kx
 ```
 
 This reader composes byte-level volume partition extraction with RuxFS absolute
@@ -177,9 +177,9 @@ guest-visible storage path sees any bytes.
 The current guest boot chain uses the same RuxFS structure:
 
 ```text
-BIOS       -> storage0 BOOT/RuxFS /boot/loader.ruxe -> bootloader
-bootloader -> storage0 ROOT/RuxFS /boot/kernel.ruxe -> kernel
-kernel     -> storage0 ROOT/RuxFS /bin/init.ruxe    -> program
+BIOS       -> storage0 BOOT/RuxFS /boot/loader.kb -> bootloader
+bootloader -> storage0 ROOT/RuxFS /boot/kernel.kx -> kernel
+kernel     -> storage0 ROOT/RuxFS /bin/init.kx    -> program
 ```
 
 Guest loaders treat missing paths, malformed metadata, or wrong executable ABI
