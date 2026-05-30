@@ -16,7 +16,7 @@ fn rux_cli_builds_partitioned_storage0_with_ruxfs_root_kernel_file() {
     fs::write(&kernel_path, &kernel_bytes).expect("kernel writes");
 
     assert_success(
-        Command::new(rux_binary())
+        Command::new(k16_binary())
             .args([
                 "volume",
                 "init",
@@ -28,7 +28,7 @@ fn rux_cli_builds_partitioned_storage0_with_ruxfs_root_kernel_file() {
             .expect("volume init runs"),
     );
 
-    let inspect_output = Command::new(rux_binary())
+    let inspect_output = Command::new(k16_binary())
         .args(["volume", "inspect", volume_path.to_str().unwrap()])
         .output()
         .expect("volume inspect runs");
@@ -39,7 +39,7 @@ fn rux_cli_builds_partitioned_storage0_with_ruxfs_root_kernel_file() {
     );
 
     assert_success(
-        Command::new(rux_binary())
+        Command::new(k16_binary())
             .args([
                 "fs",
                 "ruxfs",
@@ -52,13 +52,13 @@ fn rux_cli_builds_partitioned_storage0_with_ruxfs_root_kernel_file() {
             .expect("ruxfs format runs"),
     );
     assert_success(
-        Command::new(rux_binary())
+        Command::new(k16_binary())
             .args(["fs", "ruxfs", "mkdir", root_path.to_str().unwrap(), "/boot"])
             .output()
             .expect("ruxfs mkdir runs"),
     );
     assert_success(
-        Command::new(rux_binary())
+        Command::new(k16_binary())
             .args([
                 "fs",
                 "ruxfs",
@@ -71,7 +71,7 @@ fn rux_cli_builds_partitioned_storage0_with_ruxfs_root_kernel_file() {
             .expect("ruxfs put runs"),
     );
     assert_success(
-        Command::new(rux_binary())
+        Command::new(k16_binary())
             .args([
                 "volume",
                 "replace-partition",
@@ -83,7 +83,7 @@ fn rux_cli_builds_partitioned_storage0_with_ruxfs_root_kernel_file() {
             .expect("replace partition runs"),
     );
     assert_success(
-        Command::new(rux_binary())
+        Command::new(k16_binary())
             .args([
                 "volume",
                 "extract-partition",
@@ -95,7 +95,7 @@ fn rux_cli_builds_partitioned_storage0_with_ruxfs_root_kernel_file() {
             .expect("extract partition runs"),
     );
     assert_success(
-        Command::new(rux_binary())
+        Command::new(k16_binary())
             .args([
                 "fs",
                 "ruxfs",
@@ -131,6 +131,6 @@ fn temp_file(name: &str) -> PathBuf {
     path
 }
 
-fn rux_binary() -> String {
-    std::env::var("CARGO_BIN_EXE_rux").expect("Cargo exposes rux binary path")
+fn k16_binary() -> String {
+    std::env::var("CARGO_BIN_EXE_k16").expect("Cargo exposes k16 binary path")
 }

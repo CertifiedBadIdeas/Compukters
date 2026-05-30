@@ -41,20 +41,20 @@ fn run_cli(surface: CliSurface, args: Vec<String>) -> Result<(), String> {
     match (surface, command.as_str()) {
         (CliSurface::Rux, "compile") => run_compile(&args[1..]),
         (CliSurface::Rux, "check") => run_check(&args[1..]),
-        (_, "link") => run_link(surface, &args[1..]),
-        (_, "runtime") => run_runtime(surface, &args[1..]),
-        (_, "run") => run_program(surface, &args[1..]),
-        (_, "disasm" | "disassemble") => run_disasm(surface, &args[1..]),
-        (_, "inspect") => run_inspect(surface, &args[1..]),
-        (_, "fs") => run_fs(surface, &args[1..]),
-        (_, "volume") => run_volume(surface, &args[1..]),
+        (CliSurface::K16, "link") => run_link(surface, &args[1..]),
+        (CliSurface::K16, "runtime") => run_runtime(surface, &args[1..]),
+        (CliSurface::K16, "run") => run_program(surface, &args[1..]),
+        (CliSurface::K16, "disasm" | "disassemble") => run_disasm(surface, &args[1..]),
+        (CliSurface::K16, "inspect") => run_inspect(surface, &args[1..]),
+        (CliSurface::K16, "fs") => run_fs(surface, &args[1..]),
+        (CliSurface::K16, "volume") => run_volume(surface, &args[1..]),
         _ => usage_error(surface),
     }
 }
 
 fn usage_error(surface: CliSurface) -> Result<(), String> {
     match surface {
-        CliSurface::Rux => Err("usage: rux check <input.rx>\n       rux compile [--target <bios|boot|kernel|program>] <input.rx> -o <output>\n       rux link [--target <boot|kernel|program>] <input.o>... -o <output.ruxe>\n       rux runtime <rux16-startup|rux16-memory-helpers> -o <output.o>\n       rux run <program.ruxe>\n       rux disasm --target <bios|boot|kernel|program> <input>\n       rux inspect <blob>\n       rux volume <create|init|put-boot|put-kernel> ...\n       rux fs <filesystem> ...".to_string()),
+        CliSurface::Rux => Err("usage: rux check <input.rx>\n       rux compile [--target <bios|boot|kernel|program>] <input.rx> -o <output>".to_string()),
         CliSurface::K16 => Err("usage: k16 link [--target <boot|kernel|program>] <input.ko>... -o <output.kx>\n       k16 runtime <rux16-startup|rux16-memory-helpers> -o <output.ko>\n       k16 run <program.kx>\n       k16 disasm --target <bios|boot|kernel|program> <input>\n       k16 inspect <blob>\n       k16 volume <create|init|put-boot|put-kernel> ...\n       k16 fs <filesystem> ...".to_string()),
     }
 }
@@ -667,34 +667,21 @@ fn link_usage_error(surface: CliSurface) -> Result<LinkConfig, String> {
 }
 
 fn link_usage_message(surface: CliSurface) -> String {
-    match surface {
-        CliSurface::Rux => {
-            "usage: rux link [--target <boot|kernel|program>] <input.o>... -o <output.ruxe>"
-                .to_string()
-        }
-        CliSurface::K16 => {
-            "usage: k16 link [--target <boot|kernel|program>] <input.ko>... -o <output.kx>"
-                .to_string()
-        }
-    }
+    debug_assert_eq!(surface, CliSurface::K16);
+    "usage: k16 link [--target <boot|kernel|program>] <input.ko>... -o <output.kx>".to_string()
 }
 
 fn runtime_usage_error(surface: CliSurface) -> Result<(), String> {
+    debug_assert_eq!(surface, CliSurface::K16);
     Err(format!(
-        "usage: {} runtime <rux16-startup|rux16-memory-helpers> -o <output.{}>",
-        surface.command_name(),
-        match surface {
-            CliSurface::Rux => "o",
-            CliSurface::K16 => "ko",
-        }
+        "usage: {} runtime <rux16-startup|rux16-memory-helpers> -o <output.ko>",
+        surface.command_name()
     ))
 }
 
 fn run_usage_error(surface: CliSurface) -> Result<(), String> {
-    Err(match surface {
-        CliSurface::Rux => "usage: rux run <program.ruxe>".to_string(),
-        CliSurface::K16 => "usage: k16 run <program.kx>".to_string(),
-    })
+    debug_assert_eq!(surface, CliSurface::K16);
+    Err("usage: k16 run <program.kx>".to_string())
 }
 
 fn disasm_usage_error(surface: CliSurface) -> Result<DisasmConfig, String> {
@@ -713,23 +700,17 @@ fn inspect_usage_error(surface: CliSurface) -> Result<(), String> {
 }
 
 fn volume_usage_error(surface: CliSurface) -> Result<(), String> {
+    debug_assert_eq!(surface, CliSurface::K16);
     let command = surface.command_name();
-    let (volume_ext, boot_ext, kernel_ext) = match surface {
-        CliSurface::Rux => ("ruxvol", "bin", "ruxe"),
-        CliSurface::K16 => ("kv", "kb", "kx"),
-    };
     Err(format!(
-        "usage: {command} volume create <volume.{volume_ext}> --size <bytes>\n       {command} volume init <volume.{volume_ext}> --size <bytes>\n       {command} volume put-boot <volume.{volume_ext}> <boot.{boot_ext}>\n       {command} volume put-kernel <volume.{volume_ext}> <kernel.{kernel_ext}>\n       {command} volume extract-partition <volume.{volume_ext}> <partition> <output>\n       {command} volume replace-partition <volume.{volume_ext}> <partition> <input>\n       {command} volume inspect <volume.{volume_ext}>\n       {command} volume inspect-boot <volume.{volume_ext}>"
+        "usage: {command} volume create <volume.kv> --size <bytes>\n       {command} volume init <volume.kv> --size <bytes>\n       {command} volume put-boot <volume.kv> <boot.kb>\n       {command} volume put-kernel <volume.kv> <kernel.kx>\n       {command} volume extract-partition <volume.kv> <partition> <output>\n       {command} volume replace-partition <volume.kv> <partition> <input>\n       {command} volume inspect <volume.kv>\n       {command} volume inspect-boot <volume.kv>"
     ))
 }
 
 fn fs_usage_error(surface: CliSurface) -> Result<(), String> {
+    debug_assert_eq!(surface, CliSurface::K16);
     let command = surface.command_name();
-    let image_ext = match surface {
-        CliSurface::Rux => "ruxfs",
-        CliSurface::K16 => "kfs",
-    };
     Err(format!(
-        "usage: {command} fs ruxfs format <image.{image_ext}> --blocks <blocks>\n       {command} fs ruxfs mkdir <image.{image_ext}> <path>\n       {command} fs ruxfs put <image.{image_ext}> <path> <host-input>\n       {command} fs ruxfs get <image.{image_ext}> <path> <host-output>\n       {command} fs ruxfs rm <image.{image_ext}> <path>\n       {command} fs ruxfs ls <image.{image_ext}> <path>"
+        "usage: {command} fs ruxfs format <image.kfs> --blocks <blocks>\n       {command} fs ruxfs mkdir <image.kfs> <path>\n       {command} fs ruxfs put <image.kfs> <path> <host-input>\n       {command} fs ruxfs get <image.kfs> <path> <host-output>\n       {command} fs ruxfs rm <image.kfs> <path>\n       {command} fs ruxfs ls <image.kfs> <path>"
     ))
 }

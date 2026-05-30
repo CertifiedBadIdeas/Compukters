@@ -11,7 +11,7 @@ static TEMP_FILE_COUNTER: AtomicUsize = AtomicUsize::new(0);
 fn rux_inspect_identifies_partitioned_volume() {
     let path = temp_file("storage0.ruxvol");
     let media_path = temp_file("storage0-media.bin");
-    assert!(Command::new(rux_binary())
+    assert!(Command::new(k16_binary())
         .args(["volume", "init", path.to_str().unwrap(), "--size", "65536"])
         .status()
         .expect("volume init runs")
@@ -19,10 +19,10 @@ fn rux_inspect_identifies_partitioned_volume() {
     let volume_bytes = fs::read(&path).expect("volume reads");
     fs::write(&media_path, &volume_bytes[16..]).expect("media writes");
 
-    let output = Command::new(rux_binary())
+    let output = Command::new(k16_binary())
         .args(["inspect", path.to_str().unwrap()])
         .output()
-        .expect("rux inspect runs");
+        .expect("k16 inspect runs");
 
     assert!(
         output.status.success(),
@@ -34,10 +34,10 @@ fn rux_inspect_identifies_partitioned_volume() {
         "kind=RUXVOL\nRUXVOL v1 payload=65536\nRUXPT v1 entries=2\nBOOT start_lba=1 blocks=32 bytes=16384 name=boot\nROOT start_lba=33 blocks=95 bytes=48640 name=root\n",
     );
 
-    let media_output = Command::new(rux_binary())
+    let media_output = Command::new(k16_binary())
         .args(["inspect", media_path.to_str().unwrap()])
         .output()
-        .expect("rux inspect media runs");
+        .expect("k16 inspect media runs");
     assert!(
         media_output.status.success(),
         "stderr: {}",
@@ -65,10 +65,10 @@ fn rux_inspect_identifies_standalone_ruxfs_and_ruxe() {
     )
     .expect("RUXE writes");
 
-    let fs_output = Command::new(rux_binary())
+    let fs_output = Command::new(k16_binary())
         .args(["inspect", fs_path.to_str().unwrap()])
         .output()
-        .expect("rux inspect RuxFS runs");
+        .expect("k16 inspect RuxFS runs");
     assert!(
         fs_output.status.success(),
         "stderr: {}",
@@ -79,10 +79,10 @@ fn rux_inspect_identifies_standalone_ruxfs_and_ruxe() {
         "kind=RUXFS\nRUXFS v1 blocks=32 block_size=512 root_inode=1 inode_table_blocks=8\n",
     );
 
-    let ruxe_output = Command::new(rux_binary())
+    let ruxe_output = Command::new(k16_binary())
         .args(["inspect", ruxe_path.to_str().unwrap()])
         .output()
-        .expect("rux inspect RUXE runs");
+        .expect("k16 inspect RUXE runs");
     assert!(
         ruxe_output.status.success(),
         "stderr: {}",
@@ -99,10 +99,10 @@ fn rux_inspect_rejects_unknown_blob_without_fallback() {
     let path = temp_file("unknown.bin");
     fs::write(&path, b"not a rux blob").expect("unknown blob writes");
 
-    let output = Command::new(rux_binary())
+    let output = Command::new(k16_binary())
         .args(["inspect", path.to_str().unwrap()])
         .output()
-        .expect("rux inspect runs");
+        .expect("k16 inspect runs");
 
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -122,6 +122,6 @@ fn temp_file(name: &str) -> PathBuf {
     path
 }
 
-fn rux_binary() -> String {
-    std::env::var("CARGO_BIN_EXE_rux").expect("Cargo exposes rux binary path")
+fn k16_binary() -> String {
+    std::env::var("CARGO_BIN_EXE_k16").expect("Cargo exposes k16 binary path")
 }

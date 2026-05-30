@@ -61,8 +61,8 @@ fn rux16_object_abi_docs_define_freestanding_runtime_boundary() {
     let docs = normalized_doc("docs/abi/rux16-object-v1.md");
 
     for required in [
-        "rux runtime rux16-startup -o <startup.o>",
-        "rux runtime rux16-memory-helpers -o <helpers.o>",
+        "k16 runtime rux16-startup -o <startup.ko>",
+        "k16 runtime rux16-memory-helpers -o <helpers.ko>",
         "`_start`",
         "`main`",
         "`__rux16_memcpy`",
