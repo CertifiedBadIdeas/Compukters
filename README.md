@@ -28,5 +28,5 @@ Currently for **NeoForge 1.21.1**.
 ---
 
 Devlog (in russian): https://t.me/lazyhatdev
-Source: https://github.com/LazyHat/Compukter-Kraft
+Source: https://github.com/CertifiedBadIdeas/Compukter-Kraft
 License: GPL-3.0
