@@ -1,6 +1,7 @@
 use rux_compiler::artifact::Rux16ArtifactTarget;
 use rux_compiler::{
-    advice, compile_rux16_artifact, inspect, object_link, rux16_disasm, ruxfs, volume,
+    advice, compile_rux16_artifact, inspect, object_link, rux16_disasm, rux16_runtime, ruxfs,
+    volume,
 };
 use std::env;
 use std::fs;
@@ -23,6 +24,7 @@ fn run(args: Vec<String>) -> Result<(), String> {
     match command.as_str() {
         "compile" => run_compile(&args[1..]),
         "link" => run_link(&args[1..]),
+        "runtime" => run_runtime(&args[1..]),
         "check" => run_check(&args[1..]),
         "disasm" | "disassemble" => run_disasm(&args[1..]),
         "inspect" => run_inspect(&args[1..]),
@@ -89,6 +91,23 @@ fn run_link(args: &[String]) -> Result<(), String> {
     let bytes = object_link::link_rux16_objects_to_ruxe(&inputs, config.target)?;
     fs::write(&config.output_path, bytes)
         .map_err(|error| format!("failed to write {}: {error}", config.output_path))
+}
+
+fn run_runtime(args: &[String]) -> Result<(), String> {
+    let Some(command) = args.first() else {
+        return runtime_usage_error();
+    };
+    match command.as_str() {
+        "rux16-startup" => {
+            if args.len() != 3 || args[1] != "-o" {
+                return runtime_usage_error();
+            }
+            let bytes = rux16_runtime::rux16_startup_object();
+            fs::write(&args[2], bytes)
+                .map_err(|error| format!("failed to write {}: {error}", args[2]))
+        }
+        _ => runtime_usage_error(),
+    }
 }
 
 fn run_disasm(args: &[String]) -> Result<(), String> {
@@ -418,7 +437,7 @@ fn parse_size(value: &str) -> Result<usize, String> {
 }
 
 fn usage_error() -> Result<(), String> {
-    Err("usage: rux check <input.rx>\n       rux compile [--target <bios|boot|kernel|program>] <input.rx> -o <output>\n       rux link [--target <boot|kernel|program>] <input.o>... -o <output.ruxe>\n       rux disasm --target <bios|boot|kernel|program> <input>\n       rux inspect <blob>\n       rux volume <create|init|put-boot|put-kernel> ...\n       rux fs <filesystem> ...".to_string())
+    Err("usage: rux check <input.rx>\n       rux compile [--target <bios|boot|kernel|program>] <input.rx> -o <output>\n       rux link [--target <boot|kernel|program>] <input.o>... -o <output.ruxe>\n       rux runtime rux16-startup -o <startup.o>\n       rux disasm --target <bios|boot|kernel|program> <input>\n       rux inspect <blob>\n       rux volume <create|init|put-boot|put-kernel> ...\n       rux fs <filesystem> ...".to_string())
 }
 
 fn check_usage_error() -> Result<(), String> {
@@ -439,6 +458,10 @@ fn link_usage_error() -> Result<LinkConfig, String> {
 
 fn link_usage_message() -> String {
     "usage: rux link [--target <boot|kernel|program>] <input.o>... -o <output.ruxe>".to_string()
+}
+
+fn runtime_usage_error() -> Result<(), String> {
+    Err("usage: rux runtime rux16-startup -o <startup.o>".to_string())
 }
 
 fn disasm_usage_error() -> Result<DisasmConfig, String> {

@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Added `rux runtime rux16-startup`, which emits the first freestanding Rux16
+  startup object. It defines `_start`, calls application `main`, initializes the
+  program stack, writes the low byte of `main`'s `r0` return value to
+  `debug::WRITE`, and leaves reserved helper symbols such as `__rux16_memcpy`
+  as explicit link-time requirements instead of fallback VM hooks.
 - Added `rux link`, a static object-to-`RUXE` linker for the experimental
   Rux16 ELF32 `ET_REL` object ABI. It emits bootloader, kernel, or program
   `RUXE` images and rejects unsupported allocated sections and relocation kinds

@@ -53,3 +53,24 @@ fn active_abi_index_lists_rux16_object_contract() {
         "active ABI index must list rux16-object-v1.md"
     );
 }
+
+#[test]
+fn rux16_object_abi_docs_define_freestanding_runtime_boundary() {
+    let docs = normalized_doc("docs/abi/rux16-object-v1.md");
+
+    for required in [
+        "rux runtime rux16-startup -o <startup.o>",
+        "`_start`",
+        "`main`",
+        "`__rux16_memcpy`",
+        "`__rux16_memset`",
+        "`__rux16_memmove`",
+        "Missing helper symbols are link-time errors",
+        "The startup object writes the low byte of `main`'s `r0` return value to `debug::WRITE`",
+    ] {
+        assert!(
+            docs.contains(required),
+            "Rux16 object ABI runtime docs must contain `{required}`"
+        );
+    }
+}

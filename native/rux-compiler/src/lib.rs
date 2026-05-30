@@ -7,6 +7,7 @@ pub mod partition;
 mod runtime;
 mod rux16_asm;
 pub mod rux16_disasm;
+pub mod rux16_runtime;
 pub mod ruxe;
 pub mod ruxfs;
 pub mod ruxfs_volume;
