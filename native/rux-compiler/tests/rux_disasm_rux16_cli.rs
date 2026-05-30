@@ -10,10 +10,10 @@ fn rux_disasm_requires_explicit_target() {
     let artifact_path = temp_file("program.bin");
     fs::write(&artifact_path, halt().to_le_bytes()).expect("artifact writes");
 
-    let output = Command::new(rux_binary())
+    let output = Command::new(k16_binary())
         .args(["disasm", artifact_path.to_str().unwrap()])
         .output()
-        .expect("rux disasm runs");
+        .expect("k16 disasm runs");
 
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -35,7 +35,7 @@ fn rux_disasm_prints_program_artifact_from_program_load_base() {
     )
     .expect("artifact writes");
 
-    let output = Command::new(rux_binary())
+    let output = Command::new(k16_binary())
         .args([
             "disasm",
             "--target",
@@ -43,7 +43,7 @@ fn rux_disasm_prints_program_artifact_from_program_load_base() {
             artifact_path.to_str().unwrap(),
         ])
         .output()
-        .expect("rux disasm runs");
+        .expect("k16 disasm runs");
 
     assert!(
         output.status.success(),
@@ -73,7 +73,7 @@ fn rux_disasm_prints_boot_artifact_from_boot_load_base() {
     )
     .expect("artifact writes");
 
-    let output = Command::new(rux_binary())
+    let output = Command::new(k16_binary())
         .args([
             "disasm",
             "--target",
@@ -81,7 +81,7 @@ fn rux_disasm_prints_boot_artifact_from_boot_load_base() {
             artifact_path.to_str().unwrap(),
         ])
         .output()
-        .expect("rux disasm runs");
+        .expect("k16 disasm runs");
 
     assert!(
         output.status.success(),
@@ -111,7 +111,7 @@ fn rux_disasm_prints_kernel_artifact_from_kernel_load_base() {
     )
     .expect("artifact writes");
 
-    let output = Command::new(rux_binary())
+    let output = Command::new(k16_binary())
         .args([
             "disasm",
             "--target",
@@ -119,7 +119,7 @@ fn rux_disasm_prints_kernel_artifact_from_kernel_load_base() {
             artifact_path.to_str().unwrap(),
         ])
         .output()
-        .expect("rux disasm runs");
+        .expect("k16 disasm runs");
 
     assert!(
         output.status.success(),
@@ -139,7 +139,7 @@ fn rux_disasm_rejects_raw_boot_bytes_without_ruxe_fallback() {
     let artifact_path = temp_file("raw-boot.bin");
     fs::write(&artifact_path, words_to_bytes(&[halt()])).expect("artifact writes");
 
-    let output = Command::new(rux_binary())
+    let output = Command::new(k16_binary())
         .args([
             "disasm",
             "--target",
@@ -147,7 +147,7 @@ fn rux_disasm_rejects_raw_boot_bytes_without_ruxe_fallback() {
             artifact_path.to_str().unwrap(),
         ])
         .output()
-        .expect("rux disasm runs");
+        .expect("k16 disasm runs");
 
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -159,7 +159,7 @@ fn rux_disasm_prints_bios_artifact_from_bios_flash_base() {
     let artifact_path = temp_file("bios.flash");
     fs::write(&artifact_path, words_to_bytes(&[const4(1, 7), halt()])).expect("artifact writes");
 
-    let output = Command::new(rux_binary())
+    let output = Command::new(k16_binary())
         .args([
             "disasm",
             "--target",
@@ -167,7 +167,7 @@ fn rux_disasm_prints_bios_artifact_from_bios_flash_base() {
             artifact_path.to_str().unwrap(),
         ])
         .output()
-        .expect("rux disasm runs");
+        .expect("k16 disasm runs");
 
     assert!(
         output.status.success(),
@@ -187,7 +187,7 @@ fn rux_disasm_rejects_invalid_rux16_instruction_without_word_fallback() {
     let artifact_path = temp_file("bios-invalid-instruction.flash");
     fs::write(&artifact_path, words_to_bytes(&[0x7130])).expect("artifact writes");
 
-    let output = Command::new(rux_binary())
+    let output = Command::new(k16_binary())
         .args([
             "disasm",
             "--target",
@@ -195,7 +195,7 @@ fn rux_disasm_rejects_invalid_rux16_instruction_without_word_fallback() {
             artifact_path.to_str().unwrap(),
         ])
         .output()
-        .expect("rux disasm runs");
+        .expect("k16 disasm runs");
 
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -226,7 +226,7 @@ fn rux_disasm_prints_ltu_extended_instruction() {
     )
     .expect("artifact writes");
 
-    let output = Command::new(rux_binary())
+    let output = Command::new(k16_binary())
         .args([
             "disasm",
             "--target",
@@ -234,7 +234,7 @@ fn rux_disasm_prints_ltu_extended_instruction() {
             artifact_path.to_str().unwrap(),
         ])
         .output()
-        .expect("rux disasm runs");
+        .expect("k16 disasm runs");
 
     assert!(
         output.status.success(),
@@ -263,7 +263,7 @@ fn rux_disasm_prints_canonical_integer_instruction_surface() {
     words.extend([load16(14, 1), store16(1, 14), halt()]);
     fs::write(&artifact_path, words_to_bytes(&words)).expect("artifact writes");
 
-    let output = Command::new(rux_binary())
+    let output = Command::new(k16_binary())
         .args([
             "disasm",
             "--target",
@@ -271,7 +271,7 @@ fn rux_disasm_prints_canonical_integer_instruction_surface() {
             artifact_path.to_str().unwrap(),
         ])
         .output()
-        .expect("rux disasm runs");
+        .expect("k16 disasm runs");
 
     assert!(
         output.status.success(),
@@ -299,7 +299,7 @@ fn rux_disasm_prints_call_and_ret_instructions() {
     let artifact_path = temp_file("bios-call-ret.flash");
     fs::write(&artifact_path, words_to_bytes(&[call(1), ret(), halt()])).expect("artifact writes");
 
-    let output = Command::new(rux_binary())
+    let output = Command::new(k16_binary())
         .args([
             "disasm",
             "--target",
@@ -307,7 +307,7 @@ fn rux_disasm_prints_call_and_ret_instructions() {
             artifact_path.to_str().unwrap(),
         ])
         .output()
-        .expect("rux disasm runs");
+        .expect("k16 disasm runs");
 
     assert!(
         output.status.success(),
@@ -358,7 +358,7 @@ fn rux_disasm_prints_complete_instruction_surface_multiword_raw_words_and_branch
     )
     .expect("artifact writes");
 
-    let output = Command::new(rux_binary())
+    let output = Command::new(k16_binary())
         .args([
             "disasm",
             "--target",
@@ -366,7 +366,7 @@ fn rux_disasm_prints_complete_instruction_surface_multiword_raw_words_and_branch
             artifact_path.to_str().unwrap(),
         ])
         .output()
-        .expect("rux disasm runs");
+        .expect("k16 disasm runs");
 
     assert!(
         output.status.success(),
@@ -454,8 +454,8 @@ fn temp_file(name: &str) -> PathBuf {
     path
 }
 
-fn rux_binary() -> String {
-    std::env::var("CARGO_BIN_EXE_rux").expect("Cargo exposes rux binary path")
+fn k16_binary() -> String {
+    std::env::var("CARGO_BIN_EXE_k16").expect("Cargo exposes k16 binary path")
 }
 
 fn words_to_bytes(words: &[u16]) -> Vec<u8> {

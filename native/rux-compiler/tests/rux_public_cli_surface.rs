@@ -37,6 +37,41 @@ fn rux_compile_bios_is_the_public_firmware_path() {
 }
 
 #[test]
+fn rux_does_not_expose_machine_artifact_commands() {
+    for command in [
+        "link", "runtime", "run", "disasm", "inspect", "volume", "fs",
+    ] {
+        let output = Command::new(rux_binary())
+            .arg(command)
+            .output()
+            .expect("rux runs");
+
+        assert!(!output.status.success(), "command: {command}");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.contains("rux compile"),
+            "command: {command}, stderr: {stderr}"
+        );
+        assert!(
+            stderr.contains("rux check"),
+            "command: {command}, stderr: {stderr}"
+        );
+        assert!(
+            !stderr.contains("rux link"),
+            "command: {command}, stderr: {stderr}"
+        );
+        assert!(
+            !stderr.contains("rux volume"),
+            "command: {command}, stderr: {stderr}"
+        );
+        assert!(
+            !stderr.contains("k16"),
+            "command: {command}, stderr: {stderr}"
+        );
+    }
+}
+
+#[test]
 fn k16_is_the_public_machine_artifact_cli() {
     let output = Command::new(k16_binary())
         .arg("link")

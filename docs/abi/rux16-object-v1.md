@@ -6,7 +6,7 @@ Status: experimental.
 
 Rux16 relocatable objects use ELF32 little-endian `ET_REL` files. This is the
 first object format accepted by the LLVM-facing Rux16 toolchain. LLVM must emit
-relocatable objects, not `RUXE`; Rux tooling links those objects into final
+relocatable objects, not `RUXE`; K16 tooling links those objects into final
 `RUXE` bootloader, kernel, or program images.
 
 This boundary keeps the VM independent from LLVM and from object-file details.
@@ -22,7 +22,7 @@ The static pipeline is:
 ```text
 LLVM backend or Rux assembler
   -> Rux16 ELF32 ET_REL object
-  -> Rux linker
+  -> K16 linker
   -> RUXE fixed image
   -> storage media or guest exec service
   -> VM loader
@@ -35,7 +35,7 @@ does not implement. Unsupported relocations are link-time errors.
 The current tool entry point is:
 
 ```text
-rux link --target <boot|kernel|program> <input.o>... -o <output.ruxe>
+k16 link --target <boot|kernel|program> <input.ko>... -o <output.kx>
 ```
 
 The command accepts Rux16 ELF32 `ET_REL` inputs, resolves static symbols,
@@ -48,8 +48,8 @@ source-artifact path.
 The first freestanding startup object is generated with:
 
 ```text
-rux runtime rux16-startup -o <startup.o>
-rux runtime rux16-memory-helpers -o <helpers.o>
+k16 runtime rux16-startup -o <startup.ko>
+k16 runtime rux16-memory-helpers -o <helpers.ko>
 ```
 
 The startup object defines `_start` and requires an application-defined `main`.
@@ -83,7 +83,7 @@ Runtime helper symbol names:
 Missing helper symbols are link-time errors. The linker must not synthesize
 helper bodies, fall back to VM hooks, or ask the VM to resolve runtime helpers.
 Callers link helper support by passing the Rust-built helper object as an
-ordinary `rux link` input beside startup and application objects. The helper
+ordinary `k16 link` input beside startup and application objects. The helper
 object is not implicit.
 
 ## ELF Identification

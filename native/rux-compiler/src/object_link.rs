@@ -38,10 +38,10 @@ pub fn link_rux16_objects_to_ruxe(
     target: Rux16ArtifactTarget,
 ) -> Result<Vec<u8>, String> {
     let abi_kind = target.fixed_image_abi_kind().ok_or_else(|| {
-        "rux link does not emit raw BIOS flash; choose boot, kernel, or program".to_string()
+        "k16 link does not emit raw BIOS flash; choose boot, kernel, or program".to_string()
     })?;
     if inputs.is_empty() {
-        return Err("rux link requires at least one input object".to_string());
+        return Err("k16 link requires at least one input object".to_string());
     }
 
     let objects = inputs

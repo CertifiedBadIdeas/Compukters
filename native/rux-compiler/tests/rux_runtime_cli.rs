@@ -13,7 +13,7 @@ fn rux_runtime_startup_links_returning_main_and_exposes_return_byte() {
     let output_path = temp_file("program.ruxe");
     fs::write(&main_path, rux16_main_returning_42_object()).expect("main object writes");
 
-    let runtime_output = Command::new(rux_binary())
+    let runtime_output = Command::new(k16_binary())
         .args([
             "runtime",
             "rux16-startup",
@@ -21,14 +21,14 @@ fn rux_runtime_startup_links_returning_main_and_exposes_return_byte() {
             startup_path.to_str().unwrap(),
         ])
         .output()
-        .expect("rux runtime runs");
+        .expect("k16 runtime runs");
     assert!(
         runtime_output.status.success(),
         "stderr: {}",
         String::from_utf8_lossy(&runtime_output.stderr)
     );
 
-    let link_output = Command::new(rux_binary())
+    let link_output = Command::new(k16_binary())
         .args([
             "link",
             "--target",
@@ -39,7 +39,7 @@ fn rux_runtime_startup_links_returning_main_and_exposes_return_byte() {
             output_path.to_str().unwrap(),
         ])
         .output()
-        .expect("rux link runs");
+        .expect("k16 link runs");
     assert!(
         link_output.status.success(),
         "stderr: {}",
@@ -68,7 +68,7 @@ fn rux_run_executes_program_ruxe_and_prints_debug_output_hex() {
     let output_path = temp_file("run-program.ruxe");
     fs::write(&main_path, rux16_main_returning_42_object()).expect("main object writes");
 
-    let runtime_output = Command::new(rux_binary())
+    let runtime_output = Command::new(k16_binary())
         .args([
             "runtime",
             "rux16-startup",
@@ -76,14 +76,14 @@ fn rux_run_executes_program_ruxe_and_prints_debug_output_hex() {
             startup_path.to_str().unwrap(),
         ])
         .output()
-        .expect("rux runtime runs");
+        .expect("k16 runtime runs");
     assert!(
         runtime_output.status.success(),
         "stderr: {}",
         String::from_utf8_lossy(&runtime_output.stderr)
     );
 
-    let link_output = Command::new(rux_binary())
+    let link_output = Command::new(k16_binary())
         .args([
             "link",
             "--target",
@@ -94,17 +94,17 @@ fn rux_run_executes_program_ruxe_and_prints_debug_output_hex() {
             output_path.to_str().unwrap(),
         ])
         .output()
-        .expect("rux link runs");
+        .expect("k16 link runs");
     assert!(
         link_output.status.success(),
         "stderr: {}",
         String::from_utf8_lossy(&link_output.stderr)
     );
 
-    let run_output = Command::new(rux_binary())
+    let run_output = Command::new(k16_binary())
         .args(["run", output_path.to_str().unwrap()])
         .output()
-        .expect("rux run runs");
+        .expect("k16 run runs");
 
     assert!(
         run_output.status.success(),
@@ -128,7 +128,7 @@ fn rux_runtime_startup_does_not_hide_missing_helper_symbols() {
     )
     .expect("main object writes");
 
-    let runtime_output = Command::new(rux_binary())
+    let runtime_output = Command::new(k16_binary())
         .args([
             "runtime",
             "rux16-startup",
@@ -136,14 +136,14 @@ fn rux_runtime_startup_does_not_hide_missing_helper_symbols() {
             startup_path.to_str().unwrap(),
         ])
         .output()
-        .expect("rux runtime runs");
+        .expect("k16 runtime runs");
     assert!(
         runtime_output.status.success(),
         "stderr: {}",
         String::from_utf8_lossy(&runtime_output.stderr)
     );
 
-    let link_output = Command::new(rux_binary())
+    let link_output = Command::new(k16_binary())
         .args([
             "link",
             "--target",
@@ -154,7 +154,7 @@ fn rux_runtime_startup_does_not_hide_missing_helper_symbols() {
             output_path.to_str().unwrap(),
         ])
         .output()
-        .expect("rux link runs");
+        .expect("k16 link runs");
 
     assert!(!link_output.status.success());
     let stderr = String::from_utf8_lossy(&link_output.stderr);
@@ -169,7 +169,7 @@ fn rux_runtime_startup_does_not_hide_missing_helper_symbols() {
 fn rux_runtime_memory_helpers_require_custom_rux16_rustc() {
     let helper_path = temp_file("memory-helpers.o");
 
-    let helper_output = Command::new(rux_binary())
+    let helper_output = Command::new(k16_binary())
         .args([
             "runtime",
             "rux16-memory-helpers",
@@ -179,7 +179,7 @@ fn rux_runtime_memory_helpers_require_custom_rux16_rustc() {
         .env_remove("RUX16_RUSTC")
         .env_remove("RUX16_RUST_TARGET_JSON")
         .output()
-        .expect("rux runtime helpers runs");
+        .expect("k16 runtime helpers runs");
 
     assert!(!helper_output.status.success());
     let stderr = String::from_utf8_lossy(&helper_output.stderr);
@@ -399,8 +399,8 @@ fn temp_file(name: &str) -> PathBuf {
     path
 }
 
-fn rux_binary() -> String {
-    std::env::var("CARGO_BIN_EXE_rux").expect("Cargo exposes rux binary path")
+fn k16_binary() -> String {
+    std::env::var("CARGO_BIN_EXE_k16").expect("Cargo exposes k16 binary path")
 }
 
 fn write_u16(bytes: &mut Vec<u8>, value: u16) {

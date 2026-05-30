@@ -10,7 +10,7 @@ fn rux_fs_ruxfs_formats_writes_lists_and_reads_file() {
     fs::write(&input_path, b"BOOTLOADER").expect("input writes");
 
     assert_success(
-        Command::new(rux_binary())
+        Command::new(k16_binary())
             .args([
                 "fs",
                 "ruxfs",
@@ -23,13 +23,13 @@ fn rux_fs_ruxfs_formats_writes_lists_and_reads_file() {
             .expect("format runs"),
     );
     assert_success(
-        Command::new(rux_binary())
+        Command::new(k16_binary())
             .args(["fs", "ruxfs", "mkdir", fs_path.to_str().unwrap(), "/boot"])
             .output()
             .expect("mkdir runs"),
     );
     assert_success(
-        Command::new(rux_binary())
+        Command::new(k16_binary())
             .args([
                 "fs",
                 "ruxfs",
@@ -42,7 +42,7 @@ fn rux_fs_ruxfs_formats_writes_lists_and_reads_file() {
             .expect("put runs"),
     );
 
-    let ls_output = Command::new(rux_binary())
+    let ls_output = Command::new(k16_binary())
         .args(["fs", "ruxfs", "ls", fs_path.to_str().unwrap(), "/boot"])
         .output()
         .expect("ls runs");
@@ -53,7 +53,7 @@ fn rux_fs_ruxfs_formats_writes_lists_and_reads_file() {
     );
 
     assert_success(
-        Command::new(rux_binary())
+        Command::new(k16_binary())
             .args([
                 "fs",
                 "ruxfs",
@@ -75,7 +75,7 @@ fn rux_fs_ruxfs_removes_file() {
     fs::write(&input_path, b"BOOTLOADER").expect("input writes");
 
     assert_success(
-        Command::new(rux_binary())
+        Command::new(k16_binary())
             .args([
                 "fs",
                 "ruxfs",
@@ -88,13 +88,13 @@ fn rux_fs_ruxfs_removes_file() {
             .expect("format runs"),
     );
     assert_success(
-        Command::new(rux_binary())
+        Command::new(k16_binary())
             .args(["fs", "ruxfs", "mkdir", fs_path.to_str().unwrap(), "/boot"])
             .output()
             .expect("mkdir runs"),
     );
     assert_success(
-        Command::new(rux_binary())
+        Command::new(k16_binary())
             .args([
                 "fs",
                 "ruxfs",
@@ -107,7 +107,7 @@ fn rux_fs_ruxfs_removes_file() {
             .expect("put runs"),
     );
     assert_success(
-        Command::new(rux_binary())
+        Command::new(k16_binary())
             .args([
                 "fs",
                 "ruxfs",
@@ -119,7 +119,7 @@ fn rux_fs_ruxfs_removes_file() {
             .expect("rm runs"),
     );
 
-    let ls_output = Command::new(rux_binary())
+    let ls_output = Command::new(k16_binary())
         .args(["fs", "ruxfs", "ls", fs_path.to_str().unwrap(), "/boot"])
         .output()
         .expect("ls runs");
@@ -132,10 +132,10 @@ fn rux_fs_ruxfs_removes_file() {
 
 #[test]
 fn rux_fs_rejects_unknown_filesystem_type_without_volume_fallback() {
-    let output = Command::new(rux_binary())
+    let output = Command::new(k16_binary())
         .args(["fs", "fat32", "format", "ignored.img", "--blocks", "128"])
         .output()
-        .expect("rux runs");
+        .expect("k16 runs");
 
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -159,6 +159,6 @@ fn temp_file(name: &str) -> PathBuf {
     path
 }
 
-fn rux_binary() -> String {
-    std::env::var("CARGO_BIN_EXE_rux").expect("Cargo exposes rux binary path")
+fn k16_binary() -> String {
+    std::env::var("CARGO_BIN_EXE_k16").expect("Cargo exposes k16 binary path")
 }

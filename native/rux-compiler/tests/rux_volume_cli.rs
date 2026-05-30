@@ -13,10 +13,10 @@ use std::process::Command;
 #[test]
 fn rux_volume_create_writes_empty_ruxvol_header() {
     let path = temp_file("create-storage0.ruxvol");
-    let output = Command::new(rux_binary())
+    let output = Command::new(k16_binary())
         .args(["volume", "create", path.to_str().unwrap(), "--size", "4096"])
         .output()
-        .expect("rux runs");
+        .expect("k16 runs");
 
     assert!(
         output.status.success(),
@@ -34,10 +34,10 @@ fn rux_volume_create_writes_empty_ruxvol_header() {
 #[test]
 fn rux_volume_init_writes_ruxpt_boot_and_root_partitions() {
     let path = temp_file("init-storage0.ruxvol");
-    let output = Command::new(rux_binary())
+    let output = Command::new(k16_binary())
         .args(["volume", "init", path.to_str().unwrap(), "--size", "65536"])
         .output()
-        .expect("rux runs");
+        .expect("k16 runs");
 
     assert!(
         output.status.success(),
@@ -74,7 +74,7 @@ fn rux_volume_extracts_and_replaces_partition_bytes_by_name() {
     root_bytes[4096..4101].copy_from_slice(b"hello");
     fs::write(&root_path, &root_bytes).expect("root partition writes");
 
-    assert!(Command::new(rux_binary())
+    assert!(Command::new(k16_binary())
         .args([
             "volume",
             "init",
@@ -86,7 +86,7 @@ fn rux_volume_extracts_and_replaces_partition_bytes_by_name() {
         .expect("init runs")
         .success());
 
-    let replace_output = Command::new(rux_binary())
+    let replace_output = Command::new(k16_binary())
         .args([
             "volume",
             "replace-partition",
@@ -102,7 +102,7 @@ fn rux_volume_extracts_and_replaces_partition_bytes_by_name() {
         String::from_utf8_lossy(&replace_output.stderr)
     );
 
-    let extract_output = Command::new(rux_binary())
+    let extract_output = Command::new(k16_binary())
         .args([
             "volume",
             "extract-partition",
@@ -129,7 +129,7 @@ fn rux_volume_extracts_and_replaces_partition_bytes_by_name() {
 #[test]
 fn rux_volume_inspect_prints_ruxpt_partition_layout() {
     let volume_path = temp_file("inspect-storage0.ruxvol");
-    assert!(Command::new(rux_binary())
+    assert!(Command::new(k16_binary())
         .args([
             "volume",
             "init",
@@ -141,7 +141,7 @@ fn rux_volume_inspect_prints_ruxpt_partition_layout() {
         .expect("init runs")
         .success());
 
-    let output = Command::new(rux_binary())
+    let output = Command::new(k16_binary())
         .args(["volume", "inspect", volume_path.to_str().unwrap()])
         .output()
         .expect("inspect runs");
@@ -172,7 +172,7 @@ fn rux_volume_inspect_boot_prints_boot_chain_metadata() {
     fs::write(&boot_path, &boot_bytes).expect("boot writes");
     fs::write(&kernel_path, &kernel_bytes).expect("kernel writes");
 
-    assert!(Command::new(rux_binary())
+    assert!(Command::new(k16_binary())
         .args([
             "volume",
             "init",
@@ -183,7 +183,7 @@ fn rux_volume_inspect_boot_prints_boot_chain_metadata() {
         .status()
         .expect("init runs")
         .success());
-    assert!(Command::new(rux_binary())
+    assert!(Command::new(k16_binary())
         .args([
             "volume",
             "put-boot",
@@ -193,7 +193,7 @@ fn rux_volume_inspect_boot_prints_boot_chain_metadata() {
         .status()
         .expect("put-boot runs")
         .success());
-    assert!(Command::new(rux_binary())
+    assert!(Command::new(k16_binary())
         .args([
             "fs",
             "ruxfs",
@@ -205,7 +205,7 @@ fn rux_volume_inspect_boot_prints_boot_chain_metadata() {
         .status()
         .expect("ruxfs format runs")
         .success());
-    assert!(Command::new(rux_binary())
+    assert!(Command::new(k16_binary())
         .args([
             "volume",
             "replace-partition",
@@ -216,7 +216,7 @@ fn rux_volume_inspect_boot_prints_boot_chain_metadata() {
         .status()
         .expect("replace ROOT runs")
         .success());
-    assert!(Command::new(rux_binary())
+    assert!(Command::new(k16_binary())
         .args([
             "volume",
             "put-kernel",
@@ -227,7 +227,7 @@ fn rux_volume_inspect_boot_prints_boot_chain_metadata() {
         .expect("put-kernel runs")
         .success());
 
-    let output = Command::new(rux_binary())
+    let output = Command::new(k16_binary())
         .args(["volume", "inspect-boot", volume_path.to_str().unwrap()])
         .output()
         .expect("inspect-boot runs");
@@ -253,7 +253,7 @@ fn rux_volume_inspect_boot_rejects_missing_root_kernel() {
             .expect("boot RUXE encodes");
     fs::write(&boot_path, &boot_bytes).expect("boot writes");
 
-    assert!(Command::new(rux_binary())
+    assert!(Command::new(k16_binary())
         .args([
             "volume",
             "init",
@@ -264,7 +264,7 @@ fn rux_volume_inspect_boot_rejects_missing_root_kernel() {
         .status()
         .expect("init runs")
         .success());
-    assert!(Command::new(rux_binary())
+    assert!(Command::new(k16_binary())
         .args([
             "volume",
             "put-boot",
@@ -274,7 +274,7 @@ fn rux_volume_inspect_boot_rejects_missing_root_kernel() {
         .status()
         .expect("put-boot runs")
         .success());
-    assert!(Command::new(rux_binary())
+    assert!(Command::new(k16_binary())
         .args([
             "fs",
             "ruxfs",
@@ -286,7 +286,7 @@ fn rux_volume_inspect_boot_rejects_missing_root_kernel() {
         .status()
         .expect("ruxfs format runs")
         .success());
-    assert!(Command::new(rux_binary())
+    assert!(Command::new(k16_binary())
         .args([
             "volume",
             "replace-partition",
@@ -298,7 +298,7 @@ fn rux_volume_inspect_boot_rejects_missing_root_kernel() {
         .expect("replace ROOT runs")
         .success());
 
-    let output = Command::new(rux_binary())
+    let output = Command::new(k16_binary())
         .args(["volume", "inspect-boot", volume_path.to_str().unwrap()])
         .output()
         .expect("inspect-boot runs");
@@ -314,7 +314,7 @@ fn rux_volume_replace_partition_rejects_wrong_size_without_truncation() {
     let root_path = temp_file("oversized-root-partition.bin");
     fs::write(&root_path, vec![0x7f_u8; 95 * 512 + 1]).expect("root partition writes");
 
-    assert!(Command::new(rux_binary())
+    assert!(Command::new(k16_binary())
         .args([
             "volume",
             "init",
@@ -326,7 +326,7 @@ fn rux_volume_replace_partition_rejects_wrong_size_without_truncation() {
         .expect("init runs")
         .success());
 
-    let output = Command::new(rux_binary())
+    let output = Command::new(k16_binary())
         .args([
             "volume",
             "replace-partition",
@@ -361,7 +361,7 @@ fn rux_volume_put_boot_rejects_non_partitioned_volume_without_ruxb_fallback() {
     )
     .expect("boot writes");
 
-    assert!(Command::new(rux_binary())
+    assert!(Command::new(k16_binary())
         .args([
             "volume",
             "create",
@@ -372,7 +372,7 @@ fn rux_volume_put_boot_rejects_non_partitioned_volume_without_ruxb_fallback() {
         .status()
         .expect("create runs")
         .success());
-    let output = Command::new(rux_binary())
+    let output = Command::new(k16_binary())
         .args([
             "volume",
             "put-boot",
@@ -406,7 +406,7 @@ fn rux_volume_put_boot_installs_loader_ruxe_in_boot_ruxfs_partition() {
     )
     .expect("boot writes");
 
-    assert!(Command::new(rux_binary())
+    assert!(Command::new(k16_binary())
         .args([
             "volume",
             "init",
@@ -417,7 +417,7 @@ fn rux_volume_put_boot_installs_loader_ruxe_in_boot_ruxfs_partition() {
         .status()
         .expect("init runs")
         .success());
-    let output = Command::new(rux_binary())
+    let output = Command::new(k16_binary())
         .args([
             "volume",
             "put-boot",
@@ -466,7 +466,7 @@ fn rux_volume_put_kernel_installs_kernel_ruxe_in_root_ruxfs() {
     .expect("RUXE encodes");
     fs::write(&kernel_path, &kernel_bytes).expect("kernel writes");
 
-    assert!(Command::new(rux_binary())
+    assert!(Command::new(k16_binary())
         .args([
             "volume",
             "init",
@@ -477,7 +477,7 @@ fn rux_volume_put_kernel_installs_kernel_ruxe_in_root_ruxfs() {
         .status()
         .expect("init runs")
         .success());
-    assert!(Command::new(rux_binary())
+    assert!(Command::new(k16_binary())
         .args([
             "fs",
             "ruxfs",
@@ -489,7 +489,7 @@ fn rux_volume_put_kernel_installs_kernel_ruxe_in_root_ruxfs() {
         .status()
         .expect("ruxfs format runs")
         .success());
-    assert!(Command::new(rux_binary())
+    assert!(Command::new(k16_binary())
         .args([
             "volume",
             "replace-partition",
@@ -500,7 +500,7 @@ fn rux_volume_put_kernel_installs_kernel_ruxe_in_root_ruxfs() {
         .status()
         .expect("replace ROOT runs")
         .success());
-    let output = Command::new(rux_binary())
+    let output = Command::new(k16_binary())
         .args([
             "volume",
             "put-kernel",
@@ -536,7 +536,7 @@ fn rux_volume_init_creates_root_ruxfs_for_put_kernel() {
             .expect("RUXE encodes");
     fs::write(&kernel_path, &kernel_bytes).expect("kernel writes");
 
-    assert!(Command::new(rux_binary())
+    assert!(Command::new(k16_binary())
         .args([
             "volume",
             "init",
@@ -547,7 +547,7 @@ fn rux_volume_init_creates_root_ruxfs_for_put_kernel() {
         .status()
         .expect("init runs")
         .success());
-    let output = Command::new(rux_binary())
+    let output = Command::new(k16_binary())
         .args([
             "volume",
             "put-kernel",
@@ -581,7 +581,7 @@ fn rux_volume_put_kernel_rejects_boot_artifact_without_profile_fallback() {
     )
     .expect("boot writes");
 
-    assert!(Command::new(rux_binary())
+    assert!(Command::new(k16_binary())
         .args([
             "volume",
             "create",
@@ -592,7 +592,7 @@ fn rux_volume_put_kernel_rejects_boot_artifact_without_profile_fallback() {
         .status()
         .expect("create runs")
         .success());
-    let output = Command::new(rux_binary())
+    let output = Command::new(k16_binary())
         .args([
             "volume",
             "put-kernel",
@@ -621,7 +621,7 @@ fn rux_volume_put_boot_rejects_kernel_artifact_without_profile_fallback() {
     )
     .expect("kernel writes");
 
-    assert!(Command::new(rux_binary())
+    assert!(Command::new(k16_binary())
         .args([
             "volume",
             "create",
@@ -632,7 +632,7 @@ fn rux_volume_put_boot_rejects_kernel_artifact_without_profile_fallback() {
         .status()
         .expect("create runs")
         .success());
-    let output = Command::new(rux_binary())
+    let output = Command::new(k16_binary())
         .args([
             "volume",
             "put-boot",
@@ -656,7 +656,7 @@ fn rux_volume_put_boot_rejects_raw_boot_bytes_without_ruxe_fallback() {
     let boot_path = temp_file("raw-boot.bin");
     fs::write(&boot_path, [0x01, 0x00]).expect("boot writes");
 
-    assert!(Command::new(rux_binary())
+    assert!(Command::new(k16_binary())
         .args([
             "volume",
             "create",
@@ -667,7 +667,7 @@ fn rux_volume_put_boot_rejects_raw_boot_bytes_without_ruxe_fallback() {
         .status()
         .expect("create runs")
         .success());
-    let output = Command::new(rux_binary())
+    let output = Command::new(k16_binary())
         .args([
             "volume",
             "put-boot",
@@ -1340,7 +1340,7 @@ fn rux_volume_put_boot_and_kernel_creates_storage0_that_bundled_bios_executes() 
         "stderr: {}",
         String::from_utf8_lossy(&kernel_compile_output.stderr)
     );
-    assert!(Command::new(rux_binary())
+    assert!(Command::new(k16_binary())
         .args([
             "volume",
             "init",
@@ -1351,7 +1351,7 @@ fn rux_volume_put_boot_and_kernel_creates_storage0_that_bundled_bios_executes() 
         .status()
         .expect("init runs")
         .success());
-    assert!(Command::new(rux_binary())
+    assert!(Command::new(k16_binary())
         .args([
             "volume",
             "put-boot",
@@ -1361,7 +1361,7 @@ fn rux_volume_put_boot_and_kernel_creates_storage0_that_bundled_bios_executes() 
         .status()
         .expect("put-boot runs")
         .success());
-    assert!(Command::new(rux_binary())
+    assert!(Command::new(k16_binary())
         .args([
             "fs",
             "ruxfs",
@@ -1373,7 +1373,7 @@ fn rux_volume_put_boot_and_kernel_creates_storage0_that_bundled_bios_executes() 
         .status()
         .expect("ruxfs format runs")
         .success());
-    assert!(Command::new(rux_binary())
+    assert!(Command::new(k16_binary())
         .args([
             "volume",
             "replace-partition",
@@ -1384,7 +1384,7 @@ fn rux_volume_put_boot_and_kernel_creates_storage0_that_bundled_bios_executes() 
         .status()
         .expect("replace ROOT runs")
         .success());
-    assert!(Command::new(rux_binary())
+    assert!(Command::new(k16_binary())
         .args([
             "volume",
             "put-kernel",
@@ -1499,7 +1499,7 @@ fn rux_volume_boot_kernel_and_init_executes_init_from_root_ruxfs() {
         String::from_utf8_lossy(&init_compile_output.stderr)
     );
 
-    assert!(Command::new(rux_binary())
+    assert!(Command::new(k16_binary())
         .args([
             "volume",
             "init",
@@ -1510,7 +1510,7 @@ fn rux_volume_boot_kernel_and_init_executes_init_from_root_ruxfs() {
         .status()
         .expect("init runs")
         .success());
-    assert!(Command::new(rux_binary())
+    assert!(Command::new(k16_binary())
         .args([
             "volume",
             "put-boot",
@@ -1520,7 +1520,7 @@ fn rux_volume_boot_kernel_and_init_executes_init_from_root_ruxfs() {
         .status()
         .expect("put-boot runs")
         .success());
-    assert!(Command::new(rux_binary())
+    assert!(Command::new(k16_binary())
         .args([
             "fs",
             "ruxfs",
@@ -1532,12 +1532,12 @@ fn rux_volume_boot_kernel_and_init_executes_init_from_root_ruxfs() {
         .status()
         .expect("ruxfs format runs")
         .success());
-    assert!(Command::new(rux_binary())
+    assert!(Command::new(k16_binary())
         .args(["fs", "ruxfs", "mkdir", root_path.to_str().unwrap(), "/bin"])
         .status()
         .expect("ruxfs mkdir /bin runs")
         .success());
-    assert!(Command::new(rux_binary())
+    assert!(Command::new(k16_binary())
         .args([
             "fs",
             "ruxfs",
@@ -1549,7 +1549,7 @@ fn rux_volume_boot_kernel_and_init_executes_init_from_root_ruxfs() {
         .status()
         .expect("ruxfs put init runs")
         .success());
-    assert!(Command::new(rux_binary())
+    assert!(Command::new(k16_binary())
         .args([
             "volume",
             "replace-partition",
@@ -1560,7 +1560,7 @@ fn rux_volume_boot_kernel_and_init_executes_init_from_root_ruxfs() {
         .status()
         .expect("replace ROOT runs")
         .success());
-    assert!(Command::new(rux_binary())
+    assert!(Command::new(k16_binary())
         .args([
             "volume",
             "put-kernel",
@@ -1765,7 +1765,7 @@ fn rux_volume_boot_kernel_and_init_runtime_handoff_blocks_match_artifacts() {
     );
     let kernel_bytes = fs::read(&kernel_path).expect("kernel RUXE reads");
 
-    assert!(Command::new(rux_binary())
+    assert!(Command::new(k16_binary())
         .args([
             "volume",
             "init",
@@ -1776,7 +1776,7 @@ fn rux_volume_boot_kernel_and_init_runtime_handoff_blocks_match_artifacts() {
         .status()
         .expect("volume init runs")
         .success());
-    assert!(Command::new(rux_binary())
+    assert!(Command::new(k16_binary())
         .args([
             "volume",
             "put-boot",
@@ -1786,7 +1786,7 @@ fn rux_volume_boot_kernel_and_init_runtime_handoff_blocks_match_artifacts() {
         .status()
         .expect("put-boot runs")
         .success());
-    assert!(Command::new(rux_binary())
+    assert!(Command::new(k16_binary())
         .args([
             "fs",
             "ruxfs",
@@ -1798,12 +1798,12 @@ fn rux_volume_boot_kernel_and_init_runtime_handoff_blocks_match_artifacts() {
         .status()
         .expect("ruxfs format runs")
         .success());
-    assert!(Command::new(rux_binary())
+    assert!(Command::new(k16_binary())
         .args(["fs", "ruxfs", "mkdir", root_path.to_str().unwrap(), "/bin"])
         .status()
         .expect("ruxfs mkdir /bin runs")
         .success());
-    assert!(Command::new(rux_binary())
+    assert!(Command::new(k16_binary())
         .args([
             "fs",
             "ruxfs",
@@ -1815,7 +1815,7 @@ fn rux_volume_boot_kernel_and_init_runtime_handoff_blocks_match_artifacts() {
         .status()
         .expect("ruxfs put init runs")
         .success());
-    assert!(Command::new(rux_binary())
+    assert!(Command::new(k16_binary())
         .args([
             "volume",
             "replace-partition",
@@ -1826,7 +1826,7 @@ fn rux_volume_boot_kernel_and_init_runtime_handoff_blocks_match_artifacts() {
         .status()
         .expect("replace ROOT runs")
         .success());
-    assert!(Command::new(rux_binary())
+    assert!(Command::new(k16_binary())
         .args([
             "volume",
             "put-kernel",
@@ -1913,7 +1913,7 @@ fn rux_volume_boot_kernel_rejects_protected_init_load_address() {
         String::from_utf8_lossy(&kernel_compile_output.stderr)
     );
 
-    assert!(Command::new(rux_binary())
+    assert!(Command::new(k16_binary())
         .args([
             "volume",
             "init",
@@ -1924,7 +1924,7 @@ fn rux_volume_boot_kernel_rejects_protected_init_load_address() {
         .status()
         .expect("init runs")
         .success());
-    assert!(Command::new(rux_binary())
+    assert!(Command::new(k16_binary())
         .args([
             "volume",
             "put-boot",
@@ -1934,7 +1934,7 @@ fn rux_volume_boot_kernel_rejects_protected_init_load_address() {
         .status()
         .expect("put-boot runs")
         .success());
-    assert!(Command::new(rux_binary())
+    assert!(Command::new(k16_binary())
         .args([
             "fs",
             "ruxfs",
@@ -1946,12 +1946,12 @@ fn rux_volume_boot_kernel_rejects_protected_init_load_address() {
         .status()
         .expect("ruxfs format runs")
         .success());
-    assert!(Command::new(rux_binary())
+    assert!(Command::new(k16_binary())
         .args(["fs", "ruxfs", "mkdir", root_path.to_str().unwrap(), "/bin"])
         .status()
         .expect("ruxfs mkdir /bin runs")
         .success());
-    assert!(Command::new(rux_binary())
+    assert!(Command::new(k16_binary())
         .args([
             "fs",
             "ruxfs",
@@ -1963,7 +1963,7 @@ fn rux_volume_boot_kernel_rejects_protected_init_load_address() {
         .status()
         .expect("ruxfs put protected init runs")
         .success());
-    assert!(Command::new(rux_binary())
+    assert!(Command::new(k16_binary())
         .args([
             "volume",
             "replace-partition",
@@ -1974,7 +1974,7 @@ fn rux_volume_boot_kernel_rejects_protected_init_load_address() {
         .status()
         .expect("replace ROOT runs")
         .success());
-    assert!(Command::new(rux_binary())
+    assert!(Command::new(k16_binary())
         .args([
             "volume",
             "put-kernel",
@@ -2109,7 +2109,7 @@ fn create_boot_kernel_init_volume(name: &str, init_bytes: Option<&[u8]>) -> Path
         String::from_utf8_lossy(&kernel_compile_output.stderr)
     );
 
-    assert!(Command::new(rux_binary())
+    assert!(Command::new(k16_binary())
         .args([
             "volume",
             "init",
@@ -2120,7 +2120,7 @@ fn create_boot_kernel_init_volume(name: &str, init_bytes: Option<&[u8]>) -> Path
         .status()
         .expect("init runs")
         .success());
-    assert!(Command::new(rux_binary())
+    assert!(Command::new(k16_binary())
         .args([
             "volume",
             "put-boot",
@@ -2130,7 +2130,7 @@ fn create_boot_kernel_init_volume(name: &str, init_bytes: Option<&[u8]>) -> Path
         .status()
         .expect("put-boot runs")
         .success());
-    assert!(Command::new(rux_binary())
+    assert!(Command::new(k16_binary())
         .args([
             "fs",
             "ruxfs",
@@ -2144,12 +2144,12 @@ fn create_boot_kernel_init_volume(name: &str, init_bytes: Option<&[u8]>) -> Path
         .success());
     if let Some(init_bytes) = init_bytes {
         fs::write(&init_path, init_bytes).expect("init RUXE writes");
-        assert!(Command::new(rux_binary())
+        assert!(Command::new(k16_binary())
             .args(["fs", "ruxfs", "mkdir", root_path.to_str().unwrap(), "/bin"])
             .status()
             .expect("ruxfs mkdir /bin runs")
             .success());
-        assert!(Command::new(rux_binary())
+        assert!(Command::new(k16_binary())
             .args([
                 "fs",
                 "ruxfs",
@@ -2162,7 +2162,7 @@ fn create_boot_kernel_init_volume(name: &str, init_bytes: Option<&[u8]>) -> Path
             .expect("ruxfs put init runs")
             .success());
     }
-    assert!(Command::new(rux_binary())
+    assert!(Command::new(k16_binary())
         .args([
             "volume",
             "replace-partition",
@@ -2173,7 +2173,7 @@ fn create_boot_kernel_init_volume(name: &str, init_bytes: Option<&[u8]>) -> Path
         .status()
         .expect("replace ROOT runs")
         .success());
-    assert!(Command::new(rux_binary())
+    assert!(Command::new(k16_binary())
         .args([
             "volume",
             "put-kernel",
@@ -2247,4 +2247,8 @@ fn temp_file(name: &str) -> PathBuf {
 
 fn rux_binary() -> String {
     std::env::var("CARGO_BIN_EXE_rux").expect("Cargo exposes rux binary path")
+}
+
+fn k16_binary() -> String {
+    std::env::var("CARGO_BIN_EXE_k16").expect("Cargo exposes k16 binary path")
 }

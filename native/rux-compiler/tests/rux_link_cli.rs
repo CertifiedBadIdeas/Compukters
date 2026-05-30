@@ -9,7 +9,7 @@ fn rux_link_converts_rux16_object_with_abs32_relocation_to_program_ruxe() {
     let output_path = temp_file("abs32.ruxe");
     fs::write(&object_path, rux16_object_with_text_relocation(1)).expect("object writes");
 
-    let output = Command::new(rux_binary())
+    let output = Command::new(k16_binary())
         .args([
             "link",
             "--target",
@@ -19,7 +19,7 @@ fn rux_link_converts_rux16_object_with_abs32_relocation_to_program_ruxe() {
             output_path.to_str().unwrap(),
         ])
         .output()
-        .expect("rux link runs");
+        .expect("k16 link runs");
 
     assert!(
         output.status.success(),
@@ -47,7 +47,7 @@ fn rux_link_ignores_absolute_file_symbols_from_llvm_objects() {
     let output_path = temp_file("llvm-file-symbol.ruxe");
     fs::write(&object_path, rux16_object_with_absolute_file_symbol()).expect("object writes");
 
-    let output = Command::new(rux_binary())
+    let output = Command::new(k16_binary())
         .args([
             "link",
             "--target",
@@ -57,7 +57,7 @@ fn rux_link_ignores_absolute_file_symbols_from_llvm_objects() {
             output_path.to_str().unwrap(),
         ])
         .output()
-        .expect("rux link runs");
+        .expect("k16 link runs");
 
     assert!(
         output.status.success(),
@@ -79,7 +79,7 @@ fn rux_link_rejects_unsupported_relocation_without_raw_fallback() {
     let output_path = temp_file("bad-reloc.ruxe");
     fs::write(&object_path, rux16_object_with_text_relocation(99)).expect("object writes");
 
-    let output = Command::new(rux_binary())
+    let output = Command::new(k16_binary())
         .args([
             "link",
             "--target",
@@ -89,7 +89,7 @@ fn rux_link_rejects_unsupported_relocation_without_raw_fallback() {
             output_path.to_str().unwrap(),
         ])
         .output()
-        .expect("rux link runs");
+        .expect("k16 link runs");
 
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -106,7 +106,7 @@ fn rux_link_rejects_unsupported_alloc_section_without_guessing() {
     let output_path = temp_file("bad-section.ruxe");
     fs::write(&object_path, rux16_object_with_unsupported_alloc_section()).expect("object writes");
 
-    let output = Command::new(rux_binary())
+    let output = Command::new(k16_binary())
         .args([
             "link",
             "--target",
@@ -116,7 +116,7 @@ fn rux_link_rejects_unsupported_alloc_section_without_guessing() {
             output_path.to_str().unwrap(),
         ])
         .output()
-        .expect("rux link runs");
+        .expect("k16 link runs");
 
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -310,8 +310,8 @@ fn temp_file(name: &str) -> PathBuf {
     path
 }
 
-fn rux_binary() -> String {
-    std::env::var("CARGO_BIN_EXE_rux").expect("Cargo exposes rux binary path")
+fn k16_binary() -> String {
+    std::env::var("CARGO_BIN_EXE_k16").expect("Cargo exposes k16 binary path")
 }
 
 fn u32_at(bytes: &[u8], offset: usize) -> u32 {
