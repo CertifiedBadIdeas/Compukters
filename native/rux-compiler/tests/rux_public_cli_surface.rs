@@ -36,6 +36,37 @@ fn rux_compile_bios_is_the_public_firmware_path() {
     );
 }
 
+#[test]
+fn k16_is_the_public_machine_artifact_cli() {
+    let output = Command::new(k16_binary())
+        .arg("link")
+        .output()
+        .expect("k16 runs");
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("k16 link"), "stderr: {stderr}");
+    assert!(!stderr.contains("rux compile"), "stderr: {stderr}");
+}
+
+#[test]
+fn k16_does_not_expose_rux_language_commands() {
+    let output = Command::new(k16_binary())
+        .arg("compile")
+        .output()
+        .expect("k16 runs");
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("k16"), "stderr: {stderr}");
+    assert!(!stderr.contains("rux compile"), "stderr: {stderr}");
+    assert!(!stderr.contains("rux check"), "stderr: {stderr}");
+}
+
 fn rux_binary() -> String {
     std::env::var("CARGO_BIN_EXE_rux").expect("Cargo exposes rux binary path")
+}
+
+fn k16_binary() -> String {
+    std::env::var("CARGO_BIN_EXE_k16").expect("Cargo exposes k16 binary path")
 }
