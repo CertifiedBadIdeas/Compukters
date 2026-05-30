@@ -113,7 +113,7 @@ object NativeVmBindings {
     private val lock = Any()
     private var loadedPath: String? = null
 
-    fun createRuxComputerFromBiosFlash(
+    fun createK16ComputerFromBiosFlash(
         libraryPath: String,
         biosFlashPath: Path,
         memorySize: Int,
@@ -132,7 +132,7 @@ object NativeVmBindings {
         return handle
     }
 
-    fun restoreRuxComputerFromBiosFlashSnapshot(
+    fun restoreK16ComputerFromBiosFlashSnapshot(
         libraryPath: String,
         biosFlashPath: Path,
         memorySize: Int,

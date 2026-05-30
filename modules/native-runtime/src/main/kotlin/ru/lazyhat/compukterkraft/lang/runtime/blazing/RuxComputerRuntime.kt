@@ -82,7 +82,7 @@ object RuxComputerRuntimeFactory {
         maxSteps: Long = DEFAULT_SLICE_BUDGET_NANOS,
     ): RuxComputerRuntime {
         val handle =
-            NativeVmBindings.createRuxComputerFromBiosFlash(
+            NativeVmBindings.createK16ComputerFromBiosFlash(
                 libraryPath = NativeLibraryLocator.requireLibraryPath(),
                 biosFlashPath = biosFlashPath,
                 memorySize = memorySize,
@@ -99,7 +99,7 @@ object RuxComputerRuntimeFactory {
         memorySize: Int = DEFAULT_MEMORY_SIZE,
     ): RuxComputerRuntime {
         val handle =
-            NativeVmBindings.restoreRuxComputerFromBiosFlashSnapshot(
+            NativeVmBindings.restoreK16ComputerFromBiosFlashSnapshot(
                 libraryPath = NativeLibraryLocator.requireLibraryPath(),
                 biosFlashPath = biosFlashPath,
                 memorySize = memorySize,
