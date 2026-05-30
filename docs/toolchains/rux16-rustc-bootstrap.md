@@ -100,17 +100,36 @@ can build against the Rux16 LLVM backend.
 ### Fast Probe: Rust Source With Prebuilt Rux16 LLVM
 
 Use a Rust source checkout and configure bootstrap to use the already-built
-LLVM from `toolchains/Compukter-Kraft-llvm/build-rux/bin/llvm-config`.
+LLVM from `toolchains/Compukter-Kraft-llvm/build-rux-min/bin/llvm-config`.
 
 This may avoid rebuilding LLVM, but it depends on API compatibility between
 the selected Rust source revision and the prebuilt LLVM 23.0.0git checkout.
 If rustc and LLVM APIs do not match, this path fails during compiler build.
 
+Run the workspace probe first:
+
+```bash
+tools/rux16-rustc-bootstrap-probe.sh
+```
+
+The probe is intentionally strict. It requires:
+
+- the Rust source checkout at `toolchains/Compukter-Kraft-rust`;
+- the Rust checkout to be on branch `rux16`;
+- `llvm-config --targets-built` to contain `Rux16`;
+- Rust bootstrap entrypoint `x.py` to be present and runnable.
+
+It prints a temporary `bootstrap.toml` path plus dry-run and build commands for
+`./x.py build --config <generated-config> compiler/rustc`.
+
+Even `--dry-run` may download and build Rust bootstrap stage0 support files.
+That is expected bootstrap behavior, not a Rux16 codegen proof.
+
 Expected bootstrap direction:
 
 ```toml
 [target.x86_64-unknown-linux-gnu]
-llvm-config = "/absolute/path/to/toolchains/Compukter-Kraft-llvm/build-rux/bin/llvm-config"
+llvm-config = "/absolute/path/to/toolchains/Compukter-Kraft-llvm/build-rux-min/bin/llvm-config"
 ```
 
 ### Not Enough: Nightly rustc Only
