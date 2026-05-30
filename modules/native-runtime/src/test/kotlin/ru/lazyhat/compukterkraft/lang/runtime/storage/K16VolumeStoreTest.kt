@@ -19,9 +19,11 @@
 
 package ru.lazyhat.compukterkraft.lang.runtime.storage
 
+import java.nio.file.Path
 import kotlin.io.path.createDirectories
 import kotlin.io.path.createTempDirectory
 import kotlin.io.path.exists
+import kotlin.io.path.readText
 import kotlin.io.path.writeBytes
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
@@ -29,11 +31,64 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
-class RuxVolumeStoreTest {
+class K16VolumeStoreTest {
+    private val root = generateSequence(Path.of(System.getProperty("user.dir")).toAbsolutePath()) { it.parent }
+        .first { it.resolve("gradle/libs.versions.toml").exists() }
+
+    @Test
+    fun volumeStoreUsesK16ApiTypeNames() {
+        val k16VolumeStorePath =
+            root.resolve(
+                Path.of(
+                    "modules",
+                    "native-runtime",
+                    "src",
+                    "main",
+                    "kotlin",
+                    "ru",
+                    "lazyhat",
+                    "compukterkraft",
+                    "lang",
+                    "runtime",
+                    "storage",
+                    "K16VolumeStore.kt",
+                ),
+            )
+        val legacyVolumeStorePath =
+            root.resolve(
+                Path.of(
+                    "modules",
+                    "native-runtime",
+                    "src",
+                    "main",
+                    "kotlin",
+                    "ru",
+                    "lazyhat",
+                    "compukterkraft",
+                    "lang",
+                    "runtime",
+                    "storage",
+                    "RuxVolumeStore.kt",
+                ),
+            )
+
+        assertTrue(k16VolumeStorePath.exists())
+        assertEquals(false, legacyVolumeStorePath.exists())
+
+        val source = k16VolumeStorePath.readText()
+        assertTrue(source.contains("sealed interface K16VolumeIdentity"))
+        assertTrue(source.contains("enum class K16VolumeError"))
+        assertTrue(source.contains("class K16VolumeException"))
+        assertTrue(source.contains("interface K16VolumeBlob"))
+        assertTrue(source.contains("class FileK16VolumeStore"))
+        assertEquals(false, source.contains("RuxVolume"))
+        assertEquals(false, source.contains("FileRuxVolume"))
+    }
+
     @Test
     fun `open or create creates one mebibyte storage0 volume`() {
         val root = createTempDirectory("rux-volume-store-test-")
-        val store = FileRuxVolumeStore(root)
+        val store = FileK16VolumeStore(root)
 
         store.openOrCreateComputerVolume(42, "storage0").use { blob ->
             assertEquals(DEFAULT_STORAGE0_VOLUME_SIZE, blob.size)
@@ -44,7 +99,7 @@ class RuxVolumeStoreTest {
     @Test
     fun `written bytes survive reopen`() {
         val root = createTempDirectory("rux-volume-store-test-")
-        val store = FileRuxVolumeStore(root)
+        val store = FileK16VolumeStore(root)
 
         store.openOrCreateComputerVolume(42, "storage0").use { blob ->
             blob.write(8, byteArrayOf(1, 2, 3, 4))
@@ -59,7 +114,7 @@ class RuxVolumeStoreTest {
     @Test
     fun `resize growth zero fills new bytes`() {
         val root = createTempDirectory("rux-volume-store-test-")
-        val store = FileRuxVolumeStore(root, defaultStorage0Size = 16)
+        val store = FileK16VolumeStore(root, defaultStorage0Size = 16)
 
         store.openOrCreateComputerVolume(42, "storage0").use { blob ->
             blob.resize(20)
@@ -72,28 +127,28 @@ class RuxVolumeStoreTest {
     @Test
     fun `resize shrink rejects reads beyond new size`() {
         val root = createTempDirectory("rux-volume-store-test-")
-        val store = FileRuxVolumeStore(root, defaultStorage0Size = 16)
+        val store = FileK16VolumeStore(root, defaultStorage0Size = 16)
 
         store.openOrCreateComputerVolume(42, "storage0").use { blob ->
             blob.resize(8)
 
-            val failure = assertFailsWith<RuxVolumeException> {
+            val failure = assertFailsWith<K16VolumeException> {
                 blob.read(8, 1)
             }
-            assertEquals(RuxVolumeError.OutOfBounds, failure.error)
+            assertEquals(K16VolumeError.OutOfBounds, failure.error)
         }
     }
 
     @Test
     fun `out of bounds write fails deterministically`() {
         val root = createTempDirectory("rux-volume-store-test-")
-        val store = FileRuxVolumeStore(root, defaultStorage0Size = 16)
+        val store = FileK16VolumeStore(root, defaultStorage0Size = 16)
 
         store.openOrCreateComputerVolume(42, "storage0").use { blob ->
-            val failure = assertFailsWith<RuxVolumeException> {
+            val failure = assertFailsWith<K16VolumeException> {
                 blob.write(15, byteArrayOf(1, 2))
             }
-            assertEquals(RuxVolumeError.OutOfBounds, failure.error)
+            assertEquals(K16VolumeError.OutOfBounds, failure.error)
         }
     }
 
@@ -102,11 +157,11 @@ class RuxVolumeStoreTest {
         val root = createTempDirectory("rux-volume-store-test-")
         writeRawVolume(root, magic = "BADVOL".encodeToByteArray(), version = 1, logicalSize = 16, payloadSize = 16)
 
-        val failure = assertFailsWith<RuxVolumeException> {
-            FileRuxVolumeStore(root).openOrCreateComputerVolume(42, "storage0")
+        val failure = assertFailsWith<K16VolumeException> {
+            FileK16VolumeStore(root).openOrCreateComputerVolume(42, "storage0")
         }
 
-        assertEquals(RuxVolumeError.InvalidMagic, failure.error)
+        assertEquals(K16VolumeError.InvalidMagic, failure.error)
     }
 
     @Test
@@ -114,11 +169,11 @@ class RuxVolumeStoreTest {
         val root = createTempDirectory("rux-volume-store-test-")
         writeRawVolume(root, magic = "RUXVOL".encodeToByteArray(), version = 2, logicalSize = 16, payloadSize = 16)
 
-        val failure = assertFailsWith<RuxVolumeException> {
-            FileRuxVolumeStore(root).openOrCreateComputerVolume(42, "storage0")
+        val failure = assertFailsWith<K16VolumeException> {
+            FileK16VolumeStore(root).openOrCreateComputerVolume(42, "storage0")
         }
 
-        assertEquals(RuxVolumeError.UnsupportedVersion, failure.error)
+        assertEquals(K16VolumeError.UnsupportedVersion, failure.error)
     }
 
     @Test
@@ -127,11 +182,11 @@ class RuxVolumeStoreTest {
         volumePath(root).parent.createDirectories()
         volumePath(root).writeBytes("RUX".encodeToByteArray())
 
-        val failure = assertFailsWith<RuxVolumeException> {
-            FileRuxVolumeStore(root).openOrCreateComputerVolume(42, "storage0")
+        val failure = assertFailsWith<K16VolumeException> {
+            FileK16VolumeStore(root).openOrCreateComputerVolume(42, "storage0")
         }
 
-        assertEquals(RuxVolumeError.TruncatedHeader, failure.error)
+        assertEquals(K16VolumeError.TruncatedHeader, failure.error)
     }
 
     @Test
@@ -139,11 +194,11 @@ class RuxVolumeStoreTest {
         val root = createTempDirectory("rux-volume-store-test-")
         writeRawVolume(root, magic = "RUXVOL".encodeToByteArray(), version = 1, logicalSize = 16, payloadSize = 8)
 
-        val failure = assertFailsWith<RuxVolumeException> {
-            FileRuxVolumeStore(root).openOrCreateComputerVolume(42, "storage0")
+        val failure = assertFailsWith<K16VolumeException> {
+            FileK16VolumeStore(root).openOrCreateComputerVolume(42, "storage0")
         }
 
-        assertEquals(RuxVolumeError.TruncatedPayload, failure.error)
+        assertEquals(K16VolumeError.TruncatedPayload, failure.error)
     }
 
     private fun writeRawVolume(

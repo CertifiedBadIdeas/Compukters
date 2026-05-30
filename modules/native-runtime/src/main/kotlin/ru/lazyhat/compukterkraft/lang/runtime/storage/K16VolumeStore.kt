@@ -36,14 +36,14 @@ const val DEFAULT_STORAGE0_VOLUME_SIZE: Long = 1024L * 1024L
 private const val DEFAULT_MAX_VOLUME_SIZE: Long = 64L * 1024L * 1024L
 private val VALID_SLOT = Regex("[A-Za-z0-9_-]+")
 
-sealed interface RuxVolumeIdentity {
+sealed interface K16VolumeIdentity {
     data class ComputerOwned(
         val computerId: Int,
         val slot: String,
-    ) : RuxVolumeIdentity
+    ) : K16VolumeIdentity
 }
 
-enum class RuxVolumeError {
+enum class K16VolumeError {
     InvalidIdentity,
     InvalidMagic,
     UnsupportedVersion,
@@ -55,13 +55,13 @@ enum class RuxVolumeError {
     IoFailure,
 }
 
-class RuxVolumeException(
-    val error: RuxVolumeError,
+class K16VolumeException(
+    val error: K16VolumeError,
     message: String,
     cause: Throwable? = null,
 ) : RuntimeException(message, cause)
 
-interface RuxVolumeBlob : AutoCloseable {
+interface K16VolumeBlob : AutoCloseable {
     val path: Path
 
     val size: Long
@@ -81,7 +81,7 @@ interface RuxVolumeBlob : AutoCloseable {
     fun flush()
 }
 
-class FileRuxVolumeStore(
+class FileK16VolumeStore(
     private val root: Path,
     private val defaultStorage0Size: Long = DEFAULT_STORAGE0_VOLUME_SIZE,
     private val maxVolumeSize: Long = DEFAULT_MAX_VOLUME_SIZE,
@@ -95,10 +95,10 @@ class FileRuxVolumeStore(
     fun openOrCreateComputerVolume(
         computerId: Int,
         slot: String,
-    ): RuxVolumeBlob =
-        openOrCreate(RuxVolumeIdentity.ComputerOwned(computerId, slot))
+    ): K16VolumeBlob =
+        openOrCreate(K16VolumeIdentity.ComputerOwned(computerId, slot))
 
-    fun openOrCreate(identity: RuxVolumeIdentity): RuxVolumeBlob {
+    fun openOrCreate(identity: K16VolumeIdentity): K16VolumeBlob {
         val path = pathFor(identity)
         path.parent.createDirectories()
         if (!path.exists()) {
@@ -107,12 +107,12 @@ class FileRuxVolumeStore(
         return openExisting(path)
     }
 
-    private fun pathFor(identity: RuxVolumeIdentity): Path =
+    private fun pathFor(identity: K16VolumeIdentity): Path =
         when (identity) {
-            is RuxVolumeIdentity.ComputerOwned -> {
+            is K16VolumeIdentity.ComputerOwned -> {
                 if (identity.computerId <= 0 || !VALID_SLOT.matches(identity.slot)) {
-                    throw RuxVolumeException(
-                        RuxVolumeError.InvalidIdentity,
+                    throw K16VolumeException(
+                        K16VolumeError.InvalidIdentity,
                         "Invalid computer-owned volume identity: $identity",
                     )
                 }
@@ -136,15 +136,15 @@ class FileRuxVolumeStore(
                 file.channel.force(true)
             }
         } catch (error: IOException) {
-            throw RuxVolumeException(
-                RuxVolumeError.IoFailure,
-                "Cannot create Rux volume at $path",
+            throw K16VolumeException(
+                K16VolumeError.IoFailure,
+                "Cannot create K16 volume at $path",
                 error,
             )
         }
     }
 
-    private fun openExisting(path: Path): RuxVolumeBlob {
+    private fun openExisting(path: Path): K16VolumeBlob {
         try {
             val file = RandomAccessFile(path.toFile(), "rw")
             val logicalSize =
@@ -154,13 +154,13 @@ class FileRuxVolumeStore(
                     file.close()
                     throw error
                 }
-            return FileRuxVolumeBlob(path, file, logicalSize, maxVolumeSize)
-        } catch (error: RuxVolumeException) {
+            return FileK16VolumeBlob(path, file, logicalSize, maxVolumeSize)
+        } catch (error: K16VolumeException) {
             throw error
         } catch (error: IOException) {
-            throw RuxVolumeException(
-                RuxVolumeError.IoFailure,
-                "Cannot open Rux volume at $path",
+            throw K16VolumeException(
+                K16VolumeError.IoFailure,
+                "Cannot open K16 volume at $path",
                 error,
             )
         }
@@ -171,9 +171,9 @@ class FileRuxVolumeStore(
         file: RandomAccessFile,
     ): Long {
         if (file.length() < RUX_VOLUME_HEADER_SIZE) {
-            throw RuxVolumeException(
-                RuxVolumeError.TruncatedHeader,
-                "Rux volume header is truncated at $path",
+            throw K16VolumeException(
+                K16VolumeError.TruncatedHeader,
+                "K16 volume header is truncated at $path",
             )
         }
 
@@ -183,9 +183,9 @@ class FileRuxVolumeStore(
 
         val magic = header.copyOfRange(0, RUX_VOLUME_MAGIC_BYTES.size)
         if (!magic.contentEquals(RUX_VOLUME_MAGIC_BYTES)) {
-            throw RuxVolumeException(
-                RuxVolumeError.InvalidMagic,
-                "Rux volume magic is invalid at $path",
+            throw K16VolumeException(
+                K16VolumeError.InvalidMagic,
+                "K16 volume magic is invalid at $path",
             )
         }
 
@@ -196,9 +196,9 @@ class FileRuxVolumeStore(
                 .short
                 .toInt() and 0xffff
         if (version != RUX_VOLUME_VERSION.toInt()) {
-            throw RuxVolumeException(
-                RuxVolumeError.UnsupportedVersion,
-                "Unsupported Rux volume version $version at $path",
+            throw K16VolumeException(
+                K16VolumeError.UnsupportedVersion,
+                "Unsupported K16 volume version $version at $path",
             )
         }
 
@@ -212,15 +212,15 @@ class FileRuxVolumeStore(
         val expectedLength = RUX_VOLUME_HEADER_SIZE.toLong() + logicalSize
         val actualLength = file.length()
         if (actualLength < expectedLength) {
-            throw RuxVolumeException(
-                RuxVolumeError.TruncatedPayload,
-                "Rux volume payload is truncated at $path",
+            throw K16VolumeException(
+                K16VolumeError.TruncatedPayload,
+                "K16 volume payload is truncated at $path",
             )
         }
         if (actualLength > expectedLength) {
-            throw RuxVolumeException(
-                RuxVolumeError.InvalidLogicalSize,
-                "Rux volume file is longer than its logical size at $path",
+            throw K16VolumeException(
+                K16VolumeError.InvalidLogicalSize,
+                "K16 volume file is longer than its logical size at $path",
             )
         }
         return logicalSize
@@ -228,20 +228,20 @@ class FileRuxVolumeStore(
 
     private fun validateLogicalSize(logicalSize: Long) {
         if (logicalSize <= 0 || logicalSize > maxVolumeSize) {
-            throw RuxVolumeException(
-                RuxVolumeError.InvalidLogicalSize,
-                "Invalid Rux volume logical size: $logicalSize",
+            throw K16VolumeException(
+                K16VolumeError.InvalidLogicalSize,
+                "Invalid K16 volume logical size: $logicalSize",
             )
         }
     }
 }
 
-private class FileRuxVolumeBlob(
+private class FileK16VolumeBlob(
     override val path: Path,
     private val file: RandomAccessFile,
     initialSize: Long,
     private val maxVolumeSize: Long,
-) : RuxVolumeBlob {
+) : K16VolumeBlob {
     private var closed = false
     private var currentSize = initialSize
 
@@ -262,9 +262,9 @@ private class FileRuxVolumeBlob(
             file.seek(payloadOffset(offset))
             file.readFully(bytes)
         } catch (error: IOException) {
-            throw RuxVolumeException(
-                RuxVolumeError.IoFailure,
-                "Cannot read Rux volume at $path",
+            throw K16VolumeException(
+                K16VolumeError.IoFailure,
+                "Cannot read K16 volume at $path",
                 error,
             )
         }
@@ -281,9 +281,9 @@ private class FileRuxVolumeBlob(
             file.seek(payloadOffset(offset))
             file.write(bytes)
         } catch (error: IOException) {
-            throw RuxVolumeException(
-                RuxVolumeError.IoFailure,
-                "Cannot write Rux volume at $path",
+            throw K16VolumeException(
+                K16VolumeError.IoFailure,
+                "Cannot write K16 volume at $path",
                 error,
             )
         }
@@ -292,9 +292,9 @@ private class FileRuxVolumeBlob(
     override fun resize(newSize: Long) {
         ensureOpen()
         if (newSize <= 0 || newSize > maxVolumeSize) {
-            throw RuxVolumeException(
-                RuxVolumeError.InvalidLogicalSize,
-                "Invalid Rux volume logical size: $newSize",
+            throw K16VolumeException(
+                K16VolumeError.InvalidLogicalSize,
+                "Invalid K16 volume logical size: $newSize",
             )
         }
         try {
@@ -303,9 +303,9 @@ private class FileRuxVolumeBlob(
             writeHeader(file, currentSize)
             file.channel.force(true)
         } catch (error: IOException) {
-            throw RuxVolumeException(
-                RuxVolumeError.IoFailure,
-                "Cannot resize Rux volume at $path",
+            throw K16VolumeException(
+                K16VolumeError.IoFailure,
+                "Cannot resize K16 volume at $path",
                 error,
             )
         }
@@ -316,9 +316,9 @@ private class FileRuxVolumeBlob(
         try {
             file.channel.force(true)
         } catch (error: IOException) {
-            throw RuxVolumeException(
-                RuxVolumeError.IoFailure,
-                "Cannot flush Rux volume at $path",
+            throw K16VolumeException(
+                K16VolumeError.IoFailure,
+                "Cannot flush K16 volume at $path",
                 error,
             )
         }
@@ -336,22 +336,22 @@ private class FileRuxVolumeBlob(
         length: Int,
     ) {
         if (offset < 0 || length < 0) {
-            throw RuxVolumeException(
-                RuxVolumeError.OutOfBounds,
-                "Rux volume access has negative offset or length",
+            throw K16VolumeException(
+                K16VolumeError.OutOfBounds,
+                "K16 volume access has negative offset or length",
             )
         }
         val end =
             offset
                 .checkedAdd(length.toLong())
-                ?: throw RuxVolumeException(
-                    RuxVolumeError.OutOfBounds,
-                    "Rux volume access overflows",
+                ?: throw K16VolumeException(
+                    K16VolumeError.OutOfBounds,
+                    "K16 volume access overflows",
                 )
         if (end > currentSize) {
-            throw RuxVolumeException(
-                RuxVolumeError.OutOfBounds,
-                "Rux volume access [$offset, $end) exceeds size $currentSize",
+            throw K16VolumeException(
+                K16VolumeError.OutOfBounds,
+                "K16 volume access [$offset, $end) exceeds size $currentSize",
             )
         }
     }
@@ -361,9 +361,9 @@ private class FileRuxVolumeBlob(
 
     private fun ensureOpen() {
         if (closed) {
-            throw RuxVolumeException(
-                RuxVolumeError.Closed,
-                "Rux volume is closed",
+            throw K16VolumeException(
+                K16VolumeError.Closed,
+                "K16 volume is closed",
             )
         }
     }

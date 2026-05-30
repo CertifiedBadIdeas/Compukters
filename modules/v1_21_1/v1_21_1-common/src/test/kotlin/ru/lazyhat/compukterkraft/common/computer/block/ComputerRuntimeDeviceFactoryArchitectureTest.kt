@@ -52,9 +52,10 @@ class ComputerRuntimeDeviceFactoryArchitectureTest {
         val seedIndex = source.indexOf("K16SystemVolumeWorkspace.prepareStorage0Volume(workspace)")
         val openIndex = source.indexOf("volumeStore.openOrCreateComputerVolume(deviceId, \"storage0\")")
 
+        assertTrue(source.contains("FileK16VolumeStore(worldRoot)"))
         assertTrue(seedIndex >= 0, "storage0 should be seeded from the bundled system volume resource")
-        assertTrue(openIndex >= 0, "storage0 should still be opened through FileRuxVolumeStore")
-        assertTrue(seedIndex < openIndex, "storage0 must be seeded before FileRuxVolumeStore can create an empty volume")
+        assertTrue(openIndex >= 0, "storage0 should still be opened through FileK16VolumeStore")
+        assertTrue(seedIndex < openIndex, "storage0 must be seeded before FileK16VolumeStore can create an empty volume")
     }
 
     @Test
