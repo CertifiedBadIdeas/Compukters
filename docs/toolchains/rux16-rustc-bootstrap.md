@@ -21,6 +21,14 @@ Registered Targets:
   rux16  - Rux16 32-bit
 ```
 
+The Rust source fork is tracked as a repository submodule:
+
+```text
+toolchains/Compukter-Kraft-rust
+  url: git@github.com:CertifiedBadIdeas/Compukter-Kraft-rust.git
+  commit: c58275e0369d09fc3959b8ba87dcbcbe73797465
+```
+
 After fixing `tools/rux16-unknown-ruxos.json` so `target-pointer-width` is a
 number, the current host `rustc --target tools/rux16-unknown-ruxos.json` reaches
 the real blocker:
@@ -54,10 +62,10 @@ References:
 
 ### Preferred: Rust Source With Rux16 LLVM Submodule
 
-Create a tracked Rust source checkout or fork for toolchain work. In that Rust
-source tree, point `src/llvm-project` at the Compukter-Kraft LLVM fork that
-contains the Rux16 backend. Then build a stage1 rustc and link it through
-rustup as a local custom toolchain.
+Use `toolchains/Compukter-Kraft-rust` as the tracked Rust source tree for
+toolchain work. In that Rust source tree, point `src/llvm-project` at the
+Compukter-Kraft LLVM fork that contains the Rux16 backend. Then build a stage1
+rustc and link it through rustup as a local custom toolchain.
 
 This is the most reproducible path because the Rust source tree records the
 LLVM commit it was built against.
@@ -70,6 +78,16 @@ toolchains/Compukter-Kraft-rust
   bootstrap.toml
   build/<host>/stage1/bin/rustc
 ```
+
+Initialize the Rust source checkout with:
+
+```bash
+git submodule update --init --recursive toolchains/Compukter-Kraft-rust
+```
+
+The submodule checkout alone is not a successful rustc build. The next #145
+slice is to add the bootstrap configuration/probe that proves this Rust source
+can build against the Rux16 LLVM backend.
 
 ### Fast Probe: Rust Source With Prebuilt Rux16 LLVM
 
