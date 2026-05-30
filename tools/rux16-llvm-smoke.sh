@@ -97,6 +97,18 @@ entry:
 }
 IR
 
+cat > "$WORK_DIR/stack-local-main.ll" <<'IR'
+target triple = "rux16"
+
+define i32 @main() {
+entry:
+  %slot = alloca i32
+  store volatile i32 42, ptr %slot
+  %loaded = load volatile i32, ptr %slot
+  ret i32 %loaded
+}
+IR
+
 cat > "$WORK_DIR/i64-return.ll" <<'IR'
 target triple = "rux16"
 
@@ -174,11 +186,20 @@ require_contains "$WORK_DIR/call-helper-ruxe.disasm" "call r14"
 require_contains "$WORK_DIR/call-helper-ruxe.disasm" "add r0, r0, r1"
 require_contains "$WORK_DIR/call-helper-ruxe.disasm" "add r0, r1, r13"
 
+"$LLC" -mtriple=rux16 -filetype=obj "$WORK_DIR/stack-local-main.ll" -o "$WORK_DIR/stack-local-main.o"
+run_rux link --target program "$WORK_DIR/startup.o" "$WORK_DIR/stack-local-main.o" -o "$WORK_DIR/stack-local-main.ruxe"
+run_rux disasm --target program "$WORK_DIR/stack-local-main.ruxe" > "$WORK_DIR/stack-local-main-ruxe.disasm"
+require_contains "$WORK_DIR/stack-local-main-ruxe.disasm" "sub r15, r15, r13"
+require_contains "$WORK_DIR/stack-local-main-ruxe.disasm" "store32 [r13], r0"
+require_contains "$WORK_DIR/stack-local-main-ruxe.disasm" "load32 r0, [r13]"
+require_contains "$WORK_DIR/stack-local-main-ruxe.disasm" "add r15, r15, r13"
+
 require_llc_failure "$WORK_DIR/i64-return.ll" "LLVM ERROR: Rux16 multi-value returns are not implemented"
 require_llc_failure "$WORK_DIR/varargs.ll" "LLVM ERROR: Rux16 varargs are not implemented"
 require_llc_failure "$WORK_DIR/four-args.ll" "LLVM ERROR: Rux16 stack arguments are not implemented"
 require_llc_failure "$WORK_DIR/indirect-call.ll" "LLVM ERROR: Rux16 only supports direct calls"
 
 echo "direct LLVM call relocation checks passed"
+echo "stack-local LLVM lowering checks passed"
 echo "unsupported LLVM feature checks passed"
 echo "Rux16 LLVM smoke passed"
