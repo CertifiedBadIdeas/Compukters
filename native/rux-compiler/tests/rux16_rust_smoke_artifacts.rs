@@ -5,6 +5,8 @@ use std::path::Path;
 fn rust_nocore_smoke_artifacts_are_documented_and_strict() {
     let root = repo_root();
     let target_spec = root.join("tools/rux16-unknown-ruxos.json");
+    let llvm_smoke_script = root.join("tools/rux16-llvm-smoke.sh");
+    let clang_smoke_script = root.join("tools/rux16-clang-smoke.sh");
     let smoke_script = root.join("tools/rux16-rust-nocore-smoke.sh");
     let bootstrap_probe = root.join("tools/rux16-rustc-bootstrap-probe.sh");
     let runtime_helpers = root.join("native/rux-compiler/runtime/rux16_memory_helpers.rs");
@@ -17,6 +19,14 @@ fn rust_nocore_smoke_artifacts_are_documented_and_strict() {
     assert!(spec.contains("\"target-pointer-width\": 32"));
     assert!(!spec.contains("\"target-pointer-width\": \"32\""));
 
+    let llvm_smoke = fs::read_to_string(&llvm_smoke_script).expect("LLVM smoke script exists");
+    assert!(llvm_smoke.contains("--bin k16"));
+    assert!(!llvm_smoke.contains("--bin rux"));
+
+    let clang_smoke = fs::read_to_string(&clang_smoke_script).expect("Clang smoke script exists");
+    assert!(clang_smoke.contains("--bin k16"));
+    assert!(!clang_smoke.contains("--bin rux"));
+
     let script = fs::read_to_string(&smoke_script).expect("Rust no_core smoke script exists");
     assert!(script.contains("#![no_core]"));
     assert!(script.contains("#![no_main]"));
@@ -25,6 +35,8 @@ fn rust_nocore_smoke_artifacts_are_documented_and_strict() {
     assert!(script.contains("rux16-memory-helpers"));
     assert!(script.contains("\"$WORK_DIR/helpers.o\""));
     assert!(script.contains("debug_bytes=2a"));
+    assert!(script.contains("--bin k16"));
+    assert!(!script.contains("--bin rux"));
     assert!(!script.contains("|| true"));
 
     let helpers = fs::read_to_string(&runtime_helpers).expect("Rux16 runtime helper source exists");

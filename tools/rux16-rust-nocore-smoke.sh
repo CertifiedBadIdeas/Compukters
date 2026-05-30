@@ -49,8 +49,8 @@ require_contains() {
     fi
 }
 
-run_rux() {
-    cargo run --quiet --manifest-path "$RUX_CARGO_MANIFEST" --bin rux -- "$@"
+run_k16() {
+    cargo run --quiet --manifest-path "$RUX_CARGO_MANIFEST" --bin k16 -- "$@"
 }
 
 RUSTC="$(resolve_command "$RUSTC")"
@@ -105,14 +105,14 @@ require_contains "$WORK_DIR/main-object.txt" "Machine: 0x5258"
 require_contains "$WORK_DIR/main-object.txt" "Name: .text.rux16"
 require_contains "$WORK_DIR/main-object.txt" "Name: main"
 
-run_rux runtime rux16-startup -o "$WORK_DIR/startup.o"
-run_rux runtime rux16-memory-helpers -o "$WORK_DIR/helpers.o"
-run_rux link --target program "$WORK_DIR/startup.o" "$WORK_DIR/main.o" "$WORK_DIR/helpers.o" -o "$WORK_DIR/main.ruxe"
-run_rux inspect "$WORK_DIR/main.ruxe" > "$WORK_DIR/main-ruxe.txt"
+run_k16 runtime rux16-startup -o "$WORK_DIR/startup.o"
+run_k16 runtime rux16-memory-helpers -o "$WORK_DIR/helpers.o"
+run_k16 link --target program "$WORK_DIR/startup.o" "$WORK_DIR/main.o" "$WORK_DIR/helpers.o" -o "$WORK_DIR/main.ruxe"
+run_k16 inspect "$WORK_DIR/main.ruxe" > "$WORK_DIR/main-ruxe.txt"
 require_contains "$WORK_DIR/main-ruxe.txt" "kind=RUXE"
 require_contains "$WORK_DIR/main-ruxe.txt" "RUXE abi=program entry_pc=0x00008000 load_addr=0x00008000"
 
-run_rux run "$WORK_DIR/main.ruxe" > "$WORK_DIR/main-run.txt"
+run_k16 run "$WORK_DIR/main.ruxe" > "$WORK_DIR/main-run.txt"
 require_contains "$WORK_DIR/main-run.txt" "signal=halt debug_bytes=2a"
 
 echo "Rust no_core object checks passed"
