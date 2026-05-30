@@ -26,8 +26,16 @@ The Rust source fork is tracked as a repository submodule:
 ```text
 toolchains/Compukter-Kraft-rust
   url: git@github.com:CertifiedBadIdeas/Compukter-Kraft-rust.git
+  branch: rux16
   commit: c58275e0369d09fc3959b8ba87dcbcbe73797465
 ```
+
+Fork branch policy:
+
+- `main` mirrors upstream `rust-lang/rust` and is synced manually;
+- `rux16` contains Compukter-Kraft Rust/Rux16 toolchain changes;
+- the main repository still pins the exact submodule commit for reproducible
+  builds.
 
 After fixing `tools/rux16-unknown-ruxos.json` so `target-pointer-width` is a
 number, the current host `rustc --target tools/rux16-unknown-ruxos.json` reaches
