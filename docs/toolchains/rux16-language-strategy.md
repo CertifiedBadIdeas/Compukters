@@ -85,10 +85,15 @@ These pieces should be replaced by Rust-authored artifacts as the Rust target
 becomes capable enough. Until then they may remain only to preserve the current
 boot chain and to provide comparison fixtures.
 
-The current names `Rux16`, `RUXE`, `RUXVOL`, and `RuxFS` describe the machine
-and artifact formats in the existing ABI docs. Renaming those formats is a
-separate compatibility decision. This document retires Rux language/code, not
-the current machine format names by itself.
+The Rux language name remains Rux while the language exists. `.rx`, the Rux
+frontend, Rux stdlib modules, and Rux-language commands are not renamed by the
+machine rename.
+
+The machine/tooling naming decision now lives in
+[#147](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/147):
+future VM, ISA, artifact, storage, filesystem, and Rust target names should use
+`Kraft16`/`K16`. Current ABI documents may still describe existing Rux-named
+formats until each compatibility-affecting ABI migration lands.
 
 ## Rust Target
 
