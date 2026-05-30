@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Added `rux link`, a static object-to-`RUXE` linker for the experimental
+  Rux16 ELF32 `ET_REL` object ABI. It emits bootloader, kernel, or program
+  `RUXE` images and rejects unsupported allocated sections and relocation kinds
+  without falling back to raw Rux16 bytes or VM-side relocation.
 - Added `rux16-object-v1.md` as the experimental ELF32 `ET_REL` relocatable
   object ABI for LLVM-facing Rux16 tooling, including section names, symbol
   rules, relocation kinds, unsupported feature diagnostics, and the boundary

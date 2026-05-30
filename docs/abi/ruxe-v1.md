@@ -30,18 +30,19 @@ The intended static pipeline is:
 ```text
 clang / llc
   -> Rux16 relocatable object
-  -> Rux linker or objcopy-style conversion tool
+  -> rux link
   -> RUXE program/kernel/bootloader executable
   -> RuxFS or boot media installation
   -> VM loader or OS exec service
 ```
 
 The relocatable object format, section names, relocation records, symbol
-resolution rules, and unsupported relocation diagnostics are separate ABI work.
-The conversion step selects the final `RUXE` ABI kind (`bootloader`, `kernel`,
-or `program`) and must reject unsupported object features explicitly. Loaders
-must not reinterpret relocatable objects as `RUXE`, and LLVM-generated code
-must not bypass the normal `RUXE` validation rules.
+resolution rules, and unsupported relocation diagnostics are defined in
+`rux16-object-v1.md`. The conversion step selects the final `RUXE` ABI kind
+(`bootloader`, `kernel`, or `program`) and must reject unsupported object
+features explicitly. Loaders must not reinterpret relocatable objects as
+`RUXE`, and LLVM-generated code must not bypass the normal `RUXE` validation
+rules.
 
 ## Relationship To Existing Targets
 

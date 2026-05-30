@@ -32,6 +32,17 @@ LLVM backend or Rux assembler
 ELF object presented as `RUXE`, and the linker must reject object features it
 does not implement. Unsupported relocations are link-time errors.
 
+The current tool entry point is:
+
+```text
+rux link --target <boot|kernel|program> <input.o>... -o <output.ruxe>
+```
+
+The command accepts Rux16 ELF32 `ET_REL` inputs, resolves static symbols,
+applies supported relocations, and emits a validated single-load-section
+`RUXE`. It does not emit raw BIOS flash; BIOS images remain a `rux compile`
+source-artifact path.
+
 ## ELF Identification
 
 Rux16 object files use these ELF header values:
