@@ -42,6 +42,26 @@ The intended mapping is:
 `KraftOS` is the future OS target name. It does not imply that an OS exists
 yet; it gives the Rust target triple a non-Rux system component.
 
+## File Extensions
+
+Use short `k*` extensions for primary Kraft16 artifacts:
+
+- `.ko`: relocatable object produced by LLVM, rustc, or assembler tooling;
+- `.kx`: executable image, replacing the current RUXE artifact role;
+- `.kb`: bootloader image or boot-stage artifact;
+- `.kv`: volume/container image, replacing the current RUXVOL artifact role;
+- `.kfs`: standalone filesystem image when a filesystem is stored outside a
+  volume/container.
+
+Use `.kflash` for BIOS or firmware flash images. BIOS flash is not the same
+thing as a bootloader image in the VM model: firmware is loaded as the machine's
+reset/startup memory, while a bootloader is an artifact the firmware discovers
+and executes from storage.
+
+Do not use `.ke` for executables. `.kx` is the executable extension because it
+is visually distinct from `.ko` objects and avoids duplicating the `E` suffix
+from the internal `K16E` format name.
+
 ## Boundaries
 
 The reorganization must split language retirement from machine tooling:
