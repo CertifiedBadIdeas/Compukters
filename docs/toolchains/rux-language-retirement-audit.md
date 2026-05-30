@@ -10,10 +10,14 @@ The retirement target is the Rux language stack: `.rx` source files, the Rux
 frontend, Rux stdlib modules, Rux-authored firmware/kernel/init examples, and
 CLI behavior whose purpose is compiling Rux source.
 
-This audit does not retire the current machine/artifact names by itself.
-`Rux16`, `RUXE`, `RUXVOL`, and `RuxFS` remain the current CPU, executable,
-volume, and filesystem format names until a separate compatibility decision
-renames them.
+This audit does not rename the Rux language. `.rx`, the Rux frontend, Rux
+stdlib modules, and Rux-language commands remain named Rux while they exist.
+
+The machine/tooling naming decision now lives in
+[#147](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/147):
+future VM, ISA, artifact, storage, filesystem, and Rust target names should use
+`Kraft16`/`K16`. Current ABI documents may still describe existing Rux-named
+formats until each compatibility-affecting ABI migration lands.
 
 ## Current Rux-Language Inputs
 
@@ -88,18 +92,22 @@ artifact, object fixture, or ABI/tooling tests as each dependency is migrated.
 
 ## Keep For Now
 
-These layers remain part of the active Rust-first toolchain path:
+These layers remain part of the active Rust-first toolchain path. They should
+move toward Kraft16/K16 names as #147 implementation slices land:
 
-- Rux16 CPU and VM execution;
-- ELF32 Rux16 object ABI;
-- RUXE executable container;
+- Kraft16 CPU and VM execution;
+- ELF32 Kraft16 object ABI;
+- K16 executable container, currently represented by the existing `RUXE`
+  format;
 - object linker and relocation handling;
 - `rux run`, `rux inspect`, `rux disasm`, and volume/filesystem tooling where
-  they operate on machine artifacts rather than Rux source;
+  they operate on machine artifacts rather than Rux source, until machine CLI
+  commands move to `k16`;
 - LLVM, Clang, and Rust no_core smoke tooling.
 
-The command name `rux` is legacy naming, but the immediate retirement target is
-source-language behavior, not every command or format name.
+The command name `rux` remains correct for Rux-language behavior such as
+`rux compile` and `rux check`. Machine/artifact commands should move to `k16`
+when their slices are renamed.
 
 ## Replacement Order
 
