@@ -2,7 +2,7 @@ package ru.lazyhat.compukterkraft.impl
 
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeRuxComputerDisplaySnapshot
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16BiosFlashWorkspace
-import ru.lazyhat.compukterkraft.lang.runtime.blazing.RuxComputerRuntimeFactory
+import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16ComputerRuntimeFactory
 import ru.lazyhat.compukterkraft.lang.runtime.storage.K16SystemVolumeWorkspace
 import ru.lazyhat.compukterkraft.lang.runtime.storage.RUX_VOLUME_MAGIC_BYTES
 import java.nio.file.Path
@@ -70,7 +70,7 @@ class K16FirmwareResourceTest {
         biosFlashPath.writeBytes(K16BiosFlashWorkspace.loadBiosFlashResource(classLoader = javaClass.classLoader))
         storage0Path.writeBytes(K16SystemVolumeWorkspace.loadStorage0VolumeResource(classLoader = javaClass.classLoader))
 
-        RuxComputerRuntimeFactory.createFromBiosFlash(
+        K16ComputerRuntimeFactory.createFromBiosFlash(
             biosFlashPath = biosFlashPath,
             storage0Path = storage0Path,
         ).use { runtime ->

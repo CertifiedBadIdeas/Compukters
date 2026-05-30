@@ -26,7 +26,7 @@ import ru.lazyhat.compukterkraft.core.device.DeviceProperties
 import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeDevice
 import ru.lazyhat.compukterkraft.core.device.runtime.RuxRuntimeDevice
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16BiosFlashWorkspace
-import ru.lazyhat.compukterkraft.lang.runtime.blazing.RuxComputerRuntimeFactory
+import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16ComputerRuntimeFactory
 import ru.lazyhat.compukterkraft.lang.runtime.storage.FileRuxVolumeStore
 import ru.lazyhat.compukterkraft.lang.runtime.storage.K16SystemVolumeWorkspace
 import ru.lazyhat.compukterkraft.lang.runtime.storage.RuxVolumeBlob
@@ -50,14 +50,14 @@ object ComputerRuntimeDeviceFactory {
                 val storage0 = volumeStore.openOrCreateComputerVolume(deviceId, "storage0")
                 val biosFlashPath = K16BiosFlashWorkspace.prepareBiosFlash(workspace)
                 val snapshot = tile.consumePendingRuntimeSnapshot()
-                createRuxComputerEndpoint(biosFlashPath, storage0, snapshot)
+                createK16ComputerEndpoint(biosFlashPath, storage0, snapshot)
             },
             stateSink = host.stateSink,
             displayNetwork = host.displayNetwork,
         )
     }
 
-    private fun createRuxComputerEndpoint(
+    private fun createK16ComputerEndpoint(
         biosFlashPath: Path,
         storage0: RuxVolumeBlob,
         snapshot: ByteArray?,
@@ -66,12 +66,12 @@ object ComputerRuntimeDeviceFactory {
             val storage0Path = storage0.path
             storage0.close()
             if (snapshot == null) {
-                RuxComputerRuntimeFactory.createFromBiosFlash(
+                K16ComputerRuntimeFactory.createFromBiosFlash(
                     biosFlashPath = biosFlashPath,
                     storage0Path = storage0Path,
                 )
             } else {
-                RuxComputerRuntimeFactory.restoreFromBiosFlashSnapshot(
+                K16ComputerRuntimeFactory.restoreFromBiosFlashSnapshot(
                     biosFlashPath = biosFlashPath,
                     storage0Path = storage0Path,
                     snapshot = snapshot,

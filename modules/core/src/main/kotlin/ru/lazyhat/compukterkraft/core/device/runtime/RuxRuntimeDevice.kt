@@ -27,7 +27,7 @@ import ru.lazyhat.compukterkraft.core.device.runtime.ports.DisplayNetworkBridge
 import ru.lazyhat.compukterkraft.core.device.runtime.ports.NoopDisplayNetworkBridge
 import ru.lazyhat.compukterkraft.core.gui.TerminalFontConstants
 import ru.lazyhat.compukterkraft.core.input.KeyCodes
-import ru.lazyhat.compukterkraft.lang.runtime.blazing.RuxComputerEndpoint
+import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16ComputerEndpoint
 import java.nio.ByteBuffer
 import java.util.UUID
 
@@ -42,7 +42,7 @@ interface RuntimeDeviceSerialEndpoint {
 class RuxRuntimeDevice(
     override val deviceId: Int,
     properties: DeviceProperties,
-    private val endpointFactory: () -> RuxComputerEndpoint,
+    private val endpointFactory: () -> K16ComputerEndpoint,
     private val stateSink: DeviceStateSink,
     private val displayNetwork: DisplayNetworkBridge = NoopDisplayNetworkBridge,
 ) : RuntimeDevice,
@@ -51,7 +51,7 @@ class RuxRuntimeDevice(
     RuntimeDeviceFailureState {
     override val family: DeviceFamily = properties.family
 
-    private var endpoint: RuxComputerEndpoint? = null
+    private var endpoint: K16ComputerEndpoint? = null
     private val displaySessions = DisplaySessionTracker()
     private val renderers = mutableMapOf<Int, SerialTextDisplayRenderer>()
     private val displaySnapshotRefreshDisplayIds = mutableSetOf<Int>()
@@ -106,7 +106,7 @@ class RuxRuntimeDevice(
     override fun serverTick() {
         val current = endpoint ?: return
         current.tick()
-        if (!flushRuxDisplaySnapshot(current)) {
+        if (!flushK16DisplaySnapshot(current)) {
             flushSerialOutput(current)
         }
     }
@@ -191,7 +191,7 @@ class RuxRuntimeDevice(
             else -> null
         }
 
-    private fun flushSerialOutput(current: RuxComputerEndpoint) {
+    private fun flushSerialOutput(current: K16ComputerEndpoint) {
         if (displaySessions.isEmpty()) return
         val output = current.outputSnapshot()
         if (output.size <= renderedSerialBytes) return
@@ -211,7 +211,7 @@ class RuxRuntimeDevice(
         }
     }
 
-    private fun flushRuxDisplaySnapshot(current: RuxComputerEndpoint): Boolean {
+    private fun flushK16DisplaySnapshot(current: K16ComputerEndpoint): Boolean {
         if (current.display0Snapshot() == null) return false
         if (displaySessions.isEmpty()) return true
         val refreshDisplayIds = displaySnapshotRefreshDisplayIds.toSet()
