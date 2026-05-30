@@ -11,10 +11,12 @@
   program stack, writes the low byte of `main`'s `r0` return value to
   `debug::WRITE`, and leaves reserved helper symbols such as `__rux16_memcpy`
   as explicit link-time requirements instead of fallback VM hooks.
-- Added `rux runtime rux16-memory-helpers`, which emits an explicit Rux16
-  helper object defining `__rux16_memcpy`, `__rux16_memset`, and
-  `__rux16_memmove`. Programs must pass this object to `rux link`; the linker
-  still rejects missing helper symbols instead of synthesizing hidden bodies.
+- `rux runtime rux16-memory-helpers` now builds the helper object from bundled
+  Rust `#![no_core]` source with `RUX16_RUSTC` and Rux16 `llc` from
+  `RUX16_LLVM_BIN_DIR`. It defines `__rux16_memcpy`, `__rux16_memset`, and
+  `__rux16_memmove`; programs still pass this object to `rux link`, and the
+  linker still rejects missing helper symbols instead of synthesizing hidden
+  bodies.
 - Added `rux link`, a static object-to-`RUXE` linker for the experimental
   Rux16 ELF32 `ET_REL` object ABI. It emits bootloader, kernel, or program
   `RUXE` images and rejects unsupported allocated sections and relocation kinds
