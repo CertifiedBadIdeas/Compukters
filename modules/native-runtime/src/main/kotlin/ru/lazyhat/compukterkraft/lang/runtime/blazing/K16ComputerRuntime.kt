@@ -22,7 +22,7 @@ package ru.lazyhat.compukterkraft.lang.runtime.blazing
 import java.io.ByteArrayOutputStream
 import java.nio.file.Path
 
-interface RuxComputerRuntimeBindings {
+interface K16ComputerRuntimeBindings {
     fun runUntilSignal(handle: Long): NativeRuxComputerSignal
 
     fun control(handle: Long): NativeRuxComputerControl
@@ -43,7 +43,7 @@ interface RuxComputerRuntimeBindings {
     fun free(handle: Long)
 }
 
-object NativeK16ComputerRuntimeBindings : RuxComputerRuntimeBindings {
+object NativeK16ComputerRuntimeBindings : K16ComputerRuntimeBindings {
     override fun runUntilSignal(handle: Long): NativeRuxComputerSignal =
         NativeVmBindings.runK16ComputerUntilSignal(handle)
 
@@ -71,7 +71,7 @@ object NativeK16ComputerRuntimeBindings : RuxComputerRuntimeBindings {
         NativeVmBindings.freeRuxComputer(handle)
 }
 
-object RuxComputerRuntimeFactory {
+object K16ComputerRuntimeFactory {
     const val DEFAULT_MEMORY_SIZE: Int = 64 * 1024
     const val DEFAULT_SLICE_BUDGET_NANOS: Long = 1_000_000
 
@@ -80,7 +80,7 @@ object RuxComputerRuntimeFactory {
         storage0Path: Path,
         memorySize: Int = DEFAULT_MEMORY_SIZE,
         maxSteps: Long = DEFAULT_SLICE_BUDGET_NANOS,
-    ): RuxComputerRuntime {
+    ): K16ComputerRuntime {
         val handle =
             NativeVmBindings.createK16ComputerFromBiosFlash(
                 libraryPath = NativeLibraryLocator.requireLibraryPath(),
@@ -89,7 +89,7 @@ object RuxComputerRuntimeFactory {
                 maxSteps = maxSteps,
                 storage0Path = storage0Path,
         )
-        return RuxComputerRuntime(handle, bindings = NativeK16ComputerRuntimeBindings)
+        return K16ComputerRuntime(handle, bindings = NativeK16ComputerRuntimeBindings)
     }
 
     fun restoreFromBiosFlashSnapshot(
@@ -97,7 +97,7 @@ object RuxComputerRuntimeFactory {
         storage0Path: Path,
         snapshot: ByteArray,
         memorySize: Int = DEFAULT_MEMORY_SIZE,
-    ): RuxComputerRuntime {
+    ): K16ComputerRuntime {
         val handle =
             NativeVmBindings.restoreK16ComputerFromBiosFlashSnapshot(
                 libraryPath = NativeLibraryLocator.requireLibraryPath(),
@@ -106,11 +106,11 @@ object RuxComputerRuntimeFactory {
                 storage0Path = storage0Path,
                 snapshot = snapshot,
             )
-        return RuxComputerRuntime(handle, bindings = NativeK16ComputerRuntimeBindings)
+        return K16ComputerRuntime(handle, bindings = NativeK16ComputerRuntimeBindings)
     }
 }
 
-interface RuxComputerEndpoint : AutoCloseable {
+interface K16ComputerEndpoint : AutoCloseable {
     fun pushInput(bytes: ByteArray)
 
     fun tick(maxTurns: Int = 8): NativeRuxComputerControl
@@ -126,12 +126,12 @@ interface RuxComputerEndpoint : AutoCloseable {
     fun machineSnapshot(): ByteArray
 }
 
-class RuxComputerRuntime(
+class K16ComputerRuntime(
     private val handle: Long,
-    private val bindings: RuxComputerRuntimeBindings = NativeK16ComputerRuntimeBindings,
+    private val bindings: K16ComputerRuntimeBindings = NativeK16ComputerRuntimeBindings,
     private val defaultMaxTurnsPerTick: Int = 8,
     private val storage0Sink: ((ByteArray) -> Unit)? = null,
-) : RuxComputerEndpoint {
+) : K16ComputerEndpoint {
     private val terminalOutput = ByteArrayOutputStream()
     private var lastDisplay0Sequence: Long? = null
     private var closed = false

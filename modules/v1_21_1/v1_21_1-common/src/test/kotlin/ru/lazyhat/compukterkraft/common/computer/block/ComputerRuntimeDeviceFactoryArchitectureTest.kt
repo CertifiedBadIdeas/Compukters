@@ -38,8 +38,8 @@ class ComputerRuntimeDeviceFactoryArchitectureTest {
                 .readText()
 
         assertTrue(source.contains("K16BiosFlashWorkspace.prepareBiosFlash"))
-        assertTrue(source.contains("RuxComputerRuntimeFactory.createFromBiosFlash"))
-        assertFalse(source.contains("RuxComputerRuntimeFactory.createFromResource(storage0Path"))
+        assertTrue(source.contains("K16ComputerRuntimeFactory.createFromBiosFlash"))
+        assertFalse(source.contains("K16ComputerRuntimeFactory.createFromResource(storage0Path"))
     }
 
     @Test
@@ -65,8 +65,8 @@ class ComputerRuntimeDeviceFactoryArchitectureTest {
                 .readText()
 
         assertTrue(source.contains("tile.consumePendingRuntimeSnapshot()"))
-        assertTrue(source.contains("RuxComputerRuntimeFactory.restoreFromBiosFlashSnapshot"))
-        assertTrue(source.contains("RuxComputerRuntimeFactory.createFromBiosFlash"))
+        assertTrue(source.contains("K16ComputerRuntimeFactory.restoreFromBiosFlashSnapshot"))
+        assertTrue(source.contains("K16ComputerRuntimeFactory.createFromBiosFlash"))
         assertFalse(source.contains("var pendingRuntimeSnapshot"))
     }
 

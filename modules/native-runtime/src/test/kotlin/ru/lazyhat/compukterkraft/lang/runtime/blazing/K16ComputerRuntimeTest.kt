@@ -24,11 +24,11 @@ import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 
-class RuxComputerRuntimeTest {
+class K16ComputerRuntimeTest {
     @Test
     fun pushesSerialInputAndKeepsSharedOutputSnapshot() {
         val bindings = EchoBindings()
-        val runtime = RuxComputerRuntime(handle = 7L, bindings = bindings, defaultMaxTurnsPerTick = 4)
+        val runtime = K16ComputerRuntime(handle = 7L, bindings = bindings, defaultMaxTurnsPerTick = 4)
 
         runtime.pushInput("Rux!".encodeToByteArray())
         val control = runtime.tick()
@@ -42,7 +42,7 @@ class RuxComputerRuntimeTest {
     @Test
     fun freesNativeHandleOnlyOnce() {
         val bindings = EchoBindings()
-        val runtime = RuxComputerRuntime(handle = 9L, bindings = bindings)
+        val runtime = K16ComputerRuntime(handle = 9L, bindings = bindings)
 
         runtime.close()
         runtime.close()
@@ -59,7 +59,7 @@ class RuxComputerRuntimeTest {
         bindings.storage0Media = byteArrayOf(10, 20, 30)
         val persisted = mutableListOf<ByteArray>()
         val runtime =
-            RuxComputerRuntime(
+            K16ComputerRuntime(
                 handle = 13L,
                 bindings = bindings,
                 storage0Sink = { persisted += it.copyOf() },
@@ -76,7 +76,7 @@ class RuxComputerRuntimeTest {
     fun exposesNativeMachineSnapshot() {
         val bindings = EchoBindings()
         bindings.machineSnapshot = byteArrayOf(0x52, 0x55, 0x58)
-        val runtime = RuxComputerRuntime(handle = 15L, bindings = bindings)
+        val runtime = K16ComputerRuntime(handle = 15L, bindings = bindings)
 
         assertContentEquals(byteArrayOf(0x52, 0x55, 0x58), runtime.machineSnapshot())
         assertEquals(listOf(15L), bindings.machineSnapshotHandles)
@@ -85,7 +85,7 @@ class RuxComputerRuntimeTest {
     @Test
     fun exposesDisplaySnapshotAndPollsOnlyChangedSequences() {
         val bindings = EchoBindings()
-        val runtime = RuxComputerRuntime(handle = 11L, bindings = bindings)
+        val runtime = K16ComputerRuntime(handle = 11L, bindings = bindings)
         val first =
             NativeRuxComputerDisplaySnapshot(
                 columns = 80,
@@ -120,11 +120,11 @@ class RuxComputerRuntimeTest {
     @Test
     fun rejectsZeroHandle() {
         assertFailsWith<IllegalArgumentException> {
-            RuxComputerRuntime(handle = 0L, bindings = EchoBindings())
+            K16ComputerRuntime(handle = 0L, bindings = EchoBindings())
         }
     }
 
-    private class EchoBindings : RuxComputerRuntimeBindings {
+    private class EchoBindings : K16ComputerRuntimeBindings {
         val serialInputs = mutableListOf<ByteArray>()
         val freedHandles = mutableListOf<Long>()
         val machineSnapshotHandles = mutableListOf<Long>()

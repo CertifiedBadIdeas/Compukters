@@ -20,29 +20,30 @@
 package ru.lazyhat.compukterkraft.lang.runtime.blazing
 
 import java.nio.file.Path
+import kotlin.io.path.exists
 import kotlin.io.path.readText
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-class RuxComputerRuntimeFactoryTest {
+class K16ComputerRuntimeFactoryTest {
     private val root = generateSequence(Path.of(System.getProperty("user.dir")).toAbsolutePath()) { it.parent }
         .first { it.resolve("gradle/libs.versions.toml").toFile().exists() }
 
     @Test
     fun runtimeFactoryDoesNotExposeResourceOrImageStartup() {
-        val methodNames = RuxComputerRuntimeFactory::class.java.methods.map { it.name }.toSet()
+        val methodNames = K16ComputerRuntimeFactory::class.java.methods.map { it.name }.toSet()
 
         assertFalse("createFromResource" in methodNames)
         assertFalse("loadFirmwareResource" in methodNames)
-        val createMethods = RuxComputerRuntimeFactory::class.java.methods.filter { it.name == "create" }
+        val createMethods = K16ComputerRuntimeFactory::class.java.methods.filter { it.name == "create" }
         assertEquals(emptyList(), createMethods)
     }
 
     @Test
     fun createFromBiosFlashAcceptsOnlyPathInputsForFirmwareAndStorage() {
-        val createMethods = RuxComputerRuntimeFactory::class.java.methods.filter { it.name == "createFromBiosFlash" }
+        val createMethods = K16ComputerRuntimeFactory::class.java.methods.filter { it.name == "createFromBiosFlash" }
         val hasBiosFlashAndStorage0Paths =
             createMethods.any { method ->
                 val pathParameterCount = method.parameterTypes.count { parameterType -> parameterType == Path::class.java }
@@ -55,7 +56,7 @@ class RuxComputerRuntimeFactoryTest {
 
     @Test
     fun restoreFromBiosFlashSnapshotAcceptsSnapshotBytesExplicitly() {
-        val restoreMethods = RuxComputerRuntimeFactory::class.java.methods.filter { it.name == "restoreFromBiosFlashSnapshot" }
+        val restoreMethods = K16ComputerRuntimeFactory::class.java.methods.filter { it.name == "restoreFromBiosFlashSnapshot" }
         val hasExplicitSnapshotRestore =
             restoreMethods.any { method ->
                 val pathParameterCount = method.parameterTypes.count { parameterType -> parameterType == Path::class.java }
@@ -84,7 +85,7 @@ class RuxComputerRuntimeFactoryTest {
                             "lang",
                             "runtime",
                             "blazing",
-                            "RuxComputerRuntime.kt",
+                            "K16ComputerRuntime.kt",
                         ),
                 )
                 .readText()
@@ -117,6 +118,55 @@ class RuxComputerRuntimeFactoryTest {
         assertFalse(bindingsSource.contains("fun restoreRuxComputerFromBiosFlashSnapshot("))
         assertTrue(bindingsSource.contains("fun runK16ComputerUntilSignal(handle: Long)"))
         assertFalse(bindingsSource.contains("fun runRux16ComputerUntilSignal(handle: Long)"))
+    }
+
+    @Test
+    fun runtimeApiUsesK16TypeNames() {
+        val k16RuntimePath =
+            root.resolve(
+                Path.of(
+                    "modules",
+                    "native-runtime",
+                    "src",
+                    "main",
+                    "kotlin",
+                    "ru",
+                    "lazyhat",
+                    "compukterkraft",
+                    "lang",
+                    "runtime",
+                    "blazing",
+                    "K16ComputerRuntime.kt",
+                ),
+            )
+        val legacyRuntimePath =
+            root.resolve(
+                Path.of(
+                    "modules",
+                    "native-runtime",
+                    "src",
+                    "main",
+                    "kotlin",
+                    "ru",
+                    "lazyhat",
+                    "compukterkraft",
+                    "lang",
+                    "runtime",
+                    "blazing",
+                    "RuxComputerRuntime.kt",
+                ),
+            )
+
+        assertTrue(k16RuntimePath.exists())
+        assertFalse(legacyRuntimePath.exists())
+
+        val source = k16RuntimePath.readText()
+        assertTrue(source.contains("interface K16ComputerRuntimeBindings"))
+        assertTrue(source.contains("object K16ComputerRuntimeFactory"))
+        assertTrue(source.contains("interface K16ComputerEndpoint"))
+        assertTrue(source.contains("class K16ComputerRuntime"))
+        assertFalse(source.contains("RuxComputerRuntime"))
+        assertFalse(source.contains("RuxComputerEndpoint"))
     }
 
     @Test

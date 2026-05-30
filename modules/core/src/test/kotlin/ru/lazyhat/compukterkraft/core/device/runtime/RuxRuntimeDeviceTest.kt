@@ -28,7 +28,7 @@ import ru.lazyhat.compukterkraft.core.device.runtime.ports.DisplayNetworkBridge
 import ru.lazyhat.compukterkraft.core.input.KeyCodes
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeRuxComputerControl
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeRuxComputerDisplaySnapshot
-import ru.lazyhat.compukterkraft.lang.runtime.blazing.RuxComputerEndpoint
+import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16ComputerEndpoint
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
 import java.nio.ByteBuffer
 import java.util.UUID
@@ -41,7 +41,7 @@ import kotlin.test.assertTrue
 class RuxRuntimeDeviceTest {
     @Test
     fun ownsRuxEndpointAndTicksItWhilePoweredOn() {
-        val endpoint = RecordingRuxEndpoint()
+        val endpoint = RecordingK16Endpoint()
         val powerChanges = mutableListOf<Boolean>()
         val device =
             RuxRuntimeDevice(
@@ -70,7 +70,7 @@ class RuxRuntimeDeviceTest {
 
     @Test
     fun mapsPasteEventsToSerialBytesWithoutConsumingCallerBuffer() {
-        val endpoint = RecordingRuxEndpoint()
+        val endpoint = RecordingK16Endpoint()
         val device =
             RuxRuntimeDevice(
                 deviceId = 8,
@@ -89,7 +89,7 @@ class RuxRuntimeDeviceTest {
 
     @Test
     fun sendsSerialOutputFrameToAttachedDisplaySessions() {
-        val endpoint = RecordingRuxEndpoint()
+        val endpoint = RecordingK16Endpoint()
         val displayNetwork = RecordingDisplayNetworkBridge()
         val device =
             RuxRuntimeDevice(
@@ -118,7 +118,7 @@ class RuxRuntimeDeviceTest {
 
     @Test
     fun sendsRuxDisplaySnapshotFrameToAttachedDisplaySessions() {
-        val endpoint = RecordingRuxEndpoint()
+        val endpoint = RecordingK16Endpoint()
         val displayNetwork = RecordingDisplayNetworkBridge()
         val device =
             RuxRuntimeDevice(
@@ -157,7 +157,7 @@ class RuxRuntimeDeviceTest {
 
     @Test
     fun sendsCurrentRuxDisplaySnapshotWhenDisplaySessionReopensWithoutNewVmFrame() {
-        val endpoint = RecordingRuxEndpoint()
+        val endpoint = RecordingK16Endpoint()
         val displayNetwork = RecordingDisplayNetworkBridge()
         val device =
             RuxRuntimeDevice(
@@ -193,7 +193,7 @@ class RuxRuntimeDeviceTest {
 
     @Test
     fun dispatchesCharacterInputThroughSerialEchoToDisplayFrame() {
-        val endpoint = RecordingRuxEndpoint()
+        val endpoint = RecordingK16Endpoint()
         val displayNetwork = RecordingDisplayNetworkBridge()
         val device =
             RuxRuntimeDevice(
@@ -217,7 +217,7 @@ class RuxRuntimeDeviceTest {
 
     @Test
     fun dispatchesPasteInputThroughSerialEchoToDisplayFrame() {
-        val endpoint = RecordingRuxEndpoint()
+        val endpoint = RecordingK16Endpoint()
         val displayNetwork = RecordingDisplayNetworkBridge()
         val device =
             RuxRuntimeDevice(
@@ -239,7 +239,7 @@ class RuxRuntimeDeviceTest {
 
     @Test
     fun dispatchesEnterKeyAsSerialNewline() {
-        val endpoint = RecordingRuxEndpoint()
+        val endpoint = RecordingK16Endpoint()
         val device =
             RuxRuntimeDevice(
                 deviceId = 12,
@@ -256,7 +256,7 @@ class RuxRuntimeDeviceTest {
 
     @Test
     fun dispatchesBackspaceKeyAsSerialBackspace() {
-        val endpoint = RecordingRuxEndpoint()
+        val endpoint = RecordingK16Endpoint()
         val device =
             RuxRuntimeDevice(
                 deviceId = 13,
@@ -273,7 +273,7 @@ class RuxRuntimeDeviceTest {
 
     @Test
     fun exposesRunningEndpointSnapshotForPersistence() {
-        val endpoint = RecordingRuxEndpoint()
+        val endpoint = RecordingK16Endpoint()
         endpoint.runtimeSnapshot = byteArrayOf(0x52, 0x55, 0x58)
         val device =
             RuxRuntimeDevice(
@@ -318,7 +318,7 @@ class RuxRuntimeDeviceTest {
         assertEquals(null, device.snapshotRuntimeState())
     }
 
-    private class RecordingRuxEndpoint : RuxComputerEndpoint {
+    private class RecordingK16Endpoint : K16ComputerEndpoint {
         val inputs = mutableListOf<ByteArray>()
         var tickCalls = 0
             private set
