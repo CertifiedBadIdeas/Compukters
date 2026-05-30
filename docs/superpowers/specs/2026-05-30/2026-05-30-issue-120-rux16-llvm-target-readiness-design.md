@@ -23,6 +23,9 @@ to implement cleanly.
 
 - Treat Rux16 as a conventional 32-bit little-endian target.
 - Keep the LLVM target scoped to CPU code generation, ABI, and object output.
+- Keep `native/rux-vm` independent from LLVM. The VM owns instruction
+  execution and ABI validation; LLVM-aware lowering, object handling, and
+  linking live in compiler/toolchain layers outside the VM.
 - Keep Minecraft, machine profiles, MMIO devices, storage volumes, and RUXE
   executable packaging outside the LLVM backend unless LLVM must know a narrow
   boundary.
@@ -60,6 +63,27 @@ executable:      RUXE produced by Rux tooling after LLVM-generated objects
 The first target does not need a hosted C environment. It should start as a
 freestanding target that can compile and run leaf functions, stack-using
 functions, direct calls, simple loops, and explicit memory access.
+
+## Ownership Boundary
+
+The VM remains a standalone Rux16 machine, not an LLVM runtime. It defines and
+executes instructions, CPU state, traps, memory access, device-visible ABI, and
+RUXE loading rules. It must not import LLVM libraries, parse LLVM IR, decode
+LLVM object files, or carry target-backend-specific escape hatches.
+
+LLVM support is an external producer of normal Rux16 artifacts. The backend
+lowers LLVM IR into Rux16 machine code and a relocatable object. Rux tooling
+links or converts that object into a validated RUXE image. Only then does the
+VM or OS exec path load and execute it like any other RUXE program.
+
+If a required LLVM feature cannot be represented through the documented Rux16
+ISA, ABI, relocations, or RUXE validation rules, the compiler or linker must
+emit a clear unsupported-feature error. The VM must not gain LLVM-specific
+fallback behavior to make that program run.
+
+This boundary is tracked explicitly by
+[#130](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/130) so
+future backend work does not mix VM runtime ownership with toolchain ownership.
 
 ## Architecture Model
 

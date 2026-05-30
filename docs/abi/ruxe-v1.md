@@ -19,6 +19,12 @@ The first LLVM-facing toolchain must not make LLVM emit `RUXE` directly.
 `RUXE` remains the final guest-loadable executable container produced by Rux
 tooling after LLVM has emitted a normal relocatable object.
 
+This boundary keeps the VM independent from LLVM. LLVM-aware parsing,
+relocations, symbols, sections, and target backend details belong to external
+tooling. A VM or loader consumes validated `RUXE` bytes and guest memory
+ranges; it must not consume LLVM IR, LLVM object files, or LLVM-specific
+metadata directly.
+
 The intended static pipeline is:
 
 ```text
