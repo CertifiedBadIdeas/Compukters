@@ -31,10 +31,10 @@ pub fn disassemble_artifact(bytes: &[u8], target: Rux16ArtifactTarget) -> Result
         if labels.contains(&pc) {
             output.push_str(&format!("L_{pc:08x}:\n"));
         }
-        let (text, width) = disassemble_instruction(&words, index, pc);
-        let raw_words = format_raw_words(&words, index, width);
-        output.push_str(&format!("{pc:08x}: {raw_words}  {text}\n"));
-        index += width;
+        let instruction = disassemble_instruction(&words, index, pc)?;
+        let raw_words = format_raw_words(&words, index, instruction.width);
+        output.push_str(&format!("{pc:08x}: {raw_words}  {}\n", instruction.text));
+        index += instruction.width;
     }
     Ok(output)
 }
@@ -53,29 +53,13 @@ fn collect_branch_labels(words: &[u16], base_address: u32) -> Result<BTreeSet<u3
         let pc = base_address
             .checked_add((index as u32) * 2)
             .ok_or_else(|| "Rux16 artifact address overflows u32".to_string())?;
-        let word = words[index];
-        let op = (word >> 12) & 0x0f;
-        let b = ((word >> 4) & 0x0f) as u8;
-        let c = (word & 0x0f) as u8;
-        if op == 0x6 && (b == 0x0 || b == 0x1) {
-            labels.insert(relative_branch_target(pc, c)?);
+        let instruction = disassemble_instruction(words, index, pc)?;
+        if let Some(target) = instruction.branch_target {
+            labels.insert(target);
         }
-        index += instruction_width(words, index);
+        index += instruction.width;
     }
     Ok(labels)
-}
-
-fn instruction_width(words: &[u16], index: usize) -> usize {
-    let word = words[index];
-    let op = (word >> 12) & 0x0f;
-    let b = ((word >> 4) & 0x0f) as u8;
-    let c = (word & 0x0f) as u8;
-    match op {
-        0x2 if index + 1 < words.len() && b == 0x0 && c <= 0x0b => 2,
-        0x3 if index + 1 < words.len() && c == 0x1 => 2,
-        0xe if index + 2 < words.len() && b == 0x0 && c == 0x1 => 3,
-        _ => 1,
-    }
 }
 
 fn format_raw_words(words: &[u16], index: usize, width: usize) -> String {
@@ -86,82 +70,142 @@ fn format_raw_words(words: &[u16], index: usize, width: usize) -> String {
         .join(" ")
 }
 
-fn disassemble_instruction(words: &[u16], index: usize, pc: u32) -> (String, usize) {
+struct DisassembledInstruction {
+    text: String,
+    width: usize,
+    branch_target: Option<u32>,
+}
+
+impl DisassembledInstruction {
+    fn single(text: String) -> Self {
+        Self {
+            text,
+            width: 1,
+            branch_target: None,
+        }
+    }
+
+    fn multi(text: String, width: usize) -> Self {
+        Self {
+            text,
+            width,
+            branch_target: None,
+        }
+    }
+
+    fn branch(text: String, target: u32) -> Self {
+        Self {
+            text,
+            width: 1,
+            branch_target: Some(target),
+        }
+    }
+}
+
+fn disassemble_instruction(
+    words: &[u16],
+    index: usize,
+    pc: u32,
+) -> Result<DisassembledInstruction, String> {
     let word = words[index];
     let op = (word >> 12) & 0x0f;
     let a = ((word >> 8) & 0x0f) as u8;
     let b = ((word >> 4) & 0x0f) as u8;
     let c = (word & 0x0f) as u8;
-    match op {
+    let instruction = match op {
         0x0 => match word & 0x0fff {
-            0x000 => ("nop".to_string(), 1),
-            0x001 => ("halt".to_string(), 1),
-            _ if c == 0x2 => (format!("read_csr r{a}, {b}"), 1),
-            _ if c == 0x3 => (format!("write_csr {a}, r{b}"), 1),
-            _ => (format!(".word 0x{word:04x}"), 1),
+            0x000 => DisassembledInstruction::single("nop".to_string()),
+            0x001 => DisassembledInstruction::single("halt".to_string()),
+            _ if c == 0x2 => DisassembledInstruction::single(format!("read_csr r{a}, {b}")),
+            _ if c == 0x3 => DisassembledInstruction::single(format!("write_csr {a}, r{b}")),
+            _ => return Err(invalid_instruction(pc, word, "unknown system instruction")),
         },
-        0x1 => (format!("const4 r{a}, {c}"), 1),
-        0x2 => disassemble_alu_rrr(words, index, a, b, c, word),
-        0x3 => disassemble_extended(words, index, a, b, c, word),
+        0x1 => {
+            if b != 0 {
+                return Err(invalid_instruction(
+                    pc,
+                    word,
+                    "const4 reserved bits are set",
+                ));
+            }
+            DisassembledInstruction::single(format!("const4 r{a}, {c}"))
+        }
+        0x2 => disassemble_alu_rrr(words, index, pc, a, b, c, word)?,
+        0x3 => disassemble_extended(words, index, pc, a, b, c, word)?,
         0x4 => match c {
-            0x0 => (format!("load8 r{a}, [r{b}]"), 1),
-            0x1 => (format!("load16 r{a}, [r{b}]"), 1),
-            0x2 => (format!("load32 r{a}, [r{b}]"), 1),
-            _ => (format!(".word 0x{word:04x}"), 1),
+            0x0 => DisassembledInstruction::single(format!("load8 r{a}, [r{b}]")),
+            0x1 => DisassembledInstruction::single(format!("load16 r{a}, [r{b}]")),
+            0x2 => DisassembledInstruction::single(format!("load32 r{a}, [r{b}]")),
+            _ => return Err(invalid_instruction(pc, word, "invalid load width")),
         },
         0x5 => match c {
-            0x0 => (format!("store8 [r{a}], r{b}"), 1),
-            0x1 => (format!("store16 [r{a}], r{b}"), 1),
-            0x2 => (format!("store32 [r{a}], r{b}"), 1),
-            _ => (format!(".word 0x{word:04x}"), 1),
+            0x0 => DisassembledInstruction::single(format!("store8 [r{a}], r{b}")),
+            0x1 => DisassembledInstruction::single(format!("store16 [r{a}], r{b}")),
+            0x2 => DisassembledInstruction::single(format!("store32 [r{a}], r{b}")),
+            _ => return Err(invalid_instruction(pc, word, "invalid store width")),
         },
         0x6 => match b {
-            0x0 => (
-                format!(
-                    "branch_if_zero r{a}, L_{:08x}",
-                    relative_branch_target(pc, c).unwrap()
-                ),
-                1,
-            ),
-            0x1 => (
-                format!(
-                    "branch_if_nonzero r{a}, L_{:08x}",
-                    relative_branch_target(pc, c).unwrap()
-                ),
-                1,
-            ),
-            _ => (format!(".word 0x{word:04x}"), 1),
+            0x0 => {
+                let target = relative_branch_target(pc, c)?;
+                DisassembledInstruction::branch(
+                    format!("branch_if_zero r{a}, L_{target:08x}"),
+                    target,
+                )
+            }
+            0x1 => {
+                let target = relative_branch_target(pc, c)?;
+                DisassembledInstruction::branch(
+                    format!("branch_if_nonzero r{a}, L_{target:08x}"),
+                    target,
+                )
+            }
+            _ => return Err(invalid_instruction(pc, word, "invalid branch predicate")),
         },
-        0x7 => (format!("jump r{a}"), 1),
-        0x8 => match (b, c) {
-            (0x0, 0x0) => (format!("call r{a}"), 1),
-            _ => (format!(".word 0x{word:04x}"), 1),
-        },
-        0x9 => match (a, b, c) {
-            (0x0, 0x0, 0x0) => ("ret".to_string(), 1),
-            _ => (format!(".word 0x{word:04x}"), 1),
-        },
-        0xe => disassemble_const32(words, index, a, word),
-        _ => (format!(".word 0x{word:04x}"), 1),
-    }
+        0x7 => {
+            if b != 0 || c != 0 {
+                return Err(invalid_instruction(pc, word, "jump reserved bits are set"));
+            }
+            DisassembledInstruction::single(format!("jump r{a}"))
+        }
+        0x8 => {
+            if b != 0 || c != 0 {
+                return Err(invalid_instruction(pc, word, "call reserved bits are set"));
+            }
+            DisassembledInstruction::single(format!("call r{a}"))
+        }
+        0x9 => {
+            if a != 0 || b != 0 || c != 0 {
+                return Err(invalid_instruction(pc, word, "ret reserved bits are set"));
+            }
+            DisassembledInstruction::single("ret".to_string())
+        }
+        0xe => disassemble_const32(words, index, pc, a, b, c, word)?,
+        _ => return Err(invalid_instruction(pc, word, "unknown opcode")),
+    };
+    Ok(instruction)
 }
 
 fn disassemble_alu_rrr(
     words: &[u16],
     index: usize,
+    pc: u32,
     dst: u8,
     category: u8,
     subop: u8,
     word: u16,
-) -> (String, usize) {
+) -> Result<DisassembledInstruction, String> {
     if category != 0 {
-        return (format!(".word 0x{word:04x}"), 1);
+        return Err(invalid_instruction(pc, word, "ALU reserved bits are set"));
     }
     let Some(extension) = words.get(index + 1).copied() else {
-        return (format!(".word 0x{word:04x} ; missing alu_rrr operands"), 1);
+        return Err(invalid_instruction(pc, word, "truncated ALU operands"));
     };
     if extension & 0xff00 != 0 {
-        return (format!(".word 0x{word:04x}"), 1);
+        return Err(invalid_instruction(
+            pc,
+            word,
+            "ALU extension reserved bits are set",
+        ));
     }
     let mnemonic = match subop {
         0x0 => "add",
@@ -176,39 +220,78 @@ fn disassemble_alu_rrr(
         0x9 => "ne",
         0xa => "ltu",
         0xb => "lt_s",
-        _ => return (format!(".word 0x{word:04x}"), 1),
+        _ => return Err(invalid_instruction(pc, word, "unknown ALU subop")),
     };
     let lhs = ((extension >> 4) & 0x0f) as u8;
     let rhs = (extension & 0x0f) as u8;
-    (format!("{mnemonic} r{dst}, r{lhs}, r{rhs}"), 2)
+    Ok(DisassembledInstruction::multi(
+        format!("{mnemonic} r{dst}, r{lhs}, r{rhs}"),
+        2,
+    ))
 }
 
 fn disassemble_extended(
     words: &[u16],
     index: usize,
+    pc: u32,
     a: u8,
     b: u8,
     c: u8,
     word: u16,
-) -> (String, usize) {
+) -> Result<DisassembledInstruction, String> {
     let Some(extension) = words.get(index + 1).copied() else {
-        return (format!(".word 0x{word:04x} ; missing extension"), 1);
+        return Err(invalid_instruction(
+            pc,
+            word,
+            "truncated extended instruction",
+        ));
     };
-    match c {
-        0x1 => (format!("test_bits r{a}, r{b}, 0x{extension:04x}"), 2),
-        _ => (format!(".word 0x{word:04x}"), 1),
-    }
+    let instruction = match c {
+        0x1 => {
+            DisassembledInstruction::multi(format!("test_bits r{a}, r{b}, 0x{extension:04x}"), 2)
+        }
+        _ => {
+            return Err(invalid_instruction(
+                pc,
+                word,
+                "unknown extended instruction",
+            ))
+        }
+    };
+    Ok(instruction)
 }
 
-fn disassemble_const32(words: &[u16], index: usize, register: u8, word: u16) -> (String, usize) {
+fn disassemble_const32(
+    words: &[u16],
+    index: usize,
+    pc: u32,
+    register: u8,
+    reserved: u8,
+    subop: u8,
+    word: u16,
+) -> Result<DisassembledInstruction, String> {
+    if reserved != 0 || subop != 1 {
+        return Err(invalid_instruction(
+            pc,
+            word,
+            "const32 reserved bits are set",
+        ));
+    }
     let Some(lo) = words.get(index + 1).copied() else {
-        return (format!(".word 0x{word:04x} ; missing const32 lo"), 1);
+        return Err(invalid_instruction(pc, word, "truncated const32 low word"));
     };
     let Some(hi) = words.get(index + 2).copied() else {
-        return (format!(".word 0x{word:04x} ; missing const32 hi"), 1);
+        return Err(invalid_instruction(pc, word, "truncated const32 high word"));
     };
     let value = u32::from(lo) | (u32::from(hi) << 16);
-    (format!("const32 r{register}, 0x{value:08x}"), 3)
+    Ok(DisassembledInstruction::multi(
+        format!("const32 r{register}, 0x{value:08x}"),
+        3,
+    ))
+}
+
+fn invalid_instruction(pc: u32, word: u16, reason: &str) -> String {
+    format!("invalid Rux16 instruction 0x{word:04x} at 0x{pc:08x}: {reason}")
 }
 
 fn relative_branch_target(pc: u32, offset_nibble: u8) -> Result<u32, String> {

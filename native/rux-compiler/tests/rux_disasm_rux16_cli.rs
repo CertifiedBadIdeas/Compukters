@@ -183,6 +183,35 @@ fn rux_disasm_prints_bios_artifact_from_bios_flash_base() {
 }
 
 #[test]
+fn rux_disasm_rejects_invalid_rux16_instruction_without_word_fallback() {
+    let artifact_path = temp_file("bios-invalid-instruction.flash");
+    fs::write(&artifact_path, words_to_bytes(&[0x7130])).expect("artifact writes");
+
+    let output = Command::new(rux_binary())
+        .args([
+            "disasm",
+            "--target",
+            "bios",
+            artifact_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("rux disasm runs");
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("invalid Rux16 instruction 0x7130 at 0xfff00000"),
+        "stderr: {stderr}"
+    );
+    assert!(!stderr.contains(".word"), "stderr: {stderr}");
+    assert!(
+        output.stdout.is_empty(),
+        "stdout: {}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+}
+
+#[test]
 fn rux_disasm_prints_ltu_extended_instruction() {
     let artifact_path = temp_file("bios-ltu.flash");
     fs::write(

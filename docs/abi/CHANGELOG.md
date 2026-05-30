@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- `rux disasm` now validates Rux16 instruction encodings against the active VM
+  decode rules and fails clearly on reserved bits, unknown opcodes, and
+  truncated multi-word instructions instead of printing `.word` fallback lines.
+  Rux16 assembler helpers now cover both zero and non-zero branch predicates.
 - Added `rux runtime rux16-startup`, which emits the first freestanding Rux16
   startup object. It defines `_start`, calls application `main`, initializes the
   program stack, writes the low byte of `main`'s `r0` return value to
