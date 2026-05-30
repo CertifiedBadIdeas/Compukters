@@ -31,6 +31,103 @@ the prologue.
 
 There is no zero register in v1.
 
+## Initial LLVM-Facing Target Model
+
+The first LLVM-facing target is expected to model Rux16 as:
+
+```text
+target triple:   rux16-unknown-ruxos
+endianness:      little
+pointer width:   32
+integer width:   i1, i8, i16, i32 legal or promotable to i32
+registers:       16 architectural u32 registers
+stack:           guest RAM, downward-growing, 4-byte minimum slot size
+code model:      static, freestanding, no dynamic linking
+executable:      RUXE produced by Rux tooling after LLVM-generated objects
+```
+
+This is a readiness contract, not a statement that the LLVM backend exists.
+Until the target backend and object pipeline exist, tooling must reject
+LLVM-facing requests explicitly instead of falling back to another execution
+path.
+
+The initial LLVM register classification is:
+
+```text
+r0       return value and scratch
+r1-r3    first integer or pointer arguments
+r4-r11   allocatable general-purpose registers
+r12      frame pointer when frame pointers are enabled
+r13-r14  backend scratch registers for instruction selection and lowering
+r15      stack pointer
+```
+
+`r12`, `r13`, `r14`, and `r15` are reserved for backend or frame management in
+the initial target model. General-purpose allocation must not use those
+registers until a later ABI revision deliberately changes the contract.
+
+The first LLVM-facing calling convention is intentionally narrow:
+
+- `i32` and pointer arguments enter in `r1`, `r2`, and `r3`;
+- `i32` and pointer return values leave in `r0`;
+- additional arguments are passed on the `r15` stack in 4-byte slots;
+- stack locals and spills use normal guest RAM;
+- direct calls use `call rN`, and returns use `ret`;
+- the stack is 4-byte aligned at function entry.
+
+The initial call-preservation model is:
+
+```text
+caller-saved:  r0-r11
+reserved:      r12-r15
+callee-saved:  none in the first LLVM-facing ABI slice
+```
+
+This model keeps the first backend simple and makes all preservation explicit
+in generated caller code. A later ABI may add callee-saved registers, but code
+that depends on callee preservation before that revision is invalid.
+
+The initial target must reject or lower through deliberate helper/runtime
+symbols, not silent fallback behavior:
+
+- `i64` arguments and returns;
+- aggregate-by-value arguments;
+- struct returns;
+- varargs;
+- exceptions;
+- tail calls;
+- dynamic linking;
+- position-independent code.
+
+The first backend proof only needs freestanding static code that can run leaf
+functions, stack-using functions, direct calls, simple loops, explicit loads
+and stores, and a defined halt, return, trap, debug, or syscall result path.
+
+## LLVM Readiness Instruction Set
+
+The current Rux16 implementation does not yet provide the whole integer
+instruction surface expected by the initial LLVM target. Before backend work
+starts, the active CPU, assembler, disassembler, and compiler tooling should
+cover these instruction families:
+
+- constants: small immediates and full 32-bit constants;
+- arithmetic: `add` and `sub`;
+- bitwise operations: `and`, `or`, `xor`, and `not` or an equivalent lowering;
+- shifts: logical left, logical right, and arithmetic right;
+- comparisons: `eq`, `ne`, unsigned relational comparisons, and signed
+  relational comparisons;
+- memory: `load8`, `load16`, `load32`, `store8`, `store16`, and `store32`;
+- control flow: conditional branches, unconditional jumps, direct calls, and
+  returns;
+- trap/syscall boundary: an explicit trap mechanism or ABI path for entering
+  OS/runtime services;
+- CSR access only where the OS/debug ABI requires it.
+
+Multiplication, division, atomics, floating point, vector operations, hardware
+privilege levels, and virtual memory are allowed to land after the first LLVM
+proof. If a missing operation is routed through a helper call, that helper must
+be named, linked, and tested as part of the freestanding runtime boundary.
+
 ## Stack Pointer
 
 `r15` is reserved as the stack pointer:
@@ -182,5 +279,6 @@ restores them after `ret`.
 
 Compiler backends must not use `r12` or `r15` as scratch or local registers.
 This is a compiler-owned preservation rule for the current register-backed
-local lowering. It is not yet a full caller-saved/callee-saved register
-classification, and it does not define stack-passed parameters or return slots.
+local lowering. It is narrower than the initial LLVM-facing target model above:
+the current Rux compiler save path does not yet implement stack-passed
+parameters, return slots, or a general-purpose external calling convention.

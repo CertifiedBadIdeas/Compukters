@@ -13,6 +13,30 @@ This first version intentionally supports one load section. It is enough to
 separate "executable image file" from "raw instruction bytes" without
 introducing relocation, dynamic linking, or a full process model yet.
 
+## Relationship To LLVM Objects
+
+The first LLVM-facing toolchain must not make LLVM emit `RUXE` directly.
+`RUXE` remains the final guest-loadable executable container produced by Rux
+tooling after LLVM has emitted a normal relocatable object.
+
+The intended static pipeline is:
+
+```text
+clang / llc
+  -> Rux16 relocatable object
+  -> Rux linker or objcopy-style conversion tool
+  -> RUXE program/kernel/bootloader executable
+  -> RuxFS or boot media installation
+  -> VM loader or OS exec service
+```
+
+The relocatable object format, section names, relocation records, symbol
+resolution rules, and unsupported relocation diagnostics are separate ABI work.
+The conversion step selects the final `RUXE` ABI kind (`bootloader`, `kernel`,
+or `program`) and must reject unsupported object features explicitly. Loaders
+must not reinterpret relocatable objects as `RUXE`, and LLVM-generated code
+must not bypass the normal `RUXE` validation rules.
+
 ## Relationship To Existing Targets
 
 `rux compile` target meanings:

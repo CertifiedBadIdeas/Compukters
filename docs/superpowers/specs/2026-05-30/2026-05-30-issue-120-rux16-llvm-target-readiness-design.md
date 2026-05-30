@@ -253,17 +253,26 @@ The acceptance result is not "clang supports Rux". The acceptance result is:
 
 ## Follow-Up Issue Breakdown
 
-This readiness slice should produce or link follow-up issues for:
+This readiness slice produced these follow-up issues:
 
-1. Rux16 ISA completion for LLVM-friendly integer code generation.
-2. Rux16 calling convention and stack ABI documentation.
-3. Rux16 assembler/disassembler support for any new opcodes.
-4. Rux16 relocatable object and relocation model.
-5. Rux linker or objcopy-style conversion from relocatable objects to RUXE.
-6. Minimal freestanding startup and compiler helper runtime.
-7. First out-of-tree LLVM backend prototype.
-8. First clang freestanding C smoke test.
-9. Later Rust `core` or `no_std` feasibility.
+1. [#121](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/121):
+   Complete Rux16 integer ISA for LLVM code generation.
+2. [#122](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/122):
+   Define Rux16 calling convention and stack ABI for LLVM.
+3. [#129](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/129):
+   Keep Rux16 assembler and disassembler aligned with LLVM-readiness ISA.
+4. [#125](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/125):
+   Define Rux16 relocatable object and relocation model.
+5. [#124](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/124):
+   Add Rux object-to-RUXE link step.
+6. [#123](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/123):
+   Add minimal freestanding Rux16 runtime helpers.
+7. [#126](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/126):
+   Prototype first out-of-tree LLVM backend for Rux16.
+8. [#128](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/128):
+   Add first clang freestanding C smoke test for Rux16.
+9. [#127](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/127):
+   Assess Rust `core` and `no_std` feasibility on Rux16.
 
 The broader issue #41 remains the LLVM backend direction. This issue is the
 readiness gate before backend implementation starts.
