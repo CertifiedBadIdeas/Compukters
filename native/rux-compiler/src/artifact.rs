@@ -324,7 +324,7 @@ impl Rux16ArtifactBackend {
             rux16_asm::SCRATCH_REGISTER,
             u32::MAX - 3,
         ));
-        self.words.push(rux16_asm::add(
+        self.words.extend_from_slice(&rux16_asm::add(
             rux16_asm::STACK_POINTER_REGISTER,
             rux16_asm::STACK_POINTER_REGISTER,
             rux16_asm::SCRATCH_REGISTER,
@@ -342,7 +342,7 @@ impl Rux16ArtifactBackend {
         ));
         self.words
             .extend_from_slice(&rux16_asm::const32(rux16_asm::SCRATCH_REGISTER, 4));
-        self.words.push(rux16_asm::add(
+        self.words.extend_from_slice(&rux16_asm::add(
             rux16_asm::STACK_POINTER_REGISTER,
             rux16_asm::STACK_POINTER_REGISTER,
             rux16_asm::SCRATCH_REGISTER,
@@ -369,7 +369,7 @@ impl Rux16ArtifactBackend {
         self.words
             .extend_from_slice(&rux16_asm::const32(dst, 0u32.wrapping_sub(offset)));
         self.words
-            .push(rux16_asm::add(dst, rux16_asm::FRAME_POINTER_REGISTER, dst));
+            .extend_from_slice(&rux16_asm::add(dst, rux16_asm::FRAME_POINTER_REGISTER, dst));
     }
 
     fn emit_load_frame_slot(&mut self, dst: u8, offset: u32) {
@@ -389,7 +389,7 @@ impl Rux16ArtifactBackend {
             rux16_asm::SCRATCH_REGISTER,
             0u32.wrapping_sub(bytes),
         ));
-        self.words.push(rux16_asm::add(
+        self.words.extend_from_slice(&rux16_asm::add(
             rux16_asm::STACK_POINTER_REGISTER,
             rux16_asm::STACK_POINTER_REGISTER,
             rux16_asm::SCRATCH_REGISTER,
@@ -843,7 +843,7 @@ impl Rux16ArtifactBackend {
         self.words
             .extend_from_slice(&rux16_asm::const32(dst, index.wrapping_sub(offset)));
         self.words
-            .push(rux16_asm::add(dst, rux16_asm::FRAME_POINTER_REGISTER, dst));
+            .extend_from_slice(&rux16_asm::add(dst, rux16_asm::FRAME_POINTER_REGISTER, dst));
     }
 
     fn compile_frame_array_address_into(
@@ -871,8 +871,9 @@ impl Rux16ArtifactBackend {
         self.words
             .extend_from_slice(&rux16_asm::const32(dst, 0u32.wrapping_sub(offset)));
         self.words
-            .push(rux16_asm::add(dst, rux16_asm::FRAME_POINTER_REGISTER, dst));
-        self.words.push(rux16_asm::add(dst, dst, index_register));
+            .extend_from_slice(&rux16_asm::add(dst, rux16_asm::FRAME_POINTER_REGISTER, dst));
+        self.words
+            .extend_from_slice(&rux16_asm::add(dst, dst, index_register));
         Ok(())
     }
 
@@ -1018,9 +1019,6 @@ impl Rux16ArtifactBackend {
         value: &Expr,
         unsafe_context: bool,
     ) -> Result<(), CompileError> {
-        if op != BinaryOp::Add {
-            return unsupported("only `+=` compound assignment can be lowered in Rux16 yet");
-        }
         let local = self.locals.get(name).copied().ok_or_else(|| CompileError {
             message: format!(
                 "Rux16 backend does not support this program yet: unknown local `{name}`"
@@ -1029,6 +1027,7 @@ impl Rux16ArtifactBackend {
         match local.ty {
             TypeName::I32 => {
                 let rhs = self.compile_i32_expr_to_register_or_use(14, value, unsafe_context)?;
+                let encode = i32_binary_encoder(op)?;
                 let lhs = match local.storage {
                     Rux16LocalStorage::Register(register) => register,
                     Rux16LocalStorage::FrameSlot { offset } => {
@@ -1039,7 +1038,7 @@ impl Rux16ArtifactBackend {
                         unreachable!("array locals cannot use scalar compound assignment")
                     }
                 };
-                self.words.push(rux16_asm::add(lhs, lhs, rhs));
+                self.words.extend_from_slice(&encode(lhs, lhs, rhs));
                 if let Rux16LocalStorage::FrameSlot { offset } = local.storage {
                     self.emit_store_frame_slot(offset, lhs);
                 }
@@ -1047,6 +1046,7 @@ impl Rux16ArtifactBackend {
             }
             TypeName::U32 => {
                 let rhs = self.compile_u32_expr_to_register_or_use(14, value, unsafe_context)?;
+                let encode = u32_binary_encoder(op)?;
                 let lhs = match local.storage {
                     Rux16LocalStorage::Register(register) => register,
                     Rux16LocalStorage::FrameSlot { offset } => {
@@ -1057,7 +1057,7 @@ impl Rux16ArtifactBackend {
                         unreachable!("array locals cannot use scalar compound assignment")
                     }
                 };
-                self.words.push(rux16_asm::add(lhs, lhs, rhs));
+                self.words.extend_from_slice(&encode(lhs, lhs, rhs));
                 if let Rux16LocalStorage::FrameSlot { offset } = local.storage {
                     self.emit_store_frame_slot(offset, lhs);
                 }
@@ -1072,7 +1072,7 @@ impl Rux16ArtifactBackend {
             | TypeName::RefMutU32
             | TypeName::RefMutU8
             | TypeName::ArrayU8(_) => {
-                unsupported("only i32 and u32 `+=` can be lowered in Rux16 yet")
+                unsupported("only i32 and u32 compound assignment can be lowered in Rux16 yet")
             }
         }
     }
@@ -1320,28 +1320,32 @@ impl Rux16ArtifactBackend {
         let Expr::Compare { op, lhs, rhs } = expr else {
             return unsupported("only equality comparisons can be lowered as Rux16 conditions");
         };
+        self.compile_compare_condition_into(dst, *op, lhs, rhs, unsafe_context)
+    }
+
+    fn compile_compare_condition_into(
+        &mut self,
+        dst: u8,
+        op: CompareOp,
+        lhs: &Expr,
+        rhs: &Expr,
+        unsafe_context: bool,
+    ) -> Result<(), CompileError> {
         match op {
-            CompareOp::Eq => {
-                self.compile_equality_condition_into(dst, lhs, rhs, unsafe_context)?;
+            CompareOp::Eq => self.compile_equality_condition_into(dst, lhs, rhs, unsafe_context),
+            CompareOp::Ne => self.compile_inequality_condition_into(dst, lhs, rhs, unsafe_context),
+            CompareOp::Lt => self.compile_less_than_condition_into(dst, lhs, rhs, unsafe_context),
+            CompareOp::Gt => self.compile_less_than_condition_into(dst, rhs, lhs, unsafe_context),
+            CompareOp::Le => {
+                self.compile_less_than_condition_into(dst, rhs, lhs, unsafe_context)?;
+                self.emit_bool_not(dst);
                 Ok(())
             }
-            CompareOp::Ne => {
-                self.compile_equality_condition_into(dst, lhs, rhs, unsafe_context)?;
-                self.words
-                    .extend_from_slice(&rux16_asm::const32(rux16_asm::SCRATCH_REGISTER, 0));
-                self.words
-                    .extend_from_slice(&rux16_asm::eq(dst, dst, rux16_asm::SCRATCH_REGISTER));
+            CompareOp::Ge => {
+                self.compile_less_than_condition_into(dst, lhs, rhs, unsafe_context)?;
+                self.emit_bool_not(dst);
                 Ok(())
             }
-            CompareOp::Lt => {
-                let lhs = self.compile_u32_expr_to_register_or_use(2, lhs, unsafe_context)?;
-                let rhs = self.compile_u32_expr_to_register_or_use(14, rhs, unsafe_context)?;
-                self.words.extend_from_slice(&rux16_asm::ltu(dst, lhs, rhs));
-                Ok(())
-            }
-            CompareOp::Gt | CompareOp::Le | CompareOp::Ge => unsupported(
-                "only `==`, `!=`, and unsigned `<` comparisons can be lowered as Rux16 conditions",
-            ),
         }
     }
 
@@ -1448,6 +1452,16 @@ impl Rux16ArtifactBackend {
                 self.words.extend_from_slice(&rux16_asm::eq(dst, lhs, rhs));
                 Ok(())
             }
+            TypeName::U32 => {
+                let lhs = self.compile_u32_expr_to_register_or_use(2, lhs, unsafe_context)?;
+                let rhs = self.compile_u32_expr_to_register_or_use(
+                    rux16_asm::SCRATCH_REGISTER,
+                    rhs,
+                    unsafe_context,
+                )?;
+                self.words.extend_from_slice(&rux16_asm::eq(dst, lhs, rhs));
+                Ok(())
+            }
             TypeName::U8 => {
                 let lhs = self.compile_u8_expr_to_scratch(lhs, unsafe_context)?;
                 self.compile_u8_expr_into(rux16_asm::SCRATCH_REGISTER, rhs, unsafe_context)?;
@@ -1455,8 +1469,7 @@ impl Rux16ArtifactBackend {
                     .extend_from_slice(&rux16_asm::eq(dst, lhs, rux16_asm::SCRATCH_REGISTER));
                 Ok(())
             }
-            TypeName::U32
-            | TypeName::Bool
+            TypeName::Bool
             | TypeName::PtrI32
             | TypeName::PtrU32
             | TypeName::PtrU8
@@ -1467,6 +1480,134 @@ impl Rux16ArtifactBackend {
                 "only i32 and u8 equality comparisons can be lowered as Rux16 conditions",
             ),
         }
+    }
+
+    fn compile_inequality_condition_into(
+        &mut self,
+        dst: u8,
+        lhs: &Expr,
+        rhs: &Expr,
+        unsafe_context: bool,
+    ) -> Result<(), CompileError> {
+        let lhs_ty = self.condition_operand_type(lhs)?;
+        let rhs_ty = self.condition_operand_type(rhs)?;
+        if lhs_ty != rhs_ty {
+            return unsupported(format!(
+                "mixed {} and {} inequality comparisons cannot be lowered as Rux16 conditions",
+                type_name(lhs_ty),
+                type_name(rhs_ty)
+            ));
+        }
+        match lhs_ty {
+            TypeName::I32 => {
+                let lhs = self.compile_i32_expr_to_scratch(lhs, unsafe_context)?;
+                let rhs = self.compile_i32_expr_to_register_or_use(
+                    rux16_asm::SCRATCH_REGISTER,
+                    rhs,
+                    unsafe_context,
+                )?;
+                self.words.extend_from_slice(&rux16_asm::ne(dst, lhs, rhs));
+                Ok(())
+            }
+            TypeName::U32 => {
+                let lhs = self.compile_u32_expr_to_register_or_use(2, lhs, unsafe_context)?;
+                let rhs = self.compile_u32_expr_to_register_or_use(
+                    rux16_asm::SCRATCH_REGISTER,
+                    rhs,
+                    unsafe_context,
+                )?;
+                self.words.extend_from_slice(&rux16_asm::ne(dst, lhs, rhs));
+                Ok(())
+            }
+            TypeName::U8 => {
+                let lhs = self.compile_u8_expr_to_scratch(lhs, unsafe_context)?;
+                self.compile_u8_expr_into(rux16_asm::SCRATCH_REGISTER, rhs, unsafe_context)?;
+                self.words
+                    .extend_from_slice(&rux16_asm::ne(dst, lhs, rux16_asm::SCRATCH_REGISTER));
+                Ok(())
+            }
+            TypeName::Bool
+            | TypeName::PtrI32
+            | TypeName::PtrU32
+            | TypeName::PtrU8
+            | TypeName::RefMutI32
+            | TypeName::RefMutU32
+            | TypeName::RefMutU8
+            | TypeName::ArrayU8(_) => unsupported(
+                "only i32, u32, and u8 inequality comparisons can be lowered as Rux16 conditions",
+            ),
+        }
+    }
+
+    fn compile_less_than_condition_into(
+        &mut self,
+        dst: u8,
+        lhs: &Expr,
+        rhs: &Expr,
+        unsafe_context: bool,
+    ) -> Result<(), CompileError> {
+        let lhs_ty = self.condition_operand_type(lhs)?;
+        let rhs_ty = self.condition_operand_type(rhs)?;
+        if lhs_ty != rhs_ty {
+            return unsupported(format!(
+                "mixed {} and {} less-than comparisons cannot be lowered as Rux16 conditions",
+                type_name(lhs_ty),
+                type_name(rhs_ty)
+            ));
+        }
+        match lhs_ty {
+            TypeName::I32 => {
+                let lhs = self.compile_i32_expr_to_scratch(lhs, unsafe_context)?;
+                let rhs = self.compile_i32_expr_to_register_or_use(
+                    rux16_asm::SCRATCH_REGISTER,
+                    rhs,
+                    unsafe_context,
+                )?;
+                self.words
+                    .extend_from_slice(&rux16_asm::lt_s(dst, lhs, rhs));
+                Ok(())
+            }
+            TypeName::U32 => {
+                let lhs = self.compile_u32_expr_to_register_or_use(2, lhs, unsafe_context)?;
+                let rhs = self.compile_u32_expr_to_register_or_use(
+                    rux16_asm::SCRATCH_REGISTER,
+                    rhs,
+                    unsafe_context,
+                )?;
+                self.words.extend_from_slice(&rux16_asm::ltu(dst, lhs, rhs));
+                Ok(())
+            }
+            TypeName::U8 => {
+                let lhs = self.compile_u8_expr_to_scratch(lhs, unsafe_context)?;
+                self.compile_u8_expr_into(rux16_asm::SCRATCH_REGISTER, rhs, unsafe_context)?;
+                self.words.extend_from_slice(&rux16_asm::ltu(
+                    dst,
+                    lhs,
+                    rux16_asm::SCRATCH_REGISTER,
+                ));
+                Ok(())
+            }
+            TypeName::Bool
+            | TypeName::PtrI32
+            | TypeName::PtrU32
+            | TypeName::PtrU8
+            | TypeName::RefMutI32
+            | TypeName::RefMutU32
+            | TypeName::RefMutU8
+            | TypeName::ArrayU8(_) => unsupported(
+                "only i32, u32, and u8 less-than comparisons can be lowered as Rux16 conditions",
+            ),
+        }
+    }
+
+    fn emit_bool_not(&mut self, register: u8) {
+        self.words
+            .extend_from_slice(&rux16_asm::const32(rux16_asm::SCRATCH_REGISTER, 0));
+        self.words.extend_from_slice(&rux16_asm::eq(
+            register,
+            register,
+            rux16_asm::SCRATCH_REGISTER,
+        ));
     }
 
     fn condition_operand_type(&self, expr: &Expr) -> Result<TypeName, CompileError> {
@@ -1655,14 +1796,11 @@ impl Rux16ArtifactBackend {
                     .extend_from_slice(&rux16_asm::const32(dst, value as u32));
                 Ok(())
             }
-            Expr::Binary {
-                op: BinaryOp::Add,
-                lhs,
-                rhs,
-            } => {
+            Expr::Binary { op, lhs, rhs } => {
+                let encode = i32_binary_encoder(*op)?;
                 let lhs = self.compile_i32_expr_to_register_or_use(dst, lhs, unsafe_context)?;
                 let rhs = self.compile_i32_expr_to_register_or_use(14, rhs, unsafe_context)?;
-                self.words.push(rux16_asm::add(dst, lhs, rhs));
+                self.words.extend_from_slice(&encode(dst, lhs, rhs));
                 Ok(())
             }
             Expr::Call { name, args } => self.emit_real_function_call(
@@ -1750,10 +1888,17 @@ impl Rux16ArtifactBackend {
                 Ok(())
             }
             Expr::Binary { op, lhs, rhs } => match op {
-                BinaryOp::Add => {
+                BinaryOp::Add
+                | BinaryOp::Sub
+                | BinaryOp::BitAnd
+                | BinaryOp::BitOr
+                | BinaryOp::BitXor
+                | BinaryOp::Shl
+                | BinaryOp::Shr => {
+                    let encode = u32_binary_encoder(*op)?;
                     let lhs = self.compile_u32_expr_to_register_or_use(dst, lhs, unsafe_context)?;
                     let rhs = self.compile_u32_expr_to_register_or_use(14, rhs, unsafe_context)?;
-                    self.words.push(rux16_asm::add(dst, lhs, rhs));
+                    self.words.extend_from_slice(&encode(dst, lhs, rhs));
                     Ok(())
                 }
                 BinaryOp::Mul => {
@@ -1761,16 +1906,9 @@ impl Rux16ArtifactBackend {
                     self.compile_u32_expr_into(dst, lhs, unsafe_context)?;
                     self.emit_mul_by_small_const(dst, multiplier)
                 }
-                BinaryOp::Sub
-                | BinaryOp::Div
-                | BinaryOp::Rem
-                | BinaryOp::BitAnd
-                | BinaryOp::BitOr
-                | BinaryOp::BitXor
-                | BinaryOp::Shl
-                | BinaryOp::Shr => {
-                    unsupported("only u32 addition and multiplication by a constant can be lowered")
-                }
+                BinaryOp::Div | BinaryOp::Rem => unsupported(
+                    "u32 division and remainder require explicit runtime helpers before lowering",
+                ),
             },
             Expr::Call { name, args } => {
                 if name == "rux16_read_csr" {
@@ -1858,7 +1996,8 @@ impl Rux16ArtifactBackend {
         }
         let zero = scratch_register_excluding(src);
         self.words.extend_from_slice(&rux16_asm::const32(zero, 0));
-        self.words.push(rux16_asm::add(dst, src, zero));
+        self.words
+            .extend_from_slice(&rux16_asm::add(dst, src, zero));
     }
 
     fn emit_mul_by_small_const(&mut self, dst: u8, multiplier: u32) -> Result<(), CompileError> {
@@ -1877,7 +2016,8 @@ impl Rux16ArtifactBackend {
         let scratch = scratch_register_excluding(dst);
         self.emit_register_copy(scratch, dst);
         for _ in 1..multiplier {
-            self.words.push(rux16_asm::add(dst, dst, scratch));
+            self.words
+                .extend_from_slice(&rux16_asm::add(dst, dst, scratch));
         }
         Ok(())
     }
@@ -2700,6 +2840,36 @@ fn scratch_register_excluding(register: u8) -> u8 {
         rux16_asm::SECONDARY_SCRATCH_REGISTER
     } else {
         rux16_asm::SCRATCH_REGISTER
+    }
+}
+
+fn i32_binary_encoder(op: BinaryOp) -> Result<fn(u8, u8, u8) -> [u16; 2], CompileError> {
+    match op {
+        BinaryOp::Add => Ok(rux16_asm::add),
+        BinaryOp::Sub => Ok(rux16_asm::sub),
+        BinaryOp::BitAnd => Ok(rux16_asm::and),
+        BinaryOp::BitOr => Ok(rux16_asm::or),
+        BinaryOp::BitXor => Ok(rux16_asm::xor),
+        BinaryOp::Shl => Ok(rux16_asm::shl),
+        BinaryOp::Shr => Ok(rux16_asm::sar),
+        BinaryOp::Mul | BinaryOp::Div | BinaryOp::Rem => unsupported(
+            "i32 multiplication, division, and remainder require explicit runtime helpers before lowering",
+        ),
+    }
+}
+
+fn u32_binary_encoder(op: BinaryOp) -> Result<fn(u8, u8, u8) -> [u16; 2], CompileError> {
+    match op {
+        BinaryOp::Add => Ok(rux16_asm::add),
+        BinaryOp::Sub => Ok(rux16_asm::sub),
+        BinaryOp::BitAnd => Ok(rux16_asm::and),
+        BinaryOp::BitOr => Ok(rux16_asm::or),
+        BinaryOp::BitXor => Ok(rux16_asm::xor),
+        BinaryOp::Shl => Ok(rux16_asm::shl),
+        BinaryOp::Shr => Ok(rux16_asm::shr),
+        BinaryOp::Mul | BinaryOp::Div | BinaryOp::Rem => unsupported(
+            "u32 multiplication, division, and remainder require explicit runtime helpers before lowering",
+        ),
     }
 }
 

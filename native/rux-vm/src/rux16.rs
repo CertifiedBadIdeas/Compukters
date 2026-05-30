@@ -95,12 +95,23 @@ pub enum DecodedInstruction {
     Const4 { dst: usize, value: u32 },
     Const32 { dst: usize, value: u32 },
     Add { dst: usize, lhs: usize, rhs: usize },
+    Sub { dst: usize, lhs: usize, rhs: usize },
+    And { dst: usize, lhs: usize, rhs: usize },
+    Or { dst: usize, lhs: usize, rhs: usize },
+    Xor { dst: usize, lhs: usize, rhs: usize },
+    Shl { dst: usize, lhs: usize, rhs: usize },
+    Shr { dst: usize, lhs: usize, rhs: usize },
+    Sar { dst: usize, lhs: usize, rhs: usize },
     Eq { dst: usize, lhs: usize, rhs: usize },
+    Ne { dst: usize, lhs: usize, rhs: usize },
     Ltu { dst: usize, lhs: usize, rhs: usize },
+    LtS { dst: usize, lhs: usize, rhs: usize },
     TestBits { dst: usize, src: usize, mask: u32 },
     Load8 { dst: usize, addr: usize },
+    Load16 { dst: usize, addr: usize },
     Load32 { dst: usize, addr: usize },
     Store8 { addr: usize, src: usize },
+    Store16 { addr: usize, src: usize },
     Store32 { addr: usize, src: usize },
     BranchIfZero { src: usize, target_pc: u32 },
     BranchIfNonZero { src: usize, target_pc: u32 },
@@ -157,31 +168,49 @@ impl InstructionDecoder for Rux16Decoder {
                     value: c as u32,
                 }
             }
-            0x2 => DecodedInstruction::Add {
-                dst: a,
-                lhs: b,
-                rhs: c,
-            },
+            0x2 => {
+                if b != 0 {
+                    return Err(illegal_instruction(pc, word));
+                }
+                let extension_addr = checked_pc_add(pc, 2)?;
+                let extension = bus
+                    .load_u16(extension_addr)
+                    .map_err(|error| instruction_fetch_fault(extension_addr, error))?;
+                if extension & 0xff00 != 0 {
+                    return Err(illegal_instruction(pc, word));
+                }
+                let lhs = usize::from((extension >> 4) & 0x0f);
+                let rhs = usize::from(extension & 0x0f);
+                let instruction = match c {
+                    0x0 => DecodedInstruction::Add { dst: a, lhs, rhs },
+                    0x1 => DecodedInstruction::Sub { dst: a, lhs, rhs },
+                    0x2 => DecodedInstruction::And { dst: a, lhs, rhs },
+                    0x3 => DecodedInstruction::Or { dst: a, lhs, rhs },
+                    0x4 => DecodedInstruction::Xor { dst: a, lhs, rhs },
+                    0x5 => DecodedInstruction::Shl { dst: a, lhs, rhs },
+                    0x6 => DecodedInstruction::Shr { dst: a, lhs, rhs },
+                    0x7 => DecodedInstruction::Sar { dst: a, lhs, rhs },
+                    0x8 => DecodedInstruction::Eq { dst: a, lhs, rhs },
+                    0x9 => DecodedInstruction::Ne { dst: a, lhs, rhs },
+                    0xa => DecodedInstruction::Ltu { dst: a, lhs, rhs },
+                    0xb => DecodedInstruction::LtS { dst: a, lhs, rhs },
+                    _ => return Err(illegal_instruction(pc, word)),
+                };
+                return Ok(DecodeResult {
+                    instruction,
+                    next_pc: checked_pc_add(pc, 4)?,
+                });
+            }
             0x3 => {
                 let extension_addr = checked_pc_add(pc, 2)?;
                 let extension = bus
                     .load_u16(extension_addr)
                     .map_err(|error| instruction_fetch_fault(extension_addr, error))?;
                 let instruction = match c {
-                    0x0 if b == 0 => DecodedInstruction::Eq {
-                        dst: a,
-                        lhs: usize::from((extension >> 4) & 0x0f),
-                        rhs: usize::from(extension & 0x0f),
-                    },
                     0x1 => DecodedInstruction::TestBits {
                         dst: a,
                         src: b,
                         mask: u32::from(extension),
-                    },
-                    0x2 if b == 0 => DecodedInstruction::Ltu {
-                        dst: a,
-                        lhs: usize::from((extension >> 4) & 0x0f),
-                        rhs: usize::from(extension & 0x0f),
                     },
                     _ => return Err(illegal_instruction(pc, word)),
                 };
@@ -192,11 +221,13 @@ impl InstructionDecoder for Rux16Decoder {
             }
             0x4 => match c {
                 0x0 => DecodedInstruction::Load8 { dst: a, addr: b },
+                0x1 => DecodedInstruction::Load16 { dst: a, addr: b },
                 0x2 => DecodedInstruction::Load32 { dst: a, addr: b },
                 _ => return Err(illegal_instruction(pc, word)),
             },
             0x5 => match c {
                 0x0 => DecodedInstruction::Store8 { addr: a, src: b },
+                0x1 => DecodedInstruction::Store16 { addr: a, src: b },
                 0x2 => DecodedInstruction::Store32 { addr: a, src: b },
                 _ => return Err(illegal_instruction(pc, word)),
             },
@@ -404,12 +435,50 @@ impl Rux16Cpu {
                 self.registers[dst] = self.registers[lhs].wrapping_add(self.registers[rhs]);
                 Ok(None)
             }
+            DecodedInstruction::Sub { dst, lhs, rhs } => {
+                self.registers[dst] = self.registers[lhs].wrapping_sub(self.registers[rhs]);
+                Ok(None)
+            }
+            DecodedInstruction::And { dst, lhs, rhs } => {
+                self.registers[dst] = self.registers[lhs] & self.registers[rhs];
+                Ok(None)
+            }
+            DecodedInstruction::Or { dst, lhs, rhs } => {
+                self.registers[dst] = self.registers[lhs] | self.registers[rhs];
+                Ok(None)
+            }
+            DecodedInstruction::Xor { dst, lhs, rhs } => {
+                self.registers[dst] = self.registers[lhs] ^ self.registers[rhs];
+                Ok(None)
+            }
+            DecodedInstruction::Shl { dst, lhs, rhs } => {
+                self.registers[dst] = self.registers[lhs].wrapping_shl(self.registers[rhs] & 31);
+                Ok(None)
+            }
+            DecodedInstruction::Shr { dst, lhs, rhs } => {
+                self.registers[dst] = self.registers[lhs].wrapping_shr(self.registers[rhs] & 31);
+                Ok(None)
+            }
+            DecodedInstruction::Sar { dst, lhs, rhs } => {
+                self.registers[dst] =
+                    ((self.registers[lhs] as i32) >> (self.registers[rhs] & 31)) as u32;
+                Ok(None)
+            }
             DecodedInstruction::Eq { dst, lhs, rhs } => {
                 self.registers[dst] = u32::from(self.registers[lhs] == self.registers[rhs]);
                 Ok(None)
             }
+            DecodedInstruction::Ne { dst, lhs, rhs } => {
+                self.registers[dst] = u32::from(self.registers[lhs] != self.registers[rhs]);
+                Ok(None)
+            }
             DecodedInstruction::Ltu { dst, lhs, rhs } => {
                 self.registers[dst] = u32::from(self.registers[lhs] < self.registers[rhs]);
+                Ok(None)
+            }
+            DecodedInstruction::LtS { dst, lhs, rhs } => {
+                self.registers[dst] =
+                    u32::from((self.registers[lhs] as i32) < (self.registers[rhs] as i32));
                 Ok(None)
             }
             DecodedInstruction::TestBits { dst, src, mask } => {
@@ -419,6 +488,22 @@ impl Rux16Cpu {
             DecodedInstruction::Load8 { dst, addr } => {
                 let address = self.registers[addr];
                 let value = match bus.load_u8(address) {
+                    Ok(value) => value,
+                    Err(error) => {
+                        return self.raise_exception(
+                            RUX16_TRAP_CAUSE_LOAD_FAULT,
+                            fault_pc,
+                            address,
+                            error.to_string(),
+                        )
+                    }
+                };
+                self.registers[dst] = u32::from(value);
+                Ok(None)
+            }
+            DecodedInstruction::Load16 { dst, addr } => {
+                let address = self.registers[addr];
+                let value = match bus.load_u16(address) {
                     Ok(value) => value,
                     Err(error) => {
                         return self.raise_exception(
@@ -451,6 +536,18 @@ impl Rux16Cpu {
             DecodedInstruction::Store8 { addr, src } => {
                 let address = self.registers[addr];
                 if let Err(error) = bus.store_u8(address, self.registers[src] as u8) {
+                    return self.raise_exception(
+                        RUX16_TRAP_CAUSE_STORE_FAULT,
+                        fault_pc,
+                        address,
+                        error.to_string(),
+                    );
+                }
+                Ok(None)
+            }
+            DecodedInstruction::Store16 { addr, src } => {
+                let address = self.registers[addr];
+                if let Err(error) = bus.store_u16(address, self.registers[src] as u16) {
                     return self.raise_exception(
                         RUX16_TRAP_CAUSE_STORE_FAULT,
                         fault_pc,

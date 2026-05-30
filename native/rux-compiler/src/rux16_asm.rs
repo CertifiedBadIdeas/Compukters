@@ -26,29 +26,60 @@ pub(crate) fn const32(register: u8, value: u32) -> [u16; 3] {
     ]
 }
 
-pub(crate) fn add(dst: u8, lhs: u8, rhs: u8) -> u16 {
-    assert_register(dst);
-    assert_register(lhs);
-    assert_register(rhs);
-    0x2000 | (u16::from(dst) << 8) | (u16::from(lhs) << 4) | u16::from(rhs)
+pub(crate) fn add(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
+    alu_rrr(dst, 0x0, lhs, rhs)
+}
+
+pub(crate) fn sub(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
+    alu_rrr(dst, 0x1, lhs, rhs)
+}
+
+pub(crate) fn and(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
+    alu_rrr(dst, 0x2, lhs, rhs)
+}
+
+pub(crate) fn or(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
+    alu_rrr(dst, 0x3, lhs, rhs)
+}
+
+pub(crate) fn xor(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
+    alu_rrr(dst, 0x4, lhs, rhs)
+}
+
+pub(crate) fn shl(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
+    alu_rrr(dst, 0x5, lhs, rhs)
+}
+
+pub(crate) fn shr(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
+    alu_rrr(dst, 0x6, lhs, rhs)
+}
+
+pub(crate) fn sar(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
+    alu_rrr(dst, 0x7, lhs, rhs)
 }
 
 pub(crate) fn eq(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
-    assert_register(dst);
-    assert_register(lhs);
-    assert_register(rhs);
-    [
-        0x3000 | (u16::from(dst) << 8),
-        (u16::from(lhs) << 4) | u16::from(rhs),
-    ]
+    alu_rrr(dst, 0x8, lhs, rhs)
+}
+
+pub(crate) fn ne(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
+    alu_rrr(dst, 0x9, lhs, rhs)
 }
 
 pub(crate) fn ltu(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
+    alu_rrr(dst, 0xa, lhs, rhs)
+}
+
+pub(crate) fn lt_s(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
+    alu_rrr(dst, 0xb, lhs, rhs)
+}
+
+fn alu_rrr(dst: u8, subop: u8, lhs: u8, rhs: u8) -> [u16; 2] {
     assert_register(dst);
     assert_register(lhs);
     assert_register(rhs);
     [
-        0x3002 | (u16::from(dst) << 8),
+        0x2000 | (u16::from(dst) << 8) | u16::from(subop),
         (u16::from(lhs) << 4) | u16::from(rhs),
     ]
 }
@@ -57,6 +88,13 @@ pub(crate) fn load32(dst: u8, addr: u8) -> u16 {
     assert_register(dst);
     assert_register(addr);
     0x4002 | (u16::from(dst) << 8) | (u16::from(addr) << 4)
+}
+
+#[allow(dead_code)]
+pub(crate) fn load16(dst: u8, addr: u8) -> u16 {
+    assert_register(dst);
+    assert_register(addr);
+    0x4001 | (u16::from(dst) << 8) | (u16::from(addr) << 4)
 }
 
 pub(crate) fn load8(dst: u8, addr: u8) -> u16 {
@@ -69,6 +107,13 @@ pub(crate) fn store32(addr: u8, src: u8) -> u16 {
     assert_register(addr);
     assert_register(src);
     0x5002 | (u16::from(addr) << 8) | (u16::from(src) << 4)
+}
+
+#[allow(dead_code)]
+pub(crate) fn store16(addr: u8, src: u8) -> u16 {
+    assert_register(addr);
+    assert_register(src);
+    0x5001 | (u16::from(addr) << 8) | (u16::from(src) << 4)
 }
 
 pub(crate) fn store8(addr: u8, src: u8) -> u16 {

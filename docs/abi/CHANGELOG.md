@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Replaced the experimental Rux16 integer ALU encoding with the canonical
+  two-word `alu_rrr` format `0x2a0s 0x00bc`, covering `add`, `sub`, bitwise
+  ops, shifts, equality, inequality, unsigned less-than, and signed less-than.
+  Added `load16` and `store16` to the memory width encoding.
 - Documented the initial LLVM-facing Rux16 target model, including the
   `rux16-unknown-ruxos` shape, register classification, caller-saved model,
   stack-passed argument boundary, required integer ISA families, and the

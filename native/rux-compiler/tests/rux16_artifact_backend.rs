@@ -54,6 +54,74 @@ fn rux16_program_artifact_is_ruxe_program_executable() {
 }
 
 #[test]
+fn rux16_backend_lowers_canonical_u32_integer_ops() {
+    let source = "
+        fn main() {
+            let mut a: u32 = 240u32;
+            let mut b: u32 = 15u32;
+            let mut sub_result: u32 = a - b;
+            let mut and_result: u32 = a & b;
+            let mut or_result: u32 = a | b;
+            let mut xor_result: u32 = a ^ b;
+            let mut shl_result: u32 = b << 1u32;
+            let mut shr_result: u32 = a >> 2u32;
+            unsafe {
+                ptr<u32>(4096u32).store(sub_result);
+                ptr<u32>(4100u32).store(and_result);
+                ptr<u32>(4104u32).store(or_result);
+                ptr<u32>(4108u32).store(xor_result);
+                ptr<u32>(4112u32).store(shl_result);
+                ptr<u32>(4116u32).store(shr_result);
+            }
+        }
+    ";
+    let artifact = compile_rux16_artifact(source, Rux16ArtifactTarget::Bios)
+        .expect("canonical u32 integer ops compile to Rux16");
+
+    let disasm = rux16_disasm::disassemble_artifact(&artifact.bytes, Rux16ArtifactTarget::Bios)
+        .expect("artifact disassembles");
+
+    assert!(disasm.contains("sub "), "disasm: {disasm}");
+    assert!(disasm.contains("and "), "disasm: {disasm}");
+    assert!(disasm.contains("or "), "disasm: {disasm}");
+    assert!(disasm.contains("xor "), "disasm: {disasm}");
+    assert!(disasm.contains("shl "), "disasm: {disasm}");
+    assert!(disasm.contains("shr "), "disasm: {disasm}");
+}
+
+#[test]
+fn rux16_backend_lowers_signed_and_unsigned_integer_comparisons() {
+    let source = "
+        fn main() {
+            let mut signed_left: i32 = 1;
+            let mut signed_right: i32 = 2;
+            let mut unsigned_left: u32 = 1u32;
+            let mut unsigned_right: u32 = 2u32;
+            unsafe {
+                if signed_left < signed_right {
+                    ptr<u32>(4096u32).store(1u32);
+                }
+                if unsigned_left < unsigned_right {
+                    ptr<u32>(4100u32).store(1u32);
+                }
+                if unsigned_left != unsigned_right {
+                    ptr<u32>(4104u32).store(1u32);
+                }
+            }
+        }
+    ";
+    let artifact = compile_rux16_artifact(source, Rux16ArtifactTarget::Bios)
+        .expect("canonical integer comparisons compile to Rux16");
+
+    let disasm = rux16_disasm::disassemble_artifact(&artifact.bytes, Rux16ArtifactTarget::Bios)
+        .expect("artifact disassembles");
+
+    assert!(disasm.contains("lt_s "), "disasm: {disasm}");
+    assert!(disasm.contains("ltu "), "disasm: {disasm}");
+    assert!(disasm.contains("ne "), "disasm: {disasm}");
+}
+
+#[test]
 fn rux16_bios_firmware_source_runs_from_bios_flash() {
     let artifact = compile_bundled_rux16_bios();
     let (mut machine, cpu_id) =

@@ -79,24 +79,22 @@ pub fn run_rux16_workload(workload: VmBenchmarkWorkload, iterations: u32) -> Res
 
 fn rux16_workload(workload: VmBenchmarkWorkload, iterations: u32) -> (Vec<u16>, usize) {
     match workload {
-        VmBenchmarkWorkload::ComputeLoop => (
-            vec![
+        VmBenchmarkWorkload::ComputeLoop => {
+            let mut words = vec![
                 const32(0),
                 low16(iterations),
                 high16(iterations),
                 const4(1, 0),
                 const4(2, 1),
-                eq(3),
-                eq_operands(1, 0),
-                branch_if_zero(3, 1),
-                halt(),
-                add(1, 1, 2),
-                branch_if_nonzero(2, -6),
-            ],
-            1,
-        ),
-        VmBenchmarkWorkload::MemoryLoop => (
-            vec![
+            ];
+            words.extend(eq(3, 1, 0));
+            words.extend([branch_if_zero(3, 1), halt()]);
+            words.extend(add(1, 1, 2));
+            words.push(branch_if_nonzero(2, -7));
+            (words, 1)
+        }
+        VmBenchmarkWorkload::MemoryLoop => {
+            let mut words = vec![
                 const32(0),
                 low16(iterations),
                 high16(iterations),
@@ -108,21 +106,17 @@ fn rux16_workload(workload: VmBenchmarkWorkload, iterations: u32) -> (Vec<u16>, 
                 const32(6),
                 low16(22),
                 high16(22),
-                eq(3),
-                eq_operands(1, 0),
-                branch_if_zero(3, 2),
-                load32(5, 4),
-                halt(),
-                load32(5, 4),
-                add(5, 5, 2),
-                store32(4, 5),
-                add(1, 1, 2),
-                jump(6),
-            ],
-            5,
-        ),
-        VmBenchmarkWorkload::MmioLoop => (
-            vec![
+            ];
+            words.extend(eq(3, 1, 0));
+            words.extend([branch_if_zero(3, 2), load32(5, 4), halt(), load32(5, 4)]);
+            words.extend(add(5, 5, 2));
+            words.push(store32(4, 5));
+            words.extend(add(1, 1, 2));
+            words.push(jump(6));
+            (words, 5)
+        }
+        VmBenchmarkWorkload::MmioLoop => {
+            let mut words = vec![
                 const32(0),
                 low16(iterations),
                 high16(iterations),
@@ -134,18 +128,13 @@ fn rux16_workload(workload: VmBenchmarkWorkload, iterations: u32) -> (Vec<u16>, 
                 const32(6),
                 low16(22),
                 high16(22),
-                eq(3),
-                eq_operands(1, 0),
-                branch_if_zero(3, 2),
-                load32(5, 4),
-                halt(),
-                add(1, 1, 2),
-                store32(4, 1),
-                load32(5, 4),
-                jump(6),
-            ],
-            5,
-        ),
+            ];
+            words.extend(eq(3, 1, 0));
+            words.extend([branch_if_zero(3, 2), load32(5, 4), halt()]);
+            words.extend(add(1, 1, 2));
+            words.extend([store32(4, 1), load32(5, 4), jump(6)]);
+            (words, 5)
+        }
     }
 }
 
@@ -204,16 +193,19 @@ fn const32(dst: u8) -> u16 {
     0xe001 | (u16::from(dst) << 8)
 }
 
-fn add(dst: u8, lhs: u8, rhs: u8) -> u16 {
-    0x2000 | (u16::from(dst) << 8) | (u16::from(lhs) << 4) | u16::from(rhs)
+fn add(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
+    alu_rrr(dst, 0x0, lhs, rhs)
 }
 
-fn eq(dst: u8) -> u16 {
-    0x3000 | (u16::from(dst) << 8)
+fn eq(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
+    alu_rrr(dst, 0x8, lhs, rhs)
 }
 
-fn eq_operands(lhs: u8, rhs: u8) -> u16 {
-    (u16::from(lhs) << 4) | u16::from(rhs)
+fn alu_rrr(dst: u8, subop: u8, lhs: u8, rhs: u8) -> [u16; 2] {
+    [
+        0x2000 | (u16::from(dst) << 8) | u16::from(subop),
+        (u16::from(lhs) << 4) | u16::from(rhs),
+    ]
 }
 
 fn load32(dst: u8, addr: u8) -> u16 {

@@ -389,7 +389,7 @@ fn rux16_load32(dst: u8, addr: u8) -> u16 {
 
 fn rux16_eq(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
     [
-        0x3000 | (u16::from(dst) << 8),
+        0x2008 | (u16::from(dst) << 8),
         (u16::from(lhs) << 4) | u16::from(rhs),
     ]
 }
@@ -465,13 +465,13 @@ fn rux16_stage2_boot_bios_words() -> Vec<u16> {
     words.push(rux16_halt());
 
     words.push(rux16_const4(4, 4));
-    words.push(rux16_add(0, 0, 4));
+    words.extend(rux16_add(0, 0, 4));
     words.push(rux16_load32(7, 0));
-    words.push(rux16_add(0, 0, 4));
+    words.extend(rux16_add(0, 0, 4));
     words.push(rux16_load32(8, 0));
-    words.push(rux16_add(0, 0, 4));
+    words.extend(rux16_add(0, 0, 4));
     words.push(rux16_load32(9, 0));
-    words.push(rux16_add(0, 0, 4));
+    words.extend(rux16_add(0, 0, 4));
     words.push(rux16_load32(10, 0));
 
     words.extend(rux16_const32(2, ComputerMachine::STORAGE0_LBA_LOW));
@@ -543,10 +543,10 @@ fn rux16_storage_read_bios_words() -> Vec<u16> {
     words.push(rux16_const4(4, 1));
     words.push(rux16_load8(2, 0));
     words.push(rux16_store32(3, 2));
-    words.push(rux16_add(0, 0, 4));
+    words.extend(rux16_add(0, 0, 4));
     words.push(rux16_load8(2, 0));
     words.push(rux16_store32(3, 2));
-    words.push(rux16_add(0, 0, 4));
+    words.extend(rux16_add(0, 0, 4));
     words.push(rux16_load8(2, 0));
     words.push(rux16_store32(3, 2));
 
@@ -558,8 +558,11 @@ fn rux16_storage_read_bios_words() -> Vec<u16> {
     words
 }
 
-fn rux16_add(dst: u8, lhs: u8, rhs: u8) -> u16 {
-    0x2000 | (u16::from(dst) << 8) | (u16::from(lhs) << 4) | u16::from(rhs)
+fn rux16_add(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
+    [
+        0x2000 | (u16::from(dst) << 8),
+        (u16::from(lhs) << 4) | u16::from(rhs),
+    ]
 }
 
 fn rux16_halt() -> u16 {

@@ -114,10 +114,10 @@ and stores, and a defined halt, return, trap, debug, or syscall result path.
 
 ## LLVM Readiness Instruction Set
 
-The current Rux16 implementation does not yet provide the whole integer
-instruction surface expected by the initial LLVM target. Before backend work
-starts, the active CPU, assembler, disassembler, and compiler tooling should
-cover these instruction families:
+The Rux16 integer instruction surface is intentionally regular so an external
+LLVM backend can lower ordinary integer machine operations without introducing
+LLVM-specific behavior inside the VM. The active CPU, assembler, disassembler,
+and compiler tooling cover these instruction families:
 
 - constants: small immediates and full 32-bit constants;
 - arithmetic: `add` and `sub`;
@@ -136,6 +136,55 @@ Multiplication, division, atomics, floating point, vector operations, hardware
 privilege levels, and virtual memory are allowed to land after the first LLVM
 proof. If a missing operation is routed through a helper call, that helper must
 be named, linked, and tested as part of the freestanding runtime boundary.
+
+### Integer ALU Encoding
+
+Register-register integer ALU instructions use a canonical two-word encoding:
+
+```text
+word 0: 0x2a0s
+word 1: 0x00bc
+
+a  destination register
+s  ALU subopcode
+b  left operand register
+c  right operand register
+```
+
+The high byte of word 1 is reserved and must be zero. Encoders must not emit
+non-zero reserved bits, and decoders must reject them as illegal instructions.
+
+```text
+s    mnemonic    semantics
+0x0  add         dst = lhs + rhs, wrapping u32
+0x1  sub         dst = lhs - rhs, wrapping u32
+0x2  and         dst = lhs & rhs
+0x3  or          dst = lhs | rhs
+0x4  xor         dst = lhs ^ rhs
+0x5  shl         dst = lhs << (rhs & 31)
+0x6  shr         dst = lhs >> (rhs & 31), logical
+0x7  sar         dst = lhs >> (rhs & 31), arithmetic i32
+0x8  eq          dst = lhs == rhs ? 1 : 0
+0x9  ne          dst = lhs != rhs ? 1 : 0
+0xa  ltu         dst = unsigned(lhs) < unsigned(rhs) ? 1 : 0
+0xb  lt_s        dst = signed(lhs) < signed(rhs) ? 1 : 0
+```
+
+There are no compatibility aliases for older experimental encodings. The VM
+recognizes the documented encoding only.
+
+### Integer Memory Width Encoding
+
+Rux16 load/store width is encoded in the low nibble of the memory instruction:
+
+```text
+load8    0x4ab0    rA = zero_extend_u8([rB])
+load16   0x4ab1    rA = zero_extend_le_u16([rB])
+load32   0x4ab2    rA = le_u32([rB])
+store8   0x5ab0    [rA] = low_u8(rB)
+store16  0x5ab1    [rA] = low_le_u16(rB)
+store32  0x5ab2    [rA] = le_u32(rB)
+```
 
 ## Stack Pointer
 
