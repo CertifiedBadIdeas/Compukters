@@ -5,6 +5,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LLVM_BIN_DIR="${RUX16_LLVM_BIN_DIR:-$ROOT/toolchains/Compukter-Kraft-llvm/build-rux-min/bin}"
 LLC="$LLVM_BIN_DIR/llc"
 LLVM_READOBJ="$LLVM_BIN_DIR/llvm-readobj"
+LLVM_NOT="$LLVM_BIN_DIR/not"
 RUX_CARGO_MANIFEST="$ROOT/native/rux-compiler/Cargo.toml"
 
 require_file() {
@@ -26,12 +27,31 @@ require_contains() {
     fi
 }
 
+require_llc_failure() {
+    local input="$1"
+    local expected="$2"
+    local object="$WORK_DIR/$(basename "$input" .ll).o"
+    local stderr="$WORK_DIR/$(basename "$input" .ll).stderr"
+
+    if ! "$LLVM_NOT" --crash "$LLC" -mtriple=rux16 -filetype=obj "$input" -o "$object" \
+        > /dev/null 2> "$stderr"; then
+        echo "expected llc to reject $input" >&2
+        exit 1
+    fi
+    if [[ -e "$object" ]]; then
+        echo "llc produced unexpected object for rejected input: $object" >&2
+        exit 1
+    fi
+    require_contains "$stderr" "$expected"
+}
+
 run_rux() {
     cargo run --quiet --manifest-path "$RUX_CARGO_MANIFEST" --bin rux -- "$@"
 }
 
 require_file "$LLC"
 require_file "$LLVM_READOBJ"
+require_file "$LLVM_NOT"
 
 WORK_DIR="$(mktemp -d)"
 trap 'rm -rf "$WORK_DIR"' EXIT
@@ -52,6 +72,46 @@ target triple = "rux16"
 define i32 @main() {
 entry:
   ret i32 42
+}
+IR
+
+cat > "$WORK_DIR/i64-return.ll" <<'IR'
+target triple = "rux16"
+
+define i64 @wide_return() {
+entry:
+  ret i64 42
+}
+IR
+
+cat > "$WORK_DIR/varargs.ll" <<'IR'
+target triple = "rux16"
+
+define i32 @sum(i32 %first, ...) {
+entry:
+  ret i32 %first
+}
+IR
+
+cat > "$WORK_DIR/four-args.ll" <<'IR'
+target triple = "rux16"
+
+define i32 @many(i32 %a, i32 %b, i32 %c, i32 %d) {
+entry:
+  %ab = add i32 %a, %b
+  %cd = add i32 %c, %d
+  %sum = add i32 %ab, %cd
+  ret i32 %sum
+}
+IR
+
+cat > "$WORK_DIR/indirect-call.ll" <<'IR'
+target triple = "rux16"
+
+define i32 @call_ptr(ptr %callee) {
+entry:
+  %value = call i32 %callee()
+  ret i32 %value
 }
 IR
 
@@ -79,4 +139,10 @@ require_contains "$WORK_DIR/main-ruxe.disasm" "call r14"
 require_contains "$WORK_DIR/main-ruxe.disasm" "const32 r0, 0x0000002a"
 require_contains "$WORK_DIR/main-ruxe.disasm" "ret"
 
+require_llc_failure "$WORK_DIR/i64-return.ll" "LLVM ERROR: Rux16 multi-value returns are not implemented"
+require_llc_failure "$WORK_DIR/varargs.ll" "LLVM ERROR: Rux16 varargs are not implemented"
+require_llc_failure "$WORK_DIR/four-args.ll" "LLVM ERROR: Rux16 stack arguments are not implemented"
+require_llc_failure "$WORK_DIR/indirect-call.ll" "LLVM ERROR: Rux16 only supports direct calls"
+
+echo "unsupported LLVM feature checks passed"
 echo "Rux16 LLVM smoke passed"
