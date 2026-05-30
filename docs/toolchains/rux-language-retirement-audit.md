@@ -61,9 +61,9 @@ features.
 The NeoForge module still generates bundled firmware and storage images from
 Rux source:
 
-- `rux16_bios.rx` -> `firmware/rux16-bios.flash`;
-- `kernel_loader.rx` -> `kernel-loader.boot.ruxe`;
-- `display_ok.rx` -> `display-ok.kernel.ruxe`.
+- `rux16_bios.rx` -> `firmware/rux16-bios.kflash`;
+- `kernel_loader.rx` -> `kernel-loader.kb`;
+- `display_ok.rx` -> `display-ok.kx`.
 
 This is wired in
 `modules/v1_21_1/v1_21_1-neoforge/build.gradle.kts` through `cargo run --bin

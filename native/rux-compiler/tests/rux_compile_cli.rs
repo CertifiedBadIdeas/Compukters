@@ -5,8 +5,8 @@ use std::process::Command;
 #[test]
 fn rux_compile_defaults_to_user_space_program_target() {
     let source_path = temp_file("default-program.rx");
-    let default_output_path = temp_file("default-program.ruxe");
-    let explicit_output_path = temp_file("explicit-program.ruxe");
+    let default_output_path = temp_file("default-program.kx");
+    let explicit_output_path = temp_file("explicit-program.kx");
     fs::write(&source_path, "fn main() { }").expect("source writes");
 
     let default_output = Command::new(rux_binary())
@@ -54,7 +54,7 @@ fn rux_compile_defaults_to_user_space_program_target() {
 #[test]
 fn rux_compile_writes_explicit_bios_artifact() {
     let source_path = temp_file("bios.rx");
-    let output_path = temp_file("bios.flash");
+    let output_path = temp_file("bios.kflash");
     fs::write(&source_path, "fn main() { }").expect("source writes");
 
     let output = Command::new(rux_binary())
@@ -81,9 +81,9 @@ fn rux_compile_writes_explicit_bios_artifact() {
 }
 
 #[test]
-fn rux_compile_writes_explicit_boot_artifact_as_ruxe_executable() {
+fn rux_compile_writes_explicit_boot_artifact_as_kb_executable() {
     let source_path = temp_file("boot.rx");
-    let output_path = temp_file("boot.ruxe");
+    let output_path = temp_file("boot.kb");
     fs::write(&source_path, "fn main() { }").expect("source writes");
 
     let output = Command::new(rux_binary())
@@ -112,9 +112,9 @@ fn rux_compile_writes_explicit_boot_artifact_as_ruxe_executable() {
 }
 
 #[test]
-fn rux_compile_writes_explicit_kernel_artifact_as_ruxe_executable() {
+fn rux_compile_writes_explicit_kernel_artifact_as_kx_executable() {
     let source_path = temp_file("kernel.rx");
-    let output_path = temp_file("kernel.ruxe");
+    let output_path = temp_file("kernel.kx");
     fs::write(&source_path, "fn main() { }").expect("source writes");
 
     let output = Command::new(rux_binary())
@@ -145,7 +145,7 @@ fn rux_compile_writes_explicit_kernel_artifact_as_ruxe_executable() {
 #[test]
 fn rux_compile_rejects_unsupported_rux16_program_without_lowimage_fallback() {
     let source_path = temp_file("unsupported.rx");
-    let output_path = temp_file("unsupported.bin");
+    let output_path = temp_file("unsupported.kb");
     fs::write(&source_path, "fn main() -> i32 { return 7; }").expect("source writes");
 
     let output = Command::new(rux_binary())

@@ -54,7 +54,7 @@ fn run_cli(surface: CliSurface, args: Vec<String>) -> Result<(), String> {
 
 fn usage_error(surface: CliSurface) -> Result<(), String> {
     match surface {
-        CliSurface::Rux => Err("usage: rux check <input.rx>\n       rux compile [--target <bios|boot|kernel|program>] <input.rx> -o <output>".to_string()),
+        CliSurface::Rux => Err("usage: rux check <input.rx>\n       rux compile --target bios <input.rx> -o <bios.kflash>\n       rux compile --target boot <input.rx> -o <boot.kb>\n       rux compile [--target <kernel|program>] <input.rx> -o <program.kx>".to_string()),
         CliSurface::K16 => Err("usage: k16 link [--target <boot|kernel|program>] <input.ko>... -o <output.kx>\n       k16 runtime <rux16-startup|rux16-memory-helpers> -o <output.ko>\n       k16 run <program.kx>\n       k16 disasm --target <bios|boot|kernel|program> <input>\n       k16 inspect <blob>\n       k16 volume <create|init|put-boot|put-kernel> ...\n       k16 fs <filesystem> ...".to_string()),
     }
 }
@@ -659,7 +659,7 @@ fn compile_usage_error() -> Result<CompileConfig, String> {
 }
 
 fn compile_usage_message() -> String {
-    "usage: rux compile [--target <bios|boot|kernel|program>] <input.rx> -o <output>".to_string()
+    "usage: rux compile --target bios <input.rx> -o <bios.kflash>\n       rux compile --target boot <input.rx> -o <boot.kb>\n       rux compile [--target <kernel|program>] <input.rx> -o <program.kx>".to_string()
 }
 
 fn link_usage_error(surface: CliSurface) -> Result<LinkConfig, String> {
