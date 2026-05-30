@@ -161,8 +161,8 @@ fn rux_volume_inspect_prints_ruxpt_partition_layout() {
 fn rux_volume_inspect_boot_prints_boot_chain_metadata() {
     let volume_path = temp_file("inspect-boot-storage0.ruxvol");
     let root_path = temp_file("inspect-boot-root.ruxfs");
-    let boot_path = temp_file("inspect-boot-loader.ruxe");
-    let kernel_path = temp_file("inspect-boot-kernel.ruxe");
+    let boot_path = temp_file("inspect-boot-loader.kb");
+    let kernel_path = temp_file("inspect-boot-kernel.kx");
     let boot_bytes =
         ruxe::encode_rux16_executable(&[0x10, 0x20], ruxe::RuxeAbiKind::Bootloader, 0x2000, 0x2000)
             .expect("boot RUXE encodes");
@@ -239,7 +239,7 @@ fn rux_volume_inspect_boot_prints_boot_chain_metadata() {
     );
     assert_eq!(
         String::from_utf8(output.stdout).expect("inspect-boot stdout is UTF-8"),
-        "RUXVOL boot-chain\nBOOT partition start_lba=1 blocks=32 bytes=16384 name=boot\nBOOT RuxFS /boot/loader.ruxe file_bytes=54\nBOOTLOADER RUXE abi=bootloader entry_pc=0x00002000 load_addr=0x00002000 payload_bytes=2\nROOT partition start_lba=33 blocks=95 bytes=48640 name=root\nROOT RuxFS /boot/kernel.ruxe file_bytes=54\nKERNEL RUXE abi=kernel entry_pc=0x00003000 load_addr=0x00003000 payload_bytes=2\n"
+        "RUXVOL boot-chain\nBOOT partition start_lba=1 blocks=32 bytes=16384 name=boot\nBOOT RuxFS /boot/loader.kb file_bytes=54\nBOOTLOADER RUXE abi=bootloader entry_pc=0x00002000 load_addr=0x00002000 payload_bytes=2\nROOT partition start_lba=33 blocks=95 bytes=48640 name=root\nROOT RuxFS /boot/kernel.kx file_bytes=54\nKERNEL RUXE abi=kernel entry_pc=0x00003000 load_addr=0x00003000 payload_bytes=2\n"
     );
 }
 
@@ -247,7 +247,7 @@ fn rux_volume_inspect_boot_prints_boot_chain_metadata() {
 fn rux_volume_inspect_boot_rejects_missing_root_kernel() {
     let volume_path = temp_file("inspect-boot-missing-kernel-storage0.ruxvol");
     let root_path = temp_file("inspect-boot-missing-kernel-root.ruxfs");
-    let boot_path = temp_file("inspect-boot-missing-kernel-loader.ruxe");
+    let boot_path = temp_file("inspect-boot-missing-kernel-loader.kb");
     let boot_bytes =
         ruxe::encode_rux16_executable(&[0x10, 0x20], ruxe::RuxeAbiKind::Bootloader, 0x2000, 0x2000)
             .expect("boot RUXE encodes");
@@ -305,7 +305,7 @@ fn rux_volume_inspect_boot_rejects_missing_root_kernel() {
 
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr)
-        .contains("ROOT/RuxFS /boot/kernel.ruxe is not readable"));
+        .contains("ROOT/RuxFS /boot/kernel.kx is not readable"));
 }
 
 #[test]
@@ -391,7 +391,7 @@ fn rux_volume_put_boot_rejects_non_partitioned_volume_without_ruxb_fallback() {
 }
 
 #[test]
-fn rux_volume_put_boot_installs_loader_ruxe_in_boot_ruxfs_partition() {
+fn rux_volume_put_boot_installs_loader_kb_in_boot_ruxfs_partition() {
     let volume_path = temp_file("partitioned-boot-storage0.ruxvol");
     let boot_path = temp_file("partitioned-boot.ruxe");
     fs::write(
@@ -437,7 +437,7 @@ fn rux_volume_put_boot_installs_loader_ruxe_in_boot_ruxfs_partition() {
     assert_eq!(&payload[0..5], b"RUXPT");
     let boot = volume::extract_partition(&bytes, "BOOT").expect("BOOT extracts");
     assert_eq!(
-        ruxfs::read_file(&boot, "/boot/loader.ruxe").expect("loader reads from BOOT"),
+        ruxfs::read_file(&boot, "/boot/loader.kb").expect("loader reads from BOOT"),
         ruxe::encode_rux16_executable(
             &[0x01, 0x02, 0x03, 0x04],
             ruxe::RuxeAbiKind::Bootloader,
@@ -453,10 +453,10 @@ fn rux_volume_put_boot_installs_loader_ruxe_in_boot_ruxfs_partition() {
 }
 
 #[test]
-fn rux_volume_put_kernel_installs_kernel_ruxe_in_root_ruxfs() {
+fn rux_volume_put_kernel_installs_kernel_kx_in_root_ruxfs() {
     let volume_path = temp_file("kernel-rootfs-storage0.ruxvol");
     let root_path = temp_file("kernel-rootfs-root.ruxfs");
-    let kernel_path = temp_file("kernel-rootfs-kernel.ruxe");
+    let kernel_path = temp_file("kernel-rootfs-kernel.kx");
     let kernel_bytes = ruxe::encode_rux16_executable(
         &[0x01, 0x02, 0x03, 0x04],
         ruxe::RuxeAbiKind::Kernel,
@@ -518,7 +518,7 @@ fn rux_volume_put_kernel_installs_kernel_ruxe_in_root_ruxfs() {
     let bytes = fs::read(&volume_path).expect("volume reads");
     let root = volume::extract_partition(&bytes, "ROOT").expect("ROOT extracts");
     assert_eq!(
-        ruxfs::read_file(&root, "/boot/kernel.ruxe").expect("kernel reads from ROOT"),
+        ruxfs::read_file(&root, "/boot/kernel.kx").expect("kernel reads from ROOT"),
         kernel_bytes
     );
     assert!(
@@ -530,7 +530,7 @@ fn rux_volume_put_kernel_installs_kernel_ruxe_in_root_ruxfs() {
 #[test]
 fn rux_volume_init_creates_root_ruxfs_for_put_kernel() {
     let volume_path = temp_file("init-rootfs-storage0.ruxvol");
-    let kernel_path = temp_file("init-rootfs-kernel.ruxe");
+    let kernel_path = temp_file("init-rootfs-kernel.kx");
     let kernel_bytes =
         ruxe::encode_rux16_executable(&[0x10, 0x20], ruxe::RuxeAbiKind::Kernel, 0x3000, 0x3000)
             .expect("RUXE encodes");
@@ -565,7 +565,7 @@ fn rux_volume_init_creates_root_ruxfs_for_put_kernel() {
     let bytes = fs::read(&volume_path).expect("volume reads");
     let root = volume::extract_partition(&bytes, "ROOT").expect("ROOT extracts");
     assert_eq!(
-        ruxfs::read_file(&root, "/boot/kernel.ruxe").expect("kernel reads from ROOT"),
+        ruxfs::read_file(&root, "/boot/kernel.kx").expect("kernel reads from ROOT"),
         kernel_bytes
     );
 }
@@ -573,7 +573,7 @@ fn rux_volume_init_creates_root_ruxfs_for_put_kernel() {
 #[test]
 fn rux_volume_put_kernel_rejects_boot_artifact_without_profile_fallback() {
     let volume_path = temp_file("boot-as-kernel-storage0.ruxvol");
-    let kernel_path = temp_file("boot-as-kernel.ruxe");
+    let kernel_path = temp_file("boot-as-kernel.kx");
     fs::write(
         &kernel_path,
         ruxe::encode_rux16_executable(&[0x01, 0x00], ruxe::RuxeAbiKind::Bootloader, 0x800, 0x800)
@@ -613,7 +613,7 @@ fn rux_volume_put_kernel_rejects_boot_artifact_without_profile_fallback() {
 #[test]
 fn rux_volume_put_boot_rejects_kernel_artifact_without_profile_fallback() {
     let volume_path = temp_file("kernel-storage0.ruxvol");
-    let boot_path = temp_file("kernel.ruxe");
+    let boot_path = temp_file("kernel.kb");
     fs::write(
         &boot_path,
         ruxe::encode_rux16_executable(&[0x01, 0x00], ruxe::RuxeAbiKind::Kernel, 0x4000, 0x4000)
@@ -869,125 +869,125 @@ fn rux16_kernel_loader_source_finds_boot_directory_entry() {
 }
 
 #[test]
-fn rux16_kernel_loader_source_finds_kernel_ruxe_entry() {
+fn rux16_kernel_loader_source_finds_kernel_kx_entry() {
     let source = fs::read_to_string(
         Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/boot/kernel_loader.rx"),
     )
     .expect("kernel loader source should exist");
 
     assert!(
-        source.contains("fn find_kernel_ruxe_inode("),
-        "kernel loader should expose a guest-side kernel.ruxe lookup"
+        source.contains("fn find_kernel_kx_inode("),
+        "kernel loader should expose a guest-side kernel.kx lookup"
     );
     assert!(
         source.contains("boot_directory_inode"),
-        "kernel.ruxe lookup should take the boot directory inode id"
+        "kernel.kx lookup should take the boot directory inode id"
     );
     assert!(
         source.contains("read_storage0_blocks(inode_table_lba, 1, 0x3000)"),
-        "kernel.ruxe lookup should read the inode table block"
+        "kernel.kx lookup should read the inode table block"
     );
     assert!(
         source.contains("read_storage0_blocks(boot_dir_lba, 1, 0x3000)"),
-        "kernel.ruxe lookup should read the boot directory block"
+        "kernel.kx lookup should read the boot directory block"
     );
     assert!(
         source.contains("0x6e72656b"),
-        "kernel.ruxe lookup should match the little-endian `kern` prefix"
+        "kernel.kx lookup should match the little-endian `kern` prefix"
     );
     assert!(
-        source.contains("0x722e6c65"),
-        "kernel.ruxe lookup should match the little-endian `el.r` middle"
+        source.contains("0x6b2e6c65"),
+        "kernel.kx lookup should match the little-endian `el.k` middle"
     );
     assert!(
-        source.contains("0x00657875"),
-        "kernel.ruxe lookup should match the little-endian `uxe` suffix"
+        source.contains("0x00000078"),
+        "kernel.kx lookup should match the little-endian `x` suffix"
     );
     assert!(
         source.contains("ptr<i32>(inode_id_addr).load()"),
-        "kernel.ruxe lookup should return the matched file inode id"
+        "kernel.kx lookup should return the matched file inode id"
     );
 }
 
 #[test]
-fn rux16_kernel_loader_source_reads_kernel_ruxe_inode_metadata() {
+fn rux16_kernel_loader_source_reads_kernel_kx_inode_metadata() {
     let source = fs::read_to_string(
         Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/boot/kernel_loader.rx"),
     )
     .expect("kernel loader source should exist");
 
     assert!(
-        source.contains("fn probe_kernel_ruxe_inode_metadata("),
-        "kernel loader should expose a guest-side kernel.ruxe inode metadata probe"
+        source.contains("fn probe_kernel_kx_inode_metadata("),
+        "kernel loader should expose a guest-side kernel.kx inode metadata probe"
     );
     assert!(
-        source.contains("kernel_ruxe_inode"),
-        "kernel.ruxe metadata probe should take the kernel.ruxe inode id"
+        source.contains("kernel_kx_inode"),
+        "kernel.kx metadata probe should take the kernel.kx inode id"
     );
     assert!(
         source.contains("read_storage0_blocks(inode_table_lba, 1, 0x3000)"),
-        "kernel.ruxe metadata probe should read the inode table block"
+        "kernel.kx metadata probe should read the inode table block"
     );
     assert!(
         source.contains("ptr<u8>(inode_addr).load()"),
-        "kernel.ruxe metadata probe should read the file inode state"
+        "kernel.kx metadata probe should read the file inode state"
     );
     assert!(
         source.contains("1u8"),
-        "kernel.ruxe metadata probe should require a file inode"
+        "kernel.kx metadata probe should require a file inode"
     );
     assert!(
         source.contains("inode_addr + 8u32"),
-        "kernel.ruxe metadata probe should read the file size field"
+        "kernel.kx metadata probe should read the file size field"
     );
     assert!(
         source.contains("inode_addr + 32u32"),
-        "kernel.ruxe metadata probe should read the first extent start block"
+        "kernel.kx metadata probe should read the first extent start block"
     );
     assert!(
         source.contains("inode_addr + 36u32"),
-        "kernel.ruxe metadata probe should read the first extent block count"
+        "kernel.kx metadata probe should read the first extent block count"
     );
 }
 
 #[test]
-fn rux16_kernel_loader_source_loads_kernel_ruxe_from_root_ruxfs() {
+fn rux16_kernel_loader_source_loads_kernel_kx_from_root_ruxfs() {
     let source = fs::read_to_string(
         Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/boot/kernel_loader.rx"),
     )
     .expect("kernel loader source should exist");
 
     assert!(
-        source.contains("fn load_kernel_ruxe_from_root_ruxfs("),
-        "kernel loader should expose a guest-side kernel.ruxe file load helper"
+        source.contains("fn load_kernel_kx_from_root_ruxfs("),
+        "kernel loader should expose a guest-side kernel.kx file load helper"
     );
     assert!(
         source.contains("let mut kernel_lba: i32 = root_start_lba + kernel_start_block"),
-        "kernel.ruxe loader should translate the file extent block into an absolute storage LBA"
+        "kernel.kx loader should translate the file extent block into an absolute storage LBA"
     );
     assert!(
         source.contains("read_storage0_blocks(kernel_lba, kernel_block_count, 0x6000)"),
-        "kernel.ruxe loader should read file extent bytes into RAM"
+        "kernel.kx loader should read file extent bytes into RAM"
     );
     assert!(
         source.contains("ptr<i32>(0x6000u32).load()"),
-        "kernel.ruxe loader should inspect the loaded file header from RAM"
+        "kernel.kx loader should inspect the loaded file header from RAM"
     );
     assert!(
         source.contains("0x45585552"),
-        "kernel.ruxe loader should validate the loaded RUXE magic"
+        "kernel.kx loader should validate the loaded RUXE magic"
     );
 }
 
 #[test]
-fn rux16_kernel_loader_source_executes_kernel_ruxe_from_root_ruxfs() {
+fn rux16_kernel_loader_source_executes_kernel_kx_from_root_ruxfs() {
     let source = fs::read_to_string(
         Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/boot/kernel_loader.rx"),
     )
     .expect("kernel loader source should exist");
 
     assert!(
-        source.contains("fn execute_loaded_kernel_ruxe("),
+        source.contains("fn execute_loaded_kernel_kx("),
         "kernel loader should expose a guest-side RUXE execution helper"
     );
     assert!(
@@ -1048,11 +1048,11 @@ fn rux16_kernel_loader_source_writes_kernel_boot_info() {
         "RKBI writer should pass the ROOT partition start LBA to the kernel"
     );
     assert!(
-        source.contains("ptr<i32>(0x3f0cu32).store(kernel_ruxe_size_bytes)"),
+        source.contains("ptr<i32>(0x3f0cu32).store(kernel_kx_size_bytes)"),
         "RKBI writer should pass the loaded kernel RUXE size"
     );
     assert!(
-        source.contains("write_kernel_boot_info(root_start_lba, kernel_ruxe_size_bytes)"),
+        source.contains("write_kernel_boot_info(root_start_lba, kernel_kx_size_bytes)"),
         "kernel loader should write RKBI immediately before executing the loaded kernel"
     );
 }
@@ -1122,7 +1122,7 @@ fn rux16_init_loader_source_writes_init_handoff_info() {
         "RINI writer should pass the ROOT partition start LBA to init"
     );
     assert!(
-        source.contains("ptr<i32>(0x3f2cu32).store(init_ruxe_size_bytes)"),
+        source.contains("ptr<i32>(0x3f2cu32).store(init_kx_size_bytes)"),
         "RINI writer should pass the loaded init RUXE size"
     );
     assert!(
@@ -1130,11 +1130,11 @@ fn rux16_init_loader_source_writes_init_handoff_info() {
         "RINI writer should pass the init entry point"
     );
     assert!(
-        source.contains("write_init_handoff_info(root_start_lba, init_ruxe_size_bytes, entry_pc)"),
+        source.contains("write_init_handoff_info(root_start_lba, init_kx_size_bytes, entry_pc)"),
         "kernel should write RINI immediately before entering init"
     );
     let write_index = source
-        .find("write_init_handoff_info(root_start_lba, init_ruxe_size_bytes, entry_pc)")
+        .find("write_init_handoff_info(root_start_lba, init_kx_size_bytes, entry_pc)")
         .expect("RINI writer call should exist");
     let jump_index = source
         .find("rux16_jump(entry_pc)")
@@ -1272,7 +1272,7 @@ fn rux_volume_put_boot_and_kernel_creates_storage0_that_bundled_bios_executes() 
     let root_path = temp_file("boot-kernel-root.ruxfs");
     let boot_path = temp_file("kernel-loader.boot");
     let kernel_source_path = temp_file("kernel.rx");
-    let kernel_path = temp_file("boot-kernel-kernel.ruxe");
+    let kernel_path = temp_file("boot-kernel-kernel.kx");
     let boot_source_path =
         Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/boot/kernel_loader.rx");
     fs::write(
@@ -1417,9 +1417,9 @@ fn rux_volume_boot_kernel_and_init_executes_init_from_root_ruxfs() {
     let volume_path = temp_file("boot-kernel-init-storage0.ruxvol");
     let root_path = temp_file("boot-kernel-init-root.ruxfs");
     let boot_path = temp_file("boot-kernel-init-loader.boot");
-    let kernel_path = temp_file("boot-kernel-init-kernel.ruxe");
+    let kernel_path = temp_file("boot-kernel-init-kernel.kx");
     let init_source_path = temp_file("init.rx");
-    let init_path = temp_file("init.ruxe");
+    let init_path = temp_file("init.kx");
     let boot_source_path =
         Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/boot/kernel_loader.rx");
     let kernel_source_path =
@@ -1543,7 +1543,7 @@ fn rux_volume_boot_kernel_and_init_executes_init_from_root_ruxfs() {
             "ruxfs",
             "put",
             root_path.to_str().unwrap(),
-            "/bin/init.ruxe",
+            "/bin/init.kx",
             init_path.to_str().unwrap(),
         ])
         .status()
@@ -1605,7 +1605,7 @@ fn rux_volume_boot_kernel_and_init_executes_init_from_root_ruxfs() {
 
 #[test]
 fn rux_volume_boot_kernel_and_rini_init_consumes_handoff() {
-    let init_bytes = compile_rini_init_program("rini-init-consumes-handoff-init.ruxe");
+    let init_bytes = compile_rini_init_program("rini-init-consumes-handoff-init.kx");
     let volume_path =
         create_boot_kernel_init_volume("rini-init-consumes-handoff", Some(&init_bytes));
     let bios = compile_bundled_rux16_bios();
@@ -1636,7 +1636,7 @@ fn rux_volume_boot_kernel_and_rini_init_consumes_handoff() {
 
 #[test]
 fn rux16_rini_init_fails_without_handoff() {
-    let init_bytes = compile_rini_init_program("rini-init-missing-handoff-init.ruxe");
+    let init_bytes = compile_rini_init_program("rini-init-missing-handoff-init.kx");
     let bios = vec![0x01, 0x00];
     let mut handle = RuxComputerHandle::create_rux16_bios_flash(&bios, 64 * 1024, 1_000_000)
         .expect("Rux16 BIOS flash computer creates");
@@ -1654,7 +1654,7 @@ fn rux16_rini_init_fails_without_handoff() {
 
 #[test]
 fn rux16_rini_init_fails_with_invalid_handoff_magic() {
-    let init_bytes = compile_rini_init_program("rini-init-invalid-handoff-init.ruxe");
+    let init_bytes = compile_rini_init_program("rini-init-invalid-handoff-init.kx");
     let bios = vec![0x01, 0x00];
     let mut handle = RuxComputerHandle::create_rux16_bios_flash(&bios, 64 * 1024, 1_000_000)
         .expect("Rux16 BIOS flash computer creates");
@@ -1686,7 +1686,7 @@ fn rux16_rini_init_fails_with_invalid_handoff_magic() {
 fn rux_volume_boot_kernel_and_trap_init_uses_kernel_handler() {
     let init_bytes = compile_init_program(
         "examples/init/trap_init.rx",
-        "trap-init-kernel-handler-init.ruxe",
+        "trap-init-kernel-handler-init.kx",
     );
     let volume_path = create_boot_kernel_init_volume("trap-init-kernel-handler", Some(&init_bytes));
     let bios = compile_bundled_rux16_bios();
@@ -1720,8 +1720,8 @@ fn rux_volume_boot_kernel_and_init_runtime_handoff_blocks_match_artifacts() {
     let volume_path = temp_file("runtime-handoff-blocks-storage0.ruxvol");
     let root_path = temp_file("runtime-handoff-blocks-root.ruxfs");
     let boot_path = temp_file("runtime-handoff-blocks-loader.boot");
-    let kernel_path = temp_file("runtime-handoff-blocks-kernel.ruxe");
-    let init_path = temp_file("runtime-handoff-blocks-init.ruxe");
+    let kernel_path = temp_file("runtime-handoff-blocks-kernel.kx");
+    let init_path = temp_file("runtime-handoff-blocks-init.kx");
     let boot_source_path =
         Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/boot/kernel_loader.rx");
     let kernel_source_path =
@@ -1809,7 +1809,7 @@ fn rux_volume_boot_kernel_and_init_runtime_handoff_blocks_match_artifacts() {
             "ruxfs",
             "put",
             root_path.to_str().unwrap(),
-            "/bin/init.ruxe",
+            "/bin/init.kx",
             init_path.to_str().unwrap(),
         ])
         .status()
@@ -1867,8 +1867,8 @@ fn rux_volume_boot_kernel_rejects_protected_init_load_address() {
     let volume_path = temp_file("protected-init-load-storage0.ruxvol");
     let root_path = temp_file("protected-init-load-root.ruxfs");
     let boot_path = temp_file("protected-init-load-loader.boot");
-    let kernel_path = temp_file("protected-init-load-kernel.ruxe");
-    let init_path = temp_file("protected-init-load-init.ruxe");
+    let kernel_path = temp_file("protected-init-load-kernel.kx");
+    let init_path = temp_file("protected-init-load-init.kx");
     let boot_source_path =
         Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/boot/kernel_loader.rx");
     let kernel_source_path =
@@ -1957,7 +1957,7 @@ fn rux_volume_boot_kernel_rejects_protected_init_load_address() {
             "ruxfs",
             "put",
             root_path.to_str().unwrap(),
-            "/bin/init.ruxe",
+            "/bin/init.kx",
             init_path.to_str().unwrap(),
         ])
         .status()
@@ -2069,8 +2069,8 @@ fn create_boot_kernel_init_volume(name: &str, init_bytes: Option<&[u8]>) -> Path
     let volume_path = temp_file(&format!("{name}-storage0.ruxvol"));
     let root_path = temp_file(&format!("{name}-root.ruxfs"));
     let boot_path = temp_file(&format!("{name}-loader.boot"));
-    let kernel_path = temp_file(&format!("{name}-kernel.ruxe"));
-    let init_path = temp_file(&format!("{name}-init.ruxe"));
+    let kernel_path = temp_file(&format!("{name}-kernel.kx"));
+    let init_path = temp_file(&format!("{name}-init.kx"));
     let boot_source_path =
         Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/boot/kernel_loader.rx");
     let kernel_source_path =
@@ -2155,7 +2155,7 @@ fn create_boot_kernel_init_volume(name: &str, init_bytes: Option<&[u8]>) -> Path
                 "ruxfs",
                 "put",
                 root_path.to_str().unwrap(),
-                "/bin/init.ruxe",
+            "/bin/init.kx",
                 init_path.to_str().unwrap(),
             ])
             .status()

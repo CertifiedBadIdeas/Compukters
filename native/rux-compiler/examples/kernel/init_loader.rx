@@ -80,12 +80,12 @@ fn read_kernel_boot_info_root_start_lba() -> i32 {
     }
 }
 
-fn write_init_handoff_info(root_start_lba: i32, init_ruxe_size_bytes: i32, init_entry_pc: i32) {
+fn write_init_handoff_info(root_start_lba: i32, init_kx_size_bytes: i32, init_entry_pc: i32) {
     unsafe {
         ptr<i32>(0x3f20u32).store(0x494e4952);
         ptr<i32>(0x3f24u32).store(0x00180001);
         ptr<i32>(0x3f28u32).store(root_start_lba);
-        ptr<i32>(0x3f2cu32).store(init_ruxe_size_bytes);
+        ptr<i32>(0x3f2cu32).store(init_kx_size_bytes);
         ptr<i32>(0x3f30u32).store(init_entry_pc);
         ptr<i32>(0x3f34u32).store(0);
     }
@@ -245,7 +245,7 @@ fn find_bin_directory_inode(root_start_lba: i32) -> i32 {
     }
 }
 
-fn find_init_ruxe_inode(root_start_lba: i32, bin_directory_inode: i32) -> i32 {
+fn find_init_kx_inode(root_start_lba: i32, bin_directory_inode: i32) -> i32 {
     unsafe {
         if bin_directory_inode != 0 && probe_root_ruxfs_superblock(root_start_lba) == 1 {
             let mut inode_table_start_block: i32 = ptr<i32>(0x7818u32).load();
@@ -273,16 +273,13 @@ fn find_init_ruxe_inode(root_start_lba: i32, bin_directory_inode: i32) -> i32 {
                                 let mut entry_state: u8 = ptr<u8>(entry_addr).load();
                                 let mut name_len_addr: u32 = entry_addr + 1u32;
                                 let mut name_len: u8 = ptr<u8>(name_len_addr).load();
-                                if entry_state == 1u8 && name_len == 9u8 {
+                                if entry_state == 1u8 && name_len == 7u8 {
                                     let mut name_addr: u32 = entry_addr + 8u32;
                                     let mut name0: i32 = ptr<i32>(name_addr).load();
                                     let mut name4_addr: u32 = name_addr + 4u32;
                                     let mut name4: i32 = ptr<i32>(name4_addr).load();
-                                    let mut name8_addr: u32 = name_addr + 8u32;
-                                    let mut name8: i32 = ptr<i32>(name8_addr).load();
                                     if name0 == 0x74696e69 &&
-                                        name4 == 0x7875722e &&
-                                        name8 == 0x00000065 {
+                                        name4 == 0x00786b2e {
                                         let mut inode_id_addr: u32 = entry_addr + 4u32;
                                         return ptr<i32>(inode_id_addr).load();
                                     }
@@ -299,16 +296,16 @@ fn find_init_ruxe_inode(root_start_lba: i32, bin_directory_inode: i32) -> i32 {
     }
 }
 
-fn load_init_ruxe_from_root_ruxfs(root_start_lba: i32, init_ruxe_inode: i32) -> i32 {
+fn load_init_kx_from_root_ruxfs(root_start_lba: i32, init_kx_inode: i32) -> i32 {
     unsafe {
-        if init_ruxe_inode != 0 && probe_root_ruxfs_superblock(root_start_lba) == 1 {
+        if init_kx_inode != 0 && probe_root_ruxfs_superblock(root_start_lba) == 1 {
             let mut inode_table_start_block: i32 = ptr<i32>(0x7818u32).load();
             let mut inode_table_lba: i32 = root_start_lba + inode_table_start_block;
             let mut inode_status: i32 = read_storage0_blocks(inode_table_lba, 1, 0x7800);
             if inode_status == storage0::STATUS_DONE {
                 let mut inode_index: i32 = 0;
                 let mut inode_addr: u32 = 0x7800u32;
-                while inode_index != init_ruxe_inode {
+                while inode_index != init_kx_inode {
                     inode_addr = inode_addr + 64u32;
                     inode_index = inode_index + 1;
                 }
@@ -343,7 +340,7 @@ fn load_init_ruxe_from_root_ruxfs(root_start_lba: i32, init_ruxe_inode: i32) -> 
     }
 }
 
-fn execute_loaded_init_ruxe(root_start_lba: i32) {
+fn execute_loaded_init_kx(root_start_lba: i32) {
     unsafe {
         let mut entry_pc: i32 = ptr<i32>(0xa00cu32).load();
         let mut section_kind: i32 = ptr<i32>(0xa020u32).load();
@@ -376,8 +373,8 @@ fn execute_loaded_init_ruxe(root_start_lba: i32) {
                 dest_addr = dest_addr + 1u32;
                 copied = copied + 1u32;
             }
-            let mut init_ruxe_size_bytes: i32 = payload_offset_i32 + payload_size_i32;
-            write_init_handoff_info(root_start_lba, init_ruxe_size_bytes, entry_pc);
+            let mut init_kx_size_bytes: i32 = payload_offset_i32 + payload_size_i32;
+            write_init_handoff_info(root_start_lba, init_kx_size_bytes, entry_pc);
             install_trap_handler();
             rux16_jump(entry_pc);
         }
@@ -394,16 +391,16 @@ fn load_init() {
             return;
         }
         let mut bin_directory_inode: i32 = find_bin_directory_inode(root_start_lba);
-        let mut init_ruxe_inode: i32 = find_init_ruxe_inode(
+        let mut init_kx_inode: i32 = find_init_kx_inode(
             root_start_lba,
             bin_directory_inode
         );
-        let mut init_ruxe_present: i32 = load_init_ruxe_from_root_ruxfs(
+        let mut init_kx_present: i32 = load_init_kx_from_root_ruxfs(
             root_start_lba,
-            init_ruxe_inode
+            init_kx_inode
         );
-        if init_ruxe_present == 1 {
-            execute_loaded_init_ruxe(root_start_lba);
+        if init_kx_present == 1 {
+            execute_loaded_init_kx(root_start_lba);
         } else {
             write_init_load_failed();
         }

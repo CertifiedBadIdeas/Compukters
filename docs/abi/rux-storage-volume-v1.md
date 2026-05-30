@@ -40,8 +40,8 @@ LBA 33..end  ROOT partition
 ```
 
 In the partitioned layout, `k16 volume put-boot` formats the `BOOT` partition
-as RuxFS and writes the bootloader `RUXE` file to `/boot/loader.ruxe`.
-`k16 volume put-kernel` writes the kernel `RUXE` file to `/boot/kernel.ruxe`
+as RuxFS and writes the bootloader `RUXE` file to `/boot/loader.kb`.
+`k16 volume put-kernel` writes the kernel `RUXE` file to `/boot/kernel.kx`
 inside the `ROOT` RuxFS partition. The partitioned layout does not use fixed
 `RUXB` or `RUXK` records.
 
@@ -88,10 +88,10 @@ k16 volume init storage0.kv --size 65536
 k16 volume inspect storage0.kv
 k16 fs ruxfs format root.kfs --blocks 95
 k16 fs ruxfs mkdir root.kfs /boot
-k16 fs ruxfs put root.kfs /boot/kernel.ruxe kernel.kx
+k16 fs ruxfs put root.kfs /boot/kernel.kx kernel.kx
 k16 volume replace-partition storage0.kv ROOT root.kfs
 k16 volume extract-partition storage0.kv ROOT check-root.kfs
-k16 fs ruxfs get check-root.kfs /boot/kernel.ruxe check-kernel.kx
+k16 fs ruxfs get check-root.kfs /boot/kernel.kx check-kernel.kx
 ```
 
 This workflow keeps `k16 volume` responsible for partition bytes and `k16 fs`
@@ -153,13 +153,13 @@ partitions outside the guest-visible media size, and overlapping partitions.
 The current boot chain is:
 
 1. BIOS reads `RUXPT` from LBA 0.
-2. BIOS reads `/boot/loader.ruxe` from the `BOOT` RuxFS partition.
+2. BIOS reads `/boot/loader.kb` from the `BOOT` RuxFS partition.
 3. BIOS validates the bootloader `RUXE`, copies its payload to `load_addr`,
    and jumps to `entry_pc`.
-4. Bootloader reads `/boot/kernel.ruxe` from the `ROOT` RuxFS partition.
+4. Bootloader reads `/boot/kernel.kx` from the `ROOT` RuxFS partition.
 5. Bootloader validates the kernel `RUXE`, copies its payload to `load_addr`,
    and jumps to `entry_pc`.
-6. Kernel reads `/bin/init.ruxe` from the `ROOT` RuxFS partition.
+6. Kernel reads `/bin/init.kx` from the `ROOT` RuxFS partition.
 7. Kernel validates the program `RUXE`, copies its payload to `load_addr`, and
    jumps to `entry_pc`.
 

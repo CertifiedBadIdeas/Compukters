@@ -27,7 +27,7 @@ instructions directly from that region. The host writes profile v2 boot info and
 the hardware table into RAM before the CPU starts.
 
 Storage boot is firmware policy. The current BIOS reads `RUXPT` from storage0,
-loads `BOOT`/RuxFS `/boot/loader.ruxe`, validates the `RUXE` bootloader image,
+loads `BOOT`/RuxFS `/boot/loader.kb`, validates the `RUXE` bootloader image,
 copies its payload into RAM, and jumps to the payload entry address. There is
 no host-side executable decode step in this path.
 

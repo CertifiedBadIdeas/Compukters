@@ -7,15 +7,15 @@ use rux_compiler::ruxfs::{
 fn ruxfs_writes_lists_and_reads_root_file() {
     let mut image = format_empty_filesystem(128).expect("filesystem formats");
 
-    write_file(&mut image, "/kernel.ruxe", b"KERNEL").expect("file writes");
+    write_file(&mut image, "/kernel.kx", b"KERNEL").expect("file writes");
 
     assert_eq!(
-        read_file(&image, "/kernel.ruxe").expect("file reads"),
+        read_file(&image, "/kernel.kx").expect("file reads"),
         b"KERNEL"
     );
     assert_eq!(
         list_directory(&image, "/").expect("root lists"),
-        vec!["kernel.ruxe".to_string()]
+        vec!["kernel.kx".to_string()]
     );
     validate_filesystem(&image).expect("filesystem validates");
 }
@@ -25,7 +25,7 @@ fn ruxfs_creates_directory_and_writes_nested_file() {
     let mut image = format_empty_filesystem(128).expect("filesystem formats");
 
     create_directory(&mut image, "/boot").expect("directory creates");
-    write_file(&mut image, "/boot/loader.ruxe", b"BOOT").expect("nested file writes");
+    write_file(&mut image, "/boot/loader.kb", b"BOOT").expect("nested file writes");
 
     assert_eq!(
         list_directory(&image, "/").expect("root lists"),
@@ -33,10 +33,10 @@ fn ruxfs_creates_directory_and_writes_nested_file() {
     );
     assert_eq!(
         list_directory(&image, "/boot").expect("boot lists"),
-        vec!["loader.ruxe".to_string()]
+        vec!["loader.kb".to_string()]
     );
     assert_eq!(
-        read_file(&image, "/boot/loader.ruxe").expect("nested file reads"),
+        read_file(&image, "/boot/loader.kb").expect("nested file reads"),
         b"BOOT"
     );
 }
@@ -56,31 +56,31 @@ fn ruxfs_rejects_invalid_paths_duplicate_directories_and_missing_files() {
     assert!(create_directory(&mut image, "/boot")
         .unwrap_err()
         .contains("directory entry `boot` already exists"));
-    assert!(read_file(&image, "/boot/missing.ruxe")
+    assert!(read_file(&image, "/boot/missing.kx")
         .unwrap_err()
-        .contains("directory entry `missing.ruxe` not found"));
+        .contains("directory entry `missing.kx` not found"));
 }
 
 #[test]
 fn ruxfs_deletes_file_and_allows_recreating_same_path() {
     let mut image = format_empty_filesystem(128).expect("filesystem formats");
     create_directory(&mut image, "/boot").expect("directory creates");
-    write_file(&mut image, "/boot/loader.ruxe", b"OLD").expect("file writes");
+    write_file(&mut image, "/boot/loader.kb", b"OLD").expect("file writes");
 
-    delete_file(&mut image, "/boot/loader.ruxe").expect("file deletes");
+    delete_file(&mut image, "/boot/loader.kb").expect("file deletes");
 
     assert_eq!(
         list_directory(&image, "/boot").expect("boot lists after delete"),
         Vec::<String>::new()
     );
-    assert!(read_file(&image, "/boot/loader.ruxe")
+    assert!(read_file(&image, "/boot/loader.kb")
         .unwrap_err()
-        .contains("directory entry `loader.ruxe` not found"));
+        .contains("directory entry `loader.kb` not found"));
     validate_filesystem(&image).expect("filesystem validates after delete");
 
-    write_file(&mut image, "/boot/loader.ruxe", b"NEW").expect("path can be recreated");
+    write_file(&mut image, "/boot/loader.kb", b"NEW").expect("path can be recreated");
     assert_eq!(
-        read_file(&image, "/boot/loader.ruxe").expect("recreated file reads"),
+        read_file(&image, "/boot/loader.kb").expect("recreated file reads"),
         b"NEW"
     );
 }
@@ -90,9 +90,9 @@ fn ruxfs_delete_rejects_missing_paths_and_directories() {
     let mut image = format_empty_filesystem(128).expect("filesystem formats");
     create_directory(&mut image, "/boot").expect("directory creates");
 
-    assert!(delete_file(&mut image, "/boot/missing.ruxe")
+    assert!(delete_file(&mut image, "/boot/missing.kx")
         .unwrap_err()
-        .contains("directory entry `missing.ruxe` not found"));
+        .contains("directory entry `missing.kx` not found"));
     assert!(delete_file(&mut image, "/boot")
         .unwrap_err()
         .contains("is not a file"));

@@ -9,9 +9,9 @@ fn storage_volume_abi_docs_use_k16_cli_and_kraft16_extensions() {
         "k16 volume init storage0.kv --size 65536",
         "k16 volume inspect storage0.kv",
         "k16 fs ruxfs format root.kfs --blocks 95",
-        "k16 fs ruxfs put root.kfs /boot/kernel.ruxe kernel.kx",
+        "k16 fs ruxfs put root.kfs /boot/kernel.kx kernel.kx",
         "k16 volume replace-partition storage0.kv ROOT root.kfs",
-        "k16 fs ruxfs get check-root.kfs /boot/kernel.ruxe check-kernel.kx",
+        "k16 fs ruxfs get check-root.kfs /boot/kernel.kx check-kernel.kx",
     ] {
         assert!(
             docs.contains(required),
