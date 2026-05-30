@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Added `rux16-object-v1.md` as the experimental ELF32 `ET_REL` relocatable
+  object ABI for LLVM-facing Rux16 tooling, including section names, symbol
+  rules, relocation kinds, unsupported feature diagnostics, and the boundary
+  that keeps ELF parsing/linking outside the VM.
 - Defined the implementation-ready Rux16 calling convention for external
   LLVM-facing lowering, including scalar ABI slots, caller-saved registers,
   stack argument layout, frame-pointer offsets, caller cleanup, and the current
@@ -91,6 +95,7 @@
 - `rux-machine-profile-v2.md`
 - `rux-computer-profile-v1.md`
 - `rux16-v1.md`
+- `rux16-object-v1.md`
 - `ruxe-v1.md`
 - `rux-storage-volume-v1.md`
 - `ruxfs-v1.md`
