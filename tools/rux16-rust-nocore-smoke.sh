@@ -75,7 +75,13 @@ cat > "$WORK_DIR/main.rs" <<'RS'
 #![no_main]
 
 #[lang = "sized"]
-pub trait Sized {}
+pub trait Sized: MetaSized {}
+
+#[lang = "meta_sized"]
+pub trait MetaSized: PointeeSized {}
+
+#[lang = "pointee_sized"]
+pub trait PointeeSized {}
 
 #[no_mangle]
 pub extern "C" fn main() -> i32 {
