@@ -132,6 +132,8 @@ Symbols use the normal ELF symbol table.
 - Defined object symbols point into `.rodata`, `.data`, or `.bss`.
 - Undefined symbols must be resolved by another object or by an explicit runtime
   object supplied to the linker.
+- `STT_FILE` and other `SHN_ABS` metadata symbols do not define output payload
+  addresses and are ignored by the linker when building the global symbol map.
 - Weak symbols, common symbols, thread-local symbols, dynamic symbols, and
   symbol versioning are unsupported in v1.
 

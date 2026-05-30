@@ -33,6 +33,8 @@ fn rux16_object_abi_docs_define_elf_relocatable_contract() {
         ".data",
         ".bss",
         ".rux16.attributes",
+        "`STT_FILE`",
+        "`SHN_ABS`",
         "R_RUX16_ABS32",
         "R_RUX16_BRANCH4",
         "R_RUX16_CALL32",

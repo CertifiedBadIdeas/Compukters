@@ -42,6 +42,38 @@ fn rux_link_converts_rux16_object_with_abs32_relocation_to_program_ruxe() {
 }
 
 #[test]
+fn rux_link_ignores_absolute_file_symbols_from_llvm_objects() {
+    let object_path = temp_file("llvm-file-symbol.o");
+    let output_path = temp_file("llvm-file-symbol.ruxe");
+    fs::write(&object_path, rux16_object_with_absolute_file_symbol()).expect("object writes");
+
+    let output = Command::new(rux_binary())
+        .args([
+            "link",
+            "--target",
+            "program",
+            object_path.to_str().unwrap(),
+            "-o",
+            output_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("rux link runs");
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let bytes = fs::read(output_path).expect("RUXE output reads");
+    let executable = ruxe::decode_rux16_executable(&bytes).expect("linked RUXE decodes");
+    assert_eq!(executable.entry_pc, 0x8000);
+    assert_eq!(
+        &bytes[52..],
+        &[0x01, 0xe4, 0x00, 0x80, 0x00, 0x00, 0x01, 0x00]
+    );
+}
+
+#[test]
 fn rux_link_rejects_unsupported_relocation_without_raw_fallback() {
     let object_path = temp_file("bad-reloc.o");
     let output_path = temp_file("bad-reloc.ruxe");
@@ -96,21 +128,35 @@ fn rux_link_rejects_unsupported_alloc_section_without_guessing() {
 }
 
 fn rux16_object_with_text_relocation(relocation_type: u32) -> Vec<u8> {
+    rux16_object_with_text_relocation_config(relocation_type, false)
+}
+
+fn rux16_object_with_absolute_file_symbol() -> Vec<u8> {
+    rux16_object_with_text_relocation_config(1, true)
+}
+
+fn rux16_object_with_text_relocation_config(
+    relocation_type: u32,
+    include_absolute_file_symbol: bool,
+) -> Vec<u8> {
     let text = [0x01, 0xe4, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00];
     let shstrtab = b"\0.text.rux16\0.rela.text.rux16\0.symtab\0.strtab\0.shstrtab\0";
-    let strtab = b"\0_start\0";
+    let mut strtab = Vec::from([0]);
+    let mut local_symbol_count = 1u32;
+    let file_name = include_absolute_file_symbol.then(|| push_string(&mut strtab, "<stdin>"));
+    let start_name = push_string(&mut strtab, "_start");
     let mut symtab = Vec::new();
     symtab.extend([0u8; 16]);
-    write_u32(&mut symtab, 1);
-    write_u32(&mut symtab, 0);
-    write_u32(&mut symtab, text.len() as u32);
-    symtab.push(0x12);
-    symtab.push(0);
-    write_u16(&mut symtab, 1);
+    if let Some(file_name) = file_name {
+        write_symbol(&mut symtab, file_name, 0, 0, 0x04, 0xfff1);
+        local_symbol_count += 1;
+    }
+    let start_symbol_index = local_symbol_count;
+    write_symbol(&mut symtab, start_name, 0, text.len() as u32, 0x12, 1);
 
     let mut rela = Vec::new();
     write_u32(&mut rela, 2);
-    write_u32(&mut rela, (1 << 8) | relocation_type);
+    write_u32(&mut rela, (start_symbol_index << 8) | relocation_type);
     write_u32(&mut rela, 0);
 
     let text_offset = 52u32;
@@ -142,9 +188,9 @@ fn rux16_object_with_text_relocation(relocation_type: u32) -> Vec<u8> {
     pad_to(&mut bytes, rela_offset);
     bytes.extend(rela);
     pad_to(&mut bytes, symtab_offset);
-    bytes.extend(symtab);
+    bytes.extend_from_slice(&symtab);
     pad_to(&mut bytes, strtab_offset);
-    bytes.extend(strtab);
+    bytes.extend_from_slice(&strtab);
     pad_to(&mut bytes, shstrtab_offset);
     bytes.extend(shstrtab);
     pad_to(&mut bytes, shoff);
@@ -164,7 +210,19 @@ fn rux16_object_with_text_relocation(relocation_type: u32) -> Vec<u8> {
         0,
     );
     section(&mut bytes, 13, 4, 0, 0, rela_offset, 12, 3, 1, 4, 12);
-    section(&mut bytes, 31, 2, 0, 0, symtab_offset, 32, 4, 1, 4, 16);
+    section(
+        &mut bytes,
+        31,
+        2,
+        0,
+        0,
+        symtab_offset,
+        symtab.len() as u32,
+        4,
+        local_symbol_count,
+        4,
+        16,
+    );
     section(
         &mut bytes,
         39,
@@ -239,6 +297,13 @@ fn pad_to(bytes: &mut Vec<u8>, offset: u32) {
     bytes.resize(offset as usize, 0);
 }
 
+fn push_string(bytes: &mut Vec<u8>, value: &str) -> u32 {
+    let offset = bytes.len() as u32;
+    bytes.extend_from_slice(value.as_bytes());
+    bytes.push(0);
+    offset
+}
+
 fn temp_file(name: &str) -> PathBuf {
     let path = std::env::temp_dir().join(format!("rux-link-cli-{}-{name}", std::process::id()));
     let _ = fs::remove_file(&path);
@@ -259,4 +324,13 @@ fn write_u16(bytes: &mut Vec<u8>, value: u16) {
 
 fn write_u32(bytes: &mut Vec<u8>, value: u32) {
     bytes.extend_from_slice(&value.to_le_bytes());
+}
+
+fn write_symbol(bytes: &mut Vec<u8>, name: u32, value: u32, size: u32, info: u8, section: u16) {
+    write_u32(bytes, name);
+    write_u32(bytes, value);
+    write_u32(bytes, size);
+    bytes.push(info);
+    bytes.push(0);
+    write_u16(bytes, section);
 }
