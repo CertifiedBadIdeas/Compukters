@@ -26,7 +26,7 @@ class RuxFirmwareResourceTest {
 
     @Test
     fun bundledRux16BiosFlashResourceIsRawFlash() {
-        val resource = javaClass.classLoader.getResourceAsStream("firmware/rux16-bios.kflash")
+        val resource = javaClass.classLoader.getResourceAsStream("firmware/k16-bios.kflash")
             ?: error("raw Rux16 BIOS flash resource should exist")
 
         val bytes = resource.use { it.readBytes() }

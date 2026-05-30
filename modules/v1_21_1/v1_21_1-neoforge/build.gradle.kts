@@ -90,10 +90,10 @@ val ruxCompilerManifest = rootProject.layout.projectDirectory.file("native/rux-c
 val rux16BiosSource = rootProject.layout.projectDirectory.file("native/rux-compiler/examples/firmware/rux16_bios.rx")
 val rux16BootSource = rootProject.layout.projectDirectory.file("native/rux-compiler/examples/boot/kernel_loader.rx")
 val rux16KernelSource = rootProject.layout.projectDirectory.file("native/rux-compiler/examples/kernel/display_ok.rx")
-val rux16BiosFlashResource = generatedRuxFirmwareResources.map { it.file("firmware/rux16-bios.kflash") }
+val rux16BiosFlashResource = generatedRuxFirmwareResources.map { it.file("firmware/k16-bios.kflash") }
 val rux16BootArtifact = generatedRuxFirmwareArtifacts.map { it.file("kernel-loader.kb") }
 val rux16KernelArtifact = generatedRuxFirmwareArtifacts.map { it.file("display-ok.kx") }
-val rux16SystemStorage0Resource = generatedRuxFirmwareResources.map { it.file("firmware/rux16-system-storage0.kv") }
+val rux16SystemStorage0Resource = generatedRuxFirmwareResources.map { it.file("firmware/k16-system-storage0.kv") }
 
 val compileRux16BiosFlash =
     tasks.register<Exec>("compileRux16BiosFlash") {

@@ -85,7 +85,7 @@ class RuxSystemVolumeWorkspaceTest {
 
     @Test
     fun defaultStorage0VolumeResourceUsesKvExtension() {
-        assertEquals("firmware/rux16-system-storage0.kv", RuxSystemVolumeWorkspace.DEFAULT_STORAGE0_VOLUME_RESOURCE)
+        assertEquals("firmware/k16-system-storage0.kv", RuxSystemVolumeWorkspace.DEFAULT_STORAGE0_VOLUME_RESOURCE)
     }
 
     private fun resourceClassLoader(
