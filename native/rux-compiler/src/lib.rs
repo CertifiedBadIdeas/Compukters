@@ -1,5 +1,6 @@
 pub mod advice;
 pub mod artifact;
+pub mod cli;
 mod frontend;
 pub mod inspect;
 pub mod object_link;
