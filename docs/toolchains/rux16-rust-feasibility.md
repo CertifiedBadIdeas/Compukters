@@ -2,7 +2,7 @@
 
 > Issue: [#127](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/127)
 
-> Strategy: [Rux16 Language Strategy](rux16-language-strategy.md)
+> Strategy: [Rux16 Rust-First Language Strategy](rux16-language-strategy.md)
 
 ## Current State
 

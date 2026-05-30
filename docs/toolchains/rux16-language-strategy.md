@@ -1,11 +1,13 @@
-# Rux16 Language Strategy
+# Rux16 Rust-First Language Strategy
 
-> Issue: [#134](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/134)
+> Issue: [#135](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/135)
+>
+> Previous decision: [#134](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/134)
 
 ## Decision
 
-Rux16 should be treated as a real machine target first, not as a reason to grow
-a custom general-purpose language indefinitely.
+Rux16 should be treated as a real machine target for Rust-first development,
+not as a reason to maintain a custom project language indefinitely.
 
 The long-term language direction is:
 
@@ -13,47 +15,53 @@ The long-term language direction is:
 Rux16 CPU/ABI
   -> ELF32 object ABI
   -> RUXE packaging
-  -> freestanding external languages
-  -> Rust no_std kernels and programs when the target is ready
+  -> custom rustc/LLVM Rux16 target
+  -> Rust no_std kernels
+  -> Rust user-space programs
+  -> hosted Rust std only after real OS services exist
 ```
 
-The existing Rux compiler should remain useful for bootstrap programs,
-firmware/kernel experiments, tests, examples, and Rux16 tooling validation. It
-should not become the project's main application language by growing its own
-large standard library, package ecosystem, IDE, and long-term language runtime.
+The existing Rux language is legacy/bootstrap tooling. It can remain in the
+repository while Rust support is incomplete, but it should not be the future
+application, firmware, kernel, or user-space language.
 
 ## Rationale
 
-Maintaining a custom language is expensive. Every language feature pulls a
-chain of follow-up work: parser rules, type checking, diagnostics, formatter
-behavior, standard library APIs, examples, tests, docs, compatibility policy,
-and migration support.
+Maintaining a custom language is expensive and not central to the project goal.
+Every language feature pulls a chain of follow-up work: parser rules, type
+checking, diagnostics, formatter behavior, standard library APIs, examples,
+tests, docs, compatibility policy, and migration support.
 
 Rux16 already needs the harder and more reusable layer: a precise machine ABI,
 object format, linker, boot flow, kernel ABI, storage model, and runtime helper
-objects. Once that layer is real, existing freestanding languages can target
-it. Rust is the most important near-term candidate because a `no_std` kernel is
-a realistic way to write OS code without requiring hosted `std`.
+objects. Once that layer is real, Rust can target it directly. That is a better
+use of effort than growing Rux into a parallel language ecosystem.
 
-## Role Of Rux
+Rust is the target language because a `no_std` kernel is a realistic way to
+write OS code without requiring hosted `std`, while still keeping access to a
+real compiler, type system, tooling culture, and future ecosystem path.
 
-Rux remains valuable as a small project-native language for:
+## Rux Deprecation
 
-- BIOS, bootloader, and kernel loader experiments while external toolchains are
-  still incomplete;
-- deterministic examples that are easy to compile inside the repository;
-- Rux16 VM, linker, RUXE, filesystem, and device tests;
-- ABI exploration before the same boundary is exposed to external compilers.
+Deprecating Rux does not mean deleting it immediately. It means:
 
-Rux should stay small and explicit. New Rux features should be accepted only
-when they directly support the boot/OS/tooling path or make current examples
-materially clearer. General-purpose language growth is not the default.
+- no new general-purpose Rux language features by default;
+- no Rux standard-library expansion as a strategic direction;
+- no new long-term application APIs designed primarily for Rux;
+- new boot/kernel/program examples should move to Rust once Rust can build
+  equivalent Rux16 objects;
+- existing Rux examples may stay only as compatibility and tooling fixtures
+  until Rust replacements exist.
 
-## External-Language Target
+Rux can still be used temporarily for BIOS, bootloader, kernel-loader, VM,
+linker, RUXE, filesystem, and device tests while Rust support is incomplete.
+That use is transitional. It should not create new language commitments.
 
-The preferred target shape is freestanding:
+## Rust Target
 
-- compilers emit ordinary Rux16 ELF32 relocatable objects;
+The preferred target shape is freestanding Rust:
+
+- rustc emits ordinary Rux16 ELF32 relocatable objects;
 - `rux link` packages those objects into `RUXE`;
 - firmware, bootloaders, kernels, and user-space programs use the same machine
   ABI rules, with different load contracts where needed;
@@ -76,6 +84,23 @@ processes, time, synchronization, environment variables, allocation, and I/O
 semantics provided by the guest OS. It must not be emulated with hidden host
 paths or VM shortcuts.
 
+## Migration Rule
+
+Keep Rux only where it is still the only working path. As soon as a Rust path
+can cover the same slice, prefer Rust and convert the Rux example/test into a
+compatibility fixture or remove it in a scoped cleanup.
+
+This gives the project a clear replacement sequence:
+
+```text
+Rux bootstrap examples
+  -> Rust no_core smoke
+  -> Rust runtime-helper coverage
+  -> Rust no_std kernel
+  -> Rust boot/user-space examples
+  -> Rux compiler retirement decision
+```
+
 ## Roadmap Impact
 
 - [#132](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/132) is
@@ -87,4 +112,4 @@ paths or VM shortcuts.
 - [#57](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/57)
   remains the right direction for future guest filesystem access.
 - [#27](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/27) should
-  no longer be treated as a default language-growth track.
+  remain dropped; Rux stdlib growth is not the project direction.
