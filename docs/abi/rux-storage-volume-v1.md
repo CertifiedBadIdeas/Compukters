@@ -50,7 +50,7 @@ Boot installation commands must reject unpartitioned volumes instead of writing
 fixed boot records.
 
 General filesystem operations are not part of `k16 volume`. Tooling for RuxFS
-uses `k16 fs ruxfs ...`; future filesystems should use their own `k16 fs
+uses `k16 fs kfs ...`; future filesystems should use their own `k16 fs
 <filesystem>` namespace. `put-boot` and `put-kernel` are boot-chain
 installation helpers for the current RuxFS-backed system volume layout.
 
@@ -86,12 +86,12 @@ Example ROOT filesystem image workflow:
 ```text
 k16 volume init storage0.kv --size 65536
 k16 volume inspect storage0.kv
-k16 fs ruxfs format root.kfs --blocks 95
-k16 fs ruxfs mkdir root.kfs /boot
-k16 fs ruxfs put root.kfs /boot/kernel.kx kernel.kx
+k16 fs kfs format root.kfs --blocks 95
+k16 fs kfs mkdir root.kfs /boot
+k16 fs kfs put root.kfs /boot/kernel.kx kernel.kx
 k16 volume replace-partition storage0.kv ROOT root.kfs
 k16 volume extract-partition storage0.kv ROOT check-root.kfs
-k16 fs ruxfs get check-root.kfs /boot/kernel.kx check-kernel.kx
+k16 fs kfs get check-root.kfs /boot/kernel.kx check-kernel.kx
 ```
 
 This workflow keeps `k16 volume` responsible for partition bytes and `k16 fs`

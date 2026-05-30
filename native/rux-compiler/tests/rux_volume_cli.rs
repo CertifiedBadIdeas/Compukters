@@ -160,7 +160,7 @@ fn rux_volume_inspect_prints_ruxpt_partition_layout() {
 #[test]
 fn rux_volume_inspect_boot_prints_boot_chain_metadata() {
     let volume_path = temp_file("inspect-boot-storage0.ruxvol");
-    let root_path = temp_file("inspect-boot-root.ruxfs");
+    let root_path = temp_file("inspect-boot-root.kfs");
     let boot_path = temp_file("inspect-boot-loader.kb");
     let kernel_path = temp_file("inspect-boot-kernel.kx");
     let boot_bytes =
@@ -196,7 +196,7 @@ fn rux_volume_inspect_boot_prints_boot_chain_metadata() {
     assert!(Command::new(k16_binary())
         .args([
             "fs",
-            "ruxfs",
+            "kfs",
             "format",
             root_path.to_str().unwrap(),
             "--blocks",
@@ -246,7 +246,7 @@ fn rux_volume_inspect_boot_prints_boot_chain_metadata() {
 #[test]
 fn rux_volume_inspect_boot_rejects_missing_root_kernel() {
     let volume_path = temp_file("inspect-boot-missing-kernel-storage0.ruxvol");
-    let root_path = temp_file("inspect-boot-missing-kernel-root.ruxfs");
+    let root_path = temp_file("inspect-boot-missing-kernel-root.kfs");
     let boot_path = temp_file("inspect-boot-missing-kernel-loader.kb");
     let boot_bytes =
         ruxe::encode_rux16_executable(&[0x10, 0x20], ruxe::RuxeAbiKind::Bootloader, 0x2000, 0x2000)
@@ -277,7 +277,7 @@ fn rux_volume_inspect_boot_rejects_missing_root_kernel() {
     assert!(Command::new(k16_binary())
         .args([
             "fs",
-            "ruxfs",
+            "kfs",
             "format",
             root_path.to_str().unwrap(),
             "--blocks",
@@ -455,7 +455,7 @@ fn rux_volume_put_boot_installs_loader_kb_in_boot_ruxfs_partition() {
 #[test]
 fn rux_volume_put_kernel_installs_kernel_kx_in_root_ruxfs() {
     let volume_path = temp_file("kernel-rootfs-storage0.ruxvol");
-    let root_path = temp_file("kernel-rootfs-root.ruxfs");
+    let root_path = temp_file("kernel-rootfs-root.kfs");
     let kernel_path = temp_file("kernel-rootfs-kernel.kx");
     let kernel_bytes = ruxe::encode_rux16_executable(
         &[0x01, 0x02, 0x03, 0x04],
@@ -480,7 +480,7 @@ fn rux_volume_put_kernel_installs_kernel_kx_in_root_ruxfs() {
     assert!(Command::new(k16_binary())
         .args([
             "fs",
-            "ruxfs",
+            "kfs",
             "format",
             root_path.to_str().unwrap(),
             "--blocks",
@@ -1269,7 +1269,7 @@ fn rux16_init_loader_source_rejects_protected_init_load_address() {
 #[test]
 fn rux_volume_put_boot_and_kernel_creates_storage0_that_bundled_bios_executes() {
     let volume_path = temp_file("boot-kernel-storage0.ruxvol");
-    let root_path = temp_file("boot-kernel-root.ruxfs");
+    let root_path = temp_file("boot-kernel-root.kfs");
     let boot_path = temp_file("kernel-loader.boot");
     let kernel_source_path = temp_file("kernel.rx");
     let kernel_path = temp_file("boot-kernel-kernel.kx");
@@ -1364,7 +1364,7 @@ fn rux_volume_put_boot_and_kernel_creates_storage0_that_bundled_bios_executes() 
     assert!(Command::new(k16_binary())
         .args([
             "fs",
-            "ruxfs",
+            "kfs",
             "format",
             root_path.to_str().unwrap(),
             "--blocks",
@@ -1415,7 +1415,7 @@ fn rux_volume_put_boot_and_kernel_creates_storage0_that_bundled_bios_executes() 
 #[test]
 fn rux_volume_boot_kernel_and_init_executes_init_from_root_ruxfs() {
     let volume_path = temp_file("boot-kernel-init-storage0.ruxvol");
-    let root_path = temp_file("boot-kernel-init-root.ruxfs");
+    let root_path = temp_file("boot-kernel-init-root.kfs");
     let boot_path = temp_file("boot-kernel-init-loader.boot");
     let kernel_path = temp_file("boot-kernel-init-kernel.kx");
     let init_source_path = temp_file("init.rx");
@@ -1523,7 +1523,7 @@ fn rux_volume_boot_kernel_and_init_executes_init_from_root_ruxfs() {
     assert!(Command::new(k16_binary())
         .args([
             "fs",
-            "ruxfs",
+            "kfs",
             "format",
             root_path.to_str().unwrap(),
             "--blocks",
@@ -1533,14 +1533,14 @@ fn rux_volume_boot_kernel_and_init_executes_init_from_root_ruxfs() {
         .expect("ruxfs format runs")
         .success());
     assert!(Command::new(k16_binary())
-        .args(["fs", "ruxfs", "mkdir", root_path.to_str().unwrap(), "/bin"])
+        .args(["fs", "kfs", "mkdir", root_path.to_str().unwrap(), "/bin"])
         .status()
         .expect("ruxfs mkdir /bin runs")
         .success());
     assert!(Command::new(k16_binary())
         .args([
             "fs",
-            "ruxfs",
+            "kfs",
             "put",
             root_path.to_str().unwrap(),
             "/bin/init.kx",
@@ -1718,7 +1718,7 @@ fn rux_volume_boot_kernel_and_trap_init_uses_kernel_handler() {
 #[test]
 fn rux_volume_boot_kernel_and_init_runtime_handoff_blocks_match_artifacts() {
     let volume_path = temp_file("runtime-handoff-blocks-storage0.ruxvol");
-    let root_path = temp_file("runtime-handoff-blocks-root.ruxfs");
+    let root_path = temp_file("runtime-handoff-blocks-root.kfs");
     let boot_path = temp_file("runtime-handoff-blocks-loader.boot");
     let kernel_path = temp_file("runtime-handoff-blocks-kernel.kx");
     let init_path = temp_file("runtime-handoff-blocks-init.kx");
@@ -1789,7 +1789,7 @@ fn rux_volume_boot_kernel_and_init_runtime_handoff_blocks_match_artifacts() {
     assert!(Command::new(k16_binary())
         .args([
             "fs",
-            "ruxfs",
+            "kfs",
             "format",
             root_path.to_str().unwrap(),
             "--blocks",
@@ -1799,14 +1799,14 @@ fn rux_volume_boot_kernel_and_init_runtime_handoff_blocks_match_artifacts() {
         .expect("ruxfs format runs")
         .success());
     assert!(Command::new(k16_binary())
-        .args(["fs", "ruxfs", "mkdir", root_path.to_str().unwrap(), "/bin"])
+        .args(["fs", "kfs", "mkdir", root_path.to_str().unwrap(), "/bin"])
         .status()
         .expect("ruxfs mkdir /bin runs")
         .success());
     assert!(Command::new(k16_binary())
         .args([
             "fs",
-            "ruxfs",
+            "kfs",
             "put",
             root_path.to_str().unwrap(),
             "/bin/init.kx",
@@ -1865,7 +1865,7 @@ fn rux_volume_boot_kernel_and_init_runtime_handoff_blocks_match_artifacts() {
 #[test]
 fn rux_volume_boot_kernel_rejects_protected_init_load_address() {
     let volume_path = temp_file("protected-init-load-storage0.ruxvol");
-    let root_path = temp_file("protected-init-load-root.ruxfs");
+    let root_path = temp_file("protected-init-load-root.kfs");
     let boot_path = temp_file("protected-init-load-loader.boot");
     let kernel_path = temp_file("protected-init-load-kernel.kx");
     let init_path = temp_file("protected-init-load-init.kx");
@@ -1937,7 +1937,7 @@ fn rux_volume_boot_kernel_rejects_protected_init_load_address() {
     assert!(Command::new(k16_binary())
         .args([
             "fs",
-            "ruxfs",
+            "kfs",
             "format",
             root_path.to_str().unwrap(),
             "--blocks",
@@ -1947,14 +1947,14 @@ fn rux_volume_boot_kernel_rejects_protected_init_load_address() {
         .expect("ruxfs format runs")
         .success());
     assert!(Command::new(k16_binary())
-        .args(["fs", "ruxfs", "mkdir", root_path.to_str().unwrap(), "/bin"])
+        .args(["fs", "kfs", "mkdir", root_path.to_str().unwrap(), "/bin"])
         .status()
         .expect("ruxfs mkdir /bin runs")
         .success());
     assert!(Command::new(k16_binary())
         .args([
             "fs",
-            "ruxfs",
+            "kfs",
             "put",
             root_path.to_str().unwrap(),
             "/bin/init.kx",
@@ -2067,7 +2067,7 @@ fn rux_volume_boot_kernel_init_failure_wrong_abi_clears_stale_handoff() {
 
 fn create_boot_kernel_init_volume(name: &str, init_bytes: Option<&[u8]>) -> PathBuf {
     let volume_path = temp_file(&format!("{name}-storage0.ruxvol"));
-    let root_path = temp_file(&format!("{name}-root.ruxfs"));
+    let root_path = temp_file(&format!("{name}-root.kfs"));
     let boot_path = temp_file(&format!("{name}-loader.boot"));
     let kernel_path = temp_file(&format!("{name}-kernel.kx"));
     let init_path = temp_file(&format!("{name}-init.kx"));
@@ -2133,7 +2133,7 @@ fn create_boot_kernel_init_volume(name: &str, init_bytes: Option<&[u8]>) -> Path
     assert!(Command::new(k16_binary())
         .args([
             "fs",
-            "ruxfs",
+            "kfs",
             "format",
             root_path.to_str().unwrap(),
             "--blocks",
@@ -2145,14 +2145,14 @@ fn create_boot_kernel_init_volume(name: &str, init_bytes: Option<&[u8]>) -> Path
     if let Some(init_bytes) = init_bytes {
         fs::write(&init_path, init_bytes).expect("init RUXE writes");
         assert!(Command::new(k16_binary())
-            .args(["fs", "ruxfs", "mkdir", root_path.to_str().unwrap(), "/bin"])
+            .args(["fs", "kfs", "mkdir", root_path.to_str().unwrap(), "/bin"])
             .status()
             .expect("ruxfs mkdir /bin runs")
             .success());
         assert!(Command::new(k16_binary())
             .args([
                 "fs",
-                "ruxfs",
+                "kfs",
                 "put",
                 root_path.to_str().unwrap(),
             "/bin/init.kx",

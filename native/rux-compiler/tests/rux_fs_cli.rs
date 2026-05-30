@@ -3,8 +3,8 @@ use std::path::PathBuf;
 use std::process::Command;
 
 #[test]
-fn rux_fs_ruxfs_formats_writes_lists_and_reads_file() {
-    let fs_path = temp_file("root.ruxfs");
+fn k16_fs_kfs_formats_writes_lists_and_reads_file() {
+    let fs_path = temp_file("root.kfs");
     let input_path = temp_file("loader-input.kb");
     let output_path = temp_file("loader-output.kb");
     fs::write(&input_path, b"BOOTLOADER").expect("input writes");
@@ -13,7 +13,7 @@ fn rux_fs_ruxfs_formats_writes_lists_and_reads_file() {
         Command::new(k16_binary())
             .args([
                 "fs",
-                "ruxfs",
+                "kfs",
                 "format",
                 fs_path.to_str().unwrap(),
                 "--blocks",
@@ -24,7 +24,7 @@ fn rux_fs_ruxfs_formats_writes_lists_and_reads_file() {
     );
     assert_success(
         Command::new(k16_binary())
-            .args(["fs", "ruxfs", "mkdir", fs_path.to_str().unwrap(), "/boot"])
+            .args(["fs", "kfs", "mkdir", fs_path.to_str().unwrap(), "/boot"])
             .output()
             .expect("mkdir runs"),
     );
@@ -32,7 +32,7 @@ fn rux_fs_ruxfs_formats_writes_lists_and_reads_file() {
         Command::new(k16_binary())
             .args([
                 "fs",
-                "ruxfs",
+                "kfs",
                 "put",
                 fs_path.to_str().unwrap(),
                 "/boot/loader.kb",
@@ -43,7 +43,7 @@ fn rux_fs_ruxfs_formats_writes_lists_and_reads_file() {
     );
 
     let ls_output = Command::new(k16_binary())
-        .args(["fs", "ruxfs", "ls", fs_path.to_str().unwrap(), "/boot"])
+        .args(["fs", "kfs", "ls", fs_path.to_str().unwrap(), "/boot"])
         .output()
         .expect("ls runs");
     assert_success(ls_output.clone());
@@ -56,7 +56,7 @@ fn rux_fs_ruxfs_formats_writes_lists_and_reads_file() {
         Command::new(k16_binary())
             .args([
                 "fs",
-                "ruxfs",
+                "kfs",
                 "get",
                 fs_path.to_str().unwrap(),
                 "/boot/loader.kb",
@@ -69,8 +69,8 @@ fn rux_fs_ruxfs_formats_writes_lists_and_reads_file() {
 }
 
 #[test]
-fn rux_fs_ruxfs_removes_file() {
-    let fs_path = temp_file("delete.ruxfs");
+fn k16_fs_kfs_removes_file() {
+    let fs_path = temp_file("delete.kfs");
     let input_path = temp_file("delete-input.kb");
     fs::write(&input_path, b"BOOTLOADER").expect("input writes");
 
@@ -78,7 +78,7 @@ fn rux_fs_ruxfs_removes_file() {
         Command::new(k16_binary())
             .args([
                 "fs",
-                "ruxfs",
+                "kfs",
                 "format",
                 fs_path.to_str().unwrap(),
                 "--blocks",
@@ -89,7 +89,7 @@ fn rux_fs_ruxfs_removes_file() {
     );
     assert_success(
         Command::new(k16_binary())
-            .args(["fs", "ruxfs", "mkdir", fs_path.to_str().unwrap(), "/boot"])
+            .args(["fs", "kfs", "mkdir", fs_path.to_str().unwrap(), "/boot"])
             .output()
             .expect("mkdir runs"),
     );
@@ -97,7 +97,7 @@ fn rux_fs_ruxfs_removes_file() {
         Command::new(k16_binary())
             .args([
                 "fs",
-                "ruxfs",
+                "kfs",
                 "put",
                 fs_path.to_str().unwrap(),
                 "/boot/loader.kb",
@@ -110,7 +110,7 @@ fn rux_fs_ruxfs_removes_file() {
         Command::new(k16_binary())
             .args([
                 "fs",
-                "ruxfs",
+                "kfs",
                 "rm",
                 fs_path.to_str().unwrap(),
                 "/boot/loader.kb",
@@ -120,7 +120,7 @@ fn rux_fs_ruxfs_removes_file() {
     );
 
     let ls_output = Command::new(k16_binary())
-        .args(["fs", "ruxfs", "ls", fs_path.to_str().unwrap(), "/boot"])
+        .args(["fs", "kfs", "ls", fs_path.to_str().unwrap(), "/boot"])
         .output()
         .expect("ls runs");
     assert_success(ls_output.clone());
@@ -141,6 +141,29 @@ fn rux_fs_rejects_unknown_filesystem_type_without_volume_fallback() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
         stderr.contains("unsupported filesystem `fat32`"),
+        "stderr: {stderr}"
+    );
+}
+
+#[test]
+fn k16_fs_rejects_retired_ruxfs_name_without_alias() {
+    let fs_path = temp_file("ignored.kfs");
+    let output = Command::new(k16_binary())
+        .args([
+            "fs",
+            "ruxfs",
+            "format",
+            fs_path.to_str().unwrap(),
+            "--blocks",
+            "128",
+        ])
+        .output()
+        .expect("k16 runs");
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("unsupported filesystem `ruxfs`"),
         "stderr: {stderr}"
     );
 }

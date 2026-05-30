@@ -51,7 +51,7 @@ fn rux_inspect_identifies_partitioned_volume() {
 
 #[test]
 fn rux_inspect_identifies_standalone_ruxfs_and_ruxe() {
-    let fs_path = temp_file("root.ruxfs");
+    let fs_path = temp_file("root.kfs");
     let ruxe_path = temp_file("init.kx");
     fs::write(
         &fs_path,
