@@ -17,12 +17,11 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package ru.lazyhat.compukterkraft.lang.runtime.storage
+package ru.lazyhat.compukterkraft.lang.runtime.blazing
 
 import java.io.ByteArrayInputStream
 import java.io.InputStream
 import kotlin.io.path.createTempDirectory
-import kotlin.io.path.createDirectories
 import kotlin.io.path.exists
 import kotlin.io.path.readBytes
 import kotlin.io.path.writeBytes
@@ -32,37 +31,35 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
-class RuxSystemVolumeWorkspaceTest {
+class K16BiosFlashWorkspaceTest {
     @Test
-    fun preparesStorage0VolumeFromBundledResourceBytes() {
-        val workspace = createTempDirectory("rux-system-volume-workspace-")
-        val bytes = "RUXVOL".encodeToByteArray() + byteArrayOf(1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0)
-        val loader = resourceClassLoader("firmware/test-storage0.kv", bytes)
+    fun preparesBiosFlashFromRawResourceBytes() {
+        val workspace = createTempDirectory("rux-bios-workspace-")
+        val loader = resourceClassLoader("firmware/test-bios.kflash", byteArrayOf(0x01, 0x10, 0x01, 0xe0.toByte()))
 
         val path =
-            RuxSystemVolumeWorkspace.prepareStorage0Volume(
+            K16BiosFlashWorkspace.prepareBiosFlash(
                 workspace = workspace,
-                resourcePath = "firmware/test-storage0.kv",
+                resourcePath = "firmware/test-bios.kflash",
                 classLoader = loader,
             )
 
-        assertEquals(workspace.resolve("volumes/storage0.kv"), path)
+        assertEquals(workspace.resolve("bios.kflash"), path)
         assertTrue(path.exists())
-        assertContentEquals(bytes, path.readBytes())
+        assertContentEquals(byteArrayOf(0x01, 0x10, 0x01, 0xe0.toByte()), path.readBytes())
     }
 
     @Test
-    fun preservesExistingPerComputerStorage0Volume() {
-        val workspace = createTempDirectory("rux-system-volume-workspace-")
-        val existing = workspace.resolve("volumes/storage0.kv")
-        existing.parent.createDirectories()
+    fun preservesExistingPerComputerBiosFlash() {
+        val workspace = createTempDirectory("rux-bios-workspace-")
+        val existing = workspace.resolve("bios.kflash")
         existing.writeBytes(byteArrayOf(7, 8, 9))
-        val loader = resourceClassLoader("firmware/test-storage0.kv", byteArrayOf(1, 2, 3))
+        val loader = resourceClassLoader("firmware/test-bios.kflash", byteArrayOf(1, 2, 3))
 
         val path =
-            RuxSystemVolumeWorkspace.prepareStorage0Volume(
+            K16BiosFlashWorkspace.prepareBiosFlash(
                 workspace = workspace,
-                resourcePath = "firmware/test-storage0.kv",
+                resourcePath = "firmware/test-bios.kflash",
                 classLoader = loader,
             )
 
@@ -71,21 +68,21 @@ class RuxSystemVolumeWorkspaceTest {
     }
 
     @Test
-    fun missingStorage0VolumeResourceFailsFast() {
-        val workspace = createTempDirectory("rux-system-volume-workspace-")
+    fun missingBiosFlashResourceFailsFast() {
+        val workspace = createTempDirectory("rux-bios-workspace-")
 
         assertFailsWith<IllegalStateException> {
-            RuxSystemVolumeWorkspace.prepareStorage0Volume(
+            K16BiosFlashWorkspace.prepareBiosFlash(
                 workspace = workspace,
-                resourcePath = "firmware/missing-storage0.kv",
-                classLoader = resourceClassLoader("firmware/other.kv", byteArrayOf(1, 2)),
+                resourcePath = "firmware/missing-bios.kflash",
+                classLoader = resourceClassLoader("firmware/other.kflash", byteArrayOf(1, 2)),
             )
         }
     }
 
     @Test
-    fun defaultStorage0VolumeResourceUsesKvExtension() {
-        assertEquals("firmware/k16-system-storage0.kv", RuxSystemVolumeWorkspace.DEFAULT_STORAGE0_VOLUME_RESOURCE)
+    fun defaultBiosFlashResourceUsesKflashExtension() {
+        assertEquals("firmware/k16-bios.kflash", K16BiosFlashWorkspace.DEFAULT_BIOS_FLASH_RESOURCE)
     }
 
     private fun resourceClassLoader(

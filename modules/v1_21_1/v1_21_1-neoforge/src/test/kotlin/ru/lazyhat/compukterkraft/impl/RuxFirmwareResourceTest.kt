@@ -1,10 +1,10 @@
 package ru.lazyhat.compukterkraft.impl
 
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeRuxComputerDisplaySnapshot
-import ru.lazyhat.compukterkraft.lang.runtime.blazing.RuxBiosFlashWorkspace
+import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16BiosFlashWorkspace
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.RuxComputerRuntimeFactory
+import ru.lazyhat.compukterkraft.lang.runtime.storage.K16SystemVolumeWorkspace
 import ru.lazyhat.compukterkraft.lang.runtime.storage.RUX_VOLUME_MAGIC_BYTES
-import ru.lazyhat.compukterkraft.lang.runtime.storage.RuxSystemVolumeWorkspace
 import kotlin.io.path.createTempDirectory
 import kotlin.io.path.writeBytes
 import kotlin.test.Test
@@ -16,7 +16,7 @@ class RuxFirmwareResourceTest {
     @Test
     fun bundledRux16BiosFlashResourceExists() {
         val bytes =
-            RuxBiosFlashWorkspace.loadBiosFlashResource(
+            K16BiosFlashWorkspace.loadBiosFlashResource(
                 classLoader = javaClass.classLoader,
             )
 
@@ -32,14 +32,14 @@ class RuxFirmwareResourceTest {
         val bytes = resource.use { it.readBytes() }
         assertContentEquals(
             bytes,
-            RuxBiosFlashWorkspace.loadBiosFlashResource(classLoader = javaClass.classLoader),
+            K16BiosFlashWorkspace.loadBiosFlashResource(classLoader = javaClass.classLoader),
         )
     }
 
     @Test
     fun bundledRux16SystemStorage0VolumeResourceExists() {
         val bytes =
-            RuxSystemVolumeWorkspace.loadStorage0VolumeResource(
+            K16SystemVolumeWorkspace.loadStorage0VolumeResource(
                 classLoader = javaClass.classLoader,
             )
 
@@ -52,8 +52,8 @@ class RuxFirmwareResourceTest {
         val workspace = createTempDirectory("rux-firmware-resource-test-")
         val biosFlashPath = workspace.resolve("bios.kflash")
         val storage0Path = workspace.resolve("storage0.kv")
-        biosFlashPath.writeBytes(RuxBiosFlashWorkspace.loadBiosFlashResource(classLoader = javaClass.classLoader))
-        storage0Path.writeBytes(RuxSystemVolumeWorkspace.loadStorage0VolumeResource(classLoader = javaClass.classLoader))
+        biosFlashPath.writeBytes(K16BiosFlashWorkspace.loadBiosFlashResource(classLoader = javaClass.classLoader))
+        storage0Path.writeBytes(K16SystemVolumeWorkspace.loadStorage0VolumeResource(classLoader = javaClass.classLoader))
 
         RuxComputerRuntimeFactory.createFromBiosFlash(
             biosFlashPath = biosFlashPath,

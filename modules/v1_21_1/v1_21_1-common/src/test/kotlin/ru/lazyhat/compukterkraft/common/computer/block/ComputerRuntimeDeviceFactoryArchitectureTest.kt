@@ -37,7 +37,7 @@ class ComputerRuntimeDeviceFactoryArchitectureTest {
                 .of("src/main/kotlin/ru/lazyhat/compukterkraft/common/computer/block/ComputerRuntimeDeviceFactory.kt")
                 .readText()
 
-        assertTrue(source.contains("RuxBiosFlashWorkspace.prepareBiosFlash"))
+        assertTrue(source.contains("K16BiosFlashWorkspace.prepareBiosFlash"))
         assertTrue(source.contains("RuxComputerRuntimeFactory.createFromBiosFlash"))
         assertFalse(source.contains("RuxComputerRuntimeFactory.createFromResource(storage0Path"))
     }
@@ -49,7 +49,7 @@ class ComputerRuntimeDeviceFactoryArchitectureTest {
                 .of("src/main/kotlin/ru/lazyhat/compukterkraft/common/computer/block/ComputerRuntimeDeviceFactory.kt")
                 .readText()
 
-        val seedIndex = source.indexOf("RuxSystemVolumeWorkspace.prepareStorage0Volume(workspace)")
+        val seedIndex = source.indexOf("K16SystemVolumeWorkspace.prepareStorage0Volume(workspace)")
         val openIndex = source.indexOf("volumeStore.openOrCreateComputerVolume(deviceId, \"storage0\")")
 
         assertTrue(seedIndex >= 0, "storage0 should be seeded from the bundled system volume resource")

@@ -24,21 +24,21 @@ import kotlin.io.path.createDirectories
 import kotlin.io.path.exists
 import kotlin.io.path.writeBytes
 
-object RuxSystemVolumeWorkspace {
+object K16SystemVolumeWorkspace {
     const val DEFAULT_STORAGE0_VOLUME_RESOURCE: String = "firmware/k16-system-storage0.kv"
     const val STORAGE0_VOLUME_FILENAME: String = "storage0.kv"
 
     fun prepareStorage0Volume(
         workspace: Path,
         resourcePath: String = DEFAULT_STORAGE0_VOLUME_RESOURCE,
-        classLoader: ClassLoader = RuxSystemVolumeWorkspace::class.java.classLoader,
+        classLoader: ClassLoader = K16SystemVolumeWorkspace::class.java.classLoader,
     ): Path {
         val storage0Path = workspace.resolve("volumes").resolve(STORAGE0_VOLUME_FILENAME)
         if (storage0Path.exists()) {
             return storage0Path
         }
         val bytes = loadStorage0VolumeResource(resourcePath, classLoader)
-        check(bytes.isNotEmpty()) { "Rux16 system storage0 volume resource is empty: $resourcePath" }
+        check(bytes.isNotEmpty()) { "K16 system storage0 volume resource is empty: $resourcePath" }
         storage0Path.parent.createDirectories()
         storage0Path.writeBytes(bytes)
         return storage0Path
@@ -46,10 +46,10 @@ object RuxSystemVolumeWorkspace {
 
     fun loadStorage0VolumeResource(
         resourcePath: String = DEFAULT_STORAGE0_VOLUME_RESOURCE,
-        classLoader: ClassLoader = RuxSystemVolumeWorkspace::class.java.classLoader,
+        classLoader: ClassLoader = K16SystemVolumeWorkspace::class.java.classLoader,
     ): ByteArray =
         classLoader
             .getResourceAsStream(resourcePath)
             ?.use { it.readBytes() }
-            ?: error("Rux16 system storage0 volume resource not found: $resourcePath")
+            ?: error("K16 system storage0 volume resource not found: $resourcePath")
 }
