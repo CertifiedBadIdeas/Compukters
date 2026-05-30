@@ -25,10 +25,10 @@ fn runtime_exec_runs_program_ruxe_payload_from_entry_pc() {
 #[test]
 fn runtime_reader_loads_program_ruxe_from_root_ruxfs() {
     let init = encode_ruxe(3, 0x8000, 0x8000, &[0x01, 0x00]);
-    let root = rootfs_with_file("/bin/init.ruxe", &init);
+    let root = rootfs_with_file("/bin/init.kx", &init);
     let storage0 = storage0_media_with_root(root);
 
-    let loaded = storage_image::read_ruxfs_file_from_partition(&storage0, "ROOT", "/bin/init.ruxe")
+    let loaded = storage_image::read_ruxfs_file_from_partition(&storage0, "ROOT", "/bin/init.kx")
         .expect("program reads from ROOT RuxFS");
     let executable =
         ruxe::decode_program_rux16_executable(&loaded).expect("program RUXE validates for exec");
@@ -50,16 +50,16 @@ fn program_exec_rejects_kernel_ruxe_without_fallback() {
 
 #[test]
 fn runtime_reader_reports_missing_partition_or_path_without_fallback() {
-    let root = rootfs_with_file("/bin/init.ruxe", &[0x01, 0x00]);
+    let root = rootfs_with_file("/bin/init.kx", &[0x01, 0x00]);
     let storage0 = storage0_media_with_root(root);
 
     assert!(
-        storage_image::read_ruxfs_file_from_partition(&storage0, "DATA", "/bin/init.ruxe")
+        storage_image::read_ruxfs_file_from_partition(&storage0, "DATA", "/bin/init.kx")
             .unwrap_err()
             .contains("RUXPT partition `DATA` not found")
     );
     assert!(
-        storage_image::read_ruxfs_file_from_partition(&storage0, "ROOT", "/sbin/init.ruxe")
+        storage_image::read_ruxfs_file_from_partition(&storage0, "ROOT", "/sbin/init.kx")
             .unwrap_err()
             .contains("RuxFS directory entry `sbin` not found")
     );
@@ -101,7 +101,7 @@ fn encode_partition_entry(
 }
 
 fn rootfs_with_file(path: &str, contents: &[u8]) -> Vec<u8> {
-    assert_eq!(path, "/bin/init.ruxe");
+    assert_eq!(path, "/bin/init.kx");
     const BLOCK_SIZE: usize = 512;
     const TOTAL_BLOCKS: usize = 95;
     let mut image = vec![0_u8; TOTAL_BLOCKS * BLOCK_SIZE];
@@ -110,7 +110,7 @@ fn rootfs_with_file(path: &str, contents: &[u8]) -> Vec<u8> {
     encode_inode(&mut image, 2, 2, 64, 11, 1);
     encode_inode(&mut image, 3, 1, contents.len() as u64, 12, 1);
     encode_directory_entry(&mut image, 10 * BLOCK_SIZE, 2, "bin");
-    encode_directory_entry(&mut image, 11 * BLOCK_SIZE, 3, "init.ruxe");
+    encode_directory_entry(&mut image, 11 * BLOCK_SIZE, 3, "init.kx");
     image[12 * BLOCK_SIZE..12 * BLOCK_SIZE + contents.len()].copy_from_slice(contents);
     image
 }
