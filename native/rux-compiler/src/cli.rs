@@ -537,12 +537,12 @@ fn run_fs(surface: CliSurface, args: &[String]) -> Result<(), String> {
         return fs_usage_error(surface);
     };
     match filesystem.as_str() {
-        "ruxfs" => run_ruxfs(surface, &args[1..]),
+        "kfs" => run_kfs(surface, &args[1..]),
         other => Err(format!("unsupported filesystem `{other}`")),
     }
 }
 
-fn run_ruxfs(surface: CliSurface, args: &[String]) -> Result<(), String> {
+fn run_kfs(surface: CliSurface, args: &[String]) -> Result<(), String> {
     let Some(command) = args.first() else {
         return fs_usage_error(surface);
     };
@@ -711,6 +711,6 @@ fn fs_usage_error(surface: CliSurface) -> Result<(), String> {
     debug_assert_eq!(surface, CliSurface::K16);
     let command = surface.command_name();
     Err(format!(
-        "usage: {command} fs ruxfs format <image.kfs> --blocks <blocks>\n       {command} fs ruxfs mkdir <image.kfs> <path>\n       {command} fs ruxfs put <image.kfs> <path> <host-input>\n       {command} fs ruxfs get <image.kfs> <path> <host-output>\n       {command} fs ruxfs rm <image.kfs> <path>\n       {command} fs ruxfs ls <image.kfs> <path>"
+        "usage: {command} fs kfs format <image.kfs> --blocks <blocks>\n       {command} fs kfs mkdir <image.kfs> <path>\n       {command} fs kfs put <image.kfs> <path> <host-input>\n       {command} fs kfs get <image.kfs> <path> <host-output>\n       {command} fs kfs rm <image.kfs> <path>\n       {command} fs kfs ls <image.kfs> <path>"
     ))
 }

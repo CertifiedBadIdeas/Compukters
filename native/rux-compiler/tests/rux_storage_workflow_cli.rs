@@ -6,8 +6,8 @@ use std::process::Command;
 #[test]
 fn rux_cli_builds_partitioned_storage0_with_ruxfs_root_kernel_file() {
     let volume_path = temp_file("storage0.ruxvol");
-    let root_path = temp_file("root.ruxfs");
-    let extracted_root_path = temp_file("extracted-root.ruxfs");
+    let root_path = temp_file("root.kfs");
+    let extracted_root_path = temp_file("extracted-root.kfs");
     let kernel_path = temp_file("kernel.kx");
     let extracted_kernel_path = temp_file("extracted-kernel.kx");
     let kernel_bytes =
@@ -42,7 +42,7 @@ fn rux_cli_builds_partitioned_storage0_with_ruxfs_root_kernel_file() {
         Command::new(k16_binary())
             .args([
                 "fs",
-                "ruxfs",
+                "kfs",
                 "format",
                 root_path.to_str().unwrap(),
                 "--blocks",
@@ -53,7 +53,7 @@ fn rux_cli_builds_partitioned_storage0_with_ruxfs_root_kernel_file() {
     );
     assert_success(
         Command::new(k16_binary())
-            .args(["fs", "ruxfs", "mkdir", root_path.to_str().unwrap(), "/boot"])
+            .args(["fs", "kfs", "mkdir", root_path.to_str().unwrap(), "/boot"])
             .output()
             .expect("ruxfs mkdir runs"),
     );
@@ -61,7 +61,7 @@ fn rux_cli_builds_partitioned_storage0_with_ruxfs_root_kernel_file() {
         Command::new(k16_binary())
             .args([
                 "fs",
-                "ruxfs",
+                "kfs",
                 "put",
                 root_path.to_str().unwrap(),
                 "/boot/kernel.kx",
@@ -98,7 +98,7 @@ fn rux_cli_builds_partitioned_storage0_with_ruxfs_root_kernel_file() {
         Command::new(k16_binary())
             .args([
                 "fs",
-                "ruxfs",
+                "kfs",
                 "get",
                 extracted_root_path.to_str().unwrap(),
                 "/boot/kernel.kx",

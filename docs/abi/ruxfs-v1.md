@@ -188,12 +188,12 @@ kinds as hard load failures.
 The public CLI namespace is filesystem-specific:
 
 ```text
-k16 fs ruxfs format <image.kfs> --blocks <blocks>
-k16 fs ruxfs mkdir <image.kfs> <path>
-k16 fs ruxfs put <image.kfs> <path> <host-input>
-k16 fs ruxfs get <image.kfs> <path> <host-output>
-k16 fs ruxfs rm <image.kfs> <path>
-k16 fs ruxfs ls <image.kfs> <path>
+k16 fs kfs format <image.kfs> --blocks <blocks>
+k16 fs kfs mkdir <image.kfs> <path>
+k16 fs kfs put <image.kfs> <path> <host-input>
+k16 fs kfs get <image.kfs> <path> <host-output>
+k16 fs kfs rm <image.kfs> <path>
+k16 fs kfs ls <image.kfs> <path>
 ```
 
 `k16 volume` remains storage-container tooling. General filesystem operations
