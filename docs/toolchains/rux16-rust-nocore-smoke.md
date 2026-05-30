@@ -18,6 +18,9 @@ The script is strict. It requires a custom rustc that is:
 - paired with `tools/rux16-unknown-ruxos.json`;
 - paired with the Rux16 LLVM tools used for object inspection.
 
+The embedded no_core source defines the current minimal lang item set required
+by this Rust revision: `sized`, `meta_sized`, and `pointee_sized`.
+
 Run it with explicit tool paths:
 
 ```bash

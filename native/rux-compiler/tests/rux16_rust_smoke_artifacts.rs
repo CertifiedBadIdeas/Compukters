@@ -19,12 +19,15 @@ fn rust_nocore_smoke_artifacts_are_documented_and_strict() {
     let script = fs::read_to_string(&smoke_script).expect("Rust no_core smoke script exists");
     assert!(script.contains("#![no_core]"));
     assert!(script.contains("#![no_main]"));
+    assert!(script.contains("meta_sized"));
+    assert!(script.contains("pointee_sized"));
     assert!(script.contains("debug_bytes=2a"));
     assert!(!script.contains("|| true"));
 
     let probe = fs::read_to_string(&bootstrap_probe).expect("Rust bootstrap probe script exists");
     assert!(probe.contains("toolchains/Compukter-Kraft-rust"));
     assert!(probe.contains("toolchains/Compukter-Kraft-llvm/build-rux-min/bin/llvm-config"));
+    assert!(probe.contains("build/rux16"));
     assert!(probe.contains("--targets-built"));
     assert!(probe.contains("rux16"));
     assert!(probe.contains("x.py"));

@@ -27,7 +27,7 @@ The Rust source fork is tracked as a repository submodule:
 toolchains/Compukter-Kraft-rust
   url: git@github.com:CertifiedBadIdeas/Compukter-Kraft-rust.git
   branch: rux16
-  commit: c58275e0369d09fc3959b8ba87dcbcbe73797465
+  commit: 8fba61f0e772bd97c4c27b67bbb090db1f4f4210
 ```
 
 Fork branch policy:
@@ -46,8 +46,16 @@ error: could not create LLVM TargetMachine for triple: rux16:
 No available targets are compatible with triple "rux16"
 ```
 
-So the remaining #132 blocker is not the target JSON. It is that rustc must be
-built with an LLVM that includes the Rux16 target.
+The custom stage1 rustc now builds against that LLVM and can pass the no_core
+smoke:
+
+```text
+rustc 1.98.0-dev
+LLVM version: 23.0.0
+Rust no_core object checks passed
+RUXE link and execution checks passed
+Rux16 Rust no_core smoke passed
+```
 
 ## Upstream Rust Guidance
 
@@ -124,6 +132,15 @@ It prints a temporary `bootstrap.toml` path plus dry-run and build commands for
 
 Even `--dry-run` may download and build Rust bootstrap stage0 support files.
 That is expected bootstrap behavior, not a Rux16 codegen proof.
+
+The default build directory is `toolchains/Compukter-Kraft-rust/build/rux16`,
+which is ignored by the Rust repository.
+
+The Rux16 Rust fork changes needed for the first stage1 smoke are:
+
+- register the `rux16` LLVM component and initialize the Rux16 LLVM target
+  inside `rustc_llvm`;
+- add minimal Rux16 C ABI lowering in `rustc_target`.
 
 Expected bootstrap direction:
 
