@@ -27,10 +27,10 @@ import java.nio.file.Path
 import kotlin.io.path.createDirectories
 import kotlin.io.path.exists
 
-const val RUX_VOLUME_MAGIC = "RUXVOL"
-val RUX_VOLUME_MAGIC_BYTES: ByteArray = RUX_VOLUME_MAGIC.encodeToByteArray()
-const val RUX_VOLUME_VERSION: UShort = 1u
-const val RUX_VOLUME_HEADER_SIZE: Int = 16
+const val K16_VOLUME_MAGIC = "K16VOL"
+val K16_VOLUME_MAGIC_BYTES: ByteArray = K16_VOLUME_MAGIC.encodeToByteArray()
+const val K16_VOLUME_VERSION: UShort = 1u
+const val K16_VOLUME_HEADER_SIZE: Int = 16
 const val DEFAULT_STORAGE0_VOLUME_SIZE: Long = 1024L * 1024L
 
 private const val DEFAULT_MAX_VOLUME_SIZE: Long = 64L * 1024L * 1024L
@@ -131,7 +131,7 @@ class FileK16VolumeStore(
     ) {
         try {
             RandomAccessFile(path.toFile(), "rw").use { file ->
-                file.setLength(RUX_VOLUME_HEADER_SIZE.toLong() + logicalSize)
+                file.setLength(K16_VOLUME_HEADER_SIZE.toLong() + logicalSize)
                 writeHeader(file, logicalSize)
                 file.channel.force(true)
             }
@@ -170,19 +170,19 @@ class FileK16VolumeStore(
         path: Path,
         file: RandomAccessFile,
     ): Long {
-        if (file.length() < RUX_VOLUME_HEADER_SIZE) {
+        if (file.length() < K16_VOLUME_HEADER_SIZE) {
             throw K16VolumeException(
                 K16VolumeError.TruncatedHeader,
                 "K16 volume header is truncated at $path",
             )
         }
 
-        val header = ByteArray(RUX_VOLUME_HEADER_SIZE)
+        val header = ByteArray(K16_VOLUME_HEADER_SIZE)
         file.seek(0)
         file.readFully(header)
 
-        val magic = header.copyOfRange(0, RUX_VOLUME_MAGIC_BYTES.size)
-        if (!magic.contentEquals(RUX_VOLUME_MAGIC_BYTES)) {
+        val magic = header.copyOfRange(0, K16_VOLUME_MAGIC_BYTES.size)
+        if (!magic.contentEquals(K16_VOLUME_MAGIC_BYTES)) {
             throw K16VolumeException(
                 K16VolumeError.InvalidMagic,
                 "K16 volume magic is invalid at $path",
@@ -195,7 +195,7 @@ class FileK16VolumeStore(
                 .order(ByteOrder.LITTLE_ENDIAN)
                 .short
                 .toInt() and 0xffff
-        if (version != RUX_VOLUME_VERSION.toInt()) {
+        if (version != K16_VOLUME_VERSION.toInt()) {
             throw K16VolumeException(
                 K16VolumeError.UnsupportedVersion,
                 "Unsupported K16 volume version $version at $path",
@@ -209,7 +209,7 @@ class FileK16VolumeStore(
                 .long
         validateLogicalSize(logicalSize)
 
-        val expectedLength = RUX_VOLUME_HEADER_SIZE.toLong() + logicalSize
+        val expectedLength = K16_VOLUME_HEADER_SIZE.toLong() + logicalSize
         val actualLength = file.length()
         if (actualLength < expectedLength) {
             throw K16VolumeException(
@@ -298,7 +298,7 @@ private class FileK16VolumeBlob(
             )
         }
         try {
-            file.setLength(RUX_VOLUME_HEADER_SIZE.toLong() + newSize)
+            file.setLength(K16_VOLUME_HEADER_SIZE.toLong() + newSize)
             currentSize = newSize
             writeHeader(file, currentSize)
             file.channel.force(true)
@@ -357,7 +357,7 @@ private class FileK16VolumeBlob(
     }
 
     private fun payloadOffset(offset: Long): Long =
-        RUX_VOLUME_HEADER_SIZE.toLong() + offset
+        K16_VOLUME_HEADER_SIZE.toLong() + offset
 
     private fun ensureOpen() {
         if (closed) {
@@ -375,10 +375,10 @@ private fun writeHeader(
 ) {
     val header =
         ByteBuffer
-            .allocate(RUX_VOLUME_HEADER_SIZE)
+            .allocate(K16_VOLUME_HEADER_SIZE)
             .order(ByteOrder.LITTLE_ENDIAN)
-            .put(RUX_VOLUME_MAGIC_BYTES)
-            .putShort(RUX_VOLUME_VERSION.toShort())
+            .put(K16_VOLUME_MAGIC_BYTES)
+            .putShort(K16_VOLUME_VERSION.toShort())
             .putLong(logicalSize)
             .array()
     file.seek(0)

@@ -36,7 +36,7 @@ class K16SystemVolumeWorkspaceTest {
     @Test
     fun preparesStorage0VolumeFromBundledResourceBytes() {
         val workspace = createTempDirectory("rux-system-volume-workspace-")
-        val bytes = "RUXVOL".encodeToByteArray() + byteArrayOf(1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+        val bytes = "K16VOL".encodeToByteArray() + byteArrayOf(1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0)
         val loader = resourceClassLoader("firmware/test-storage0.kv", bytes)
 
         val path =

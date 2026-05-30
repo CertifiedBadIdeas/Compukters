@@ -5,7 +5,7 @@ use std::process::Command;
 
 #[test]
 fn rux_cli_builds_partitioned_storage0_with_ruxfs_root_kernel_file() {
-    let volume_path = temp_file("storage0.ruxvol");
+    let volume_path = temp_file("storage0.kv");
     let root_path = temp_file("root.kfs");
     let extracted_root_path = temp_file("extracted-root.kfs");
     let kernel_path = temp_file("kernel.kx");
@@ -35,7 +35,7 @@ fn rux_cli_builds_partitioned_storage0_with_ruxfs_root_kernel_file() {
     assert_success(inspect_output.clone());
     assert_eq!(
         String::from_utf8(inspect_output.stdout).expect("inspect stdout is UTF-8"),
-        "RUXVOL v1 payload=65536\nRUXPT v1 entries=2\nBOOT start_lba=1 blocks=32 bytes=16384 name=boot\nROOT start_lba=33 blocks=95 bytes=48640 name=root\n"
+        "K16VOL v1 payload=65536\nRUXPT v1 entries=2\nBOOT start_lba=1 blocks=32 bytes=16384 name=boot\nROOT start_lba=33 blocks=95 bytes=48640 name=root\n"
     );
 
     assert_success(

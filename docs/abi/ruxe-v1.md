@@ -176,7 +176,7 @@ the `ROOT` RuxFS partition, validates ABI kind `program`, copies the payload to
 
 ## Storage Volume Tooling
 
-`RUXE` is the artifact format produced by the compiler. The current `RUXVOL`
+`RUXE` is the artifact format produced by the compiler. The current `K16VOL`
 storage tooling installs fixed-image `RUXE` artifacts into the partitioned
 system volume:
 
@@ -184,7 +184,7 @@ system volume:
   `BOOT`/RuxFS `/boot/loader.kb`.
 - `put-kernel` accepts ABI kind `kernel` and writes
   `ROOT`/RuxFS `/boot/kernel.kx`.
-- `program` artifacts are not installed by `rux volume put-boot` or
+- `program` artifacts are not installed by `k16 volume put-boot` or
   `put-kernel`; they belong in a filesystem such as `RuxFS` and are selected by
   OS policy.
 

@@ -3,8 +3,8 @@ package ru.lazyhat.compukterkraft.impl
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeRuxComputerDisplaySnapshot
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16BiosFlashWorkspace
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16ComputerRuntimeFactory
+import ru.lazyhat.compukterkraft.lang.runtime.storage.K16_VOLUME_MAGIC_BYTES
 import ru.lazyhat.compukterkraft.lang.runtime.storage.K16SystemVolumeWorkspace
-import ru.lazyhat.compukterkraft.lang.runtime.storage.RUX_VOLUME_MAGIC_BYTES
 import java.nio.file.Path
 import kotlin.io.path.createTempDirectory
 import kotlin.io.path.readText
@@ -59,7 +59,7 @@ class K16FirmwareResourceTest {
             )
 
         assertTrue(bytes.size > 512, "K16 system storage0 volume resource should not be empty")
-        assertContentEquals(RUX_VOLUME_MAGIC_BYTES, bytes.copyOfRange(0, RUX_VOLUME_MAGIC_BYTES.size))
+        assertContentEquals(K16_VOLUME_MAGIC_BYTES, bytes.copyOfRange(0, K16_VOLUME_MAGIC_BYTES.size))
     }
 
     @Test

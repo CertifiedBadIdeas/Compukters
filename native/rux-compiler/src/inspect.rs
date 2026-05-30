@@ -4,8 +4,8 @@ use crate::ruxfs;
 use crate::volume;
 
 pub fn inspect_blob(bytes: &[u8]) -> Result<String, String> {
-    if bytes.starts_with(volume::RUXVOL_MAGIC) {
-        return Ok(format!("kind=RUXVOL\n{}", volume::inspect(bytes)?));
+    if bytes.starts_with(volume::K16VOL_MAGIC) {
+        return Ok(format!("kind=K16VOL\n{}", volume::inspect(bytes)?));
     }
     if bytes.starts_with(partition::RUXPT_MAGIC) {
         return inspect_partitioned_media(bytes);
