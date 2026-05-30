@@ -6,10 +6,10 @@
 
 - `clang --target=rux16 -ffreestanding -fno-builtin -nostdlib` compiles a tiny C
   `main` into an ELF32 relocatable object.
-- `rux runtime rux16-startup` and `rux link --target program` package the object
+- `k16 runtime rux16-startup` and `k16 link --target program` package the object
   as a normal program `RUXE`.
-- `rux disasm --target program` checks the linked Rux16 code.
-- `rux run` executes the `RUXE` in the VM and observes `42` as
+- `k16 disasm --target program` checks the linked Rux16 code.
+- `k16 run` executes the `RUXE` in the VM and observes `42` as
   `debug_bytes=2a`.
 - unsupported C shapes fail explicitly: `long long` return, varargs, stack
   arguments, and indirect calls.

@@ -44,8 +44,8 @@ require_clang_failure() {
     require_contains "$stderr" "$expected"
 }
 
-run_rux() {
-    cargo run --quiet --manifest-path "$RUX_CARGO_MANIFEST" --bin rux -- "$@"
+run_k16() {
+    cargo run --quiet --manifest-path "$RUX_CARGO_MANIFEST" --bin k16 -- "$@"
 }
 
 require_file "$CLANG"
@@ -94,19 +94,19 @@ require_contains "$WORK_DIR/main-object.txt" "Machine: 0x5258"
 require_contains "$WORK_DIR/main-object.txt" "Name: .text.rux16"
 require_contains "$WORK_DIR/main-object.txt" "Name: main"
 
-run_rux runtime rux16-startup -o "$WORK_DIR/startup.o"
-run_rux link --target program "$WORK_DIR/startup.o" "$WORK_DIR/main.o" -o "$WORK_DIR/main.ruxe"
+run_k16 runtime rux16-startup -o "$WORK_DIR/startup.o"
+run_k16 link --target program "$WORK_DIR/startup.o" "$WORK_DIR/main.o" -o "$WORK_DIR/main.ruxe"
 
-run_rux inspect "$WORK_DIR/main.ruxe" > "$WORK_DIR/main-ruxe.txt"
+run_k16 inspect "$WORK_DIR/main.ruxe" > "$WORK_DIR/main-ruxe.txt"
 require_contains "$WORK_DIR/main-ruxe.txt" "kind=RUXE"
 require_contains "$WORK_DIR/main-ruxe.txt" "RUXE abi=program entry_pc=0x00008000 load_addr=0x00008000"
 
-run_rux disasm --target program "$WORK_DIR/main.ruxe" > "$WORK_DIR/main-ruxe.disasm"
+run_k16 disasm --target program "$WORK_DIR/main.ruxe" > "$WORK_DIR/main-ruxe.disasm"
 require_contains "$WORK_DIR/main-ruxe.disasm" "call r14"
 require_contains "$WORK_DIR/main-ruxe.disasm" "const32 r0, 0x0000002a"
 require_contains "$WORK_DIR/main-ruxe.disasm" "ret"
 
-run_rux run "$WORK_DIR/main.ruxe" > "$WORK_DIR/main-run.txt"
+run_k16 run "$WORK_DIR/main.ruxe" > "$WORK_DIR/main-run.txt"
 require_contains "$WORK_DIR/main-run.txt" "signal=halt debug_bytes=2a"
 
 require_clang_failure "$WORK_DIR/i64-return.c" "Rux16 multi-value returns are not implemented"

@@ -45,8 +45,8 @@ require_llc_failure() {
     require_contains "$stderr" "$expected"
 }
 
-run_rux() {
-    cargo run --quiet --manifest-path "$RUX_CARGO_MANIFEST" --bin rux -- "$@"
+run_k16() {
+    cargo run --quiet --manifest-path "$RUX_CARGO_MANIFEST" --bin k16 -- "$@"
 }
 
 require_file "$LLC"
@@ -162,13 +162,13 @@ require_contains "$WORK_DIR/main-object.txt" "Machine: 0x5258"
 require_contains "$WORK_DIR/main-object.txt" "Name: .text.rux16"
 require_contains "$WORK_DIR/main-object.txt" "Name: main"
 
-run_rux runtime rux16-startup -o "$WORK_DIR/startup.o"
-run_rux link --target program "$WORK_DIR/startup.o" "$WORK_DIR/main.o" -o "$WORK_DIR/main.ruxe"
-run_rux inspect "$WORK_DIR/main.ruxe" > "$WORK_DIR/main-ruxe.txt"
+run_k16 runtime rux16-startup -o "$WORK_DIR/startup.o"
+run_k16 link --target program "$WORK_DIR/startup.o" "$WORK_DIR/main.o" -o "$WORK_DIR/main.ruxe"
+run_k16 inspect "$WORK_DIR/main.ruxe" > "$WORK_DIR/main-ruxe.txt"
 require_contains "$WORK_DIR/main-ruxe.txt" "kind=RUXE"
 require_contains "$WORK_DIR/main-ruxe.txt" "RUXE abi=program entry_pc=0x00008000 load_addr=0x00008000"
 
-run_rux disasm --target program "$WORK_DIR/main.ruxe" > "$WORK_DIR/main-ruxe.disasm"
+run_k16 disasm --target program "$WORK_DIR/main.ruxe" > "$WORK_DIR/main-ruxe.disasm"
 require_contains "$WORK_DIR/main-ruxe.disasm" "call r14"
 require_contains "$WORK_DIR/main-ruxe.disasm" "const32 r0, 0x0000002a"
 require_contains "$WORK_DIR/main-ruxe.disasm" "ret"
@@ -179,16 +179,16 @@ require_contains "$WORK_DIR/main-ruxe.disasm" "ret"
 require_contains "$WORK_DIR/main-calls-helper-object.txt" "R_RUX16_CALL32 helper"
 require_contains "$WORK_DIR/main-calls-helper-object.txt" "Name: helper"
 
-run_rux link --target program "$WORK_DIR/startup.o" "$WORK_DIR/main-calls-helper.o" "$WORK_DIR/helper.o" -o "$WORK_DIR/call-helper.ruxe"
-run_rux disasm --target program "$WORK_DIR/call-helper.ruxe" > "$WORK_DIR/call-helper-ruxe.disasm"
+run_k16 link --target program "$WORK_DIR/startup.o" "$WORK_DIR/main-calls-helper.o" "$WORK_DIR/helper.o" -o "$WORK_DIR/call-helper.ruxe"
+run_k16 disasm --target program "$WORK_DIR/call-helper.ruxe" > "$WORK_DIR/call-helper-ruxe.disasm"
 require_contains "$WORK_DIR/call-helper-ruxe.disasm" "const32 r1, 0x00000028"
 require_contains "$WORK_DIR/call-helper-ruxe.disasm" "call r14"
 require_contains "$WORK_DIR/call-helper-ruxe.disasm" "add r0, r0, r1"
 require_contains "$WORK_DIR/call-helper-ruxe.disasm" "add r0, r1, r13"
 
 "$LLC" -mtriple=rux16 -filetype=obj "$WORK_DIR/stack-local-main.ll" -o "$WORK_DIR/stack-local-main.o"
-run_rux link --target program "$WORK_DIR/startup.o" "$WORK_DIR/stack-local-main.o" -o "$WORK_DIR/stack-local-main.ruxe"
-run_rux disasm --target program "$WORK_DIR/stack-local-main.ruxe" > "$WORK_DIR/stack-local-main-ruxe.disasm"
+run_k16 link --target program "$WORK_DIR/startup.o" "$WORK_DIR/stack-local-main.o" -o "$WORK_DIR/stack-local-main.ruxe"
+run_k16 disasm --target program "$WORK_DIR/stack-local-main.ruxe" > "$WORK_DIR/stack-local-main-ruxe.disasm"
 require_contains "$WORK_DIR/stack-local-main-ruxe.disasm" "sub r15, r15, r13"
 require_contains "$WORK_DIR/stack-local-main-ruxe.disasm" "store32 [r13], r0"
 require_contains "$WORK_DIR/stack-local-main-ruxe.disasm" "load32 r0, [r13]"
