@@ -5,6 +5,7 @@ use rux_compiler::ruxe;
 use rux_vm::computer_machine::ComputerMachine;
 use rux_vm::rux16::Rux16Signal;
 use rux_vm::rux_computer::RuxComputerHandle;
+use std::fs;
 use std::path::Path;
 
 const TEST_COMPUTER_ABI_IMPORT: &str =
@@ -51,6 +52,32 @@ fn rux16_program_artifact_is_ruxe_program_executable() {
     assert_eq!(executable.entry_pc, 0x8000);
     assert_eq!(executable.load_addr, 0x8000);
     assert_eq!(executable.payload, vec![0x01, 0x00]);
+}
+
+#[test]
+fn rux16_abi_docs_define_implementation_ready_calling_convention() {
+    let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(Path::parent)
+        .expect("compiler crate lives under native/rux-compiler");
+    let docs =
+        fs::read_to_string(repo_root.join("docs/abi/rux16-v1.md")).expect("Rux16 ABI docs read");
+    let normalized_docs = docs.split_whitespace().collect::<Vec<_>>().join(" ");
+
+    for required in [
+        "stack argument 0 is at `[sp + 4]`",
+        "stack argument 0 is at `[fp + 8]`",
+        "caller removes the outgoing stack-argument area after `ret`",
+        "r0-r11 are caller-saved",
+        "r12-r15 are reserved",
+        "no registers are callee-saved",
+        "The current Rux source compiler helper-call lowering supports only `r1`-`r3` arguments",
+    ] {
+        assert!(
+            normalized_docs.contains(required),
+            "Rux16 ABI docs must contain `{required}`"
+        );
+    }
 }
 
 #[test]
@@ -1262,6 +1289,31 @@ fn rux16_artifact_calls_helper_parameters_and_returns_from_bios_flash() {
     assert_eq!(machine.panic_code(), ComputerMachine::STATUS_READY);
     assert_eq!(machine.debug_output_bytes(), b"O", "{disassembly}");
     assert_eq!(machine.control_status(), ComputerMachine::STATUS_HALTED);
+}
+
+#[test]
+fn rux16_artifact_rejects_stack_passed_helper_arguments_without_fallback() {
+    let error = compile_rux16_artifact(
+        "fn write_four(a: i32, b: i32, c: i32, d: i32) {
+            unsafe {
+                ptr<i32>(4096u32).store(d);
+            }
+         }
+
+         fn main() {
+            write_four(1, 2, 3, 4);
+         }",
+        Rux16ArtifactTarget::Bios,
+    )
+    .unwrap_err();
+
+    assert!(
+        error.message.contains(
+            "helper function `write_four` has 4 parameters, but the Rux16 call ABI supports at most 3"
+        ),
+        "{}",
+        error.message
+    );
 }
 
 #[test]

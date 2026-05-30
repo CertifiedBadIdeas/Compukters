@@ -75,16 +75,34 @@ r15      stack pointer
 the initial target model. General-purpose allocation must not use those
 registers until a later ABI revision deliberately changes the contract.
 
-The first LLVM-facing calling convention is intentionally narrow:
+### LLVM-Facing Function Value Model
 
-- `i32` and pointer arguments enter in `r1`, `r2`, and `r3`;
-- `i32` and pointer return values leave in `r0`;
-- additional arguments are passed on the `r15` stack in 4-byte slots;
-- stack locals and spills use normal guest RAM;
-- direct calls use `call rN`, and returns use `ret`;
-- the stack is 4-byte aligned at function entry.
+The LLVM-facing ABI uses one 32-bit ABI slot for `i1`, `i8`, `i16`, `i32`, and
+pointer values. Narrow integer arguments and return values are zero-extended to
+the low bits of their 32-bit ABI slot. Signed operations on narrow source
+values must explicitly perform signed interpretation during lowering; the ABI
+slot itself does not carry signedness.
 
-The initial call-preservation model is:
+The first value model supports one scalar return value in `r0`. Multi-value
+returns, `i64`, aggregate-by-value arguments, struct returns, varargs, and
+implicit return slots are unsupported in v1.
+
+### LLVM-Facing Register Calling Convention
+
+The register call ABI is:
+
+- `r0` receives the scalar return value and is also a scratch register;
+- `r1`, `r2`, and `r3` receive logical arguments 0, 1, and 2;
+- `r4-r11` are allocatable general-purpose registers;
+- `r12` is the frame pointer when frame pointers are enabled;
+- `r13-r14` are backend scratch registers for instruction selection and
+  lowering;
+- `r15` is the stack pointer.
+
+`r0-r11 are caller-saved`. `r12-r15 are reserved`. There are no callee-owned
+preservation registers in v1: `no registers are callee-saved`.
+
+The initial call-preservation table is:
 
 ```text
 caller-saved:  r0-r11
@@ -96,6 +114,79 @@ This model keeps the first backend simple and makes all preservation explicit
 in generated caller code. A later ABI may add callee-saved registers, but code
 that depends on callee preservation before that revision is invalid.
 
+### LLVM-Facing Stack Arguments
+
+Arguments are numbered in source order. Logical arguments 0, 1, and 2 use
+`r1`, `r2`, and `r3`. Logical argument 3 is stack argument 0, logical argument
+4 is stack argument 1, and so on.
+
+The caller reserves the outgoing stack-argument area before `call`:
+
+```text
+sp = sp - stack_arg_bytes
+store32 [sp + 0], stack_arg0
+store32 [sp + 4], stack_arg1
+...
+call target
+sp = sp + stack_arg_bytes
+```
+
+`call` pushes the return PC after the outgoing stack-argument area has been
+reserved. On callee entry:
+
+```text
+[sp + 0]  return_pc
+[sp + 4]  stack argument 0
+[sp + 8]  stack argument 1
+...
+```
+
+Therefore stack argument 0 is at `[sp + 4]` for a callee that addresses
+arguments relative to `sp` before installing a frame pointer. The `ret`
+instruction pops only the return PC; the caller removes the outgoing
+stack-argument area after `ret`.
+
+### LLVM-Facing Frame Layout
+
+When a callee uses `r12` as a frame pointer, it saves the caller frame pointer
+below the return PC and sets `fp` to that saved slot:
+
+```text
+sp = sp - 4
+store32 [sp], old_fp
+fp = sp
+```
+
+The resulting frame layout is:
+
+```text
+[fp + 0]   saved caller fp
+[fp + 4]   return_pc
+[fp + 8]   stack argument 0
+[fp + 12]  stack argument 1
+[fp - 4]   local/spill slot 0
+[fp - 8]   local/spill slot 1
+...
+```
+
+Therefore stack argument 0 is at `[fp + 8]` after the frame pointer prologue.
+Before returning, the callee restores `sp` to the return address slot and lets
+`ret` pop the return PC:
+
+```text
+sp = fp
+old_fp = load32 [sp]
+sp = sp + 4
+ret
+```
+
+### Current Rux Compiler Boundary
+
+The current Rux source compiler helper-call lowering supports only `r1`-`r3`
+arguments. It must reject helper calls that need stack-passed arguments until
+stack-argument lowering is deliberately implemented. It still supports
+stack-backed helper locals and local byte arrays inside helper frames.
+
 The initial target must reject or lower through deliberate helper/runtime
 symbols, not silent fallback behavior:
 
@@ -104,6 +195,8 @@ symbols, not silent fallback behavior:
 - struct returns;
 - varargs;
 - exceptions;
+- stack bounds metadata;
+- callee cleanup;
 - tail calls;
 - dynamic linking;
 - position-independent code.
@@ -282,10 +375,10 @@ That address is a normal `u32` guest RAM address and can be consumed by
 passing a helper-owned block buffer to storage MMIO code. The current slice does
 not add general pointer arithmetic or pointer-passed helper parameters.
 
-The current frame slice does not add stack-passed arguments, recursion, or
-return slots. User-space programs use the same compiler-owned helper stack
-convention as other Rux16 targets, with process ownership defined by the OS exec
-service rather than by helper call lowering.
+The current Rux compiler frame slice does not implement stack-passed helper
+arguments, recursion, or return slots. User-space programs use the same
+compiler-owned helper stack convention as other Rux16 targets, with process
+ownership defined by the OS exec service rather than by helper call lowering.
 
 ## Target Stack Ownership
 
@@ -326,7 +419,7 @@ The return address is the next instruction after `call`. Helper return values
 are passed in `r0`; the first three helper arguments enter the callee in `r1`,
 `r2`, and `r3`, then the compiler-owned callee prologue copies them into stable
 local storage. Stack load/store faults are normal Rux16 CPU faults. The first
-ABI slice does not add stack bounds metadata, stack-passed arguments, or a
+ABI slice does not add stack bounds metadata, callee-cleaned arguments, or a
 fallback return path.
 
 ## Compiler-Generated Register Saves

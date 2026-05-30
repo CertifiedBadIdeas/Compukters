@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Defined the implementation-ready Rux16 calling convention for external
+  LLVM-facing lowering, including scalar ABI slots, caller-saved registers,
+  stack argument layout, frame-pointer offsets, caller cleanup, and the current
+  Rux compiler boundary that still rejects helper calls needing stack-passed
+  arguments.
 - Replaced the experimental Rux16 integer ALU encoding with the canonical
   two-word `alu_rrr` format `0x2a0s 0x00bc`, covering `add`, `sub`, bitwise
   ops, shifts, equality, inequality, unsigned less-than, and signed less-than.
