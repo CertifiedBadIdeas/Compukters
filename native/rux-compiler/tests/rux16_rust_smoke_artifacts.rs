@@ -21,6 +21,8 @@ fn rust_nocore_smoke_artifacts_are_documented_and_strict() {
     assert!(script.contains("#![no_main]"));
     assert!(script.contains("meta_sized"));
     assert!(script.contains("pointee_sized"));
+    assert!(script.contains("rux16-memory-helpers"));
+    assert!(script.contains("\"$WORK_DIR/helpers.o\""));
     assert!(script.contains("debug_bytes=2a"));
     assert!(!script.contains("|| true"));
 

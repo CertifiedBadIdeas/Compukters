@@ -8,8 +8,9 @@
 
 `tools/rux16-rust-nocore-smoke.sh` is the first intended Rust smoke path for
 Rux16. It compiles a tiny `#![no_core]` Rust program with an unmangled
-`extern "C" fn main() -> i32`, links it with `rux16-startup`, executes the
-resulting program `RUXE`, and expects `debug_bytes=2a`.
+`extern "C" fn main() -> i32`, links it with `rux16-startup` and the explicit
+`rux16-memory-helpers` runtime object, executes the resulting program `RUXE`,
+and expects `debug_bytes=2a`.
 
 The script is strict. It requires a custom rustc that is:
 
