@@ -11,6 +11,8 @@ fn rust_nocore_smoke_artifacts_are_documented_and_strict() {
     let spec = fs::read_to_string(&target_spec).expect("Rux16 Rust target spec exists");
     assert!(spec.contains("\"llvm-target\": \"rux16\""));
     assert!(spec.contains("\"panic-strategy\": \"abort\""));
+    assert!(spec.contains("\"target-pointer-width\": 32"));
+    assert!(!spec.contains("\"target-pointer-width\": \"32\""));
 
     let script = fs::read_to_string(&smoke_script).expect("Rust no_core smoke script exists");
     assert!(script.contains("#![no_core]"));

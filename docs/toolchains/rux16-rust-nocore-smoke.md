@@ -3,6 +3,8 @@
 > Issue: [#132](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/132)
 >
 > Toolchain: [Rux16 LLVM Submodule](rux16-llvm-submodule.md)
+>
+> rustc bootstrap: [Rux16 rustc Bootstrap Path](rux16-rustc-bootstrap.md)
 
 `tools/rux16-rust-nocore-smoke.sh` is the first intended Rust smoke path for
 Rux16. It compiles a tiny `#![no_core]` Rust program with an unmangled
