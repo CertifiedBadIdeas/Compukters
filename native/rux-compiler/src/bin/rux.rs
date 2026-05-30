@@ -3,6 +3,8 @@ use rux_compiler::{
     advice, compile_rux16_artifact, inspect, object_link, rux16_disasm, rux16_runtime, ruxfs,
     volume,
 };
+use rux_vm::rux16::Rux16Signal;
+use rux_vm::rux_computer::RuxComputerHandle;
 use std::env;
 use std::fs;
 use std::process::ExitCode;
@@ -25,6 +27,7 @@ fn run(args: Vec<String>) -> Result<(), String> {
         "compile" => run_compile(&args[1..]),
         "link" => run_link(&args[1..]),
         "runtime" => run_runtime(&args[1..]),
+        "run" => run_program(&args[1..]),
         "check" => run_check(&args[1..]),
         "disasm" | "disassemble" => run_disasm(&args[1..]),
         "inspect" => run_inspect(&args[1..]),
@@ -32,6 +35,29 @@ fn run(args: Vec<String>) -> Result<(), String> {
         "volume" => run_volume(&args[1..]),
         _ => usage_error(),
     }
+}
+
+fn run_program(args: &[String]) -> Result<(), String> {
+    if args.len() != 1 {
+        return run_usage_error();
+    }
+    let program =
+        fs::read(&args[0]).map_err(|error| format!("failed to read {}: {error}", args[0]))?;
+    let mut handle =
+        RuxComputerHandle::create_rux16_bios_flash(&[0x01, 0x00], 64 * 1024, 1_000_000)
+            .map_err(|error| format!("failed to create Rux16 computer: {error}"))?;
+    handle
+        .exec_ruxe_program_from_bytes(&program, 1_000_000)
+        .map_err(|error| format!("failed to install RUXE program: {error}"))?;
+    let signal = handle
+        .run_rux16_until_signal()
+        .map_err(|error| format!("failed to run Rux16 program: {error}"))?;
+    println!(
+        "signal={} debug_bytes={}",
+        signal_name(signal),
+        hex_bytes(handle.debug_output_bytes())
+    );
+    Ok(())
 }
 
 fn run_inspect(args: &[String]) -> Result<(), String> {
@@ -416,6 +442,23 @@ fn run_ruxfs(args: &[String]) -> Result<(), String> {
     }
 }
 
+fn signal_name(signal: Rux16Signal) -> &'static str {
+    match signal {
+        Rux16Signal::Halt => "halt",
+        Rux16Signal::StepLimitExceeded => "step-limit-exceeded",
+    }
+}
+
+fn hex_bytes(bytes: &[u8]) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut output = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        output.push(HEX[(byte >> 4) as usize] as char);
+        output.push(HEX[(byte & 0x0f) as usize] as char);
+    }
+    output
+}
+
 fn parse_blocks(value: &str) -> Result<u32, String> {
     let blocks = value
         .parse::<u32>()
@@ -437,7 +480,7 @@ fn parse_size(value: &str) -> Result<usize, String> {
 }
 
 fn usage_error() -> Result<(), String> {
-    Err("usage: rux check <input.rx>\n       rux compile [--target <bios|boot|kernel|program>] <input.rx> -o <output>\n       rux link [--target <boot|kernel|program>] <input.o>... -o <output.ruxe>\n       rux runtime rux16-startup -o <startup.o>\n       rux disasm --target <bios|boot|kernel|program> <input>\n       rux inspect <blob>\n       rux volume <create|init|put-boot|put-kernel> ...\n       rux fs <filesystem> ...".to_string())
+    Err("usage: rux check <input.rx>\n       rux compile [--target <bios|boot|kernel|program>] <input.rx> -o <output>\n       rux link [--target <boot|kernel|program>] <input.o>... -o <output.ruxe>\n       rux runtime rux16-startup -o <startup.o>\n       rux run <program.ruxe>\n       rux disasm --target <bios|boot|kernel|program> <input>\n       rux inspect <blob>\n       rux volume <create|init|put-boot|put-kernel> ...\n       rux fs <filesystem> ...".to_string())
 }
 
 fn check_usage_error() -> Result<(), String> {
@@ -462,6 +505,10 @@ fn link_usage_message() -> String {
 
 fn runtime_usage_error() -> Result<(), String> {
     Err("usage: rux runtime rux16-startup -o <startup.o>".to_string())
+}
+
+fn run_usage_error() -> Result<(), String> {
+    Err("usage: rux run <program.ruxe>".to_string())
 }
 
 fn disasm_usage_error() -> Result<DisasmConfig, String> {
