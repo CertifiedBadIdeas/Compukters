@@ -12,6 +12,12 @@ Rux16. It compiles a tiny `#![no_core]` Rust program with an unmangled
 `rux16-memory-helpers` runtime object, executes the resulting program `RUXE`,
 and expects `debug_bytes=2a`.
 
+`rux16-memory-helpers` is also Rust-owned: `rux runtime rux16-memory-helpers`
+builds `native/rux-compiler/runtime/rux16_memory_helpers.rs` with the same
+custom Rux16 rustc, then lowers the generated LLVM IR with `llc` from
+`RUX16_LLVM_BIN_DIR`. The tool does not keep a host-generated helper object
+path.
+
 The script is strict. It requires a custom rustc that is:
 
 - nightly-capable, because `no_core` and custom target JSON are unstable;

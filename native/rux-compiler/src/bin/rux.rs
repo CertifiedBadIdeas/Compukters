@@ -7,7 +7,9 @@ use rux_vm::rux16::Rux16Signal;
 use rux_vm::rux_computer::RuxComputerHandle;
 use std::env;
 use std::fs;
-use std::process::ExitCode;
+use std::path::{Path, PathBuf};
+use std::process::{Command, ExitCode};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 fn main() -> ExitCode {
     match run(env::args().skip(1).collect()) {
@@ -136,12 +138,153 @@ fn run_runtime(args: &[String]) -> Result<(), String> {
             if args.len() != 3 || args[1] != "-o" {
                 return runtime_usage_error();
             }
-            let bytes = rux16_runtime::rux16_memory_helpers_object();
-            fs::write(&args[2], bytes)
-                .map_err(|error| format!("failed to write {}: {error}", args[2]))
+            build_rux16_memory_helpers(Path::new(&args[2]))
         }
         _ => runtime_usage_error(),
     }
+}
+
+fn build_rux16_memory_helpers(output_path: &Path) -> Result<(), String> {
+    let rustc = env::var("RUX16_RUSTC")
+        .map_err(|_| "RUX16_RUSTC must point to a custom Rux16 rustc".to_string())?;
+    let rustc_path = PathBuf::from(&rustc);
+    if !rustc_path.is_file() {
+        return Err(format!(
+            "RUX16_RUSTC must point to a custom Rux16 rustc: {}",
+            rustc_path.display()
+        ));
+    }
+
+    let llvm_bin_dir = env::var("RUX16_LLVM_BIN_DIR")
+        .map_err(|_| "RUX16_LLVM_BIN_DIR must point to Rux16 LLVM tools".to_string())?;
+    let llc_path = PathBuf::from(llvm_bin_dir).join("llc");
+    if !llc_path.is_file() {
+        return Err(format!(
+            "RUX16_LLVM_BIN_DIR must contain Rux16 llc: {}",
+            llc_path.display()
+        ));
+    }
+
+    let target_spec = env::var("RUX16_RUST_TARGET_JSON")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| repo_root().join("tools/rux16-unknown-ruxos.json"));
+    if !target_spec.is_file() {
+        return Err(format!(
+            "Rux16 Rust target spec is missing: {}",
+            target_spec.display()
+        ));
+    }
+
+    let source = runtime_source_path("rux16_memory_helpers.rs");
+    if !source.is_file() {
+        return Err(format!(
+            "Rux16 runtime helper source is missing: {}",
+            source.display()
+        ));
+    }
+
+    let _ = fs::remove_file(output_path);
+    let ir_path = temp_runtime_path("rux16-memory-helpers", "ll");
+    let rustc_output = Command::new(&rustc_path)
+        .args([
+            "-Z",
+            "unstable-options",
+            "--edition=2021",
+            "--target",
+            target_spec.to_str().ok_or_else(|| {
+                format!(
+                    "Rux16 Rust target spec path is not UTF-8: {}",
+                    target_spec.display()
+                )
+            })?,
+            "-C",
+            "panic=abort",
+            "-C",
+            "relocation-model=static",
+            "-C",
+            "overflow-checks=off",
+            "--emit=llvm-ir",
+            source.to_str().ok_or_else(|| {
+                format!(
+                    "Rux16 runtime helper source path is not UTF-8: {}",
+                    source.display()
+                )
+            })?,
+            "-o",
+            ir_path.to_str().ok_or_else(|| {
+                format!(
+                    "Rux16 runtime helper IR path is not UTF-8: {}",
+                    ir_path.display()
+                )
+            })?,
+        ])
+        .output()
+        .map_err(|error| format!("failed to run {}: {error}", rustc_path.display()))?;
+
+    if !rustc_output.status.success() {
+        let _ = fs::remove_file(output_path);
+        let _ = fs::remove_file(&ir_path);
+        return Err(format!(
+            "failed to compile Rux16 memory helpers to LLVM IR with {}:\n{}{}",
+            rustc_path.display(),
+            String::from_utf8_lossy(&rustc_output.stdout),
+            String::from_utf8_lossy(&rustc_output.stderr)
+        ));
+    }
+
+    let llc_output = Command::new(&llc_path)
+        .args([
+            "-mtriple=rux16",
+            "-filetype=obj",
+            ir_path.to_str().ok_or_else(|| {
+                format!(
+                    "Rux16 runtime helper IR path is not UTF-8: {}",
+                    ir_path.display()
+                )
+            })?,
+            "-o",
+            output_path.to_str().ok_or_else(|| {
+                format!(
+                    "Rux16 runtime helper output path is not UTF-8: {}",
+                    output_path.display()
+                )
+            })?,
+        ])
+        .output()
+        .map_err(|error| format!("failed to run {}: {error}", llc_path.display()))?;
+    let _ = fs::remove_file(&ir_path);
+    if !llc_output.status.success() {
+        let _ = fs::remove_file(output_path);
+        return Err(format!(
+            "failed to lower Rux16 memory helpers with {}:\n{}{}",
+            llc_path.display(),
+            String::from_utf8_lossy(&llc_output.stdout),
+            String::from_utf8_lossy(&llc_output.stderr)
+        ));
+    }
+    Ok(())
+}
+
+fn runtime_source_path(name: &str) -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("runtime")
+        .join(name)
+}
+
+fn repo_root() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(Path::parent)
+        .expect("native/rux-compiler has repo root grandparent")
+        .to_path_buf()
+}
+
+fn temp_runtime_path(stem: &str, extension: &str) -> PathBuf {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("system time is after Unix epoch")
+        .as_nanos();
+    env::temp_dir().join(format!("{stem}-{}-{nanos}.{extension}", std::process::id()))
 }
 
 fn run_disasm(args: &[String]) -> Result<(), String> {

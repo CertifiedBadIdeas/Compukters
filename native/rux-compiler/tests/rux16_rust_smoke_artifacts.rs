@@ -7,6 +7,7 @@ fn rust_nocore_smoke_artifacts_are_documented_and_strict() {
     let target_spec = root.join("tools/rux16-unknown-ruxos.json");
     let smoke_script = root.join("tools/rux16-rust-nocore-smoke.sh");
     let bootstrap_probe = root.join("tools/rux16-rustc-bootstrap-probe.sh");
+    let runtime_helpers = root.join("native/rux-compiler/runtime/rux16_memory_helpers.rs");
     let docs = root.join("docs/toolchains/rux16-rust-nocore-smoke.md");
     let bootstrap_docs = root.join("docs/toolchains/rux16-rustc-bootstrap.md");
 
@@ -25,6 +26,14 @@ fn rust_nocore_smoke_artifacts_are_documented_and_strict() {
     assert!(script.contains("\"$WORK_DIR/helpers.o\""));
     assert!(script.contains("debug_bytes=2a"));
     assert!(!script.contains("|| true"));
+
+    let helpers = fs::read_to_string(&runtime_helpers).expect("Rux16 runtime helper source exists");
+    assert!(helpers.contains("#![no_core]"));
+    assert!(helpers.contains("#![no_main]"));
+    assert!(helpers.contains("__rux16_memcpy"));
+    assert!(helpers.contains("__rux16_memset"));
+    assert!(helpers.contains("__rux16_memmove"));
+    assert!(!helpers.contains("extern crate std"));
 
     let probe = fs::read_to_string(&bootstrap_probe).expect("Rust bootstrap probe script exists");
     assert!(probe.contains("toolchains/Compukter-Kraft-rust"));

@@ -62,6 +62,14 @@ The startup object writes the low byte of `main`'s `r0` return value to
 initial return-42/add proof boundary. It is not a libc, an OS ABI, or a syscall
 surface.
 
+The memory helper object is built from the bundled Rust `#![no_core]` runtime
+source at `native/rux-compiler/runtime/rux16_memory_helpers.rs`. Building it
+requires `RUX16_RUSTC` to point at the custom rustc that contains the Rux16 LLVM
+target and `RUX16_LLVM_BIN_DIR` to point at the Rux16 LLVM tools used to lower
+the generated LLVM IR into an ELF object. `RUX16_RUST_TARGET_JSON` can override
+the target spec; otherwise the repo target spec at
+`tools/rux16-unknown-ruxos.json` is used.
+
 Runtime helper symbol names:
 
 ```text
@@ -74,7 +82,7 @@ Runtime helper symbol names:
 
 Missing helper symbols are link-time errors. The linker must not synthesize
 helper bodies, fall back to VM hooks, or ask the VM to resolve runtime helpers.
-Callers link helper support by passing the generated helper object as an
+Callers link helper support by passing the Rust-built helper object as an
 ordinary `rux link` input beside startup and application objects. The helper
 object is not implicit.
 
