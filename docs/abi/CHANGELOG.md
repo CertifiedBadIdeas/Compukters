@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- LLVM K16 lowering now materializes global and external symbol addresses with
+  `const32` plus `R_K16_ABS32` relocations.
 - LLVM K16 lowering now supports branchless scalar `select` from compare
   results plus `load16`/`store16` instruction selection and object emission.
 - LLVM K16 lowering now emits caller-cleaned stack arguments after `r1..r3`,
