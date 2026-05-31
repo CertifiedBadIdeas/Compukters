@@ -27,7 +27,7 @@ The Rust source fork is tracked as a repository submodule:
 toolchains/Compukter-Kraft-rust
   url: git@github.com:CertifiedBadIdeas/Compukter-Kraft-rust.git
   branch: k16
-  commit: 8fba61f0e772bd97c4c27b67bbb090db1f4f4210
+  commit: d22824cba4ff01b6156aa5a4cd411859a693fcda
 ```
 
 Fork branch policy:
@@ -187,8 +187,13 @@ K16_LLVM_BIN_DIR=/path/to/k16/llvm/bin \
 tools/k16-rust-core-smoke.sh
 ```
 
-That path uses `-Z build-std=core` and is intentionally limited to `core`
-without `alloc` or hosted `std`.
+That path uses `-Z build-std=core` and `-Z json-target-spec`, and is
+intentionally limited to `core` without `alloc` or hosted `std`.
+
+With the updated `k16` Rust and LLVM branches plus a rebuilt stage1 host `std`
+sysroot, this path reaches K16 backend codegen for `core`. The current blocker
+is missing lowering for the wider Rust `core` surface, including jump tables and
+some compiler-builtins library call operations.
 
 ## Follow-Up
 
