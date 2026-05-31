@@ -3,8 +3,8 @@ use crate::{
     advice, compile_rux16_artifact, inspect, object_link, rux16_disasm, rux16_runtime, ruxfs,
     volume,
 };
-use rux_vm::k16_computer::K16ComputerHandle;
-use rux_vm::rux16::Rux16Signal;
+use k16_vm::k16_computer::K16ComputerHandle;
+use k16_vm::rux16::Rux16Signal;
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};

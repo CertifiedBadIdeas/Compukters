@@ -75,6 +75,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "k16-vm"
+version = "0.1.0"
+dependencies = [
+ "jni",
+ "thiserror",
+]
+
+[[package]]
 name = "log"
 version = "0.4.29"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -108,15 +116,7 @@ dependencies = [
 name = "rux-compiler"
 version = "0.1.0"
 dependencies = [
- "rux-vm",
-]
-
-[[package]]
-name = "rux-vm"
-version = "0.1.0"
-dependencies = [
- "jni",
- "thiserror",
+ "k16-vm",
 ]
 
 [[package]]

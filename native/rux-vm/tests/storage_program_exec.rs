@@ -1,6 +1,6 @@
-use rux_vm::computer_machine::ComputerMachine;
-use rux_vm::k16_computer::K16ComputerHandle;
-use rux_vm::{ruxe, storage_image};
+use k16_vm::computer_machine::ComputerMachine;
+use k16_vm::k16_computer::K16ComputerHandle;
+use k16_vm::{ruxe, storage_image};
 
 #[test]
 fn runtime_exec_runs_program_ruxe_payload_from_entry_pc() {

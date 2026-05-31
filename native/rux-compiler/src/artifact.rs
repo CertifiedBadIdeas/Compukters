@@ -33,7 +33,7 @@ impl Rux16ArtifactTarget {
 
     pub fn base_address(self) -> u32 {
         match self {
-            Self::Bios => rux_vm::computer_machine::ComputerMachine::RUX16_BIOS_FLASH_BASE,
+            Self::Bios => k16_vm::computer_machine::ComputerMachine::RUX16_BIOS_FLASH_BASE,
             Self::Boot => 2048,
             Self::Kernel => 0x4000,
             Self::Program => Self::PROGRAM_LOAD_BASE,

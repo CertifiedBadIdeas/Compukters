@@ -3,13 +3,13 @@
 **Programmable computers for Minecraft — booted end-to-end on a custom Rust VM.**
 
 Inspired by ComputerCraft. With one big difference: the runtime is not Lua —
-it is a native Rust virtual machine (`rux-vm`) wrapped via JNI.
+it is a native Rust virtual machine (`k16-vm`) wrapped via JNI.
 
 ## What you get
 
 - 💻 **Notebook** — a portable player-facing computer item that boots its own
   Rux VM instance on a background daemon thread.
-- 🖥 **Rux VM** — a deterministic, sandboxed virtual machine implemented in
+- 🖥 **Kraft16 VM** — a deterministic, sandboxed virtual machine implemented in
   Rust. Boots Rux16 code from per-computer `bios.kflash` files and storage0
   `.kv` boot media.
 - 🔌 **Display + input devices** — accelerated framebuffer with `copyRect` /

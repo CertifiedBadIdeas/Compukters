@@ -58,7 +58,7 @@ private val rustVmNativePlatform = currentRustVmNativePlatform()
 private val rustVmNativeLibrary = rustVmCrateDir.file("target/debug/${rustVmNativePlatform.libraryName}")
 private val rustVmReleaseNativeLibrary = rustVmCrateDir.file("target/release/${rustVmNativePlatform.libraryName}")
 private val rustVmWindowsX64Target = "x86_64-pc-windows-gnu"
-private val rustVmWindowsX64NativeLibrary = rustVmCrateDir.file("target/$rustVmWindowsX64Target/release/rux_vm.dll")
+private val rustVmWindowsX64NativeLibrary = rustVmCrateDir.file("target/$rustVmWindowsX64Target/release/k16_vm.dll")
 private val rustVmNativeDistDir = rustVmCrateDir.dir("dist/natives")
 private val productionRustVmNativeResources = layout.buildDirectory.dir("generated/production-rust-vm-native-resources")
 private val isProductionUniversalJarRequested =
@@ -140,7 +140,7 @@ val stageProductionRustVmNativeLibraries =
         }
         from(if (rustVmNativePlatform.id == "windows-x86_64") rustVmReleaseNativeLibrary else rustVmWindowsX64NativeLibrary) {
             into("natives/windows-x86_64")
-            rename { "rux_vm.dll" }
+            rename { "k16_vm.dll" }
         }
         from(rustVmNativeDistDir) {
             include("**/*")

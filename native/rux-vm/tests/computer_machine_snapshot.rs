@@ -1,8 +1,8 @@
-use rux_vm::computer_machine::{
+use k16_vm::computer_machine::{
     decode_snapshot_v1, ComputerMachine, ComputerMachineProfile, COMPUTER_SNAPSHOT_V1_HEADER_SIZE,
     COMPUTER_SNAPSHOT_V1_MAGIC, COMPUTER_SNAPSHOT_V1_RUX16_CPU_RECORD_SIZE,
 };
-use rux_vm::rux16::Rux16Signal;
+use k16_vm::rux16::Rux16Signal;
 
 const CONTROL_DEVICE_RECORD_SIZE: usize = 20;
 const EMPTY_DEBUG_DEVICE_RECORD_SIZE: usize = 8;
@@ -220,7 +220,7 @@ fn computer_machine_snapshot_v1_restores_storage0_controller_state() {
     machine
         .bus_store_i32(
             ComputerMachine::STORAGE0_COMMAND,
-            rux_vm::computer_abi::STORAGE_COMMAND_READ_BLOCKS,
+            k16_vm::computer_abi::STORAGE_COMMAND_READ_BLOCKS,
         )
         .unwrap();
     machine
@@ -234,13 +234,13 @@ fn computer_machine_snapshot_v1_restores_storage0_controller_state() {
         restored
             .bus_load_i32(ComputerMachine::STORAGE0_STATUS)
             .unwrap(),
-        rux_vm::computer_abi::STORAGE_STATUS_DONE
+        k16_vm::computer_abi::STORAGE_STATUS_DONE
     );
     assert_eq!(
         restored
             .bus_load_i32(ComputerMachine::STORAGE0_ERROR)
             .unwrap(),
-        rux_vm::computer_abi::STORAGE_ERROR_NONE
+        k16_vm::computer_abi::STORAGE_ERROR_NONE
     );
     assert_eq!(
         restored
@@ -288,7 +288,7 @@ fn computer_machine_snapshot_v1_restores_storage0_controller_state() {
         restored
             .bus_load_i32(ComputerMachine::STORAGE0_MEDIA_STATUS)
             .unwrap(),
-        rux_vm::computer_abi::STORAGE_MEDIA_PRESENT
+        k16_vm::computer_abi::STORAGE_MEDIA_PRESENT
     );
 }
 

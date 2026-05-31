@@ -22,6 +22,15 @@ fn compiler_source_does_not_expose_legacy_low_image_runtime_path() {
     }
 }
 
+#[test]
+fn compiler_depends_on_k16_vm_without_rux_vm_alias() {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let cargo_toml = fs::read_to_string(manifest_dir.join("Cargo.toml")).unwrap();
+
+    assert!(cargo_toml.contains("k16-vm = { path = \"../rux-vm\" }"));
+    assert!(!cargo_toml.contains("rux-vm ="));
+}
+
 fn collect_rust_source(dir: &Path, output: &mut String) {
     for entry in fs::read_dir(dir).expect("compiler source directory reads") {
         let entry = entry.expect("compiler source entry reads");

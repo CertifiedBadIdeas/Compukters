@@ -31,7 +31,7 @@ pub fn rux16_startup_object() -> Vec<u8> {
     emit_const32(
         &mut text,
         SCRATCH_REGISTER,
-        rux_vm::computer_abi::DEBUG_WRITE,
+        k16_vm::computer_abi::DEBUG_WRITE,
     );
     emit_word(&mut text, store8(SCRATCH_REGISTER, RETURN_REGISTER));
     emit_word(&mut text, halt());

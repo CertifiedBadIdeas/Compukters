@@ -4,4 +4,4 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-rux-vm = { path = "../rux-vm" }
+k16-vm = { path = "../rux-vm" }
