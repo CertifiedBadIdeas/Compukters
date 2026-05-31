@@ -63,8 +63,8 @@ toolchain must fail before the VM run boundary.
 The initial LLVM register classification is:
 
 ```text
-r0       return value and scratch
-r1-r3    first integer or pointer arguments
+r0       first return value and scratch
+r1-r3    first integer or pointer arguments, or additional return values
 r4-r11   allocatable general-purpose registers
 r12      frame pointer when frame pointers are enabled
 r13-r14  backend scratch registers for instruction selection and lowering
@@ -83,16 +83,20 @@ the low bits of their 32-bit ABI slot. Signed operations on narrow source
 values must explicitly perform signed interpretation during lowering; the ABI
 slot itself does not carry signedness.
 
-The first value model supports one scalar return value in `r0`. Multi-value
-returns, `i64`, aggregate-by-value arguments, struct returns, varargs, and
-implicit return slots are unsupported in v1.
+The first value model supports up to four scalar `i32` return slots in
+`r0..r3`. This covers LLVM/Rust scalar pair-style returns such as small
+result/status aggregates without adding a hidden return pointer. `i64`,
+aggregate-by-value arguments, memory-returned structs, varargs, and implicit
+return slots are unsupported in v1.
 
 ### LLVM-Facing Register Calling Convention
 
 The register call ABI is:
 
-- `r0` receives the scalar return value and is also a scratch register;
-- `r1`, `r2`, and `r3` receive logical arguments 0, 1, and 2;
+- `r0` receives return value 0 and is also a scratch register;
+- `r1`, `r2`, and `r3` receive logical arguments 0, 1, and 2 on function
+  entry;
+- `r1`, `r2`, and `r3` receive return values 1, 2, and 3 on function return;
 - `r4-r11` are allocatable general-purpose registers;
 - `r12` is the frame pointer when frame pointers are enabled;
 - `r13-r14` are backend scratch registers for instruction selection and
