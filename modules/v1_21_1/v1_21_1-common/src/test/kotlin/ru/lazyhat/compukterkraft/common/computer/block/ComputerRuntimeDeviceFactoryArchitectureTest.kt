@@ -84,6 +84,17 @@ class ComputerRuntimeDeviceFactoryArchitectureTest {
     }
 
     @Test
+    fun runtimeSnapshotNbtKeyUsesK16Name() {
+        val source =
+            Path
+                .of("src/main/kotlin/ru/lazyhat/compukterkraft/common/utils/NBTUtls.kt")
+                .readText()
+
+        assertTrue(source.contains("K16RuntimeSnapshot"))
+        assertFalse(source.contains("RuxRuntimeSnapshot"))
+    }
+
+    @Test
     fun computerBlockEntityMarksChunkDirtyAfterCapturingUnloadSnapshot() {
         val source =
             Path
