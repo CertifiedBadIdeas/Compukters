@@ -50,7 +50,9 @@ metadata and compiler-builtins expectations. Even without allocation or `std`,
 `core` pulls in assumptions around panic language items, memory intrinsics,
 integer helper operations, and target feature metadata.
 
-This is the right second milestone, not the first one.
+This is now tracked as the next milestone after the no_core proof:
+[`tools/k16-rust-core-smoke.sh`](k16-rust-core-smoke.md). The path must stay
+core only: no `alloc`, no hosted `std`, and no hidden host fallback.
 
 ### `no_std`
 
@@ -202,6 +204,7 @@ Rux `std::fs`. Hosted Rust is blocked until that exists.
 
 - Rust target spec and driver invocation for a local experimental K16 target.
 - A no-core smoke that proves `rustc -> object -> K16E -> VM`.
+- A core smoke that proves `cargo rustc -Z build-std=core -> object -> K16E -> VM`.
 - Explicit K16 runtime helper objects for memory intrinsics and compiler
   builtins that Rust/LLVM may emit.
 - Panic-abort behavior tied to the Rux panic/error model.
@@ -215,14 +218,16 @@ Start with a `no_core` smoke that reuses the existing Clang proof boundary:
 return `42` from `main`, link with `k16-startup`, execute through `k16 run`,
 and observe `debug_bytes=2a`.
 
-After that, add the smallest runtime-helper object set needed by `core`, then
-define `panic=abort` behavior. Only after the OS syscall/capability boundary is
-stable should K16 try `no_std + alloc` or hosted Rust paths.
+After that, use the core smoke to build the smallest `core` sysroot K16 can
+support. Only after the OS syscall/capability boundary is stable should K16 try
+`no_std + alloc` or hosted Rust paths.
 
 ## Follow-Up Issues
 
 - [#132](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/132):
   Add first Rust `no_core` smoke for K16.
+- [#148](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/148):
+  Build K16 Rust `core` sysroot.
 - [#133](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/133):
   Add K16 runtime helper objects for compiler-generated memory operations.
 - [#29](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/29):
