@@ -44,7 +44,7 @@ open class NotebookBlockEntity(
     private var notebookMenuViewers: Int = 0
 
     override fun createComputer(id: Int): RuntimeDevice =
-        ComputerRuntimeDeviceFactory.createRuxComputer(level as ServerLevel, this, id)
+        ComputerRuntimeDeviceFactory.createK16Computer(level as ServerLevel, this, id)
 
     override fun updateBlockState(newState: ComputerState) {
         val currentState = level?.getBlockState(blockPos) ?: return
