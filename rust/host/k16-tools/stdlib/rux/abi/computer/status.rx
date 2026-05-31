@@ -1,5 +1,0 @@
-pub const RESET: i32 = 0;
-pub const BOOTING: i32 = 1;
-pub const READY: i32 = 2;
-pub const HALTED: i32 = 3;
-pub const PANIC: i32 = 4;

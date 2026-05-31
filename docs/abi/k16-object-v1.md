@@ -20,7 +20,7 @@ compiler and linker tooling outside the VM.
 The static pipeline is:
 
 ```text
-LLVM backend or Rux assembler
+LLVM backend or handwritten K16 object fixtures
   -> K16 ELF32 ET_REL object
   -> K16 linker
   -> K16E fixed image

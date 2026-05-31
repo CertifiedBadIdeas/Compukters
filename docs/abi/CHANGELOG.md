@@ -2,8 +2,9 @@
 
 ## Unreleased
 
-- The public `rux compile` CLI path is retired. Rux source checks remain under
-  `rux check`, while K16 artifact work stays under `k16`.
+- The public `rux` CLI surface and active Rux compiler/frontend sources are
+  retired. K16 artifact work stays under `k16`, and guest-owned source belongs
+  under `rust/guest`.
 - `k16 runtime k16-memory-helpers` now compiles its helper source from
   `rust/guest/k16-rt`, so host tooling no longer owns guest runtime code.
 - `k16 runtime k16-memory-helpers` now owns the first integer compiler-rt

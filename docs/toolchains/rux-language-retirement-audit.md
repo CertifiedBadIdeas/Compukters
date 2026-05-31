@@ -19,9 +19,10 @@ future VM, ISA, artifact, storage, filesystem, and Rust target names should use
 `Kraft16`/`K16`. Current ABI documents may still describe existing Rux-named
 formats until each compatibility-affecting ABI migration lands.
 
-## Current Rux-Language Inputs
+## Retired Rux-Language Inputs
 
-Tracked `.rx` source is concentrated under `rust/host/k16-tools`:
+The active `rust/host/k16-tools` tree no longer owns tracked `.rx` guest source.
+The retired source groups were:
 
 - `examples/firmware/*.rx`: BIOS and old firmware demos, including
   `k16_bios.rx`.
@@ -34,12 +35,11 @@ Tracked `.rx` source is concentrated under `rust/host/k16-tools`:
 - `stdlib/rux/abi/**/*.rx`: low-level ABI wrapper modules.
 - `stdlib/std/*.rx`: higher-level Rux stdlib modules.
 
-These are all retirement targets. They may remain temporarily only while they
-are still the only working boot-chain fixtures.
+These groups are no longer part of the active host-tool source tree.
 
 ## Compiler And CLI Surface
 
-The Rux-language implementation currently lives in:
+The retired Rux-language implementation lived in:
 
 - `rust/host/k16-tools/src/frontend/*`: AST, lexer, parser, resolver, and
   diagnostics.
@@ -50,26 +50,23 @@ The Rux-language implementation currently lives in:
 - `rust/host/k16-tools/src/advice.rs`: source-level improvement checks for Rux
   listings.
 
-The parts of `rust/host/k16-tools` that should survive are the machine/tooling
-pieces: K16 object assembly/disassembly, object linking, K16E encoding,
-volume/filesystem tooling, inspect/run helpers, and Rust-target smoke support.
-Those may need a later crate/CLI rename, but they are not language frontend
-features.
+The surviving parts of `rust/host/k16-tools` are host-side machine/tooling
+pieces: K16 disassembly, object linking, K16E encoding, volume/filesystem
+tooling, inspect/run helpers, and Rust-target smoke support. Guest runtime
+source belongs under `rust/guest/k16-rt`.
 
-## Build Integration Blockers
+## Build Integration Status
 
-The NeoForge module still generates bundled firmware and storage images from
-Rux source:
+The old NeoForge Rux-source build integration generated bundled firmware and
+storage images from:
 
 - `k16_bios.rx` -> `firmware/k16-bios.kflash`;
 - `kernel_loader.rx` -> `kernel-loader.kb`;
 - `display_ok.rx` -> `display-ok.kx`.
 
-This is wired in
-`modules/v1_21_1/v1_21_1-neoforge/build.gradle.kts` through `cargo run --bin
-rux -- compile`. The first practical migration target is to replace these
-inputs with Rust-built or object-level artifacts so Gradle no longer depends
-on `.rx` source for the bundled boot chain.
+Those source inputs are not the intended guest software structure. New BIOS,
+bootloader, kernel, runtime, and program work should be Rust-owned under
+`rust/guest`.
 
 ## Test Blockers
 
@@ -87,8 +84,8 @@ The highest-impact Rux-language test dependencies are:
 - `rust/host/k16-tools/tests/rux_public_cli_surface.rs`: expects public help
   text to expose `rux compile`.
 
-These tests should not be deleted first. They should be replaced with Rust
-artifact, object fixture, or ABI/tooling tests as each dependency is migrated.
+These tests were migration blockers. Active host-tool coverage should now use
+Rust artifacts, object fixtures, or ABI/tooling tests instead of `.rx` source.
 
 ## Keep For Now
 
@@ -104,22 +101,18 @@ move toward Kraft16/K16 names as #147 implementation slices land:
   they operate on machine artifacts rather than Rux source;
 - LLVM, Clang, and Rust no_core smoke tooling.
 
-The command name `rux` remains correct for Rux-language behavior such as
-`rux compile` and `rux check`. Machine/artifact commands should move to `k16`
-when their slices are renamed.
+The public `rux` command is no longer part of active host tooling. Machine and
+artifact commands live under `k16`.
 
-## Replacement Order
+## Retirement State
 
-1. Replace bundled BIOS generation with Rust-built or object-level firmware.
-2. Replace bundled bootloader and kernel examples with Rust-built artifacts.
-3. Convert boot-chain tests from `.rx` source assertions to artifact/ABI
-   assertions.
-4. Remove Rux stdlib and source-level advice checks.
-5. Remove `rux compile` public CLI behavior.
-6. Remove the Rux frontend once no tracked tests or build tasks depend on it.
+1. Rux stdlib and source-level advice checks are removed from active tooling.
+2. The public `rux compile` and `rux check` CLI surface is removed from active
+   tooling.
+3. The Rux frontend is removed from active host tooling.
+4. Guest-owned Rust work continues under `rust/guest`.
 
-This order preserves the current working boot pipeline while moving every
-guest-code source artifact toward Rust.
+This is a retirement record, not a replacement plan.
 
 ## Follow-Up Issues
 
@@ -130,6 +123,7 @@ guest-code source artifact toward Rust.
 - [#143](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/143):
   Convert boot-chain tests away from Rux source dependencies.
 - [#142](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/142):
-  Remove Rux stdlib and source advice after artifact replacements.
+  Remove Rux stdlib and source advice.
 - [#144](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/144):
-  Remove `rux compile` and Rux frontend after Rust replacements.
+  Retire Rux compiler/frontend and move guest software ownership to
+  `rust/guest`.

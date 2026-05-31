@@ -1,3 +1,0 @@
-pub const BASE: u32 = 0x10000100u32;
-pub const WRITE: u32 = 0x10000100u32;
-pub const SIZE: u32 = 256u32;
