@@ -116,6 +116,7 @@ fn panic(_info: &PanicInfo<'_>) -> ! {
 RS
 
 if ! RUSTC="$RUSTC" \
+    RUSTFLAGS="-Cjump-tables=no" \
     "$CARGO" \
         rustc \
         -Z build-std=core \
@@ -126,6 +127,7 @@ if ! RUSTC="$RUSTC" \
         -- \
         -C panic=abort \
         -C relocation-model=static \
+        -Cjump-tables=no \
         --emit=obj \
         -o "$WORK_DIR/main.o" \
         2> "$WORK_DIR/cargo-rustc.stderr"; then

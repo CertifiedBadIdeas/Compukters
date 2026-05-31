@@ -90,6 +90,8 @@ fn rust_nocore_smoke_artifacts_are_documented_and_strict() {
         fs::read_to_string(&core_smoke_script).expect("Rust core smoke script exists");
     assert!(core_script.contains("-Z build-std=core"));
     assert!(core_script.contains("-Z json-target-spec"));
+    assert!(core_script.contains("RUSTFLAGS=\"-Cjump-tables=no\""));
+    assert!(core_script.contains("-Cjump-tables=no"));
     assert!(core_script.contains("#![no_std]"));
     assert!(core_script.contains("#![no_main]"));
     assert!(core_script.contains("core::hint::spin_loop"));
@@ -140,6 +142,13 @@ fn rust_nocore_smoke_artifacts_are_documented_and_strict() {
     assert!(probe.contains("llvm-objcopy"));
     assert!(probe.contains("llvm-profdata"));
     assert!(probe.contains("--targets-built"));
+    assert!(probe.contains("--obj-root"));
+    assert!(probe.contains("CMakeCache.txt"));
+    assert!(probe.contains("LLVM_SOURCE_DIR:STATIC="));
+    assert!(probe.contains("src/llvm-project"));
+    assert!(probe.contains("ls-tree HEAD src/llvm-project"));
+    assert!(probe.contains("merge-base --is-ancestor"));
+    assert!(probe.contains("Rust-pinned LLVM commit"));
     assert!(probe.contains("k16"));
     assert!(probe.contains("x.py"));
     assert!(!probe.contains("|| true"));
@@ -197,6 +206,8 @@ fn rust_nocore_smoke_artifacts_are_documented_and_strict() {
     assert!(bootstrap_docs.contains("K16_RUSTC"));
     assert!(bootstrap_docs.contains("K16_LLVM_BIN_DIR"));
     assert!(bootstrap_docs.contains("build-k16-min/bin/llvm-config"));
+    assert!(bootstrap_docs.contains("Rust-pinned LLVM commit"));
+    assert!(bootstrap_docs.contains("merge-base --is-ancestor"));
     assert!(bootstrap_docs.contains("k16"));
     assert!(!bootstrap_docs.contains("tools/rux16-rustc-bootstrap-probe.sh"));
     assert!(!bootstrap_docs.contains("tools/rux16-rust-nocore-smoke.sh"));
