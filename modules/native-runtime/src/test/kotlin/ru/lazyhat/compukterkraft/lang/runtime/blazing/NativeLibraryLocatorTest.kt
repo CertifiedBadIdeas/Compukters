@@ -32,6 +32,12 @@ import kotlin.test.assertTrue
 
 class NativeLibraryLocatorTest {
     @Test
+    fun nativeLibraryPropertiesUseK16NamespaceWithoutRuxFallbacks() {
+        assertEquals("k16.vm.native.library", NativeLibraryLocator.LIBRARY_PROPERTY)
+        assertEquals("k16.vm.native.extract.dir", NativeLibraryLocator.EXTRACT_DIR_PROPERTY)
+    }
+
+    @Test
     fun normalizesLinuxAmd64Platform() {
         val platform = NativeLibraryLocator.platform(osName = "Linux", osArch = "amd64")
 

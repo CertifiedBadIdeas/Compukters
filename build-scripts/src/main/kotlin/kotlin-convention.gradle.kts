@@ -70,8 +70,8 @@ kotlin {
 
 tasks.test {
     useJUnitPlatform()
-    System.getProperty("rux.vm.native.library")?.takeIf { it.isNotBlank() }?.let { libraryPath ->
-        systemProperty("rux.vm.native.library", libraryPath)
+    System.getProperty("k16.vm.native.library")?.takeIf { it.isNotBlank() }?.let { libraryPath ->
+        systemProperty("k16.vm.native.library", libraryPath)
     }
 }
 

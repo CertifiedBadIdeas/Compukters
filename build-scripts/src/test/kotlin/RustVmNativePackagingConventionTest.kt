@@ -17,6 +17,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.nio.file.Files
@@ -55,6 +56,18 @@ class RustVmNativePackagingConventionTest {
     }
 
     @Test
+    fun gradleNativeRuntimePropertiesUseK16NamespaceWithoutRuxFallbacks() {
+        val kotlinConvention = kotlinConventionSource().readText()
+        val loomConvention = loomRunsConventionSource().readText()
+
+        assertTrue(kotlinConvention.contains("k16.vm.native.library"))
+        assertTrue(loomConvention.contains("k16.vm.native.display"))
+        assertTrue(loomConvention.contains("k16.vm.native.daemon"))
+        assertFalse(kotlinConvention.contains("rux.vm.native."))
+        assertFalse(loomConvention.contains("rux.vm.native."))
+    }
+
+    @Test
     fun metadataGenerationDoesNotTemplateExpandRuxImages() {
         val source = metadataConventionSource().readText()
 
@@ -72,6 +85,16 @@ class RustVmNativePackagingConventionTest {
             )
         return candidates.firstOrNull(Files::exists)
             ?: error("Could not locate loom-runs-convention.gradle.kts from ${System.getProperty("user.dir")}")
+    }
+
+    private fun kotlinConventionSource(): Path {
+        val candidates =
+            listOf(
+                Path.of(System.getProperty("user.dir"), "src/main/kotlin/kotlin-convention.gradle.kts"),
+                Path.of(System.getProperty("user.dir"), "build-scripts/src/main/kotlin/kotlin-convention.gradle.kts"),
+            )
+        return candidates.firstOrNull(Files::exists)
+            ?: error("Could not locate kotlin-convention.gradle.kts from ${System.getProperty("user.dir")}")
     }
 
     private fun metadataConventionSource(): Path {
