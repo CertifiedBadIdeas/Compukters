@@ -1,9 +1,10 @@
 #![no_std]
 #![no_main]
 
+extern crate k16_rt;
+
 use core::panic::PanicInfo;
 use k16_abi::computer::{control, debug, display0, status};
-use k16_abi::mmio;
 
 #[no_mangle]
 pub extern "C" fn _start() -> ! {
@@ -23,47 +24,61 @@ fn panic(_info: &PanicInfo) -> ! {
 
 fn clear_display() {
     unsafe {
-        mmio::<i32>(display0::COMMAND).write(display0::COMMAND_CLEAR);
+        write_i32(display0::COMMAND, display0::COMMAND_CLEAR);
     }
 }
 
 fn print_display_line(row: i32, bytes: &[u8]) {
     unsafe {
-        mmio::<i32>(display0::CURSOR_X).write(0);
-        mmio::<i32>(display0::CURSOR_Y).write(row);
+        write_i32(display0::CURSOR_X, 0);
+        write_i32(display0::CURSOR_Y, row);
     }
-    for byte in bytes {
+    let mut index = 0;
+    while index < bytes.len() {
         unsafe {
-            mmio::<u8>(display0::DATA).write(*byte);
-            mmio::<i32>(display0::COMMAND).write(display0::COMMAND_PUT_BYTE_AT_CURSOR);
+            write_u8(display0::DATA, *bytes.as_ptr().add(index));
+            write_i32(display0::COMMAND, display0::COMMAND_PUT_BYTE_AT_CURSOR);
         }
+        index += 1;
     }
 }
 
 fn print_debug(bytes: &[u8]) {
-    for byte in bytes {
+    let mut index = 0;
+    while index < bytes.len() {
         unsafe {
-            mmio::<u8>(debug::WRITE).write(*byte);
+            write_u8(debug::WRITE, *bytes.as_ptr().add(index));
         }
+        index += 1;
     }
 }
 
 fn set_halted(code: i32) {
     unsafe {
-        mmio::<i32>(control::PANIC_CODE).write(code);
-        mmio::<i32>(control::STATUS).write(status::HALTED);
+        write_i32(control::PANIC_CODE, code);
+        write_i32(control::STATUS, status::HALTED);
     }
 }
 
 fn set_panic() {
     unsafe {
-        mmio::<i32>(control::PANIC_CODE).write(status::PANIC);
-        mmio::<i32>(control::STATUS).write(status::PANIC);
+        write_i32(control::PANIC_CODE, status::PANIC);
+        write_i32(control::STATUS, status::PANIC);
+    }
+}
+
+unsafe fn write_i32(address: u32, value: i32) {
+    unsafe {
+        *(address as usize as *mut i32) = value;
+    }
+}
+
+unsafe fn write_u8(address: u32, value: u8) {
+    unsafe {
+        *(address as usize as *mut u8) = value;
     }
 }
 
 fn wait_forever() -> ! {
-    loop {
-        core::hint::spin_loop();
-    }
+    loop {}
 }

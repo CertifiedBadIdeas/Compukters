@@ -394,23 +394,26 @@ fn select_archive_members(objects: &mut Vec<ParsedObject>, archives: Vec<Vec<Par
             break;
         }
 
-        let mut changed = false;
-        for archive in &mut selected {
-            for member in archive {
+        let mut selected_member = None;
+        'archive_search: for (archive_index, archive) in selected.iter_mut().enumerate() {
+            for (member_index, member) in archive.iter_mut().enumerate() {
                 let Some(object) = member else {
                     continue;
                 };
                 if object.defines_any(&unresolved) {
-                    let object = member.take().expect("member is present");
-                    objects.push(object);
-                    changed = true;
+                    selected_member = Some((archive_index, member_index));
+                    break 'archive_search;
                 }
             }
         }
 
-        if !changed {
+        let Some((archive_index, member_index)) = selected_member else {
             break;
-        }
+        };
+        let object = selected[archive_index][member_index]
+            .take()
+            .expect("selected archive member is present");
+        objects.push(object);
     }
 }
 

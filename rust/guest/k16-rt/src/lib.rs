@@ -139,23 +139,8 @@ pub unsafe extern "C" fn memcmp(lhs: *const u8, rhs: *const u8, n: usize) -> i32
 }
 
 #[cfg_attr(not(test), no_mangle)]
-pub extern "C" fn __udivdi3(lhs: u64, rhs: u64) -> u64 {
-    k16_udiv64(lhs, rhs)
-}
-
-#[cfg_attr(not(test), no_mangle)]
-pub extern "C" fn __umoddi3(lhs: u64, rhs: u64) -> u64 {
-    k16_umod64(lhs, rhs)
-}
-
-#[cfg_attr(not(test), no_mangle)]
-pub extern "C" fn __divdi3(lhs: i64, rhs: i64) -> i64 {
-    k16_div64(lhs, rhs)
-}
-
-#[cfg_attr(not(test), no_mangle)]
-pub extern "C" fn __moddi3(lhs: i64, rhs: i64) -> i64 {
-    k16_mod64(lhs, rhs)
+pub extern "C" fn abort() -> ! {
+    loop {}
 }
 
 #[cfg(test)]
@@ -219,6 +204,11 @@ mod tests {
     }
 
     #[test]
+    fn abort_helper_has_c_abi_signature() {
+        let _abort: extern "C" fn() -> ! = abort;
+    }
+
+    #[test]
     fn unsigned_i64_division_helpers_match_rust_for_nonzero_divisors() {
         let cases = [
             (0u64, 1u64),
@@ -232,8 +222,6 @@ mod tests {
         for (lhs, rhs) in cases {
             assert_eq!(k16_udiv64(lhs, rhs), lhs / rhs, "{lhs} / {rhs}");
             assert_eq!(k16_umod64(lhs, rhs), lhs % rhs, "{lhs} % {rhs}");
-            assert_eq!(__udivdi3(lhs, rhs), lhs / rhs, "__udivdi3({lhs}, {rhs})");
-            assert_eq!(__umoddi3(lhs, rhs), lhs % rhs, "__umoddi3({lhs}, {rhs})");
         }
     }
 
@@ -253,16 +241,6 @@ mod tests {
         for (lhs, rhs) in cases {
             assert_eq!(k16_div64(lhs, rhs), lhs.wrapping_div(rhs), "{lhs} / {rhs}");
             assert_eq!(k16_mod64(lhs, rhs), lhs.wrapping_rem(rhs), "{lhs} % {rhs}");
-            assert_eq!(
-                __divdi3(lhs, rhs),
-                lhs.wrapping_div(rhs),
-                "__divdi3({lhs}, {rhs})"
-            );
-            assert_eq!(
-                __moddi3(lhs, rhs),
-                lhs.wrapping_rem(rhs),
-                "__moddi3({lhs}, {rhs})"
-            );
         }
     }
 }

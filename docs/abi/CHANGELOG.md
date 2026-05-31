@@ -10,6 +10,14 @@
 - NeoForge bundled BIOS generation now builds `rust/guest/k16-bios` as a Rust
   `bin` crate through `k16-ld`, so the `.kflash` is the linker output rather
   than an object-only Cargo emission followed by a separate Gradle link step.
+- NeoForge bundled bootloader and kernel generation now build
+  `rust/guest/k16-boot` and `rust/guest/k16-kernel` as Rust `bin` crates
+  through `k16-ld --k16-target=boot|kernel`. The bundled guest firmware path no
+  longer emits intermediate objects through Gradle for BIOS, bootloader, or
+  kernel artifacts.
+- Cargo-built K16 Rust bins now link `k16-rt` explicitly for freestanding
+  platform symbols such as `abort`, while Rust `compiler_builtins` remains the
+  provider for compiler arithmetic helper symbols pulled from `.rlib` archives.
 - `k16 link --target bios` now emits raw linked K16 BIOS flash bytes from K16
   object inputs with a reset-address trampoline that initializes `sp` and jumps
   to `_start`, so Rust-authored BIOS firmware has a host-tool path to `.kflash`

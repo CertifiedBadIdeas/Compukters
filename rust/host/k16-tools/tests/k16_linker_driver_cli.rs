@@ -74,6 +74,53 @@ fn k16_ld_links_program_k16e_from_rustc_style_args() {
 }
 
 #[test]
+fn k16_ld_selects_first_archive_member_that_resolves_a_symbol() {
+    let object_path = temp_file("archive-selection-main.o");
+    let first_archive_path = temp_file("libk16_rt.rlib");
+    let second_archive_path = temp_file("libcompiler_builtins.rlib");
+    let output_path = temp_file("archive-selection.kx");
+    fs::write(
+        &object_path,
+        k16_object_with_undefined_text_relocation("__helper"),
+    )
+    .expect("object writes");
+    fs::write(
+        &first_archive_path,
+        ar_archive_with_k16_object(
+            "first.o",
+            &k16_object_with_text_relocation_and_symbol(1, "__helper"),
+        ),
+    )
+    .expect("first archive writes");
+    fs::write(
+        &second_archive_path,
+        ar_archive_with_k16_object(
+            "second.o",
+            &k16_object_with_text_relocation_and_symbol(1, "__helper"),
+        ),
+    )
+    .expect("second archive writes");
+
+    let output = Command::new(k16_ld_binary())
+        .args([
+            object_path.to_str().unwrap(),
+            first_archive_path.to_str().unwrap(),
+            second_archive_path.to_str().unwrap(),
+            "--k16-target=program",
+            "-o",
+            output_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("k16-ld runs");
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
 fn k16_ld_rejects_missing_target_without_host_linker_fallback() {
     let object_path = temp_file("missing-target.o");
     let output_path = temp_file("missing-target.kx");
@@ -204,6 +251,111 @@ fn k16_object_with_text_relocation_and_symbol(relocation_type: u32, symbol_name:
     bytes
 }
 
+fn k16_object_with_undefined_text_relocation(symbol_name: &str) -> Vec<u8> {
+    let text = [0x01, 0xe4, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00];
+    let shstrtab = b"\0.text.k16\0.rela.text.k16\0.symtab\0.strtab\0.shstrtab\0";
+    let mut strtab = Vec::from([0]);
+    let start_name = push_string(&mut strtab, "_start");
+    let helper_name = push_string(&mut strtab, symbol_name);
+    let mut symtab = Vec::new();
+    symtab.extend([0u8; 16]);
+    write_symbol(&mut symtab, start_name, 0, text.len() as u32, 0x12, 1);
+    write_symbol(&mut symtab, helper_name, 0, 0, 0x10, 0);
+
+    let mut rela = Vec::new();
+    write_u32(&mut rela, 2);
+    write_u32(&mut rela, (2 << 8) | 1);
+    write_u32(&mut rela, 0);
+
+    let text_offset = 52u32;
+    let rela_offset = align(text_offset + text.len() as u32, 4);
+    let symtab_offset = align(rela_offset + rela.len() as u32, 4);
+    let strtab_offset = align(symtab_offset + symtab.len() as u32, 4);
+    let shstrtab_offset = align(strtab_offset + strtab.len() as u32, 4);
+    let shoff = align(shstrtab_offset + shstrtab.len() as u32, 4);
+
+    let mut bytes = Vec::new();
+    bytes.extend([0x7f, b'E', b'L', b'F', 1, 1, 1, 0]);
+    bytes.extend([0u8; 8]);
+    write_u16(&mut bytes, 1);
+    write_u16(&mut bytes, 0x5258);
+    write_u32(&mut bytes, 1);
+    write_u32(&mut bytes, 0);
+    write_u32(&mut bytes, 0);
+    write_u32(&mut bytes, shoff);
+    write_u32(&mut bytes, 0);
+    write_u16(&mut bytes, 52);
+    write_u16(&mut bytes, 0);
+    write_u16(&mut bytes, 0);
+    write_u16(&mut bytes, 40);
+    write_u16(&mut bytes, 6);
+    write_u16(&mut bytes, 5);
+
+    pad_to(&mut bytes, text_offset);
+    bytes.extend(text);
+    pad_to(&mut bytes, rela_offset);
+    bytes.extend(rela);
+    pad_to(&mut bytes, symtab_offset);
+    bytes.extend_from_slice(&symtab);
+    pad_to(&mut bytes, strtab_offset);
+    bytes.extend_from_slice(&strtab);
+    pad_to(&mut bytes, shstrtab_offset);
+    bytes.extend(shstrtab);
+    pad_to(&mut bytes, shoff);
+
+    bytes.extend([0u8; 40]);
+    section(
+        &mut bytes,
+        1,
+        1,
+        0x6,
+        text_offset,
+        text.len() as u32,
+        0,
+        0,
+        2,
+        0,
+    );
+    section(&mut bytes, 13, 4, 0, rela_offset, 12, 3, 1, 4, 12);
+    section(
+        &mut bytes,
+        31,
+        2,
+        0,
+        symtab_offset,
+        symtab.len() as u32,
+        4,
+        1,
+        4,
+        16,
+    );
+    section(
+        &mut bytes,
+        39,
+        3,
+        0,
+        strtab_offset,
+        strtab.len() as u32,
+        0,
+        0,
+        1,
+        0,
+    );
+    section(
+        &mut bytes,
+        47,
+        3,
+        0,
+        shstrtab_offset,
+        shstrtab.len() as u32,
+        0,
+        0,
+        1,
+        0,
+    );
+    bytes
+}
+
 fn ar_archive_with_metadata_and_k16_object() -> Vec<u8> {
     let mut bytes = b"!<arch>\n".to_vec();
     ar_member(&mut bytes, "lib.rmeta", b"metadata");
@@ -212,6 +364,12 @@ fn ar_archive_with_metadata_and_k16_object() -> Vec<u8> {
         "member.o",
         &k16_object_with_text_relocation_and_symbol(1, "__archive_helper"),
     );
+    bytes
+}
+
+fn ar_archive_with_k16_object(name: &str, object: &[u8]) -> Vec<u8> {
+    let mut bytes = b"!<arch>\n".to_vec();
+    ar_member(&mut bytes, name, object);
     bytes
 }
 
