@@ -221,6 +221,8 @@ fn disassemble_alu_rrr(
         0xa => "ltu",
         0xb => "lt_s",
         0xc => "mul",
+        0xd => "mulh_u",
+        0xe => "mulh_s",
         _ => return Err(invalid_instruction(pc, word, "unknown ALU subop")),
     };
     let lhs = ((extension >> 4) & 0x0f) as u8;
