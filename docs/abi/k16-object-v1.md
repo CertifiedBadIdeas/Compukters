@@ -55,6 +55,24 @@ members from `.rlib` archives only when they resolve currently undefined global
 symbols, and then delegates to the same object linker. The target is explicit;
 missing `--k16-target` is a hard error.
 
+The archive selection model follows the usual static-linker shape: object files
+on the command line are included directly, while archive members are selected in
+link order only when they resolve currently undefined global symbols. If two
+archives can define the same helper, the first selected provider satisfies the
+symbol and later duplicate providers are not pulled.
+
+Bundled Rust guest artifacts use this driver directly:
+
+```text
+rust/guest/k16-bios   -> k16-ld --k16-target=bios   -> firmware/k16-bios.kflash
+rust/guest/k16-boot   -> k16-ld --k16-target=boot   -> kernel-loader.kb
+rust/guest/k16-kernel -> k16-ld --k16-target=kernel -> display-ok.kx
+```
+
+These builds are freestanding Rust `bin` crates. They require explicit
+`K16_CARGO`, `K16_RUSTC`, and `K16_LD` inputs. Missing toolchain paths are hard
+configuration errors.
+
 ## Freestanding Runtime Boundary
 
 The first freestanding startup object is generated with:
@@ -80,6 +98,13 @@ runtime source at `rust/guest/k16-rt/src/no_core_helpers.rs`. Building it requir
 `K16_LLVM_BIN_DIR` to point at the K16 LLVM tools used to lower the generated
 LLVM IR into an ELF object. `K16_RUST_TARGET_JSON` can override the target spec;
 otherwise the repo target spec at `tools/k16-unknown-kraftos.json` is used.
+
+Cargo-built Rust `bin` crates use the normal `core` plus `compiler_builtins`
+`rlib` inputs produced by `-Zbuild-std=core`. In that path,
+`compiler_builtins` owns compiler arithmetic helpers such as `__udivdi3` and
+`__umoddi3`; `k16-rt` owns K16 platform/runtime symbols such as `abort` and the
+small C ABI memory helpers. The object linker does not synthesize any of these
+symbols.
 
 Runtime helper symbol names:
 

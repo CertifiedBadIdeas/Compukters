@@ -1,6 +1,8 @@
 #![no_std]
 #![no_main]
 
+extern crate k16_rt;
+
 use core::panic::PanicInfo;
 
 use k16_abi::computer::{control, debug, display0, status};
@@ -76,7 +78,5 @@ unsafe fn write_u8(address: u32, value: u8) {
 }
 
 fn wait_forever() -> ! {
-    loop {
-        core::hint::spin_loop();
-    }
+    loop {}
 }

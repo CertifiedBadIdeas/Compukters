@@ -87,6 +87,9 @@ val k16VmNativeLibrary = rootProject.layout.projectDirectory.file("rust/host/k16
 val generatedK16FirmwareResources = layout.buildDirectory.dir("generated/k16-firmware-resources")
 val generatedK16FirmwareArtifacts = layout.buildDirectory.dir("generated/k16-firmware-artifacts")
 val generatedK16GuestTarget = layout.buildDirectory.dir("generated/k16-guest-target")
+val generatedK16BiosTarget = generatedK16GuestTarget.map { it.dir("bios") }
+val generatedK16BootTarget = generatedK16GuestTarget.map { it.dir("boot") }
+val generatedK16KernelTarget = generatedK16GuestTarget.map { it.dir("kernel") }
 val k16ToolsManifest = rootProject.layout.projectDirectory.file("rust/host/k16-tools/Cargo.toml")
 val k16ToolsSource = rootProject.layout.projectDirectory.dir("rust/host/k16-tools/src")
 val k16GuestManifest = rootProject.layout.projectDirectory.file("rust/guest/Cargo.toml")
@@ -97,12 +100,43 @@ val k16BootSource = rootProject.layout.projectDirectory.file("rust/guest/k16-boo
 val k16KernelManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-kernel/Cargo.toml")
 val k16KernelSource = rootProject.layout.projectDirectory.file("rust/guest/k16-kernel/src/main.rs")
 val k16RustTargetSpec = rootProject.layout.projectDirectory.file("tools/k16-unknown-kraftos.json")
-val k16BootObject = generatedK16FirmwareArtifacts.map { it.file("k16-boot.o") }
-val k16KernelObject = generatedK16FirmwareArtifacts.map { it.file("k16-kernel.o") }
 val k16BiosFlashResource = generatedK16FirmwareResources.map { it.file("firmware/k16-bios.kflash") }
 val k16BootArtifact = generatedK16FirmwareArtifacts.map { it.file("kernel-loader.kb") }
 val k16KernelArtifact = generatedK16FirmwareArtifacts.map { it.file("display-ok.kx") }
 val k16SystemStorage0Resource = generatedK16FirmwareResources.map { it.file("firmware/k16-system-storage0.kv") }
+
+fun deleteK16RustBinOutputs(
+    targetDir: File,
+    binName: String,
+) {
+    val debugDir = targetDir.resolve("k16-unknown-kraftos/debug")
+    debugDir.resolve(binName).delete()
+    debugDir.resolve("$binName.d").delete()
+    val depsDir = targetDir.resolve("k16-unknown-kraftos/debug/deps")
+    depsDir
+        .listFiles()
+        ?.filter { it.name.startsWith("$binName-") }
+        ?.forEach { file ->
+            if (file.isDirectory) {
+                file.deleteRecursively()
+            } else {
+                file.delete()
+            }
+        }
+}
+
+fun copyK16RustBinOutput(
+    targetDir: File,
+    binName: String,
+    output: File,
+) {
+    val artifact = targetDir.resolve("k16-unknown-kraftos/debug/$binName")
+    check(artifact.isFile) {
+        "Expected linked K16 Rust bin artifact for $binName at $artifact"
+    }
+    output.parentFile.mkdirs()
+    artifact.copyTo(output, overwrite = true)
+}
 
 val linkK16BiosFlash =
     tasks.register<Exec>("linkK16BiosFlash") {
@@ -127,6 +161,7 @@ val linkK16BiosFlash =
                 providers.environmentVariable("K16_LD").orNull
                     ?: throw GradleException("K16_LD must point to the k16-ld linker driver to build rust/guest/k16-bios")
             k16BiosFlashResource.get().asFile.parentFile.mkdirs()
+            deleteK16RustBinOutputs(generatedK16BiosTarget.get().asFile, "k16-bios")
             environment("RUSTC", rustc)
             environment(
                 "RUSTFLAGS",
@@ -146,7 +181,7 @@ val linkK16BiosFlash =
                 "--target",
                 k16RustTargetSpec.asFile.absolutePath,
                 "--target-dir",
-                generatedK16GuestTarget.get().asFile.absolutePath,
+                generatedK16BiosTarget.get().asFile.absolutePath,
                 "--",
                 "-C",
                 "panic=abort",
@@ -157,31 +192,49 @@ val linkK16BiosFlash =
                 "-Cdebug-assertions=off",
                 "-Coverflow-checks=off",
                 "-Zub-checks=no",
-                "-o",
-                k16BiosFlashResource.get().asFile.absolutePath,
+            )
+        }
+
+        doLast {
+            copyK16RustBinOutput(
+                targetDir = generatedK16BiosTarget.get().asFile,
+                binName = "k16-bios",
+                output = k16BiosFlashResource.get().asFile,
             )
         }
     }
 
-val compileK16SystemBootObject =
-    tasks.register<Exec>("compileK16SystemBootObject") {
-        description = "Compiles the bundled Rust K16 bootloader crate into a K16 object."
+val compileK16SystemBoot =
+    tasks.register<Exec>("compileK16SystemBoot") {
+        description = "Compiles and links the bundled Rust K16 bootloader bin crate into a K16E boot artifact."
         group = "k16"
         inputs.file(k16GuestManifest)
         inputs.file(k16BootManifest)
         inputs.file(k16BootSource)
         inputs.file(k16RustTargetSpec)
-        outputs.file(k16BootObject)
+        inputs.file(k16ToolsManifest)
+        inputs.dir(k16ToolsSource)
+        outputs.file(k16BootArtifact)
 
         doFirst {
+            val cargo =
+                providers.environmentVariable("K16_CARGO").orNull
+                    ?: throw GradleException("K16_CARGO must point to a custom K16 cargo to build rust/guest/k16-boot")
             val rustc =
                 providers.environmentVariable("K16_RUSTC").orNull
                     ?: throw GradleException("K16_RUSTC must point to a custom K16 rustc to build rust/guest/k16-boot")
-            k16BootObject.get().asFile.parentFile.mkdirs()
+            val linker =
+                providers.environmentVariable("K16_LD").orNull
+                    ?: throw GradleException("K16_LD must point to the k16-ld linker driver to build rust/guest/k16-boot")
+            k16BootArtifact.get().asFile.parentFile.mkdirs()
+            deleteK16RustBinOutputs(generatedK16BootTarget.get().asFile, "k16-boot")
             environment("RUSTC", rustc)
-            environment("RUSTFLAGS", "-Zunstable-options -Cjump-tables=no")
+            environment(
+                "RUSTFLAGS",
+                "-C linker=$linker -C link-arg=--k16-target=boot -Cjump-tables=no -Cdebuginfo=0 -Cdebug-assertions=off -Coverflow-checks=off -Zub-checks=no",
+            )
             commandLine(
-                "cargo",
+                cargo,
                 "rustc",
                 "-Zbuild-std=core",
                 "-Zjson-target-spec",
@@ -189,71 +242,65 @@ val compileK16SystemBootObject =
                 k16BootManifest.asFile.absolutePath,
                 "--features",
                 "k16-target",
+                "--bin",
+                "k16-boot",
                 "--target",
                 k16RustTargetSpec.asFile.absolutePath,
                 "--target-dir",
-                generatedK16GuestTarget.get().asFile.absolutePath,
+                generatedK16BootTarget.get().asFile.absolutePath,
                 "--",
                 "-C",
                 "panic=abort",
                 "-C",
                 "relocation-model=static",
                 "-Cjump-tables=no",
-                "--emit=obj",
-                "-o",
-                k16BootObject.get().asFile.absolutePath,
+                "-Cdebuginfo=0",
+                "-Cdebug-assertions=off",
+                "-Coverflow-checks=off",
+                "-Zub-checks=no",
+            )
+        }
+
+        doLast {
+            copyK16RustBinOutput(
+                targetDir = generatedK16BootTarget.get().asFile,
+                binName = "k16-boot",
+                output = k16BootArtifact.get().asFile,
             )
         }
     }
 
-val compileK16SystemBoot =
-    tasks.register<Exec>("compileK16SystemBoot") {
-        description = "Links the bundled Rust K16 bootloader object into a K16E boot artifact."
-        group = "k16"
-        dependsOn(compileK16SystemBootObject)
-        inputs.file(k16ToolsManifest)
-        inputs.file(k16BootObject)
-        outputs.file(k16BootArtifact)
-
-        doFirst {
-            k16BootArtifact.get().asFile.parentFile.mkdirs()
-            commandLine(
-                "cargo",
-                "run",
-                "--manifest-path",
-                k16ToolsManifest.asFile.absolutePath,
-                "--bin",
-                "k16",
-                "--",
-                "link",
-                "--target",
-                "boot",
-                k16BootObject.get().asFile.absolutePath,
-                "-o",
-                k16BootArtifact.get().asFile.absolutePath,
-            )
-        }
-    }
-
-val compileK16SystemKernelObject =
-    tasks.register<Exec>("compileK16SystemKernelObject") {
-        description = "Compiles the bundled Rust K16 kernel crate into a K16 object."
+val compileK16SystemKernel =
+    tasks.register<Exec>("compileK16SystemKernel") {
+        description = "Compiles and links the bundled Rust K16 kernel bin crate into a K16E kernel artifact."
         group = "k16"
         inputs.file(k16GuestManifest)
         inputs.file(k16KernelManifest)
         inputs.file(k16KernelSource)
         inputs.file(k16RustTargetSpec)
-        outputs.file(k16KernelObject)
+        inputs.file(k16ToolsManifest)
+        inputs.dir(k16ToolsSource)
+        outputs.file(k16KernelArtifact)
 
         doFirst {
+            val cargo =
+                providers.environmentVariable("K16_CARGO").orNull
+                    ?: throw GradleException("K16_CARGO must point to a custom K16 cargo to build rust/guest/k16-kernel")
             val rustc =
                 providers.environmentVariable("K16_RUSTC").orNull
                     ?: throw GradleException("K16_RUSTC must point to a custom K16 rustc to build rust/guest/k16-kernel")
-            k16KernelObject.get().asFile.parentFile.mkdirs()
+            val linker =
+                providers.environmentVariable("K16_LD").orNull
+                    ?: throw GradleException("K16_LD must point to the k16-ld linker driver to build rust/guest/k16-kernel")
+            k16KernelArtifact.get().asFile.parentFile.mkdirs()
+            deleteK16RustBinOutputs(generatedK16KernelTarget.get().asFile, "k16-kernel")
             environment("RUSTC", rustc)
-            environment("RUSTFLAGS", "-Zunstable-options -Cjump-tables=no")
+            environment(
+                "RUSTFLAGS",
+                "-C linker=$linker -C link-arg=--k16-target=kernel -Cjump-tables=no -Cdebuginfo=0 -Cdebug-assertions=off -Coverflow-checks=off -Zub-checks=no",
+            )
             commandLine(
-                "cargo",
+                cargo,
                 "rustc",
                 "-Zbuild-std=core",
                 "-Zjson-target-spec",
@@ -261,48 +308,30 @@ val compileK16SystemKernelObject =
                 k16KernelManifest.asFile.absolutePath,
                 "--features",
                 "k16-target",
+                "--bin",
+                "k16-kernel",
                 "--target",
                 k16RustTargetSpec.asFile.absolutePath,
                 "--target-dir",
-                generatedK16GuestTarget.get().asFile.absolutePath,
+                generatedK16KernelTarget.get().asFile.absolutePath,
                 "--",
                 "-C",
                 "panic=abort",
                 "-C",
                 "relocation-model=static",
                 "-Cjump-tables=no",
-                "--emit=obj",
-                "-o",
-                k16KernelObject.get().asFile.absolutePath,
+                "-Cdebuginfo=0",
+                "-Cdebug-assertions=off",
+                "-Coverflow-checks=off",
+                "-Zub-checks=no",
             )
         }
-    }
 
-val compileK16SystemKernel =
-    tasks.register<Exec>("compileK16SystemKernel") {
-        description = "Links the bundled Rust K16 kernel object into a K16E kernel artifact."
-        group = "k16"
-        dependsOn(compileK16SystemKernelObject)
-        inputs.file(k16ToolsManifest)
-        inputs.file(k16KernelObject)
-        outputs.file(k16KernelArtifact)
-
-        doFirst {
-            k16KernelArtifact.get().asFile.parentFile.mkdirs()
-            commandLine(
-                "cargo",
-                "run",
-                "--manifest-path",
-                k16ToolsManifest.asFile.absolutePath,
-                "--bin",
-                "k16",
-                "--",
-                "link",
-                "--target",
-                "kernel",
-                k16KernelObject.get().asFile.absolutePath,
-                "-o",
-                k16KernelArtifact.get().asFile.absolutePath,
+        doLast {
+            copyK16RustBinOutput(
+                targetDir = generatedK16KernelTarget.get().asFile,
+                binName = "k16-kernel",
+                output = k16KernelArtifact.get().asFile,
             )
         }
     }
