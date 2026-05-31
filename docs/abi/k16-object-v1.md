@@ -63,7 +63,7 @@ initial return-42/add proof boundary. It is not a libc, an OS ABI, or a syscall
 surface.
 
 The memory helper object is built from the bundled Rust `#![no_core]` runtime
-source at `native/k16-tools/runtime/k16_memory_helpers.rs`. Building it
+source at `rust/host/k16-tools/runtime/k16_memory_helpers.rs`. Building it
 requires `K16_RUSTC` to point at the custom rustc that contains the K16 LLVM
 target and `K16_LLVM_BIN_DIR` to point at the K16 LLVM tools used to lower
 the generated LLVM IR into an ELF object. `K16_RUST_TARGET_JSON` can override

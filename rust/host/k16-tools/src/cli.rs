@@ -293,7 +293,8 @@ fn repo_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .and_then(Path::parent)
-        .expect("native/k16-tools has repo root grandparent")
+        .and_then(Path::parent)
+        .expect("rust/host/k16-tools has repo root great-grandparent")
         .to_path_buf()
 }
 

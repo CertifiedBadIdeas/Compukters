@@ -20,7 +20,7 @@ They are not portable performance claims and they are not CI pass/fail budgets.
 
 ## Command
 
-From `native/k16-vm`:
+From `rust/host/k16-vm`:
 
 ```bash
 cargo run --release --example vm_microbenchmarks -- <iterations> <samples>

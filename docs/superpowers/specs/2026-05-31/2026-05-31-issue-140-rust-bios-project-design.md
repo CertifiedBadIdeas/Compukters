@@ -4,7 +4,7 @@
 ## Context
 
 The bundled K16 BIOS is still authored as Rux source at
-`native/k16-tools/examples/firmware/k16_bios.rx` and Gradle builds
+`rust/host/k16-tools/examples/firmware/k16_bios.rx` and Gradle builds
 `firmware/k16-bios.kflash` through `rux compile --target bios`.
 
 That keeps the first firmware stage tied to the legacy Rux frontend. The
@@ -14,11 +14,12 @@ but they are separate implementation slices.
 
 ## Design Options
 
-### Option A: Keep Guest Rust Crates Under `native/`
+### Option A: Keep Guest Rust Crates Beside Host Crates
 
-This would put BIOS beside `native/k16-vm` and `native/k16-tools`. It is simple
-but mixes host-side native code with guest-side software. That boundary will
-become confusing once BIOS, bootloader, kernel, and user programs all exist.
+This would put BIOS beside `rust/host/k16-vm` and `rust/host/k16-tools`. It is
+simple but mixes host-side native code with guest-side software. That boundary
+will become confusing once BIOS, bootloader, kernel, and user programs all
+exist.
 
 ### Option B: Single Shared Firmware Crate
 
@@ -32,11 +33,12 @@ not the same kind of program.
 Create a guest-software workspace, for example:
 
 ```text
-guest/
-  Cargo.toml
-  k16-bios/
-  k16-bootloader/
-  kraft-kernel/
+rust/
+  guest/
+    Cargo.toml
+    k16-bios/
+    k16-bootloader/
+    kraft-kernel/
 ```
 
 Each crate owns one guest program class and produces exactly one primary K16
@@ -51,7 +53,7 @@ Use a dedicated guest Rust workspace with separate crates for BIOS, bootloader,
 and kernel. Issue #140 implements only the BIOS part:
 
 ```text
-guest/k16-bios
+rust/guest/k16-bios
   -> Rust-authored BIOS source
   -> K16 object/link/package path
   -> firmware/k16-bios.kflash
@@ -75,7 +77,7 @@ errors. There should be no fallback to the old Rux BIOS path.
 
 ## Build Integration
 
-Gradle should stop declaring `native/k16-tools/examples/firmware/k16_bios.rx`
+Gradle should stop declaring `rust/host/k16-tools/examples/firmware/k16_bios.rx`
 as the bundled BIOS input. The BIOS task should depend on the Rust BIOS project
 and on the K16 packaging toolchain needed to produce `.kflash`.
 
@@ -96,7 +98,7 @@ made explicit rather than hidden behind a Rux fallback.
 
 The implementation slice should verify:
 
-- `cargo test --manifest-path native/k16-tools/Cargo.toml --test k16_artifact_backend`
+- `cargo test --manifest-path rust/host/k16-tools/Cargo.toml --test k16_artifact_backend`
 - `./gradlew-sandbox :v1_21_1-neoforge:processResources`
 - the generated `firmware/k16-bios.kflash` comes from the Rust BIOS project,
   not from `rux compile`.

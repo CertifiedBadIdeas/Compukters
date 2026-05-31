@@ -28,13 +28,22 @@ class K16ToolingRenameTest {
     private val root = Path.of("..").toAbsolutePath().normalize()
 
     @Test
-    fun nativeMachineToolingLivesUnderK16Tools() {
-        assertTrue(root.resolve("native/k16-tools/Cargo.toml").exists())
+    fun hostMachineToolingLivesUnderRustHostK16Tools() {
+        assertTrue(root.resolve("rust/host/k16-tools/Cargo.toml").exists())
+        assertFalse(root.resolve("native/k16-tools/Cargo.toml").exists())
         assertFalse(root.resolve("native/rux-compiler/Cargo.toml").exists())
 
-        val manifest = root.resolve("native/k16-tools/Cargo.toml").readText()
+        val manifest = root.resolve("rust/host/k16-tools/Cargo.toml").readText()
         assertTrue(manifest.contains("name = \"k16-tools\""))
         assertFalse(manifest.contains("name = \"rux-compiler\""))
+    }
+
+    @Test
+    fun guestRustCratesLiveUnderRustGuest() {
+        assertTrue(root.resolve("rust/guest/Cargo.toml").exists())
+        assertTrue(root.resolve("rust/guest/k16-abi/Cargo.toml").exists())
+        assertTrue(root.resolve("rust/guest/k16-rt/Cargo.toml").exists())
+        assertFalse(root.resolve("guest/Cargo.toml").exists())
     }
 
     @Test

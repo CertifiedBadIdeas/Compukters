@@ -59,7 +59,8 @@ fn k16_abi_docs_define_implementation_ready_calling_convention() {
     let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .and_then(Path::parent)
-        .expect("compiler crate lives under native/k16-tools");
+        .and_then(Path::parent)
+        .expect("compiler crate lives under rust/host/k16-tools");
     let docs =
         fs::read_to_string(repo_root.join("docs/abi/k16-cpu-v1.md")).expect("K16 ABI docs read");
     let normalized_docs = docs.split_whitespace().collect::<Vec<_>>().join(" ");

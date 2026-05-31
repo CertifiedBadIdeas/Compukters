@@ -18,11 +18,12 @@ fn runtime_test_and_benchmark_surfaces_use_k16_names() {
     let repo_dir = manifest_dir
         .parent()
         .and_then(Path::parent)
-        .expect("repo root is above native/k16-vm");
+        .and_then(Path::parent)
+        .expect("repo root is above rust/host/k16-vm");
 
     for expected_path in [
-        "native/k16-vm/tests/k16_computer.rs",
-        "native/k16-vm/tests/k16_computer_runtime_surface.rs",
+        "rust/host/k16-vm/tests/k16_computer.rs",
+        "rust/host/k16-vm/tests/k16_computer_runtime_surface.rs",
         "docs/benchmarks/k16-vm-baseline-2026-05-29.md",
     ] {
         assert!(
@@ -32,8 +33,8 @@ fn runtime_test_and_benchmark_surfaces_use_k16_names() {
     }
 
     for retired_path in [
-        "native/k16-vm/tests/rux_computer.rs",
-        "native/k16-vm/tests/rux_computer_runtime_surface.rs",
+        "rust/host/k16-vm/tests/rux_computer.rs",
+        "rust/host/k16-vm/tests/rux_computer_runtime_surface.rs",
         "docs/benchmarks/rux-vm-baseline-2026-05-29.md",
     ] {
         assert!(
@@ -150,7 +151,8 @@ fn active_abi_docs_do_not_present_low_image_as_supported() {
     let repo_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .and_then(Path::parent)
-        .expect("repo root is above native/k16-vm");
+        .and_then(Path::parent)
+        .expect("repo root is above rust/host/k16-vm");
     let abi_dir = repo_dir.join("docs/abi");
     let mut docs = String::new();
     collect_text_files(&abi_dir, &mut docs);
@@ -179,7 +181,8 @@ fn active_overview_docs_use_kraft16_runtime_brand() {
     let repo_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .and_then(Path::parent)
-        .expect("repo root is above native/k16-vm");
+        .and_then(Path::parent)
+        .expect("repo root is above rust/host/k16-vm");
     let active_docs = [
         "README.md",
         "docs/ARCHITECTURE.md",

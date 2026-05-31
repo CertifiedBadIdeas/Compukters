@@ -5,7 +5,8 @@ fn repo_root() -> &'static Path {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .and_then(Path::parent)
-        .expect("compiler crate lives under native/k16-tools")
+        .and_then(Path::parent)
+        .expect("compiler crate lives under rust/host/k16-tools")
 }
 
 fn normalized_doc(path: &str) -> String {
@@ -68,7 +69,7 @@ fn k16_object_abi_docs_define_freestanding_runtime_boundary() {
         "`__k16_memcpy`",
         "`__k16_memset`",
         "`__k16_memmove`",
-        "native/k16-tools/runtime/k16_memory_helpers.rs",
+        "rust/host/k16-tools/runtime/k16_memory_helpers.rs",
         "requires `K16_RUSTC`",
         "`K16_LLVM_BIN_DIR`",
         "Rust-built helper object",
