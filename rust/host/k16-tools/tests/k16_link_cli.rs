@@ -42,6 +42,37 @@ fn k16_link_converts_k16_object_with_abs32_relocation_to_program_k16e() {
 }
 
 #[test]
+fn k16_link_converts_k16_object_to_raw_bios_flash() {
+    let object_path = temp_file("bios.o");
+    let output_path = temp_file("bios.kflash");
+    fs::write(&object_path, k16_object_with_text_relocation(1)).expect("object writes");
+
+    let output = Command::new(k16_binary())
+        .args([
+            "link",
+            "--target",
+            "bios",
+            object_path.to_str().unwrap(),
+            "-o",
+            output_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("k16 link runs");
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let bytes = fs::read(output_path).expect("BIOS flash output reads");
+    assert_eq!(
+        bytes,
+        [0x01, 0xe4, 0x00, 0x00, 0xf0, 0xff, 0x01, 0x00],
+        "BIOS flash output should be raw linked K16 bytes, not K16E"
+    );
+}
+
+#[test]
 fn k16_link_ignores_absolute_file_symbols_from_llvm_objects() {
     let object_path = temp_file("llvm-file-symbol.o");
     let output_path = temp_file("llvm-file-symbol.k16e");

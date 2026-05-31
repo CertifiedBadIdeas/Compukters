@@ -22,10 +22,13 @@ class K16FirmwareResourceTest {
 
         assertTrue(source.contains("generated/k16-firmware-resources"))
         assertTrue(source.contains("generated/k16-firmware-artifacts"))
-        assertTrue(source.contains("tasks.register<Exec>(\"compileK16BiosFlash\")"))
+        assertTrue(source.contains("tasks.register<Exec>(\"compileK16BiosObject\")"))
+        assertTrue(source.contains("tasks.register<Exec>(\"linkK16BiosFlash\")"))
         assertTrue(source.contains("tasks.register<Exec>(\"compileK16SystemStorage0\")"))
+        assertTrue(source.contains("rust/guest/k16-bios"))
         assertFalse(source.contains("generated/rux-firmware-"))
         assertFalse(source.contains("tasks.register<Exec>(\"compileRux"))
+        assertFalse(source.contains("--bin\", \"rux\""))
     }
 
     @Test

@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- `k16 link --target bios` now emits raw linked K16 BIOS flash bytes from K16
+  object inputs, so Rust-authored BIOS firmware has a host-tool path to
+  `.kflash` without the retired Rux compiler.
+- NeoForge bundled BIOS generation now points at `rust/guest/k16-bios` and
+  requires an explicit `K16_RUSTC` K16 Rust compiler input; missing Rust BIOS
+  toolchain state is a hard build error, not a fallback to deleted `.rx`
+  sources.
 - The public `rux` CLI surface and active Rux compiler/frontend sources are
   retired. K16 artifact work stays under `k16`, and guest-owned source belongs
   under `rust/guest`.

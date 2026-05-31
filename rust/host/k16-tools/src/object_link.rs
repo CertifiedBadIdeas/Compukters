@@ -37,9 +37,6 @@ pub fn link_k16_objects_to_k16e(
     inputs: &[K16LinkInput<'_>],
     target: K16ArtifactTarget,
 ) -> Result<Vec<u8>, String> {
-    let abi_kind = target.fixed_image_abi_kind().ok_or_else(|| {
-        "k16 link does not emit raw BIOS flash; choose boot, kernel, or program".to_string()
-    })?;
     if inputs.is_empty() {
         return Err("k16 link requires at least one input object".to_string());
     }
@@ -50,7 +47,12 @@ pub fn link_k16_objects_to_k16e(
         .collect::<Result<Vec<_>, _>>()?;
     let load_addr = target.base_address();
     let linked = link_objects(&objects, load_addr)?;
-    k16e::encode_k16_executable(&linked.payload, abi_kind, linked.entry_pc, load_addr)
+    match target.fixed_image_abi_kind() {
+        Some(abi_kind) => {
+            k16e::encode_k16_executable(&linked.payload, abi_kind, linked.entry_pc, load_addr)
+        }
+        None => Ok(linked.payload),
+    }
 }
 
 struct LinkedImage {

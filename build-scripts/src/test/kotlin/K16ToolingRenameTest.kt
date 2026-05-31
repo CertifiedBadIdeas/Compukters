@@ -65,6 +65,19 @@ class K16ToolingRenameTest {
     }
 
     @Test
+    fun neoforgeFirmwareBuildDoesNotUseRuxCompilerOrDeletedGuestExamples() {
+        val buildScript = root.resolve("modules/v1_21_1/v1_21_1-neoforge/build.gradle.kts").readText()
+
+        assertTrue(buildScript.contains("rust/guest/k16-bios"))
+        assertFalse(buildScript.contains("--bin\",\\n            \"rux\""))
+        assertFalse(buildScript.contains("ruxCompilerManifest"))
+        assertFalse(buildScript.contains("k16_bios.rx"))
+        assertFalse(buildScript.contains("kernel_loader.rx"))
+        assertFalse(buildScript.contains("display_ok.rx"))
+        assertFalse(buildScript.contains("rust/host/k16-tools/examples"))
+    }
+
+    @Test
     fun activeAbiDocsUseK16FormatNames() {
         val abiDir = root.resolve("docs/abi")
 
