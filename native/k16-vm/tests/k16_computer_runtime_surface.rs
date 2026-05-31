@@ -13,7 +13,38 @@ fn runtime_crate_metadata_uses_k16_package_name() {
 }
 
 #[test]
-fn rux_computer_handle_source_does_not_expose_low_image_startup_or_handoff() {
+fn runtime_test_and_benchmark_surfaces_use_k16_names() {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let repo_dir = manifest_dir
+        .parent()
+        .and_then(Path::parent)
+        .expect("repo root is above native/k16-vm");
+
+    for expected_path in [
+        "native/k16-vm/tests/k16_computer.rs",
+        "native/k16-vm/tests/k16_computer_runtime_surface.rs",
+        "docs/benchmarks/k16-vm-baseline-2026-05-29.md",
+    ] {
+        assert!(
+            repo_dir.join(expected_path).exists(),
+            "K16 runtime surface should expose `{expected_path}`"
+        );
+    }
+
+    for retired_path in [
+        "native/k16-vm/tests/rux_computer.rs",
+        "native/k16-vm/tests/rux_computer_runtime_surface.rs",
+        "docs/benchmarks/rux16-vm-baseline-2026-05-29.md",
+    ] {
+        assert!(
+            !repo_dir.join(retired_path).exists(),
+            "K16 runtime surface should not keep retired path `{retired_path}`"
+        );
+    }
+}
+
+#[test]
+fn k16_computer_handle_source_does_not_expose_low_image_startup_or_handoff() {
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
     let lib_source = fs::read_to_string(manifest_dir.join("src/lib.rs")).unwrap();
     let computer_mod_source = fs::read_to_string(manifest_dir.join("src/computer/mod.rs")).unwrap();
@@ -154,7 +185,7 @@ fn active_overview_docs_use_kraft16_runtime_brand() {
         "docs/ARCHITECTURE.md",
         "docs/LANGUAGE.md",
         "docs/PROFILING.md",
-        "docs/benchmarks/rux16-vm-baseline-2026-05-29.md",
+        "docs/benchmarks/k16-vm-baseline-2026-05-29.md",
     ];
     let mut docs = String::new();
     for doc_path in active_docs {

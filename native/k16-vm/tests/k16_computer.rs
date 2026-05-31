@@ -351,7 +351,7 @@ fn temp_volume_path(name: &str) -> std::path::PathBuf {
         .unwrap()
         .as_nanos();
     std::env::temp_dir().join(format!(
-        "rux-computer-{name}-{}-{nanos}.kv",
+        "k16-computer-{name}-{}-{nanos}.kv",
         std::process::id()
     ))
 }
