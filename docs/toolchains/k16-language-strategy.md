@@ -1,4 +1,4 @@
-# Rux16 Rust-First Language Strategy
+# K16 Rust-First Language Strategy
 
 > Issue: [#135](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/135)
 >
@@ -6,16 +6,16 @@
 
 ## Decision
 
-Rux16 should be treated as a real machine target for Rust-first development,
+K16 should be treated as a real machine target for Rust-first development,
 not as a reason to maintain a custom project language indefinitely.
 
 The long-term language direction is:
 
 ```text
-Rux16 CPU/ABI
+K16 CPU/ABI
   -> ELF32 object ABI
   -> RUXE packaging
-  -> custom rustc/LLVM Rux16 target
+  -> custom rustc/LLVM K16 target
   -> Rust no_std kernels
   -> Rust user-space programs
   -> hosted Rust std only after real OS services exist
@@ -33,7 +33,7 @@ Every language feature pulls a chain of follow-up work: parser rules, type
 checking, diagnostics, formatter behavior, standard library APIs, examples,
 tests, docs, compatibility policy, and migration support.
 
-Rux16 already needs the harder and more reusable layer: a precise machine ABI,
+K16 already needs the harder and more reusable layer: a precise machine ABI,
 object format, linker, boot flow, kernel ABI, storage model, and runtime helper
 objects. Once that layer is real, Rust can target it directly. That is a better
 use of effort than growing Rux into a parallel language ecosystem.
@@ -58,13 +58,13 @@ Deprecating Rux does not mean deleting existing files immediately. It means:
 - existing Rux examples may stay only as legacy compatibility fixtures until
   Rust replacements exist.
 
-Before the custom Rux16 Rust target is ready, new work should focus on the
+Before the custom K16 Rust target is ready, new work should focus on the
 toolchain boundary rather than adding more Rux source. Acceptable temporary
 artifacts are:
 
-- raw Rux16 object fixtures for linker/VM tests;
+- raw K16 object fixtures for linker/VM tests;
 - LLVM IR or freestanding C smoke inputs when they validate the machine target;
-- host-side tooling needed to package, inspect, link, or run Rux16 artifacts;
+- host-side tooling needed to package, inspect, link, or run K16 artifacts;
 - documentation that explains how existing Rux code will be replaced.
 
 Those artifacts must not become a new Rux-language feature path. If a slice
@@ -99,11 +99,11 @@ formats until each compatibility-affecting ABI migration lands.
 
 The preferred target shape is freestanding Rust:
 
-- rustc emits ordinary Rux16 ELF32 relocatable objects;
+- rustc emits ordinary K16 ELF32 relocatable objects;
 - `k16 link` packages those objects into `RUXE`;
 - firmware, bootloaders, kernels, and user-space programs use the same machine
   ABI rules, with different load contracts where needed;
-- missing runtime helpers remain link-time errors until explicit Rux16 object
+- missing runtime helpers remain link-time errors until explicit K16 object
   implementations exist.
 
 The Rust path should progress in this order:
@@ -144,7 +144,7 @@ Existing Rux bootstrap examples
 ## Roadmap Impact
 
 - [#132](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/132) is
-  the next Rust proof: `rustc -> Rux16 object -> RUXE -> VM`.
+  the next Rust proof: `rustc -> K16 object -> RUXE -> VM`.
 - [#133](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/133)
   should be framed as Rust target runtime/helper work, not Rux source runtime
   expansion.

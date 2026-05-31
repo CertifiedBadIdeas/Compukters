@@ -1,18 +1,18 @@
-# Rux16 Rust Feasibility
+# K16 Rust Feasibility
 
 > Issue: [#127](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/127)
 
-> Strategy: [Rux16 Rust-First Language Strategy](rux16-language-strategy.md)
+> Strategy: [K16 Rust-First Language Strategy](k16-language-strategy.md)
 
 ## Current State
 
-Rux16 now has enough LLVM-facing infrastructure for a tiny freestanding C proof:
+K16 now has enough LLVM-facing infrastructure for a tiny freestanding C proof:
 
-- a Rux16 LLVM backend prototype can emit ELF32 relocatable objects;
-- Clang can compile `--target=rux16` freestanding C into `.text.rux16`;
+- a K16 LLVM backend prototype can emit ELF32 relocatable objects;
+- Clang can compile the current `--target=rux16` backend into `.text.rux16`;
 - `k16 runtime rux16-startup` provides `_start`, calls `main`, and exposes the
   low byte of the return value through `debug::WRITE`;
-- `k16 link --target program` converts Rux16 objects into a `RUXE` program;
+- `k16 link --target program` converts K16 objects into a `RUXE` program;
 - `k16 run` executes that `RUXE` in the VM and observes `debug_bytes=2a`.
 
 That proves the CPU/object/RUXE path, not Rust support. Rust requires a target
@@ -25,7 +25,7 @@ symbols, and eventually an OS ABI surface.
 
 `no_core` is the smallest useful Rust proof. It avoids `core`, lang items from
 the standard library, allocation, formatting, and panic machinery as much as
-possible. It is useful for validating that `rustc` can target Rux16 LLVM output
+possible. It is useful for validating that `rustc` can target K16 LLVM output
 and that K16 tooling can link the resulting object.
 
 Recommended first Rust slice:
@@ -55,7 +55,7 @@ This is the right second milestone, not the first one.
 ### `no_std`
 
 `no_std` means Rust code uses `core` and may use `alloc` when a global allocator
-exists. For Rux16, that requires an explicit panic strategy, allocator boundary,
+exists. For K16, that requires an explicit panic strategy, allocator boundary,
 and OS/runtime calls for any non-trivial program. It should wait until the
 kernel/user ABI has a deliberate syscall or capability surface.
 
@@ -70,7 +70,7 @@ and I/O. The current Rux OS direction is not ready for this, and trying to add
 
 ### Rust Target Description
 
-Rust needs a target specification for Rux16. The likely target shape is:
+Rust needs a target specification for K16. The likely target shape is:
 
 ```text
 llvm-target:        k16-unknown-kraftos or rux16
@@ -83,7 +83,7 @@ relocation model:   static
 executables:        false at rustc layer; RUXE is produced by k16 link
 ```
 
-The Rust target must emit ordinary Rux16 ELF objects. Rust must not emit `RUXE`
+The Rust target must emit ordinary K16 ELF objects. Rust must not emit `RUXE`
 directly in the first slice.
 
 ### Entry And Link Boundary
@@ -96,7 +96,7 @@ The pipeline should be:
 
 ```text
 rustc
-  -> Rux16 ELF32 object
+  -> K16 ELF32 object
   -> k16 runtime rux16-startup
   -> k16 link --target program
   -> k16 run
@@ -104,7 +104,7 @@ rustc
 
 ### Compiler Builtins And Runtime Helpers
 
-Rux16 currently reserves helper symbols such as:
+K16 currently reserves helper symbols such as:
 
 ```text
 __rux16_memcpy
@@ -114,7 +114,7 @@ __rux16_memmove
 
 Rust may also need integer helper routines depending on emitted IR and target
 legalization. Missing helper calls must remain link-time errors until explicit
-Rux16 runtime objects provide them.
+K16 runtime objects provide them.
 
 The first `no_core` proof should choose code that does not require those
 helpers. The `core` milestone should add the required helper object(s) before
@@ -141,7 +141,7 @@ service. That belongs after the user/kernel ABI can own memory policy.
 
 ### Atomics And Concurrency
 
-Atomics should be treated as unsupported until Rux16 has a deliberate atomic
+Atomics should be treated as unsupported until K16 has a deliberate atomic
 or synchronization ABI. Single-threaded Rust proofs should avoid atomic APIs.
 
 ### Filesystem And I/O
@@ -152,9 +152,9 @@ Rux `std::fs`. Hosted Rust is blocked until that exists.
 
 ## Blocking Gaps
 
-- Rust target spec and driver invocation for a local experimental Rux16 target.
+- Rust target spec and driver invocation for a local experimental K16 target.
 - A no-core smoke that proves `rustc -> object -> RUXE -> VM`.
-- Explicit Rux16 runtime helper objects for memory intrinsics and compiler
+- Explicit K16 runtime helper objects for memory intrinsics and compiler
   builtins that Rust/LLVM may emit.
 - Panic-abort behavior tied to the Rux panic/error model.
 - Allocator and filesystem/syscall surfaces for any meaningful `no_std + alloc`
@@ -169,14 +169,14 @@ and observe `debug_bytes=2a`.
 
 After that, add the smallest runtime-helper object set needed by `core`, then
 define `panic=abort` behavior. Only after the OS syscall/capability boundary is
-stable should Rux16 try `no_std + alloc` or hosted Rust paths.
+stable should K16 try `no_std + alloc` or hosted Rust paths.
 
 ## Follow-Up Issues
 
 - [#132](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/132):
-  Add first Rust `no_core` smoke for Rux16.
+  Add first Rust `no_core` smoke for K16.
 - [#133](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/133):
-  Add Rux16 runtime helper objects for compiler-generated memory operations.
+  Add K16 runtime helper objects for compiler-generated memory operations.
 - [#29](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/29):
   Reuse the Rux panic/error model work for Rust `panic=abort`.
 - [#57](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/57):

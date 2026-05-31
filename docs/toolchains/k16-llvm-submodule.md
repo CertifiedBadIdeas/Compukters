@@ -1,21 +1,21 @@
-# Rux16 LLVM Submodule
+# K16 LLVM Submodule
 
 > Issue: [#136](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/136)
 
-The Rux16 LLVM fork is tracked as a git submodule at:
+The K16 LLVM fork is tracked as a git submodule at:
 
 ```text
 toolchains/Compukter-Kraft-llvm
 ```
 
-It is an essential toolchain input for Rux16 LLVM, Clang, and future Rust
-target work. The main repository tracks the LLVM fork as a gitlink, not as
-copied source files or build outputs.
+It is an essential toolchain input for K16 LLVM, Clang, and future Rust target
+work. The main repository tracks the LLVM fork as a gitlink, not as copied
+source files or build outputs.
 
 Fork branch policy:
 
 - `main` mirrors upstream `llvm/llvm-project` and is synced manually;
-- `rux16` contains Compukter-Kraft LLVM/Rux16 changes;
+- `rux16` contains Compukter-Kraft LLVM/K16 changes;
 - the main repository still pins the exact submodule commit for reproducible
   builds.
 
