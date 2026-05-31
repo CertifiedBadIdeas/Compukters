@@ -64,11 +64,11 @@ surface.
 
 The memory helper object is built from the bundled Rust `#![no_core]` runtime
 source at `native/rux-compiler/runtime/rux16_memory_helpers.rs`. Building it
-requires `RUX16_RUSTC` to point at the custom rustc that contains the Rux16 LLVM
-target and `RUX16_LLVM_BIN_DIR` to point at the Rux16 LLVM tools used to lower
-the generated LLVM IR into an ELF object. `RUX16_RUST_TARGET_JSON` can override
+requires `K16_RUSTC` to point at the custom rustc that contains the Rux16 LLVM
+target and `K16_LLVM_BIN_DIR` to point at the K16 LLVM tools used to lower
+the generated LLVM IR into an ELF object. `K16_RUST_TARGET_JSON` can override
 the target spec; otherwise the repo target spec at
-`tools/rux16-unknown-ruxos.json` is used.
+`tools/k16-unknown-kraftos.json` is used.
 
 Runtime helper symbol names:
 

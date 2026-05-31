@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-LLVM_BIN_DIR="${RUX16_LLVM_BIN_DIR:-$ROOT/toolchains/Compukter-Kraft-llvm/build-rux-min/bin}"
+LLVM_BIN_DIR="${K16_LLVM_BIN_DIR:-$ROOT/toolchains/Compukter-Kraft-llvm/build-rux-min/bin}"
 LLC="$LLVM_BIN_DIR/llc"
 LLVM_READOBJ="$LLVM_BIN_DIR/llvm-readobj"
 LLVM_NOT="$LLVM_BIN_DIR/not"

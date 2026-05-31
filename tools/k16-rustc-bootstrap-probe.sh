@@ -2,11 +2,11 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-RUST_SRC="${RUX16_RUST_SRC:-$ROOT/toolchains/Compukter-Kraft-rust}"
-LLVM_CONFIG="${RUX16_LLVM_CONFIG:-$ROOT/toolchains/Compukter-Kraft-llvm/build-rux-min/bin/llvm-config}"
+RUST_SRC="${K16_RUST_SRC:-$ROOT/toolchains/Compukter-Kraft-rust}"
+LLVM_CONFIG="${K16_LLVM_CONFIG:-$ROOT/toolchains/Compukter-Kraft-llvm/build-rux-min/bin/llvm-config}"
 EXPECTED_BRANCH="rux16"
-BUILD_DIR="${RUX16_RUST_BUILD_DIR:-$RUST_SRC/build/rux16}"
-HOST_TRIPLE="${RUX16_RUST_HOST:-x86_64-unknown-linux-gnu}"
+BUILD_DIR="${K16_RUST_BUILD_DIR:-$RUST_SRC/build/rux16}"
+HOST_TRIPLE="${K16_RUST_HOST:-x86_64-unknown-linux-gnu}"
 
 require_dir() {
     local path="$1"

@@ -4,18 +4,38 @@ use std::path::Path;
 #[test]
 fn rust_nocore_smoke_artifacts_are_documented_and_strict() {
     let root = repo_root();
-    let target_spec = root.join("tools/rux16-unknown-ruxos.json");
-    let llvm_smoke_script = root.join("tools/rux16-llvm-smoke.sh");
-    let clang_smoke_script = root.join("tools/rux16-clang-smoke.sh");
-    let smoke_script = root.join("tools/rux16-rust-nocore-smoke.sh");
-    let bootstrap_probe = root.join("tools/rux16-rustc-bootstrap-probe.sh");
+    let target_spec = root.join("tools/k16-unknown-kraftos.json");
+    let llvm_smoke_script = root.join("tools/k16-llvm-smoke.sh");
+    let clang_smoke_script = root.join("tools/k16-clang-smoke.sh");
+    let smoke_script = root.join("tools/k16-rust-nocore-smoke.sh");
+    let bootstrap_probe = root.join("tools/k16-rustc-bootstrap-probe.sh");
     let runtime_helpers = root.join("native/rux-compiler/runtime/rux16_memory_helpers.rs");
-    let docs = root.join("docs/toolchains/rux16-rust-nocore-smoke.md");
-    let bootstrap_docs = root.join("docs/toolchains/rux16-rustc-bootstrap.md");
+    let llvm_docs = root.join("docs/toolchains/k16-llvm-smoke.md");
+    let clang_docs = root.join("docs/toolchains/k16-clang-smoke.md");
+    let docs = root.join("docs/toolchains/k16-rust-nocore-smoke.md");
+    let bootstrap_docs = root.join("docs/toolchains/k16-rustc-bootstrap.md");
     let feasibility_docs = root.join("docs/toolchains/rux16-rust-feasibility.md");
     let strategy_docs = root.join("docs/toolchains/rux16-language-strategy.md");
+    let retired_public_paths = [
+        "tools/rux16-unknown-ruxos.json",
+        "tools/rux16-llvm-smoke.sh",
+        "tools/rux16-clang-smoke.sh",
+        "tools/rux16-rust-nocore-smoke.sh",
+        "tools/rux16-rustc-bootstrap-probe.sh",
+        "docs/toolchains/rux16-llvm-smoke.md",
+        "docs/toolchains/rux16-clang-smoke.md",
+        "docs/toolchains/rux16-rust-nocore-smoke.md",
+        "docs/toolchains/rux16-rustc-bootstrap.md",
+    ];
 
-    let spec = fs::read_to_string(&target_spec).expect("Rux16 Rust target spec exists");
+    for path in retired_public_paths {
+        assert!(
+            !root.join(path).exists(),
+            "machine toolchain surface should not keep retired public path `{path}`"
+        );
+    }
+
+    let spec = fs::read_to_string(&target_spec).expect("K16 Rust target spec exists");
     assert!(spec.contains("\"llvm-target\": \"rux16\""));
     assert!(spec.contains("\"panic-strategy\": \"abort\""));
     assert!(spec.contains("\"target-pointer-width\": 32"));
@@ -36,6 +56,10 @@ fn rust_nocore_smoke_artifacts_are_documented_and_strict() {
     assert!(!clang_smoke.contains(".ruxe"));
 
     let script = fs::read_to_string(&smoke_script).expect("Rust no_core smoke script exists");
+    assert!(script.contains("K16_RUSTC"));
+    assert!(script.contains("K16_LLVM_BIN_DIR"));
+    assert!(script.contains("K16_RUST_TARGET_JSON"));
+    assert!(script.contains("tools/k16-unknown-kraftos.json"));
     assert!(script.contains("#![no_core]"));
     assert!(script.contains("#![no_main]"));
     assert!(script.contains("meta_sized"));
@@ -48,8 +72,11 @@ fn rust_nocore_smoke_artifacts_are_documented_and_strict() {
     assert!(!script.contains("--bin rux"));
     assert!(!script.contains(".ruxe"));
     assert!(!script.contains("|| true"));
+    assert!(!script.contains("RUX16_RUSTC"));
+    assert!(!script.contains("RUX16_LLVM_BIN_DIR"));
+    assert!(!script.contains("RUX16_RUST_TARGET_JSON"));
 
-    let helpers = fs::read_to_string(&runtime_helpers).expect("Rux16 runtime helper source exists");
+    let helpers = fs::read_to_string(&runtime_helpers).expect("K16 runtime helper source exists");
     assert!(helpers.contains("#![no_core]"));
     assert!(helpers.contains("#![no_main]"));
     assert!(helpers.contains("__rux16_memcpy"));
@@ -58,6 +85,10 @@ fn rust_nocore_smoke_artifacts_are_documented_and_strict() {
     assert!(!helpers.contains("extern crate std"));
 
     let probe = fs::read_to_string(&bootstrap_probe).expect("Rust bootstrap probe script exists");
+    assert!(probe.contains("K16_RUST_SRC"));
+    assert!(probe.contains("K16_LLVM_CONFIG"));
+    assert!(probe.contains("K16_RUST_BUILD_DIR"));
+    assert!(probe.contains("K16_RUST_HOST"));
     assert!(probe.contains("toolchains/Compukter-Kraft-rust"));
     assert!(probe.contains("toolchains/Compukter-Kraft-llvm/build-rux-min/bin/llvm-config"));
     assert!(probe.contains("build/rux16"));
@@ -65,18 +96,48 @@ fn rust_nocore_smoke_artifacts_are_documented_and_strict() {
     assert!(probe.contains("rux16"));
     assert!(probe.contains("x.py"));
     assert!(!probe.contains("|| true"));
+    assert!(!probe.contains("RUX16_RUST_SRC"));
+    assert!(!probe.contains("RUX16_LLVM_CONFIG"));
+    assert!(!probe.contains("RUX16_RUST_BUILD_DIR"));
+    assert!(!probe.contains("RUX16_RUST_HOST"));
+
+    let llvm_docs = fs::read_to_string(&llvm_docs).expect("LLVM smoke docs exist");
+    assert!(llvm_docs.contains("tools/k16-llvm-smoke.sh"));
+    assert!(llvm_docs.contains("K16_LLVM_BIN_DIR"));
+    assert!(!llvm_docs.contains("tools/rux16-llvm-smoke.sh"));
+    assert!(!llvm_docs.contains("RUX16_LLVM_BIN_DIR"));
+
+    let clang_docs = fs::read_to_string(&clang_docs).expect("Clang smoke docs exist");
+    assert!(clang_docs.contains("tools/k16-clang-smoke.sh"));
+    assert!(clang_docs.contains("K16_LLVM_BIN_DIR"));
+    assert!(!clang_docs.contains("tools/rux16-clang-smoke.sh"));
+    assert!(!clang_docs.contains("RUX16_LLVM_BIN_DIR"));
 
     let docs = fs::read_to_string(&docs).expect("Rust no_core smoke docs exist");
-    assert!(docs.contains("tools/rux16-rust-nocore-smoke.sh"));
+    assert!(docs.contains("tools/k16-rust-nocore-smoke.sh"));
+    assert!(docs.contains("tools/k16-unknown-kraftos.json"));
+    assert!(docs.contains("K16_RUSTC"));
+    assert!(docs.contains("K16_LLVM_BIN_DIR"));
     assert!(docs.contains("custom rustc"));
     assert!(docs.contains("KX"));
     assert!(docs.contains("debug_bytes=2a"));
+    assert!(!docs.contains("tools/rux16-rust-nocore-smoke.sh"));
+    assert!(!docs.contains("RUX16_RUSTC"));
+    assert!(!docs.contains("RUX16_LLVM_BIN_DIR"));
     assert!(!docs.contains(".ruxe"));
 
     let bootstrap_docs = fs::read_to_string(&bootstrap_docs).expect("Rust bootstrap docs exist");
-    assert!(bootstrap_docs.contains("tools/rux16-rustc-bootstrap-probe.sh"));
+    assert!(bootstrap_docs.contains("tools/k16-rustc-bootstrap-probe.sh"));
+    assert!(bootstrap_docs.contains("tools/k16-rust-nocore-smoke.sh"));
+    assert!(bootstrap_docs.contains("tools/k16-unknown-kraftos.json"));
+    assert!(bootstrap_docs.contains("K16_RUSTC"));
+    assert!(bootstrap_docs.contains("K16_LLVM_BIN_DIR"));
     assert!(bootstrap_docs.contains("build-rux-min/bin/llvm-config"));
     assert!(bootstrap_docs.contains("rux16"));
+    assert!(!bootstrap_docs.contains("tools/rux16-rustc-bootstrap-probe.sh"));
+    assert!(!bootstrap_docs.contains("tools/rux16-rust-nocore-smoke.sh"));
+    assert!(!bootstrap_docs.contains("RUX16_RUSTC"));
+    assert!(!bootstrap_docs.contains("RUX16_LLVM_BIN_DIR"));
 
     let feasibility_docs =
         fs::read_to_string(&feasibility_docs).expect("Rust feasibility docs exist");

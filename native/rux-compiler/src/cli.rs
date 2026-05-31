@@ -165,32 +165,32 @@ fn run_runtime(surface: CliSurface, args: &[String]) -> Result<(), String> {
 }
 
 fn build_rux16_memory_helpers(output_path: &Path) -> Result<(), String> {
-    let rustc = env::var("RUX16_RUSTC")
-        .map_err(|_| "RUX16_RUSTC must point to a custom Rux16 rustc".to_string())?;
+    let rustc = env::var("K16_RUSTC")
+        .map_err(|_| "K16_RUSTC must point to a custom K16 rustc".to_string())?;
     let rustc_path = PathBuf::from(&rustc);
     if !rustc_path.is_file() {
         return Err(format!(
-            "RUX16_RUSTC must point to a custom Rux16 rustc: {}",
+            "K16_RUSTC must point to a custom K16 rustc: {}",
             rustc_path.display()
         ));
     }
 
-    let llvm_bin_dir = env::var("RUX16_LLVM_BIN_DIR")
-        .map_err(|_| "RUX16_LLVM_BIN_DIR must point to Rux16 LLVM tools".to_string())?;
+    let llvm_bin_dir = env::var("K16_LLVM_BIN_DIR")
+        .map_err(|_| "K16_LLVM_BIN_DIR must point to K16 LLVM tools".to_string())?;
     let llc_path = PathBuf::from(llvm_bin_dir).join("llc");
     if !llc_path.is_file() {
         return Err(format!(
-            "RUX16_LLVM_BIN_DIR must contain Rux16 llc: {}",
+            "K16_LLVM_BIN_DIR must contain Rux16 llc: {}",
             llc_path.display()
         ));
     }
 
-    let target_spec = env::var("RUX16_RUST_TARGET_JSON")
+    let target_spec = env::var("K16_RUST_TARGET_JSON")
         .map(PathBuf::from)
-        .unwrap_or_else(|_| repo_root().join("tools/rux16-unknown-ruxos.json"));
+        .unwrap_or_else(|_| repo_root().join("tools/k16-unknown-kraftos.json"));
     if !target_spec.is_file() {
         return Err(format!(
-            "Rux16 Rust target spec is missing: {}",
+            "K16 Rust target spec is missing: {}",
             target_spec.display()
         ));
     }
@@ -198,7 +198,7 @@ fn build_rux16_memory_helpers(output_path: &Path) -> Result<(), String> {
     let source = runtime_source_path("rux16_memory_helpers.rs");
     if !source.is_file() {
         return Err(format!(
-            "Rux16 runtime helper source is missing: {}",
+            "K16 runtime helper source is missing: {}",
             source.display()
         ));
     }
@@ -213,7 +213,7 @@ fn build_rux16_memory_helpers(output_path: &Path) -> Result<(), String> {
             "--target",
             target_spec.to_str().ok_or_else(|| {
                 format!(
-                    "Rux16 Rust target spec path is not UTF-8: {}",
+                    "K16 Rust target spec path is not UTF-8: {}",
                     target_spec.display()
                 )
             })?,
@@ -226,7 +226,7 @@ fn build_rux16_memory_helpers(output_path: &Path) -> Result<(), String> {
             "--emit=llvm-ir",
             source.to_str().ok_or_else(|| {
                 format!(
-                    "Rux16 runtime helper source path is not UTF-8: {}",
+                    "K16 runtime helper source path is not UTF-8: {}",
                     source.display()
                 )
             })?,

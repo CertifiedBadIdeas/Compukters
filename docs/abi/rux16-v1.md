@@ -36,7 +36,7 @@ There is no zero register in v1.
 The first LLVM-facing target is expected to model Rux16 as:
 
 ```text
-target triple:   rux16-unknown-ruxos
+target triple:   k16-unknown-kraftos
 endianness:      little
 pointer width:   32
 integer width:   i1, i8, i16, i32 legal or promotable to i32

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-LLVM_BIN_DIR="${RUX16_LLVM_BIN_DIR:-$ROOT/toolchains/Compukter-Kraft-llvm/build-rux/bin}"
+LLVM_BIN_DIR="${K16_LLVM_BIN_DIR:-$ROOT/toolchains/Compukter-Kraft-llvm/build-rux/bin}"
 CLANG="$LLVM_BIN_DIR/clang"
 LLVM_READOBJ="$LLVM_BIN_DIR/llvm-readobj"
 RUX_CARGO_MANIFEST="$ROOT/native/rux-compiler/Cargo.toml"
@@ -117,4 +117,4 @@ require_clang_failure "$WORK_DIR/indirect-call.c" "Rux16 only supports direct ca
 echo "freestanding C compile checks passed"
 echo "KX link and execution checks passed"
 echo "unsupported C feature checks passed"
-echo "Rux16 clang smoke passed"
+echo "K16 clang smoke passed"

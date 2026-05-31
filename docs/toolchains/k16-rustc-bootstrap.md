@@ -1,12 +1,12 @@
-# Rux16 rustc Bootstrap Path
+# K16 rustc Bootstrap Path
 
 > Issue: [#132](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/132)
 >
-> Strategy: [Rux16 Rust-First Language Strategy](rux16-language-strategy.md)
+> Strategy: [K16 Rust-First Language Strategy](rux16-language-strategy.md)
 
 ## Current Evidence
 
-The local host compiler is not enough for the Rux16 Rust smoke:
+The local host compiler is not enough for the K16 Rust smoke:
 
 ```text
 rustc 1.94.1
@@ -37,8 +37,8 @@ Fork branch policy:
 - the main repository still pins the exact submodule commit for reproducible
   builds.
 
-After fixing `tools/rux16-unknown-ruxos.json` so `target-pointer-width` is a
-number, the current host `rustc --target tools/rux16-unknown-ruxos.json` reaches
+After fixing `tools/k16-unknown-kraftos.json` so `target-pointer-width` is a
+number, the current host `rustc --target tools/k16-unknown-kraftos.json` reaches
 the real blocker:
 
 ```text
@@ -53,8 +53,8 @@ smoke:
 rustc 1.98.0-dev
 LLVM version: 23.0.0
 Rust no_core object checks passed
-RUXE link and execution checks passed
-Rux16 Rust no_core smoke passed
+KX link and execution checks passed
+K16 Rust no_core smoke passed
 ```
 
 ## Upstream Rust Guidance
@@ -76,7 +76,7 @@ References:
 
 ## Viable Local Paths
 
-### Preferred: Rust Source With Rux16 LLVM Submodule
+### Preferred: Rust Source With K16 LLVM Submodule
 
 Use `toolchains/Compukter-Kraft-rust` as the tracked Rust source tree for
 toolchain work. In that Rust source tree, point `src/llvm-project` at the
@@ -103,7 +103,7 @@ git submodule update --init --recursive toolchains/Compukter-Kraft-rust
 
 The submodule checkout alone is not a successful rustc build. The next #145
 slice is to add the bootstrap configuration/probe that proves this Rust source
-can build against the Rux16 LLVM backend.
+can build against the K16 LLVM backend.
 
 ### Fast Probe: Rust Source With Prebuilt Rux16 LLVM
 
@@ -117,7 +117,7 @@ If rustc and LLVM APIs do not match, this path fails during compiler build.
 Run the workspace probe first:
 
 ```bash
-tools/rux16-rustc-bootstrap-probe.sh
+tools/k16-rustc-bootstrap-probe.sh
 ```
 
 The probe is intentionally strict. It requires:
@@ -138,7 +138,7 @@ which is ignored by the Rust repository.
 
 The Rux16 Rust fork changes needed for the first stage1 smoke are:
 
-- register the `rux16` LLVM component and initialize the Rux16 LLVM target
+- register the `rux16` LLVM component and initialize the K16 LLVM target
   inside `rustc_llvm`;
 - add minimal Rux16 C ABI lowering in `rustc_target`.
 
@@ -160,17 +160,17 @@ Rux16 backend.
 The first useful custom rustc result is not `core` or `std`. It is only:
 
 ```text
-RUX16_RUSTC=/path/to/custom/stage1/rustc \
-RUX16_LLVM_BIN_DIR=/path/to/rux16/llvm/bin \
-tools/rux16-rust-nocore-smoke.sh
+K16_RUSTC=/path/to/custom/stage1/rustc \
+K16_LLVM_BIN_DIR=/path/to/rux16/llvm/bin \
+tools/k16-rust-nocore-smoke.sh
 ```
 
 Expected final output:
 
 ```text
 Rust no_core object checks passed
-RUXE link and execution checks passed
-Rux16 Rust no_core smoke passed
+KX link and execution checks passed
+K16 Rust no_core smoke passed
 ```
 
 Only after that should the project move to Rust target runtime helpers,
