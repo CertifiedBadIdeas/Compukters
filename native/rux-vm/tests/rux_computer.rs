@@ -61,7 +61,7 @@ fn rux_computer_handle_accepts_storage0_media_and_exposes_snapshot() {
 fn rux_computer_handle_accepts_storage0_volume_path() {
     let bios = rux16_words(&[rux16_halt()]);
     let path = temp_volume_path("handle-storage0-path");
-    write_rux_volume(&path, &[0; 1024]);
+    write_k16_volume(&path, &[0; 1024]);
 
     let handle =
         RuxComputerHandle::create_rux16_bios_flash_with_storage0_path(&bios, 64 * 1024, 128, &path)
@@ -223,7 +223,7 @@ fn rux_computer_handle_rux16_bios_loads_stage2_from_storage_volume_path() {
     let stage2 = rux16_words(&rux16_stage2_program_words());
     let media = rux16_boot_media(entry_pc, entry_pc, 1, 1, &stage2);
     let path = temp_volume_path("rux16-stage2-volume-path");
-    write_rux_volume(&path, &media);
+    write_k16_volume(&path, &media);
     let mut handle =
         RuxComputerHandle::create_rux16_bios_flash_with_storage0_path(&bios, 64 * 1024, 512, &path)
             .expect("Rux16 BIOS flash computer creates with boot volume path");
@@ -250,7 +250,7 @@ fn rux_computer_handle_loads_rux16_bios_flash_from_path_with_storage0_path() {
     let bios_path = temp_volume_path("rux16-bios-flash-path");
     let storage_path = temp_volume_path("rux16-stage2-storage-path");
     fs::write(&bios_path, &bios).unwrap();
-    write_rux_volume(&storage_path, &media);
+    write_k16_volume(&storage_path, &media);
     let mut handle = RuxComputerHandle::create_rux16_bios_flash_path_with_storage0_path(
         &bios_path,
         64 * 1024,
@@ -277,7 +277,7 @@ fn rux_computer_handle_loads_rux16_bios_flash_from_path_with_storage0_path() {
 fn rux_computer_handle_restores_snapshot_with_bios_flash_and_storage0_path() {
     let bios = rux16_words(&rux16_mmio_firmware_words());
     let storage_path = temp_volume_path("rux16-restore-storage-path");
-    write_rux_volume(&storage_path, &[0; 1024]);
+    write_k16_volume(&storage_path, &[0; 1024]);
     let mut handle = RuxComputerHandle::create_rux16_bios_flash_with_storage0_path(
         &bios,
         64 * 1024,
@@ -336,7 +336,7 @@ fn rux_computer_handle_rux16_bios_rejects_corrupt_boot_header_magic() {
     );
 }
 
-fn write_rux_volume(path: &std::path::Path, payload: &[u8]) {
+fn write_k16_volume(path: &std::path::Path, payload: &[u8]) {
     let mut bytes = Vec::new();
     bytes.extend_from_slice(b"K16VOL");
     bytes.extend_from_slice(&1u16.to_le_bytes());
