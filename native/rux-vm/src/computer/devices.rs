@@ -490,12 +490,12 @@ pub(crate) trait StorageMedia {
 }
 
 #[derive(Debug)]
-pub(crate) struct RuxVolumeFileStorageMedia {
+pub(crate) struct K16VolumeFileStorageMedia {
     file: File,
     len: u64,
 }
 
-impl RuxVolumeFileStorageMedia {
+impl K16VolumeFileStorageMedia {
     const MAGIC: &'static [u8; 6] = b"K16VOL";
     const VERSION: u16 = 1;
     const HEADER_SIZE: u64 = 16;
@@ -575,7 +575,7 @@ impl RuxVolumeFileStorageMedia {
     }
 }
 
-impl StorageMedia for RuxVolumeFileStorageMedia {
+impl StorageMedia for K16VolumeFileStorageMedia {
     fn len(&self) -> u64 {
         self.len
     }
@@ -1019,10 +1019,10 @@ mod tests {
     }
 
     #[test]
-    fn rux_volume_file_media_reads_writes_and_flushes_payload() {
+    fn k16_volume_file_media_reads_writes_and_flushes_payload() {
         let path = temp_volume_path("read_write_flush");
-        write_rux_volume(&path, &[0; 512]);
-        let mut media = RuxVolumeFileStorageMedia::open(&path).unwrap();
+        write_k16_volume(&path, &[0; 512]);
+        let mut media = K16VolumeFileStorageMedia::open(&path).unwrap();
 
         media.write_at(511, &[0xA5]).unwrap();
         media.flush().unwrap();
@@ -1038,17 +1038,27 @@ mod tests {
     }
 
     #[test]
-    fn rux_volume_file_media_rejects_invalid_magic() {
+    fn k16_volume_file_media_rejects_invalid_magic() {
         let path = temp_volume_path("invalid_magic");
         fs::write(&path, b"BADVOL\x01\x00\x00\x02\x00\x00\x00\x00\x00\x00").unwrap();
 
-        let error = RuxVolumeFileStorageMedia::open(&path).unwrap_err();
+        let error = K16VolumeFileStorageMedia::open(&path).unwrap_err();
 
         assert!(error.to_string().contains("invalid K16VOL magic"));
         fs::remove_file(path).unwrap();
     }
 
-    fn write_rux_volume(path: &std::path::Path, payload: &[u8]) {
+    #[test]
+    fn k16_volume_file_storage_source_uses_k16_names() {
+        let devices_source = include_str!("devices.rs");
+        let profile_source = include_str!("profile.rs");
+
+        assert!(!devices_source.contains(&["Rux", "VolumeFile"].concat()));
+        assert!(!profile_source.contains(&["Rux", "VolumeFile"].concat()));
+        assert!(!profile_source.contains(&["with_", "rux", "_volume_file"].concat()));
+    }
+
+    fn write_k16_volume(path: &std::path::Path, payload: &[u8]) {
         let mut bytes = Vec::new();
         bytes.extend_from_slice(b"K16VOL");
         bytes.extend_from_slice(&1u16.to_le_bytes());

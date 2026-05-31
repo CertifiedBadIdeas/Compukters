@@ -99,7 +99,7 @@ impl ComputerMachineProfile {
                 computer_abi::COMPUTER_HARDWARE_ID_DISPLAY0,
                 computer_abi::DISPLAY0_BASE,
             ))
-            .with_hardware(ComputerHardwareConfig::storage_port_with_rux_volume_file(
+            .with_hardware(ComputerHardwareConfig::storage_port_with_k16_volume_file(
                 computer_abi::COMPUTER_HARDWARE_ID_STORAGE0,
                 computer_abi::STORAGE0_BASE,
                 storage0_path,
@@ -175,7 +175,7 @@ impl ComputerHardwareConfig {
         }
     }
 
-    pub fn storage_port_with_rux_volume_file(
+    pub fn storage_port_with_k16_volume_file(
         id: u32,
         mmio_base: u32,
         path: impl AsRef<Path>,
@@ -183,7 +183,7 @@ impl ComputerHardwareConfig {
         Self {
             id,
             mmio_base,
-            device: ComputerHardwareDevice::StoragePort(StoragePortConfig::with_rux_volume_file(
+            device: ComputerHardwareDevice::StoragePort(StoragePortConfig::with_k16_volume_file(
                 path,
             )),
         }
@@ -219,9 +219,9 @@ impl StoragePortConfig {
         }
     }
 
-    fn with_rux_volume_file(path: impl AsRef<Path>) -> Self {
+    fn with_k16_volume_file(path: impl AsRef<Path>) -> Self {
         Self {
-            media: Some(StorageMediaConfig::RuxVolumeFile {
+            media: Some(StorageMediaConfig::K16VolumeFile {
                 path: path.as_ref().to_path_buf(),
             }),
         }
@@ -231,7 +231,7 @@ impl StoragePortConfig {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum StorageMediaConfig {
     InMemory { bytes: Vec<u8>, read_only: bool },
-    RuxVolumeFile { path: PathBuf },
+    K16VolumeFile { path: PathBuf },
 }
 
 impl ComputerHardwareDevice {

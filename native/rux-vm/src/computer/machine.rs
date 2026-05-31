@@ -1,6 +1,6 @@
 use crate::computer::devices::{
     BiosFlashDevice, ComputerControlDevice, ComputerTextDisplaySnapshot, DebugSerialDevice,
-    RuxVolumeFileStorageMedia, SerialInputDevice, StoragePortDevice, TextDisplayDevice,
+    K16VolumeFileStorageMedia, SerialInputDevice, StoragePortDevice, TextDisplayDevice,
 };
 use crate::computer::profile::{
     validate_profile_v2, ComputerHardwareDevice, ComputerMachineProfile, HardwareTableEntry,
@@ -202,9 +202,9 @@ impl ComputerMachine {
                         Some(StorageMediaConfig::InMemory { bytes, read_only }) => {
                             StoragePortDevice::with_media(bytes.clone(), *read_only)?
                         }
-                        Some(StorageMediaConfig::RuxVolumeFile { path }) => {
+                        Some(StorageMediaConfig::K16VolumeFile { path }) => {
                             StoragePortDevice::with_media_backend(Box::new(
-                                RuxVolumeFileStorageMedia::open(path)?,
+                                K16VolumeFileStorageMedia::open(path)?,
                             ))?
                         }
                         None => StoragePortDevice::new_absent(),
@@ -1308,9 +1308,9 @@ mod tests {
     #[test]
     fn storage0_file_media_write_blocks_flushes_payload_file() {
         let path = temp_volume_path("machine-storage0-file");
-        write_rux_volume(&path, &[0; 512]);
+        write_k16_volume(&path, &[0; 512]);
         let profile = ComputerMachineProfile::new(2048).with_hardware(
-            ComputerHardwareConfig::storage_port_with_rux_volume_file(
+            ComputerHardwareConfig::storage_port_with_k16_volume_file(
                 computer_abi::COMPUTER_HARDWARE_ID_STORAGE0,
                 computer_abi::STORAGE0_BASE,
                 &path,
@@ -1895,7 +1895,7 @@ mod tests {
         ComputerMachine::from_profile(profile).unwrap()
     }
 
-    fn write_rux_volume(path: &std::path::Path, payload: &[u8]) {
+    fn write_k16_volume(path: &std::path::Path, payload: &[u8]) {
         let mut bytes = Vec::new();
         bytes.extend_from_slice(b"K16VOL");
         bytes.extend_from_slice(&1u16.to_le_bytes());
