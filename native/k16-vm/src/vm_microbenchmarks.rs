@@ -59,7 +59,7 @@ impl std::str::FromStr for VmBenchmarkWorkload {
     }
 }
 
-pub fn run_rux16_workload(workload: VmBenchmarkWorkload, iterations: u32) -> Result<u32, String> {
+pub fn run_k16_workload(workload: VmBenchmarkWorkload, iterations: u32) -> Result<u32, String> {
     let mut bus = MachineBus::new(MEMORY_SIZE).map_err(|error| error.to_string())?;
     if workload == VmBenchmarkWorkload::MmioLoop {
         bus.map_mmio(MMIO_ADDR, Box::new(BenchmarkRegisterDevice { value: 0 }))

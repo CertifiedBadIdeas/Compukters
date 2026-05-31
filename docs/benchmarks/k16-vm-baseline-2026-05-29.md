@@ -36,19 +36,19 @@ This run used:
 
 ```text
 workload	vm	iterations	checksum	best_nanos	nanos_per_iteration
-compute-loop	rux16	1000	1000	61730	61.730
-memory-loop	rux16	1000	1000	103359	103.359
-mmio-loop	rux16	1000	1000	101100	101.100
+compute-loop	k16	1000	1000	61730	61.730
+memory-loop	k16	1000	1000	103359	103.359
+mmio-loop	k16	1000	1000	101100	101.100
 
 workload	vm	iterations	checksum	best_nanos	nanos_per_iteration
-compute-loop	rux16	10000	10000	613949	61.395
-memory-loop	rux16	10000	10000	1029397	102.940
-mmio-loop	rux16	10000	10000	1007878	100.788
+compute-loop	k16	10000	10000	613949	61.395
+memory-loop	k16	10000	10000	1029397	102.940
+mmio-loop	k16	10000	10000	1007878	100.788
 
 workload	vm	iterations	checksum	best_nanos	nanos_per_iteration
-compute-loop	rux16	100000	100000	6226766	62.268
-memory-loop	rux16	100000	100000	10406456	104.065
-mmio-loop	rux16	100000	100000	10111187	101.112
+compute-loop	k16	100000	100000	6226766	62.268
+memory-loop	k16	100000	100000	10406456	104.065
+mmio-loop	k16	100000	100000	10111187	101.112
 ```
 
 ## Approximate Throughput

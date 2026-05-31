@@ -17,7 +17,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use k16_vm::vm_microbenchmarks::{run_rux16_workload, VmBenchmarkWorkload};
+use k16_vm::vm_microbenchmarks::{run_k16_workload, VmBenchmarkWorkload};
 use std::env;
 use std::hint::black_box;
 use std::time::Instant;
@@ -29,7 +29,7 @@ fn main() {
 
     println!("workload\tvm\titerations\tchecksum\tbest_nanos\tnanos_per_iteration");
     for workload in VmBenchmarkWorkload::all() {
-        print_sample(*workload, "rux16", iterations, samples, run_rux16_workload);
+        print_sample(*workload, "k16", iterations, samples, run_k16_workload);
     }
 }
 

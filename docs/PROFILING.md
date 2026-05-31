@@ -18,7 +18,7 @@ cargo run --release --example vm_microbenchmarks -- 100000 5
 ```
 
 The current tracked local baseline is documented in
-[`docs/benchmarks/rux16-vm-baseline-2026-05-29.md`](benchmarks/rux16-vm-baseline-2026-05-29.md).
+[`docs/benchmarks/k16-vm-baseline-2026-05-29.md`](benchmarks/k16-vm-baseline-2026-05-29.md).
 These numbers are diagnostic points for optimization work, not CI performance
 budgets.
 

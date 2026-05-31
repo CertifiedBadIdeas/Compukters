@@ -17,36 +17,36 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use k16_vm::vm_microbenchmarks::{run_rux16_workload, VmBenchmarkWorkload};
+use k16_vm::vm_microbenchmarks::{run_k16_workload, VmBenchmarkWorkload};
 use std::fs;
 use std::path::Path;
 
 #[test]
-fn compute_loop_runs_on_rux16() {
+fn compute_loop_runs_on_k16() {
     let iterations = 7;
 
     assert_eq!(
-        run_rux16_workload(VmBenchmarkWorkload::ComputeLoop, iterations).unwrap(),
+        run_k16_workload(VmBenchmarkWorkload::ComputeLoop, iterations).unwrap(),
         iterations,
     );
 }
 
 #[test]
-fn memory_loop_runs_on_rux16() {
+fn memory_loop_runs_on_k16() {
     let iterations = 7;
 
     assert_eq!(
-        run_rux16_workload(VmBenchmarkWorkload::MemoryLoop, iterations).unwrap(),
+        run_k16_workload(VmBenchmarkWorkload::MemoryLoop, iterations).unwrap(),
         iterations,
     );
 }
 
 #[test]
-fn mmio_loop_runs_on_rux16() {
+fn mmio_loop_runs_on_k16() {
     let iterations = 7;
 
     assert_eq!(
-        run_rux16_workload(VmBenchmarkWorkload::MmioLoop, iterations).unwrap(),
+        run_k16_workload(VmBenchmarkWorkload::MmioLoop, iterations).unwrap(),
         iterations,
     );
 }
@@ -66,7 +66,7 @@ fn memory_loop_budget_covers_larger_benchmark_runs() {
     let iterations = 1_000;
 
     assert_eq!(
-        run_rux16_workload(VmBenchmarkWorkload::MemoryLoop, iterations).unwrap(),
+        run_k16_workload(VmBenchmarkWorkload::MemoryLoop, iterations).unwrap(),
         iterations,
     );
 }
@@ -75,7 +75,14 @@ fn memory_loop_budget_covers_larger_benchmark_runs() {
 fn vm_microbenchmarks_source_does_not_expose_low_image_path() {
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
     let source = fs::read_to_string(manifest_dir.join("src/vm_microbenchmarks.rs")).unwrap();
+    let example = fs::read_to_string(manifest_dir.join("examples/vm_microbenchmarks.rs")).unwrap();
 
+    assert!(source.contains("pub fn run_k16_workload("));
+    assert!(!source.contains("pub fn run_rux16_workload("));
+    assert!(example.contains("run_k16_workload"));
+    assert!(!example.contains("run_rux16_workload"));
+    assert!(example.contains("print_sample(*workload, \"k16\""));
+    assert!(!example.contains("print_sample(*workload, \"rux16\""));
     assert!(!source.contains("low_image"));
     assert!(!source.contains("LowImage"));
     assert!(!source.contains("run_low_image_workload"));
