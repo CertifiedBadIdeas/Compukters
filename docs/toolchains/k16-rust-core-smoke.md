@@ -5,10 +5,10 @@
 > Previous proof: [K16 Rust no_core Smoke](k16-rust-nocore-smoke.md)
 
 `tools/k16-rust-core-smoke.sh` is the first strict proof path for ordinary
-freestanding Rust on K16. It uses Cargo's nightly `-Z build-std=core` path to
-build Rust `core` for `tools/k16-unknown-kraftos.json`, then compiles a tiny
-`#![no_std]` program, links it through `k16 link`, and executes it through the
-VM.
+freestanding Rust on K16. It uses Cargo's nightly `-Z build-std=core` and
+`-Z json-target-spec` path to build Rust `core` for
+`tools/k16-unknown-kraftos.json`, then compiles a tiny `#![no_std]` program,
+links it through `k16 link`, and executes it through the VM.
 
 This smoke is core only: no alloc, no std, no panic unwinding, and no hidden VM
 or host fallback path. Missing target support or missing helper symbols must
@@ -19,7 +19,7 @@ fail the build or link explicitly.
 The script requires:
 
 - `K16_RUSTC` pointing at a custom nightly rustc with the K16 LLVM target;
-- nightly-capable Cargo with `-Z build-std` support;
+- nightly-capable Cargo with `-Z build-std` and `-Z json-target-spec` support;
 - `K16_LLVM_BIN_DIR` pointing at LLVM tools built with the K16 target;
 - `tools/k16-unknown-kraftos.json` as the Rust target specification.
 
@@ -46,6 +46,20 @@ contract, so a successful VM run observes:
 ```text
 debug_bytes=2a
 ```
+
+## Current Blocker
+
+After building the stage1 host `std` sysroot, the smoke reaches real K16 codegen
+for Rust `core`. The current blocker is still inside the K16 LLVM/Rust backend:
+
+```text
+rustc-LLVM ERROR: Cannot select: br_jt
+rustc-LLVM ERROR: unsupported library call operation
+```
+
+Standalone LLVM lowering for register and constant `shr` is covered by the K16
+LLVM tests, so the remaining work is the broader Rust `core` codegen surface
+exercised by `build-std=core`.
 
 ## Firmware Tier
 

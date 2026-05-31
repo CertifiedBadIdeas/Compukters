@@ -17,7 +17,7 @@ tiny `#![no_std]` program. The object then goes through the existing K16 object
 pipeline:
 
 ```text
-cargo rustc -Z build-std=core
+cargo rustc -Z build-std=core -Z json-target-spec
   -> K16 ELF32 object
   -> k16 runtime k16-startup + k16-memory-helpers
   -> k16 link --target program
@@ -28,7 +28,7 @@ The firmware Gradle path should use the same runtime tier for BIOS, bootloader,
 and kernel object builds:
 
 ```text
--Zbuild-std=core
+-Zbuild-std=core -Zjson-target-spec
 ```
 
 No `alloc`, no `std`, no unwinding, and no hidden host fallback are part of this
@@ -46,4 +46,6 @@ synchronization, and I/O services.
 
 - `cargo test --manifest-path rust/host/k16-tools/Cargo.toml rust_nocore_smoke_artifacts_are_documented_and_strict`
 - `./gradlew-sandbox :build-scripts:test --tests '*K16ToolingRenameTest.rustFirmwareGradleBuildsCoreOnlyArtifacts'`
-- `tools/k16-rust-core-smoke.sh` with a custom K16 rustc/Cargo toolchain
+- `tools/k16-rust-core-smoke.sh` with a custom K16 rustc/Cargo toolchain; it
+  currently reaches K16 backend codegen and fails on missing `core` lowering
+  support such as `br_jt` and unsupported library calls.

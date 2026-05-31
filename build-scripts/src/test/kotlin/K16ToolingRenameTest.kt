@@ -107,6 +107,7 @@ class K16ToolingRenameTest {
         val buildScript = root.resolve("modules/v1_21_1/v1_21_1-neoforge/build.gradle.kts").readText()
 
         assertTrue(buildScript.contains("-Zbuild-std=core"))
+        assertTrue(buildScript.contains("-Zjson-target-spec"))
         assertFalse(buildScript.contains("build-std=core,alloc"))
         assertFalse(buildScript.contains("build-std=std"))
     }
