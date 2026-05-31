@@ -8,7 +8,7 @@ it is a native Rust virtual machine (`k16-vm`) wrapped via JNI.
 ## What you get
 
 - 💻 **Notebook** — a portable player-facing computer item that boots its own
-  Rux VM instance on a background daemon thread.
+  Kraft16 VM instance on a background daemon thread.
 - 🖥 **Kraft16 VM** — a deterministic, sandboxed virtual machine implemented in
   Rust. Boots Rux16 code from per-computer `bios.kflash` files and storage0
   `.kv` boot media.
@@ -20,8 +20,8 @@ it is a native Rust virtual machine (`k16-vm`) wrapped via JNI.
 Mid-rewrite. The legacy in-game CKL language stack, the Workbench IDE,
 the standalone Computer block, the Workbench/Terminal/Serial items, and the
 CKIM bytecode runtime have all been removed. The remaining player-facing
-surface is Notebook, booted through the Rust VM's Rux16 BIOS path
-(`bios.kflash` → `storage0.kv` boot entry → guest Rux16 execution).
+surface is Notebook, booted through the Kraft16 BIOS path
+(`bios.kflash` → `storage0.kv` boot entry → guest K16 execution).
 
 Currently for **NeoForge 1.21.1**.
 

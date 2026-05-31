@@ -33,7 +33,7 @@ data class BuildContext(
     val javaVersion: Int,
 )
 
-data class RustVmNativePlatform(
+data class K16VmNativePlatform(
     val id: String,
     val libraryName: String,
 )
@@ -141,24 +141,24 @@ fun Project.effectiveBuildVersion(): String {
     return effective
 }
 
-fun currentRustVmNativePlatform(
+fun currentK16VmNativePlatform(
     osName: String = System.getProperty("os.name"),
     osArch: String = System.getProperty("os.arch"),
-): RustVmNativePlatform {
+): K16VmNativePlatform {
     val arch =
         when (osArch.lowercase()) {
             "amd64", "x86_64" -> "x86_64"
             "aarch64", "arm64" -> "aarch64"
-            else -> error("Unsupported Rust VM native architecture: $osArch")
+            else -> error("Unsupported K16 VM native architecture: $osArch")
         }
     return when {
         osName.startsWith("linux", ignoreCase = true) ->
-            RustVmNativePlatform(id = "linux-$arch", libraryName = "libk16_vm.so")
+            K16VmNativePlatform(id = "linux-$arch", libraryName = "libk16_vm.so")
         osName.startsWith("windows", ignoreCase = true) ->
-            RustVmNativePlatform(id = "windows-$arch", libraryName = "k16_vm.dll")
+            K16VmNativePlatform(id = "windows-$arch", libraryName = "k16_vm.dll")
         osName.startsWith("mac", ignoreCase = true) || osName.startsWith("darwin", ignoreCase = true) ->
-            RustVmNativePlatform(id = "macos-$arch", libraryName = "libk16_vm.dylib")
-        else -> error("Unsupported Rust VM native OS: $osName")
+            K16VmNativePlatform(id = "macos-$arch", libraryName = "libk16_vm.dylib")
+        else -> error("Unsupported K16 VM native OS: $osName")
     }
 }
 

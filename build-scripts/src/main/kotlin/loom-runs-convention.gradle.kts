@@ -53,118 +53,118 @@ fun RunConfigSettings.applyShared() {
 
 private val DEV_CLIENT_USERNAMES = listOf("DevA", "DevB", "DevC")
 
-private val rustVmCrateDir = rootProject.layout.projectDirectory.dir("native/rux-vm")
-private val rustVmNativePlatform = currentRustVmNativePlatform()
-private val rustVmNativeLibrary = rustVmCrateDir.file("target/debug/${rustVmNativePlatform.libraryName}")
-private val rustVmReleaseNativeLibrary = rustVmCrateDir.file("target/release/${rustVmNativePlatform.libraryName}")
-private val rustVmWindowsX64Target = "x86_64-pc-windows-gnu"
-private val rustVmWindowsX64NativeLibrary = rustVmCrateDir.file("target/$rustVmWindowsX64Target/release/k16_vm.dll")
-private val rustVmNativeDistDir = rustVmCrateDir.dir("dist/natives")
-private val productionRustVmNativeResources = layout.buildDirectory.dir("generated/production-rust-vm-native-resources")
+private val k16VmCrateDir = rootProject.layout.projectDirectory.dir("native/rux-vm")
+private val k16VmNativePlatform = currentK16VmNativePlatform()
+private val k16VmNativeLibrary = k16VmCrateDir.file("target/debug/${k16VmNativePlatform.libraryName}")
+private val k16VmReleaseNativeLibrary = k16VmCrateDir.file("target/release/${k16VmNativePlatform.libraryName}")
+private val k16VmWindowsX64Target = "x86_64-pc-windows-gnu"
+private val k16VmWindowsX64NativeLibrary = k16VmCrateDir.file("target/$k16VmWindowsX64Target/release/k16_vm.dll")
+private val k16VmNativeDistDir = k16VmCrateDir.dir("dist/natives")
+private val productionK16VmNativeResources = layout.buildDirectory.dir("generated/production-k16-vm-native-resources")
 private val isProductionUniversalJarRequested =
     gradle.startParameter.taskNames.any { taskName ->
         taskName == "buildProductionUniversalJar" || taskName.endsWith(":buildProductionUniversalJar")
     }
 
-val buildRustVmNativeLibrary =
-    tasks.register<Exec>("buildRustVmNativeLibrary") {
+val buildK16VmNativeLibrary =
+    tasks.register<Exec>("buildK16VmNativeLibrary") {
         group = "loom"
-        description = "Build the local Rust Rux VM JNI library used by Rust VM dev run configurations."
-        workingDir = rustVmCrateDir.asFile
+        description = "Build the local K16 VM JNI library used by K16 VM dev run configurations."
+        workingDir = k16VmCrateDir.asFile
         commandLine("cargo", "build")
-        inputs.file(rustVmCrateDir.file("Cargo.toml"))
-        inputs.file(rustVmCrateDir.file("Cargo.lock"))
-        inputs.dir(rustVmCrateDir.dir("src"))
-        outputs.file(rustVmNativeLibrary)
+        inputs.file(k16VmCrateDir.file("Cargo.toml"))
+        inputs.file(k16VmCrateDir.file("Cargo.lock"))
+        inputs.dir(k16VmCrateDir.dir("src"))
+        outputs.file(k16VmNativeLibrary)
     }
 
-val buildRustVmNativeLibraryRelease =
-    tasks.register<Exec>("buildRustVmNativeLibraryRelease") {
+val buildK16VmNativeLibraryRelease =
+    tasks.register<Exec>("buildK16VmNativeLibraryRelease") {
         group = "build"
-        description = "Build the release Rust Rux VM JNI library for bundling into production mod jars."
-        workingDir = rustVmCrateDir.asFile
+        description = "Build the release K16 VM JNI library for bundling into production mod jars."
+        workingDir = k16VmCrateDir.asFile
         commandLine("cargo", "build", "--release")
-        inputs.file(rustVmCrateDir.file("Cargo.toml"))
-        inputs.file(rustVmCrateDir.file("Cargo.lock"))
-        inputs.dir(rustVmCrateDir.dir("src"))
-        outputs.file(rustVmReleaseNativeLibrary)
+        inputs.file(k16VmCrateDir.file("Cargo.toml"))
+        inputs.file(k16VmCrateDir.file("Cargo.lock"))
+        inputs.dir(k16VmCrateDir.dir("src"))
+        outputs.file(k16VmReleaseNativeLibrary)
     }
 
-val buildRustVmWindowsX64NativeLibraryRelease =
-    tasks.register<Exec>("buildRustVmWindowsX64NativeLibraryRelease") {
+val buildK16VmWindowsX64NativeLibraryRelease =
+    tasks.register<Exec>("buildK16VmWindowsX64NativeLibraryRelease") {
         group = "build"
-        description = "Cross-build the release Rust Rux VM JNI library for Windows x64 production jars."
-        workingDir = rustVmCrateDir.asFile
-        commandLine("cargo", "build", "--release", "--target", rustVmWindowsX64Target)
+        description = "Cross-build the release K16 VM JNI library for Windows x64 production jars."
+        workingDir = k16VmCrateDir.asFile
+        commandLine("cargo", "build", "--release", "--target", k16VmWindowsX64Target)
         environment("CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER", "x86_64-w64-mingw32-gcc")
-        inputs.file(rustVmCrateDir.file("Cargo.toml"))
-        inputs.file(rustVmCrateDir.file("Cargo.lock"))
-        inputs.dir(rustVmCrateDir.dir("src"))
-        outputs.file(rustVmWindowsX64NativeLibrary)
+        inputs.file(k16VmCrateDir.file("Cargo.toml"))
+        inputs.file(k16VmCrateDir.file("Cargo.lock"))
+        inputs.dir(k16VmCrateDir.dir("src"))
+        outputs.file(k16VmWindowsX64NativeLibrary)
         doFirst {
             require(commandAvailable("x86_64-w64-mingw32-gcc")) {
                 "Missing x86_64-w64-mingw32-gcc. Install MinGW-w64 and run " +
-                    "`rustup target add $rustVmWindowsX64Target` before building a production universal jar."
+                    "`rustup target add $k16VmWindowsX64Target` before building a production universal jar."
             }
         }
     }
 
-val prepareBundledRustVmNativeLibraries =
-    tasks.register<Sync>("prepareBundledRustVmNativeLibraries") {
+val prepareBundledK16VmNativeLibraries =
+    tasks.register<Sync>("prepareBundledK16VmNativeLibraries") {
         group = "build"
-        description = "Stage Rust Rux VM native libraries under natives/<os-arch>/ for universal mod jars."
-        dependsOn(buildRustVmNativeLibraryRelease)
+        description = "Stage K16 VM native libraries under natives/<os-arch>/ for universal mod jars."
+        dependsOn(buildK16VmNativeLibraryRelease)
 
-        from(rustVmReleaseNativeLibrary) {
-            into("natives/${rustVmNativePlatform.id}")
-            rename { rustVmNativePlatform.libraryName }
+        from(k16VmReleaseNativeLibrary) {
+            into("natives/${k16VmNativePlatform.id}")
+            rename { k16VmNativePlatform.libraryName }
         }
-        from(rustVmNativeDistDir) {
+        from(k16VmNativeDistDir) {
             include("**/*")
         }
-        into(layout.buildDirectory.dir("generated/rust-vm-native-resources"))
+        into(layout.buildDirectory.dir("generated/k16-vm-native-resources"))
     }
 
-val stageProductionRustVmNativeLibraries =
-    tasks.register<Sync>("stageProductionRustVmNativeLibraries") {
+val stageProductionK16VmNativeLibraries =
+    tasks.register<Sync>("stageProductionK16VmNativeLibraries") {
         group = "build"
-        description = "Stage current-platform and Windows x64 Rust Rux VM natives for production universal jars."
-        dependsOn(buildRustVmNativeLibraryRelease)
-        if (rustVmNativePlatform.id != "windows-x86_64") {
-            dependsOn(buildRustVmWindowsX64NativeLibraryRelease)
+        description = "Stage current-platform and Windows x64 K16 VM natives for production universal jars."
+        dependsOn(buildK16VmNativeLibraryRelease)
+        if (k16VmNativePlatform.id != "windows-x86_64") {
+            dependsOn(buildK16VmWindowsX64NativeLibraryRelease)
         }
 
-        from(rustVmReleaseNativeLibrary) {
-            into("natives/${rustVmNativePlatform.id}")
-            rename { rustVmNativePlatform.libraryName }
+        from(k16VmReleaseNativeLibrary) {
+            into("natives/${k16VmNativePlatform.id}")
+            rename { k16VmNativePlatform.libraryName }
         }
-        from(if (rustVmNativePlatform.id == "windows-x86_64") rustVmReleaseNativeLibrary else rustVmWindowsX64NativeLibrary) {
+        from(if (k16VmNativePlatform.id == "windows-x86_64") k16VmReleaseNativeLibrary else k16VmWindowsX64NativeLibrary) {
             into("natives/windows-x86_64")
             rename { "k16_vm.dll" }
         }
-        from(rustVmNativeDistDir) {
+        from(k16VmNativeDistDir) {
             include("**/*")
         }
-        into(productionRustVmNativeResources)
+        into(productionK16VmNativeResources)
     }
 
 tasks.named<ProcessResources>("processResources") {
-    dependsOn(prepareBundledRustVmNativeLibraries)
-    from(prepareBundledRustVmNativeLibraries)
+    dependsOn(prepareBundledK16VmNativeLibraries)
+    from(prepareBundledK16VmNativeLibraries)
     if (isProductionUniversalJarRequested) {
-        dependsOn(stageProductionRustVmNativeLibraries)
-        from(productionRustVmNativeResources)
+        dependsOn(stageProductionK16VmNativeLibraries)
+        from(productionK16VmNativeResources)
     }
 }
 
 tasks.register("buildProductionUniversalJar") {
     group = "build"
-    description = "Build a production mod jar with current-platform and Windows x64 Rust Rux VM natives bundled."
-    dependsOn(stageProductionRustVmNativeLibraries)
+    description = "Build a production mod jar with current-platform and Windows x64 K16 VM natives bundled."
+    dependsOn(stageProductionK16VmNativeLibraries)
     dependsOn(tasks.named("remapJar"))
 }
 
-fun RunConfigSettings.applyRustVm() {
+fun RunConfigSettings.applyK16Vm() {
     property("k16.vm.native.display", "true")
     property("k16.vm.native.daemon", "true")
 }
@@ -176,7 +176,7 @@ val runs = loom.runs
 runs.named("client") {
     runDir("run/client")
     applyShared()
-    applyRustVm()
+    applyK16Vm()
     programArgs("--username", DEV_CLIENT_USERNAMES[0])
 }
 
@@ -189,7 +189,7 @@ runs.register("client2") {
     configName = "Minecraft Client 2"
     runDir("run/client2")
     applyShared()
-    applyRustVm()
+    applyK16Vm()
     programArgs("--username", DEV_CLIENT_USERNAMES[1])
 }
 
@@ -202,7 +202,7 @@ runs.register("client3") {
     configName = "Minecraft Client 3"
     runDir("run/client3")
     applyShared()
-    applyRustVm()
+    applyK16Vm()
     programArgs("--username", DEV_CLIENT_USERNAMES[2])
 }
 
@@ -214,7 +214,7 @@ runs.register("client3") {
 runs.named("server") {
     runDir("run/server")
     applyShared()
-    applyRustVm()
+    applyK16Vm()
 }
 
 private val DEV_SERVER_SEED = "compukterkraft"
@@ -286,7 +286,7 @@ val prepareServerDev =
     }
 
 tasks.matching { it.name == "runServer" }.configureEach {
-    dependsOn(prepareServerDev, buildRustVmNativeLibrary)
+    dependsOn(prepareServerDev, buildK16VmNativeLibrary)
 }
 
 // ---------------------------------------------------------------------------
@@ -358,7 +358,7 @@ private val CLIENT_RUN_TASKS =
     )
 
 tasks.matching { it.name in CLIENT_RUN_TASKS }.configureEach {
-    dependsOn(prepareClientDev, buildRustVmNativeLibrary)
+    dependsOn(prepareClientDev, buildK16VmNativeLibrary)
 }
 
 private fun seedOptionsTxt(file: File) {

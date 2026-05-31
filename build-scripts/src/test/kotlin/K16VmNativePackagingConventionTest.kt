@@ -24,13 +24,13 @@ import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.io.path.readText
 
-class RustVmNativePackagingConventionTest {
+class K16VmNativePackagingConventionTest {
     @Test
-    fun productionUniversalJarBuildsWindowsNativeWithoutAffectingDevRuns() {
+    fun productionUniversalJarBuildsWindowsK16NativeWithoutAffectingDevRuns() {
         val source = loomRunsConventionSource().readText()
 
         assertTrue(
-            source.contains("buildRustVmWindowsX64NativeLibraryRelease"),
+            source.contains("buildK16VmWindowsX64NativeLibraryRelease"),
             "Production packaging should expose an explicit Windows x64 native build task.",
         )
         assertTrue(
@@ -46,13 +46,29 @@ class RustVmNativePackagingConventionTest {
             "Production native resources must be gated to production builds so stale staged natives cannot shadow dev natives.",
         )
         assertTrue(
-            source.contains("dependsOn(stageProductionRustVmNativeLibraries)"),
+            source.contains("dependsOn(stageProductionK16VmNativeLibraries)"),
             "Production resource processing should depend on production native staging only for the production task path.",
         )
         assertTrue(
-            source.contains("from(productionRustVmNativeResources)"),
+            source.contains("from(productionK16VmNativeResources)"),
             "Production jars should still include staged cross-platform native resources.",
         )
+    }
+
+    @Test
+    fun gradleNativeBuildSurfaceUsesK16VmNamesWithoutRustVmAliases() {
+        val source = loomRunsConventionSource().readText()
+
+        assertTrue(source.contains("buildK16VmNativeLibrary"))
+        assertTrue(source.contains("buildK16VmNativeLibraryRelease"))
+        assertTrue(source.contains("prepareBundledK16VmNativeLibraries"))
+        assertTrue(source.contains("stageProductionK16VmNativeLibraries"))
+        assertTrue(source.contains("applyK16Vm"))
+        assertFalse(source.contains("buildRustVm"))
+        assertFalse(source.contains("prepareBundledRustVm"))
+        assertFalse(source.contains("stageProductionRustVm"))
+        assertFalse(source.contains("applyRustVm"))
+        assertFalse(source.contains("productionRustVmNativeResources"))
     }
 
     @Test

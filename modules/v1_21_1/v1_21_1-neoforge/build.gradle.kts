@@ -82,8 +82,8 @@ dependencies {
     add(gameTest.implementationConfigurationName, project(path = projects.v1211Common.path, configuration = "namedElements"))
 }
 
-val rustVmNativePlatform = currentRustVmNativePlatform()
-val rustVmNativeLibrary = rootProject.layout.projectDirectory.file("native/rux-vm/target/debug/${rustVmNativePlatform.libraryName}")
+val k16VmNativePlatform = currentK16VmNativePlatform()
+val k16VmNativeLibrary = rootProject.layout.projectDirectory.file("native/rux-vm/target/debug/${k16VmNativePlatform.libraryName}")
 val generatedK16FirmwareResources = layout.buildDirectory.dir("generated/k16-firmware-resources")
 val generatedK16FirmwareArtifacts = layout.buildDirectory.dir("generated/k16-firmware-artifacts")
 val ruxCompilerManifest = rootProject.layout.projectDirectory.file("native/rux-compiler/Cargo.toml")
