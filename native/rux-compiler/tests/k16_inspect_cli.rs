@@ -8,7 +8,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 static TEMP_FILE_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
 #[test]
-fn rux_inspect_identifies_partitioned_volume() {
+fn k16_inspect_identifies_partitioned_volume() {
     let path = temp_file("storage0.kv");
     let media_path = temp_file("storage0-media.bin");
     assert!(Command::new(k16_binary())
@@ -50,7 +50,7 @@ fn rux_inspect_identifies_partitioned_volume() {
 }
 
 #[test]
-fn rux_inspect_identifies_standalone_ruxfs_and_ruxe() {
+fn k16_inspect_identifies_standalone_ruxfs_and_ruxe() {
     let fs_path = temp_file("root.kfs");
     let ruxe_path = temp_file("init.kx");
     fs::write(
@@ -95,7 +95,7 @@ fn rux_inspect_identifies_standalone_ruxfs_and_ruxe() {
 }
 
 #[test]
-fn rux_inspect_rejects_unknown_blob_without_fallback() {
+fn k16_inspect_rejects_unknown_blob_without_fallback() {
     let path = temp_file("unknown.bin");
     fs::write(&path, b"not a rux blob").expect("unknown blob writes");
 
@@ -115,7 +115,7 @@ fn rux_inspect_rejects_unknown_blob_without_fallback() {
 fn temp_file(name: &str) -> PathBuf {
     let counter = TEMP_FILE_COUNTER.fetch_add(1, Ordering::Relaxed);
     let path = std::env::temp_dir().join(format!(
-        "rux-inspect-{}-{counter}-{name}",
+        "k16-inspect-{}-{counter}-{name}",
         std::process::id()
     ));
     let _ = fs::remove_file(&path);

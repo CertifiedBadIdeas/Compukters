@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use std::process::Command;
 
 #[test]
-fn rux_runtime_startup_links_returning_main_and_exposes_return_byte() {
+fn k16_runtime_startup_links_returning_main_and_exposes_return_byte() {
     let startup_path = temp_file("startup.o");
     let main_path = temp_file("main.o");
     let output_path = temp_file("program.ruxe");
@@ -62,7 +62,7 @@ fn rux_runtime_startup_links_returning_main_and_exposes_return_byte() {
 }
 
 #[test]
-fn rux_run_executes_program_ruxe_and_prints_debug_output_hex() {
+fn k16_run_executes_program_ruxe_and_prints_debug_output_hex() {
     let startup_path = temp_file("run-startup.o");
     let main_path = temp_file("run-main.o");
     let output_path = temp_file("run-program.ruxe");
@@ -118,7 +118,7 @@ fn rux_run_executes_program_ruxe_and_prints_debug_output_hex() {
 }
 
 #[test]
-fn rux_runtime_startup_does_not_hide_missing_helper_symbols() {
+fn k16_runtime_startup_does_not_hide_missing_helper_symbols() {
     let startup_path = temp_file("startup-helper-missing.o");
     let main_path = temp_file("main-needs-helper.o");
     let output_path = temp_file("missing-helper.ruxe");
@@ -166,7 +166,7 @@ fn rux_runtime_startup_does_not_hide_missing_helper_symbols() {
 }
 
 #[test]
-fn rux_runtime_memory_helpers_require_custom_rux16_rustc() {
+fn k16_runtime_memory_helpers_require_custom_rux16_rustc() {
     let helper_path = temp_file("memory-helpers.o");
 
     let helper_output = Command::new(k16_binary())
@@ -394,7 +394,7 @@ fn pad_to(bytes: &mut Vec<u8>, offset: u32) {
 }
 
 fn temp_file(name: &str) -> PathBuf {
-    let path = std::env::temp_dir().join(format!("rux-runtime-cli-{}-{name}", std::process::id()));
+    let path = std::env::temp_dir().join(format!("k16-runtime-cli-{}-{name}", std::process::id()));
     let _ = fs::remove_file(&path);
     path
 }

@@ -146,14 +146,28 @@ fn root_shell_helpers_split_rux_language_and_k16_machine_tooling() {
 fn machine_cli_integration_tests_use_k16_names() {
     let tests_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests");
 
-    assert!(
-        tests_dir.join("k16_disasm_cli.rs").exists(),
-        "k16 disasm integration test should use the k16 machine-tooling name"
-    );
-    assert!(
-        !tests_dir.join("rux_disasm_rux16_cli.rs").exists(),
-        "k16 disasm integration test should not keep the old rux machine-tooling name"
-    );
+    for (tool, k16_name, old_rux_name) in [
+        ("disasm", "k16_disasm_cli.rs", "rux_disasm_rux16_cli.rs"),
+        ("fs", "k16_fs_cli.rs", "rux_fs_cli.rs"),
+        ("inspect", "k16_inspect_cli.rs", "rux_inspect_cli.rs"),
+        ("link", "k16_link_cli.rs", "rux_link_cli.rs"),
+        ("runtime", "k16_runtime_cli.rs", "rux_runtime_cli.rs"),
+        (
+            "storage workflow",
+            "k16_storage_workflow_cli.rs",
+            "rux_storage_workflow_cli.rs",
+        ),
+        ("volume", "k16_volume_cli.rs", "rux_volume_cli.rs"),
+    ] {
+        assert!(
+            tests_dir.join(k16_name).exists(),
+            "k16 {tool} integration test should use the k16 machine-tooling name"
+        );
+        assert!(
+            !tests_dir.join(old_rux_name).exists(),
+            "k16 {tool} integration test should not keep the old rux machine-tooling name"
+        );
+    }
 }
 
 fn rux_binary() -> String {
