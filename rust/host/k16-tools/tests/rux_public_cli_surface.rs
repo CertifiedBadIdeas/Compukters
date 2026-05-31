@@ -111,7 +111,8 @@ fn root_shell_helpers_split_rux_language_and_k16_machine_tooling() {
     let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .and_then(Path::parent)
-        .expect("compiler crate is under native/k16-tools");
+        .and_then(Path::parent)
+        .expect("compiler crate is under rust/host/k16-tools");
     let rux_helper = repo_root.join("rux");
     let k16_helper = repo_root.join("k16");
 

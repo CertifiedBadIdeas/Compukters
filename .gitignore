@@ -2,6 +2,8 @@
 bin
 !modules/v1_21_1/v1_21_1-neoforge/src/main/resources/rom/bin/
 !modules/v1_21_1/v1_21_1-neoforge/src/main/resources/rom/bin/*.ck
+!rust/host/k16-tools/src/bin/
+!rust/host/k16-tools/src/bin/*.rs
 *.launch
 .settings
 .metadata

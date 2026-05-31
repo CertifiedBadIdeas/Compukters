@@ -6,7 +6,7 @@ LLVM_BIN_DIR="${K16_LLVM_BIN_DIR:-$ROOT/toolchains/Compukter-Kraft-llvm/build-ru
 LLC="$LLVM_BIN_DIR/llc"
 LLVM_READOBJ="$LLVM_BIN_DIR/llvm-readobj"
 LLVM_NOT="$LLVM_BIN_DIR/not"
-RUX_CARGO_MANIFEST="$ROOT/native/k16-tools/Cargo.toml"
+RUX_CARGO_MANIFEST="$ROOT/rust/host/k16-tools/Cargo.toml"
 
 require_file() {
     local path="$1"

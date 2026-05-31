@@ -9,7 +9,7 @@ fn rust_nocore_smoke_artifacts_are_documented_and_strict() {
     let clang_smoke_script = root.join("tools/k16-clang-smoke.sh");
     let smoke_script = root.join("tools/k16-rust-nocore-smoke.sh");
     let bootstrap_probe = root.join("tools/k16-rustc-bootstrap-probe.sh");
-    let runtime_helpers = root.join("native/k16-tools/runtime/k16_memory_helpers.rs");
+    let runtime_helpers = root.join("rust/host/k16-tools/runtime/k16_memory_helpers.rs");
     let llvm_docs = root.join("docs/toolchains/k16-llvm-smoke.md");
     let clang_docs = root.join("docs/toolchains/k16-clang-smoke.md");
     let docs = root.join("docs/toolchains/k16-rust-nocore-smoke.md");
@@ -166,5 +166,6 @@ fn repo_root() -> &'static Path {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .and_then(Path::parent)
-        .expect("native/k16-tools has repo root grandparent")
+        .and_then(Path::parent)
+        .expect("rust/host/k16-tools has repo root great-grandparent")
 }

@@ -21,7 +21,7 @@ formats until each compatibility-affecting ABI migration lands.
 
 ## Current Rux-Language Inputs
 
-Tracked `.rx` source is concentrated under `native/k16-tools`:
+Tracked `.rx` source is concentrated under `rust/host/k16-tools`:
 
 - `examples/firmware/*.rx`: BIOS and old firmware demos, including
   `k16_bios.rx`.
@@ -41,16 +41,16 @@ are still the only working boot-chain fixtures.
 
 The Rux-language implementation currently lives in:
 
-- `native/k16-tools/src/frontend/*`: AST, lexer, parser, resolver, and
+- `rust/host/k16-tools/src/frontend/*`: AST, lexer, parser, resolver, and
   diagnostics.
-- `native/k16-tools/src/runtime/stdlib.rs`: embedded `.rx` stdlib module
+- `rust/host/k16-tools/src/runtime/stdlib.rs`: embedded `.rx` stdlib module
   registry.
-- `native/k16-tools/src/bin/rux.rs`: public CLI surface, including
+- `rust/host/k16-tools/src/bin/rux.rs`: public CLI surface, including
   `rux compile` and related source-driven commands.
-- `native/k16-tools/src/advice.rs`: source-level improvement checks for Rux
+- `rust/host/k16-tools/src/advice.rs`: source-level improvement checks for Rux
   listings.
 
-The parts of `native/k16-tools` that should survive are the machine/tooling
+The parts of `rust/host/k16-tools` that should survive are the machine/tooling
 pieces: K16 object assembly/disassembly, object linking, K16E encoding,
 volume/filesystem tooling, inspect/run helpers, and Rust-target smoke support.
 Those may need a later crate/CLI rename, but they are not language frontend
@@ -75,16 +75,16 @@ on `.rx` source for the bundled boot chain.
 
 The highest-impact Rux-language test dependencies are:
 
-- `native/k16-tools/tests/k16_artifact_backend.rs`: compiles and executes
+- `rust/host/k16-tools/tests/k16_artifact_backend.rs`: compiles and executes
   bundled BIOS source and verifies many BIOS behaviors.
-- `native/k16-tools/tests/rux_volume_cli.rs`: relies on
+- `rust/host/k16-tools/tests/rux_volume_cli.rs`: relies on
   `kernel_loader.rx`, `init_loader.rx`, `rini_init.rx`, and `trap_init.rx` for
   boot-chain, K16FS, kernel/init, and syscall-style tests.
-- `native/k16-tools/tests/rux_compile_cli.rs`: directly tests
+- `rust/host/k16-tools/tests/rux_compile_cli.rs`: directly tests
   `rux compile` from `.rx` source.
-- `native/k16-tools/tests/rux_check_cli.rs`: tests source-level Rux code
+- `rust/host/k16-tools/tests/rux_check_cli.rs`: tests source-level Rux code
   advice.
-- `native/k16-tools/tests/rux_public_cli_surface.rs`: expects public help
+- `rust/host/k16-tools/tests/rux_public_cli_surface.rs`: expects public help
   text to expose `rux compile`.
 
 These tests should not be deleted first. They should be replaced with Rust
