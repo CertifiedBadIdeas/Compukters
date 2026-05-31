@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Added `k16-ld`, a Rust/Cargo linker-driver entry point for K16 `bin`
+  artifacts. It accepts rustc-style linker arguments with explicit
+  `--k16-target`, expands K16 ELF members from `.rlib` archives on demand, and
+  rejects missing targets or unsupported linker flags without falling back to
+  host linker behavior.
+- NeoForge bundled BIOS generation now builds `rust/guest/k16-bios` as a Rust
+  `bin` crate through `k16-ld`, so the `.kflash` is the linker output rather
+  than an object-only Cargo emission followed by a separate Gradle link step.
 - `k16 link --target bios` now emits raw linked K16 BIOS flash bytes from K16
   object inputs with a reset-address trampoline that initializes `sp` and jumps
   to `_start`, so Rust-authored BIOS firmware has a host-tool path to `.kflash`

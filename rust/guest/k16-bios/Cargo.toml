@@ -6,10 +6,11 @@ edition = "2021"
 [features]
 k16-target = []
 
-[lib]
-name = "k16_bios"
-path = "src/lib.rs"
+[[bin]]
+name = "k16-bios"
+path = "src/main.rs"
 test = false
+required-features = ["k16-target"]
 
 [dependencies]
 k16-abi = { path = "../k16-abi" }

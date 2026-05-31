@@ -1,12 +1,10 @@
-#![cfg_attr(feature = "k16-target", no_std)]
+#![no_std]
+#![no_main]
 
-#[cfg(feature = "k16-target")]
 use core::panic::PanicInfo;
 
-#[cfg(feature = "k16-target")]
 use k16_abi::computer::{control, debug, display0, status};
 
-#[cfg(feature = "k16-target")]
 #[no_mangle]
 pub extern "C" fn _start() -> ! {
     clear_display();
@@ -17,7 +15,6 @@ pub extern "C" fn _start() -> ! {
     wait_forever()
 }
 
-#[cfg(feature = "k16-target")]
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {
     print_debug(b"K16 BIOS PANIC\n");
@@ -28,7 +25,6 @@ fn panic(_info: &PanicInfo) -> ! {
     wait_forever()
 }
 
-#[cfg(feature = "k16-target")]
 fn print_debug(bytes: &[u8]) {
     let mut index = 0;
     while index < bytes.len() {
@@ -39,14 +35,12 @@ fn print_debug(bytes: &[u8]) {
     }
 }
 
-#[cfg(feature = "k16-target")]
 fn clear_display() {
     unsafe {
         write_i32(display0::COMMAND, display0::COMMAND_CLEAR);
     }
 }
 
-#[cfg(feature = "k16-target")]
 fn print_display_line(row: i32, bytes: &[u8]) {
     unsafe {
         write_i32(display0::CURSOR_X, 0);
@@ -62,7 +56,6 @@ fn print_display_line(row: i32, bytes: &[u8]) {
     }
 }
 
-#[cfg(feature = "k16-target")]
 fn set_halted() {
     unsafe {
         write_i32(control::PANIC_CODE, status::READY);
@@ -70,21 +63,18 @@ fn set_halted() {
     }
 }
 
-#[cfg(feature = "k16-target")]
 unsafe fn write_i32(address: u32, value: i32) {
     unsafe {
         *(address as usize as *mut i32) = value;
     }
 }
 
-#[cfg(feature = "k16-target")]
 unsafe fn write_u8(address: u32, value: u8) {
     unsafe {
         *(address as usize as *mut u8) = value;
     }
 }
 
-#[cfg(feature = "k16-target")]
 fn wait_forever() -> ! {
     loop {
         core::hint::spin_loop();

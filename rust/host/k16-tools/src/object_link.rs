@@ -3,6 +3,7 @@ use crate::k16e;
 use std::collections::HashMap;
 
 const ELF_MAGIC: &[u8; 4] = b"\x7fELF";
+const AR_MAGIC: &[u8; 8] = b"!<arch>\n";
 const ELFCLASS32: u8 = 1;
 const ELFDATA2LSB: u8 = 1;
 const EV_CURRENT: u32 = 1;
@@ -23,6 +24,7 @@ const SHF_STRINGS: u32 = 0x20;
 
 const SHN_UNDEF: u16 = 0;
 const SHN_ABS: u16 = 0xfff1;
+const STB_LOCAL: u8 = 0;
 
 const R_K16_NONE: u32 = 0;
 const R_K16_ABS32: u32 = 1;
@@ -47,10 +49,7 @@ pub fn link_k16_objects_to_k16e(
         return Err("k16 link requires at least one input object".to_string());
     }
 
-    let objects = inputs
-        .iter()
-        .map(|input| ParsedObject::parse(input.name, input.bytes))
-        .collect::<Result<Vec<_>, _>>()?;
+    let objects = parse_link_inputs(inputs)?;
     let load_addr = target.base_address();
     let bios_prefix_len = if target == K16ArtifactTarget::Bios {
         BIOS_ENTRY_TRAMPOLINE_LEN
@@ -122,7 +121,8 @@ fn link_objects(
     let mut defined_symbols = HashMap::new();
     for (object_index, object) in objects.iter().enumerate() {
         for symbol in &object.symbols {
-            if symbol.name.is_empty()
+            if symbol.binding == STB_LOCAL
+                || symbol.name.is_empty()
                 || symbol.section_index == SHN_UNDEF
                 || symbol.section_index == SHN_ABS
             {
@@ -366,6 +366,126 @@ struct ParsedObject {
     relocations: Vec<Relocation>,
 }
 
+fn parse_link_inputs(inputs: &[K16LinkInput<'_>]) -> Result<Vec<ParsedObject>, String> {
+    let mut objects = Vec::new();
+    let mut archives = Vec::new();
+    for input in inputs {
+        if input.bytes.starts_with(ELF_MAGIC) {
+            objects.push(ParsedObject::parse(input.name, input.bytes)?);
+        } else if input.bytes.starts_with(AR_MAGIC) {
+            archives.push(parse_archive(input.name, input.bytes)?);
+        } else {
+            return Err(format!("{}: invalid ELF or archive magic", input.name));
+        }
+    }
+    select_archive_members(&mut objects, archives);
+    Ok(objects)
+}
+
+fn select_archive_members(objects: &mut Vec<ParsedObject>, archives: Vec<Vec<ParsedObject>>) {
+    let mut selected = archives
+        .into_iter()
+        .map(|archive| archive.into_iter().map(Some).collect::<Vec<_>>())
+        .collect::<Vec<_>>();
+
+    loop {
+        let unresolved = unresolved_global_symbols(objects);
+        if unresolved.is_empty() {
+            break;
+        }
+
+        let mut changed = false;
+        for archive in &mut selected {
+            for member in archive {
+                let Some(object) = member else {
+                    continue;
+                };
+                if object.defines_any(&unresolved) {
+                    let object = member.take().expect("member is present");
+                    objects.push(object);
+                    changed = true;
+                }
+            }
+        }
+
+        if !changed {
+            break;
+        }
+    }
+}
+
+fn unresolved_global_symbols(objects: &[ParsedObject]) -> Vec<String> {
+    let mut defined = Vec::new();
+    let mut unresolved = Vec::new();
+
+    for object in objects {
+        for symbol in &object.symbols {
+            if symbol.is_global_definition() {
+                defined.push(symbol.name.clone());
+            }
+        }
+    }
+
+    for object in objects {
+        for symbol in &object.symbols {
+            if symbol.is_global_undefined()
+                && !defined.iter().any(|defined| defined == &symbol.name)
+                && !unresolved
+                    .iter()
+                    .any(|unresolved| unresolved == &symbol.name)
+            {
+                unresolved.push(symbol.name.clone());
+            }
+        }
+    }
+
+    unresolved
+}
+
+fn parse_archive(name: &str, bytes: &[u8]) -> Result<Vec<ParsedObject>, String> {
+    let mut objects = Vec::new();
+    let mut offset = AR_MAGIC.len();
+    while offset < bytes.len() {
+        let header = bytes
+            .get(offset..offset + 60)
+            .ok_or_else(|| format!("{name}: archive member header is truncated"))?;
+        if header.get(58..60) != Some(b"`\n") {
+            return Err(format!("{name}: invalid archive member header"));
+        }
+        let raw_name = String::from_utf8_lossy(&header[0..16]).trim().to_string();
+        let size_text = String::from_utf8_lossy(&header[48..58]).trim().to_string();
+        let size = size_text
+            .parse::<usize>()
+            .map_err(|_| format!("{name}: invalid archive member size `{size_text}`"))?;
+        offset += 60;
+        let member = bytes
+            .get(offset..offset + size)
+            .ok_or_else(|| format!("{name}: archive member `{raw_name}` is truncated"))?;
+        let member_name = archive_member_name(&raw_name);
+        if member.starts_with(ELF_MAGIC) {
+            objects.push(ParsedObject::parse(
+                &format!("{name}({member_name})"),
+                member,
+            )?);
+        }
+        offset += size + (size % 2);
+    }
+    if objects.is_empty() {
+        return Err(format!(
+            "{name}: archive contains no K16 ELF object members"
+        ));
+    }
+    Ok(objects)
+}
+
+fn archive_member_name(raw_name: &str) -> String {
+    raw_name
+        .strip_suffix('/')
+        .unwrap_or(raw_name)
+        .trim()
+        .to_string()
+}
+
 impl ParsedObject {
     fn parse(name: &str, bytes: &[u8]) -> Result<Self, String> {
         validate_elf_header(name, bytes)?;
@@ -412,6 +532,14 @@ impl ParsedObject {
             symbols,
             relocations,
         })
+    }
+}
+
+impl ParsedObject {
+    fn defines_any(&self, unresolved: &[String]) -> bool {
+        self.symbols
+            .iter()
+            .any(|symbol| symbol.is_global_definition() && unresolved.contains(&symbol.name))
     }
 }
 
@@ -510,7 +638,21 @@ struct Section {
 struct Symbol {
     name: String,
     value: u32,
+    binding: u8,
     section_index: u16,
+}
+
+impl Symbol {
+    fn is_global_definition(&self) -> bool {
+        self.binding != STB_LOCAL
+            && !self.name.is_empty()
+            && self.section_index != SHN_UNDEF
+            && self.section_index != SHN_ABS
+    }
+
+    fn is_global_undefined(&self) -> bool {
+        self.binding != STB_LOCAL && !self.name.is_empty() && self.section_index == SHN_UNDEF
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -561,9 +703,14 @@ fn parse_symbols(
             .get(offset..offset + 16)
             .ok_or_else(|| format!("{object_name}: symtab entry {symbol_index} is truncated"))?;
         let name_offset = read_u32_at(bytes, offset)?;
+        let info = bytes
+            .get(offset + 12)
+            .copied()
+            .ok_or_else(|| format!("{object_name}: symtab entry {symbol_index} is truncated"))?;
         symbols.push(Symbol {
             name: read_string(strtab_bytes, name_offset, object_name)?,
             value: read_u32_at(bytes, offset + 4)?,
+            binding: info >> 4,
             section_index: read_u16_at(bytes, offset + 14)?,
         });
     }
