@@ -67,7 +67,7 @@ internal object NativeLibraryLocator {
     fun requireLibraryPath(): String =
         resolve()?.path
             ?: error(
-                "Rust image VM runner requires -D$LIBRARY_PROPERTY=/absolute/path/to/${platform()?.libraryName ?: "librux_vm.so"} " +
+                "Rust image VM runner requires -D$LIBRARY_PROPERTY=/absolute/path/to/${platform()?.libraryName ?: "libk16_vm.so"} " +
                     "or a bundled native resource for ${System.getProperty("os.name")}/${System.getProperty("os.arch")}",
             )
 
@@ -83,11 +83,11 @@ internal object NativeLibraryLocator {
             }
         return when {
             osName.startsWith("Linux", ignoreCase = true) ->
-                NativeLibraryPlatform(id = "linux-$arch", libraryName = "librux_vm.so")
+                NativeLibraryPlatform(id = "linux-$arch", libraryName = "libk16_vm.so")
             osName.startsWith("Windows", ignoreCase = true) ->
-                NativeLibraryPlatform(id = "windows-$arch", libraryName = "rux_vm.dll")
+                NativeLibraryPlatform(id = "windows-$arch", libraryName = "k16_vm.dll")
             osName.startsWith("Mac", ignoreCase = true) || osName.startsWith("Darwin", ignoreCase = true) ->
-                NativeLibraryPlatform(id = "macos-$arch", libraryName = "librux_vm.dylib")
+                NativeLibraryPlatform(id = "macos-$arch", libraryName = "libk16_vm.dylib")
             else -> null
         }
     }

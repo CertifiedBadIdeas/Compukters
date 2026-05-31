@@ -1,10 +1,10 @@
+use k16_vm::k16_computer::{K16ComputerHandle, K16ComputerTextDisplaySnapshot};
+use k16_vm::rux16::Rux16Signal;
 use rux_compiler::artifact::Rux16ArtifactTarget;
 use rux_compiler::compile_rux16_artifact;
 use rux_compiler::ruxe;
 use rux_compiler::ruxfs;
 use rux_compiler::volume;
-use rux_vm::k16_computer::{K16ComputerHandle, K16ComputerTextDisplaySnapshot};
-use rux_vm::rux16::Rux16Signal;
 use std::fs;
 use std::path::Path;
 use std::path::PathBuf;

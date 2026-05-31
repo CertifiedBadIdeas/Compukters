@@ -2,6 +2,15 @@ use std::fs;
 use std::path::Path;
 
 #[test]
+fn runtime_crate_metadata_uses_k16_package_name() {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let cargo_toml = fs::read_to_string(manifest_dir.join("Cargo.toml")).unwrap();
+
+    assert!(cargo_toml.contains("name = \"k16-vm\""));
+    assert!(!cargo_toml.contains("name = \"rux-vm\""));
+}
+
+#[test]
 fn rux_computer_handle_source_does_not_expose_low_image_startup_or_handoff() {
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
     let lib_source = fs::read_to_string(manifest_dir.join("src/lib.rs")).unwrap();

@@ -17,7 +17,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use rux_vm::vm_microbenchmarks::{run_rux16_workload, VmBenchmarkWorkload};
+use k16_vm::vm_microbenchmarks::{run_rux16_workload, VmBenchmarkWorkload};
 use std::env;
 use std::hint::black_box;
 use std::time::Instant;

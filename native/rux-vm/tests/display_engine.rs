@@ -1,5 +1,5 @@
-use rux_vm::display::{DeviceDisplayRegistry, DisplayEngine, PixelFormat};
-use rux_vm::generated::font_mono5x7::{has_mono5x7_glyph, mono5x7_glyph};
+use k16_vm::display::{DeviceDisplayRegistry, DisplayEngine, PixelFormat};
+use k16_vm::generated::font_mono5x7::{has_mono5x7_glyph, mono5x7_glyph};
 
 fn payload_contains_rgb565(payload: &[u8], rgb565: u16) -> bool {
     let hi = (rgb565 >> 8) as u8;

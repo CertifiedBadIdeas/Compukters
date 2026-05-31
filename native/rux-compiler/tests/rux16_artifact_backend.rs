@@ -1,10 +1,10 @@
+use k16_vm::computer_machine::ComputerMachine;
+use k16_vm::k16_computer::K16ComputerHandle;
+use k16_vm::rux16::Rux16Signal;
 use rux_compiler::artifact::Rux16ArtifactTarget;
 use rux_compiler::compile_rux16_artifact;
 use rux_compiler::rux16_disasm;
 use rux_compiler::ruxe;
-use rux_vm::computer_machine::ComputerMachine;
-use rux_vm::k16_computer::K16ComputerHandle;
-use rux_vm::rux16::Rux16Signal;
 use std::fs;
 use std::path::Path;
 
@@ -296,7 +296,7 @@ fn assert_bios_rejects_non_partitioned_boot_media(bios_flash: &[u8], media: Vec<
 }
 
 fn rux16_display_row(
-    snapshot: &rux_vm::computer_machine::ComputerTextDisplaySnapshot,
+    snapshot: &k16_vm::computer_machine::ComputerTextDisplaySnapshot,
     row: u32,
 ) -> String {
     let start = (row * snapshot.columns) as usize;

@@ -1,6 +1,6 @@
-use rux_vm::low_bus::{MachineBus, MmioDevice};
-use rux_vm::low_machine::MemoryFault;
-use rux_vm::rux16::{
+use k16_vm::low_bus::{MachineBus, MmioDevice};
+use k16_vm::low_machine::MemoryFault;
+use k16_vm::rux16::{
     Rux16Cpu, Rux16Signal, RUX16_CSR_TRAP_CAUSE, RUX16_CSR_TRAP_PC, RUX16_CSR_TRAP_VALUE,
     RUX16_CSR_TRAP_VECTOR, RUX16_STACK_POINTER_REGISTER, RUX16_TRAP_CAUSE_ILLEGAL_INSTRUCTION,
 };

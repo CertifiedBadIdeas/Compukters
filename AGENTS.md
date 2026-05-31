@@ -33,7 +33,7 @@ Rust crates use edition 2021 conventions: `snake_case` modules/functions, `Pasca
 Kotlin tests use `kotlin.test` on JUnit Platform; build-script tests use JUnit Jupiter. Place tests beside the owning
 module in `src/test/kotlin`. NeoForge game tests live under `src/gameTest/kotlin` and are compiled by `check`; run
 `:v1_21_1-neoforge:runGameTestServer` when validating in-game behavior. For JNI-dependent tests, pass
-`-Dk16.vm.native.library=/path/to/librux_vm.so` after building the Rust library.
+`-Dk16.vm.native.library=/path/to/libk16_vm.so` after building the Rust library.
 
 ## Commit & Pull Request Guidelines
 
