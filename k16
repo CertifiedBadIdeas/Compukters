@@ -26,8 +26,13 @@ MANIFEST="$ROOT/native/rux-compiler/Cargo.toml"
 usage() {
     cat >&2 <<'EOF'
 usage:
-  rux check <input.rx>
-  rux compile --target <bios|boot|program> <input.rx> -o <output>
+  k16 link [--target <boot|kernel|program>] <input.ko>... -o <output.kx>
+  k16 runtime <rux16-startup|rux16-memory-helpers> -o <output.ko>
+  k16 run <program.kx>
+  k16 disasm --target <bios|boot|kernel|program> <input>
+  k16 inspect <blob>
+  k16 volume <create|init|put-boot|put-kernel> ...
+  k16 fs <filesystem> ...
 EOF
 }
 
@@ -36,4 +41,4 @@ if [ "$#" -lt 1 ]; then
     exit 2
 fi
 
-exec cargo run --quiet --manifest-path "$MANIFEST" --bin rux -- "$@"
+exec cargo run --quiet --manifest-path "$MANIFEST" --bin k16 -- "$@"
