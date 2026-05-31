@@ -35,13 +35,14 @@ does not implement. Unsupported relocations are link-time errors.
 The current tool entry point is:
 
 ```text
-k16 link --target <boot|kernel|program> <input.ko>... -o <output.kx>
+k16 link --target <bios|boot|kernel|program> <input.ko>... -o <output>
 ```
 
 The command accepts K16 ELF32 `ET_REL` inputs, resolves static symbols,
 applies supported relocations, and emits a validated single-load-section
-`K16E`. It does not emit raw BIOS flash; BIOS images are moving to Rust-built
-firmware artifacts rather than the retired public `rux compile` path.
+`K16E` for bootloader, kernel, and program targets. The `bios` target emits raw
+BIOS flash bytes and prefixes them with a reset-address trampoline that
+initializes `sp` to the machine profile program base and jumps to `_start`.
 
 ## Freestanding Runtime Boundary
 
