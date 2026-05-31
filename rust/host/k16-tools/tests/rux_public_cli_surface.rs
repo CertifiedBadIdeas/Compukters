@@ -19,12 +19,13 @@ fn rux_emit_is_not_a_legacy_alias() {
 
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("rux compile"), "stderr: {stderr}");
+    assert!(stderr.contains("rux check"), "stderr: {stderr}");
+    assert!(!stderr.contains("rux compile"), "stderr: {stderr}");
     assert!(!stderr.contains("ruxi"), "stderr: {stderr}");
 }
 
 #[test]
-fn rux_compile_bios_is_the_public_firmware_path() {
+fn rux_compile_is_retired_from_public_cli() {
     let output = Command::new(rux_binary())
         .args(["compile", "--target", "bios"])
         .output()
@@ -32,16 +33,9 @@ fn rux_compile_bios_is_the_public_firmware_path() {
 
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("rux compile"), "stderr: {stderr}");
-    assert!(stderr.contains("--target bios"), "stderr: {stderr}");
-    assert!(stderr.contains("--target boot"), "stderr: {stderr}");
-    assert!(
-        stderr.contains("--target <kernel|program>"),
-        "stderr: {stderr}"
-    );
-    assert!(stderr.contains("<bios.kflash>"), "stderr: {stderr}");
-    assert!(stderr.contains("<boot.kb>"), "stderr: {stderr}");
-    assert!(stderr.contains("<program.kx>"), "stderr: {stderr}");
+    assert!(stderr.contains("rux check"), "stderr: {stderr}");
+    assert!(!stderr.contains("rux compile"), "stderr: {stderr}");
+    assert!(!stderr.contains("--target bios"), "stderr: {stderr}");
 }
 
 #[test]
@@ -57,11 +51,11 @@ fn rux_does_not_expose_machine_artifact_commands() {
         assert!(!output.status.success(), "command: {command}");
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
-            stderr.contains("rux compile"),
+            stderr.contains("rux check"),
             "command: {command}, stderr: {stderr}"
         );
         assert!(
-            stderr.contains("rux check"),
+            !stderr.contains("rux compile"),
             "command: {command}, stderr: {stderr}"
         );
         assert!(
@@ -133,8 +127,8 @@ fn root_shell_helpers_split_rux_language_and_k16_machine_tooling() {
 
     assert!(rux_source.contains("--bin rux"));
     assert!(k16_source.contains("--bin k16"));
-    assert!(rux_source.contains("rux compile"));
     assert!(rux_source.contains("rux check"));
+    assert!(!rux_source.contains("rux compile"));
     assert!(!rux_source.contains("rux volume"));
     assert!(!rux_source.contains("rux disasm"));
     assert!(!rux_source.contains("rux fs"));

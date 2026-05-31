@@ -9,7 +9,8 @@ fn rust_nocore_smoke_artifacts_are_documented_and_strict() {
     let clang_smoke_script = root.join("tools/k16-clang-smoke.sh");
     let smoke_script = root.join("tools/k16-rust-nocore-smoke.sh");
     let bootstrap_probe = root.join("tools/k16-rustc-bootstrap-probe.sh");
-    let runtime_helpers = root.join("rust/host/k16-tools/runtime/k16_memory_helpers.rs");
+    let runtime_helpers = root.join("rust/guest/k16-rt/src/no_core_helpers.rs");
+    let retired_host_runtime = root.join("rust/host/k16-tools/runtime");
     let llvm_docs = root.join("docs/toolchains/k16-llvm-smoke.md");
     let clang_docs = root.join("docs/toolchains/k16-clang-smoke.md");
     let docs = root.join("docs/toolchains/k16-rust-nocore-smoke.md");
@@ -83,12 +84,21 @@ fn rust_nocore_smoke_artifacts_are_documented_and_strict() {
     assert!(!script.contains("RUX16_LLVM_BIN_DIR"));
     assert!(!script.contains("RUX16_RUST_TARGET_JSON"));
 
-    let helpers = fs::read_to_string(&runtime_helpers).expect("K16 runtime helper source exists");
+    assert!(
+        !retired_host_runtime.exists(),
+        "K16 host tools must not own guest runtime helper source"
+    );
+    let helpers =
+        fs::read_to_string(&runtime_helpers).expect("K16 guest runtime helper source exists");
     assert!(helpers.contains("#![no_core]"));
     assert!(helpers.contains("#![no_main]"));
     assert!(helpers.contains("__k16_memcpy"));
     assert!(helpers.contains("__k16_memset"));
     assert!(helpers.contains("__k16_memmove"));
+    assert!(helpers.contains("__divdi3"));
+    assert!(helpers.contains("__udivdi3"));
+    assert!(helpers.contains("__moddi3"));
+    assert!(helpers.contains("__umoddi3"));
     assert!(!helpers.contains("extern crate std"));
 
     let probe = fs::read_to_string(&bootstrap_probe).expect("Rust bootstrap probe script exists");

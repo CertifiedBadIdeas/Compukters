@@ -105,7 +105,8 @@ rustc
 
 ### Compiler Builtins And Runtime Helpers
 
-K16 currently reserves helper symbols such as:
+K16 currently provides memory helpers and the first i64 integer compiler-rt
+helpers, while the remaining compiler-rt surface stays explicit link-time work:
 
 ```text
 __k16_memcpy

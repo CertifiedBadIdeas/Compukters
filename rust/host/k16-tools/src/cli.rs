@@ -1,7 +1,5 @@
 use crate::artifact::K16ArtifactTarget;
-use crate::{
-    advice, compile_k16_artifact, inspect, k16_disasm, k16_runtime, k16fs, object_link, volume,
-};
+use crate::{advice, inspect, k16_disasm, k16_runtime, k16fs, object_link, volume};
 use k16_vm::k16::K16Signal;
 use k16_vm::k16_computer::K16ComputerHandle;
 use std::env;
@@ -38,7 +36,6 @@ fn run_cli(surface: CliSurface, args: Vec<String>) -> Result<(), String> {
         return usage_error(surface);
     };
     match (surface, command.as_str()) {
-        (CliSurface::Rux, "compile") => run_compile(&args[1..]),
         (CliSurface::Rux, "check") => run_check(&args[1..]),
         (CliSurface::K16, "link") => run_link(surface, &args[1..]),
         (CliSurface::K16, "runtime") => run_runtime(surface, &args[1..]),
@@ -53,7 +50,7 @@ fn run_cli(surface: CliSurface, args: Vec<String>) -> Result<(), String> {
 
 fn usage_error(surface: CliSurface) -> Result<(), String> {
     match surface {
-        CliSurface::Rux => Err("usage: rux check <input.rx>\n       rux compile --target bios <input.rx> -o <bios.kflash>\n       rux compile --target boot <input.rx> -o <boot.kb>\n       rux compile [--target <kernel|program>] <input.rx> -o <program.kx>".to_string()),
+        CliSurface::Rux => Err("usage: rux check <input.rx>".to_string()),
         CliSurface::K16 => Err("usage: k16 link [--target <boot|kernel|program>] <input.ko>... -o <output.kx>\n       k16 runtime <k16-startup|k16-memory-helpers> -o <output.ko>\n       k16 run <program.kx>\n       k16 disasm --target <bios|boot|kernel|program> <input>\n       k16 inspect <blob>\n       k16 volume <create|init|put-boot|put-kernel> ...\n       k16 fs <filesystem> ...".to_string()),
     }
 }
@@ -107,16 +104,6 @@ fn run_check(args: &[String]) -> Result<(), String> {
         println!("  help: {}", diagnostic.help);
     }
     Ok(())
-}
-
-fn run_compile(args: &[String]) -> Result<(), String> {
-    let config = parse_compile_args(args)?;
-    let source = fs::read_to_string(&config.source_path)
-        .map_err(|error| format!("failed to read {}: {error}", config.source_path))?;
-    let artifact = compile_k16_artifact(&source, config.target)
-        .map_err(|error| format!("compile error: {}", error.message))?;
-    fs::write(&config.output_path, artifact.bytes)
-        .map_err(|error| format!("failed to write {}: {error}", config.output_path))
 }
 
 fn run_link(surface: CliSurface, args: &[String]) -> Result<(), String> {
@@ -193,7 +180,7 @@ fn build_k16_memory_helpers(output_path: &Path) -> Result<(), String> {
         ));
     }
 
-    let source = runtime_source_path("k16_memory_helpers.rs");
+    let source = k16_rt_no_core_helpers_path();
     if !source.is_file() {
         return Err(format!(
             "K16 runtime helper source is missing: {}",
@@ -283,10 +270,8 @@ fn build_k16_memory_helpers(output_path: &Path) -> Result<(), String> {
     Ok(())
 }
 
-fn runtime_source_path(name: &str) -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("runtime")
-        .join(name)
+fn k16_rt_no_core_helpers_path() -> PathBuf {
+    repo_root().join("rust/guest/k16-rt/src/no_core_helpers.rs")
 }
 
 fn repo_root() -> PathBuf {
@@ -351,13 +336,6 @@ fn parse_disasm_args(surface: CliSurface, args: &[String]) -> Result<DisasmConfi
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct CompileConfig {
-    target: K16ArtifactTarget,
-    source_path: String,
-    output_path: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
 struct LinkConfig {
     target: K16ArtifactTarget,
     input_paths: Vec<String>,
@@ -399,44 +377,6 @@ fn parse_link_args(surface: CliSurface, args: &[String]) -> Result<LinkConfig, S
         target,
         input_paths,
         output_path: output_path.ok_or_else(|| link_usage_message(surface))?,
-    })
-}
-
-fn parse_compile_args(args: &[String]) -> Result<CompileConfig, String> {
-    let mut target = K16ArtifactTarget::Program;
-    let mut source_path = None;
-    let mut output_path = None;
-    let mut index = 0;
-    while index < args.len() {
-        match args[index].as_str() {
-            "--target" => {
-                let Some(value) = args.get(index + 1) else {
-                    return compile_usage_error();
-                };
-                target = K16ArtifactTarget::parse(value)?;
-                index += 2;
-            }
-            "-o" => {
-                let Some(value) = args.get(index + 1) else {
-                    return compile_usage_error();
-                };
-                output_path = Some(value.clone());
-                index += 2;
-            }
-            value if value.starts_with('-') => return compile_usage_error(),
-            value => {
-                if source_path.is_some() {
-                    return compile_usage_error();
-                }
-                source_path = Some(value.to_string());
-                index += 1;
-            }
-        }
-    }
-    Ok(CompileConfig {
-        target,
-        source_path: source_path.ok_or_else(compile_usage_message)?,
-        output_path: output_path.ok_or_else(compile_usage_message)?,
     })
 }
 
@@ -651,14 +591,6 @@ fn parse_size(value: &str) -> Result<usize, String> {
 
 fn check_usage_error() -> Result<(), String> {
     Err("usage: rux check <input.rx>".to_string())
-}
-
-fn compile_usage_error() -> Result<CompileConfig, String> {
-    Err(compile_usage_message())
-}
-
-fn compile_usage_message() -> String {
-    "usage: rux compile --target bios <input.rx> -o <bios.kflash>\n       rux compile --target boot <input.rx> -o <boot.kb>\n       rux compile [--target <kernel|program>] <input.rx> -o <program.kx>".to_string()
 }
 
 fn link_usage_error(surface: CliSurface) -> Result<LinkConfig, String> {

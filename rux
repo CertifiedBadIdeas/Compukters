@@ -27,7 +27,6 @@ usage() {
     cat >&2 <<'EOF'
 usage:
   rux check <input.rx>
-  rux compile --target <bios|boot|program> <input.rx> -o <output>
 EOF
 }
 
