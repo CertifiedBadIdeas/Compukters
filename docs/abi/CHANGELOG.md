@@ -2,22 +2,22 @@
 
 ## Unreleased
 
-- `rux disasm` now validates Rux16 instruction encodings against the active VM
+- `k16 disasm` now validates Rux16 instruction encodings against the active VM
   decode rules and fails clearly on reserved bits, unknown opcodes, and
   truncated multi-word instructions instead of printing `.word` fallback lines.
   Rux16 assembler helpers now cover both zero and non-zero branch predicates.
-- Added `rux runtime rux16-startup`, which emits the first freestanding Rux16
+- Added `k16 runtime rux16-startup`, which emits the first freestanding Rux16
   startup object. It defines `_start`, calls application `main`, initializes the
   program stack, writes the low byte of `main`'s `r0` return value to
   `debug::WRITE`, and leaves reserved helper symbols such as `__rux16_memcpy`
   as explicit link-time requirements instead of fallback VM hooks.
-- `rux runtime rux16-memory-helpers` now builds the helper object from bundled
+- `k16 runtime rux16-memory-helpers` now builds the helper object from bundled
   Rust `#![no_core]` source with `RUX16_RUSTC` and Rux16 `llc` from
   `RUX16_LLVM_BIN_DIR`. It defines `__rux16_memcpy`, `__rux16_memset`, and
-  `__rux16_memmove`; programs still pass this object to `rux link`, and the
+  `__rux16_memmove`; programs still pass this object to `k16 link`, and the
   linker still rejects missing helper symbols instead of synthesizing hidden
   bodies.
-- Added `rux link`, a static object-to-`RUXE` linker for the experimental
+- Added `k16 link`, a static object-to-`RUXE` linker for the experimental
   Rux16 ELF32 `ET_REL` object ABI. It emits bootloader, kernel, or program
   `RUXE` images and rejects unsupported allocated sections and relocation kinds
   without falling back to raw Rux16 bytes or VM-side relocation.

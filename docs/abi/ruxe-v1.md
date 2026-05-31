@@ -16,7 +16,7 @@ introducing relocation, dynamic linking, or a full process model yet.
 ## Relationship To LLVM Objects
 
 The first LLVM-facing toolchain must not make LLVM emit `RUXE` directly.
-`RUXE` remains the final guest-loadable executable container produced by Rux
+`RUXE` remains the final guest-loadable executable container produced by K16
 tooling after LLVM has emitted a normal relocatable object.
 
 This boundary keeps the VM independent from LLVM. LLVM-aware parsing,
@@ -30,7 +30,7 @@ The intended static pipeline is:
 ```text
 clang / llc
   -> Rux16 relocatable object
-  -> rux link
+  -> k16 link
   -> RUXE program/kernel/bootloader executable
   -> RuxFS or boot media installation
   -> VM loader or OS exec service

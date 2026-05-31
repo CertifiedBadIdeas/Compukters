@@ -43,7 +43,7 @@ integer width:   i1, i8, i16, i32 legal or promotable to i32
 registers:       16 architectural u32 registers
 stack:           guest RAM, downward-growing, 4-byte minimum slot size
 code model:      static, freestanding, no dynamic linking
-executable:      RUXE produced by Rux tooling after LLVM-generated objects
+executable:      RUXE produced by K16 tooling after LLVM-generated objects
 ```
 
 This is a readiness contract, not a statement that the LLVM backend exists.
