@@ -88,9 +88,10 @@ val generatedK16FirmwareResources = layout.buildDirectory.dir("generated/k16-fir
 val generatedK16FirmwareArtifacts = layout.buildDirectory.dir("generated/k16-firmware-artifacts")
 val generatedK16GuestTarget = layout.buildDirectory.dir("generated/k16-guest-target")
 val k16ToolsManifest = rootProject.layout.projectDirectory.file("rust/host/k16-tools/Cargo.toml")
+val k16ToolsSource = rootProject.layout.projectDirectory.dir("rust/host/k16-tools/src")
 val k16GuestManifest = rootProject.layout.projectDirectory.file("rust/guest/Cargo.toml")
 val k16BiosManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-bios/Cargo.toml")
-val k16BiosSource = rootProject.layout.projectDirectory.file("rust/guest/k16-bios/src/main.rs")
+val k16BiosSource = rootProject.layout.projectDirectory.file("rust/guest/k16-bios/src/lib.rs")
 val k16BootManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-boot/Cargo.toml")
 val k16BootSource = rootProject.layout.projectDirectory.file("rust/guest/k16-boot/src/main.rs")
 val k16KernelManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-kernel/Cargo.toml")
@@ -115,14 +116,17 @@ val compileK16BiosObject =
         outputs.file(k16BiosObject)
 
         doFirst {
+            val cargo =
+                providers.environmentVariable("K16_CARGO").orNull
+                    ?: throw GradleException("K16_CARGO must point to a nightly-capable cargo to build rust/guest/k16-bios")
             val rustc =
                 providers.environmentVariable("K16_RUSTC").orNull
                     ?: throw GradleException("K16_RUSTC must point to a custom K16 rustc to build rust/guest/k16-bios")
             k16BiosObject.get().asFile.parentFile.mkdirs()
             environment("RUSTC", rustc)
-            environment("RUSTFLAGS", "-Zunstable-options -Cjump-tables=no")
+            environment("RUSTFLAGS", "-Cjump-tables=no -Cdebuginfo=0 -Cdebug-assertions=off -Coverflow-checks=off -Zub-checks=no")
             commandLine(
-                "cargo",
+                cargo,
                 "rustc",
                 "-Zbuild-std=core",
                 "-Zjson-target-spec",
@@ -134,15 +138,18 @@ val compileK16BiosObject =
                 k16RustTargetSpec.asFile.absolutePath,
                 "--target-dir",
                 generatedK16GuestTarget.get().asFile.absolutePath,
+                "--lib",
                 "--",
                 "-C",
                 "panic=abort",
                 "-C",
                 "relocation-model=static",
                 "-Cjump-tables=no",
-                "--emit=obj",
-                "-o",
-                k16BiosObject.get().asFile.absolutePath,
+                "-Cdebuginfo=0",
+                "-Cdebug-assertions=off",
+                "-Coverflow-checks=off",
+                "-Zub-checks=no",
+                "--emit=obj=${k16BiosObject.get().asFile.absolutePath}",
             )
         }
     }
@@ -153,6 +160,7 @@ val linkK16BiosFlash =
         group = "k16"
         dependsOn(compileK16BiosObject)
         inputs.file(k16ToolsManifest)
+        inputs.dir(k16ToolsSource)
         inputs.file(k16BiosObject)
         outputs.file(k16BiosFlashResource)
 

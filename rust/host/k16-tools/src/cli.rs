@@ -16,6 +16,7 @@ pub fn run_k16_cli(args: Vec<String>) -> Result<(), String> {
         "link" => run_link(&args[1..]),
         "runtime" => run_runtime(&args[1..]),
         "run" => run_program(&args[1..]),
+        "run-bios" => run_bios(&args[1..]),
         "disasm" | "disassemble" => run_disasm(&args[1..]),
         "inspect" => run_inspect(&args[1..]),
         "fs" => run_fs(&args[1..]),
@@ -25,7 +26,7 @@ pub fn run_k16_cli(args: Vec<String>) -> Result<(), String> {
 }
 
 fn usage_error() -> Result<(), String> {
-    Err("usage: k16 link [--target <boot|kernel|program>] <input.ko>... -o <output.kx>\n       k16 runtime <k16-startup|k16-memory-helpers> -o <output.ko>\n       k16 run <program.kx>\n       k16 disasm --target <bios|boot|kernel|program> <input>\n       k16 inspect <blob>\n       k16 volume <create|init|put-boot|put-kernel> ...\n       k16 fs <filesystem> ...".to_string())
+    Err("usage: k16 link [--target <boot|kernel|program>] <input.ko>... -o <output.kx>\n       k16 runtime <k16-startup|k16-memory-helpers> -o <output.ko>\n       k16 run <program.kx>\n       k16 run-bios <bios.kflash>\n       k16 disasm --target <bios|boot|kernel|program> <input>\n       k16 inspect <blob>\n       k16 volume <create|init|put-boot|put-kernel> ...\n       k16 fs <filesystem> ...".to_string())
 }
 
 fn run_program(args: &[String]) -> Result<(), String> {
@@ -47,6 +48,32 @@ fn run_program(args: &[String]) -> Result<(), String> {
         signal_name(signal),
         hex_bytes(handle.debug_output_bytes())
     );
+    Ok(())
+}
+
+fn run_bios(args: &[String]) -> Result<(), String> {
+    if args.len() != 1 {
+        return run_bios_usage_error();
+    }
+    let bios_flash =
+        fs::read(&args[0]).map_err(|error| format!("failed to read {}: {error}", args[0]))?;
+    let mut handle = K16ComputerHandle::create_k16_bios_flash(&bios_flash, 64 * 1024, 1_000_000)
+        .map_err(|error| format!("failed to create K16 BIOS computer: {error}"))?;
+    let signal = handle
+        .run_k16_until_signal()
+        .map_err(|error| format!("failed to run K16 BIOS: {error}"))?;
+    let control = handle.control();
+    println!(
+        "signal={} status={} panic_code={} debug_text={}",
+        signal_name(signal),
+        control.status,
+        control.panic_code,
+        String::from_utf8_lossy(handle.debug_output_bytes()).escape_debug()
+    );
+    if let Some(snapshot) = handle.display0_snapshot() {
+        println!("display0_row0={}", display_row(&snapshot.cells, snapshot.columns, 0));
+        println!("display0_row2={}", display_row(&snapshot.cells, snapshot.columns, 2));
+    }
     Ok(())
 }
 
@@ -523,6 +550,20 @@ fn hex_bytes(bytes: &[u8]) -> String {
     output
 }
 
+fn display_row(cells: &[u8], columns: u32, row: u32) -> String {
+    let start = (row * columns) as usize;
+    let end = start + columns as usize;
+    let Some(row_cells) = cells.get(start..end) else {
+        return String::new();
+    };
+    let visible_end = row_cells
+        .iter()
+        .rposition(|byte| *byte != b' ' && *byte != 0)
+        .map(|index| index + 1)
+        .unwrap_or(0);
+    String::from_utf8_lossy(&row_cells[..visible_end]).into_owned()
+}
+
 fn parse_blocks(value: &str) -> Result<u32, String> {
     let blocks = value
         .parse::<u32>()
@@ -557,6 +598,10 @@ fn runtime_usage_error() -> Result<(), String> {
 
 fn run_usage_error() -> Result<(), String> {
     Err("usage: k16 run <program.kx>".to_string())
+}
+
+fn run_bios_usage_error() -> Result<(), String> {
+    Err("usage: k16 run-bios <bios.kflash>".to_string())
 }
 
 fn disasm_usage_error() -> Result<DisasmConfig, String> {

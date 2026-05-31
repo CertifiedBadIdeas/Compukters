@@ -18,6 +18,8 @@ const SHT_NOBITS: u32 = 8;
 const SHF_WRITE: u32 = 0x1;
 const SHF_ALLOC: u32 = 0x2;
 const SHF_EXECINSTR: u32 = 0x4;
+const SHF_MERGE: u32 = 0x10;
+const SHF_STRINGS: u32 = 0x20;
 
 const SHN_UNDEF: u16 = 0;
 const SHN_ABS: u16 = 0xfff1;
@@ -26,6 +28,10 @@ const R_K16_NONE: u32 = 0;
 const R_K16_ABS32: u32 = 1;
 const R_K16_CALL32: u32 = 2;
 const R_K16_BRANCH4: u32 = 3;
+
+const BIOS_ENTRY_TRAMPOLINE_LEN: usize = 14;
+const BIOS_ENTRY_TRAMPOLINE_TARGET_REG: u16 = 14;
+const BIOS_ENTRY_TRAMPOLINE_STACK_REG: u16 = 15;
 
 #[derive(Debug, Clone)]
 pub struct K16LinkInput<'a> {
@@ -46,12 +52,20 @@ pub fn link_k16_objects_to_k16e(
         .map(|input| ParsedObject::parse(input.name, input.bytes))
         .collect::<Result<Vec<_>, _>>()?;
     let load_addr = target.base_address();
-    let linked = link_objects(&objects, load_addr)?;
+    let bios_prefix_len = if target == K16ArtifactTarget::Bios {
+        BIOS_ENTRY_TRAMPOLINE_LEN
+    } else {
+        0
+    };
+    let mut linked = link_objects(&objects, load_addr, bios_prefix_len)?;
     match target.fixed_image_abi_kind() {
         Some(abi_kind) => {
             k16e::encode_k16_executable(&linked.payload, abi_kind, linked.entry_pc, load_addr)
         }
-        None => Ok(linked.payload),
+        None => {
+            write_bios_entry_trampoline(&mut linked.payload, linked.entry_pc)?;
+            Ok(linked.payload)
+        }
     }
 }
 
@@ -60,8 +74,12 @@ struct LinkedImage {
     entry_pc: u32,
 }
 
-fn link_objects(objects: &[ParsedObject], load_addr: u32) -> Result<LinkedImage, String> {
-    let mut payload = Vec::new();
+fn link_objects(
+    objects: &[ParsedObject],
+    load_addr: u32,
+    prefix_len: usize,
+) -> Result<LinkedImage, String> {
+    let mut payload = vec![0; prefix_len];
     let mut section_offsets: Vec<Vec<Option<u32>>> = Vec::new();
 
     for object in objects {
@@ -94,7 +112,7 @@ fn link_objects(objects: &[ParsedObject], load_addr: u32) -> Result<LinkedImage,
         section_offsets.push(object_offsets);
     }
 
-    if payload.is_empty() {
+    if payload.len() == prefix_len {
         return Err("K16 link produced an empty payload".to_string());
     }
     if payload.len() % 2 != 0 {
@@ -186,6 +204,24 @@ fn link_objects(objects: &[ParsedObject], load_addr: u32) -> Result<LinkedImage,
     Ok(LinkedImage { payload, entry_pc })
 }
 
+fn write_bios_entry_trampoline(payload: &mut [u8], entry_pc: u32) -> Result<(), String> {
+    let Some(trampoline) = payload.get_mut(..BIOS_ENTRY_TRAMPOLINE_LEN) else {
+        return Err("K16 BIOS payload is too small for entry trampoline".to_string());
+    };
+    let const32_stack = 0xe001 | (BIOS_ENTRY_TRAMPOLINE_STACK_REG << 8);
+    let const32_target = 0xe001 | (BIOS_ENTRY_TRAMPOLINE_TARGET_REG << 8);
+    let jump = 0x7000 | (BIOS_ENTRY_TRAMPOLINE_TARGET_REG << 8);
+    let stack_top = k16_vm::computer_machine::ComputerMachine::PROFILE_V2_PROGRAM_BASE;
+    trampoline[0..2].copy_from_slice(&const32_stack.to_le_bytes());
+    trampoline[2..4].copy_from_slice(&(stack_top as u16).to_le_bytes());
+    trampoline[4..6].copy_from_slice(&((stack_top >> 16) as u16).to_le_bytes());
+    trampoline[6..8].copy_from_slice(&const32_target.to_le_bytes());
+    trampoline[8..10].copy_from_slice(&(entry_pc as u16).to_le_bytes());
+    trampoline[10..12].copy_from_slice(&((entry_pc >> 16) as u16).to_le_bytes());
+    trampoline[12..14].copy_from_slice(&jump.to_le_bytes());
+    Ok(())
+}
+
 fn validate_alloc_section(section: &Section) -> Result<(), String> {
     match section.name.as_str() {
         ".text.k16" => {
@@ -199,11 +235,7 @@ fn validate_alloc_section(section: &Section) -> Result<(), String> {
                 return Err(".text.k16 size must be even".to_string());
             }
         }
-        ".rodata" => {
-            if section.kind != SHT_PROGBITS || section.flags != SHF_ALLOC {
-                return Err("unsupported .rodata section attributes".to_string());
-            }
-        }
+        name if name == ".rodata" || name.starts_with(".rodata.") => validate_rodata(section)?,
         ".data" => {
             if section.kind != SHT_PROGBITS || section.flags != (SHF_ALLOC | SHF_WRITE) {
                 return Err("unsupported .data section attributes".to_string());
@@ -215,6 +247,17 @@ fn validate_alloc_section(section: &Section) -> Result<(), String> {
             }
         }
         other => return Err(format!("unsupported alloc section `{other}`")),
+    }
+    Ok(())
+}
+
+fn validate_rodata(section: &Section) -> Result<(), String> {
+    let supported_flags = SHF_ALLOC | SHF_MERGE | SHF_STRINGS;
+    if section.kind != SHT_PROGBITS
+        || section.flags & SHF_ALLOC == 0
+        || section.flags & !supported_flags != 0
+    {
+        return Err("unsupported .rodata section attributes".to_string());
     }
     Ok(())
 }
