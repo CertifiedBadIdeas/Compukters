@@ -111,11 +111,57 @@ K16 currently reserves helper symbols such as:
 __k16_memcpy
 __k16_memset
 __k16_memmove
+__divdi3
+__udivdi3
+__moddi3
+__umoddi3
+__divti3
+__udivti3
+__modti3
+__umodti3
+__addsf3
+__subsf3
+__mulsf3
+__divsf3
+__adddf3
+__subdf3
+__muldf3
+__divdf3
+__eqsf2
+__nesf2
+__gesf2
+__ltsf2
+__lesf2
+__gtsf2
+__unordsf2
+__eqdf2
+__nedf2
+__gedf2
+__ltdf2
+__ledf2
+__gtdf2
+__unorddf2
+__extendhfsf2
+__extendsfdf2
+__truncsfhf2
+__truncdfhf2
+__fixsfsi
+__fixsfdi
+__fixdfsi
+__fixdfdi
+__fixunssfsi
+__fixunssfdi
+__fixunsdfsi
+__fixunsdfdi
+__floatdisf
+__floatdidf
+__floatundisf
+__floatundidf
 ```
 
-Rust may also need integer helper routines depending on emitted IR and target
-legalization. Missing helper calls must remain link-time errors until explicit
-K16 runtime objects provide them.
+Rust may also need additional compiler-generated helper routines depending on
+emitted IR and target legalization. Missing helper calls must remain link-time
+errors until explicit K16 runtime objects provide them.
 
 The first `no_core` proof should choose code that does not require those
 helpers. The `core` milestone should add the required helper object(s) before
