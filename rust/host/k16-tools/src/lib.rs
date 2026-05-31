@@ -2,6 +2,7 @@ pub mod artifact;
 pub mod cli;
 pub mod inspect;
 pub mod k16_disasm;
+pub mod k16_linker_driver;
 pub mod k16_runtime;
 pub mod k16e;
 pub mod k16fs;

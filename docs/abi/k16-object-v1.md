@@ -44,6 +44,17 @@ applies supported relocations, and emits a validated single-load-section
 BIOS flash bytes and prefixes them with a reset-address trampoline that
 initializes `sp` to the machine profile program base and jumps to `_start`.
 
+Rust `bin` crates use the linker-driver entry point:
+
+```text
+k16-ld <rustc linker args> --k16-target <bios|boot|kernel|program> -o <output>
+```
+
+The driver consumes rustc-style object and archive arguments, extracts K16 ELF
+members from `.rlib` archives only when they resolve currently undefined global
+symbols, and then delegates to the same object linker. The target is explicit;
+missing `--k16-target` is a hard error.
+
 ## Freestanding Runtime Boundary
 
 The first freestanding startup object is generated with:

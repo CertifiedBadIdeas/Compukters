@@ -91,13 +91,12 @@ val k16ToolsManifest = rootProject.layout.projectDirectory.file("rust/host/k16-t
 val k16ToolsSource = rootProject.layout.projectDirectory.dir("rust/host/k16-tools/src")
 val k16GuestManifest = rootProject.layout.projectDirectory.file("rust/guest/Cargo.toml")
 val k16BiosManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-bios/Cargo.toml")
-val k16BiosSource = rootProject.layout.projectDirectory.file("rust/guest/k16-bios/src/lib.rs")
+val k16BiosSource = rootProject.layout.projectDirectory.file("rust/guest/k16-bios/src/main.rs")
 val k16BootManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-boot/Cargo.toml")
 val k16BootSource = rootProject.layout.projectDirectory.file("rust/guest/k16-boot/src/main.rs")
 val k16KernelManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-kernel/Cargo.toml")
 val k16KernelSource = rootProject.layout.projectDirectory.file("rust/guest/k16-kernel/src/main.rs")
 val k16RustTargetSpec = rootProject.layout.projectDirectory.file("tools/k16-unknown-kraftos.json")
-val k16BiosObject = generatedK16FirmwareArtifacts.map { it.file("k16-bios.o") }
 val k16BootObject = generatedK16FirmwareArtifacts.map { it.file("k16-boot.o") }
 val k16KernelObject = generatedK16FirmwareArtifacts.map { it.file("k16-kernel.o") }
 val k16BiosFlashResource = generatedK16FirmwareResources.map { it.file("firmware/k16-bios.kflash") }
@@ -105,15 +104,17 @@ val k16BootArtifact = generatedK16FirmwareArtifacts.map { it.file("kernel-loader
 val k16KernelArtifact = generatedK16FirmwareArtifacts.map { it.file("display-ok.kx") }
 val k16SystemStorage0Resource = generatedK16FirmwareResources.map { it.file("firmware/k16-system-storage0.kv") }
 
-val compileK16BiosObject =
-    tasks.register<Exec>("compileK16BiosObject") {
-        description = "Compiles the bundled Rust K16 BIOS crate into a K16 object."
+val linkK16BiosFlash =
+    tasks.register<Exec>("linkK16BiosFlash") {
+        description = "Compiles and links the bundled Rust K16 BIOS bin crate into a raw BIOS flash resource."
         group = "k16"
         inputs.file(k16GuestManifest)
         inputs.file(k16BiosManifest)
         inputs.file(k16BiosSource)
         inputs.file(k16RustTargetSpec)
-        outputs.file(k16BiosObject)
+        inputs.file(k16ToolsManifest)
+        inputs.dir(k16ToolsSource)
+        outputs.file(k16BiosFlashResource)
 
         doFirst {
             val cargo =
@@ -122,9 +123,15 @@ val compileK16BiosObject =
             val rustc =
                 providers.environmentVariable("K16_RUSTC").orNull
                     ?: throw GradleException("K16_RUSTC must point to a custom K16 rustc to build rust/guest/k16-bios")
-            k16BiosObject.get().asFile.parentFile.mkdirs()
+            val linker =
+                providers.environmentVariable("K16_LD").orNull
+                    ?: throw GradleException("K16_LD must point to the k16-ld linker driver to build rust/guest/k16-bios")
+            k16BiosFlashResource.get().asFile.parentFile.mkdirs()
             environment("RUSTC", rustc)
-            environment("RUSTFLAGS", "-Cjump-tables=no -Cdebuginfo=0 -Cdebug-assertions=off -Coverflow-checks=off -Zub-checks=no")
+            environment(
+                "RUSTFLAGS",
+                "-C linker=$linker -C link-arg=--k16-target=bios -Cjump-tables=no -Cdebuginfo=0 -Cdebug-assertions=off -Coverflow-checks=off -Zub-checks=no",
+            )
             commandLine(
                 cargo,
                 "rustc",
@@ -134,11 +141,12 @@ val compileK16BiosObject =
                 k16BiosManifest.asFile.absolutePath,
                 "--features",
                 "k16-target",
+                "--bin",
+                "k16-bios",
                 "--target",
                 k16RustTargetSpec.asFile.absolutePath,
                 "--target-dir",
                 generatedK16GuestTarget.get().asFile.absolutePath,
-                "--lib",
                 "--",
                 "-C",
                 "panic=abort",
@@ -149,35 +157,6 @@ val compileK16BiosObject =
                 "-Cdebug-assertions=off",
                 "-Coverflow-checks=off",
                 "-Zub-checks=no",
-                "--emit=obj=${k16BiosObject.get().asFile.absolutePath}",
-            )
-        }
-    }
-
-val linkK16BiosFlash =
-    tasks.register<Exec>("linkK16BiosFlash") {
-        description = "Links the bundled Rust K16 BIOS object into a raw BIOS flash resource."
-        group = "k16"
-        dependsOn(compileK16BiosObject)
-        inputs.file(k16ToolsManifest)
-        inputs.dir(k16ToolsSource)
-        inputs.file(k16BiosObject)
-        outputs.file(k16BiosFlashResource)
-
-        doFirst {
-            k16BiosFlashResource.get().asFile.parentFile.mkdirs()
-            commandLine(
-                "cargo",
-                "run",
-                "--manifest-path",
-                k16ToolsManifest.asFile.absolutePath,
-                "--bin",
-                "k16",
-                "--",
-                "link",
-                "--target",
-                "bios",
-                k16BiosObject.get().asFile.absolutePath,
                 "-o",
                 k16BiosFlashResource.get().asFile.absolutePath,
             )
