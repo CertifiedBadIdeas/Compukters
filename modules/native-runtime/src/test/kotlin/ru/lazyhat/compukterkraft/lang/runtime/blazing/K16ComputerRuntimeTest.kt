@@ -33,7 +33,7 @@ class K16ComputerRuntimeTest {
         runtime.pushInput("Rux!".encodeToByteArray())
         val control = runtime.tick()
 
-        assertEquals(NativeRuxComputerControl(status = 1, exitCode = 0, panicCode = 0), control)
+        assertEquals(NativeK16ComputerControl(status = 1, exitCode = 0, panicCode = 0), control)
         assertEquals("Rux!", runtime.outputSnapshot().decodeToString())
         assertEquals("Rux!", runtime.outputSnapshot().decodeToString())
         assertEquals(listOf("Rux!".encodeToByteArray().toList()), bindings.serialInputs.map { it.toList() })
@@ -87,7 +87,7 @@ class K16ComputerRuntimeTest {
         val bindings = EchoBindings()
         val runtime = K16ComputerRuntime(handle = 11L, bindings = bindings)
         val first =
-            NativeRuxComputerDisplaySnapshot(
+            NativeK16ComputerDisplaySnapshot(
                 columns = 80,
                 rows = 25,
                 cursorX = 1,
@@ -96,7 +96,7 @@ class K16ComputerRuntimeTest {
                 cells = byteArrayOf('A'.code.toByte()),
             )
         val second =
-            NativeRuxComputerDisplaySnapshot(
+            NativeK16ComputerDisplaySnapshot(
                 columns = 80,
                 rows = 25,
                 cursorX = 2,
@@ -128,15 +128,15 @@ class K16ComputerRuntimeTest {
         val serialInputs = mutableListOf<ByteArray>()
         val freedHandles = mutableListOf<Long>()
         val machineSnapshotHandles = mutableListOf<Long>()
-        var displaySnapshot: NativeRuxComputerDisplaySnapshot? = null
+        var displaySnapshot: NativeK16ComputerDisplaySnapshot? = null
         var storage0Media: ByteArray? = null
         var machineSnapshot: ByteArray = ByteArray(0)
         private val pendingOutput = ArrayDeque<ByteArray>()
 
-        override fun runUntilSignal(handle: Long): NativeRuxComputerSignal = NativeRuxComputerSignal.Pause
+        override fun runUntilSignal(handle: Long): NativeK16ComputerSignal = NativeK16ComputerSignal.Pause
 
-        override fun control(handle: Long): NativeRuxComputerControl =
-            NativeRuxComputerControl(status = 1, exitCode = 0, panicCode = 0)
+        override fun control(handle: Long): NativeK16ComputerControl =
+            NativeK16ComputerControl(status = 1, exitCode = 0, panicCode = 0)
 
         override fun pushSerialInput(
             handle: Long,
@@ -153,7 +153,7 @@ class K16ComputerRuntimeTest {
                 pendingOutput.removeFirst()
             }
 
-        override fun display0Snapshot(handle: Long): NativeRuxComputerDisplaySnapshot? = displaySnapshot
+        override fun display0Snapshot(handle: Long): NativeK16ComputerDisplaySnapshot? = displaySnapshot
 
         override fun storage0MediaSnapshot(handle: Long): ByteArray? = storage0Media?.copyOf()
 

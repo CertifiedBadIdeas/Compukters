@@ -21,14 +21,14 @@ package ru.lazyhat.compukterkraft.lang.runtime.blazing
 
 import java.nio.file.Path
 
-data class NativeRuxComputerControl(
+data class NativeK16ComputerControl(
     val status: Int,
     val exitCode: Int,
     val panicCode: Int,
 ) {
     companion object {
-        fun from(values: LongArray): NativeRuxComputerControl =
-            NativeRuxComputerControl(
+        fun from(values: LongArray): NativeK16ComputerControl =
+            NativeK16ComputerControl(
                 status = values.getOrElse(0) { 0L }.toInt(),
                 exitCode = values.getOrElse(1) { 0L }.toInt(),
                 panicCode = values.getOrElse(2) { 0L }.toInt(),
@@ -36,7 +36,7 @@ data class NativeRuxComputerControl(
     }
 }
 
-class NativeRuxComputerDisplaySnapshot(
+class NativeK16ComputerDisplaySnapshot(
     val columns: Int,
     val rows: Int,
     val cursorX: Int,
@@ -45,11 +45,11 @@ class NativeRuxComputerDisplaySnapshot(
     val cells: ByteArray,
 ) {
     companion object {
-        fun from(bytes: ByteArray): NativeRuxComputerDisplaySnapshot? {
+        fun from(bytes: ByteArray): NativeK16ComputerDisplaySnapshot? {
             if (bytes.isEmpty()) {
                 return null
             }
-            val reader = NativeRuxComputerDisplaySnapshotReader(bytes)
+            val reader = NativeK16ComputerDisplaySnapshotReader(bytes)
             val columns = reader.readU32AsInt("columns")
             val rows = reader.readU32AsInt("rows")
             val cursorX = reader.readU32AsInt("cursorX")
@@ -58,7 +58,7 @@ class NativeRuxComputerDisplaySnapshot(
             val cellCount = reader.readU32AsInt("cellCount")
             val cells = reader.readBytes(cellCount, "cells")
             reader.requireEnd()
-            return NativeRuxComputerDisplaySnapshot(
+            return NativeK16ComputerDisplaySnapshot(
                 columns = columns,
                 rows = rows,
                 cursorX = cursorX,
@@ -71,7 +71,7 @@ class NativeRuxComputerDisplaySnapshot(
 
     override fun equals(other: Any?): Boolean =
         this === other ||
-            other is NativeRuxComputerDisplaySnapshot &&
+            other is NativeK16ComputerDisplaySnapshot &&
             columns == other.columns &&
             rows == other.rows &&
             cursorX == other.cursorX &&
@@ -90,21 +90,21 @@ class NativeRuxComputerDisplaySnapshot(
     }
 
     override fun toString(): String =
-        "NativeRuxComputerDisplaySnapshot(columns=$columns, rows=$rows, cursorX=$cursorX, " +
+        "NativeK16ComputerDisplaySnapshot(columns=$columns, rows=$rows, cursorX=$cursorX, " +
             "cursorY=$cursorY, sequence=$sequence, cells=${cells.size} bytes)"
 }
 
-sealed interface NativeRuxComputerSignal {
-    data object Halt : NativeRuxComputerSignal
+sealed interface NativeK16ComputerSignal {
+    data object Halt : NativeK16ComputerSignal
 
-    data object Pause : NativeRuxComputerSignal
+    data object Pause : NativeK16ComputerSignal
 
     companion object {
-        fun from(values: LongArray): NativeRuxComputerSignal =
+        fun from(values: LongArray): NativeK16ComputerSignal =
             when (val tag = values.getOrElse(0) { 0L }) {
                 1L -> Halt
                 6L -> Pause
-                else -> error("Unknown native Rux computer signal tag: $tag")
+                else -> error("Unknown native K16 computer signal tag: $tag")
             }
     }
 }
@@ -152,38 +152,38 @@ object NativeVmBindings {
         return handle
     }
 
-    fun runK16ComputerUntilSignal(handle: Long): NativeRuxComputerSignal {
-        require(handle != 0L) { "Native Rux computer handle is zero" }
-        return NativeRuxComputerSignal.from(runRux16ComputerUntilSignalNative(handle))
+    fun runK16ComputerUntilSignal(handle: Long): NativeK16ComputerSignal {
+        require(handle != 0L) { "Native K16 computer handle is zero" }
+        return NativeK16ComputerSignal.from(runRux16ComputerUntilSignalNative(handle))
     }
 
-    fun ruxComputerControl(handle: Long): NativeRuxComputerControl {
-        require(handle != 0L) { "Native Rux computer handle is zero" }
-        return NativeRuxComputerControl.from(ruxComputerControlNative(handle))
+    fun ruxComputerControl(handle: Long): NativeK16ComputerControl {
+        require(handle != 0L) { "Native K16 computer handle is zero" }
+        return NativeK16ComputerControl.from(ruxComputerControlNative(handle))
     }
 
     fun ruxComputerDebugOutput(handle: Long): ByteArray {
-        require(handle != 0L) { "Native Rux computer handle is zero" }
+        require(handle != 0L) { "Native K16 computer handle is zero" }
         return ruxComputerDebugOutputNative(handle)
     }
 
     fun drainRuxComputerDebugOutput(handle: Long): ByteArray {
-        require(handle != 0L) { "Native Rux computer handle is zero" }
+        require(handle != 0L) { "Native K16 computer handle is zero" }
         return drainRuxComputerDebugOutputNative(handle)
     }
 
-    fun ruxComputerDisplay0Snapshot(handle: Long): NativeRuxComputerDisplaySnapshot? {
-        require(handle != 0L) { "Native Rux computer handle is zero" }
-        return NativeRuxComputerDisplaySnapshot.from(ruxComputerDisplay0SnapshotNative(handle))
+    fun ruxComputerDisplay0Snapshot(handle: Long): NativeK16ComputerDisplaySnapshot? {
+        require(handle != 0L) { "Native K16 computer handle is zero" }
+        return NativeK16ComputerDisplaySnapshot.from(ruxComputerDisplay0SnapshotNative(handle))
     }
 
     fun ruxComputerStorage0MediaSnapshot(handle: Long): ByteArray? {
-        require(handle != 0L) { "Native Rux computer handle is zero" }
+        require(handle != 0L) { "Native K16 computer handle is zero" }
         return ruxComputerStorage0MediaSnapshotNative(handle).takeIf { it.isNotEmpty() }
     }
 
     fun ruxComputerMachineSnapshot(handle: Long): ByteArray {
-        require(handle != 0L) { "Native Rux computer handle is zero" }
+        require(handle != 0L) { "Native K16 computer handle is zero" }
         return ruxComputerMachineSnapshotNative(handle)
     }
 
@@ -191,7 +191,7 @@ object NativeVmBindings {
         handle: Long,
         bytes: ByteArray,
     ) {
-        require(handle != 0L) { "Native Rux computer handle is zero" }
+        require(handle != 0L) { "Native K16 computer handle is zero" }
         pushRuxComputerSerialInputNative(handle, bytes)
     }
 
@@ -260,7 +260,7 @@ object NativeVmBindings {
     private external fun freeRuxComputerNative(handle: Long)
 }
 
-private class NativeRuxComputerDisplaySnapshotReader(
+private class NativeK16ComputerDisplaySnapshotReader(
     private val bytes: ByteArray,
 ) {
     private var offset = 0
@@ -268,14 +268,14 @@ private class NativeRuxComputerDisplaySnapshotReader(
     fun readU32AsInt(fieldName: String): Int {
         val value = readU32(fieldName)
         require(value <= Int.MAX_VALUE.toUInt()) {
-            "Native Rux computer display snapshot field $fieldName does not fit Int: $value"
+            "Native K16 computer display snapshot field $fieldName does not fit Int: $value"
         }
         return value.toInt()
     }
 
     fun readI64(fieldName: String): Long {
         require(offset + 8 <= bytes.size) {
-            "Unexpected end of native Rux computer display snapshot while reading $fieldName"
+            "Unexpected end of native K16 computer display snapshot while reading $fieldName"
         }
         var value = 0L
         repeat(8) { index ->
@@ -288,9 +288,9 @@ private class NativeRuxComputerDisplaySnapshotReader(
         length: Int,
         fieldName: String,
     ): ByteArray {
-        require(length >= 0) { "Negative native Rux computer display snapshot length for $fieldName: $length" }
+        require(length >= 0) { "Negative native K16 computer display snapshot length for $fieldName: $length" }
         require(offset + length <= bytes.size) {
-            "Unexpected end of native Rux computer display snapshot while reading $fieldName"
+            "Unexpected end of native K16 computer display snapshot while reading $fieldName"
         }
         val value = bytes.copyOfRange(offset, offset + length)
         offset += length
@@ -299,13 +299,13 @@ private class NativeRuxComputerDisplaySnapshotReader(
 
     fun requireEnd() {
         require(offset == bytes.size) {
-            "Trailing native Rux computer display snapshot bytes: ${bytes.size - offset}"
+            "Trailing native K16 computer display snapshot bytes: ${bytes.size - offset}"
         }
     }
 
     private fun readU32(fieldName: String): UInt {
         require(offset + 4 <= bytes.size) {
-            "Unexpected end of native Rux computer display snapshot while reading $fieldName"
+            "Unexpected end of native K16 computer display snapshot while reading $fieldName"
         }
         val b0 = bytes[offset++].toUInt() and 0xffu
         val b1 = bytes[offset++].toUInt() and 0xffu
