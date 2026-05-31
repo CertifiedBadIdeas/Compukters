@@ -29,7 +29,7 @@ private object NBT {
     const val ID: String = "ComputerID"
     const val FAMILY_ID: String = "DeviceFamilyId"
     const val LABEL: String = "Label"
-    const val RUNTIME_SNAPSHOT: String = "RuxRuntimeSnapshot"
+    const val RUNTIME_SNAPSHOT: String = "K16RuntimeSnapshot"
 }
 
 private val ItemStack.computerData: CustomData?
