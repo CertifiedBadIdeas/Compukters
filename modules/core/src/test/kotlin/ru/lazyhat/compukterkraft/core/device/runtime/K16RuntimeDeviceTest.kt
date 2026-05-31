@@ -26,8 +26,8 @@ import ru.lazyhat.compukterkraft.core.device.input.KeyInputEvent
 import ru.lazyhat.compukterkraft.core.device.input.PasteInputEvent
 import ru.lazyhat.compukterkraft.core.device.runtime.ports.DisplayNetworkBridge
 import ru.lazyhat.compukterkraft.core.input.KeyCodes
-import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeRuxComputerControl
-import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeRuxComputerDisplaySnapshot
+import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16ComputerControl
+import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16ComputerDisplaySnapshot
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16ComputerEndpoint
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
 import java.nio.ByteBuffer
@@ -182,7 +182,7 @@ class K16RuntimeDeviceTest {
         val playerUuid = UUID.randomUUID()
 
         endpoint.displaySnapshot =
-            NativeRuxComputerDisplaySnapshot(
+            NativeK16ComputerDisplaySnapshot(
                 columns = 80,
                 rows = 25,
                 cursorX = 3,
@@ -220,7 +220,7 @@ class K16RuntimeDeviceTest {
             )
         val playerUuid = UUID.randomUUID()
         endpoint.displaySnapshot =
-            NativeRuxComputerDisplaySnapshot(
+            NativeK16ComputerDisplaySnapshot(
                 columns = 80,
                 rows = 25,
                 cursorX = 0,
@@ -375,7 +375,7 @@ class K16RuntimeDeviceTest {
             private set
         var closeCalls = 0
             private set
-        var displaySnapshot: NativeRuxComputerDisplaySnapshot? = null
+        var displaySnapshot: NativeK16ComputerDisplaySnapshot? = null
         var runtimeSnapshot: ByteArray = ByteArray(0)
         private var lastPolledDisplaySequence: Long? = null
         private val injectedOutput = StringBuilder()
@@ -384,18 +384,18 @@ class K16RuntimeDeviceTest {
             inputs += bytes.copyOf()
         }
 
-        override fun tick(maxTurns: Int): NativeRuxComputerControl {
+        override fun tick(maxTurns: Int): NativeK16ComputerControl {
             tickCalls += 1
-            return NativeRuxComputerControl(status = K16RuntimeDevice.STATUS_READY, exitCode = 0, panicCode = 0)
+            return NativeK16ComputerControl(status = K16RuntimeDevice.STATUS_READY, exitCode = 0, panicCode = 0)
         }
 
         override fun outputSnapshot(): ByteArray =
             (inputs.fold(ByteArray(0)) { acc, bytes -> acc + bytes }.decodeToString() + injectedOutput)
                 .encodeToByteArray()
 
-        override fun display0Snapshot(): NativeRuxComputerDisplaySnapshot? = displaySnapshot
+        override fun display0Snapshot(): NativeK16ComputerDisplaySnapshot? = displaySnapshot
 
-        override fun pollDisplay0Snapshot(): NativeRuxComputerDisplaySnapshot? {
+        override fun pollDisplay0Snapshot(): NativeK16ComputerDisplaySnapshot? {
             val snapshot = displaySnapshot ?: run {
                 lastPolledDisplaySequence = null
                 return null

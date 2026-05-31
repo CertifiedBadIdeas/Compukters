@@ -1,6 +1,6 @@
 package ru.lazyhat.compukterkraft.impl
 
-import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeRuxComputerDisplaySnapshot
+import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16ComputerDisplaySnapshot
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16BiosFlashWorkspace
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16ComputerRuntimeFactory
 import ru.lazyhat.compukterkraft.lang.runtime.storage.K16_VOLUME_MAGIC_BYTES
@@ -83,7 +83,7 @@ class K16FirmwareResourceTest {
     }
 
     private fun displayRow(
-        snapshot: NativeRuxComputerDisplaySnapshot,
+        snapshot: NativeK16ComputerDisplaySnapshot,
         row: Int,
     ): String {
         val start = row * snapshot.columns

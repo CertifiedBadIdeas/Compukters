@@ -162,9 +162,13 @@ class K16ComputerRuntimeFactoryTest {
 
         val source = k16RuntimePath.readText()
         assertTrue(source.contains("interface K16ComputerRuntimeBindings"))
+        assertTrue(source.contains("NativeK16ComputerControl"))
+        assertTrue(source.contains("NativeK16ComputerSignal"))
+        assertTrue(source.contains("NativeK16ComputerDisplaySnapshot"))
         assertTrue(source.contains("object K16ComputerRuntimeFactory"))
         assertTrue(source.contains("interface K16ComputerEndpoint"))
         assertTrue(source.contains("class K16ComputerRuntime"))
+        assertFalse(source.contains("NativeRuxComputer"))
         assertFalse(source.contains("RuxComputerRuntime"))
         assertFalse(source.contains("RuxComputerEndpoint"))
     }

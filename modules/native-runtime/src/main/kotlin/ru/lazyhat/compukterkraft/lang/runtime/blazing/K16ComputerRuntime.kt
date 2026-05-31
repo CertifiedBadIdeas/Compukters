@@ -23,9 +23,9 @@ import java.io.ByteArrayOutputStream
 import java.nio.file.Path
 
 interface K16ComputerRuntimeBindings {
-    fun runUntilSignal(handle: Long): NativeRuxComputerSignal
+    fun runUntilSignal(handle: Long): NativeK16ComputerSignal
 
-    fun control(handle: Long): NativeRuxComputerControl
+    fun control(handle: Long): NativeK16ComputerControl
 
     fun pushSerialInput(
         handle: Long,
@@ -34,7 +34,7 @@ interface K16ComputerRuntimeBindings {
 
     fun drainDebugOutput(handle: Long): ByteArray
 
-    fun display0Snapshot(handle: Long): NativeRuxComputerDisplaySnapshot?
+    fun display0Snapshot(handle: Long): NativeK16ComputerDisplaySnapshot?
 
     fun storage0MediaSnapshot(handle: Long): ByteArray?
 
@@ -44,10 +44,10 @@ interface K16ComputerRuntimeBindings {
 }
 
 object NativeK16ComputerRuntimeBindings : K16ComputerRuntimeBindings {
-    override fun runUntilSignal(handle: Long): NativeRuxComputerSignal =
+    override fun runUntilSignal(handle: Long): NativeK16ComputerSignal =
         NativeVmBindings.runK16ComputerUntilSignal(handle)
 
-    override fun control(handle: Long): NativeRuxComputerControl =
+    override fun control(handle: Long): NativeK16ComputerControl =
         NativeVmBindings.ruxComputerControl(handle)
 
     override fun pushSerialInput(
@@ -58,7 +58,7 @@ object NativeK16ComputerRuntimeBindings : K16ComputerRuntimeBindings {
     override fun drainDebugOutput(handle: Long): ByteArray =
         NativeVmBindings.drainRuxComputerDebugOutput(handle)
 
-    override fun display0Snapshot(handle: Long): NativeRuxComputerDisplaySnapshot? =
+    override fun display0Snapshot(handle: Long): NativeK16ComputerDisplaySnapshot? =
         NativeVmBindings.ruxComputerDisplay0Snapshot(handle)
 
     override fun storage0MediaSnapshot(handle: Long): ByteArray? =
@@ -113,13 +113,13 @@ object K16ComputerRuntimeFactory {
 interface K16ComputerEndpoint : AutoCloseable {
     fun pushInput(bytes: ByteArray)
 
-    fun tick(maxTurns: Int = 8): NativeRuxComputerControl
+    fun tick(maxTurns: Int = 8): NativeK16ComputerControl
 
     fun outputSnapshot(): ByteArray
 
-    fun display0Snapshot(): NativeRuxComputerDisplaySnapshot?
+    fun display0Snapshot(): NativeK16ComputerDisplaySnapshot?
 
-    fun pollDisplay0Snapshot(): NativeRuxComputerDisplaySnapshot?
+    fun pollDisplay0Snapshot(): NativeK16ComputerDisplaySnapshot?
 
     fun clearOutput()
 
@@ -137,7 +137,7 @@ class K16ComputerRuntime(
     private var closed = false
 
     init {
-        require(handle != 0L) { "Native Rux computer handle is zero" }
+        require(handle != 0L) { "Native K16 computer handle is zero" }
         require(defaultMaxTurnsPerTick >= 0) { "defaultMaxTurnsPerTick must be non-negative" }
     }
 
@@ -151,23 +151,23 @@ class K16ComputerRuntime(
     fun pushInput(text: String) =
         pushInput(text.encodeToByteArray())
 
-    fun tick(): NativeRuxComputerControl =
+    fun tick(): NativeK16ComputerControl =
         tick(defaultMaxTurnsPerTick)
 
-    override fun tick(maxTurns: Int): NativeRuxComputerControl {
+    override fun tick(maxTurns: Int): NativeK16ComputerControl {
         ensureOpen()
         require(maxTurns >= 0) { "maxTurns must be non-negative" }
         repeat(maxTurns) {
             val signal = bindings.runUntilSignal(handle)
             appendNativeOutput()
-            if (signal != NativeRuxComputerSignal.Pause) {
+            if (signal != NativeK16ComputerSignal.Pause) {
                 return bindings.control(handle)
             }
         }
         return bindings.control(handle)
     }
 
-    fun control(): NativeRuxComputerControl {
+    fun control(): NativeK16ComputerControl {
         ensureOpen()
         return bindings.control(handle)
     }
@@ -177,12 +177,12 @@ class K16ComputerRuntime(
         return terminalOutput.toByteArray()
     }
 
-    override fun display0Snapshot(): NativeRuxComputerDisplaySnapshot? {
+    override fun display0Snapshot(): NativeK16ComputerDisplaySnapshot? {
         ensureOpen()
         return bindings.display0Snapshot(handle)
     }
 
-    override fun pollDisplay0Snapshot(): NativeRuxComputerDisplaySnapshot? {
+    override fun pollDisplay0Snapshot(): NativeK16ComputerDisplaySnapshot? {
         ensureOpen()
         val snapshot = bindings.display0Snapshot(handle) ?: run {
             lastDisplay0Sequence = null
