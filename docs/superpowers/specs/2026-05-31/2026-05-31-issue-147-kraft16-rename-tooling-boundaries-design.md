@@ -125,3 +125,15 @@ Each implementation slice should run the narrowest relevant checks. For pure
 docs/spec changes, `git diff --check` is enough. For tooling/crate changes, keep
 the Rust crate tests and Rust no_core smoke path green. For VM/runtime changes,
 run the focused Gradle tests through `./gradlew-sandbox`.
+
+## Completion Status
+
+Issue #147 is complete for the local repository surface. The VM crate, native
+tooling crate, active ABI documents, bundled firmware artifacts, storage volume
+format names, Kotlin runtime bindings, JNI exports, Gradle tasks, and active
+machine-facing scripts now use Kraft16/K16 names.
+
+The remaining Rux names are intentional language-surface or historical planning
+references: `.rx` source, `rux check`, `rux compile`, Rux stdlib modules, and
+follow-up retirement issues for replacing those sources with Rust-built
+artifacts.
