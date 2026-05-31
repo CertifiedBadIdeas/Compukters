@@ -72,6 +72,17 @@ class K16VmNativePackagingConventionTest {
     }
 
     @Test
+    fun gradleNativeBuildUsesK16VmCrateDirectoryWithoutRuxVmPath() {
+        val rootBuild = rootBuildSource().readText()
+        val loomConvention = loomRunsConventionSource().readText()
+
+        assertTrue(rootBuild.contains("native/k16-vm/src/generated/font_mono5x7.rs"))
+        assertTrue(loomConvention.contains("dir(\"native/k16-vm\")"))
+        assertFalse(rootBuild.contains("native/rux-vm"))
+        assertFalse(loomConvention.contains("native/rux-vm"))
+    }
+
+    @Test
     fun gradleNativeRuntimePropertiesUseK16NamespaceWithoutRuxFallbacks() {
         val kotlinConvention = kotlinConventionSource().readText()
         val loomConvention = loomRunsConventionSource().readText()
@@ -101,6 +112,16 @@ class K16VmNativePackagingConventionTest {
             )
         return candidates.firstOrNull(Files::exists)
             ?: error("Could not locate loom-runs-convention.gradle.kts from ${System.getProperty("user.dir")}")
+    }
+
+    private fun rootBuildSource(): Path {
+        val candidates =
+            listOf(
+                Path.of(System.getProperty("user.dir"), "..", "build.gradle.kts").normalize(),
+                Path.of(System.getProperty("user.dir"), "build.gradle.kts"),
+            )
+        return candidates.firstOrNull(Files::exists)
+            ?: error("Could not locate root build.gradle.kts from ${System.getProperty("user.dir")}")
     }
 
     private fun kotlinConventionSource(): Path {

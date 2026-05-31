@@ -5,7 +5,7 @@
 Compukter Kraft is a Gradle multi-module Kotlin project with native Rust VM components. Kotlin modules live under
 `modules/`: `core` contains shared device/runtime logic, `native-runtime` wraps the Rust VM through JNI, and
 `v1_21_1/v1_21_1-common` plus `v1_21_1/v1_21_1-neoforge` contain the Minecraft 1.21.1 integration. Rust crates live in
-`native/rux-vm` and `native/rux-compiler`. Documentation is in `docs/`, active machine ABI references are in `docs/abi`,
+`native/k16-vm` and `native/rux-compiler`. Documentation is in `docs/`, active machine ABI references are in `docs/abi`,
 mod metadata is in `config/`, and visual/model assets are in `models/` and top-level logo files.
 
 ## Build, Test, and Development Commands
@@ -18,7 +18,7 @@ mod metadata is in `config/`, and visual/model assets are in `models/` and top-l
 - `./gradlew :v1_21_1-neoforge:runClient` launches the NeoForge dev client.
 - `./gradlew :v1_21_1-neoforge:buildK16VmNativeLibrary` builds the debug Rust JNI library used by dev runs.
 - `./gradlew :v1_21_1-neoforge:buildProductionUniversalJar` builds a production jar with release native VM artifacts.
-- `cargo test` from `native/rux-vm` or `native/rux-compiler` runs Rust crate tests.
+- `cargo test` from `native/k16-vm` or `native/rux-compiler` runs Rust crate tests.
 
 ## Coding Style & Naming Conventions
 

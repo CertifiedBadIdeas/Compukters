@@ -26,7 +26,7 @@ tasks.register<GenerateRuxFontTablesTask>("generateRuxFontTables") {
     description = "Generates Rust and Kotlin terminal font tables from the Rux bitmap font source."
     group = "rux"
     fontFile.set(layout.projectDirectory.file("assets/rux/fonts/rux-mono-5x7.font"))
-    rustOutput.set(layout.projectDirectory.file("native/rux-vm/src/generated/font_mono5x7.rs"))
+    rustOutput.set(layout.projectDirectory.file("native/k16-vm/src/generated/font_mono5x7.rs"))
     kotlinOutput.set(
         layout.projectDirectory.file(
             "modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/gui/GeneratedTerminalFont.kt",

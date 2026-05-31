@@ -27,8 +27,9 @@ fn compiler_depends_on_k16_vm_without_rux_vm_alias() {
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
     let cargo_toml = fs::read_to_string(manifest_dir.join("Cargo.toml")).unwrap();
 
-    assert!(cargo_toml.contains("k16-vm = { path = \"../rux-vm\" }"));
+    assert!(cargo_toml.contains("k16-vm = { path = \"../k16-vm\" }"));
     assert!(!cargo_toml.contains("rux-vm ="));
+    assert!(!cargo_toml.contains("../rux-vm"));
 }
 
 fn collect_rust_source(dir: &Path, output: &mut String) {

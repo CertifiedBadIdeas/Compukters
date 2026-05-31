@@ -1072,6 +1072,6 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        std::env::temp_dir().join(format!("rux-vm-{name}-{}-{nanos}.kv", std::process::id()))
+        std::env::temp_dir().join(format!("k16-vm-{name}-{}-{nanos}.kv", std::process::id()))
     }
 }
