@@ -1,8 +1,8 @@
 [submodule "toolchains/Compukter-Kraft-llvm"]
 	path = toolchains/Compukter-Kraft-llvm
 	url = git@github.com:CertifiedBadIdeas/Compukter-Kraft-llvm.git
-	branch = rux16
+	branch = k16
 [submodule "toolchains/Compukter-Kraft-rust"]
 	path = toolchains/Compukter-Kraft-rust
 	url = git@github.com:CertifiedBadIdeas/Compukter-Kraft-rust.git
-	branch = rux16
+	branch = k16

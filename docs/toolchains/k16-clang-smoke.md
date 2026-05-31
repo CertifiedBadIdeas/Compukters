@@ -17,14 +17,14 @@
 The smoke expects a Clang-capable K16 LLVM build at:
 
 ```sh
-toolchains/Compukter-Kraft-llvm/build-rux/bin
+toolchains/Compukter-Kraft-llvm/build-k16/bin
 ```
 
 The build directory must include the K16 experimental backend:
 
 ```sh
-cmake -S llvm -B build-rux -DLLVM_EXPERIMENTAL_TARGETS_TO_BUILD=K16
-cmake --build build-rux --target clang llc llvm-readobj FileCheck not
+cmake -S llvm -B build-k16 -DLLVM_EXPERIMENTAL_TARGETS_TO_BUILD=K16
+cmake --build build-k16 --target clang llc llvm-readobj FileCheck not
 ```
 
 Override it with:

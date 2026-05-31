@@ -3,10 +3,27 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 RUST_SRC="${K16_RUST_SRC:-$ROOT/toolchains/Compukter-Kraft-rust}"
-LLVM_CONFIG="${K16_LLVM_CONFIG:-$ROOT/toolchains/Compukter-Kraft-llvm/build-rux-min/bin/llvm-config}"
+LLVM_CONFIG="${K16_LLVM_CONFIG:-$ROOT/toolchains/Compukter-Kraft-llvm/build-k16-min/bin/llvm-config}"
+LLVM_BIN_DIR="$(cd "$(dirname "$LLVM_CONFIG")" && pwd)"
 EXPECTED_BRANCH="k16"
 BUILD_DIR="${K16_RUST_BUILD_DIR:-$RUST_SRC/build/k16}"
 HOST_TRIPLE="${K16_RUST_HOST:-x86_64-unknown-linux-gnu}"
+REQUIRED_LLVM_TOOLS=(
+    llvm-ar
+    llvm-as
+    llvm-cov
+    llvm-dis
+    llvm-link
+    llvm-nm
+    llvm-objcopy
+    llvm-objdump
+    llvm-profdata
+    llvm-readobj
+    llvm-size
+    llvm-strip
+    llc
+    opt
+)
 
 require_dir() {
     local path="$1"
@@ -39,6 +56,10 @@ require_output_contains() {
 require_dir "$RUST_SRC"
 require_executable "$RUST_SRC/x.py"
 require_executable "$LLVM_CONFIG"
+
+for tool in "${REQUIRED_LLVM_TOOLS[@]}"; do
+    require_executable "$LLVM_BIN_DIR/$tool"
+done
 
 if ! git -C "$RUST_SRC" rev-parse --is-inside-work-tree > /dev/null 2>&1; then
     echo "Rust source is not a git checkout: $RUST_SRC" >&2

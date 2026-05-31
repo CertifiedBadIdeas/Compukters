@@ -7,7 +7,7 @@ Issue: [#126](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/126)
 The smoke command requires the out-of-tree LLVM checkout to be built at:
 
 ```text
-toolchains/Compukter-Kraft-llvm/build-rux-min/bin
+toolchains/Compukter-Kraft-llvm/build-k16-min/bin
 ```
 
 Run:

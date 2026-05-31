@@ -95,8 +95,13 @@ fn rust_nocore_smoke_artifacts_are_documented_and_strict() {
     assert!(probe.contains("K16_RUST_BUILD_DIR"));
     assert!(probe.contains("K16_RUST_HOST"));
     assert!(probe.contains("toolchains/Compukter-Kraft-rust"));
-    assert!(probe.contains("toolchains/Compukter-Kraft-llvm/build-rux-min/bin/llvm-config"));
+    assert!(probe.contains("toolchains/Compukter-Kraft-llvm/build-k16-min/bin/llvm-config"));
     assert!(probe.contains("build/k16"));
+    assert!(probe.contains("REQUIRED_LLVM_TOOLS"));
+    assert!(probe.contains("llvm-cov"));
+    assert!(probe.contains("llvm-nm"));
+    assert!(probe.contains("llvm-objcopy"));
+    assert!(probe.contains("llvm-profdata"));
     assert!(probe.contains("--targets-built"));
     assert!(probe.contains("k16"));
     assert!(probe.contains("x.py"));
@@ -142,7 +147,7 @@ fn rust_nocore_smoke_artifacts_are_documented_and_strict() {
     assert!(bootstrap_docs.contains("tools/k16-unknown-kraftos.json"));
     assert!(bootstrap_docs.contains("K16_RUSTC"));
     assert!(bootstrap_docs.contains("K16_LLVM_BIN_DIR"));
-    assert!(bootstrap_docs.contains("build-rux-min/bin/llvm-config"));
+    assert!(bootstrap_docs.contains("build-k16-min/bin/llvm-config"));
     assert!(bootstrap_docs.contains("k16"));
     assert!(!bootstrap_docs.contains("tools/rux16-rustc-bootstrap-probe.sh"));
     assert!(!bootstrap_docs.contains("tools/rux16-rust-nocore-smoke.sh"));
@@ -160,6 +165,44 @@ fn rust_nocore_smoke_artifacts_are_documented_and_strict() {
     }
     assert!(feasibility_docs.contains("k16 runtime k16-startup"));
     assert!(feasibility_docs.contains("k16 run"));
+}
+
+#[test]
+fn llvm_and_rust_backend_sources_use_k16_without_retired_rux16_names() {
+    let root = repo_root();
+    let backend_paths = [
+        "toolchains/Compukter-Kraft-llvm/llvm/include/llvm/TargetParser/Triple.h",
+        "toolchains/Compukter-Kraft-llvm/llvm/lib/TargetParser/Triple.cpp",
+        "toolchains/Compukter-Kraft-llvm/llvm/lib/Target/K16/CMakeLists.txt",
+        "toolchains/Compukter-Kraft-llvm/llvm/lib/Target/K16/TargetInfo/K16TargetInfo.cpp",
+        "toolchains/Compukter-Kraft-llvm/llvm/lib/Target/K16/K16TargetMachine.cpp",
+        "toolchains/Compukter-Kraft-rust/compiler/rustc_llvm/build.rs",
+        "toolchains/Compukter-Kraft-rust/compiler/rustc_llvm/src/lib.rs",
+        "toolchains/Compukter-Kraft-rust/compiler/rustc_target/src/callconv/mod.rs",
+        "toolchains/Compukter-Kraft-rust/compiler/rustc_target/src/callconv/k16.rs",
+    ];
+
+    for path in backend_paths {
+        let contents = fs::read_to_string(root.join(path))
+            .unwrap_or_else(|error| panic!("expected active K16 backend file `{path}`: {error}"));
+        assert!(
+            !contents.contains("rux16")
+                && !contents.contains("Rux16")
+                && !contents.contains("RUX16"),
+            "active K16 backend file `{path}` should not keep retired Rux16 names"
+        );
+    }
+
+    let retired_paths = [
+        "toolchains/Compukter-Kraft-llvm/llvm/lib/Target/Rux16",
+        "toolchains/Compukter-Kraft-rust/compiler/rustc_target/src/callconv/rux16.rs",
+    ];
+    for path in retired_paths {
+        assert!(
+            !root.join(path).exists(),
+            "retired backend path `{path}` should not exist"
+        );
+    }
 }
 
 fn repo_root() -> &'static Path {
