@@ -14,8 +14,9 @@ fn rust_nocore_smoke_artifacts_are_documented_and_strict() {
     let clang_docs = root.join("docs/toolchains/k16-clang-smoke.md");
     let docs = root.join("docs/toolchains/k16-rust-nocore-smoke.md");
     let bootstrap_docs = root.join("docs/toolchains/k16-rustc-bootstrap.md");
-    let feasibility_docs = root.join("docs/toolchains/rux16-rust-feasibility.md");
-    let strategy_docs = root.join("docs/toolchains/rux16-language-strategy.md");
+    let llvm_submodule_docs = root.join("docs/toolchains/k16-llvm-submodule.md");
+    let feasibility_docs = root.join("docs/toolchains/k16-rust-feasibility.md");
+    let strategy_docs = root.join("docs/toolchains/k16-language-strategy.md");
     let retired_public_paths = [
         "tools/rux16-unknown-ruxos.json",
         "tools/rux16-llvm-smoke.sh",
@@ -24,8 +25,11 @@ fn rust_nocore_smoke_artifacts_are_documented_and_strict() {
         "tools/rux16-rustc-bootstrap-probe.sh",
         "docs/toolchains/rux16-llvm-smoke.md",
         "docs/toolchains/rux16-clang-smoke.md",
+        "docs/toolchains/rux16-llvm-submodule.md",
+        "docs/toolchains/rux16-rust-feasibility.md",
         "docs/toolchains/rux16-rust-nocore-smoke.md",
         "docs/toolchains/rux16-rustc-bootstrap.md",
+        "docs/toolchains/rux16-language-strategy.md",
     ];
 
     for path in retired_public_paths {
@@ -112,6 +116,11 @@ fn rust_nocore_smoke_artifacts_are_documented_and_strict() {
     assert!(clang_docs.contains("K16_LLVM_BIN_DIR"));
     assert!(!clang_docs.contains("tools/rux16-clang-smoke.sh"));
     assert!(!clang_docs.contains("RUX16_LLVM_BIN_DIR"));
+
+    let llvm_submodule_docs =
+        fs::read_to_string(&llvm_submodule_docs).expect("LLVM submodule docs exist");
+    assert!(llvm_submodule_docs.contains("K16 LLVM"));
+    assert!(!llvm_submodule_docs.contains("Rux16 LLVM Submodule"));
 
     let docs = fs::read_to_string(&docs).expect("Rust no_core smoke docs exist");
     assert!(docs.contains("tools/k16-rust-nocore-smoke.sh"));

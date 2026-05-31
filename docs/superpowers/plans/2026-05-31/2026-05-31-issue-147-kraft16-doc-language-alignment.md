@@ -16,13 +16,13 @@
 
 **Files:**
 - Modify: `docs/toolchains/rux-language-retirement-audit.md`
-- Modify: `docs/toolchains/rux16-language-strategy.md`
+- Modify: `docs/toolchains/k16-language-strategy.md`
 
 - [x] **Step 1: Replace stale machine-name decision text**
 
 In `docs/toolchains/rux-language-retirement-audit.md`, replace the paragraph that says machine/artifact names remain current until a later decision with text that points to #147 and explains that the language remains Rux.
 
-In `docs/toolchains/rux16-language-strategy.md`, replace the equivalent paragraph under "What Is Being Retired" with the same boundary.
+In `docs/toolchains/k16-language-strategy.md`, replace the equivalent paragraph under "What Is Being Retired" with the same boundary.
 
 - [x] **Step 2: Update keep/current wording**
 
@@ -33,7 +33,7 @@ In `docs/toolchains/rux-language-retirement-audit.md`, update "Keep For Now" so 
 Run:
 
 ```bash
-rg -n "machine/artifact names by itself|separate compatibility decision|remain the current CPU" docs/toolchains/rux-language-retirement-audit.md docs/toolchains/rux16-language-strategy.md
+rg -n "machine/artifact names by itself|separate compatibility decision|remain the current CPU" docs/toolchains/rux-language-retirement-audit.md docs/toolchains/k16-language-strategy.md
 ```
 
 Expected: no output.
@@ -53,6 +53,6 @@ Expected: no output.
 Run:
 
 ```bash
-git add docs/toolchains/rux-language-retirement-audit.md docs/toolchains/rux16-language-strategy.md docs/superpowers/plans/2026-05-31/2026-05-31-issue-147-kraft16-doc-language-alignment.md
+git add docs/toolchains/rux-language-retirement-audit.md docs/toolchains/k16-language-strategy.md docs/superpowers/plans/2026-05-31/2026-05-31-issue-147-kraft16-doc-language-alignment.md
 git commit -m "docs(toolchains): align Kraft16 naming strategy"
 ```

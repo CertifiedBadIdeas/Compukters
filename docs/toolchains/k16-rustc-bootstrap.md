@@ -2,7 +2,7 @@
 
 > Issue: [#132](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/132)
 >
-> Strategy: [K16 Rust-First Language Strategy](rux16-language-strategy.md)
+> Strategy: [K16 Rust-First Language Strategy](k16-language-strategy.md)
 
 ## Current Evidence
 
@@ -33,7 +33,7 @@ toolchains/Compukter-Kraft-rust
 Fork branch policy:
 
 - `main` mirrors upstream `rust-lang/rust` and is synced manually;
-- `rux16` contains Compukter-Kraft Rust/Rux16 toolchain changes;
+- `rux16` contains Compukter-Kraft Rust/K16 toolchain changes;
 - the main repository still pins the exact submodule commit for reproducible
   builds.
 
@@ -105,7 +105,7 @@ The submodule checkout alone is not a successful rustc build. The next #145
 slice is to add the bootstrap configuration/probe that proves this Rust source
 can build against the K16 LLVM backend.
 
-### Fast Probe: Rust Source With Prebuilt Rux16 LLVM
+### Fast Probe: Rust Source With Prebuilt K16 LLVM
 
 Use a Rust source checkout and configure bootstrap to use the already-built
 LLVM from `toolchains/Compukter-Kraft-llvm/build-rux-min/bin/llvm-config`.
@@ -136,7 +136,7 @@ That is expected bootstrap behavior, not a Rux16 codegen proof.
 The default build directory is `toolchains/Compukter-Kraft-rust/build/rux16`,
 which is ignored by the Rust repository.
 
-The Rux16 Rust fork changes needed for the first stage1 smoke are:
+The K16 Rust fork changes needed for the first stage1 smoke are:
 
 - register the `rux16` LLVM component and initialize the K16 LLVM target
   inside `rustc_llvm`;
@@ -153,7 +153,7 @@ llvm-config = "/absolute/path/to/toolchains/Compukter-Kraft-llvm/build-rux-min/b
 
 Installing nightly is useful for unstable `no_core` and custom target JSON
 flags, but it will still fail if that rustc's bundled LLVM does not include the
-Rux16 backend.
+current Rux16 backend.
 
 ## First Success Criterion
 

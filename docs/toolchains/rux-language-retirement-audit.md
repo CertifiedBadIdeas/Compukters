@@ -2,7 +2,7 @@
 
 > Issue: [#139](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/139)
 >
-> Strategy: [Rux16 Rust-First Language Strategy](rux16-language-strategy.md)
+> Strategy: [K16 Rust-First Language Strategy](k16-language-strategy.md)
 
 ## Decision Boundary
 
@@ -51,7 +51,7 @@ The Rux-language implementation currently lives in:
   listings.
 
 The parts of `native/rux-compiler` that should survive are the machine/tooling
-pieces: Rux16 object assembly/disassembly, object linking, RUXE encoding,
+pieces: K16 object assembly/disassembly, object linking, RUXE encoding,
 volume/filesystem tooling, inspect/run helpers, and Rust-target smoke support.
 Those may need a later crate/CLI rename, but they are not language frontend
 features.
@@ -100,9 +100,8 @@ move toward Kraft16/K16 names as #147 implementation slices land:
 - K16 executable container, currently represented by the existing `RUXE`
   format;
 - object linker and relocation handling;
-- `rux run`, `rux inspect`, `rux disasm`, and volume/filesystem tooling where
-  they operate on machine artifacts rather than Rux source, until machine CLI
-  commands move to `k16`;
+- `k16 run`, `k16 inspect`, `k16 disasm`, and volume/filesystem tooling where
+  they operate on machine artifacts rather than Rux source;
 - LLVM, Clang, and Rust no_core smoke tooling.
 
 The command name `rux` remains correct for Rux-language behavior such as

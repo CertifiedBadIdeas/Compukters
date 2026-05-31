@@ -1,6 +1,6 @@
 # K16 Clang Smoke
 
-> Toolchain: [K16 LLVM Submodule](rux16-llvm-submodule.md)
+> Toolchain: [K16 LLVM Submodule](k16-llvm-submodule.md)
 
 `tools/k16-clang-smoke.sh` verifies the first freestanding C path for Rux16:
 

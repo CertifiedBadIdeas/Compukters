@@ -2,12 +2,12 @@
 
 > Issue: [#132](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/132)
 >
-> Toolchain: [K16 LLVM Submodule](rux16-llvm-submodule.md)
+> Toolchain: [K16 LLVM Submodule](k16-llvm-submodule.md)
 >
 > rustc bootstrap: [K16 rustc Bootstrap Path](k16-rustc-bootstrap.md)
 
 `tools/k16-rust-nocore-smoke.sh` is the first intended Rust smoke path for
-Rux16. It compiles a tiny `#![no_core]` Rust program with an unmangled
+K16. It compiles a tiny `#![no_core]` Rust program with an unmangled
 `extern "C" fn main() -> i32`, links it with `rux16-startup` and the explicit
 `rux16-memory-helpers` runtime object, executes the resulting KX program,
 and expects `debug_bytes=2a`.
@@ -31,7 +31,7 @@ by this Rust revision: `sized`, `meta_sized`, and `pointee_sized`.
 Run it with explicit tool paths:
 
 ```bash
-K16_RUSTC=/path/to/custom-rux16-rustc \
+K16_RUSTC=/path/to/custom-k16-rustc \
 K16_LLVM_BIN_DIR=/path/to/rux16/llvm/bin \
 tools/k16-rust-nocore-smoke.sh
 ```
