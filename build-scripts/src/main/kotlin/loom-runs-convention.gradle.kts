@@ -165,8 +165,8 @@ tasks.register("buildProductionUniversalJar") {
 }
 
 fun RunConfigSettings.applyRustVm() {
-    property("rux.vm.native.display", "true")
-    property("rux.vm.native.daemon", "true")
+    property("k16.vm.native.display", "true")
+    property("k16.vm.native.daemon", "true")
 }
 
 val loom = extensions.getByType<LoomGradleExtensionAPI>()
@@ -451,4 +451,3 @@ private fun commandAvailable(command: String): Boolean =
             .start()
             .waitFor() == 0
     }.getOrDefault(false)
-

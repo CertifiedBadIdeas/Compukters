@@ -52,8 +52,8 @@ internal sealed class NativeLibraryResolution {
 }
 
 internal object NativeLibraryLocator {
-    const val LIBRARY_PROPERTY = "rux.vm.native.library"
-    const val EXTRACT_DIR_PROPERTY = "rux.vm.native.extract.dir"
+    const val LIBRARY_PROPERTY = "k16.vm.native.library"
+    const val EXTRACT_DIR_PROPERTY = "k16.vm.native.extract.dir"
 
     fun resolve(): NativeLibraryResolution? =
         resolve(
