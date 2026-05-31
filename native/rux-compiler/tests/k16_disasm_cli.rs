@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 static TEMP_FILE_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
 #[test]
-fn rux_disasm_requires_explicit_target() {
+fn k16_disasm_requires_explicit_target() {
     let artifact_path = temp_file("program.bin");
     fs::write(&artifact_path, halt().to_le_bytes()).expect("artifact writes");
 
@@ -21,7 +21,7 @@ fn rux_disasm_requires_explicit_target() {
 }
 
 #[test]
-fn rux_disasm_prints_program_artifact_from_program_load_base() {
+fn k16_disasm_prints_program_artifact_from_program_load_base() {
     let artifact_path = temp_file("program.kx");
     fs::write(
         &artifact_path,
@@ -59,7 +59,7 @@ fn rux_disasm_prints_program_artifact_from_program_load_base() {
 }
 
 #[test]
-fn rux_disasm_prints_boot_artifact_from_boot_load_base() {
+fn k16_disasm_prints_boot_artifact_from_boot_load_base() {
     let artifact_path = temp_file("boot.kb");
     fs::write(
         &artifact_path,
@@ -97,7 +97,7 @@ fn rux_disasm_prints_boot_artifact_from_boot_load_base() {
 }
 
 #[test]
-fn rux_disasm_prints_kernel_artifact_from_kernel_load_base() {
+fn k16_disasm_prints_kernel_artifact_from_kernel_load_base() {
     let artifact_path = temp_file("kernel.kx");
     fs::write(
         &artifact_path,
@@ -135,7 +135,7 @@ fn rux_disasm_prints_kernel_artifact_from_kernel_load_base() {
 }
 
 #[test]
-fn rux_disasm_rejects_raw_boot_bytes_without_ruxe_fallback() {
+fn k16_disasm_rejects_raw_boot_bytes_without_ruxe_fallback() {
     let artifact_path = temp_file("raw-boot.bin");
     fs::write(&artifact_path, words_to_bytes(&[halt()])).expect("artifact writes");
 
@@ -155,7 +155,7 @@ fn rux_disasm_rejects_raw_boot_bytes_without_ruxe_fallback() {
 }
 
 #[test]
-fn rux_disasm_prints_bios_artifact_from_bios_flash_base() {
+fn k16_disasm_prints_bios_artifact_from_bios_flash_base() {
     let artifact_path = temp_file("bios.flash");
     fs::write(&artifact_path, words_to_bytes(&[const4(1, 7), halt()])).expect("artifact writes");
 
@@ -183,7 +183,7 @@ fn rux_disasm_prints_bios_artifact_from_bios_flash_base() {
 }
 
 #[test]
-fn rux_disasm_rejects_invalid_rux16_instruction_without_word_fallback() {
+fn k16_disasm_rejects_invalid_rux16_instruction_without_word_fallback() {
     let artifact_path = temp_file("bios-invalid-instruction.flash");
     fs::write(&artifact_path, words_to_bytes(&[0x7130])).expect("artifact writes");
 
@@ -212,7 +212,7 @@ fn rux_disasm_rejects_invalid_rux16_instruction_without_word_fallback() {
 }
 
 #[test]
-fn rux_disasm_prints_ltu_extended_instruction() {
+fn k16_disasm_prints_ltu_extended_instruction() {
     let artifact_path = temp_file("bios-ltu.flash");
     fs::write(
         &artifact_path,
@@ -246,7 +246,7 @@ fn rux_disasm_prints_ltu_extended_instruction() {
 }
 
 #[test]
-fn rux_disasm_prints_canonical_integer_instruction_surface() {
+fn k16_disasm_prints_canonical_integer_instruction_surface() {
     let artifact_path = temp_file("bios-canonical-integer.flash");
     let mut words = Vec::new();
     words.extend(sub(3, 1, 2));
@@ -295,7 +295,7 @@ fn rux_disasm_prints_canonical_integer_instruction_surface() {
 }
 
 #[test]
-fn rux_disasm_prints_call_and_ret_instructions() {
+fn k16_disasm_prints_call_and_ret_instructions() {
     let artifact_path = temp_file("bios-call-ret.flash");
     fs::write(&artifact_path, words_to_bytes(&[call(1), ret(), halt()])).expect("artifact writes");
 
@@ -323,7 +323,7 @@ fn rux_disasm_prints_call_and_ret_instructions() {
 }
 
 #[test]
-fn rux_disasm_prints_complete_instruction_surface_multiword_raw_words_and_branch_labels() {
+fn k16_disasm_prints_complete_instruction_surface_multiword_raw_words_and_branch_labels() {
     let artifact_path = temp_file("bios-labels.flash");
     fs::write(
         &artifact_path,

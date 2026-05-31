@@ -142,6 +142,20 @@ fn root_shell_helpers_split_rux_language_and_k16_machine_tooling() {
     assert!(k16_source.contains("k16 fs"));
 }
 
+#[test]
+fn machine_cli_integration_tests_use_k16_names() {
+    let tests_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests");
+
+    assert!(
+        tests_dir.join("k16_disasm_cli.rs").exists(),
+        "k16 disasm integration test should use the k16 machine-tooling name"
+    );
+    assert!(
+        !tests_dir.join("rux_disasm_rux16_cli.rs").exists(),
+        "k16 disasm integration test should not keep the old rux machine-tooling name"
+    );
+}
+
 fn rux_binary() -> String {
     std::env::var("CARGO_BIN_EXE_rux").expect("Cargo exposes rux binary path")
 }
