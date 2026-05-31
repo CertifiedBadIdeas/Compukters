@@ -83,6 +83,18 @@ class K16ComputerRuntimeTest {
     }
 
     @Test
+    fun skipsNativeExecutionAfterTerminalControlStatus() {
+        val bindings = EchoBindings()
+        bindings.control = NativeK16ComputerControl(status = 3, exitCode = 0, panicCode = 2)
+        val runtime = K16ComputerRuntime(handle = 21L, bindings = bindings, defaultMaxTurnsPerTick = 8)
+
+        assertEquals(NativeK16ComputerControl(status = 3, exitCode = 0, panicCode = 2), runtime.tick())
+        assertEquals(NativeK16ComputerControl(status = 3, exitCode = 0, panicCode = 2), runtime.tick())
+
+        assertEquals(1, bindings.runUntilSignalCalls)
+    }
+
+    @Test
     fun exposesDisplaySnapshotAndPollsOnlyChangedSequences() {
         val bindings = EchoBindings()
         val runtime = K16ComputerRuntime(handle = 11L, bindings = bindings)
@@ -131,12 +143,18 @@ class K16ComputerRuntimeTest {
         var displaySnapshot: NativeK16ComputerDisplaySnapshot? = null
         var storage0Media: ByteArray? = null
         var machineSnapshot: ByteArray = ByteArray(0)
+        var control: NativeK16ComputerControl = NativeK16ComputerControl(status = 1, exitCode = 0, panicCode = 0)
+        var runUntilSignalCalls = 0
+            private set
         private val pendingOutput = ArrayDeque<ByteArray>()
 
-        override fun runUntilSignal(handle: Long): NativeK16ComputerSignal = NativeK16ComputerSignal.Pause
+        override fun runUntilSignal(handle: Long): NativeK16ComputerSignal {
+            runUntilSignalCalls += 1
+            return NativeK16ComputerSignal.Pause
+        }
 
         override fun control(handle: Long): NativeK16ComputerControl =
-            NativeK16ComputerControl(status = 1, exitCode = 0, panicCode = 0)
+            control
 
         override fun pushSerialInput(
             handle: Long,

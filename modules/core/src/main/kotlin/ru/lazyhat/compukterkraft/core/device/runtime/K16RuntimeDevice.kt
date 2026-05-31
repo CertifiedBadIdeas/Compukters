@@ -28,6 +28,7 @@ import ru.lazyhat.compukterkraft.core.device.runtime.ports.NoopDisplayNetworkBri
 import ru.lazyhat.compukterkraft.core.gui.TerminalFontConstants
 import ru.lazyhat.compukterkraft.core.input.KeyCodes
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16ComputerEndpoint
+import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16ComputerControl
 import java.nio.ByteBuffer
 import java.util.UUID
 
@@ -57,6 +58,7 @@ class K16RuntimeDevice(
     private val displaySnapshotRefreshDisplayIds = mutableSetOf<Int>()
     private var labelBacking: String? = properties.label
     private var renderedSerialBytes = 0
+    private var terminalControlReached = false
     private var runtimeFailureMessageBacking: String? = null
 
     override var label: String?
@@ -85,6 +87,7 @@ class K16RuntimeDevice(
                 return
             }
         runtimeFailureMessageBacking = null
+        terminalControlReached = false
         stateSink.onPowerStateChanged(true)
     }
 
@@ -92,6 +95,7 @@ class K16RuntimeDevice(
         val current = endpoint ?: return
         endpoint = null
         renderedSerialBytes = 0
+        terminalControlReached = false
         renderers.clear()
         displaySnapshotRefreshDisplayIds.clear()
         current.close()
@@ -105,7 +109,10 @@ class K16RuntimeDevice(
 
     override fun serverTick() {
         val current = endpoint ?: return
-        current.tick()
+        if (!terminalControlReached) {
+            val control = current.tick()
+            terminalControlReached = control.isTerminal()
+        }
         if (!flushK16DisplaySnapshot(current)) {
             flushSerialOutput(current)
         }
@@ -253,10 +260,10 @@ class K16RuntimeDevice(
     }
 
     companion object {
-        const val STATUS_RESET: Int = 0
-        const val STATUS_BOOTING: Int = 1
-        const val STATUS_READY: Int = 2
-        const val STATUS_HALTED: Int = 3
-        const val STATUS_PANIC: Int = 4
+        const val STATUS_RESET: Int = NativeK16ComputerControl.STATUS_RESET
+        const val STATUS_BOOTING: Int = NativeK16ComputerControl.STATUS_BOOTING
+        const val STATUS_READY: Int = NativeK16ComputerControl.STATUS_READY
+        const val STATUS_HALTED: Int = NativeK16ComputerControl.STATUS_HALTED
+        const val STATUS_PANIC: Int = NativeK16ComputerControl.STATUS_PANIC
     }
 }

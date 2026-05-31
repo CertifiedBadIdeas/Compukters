@@ -26,7 +26,16 @@ data class NativeK16ComputerControl(
     val exitCode: Int,
     val panicCode: Int,
 ) {
+    fun isTerminal(): Boolean =
+        status == STATUS_HALTED || status == STATUS_PANIC
+
     companion object {
+        const val STATUS_RESET: Int = 0
+        const val STATUS_BOOTING: Int = 1
+        const val STATUS_READY: Int = 2
+        const val STATUS_HALTED: Int = 3
+        const val STATUS_PANIC: Int = 4
+
         fun from(values: LongArray): NativeK16ComputerControl =
             NativeK16ComputerControl(
                 status = values.getOrElse(0) { 0L }.toInt(),
