@@ -143,6 +143,43 @@ fn active_abi_docs_do_not_present_low_image_as_supported() {
     }
 }
 
+#[test]
+fn active_overview_docs_use_kraft16_runtime_brand() {
+    let repo_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(Path::parent)
+        .expect("repo root is above native/k16-vm");
+    let active_docs = [
+        "README.md",
+        "docs/ARCHITECTURE.md",
+        "docs/PROFILING.md",
+        "docs/benchmarks/rux16-vm-baseline-2026-05-29.md",
+    ];
+    let mut docs = String::new();
+    for doc_path in active_docs {
+        docs.push_str(
+            &fs::read_to_string(repo_dir.join(doc_path)).expect("active overview doc reads"),
+        );
+        docs.push('\n');
+    }
+
+    assert!(docs.contains("Kraft16 VM"));
+    assert!(docs.contains("Kraft16 CPU"));
+    for forbidden in [
+        "Rux16 VM",
+        "Rux16 CPU",
+        "Rux16 code",
+        "Rux16 guest execution",
+        "Rust Rux16 computer",
+        "runRux16ComputerUntilSignal",
+    ] {
+        assert!(
+            !docs.contains(forbidden),
+            "active overview docs still expose legacy runtime brand `{forbidden}`"
+        );
+    }
+}
+
 fn collect_text_files(dir: &Path, output: &mut String) {
     for entry in fs::read_dir(dir).expect("directory reads") {
         let entry = entry.expect("directory entry reads");

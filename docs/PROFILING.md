@@ -7,9 +7,9 @@ Compukter Kraft profiling has two layers:
 
 The in-code metrics explain what the VM/display/compiler did. External profilers explain where CPU time and allocations were spent.
 
-## Rux16 VM microbenchmarks
+## Kraft16 VM microbenchmarks
 
-The native Rux16 VM has a dependency-free microbenchmark example for local
+The native Kraft16 VM has a dependency-free microbenchmark example for local
 before/after comparisons:
 
 ```bash

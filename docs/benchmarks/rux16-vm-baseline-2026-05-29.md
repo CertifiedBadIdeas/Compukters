@@ -1,10 +1,10 @@
-# Rux16 VM Microbenchmark Baseline - 2026-05-29
+# Kraft16 VM Microbenchmark Baseline - 2026-05-29
 
 > Issue: [#115](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/115)
 
 ## Scope
 
-This baseline records local release-mode Rux16 VM microbenchmark results after
+This baseline records local release-mode Kraft16 VM microbenchmark results after
 the `mmio-loop` workload was added in `fcaea5ba`.
 
 The numbers are diagnostic comparison points for future VM optimization work.
