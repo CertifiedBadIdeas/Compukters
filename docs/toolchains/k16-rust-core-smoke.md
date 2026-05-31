@@ -51,14 +51,15 @@ contract, so a successful VM run observes:
 debug_bytes=2a
 ```
 
-## Current Blocker
+## Current State
 
-The strict bootstrap probe currently rejects the local updated branch pair
-because the external K16 LLVM checkout does not contain the Rust-pinned
-`src/llvm-project` commit. Rebuilding stage1 rustc from that mismatched pair can
-produce a `rustc --version --verbose` segmentation fault during LLVM static
-initialization, so the toolchain must be realigned before treating any `core`
-codegen result as valid.
+The strict bootstrap probe requires the external K16 LLVM checkout to be based
+on the Rust-pinned `src/llvm-project` commit. The main repository now pins
+`toolchains/Compukter-Kraft-llvm` to the `k16-rust-pinned` branch commit that
+satisfies that check.
+
+The next required step is rebuilding stage1 rustc against that aligned LLVM
+checkout before treating any `core` codegen result as valid.
 
 After a compatible stage1 host `std` sysroot is rebuilt, the smoke reaches real
 K16 codegen for Rust `core`. The known backend blocker after that point is:

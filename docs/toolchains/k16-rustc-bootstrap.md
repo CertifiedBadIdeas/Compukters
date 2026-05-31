@@ -74,25 +74,34 @@ References:
 - <https://rustc-dev-guide.rust-lang.org/building/how-to-build-and-run>
 - <https://doc.rust-lang.org/nightly/rustc/targets/custom.html>
 
-## Viable Local Paths
-
-### Preferred: Rust Source With K16 LLVM Submodule
+## Intended Local Path
 
 Use `toolchains/Compukter-Kraft-rust` as the tracked Rust source tree for
-toolchain work. In that Rust source tree, point `src/llvm-project` at the
-Compukter-Kraft LLVM fork that contains the K16 backend. Then build a stage1
-rustc and link it through rustup as a local custom toolchain.
+toolchain work. Use `toolchains/Compukter-Kraft-llvm` as the tracked LLVM fork
+that contains the K16 backend. The LLVM fork branch used for Rust bootstrap must
+be based on the LLVM commit pinned by the Rust source tree's `src/llvm-project`
+gitlink; do not initialize or replace that Rust submodule as the build source.
 
-This is the most reproducible path because the Rust source tree records the
-LLVM commit it was built against.
+Rust bootstrap is configured to use the already-built K16 LLVM through
+`llvm-config`:
+
+```text
+toolchains/Compukter-Kraft-llvm/build-k16-min/bin/llvm-config
+```
+
+This keeps one K16 LLVM source of truth in `Compukter-Kraft-llvm` while still
+proving API compatibility against the Rust-pinned LLVM base.
 
 Expected shape:
 
 ```text
 toolchains/Compukter-Kraft-rust
-  src/llvm-project -> Compukter-Kraft-llvm commit with K16
+  src/llvm-project -> Rust-pinned LLVM commit, left uninitialized
   bootstrap.toml
   build/<host>/stage1/bin/rustc
+toolchains/Compukter-Kraft-llvm
+  branch: k16-rust-pinned
+  build-k16-min/bin/llvm-config
 ```
 
 Initialize the Rust source checkout with:
@@ -101,18 +110,9 @@ Initialize the Rust source checkout with:
 git submodule update --init --recursive toolchains/Compukter-Kraft-rust
 ```
 
-The submodule checkout alone is not a successful rustc build. The next #145
-slice is to add the bootstrap configuration/probe that proves this Rust source
-can build against the K16 LLVM backend.
-
-### Fast Probe: Rust Source With Prebuilt K16 LLVM
-
-Use a Rust source checkout and configure bootstrap to use the already-built
-LLVM from `toolchains/Compukter-Kraft-llvm/build-k16-min/bin/llvm-config`.
-
-This may avoid rebuilding LLVM, but it depends on API compatibility between
-the selected Rust source revision and the prebuilt LLVM 23.0.0git checkout.
-If rustc and LLVM APIs do not match, this path fails during compiler build.
+The source checkout alone is not a successful rustc build. A stage1 rustc must
+still be rebuilt after the K16 LLVM fork is aligned to the Rust-pinned LLVM
+base.
 
 Run the workspace probe first:
 
