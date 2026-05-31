@@ -1,5 +1,5 @@
 use crate::artifact::K16ArtifactTarget;
-use crate::{advice, inspect, k16_disasm, k16_runtime, k16fs, object_link, volume};
+use crate::{inspect, k16_disasm, k16_runtime, k16fs, object_link, volume};
 use k16_vm::k16::K16Signal;
 use k16_vm::k16_computer::K16ComputerHandle;
 use std::env;
@@ -8,56 +8,29 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum CliSurface {
-    Rux,
-    K16,
-}
-
-impl CliSurface {
-    fn command_name(self) -> &'static str {
-        match self {
-            CliSurface::Rux => "rux",
-            CliSurface::K16 => "k16",
-        }
-    }
-}
-
-pub fn run_rux_cli(args: Vec<String>) -> Result<(), String> {
-    run_cli(CliSurface::Rux, args)
-}
-
 pub fn run_k16_cli(args: Vec<String>) -> Result<(), String> {
-    run_cli(CliSurface::K16, args)
-}
-
-fn run_cli(surface: CliSurface, args: Vec<String>) -> Result<(), String> {
     let Some(command) = args.first() else {
-        return usage_error(surface);
+        return usage_error();
     };
-    match (surface, command.as_str()) {
-        (CliSurface::Rux, "check") => run_check(&args[1..]),
-        (CliSurface::K16, "link") => run_link(surface, &args[1..]),
-        (CliSurface::K16, "runtime") => run_runtime(surface, &args[1..]),
-        (CliSurface::K16, "run") => run_program(surface, &args[1..]),
-        (CliSurface::K16, "disasm" | "disassemble") => run_disasm(surface, &args[1..]),
-        (CliSurface::K16, "inspect") => run_inspect(surface, &args[1..]),
-        (CliSurface::K16, "fs") => run_fs(surface, &args[1..]),
-        (CliSurface::K16, "volume") => run_volume(surface, &args[1..]),
-        _ => usage_error(surface),
+    match command.as_str() {
+        "link" => run_link(&args[1..]),
+        "runtime" => run_runtime(&args[1..]),
+        "run" => run_program(&args[1..]),
+        "disasm" | "disassemble" => run_disasm(&args[1..]),
+        "inspect" => run_inspect(&args[1..]),
+        "fs" => run_fs(&args[1..]),
+        "volume" => run_volume(&args[1..]),
+        _ => usage_error(),
     }
 }
 
-fn usage_error(surface: CliSurface) -> Result<(), String> {
-    match surface {
-        CliSurface::Rux => Err("usage: rux check <input.rx>".to_string()),
-        CliSurface::K16 => Err("usage: k16 link [--target <boot|kernel|program>] <input.ko>... -o <output.kx>\n       k16 runtime <k16-startup|k16-memory-helpers> -o <output.ko>\n       k16 run <program.kx>\n       k16 disasm --target <bios|boot|kernel|program> <input>\n       k16 inspect <blob>\n       k16 volume <create|init|put-boot|put-kernel> ...\n       k16 fs <filesystem> ...".to_string()),
-    }
+fn usage_error() -> Result<(), String> {
+    Err("usage: k16 link [--target <boot|kernel|program>] <input.ko>... -o <output.kx>\n       k16 runtime <k16-startup|k16-memory-helpers> -o <output.ko>\n       k16 run <program.kx>\n       k16 disasm --target <bios|boot|kernel|program> <input>\n       k16 inspect <blob>\n       k16 volume <create|init|put-boot|put-kernel> ...\n       k16 fs <filesystem> ...".to_string())
 }
 
-fn run_program(surface: CliSurface, args: &[String]) -> Result<(), String> {
+fn run_program(args: &[String]) -> Result<(), String> {
     if args.len() != 1 {
-        return run_usage_error(surface);
+        return run_usage_error();
     }
     let program =
         fs::read(&args[0]).map_err(|error| format!("failed to read {}: {error}", args[0]))?;
@@ -77,9 +50,9 @@ fn run_program(surface: CliSurface, args: &[String]) -> Result<(), String> {
     Ok(())
 }
 
-fn run_inspect(surface: CliSurface, args: &[String]) -> Result<(), String> {
+fn run_inspect(args: &[String]) -> Result<(), String> {
     if args.len() != 1 {
-        return inspect_usage_error(surface);
+        return inspect_usage_error();
     }
     let bytes =
         fs::read(&args[0]).map_err(|error| format!("failed to read {}: {error}", args[0]))?;
@@ -87,27 +60,8 @@ fn run_inspect(surface: CliSurface, args: &[String]) -> Result<(), String> {
     Ok(())
 }
 
-fn run_check(args: &[String]) -> Result<(), String> {
-    if args.len() != 1 {
-        return check_usage_error();
-    }
-    let source_path = &args[0];
-    let source = fs::read_to_string(source_path)
-        .map_err(|error| format!("failed to read {source_path}: {error}"))?;
-    let diagnostics =
-        advice::check_source(&source).map_err(|error| format!("check error: {}", error.message))?;
-    for diagnostic in diagnostics {
-        println!(
-            "{source_path}:{}:{}: suggestion: {}",
-            diagnostic.line, diagnostic.column, diagnostic.message
-        );
-        println!("  help: {}", diagnostic.help);
-    }
-    Ok(())
-}
-
-fn run_link(surface: CliSurface, args: &[String]) -> Result<(), String> {
-    let config = parse_link_args(surface, args)?;
+fn run_link(args: &[String]) -> Result<(), String> {
+    let config = parse_link_args(args)?;
     let input_bytes = config
         .input_paths
         .iter()
@@ -126,14 +80,14 @@ fn run_link(surface: CliSurface, args: &[String]) -> Result<(), String> {
         .map_err(|error| format!("failed to write {}: {error}", config.output_path))
 }
 
-fn run_runtime(surface: CliSurface, args: &[String]) -> Result<(), String> {
+fn run_runtime(args: &[String]) -> Result<(), String> {
     let Some(command) = args.first() else {
-        return runtime_usage_error(surface);
+        return runtime_usage_error();
     };
     match command.as_str() {
         "k16-startup" => {
             if args.len() != 3 || args[1] != "-o" {
-                return runtime_usage_error(surface);
+                return runtime_usage_error();
             }
             let bytes = k16_runtime::k16_startup_object();
             fs::write(&args[2], bytes)
@@ -141,11 +95,11 @@ fn run_runtime(surface: CliSurface, args: &[String]) -> Result<(), String> {
         }
         "k16-memory-helpers" => {
             if args.len() != 3 || args[1] != "-o" {
-                return runtime_usage_error(surface);
+                return runtime_usage_error();
             }
             build_k16_memory_helpers(Path::new(&args[2]))
         }
-        _ => runtime_usage_error(surface),
+        _ => runtime_usage_error(),
     }
 }
 
@@ -291,8 +245,8 @@ fn temp_runtime_path(stem: &str, extension: &str) -> PathBuf {
     env::temp_dir().join(format!("{stem}-{}-{nanos}.{extension}", std::process::id()))
 }
 
-fn run_disasm(surface: CliSurface, args: &[String]) -> Result<(), String> {
-    let config = parse_disasm_args(surface, args)?;
+fn run_disasm(args: &[String]) -> Result<(), String> {
+    let config = parse_disasm_args(args)?;
     let bytes = fs::read(&config.input_path)
         .map_err(|error| format!("failed to read {}: {error}", config.input_path))?;
     let disassembly = k16_disasm::disassemble_artifact(&bytes, config.target)?;
@@ -306,7 +260,7 @@ struct DisasmConfig {
     input_path: String,
 }
 
-fn parse_disasm_args(surface: CliSurface, args: &[String]) -> Result<DisasmConfig, String> {
+fn parse_disasm_args(args: &[String]) -> Result<DisasmConfig, String> {
     let mut target = None;
     let mut input_path = None;
     let mut index = 0;
@@ -314,15 +268,15 @@ fn parse_disasm_args(surface: CliSurface, args: &[String]) -> Result<DisasmConfi
         match args[index].as_str() {
             "--target" => {
                 let Some(value) = args.get(index + 1) else {
-                    return disasm_usage_error(surface);
+                    return disasm_usage_error();
                 };
                 target = Some(K16ArtifactTarget::parse(value)?);
                 index += 2;
             }
-            value if value.starts_with('-') => return disasm_usage_error(surface),
+            value if value.starts_with('-') => return disasm_usage_error(),
             value => {
                 if input_path.is_some() {
-                    return disasm_usage_error(surface);
+                    return disasm_usage_error();
                 }
                 input_path = Some(value.to_string());
                 index += 1;
@@ -330,8 +284,8 @@ fn parse_disasm_args(surface: CliSurface, args: &[String]) -> Result<DisasmConfi
         }
     }
     Ok(DisasmConfig {
-        target: target.ok_or_else(|| disasm_usage_message(surface))?,
-        input_path: input_path.ok_or_else(|| disasm_usage_message(surface))?,
+        target: target.ok_or_else(disasm_usage_message)?,
+        input_path: input_path.ok_or_else(disasm_usage_message)?,
     })
 }
 
@@ -342,7 +296,7 @@ struct LinkConfig {
     output_path: String,
 }
 
-fn parse_link_args(surface: CliSurface, args: &[String]) -> Result<LinkConfig, String> {
+fn parse_link_args(args: &[String]) -> Result<LinkConfig, String> {
     let mut target = K16ArtifactTarget::Program;
     let mut input_paths = Vec::new();
     let mut output_path = None;
@@ -351,19 +305,19 @@ fn parse_link_args(surface: CliSurface, args: &[String]) -> Result<LinkConfig, S
         match args[index].as_str() {
             "--target" => {
                 let Some(value) = args.get(index + 1) else {
-                    return link_usage_error(surface);
+                    return link_usage_error();
                 };
                 target = K16ArtifactTarget::parse(value)?;
                 index += 2;
             }
             "-o" => {
                 let Some(value) = args.get(index + 1) else {
-                    return link_usage_error(surface);
+                    return link_usage_error();
                 };
                 output_path = Some(value.clone());
                 index += 2;
             }
-            value if value.starts_with('-') => return link_usage_error(surface),
+            value if value.starts_with('-') => return link_usage_error(),
             value => {
                 input_paths.push(value.to_string());
                 index += 1;
@@ -371,23 +325,23 @@ fn parse_link_args(surface: CliSurface, args: &[String]) -> Result<LinkConfig, S
         }
     }
     if input_paths.is_empty() {
-        return link_usage_error(surface);
+        return link_usage_error();
     }
     Ok(LinkConfig {
         target,
         input_paths,
-        output_path: output_path.ok_or_else(|| link_usage_message(surface))?,
+        output_path: output_path.ok_or_else(link_usage_message)?,
     })
 }
 
-fn run_volume(surface: CliSurface, args: &[String]) -> Result<(), String> {
+fn run_volume(args: &[String]) -> Result<(), String> {
     let Some(command) = args.first() else {
-        return volume_usage_error(surface);
+        return volume_usage_error();
     };
     match command.as_str() {
         "create" => {
             if args.len() != 4 || args[2] != "--size" {
-                return volume_usage_error(surface);
+                return volume_usage_error();
             }
             let size = parse_size(&args[3])?;
             let bytes = volume::create_empty_volume(size)?;
@@ -396,7 +350,7 @@ fn run_volume(surface: CliSurface, args: &[String]) -> Result<(), String> {
         }
         "init" => {
             if args.len() != 4 || args[2] != "--size" {
-                return volume_usage_error(surface);
+                return volume_usage_error();
             }
             let size = parse_size(&args[3])?;
             let bytes = volume::create_initialized_volume(size)?;
@@ -405,7 +359,7 @@ fn run_volume(surface: CliSurface, args: &[String]) -> Result<(), String> {
         }
         "put-boot" => {
             if args.len() != 3 {
-                return volume_usage_error(surface);
+                return volume_usage_error();
             }
             let mut volume_bytes = fs::read(&args[1])
                 .map_err(|error| format!("failed to read {}: {error}", args[1]))?;
@@ -417,7 +371,7 @@ fn run_volume(surface: CliSurface, args: &[String]) -> Result<(), String> {
         }
         "put-kernel" => {
             if args.len() != 3 {
-                return volume_usage_error(surface);
+                return volume_usage_error();
             }
             let mut volume_bytes = fs::read(&args[1])
                 .map_err(|error| format!("failed to read {}: {error}", args[1]))?;
@@ -429,7 +383,7 @@ fn run_volume(surface: CliSurface, args: &[String]) -> Result<(), String> {
         }
         "extract-partition" => {
             if args.len() != 4 {
-                return volume_usage_error(surface);
+                return volume_usage_error();
             }
             let volume_bytes = fs::read(&args[1])
                 .map_err(|error| format!("failed to read {}: {error}", args[1]))?;
@@ -439,7 +393,7 @@ fn run_volume(surface: CliSurface, args: &[String]) -> Result<(), String> {
         }
         "replace-partition" => {
             if args.len() != 4 {
-                return volume_usage_error(surface);
+                return volume_usage_error();
             }
             let mut volume_bytes = fs::read(&args[1])
                 .map_err(|error| format!("failed to read {}: {error}", args[1]))?;
@@ -451,7 +405,7 @@ fn run_volume(surface: CliSurface, args: &[String]) -> Result<(), String> {
         }
         "inspect" => {
             if args.len() != 2 {
-                return volume_usage_error(surface);
+                return volume_usage_error();
             }
             let volume_bytes = fs::read(&args[1])
                 .map_err(|error| format!("failed to read {}: {error}", args[1]))?;
@@ -460,35 +414,35 @@ fn run_volume(surface: CliSurface, args: &[String]) -> Result<(), String> {
         }
         "inspect-boot" => {
             if args.len() != 2 {
-                return volume_usage_error(surface);
+                return volume_usage_error();
             }
             let volume_bytes = fs::read(&args[1])
                 .map_err(|error| format!("failed to read {}: {error}", args[1]))?;
             print!("{}", volume::inspect_boot_chain(&volume_bytes)?);
             Ok(())
         }
-        _ => volume_usage_error(surface),
+        _ => volume_usage_error(),
     }
 }
 
-fn run_fs(surface: CliSurface, args: &[String]) -> Result<(), String> {
+fn run_fs(args: &[String]) -> Result<(), String> {
     let Some(filesystem) = args.first() else {
-        return fs_usage_error(surface);
+        return fs_usage_error();
     };
     match filesystem.as_str() {
-        "kfs" => run_kfs(surface, &args[1..]),
+        "kfs" => run_kfs(&args[1..]),
         other => Err(format!("unsupported filesystem `{other}`")),
     }
 }
 
-fn run_kfs(surface: CliSurface, args: &[String]) -> Result<(), String> {
+fn run_kfs(args: &[String]) -> Result<(), String> {
     let Some(command) = args.first() else {
-        return fs_usage_error(surface);
+        return fs_usage_error();
     };
     match command.as_str() {
         "format" => {
             if args.len() != 4 || args[2] != "--blocks" {
-                return fs_usage_error(surface);
+                return fs_usage_error();
             }
             let total_blocks = parse_blocks(&args[3])?;
             let bytes = k16fs::format_empty_filesystem(total_blocks)?;
@@ -497,7 +451,7 @@ fn run_kfs(surface: CliSurface, args: &[String]) -> Result<(), String> {
         }
         "mkdir" => {
             if args.len() != 3 {
-                return fs_usage_error(surface);
+                return fs_usage_error();
             }
             let mut image = fs::read(&args[1])
                 .map_err(|error| format!("failed to read {}: {error}", args[1]))?;
@@ -507,7 +461,7 @@ fn run_kfs(surface: CliSurface, args: &[String]) -> Result<(), String> {
         }
         "put" => {
             if args.len() != 4 {
-                return fs_usage_error(surface);
+                return fs_usage_error();
             }
             let mut image = fs::read(&args[1])
                 .map_err(|error| format!("failed to read {}: {error}", args[1]))?;
@@ -519,7 +473,7 @@ fn run_kfs(surface: CliSurface, args: &[String]) -> Result<(), String> {
         }
         "get" => {
             if args.len() != 4 {
-                return fs_usage_error(surface);
+                return fs_usage_error();
             }
             let image = fs::read(&args[1])
                 .map_err(|error| format!("failed to read {}: {error}", args[1]))?;
@@ -529,7 +483,7 @@ fn run_kfs(surface: CliSurface, args: &[String]) -> Result<(), String> {
         }
         "rm" => {
             if args.len() != 3 {
-                return fs_usage_error(surface);
+                return fs_usage_error();
             }
             let mut image = fs::read(&args[1])
                 .map_err(|error| format!("failed to read {}: {error}", args[1]))?;
@@ -539,7 +493,7 @@ fn run_kfs(surface: CliSurface, args: &[String]) -> Result<(), String> {
         }
         "ls" => {
             if args.len() != 3 {
-                return fs_usage_error(surface);
+                return fs_usage_error();
             }
             let image = fs::read(&args[1])
                 .map_err(|error| format!("failed to read {}: {error}", args[1]))?;
@@ -548,7 +502,7 @@ fn run_kfs(surface: CliSurface, args: &[String]) -> Result<(), String> {
             }
             Ok(())
         }
-        _ => fs_usage_error(surface),
+        _ => fs_usage_error(),
     }
 }
 
@@ -589,59 +543,38 @@ fn parse_size(value: &str) -> Result<usize, String> {
     Ok(size)
 }
 
-fn check_usage_error() -> Result<(), String> {
-    Err("usage: rux check <input.rx>".to_string())
+fn link_usage_error() -> Result<LinkConfig, String> {
+    Err(link_usage_message())
 }
 
-fn link_usage_error(surface: CliSurface) -> Result<LinkConfig, String> {
-    Err(link_usage_message(surface))
-}
-
-fn link_usage_message(surface: CliSurface) -> String {
-    debug_assert_eq!(surface, CliSurface::K16);
+fn link_usage_message() -> String {
     "usage: k16 link [--target <boot|kernel|program>] <input.ko>... -o <output.kx>".to_string()
 }
 
-fn runtime_usage_error(surface: CliSurface) -> Result<(), String> {
-    debug_assert_eq!(surface, CliSurface::K16);
-    Err(format!(
-        "usage: {} runtime <k16-startup|k16-memory-helpers> -o <output.ko>",
-        surface.command_name()
-    ))
+fn runtime_usage_error() -> Result<(), String> {
+    Err("usage: k16 runtime <k16-startup|k16-memory-helpers> -o <output.ko>".to_string())
 }
 
-fn run_usage_error(surface: CliSurface) -> Result<(), String> {
-    debug_assert_eq!(surface, CliSurface::K16);
+fn run_usage_error() -> Result<(), String> {
     Err("usage: k16 run <program.kx>".to_string())
 }
 
-fn disasm_usage_error(surface: CliSurface) -> Result<DisasmConfig, String> {
-    Err(disasm_usage_message(surface))
+fn disasm_usage_error() -> Result<DisasmConfig, String> {
+    Err(disasm_usage_message())
 }
 
-fn disasm_usage_message(surface: CliSurface) -> String {
-    format!(
-        "usage: {} disasm --target <bios|boot|kernel|program> <input>",
-        surface.command_name()
-    )
+fn disasm_usage_message() -> String {
+    "usage: k16 disasm --target <bios|boot|kernel|program> <input>".to_string()
 }
 
-fn inspect_usage_error(surface: CliSurface) -> Result<(), String> {
-    Err(format!("usage: {} inspect <blob>", surface.command_name()))
+fn inspect_usage_error() -> Result<(), String> {
+    Err("usage: k16 inspect <blob>".to_string())
 }
 
-fn volume_usage_error(surface: CliSurface) -> Result<(), String> {
-    debug_assert_eq!(surface, CliSurface::K16);
-    let command = surface.command_name();
-    Err(format!(
-        "usage: {command} volume create <volume.kv> --size <bytes>\n       {command} volume init <volume.kv> --size <bytes>\n       {command} volume put-boot <volume.kv> <boot.kb>\n       {command} volume put-kernel <volume.kv> <kernel.kx>\n       {command} volume extract-partition <volume.kv> <partition> <output>\n       {command} volume replace-partition <volume.kv> <partition> <input>\n       {command} volume inspect <volume.kv>\n       {command} volume inspect-boot <volume.kv>"
-    ))
+fn volume_usage_error() -> Result<(), String> {
+    Err("usage: k16 volume create <volume.kv> --size <bytes>\n       k16 volume init <volume.kv> --size <bytes>\n       k16 volume put-boot <volume.kv> <boot.kb>\n       k16 volume put-kernel <volume.kv> <kernel.kx>\n       k16 volume extract-partition <volume.kv> <partition> <output>\n       k16 volume replace-partition <volume.kv> <partition> <input>\n       k16 volume inspect <volume.kv>\n       k16 volume inspect-boot <volume.kv>".to_string())
 }
 
-fn fs_usage_error(surface: CliSurface) -> Result<(), String> {
-    debug_assert_eq!(surface, CliSurface::K16);
-    let command = surface.command_name();
-    Err(format!(
-        "usage: {command} fs kfs format <image.kfs> --blocks <blocks>\n       {command} fs kfs mkdir <image.kfs> <path>\n       {command} fs kfs put <image.kfs> <path> <host-input>\n       {command} fs kfs get <image.kfs> <path> <host-output>\n       {command} fs kfs rm <image.kfs> <path>\n       {command} fs kfs ls <image.kfs> <path>"
-    ))
+fn fs_usage_error() -> Result<(), String> {
+    Err("usage: k16 fs kfs format <image.kfs> --blocks <blocks>\n       k16 fs kfs mkdir <image.kfs> <path>\n       k16 fs kfs put <image.kfs> <path> <host-input>\n       k16 fs kfs get <image.kfs> <path> <host-output>\n       k16 fs kfs rm <image.kfs> <path>\n       k16 fs kfs ls <image.kfs> <path>".to_string())
 }

@@ -217,6 +217,32 @@ fn llvm_and_rust_backend_sources_use_k16_without_retired_rux16_names() {
     }
 }
 
+#[test]
+fn active_k16_tools_do_not_ship_rux_compiler_surface() {
+    let root = repo_root();
+
+    for path in [
+        "rux",
+        "rust/host/k16-tools/src/bin/rux.rs",
+        "rust/host/k16-tools/src/advice.rs",
+        "rust/host/k16-tools/src/frontend",
+        "rust/host/k16-tools/src/k16_asm.rs",
+        "rust/host/k16-tools/src/runtime",
+        "rust/host/k16-tools/stdlib",
+        "rust/host/k16-tools/examples",
+        "rust/host/k16-tools/tests/k16_artifact_backend.rs",
+        "rust/host/k16-tools/tests/rux_check_cli.rs",
+        "rust/host/k16-tools/tests/rux_compile_cli.rs",
+        "rust/host/k16-tools/tests/rux_compiler_runtime_surface.rs",
+        "rust/host/k16-tools/tests/rux_public_cli_surface.rs",
+    ] {
+        assert!(
+            !root.join(path).exists(),
+            "active K16 tools must not ship retired Rux compiler path `{path}`"
+        );
+    }
+}
+
 fn repo_root() -> &'static Path {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()

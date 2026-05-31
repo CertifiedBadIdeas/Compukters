@@ -1,5 +1,0 @@
-pub const BASE: u32 = 0x10000000u32;
-pub const STATUS: u32 = 0x10000000u32;
-pub const PANIC_CODE: u32 = 0x10000004u32;
-pub const EXIT_CODE: u32 = 0x10000008u32;
-pub const SIZE: u32 = 256u32;
