@@ -36,4 +36,3 @@ versions.properties
 /.kotlin/
 /build-scripts/.kotlin/
 .architectury-transformer/
-/toolchains/
