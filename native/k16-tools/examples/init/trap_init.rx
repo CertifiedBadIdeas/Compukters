@@ -1,0 +1,36 @@
+use rux::abi::computer::{control};
+
+fn read_rini_handoff_valid() -> bool {
+    unsafe {
+        let mut magic: i32 = ptr<i32>(0x3f20u32).load();
+        let mut version_and_size: i32 = ptr<i32>(0x3f24u32).load();
+        let mut root_start_lba: i32 = ptr<i32>(0x3f28u32).load();
+        let mut init_entry_pc: i32 = ptr<i32>(0x3f30u32).load();
+        let mut flags: i32 = ptr<i32>(0x3f34u32).load();
+        return magic == 0x494e4952 &&
+            version_and_size == 0x00180001 &&
+            root_start_lba == 33 &&
+            init_entry_pc == 0x8000 &&
+            flags == 0;
+    }
+}
+
+fn request_kernel_console_ok() {
+    unsafe {
+        k16_write_csr(2u32, 1u32);
+    }
+}
+
+fn fail_init() {
+    unsafe {
+        mmio<i32>(control::PANIC_CODE).store(73);
+    }
+}
+
+fn main() {
+    if read_rini_handoff_valid() {
+        request_kernel_console_ok();
+    } else {
+        fail_init();
+    }
+}

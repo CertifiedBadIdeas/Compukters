@@ -1,30 +1,30 @@
 # ABI Specifications
 
 This directory contains the active guest-visible hardware contracts for the
-Rux computer runtime.
+K16 computer runtime.
 
 Design notes and implementation plans may explain how older interfaces were
 chosen, but the files here are the current references for firmware and tooling.
 
 Current specifications:
 
-- `rux16-object-v1.md`: experimental ELF32 relocatable object ABI for external
-  Rux16 toolchains before final `RUXE` linking.
-- `ruxe-v1.md`: experimental guest-loadable executable container for Rux16
+- `k16-object-v1.md`: experimental ELF32 relocatable object ABI for external
+  K16 toolchains before final `K16E` linking.
+- `k16e-v1.md`: experimental guest-loadable executable container for K16
   bootloader, kernel, and user-space program images.
-- `rux16-v1.md`: experimental Rux16 CPU ABI, including the register file and
+- `k16-cpu-v1.md`: experimental K16 CPU ABI, including the register file and
   stack pointer convention.
-- `rux-storage-volume-v1.md`: current storage0 volume and partitioned `RUXPT`
+- `k16-storage-volume-v1.md`: current storage0 volume and partitioned `K16PT`
   layout.
-- `ruxfs-v1.md`: extent-based filesystem targeted for the `ROOT` partition in
+- `k16fs-v1.md`: extent-based filesystem targeted for the `ROOT` partition in
   the partitioned storage0 layout.
-- `rux-machine-profile-v2.md`: machine boot info, RAM layout, MMIO allocation,
+- `k16-machine-profile-v2.md`: machine boot info, RAM layout, MMIO allocation,
   and hardware table contract.
-- `rux-computer-profile-v1.md`: concrete hardware IDs and MMIO register layout
+- `k16-computer-profile-v1.md`: concrete hardware IDs and MMIO register layout
   for the current `ComputerMachine`.
-- `rux-computer-snapshot-v1.md`: experimental host-side `ComputerMachine`
+- `k16-computer-snapshot-v1.md`: experimental host-side `ComputerMachine`
   snapshot container.
 - `CHANGELOG.md`: active ABI history.
 
-The supported execution model is Rux16 guest instruction-memory execution from
+The supported execution model is K16 guest instruction-memory execution from
 BIOS flash with optional storage0 boot media.

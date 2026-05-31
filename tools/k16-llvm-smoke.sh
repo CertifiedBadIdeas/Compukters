@@ -6,7 +6,7 @@ LLVM_BIN_DIR="${K16_LLVM_BIN_DIR:-$ROOT/toolchains/Compukter-Kraft-llvm/build-ru
 LLC="$LLVM_BIN_DIR/llc"
 LLVM_READOBJ="$LLVM_BIN_DIR/llvm-readobj"
 LLVM_NOT="$LLVM_BIN_DIR/not"
-RUX_CARGO_MANIFEST="$ROOT/native/rux-compiler/Cargo.toml"
+RUX_CARGO_MANIFEST="$ROOT/native/k16-tools/Cargo.toml"
 
 require_file() {
     local path="$1"
@@ -33,7 +33,7 @@ require_llc_failure() {
     local object="$WORK_DIR/$(basename "$input" .ll).o"
     local stderr="$WORK_DIR/$(basename "$input" .ll).stderr"
 
-    if ! "$LLVM_NOT" --crash "$LLC" -mtriple=rux16 -filetype=obj "$input" -o "$object" \
+    if ! "$LLVM_NOT" --crash "$LLC" -mtriple=k16 -filetype=obj "$input" -o "$object" \
         > /dev/null 2> "$stderr"; then
         echo "expected llc to reject $input" >&2
         exit 1
@@ -57,7 +57,7 @@ WORK_DIR="$(mktemp -d)"
 trap 'rm -rf "$WORK_DIR"' EXIT
 
 cat > "$WORK_DIR/add.ll" <<'IR'
-target triple = "rux16"
+target triple = "k16"
 
 define i32 @add(i32 %a, i32 %b) {
 entry:
@@ -67,7 +67,7 @@ entry:
 IR
 
 cat > "$WORK_DIR/main.ll" <<'IR'
-target triple = "rux16"
+target triple = "k16"
 
 define i32 @main() {
 entry:
@@ -76,7 +76,7 @@ entry:
 IR
 
 cat > "$WORK_DIR/main-calls-helper.ll" <<'IR'
-target triple = "rux16"
+target triple = "k16"
 
 declare i32 @helper(i32)
 
@@ -89,7 +89,7 @@ entry:
 IR
 
 cat > "$WORK_DIR/helper.ll" <<'IR'
-target triple = "rux16"
+target triple = "k16"
 
 define i32 @helper(i32 %value) {
 entry:
@@ -98,7 +98,7 @@ entry:
 IR
 
 cat > "$WORK_DIR/stack-local-main.ll" <<'IR'
-target triple = "rux16"
+target triple = "k16"
 
 define i32 @main() {
 entry:
@@ -110,7 +110,7 @@ entry:
 IR
 
 cat > "$WORK_DIR/i64-return.ll" <<'IR'
-target triple = "rux16"
+target triple = "k16"
 
 define i64 @wide_return() {
 entry:
@@ -119,7 +119,7 @@ entry:
 IR
 
 cat > "$WORK_DIR/varargs.ll" <<'IR'
-target triple = "rux16"
+target triple = "k16"
 
 define i32 @sum(i32 %first, ...) {
 entry:
@@ -128,7 +128,7 @@ entry:
 IR
 
 cat > "$WORK_DIR/four-args.ll" <<'IR'
-target triple = "rux16"
+target triple = "k16"
 
 define i32 @many(i32 %a, i32 %b, i32 %c, i32 %d) {
 entry:
@@ -140,7 +140,7 @@ entry:
 IR
 
 cat > "$WORK_DIR/indirect-call.ll" <<'IR'
-target triple = "rux16"
+target triple = "k16"
 
 define i32 @call_ptr(ptr %callee) {
 entry:
@@ -150,33 +150,33 @@ entry:
 IR
 
 "$LLC" --version > "$WORK_DIR/llc-version.txt"
-require_contains "$WORK_DIR/llc-version.txt" "rux16  - Rux16 32-bit"
+require_contains "$WORK_DIR/llc-version.txt" "k16  - K16 32-bit"
 
-"$LLC" -mtriple=rux16 -filetype=asm "$WORK_DIR/add.ll" -o "$WORK_DIR/add.s"
+"$LLC" -mtriple=k16 -filetype=asm "$WORK_DIR/add.ll" -o "$WORK_DIR/add.s"
 require_contains "$WORK_DIR/add.s" "add r0, r1, r2"
 require_contains "$WORK_DIR/add.s" "ret"
 
-"$LLC" -mtriple=rux16 -filetype=obj "$WORK_DIR/main.ll" -o "$WORK_DIR/main.o"
+"$LLC" -mtriple=k16 -filetype=obj "$WORK_DIR/main.ll" -o "$WORK_DIR/main.o"
 "$LLVM_READOBJ" -h -S -s "$WORK_DIR/main.o" > "$WORK_DIR/main-object.txt"
 require_contains "$WORK_DIR/main-object.txt" "Machine: 0x5258"
-require_contains "$WORK_DIR/main-object.txt" "Name: .text.rux16"
+require_contains "$WORK_DIR/main-object.txt" "Name: .text.k16"
 require_contains "$WORK_DIR/main-object.txt" "Name: main"
 
-run_k16 runtime rux16-startup -o "$WORK_DIR/startup.o"
+run_k16 runtime k16-startup -o "$WORK_DIR/startup.o"
 run_k16 link --target program "$WORK_DIR/startup.o" "$WORK_DIR/main.o" -o "$WORK_DIR/main.kx"
 run_k16 inspect "$WORK_DIR/main.kx" > "$WORK_DIR/main-kx.txt"
-require_contains "$WORK_DIR/main-kx.txt" "kind=RUXE"
-require_contains "$WORK_DIR/main-kx.txt" "RUXE abi=program entry_pc=0x00008000 load_addr=0x00008000"
+require_contains "$WORK_DIR/main-kx.txt" "kind=K16E"
+require_contains "$WORK_DIR/main-kx.txt" "K16E abi=program entry_pc=0x00008000 load_addr=0x00008000"
 
 run_k16 disasm --target program "$WORK_DIR/main.kx" > "$WORK_DIR/main-kx.disasm"
 require_contains "$WORK_DIR/main-kx.disasm" "call r14"
 require_contains "$WORK_DIR/main-kx.disasm" "const32 r0, 0x0000002a"
 require_contains "$WORK_DIR/main-kx.disasm" "ret"
 
-"$LLC" -mtriple=rux16 -filetype=obj "$WORK_DIR/main-calls-helper.ll" -o "$WORK_DIR/main-calls-helper.o"
-"$LLC" -mtriple=rux16 -filetype=obj "$WORK_DIR/helper.ll" -o "$WORK_DIR/helper.o"
+"$LLC" -mtriple=k16 -filetype=obj "$WORK_DIR/main-calls-helper.ll" -o "$WORK_DIR/main-calls-helper.o"
+"$LLC" -mtriple=k16 -filetype=obj "$WORK_DIR/helper.ll" -o "$WORK_DIR/helper.o"
 "$LLVM_READOBJ" -r -s "$WORK_DIR/main-calls-helper.o" > "$WORK_DIR/main-calls-helper-object.txt"
-require_contains "$WORK_DIR/main-calls-helper-object.txt" "R_RUX16_CALL32 helper"
+require_contains "$WORK_DIR/main-calls-helper-object.txt" "R_K16_CALL32 helper"
 require_contains "$WORK_DIR/main-calls-helper-object.txt" "Name: helper"
 
 run_k16 link --target program "$WORK_DIR/startup.o" "$WORK_DIR/main-calls-helper.o" "$WORK_DIR/helper.o" -o "$WORK_DIR/call-helper.kx"
@@ -186,7 +186,7 @@ require_contains "$WORK_DIR/call-helper-kx.disasm" "call r14"
 require_contains "$WORK_DIR/call-helper-kx.disasm" "add r0, r0, r1"
 require_contains "$WORK_DIR/call-helper-kx.disasm" "add r0, r1, r13"
 
-"$LLC" -mtriple=rux16 -filetype=obj "$WORK_DIR/stack-local-main.ll" -o "$WORK_DIR/stack-local-main.o"
+"$LLC" -mtriple=k16 -filetype=obj "$WORK_DIR/stack-local-main.ll" -o "$WORK_DIR/stack-local-main.o"
 run_k16 link --target program "$WORK_DIR/startup.o" "$WORK_DIR/stack-local-main.o" -o "$WORK_DIR/stack-local-main.kx"
 run_k16 disasm --target program "$WORK_DIR/stack-local-main.kx" > "$WORK_DIR/stack-local-main-kx.disasm"
 require_contains "$WORK_DIR/stack-local-main-kx.disasm" "sub r15, r15, r13"
@@ -194,12 +194,12 @@ require_contains "$WORK_DIR/stack-local-main-kx.disasm" "store32 [r13], r0"
 require_contains "$WORK_DIR/stack-local-main-kx.disasm" "load32 r0, [r13]"
 require_contains "$WORK_DIR/stack-local-main-kx.disasm" "add r15, r15, r13"
 
-require_llc_failure "$WORK_DIR/i64-return.ll" "LLVM ERROR: Rux16 multi-value returns are not implemented"
-require_llc_failure "$WORK_DIR/varargs.ll" "LLVM ERROR: Rux16 varargs are not implemented"
-require_llc_failure "$WORK_DIR/four-args.ll" "LLVM ERROR: Rux16 stack arguments are not implemented"
-require_llc_failure "$WORK_DIR/indirect-call.ll" "LLVM ERROR: Rux16 only supports direct calls"
+require_llc_failure "$WORK_DIR/i64-return.ll" "LLVM ERROR: K16 multi-value returns are not implemented"
+require_llc_failure "$WORK_DIR/varargs.ll" "LLVM ERROR: K16 varargs are not implemented"
+require_llc_failure "$WORK_DIR/four-args.ll" "LLVM ERROR: K16 stack arguments are not implemented"
+require_llc_failure "$WORK_DIR/indirect-call.ll" "LLVM ERROR: K16 only supports direct calls"
 
 echo "direct LLVM call relocation checks passed"
 echo "stack-local LLVM lowering checks passed"
 echo "unsupported LLVM feature checks passed"
-echo "Rux16 LLVM smoke passed"
+echo "K16 LLVM smoke passed"

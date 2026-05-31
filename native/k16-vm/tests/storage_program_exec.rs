@@ -1,37 +1,37 @@
 use k16_vm::computer_machine::ComputerMachine;
 use k16_vm::k16_computer::K16ComputerHandle;
-use k16_vm::{ruxe, storage_image};
+use k16_vm::{k16e, storage_image};
 
 #[test]
-fn runtime_exec_runs_program_ruxe_payload_from_entry_pc() {
-    let bios = rux16_words(&[rux16_halt()]);
-    let mut program_words = vec![rux16_halt()];
-    program_words.extend(rux16_init_ok_program_words());
-    let program_payload = rux16_words(&program_words);
-    let init = encode_ruxe(3, 0x8002, 0x8000, &program_payload);
+fn runtime_exec_runs_program_k16e_payload_from_entry_pc() {
+    let bios = k16_words(&[k16_halt()]);
+    let mut program_words = vec![k16_halt()];
+    program_words.extend(k16_init_ok_program_words());
+    let program_payload = k16_words(&program_words);
+    let init = encode_k16e(3, 0x8002, 0x8000, &program_payload);
     let mut handle =
-        K16ComputerHandle::create_rux16_bios_flash(&bios, 64 * 1024, 8).expect("VM creates");
+        K16ComputerHandle::create_k16_bios_flash(&bios, 64 * 1024, 8).expect("VM creates");
 
     handle
-        .exec_ruxe_program_from_bytes(&init, 256)
-        .expect("program RUXE transfers into Rux16 execution");
+        .exec_k16e_program_from_bytes(&init, 256)
+        .expect("program K16E transfers into K16 execution");
     handle
-        .run_rux16_until_signal()
+        .run_k16_until_signal()
         .expect("program runs until halt");
 
     assert_eq!(handle.debug_output_bytes(), b"INIT OK");
 }
 
 #[test]
-fn runtime_reader_loads_program_ruxe_from_root_ruxfs() {
-    let init = encode_ruxe(3, 0x8000, 0x8000, &[0x01, 0x00]);
+fn runtime_reader_loads_program_k16e_from_root_k16fs() {
+    let init = encode_k16e(3, 0x8000, 0x8000, &[0x01, 0x00]);
     let root = rootfs_with_file("/bin/init.kx", &init);
     let storage0 = storage0_media_with_root(root);
 
-    let loaded = storage_image::read_ruxfs_file_from_partition(&storage0, "ROOT", "/bin/init.kx")
-        .expect("program reads from ROOT RuxFS");
+    let loaded = storage_image::read_k16fs_file_from_partition(&storage0, "ROOT", "/bin/init.kx")
+        .expect("program reads from ROOT K16FS");
     let executable =
-        ruxe::decode_program_rux16_executable(&loaded).expect("program RUXE validates for exec");
+        k16e::decode_program_k16_executable(&loaded).expect("program K16E validates for exec");
 
     assert_eq!(loaded, init);
     assert_eq!(executable.entry_pc, 0x8000);
@@ -40,12 +40,12 @@ fn runtime_reader_loads_program_ruxe_from_root_ruxfs() {
 }
 
 #[test]
-fn program_exec_rejects_kernel_ruxe_without_fallback() {
-    let kernel = encode_ruxe(2, 0x4000, 0x4000, &[0x01, 0x00]);
+fn program_exec_rejects_kernel_k16e_without_fallback() {
+    let kernel = encode_k16e(2, 0x4000, 0x4000, &[0x01, 0x00]);
 
-    let error = ruxe::decode_program_rux16_executable(&kernel).unwrap_err();
+    let error = k16e::decode_program_k16_executable(&kernel).unwrap_err();
 
-    assert!(error.contains("expected RUXE program ABI kind"), "{error}");
+    assert!(error.contains("expected K16E program ABI kind"), "{error}");
 }
 
 #[test]
@@ -54,14 +54,14 @@ fn runtime_reader_reports_missing_partition_or_path_without_fallback() {
     let storage0 = storage0_media_with_root(root);
 
     assert!(
-        storage_image::read_ruxfs_file_from_partition(&storage0, "DATA", "/bin/init.kx")
+        storage_image::read_k16fs_file_from_partition(&storage0, "DATA", "/bin/init.kx")
             .unwrap_err()
-            .contains("RUXPT partition `DATA` not found")
+            .contains("K16PT partition `DATA` not found")
     );
     assert!(
-        storage_image::read_ruxfs_file_from_partition(&storage0, "ROOT", "/sbin/init.kx")
+        storage_image::read_k16fs_file_from_partition(&storage0, "ROOT", "/sbin/init.kx")
             .unwrap_err()
-            .contains("RuxFS directory entry `sbin` not found")
+            .contains("K16FS directory entry `sbin` not found")
     );
 }
 
@@ -70,14 +70,14 @@ fn storage0_media_with_root(root: Vec<u8>) -> Vec<u8> {
     const STORAGE_BLOCKS: usize = 128;
     const ROOT_START_LBA: usize = 33;
     let mut media = vec![0_u8; STORAGE_BLOCKS * BLOCK_SIZE];
-    encode_ruxpt(&mut media[..BLOCK_SIZE]);
+    encode_k16pt(&mut media[..BLOCK_SIZE]);
     let root_offset = ROOT_START_LBA * BLOCK_SIZE;
     media[root_offset..root_offset + root.len()].copy_from_slice(&root);
     media
 }
 
-fn encode_ruxpt(block: &mut [u8]) {
-    block[0..5].copy_from_slice(b"RUXPT");
+fn encode_k16pt(block: &mut [u8]) {
+    block[0..5].copy_from_slice(b"K16PT");
     block[5] = 1;
     block[6] = 2;
     write_u32(block, 8, 0);
@@ -105,7 +105,7 @@ fn rootfs_with_file(path: &str, contents: &[u8]) -> Vec<u8> {
     const BLOCK_SIZE: usize = 512;
     const TOTAL_BLOCKS: usize = 95;
     let mut image = vec![0_u8; TOTAL_BLOCKS * BLOCK_SIZE];
-    encode_ruxfs_superblock(&mut image);
+    encode_k16fs_superblock(&mut image);
     encode_inode(&mut image, 1, 2, 64, 10, 1);
     encode_inode(&mut image, 2, 2, 64, 11, 1);
     encode_inode(&mut image, 3, 1, contents.len() as u64, 12, 1);
@@ -115,8 +115,8 @@ fn rootfs_with_file(path: &str, contents: &[u8]) -> Vec<u8> {
     image
 }
 
-fn encode_ruxfs_superblock(image: &mut [u8]) {
-    image[0..5].copy_from_slice(b"RUXFS");
+fn encode_k16fs_superblock(image: &mut [u8]) {
+    image[0..5].copy_from_slice(b"K16FS");
     image[5] = 1;
     write_u32(image, 0x08, 512);
     write_u32(image, 0x0c, 95);
@@ -150,9 +150,9 @@ fn encode_directory_entry(image: &mut [u8], offset: usize, inode_id: u32, name: 
     image[offset + 0x08..offset + 0x08 + name.len()].copy_from_slice(name.as_bytes());
 }
 
-fn encode_ruxe(abi_kind: u32, entry_pc: u32, load_addr: u32, payload: &[u8]) -> Vec<u8> {
+fn encode_k16e(abi_kind: u32, entry_pc: u32, load_addr: u32, payload: &[u8]) -> Vec<u8> {
     let mut bytes = Vec::new();
-    bytes.extend_from_slice(b"RUXE");
+    bytes.extend_from_slice(b"K16E");
     bytes.extend_from_slice(&1_u16.to_le_bytes());
     bytes.extend_from_slice(&32_u16.to_le_bytes());
     bytes.extend_from_slice(&1_u16.to_le_bytes());
@@ -171,25 +171,25 @@ fn encode_ruxe(abi_kind: u32, entry_pc: u32, load_addr: u32, payload: &[u8]) -> 
     bytes
 }
 
-fn rux16_init_ok_program_words() -> Vec<u16> {
+fn k16_init_ok_program_words() -> Vec<u16> {
     let mut words = Vec::new();
-    words.extend(rux16_const32(0, ComputerMachine::DEBUG_WRITE));
+    words.extend(k16_const32(0, ComputerMachine::DEBUG_WRITE));
     for byte in b"INIT OK" {
-        words.extend(rux16_const32(1, u32::from(*byte)));
-        words.push(rux16_store32(0, 1));
+        words.extend(k16_const32(1, u32::from(*byte)));
+        words.push(k16_store32(0, 1));
     }
-    words.push(rux16_halt());
+    words.push(k16_halt());
     words
 }
 
-fn rux16_words(words: &[u16]) -> Vec<u8> {
+fn k16_words(words: &[u16]) -> Vec<u8> {
     words
         .iter()
         .flat_map(|word| word.to_le_bytes())
         .collect::<Vec<_>>()
 }
 
-fn rux16_const32(dst: u8, value: u32) -> [u16; 3] {
+fn k16_const32(dst: u8, value: u32) -> [u16; 3] {
     [
         0xe001 | (u16::from(dst) << 8),
         value as u16,
@@ -197,11 +197,11 @@ fn rux16_const32(dst: u8, value: u32) -> [u16; 3] {
     ]
 }
 
-fn rux16_store32(addr: u8, src: u8) -> u16 {
+fn k16_store32(addr: u8, src: u8) -> u16 {
     0x5002 | (u16::from(addr) << 8) | (u16::from(src) << 4)
 }
 
-fn rux16_halt() -> u16 {
+fn k16_halt() -> u16 {
     0x0001
 }
 

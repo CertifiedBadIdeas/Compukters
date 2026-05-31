@@ -1,6 +1,6 @@
 {
-  "llvm-target": "rux16",
-  "arch": "rux16",
+  "llvm-target": "k16",
+  "arch": "k16",
   "os": "none",
   "vendor": "unknown",
   "env": "",

@@ -13,12 +13,12 @@ rustc 1.94.1
 LLVM version: 21.1.8
 ```
 
-The tracked LLVM submodule build contains the Rux16 backend:
+The tracked LLVM submodule build contains the K16 backend:
 
 ```text
 LLVM version 23.0.0git
 Registered Targets:
-  rux16  - Rux16 32-bit
+  k16  - K16 32-bit
 ```
 
 The Rust source fork is tracked as a repository submodule:
@@ -26,14 +26,14 @@ The Rust source fork is tracked as a repository submodule:
 ```text
 toolchains/Compukter-Kraft-rust
   url: git@github.com:CertifiedBadIdeas/Compukter-Kraft-rust.git
-  branch: rux16
+  branch: k16
   commit: 8fba61f0e772bd97c4c27b67bbb090db1f4f4210
 ```
 
 Fork branch policy:
 
 - `main` mirrors upstream `rust-lang/rust` and is synced manually;
-- `rux16` contains Compukter-Kraft Rust/K16 toolchain changes;
+- `k16` contains Compukter-Kraft Rust/K16 toolchain changes;
 - the main repository still pins the exact submodule commit for reproducible
   builds.
 
@@ -42,8 +42,8 @@ number, the current host `rustc --target tools/k16-unknown-kraftos.json` reaches
 the real blocker:
 
 ```text
-error: could not create LLVM TargetMachine for triple: rux16:
-No available targets are compatible with triple "rux16"
+error: could not create LLVM TargetMachine for triple: k16:
+No available targets are compatible with triple "k16"
 ```
 
 The custom stage1 rustc now builds against that LLVM and can pass the no_core
@@ -80,7 +80,7 @@ References:
 
 Use `toolchains/Compukter-Kraft-rust` as the tracked Rust source tree for
 toolchain work. In that Rust source tree, point `src/llvm-project` at the
-Compukter-Kraft LLVM fork that contains the Rux16 backend. Then build a stage1
+Compukter-Kraft LLVM fork that contains the K16 backend. Then build a stage1
 rustc and link it through rustup as a local custom toolchain.
 
 This is the most reproducible path because the Rust source tree records the
@@ -90,7 +90,7 @@ Expected shape:
 
 ```text
 toolchains/Compukter-Kraft-rust
-  src/llvm-project -> Compukter-Kraft-llvm commit with Rux16
+  src/llvm-project -> Compukter-Kraft-llvm commit with K16
   bootstrap.toml
   build/<host>/stage1/bin/rustc
 ```
@@ -123,24 +123,24 @@ tools/k16-rustc-bootstrap-probe.sh
 The probe is intentionally strict. It requires:
 
 - the Rust source checkout at `toolchains/Compukter-Kraft-rust`;
-- the Rust checkout to be on branch `rux16`;
-- `llvm-config --targets-built` to contain `Rux16`;
+- the Rust checkout to be on branch `k16`;
+- `llvm-config --targets-built` to contain `K16`;
 - Rust bootstrap entrypoint `x.py` to be present and runnable.
 
 It prints a temporary `bootstrap.toml` path plus dry-run and build commands for
 `./x.py build --config <generated-config> compiler/rustc`.
 
 Even `--dry-run` may download and build Rust bootstrap stage0 support files.
-That is expected bootstrap behavior, not a Rux16 codegen proof.
+That is expected bootstrap behavior, not a K16 codegen proof.
 
-The default build directory is `toolchains/Compukter-Kraft-rust/build/rux16`,
+The default build directory is `toolchains/Compukter-Kraft-rust/build/k16`,
 which is ignored by the Rust repository.
 
 The K16 Rust fork changes needed for the first stage1 smoke are:
 
-- register the `rux16` LLVM component and initialize the K16 LLVM target
+- register the `k16` LLVM component and initialize the K16 LLVM target
   inside `rustc_llvm`;
-- add minimal Rux16 C ABI lowering in `rustc_target`.
+- add minimal K16 C ABI lowering in `rustc_target`.
 
 Expected bootstrap direction:
 
@@ -153,7 +153,7 @@ llvm-config = "/absolute/path/to/toolchains/Compukter-Kraft-llvm/build-rux-min/b
 
 Installing nightly is useful for unstable `no_core` and custom target JSON
 flags, but it will still fail if that rustc's bundled LLVM does not include the
-current Rux16 backend.
+current K16 backend.
 
 ## First Success Criterion
 
@@ -161,7 +161,7 @@ The first useful custom rustc result is not `core` or `std`. It is only:
 
 ```text
 K16_RUSTC=/path/to/custom/stage1/rustc \
-K16_LLVM_BIN_DIR=/path/to/rux16/llvm/bin \
+K16_LLVM_BIN_DIR=/path/to/k16/llvm/bin \
 tools/k16-rust-nocore-smoke.sh
 ```
 

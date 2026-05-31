@@ -9,9 +9,9 @@ use crate::computer::profile::{
 use crate::computer::snapshot;
 use crate::computer::snapshot::{ComputerCpuSnapshotRecord, ComputerDeviceSnapshotRecord};
 use crate::computer_abi;
+use crate::k16::{K16Cpu, K16Signal};
 use crate::low_bus::{MachineBus, MmioDeviceId};
 use crate::low_machine::{MachineMemory, MemoryFault};
-use crate::rux16::{Rux16Cpu, Rux16Signal};
 use std::fmt::{Display, Formatter};
 
 pub type CpuId = usize;
@@ -29,7 +29,7 @@ pub struct ComputerMachine {
 }
 
 enum ComputerCpuContext {
-    Rux16 { cpu: Rux16Cpu, max_steps: u64 },
+    K16 { cpu: K16Cpu, max_steps: u64 },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -154,7 +154,7 @@ impl ComputerMachine {
     pub const STORAGE0_SEQUENCE_HIGH: u32 = computer_abi::STORAGE0_SEQUENCE_HIGH;
     pub const STORAGE0_MEDIA_STATUS: u32 = computer_abi::STORAGE0_MEDIA_STATUS;
     pub const STORAGE0_SIZE: u32 = computer_abi::STORAGE0_SIZE;
-    pub const RUX16_BIOS_FLASH_BASE: u32 = 0xFFF0_0000;
+    pub const K16_BIOS_FLASH_BASE: u32 = 0xFFF0_0000;
     pub const STATUS_RESET: i32 = computer_abi::STATUS_RESET;
     pub const STATUS_BOOTING: i32 = computer_abi::STATUS_BOOTING;
     pub const STATUS_READY: i32 = computer_abi::STATUS_READY;
@@ -235,35 +235,35 @@ impl ComputerMachine {
         })
     }
 
-    pub fn from_rux16_bios_flash(
+    pub fn from_k16_bios_flash(
         bios_flash: &[u8],
         memory_size: usize,
         max_steps: u64,
     ) -> Result<(Self, CpuId), String> {
-        Self::from_rux16_bios_flash_with_profile(
+        Self::from_k16_bios_flash_with_profile(
             bios_flash,
             ComputerMachineProfile::computer_v1(memory_size),
             max_steps,
         )
     }
 
-    pub(crate) fn from_rux16_bios_flash_with_profile(
+    pub(crate) fn from_k16_bios_flash_with_profile(
         bios_flash: &[u8],
         profile: ComputerMachineProfile,
         max_steps: u64,
     ) -> Result<(Self, CpuId), String> {
         if bios_flash.is_empty() {
-            return Err("Rux16 BIOS flash is empty".to_string());
+            return Err("K16 BIOS flash is empty".to_string());
         }
         let bios_flash_len = u32::try_from(bios_flash.len())
-            .map_err(|_| "Rux16 BIOS flash size does not fit u32".to_string())?;
-        Self::RUX16_BIOS_FLASH_BASE
+            .map_err(|_| "K16 BIOS flash size does not fit u32".to_string())?;
+        Self::K16_BIOS_FLASH_BASE
             .checked_add(bios_flash_len)
-            .ok_or_else(|| "Rux16 BIOS flash range overflows address space".to_string())?;
+            .ok_or_else(|| "K16 BIOS flash range overflows address space".to_string())?;
 
         let mut machine = Self::from_profile(profile).map_err(|error| error.to_string())?;
-        machine.map_rux16_bios_flash(bios_flash.to_vec())?;
-        let boot_cpu = machine.spawn_rux16_boot_cpu(Self::RUX16_BIOS_FLASH_BASE, max_steps)?;
+        machine.map_k16_bios_flash(bios_flash.to_vec())?;
+        let boot_cpu = machine.spawn_k16_boot_cpu(Self::K16_BIOS_FLASH_BASE, max_steps)?;
         Ok((machine, boot_cpu))
     }
 
@@ -399,20 +399,20 @@ impl ComputerMachine {
         Ok(bytes)
     }
 
-    fn spawn_rux16_boot_cpu(&mut self, entry_pc: u32, max_steps: u64) -> Result<CpuId, String> {
+    fn spawn_k16_boot_cpu(&mut self, entry_pc: u32, max_steps: u64) -> Result<CpuId, String> {
         if self.boot_cpu.is_some() {
             return Err("boot CPU is already spawned".to_string());
         }
         let cpu_id = self.cpus.len();
-        self.cpus.push(ComputerCpuContext::Rux16 {
-            cpu: Rux16Cpu::new(entry_pc),
+        self.cpus.push(ComputerCpuContext::K16 {
+            cpu: K16Cpu::new(entry_pc),
             max_steps: max_steps.max(1),
         });
         self.boot_cpu = Some(cpu_id);
         Ok(cpu_id)
     }
 
-    pub fn boot_handoff_rux16_from_ram(
+    pub fn boot_handoff_k16_from_ram(
         &mut self,
         entry_pc: u32,
         byte_len: u32,
@@ -423,8 +423,8 @@ impl ComputerMachine {
             return Err(BootHandoffError::EmptyImage);
         }
         checked_ram_range(entry_pc, byte_len, self.bus.memory().len())?;
-        self.cpus[boot_cpu] = ComputerCpuContext::Rux16 {
-            cpu: Rux16Cpu::new(entry_pc),
+        self.cpus[boot_cpu] = ComputerCpuContext::K16 {
+            cpu: K16Cpu::new(entry_pc),
             max_steps: max_steps.max(1),
         };
         Ok(boot_cpu)
@@ -438,7 +438,7 @@ impl ComputerMachine {
         self.cpus.len()
     }
 
-    pub fn run_boot_rux16_until_signal(&mut self, cpu_id: CpuId) -> Result<Rux16Signal, String> {
+    pub fn run_boot_k16_until_signal(&mut self, cpu_id: CpuId) -> Result<K16Signal, String> {
         if self.boot_cpu != Some(cpu_id) {
             return Err(format!("CPU {cpu_id} is not the boot CPU"));
         }
@@ -448,16 +448,16 @@ impl ComputerMachine {
                 .get_mut(cpu_id)
                 .ok_or_else(|| format!("CPU {cpu_id} is not present"))?;
             match cpu {
-                ComputerCpuContext::Rux16 { cpu, max_steps } => cpu
+                ComputerCpuContext::K16 { cpu, max_steps } => cpu
                     .run_until_signal(&mut self.bus, *max_steps)
                     .map_err(|error| error.to_string()),
             }
         };
         match &signal {
-            Ok(Rux16Signal::Halt) => {
+            Ok(K16Signal::Halt) => {
                 self.set_halted_exit_code(0)?;
             }
-            Ok(Rux16Signal::StepLimitExceeded) => {}
+            Ok(K16Signal::StepLimitExceeded) => {}
             Err(message) => {
                 self.set_panic_from_fault(message)?;
             }
@@ -551,14 +551,14 @@ impl ComputerMachine {
         });
     }
 
-    pub(crate) fn map_rux16_bios_flash(&mut self, bytes: Vec<u8>) -> Result<(), String> {
+    pub(crate) fn map_k16_bios_flash(&mut self, bytes: Vec<u8>) -> Result<(), String> {
         if self.bios_flash_device_id.is_some() {
-            return Err("Rux16 BIOS flash is already mapped".to_string());
+            return Err("K16 BIOS flash is already mapped".to_string());
         }
         let device = BiosFlashDevice::new(bytes).map_err(|error| error.to_string())?;
         let device_id = self
             .bus
-            .map_mmio(Self::RUX16_BIOS_FLASH_BASE, Box::new(device))
+            .map_mmio(Self::K16_BIOS_FLASH_BASE, Box::new(device))
             .map_err(|error| error.to_string())?;
         self.bios_flash_device_id = Some(device_id);
         Ok(())
@@ -744,7 +744,7 @@ impl ComputerMachine {
 impl ComputerCpuContext {
     fn snapshot_record(&self) -> ComputerCpuSnapshotRecord {
         match self {
-            ComputerCpuContext::Rux16 { cpu, max_steps } => ComputerCpuSnapshotRecord::Rux16 {
+            ComputerCpuContext::K16 { cpu, max_steps } => ComputerCpuSnapshotRecord::K16 {
                 cpu: cpu.snapshot(),
                 max_steps: *max_steps,
             },
@@ -753,14 +753,14 @@ impl ComputerCpuContext {
 
     fn from_snapshot_record(record: ComputerCpuSnapshotRecord) -> Result<Self, String> {
         match record {
-            ComputerCpuSnapshotRecord::Rux16 { cpu, max_steps } => {
+            ComputerCpuSnapshotRecord::K16 { cpu, max_steps } => {
                 if max_steps == 0 {
                     return Err(
-                        "ComputerMachine snapshot Rux16 CPU max_steps must be non-zero".to_string(),
+                        "ComputerMachine snapshot K16 CPU max_steps must be non-zero".to_string(),
                     );
                 }
-                Ok(ComputerCpuContext::Rux16 {
-                    cpu: Rux16Cpu::from_snapshot(cpu),
+                Ok(ComputerCpuContext::K16 {
+                    cpu: K16Cpu::from_snapshot(cpu),
                     max_steps,
                 })
             }

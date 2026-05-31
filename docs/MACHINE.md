@@ -5,7 +5,7 @@
 > `BackgroundComputerVm`, device daemon, runtime kernel). After issue
 > #26 the CKL stack was removed, and after issue #44 the Image-VM and
 > device daemon were retired in favour of a single LowVM runtime
-> driven through `RuxComputer` (flat RAM + MMIO). See
+> driven through `K16Computer` (flat RAM + MMIO). See
 > [ARCHITECTURE.md](ARCHITECTURE.md) for the current model. The text
 > below is kept only for historical context.
 

@@ -1,8 +1,8 @@
 use crate::computer::{
     BootHandoffError, ComputerMachine, ComputerMachineProfile, ComputerTextDisplaySnapshot, CpuId,
 };
-use crate::rux16::Rux16Signal;
-use crate::ruxe;
+use crate::k16::K16Signal;
+use crate::k16e;
 use std::fs;
 use std::path::Path;
 
@@ -42,17 +42,17 @@ impl From<ComputerTextDisplaySnapshot> for K16ComputerTextDisplaySnapshot {
 }
 
 impl K16ComputerHandle {
-    pub fn create_rux16_bios_flash(
+    pub fn create_k16_bios_flash(
         bios_flash: &[u8],
         memory_size: usize,
         max_steps: u64,
     ) -> Result<Self, String> {
         let (machine, boot_cpu) =
-            ComputerMachine::from_rux16_bios_flash(bios_flash, memory_size, max_steps)?;
+            ComputerMachine::from_k16_bios_flash(bios_flash, memory_size, max_steps)?;
         Ok(Self { machine, boot_cpu })
     }
 
-    pub fn create_rux16_bios_flash_with_storage0_media(
+    pub fn create_k16_bios_flash_with_storage0_media(
         bios_flash: &[u8],
         memory_size: usize,
         max_steps: u64,
@@ -64,11 +64,11 @@ impl K16ComputerHandle {
             false,
         );
         let (machine, boot_cpu) =
-            ComputerMachine::from_rux16_bios_flash_with_profile(bios_flash, profile, max_steps)?;
+            ComputerMachine::from_k16_bios_flash_with_profile(bios_flash, profile, max_steps)?;
         Ok(Self { machine, boot_cpu })
     }
 
-    pub fn create_rux16_bios_flash_with_storage0_path(
+    pub fn create_k16_bios_flash_with_storage0_path(
         bios_flash: &[u8],
         memory_size: usize,
         max_steps: u64,
@@ -77,30 +77,30 @@ impl K16ComputerHandle {
         let profile =
             ComputerMachineProfile::computer_v1_with_storage0_path(memory_size, storage0_path);
         let (machine, boot_cpu) =
-            ComputerMachine::from_rux16_bios_flash_with_profile(bios_flash, profile, max_steps)?;
+            ComputerMachine::from_k16_bios_flash_with_profile(bios_flash, profile, max_steps)?;
         Ok(Self { machine, boot_cpu })
     }
 
-    pub fn restore_rux16_bios_flash_snapshot_with_storage0_path(
+    pub fn restore_k16_bios_flash_snapshot_with_storage0_path(
         bios_flash: &[u8],
         memory_size: usize,
         storage0_path: impl AsRef<Path>,
         snapshot: &[u8],
     ) -> Result<Self, String> {
         if bios_flash.is_empty() {
-            return Err("Rux16 BIOS flash is empty".to_string());
+            return Err("K16 BIOS flash is empty".to_string());
         }
         let profile =
             ComputerMachineProfile::computer_v1_with_storage0_path(memory_size, storage0_path);
         let mut machine = ComputerMachine::restore_snapshot_v1(profile, snapshot)?;
-        machine.map_rux16_bios_flash(bios_flash.to_vec())?;
+        machine.map_k16_bios_flash(bios_flash.to_vec())?;
         let boot_cpu = machine
             .boot_cpu_id()
             .ok_or_else(|| "K16 computer snapshot has no boot CPU".to_string())?;
         Ok(Self { machine, boot_cpu })
     }
 
-    pub fn create_rux16_bios_flash_path_with_storage0_path(
+    pub fn create_k16_bios_flash_path_with_storage0_path(
         bios_flash_path: impl AsRef<Path>,
         memory_size: usize,
         max_steps: u64,
@@ -109,11 +109,11 @@ impl K16ComputerHandle {
         let bios_flash_path = bios_flash_path.as_ref();
         let bios_flash = fs::read(bios_flash_path).map_err(|error| {
             format!(
-                "Cannot read Rux16 BIOS flash at {}: {error}",
+                "Cannot read K16 BIOS flash at {}: {error}",
                 bios_flash_path.display(),
             )
         })?;
-        Self::create_rux16_bios_flash_with_storage0_path(
+        Self::create_k16_bios_flash_with_storage0_path(
             &bios_flash,
             memory_size,
             max_steps,
@@ -121,7 +121,7 @@ impl K16ComputerHandle {
         )
     }
 
-    pub fn restore_rux16_bios_flash_snapshot_path_with_storage0_path(
+    pub fn restore_k16_bios_flash_snapshot_path_with_storage0_path(
         bios_flash_path: impl AsRef<Path>,
         memory_size: usize,
         storage0_path: impl AsRef<Path>,
@@ -130,11 +130,11 @@ impl K16ComputerHandle {
         let bios_flash_path = bios_flash_path.as_ref();
         let bios_flash = fs::read(bios_flash_path).map_err(|error| {
             format!(
-                "Cannot read Rux16 BIOS flash at {}: {error}",
+                "Cannot read K16 BIOS flash at {}: {error}",
                 bios_flash_path.display(),
             )
         })?;
-        Self::restore_rux16_bios_flash_snapshot_with_storage0_path(
+        Self::restore_k16_bios_flash_snapshot_with_storage0_path(
             &bios_flash,
             memory_size,
             storage0_path,
@@ -142,8 +142,8 @@ impl K16ComputerHandle {
         )
     }
 
-    pub fn run_rux16_until_signal(&mut self) -> Result<Rux16Signal, String> {
-        self.machine.run_boot_rux16_until_signal(self.boot_cpu)
+    pub fn run_k16_until_signal(&mut self) -> Result<K16Signal, String> {
+        self.machine.run_boot_k16_until_signal(self.boot_cpu)
     }
 
     pub fn control(&self) -> K16ComputerControl {
@@ -186,26 +186,26 @@ impl K16ComputerHandle {
         self.machine.read_guest_ram_bytes(address, byte_len)
     }
 
-    pub fn boot_handoff_rux16_from_guest_ram(
+    pub fn boot_handoff_k16_from_guest_ram(
         &mut self,
         entry_pc: u32,
         byte_len: u32,
         max_steps: u64,
     ) -> Result<CpuId, BootHandoffError> {
         self.machine
-            .boot_handoff_rux16_from_ram(entry_pc, byte_len, max_steps)
+            .boot_handoff_k16_from_ram(entry_pc, byte_len, max_steps)
     }
 
-    pub fn exec_ruxe_program_from_bytes(
+    pub fn exec_k16e_program_from_bytes(
         &mut self,
         program: &[u8],
         max_steps: u64,
     ) -> Result<CpuId, String> {
-        let executable = ruxe::decode_program_rux16_executable(program)?;
+        let executable = k16e::decode_program_k16_executable(program)?;
         self.machine
             .write_guest_ram_bytes(executable.load_addr, &executable.payload)?;
         self.machine
-            .boot_handoff_rux16_from_ram(executable.entry_pc, 2, max_steps)
+            .boot_handoff_k16_from_ram(executable.entry_pc, 2, max_steps)
             .map_err(|error| error.to_string())
     }
 }

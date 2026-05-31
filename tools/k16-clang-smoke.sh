@@ -5,7 +5,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LLVM_BIN_DIR="${K16_LLVM_BIN_DIR:-$ROOT/toolchains/Compukter-Kraft-llvm/build-rux/bin}"
 CLANG="$LLVM_BIN_DIR/clang"
 LLVM_READOBJ="$LLVM_BIN_DIR/llvm-readobj"
-RUX_CARGO_MANIFEST="$ROOT/native/rux-compiler/Cargo.toml"
+RUX_CARGO_MANIFEST="$ROOT/native/k16-tools/Cargo.toml"
 
 require_file() {
     local path="$1"
@@ -32,7 +32,7 @@ require_clang_failure() {
     local object="$WORK_DIR/$(basename "$input" .c).o"
     local stderr="$WORK_DIR/$(basename "$input" .c).stderr"
 
-    if "$CLANG" --target=rux16 -ffreestanding -fno-builtin -nostdlib \
+    if "$CLANG" --target=k16 -ffreestanding -fno-builtin -nostdlib \
         -c "$input" -o "$object" > /dev/null 2> "$stderr"; then
         echo "expected clang to reject $input" >&2
         exit 1
@@ -86,20 +86,20 @@ int call_ptr(callback_t callback) {
 }
 C
 
-"$CLANG" --target=rux16 -ffreestanding -fno-builtin -nostdlib \
+"$CLANG" --target=k16 -ffreestanding -fno-builtin -nostdlib \
     -c "$WORK_DIR/main.c" -o "$WORK_DIR/main.o"
 
 "$LLVM_READOBJ" -h -S -s "$WORK_DIR/main.o" > "$WORK_DIR/main-object.txt"
 require_contains "$WORK_DIR/main-object.txt" "Machine: 0x5258"
-require_contains "$WORK_DIR/main-object.txt" "Name: .text.rux16"
+require_contains "$WORK_DIR/main-object.txt" "Name: .text.k16"
 require_contains "$WORK_DIR/main-object.txt" "Name: main"
 
-run_k16 runtime rux16-startup -o "$WORK_DIR/startup.o"
+run_k16 runtime k16-startup -o "$WORK_DIR/startup.o"
 run_k16 link --target program "$WORK_DIR/startup.o" "$WORK_DIR/main.o" -o "$WORK_DIR/main.kx"
 
 run_k16 inspect "$WORK_DIR/main.kx" > "$WORK_DIR/main-kx.txt"
-require_contains "$WORK_DIR/main-kx.txt" "kind=RUXE"
-require_contains "$WORK_DIR/main-kx.txt" "RUXE abi=program entry_pc=0x00008000 load_addr=0x00008000"
+require_contains "$WORK_DIR/main-kx.txt" "kind=K16E"
+require_contains "$WORK_DIR/main-kx.txt" "K16E abi=program entry_pc=0x00008000 load_addr=0x00008000"
 
 run_k16 disasm --target program "$WORK_DIR/main.kx" > "$WORK_DIR/main-kx.disasm"
 require_contains "$WORK_DIR/main-kx.disasm" "call r14"
@@ -109,10 +109,10 @@ require_contains "$WORK_DIR/main-kx.disasm" "ret"
 run_k16 run "$WORK_DIR/main.kx" > "$WORK_DIR/main-run.txt"
 require_contains "$WORK_DIR/main-run.txt" "signal=halt debug_bytes=2a"
 
-require_clang_failure "$WORK_DIR/i64-return.c" "Rux16 multi-value returns are not implemented"
-require_clang_failure "$WORK_DIR/varargs.c" "Rux16 varargs are not implemented"
-require_clang_failure "$WORK_DIR/four-args.c" "Rux16 stack arguments are not implemented"
-require_clang_failure "$WORK_DIR/indirect-call.c" "Rux16 only supports direct calls"
+require_clang_failure "$WORK_DIR/i64-return.c" "K16 multi-value returns are not implemented"
+require_clang_failure "$WORK_DIR/varargs.c" "K16 varargs are not implemented"
+require_clang_failure "$WORK_DIR/four-args.c" "K16 stack arguments are not implemented"
+require_clang_failure "$WORK_DIR/indirect-call.c" "K16 only supports direct calls"
 
 echo "freestanding C compile checks passed"
 echo "KX link and execution checks passed"

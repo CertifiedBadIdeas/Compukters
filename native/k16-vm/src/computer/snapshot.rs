@@ -1,21 +1,21 @@
 use crate::computer::profile::ComputerMachineProfile;
 use crate::computer::ComputerTextDisplaySnapshot;
-use crate::rux16::{Rux16CpuSnapshot, Rux16CpuSnapshotState};
+use crate::k16::{K16CpuSnapshot, K16CpuSnapshotState};
 
-pub const COMPUTER_SNAPSHOT_V1_MAGIC: &[u8; 8] = b"RUXSNAP\0";
+pub const COMPUTER_SNAPSHOT_V1_MAGIC: &[u8; 8] = b"K16SNAP\0";
 pub const COMPUTER_SNAPSHOT_V1_VERSION: u16 = 1;
 pub const COMPUTER_SNAPSHOT_V1_HEADER_SIZE: usize = 40;
-pub const COMPUTER_SNAPSHOT_V1_RUX16_CPU_KIND: u32 = 1;
-pub const COMPUTER_SNAPSHOT_V1_RUX16_CPU_RECORD_SIZE: usize = 112;
+pub const COMPUTER_SNAPSHOT_V1_K16_CPU_KIND: u32 = 1;
+pub const COMPUTER_SNAPSHOT_V1_K16_CPU_RECORD_SIZE: usize = 112;
 pub const COMPUTER_SNAPSHOT_V1_CONTROL_DEVICE_KIND: u32 = 1;
 pub const COMPUTER_SNAPSHOT_V1_DEBUG_DEVICE_KIND: u32 = 2;
 pub const COMPUTER_SNAPSHOT_V1_DISPLAY0_DEVICE_KIND: u32 = 3;
 pub const COMPUTER_SNAPSHOT_V1_SERIAL_INPUT_DEVICE_KIND: u32 = 4;
 pub const COMPUTER_SNAPSHOT_V1_STORAGE0_DEVICE_KIND: u32 = 5;
 const NO_BOOT_CPU: u32 = u32::MAX;
-const RUX16_CPU_STATE_RUNNING: u32 = 1;
-const RUX16_CPU_STATE_HALTED: u32 = 2;
-const RUX16_CPU_STATE_TRAPPED: u32 = 3;
+const K16_CPU_STATE_RUNNING: u32 = 1;
+const K16_CPU_STATE_HALTED: u32 = 2;
+const K16_CPU_STATE_TRAPPED: u32 = 3;
 const CONTROL_DEVICE_PAYLOAD_SIZE: usize = 12;
 const DISPLAY0_DEVICE_PAYLOAD_HEADER_SIZE: usize = 24;
 const STORAGE0_DEVICE_PAYLOAD_SIZE: usize = 36;
@@ -41,10 +41,7 @@ pub struct ComputerMachineSnapshot<'a> {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ComputerCpuSnapshotRecord {
-    Rux16 {
-        cpu: Rux16CpuSnapshot,
-        max_steps: u64,
-    },
+    K16 { cpu: K16CpuSnapshot, max_steps: u64 },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -95,7 +92,7 @@ pub fn encode_snapshot_v1(
     };
     let cpu_records_size = cpus
         .len()
-        .checked_mul(COMPUTER_SNAPSHOT_V1_RUX16_CPU_RECORD_SIZE)
+        .checked_mul(COMPUTER_SNAPSHOT_V1_K16_CPU_RECORD_SIZE)
         .ok_or_else(|| "snapshot CPU record size overflows usize".to_string())?;
     let device_records_size = devices
         .iter()
@@ -173,7 +170,7 @@ pub fn decode_snapshot_v1(bytes: &[u8]) -> Result<ComputerMachineSnapshot<'_>, S
         .and_then(|size| {
             usize::try_from(cpu_count).ok().and_then(|count| {
                 count
-                    .checked_mul(COMPUTER_SNAPSHOT_V1_RUX16_CPU_RECORD_SIZE)
+                    .checked_mul(COMPUTER_SNAPSHOT_V1_K16_CPU_RECORD_SIZE)
                     .and_then(|cpu_bytes| size.checked_add(cpu_bytes))
             })
         })
@@ -190,9 +187,9 @@ pub fn decode_snapshot_v1(bytes: &[u8]) -> Result<ComputerMachineSnapshot<'_>, S
     let mut cpus = Vec::with_capacity(cpu_count as usize);
     let mut cpu_offset = ram_end;
     for index in 0..cpu_count {
-        let cpu_bytes = &bytes[cpu_offset..cpu_offset + COMPUTER_SNAPSHOT_V1_RUX16_CPU_RECORD_SIZE];
+        let cpu_bytes = &bytes[cpu_offset..cpu_offset + COMPUTER_SNAPSHOT_V1_K16_CPU_RECORD_SIZE];
         cpus.push(decode_cpu_record(cpu_bytes, index)?);
-        cpu_offset += COMPUTER_SNAPSHOT_V1_RUX16_CPU_RECORD_SIZE;
+        cpu_offset += COMPUTER_SNAPSHOT_V1_K16_CPU_RECORD_SIZE;
     }
     let mut devices = Vec::with_capacity(device_count as usize);
     let mut device_offset = cpu_offset;
@@ -258,9 +255,9 @@ fn encode_cpu_record(
     record: &ComputerCpuSnapshotRecord,
 ) -> Result<(), String> {
     match record {
-        ComputerCpuSnapshotRecord::Rux16 { cpu, max_steps } => {
-            write_u32(bytes, COMPUTER_SNAPSHOT_V1_RUX16_CPU_KIND);
-            write_u32(bytes, encode_rux16_state(cpu.state));
+        ComputerCpuSnapshotRecord::K16 { cpu, max_steps } => {
+            write_u32(bytes, COMPUTER_SNAPSHOT_V1_K16_CPU_KIND);
+            write_u32(bytes, encode_k16_state(cpu.state));
             write_u64(bytes, *max_steps);
             write_u32(bytes, cpu.pc);
             write_u32(bytes, cpu.trap_vector);
@@ -484,12 +481,12 @@ fn decode_device_record(
 
 fn decode_cpu_record(bytes: &[u8], index: u32) -> Result<ComputerCpuSnapshotRecord, String> {
     let kind = read_u32(bytes, 0)?;
-    if kind != COMPUTER_SNAPSHOT_V1_RUX16_CPU_KIND {
+    if kind != COMPUTER_SNAPSHOT_V1_K16_CPU_KIND {
         return Err(format!(
             "unsupported ComputerMachine snapshot CPU {index} kind {kind}"
         ));
     }
-    let state = decode_rux16_state(read_u32(bytes, 4)?)?;
+    let state = decode_k16_state(read_u32(bytes, 4)?)?;
     let max_steps = read_u64(bytes, 8)?;
     let pc = read_u32(bytes, 16)?;
     let trap_vector = read_u32(bytes, 20)?;
@@ -507,8 +504,8 @@ fn decode_cpu_record(bytes: &[u8], index: u32) -> Result<ComputerCpuSnapshotReco
         *register = read_u32(bytes, 40 + register_index * 4)?;
     }
     let metrics_steps = read_u64(bytes, 104)?;
-    Ok(ComputerCpuSnapshotRecord::Rux16 {
-        cpu: Rux16CpuSnapshot {
+    Ok(ComputerCpuSnapshotRecord::K16 {
+        cpu: K16CpuSnapshot {
             pc,
             registers,
             trap_vector,
@@ -522,21 +519,21 @@ fn decode_cpu_record(bytes: &[u8], index: u32) -> Result<ComputerCpuSnapshotReco
     })
 }
 
-fn encode_rux16_state(state: Rux16CpuSnapshotState) -> u32 {
+fn encode_k16_state(state: K16CpuSnapshotState) -> u32 {
     match state {
-        Rux16CpuSnapshotState::Running => RUX16_CPU_STATE_RUNNING,
-        Rux16CpuSnapshotState::Halted => RUX16_CPU_STATE_HALTED,
-        Rux16CpuSnapshotState::Trapped => RUX16_CPU_STATE_TRAPPED,
+        K16CpuSnapshotState::Running => K16_CPU_STATE_RUNNING,
+        K16CpuSnapshotState::Halted => K16_CPU_STATE_HALTED,
+        K16CpuSnapshotState::Trapped => K16_CPU_STATE_TRAPPED,
     }
 }
 
-fn decode_rux16_state(state: u32) -> Result<Rux16CpuSnapshotState, String> {
+fn decode_k16_state(state: u32) -> Result<K16CpuSnapshotState, String> {
     match state {
-        RUX16_CPU_STATE_RUNNING => Ok(Rux16CpuSnapshotState::Running),
-        RUX16_CPU_STATE_HALTED => Ok(Rux16CpuSnapshotState::Halted),
-        RUX16_CPU_STATE_TRAPPED => Ok(Rux16CpuSnapshotState::Trapped),
+        K16_CPU_STATE_RUNNING => Ok(K16CpuSnapshotState::Running),
+        K16_CPU_STATE_HALTED => Ok(K16CpuSnapshotState::Halted),
+        K16_CPU_STATE_TRAPPED => Ok(K16CpuSnapshotState::Trapped),
         _ => Err(format!(
-            "unsupported ComputerMachine snapshot Rux16 CPU state {state}"
+            "unsupported ComputerMachine snapshot K16 CPU state {state}"
         )),
     }
 }

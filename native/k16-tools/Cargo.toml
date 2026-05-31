@@ -1,0 +1,7 @@
+[package]
+name = "k16-tools"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+k16-vm = { path = "../k16-vm" }

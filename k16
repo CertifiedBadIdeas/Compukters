@@ -21,13 +21,13 @@
 set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-MANIFEST="$ROOT/native/rux-compiler/Cargo.toml"
+MANIFEST="$ROOT/native/k16-tools/Cargo.toml"
 
 usage() {
     cat >&2 <<'EOF'
 usage:
   k16 link [--target <boot|kernel|program>] <input.ko>... -o <output.kx>
-  k16 runtime <rux16-startup|rux16-memory-helpers> -o <output.ko>
+  k16 runtime <k16-startup|k16-memory-helpers> -o <output.ko>
   k16 run <program.kx>
   k16 disasm --target <bios|boot|kernel|program> <input>
   k16 inspect <blob>

@@ -1,121 +1,121 @@
-# Rux ABI Changelog
+# K16 ABI Changelog
 
 ## Unreleased
 
-- `k16 disasm` now validates Rux16 instruction encodings against the active VM
+- `k16 disasm` now validates K16 instruction encodings against the active VM
   decode rules and fails clearly on reserved bits, unknown opcodes, and
   truncated multi-word instructions instead of printing `.word` fallback lines.
-  Rux16 assembler helpers now cover both zero and non-zero branch predicates.
-- Added `k16 runtime rux16-startup`, which emits the first freestanding Rux16
+  K16 assembler helpers now cover both zero and non-zero branch predicates.
+- Added `k16 runtime k16-startup`, which emits the first freestanding K16
   startup object. It defines `_start`, calls application `main`, initializes the
   program stack, writes the low byte of `main`'s `r0` return value to
-  `debug::WRITE`, and leaves reserved helper symbols such as `__rux16_memcpy`
+  `debug::WRITE`, and leaves reserved helper symbols such as `__k16_memcpy`
   as explicit link-time requirements instead of fallback VM hooks.
-- `k16 runtime rux16-memory-helpers` now builds the helper object from bundled
-  Rust `#![no_core]` source with `K16_RUSTC` and Rux16 `llc` from
-  `K16_LLVM_BIN_DIR`. It defines `__rux16_memcpy`, `__rux16_memset`, and
-  `__rux16_memmove`; programs still pass this object to `k16 link`, and the
+- `k16 runtime k16-memory-helpers` now builds the helper object from bundled
+  Rust `#![no_core]` source with `K16_RUSTC` and K16 `llc` from
+  `K16_LLVM_BIN_DIR`. It defines `__k16_memcpy`, `__k16_memset`, and
+  `__k16_memmove`; programs still pass this object to `k16 link`, and the
   linker still rejects missing helper symbols instead of synthesizing hidden
   bodies.
-- Added `k16 link`, a static object-to-`RUXE` linker for the experimental
-  Rux16 ELF32 `ET_REL` object ABI. It emits bootloader, kernel, or program
-  `RUXE` images and rejects unsupported allocated sections and relocation kinds
-  without falling back to raw Rux16 bytes or VM-side relocation.
-- Added `rux16-object-v1.md` as the experimental ELF32 `ET_REL` relocatable
-  object ABI for LLVM-facing Rux16 tooling, including section names, symbol
+- Added `k16 link`, a static object-to-`K16E` linker for the experimental
+  K16 ELF32 `ET_REL` object ABI. It emits bootloader, kernel, or program
+  `K16E` images and rejects unsupported allocated sections and relocation kinds
+  without falling back to raw K16 bytes or VM-side relocation.
+- Added `k16-object-v1.md` as the experimental ELF32 `ET_REL` relocatable
+  object ABI for LLVM-facing K16 tooling, including section names, symbol
   rules, relocation kinds, unsupported feature diagnostics, and the boundary
   that keeps ELF parsing/linking outside the VM.
-- Defined the implementation-ready Rux16 calling convention for external
+- Defined the implementation-ready K16 calling convention for external
   LLVM-facing lowering, including scalar ABI slots, caller-saved registers,
   stack argument layout, frame-pointer offsets, caller cleanup, and the current
   Rux compiler boundary that still rejects helper calls needing stack-passed
   arguments.
-- Replaced the experimental Rux16 integer ALU encoding with the canonical
+- Replaced the experimental K16 integer ALU encoding with the canonical
   two-word `alu_rrr` format `0x2a0s 0x00bc`, covering `add`, `sub`, bitwise
   ops, shifts, equality, inequality, unsigned less-than, and signed less-than.
   Added `load16` and `store16` to the memory width encoding.
-- Documented the initial LLVM-facing Rux16 target model, including the
+- Documented the initial LLVM-facing K16 target model, including the
   `k16-unknown-kraftos` shape, register classification, caller-saved model,
   stack-passed argument boundary, required integer ISA families, and the
-  object-to-`RUXE` executable pipeline. The boundary explicitly keeps LLVM
+  object-to-`K16E` executable pipeline. The boundary explicitly keeps LLVM
   backend/toolchain concerns outside the VM implementation.
-- Added experimental `RUXSNAP` v1 as the host-side `ComputerMachine` snapshot
-  container. It records a versioned header, full RAM bytes, and Rux16 CPU
+- Added experimental `K16SNAP` v1 as the host-side `ComputerMachine` snapshot
+  container. It records a versioned header, full RAM bytes, and K16 CPU
   continuation records; `control`, `debug`, `display0`, and serial input
   device state plus `storage0` controller registers are now restored.
-- Added `rux16-v1.md` and reserved `r15` as the Rux16 stack pointer. The stack
+- Added `k16-cpu-v1.md` and reserved `r15` as the K16 stack pointer. The stack
   lives in guest RAM, grows downward, and uses 4-byte slots in the first ABI
   slice.
-- Added Rux16 `call rN` and `ret` instructions backed by the `r15` stack
+- Added K16 `call rN` and `ret` instructions backed by the `r15` stack
   pointer convention.
-- The Rux16 compiler now saves and restores live local registers around
+- The K16 compiler now saves and restores live local registers around
   compiler-generated helper calls that use `call`/`ret`.
-- Rux16 helper parameters now enter through `r1..r3` and are copied into stable
+- K16 helper parameters now enter through `r1..r3` and are copied into stable
   callee-local storage before helper body lowering, so scratch register use does
   not clobber parameters.
-- Added experimental `RUXE` v1 as the guest-loadable fixed-image container for
-  Rux16 bootloader and kernel artifacts.
-- `RUXE` now carries an ABI kind: `bootloader` or `kernel`.
-- `rux compile` now emits `RUXE` for `boot`, `kernel`, and `program` targets.
-  Explicit `bios` continues to emit raw Rux16 instruction bytes for BIOS flash.
-- `RUXE` now carries ABI kind `program`, and the program target emits a
+- Added experimental `K16E` v1 as the guest-loadable fixed-image container for
+  K16 bootloader and kernel artifacts.
+- `K16E` now carries an ABI kind: `bootloader` or `kernel`.
+- `rux compile` now emits `K16E` for `boot`, `kernel`, and `program` targets.
+  Explicit `bios` continues to emit raw K16 instruction bytes for BIOS flash.
+- `K16E` now carries ABI kind `program`, and the program target emits a
   filesystem-backed user-space executable profile linked at `0x8000`.
-- The VM runtime now has a read-only `storage0 media -> RUXPT ROOT -> RuxFS`
-  reader and validates already-read `RUXE` bytes as `program` images for the
+- The VM runtime now has a read-only `storage0 media -> K16PT ROOT -> K16FS`
+  reader and validates already-read `K16E` bytes as `program` images for the
   future OS exec path.
-- The runtime `RuxComputerHandle` can transfer an already-read `RUXE` program
-  into guest RAM and start Rux16 execution at the executable `entry_pc`.
+- The runtime `K16ComputerHandle` can transfer an already-read `K16E` program
+  into guest RAM and start K16 execution at the executable `entry_pc`.
 - Added a guest-side kernel init loader that reads `/bin/init.kx` from
-  `storage0` `ROOT`/RuxFS, validates `RUXE` ABI kind `program`, loads the
+  `storage0` `ROOT`/K16FS, validates `K16E` ABI kind `program`, loads the
   payload, and enters the program `entry_pc`.
-- The bundled BIOS now loads `/boot/loader.kb` from the `BOOT` RuxFS
-  partition in the partitioned boot path, validates `RUXE` ABI kind
+- The bundled BIOS now loads `/boot/loader.kb` from the `BOOT` K16FS
+  partition in the partitioned boot path, validates `K16E` ABI kind
   `bootloader`, and enters the bootloader `entry_pc`.
-- `k16 volume put-boot` now accepts a `RUXE` boot artifact and writes the
-  bootloader file to `BOOT`/RuxFS `/boot/loader.kb` for partitioned volumes.
+- `k16 volume put-boot` now accepts a `K16E` boot artifact and writes the
+  bootloader file to `BOOT`/K16FS `/boot/loader.kb` for partitioned volumes.
   Kernel artifacts are rejected for boot media.
-- Added `k16 volume put-kernel`, which writes the kernel `RUXE` file to
-  `ROOT`/RuxFS `/boot/kernel.kx` for the bootloader-to-kernel chain.
-- Retired the legacy fixed `RUXB` raw boot path from active BIOS and
-  `put-boot` behavior. Partitioned `RUXPT` plus RuxFS is now the only supported
+- Added `k16 volume put-kernel`, which writes the kernel `K16E` file to
+  `ROOT`/K16FS `/boot/kernel.kx` for the bootloader-to-kernel chain.
+- Retired the legacy fixed `K16B` raw boot path from active BIOS and
+  `put-boot` behavior. Partitioned `K16PT` plus K16FS is now the only supported
   boot path.
-- Added `k16 volume init`, which creates a partitioned `RUXPT` volume with
+- Added `k16 volume init`, which creates a partitioned `K16PT` volume with
   `BOOT` and `ROOT` partitions for the next filesystem-backed boot chain.
 - Added byte-level `k16 volume extract-partition` and `replace-partition`
-  commands for moving partition images in and out of `RUXPT` volumes without
+  commands for moving partition images in and out of `K16PT` volumes without
   filesystem-specific logic.
 - Added `k16 volume inspect`, which prints the `K16VOL` header summary and
-  decoded `RUXPT` partition layout.
+  decoded `K16PT` partition layout.
 - Added CLI workflow coverage for building a partitioned `storage0.kv`
-  with a RuxFS `ROOT` partition containing `/boot/kernel.kx`.
-- Added a host-side RuxFS volume reader that models the future bootloader read
-  path from `RUXPT` `ROOT` to `/boot/kernel.kx`.
-- Added experimental `RuxFS` v1 as the extent-based filesystem contract for
+  with a K16FS `ROOT` partition containing `/boot/kernel.kx`.
+- Added a host-side K16FS volume reader that models the future bootloader read
+  path from `K16PT` `ROOT` to `/boot/kernel.kx`.
+- Added experimental `K16FS` v1 as the extent-based filesystem contract for
   the partitioned `ROOT` partition, with empty formatting and structural
   validation in compiler tooling.
-- `RuxFS` tooling now supports fixed-size directory entries, absolute-path
+- `K16FS` tooling now supports fixed-size directory entries, absolute-path
   directory creation, file creation, file reads, and directory listing over an
   in-memory filesystem image.
 - Added `k16 fs kfs`, keeping filesystem-specific commands separate from
   `k16 volume` so additional filesystems can be introduced explicitly.
-- Added `rux-storage-volume-v1.md` for the earlier fixed-record `K16VOL`,
-  `RUXB`, and `RUXK` storage0 media layout.
+- Added `k16-storage-volume-v1.md` for the earlier fixed-record `K16VOL`,
+  `K16B`, and `K16K` storage0 media layout.
 - Retired the previous host-decoded executable ABI package from active
   documentation.
 - Removed the obsolete decoder, runner, disassembler, conformance examples,
   and fixture tests from `native/rux-vm`.
-- Moved the active runtime contract to Rux16 guest execution from mapped
+- Moved the active runtime contract to K16 guest execution from mapped
   BIOS flash with optional storage0 boot media.
 - Kept machine profile v2 and computer profile v1 as the active guest-visible
   hardware contracts.
 
 ## Current Active Contracts
 
-- `rux-machine-profile-v2.md`
-- `rux-computer-profile-v1.md`
-- `rux16-v1.md`
-- `rux16-object-v1.md`
-- `ruxe-v1.md`
-- `rux-storage-volume-v1.md`
-- `ruxfs-v1.md`
-- `rux-computer-snapshot-v1.md`
+- `k16-machine-profile-v2.md`
+- `k16-computer-profile-v1.md`
+- `k16-cpu-v1.md`
+- `k16-object-v1.md`
+- `k16e-v1.md`
+- `k16-storage-volume-v1.md`
+- `k16fs-v1.md`
+- `k16-computer-snapshot-v1.md`
