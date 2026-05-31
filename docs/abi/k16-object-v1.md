@@ -81,6 +81,9 @@ Runtime helper symbol names:
 `__udivdi3`      provided by k16-memory-helpers
 `__moddi3`       provided by k16-memory-helpers
 `__umoddi3`      provided by k16-memory-helpers
+`__ashldi3`      provided by k16-memory-helpers
+`__lshrdi3`      provided by k16-memory-helpers
+`__ashrdi3`      provided by k16-memory-helpers
 ```
 
 Missing helper symbols are link-time errors. The linker must not synthesize

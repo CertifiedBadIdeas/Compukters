@@ -7,12 +7,17 @@
 `tools/k16-rust-core-smoke.sh` is the first strict proof path for ordinary
 freestanding Rust on K16. It uses Cargo's nightly `-Z build-std=core` and
 `-Z json-target-spec` path to build Rust `core` for
-`tools/k16-unknown-kraftos.json`, then compiles a tiny `#![no_std]` program,
-links it through `k16 link`, and executes it through the VM.
+`tools/k16-unknown-kraftos.json`, then compiles a tiny `#![no_std]` library crate with an exported C ABI `main`, links the emitted object through `k16
+link`, and executes it through the VM. The final executable link is owned by
+`k16 link`, not by Cargo or host `lld`.
 
 The smoke passes `-C jump-tables=no` because the current K16 ABI slice does not
 yet define a jump-table object/relocation contract for Rust `core`. Switches
 must lower to explicit branch code until that ABI is added.
+
+The smoke also passes `-Cdebuginfo=0` because the current object linker
+explicitly rejects debug relocation semantics. Debug object support must be
+added as a separate ABI/tooling slice before enabling debuginfo here.
 
 This smoke is core only: no alloc, no std, no panic unwinding, and no hidden VM
 or host fallback path. Missing target support or missing helper symbols must

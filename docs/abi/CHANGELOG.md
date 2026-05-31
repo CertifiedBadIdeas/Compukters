@@ -22,6 +22,8 @@
 - `k16 runtime k16-memory-helpers` now owns the first integer compiler-rt
   helper implementations: `__divdi3`, `__udivdi3`, `__moddi3`, and
   `__umoddi3`.
+- `k16 runtime k16-memory-helpers` now owns the 64-bit shift compiler-rt
+  helpers: `__ashldi3`, `__lshrdi3`, and `__ashrdi3`.
 - LLVM K16 lowering now maps wide integer div/rem and soft-float operations to
   explicit compiler-rt helper symbols, including i64/i128 div/rem, f32/f64
   arithmetic and comparisons, f16/f32/f64 conversion helpers, and f32/f64

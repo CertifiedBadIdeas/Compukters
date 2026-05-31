@@ -24,6 +24,7 @@ pub trait Copy {}
 
 impl Copy for bool {}
 impl Copy for usize {}
+impl Copy for u32 {}
 impl Copy for i32 {}
 impl Copy for u64 {}
 impl Copy for i64 {}
@@ -127,6 +128,16 @@ impl PartialOrd for usize {
     }
 }
 
+impl PartialOrd for u32 {
+    fn lt(&self, other: &u32) -> bool {
+        *self < *other
+    }
+
+    fn gt(&self, other: &u32) -> bool {
+        *self > *other
+    }
+}
+
 impl PartialOrd for u64 {
     fn lt(&self, other: &u64) -> bool {
         *self < *other
@@ -177,6 +188,14 @@ impl BitOr for u64 {
     }
 }
 
+impl BitOr for u32 {
+    type Output = u32;
+
+    fn bitor(self, rhs: u32) -> u32 {
+        self | rhs
+    }
+}
+
 #[lang = "shl"]
 pub trait Shl<Rhs = Self> {
     type Output;
@@ -192,6 +211,14 @@ impl Shl<usize> for u64 {
     }
 }
 
+impl Shl<usize> for u32 {
+    type Output = u32;
+
+    fn shl(self, rhs: usize) -> u32 {
+        self << rhs
+    }
+}
+
 #[lang = "shr"]
 pub trait Shr<Rhs = Self> {
     type Output;
@@ -203,6 +230,22 @@ impl Shr<usize> for u64 {
     type Output = u64;
 
     fn shr(self, rhs: usize) -> u64 {
+        self >> rhs
+    }
+}
+
+impl Shr<usize> for u32 {
+    type Output = u32;
+
+    fn shr(self, rhs: usize) -> u32 {
+        self >> rhs
+    }
+}
+
+impl Shr<usize> for i32 {
+    type Output = i32;
+
+    fn shr(self, rhs: usize) -> i32 {
         self >> rhs
     }
 }
@@ -229,6 +272,69 @@ pub extern "C" fn __udivdi3(lhs: u64, rhs: u64) -> u64 {
 #[no_mangle]
 pub extern "C" fn __umoddi3(lhs: u64, rhs: u64) -> u64 {
     k16_umod64(lhs, rhs)
+}
+
+#[no_mangle]
+pub extern "C" fn __ashldi3(value: u64, shift: u32) -> u64 {
+    let mut count = shift as usize;
+    while count > 63usize {
+        count = count - 64usize;
+    }
+    if count < 1usize {
+        return value;
+    }
+
+    let (lo, hi) = k16_split_u64(value);
+    if count < 32usize {
+        k16_pack_u64(lo << count, (hi << count) | (lo >> (32usize - count)))
+    } else {
+        k16_pack_u64(0u32, lo << (count - 32usize))
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn __lshrdi3(value: u64, shift: u32) -> u64 {
+    let mut count = shift as usize;
+    while count > 63usize {
+        count = count - 64usize;
+    }
+    if count < 1usize {
+        return value;
+    }
+
+    let (lo, hi) = k16_split_u64(value);
+    if count < 32usize {
+        k16_pack_u64((lo >> count) | (hi << (32usize - count)), hi >> count)
+    } else {
+        k16_pack_u64(hi >> (count - 32usize), 0u32)
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn __ashrdi3(value: i64, shift: u32) -> i64 {
+    let mut count = shift as usize;
+    while count > 63usize {
+        count = count - 64usize;
+    }
+    if count < 1usize {
+        return value;
+    }
+
+    let (lo, hi) = k16_split_u64(value as u64);
+    let signed_hi = hi as i32;
+    if count < 32usize {
+        k16_pack_u64(
+            (lo >> count) | (hi << (32usize - count)),
+            (signed_hi >> count) as u32,
+        ) as i64
+    } else {
+        let fill = if hi < 0x80000000u32 {
+            0u32
+        } else {
+            4294967295u32
+        };
+        k16_pack_u64((signed_hi >> (count - 32usize)) as u32, fill) as i64
+    }
 }
 
 #[no_mangle]
@@ -304,6 +410,25 @@ fn k16_i64_abs_bits(value: i64) -> u64 {
 
 fn k16_negate_u64_bits(value: u64) -> i64 {
     (0u64 - value) as i64
+}
+
+fn k16_split_u64(value: u64) -> (u32, u32) {
+    unsafe {
+        let lo = (&value as *const u64) as *const u32;
+        let hi = ((lo as usize) + 4usize) as *const u32;
+        (*lo, *hi)
+    }
+}
+
+fn k16_pack_u64(lo: u32, hi: u32) -> u64 {
+    let mut value = 0u64;
+    unsafe {
+        let lo_out = (&mut value as *mut u64) as *mut u32;
+        let hi_out = ((lo_out as usize) + 4usize) as *mut u32;
+        *lo_out = lo;
+        *hi_out = hi;
+    }
+    value
 }
 
 #[no_mangle]
