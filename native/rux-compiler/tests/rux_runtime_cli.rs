@@ -1,7 +1,7 @@
 use rux_compiler::ruxe;
 use rux_vm::computer_machine::ComputerMachine;
+use rux_vm::k16_computer::K16ComputerHandle;
 use rux_vm::rux16::Rux16Signal;
-use rux_vm::rux_computer::RuxComputerHandle;
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
@@ -51,7 +51,7 @@ fn rux_runtime_startup_links_returning_main_and_exposes_return_byte() {
     assert_eq!(executable.entry_pc, 0x8000);
 
     let mut handle =
-        RuxComputerHandle::create_rux16_bios_flash(&[0x01, 0x00], 64 * 1024, 1_000_000)
+        K16ComputerHandle::create_rux16_bios_flash(&[0x01, 0x00], 64 * 1024, 1_000_000)
             .expect("Rux16 computer creates");
     handle
         .exec_ruxe_program_from_bytes(&program, 1_000_000)

@@ -4,8 +4,8 @@ use jni::objects::{JByteArray, JClass, JString};
 use jni::sys::{jbyteArray, jint, jlong, jlongArray};
 use jni::JNIEnv;
 
+use crate::k16_computer::{K16ComputerHandle, K16ComputerTextDisplaySnapshot};
 use crate::rux16::Rux16Signal;
-use crate::rux_computer::{RuxComputerHandle, RuxComputerTextDisplaySnapshot};
 
 #[no_mangle]
 pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_createK16ComputerFromBiosFlashNative(
@@ -36,7 +36,7 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
             return 0;
         }
     };
-    match RuxComputerHandle::create_rux16_bios_flash_path_with_storage0_path(
+    match K16ComputerHandle::create_rux16_bios_flash_path_with_storage0_path(
         bios_flash_path,
         memory_size.max(1) as usize,
         max_steps.max(1) as u64,
@@ -89,7 +89,7 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
             return 0;
         }
     };
-    match RuxComputerHandle::restore_rux16_bios_flash_snapshot_path_with_storage0_path(
+    match K16ComputerHandle::restore_rux16_bios_flash_snapshot_path_with_storage0_path(
         bios_flash_path,
         memory_size.max(1) as usize,
         storage0_path,
@@ -252,14 +252,14 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
     handle: jlong,
 ) {
     if handle != 0 {
-        unsafe { drop(Box::from_raw(handle as *mut RuxComputerHandle)) };
+        unsafe { drop(Box::from_raw(handle as *mut K16ComputerHandle)) };
     }
 }
 
 fn k16_computer_handle_mut(
     env: &mut JNIEnv<'_>,
     handle: jlong,
-) -> Option<&'static mut RuxComputerHandle> {
+) -> Option<&'static mut K16ComputerHandle> {
     if handle == 0 {
         let _ = env.throw_new(
             "java/lang/IllegalStateException",
@@ -267,7 +267,7 @@ fn k16_computer_handle_mut(
         );
         return None;
     }
-    let pointer = handle as *mut RuxComputerHandle;
+    let pointer = handle as *mut K16ComputerHandle;
     if pointer.is_null() {
         let _ = env.throw_new(
             "java/lang/IllegalStateException",
@@ -293,7 +293,7 @@ fn push_u64(out: &mut Vec<u8>, value: u64) {
     out.extend_from_slice(&value.to_le_bytes());
 }
 
-fn encode_k16_computer_text_display_snapshot(snapshot: &RuxComputerTextDisplaySnapshot) -> Vec<u8> {
+fn encode_k16_computer_text_display_snapshot(snapshot: &K16ComputerTextDisplaySnapshot) -> Vec<u8> {
     let mut out = Vec::with_capacity(28 + snapshot.cells.len());
     push_u32(&mut out, snapshot.columns);
     push_u32(&mut out, snapshot.rows);

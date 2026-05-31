@@ -19,9 +19,9 @@ pub mod low_bus;
 pub mod low_machine;
 pub mod rux16;
 pub mod ruxe;
-pub mod rux_computer {
+pub mod k16_computer {
     pub use crate::computer::handle::{
-        RuxComputerControl, RuxComputerHandle, RuxComputerTextDisplaySnapshot,
+        K16ComputerControl, K16ComputerHandle, K16ComputerTextDisplaySnapshot,
     };
     pub use crate::computer::machine::BootHandoffError;
 }

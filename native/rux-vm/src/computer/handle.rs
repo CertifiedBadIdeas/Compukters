@@ -7,19 +7,19 @@ use std::fs;
 use std::path::Path;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct RuxComputerControl {
+pub struct K16ComputerControl {
     pub status: i32,
     pub exit_code: i32,
     pub panic_code: i32,
 }
 
-pub struct RuxComputerHandle {
+pub struct K16ComputerHandle {
     machine: ComputerMachine,
     boot_cpu: CpuId,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RuxComputerTextDisplaySnapshot {
+pub struct K16ComputerTextDisplaySnapshot {
     pub columns: u32,
     pub rows: u32,
     pub cursor_x: u32,
@@ -28,7 +28,7 @@ pub struct RuxComputerTextDisplaySnapshot {
     pub cells: Vec<u8>,
 }
 
-impl From<ComputerTextDisplaySnapshot> for RuxComputerTextDisplaySnapshot {
+impl From<ComputerTextDisplaySnapshot> for K16ComputerTextDisplaySnapshot {
     fn from(snapshot: ComputerTextDisplaySnapshot) -> Self {
         Self {
             columns: snapshot.columns,
@@ -41,7 +41,7 @@ impl From<ComputerTextDisplaySnapshot> for RuxComputerTextDisplaySnapshot {
     }
 }
 
-impl RuxComputerHandle {
+impl K16ComputerHandle {
     pub fn create_rux16_bios_flash(
         bios_flash: &[u8],
         memory_size: usize,
@@ -96,7 +96,7 @@ impl RuxComputerHandle {
         machine.map_rux16_bios_flash(bios_flash.to_vec())?;
         let boot_cpu = machine
             .boot_cpu_id()
-            .ok_or_else(|| "Rux computer snapshot has no boot CPU".to_string())?;
+            .ok_or_else(|| "K16 computer snapshot has no boot CPU".to_string())?;
         Ok(Self { machine, boot_cpu })
     }
 
@@ -146,8 +146,8 @@ impl RuxComputerHandle {
         self.machine.run_boot_rux16_until_signal(self.boot_cpu)
     }
 
-    pub fn control(&self) -> RuxComputerControl {
-        RuxComputerControl {
+    pub fn control(&self) -> K16ComputerControl {
+        K16ComputerControl {
             status: self.machine.control_status(),
             exit_code: self.machine.exit_code(),
             panic_code: self.machine.panic_code(),
@@ -162,7 +162,7 @@ impl RuxComputerHandle {
         self.machine.drain_debug_output_bytes()
     }
 
-    pub fn display0_snapshot(&self) -> Option<RuxComputerTextDisplaySnapshot> {
+    pub fn display0_snapshot(&self) -> Option<K16ComputerTextDisplaySnapshot> {
         self.machine.display0_snapshot().map(Into::into)
     }
 

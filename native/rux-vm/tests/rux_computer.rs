@@ -1,13 +1,13 @@
 use rux_vm::computer_machine::ComputerMachine;
+use rux_vm::k16_computer::{K16ComputerControl, K16ComputerHandle};
 use rux_vm::rux16::Rux16Signal;
-use rux_vm::rux_computer::{RuxComputerControl, RuxComputerHandle};
 use std::fs;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[test]
-fn rux_computer_handle_fails_when_memory_is_too_small() {
+fn k16_computer_handle_fails_when_memory_is_too_small() {
     let bios = rux16_words(&[rux16_halt()]);
-    let error: String = match RuxComputerHandle::create_rux16_bios_flash(&bios, 128, 128) {
+    let error: String = match K16ComputerHandle::create_rux16_bios_flash(&bios, 128, 128) {
         Ok(_) => panic!("computer handle should reject undersized memory"),
         Err(error) => error,
     };
@@ -19,9 +19,9 @@ fn rux_computer_handle_fails_when_memory_is_too_small() {
 }
 
 #[test]
-fn rux_computer_handle_exposes_display0_snapshot() {
+fn k16_computer_handle_exposes_display0_snapshot() {
     let bios = rux16_words(&rux16_display_firmware_words());
-    let mut handle = RuxComputerHandle::create_rux16_bios_flash(&bios, 64 * 1024, 128)
+    let mut handle = K16ComputerHandle::create_rux16_bios_flash(&bios, 64 * 1024, 128)
         .expect("Rux16 BIOS flash computer creates");
 
     assert_eq!(handle.run_rux16_until_signal().unwrap(), Rux16Signal::Halt);
@@ -38,10 +38,10 @@ fn rux_computer_handle_exposes_display0_snapshot() {
 }
 
 #[test]
-fn rux_computer_handle_accepts_storage0_media_and_exposes_snapshot() {
+fn k16_computer_handle_accepts_storage0_media_and_exposes_snapshot() {
     let bios = rux16_words(&[rux16_halt()]);
     let media = vec![7; 1024];
-    let handle = RuxComputerHandle::create_rux16_bios_flash_with_storage0_media(
+    let handle = K16ComputerHandle::create_rux16_bios_flash_with_storage0_media(
         &bios,
         64 * 1024,
         128,
@@ -58,13 +58,13 @@ fn rux_computer_handle_accepts_storage0_media_and_exposes_snapshot() {
 }
 
 #[test]
-fn rux_computer_handle_accepts_storage0_volume_path() {
+fn k16_computer_handle_accepts_storage0_volume_path() {
     let bios = rux16_words(&[rux16_halt()]);
     let path = temp_volume_path("handle-storage0-path");
     write_k16_volume(&path, &[0; 1024]);
 
     let handle =
-        RuxComputerHandle::create_rux16_bios_flash_with_storage0_path(&bios, 64 * 1024, 128, &path)
+        K16ComputerHandle::create_rux16_bios_flash_with_storage0_path(&bios, 64 * 1024, 128, &path)
             .expect("Rux16 BIOS flash computer creates with storage0 volume path");
 
     assert!(handle.storage0_media_snapshot().is_none());
@@ -72,11 +72,11 @@ fn rux_computer_handle_accepts_storage0_volume_path() {
 }
 
 #[test]
-fn rux_computer_handle_boot_handoff_starts_rux16_from_guest_ram_without_host_decode() {
+fn k16_computer_handle_boot_handoff_starts_rux16_from_guest_ram_without_host_decode() {
     let bios = rux16_words(&[rux16_halt()]);
     let entry_pc = 4096;
     let program = rux16_words(&[rux16_const4(1, 7), rux16_halt()]);
-    let mut handle = RuxComputerHandle::create_rux16_bios_flash(&bios, 64 * 1024, 128)
+    let mut handle = K16ComputerHandle::create_rux16_bios_flash(&bios, 64 * 1024, 128)
         .expect("Rux16 BIOS flash computer creates");
     handle.write_guest_ram_bytes(entry_pc, &program).unwrap();
 
@@ -89,11 +89,11 @@ fn rux_computer_handle_boot_handoff_starts_rux16_from_guest_ram_without_host_dec
 }
 
 #[test]
-fn rux_computer_handle_rux16_firmware_writes_debug_and_control_mmio() {
+fn k16_computer_handle_rux16_firmware_writes_debug_and_control_mmio() {
     let bios = rux16_words(&[rux16_halt()]);
     let entry_pc = 4096;
     let program = rux16_words(&rux16_mmio_firmware_words());
-    let mut handle = RuxComputerHandle::create_rux16_bios_flash(&bios, 64 * 1024, 128)
+    let mut handle = K16ComputerHandle::create_rux16_bios_flash(&bios, 64 * 1024, 128)
         .expect("Rux16 BIOS flash computer creates");
     handle.write_guest_ram_bytes(entry_pc, &program).unwrap();
 
@@ -105,7 +105,7 @@ fn rux_computer_handle_rux16_firmware_writes_debug_and_control_mmio() {
     assert_eq!(handle.debug_output_bytes(), b"RUX");
     assert_eq!(
         handle.control(),
-        RuxComputerControl {
+        K16ComputerControl {
             status: ComputerMachine::STATUS_HALTED,
             exit_code: 0,
             panic_code: 0x16,
@@ -114,16 +114,16 @@ fn rux_computer_handle_rux16_firmware_writes_debug_and_control_mmio() {
 }
 
 #[test]
-fn rux_computer_handle_boots_rux16_directly_from_bios_flash() {
+fn k16_computer_handle_boots_rux16_directly_from_bios_flash() {
     let bios = rux16_words(&rux16_mmio_firmware_words());
-    let mut handle = RuxComputerHandle::create_rux16_bios_flash(&bios, 64 * 1024, 128)
+    let mut handle = K16ComputerHandle::create_rux16_bios_flash(&bios, 64 * 1024, 128)
         .expect("Rux16 BIOS flash computer creates");
 
     assert_eq!(handle.run_rux16_until_signal().unwrap(), Rux16Signal::Halt);
     assert_eq!(handle.debug_output_bytes(), b"RUX");
     assert_eq!(
         handle.control(),
-        RuxComputerControl {
+        K16ComputerControl {
             status: ComputerMachine::STATUS_HALTED,
             exit_code: 0,
             panic_code: 0x16,
@@ -132,8 +132,8 @@ fn rux_computer_handle_boots_rux16_directly_from_bios_flash() {
 }
 
 #[test]
-fn rux_computer_handle_rejects_empty_rux16_bios_flash() {
-    let error = match RuxComputerHandle::create_rux16_bios_flash(&[], 64 * 1024, 128) {
+fn k16_computer_handle_rejects_empty_rux16_bios_flash() {
+    let error = match K16ComputerHandle::create_rux16_bios_flash(&[], 64 * 1024, 128) {
         Ok(_) => panic!("empty Rux16 BIOS flash unexpectedly created a computer"),
         Err(error) => error,
     };
@@ -145,14 +145,14 @@ fn rux_computer_handle_rejects_empty_rux16_bios_flash() {
 }
 
 #[test]
-fn rux_computer_handle_rux16_bios_flash_is_read_only() {
+fn k16_computer_handle_rux16_bios_flash_is_read_only() {
     let mut words = Vec::new();
     words.extend(rux16_const32(0, ComputerMachine::RUX16_BIOS_FLASH_BASE));
     words.extend(rux16_const32(1, 0x1234));
     words.push(rux16_store32(0, 1));
     words.push(rux16_halt());
     let bios = rux16_words(&words);
-    let mut handle = RuxComputerHandle::create_rux16_bios_flash(&bios, 64 * 1024, 128)
+    let mut handle = K16ComputerHandle::create_rux16_bios_flash(&bios, 64 * 1024, 128)
         .expect("Rux16 BIOS flash computer creates");
 
     let error = handle
@@ -166,11 +166,11 @@ fn rux_computer_handle_rux16_bios_flash_is_read_only() {
 }
 
 #[test]
-fn rux_computer_handle_rux16_bios_flash_reads_storage0_block_into_ram() {
+fn k16_computer_handle_rux16_bios_flash_reads_storage0_block_into_ram() {
     let bios = rux16_words(&rux16_storage_read_bios_words());
     let mut media = vec![0; 512];
     media[0..3].copy_from_slice(b"RUX");
-    let mut handle = RuxComputerHandle::create_rux16_bios_flash_with_storage0_media(
+    let mut handle = K16ComputerHandle::create_rux16_bios_flash_with_storage0_media(
         &bios,
         64 * 1024,
         256,
@@ -182,7 +182,7 @@ fn rux_computer_handle_rux16_bios_flash_reads_storage0_block_into_ram() {
     assert_eq!(handle.debug_output_bytes(), b"RUX");
     assert_eq!(
         handle.control(),
-        RuxComputerControl {
+        K16ComputerControl {
             status: ComputerMachine::STATUS_HALTED,
             exit_code: 0,
             panic_code: 2,
@@ -191,12 +191,12 @@ fn rux_computer_handle_rux16_bios_flash_reads_storage0_block_into_ram() {
 }
 
 #[test]
-fn rux_computer_handle_rux16_bios_loads_stage2_from_storage_and_jumps_to_ram() {
+fn k16_computer_handle_rux16_bios_loads_stage2_from_storage_and_jumps_to_ram() {
     let entry_pc = 2048;
     let bios = rux16_words(&rux16_stage2_boot_bios_words());
     let stage2 = rux16_words(&rux16_stage2_program_words());
     let media = rux16_boot_media(entry_pc, entry_pc, 1, 1, &stage2);
-    let mut handle = RuxComputerHandle::create_rux16_bios_flash_with_storage0_media(
+    let mut handle = K16ComputerHandle::create_rux16_bios_flash_with_storage0_media(
         &bios,
         64 * 1024,
         512,
@@ -208,7 +208,7 @@ fn rux_computer_handle_rux16_bios_loads_stage2_from_storage_and_jumps_to_ram() {
     assert_eq!(handle.debug_output_bytes(), b"S2");
     assert_eq!(
         handle.control(),
-        RuxComputerControl {
+        K16ComputerControl {
             status: ComputerMachine::STATUS_HALTED,
             exit_code: 0,
             panic_code: 0x52,
@@ -217,7 +217,7 @@ fn rux_computer_handle_rux16_bios_loads_stage2_from_storage_and_jumps_to_ram() {
 }
 
 #[test]
-fn rux_computer_handle_rux16_bios_loads_stage2_from_storage_volume_path() {
+fn k16_computer_handle_rux16_bios_loads_stage2_from_storage_volume_path() {
     let entry_pc = 2048;
     let bios = rux16_words(&rux16_stage2_boot_bios_words());
     let stage2 = rux16_words(&rux16_stage2_program_words());
@@ -225,14 +225,14 @@ fn rux_computer_handle_rux16_bios_loads_stage2_from_storage_volume_path() {
     let path = temp_volume_path("rux16-stage2-volume-path");
     write_k16_volume(&path, &media);
     let mut handle =
-        RuxComputerHandle::create_rux16_bios_flash_with_storage0_path(&bios, 64 * 1024, 512, &path)
+        K16ComputerHandle::create_rux16_bios_flash_with_storage0_path(&bios, 64 * 1024, 512, &path)
             .expect("Rux16 BIOS flash computer creates with boot volume path");
 
     assert_eq!(handle.run_rux16_until_signal().unwrap(), Rux16Signal::Halt);
     assert_eq!(handle.debug_output_bytes(), b"S2");
     assert_eq!(
         handle.control(),
-        RuxComputerControl {
+        K16ComputerControl {
             status: ComputerMachine::STATUS_HALTED,
             exit_code: 0,
             panic_code: 0x52,
@@ -242,7 +242,7 @@ fn rux_computer_handle_rux16_bios_loads_stage2_from_storage_volume_path() {
 }
 
 #[test]
-fn rux_computer_handle_loads_rux16_bios_flash_from_path_with_storage0_path() {
+fn k16_computer_handle_loads_rux16_bios_flash_from_path_with_storage0_path() {
     let entry_pc = 2048;
     let bios = rux16_words(&rux16_stage2_boot_bios_words());
     let stage2 = rux16_words(&rux16_stage2_program_words());
@@ -251,7 +251,7 @@ fn rux_computer_handle_loads_rux16_bios_flash_from_path_with_storage0_path() {
     let storage_path = temp_volume_path("rux16-stage2-storage-path");
     fs::write(&bios_path, &bios).unwrap();
     write_k16_volume(&storage_path, &media);
-    let mut handle = RuxComputerHandle::create_rux16_bios_flash_path_with_storage0_path(
+    let mut handle = K16ComputerHandle::create_rux16_bios_flash_path_with_storage0_path(
         &bios_path,
         64 * 1024,
         512,
@@ -263,7 +263,7 @@ fn rux_computer_handle_loads_rux16_bios_flash_from_path_with_storage0_path() {
     assert_eq!(handle.debug_output_bytes(), b"S2");
     assert_eq!(
         handle.control(),
-        RuxComputerControl {
+        K16ComputerControl {
             status: ComputerMachine::STATUS_HALTED,
             exit_code: 0,
             panic_code: 0x52,
@@ -274,11 +274,11 @@ fn rux_computer_handle_loads_rux16_bios_flash_from_path_with_storage0_path() {
 }
 
 #[test]
-fn rux_computer_handle_restores_snapshot_with_bios_flash_and_storage0_path() {
+fn k16_computer_handle_restores_snapshot_with_bios_flash_and_storage0_path() {
     let bios = rux16_words(&rux16_mmio_firmware_words());
     let storage_path = temp_volume_path("rux16-restore-storage-path");
     write_k16_volume(&storage_path, &[0; 1024]);
-    let mut handle = RuxComputerHandle::create_rux16_bios_flash_with_storage0_path(
+    let mut handle = K16ComputerHandle::create_rux16_bios_flash_with_storage0_path(
         &bios,
         64 * 1024,
         128,
@@ -289,7 +289,7 @@ fn rux_computer_handle_restores_snapshot_with_bios_flash_and_storage0_path() {
     assert_eq!(handle.run_rux16_until_signal().unwrap(), Rux16Signal::Halt);
 
     let snapshot = handle.snapshot_v1().expect("snapshot encodes");
-    let restored = RuxComputerHandle::restore_rux16_bios_flash_snapshot_with_storage0_path(
+    let restored = K16ComputerHandle::restore_rux16_bios_flash_snapshot_with_storage0_path(
         &bios,
         64 * 1024,
         &storage_path,
@@ -300,7 +300,7 @@ fn rux_computer_handle_restores_snapshot_with_bios_flash_and_storage0_path() {
     assert_eq!(restored.debug_output_bytes(), b"RUX");
     assert_eq!(
         restored.control(),
-        RuxComputerControl {
+        K16ComputerControl {
             status: ComputerMachine::STATUS_HALTED,
             exit_code: 0,
             panic_code: 0x16,
@@ -310,13 +310,13 @@ fn rux_computer_handle_restores_snapshot_with_bios_flash_and_storage0_path() {
 }
 
 #[test]
-fn rux_computer_handle_rux16_bios_rejects_corrupt_boot_header_magic() {
+fn k16_computer_handle_rux16_bios_rejects_corrupt_boot_header_magic() {
     let entry_pc = 2048;
     let bios = rux16_words(&rux16_stage2_boot_bios_words());
     let stage2 = rux16_words(&rux16_stage2_program_words());
     let mut media = rux16_boot_media(entry_pc, entry_pc, 1, 1, &stage2);
     media[0..4].copy_from_slice(b"NOPE");
-    let mut handle = RuxComputerHandle::create_rux16_bios_flash_with_storage0_media(
+    let mut handle = K16ComputerHandle::create_rux16_bios_flash_with_storage0_media(
         &bios,
         64 * 1024,
         512,
@@ -328,7 +328,7 @@ fn rux_computer_handle_rux16_bios_rejects_corrupt_boot_header_magic() {
     assert_eq!(handle.debug_output_bytes(), b"");
     assert_eq!(
         handle.control(),
-        RuxComputerControl {
+        K16ComputerControl {
             status: ComputerMachine::STATUS_HALTED,
             exit_code: 0,
             panic_code: 0xB,

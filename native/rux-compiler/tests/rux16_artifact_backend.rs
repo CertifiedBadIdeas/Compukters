@@ -3,8 +3,8 @@ use rux_compiler::compile_rux16_artifact;
 use rux_compiler::rux16_disasm;
 use rux_compiler::ruxe;
 use rux_vm::computer_machine::ComputerMachine;
+use rux_vm::k16_computer::K16ComputerHandle;
 use rux_vm::rux16::Rux16Signal;
-use rux_vm::rux_computer::RuxComputerHandle;
 use std::fs;
 use std::path::Path;
 
@@ -278,7 +278,7 @@ fn compile_stage2_program() -> rux_compiler::artifact::Rux16Artifact {
 }
 
 fn assert_bios_rejects_non_partitioned_boot_media(bios_flash: &[u8], media: Vec<u8>) {
-    let mut handle = RuxComputerHandle::create_rux16_bios_flash_with_storage0_media(
+    let mut handle = K16ComputerHandle::create_rux16_bios_flash_with_storage0_media(
         bios_flash,
         64 * 1024,
         1024,
@@ -1555,7 +1555,7 @@ fn rux16_artifact_reads_storage0_block_into_stack_buffer() {
     let mut media = vec![0; 512];
     media[0] = b'O';
     media[1] = b'K';
-    let mut handle = RuxComputerHandle::create_rux16_bios_flash_with_storage0_media(
+    let mut handle = K16ComputerHandle::create_rux16_bios_flash_with_storage0_media(
         &artifact.bytes,
         64 * 1024,
         100_000,
