@@ -73,7 +73,7 @@ and I/O. The current Rux OS direction is not ready for this, and trying to add
 Rust needs a target specification for Rux16. The likely target shape is:
 
 ```text
-llvm-target:        rux16-unknown-ruxos or rux16
+llvm-target:        k16-unknown-kraftos or rux16
 pointer-width:      32
 data-layout:        e-p:32:32-i32:32-n32
 arch:               rux16

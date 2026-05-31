@@ -12,8 +12,8 @@
   `debug::WRITE`, and leaves reserved helper symbols such as `__rux16_memcpy`
   as explicit link-time requirements instead of fallback VM hooks.
 - `k16 runtime rux16-memory-helpers` now builds the helper object from bundled
-  Rust `#![no_core]` source with `RUX16_RUSTC` and Rux16 `llc` from
-  `RUX16_LLVM_BIN_DIR`. It defines `__rux16_memcpy`, `__rux16_memset`, and
+  Rust `#![no_core]` source with `K16_RUSTC` and Rux16 `llc` from
+  `K16_LLVM_BIN_DIR`. It defines `__rux16_memcpy`, `__rux16_memset`, and
   `__rux16_memmove`; programs still pass this object to `k16 link`, and the
   linker still rejects missing helper symbols instead of synthesizing hidden
   bodies.
@@ -35,7 +35,7 @@
   ops, shifts, equality, inequality, unsigned less-than, and signed less-than.
   Added `load16` and `store16` to the memory width encoding.
 - Documented the initial LLVM-facing Rux16 target model, including the
-  `rux16-unknown-ruxos` shape, register classification, caller-saved model,
+  `k16-unknown-kraftos` shape, register classification, caller-saved model,
   stack-passed argument boundary, required integer ISA families, and the
   object-to-`RUXE` executable pipeline. The boundary explicitly keeps LLVM
   backend/toolchain concerns outside the VM implementation.

@@ -2,11 +2,11 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-RUSTC="${RUX16_RUSTC:-rustc}"
-LLVM_BIN_DIR="${RUX16_LLVM_BIN_DIR:-$ROOT/toolchains/Compukter-Kraft-llvm/build-rux/bin}"
+RUSTC="${K16_RUSTC:-rustc}"
+LLVM_BIN_DIR="${K16_LLVM_BIN_DIR:-$ROOT/toolchains/Compukter-Kraft-llvm/build-rux/bin}"
 LLVM_READOBJ="$LLVM_BIN_DIR/llvm-readobj"
 RUX_CARGO_MANIFEST="$ROOT/native/rux-compiler/Cargo.toml"
-TARGET_SPEC="${RUX16_RUST_TARGET_JSON:-$ROOT/tools/rux16-unknown-ruxos.json}"
+TARGET_SPEC="${K16_RUST_TARGET_JSON:-$ROOT/tools/k16-unknown-kraftos.json}"
 
 require_file() {
     local path="$1"
@@ -62,8 +62,8 @@ trap 'rm -rf "$WORK_DIR"' EXIT
 
 "$RUSTC" --version --verbose > "$WORK_DIR/rustc-version.txt"
 if ! "$RUSTC" -Z help > "$WORK_DIR/rustc-z-help.txt" 2> "$WORK_DIR/rustc-z-help.stderr"; then
-    echo "Rux16 Rust no_core smoke requires a custom nightly rustc built with the Rux16 LLVM target." >&2
-    echo "Set RUX16_RUSTC=/path/to/rustc and rerun tools/rux16-rust-nocore-smoke.sh." >&2
+    echo "K16 Rust no_core smoke requires a custom nightly rustc built with the K16 LLVM target." >&2
+    echo "Set K16_RUSTC=/path/to/rustc and rerun tools/k16-rust-nocore-smoke.sh." >&2
     echo "----- rustc -Z help stderr -----" >&2
     sed -n '1,80p' "$WORK_DIR/rustc-z-help.stderr" >&2
     exit 1
@@ -117,4 +117,4 @@ require_contains "$WORK_DIR/main-run.txt" "signal=halt debug_bytes=2a"
 
 echo "Rust no_core object checks passed"
 echo "KX link and execution checks passed"
-echo "Rux16 Rust no_core smoke passed"
+echo "K16 Rust no_core smoke passed"

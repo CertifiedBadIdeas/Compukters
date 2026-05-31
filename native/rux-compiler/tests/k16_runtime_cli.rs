@@ -176,15 +176,15 @@ fn k16_runtime_memory_helpers_require_custom_rux16_rustc() {
             "-o",
             helper_path.to_str().unwrap(),
         ])
-        .env_remove("RUX16_RUSTC")
-        .env_remove("RUX16_RUST_TARGET_JSON")
+        .env_remove("K16_RUSTC")
+        .env_remove("K16_RUST_TARGET_JSON")
         .output()
         .expect("k16 runtime helpers runs");
 
     assert!(!helper_output.status.success());
     let stderr = String::from_utf8_lossy(&helper_output.stderr);
     assert!(
-        stderr.contains("RUX16_RUSTC must point to a custom Rux16 rustc"),
+        stderr.contains("K16_RUSTC must point to a custom K16 rustc"),
         "stderr: {stderr}"
     );
     assert!(!helper_path.exists());

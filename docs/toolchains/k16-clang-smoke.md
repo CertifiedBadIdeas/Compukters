@@ -1,8 +1,8 @@
-# Rux16 Clang Smoke
+# K16 Clang Smoke
 
-> Toolchain: [Rux16 LLVM Submodule](rux16-llvm-submodule.md)
+> Toolchain: [K16 LLVM Submodule](rux16-llvm-submodule.md)
 
-`tools/rux16-clang-smoke.sh` verifies the first freestanding C path for Rux16:
+`tools/k16-clang-smoke.sh` verifies the first freestanding C path for Rux16:
 
 - `clang --target=rux16 -ffreestanding -fno-builtin -nostdlib` compiles a tiny C
   `main` into an ELF32 relocatable object.
@@ -30,5 +30,5 @@ cmake --build build-rux --target clang llc llvm-readobj FileCheck not
 Override it with:
 
 ```sh
-RUX16_LLVM_BIN_DIR=/path/to/llvm/bin tools/rux16-clang-smoke.sh
+K16_LLVM_BIN_DIR=/path/to/llvm/bin tools/k16-clang-smoke.sh
 ```

@@ -1,8 +1,8 @@
-# Rux16 LLVM Smoke
+# K16 LLVM Smoke
 
 Issue: [#126](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/126)
 
-`tools/rux16-llvm-smoke.sh` verifies the first external LLVM backend path without adding LLVM-specific execution logic to the VM.
+`tools/k16-llvm-smoke.sh` verifies the first external LLVM backend path without adding LLVM-specific execution logic to the VM.
 
 The smoke command requires the out-of-tree LLVM checkout to be built at:
 
@@ -13,13 +13,13 @@ toolchains/Compukter-Kraft-llvm/build-rux-min/bin
 Run:
 
 ```bash
-tools/rux16-llvm-smoke.sh
+tools/k16-llvm-smoke.sh
 ```
 
 For a different LLVM build, pass the exact bin directory:
 
 ```bash
-RUX16_LLVM_BIN_DIR=/path/to/llvm-build/bin tools/rux16-llvm-smoke.sh
+K16_LLVM_BIN_DIR=/path/to/llvm-build/bin tools/k16-llvm-smoke.sh
 ```
 
 The script fails explicitly if required tools are missing. It checks that:
