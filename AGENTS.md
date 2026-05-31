@@ -16,7 +16,7 @@ mod metadata is in `config/`, and visual/model assets are in `models/` and top-l
 - `./gradlew test` runs JVM unit tests across Kotlin modules.
 - `./gradlew :core:test` or `./gradlew :native-runtime:test` runs focused module tests.
 - `./gradlew :v1_21_1-neoforge:runClient` launches the NeoForge dev client.
-- `./gradlew :v1_21_1-neoforge:buildRustVmNativeLibrary` builds the debug Rust JNI library used by dev runs.
+- `./gradlew :v1_21_1-neoforge:buildK16VmNativeLibrary` builds the debug Rust JNI library used by dev runs.
 - `./gradlew :v1_21_1-neoforge:buildProductionUniversalJar` builds a production jar with release native VM artifacts.
 - `cargo test` from `native/rux-vm` or `native/rux-compiler` runs Rust crate tests.
 
