@@ -23,7 +23,7 @@ import org.gradle.api.tasks.InputFile
 import org.gradle.api.tasks.OutputFile
 import org.gradle.api.tasks.TaskAction
 
-abstract class GenerateRuxFontTablesTask : DefaultTask() {
+abstract class GenerateK16FontTablesTask : DefaultTask() {
     @get:InputFile
     abstract val fontFile: RegularFileProperty
 
@@ -35,7 +35,7 @@ abstract class GenerateRuxFontTablesTask : DefaultTask() {
 
     @TaskAction
     fun generateSources() {
-        val generated = RuxFontTableGenerator().generate(fontFile.get().asFile.readText())
+        val generated = K16FontTableGenerator().generate(fontFile.get().asFile.readText())
 
         rustOutput.get().asFile.writeGeneratedText(generated.rustSource)
         kotlinOutput.get().asFile.writeGeneratedText(generated.kotlinSource)

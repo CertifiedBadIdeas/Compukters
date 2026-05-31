@@ -22,7 +22,7 @@ package ru.lazyhat.compukterkraft.lang.runtime
 /**
  * Minimal IDE primitives kept after the CKL language stack removal so the
  * existing `EditorViewModel` / `CodeEditor` UI contract still compiles.
- * The Rux IDE will populate these later; today the editor always renders
+ * The K16 IDE will populate these later; today the editor always renders
  * empty highlights and diagnostics.
  */
 

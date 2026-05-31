@@ -229,4 +229,29 @@ class K16ComputerRuntimeFactoryTest {
 
         assertFalse(lowImagePackage.toFile().exists())
     }
+
+    @Test
+    fun nativeRuntimeIdeStubsUseK16Branding() {
+        val source =
+            root
+                .resolve(
+                    Path.of(
+                        "modules",
+                        "native-runtime",
+                        "src",
+                        "main",
+                        "kotlin",
+                        "ru",
+                        "lazyhat",
+                        "compukterkraft",
+                        "lang",
+                        "runtime",
+                        "IdeStubs.kt",
+                    ),
+                )
+                .readText()
+
+        assertTrue(source.contains("K16 IDE"))
+        assertFalse(source.contains("Rux IDE"))
+    }
 }

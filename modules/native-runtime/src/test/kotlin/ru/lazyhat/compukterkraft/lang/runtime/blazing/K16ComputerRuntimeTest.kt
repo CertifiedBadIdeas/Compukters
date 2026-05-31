@@ -30,13 +30,13 @@ class K16ComputerRuntimeTest {
         val bindings = EchoBindings()
         val runtime = K16ComputerRuntime(handle = 7L, bindings = bindings, defaultMaxTurnsPerTick = 4)
 
-        runtime.pushInput("Rux!".encodeToByteArray())
+        runtime.pushInput("K16!".encodeToByteArray())
         val control = runtime.tick()
 
         assertEquals(NativeK16ComputerControl(status = 1, exitCode = 0, panicCode = 0), control)
-        assertEquals("Rux!", runtime.outputSnapshot().decodeToString())
-        assertEquals("Rux!", runtime.outputSnapshot().decodeToString())
-        assertEquals(listOf("Rux!".encodeToByteArray().toList()), bindings.serialInputs.map { it.toList() })
+        assertEquals("K16!", runtime.outputSnapshot().decodeToString())
+        assertEquals("K16!", runtime.outputSnapshot().decodeToString())
+        assertEquals(listOf("K16!".encodeToByteArray().toList()), bindings.serialInputs.map { it.toList() })
     }
 
     @Test

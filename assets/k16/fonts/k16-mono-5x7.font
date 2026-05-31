@@ -1,5 +1,5 @@
-# Rux Mono 5x7 bitmap font.
-# Edit this file, then run ./gradlew generateRuxFontTables.
+# K16 Mono 5x7 bitmap font.
+# Edit this file, then run ./gradlew generateK16FontTables.
 # Each glyph is 5 columns by 7 rows. `#` is on, `.` is off.
 
 glyph U+0020 SPACE

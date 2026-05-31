@@ -31,10 +31,10 @@ class SerialTextDisplayRendererTest {
     fun rendersSerialBytesIntoTerminalRows() {
         val renderer = SerialTextDisplayRenderer(columns = 6, rows = 3)
 
-        renderer.append("Rux\nOS".encodeToByteArray())
+        renderer.append("K16\nOS".encodeToByteArray())
         val frame = renderer.renderFrame(displayId = 1, pixelWidth = 36, pixelHeight = 27)
 
-        assertEquals("Rux   ", renderer.rowText(0))
+        assertEquals("K16   ", renderer.rowText(0))
         assertEquals("OS    ", renderer.rowText(1))
         assertEquals(1, frame.displayId)
         assertEquals(1, frame.sequence)

@@ -89,7 +89,7 @@ class K16VolumeStoreTest {
 
     @Test
     fun `open or create creates one mebibyte storage0 volume`() {
-        val root = createTempDirectory("rux-volume-store-test-")
+        val root = createTempDirectory("k16-volume-store-test-")
         val store = FileK16VolumeStore(root)
 
         store.openOrCreateComputerVolume(42, "storage0").use { blob ->
@@ -100,7 +100,7 @@ class K16VolumeStoreTest {
 
     @Test
     fun `written bytes survive reopen`() {
-        val root = createTempDirectory("rux-volume-store-test-")
+        val root = createTempDirectory("k16-volume-store-test-")
         val store = FileK16VolumeStore(root)
 
         store.openOrCreateComputerVolume(42, "storage0").use { blob ->
@@ -115,7 +115,7 @@ class K16VolumeStoreTest {
 
     @Test
     fun `resize growth zero fills new bytes`() {
-        val root = createTempDirectory("rux-volume-store-test-")
+        val root = createTempDirectory("k16-volume-store-test-")
         val store = FileK16VolumeStore(root, defaultStorage0Size = 16)
 
         store.openOrCreateComputerVolume(42, "storage0").use { blob ->
@@ -128,7 +128,7 @@ class K16VolumeStoreTest {
 
     @Test
     fun `resize shrink rejects reads beyond new size`() {
-        val root = createTempDirectory("rux-volume-store-test-")
+        val root = createTempDirectory("k16-volume-store-test-")
         val store = FileK16VolumeStore(root, defaultStorage0Size = 16)
 
         store.openOrCreateComputerVolume(42, "storage0").use { blob ->
@@ -143,7 +143,7 @@ class K16VolumeStoreTest {
 
     @Test
     fun `out of bounds write fails deterministically`() {
-        val root = createTempDirectory("rux-volume-store-test-")
+        val root = createTempDirectory("k16-volume-store-test-")
         val store = FileK16VolumeStore(root, defaultStorage0Size = 16)
 
         store.openOrCreateComputerVolume(42, "storage0").use { blob ->
@@ -156,7 +156,7 @@ class K16VolumeStoreTest {
 
     @Test
     fun `invalid magic fails deterministically`() {
-        val root = createTempDirectory("rux-volume-store-test-")
+        val root = createTempDirectory("k16-volume-store-test-")
         writeRawVolume(root, magic = "BADVOL".encodeToByteArray(), version = 1, logicalSize = 16, payloadSize = 16)
 
         val failure = assertFailsWith<K16VolumeException> {
@@ -168,7 +168,7 @@ class K16VolumeStoreTest {
 
     @Test
     fun `unsupported version fails deterministically`() {
-        val root = createTempDirectory("rux-volume-store-test-")
+        val root = createTempDirectory("k16-volume-store-test-")
         writeRawVolume(root, magic = "K16VOL".encodeToByteArray(), version = 2, logicalSize = 16, payloadSize = 16)
 
         val failure = assertFailsWith<K16VolumeException> {
@@ -180,9 +180,9 @@ class K16VolumeStoreTest {
 
     @Test
     fun `truncated header fails deterministically`() {
-        val root = createTempDirectory("rux-volume-store-test-")
+        val root = createTempDirectory("k16-volume-store-test-")
         volumePath(root).parent.createDirectories()
-        volumePath(root).writeBytes("RUX".encodeToByteArray())
+        volumePath(root).writeBytes("K16".encodeToByteArray())
 
         val failure = assertFailsWith<K16VolumeException> {
             FileK16VolumeStore(root).openOrCreateComputerVolume(42, "storage0")
@@ -193,7 +193,7 @@ class K16VolumeStoreTest {
 
     @Test
     fun `truncated payload fails deterministically`() {
-        val root = createTempDirectory("rux-volume-store-test-")
+        val root = createTempDirectory("k16-volume-store-test-")
         writeRawVolume(root, magic = "K16VOL".encodeToByteArray(), version = 1, logicalSize = 16, payloadSize = 8)
 
         val failure = assertFailsWith<K16VolumeException> {
