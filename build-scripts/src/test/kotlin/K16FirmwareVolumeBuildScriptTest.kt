@@ -23,7 +23,7 @@ import org.junit.jupiter.api.Test
 import java.nio.file.Path
 import kotlin.io.path.readText
 
-class RuxFirmwareVolumeBuildScriptTest {
+class K16FirmwareVolumeBuildScriptTest {
     @Test
     fun systemStorage0TaskCreatesPartitionedVolumeBeforePutBoot() {
         val buildScript =
@@ -31,11 +31,13 @@ class RuxFirmwareVolumeBuildScriptTest {
                 .normalize()
                 .readText()
         val taskBody =
-            buildScript.substringAfter("val createRux16SystemStorage0 =")
-                .substringBefore("val putRux16SystemStorage0Boot =")
+            buildScript.substringAfter("val createK16SystemStorage0 =")
+                .substringBefore("val putK16SystemStorage0Boot =")
 
         assertTrue(taskBody.contains("\"volume\""), "storage0 task should invoke rux volume tooling")
         assertTrue(taskBody.contains("\"init\""), "storage0 task must create a RUXPT partitioned volume")
         assertFalse(taskBody.contains("\"create\""), "plain rux volume create is not accepted by put-boot")
+        assertFalse(buildScript.contains("createRux16SystemStorage0"))
+        assertFalse(buildScript.contains("putRux16SystemStorage0Boot"))
     }
 }

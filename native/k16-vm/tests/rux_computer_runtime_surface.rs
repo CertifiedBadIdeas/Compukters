@@ -168,6 +168,7 @@ fn active_overview_docs_use_kraft16_runtime_brand() {
     for forbidden in [
         "Rux16 VM",
         "Rux16 CPU",
+        "Rux16 guest CPU",
         "Rux16 code",
         "Rux16 guest execution",
         "Rust Rux16 computer",
