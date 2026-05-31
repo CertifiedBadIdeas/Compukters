@@ -115,19 +115,25 @@ fn panic(_info: &PanicInfo<'_>) -> ! {
 }
 RS
 
-RUSTC="$RUSTC" \
+if ! RUSTC="$RUSTC" \
     "$CARGO" \
-    rustc \
-    -Z build-std=core \
-    --manifest-path "$WORK_DIR/Cargo.toml" \
-    --target "$TARGET_SPEC" \
-    --target-dir "$WORK_DIR/target" \
-    -- \
-    -C panic=abort \
-    -C relocation-model=static \
-    --emit=obj \
-    -o "$WORK_DIR/main.o" \
-    2> "$WORK_DIR/cargo-rustc.stderr"
+        rustc \
+        -Z build-std=core \
+        -Z json-target-spec \
+        --manifest-path "$WORK_DIR/Cargo.toml" \
+        --target "$TARGET_SPEC" \
+        --target-dir "$WORK_DIR/target" \
+        -- \
+        -C panic=abort \
+        -C relocation-model=static \
+        --emit=obj \
+        -o "$WORK_DIR/main.o" \
+        2> "$WORK_DIR/cargo-rustc.stderr"; then
+    echo "K16 Rust core build failed." >&2
+    echo "----- cargo rustc stderr -----" >&2
+    sed -n '1,160p' "$WORK_DIR/cargo-rustc.stderr" >&2
+    exit 1
+fi
 
 "$LLVM_READOBJ" -h -S -s "$WORK_DIR/main.o" > "$WORK_DIR/main-object.txt"
 require_contains "$WORK_DIR/main-object.txt" "Machine: 0x5258"

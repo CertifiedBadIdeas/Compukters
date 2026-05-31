@@ -89,6 +89,7 @@ fn rust_nocore_smoke_artifacts_are_documented_and_strict() {
     let core_script =
         fs::read_to_string(&core_smoke_script).expect("Rust core smoke script exists");
     assert!(core_script.contains("-Z build-std=core"));
+    assert!(core_script.contains("-Z json-target-spec"));
     assert!(core_script.contains("#![no_std]"));
     assert!(core_script.contains("#![no_main]"));
     assert!(core_script.contains("core::hint::spin_loop"));
@@ -97,6 +98,8 @@ fn rust_nocore_smoke_artifacts_are_documented_and_strict() {
     assert!(core_script.contains("K16_RUST_TARGET_JSON"));
     assert!(core_script.contains("tools/k16-unknown-kraftos.json"));
     assert!(core_script.contains("k16-memory-helpers"));
+    assert!(core_script.contains("K16 Rust core build failed."));
+    assert!(core_script.contains("cargo-rustc.stderr"));
     assert!(core_script.contains("main.kx"));
     assert!(core_script.contains("debug_bytes=2a"));
     assert!(core_script.contains("--bin k16"));
