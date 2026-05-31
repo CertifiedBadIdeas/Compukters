@@ -1308,38 +1308,8 @@ fn k16_volume_put_boot_and_kernel_creates_storage0_that_bundled_bios_executes() 
     )
     .expect("kernel source writes");
 
-    let boot_compile_output = Command::new(rux_binary())
-        .args([
-            "compile",
-            "--target",
-            "boot",
-            boot_source_path.to_str().unwrap(),
-            "-o",
-            boot_path.to_str().unwrap(),
-        ])
-        .output()
-        .expect("rux compile boot runs");
-    assert!(
-        boot_compile_output.status.success(),
-        "stderr: {}",
-        String::from_utf8_lossy(&boot_compile_output.stderr)
-    );
-    let kernel_compile_output = Command::new(rux_binary())
-        .args([
-            "compile",
-            "--target",
-            "kernel",
-            kernel_source_path.to_str().unwrap(),
-            "-o",
-            kernel_path.to_str().unwrap(),
-        ])
-        .output()
-        .expect("rux compile kernel runs");
-    assert!(
-        kernel_compile_output.status.success(),
-        "stderr: {}",
-        String::from_utf8_lossy(&kernel_compile_output.stderr)
-    );
+    compile_source_file_to_path(&boot_source_path, K16ArtifactTarget::Boot, &boot_path);
+    compile_source_file_to_path(&kernel_source_path, K16ArtifactTarget::Kernel, &kernel_path);
     assert!(Command::new(k16_binary())
         .args([
             "volume",
@@ -1452,52 +1422,9 @@ fn k16_volume_boot_kernel_and_init_executes_init_from_root_k16fs() {
     )
     .expect("init source writes");
 
-    let boot_compile_output = Command::new(rux_binary())
-        .args([
-            "compile",
-            "--target",
-            "boot",
-            boot_source_path.to_str().unwrap(),
-            "-o",
-            boot_path.to_str().unwrap(),
-        ])
-        .output()
-        .expect("rux compile boot runs");
-    assert!(
-        boot_compile_output.status.success(),
-        "stderr: {}",
-        String::from_utf8_lossy(&boot_compile_output.stderr)
-    );
-    let kernel_compile_output = Command::new(rux_binary())
-        .args([
-            "compile",
-            "--target",
-            "kernel",
-            kernel_source_path.to_str().unwrap(),
-            "-o",
-            kernel_path.to_str().unwrap(),
-        ])
-        .output()
-        .expect("rux compile kernel runs");
-    assert!(
-        kernel_compile_output.status.success(),
-        "stderr: {}",
-        String::from_utf8_lossy(&kernel_compile_output.stderr)
-    );
-    let init_compile_output = Command::new(rux_binary())
-        .args([
-            "compile",
-            init_source_path.to_str().unwrap(),
-            "-o",
-            init_path.to_str().unwrap(),
-        ])
-        .output()
-        .expect("rux compile init runs");
-    assert!(
-        init_compile_output.status.success(),
-        "stderr: {}",
-        String::from_utf8_lossy(&init_compile_output.stderr)
-    );
+    compile_source_file_to_path(&boot_source_path, K16ArtifactTarget::Boot, &boot_path);
+    compile_source_file_to_path(&kernel_source_path, K16ArtifactTarget::Kernel, &kernel_path);
+    compile_source_file_to_path(&init_source_path, K16ArtifactTarget::Program, &init_path);
 
     assert!(Command::new(k16_binary())
         .args([
@@ -1731,38 +1658,8 @@ fn k16_volume_boot_kernel_and_init_runtime_handoff_blocks_match_artifacts() {
             .expect("init K16E encodes");
     fs::write(&init_path, &init_bytes).expect("init writes");
 
-    let boot_compile_output = Command::new(rux_binary())
-        .args([
-            "compile",
-            "--target",
-            "boot",
-            boot_source_path.to_str().unwrap(),
-            "-o",
-            boot_path.to_str().unwrap(),
-        ])
-        .output()
-        .expect("rux compile boot runs");
-    assert!(
-        boot_compile_output.status.success(),
-        "stderr: {}",
-        String::from_utf8_lossy(&boot_compile_output.stderr)
-    );
-    let kernel_compile_output = Command::new(rux_binary())
-        .args([
-            "compile",
-            "--target",
-            "kernel",
-            kernel_source_path.to_str().unwrap(),
-            "-o",
-            kernel_path.to_str().unwrap(),
-        ])
-        .output()
-        .expect("rux compile kernel runs");
-    assert!(
-        kernel_compile_output.status.success(),
-        "stderr: {}",
-        String::from_utf8_lossy(&kernel_compile_output.stderr)
-    );
+    compile_source_file_to_path(&boot_source_path, K16ArtifactTarget::Boot, &boot_path);
+    compile_source_file_to_path(&kernel_source_path, K16ArtifactTarget::Kernel, &kernel_path);
     let kernel_bytes = fs::read(&kernel_path).expect("kernel K16E reads");
 
     assert!(Command::new(k16_binary())
@@ -1880,38 +1777,8 @@ fn k16_volume_boot_kernel_rejects_protected_init_load_address() {
     )
     .expect("protected init writes");
 
-    let boot_compile_output = Command::new(rux_binary())
-        .args([
-            "compile",
-            "--target",
-            "boot",
-            boot_source_path.to_str().unwrap(),
-            "-o",
-            boot_path.to_str().unwrap(),
-        ])
-        .output()
-        .expect("rux compile boot runs");
-    assert!(
-        boot_compile_output.status.success(),
-        "stderr: {}",
-        String::from_utf8_lossy(&boot_compile_output.stderr)
-    );
-    let kernel_compile_output = Command::new(rux_binary())
-        .args([
-            "compile",
-            "--target",
-            "kernel",
-            kernel_source_path.to_str().unwrap(),
-            "-o",
-            kernel_path.to_str().unwrap(),
-        ])
-        .output()
-        .expect("rux compile kernel runs");
-    assert!(
-        kernel_compile_output.status.success(),
-        "stderr: {}",
-        String::from_utf8_lossy(&kernel_compile_output.stderr)
-    );
+    compile_source_file_to_path(&boot_source_path, K16ArtifactTarget::Boot, &boot_path);
+    compile_source_file_to_path(&kernel_source_path, K16ArtifactTarget::Kernel, &kernel_path);
 
     assert!(Command::new(k16_binary())
         .args([
@@ -2076,38 +1943,8 @@ fn create_boot_kernel_init_volume(name: &str, init_bytes: Option<&[u8]>) -> Path
     let kernel_source_path =
         Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/kernel/init_loader.rx");
 
-    let boot_compile_output = Command::new(rux_binary())
-        .args([
-            "compile",
-            "--target",
-            "boot",
-            boot_source_path.to_str().unwrap(),
-            "-o",
-            boot_path.to_str().unwrap(),
-        ])
-        .output()
-        .expect("rux compile boot runs");
-    assert!(
-        boot_compile_output.status.success(),
-        "stderr: {}",
-        String::from_utf8_lossy(&boot_compile_output.stderr)
-    );
-    let kernel_compile_output = Command::new(rux_binary())
-        .args([
-            "compile",
-            "--target",
-            "kernel",
-            kernel_source_path.to_str().unwrap(),
-            "-o",
-            kernel_path.to_str().unwrap(),
-        ])
-        .output()
-        .expect("rux compile kernel runs");
-    assert!(
-        kernel_compile_output.status.success(),
-        "stderr: {}",
-        String::from_utf8_lossy(&kernel_compile_output.stderr)
-    );
+    compile_source_file_to_path(&boot_source_path, K16ArtifactTarget::Boot, &boot_path);
+    compile_source_file_to_path(&kernel_source_path, K16ArtifactTarget::Kernel, &kernel_path);
 
     assert!(Command::new(k16_binary())
         .args([
@@ -2204,21 +2041,22 @@ fn compile_rini_init_program(name: &str) -> Vec<u8> {
 fn compile_init_program(source: &str, name: &str) -> Vec<u8> {
     let init_source_path = Path::new(env!("CARGO_MANIFEST_DIR")).join(source);
     let init_path = temp_file(name);
-    let init_compile_output = Command::new(rux_binary())
-        .args([
-            "compile",
-            init_source_path.to_str().unwrap(),
-            "-o",
-            init_path.to_str().unwrap(),
-        ])
-        .output()
-        .expect("rux compile RINI init runs");
-    assert!(
-        init_compile_output.status.success(),
-        "stderr: {}",
-        String::from_utf8_lossy(&init_compile_output.stderr)
-    );
+    compile_source_file_to_path(&init_source_path, K16ArtifactTarget::Program, &init_path);
     fs::read(&init_path).expect("RINI init K16E reads")
+}
+
+fn compile_source_file_to_path(source_path: &Path, target: K16ArtifactTarget, output_path: &Path) {
+    let source = fs::read_to_string(source_path)
+        .unwrap_or_else(|error| panic!("source {} reads: {error}", source_path.display()));
+    let artifact = compile_k16_artifact(&source, target).unwrap_or_else(|error| {
+        panic!(
+            "source {} compiles: {}",
+            source_path.display(),
+            error.message
+        )
+    });
+    fs::write(output_path, artifact.bytes)
+        .unwrap_or_else(|error| panic!("output {} writes: {error}", output_path.display()));
 }
 
 fn display_row(snapshot: &K16ComputerTextDisplaySnapshot, row: u32) -> String {
@@ -2243,10 +2081,6 @@ fn temp_file(name: &str) -> PathBuf {
     let path = std::env::temp_dir().join(format!("k16-volume-cli-{}-{name}", std::process::id()));
     let _ = fs::remove_file(&path);
     path
-}
-
-fn rux_binary() -> String {
-    std::env::var("CARGO_BIN_EXE_rux").expect("Cargo exposes rux binary path")
 }
 
 fn k16_binary() -> String {

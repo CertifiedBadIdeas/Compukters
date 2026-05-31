@@ -69,7 +69,7 @@ fn k16_object_abi_docs_define_freestanding_runtime_boundary() {
         "`__k16_memcpy`",
         "`__k16_memset`",
         "`__k16_memmove`",
-        "rust/host/k16-tools/runtime/k16_memory_helpers.rs",
+        "rust/guest/k16-rt/src/no_core_helpers.rs",
         "requires `K16_RUSTC`",
         "`K16_LLVM_BIN_DIR`",
         "Rust-built helper object",

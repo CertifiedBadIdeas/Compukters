@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- The public `rux compile` CLI path is retired. Rux source checks remain under
+  `rux check`, while K16 artifact work stays under `k16`.
+- `k16 runtime k16-memory-helpers` now compiles its helper source from
+  `rust/guest/k16-rt`, so host tooling no longer owns guest runtime code.
+- `k16 runtime k16-memory-helpers` now owns the first integer compiler-rt
+  helper implementations: `__divdi3`, `__udivdi3`, `__moddi3`, and
+  `__umoddi3`.
 - LLVM K16 lowering now maps wide integer div/rem and soft-float operations to
   explicit compiler-rt helper symbols, including i64/i128 div/rem, f32/f64
   arithmetic and comparisons, f16/f32/f64 conversion helpers, and f32/f64

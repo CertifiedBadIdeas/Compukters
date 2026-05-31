@@ -32,7 +32,7 @@ through memory-mapped peripherals.
 | Crate            | Purpose                                                                  |
 |------------------|--------------------------------------------------------------------------|
 | `rust/host/k16-vm`  | Rust virtual machine: Kraft16 CPU, memory-mapped devices, `K16Computer` handle, JNI exports |
-| `rust/host/k16-tools` | Rux language frontend plus `rux compile`; K16 artifact tooling via `k16` for disassembly, volume, and filesystem commands |
+| `rust/host/k16-tools` | Legacy Rux source checks plus K16 artifact tooling via `k16` for disassembly, volume, and filesystem commands |
 
 ## Module ownership rules
 

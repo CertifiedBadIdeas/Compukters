@@ -40,8 +40,8 @@ k16 link --target <boot|kernel|program> <input.ko>... -o <output.kx>
 
 The command accepts K16 ELF32 `ET_REL` inputs, resolves static symbols,
 applies supported relocations, and emits a validated single-load-section
-`K16E`. It does not emit raw BIOS flash; BIOS images remain a `rux compile`
-source-artifact path.
+`K16E`. It does not emit raw BIOS flash; BIOS images are moving to Rust-built
+firmware artifacts rather than the retired public `rux compile` path.
 
 ## Freestanding Runtime Boundary
 
@@ -62,13 +62,12 @@ The startup object writes the low byte of `main`'s `r0` return value to
 initial return-42/add proof boundary. It is not a libc, an OS ABI, or a syscall
 surface.
 
-The memory helper object is built from the bundled Rust `#![no_core]` runtime
-source at `rust/host/k16-tools/runtime/k16_memory_helpers.rs`. Building it
-requires `K16_RUSTC` to point at the custom rustc that contains the K16 LLVM
-target and `K16_LLVM_BIN_DIR` to point at the K16 LLVM tools used to lower
-the generated LLVM IR into an ELF object. `K16_RUST_TARGET_JSON` can override
-the target spec; otherwise the repo target spec at
-`tools/k16-unknown-kraftos.json` is used.
+The memory and integer helper object is built from the guest Rust `#![no_core]`
+runtime source at `rust/guest/k16-rt/src/no_core_helpers.rs`. Building it requires
+`K16_RUSTC` to point at the custom rustc that contains the K16 LLVM target and
+`K16_LLVM_BIN_DIR` to point at the K16 LLVM tools used to lower the generated
+LLVM IR into an ELF object. `K16_RUST_TARGET_JSON` can override the target spec;
+otherwise the repo target spec at `tools/k16-unknown-kraftos.json` is used.
 
 Runtime helper symbol names:
 
@@ -78,6 +77,10 @@ Runtime helper symbol names:
 `__k16_memcpy`  provided by k16-memory-helpers
 `__k16_memset`  provided by k16-memory-helpers
 `__k16_memmove` provided by k16-memory-helpers
+`__divdi3`       provided by k16-memory-helpers
+`__udivdi3`      provided by k16-memory-helpers
+`__moddi3`       provided by k16-memory-helpers
+`__umoddi3`      provided by k16-memory-helpers
 ```
 
 Missing helper symbols are link-time errors. The linker must not synthesize
