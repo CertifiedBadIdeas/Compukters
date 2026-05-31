@@ -10,7 +10,7 @@ it is a native Rust virtual machine (`k16-vm`) wrapped via JNI.
 - 💻 **Notebook** — a portable player-facing computer item that boots its own
   Kraft16 VM instance on a background daemon thread.
 - 🖥 **Kraft16 VM** — a deterministic, sandboxed virtual machine implemented in
-  Rust. Boots Rux16 code from per-computer `bios.kflash` files and storage0
+  Rust. Boots K16 code from per-computer `bios.kflash` files and storage0
   `.kv` boot media.
 - 🔌 **Display + input devices** — accelerated framebuffer with `copyRect` /
   `blitMono` primitives, terminal input queue, and a per-device runtime workspace.

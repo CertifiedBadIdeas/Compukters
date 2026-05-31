@@ -4,7 +4,7 @@
 > in-game Workbench IDE have been removed. As of issue #44 the legacy
 > Image-VM (host-call opcode, multi-process device daemon, runtime
 > kernel, host-imported filesystem) has also been retired. The active
-> computer boot path is now Rux16 guest execution from BIOS flash and
+> computer boot path is now Kraft16 guest execution from BIOS flash and
 > storage-backed boot media. Older revisions in git history describe the
 > previous architectures.
 
@@ -31,7 +31,7 @@ through memory-mapped peripherals.
 
 | Crate            | Purpose                                                                  |
 |------------------|--------------------------------------------------------------------------|
-| `native/k16-vm`  | Rust virtual machine: Rux16 CPU, memory-mapped devices, `K16Computer` handle, JNI exports |
+| `native/k16-vm`  | Rust virtual machine: Kraft16 CPU, memory-mapped devices, `K16Computer` handle, JNI exports |
 | `native/rux-compiler` | Rux language frontend plus `rux compile`; K16 artifact tooling via `k16` for disassembly, volume, and filesystem commands |
 
 ## Module ownership rules
@@ -51,7 +51,7 @@ NotebookItem.use()
 RuntimeDevice.boot()
   └─ NativeVmBindings.createK16ComputerFromBiosFlash(biosFlashPath, storage0Path, ...)
         └─ Rust K16ComputerHandle
-              ├─ Rux16 CPU fetching instructions from mapped BIOS flash
+              ├─ Kraft16 CPU fetching instructions from mapped BIOS flash
               ├─ storage0 KV boot media
               ├─ flat RAM + MMIO bus (control, debug-serial, serial-input,
               │   text-display, storage0, bios-flash)
@@ -70,9 +70,9 @@ RuntimeDevice.close()
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│  Rust Rux16 computer (driven on demand by JNI calls)                │
+│  Rust K16 computer (driven on demand by JNI calls)                  │
 │                                                                     │
-│  Rux16 BIOS executing from mapped bios.kflash                       │
+│  Kraft16 BIOS executing from mapped bios.kflash                     │
 │    ├─ MMIO control device  ──►  status / exit / panic registers      │
 │    ├─ MMIO debug serial    ──►  K16ComputerHandle.debug_output       │
 │    ├─ MMIO serial input    ◄──  player keyboard events               │
@@ -86,7 +86,7 @@ RuntimeDevice.close()
 │  Server tick thread (main thread)                                   │
 │                                                                     │
 │  RuntimeDevice.serverTick()                                          │
-│    ├─ NativeVmBindings.runRux16ComputerUntilSignal(handle)           │
+│    ├─ NativeVmBindings.runK16ComputerUntilSignal(handle)             │
 │    ├─ poll display snapshot / debug output                           │
 │    ├─ flushDisplaySessions → FrameDeltaClientMessage                 │
 │    └─ react to control register (halt / crash / reboot)              │
