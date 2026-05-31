@@ -7,5 +7,13 @@ name = "k16-abi"
 version = "0.1.0"
 
 [[package]]
+name = "k16-bios"
+version = "0.1.0"
+dependencies = [
+ "k16-abi",
+ "k16-rt",
+]
+
+[[package]]
 name = "k16-rt"
 version = "0.1.0"

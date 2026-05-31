@@ -47,6 +47,24 @@ class K16ToolingRenameTest {
     }
 
     @Test
+    fun rustBiosLivesAsGuestCrate() {
+        val workspaceManifest = root.resolve("rust/guest/Cargo.toml").readText()
+        val biosManifest = root.resolve("rust/guest/k16-bios/Cargo.toml")
+        val biosSource = root.resolve("rust/guest/k16-bios/src/main.rs")
+
+        assertTrue(workspaceManifest.contains("\"k16-bios\""))
+        assertTrue(biosManifest.exists())
+        assertTrue(biosSource.exists())
+
+        val source = biosSource.readText()
+        assertTrue(source.contains("#![no_std]"))
+        assertTrue(source.contains("#![no_main]"))
+        assertTrue(source.contains("extern \"C\" fn _start() -> !"))
+        assertTrue(source.contains("K16 BIOS"))
+        assertTrue(source.contains("No bootable device"))
+    }
+
+    @Test
     fun activeAbiDocsUseK16FormatNames() {
         val abiDir = root.resolve("docs/abi")
 

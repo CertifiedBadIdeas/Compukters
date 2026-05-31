@@ -62,6 +62,19 @@ rust/guest/k16-bios
 The old `.rx` BIOS must not remain the source of truth. It may stay temporarily
 as a legacy comparison fixture only if a test explicitly labels it that way.
 
+## Current Implementation State
+
+`rust/guest/k16-bios` now exists as the dedicated Rust BIOS guest crate. Its
+entrypoint is a `#![no_std]`, `#![no_main]` `_start` path that writes the same
+initial BIOS/no-bootable-device text through the shared `k16-abi` MMIO surface.
+
+The crate's executable target is gated behind an explicit `k16-target` feature
+so normal host-side workspace checks do not try to link freestanding BIOS code
+against the host runtime. The final `k16-target` build path must use the custom
+K16 Rust target pipeline. On the current local toolchain, that path is blocked
+before object emission by rustc failing to create an LLVM TargetMachine for
+`k16`; this should stay visible instead of being hidden behind a Rux fallback.
+
 ## BIOS Contract
 
 The Rust BIOS must preserve the current observable behavior:
