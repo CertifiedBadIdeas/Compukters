@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- LLVM K16 lowering now emits caller-cleaned stack arguments after `r1..r3`,
+  matching the documented external call ABI.
 - The LLVM-facing call ABI now supports up to four scalar `i32` return values
   in `r0..r3`, matching small Rust/LLVM multi-value returns without introducing
   hidden return pointers.
