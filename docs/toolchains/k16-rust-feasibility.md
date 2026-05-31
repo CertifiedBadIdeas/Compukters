@@ -80,11 +80,12 @@ arch:               k16
 os/env/vendor:      explicit experimental values
 panic strategy:     abort
 relocation model:   static
-executables:        false at rustc layer; K16E is produced by k16 link
+executables:        true, so Cargo can build guest binaries before k16 link
 ```
 
-The Rust target must emit ordinary K16 ELF objects. Rust must not emit `K16E`
-directly in the first slice.
+The Rust target must emit ordinary K16 ELF objects or intermediate executable
+inputs that `k16 link` consumes. Rust must not emit `K16E` directly in the first
+slice.
 
 ### Entry And Link Boundary
 
