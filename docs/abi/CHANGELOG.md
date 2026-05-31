@@ -7,6 +7,8 @@
   hidden return pointers.
 - Added K16 `mul` as canonical ALU subop `0xc`, with VM execution,
   disassembly, assembler helper, and LLVM lowering/emission support.
+- Added K16 `mulh_u` and `mulh_s` as canonical ALU subops `0xd` and `0xe`
+  for high-half integer multiply and LLVM `*_lohi` lowering support.
 - `k16 disasm` now validates K16 instruction encodings against the active VM
   decode rules and fails clearly on reserved bits, unknown opcodes, and
   truncated multi-word instructions instead of printing `.word` fallback lines.

@@ -217,7 +217,7 @@ LLVM-specific behavior inside the VM. The active CPU, assembler, disassembler,
 and compiler tooling cover these instruction families:
 
 - constants: small immediates and full 32-bit constants;
-- arithmetic: `add`, `sub`, and `mul`;
+- arithmetic: `add`, `sub`, `mul`, `mulh_u`, and `mulh_s`;
 - bitwise operations: `and`, `or`, `xor`, and `not` or an equivalent lowering;
 - shifts: logical left, logical right, and arithmetic right;
 - comparisons: `eq`, `ne`, unsigned relational comparisons, and signed
@@ -266,6 +266,8 @@ s    mnemonic    semantics
 0xa  ltu         dst = unsigned(lhs) < unsigned(rhs) ? 1 : 0
 0xb  lt_s        dst = signed(lhs) < signed(rhs) ? 1 : 0
 0xc  mul         dst = lhs * rhs, wrapping u32
+0xd  mulh_u      dst = high 32 bits of unsigned(lhs) * unsigned(rhs)
+0xe  mulh_s      dst = high 32 bits of signed(lhs) * signed(rhs)
 ```
 
 There are no compatibility aliases for older experimental encodings. The VM

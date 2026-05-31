@@ -97,6 +97,8 @@ pub enum DecodedInstruction {
     Add { dst: usize, lhs: usize, rhs: usize },
     Sub { dst: usize, lhs: usize, rhs: usize },
     Mul { dst: usize, lhs: usize, rhs: usize },
+    MulHU { dst: usize, lhs: usize, rhs: usize },
+    MulHS { dst: usize, lhs: usize, rhs: usize },
     And { dst: usize, lhs: usize, rhs: usize },
     Or { dst: usize, lhs: usize, rhs: usize },
     Xor { dst: usize, lhs: usize, rhs: usize },
@@ -196,6 +198,8 @@ impl InstructionDecoder for K16Decoder {
                     0xa => DecodedInstruction::Ltu { dst: a, lhs, rhs },
                     0xb => DecodedInstruction::LtS { dst: a, lhs, rhs },
                     0xc => DecodedInstruction::Mul { dst: a, lhs, rhs },
+                    0xd => DecodedInstruction::MulHU { dst: a, lhs, rhs },
+                    0xe => DecodedInstruction::MulHS { dst: a, lhs, rhs },
                     _ => return Err(illegal_instruction(pc, word)),
                 };
                 return Ok(DecodeResult {
@@ -443,6 +447,17 @@ impl K16Cpu {
             }
             DecodedInstruction::Mul { dst, lhs, rhs } => {
                 self.registers[dst] = self.registers[lhs].wrapping_mul(self.registers[rhs]);
+                Ok(None)
+            }
+            DecodedInstruction::MulHU { dst, lhs, rhs } => {
+                let product = u64::from(self.registers[lhs]) * u64::from(self.registers[rhs]);
+                self.registers[dst] = (product >> 32) as u32;
+                Ok(None)
+            }
+            DecodedInstruction::MulHS { dst, lhs, rhs } => {
+                let lhs = i64::from(self.registers[lhs] as i32);
+                let rhs = i64::from(self.registers[rhs] as i32);
+                self.registers[dst] = ((lhs * rhs) >> 32) as u32;
                 Ok(None)
             }
             DecodedInstruction::And { dst, lhs, rhs } => {

@@ -244,6 +244,10 @@ fn k16_executes_canonical_integer_register_ops() {
     program.extend(ne(7, 1, 2));
     program.extend(ltu(8, 2, 1));
     program.extend(mul(9, 1, 2));
+    program.extend(mulh_u(10, 1, 2));
+    program.extend(const32(11, 0xffff_fffe));
+    program.extend(const32(12, 2));
+    program.extend(mulh_s(13, 11, 12));
     program.push(halt());
     write_words(&mut bus, 0, &program);
     let mut cpu = K16Cpu::new(0);
@@ -256,6 +260,8 @@ fn k16_executes_canonical_integer_register_ops() {
     assert_eq!(cpu.register(7), 1);
     assert_eq!(cpu.register(8), 1);
     assert_eq!(cpu.register(9), 0x0000_0e10);
+    assert_eq!(cpu.register(10), 0);
+    assert_eq!(cpu.register(13), 0xffff_ffff);
 }
 
 #[test]
@@ -417,6 +423,14 @@ fn lt_s(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
 
 fn mul(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
     alu_rrr(dst, 0xc, lhs, rhs)
+}
+
+fn mulh_u(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
+    alu_rrr(dst, 0xd, lhs, rhs)
+}
+
+fn mulh_s(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
+    alu_rrr(dst, 0xe, lhs, rhs)
 }
 
 fn shl(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {

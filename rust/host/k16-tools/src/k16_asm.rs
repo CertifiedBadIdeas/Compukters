@@ -201,6 +201,8 @@ mod tests {
         assert_eq!(add(2, 1, 3), [0x2200, 0x0013]);
         assert_eq!(sub(2, 1, 3), [0x2201, 0x0013]);
         assert_eq!(mul(2, 1, 3), [0x220c, 0x0013]);
+        assert_eq!(alu_rrr(2, 0xd, 1, 3), [0x220d, 0x0013]);
+        assert_eq!(alu_rrr(2, 0xe, 1, 3), [0x220e, 0x0013]);
         assert_eq!(and(2, 1, 3), [0x2202, 0x0013]);
         assert_eq!(or(2, 1, 3), [0x2203, 0x0013]);
         assert_eq!(xor(2, 1, 3), [0x2204, 0x0013]);
