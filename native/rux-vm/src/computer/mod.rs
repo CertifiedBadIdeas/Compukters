@@ -5,7 +5,7 @@ pub mod profile;
 pub mod snapshot;
 
 pub use devices::ComputerTextDisplaySnapshot;
-pub use handle::{RuxComputerControl, RuxComputerHandle, RuxComputerTextDisplaySnapshot};
+pub use handle::{K16ComputerControl, K16ComputerHandle, K16ComputerTextDisplaySnapshot};
 pub use machine::{
     BootHandoffError, ComputerMachine, ComputerMemoryMap, ComputerMemoryRegion, CpuId,
 };

@@ -4,9 +4,17 @@ use std::path::Path;
 #[test]
 fn rux_computer_handle_source_does_not_expose_low_image_startup_or_handoff() {
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let lib_source = fs::read_to_string(manifest_dir.join("src/lib.rs")).unwrap();
+    let computer_mod_source = fs::read_to_string(manifest_dir.join("src/computer/mod.rs")).unwrap();
     let handle_source = fs::read_to_string(manifest_dir.join("src/computer/handle.rs")).unwrap();
     let jni_source = fs::read_to_string(manifest_dir.join("src/jni.rs")).unwrap();
 
+    assert!(lib_source.contains("pub mod k16_computer"));
+    assert!(!lib_source.contains("pub mod rux_computer"));
+    assert!(computer_mod_source.contains("K16ComputerHandle"));
+    assert!(!computer_mod_source.contains("RuxComputerHandle"));
+    assert!(handle_source.contains("pub struct K16ComputerHandle"));
+    assert!(!handle_source.contains("pub struct RuxComputerHandle"));
     assert!(!handle_source.contains("pub fn create("));
     assert!(!handle_source.contains("create_with_storage0_media"));
     assert!(!handle_source.contains("create_with_storage0_path"));

@@ -3,8 +3,8 @@ use rux_compiler::compile_rux16_artifact;
 use rux_compiler::ruxe;
 use rux_compiler::ruxfs;
 use rux_compiler::volume;
+use rux_vm::k16_computer::{K16ComputerHandle, K16ComputerTextDisplaySnapshot};
 use rux_vm::rux16::Rux16Signal;
-use rux_vm::rux_computer::{RuxComputerHandle, RuxComputerTextDisplaySnapshot};
 use std::fs;
 use std::path::Path;
 use std::path::PathBuf;
@@ -1396,7 +1396,7 @@ fn rux_volume_put_boot_and_kernel_creates_storage0_that_bundled_bios_executes() 
         .success());
 
     let bios = compile_bundled_rux16_bios();
-    let mut handle = RuxComputerHandle::create_rux16_bios_flash_with_storage0_path(
+    let mut handle = K16ComputerHandle::create_rux16_bios_flash_with_storage0_path(
         &bios,
         64 * 1024,
         1_000_000,
@@ -1572,7 +1572,7 @@ fn rux_volume_boot_kernel_and_init_executes_init_from_root_ruxfs() {
         .success());
 
     let bios = compile_bundled_rux16_bios();
-    let mut handle = RuxComputerHandle::create_rux16_bios_flash_with_storage0_path(
+    let mut handle = K16ComputerHandle::create_rux16_bios_flash_with_storage0_path(
         &bios,
         64 * 1024,
         1_000_000,
@@ -1609,7 +1609,7 @@ fn rux_volume_boot_kernel_and_rini_init_consumes_handoff() {
     let volume_path =
         create_boot_kernel_init_volume("rini-init-consumes-handoff", Some(&init_bytes));
     let bios = compile_bundled_rux16_bios();
-    let mut handle = RuxComputerHandle::create_rux16_bios_flash_with_storage0_path(
+    let mut handle = K16ComputerHandle::create_rux16_bios_flash_with_storage0_path(
         &bios,
         64 * 1024,
         1_000_000,
@@ -1638,7 +1638,7 @@ fn rux_volume_boot_kernel_and_rini_init_consumes_handoff() {
 fn rux16_rini_init_fails_without_handoff() {
     let init_bytes = compile_rini_init_program("rini-init-missing-handoff-init.kx");
     let bios = vec![0x01, 0x00];
-    let mut handle = RuxComputerHandle::create_rux16_bios_flash(&bios, 64 * 1024, 1_000_000)
+    let mut handle = K16ComputerHandle::create_rux16_bios_flash(&bios, 64 * 1024, 1_000_000)
         .expect("Rux16 BIOS flash computer creates");
 
     handle
@@ -1656,7 +1656,7 @@ fn rux16_rini_init_fails_without_handoff() {
 fn rux16_rini_init_fails_with_invalid_handoff_magic() {
     let init_bytes = compile_rini_init_program("rini-init-invalid-handoff-init.kx");
     let bios = vec![0x01, 0x00];
-    let mut handle = RuxComputerHandle::create_rux16_bios_flash(&bios, 64 * 1024, 1_000_000)
+    let mut handle = K16ComputerHandle::create_rux16_bios_flash(&bios, 64 * 1024, 1_000_000)
         .expect("Rux16 BIOS flash computer creates");
     handle
         .write_guest_ram_bytes(0x3f20, b"BAD!")
@@ -1690,7 +1690,7 @@ fn rux_volume_boot_kernel_and_trap_init_uses_kernel_handler() {
     );
     let volume_path = create_boot_kernel_init_volume("trap-init-kernel-handler", Some(&init_bytes));
     let bios = compile_bundled_rux16_bios();
-    let mut handle = RuxComputerHandle::create_rux16_bios_flash_with_storage0_path(
+    let mut handle = K16ComputerHandle::create_rux16_bios_flash_with_storage0_path(
         &bios,
         64 * 1024,
         1_000_000,
@@ -1838,7 +1838,7 @@ fn rux_volume_boot_kernel_and_init_runtime_handoff_blocks_match_artifacts() {
         .success());
 
     let bios = compile_bundled_rux16_bios();
-    let mut handle = RuxComputerHandle::create_rux16_bios_flash_with_storage0_path(
+    let mut handle = K16ComputerHandle::create_rux16_bios_flash_with_storage0_path(
         &bios,
         64 * 1024,
         1_000_000,
@@ -1986,7 +1986,7 @@ fn rux_volume_boot_kernel_rejects_protected_init_load_address() {
         .success());
 
     let bios = compile_bundled_rux16_bios();
-    let mut handle = RuxComputerHandle::create_rux16_bios_flash_with_storage0_path(
+    let mut handle = K16ComputerHandle::create_rux16_bios_flash_with_storage0_path(
         &bios,
         64 * 1024,
         1_000_000,
@@ -2006,7 +2006,7 @@ fn rux_volume_boot_kernel_rejects_protected_init_load_address() {
 fn rux_volume_boot_kernel_init_failure_missing_init_clears_stale_handoff() {
     let volume_path = create_boot_kernel_init_volume("missing-init-failure", None);
     let bios = compile_bundled_rux16_bios();
-    let mut handle = RuxComputerHandle::create_rux16_bios_flash_with_storage0_path(
+    let mut handle = K16ComputerHandle::create_rux16_bios_flash_with_storage0_path(
         &bios,
         64 * 1024,
         1_000_000,
@@ -2039,7 +2039,7 @@ fn rux_volume_boot_kernel_init_failure_wrong_abi_clears_stale_handoff() {
             .expect("wrong init RUXE encodes");
     let volume_path = create_boot_kernel_init_volume("wrong-init-abi-failure", Some(&wrong_init));
     let bios = compile_bundled_rux16_bios();
-    let mut handle = RuxComputerHandle::create_rux16_bios_flash_with_storage0_path(
+    let mut handle = K16ComputerHandle::create_rux16_bios_flash_with_storage0_path(
         &bios,
         64 * 1024,
         1_000_000,
@@ -2221,7 +2221,7 @@ fn compile_init_program(source: &str, name: &str) -> Vec<u8> {
     fs::read(&init_path).expect("RINI init RUXE reads")
 }
 
-fn display_row(snapshot: &RuxComputerTextDisplaySnapshot, row: u32) -> String {
+fn display_row(snapshot: &K16ComputerTextDisplaySnapshot, row: u32) -> String {
     let start = (row * snapshot.columns) as usize;
     let end = start + snapshot.columns as usize;
     let row = &snapshot.cells[start..end];
@@ -2232,7 +2232,7 @@ fn display_row(snapshot: &RuxComputerTextDisplaySnapshot, row: u32) -> String {
     String::from_utf8_lossy(&row[..visible_end]).to_string()
 }
 
-fn read_guest_u32(handle: &RuxComputerHandle, address: u32) -> u32 {
+fn read_guest_u32(handle: &K16ComputerHandle, address: u32) -> u32 {
     let bytes = handle
         .read_guest_ram_bytes(address, 4)
         .expect("guest RAM bytes read");

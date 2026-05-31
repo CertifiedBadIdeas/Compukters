@@ -3,8 +3,8 @@ use crate::{
     advice, compile_rux16_artifact, inspect, object_link, rux16_disasm, rux16_runtime, ruxfs,
     volume,
 };
+use rux_vm::k16_computer::K16ComputerHandle;
 use rux_vm::rux16::Rux16Signal;
-use rux_vm::rux_computer::RuxComputerHandle;
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -66,7 +66,7 @@ fn run_program(surface: CliSurface, args: &[String]) -> Result<(), String> {
     let program =
         fs::read(&args[0]).map_err(|error| format!("failed to read {}: {error}", args[0]))?;
     let mut handle =
-        RuxComputerHandle::create_rux16_bios_flash(&[0x01, 0x00], 64 * 1024, 1_000_000)
+        K16ComputerHandle::create_rux16_bios_flash(&[0x01, 0x00], 64 * 1024, 1_000_000)
             .map_err(|error| format!("failed to create Rux16 computer: {error}"))?;
     handle
         .exec_ruxe_program_from_bytes(&program, 1_000_000)

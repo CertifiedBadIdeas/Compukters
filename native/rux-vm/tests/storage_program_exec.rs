@@ -1,5 +1,5 @@
 use rux_vm::computer_machine::ComputerMachine;
-use rux_vm::rux_computer::RuxComputerHandle;
+use rux_vm::k16_computer::K16ComputerHandle;
 use rux_vm::{ruxe, storage_image};
 
 #[test]
@@ -10,7 +10,7 @@ fn runtime_exec_runs_program_ruxe_payload_from_entry_pc() {
     let program_payload = rux16_words(&program_words);
     let init = encode_ruxe(3, 0x8002, 0x8000, &program_payload);
     let mut handle =
-        RuxComputerHandle::create_rux16_bios_flash(&bios, 64 * 1024, 8).expect("VM creates");
+        K16ComputerHandle::create_rux16_bios_flash(&bios, 64 * 1024, 8).expect("VM creates");
 
     handle
         .exec_ruxe_program_from_bytes(&init, 256)
