@@ -14,6 +14,44 @@ fn rux_computer_handle_source_does_not_expose_low_image_startup_or_handoff() {
     assert!(!jni_source.contains("createLowImageNative"));
     assert!(!jni_source.contains("createRuxComputerNative"));
     assert!(!jni_source.contains("runRuxComputerUntilSignalNative"));
+
+    for required_name in [
+        "createK16ComputerFromBiosFlashNative",
+        "restoreK16ComputerFromBiosFlashSnapshotNative",
+        "runK16ComputerUntilSignalNative",
+        "k16ComputerControlNative",
+        "k16ComputerDebugOutputNative",
+        "drainK16ComputerDebugOutputNative",
+        "k16ComputerDisplay0SnapshotNative",
+        "k16ComputerStorage0MediaSnapshotNative",
+        "k16ComputerMachineSnapshotNative",
+        "pushK16ComputerSerialInputNative",
+        "freeK16ComputerNative",
+    ] {
+        assert!(
+            jni_source.contains(required_name),
+            "src/jni.rs should expose {required_name}"
+        );
+    }
+
+    for legacy_name in [
+        "createRuxComputerFromBiosFlashNative",
+        "restoreRuxComputerFromBiosFlashSnapshotNative",
+        "runRux16ComputerUntilSignalNative",
+        "ruxComputerControlNative",
+        "ruxComputerDebugOutputNative",
+        "drainRuxComputerDebugOutputNative",
+        "ruxComputerDisplay0SnapshotNative",
+        "ruxComputerStorage0MediaSnapshotNative",
+        "ruxComputerMachineSnapshotNative",
+        "pushRuxComputerSerialInputNative",
+        "freeRuxComputerNative",
+    ] {
+        assert!(
+            !jni_source.contains(legacy_name),
+            "src/jni.rs should not expose {legacy_name}"
+        );
+    }
 }
 
 #[test]

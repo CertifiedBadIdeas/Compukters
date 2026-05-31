@@ -118,6 +118,42 @@ class K16ComputerRuntimeFactoryTest {
         assertFalse(bindingsSource.contains("fun restoreRuxComputerFromBiosFlashSnapshot("))
         assertTrue(bindingsSource.contains("fun runK16ComputerUntilSignal(handle: Long)"))
         assertFalse(bindingsSource.contains("fun runRux16ComputerUntilSignal(handle: Long)"))
+
+        for (requiredName in
+            listOf(
+                "createK16ComputerFromBiosFlashNative",
+                "restoreK16ComputerFromBiosFlashSnapshotNative",
+                "runK16ComputerUntilSignalNative",
+                "k16ComputerControlNative",
+                "k16ComputerDebugOutputNative",
+                "drainK16ComputerDebugOutputNative",
+                "k16ComputerDisplay0SnapshotNative",
+                "k16ComputerStorage0MediaSnapshotNative",
+                "k16ComputerMachineSnapshotNative",
+                "pushK16ComputerSerialInputNative",
+                "freeK16ComputerNative",
+            )
+        ) {
+            assertTrue(bindingsSource.contains(requiredName), "NativeVmBindings.kt should expose $requiredName")
+        }
+
+        for (legacyName in
+            listOf(
+                "createRuxComputerFromBiosFlashNative",
+                "restoreRuxComputerFromBiosFlashSnapshotNative",
+                "runRux16ComputerUntilSignalNative",
+                "ruxComputerControlNative",
+                "ruxComputerDebugOutputNative",
+                "drainRuxComputerDebugOutputNative",
+                "ruxComputerDisplay0SnapshotNative",
+                "ruxComputerStorage0MediaSnapshotNative",
+                "ruxComputerMachineSnapshotNative",
+                "pushRuxComputerSerialInputNative",
+                "freeRuxComputerNative",
+            )
+        ) {
+            assertFalse(bindingsSource.contains(legacyName), "NativeVmBindings.kt should not expose $legacyName")
+        }
     }
 
     @Test

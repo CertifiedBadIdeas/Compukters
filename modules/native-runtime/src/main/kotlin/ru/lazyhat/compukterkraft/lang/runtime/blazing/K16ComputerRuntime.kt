@@ -44,31 +44,24 @@ interface K16ComputerRuntimeBindings {
 }
 
 object NativeK16ComputerRuntimeBindings : K16ComputerRuntimeBindings {
-    override fun runUntilSignal(handle: Long): NativeK16ComputerSignal =
-        NativeVmBindings.runK16ComputerUntilSignal(handle)
+    override fun runUntilSignal(handle: Long): NativeK16ComputerSignal = NativeVmBindings.runK16ComputerUntilSignal(handle)
 
-    override fun control(handle: Long): NativeK16ComputerControl =
-        NativeVmBindings.ruxComputerControl(handle)
+    override fun control(handle: Long): NativeK16ComputerControl = NativeVmBindings.k16ComputerControl(handle)
 
     override fun pushSerialInput(
         handle: Long,
         bytes: ByteArray,
-    ) = NativeVmBindings.pushRuxComputerSerialInput(handle, bytes)
+    ) = NativeVmBindings.pushK16ComputerSerialInput(handle, bytes)
 
-    override fun drainDebugOutput(handle: Long): ByteArray =
-        NativeVmBindings.drainRuxComputerDebugOutput(handle)
+    override fun drainDebugOutput(handle: Long): ByteArray = NativeVmBindings.drainK16ComputerDebugOutput(handle)
 
-    override fun display0Snapshot(handle: Long): NativeK16ComputerDisplaySnapshot? =
-        NativeVmBindings.ruxComputerDisplay0Snapshot(handle)
+    override fun display0Snapshot(handle: Long): NativeK16ComputerDisplaySnapshot? = NativeVmBindings.k16ComputerDisplay0Snapshot(handle)
 
-    override fun storage0MediaSnapshot(handle: Long): ByteArray? =
-        NativeVmBindings.ruxComputerStorage0MediaSnapshot(handle)
+    override fun storage0MediaSnapshot(handle: Long): ByteArray? = NativeVmBindings.k16ComputerStorage0MediaSnapshot(handle)
 
-    override fun machineSnapshot(handle: Long): ByteArray =
-        NativeVmBindings.ruxComputerMachineSnapshot(handle)
+    override fun machineSnapshot(handle: Long): ByteArray = NativeVmBindings.k16ComputerMachineSnapshot(handle)
 
-    override fun free(handle: Long) =
-        NativeVmBindings.freeRuxComputer(handle)
+    override fun free(handle: Long) = NativeVmBindings.freeK16Computer(handle)
 }
 
 object K16ComputerRuntimeFactory {
@@ -88,7 +81,7 @@ object K16ComputerRuntimeFactory {
                 memorySize = memorySize,
                 maxSteps = maxSteps,
                 storage0Path = storage0Path,
-        )
+            )
         return K16ComputerRuntime(handle, bindings = NativeK16ComputerRuntimeBindings)
     }
 
@@ -148,11 +141,9 @@ class K16ComputerRuntime(
         }
     }
 
-    fun pushInput(text: String) =
-        pushInput(text.encodeToByteArray())
+    fun pushInput(text: String) = pushInput(text.encodeToByteArray())
 
-    fun tick(): NativeK16ComputerControl =
-        tick(defaultMaxTurnsPerTick)
+    fun tick(): NativeK16ComputerControl = tick(defaultMaxTurnsPerTick)
 
     override fun tick(maxTurns: Int): NativeK16ComputerControl {
         ensureOpen()
@@ -184,10 +175,11 @@ class K16ComputerRuntime(
 
     override fun pollDisplay0Snapshot(): NativeK16ComputerDisplaySnapshot? {
         ensureOpen()
-        val snapshot = bindings.display0Snapshot(handle) ?: run {
-            lastDisplay0Sequence = null
-            return null
-        }
+        val snapshot =
+            bindings.display0Snapshot(handle) ?: run {
+                lastDisplay0Sequence = null
+                return null
+            }
         if (lastDisplay0Sequence == snapshot.sequence) {
             return null
         }
@@ -228,6 +220,6 @@ class K16ComputerRuntime(
     }
 
     private fun ensureOpen() {
-        check(!closed) { "Rux computer runtime is closed" }
+        check(!closed) { "K16 computer runtime is closed" }
     }
 }
