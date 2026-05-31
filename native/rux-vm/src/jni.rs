@@ -8,7 +8,7 @@ use crate::rux16::Rux16Signal;
 use crate::rux_computer::{RuxComputerHandle, RuxComputerTextDisplaySnapshot};
 
 #[no_mangle]
-pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_createRuxComputerFromBiosFlashNative(
+pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_createK16ComputerFromBiosFlashNative(
     mut env: JNIEnv<'_>,
     _class: JClass<'_>,
     bios_flash_path: JString<'_>,
@@ -31,7 +31,7 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
         Err(error) => {
             let _ = env.throw_new(
                 "java/lang/IllegalArgumentException",
-                format!("Cannot read Rux computer storage0 path: {error}"),
+                format!("Cannot read K16 computer storage0 path: {error}"),
             );
             return 0;
         }
@@ -51,7 +51,7 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
 }
 
 #[no_mangle]
-pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_restoreRuxComputerFromBiosFlashSnapshotNative(
+pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_restoreK16ComputerFromBiosFlashSnapshotNative(
     mut env: JNIEnv<'_>,
     _class: JClass<'_>,
     bios_flash_path: JString<'_>,
@@ -74,7 +74,7 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
         Err(error) => {
             let _ = env.throw_new(
                 "java/lang/IllegalArgumentException",
-                format!("Cannot read Rux computer storage0 path: {error}"),
+                format!("Cannot read K16 computer storage0 path: {error}"),
             );
             return 0;
         }
@@ -84,7 +84,7 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
         Err(error) => {
             let _ = env.throw_new(
                 "java/lang/IllegalArgumentException",
-                format!("Cannot read Rux computer snapshot bytes: {error}"),
+                format!("Cannot read K16 computer snapshot bytes: {error}"),
             );
             return 0;
         }
@@ -104,12 +104,12 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
 }
 
 #[no_mangle]
-pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_runRux16ComputerUntilSignalNative(
+pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_runK16ComputerUntilSignalNative(
     mut env: JNIEnv<'_>,
     _class: JClass<'_>,
     handle: jlong,
 ) -> jlongArray {
-    let handle = match rux_computer_handle_mut(&mut env, handle) {
+    let handle = match k16_computer_handle_mut(&mut env, handle) {
         Some(handle) => handle,
         None => return null_mut(),
     };
@@ -124,12 +124,12 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
 }
 
 #[no_mangle]
-pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_ruxComputerControlNative(
+pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_k16ComputerControlNative(
     mut env: JNIEnv<'_>,
     _class: JClass<'_>,
     handle: jlong,
 ) -> jlongArray {
-    let handle = match rux_computer_handle_mut(&mut env, handle) {
+    let handle = match k16_computer_handle_mut(&mut env, handle) {
         Some(handle) => handle,
         None => return null_mut(),
     };
@@ -145,12 +145,12 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
 }
 
 #[no_mangle]
-pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_ruxComputerDebugOutputNative(
+pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_k16ComputerDebugOutputNative(
     mut env: JNIEnv<'_>,
     _class: JClass<'_>,
     handle: jlong,
 ) -> jbyteArray {
-    let handle = match rux_computer_handle_mut(&mut env, handle) {
+    let handle = match k16_computer_handle_mut(&mut env, handle) {
         Some(handle) => handle,
         None => return null_mut(),
     };
@@ -158,12 +158,12 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
 }
 
 #[no_mangle]
-pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_drainRuxComputerDebugOutputNative(
+pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_drainK16ComputerDebugOutputNative(
     mut env: JNIEnv<'_>,
     _class: JClass<'_>,
     handle: jlong,
 ) -> jbyteArray {
-    let handle = match rux_computer_handle_mut(&mut env, handle) {
+    let handle = match k16_computer_handle_mut(&mut env, handle) {
         Some(handle) => handle,
         None => return null_mut(),
     };
@@ -171,29 +171,29 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
 }
 
 #[no_mangle]
-pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_ruxComputerDisplay0SnapshotNative(
+pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_k16ComputerDisplay0SnapshotNative(
     mut env: JNIEnv<'_>,
     _class: JClass<'_>,
     handle: jlong,
 ) -> jbyteArray {
-    let handle = match rux_computer_handle_mut(&mut env, handle) {
+    let handle = match k16_computer_handle_mut(&mut env, handle) {
         Some(handle) => handle,
         None => return null_mut(),
     };
     let payload = match handle.display0_snapshot() {
-        Some(snapshot) => encode_rux_computer_text_display_snapshot(&snapshot),
+        Some(snapshot) => encode_k16_computer_text_display_snapshot(&snapshot),
         None => Vec::new(),
     };
     byte_array_or_throw(&mut env, &payload)
 }
 
 #[no_mangle]
-pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_ruxComputerStorage0MediaSnapshotNative(
+pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_k16ComputerStorage0MediaSnapshotNative(
     mut env: JNIEnv<'_>,
     _class: JClass<'_>,
     handle: jlong,
 ) -> jbyteArray {
-    let handle = match rux_computer_handle_mut(&mut env, handle) {
+    let handle = match k16_computer_handle_mut(&mut env, handle) {
         Some(handle) => handle,
         None => return null_mut(),
     };
@@ -202,12 +202,12 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
 }
 
 #[no_mangle]
-pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_ruxComputerMachineSnapshotNative(
+pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_k16ComputerMachineSnapshotNative(
     mut env: JNIEnv<'_>,
     _class: JClass<'_>,
     handle: jlong,
 ) -> jbyteArray {
-    let handle = match rux_computer_handle_mut(&mut env, handle) {
+    let handle = match k16_computer_handle_mut(&mut env, handle) {
         Some(handle) => handle,
         None => return null_mut(),
     };
@@ -222,13 +222,13 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
 }
 
 #[no_mangle]
-pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_pushRuxComputerSerialInputNative(
+pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_pushK16ComputerSerialInputNative(
     mut env: JNIEnv<'_>,
     _class: JClass<'_>,
     handle: jlong,
     bytes: JByteArray<'_>,
 ) {
-    let handle = match rux_computer_handle_mut(&mut env, handle) {
+    let handle = match k16_computer_handle_mut(&mut env, handle) {
         Some(handle) => handle,
         None => return,
     };
@@ -237,7 +237,7 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
         Err(error) => {
             let _ = env.throw_new(
                 "java/lang/IllegalArgumentException",
-                format!("Cannot read Rux computer serial input: {error}"),
+                format!("Cannot read K16 computer serial input: {error}"),
             );
             return;
         }
@@ -246,7 +246,7 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
 }
 
 #[no_mangle]
-pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_freeRuxComputerNative(
+pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_freeK16ComputerNative(
     _env: JNIEnv<'_>,
     _class: JClass<'_>,
     handle: jlong,
@@ -256,14 +256,14 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
     }
 }
 
-fn rux_computer_handle_mut(
+fn k16_computer_handle_mut(
     env: &mut JNIEnv<'_>,
     handle: jlong,
 ) -> Option<&'static mut RuxComputerHandle> {
     if handle == 0 {
         let _ = env.throw_new(
             "java/lang/IllegalStateException",
-            "Native Rux computer handle is zero",
+            "Native K16 computer handle is zero",
         );
         return None;
     }
@@ -271,7 +271,7 @@ fn rux_computer_handle_mut(
     if pointer.is_null() {
         let _ = env.throw_new(
             "java/lang/IllegalStateException",
-            "Native Rux computer handle is null",
+            "Native K16 computer handle is null",
         );
         return None;
     }
@@ -293,7 +293,7 @@ fn push_u64(out: &mut Vec<u8>, value: u64) {
     out.extend_from_slice(&value.to_le_bytes());
 }
 
-fn encode_rux_computer_text_display_snapshot(snapshot: &RuxComputerTextDisplaySnapshot) -> Vec<u8> {
+fn encode_k16_computer_text_display_snapshot(snapshot: &RuxComputerTextDisplaySnapshot) -> Vec<u8> {
     let mut out = Vec::with_capacity(28 + snapshot.cells.len());
     push_u32(&mut out, snapshot.columns);
     push_u32(&mut out, snapshot.rows);

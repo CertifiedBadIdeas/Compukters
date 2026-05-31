@@ -71,13 +71,15 @@ class NativeK16ComputerDisplaySnapshot(
 
     override fun equals(other: Any?): Boolean =
         this === other ||
-            other is NativeK16ComputerDisplaySnapshot &&
-            columns == other.columns &&
-            rows == other.rows &&
-            cursorX == other.cursorX &&
-            cursorY == other.cursorY &&
-            sequence == other.sequence &&
-            cells.contentEquals(other.cells)
+            (
+                other is NativeK16ComputerDisplaySnapshot &&
+                    columns == other.columns &&
+                    rows == other.rows &&
+                    cursorX == other.cursorX &&
+                    cursorY == other.cursorY &&
+                    sequence == other.sequence &&
+                    cells.contentEquals(other.cells)
+            )
 
     override fun hashCode(): Int {
         var result = columns
@@ -122,7 +124,7 @@ object NativeVmBindings {
     ): Long {
         load(libraryPath)
         val handle =
-            createRuxComputerFromBiosFlashNative(
+            createK16ComputerFromBiosFlashNative(
                 biosFlashPath.toAbsolutePath().normalize().toString(),
                 memorySize.coerceAtLeast(1),
                 maxSteps.coerceAtLeast(1),
@@ -140,9 +142,9 @@ object NativeVmBindings {
         snapshot: ByteArray,
     ): Long {
         load(libraryPath)
-        require(snapshot.isNotEmpty()) { "Rux computer snapshot must not be empty" }
+        require(snapshot.isNotEmpty()) { "K16 computer snapshot must not be empty" }
         val handle =
-            restoreRuxComputerFromBiosFlashSnapshotNative(
+            restoreK16ComputerFromBiosFlashSnapshotNative(
                 biosFlashPath.toAbsolutePath().normalize().toString(),
                 memorySize.coerceAtLeast(1),
                 storage0Path.toAbsolutePath().normalize().toString(),
@@ -154,52 +156,53 @@ object NativeVmBindings {
 
     fun runK16ComputerUntilSignal(handle: Long): NativeK16ComputerSignal {
         require(handle != 0L) { "Native K16 computer handle is zero" }
-        return NativeK16ComputerSignal.from(runRux16ComputerUntilSignalNative(handle))
+        return NativeK16ComputerSignal.from(runK16ComputerUntilSignalNative(handle))
     }
 
-    fun ruxComputerControl(handle: Long): NativeK16ComputerControl {
+    fun k16ComputerControl(handle: Long): NativeK16ComputerControl {
         require(handle != 0L) { "Native K16 computer handle is zero" }
-        return NativeK16ComputerControl.from(ruxComputerControlNative(handle))
+        return NativeK16ComputerControl.from(k16ComputerControlNative(handle))
     }
 
-    fun ruxComputerDebugOutput(handle: Long): ByteArray {
+    fun k16ComputerDebugOutput(handle: Long): ByteArray {
         require(handle != 0L) { "Native K16 computer handle is zero" }
-        return ruxComputerDebugOutputNative(handle)
+        return k16ComputerDebugOutputNative(handle)
     }
 
-    fun drainRuxComputerDebugOutput(handle: Long): ByteArray {
+    fun drainK16ComputerDebugOutput(handle: Long): ByteArray {
         require(handle != 0L) { "Native K16 computer handle is zero" }
-        return drainRuxComputerDebugOutputNative(handle)
+        return drainK16ComputerDebugOutputNative(handle)
     }
 
-    fun ruxComputerDisplay0Snapshot(handle: Long): NativeK16ComputerDisplaySnapshot? {
+    fun k16ComputerDisplay0Snapshot(handle: Long): NativeK16ComputerDisplaySnapshot? {
         require(handle != 0L) { "Native K16 computer handle is zero" }
-        return NativeK16ComputerDisplaySnapshot.from(ruxComputerDisplay0SnapshotNative(handle))
+        return NativeK16ComputerDisplaySnapshot.from(k16ComputerDisplay0SnapshotNative(handle))
     }
 
-    fun ruxComputerStorage0MediaSnapshot(handle: Long): ByteArray? {
+    fun k16ComputerStorage0MediaSnapshot(handle: Long): ByteArray? {
         require(handle != 0L) { "Native K16 computer handle is zero" }
-        return ruxComputerStorage0MediaSnapshotNative(handle).takeIf { it.isNotEmpty() }
+        return k16ComputerStorage0MediaSnapshotNative(handle).takeIf { it.isNotEmpty() }
     }
 
-    fun ruxComputerMachineSnapshot(handle: Long): ByteArray {
+    fun k16ComputerMachineSnapshot(handle: Long): ByteArray {
         require(handle != 0L) { "Native K16 computer handle is zero" }
-        return ruxComputerMachineSnapshotNative(handle)
+        return k16ComputerMachineSnapshotNative(handle)
     }
 
-    fun pushRuxComputerSerialInput(
+    fun pushK16ComputerSerialInput(
         handle: Long,
         bytes: ByteArray,
     ) {
         require(handle != 0L) { "Native K16 computer handle is zero" }
-        pushRuxComputerSerialInputNative(handle, bytes)
+        pushK16ComputerSerialInputNative(handle, bytes)
     }
 
-    fun freeRuxComputer(handle: Long) {
+    fun freeK16Computer(handle: Long) {
         if (handle != 0L) {
-            freeRuxComputerNative(handle)
+            freeK16ComputerNative(handle)
         }
     }
+
     private fun load(libraryPath: String) {
         synchronized(lock) {
             val current = loadedPath
@@ -213,8 +216,9 @@ object NativeVmBindings {
             loadedPath = libraryPath
         }
     }
+
     @JvmStatic
-    private external fun createRuxComputerFromBiosFlashNative(
+    private external fun createK16ComputerFromBiosFlashNative(
         biosFlashPath: String,
         memorySize: Int,
         maxSteps: Long,
@@ -222,7 +226,7 @@ object NativeVmBindings {
     ): Long
 
     @JvmStatic
-    private external fun restoreRuxComputerFromBiosFlashSnapshotNative(
+    private external fun restoreK16ComputerFromBiosFlashSnapshotNative(
         biosFlashPath: String,
         memorySize: Int,
         storage0Path: String,
@@ -230,34 +234,34 @@ object NativeVmBindings {
     ): Long
 
     @JvmStatic
-    private external fun runRux16ComputerUntilSignalNative(handle: Long): LongArray
+    private external fun runK16ComputerUntilSignalNative(handle: Long): LongArray
 
     @JvmStatic
-    private external fun ruxComputerControlNative(handle: Long): LongArray
+    private external fun k16ComputerControlNative(handle: Long): LongArray
 
     @JvmStatic
-    private external fun ruxComputerDebugOutputNative(handle: Long): ByteArray
+    private external fun k16ComputerDebugOutputNative(handle: Long): ByteArray
 
     @JvmStatic
-    private external fun drainRuxComputerDebugOutputNative(handle: Long): ByteArray
+    private external fun drainK16ComputerDebugOutputNative(handle: Long): ByteArray
 
     @JvmStatic
-    private external fun ruxComputerDisplay0SnapshotNative(handle: Long): ByteArray
+    private external fun k16ComputerDisplay0SnapshotNative(handle: Long): ByteArray
 
     @JvmStatic
-    private external fun ruxComputerStorage0MediaSnapshotNative(handle: Long): ByteArray
+    private external fun k16ComputerStorage0MediaSnapshotNative(handle: Long): ByteArray
 
     @JvmStatic
-    private external fun ruxComputerMachineSnapshotNative(handle: Long): ByteArray
+    private external fun k16ComputerMachineSnapshotNative(handle: Long): ByteArray
 
     @JvmStatic
-    private external fun pushRuxComputerSerialInputNative(
+    private external fun pushK16ComputerSerialInputNative(
         handle: Long,
         bytes: ByteArray,
     )
 
     @JvmStatic
-    private external fun freeRuxComputerNative(handle: Long)
+    private external fun freeK16ComputerNative(handle: Long)
 }
 
 private class NativeK16ComputerDisplaySnapshotReader(
