@@ -260,6 +260,7 @@ fn k16_disasm_prints_canonical_integer_instruction_surface() {
     words.extend(ne(11, 1, 2));
     words.extend(ltu(12, 1, 2));
     words.extend(lt_s(13, 1, 2));
+    words.extend(mul(15, 1, 2));
     words.extend([load16(14, 1), store16(1, 14), halt()]);
     fs::write(&artifact_path, words_to_bytes(&words)).expect("artifact writes");
 
@@ -290,6 +291,7 @@ fn k16_disasm_prints_canonical_integer_instruction_surface() {
     assert!(stdout.contains("ne r11, r1, r2"), "stdout: {stdout}");
     assert!(stdout.contains("ltu r12, r1, r2"), "stdout: {stdout}");
     assert!(stdout.contains("lt_s r13, r1, r2"), "stdout: {stdout}");
+    assert!(stdout.contains("mul r15, r1, r2"), "stdout: {stdout}");
     assert!(stdout.contains("load16 r14, [r1]"), "stdout: {stdout}");
     assert!(stdout.contains("store16 [r1], r14"), "stdout: {stdout}");
 }
@@ -528,6 +530,10 @@ fn ltu(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
 
 fn lt_s(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
     alu_rrr(dst, 0xb, lhs, rhs)
+}
+
+fn mul(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
+    alu_rrr(dst, 0xc, lhs, rhs)
 }
 
 fn alu_rrr(dst: u8, subop: u8, lhs: u8, rhs: u8) -> [u16; 2] {

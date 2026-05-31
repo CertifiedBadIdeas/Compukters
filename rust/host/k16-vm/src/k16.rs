@@ -96,6 +96,7 @@ pub enum DecodedInstruction {
     Const32 { dst: usize, value: u32 },
     Add { dst: usize, lhs: usize, rhs: usize },
     Sub { dst: usize, lhs: usize, rhs: usize },
+    Mul { dst: usize, lhs: usize, rhs: usize },
     And { dst: usize, lhs: usize, rhs: usize },
     Or { dst: usize, lhs: usize, rhs: usize },
     Xor { dst: usize, lhs: usize, rhs: usize },
@@ -194,6 +195,7 @@ impl InstructionDecoder for K16Decoder {
                     0x9 => DecodedInstruction::Ne { dst: a, lhs, rhs },
                     0xa => DecodedInstruction::Ltu { dst: a, lhs, rhs },
                     0xb => DecodedInstruction::LtS { dst: a, lhs, rhs },
+                    0xc => DecodedInstruction::Mul { dst: a, lhs, rhs },
                     _ => return Err(illegal_instruction(pc, word)),
                 };
                 return Ok(DecodeResult {
@@ -437,6 +439,10 @@ impl K16Cpu {
             }
             DecodedInstruction::Sub { dst, lhs, rhs } => {
                 self.registers[dst] = self.registers[lhs].wrapping_sub(self.registers[rhs]);
+                Ok(None)
+            }
+            DecodedInstruction::Mul { dst, lhs, rhs } => {
+                self.registers[dst] = self.registers[lhs].wrapping_mul(self.registers[rhs]);
                 Ok(None)
             }
             DecodedInstruction::And { dst, lhs, rhs } => {
