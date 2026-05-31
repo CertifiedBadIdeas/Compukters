@@ -11,7 +11,7 @@ use std::path::PathBuf;
 use std::process::Command;
 
 #[test]
-fn rux_volume_create_writes_empty_k16vol_header() {
+fn k16_volume_create_writes_empty_k16vol_header() {
     let path = temp_file("create-storage0.kv");
     let output = Command::new(k16_binary())
         .args(["volume", "create", path.to_str().unwrap(), "--size", "4096"])
@@ -32,7 +32,7 @@ fn rux_volume_create_writes_empty_k16vol_header() {
 }
 
 #[test]
-fn rux_volume_init_writes_ruxpt_boot_and_root_partitions() {
+fn k16_volume_init_writes_ruxpt_boot_and_root_partitions() {
     let path = temp_file("init-storage0.kv");
     let output = Command::new(k16_binary())
         .args(["volume", "init", path.to_str().unwrap(), "--size", "65536"])
@@ -65,7 +65,7 @@ fn rux_volume_init_writes_ruxpt_boot_and_root_partitions() {
 }
 
 #[test]
-fn rux_volume_extracts_and_replaces_partition_bytes_by_name() {
+fn k16_volume_extracts_and_replaces_partition_bytes_by_name() {
     let volume_path = temp_file("partition-bridge-storage0.kv");
     let root_path = temp_file("root-partition.bin");
     let extracted_path = temp_file("root-partition-extracted.bin");
@@ -127,7 +127,7 @@ fn rux_volume_extracts_and_replaces_partition_bytes_by_name() {
 }
 
 #[test]
-fn rux_volume_inspect_prints_ruxpt_partition_layout() {
+fn k16_volume_inspect_prints_ruxpt_partition_layout() {
     let volume_path = temp_file("inspect-storage0.kv");
     assert!(Command::new(k16_binary())
         .args([
@@ -158,7 +158,7 @@ fn rux_volume_inspect_prints_ruxpt_partition_layout() {
 }
 
 #[test]
-fn rux_volume_inspect_boot_prints_boot_chain_metadata() {
+fn k16_volume_inspect_boot_prints_boot_chain_metadata() {
     let volume_path = temp_file("inspect-boot-storage0.kv");
     let root_path = temp_file("inspect-boot-root.kfs");
     let boot_path = temp_file("inspect-boot-loader.kb");
@@ -244,7 +244,7 @@ fn rux_volume_inspect_boot_prints_boot_chain_metadata() {
 }
 
 #[test]
-fn rux_volume_inspect_boot_rejects_missing_root_kernel() {
+fn k16_volume_inspect_boot_rejects_missing_root_kernel() {
     let volume_path = temp_file("inspect-boot-missing-kernel-storage0.kv");
     let root_path = temp_file("inspect-boot-missing-kernel-root.kfs");
     let boot_path = temp_file("inspect-boot-missing-kernel-loader.kb");
@@ -309,7 +309,7 @@ fn rux_volume_inspect_boot_rejects_missing_root_kernel() {
 }
 
 #[test]
-fn rux_volume_replace_partition_rejects_wrong_size_without_truncation() {
+fn k16_volume_replace_partition_rejects_wrong_size_without_truncation() {
     let volume_path = temp_file("partition-size-storage0.kv");
     let root_path = temp_file("oversized-root-partition.bin");
     fs::write(&root_path, vec![0x7f_u8; 95 * 512 + 1]).expect("root partition writes");
@@ -346,7 +346,7 @@ fn rux_volume_replace_partition_rejects_wrong_size_without_truncation() {
 }
 
 #[test]
-fn rux_volume_put_boot_rejects_non_partitioned_volume_without_ruxb_fallback() {
+fn k16_volume_put_boot_rejects_non_partitioned_volume_without_ruxb_fallback() {
     let volume_path = temp_file("boot-storage0.kv");
     let boot_path = temp_file("boot.ruxe");
     fs::write(
@@ -391,7 +391,7 @@ fn rux_volume_put_boot_rejects_non_partitioned_volume_without_ruxb_fallback() {
 }
 
 #[test]
-fn rux_volume_put_boot_installs_loader_kb_in_boot_ruxfs_partition() {
+fn k16_volume_put_boot_installs_loader_kb_in_boot_ruxfs_partition() {
     let volume_path = temp_file("partitioned-boot-storage0.kv");
     let boot_path = temp_file("partitioned-boot.ruxe");
     fs::write(
@@ -453,7 +453,7 @@ fn rux_volume_put_boot_installs_loader_kb_in_boot_ruxfs_partition() {
 }
 
 #[test]
-fn rux_volume_put_kernel_installs_kernel_kx_in_root_ruxfs() {
+fn k16_volume_put_kernel_installs_kernel_kx_in_root_ruxfs() {
     let volume_path = temp_file("kernel-rootfs-storage0.kv");
     let root_path = temp_file("kernel-rootfs-root.kfs");
     let kernel_path = temp_file("kernel-rootfs-kernel.kx");
@@ -528,7 +528,7 @@ fn rux_volume_put_kernel_installs_kernel_kx_in_root_ruxfs() {
 }
 
 #[test]
-fn rux_volume_init_creates_root_ruxfs_for_put_kernel() {
+fn k16_volume_init_creates_root_ruxfs_for_put_kernel() {
     let volume_path = temp_file("init-rootfs-storage0.kv");
     let kernel_path = temp_file("init-rootfs-kernel.kx");
     let kernel_bytes =
@@ -571,7 +571,7 @@ fn rux_volume_init_creates_root_ruxfs_for_put_kernel() {
 }
 
 #[test]
-fn rux_volume_put_kernel_rejects_boot_artifact_without_profile_fallback() {
+fn k16_volume_put_kernel_rejects_boot_artifact_without_profile_fallback() {
     let volume_path = temp_file("boot-as-kernel-storage0.kv");
     let kernel_path = temp_file("boot-as-kernel.kx");
     fs::write(
@@ -611,7 +611,7 @@ fn rux_volume_put_kernel_rejects_boot_artifact_without_profile_fallback() {
 }
 
 #[test]
-fn rux_volume_put_boot_rejects_kernel_artifact_without_profile_fallback() {
+fn k16_volume_put_boot_rejects_kernel_artifact_without_profile_fallback() {
     let volume_path = temp_file("kernel-storage0.kv");
     let boot_path = temp_file("kernel.kb");
     fs::write(
@@ -651,7 +651,7 @@ fn rux_volume_put_boot_rejects_kernel_artifact_without_profile_fallback() {
 }
 
 #[test]
-fn rux_volume_put_boot_rejects_raw_boot_bytes_without_ruxe_fallback() {
+fn k16_volume_put_boot_rejects_raw_boot_bytes_without_ruxe_fallback() {
     let volume_path = temp_file("raw-boot-storage0.kv");
     let boot_path = temp_file("raw-boot.bin");
     fs::write(&boot_path, [0x01, 0x00]).expect("boot writes");
@@ -1267,7 +1267,7 @@ fn rux16_init_loader_source_rejects_protected_init_load_address() {
 }
 
 #[test]
-fn rux_volume_put_boot_and_kernel_creates_storage0_that_bundled_bios_executes() {
+fn k16_volume_put_boot_and_kernel_creates_storage0_that_bundled_bios_executes() {
     let volume_path = temp_file("boot-kernel-storage0.kv");
     let root_path = temp_file("boot-kernel-root.kfs");
     let boot_path = temp_file("kernel-loader.boot");
@@ -1413,7 +1413,7 @@ fn rux_volume_put_boot_and_kernel_creates_storage0_that_bundled_bios_executes() 
 }
 
 #[test]
-fn rux_volume_boot_kernel_and_init_executes_init_from_root_ruxfs() {
+fn k16_volume_boot_kernel_and_init_executes_init_from_root_ruxfs() {
     let volume_path = temp_file("boot-kernel-init-storage0.kv");
     let root_path = temp_file("boot-kernel-init-root.kfs");
     let boot_path = temp_file("boot-kernel-init-loader.boot");
@@ -1604,7 +1604,7 @@ fn rux_volume_boot_kernel_and_init_executes_init_from_root_ruxfs() {
 }
 
 #[test]
-fn rux_volume_boot_kernel_and_rini_init_consumes_handoff() {
+fn k16_volume_boot_kernel_and_rini_init_consumes_handoff() {
     let init_bytes = compile_rini_init_program("rini-init-consumes-handoff-init.kx");
     let volume_path =
         create_boot_kernel_init_volume("rini-init-consumes-handoff", Some(&init_bytes));
@@ -1683,7 +1683,7 @@ fn rux16_rini_init_fails_with_invalid_handoff_magic() {
 }
 
 #[test]
-fn rux_volume_boot_kernel_and_trap_init_uses_kernel_handler() {
+fn k16_volume_boot_kernel_and_trap_init_uses_kernel_handler() {
     let init_bytes = compile_init_program(
         "examples/init/trap_init.rx",
         "trap-init-kernel-handler-init.kx",
@@ -1716,7 +1716,7 @@ fn rux_volume_boot_kernel_and_trap_init_uses_kernel_handler() {
 }
 
 #[test]
-fn rux_volume_boot_kernel_and_init_runtime_handoff_blocks_match_artifacts() {
+fn k16_volume_boot_kernel_and_init_runtime_handoff_blocks_match_artifacts() {
     let volume_path = temp_file("runtime-handoff-blocks-storage0.kv");
     let root_path = temp_file("runtime-handoff-blocks-root.kfs");
     let boot_path = temp_file("runtime-handoff-blocks-loader.boot");
@@ -1863,7 +1863,7 @@ fn rux_volume_boot_kernel_and_init_runtime_handoff_blocks_match_artifacts() {
 }
 
 #[test]
-fn rux_volume_boot_kernel_rejects_protected_init_load_address() {
+fn k16_volume_boot_kernel_rejects_protected_init_load_address() {
     let volume_path = temp_file("protected-init-load-storage0.kv");
     let root_path = temp_file("protected-init-load-root.kfs");
     let boot_path = temp_file("protected-init-load-loader.boot");
@@ -2003,7 +2003,7 @@ fn rux_volume_boot_kernel_rejects_protected_init_load_address() {
 }
 
 #[test]
-fn rux_volume_boot_kernel_init_failure_missing_init_clears_stale_handoff() {
+fn k16_volume_boot_kernel_init_failure_missing_init_clears_stale_handoff() {
     let volume_path = create_boot_kernel_init_volume("missing-init-failure", None);
     let bios = compile_bundled_rux16_bios();
     let mut handle = K16ComputerHandle::create_rux16_bios_flash_with_storage0_path(
@@ -2033,7 +2033,7 @@ fn rux_volume_boot_kernel_init_failure_missing_init_clears_stale_handoff() {
 }
 
 #[test]
-fn rux_volume_boot_kernel_init_failure_wrong_abi_clears_stale_handoff() {
+fn k16_volume_boot_kernel_init_failure_wrong_abi_clears_stale_handoff() {
     let wrong_init =
         ruxe::encode_rux16_executable(&[0x01, 0x00], ruxe::RuxeAbiKind::Kernel, 0x8000, 0x8000)
             .expect("wrong init RUXE encodes");
@@ -2240,7 +2240,7 @@ fn read_guest_u32(handle: &K16ComputerHandle, address: u32) -> u32 {
 }
 
 fn temp_file(name: &str) -> PathBuf {
-    let path = std::env::temp_dir().join(format!("rux-volume-cli-{}-{name}", std::process::id()));
+    let path = std::env::temp_dir().join(format!("k16-volume-cli-{}-{name}", std::process::id()));
     let _ = fs::remove_file(&path);
     path
 }

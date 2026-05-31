@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::process::Command;
 
 #[test]
-fn rux_cli_builds_partitioned_storage0_with_ruxfs_root_kernel_file() {
+fn k16_cli_builds_partitioned_storage0_with_ruxfs_root_kernel_file() {
     let volume_path = temp_file("storage0.kv");
     let root_path = temp_file("root.kfs");
     let extracted_root_path = temp_file("extracted-root.kfs");
@@ -124,7 +124,7 @@ fn assert_success(output: std::process::Output) {
 
 fn temp_file(name: &str) -> PathBuf {
     let path = std::env::temp_dir().join(format!(
-        "rux-storage-workflow-cli-{}-{name}",
+        "k16-storage-workflow-cli-{}-{name}",
         std::process::id()
     ));
     let _ = fs::remove_file(&path);

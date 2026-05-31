@@ -131,7 +131,7 @@ fn k16_fs_kfs_removes_file() {
 }
 
 #[test]
-fn rux_fs_rejects_unknown_filesystem_type_without_volume_fallback() {
+fn k16_fs_rejects_unknown_filesystem_type_without_volume_fallback() {
     let output = Command::new(k16_binary())
         .args(["fs", "fat32", "format", "ignored.img", "--blocks", "128"])
         .output()
@@ -177,7 +177,7 @@ fn assert_success(output: std::process::Output) {
 }
 
 fn temp_file(name: &str) -> PathBuf {
-    let path = std::env::temp_dir().join(format!("rux-fs-cli-{}-{name}", std::process::id()));
+    let path = std::env::temp_dir().join(format!("k16-fs-cli-{}-{name}", std::process::id()));
     let _ = fs::remove_file(&path);
     path
 }

@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::process::Command;
 
 #[test]
-fn rux_link_converts_rux16_object_with_abs32_relocation_to_program_ruxe() {
+fn k16_link_converts_rux16_object_with_abs32_relocation_to_program_ruxe() {
     let object_path = temp_file("abs32.o");
     let output_path = temp_file("abs32.ruxe");
     fs::write(&object_path, rux16_object_with_text_relocation(1)).expect("object writes");
@@ -42,7 +42,7 @@ fn rux_link_converts_rux16_object_with_abs32_relocation_to_program_ruxe() {
 }
 
 #[test]
-fn rux_link_ignores_absolute_file_symbols_from_llvm_objects() {
+fn k16_link_ignores_absolute_file_symbols_from_llvm_objects() {
     let object_path = temp_file("llvm-file-symbol.o");
     let output_path = temp_file("llvm-file-symbol.ruxe");
     fs::write(&object_path, rux16_object_with_absolute_file_symbol()).expect("object writes");
@@ -74,7 +74,7 @@ fn rux_link_ignores_absolute_file_symbols_from_llvm_objects() {
 }
 
 #[test]
-fn rux_link_rejects_unsupported_relocation_without_raw_fallback() {
+fn k16_link_rejects_unsupported_relocation_without_raw_fallback() {
     let object_path = temp_file("bad-reloc.o");
     let output_path = temp_file("bad-reloc.ruxe");
     fs::write(&object_path, rux16_object_with_text_relocation(99)).expect("object writes");
@@ -101,7 +101,7 @@ fn rux_link_rejects_unsupported_relocation_without_raw_fallback() {
 }
 
 #[test]
-fn rux_link_rejects_unsupported_alloc_section_without_guessing() {
+fn k16_link_rejects_unsupported_alloc_section_without_guessing() {
     let object_path = temp_file("bad-section.o");
     let output_path = temp_file("bad-section.ruxe");
     fs::write(&object_path, rux16_object_with_unsupported_alloc_section()).expect("object writes");
@@ -305,7 +305,7 @@ fn push_string(bytes: &mut Vec<u8>, value: &str) -> u32 {
 }
 
 fn temp_file(name: &str) -> PathBuf {
-    let path = std::env::temp_dir().join(format!("rux-link-cli-{}-{name}", std::process::id()));
+    let path = std::env::temp_dir().join(format!("k16-link-cli-{}-{name}", std::process::id()));
     let _ = fs::remove_file(&path);
     path
 }
