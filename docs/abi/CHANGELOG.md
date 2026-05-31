@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- LLVM K16 lowering now maps wide integer div/rem and soft-float operations to
+  explicit compiler-rt helper symbols, including i64/i128 div/rem, f32/f64
+  arithmetic and comparisons, f16/f32/f64 conversion helpers, and f32/f64
+  integer conversion helpers. Helper implementations remain runtime object and
+  link-time requirements.
 - LLVM K16 lowering now supports indirect calls through the existing
   register-target `call rN` instruction and expands i32 byte-swap/rotate
   operations into regular K16 shifts and bitwise ops. Rust `core` now advances
