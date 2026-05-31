@@ -14,8 +14,8 @@ and expects `debug_bytes=2a`.
 
 `k16-memory-helpers` is also Rust-owned: `k16 runtime k16-memory-helpers`
 builds `rust/host/k16-tools/runtime/k16_memory_helpers.rs` with the same
-custom K16 rustc, then lowers the generated LLVM IR with `llc` from
-`K16_LLVM_BIN_DIR`. The tool does not keep a host-generated helper object
+custom K16 rustc, then inspects and links the generated K16 object with tools
+from `K16_LLVM_BIN_DIR`. The tool does not keep a host-generated helper object
 path.
 
 The script is strict. It requires a custom rustc that is:

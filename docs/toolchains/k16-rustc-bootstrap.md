@@ -108,7 +108,7 @@ can build against the K16 LLVM backend.
 ### Fast Probe: Rust Source With Prebuilt K16 LLVM
 
 Use a Rust source checkout and configure bootstrap to use the already-built
-LLVM from `toolchains/Compukter-Kraft-llvm/build-rux-min/bin/llvm-config`.
+LLVM from `toolchains/Compukter-Kraft-llvm/build-k16-min/bin/llvm-config`.
 
 This may avoid rebuilding LLVM, but it depends on API compatibility between
 the selected Rust source revision and the prebuilt LLVM 23.0.0git checkout.
@@ -125,6 +125,8 @@ The probe is intentionally strict. It requires:
 - the Rust source checkout at `toolchains/Compukter-Kraft-rust`;
 - the Rust checkout to be on branch `k16`;
 - `llvm-config --targets-built` to contain `K16`;
+- the K16 LLVM bin directory to contain the LLVM tools copied by Rust bootstrap
+  into the stage1 sysroot;
 - Rust bootstrap entrypoint `x.py` to be present and runnable.
 
 It prints a temporary `bootstrap.toml` path plus dry-run and build commands for
@@ -146,7 +148,7 @@ Expected bootstrap direction:
 
 ```toml
 [target.x86_64-unknown-linux-gnu]
-llvm-config = "/absolute/path/to/toolchains/Compukter-Kraft-llvm/build-rux-min/bin/llvm-config"
+llvm-config = "/absolute/path/to/toolchains/Compukter-Kraft-llvm/build-k16-min/bin/llvm-config"
 ```
 
 ### Not Enough: Nightly rustc Only

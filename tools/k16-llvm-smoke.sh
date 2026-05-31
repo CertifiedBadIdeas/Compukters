@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-LLVM_BIN_DIR="${K16_LLVM_BIN_DIR:-$ROOT/toolchains/Compukter-Kraft-llvm/build-rux-min/bin}"
+LLVM_BIN_DIR="${K16_LLVM_BIN_DIR:-$ROOT/toolchains/Compukter-Kraft-llvm/build-k16-min/bin}"
 LLC="$LLVM_BIN_DIR/llc"
 LLVM_READOBJ="$LLVM_BIN_DIR/llvm-readobj"
 LLVM_NOT="$LLVM_BIN_DIR/not"
@@ -150,7 +150,7 @@ entry:
 IR
 
 "$LLC" --version > "$WORK_DIR/llc-version.txt"
-require_contains "$WORK_DIR/llc-version.txt" "k16  - K16 32-bit"
+require_contains "$WORK_DIR/llc-version.txt" "K16 32-bit"
 
 "$LLC" -mtriple=k16 -filetype=asm "$WORK_DIR/add.ll" -o "$WORK_DIR/add.s"
 require_contains "$WORK_DIR/add.s" "add r0, r1, r2"

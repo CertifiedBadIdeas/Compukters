@@ -39,5 +39,5 @@ The current tracked commit is:
 
 That commit is carried by the fork branch `k16`.
 
-Local LLVM build directories such as `build-rux/` and `build-rux-min/` remain
+Local LLVM build directories such as `build-k16/` and `build-k16-min/` remain
 inside the submodule checkout and are not tracked by the main repository.
