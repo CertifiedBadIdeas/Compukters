@@ -53,7 +53,7 @@ fun RunConfigSettings.applyShared() {
 
 private val DEV_CLIENT_USERNAMES = listOf("DevA", "DevB", "DevC")
 
-private val k16VmCrateDir = rootProject.layout.projectDirectory.dir("native/rux-vm")
+private val k16VmCrateDir = rootProject.layout.projectDirectory.dir("native/k16-vm")
 private val k16VmNativePlatform = currentK16VmNativePlatform()
 private val k16VmNativeLibrary = k16VmCrateDir.file("target/debug/${k16VmNativePlatform.libraryName}")
 private val k16VmReleaseNativeLibrary = k16VmCrateDir.file("target/release/${k16VmNativePlatform.libraryName}")

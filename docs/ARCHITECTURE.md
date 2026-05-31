@@ -11,9 +11,9 @@
 ## Overview
 
 Compukter Kraft is a Minecraft mod that adds programmable computers backed
-by a Rust virtual machine (`native/rux-vm`). The mod ships a single
+by a Rust virtual machine (`native/k16-vm`). The mod ships a single
 player-facing computer item — **Notebook** — that starts a native
-`RuxComputer` from a per-computer `bios.kflash` file. The BIOS executes on
+`K16Computer` from a per-computer `bios.kflash` file. The BIOS executes on
 the Rux16 guest CPU, can inspect storage0 boot media, and exposes devices
 through memory-mapped peripherals.
 
@@ -31,7 +31,7 @@ through memory-mapped peripherals.
 
 | Crate            | Purpose                                                                  |
 |------------------|--------------------------------------------------------------------------|
-| `native/rux-vm`  | Rust virtual machine: Rux16 CPU, memory-mapped devices, `RuxComputer` handle, JNI exports |
+| `native/k16-vm`  | Rust virtual machine: Rux16 CPU, memory-mapped devices, `K16Computer` handle, JNI exports |
 | `native/rux-compiler` | Rux language frontend plus `rux compile`; K16 artifact tooling via `k16` for disassembly, volume, and filesystem commands |
 
 ## Module ownership rules
@@ -49,8 +49,8 @@ NotebookItem.use()
         └─ RuntimeDevice (native-backed)
 
 RuntimeDevice.boot()
-  └─ NativeVmBindings.createRux16Computer(biosFlashPath, storage0Path, ...)
-        └─ Rust RuxComputerHandle
+  └─ NativeVmBindings.createK16ComputerFromBiosFlash(biosFlashPath, storage0Path, ...)
+        └─ Rust K16ComputerHandle
               ├─ Rux16 CPU fetching instructions from mapped BIOS flash
               ├─ storage0 KV boot media
               ├─ flat RAM + MMIO bus (control, debug-serial, serial-input,
@@ -58,12 +58,12 @@ RuntimeDevice.boot()
               └─ exposes control / debug / display snapshot over JNI
 
 RuntimeDevice.serverTick(gameTime)
-  ├─ runRux16ComputerUntilSignal() — advance guest CPU until pause / halt
-  ├─ ruxComputerDisplay0Snapshot() — pull text display state
-  └─ drainRuxComputerDebugOutput() — drain debug serial bytes
+  ├─ runK16ComputerUntilSignal() — advance guest CPU until pause / halt
+  ├─ k16ComputerDisplay0Snapshot() — pull text display state
+  └─ drainK16ComputerDebugOutput() — drain debug serial bytes
 
 RuntimeDevice.close()
-  └─ NativeVmBindings.freeRuxComputer(handle)
+  └─ NativeVmBindings.freeK16Computer(handle)
 ```
 
 ## Data flow
@@ -74,11 +74,11 @@ RuntimeDevice.close()
 │                                                                     │
 │  Rux16 BIOS executing from mapped bios.kflash                       │
 │    ├─ MMIO control device  ──►  status / exit / panic registers      │
-│    ├─ MMIO debug serial    ──►  RuxComputerHandle.debug_output       │
+│    ├─ MMIO debug serial    ──►  K16ComputerHandle.debug_output       │
 │    ├─ MMIO serial input    ◄──  player keyboard events               │
 │    ├─ MMIO storage0        ◄──► KV boot media                        │
 │    ├─ MMIO bios flash      ──►  read-only firmware mapping           │
-│    └─ MMIO text display    ──►  RuxComputerTextDisplaySnapshot       │
+│    └─ MMIO text display    ──►  K16ComputerTextDisplaySnapshot       │
 └──────────────────────────────────────────┬──────────────────────────┘
                                            │ JNI run-until-signal
                                            ▼

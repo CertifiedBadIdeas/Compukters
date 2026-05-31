@@ -13,7 +13,7 @@ The native Rux16 VM has a dependency-free microbenchmark example for local
 before/after comparisons:
 
 ```bash
-cd native/rux-vm
+cd native/k16-vm
 cargo run --release --example vm_microbenchmarks -- 100000 5
 ```
 
@@ -71,7 +71,7 @@ Run the bundled terminal profiling workload:
 
 ```bash
 ./gradlew \
-  -Dckl.vm.native.library="$PWD/native/ckl-vm/target/debug/libckl_vm.so" \
+  -Dk16.vm.native.library="$PWD/native/k16-vm/target/debug/libk16_vm.so" \
   :v1_21_1-neoforge:test \
   --tests ru.lazyhat.compukterkraft.impl.computer.vm.RuntimeDisplayProfilingTest \
   --info
@@ -81,7 +81,7 @@ Run only the held-Enter backlog workload:
 
 ```bash
 ./gradlew \
-  -Dckl.vm.native.library="$PWD/native/ckl-vm/target/debug/libckl_vm.so" \
+  -Dk16.vm.native.library="$PWD/native/k16-vm/target/debug/libk16_vm.so" \
   :v1_21_1-neoforge:test \
   --tests ru.lazyhat.compukterkraft.impl.computer.vm.RuntimeDisplayProfilingTest.heldEnterWorkloadProducesBacklogProfilingMetrics \
   --info
@@ -153,52 +153,44 @@ Unlikely candidates:
 - event queue bookkeeping;
 - Minecraft UI glue.
 
-## Rust VM prototype
+## K16 VM local checks
 
-The Rust VM prototype is local-development only until packaging is designed.
+The K16 VM crate owns the native runtime and JNI library used by dev runs.
 
 Run Rust crate tests:
 
 ```bash
-cd native/ckl-vm && cargo test
+cd native/k16-vm && cargo test
 ```
 
 Build the local JNI library:
 
 ```bash
-cd native/ckl-vm && cargo build
+./gradlew-sandbox :v1_21_1-neoforge:buildK16VmNativeLibrary
 ```
 
-Run Kotlin CKIM/image backend and image runner seam tests:
+Run native-runtime JNI boundary tests:
 
 ```bash
-./gradlew :compiler:test --tests '*CkVmImageBackendTest' --tests '*CkVmImageComputerProgramTest'
+./gradlew-sandbox :native-runtime:test \
+  -Dk16.vm.native.library=$PWD/native/k16-vm/target/debug/libk16_vm.so
 ```
 
-Run optional image JNI smoke tests with the local debug library:
+Run a Minecraft dev client with the K16 VM native library:
 
 ```bash
-./gradlew buildRustVmNativeLibrary :compiler:test \
-  --tests '*NativeImageVmRunnerJniTest' \
-  --tests '*NativeImageVmBindingsJniTest' \
-  -Dckl.vm.native.library=$PWD/native/ckl-vm/target/debug/libckl_vm.so
+./gradlew :v1_21_1-neoforge:runClient
 ```
 
-Run a Minecraft dev client with the Rust VM option enabled:
+Run a Minecraft dev server with the K16 VM native library:
 
 ```bash
-./gradlew :v1_21_1-neoforge:runClientRust
+./gradlew :v1_21_1-neoforge:runServer
 ```
 
-Run a Minecraft dev server with the Rust VM option enabled:
-
-```bash
-./gradlew :v1_21_1-neoforge:runServerRust
-```
-
-The Rust run tasks are `runClientRust`, `runClient2Rust`, `runClient3Rust`, and `runServerRust`. Each depends on `buildRustVmNativeLibrary`, which builds `native/ckl-vm/target/debug/libckl_vm.so` before launching Minecraft and passes `ckl.vm.native.library=...` to the JVM.
-
-Runtime execution in this branch is Rust-image based. Kotlin still owns frontend analysis and temporary image lowering scaffolding, but JVM bytecode VM execution is no longer maintained here.
+The Loom run tasks depend on `buildK16VmNativeLibrary`, which builds
+`native/k16-vm/target/debug/libk16_vm.so` before launching Minecraft and
+passes `k16.vm.native.library=...` to the JVM.
 
 ## Interpretation notes
 
