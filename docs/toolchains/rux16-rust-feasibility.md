@@ -10,10 +10,10 @@ Rux16 now has enough LLVM-facing infrastructure for a tiny freestanding C proof:
 
 - a Rux16 LLVM backend prototype can emit ELF32 relocatable objects;
 - Clang can compile `--target=rux16` freestanding C into `.text.rux16`;
-- `rux runtime rux16-startup` provides `_start`, calls `main`, and exposes the
+- `k16 runtime rux16-startup` provides `_start`, calls `main`, and exposes the
   low byte of the return value through `debug::WRITE`;
-- `rux link --target program` converts Rux16 objects into a `RUXE` program;
-- `rux run` executes that `RUXE` in the VM and observes `debug_bytes=2a`.
+- `k16 link --target program` converts Rux16 objects into a `RUXE` program;
+- `k16 run` executes that `RUXE` in the VM and observes `debug_bytes=2a`.
 
 That proves the CPU/object/RUXE path, not Rust support. Rust requires a target
 description, language runtime decisions, panic behavior, compiler helper
@@ -26,7 +26,7 @@ symbols, and eventually an OS ABI surface.
 `no_core` is the smallest useful Rust proof. It avoids `core`, lang items from
 the standard library, allocation, formatting, and panic machinery as much as
 possible. It is useful for validating that `rustc` can target Rux16 LLVM output
-and that Rux tooling can link the resulting object.
+and that K16 tooling can link the resulting object.
 
 Recommended first Rust slice:
 
@@ -80,7 +80,7 @@ arch:               rux16
 os/env/vendor:      explicit experimental values
 panic strategy:     abort
 relocation model:   static
-executables:        false at rustc layer; RUXE is produced by rux link
+executables:        false at rustc layer; RUXE is produced by k16 link
 ```
 
 The Rust target must emit ordinary Rux16 ELF objects. Rust must not emit `RUXE`
@@ -97,9 +97,9 @@ The pipeline should be:
 ```text
 rustc
   -> Rux16 ELF32 object
-  -> rux runtime rux16-startup
-  -> rux link --target program
-  -> rux run
+  -> k16 runtime rux16-startup
+  -> k16 link --target program
+  -> k16 run
 ```
 
 ### Compiler Builtins And Runtime Helpers
@@ -164,7 +164,7 @@ Rux `std::fs`. Hosted Rust is blocked until that exists.
 
 Do not start with hosted `std`, `no_std + alloc`, or a broad `core` promise.
 Start with a `no_core` smoke that reuses the existing Clang proof boundary:
-return `42` from `main`, link with `rux16-startup`, execute through `rux run`,
+return `42` from `main`, link with `rux16-startup`, execute through `k16 run`,
 and observe `debug_bytes=2a`.
 
 After that, add the smallest runtime-helper object set needed by `core`, then
