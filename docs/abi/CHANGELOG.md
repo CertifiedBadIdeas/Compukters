@@ -5,6 +5,8 @@
 - The LLVM-facing call ABI now supports up to four scalar `i32` return values
   in `r0..r3`, matching small Rust/LLVM multi-value returns without introducing
   hidden return pointers.
+- Added K16 `mul` as canonical ALU subop `0xc`, with VM execution,
+  disassembly, assembler helper, and LLVM lowering/emission support.
 - `k16 disasm` now validates K16 instruction encodings against the active VM
   decode rules and fails clearly on reserved bits, unknown opcodes, and
   truncated multi-word instructions instead of printing `.word` fallback lines.

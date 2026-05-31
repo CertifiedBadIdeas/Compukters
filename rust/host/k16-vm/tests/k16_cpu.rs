@@ -243,6 +243,7 @@ fn k16_executes_canonical_integer_register_ops() {
     program.extend(xor(6, 1, 2));
     program.extend(ne(7, 1, 2));
     program.extend(ltu(8, 2, 1));
+    program.extend(mul(9, 1, 2));
     program.push(halt());
     write_words(&mut bus, 0, &program);
     let mut cpu = K16Cpu::new(0);
@@ -254,6 +255,7 @@ fn k16_executes_canonical_integer_register_ops() {
     assert_eq!(cpu.register(6), 0x0000_00ff);
     assert_eq!(cpu.register(7), 1);
     assert_eq!(cpu.register(8), 1);
+    assert_eq!(cpu.register(9), 0x0000_0e10);
 }
 
 #[test]
@@ -411,6 +413,10 @@ fn ltu(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
 
 fn lt_s(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
     alu_rrr(dst, 0xb, lhs, rhs)
+}
+
+fn mul(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
+    alu_rrr(dst, 0xc, lhs, rhs)
 }
 
 fn shl(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {

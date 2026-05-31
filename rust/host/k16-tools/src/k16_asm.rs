@@ -34,6 +34,10 @@ pub(crate) fn sub(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
     alu_rrr(dst, 0x1, lhs, rhs)
 }
 
+pub(crate) fn mul(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
+    alu_rrr(dst, 0xc, lhs, rhs)
+}
+
 pub(crate) fn and(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
     alu_rrr(dst, 0x2, lhs, rhs)
 }
@@ -196,6 +200,7 @@ mod tests {
         assert_eq!(const32(1, 0x1234_5678), [0xe101, 0x5678, 0x1234]);
         assert_eq!(add(2, 1, 3), [0x2200, 0x0013]);
         assert_eq!(sub(2, 1, 3), [0x2201, 0x0013]);
+        assert_eq!(mul(2, 1, 3), [0x220c, 0x0013]);
         assert_eq!(and(2, 1, 3), [0x2202, 0x0013]);
         assert_eq!(or(2, 1, 3), [0x2203, 0x0013]);
         assert_eq!(xor(2, 1, 3), [0x2204, 0x0013]);

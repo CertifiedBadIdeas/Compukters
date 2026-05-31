@@ -1873,17 +1873,13 @@ impl K16ArtifactBackend {
                 | BinaryOp::BitOr
                 | BinaryOp::BitXor
                 | BinaryOp::Shl
-                | BinaryOp::Shr => {
+                | BinaryOp::Shr
+                | BinaryOp::Mul => {
                     let encode = u32_binary_encoder(*op)?;
                     let lhs = self.compile_u32_expr_to_register_or_use(dst, lhs, unsafe_context)?;
                     let rhs = self.compile_u32_expr_to_register_or_use(14, rhs, unsafe_context)?;
                     self.words.extend_from_slice(&encode(dst, lhs, rhs));
                     Ok(())
-                }
-                BinaryOp::Mul => {
-                    let multiplier = self.eval_u32_const_value(rhs)?;
-                    self.compile_u32_expr_into(dst, lhs, unsafe_context)?;
-                    self.emit_mul_by_small_const(dst, multiplier)
                 }
                 BinaryOp::Div | BinaryOp::Rem => unsupported(
                     "u32 division and remainder require explicit runtime helpers before lowering",
@@ -1974,28 +1970,6 @@ impl K16ArtifactBackend {
         let zero = scratch_register_excluding(src);
         self.words.extend_from_slice(&k16_asm::const32(zero, 0));
         self.words.extend_from_slice(&k16_asm::add(dst, src, zero));
-    }
-
-    fn emit_mul_by_small_const(&mut self, dst: u8, multiplier: u32) -> Result<(), CompileError> {
-        if multiplier == 0 {
-            self.words.extend_from_slice(&k16_asm::const32(dst, 0));
-            return Ok(());
-        }
-        if multiplier == 1 {
-            return Ok(());
-        }
-        if multiplier > 16 {
-            return unsupported(format!(
-                "u32 multiplication by constant `{multiplier}` is too large for K16 lowering"
-            ));
-        }
-        let scratch = scratch_register_excluding(dst);
-        self.emit_register_copy(scratch, dst);
-        for _ in 1..multiplier {
-            self.words
-                .extend_from_slice(&k16_asm::add(dst, dst, scratch));
-        }
-        Ok(())
     }
 
     fn compile_u8_expr_into(
@@ -2828,8 +2802,9 @@ fn i32_binary_encoder(op: BinaryOp) -> Result<fn(u8, u8, u8) -> [u16; 2], Compil
         BinaryOp::BitXor => Ok(k16_asm::xor),
         BinaryOp::Shl => Ok(k16_asm::shl),
         BinaryOp::Shr => Ok(k16_asm::sar),
-        BinaryOp::Mul | BinaryOp::Div | BinaryOp::Rem => unsupported(
-            "i32 multiplication, division, and remainder require explicit runtime helpers before lowering",
+        BinaryOp::Mul => Ok(k16_asm::mul),
+        BinaryOp::Div | BinaryOp::Rem => unsupported(
+            "i32 division and remainder require explicit runtime helpers before lowering",
         ),
     }
 }
@@ -2843,8 +2818,9 @@ fn u32_binary_encoder(op: BinaryOp) -> Result<fn(u8, u8, u8) -> [u16; 2], Compil
         BinaryOp::BitXor => Ok(k16_asm::xor),
         BinaryOp::Shl => Ok(k16_asm::shl),
         BinaryOp::Shr => Ok(k16_asm::shr),
-        BinaryOp::Mul | BinaryOp::Div | BinaryOp::Rem => unsupported(
-            "u32 multiplication, division, and remainder require explicit runtime helpers before lowering",
+        BinaryOp::Mul => Ok(k16_asm::mul),
+        BinaryOp::Div | BinaryOp::Rem => unsupported(
+            "u32 division and remainder require explicit runtime helpers before lowering",
         ),
     }
 }
