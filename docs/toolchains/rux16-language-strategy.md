@@ -100,7 +100,7 @@ formats until each compatibility-affecting ABI migration lands.
 The preferred target shape is freestanding Rust:
 
 - rustc emits ordinary Rux16 ELF32 relocatable objects;
-- `rux link` packages those objects into `RUXE`;
+- `k16 link` packages those objects into `RUXE`;
 - firmware, bootloaders, kernels, and user-space programs use the same machine
   ABI rules, with different load contracts where needed;
 - missing runtime helpers remain link-time errors until explicit Rux16 object

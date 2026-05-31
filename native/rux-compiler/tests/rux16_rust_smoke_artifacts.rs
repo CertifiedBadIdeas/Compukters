@@ -12,6 +12,8 @@ fn rust_nocore_smoke_artifacts_are_documented_and_strict() {
     let runtime_helpers = root.join("native/rux-compiler/runtime/rux16_memory_helpers.rs");
     let docs = root.join("docs/toolchains/rux16-rust-nocore-smoke.md");
     let bootstrap_docs = root.join("docs/toolchains/rux16-rustc-bootstrap.md");
+    let feasibility_docs = root.join("docs/toolchains/rux16-rust-feasibility.md");
+    let strategy_docs = root.join("docs/toolchains/rux16-language-strategy.md");
 
     let spec = fs::read_to_string(&target_spec).expect("Rux16 Rust target spec exists");
     assert!(spec.contains("\"llvm-target\": \"rux16\""));
@@ -75,6 +77,18 @@ fn rust_nocore_smoke_artifacts_are_documented_and_strict() {
     assert!(bootstrap_docs.contains("tools/rux16-rustc-bootstrap-probe.sh"));
     assert!(bootstrap_docs.contains("build-rux-min/bin/llvm-config"));
     assert!(bootstrap_docs.contains("rux16"));
+
+    let feasibility_docs =
+        fs::read_to_string(&feasibility_docs).expect("Rust feasibility docs exist");
+    let strategy_docs = fs::read_to_string(&strategy_docs).expect("Rust strategy docs exist");
+    for docs in [&feasibility_docs, &strategy_docs] {
+        assert!(docs.contains("k16 link"));
+        assert!(!docs.contains("rux link"));
+        assert!(!docs.contains("rux run"));
+        assert!(!docs.contains("rux runtime"));
+    }
+    assert!(feasibility_docs.contains("k16 runtime rux16-startup"));
+    assert!(feasibility_docs.contains("k16 run"));
 }
 
 fn repo_root() -> &'static Path {
