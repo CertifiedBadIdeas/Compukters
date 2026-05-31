@@ -26,10 +26,8 @@ MANIFEST="$ROOT/native/rux-compiler/Cargo.toml"
 usage() {
     cat >&2 <<'EOF'
 usage:
+  rux check <input.rx>
   rux compile --target <bios|boot|program> <input.rx> -o <output>
-  rux disasm --target <bios|boot|program> <input>
-  rux volume create <volume.ruxvol> --size <bytes>
-  rux volume put-boot <volume.ruxvol> <boot.bin>
 EOF
 }
 
