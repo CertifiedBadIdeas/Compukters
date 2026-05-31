@@ -127,6 +127,7 @@ class K16ComputerRuntime(
 ) : K16ComputerEndpoint {
     private val terminalOutput = ByteArrayOutputStream()
     private var lastDisplay0Sequence: Long? = null
+    private var terminalControl: NativeK16ComputerControl? = null
     private var closed = false
 
     init {
@@ -148,14 +149,23 @@ class K16ComputerRuntime(
     override fun tick(maxTurns: Int): NativeK16ComputerControl {
         ensureOpen()
         require(maxTurns >= 0) { "maxTurns must be non-negative" }
+        terminalControl?.let { return it }
         repeat(maxTurns) {
             val signal = bindings.runUntilSignal(handle)
             appendNativeOutput()
-            if (signal != NativeK16ComputerSignal.Pause) {
-                return bindings.control(handle)
+            val control = bindings.control(handle)
+            if (signal != NativeK16ComputerSignal.Pause || control.isTerminal()) {
+                if (control.isTerminal()) {
+                    terminalControl = control
+                }
+                return control
             }
         }
-        return bindings.control(handle)
+        return bindings.control(handle).also { control ->
+            if (control.isTerminal()) {
+                terminalControl = control
+            }
+        }
     }
 
     fun control(): NativeK16ComputerControl {

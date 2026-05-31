@@ -243,6 +243,25 @@ class K16RuntimeDeviceTest {
     }
 
     @Test
+    fun stopsTickingEndpointAfterTerminalControlStatus() {
+        val endpoint = RecordingK16Endpoint()
+        endpoint.control = NativeK16ComputerControl(status = K16RuntimeDevice.STATUS_HALTED, exitCode = 0, panicCode = 2)
+        val device =
+            K16RuntimeDevice(
+                deviceId = 18,
+                properties = DeviceProperties(DeviceFamily.NORMAL, label = null),
+                endpointFactory = { endpoint },
+                stateSink = {},
+            )
+
+        device.turnOn()
+        device.serverTick()
+        device.serverTick()
+
+        assertEquals(1, endpoint.tickCalls)
+    }
+
+    @Test
     fun dispatchesCharacterInputThroughSerialEchoToDisplayFrame() {
         val endpoint = RecordingK16Endpoint()
         val displayNetwork = RecordingDisplayNetworkBridge()
@@ -377,6 +396,7 @@ class K16RuntimeDeviceTest {
             private set
         var displaySnapshot: NativeK16ComputerDisplaySnapshot? = null
         var runtimeSnapshot: ByteArray = ByteArray(0)
+        var control: NativeK16ComputerControl = NativeK16ComputerControl(status = K16RuntimeDevice.STATUS_READY, exitCode = 0, panicCode = 0)
         private var lastPolledDisplaySequence: Long? = null
         private val injectedOutput = StringBuilder()
 
@@ -386,7 +406,7 @@ class K16RuntimeDeviceTest {
 
         override fun tick(maxTurns: Int): NativeK16ComputerControl {
             tickCalls += 1
-            return NativeK16ComputerControl(status = K16RuntimeDevice.STATUS_READY, exitCode = 0, panicCode = 0)
+            return control
         }
 
         override fun outputSnapshot(): ByteArray =
