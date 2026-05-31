@@ -31,4 +31,6 @@ The script fails explicitly if required tools are missing. It checks that:
 - `k16 disasm --target program` sees the linked startup path and LLVM-produced `main`.
 - LLVM emits `R_K16_CALL32` for a direct external call, and `k16 link` resolves it across LLVM-produced objects.
 - LLVM lowers a volatile stack local through K16 stack adjustment, `store32`, and `load32`, then `k16 link` packages it as normal program `K16E`.
-- Unsupported `i64` returns, varargs, stack arguments, and indirect calls fail explicitly before any object is produced.
+- Stack-passed arguments and indirect calls lower to the documented K16 call
+  ABI; unsupported `i64` returns and varargs still fail explicitly before any
+  object is produced.

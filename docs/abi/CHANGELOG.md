@@ -2,12 +2,15 @@
 
 ## Unreleased
 
+- LLVM K16 lowering now supports indirect calls through the existing
+  register-target `call rN` instruction and expands i32 byte-swap/rotate
+  operations into regular K16 shifts and bitwise ops. Rust `core` now advances
+  to the next integer runtime/libcall legalization blocker.
 - LLVM K16 lowering now covers the next Rust `core` prerequisites: memory
   helper libcalls, i32 div/rem libcalls, logical right shift, non-strict integer
   comparisons, signed narrow loads, bit-count expansion, i64 shift-parts,
   switch lowering without jump tables, and branch insertion/removal for branch
-  folding. The remaining Rust `core` blocker is indirect calls, which still
-  require an explicit K16 call ABI/ISA decision.
+  folding.
 - LLVM K16 lowering now materializes global and external symbol addresses with
   `const32` plus `R_K16_ABS32` relocations.
 - LLVM K16 lowering now supports branchless scalar `select` from compare

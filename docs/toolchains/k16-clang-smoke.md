@@ -11,8 +11,9 @@
 - `k16 disasm --target program` checks the linked K16 code.
 - `k16 run` executes the `K16E` in the VM and observes `42` as
   `debug_bytes=2a`.
-- unsupported C shapes fail explicitly: `long long` return, varargs, stack
-  arguments, and indirect calls.
+- stack-passed arguments and indirect calls lower to the documented K16 call
+  ABI; unsupported C shapes such as `long long` return and varargs still fail
+  explicitly.
 
 The smoke expects a Clang-capable K16 LLVM build at:
 
