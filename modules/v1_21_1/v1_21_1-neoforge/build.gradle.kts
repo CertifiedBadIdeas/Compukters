@@ -124,6 +124,7 @@ val compileK16BiosObject =
             commandLine(
                 "cargo",
                 "rustc",
+                "-Zbuild-std=core",
                 "--manifest-path",
                 k16BiosManifest.asFile.absolutePath,
                 "--features",
@@ -193,6 +194,7 @@ val compileK16SystemBootObject =
             commandLine(
                 "cargo",
                 "rustc",
+                "-Zbuild-std=core",
                 "--manifest-path",
                 k16BootManifest.asFile.absolutePath,
                 "--features",
@@ -262,6 +264,7 @@ val compileK16SystemKernelObject =
             commandLine(
                 "cargo",
                 "rustc",
+                "-Zbuild-std=core",
                 "--manifest-path",
                 k16KernelManifest.asFile.absolutePath,
                 "--features",

@@ -103,6 +103,15 @@ class K16ToolingRenameTest {
     }
 
     @Test
+    fun rustFirmwareGradleBuildsCoreOnlyArtifacts() {
+        val buildScript = root.resolve("modules/v1_21_1/v1_21_1-neoforge/build.gradle.kts").readText()
+
+        assertTrue(buildScript.contains("-Zbuild-std=core"))
+        assertFalse(buildScript.contains("build-std=core,alloc"))
+        assertFalse(buildScript.contains("build-std=std"))
+    }
+
+    @Test
     fun activeAbiDocsUseK16FormatNames() {
         val abiDir = root.resolve("docs/abi")
 

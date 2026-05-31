@@ -178,7 +178,21 @@ K16 Rust no_core smoke passed
 Only after that should the project move to Rust target runtime helpers,
 `panic=abort`, and `core`/`no_std`.
 
+The next core-specific proof is:
+
+```text
+K16_RUSTC=/path/to/custom/stage1/rustc \
+K16_CARGO=/path/to/nightly/cargo \
+K16_LLVM_BIN_DIR=/path/to/k16/llvm/bin \
+tools/k16-rust-core-smoke.sh
+```
+
+That path uses `-Z build-std=core` and is intentionally limited to `core`
+without `alloc` or hosted `std`.
+
 ## Follow-Up
 
 - [#145](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/145):
   prepare the custom rustc workspace/build path needed before #132 can pass.
+- [#148](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/148):
+  build the K16 Rust `core` sysroot path.

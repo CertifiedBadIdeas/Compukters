@@ -107,7 +107,7 @@ The Rust path should progress in this order:
 no_core smoke
   -> runtime helper objects
   -> panic=abort boundary
-  -> core/no_std kernel code
+  -> core-only no_std firmware and kernel code
   -> alloc after kernel memory management
   -> hosted std only after real OS services exist
 ```
@@ -149,3 +149,6 @@ rust/guest/k16-rt
 - [#138](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/138)
   records the stronger goal: existing Rux language/compiler/source code should
   be retired, not only frozen for new work.
+- [#148](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/148)
+  tracks the K16 Rust `core` sysroot milestone. BIOS and bootloader should stay
+  on `core` only, without `alloc` or `std`.
