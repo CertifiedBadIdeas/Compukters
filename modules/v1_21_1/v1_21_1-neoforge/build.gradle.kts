@@ -120,7 +120,7 @@ val compileK16BiosObject =
                     ?: throw GradleException("K16_RUSTC must point to a custom K16 rustc to build rust/guest/k16-bios")
             k16BiosObject.get().asFile.parentFile.mkdirs()
             environment("RUSTC", rustc)
-            environment("RUSTFLAGS", "-Zunstable-options")
+            environment("RUSTFLAGS", "-Zunstable-options -Cjump-tables=no")
             commandLine(
                 "cargo",
                 "rustc",
@@ -139,6 +139,7 @@ val compileK16BiosObject =
                 "panic=abort",
                 "-C",
                 "relocation-model=static",
+                "-Cjump-tables=no",
                 "--emit=obj",
                 "-o",
                 k16BiosObject.get().asFile.absolutePath,
@@ -191,7 +192,7 @@ val compileK16SystemBootObject =
                     ?: throw GradleException("K16_RUSTC must point to a custom K16 rustc to build rust/guest/k16-boot")
             k16BootObject.get().asFile.parentFile.mkdirs()
             environment("RUSTC", rustc)
-            environment("RUSTFLAGS", "-Zunstable-options")
+            environment("RUSTFLAGS", "-Zunstable-options -Cjump-tables=no")
             commandLine(
                 "cargo",
                 "rustc",
@@ -210,6 +211,7 @@ val compileK16SystemBootObject =
                 "panic=abort",
                 "-C",
                 "relocation-model=static",
+                "-Cjump-tables=no",
                 "--emit=obj",
                 "-o",
                 k16BootObject.get().asFile.absolutePath,
@@ -262,7 +264,7 @@ val compileK16SystemKernelObject =
                     ?: throw GradleException("K16_RUSTC must point to a custom K16 rustc to build rust/guest/k16-kernel")
             k16KernelObject.get().asFile.parentFile.mkdirs()
             environment("RUSTC", rustc)
-            environment("RUSTFLAGS", "-Zunstable-options")
+            environment("RUSTFLAGS", "-Zunstable-options -Cjump-tables=no")
             commandLine(
                 "cargo",
                 "rustc",
@@ -281,6 +283,7 @@ val compileK16SystemKernelObject =
                 "panic=abort",
                 "-C",
                 "relocation-model=static",
+                "-Cjump-tables=no",
                 "--emit=obj",
                 "-o",
                 k16KernelObject.get().asFile.absolutePath,

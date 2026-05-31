@@ -75,7 +75,43 @@ fi
 
 llvm_version="$("$LLVM_CONFIG" --version)"
 llvm_targets="$("$LLVM_CONFIG" --targets-built)"
+llvm_obj_root="$("$LLVM_CONFIG" --obj-root)"
 require_output_contains "llvm-config --targets-built" "$llvm_targets" "K16"
+
+cmake_cache="$llvm_obj_root/CMakeCache.txt"
+if [[ ! -f "$cmake_cache" ]]; then
+    echo "LLVM CMake cache is missing: $cmake_cache" >&2
+    exit 1
+fi
+
+llvm_source_dir="$(sed -n 's/^LLVM_SOURCE_DIR:STATIC=//p' "$cmake_cache" | head -n 1)"
+if [[ -z "$llvm_source_dir" ]]; then
+    echo "LLVM_SOURCE_DIR is missing from $cmake_cache" >&2
+    exit 1
+fi
+
+if ! git -C "$llvm_source_dir" rev-parse --is-inside-work-tree > /dev/null 2>&1; then
+    echo "LLVM source is not a git checkout: $llvm_source_dir" >&2
+    exit 1
+fi
+
+expected_llvm_commit="$(git -C "$RUST_SRC" ls-tree HEAD src/llvm-project | awk '{ print $3 }')"
+if [[ -z "$expected_llvm_commit" ]]; then
+    echo "Rust source does not pin src/llvm-project at HEAD." >&2
+    exit 1
+fi
+
+if ! git -C "$llvm_source_dir" cat-file -e "$expected_llvm_commit^{commit}" 2> /dev/null; then
+    echo "K16 LLVM source does not contain Rust-pinned llvm-project commit: $expected_llvm_commit" >&2
+    echo "LLVM source: $llvm_source_dir" >&2
+    exit 1
+fi
+
+if ! git -C "$llvm_source_dir" merge-base --is-ancestor "$expected_llvm_commit" HEAD; then
+    echo "K16 LLVM HEAD is not based on Rust-pinned llvm-project commit: $expected_llvm_commit" >&2
+    echo "LLVM source: $llvm_source_dir" >&2
+    exit 1
+fi
 
 "$RUST_SRC/x.py" --help > /dev/null
 
@@ -96,8 +132,10 @@ echo "K16 rustc bootstrap probe passed"
 echo "Rust source: $RUST_SRC"
 echo "Rust branch: $current_branch"
 echo "LLVM config: $LLVM_CONFIG"
+echo "LLVM source: $llvm_source_dir"
 echo "LLVM version: $llvm_version"
 echo "LLVM targets: $llvm_targets"
+echo "Rust-pinned LLVM commit: $expected_llvm_commit"
 echo
 echo "Bootstrap config written to: $bootstrap_config"
 echo

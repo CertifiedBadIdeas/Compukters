@@ -125,6 +125,10 @@ The probe is intentionally strict. It requires:
 - the Rust source checkout at `toolchains/Compukter-Kraft-rust`;
 - the Rust checkout to be on branch `k16`;
 - `llvm-config --targets-built` to contain `K16`;
+- the K16 LLVM source checkout to contain the Rust-pinned LLVM commit from
+  `src/llvm-project`;
+- `git merge-base --is-ancestor` to prove K16 LLVM `HEAD` is based on that
+  Rust-pinned LLVM commit;
 - the K16 LLVM bin directory to contain the LLVM tools copied by Rust bootstrap
   into the stage1 sysroot;
 - Rust bootstrap entrypoint `x.py` to be present and runnable.
@@ -192,8 +196,9 @@ intentionally limited to `core` without `alloc` or hosted `std`.
 
 With the updated `k16` Rust and LLVM branches plus a rebuilt stage1 host `std`
 sysroot, this path reaches K16 backend codegen for `core`. The current blocker
-is missing lowering for the wider Rust `core` surface, including jump tables and
-some compiler-builtins library call operations.
+is missing lowering for the wider Rust `core` surface, including some
+compiler-builtins library call operations. Rust jump tables are disabled for the
+current ABI slice with `-Cjump-tables=no`.
 
 ## Follow-Up
 

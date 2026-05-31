@@ -10,6 +10,10 @@ freestanding Rust on K16. It uses Cargo's nightly `-Z build-std=core` and
 `tools/k16-unknown-kraftos.json`, then compiles a tiny `#![no_std]` program,
 links it through `k16 link`, and executes it through the VM.
 
+The smoke passes `-C jump-tables=no` because the current K16 ABI slice does not
+yet define a jump-table object/relocation contract for Rust `core`. Switches
+must lower to explicit branch code until that ABI is added.
+
 This smoke is core only: no alloc, no std, no panic unwinding, and no hidden VM
 or host fallback path. Missing target support or missing helper symbols must
 fail the build or link explicitly.
@@ -49,17 +53,23 @@ debug_bytes=2a
 
 ## Current Blocker
 
-After building the stage1 host `std` sysroot, the smoke reaches real K16 codegen
-for Rust `core`. The current blocker is still inside the K16 LLVM/Rust backend:
+The strict bootstrap probe currently rejects the local updated branch pair
+because the external K16 LLVM checkout does not contain the Rust-pinned
+`src/llvm-project` commit. Rebuilding stage1 rustc from that mismatched pair can
+produce a `rustc --version --verbose` segmentation fault during LLVM static
+initialization, so the toolchain must be realigned before treating any `core`
+codegen result as valid.
+
+After a compatible stage1 host `std` sysroot is rebuilt, the smoke reaches real
+K16 codegen for Rust `core`. The known backend blocker after that point is:
 
 ```text
-rustc-LLVM ERROR: Cannot select: br_jt
 rustc-LLVM ERROR: unsupported library call operation
 ```
 
 Standalone LLVM lowering for register and constant `shr` is covered by the K16
-LLVM tests, so the remaining work is the broader Rust `core` codegen surface
-exercised by `build-std=core`.
+LLVM tests, and Rust jump tables are disabled for this ABI slice. The remaining
+work is the broader Rust `core` codegen surface exercised by `build-std=core`.
 
 ## Firmware Tier
 
