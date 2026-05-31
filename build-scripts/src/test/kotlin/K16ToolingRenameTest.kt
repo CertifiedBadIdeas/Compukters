@@ -65,10 +65,35 @@ class K16ToolingRenameTest {
     }
 
     @Test
+    fun rustBootloaderAndKernelLiveAsGuestCrates() {
+        val workspaceManifest = root.resolve("rust/guest/Cargo.toml").readText()
+        val bootManifest = root.resolve("rust/guest/k16-boot/Cargo.toml")
+        val bootSource = root.resolve("rust/guest/k16-boot/src/main.rs")
+        val kernelManifest = root.resolve("rust/guest/k16-kernel/Cargo.toml")
+        val kernelSource = root.resolve("rust/guest/k16-kernel/src/main.rs")
+
+        assertTrue(workspaceManifest.contains("\"k16-boot\""))
+        assertTrue(workspaceManifest.contains("\"k16-kernel\""))
+        assertTrue(bootManifest.exists())
+        assertTrue(bootSource.exists())
+        assertTrue(kernelManifest.exists())
+        assertTrue(kernelSource.exists())
+
+        val kernel = kernelSource.readText()
+        assertTrue(kernel.contains("#![no_std]"))
+        assertTrue(kernel.contains("#![no_main]"))
+        assertTrue(kernel.contains("extern \"C\" fn _start() -> !"))
+        assertTrue(kernel.contains("KERNEL OK"))
+    }
+
+    @Test
     fun neoforgeFirmwareBuildDoesNotUseRuxCompilerOrDeletedGuestExamples() {
         val buildScript = root.resolve("modules/v1_21_1/v1_21_1-neoforge/build.gradle.kts").readText()
 
         assertTrue(buildScript.contains("rust/guest/k16-bios"))
+        assertTrue(buildScript.contains("rust/guest/k16-boot"))
+        assertTrue(buildScript.contains("rust/guest/k16-kernel"))
+        assertFalse(buildScript.contains("tracked in #141"))
         assertFalse(buildScript.contains("--bin\",\\n            \"rux\""))
         assertFalse(buildScript.contains("ruxCompilerManifest"))
         assertFalse(buildScript.contains("k16_bios.rx"))
