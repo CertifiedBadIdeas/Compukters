@@ -45,6 +45,8 @@ fn rust_nocore_smoke_artifacts_are_documented_and_strict() {
     assert!(spec.contains("\"panic-strategy\": \"abort\""));
     assert!(spec.contains("\"target-pointer-width\": 32"));
     assert!(!spec.contains("\"target-pointer-width\": \"32\""));
+    assert!(spec.contains("\"executables\": true"));
+    assert!(!spec.contains("\"executables\": false"));
 
     let llvm_smoke = fs::read_to_string(&llvm_smoke_script).expect("LLVM smoke script exists");
     assert!(llvm_smoke.contains("--bin k16"));

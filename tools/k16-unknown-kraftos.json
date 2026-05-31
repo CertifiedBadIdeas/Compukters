@@ -11,7 +11,7 @@
   "panic-strategy": "abort",
   "relocation-model": "static",
   "code-model": "small",
-  "executables": false,
+  "executables": true,
   "disable-redzone": true,
   "singlethread": true,
   "atomic-cas": false,
