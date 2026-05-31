@@ -9,6 +9,11 @@
   requires an explicit `K16_RUSTC` K16 Rust compiler input; missing Rust BIOS
   toolchain state is a hard build error, not a fallback to deleted `.rx`
   sources.
+- Added guest-owned Rust bootloader and kernel crate scaffolds under
+  `rust/guest/k16-boot` and `rust/guest/k16-kernel`. NeoForge boot/kernel
+  artifact generation now uses explicit Rust object build tasks plus
+  `k16 link --target boot|kernel`, with missing `K16_RUSTC` reported as a hard
+  guest Rust toolchain error.
 - The public `rux` CLI surface and active Rux compiler/frontend sources are
   retired. K16 artifact work stays under `k16`, and guest-owned source belongs
   under `rust/guest`.
