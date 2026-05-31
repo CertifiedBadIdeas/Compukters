@@ -152,6 +152,7 @@ fn active_overview_docs_use_kraft16_runtime_brand() {
     let active_docs = [
         "README.md",
         "docs/ARCHITECTURE.md",
+        "docs/LANGUAGE.md",
         "docs/PROFILING.md",
         "docs/benchmarks/rux16-vm-baseline-2026-05-29.md",
     ];
@@ -169,10 +170,13 @@ fn active_overview_docs_use_kraft16_runtime_brand() {
         "Rux16 VM",
         "Rux16 CPU",
         "Rux16 guest CPU",
+        "Rux16 binary artifacts",
         "Rux16 code",
         "Rux16 guest execution",
         "Rust Rux16 computer",
         "runRux16ComputerUntilSignal",
+        "rux disasm --target",
+        "rux fs",
     ] {
         assert!(
             !docs.contains(forbidden),

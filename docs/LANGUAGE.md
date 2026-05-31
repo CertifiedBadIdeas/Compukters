@@ -2,9 +2,9 @@
 
 The Compukter Kraft Language (CKL) and its in-game IDE/Workbench were removed
 as part of the Rux MVP cutover (issue #26). The mod no longer ships a
-player-facing high-level language. Current runtime work uses Rux16 binary
-artifacts: `rux compile` produces raw guest code, `rux disasm --target ...`
-prints readable instruction output, `k16 volume` prepares storage0 `.kv`
-media, and filesystem-specific tooling lives under `rux fs`.
+player-facing high-level language. The remaining Rux surface is the temporary
+`.rx` language frontend: `rux compile` lowers source into Kraft16 artifacts.
+Machine and artifact tooling lives under `k16`: disassembly, inspect, volume,
+filesystem, runtime-helper, link, and run commands.
 
 If you need the previous CKL design notes, see the git history of this file.
