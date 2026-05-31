@@ -97,7 +97,7 @@ class K16RuntimeDeviceTest {
         val device =
             K16RuntimeDevice(
                 deviceId = 7,
-                properties = DeviceProperties(DeviceFamily.NORMAL, label = "Rux"),
+                properties = DeviceProperties(DeviceFamily.NORMAL, label = "K16"),
                 endpointFactory = { endpoint },
                 stateSink = { powerChanges += it },
             )
@@ -154,7 +154,7 @@ class K16RuntimeDeviceTest {
 
         device.attachDisplaySession(playerUuid, containerId = 17, displayId = 1, width = 36, height = 27)
         device.turnOn()
-        endpoint.injectOutput("Rux!")
+        endpoint.injectOutput("K16!")
         device.serverTick()
 
         assertEquals(1, displayNetwork.sentFrames.size)
@@ -168,7 +168,7 @@ class K16RuntimeDeviceTest {
     }
 
     @Test
-    fun sendsRuxDisplaySnapshotFrameToAttachedDisplaySessions() {
+    fun sendsK16DisplaySnapshotFrameToAttachedDisplaySessions() {
         val endpoint = RecordingK16Endpoint()
         val displayNetwork = RecordingDisplayNetworkBridge()
         val device =
@@ -188,7 +188,7 @@ class K16RuntimeDeviceTest {
                 cursorX = 3,
                 cursorY = 0,
                 sequence = 1,
-                cells = "RUX".encodeToByteArray() + ByteArray(80 * 25 - 3),
+                cells = "K16".encodeToByteArray() + ByteArray(80 * 25 - 3),
             )
         device.attachDisplaySession(playerUuid, containerId = 20, displayId = 1, width = 400, height = 200)
         device.turnOn()
@@ -207,7 +207,7 @@ class K16RuntimeDeviceTest {
     }
 
     @Test
-    fun sendsCurrentRuxDisplaySnapshotWhenDisplaySessionReopensWithoutNewVmFrame() {
+    fun sendsCurrentK16DisplaySnapshotWhenDisplaySessionReopensWithoutNewVmFrame() {
         val endpoint = RecordingK16Endpoint()
         val displayNetwork = RecordingDisplayNetworkBridge()
         val device =
@@ -281,10 +281,10 @@ class K16RuntimeDeviceTest {
 
         device.attachDisplaySession(UUID.randomUUID(), containerId = 19, displayId = 1, width = 36, height = 27)
         device.turnOn()
-        DeviceEvents.dispatch(device, PasteInputEvent(ByteBuffer.wrap("Rux".encodeToByteArray())))
+        DeviceEvents.dispatch(device, PasteInputEvent(ByteBuffer.wrap("K16".encodeToByteArray())))
         device.serverTick()
 
-        assertEquals(listOf("Rux"), endpoint.inputs.map { it.decodeToString() })
+        assertEquals(listOf("K16"), endpoint.inputs.map { it.decodeToString() })
         assertEquals(1, displayNetwork.sentFrames.size)
     }
 

@@ -28,7 +28,7 @@ import kotlin.test.assertTrue
 
 class NotebookBlockArchitectureTest {
     @Test
-    fun notebookIsAPlacedRuxDeviceNotAnInventoryComputer() {
+    fun notebookIsAPlacedK16DeviceNotAnInventoryComputer() {
         val blockEntityPath =
             Path.of("src/main/kotlin/ru/lazyhat/compukterkraft/common/notebook/block/NotebookBlockEntity.kt")
         val blockPath =
@@ -51,6 +51,17 @@ class NotebookBlockArchitectureTest {
         assertTrue(itemSource.contains("deviceFamilyId = DeviceFamily.NORMAL.name.lowercase()"))
         assertFalse(itemSource.contains("useOn"))
         assertFalse(itemSource.contains("openMenu"))
+    }
+
+    @Test
+    fun notebookScreenUsesK16Branding() {
+        val screenSource =
+            Path
+                .of("src/main/kotlin/ru/lazyhat/compukterkraft/common/notebook/screen/NotebookScreen.kt")
+                .readText()
+
+        assertTrue(screenSource.contains("\"K16 LAPTOP\""))
+        assertFalse(screenSource.contains("\"RUX LAPTOP\""))
     }
 
     @Test

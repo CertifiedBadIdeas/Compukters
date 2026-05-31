@@ -84,7 +84,7 @@ class NotebookScreen(
                 modifier = Modifier.offset(12, 20),
                 color = DIM,
             ) {
-                "RUX LAPTOP"
+                "K16 LAPTOP"
             }
             text(
                 modifier = Modifier.offset(imageWidth - 156, 8),

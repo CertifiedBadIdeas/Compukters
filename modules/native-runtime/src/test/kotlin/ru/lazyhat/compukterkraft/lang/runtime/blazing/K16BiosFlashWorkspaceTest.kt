@@ -34,7 +34,7 @@ import kotlin.test.assertTrue
 class K16BiosFlashWorkspaceTest {
     @Test
     fun preparesBiosFlashFromRawResourceBytes() {
-        val workspace = createTempDirectory("rux-bios-workspace-")
+        val workspace = createTempDirectory("k16-bios-workspace-")
         val loader = resourceClassLoader("firmware/test-bios.kflash", byteArrayOf(0x01, 0x10, 0x01, 0xe0.toByte()))
 
         val path =
@@ -51,7 +51,7 @@ class K16BiosFlashWorkspaceTest {
 
     @Test
     fun preservesExistingPerComputerBiosFlash() {
-        val workspace = createTempDirectory("rux-bios-workspace-")
+        val workspace = createTempDirectory("k16-bios-workspace-")
         val existing = workspace.resolve("bios.kflash")
         existing.writeBytes(byteArrayOf(7, 8, 9))
         val loader = resourceClassLoader("firmware/test-bios.kflash", byteArrayOf(1, 2, 3))
@@ -69,7 +69,7 @@ class K16BiosFlashWorkspaceTest {
 
     @Test
     fun missingBiosFlashResourceFailsFast() {
-        val workspace = createTempDirectory("rux-bios-workspace-")
+        val workspace = createTempDirectory("k16-bios-workspace-")
 
         assertFailsWith<IllegalStateException> {
             K16BiosFlashWorkspace.prepareBiosFlash(

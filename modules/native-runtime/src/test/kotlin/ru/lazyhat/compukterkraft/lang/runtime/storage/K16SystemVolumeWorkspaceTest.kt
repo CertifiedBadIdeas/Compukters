@@ -35,7 +35,7 @@ import kotlin.test.assertTrue
 class K16SystemVolumeWorkspaceTest {
     @Test
     fun preparesStorage0VolumeFromBundledResourceBytes() {
-        val workspace = createTempDirectory("rux-system-volume-workspace-")
+        val workspace = createTempDirectory("k16-system-volume-workspace-")
         val bytes = "K16VOL".encodeToByteArray() + byteArrayOf(1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0)
         val loader = resourceClassLoader("firmware/test-storage0.kv", bytes)
 
@@ -53,7 +53,7 @@ class K16SystemVolumeWorkspaceTest {
 
     @Test
     fun preservesExistingPerComputerStorage0Volume() {
-        val workspace = createTempDirectory("rux-system-volume-workspace-")
+        val workspace = createTempDirectory("k16-system-volume-workspace-")
         val existing = workspace.resolve("volumes/storage0.kv")
         existing.parent.createDirectories()
         existing.writeBytes(byteArrayOf(7, 8, 9))
@@ -72,7 +72,7 @@ class K16SystemVolumeWorkspaceTest {
 
     @Test
     fun missingStorage0VolumeResourceFailsFast() {
-        val workspace = createTempDirectory("rux-system-volume-workspace-")
+        val workspace = createTempDirectory("k16-system-volume-workspace-")
 
         assertFailsWith<IllegalStateException> {
             K16SystemVolumeWorkspace.prepareStorage0Volume(

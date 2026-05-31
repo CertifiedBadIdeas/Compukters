@@ -23,7 +23,7 @@ import org.gradle.api.tasks.InputFile
 import org.gradle.api.tasks.OutputFile
 import org.gradle.api.tasks.TaskAction
 
-abstract class GenerateRuxFontSpecimenTask : DefaultTask() {
+abstract class GenerateK16FontSpecimenTask : DefaultTask() {
     @get:InputFile
     abstract val fontFile: RegularFileProperty
 
@@ -32,7 +32,7 @@ abstract class GenerateRuxFontSpecimenTask : DefaultTask() {
 
     @TaskAction
     fun generateSpecimen() {
-        val generated = RuxFontTableGenerator().generate(fontFile.get().asFile.readText())
+        val generated = K16FontTableGenerator().generate(fontFile.get().asFile.readText())
         output.get().asFile.writeGeneratedText(generated.markdownSpecimen)
     }
 
