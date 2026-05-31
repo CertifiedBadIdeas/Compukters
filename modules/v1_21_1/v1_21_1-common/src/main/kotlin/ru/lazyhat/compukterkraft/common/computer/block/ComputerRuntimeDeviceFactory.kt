@@ -33,7 +33,7 @@ import ru.lazyhat.compukterkraft.lang.runtime.storage.K16VolumeBlob
 import java.nio.file.Path
 
 object ComputerRuntimeDeviceFactory {
-    fun createRuxComputer(
+    fun createK16Computer(
         level: ServerLevel,
         tile: AbstractComputerBlockEntity,
         deviceId: Int,

@@ -31,7 +31,7 @@ class ComputerRuntimeDeviceFactoryArchitectureTest {
         .first { it.resolve("gradle/libs.versions.toml").exists() }
 
     @Test
-    fun inGameRuxComputerStartsFromPreparedBiosFlashFile() {
+    fun inGameK16ComputerStartsFromPreparedBiosFlashFile() {
         val source =
             Path
                 .of("src/main/kotlin/ru/lazyhat/compukterkraft/common/computer/block/ComputerRuntimeDeviceFactory.kt")
@@ -43,7 +43,7 @@ class ComputerRuntimeDeviceFactoryArchitectureTest {
     }
 
     @Test
-    fun inGameRuxComputerSeedsStorage0BeforeOpeningVolume() {
+    fun inGameK16ComputerSeedsStorage0BeforeOpeningVolume() {
         val source =
             Path
                 .of("src/main/kotlin/ru/lazyhat/compukterkraft/common/computer/block/ComputerRuntimeDeviceFactory.kt")
@@ -59,7 +59,7 @@ class ComputerRuntimeDeviceFactoryArchitectureTest {
     }
 
     @Test
-    fun inGameRuxComputerRestoresPendingRuntimeSnapshotBeforeFreshBoot() {
+    fun inGameK16ComputerRestoresPendingRuntimeSnapshotBeforeFreshBoot() {
         val source =
             Path
                 .of("src/main/kotlin/ru/lazyhat/compukterkraft/common/computer/block/ComputerRuntimeDeviceFactory.kt")
@@ -69,6 +69,23 @@ class ComputerRuntimeDeviceFactoryArchitectureTest {
         assertTrue(source.contains("K16ComputerRuntimeFactory.restoreFromBiosFlashSnapshot"))
         assertTrue(source.contains("K16ComputerRuntimeFactory.createFromBiosFlash"))
         assertFalse(source.contains("var pendingRuntimeSnapshot"))
+    }
+
+    @Test
+    fun inGameFactoryExposesK16ComputerNameWithoutRuxComputerAlias() {
+        val factorySource =
+            Path
+                .of("src/main/kotlin/ru/lazyhat/compukterkraft/common/computer/block/ComputerRuntimeDeviceFactory.kt")
+                .readText()
+        val notebookSource =
+            Path
+                .of("src/main/kotlin/ru/lazyhat/compukterkraft/common/notebook/block/NotebookBlockEntity.kt")
+                .readText()
+
+        assertTrue(factorySource.contains("fun createK16Computer("))
+        assertTrue(notebookSource.contains("ComputerRuntimeDeviceFactory.createK16Computer("))
+        assertFalse(factorySource.contains("createRuxComputer"))
+        assertFalse(notebookSource.contains("createRuxComputer"))
     }
 
     @Test
