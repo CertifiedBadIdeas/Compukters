@@ -82,3 +82,33 @@ fn rux16_object_abi_docs_define_freestanding_runtime_boundary() {
         );
     }
 }
+
+#[test]
+fn active_abi_docs_use_k16_for_machine_tooling_commands() {
+    let docs = [
+        normalized_doc("docs/abi/CHANGELOG.md"),
+        normalized_doc("docs/abi/ruxe-v1.md"),
+        normalized_doc("docs/abi/rux16-v1.md"),
+    ]
+    .join(" ");
+
+    for required in [
+        "k16 disasm",
+        "k16 runtime rux16-startup",
+        "k16 runtime rux16-memory-helpers",
+        "k16 link",
+        "K16 tooling",
+    ] {
+        assert!(
+            docs.contains(required),
+            "active ABI docs must contain `{required}`"
+        );
+    }
+
+    for retired in ["rux disasm", "rux runtime", "rux link", "rux run"] {
+        assert!(
+            !docs.contains(retired),
+            "active ABI docs must not contain `{retired}`"
+        );
+    }
+}
