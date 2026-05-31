@@ -15,7 +15,7 @@ source files or build outputs.
 Fork branch policy:
 
 - `main` mirrors upstream `llvm/llvm-project` and is synced manually;
-- `rux16` contains Compukter-Kraft LLVM/K16 changes;
+- `k16` contains Compukter-Kraft LLVM/K16 changes;
 - the main repository still pins the exact submodule commit for reproducible
   builds.
 
@@ -37,7 +37,7 @@ The current tracked commit is:
 5f56e021a651aa59b03d873ea749cf3eb15ed398
 ```
 
-That commit is carried by the fork branch `rux16`.
+That commit is carried by the fork branch `k16`.
 
 Local LLVM build directories such as `build-rux/` and `build-rux-min/` remain
 inside the submodule checkout and are not tracked by the main repository.

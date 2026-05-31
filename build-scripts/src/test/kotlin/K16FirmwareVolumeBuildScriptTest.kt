@@ -34,10 +34,10 @@ class K16FirmwareVolumeBuildScriptTest {
             buildScript.substringAfter("val createK16SystemStorage0 =")
                 .substringBefore("val putK16SystemStorage0Boot =")
 
-        assertTrue(taskBody.contains("\"volume\""), "storage0 task should invoke rux volume tooling")
-        assertTrue(taskBody.contains("\"init\""), "storage0 task must create a RUXPT partitioned volume")
-        assertFalse(taskBody.contains("\"create\""), "plain rux volume create is not accepted by put-boot")
-        assertFalse(buildScript.contains("createRux16SystemStorage0"))
-        assertFalse(buildScript.contains("putRux16SystemStorage0Boot"))
+        assertTrue(taskBody.contains("\"volume\""), "storage0 task should invoke k16 volume tooling")
+        assertTrue(taskBody.contains("\"init\""), "storage0 task must create a K16PT partitioned volume")
+        assertFalse(taskBody.contains("\"create\""), "plain k16 volume create is not accepted by put-boot")
+        assertFalse(buildScript.contains("createRuxSystemStorage0"))
+        assertFalse(buildScript.contains("putRuxSystemStorage0Boot"))
     }
 }

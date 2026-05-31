@@ -21,7 +21,7 @@
 set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-MANIFEST="$ROOT/native/rux-compiler/Cargo.toml"
+MANIFEST="$ROOT/native/k16-tools/Cargo.toml"
 
 usage() {
     cat >&2 <<'EOF'

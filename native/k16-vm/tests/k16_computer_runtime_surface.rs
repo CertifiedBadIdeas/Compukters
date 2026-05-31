@@ -34,7 +34,7 @@ fn runtime_test_and_benchmark_surfaces_use_k16_names() {
     for retired_path in [
         "native/k16-vm/tests/rux_computer.rs",
         "native/k16-vm/tests/rux_computer_runtime_surface.rs",
-        "docs/benchmarks/rux16-vm-baseline-2026-05-29.md",
+        "docs/benchmarks/rux-vm-baseline-2026-05-29.md",
     ] {
         assert!(
             !repo_dir.join(retired_path).exists(),
@@ -87,7 +87,7 @@ fn k16_computer_handle_source_does_not_expose_low_image_startup_or_handoff() {
     for legacy_name in [
         "createRuxComputerFromBiosFlashNative",
         "restoreRuxComputerFromBiosFlashSnapshotNative",
-        "runRux16ComputerUntilSignalNative",
+        "runRuxComputerUntilSignalNative",
         "ruxComputerControlNative",
         "ruxComputerDebugOutputNative",
         "drainRuxComputerDebugOutputNative",
@@ -169,7 +169,7 @@ fn active_abi_docs_do_not_present_low_image_as_supported() {
         assert!(!abi_dir.join(removed_doc).exists());
     }
 
-    for forbidden in ["RUXI", "LowImage", "low image", "low-image", ".ruxi"] {
+    for forbidden in ["K16I", "LowImage", "low image", "low-image", ".k16i"] {
         assert!(!docs.contains(forbidden));
     }
 }
@@ -198,14 +198,14 @@ fn active_overview_docs_use_kraft16_runtime_brand() {
     assert!(docs.contains("Kraft16 VM"));
     assert!(docs.contains("Kraft16 CPU"));
     for forbidden in [
-        "Rux16 VM",
+        "Rux VM",
         "Rux16 CPU",
         "Rux16 guest CPU",
         "Rux16 binary artifacts",
         "Rux16 code",
         "Rux16 guest execution",
-        "Rust Rux16 computer",
-        "runRux16ComputerUntilSignal",
+        "Rust K16 computer",
+        "runK16ComputerUntilSignal",
         "rux disasm --target",
         "rux fs",
     ] {

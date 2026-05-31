@@ -17,9 +17,9 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+use crate::k16::{K16Cpu, K16Signal};
 use crate::low_bus::{MachineBus, MmioDevice};
 use crate::low_machine::MemoryFault;
-use crate::rux16::{Rux16Cpu, Rux16Signal};
 
 const MEMORY_SIZE: usize = 1024;
 const DATA_ADDR: u32 = 512;
@@ -65,19 +65,19 @@ pub fn run_k16_workload(workload: VmBenchmarkWorkload, iterations: u32) -> Resul
         bus.map_mmio(MMIO_ADDR, Box::new(BenchmarkRegisterDevice { value: 0 }))
             .map_err(|error| error.to_string())?;
     }
-    let (words, result_register) = rux16_workload(workload, iterations);
+    let (words, result_register) = k16_workload(workload, iterations);
     write_words(&mut bus, 0, &words)?;
-    let mut cpu = Rux16Cpu::new(0);
+    let mut cpu = K16Cpu::new(0);
     match cpu
-        .run_until_signal(&mut bus, rux16_max_steps(workload, iterations))
+        .run_until_signal(&mut bus, k16_max_steps(workload, iterations))
         .map_err(|error| error.to_string())?
     {
-        Rux16Signal::Halt => Ok(cpu.register(result_register)),
-        signal => Err(format!("unexpected Rux16 signal: {signal:?}")),
+        K16Signal::Halt => Ok(cpu.register(result_register)),
+        signal => Err(format!("unexpected K16 signal: {signal:?}")),
     }
 }
 
-fn rux16_workload(workload: VmBenchmarkWorkload, iterations: u32) -> (Vec<u16>, usize) {
+fn k16_workload(workload: VmBenchmarkWorkload, iterations: u32) -> (Vec<u16>, usize) {
     match workload {
         VmBenchmarkWorkload::ComputeLoop => {
             let mut words = vec![
@@ -138,7 +138,7 @@ fn rux16_workload(workload: VmBenchmarkWorkload, iterations: u32) -> (Vec<u16>, 
     }
 }
 
-fn rux16_max_steps(workload: VmBenchmarkWorkload, iterations: u32) -> u64 {
+fn k16_max_steps(workload: VmBenchmarkWorkload, iterations: u32) -> u64 {
     match workload {
         VmBenchmarkWorkload::ComputeLoop => u64::from(iterations) * 4 + 16,
         VmBenchmarkWorkload::MemoryLoop => u64::from(iterations) * 7 + 16,

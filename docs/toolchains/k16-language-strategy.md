@@ -14,7 +14,7 @@ The long-term language direction is:
 ```text
 K16 CPU/ABI
   -> ELF32 object ABI
-  -> RUXE packaging
+  -> K16E packaging
   -> custom rustc/LLVM K16 target
   -> Rust no_std kernels
   -> Rust user-space programs
@@ -100,7 +100,7 @@ formats until each compatibility-affecting ABI migration lands.
 The preferred target shape is freestanding Rust:
 
 - rustc emits ordinary K16 ELF32 relocatable objects;
-- `k16 link` packages those objects into `RUXE`;
+- `k16 link` packages those objects into `K16E`;
 - firmware, bootloaders, kernels, and user-space programs use the same machine
   ABI rules, with different load contracts where needed;
 - missing runtime helpers remain link-time errors until explicit K16 object
@@ -144,7 +144,7 @@ Existing Rux bootstrap examples
 ## Roadmap Impact
 
 - [#132](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/132) is
-  the next Rust proof: `rustc -> K16 object -> RUXE -> VM`.
+  the next Rust proof: `rustc -> K16 object -> K16E -> VM`.
 - [#133](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/133)
   should be framed as Rust target runtime/helper work, not Rux source runtime
   expansion.

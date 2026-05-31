@@ -25,7 +25,7 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("tasks.register<Exec>(\"compileK16BiosFlash\")"))
         assertTrue(source.contains("tasks.register<Exec>(\"compileK16SystemStorage0\")"))
         assertFalse(source.contains("generated/rux-firmware-"))
-        assertFalse(source.contains("tasks.register<Exec>(\"compileRux16"))
+        assertFalse(source.contains("tasks.register<Exec>(\"compileRux"))
     }
 
     @Test

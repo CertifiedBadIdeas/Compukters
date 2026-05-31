@@ -9,13 +9,13 @@
 K16 now has enough LLVM-facing infrastructure for a tiny freestanding C proof:
 
 - a K16 LLVM backend prototype can emit ELF32 relocatable objects;
-- Clang can compile the current `--target=rux16` backend into `.text.rux16`;
-- `k16 runtime rux16-startup` provides `_start`, calls `main`, and exposes the
+- Clang can compile the current `--target=k16` backend into `.text.k16`;
+- `k16 runtime k16-startup` provides `_start`, calls `main`, and exposes the
   low byte of the return value through `debug::WRITE`;
-- `k16 link --target program` converts K16 objects into a `RUXE` program;
-- `k16 run` executes that `RUXE` in the VM and observes `debug_bytes=2a`.
+- `k16 link --target program` converts K16 objects into a `K16E` program;
+- `k16 run` executes that `K16E` in the VM and observes `debug_bytes=2a`.
 
-That proves the CPU/object/RUXE path, not Rust support. Rust requires a target
+That proves the CPU/object/K16E path, not Rust support. Rust requires a target
 description, language runtime decisions, panic behavior, compiler helper
 symbols, and eventually an OS ABI surface.
 
@@ -40,7 +40,7 @@ pub extern "C" fn main() -> i32 {
 }
 ```
 
-This should use the same `rux16-startup -> main -> debug byte -> halt` boundary
+This should use the same `k16-startup -> main -> debug byte -> halt` boundary
 as the C smoke.
 
 ### `core`-Only
@@ -73,23 +73,23 @@ and I/O. The current Rux OS direction is not ready for this, and trying to add
 Rust needs a target specification for K16. The likely target shape is:
 
 ```text
-llvm-target:        k16-unknown-kraftos or rux16
+llvm-target:        k16-unknown-kraftos or k16
 pointer-width:      32
 data-layout:        e-p:32:32-i32:32-n32
-arch:               rux16
+arch:               k16
 os/env/vendor:      explicit experimental values
 panic strategy:     abort
 relocation model:   static
-executables:        false at rustc layer; RUXE is produced by k16 link
+executables:        false at rustc layer; K16E is produced by k16 link
 ```
 
-The Rust target must emit ordinary K16 ELF objects. Rust must not emit `RUXE`
+The Rust target must emit ordinary K16 ELF objects. Rust must not emit `K16E`
 directly in the first slice.
 
 ### Entry And Link Boundary
 
 The initial Rust proof should define `main` as an unmangled C ABI symbol and
-reuse `rux16-startup`. That keeps Rust aligned with the current Clang smoke and
+reuse `k16-startup`. That keeps Rust aligned with the current Clang smoke and
 avoids inventing Rust-specific VM entry rules.
 
 The pipeline should be:
@@ -97,7 +97,7 @@ The pipeline should be:
 ```text
 rustc
   -> K16 ELF32 object
-  -> k16 runtime rux16-startup
+  -> k16 runtime k16-startup
   -> k16 link --target program
   -> k16 run
 ```
@@ -107,9 +107,9 @@ rustc
 K16 currently reserves helper symbols such as:
 
 ```text
-__rux16_memcpy
-__rux16_memset
-__rux16_memmove
+__k16_memcpy
+__k16_memset
+__k16_memmove
 ```
 
 Rust may also need integer helper routines depending on emitted IR and target
@@ -153,7 +153,7 @@ Rux `std::fs`. Hosted Rust is blocked until that exists.
 ## Blocking Gaps
 
 - Rust target spec and driver invocation for a local experimental K16 target.
-- A no-core smoke that proves `rustc -> object -> RUXE -> VM`.
+- A no-core smoke that proves `rustc -> object -> K16E -> VM`.
 - Explicit K16 runtime helper objects for memory intrinsics and compiler
   builtins that Rust/LLVM may emit.
 - Panic-abort behavior tied to the Rux panic/error model.
@@ -164,7 +164,7 @@ Rux `std::fs`. Hosted Rust is blocked until that exists.
 
 Do not start with hosted `std`, `no_std + alloc`, or a broad `core` promise.
 Start with a `no_core` smoke that reuses the existing Clang proof boundary:
-return `42` from `main`, link with `rux16-startup`, execute through `k16 run`,
+return `42` from `main`, link with `k16-startup`, execute through `k16 run`,
 and observe `debug_bytes=2a`.
 
 After that, add the smallest runtime-helper object set needed by `core`, then

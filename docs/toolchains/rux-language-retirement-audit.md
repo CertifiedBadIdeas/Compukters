@@ -21,10 +21,10 @@ formats until each compatibility-affecting ABI migration lands.
 
 ## Current Rux-Language Inputs
 
-Tracked `.rx` source is concentrated under `native/rux-compiler`:
+Tracked `.rx` source is concentrated under `native/k16-tools`:
 
 - `examples/firmware/*.rx`: BIOS and old firmware demos, including
-  `rux16_bios.rx`.
+  `k16_bios.rx`.
 - `examples/boot/*.rx`: bootloader experiments, including
   `kernel_loader.rx`.
 - `examples/kernel/*.rx`: kernel examples, including `display_ok.rx` and
@@ -41,17 +41,17 @@ are still the only working boot-chain fixtures.
 
 The Rux-language implementation currently lives in:
 
-- `native/rux-compiler/src/frontend/*`: AST, lexer, parser, resolver, and
+- `native/k16-tools/src/frontend/*`: AST, lexer, parser, resolver, and
   diagnostics.
-- `native/rux-compiler/src/runtime/stdlib.rs`: embedded `.rx` stdlib module
+- `native/k16-tools/src/runtime/stdlib.rs`: embedded `.rx` stdlib module
   registry.
-- `native/rux-compiler/src/bin/rux.rs`: public CLI surface, including
+- `native/k16-tools/src/bin/rux.rs`: public CLI surface, including
   `rux compile` and related source-driven commands.
-- `native/rux-compiler/src/advice.rs`: source-level improvement checks for Rux
+- `native/k16-tools/src/advice.rs`: source-level improvement checks for Rux
   listings.
 
-The parts of `native/rux-compiler` that should survive are the machine/tooling
-pieces: K16 object assembly/disassembly, object linking, RUXE encoding,
+The parts of `native/k16-tools` that should survive are the machine/tooling
+pieces: K16 object assembly/disassembly, object linking, K16E encoding,
 volume/filesystem tooling, inspect/run helpers, and Rust-target smoke support.
 Those may need a later crate/CLI rename, but they are not language frontend
 features.
@@ -61,7 +61,7 @@ features.
 The NeoForge module still generates bundled firmware and storage images from
 Rux source:
 
-- `rux16_bios.rx` -> `firmware/k16-bios.kflash`;
+- `k16_bios.rx` -> `firmware/k16-bios.kflash`;
 - `kernel_loader.rx` -> `kernel-loader.kb`;
 - `display_ok.rx` -> `display-ok.kx`.
 
@@ -75,16 +75,16 @@ on `.rx` source for the bundled boot chain.
 
 The highest-impact Rux-language test dependencies are:
 
-- `native/rux-compiler/tests/rux16_artifact_backend.rs`: compiles and executes
+- `native/k16-tools/tests/k16_artifact_backend.rs`: compiles and executes
   bundled BIOS source and verifies many BIOS behaviors.
-- `native/rux-compiler/tests/rux_volume_cli.rs`: relies on
+- `native/k16-tools/tests/rux_volume_cli.rs`: relies on
   `kernel_loader.rx`, `init_loader.rx`, `rini_init.rx`, and `trap_init.rx` for
-  boot-chain, RuxFS, kernel/init, and syscall-style tests.
-- `native/rux-compiler/tests/rux_compile_cli.rs`: directly tests
+  boot-chain, K16FS, kernel/init, and syscall-style tests.
+- `native/k16-tools/tests/rux_compile_cli.rs`: directly tests
   `rux compile` from `.rx` source.
-- `native/rux-compiler/tests/rux_check_cli.rs`: tests source-level Rux code
+- `native/k16-tools/tests/rux_check_cli.rs`: tests source-level Rux code
   advice.
-- `native/rux-compiler/tests/rux_public_cli_surface.rs`: expects public help
+- `native/k16-tools/tests/rux_public_cli_surface.rs`: expects public help
   text to expose `rux compile`.
 
 These tests should not be deleted first. They should be replaced with Rust
@@ -97,7 +97,7 @@ move toward Kraft16/K16 names as #147 implementation slices land:
 
 - Kraft16 CPU and VM execution;
 - ELF32 Kraft16 object ABI;
-- K16 executable container, currently represented by the existing `RUXE`
+- K16 executable container, currently represented by the existing `K16E`
   format;
 - object linker and relocation handling;
 - `k16 run`, `k16 inspect`, `k16 disasm`, and volume/filesystem tooling where

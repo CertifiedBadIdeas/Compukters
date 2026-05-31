@@ -78,12 +78,11 @@ fn vm_microbenchmarks_source_does_not_expose_low_image_path() {
     let example = fs::read_to_string(manifest_dir.join("examples/vm_microbenchmarks.rs")).unwrap();
 
     assert!(source.contains("pub fn run_k16_workload("));
-    assert!(!source.contains("pub fn run_rux16_workload("));
     assert!(example.contains("run_k16_workload"));
-    assert!(!example.contains("run_rux16_workload"));
     assert!(example.contains("print_sample(*workload, \"k16\""));
-    assert!(!example.contains("print_sample(*workload, \"rux16\""));
     assert!(!source.contains("low_image"));
     assert!(!source.contains("LowImage"));
     assert!(!source.contains("run_low_image_workload"));
+    assert!(!source.contains("run_rux_workload"));
+    assert!(!example.contains("\"rux\""));
 }

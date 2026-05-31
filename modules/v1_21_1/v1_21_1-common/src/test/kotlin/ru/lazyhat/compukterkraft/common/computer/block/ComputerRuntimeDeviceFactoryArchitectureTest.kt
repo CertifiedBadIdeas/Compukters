@@ -72,7 +72,7 @@ class ComputerRuntimeDeviceFactoryArchitectureTest {
     }
 
     @Test
-    fun inGameFactoryExposesK16ComputerNameWithoutRuxComputerAlias() {
+    fun inGameFactoryExposesK16ComputerNameWithoutK16ComputerAlias() {
         val factorySource =
             Path
                 .of("src/main/kotlin/ru/lazyhat/compukterkraft/common/computer/block/ComputerRuntimeDeviceFactory.kt")

@@ -9,16 +9,16 @@ pub mod computer_machine {
     pub use crate::computer::snapshot::{
         decode_snapshot_v1, ComputerCpuSnapshotRecord, ComputerDeviceSnapshotRecord,
         ComputerMachineSnapshot, ComputerMachineSnapshotHeader, COMPUTER_SNAPSHOT_V1_HEADER_SIZE,
-        COMPUTER_SNAPSHOT_V1_MAGIC, COMPUTER_SNAPSHOT_V1_RUX16_CPU_RECORD_SIZE,
+        COMPUTER_SNAPSHOT_V1_K16_CPU_RECORD_SIZE, COMPUTER_SNAPSHOT_V1_MAGIC,
     };
 }
 pub mod display;
 pub mod generated;
 pub mod jni;
+pub mod k16;
+pub mod k16e;
 pub mod low_bus;
 pub mod low_machine;
-pub mod rux16;
-pub mod ruxe;
 pub mod k16_computer {
     pub use crate::computer::handle::{
         K16ComputerControl, K16ComputerHandle, K16ComputerTextDisplaySnapshot,

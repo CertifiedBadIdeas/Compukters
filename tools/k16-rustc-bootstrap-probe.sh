@@ -4,8 +4,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 RUST_SRC="${K16_RUST_SRC:-$ROOT/toolchains/Compukter-Kraft-rust}"
 LLVM_CONFIG="${K16_LLVM_CONFIG:-$ROOT/toolchains/Compukter-Kraft-llvm/build-rux-min/bin/llvm-config}"
-EXPECTED_BRANCH="rux16"
-BUILD_DIR="${K16_RUST_BUILD_DIR:-$RUST_SRC/build/rux16}"
+EXPECTED_BRANCH="k16"
+BUILD_DIR="${K16_RUST_BUILD_DIR:-$RUST_SRC/build/k16}"
 HOST_TRIPLE="${K16_RUST_HOST:-x86_64-unknown-linux-gnu}"
 
 require_dir() {
@@ -54,11 +54,11 @@ fi
 
 llvm_version="$("$LLVM_CONFIG" --version)"
 llvm_targets="$("$LLVM_CONFIG" --targets-built)"
-require_output_contains "llvm-config --targets-built" "$llvm_targets" "Rux16"
+require_output_contains "llvm-config --targets-built" "$llvm_targets" "K16"
 
 "$RUST_SRC/x.py" --help > /dev/null
 
-bootstrap_config="$(mktemp /tmp/rux16-rust-bootstrap.XXXXXX.toml)"
+bootstrap_config="$(mktemp /tmp/k16-rust-bootstrap.XXXXXX.toml)"
 
 cat > "$bootstrap_config" <<TOML
 [build]
@@ -71,7 +71,7 @@ download-ci-llvm = false
 llvm-config = "$LLVM_CONFIG"
 TOML
 
-echo "Rux16 rustc bootstrap probe passed"
+echo "K16 rustc bootstrap probe passed"
 echo "Rust source: $RUST_SRC"
 echo "Rust branch: $current_branch"
 echo "LLVM config: $LLVM_CONFIG"

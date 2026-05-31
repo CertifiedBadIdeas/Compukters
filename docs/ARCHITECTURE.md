@@ -32,7 +32,7 @@ through memory-mapped peripherals.
 | Crate            | Purpose                                                                  |
 |------------------|--------------------------------------------------------------------------|
 | `native/k16-vm`  | Rust virtual machine: Kraft16 CPU, memory-mapped devices, `K16Computer` handle, JNI exports |
-| `native/rux-compiler` | Rux language frontend plus `rux compile`; K16 artifact tooling via `k16` for disassembly, volume, and filesystem commands |
+| `native/k16-tools` | Rux language frontend plus `rux compile`; K16 artifact tooling via `k16` for disassembly, volume, and filesystem commands |
 
 ## Module ownership rules
 
@@ -50,7 +50,7 @@ NotebookItem.use()
 
 RuntimeDevice.boot()
   └─ NativeVmBindings.createK16ComputerFromBiosFlash(biosFlashPath, storage0Path, ...)
-        └─ Rust K16ComputerHandle
+        └─ native K16 computer handle
               ├─ Kraft16 CPU fetching instructions from mapped BIOS flash
               ├─ storage0 KV boot media
               ├─ flat RAM + MMIO bus (control, debug-serial, serial-input,
@@ -58,9 +58,9 @@ RuntimeDevice.boot()
               └─ exposes control / debug / display snapshot over JNI
 
 RuntimeDevice.serverTick(gameTime)
-  ├─ runK16ComputerUntilSignal() — advance guest CPU until pause / halt
-  ├─ k16ComputerDisplay0Snapshot() — pull text display state
-  └─ drainK16ComputerDebugOutput() — drain debug serial bytes
+  ├─ advance native VM until pause / halt
+  ├─ pull text display state
+  └─ drain debug serial bytes
 
 RuntimeDevice.close()
   └─ NativeVmBindings.freeK16Computer(handle)
@@ -70,7 +70,7 @@ RuntimeDevice.close()
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│  Rust K16 computer (driven on demand by JNI calls)                  │
+│  Native K16 computer (driven on demand by JNI calls)                │
 │                                                                     │
 │  Kraft16 BIOS executing from mapped bios.kflash                     │
 │    ├─ MMIO control device  ──►  status / exit / panic registers      │
@@ -86,7 +86,7 @@ RuntimeDevice.close()
 │  Server tick thread (main thread)                                   │
 │                                                                     │
 │  RuntimeDevice.serverTick()                                          │
-│    ├─ NativeVmBindings.runK16ComputerUntilSignal(handle)             │
+│    ├─ NativeVmBindings advances the VM until pause / halt            │
 │    ├─ poll display snapshot / debug output                           │
 │    ├─ flushDisplaySessions → FrameDeltaClientMessage                 │
 │    └─ react to control register (halt / crash / reboot)              │

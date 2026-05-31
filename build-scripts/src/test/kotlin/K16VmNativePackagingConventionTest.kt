@@ -95,13 +95,11 @@ class K16VmNativePackagingConventionTest {
     }
 
     @Test
-    fun metadataGenerationDoesNotTemplateExpandRuxImages() {
+    fun metadataGenerationDoesNotKeepLegacyRuxImages() {
         val source = metadataConventionSource().readText()
 
-        assertTrue(
-            source.contains("endsWith(\".ruxi\")"),
-            "Rux image binaries must be copied as binary resources, not parsed as Groovy templates.",
-        )
+        assertFalse(source.contains(".ruxi"))
+        assertFalse(source.contains(".k16i"))
     }
 
     private fun loomRunsConventionSource(): Path {

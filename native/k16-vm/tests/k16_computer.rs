@@ -1,13 +1,13 @@
 use k16_vm::computer_machine::ComputerMachine;
+use k16_vm::k16::K16Signal;
 use k16_vm::k16_computer::{K16ComputerControl, K16ComputerHandle};
-use k16_vm::rux16::Rux16Signal;
 use std::fs;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[test]
 fn k16_computer_handle_fails_when_memory_is_too_small() {
-    let bios = rux16_words(&[rux16_halt()]);
-    let error: String = match K16ComputerHandle::create_rux16_bios_flash(&bios, 128, 128) {
+    let bios = k16_words(&[k16_halt()]);
+    let error: String = match K16ComputerHandle::create_k16_bios_flash(&bios, 128, 128) {
         Ok(_) => panic!("computer handle should reject undersized memory"),
         Err(error) => error,
     };
@@ -20,11 +20,11 @@ fn k16_computer_handle_fails_when_memory_is_too_small() {
 
 #[test]
 fn k16_computer_handle_exposes_display0_snapshot() {
-    let bios = rux16_words(&rux16_display_firmware_words());
-    let mut handle = K16ComputerHandle::create_rux16_bios_flash(&bios, 64 * 1024, 128)
-        .expect("Rux16 BIOS flash computer creates");
+    let bios = k16_words(&k16_display_firmware_words());
+    let mut handle = K16ComputerHandle::create_k16_bios_flash(&bios, 64 * 1024, 128)
+        .expect("K16 BIOS flash computer creates");
 
-    assert_eq!(handle.run_rux16_until_signal().unwrap(), Rux16Signal::Halt);
+    assert_eq!(handle.run_k16_until_signal().unwrap(), K16Signal::Halt);
 
     let snapshot = handle
         .display0_snapshot()
@@ -39,15 +39,15 @@ fn k16_computer_handle_exposes_display0_snapshot() {
 
 #[test]
 fn k16_computer_handle_accepts_storage0_media_and_exposes_snapshot() {
-    let bios = rux16_words(&[rux16_halt()]);
+    let bios = k16_words(&[k16_halt()]);
     let media = vec![7; 1024];
-    let handle = K16ComputerHandle::create_rux16_bios_flash_with_storage0_media(
+    let handle = K16ComputerHandle::create_k16_bios_flash_with_storage0_media(
         &bios,
         64 * 1024,
         128,
         media.clone(),
     )
-    .expect("Rux16 BIOS flash computer creates with storage0 media");
+    .expect("K16 BIOS flash computer creates with storage0 media");
 
     assert_eq!(
         handle
@@ -59,49 +59,49 @@ fn k16_computer_handle_accepts_storage0_media_and_exposes_snapshot() {
 
 #[test]
 fn k16_computer_handle_accepts_storage0_volume_path() {
-    let bios = rux16_words(&[rux16_halt()]);
+    let bios = k16_words(&[k16_halt()]);
     let path = temp_volume_path("handle-storage0-path");
     write_k16_volume(&path, &[0; 1024]);
 
     let handle =
-        K16ComputerHandle::create_rux16_bios_flash_with_storage0_path(&bios, 64 * 1024, 128, &path)
-            .expect("Rux16 BIOS flash computer creates with storage0 volume path");
+        K16ComputerHandle::create_k16_bios_flash_with_storage0_path(&bios, 64 * 1024, 128, &path)
+            .expect("K16 BIOS flash computer creates with storage0 volume path");
 
     assert!(handle.storage0_media_snapshot().is_none());
     fs::remove_file(path).unwrap();
 }
 
 #[test]
-fn k16_computer_handle_boot_handoff_starts_rux16_from_guest_ram_without_host_decode() {
-    let bios = rux16_words(&[rux16_halt()]);
+fn k16_computer_handle_boot_handoff_starts_k16_from_guest_ram_without_host_decode() {
+    let bios = k16_words(&[k16_halt()]);
     let entry_pc = 4096;
-    let program = rux16_words(&[rux16_const4(1, 7), rux16_halt()]);
-    let mut handle = K16ComputerHandle::create_rux16_bios_flash(&bios, 64 * 1024, 128)
-        .expect("Rux16 BIOS flash computer creates");
+    let program = k16_words(&[k16_const4(1, 7), k16_halt()]);
+    let mut handle = K16ComputerHandle::create_k16_bios_flash(&bios, 64 * 1024, 128)
+        .expect("K16 BIOS flash computer creates");
     handle.write_guest_ram_bytes(entry_pc, &program).unwrap();
 
     let cpu_id = handle
-        .boot_handoff_rux16_from_guest_ram(entry_pc, program.len() as u32, 128)
-        .expect("boot handoff accepts in-RAM Rux16 program");
+        .boot_handoff_k16_from_guest_ram(entry_pc, program.len() as u32, 128)
+        .expect("boot handoff accepts in-RAM K16 program");
 
     assert_eq!(cpu_id, 0);
-    assert_eq!(handle.run_rux16_until_signal().unwrap(), Rux16Signal::Halt);
+    assert_eq!(handle.run_k16_until_signal().unwrap(), K16Signal::Halt);
 }
 
 #[test]
-fn k16_computer_handle_rux16_firmware_writes_debug_and_control_mmio() {
-    let bios = rux16_words(&[rux16_halt()]);
+fn k16_computer_handle_k16_firmware_writes_debug_and_control_mmio() {
+    let bios = k16_words(&[k16_halt()]);
     let entry_pc = 4096;
-    let program = rux16_words(&rux16_mmio_firmware_words());
-    let mut handle = K16ComputerHandle::create_rux16_bios_flash(&bios, 64 * 1024, 128)
-        .expect("Rux16 BIOS flash computer creates");
+    let program = k16_words(&k16_mmio_firmware_words());
+    let mut handle = K16ComputerHandle::create_k16_bios_flash(&bios, 64 * 1024, 128)
+        .expect("K16 BIOS flash computer creates");
     handle.write_guest_ram_bytes(entry_pc, &program).unwrap();
 
     handle
-        .boot_handoff_rux16_from_guest_ram(entry_pc, program.len() as u32, 128)
-        .expect("boot handoff accepts in-RAM Rux16 firmware");
+        .boot_handoff_k16_from_guest_ram(entry_pc, program.len() as u32, 128)
+        .expect("boot handoff accepts in-RAM K16 firmware");
 
-    assert_eq!(handle.run_rux16_until_signal().unwrap(), Rux16Signal::Halt);
+    assert_eq!(handle.run_k16_until_signal().unwrap(), K16Signal::Halt);
     assert_eq!(handle.debug_output_bytes(), b"RUX");
     assert_eq!(
         handle.control(),
@@ -114,12 +114,12 @@ fn k16_computer_handle_rux16_firmware_writes_debug_and_control_mmio() {
 }
 
 #[test]
-fn k16_computer_handle_boots_rux16_directly_from_bios_flash() {
-    let bios = rux16_words(&rux16_mmio_firmware_words());
-    let mut handle = K16ComputerHandle::create_rux16_bios_flash(&bios, 64 * 1024, 128)
-        .expect("Rux16 BIOS flash computer creates");
+fn k16_computer_handle_boots_k16_directly_from_bios_flash() {
+    let bios = k16_words(&k16_mmio_firmware_words());
+    let mut handle = K16ComputerHandle::create_k16_bios_flash(&bios, 64 * 1024, 128)
+        .expect("K16 BIOS flash computer creates");
 
-    assert_eq!(handle.run_rux16_until_signal().unwrap(), Rux16Signal::Halt);
+    assert_eq!(handle.run_k16_until_signal().unwrap(), K16Signal::Halt);
     assert_eq!(handle.debug_output_bytes(), b"RUX");
     assert_eq!(
         handle.control(),
@@ -132,31 +132,31 @@ fn k16_computer_handle_boots_rux16_directly_from_bios_flash() {
 }
 
 #[test]
-fn k16_computer_handle_rejects_empty_rux16_bios_flash() {
-    let error = match K16ComputerHandle::create_rux16_bios_flash(&[], 64 * 1024, 128) {
-        Ok(_) => panic!("empty Rux16 BIOS flash unexpectedly created a computer"),
+fn k16_computer_handle_rejects_empty_k16_bios_flash() {
+    let error = match K16ComputerHandle::create_k16_bios_flash(&[], 64 * 1024, 128) {
+        Ok(_) => panic!("empty K16 BIOS flash unexpectedly created a computer"),
         Err(error) => error,
     };
 
     assert!(
-        error.contains("Rux16 BIOS flash is empty"),
+        error.contains("K16 BIOS flash is empty"),
         "unexpected error: {error}",
     );
 }
 
 #[test]
-fn k16_computer_handle_rux16_bios_flash_is_read_only() {
+fn k16_computer_handle_k16_bios_flash_is_read_only() {
     let mut words = Vec::new();
-    words.extend(rux16_const32(0, ComputerMachine::RUX16_BIOS_FLASH_BASE));
-    words.extend(rux16_const32(1, 0x1234));
-    words.push(rux16_store32(0, 1));
-    words.push(rux16_halt());
-    let bios = rux16_words(&words);
-    let mut handle = K16ComputerHandle::create_rux16_bios_flash(&bios, 64 * 1024, 128)
-        .expect("Rux16 BIOS flash computer creates");
+    words.extend(k16_const32(0, ComputerMachine::K16_BIOS_FLASH_BASE));
+    words.extend(k16_const32(1, 0x1234));
+    words.push(k16_store32(0, 1));
+    words.push(k16_halt());
+    let bios = k16_words(&words);
+    let mut handle = K16ComputerHandle::create_k16_bios_flash(&bios, 64 * 1024, 128)
+        .expect("K16 BIOS flash computer creates");
 
     let error = handle
-        .run_rux16_until_signal()
+        .run_k16_until_signal()
         .expect_err("flash write traps");
 
     assert!(
@@ -166,19 +166,15 @@ fn k16_computer_handle_rux16_bios_flash_is_read_only() {
 }
 
 #[test]
-fn k16_computer_handle_rux16_bios_flash_reads_storage0_block_into_ram() {
-    let bios = rux16_words(&rux16_storage_read_bios_words());
+fn k16_computer_handle_k16_bios_flash_reads_storage0_block_into_ram() {
+    let bios = k16_words(&k16_storage_read_bios_words());
     let mut media = vec![0; 512];
     media[0..3].copy_from_slice(b"RUX");
-    let mut handle = K16ComputerHandle::create_rux16_bios_flash_with_storage0_media(
-        &bios,
-        64 * 1024,
-        256,
-        media,
-    )
-    .expect("Rux16 BIOS flash computer creates with storage0 media");
+    let mut handle =
+        K16ComputerHandle::create_k16_bios_flash_with_storage0_media(&bios, 64 * 1024, 256, media)
+            .expect("K16 BIOS flash computer creates with storage0 media");
 
-    assert_eq!(handle.run_rux16_until_signal().unwrap(), Rux16Signal::Halt);
+    assert_eq!(handle.run_k16_until_signal().unwrap(), K16Signal::Halt);
     assert_eq!(handle.debug_output_bytes(), b"RUX");
     assert_eq!(
         handle.control(),
@@ -191,20 +187,16 @@ fn k16_computer_handle_rux16_bios_flash_reads_storage0_block_into_ram() {
 }
 
 #[test]
-fn k16_computer_handle_rux16_bios_loads_stage2_from_storage_and_jumps_to_ram() {
+fn k16_computer_handle_k16_bios_loads_stage2_from_storage_and_jumps_to_ram() {
     let entry_pc = 2048;
-    let bios = rux16_words(&rux16_stage2_boot_bios_words());
-    let stage2 = rux16_words(&rux16_stage2_program_words());
-    let media = rux16_boot_media(entry_pc, entry_pc, 1, 1, &stage2);
-    let mut handle = K16ComputerHandle::create_rux16_bios_flash_with_storage0_media(
-        &bios,
-        64 * 1024,
-        512,
-        media,
-    )
-    .expect("Rux16 BIOS flash computer creates with boot media");
+    let bios = k16_words(&k16_stage2_boot_bios_words());
+    let stage2 = k16_words(&k16_stage2_program_words());
+    let media = k16_boot_media(entry_pc, entry_pc, 1, 1, &stage2);
+    let mut handle =
+        K16ComputerHandle::create_k16_bios_flash_with_storage0_media(&bios, 64 * 1024, 512, media)
+            .expect("K16 BIOS flash computer creates with boot media");
 
-    assert_eq!(handle.run_rux16_until_signal().unwrap(), Rux16Signal::Halt);
+    assert_eq!(handle.run_k16_until_signal().unwrap(), K16Signal::Halt);
     assert_eq!(handle.debug_output_bytes(), b"S2");
     assert_eq!(
         handle.control(),
@@ -217,18 +209,18 @@ fn k16_computer_handle_rux16_bios_loads_stage2_from_storage_and_jumps_to_ram() {
 }
 
 #[test]
-fn k16_computer_handle_rux16_bios_loads_stage2_from_storage_volume_path() {
+fn k16_computer_handle_k16_bios_loads_stage2_from_storage_volume_path() {
     let entry_pc = 2048;
-    let bios = rux16_words(&rux16_stage2_boot_bios_words());
-    let stage2 = rux16_words(&rux16_stage2_program_words());
-    let media = rux16_boot_media(entry_pc, entry_pc, 1, 1, &stage2);
-    let path = temp_volume_path("rux16-stage2-volume-path");
+    let bios = k16_words(&k16_stage2_boot_bios_words());
+    let stage2 = k16_words(&k16_stage2_program_words());
+    let media = k16_boot_media(entry_pc, entry_pc, 1, 1, &stage2);
+    let path = temp_volume_path("k16-stage2-volume-path");
     write_k16_volume(&path, &media);
     let mut handle =
-        K16ComputerHandle::create_rux16_bios_flash_with_storage0_path(&bios, 64 * 1024, 512, &path)
-            .expect("Rux16 BIOS flash computer creates with boot volume path");
+        K16ComputerHandle::create_k16_bios_flash_with_storage0_path(&bios, 64 * 1024, 512, &path)
+            .expect("K16 BIOS flash computer creates with boot volume path");
 
-    assert_eq!(handle.run_rux16_until_signal().unwrap(), Rux16Signal::Halt);
+    assert_eq!(handle.run_k16_until_signal().unwrap(), K16Signal::Halt);
     assert_eq!(handle.debug_output_bytes(), b"S2");
     assert_eq!(
         handle.control(),
@@ -242,24 +234,24 @@ fn k16_computer_handle_rux16_bios_loads_stage2_from_storage_volume_path() {
 }
 
 #[test]
-fn k16_computer_handle_loads_rux16_bios_flash_from_path_with_storage0_path() {
+fn k16_computer_handle_loads_k16_bios_flash_from_path_with_storage0_path() {
     let entry_pc = 2048;
-    let bios = rux16_words(&rux16_stage2_boot_bios_words());
-    let stage2 = rux16_words(&rux16_stage2_program_words());
-    let media = rux16_boot_media(entry_pc, entry_pc, 1, 1, &stage2);
-    let bios_path = temp_volume_path("rux16-bios-flash-path");
-    let storage_path = temp_volume_path("rux16-stage2-storage-path");
+    let bios = k16_words(&k16_stage2_boot_bios_words());
+    let stage2 = k16_words(&k16_stage2_program_words());
+    let media = k16_boot_media(entry_pc, entry_pc, 1, 1, &stage2);
+    let bios_path = temp_volume_path("k16-bios-flash-path");
+    let storage_path = temp_volume_path("k16-stage2-storage-path");
     fs::write(&bios_path, &bios).unwrap();
     write_k16_volume(&storage_path, &media);
-    let mut handle = K16ComputerHandle::create_rux16_bios_flash_path_with_storage0_path(
+    let mut handle = K16ComputerHandle::create_k16_bios_flash_path_with_storage0_path(
         &bios_path,
         64 * 1024,
         512,
         &storage_path,
     )
-    .expect("Rux16 BIOS flash computer creates from BIOS and storage paths");
+    .expect("K16 BIOS flash computer creates from BIOS and storage paths");
 
-    assert_eq!(handle.run_rux16_until_signal().unwrap(), Rux16Signal::Halt);
+    assert_eq!(handle.run_k16_until_signal().unwrap(), K16Signal::Halt);
     assert_eq!(handle.debug_output_bytes(), b"S2");
     assert_eq!(
         handle.control(),
@@ -275,21 +267,21 @@ fn k16_computer_handle_loads_rux16_bios_flash_from_path_with_storage0_path() {
 
 #[test]
 fn k16_computer_handle_restores_snapshot_with_bios_flash_and_storage0_path() {
-    let bios = rux16_words(&rux16_mmio_firmware_words());
-    let storage_path = temp_volume_path("rux16-restore-storage-path");
+    let bios = k16_words(&k16_mmio_firmware_words());
+    let storage_path = temp_volume_path("k16-restore-storage-path");
     write_k16_volume(&storage_path, &[0; 1024]);
-    let mut handle = K16ComputerHandle::create_rux16_bios_flash_with_storage0_path(
+    let mut handle = K16ComputerHandle::create_k16_bios_flash_with_storage0_path(
         &bios,
         64 * 1024,
         128,
         &storage_path,
     )
-    .expect("Rux16 BIOS flash computer creates with storage0 path");
+    .expect("K16 BIOS flash computer creates with storage0 path");
 
-    assert_eq!(handle.run_rux16_until_signal().unwrap(), Rux16Signal::Halt);
+    assert_eq!(handle.run_k16_until_signal().unwrap(), K16Signal::Halt);
 
     let snapshot = handle.snapshot_v1().expect("snapshot encodes");
-    let restored = K16ComputerHandle::restore_rux16_bios_flash_snapshot_with_storage0_path(
+    let restored = K16ComputerHandle::restore_k16_bios_flash_snapshot_with_storage0_path(
         &bios,
         64 * 1024,
         &storage_path,
@@ -310,21 +302,17 @@ fn k16_computer_handle_restores_snapshot_with_bios_flash_and_storage0_path() {
 }
 
 #[test]
-fn k16_computer_handle_rux16_bios_rejects_corrupt_boot_header_magic() {
+fn k16_computer_handle_k16_bios_rejects_corrupt_boot_header_magic() {
     let entry_pc = 2048;
-    let bios = rux16_words(&rux16_stage2_boot_bios_words());
-    let stage2 = rux16_words(&rux16_stage2_program_words());
-    let mut media = rux16_boot_media(entry_pc, entry_pc, 1, 1, &stage2);
+    let bios = k16_words(&k16_stage2_boot_bios_words());
+    let stage2 = k16_words(&k16_stage2_program_words());
+    let mut media = k16_boot_media(entry_pc, entry_pc, 1, 1, &stage2);
     media[0..4].copy_from_slice(b"NOPE");
-    let mut handle = K16ComputerHandle::create_rux16_bios_flash_with_storage0_media(
-        &bios,
-        64 * 1024,
-        512,
-        media,
-    )
-    .expect("Rux16 BIOS flash computer creates with corrupt boot media");
+    let mut handle =
+        K16ComputerHandle::create_k16_bios_flash_with_storage0_media(&bios, 64 * 1024, 512, media)
+            .expect("K16 BIOS flash computer creates with corrupt boot media");
 
-    assert_eq!(handle.run_rux16_until_signal().unwrap(), Rux16Signal::Halt);
+    assert_eq!(handle.run_k16_until_signal().unwrap(), K16Signal::Halt);
     assert_eq!(handle.debug_output_bytes(), b"");
     assert_eq!(
         handle.control(),
@@ -356,18 +344,18 @@ fn temp_volume_path(name: &str) -> std::path::PathBuf {
     ))
 }
 
-fn rux16_words(words: &[u16]) -> Vec<u8> {
+fn k16_words(words: &[u16]) -> Vec<u8> {
     words
         .iter()
         .flat_map(|word| word.to_le_bytes())
         .collect::<Vec<_>>()
 }
 
-fn rux16_const4(dst: u8, value: u8) -> u16 {
+fn k16_const4(dst: u8, value: u8) -> u16 {
     0x1000 | (u16::from(dst) << 8) | u16::from(value & 0x0f)
 }
 
-fn rux16_const32(dst: u8, value: u32) -> [u16; 3] {
+fn k16_const32(dst: u8, value: u32) -> [u16; 3] {
     [
         0xe001 | (u16::from(dst) << 8),
         value as u16,
@@ -375,136 +363,136 @@ fn rux16_const32(dst: u8, value: u32) -> [u16; 3] {
     ]
 }
 
-fn rux16_store32(addr: u8, src: u8) -> u16 {
+fn k16_store32(addr: u8, src: u8) -> u16 {
     0x5002 | (u16::from(addr) << 8) | (u16::from(src) << 4)
 }
 
-fn rux16_load8(dst: u8, addr: u8) -> u16 {
+fn k16_load8(dst: u8, addr: u8) -> u16 {
     0x4000 | (u16::from(dst) << 8) | (u16::from(addr) << 4)
 }
 
-fn rux16_load32(dst: u8, addr: u8) -> u16 {
+fn k16_load32(dst: u8, addr: u8) -> u16 {
     0x4002 | (u16::from(dst) << 8) | (u16::from(addr) << 4)
 }
 
-fn rux16_eq(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
+fn k16_eq(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
     [
         0x2008 | (u16::from(dst) << 8),
         (u16::from(lhs) << 4) | u16::from(rhs),
     ]
 }
 
-fn rux16_branch_if_nonzero(src: u8, offset_words: u8) -> u16 {
+fn k16_branch_if_nonzero(src: u8, offset_words: u8) -> u16 {
     0x6000 | (u16::from(src) << 8) | 0x0010 | u16::from(offset_words & 0x0f)
 }
 
-fn rux16_jump(target: u8) -> u16 {
+fn k16_jump(target: u8) -> u16 {
     0x7000 | (u16::from(target) << 8)
 }
 
-fn rux16_mmio_firmware_words() -> Vec<u16> {
+fn k16_mmio_firmware_words() -> Vec<u16> {
     let mut words = Vec::new();
-    words.extend(rux16_const32(0, ComputerMachine::DEBUG_WRITE));
-    words.extend(rux16_const32(1, u32::from(b'R')));
-    words.push(rux16_store32(0, 1));
-    words.extend(rux16_const32(1, u32::from(b'U')));
-    words.push(rux16_store32(0, 1));
-    words.extend(rux16_const32(1, u32::from(b'X')));
-    words.push(rux16_store32(0, 1));
-    words.extend(rux16_const32(0, ComputerMachine::CONTROL_PANIC_CODE));
-    words.extend(rux16_const32(1, 0x16));
-    words.push(rux16_store32(0, 1));
-    words.push(rux16_halt());
+    words.extend(k16_const32(0, ComputerMachine::DEBUG_WRITE));
+    words.extend(k16_const32(1, u32::from(b'R')));
+    words.push(k16_store32(0, 1));
+    words.extend(k16_const32(1, u32::from(b'U')));
+    words.push(k16_store32(0, 1));
+    words.extend(k16_const32(1, u32::from(b'X')));
+    words.push(k16_store32(0, 1));
+    words.extend(k16_const32(0, ComputerMachine::CONTROL_PANIC_CODE));
+    words.extend(k16_const32(1, 0x16));
+    words.push(k16_store32(0, 1));
+    words.push(k16_halt());
     words
 }
 
-fn rux16_display_firmware_words() -> Vec<u16> {
+fn k16_display_firmware_words() -> Vec<u16> {
     let mut words = Vec::new();
-    words.extend(rux16_const32(0, ComputerMachine::DISPLAY0_DATA));
-    words.extend(rux16_const32(1, ComputerMachine::DISPLAY0_COMMAND));
-    words.extend(rux16_const32(2, u32::from(b'R')));
-    words.push(rux16_store32(0, 2));
-    words.extend(rux16_const32(
+    words.extend(k16_const32(0, ComputerMachine::DISPLAY0_DATA));
+    words.extend(k16_const32(1, ComputerMachine::DISPLAY0_COMMAND));
+    words.extend(k16_const32(2, u32::from(b'R')));
+    words.push(k16_store32(0, 2));
+    words.extend(k16_const32(
         3,
         ComputerMachine::DISPLAY0_COMMAND_PUT_BYTE_AT_CURSOR as u32,
     ));
-    words.push(rux16_store32(1, 3));
-    words.extend(rux16_const32(2, u32::from(b'U')));
-    words.push(rux16_store32(0, 2));
-    words.push(rux16_store32(1, 3));
-    words.extend(rux16_const32(2, u32::from(b'X')));
-    words.push(rux16_store32(0, 2));
-    words.push(rux16_store32(1, 3));
-    words.push(rux16_halt());
+    words.push(k16_store32(1, 3));
+    words.extend(k16_const32(2, u32::from(b'U')));
+    words.push(k16_store32(0, 2));
+    words.push(k16_store32(1, 3));
+    words.extend(k16_const32(2, u32::from(b'X')));
+    words.push(k16_store32(0, 2));
+    words.push(k16_store32(1, 3));
+    words.push(k16_halt());
     words
 }
 
-fn rux16_stage2_boot_bios_words() -> Vec<u16> {
+fn k16_stage2_boot_bios_words() -> Vec<u16> {
     let mut words = Vec::new();
-    words.extend(rux16_const32(0, 512));
-    words.push(rux16_const4(1, 0));
-    words.extend(rux16_const32(2, ComputerMachine::STORAGE0_LBA_LOW));
-    words.push(rux16_store32(2, 1));
-    words.extend(rux16_const32(2, ComputerMachine::STORAGE0_LBA_HIGH));
-    words.push(rux16_store32(2, 1));
-    words.extend(rux16_const32(2, ComputerMachine::STORAGE0_BLOCK_COUNT));
-    words.push(rux16_const4(3, 1));
-    words.push(rux16_store32(2, 3));
-    words.extend(rux16_const32(2, ComputerMachine::STORAGE0_BUFFER_ADDR));
-    words.push(rux16_store32(2, 0));
-    words.extend(rux16_const32(2, ComputerMachine::STORAGE0_COMMAND));
-    words.push(rux16_store32(2, 3));
+    words.extend(k16_const32(0, 512));
+    words.push(k16_const4(1, 0));
+    words.extend(k16_const32(2, ComputerMachine::STORAGE0_LBA_LOW));
+    words.push(k16_store32(2, 1));
+    words.extend(k16_const32(2, ComputerMachine::STORAGE0_LBA_HIGH));
+    words.push(k16_store32(2, 1));
+    words.extend(k16_const32(2, ComputerMachine::STORAGE0_BLOCK_COUNT));
+    words.push(k16_const4(3, 1));
+    words.push(k16_store32(2, 3));
+    words.extend(k16_const32(2, ComputerMachine::STORAGE0_BUFFER_ADDR));
+    words.push(k16_store32(2, 0));
+    words.extend(k16_const32(2, ComputerMachine::STORAGE0_COMMAND));
+    words.push(k16_store32(2, 3));
 
-    words.push(rux16_load32(5, 0));
-    words.extend(rux16_const32(6, u32::from_le_bytes(*b"RUXB")));
-    words.extend(rux16_eq(6, 5, 6));
-    words.push(rux16_branch_if_nonzero(6, 6));
-    words.extend(rux16_const32(2, ComputerMachine::CONTROL_PANIC_CODE));
-    words.push(rux16_const4(3, 0xB));
-    words.push(rux16_store32(2, 3));
-    words.push(rux16_halt());
+    words.push(k16_load32(5, 0));
+    words.extend(k16_const32(6, u32::from_le_bytes(*b"K16B")));
+    words.extend(k16_eq(6, 5, 6));
+    words.push(k16_branch_if_nonzero(6, 6));
+    words.extend(k16_const32(2, ComputerMachine::CONTROL_PANIC_CODE));
+    words.push(k16_const4(3, 0xB));
+    words.push(k16_store32(2, 3));
+    words.push(k16_halt());
 
-    words.push(rux16_const4(4, 4));
-    words.extend(rux16_add(0, 0, 4));
-    words.push(rux16_load32(7, 0));
-    words.extend(rux16_add(0, 0, 4));
-    words.push(rux16_load32(8, 0));
-    words.extend(rux16_add(0, 0, 4));
-    words.push(rux16_load32(9, 0));
-    words.extend(rux16_add(0, 0, 4));
-    words.push(rux16_load32(10, 0));
+    words.push(k16_const4(4, 4));
+    words.extend(k16_add(0, 0, 4));
+    words.push(k16_load32(7, 0));
+    words.extend(k16_add(0, 0, 4));
+    words.push(k16_load32(8, 0));
+    words.extend(k16_add(0, 0, 4));
+    words.push(k16_load32(9, 0));
+    words.extend(k16_add(0, 0, 4));
+    words.push(k16_load32(10, 0));
 
-    words.extend(rux16_const32(2, ComputerMachine::STORAGE0_LBA_LOW));
-    words.push(rux16_store32(2, 10));
-    words.push(rux16_const4(1, 0));
-    words.extend(rux16_const32(2, ComputerMachine::STORAGE0_LBA_HIGH));
-    words.push(rux16_store32(2, 1));
-    words.extend(rux16_const32(2, ComputerMachine::STORAGE0_BLOCK_COUNT));
-    words.push(rux16_store32(2, 9));
-    words.extend(rux16_const32(2, ComputerMachine::STORAGE0_BUFFER_ADDR));
-    words.push(rux16_store32(2, 8));
-    words.extend(rux16_const32(2, ComputerMachine::STORAGE0_COMMAND));
-    words.push(rux16_const4(3, 1));
-    words.push(rux16_store32(2, 3));
-    words.push(rux16_jump(7));
+    words.extend(k16_const32(2, ComputerMachine::STORAGE0_LBA_LOW));
+    words.push(k16_store32(2, 10));
+    words.push(k16_const4(1, 0));
+    words.extend(k16_const32(2, ComputerMachine::STORAGE0_LBA_HIGH));
+    words.push(k16_store32(2, 1));
+    words.extend(k16_const32(2, ComputerMachine::STORAGE0_BLOCK_COUNT));
+    words.push(k16_store32(2, 9));
+    words.extend(k16_const32(2, ComputerMachine::STORAGE0_BUFFER_ADDR));
+    words.push(k16_store32(2, 8));
+    words.extend(k16_const32(2, ComputerMachine::STORAGE0_COMMAND));
+    words.push(k16_const4(3, 1));
+    words.push(k16_store32(2, 3));
+    words.push(k16_jump(7));
     words
 }
 
-fn rux16_stage2_program_words() -> Vec<u16> {
+fn k16_stage2_program_words() -> Vec<u16> {
     let mut words = Vec::new();
-    words.extend(rux16_const32(0, ComputerMachine::DEBUG_WRITE));
-    words.extend(rux16_const32(1, u32::from(b'S')));
-    words.push(rux16_store32(0, 1));
-    words.extend(rux16_const32(1, u32::from(b'2')));
-    words.push(rux16_store32(0, 1));
-    words.extend(rux16_const32(0, ComputerMachine::CONTROL_PANIC_CODE));
-    words.extend(rux16_const32(1, 0x52));
-    words.push(rux16_store32(0, 1));
-    words.push(rux16_halt());
+    words.extend(k16_const32(0, ComputerMachine::DEBUG_WRITE));
+    words.extend(k16_const32(1, u32::from(b'S')));
+    words.push(k16_store32(0, 1));
+    words.extend(k16_const32(1, u32::from(b'2')));
+    words.push(k16_store32(0, 1));
+    words.extend(k16_const32(0, ComputerMachine::CONTROL_PANIC_CODE));
+    words.extend(k16_const32(1, 0x52));
+    words.push(k16_store32(0, 1));
+    words.push(k16_halt());
     words
 }
 
-fn rux16_boot_media(
+fn k16_boot_media(
     entry_pc: u32,
     load_addr: u32,
     block_count: u32,
@@ -512,7 +500,7 @@ fn rux16_boot_media(
     stage2: &[u8],
 ) -> Vec<u8> {
     let mut media = vec![0; 1024];
-    media[0..4].copy_from_slice(b"RUXB");
+    media[0..4].copy_from_slice(b"K16B");
     media[4..8].copy_from_slice(&entry_pc.to_le_bytes());
     media[8..12].copy_from_slice(&load_addr.to_le_bytes());
     media[12..16].copy_from_slice(&block_count.to_le_bytes());
@@ -521,50 +509,50 @@ fn rux16_boot_media(
     media
 }
 
-fn rux16_storage_read_bios_words() -> Vec<u16> {
+fn k16_storage_read_bios_words() -> Vec<u16> {
     let mut words = Vec::new();
-    words.extend(rux16_const32(0, ComputerMachine::STORAGE0_LBA_LOW));
-    words.push(rux16_const4(1, 0));
-    words.push(rux16_store32(0, 1));
-    words.extend(rux16_const32(0, ComputerMachine::STORAGE0_LBA_HIGH));
-    words.push(rux16_store32(0, 1));
-    words.extend(rux16_const32(0, ComputerMachine::STORAGE0_BLOCK_COUNT));
-    words.push(rux16_const4(1, 1));
-    words.push(rux16_store32(0, 1));
-    words.extend(rux16_const32(0, ComputerMachine::STORAGE0_BUFFER_ADDR));
-    words.extend(rux16_const32(1, 512));
-    words.push(rux16_store32(0, 1));
-    words.extend(rux16_const32(0, ComputerMachine::STORAGE0_COMMAND));
-    words.push(rux16_const4(1, 1));
-    words.push(rux16_store32(0, 1));
+    words.extend(k16_const32(0, ComputerMachine::STORAGE0_LBA_LOW));
+    words.push(k16_const4(1, 0));
+    words.push(k16_store32(0, 1));
+    words.extend(k16_const32(0, ComputerMachine::STORAGE0_LBA_HIGH));
+    words.push(k16_store32(0, 1));
+    words.extend(k16_const32(0, ComputerMachine::STORAGE0_BLOCK_COUNT));
+    words.push(k16_const4(1, 1));
+    words.push(k16_store32(0, 1));
+    words.extend(k16_const32(0, ComputerMachine::STORAGE0_BUFFER_ADDR));
+    words.extend(k16_const32(1, 512));
+    words.push(k16_store32(0, 1));
+    words.extend(k16_const32(0, ComputerMachine::STORAGE0_COMMAND));
+    words.push(k16_const4(1, 1));
+    words.push(k16_store32(0, 1));
 
-    words.extend(rux16_const32(0, 512));
-    words.extend(rux16_const32(3, ComputerMachine::DEBUG_WRITE));
-    words.push(rux16_const4(4, 1));
-    words.push(rux16_load8(2, 0));
-    words.push(rux16_store32(3, 2));
-    words.extend(rux16_add(0, 0, 4));
-    words.push(rux16_load8(2, 0));
-    words.push(rux16_store32(3, 2));
-    words.extend(rux16_add(0, 0, 4));
-    words.push(rux16_load8(2, 0));
-    words.push(rux16_store32(3, 2));
+    words.extend(k16_const32(0, 512));
+    words.extend(k16_const32(3, ComputerMachine::DEBUG_WRITE));
+    words.push(k16_const4(4, 1));
+    words.push(k16_load8(2, 0));
+    words.push(k16_store32(3, 2));
+    words.extend(k16_add(0, 0, 4));
+    words.push(k16_load8(2, 0));
+    words.push(k16_store32(3, 2));
+    words.extend(k16_add(0, 0, 4));
+    words.push(k16_load8(2, 0));
+    words.push(k16_store32(3, 2));
 
-    words.extend(rux16_const32(0, ComputerMachine::STORAGE0_STATUS));
-    words.push(rux16_load32(2, 0));
-    words.extend(rux16_const32(0, ComputerMachine::CONTROL_PANIC_CODE));
-    words.push(rux16_store32(0, 2));
-    words.push(rux16_halt());
+    words.extend(k16_const32(0, ComputerMachine::STORAGE0_STATUS));
+    words.push(k16_load32(2, 0));
+    words.extend(k16_const32(0, ComputerMachine::CONTROL_PANIC_CODE));
+    words.push(k16_store32(0, 2));
+    words.push(k16_halt());
     words
 }
 
-fn rux16_add(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
+fn k16_add(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
     [
         0x2000 | (u16::from(dst) << 8),
         (u16::from(lhs) << 4) | u16::from(rhs),
     ]
 }
 
-fn rux16_halt() -> u16 {
+fn k16_halt() -> u16 {
     0x0001
 }

@@ -86,13 +86,12 @@ val generateModMetadata =
             exclude("rom/rom.index", "firmware/firmware.index")
             exclude { element ->
                 element.name.contains(".png") ||
-                    element.name.endsWith(".ck") ||
-                    element.name.endsWith(".ruxi")
+                    element.name.endsWith(".ck")
             }
             expand(replaceProperties)
         }
         from(from) {
-            include("**/*.ck", "**/*.ruxi")
+            include("**/*.ck")
         }
         from(generateCklResourceIndexes)
 

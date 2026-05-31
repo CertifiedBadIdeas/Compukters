@@ -8,12 +8,12 @@
 
 `tools/k16-rust-nocore-smoke.sh` is the first intended Rust smoke path for
 K16. It compiles a tiny `#![no_core]` Rust program with an unmangled
-`extern "C" fn main() -> i32`, links it with `rux16-startup` and the explicit
-`rux16-memory-helpers` runtime object, executes the resulting KX program,
+`extern "C" fn main() -> i32`, links it with `k16-startup` and the explicit
+`k16-memory-helpers` runtime object, executes the resulting KX program,
 and expects `debug_bytes=2a`.
 
-`rux16-memory-helpers` is also Rust-owned: `k16 runtime rux16-memory-helpers`
-builds `native/rux-compiler/runtime/rux16_memory_helpers.rs` with the same
+`k16-memory-helpers` is also Rust-owned: `k16 runtime k16-memory-helpers`
+builds `native/k16-tools/runtime/k16_memory_helpers.rs` with the same
 custom K16 rustc, then lowers the generated LLVM IR with `llc` from
 `K16_LLVM_BIN_DIR`. The tool does not keep a host-generated helper object
 path.
@@ -32,11 +32,11 @@ Run it with explicit tool paths:
 
 ```bash
 K16_RUSTC=/path/to/custom-k16-rustc \
-K16_LLVM_BIN_DIR=/path/to/rux16/llvm/bin \
+K16_LLVM_BIN_DIR=/path/to/k16/llvm/bin \
 tools/k16-rust-nocore-smoke.sh
 ```
 
-The current host rustc is not enough if it does not contain the current Rux16
+The current host rustc is not enough if it does not contain the current K16
 LLVM backend. In that case the script stops before compiling instead of routing
 through a host target or another fallback.
 

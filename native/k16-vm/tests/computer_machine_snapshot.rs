@@ -1,8 +1,8 @@
 use k16_vm::computer_machine::{
     decode_snapshot_v1, ComputerMachine, ComputerMachineProfile, COMPUTER_SNAPSHOT_V1_HEADER_SIZE,
-    COMPUTER_SNAPSHOT_V1_MAGIC, COMPUTER_SNAPSHOT_V1_RUX16_CPU_RECORD_SIZE,
+    COMPUTER_SNAPSHOT_V1_K16_CPU_RECORD_SIZE, COMPUTER_SNAPSHOT_V1_MAGIC,
 };
-use k16_vm::rux16::Rux16Signal;
+use k16_vm::k16::K16Signal;
 
 const CONTROL_DEVICE_RECORD_SIZE: usize = 20;
 const EMPTY_DEBUG_DEVICE_RECORD_SIZE: usize = 8;
@@ -14,7 +14,7 @@ const STORAGE0_DEVICE_RECORD_SIZE: usize = 44;
 fn computer_machine_snapshot_v1_records_header_and_ram_payload() {
     let bios = [0x01, 0x00];
     let (mut machine, boot_cpu) =
-        ComputerMachine::from_rux16_bios_flash(&bios, 1024, 8).expect("machine creates");
+        ComputerMachine::from_k16_bios_flash(&bios, 1024, 8).expect("machine creates");
     machine.memory_mut().store_u8(512, 0xA5).unwrap();
     machine.memory_mut().store_u8(1023, 0x5A).unwrap();
 
@@ -25,7 +25,7 @@ fn computer_machine_snapshot_v1_records_header_and_ram_payload() {
         snapshot.len(),
         COMPUTER_SNAPSHOT_V1_HEADER_SIZE
             + 1024
-            + COMPUTER_SNAPSHOT_V1_RUX16_CPU_RECORD_SIZE
+            + COMPUTER_SNAPSHOT_V1_K16_CPU_RECORD_SIZE
             + CONTROL_DEVICE_RECORD_SIZE
             + EMPTY_DEBUG_DEVICE_RECORD_SIZE
             + EMPTY_DISPLAY0_DEVICE_RECORD_SIZE
@@ -69,18 +69,18 @@ fn computer_machine_snapshot_v1_restores_ram_bytes_without_recreating_cpu_state(
 
 #[test]
 fn computer_machine_snapshot_v1_restores_boot_cpu_continuation_state() {
-    let bios = rux16_words(&[halt()]);
-    let program = rux16_words(&[const4(1, 5), const32(4), 512, 0, store32(4, 1), halt()]);
+    let bios = k16_words(&[halt()]);
+    let program = k16_words(&[const4(1, 5), const32(4), 512, 0, store32(4, 1), halt()]);
     let (mut machine, boot_cpu) =
-        ComputerMachine::from_rux16_bios_flash(&bios, 1024, 8).expect("machine creates");
+        ComputerMachine::from_k16_bios_flash(&bios, 1024, 8).expect("machine creates");
     machine.write_guest_ram_bytes(0x100, &program).unwrap();
     machine
-        .boot_handoff_rux16_from_ram(0x100, program.len() as u32, 2)
+        .boot_handoff_k16_from_ram(0x100, program.len() as u32, 2)
         .expect("boot handoff succeeds");
 
     assert_eq!(
-        machine.run_boot_rux16_until_signal(boot_cpu).unwrap(),
-        Rux16Signal::StepLimitExceeded
+        machine.run_boot_k16_until_signal(boot_cpu).unwrap(),
+        K16Signal::StepLimitExceeded
     );
     assert_eq!(&machine.memory().bytes()[512..516], &[0, 0, 0, 0]);
 
@@ -92,8 +92,8 @@ fn computer_machine_snapshot_v1_restores_boot_cpu_continuation_state() {
     assert_eq!(restored.boot_cpu_id(), Some(boot_cpu));
     assert_eq!(restored.cpu_count(), 1);
     assert_eq!(
-        restored.run_boot_rux16_until_signal(boot_cpu).unwrap(),
-        Rux16Signal::Halt
+        restored.run_boot_k16_until_signal(boot_cpu).unwrap(),
+        K16Signal::Halt
     );
     assert_eq!(&restored.memory().bytes()[512..516], &[5, 0, 0, 0]);
 }
@@ -339,9 +339,9 @@ fn computer_machine_snapshot_v1_rejects_bad_magic_version_and_length() {
 
 #[test]
 fn computer_machine_snapshot_v1_rejects_invalid_cpu_record_fields() {
-    let bios = rux16_words(&[halt()]);
+    let bios = k16_words(&[halt()]);
     let (machine, _) =
-        ComputerMachine::from_rux16_bios_flash(&bios, 1024, 8).expect("machine creates");
+        ComputerMachine::from_k16_bios_flash(&bios, 1024, 8).expect("machine creates");
     let snapshot = machine.snapshot_v1().expect("snapshot encodes");
     let cpu_record = COMPUTER_SNAPSHOT_V1_HEADER_SIZE + 1024;
 
@@ -349,7 +349,7 @@ fn computer_machine_snapshot_v1_rejects_invalid_cpu_record_fields() {
     bad_state[cpu_record + 4..cpu_record + 8].copy_from_slice(&99_u32.to_le_bytes());
     assert_eq!(
         decode_snapshot_v1(&bad_state).unwrap_err(),
-        "unsupported ComputerMachine snapshot Rux16 CPU state 99"
+        "unsupported ComputerMachine snapshot K16 CPU state 99"
     );
 
     let mut bad_reserved = snapshot.clone();
@@ -370,7 +370,7 @@ fn computer_machine_snapshot_v1_rejects_invalid_cpu_record_fields() {
     };
     assert_eq!(
         error,
-        "ComputerMachine snapshot Rux16 CPU max_steps must be non-zero"
+        "ComputerMachine snapshot K16 CPU max_steps must be non-zero"
     );
 }
 
@@ -444,7 +444,7 @@ fn computer_machine_snapshot_v1_rejects_invalid_device_record_fields() {
     );
 }
 
-fn rux16_words(words: &[u16]) -> Vec<u8> {
+fn k16_words(words: &[u16]) -> Vec<u8> {
     words.iter().flat_map(|word| word.to_le_bytes()).collect()
 }
 

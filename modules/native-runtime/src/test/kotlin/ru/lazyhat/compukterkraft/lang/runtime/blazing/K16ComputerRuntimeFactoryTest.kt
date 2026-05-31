@@ -111,13 +111,13 @@ class K16ComputerRuntimeFactoryTest {
                 .readText()
 
         assertTrue(runtimeSource.contains("NativeK16ComputerRuntimeBindings"))
-        assertFalse(runtimeSource.contains("NativeRux16ComputerRuntimeBindings"))
+        assertFalse(runtimeSource.contains("NativeRuxComputerRuntimeBindings"))
         assertTrue(bindingsSource.contains("fun createK16ComputerFromBiosFlash("))
         assertFalse(bindingsSource.contains("fun createRuxComputerFromBiosFlash("))
         assertTrue(bindingsSource.contains("fun restoreK16ComputerFromBiosFlashSnapshot("))
         assertFalse(bindingsSource.contains("fun restoreRuxComputerFromBiosFlashSnapshot("))
         assertTrue(bindingsSource.contains("fun runK16ComputerUntilSignal(handle: Long)"))
-        assertFalse(bindingsSource.contains("fun runRux16ComputerUntilSignal(handle: Long)"))
+        assertFalse(bindingsSource.contains("fun runRuxComputerUntilSignal(handle: Long)"))
 
         for (requiredName in
             listOf(
@@ -141,7 +141,7 @@ class K16ComputerRuntimeFactoryTest {
             listOf(
                 "createRuxComputerFromBiosFlashNative",
                 "restoreRuxComputerFromBiosFlashSnapshotNative",
-                "runRux16ComputerUntilSignalNative",
+                "runRuxComputerUntilSignalNative",
                 "ruxComputerControlNative",
                 "ruxComputerDebugOutputNative",
                 "drainRuxComputerDebugOutputNative",

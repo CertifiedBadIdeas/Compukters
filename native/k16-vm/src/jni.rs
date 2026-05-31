@@ -4,8 +4,8 @@ use jni::objects::{JByteArray, JClass, JString};
 use jni::sys::{jbyteArray, jint, jlong, jlongArray};
 use jni::JNIEnv;
 
+use crate::k16::K16Signal;
 use crate::k16_computer::{K16ComputerHandle, K16ComputerTextDisplaySnapshot};
-use crate::rux16::Rux16Signal;
 
 #[no_mangle]
 pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_createK16ComputerFromBiosFlashNative(
@@ -21,7 +21,7 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
         Err(error) => {
             let _ = env.throw_new(
                 "java/lang/IllegalArgumentException",
-                format!("Cannot read Rux16 BIOS flash path: {error}"),
+                format!("Cannot read K16 BIOS flash path: {error}"),
             );
             return 0;
         }
@@ -36,7 +36,7 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
             return 0;
         }
     };
-    match K16ComputerHandle::create_rux16_bios_flash_path_with_storage0_path(
+    match K16ComputerHandle::create_k16_bios_flash_path_with_storage0_path(
         bios_flash_path,
         memory_size.max(1) as usize,
         max_steps.max(1) as u64,
@@ -64,7 +64,7 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
         Err(error) => {
             let _ = env.throw_new(
                 "java/lang/IllegalArgumentException",
-                format!("Cannot read Rux16 BIOS flash path: {error}"),
+                format!("Cannot read K16 BIOS flash path: {error}"),
             );
             return 0;
         }
@@ -89,7 +89,7 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
             return 0;
         }
     };
-    match K16ComputerHandle::restore_rux16_bios_flash_snapshot_path_with_storage0_path(
+    match K16ComputerHandle::restore_k16_bios_flash_snapshot_path_with_storage0_path(
         bios_flash_path,
         memory_size.max(1) as usize,
         storage0_path,
@@ -113,14 +113,14 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
         Some(handle) => handle,
         None => return null_mut(),
     };
-    let signal = match handle.run_rux16_until_signal() {
+    let signal = match handle.run_k16_until_signal() {
         Ok(signal) => signal,
         Err(error) => {
             let _ = env.throw_new("java/lang/IllegalStateException", error);
             return null_mut();
         }
     };
-    long_array_or_throw(&mut env, &rux16_signal_values(signal))
+    long_array_or_throw(&mut env, &k16_signal_values(signal))
 }
 
 #[no_mangle]
@@ -278,10 +278,10 @@ fn k16_computer_handle_mut(
     Some(unsafe { &mut *pointer })
 }
 
-fn rux16_signal_values(signal: Rux16Signal) -> [jlong; 2] {
+fn k16_signal_values(signal: K16Signal) -> [jlong; 2] {
     match signal {
-        Rux16Signal::Halt => [1, 0],
-        Rux16Signal::StepLimitExceeded => [6, 0],
+        K16Signal::Halt => [1, 0],
+        K16Signal::StepLimitExceeded => [6, 0],
     }
 }
 
