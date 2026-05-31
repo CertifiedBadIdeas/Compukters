@@ -86,107 +86,114 @@ val k16VmNativePlatform = currentK16VmNativePlatform()
 val k16VmNativeLibrary = rootProject.layout.projectDirectory.file("rust/host/k16-vm/target/debug/${k16VmNativePlatform.libraryName}")
 val generatedK16FirmwareResources = layout.buildDirectory.dir("generated/k16-firmware-resources")
 val generatedK16FirmwareArtifacts = layout.buildDirectory.dir("generated/k16-firmware-artifacts")
-val ruxCompilerManifest = rootProject.layout.projectDirectory.file("rust/host/k16-tools/Cargo.toml")
-val k16BiosSource = rootProject.layout.projectDirectory.file("rust/host/k16-tools/examples/firmware/k16_bios.rx")
-val k16BootSource = rootProject.layout.projectDirectory.file("rust/host/k16-tools/examples/boot/kernel_loader.rx")
-val k16KernelSource = rootProject.layout.projectDirectory.file("rust/host/k16-tools/examples/kernel/display_ok.rx")
+val generatedK16GuestTarget = layout.buildDirectory.dir("generated/k16-guest-target")
+val k16ToolsManifest = rootProject.layout.projectDirectory.file("rust/host/k16-tools/Cargo.toml")
+val k16GuestManifest = rootProject.layout.projectDirectory.file("rust/guest/Cargo.toml")
+val k16BiosManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-bios/Cargo.toml")
+val k16BiosSource = rootProject.layout.projectDirectory.file("rust/guest/k16-bios/src/main.rs")
+val k16RustTargetSpec = rootProject.layout.projectDirectory.file("tools/k16-unknown-kraftos.json")
+val k16BiosObject = generatedK16FirmwareArtifacts.map { it.file("k16-bios.o") }
 val k16BiosFlashResource = generatedK16FirmwareResources.map { it.file("firmware/k16-bios.kflash") }
 val k16BootArtifact = generatedK16FirmwareArtifacts.map { it.file("kernel-loader.kb") }
 val k16KernelArtifact = generatedK16FirmwareArtifacts.map { it.file("display-ok.kx") }
 val k16SystemStorage0Resource = generatedK16FirmwareResources.map { it.file("firmware/k16-system-storage0.kv") }
 
-val compileK16BiosFlash =
-    tasks.register<Exec>("compileK16BiosFlash") {
-        description = "Compiles the bundled K16 BIOS source into a raw BIOS flash resource."
+val compileK16BiosObject =
+    tasks.register<Exec>("compileK16BiosObject") {
+        description = "Compiles the bundled Rust K16 BIOS crate into a K16 object."
         group = "k16"
-        inputs.file(ruxCompilerManifest)
+        inputs.file(k16GuestManifest)
+        inputs.file(k16BiosManifest)
         inputs.file(k16BiosSource)
+        inputs.file(k16RustTargetSpec)
+        outputs.file(k16BiosObject)
+
+        doFirst {
+            val rustc =
+                providers.environmentVariable("K16_RUSTC").orNull
+                    ?: throw GradleException("K16_RUSTC must point to a custom K16 rustc to build rust/guest/k16-bios")
+            k16BiosObject.get().asFile.parentFile.mkdirs()
+            environment("RUSTC", rustc)
+            environment("RUSTFLAGS", "-Zunstable-options")
+            commandLine(
+                "cargo",
+                "rustc",
+                "--manifest-path",
+                k16BiosManifest.asFile.absolutePath,
+                "--features",
+                "k16-target",
+                "--target",
+                k16RustTargetSpec.asFile.absolutePath,
+                "--target-dir",
+                generatedK16GuestTarget.get().asFile.absolutePath,
+                "--",
+                "-C",
+                "panic=abort",
+                "-C",
+                "relocation-model=static",
+                "--emit=obj",
+                "-o",
+                k16BiosObject.get().asFile.absolutePath,
+            )
+        }
+    }
+
+val linkK16BiosFlash =
+    tasks.register<Exec>("linkK16BiosFlash") {
+        description = "Links the bundled Rust K16 BIOS object into a raw BIOS flash resource."
+        group = "k16"
+        dependsOn(compileK16BiosObject)
+        inputs.file(k16ToolsManifest)
+        inputs.file(k16BiosObject)
         outputs.file(k16BiosFlashResource)
 
         doFirst {
             k16BiosFlashResource.get().asFile.parentFile.mkdirs()
+            commandLine(
+                "cargo",
+                "run",
+                "--manifest-path",
+                k16ToolsManifest.asFile.absolutePath,
+                "--bin",
+                "k16",
+                "--",
+                "link",
+                "--target",
+                "bios",
+                k16BiosObject.get().asFile.absolutePath,
+                "-o",
+                k16BiosFlashResource.get().asFile.absolutePath,
+            )
         }
-
-        commandLine(
-            "cargo",
-            "run",
-            "--manifest-path",
-            ruxCompilerManifest.asFile.absolutePath,
-            "--bin",
-            "rux",
-            "--",
-            "compile",
-            "--target",
-            "bios",
-            k16BiosSource.asFile.absolutePath,
-            "-o",
-            k16BiosFlashResource.get().asFile.absolutePath,
-        )
     }
 
 val compileK16SystemBoot =
-    tasks.register<Exec>("compileK16SystemBoot") {
-        description = "Compiles the bundled K16 bootloader artifact."
+    tasks.register("compileK16SystemBoot") {
+        description = "Builds the bundled Rust K16 bootloader artifact."
         group = "k16"
-        inputs.file(ruxCompilerManifest)
-        inputs.file(k16BootSource)
         outputs.file(k16BootArtifact)
 
-        doFirst {
-            k16BootArtifact.get().asFile.parentFile.mkdirs()
+        doLast {
+            throw GradleException("Rust K16 bootloader artifact generation is tracked in #141; no Rux fallback exists")
         }
-
-        commandLine(
-            "cargo",
-            "run",
-            "--manifest-path",
-            ruxCompilerManifest.asFile.absolutePath,
-            "--bin",
-            "rux",
-            "--",
-            "compile",
-            "--target",
-            "boot",
-            k16BootSource.asFile.absolutePath,
-            "-o",
-            k16BootArtifact.get().asFile.absolutePath,
-        )
     }
 
 val compileK16SystemKernel =
-    tasks.register<Exec>("compileK16SystemKernel") {
-        description = "Compiles the bundled K16 kernel artifact."
+    tasks.register("compileK16SystemKernel") {
+        description = "Builds the bundled Rust K16 kernel artifact."
         group = "k16"
-        inputs.file(ruxCompilerManifest)
-        inputs.file(k16KernelSource)
         outputs.file(k16KernelArtifact)
 
-        doFirst {
-            k16KernelArtifact.get().asFile.parentFile.mkdirs()
+        doLast {
+            throw GradleException("Rust K16 kernel artifact generation is tracked in #141; no Rux fallback exists")
         }
-
-        commandLine(
-            "cargo",
-            "run",
-            "--manifest-path",
-            ruxCompilerManifest.asFile.absolutePath,
-            "--bin",
-            "rux",
-            "--",
-            "compile",
-            "--target",
-            "kernel",
-            k16KernelSource.asFile.absolutePath,
-            "-o",
-            k16KernelArtifact.get().asFile.absolutePath,
-        )
     }
 
 val createK16SystemStorage0 =
     tasks.register<Exec>("createK16SystemStorage0") {
         description = "Creates the bundled K16 system storage0 volume resource."
         group = "k16"
-        inputs.file(ruxCompilerManifest)
+        inputs.file(k16ToolsManifest)
 
         doFirst {
             k16SystemStorage0Resource.get().asFile.parentFile.mkdirs()
@@ -196,7 +203,7 @@ val createK16SystemStorage0 =
             "cargo",
             "run",
             "--manifest-path",
-            ruxCompilerManifest.asFile.absolutePath,
+            k16ToolsManifest.asFile.absolutePath,
             "--bin",
             "k16",
             "--",
@@ -213,14 +220,14 @@ val putK16SystemStorage0Boot =
         description = "Writes the bundled K16 bootloader into the system storage0 volume resource."
         group = "k16"
         dependsOn(createK16SystemStorage0, compileK16SystemBoot)
-        inputs.file(ruxCompilerManifest)
+        inputs.file(k16ToolsManifest)
         inputs.file(k16BootArtifact)
 
         commandLine(
             "cargo",
             "run",
             "--manifest-path",
-            ruxCompilerManifest.asFile.absolutePath,
+            k16ToolsManifest.asFile.absolutePath,
             "--bin",
             "k16",
             "--",
@@ -236,7 +243,7 @@ val compileK16SystemStorage0 =
         description = "Writes the bundled K16 kernel into the system storage0 volume resource."
         group = "k16"
         dependsOn(putK16SystemStorage0Boot, compileK16SystemKernel)
-        inputs.file(ruxCompilerManifest)
+        inputs.file(k16ToolsManifest)
         inputs.file(k16BootArtifact)
         inputs.file(k16KernelArtifact)
 
@@ -244,7 +251,7 @@ val compileK16SystemStorage0 =
             "cargo",
             "run",
             "--manifest-path",
-            ruxCompilerManifest.asFile.absolutePath,
+            k16ToolsManifest.asFile.absolutePath,
             "--bin",
             "k16",
             "--",
@@ -260,6 +267,6 @@ sourceSets.main {
 }
 
 tasks.named("processResources") {
-    dependsOn(compileK16BiosFlash)
+    dependsOn(linkK16BiosFlash)
     dependsOn(compileK16SystemStorage0)
 }
