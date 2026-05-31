@@ -90,10 +90,14 @@ fn rust_nocore_smoke_artifacts_are_documented_and_strict() {
         fs::read_to_string(&core_smoke_script).expect("Rust core smoke script exists");
     assert!(core_script.contains("-Z build-std=core"));
     assert!(core_script.contains("-Z json-target-spec"));
-    assert!(core_script.contains("RUSTFLAGS=\"-Cjump-tables=no\""));
+    assert!(core_script.contains("[lib]"));
+    assert!(core_script.contains("--lib"));
+    assert!(core_script.contains("RUSTFLAGS=\"-Cjump-tables=no -Cdebuginfo=0\""));
     assert!(core_script.contains("-Cjump-tables=no"));
+    assert!(core_script.contains("-Cdebuginfo=0"));
     assert!(core_script.contains("#![no_std]"));
-    assert!(core_script.contains("#![no_main]"));
+    assert!(!core_script.contains("[[bin]]"));
+    assert!(!core_script.contains("#![no_main]"));
     assert!(core_script.contains("core::hint::spin_loop"));
     assert!(core_script.contains("K16_RUSTC"));
     assert!(core_script.contains("K16_LLVM_BIN_DIR"));
@@ -126,6 +130,9 @@ fn rust_nocore_smoke_artifacts_are_documented_and_strict() {
     assert!(helpers.contains("__udivdi3"));
     assert!(helpers.contains("__moddi3"));
     assert!(helpers.contains("__umoddi3"));
+    assert!(helpers.contains("__ashldi3"));
+    assert!(helpers.contains("__lshrdi3"));
+    assert!(helpers.contains("__ashrdi3"));
     assert!(!helpers.contains("extern crate std"));
 
     let probe = fs::read_to_string(&bootstrap_probe).expect("Rust bootstrap probe script exists");
@@ -191,6 +198,8 @@ fn rust_nocore_smoke_artifacts_are_documented_and_strict() {
     assert!(core_docs.contains("tools/k16-rust-core-smoke.sh"));
     assert!(core_docs.contains("-Z build-std=core"));
     assert!(core_docs.contains("core only"));
+    assert!(core_docs.contains("library crate with an exported C ABI `main`"));
+    assert!(core_docs.contains("-Cdebuginfo=0"));
     assert!(core_docs.contains("no alloc"));
     assert!(core_docs.contains("no std"));
     assert!(core_docs.contains("K16_RUSTC"));

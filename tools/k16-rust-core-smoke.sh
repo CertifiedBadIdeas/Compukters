@@ -58,6 +58,7 @@ CARGO="$(resolve_command "$CARGO")"
 RUSTC="$(resolve_command "$RUSTC")"
 require_file "$LLVM_READOBJ"
 require_readable "$TARGET_SPEC"
+export K16_LLVM_BIN_DIR="$LLVM_BIN_DIR"
 
 WORK_DIR="$(mktemp -d)"
 trap 'rm -rf "$WORK_DIR"' EXIT
@@ -86,15 +87,14 @@ name = "k16-core-smoke"
 version = "0.1.0"
 edition = "2021"
 
-[[bin]]
-name = "k16-core-smoke"
+[lib]
+name = "k16_core_smoke"
 path = "src/main.rs"
 test = false
 TOML
 
 cat > "$WORK_DIR/src/main.rs" <<'RS'
 #![no_std]
-#![no_main]
 
 use core::panic::PanicInfo;
 
@@ -116,7 +116,7 @@ fn panic(_info: &PanicInfo<'_>) -> ! {
 RS
 
 if ! RUSTC="$RUSTC" \
-    RUSTFLAGS="-Cjump-tables=no" \
+    RUSTFLAGS="-Cjump-tables=no -Cdebuginfo=0" \
     "$CARGO" \
         rustc \
         -Z build-std=core \
@@ -124,12 +124,13 @@ if ! RUSTC="$RUSTC" \
         --manifest-path "$WORK_DIR/Cargo.toml" \
         --target "$TARGET_SPEC" \
         --target-dir "$WORK_DIR/target" \
+        --lib \
         -- \
         -C panic=abort \
         -C relocation-model=static \
         -Cjump-tables=no \
-        --emit=obj \
-        -o "$WORK_DIR/main.o" \
+        -Cdebuginfo=0 \
+        "--emit=obj=$WORK_DIR/main.o" \
         2> "$WORK_DIR/cargo-rustc.stderr"; then
     echo "K16 Rust core build failed." >&2
     echo "----- cargo rustc stderr -----" >&2

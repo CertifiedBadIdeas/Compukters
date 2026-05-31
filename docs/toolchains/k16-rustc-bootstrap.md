@@ -192,7 +192,11 @@ tools/k16-rust-core-smoke.sh
 ```
 
 That path uses `-Z build-std=core` and `-Z json-target-spec`, and is
-intentionally limited to `core` without `alloc` or hosted `std`.
+intentionally limited to a `#![no_std]` library crate with an exported C ABI
+`main`, `core`, no `alloc`, and no hosted `std`. The final executable is linked
+by `k16 link`, so host `lld` is not part of this proof path. It passes
+`-Cdebuginfo=0` because the current K16 object ABI rejects debug relocation
+semantics.
 
 With the updated `k16` Rust and LLVM branches plus a rebuilt stage1 host `std`
 sysroot, this path reaches K16 backend codegen for `core`. The current blocker
