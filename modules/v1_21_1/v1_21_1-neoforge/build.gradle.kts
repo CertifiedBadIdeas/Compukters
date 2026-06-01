@@ -96,6 +96,7 @@ val generatedK16BootTarget = generatedK16GuestTarget.map { it.dir("boot") }
 val generatedK16KernelTarget = generatedK16GuestTarget.map { it.dir("kernel") }
 val downloadedK16ToolchainArchives = layout.buildDirectory.dir("k16-toolchain-archives")
 val packagedK16ToolchainArchives = layout.buildDirectory.dir("k16-toolchain-packages")
+val stagedK16ToolchainRoot = layout.buildDirectory.dir("k16-toolchain-stage/${k16VmNativePlatform.id}")
 val k16ToolsManifest = rootProject.layout.projectDirectory.file("rust/host/k16-tools/Cargo.toml")
 val k16ToolsSource = rootProject.layout.projectDirectory.dir("rust/host/k16-tools/src")
 val k16GuestManifest = rootProject.layout.projectDirectory.file("rust/guest/Cargo.toml")
@@ -211,6 +212,26 @@ fun validateK16ToolchainPath(
     requireRealFile(rustc, "rustc")
     requireRealFile(linker, "k16-ld")
     return K16Toolchain(root = root, cargo = cargo, rustc = rustc, linker = linker)
+}
+
+fun requireK16ToolchainInputFile(
+    propertyName: String,
+    label: String,
+): File {
+    val value =
+        providers.gradleProperty(propertyName).orNull
+            ?: throw GradleException("stageK16Toolchain requires -P$propertyName=/absolute/path/to/$label")
+    val file = File(value)
+    check(file.isAbsolute) {
+        "$propertyName must be an absolute path, got: $value"
+    }
+    check(file.isFile) {
+        "$propertyName must point to an existing file, got: $file"
+    }
+    check(!Files.isSymbolicLink(file.toPath())) {
+        "$propertyName must not point to a symlink: $file"
+    }
+    return file
 }
 
 fun explicitK16ToolchainRoot(): File? {
@@ -351,20 +372,63 @@ val installK16Toolchain =
         }
     }
 
+val stageK16Toolchain =
+    tasks.register<Sync>("stageK16Toolchain") {
+        description = "Stages explicitly provided K16 toolchain binaries into the install layout."
+        group = "k16"
+        into(stagedK16ToolchainRoot)
+        onlyIf {
+            explicitK16ToolchainRoot() == null
+        }
+        from({ requireK16ToolchainInputFile("k16CargoPath", "cargo") }) {
+            into("bin")
+            rename { "cargo" }
+        }
+        from({ requireK16ToolchainInputFile("k16RustcPath", "rustc") }) {
+            into("bin")
+            rename { "rustc" }
+        }
+        from({ requireK16ToolchainInputFile("k16LdPath", "k16-ld") }) {
+            into("bin")
+            rename { "k16-ld" }
+        }
+
+        doLast {
+            val root = stagedK16ToolchainRoot.get().asFile
+            root.resolve("manifest.json").writeText(
+                """
+                {
+                  "schemaVersion": 1,
+                  "pin": "${k16ToolchainPin.pin}",
+                  "host": "${k16VmNativePlatform.id}",
+                  "archive": "${k16ToolchainPin.archive}",
+                  "source": "explicit-gradle-stage"
+                }
+                """.trimIndent() + "\n",
+            )
+            validateK16ToolchainPath(
+                root = root,
+                origin = "stageK16Toolchain",
+                requiredExecutables = k16ToolchainPin.requiredExecutables,
+            )
+        }
+    }
+
 val packageK16Toolchain =
     tasks.register("packageK16Toolchain", Zip::class) {
         description = "Packages an explicit local K16 toolchain directory into the pinned host archive shape."
         group = "k16"
+        dependsOn(stageK16Toolchain)
         inputs.file(k16ToolchainConfig)
         archiveFileName.set(k16ToolchainPin.archive)
         destinationDirectory.set(packagedK16ToolchainArchives)
         from({
             val root =
                 explicitK16ToolchainRoot()
-                    ?: throw GradleException("packageK16Toolchain requires -Pk16ToolchainDir=/absolute/path/to/k16-toolchain")
+                    ?: stagedK16ToolchainRoot.get().asFile
             validateK16ToolchainPath(
                 root = root,
-                origin = "k16ToolchainDir",
+                origin = if (explicitK16ToolchainRoot() == null) "stageK16Toolchain" else "k16ToolchainDir",
                 requiredExecutables = k16ToolchainPin.requiredExecutables,
             )
             root

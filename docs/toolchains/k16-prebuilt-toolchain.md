@@ -56,7 +56,19 @@ For manual shell usage, Gradle can print the selected toolchain paths:
 ## Maintainer Publish Flow
 
 Build the K16 toolchain in a maintainer workspace, then stage the install layout
-for one host:
+for one host from already-built binaries:
+
+```bash
+./gradlew-sandbox :v1_21_1-neoforge:stageK16Toolchain \
+  -Pk16CargoPath=/absolute/path/to/cargo \
+  -Pk16RustcPath=/absolute/path/to/rustc \
+  -Pk16LdPath=/absolute/path/to/k16-ld
+```
+
+This task only copies explicit binaries. It does not build LLVM, rustc, cargo,
+or `k16-ld`.
+
+The staged layout is:
 
 ```text
 stage/
@@ -71,7 +83,9 @@ host archive name and layout validation as the consumer installer:
 
 ```bash
 ./gradlew-sandbox :v1_21_1-neoforge:packageK16Toolchain \
-  -Pk16ToolchainDir=/absolute/path/to/stage
+  -Pk16CargoPath=/absolute/path/to/cargo \
+  -Pk16RustcPath=/absolute/path/to/rustc \
+  -Pk16LdPath=/absolute/path/to/k16-ld
 ```
 
 The task prints the archive path and SHA-256. Update the matching `sha256` in
