@@ -23,9 +23,14 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("generated/k16-firmware-resources"))
         assertTrue(source.contains("generated/k16-firmware-artifacts"))
         assertTrue(source.contains("tasks.register<Exec>(\"linkK16BiosFlash\")"))
-        assertTrue(source.contains("K16_CARGO"))
-        assertTrue(source.contains("K16_LD"))
-        assertTrue(source.contains("K16_LD must point to the k16-ld linker driver"))
+        assertTrue(source.contains("config/k16-toolchain.json"))
+        assertTrue(source.contains("resolveK16Toolchain()"))
+        assertTrue(source.contains("k16ToolchainDir"))
+        assertTrue(source.contains(".cache/compukter-kraft/k16-toolchains"))
+        assertTrue(source.contains("must not be a symlink"))
+        assertFalse(source.contains("providers.environmentVariable(\"K16_CARGO\")"))
+        assertFalse(source.contains("providers.environmentVariable(\"K16_RUSTC\")"))
+        assertFalse(source.contains("providers.environmentVariable(\"K16_LD\")"))
         assertTrue(source.contains("-C linker="))
         assertTrue(source.contains("-C link-arg=--k16-target=bios"))
         assertTrue(source.contains("-C link-arg=--k16-target=boot"))
@@ -41,6 +46,11 @@ class K16FirmwareResourceTest {
         assertFalse(source.contains("generated/rux-firmware-"))
         assertFalse(source.contains("tasks.register<Exec>(\"compileRux"))
         assertFalse(source.contains("--bin\", \"rux\""))
+
+        val toolchainConfig = Path.of("../../../config/k16-toolchain.json").readText()
+        assertTrue(toolchainConfig.contains("\"pin\""))
+        assertTrue(toolchainConfig.contains("\"linux-x86_64\""))
+        assertTrue(toolchainConfig.contains("\"bin/k16-ld\""))
     }
 
     @Test

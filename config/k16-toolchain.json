@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "pin": "k16-dev-2026-06-01",
+  "requiredExecutables": [
+    "bin/cargo",
+    "bin/rustc",
+    "bin/k16-ld"
+  ],
+  "hosts": {
+    "linux-x86_64": {
+      "archive": "k16-toolchain-k16-dev-2026-06-01-linux-x86_64.tar.zst"
+    },
+    "linux-aarch64": {
+      "archive": "k16-toolchain-k16-dev-2026-06-01-linux-aarch64.tar.zst"
+    },
+    "macos-aarch64": {
+      "archive": "k16-toolchain-k16-dev-2026-06-01-macos-aarch64.tar.zst"
+    },
+    "windows-x86_64": {
+      "archive": "k16-toolchain-k16-dev-2026-06-01-windows-x86_64.zip"
+    }
+  }
+}
