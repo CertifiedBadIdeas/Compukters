@@ -19,6 +19,8 @@
 
 @file:Suppress("PropertyName")
 
+import groovy.json.JsonSlurper
+import java.nio.file.Files
 import java.time.OffsetDateTime
 import java.time.format.DateTimeFormatter
 
@@ -100,10 +102,113 @@ val k16BootSource = rootProject.layout.projectDirectory.file("rust/guest/k16-boo
 val k16KernelManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-kernel/Cargo.toml")
 val k16KernelSource = rootProject.layout.projectDirectory.file("rust/guest/k16-kernel/src/main.rs")
 val k16RustTargetSpec = rootProject.layout.projectDirectory.file("tools/k16-unknown-kraftos.json")
+val k16ToolchainConfig = rootProject.layout.projectDirectory.file("config/k16-toolchain.json")
 val k16BiosFlashResource = generatedK16FirmwareResources.map { it.file("firmware/k16-bios.kflash") }
 val k16BootArtifact = generatedK16FirmwareArtifacts.map { it.file("kernel-loader.kb") }
 val k16KernelArtifact = generatedK16FirmwareArtifacts.map { it.file("display-ok.kx") }
 val k16SystemStorage0Resource = generatedK16FirmwareResources.map { it.file("firmware/k16-system-storage0.kv") }
+
+data class K16Toolchain(
+    val root: File,
+    val cargo: File,
+    val rustc: File,
+    val linker: File,
+)
+
+data class K16ToolchainPin(
+    val pin: String,
+    val requiredExecutables: List<String>,
+)
+
+fun readK16ToolchainPin(): K16ToolchainPin {
+    val config = JsonSlurper().parse(k16ToolchainConfig.asFile) as Map<*, *>
+    val schemaVersion = config["schemaVersion"]
+    check(schemaVersion.toString() == "1") {
+        "Unsupported K16 toolchain config schemaVersion=$schemaVersion in ${k16ToolchainConfig.asFile}"
+    }
+    val pin =
+        config["pin"] as? String
+            ?: error("K16 toolchain config is missing string field 'pin': ${k16ToolchainConfig.asFile}")
+    val requiredExecutables =
+        (config["requiredExecutables"] as? List<*>)
+            ?.map {
+                it as? String
+                    ?: error("K16 toolchain config has a non-string required executable in ${k16ToolchainConfig.asFile}")
+            }
+            ?: error("K16 toolchain config is missing array field 'requiredExecutables': ${k16ToolchainConfig.asFile}")
+    val hosts =
+        config["hosts"] as? Map<*, *>
+            ?: error("K16 toolchain config is missing object field 'hosts': ${k16ToolchainConfig.asFile}")
+    val hostId = k16VmNativePlatform.id
+    check(hosts.containsKey(hostId)) {
+        "K16 toolchain pin '$pin' does not declare host '$hostId' in ${k16ToolchainConfig.asFile}"
+    }
+    return K16ToolchainPin(pin = pin, requiredExecutables = requiredExecutables)
+}
+
+fun validateK16ToolchainPath(
+    root: File,
+    origin: String,
+    requiredExecutables: List<String>,
+): K16Toolchain {
+    fun requireRealFile(file: File, label: String) {
+        check(file.isFile) {
+            "K16 toolchain from $origin is invalid: missing $label at $file"
+        }
+        check(!Files.isSymbolicLink(file.toPath())) {
+            "K16 toolchain from $origin is invalid: $label must not be a symlink: $file"
+        }
+    }
+
+    check(root.isDirectory) {
+        "K16 toolchain from $origin is not installed at $root. " +
+            "Install the pinned prebuilt toolchain or pass -Pk16ToolchainDir=/absolute/path/to/k16-toolchain."
+    }
+    check(!Files.isSymbolicLink(root.toPath())) {
+        "K16 toolchain from $origin must not resolve through a symlink: $root"
+    }
+    requireRealFile(root.resolve("manifest.json"), "manifest")
+    requiredExecutables.forEach { relativePath ->
+        requireRealFile(root.resolve(relativePath), relativePath)
+    }
+    val cargo = root.resolve(requiredExecutables.single { it.endsWith("/cargo") })
+    val rustc = root.resolve(requiredExecutables.single { it.endsWith("/rustc") })
+    val linker = root.resolve(requiredExecutables.single { it.endsWith("/k16-ld") })
+    requireRealFile(cargo, "cargo")
+    requireRealFile(rustc, "rustc")
+    requireRealFile(linker, "k16-ld")
+    return K16Toolchain(root = root, cargo = cargo, rustc = rustc, linker = linker)
+}
+
+fun resolveK16Toolchain(): K16Toolchain {
+    val toolchainPin = readK16ToolchainPin()
+    val explicitDir = providers.gradleProperty("k16ToolchainDir").orNull
+    if (explicitDir != null) {
+        val root = File(explicitDir)
+        check(root.isAbsolute) {
+            "k16ToolchainDir must be an absolute path, got: $explicitDir"
+        }
+        return validateK16ToolchainPath(
+            root = root,
+            origin = "k16ToolchainDir",
+            requiredExecutables = toolchainPin.requiredExecutables,
+        )
+    }
+
+    val cacheRoot =
+        providers
+            .gradleProperty("k16ToolchainCacheDir")
+            .map { file(it) }
+            .orNull
+            ?: File(System.getProperty("user.home"), ".cache/compukter-kraft/k16-toolchains")
+    val hostId = k16VmNativePlatform.id
+    val root = cacheRoot.resolve(toolchainPin.pin).resolve(hostId)
+    return validateK16ToolchainPath(
+        root = root,
+        origin = "pinned prebuilt cache '${toolchainPin.pin}' for $hostId",
+        requiredExecutables = toolchainPin.requiredExecutables,
+    )
+}
 
 fun deleteK16RustBinOutputs(
     targetDir: File,
@@ -146,29 +251,22 @@ val linkK16BiosFlash =
         inputs.file(k16BiosManifest)
         inputs.file(k16BiosSource)
         inputs.file(k16RustTargetSpec)
+        inputs.file(k16ToolchainConfig)
         inputs.file(k16ToolsManifest)
         inputs.dir(k16ToolsSource)
         outputs.file(k16BiosFlashResource)
 
         doFirst {
-            val cargo =
-                providers.environmentVariable("K16_CARGO").orNull
-                    ?: throw GradleException("K16_CARGO must point to a nightly-capable cargo to build rust/guest/k16-bios")
-            val rustc =
-                providers.environmentVariable("K16_RUSTC").orNull
-                    ?: throw GradleException("K16_RUSTC must point to a custom K16 rustc to build rust/guest/k16-bios")
-            val linker =
-                providers.environmentVariable("K16_LD").orNull
-                    ?: throw GradleException("K16_LD must point to the k16-ld linker driver to build rust/guest/k16-bios")
+            val toolchain = resolveK16Toolchain()
             k16BiosFlashResource.get().asFile.parentFile.mkdirs()
             deleteK16RustBinOutputs(generatedK16BiosTarget.get().asFile, "k16-bios")
-            environment("RUSTC", rustc)
+            environment("RUSTC", toolchain.rustc.absolutePath)
             environment(
                 "RUSTFLAGS",
-                "-C linker=$linker -C link-arg=--k16-target=bios -Cjump-tables=no -Cdebuginfo=0 -Cdebug-assertions=off -Coverflow-checks=off -Zub-checks=no",
+                "-C linker=${toolchain.linker.absolutePath} -C link-arg=--k16-target=bios -Cjump-tables=no -Cdebuginfo=0 -Cdebug-assertions=off -Coverflow-checks=off -Zub-checks=no",
             )
             commandLine(
-                cargo,
+                toolchain.cargo.absolutePath,
                 "rustc",
                 "-Zbuild-std=core",
                 "-Zjson-target-spec",
@@ -212,29 +310,22 @@ val compileK16SystemBoot =
         inputs.file(k16BootManifest)
         inputs.file(k16BootSource)
         inputs.file(k16RustTargetSpec)
+        inputs.file(k16ToolchainConfig)
         inputs.file(k16ToolsManifest)
         inputs.dir(k16ToolsSource)
         outputs.file(k16BootArtifact)
 
         doFirst {
-            val cargo =
-                providers.environmentVariable("K16_CARGO").orNull
-                    ?: throw GradleException("K16_CARGO must point to a custom K16 cargo to build rust/guest/k16-boot")
-            val rustc =
-                providers.environmentVariable("K16_RUSTC").orNull
-                    ?: throw GradleException("K16_RUSTC must point to a custom K16 rustc to build rust/guest/k16-boot")
-            val linker =
-                providers.environmentVariable("K16_LD").orNull
-                    ?: throw GradleException("K16_LD must point to the k16-ld linker driver to build rust/guest/k16-boot")
+            val toolchain = resolveK16Toolchain()
             k16BootArtifact.get().asFile.parentFile.mkdirs()
             deleteK16RustBinOutputs(generatedK16BootTarget.get().asFile, "k16-boot")
-            environment("RUSTC", rustc)
+            environment("RUSTC", toolchain.rustc.absolutePath)
             environment(
                 "RUSTFLAGS",
-                "-C linker=$linker -C link-arg=--k16-target=boot -Cjump-tables=no -Cdebuginfo=0 -Cdebug-assertions=off -Coverflow-checks=off -Zub-checks=no",
+                "-C linker=${toolchain.linker.absolutePath} -C link-arg=--k16-target=boot -Cjump-tables=no -Cdebuginfo=0 -Cdebug-assertions=off -Coverflow-checks=off -Zub-checks=no",
             )
             commandLine(
-                cargo,
+                toolchain.cargo.absolutePath,
                 "rustc",
                 "-Zbuild-std=core",
                 "-Zjson-target-spec",
@@ -278,29 +369,22 @@ val compileK16SystemKernel =
         inputs.file(k16KernelManifest)
         inputs.file(k16KernelSource)
         inputs.file(k16RustTargetSpec)
+        inputs.file(k16ToolchainConfig)
         inputs.file(k16ToolsManifest)
         inputs.dir(k16ToolsSource)
         outputs.file(k16KernelArtifact)
 
         doFirst {
-            val cargo =
-                providers.environmentVariable("K16_CARGO").orNull
-                    ?: throw GradleException("K16_CARGO must point to a custom K16 cargo to build rust/guest/k16-kernel")
-            val rustc =
-                providers.environmentVariable("K16_RUSTC").orNull
-                    ?: throw GradleException("K16_RUSTC must point to a custom K16 rustc to build rust/guest/k16-kernel")
-            val linker =
-                providers.environmentVariable("K16_LD").orNull
-                    ?: throw GradleException("K16_LD must point to the k16-ld linker driver to build rust/guest/k16-kernel")
+            val toolchain = resolveK16Toolchain()
             k16KernelArtifact.get().asFile.parentFile.mkdirs()
             deleteK16RustBinOutputs(generatedK16KernelTarget.get().asFile, "k16-kernel")
-            environment("RUSTC", rustc)
+            environment("RUSTC", toolchain.rustc.absolutePath)
             environment(
                 "RUSTFLAGS",
-                "-C linker=$linker -C link-arg=--k16-target=kernel -Cjump-tables=no -Cdebuginfo=0 -Cdebug-assertions=off -Coverflow-checks=off -Zub-checks=no",
+                "-C linker=${toolchain.linker.absolutePath} -C link-arg=--k16-target=kernel -Cjump-tables=no -Cdebuginfo=0 -Cdebug-assertions=off -Coverflow-checks=off -Zub-checks=no",
             )
             commandLine(
-                cargo,
+                toolchain.cargo.absolutePath,
                 "rustc",
                 "-Zbuild-std=core",
                 "-Zjson-target-spec",
