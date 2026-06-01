@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- `k16 link` now performs reachability-based alloc section GC from `_start`,
+  and K16 LLVM honors function sections as `.text.k16.<symbol>` so Rust
+  `core`/`compiler_builtins` code that is not reached by firmware is not copied
+  into VM payloads.
 - Added `k16-ld`, a Rust/Cargo linker-driver entry point for K16 `bin`
   artifacts. It accepts rustc-style linker arguments with explicit
   `--k16-target`, expands K16 ELF members from `.rlib` archives on demand, and

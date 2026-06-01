@@ -68,8 +68,8 @@ fn k16_link_converts_k16_object_to_raw_bios_flash() {
     assert_eq!(
         bytes,
         [
-            0x01, 0xef, 0x00, 0x01, 0x00, 0x00, 0x01, 0xee, 0x0e, 0x00, 0xf0, 0xff, 0x00,
-            0x7e, 0x01, 0xe4, 0x0e, 0x00, 0xf0, 0xff, 0x01, 0x00,
+            0x01, 0xef, 0x00, 0x01, 0x00, 0x00, 0x01, 0xee, 0x0e, 0x00, 0xf0, 0xff, 0x00, 0x7e,
+            0x01, 0xe4, 0x0e, 0x00, 0xf0, 0xff, 0x01, 0x00,
         ],
         "BIOS flash output should be raw K16 bytes with an entry trampoline, not K16E"
     );
@@ -79,7 +79,7 @@ fn k16_link_converts_k16_object_to_raw_bios_flash() {
 fn k16_link_accepts_rust_rodata_alloc_sections() {
     let object_path = temp_file("bios-rodata.o");
     let output_path = temp_file("bios-rodata.kflash");
-    fs::write(&object_path, k16_object_with_rust_rodata_section()).expect("object writes");
+    fs::write(&object_path, k16_object_with_referenced_rodata_section()).expect("object writes");
 
     let output = Command::new(k16_binary())
         .args([
@@ -101,13 +101,50 @@ fn k16_link_accepts_rust_rodata_alloc_sections() {
     let bytes = fs::read(output_path).expect("BIOS flash output reads");
     assert_eq!(
         &bytes[..14],
-        &[
-            0x01, 0xef, 0x00, 0x01, 0x00, 0x00, 0x01, 0xee, 0x0e, 0x00, 0xf0, 0xff, 0x00,
-            0x7e,
-        ]
+        &[0x01, 0xef, 0x00, 0x01, 0x00, 0x00, 0x01, 0xee, 0x0e, 0x00, 0xf0, 0xff, 0x00, 0x7e,]
     );
-    assert_eq!(&bytes[14..16], &[0x01, 0x00]);
-    assert_eq!(&bytes[16..], b"K16 BIOS\0\0");
+    assert_eq!(
+        &bytes[14..22],
+        &[0x01, 0xe4, 0x16, 0x00, 0xf0, 0xff, 0x01, 0x00]
+    );
+    assert_eq!(&bytes[22..], b"K16 BIOS\0\0");
+}
+
+#[test]
+fn k16_link_discards_unreferenced_alloc_rodata_sections() {
+    let object_path = temp_file("unused-rodata.o");
+    let output_path = temp_file("unused-rodata.kflash");
+    fs::write(&object_path, k16_object_with_unreferenced_rodata_section()).expect("object writes");
+
+    let output = Command::new(k16_binary())
+        .args([
+            "link",
+            "--target",
+            "bios",
+            object_path.to_str().unwrap(),
+            "-o",
+            output_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("k16 link runs");
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let bytes = fs::read(output_path).expect("BIOS flash output reads");
+    assert_eq!(
+        &bytes[..14],
+        &[0x01, 0xef, 0x00, 0x01, 0x00, 0x00, 0x01, 0xee, 0x0e, 0x00, 0xf0, 0xff, 0x00, 0x7e,]
+    );
+    assert_eq!(&bytes[14..], &[0x01, 0x00]);
+    assert!(
+        !bytes
+            .windows(b"K16 UNUSED".len())
+            .any(|window| window == b"K16 UNUSED"),
+        "unreferenced rodata must not be loaded into the VM payload"
+    );
 }
 
 #[test]
@@ -332,18 +369,43 @@ fn k16_object_with_unsupported_alloc_section() -> Vec<u8> {
     bytes
 }
 
-fn k16_object_with_rust_rodata_section() -> Vec<u8> {
-    let text = [0x01, 0x00];
-    let rodata = b"K16 BIOS\0";
-    let shstrtab = b"\0.text.k16\0.rodata.anon.1\0.symtab\0.strtab\0.shstrtab\0";
+fn k16_object_with_referenced_rodata_section() -> Vec<u8> {
+    k16_object_with_rodata_section(b"K16 BIOS\0", true)
+}
+
+fn k16_object_with_unreferenced_rodata_section() -> Vec<u8> {
+    k16_object_with_rodata_section(b"K16 UNUSED\0", false)
+}
+
+fn k16_object_with_rodata_section(rodata: &[u8], reference_rodata: bool) -> Vec<u8> {
+    let text = if reference_rodata {
+        vec![0x01, 0xe4, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00]
+    } else {
+        vec![0x01, 0x00]
+    };
+    let shstrtab = b"\0.text.k16\0.rela.text.k16\0.rodata.anon.1\0.symtab\0.strtab\0.shstrtab\0";
     let mut strtab = Vec::from([0]);
+    let rodata_name = push_string(&mut strtab, "__rodata");
     let start_name = push_string(&mut strtab, "_start");
     let mut symtab = Vec::new();
     symtab.extend([0u8; 16]);
+    write_symbol(&mut symtab, rodata_name, 0, rodata.len() as u32, 0x00, 3);
     write_symbol(&mut symtab, start_name, 0, text.len() as u32, 0x12, 1);
+    let local_symbol_count = 2u32;
+
+    let mut rela = Vec::new();
+    let rela_size = if reference_rodata {
+        write_u32(&mut rela, 2);
+        write_u32(&mut rela, (1 << 8) | 1);
+        write_u32(&mut rela, 0);
+        12
+    } else {
+        0
+    };
 
     let text_offset = 52u32;
-    let rodata_offset = align(text_offset + text.len() as u32, 1);
+    let rela_offset = align(text_offset + text.len() as u32, 4);
+    let rodata_offset = align(rela_offset + rela_size, 1);
     let symtab_offset = align(rodata_offset + rodata.len() as u32, 4);
     let strtab_offset = align(symtab_offset + symtab.len() as u32, 4);
     let shstrtab_offset = align(strtab_offset + strtab.len() as u32, 4);
@@ -363,11 +425,13 @@ fn k16_object_with_rust_rodata_section() -> Vec<u8> {
     write_u16(&mut bytes, 0);
     write_u16(&mut bytes, 0);
     write_u16(&mut bytes, 40);
+    write_u16(&mut bytes, 7);
     write_u16(&mut bytes, 6);
-    write_u16(&mut bytes, 5);
 
     pad_to(&mut bytes, text_offset);
-    bytes.extend(text);
+    bytes.extend(text.iter());
+    pad_to(&mut bytes, rela_offset);
+    bytes.extend(rela);
     pad_to(&mut bytes, rodata_offset);
     bytes.extend(rodata);
     pad_to(&mut bytes, symtab_offset);
@@ -392,9 +456,10 @@ fn k16_object_with_rust_rodata_section() -> Vec<u8> {
         2,
         0,
     );
+    section(&mut bytes, 11, 4, 0, 0, rela_offset, rela_size, 4, 1, 4, 12);
     section(
         &mut bytes,
-        11,
+        26,
         1,
         0x2,
         0,
@@ -407,20 +472,20 @@ fn k16_object_with_rust_rodata_section() -> Vec<u8> {
     );
     section(
         &mut bytes,
-        27,
+        41,
         2,
         0,
         0,
         symtab_offset,
         symtab.len() as u32,
-        4,
-        1,
+        5,
+        local_symbol_count,
         4,
         16,
     );
     section(
         &mut bytes,
-        35,
+        49,
         3,
         0,
         0,
@@ -433,7 +498,7 @@ fn k16_object_with_rust_rodata_section() -> Vec<u8> {
     );
     section(
         &mut bytes,
-        43,
+        57,
         3,
         0,
         0,

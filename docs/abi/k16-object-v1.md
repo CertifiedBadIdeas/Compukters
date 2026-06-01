@@ -157,7 +157,7 @@ The first linker consumes these allocatable sections:
 
 ```text
 name              type         flags                         alignment
-.text.k16       SHT_PROGBITS SHF_ALLOC | SHF_EXECINSTR      2
+.text.k16*      SHT_PROGBITS SHF_ALLOC | SHF_EXECINSTR      2
 .rodata           SHT_PROGBITS SHF_ALLOC                      4
 .data             SHT_PROGBITS SHF_ALLOC | SHF_WRITE          4
 .bss              SHT_NOBITS   SHF_ALLOC | SHF_WRITE          4
@@ -168,7 +168,8 @@ name              type         flags                         alignment
 linked image. `SHT_NOBITS` is allowed only for `.bss`; the linker assigns RAM
 space for it but does not copy bytes from the object file.
 
-`.text.k16` contains K16 instruction bytes and must have even size.
+`.text.k16` and `.text.k16.<symbol>` contain K16 instruction bytes and must
+have even size.
 `.rodata` and `.data` contain initialized bytes. `.bss` contributes zero-filled
 memory. `.k16.attributes` is non-allocatable metadata for toolchain checks.
 
@@ -180,7 +181,8 @@ v1 and must be rejected instead of guessed into the output image.
 
 Symbols use the normal ELF symbol table.
 
-- Defined function symbols point into `.text.k16` and must be 2-byte aligned.
+- Defined function symbols point into `.text.k16*` sections and must be
+  2-byte aligned.
 - Defined object symbols point into `.rodata`, `.data`, or `.bss`.
 - Undefined symbols must be resolved by another object or by an explicit runtime
   object supplied to the linker.
@@ -248,11 +250,15 @@ unsupported section kinds are link-time errors.
 The v1 linker is static only:
 
 1. Validate every input object as K16 ELF32 `ET_REL`.
-2. Resolve strong symbols and report duplicate strong definitions.
-3. Lay out `.text.k16`, `.rodata`, `.data`, and `.bss` in the selected target
-   profile address space.
-4. Apply supported RELA relocations.
-5. Emit a single-load-section `K16E` image for the selected ABI kind.
+2. Start section reachability from `_start`.
+3. Follow relocations from retained allocatable sections and retain only the
+   sections they reference.
+4. Resolve strong symbols used by retained sections and report duplicate strong
+   definitions.
+5. Lay out retained `.text.k16*`, `.rodata`, `.data`, and `.bss` sections in
+   the selected target profile address space.
+6. Apply supported RELA relocations from retained sections.
+7. Emit a single-load-section `K16E` image for the selected ABI kind.
 
 The first `K16E` format has no zero-fill section, so a v1 object-to-`K16E`
 linker must either include `.bss` in the emitted load payload as zero bytes or

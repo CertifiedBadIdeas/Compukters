@@ -78,13 +78,19 @@ fn link_objects(
     load_addr: u32,
     prefix_len: usize,
 ) -> Result<LinkedImage, String> {
+    let retained_sections = reachable_alloc_sections(objects)?;
     let mut payload = vec![0; prefix_len];
     let mut section_offsets: Vec<Vec<Option<u32>>> = Vec::new();
 
-    for object in objects {
+    for (object_index, object) in objects.iter().enumerate() {
         let mut object_offsets = vec![None; object.sections.len()];
         for section in &object.sections {
-            if section.flags & SHF_ALLOC == 0 {
+            if !retained_sections
+                .get(object_index)
+                .and_then(|sections| sections.get(section.index))
+                .copied()
+                .unwrap_or(false)
+            {
                 continue;
             }
             validate_alloc_section(section)?;
@@ -129,6 +135,14 @@ fn link_objects(
                 continue;
             }
             let section_index = usize::from(symbol.section_index);
+            if !retained_sections
+                .get(object_index)
+                .and_then(|sections| sections.get(section_index))
+                .copied()
+                .unwrap_or(false)
+            {
+                continue;
+            }
             let Some(Some(section_offset)) = section_offsets
                 .get(object_index)
                 .and_then(|offsets| offsets.get(section_index))
@@ -160,6 +174,18 @@ fn link_objects(
         for relocation in &object.relocations {
             let target_section = usize::try_from(relocation.target_section)
                 .map_err(|_| format!("{}: relocation target section is too large", object.name))?;
+            let Some(target_retained) = retained_sections
+                .get(object_index)
+                .and_then(|sections| sections.get(target_section))
+            else {
+                return Err(format!(
+                    "{}: relocation targets unsupported section {}",
+                    object.name, relocation.target_section
+                ));
+            };
+            if !target_retained {
+                continue;
+            }
             let Some(Some(section_offset)) = section_offsets
                 .get(object_index)
                 .and_then(|offsets| offsets.get(target_section))
@@ -204,6 +230,142 @@ fn link_objects(
     Ok(LinkedImage { payload, entry_pc })
 }
 
+fn reachable_alloc_sections(objects: &[ParsedObject]) -> Result<Vec<Vec<bool>>, String> {
+    let mut retained = objects
+        .iter()
+        .map(|object| vec![false; object.sections.len()])
+        .collect::<Vec<_>>();
+    let entry = unique_global_definition(objects, "_start")?
+        .ok_or_else(|| "K16 link requires defined entry symbol `_start`".to_string())?;
+    mark_alloc_section(objects, &mut retained, entry.0, entry.1, "_start")?;
+
+    let mut stack = vec![entry];
+    while let Some((object_index, section_index)) = stack.pop() {
+        let object = &objects[object_index];
+        for relocation in object
+            .relocations
+            .iter()
+            .filter(|relocation| relocation.target_section == section_index as u32)
+        {
+            if relocation.kind == R_K16_NONE {
+                continue;
+            }
+            let symbol = object.symbols.get(relocation.symbol_index).ok_or_else(|| {
+                format!(
+                    "{}: relocation references missing symbol {}",
+                    object.name, relocation.symbol_index
+                )
+            })?;
+            let Some((target_object, target_section)) =
+                relocated_symbol_section(objects, object_index, symbol)?
+            else {
+                continue;
+            };
+            if mark_alloc_section(
+                objects,
+                &mut retained,
+                target_object,
+                target_section,
+                &symbol.name,
+            )? {
+                stack.push((target_object, target_section));
+            }
+        }
+    }
+
+    Ok(retained)
+}
+
+fn unique_global_definition(
+    objects: &[ParsedObject],
+    name: &str,
+) -> Result<Option<(usize, usize)>, String> {
+    let mut definition: Option<(usize, usize)> = None;
+    for (object_index, object) in objects.iter().enumerate() {
+        for symbol in &object.symbols {
+            if !symbol.is_global_definition() || symbol.name != name {
+                continue;
+            }
+            let section_index = usize::from(symbol.section_index);
+            let section = object.sections.get(section_index).ok_or_else(|| {
+                format!(
+                    "{}: symbol `{}` points at missing section {}",
+                    object.name, symbol.name, symbol.section_index
+                )
+            })?;
+            if section.flags & SHF_ALLOC == 0 {
+                return Err(format!(
+                    "{}: symbol `{}` points at non-allocated section {}",
+                    object.name, symbol.name, symbol.section_index
+                ));
+            }
+            if let Some((previous_object, previous_section)) = definition {
+                let previous = &objects[previous_object].sections[previous_section];
+                return Err(format!(
+                    "duplicate K16 symbol `{}` in `{}` and `{}`",
+                    name, previous.name, section.name
+                ));
+            }
+            definition = Some((object_index, section_index));
+        }
+    }
+    Ok(definition)
+}
+
+fn relocated_symbol_section(
+    objects: &[ParsedObject],
+    object_index: usize,
+    symbol: &Symbol,
+) -> Result<Option<(usize, usize)>, String> {
+    if symbol.section_index == SHN_UNDEF {
+        return unique_global_definition(objects, &symbol.name)?
+            .map(Some)
+            .ok_or_else(|| {
+                format!(
+                    "{}: unresolved K16 symbol `{}`",
+                    objects[object_index].name, symbol.name
+                )
+            });
+    }
+    if symbol.section_index == SHN_ABS {
+        return Ok(None);
+    }
+    Ok(Some((object_index, usize::from(symbol.section_index))))
+}
+
+fn mark_alloc_section(
+    objects: &[ParsedObject],
+    retained: &mut [Vec<bool>],
+    object_index: usize,
+    section_index: usize,
+    symbol_name: &str,
+) -> Result<bool, String> {
+    let object = objects
+        .get(object_index)
+        .ok_or_else(|| "internal K16 link object index is out of bounds".to_string())?;
+    let section = object.sections.get(section_index).ok_or_else(|| {
+        format!(
+            "{}: symbol `{}` points at missing section {}",
+            object.name, symbol_name, section_index
+        )
+    })?;
+    if section.flags & SHF_ALLOC == 0 {
+        return Err(format!(
+            "{}: symbol `{}` points at non-allocated section {}",
+            object.name, symbol_name, section_index
+        ));
+    }
+    let retained_section = retained
+        .get_mut(object_index)
+        .and_then(|sections| sections.get_mut(section_index))
+        .ok_or_else(|| "internal K16 link retained section index is out of bounds".to_string())?;
+    if *retained_section {
+        return Ok(false);
+    }
+    *retained_section = true;
+    Ok(true)
+}
+
 fn write_bios_entry_trampoline(payload: &mut [u8], entry_pc: u32) -> Result<(), String> {
     let Some(trampoline) = payload.get_mut(..BIOS_ENTRY_TRAMPOLINE_LEN) else {
         return Err("K16 BIOS payload is too small for entry trampoline".to_string());
@@ -224,7 +386,7 @@ fn write_bios_entry_trampoline(payload: &mut [u8], entry_pc: u32) -> Result<(), 
 
 fn validate_alloc_section(section: &Section) -> Result<(), String> {
     match section.name.as_str() {
-        ".text.k16" => {
+        name if name == ".text.k16" || name.starts_with(".text.k16.") => {
             if section.kind != SHT_PROGBITS
                 || section.flags != (SHF_ALLOC | SHF_EXECINSTR)
                 || section.alignment != 2

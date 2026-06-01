@@ -12,6 +12,7 @@
   "relocation-model": "static",
   "code-model": "small",
   "executables": true,
+  "function-sections": true,
   "disable-redzone": true,
   "singlethread": true,
   "atomic-cas": false,
