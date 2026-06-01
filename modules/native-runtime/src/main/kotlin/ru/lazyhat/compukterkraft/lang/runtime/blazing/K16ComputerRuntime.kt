@@ -154,18 +154,14 @@ class K16ComputerRuntime(
             val signal = bindings.runUntilSignal(handle)
             appendNativeOutput()
             val control = bindings.control(handle)
-            if (signal != NativeK16ComputerSignal.Pause || control.isTerminal()) {
-                if (control.isTerminal()) {
+            if (signal != NativeK16ComputerSignal.Pause) {
+                if (signal == NativeK16ComputerSignal.Halt) {
                     terminalControl = control
                 }
                 return control
             }
         }
-        return bindings.control(handle).also { control ->
-            if (control.isTerminal()) {
-                terminalControl = control
-            }
-        }
+        return bindings.control(handle)
     }
 
     fun control(): NativeK16ComputerControl {

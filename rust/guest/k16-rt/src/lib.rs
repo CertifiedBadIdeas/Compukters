@@ -3,6 +3,28 @@
 #[cfg(test)]
 extern crate std;
 
+#[cfg(not(test))]
+extern "C" {
+    fn __k16_halt_once();
+}
+
+#[cfg(not(test))]
+#[inline(always)]
+pub fn halt_once() {
+    unsafe {
+        __k16_halt_once();
+    }
+}
+
+#[cfg(test)]
+pub fn halt_once() {}
+
+pub fn halt_forever() -> ! {
+    loop {
+        halt_once();
+    }
+}
+
 pub unsafe fn k16_memcpy(dst: *mut u8, src: *const u8, n: usize) -> *mut u8 {
     let mut index = 0;
     while index < n {
@@ -140,7 +162,7 @@ pub unsafe extern "C" fn memcmp(lhs: *const u8, rhs: *const u8, n: usize) -> i32
 
 #[cfg_attr(not(test), no_mangle)]
 pub extern "C" fn abort() -> ! {
-    loop {}
+    halt_forever()
 }
 
 #[cfg(test)]

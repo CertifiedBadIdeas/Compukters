@@ -83,9 +83,10 @@ class K16ComputerRuntimeTest {
     }
 
     @Test
-    fun skipsNativeExecutionAfterTerminalControlStatus() {
+    fun skipsNativeExecutionAfterHaltSignal() {
         val bindings = EchoBindings()
         bindings.control = NativeK16ComputerControl(status = 3, exitCode = 0, panicCode = 2)
+        bindings.signal = NativeK16ComputerSignal.Halt
         val runtime = K16ComputerRuntime(handle = 21L, bindings = bindings, defaultMaxTurnsPerTick = 8)
 
         assertEquals(NativeK16ComputerControl(status = 3, exitCode = 0, panicCode = 2), runtime.tick())
@@ -144,13 +145,14 @@ class K16ComputerRuntimeTest {
         var storage0Media: ByteArray? = null
         var machineSnapshot: ByteArray = ByteArray(0)
         var control: NativeK16ComputerControl = NativeK16ComputerControl(status = 1, exitCode = 0, panicCode = 0)
+        var signal: NativeK16ComputerSignal = NativeK16ComputerSignal.Pause
         var runUntilSignalCalls = 0
             private set
         private val pendingOutput = ArrayDeque<ByteArray>()
 
         override fun runUntilSignal(handle: Long): NativeK16ComputerSignal {
             runUntilSignalCalls += 1
-            return NativeK16ComputerSignal.Pause
+            return signal
         }
 
         override fun control(handle: Long): NativeK16ComputerControl =
