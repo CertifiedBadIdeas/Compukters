@@ -56,26 +56,15 @@ contract, so a successful VM run observes:
 debug_bytes=2a
 ```
 
-## Current State
+## Current Result
 
-The strict bootstrap probe requires the external K16 LLVM checkout to be based
-on the Rust-pinned `src/llvm-project` commit. The main repository now pins
-`toolchains/Compukter-Kraft-llvm` to the `k16-rust-pinned` branch commit that
-satisfies that check.
+The smoke passes with the aligned local K16 stage1 Rust toolchain and the pinned
+K16 LLVM checkout. That proves the strict `core` sysroot path can build a
+`#![no_std]` K16 object, link it through the K16 object pipeline, and execute the
+resulting `K16E` program in the VM.
 
-The next required step is rebuilding stage1 rustc against that aligned LLVM
-checkout before treating any `core` codegen result as valid.
-
-After a compatible stage1 host `std` sysroot is rebuilt, the smoke reaches real
-K16 codegen for Rust `core`. The known backend blocker after that point is:
-
-```text
-rustc-LLVM ERROR: unsupported library call operation
-```
-
-Standalone LLVM lowering for register and constant `shr` is covered by the K16
-LLVM tests, and Rust jump tables are disabled for this ABI slice. The remaining
-work is the broader Rust `core` codegen surface exercised by `build-std=core`.
+This does not enable `alloc`, hosted `std`, panic unwinding, or debug object
+relocations. Those remain separate ABI and runtime slices.
 
 ## Firmware Tier
 

@@ -35,6 +35,11 @@ No `alloc`, no `std`, no unwinding, and no hidden host fallback are part of this
 slice. Missing K16 target support or missing helper symbols must remain hard
 build or link failures.
 
+The strict core smoke path passes with the aligned local K16 stage1 Rust
+toolchain. It proves the current baseline: `core` can be built for K16, a
+`#![no_std]` object can be emitted, and the linked `K16E` program can return
+through the VM run path.
+
 ## Boundaries
 
 `core` is allowed for BIOS and bootloader because it does not require an OS or
@@ -46,8 +51,4 @@ synchronization, and I/O services.
 
 - `cargo test --manifest-path rust/host/k16-tools/Cargo.toml rust_nocore_smoke_artifacts_are_documented_and_strict`
 - `./gradlew-sandbox :build-scripts:test --tests '*K16ToolingRenameTest.rustFirmwareGradleBuildsCoreOnlyArtifacts'`
-- `tools/k16-rust-core-smoke.sh` with a custom K16 rustc/Cargo toolchain; it
-  currently requires a realigned Rust/K16 LLVM branch pair. The bootstrap probe
-  rejects an external LLVM checkout that is not based on Rust's pinned
-  `src/llvm-project` commit. After that is realigned, the known `core` codegen
-  blocker is unsupported library calls.
+- `tools/k16-rust-core-smoke.sh` with a custom K16 rustc/Cargo toolchain.
