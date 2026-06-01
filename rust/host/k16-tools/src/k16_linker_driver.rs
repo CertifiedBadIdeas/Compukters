@@ -56,7 +56,7 @@ fn parse_linker_args(args: &[String]) -> Result<LinkerDriverConfig, String> {
                 };
                 output_path = Some(value.clone());
             }
-            "-flavor" | "-z" | "-L" | "-l" | "-m" => {
+            "-flavor" | "-z" | "-L" | "-l" | "-m" | "-O" => {
                 index += 1;
                 if args.get(index).is_none() {
                     return Err(format!("k16-ld requires a value after {arg}"));
@@ -70,6 +70,7 @@ fn parse_linker_args(args: &[String]) -> Result<LinkerDriverConfig, String> {
                     .expect("prefix already checked");
                 target = Some(K16ArtifactTarget::parse(value)?);
             }
+            _ if is_linker_optimization_arg(arg) => {}
             _ if arg.starts_with("-L") || arg.starts_with("-l") || arg.starts_with("-z") => {}
             _ if arg.starts_with("--") && arg.contains('=') => {}
             _ if arg.starts_with('-') => {
@@ -97,4 +98,8 @@ fn parse_linker_args(args: &[String]) -> Result<LinkerDriverConfig, String> {
 
 fn is_link_input(arg: &str) -> bool {
     arg.ends_with(".o") || arg.ends_with(".rlib") || arg.ends_with(".a")
+}
+
+fn is_linker_optimization_arg(arg: &str) -> bool {
+    matches!(arg, "-O0" | "-O1" | "-O2" | "-O3" | "-Os" | "-Oz")
 }

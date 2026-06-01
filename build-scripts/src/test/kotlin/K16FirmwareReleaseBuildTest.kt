@@ -36,7 +36,7 @@ class K16FirmwareReleaseBuildTest {
         assertTrue(buildScript.contains("if (isProductionUniversalJarRequested) \"release\" else \"debug\""))
         assertTrue(buildScript.contains("fun k16CargoProfileArgs"))
         assertTrue(buildScript.contains("listOf(\"--release\")"))
-        assertTrue(buildScript.contains("-Copt-level=0"))
+        assertFalse(buildScript.contains("-Copt-level=0"))
         assertTrue(buildScript.contains("k16RustBinProfileDir"))
         assertTrue(buildScript.contains("targetDir.resolve(\"k16-unknown-kraftos/\$profile/\$binName\")"))
         assertTrue(buildScript.contains("inputs.property(\"k16FirmwareProfile\", k16FirmwareProfile)"))
@@ -46,6 +46,7 @@ class K16FirmwareReleaseBuildTest {
 
         assertTrue(docs.contains("-Pk16FirmwareProfile=release"))
         assertTrue(docs.contains("There is no debug artifact fallback."))
+        assertTrue(docs.contains("no longer overrides"))
         assertTrue(docs.contains("buildProductionUniversalJar"))
     }
 }
