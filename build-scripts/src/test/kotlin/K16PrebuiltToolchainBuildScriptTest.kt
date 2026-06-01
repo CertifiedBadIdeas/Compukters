@@ -30,8 +30,10 @@ class K16PrebuiltToolchainBuildScriptTest {
     fun neoforgeBuildInstallsPinnedPrebuiltToolchainArchive() {
         val buildScript = root.resolve("modules/v1_21_1/v1_21_1-neoforge/build.gradle.kts").readText()
         val config = root.resolve("config/k16-toolchain.json").readText()
+        val docs = root.resolve("docs/toolchains/k16-prebuilt-toolchain.md").readText()
 
         assertTrue(config.contains("\"artifactBaseUrl\""))
+        assertTrue(config.contains("\"sha256\""))
         assertTrue(config.contains(".zip"))
         assertFalse(config.contains(".tar.zst"))
 
@@ -39,6 +41,8 @@ class K16PrebuiltToolchainBuildScriptTest {
         assertTrue(buildScript.contains("installK16Toolchain"))
         assertTrue(buildScript.contains("zipTree"))
         assertTrue(buildScript.contains("URI("))
+        assertTrue(buildScript.contains("MessageDigest.getInstance(\"SHA-256\")"))
+        assertTrue(buildScript.contains("verifyK16ToolchainArchiveChecksum"))
         assertTrue(buildScript.contains("dependsOn(installK16Toolchain)"))
         assertTrue(buildScript.contains("k16ToolchainDir"))
         assertTrue(buildScript.contains("k16ToolchainCacheDir"))
@@ -46,5 +50,10 @@ class K16PrebuiltToolchainBuildScriptTest {
         assertFalse(buildScript.contains("providers.environmentVariable(\"K16_CARGO\")"))
         assertFalse(buildScript.contains("providers.environmentVariable(\"K16_RUSTC\")"))
         assertFalse(buildScript.contains("providers.environmentVariable(\"K16_LD\")"))
+
+        assertTrue(docs.contains("gh release upload"))
+        assertTrue(docs.contains("sha256sum"))
+        assertTrue(docs.contains("config/k16-toolchain.json"))
+        assertTrue(docs.contains("-Pk16ToolchainDir"))
     }
 }

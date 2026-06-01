@@ -22,6 +22,7 @@
 import groovy.json.JsonSlurper
 import java.net.URI
 import java.nio.file.Files
+import java.security.MessageDigest
 import java.time.OffsetDateTime
 import java.time.format.DateTimeFormatter
 
@@ -121,6 +122,7 @@ data class K16ToolchainPin(
     val pin: String,
     val artifactBaseUrl: String,
     val archive: String,
+    val sha256: String,
     val requiredExecutables: List<String>,
 )
 
@@ -159,10 +161,17 @@ fun readK16ToolchainPin(): K16ToolchainPin {
     check(archive.endsWith(".zip")) {
         "K16 toolchain host '$hostId' must use a .zip archive supported by the Gradle installer: $archive"
     }
+    val sha256 =
+        host["sha256"] as? String
+            ?: error("K16 toolchain host '$hostId' is missing string field 'sha256' in ${k16ToolchainConfig.asFile}")
+    check(sha256.matches(Regex("[0-9a-fA-F]{64}"))) {
+        "K16 toolchain host '$hostId' has invalid sha256 in ${k16ToolchainConfig.asFile}: $sha256"
+    }
     return K16ToolchainPin(
         pin = pin,
         artifactBaseUrl = artifactBaseUrl,
         archive = archive,
+        sha256 = sha256.lowercase(),
         requiredExecutables = requiredExecutables,
     )
 }
@@ -216,11 +225,11 @@ fun explicitK16ToolchainRoot(): File? {
 }
 
 fun k16ToolchainCacheRoot(): File =
-        providers
-            .gradleProperty("k16ToolchainCacheDir")
-            .map { file(it) }
-            .orNull
-            ?: File(System.getProperty("user.home"), ".cache/compukter-kraft/k16-toolchains")
+    providers
+        .gradleProperty("k16ToolchainCacheDir")
+        .map { file(it) }
+        .orNull
+        ?: File(System.getProperty("user.home"), ".cache/compukter-kraft/k16-toolchains")
 
 fun defaultK16ToolchainRoot(): File {
     val hostId = k16VmNativePlatform.id
@@ -231,6 +240,30 @@ fun isK16ToolchainInstalled(root: File): Boolean =
     root.isDirectory &&
         root.resolve("manifest.json").isFile &&
         k16ToolchainPin.requiredExecutables.all { root.resolve(it).isFile }
+
+fun sha256Hex(file: File): String {
+    val digest = MessageDigest.getInstance("SHA-256")
+    file.inputStream().use { input ->
+        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+        while (true) {
+            val read = input.read(buffer)
+            if (read < 0) {
+                break
+            }
+            digest.update(buffer, 0, read)
+        }
+    }
+    return digest.digest().joinToString("") { byte -> "%02x".format(byte) }
+}
+
+fun verifyK16ToolchainArchiveChecksum(archive: File) {
+    val actual = sha256Hex(archive)
+    check(actual == k16ToolchainPin.sha256) {
+        "K16 toolchain archive checksum mismatch for $archive. " +
+            "Expected ${k16ToolchainPin.sha256}, got $actual. " +
+            "Update config/k16-toolchain.json only after publishing the intended prebuilt artifact."
+    }
+}
 
 fun resolveK16Toolchain(): K16Toolchain {
     val explicitRoot = explicitK16ToolchainRoot()
@@ -260,6 +293,7 @@ val downloadK16ToolchainArchive =
         group = "k16"
         inputs.file(k16ToolchainConfig)
         inputs.property("archiveUrl", k16ToolchainArchiveUrl)
+        inputs.property("archiveSha256", k16ToolchainPin.sha256)
         outputs.file(k16ToolchainArchive)
         onlyIf {
             explicitK16ToolchainRoot() == null && !isK16ToolchainInstalled(defaultK16ToolchainRoot())
@@ -296,10 +330,15 @@ val installK16Toolchain =
         group = "k16"
         dependsOn(downloadK16ToolchainArchive)
         inputs.file(k16ToolchainConfig)
+        inputs.property("archiveSha256", k16ToolchainPin.sha256)
         from({ zipTree(k16ToolchainArchive.get().asFile) })
         into(defaultK16ToolchainRoot())
         onlyIf {
             explicitK16ToolchainRoot() == null && !isK16ToolchainInstalled(defaultK16ToolchainRoot())
+        }
+
+        doFirst {
+            verifyK16ToolchainArchiveChecksum(k16ToolchainArchive.get().asFile)
         }
 
         doLast {

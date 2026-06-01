@@ -32,6 +32,7 @@ The repository stores the selected toolchain contract in
 - `requiredExecutables`: paths that must exist inside an installed toolchain;
 - `hosts`: supported host platform identifiers and their future archive names.
 - `artifactBaseUrl`: the release/download base URL used by the Gradle installer.
+- per-host `sha256`: the expected archive checksum.
 
 This file is the source of truth for the mod build. It is intentionally small
 and stable so Gradle, shell scripts, and manual users can all consume the same
@@ -58,8 +59,8 @@ toolchain dependency to normal mod builds.
 
 `downloadK16ToolchainArchive` downloads the host archive from
 `artifactBaseUrl/archive` into the module build directory.
-`installK16Toolchain` unpacks it into the cache layout and validates the
-installed root before firmware tasks use it.
+`installK16Toolchain` verifies the archive SHA-256 before unpacking it into the
+cache layout, then validates the installed root before firmware tasks use it.
 
 ## Explicit Local Toolchain
 
@@ -103,7 +104,8 @@ artifacts, or another installed K16 toolchain.
 - Replace the three large per-binary environment variables with one explicit
   optional `k16ToolchainDir` Gradle property.
 - Add Gradle download/install tasks for pinned zip archives.
-- Keep publishing and checksum verification out of this slice.
+- Verify archive SHA-256 before unpacking.
+- Document the maintainer publish flow.
 
 ## Verification
 
@@ -113,4 +115,4 @@ artifacts, or another installed K16 toolchain.
   must fail before Cargo starts and tell the user to publish a prebuilt archive
   or pass `-Pk16ToolchainDir`.
 - `./gradlew-sandbox :v1_21_1-neoforge:installK16Toolchain -Pk16ToolchainCacheDir=<tmp-cache> -Pk16ToolchainArchiveUrl=file:///<tmp-archive>.zip`
-  must download, unpack, and validate a correctly shaped archive.
+  with a mismatched archive checksum must fail before unpacking into the cache.
