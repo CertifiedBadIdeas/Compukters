@@ -95,6 +95,7 @@ val generatedK16BiosTarget = generatedK16GuestTarget.map { it.dir("bios") }
 val generatedK16BootTarget = generatedK16GuestTarget.map { it.dir("boot") }
 val generatedK16KernelTarget = generatedK16GuestTarget.map { it.dir("kernel") }
 val downloadedK16ToolchainArchives = layout.buildDirectory.dir("k16-toolchain-archives")
+val packagedK16ToolchainArchives = layout.buildDirectory.dir("k16-toolchain-packages")
 val k16ToolsManifest = rootProject.layout.projectDirectory.file("rust/host/k16-tools/Cargo.toml")
 val k16ToolsSource = rootProject.layout.projectDirectory.dir("rust/host/k16-tools/src")
 val k16GuestManifest = rootProject.layout.projectDirectory.file("rust/guest/Cargo.toml")
@@ -349,6 +350,45 @@ val installK16Toolchain =
             )
         }
     }
+
+val packageK16Toolchain =
+    tasks.register("packageK16Toolchain", Zip::class) {
+        description = "Packages an explicit local K16 toolchain directory into the pinned host archive shape."
+        group = "k16"
+        inputs.file(k16ToolchainConfig)
+        archiveFileName.set(k16ToolchainPin.archive)
+        destinationDirectory.set(packagedK16ToolchainArchives)
+        from({
+            val root =
+                explicitK16ToolchainRoot()
+                    ?: throw GradleException("packageK16Toolchain requires -Pk16ToolchainDir=/absolute/path/to/k16-toolchain")
+            validateK16ToolchainPath(
+                root = root,
+                origin = "k16ToolchainDir",
+                requiredExecutables = k16ToolchainPin.requiredExecutables,
+            )
+            root
+        })
+
+        doLast {
+            val archive = archiveFile.get().asFile
+            println("archive=${archive.absolutePath}")
+            println("sha256=${sha256Hex(archive)}")
+        }
+    }
+
+tasks.register("printK16ToolchainEnv") {
+    description = "Prints shell exports for the selected K16 toolchain."
+    group = "k16"
+    dependsOn(installK16Toolchain)
+
+    doLast {
+        val toolchain = resolveK16Toolchain()
+        println("export K16_CARGO=${toolchain.cargo.absolutePath}")
+        println("export K16_RUSTC=${toolchain.rustc.absolutePath}")
+        println("export K16_LD=${toolchain.linker.absolutePath}")
+    }
+}
 
 fun deleteK16RustBinOutputs(
     targetDir: File,
