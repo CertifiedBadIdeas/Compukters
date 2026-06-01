@@ -47,6 +47,12 @@ layout:
 The path must be absolute and must not be a symlink. It is validated with the
 same layout rules as the prebuilt cache.
 
+For manual shell usage, Gradle can print the selected toolchain paths:
+
+```bash
+./gradlew-sandbox :v1_21_1-neoforge:printK16ToolchainEnv
+```
+
 ## Maintainer Publish Flow
 
 Build the K16 toolchain in a maintainer workspace, then stage the install layout
@@ -60,18 +66,17 @@ stage/
   bin/k16-ld
 ```
 
-Create the archive from inside the staged root so the zip expands directly into
-the install layout:
+Create the archive through the Gradle package task so it uses the same pinned
+host archive name and layout validation as the consumer installer:
 
 ```bash
-cd stage
-zip -r ../k16-toolchain-k16-dev-2026-06-01-linux-x86_64.zip .
-cd ..
-sha256sum k16-toolchain-k16-dev-2026-06-01-linux-x86_64.zip
+./gradlew-sandbox :v1_21_1-neoforge:packageK16Toolchain \
+  -Pk16ToolchainDir=/absolute/path/to/stage
 ```
 
-Update the matching `sha256` in `config/k16-toolchain.json`, then upload the
-archive to the release named by `artifactBaseUrl`:
+The task prints the archive path and SHA-256. Update the matching `sha256` in
+`config/k16-toolchain.json`, then upload the archive to the release named by
+`artifactBaseUrl`:
 
 ```bash
 gh release upload k16-toolchain-k16-dev-2026-06-01 \

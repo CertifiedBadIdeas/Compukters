@@ -43,6 +43,9 @@ class K16PrebuiltToolchainBuildScriptTest {
         assertTrue(buildScript.contains("URI("))
         assertTrue(buildScript.contains("MessageDigest.getInstance(\"SHA-256\")"))
         assertTrue(buildScript.contains("verifyK16ToolchainArchiveChecksum"))
+        assertTrue(buildScript.contains("packageK16Toolchain"))
+        assertTrue(buildScript.contains("printK16ToolchainEnv"))
+        assertTrue(buildScript.contains("Zip::class"))
         assertTrue(buildScript.contains("dependsOn(installK16Toolchain)"))
         assertTrue(buildScript.contains("k16ToolchainDir"))
         assertTrue(buildScript.contains("k16ToolchainCacheDir"))
@@ -52,7 +55,7 @@ class K16PrebuiltToolchainBuildScriptTest {
         assertFalse(buildScript.contains("providers.environmentVariable(\"K16_LD\")"))
 
         assertTrue(docs.contains("gh release upload"))
-        assertTrue(docs.contains("sha256sum"))
+        assertTrue(docs.contains("packageK16Toolchain"))
         assertTrue(docs.contains("config/k16-toolchain.json"))
         assertTrue(docs.contains("-Pk16ToolchainDir"))
     }
