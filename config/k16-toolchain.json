@@ -10,7 +10,7 @@
   "hosts": {
     "linux-x86_64": {
       "archive": "k16-toolchain-k16-dev-2026-06-01-linux-x86_64.zip",
-      "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+      "sha256": "8926d6cdfe8dbf3ade2688104133520b7ce3a85dd35eda6699a2ecdfd47b6621"
     },
     "linux-aarch64": {
       "archive": "k16-toolchain-k16-dev-2026-06-01-linux-aarch64.zip",
