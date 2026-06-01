@@ -20,6 +20,7 @@
 @file:Suppress("PropertyName")
 
 import groovy.json.JsonSlurper
+import java.net.URI
 import java.nio.file.Files
 import java.time.OffsetDateTime
 import java.time.format.DateTimeFormatter
@@ -92,6 +93,7 @@ val generatedK16GuestTarget = layout.buildDirectory.dir("generated/k16-guest-tar
 val generatedK16BiosTarget = generatedK16GuestTarget.map { it.dir("bios") }
 val generatedK16BootTarget = generatedK16GuestTarget.map { it.dir("boot") }
 val generatedK16KernelTarget = generatedK16GuestTarget.map { it.dir("kernel") }
+val downloadedK16ToolchainArchives = layout.buildDirectory.dir("k16-toolchain-archives")
 val k16ToolsManifest = rootProject.layout.projectDirectory.file("rust/host/k16-tools/Cargo.toml")
 val k16ToolsSource = rootProject.layout.projectDirectory.dir("rust/host/k16-tools/src")
 val k16GuestManifest = rootProject.layout.projectDirectory.file("rust/guest/Cargo.toml")
@@ -117,6 +119,8 @@ data class K16Toolchain(
 
 data class K16ToolchainPin(
     val pin: String,
+    val artifactBaseUrl: String,
+    val archive: String,
     val requiredExecutables: List<String>,
 )
 
@@ -129,6 +133,9 @@ fun readK16ToolchainPin(): K16ToolchainPin {
     val pin =
         config["pin"] as? String
             ?: error("K16 toolchain config is missing string field 'pin': ${k16ToolchainConfig.asFile}")
+    val artifactBaseUrl =
+        config["artifactBaseUrl"] as? String
+            ?: error("K16 toolchain config is missing string field 'artifactBaseUrl': ${k16ToolchainConfig.asFile}")
     val requiredExecutables =
         (config["requiredExecutables"] as? List<*>)
             ?.map {
@@ -143,8 +150,24 @@ fun readK16ToolchainPin(): K16ToolchainPin {
     check(hosts.containsKey(hostId)) {
         "K16 toolchain pin '$pin' does not declare host '$hostId' in ${k16ToolchainConfig.asFile}"
     }
-    return K16ToolchainPin(pin = pin, requiredExecutables = requiredExecutables)
+    val host =
+        hosts[hostId] as? Map<*, *>
+            ?: error("K16 toolchain host '$hostId' is not an object in ${k16ToolchainConfig.asFile}")
+    val archive =
+        host["archive"] as? String
+            ?: error("K16 toolchain host '$hostId' is missing string field 'archive' in ${k16ToolchainConfig.asFile}")
+    check(archive.endsWith(".zip")) {
+        "K16 toolchain host '$hostId' must use a .zip archive supported by the Gradle installer: $archive"
+    }
+    return K16ToolchainPin(
+        pin = pin,
+        artifactBaseUrl = artifactBaseUrl,
+        archive = archive,
+        requiredExecutables = requiredExecutables,
+    )
 }
+
+val k16ToolchainPin = readK16ToolchainPin()
 
 fun validateK16ToolchainPath(
     root: File,
@@ -180,35 +203,113 @@ fun validateK16ToolchainPath(
     return K16Toolchain(root = root, cargo = cargo, rustc = rustc, linker = linker)
 }
 
-fun resolveK16Toolchain(): K16Toolchain {
-    val toolchainPin = readK16ToolchainPin()
+fun explicitK16ToolchainRoot(): File? {
     val explicitDir = providers.gradleProperty("k16ToolchainDir").orNull
     if (explicitDir != null) {
         val root = File(explicitDir)
         check(root.isAbsolute) {
             "k16ToolchainDir must be an absolute path, got: $explicitDir"
         }
-        return validateK16ToolchainPath(
-            root = root,
-            origin = "k16ToolchainDir",
-            requiredExecutables = toolchainPin.requiredExecutables,
-        )
+        return root
     }
+    return null
+}
 
-    val cacheRoot =
+fun k16ToolchainCacheRoot(): File =
         providers
             .gradleProperty("k16ToolchainCacheDir")
             .map { file(it) }
             .orNull
             ?: File(System.getProperty("user.home"), ".cache/compukter-kraft/k16-toolchains")
+
+fun defaultK16ToolchainRoot(): File {
     val hostId = k16VmNativePlatform.id
-    val root = cacheRoot.resolve(toolchainPin.pin).resolve(hostId)
+    return k16ToolchainCacheRoot().resolve(k16ToolchainPin.pin).resolve(hostId)
+}
+
+fun isK16ToolchainInstalled(root: File): Boolean =
+    root.isDirectory &&
+        root.resolve("manifest.json").isFile &&
+        k16ToolchainPin.requiredExecutables.all { root.resolve(it).isFile }
+
+fun resolveK16Toolchain(): K16Toolchain {
+    val explicitRoot = explicitK16ToolchainRoot()
+    val root = explicitRoot ?: defaultK16ToolchainRoot()
+    val origin =
+        if (explicitRoot == null) {
+            "pinned prebuilt cache '${k16ToolchainPin.pin}' for ${k16VmNativePlatform.id}"
+        } else {
+            "k16ToolchainDir"
+        }
     return validateK16ToolchainPath(
         root = root,
-        origin = "pinned prebuilt cache '${toolchainPin.pin}' for $hostId",
-        requiredExecutables = toolchainPin.requiredExecutables,
+        origin = origin,
+        requiredExecutables = k16ToolchainPin.requiredExecutables,
     )
 }
+
+val k16ToolchainArchive = downloadedK16ToolchainArchives.map { it.file(k16ToolchainPin.archive) }
+val k16ToolchainArchiveUrl =
+    providers
+        .gradleProperty("k16ToolchainArchiveUrl")
+        .orElse("${k16ToolchainPin.artifactBaseUrl.trimEnd('/')}/${k16ToolchainPin.archive}")
+
+val downloadK16ToolchainArchive =
+    tasks.register("downloadK16ToolchainArchive") {
+        description = "Downloads the pinned prebuilt K16 toolchain archive for the current host."
+        group = "k16"
+        inputs.file(k16ToolchainConfig)
+        inputs.property("archiveUrl", k16ToolchainArchiveUrl)
+        outputs.file(k16ToolchainArchive)
+        onlyIf {
+            explicitK16ToolchainRoot() == null && !isK16ToolchainInstalled(defaultK16ToolchainRoot())
+        }
+
+        doLast {
+            val archiveFile = k16ToolchainArchive.get().asFile
+            archiveFile.parentFile.mkdirs()
+            val downloadUrl = k16ToolchainArchiveUrl.get()
+            val tempFile = File("${archiveFile.absolutePath}.tmp")
+            tempFile.delete()
+            try {
+                URI(downloadUrl).toURL().openStream().use { input ->
+                    tempFile.outputStream().use { output ->
+                        input.copyTo(output)
+                    }
+                }
+                tempFile.copyTo(archiveFile, overwrite = true)
+            } catch (error: Exception) {
+                throw GradleException(
+                    "Failed to download pinned K16 toolchain archive from $downloadUrl. " +
+                        "Publish the prebuilt archive or pass -Pk16ToolchainDir=/absolute/path/to/k16-toolchain.",
+                    error,
+                )
+            } finally {
+                tempFile.delete()
+            }
+        }
+    }
+
+val installK16Toolchain =
+    tasks.register<Copy>("installK16Toolchain") {
+        description = "Installs the pinned prebuilt K16 toolchain archive into the local cache."
+        group = "k16"
+        dependsOn(downloadK16ToolchainArchive)
+        inputs.file(k16ToolchainConfig)
+        from({ zipTree(k16ToolchainArchive.get().asFile) })
+        into(defaultK16ToolchainRoot())
+        onlyIf {
+            explicitK16ToolchainRoot() == null && !isK16ToolchainInstalled(defaultK16ToolchainRoot())
+        }
+
+        doLast {
+            validateK16ToolchainPath(
+                root = defaultK16ToolchainRoot(),
+                origin = "installed pinned prebuilt archive '${k16ToolchainPin.archive}'",
+                requiredExecutables = k16ToolchainPin.requiredExecutables,
+            )
+        }
+    }
 
 fun deleteK16RustBinOutputs(
     targetDir: File,
@@ -255,6 +356,7 @@ val linkK16BiosFlash =
         inputs.file(k16ToolsManifest)
         inputs.dir(k16ToolsSource)
         outputs.file(k16BiosFlashResource)
+        dependsOn(installK16Toolchain)
 
         doFirst {
             val toolchain = resolveK16Toolchain()
@@ -314,6 +416,7 @@ val compileK16SystemBoot =
         inputs.file(k16ToolsManifest)
         inputs.dir(k16ToolsSource)
         outputs.file(k16BootArtifact)
+        dependsOn(installK16Toolchain)
 
         doFirst {
             val toolchain = resolveK16Toolchain()
@@ -373,6 +476,7 @@ val compileK16SystemKernel =
         inputs.file(k16ToolsManifest)
         inputs.dir(k16ToolsSource)
         outputs.file(k16KernelArtifact)
+        dependsOn(installK16Toolchain)
 
         doFirst {
             val toolchain = resolveK16Toolchain()
