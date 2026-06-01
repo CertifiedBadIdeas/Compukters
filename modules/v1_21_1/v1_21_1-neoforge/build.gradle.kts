@@ -97,6 +97,14 @@ val generatedK16KernelTarget = generatedK16GuestTarget.map { it.dir("kernel") }
 val downloadedK16ToolchainArchives = layout.buildDirectory.dir("k16-toolchain-archives")
 val packagedK16ToolchainArchives = layout.buildDirectory.dir("k16-toolchain-packages")
 val stagedK16ToolchainRoot = layout.buildDirectory.dir("k16-toolchain-stage/${k16VmNativePlatform.id}")
+val isProductionUniversalJarRequested =
+    gradle.startParameter.taskNames.any { taskName ->
+        taskName == "buildProductionUniversalJar" || taskName.endsWith(":buildProductionUniversalJar")
+    }
+val k16FirmwareProfile =
+    providers
+        .gradleProperty("k16FirmwareProfile")
+        .orElse(if (isProductionUniversalJarRequested) "release" else "debug")
 val k16ToolsManifest = rootProject.layout.projectDirectory.file("rust/host/k16-tools/Cargo.toml")
 val k16ToolsSource = rootProject.layout.projectDirectory.dir("rust/host/k16-tools/src")
 val k16GuestManifest = rootProject.layout.projectDirectory.file("rust/guest/Cargo.toml")
@@ -232,6 +240,18 @@ fun requireK16ToolchainInputFile(
         "$propertyName must not point to a symlink: $file"
     }
     return file
+}
+
+fun k16RustcRuntimeLibDir(): File {
+    val rustc = requireK16ToolchainInputFile("k16RustcPath", "rustc")
+    val libDir = rustc.parentFile.parentFile.resolve("lib")
+    check(libDir.isDirectory) {
+        "k16RustcPath must belong to a Rust install layout with runtime libraries at ../lib, got: $libDir"
+    }
+    check(!Files.isSymbolicLink(libDir.toPath())) {
+        "k16RustcPath runtime library directory must not be a symlink: $libDir"
+    }
+    return libDir
 }
 
 fun explicitK16ToolchainRoot(): File? {
@@ -392,6 +412,12 @@ val stageK16Toolchain =
             into("bin")
             rename { "k16-ld" }
         }
+        from({ k16RustcRuntimeLibDir() }) {
+            into("lib")
+            include("librustc_driver*.so")
+            include("rustlib/src/rust/library/**")
+            include("rustlib/*/lib/**")
+        }
 
         doLast {
             val root = stagedK16ToolchainRoot.get().asFile
@@ -457,11 +483,12 @@ tasks.register("printK16ToolchainEnv") {
 fun deleteK16RustBinOutputs(
     targetDir: File,
     binName: String,
+    profile: String,
 ) {
-    val debugDir = targetDir.resolve("k16-unknown-kraftos/debug")
-    debugDir.resolve(binName).delete()
-    debugDir.resolve("$binName.d").delete()
-    val depsDir = targetDir.resolve("k16-unknown-kraftos/debug/deps")
+    val profileDir = k16RustBinProfileDir(targetDir, profile)
+    profileDir.resolve(binName).delete()
+    profileDir.resolve("$binName.d").delete()
+    val depsDir = profileDir.resolve("deps")
     depsDir
         .listFiles()
         ?.filter { it.name.startsWith("$binName-") }
@@ -478,14 +505,35 @@ fun copyK16RustBinOutput(
     targetDir: File,
     binName: String,
     output: File,
+    profile: String,
 ) {
-    val artifact = targetDir.resolve("k16-unknown-kraftos/debug/$binName")
+    val artifact = targetDir.resolve("k16-unknown-kraftos/$profile/$binName")
     check(artifact.isFile) {
-        "Expected linked K16 Rust bin artifact for $binName at $artifact"
+        "Expected linked K16 Rust $profile bin artifact for $binName at $artifact"
     }
     output.parentFile.mkdirs()
     artifact.copyTo(output, overwrite = true)
 }
+
+fun k16FirmwareProfileName(): String {
+    val profile = k16FirmwareProfile.get()
+    check(profile == "debug" || profile == "release") {
+        "k16FirmwareProfile must be 'debug' or 'release', got: $profile"
+    }
+    return profile
+}
+
+fun k16CargoProfileArgs(profile: String): List<String> =
+    when (profile) {
+        "debug" -> emptyList()
+        "release" -> listOf("--release")
+        else -> error("Unsupported K16 firmware profile: $profile")
+    }
+
+fun k16RustBinProfileDir(
+    targetDir: File,
+    profile: String,
+): File = targetDir.resolve("k16-unknown-kraftos/$profile")
 
 val linkK16BiosFlash =
     tasks.register<Exec>("linkK16BiosFlash") {
@@ -498,43 +546,48 @@ val linkK16BiosFlash =
         inputs.file(k16ToolchainConfig)
         inputs.file(k16ToolsManifest)
         inputs.dir(k16ToolsSource)
+        inputs.property("k16FirmwareProfile", k16FirmwareProfile)
         outputs.file(k16BiosFlashResource)
         dependsOn(installK16Toolchain)
 
         doFirst {
             val toolchain = resolveK16Toolchain()
+            val profile = k16FirmwareProfileName()
             k16BiosFlashResource.get().asFile.parentFile.mkdirs()
-            deleteK16RustBinOutputs(generatedK16BiosTarget.get().asFile, "k16-bios")
+            deleteK16RustBinOutputs(generatedK16BiosTarget.get().asFile, "k16-bios", profile)
             environment("RUSTC", toolchain.rustc.absolutePath)
             environment(
                 "RUSTFLAGS",
-                "-C linker=${toolchain.linker.absolutePath} -C link-arg=--k16-target=bios -Cjump-tables=no -Cdebuginfo=0 -Cdebug-assertions=off -Coverflow-checks=off -Zub-checks=no",
+                "-C linker=${toolchain.linker.absolutePath} -C link-arg=--k16-target=bios -Cjump-tables=no -Cdebuginfo=0 -Cdebug-assertions=off -Copt-level=0 -Coverflow-checks=off -Zub-checks=no",
             )
             commandLine(
-                toolchain.cargo.absolutePath,
-                "rustc",
-                "-Zbuild-std=core",
-                "-Zjson-target-spec",
-                "--manifest-path",
-                k16BiosManifest.asFile.absolutePath,
-                "--features",
-                "k16-target",
-                "--bin",
-                "k16-bios",
-                "--target",
-                k16RustTargetSpec.asFile.absolutePath,
-                "--target-dir",
-                generatedK16BiosTarget.get().asFile.absolutePath,
-                "--",
-                "-C",
-                "panic=abort",
-                "-C",
-                "relocation-model=static",
-                "-Cjump-tables=no",
-                "-Cdebuginfo=0",
-                "-Cdebug-assertions=off",
-                "-Coverflow-checks=off",
-                "-Zub-checks=no",
+                listOf(toolchain.cargo.absolutePath, "rustc") +
+                    k16CargoProfileArgs(profile) +
+                    listOf(
+                        "-Zbuild-std=core",
+                        "-Zjson-target-spec",
+                        "--manifest-path",
+                        k16BiosManifest.asFile.absolutePath,
+                        "--features",
+                        "k16-target",
+                        "--bin",
+                        "k16-bios",
+                        "--target",
+                        k16RustTargetSpec.asFile.absolutePath,
+                        "--target-dir",
+                        generatedK16BiosTarget.get().asFile.absolutePath,
+                        "--",
+                        "-C",
+                        "panic=abort",
+                        "-C",
+                        "relocation-model=static",
+                        "-Cjump-tables=no",
+                        "-Cdebuginfo=0",
+                        "-Cdebug-assertions=off",
+                        "-Copt-level=0",
+                        "-Coverflow-checks=off",
+                        "-Zub-checks=no",
+                    ),
             )
         }
 
@@ -543,6 +596,7 @@ val linkK16BiosFlash =
                 targetDir = generatedK16BiosTarget.get().asFile,
                 binName = "k16-bios",
                 output = k16BiosFlashResource.get().asFile,
+                profile = k16FirmwareProfileName(),
             )
         }
     }
@@ -558,43 +612,48 @@ val compileK16SystemBoot =
         inputs.file(k16ToolchainConfig)
         inputs.file(k16ToolsManifest)
         inputs.dir(k16ToolsSource)
+        inputs.property("k16FirmwareProfile", k16FirmwareProfile)
         outputs.file(k16BootArtifact)
         dependsOn(installK16Toolchain)
 
         doFirst {
             val toolchain = resolveK16Toolchain()
+            val profile = k16FirmwareProfileName()
             k16BootArtifact.get().asFile.parentFile.mkdirs()
-            deleteK16RustBinOutputs(generatedK16BootTarget.get().asFile, "k16-boot")
+            deleteK16RustBinOutputs(generatedK16BootTarget.get().asFile, "k16-boot", profile)
             environment("RUSTC", toolchain.rustc.absolutePath)
             environment(
                 "RUSTFLAGS",
-                "-C linker=${toolchain.linker.absolutePath} -C link-arg=--k16-target=boot -Cjump-tables=no -Cdebuginfo=0 -Cdebug-assertions=off -Coverflow-checks=off -Zub-checks=no",
+                "-C linker=${toolchain.linker.absolutePath} -C link-arg=--k16-target=boot -Cjump-tables=no -Cdebuginfo=0 -Cdebug-assertions=off -Copt-level=0 -Coverflow-checks=off -Zub-checks=no",
             )
             commandLine(
-                toolchain.cargo.absolutePath,
-                "rustc",
-                "-Zbuild-std=core",
-                "-Zjson-target-spec",
-                "--manifest-path",
-                k16BootManifest.asFile.absolutePath,
-                "--features",
-                "k16-target",
-                "--bin",
-                "k16-boot",
-                "--target",
-                k16RustTargetSpec.asFile.absolutePath,
-                "--target-dir",
-                generatedK16BootTarget.get().asFile.absolutePath,
-                "--",
-                "-C",
-                "panic=abort",
-                "-C",
-                "relocation-model=static",
-                "-Cjump-tables=no",
-                "-Cdebuginfo=0",
-                "-Cdebug-assertions=off",
-                "-Coverflow-checks=off",
-                "-Zub-checks=no",
+                listOf(toolchain.cargo.absolutePath, "rustc") +
+                    k16CargoProfileArgs(profile) +
+                    listOf(
+                        "-Zbuild-std=core",
+                        "-Zjson-target-spec",
+                        "--manifest-path",
+                        k16BootManifest.asFile.absolutePath,
+                        "--features",
+                        "k16-target",
+                        "--bin",
+                        "k16-boot",
+                        "--target",
+                        k16RustTargetSpec.asFile.absolutePath,
+                        "--target-dir",
+                        generatedK16BootTarget.get().asFile.absolutePath,
+                        "--",
+                        "-C",
+                        "panic=abort",
+                        "-C",
+                        "relocation-model=static",
+                        "-Cjump-tables=no",
+                        "-Cdebuginfo=0",
+                        "-Cdebug-assertions=off",
+                        "-Copt-level=0",
+                        "-Coverflow-checks=off",
+                        "-Zub-checks=no",
+                    ),
             )
         }
 
@@ -603,6 +662,7 @@ val compileK16SystemBoot =
                 targetDir = generatedK16BootTarget.get().asFile,
                 binName = "k16-boot",
                 output = k16BootArtifact.get().asFile,
+                profile = k16FirmwareProfileName(),
             )
         }
     }
@@ -618,43 +678,48 @@ val compileK16SystemKernel =
         inputs.file(k16ToolchainConfig)
         inputs.file(k16ToolsManifest)
         inputs.dir(k16ToolsSource)
+        inputs.property("k16FirmwareProfile", k16FirmwareProfile)
         outputs.file(k16KernelArtifact)
         dependsOn(installK16Toolchain)
 
         doFirst {
             val toolchain = resolveK16Toolchain()
+            val profile = k16FirmwareProfileName()
             k16KernelArtifact.get().asFile.parentFile.mkdirs()
-            deleteK16RustBinOutputs(generatedK16KernelTarget.get().asFile, "k16-kernel")
+            deleteK16RustBinOutputs(generatedK16KernelTarget.get().asFile, "k16-kernel", profile)
             environment("RUSTC", toolchain.rustc.absolutePath)
             environment(
                 "RUSTFLAGS",
-                "-C linker=${toolchain.linker.absolutePath} -C link-arg=--k16-target=kernel -Cjump-tables=no -Cdebuginfo=0 -Cdebug-assertions=off -Coverflow-checks=off -Zub-checks=no",
+                "-C linker=${toolchain.linker.absolutePath} -C link-arg=--k16-target=kernel -Cjump-tables=no -Cdebuginfo=0 -Cdebug-assertions=off -Copt-level=0 -Coverflow-checks=off -Zub-checks=no",
             )
             commandLine(
-                toolchain.cargo.absolutePath,
-                "rustc",
-                "-Zbuild-std=core",
-                "-Zjson-target-spec",
-                "--manifest-path",
-                k16KernelManifest.asFile.absolutePath,
-                "--features",
-                "k16-target",
-                "--bin",
-                "k16-kernel",
-                "--target",
-                k16RustTargetSpec.asFile.absolutePath,
-                "--target-dir",
-                generatedK16KernelTarget.get().asFile.absolutePath,
-                "--",
-                "-C",
-                "panic=abort",
-                "-C",
-                "relocation-model=static",
-                "-Cjump-tables=no",
-                "-Cdebuginfo=0",
-                "-Cdebug-assertions=off",
-                "-Coverflow-checks=off",
-                "-Zub-checks=no",
+                listOf(toolchain.cargo.absolutePath, "rustc") +
+                    k16CargoProfileArgs(profile) +
+                    listOf(
+                        "-Zbuild-std=core",
+                        "-Zjson-target-spec",
+                        "--manifest-path",
+                        k16KernelManifest.asFile.absolutePath,
+                        "--features",
+                        "k16-target",
+                        "--bin",
+                        "k16-kernel",
+                        "--target",
+                        k16RustTargetSpec.asFile.absolutePath,
+                        "--target-dir",
+                        generatedK16KernelTarget.get().asFile.absolutePath,
+                        "--",
+                        "-C",
+                        "panic=abort",
+                        "-C",
+                        "relocation-model=static",
+                        "-Cjump-tables=no",
+                        "-Cdebuginfo=0",
+                        "-Cdebug-assertions=off",
+                        "-Copt-level=0",
+                        "-Coverflow-checks=off",
+                        "-Zub-checks=no",
+                    ),
             )
         }
 
@@ -663,6 +728,7 @@ val compileK16SystemKernel =
                 targetDir = generatedK16KernelTarget.get().asFile,
                 binName = "k16-kernel",
                 output = k16KernelArtifact.get().asFile,
+                profile = k16FirmwareProfileName(),
             )
         }
     }

@@ -47,6 +47,11 @@ class K16PrebuiltToolchainBuildScriptTest {
         assertTrue(buildScript.contains("k16RustcPath"))
         assertTrue(buildScript.contains("k16CargoPath"))
         assertTrue(buildScript.contains("k16LdPath"))
+        assertTrue(buildScript.contains("k16RustcRuntimeLibDir"))
+        assertTrue(buildScript.contains("into(\"lib\")"))
+        assertTrue(buildScript.contains("include(\"librustc_driver*.so\")"))
+        assertTrue(buildScript.contains("include(\"rustlib/src/rust/library/**\")"))
+        assertTrue(buildScript.contains("include(\"rustlib/*/lib/**\")"))
         assertTrue(buildScript.contains("packageK16Toolchain"))
         assertTrue(buildScript.contains("printK16ToolchainEnv"))
         assertTrue(buildScript.contains("Zip::class"))
@@ -63,5 +68,6 @@ class K16PrebuiltToolchainBuildScriptTest {
         assertTrue(docs.contains("packageK16Toolchain"))
         assertTrue(docs.contains("config/k16-toolchain.json"))
         assertTrue(docs.contains("-Pk16ToolchainDir"))
+        assertTrue(docs.contains("lib/rustlib/<host>/lib/"))
     }
 }
