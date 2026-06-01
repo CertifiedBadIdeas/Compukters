@@ -60,6 +60,15 @@ class K16PrebuiltToolchainBuildScriptTest {
         assertTrue(buildScript.contains("dependsOn(installK16Toolchain)"))
         assertTrue(buildScript.contains("k16ToolchainDir"))
         assertTrue(buildScript.contains("k16ToolchainCacheDir"))
+        assertTrue(buildScript.contains("k16ToolchainMode"))
+        assertTrue(buildScript.contains("k16ToolchainMode must be 'prebuilt' or 'local'"))
+        assertTrue(buildScript.contains("\"prebuilt\" ->"))
+        assertTrue(buildScript.contains("\"local\" ->"))
+        assertTrue(buildScript.contains("prepareK16Toolchain"))
+        assertTrue(buildScript.contains("k16ToolchainModeName() == \"prebuilt\""))
+        assertTrue(buildScript.contains("k16ToolchainModeName() == \"local\""))
+        assertTrue(buildScript.contains("dependsOn(prepareK16Toolchain)"))
+        assertTrue(buildScript.contains("environment(\"RUSTC_BOOTSTRAP\", \"1\")"))
 
         assertFalse(buildScript.contains("providers.environmentVariable(\"K16_CARGO\")"))
         assertFalse(buildScript.contains("providers.environmentVariable(\"K16_RUSTC\")"))
@@ -69,7 +78,10 @@ class K16PrebuiltToolchainBuildScriptTest {
         assertTrue(docs.contains("stageK16Toolchain"))
         assertTrue(docs.contains("packageK16Toolchain"))
         assertTrue(docs.contains("config/k16-toolchain.json"))
+        assertTrue(docs.contains("-Pk16ToolchainMode=prebuilt"))
+        assertTrue(docs.contains("-Pk16ToolchainMode=local"))
         assertTrue(docs.contains("-Pk16ToolchainDir"))
+        assertTrue(docs.contains("RUSTC_BOOTSTRAP=1"))
         assertTrue(docs.contains("lib/rustlib/<host>/lib/"))
     }
 }
