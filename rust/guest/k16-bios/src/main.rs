@@ -78,5 +78,5 @@ unsafe fn write_u8(address: u32, value: u8) {
 }
 
 fn wait_forever() -> ! {
-    loop {}
+    k16_rt::halt_forever()
 }
