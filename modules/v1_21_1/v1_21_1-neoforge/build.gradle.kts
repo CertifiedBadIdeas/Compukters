@@ -254,6 +254,35 @@ fun k16RustcRuntimeLibDir(): File {
     return libDir
 }
 
+fun k16RustHostTargetTriple(): String {
+    val arch =
+        when (System.getProperty("os.arch").lowercase()) {
+            "amd64", "x86_64" -> "x86_64"
+            "aarch64", "arm64" -> "aarch64"
+            else -> error("Unsupported K16 Rust host architecture: ${System.getProperty("os.arch")}")
+        }
+    return when {
+        System.getProperty("os.name").startsWith("linux", ignoreCase = true) -> "$arch-unknown-linux-gnu"
+        System.getProperty("os.name").startsWith("mac", ignoreCase = true) ||
+            System.getProperty("os.name").startsWith("darwin", ignoreCase = true) -> "$arch-apple-darwin"
+        System.getProperty("os.name").startsWith("windows", ignoreCase = true) -> "$arch-pc-windows-msvc"
+        else -> error("Unsupported K16 Rust host OS: ${System.getProperty("os.name")}")
+    }
+}
+
+fun k16RustcHostRuntimeLibDir(): File {
+    val rustc = requireK16ToolchainInputFile("k16RustcPath", "rustc")
+    val hostTriple = k16RustHostTargetTriple()
+    val libDir = rustc.parentFile.parentFile.resolve("lib/rustlib/$hostTriple/lib")
+    check(libDir.isDirectory) {
+        "k16RustcPath must belong to a Rust bootstrap layout with host runtime libraries at $libDir"
+    }
+    check(!Files.isSymbolicLink(libDir.toPath())) {
+        "k16RustcPath host runtime library directory must not be a symlink: $libDir"
+    }
+    return libDir
+}
+
 fun explicitK16ToolchainRoot(): File? {
     val explicitDir = providers.gradleProperty("k16ToolchainDir").orNull
     if (explicitDir != null) {
@@ -416,7 +445,9 @@ val stageK16Toolchain =
             into("lib")
             include("librustc_driver*.so")
             include("rustlib/src/rust/library/**")
-            include("rustlib/*/lib/**")
+        }
+        from({ k16RustcHostRuntimeLibDir() }) {
+            into("lib/rustlib/${k16RustHostTargetTriple()}/lib")
         }
 
         doLast {
@@ -558,7 +589,7 @@ val linkK16BiosFlash =
             environment("RUSTC", toolchain.rustc.absolutePath)
             environment(
                 "RUSTFLAGS",
-                "-C linker=${toolchain.linker.absolutePath} -C link-arg=--k16-target=bios -Cjump-tables=no -Cdebuginfo=0 -Cdebug-assertions=off -Copt-level=0 -Coverflow-checks=off -Zub-checks=no",
+                "-C linker=${toolchain.linker.absolutePath} -C link-arg=--k16-target=bios -Cjump-tables=no -Cdebuginfo=0 -Cdebug-assertions=off -Coverflow-checks=off -Zub-checks=no",
             )
             commandLine(
                 listOf(toolchain.cargo.absolutePath, "rustc") +
@@ -584,7 +615,6 @@ val linkK16BiosFlash =
                         "-Cjump-tables=no",
                         "-Cdebuginfo=0",
                         "-Cdebug-assertions=off",
-                        "-Copt-level=0",
                         "-Coverflow-checks=off",
                         "-Zub-checks=no",
                     ),
@@ -624,7 +654,7 @@ val compileK16SystemBoot =
             environment("RUSTC", toolchain.rustc.absolutePath)
             environment(
                 "RUSTFLAGS",
-                "-C linker=${toolchain.linker.absolutePath} -C link-arg=--k16-target=boot -Cjump-tables=no -Cdebuginfo=0 -Cdebug-assertions=off -Copt-level=0 -Coverflow-checks=off -Zub-checks=no",
+                "-C linker=${toolchain.linker.absolutePath} -C link-arg=--k16-target=boot -Cjump-tables=no -Cdebuginfo=0 -Cdebug-assertions=off -Coverflow-checks=off -Zub-checks=no",
             )
             commandLine(
                 listOf(toolchain.cargo.absolutePath, "rustc") +
@@ -650,7 +680,6 @@ val compileK16SystemBoot =
                         "-Cjump-tables=no",
                         "-Cdebuginfo=0",
                         "-Cdebug-assertions=off",
-                        "-Copt-level=0",
                         "-Coverflow-checks=off",
                         "-Zub-checks=no",
                     ),
@@ -690,7 +719,7 @@ val compileK16SystemKernel =
             environment("RUSTC", toolchain.rustc.absolutePath)
             environment(
                 "RUSTFLAGS",
-                "-C linker=${toolchain.linker.absolutePath} -C link-arg=--k16-target=kernel -Cjump-tables=no -Cdebuginfo=0 -Cdebug-assertions=off -Copt-level=0 -Coverflow-checks=off -Zub-checks=no",
+                "-C linker=${toolchain.linker.absolutePath} -C link-arg=--k16-target=kernel -Cjump-tables=no -Cdebuginfo=0 -Cdebug-assertions=off -Coverflow-checks=off -Zub-checks=no",
             )
             commandLine(
                 listOf(toolchain.cargo.absolutePath, "rustc") +
@@ -716,7 +745,6 @@ val compileK16SystemKernel =
                         "-Cjump-tables=no",
                         "-Cdebuginfo=0",
                         "-Cdebug-assertions=off",
-                        "-Copt-level=0",
                         "-Coverflow-checks=off",
                         "-Zub-checks=no",
                     ),

@@ -66,7 +66,9 @@ for one host from already-built binaries:
 ```
 
 This task only copies explicit binaries. It does not build LLVM, rustc, cargo,
-or `k16-ld`.
+or `k16-ld`. `k16RustcPath` must point at a Rust bootstrap `stage1/bin/rustc`;
+that stage1 sysroot must already contain matching host runtime libraries, so
+Cargo can compile host build scripts while building K16 `core`.
 
 The staged layout is:
 

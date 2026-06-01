@@ -1,6 +1,7 @@
 # K16 Firmware Release Builds
 
 > Issue: [#154](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/154)
+> Optimized K16 core codegen: [#158](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/158)
 
 Bundled K16 firmware can be built through either a debug or release Cargo
 profile. Development resource builds use the debug profile by default.
@@ -24,6 +25,7 @@ build/generated/k16-guest-target/kernel/k16-unknown-kraftos/release/k16-kernel
 There is no debug artifact fallback. If the selected profile does not produce
 the expected BIOS, bootloader, or kernel output, the Gradle task fails.
 
-The current K16 backend requires explicit safe codegen flags for release
-firmware, including `-Copt-level=0`. Cargo still writes release-profile outputs;
-optimized K16 release codegen is a separate backend readiness slice.
+Release firmware uses Cargo's release profile and no longer overrides
+`opt-level` back to zero. The firmware tasks still pass explicit K16-safe flags
+for jump tables, debug info, debug assertions, overflow checks, UB checks, panic
+strategy, and static relocation.
