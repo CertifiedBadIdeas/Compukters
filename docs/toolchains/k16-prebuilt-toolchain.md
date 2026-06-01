@@ -27,20 +27,24 @@ bin/k16-ld
 The normal entry points are still regular Gradle tasks:
 
 ```bash
-./gradlew-sandbox :v1_21_1-neoforge:processResources
-./gradlew-sandbox :v1_21_1-neoforge:buildProductionUniversalJar
+./gradlew-sandbox :v1_21_1-neoforge:processResources \
+  -Pk16ToolchainMode=prebuilt
+./gradlew-sandbox :v1_21_1-neoforge:buildProductionUniversalJar \
+  -Pk16ToolchainMode=prebuilt
 ```
 
 If the release asset is missing or the checksum does not match, the build fails.
 It does not build LLVM or rustc locally.
 
-## Explicit Local Toolchain
+`prebuilt` is the default mode, so the property can be omitted for normal mod
+builds. Passing it explicitly is useful in scripts that must document which
+toolchain source they expect.
 
-Toolchain developers can bypass the prebuilt cache with an explicit installed
-layout:
+An already-unpacked prebuilt layout can be used explicitly:
 
 ```bash
 ./gradlew-sandbox :v1_21_1-neoforge:processResources \
+  -Pk16ToolchainMode=prebuilt \
   -Pk16ToolchainDir=/absolute/path/to/k16-toolchain
 ```
 
@@ -53,6 +57,27 @@ For manual shell usage, Gradle can print the selected toolchain paths:
 ./gradlew-sandbox :v1_21_1-neoforge:printK16ToolchainEnv
 ```
 
+## Explicit Local Toolchain
+
+Toolchain developers do not need to publish a release asset for every local
+toolchain change. Use `local` mode to stage a fresh local toolchain from
+already-built binaries:
+
+```bash
+./gradlew-sandbox :v1_21_1-neoforge:processResources \
+  -Pk16ToolchainMode=local \
+  -Pk16CargoPath=/absolute/path/to/cargo \
+  -Pk16RustcPath=/absolute/path/to/rustc \
+  -Pk16LdPath=/absolute/path/to/k16-ld
+```
+
+`local` mode does not download a prebuilt archive and does not accept
+`k16ToolchainDir`. The three input paths are required, absolute, and non-symlink.
+
+Firmware Gradle tasks set `RUSTC_BOOTSTRAP=1` internally because the staged
+Cargo currently comes from Rust bootstrap stage0 while K16 firmware builds use
+`-Zbuild-std=core`. Users should not need to provide that environment variable.
+
 ## Maintainer Publish Flow
 
 Build the K16 toolchain in a maintainer workspace, then stage the install layout
@@ -60,6 +85,7 @@ for one host from already-built binaries:
 
 ```bash
 ./gradlew-sandbox :v1_21_1-neoforge:stageK16Toolchain \
+  -Pk16ToolchainMode=local \
   -Pk16CargoPath=/absolute/path/to/cargo \
   -Pk16RustcPath=/absolute/path/to/rustc \
   -Pk16LdPath=/absolute/path/to/k16-ld
@@ -88,6 +114,7 @@ host archive name and layout validation as the consumer installer:
 
 ```bash
 ./gradlew-sandbox :v1_21_1-neoforge:packageK16Toolchain \
+  -Pk16ToolchainMode=local \
   -Pk16CargoPath=/absolute/path/to/cargo \
   -Pk16RustcPath=/absolute/path/to/rustc \
   -Pk16LdPath=/absolute/path/to/k16-ld

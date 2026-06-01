@@ -105,6 +105,10 @@ val k16FirmwareProfile =
     providers
         .gradleProperty("k16FirmwareProfile")
         .orElse(if (isProductionUniversalJarRequested) "release" else "debug")
+val k16ToolchainMode =
+    providers
+        .gradleProperty("k16ToolchainMode")
+        .orElse("prebuilt")
 val k16ToolsManifest = rootProject.layout.projectDirectory.file("rust/host/k16-tools/Cargo.toml")
 val k16ToolsSource = rootProject.layout.projectDirectory.dir("rust/host/k16-tools/src")
 val k16GuestManifest = rootProject.layout.projectDirectory.file("rust/guest/Cargo.toml")
@@ -187,6 +191,14 @@ fun readK16ToolchainPin(): K16ToolchainPin {
 }
 
 val k16ToolchainPin = readK16ToolchainPin()
+
+fun k16ToolchainModeName(): String {
+    val mode = k16ToolchainMode.get()
+    check(mode == "prebuilt" || mode == "local") {
+        "k16ToolchainMode must be 'prebuilt' or 'local', got: $mode"
+    }
+    return mode
+}
 
 fun validateK16ToolchainPath(
     root: File,
@@ -337,19 +349,34 @@ fun verifyK16ToolchainArchiveChecksum(archive: File) {
 }
 
 fun resolveK16Toolchain(): K16Toolchain {
-    val explicitRoot = explicitK16ToolchainRoot()
-    val root = explicitRoot ?: defaultK16ToolchainRoot()
-    val origin =
-        if (explicitRoot == null) {
-            "pinned prebuilt cache '${k16ToolchainPin.pin}' for ${k16VmNativePlatform.id}"
-        } else {
-            "k16ToolchainDir"
+    return when (k16ToolchainModeName()) {
+        "prebuilt" -> {
+            val explicitRoot = explicitK16ToolchainRoot()
+            val root = explicitRoot ?: defaultK16ToolchainRoot()
+            val origin =
+                if (explicitRoot == null) {
+                    "pinned prebuilt cache '${k16ToolchainPin.pin}' for ${k16VmNativePlatform.id}"
+                } else {
+                    "k16ToolchainDir"
+                }
+            validateK16ToolchainPath(
+                root = root,
+                origin = origin,
+                requiredExecutables = k16ToolchainPin.requiredExecutables,
+            )
         }
-    return validateK16ToolchainPath(
-        root = root,
-        origin = origin,
-        requiredExecutables = k16ToolchainPin.requiredExecutables,
-    )
+        "local" -> {
+            check(explicitK16ToolchainRoot() == null) {
+                "k16ToolchainMode=local does not accept k16ToolchainDir; pass k16CargoPath, k16RustcPath, and k16LdPath"
+            }
+            validateK16ToolchainPath(
+                root = stagedK16ToolchainRoot.get().asFile,
+                origin = "stageK16Toolchain",
+                requiredExecutables = k16ToolchainPin.requiredExecutables,
+            )
+        }
+        else -> error("unreachable")
+    }
 }
 
 val k16ToolchainArchive = downloadedK16ToolchainArchives.map { it.file(k16ToolchainPin.archive) }
@@ -367,7 +394,9 @@ val downloadK16ToolchainArchive =
         inputs.property("archiveSha256", k16ToolchainPin.sha256)
         outputs.file(k16ToolchainArchive)
         onlyIf {
-            explicitK16ToolchainRoot() == null && !isK16ToolchainInstalled(defaultK16ToolchainRoot())
+            k16ToolchainModeName() == "prebuilt" &&
+                explicitK16ToolchainRoot() == null &&
+                !isK16ToolchainInstalled(defaultK16ToolchainRoot())
         }
 
         doLast {
@@ -405,7 +434,9 @@ val installK16Toolchain =
         from({ zipTree(k16ToolchainArchive.get().asFile) })
         into(defaultK16ToolchainRoot())
         onlyIf {
-            explicitK16ToolchainRoot() == null && !isK16ToolchainInstalled(defaultK16ToolchainRoot())
+            k16ToolchainModeName() == "prebuilt" &&
+                explicitK16ToolchainRoot() == null &&
+                !isK16ToolchainInstalled(defaultK16ToolchainRoot())
         }
 
         doFirst {
@@ -427,26 +458,56 @@ val stageK16Toolchain =
         group = "k16"
         into(stagedK16ToolchainRoot)
         onlyIf {
-            explicitK16ToolchainRoot() == null
+            k16ToolchainModeName() == "local"
         }
-        from({ requireK16ToolchainInputFile("k16CargoPath", "cargo") }) {
+        from({
+            if (k16ToolchainModeName() == "local") {
+                requireK16ToolchainInputFile("k16CargoPath", "cargo")
+            } else {
+                emptyList<File>()
+            }
+        }) {
             into("bin")
             rename { "cargo" }
         }
-        from({ requireK16ToolchainInputFile("k16RustcPath", "rustc") }) {
+        from({
+            if (k16ToolchainModeName() == "local") {
+                requireK16ToolchainInputFile("k16RustcPath", "rustc")
+            } else {
+                emptyList<File>()
+            }
+        }) {
             into("bin")
             rename { "rustc" }
         }
-        from({ requireK16ToolchainInputFile("k16LdPath", "k16-ld") }) {
+        from({
+            if (k16ToolchainModeName() == "local") {
+                requireK16ToolchainInputFile("k16LdPath", "k16-ld")
+            } else {
+                emptyList<File>()
+            }
+        }) {
             into("bin")
             rename { "k16-ld" }
         }
-        from({ k16RustcRuntimeLibDir() }) {
+        from({
+            if (k16ToolchainModeName() == "local") {
+                k16RustcRuntimeLibDir()
+            } else {
+                emptyList<File>()
+            }
+        }) {
             into("lib")
             include("librustc_driver*.so")
             include("rustlib/src/rust/library/**")
         }
-        from({ k16RustcHostRuntimeLibDir() }) {
+        from({
+            if (k16ToolchainModeName() == "local") {
+                k16RustcHostRuntimeLibDir()
+            } else {
+                emptyList<File>()
+            }
+        }) {
             into("lib/rustlib/${k16RustHostTargetTriple()}/lib")
         }
 
@@ -481,11 +542,19 @@ val packageK16Toolchain =
         destinationDirectory.set(packagedK16ToolchainArchives)
         from({
             val root =
-                explicitK16ToolchainRoot()
-                    ?: stagedK16ToolchainRoot.get().asFile
+                when (k16ToolchainModeName()) {
+                    "local" -> stagedK16ToolchainRoot.get().asFile
+                    "prebuilt" ->
+                        explicitK16ToolchainRoot()
+                            ?: error(
+                                "packageK16Toolchain requires -Pk16ToolchainMode=local with explicit binaries or " +
+                                    "-Pk16ToolchainMode=prebuilt -Pk16ToolchainDir=/absolute/path/to/k16-toolchain",
+                            )
+                    else -> error("unreachable")
+                }
             validateK16ToolchainPath(
                 root = root,
-                origin = if (explicitK16ToolchainRoot() == null) "stageK16Toolchain" else "k16ToolchainDir",
+                origin = if (k16ToolchainModeName() == "local") "stageK16Toolchain" else "k16ToolchainDir",
                 requiredExecutables = k16ToolchainPin.requiredExecutables,
             )
             root
@@ -498,10 +567,23 @@ val packageK16Toolchain =
         }
     }
 
+val prepareK16Toolchain =
+    tasks.register("prepareK16Toolchain") {
+        description = "Prepares the selected K16 toolchain mode and validates the resolved install layout."
+        group = "k16"
+        dependsOn(installK16Toolchain)
+        dependsOn(stageK16Toolchain)
+        inputs.property("k16ToolchainMode", k16ToolchainMode)
+
+        doLast {
+            resolveK16Toolchain()
+        }
+    }
+
 tasks.register("printK16ToolchainEnv") {
     description = "Prints shell exports for the selected K16 toolchain."
     group = "k16"
-    dependsOn(installK16Toolchain)
+    dependsOn(prepareK16Toolchain)
 
     doLast {
         val toolchain = resolveK16Toolchain()
@@ -579,7 +661,7 @@ val linkK16BiosFlash =
         inputs.dir(k16ToolsSource)
         inputs.property("k16FirmwareProfile", k16FirmwareProfile)
         outputs.file(k16BiosFlashResource)
-        dependsOn(installK16Toolchain)
+        dependsOn(prepareK16Toolchain)
 
         doFirst {
             val toolchain = resolveK16Toolchain()
@@ -587,6 +669,7 @@ val linkK16BiosFlash =
             k16BiosFlashResource.get().asFile.parentFile.mkdirs()
             deleteK16RustBinOutputs(generatedK16BiosTarget.get().asFile, "k16-bios", profile)
             environment("RUSTC", toolchain.rustc.absolutePath)
+            environment("RUSTC_BOOTSTRAP", "1")
             environment(
                 "RUSTFLAGS",
                 "-C linker=${toolchain.linker.absolutePath} -C link-arg=--k16-target=bios -Cjump-tables=no -Cdebuginfo=0 -Cdebug-assertions=off -Coverflow-checks=off -Zub-checks=no",
@@ -644,7 +727,7 @@ val compileK16SystemBoot =
         inputs.dir(k16ToolsSource)
         inputs.property("k16FirmwareProfile", k16FirmwareProfile)
         outputs.file(k16BootArtifact)
-        dependsOn(installK16Toolchain)
+        dependsOn(prepareK16Toolchain)
 
         doFirst {
             val toolchain = resolveK16Toolchain()
@@ -652,6 +735,7 @@ val compileK16SystemBoot =
             k16BootArtifact.get().asFile.parentFile.mkdirs()
             deleteK16RustBinOutputs(generatedK16BootTarget.get().asFile, "k16-boot", profile)
             environment("RUSTC", toolchain.rustc.absolutePath)
+            environment("RUSTC_BOOTSTRAP", "1")
             environment(
                 "RUSTFLAGS",
                 "-C linker=${toolchain.linker.absolutePath} -C link-arg=--k16-target=boot -Cjump-tables=no -Cdebuginfo=0 -Cdebug-assertions=off -Coverflow-checks=off -Zub-checks=no",
@@ -709,7 +793,7 @@ val compileK16SystemKernel =
         inputs.dir(k16ToolsSource)
         inputs.property("k16FirmwareProfile", k16FirmwareProfile)
         outputs.file(k16KernelArtifact)
-        dependsOn(installK16Toolchain)
+        dependsOn(prepareK16Toolchain)
 
         doFirst {
             val toolchain = resolveK16Toolchain()
@@ -717,6 +801,7 @@ val compileK16SystemKernel =
             k16KernelArtifact.get().asFile.parentFile.mkdirs()
             deleteK16RustBinOutputs(generatedK16KernelTarget.get().asFile, "k16-kernel", profile)
             environment("RUSTC", toolchain.rustc.absolutePath)
+            environment("RUSTC_BOOTSTRAP", "1")
             environment(
                 "RUSTFLAGS",
                 "-C linker=${toolchain.linker.absolutePath} -C link-arg=--k16-target=kernel -Cjump-tables=no -Cdebuginfo=0 -Cdebug-assertions=off -Coverflow-checks=off -Zub-checks=no",
