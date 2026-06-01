@@ -31,6 +31,7 @@ The repository stores the selected toolchain contract in
 - `pin`: the logical prebuilt toolchain version expected by the repo;
 - `requiredExecutables`: paths that must exist inside an installed toolchain;
 - `hosts`: supported host platform identifiers and their future archive names.
+- `artifactBaseUrl`: the release/download base URL used by the Gradle installer.
 
 This file is the source of truth for the mod build. It is intentionally small
 and stable so Gradle, shell scripts, and manual users can all consume the same
@@ -51,9 +52,14 @@ The default installed layout is:
         k16-ld
 ```
 
-The first slice only validates this layout. Downloading and unpacking the
-archive is a later slice; the resolver must not build LLVM or rustc locally
-when the cache is missing.
+The archive format is zip for every host in the Gradle-installed path. Zip is
+used because Gradle can unpack it directly without adding another decompression
+toolchain dependency to normal mod builds.
+
+`downloadK16ToolchainArchive` downloads the host archive from
+`artifactBaseUrl/archive` into the module build directory.
+`installK16Toolchain` unpacks it into the cache layout and validates the
+installed root before firmware tasks use it.
 
 ## Explicit Local Toolchain
 
@@ -67,6 +73,9 @@ an installed-layout directory:
 That directory must contain the same `manifest.json` and `bin/*` files as a
 prebuilt install. This keeps local toolchain development explicit while keeping
 the firmware build code identical for prebuilt and local sources.
+
+When `k16ToolchainDir` is set, the install task is skipped. The selected local
+directory is still validated by the firmware tasks before Cargo is executed.
 
 ## Symlink Policy
 
@@ -93,11 +102,15 @@ artifacts, or another installed K16 toolchain.
 - Add a Gradle resolver used by BIOS, bootloader, and kernel firmware tasks.
 - Replace the three large per-binary environment variables with one explicit
   optional `k16ToolchainDir` Gradle property.
-- Keep download/unpack out of this slice.
+- Add Gradle download/install tasks for pinned zip archives.
+- Keep publishing and checksum verification out of this slice.
 
 ## Verification
 
 - `./gradlew-sandbox :v1_21_1-neoforge:compileKotlin`
-- `./gradlew-sandbox :v1_21_1-neoforge:processResources` without an installed
-  prebuilt toolchain must fail before Cargo starts, name the missing installed
-  layout, and not build LLVM or rustc.
+- `./gradlew-sandbox :build-scripts:test --tests K16PrebuiltToolchainBuildScriptTest`
+- `./gradlew-sandbox :v1_21_1-neoforge:downloadK16ToolchainArchive -Pk16ToolchainArchiveUrl=file:///tmp/missing.zip`
+  must fail before Cargo starts and tell the user to publish a prebuilt archive
+  or pass `-Pk16ToolchainDir`.
+- `./gradlew-sandbox :v1_21_1-neoforge:installK16Toolchain -Pk16ToolchainCacheDir=<tmp-cache> -Pk16ToolchainArchiveUrl=file:///<tmp-archive>.zip`
+  must download, unpack, and validate a correctly shaped archive.

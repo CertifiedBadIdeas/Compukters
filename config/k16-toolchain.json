@@ -1,6 +1,7 @@
 {
   "schemaVersion": 1,
   "pin": "k16-dev-2026-06-01",
+  "artifactBaseUrl": "https://github.com/CertifiedBadIdeas/Compukter-Kraft/releases/download/k16-toolchain-k16-dev-2026-06-01",
   "requiredExecutables": [
     "bin/cargo",
     "bin/rustc",
@@ -8,13 +9,13 @@
   ],
   "hosts": {
     "linux-x86_64": {
-      "archive": "k16-toolchain-k16-dev-2026-06-01-linux-x86_64.tar.zst"
+      "archive": "k16-toolchain-k16-dev-2026-06-01-linux-x86_64.zip"
     },
     "linux-aarch64": {
-      "archive": "k16-toolchain-k16-dev-2026-06-01-linux-aarch64.tar.zst"
+      "archive": "k16-toolchain-k16-dev-2026-06-01-linux-aarch64.zip"
     },
     "macos-aarch64": {
-      "archive": "k16-toolchain-k16-dev-2026-06-01-macos-aarch64.tar.zst"
+      "archive": "k16-toolchain-k16-dev-2026-06-01-macos-aarch64.zip"
     },
     "windows-x86_64": {
       "archive": "k16-toolchain-k16-dev-2026-06-01-windows-x86_64.zip"

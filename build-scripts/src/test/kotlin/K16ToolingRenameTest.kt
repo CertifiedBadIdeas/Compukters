@@ -108,7 +108,8 @@ class K16ToolingRenameTest {
 
         assertTrue(buildScript.contains("-Zbuild-std=core"))
         assertTrue(buildScript.contains("-Zjson-target-spec"))
-        assertTrue(buildScript.contains("environment(\"RUSTFLAGS\", \"-Zunstable-options -Cjump-tables=no\")"))
+        assertTrue(buildScript.contains("\"RUSTFLAGS\""))
+        assertTrue(buildScript.contains("-C linker=\${toolchain.linker.absolutePath}"))
         assertTrue(buildScript.contains("-Cjump-tables=no"))
         assertFalse(buildScript.contains("build-std=core,alloc"))
         assertFalse(buildScript.contains("build-std=std"))
