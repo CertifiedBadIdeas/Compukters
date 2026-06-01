@@ -76,6 +76,9 @@ stage/
   bin/cargo
   bin/rustc
   bin/k16-ld
+  lib/librustc_driver-*.so
+  lib/rustlib/src/rust/library/
+  lib/rustlib/<host>/lib/
 ```
 
 Create the archive through the Gradle package task so it uses the same pinned

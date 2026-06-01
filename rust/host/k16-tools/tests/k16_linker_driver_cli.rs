@@ -24,6 +24,7 @@ fn k16_ld_links_rustc_style_bios_args_with_archive_input() {
             "-z",
             "noexecstack",
             "--gc-sections",
+            "--strip-debug",
             "--k16-target=bios",
             "-o",
             output_path.to_str().unwrap(),

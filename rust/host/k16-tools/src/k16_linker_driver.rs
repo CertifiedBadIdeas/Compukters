@@ -63,7 +63,7 @@ fn parse_linker_args(args: &[String]) -> Result<LinkerDriverConfig, String> {
                 }
             }
             "--as-needed" | "-Bstatic" | "-Bdynamic" | "--eh-frame-hdr" | "--gc-sections"
-            | "--no-gc-sections" => {}
+            | "--no-gc-sections" | "--strip-debug" => {}
             _ if arg.starts_with("--k16-target=") => {
                 let value = arg
                     .strip_prefix("--k16-target=")
