@@ -3,14 +3,13 @@
 
 ## Context
 
-The bundled K16 BIOS is still authored as Rux source at
-`rust/host/k16-tools/examples/firmware/k16_bios.rx` and Gradle builds
-`firmware/k16-bios.kflash` through `rux compile --target bios`.
+The bundled K16 BIOS used to be authored as Rux source at
+`rust/host/k16-tools/examples/firmware/k16_bios.rx` and built into
+`firmware/k16-bios.kflash` through the retired Rux compiler path.
 
-That keeps the first firmware stage tied to the legacy Rux frontend. The
-project direction is Rust-first guest software, so BIOS should become the first
-guest Rust project. Bootloader and kernel should follow the same organization,
-but they are separate implementation slices.
+That tied the first firmware stage to the legacy Rux frontend. The accepted
+project direction is Rust-first guest software, with BIOS, bootloader, and
+kernel owned by crates under `rust/guest`.
 
 ## Design Options
 
@@ -64,16 +63,20 @@ as a legacy comparison fixture only if a test explicitly labels it that way.
 
 ## Current Implementation State
 
-`rust/guest/k16-bios` now exists as the dedicated Rust BIOS guest crate. Its
-entrypoint is a `#![no_std]`, `#![no_main]` `_start` path that writes the same
-initial BIOS/no-bootable-device text through the shared `k16-abi` MMIO surface.
+`rust/guest/k16-bios` is the dedicated Rust BIOS guest crate. Its entrypoint is
+a `#![no_std]`, `#![no_main]` `_start` path that writes the same initial
+BIOS/no-bootable-device text through the shared `k16-abi` MMIO surface.
 
-The crate's executable target is gated behind an explicit `k16-target` feature
-so normal host-side workspace checks do not try to link freestanding BIOS code
-against the host runtime. The final `k16-target` build path must use the custom
-K16 Rust target pipeline. On the current local toolchain, that path is blocked
-before object emission by rustc failing to create an LLVM TargetMachine for
-`k16`; this should stay visible instead of being hidden behind a Rux fallback.
+NeoForge resource generation now depends on the shared Gradle
+`prepareK16Toolchain` path, resolves the prepared K16 toolchain, and builds the
+BIOS as a Rust `bin` crate through `k16-ld --k16-target=bios`. The resulting
+Cargo-linked artifact is copied directly to `firmware/k16-bios.kflash`.
+
+The prepared toolchain may be a published prebuilt archive, an explicit
+`k16ToolchainDir`, or a source-built staged install from
+`prepareBuiltK16Toolchain`. Missing prepared toolchain state is a hard build
+error. There is no fallback to host rustc, host linker behavior, or the old Rux
+BIOS source path.
 
 ## BIOS Contract
 
@@ -90,20 +93,26 @@ errors. There should be no fallback to the old Rux BIOS path.
 
 ## Build Integration
 
-Gradle should stop declaring `rust/host/k16-tools/examples/firmware/k16_bios.rx`
-as the bundled BIOS input. The BIOS task should depend on the Rust BIOS project
-and on the K16 packaging toolchain needed to produce `.kflash`.
+Gradle no longer declares
+`rust/host/k16-tools/examples/firmware/k16_bios.rx` as a bundled BIOS input.
+The BIOS task depends on:
 
-The first implementation may use the minimum Rust path the current toolchain can
-support, but it must be visibly the Rust BIOS path. If the custom Rust target is
-not yet capable of producing the final artifact directly, the blocker should be
-made explicit rather than hidden behind a Rux fallback.
+- the Rust BIOS crate under `rust/guest/k16-bios`;
+- the K16 target spec at `tools/k16-unknown-kraftos.json`;
+- the prepared K16 toolchain from `prepareK16Toolchain`;
+- the K16 host linker driver `k16-ld`.
+
+The BIOS build uses Cargo directly with `-Zbuild-std=core`, `RUSTC` pointed at
+the prepared K16 rustc, and explicit K16 linker flags. The selected firmware
+profile controls the Cargo profile and artifact lookup. There is no debug
+artifact fallback when release firmware is selected.
 
 ## Follow-Up Slices
 
-- #141 should apply the same guest workspace model to bootloader and kernel.
-- #143 should convert boot-chain tests away from Rux source assertions once the
-  Rust BIOS/boot/kernel artifacts exist.
+- #141 tracks remaining bootloader/kernel artifact cleanup if any old assertions
+  survive outside the active Gradle resource path.
+- #143 should convert any remaining boot-chain tests away from Rux source
+  assertions.
 - #144 remains the later cleanup for removing the Rux frontend after Rust
   replacements cover the boot chain.
 
@@ -111,7 +120,7 @@ made explicit rather than hidden behind a Rux fallback.
 
 The implementation slice should verify:
 
-- `cargo test --manifest-path rust/host/k16-tools/Cargo.toml --test k16_artifact_backend`
-- `./gradlew-sandbox :v1_21_1-neoforge:processResources`
+- `./gradlew-sandbox :v1_21_1-neoforge:processResources -Pk16ToolchainMode=prebuilt -Pk16ToolchainDir=<prepared-toolchain>`
+- `./gradlew-sandbox :v1_21_1-neoforge:test --tests '*K16FirmwareResourceTest.bundledK16BiosFlashShowsNoBootableDeviceWithBundledSystemStorage0Volume' -Pk16ToolchainMode=prebuilt -Pk16ToolchainDir=<prepared-toolchain>`
 - the generated `firmware/k16-bios.kflash` comes from the Rust BIOS project,
   not from `rux compile`.
