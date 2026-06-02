@@ -71,7 +71,7 @@ Run the bundled terminal profiling workload:
 
 ```bash
 ./gradlew \
-  -Dk16.vm.native.library="$PWD/rust/host/k16-vm/target/debug/libk16_vm.so" \
+  -Dk16.vm.native.library="$PWD/.toolchain/build/cargo/k16-vm/debug/libk16_vm.so" \
   :v1_21_1-neoforge:test \
   --tests ru.lazyhat.compukterkraft.impl.computer.vm.RuntimeDisplayProfilingTest \
   --info
@@ -81,7 +81,7 @@ Run only the held-Enter backlog workload:
 
 ```bash
 ./gradlew \
-  -Dk16.vm.native.library="$PWD/rust/host/k16-vm/target/debug/libk16_vm.so" \
+  -Dk16.vm.native.library="$PWD/.toolchain/build/cargo/k16-vm/debug/libk16_vm.so" \
   :v1_21_1-neoforge:test \
   --tests ru.lazyhat.compukterkraft.impl.computer.vm.RuntimeDisplayProfilingTest.heldEnterWorkloadProducesBacklogProfilingMetrics \
   --info
@@ -173,7 +173,7 @@ Run native-runtime JNI boundary tests:
 
 ```bash
 ./gradlew-sandbox :native-runtime:test \
-  -Dk16.vm.native.library=$PWD/rust/host/k16-vm/target/debug/libk16_vm.so
+  -Dk16.vm.native.library=$PWD/.toolchain/build/cargo/k16-vm/debug/libk16_vm.so
 ```
 
 Run a Minecraft dev client with the K16 VM native library:
@@ -189,7 +189,7 @@ Run a Minecraft dev server with the K16 VM native library:
 ```
 
 The Loom run tasks depend on `buildK16VmNativeLibrary`, which builds
-`rust/host/k16-vm/target/debug/libk16_vm.so` before launching Minecraft and
+`.toolchain/build/cargo/k16-vm/debug/libk16_vm.so` before launching Minecraft and
 passes `k16.vm.native.library=...` to the JVM.
 
 ## Interpretation notes

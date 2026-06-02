@@ -2,10 +2,12 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-LLVM_BIN_DIR="${K16_LLVM_BIN_DIR:-$ROOT/toolchains/Compukter-Kraft-llvm/build-k16/bin}"
+LLVM_BIN_DIR="${K16_LLVM_BIN_DIR:-$ROOT/.toolchain/build/llvm/k16/bin}"
 CLANG="$LLVM_BIN_DIR/clang"
 LLVM_READOBJ="$LLVM_BIN_DIR/llvm-readobj"
 RUX_CARGO_MANIFEST="$ROOT/rust/host/k16-tools/Cargo.toml"
+K16_HOST_CARGO_TARGET_DIR="${K16_HOST_CARGO_TARGET_DIR:-${CARGO_TARGET_DIR:-$ROOT/.toolchain/build/cargo/k16-tools}}"
+export CARGO_TARGET_DIR="$K16_HOST_CARGO_TARGET_DIR"
 
 require_file() {
     local path="$1"

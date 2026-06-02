@@ -86,7 +86,7 @@ Rust bootstrap is configured to use the already-built K16 LLVM through
 `llvm-config`:
 
 ```text
-toolchains/Compukter-Kraft-llvm/build-k16-min/bin/llvm-config
+.toolchain/build/llvm/k16-min/bin/llvm-config
 ```
 
 This keeps one K16 LLVM source of truth in `Compukter-Kraft-llvm` while still
@@ -98,10 +98,10 @@ Expected shape:
 toolchains/Compukter-Kraft-rust
   src/llvm-project -> Rust-pinned LLVM commit, left uninitialized
   bootstrap.toml
-  build/<host>/stage1/bin/rustc
+.toolchain/build/rust/k16/<host>/stage1/bin/rustc
 toolchains/Compukter-Kraft-llvm
   branch: k16-rust-pinned
-  build-k16-min/bin/llvm-config
+.toolchain/build/llvm/k16-min/bin/llvm-config
 ```
 
 Initialize the Rust source checkout with:
@@ -139,8 +139,8 @@ It prints a temporary `bootstrap.toml` path plus dry-run and build commands for
 Even `--dry-run` may download and build Rust bootstrap stage0 support files.
 That is expected bootstrap behavior, not a K16 codegen proof.
 
-The default build directory is `toolchains/Compukter-Kraft-rust/build/k16`,
-which is ignored by the Rust repository.
+The default build directory is `.toolchain/build/rust/k16`, which keeps Rust
+bootstrap outputs outside the tracked Rust checkout.
 
 The K16 Rust fork changes needed for the first stage1 smoke are:
 
@@ -152,7 +152,7 @@ Expected bootstrap direction:
 
 ```toml
 [target.x86_64-unknown-linux-gnu]
-llvm-config = "/absolute/path/to/toolchains/Compukter-Kraft-llvm/build-k16-min/bin/llvm-config"
+llvm-config = "/absolute/path/to/.toolchain/build/llvm/k16-min/bin/llvm-config"
 ```
 
 ### Not Enough: Nightly rustc Only

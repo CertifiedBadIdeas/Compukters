@@ -78,6 +78,8 @@ class K16VmNativePackagingConventionTest {
 
         assertTrue(rootBuild.contains("rust/host/k16-vm/src/generated/font_mono5x7.rs"))
         assertTrue(loomConvention.contains("dir(\"rust/host/k16-vm\")"))
+        assertTrue(loomConvention.contains(".toolchain/build/cargo/k16-vm"))
+        assertTrue(loomConvention.contains("environment(\"CARGO_TARGET_DIR\""))
         assertFalse(rootBuild.contains("native/k16-vm"))
         assertFalse(loomConvention.contains("native/k16-vm"))
         assertFalse(rootBuild.contains("native/rux-vm"))

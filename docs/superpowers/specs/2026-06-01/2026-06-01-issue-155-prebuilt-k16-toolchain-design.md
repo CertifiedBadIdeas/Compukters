@@ -43,15 +43,27 @@ pin.
 The default installed layout is:
 
 ```text
-.toolchain/k16/
-  <pin>/
-    <host>/
-      manifest.json
-      bin/
-        cargo
-        rustc
-        k16-ld
+.toolchain/
+  build/
+    llvm/k16-min/
+    llvm/k16/
+    rust/k16/
+    cargo/k16-tools/
+    cargo/k16-vm/
+  k16/
+    <pin>/
+      <host>/
+        manifest.json
+        bin/
+          cargo
+          rustc
+          k16-ld
 ```
+
+`toolchains/Compukter-Kraft-llvm` and `toolchains/Compukter-Kraft-rust` are
+source checkouts only. LLVM, Rust bootstrap, and host Cargo build outputs belong
+under `.toolchain/build`, while `.toolchain/k16/<pin>/<host>` is the clean
+installed toolchain root consumed by Gradle firmware builds.
 
 The archive format is zip for every host in the Gradle-installed path. Zip is
 used because Gradle can unpack it directly without adding another decompression
