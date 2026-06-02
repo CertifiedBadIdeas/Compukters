@@ -18,6 +18,7 @@
  */
 
 plugins {
+    base
     alias(libs.plugins.kotlin) apply false
     alias(libs.plugins.releaseConvention)
 }
@@ -32,6 +33,48 @@ val k16ToolchainArchiveUrl =
     providers
         .gradleProperty("k16ToolchainArchiveUrl")
         .orElse("${k16ToolchainPin.artifactBaseUrl.trimEnd('/')}/${k16ToolchainPin.archive}")
+val cleanWorkspaceSkipDirs =
+    setOf(
+        ".git",
+        ".gradle",
+        ".gradle-sandbox",
+        ".idea",
+    )
+
+fun cleanWorkspaceTargets(): List<File> {
+    val repositoryRoot = rootProject.projectDir
+    return sequenceOf(repositoryRoot.resolve(".toolchain"))
+        .plus(
+            repositoryRoot
+                .walkTopDown()
+                .onEnter { file ->
+                    file == repositoryRoot ||
+                        (file.name !in cleanWorkspaceSkipDirs && !file.resolve(".git").exists())
+                }
+                .filter { file ->
+                    file.isDirectory && (file.name == "build" || file.name == "target")
+                },
+        ).distinctBy { it.canonicalFile }
+        .toList()
+}
+
+val cleanWorkspace =
+    tasks.register("cleanWorkspace") {
+        description = "Deletes repo-local build, target, and .toolchain outputs."
+        group = "build"
+
+        doLast {
+            cleanWorkspaceTargets().forEach { target ->
+                if (target.exists()) {
+                    delete(target)
+                }
+            }
+        }
+    }
+
+tasks.named("clean") {
+    dependsOn(cleanWorkspace)
+}
 
 tasks.register<GenerateK16FontTablesTask>("generateK16FontTables") {
     description = "Generates Rust and Kotlin terminal font tables from the K16 bitmap font source."
