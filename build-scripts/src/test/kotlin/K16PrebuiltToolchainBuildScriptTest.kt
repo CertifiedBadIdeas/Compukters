@@ -135,6 +135,7 @@ class K16PrebuiltToolchainBuildScriptTest {
         assertTrue(rootBuildScript.contains("toolchains/Compukter-Kraft-llvm"))
         assertTrue(rootBuildScript.contains("toolchains/Compukter-Kraft-rust"))
         assertTrue(rootBuildScript.contains("tools/k16-rustc-bootstrap-probe.sh"))
+        assertTrue(rootBuildScript.contains("LLVM_TARGETS_TO_BUILD="))
         assertTrue(rootBuildScript.contains("LLVM_EXPERIMENTAL_TARGETS_TO_BUILD=K16"))
         assertTrue(rootBuildScript.contains("cmake"))
         assertTrue(rootBuildScript.contains("x.py"))
@@ -149,5 +150,6 @@ class K16PrebuiltToolchainBuildScriptTest {
         assertTrue(docs.contains(".toolchain/build/llvm/k16-min"))
         assertTrue(docs.contains(".toolchain/build/rust/k16"))
         assertTrue(docs.contains(".toolchain/build/cargo/k16-tools"))
+        assertTrue(docs.contains("only the K16 LLVM backend"))
     }
 }

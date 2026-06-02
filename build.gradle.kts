@@ -145,6 +145,7 @@ val configureK16Llvm =
             k16LlvmSourceRoot.resolve("llvm").absolutePath,
             "-B",
             k16LlvmBuildRoot.absolutePath,
+            "-DLLVM_TARGETS_TO_BUILD=",
             "-DLLVM_EXPERIMENTAL_TARGETS_TO_BUILD=K16",
         )
 
