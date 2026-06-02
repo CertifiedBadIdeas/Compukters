@@ -46,6 +46,16 @@ tracked source checkouts. Their build trees should live under `.toolchain/build`
 instead of inside the source checkouts. The clean install layout consumed by mod
 and firmware builds remains `.toolchain/k16/<pin>/<host>/`.
 
+The root Gradle `clean` task depends on `cleanWorkspace`, which deletes
+`.toolchain` plus repo-local `build/` and `target/` directories. It does not
+descend into nested Git checkout roots or submodules, because toolchain source
+trees can contain tracked fixtures named `build` or `target`. Use it when you
+want to remove generated JVM, Rust, LLVM, and staged toolchain outputs:
+
+```bash
+./gradlew-sandbox clean
+```
+
 The normal entry points are still regular Gradle tasks:
 
 ```bash

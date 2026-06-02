@@ -97,4 +97,19 @@ class K16PrebuiltToolchainBuildScriptTest {
         assertTrue(docs.contains("RUSTC_BOOTSTRAP=1"))
         assertTrue(docs.contains("lib/rustlib/<host>/lib/"))
     }
+
+    @Test
+    fun rootCleanRemovesWorkspaceBuildAndTargetOutputs() {
+        val rootBuildScript = root.resolve("build.gradle.kts").readText()
+
+        assertTrue(rootBuildScript.contains("tasks.register(\"cleanWorkspace\")"))
+        assertTrue(rootBuildScript.contains("tasks.named(\"clean\")"))
+        assertTrue(rootBuildScript.contains("dependsOn(cleanWorkspace)"))
+        assertTrue(rootBuildScript.contains(".toolchain"))
+        assertTrue(rootBuildScript.contains("walkTopDown()"))
+        assertTrue(rootBuildScript.contains("file.name == \"build\" || file.name == \"target\""))
+        assertTrue(rootBuildScript.contains("!file.resolve(\".git\").exists()"))
+        assertTrue(rootBuildScript.contains(".git"))
+        assertTrue(rootBuildScript.contains(".gradle-sandbox"))
+    }
 }
