@@ -43,7 +43,7 @@ pin.
 The default installed layout is:
 
 ```text
-~/.cache/compukter-kraft/k16-toolchains/
+.toolchain/k16/
   <pin>/
     <host>/
       manifest.json
@@ -58,25 +58,31 @@ used because Gradle can unpack it directly without adding another decompression
 toolchain dependency to normal mod builds.
 
 `downloadK16ToolchainArchive` downloads the host archive from
-`artifactBaseUrl/archive` into the module build directory.
+`artifactBaseUrl/archive` into the root build directory.
 `installK16Toolchain` verifies the archive SHA-256 before unpacking it into the
-cache layout, then validates the installed root before firmware tasks use it.
+repo-local `.toolchain` layout, then validates the installed root before
+firmware tasks use it.
 
 ## Explicit Local Toolchain
 
 A source-built local toolchain can be used only by explicitly pointing Gradle at
-an installed-layout directory:
+already-built local toolchain binaries:
 
 ```text
--Pk16ToolchainDir=/absolute/path/to/k16-toolchain
+-Pk16ToolchainMode=local
+-Pk16CargoPath=/absolute/path/to/cargo
+-Pk16RustcPath=/absolute/path/to/rustc
+-Pk16LdPath=/absolute/path/to/k16-ld
 ```
 
-That directory must contain the same `manifest.json` and `bin/*` files as a
-prebuilt install. This keeps local toolchain development explicit while keeping
-the firmware build code identical for prebuilt and local sources.
+`stageK16Toolchain` copies those explicit binaries and required runtime libs
+into the same `.toolchain/k16/<pin>/<host>/` layout used by the prebuilt path.
+This keeps local toolchain development explicit while keeping the firmware build
+code identical after preparation.
 
-When `k16ToolchainDir` is set, the install task is skipped. The selected local
-directory is still validated by the firmware tasks before Cargo is executed.
+When `k16ToolchainMode=local` is set, download/install tasks are skipped. The
+staged layout is still validated by `prepareK16Toolchain` before Cargo is
+executed.
 
 ## Symlink Policy
 
@@ -100,10 +106,12 @@ artifacts, or another installed K16 toolchain.
 ## First Implementation Slice
 
 - Add `config/k16-toolchain.json`.
-- Add a Gradle resolver used by BIOS, bootloader, and kernel firmware tasks.
-- Replace the three large per-binary environment variables with one explicit
-  optional `k16ToolchainDir` Gradle property.
+- Add a top-level Gradle resolver used by BIOS, bootloader, and kernel firmware
+  tasks.
+- Replace ad hoc per-module toolchain wiring with explicit `prebuilt` and
+  `local` toolchain modes.
 - Add Gradle download/install tasks for pinned zip archives.
+- Add Gradle local staging and packaging tasks that write to `.toolchain`.
 - Verify archive SHA-256 before unpacking.
 - Document the maintainer publish flow.
 
@@ -111,8 +119,10 @@ artifacts, or another installed K16 toolchain.
 
 - `./gradlew-sandbox :v1_21_1-neoforge:compileKotlin`
 - `./gradlew-sandbox :build-scripts:test --tests K16PrebuiltToolchainBuildScriptTest`
-- `./gradlew-sandbox :v1_21_1-neoforge:downloadK16ToolchainArchive -Pk16ToolchainArchiveUrl=file:///tmp/missing.zip`
+- `./gradlew-sandbox :downloadK16ToolchainArchive -Pk16ToolchainArchiveUrl=file:///tmp/missing.zip`
   must fail before Cargo starts and tell the user to publish a prebuilt archive
   or pass `-Pk16ToolchainDir`.
-- `./gradlew-sandbox :v1_21_1-neoforge:installK16Toolchain -Pk16ToolchainCacheDir=<tmp-cache> -Pk16ToolchainArchiveUrl=file:///<tmp-archive>.zip`
-  with a mismatched archive checksum must fail before unpacking into the cache.
+- `./gradlew-sandbox :installK16Toolchain -Pk16ToolchainArchiveUrl=file:///<tmp-archive>.zip`
+  with a mismatched archive checksum must fail before unpacking into `.toolchain`.
+- `./gradlew-sandbox :stageK16Toolchain -Pk16ToolchainMode=local ...`
+- `./gradlew-sandbox :v1_21_1-neoforge:processResources -Pk16ToolchainMode=local ...`
