@@ -161,6 +161,8 @@ class K16PrebuiltToolchainBuildScriptTest {
         assertTrue(bootstrapProbe.contains("lto"))
         assertTrue(rootBuildScript.contains("cmake"))
         assertTrue(rootBuildScript.contains("x.py"))
+        assertTrue(rootBuildScript.contains("library/std"))
+        assertTrue(rootBuildScript.contains("libstd-*.rlib"))
         assertTrue(rootBuildScript.contains("cargo"))
         assertTrue(rootBuildScript.contains("stage0/bin/cargo"))
         assertTrue(rootBuildScript.contains("stage1/bin/rustc"))

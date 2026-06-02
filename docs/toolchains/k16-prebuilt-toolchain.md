@@ -127,7 +127,8 @@ install layout, and prints `K16_CARGO`, `K16_RUSTC`, and `K16_LD` shell exports.
 The lower-level source build task builds:
 
 - patched LLVM in `.toolchain/build/llvm/k16-min` with the native host LLVM backend plus K16;
-- patched Rust bootstrap outputs in `.toolchain/build/rust/k16`;
+- patched Rust bootstrap outputs in `.toolchain/build/rust/k16`, including the
+  stage1 compiler and host `library/std`;
 - K16 host tools in `.toolchain/build/cargo/k16-tools`.
 
 `buildK16Llvm` builds LLVM in parallel by default using the available CPU count.
@@ -142,8 +143,9 @@ toolchains/Compukter-Kraft-rust
 ```
 
 `buildK16ToolchainFromSource` runs the strict Rust/LLVM compatibility probe
-before `x.py` builds `compiler/rustc`. The staged toolchain is then copied into
-the same clean install layout used by prebuilt consumers:
+before `x.py` builds `compiler/rustc` and host `library/std`. The staged
+toolchain is then copied into the same clean install layout used by prebuilt
+consumers:
 
 ```text
 .toolchain/k16/<pin>/<host>/
