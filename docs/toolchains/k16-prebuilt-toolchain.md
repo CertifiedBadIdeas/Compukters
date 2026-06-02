@@ -124,7 +124,7 @@ directly into `.toolchain/build`:
 
 This task builds:
 
-- patched LLVM in `.toolchain/build/llvm/k16-min`;
+- patched LLVM in `.toolchain/build/llvm/k16-min` with only the K16 LLVM backend;
 - patched Rust bootstrap outputs in `.toolchain/build/rust/k16`;
 - K16 host tools in `.toolchain/build/cargo/k16-tools`.
 
