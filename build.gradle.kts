@@ -57,6 +57,8 @@ val k16RustcDriverLibRoot = k16BuiltRustc.parentFile.parentFile.resolve("lib")
 val k16RustcHostLibRoot = k16RustcDriverLibRoot.resolve("rustlib/$k16BootstrapHost/lib")
 val k16LlvmBuildTargets =
     listOf(
+        "FileCheck",
+        "LLVMLTO",
         "llvm-config",
         "llvm-ar",
         "llvm-as",
@@ -160,7 +162,10 @@ val buildK16Llvm =
         group = "k16"
         dependsOn(configureK16Llvm)
         inputs.dir(k16LlvmSourceRoot.resolve("llvm"))
+        inputs.property("k16LlvmBuildTargets", k16LlvmBuildTargets)
         outputs.file(k16LlvmConfig)
+        outputs.file(k16LlvmBuildRoot.resolve("bin/FileCheck"))
+        outputs.file(k16LlvmBuildRoot.resolve("lib/libLLVMLTO.a"))
         commandLine(
             listOf(
                 "cmake",
