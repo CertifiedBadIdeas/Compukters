@@ -119,10 +119,12 @@ Maintainers can build the K16 toolchain from the checked-out source repositories
 directly into `.toolchain/build`:
 
 ```bash
-./gradlew-sandbox :buildK16ToolchainFromSource
+./gradlew-sandbox :prepareBuiltK16Toolchain
 ```
 
-This task builds:
+This task depends on `buildK16ToolchainFromSource`, validates the staged
+install layout, and prints `K16_CARGO`, `K16_RUSTC`, and `K16_LD` shell exports.
+The lower-level source build task builds:
 
 - patched LLVM in `.toolchain/build/llvm/k16-min` with only the K16 LLVM backend;
 - patched Rust bootstrap outputs in `.toolchain/build/rust/k16`;

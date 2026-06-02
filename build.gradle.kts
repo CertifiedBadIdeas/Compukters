@@ -322,6 +322,24 @@ tasks.register("buildK16ToolchainFromSource") {
     dependsOn(stageBuiltK16Toolchain)
 }
 
+tasks.register("prepareBuiltK16Toolchain") {
+    description = "Builds and prepares the source-built K16 toolchain, then prints its environment."
+    group = "k16"
+    dependsOn(stageBuiltK16Toolchain)
+
+    doLast {
+        val toolchain =
+            validateK16ToolchainPath(
+                root = k16ToolchainInstallRoot,
+                origin = "stageBuiltK16Toolchain",
+                requiredExecutables = k16ToolchainPin.requiredExecutables,
+            )
+        println("export K16_CARGO=${toolchain.cargo.absolutePath}")
+        println("export K16_RUSTC=${toolchain.rustc.absolutePath}")
+        println("export K16_LD=${toolchain.linker.absolutePath}")
+    }
+}
+
 tasks.register<Zip>("packageBuiltK16Toolchain") {
     description = "Packages the source-built staged K16 toolchain into the pinned host archive shape."
     group = "k16"
