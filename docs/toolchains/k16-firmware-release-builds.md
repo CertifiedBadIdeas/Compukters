@@ -6,11 +6,14 @@
 Bundled K16 firmware can be built through either a debug or release Cargo
 profile. Development resource builds use the debug profile by default.
 `buildProductionUniversalJar` selects the release firmware profile by default,
-and maintainers can force the same path explicitly:
+and maintainers can force the same path explicitly. The toolchain can be a
+local staged install from `prepareBuiltK16Toolchain`; this does not require
+publishing a GitHub release artifact:
 
 ```bash
 ./gradlew-sandbox :v1_21_1-neoforge:processResources \
-  -Pk16ToolchainDir=/absolute/path/to/k16-toolchain \
+  -Pk16ToolchainMode=prebuilt \
+  -Pk16ToolchainDir=/absolute/path/to/.toolchain/k16/<pin>/<host> \
   -Pk16FirmwareProfile=release
 ```
 
@@ -29,3 +32,8 @@ Release firmware uses Cargo's release profile and no longer overrides
 `opt-level` back to zero. The firmware tasks still pass explicit K16-safe flags
 for jump tables, debug info, debug assertions, overflow checks, UB checks, panic
 strategy, and static relocation.
+
+The selected prepared toolchain must include host `library/std` sysroot
+artifacts as well as the K16 Rust source tree. Cargo needs host std for build
+scripts even when the firmware target itself is freestanding and builds only
+`core`.

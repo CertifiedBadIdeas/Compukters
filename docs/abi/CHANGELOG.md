@@ -19,6 +19,11 @@
   through `k16-ld --k16-target=boot|kernel`. The bundled guest firmware path no
   longer emits intermediate objects through Gradle for BIOS, bootloader, or
   kernel artifacts.
+- Bundled K16 firmware builds now resolve the K16 Rust toolchain through the
+  shared Gradle `prepareK16Toolchain` path. Source-built prepared toolchains
+  stage the K16 stage1 rustc, `k16-ld`, Rust source, and matching host
+  `library/std` sysroot artifacts so Cargo can compile host build scripts while
+  building freestanding K16 `core`.
 - Cargo-built K16 Rust bins now link `k16-rt` explicitly for freestanding
   platform symbols such as `abort`, while Rust `compiler_builtins` remains the
   provider for compiler arithmetic helper symbols pulled from `.rlib` archives.
@@ -26,15 +31,13 @@
   object inputs with a reset-address trampoline that initializes `sp` and jumps
   to `_start`, so Rust-authored BIOS firmware has a host-tool path to `.kflash`
   without the retired Rux compiler.
-- NeoForge bundled BIOS generation now points at `rust/guest/k16-bios` and
-  requires explicit `K16_CARGO` and `K16_RUSTC` K16 Rust toolchain inputs;
-  missing Rust BIOS toolchain state is a hard build error, not a fallback to
+- NeoForge bundled BIOS generation now points at `rust/guest/k16-bios`; missing
+  prepared Rust BIOS toolchain state is a hard build error, not a fallback to
   deleted `.rx` sources.
 - Added guest-owned Rust bootloader and kernel crate scaffolds under
   `rust/guest/k16-boot` and `rust/guest/k16-kernel`. NeoForge boot/kernel
-  artifact generation now uses explicit Rust object build tasks plus
-  `k16 link --target boot|kernel`, with missing `K16_RUSTC` reported as a hard
-  guest Rust toolchain error.
+  artifact generation now uses the same prepared K16 Rust toolchain path, with
+  missing toolchain state reported as a hard guest Rust build error.
 - The public `rux` CLI surface and active Rux compiler/frontend sources are
   retired. K16 artifact work stays under `k16`, and guest-owned source belongs
   under `rust/guest`.

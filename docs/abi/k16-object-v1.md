@@ -69,9 +69,16 @@ rust/guest/k16-boot   -> k16-ld --k16-target=boot   -> kernel-loader.kb
 rust/guest/k16-kernel -> k16-ld --k16-target=kernel -> display-ok.kx
 ```
 
-These builds are freestanding Rust `bin` crates. They require explicit
-`K16_CARGO`, `K16_RUSTC`, and `K16_LD` inputs. Missing toolchain paths are hard
-configuration errors.
+These builds are freestanding Rust `bin` crates. Gradle resolves a prepared K16
+toolchain through `prepareK16Toolchain`, then invokes Cargo with `RUSTC` and
+K16 linker flags pointed at that prepared install. Missing toolchain state is a
+hard configuration error. There is no fallback to host rustc, host linker
+behavior, or retired Rux source generation.
+
+Source-built prepared toolchains must include the stage1 K16 rustc, `k16-ld`,
+Rust source for `-Zbuild-std=core`, and the matching host `library/std` sysroot
+artifacts. The host std artifacts are required because Cargo compiles build
+scripts for the host while it builds freestanding K16 `core`.
 
 ## Freestanding Runtime Boundary
 
