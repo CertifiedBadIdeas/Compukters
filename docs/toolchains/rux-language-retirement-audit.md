@@ -55,7 +55,7 @@ pieces: K16 disassembly, object linking, K16E encoding, volume/filesystem
 tooling, inspect/run helpers, and Rust-target smoke support. Guest runtime
 source belongs under `rust/guest/k16-rt`.
 
-## Build Integration Status
+## Retired Build Integration
 
 The old NeoForge Rux-source build integration generated bundled firmware and
 storage images from:
@@ -64,9 +64,18 @@ storage images from:
 - `kernel_loader.rx` -> `kernel-loader.kb`;
 - `display_ok.rx` -> `display-ok.kx`.
 
-Those source inputs are not the intended guest software structure. New BIOS,
-bootloader, kernel, runtime, and program work should be Rust-owned under
-`rust/guest`.
+Those source inputs are retired from the active bundled firmware path. BIOS,
+bootloader, kernel, runtime, and program work is Rust-owned under `rust/guest`.
+
+The active NeoForge resource generation path now builds:
+
+- `rust/guest/k16-bios` -> `firmware/k16-bios.kflash`;
+- `rust/guest/k16-boot` -> `kernel-loader.kb`;
+- `rust/guest/k16-kernel` -> `display-ok.kx`.
+
+These builds resolve a prepared K16 Rust toolchain through Gradle
+`prepareK16Toolchain` and link through `k16-ld`. Missing prepared toolchain
+state is a hard error; there is no fallback to the retired Rux source inputs.
 
 ## Test Blockers
 
