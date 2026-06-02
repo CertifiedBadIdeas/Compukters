@@ -126,9 +126,13 @@ This task depends on `buildK16ToolchainFromSource`, validates the staged
 install layout, and prints `K16_CARGO`, `K16_RUSTC`, and `K16_LD` shell exports.
 The lower-level source build task builds:
 
-- patched LLVM in `.toolchain/build/llvm/k16-min` with only the K16 LLVM backend;
+- patched LLVM in `.toolchain/build/llvm/k16-min` with the native host LLVM backend plus K16;
 - patched Rust bootstrap outputs in `.toolchain/build/rust/k16`;
 - K16 host tools in `.toolchain/build/cargo/k16-tools`.
+
+`buildK16Llvm` builds LLVM in parallel by default using the available CPU count.
+Override it with `-Pk16LlvmBuildJobs=<jobs>` when a machine needs a tighter CPU or
+memory limit.
 
 The source checkouts are:
 
