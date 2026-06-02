@@ -123,6 +123,23 @@ fun requireBuiltFile(
     return file
 }
 
+fun requireBuiltFileMatching(
+    directory: File,
+    glob: String,
+    label: String,
+    producer: String,
+) {
+    requireDirectory(directory, "$producer $label directory")
+    val matcher = directory.toPath().fileSystem.getPathMatcher("glob:$glob")
+    val match =
+        directory
+            .listFiles()
+            ?.firstOrNull { file -> file.isFile && matcher.matches(file.toPath().fileName) }
+    check(match != null) {
+        "$producer did not produce $label matching $glob in $directory"
+    }
+}
+
 fun cleanWorkspaceTargets(): List<File> {
     val repositoryRoot = rootProject.projectDir
     return repositoryRoot
@@ -258,18 +275,29 @@ val buildK16Rustc =
         workingDir(k16RustSourceRoot)
         inputs.dir(k16RustSourceRoot)
         inputs.file(k16RustBootstrapConfig)
+        inputs.property("k16RustBuildTargets", listOf("compiler/rustc", "library/std"))
         outputs.file(k16BuiltRustc)
+        outputs.dir(k16RustcHostLibRoot)
+        outputs.upToDateWhen {
+            k16RustcHostLibRoot
+                .listFiles()
+                ?.any { file -> file.isFile && file.name.startsWith("libstd-") && file.name.endsWith(".rlib") } == true
+        }
         commandLine(
             k16RustSourceRoot.resolve("x.py").absolutePath,
             "build",
             "--config",
             k16RustBootstrapConfig.absolutePath,
             "compiler/rustc",
+            "library/std",
         )
 
         doFirst {
             requireBuiltFile(k16RustSourceRoot.resolve("x.py"), "x.py", "K16 Rust source checkout")
             requireBuiltFile(k16RustBootstrapConfig, "bootstrap.toml", "writeK16RustBootstrapConfig")
+        }
+        doLast {
+            requireBuiltFileMatching(k16RustcHostLibRoot, "libstd-*.rlib", "host libstd", "buildK16Rustc")
         }
     }
 
@@ -323,6 +351,7 @@ val stageBuiltK16Toolchain =
             requireBuiltFile(k16BuiltLd, "k16-ld", "buildK16HostTools", executable = true)
             requireDirectory(k16RustcDriverLibRoot, "source-built rustc runtime library directory")
             requireDirectory(k16RustcHostLibRoot, "source-built rustc host runtime library directory")
+            requireBuiltFileMatching(k16RustcHostLibRoot, "libstd-*.rlib", "host libstd", "buildK16Rustc")
         }
 
         doLast {
