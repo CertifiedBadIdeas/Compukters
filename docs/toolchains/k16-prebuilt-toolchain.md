@@ -47,10 +47,11 @@ instead of inside the source checkouts. The clean install layout consumed by mod
 and firmware builds remains `.toolchain/k16/<pin>/<host>/`.
 
 The root Gradle `clean` task depends on `cleanWorkspace`, which deletes
-`.toolchain` plus repo-local `build/` and `target/` directories. It does not
-descend into nested Git checkout roots or submodules, because toolchain source
-trees can contain tracked fixtures named `build` or `target`. Use it when you
-want to remove generated JVM, Rust, LLVM, and staged toolchain outputs:
+repo-local `build/` and `target/` directories but preserves `.toolchain`. It
+also does not descend into nested Git checkout roots or submodules, because
+toolchain source trees can contain tracked fixtures named `build` or `target`.
+Use it when you want to remove generated JVM and Rust build outputs without
+discarding installed or source-built K16 toolchains:
 
 ```bash
 ./gradlew-sandbox clean

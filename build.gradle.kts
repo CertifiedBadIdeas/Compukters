@@ -39,6 +39,7 @@ val cleanWorkspaceSkipDirs =
         ".gradle",
         ".gradle-sandbox",
         ".idea",
+        ".toolchain",
     )
 val k16LlvmSourceRoot = rootProject.file(providers.gradleProperty("k16LlvmSourceDir").orElse("toolchains/Compukter-Kraft-llvm").get())
 val k16RustSourceRoot = rootProject.file(providers.gradleProperty("k16RustSourceDir").orElse("toolchains/Compukter-Kraft-rust").get())
@@ -102,24 +103,21 @@ fun requireBuiltFile(
 
 fun cleanWorkspaceTargets(): List<File> {
     val repositoryRoot = rootProject.projectDir
-    return sequenceOf(repositoryRoot.resolve(".toolchain"))
-        .plus(
-            repositoryRoot
-                .walkTopDown()
-                .onEnter { file ->
-                    file == repositoryRoot ||
-                        (file.name !in cleanWorkspaceSkipDirs && !file.resolve(".git").exists())
-                }
-                .filter { file ->
-                    file.isDirectory && (file.name == "build" || file.name == "target")
-                },
-        ).distinctBy { it.canonicalFile }
+    return repositoryRoot
+        .walkTopDown()
+        .onEnter { file ->
+            file == repositoryRoot ||
+                (file.name !in cleanWorkspaceSkipDirs && !file.resolve(".git").exists())
+        }
+        .filter { file ->
+            file.isDirectory && (file.name == "build" || file.name == "target")
+        }.distinctBy { it.canonicalFile }
         .toList()
 }
 
 val cleanWorkspace =
     tasks.register("cleanWorkspace") {
-        description = "Deletes repo-local build, target, and .toolchain outputs."
+        description = "Deletes repo-local build and target outputs while preserving .toolchain."
         group = "build"
 
         doLast {
