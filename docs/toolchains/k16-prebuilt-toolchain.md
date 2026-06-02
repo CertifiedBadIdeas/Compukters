@@ -24,6 +24,28 @@ bin/rustc
 bin/k16-ld
 ```
 
+## Workspace Layout
+
+The repo uses one ignored `.toolchain` workspace for both source-built outputs
+and installed toolchains:
+
+```text
+.toolchain/
+  build/
+    llvm/k16-min/
+    llvm/k16/
+    rust/k16/
+    cargo/k16-tools/
+    cargo/k16-vm/
+  k16/
+    <pin>/<host>/
+```
+
+`toolchains/Compukter-Kraft-llvm` and `toolchains/Compukter-Kraft-rust` remain
+tracked source checkouts. Their build trees should live under `.toolchain/build`
+instead of inside the source checkouts. The clean install layout consumed by mod
+and firmware builds remains `.toolchain/k16/<pin>/<host>/`.
+
 The normal entry points are still regular Gradle tasks:
 
 ```bash

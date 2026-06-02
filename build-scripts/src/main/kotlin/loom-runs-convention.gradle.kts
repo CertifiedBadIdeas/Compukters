@@ -54,11 +54,12 @@ fun RunConfigSettings.applyShared() {
 private val DEV_CLIENT_USERNAMES = listOf("DevA", "DevB", "DevC")
 
 private val k16VmCrateDir = rootProject.layout.projectDirectory.dir("rust/host/k16-vm")
+private val k16VmCargoTargetDir = rootProject.layout.projectDirectory.dir(".toolchain/build/cargo/k16-vm")
 private val k16VmNativePlatform = currentK16VmNativePlatform()
-private val k16VmNativeLibrary = k16VmCrateDir.file("target/debug/${k16VmNativePlatform.libraryName}")
-private val k16VmReleaseNativeLibrary = k16VmCrateDir.file("target/release/${k16VmNativePlatform.libraryName}")
+private val k16VmNativeLibrary = k16VmCargoTargetDir.file("debug/${k16VmNativePlatform.libraryName}")
+private val k16VmReleaseNativeLibrary = k16VmCargoTargetDir.file("release/${k16VmNativePlatform.libraryName}")
 private val k16VmWindowsX64Target = "x86_64-pc-windows-gnu"
-private val k16VmWindowsX64NativeLibrary = k16VmCrateDir.file("target/$k16VmWindowsX64Target/release/k16_vm.dll")
+private val k16VmWindowsX64NativeLibrary = k16VmCargoTargetDir.file("$k16VmWindowsX64Target/release/k16_vm.dll")
 private val k16VmNativeDistDir = k16VmCrateDir.dir("dist/natives")
 private val productionK16VmNativeResources = layout.buildDirectory.dir("generated/production-k16-vm-native-resources")
 private val isProductionUniversalJarRequested =
@@ -72,6 +73,7 @@ val buildK16VmNativeLibrary =
         description = "Build the local K16 VM JNI library used by K16 VM dev run configurations."
         workingDir = k16VmCrateDir.asFile
         commandLine("cargo", "build")
+        environment("CARGO_TARGET_DIR", k16VmCargoTargetDir.asFile.absolutePath)
         inputs.file(k16VmCrateDir.file("Cargo.toml"))
         inputs.file(k16VmCrateDir.file("Cargo.lock"))
         inputs.dir(k16VmCrateDir.dir("src"))
@@ -84,6 +86,7 @@ val buildK16VmNativeLibraryRelease =
         description = "Build the release K16 VM JNI library for bundling into production mod jars."
         workingDir = k16VmCrateDir.asFile
         commandLine("cargo", "build", "--release")
+        environment("CARGO_TARGET_DIR", k16VmCargoTargetDir.asFile.absolutePath)
         inputs.file(k16VmCrateDir.file("Cargo.toml"))
         inputs.file(k16VmCrateDir.file("Cargo.lock"))
         inputs.dir(k16VmCrateDir.dir("src"))
@@ -96,6 +99,7 @@ val buildK16VmWindowsX64NativeLibraryRelease =
         description = "Cross-build the release K16 VM JNI library for Windows x64 production jars."
         workingDir = k16VmCrateDir.asFile
         commandLine("cargo", "build", "--release", "--target", k16VmWindowsX64Target)
+        environment("CARGO_TARGET_DIR", k16VmCargoTargetDir.asFile.absolutePath)
         environment("CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER", "x86_64-w64-mingw32-gcc")
         inputs.file(k16VmCrateDir.file("Cargo.toml"))
         inputs.file(k16VmCrateDir.file("Cargo.lock"))

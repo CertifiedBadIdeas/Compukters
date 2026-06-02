@@ -83,7 +83,8 @@ dependencies {
 }
 
 val k16VmNativePlatform = currentK16VmNativePlatform()
-val k16VmNativeLibrary = rootProject.layout.projectDirectory.file("rust/host/k16-vm/target/debug/${k16VmNativePlatform.libraryName}")
+val k16VmNativeLibrary =
+    rootProject.layout.projectDirectory.file(".toolchain/build/cargo/k16-vm/debug/${k16VmNativePlatform.libraryName}")
 val generatedK16FirmwareResources = layout.buildDirectory.dir("generated/k16-firmware-resources")
 val generatedK16FirmwareArtifacts = layout.buildDirectory.dir("generated/k16-firmware-artifacts")
 val generatedK16GuestTarget = layout.buildDirectory.dir("generated/k16-guest-target")
@@ -100,6 +101,7 @@ val k16FirmwareProfile =
         .orElse(if (isProductionUniversalJarRequested) "release" else "debug")
 val k16ToolsManifest = rootProject.layout.projectDirectory.file("rust/host/k16-tools/Cargo.toml")
 val k16ToolsSource = rootProject.layout.projectDirectory.dir("rust/host/k16-tools/src")
+val k16ToolsCargoTargetDir = rootProject.layout.projectDirectory.dir(".toolchain/build/cargo/k16-tools")
 val k16GuestManifest = rootProject.layout.projectDirectory.file("rust/guest/Cargo.toml")
 val k16BiosManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-bios/Cargo.toml")
 val k16BiosSource = rootProject.layout.projectDirectory.file("rust/guest/k16-bios/src/main.rs")
@@ -391,6 +393,7 @@ val createK16SystemStorage0 =
             "--size",
             "1048576",
         )
+        environment("CARGO_TARGET_DIR", k16ToolsCargoTargetDir.asFile.absolutePath)
     }
 
 val putK16SystemStorage0Boot =
@@ -414,6 +417,7 @@ val putK16SystemStorage0Boot =
             k16SystemStorage0Resource.get().asFile.absolutePath,
             k16BootArtifact.get().asFile.absolutePath,
         )
+        environment("CARGO_TARGET_DIR", k16ToolsCargoTargetDir.asFile.absolutePath)
     }
 
 val compileK16SystemStorage0 =
@@ -438,6 +442,7 @@ val compileK16SystemStorage0 =
             k16SystemStorage0Resource.get().asFile.absolutePath,
             k16KernelArtifact.get().asFile.absolutePath,
         )
+        environment("CARGO_TARGET_DIR", k16ToolsCargoTargetDir.asFile.absolutePath)
     }
 
 sourceSets.main {

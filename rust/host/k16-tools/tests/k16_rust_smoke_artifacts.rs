@@ -52,6 +52,10 @@ fn rust_nocore_smoke_artifacts_are_documented_and_strict() {
     assert!(!spec.contains("\"executables\": false"));
 
     let llvm_smoke = fs::read_to_string(&llvm_smoke_script).expect("LLVM smoke script exists");
+    assert!(llvm_smoke.contains(".toolchain/build/llvm/k16-min/bin"));
+    assert!(llvm_smoke.contains(".toolchain/build/cargo/k16-tools"));
+    assert!(llvm_smoke.contains("K16_HOST_CARGO_TARGET_DIR"));
+    assert!(!llvm_smoke.contains("toolchains/Compukter-Kraft-llvm/build-k16-min/bin"));
     assert!(llvm_smoke.contains("--bin k16"));
     assert!(llvm_smoke.contains("main.kx"));
     assert!(llvm_smoke.contains("call-helper.kx"));
@@ -60,6 +64,10 @@ fn rust_nocore_smoke_artifacts_are_documented_and_strict() {
     assert!(!llvm_smoke.contains(".k16e"));
 
     let clang_smoke = fs::read_to_string(&clang_smoke_script).expect("Clang smoke script exists");
+    assert!(clang_smoke.contains(".toolchain/build/llvm/k16/bin"));
+    assert!(clang_smoke.contains(".toolchain/build/cargo/k16-tools"));
+    assert!(clang_smoke.contains("K16_HOST_CARGO_TARGET_DIR"));
+    assert!(!clang_smoke.contains("toolchains/Compukter-Kraft-llvm/build-k16/bin"));
     assert!(clang_smoke.contains("--bin k16"));
     assert!(clang_smoke.contains("main.kx"));
     assert!(!clang_smoke.contains("--bin rux"));
@@ -68,6 +76,9 @@ fn rust_nocore_smoke_artifacts_are_documented_and_strict() {
     let script = fs::read_to_string(&smoke_script).expect("Rust no_core smoke script exists");
     assert!(script.contains("K16_RUSTC"));
     assert!(script.contains("K16_LLVM_BIN_DIR"));
+    assert!(script.contains(".toolchain/build/llvm/k16-min/bin"));
+    assert!(script.contains(".toolchain/build/cargo/k16-tools"));
+    assert!(script.contains("K16_HOST_CARGO_TARGET_DIR"));
     assert!(script.contains("K16_RUST_TARGET_JSON"));
     assert!(script.contains("tools/k16-unknown-kraftos.json"));
     assert!(script.contains("#![no_core]"));
@@ -101,6 +112,9 @@ fn rust_nocore_smoke_artifacts_are_documented_and_strict() {
     assert!(core_script.contains("core::hint::spin_loop"));
     assert!(core_script.contains("K16_RUSTC"));
     assert!(core_script.contains("K16_LLVM_BIN_DIR"));
+    assert!(core_script.contains(".toolchain/build/llvm/k16-min/bin"));
+    assert!(core_script.contains(".toolchain/build/cargo/k16-tools"));
+    assert!(core_script.contains("K16_HOST_CARGO_TARGET_DIR"));
     assert!(core_script.contains("K16_RUST_TARGET_JSON"));
     assert!(core_script.contains("tools/k16-unknown-kraftos.json"));
     assert!(core_script.contains("k16-memory-helpers"));
@@ -141,8 +155,10 @@ fn rust_nocore_smoke_artifacts_are_documented_and_strict() {
     assert!(probe.contains("K16_RUST_BUILD_DIR"));
     assert!(probe.contains("K16_RUST_HOST"));
     assert!(probe.contains("toolchains/Compukter-Kraft-rust"));
-    assert!(probe.contains("toolchains/Compukter-Kraft-llvm/build-k16-min/bin/llvm-config"));
-    assert!(probe.contains("build/k16"));
+    assert!(probe.contains(".toolchain/build/llvm/k16-min/bin/llvm-config"));
+    assert!(probe.contains(".toolchain/build/rust/k16"));
+    assert!(!probe.contains("toolchains/Compukter-Kraft-llvm/build-k16-min/bin/llvm-config"));
+    assert!(!probe.contains("$RUST_SRC/build/k16"));
     assert!(probe.contains("REQUIRED_LLVM_TOOLS"));
     assert!(probe.contains("llvm-cov"));
     assert!(probe.contains("llvm-nm"));
@@ -167,12 +183,16 @@ fn rust_nocore_smoke_artifacts_are_documented_and_strict() {
     let llvm_docs = fs::read_to_string(&llvm_docs).expect("LLVM smoke docs exist");
     assert!(llvm_docs.contains("tools/k16-llvm-smoke.sh"));
     assert!(llvm_docs.contains("K16_LLVM_BIN_DIR"));
+    assert!(llvm_docs.contains(".toolchain/build/llvm/k16-min/bin"));
+    assert!(!llvm_docs.contains("toolchains/Compukter-Kraft-llvm/build-k16-min/bin"));
     assert!(!llvm_docs.contains("tools/rux16-llvm-smoke.sh"));
     assert!(!llvm_docs.contains("RUX16_LLVM_BIN_DIR"));
 
     let clang_docs = fs::read_to_string(&clang_docs).expect("Clang smoke docs exist");
     assert!(clang_docs.contains("tools/k16-clang-smoke.sh"));
     assert!(clang_docs.contains("K16_LLVM_BIN_DIR"));
+    assert!(clang_docs.contains(".toolchain/build/llvm/k16/bin"));
+    assert!(!clang_docs.contains("toolchains/Compukter-Kraft-llvm/build-k16/bin"));
     assert!(!clang_docs.contains("tools/rux16-clang-smoke.sh"));
     assert!(!clang_docs.contains("RUX16_LLVM_BIN_DIR"));
 
@@ -214,7 +234,10 @@ fn rust_nocore_smoke_artifacts_are_documented_and_strict() {
     assert!(bootstrap_docs.contains("tools/k16-unknown-kraftos.json"));
     assert!(bootstrap_docs.contains("K16_RUSTC"));
     assert!(bootstrap_docs.contains("K16_LLVM_BIN_DIR"));
-    assert!(bootstrap_docs.contains("build-k16-min/bin/llvm-config"));
+    assert!(bootstrap_docs.contains(".toolchain/build/llvm/k16-min/bin/llvm-config"));
+    assert!(bootstrap_docs.contains(".toolchain/build/rust/k16"));
+    assert!(!bootstrap_docs.contains("toolchains/Compukter-Kraft-llvm/build-k16-min/bin/llvm-config"));
+    assert!(!bootstrap_docs.contains("toolchains/Compukter-Kraft-rust/build/k16"));
     assert!(bootstrap_docs.contains("Rust-pinned LLVM commit"));
     assert!(bootstrap_docs.contains("merge-base --is-ancestor"));
     assert!(bootstrap_docs.contains("k16"));
