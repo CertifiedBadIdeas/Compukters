@@ -114,8 +114,45 @@ Cargo currently comes from Rust bootstrap stage0 while K16 firmware builds use
 
 ## Maintainer Publish Flow
 
-Build the K16 toolchain in a maintainer workspace, then stage the install layout
-for one host from already-built binaries:
+Maintainers can build the K16 toolchain from the checked-out source repositories
+directly into `.toolchain/build`:
+
+```bash
+./gradlew-sandbox :buildK16ToolchainFromSource
+```
+
+This task builds:
+
+- patched LLVM in `.toolchain/build/llvm/k16-min`;
+- patched Rust bootstrap outputs in `.toolchain/build/rust/k16`;
+- K16 host tools in `.toolchain/build/cargo/k16-tools`.
+
+The source checkouts are:
+
+```text
+toolchains/Compukter-Kraft-llvm
+toolchains/Compukter-Kraft-rust
+```
+
+`buildK16ToolchainFromSource` runs the strict Rust/LLVM compatibility probe
+before `x.py` builds `compiler/rustc`. The staged toolchain is then copied into
+the same clean install layout used by prebuilt consumers:
+
+```text
+.toolchain/k16/<pin>/<host>/
+```
+
+Packaging a source-built staged toolchain uses a dedicated task:
+
+```bash
+./gradlew-sandbox :packageBuiltK16Toolchain
+```
+
+It writes the same pinned host archive name as `packageK16Toolchain` and prints
+the resulting SHA-256.
+
+If the toolchain was built outside Gradle, stage the install layout for one host
+from already-built binaries:
 
 ```bash
 ./gradlew-sandbox :stageK16Toolchain \

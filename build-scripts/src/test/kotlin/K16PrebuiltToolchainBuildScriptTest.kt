@@ -112,4 +112,39 @@ class K16PrebuiltToolchainBuildScriptTest {
         assertTrue(rootBuildScript.contains(".git"))
         assertTrue(rootBuildScript.contains(".gradle-sandbox"))
     }
+
+    @Test
+    fun rootBuildCanBuildLocalToolchainFromSources() {
+        val rootBuildScript = root.resolve("build.gradle.kts").readText()
+        val docs = root.resolve("docs/toolchains/k16-prebuilt-toolchain.md").readText()
+
+        assertTrue(rootBuildScript.contains("buildK16ToolchainFromSource"))
+        assertTrue(rootBuildScript.contains("buildK16Llvm"))
+        assertTrue(rootBuildScript.contains("writeK16RustBootstrapConfig"))
+        assertTrue(rootBuildScript.contains("probeK16RustBootstrap"))
+        assertTrue(rootBuildScript.contains("buildK16Rustc"))
+        assertTrue(rootBuildScript.contains("buildK16HostTools"))
+        assertTrue(rootBuildScript.contains("stageBuiltK16Toolchain"))
+        assertTrue(rootBuildScript.contains("packageBuiltK16Toolchain"))
+        assertTrue(rootBuildScript.contains(".toolchain/build/llvm/k16-min"))
+        assertTrue(rootBuildScript.contains(".toolchain/build/rust/k16"))
+        assertTrue(rootBuildScript.contains(".toolchain/build/cargo/k16-tools"))
+        assertTrue(rootBuildScript.contains("toolchains/Compukter-Kraft-llvm"))
+        assertTrue(rootBuildScript.contains("toolchains/Compukter-Kraft-rust"))
+        assertTrue(rootBuildScript.contains("tools/k16-rustc-bootstrap-probe.sh"))
+        assertTrue(rootBuildScript.contains("LLVM_EXPERIMENTAL_TARGETS_TO_BUILD=K16"))
+        assertTrue(rootBuildScript.contains("cmake"))
+        assertTrue(rootBuildScript.contains("x.py"))
+        assertTrue(rootBuildScript.contains("cargo"))
+        assertTrue(rootBuildScript.contains("stage0/bin/cargo"))
+        assertTrue(rootBuildScript.contains("stage1/bin/rustc"))
+        assertTrue(rootBuildScript.contains("release/k16-ld"))
+        assertTrue(rootBuildScript.contains("source-built-gradle-stage"))
+
+        assertTrue(docs.contains("buildK16ToolchainFromSource"))
+        assertTrue(docs.contains("packageBuiltK16Toolchain"))
+        assertTrue(docs.contains(".toolchain/build/llvm/k16-min"))
+        assertTrue(docs.contains(".toolchain/build/rust/k16"))
+        assertTrue(docs.contains(".toolchain/build/cargo/k16-tools"))
+    }
 }
