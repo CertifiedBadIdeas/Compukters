@@ -3,6 +3,7 @@ package ru.lazyhat.compukterkraft.impl
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16ComputerDisplaySnapshot
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16BiosFlashWorkspace
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16ComputerRuntimeFactory
+import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16ComputerControl
 import ru.lazyhat.compukterkraft.lang.runtime.storage.K16_VOLUME_MAGIC_BYTES
 import ru.lazyhat.compukterkraft.lang.runtime.storage.K16SystemVolumeWorkspace
 import java.nio.file.Path
@@ -19,15 +20,20 @@ class K16FirmwareResourceTest {
     @Test
     fun bundledK16FirmwareBuildUsesK16GradleSurface() {
         val source = Path.of("build.gradle.kts").readText()
+        val rootBuildScript = Path.of("../../../build.gradle.kts").readText()
+        val buildLogicSupport = Path.of("../../../build-scripts/src/main/kotlin/BuildLogicSupport.kt").readText()
 
         assertTrue(source.contains("generated/k16-firmware-resources"))
         assertTrue(source.contains("generated/k16-firmware-artifacts"))
         assertTrue(source.contains("tasks.register<Exec>(\"linkK16BiosFlash\")"))
-        assertTrue(source.contains("config/k16-toolchain.json"))
+        assertTrue(source.contains("rootProject.tasks.named(\"prepareK16Toolchain\")"))
         assertTrue(source.contains("resolveK16Toolchain()"))
-        assertTrue(source.contains("k16ToolchainDir"))
-        assertTrue(source.contains(".cache/compukter-kraft/k16-toolchains"))
-        assertTrue(source.contains("must not be a symlink"))
+        assertTrue(rootBuildScript.contains("prepareK16Toolchain"))
+        assertTrue(rootBuildScript.contains("stageK16Toolchain"))
+        assertTrue(rootBuildScript.contains("downloadK16ToolchainArchive"))
+        assertTrue(buildLogicSupport.contains("config/k16-toolchain.json"))
+        assertTrue(buildLogicSupport.contains(".toolchain/k16"))
+        assertTrue(buildLogicSupport.contains("must not be a symlink"))
         assertFalse(source.contains("providers.environmentVariable(\"K16_CARGO\")"))
         assertFalse(source.contains("providers.environmentVariable(\"K16_RUSTC\")"))
         assertFalse(source.contains("providers.environmentVariable(\"K16_LD\")"))
@@ -88,7 +94,7 @@ class K16FirmwareResourceTest {
     }
 
     @Test
-    fun bundledK16BiosFlashBootsBundledSystemStorage0Volume() {
+    fun bundledK16BiosFlashShowsNoBootableDeviceWithBundledSystemStorage0Volume() {
         val workspace = createTempDirectory("k16-firmware-resource-test-")
         val biosFlashPath = workspace.resolve("bios.kflash")
         val storage0Path = workspace.resolve("storage0.kv")
@@ -99,11 +105,12 @@ class K16FirmwareResourceTest {
             biosFlashPath = biosFlashPath,
             storage0Path = storage0Path,
         ).use { runtime ->
-            val control = runtime.tick(maxTurns = 64)
+            val control = runtime.tick(maxTurns = 256)
             val snapshot = runtime.display0Snapshot() ?: error("display0 snapshot should exist")
 
-            assertEquals("KERNEL OK", displayRow(snapshot, 0))
-            assertEquals(75, control.panicCode)
+            assertEquals("K16 BIOS", displayRow(snapshot, 0))
+            assertEquals("No bootable device", displayRow(snapshot, 2))
+            assertEquals(NativeK16ComputerControl.STATUS_HALTED, control.status)
         }
     }
 

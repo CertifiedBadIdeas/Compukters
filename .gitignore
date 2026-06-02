@@ -21,6 +21,7 @@ out
 build
 .gradle
 .gradle-sandbox
+.toolchain
 
 # other
 eclipse

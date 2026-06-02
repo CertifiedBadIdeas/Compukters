@@ -12,7 +12,7 @@ selects the current host archive, downloads it from the configured release URL,
 checks SHA-256, and installs it into:
 
 ```text
-~/.cache/compukter-kraft/k16-toolchains/<pin>/<host>/
+.toolchain/k16/<pin>/<host>/
 ```
 
 The installed root must contain:
@@ -54,7 +54,7 @@ same layout rules as the prebuilt cache.
 For manual shell usage, Gradle can print the selected toolchain paths:
 
 ```bash
-./gradlew-sandbox :v1_21_1-neoforge:printK16ToolchainEnv
+./gradlew-sandbox :printK16ToolchainEnv
 ```
 
 ## Explicit Local Toolchain
@@ -73,6 +73,8 @@ already-built binaries:
 
 `local` mode does not download a prebuilt archive and does not accept
 `k16ToolchainDir`. The three input paths are required, absolute, and non-symlink.
+After staging, the same pinned `.toolchain/k16/<pin>/<host>/` install layout is
+available to every Gradle module in the repo.
 
 Firmware Gradle tasks set `RUSTC_BOOTSTRAP=1` internally because the staged
 Cargo currently comes from Rust bootstrap stage0 while K16 firmware builds use
@@ -84,7 +86,7 @@ Build the K16 toolchain in a maintainer workspace, then stage the install layout
 for one host from already-built binaries:
 
 ```bash
-./gradlew-sandbox :v1_21_1-neoforge:stageK16Toolchain \
+./gradlew-sandbox :stageK16Toolchain \
   -Pk16ToolchainMode=local \
   -Pk16CargoPath=/absolute/path/to/cargo \
   -Pk16RustcPath=/absolute/path/to/rustc \
@@ -99,7 +101,7 @@ Cargo can compile host build scripts while building K16 `core`.
 The staged layout is:
 
 ```text
-stage/
+.toolchain/k16/<pin>/<host>/
   manifest.json
   bin/cargo
   bin/rustc
@@ -113,7 +115,7 @@ Create the archive through the Gradle package task so it uses the same pinned
 host archive name and layout validation as the consumer installer:
 
 ```bash
-./gradlew-sandbox :v1_21_1-neoforge:packageK16Toolchain \
+./gradlew-sandbox :packageK16Toolchain \
   -Pk16ToolchainMode=local \
   -Pk16CargoPath=/absolute/path/to/cargo \
   -Pk16RustcPath=/absolute/path/to/rustc \
