@@ -545,45 +545,6 @@ val stageK16Toolchain =
         }
     }
 
-tasks.register<Zip>("packageK16Toolchain") {
-    description = "Packages a selected local K16 toolchain directory into the pinned host archive shape."
-    group = "k16"
-    dependsOn(stageK16Toolchain)
-    inputs.file(k16ToolchainConfigFile())
-    archiveFileName.set(k16ToolchainPin.archive)
-    destinationDirectory.set(packagedK16ToolchainArchives)
-    from({
-        val root =
-            when (k16ToolchainModeName()) {
-                "local" -> k16ToolchainInstallRoot
-                "prebuilt" ->
-                    explicitK16ToolchainRoot()
-                        ?: error(
-                            "packageK16Toolchain requires -Pk16ToolchainMode=local with explicit binaries or " +
-                                "-Pk16ToolchainMode=prebuilt -Pk16ToolchainDir=/absolute/path/to/k16-toolchain",
-                        )
-                else -> error("unreachable")
-            }
-        validateK16ToolchainPath(
-            root = root,
-            origin = if (k16ToolchainModeName() == "local") "stageK16Toolchain" else "k16ToolchainDir",
-            requiredExecutables = k16ToolchainPin.requiredExecutables,
-        )
-        root
-    })
-    eachFile {
-        if (k16ToolchainPin.requiredExecutables.contains(relativePath.pathString)) {
-            permissions { unix("rwxr-xr-x") }
-        }
-    }
-
-    doLast {
-        val archive = archiveFile.get().asFile
-        println("archive=${archive.absolutePath}")
-        println("sha256=${sha256Hex(archive)}")
-    }
-}
-
 val prepareK16Toolchain =
     tasks.register("prepareK16Toolchain") {
         description = "Prepares the selected K16 toolchain mode and validates the resolved install layout."
