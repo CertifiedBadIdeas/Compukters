@@ -99,18 +99,21 @@ class K16PrebuiltToolchainBuildScriptTest {
     }
 
     @Test
-    fun rootCleanRemovesWorkspaceBuildAndTargetOutputs() {
+    fun rootCleanRemovesRepoBuildAndTargetOutputsButKeepsToolchainWorkspace() {
         val rootBuildScript = root.resolve("build.gradle.kts").readText()
+        val docs = root.resolve("docs/toolchains/k16-prebuilt-toolchain.md").readText()
 
         assertTrue(rootBuildScript.contains("tasks.register(\"cleanWorkspace\")"))
         assertTrue(rootBuildScript.contains("tasks.named(\"clean\")"))
         assertTrue(rootBuildScript.contains("dependsOn(cleanWorkspace)"))
+        assertFalse(rootBuildScript.contains("sequenceOf(repositoryRoot.resolve(\".toolchain\"))"))
         assertTrue(rootBuildScript.contains(".toolchain"))
         assertTrue(rootBuildScript.contains("walkTopDown()"))
         assertTrue(rootBuildScript.contains("file.name == \"build\" || file.name == \"target\""))
         assertTrue(rootBuildScript.contains("!file.resolve(\".git\").exists()"))
         assertTrue(rootBuildScript.contains(".git"))
         assertTrue(rootBuildScript.contains(".gradle-sandbox"))
+        assertTrue(docs.contains("preserves `.toolchain`"))
     }
 
     @Test
