@@ -119,6 +119,7 @@ class K16PrebuiltToolchainBuildScriptTest {
     @Test
     fun rootBuildCanBuildLocalToolchainFromSources() {
         val rootBuildScript = root.resolve("build.gradle.kts").readText()
+        val bootstrapProbe = root.resolve("tools/k16-rustc-bootstrap-probe.sh").readText()
         val docs = root.resolve("docs/toolchains/k16-prebuilt-toolchain.md").readText()
 
         assertTrue(rootBuildScript.contains("buildK16ToolchainFromSource"))
@@ -137,6 +138,11 @@ class K16PrebuiltToolchainBuildScriptTest {
         assertTrue(rootBuildScript.contains("tools/k16-rustc-bootstrap-probe.sh"))
         assertTrue(rootBuildScript.contains("LLVM_TARGETS_TO_BUILD="))
         assertTrue(rootBuildScript.contains("LLVM_EXPERIMENTAL_TARGETS_TO_BUILD=K16"))
+        assertTrue(rootBuildScript.contains("\"FileCheck\""))
+        assertTrue(rootBuildScript.contains("\"LLVMLTO\""))
+        assertTrue(bootstrapProbe.contains("FileCheck"))
+        assertTrue(bootstrapProbe.contains("--link-static"))
+        assertTrue(bootstrapProbe.contains("lto"))
         assertTrue(rootBuildScript.contains("cmake"))
         assertTrue(rootBuildScript.contains("x.py"))
         assertTrue(rootBuildScript.contains("cargo"))

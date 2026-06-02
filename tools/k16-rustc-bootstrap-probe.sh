@@ -9,6 +9,7 @@ EXPECTED_BRANCH="k16"
 BUILD_DIR="${K16_RUST_BUILD_DIR:-$ROOT/.toolchain/build/rust/k16}"
 HOST_TRIPLE="${K16_RUST_HOST:-x86_64-unknown-linux-gnu}"
 REQUIRED_LLVM_TOOLS=(
+    FileCheck
     llvm-ar
     llvm-as
     llvm-cov
@@ -23,6 +24,17 @@ REQUIRED_LLVM_TOOLS=(
     llvm-strip
     llc
     opt
+)
+REQUIRED_RUST_LLVM_COMPONENTS=(
+    asmparser
+    bitreader
+    bitwriter
+    coverage
+    instrumentation
+    ipo
+    k16
+    linker
+    lto
 )
 
 require_dir() {
@@ -77,6 +89,7 @@ llvm_version="$("$LLVM_CONFIG" --version)"
 llvm_targets="$("$LLVM_CONFIG" --targets-built)"
 llvm_obj_root="$("$LLVM_CONFIG" --obj-root)"
 require_output_contains "llvm-config --targets-built" "$llvm_targets" "K16"
+"$LLVM_CONFIG" --link-static --libs --system-libs "${REQUIRED_RUST_LLVM_COMPONENTS[@]}" --quote-paths > /dev/null
 
 cmake_cache="$llvm_obj_root/CMakeCache.txt"
 if [[ ! -f "$cmake_cache" ]]; then
