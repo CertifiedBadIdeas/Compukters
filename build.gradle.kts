@@ -93,12 +93,16 @@ fun requireBuiltFile(
     file: File,
     label: String,
     producer: String,
+    executable: Boolean = false,
 ): File {
     check(file.isFile) {
         "$producer did not produce $label at $file"
     }
     check(!java.nio.file.Files.isSymbolicLink(file.toPath())) {
         "$producer produced $label as a symlink, which is not allowed: $file"
+    }
+    check(!executable || file.canExecute()) {
+        "$producer produced $label without executable permissions: $file"
     }
     return file
 }
@@ -270,14 +274,17 @@ val stageBuiltK16Toolchain =
         from(k16BuiltCargo) {
             into("bin")
             rename { "cargo" }
+            filePermissions { unix("rwxr-xr-x") }
         }
         from(k16BuiltRustc) {
             into("bin")
             rename { "rustc" }
+            filePermissions { unix("rwxr-xr-x") }
         }
         from(k16BuiltLd) {
             into("bin")
             rename { "k16-ld" }
+            filePermissions { unix("rwxr-xr-x") }
         }
         from(k16RustcDriverLibRoot) {
             into("lib")
@@ -289,9 +296,9 @@ val stageBuiltK16Toolchain =
         }
 
         doFirst {
-            requireBuiltFile(k16BuiltCargo, "cargo", "buildK16Rustc")
-            requireBuiltFile(k16BuiltRustc, "rustc", "buildK16Rustc")
-            requireBuiltFile(k16BuiltLd, "k16-ld", "buildK16HostTools")
+            requireBuiltFile(k16BuiltCargo, "cargo", "buildK16Rustc", executable = true)
+            requireBuiltFile(k16BuiltRustc, "rustc", "buildK16Rustc", executable = true)
+            requireBuiltFile(k16BuiltLd, "k16-ld", "buildK16HostTools", executable = true)
             requireDirectory(k16RustcDriverLibRoot, "source-built rustc runtime library directory")
             requireDirectory(k16RustcHostLibRoot, "source-built rustc host runtime library directory")
         }
@@ -348,6 +355,11 @@ tasks.register<Zip>("packageBuiltK16Toolchain") {
     archiveFileName.set(k16ToolchainPin.archive)
     destinationDirectory.set(packagedK16ToolchainArchives)
     from(k16ToolchainInstallRoot)
+    eachFile {
+        if (k16ToolchainPin.requiredExecutables.contains(relativePath.pathString)) {
+            permissions { unix("rwxr-xr-x") }
+        }
+    }
 
     doFirst {
         validateK16ToolchainPath(
@@ -467,6 +479,7 @@ val stageK16Toolchain =
         }) {
             into("bin")
             rename { "cargo" }
+            filePermissions { unix("rwxr-xr-x") }
         }
         from({
             if (k16ToolchainModeName() == "local") {
@@ -477,6 +490,7 @@ val stageK16Toolchain =
         }) {
             into("bin")
             rename { "rustc" }
+            filePermissions { unix("rwxr-xr-x") }
         }
         from({
             if (k16ToolchainModeName() == "local") {
@@ -487,6 +501,7 @@ val stageK16Toolchain =
         }) {
             into("bin")
             rename { "k16-ld" }
+            filePermissions { unix("rwxr-xr-x") }
         }
         from({
             if (k16ToolchainModeName() == "local") {
@@ -556,6 +571,11 @@ tasks.register<Zip>("packageK16Toolchain") {
         )
         root
     })
+    eachFile {
+        if (k16ToolchainPin.requiredExecutables.contains(relativePath.pathString)) {
+            permissions { unix("rwxr-xr-x") }
+        }
+    }
 
     doLast {
         val archive = archiveFile.get().asFile

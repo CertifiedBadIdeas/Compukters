@@ -162,6 +162,13 @@ fun Project.validateK16ToolchainPath(
         }
     }
 
+    fun requireExecutable(file: File, label: String) {
+        requireRealFile(file, label)
+        check(file.canExecute()) {
+            "K16 toolchain from $origin is invalid: $label must be executable: $file"
+        }
+    }
+
     check(root.isDirectory) {
         "K16 toolchain from $origin is not installed at $root. " +
             "Install the pinned prebuilt toolchain or pass -Pk16ToolchainDir=/absolute/path/to/k16-toolchain."
@@ -171,14 +178,14 @@ fun Project.validateK16ToolchainPath(
     }
     requireRealFile(root.resolve("manifest.json"), "manifest")
     requiredExecutables.forEach { relativePath ->
-        requireRealFile(root.resolve(relativePath), relativePath)
+        requireExecutable(root.resolve(relativePath), relativePath)
     }
     val cargo = root.resolve(requiredExecutables.single { it.endsWith("/cargo") })
     val rustc = root.resolve(requiredExecutables.single { it.endsWith("/rustc") })
     val linker = root.resolve(requiredExecutables.single { it.endsWith("/k16-ld") })
-    requireRealFile(cargo, "cargo")
-    requireRealFile(rustc, "rustc")
-    requireRealFile(linker, "k16-ld")
+    requireExecutable(cargo, "cargo")
+    requireExecutable(rustc, "rustc")
+    requireExecutable(linker, "k16-ld")
     return K16Toolchain(root = root, cargo = cargo, rustc = rustc, linker = linker)
 }
 
@@ -195,6 +202,9 @@ fun Project.requireK16ToolchainInputFile(
     }
     check(file.isFile) {
         "$propertyName must point to an existing file, got: $file"
+    }
+    check(file.canExecute()) {
+        "$propertyName must point to an executable file, got: $file"
     }
     check(!Files.isSymbolicLink(file.toPath())) {
         "$propertyName must not point to a symlink: $file"
@@ -249,7 +259,7 @@ fun isK16ToolchainInstalled(
 ): Boolean =
     root.isDirectory &&
         root.resolve("manifest.json").isFile &&
-        requiredExecutables.all { root.resolve(it).isFile }
+        requiredExecutables.all { root.resolve(it).isFile && root.resolve(it).canExecute() }
 
 fun sha256Hex(file: File): String {
     val digest = MessageDigest.getInstance("SHA-256")
