@@ -21,7 +21,8 @@ class K16FirmwareResourceTest {
     fun bundledK16FirmwareBuildUsesK16GradleSurface() {
         val source = Path.of("build.gradle.kts").readText()
         val rootBuildScript = Path.of("../../../build.gradle.kts").readText()
-        val buildLogicSupport = Path.of("../../../build-scripts/src/main/kotlin/BuildLogicSupport.kt").readText()
+        val k16ToolchainSupport =
+            Path.of("../../../build-scripts/src/main/kotlin/K16ToolchainSupport.kt").readText()
 
         assertTrue(source.contains("generated/k16-firmware-resources"))
         assertTrue(source.contains("generated/k16-firmware-artifacts"))
@@ -31,9 +32,9 @@ class K16FirmwareResourceTest {
         assertTrue(rootBuildScript.contains("prepareK16Toolchain"))
         assertTrue(rootBuildScript.contains("stageK16Toolchain"))
         assertTrue(rootBuildScript.contains("downloadK16ToolchainArchive"))
-        assertTrue(buildLogicSupport.contains("config/k16-toolchain.json"))
-        assertTrue(buildLogicSupport.contains(".toolchain/k16"))
-        assertTrue(buildLogicSupport.contains("must not be a symlink"))
+        assertTrue(k16ToolchainSupport.contains("config/k16-toolchain.json"))
+        assertTrue(k16ToolchainSupport.contains(".toolchain/k16"))
+        assertTrue(k16ToolchainSupport.contains("must not be a symlink"))
         assertFalse(source.contains("providers.environmentVariable(\"K16_CARGO\")"))
         assertFalse(source.contains("providers.environmentVariable(\"K16_RUSTC\")"))
         assertFalse(source.contains("providers.environmentVariable(\"K16_LD\")"))
