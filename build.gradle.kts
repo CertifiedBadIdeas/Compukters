@@ -43,18 +43,34 @@ val cleanWorkspaceSkipDirs =
     )
 val k16LlvmSourceRoot = rootProject.file(providers.gradleProperty("k16LlvmSourceDir").orElse("toolchains/Compukter-Kraft-llvm").get())
 val k16RustSourceRoot = rootProject.file(providers.gradleProperty("k16RustSourceDir").orElse("toolchains/Compukter-Kraft-rust").get())
-val k16LlvmBuildRoot = rootProject.file(providers.gradleProperty("k16LlvmBuildDir").orElse(".toolchain/build/llvm/k16-min").get())
 val k16RustBuildRoot = rootProject.file(providers.gradleProperty("k16RustBuildDir").orElse(".toolchain/build/rust/k16").get())
 val k16HostToolsTargetRoot =
     rootProject.file(providers.gradleProperty("k16HostToolsTargetDir").orElse(".toolchain/build/cargo/k16-tools").get())
 val k16RustBootstrapConfig = k16RustBuildRoot.resolve("bootstrap.toml")
-val k16LlvmConfig = k16LlvmBuildRoot.resolve("bin/llvm-config")
 val k16BootstrapHost = k16RustHostTargetTriple()
+val k16LlvmHostTarget =
+    when (k16BootstrapHost.substringBefore("-")) {
+        "x86_64" -> "X86"
+        "aarch64" -> "AArch64"
+        else -> error("Unsupported K16 LLVM host target for Rust bootstrap host: $k16BootstrapHost")
+    }
+val k16LlvmBuildJobs =
+    providers.gradleProperty("k16LlvmBuildJobs")
+        .orElse(Runtime.getRuntime().availableProcessors().toString())
+        .get()
+val k16LlvmBuildRoot = rootProject.file(providers.gradleProperty("k16LlvmBuildDir").orElse(".toolchain/build/llvm/k16-min").get())
+val k16LlvmConfig = k16LlvmBuildRoot.resolve("bin/llvm-config")
 val k16BuiltCargo = k16RustBuildRoot.resolve("$k16BootstrapHost/stage0/bin/cargo")
 val k16BuiltRustc = k16RustBuildRoot.resolve("$k16BootstrapHost/stage1/bin/rustc")
 val k16BuiltLd = k16HostToolsTargetRoot.resolve("release/k16-ld")
 val k16RustcDriverLibRoot = k16BuiltRustc.parentFile.parentFile.resolve("lib")
 val k16RustcHostLibRoot = k16RustcDriverLibRoot.resolve("rustlib/$k16BootstrapHost/lib")
+val k16LlvmHostLibraryTargets =
+    when (k16LlvmHostTarget) {
+        "X86" -> listOf("LLVMMCA", "LLVMX86TargetMCA")
+        "AArch64" -> emptyList()
+        else -> error("Unsupported K16 LLVM host library target set: $k16LlvmHostTarget")
+    }
 val k16LlvmBuildTargets =
     listOf(
         "FileCheck",
@@ -74,7 +90,7 @@ val k16LlvmBuildTargets =
         "llvm-strip",
         "llc",
         "opt",
-    )
+    ) + k16LlvmHostLibraryTargets
 
 fun requireDirectory(
     directory: File,
@@ -144,6 +160,7 @@ val configureK16Llvm =
         description = "Configures the source-built K16 LLVM tree in .toolchain/build."
         group = "k16"
         inputs.dir(k16LlvmSourceRoot.resolve("llvm"))
+        inputs.property("k16LlvmHostTarget", k16LlvmHostTarget)
         outputs.file(k16LlvmBuildRoot.resolve("CMakeCache.txt"))
         commandLine(
             "cmake",
@@ -151,7 +168,7 @@ val configureK16Llvm =
             k16LlvmSourceRoot.resolve("llvm").absolutePath,
             "-B",
             k16LlvmBuildRoot.absolutePath,
-            "-DLLVM_TARGETS_TO_BUILD=",
+            "-DLLVM_TARGETS_TO_BUILD=$k16LlvmHostTarget",
             "-DLLVM_EXPERIMENTAL_TARGETS_TO_BUILD=K16",
         )
 
@@ -166,6 +183,8 @@ val buildK16Llvm =
         group = "k16"
         dependsOn(configureK16Llvm)
         inputs.dir(k16LlvmSourceRoot.resolve("llvm"))
+        inputs.property("k16LlvmHostTarget", k16LlvmHostTarget)
+        inputs.property("k16LlvmBuildJobs", k16LlvmBuildJobs)
         inputs.property("k16LlvmBuildTargets", k16LlvmBuildTargets)
         outputs.file(k16LlvmConfig)
         outputs.file(k16LlvmBuildRoot.resolve("bin/FileCheck"))
@@ -175,6 +194,8 @@ val buildK16Llvm =
                 "cmake",
                 "--build",
                 k16LlvmBuildRoot.absolutePath,
+                "--parallel",
+                k16LlvmBuildJobs,
                 "--target",
             ) + k16LlvmBuildTargets,
         )
@@ -217,6 +238,7 @@ val probeK16RustBootstrap =
         commandLine(rootProject.file("tools/k16-rustc-bootstrap-probe.sh").absolutePath)
         environment("K16_RUST_SRC", k16RustSourceRoot.absolutePath)
         environment("K16_LLVM_CONFIG", k16LlvmConfig.absolutePath)
+        environment("K16_LLVM_HOST_TARGET", k16LlvmHostTarget)
         environment("K16_RUST_BUILD_DIR", k16RustBuildRoot.absolutePath)
         environment("K16_RUST_HOST", k16BootstrapHost)
 

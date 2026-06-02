@@ -8,6 +8,19 @@ LLVM_BIN_DIR="$(cd "$(dirname "$LLVM_CONFIG")" && pwd)"
 EXPECTED_BRANCH="k16"
 BUILD_DIR="${K16_RUST_BUILD_DIR:-$ROOT/.toolchain/build/rust/k16}"
 HOST_TRIPLE="${K16_RUST_HOST:-x86_64-unknown-linux-gnu}"
+HOST_LLVM_TARGET="${K16_LLVM_HOST_TARGET:-X86}"
+case "$HOST_LLVM_TARGET" in
+    X86)
+        HOST_LLVM_COMPONENT="x86"
+        ;;
+    AArch64)
+        HOST_LLVM_COMPONENT="aarch64"
+        ;;
+    *)
+        echo "unsupported host LLVM target: $HOST_LLVM_TARGET" >&2
+        exit 1
+        ;;
+esac
 REQUIRED_LLVM_TOOLS=(
     FileCheck
     llvm-ar
@@ -88,8 +101,9 @@ fi
 llvm_version="$("$LLVM_CONFIG" --version)"
 llvm_targets="$("$LLVM_CONFIG" --targets-built)"
 llvm_obj_root="$("$LLVM_CONFIG" --obj-root)"
+require_output_contains "llvm-config --targets-built" "$llvm_targets" "$HOST_LLVM_TARGET"
 require_output_contains "llvm-config --targets-built" "$llvm_targets" "K16"
-"$LLVM_CONFIG" --link-static --libs --system-libs "${REQUIRED_RUST_LLVM_COMPONENTS[@]}" --quote-paths > /dev/null
+"$LLVM_CONFIG" --link-static --libs --system-libs "${REQUIRED_RUST_LLVM_COMPONENTS[@]}" "$HOST_LLVM_COMPONENT" --quote-paths > /dev/null
 
 cmake_cache="$llvm_obj_root/CMakeCache.txt"
 if [[ ! -f "$cmake_cache" ]]; then
