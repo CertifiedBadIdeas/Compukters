@@ -151,8 +151,9 @@ Packaging a source-built staged toolchain uses a dedicated task:
 ./gradlew-sandbox :packageBuiltK16Toolchain
 ```
 
-It writes the same pinned host archive name as `packageK16Toolchain` and prints
-the resulting SHA-256.
+It writes the pinned host archive name from `config/k16-toolchain.json` and
+prints the resulting SHA-256. Release archives are produced only from this
+source-built path.
 
 If the toolchain was built outside Gradle, stage the install layout for one host
 from already-built binaries:
@@ -183,18 +184,8 @@ The staged layout is:
   lib/rustlib/<host>/lib/
 ```
 
-Create the archive through the Gradle package task so it uses the same pinned
-host archive name and layout validation as the consumer installer:
-
-```bash
-./gradlew-sandbox :packageK16Toolchain \
-  -Pk16ToolchainMode=local \
-  -Pk16CargoPath=/absolute/path/to/cargo \
-  -Pk16RustcPath=/absolute/path/to/rustc \
-  -Pk16LdPath=/absolute/path/to/k16-ld
-```
-
-The task prints the archive path and SHA-256. Update the matching `sha256` in
+Do not publish archives from ad-hoc local binaries. Build and package through
+`packageBuiltK16Toolchain`, update the matching `sha256` in
 `config/k16-toolchain.json`, then upload the archive to the release named by
 `artifactBaseUrl`:
 
