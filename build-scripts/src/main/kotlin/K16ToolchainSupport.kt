@@ -157,6 +157,9 @@ fun Project.validateK16ToolchainPath(
         check(file.isFile) {
             "K16 toolchain from $origin is invalid: missing $label at $file"
         }
+        check(file.length() > 0) {
+            "K16 toolchain from $origin is invalid: $label must not be empty: $file"
+        }
         check(!Files.isSymbolicLink(file.toPath())) {
             "K16 toolchain from $origin is invalid: $label must not be a symlink: $file"
         }
@@ -208,6 +211,12 @@ fun Project.requireK16ToolchainInputFile(
     }
     check(!Files.isSymbolicLink(file.toPath())) {
         "$propertyName must not point to a symlink: $file"
+    }
+    val stagedRoot = defaultK16ToolchainRoot().toPath().toAbsolutePath().normalize()
+    val inputPath = file.toPath().toAbsolutePath().normalize()
+    check(!inputPath.startsWith(stagedRoot)) {
+        "$propertyName must point outside the staged K16 toolchain root $stagedRoot; " +
+            "use k16ToolchainMode=prebuilt or k16ToolchainDir for an already staged toolchain"
     }
     return file
 }

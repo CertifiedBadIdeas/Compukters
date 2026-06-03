@@ -171,6 +171,16 @@ impl MmioDevice for DebugSerialDevice {
         self.bytes.push(value.to_le_bytes()[0]);
         Ok(())
     }
+
+    fn store_u8(&mut self, offset: u32, value: u8) -> Result<(), MemoryFault> {
+        if offset != 0 {
+            return Err(MemoryFault::new(format!(
+                "computer debug serial offset {offset} is not mapped",
+            )));
+        }
+        self.bytes.push(value);
+        Ok(())
+    }
 }
 
 pub(crate) struct SerialInputDevice {
@@ -449,6 +459,14 @@ impl MmioDevice for TextDisplayDevice {
 
     fn store_i32(&mut self, offset: u32, value: i32) -> Result<(), MemoryFault> {
         self.store_register(offset, value)
+    }
+
+    fn store_u8(&mut self, offset: u32, value: u8) -> Result<(), MemoryFault> {
+        if offset == 20 {
+            self.data = i32::from(value);
+            return Ok(());
+        }
+        self.store_register(offset, i32::from(value))
     }
 }
 

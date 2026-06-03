@@ -6,9 +6,9 @@ fn storage_volume_abi_docs_use_k16_cli_and_kraft16_extensions() {
     let docs = normalized_doc("docs/abi/k16-storage-volume-v1.md");
 
     for required in [
-        "k16 volume init storage0.kv --size 65536",
+        "k16 volume init storage0.kv --size 1048576",
         "k16 volume inspect storage0.kv",
-        "k16 fs kfs format root.kfs --blocks 95",
+        "k16 fs kfs format root.kfs --blocks 1791",
         "k16 fs kfs put root.kfs /boot/kernel.kx kernel.kx",
         "k16 volume replace-partition storage0.kv ROOT root.kfs",
         "k16 fs kfs get check-root.kfs /boot/kernel.kx check-kernel.kx",

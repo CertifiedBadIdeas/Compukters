@@ -38,6 +38,7 @@ fn k16_ld_links_rustc_style_bios_args_with_archive_input() {
         "stderr: {}",
         String::from_utf8_lossy(&output.stderr)
     );
+    assert_linker_output_is_executable(&output_path);
     let bytes = fs::read(output_path).expect("BIOS output reads");
     assert_eq!(&bytes[..2], &[0x01, 0xef]);
     assert!(
@@ -70,6 +71,7 @@ fn k16_ld_links_program_k16e_from_rustc_style_args() {
         "stderr: {}",
         String::from_utf8_lossy(&output.stderr)
     );
+    assert_linker_output_is_executable(&output_path);
     let bytes = fs::read(output_path).expect("program output reads");
     let executable = k16e::decode_k16_executable(&bytes).expect("K16E decodes");
     assert_eq!(executable.abi_kind, k16e::K16eAbiKind::Program);
@@ -444,6 +446,17 @@ fn temp_file(name: &str) -> PathBuf {
 fn k16_ld_binary() -> String {
     std::env::var("CARGO_BIN_EXE_k16-ld").expect("Cargo exposes k16-ld binary path")
 }
+
+#[cfg(unix)]
+fn assert_linker_output_is_executable(path: &std::path::Path) {
+    use std::os::unix::fs::PermissionsExt;
+
+    let mode = fs::metadata(path).expect("output metadata reads").permissions().mode();
+    assert_ne!(mode & 0o111, 0, "k16-ld output should be executable");
+}
+
+#[cfg(not(unix))]
+fn assert_linker_output_is_executable(_path: &std::path::Path) {}
 
 fn write_u16(bytes: &mut Vec<u8>, value: u16) {
     bytes.extend_from_slice(&value.to_le_bytes());

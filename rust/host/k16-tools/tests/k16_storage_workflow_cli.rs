@@ -3,6 +3,9 @@ use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
 
+const TEST_VOLUME_SIZE: &str = "1048576";
+const TEST_ROOT_BLOCKS: &str = "1791";
+
 #[test]
 fn k16_cli_builds_partitioned_storage0_with_k16fs_root_kernel_file() {
     let volume_path = temp_file("storage0.kv");
@@ -22,7 +25,7 @@ fn k16_cli_builds_partitioned_storage0_with_k16fs_root_kernel_file() {
                 "init",
                 volume_path.to_str().unwrap(),
                 "--size",
-                "65536",
+                TEST_VOLUME_SIZE,
             ])
             .output()
             .expect("volume init runs"),
@@ -35,7 +38,7 @@ fn k16_cli_builds_partitioned_storage0_with_k16fs_root_kernel_file() {
     assert_success(inspect_output.clone());
     assert_eq!(
         String::from_utf8(inspect_output.stdout).expect("inspect stdout is UTF-8"),
-        "K16VOL v1 payload=65536\nK16PT v1 entries=2\nBOOT start_lba=1 blocks=32 bytes=16384 name=boot\nROOT start_lba=33 blocks=95 bytes=48640 name=root\n"
+        "K16VOL v1 payload=1048576\nK16PT v1 entries=2\nBOOT start_lba=1 blocks=256 bytes=131072 name=boot\nROOT start_lba=257 blocks=1791 bytes=916992 name=root\n"
     );
 
     assert_success(
@@ -46,7 +49,7 @@ fn k16_cli_builds_partitioned_storage0_with_k16fs_root_kernel_file() {
                 "format",
                 root_path.to_str().unwrap(),
                 "--blocks",
-                "95",
+                TEST_ROOT_BLOCKS,
             ])
             .output()
             .expect("k16fs format runs"),

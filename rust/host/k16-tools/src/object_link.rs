@@ -57,6 +57,7 @@ pub fn link_k16_objects_to_k16e(
         0
     };
     let mut linked = link_objects(&objects, load_addr, bios_prefix_len)?;
+    validate_payload_range(target, linked.payload.len())?;
     match target.fixed_image_abi_kind() {
         Some(abi_kind) => {
             k16e::encode_k16_executable(&linked.payload, abi_kind, linked.entry_pc, load_addr)
@@ -66,6 +67,27 @@ pub fn link_k16_objects_to_k16e(
             Ok(linked.payload)
         }
     }
+}
+
+fn validate_payload_range(target: K16ArtifactTarget, payload_len: usize) -> Result<(), String> {
+    let Some(limit) = target.payload_end_limit() else {
+        return Ok(());
+    };
+    let payload_len =
+        u32::try_from(payload_len).map_err(|_| "linked K16 payload is too large".to_string())?;
+    let end = target
+        .base_address()
+        .checked_add(payload_len)
+        .ok_or_else(|| "linked K16 payload range overflows".to_string())?;
+    if end > limit {
+        return Err(format!(
+            "linked {target:?} payload range {:#010x}..{:#010x} exceeds target limit {:#010x}",
+            target.base_address(),
+            end,
+            limit,
+        ));
+    }
+    Ok(())
 }
 
 struct LinkedImage {
@@ -373,7 +395,7 @@ fn write_bios_entry_trampoline(payload: &mut [u8], entry_pc: u32) -> Result<(), 
     let const32_stack = 0xe001 | (BIOS_ENTRY_TRAMPOLINE_STACK_REG << 8);
     let const32_target = 0xe001 | (BIOS_ENTRY_TRAMPOLINE_TARGET_REG << 8);
     let jump = 0x7000 | (BIOS_ENTRY_TRAMPOLINE_TARGET_REG << 8);
-    let stack_top = k16_vm::computer_machine::ComputerMachine::PROFILE_V2_PROGRAM_BASE;
+    let stack_top = K16ArtifactTarget::PROGRAM_STACK_TOP;
     trampoline[0..2].copy_from_slice(&const32_stack.to_le_bytes());
     trampoline[2..4].copy_from_slice(&(stack_top as u16).to_le_bytes());
     trampoline[4..6].copy_from_slice(&((stack_top >> 16) as u16).to_le_bytes());
@@ -398,12 +420,12 @@ fn validate_alloc_section(section: &Section) -> Result<(), String> {
             }
         }
         name if name == ".rodata" || name.starts_with(".rodata.") => validate_rodata(section)?,
-        ".data" => {
+        name if name == ".data" || name.starts_with(".data.") => {
             if section.kind != SHT_PROGBITS || section.flags != (SHF_ALLOC | SHF_WRITE) {
                 return Err("unsupported .data section attributes".to_string());
             }
         }
-        ".bss" => {
+        name if name == ".bss" || name.starts_with(".bss.") => {
             if section.kind != SHT_NOBITS || section.flags != (SHF_ALLOC | SHF_WRITE) {
                 return Err("unsupported .bss section attributes".to_string());
             }

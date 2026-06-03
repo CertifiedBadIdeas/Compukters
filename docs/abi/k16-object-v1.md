@@ -42,7 +42,7 @@ The command accepts K16 ELF32 `ET_REL` inputs, resolves static symbols,
 applies supported relocations, and emits a validated single-load-section
 `K16E` for bootloader, kernel, and program targets. The `bios` target emits raw
 BIOS flash bytes and prefixes them with a reset-address trampoline that
-initializes `sp` to the machine profile program base and jumps to `_start`.
+initializes `sp` to the current fixed 64 KiB stack top and jumps to `_start`.
 
 Rust `bin` crates use the linker-driver entry point:
 
@@ -202,6 +202,9 @@ The final `K16E` entry point is selected by the linker profile. Program images
 use `_start` unless the command line explicitly chooses another defined symbol.
 Bootloader and kernel profiles may use their profile-specific entry symbol, but
 the resolved entry address must still satisfy the `K16E` entry validation rules.
+The current linker profile bases are fixed: bootloader at `0x00000800`, kernel
+at `0x00005000`, and user program at `0x00008000`. Linkers must reject payloads
+that exceed the reserved range for the selected profile.
 
 ## Relocations
 

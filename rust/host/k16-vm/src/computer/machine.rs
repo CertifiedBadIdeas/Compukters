@@ -976,6 +976,28 @@ mod tests {
     }
 
     #[test]
+    fn computer_display0_put_byte_accepts_byte_data_write() {
+        let mut machine = ComputerMachine::new(1024).unwrap();
+
+        machine
+            .bus
+            .store_u8(ComputerMachine::DISPLAY0_DATA, b'K')
+            .unwrap();
+        machine
+            .bus
+            .store_i32(
+                ComputerMachine::DISPLAY0_COMMAND,
+                ComputerMachine::DISPLAY0_COMMAND_PUT_BYTE_AT_CURSOR,
+            )
+            .unwrap();
+
+        let snapshot = machine.display0_snapshot().unwrap();
+        assert_eq!(snapshot.cursor_x, 1);
+        assert_eq!(snapshot.sequence, 1);
+        assert_eq!(snapshot.cells[0], b'K');
+    }
+
+    #[test]
     fn computer_display0_clear_and_newline_are_deterministic() {
         let mut machine = ComputerMachine::new(1024).unwrap();
 
@@ -1340,6 +1362,34 @@ mod tests {
 
         let bytes = fs::read(&path).unwrap();
         assert_eq!(bytes[16], 0x7E);
+        fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn storage0_file_media_reports_version_and_present_status() {
+        let path = temp_volume_path("machine-storage0-file-status");
+        write_k16_volume(&path, &[0; 512]);
+        let profile = ComputerMachineProfile::new(2048).with_hardware(
+            ComputerHardwareConfig::storage_port_with_k16_volume_file(
+                computer_abi::COMPUTER_HARDWARE_ID_STORAGE0,
+                computer_abi::STORAGE0_BASE,
+                &path,
+            ),
+        );
+        let machine = ComputerMachine::from_profile(profile).unwrap();
+
+        assert_eq!(
+            machine
+                .bus_load_i32(computer_abi::STORAGE0_VERSION)
+                .unwrap(),
+            computer_abi::STORAGE_VERSION,
+        );
+        assert_eq!(
+            machine
+                .bus_load_i32(computer_abi::STORAGE0_MEDIA_STATUS)
+                .unwrap(),
+            computer_abi::STORAGE_MEDIA_PRESENT,
+        );
         fs::remove_file(path).unwrap();
     }
 

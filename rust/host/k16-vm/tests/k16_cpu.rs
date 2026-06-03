@@ -122,6 +122,26 @@ fn k16_loads_and_stores_mmio_through_machine_bus() {
 }
 
 #[test]
+fn k16_loads_and_stores_high_mmio_through_machine_bus() {
+    let mut bus = MachineBus::new(64).unwrap();
+    let device_id = bus
+        .map_mmio(0x1000_0400, Box::new(RegisterDevice { value: 7 }))
+        .unwrap();
+    let mut program = Vec::new();
+    program.extend(const32(1, 0x1000_0400));
+    program.push(load32(2, 1));
+    program.push(const4(3, 9));
+    program.push(store32(1, 3));
+    program.push(halt());
+    write_words(&mut bus, 0, &program);
+    let mut cpu = K16Cpu::new(0);
+
+    assert_eq!(cpu.run_until_signal(&mut bus, 16).unwrap(), K16Signal::Halt);
+    assert_eq!(cpu.register(2), 7);
+    assert_eq!(bus.device::<RegisterDevice>(device_id).unwrap().value, 9);
+}
+
+#[test]
 fn k16_register_jump_sets_pc_to_guest_address() {
     let mut bus = MachineBus::new(64).unwrap();
     write_words(&mut bus, 0, &[const4(1, 6), jmp(1), const4(2, 1), halt()]);
