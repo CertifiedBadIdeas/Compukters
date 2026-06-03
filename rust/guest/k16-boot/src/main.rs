@@ -5,28 +5,67 @@ extern crate k16_rt;
 
 use core::panic::PanicInfo;
 use k16_abi::computer::{control, debug, status};
+use k16_boot_chain::{enter_loaded_image, load_k16e_from_storage0, K16eAbiKind};
 
 #[no_mangle]
 pub extern "C" fn _start() -> ! {
-    print_debug(b"K16 BOOT\n");
-    set_halted(66);
-    wait_forever()
+    print_boot_debug();
+    let image = unsafe {
+        load_k16e_from_storage0(
+            b"ROOT",
+            &[b"boot".as_slice(), b"kernel.kx".as_slice()],
+            K16eAbiKind::Kernel,
+        )
+    };
+    match image {
+        Ok(image) => unsafe { enter_loaded_image(image) },
+        Err(error) => {
+            set_halted(error.code());
+            wait_forever()
+        }
+    }
 }
 
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {
-    print_debug(b"K16 BOOT PANIC\n");
+    print_boot_panic_debug();
     set_panic();
     wait_forever()
 }
 
-fn print_debug(bytes: &[u8]) {
-    let mut index = 0;
-    while index < bytes.len() {
-        unsafe {
-            write_u8(debug::WRITE, *bytes.as_ptr().add(index));
-        }
-        index += 1;
+fn print_boot_debug() {
+    print_debug_byte(b'K');
+    print_debug_byte(b'1');
+    print_debug_byte(b'6');
+    print_debug_byte(b' ');
+    print_debug_byte(b'B');
+    print_debug_byte(b'O');
+    print_debug_byte(b'O');
+    print_debug_byte(b'T');
+    print_debug_byte(b'\n');
+}
+
+fn print_boot_panic_debug() {
+    print_debug_byte(b'K');
+    print_debug_byte(b'1');
+    print_debug_byte(b'6');
+    print_debug_byte(b' ');
+    print_debug_byte(b'B');
+    print_debug_byte(b'O');
+    print_debug_byte(b'O');
+    print_debug_byte(b'T');
+    print_debug_byte(b' ');
+    print_debug_byte(b'P');
+    print_debug_byte(b'A');
+    print_debug_byte(b'N');
+    print_debug_byte(b'I');
+    print_debug_byte(b'C');
+    print_debug_byte(b'\n');
+}
+
+fn print_debug_byte(byte: u8) {
+    unsafe {
+        write_u8(debug::WRITE, byte);
     }
 }
 
@@ -45,15 +84,11 @@ fn set_panic() {
 }
 
 unsafe fn write_i32(address: u32, value: i32) {
-    unsafe {
-        *(address as usize as *mut i32) = value;
-    }
+    unsafe { core::ptr::write_volatile(address as usize as *mut i32, value) }
 }
 
 unsafe fn write_u8(address: u32, value: u8) {
-    unsafe {
-        *(address as usize as *mut u8) = value;
-    }
+    unsafe { core::ptr::write_volatile(address as usize as *mut u8, value) }
 }
 
 fn wait_forever() -> ! {

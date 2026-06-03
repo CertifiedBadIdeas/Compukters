@@ -72,6 +72,53 @@ fn k16_computer_handle_accepts_storage0_volume_path() {
 }
 
 #[test]
+fn k16_computer_handle_bios_flash_reads_storage0_version_from_path() {
+    let mut words = Vec::new();
+    words.extend(k16_const32(0, ComputerMachine::STORAGE0_VERSION));
+    words.push(k16_load32(1, 0));
+    words.extend(k16_const32(0, ComputerMachine::CONTROL_PANIC_CODE));
+    words.push(k16_store32(0, 1));
+    words.push(k16_halt());
+    let bios = k16_words(&words);
+    let path = temp_volume_path("handle-storage0-version-path");
+    write_k16_volume(&path, &[0; 1024]);
+
+    let mut handle =
+        K16ComputerHandle::create_k16_bios_flash_with_storage0_path(&bios, 64 * 1024, 128, &path)
+            .expect("K16 BIOS flash computer creates with storage0 volume path");
+
+    assert_eq!(handle.run_k16_until_signal().unwrap(), K16Signal::Halt);
+    assert_eq!(handle.control().panic_code, 1);
+    fs::remove_file(path).unwrap();
+}
+
+#[test]
+fn k16_computer_handle_bios_flash_reads_storage0_version_through_call_helper() {
+    let mut words = Vec::new();
+    words.extend(k16_const32(15, 0x0001_0000));
+    words.extend(k16_const32(1, ComputerMachine::STORAGE0_VERSION));
+    let helper_pc = ComputerMachine::K16_BIOS_FLASH_BASE + 30;
+    words.extend(k16_const32(14, helper_pc));
+    words.push(k16_call(14));
+    words.extend(k16_const32(1, ComputerMachine::CONTROL_PANIC_CODE));
+    words.push(k16_store32(1, 0));
+    words.push(k16_halt());
+    words.push(k16_load32(0, 1));
+    words.push(k16_ret());
+    let bios = k16_words(&words);
+    let path = temp_volume_path("handle-storage0-helper-path");
+    write_k16_volume(&path, &[0; 1024]);
+
+    let mut handle =
+        K16ComputerHandle::create_k16_bios_flash_with_storage0_path(&bios, 64 * 1024, 128, &path)
+            .expect("K16 BIOS flash computer creates with storage0 volume path");
+
+    assert_eq!(handle.run_k16_until_signal().unwrap(), K16Signal::Halt);
+    assert_eq!(handle.control().panic_code, 1);
+    fs::remove_file(path).unwrap();
+}
+
+#[test]
 fn k16_computer_handle_boot_handoff_starts_k16_from_guest_ram_without_host_decode() {
     let bios = k16_words(&[k16_halt()]);
     let entry_pc = 4096;
@@ -555,4 +602,12 @@ fn k16_add(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
 
 fn k16_halt() -> u16 {
     0x0001
+}
+
+fn k16_call(register: u8) -> u16 {
+    0x8000 | (u16::from(register) << 8)
+}
+
+fn k16_ret() -> u16 {
+    0x9000
 }

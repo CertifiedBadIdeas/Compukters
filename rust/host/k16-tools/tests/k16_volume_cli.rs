@@ -5,6 +5,14 @@ use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
 
+const TEST_VOLUME_SIZE: &str = "1048576";
+const TEST_VOLUME_SIZE_BYTES: u64 = 1_048_576;
+const TEST_BOOT_BLOCKS: u32 = 256;
+const TEST_ROOT_START_LBA: u32 = 257;
+const TEST_ROOT_BLOCKS: u32 = 1_791;
+const TEST_BOOT_BYTES: u32 = TEST_BOOT_BLOCKS * 512;
+const TEST_ROOT_BYTES: u32 = TEST_ROOT_BLOCKS * 512;
+
 #[test]
 fn k16_volume_create_writes_empty_k16vol_header() {
     let path = temp_file("create-storage0.kv");
@@ -30,7 +38,7 @@ fn k16_volume_create_writes_empty_k16vol_header() {
 fn k16_volume_init_writes_k16pt_boot_and_root_partitions() {
     let path = temp_file("init-storage0.kv");
     let output = Command::new(k16_binary())
-        .args(["volume", "init", path.to_str().unwrap(), "--size", "65536"])
+        .args(["volume", "init", path.to_str().unwrap(), "--size", TEST_VOLUME_SIZE])
         .output()
         .expect("k16 runs");
 
@@ -41,7 +49,10 @@ fn k16_volume_init_writes_k16pt_boot_and_root_partitions() {
     );
     let bytes = fs::read(&path).expect("volume exists");
     assert_eq!(&bytes[..6], b"K16VOL");
-    assert_eq!(u64::from_le_bytes(bytes[8..16].try_into().unwrap()), 65536);
+    assert_eq!(
+        u64::from_le_bytes(bytes[8..16].try_into().unwrap()),
+        TEST_VOLUME_SIZE_BYTES
+    );
 
     let payload = &bytes[16..];
     assert_eq!(&payload[0..5], b"K16PT");
@@ -50,12 +61,21 @@ fn k16_volume_init_writes_k16pt_boot_and_root_partitions() {
 
     assert_eq!(&payload[16..20], b"BOOT");
     assert_eq!(u32::from_le_bytes(payload[24..28].try_into().unwrap()), 1);
-    assert_eq!(u32::from_le_bytes(payload[28..32].try_into().unwrap()), 32);
+    assert_eq!(
+        u32::from_le_bytes(payload[28..32].try_into().unwrap()),
+        TEST_BOOT_BLOCKS
+    );
     assert_eq!(&payload[32..36], b"boot");
 
     assert_eq!(&payload[48..52], b"ROOT");
-    assert_eq!(u32::from_le_bytes(payload[56..60].try_into().unwrap()), 33);
-    assert_eq!(u32::from_le_bytes(payload[60..64].try_into().unwrap()), 95);
+    assert_eq!(
+        u32::from_le_bytes(payload[56..60].try_into().unwrap()),
+        TEST_ROOT_START_LBA
+    );
+    assert_eq!(
+        u32::from_le_bytes(payload[60..64].try_into().unwrap()),
+        TEST_ROOT_BLOCKS
+    );
     assert_eq!(&payload[64..68], b"root");
 }
 
@@ -64,7 +84,7 @@ fn k16_volume_extracts_and_replaces_partition_bytes_by_name() {
     let volume_path = temp_file("partition-bridge-storage0.kv");
     let root_path = temp_file("root-partition.bin");
     let extracted_path = temp_file("root-partition-extracted.bin");
-    let mut root_bytes = vec![0_u8; 95 * 512];
+    let mut root_bytes = vec![0_u8; TEST_ROOT_BYTES as usize];
     root_bytes[0..6].copy_from_slice(b"ROOTFS");
     root_bytes[4096..4101].copy_from_slice(b"hello");
     fs::write(&root_path, &root_bytes).expect("root partition writes");
@@ -75,7 +95,7 @@ fn k16_volume_extracts_and_replaces_partition_bytes_by_name() {
             "init",
             volume_path.to_str().unwrap(),
             "--size",
-            "65536",
+            TEST_VOLUME_SIZE,
         ])
         .status()
         .expect("init runs")
@@ -116,7 +136,7 @@ fn k16_volume_extracts_and_replaces_partition_bytes_by_name() {
 
     let volume_bytes = fs::read(&volume_path).expect("volume reads");
     let payload = &volume_bytes[16..];
-    let root_offset = 33 * 512;
+    let root_offset = TEST_ROOT_START_LBA as usize * 512;
     assert_eq!(&payload[root_offset..root_offset + 6], b"ROOTFS");
     assert_eq!(&payload[root_offset + 4096..root_offset + 4101], b"hello");
 }
@@ -130,7 +150,7 @@ fn k16_volume_inspect_prints_k16pt_partition_layout() {
             "init",
             volume_path.to_str().unwrap(),
             "--size",
-            "65536",
+            TEST_VOLUME_SIZE,
         ])
         .status()
         .expect("init runs")
@@ -148,7 +168,9 @@ fn k16_volume_inspect_prints_k16pt_partition_layout() {
     );
     assert_eq!(
         String::from_utf8(output.stdout).expect("inspect stdout is UTF-8"),
-        "K16VOL v1 payload=65536\nK16PT v1 entries=2\nBOOT start_lba=1 blocks=32 bytes=16384 name=boot\nROOT start_lba=33 blocks=95 bytes=48640 name=root\n"
+        format!(
+            "K16VOL v1 payload={TEST_VOLUME_SIZE}\nK16PT v1 entries=2\nBOOT start_lba=1 blocks={TEST_BOOT_BLOCKS} bytes={TEST_BOOT_BYTES} name=boot\nROOT start_lba={TEST_ROOT_START_LBA} blocks={TEST_ROOT_BLOCKS} bytes={TEST_ROOT_BYTES} name=root\n"
+        )
     );
 }
 
@@ -173,7 +195,7 @@ fn k16_volume_inspect_boot_prints_boot_chain_metadata() {
             "init",
             volume_path.to_str().unwrap(),
             "--size",
-            "65536",
+            TEST_VOLUME_SIZE,
         ])
         .status()
         .expect("init runs")
@@ -195,7 +217,7 @@ fn k16_volume_inspect_boot_prints_boot_chain_metadata() {
             "format",
             root_path.to_str().unwrap(),
             "--blocks",
-            "95",
+            &TEST_ROOT_BLOCKS.to_string(),
         ])
         .status()
         .expect("k16fs format runs")
@@ -234,7 +256,9 @@ fn k16_volume_inspect_boot_prints_boot_chain_metadata() {
     );
     assert_eq!(
         String::from_utf8(output.stdout).expect("inspect-boot stdout is UTF-8"),
-        "K16VOL boot-chain\nBOOT partition start_lba=1 blocks=32 bytes=16384 name=boot\nBOOT K16FS /boot/loader.kb file_bytes=54\nBOOTLOADER K16E abi=bootloader entry_pc=0x00002000 load_addr=0x00002000 payload_bytes=2\nROOT partition start_lba=33 blocks=95 bytes=48640 name=root\nROOT K16FS /boot/kernel.kx file_bytes=54\nKERNEL K16E abi=kernel entry_pc=0x00003000 load_addr=0x00003000 payload_bytes=2\n"
+        format!(
+            "K16VOL boot-chain\nBOOT partition start_lba=1 blocks={TEST_BOOT_BLOCKS} bytes={TEST_BOOT_BYTES} name=boot\nBOOT K16FS /boot/loader.kb file_bytes=54\nBOOTLOADER K16E abi=bootloader entry_pc=0x00002000 load_addr=0x00002000 payload_bytes=2\nROOT partition start_lba={TEST_ROOT_START_LBA} blocks={TEST_ROOT_BLOCKS} bytes={TEST_ROOT_BYTES} name=root\nROOT K16FS /boot/kernel.kx file_bytes=54\nKERNEL K16E abi=kernel entry_pc=0x00003000 load_addr=0x00003000 payload_bytes=2\n"
+        )
     );
 }
 
@@ -254,7 +278,7 @@ fn k16_volume_inspect_boot_rejects_missing_root_kernel() {
             "init",
             volume_path.to_str().unwrap(),
             "--size",
-            "65536",
+            TEST_VOLUME_SIZE,
         ])
         .status()
         .expect("init runs")
@@ -276,7 +300,7 @@ fn k16_volume_inspect_boot_rejects_missing_root_kernel() {
             "format",
             root_path.to_str().unwrap(),
             "--blocks",
-            "95",
+            &TEST_ROOT_BLOCKS.to_string(),
         ])
         .status()
         .expect("k16fs format runs")
@@ -307,7 +331,8 @@ fn k16_volume_inspect_boot_rejects_missing_root_kernel() {
 fn k16_volume_replace_partition_rejects_wrong_size_without_truncation() {
     let volume_path = temp_file("partition-size-storage0.kv");
     let root_path = temp_file("oversized-root-partition.bin");
-    fs::write(&root_path, vec![0x7f_u8; 95 * 512 + 1]).expect("root partition writes");
+    fs::write(&root_path, vec![0x7f_u8; TEST_ROOT_BYTES as usize + 1])
+        .expect("root partition writes");
 
     assert!(Command::new(k16_binary())
         .args([
@@ -315,7 +340,7 @@ fn k16_volume_replace_partition_rejects_wrong_size_without_truncation() {
             "init",
             volume_path.to_str().unwrap(),
             "--size",
-            "65536",
+            TEST_VOLUME_SIZE,
         ])
         .status()
         .expect("init runs")
@@ -335,7 +360,10 @@ fn k16_volume_replace_partition_rejects_wrong_size_without_truncation() {
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr.contains("partition `ROOT` is 48640 bytes but input has 48641 bytes"),
+        stderr.contains(&format!(
+            "partition `ROOT` is {TEST_ROOT_BYTES} bytes but input has {} bytes",
+            TEST_ROOT_BYTES + 1
+        )),
         "stderr: {stderr}"
     );
 }
@@ -407,7 +435,7 @@ fn k16_volume_put_boot_installs_loader_kb_in_boot_k16fs_partition() {
             "init",
             volume_path.to_str().unwrap(),
             "--size",
-            "65536",
+            TEST_VOLUME_SIZE,
         ])
         .status()
         .expect("init runs")
@@ -467,7 +495,7 @@ fn k16_volume_put_kernel_installs_kernel_kx_in_root_k16fs() {
             "init",
             volume_path.to_str().unwrap(),
             "--size",
-            "65536",
+            TEST_VOLUME_SIZE,
         ])
         .status()
         .expect("init runs")
@@ -479,7 +507,7 @@ fn k16_volume_put_kernel_installs_kernel_kx_in_root_k16fs() {
             "format",
             root_path.to_str().unwrap(),
             "--blocks",
-            "95",
+            &TEST_ROOT_BLOCKS.to_string(),
         ])
         .status()
         .expect("k16fs format runs")
@@ -537,7 +565,7 @@ fn k16_volume_init_creates_root_k16fs_for_put_kernel() {
             "init",
             volume_path.to_str().unwrap(),
             "--size",
-            "65536",
+            TEST_VOLUME_SIZE,
         ])
         .status()
         .expect("init runs")

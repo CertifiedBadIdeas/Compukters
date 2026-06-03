@@ -6,7 +6,7 @@ pub const K16PT_ENTRY_SIZE: usize = 32;
 pub const K16PT_TABLE_LBA: u32 = 0;
 pub const K16PT_TABLE_BLOCKS: u32 = 1;
 pub const K16PT_MAX_ENTRIES: usize = (K16PT_BLOCK_SIZE - K16PT_HEADER_SIZE) / K16PT_ENTRY_SIZE;
-pub const K16PT_DEFAULT_BOOT_BLOCKS: u32 = 32;
+pub const K16PT_DEFAULT_BOOT_BLOCKS: u32 = 256;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PartitionType {

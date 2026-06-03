@@ -26,7 +26,9 @@ class K16FirmwareResourceTest {
 
         assertTrue(source.contains("generated/k16-firmware-resources"))
         assertTrue(source.contains("generated/k16-firmware-artifacts"))
-        assertTrue(source.contains("tasks.register<Exec>(\"linkK16BiosFlash\")"))
+        assertTrue(source.contains("tasks.register(\"linkK16BiosFlash\")"))
+        assertTrue(source.contains("fun Project.compileK16GuestRustBin("))
+        assertTrue(source.contains("ProcessBuilder(command)"))
         assertTrue(source.contains("rootProject.tasks.named(\"prepareK16Toolchain\")"))
         assertTrue(source.contains("resolveK16Toolchain()"))
         assertTrue(rootBuildScript.contains("prepareK16Toolchain"))
@@ -39,14 +41,16 @@ class K16FirmwareResourceTest {
         assertFalse(source.contains("providers.environmentVariable(\"K16_RUSTC\")"))
         assertFalse(source.contains("providers.environmentVariable(\"K16_LD\")"))
         assertTrue(source.contains("-C linker="))
-        assertTrue(source.contains("-C link-arg=--k16-target=bios"))
-        assertTrue(source.contains("-C link-arg=--k16-target=boot"))
-        assertTrue(source.contains("-C link-arg=--k16-target=kernel"))
+        assertTrue(source.contains("-C link-arg=--k16-target=\$k16Target"))
+        assertTrue(source.contains("k16Target = \"bios\""))
+        assertTrue(source.contains("k16Target = \"boot\""))
+        assertTrue(source.contains("k16Target = \"kernel\""))
         assertFalse(source.contains("tasks.register<Exec>(\"compileK16BiosObject\")"))
         assertFalse(source.contains("tasks.register<Exec>(\"compileK16SystemBootObject\")"))
         assertFalse(source.contains("tasks.register<Exec>(\"compileK16SystemKernelObject\")"))
         assertFalse(source.contains("--emit=obj"))
         assertTrue(source.contains("tasks.register<Exec>(\"compileK16SystemStorage0\")"))
+        assertTrue(source.contains("rust/guest/k16-boot-chain"))
         assertTrue(source.contains("rust/guest/k16-bios"))
         assertTrue(source.contains("rust/guest/k16-boot"))
         assertTrue(source.contains("rust/guest/k16-kernel"))
@@ -97,7 +101,7 @@ class K16FirmwareResourceTest {
     }
 
     @Test
-    fun bundledK16BiosFlashShowsNoBootableDeviceWithBundledSystemStorage0Volume() {
+    fun bundledK16SystemStorage0BootsRustKernel() {
         val workspace = createTempDirectory("k16-firmware-resource-test-")
         val biosFlashPath = workspace.resolve("bios.kflash")
         val storage0Path = workspace.resolve("storage0.kv")
@@ -108,12 +112,17 @@ class K16FirmwareResourceTest {
             biosFlashPath = biosFlashPath,
             storage0Path = storage0Path,
         ).use { runtime ->
-            val control = runtime.tick(maxTurns = 256)
+            val control = runtime.tick(maxTurns = 1_000_000)
             val snapshot = runtime.display0Snapshot() ?: error("display0 snapshot should exist")
+            val row0 = displayRow(snapshot, 0)
+            val debug = runtime.outputSnapshot().decodeToString()
 
-            assertEquals("K16 BIOS", displayRow(snapshot, 0))
-            assertEquals("No bootable device", displayRow(snapshot, 2))
-            assertEquals(NativeK16ComputerControl.STATUS_HALTED, control.status)
+            assertEquals(
+                NativeK16ComputerControl.STATUS_HALTED,
+                control.status,
+                "display row 0: $row0, panic code: ${control.panicCode}, debug: $debug",
+            )
+            assertEquals("KERNEL OK", row0, "panic code: ${control.panicCode}, debug: $debug")
         }
     }
 

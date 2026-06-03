@@ -104,8 +104,8 @@ fn k16_disasm_prints_kernel_artifact_from_kernel_load_base() {
         k16_tools::k16e::encode_k16_executable(
             &words_to_bytes(&[const4(1, 7), halt()]),
             k16_tools::k16e::K16eAbiKind::Kernel,
-            0x4000,
-            0x4000,
+            0x5000,
+            0x5000,
         )
         .expect("K16E encodes"),
     )
@@ -128,10 +128,10 @@ fn k16_disasm_prints_kernel_artifact_from_kernel_load_base() {
     );
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
-        stdout.contains("00004000: 1107  const4 r1, 7"),
+        stdout.contains("00005000: 1107  const4 r1, 7"),
         "stdout: {stdout}"
     );
-    assert!(stdout.contains("00004002: 0001  halt"), "stdout: {stdout}");
+    assert!(stdout.contains("00005002: 0001  halt"), "stdout: {stdout}");
 }
 
 #[test]

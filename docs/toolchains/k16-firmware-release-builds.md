@@ -4,11 +4,12 @@
 > Optimized K16 core codegen: [#158](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/158)
 
 Bundled K16 firmware can be built through either a debug or release Cargo
-profile. Development resource builds use the debug profile by default.
-`buildProductionUniversalJar` selects the release firmware profile by default,
-and maintainers can force the same path explicitly. The toolchain can be a
-local staged install from `prepareBuiltK16Toolchain`; this does not require
-publishing a GitHub release artifact:
+profile. Resource builds use the release profile by default because BIOS,
+bootloader, and kernel images are fixed-range firmware artifacts; debug images
+can exceed those ranges and must fail at link time instead of booting a
+corrupted chain. Maintainers can still request a profile explicitly. The
+toolchain can be a local staged install from `prepareBuiltK16Toolchain`; this
+does not require publishing a GitHub release artifact:
 
 ```bash
 ./gradlew-sandbox :v1_21_1-neoforge:processResources \

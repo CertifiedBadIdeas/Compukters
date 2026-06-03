@@ -35,8 +35,8 @@ K16VOL v1 uses the partitioned layout created by `k16 volume init`:
 
 ```text
 LBA 0        K16PT partition table
-LBA 1..32    BOOT partition
-LBA 33..end  ROOT partition
+LBA 1..256   BOOT partition
+LBA 257..end ROOT partition
 ```
 
 In the partitioned layout, `k16 volume put-boot` formats the `BOOT` partition
@@ -84,9 +84,9 @@ rather than truncating or padding it.
 Example ROOT filesystem image workflow:
 
 ```text
-k16 volume init storage0.kv --size 65536
+k16 volume init storage0.kv --size 1048576
 k16 volume inspect storage0.kv
-k16 fs kfs format root.kfs --blocks 95
+k16 fs kfs format root.kfs --blocks 1791
 k16 fs kfs mkdir root.kfs /boot
 k16 fs kfs put root.kfs /boot/kernel.kx kernel.kx
 k16 volume replace-partition storage0.kv ROOT root.kfs

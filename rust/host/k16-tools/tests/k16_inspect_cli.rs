@@ -6,13 +6,20 @@ use std::process::Command;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 static TEMP_FILE_COUNTER: AtomicUsize = AtomicUsize::new(0);
+const TEST_VOLUME_SIZE: &str = "1048576";
+const TEST_BOOT_BLOCKS: u32 = 256;
+const TEST_ROOT_START_LBA: u32 = 257;
+const TEST_ROOT_BLOCKS: u32 = 1_791;
+const TEST_BOOT_BYTES: u32 = TEST_BOOT_BLOCKS * 512;
+const TEST_ROOT_BYTES: u32 = TEST_ROOT_BLOCKS * 512;
+const TEST_TOTAL_BLOCKS: u32 = 2_048;
 
 #[test]
 fn k16_inspect_identifies_partitioned_volume() {
     let path = temp_file("storage0.kv");
     let media_path = temp_file("storage0-media.bin");
     assert!(Command::new(k16_binary())
-        .args(["volume", "init", path.to_str().unwrap(), "--size", "65536"])
+        .args(["volume", "init", path.to_str().unwrap(), "--size", TEST_VOLUME_SIZE])
         .status()
         .expect("volume init runs")
         .success());
@@ -31,7 +38,9 @@ fn k16_inspect_identifies_partitioned_volume() {
     );
     assert_eq!(
         String::from_utf8(output.stdout).expect("inspect stdout is UTF-8"),
-        "kind=K16VOL\nK16VOL v1 payload=65536\nK16PT v1 entries=2\nBOOT start_lba=1 blocks=32 bytes=16384 name=boot\nROOT start_lba=33 blocks=95 bytes=48640 name=root\n",
+        format!(
+            "kind=K16VOL\nK16VOL v1 payload={TEST_VOLUME_SIZE}\nK16PT v1 entries=2\nBOOT start_lba=1 blocks={TEST_BOOT_BLOCKS} bytes={TEST_BOOT_BYTES} name=boot\nROOT start_lba={TEST_ROOT_START_LBA} blocks={TEST_ROOT_BLOCKS} bytes={TEST_ROOT_BYTES} name=root\n"
+        ),
     );
 
     let media_output = Command::new(k16_binary())
@@ -45,7 +54,9 @@ fn k16_inspect_identifies_partitioned_volume() {
     );
     assert_eq!(
         String::from_utf8(media_output.stdout).expect("media inspect stdout is UTF-8"),
-        "kind=K16PT\nK16PT v1 entries=2 media_blocks=128\nBOOT start_lba=1 blocks=32 bytes=16384 name=boot\nROOT start_lba=33 blocks=95 bytes=48640 name=root\n",
+        format!(
+            "kind=K16PT\nK16PT v1 entries=2 media_blocks={TEST_TOTAL_BLOCKS}\nBOOT start_lba=1 blocks={TEST_BOOT_BLOCKS} bytes={TEST_BOOT_BYTES} name=boot\nROOT start_lba={TEST_ROOT_START_LBA} blocks={TEST_ROOT_BLOCKS} bytes={TEST_ROOT_BYTES} name=root\n"
+        ),
     );
 }
 

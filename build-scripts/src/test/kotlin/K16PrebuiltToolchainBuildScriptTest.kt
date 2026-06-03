@@ -73,6 +73,9 @@ class K16PrebuiltToolchainBuildScriptTest {
         assertTrue(k16ToolchainSupport.contains("fun Project.resolveK16Toolchain()"))
         assertTrue(k16ToolchainSupport.contains("file.canExecute()"))
         assertTrue(k16ToolchainSupport.contains("must be executable"))
+        assertTrue(k16ToolchainSupport.contains("file.length() > 0"))
+        assertTrue(k16ToolchainSupport.contains("must not be empty"))
+        assertTrue(k16ToolchainSupport.contains("must point outside the staged K16 toolchain root"))
         assertFalse(buildLogicSupport.contains("data class K16Toolchain"))
         assertFalse(buildLogicSupport.contains("fun Project.resolveK16Toolchain()"))
         assertTrue(gitignore.contains(".toolchain"))
@@ -84,7 +87,7 @@ class K16PrebuiltToolchainBuildScriptTest {
         assertFalse(neoforgeBuildScript.contains("printK16ToolchainEnv"))
         assertTrue(neoforgeBuildScript.contains("rootProject.tasks.named(\"prepareK16Toolchain\")"))
         assertTrue(neoforgeBuildScript.contains("resolveK16Toolchain()"))
-        assertTrue(neoforgeBuildScript.contains("environment(\"RUSTC_BOOTSTRAP\", \"1\")"))
+        assertTrue(neoforgeBuildScript.contains("processBuilder.environment()[\"RUSTC_BOOTSTRAP\"] = \"1\""))
 
         assertFalse(rootBuildScript.contains("providers.environmentVariable(\"K16_CARGO\")"))
         assertFalse(rootBuildScript.contains("providers.environmentVariable(\"K16_RUSTC\")"))
