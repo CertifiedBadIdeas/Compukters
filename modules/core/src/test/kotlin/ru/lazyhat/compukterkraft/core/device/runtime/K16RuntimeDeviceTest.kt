@@ -32,6 +32,7 @@ import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16ComputerEndpoint
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
 import java.nio.ByteBuffer
 import java.nio.file.Path
+import java.util.Collections
 import java.util.UUID
 import kotlin.io.path.exists
 import kotlin.io.path.readText
@@ -105,6 +106,7 @@ class K16RuntimeDeviceTest {
         device.turnOn()
         device.queueEvent("char", arrayOf(byteArrayOf('R'.code.toByte())))
         device.serverTick()
+        waitUntil { endpoint.tickCalls == 1 && device.serialOutputSnapshot().decodeToString() == "R" }
 
         assertTrue(device.isOn)
         assertEquals(1, endpoint.tickCalls)
@@ -117,6 +119,28 @@ class K16RuntimeDeviceTest {
         assertFalse(device.isOn)
         assertEquals(1, endpoint.closeCalls)
         assertEquals(listOf(true, false), powerChanges)
+    }
+
+    @Test
+    fun serverTickDoesNotExecuteK16EndpointOnCallerThread() {
+        val endpoint = RecordingK16Endpoint()
+        val device =
+            K16RuntimeDevice(
+                deviceId = 19,
+                properties = DeviceProperties(DeviceFamily.NORMAL, label = null),
+                endpointFactory = { endpoint },
+                stateSink = {},
+            )
+        val callerThreadId = Thread.currentThread().id
+
+        device.turnOn()
+        device.serverTick()
+        waitUntil { endpoint.tickCalls == 1 }
+
+        assertFalse(
+            endpoint.tickThreadIds.contains(callerThreadId),
+            "K16 endpoint execution must not run on the Minecraft server tick thread.",
+        )
     }
 
     @Test
@@ -133,6 +157,7 @@ class K16RuntimeDeviceTest {
 
         device.turnOn()
         device.queueEvent("paste", arrayOf(paste))
+        waitUntil { endpoint.inputs.isNotEmpty() }
 
         assertEquals("Hi", endpoint.inputs.single().decodeToString())
         assertEquals(0, paste.position())
@@ -155,6 +180,8 @@ class K16RuntimeDeviceTest {
         device.attachDisplaySession(playerUuid, containerId = 17, displayId = 1, width = 36, height = 27)
         device.turnOn()
         endpoint.injectOutput("K16!")
+        device.serverTick()
+        waitUntil { device.serialOutputSnapshot().decodeToString() == "K16!" }
         device.serverTick()
 
         assertEquals(1, displayNetwork.sentFrames.size)
@@ -256,6 +283,7 @@ class K16RuntimeDeviceTest {
 
         device.turnOn()
         device.serverTick()
+        waitUntil { endpoint.tickCalls == 1 }
         device.serverTick()
 
         assertEquals(1, endpoint.tickCalls)
@@ -278,6 +306,8 @@ class K16RuntimeDeviceTest {
         device.attachDisplaySession(playerUuid, containerId = 18, displayId = 1, width = 36, height = 27)
         device.turnOn()
         DeviceEvents.dispatch(device, KeyInputEvent.Character('R'.code.toByte()))
+        device.serverTick()
+        waitUntil { device.serialOutputSnapshot().decodeToString() == "R" }
         device.serverTick()
 
         assertEquals(listOf("R"), endpoint.inputs.map { it.decodeToString() })
@@ -302,6 +332,8 @@ class K16RuntimeDeviceTest {
         device.turnOn()
         DeviceEvents.dispatch(device, PasteInputEvent(ByteBuffer.wrap("K16".encodeToByteArray())))
         device.serverTick()
+        waitUntil { device.serialOutputSnapshot().decodeToString() == "K16" }
+        device.serverTick()
 
         assertEquals(listOf("K16"), endpoint.inputs.map { it.decodeToString() })
         assertEquals(1, displayNetwork.sentFrames.size)
@@ -320,6 +352,7 @@ class K16RuntimeDeviceTest {
 
         device.turnOn()
         DeviceEvents.dispatch(device, KeyInputEvent.Down(KeyCodes.KEY_ENTER, repeat = false))
+        waitUntil { endpoint.inputs.isNotEmpty() }
 
         assertEquals(listOf("\n"), endpoint.inputs.map { it.decodeToString() })
     }
@@ -337,6 +370,7 @@ class K16RuntimeDeviceTest {
 
         device.turnOn()
         DeviceEvents.dispatch(device, KeyInputEvent.Down(KeyCodes.KEY_BACKSPACE, repeat = false))
+        waitUntil { endpoint.inputs.isNotEmpty() }
 
         assertEquals(listOf(listOf(0x08)), endpoint.inputs.map { it.map(Byte::toInt) })
     }
@@ -388,10 +422,25 @@ class K16RuntimeDeviceTest {
         assertEquals(null, device.snapshotRuntimeState())
     }
 
+    private fun waitUntil(
+        timeoutMillis: Long = 2_000,
+        predicate: () -> Boolean,
+    ) {
+        val deadline = System.nanoTime() + timeoutMillis * 1_000_000
+        while (System.nanoTime() < deadline) {
+            if (predicate()) return
+            Thread.sleep(10)
+        }
+        assertTrue(predicate(), "Condition was not met within ${timeoutMillis}ms.")
+    }
+
     private class RecordingK16Endpoint : K16ComputerEndpoint {
-        val inputs = mutableListOf<ByteArray>()
+        val inputs: MutableList<ByteArray> = Collections.synchronizedList(mutableListOf())
+        @Volatile
         var tickCalls = 0
             private set
+        val tickThreadIds: MutableList<Long> = Collections.synchronizedList(mutableListOf())
+        @Volatile
         var closeCalls = 0
             private set
         var displaySnapshot: NativeK16ComputerDisplaySnapshot? = null
@@ -406,6 +455,7 @@ class K16RuntimeDeviceTest {
 
         override fun tick(maxTurns: Int): NativeK16ComputerControl {
             tickCalls += 1
+            tickThreadIds += Thread.currentThread().id
             return control
         }
 

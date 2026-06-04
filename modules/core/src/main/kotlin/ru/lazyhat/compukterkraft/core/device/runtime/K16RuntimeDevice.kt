@@ -29,7 +29,12 @@ import ru.lazyhat.compukterkraft.core.gui.TerminalFontConstants
 import ru.lazyhat.compukterkraft.core.input.KeyCodes
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16ComputerEndpoint
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16ComputerControl
+import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16ComputerDisplaySnapshot
 import java.nio.ByteBuffer
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.CompletionException
+import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.UUID
 
 interface RuntimeDeviceSerialEndpoint {
@@ -52,7 +57,7 @@ class K16RuntimeDevice(
     RuntimeDeviceFailureState {
     override val family: DeviceFamily = properties.family
 
-    private var endpoint: K16ComputerEndpoint? = null
+    private var endpoint: K16EndpointWorker? = null
     private val displaySessions = DisplaySessionTracker()
     private val renderers = mutableMapOf<Int, SerialTextDisplayRenderer>()
     private val displaySnapshotRefreshDisplayIds = mutableSetOf<Int>()
@@ -75,9 +80,9 @@ class K16RuntimeDevice(
 
     override fun turnOn() {
         if (endpoint != null) return
-        endpoint =
+        val worker =
             try {
-                endpointFactory()
+                K16EndpointWorker(deviceId, endpointFactory).also { it.start() }
             } catch (error: Throwable) {
                 runtimeFailureMessageBacking = error.message ?: error::class.java.name
                 LOGGER.error(error) {
@@ -86,6 +91,7 @@ class K16RuntimeDevice(
                 stateSink.onPowerStateChanged(false)
                 return
             }
+        endpoint = worker
         runtimeFailureMessageBacking = null
         terminalControlReached = false
         stateSink.onPowerStateChanged(true)
@@ -109,10 +115,8 @@ class K16RuntimeDevice(
 
     override fun serverTick() {
         val current = endpoint ?: return
-        if (!terminalControlReached) {
-            val control = current.tick()
-            terminalControlReached = control.isTerminal()
-        }
+        current.requestTick()
+        terminalControlReached = current.terminalControlReached
         if (!flushK16DisplaySnapshot(current)) {
             flushSerialOutput(current)
         }
@@ -198,7 +202,7 @@ class K16RuntimeDevice(
             else -> null
         }
 
-    private fun flushSerialOutput(current: K16ComputerEndpoint) {
+    private fun flushSerialOutput(current: K16EndpointWorker) {
         if (displaySessions.isEmpty()) return
         val output = current.outputSnapshot()
         if (output.size <= renderedSerialBytes) return
@@ -218,7 +222,7 @@ class K16RuntimeDevice(
         }
     }
 
-    private fun flushK16DisplaySnapshot(current: K16ComputerEndpoint): Boolean {
+    private fun flushK16DisplaySnapshot(current: K16EndpointWorker): Boolean {
         if (current.display0Snapshot() == null) return false
         if (displaySessions.isEmpty()) return true
         val refreshDisplayIds = displaySnapshotRefreshDisplayIds.toSet()
@@ -257,6 +261,135 @@ class K16RuntimeDevice(
             displayNetwork.sendDisplayFrame(session.playerUuid, session.containerId, frame)
         }
         toDetach.forEach { (playerUuid, detachedDisplayId) -> detachDisplaySession(playerUuid, detachedDisplayId) }
+    }
+
+    private class K16EndpointWorker(
+        deviceId: Int,
+        private val endpointFactory: () -> K16ComputerEndpoint,
+    ) : AutoCloseable {
+        private val commands = LinkedBlockingQueue<Command>()
+        private val startup = CompletableFuture<Unit>()
+        private val closed = AtomicBoolean(false)
+        private val tickRequested = AtomicBoolean(false)
+        private val workerThread =
+            Thread(::runWorker, "compukterkraft-k16-$deviceId").apply {
+                isDaemon = true
+            }
+        @Volatile
+        private var outputCache: ByteArray = ByteArray(0)
+        @Volatile
+        private var display0Cache: NativeK16ComputerDisplaySnapshot? = null
+        @Volatile
+        var terminalControlReached: Boolean = false
+            private set
+        private var lastPolledDisplay0Sequence: Long? = null
+
+        fun start() {
+            workerThread.start()
+            try {
+                startup.join()
+            } catch (error: CompletionException) {
+                throw error.cause ?: error
+            }
+        }
+
+        fun requestTick() {
+            if (!closed.get() && !terminalControlReached && tickRequested.compareAndSet(false, true)) {
+                commands.offer(Command.Tick)
+            }
+        }
+
+        fun pushInput(bytes: ByteArray) {
+            if (!closed.get() && bytes.isNotEmpty()) {
+                commands.offer(Command.PushInput(bytes.copyOf()))
+            }
+        }
+
+        fun outputSnapshot(): ByteArray = outputCache.copyOf()
+
+        fun display0Snapshot(): NativeK16ComputerDisplaySnapshot? = display0Cache
+
+        fun pollDisplay0Snapshot(): NativeK16ComputerDisplaySnapshot? {
+            val snapshot = display0Cache ?: run {
+                lastPolledDisplay0Sequence = null
+                return null
+            }
+            if (lastPolledDisplay0Sequence == snapshot.sequence) {
+                return null
+            }
+            lastPolledDisplay0Sequence = snapshot.sequence
+            return snapshot
+        }
+
+        fun clearOutput() {
+            outputCache = ByteArray(0)
+            if (!closed.get()) {
+                commands.offer(Command.ClearOutput)
+            }
+        }
+
+        fun machineSnapshot(): ByteArray {
+            check(!closed.get()) { "K16 endpoint worker is closed" }
+            val response = CompletableFuture<ByteArray>()
+            commands.offer(Command.MachineSnapshot(response))
+            return response.join()
+        }
+
+        override fun close() {
+            if (closed.compareAndSet(false, true)) {
+                commands.offer(Command.Close)
+                workerThread.join()
+            }
+        }
+
+        private fun runWorker() {
+            var endpoint: K16ComputerEndpoint? = null
+            try {
+                endpoint = endpointFactory()
+                refreshCaches(endpoint)
+                startup.complete(Unit)
+            } catch (error: Throwable) {
+                startup.completeExceptionally(error)
+                endpoint?.close()
+                return
+            }
+            try {
+                while (true) {
+                    when (val command = commands.take()) {
+                        Command.Tick -> {
+                            tickRequested.set(false)
+                            if (!terminalControlReached) {
+                                val control = endpoint.tick()
+                                terminalControlReached = control.isTerminal()
+                                refreshCaches(endpoint)
+                            }
+                        }
+                        is Command.PushInput -> endpoint.pushInput(command.bytes)
+                        Command.ClearOutput -> {
+                            endpoint.clearOutput()
+                            refreshCaches(endpoint)
+                        }
+                        is Command.MachineSnapshot -> command.response.complete(endpoint.machineSnapshot())
+                        Command.Close -> break
+                    }
+                }
+            } finally {
+                endpoint.close()
+            }
+        }
+
+        private fun refreshCaches(endpoint: K16ComputerEndpoint) {
+            outputCache = endpoint.outputSnapshot()
+            display0Cache = endpoint.display0Snapshot()
+        }
+
+        private sealed interface Command {
+            data object Tick : Command
+            data class PushInput(val bytes: ByteArray) : Command
+            data object ClearOutput : Command
+            data class MachineSnapshot(val response: CompletableFuture<ByteArray>) : Command
+            data object Close : Command
+        }
     }
 
     companion object {
