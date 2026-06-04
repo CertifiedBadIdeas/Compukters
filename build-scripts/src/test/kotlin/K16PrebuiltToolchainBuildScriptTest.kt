@@ -41,7 +41,7 @@ class K16PrebuiltToolchainBuildScriptTest {
         assertTrue(config.contains(".zip"))
         assertFalse(config.contains(".tar.zst"))
         assertTrue(config.contains("\"linux-x86_64\""))
-        assertTrue(config.contains("\"54d859125ceaa0093ccea98b6069c3c37d3aa6270fc1242c2a20ba8c6589dc99\""))
+        assertTrue(config.contains("\"891872ad71e7d93474c32bac9ead9a3ab031f0de6c51788b16326599a7787f1e\""))
 
         assertTrue(rootBuildScript.contains("downloadK16ToolchainArchive"))
         assertTrue(rootBuildScript.contains("installK16Toolchain"))
