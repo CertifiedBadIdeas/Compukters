@@ -60,8 +60,8 @@ class K16ToolingRenameTest {
         assertTrue(source.contains("#![no_std]"))
         assertTrue(source.contains("#![no_main]"))
         assertTrue(source.contains("extern \"C\" fn _start() -> !"))
-        assertTrue(source.contains("K16 BIOS"))
-        assertTrue(source.contains("No bootable device"))
+        assertTrue(source.contains("print_bios_banner"))
+        assertTrue(source.contains("print_no_bootable_device"))
     }
 
     @Test
@@ -83,7 +83,8 @@ class K16ToolingRenameTest {
         assertTrue(kernel.contains("#![no_std]"))
         assertTrue(kernel.contains("#![no_main]"))
         assertTrue(kernel.contains("extern \"C\" fn _start() -> !"))
-        assertTrue(kernel.contains("KERNEL OK"))
+        assertTrue(kernel.contains("print_kernel_ok_display"))
+        assertTrue(kernel.contains("print_kernel_ok_debug"))
     }
 
     @Test
@@ -103,13 +104,34 @@ class K16ToolingRenameTest {
     }
 
     @Test
+    fun activeBootChainTestsUseK16ArtifactsWithoutRuxSourceFixtures() {
+        val testPaths =
+            listOf(
+                "rust/host/k16-tools/tests/k16_volume_cli.rs",
+                "rust/host/k16-tools/tests/k16_storage_workflow_cli.rs",
+            )
+
+        for (path in testPaths) {
+            val source = root.resolve(path).readText()
+
+            assertTrue(source.contains("K16eAbiKind"))
+            assertFalse(source.contains(".rx"), "$path should not use Rux source fixtures")
+            assertFalse(source.contains("rux compile"), "$path should not invoke the Rux compiler")
+            assertFalse(source.contains("--bin rux"), "$path should not invoke the Rux CLI")
+            assertFalse(source.contains("examples/boot"), "$path should not read retired boot examples")
+            assertFalse(source.contains("examples/kernel"), "$path should not read retired kernel examples")
+            assertFalse(source.contains("examples/init"), "$path should not read retired init examples")
+        }
+    }
+
+    @Test
     fun rustFirmwareGradleBuildsCoreOnlyArtifacts() {
         val buildScript = root.resolve("modules/v1_21_1/v1_21_1-neoforge/build.gradle.kts").readText()
 
         assertTrue(buildScript.contains("-Zbuild-std=core"))
         assertTrue(buildScript.contains("-Zjson-target-spec"))
         assertTrue(buildScript.contains("\"RUSTFLAGS\""))
-        assertTrue(buildScript.contains("-C linker=\${toolchain.linker.absolutePath}"))
+        assertTrue(buildScript.contains("-C linker=\${k16HostLinker.asFile.absolutePath}"))
         assertTrue(buildScript.contains("-Cjump-tables=no"))
         assertFalse(buildScript.contains("build-std=core,alloc"))
         assertFalse(buildScript.contains("build-std=std"))
