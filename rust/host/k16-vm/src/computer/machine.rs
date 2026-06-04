@@ -1,6 +1,7 @@
 use crate::computer::devices::{
     BiosFlashDevice, ComputerControlDevice, ComputerTextDisplaySnapshot, DebugSerialDevice,
-    K16VolumeFileStorageMedia, SerialInputDevice, StoragePortDevice, TextDisplayDevice,
+    FramebufferDevice, K16VolumeFileStorageMedia, SerialInputDevice, StoragePortDevice,
+    TextDisplayDevice,
 };
 use crate::computer::profile::{
     validate_profile_v2, ComputerHardwareDevice, ComputerMachineProfile, HardwareTableEntry,
@@ -9,6 +10,7 @@ use crate::computer::profile::{
 use crate::computer::snapshot;
 use crate::computer::snapshot::{ComputerCpuSnapshotRecord, ComputerDeviceSnapshotRecord};
 use crate::computer_abi;
+use crate::display::DisplayFrameDelta;
 use crate::k16::{K16Cpu, K16Signal};
 use crate::low_bus::{MachineBus, MmioDeviceId};
 use crate::low_machine::{MachineMemory, MemoryFault};
@@ -22,6 +24,7 @@ pub struct ComputerMachine {
     debug_device_id: Option<MmioDeviceId>,
     serial_input_device_id: Option<MmioDeviceId>,
     display0_device_id: Option<MmioDeviceId>,
+    framebuffer0_device_id: Option<MmioDeviceId>,
     storage0_device_id: Option<MmioDeviceId>,
     bios_flash_device_id: Option<MmioDeviceId>,
     cpus: Vec<ComputerCpuContext>,
@@ -110,6 +113,7 @@ impl ComputerMachine {
     pub const HARDWARE_ID_SERIAL_INPUT: u32 = computer_abi::COMPUTER_HARDWARE_ID_SERIAL_INPUT;
     pub const HARDWARE_ID_DISPLAY0: u32 = computer_abi::COMPUTER_HARDWARE_ID_DISPLAY0;
     pub const HARDWARE_ID_STORAGE0: u32 = computer_abi::COMPUTER_HARDWARE_ID_STORAGE0;
+    pub const HARDWARE_ID_FRAMEBUFFER0: u32 = computer_abi::COMPUTER_HARDWARE_ID_FRAMEBUFFER0;
     pub const CONTROL_BASE: u32 = computer_abi::CONTROL_BASE;
     pub const CONTROL_STATUS: u32 = computer_abi::CONTROL_STATUS;
     pub const CONTROL_PANIC_CODE: u32 = computer_abi::CONTROL_PANIC_CODE;
@@ -137,6 +141,43 @@ impl ComputerMachine {
         computer_abi::DISPLAY0_COMMAND_PUT_BYTE_AT_CURSOR;
     pub const DISPLAY0_COMMAND_PUT_BYTE_AT_XY: i32 = computer_abi::DISPLAY0_COMMAND_PUT_BYTE_AT_XY;
     pub const DISPLAY0_COMMAND_NEWLINE: i32 = computer_abi::DISPLAY0_COMMAND_NEWLINE;
+    pub const FRAMEBUFFER0_BASE: u32 = computer_abi::FRAMEBUFFER0_BASE;
+    pub const FRAMEBUFFER0_WIDTH: u32 = computer_abi::FRAMEBUFFER0_WIDTH;
+    pub const FRAMEBUFFER0_HEIGHT: u32 = computer_abi::FRAMEBUFFER0_HEIGHT;
+    pub const FRAMEBUFFER0_STRIDE_BYTES: u32 = computer_abi::FRAMEBUFFER0_STRIDE_BYTES;
+    pub const FRAMEBUFFER0_PIXEL_FORMAT: u32 = computer_abi::FRAMEBUFFER0_PIXEL_FORMAT;
+    pub const FRAMEBUFFER0_COMMAND: u32 = computer_abi::FRAMEBUFFER0_COMMAND;
+    pub const FRAMEBUFFER0_STATUS: u32 = computer_abi::FRAMEBUFFER0_STATUS;
+    pub const FRAMEBUFFER0_ERROR: u32 = computer_abi::FRAMEBUFFER0_ERROR;
+    pub const FRAMEBUFFER0_X: u32 = computer_abi::FRAMEBUFFER0_X;
+    pub const FRAMEBUFFER0_Y: u32 = computer_abi::FRAMEBUFFER0_Y;
+    pub const FRAMEBUFFER0_RECT_WIDTH: u32 = computer_abi::FRAMEBUFFER0_RECT_WIDTH;
+    pub const FRAMEBUFFER0_RECT_HEIGHT: u32 = computer_abi::FRAMEBUFFER0_RECT_HEIGHT;
+    pub const FRAMEBUFFER0_BUFFER_ADDR: u32 = computer_abi::FRAMEBUFFER0_BUFFER_ADDR;
+    pub const FRAMEBUFFER0_BUFFER_STRIDE_BYTES: u32 =
+        computer_abi::FRAMEBUFFER0_BUFFER_STRIDE_BYTES;
+    pub const FRAMEBUFFER0_COLOR: u32 = computer_abi::FRAMEBUFFER0_COLOR;
+    pub const FRAMEBUFFER0_SEQUENCE_LOW: u32 = computer_abi::FRAMEBUFFER0_SEQUENCE_LOW;
+    pub const FRAMEBUFFER0_SEQUENCE_HIGH: u32 = computer_abi::FRAMEBUFFER0_SEQUENCE_HIGH;
+    pub const FRAMEBUFFER0_SIZE: u32 = computer_abi::FRAMEBUFFER0_SIZE;
+    pub const FRAMEBUFFER0_PIXEL_FORMAT_RGB565: i32 =
+        computer_abi::FRAMEBUFFER0_PIXEL_FORMAT_RGB565;
+    pub const FRAMEBUFFER0_STATUS_READY: i32 = computer_abi::FRAMEBUFFER0_STATUS_READY;
+    pub const FRAMEBUFFER0_STATUS_DONE: i32 = computer_abi::FRAMEBUFFER0_STATUS_DONE;
+    pub const FRAMEBUFFER0_STATUS_ERROR: i32 = computer_abi::FRAMEBUFFER0_STATUS_ERROR;
+    pub const FRAMEBUFFER0_ERROR_NONE: i32 = computer_abi::FRAMEBUFFER0_ERROR_NONE;
+    pub const FRAMEBUFFER0_ERROR_INVALID_COMMAND: i32 =
+        computer_abi::FRAMEBUFFER0_ERROR_INVALID_COMMAND;
+    pub const FRAMEBUFFER0_ERROR_BUFFER_OUT_OF_BOUNDS: i32 =
+        computer_abi::FRAMEBUFFER0_ERROR_BUFFER_OUT_OF_BOUNDS;
+    pub const FRAMEBUFFER0_ERROR_INVALID_RECT: i32 = computer_abi::FRAMEBUFFER0_ERROR_INVALID_RECT;
+    pub const FRAMEBUFFER0_ERROR_INVALID_STRIDE: i32 =
+        computer_abi::FRAMEBUFFER0_ERROR_INVALID_STRIDE;
+    pub const FRAMEBUFFER0_COMMAND_NOP: i32 = computer_abi::FRAMEBUFFER0_COMMAND_NOP;
+    pub const FRAMEBUFFER0_COMMAND_CLEAR: i32 = computer_abi::FRAMEBUFFER0_COMMAND_CLEAR;
+    pub const FRAMEBUFFER0_COMMAND_BLIT_BUFFER: i32 =
+        computer_abi::FRAMEBUFFER0_COMMAND_BLIT_BUFFER;
+    pub const FRAMEBUFFER0_COMMAND_PRESENT: i32 = computer_abi::FRAMEBUFFER0_COMMAND_PRESENT;
     pub const STORAGE0_BASE: u32 = computer_abi::STORAGE0_BASE;
     pub const STORAGE0_VERSION: u32 = computer_abi::STORAGE0_VERSION;
     pub const STORAGE0_STATUS: u32 = computer_abi::STORAGE0_STATUS;
@@ -172,6 +213,7 @@ impl ComputerMachine {
         let mut debug_device_id = None;
         let mut serial_input_device_id = None;
         let mut display0_device_id = None;
+        let mut framebuffer0_device_id = None;
         let mut storage0_device_id = None;
         let hardware_entries = profile
             .hardware
@@ -197,6 +239,9 @@ impl ComputerMachine {
                 ComputerHardwareDevice::TextDisplay => {
                     bus.map_mmio(hardware.mmio_base, Box::new(TextDisplayDevice::new()))?
                 }
+                ComputerHardwareDevice::Framebuffer => {
+                    bus.map_mmio(hardware.mmio_base, Box::new(FramebufferDevice::new()))?
+                }
                 ComputerHardwareDevice::StoragePort(config) => {
                     let device = match &config.media {
                         Some(StorageMediaConfig::InMemory { bytes, read_only }) => {
@@ -217,6 +262,7 @@ impl ComputerMachine {
                 ComputerHardwareDevice::DebugSerial => debug_device_id = Some(device_id),
                 ComputerHardwareDevice::SerialInput => serial_input_device_id = Some(device_id),
                 ComputerHardwareDevice::TextDisplay => display0_device_id = Some(device_id),
+                ComputerHardwareDevice::Framebuffer => framebuffer0_device_id = Some(device_id),
                 ComputerHardwareDevice::StoragePort(_) => storage0_device_id = Some(device_id),
             }
         }
@@ -228,6 +274,7 @@ impl ComputerMachine {
             debug_device_id,
             serial_input_device_id,
             display0_device_id,
+            framebuffer0_device_id,
             storage0_device_id,
             bios_flash_device_id: None,
             cpus: Vec::new(),
@@ -289,6 +336,7 @@ impl ComputerMachine {
         self.push_memory_map_region(&mut map, self.debug_device_id, "debug");
         self.push_memory_map_region(&mut map, self.serial_input_device_id, "serial-input");
         self.push_memory_map_region(&mut map, self.display0_device_id, "display0");
+        self.push_memory_map_region(&mut map, self.framebuffer0_device_id, "framebuffer0");
         self.push_memory_map_region(&mut map, self.storage0_device_id, "storage0");
         self.push_memory_map_region_with_flags(
             &mut map,
@@ -519,6 +567,12 @@ impl ComputerMachine {
         self.display0_device().map(TextDisplayDevice::sequence)
     }
 
+    pub fn drain_framebuffer0_frames(&mut self) -> Vec<DisplayFrameDelta> {
+        self.framebuffer0_device_mut()
+            .map(FramebufferDevice::drain_frames)
+            .unwrap_or_default()
+    }
+
     fn push_memory_map_region(
         &self,
         map: &mut ComputerMemoryMap,
@@ -709,6 +763,11 @@ impl ComputerMachine {
             .and_then(|id| self.bus.device_mut::<TextDisplayDevice>(id))
     }
 
+    fn framebuffer0_device_mut(&mut self) -> Option<&mut FramebufferDevice> {
+        self.framebuffer0_device_id
+            .and_then(|id| self.bus.device_mut::<FramebufferDevice>(id))
+    }
+
     fn storage0_device(&self) -> Option<&StoragePortDevice> {
         self.storage0_device_id
             .and_then(|id| self.bus.device::<StoragePortDevice>(id))
@@ -855,7 +914,8 @@ fn stable_panic_code(message: &str) -> i32 {
 mod tests {
     use super::ComputerMachine;
     use crate::computer::devices::{
-        ComputerControlDevice, DebugSerialDevice, SerialInputDevice, TextDisplayDevice,
+        ComputerControlDevice, DebugSerialDevice, FramebufferDevice, SerialInputDevice,
+        TextDisplayDevice,
     };
     use crate::computer::profile::{ComputerHardwareConfig, ComputerMachineProfile};
     use crate::computer_abi;
@@ -920,13 +980,27 @@ mod tests {
     fn computer_machine_writes_display0_hardware_entry() {
         let machine = ComputerMachine::new(1024).unwrap();
 
-        assert_eq!(read_u32(machine.memory(), 0x18), 5);
+        assert_eq!(read_u32(machine.memory(), 0x18), 6);
         assert_hardware_entry(
             machine.memory(),
             64,
             computer_abi::COMPUTER_HARDWARE_ID_DISPLAY0,
             computer_abi::DISPLAY0_BASE,
             computer_abi::DISPLAY0_SIZE,
+        );
+    }
+
+    #[test]
+    fn computer_machine_writes_framebuffer0_hardware_entry() {
+        let machine = ComputerMachine::new(1024).unwrap();
+
+        assert_eq!(read_u32(machine.memory(), 0x18), 6);
+        assert_hardware_entry(
+            machine.memory(),
+            76,
+            computer_abi::COMPUTER_HARDWARE_ID_FRAMEBUFFER0,
+            computer_abi::FRAMEBUFFER0_BASE,
+            computer_abi::FRAMEBUFFER0_SIZE,
         );
     }
 
@@ -973,6 +1047,64 @@ mod tests {
         assert_eq!(snapshot.cursor_y, 0);
         assert_eq!(snapshot.sequence, 1);
         assert_eq!(snapshot.cells[0], b'R');
+    }
+
+    #[test]
+    fn computer_framebuffer0_blits_guest_ram_to_frame_delta() {
+        let mut machine = ComputerMachine::new(1024).unwrap();
+        machine
+            .write_guest_ram_bytes(0x0100, &[0x00, 0xF8, 0xE0, 0x07, 0x1F, 0x00, 0xFF, 0xFF])
+            .unwrap();
+
+        machine
+            .bus
+            .store_i32(ComputerMachine::FRAMEBUFFER0_X, 0)
+            .unwrap();
+        machine
+            .bus
+            .store_i32(ComputerMachine::FRAMEBUFFER0_Y, 0)
+            .unwrap();
+        machine
+            .bus
+            .store_i32(ComputerMachine::FRAMEBUFFER0_RECT_WIDTH, 2)
+            .unwrap();
+        machine
+            .bus
+            .store_i32(ComputerMachine::FRAMEBUFFER0_RECT_HEIGHT, 2)
+            .unwrap();
+        machine
+            .bus
+            .store_i32(ComputerMachine::FRAMEBUFFER0_BUFFER_ADDR, 0x0100)
+            .unwrap();
+        machine
+            .bus
+            .store_i32(ComputerMachine::FRAMEBUFFER0_BUFFER_STRIDE_BYTES, 4)
+            .unwrap();
+        machine
+            .bus
+            .store_i32(
+                ComputerMachine::FRAMEBUFFER0_COMMAND,
+                ComputerMachine::FRAMEBUFFER0_COMMAND_BLIT_BUFFER,
+            )
+            .unwrap();
+        machine
+            .bus
+            .store_i32(
+                ComputerMachine::FRAMEBUFFER0_COMMAND,
+                ComputerMachine::FRAMEBUFFER0_COMMAND_PRESENT,
+            )
+            .unwrap();
+
+        let frames = machine.drain_framebuffer0_frames();
+
+        assert_eq!(frames.len(), 1);
+        let frame = &frames[0];
+        assert_eq!(frame.display_id, 1);
+        assert_eq!(frame.width, 320);
+        assert_eq!(frame.height, 200);
+        assert_eq!(frame.tiles.len(), 1);
+        assert_eq!(&frame.tiles[0].payload[0..4], &[0xF8, 0x00, 0x07, 0xE0]);
+        assert_eq!(&frame.tiles[0].payload[32..36], &[0x00, 0x1F, 0xFF, 0xFF]);
     }
 
     #[test]
@@ -1095,7 +1227,7 @@ mod tests {
             read_u32(machine.memory(), 0x14),
             ComputerMachine::PROFILE_V2_BOOT_INFO_SIZE
         );
-        assert_eq!(read_u32(machine.memory(), 0x18), 5);
+        assert_eq!(read_u32(machine.memory(), 0x18), 6);
     }
 
     #[test]
@@ -1133,6 +1265,13 @@ mod tests {
         assert_hardware_entry(
             machine.memory(),
             76,
+            computer_abi::COMPUTER_HARDWARE_ID_FRAMEBUFFER0,
+            computer_abi::FRAMEBUFFER0_BASE,
+            computer_abi::PROFILE_V2_PAGE_SIZE,
+        );
+        assert_hardware_entry(
+            machine.memory(),
+            88,
             computer_abi::COMPUTER_HARDWARE_ID_STORAGE0,
             computer_abi::STORAGE0_BASE,
             computer_abi::PROFILE_V2_PAGE_SIZE,
@@ -1144,7 +1283,7 @@ mod tests {
         let profile = ComputerMachineProfile::computer_v1(1024);
         let machine = ComputerMachine::from_profile(profile).unwrap();
 
-        assert_eq!(read_u32(machine.memory(), 0x18), 5);
+        assert_eq!(read_u32(machine.memory(), 0x18), 6);
         assert_hardware_entry(
             machine.memory(),
             28,
@@ -1176,6 +1315,13 @@ mod tests {
         assert_hardware_entry(
             machine.memory(),
             76,
+            computer_abi::COMPUTER_HARDWARE_ID_FRAMEBUFFER0,
+            computer_abi::FRAMEBUFFER0_BASE,
+            computer_abi::PROFILE_V2_PAGE_SIZE,
+        );
+        assert_hardware_entry(
+            machine.memory(),
+            88,
             computer_abi::COMPUTER_HARDWARE_ID_STORAGE0,
             computer_abi::STORAGE0_BASE,
             computer_abi::PROFILE_V2_PAGE_SIZE,
@@ -1834,6 +1980,22 @@ mod tests {
             ComputerMachine::DISPLAY0_COMMAND_NEWLINE,
             computer_abi::DISPLAY0_COMMAND_NEWLINE,
         );
+        assert_eq!(
+            ComputerMachine::FRAMEBUFFER0_BASE,
+            computer_abi::FRAMEBUFFER0_BASE,
+        );
+        assert_eq!(
+            ComputerMachine::FRAMEBUFFER0_COMMAND,
+            computer_abi::FRAMEBUFFER0_COMMAND,
+        );
+        assert_eq!(
+            ComputerMachine::FRAMEBUFFER0_COMMAND_BLIT_BUFFER,
+            computer_abi::FRAMEBUFFER0_COMMAND_BLIT_BUFFER,
+        );
+        assert_eq!(
+            ComputerMachine::FRAMEBUFFER0_COMMAND_PRESENT,
+            computer_abi::FRAMEBUFFER0_COMMAND_PRESENT,
+        );
         assert_eq!(ComputerMachine::STATUS_RESET, computer_abi::STATUS_RESET);
         assert_eq!(
             ComputerMachine::STATUS_BOOTING,
@@ -1850,11 +2012,13 @@ mod tests {
         let debug = DebugSerialDevice::new();
         let serial_input = SerialInputDevice::new();
         let display = TextDisplayDevice::new();
+        let framebuffer = FramebufferDevice::new();
 
         assert_eq!(control.size(), computer_abi::CONTROL_SIZE);
         assert_eq!(debug.size(), computer_abi::DEBUG_SIZE);
         assert_eq!(serial_input.size(), computer_abi::SERIAL_INPUT_SIZE);
         assert_eq!(display.size(), computer_abi::DISPLAY0_SIZE);
+        assert_eq!(framebuffer.size(), computer_abi::FRAMEBUFFER0_SIZE);
     }
 
     #[test]
@@ -1915,6 +2079,19 @@ mod tests {
         assert_eq!(display.size, computer_abi::DISPLAY0_SIZE);
         assert!(display.readable);
         assert!(display.writable);
+    }
+
+    #[test]
+    fn computer_memory_map_describes_framebuffer0_mmio_region() {
+        let machine = ComputerMachine::new(1024).unwrap();
+        let map = machine.memory_map();
+
+        let framebuffer = map.region("framebuffer0").unwrap();
+
+        assert_eq!(framebuffer.base, computer_abi::FRAMEBUFFER0_BASE);
+        assert_eq!(framebuffer.size, computer_abi::FRAMEBUFFER0_SIZE);
+        assert!(framebuffer.readable);
+        assert!(framebuffer.writable);
     }
 
     fn read_u32(memory: &crate::low_machine::MachineMemory, address: u32) -> u32 {

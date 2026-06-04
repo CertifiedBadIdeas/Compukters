@@ -1,6 +1,7 @@
 use crate::computer::{
     BootHandoffError, ComputerMachine, ComputerMachineProfile, ComputerTextDisplaySnapshot, CpuId,
 };
+use crate::display::DisplayFrameDelta;
 use crate::k16::K16Signal;
 use crate::k16e;
 use std::fs;
@@ -164,6 +165,10 @@ impl K16ComputerHandle {
 
     pub fn display0_snapshot(&self) -> Option<K16ComputerTextDisplaySnapshot> {
         self.machine.display0_snapshot().map(Into::into)
+    }
+
+    pub fn drain_framebuffer0_frames(&mut self) -> Vec<DisplayFrameDelta> {
+        self.machine.drain_framebuffer0_frames()
     }
 
     pub fn push_serial_input(&mut self, bytes: &[u8]) {

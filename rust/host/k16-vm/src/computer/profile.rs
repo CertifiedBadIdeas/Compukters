@@ -1,6 +1,6 @@
 use crate::computer::devices::{
-    ComputerControlDevice, DebugSerialDevice, SerialInputDevice, StoragePortDevice,
-    TextDisplayDevice,
+    ComputerControlDevice, DebugSerialDevice, FramebufferDevice, SerialInputDevice,
+    StoragePortDevice, TextDisplayDevice,
 };
 use crate::computer_abi;
 use crate::low_machine::MemoryFault;
@@ -42,6 +42,10 @@ impl ComputerMachineProfile {
                 computer_abi::COMPUTER_HARDWARE_ID_DISPLAY0,
                 computer_abi::DISPLAY0_BASE,
             ))
+            .with_hardware(ComputerHardwareConfig::framebuffer(
+                computer_abi::COMPUTER_HARDWARE_ID_FRAMEBUFFER0,
+                computer_abi::FRAMEBUFFER0_BASE,
+            ))
             .with_hardware(ComputerHardwareConfig::storage_port(
                 computer_abi::COMPUTER_HARDWARE_ID_STORAGE0,
                 computer_abi::STORAGE0_BASE,
@@ -69,6 +73,10 @@ impl ComputerMachineProfile {
             .with_hardware(ComputerHardwareConfig::text_display(
                 computer_abi::COMPUTER_HARDWARE_ID_DISPLAY0,
                 computer_abi::DISPLAY0_BASE,
+            ))
+            .with_hardware(ComputerHardwareConfig::framebuffer(
+                computer_abi::COMPUTER_HARDWARE_ID_FRAMEBUFFER0,
+                computer_abi::FRAMEBUFFER0_BASE,
             ))
             .with_hardware(ComputerHardwareConfig::storage_port_with_media(
                 computer_abi::COMPUTER_HARDWARE_ID_STORAGE0,
@@ -98,6 +106,10 @@ impl ComputerMachineProfile {
             .with_hardware(ComputerHardwareConfig::text_display(
                 computer_abi::COMPUTER_HARDWARE_ID_DISPLAY0,
                 computer_abi::DISPLAY0_BASE,
+            ))
+            .with_hardware(ComputerHardwareConfig::framebuffer(
+                computer_abi::COMPUTER_HARDWARE_ID_FRAMEBUFFER0,
+                computer_abi::FRAMEBUFFER0_BASE,
             ))
             .with_hardware(ComputerHardwareConfig::storage_port_with_k16_volume_file(
                 computer_abi::COMPUTER_HARDWARE_ID_STORAGE0,
@@ -152,6 +164,14 @@ impl ComputerHardwareConfig {
         }
     }
 
+    pub fn framebuffer(id: u32, mmio_base: u32) -> Self {
+        Self {
+            id,
+            mmio_base,
+            device: ComputerHardwareDevice::Framebuffer,
+        }
+    }
+
     pub fn storage_port(id: u32, mmio_base: u32) -> Self {
         Self {
             id,
@@ -200,6 +220,7 @@ pub(crate) enum ComputerHardwareDevice {
     DebugSerial,
     SerialInput,
     TextDisplay,
+    Framebuffer,
     StoragePort(StoragePortConfig),
 }
 
@@ -241,6 +262,7 @@ impl ComputerHardwareDevice {
             Self::DebugSerial => DebugSerialDevice::SIZE,
             Self::SerialInput => SerialInputDevice::SIZE,
             Self::TextDisplay => TextDisplayDevice::SIZE,
+            Self::Framebuffer => FramebufferDevice::SIZE,
             Self::StoragePort(_) => StoragePortDevice::SIZE,
         }
     }

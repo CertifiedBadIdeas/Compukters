@@ -130,6 +130,44 @@ pub mod computer {
         pub const MEDIA_ERROR: i32 = 3;
     }
 
+    pub mod framebuffer0 {
+        pub const BASE: u32 = 0x1000_0500;
+        pub const WIDTH: u32 = 0x1000_0500;
+        pub const HEIGHT: u32 = 0x1000_0504;
+        pub const STRIDE_BYTES: u32 = 0x1000_0508;
+        pub const PIXEL_FORMAT: u32 = 0x1000_050c;
+        pub const COMMAND: u32 = 0x1000_0510;
+        pub const STATUS: u32 = 0x1000_0514;
+        pub const ERROR: u32 = 0x1000_0518;
+        pub const X: u32 = 0x1000_051c;
+        pub const Y: u32 = 0x1000_0520;
+        pub const RECT_WIDTH: u32 = 0x1000_0524;
+        pub const RECT_HEIGHT: u32 = 0x1000_0528;
+        pub const BUFFER_ADDR: u32 = 0x1000_052c;
+        pub const BUFFER_STRIDE_BYTES: u32 = 0x1000_0530;
+        pub const COLOR: u32 = 0x1000_0534;
+        pub const SEQUENCE_LOW: u32 = 0x1000_0538;
+        pub const SEQUENCE_HIGH: u32 = 0x1000_053c;
+        pub const SIZE: u32 = 256;
+
+        pub const PIXEL_FORMAT_RGB565: i32 = 1;
+
+        pub const STATUS_READY: i32 = 0;
+        pub const STATUS_DONE: i32 = 1;
+        pub const STATUS_ERROR: i32 = 2;
+
+        pub const ERROR_NONE: i32 = 0;
+        pub const ERROR_INVALID_COMMAND: i32 = 1;
+        pub const ERROR_BUFFER_OUT_OF_BOUNDS: i32 = 2;
+        pub const ERROR_INVALID_RECT: i32 = 3;
+        pub const ERROR_INVALID_STRIDE: i32 = 4;
+
+        pub const COMMAND_NOP: i32 = 0;
+        pub const COMMAND_CLEAR: i32 = 1;
+        pub const COMMAND_BLIT_BUFFER: i32 = 2;
+        pub const COMMAND_PRESENT: i32 = 3;
+    }
+
     pub mod memory {
         pub const RAM_BASE: u32 = 0x0000_0000;
     }
@@ -146,6 +184,7 @@ mod tests {
         assert_eq!(computer::serial_input::READ, 0x1000_0204);
         assert_eq!(computer::display0::COMMAND, 0x1000_0310);
         assert_eq!(computer::storage0::COMMAND, 0x1000_040c);
+        assert_eq!(computer::framebuffer0::COMMAND, 0x1000_0510);
     }
 
     #[test]
