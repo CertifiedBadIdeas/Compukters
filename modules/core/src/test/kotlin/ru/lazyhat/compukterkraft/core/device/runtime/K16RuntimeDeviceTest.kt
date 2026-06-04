@@ -34,6 +34,8 @@ import java.nio.ByteBuffer
 import java.nio.file.Path
 import java.util.Collections
 import java.util.UUID
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import kotlin.io.path.exists
 import kotlin.io.path.readText
 import kotlin.test.Test
@@ -141,6 +143,51 @@ class K16RuntimeDeviceTest {
             endpoint.tickThreadIds.contains(callerThreadId),
             "K16 endpoint execution must not run on the Minecraft server tick thread.",
         )
+    }
+
+    @Test
+    fun overloadedK16EndpointDoesNotBlockServerTick() {
+        val tickEntered = CountDownLatch(1)
+        val releaseTick = CountDownLatch(1)
+        val serverTickReturned = CountDownLatch(1)
+        val endpoint =
+            BlockingFirstTickK16Endpoint(
+                tickEntered = tickEntered,
+                releaseTick = releaseTick,
+            )
+        val device =
+            K16RuntimeDevice(
+                deviceId = 20,
+                properties = DeviceProperties(DeviceFamily.NORMAL, label = null),
+                endpointFactory = { endpoint },
+                stateSink = {},
+            )
+
+        device.turnOn()
+        val callerThread =
+            Thread(
+                {
+                    device.serverTick()
+                    serverTickReturned.countDown()
+                },
+                "test-server-tick-caller",
+            )
+
+        callerThread.start()
+
+        assertTrue(
+            serverTickReturned.await(200, TimeUnit.MILLISECONDS),
+            "K16 serverTick must return while worker execution is still overloaded.",
+        )
+        assertTrue(
+            tickEntered.await(2, TimeUnit.SECONDS),
+            "Expected worker to enter the overloaded K16 endpoint tick.",
+        )
+
+        releaseTick.countDown()
+        callerThread.join(2_000)
+        waitUntil { endpoint.tickCalls == 1 }
+        device.shutdown()
     }
 
     @Test
@@ -434,7 +481,7 @@ class K16RuntimeDeviceTest {
         assertTrue(predicate(), "Condition was not met within ${timeoutMillis}ms.")
     }
 
-    private class RecordingK16Endpoint : K16ComputerEndpoint {
+    private open class RecordingK16Endpoint : K16ComputerEndpoint {
         val inputs: MutableList<ByteArray> = Collections.synchronizedList(mutableListOf())
         @Volatile
         var tickCalls = 0
@@ -453,7 +500,7 @@ class K16RuntimeDeviceTest {
             inputs += bytes.copyOf()
         }
 
-        override fun tick(maxTurns: Int): NativeK16ComputerControl {
+        override open fun tick(maxTurns: Int): NativeK16ComputerControl {
             tickCalls += 1
             tickThreadIds += Thread.currentThread().id
             return control
@@ -487,6 +534,22 @@ class K16RuntimeDeviceTest {
 
         fun injectOutput(text: String) {
             injectedOutput.append(text)
+        }
+    }
+
+    private class BlockingFirstTickK16Endpoint(
+        private val tickEntered: CountDownLatch,
+        private val releaseTick: CountDownLatch,
+    ) : RecordingK16Endpoint() {
+        private var firstTick = true
+
+        override fun tick(maxTurns: Int): NativeK16ComputerControl {
+            if (firstTick) {
+                firstTick = false
+                tickEntered.countDown()
+                releaseTick.await(2, TimeUnit.SECONDS)
+            }
+            return super.tick(maxTurns)
         }
     }
 
