@@ -5,7 +5,8 @@
   "requiredExecutables": [
     "bin/cargo",
     "bin/rustc",
-    "bin/k16-ld"
+    "bin/k16-ld",
+    "bin/k16"
   ],
   "hosts": {
     "linux-x86_64": {

@@ -63,6 +63,7 @@ val k16LlvmConfig = k16LlvmBuildRoot.resolve("bin/llvm-config")
 val k16BuiltCargo = k16RustBuildRoot.resolve("$k16BootstrapHost/stage0/bin/cargo")
 val k16BuiltRustc = k16RustBuildRoot.resolve("$k16BootstrapHost/stage1/bin/rustc")
 val k16BuiltLd = k16HostToolsTargetRoot.resolve("release/k16-ld")
+val k16BuiltCli = k16HostToolsTargetRoot.resolve("release/k16")
 val k16RustcDriverLibRoot = k16BuiltRustc.parentFile.parentFile.resolve("lib")
 val k16RustcHostLibRoot = k16RustcDriverLibRoot.resolve("rustlib/$k16BootstrapHost/lib")
 val k16LlvmHostLibraryTargets =
@@ -310,7 +311,8 @@ val buildK16HostTools =
         inputs.file(rootProject.file("rust/host/k16-tools/Cargo.toml"))
         inputs.file(rootProject.file("rust/host/k16-tools/Cargo.lock"))
         outputs.file(k16BuiltLd)
-        commandLine("cargo", "build", "--release", "--bin", "k16-ld")
+        outputs.file(k16BuiltCli)
+        commandLine("cargo", "build", "--release", "--bins")
         environment("CARGO_TARGET_DIR", k16HostToolsTargetRoot.absolutePath)
     }
 
@@ -336,6 +338,11 @@ val stageBuiltK16Toolchain =
             rename { "k16-ld" }
             filePermissions { unix("rwxr-xr-x") }
         }
+        from(k16BuiltCli) {
+            into("bin")
+            rename { "k16" }
+            filePermissions { unix("rwxr-xr-x") }
+        }
         from(k16RustcDriverLibRoot) {
             into("lib")
             include("librustc_driver*.so")
@@ -349,6 +356,7 @@ val stageBuiltK16Toolchain =
             requireBuiltFile(k16BuiltCargo, "cargo", "buildK16Rustc", executable = true)
             requireBuiltFile(k16BuiltRustc, "rustc", "buildK16Rustc", executable = true)
             requireBuiltFile(k16BuiltLd, "k16-ld", "buildK16HostTools", executable = true)
+            requireBuiltFile(k16BuiltCli, "k16", "buildK16HostTools", executable = true)
             requireDirectory(k16RustcDriverLibRoot, "source-built rustc runtime library directory")
             requireDirectory(k16RustcHostLibRoot, "source-built rustc host runtime library directory")
             requireBuiltFileMatching(k16RustcHostLibRoot, "libstd-*.rlib", "host libstd", "buildK16Rustc")
@@ -395,6 +403,7 @@ tasks.register("prepareBuiltK16Toolchain") {
         println("export K16_CARGO=${toolchain.cargo.absolutePath}")
         println("export K16_RUSTC=${toolchain.rustc.absolutePath}")
         println("export K16_LD=${toolchain.linker.absolutePath}")
+        println("export K16_TOOL=${toolchain.cli.absolutePath}")
     }
 }
 
@@ -556,6 +565,17 @@ val stageK16Toolchain =
         }
         from({
             if (k16ToolchainModeName() == "local") {
+                requireK16ToolchainInputFile("k16ToolPath", "k16")
+            } else {
+                emptyList<File>()
+            }
+        }) {
+            into("bin")
+            rename { "k16" }
+            filePermissions { unix("rwxr-xr-x") }
+        }
+        from({
+            if (k16ToolchainModeName() == "local") {
                 k16RustcRuntimeLibDir()
             } else {
                 emptyList<File>()
@@ -619,5 +639,6 @@ tasks.register("printK16ToolchainEnv") {
         println("export K16_CARGO=${toolchain.cargo.absolutePath}")
         println("export K16_RUSTC=${toolchain.rustc.absolutePath}")
         println("export K16_LD=${toolchain.linker.absolutePath}")
+        println("export K16_TOOL=${toolchain.cli.absolutePath}")
     }
 }

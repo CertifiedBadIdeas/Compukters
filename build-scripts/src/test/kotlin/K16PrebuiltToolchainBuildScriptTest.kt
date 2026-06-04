@@ -52,6 +52,7 @@ class K16PrebuiltToolchainBuildScriptTest {
         assertTrue(rootBuildScript.contains("k16RustcPath"))
         assertTrue(rootBuildScript.contains("k16CargoPath"))
         assertTrue(rootBuildScript.contains("k16LdPath"))
+        assertTrue(rootBuildScript.contains("k16ToolPath"))
         assertTrue(rootBuildScript.contains("k16RustcRuntimeLibDir"))
         assertTrue(rootBuildScript.contains("k16RustcHostRuntimeLibDir"))
         assertTrue(rootBuildScript.contains("lib/rustlib/\$hostTriple/lib"))
@@ -70,6 +71,7 @@ class K16PrebuiltToolchainBuildScriptTest {
         assertTrue(rootBuildScript.contains("prepareK16Toolchain"))
         assertTrue(k16ToolchainSupport.contains(".toolchain/k16"))
         assertTrue(k16ToolchainSupport.contains("data class K16Toolchain"))
+        assertTrue(k16ToolchainSupport.contains("val cli: File"))
         assertTrue(k16ToolchainSupport.contains("fun Project.resolveK16Toolchain()"))
         assertTrue(k16ToolchainSupport.contains("file.canExecute()"))
         assertTrue(k16ToolchainSupport.contains("must be executable"))
@@ -88,6 +90,12 @@ class K16PrebuiltToolchainBuildScriptTest {
         assertTrue(neoforgeBuildScript.contains("rootProject.tasks.named(\"prepareK16Toolchain\")"))
         assertTrue(neoforgeBuildScript.contains("resolveK16Toolchain()"))
         assertTrue(neoforgeBuildScript.contains("processBuilder.environment()[\"RUSTC_BOOTSTRAP\"] = \"1\""))
+        assertTrue(neoforgeBuildScript.contains("-C linker=\${toolchain.linker.absolutePath}"))
+        assertTrue(neoforgeBuildScript.contains("toolchain.cli.absolutePath"))
+        assertFalse(neoforgeBuildScript.contains("dependsOn(rootProject.tasks.named(\"buildK16HostTools\"))"))
+        assertFalse(neoforgeBuildScript.contains("inputs.file(k16HostLinker)"))
+        assertFalse(neoforgeBuildScript.contains("-C linker=\${k16HostLinker.asFile.absolutePath}"))
+        assertFalse(neoforgeBuildScript.contains("\"cargo\",\n            \"run\""))
 
         assertFalse(rootBuildScript.contains("providers.environmentVariable(\"K16_CARGO\")"))
         assertFalse(rootBuildScript.contains("providers.environmentVariable(\"K16_RUSTC\")"))
@@ -103,8 +111,10 @@ class K16PrebuiltToolchainBuildScriptTest {
         assertTrue(docs.contains("-Pk16ToolchainMode=prebuilt"))
         assertTrue(docs.contains("-Pk16ToolchainMode=local"))
         assertTrue(docs.contains("-Pk16ToolchainDir"))
+        assertTrue(docs.contains("-Pk16ToolPath"))
         assertTrue(docs.contains("RUSTC_BOOTSTRAP=1"))
         assertTrue(docs.contains("lib/rustlib/<host>/lib/"))
+        assertTrue(docs.contains("bin/k16"))
     }
 
     @Test
@@ -170,11 +180,13 @@ class K16PrebuiltToolchainBuildScriptTest {
         assertTrue(rootBuildScript.contains("stage0/bin/cargo"))
         assertTrue(rootBuildScript.contains("stage1/bin/rustc"))
         assertTrue(rootBuildScript.contains("release/k16-ld"))
+        assertTrue(rootBuildScript.contains("release/k16"))
         assertTrue(rootBuildScript.contains("source-built-gradle-stage"))
         assertTrue(rootBuildScript.contains("dependsOn(stageBuiltK16Toolchain)"))
         assertTrue(rootBuildScript.contains("export K16_CARGO="))
         assertTrue(rootBuildScript.contains("export K16_RUSTC="))
         assertTrue(rootBuildScript.contains("export K16_LD="))
+        assertTrue(rootBuildScript.contains("export K16_TOOL="))
 
         assertTrue(docs.contains("buildK16ToolchainFromSource"))
         assertTrue(docs.contains("prepareBuiltK16Toolchain"))
