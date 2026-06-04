@@ -6,7 +6,7 @@ LLVM_BIN_DIR="${K16_LLVM_BIN_DIR:-$ROOT/.toolchain/build/llvm/k16-min/bin}"
 LLC="$LLVM_BIN_DIR/llc"
 LLVM_READOBJ="$LLVM_BIN_DIR/llvm-readobj"
 LLVM_NOT="$LLVM_BIN_DIR/not"
-RUX_CARGO_MANIFEST="$ROOT/rust/host/k16-tools/Cargo.toml"
+K16_CARGO_MANIFEST="$ROOT/rust/host/k16-tools/Cargo.toml"
 K16_HOST_CARGO_TARGET_DIR="${K16_HOST_CARGO_TARGET_DIR:-${CARGO_TARGET_DIR:-$ROOT/.toolchain/build/cargo/k16-tools}}"
 export CARGO_TARGET_DIR="$K16_HOST_CARGO_TARGET_DIR"
 
@@ -48,7 +48,7 @@ require_llc_failure() {
 }
 
 run_k16() {
-    cargo run --quiet --manifest-path "$RUX_CARGO_MANIFEST" --bin k16 -- "$@"
+    cargo run --quiet --manifest-path "$K16_CARGO_MANIFEST" --bin k16 -- "$@"
 }
 
 require_file "$LLC"

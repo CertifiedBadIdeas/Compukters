@@ -77,24 +77,24 @@ These builds resolve a prepared K16 Rust toolchain through Gradle
 `prepareK16Toolchain` and link through `k16-ld`. Missing prepared toolchain
 state is a hard error; there is no fallback to the retired Rux source inputs.
 
-## Test Blockers
+## Test Migration State
 
-The highest-impact Rux-language test dependencies are:
+The highest-impact Rux-language test dependencies have been split into
+historical retirement records and active K16 artifact coverage:
 
-- `rust/host/k16-tools/tests/k16_artifact_backend.rs`: compiles and executes
-  bundled BIOS source and verifies many BIOS behaviors.
-- `rust/host/k16-tools/tests/rux_volume_cli.rs`: relies on
-  `kernel_loader.rx`, `init_loader.rx`, `rini_init.rx`, and `trap_init.rx` for
-  boot-chain, K16FS, kernel/init, and syscall-style tests.
-- `rust/host/k16-tools/tests/rux_compile_cli.rs`: directly tests
-  `rux compile` from `.rx` source.
-- `rust/host/k16-tools/tests/rux_check_cli.rs`: tests source-level Rux code
-  advice.
-- `rust/host/k16-tools/tests/rux_public_cli_surface.rs`: expects public help
-  text to expose `rux compile`.
+- Active boot-chain tests live in `rust/host/k16-tools/tests/k16_volume_cli.rs`
+  and `rust/host/k16-tools/tests/k16_storage_workflow_cli.rs`. They build and
+  inspect K16PT, K16FS, and K16E machine artifacts directly.
+- Active bundled firmware coverage lives in
+  `modules/v1_21_1/v1_21_1-neoforge/src/test/kotlin/.../K16FirmwareResourceTest.kt`.
+  It verifies the Rust BIOS -> BOOT bootloader -> ROOT kernel path from
+  generated resources.
+- Legacy Rux frontend/source tests are not part of active boot-chain
+  verification. Any remaining Rux-source tests must be explicitly scoped to
+  frontend retirement or historical source behavior.
 
-These tests were migration blockers. Active host-tool coverage should now use
-Rust artifacts, object fixtures, or ABI/tooling tests instead of `.rx` source.
+Active host-tool coverage should continue to use Rust artifacts, object
+fixtures, or ABI/tooling tests instead of `.rx` source.
 
 ## Keep For Now
 
@@ -130,7 +130,8 @@ This is a retirement record, not a replacement plan.
 - [#141](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/141):
   Replace bundled Rux bootloader and kernel sources with Rust artifacts.
 - [#143](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/143):
-  Convert boot-chain tests away from Rux source dependencies.
+  Convert boot-chain tests away from Rux source dependencies. Active coverage
+  now uses K16 machine artifacts rather than `.rx` fixtures.
 - [#142](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/142):
   Remove Rux stdlib and source advice.
 - [#144](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/144):

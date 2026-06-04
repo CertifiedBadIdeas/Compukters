@@ -55,6 +55,8 @@ fn rust_nocore_smoke_artifacts_are_documented_and_strict() {
     assert!(llvm_smoke.contains(".toolchain/build/llvm/k16-min/bin"));
     assert!(llvm_smoke.contains(".toolchain/build/cargo/k16-tools"));
     assert!(llvm_smoke.contains("K16_HOST_CARGO_TARGET_DIR"));
+    assert!(llvm_smoke.contains("K16_CARGO_MANIFEST"));
+    assert!(!llvm_smoke.contains("RUX_CARGO_MANIFEST"));
     assert!(!llvm_smoke.contains("toolchains/Compukter-Kraft-llvm/build-k16-min/bin"));
     assert!(llvm_smoke.contains("--bin k16"));
     assert!(llvm_smoke.contains("main.kx"));
@@ -67,6 +69,8 @@ fn rust_nocore_smoke_artifacts_are_documented_and_strict() {
     assert!(clang_smoke.contains(".toolchain/build/llvm/k16/bin"));
     assert!(clang_smoke.contains(".toolchain/build/cargo/k16-tools"));
     assert!(clang_smoke.contains("K16_HOST_CARGO_TARGET_DIR"));
+    assert!(clang_smoke.contains("K16_CARGO_MANIFEST"));
+    assert!(!clang_smoke.contains("RUX_CARGO_MANIFEST"));
     assert!(!clang_smoke.contains("toolchains/Compukter-Kraft-llvm/build-k16/bin"));
     assert!(clang_smoke.contains("--bin k16"));
     assert!(clang_smoke.contains("main.kx"));
@@ -79,6 +83,8 @@ fn rust_nocore_smoke_artifacts_are_documented_and_strict() {
     assert!(script.contains(".toolchain/build/llvm/k16-min/bin"));
     assert!(script.contains(".toolchain/build/cargo/k16-tools"));
     assert!(script.contains("K16_HOST_CARGO_TARGET_DIR"));
+    assert!(script.contains("K16_CARGO_MANIFEST"));
+    assert!(!script.contains("RUX_CARGO_MANIFEST"));
     assert!(script.contains("K16_RUST_TARGET_JSON"));
     assert!(script.contains("tools/k16-unknown-kraftos.json"));
     assert!(script.contains("#![no_core]"));
@@ -236,7 +242,9 @@ fn rust_nocore_smoke_artifacts_are_documented_and_strict() {
     assert!(bootstrap_docs.contains("K16_LLVM_BIN_DIR"));
     assert!(bootstrap_docs.contains(".toolchain/build/llvm/k16-min/bin/llvm-config"));
     assert!(bootstrap_docs.contains(".toolchain/build/rust/k16"));
-    assert!(!bootstrap_docs.contains("toolchains/Compukter-Kraft-llvm/build-k16-min/bin/llvm-config"));
+    assert!(
+        !bootstrap_docs.contains("toolchains/Compukter-Kraft-llvm/build-k16-min/bin/llvm-config")
+    );
     assert!(!bootstrap_docs.contains("toolchains/Compukter-Kraft-rust/build/k16"));
     assert!(bootstrap_docs.contains("Rust-pinned LLVM commit"));
     assert!(bootstrap_docs.contains("merge-base --is-ancestor"));
