@@ -206,8 +206,8 @@ Do not publish archives from ad-hoc local binaries. Build and package through
 `artifactBaseUrl`:
 
 ```bash
-gh release upload k16-toolchain-k16-dev-2026-06-01 \
-  k16-toolchain-k16-dev-2026-06-01-linux-x86_64.zip \
+gh release upload k16-toolchain-k16-dev-2026-06-04 \
+  k16-toolchain-k16-dev-2026-06-04-linux-x86_64.zip \
   --repo CertifiedBadIdeas/Compukter-Kraft
 ```
 
