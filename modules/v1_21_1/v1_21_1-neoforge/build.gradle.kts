@@ -95,10 +95,6 @@ val k16FirmwareProfile =
     providers
         .gradleProperty("k16FirmwareProfile")
         .orElse("release")
-val k16ToolsManifest = rootProject.layout.projectDirectory.file("rust/host/k16-tools/Cargo.toml")
-val k16ToolsSource = rootProject.layout.projectDirectory.dir("rust/host/k16-tools/src")
-val k16ToolsCargoTargetDir = rootProject.layout.projectDirectory.dir(".toolchain/build/cargo/k16-tools")
-val k16HostLinker = k16ToolsCargoTargetDir.file("release/k16-ld")
 val k16GuestManifest = rootProject.layout.projectDirectory.file("rust/guest/Cargo.toml")
 val k16BiosManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-bios/Cargo.toml")
 val k16BiosSource = rootProject.layout.projectDirectory.file("rust/guest/k16-bios/src/main.rs")
@@ -261,7 +257,7 @@ fun Project.compileK16GuestRustBin(
     processBuilder.environment()["RUSTC"] = toolchain.rustc.absolutePath
     processBuilder.environment()["RUSTC_BOOTSTRAP"] = "1"
     processBuilder.environment()["RUSTFLAGS"] =
-        "-C linker=${k16HostLinker.asFile.absolutePath} -C link-arg=--k16-target=$k16Target -Cjump-tables=no -Cdebuginfo=0 -Cdebug-assertions=off -Coverflow-checks=off -Zub-checks=no"
+        "-C linker=${toolchain.linker.absolutePath} -C link-arg=--k16-target=$k16Target -Cjump-tables=no -Cdebuginfo=0 -Cdebug-assertions=off -Coverflow-checks=off -Zub-checks=no"
     val exitCode = processBuilder.start().waitFor()
     check(exitCode == 0) {
         "K16 Rust firmware build for $binName failed with exit code $exitCode"
@@ -285,13 +281,9 @@ val linkK16BiosFlash =
         inputs.dir(k16BootChainSource)
         inputs.file(k16RustTargetSpec)
         inputs.file(k16ToolchainConfig)
-        inputs.file(k16ToolsManifest)
-        inputs.dir(k16ToolsSource)
-        inputs.file(k16HostLinker)
         inputs.property("k16FirmwareProfile", k16FirmwareProfile)
         outputs.file(k16BiosFlashResource)
         dependsOn(rootProject.tasks.named("prepareK16Toolchain"))
-        dependsOn(rootProject.tasks.named("buildK16HostTools"))
 
         doLast {
             project.compileK16GuestRustBin(
@@ -315,13 +307,9 @@ val compileK16SystemBoot =
         inputs.dir(k16BootChainSource)
         inputs.file(k16RustTargetSpec)
         inputs.file(k16ToolchainConfig)
-        inputs.file(k16ToolsManifest)
-        inputs.dir(k16ToolsSource)
-        inputs.file(k16HostLinker)
         inputs.property("k16FirmwareProfile", k16FirmwareProfile)
         outputs.file(k16BootArtifact)
         dependsOn(rootProject.tasks.named("prepareK16Toolchain"))
-        dependsOn(rootProject.tasks.named("buildK16HostTools"))
 
         doLast {
             project.compileK16GuestRustBin(
@@ -343,13 +331,9 @@ val compileK16SystemKernel =
         inputs.file(k16KernelSource)
         inputs.file(k16RustTargetSpec)
         inputs.file(k16ToolchainConfig)
-        inputs.file(k16ToolsManifest)
-        inputs.dir(k16ToolsSource)
-        inputs.file(k16HostLinker)
         inputs.property("k16FirmwareProfile", k16FirmwareProfile)
         outputs.file(k16KernelArtifact)
         dependsOn(rootProject.tasks.named("prepareK16Toolchain"))
-        dependsOn(rootProject.tasks.named("buildK16HostTools"))
 
         doLast {
             project.compileK16GuestRustBin(
@@ -366,27 +350,22 @@ val createK16SystemStorage0 =
     tasks.register<Exec>("createK16SystemStorage0") {
         description = "Creates the bundled K16 system storage0 volume resource."
         group = "k16"
-        inputs.file(k16ToolsManifest)
+        dependsOn(rootProject.tasks.named("prepareK16Toolchain"))
+        inputs.file(k16ToolchainConfig)
+        outputs.file(k16SystemStorage0Resource)
 
         doFirst {
+            val toolchain = resolveK16Toolchain()
             k16SystemStorage0Resource.get().asFile.parentFile.mkdirs()
+            commandLine(
+                toolchain.cli.absolutePath,
+                "volume",
+                "init",
+                k16SystemStorage0Resource.get().asFile.absolutePath,
+                "--size",
+                "1048576",
+            )
         }
-
-        commandLine(
-            "cargo",
-            "run",
-            "--manifest-path",
-            k16ToolsManifest.asFile.absolutePath,
-            "--bin",
-            "k16",
-            "--",
-            "volume",
-            "init",
-            k16SystemStorage0Resource.get().asFile.absolutePath,
-            "--size",
-            "1048576",
-        )
-        environment("CARGO_TARGET_DIR", k16ToolsCargoTargetDir.asFile.absolutePath)
     }
 
 val putK16SystemStorage0Boot =
@@ -394,23 +373,20 @@ val putK16SystemStorage0Boot =
         description = "Writes the bundled K16 bootloader into the system storage0 volume resource."
         group = "k16"
         dependsOn(createK16SystemStorage0, compileK16SystemBoot)
-        inputs.file(k16ToolsManifest)
+        dependsOn(rootProject.tasks.named("prepareK16Toolchain"))
+        inputs.file(k16ToolchainConfig)
         inputs.file(k16BootArtifact)
 
-        commandLine(
-            "cargo",
-            "run",
-            "--manifest-path",
-            k16ToolsManifest.asFile.absolutePath,
-            "--bin",
-            "k16",
-            "--",
-            "volume",
-            "put-boot",
-            k16SystemStorage0Resource.get().asFile.absolutePath,
-            k16BootArtifact.get().asFile.absolutePath,
-        )
-        environment("CARGO_TARGET_DIR", k16ToolsCargoTargetDir.asFile.absolutePath)
+        doFirst {
+            val toolchain = resolveK16Toolchain()
+            commandLine(
+                toolchain.cli.absolutePath,
+                "volume",
+                "put-boot",
+                k16SystemStorage0Resource.get().asFile.absolutePath,
+                k16BootArtifact.get().asFile.absolutePath,
+            )
+        }
     }
 
 val compileK16SystemStorage0 =
@@ -418,24 +394,22 @@ val compileK16SystemStorage0 =
         description = "Writes the bundled K16 kernel into the system storage0 volume resource."
         group = "k16"
         dependsOn(putK16SystemStorage0Boot, compileK16SystemKernel)
-        inputs.file(k16ToolsManifest)
+        dependsOn(rootProject.tasks.named("prepareK16Toolchain"))
+        inputs.file(k16ToolchainConfig)
         inputs.file(k16BootArtifact)
         inputs.file(k16KernelArtifact)
+        outputs.file(k16SystemStorage0Resource)
 
-        commandLine(
-            "cargo",
-            "run",
-            "--manifest-path",
-            k16ToolsManifest.asFile.absolutePath,
-            "--bin",
-            "k16",
-            "--",
-            "volume",
-            "put-kernel",
-            k16SystemStorage0Resource.get().asFile.absolutePath,
-            k16KernelArtifact.get().asFile.absolutePath,
-        )
-        environment("CARGO_TARGET_DIR", k16ToolsCargoTargetDir.asFile.absolutePath)
+        doFirst {
+            val toolchain = resolveK16Toolchain()
+            commandLine(
+                toolchain.cli.absolutePath,
+                "volume",
+                "put-kernel",
+                k16SystemStorage0Resource.get().asFile.absolutePath,
+                k16KernelArtifact.get().asFile.absolutePath,
+            )
+        }
     }
 
 sourceSets.main {

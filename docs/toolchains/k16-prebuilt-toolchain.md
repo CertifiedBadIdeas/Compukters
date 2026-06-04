@@ -22,6 +22,7 @@ manifest.json
 bin/cargo
 bin/rustc
 bin/k16-ld
+bin/k16
 ```
 
 ## Workspace Layout
@@ -101,11 +102,12 @@ already-built binaries:
   -Pk16ToolchainMode=local \
   -Pk16CargoPath=/absolute/path/to/cargo \
   -Pk16RustcPath=/absolute/path/to/rustc \
-  -Pk16LdPath=/absolute/path/to/k16-ld
+  -Pk16LdPath=/absolute/path/to/k16-ld \
+  -Pk16ToolPath=/absolute/path/to/k16
 ```
 
 `local` mode does not download a prebuilt archive and does not accept
-`k16ToolchainDir`. The three input paths are required, absolute, and non-symlink.
+`k16ToolchainDir`. The four input paths are required, absolute, and non-symlink.
 After staging, the same pinned `.toolchain/k16/<pin>/<host>/` install layout is
 available to every Gradle module in the repo.
 
@@ -123,7 +125,8 @@ directly into `.toolchain/build`:
 ```
 
 This task depends on `buildK16ToolchainFromSource`, validates the staged
-install layout, and prints `K16_CARGO`, `K16_RUSTC`, and `K16_LD` shell exports.
+install layout, and prints `K16_CARGO`, `K16_RUSTC`, `K16_LD`, and `K16_TOOL`
+shell exports.
 The lower-level source build task builds:
 
 - patched LLVM in `.toolchain/build/llvm/k16-min` with the native host LLVM backend plus K16;
@@ -169,13 +172,19 @@ from already-built binaries:
   -Pk16ToolchainMode=local \
   -Pk16CargoPath=/absolute/path/to/cargo \
   -Pk16RustcPath=/absolute/path/to/rustc \
-  -Pk16LdPath=/absolute/path/to/k16-ld
+  -Pk16LdPath=/absolute/path/to/k16-ld \
+  -Pk16ToolPath=/absolute/path/to/k16
 ```
 
 This task only copies explicit binaries. It does not build LLVM, rustc, cargo,
-or `k16-ld`. `k16RustcPath` must point at a Rust bootstrap `stage1/bin/rustc`;
-that stage1 sysroot must already contain matching host runtime libraries, so
-Cargo can compile host build scripts while building K16 `core`.
+`k16-ld`, or `k16`. `k16RustcPath` must point at a Rust bootstrap
+`stage1/bin/rustc`; that stage1 sysroot must already contain matching host
+runtime libraries, so Cargo can compile host build scripts while building K16
+`core`.
+
+Bundled firmware tasks use the staged `bin/k16-ld` linker and `bin/k16` volume
+CLI from the prepared toolchain. They do not build or run `k16-tools` from the
+repository during normal mod resource generation.
 
 The staged layout is:
 
@@ -185,6 +194,7 @@ The staged layout is:
   bin/cargo
   bin/rustc
   bin/k16-ld
+  bin/k16
   lib/librustc_driver-*.so
   lib/rustlib/src/rust/library/
   lib/rustlib/<host>/lib/

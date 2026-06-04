@@ -54,8 +54,9 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("rust/guest/k16-bios"))
         assertTrue(source.contains("rust/guest/k16-boot"))
         assertTrue(source.contains("rust/guest/k16-kernel"))
-        assertTrue(source.contains(".toolchain/build/cargo/k16-tools"))
-        assertTrue(source.contains("environment(\"CARGO_TARGET_DIR\""))
+        assertTrue(source.contains("toolchain.cli.absolutePath"))
+        assertFalse(source.contains(".toolchain/build/cargo/k16-tools"))
+        assertFalse(source.contains("environment(\"CARGO_TARGET_DIR\""))
         assertFalse(source.contains("generated/rux-firmware-"))
         assertFalse(source.contains("tasks.register<Exec>(\"compileRux"))
         assertFalse(source.contains("--bin\", \"rux\""))
@@ -64,6 +65,7 @@ class K16FirmwareResourceTest {
         assertTrue(toolchainConfig.contains("\"pin\""))
         assertTrue(toolchainConfig.contains("\"linux-x86_64\""))
         assertTrue(toolchainConfig.contains("\"bin/k16-ld\""))
+        assertTrue(toolchainConfig.contains("\"bin/k16\""))
     }
 
     @Test

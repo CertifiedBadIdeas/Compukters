@@ -28,6 +28,7 @@ data class K16Toolchain(
     val cargo: File,
     val rustc: File,
     val linker: File,
+    val cli: File,
 )
 
 data class K16ToolchainPin(
@@ -186,10 +187,12 @@ fun Project.validateK16ToolchainPath(
     val cargo = root.resolve(requiredExecutables.single { it.endsWith("/cargo") })
     val rustc = root.resolve(requiredExecutables.single { it.endsWith("/rustc") })
     val linker = root.resolve(requiredExecutables.single { it.endsWith("/k16-ld") })
+    val cli = root.resolve(requiredExecutables.single { it.endsWith("/k16") })
     requireExecutable(cargo, "cargo")
     requireExecutable(rustc, "rustc")
     requireExecutable(linker, "k16-ld")
-    return K16Toolchain(root = root, cargo = cargo, rustc = rustc, linker = linker)
+    requireExecutable(cli, "k16")
+    return K16Toolchain(root = root, cargo = cargo, rustc = rustc, linker = linker, cli = cli)
 }
 
 fun Project.requireK16ToolchainInputFile(
