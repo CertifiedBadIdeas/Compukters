@@ -30,7 +30,10 @@ import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16ComputerControl
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16ComputerDisplaySnapshot
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16ComputerEndpoint
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
+import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayPixelFormat
+import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayTile
 import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.nio.file.Path
 import java.util.Collections
 import java.util.UUID
@@ -281,6 +284,54 @@ class K16RuntimeDeviceTest {
     }
 
     @Test
+    fun sendsFramebufferFramesToAttachedDisplaySessions() {
+        val endpoint = RecordingK16Endpoint()
+        val displayNetwork = RecordingDisplayNetworkBridge()
+        val device =
+            K16RuntimeDevice(
+                deviceId = 21,
+                properties = DeviceProperties(DeviceFamily.NORMAL, label = null),
+                endpointFactory = { endpoint },
+                stateSink = {},
+                displayNetwork = displayNetwork,
+            )
+        val playerUuid = UUID.randomUUID()
+        val frame =
+            DisplayFrameDelta(
+                displayId = 1,
+                sequence = 7,
+                width = 320,
+                height = 200,
+                pixelFormat = DisplayPixelFormat.RGB565,
+                fullRefresh = false,
+                tiles =
+                    listOf(
+                        DisplayTile(
+                            tileX = 0,
+                            tileY = 0,
+                            x = 0,
+                            y = 0,
+                            width = 2,
+                            height = 1,
+                            payload = byteArrayOf(0xF8.toByte(), 0x00, 0x07, 0xE0.toByte()),
+                        ),
+                    ),
+            )
+
+        device.attachDisplaySession(playerUuid, containerId = 22, displayId = 1, width = 320, height = 200)
+        device.turnOn()
+        endpoint.enqueueFramebufferFrames(encodeDisplayFrames(listOf(frame)))
+        device.serverTick()
+        waitUntil {
+            device.serverTick()
+            displayNetwork.sentFrames.size == 1
+        }
+
+        assertEquals(1, displayNetwork.sentFrames.size)
+        assertEquals(frame, displayNetwork.sentFrames.single().frame)
+    }
+
+    @Test
     fun sendsCurrentK16DisplaySnapshotWhenDisplaySessionReopensWithoutNewVmFrame() {
         val endpoint = RecordingK16Endpoint()
         val displayNetwork = RecordingDisplayNetworkBridge()
@@ -495,6 +546,7 @@ class K16RuntimeDeviceTest {
         var control: NativeK16ComputerControl = NativeK16ComputerControl(status = K16RuntimeDevice.STATUS_READY, exitCode = 0, panicCode = 0)
         private var lastPolledDisplaySequence: Long? = null
         private val injectedOutput = StringBuilder()
+        private val framebufferFrameBatches = ArrayDeque<ByteArray>()
 
         override fun pushInput(bytes: ByteArray) {
             inputs += bytes.copyOf()
@@ -524,6 +576,13 @@ class K16RuntimeDeviceTest {
             return snapshot
         }
 
+        override fun drainFramebuffer0Frames(): ByteArray =
+            if (framebufferFrameBatches.isEmpty()) {
+                ByteArray(0)
+            } else {
+                framebufferFrameBatches.removeFirst()
+            }
+
         override fun clearOutput() = Unit
 
         override fun machineSnapshot(): ByteArray = runtimeSnapshot.copyOf()
@@ -535,6 +594,41 @@ class K16RuntimeDeviceTest {
         fun injectOutput(text: String) {
             injectedOutput.append(text)
         }
+
+        fun enqueueFramebufferFrames(bytes: ByteArray) {
+            framebufferFrameBatches += bytes.copyOf()
+        }
+    }
+
+    private fun encodeDisplayFrames(frames: List<DisplayFrameDelta>): ByteArray {
+        val payloadBytes = frames.sumOf { frame -> frame.tiles.sumOf { it.payload.size } }
+        val buffer = ByteBuffer.allocate(4 + frames.size * 31 + frames.sumOf { it.tiles.size * 28 } + payloadBytes)
+            .order(ByteOrder.LITTLE_ENDIAN)
+        buffer.putInt(frames.size)
+        for (frame in frames) {
+            buffer.putInt(frame.displayId)
+            buffer.putLong(frame.sequence)
+            buffer.putInt(frame.width)
+            buffer.putInt(frame.height)
+            buffer.put(
+                when (frame.pixelFormat) {
+                    DisplayPixelFormat.RGB565 -> 0
+                },
+            )
+            buffer.put(if (frame.fullRefresh) 1 else 0)
+            buffer.putInt(frame.tiles.size)
+            for (tile in frame.tiles) {
+                buffer.putInt(tile.tileX)
+                buffer.putInt(tile.tileY)
+                buffer.putInt(tile.x)
+                buffer.putInt(tile.y)
+                buffer.putInt(tile.width)
+                buffer.putInt(tile.height)
+                buffer.putInt(tile.payload.size)
+                buffer.put(tile.payload)
+            }
+        }
+        return buffer.array()
     }
 
     private class BlockingFirstTickK16Endpoint(

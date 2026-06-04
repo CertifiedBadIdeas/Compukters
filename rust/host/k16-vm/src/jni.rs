@@ -4,6 +4,7 @@ use jni::objects::{JByteArray, JClass, JString};
 use jni::sys::{jbyteArray, jint, jlong, jlongArray};
 use jni::JNIEnv;
 
+use crate::display::{DisplayFrameDelta, PixelFormat};
 use crate::k16::K16Signal;
 use crate::k16_computer::{K16ComputerHandle, K16ComputerTextDisplaySnapshot};
 
@@ -188,6 +189,20 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
 }
 
 #[no_mangle]
+pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_drainK16ComputerFramebuffer0FramesNative(
+    mut env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    handle: jlong,
+) -> jbyteArray {
+    let handle = match k16_computer_handle_mut(&mut env, handle) {
+        Some(handle) => handle,
+        None => return null_mut(),
+    };
+    let frames = handle.drain_framebuffer0_frames();
+    byte_array_or_throw(&mut env, &encode_display_frame_deltas(&frames))
+}
+
+#[no_mangle]
 pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_k16ComputerStorage0MediaSnapshotNative(
     mut env: JNIEnv<'_>,
     _class: JClass<'_>,
@@ -293,6 +308,14 @@ fn push_u64(out: &mut Vec<u8>, value: u64) {
     out.extend_from_slice(&value.to_le_bytes());
 }
 
+fn push_i32(out: &mut Vec<u8>, value: i32) {
+    out.extend_from_slice(&value.to_le_bytes());
+}
+
+fn push_i64(out: &mut Vec<u8>, value: i64) {
+    out.extend_from_slice(&value.to_le_bytes());
+}
+
 fn encode_k16_computer_text_display_snapshot(snapshot: &K16ComputerTextDisplaySnapshot) -> Vec<u8> {
     let mut out = Vec::with_capacity(28 + snapshot.cells.len());
     push_u32(&mut out, snapshot.columns);
@@ -302,6 +325,33 @@ fn encode_k16_computer_text_display_snapshot(snapshot: &K16ComputerTextDisplaySn
     push_u64(&mut out, snapshot.sequence);
     push_u32(&mut out, snapshot.cells.len() as u32);
     out.extend_from_slice(&snapshot.cells);
+    out
+}
+
+fn encode_display_frame_deltas(frames: &[DisplayFrameDelta]) -> Vec<u8> {
+    let mut out = Vec::new();
+    push_i32(&mut out, frames.len() as i32);
+    for frame in frames {
+        push_i32(&mut out, frame.display_id);
+        push_i64(&mut out, frame.sequence);
+        push_i32(&mut out, frame.width);
+        push_i32(&mut out, frame.height);
+        out.push(match frame.pixel_format {
+            PixelFormat::Rgb565 => 0,
+        });
+        out.push(u8::from(frame.full_refresh));
+        push_i32(&mut out, frame.tiles.len() as i32);
+        for tile in &frame.tiles {
+            push_i32(&mut out, tile.tile_x);
+            push_i32(&mut out, tile.tile_y);
+            push_i32(&mut out, tile.x);
+            push_i32(&mut out, tile.y);
+            push_i32(&mut out, tile.width);
+            push_i32(&mut out, tile.height);
+            push_i32(&mut out, tile.payload.len() as i32);
+            out.extend_from_slice(&tile.payload);
+        }
+    }
     out
 }
 

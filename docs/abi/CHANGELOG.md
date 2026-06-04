@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Added `framebuffer0` to K16 computer profile v1 as a guest-visible RGB565
+  pixel MMIO device. Guest code can blit little-endian RGB565 rectangles from
+  RAM and explicitly present dirty tiles through the existing display-frame
+  path.
 - `k16 link` now performs reachability-based alloc section GC from `_start`,
   and K16 LLVM honors function sections as `.text.k16.<symbol>` so Rust
   `core`/`compiler_builtins` code that is not reached by firmware is not copied

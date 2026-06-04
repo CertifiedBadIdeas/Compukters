@@ -56,6 +56,7 @@ id  name          mmio_base     mmio_size
 3   serial-input  0x1000_0200   0x0000_0100
 4   display0      0x1000_0300   0x0000_0100
 5   storage0      0x1000_0400   0x0000_0100
+6   framebuffer0  0x1000_0500   0x0000_0100
 ```
 
 Firmware should discover these ranges through `BootInfo.hardware_table_addr` and
@@ -163,6 +164,90 @@ bits 20..31  y
 
 The sequence registers expose a monotonic `u64` split into low/high `u32`
 words. It advances when visible display state changes through a display command.
+
+## Framebuffer0 MMIO
+
+The framebuffer0 range provides a pixel display surface for firmware and kernel
+graphics. It is independent from the text-mode `display0` device. Pixel output
+does not go through text cells or host text rendering.
+
+Initial dimensions:
+
+```text
+320 x 200 pixels
+```
+
+The only pixel format in profile v1 is RGB565. Guest RAM source buffers store
+RGB565 pixels as little-endian `u16` values. Host display frames serialize
+RGB565 payload bytes in the existing display-frame network format.
+
+All multi-byte registers are little-endian.
+
+```text
+offset  size  access  name
+0x00    4     R       width
+0x04    4     R       height
+0x08    4     R       stride_bytes
+0x0C    4     R       pixel_format
+0x10    4     W       command
+0x14    4     R       status
+0x18    4     R       error
+0x1C    4     R/W     x
+0x20    4     R/W     y
+0x24    4     R/W     rect_width
+0x28    4     R/W     rect_height
+0x2C    4     R/W     buffer_addr
+0x30    4     R/W     buffer_stride_bytes
+0x34    4     R/W     color
+0x38    4     R       sequence_low
+0x3C    4     R       sequence_high
+```
+
+Pixel format values:
+
+```text
+1  rgb565
+```
+
+Status values:
+
+```text
+0  ready
+1  done
+2  error
+```
+
+Error values:
+
+```text
+0  none
+1  invalid_command
+2  buffer_out_of_bounds
+3  invalid_rect
+4  invalid_stride
+```
+
+Commands:
+
+```text
+0  nop
+1  clear
+2  blit_buffer
+3  present
+```
+
+`clear` fills the framebuffer with `color`. `color` uses the low 16 bits as an
+RGB565 value.
+
+`blit_buffer` copies a rectangle from guest RAM into the framebuffer. Firmware
+writes `x`, `y`, `rect_width`, `rect_height`, `buffer_addr`, and
+`buffer_stride_bytes`, then writes `command = blit_buffer`. The source buffer
+must contain at least `rect_height` rows, each with `buffer_stride_bytes`
+bytes. `buffer_stride_bytes` must be at least `rect_width * 2`.
+
+`present` emits dirty framebuffer tiles to the host display-frame path and
+increments the framebuffer sequence if a frame is emitted. Dirty pixels are not
+sent to the host until firmware writes `command = present`.
 
 ## Storage0 MMIO
 
