@@ -133,7 +133,7 @@ This is a retirement record, not a replacement plan.
   Convert boot-chain tests away from Rux source dependencies. Active coverage
   now uses K16 machine artifacts rather than `.rx` fixtures.
 - [#142](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/142):
-  Remove Rux stdlib and source advice.
+  Rux stdlib and source advice have been removed from active tooling.
 - [#144](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/144):
   Retire Rux compiler/frontend and move guest software ownership to
   `rust/guest`.

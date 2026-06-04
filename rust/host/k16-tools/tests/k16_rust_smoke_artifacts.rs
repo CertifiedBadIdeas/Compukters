@@ -308,6 +308,9 @@ fn llvm_and_rust_backend_sources_use_k16_without_retired_rux16_names() {
 #[test]
 fn active_k16_tools_do_not_ship_rux_compiler_surface() {
     let root = repo_root();
+    let retirement_audit =
+        fs::read_to_string(root.join("docs/toolchains/rux-language-retirement-audit.md"))
+            .expect("Rux language retirement audit exists");
 
     for path in [
         "rux",
@@ -329,6 +332,13 @@ fn active_k16_tools_do_not_ship_rux_compiler_surface() {
             "active K16 tools must not ship retired Rux compiler path `{path}`"
         );
     }
+
+    assert!(retirement_audit.contains(
+        "[#142](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/142):\n  Rux stdlib and source advice have been removed from active tooling."
+    ));
+    assert!(!retirement_audit.contains(
+        "[#142](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/142):\n  Remove Rux stdlib and source advice."
+    ));
 }
 
 fn repo_root() -> &'static Path {
