@@ -34,11 +34,15 @@ statuses:
 - `kind:idea` — umbrella / discussion issue, not a concrete task.
 - `status:dropped` — applied alongside `state_reason=not_planned` when closing rejected ideas.
 
-## Spec & plan conventions
+## Agent working artifacts
 
-- English only. Specs live under `docs/superpowers/specs/YYYY-MM-DD/YYYY-MM-DD-<topic>-design.md`; plans under `docs/superpowers/plans/YYYY-MM-DD/YYYY-MM-DD-<topic>.md`.
+- English only. Agent-generated specs and plans are working artifacts, not repository history.
+- Put agent specs under `.agents/tmp/specs/YYYY-MM-DD-issue-N-<topic>-design.md`.
+- Put agent plans under `.agents/tmp/plans/YYYY-MM-DD-issue-N-<topic>.md`.
+- `.agents/tmp/` is intentionally ignored and must not be committed by default.
 - First content line under the `# Title` MUST be `> Issue: [#N](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/N)`.
-- When a spec/plan is superseded, prepend a `> **Superseded by** [...](...)` banner; do not delete the file.
+- Keep durable decisions, scope, acceptance criteria, verification, and commit links in the GitHub issue.
+- Only create files under `docs/` when they are real project documentation, such as ABI references, architecture docs, profiling docs, or user-facing docs.
 
 ## Authentication
 
