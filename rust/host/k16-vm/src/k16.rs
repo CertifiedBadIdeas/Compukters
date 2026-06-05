@@ -140,6 +140,8 @@ impl K16Decoder {
 
 impl InstructionDecoder for K16Decoder {
     fn decode(&mut self, bus: &mut dyn MemoryBus, pc: u32) -> Result<DecodeResult, K16Trap> {
+        // Decoder owns the binary instruction format. It may fetch extension
+        // words, but it does not mutate CPU registers or device state.
         let word = bus
             .load_u16(pc)
             .map_err(|error| instruction_fetch_fault(pc, error))?;
@@ -413,6 +415,9 @@ impl K16Cpu {
             }
         }
 
+        // Step order is intentionally simple: decode at the old PC, count the
+        // instruction, advance to the decoder-provided next PC, then let control
+        // flow instructions override PC during execution.
         let fault_pc = self.pc;
         let decode = match decoder.decode(bus, self.pc) {
             Ok(decode) => decode,

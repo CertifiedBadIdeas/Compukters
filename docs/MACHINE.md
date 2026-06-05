@@ -4,10 +4,12 @@
 > machine model (CKIM, host-call boundary, `HostCallManager`,
 > `BackgroundComputerVm`, device daemon, runtime kernel). After issue
 > #26 the CKL stack was removed, and after issue #44 the Image-VM and
-> device daemon were retired in favour of a single LowVM runtime
-> driven through `K16Computer` (flat RAM + MMIO). See
-> [ARCHITECTURE.md](ARCHITECTURE.md) for the current model. The text
-> below is kept only for historical context.
+> device daemon were retired in favour of Kraft16 guest execution through
+> `K16Computer` (flat RAM + MMIO). See [ARCHITECTURE.md](ARCHITECTURE.md)
+> for the current product architecture and
+> [k16-vm-code-flow.md](k16-vm-code-flow.md) for the current Rust VM code
+> flow. The text below is kept only for historical context and should not
+> be used as guidance for new VM work.
 
 Подробное описание того, как устроена VM в моде Compukter-Kraft по фактической реализации.
 

@@ -225,6 +225,9 @@ impl ComputerMachine {
             })
             .collect::<Vec<_>>();
 
+        // Profiles describe guest-visible hardware. Construction turns that
+        // declarative table into concrete MMIO devices and remembers their
+        // MachineBus ids for host-side accessors and snapshot handling.
         for hardware in &profile.hardware {
             let device_id = match &hardware.device {
                 ComputerHardwareDevice::Control => {
@@ -490,6 +493,9 @@ impl ComputerMachine {
         if self.boot_cpu != Some(cpu_id) {
             return Err(format!("CPU {cpu_id} is not the boot CPU"));
         }
+        // ComputerMachine owns the full-computer reaction to CPU results. The
+        // CPU executes instructions; the machine translates halt/fault outcomes
+        // into control-device state visible to the host.
         let signal = {
             let cpu = self
                 .cpus
