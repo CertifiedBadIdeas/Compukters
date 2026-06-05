@@ -20,6 +20,7 @@
 use crate::k16::{K16Cpu, K16Signal};
 use crate::low_bus::{MachineBus, MmioDevice};
 use crate::low_machine::MemoryFault;
+use std::hint::black_box;
 
 const MEMORY_SIZE: usize = 1024;
 const DATA_ADDR: u32 = 512;
@@ -30,6 +31,8 @@ pub enum VmBenchmarkWorkload {
     ComputeLoop,
     MemoryLoop,
     MmioLoop,
+    BranchMix,
+    CallLoop,
 }
 
 impl VmBenchmarkWorkload {
@@ -38,11 +41,19 @@ impl VmBenchmarkWorkload {
             Self::ComputeLoop => "compute-loop",
             Self::MemoryLoop => "memory-loop",
             Self::MmioLoop => "mmio-loop",
+            Self::BranchMix => "branch-mix",
+            Self::CallLoop => "call-loop",
         }
     }
 
     pub fn all() -> &'static [Self] {
-        &[Self::ComputeLoop, Self::MemoryLoop, Self::MmioLoop]
+        &[
+            Self::ComputeLoop,
+            Self::MemoryLoop,
+            Self::MmioLoop,
+            Self::BranchMix,
+            Self::CallLoop,
+        ]
     }
 }
 
@@ -54,6 +65,8 @@ impl std::str::FromStr for VmBenchmarkWorkload {
             "compute-loop" => Ok(Self::ComputeLoop),
             "memory-loop" => Ok(Self::MemoryLoop),
             "mmio-loop" => Ok(Self::MmioLoop),
+            "branch-mix" => Ok(Self::BranchMix),
+            "call-loop" => Ok(Self::CallLoop),
             _ => Err(format!("unknown VM benchmark workload: {value}")),
         }
     }
@@ -75,6 +88,19 @@ pub fn run_k16_workload(workload: VmBenchmarkWorkload, iterations: u32) -> Resul
         K16Signal::Halt => Ok(cpu.register(result_register)),
         signal => Err(format!("unexpected K16 signal: {signal:?}")),
     }
+}
+
+pub fn run_native_rust_workload(
+    workload: VmBenchmarkWorkload,
+    iterations: u32,
+) -> Result<u32, String> {
+    Ok(match workload {
+        VmBenchmarkWorkload::ComputeLoop => native_compute_loop(iterations),
+        VmBenchmarkWorkload::MemoryLoop => native_memory_loop(iterations),
+        VmBenchmarkWorkload::MmioLoop => native_mmio_loop(iterations),
+        VmBenchmarkWorkload::BranchMix => native_branch_mix(iterations),
+        VmBenchmarkWorkload::CallLoop => native_call_loop(iterations),
+    })
 }
 
 fn k16_workload(workload: VmBenchmarkWorkload, iterations: u32) -> (Vec<u16>, usize) {
@@ -135,6 +161,56 @@ fn k16_workload(workload: VmBenchmarkWorkload, iterations: u32) -> (Vec<u16>, us
             words.extend([store32(4, 1), load32(5, 4), jump(6)]);
             (words, 5)
         }
+        VmBenchmarkWorkload::BranchMix => {
+            let mut words = vec![
+                const32(0),
+                low16(iterations),
+                high16(iterations),
+                const4(1, 0),
+                const4(2, 1),
+                const4(4, 0),
+                const32(5),
+                low16(20),
+                high16(20),
+                const4(6, 3),
+            ];
+            words.extend(eq(3, 1, 0));
+            words.extend([branch_if_zero(3, 1), halt()]);
+            words.extend(and(7, 1, 2));
+            words.push(branch_if_zero(7, 3));
+            words.extend(add(4, 4, 6));
+            words.push(branch_if_nonzero(2, 2));
+            words.extend(add(4, 4, 2));
+            words.extend(add(1, 1, 2));
+            words.push(jump(5));
+            (words, 4)
+        }
+        VmBenchmarkWorkload::CallLoop => {
+            let mut words = vec![
+                const32(0),
+                low16(iterations),
+                high16(iterations),
+                const4(1, 0),
+                const4(2, 1),
+                const4(4, 0),
+                const32(15),
+                low16(MEMORY_SIZE as u32),
+                high16(MEMORY_SIZE as u32),
+                const32(5),
+                low16(30),
+                high16(30),
+                const32(6),
+                low16(46),
+                high16(46),
+            ];
+            words.extend(eq(3, 1, 0));
+            words.extend([branch_if_zero(3, 1), halt(), call(6)]);
+            words.extend(add(1, 1, 2));
+            words.push(jump(5));
+            words.extend(add(4, 4, 2));
+            words.push(ret());
+            (words, 4)
+        }
     }
 }
 
@@ -143,6 +219,82 @@ fn k16_max_steps(workload: VmBenchmarkWorkload, iterations: u32) -> u64 {
         VmBenchmarkWorkload::ComputeLoop => u64::from(iterations) * 4 + 16,
         VmBenchmarkWorkload::MemoryLoop => u64::from(iterations) * 7 + 16,
         VmBenchmarkWorkload::MmioLoop => u64::from(iterations) * 7 + 16,
+        VmBenchmarkWorkload::BranchMix => u64::from(iterations) * 12 + 32,
+        VmBenchmarkWorkload::CallLoop => u64::from(iterations) * 10 + 32,
+    }
+}
+
+fn native_compute_loop(iterations: u32) -> u32 {
+    let mut counter = 0_u32;
+    while black_box(counter) != iterations {
+        counter = counter.wrapping_add(1);
+    }
+    counter
+}
+
+fn native_memory_loop(iterations: u32) -> u32 {
+    let mut counter = 0_u32;
+    let mut cell = 0_u32;
+    while black_box(counter) != iterations {
+        cell = black_box(cell).wrapping_add(1);
+        counter = counter.wrapping_add(1);
+    }
+    cell
+}
+
+fn native_mmio_loop(iterations: u32) -> u32 {
+    let mut counter = 0_u32;
+    let mut register = NativeBenchmarkRegister { value: 0 };
+    while black_box(counter) != iterations {
+        counter = counter.wrapping_add(1);
+        register.store(counter);
+        black_box(register.load());
+    }
+    register.load()
+}
+
+fn native_branch_mix(iterations: u32) -> u32 {
+    let mut counter = 0_u32;
+    let mut checksum = 0_u32;
+    while black_box(counter) != iterations {
+        if black_box(counter) & 1 != 0 {
+            checksum = checksum.wrapping_add(3);
+        } else {
+            checksum = checksum.wrapping_add(1);
+        }
+        counter = counter.wrapping_add(1);
+    }
+    checksum
+}
+
+fn native_call_loop(iterations: u32) -> u32 {
+    let mut counter = 0_u32;
+    let mut checksum = 0_u32;
+    while black_box(counter) != iterations {
+        checksum = native_call_loop_helper(checksum);
+        counter = counter.wrapping_add(1);
+    }
+    checksum
+}
+
+#[inline(never)]
+fn native_call_loop_helper(value: u32) -> u32 {
+    black_box(value).wrapping_add(1)
+}
+
+struct NativeBenchmarkRegister {
+    value: u32,
+}
+
+impl NativeBenchmarkRegister {
+    #[inline(never)]
+    fn load(&self) -> u32 {
+        black_box(self.value)
+    }
+
+    #[inline(never)]
+    fn store(&mut self, value: u32) {
+        self.value = black_box(value);
     }
 }
 
@@ -197,6 +349,10 @@ fn add(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
     alu_rrr(dst, 0x0, lhs, rhs)
 }
 
+fn and(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
+    alu_rrr(dst, 0x2, lhs, rhs)
+}
+
 fn eq(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
     alu_rrr(dst, 0x8, lhs, rhs)
 }
@@ -226,6 +382,14 @@ fn branch_if_nonzero(register: u8, offset_words: i8) -> u16 {
 
 fn jump(target: u8) -> u16 {
     0x7000 | (u16::from(target) << 8)
+}
+
+fn call(target: u8) -> u16 {
+    0x8000 | (u16::from(target) << 8)
+}
+
+fn ret() -> u16 {
+    0x9000
 }
 
 fn halt() -> u16 {
