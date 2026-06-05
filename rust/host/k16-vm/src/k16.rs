@@ -512,87 +512,27 @@ impl K16Cpu {
                 Ok(None)
             }
             DecodedInstruction::Load8 { dst, addr } => {
-                let address = self.registers[addr];
-                let value = match bus.load_u8(address) {
-                    Ok(value) => value,
-                    Err(error) => {
-                        return self.raise_exception(
-                            K16_TRAP_CAUSE_LOAD_FAULT,
-                            fault_pc,
-                            address,
-                            error.to_string(),
-                        )
-                    }
-                };
-                self.registers[dst] = u32::from(value);
+                self.load_u8_into_register(bus, fault_pc, dst, addr)?;
                 Ok(None)
             }
             DecodedInstruction::Load16 { dst, addr } => {
-                let address = self.registers[addr];
-                let value = match bus.load_u16(address) {
-                    Ok(value) => value,
-                    Err(error) => {
-                        return self.raise_exception(
-                            K16_TRAP_CAUSE_LOAD_FAULT,
-                            fault_pc,
-                            address,
-                            error.to_string(),
-                        )
-                    }
-                };
-                self.registers[dst] = u32::from(value);
+                self.load_u16_into_register(bus, fault_pc, dst, addr)?;
                 Ok(None)
             }
             DecodedInstruction::Load32 { dst, addr } => {
-                let address = self.registers[addr];
-                let value = match bus.load_i32(address) {
-                    Ok(value) => value,
-                    Err(error) => {
-                        return self.raise_exception(
-                            K16_TRAP_CAUSE_LOAD_FAULT,
-                            fault_pc,
-                            address,
-                            error.to_string(),
-                        )
-                    }
-                };
-                self.registers[dst] = value as u32;
+                self.load_i32_into_register(bus, fault_pc, dst, addr)?;
                 Ok(None)
             }
             DecodedInstruction::Store8 { addr, src } => {
-                let address = self.registers[addr];
-                if let Err(error) = bus.store_u8(address, self.registers[src] as u8) {
-                    return self.raise_exception(
-                        K16_TRAP_CAUSE_STORE_FAULT,
-                        fault_pc,
-                        address,
-                        error.to_string(),
-                    );
-                }
+                self.store_u8_from_register(bus, fault_pc, addr, src)?;
                 Ok(None)
             }
             DecodedInstruction::Store16 { addr, src } => {
-                let address = self.registers[addr];
-                if let Err(error) = bus.store_u16(address, self.registers[src] as u16) {
-                    return self.raise_exception(
-                        K16_TRAP_CAUSE_STORE_FAULT,
-                        fault_pc,
-                        address,
-                        error.to_string(),
-                    );
-                }
+                self.store_u16_from_register(bus, fault_pc, addr, src)?;
                 Ok(None)
             }
             DecodedInstruction::Store32 { addr, src } => {
-                let address = self.registers[addr];
-                if let Err(error) = bus.store_i32(address, self.registers[src] as i32) {
-                    return self.raise_exception(
-                        K16_TRAP_CAUSE_STORE_FAULT,
-                        fault_pc,
-                        address,
-                        error.to_string(),
-                    );
-                }
+                self.store_i32_from_register(bus, fault_pc, addr, src)?;
                 Ok(None)
             }
             DecodedInstruction::BranchIfZero { src, target_pc } => {
@@ -612,76 +552,222 @@ impl K16Cpu {
                 Ok(None)
             }
             DecodedInstruction::Call { target } => {
-                let return_pc = self.pc;
-                let stack_pointer = usize::from(K16_STACK_POINTER_REGISTER);
-                let new_stack_pointer = self.registers[stack_pointer].wrapping_sub(4);
-                if let Err(error) = bus.store_i32(new_stack_pointer, return_pc as i32) {
-                    return self.raise_exception(
-                        K16_TRAP_CAUSE_STORE_FAULT,
-                        fault_pc,
-                        new_stack_pointer,
-                        error.to_string(),
-                    );
-                }
-                self.registers[stack_pointer] = new_stack_pointer;
-                self.pc = self.registers[target];
+                self.call_register_target(bus, fault_pc, target)?;
                 Ok(None)
             }
             DecodedInstruction::Ret => {
-                let stack_pointer = usize::from(K16_STACK_POINTER_REGISTER);
-                let return_pc = match bus.load_i32(self.registers[stack_pointer]) {
-                    Ok(value) => value as u32,
-                    Err(error) => {
-                        return self.raise_exception(
-                            K16_TRAP_CAUSE_LOAD_FAULT,
-                            fault_pc,
-                            self.registers[stack_pointer],
-                            error.to_string(),
-                        )
-                    }
-                };
-                self.registers[stack_pointer] = self.registers[stack_pointer].wrapping_add(4);
-                self.pc = return_pc;
+                self.return_from_stack(bus, fault_pc)?;
                 Ok(None)
             }
             DecodedInstruction::ReadCsr { dst, csr } => {
-                let value = match self.csr(csr) {
-                    Some(value) => value,
-                    None => {
-                        return self.raise_exception(
-                            K16_TRAP_CAUSE_EXPLICIT_TRAP,
-                            fault_pc,
-                            csr,
-                            format!("unknown csr {csr}"),
-                        )
-                    }
-                };
-                self.registers[dst] = value;
+                self.read_csr_into_register(fault_pc, dst, csr)?;
                 Ok(None)
             }
             DecodedInstruction::WriteCsr { csr, src } => {
-                match csr {
-                    K16_CSR_TRAP_VECTOR => self.trap_vector = self.registers[src],
-                    K16_CSR_TRAP_CAUSE | K16_CSR_TRAP_PC | K16_CSR_TRAP_VALUE => {
-                        return self.raise_exception(
-                            K16_TRAP_CAUSE_EXPLICIT_TRAP,
-                            fault_pc,
-                            csr,
-                            format!("csr {csr} is read-only"),
-                        )
-                    }
-                    _ => {
-                        return self.raise_exception(
-                            K16_TRAP_CAUSE_EXPLICIT_TRAP,
-                            fault_pc,
-                            csr,
-                            format!("unknown csr {csr}"),
-                        )
-                    }
-                }
+                self.write_csr_from_register(fault_pc, csr, src)?;
                 Ok(None)
             }
         }
+    }
+
+    fn load_u8_into_register(
+        &mut self,
+        bus: &mut dyn MemoryBus,
+        fault_pc: u32,
+        dst: usize,
+        addr: usize,
+    ) -> Result<(), K16Trap> {
+        let address = self.registers[addr];
+        let value = match bus.load_u8(address) {
+            Ok(value) => value,
+            Err(error) => {
+                return self.raise_load_fault(fault_pc, address, error);
+            }
+        };
+        self.registers[dst] = u32::from(value);
+        Ok(())
+    }
+
+    fn load_u16_into_register(
+        &mut self,
+        bus: &mut dyn MemoryBus,
+        fault_pc: u32,
+        dst: usize,
+        addr: usize,
+    ) -> Result<(), K16Trap> {
+        let address = self.registers[addr];
+        let value = match bus.load_u16(address) {
+            Ok(value) => value,
+            Err(error) => {
+                return self.raise_load_fault(fault_pc, address, error);
+            }
+        };
+        self.registers[dst] = u32::from(value);
+        Ok(())
+    }
+
+    fn load_i32_into_register(
+        &mut self,
+        bus: &mut dyn MemoryBus,
+        fault_pc: u32,
+        dst: usize,
+        addr: usize,
+    ) -> Result<(), K16Trap> {
+        let address = self.registers[addr];
+        let value = match bus.load_i32(address) {
+            Ok(value) => value,
+            Err(error) => {
+                return self.raise_load_fault(fault_pc, address, error);
+            }
+        };
+        self.registers[dst] = value as u32;
+        Ok(())
+    }
+
+    fn store_u8_from_register(
+        &mut self,
+        bus: &mut dyn MemoryBus,
+        fault_pc: u32,
+        addr: usize,
+        src: usize,
+    ) -> Result<(), K16Trap> {
+        let address = self.registers[addr];
+        if let Err(error) = bus.store_u8(address, self.registers[src] as u8) {
+            return self.raise_store_fault(fault_pc, address, error);
+        }
+        Ok(())
+    }
+
+    fn store_u16_from_register(
+        &mut self,
+        bus: &mut dyn MemoryBus,
+        fault_pc: u32,
+        addr: usize,
+        src: usize,
+    ) -> Result<(), K16Trap> {
+        let address = self.registers[addr];
+        if let Err(error) = bus.store_u16(address, self.registers[src] as u16) {
+            return self.raise_store_fault(fault_pc, address, error);
+        }
+        Ok(())
+    }
+
+    fn store_i32_from_register(
+        &mut self,
+        bus: &mut dyn MemoryBus,
+        fault_pc: u32,
+        addr: usize,
+        src: usize,
+    ) -> Result<(), K16Trap> {
+        let address = self.registers[addr];
+        if let Err(error) = bus.store_i32(address, self.registers[src] as i32) {
+            return self.raise_store_fault(fault_pc, address, error);
+        }
+        Ok(())
+    }
+
+    fn call_register_target(
+        &mut self,
+        bus: &mut dyn MemoryBus,
+        fault_pc: u32,
+        target: usize,
+    ) -> Result<(), K16Trap> {
+        let return_pc = self.pc;
+        let stack_pointer = usize::from(K16_STACK_POINTER_REGISTER);
+        let new_stack_pointer = self.registers[stack_pointer].wrapping_sub(4);
+        if let Err(error) = bus.store_i32(new_stack_pointer, return_pc as i32) {
+            return self.raise_store_fault(fault_pc, new_stack_pointer, error);
+        }
+        self.registers[stack_pointer] = new_stack_pointer;
+        self.pc = self.registers[target];
+        Ok(())
+    }
+
+    fn return_from_stack(&mut self, bus: &mut dyn MemoryBus, fault_pc: u32) -> Result<(), K16Trap> {
+        let stack_pointer = usize::from(K16_STACK_POINTER_REGISTER);
+        let return_pc = match bus.load_i32(self.registers[stack_pointer]) {
+            Ok(value) => value as u32,
+            Err(error) => {
+                return self.raise_load_fault(fault_pc, self.registers[stack_pointer], error);
+            }
+        };
+        self.registers[stack_pointer] = self.registers[stack_pointer].wrapping_add(4);
+        self.pc = return_pc;
+        Ok(())
+    }
+
+    fn read_csr_into_register(
+        &mut self,
+        fault_pc: u32,
+        dst: usize,
+        csr: u32,
+    ) -> Result<(), K16Trap> {
+        let value = match self.csr(csr) {
+            Some(value) => value,
+            None => {
+                return self.raise_explicit_trap(fault_pc, csr, format!("unknown csr {csr}"));
+            }
+        };
+        self.registers[dst] = value;
+        Ok(())
+    }
+
+    fn write_csr_from_register(
+        &mut self,
+        fault_pc: u32,
+        csr: u32,
+        src: usize,
+    ) -> Result<(), K16Trap> {
+        match csr {
+            K16_CSR_TRAP_VECTOR => self.trap_vector = self.registers[src],
+            K16_CSR_TRAP_CAUSE | K16_CSR_TRAP_PC | K16_CSR_TRAP_VALUE => {
+                return self.raise_explicit_trap(fault_pc, csr, format!("csr {csr} is read-only"));
+            }
+            _ => {
+                return self.raise_explicit_trap(fault_pc, csr, format!("unknown csr {csr}"));
+            }
+        }
+        Ok(())
+    }
+
+    fn raise_load_fault(
+        &mut self,
+        fault_pc: u32,
+        address: u32,
+        error: MemoryFault,
+    ) -> Result<(), K16Trap> {
+        self.raise_exception(
+            K16_TRAP_CAUSE_LOAD_FAULT,
+            fault_pc,
+            address,
+            error.to_string(),
+        )
+        .map(|_| ())
+    }
+
+    fn raise_store_fault(
+        &mut self,
+        fault_pc: u32,
+        address: u32,
+        error: MemoryFault,
+    ) -> Result<(), K16Trap> {
+        self.raise_exception(
+            K16_TRAP_CAUSE_STORE_FAULT,
+            fault_pc,
+            address,
+            error.to_string(),
+        )
+        .map(|_| ())
+    }
+
+    fn raise_explicit_trap(
+        &mut self,
+        fault_pc: u32,
+        value: u32,
+        message: impl Into<String>,
+    ) -> Result<(), K16Trap> {
+        self.raise_exception(K16_TRAP_CAUSE_EXPLICIT_TRAP, fault_pc, value, message)
+            .map(|_| ())
     }
 
     fn raise_exception(
