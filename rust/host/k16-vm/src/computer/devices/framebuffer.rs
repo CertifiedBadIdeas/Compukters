@@ -1,0 +1,249 @@
+use crate::computer_abi;
+use crate::display::{DisplayEngine, DisplayFrameDelta, PixelFormat};
+use crate::low_bus::MmioDevice;
+use crate::low_machine::{MachineMemory, MemoryFault};
+
+pub(crate) struct FramebufferDevice {
+    display: DisplayEngine,
+    pending_frames: Vec<DisplayFrameDelta>,
+    status: i32,
+    error: i32,
+    x: i32,
+    y: i32,
+    rect_width: i32,
+    rect_height: i32,
+    buffer_addr: u32,
+    buffer_stride_bytes: u32,
+    color: u16,
+    sequence: u64,
+}
+
+impl FramebufferDevice {
+    pub(crate) const SIZE: u32 = computer_abi::FRAMEBUFFER0_SIZE;
+    const DISPLAY_ID: i32 = 1;
+    const WIDTH: i32 = 320;
+    const HEIGHT: i32 = 200;
+    const BYTES_PER_PIXEL: u32 = 2;
+
+    pub(crate) fn new() -> Self {
+        Self {
+            display: DisplayEngine::new(
+                Self::DISPLAY_ID,
+                Self::WIDTH,
+                Self::HEIGHT,
+                PixelFormat::Rgb565,
+            )
+            .expect("framebuffer0 default geometry must be valid"),
+            pending_frames: Vec::new(),
+            status: computer_abi::FRAMEBUFFER0_STATUS_READY,
+            error: computer_abi::FRAMEBUFFER0_ERROR_NONE,
+            x: 0,
+            y: 0,
+            rect_width: Self::WIDTH,
+            rect_height: Self::HEIGHT,
+            buffer_addr: 0,
+            buffer_stride_bytes: (Self::WIDTH as u32) * Self::BYTES_PER_PIXEL,
+            color: 0,
+            sequence: 0,
+        }
+    }
+
+    pub(crate) fn drain_frames(&mut self) -> Vec<DisplayFrameDelta> {
+        std::mem::take(&mut self.pending_frames)
+    }
+
+    fn load_register(&self, offset: u32) -> Result<i32, MemoryFault> {
+        match offset {
+            0 => Ok(Self::WIDTH),
+            4 => Ok(Self::HEIGHT),
+            8 => Ok((Self::WIDTH as u32 * Self::BYTES_PER_PIXEL) as i32),
+            12 => Ok(computer_abi::FRAMEBUFFER0_PIXEL_FORMAT_RGB565),
+            20 => Ok(self.status),
+            24 => Ok(self.error),
+            28 => Ok(self.x),
+            32 => Ok(self.y),
+            36 => Ok(self.rect_width),
+            40 => Ok(self.rect_height),
+            44 => Ok(self.buffer_addr as i32),
+            48 => Ok(self.buffer_stride_bytes as i32),
+            52 => Ok(i32::from(self.color)),
+            56 => Ok((self.sequence as u32) as i32),
+            60 => Ok((self.sequence >> 32) as u32 as i32),
+            _ => Err(MemoryFault::new(format!(
+                "computer framebuffer0 offset {offset} is not readable",
+            ))),
+        }
+    }
+
+    fn store_register(&mut self, offset: u32, value: i32) -> Result<(), MemoryFault> {
+        match offset {
+            16 => self.execute_command(value, None),
+            28 => {
+                self.x = value;
+                Ok(())
+            }
+            32 => {
+                self.y = value;
+                Ok(())
+            }
+            36 => {
+                self.rect_width = value;
+                Ok(())
+            }
+            40 => {
+                self.rect_height = value;
+                Ok(())
+            }
+            44 => {
+                self.buffer_addr = u32::from_le_bytes(value.to_le_bytes());
+                Ok(())
+            }
+            48 => {
+                self.buffer_stride_bytes = u32::from_le_bytes(value.to_le_bytes());
+                Ok(())
+            }
+            52 => {
+                self.color = u16::from_le_bytes([value.to_le_bytes()[0], value.to_le_bytes()[1]]);
+                Ok(())
+            }
+            _ => Err(MemoryFault::new(format!(
+                "computer framebuffer0 offset {offset} is not writable",
+            ))),
+        }
+    }
+
+    fn execute_command(
+        &mut self,
+        command: i32,
+        memory: Option<&mut MachineMemory>,
+    ) -> Result<(), MemoryFault> {
+        self.error = computer_abi::FRAMEBUFFER0_ERROR_NONE;
+        self.status = computer_abi::FRAMEBUFFER0_STATUS_READY;
+        match command {
+            computer_abi::FRAMEBUFFER0_COMMAND_NOP => Ok(()),
+            computer_abi::FRAMEBUFFER0_COMMAND_CLEAR => {
+                self.display.clear(self.color);
+                self.status = computer_abi::FRAMEBUFFER0_STATUS_DONE;
+                Ok(())
+            }
+            computer_abi::FRAMEBUFFER0_COMMAND_BLIT_BUFFER => {
+                let Some(memory) = memory else {
+                    self.set_error(computer_abi::FRAMEBUFFER0_ERROR_BUFFER_OUT_OF_BOUNDS);
+                    return Ok(());
+                };
+                self.blit_buffer(memory);
+                Ok(())
+            }
+            computer_abi::FRAMEBUFFER0_COMMAND_PRESENT => {
+                if let Some(frame) = self.display.present() {
+                    self.sequence = frame.sequence as u64;
+                    self.pending_frames.push(frame);
+                }
+                self.status = computer_abi::FRAMEBUFFER0_STATUS_DONE;
+                Ok(())
+            }
+            _ => {
+                self.set_error(computer_abi::FRAMEBUFFER0_ERROR_INVALID_COMMAND);
+                Ok(())
+            }
+        }
+    }
+
+    fn blit_buffer(&mut self, memory: &MachineMemory) {
+        if self.rect_width <= 0 || self.rect_height <= 0 {
+            self.set_error(computer_abi::FRAMEBUFFER0_ERROR_INVALID_RECT);
+            return;
+        }
+        let min_stride = match u32::try_from(self.rect_width)
+            .ok()
+            .and_then(|width| width.checked_mul(Self::BYTES_PER_PIXEL))
+        {
+            Some(value) => value,
+            None => {
+                self.set_error(computer_abi::FRAMEBUFFER0_ERROR_INVALID_RECT);
+                return;
+            }
+        };
+        if self.buffer_stride_bytes < min_stride {
+            self.set_error(computer_abi::FRAMEBUFFER0_ERROR_INVALID_STRIDE);
+            return;
+        }
+        let rows = self.rect_height as u32;
+        let last_row_offset = match rows
+            .checked_sub(1)
+            .and_then(|row| row.checked_mul(self.buffer_stride_bytes))
+        {
+            Some(value) => value,
+            None => {
+                self.set_error(computer_abi::FRAMEBUFFER0_ERROR_BUFFER_OUT_OF_BOUNDS);
+                return;
+            }
+        };
+        let byte_len = match last_row_offset.checked_add(min_stride) {
+            Some(value) => value,
+            None => {
+                self.set_error(computer_abi::FRAMEBUFFER0_ERROR_BUFFER_OUT_OF_BOUNDS);
+                return;
+            }
+        };
+        if !ram_range_in_bounds(self.buffer_addr, byte_len, memory.len()) {
+            self.set_error(computer_abi::FRAMEBUFFER0_ERROR_BUFFER_OUT_OF_BOUNDS);
+            return;
+        }
+        for row in 0..self.rect_height {
+            let row_offset = row as u32 * self.buffer_stride_bytes;
+            for col in 0..self.rect_width {
+                let source = self.buffer_addr + row_offset + col as u32 * Self::BYTES_PER_PIXEL;
+                let lo = memory
+                    .load_u8(source)
+                    .expect("framebuffer0 source range was prevalidated");
+                let hi = memory
+                    .load_u8(source + 1)
+                    .expect("framebuffer0 source range was prevalidated");
+                let rgb565 = u16::from_le_bytes([lo, hi]);
+                self.display.set_pixel(self.x + col, self.y + row, rgb565);
+            }
+        }
+        self.status = computer_abi::FRAMEBUFFER0_STATUS_DONE;
+    }
+
+    fn set_error(&mut self, error: i32) {
+        self.status = computer_abi::FRAMEBUFFER0_STATUS_ERROR;
+        self.error = error;
+    }
+}
+
+impl MmioDevice for FramebufferDevice {
+    fn size(&self) -> u32 {
+        Self::SIZE
+    }
+
+    fn load_i32(&self, offset: u32) -> Result<i32, MemoryFault> {
+        self.load_register(offset)
+    }
+
+    fn store_i32(&mut self, offset: u32, value: i32) -> Result<(), MemoryFault> {
+        self.store_register(offset, value)
+    }
+
+    fn store_i32_with_memory(
+        &mut self,
+        offset: u32,
+        value: i32,
+        memory: &mut MachineMemory,
+    ) -> Result<(), MemoryFault> {
+        if offset == 16 {
+            return self.execute_command(value, Some(memory));
+        }
+        self.store_register(offset, value)
+    }
+}
+
+fn ram_range_in_bounds(address: u32, byte_len: u32, ram_len: usize) -> bool {
+    let Some(end) = address.checked_add(byte_len) else {
+        return false;
+    };
+    let start = address as usize;
+    let end = end as usize;
+    start <= ram_len && end <= ram_len
+}

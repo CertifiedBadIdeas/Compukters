@@ -30,6 +30,7 @@ runs
 run-data
 .worktrees
 logs
+.agents/tmp/
 
 repo
 versions.properties
