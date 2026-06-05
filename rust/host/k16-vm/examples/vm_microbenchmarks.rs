@@ -17,7 +17,10 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use k16_vm::vm_microbenchmarks::{run_k16_workload, run_native_rust_workload, VmBenchmarkWorkload};
+use k16_vm::vm_microbenchmarks::{
+    benchmark_output_header, format_benchmark_sample, run_k16_workload, run_native_rust_workload,
+    VmBenchmarkSample, VmBenchmarkWorkload,
+};
 use std::env;
 use std::hint::black_box;
 use std::time::Instant;
@@ -27,26 +30,28 @@ fn main() {
     let iterations = parse_arg(&args, 1, "iterations");
     let samples = parse_arg(&args, 2, "samples");
 
-    println!("workload\tvm\titerations\tchecksum\tbest_nanos\tnanos_per_iteration");
+    println!("{}", benchmark_output_header());
     for workload in VmBenchmarkWorkload::all() {
-        print_sample(*workload, "k16", iterations, samples, run_k16_workload);
-        print_sample(
+        let k16 = collect_sample(*workload, "k16", iterations, samples, run_k16_workload);
+        let native = collect_sample(
             *workload,
             "native-rust",
             iterations,
             samples,
             run_native_rust_workload,
         );
+        println!("{}", format_benchmark_sample(&k16, native.best_nanos));
+        println!("{}", format_benchmark_sample(&native, native.best_nanos));
     }
 }
 
-fn print_sample(
+fn collect_sample(
     workload: VmBenchmarkWorkload,
-    vm: &str,
+    vm: &'static str,
     iterations: u32,
     samples: u32,
     run: fn(VmBenchmarkWorkload, u32) -> Result<u32, String>,
-) {
+) -> VmBenchmarkSample {
     let mut expected_checksum = None;
     let mut best_nanos = u128::MAX;
     for _ in 0..samples {
@@ -66,16 +71,13 @@ fn print_sample(
         best_nanos = best_nanos.min(elapsed);
     }
 
-    let nanos_per_iteration = if iterations == 0 {
-        0.0
-    } else {
-        best_nanos as f64 / f64::from(iterations)
-    };
-    println!(
-        "{}\t{vm}\t{iterations}\t{}\t{best_nanos}\t{nanos_per_iteration:.3}",
-        workload.name(),
-        expected_checksum.expect("at least one sample is required"),
-    );
+    VmBenchmarkSample {
+        workload,
+        vm,
+        iterations,
+        checksum: expected_checksum.expect("at least one sample is required"),
+        best_nanos,
+    }
 }
 
 fn parse_arg(args: &[String], index: usize, name: &str) -> u32 {
