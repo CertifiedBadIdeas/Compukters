@@ -28,6 +28,43 @@ The current tracked local baseline is documented in
 These numbers are diagnostic points for optimization work, not CI performance
 budgets.
 
+The current per-commit snapshot lives at:
+
+```text
+docs/benchmarks/k16-vm-current.txt
+```
+
+It is plaintext and keeps the same table shape as the terminal output, with a
+small metadata header. Refresh it manually with:
+
+```bash
+scripts/record-k16-vm-benchmark-current.sh
+```
+
+Optional arguments override the default `100000 5` benchmark size:
+
+```bash
+scripts/record-k16-vm-benchmark-current.sh 1000 3
+```
+
+Install the repository pre-commit hook to refresh and stage the current snapshot
+automatically before each commit:
+
+```bash
+scripts/install-git-hooks.sh
+```
+
+The hook refuses unrelated unstaged or untracked files so the snapshot reflects
+the tree being committed. `docs/benchmarks/k16-vm-current.txt` is the only path
+the hook may rewrite while committing.
+
+There is no separate append-only benchmark history file. Git is the history:
+
+```bash
+git diff docs/benchmarks/k16-vm-current.txt
+git show <commit>:docs/benchmarks/k16-vm-current.txt
+```
+
 ## Runtime/display profiling workload
 
 Runtime VM profiling records the Rust image runtime path. Use `profileRuntimeVmImage` to build the native library, run the profiling workload, write the stable raw profile, and archive a timestamped run with Markdown.
