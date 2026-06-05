@@ -1,12 +1,8 @@
 use crate::computer::devices::{
     BiosFlashDevice, ComputerControlDevice, ComputerTextDisplaySnapshot, DebugSerialDevice,
-    FramebufferDevice, K16VolumeFileStorageMedia, SerialInputDevice, StoragePortDevice,
-    TextDisplayDevice,
+    FramebufferDevice, SerialInputDevice, StoragePortDevice, TextDisplayDevice,
 };
-use crate::computer::profile::{
-    validate_profile_v2, ComputerHardwareDevice, ComputerMachineProfile, HardwareTableEntry,
-    StorageMediaConfig,
-};
+use crate::computer::profile::ComputerMachineProfile;
 use crate::computer::snapshot;
 use crate::computer::snapshot::{ComputerCpuSnapshotRecord, ComputerDeviceSnapshotRecord};
 use crate::computer_abi;
@@ -15,6 +11,8 @@ use crate::k16::{K16Cpu, K16Signal};
 use crate::low_bus::{MachineBus, MmioDeviceId};
 use crate::low_machine::{MachineMemory, MemoryFault};
 use std::fmt::{Display, Formatter};
+
+mod construction;
 
 pub type CpuId = usize;
 
@@ -207,82 +205,7 @@ impl ComputerMachine {
     }
 
     pub fn from_profile(profile: ComputerMachineProfile) -> Result<Self, MemoryFault> {
-        validate_profile_v2(&profile)?;
-        let mut bus = MachineBus::new(profile.memory_size)?;
-        let mut control_device_id = None;
-        let mut debug_device_id = None;
-        let mut serial_input_device_id = None;
-        let mut display0_device_id = None;
-        let mut framebuffer0_device_id = None;
-        let mut storage0_device_id = None;
-        let hardware_entries = profile
-            .hardware
-            .iter()
-            .map(|hardware| HardwareTableEntry {
-                id: hardware.id,
-                mmio_base: hardware.mmio_base,
-                mmio_size: hardware.mmio_size(),
-            })
-            .collect::<Vec<_>>();
-
-        // Profiles describe guest-visible hardware. Construction turns that
-        // declarative table into concrete MMIO devices and remembers their
-        // MachineBus ids for host-side accessors and snapshot handling.
-        for hardware in &profile.hardware {
-            let device_id = match &hardware.device {
-                ComputerHardwareDevice::Control => {
-                    bus.map_mmio(hardware.mmio_base, Box::new(ComputerControlDevice::new()))?
-                }
-                ComputerHardwareDevice::DebugSerial => {
-                    bus.map_mmio(hardware.mmio_base, Box::new(DebugSerialDevice::new()))?
-                }
-                ComputerHardwareDevice::SerialInput => {
-                    bus.map_mmio(hardware.mmio_base, Box::new(SerialInputDevice::new()))?
-                }
-                ComputerHardwareDevice::TextDisplay => {
-                    bus.map_mmio(hardware.mmio_base, Box::new(TextDisplayDevice::new()))?
-                }
-                ComputerHardwareDevice::Framebuffer => {
-                    bus.map_mmio(hardware.mmio_base, Box::new(FramebufferDevice::new()))?
-                }
-                ComputerHardwareDevice::StoragePort(config) => {
-                    let device = match &config.media {
-                        Some(StorageMediaConfig::InMemory { bytes, read_only }) => {
-                            StoragePortDevice::with_media(bytes.clone(), *read_only)?
-                        }
-                        Some(StorageMediaConfig::K16VolumeFile { path }) => {
-                            StoragePortDevice::with_media_backend(Box::new(
-                                K16VolumeFileStorageMedia::open(path)?,
-                            ))?
-                        }
-                        None => StoragePortDevice::new_absent(),
-                    };
-                    bus.map_mmio(hardware.mmio_base, Box::new(device))?
-                }
-            };
-            match &hardware.device {
-                ComputerHardwareDevice::Control => control_device_id = Some(device_id),
-                ComputerHardwareDevice::DebugSerial => debug_device_id = Some(device_id),
-                ComputerHardwareDevice::SerialInput => serial_input_device_id = Some(device_id),
-                ComputerHardwareDevice::TextDisplay => display0_device_id = Some(device_id),
-                ComputerHardwareDevice::Framebuffer => framebuffer0_device_id = Some(device_id),
-                ComputerHardwareDevice::StoragePort(_) => storage0_device_id = Some(device_id),
-            }
-        }
-
-        write_profile_v2_boot_info(&mut bus, &profile, &hardware_entries)?;
-        Ok(Self {
-            bus,
-            control_device_id,
-            debug_device_id,
-            serial_input_device_id,
-            display0_device_id,
-            framebuffer0_device_id,
-            storage0_device_id,
-            bios_flash_device_id: None,
-            cpus: Vec::new(),
-            boot_cpu: None,
-        })
+        construction::from_profile(profile)
     }
 
     pub fn from_k16_bios_flash(
@@ -855,59 +778,6 @@ fn checked_ram_range(
         });
     }
     Ok(end)
-}
-
-fn write_profile_v2_boot_info(
-    bus: &mut MachineBus,
-    profile: &ComputerMachineProfile,
-    hardware_entries: &[HardwareTableEntry],
-) -> Result<(), MemoryFault> {
-    let hardware_table_addr = if hardware_entries.is_empty() {
-        0
-    } else {
-        computer_abi::PROFILE_V2_BOOT_INFO_SIZE
-    };
-    let hardware_count = hardware_entries.len() as u32;
-    let ram_size = bus.memory().len() as u32;
-
-    write_u32(
-        bus.memory_mut(),
-        computer_abi::PROFILE_V2_BOOT_INFO_ADDR,
-        computer_abi::PROFILE_V2_BOOT_INFO_MAGIC,
-    )?;
-    write_u32(bus.memory_mut(), 0x04, computer_abi::PROFILE_V2_VERSION)?;
-    write_u32(bus.memory_mut(), 0x08, ram_size)?;
-    write_u32(bus.memory_mut(), 0x0C, profile.page_size)?;
-    write_u32(bus.memory_mut(), 0x10, profile.program_base)?;
-    write_u32(bus.memory_mut(), 0x14, hardware_table_addr)?;
-    write_u32(bus.memory_mut(), 0x18, hardware_count)?;
-
-    for (index, entry) in hardware_entries.iter().enumerate() {
-        write_hardware_entry(
-            bus.memory_mut(),
-            hardware_table_addr + computer_abi::PROFILE_V2_HARDWARE_ENTRY_SIZE * index as u32,
-            entry.id,
-            entry.mmio_base,
-            entry.mmio_size,
-        )?;
-    }
-    Ok(())
-}
-
-fn write_hardware_entry(
-    memory: &mut MachineMemory,
-    address: u32,
-    id: u32,
-    mmio_base: u32,
-    mmio_size: u32,
-) -> Result<(), MemoryFault> {
-    write_u32(memory, address, id)?;
-    write_u32(memory, address + 4, mmio_base)?;
-    write_u32(memory, address + 8, mmio_size)
-}
-
-fn write_u32(memory: &mut MachineMemory, address: u32, value: u32) -> Result<(), MemoryFault> {
-    memory.store_i32(address, i32::from_le_bytes(value.to_le_bytes()))
 }
 
 fn stable_panic_code(message: &str) -> i32 {
