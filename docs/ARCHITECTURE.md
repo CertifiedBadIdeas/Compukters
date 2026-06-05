@@ -34,6 +34,9 @@ through memory-mapped peripherals.
 | `rust/host/k16-vm`  | Rust virtual machine: Kraft16 CPU, memory-mapped devices, `K16Computer` handle, JNI exports |
 | `rust/host/k16-tools` | Legacy Rux source checks plus K16 artifact tooling via `k16` for disassembly, volume, and filesystem commands |
 
+For a code-level map of the active Rust VM path, see
+[`k16-vm-code-flow.md`](k16-vm-code-flow.md).
+
 ## Module ownership rules
 
 - `core` must not import `net.minecraft.*`.
@@ -52,9 +55,9 @@ RuntimeDevice.boot()
   └─ NativeVmBindings.createK16ComputerFromBiosFlash(biosFlashPath, storage0Path, ...)
         └─ native K16 computer handle
               ├─ Kraft16 CPU fetching instructions from mapped BIOS flash
-              ├─ storage0 KV boot media
+              ├─ storage0 boot media
               ├─ flat RAM + MMIO bus (control, debug-serial, serial-input,
-              │   text-display, storage0, bios-flash)
+              │   text-display, framebuffer0, storage0, bios-flash)
               └─ exposes control / debug / display snapshot over JNI
 
 RuntimeDevice.serverTick(gameTime)
@@ -76,9 +79,10 @@ RuntimeDevice.close()
 │    ├─ MMIO control device  ──►  status / exit / panic registers      │
 │    ├─ MMIO debug serial    ──►  K16ComputerHandle.debug_output       │
 │    ├─ MMIO serial input    ◄──  player keyboard events               │
-│    ├─ MMIO storage0        ◄──► KV boot media                        │
+│    ├─ MMIO storage0        ◄──► boot media                           │
 │    ├─ MMIO bios flash      ──►  read-only firmware mapping           │
-│    └─ MMIO text display    ──►  K16ComputerTextDisplaySnapshot       │
+│    ├─ MMIO text display    ──►  K16ComputerTextDisplaySnapshot       │
+│    └─ MMIO framebuffer0    ──►  DisplayFrameDelta values             │
 └──────────────────────────────────────────┬──────────────────────────┘
                                            │ JNI run-until-signal
                                            ▼
@@ -103,7 +107,8 @@ RuntimeDevice.close()
 ```
 
 The text display device exposes a character cell buffer with cursor and a
-monotonic sequence number for delta detection. The client sends discrete
-input events into the serial-input MMIO device. There is no multi-process
-scheduling and no host-call opcode — host-side interaction happens purely
-through memory-mapped registers.
+monotonic sequence number for delta detection. The framebuffer device converts
+guest RAM blits into display frame deltas. The client sends discrete input
+events into the serial-input MMIO device. There is no multi-process scheduling
+and no host-call opcode — host-side interaction happens purely through
+memory-mapped registers.

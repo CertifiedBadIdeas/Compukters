@@ -199,6 +199,8 @@ Unlikely candidates:
 ## K16 VM local checks
 
 The K16 VM crate owns the native runtime and JNI library used by dev runs.
+For a code-level map of the Rust VM execution path, see
+[`k16-vm-code-flow.md`](k16-vm-code-flow.md).
 
 Run Rust crate tests:
 
@@ -241,7 +243,7 @@ passes `k16.vm.native.library=...` to the JVM.
 - High total nanos in small per-call operations suggests batching before native code.
 - High tile payload bytes with high serialization nanos may justify native serialization or compression.
 - High VM execution nanos plus many pause/yield signals points to VM interpreter work.
-- High `host-calls:` counts point to chatty CKL-to-runtime builtins; prefer batching or moving work inside the VM before considering native code.
-- High `host-calls:` nanos can include coroutine wait time for blocking APIs such as IPC reads or event polling. Treat these as latency/blocking signals first, then use JFR to confirm CPU cost.
-- High `instructions:` nanos or counts identify interpreter opcode families to inspect with JFR before rewriting the VM.
+- K16 guest/host interaction is MMIO-driven; high device costs usually point to a specific MMIO device implementation or host-side frame/storage plumbing.
+- High K16 benchmark `vs_native` ratios identify interpreter overhead to inspect before rewriting guest algorithms.
+- High `instructions:` nanos or counts in older profiling reports identify interpreter opcode families to inspect with JFR before rewriting the VM.
 - Compiler phase timings affect startup and IDE latency, not steady-state display FPS.
