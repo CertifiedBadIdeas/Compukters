@@ -17,7 +17,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use k16_vm::vm_microbenchmarks::{run_k16_workload, VmBenchmarkWorkload};
+use k16_vm::vm_microbenchmarks::{run_k16_workload, run_native_rust_workload, VmBenchmarkWorkload};
 use std::fs;
 use std::path::Path;
 
@@ -52,13 +52,56 @@ fn mmio_loop_runs_on_k16() {
 }
 
 #[test]
+fn branch_mix_runs_on_k16() {
+    let iterations = 7;
+
+    assert_eq!(
+        run_k16_workload(VmBenchmarkWorkload::BranchMix, iterations).unwrap(),
+        run_native_rust_workload(VmBenchmarkWorkload::BranchMix, iterations).unwrap(),
+    );
+}
+
+#[test]
+fn call_loop_runs_on_k16() {
+    let iterations = 7;
+
+    assert_eq!(
+        run_k16_workload(VmBenchmarkWorkload::CallLoop, iterations).unwrap(),
+        run_native_rust_workload(VmBenchmarkWorkload::CallLoop, iterations).unwrap(),
+    );
+}
+
+#[test]
 fn benchmark_workload_list_includes_mmio_loop_for_cli_output() {
     let names = VmBenchmarkWorkload::all()
         .iter()
         .map(|workload| workload.name())
         .collect::<Vec<_>>();
 
-    assert_eq!(names, vec!["compute-loop", "memory-loop", "mmio-loop"]);
+    assert_eq!(
+        names,
+        vec![
+            "compute-loop",
+            "memory-loop",
+            "mmio-loop",
+            "branch-mix",
+            "call-loop",
+        ],
+    );
+}
+
+#[test]
+fn native_rust_workloads_match_k16_checksums() {
+    let iterations = 11;
+
+    for workload in VmBenchmarkWorkload::all() {
+        assert_eq!(
+            run_native_rust_workload(*workload, iterations).unwrap(),
+            run_k16_workload(*workload, iterations).unwrap(),
+            "{} checksum mismatch",
+            workload.name(),
+        );
+    }
 }
 
 #[test]

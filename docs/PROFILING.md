@@ -17,6 +17,10 @@ cd rust/host/k16-vm
 cargo run --release --example vm_microbenchmarks -- 100000 5
 ```
 
+Each workload prints a `k16` row and a `native-rust` row. The native row runs an
+equivalent host Rust algorithm and gives local diagnostic context for VM
+overhead. It is not a portable performance claim or a CI budget.
+
 The current tracked local baseline is documented in
 [`docs/benchmarks/k16-vm-baseline-2026-05-29.md`](benchmarks/k16-vm-baseline-2026-05-29.md).
 These numbers are diagnostic points for optimization work, not CI performance
