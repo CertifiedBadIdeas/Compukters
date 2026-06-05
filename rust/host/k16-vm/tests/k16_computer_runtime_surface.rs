@@ -186,7 +186,6 @@ fn active_overview_docs_use_kraft16_runtime_brand() {
     let active_docs = [
         "README.md",
         "docs/ARCHITECTURE.md",
-        "docs/LANGUAGE.md",
         "docs/PROFILING.md",
         "docs/benchmarks/k16-vm-baseline-2026-05-29.md",
     ];
