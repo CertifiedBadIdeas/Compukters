@@ -1,6 +1,6 @@
 use crate::computer::devices::{
-    BiosFlashDevice, ComputerControlDevice, ComputerTextDisplaySnapshot, DebugSerialDevice,
-    FramebufferDevice, SerialInputDevice, StoragePortDevice, TextDisplayDevice,
+    ComputerControlDevice, ComputerTextDisplaySnapshot, DebugSerialDevice, FramebufferDevice,
+    SerialInputDevice, StoragePortDevice, TextDisplayDevice,
 };
 use crate::computer::profile::ComputerMachineProfile;
 use crate::computer_abi;
@@ -10,6 +10,7 @@ use crate::low_bus::{MachineBus, MmioDeviceId};
 use crate::low_machine::{MachineMemory, MemoryFault};
 use std::fmt::{Display, Formatter};
 
+mod boot_flow;
 mod construction;
 mod snapshot_flow;
 
@@ -212,11 +213,7 @@ impl ComputerMachine {
         memory_size: usize,
         max_steps: u64,
     ) -> Result<(Self, CpuId), String> {
-        Self::from_k16_bios_flash_with_profile(
-            bios_flash,
-            ComputerMachineProfile::computer_v1(memory_size),
-            max_steps,
-        )
+        boot_flow::from_k16_bios_flash(bios_flash, memory_size, max_steps)
     }
 
     pub(crate) fn from_k16_bios_flash_with_profile(
@@ -224,19 +221,7 @@ impl ComputerMachine {
         profile: ComputerMachineProfile,
         max_steps: u64,
     ) -> Result<(Self, CpuId), String> {
-        if bios_flash.is_empty() {
-            return Err("K16 BIOS flash is empty".to_string());
-        }
-        let bios_flash_len = u32::try_from(bios_flash.len())
-            .map_err(|_| "K16 BIOS flash size does not fit u32".to_string())?;
-        Self::K16_BIOS_FLASH_BASE
-            .checked_add(bios_flash_len)
-            .ok_or_else(|| "K16 BIOS flash range overflows address space".to_string())?;
-
-        let mut machine = Self::from_profile(profile).map_err(|error| error.to_string())?;
-        machine.map_k16_bios_flash(bios_flash.to_vec())?;
-        let boot_cpu = machine.spawn_k16_boot_cpu(Self::K16_BIOS_FLASH_BASE, max_steps)?;
-        Ok((machine, boot_cpu))
+        boot_flow::from_k16_bios_flash_with_profile(bios_flash, profile, max_steps)
     }
 
     pub fn memory(&self) -> &MachineMemory {
@@ -337,35 +322,13 @@ impl ComputerMachine {
         Ok(bytes)
     }
 
-    fn spawn_k16_boot_cpu(&mut self, entry_pc: u32, max_steps: u64) -> Result<CpuId, String> {
-        if self.boot_cpu.is_some() {
-            return Err("boot CPU is already spawned".to_string());
-        }
-        let cpu_id = self.cpus.len();
-        self.cpus.push(ComputerCpuContext::K16 {
-            cpu: K16Cpu::new(entry_pc),
-            max_steps: max_steps.max(1),
-        });
-        self.boot_cpu = Some(cpu_id);
-        Ok(cpu_id)
-    }
-
     pub fn boot_handoff_k16_from_ram(
         &mut self,
         entry_pc: u32,
         byte_len: u32,
         max_steps: u64,
     ) -> Result<CpuId, BootHandoffError> {
-        let boot_cpu = self.boot_cpu.ok_or(BootHandoffError::MissingBootCpu)?;
-        if byte_len == 0 {
-            return Err(BootHandoffError::EmptyImage);
-        }
-        checked_ram_range(entry_pc, byte_len, self.bus.memory().len())?;
-        self.cpus[boot_cpu] = ComputerCpuContext::K16 {
-            cpu: K16Cpu::new(entry_pc),
-            max_steps: max_steps.max(1),
-        };
-        Ok(boot_cpu)
+        boot_flow::boot_handoff_k16_from_ram(self, entry_pc, byte_len, max_steps)
     }
 
     pub fn boot_cpu_id(&self) -> Option<CpuId> {
@@ -377,33 +340,7 @@ impl ComputerMachine {
     }
 
     pub fn run_boot_k16_until_signal(&mut self, cpu_id: CpuId) -> Result<K16Signal, String> {
-        if self.boot_cpu != Some(cpu_id) {
-            return Err(format!("CPU {cpu_id} is not the boot CPU"));
-        }
-        // ComputerMachine owns the full-computer reaction to CPU results. The
-        // CPU executes instructions; the machine translates halt/fault outcomes
-        // into control-device state visible to the host.
-        let signal = {
-            let cpu = self
-                .cpus
-                .get_mut(cpu_id)
-                .ok_or_else(|| format!("CPU {cpu_id} is not present"))?;
-            match cpu {
-                ComputerCpuContext::K16 { cpu, max_steps } => cpu
-                    .run_until_signal(&mut self.bus, *max_steps)
-                    .map_err(|error| error.to_string()),
-            }
-        };
-        match &signal {
-            Ok(K16Signal::Halt) => {
-                self.set_halted_exit_code(0)?;
-            }
-            Ok(K16Signal::StepLimitExceeded) => {}
-            Err(message) => {
-                self.set_panic_from_fault(message)?;
-            }
-        }
-        signal
+        boot_flow::run_boot_k16_until_signal(self, cpu_id)
     }
 
     pub fn control_status(&self) -> i32 {
@@ -499,16 +436,7 @@ impl ComputerMachine {
     }
 
     pub(crate) fn map_k16_bios_flash(&mut self, bytes: Vec<u8>) -> Result<(), String> {
-        if self.bios_flash_device_id.is_some() {
-            return Err("K16 BIOS flash is already mapped".to_string());
-        }
-        let device = BiosFlashDevice::new(bytes).map_err(|error| error.to_string())?;
-        let device_id = self
-            .bus
-            .map_mmio(Self::K16_BIOS_FLASH_BASE, Box::new(device))
-            .map_err(|error| error.to_string())?;
-        self.bios_flash_device_id = Some(device_id);
-        Ok(())
+        boot_flow::map_k16_bios_flash(self, bytes)
     }
 
     fn control_device(&self) -> Option<&ComputerControlDevice> {
@@ -565,22 +493,6 @@ impl ComputerMachine {
         self.control_device_id
             .and_then(|id| self.bus.device_mut::<ComputerControlDevice>(id))
     }
-
-    fn set_halted_exit_code(&mut self, exit_code: i32) -> Result<(), String> {
-        if let Some(control) = self.control_device_mut() {
-            control.status = Self::STATUS_HALTED;
-            control.exit_code = exit_code;
-        }
-        Ok(())
-    }
-
-    fn set_panic_from_fault(&mut self, message: &str) -> Result<(), String> {
-        if let Some(control) = self.control_device_mut() {
-            control.status = Self::STATUS_PANIC;
-            control.panic_code = stable_panic_code(message);
-        }
-        Err(message.to_string())
-    }
 }
 
 fn checked_ram_range(
@@ -605,12 +517,6 @@ fn checked_ram_range(
         });
     }
     Ok(end)
-}
-
-fn stable_panic_code(message: &str) -> i32 {
-    message.bytes().fold(0_i32, |hash, byte| {
-        hash.wrapping_mul(31).wrapping_add(i32::from(byte))
-    })
 }
 
 #[cfg(test)]
