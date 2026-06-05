@@ -3,8 +3,6 @@ use crate::computer::devices::{
     FramebufferDevice, SerialInputDevice, StoragePortDevice, TextDisplayDevice,
 };
 use crate::computer::profile::ComputerMachineProfile;
-use crate::computer::snapshot;
-use crate::computer::snapshot::{ComputerCpuSnapshotRecord, ComputerDeviceSnapshotRecord};
 use crate::computer_abi;
 use crate::display::DisplayFrameDelta;
 use crate::k16::{K16Cpu, K16Signal};
@@ -13,6 +11,7 @@ use crate::low_machine::{MachineMemory, MemoryFault};
 use std::fmt::{Display, Formatter};
 
 mod construction;
+mod snapshot_flow;
 
 pub type CpuId = usize;
 
@@ -275,56 +274,21 @@ impl ComputerMachine {
     }
 
     pub fn snapshot_v1(&self) -> Result<Vec<u8>, String> {
-        let cpus = self
-            .cpus
-            .iter()
-            .map(ComputerCpuContext::snapshot_record)
-            .collect::<Vec<_>>();
-        let devices = self.device_snapshot_records();
-        snapshot::encode_snapshot_v1(self.memory().bytes(), self.boot_cpu, &cpus, &devices)
+        snapshot_flow::snapshot_v1(self)
     }
 
     pub fn restore_ram_snapshot_v1(
         profile: ComputerMachineProfile,
         snapshot_bytes: &[u8],
     ) -> Result<Self, String> {
-        let snapshot = snapshot::decode_snapshot_v1(snapshot_bytes)?;
-        snapshot::validate_snapshot_ram_matches_profile(&profile, &snapshot)?;
-        let mut machine = Self::from_profile(profile).map_err(|error| error.to_string())?;
-        machine.write_guest_ram_bytes(0, snapshot.ram)?;
-        Ok(machine)
+        snapshot_flow::restore_ram_snapshot_v1(profile, snapshot_bytes)
     }
 
     pub fn restore_snapshot_v1(
         profile: ComputerMachineProfile,
         snapshot_bytes: &[u8],
     ) -> Result<Self, String> {
-        let snapshot = snapshot::decode_snapshot_v1(snapshot_bytes)?;
-        snapshot::validate_snapshot_ram_matches_profile(&profile, &snapshot)?;
-        let mut machine = Self::from_profile(profile).map_err(|error| error.to_string())?;
-        machine.write_guest_ram_bytes(0, snapshot.ram)?;
-        machine.cpus = snapshot
-            .cpus
-            .iter()
-            .cloned()
-            .map(ComputerCpuContext::from_snapshot_record)
-            .collect::<Result<Vec<_>, _>>()?;
-        for device in snapshot.devices {
-            machine.restore_device_snapshot_record(device)?;
-        }
-        machine.boot_cpu = snapshot
-            .header
-            .boot_cpu_id
-            .map(|id| {
-                let id = usize::try_from(id)
-                    .map_err(|_| "ComputerMachine snapshot boot CPU id does not fit usize")?;
-                if id >= machine.cpus.len() {
-                    return Err("ComputerMachine snapshot boot CPU id is outside CPU table");
-                }
-                Ok(id)
-            })
-            .transpose()?;
-        Ok(machine)
+        snapshot_flow::restore_snapshot_v1(profile, snapshot_bytes)
     }
 
     pub fn bus_load_i32(&self, address: u32) -> Result<i32, MemoryFault> {
@@ -562,116 +526,6 @@ impl ComputerMachine {
             .and_then(|id| self.bus.device_mut::<DebugSerialDevice>(id))
     }
 
-    fn device_snapshot_records(&self) -> Vec<ComputerDeviceSnapshotRecord> {
-        let mut devices = Vec::new();
-        if let Some(control) = self.control_device() {
-            devices.push(ComputerDeviceSnapshotRecord::Control {
-                status: control.status,
-                panic_code: control.panic_code,
-                exit_code: control.exit_code,
-            });
-        }
-        if let Some(debug) = self.debug_device() {
-            devices.push(ComputerDeviceSnapshotRecord::DebugSerial {
-                bytes: debug.bytes().to_vec(),
-            });
-        }
-        if let Some(display0) = self.display0_device() {
-            devices.push(ComputerDeviceSnapshotRecord::Display0 {
-                snapshot: display0.snapshot(),
-            });
-        }
-        if let Some(serial_input) = self.serial_input_device() {
-            devices.push(ComputerDeviceSnapshotRecord::SerialInput {
-                bytes: serial_input.bytes(),
-            });
-        }
-        if let Some(storage0) = self.storage0_device() {
-            let snapshot = storage0.controller_snapshot();
-            devices.push(ComputerDeviceSnapshotRecord::Storage0 {
-                status: snapshot.status,
-                error: snapshot.error,
-                lba_low: snapshot.lba_low,
-                lba_high: snapshot.lba_high,
-                block_count: snapshot.block_count,
-                buffer_addr: snapshot.buffer_addr,
-                bytes_done: snapshot.bytes_done,
-                sequence: snapshot.sequence,
-            });
-        }
-        devices
-    }
-
-    fn restore_device_snapshot_record(
-        &mut self,
-        record: ComputerDeviceSnapshotRecord,
-    ) -> Result<(), String> {
-        match record {
-            ComputerDeviceSnapshotRecord::Control {
-                status,
-                panic_code,
-                exit_code,
-            } => {
-                let control = self.control_device_mut().ok_or_else(|| {
-                    "ComputerMachine snapshot contains control device state but profile has no control device"
-                        .to_string()
-                })?;
-                control.status = status;
-                control.panic_code = panic_code;
-                control.exit_code = exit_code;
-            }
-            ComputerDeviceSnapshotRecord::DebugSerial { bytes } => {
-                let debug = self.debug_device_mut().ok_or_else(|| {
-                    "ComputerMachine snapshot contains debug device state but profile has no debug device"
-                        .to_string()
-                })?;
-                debug.restore_bytes(bytes);
-            }
-            ComputerDeviceSnapshotRecord::Display0 { snapshot } => {
-                let display0 = self.display0_device_mut().ok_or_else(|| {
-                    "ComputerMachine snapshot contains display0 device state but profile has no display0 device"
-                        .to_string()
-                })?;
-                display0.restore_snapshot(snapshot)?;
-            }
-            ComputerDeviceSnapshotRecord::SerialInput { bytes } => {
-                let serial_input = self.serial_input_device_mut().ok_or_else(|| {
-                    "ComputerMachine snapshot contains serial input device state but profile has no serial input device"
-                        .to_string()
-                })?;
-                serial_input.restore_bytes(bytes);
-            }
-            ComputerDeviceSnapshotRecord::Storage0 {
-                status,
-                error,
-                lba_low,
-                lba_high,
-                block_count,
-                buffer_addr,
-                bytes_done,
-                sequence,
-            } => {
-                let storage0 = self.storage0_device_mut().ok_or_else(|| {
-                    "ComputerMachine snapshot contains storage0 device state but profile has no storage0 device"
-                        .to_string()
-                })?;
-                storage0.restore_controller_snapshot(
-                    crate::computer::devices::StoragePortControllerSnapshot {
-                        status,
-                        error,
-                        lba_low,
-                        lba_high,
-                        block_count,
-                        buffer_addr,
-                        bytes_done,
-                        sequence,
-                    },
-                );
-            }
-        }
-        Ok(())
-    }
-
     fn serial_input_device(&self) -> Option<&SerialInputDevice> {
         self.serial_input_device_id
             .and_then(|id| self.bus.device::<SerialInputDevice>(id))
@@ -726,33 +580,6 @@ impl ComputerMachine {
             control.panic_code = stable_panic_code(message);
         }
         Err(message.to_string())
-    }
-}
-
-impl ComputerCpuContext {
-    fn snapshot_record(&self) -> ComputerCpuSnapshotRecord {
-        match self {
-            ComputerCpuContext::K16 { cpu, max_steps } => ComputerCpuSnapshotRecord::K16 {
-                cpu: cpu.snapshot(),
-                max_steps: *max_steps,
-            },
-        }
-    }
-
-    fn from_snapshot_record(record: ComputerCpuSnapshotRecord) -> Result<Self, String> {
-        match record {
-            ComputerCpuSnapshotRecord::K16 { cpu, max_steps } => {
-                if max_steps == 0 {
-                    return Err(
-                        "ComputerMachine snapshot K16 CPU max_steps must be non-zero".to_string(),
-                    );
-                }
-                Ok(ComputerCpuContext::K16 {
-                    cpu: K16Cpu::from_snapshot(cpu),
-                    max_steps,
-                })
-            }
-        }
     }
 }
 
