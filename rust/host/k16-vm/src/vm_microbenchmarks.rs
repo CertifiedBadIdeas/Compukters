@@ -72,6 +72,73 @@ impl std::str::FromStr for VmBenchmarkWorkload {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct VmBenchmarkSample {
+    pub workload: VmBenchmarkWorkload,
+    pub vm: &'static str,
+    pub iterations: u32,
+    pub checksum: u32,
+    pub best_nanos: u128,
+}
+
+impl VmBenchmarkSample {
+    pub fn nanos_per_iteration(self) -> f64 {
+        if self.iterations == 0 {
+            0.0
+        } else {
+            self.best_nanos as f64 / f64::from(self.iterations)
+        }
+    }
+}
+
+pub fn benchmark_output_header() -> String {
+    format_benchmark_columns(
+        "workload",
+        "vm",
+        "iterations",
+        "checksum",
+        "best_nanos",
+        "nanos/iter",
+        "vs_native",
+        "native_pct",
+    )
+}
+
+pub fn format_benchmark_sample(sample: &VmBenchmarkSample, native_best_nanos: u128) -> String {
+    let native_ratio = if native_best_nanos == 0 {
+        0.0
+    } else {
+        sample.best_nanos as f64 / native_best_nanos as f64
+    };
+    let ratio = format!("{native_ratio:.3}x");
+    let percent = format!("{:.1}%", native_ratio * 100.0);
+    format_benchmark_columns(
+        sample.workload.name(),
+        sample.vm,
+        &sample.iterations.to_string(),
+        &sample.checksum.to_string(),
+        &sample.best_nanos.to_string(),
+        &format!("{:.3}", sample.nanos_per_iteration()),
+        &ratio,
+        &percent,
+    )
+}
+
+fn format_benchmark_columns(
+    workload: &str,
+    vm: &str,
+    iterations: &str,
+    checksum: &str,
+    best_nanos: &str,
+    nanos_per_iteration: &str,
+    native_ratio: &str,
+    native_percent: &str,
+) -> String {
+    format!(
+        "{workload:<14} {vm:<12} {iterations:>10} {checksum:>10} {best_nanos:>12} {nanos_per_iteration:>12} {native_ratio:>10} {native_percent:>11}",
+    )
+}
+
 pub fn run_k16_workload(workload: VmBenchmarkWorkload, iterations: u32) -> Result<u32, String> {
     let mut bus = MachineBus::new(MEMORY_SIZE).map_err(|error| error.to_string())?;
     if workload == VmBenchmarkWorkload::MmioLoop {

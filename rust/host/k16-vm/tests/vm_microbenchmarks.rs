@@ -17,7 +17,10 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use k16_vm::vm_microbenchmarks::{run_k16_workload, run_native_rust_workload, VmBenchmarkWorkload};
+use k16_vm::vm_microbenchmarks::{
+    benchmark_output_header, format_benchmark_sample, run_k16_workload, run_native_rust_workload,
+    VmBenchmarkSample, VmBenchmarkWorkload,
+};
 use std::fs;
 use std::path::Path;
 
@@ -105,6 +108,40 @@ fn native_rust_workloads_match_k16_checksums() {
 }
 
 #[test]
+fn benchmark_output_header_includes_native_ratio_columns() {
+    let header = benchmark_output_header();
+
+    assert!(header.contains("vs_native"));
+    assert!(header.contains("native_pct"));
+}
+
+#[test]
+fn benchmark_output_rows_show_multiplier_and_percent_against_native() {
+    let native = VmBenchmarkSample {
+        workload: VmBenchmarkWorkload::ComputeLoop,
+        vm: "native-rust",
+        iterations: 100,
+        checksum: 100,
+        best_nanos: 100,
+    };
+    let k16 = VmBenchmarkSample {
+        workload: VmBenchmarkWorkload::ComputeLoop,
+        vm: "k16",
+        iterations: 100,
+        checksum: 100,
+        best_nanos: 250,
+    };
+
+    let native_row = format_benchmark_sample(&native, native.best_nanos);
+    let k16_row = format_benchmark_sample(&k16, native.best_nanos);
+
+    assert!(native_row.contains("1.000x"));
+    assert!(native_row.contains("100.0%"));
+    assert!(k16_row.contains("2.500x"));
+    assert!(k16_row.contains("250.0%"));
+}
+
+#[test]
 fn memory_loop_budget_covers_larger_benchmark_runs() {
     let iterations = 1_000;
 
@@ -122,7 +159,7 @@ fn vm_microbenchmarks_source_does_not_expose_low_image_path() {
 
     assert!(source.contains("pub fn run_k16_workload("));
     assert!(example.contains("run_k16_workload"));
-    assert!(example.contains("print_sample(*workload, \"k16\""));
+    assert!(example.contains("collect_sample(*workload, \"k16\""));
     assert!(!source.contains("low_image"));
     assert!(!source.contains("LowImage"));
     assert!(!source.contains("run_low_image_workload"));
