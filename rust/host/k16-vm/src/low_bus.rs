@@ -62,6 +62,16 @@ impl MmioRegion {
             None
         }
     }
+
+    fn offset_for_u16(&self, address: u32) -> Option<u32> {
+        let end = self.end().ok()?;
+        let access_end = address.checked_add(2)?;
+        if address >= self.base && access_end <= end {
+            Some(address - self.base)
+        } else {
+            None
+        }
+    }
 }
 
 pub struct MachineBus {
@@ -205,12 +215,37 @@ impl MemoryBus for MachineBus {
         }
         self.memory.store_u8(address, value)
     }
+
+    fn load_u16(&self, address: u32) -> Result<u16, MemoryFault> {
+        for region in &self.regions {
+            if let Some(offset) = region.offset_for_u16(address) {
+                return Ok(u16::from_le_bytes([
+                    region.device.load_u8(offset)?,
+                    region.device.load_u8(offset + 1)?,
+                ]));
+            }
+        }
+        self.memory.load_u16(address)
+    }
+
+    fn store_u16(&mut self, address: u32, value: u16) -> Result<(), MemoryFault> {
+        for region in &mut self.regions {
+            if let Some(offset) = region.offset_for_u16(address) {
+                let [lo, hi] = value.to_le_bytes();
+                region.device.store_u8(offset, lo)?;
+                return region.device.store_u8(offset + 1, hi);
+            }
+        }
+        self.memory.store_u16(address, value)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use crate::low_bus::{MachineBus, MmioDevice};
     use crate::low_machine::MemoryFault;
+    use std::fs;
+    use std::path::Path;
 
     struct RegisterDevice {
         value: i32,
@@ -235,6 +270,65 @@ mod tests {
             self.value = value;
             Ok(())
         }
+    }
+
+    struct ByteWindowDevice {
+        bytes: [u8; 4],
+    }
+
+    impl MmioDevice for ByteWindowDevice {
+        fn size(&self) -> u32 {
+            self.bytes.len() as u32
+        }
+
+        fn load_i32(&self, offset: u32) -> Result<i32, MemoryFault> {
+            let offset = offset as usize;
+            let bytes = self
+                .bytes
+                .get(offset..offset + 4)
+                .ok_or_else(|| MemoryFault::new(format!("invalid i32 offset {offset}")))?;
+            Ok(i32::from_le_bytes(
+                bytes.try_into().expect("slice has length 4"),
+            ))
+        }
+
+        fn store_i32(&mut self, offset: u32, value: i32) -> Result<(), MemoryFault> {
+            let offset = offset as usize;
+            let bytes = self
+                .bytes
+                .get_mut(offset..offset + 4)
+                .ok_or_else(|| MemoryFault::new(format!("invalid i32 offset {offset}")))?;
+            bytes.copy_from_slice(&value.to_le_bytes());
+            Ok(())
+        }
+
+        fn load_u8(&self, offset: u32) -> Result<u8, MemoryFault> {
+            self.bytes
+                .get(offset as usize)
+                .copied()
+                .ok_or_else(|| MemoryFault::new(format!("invalid u8 offset {offset}")))
+        }
+
+        fn store_u8(&mut self, offset: u32, value: u8) -> Result<(), MemoryFault> {
+            let byte = self
+                .bytes
+                .get_mut(offset as usize)
+                .ok_or_else(|| MemoryFault::new(format!("invalid u8 offset {offset}")))?;
+            *byte = value;
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn machine_bus_overrides_word_access_for_fetch_path() {
+        let source_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/low_bus.rs");
+        let source = fs::read_to_string(source_path).unwrap();
+        let impl_start = source.find("impl MemoryBus for MachineBus").unwrap();
+        let impl_end = source[impl_start..].find("\n}\n\n#[cfg(test)]").unwrap();
+        let impl_source = &source[impl_start..impl_start + impl_end];
+
+        assert!(impl_source.contains("fn load_u16("));
+        assert!(impl_source.contains("fn store_u16("));
     }
 
     #[test]
@@ -282,6 +376,41 @@ mod tests {
 
         let device = bus.device::<RegisterDevice>(device_id).unwrap();
         assert_eq!(device.value, 9);
+    }
+
+    #[test]
+    fn machine_bus_routes_word_load_to_overlapping_mmio_before_ram() {
+        let mut bus = MachineBus::new(16).unwrap();
+        bus.memory_mut().store_u16(0, 0x1122).unwrap();
+        bus.map_mmio(
+            0,
+            Box::new(ByteWindowDevice {
+                bytes: [0x78, 0x56, 0x34, 0x12],
+            }),
+        )
+        .unwrap();
+
+        assert_eq!(bus.load_u16(0).unwrap(), 0x5678);
+    }
+
+    #[test]
+    fn machine_bus_routes_word_store_to_overlapping_mmio_before_ram() {
+        let mut bus = MachineBus::new(16).unwrap();
+        bus.memory_mut().store_u16(0, 0x1122).unwrap();
+        let device_id = bus
+            .map_mmio(
+                0,
+                Box::new(ByteWindowDevice {
+                    bytes: [0x78, 0x56, 0x34, 0x12],
+                }),
+            )
+            .unwrap();
+
+        bus.store_u16(0, 0xa1b2).unwrap();
+
+        assert_eq!(bus.memory().load_u16(0).unwrap(), 0x1122);
+        let device = bus.device::<ByteWindowDevice>(device_id).unwrap();
+        assert_eq!(device.bytes, [0xb2, 0xa1, 0x34, 0x12]);
     }
 
     #[test]
