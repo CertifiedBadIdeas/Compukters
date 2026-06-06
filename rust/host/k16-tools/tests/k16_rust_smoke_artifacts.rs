@@ -50,7 +50,7 @@ fn k16_kernel_timer_smoke_artifacts_are_documented() {
     assert!(script.contains("syscall"));
     assert!(script.contains("signal=yield"));
     assert!(script.contains("debug_suffix=7c7c"));
-    assert!(script.contains("continuation_r2=7"));
+    assert!(script.contains("continuation_r2=83"));
     assert!(!script.contains("intc0"));
     assert!(!script.contains("RUX16"));
 
@@ -62,7 +62,7 @@ fn k16_kernel_timer_smoke_artifacts_are_documented() {
     assert!(docs.contains("syscall"));
     assert!(docs.contains("READY"));
     assert!(docs.contains("debug_suffix=7c7c"));
-    assert!(docs.contains("continuation_r2=7"));
+    assert!(docs.contains("continuation_r2=83"));
     assert!(!docs.contains("intc0"));
     assert!(!docs.contains("RUX16"));
 }

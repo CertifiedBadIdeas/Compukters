@@ -273,16 +273,16 @@ fn main() {
         process::exit(1);
     }
     let continuation_r2 = boot_cpu_register(&mut handle, 2);
-    if continuation_r2 != 7 {
+    if continuation_r2 != 83 {
         dump_cpu_snapshot(&mut handle);
         eprintln!(
-            "expected continuation_r2=7 after returning syscall proof, got {continuation_r2}"
+            "expected continuation_r2=83 after returning syscall proof, got {continuation_r2}"
         );
         process::exit(1);
     }
 
     println!(
-        "first_signal=yield timer_signals=yield,yield syscall_signal=yield status=READY debug_suffix=7c7c continuation_r2=7"
+        "first_signal=yield timer_signals=yield,yield syscall_signal=yield status=READY debug_suffix=7c7c continuation_r2=83"
     );
 }
 
@@ -318,7 +318,8 @@ fn returning_syscall_probe(patch_pc: u32, original_bytes: &[u8]) -> Vec<u8> {
     emit_word(&mut bytes, store32(14, 1));
     emit_word(&mut bytes, const4(0, 2));
     emit_word(&mut bytes, syscall(0));
-    emit_word(&mut bytes, const4(2, 7));
+    emit_word(&mut bytes, const4(13, 0));
+    emit_alu_rrr(&mut bytes, 2, 0x0, 0, 13);
     emit_const32(&mut bytes, 14, computer_abi::CONTROL_YIELD);
     emit_word(&mut bytes, const4(1, 1));
     emit_word(&mut bytes, store32(14, 1));
@@ -411,7 +412,7 @@ RS
     > "$WORK_DIR/runner.stdout"
 require_contains "$WORK_DIR/runner.stdout" "signal=yield"
 require_contains "$WORK_DIR/runner.stdout" "debug_suffix=7c7c"
-require_contains "$WORK_DIR/runner.stdout" "continuation_r2=7"
+require_contains "$WORK_DIR/runner.stdout" "continuation_r2=83"
 
 cat "$WORK_DIR/runner.stdout"
 echo "K16 kernel timer smoke passed"

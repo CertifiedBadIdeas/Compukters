@@ -472,6 +472,14 @@ records the current stack pointer as `trap_stack_pointer` and enters
 can complete the service and use `iret` to resume the caller after the `syscall`
 instruction.
 
+The initial K16 syscall ABI v0 is a guest/runtime convention layered on this
+CPU instruction. The CPU does not decode syscall tables. `k16-rt`
+`syscall0(number)` receives `number` in the Rust arg0 register (`r1`), executes
+`syscall r1`, and returns the kernel result from `r0`. The kernel interprets
+`trap_value` as the syscall number, may clobber `r1..r4`, and returns a `u32`
+result by placing it in `r0` before `iret`. Registers `r5..r15` are preserved
+unless a future ABI revision extends the clobber set.
+
 Asynchronous interrupts are delivered between guest instructions. Delivery
 requires `interrupt_enable != 0` and a source bit present in both
 `interrupt_pending` and `interrupt_mask`. Entering an interrupt records the

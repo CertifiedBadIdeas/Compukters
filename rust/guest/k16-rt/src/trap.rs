@@ -6,6 +6,8 @@ extern "C" {
     fn __k16_read_trap_pc() -> u32;
     fn __k16_read_trap_value() -> u32;
     fn __k16_syscall_once(number: u32);
+    fn __k16_syscall0(number: u32) -> u32;
+    fn __k16_iret_with_r0(value: u32) -> !;
     fn __k16_write_interrupt_enable(value: u32);
     fn __k16_write_interrupt_mask(value: u32);
     fn __k16_read_interrupt_pending() -> u32;
@@ -24,6 +26,8 @@ static TEST_TRAP_PC: AtomicU32 = AtomicU32::new(0);
 static TEST_TRAP_VALUE: AtomicU32 = AtomicU32::new(0);
 #[cfg(test)]
 static TEST_SYSCALL_NUMBER: AtomicU32 = AtomicU32::new(0);
+#[cfg(test)]
+static TEST_SYSCALL_RETURN: AtomicU32 = AtomicU32::new(0);
 #[cfg(test)]
 static TEST_INTERRUPT_ENABLE: AtomicU32 = AtomicU32::new(0);
 #[cfg(test)]
@@ -92,6 +96,18 @@ pub fn syscall_once(number: u32) {
 
 #[cfg(not(test))]
 #[inline(always)]
+pub fn syscall0(number: u32) -> u32 {
+    unsafe { __k16_syscall0(number) }
+}
+
+#[cfg(test)]
+pub fn syscall0(number: u32) -> u32 {
+    TEST_SYSCALL_NUMBER.store(number, Ordering::Relaxed);
+    TEST_SYSCALL_RETURN.load(Ordering::Relaxed)
+}
+
+#[cfg(not(test))]
+#[inline(always)]
 pub unsafe fn set_interrupt_mask(mask: u32) {
     unsafe {
         __k16_write_interrupt_mask(mask);
@@ -151,6 +167,17 @@ pub unsafe fn iret_once() -> ! {
     panic!("k16 interrupt return is only available on the K16 target")
 }
 
+#[cfg(not(test))]
+#[inline(always)]
+pub unsafe fn iret_with_r0(value: u32) -> ! {
+    unsafe { __k16_iret_with_r0(value) }
+}
+
+#[cfg(test)]
+pub unsafe fn iret_with_r0(_value: u32) -> ! {
+    panic!("k16 interrupt return is only available on the K16 target")
+}
+
 #[cfg(test)]
 pub(crate) fn reset_test_interrupts() {
     TEST_TRAP_VECTOR.store(0, Ordering::Relaxed);
@@ -158,6 +185,7 @@ pub(crate) fn reset_test_interrupts() {
     TEST_TRAP_PC.store(0, Ordering::Relaxed);
     TEST_TRAP_VALUE.store(0, Ordering::Relaxed);
     TEST_SYSCALL_NUMBER.store(0, Ordering::Relaxed);
+    TEST_SYSCALL_RETURN.store(0, Ordering::Relaxed);
     TEST_INTERRUPT_ENABLE.store(0, Ordering::Relaxed);
     TEST_INTERRUPT_MASK.store(0, Ordering::Relaxed);
     TEST_INTERRUPT_PENDING.store(0, Ordering::Relaxed);
@@ -169,6 +197,11 @@ pub(crate) fn set_test_trap_state(cause: u32, pc: u32, value: u32) {
     TEST_TRAP_PC.store(pc, Ordering::Relaxed);
     TEST_TRAP_VALUE.store(value, Ordering::Relaxed);
     TEST_INTERRUPT_PENDING.store(value, Ordering::Relaxed);
+}
+
+#[cfg(test)]
+pub(crate) fn set_test_syscall_return(value: u32) {
+    TEST_SYSCALL_RETURN.store(value, Ordering::Relaxed);
 }
 
 #[cfg(test)]

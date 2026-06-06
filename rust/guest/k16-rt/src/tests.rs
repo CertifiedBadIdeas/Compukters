@@ -164,3 +164,14 @@ fn syscall_helper_records_test_syscall_number() {
         k16_abi::cpu::csr::TRAP_CAUSE
     );
 }
+
+#[test]
+fn syscall0_returns_test_syscall_value() {
+    crate::trap::reset_test_interrupts();
+    crate::trap::set_test_syscall_return(0x53);
+
+    let returned = syscall0(2);
+
+    assert_eq!(crate::trap::test_syscall_number(), 2);
+    assert_eq!(returned, 0x53);
+}
