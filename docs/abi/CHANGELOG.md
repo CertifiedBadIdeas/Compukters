@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Added K16 syscall argument capture for `syscall1(number, arg0) -> u32`.
+  `syscall` now captures guest `r2` into the read-only `trap_arg0` CSR, and the
+  Rust kernel uses it for the first debug-write-byte syscall proof.
 - Defined K16 syscall ABI v0 for the first Rust kernel services. `k16-rt`
   exposes a returning `syscall0(number) -> u32` helper, the kernel returns
   through `r0`, and `k16-cpu-helpers` provides `__k16_iret_with_r0` for

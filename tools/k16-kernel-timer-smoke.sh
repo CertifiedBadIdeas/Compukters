@@ -280,9 +280,25 @@ fn main() {
         );
         process::exit(1);
     }
+    let continuation_r3 = boot_cpu_register(&mut handle, 3);
+    if continuation_r3 != 0 {
+        dump_cpu_snapshot(&mut handle);
+        eprintln!(
+            "expected continuation_r3=0 after syscall1 debug-write proof, got {continuation_r3}"
+        );
+        process::exit(1);
+    }
+    if !handle.debug_output_bytes().ends_with(b"||S!") {
+        dump_cpu_snapshot(&mut handle);
+        eprintln!(
+            "expected debug_suffix=7c7c5321 after syscall1 debug-write proof, got {}",
+            hex_bytes(handle.debug_output_bytes())
+        );
+        process::exit(1);
+    }
 
     println!(
-        "first_signal=yield timer_signals=yield,yield syscall_signal=yield status=READY debug_suffix=7c7c continuation_r2=83"
+        "first_signal=yield timer_signals=yield,yield syscall_signal=yield status=READY debug_suffix=7c7c5321 continuation_r2=83 continuation_r3=0"
     );
 }
 
@@ -319,7 +335,13 @@ fn returning_syscall_probe(patch_pc: u32, original_bytes: &[u8]) -> Vec<u8> {
     emit_word(&mut bytes, const4(0, 2));
     emit_word(&mut bytes, syscall(0));
     emit_word(&mut bytes, const4(13, 0));
-    emit_alu_rrr(&mut bytes, 2, 0x0, 0, 13);
+    emit_alu_rrr(&mut bytes, 12, 0x0, 0, 13);
+    emit_word(&mut bytes, const4(1, 3));
+    emit_const32(&mut bytes, 2, 0x0000_0021);
+    emit_word(&mut bytes, syscall(1));
+    emit_word(&mut bytes, const4(13, 0));
+    emit_alu_rrr(&mut bytes, 3, 0x0, 0, 13);
+    emit_alu_rrr(&mut bytes, 2, 0x0, 12, 13);
     emit_const32(&mut bytes, 14, computer_abi::CONTROL_YIELD);
     emit_word(&mut bytes, const4(1, 1));
     emit_word(&mut bytes, store32(14, 1));
@@ -411,8 +433,9 @@ RS
 "$HOST_CARGO" run --quiet --offline --manifest-path "$WORK_DIR/runner/Cargo.toml" -- "$KERNEL_KX" \
     > "$WORK_DIR/runner.stdout"
 require_contains "$WORK_DIR/runner.stdout" "signal=yield"
-require_contains "$WORK_DIR/runner.stdout" "debug_suffix=7c7c"
+require_contains "$WORK_DIR/runner.stdout" "debug_suffix=7c7c5321"
 require_contains "$WORK_DIR/runner.stdout" "continuation_r2=83"
+require_contains "$WORK_DIR/runner.stdout" "continuation_r3=0"
 
 cat "$WORK_DIR/runner.stdout"
 echo "K16 kernel timer smoke passed"

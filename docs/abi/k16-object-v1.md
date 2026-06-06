@@ -141,8 +141,10 @@ Runtime helper symbol names:
 `__k16_read_trap_cause`        provided by k16-cpu-helpers
 `__k16_read_trap_pc`           provided by k16-cpu-helpers
 `__k16_read_trap_value`        provided by k16-cpu-helpers
+`__k16_read_trap_arg0`         provided by k16-cpu-helpers
 `__k16_syscall_once`           provided by k16-cpu-helpers
 `__k16_syscall0`               provided by k16-cpu-helpers
+`__k16_syscall1`               provided by k16-cpu-helpers
 `__k16_iret_with_r0`           provided by k16-cpu-helpers
 `__k16_write_interrupt_enable` provided by k16-cpu-helpers
 `__k16_write_interrupt_mask`   provided by k16-cpu-helpers

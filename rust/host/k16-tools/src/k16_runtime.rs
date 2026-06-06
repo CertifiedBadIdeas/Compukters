@@ -133,6 +133,16 @@ pub fn k16_cpu_helpers_object() -> Vec<u8> {
         &mut text,
         &mut strtab,
         &mut symtab,
+        "__k16_read_trap_arg0",
+        &[
+            read_csr(RETURN_REGISTER, k16_vm::k16::K16_CSR_TRAP_ARG0),
+            ret(),
+        ],
+    );
+    emit_symbol_function(
+        &mut text,
+        &mut strtab,
+        &mut symtab,
         "__k16_syscall_once",
         &[syscall(ARG0_REGISTER), ret()],
     );
@@ -141,6 +151,13 @@ pub fn k16_cpu_helpers_object() -> Vec<u8> {
         &mut strtab,
         &mut symtab,
         "__k16_syscall0",
+        &[syscall(ARG0_REGISTER), ret()],
+    );
+    emit_symbol_function(
+        &mut text,
+        &mut strtab,
+        &mut symtab,
+        "__k16_syscall1",
         &[syscall(ARG0_REGISTER), ret()],
     );
     let copy_arg0_to_return = add(RETURN_REGISTER, ARG0_REGISTER, SCRATCH_REGISTER);

@@ -1,8 +1,9 @@
 use k16_vm::k16::{
     K16Cpu, K16Signal, K16_CSR_INTERRUPT_ENABLE, K16_CSR_INTERRUPT_MASK, K16_CSR_INTERRUPT_PENDING,
-    K16_CSR_TRAP_CAUSE, K16_CSR_TRAP_PC, K16_CSR_TRAP_VALUE, K16_CSR_TRAP_VECTOR,
-    K16_INTERRUPT_SOURCE_TIMER0, K16_STACK_POINTER_REGISTER, K16_TRAP_CAUSE_ILLEGAL_INSTRUCTION,
-    K16_TRAP_CAUSE_EXPLICIT_TRAP, K16_TRAP_CAUSE_TIMER0_INTERRUPT,
+    K16_CSR_TRAP_ARG0, K16_CSR_TRAP_CAUSE, K16_CSR_TRAP_PC, K16_CSR_TRAP_VALUE,
+    K16_CSR_TRAP_VECTOR, K16_INTERRUPT_SOURCE_TIMER0, K16_STACK_POINTER_REGISTER,
+    K16_TRAP_CAUSE_EXPLICIT_TRAP, K16_TRAP_CAUSE_ILLEGAL_INSTRUCTION,
+    K16_TRAP_CAUSE_TIMER0_INTERRUPT,
 };
 use k16_vm::low_bus::{MachineBus, MmioDevice};
 use k16_vm::low_machine::MemoryFault;
@@ -506,6 +507,28 @@ fn k16_syscall_enters_vector_and_iret_resumes_next_instruction() {
     assert_eq!(cpu.register(4), 12);
     assert_eq!(cpu.register(5), K16_CSR_TRAP_CAUSE);
     assert_eq!(cpu.register(6), 9);
+}
+
+#[test]
+fn k16_syscall_captures_first_argument_from_r2() {
+    let mut bus = MachineBus::new(64).unwrap();
+    let mut program = Vec::new();
+    program.extend(const32(1, 28));
+    program.push(write_csr(K16_CSR_TRAP_VECTOR, 1));
+    program.push(const4(1, 3));
+    program.extend(const32(2, 0x0000_0021));
+    program.push(syscall(1));
+    program.push(halt());
+    program.extend([0; 6]);
+    program.push(read_csr(3, K16_CSR_TRAP_VALUE));
+    program.push(read_csr(4, K16_CSR_TRAP_ARG0));
+    program.push(iret());
+    write_words(&mut bus, 0, &program);
+    let mut cpu = K16Cpu::new(0);
+
+    assert_eq!(cpu.run_until_signal(&mut bus, 16).unwrap(), K16Signal::Halt);
+    assert_eq!(cpu.register(3), 3);
+    assert_eq!(cpu.register(4), 0x21);
 }
 
 #[test]

@@ -175,3 +175,16 @@ fn syscall0_returns_test_syscall_value() {
     assert_eq!(crate::trap::test_syscall_number(), 2);
     assert_eq!(returned, 0x53);
 }
+
+#[test]
+fn syscall1_records_argument_and_returns_test_syscall_value() {
+    crate::trap::reset_test_interrupts();
+    crate::trap::set_test_syscall_return(0);
+
+    let returned = syscall1(3, 0x21);
+
+    assert_eq!(crate::trap::test_syscall_number(), 3);
+    assert_eq!(crate::trap::test_syscall_arg0(), 0x21);
+    assert_eq!(syscall_arg0(), 0x21);
+    assert_eq!(returned, 0);
+}
