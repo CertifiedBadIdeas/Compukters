@@ -169,6 +169,7 @@ use k16_vm::k16e::{self, K16eAbiKind};
 use std::{env, fs, process};
 
 fn main() {
+    const K16_CSR_TRAP_CAUSE: u32 = 2;
     const KERNEL_STACK_TOP: u32 = 0x0001_0000;
 
     let kernel_path = env::args().nth(1).expect("kernel path argument");
@@ -249,13 +250,48 @@ fn main() {
         process::exit(1);
     }
 
+    let syscall_pc = boot_cpu_pc(&mut handle);
+    handle
+        .write_guest_ram_bytes(syscall_pc, &write_csr_word(K16_CSR_TRAP_CAUSE, 0))
+        .expect("explicit trap syscall probe writes to guest RAM");
+    let fourth = handle
+        .run_k16_until_signal()
+        .expect("explicit trap syscall probe runs");
+    if fourth != K16Signal::Yield {
+        dump_cpu_snapshot(&mut handle);
+        eprintln!("debug_bytes={}", hex_bytes(handle.debug_output_bytes()));
+        eprintln!("expected signal=yield after explicit trap syscall, got {fourth:?}");
+        process::exit(1);
+    }
+    if !handle.debug_output_bytes().ends_with(b"||S") {
+        dump_cpu_snapshot(&mut handle);
+        eprintln!(
+            "expected debug_suffix=7c7c53 after syscall proof, got {}",
+            hex_bytes(handle.debug_output_bytes())
+        );
+        process::exit(1);
+    }
+
     println!(
-        "first_signal=yield timer_signals=yield,yield status=READY debug_suffix=7c7c"
+        "first_signal=yield timer_signals=yield,yield syscall_signal=yield status=READY debug_suffix=7c7c53"
     );
 }
 
 fn hex_bytes(bytes: &[u8]) -> String {
     bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+fn write_csr_word(csr: u32, src: u8) -> [u8; 2] {
+    let word = 0x0003 | ((csr as u16) << 8) | (u16::from(src) << 4);
+    word.to_le_bytes()
+}
+
+fn boot_cpu_pc(handle: &mut K16ComputerHandle) -> u32 {
+    let snapshot_bytes = handle.snapshot_v1().expect("snapshot encodes");
+    let snapshot = decode_snapshot_v1(&snapshot_bytes).expect("snapshot decodes");
+    let record = snapshot.cpus.into_iter().next().expect("boot CPU exists");
+    let ComputerCpuSnapshotRecord::K16 { cpu, .. } = record;
+    cpu.pc
 }
 
 fn dump_cpu_snapshot(handle: &mut K16ComputerHandle) {
@@ -289,7 +325,7 @@ RS
 "$HOST_CARGO" run --quiet --offline --manifest-path "$WORK_DIR/runner/Cargo.toml" -- "$KERNEL_KX" \
     > "$WORK_DIR/runner.stdout"
 require_contains "$WORK_DIR/runner.stdout" "signal=yield"
-require_contains "$WORK_DIR/runner.stdout" "debug_suffix=7c7c"
+require_contains "$WORK_DIR/runner.stdout" "debug_suffix=7c7c53"
 
 cat "$WORK_DIR/runner.stdout"
 echo "K16 kernel timer smoke passed"

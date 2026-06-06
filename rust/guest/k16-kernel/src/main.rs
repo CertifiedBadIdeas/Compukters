@@ -11,6 +11,8 @@ static mut TIMER0_IRQ_SOURCE: u32 = 0;
 static mut TIMER0_TICKS: u32 = 0;
 static mut TIMER0_LAST_GAME_TICK: u32 = 0;
 
+const SYSCALL_DEBUG_MARKER: u32 = cpu::csr::TRAP_CAUSE;
+
 #[no_mangle]
 pub extern "C" fn _start() -> ! {
     clear_display();
@@ -28,7 +30,7 @@ extern "C" fn kernel_trap_vector() -> ! {
         unsafe { k16_rt::iret_once() }
     }
 
-    kernel_trap();
+    dispatch_synchronous_trap(trap_cause);
 }
 
 fn dispatch_interrupt(source: u32) {
@@ -46,6 +48,24 @@ fn handle_timer0_interrupt() {
         TIMER0_LAST_GAME_TICK = k16_rt::trap_value();
     }
     print_debug_byte(b'|');
+}
+
+fn dispatch_synchronous_trap(cause: u32) -> ! {
+    if cause == cpu::trap_cause::EXPLICIT_TRAP {
+        dispatch_syscall(k16_rt::trap_value());
+    }
+
+    kernel_trap();
+}
+
+fn dispatch_syscall(number: u32) -> ! {
+    if number == SYSCALL_DEBUG_MARKER {
+        print_debug_byte(b'S');
+        set_ready();
+        idle_forever();
+    }
+
+    kernel_trap();
 }
 
 #[panic_handler]

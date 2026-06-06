@@ -48,7 +48,7 @@ fn k16_kernel_timer_smoke_artifacts_are_documented() {
     assert!(script.contains("boot_handoff_k16_from_guest_ram"));
     assert!(script.contains("advance_game_tick"));
     assert!(script.contains("signal=yield"));
-    assert!(script.contains("debug_suffix=7c7c"));
+    assert!(script.contains("debug_suffix=7c7c53"));
     assert!(!script.contains("intc0"));
     assert!(!script.contains("RUX16"));
 
@@ -58,7 +58,7 @@ fn k16_kernel_timer_smoke_artifacts_are_documented() {
     assert!(docs.contains("k16-cpu-helpers"));
     assert!(docs.contains("timer0"));
     assert!(docs.contains("READY"));
-    assert!(docs.contains("debug_suffix=7c7c"));
+    assert!(docs.contains("debug_suffix=7c7c53"));
     assert!(!docs.contains("intc0"));
     assert!(!docs.contains("RUX16"));
 }
