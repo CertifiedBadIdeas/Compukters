@@ -73,4 +73,19 @@ class ComputerTerminalScreenArchitectureTest {
         assertTrue(displaySource.contains("keyInventory"))
         assertTrue(displaySource.contains(".matches(keyCode, scanCode)"))
     }
+
+    @Test
+    fun computerScreenHidesDisplayTextureWhilePoweredOff() {
+        assertTrue(displaySource.contains("if (!menu.isComputerOn) return"))
+        assertTrue(displaySource.contains("if (!buffer.hasReceivedFrames) return"))
+    }
+
+    @Test
+    fun computerScreenResetsClientDisplayBufferWhenPowerTurnsOff() {
+        assertTrue(displaySource.contains("lastMenuPowerState"))
+        assertTrue(displaySource.contains("if (lastPowerState == true && !currentPowerState)"))
+        assertTrue(displaySource.contains("menu.clientSide.detachDisplayBuffer()"))
+        assertTrue(displaySource.contains("menu.clientSide.attachDisplayBuffer(ClientDisplayBuffer(displayId, displayWidth, displayHeight))"))
+        assertTrue(displaySource.contains("if (!buffer.hasReceivedFrames) return"))
+    }
 }
