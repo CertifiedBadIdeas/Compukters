@@ -2,7 +2,10 @@ use k16_vm::computer_machine::{
     decode_snapshot_v1, ComputerMachine, ComputerMachineProfile, COMPUTER_SNAPSHOT_V1_HEADER_SIZE,
     COMPUTER_SNAPSHOT_V1_K16_CPU_RECORD_SIZE, COMPUTER_SNAPSHOT_V1_MAGIC,
 };
-use k16_vm::k16::K16Signal;
+use k16_vm::k16::{
+    K16Signal, K16_CSR_INTERRUPT_ENABLE, K16_CSR_INTERRUPT_MASK, K16_CSR_TRAP_VALUE,
+    K16_CSR_TRAP_VECTOR, K16_INTERRUPT_SOURCE_TIMER0,
+};
 
 const CONTROL_DEVICE_RECORD_SIZE: usize = 20;
 const EMPTY_DEBUG_DEVICE_RECORD_SIZE: usize = 8;
@@ -98,6 +101,54 @@ fn computer_machine_snapshot_v1_restores_boot_cpu_continuation_state() {
         K16Signal::Halt
     );
     assert_eq!(&restored.memory().bytes()[512..516], &[5, 0, 0, 0]);
+}
+
+#[test]
+fn computer_machine_snapshot_v1_restores_k16_interrupt_state() {
+    let entry_pc = 0x100;
+    let mut words = Vec::new();
+    words.extend([const32(1), (entry_pc + 32) as u16, 0]);
+    words.push(write_csr(K16_CSR_TRAP_VECTOR, 1));
+    words.push(const4(1, K16_INTERRUPT_SOURCE_TIMER0 as u16));
+    words.push(write_csr(K16_CSR_INTERRUPT_MASK, 1));
+    words.push(const4(1, 1));
+    words.push(write_csr(K16_CSR_INTERRUPT_ENABLE, 1));
+    words.extend([
+        const32(0),
+        ComputerMachine::CONTROL_PANIC_CODE as u16,
+        0x1000,
+    ]);
+    words.push(store32(0, 3));
+    words.push(halt());
+    words.extend([0; 3]);
+    words.push(read_csr(3, K16_CSR_TRAP_VALUE));
+    words.push(iret());
+    let bios = k16_words(&[halt()]);
+    let program = k16_words(&words);
+    let (mut machine, boot_cpu) =
+        ComputerMachine::from_k16_bios_flash(&bios, 1024, 6).expect("machine creates");
+    machine.write_guest_ram_bytes(entry_pc, &program).unwrap();
+    machine
+        .boot_handoff_k16_from_ram(entry_pc, program.len() as u32, 6)
+        .expect("boot handoff succeeds");
+
+    assert_eq!(
+        machine.run_boot_k16_until_signal(boot_cpu).unwrap(),
+        K16Signal::StepLimitExceeded
+    );
+
+    machine.advance_game_tick();
+
+    let snapshot = machine.snapshot_v1().expect("snapshot encodes");
+    let mut restored =
+        ComputerMachine::restore_snapshot_v1(ComputerMachineProfile::computer_v1(1024), &snapshot)
+            .expect("snapshot restores");
+
+    assert_eq!(
+        restored.run_boot_k16_until_signal(boot_cpu).unwrap(),
+        K16Signal::Halt
+    );
+    assert_eq!(restored.panic_code(), 1);
 }
 
 #[test]
@@ -383,7 +434,7 @@ fn computer_machine_snapshot_v1_rejects_invalid_cpu_record_fields() {
     );
 
     let mut bad_reserved = snapshot.clone();
-    bad_reserved[cpu_record + 36..cpu_record + 40].copy_from_slice(&1_u32.to_le_bytes());
+    bad_reserved[cpu_record + 52..cpu_record + 56].copy_from_slice(&1_u32.to_le_bytes());
     assert_eq!(
         decode_snapshot_v1(&bad_reserved).unwrap_err(),
         "unsupported ComputerMachine snapshot CPU 0 reserved field 0x00000001"
@@ -492,4 +543,16 @@ fn const32(dst: u16) -> u16 {
 
 fn store32(addr: u16, src: u16) -> u16 {
     0x5002 | (addr << 8) | (src << 4)
+}
+
+fn read_csr(dst: u16, csr: u32) -> u16 {
+    0x0002 | (dst << 8) | ((csr as u16) << 4)
+}
+
+fn write_csr(csr: u32, src: u16) -> u16 {
+    0x0003 | ((csr as u16) << 8) | (src << 4)
+}
+
+fn iret() -> u16 {
+    0x0004
 }
