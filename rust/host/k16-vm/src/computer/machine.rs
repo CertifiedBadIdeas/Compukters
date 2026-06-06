@@ -5,7 +5,7 @@ use crate::computer::devices::{
 use crate::computer::profile::ComputerMachineProfile;
 use crate::computer_abi;
 use crate::display::DisplayFrameDelta;
-use crate::k16::{K16Cpu, K16Signal};
+use crate::k16::{K16Cpu, K16Signal, K16_INTERRUPT_SOURCE_TIMER0};
 use crate::low_bus::{MachineBus, MmioDeviceId};
 use crate::low_machine::{MachineMemory, MemoryFault};
 use std::fmt::{Display, Formatter};
@@ -416,8 +416,14 @@ impl ComputerMachine {
     }
 
     pub fn advance_game_tick(&mut self) {
-        if let Some(timer0) = self.timer0_device_mut() {
+        let game_ticks = if let Some(timer0) = self.timer0_device_mut() {
             timer0.advance_game_tick();
+            Some(timer0.game_ticks())
+        } else {
+            None
+        };
+        if let Some(game_ticks) = game_ticks {
+            self.request_boot_cpu_interrupt(K16_INTERRUPT_SOURCE_TIMER0, game_ticks as u32);
         }
     }
 
@@ -519,6 +525,18 @@ impl ComputerMachine {
     fn timer0_device_mut(&mut self) -> Option<&mut TimerDevice> {
         self.timer0_device_id
             .and_then(|id| self.bus.device_mut::<TimerDevice>(id))
+    }
+
+    fn request_boot_cpu_interrupt(&mut self, source: u32, value: u32) {
+        let Some(cpu_id) = self.boot_cpu else {
+            return;
+        };
+        let Some(cpu) = self.cpus.get_mut(cpu_id) else {
+            return;
+        };
+        match cpu {
+            ComputerCpuContext::K16 { cpu, .. } => cpu.request_interrupt(source, value),
+        }
     }
 
     fn control_device_mut(&mut self) -> Option<&mut ComputerControlDevice> {

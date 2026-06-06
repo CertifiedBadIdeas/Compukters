@@ -257,8 +257,11 @@ sent to the host until firmware writes `command = present`.
 
 ## Timer0 MMIO
 
-The timer0 range exposes polling-only time counters for guest firmware and
-kernel code. It does not deliver interrupts in profile v1.
+The timer0 range exposes time counters for guest firmware and kernel code.
+Both counters are always readable by polling. In addition, each host game-tick
+advance requests the K16 CPU `timer0` interrupt for the boot CPU; delivery
+still depends on the CPU interrupt enable and mask CSRs documented in
+`k16-cpu-v1.md`.
 
 All multi-byte registers are little-endian and read-only for guest code.
 
@@ -281,6 +284,11 @@ Version:
 once for each high-level runtime tick before native CPU turns run. It follows
 Minecraft/server simulation time, so guest OS sleep, scheduler ticks, firmware
 delays, and device cooldowns should use this counter.
+
+When `game_ticks` advances, the host sets the CPU timer0 pending interrupt
+source (`0x00000001`) with `trap_value = low32(game_ticks)`. Firmware or kernel
+code that does not install `trap_vector`, set `interrupt_mask`, and enable
+`interrupt_enable` continues to observe timer0 purely by polling.
 
 `monotonic_nanos` is a `u64` split into low/high `u32` words. It measures host
 monotonic elapsed nanoseconds since the native machine/runtime instance was

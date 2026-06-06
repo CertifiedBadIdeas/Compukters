@@ -359,6 +359,7 @@ fn k16_disasm_prints_complete_instruction_surface_multiword_raw_words_and_branch
             jump(2),
             call(2),
             ret(),
+            iret(),
             halt(),
         ]),
     )
@@ -447,7 +448,8 @@ fn k16_disasm_prints_complete_instruction_surface_multiword_raw_words_and_branch
         "stdout: {stdout}"
     );
     assert!(stdout.contains("fff00030: 9000  ret"), "stdout: {stdout}");
-    assert!(stdout.contains("fff00032: 0001  halt"), "stdout: {stdout}");
+    assert!(stdout.contains("fff00032: 0004  iret"), "stdout: {stdout}");
+    assert!(stdout.contains("fff00034: 0001  halt"), "stdout: {stdout}");
 }
 
 fn temp_file(name: &str) -> PathBuf {
@@ -482,6 +484,10 @@ fn read_csr(register: u8, csr: u8) -> u16 {
 
 fn write_csr(csr: u8, register: u8) -> u16 {
     0x0003 | (u16::from(csr) << 8) | (u16::from(register) << 4)
+}
+
+fn iret() -> u16 {
+    0x0004
 }
 
 fn const4(register: u8, value: u8) -> u16 {

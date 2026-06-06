@@ -6,7 +6,7 @@ pub const COMPUTER_SNAPSHOT_V1_MAGIC: &[u8; 8] = b"K16SNAP\0";
 pub const COMPUTER_SNAPSHOT_V1_VERSION: u16 = 1;
 pub const COMPUTER_SNAPSHOT_V1_HEADER_SIZE: usize = 40;
 pub const COMPUTER_SNAPSHOT_V1_K16_CPU_KIND: u32 = 1;
-pub const COMPUTER_SNAPSHOT_V1_K16_CPU_RECORD_SIZE: usize = 112;
+pub const COMPUTER_SNAPSHOT_V1_K16_CPU_RECORD_SIZE: usize = 128;
 pub const COMPUTER_SNAPSHOT_V1_CONTROL_DEVICE_KIND: u32 = 1;
 pub const COMPUTER_SNAPSHOT_V1_DEBUG_DEVICE_KIND: u32 = 2;
 pub const COMPUTER_SNAPSHOT_V1_DISPLAY0_DEVICE_KIND: u32 = 3;
@@ -269,6 +269,10 @@ fn encode_cpu_record(
             write_u32(bytes, cpu.trap_cause);
             write_u32(bytes, cpu.trap_pc);
             write_u32(bytes, cpu.trap_value);
+            write_u32(bytes, u32::from(cpu.interrupt_enable));
+            write_u32(bytes, cpu.interrupt_mask);
+            write_u32(bytes, cpu.interrupt_pending);
+            write_u32(bytes, cpu.timer0_interrupt_value);
             write_u32(bytes, 0);
             for register in cpu.registers {
                 write_u32(bytes, register);
@@ -515,7 +519,11 @@ fn decode_cpu_record(bytes: &[u8], index: u32) -> Result<ComputerCpuSnapshotReco
     let trap_cause = read_u32(bytes, 24)?;
     let trap_pc = read_u32(bytes, 28)?;
     let trap_value = read_u32(bytes, 32)?;
-    let reserved = read_u32(bytes, 36)?;
+    let interrupt_enable = read_bool_u32(bytes, 36, "interrupt_enable")?;
+    let interrupt_mask = read_u32(bytes, 40)?;
+    let interrupt_pending = read_u32(bytes, 44)?;
+    let timer0_interrupt_value = read_u32(bytes, 48)?;
+    let reserved = read_u32(bytes, 52)?;
     if reserved != 0 {
         return Err(format!(
             "unsupported ComputerMachine snapshot CPU {index} reserved field {reserved:#010x}"
@@ -523,9 +531,9 @@ fn decode_cpu_record(bytes: &[u8], index: u32) -> Result<ComputerCpuSnapshotReco
     }
     let mut registers = [0_u32; 16];
     for (register_index, register) in registers.iter_mut().enumerate() {
-        *register = read_u32(bytes, 40 + register_index * 4)?;
+        *register = read_u32(bytes, 56 + register_index * 4)?;
     }
-    let metrics_steps = read_u64(bytes, 104)?;
+    let metrics_steps = read_u64(bytes, 120)?;
     Ok(ComputerCpuSnapshotRecord::K16 {
         cpu: K16CpuSnapshot {
             pc,
@@ -534,11 +542,25 @@ fn decode_cpu_record(bytes: &[u8], index: u32) -> Result<ComputerCpuSnapshotReco
             trap_cause,
             trap_pc,
             trap_value,
+            interrupt_enable,
+            interrupt_mask,
+            interrupt_pending,
+            timer0_interrupt_value,
             state,
             metrics_steps,
         },
         max_steps,
     })
+}
+
+fn read_bool_u32(bytes: &[u8], offset: usize, name: &str) -> Result<bool, String> {
+    match read_u32(bytes, offset)? {
+        0 => Ok(false),
+        1 => Ok(true),
+        value => Err(format!(
+            "unsupported ComputerMachine snapshot K16 CPU {name} value {value}"
+        )),
+    }
 }
 
 fn encode_k16_state(state: K16CpuSnapshotState) -> u32 {

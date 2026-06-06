@@ -36,6 +36,31 @@ pub const unsafe fn mmio<T>(address: u32) -> Mmio<T> {
     }
 }
 
+pub mod cpu {
+    pub mod csr {
+        pub const TRAP_VECTOR: u32 = 1;
+        pub const TRAP_CAUSE: u32 = 2;
+        pub const TRAP_PC: u32 = 3;
+        pub const TRAP_VALUE: u32 = 4;
+        pub const INTERRUPT_ENABLE: u32 = 5;
+        pub const INTERRUPT_MASK: u32 = 6;
+        pub const INTERRUPT_PENDING: u32 = 7;
+    }
+
+    pub mod trap_cause {
+        pub const ILLEGAL_INSTRUCTION: u32 = 1;
+        pub const INSTRUCTION_FETCH_FAULT: u32 = 2;
+        pub const LOAD_FAULT: u32 = 3;
+        pub const STORE_FAULT: u32 = 4;
+        pub const EXPLICIT_TRAP: u32 = 5;
+        pub const TIMER0_INTERRUPT: u32 = 0x8000_0001;
+    }
+
+    pub mod interrupt_source {
+        pub const TIMER0: u32 = 0x0000_0001;
+    }
+}
+
 pub mod computer {
     pub mod control {
         pub const BASE: u32 = 0x1000_0000;
@@ -206,6 +231,16 @@ mod tests {
         assert_eq!(computer::timer0::MONOTONIC_NANOS_LOW, 0x1000_060c);
         assert_eq!(computer::timer0::MONOTONIC_NANOS_HIGH, 0x1000_0610);
         assert_eq!(computer::timer0::TIMER_VERSION, 1);
+    }
+
+    #[test]
+    fn cpu_interrupt_constants_match_current_k16_profile() {
+        assert_eq!(cpu::csr::TRAP_VECTOR, 1);
+        assert_eq!(cpu::csr::INTERRUPT_ENABLE, 5);
+        assert_eq!(cpu::csr::INTERRUPT_MASK, 6);
+        assert_eq!(cpu::csr::INTERRUPT_PENDING, 7);
+        assert_eq!(cpu::interrupt_source::TIMER0, 0x0000_0001);
+        assert_eq!(cpu::trap_cause::TIMER0_INTERRUPT, 0x8000_0001);
     }
 
     #[test]

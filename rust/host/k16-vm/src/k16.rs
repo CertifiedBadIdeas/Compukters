@@ -5,6 +5,11 @@ pub const K16_CSR_TRAP_VECTOR: u32 = 1;
 pub const K16_CSR_TRAP_CAUSE: u32 = 2;
 pub const K16_CSR_TRAP_PC: u32 = 3;
 pub const K16_CSR_TRAP_VALUE: u32 = 4;
+pub const K16_CSR_INTERRUPT_ENABLE: u32 = 5;
+pub const K16_CSR_INTERRUPT_MASK: u32 = 6;
+pub const K16_CSR_INTERRUPT_PENDING: u32 = 7;
+
+pub const K16_INTERRUPT_SOURCE_TIMER0: u32 = 1;
 
 /// K16 ABI register reserved as the stack pointer. The stack lives in guest RAM,
 /// uses 4-byte slots, and grows toward lower addresses.
@@ -15,6 +20,7 @@ pub const K16_TRAP_CAUSE_INSTRUCTION_FETCH_FAULT: u32 = 2;
 pub const K16_TRAP_CAUSE_LOAD_FAULT: u32 = 3;
 pub const K16_TRAP_CAUSE_STORE_FAULT: u32 = 4;
 pub const K16_TRAP_CAUSE_EXPLICIT_TRAP: u32 = 5;
+pub const K16_TRAP_CAUSE_TIMER0_INTERRUPT: u32 = 0x8000_0001;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum K16Signal {
@@ -43,6 +49,10 @@ pub struct K16CpuSnapshot {
     pub trap_cause: u32,
     pub trap_pc: u32,
     pub trap_value: u32,
+    pub interrupt_enable: bool,
+    pub interrupt_mask: u32,
+    pub interrupt_pending: u32,
+    pub timer0_interrupt_value: u32,
     pub state: K16CpuSnapshotState,
     pub metrics_steps: u64,
 }
@@ -122,6 +132,7 @@ pub enum DecodedInstruction {
     Jump { target: usize },
     Call { target: usize },
     Ret,
+    Iret,
     ReadCsr { dst: usize, csr: u32 },
     WriteCsr { csr: u32, src: usize },
 }
@@ -155,6 +166,7 @@ impl InstructionDecoder for K16Decoder {
             0x0 => match word & 0x0fff {
                 0x000 => DecodedInstruction::Nop,
                 0x001 => DecodedInstruction::Halt,
+                0x004 => DecodedInstruction::Iret,
                 _ if c == 0x2 => DecodedInstruction::ReadCsr {
                     dst: a,
                     csr: b as u32,
@@ -312,6 +324,10 @@ pub struct K16Cpu {
     trap_cause: u32,
     trap_pc: u32,
     trap_value: u32,
+    interrupt_enable: bool,
+    interrupt_mask: u32,
+    interrupt_pending: u32,
+    timer0_interrupt_value: u32,
     state: K16State,
     metrics: K16Metrics,
 }
@@ -325,6 +341,10 @@ impl K16Cpu {
             trap_cause: 0,
             trap_pc: 0,
             trap_value: 0,
+            interrupt_enable: false,
+            interrupt_mask: 0,
+            interrupt_pending: 0,
+            timer0_interrupt_value: 0,
             state: K16State::Running,
             metrics: K16Metrics { steps: 0 },
         }
@@ -350,6 +370,10 @@ impl K16Cpu {
             trap_cause: self.trap_cause,
             trap_pc: self.trap_pc,
             trap_value: self.trap_value,
+            interrupt_enable: self.interrupt_enable,
+            interrupt_mask: self.interrupt_mask,
+            interrupt_pending: self.interrupt_pending,
+            timer0_interrupt_value: self.timer0_interrupt_value,
             state: match &self.state {
                 K16State::Running => K16CpuSnapshotState::Running,
                 K16State::Halted => K16CpuSnapshotState::Halted,
@@ -367,6 +391,10 @@ impl K16Cpu {
             trap_cause: snapshot.trap_cause,
             trap_pc: snapshot.trap_pc,
             trap_value: snapshot.trap_value,
+            interrupt_enable: snapshot.interrupt_enable,
+            interrupt_mask: snapshot.interrupt_mask,
+            interrupt_pending: snapshot.interrupt_pending,
+            timer0_interrupt_value: snapshot.timer0_interrupt_value,
             state: match snapshot.state {
                 K16CpuSnapshotState::Running => K16State::Running,
                 K16CpuSnapshotState::Halted => K16State::Halted,
@@ -393,7 +421,17 @@ impl K16Cpu {
             K16_CSR_TRAP_CAUSE => Some(self.trap_cause),
             K16_CSR_TRAP_PC => Some(self.trap_pc),
             K16_CSR_TRAP_VALUE => Some(self.trap_value),
+            K16_CSR_INTERRUPT_ENABLE => Some(u32::from(self.interrupt_enable)),
+            K16_CSR_INTERRUPT_MASK => Some(self.interrupt_mask),
+            K16_CSR_INTERRUPT_PENDING => Some(self.interrupt_pending),
             _ => None,
+        }
+    }
+
+    pub fn request_interrupt(&mut self, source: u32, value: u32) {
+        self.interrupt_pending |= source;
+        if source & K16_INTERRUPT_SOURCE_TIMER0 != 0 {
+            self.timer0_interrupt_value = value;
         }
     }
 
@@ -416,9 +454,13 @@ impl K16Cpu {
             }
         }
 
-        // Step order is intentionally simple: decode at the old PC, count the
-        // instruction, advance to the decoder-provided next PC, then let control
-        // flow instructions override PC during execution.
+        if self.try_deliver_interrupt()? {
+            return Ok(None);
+        }
+
+        // Instruction order is intentionally simple: decode at the old PC,
+        // count the instruction, advance to the decoder-provided next PC, then
+        // let control flow instructions override PC during execution.
         let fault_pc = self.pc;
         let decode = match decoder.decode(bus, self.pc) {
             Ok(decode) => decode,
@@ -558,6 +600,10 @@ impl K16Cpu {
             }
             DecodedInstruction::Ret => {
                 self.return_from_stack(bus, fault_pc)?;
+                Ok(None)
+            }
+            DecodedInstruction::Iret => {
+                self.return_from_interrupt();
                 Ok(None)
             }
             DecodedInstruction::ReadCsr { dst, csr } => {
@@ -728,11 +774,55 @@ impl K16Cpu {
             K16_CSR_TRAP_CAUSE | K16_CSR_TRAP_PC | K16_CSR_TRAP_VALUE => {
                 return self.raise_explicit_trap(fault_pc, csr, format!("csr {csr} is read-only"));
             }
+            K16_CSR_INTERRUPT_ENABLE => self.interrupt_enable = self.registers[src] != 0,
+            K16_CSR_INTERRUPT_MASK => self.interrupt_mask = self.registers[src],
+            K16_CSR_INTERRUPT_PENDING => {
+                return self.raise_explicit_trap(fault_pc, csr, format!("csr {csr} is read-only"));
+            }
             _ => {
                 return self.raise_explicit_trap(fault_pc, csr, format!("unknown csr {csr}"));
             }
         }
         Ok(())
+    }
+
+    fn try_deliver_interrupt(&mut self) -> Result<bool, K16Trap> {
+        if !self.interrupt_enable {
+            return Ok(false);
+        }
+        let eligible = self.interrupt_pending & self.interrupt_mask;
+        if eligible == 0 {
+            return Ok(false);
+        }
+        let source = eligible & eligible.wrapping_neg();
+        let (cause, value) = match source {
+            K16_INTERRUPT_SOURCE_TIMER0 => {
+                (K16_TRAP_CAUSE_TIMER0_INTERRUPT, self.timer0_interrupt_value)
+            }
+            _ => return Ok(false),
+        };
+        if self.trap_vector == 0 {
+            let trap = K16Trap::exception(
+                cause,
+                self.pc,
+                value,
+                format!("unhandled interrupt cause {cause} at pc {:#010x}", self.pc),
+            );
+            self.state = K16State::Trapped(trap.to_string());
+            return Err(trap);
+        }
+        self.interrupt_pending &= !source;
+        self.trap_cause = cause;
+        self.trap_pc = self.pc;
+        self.trap_value = value;
+        self.pc = self.trap_vector;
+        self.interrupt_enable = false;
+        Ok(true)
+    }
+
+    fn return_from_interrupt(&mut self) {
+        self.pc = self.trap_pc;
+        self.interrupt_enable = true;
     }
 
     fn raise_load_fault(

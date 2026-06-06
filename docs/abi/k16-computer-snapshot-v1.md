@@ -10,9 +10,9 @@ state. It is not a guest-visible disk format and it is not stored on
 across host unload/load boundaries.
 
 The current v1 slice records a versioned header, full RAM bytes, fixed-size
-K16 CPU continuation records, and explicit device records for `control`,
-`debug`, `display0`, serial input, the `storage0` controller, and `timer0`
-game ticks.
+K16 CPU continuation records, including trap and interrupt CSR state, and
+explicit device records for `control`, `debug`, `display0`, serial input, the
+`storage0` controller, and `timer0` game ticks.
 
 ## File Layout
 
@@ -37,7 +37,7 @@ offset  size  field
 The fixed payload prefix must contain:
 
 ```text
-header_size + ram_size + cpu_count * 112
+header_size + ram_size + cpu_count * 128
 ```
 
 The final file size is that fixed prefix plus the decoded sizes of all device
@@ -57,14 +57,20 @@ offset  size  field
 0x18    4     trap_cause
 0x1C    4     trap_pc
 0x20    4     trap_value
-0x24    4     reserved: 0
-0x28    64    registers r0..r15, 32-bit each
-0x68    8     metrics_steps
+0x24    4     interrupt_enable: 0 or 1
+0x28    4     interrupt_mask
+0x2C    4     interrupt_pending
+0x30    4     timer0_interrupt_value
+0x34    4     reserved: 0
+0x38    64    registers r0..r15, 32-bit each
+0x78    8     metrics_steps
 ```
 
 `max_steps` must be non-zero when restoring a CPU context. The trapped state is
 restored as a trapped CPU with preserved trap CSRs; the human-readable trap
-message is not serialized in v1.
+message is not serialized in v1. Pending interrupt state is restored with the
+CPU record; `timer0_interrupt_value` is the cause-specific value used when a
+pending timer0 interrupt is delivered after restore.
 
 ## Device Record Layout
 

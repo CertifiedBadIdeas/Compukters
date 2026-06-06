@@ -1,6 +1,8 @@
 use k16_vm::k16::{
-    K16Cpu, K16Signal, K16_CSR_TRAP_CAUSE, K16_CSR_TRAP_PC, K16_CSR_TRAP_VALUE,
-    K16_CSR_TRAP_VECTOR, K16_STACK_POINTER_REGISTER, K16_TRAP_CAUSE_ILLEGAL_INSTRUCTION,
+    K16Cpu, K16Signal, K16_CSR_INTERRUPT_ENABLE, K16_CSR_INTERRUPT_MASK, K16_CSR_INTERRUPT_PENDING,
+    K16_CSR_TRAP_CAUSE, K16_CSR_TRAP_PC, K16_CSR_TRAP_VALUE, K16_CSR_TRAP_VECTOR,
+    K16_INTERRUPT_SOURCE_TIMER0, K16_STACK_POINTER_REGISTER, K16_TRAP_CAUSE_ILLEGAL_INSTRUCTION,
+    K16_TRAP_CAUSE_TIMER0_INTERRUPT,
 };
 use k16_vm::low_bus::{MachineBus, MmioDevice};
 use k16_vm::low_machine::MemoryFault;
@@ -414,6 +416,85 @@ fn k16_unhandled_exception_is_a_hard_error() {
     );
 }
 
+#[test]
+fn k16_timer_interrupt_enters_vector_and_iret_resumes_guest_pc() {
+    let mut bus = MachineBus::new(64).unwrap();
+    let mut program = Vec::new();
+    program.extend(const32(1, 32));
+    program.push(write_csr(K16_CSR_TRAP_VECTOR, 1));
+    program.push(const4(1, K16_INTERRUPT_SOURCE_TIMER0 as u8));
+    program.push(write_csr(K16_CSR_INTERRUPT_MASK, 1));
+    program.push(const4(1, 1));
+    program.push(write_csr(K16_CSR_INTERRUPT_ENABLE, 1));
+    program.push(const4(2, 9));
+    program.push(halt());
+    program.extend([0; 6]);
+    program.push(read_csr(3, K16_CSR_TRAP_CAUSE));
+    program.push(read_csr(4, K16_CSR_TRAP_PC));
+    program.push(read_csr(5, K16_CSR_TRAP_VALUE));
+    program.push(iret());
+    write_words(&mut bus, 0, &program);
+    let mut cpu = K16Cpu::new(0);
+
+    assert_eq!(
+        cpu.run_until_signal(&mut bus, 6).unwrap(),
+        K16Signal::StepLimitExceeded,
+    );
+    assert_eq!(cpu.pc(), 16);
+
+    cpu.request_interrupt(K16_INTERRUPT_SOURCE_TIMER0, 77);
+
+    assert_eq!(cpu.run_until_signal(&mut bus, 16).unwrap(), K16Signal::Halt);
+    assert_eq!(cpu.register(2), 9);
+    assert_eq!(cpu.register(3), K16_TRAP_CAUSE_TIMER0_INTERRUPT);
+    assert_eq!(cpu.register(4), 16);
+    assert_eq!(cpu.register(5), 77);
+    assert_eq!(cpu.csr(K16_CSR_INTERRUPT_PENDING), Some(0));
+    assert_eq!(cpu.csr(K16_CSR_INTERRUPT_ENABLE), Some(1));
+}
+
+#[test]
+fn k16_timer_interrupt_remains_pending_while_masked() {
+    let mut bus = MachineBus::new(64).unwrap();
+    write_words(
+        &mut bus,
+        0,
+        &[
+            const4(1, 24),
+            write_csr(K16_CSR_TRAP_VECTOR, 1),
+            const4(1, 0),
+            write_csr(K16_CSR_INTERRUPT_MASK, 1),
+            const4(1, 1),
+            write_csr(K16_CSR_INTERRUPT_ENABLE, 1),
+            read_csr(2, K16_CSR_INTERRUPT_PENDING),
+            halt(),
+            0,
+            0,
+            0,
+            0,
+            read_csr(3, K16_CSR_TRAP_CAUSE),
+            halt(),
+        ],
+    );
+    let mut cpu = K16Cpu::new(0);
+
+    assert_eq!(
+        cpu.run_until_signal(&mut bus, 6).unwrap(),
+        K16Signal::StepLimitExceeded,
+    );
+    assert_eq!(cpu.pc(), 12);
+
+    cpu.request_interrupt(K16_INTERRUPT_SOURCE_TIMER0, 99);
+
+    assert_eq!(cpu.run_until_signal(&mut bus, 16).unwrap(), K16Signal::Halt);
+    assert_eq!(cpu.register(2), K16_INTERRUPT_SOURCE_TIMER0);
+    assert_eq!(cpu.register(3), 0);
+    assert_eq!(
+        cpu.csr(K16_CSR_INTERRUPT_PENDING),
+        Some(K16_INTERRUPT_SOURCE_TIMER0),
+    );
+}
+
 fn write_words(bus: &mut MachineBus, address: u32, words: &[u16]) {
     for (index, word) in words.iter().copied().enumerate() {
         bus.store_u16(address + (index as u32 * 2), word).unwrap();
@@ -537,6 +618,10 @@ fn call(register: u8) -> u16 {
 
 fn ret() -> u16 {
     0x9000
+}
+
+fn iret() -> u16 {
+    0x0004
 }
 
 fn branch_if_zero(register: u8, offset_words: i8) -> u16 {

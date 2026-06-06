@@ -1,5 +1,8 @@
 use k16_vm::computer_machine::ComputerMachine;
-use k16_vm::k16::K16Signal;
+use k16_vm::k16::{
+    K16Signal, K16_CSR_INTERRUPT_ENABLE, K16_CSR_INTERRUPT_MASK, K16_CSR_TRAP_VALUE,
+    K16_CSR_TRAP_VECTOR, K16_INTERRUPT_SOURCE_TIMER0,
+};
 use k16_vm::k16_computer::{K16ComputerControl, K16ComputerHandle};
 use std::fs;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -137,6 +140,36 @@ fn k16_computer_handle_guest_reads_timer0_game_ticks_after_host_advance() {
 
     assert_eq!(handle.run_k16_until_signal().unwrap(), K16Signal::Halt);
     assert_eq!(handle.control().panic_code, 2);
+}
+
+#[test]
+fn k16_computer_handle_advance_game_tick_requests_timer0_interrupt() {
+    let mut words = Vec::new();
+    words.extend(k16_const32(1, ComputerMachine::K16_BIOS_FLASH_BASE + 32));
+    words.push(k16_write_csr(K16_CSR_TRAP_VECTOR, 1));
+    words.push(k16_const4(1, K16_INTERRUPT_SOURCE_TIMER0 as u8));
+    words.push(k16_write_csr(K16_CSR_INTERRUPT_MASK, 1));
+    words.push(k16_const4(1, 1));
+    words.push(k16_write_csr(K16_CSR_INTERRUPT_ENABLE, 1));
+    words.extend(k16_const32(0, ComputerMachine::CONTROL_PANIC_CODE));
+    words.push(k16_store32(0, 3));
+    words.push(k16_halt());
+    words.extend([0; 3]);
+    words.push(k16_read_csr(3, K16_CSR_TRAP_VALUE));
+    words.push(k16_iret());
+    let bios = k16_words(&words);
+    let mut handle = K16ComputerHandle::create_k16_bios_flash(&bios, 64 * 1024, 6)
+        .expect("K16 BIOS flash computer creates");
+
+    assert_eq!(
+        handle.run_k16_until_signal().unwrap(),
+        K16Signal::StepLimitExceeded,
+    );
+
+    handle.advance_game_tick();
+
+    assert_eq!(handle.run_k16_until_signal().unwrap(), K16Signal::Halt);
+    assert_eq!(handle.control().panic_code, 1);
 }
 
 #[test]
@@ -694,4 +727,16 @@ fn k16_call(register: u8) -> u16 {
 
 fn k16_ret() -> u16 {
     0x9000
+}
+
+fn k16_read_csr(dst: u8, csr: u32) -> u16 {
+    0x0002 | (u16::from(dst) << 8) | ((csr as u16) << 4)
+}
+
+fn k16_write_csr(csr: u32, src: u8) -> u16 {
+    0x0003 | ((csr as u16) << 8) | (u16::from(src) << 4)
+}
+
+fn k16_iret() -> u16 {
+    0x0004
 }

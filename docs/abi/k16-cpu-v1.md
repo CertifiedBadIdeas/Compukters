@@ -429,6 +429,66 @@ local storage. Stack load/store faults are normal K16 CPU faults. The first
 ABI slice does not add stack bounds metadata, callee-cleaned arguments, or a
 fallback return path.
 
+## Traps And Interrupts
+
+K16 uses one trap-vector path for synchronous CPU exceptions and asynchronous
+interrupts. Firmware or kernel code installs the handler entry address through
+`trap_vector`.
+
+CSR instructions use the zero-opcode encoding family:
+
+```text
+read_csr   0x0ab2    rA = csr(B)
+write_csr  0x0ab3    csr(A) = rB
+iret       0x0004    pc = trap_pc; interrupt_enable = 1
+```
+
+The active v1 CSRs are:
+
+```text
+csr  access  name               semantics
+1    R/W     trap_vector        handler entry PC, 0 means no handler installed
+2    R       trap_cause         last trap or interrupt cause
+3    R       trap_pc            interrupted or faulting PC
+4    R       trap_value         cause-specific diagnostic value
+5    R/W     interrupt_enable   0 disables async interrupt delivery, non-zero enables it
+6    R/W     interrupt_mask     enabled interrupt source bitmask
+7    R       interrupt_pending  pending interrupt source bitmask
+```
+
+Writes to read-only CSRs raise an explicit synchronous trap.
+
+Synchronous exceptions are delivered immediately when the faulting instruction
+is decoded or executed. If `trap_vector = 0`, the VM reports a hard CPU trap to
+the host. Otherwise the CPU records `trap_cause`, `trap_pc`, and `trap_value`,
+then sets `pc = trap_vector`.
+
+Asynchronous interrupts are delivered between guest instructions. Delivery
+requires `interrupt_enable != 0` and a source bit present in both
+`interrupt_pending` and `interrupt_mask`. Entering an interrupt records the
+interrupted `pc`, records the cause/value, clears the delivered pending bit,
+sets `pc = trap_vector`, and disables global interrupt delivery. `iret`
+resumes at `trap_pc` and re-enables global interrupt delivery. Nested
+interrupts, interrupt priorities, and separate interrupt-controller hardware
+are not part of this ABI slice.
+
+Current trap and interrupt causes:
+
+```text
+0x00000001  illegal instruction
+0x00000002  instruction fetch fault
+0x00000003  load fault
+0x00000004  store fault
+0x00000005  explicit trap
+0x80000001  timer0 interrupt
+```
+
+Current interrupt source bits:
+
+```text
+bit 0 / mask 0x00000001  timer0 game tick
+```
+
 ## Compiler-Generated Register Saves
 
 When the K16 compiler emits a real helper call and the caller has live local
