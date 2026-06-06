@@ -27,7 +27,7 @@ fn dispatch_interrupt(source: u32) {
         return;
     }
 
-    kernel_trap();
+    unknown_interrupt(source);
 }
 
 fn dispatch_synchronous_trap(cause: u32) -> ! {
@@ -35,10 +35,22 @@ fn dispatch_synchronous_trap(cause: u32) -> ! {
         syscall::dispatch(k16_rt::trap_value());
     }
 
-    kernel_trap();
+    unknown_synchronous_trap(cause);
 }
 
-pub fn kernel_trap() -> ! {
+fn unknown_interrupt(_source: u32) -> ! {
+    enter_kernel_trap()
+}
+
+fn unknown_synchronous_trap(_cause: u32) -> ! {
+    enter_kernel_trap()
+}
+
+pub fn unknown_syscall(_number: u32) -> ! {
+    enter_kernel_trap()
+}
+
+fn enter_kernel_trap() -> ! {
     debug::print_kernel_trap();
     control::set_panic();
     control::wait_forever();
