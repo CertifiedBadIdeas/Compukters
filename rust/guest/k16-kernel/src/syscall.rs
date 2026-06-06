@@ -24,7 +24,7 @@ impl KernelSyscall {
 
 pub fn dispatch(number: u32) -> ! {
     let Some(syscall) = KernelSyscall::from_raw(number) else {
-        trap::kernel_trap();
+        trap::unknown_syscall(number);
     };
 
     dispatch_kernel_syscall(syscall)
