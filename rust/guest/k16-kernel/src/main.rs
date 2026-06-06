@@ -4,10 +4,11 @@
 extern crate k16_rt;
 
 use core::panic::PanicInfo;
-use k16_abi::computer::{control, debug, display0, status};
+use k16_abi::computer::{control, debug, display0, hardware_id, profile, status};
 use k16_rt::cpu;
 
 static mut KERNEL_TIMER0_TICKS: u32 = 0;
+static mut TIMER0_IRQ_SOURCE: u32 = 0;
 
 #[no_mangle]
 pub extern "C" fn _start() -> ! {
@@ -21,8 +22,9 @@ pub extern "C" fn _start() -> ! {
 
 extern "C" fn timer0_interrupt_handler() -> ! {
     let trap_cause = k16_rt::trap_cause();
+    let timer0_irq_source = unsafe { TIMER0_IRQ_SOURCE };
     if !cpu::trap_cause::is_interrupt(trap_cause)
-        || cpu::trap_cause::interrupt_source(trap_cause) != cpu::interrupt_source::TIMER0
+        || cpu::trap_cause::interrupt_source(trap_cause) != timer0_irq_source
     {
         print_kernel_trap_debug();
         set_panic();
@@ -131,11 +133,28 @@ fn print_debug_byte(byte: u8) {
 }
 
 fn install_timer0_interrupt_handler() {
+    let timer0_irq_source = timer0_irq_source_or_panic();
     unsafe {
+        TIMER0_IRQ_SOURCE = timer0_irq_source;
         k16_rt::install_trap_vector(timer0_interrupt_handler as *const () as usize as u32);
-        k16_rt::set_interrupt_mask(cpu::interrupt_source::TIMER0);
+        k16_rt::set_interrupt_mask(timer0_irq_source);
         k16_rt::enable_interrupts();
     }
+}
+
+fn timer0_irq_source_or_panic() -> u32 {
+    let timer0 = unsafe { profile::find_hardware_entry(hardware_id::TIMER0) };
+    let Some(timer0) = timer0 else {
+        print_kernel_panic_debug();
+        set_panic();
+        wait_forever();
+    };
+    if timer0.irq_source == 0 {
+        print_kernel_panic_debug();
+        set_panic();
+        wait_forever();
+    }
+    timer0.irq_source
 }
 
 fn set_ready() {

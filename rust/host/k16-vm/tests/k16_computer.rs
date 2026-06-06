@@ -79,12 +79,13 @@ fn k16_computer_profile_exposes_timer0_hardware_entry_and_mmio() {
     let mut machine = ComputerMachine::new(1024).expect("machine creates");
 
     assert_eq!(read_u32(machine.memory(), 0x18), 7);
-    assert_hardware_entry(
+    assert_hardware_entry_with_irq(
         machine.memory(),
-        100,
+        124,
         ComputerMachine::HARDWARE_ID_TIMER0,
         ComputerMachine::TIMER0_BASE,
         ComputerMachine::TIMER0_SIZE,
+        k16_vm::k16::K16_INTERRUPT_SOURCE_TIMER0,
     );
     assert_eq!(
         machine
@@ -528,16 +529,18 @@ fn read_u32(memory: &k16_vm::low_machine::MachineMemory, address: u32) -> u32 {
     u32::from_le_bytes(memory.load_i32(address).unwrap().to_le_bytes())
 }
 
-fn assert_hardware_entry(
+fn assert_hardware_entry_with_irq(
     memory: &k16_vm::low_machine::MachineMemory,
     address: u32,
     id: u32,
     base: u32,
     size: u32,
+    irq_source: u32,
 ) {
     assert_eq!(read_u32(memory, address), id);
     assert_eq!(read_u32(memory, address + 4), base);
     assert_eq!(read_u32(memory, address + 8), size);
+    assert_eq!(read_u32(memory, address + 12), irq_source);
 }
 
 fn k16_words(words: &[u16]) -> Vec<u8> {
