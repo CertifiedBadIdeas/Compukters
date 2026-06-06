@@ -2,6 +2,38 @@ use std::fs;
 use std::path::Path;
 
 #[test]
+fn k16_guest_interrupt_smoke_artifacts_are_documented() {
+    let root = repo_root();
+    let smoke_script = root.join("tools/k16-guest-interrupt-smoke.sh");
+    let docs = root.join("docs/toolchains/k16-guest-interrupt-smoke.md");
+
+    let script = fs::read_to_string(&smoke_script).expect("guest interrupt smoke script exists");
+    assert!(script.contains("K16_CARGO"));
+    assert!(script.contains("K16_RUSTC"));
+    assert!(script.contains("K16_TOOL"));
+    assert!(script.contains("k16-rt"));
+    assert!(script.contains("install_trap_vector"));
+    assert!(script.contains("set_interrupt_mask"));
+    assert!(script.contains("enable_interrupts"));
+    assert!(script.contains("trap_cause"));
+    assert!(script.contains("trap_pc"));
+    assert!(script.contains("trap_value"));
+    assert!(script.contains("interrupt_pending"));
+    assert!(script.contains("iret_once"));
+    assert!(script.contains("advance_game_tick"));
+    assert!(script.contains("debug_bytes=492a"));
+    assert!(!script.contains("RUX16"));
+
+    let docs = fs::read_to_string(&docs).expect("guest interrupt smoke docs exist");
+    assert!(docs.contains("tools/k16-guest-interrupt-smoke.sh"));
+    assert!(docs.contains("timer0"));
+    assert!(docs.contains("k16-rt"));
+    assert!(docs.contains("advance_game_tick"));
+    assert!(docs.contains("debug_bytes=492a"));
+    assert!(!docs.contains("RUX16"));
+}
+
+#[test]
 fn rust_nocore_smoke_artifacts_are_documented_and_strict() {
     let root = repo_root();
     let target_spec = root.join("tools/k16-unknown-kraftos.json");
