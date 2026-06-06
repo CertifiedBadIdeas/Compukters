@@ -451,7 +451,10 @@ fn k16_ld_binary() -> String {
 fn assert_linker_output_is_executable(path: &std::path::Path) {
     use std::os::unix::fs::PermissionsExt;
 
-    let mode = fs::metadata(path).expect("output metadata reads").permissions().mode();
+    let mode = fs::metadata(path)
+        .expect("output metadata reads")
+        .permissions()
+        .mode();
     assert_ne!(mode & 0o111, 0, "k16-ld output should be executable");
 }
 

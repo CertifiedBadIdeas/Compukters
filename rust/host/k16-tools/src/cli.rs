@@ -71,8 +71,14 @@ fn run_bios(args: &[String]) -> Result<(), String> {
         String::from_utf8_lossy(handle.debug_output_bytes()).escape_debug()
     );
     if let Some(snapshot) = handle.display0_snapshot() {
-        println!("display0_row0={}", display_row(&snapshot.cells, snapshot.columns, 0));
-        println!("display0_row2={}", display_row(&snapshot.cells, snapshot.columns, 2));
+        println!(
+            "display0_row0={}",
+            display_row(&snapshot.cells, snapshot.columns, 0)
+        );
+        println!(
+            "display0_row2={}",
+            display_row(&snapshot.cells, snapshot.columns, 2)
+        );
     }
     Ok(())
 }

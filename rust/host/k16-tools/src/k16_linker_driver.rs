@@ -31,8 +31,8 @@ pub fn run_k16_linker_driver(args: Vec<String>) -> Result<(), String> {
 fn mark_linker_output_executable(path: &str) -> Result<(), String> {
     use std::os::unix::fs::PermissionsExt;
 
-    let metadata =
-        fs::metadata(path).map_err(|error| format!("failed to stat linker output {path}: {error}"))?;
+    let metadata = fs::metadata(path)
+        .map_err(|error| format!("failed to stat linker output {path}: {error}"))?;
     let mut permissions = metadata.permissions();
     permissions.set_mode(permissions.mode() | 0o111);
     fs::set_permissions(path, permissions)

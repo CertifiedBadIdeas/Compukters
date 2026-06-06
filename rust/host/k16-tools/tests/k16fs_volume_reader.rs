@@ -12,7 +12,8 @@ fn k16fs_volume_reader_loads_kernel_file_from_root_partition() {
     k16fs::create_directory(&mut root, "/boot").expect("boot directory creates");
     k16fs::write_file(&mut root, "/boot/kernel.kx", &kernel_bytes).expect("kernel writes");
 
-    let mut storage0 = volume::create_initialized_volume(TEST_VOLUME_SIZE).expect("volume initializes");
+    let mut storage0 =
+        volume::create_initialized_volume(TEST_VOLUME_SIZE).expect("volume initializes");
     volume::replace_partition(&mut storage0, "ROOT", &root).expect("ROOT partition replaces");
 
     let loaded = k16fs_volume::read_file_from_partition(&storage0, "ROOT", "/boot/kernel.kx")
@@ -25,7 +26,8 @@ fn k16fs_volume_reader_loads_kernel_file_from_root_partition() {
 fn k16fs_volume_reader_reports_missing_partition_or_path_without_fallback() {
     let mut root = k16fs::format_empty_filesystem(TEST_ROOT_BLOCKS).expect("root formats");
     k16fs::create_directory(&mut root, "/boot").expect("boot directory creates");
-    let mut storage0 = volume::create_initialized_volume(TEST_VOLUME_SIZE).expect("volume initializes");
+    let mut storage0 =
+        volume::create_initialized_volume(TEST_VOLUME_SIZE).expect("volume initializes");
     volume::replace_partition(&mut storage0, "ROOT", &root).expect("ROOT partition replaces");
 
     assert!(
