@@ -20,6 +20,10 @@ pub mod thread {
     pub fn yield_now() {
         let _ = k16_rt::yield_syscall();
     }
+
+    pub fn sleep_ticks(ticks: u32) {
+        let _ = k16_rt::sleep_ticks_syscall(ticks);
+    }
 }
 
 pub mod prelude {

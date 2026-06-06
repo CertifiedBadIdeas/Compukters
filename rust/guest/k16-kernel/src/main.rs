@@ -76,7 +76,19 @@ fn dispatch_syscall(number: u32) -> ! {
         unsafe { k16_rt::iret_with_r0(syscall::STATUS_OK) }
     }
 
+    if number == syscall::SLEEP_TICKS {
+        sleep_ticks(k16_rt::syscall_arg0());
+        unsafe { k16_rt::iret_with_r0(syscall::STATUS_OK) }
+    }
+
     kernel_trap();
+}
+
+fn sleep_ticks(ticks: u32) {
+    let target = k16_rt::timer0_game_ticks().saturating_add(u64::from(ticks));
+    while k16_rt::timer0_game_ticks() < target {
+        k16_rt::yield_once();
+    }
 }
 
 #[panic_handler]

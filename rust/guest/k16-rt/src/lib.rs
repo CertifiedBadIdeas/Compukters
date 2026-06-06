@@ -16,7 +16,7 @@ mod tests;
 #[cfg(any(test, feature = "host-test"))]
 pub mod host_test {
     pub use k16_abi::syscall::{
-        DEBUG_MARKER, DEBUG_MARKER_RETURN, DEBUG_WRITE_BYTE, STATUS_OK, YIELD,
+        DEBUG_MARKER, DEBUG_MARKER_RETURN, DEBUG_WRITE_BYTE, SLEEP_TICKS, STATUS_OK, YIELD,
     };
 
     pub fn reset_syscalls() {
@@ -76,6 +76,6 @@ pub use memory::{k16_memcmp, k16_memcpy, k16_memmove, k16_memset};
 pub use time::{sleep_ticks, timer0_game_ticks, timer0_monotonic_nanos, yield_frames};
 pub use trap::{
     debug_marker, debug_write_byte, disable_interrupts, enable_interrupts, install_trap_vector,
-    interrupt_pending, iret_once, iret_with_r0, set_interrupt_mask, syscall0, syscall1,
-    syscall_arg0, syscall_once, trap_cause, trap_pc, trap_value, yield_syscall,
+    interrupt_pending, iret_once, iret_with_r0, set_interrupt_mask, sleep_ticks_syscall, syscall0,
+    syscall1, syscall_arg0, syscall_once, trap_cause, trap_pc, trap_value, yield_syscall,
 };

@@ -171,9 +171,11 @@ use k16_vm::k16_computer::K16ComputerHandle;
 use k16_vm::k16e::{self, K16eAbiKind};
 use std::{env, fs, process};
 
+const SYSCALL_PROBE_ADDR: u32 = 0x0000_9000;
+const SYSCALL_PROBE_SCRATCH_ADDR: u32 = 0x0000_9100;
+
 fn main() {
     const KERNEL_STACK_TOP: u32 = 0x0001_0000;
-    const SYSCALL_PROBE_ADDR: u32 = 0x0000_9000;
 
     let kernel_path = env::args().nth(1).expect("kernel path argument");
     let kernel = fs::read(&kernel_path).expect("kernel K16E reads");
@@ -276,11 +278,21 @@ fn main() {
     }
     let fifth = handle
         .run_k16_until_signal()
-        .expect("returning syscall probe continuation runs");
+        .expect("sleep syscall handler runs before target tick");
     if fifth != K16Signal::Yield {
         dump_cpu_snapshot(&mut handle);
         eprintln!("debug_bytes={}", hex_bytes(handle.debug_output_bytes()));
-        eprintln!("expected signal=yield after returning syscall continuation, got {fifth:?}");
+        eprintln!("expected signal=yield from sleep syscall handler, got {fifth:?}");
+        process::exit(1);
+    }
+    handle.advance_game_tick();
+    let sixth = handle
+        .run_k16_until_signal()
+        .expect("returning syscall probe continuation runs after sleep tick");
+    if sixth != K16Signal::Yield {
+        dump_cpu_snapshot(&mut handle);
+        eprintln!("debug_bytes={}", hex_bytes(handle.debug_output_bytes()));
+        eprintln!("expected signal=yield after sleep syscall continuation, got {sixth:?}");
         process::exit(1);
     }
     let continuation_r2 = boot_cpu_register(&mut handle, 2);
@@ -307,17 +319,25 @@ fn main() {
         );
         process::exit(1);
     }
-    if !handle.debug_output_bytes().ends_with(b"||S!") {
+    let continuation_r5 = boot_cpu_register(&mut handle, 5);
+    if continuation_r5 != 0 {
         dump_cpu_snapshot(&mut handle);
         eprintln!(
-            "expected debug_suffix=7c7c5321 after syscall1 debug-write proof, got {}",
+            "expected continuation_r5=0 after sleep syscall proof, got {continuation_r5}"
+        );
+        process::exit(1);
+    }
+    if !handle.debug_output_bytes().ends_with(b"||S!|") {
+        dump_cpu_snapshot(&mut handle);
+        eprintln!(
+            "expected debug_suffix=7c7c53217c after sleep syscall tick proof, got {}",
             hex_bytes(handle.debug_output_bytes())
         );
         process::exit(1);
     }
 
     println!(
-        "first_signal=yield timer_signals=yield,yield syscall_signal=yield continuation_signal=yield status=READY debug_suffix=7c7c5321 continuation_r2=83 continuation_r3=0 continuation_r4=0"
+        "first_signal=yield timer_signals=yield,yield syscall_signal=yield sleep_signal=yield continuation_signal=yield status=READY debug_suffix=7c7c53217c continuation_r2=83 continuation_r3=0 continuation_r4=0 continuation_r5=0"
     );
 }
 
@@ -364,7 +384,24 @@ fn returning_syscall_probe(patch_pc: u32, original_bytes: &[u8]) -> Vec<u8> {
     emit_word(&mut bytes, syscall(1));
     emit_word(&mut bytes, const4(13, 0));
     emit_alu_rrr(&mut bytes, 4, 0x0, 0, 13);
-    emit_alu_rrr(&mut bytes, 2, 0x0, 12, 13);
+    emit_const32(&mut bytes, 14, SYSCALL_PROBE_SCRATCH_ADDR);
+    emit_word(&mut bytes, store32(14, 12));
+    emit_word(&mut bytes, const4(13, 4));
+    emit_alu_rrr(&mut bytes, 14, 0x0, 14, 13);
+    emit_word(&mut bytes, store32(14, 3));
+    emit_alu_rrr(&mut bytes, 14, 0x0, 14, 13);
+    emit_word(&mut bytes, store32(14, 4));
+    emit_const32(&mut bytes, 1, syscall::SLEEP_TICKS);
+    emit_word(&mut bytes, const4(2, 1));
+    emit_word(&mut bytes, syscall(1));
+    emit_alu_rrr(&mut bytes, 5, 0x0, 0, 0);
+    emit_const32(&mut bytes, 14, SYSCALL_PROBE_SCRATCH_ADDR);
+    emit_word(&mut bytes, load32(2, 14));
+    emit_word(&mut bytes, const4(13, 4));
+    emit_alu_rrr(&mut bytes, 14, 0x0, 14, 13);
+    emit_word(&mut bytes, load32(3, 14));
+    emit_alu_rrr(&mut bytes, 14, 0x0, 14, 13);
+    emit_word(&mut bytes, load32(4, 14));
     emit_const32(&mut bytes, 14, computer_abi::CONTROL_YIELD);
     emit_word(&mut bytes, const4(1, 1));
     emit_word(&mut bytes, store32(14, 1));
@@ -400,6 +437,10 @@ fn jump(register: u8) -> u16 {
 
 fn store32(addr: u8, src: u8) -> u16 {
     0x5002 | (u16::from(addr) << 8) | (u16::from(src) << 4)
+}
+
+fn load32(dst: u8, addr: u8) -> u16 {
+    0x4002 | (u16::from(dst) << 8) | (u16::from(addr) << 4)
 }
 
 fn original_guest_bytes(executable: &k16e::K16eExecutable, address: u32, len: usize) -> Vec<u8> {
@@ -456,10 +497,11 @@ RS
 "$HOST_CARGO" run --quiet --offline --manifest-path "$WORK_DIR/runner/Cargo.toml" -- "$KERNEL_KX" \
     > "$WORK_DIR/runner.stdout"
 require_contains "$WORK_DIR/runner.stdout" "signal=yield"
-require_contains "$WORK_DIR/runner.stdout" "debug_suffix=7c7c5321"
+require_contains "$WORK_DIR/runner.stdout" "debug_suffix=7c7c53217c"
 require_contains "$WORK_DIR/runner.stdout" "continuation_r2=83"
 require_contains "$WORK_DIR/runner.stdout" "continuation_r3=0"
 require_contains "$WORK_DIR/runner.stdout" "continuation_r4=0"
+require_contains "$WORK_DIR/runner.stdout" "continuation_r5=0"
 
 cat "$WORK_DIR/runner.stdout"
 echo "K16 kernel timer smoke passed"
