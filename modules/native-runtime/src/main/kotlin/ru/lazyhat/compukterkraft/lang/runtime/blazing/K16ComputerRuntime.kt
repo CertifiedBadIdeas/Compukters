@@ -23,6 +23,8 @@ import java.io.ByteArrayOutputStream
 import java.nio.file.Path
 
 interface K16ComputerRuntimeBindings {
+    fun advanceGameTick(handle: Long)
+
     fun runUntilSignal(handle: Long): NativeK16ComputerSignal
 
     fun control(handle: Long): NativeK16ComputerControl
@@ -46,6 +48,8 @@ interface K16ComputerRuntimeBindings {
 }
 
 object NativeK16ComputerRuntimeBindings : K16ComputerRuntimeBindings {
+    override fun advanceGameTick(handle: Long) = NativeVmBindings.advanceK16ComputerGameTick(handle)
+
     override fun runUntilSignal(handle: Long): NativeK16ComputerSignal = NativeVmBindings.runK16ComputerUntilSignal(handle)
 
     override fun control(handle: Long): NativeK16ComputerControl = NativeVmBindings.k16ComputerControl(handle)
@@ -156,6 +160,7 @@ class K16ComputerRuntime(
         ensureOpen()
         require(maxTurns >= 0) { "maxTurns must be non-negative" }
         terminalControl?.let { return it }
+        bindings.advanceGameTick(handle)
         repeat(maxTurns) {
             val signal = bindings.runUntilSignal(handle)
             appendNativeOutput()

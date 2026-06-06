@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Added polling-only `timer0` to K16 computer profile v1. It exposes
+  `game_ticks` for Minecraft/server simulation time and `monotonic_nanos` for
+  host monotonic elapsed-time diagnostics. `game_ticks` is included in
+  `K16SNAP`; the host monotonic origin is intentionally recreated on restore.
 - Added `control + 0x0c` as a guest-visible `yield` request register. A
   non-zero write pauses the current VM tick after the current instruction and
   resumes execution on the next host tick without changing durable control

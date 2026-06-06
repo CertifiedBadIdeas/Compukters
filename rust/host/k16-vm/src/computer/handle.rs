@@ -147,6 +147,10 @@ impl K16ComputerHandle {
         self.machine.run_boot_k16_until_signal(self.boot_cpu)
     }
 
+    pub fn advance_game_tick(&mut self) {
+        self.machine.advance_game_tick();
+    }
+
     pub fn control(&self) -> K16ComputerControl {
         K16ComputerControl {
             status: self.machine.control_status(),

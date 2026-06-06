@@ -66,7 +66,7 @@ fn computer_serial_input_device_reports_ready_and_consumes_bytes() {
 fn computer_machine_writes_display0_hardware_entry() {
     let machine = ComputerMachine::new(1024).unwrap();
 
-    assert_eq!(read_u32(machine.memory(), 0x18), 6);
+    assert_eq!(read_u32(machine.memory(), 0x18), 7);
     assert_hardware_entry(
         machine.memory(),
         64,
@@ -80,7 +80,7 @@ fn computer_machine_writes_display0_hardware_entry() {
 fn computer_machine_writes_framebuffer0_hardware_entry() {
     let machine = ComputerMachine::new(1024).unwrap();
 
-    assert_eq!(read_u32(machine.memory(), 0x18), 6);
+    assert_eq!(read_u32(machine.memory(), 0x18), 7);
     assert_hardware_entry(
         machine.memory(),
         76,
@@ -313,7 +313,7 @@ fn computer_machine_writes_machine_profile_v2_boot_info() {
         read_u32(machine.memory(), 0x14),
         ComputerMachine::PROFILE_V2_BOOT_INFO_SIZE
     );
-    assert_eq!(read_u32(machine.memory(), 0x18), 6);
+    assert_eq!(read_u32(machine.memory(), 0x18), 7);
 }
 
 #[test]
@@ -362,6 +362,13 @@ fn computer_machine_writes_static_hardware_table_for_mmio_ranges() {
         computer_abi::STORAGE0_BASE,
         computer_abi::PROFILE_V2_PAGE_SIZE,
     );
+    assert_hardware_entry(
+        machine.memory(),
+        100,
+        computer_abi::COMPUTER_HARDWARE_ID_TIMER0,
+        computer_abi::TIMER0_BASE,
+        computer_abi::PROFILE_V2_PAGE_SIZE,
+    );
 }
 
 #[test]
@@ -369,7 +376,7 @@ fn computer_machine_can_be_created_from_explicit_computer_v1_profile() {
     let profile = ComputerMachineProfile::computer_v1(1024);
     let machine = ComputerMachine::from_profile(profile).unwrap();
 
-    assert_eq!(read_u32(machine.memory(), 0x18), 6);
+    assert_eq!(read_u32(machine.memory(), 0x18), 7);
     assert_hardware_entry(
         machine.memory(),
         28,
@@ -410,6 +417,13 @@ fn computer_machine_can_be_created_from_explicit_computer_v1_profile() {
         88,
         computer_abi::COMPUTER_HARDWARE_ID_STORAGE0,
         computer_abi::STORAGE0_BASE,
+        computer_abi::PROFILE_V2_PAGE_SIZE,
+    );
+    assert_hardware_entry(
+        machine.memory(),
+        100,
+        computer_abi::COMPUTER_HARDWARE_ID_TIMER0,
+        computer_abi::TIMER0_BASE,
         computer_abi::PROFILE_V2_PAGE_SIZE,
     );
 }
@@ -989,6 +1003,10 @@ fn computer_machine_constants_match_profile_v2_abi() {
         ComputerMachine::HARDWARE_ID_DISPLAY0,
         computer_abi::COMPUTER_HARDWARE_ID_DISPLAY0,
     );
+    assert_eq!(
+        ComputerMachine::HARDWARE_ID_TIMER0,
+        computer_abi::COMPUTER_HARDWARE_ID_TIMER0,
+    );
     assert_eq!(ComputerMachine::CONTROL_BASE, computer_abi::CONTROL_BASE);
     assert_eq!(
         ComputerMachine::CONTROL_STATUS,
@@ -1179,6 +1197,19 @@ fn computer_memory_map_describes_framebuffer0_mmio_region() {
     assert_eq!(framebuffer.size, computer_abi::FRAMEBUFFER0_SIZE);
     assert!(framebuffer.readable);
     assert!(framebuffer.writable);
+}
+
+#[test]
+fn computer_memory_map_describes_timer0_mmio_region() {
+    let machine = ComputerMachine::new(1024).unwrap();
+    let map = machine.memory_map();
+
+    let timer = map.region("timer0").unwrap();
+
+    assert_eq!(timer.base, computer_abi::TIMER0_BASE);
+    assert_eq!(timer.size, computer_abi::TIMER0_SIZE);
+    assert!(timer.readable);
+    assert!(timer.writable);
 }
 
 fn read_u32(memory: &crate::low_machine::MachineMemory, address: u32) -> u32 {

@@ -9,6 +9,7 @@ const EMPTY_DEBUG_DEVICE_RECORD_SIZE: usize = 8;
 const EMPTY_DISPLAY0_DEVICE_RECORD_SIZE: usize = 2032;
 const EMPTY_SERIAL_INPUT_DEVICE_RECORD_SIZE: usize = 8;
 const STORAGE0_DEVICE_RECORD_SIZE: usize = 44;
+const TIMER0_DEVICE_RECORD_SIZE: usize = 16;
 
 #[test]
 fn computer_machine_snapshot_v1_records_header_and_ram_payload() {
@@ -31,6 +32,7 @@ fn computer_machine_snapshot_v1_records_header_and_ram_payload() {
             + EMPTY_DISPLAY0_DEVICE_RECORD_SIZE
             + EMPTY_SERIAL_INPUT_DEVICE_RECORD_SIZE
             + STORAGE0_DEVICE_RECORD_SIZE
+            + TIMER0_DEVICE_RECORD_SIZE
     );
 
     let decoded = decode_snapshot_v1(&snapshot).expect("snapshot decodes");
@@ -43,11 +45,11 @@ fn computer_machine_snapshot_v1_records_header_and_ram_payload() {
     assert_eq!(decoded.header.ram_size, 1024);
     assert_eq!(decoded.header.cpu_count, 1);
     assert_eq!(decoded.header.boot_cpu_id, Some(boot_cpu as u32));
-    assert_eq!(decoded.header.device_count, 5);
+    assert_eq!(decoded.header.device_count, 6);
     assert_eq!(decoded.ram[512], 0xA5);
     assert_eq!(decoded.ram[1023], 0x5A);
     assert_eq!(decoded.cpus.len(), 1);
-    assert_eq!(decoded.devices.len(), 5);
+    assert_eq!(decoded.devices.len(), 6);
 }
 
 #[test]
@@ -293,6 +295,34 @@ fn computer_machine_snapshot_v1_restores_storage0_controller_state() {
 }
 
 #[test]
+fn computer_machine_snapshot_v1_restores_timer0_game_ticks() {
+    let mut machine = ComputerMachine::new(1024).expect("machine creates");
+    machine.advance_game_tick();
+    machine.advance_game_tick();
+
+    let snapshot = machine.snapshot_v1().expect("snapshot encodes");
+    let mut restored =
+        ComputerMachine::restore_snapshot_v1(ComputerMachineProfile::computer_v1(1024), &snapshot)
+            .expect("snapshot restores");
+
+    assert_eq!(
+        restored
+            .bus_load_i32(ComputerMachine::TIMER0_GAME_TICKS_LOW)
+            .unwrap(),
+        2
+    );
+
+    restored.advance_game_tick();
+
+    assert_eq!(
+        restored
+            .bus_load_i32(ComputerMachine::TIMER0_GAME_TICKS_LOW)
+            .unwrap(),
+        3
+    );
+}
+
+#[test]
 fn computer_machine_snapshot_v1_rejects_profile_ram_size_mismatch() {
     let machine = ComputerMachine::new(1024).expect("machine creates");
     let snapshot = machine.snapshot_v1().expect("snapshot encodes");
@@ -333,7 +363,7 @@ fn computer_machine_snapshot_v1_rejects_bad_magic_version_and_length() {
     let truncated = &snapshot[..snapshot.len() - 1];
     assert_eq!(
         decode_snapshot_v1(truncated).unwrap_err(),
-        "ComputerMachine snapshot device 4 payload is truncated"
+        "ComputerMachine snapshot device 5 payload is truncated"
     );
 }
 

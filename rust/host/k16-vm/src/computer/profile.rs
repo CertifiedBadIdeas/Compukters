@@ -1,6 +1,6 @@
 use crate::computer::devices::{
     ComputerControlDevice, DebugSerialDevice, FramebufferDevice, SerialInputDevice,
-    StoragePortDevice, TextDisplayDevice,
+    StoragePortDevice, TextDisplayDevice, TimerDevice,
 };
 use crate::computer_abi;
 use crate::low_machine::MemoryFault;
@@ -50,6 +50,10 @@ impl ComputerMachineProfile {
                 computer_abi::COMPUTER_HARDWARE_ID_STORAGE0,
                 computer_abi::STORAGE0_BASE,
             ))
+            .with_hardware(ComputerHardwareConfig::timer(
+                computer_abi::COMPUTER_HARDWARE_ID_TIMER0,
+                computer_abi::TIMER0_BASE,
+            ))
     }
 
     pub fn computer_v1_with_storage0_media(
@@ -84,6 +88,10 @@ impl ComputerMachineProfile {
                 storage0_media,
                 storage0_read_only,
             ))
+            .with_hardware(ComputerHardwareConfig::timer(
+                computer_abi::COMPUTER_HARDWARE_ID_TIMER0,
+                computer_abi::TIMER0_BASE,
+            ))
     }
 
     pub fn computer_v1_with_storage0_path(
@@ -115,6 +123,10 @@ impl ComputerMachineProfile {
                 computer_abi::COMPUTER_HARDWARE_ID_STORAGE0,
                 computer_abi::STORAGE0_BASE,
                 storage0_path,
+            ))
+            .with_hardware(ComputerHardwareConfig::timer(
+                computer_abi::COMPUTER_HARDWARE_ID_TIMER0,
+                computer_abi::TIMER0_BASE,
             ))
     }
 
@@ -209,6 +221,14 @@ impl ComputerHardwareConfig {
         }
     }
 
+    pub fn timer(id: u32, mmio_base: u32) -> Self {
+        Self {
+            id,
+            mmio_base,
+            device: ComputerHardwareDevice::Timer,
+        }
+    }
+
     pub(crate) fn mmio_size(&self) -> u32 {
         self.device.mmio_size()
     }
@@ -222,6 +242,7 @@ pub(crate) enum ComputerHardwareDevice {
     TextDisplay,
     Framebuffer,
     StoragePort(StoragePortConfig),
+    Timer,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -264,6 +285,7 @@ impl ComputerHardwareDevice {
             Self::TextDisplay => TextDisplayDevice::SIZE,
             Self::Framebuffer => FramebufferDevice::SIZE,
             Self::StoragePort(_) => StoragePortDevice::SIZE,
+            Self::Timer => TimerDevice::SIZE,
         }
     }
 }

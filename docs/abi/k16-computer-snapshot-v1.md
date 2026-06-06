@@ -1,4 +1,4 @@
-# Rux Computer Snapshot v1
+# K16 Computer Snapshot v1
 
 ## Status
 
@@ -11,7 +11,8 @@ across host unload/load boundaries.
 
 The current v1 slice records a versioned header, full RAM bytes, fixed-size
 K16 CPU continuation records, and explicit device records for `control`,
-`debug`, `display0`, serial input, and the `storage0` controller.
+`debug`, `display0`, serial input, the `storage0` controller, and `timer0`
+game ticks.
 
 ## File Layout
 
@@ -88,6 +89,7 @@ kind  payload
 5     storage0 controller: status i32, error i32, lba_low u32,
       lba_high u32, block_count u32, buffer_addr u32, bytes_done u32,
       sequence u64
+6     timer0: game_ticks u64
 ```
 
 Unknown device kinds are rejected. `control` payloads must be exactly 12 bytes.
@@ -95,21 +97,26 @@ The transient `control.yield` request bit is not serialized.
 `debug` payloads may be empty. `display0` payloads must contain at least 24
 bytes of metadata, and the remaining cell byte count must equal
 `columns * rows`. `storage0` controller payloads must be exactly 36 bytes.
+`timer0` payloads must be exactly 8 bytes.
 
 `storage0` media contents are not stored in `K16SNAP`; they remain part of the
 configured storage media. `STORAGE0_MEDIA_STATUS` is derived from the restored
 profile/media rather than serialized as controller state.
 
+`timer0.game_ticks` is serialized so guest simulation time continues after
+restore. `timer0.monotonic_nanos` is not serialized; a restored machine gets a
+fresh host monotonic origin.
+
 ## Restore Semantics
 
 Full restore recreates RAM, CPU contexts, `boot_cpu_id`, `control` state,
 `debug` output, `display0` screen state, pending serial input bytes, and
-`storage0` controller registers from the snapshot against an explicitly
-provided `ComputerMachineProfile`. Restore must reject a snapshot when its
-`ram_size` differs from the target profile memory size, when the boot CPU id
-points outside the CPU table, when a CPU record contains an unsupported
-kind/state/reserved field, or when the target profile does not expose a device
-recorded by the snapshot.
+`storage0` controller registers, and `timer0.game_ticks` from the snapshot
+against an explicitly provided `ComputerMachineProfile`. Restore must reject a
+snapshot when its `ram_size` differs from the target profile memory size, when
+the boot CPU id points outside the CPU table, when a CPU record contains an
+unsupported kind/state/reserved field, or when the target profile does not
+expose a device recorded by the snapshot.
 
 RAM-only restore remains available as an explicitly named operation for tooling
 that only wants RAM bytes. It does not recreate CPU contexts, boot CPU id,
@@ -136,6 +143,7 @@ A decoder must reject:
 - invalid fixed-size device payload lengths;
 - invalid `display0` cell counts;
 - invalid `storage0` controller payload length;
+- invalid `timer0` payload length;
 - trailing bytes after declared device records.
 
 There is no fallback decoder for unknown snapshot formats.

@@ -12,6 +12,7 @@ pub const COMPUTER_SNAPSHOT_V1_DEBUG_DEVICE_KIND: u32 = 2;
 pub const COMPUTER_SNAPSHOT_V1_DISPLAY0_DEVICE_KIND: u32 = 3;
 pub const COMPUTER_SNAPSHOT_V1_SERIAL_INPUT_DEVICE_KIND: u32 = 4;
 pub const COMPUTER_SNAPSHOT_V1_STORAGE0_DEVICE_KIND: u32 = 5;
+pub const COMPUTER_SNAPSHOT_V1_TIMER0_DEVICE_KIND: u32 = 6;
 const NO_BOOT_CPU: u32 = u32::MAX;
 const K16_CPU_STATE_RUNNING: u32 = 1;
 const K16_CPU_STATE_HALTED: u32 = 2;
@@ -19,6 +20,7 @@ const K16_CPU_STATE_TRAPPED: u32 = 3;
 const CONTROL_DEVICE_PAYLOAD_SIZE: usize = 12;
 const DISPLAY0_DEVICE_PAYLOAD_HEADER_SIZE: usize = 24;
 const STORAGE0_DEVICE_PAYLOAD_SIZE: usize = 36;
+const TIMER0_DEVICE_PAYLOAD_SIZE: usize = 8;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ComputerMachineSnapshotHeader {
@@ -69,6 +71,9 @@ pub enum ComputerDeviceSnapshotRecord {
         buffer_addr: u32,
         bytes_done: u32,
         sequence: u64,
+    },
+    Timer0 {
+        game_ticks: u64,
     },
 }
 
@@ -283,6 +288,7 @@ fn device_record_size(record: &ComputerDeviceSnapshotRecord) -> usize {
         }
         ComputerDeviceSnapshotRecord::SerialInput { bytes } => bytes.len(),
         ComputerDeviceSnapshotRecord::Storage0 { .. } => STORAGE0_DEVICE_PAYLOAD_SIZE,
+        ComputerDeviceSnapshotRecord::Timer0 { .. } => TIMER0_DEVICE_PAYLOAD_SIZE,
     }
 }
 
@@ -357,6 +363,11 @@ fn encode_device_record(
             write_u32(bytes, *buffer_addr);
             write_u32(bytes, *bytes_done);
             write_u64(bytes, *sequence);
+        }
+        ComputerDeviceSnapshotRecord::Timer0 { game_ticks } => {
+            write_u32(bytes, COMPUTER_SNAPSHOT_V1_TIMER0_DEVICE_KIND);
+            write_u32(bytes, TIMER0_DEVICE_PAYLOAD_SIZE as u32);
+            write_u64(bytes, *game_ticks);
         }
     }
     Ok(())
@@ -468,6 +479,17 @@ fn decode_device_record(
                 buffer_addr: read_u32(payload, 20)?,
                 bytes_done: read_u32(payload, 24)?,
                 sequence: read_u64(payload, 28)?,
+            }
+        }
+        COMPUTER_SNAPSHOT_V1_TIMER0_DEVICE_KIND => {
+            if payload.len() != TIMER0_DEVICE_PAYLOAD_SIZE {
+                return Err(format!(
+                    "ComputerMachine snapshot timer0 device payload has {} bytes but expected {TIMER0_DEVICE_PAYLOAD_SIZE}",
+                    payload.len()
+                ));
+            }
+            ComputerDeviceSnapshotRecord::Timer0 {
+                game_ticks: read_u64(payload, 0)?,
             }
         }
         _ => {

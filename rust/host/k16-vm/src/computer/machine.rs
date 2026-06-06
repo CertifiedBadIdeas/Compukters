@@ -1,6 +1,6 @@
 use crate::computer::devices::{
     ComputerControlDevice, ComputerTextDisplaySnapshot, DebugSerialDevice, FramebufferDevice,
-    SerialInputDevice, StoragePortDevice, TextDisplayDevice,
+    SerialInputDevice, StoragePortDevice, TextDisplayDevice, TimerDevice,
 };
 use crate::computer::profile::ComputerMachineProfile;
 use crate::computer_abi;
@@ -24,6 +24,7 @@ pub struct ComputerMachine {
     display0_device_id: Option<MmioDeviceId>,
     framebuffer0_device_id: Option<MmioDeviceId>,
     storage0_device_id: Option<MmioDeviceId>,
+    timer0_device_id: Option<MmioDeviceId>,
     bios_flash_device_id: Option<MmioDeviceId>,
     cpus: Vec<ComputerCpuContext>,
     boot_cpu: Option<CpuId>,
@@ -112,6 +113,7 @@ impl ComputerMachine {
     pub const HARDWARE_ID_DISPLAY0: u32 = computer_abi::COMPUTER_HARDWARE_ID_DISPLAY0;
     pub const HARDWARE_ID_STORAGE0: u32 = computer_abi::COMPUTER_HARDWARE_ID_STORAGE0;
     pub const HARDWARE_ID_FRAMEBUFFER0: u32 = computer_abi::COMPUTER_HARDWARE_ID_FRAMEBUFFER0;
+    pub const HARDWARE_ID_TIMER0: u32 = computer_abi::COMPUTER_HARDWARE_ID_TIMER0;
     pub const CONTROL_BASE: u32 = computer_abi::CONTROL_BASE;
     pub const CONTROL_STATUS: u32 = computer_abi::CONTROL_STATUS;
     pub const CONTROL_PANIC_CODE: u32 = computer_abi::CONTROL_PANIC_CODE;
@@ -194,6 +196,14 @@ impl ComputerMachine {
     pub const STORAGE0_SEQUENCE_HIGH: u32 = computer_abi::STORAGE0_SEQUENCE_HIGH;
     pub const STORAGE0_MEDIA_STATUS: u32 = computer_abi::STORAGE0_MEDIA_STATUS;
     pub const STORAGE0_SIZE: u32 = computer_abi::STORAGE0_SIZE;
+    pub const TIMER0_BASE: u32 = computer_abi::TIMER0_BASE;
+    pub const TIMER0_VERSION: u32 = computer_abi::TIMER0_VERSION;
+    pub const TIMER0_GAME_TICKS_LOW: u32 = computer_abi::TIMER0_GAME_TICKS_LOW;
+    pub const TIMER0_GAME_TICKS_HIGH: u32 = computer_abi::TIMER0_GAME_TICKS_HIGH;
+    pub const TIMER0_MONOTONIC_NANOS_LOW: u32 = computer_abi::TIMER0_MONOTONIC_NANOS_LOW;
+    pub const TIMER0_MONOTONIC_NANOS_HIGH: u32 = computer_abi::TIMER0_MONOTONIC_NANOS_HIGH;
+    pub const TIMER0_SIZE: u32 = computer_abi::TIMER0_SIZE;
+    pub const TIMER0_VERSION_VALUE: i32 = computer_abi::TIMER0_VERSION_VALUE;
     pub const K16_BIOS_FLASH_BASE: u32 = 0xFFF0_0000;
     pub const STATUS_RESET: i32 = computer_abi::STATUS_RESET;
     pub const STATUS_BOOTING: i32 = computer_abi::STATUS_BOOTING;
@@ -249,6 +259,7 @@ impl ComputerMachine {
         self.push_memory_map_region(&mut map, self.display0_device_id, "display0");
         self.push_memory_map_region(&mut map, self.framebuffer0_device_id, "framebuffer0");
         self.push_memory_map_region(&mut map, self.storage0_device_id, "storage0");
+        self.push_memory_map_region(&mut map, self.timer0_device_id, "timer0");
         self.push_memory_map_region_with_flags(
             &mut map,
             self.bios_flash_device_id,
@@ -404,6 +415,16 @@ impl ComputerMachine {
             .unwrap_or_default()
     }
 
+    pub fn advance_game_tick(&mut self) {
+        if let Some(timer0) = self.timer0_device_mut() {
+            timer0.advance_game_tick();
+        }
+    }
+
+    pub fn timer0_game_ticks(&self) -> Option<u64> {
+        self.timer0_device().map(TimerDevice::game_ticks)
+    }
+
     fn push_memory_map_region(
         &self,
         map: &mut ComputerMemoryMap,
@@ -488,6 +509,16 @@ impl ComputerMachine {
     fn storage0_device_mut(&mut self) -> Option<&mut StoragePortDevice> {
         self.storage0_device_id
             .and_then(|id| self.bus.device_mut::<StoragePortDevice>(id))
+    }
+
+    fn timer0_device(&self) -> Option<&TimerDevice> {
+        self.timer0_device_id
+            .and_then(|id| self.bus.device::<TimerDevice>(id))
+    }
+
+    fn timer0_device_mut(&mut self) -> Option<&mut TimerDevice> {
+        self.timer0_device_id
+            .and_then(|id| self.bus.device_mut::<TimerDevice>(id))
     }
 
     fn control_device_mut(&mut self) -> Option<&mut ComputerControlDevice> {

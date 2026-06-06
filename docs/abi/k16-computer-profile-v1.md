@@ -57,6 +57,7 @@ id  name          mmio_base     mmio_size
 4   display0      0x1000_0300   0x0000_0100
 5   storage0      0x1000_0400   0x0000_0100
 6   framebuffer0  0x1000_0500   0x0000_0100
+7   timer0        0x1000_0600   0x0000_0100
 ```
 
 Firmware should discover these ranges through `BootInfo.hardware_table_addr` and
@@ -253,6 +254,46 @@ bytes. `buffer_stride_bytes` must be at least `rect_width * 2`.
 `present` emits dirty framebuffer tiles to the host display-frame path and
 increments the framebuffer sequence if a frame is emitted. Dirty pixels are not
 sent to the host until firmware writes `command = present`.
+
+## Timer0 MMIO
+
+The timer0 range exposes polling-only time counters for guest firmware and
+kernel code. It does not deliver interrupts in profile v1.
+
+All multi-byte registers are little-endian and read-only for guest code.
+
+```text
+offset  size  access  name
+0x00    4     R       version
+0x04    4     R       game_ticks_low
+0x08    4     R       game_ticks_high
+0x0C    4     R       monotonic_nanos_low
+0x10    4     R       monotonic_nanos_high
+```
+
+Version:
+
+```text
+1  timer MMIO v1
+```
+
+`game_ticks` is a `u64` split into low/high `u32` words. The host advances it
+once for each high-level runtime tick before native CPU turns run. It follows
+Minecraft/server simulation time, so guest OS sleep, scheduler ticks, firmware
+delays, and device cooldowns should use this counter.
+
+`monotonic_nanos` is a `u64` split into low/high `u32` words. It measures host
+monotonic elapsed nanoseconds since the native machine/runtime instance was
+created or restored. Guest diagnostics, profiling, and clocks may use it, but
+it should not drive simulation sleeps.
+
+Multi-word reads are not atomic. Firmware that requires a stable `u64` should
+read high, then low, then high again and retry if the two high words differ.
+
+CPU execution progress is a separate concept from `timer0`. K16 currently
+tracks VM steps internally, not physical CPU cycles. If guest-visible CPU work
+counters become necessary, they should be exposed as future performance or
+progress counters rather than as the OS sleep timer.
 
 ## Storage0 MMIO
 
