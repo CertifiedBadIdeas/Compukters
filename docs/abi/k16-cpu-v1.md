@@ -455,6 +455,7 @@ csr  access  name               semantics
 5    R/W     interrupt_enable   0 disables async interrupt delivery, non-zero enables it
 6    R/W     interrupt_mask     enabled interrupt source bitmask
 7    R       interrupt_pending  pending interrupt source bitmask
+8    R       trap_arg0          first captured syscall argument, or 0 otherwise
 ```
 
 Writes to read-only CSRs raise an explicit synchronous trap.
@@ -475,10 +476,13 @@ instruction.
 The initial K16 syscall ABI v0 is a guest/runtime convention layered on this
 CPU instruction. The CPU does not decode syscall tables. `k16-rt`
 `syscall0(number)` receives `number` in the Rust arg0 register (`r1`), executes
-`syscall r1`, and returns the kernel result from `r0`. The kernel interprets
-`trap_value` as the syscall number, may clobber `r1..r4`, and returns a `u32`
-result by placing it in `r0` before `iret`. Registers `r5..r15` are preserved
-unless a future ABI revision extends the clobber set.
+`syscall r1`, and returns the kernel result from `r0`. `syscall1(number, arg0)`
+receives `number` in `r1` and `arg0` in `r2`, executes `syscall r1`, and lets
+the CPU capture `r2` into `trap_arg0` before entering the kernel. The kernel
+interprets `trap_value` as the syscall number, reads `trap_arg0` for the first
+argument, may clobber `r1..r4`, and returns a `u32` result by placing it in
+`r0` before `iret`. Registers `r5..r15` are preserved unless a future ABI
+revision extends the clobber set.
 
 Asynchronous interrupts are delivered between guest instructions. Delivery
 requires `interrupt_enable != 0` and a source bit present in both

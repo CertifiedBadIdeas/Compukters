@@ -13,6 +13,8 @@ static mut TIMER0_LAST_GAME_TICK: u32 = 0;
 
 const SYSCALL_DEBUG_MARKER: u32 = cpu::csr::TRAP_CAUSE;
 const SYSCALL_DEBUG_MARKER_RETURN: u32 = 0x53;
+const SYSCALL_DEBUG_WRITE_BYTE: u32 = 3;
+const SYSCALL_STATUS_OK: u32 = 0;
 
 #[no_mangle]
 pub extern "C" fn _start() -> ! {
@@ -64,6 +66,11 @@ fn dispatch_syscall(number: u32) -> ! {
         print_debug_byte(b'S');
         set_ready();
         unsafe { k16_rt::iret_with_r0(SYSCALL_DEBUG_MARKER_RETURN) }
+    }
+
+    if number == SYSCALL_DEBUG_WRITE_BYTE {
+        print_debug_byte((k16_rt::syscall_arg0() & 0xff) as u8);
+        unsafe { k16_rt::iret_with_r0(SYSCALL_STATUS_OK) }
     }
 
     kernel_trap();

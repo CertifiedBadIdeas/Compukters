@@ -45,6 +45,7 @@ pub mod cpu {
         pub const INTERRUPT_ENABLE: u32 = 5;
         pub const INTERRUPT_MASK: u32 = 6;
         pub const INTERRUPT_PENDING: u32 = 7;
+        pub const TRAP_ARG0: u32 = 8;
     }
 
     pub mod trap_cause {
@@ -355,6 +356,7 @@ mod tests {
         assert_eq!(cpu::csr::INTERRUPT_ENABLE, 5);
         assert_eq!(cpu::csr::INTERRUPT_MASK, 6);
         assert_eq!(cpu::csr::INTERRUPT_PENDING, 7);
+        assert_eq!(cpu::csr::TRAP_ARG0, 8);
         assert_eq!(cpu::interrupt_source::TIMER0, 0x0000_0001);
         assert_eq!(cpu::trap_cause::TIMER0_INTERRUPT, 0x8000_0001);
         assert!(cpu::trap_cause::is_interrupt(

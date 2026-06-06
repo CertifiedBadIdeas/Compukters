@@ -1,6 +1,7 @@
 use k16_vm::computer_machine::{
-    decode_snapshot_v1, ComputerMachine, ComputerMachineProfile, COMPUTER_SNAPSHOT_V1_HEADER_SIZE,
-    COMPUTER_SNAPSHOT_V1_K16_CPU_RECORD_SIZE, COMPUTER_SNAPSHOT_V1_MAGIC,
+    decode_snapshot_v1, ComputerCpuSnapshotRecord, ComputerMachine, ComputerMachineProfile,
+    COMPUTER_SNAPSHOT_V1_HEADER_SIZE, COMPUTER_SNAPSHOT_V1_K16_CPU_RECORD_SIZE,
+    COMPUTER_SNAPSHOT_V1_MAGIC,
 };
 use k16_vm::k16::{
     K16Signal, K16_CSR_INTERRUPT_ENABLE, K16_CSR_INTERRUPT_MASK, K16_CSR_TRAP_VALUE,
@@ -107,7 +108,7 @@ fn computer_machine_snapshot_v1_restores_boot_cpu_continuation_state() {
 fn computer_machine_snapshot_v1_restores_k16_interrupt_state() {
     let entry_pc = 0x100;
     let mut words = Vec::new();
-    words.extend([const32(1), (entry_pc + 32) as u16, 0]);
+    words.extend([const32(1), (entry_pc + 30) as u16, 0]);
     words.push(write_csr(K16_CSR_TRAP_VECTOR, 1));
     words.push(const4(1, K16_INTERRUPT_SOURCE_TIMER0 as u16));
     words.push(write_csr(K16_CSR_INTERRUPT_MASK, 1));
@@ -126,10 +127,10 @@ fn computer_machine_snapshot_v1_restores_k16_interrupt_state() {
     let bios = k16_words(&[halt()]);
     let program = k16_words(&words);
     let (mut machine, boot_cpu) =
-        ComputerMachine::from_k16_bios_flash(&bios, 1024, 6).expect("machine creates");
+        ComputerMachine::from_k16_bios_flash(&bios, 1024, 7).expect("machine creates");
     machine.write_guest_ram_bytes(entry_pc, &program).unwrap();
     machine
-        .boot_handoff_k16_from_ram(entry_pc, program.len() as u32, 6)
+        .boot_handoff_k16_from_ram(entry_pc, program.len() as u32, 7)
         .expect("boot handoff succeeds");
 
     assert_eq!(
@@ -149,6 +150,36 @@ fn computer_machine_snapshot_v1_restores_k16_interrupt_state() {
         K16Signal::Halt
     );
     assert_eq!(restored.panic_code(), 1);
+}
+
+#[test]
+fn computer_machine_snapshot_v1_preserves_k16_trap_arg0() {
+    let entry_pc = 0x100;
+    let mut words = Vec::new();
+    words.extend([const32(1), (entry_pc + 18) as u16, 0]);
+    words.push(write_csr(K16_CSR_TRAP_VECTOR, 1));
+    words.push(const4(1, 3));
+    words.extend([const32(2), 0x21, 0]);
+    words.push(syscall(1));
+    let bios = k16_words(&[halt()]);
+    let program = k16_words(&words);
+    let (mut machine, boot_cpu) =
+        ComputerMachine::from_k16_bios_flash(&bios, 1024, 5).expect("machine creates");
+    machine.write_guest_ram_bytes(entry_pc, &program).unwrap();
+    machine
+        .boot_handoff_k16_from_ram(entry_pc, program.len() as u32, 6)
+        .expect("boot handoff succeeds");
+
+    assert_eq!(
+        machine.run_boot_k16_until_signal(boot_cpu).unwrap(),
+        K16Signal::StepLimitExceeded
+    );
+
+    let snapshot = machine.snapshot_v1().expect("snapshot encodes");
+    let decoded = decode_snapshot_v1(&snapshot).expect("snapshot decodes");
+    let ComputerCpuSnapshotRecord::K16 { cpu, .. } = &decoded.cpus[0];
+
+    assert_eq!(cpu.trap_arg0, 0x21);
 }
 
 #[test]
@@ -551,6 +582,10 @@ fn read_csr(dst: u16, csr: u32) -> u16 {
 
 fn write_csr(csr: u32, src: u16) -> u16 {
     0x0003 | ((csr as u16) << 8) | (src << 4)
+}
+
+fn syscall(register: u16) -> u16 {
+    0x0005 | (register << 8)
 }
 
 fn iret() -> u16 {
