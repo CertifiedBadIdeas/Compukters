@@ -1,5 +1,5 @@
 use k16_tools::k16e;
-use k16_vm::computer_machine::ComputerMachine;
+use k16_vm::computer_machine::{decode_snapshot_v1, ComputerCpuSnapshotRecord, ComputerMachine};
 use k16_vm::k16::K16Signal;
 use k16_vm::k16_computer::K16ComputerHandle;
 use std::fs;
@@ -165,6 +165,83 @@ fn k16_runtime_startup_does_not_hide_missing_helper_symbols() {
 }
 
 #[test]
+fn k16_runtime_cpu_helpers_resolve_k16_cpu_symbols() {
+    let startup_path = temp_file("cpu-helper-startup.o");
+    let helper_path = temp_file("cpu-helpers.o");
+    let main_path = temp_file("cpu-helper-main.o");
+    let output_path = temp_file("cpu-helper-program.k16e");
+    fs::write(
+        &main_path,
+        k16_main_calling_undefined_helper_with_arg("__k16_write_trap_vector", 0x1234),
+    )
+    .expect("main object writes");
+
+    let startup_output = Command::new(k16_binary())
+        .args([
+            "runtime",
+            "k16-startup",
+            "-o",
+            startup_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("k16 runtime startup runs");
+    assert!(
+        startup_output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&startup_output.stderr)
+    );
+
+    let helper_output = Command::new(k16_binary())
+        .args([
+            "runtime",
+            "k16-cpu-helpers",
+            "-o",
+            helper_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("k16 runtime cpu helpers runs");
+    assert!(
+        helper_output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&helper_output.stderr)
+    );
+
+    let link_output = Command::new(k16_binary())
+        .args([
+            "link",
+            "--target",
+            "program",
+            startup_path.to_str().unwrap(),
+            main_path.to_str().unwrap(),
+            helper_path.to_str().unwrap(),
+            "-o",
+            output_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("k16 link runs");
+    assert!(
+        link_output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&link_output.stderr)
+    );
+
+    let program = fs::read(output_path).expect("linked program reads");
+    let mut handle = K16ComputerHandle::create_k16_bios_flash(&[0x01, 0x00], 64 * 1024, 1_000_000)
+        .expect("K16 computer creates");
+    handle
+        .exec_k16e_program_from_bytes(&program, 1_000_000)
+        .expect("program installs");
+
+    assert_eq!(handle.run_k16_until_signal().unwrap(), K16Signal::Halt);
+    assert_eq!(handle.debug_output_bytes(), &[0]);
+    assert_eq!(handle.control().status, ComputerMachine::STATUS_HALTED);
+    let snapshot_bytes = handle.snapshot_v1().expect("snapshot encodes");
+    let snapshot = decode_snapshot_v1(&snapshot_bytes).expect("snapshot decodes");
+    let ComputerCpuSnapshotRecord::K16 { cpu, .. } = &snapshot.cpus[0];
+    assert_eq!(cpu.trap_vector, 0x1234);
+}
+
+#[test]
 fn k16_runtime_memory_helpers_require_custom_k16_rustc() {
     let helper_path = temp_file("memory-helpers.o");
 
@@ -199,6 +276,14 @@ fn k16_main_calling_undefined_helper(helper: &str) -> Vec<u8> {
         &[0x01, 0xee, 0, 0, 0, 0, 0x00, 0x8e, 0x00, 0x90],
         Some((2, 2, helper)),
     )
+}
+
+fn k16_main_calling_undefined_helper_with_arg(helper: &str, arg: u32) -> Vec<u8> {
+    let mut text = Vec::new();
+    text.extend([0x01, 0xe1]);
+    text.extend(arg.to_le_bytes());
+    text.extend([0x01, 0xee, 0, 0, 0, 0, 0x00, 0x8e, 0x00, 0x90]);
+    k16_object("main", &text, Some((8, 2, helper)))
 }
 
 fn k16_object(defined_symbol: &str, text: &[u8], relocation: Option<(u32, u32, &str)>) -> Vec<u8> {

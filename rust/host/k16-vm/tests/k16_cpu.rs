@@ -454,6 +454,36 @@ fn k16_timer_interrupt_enters_vector_and_iret_resumes_guest_pc() {
 }
 
 #[test]
+fn k16_iret_restores_interrupted_stack_pointer() {
+    let mut bus = MachineBus::new(64).unwrap();
+    let mut program = Vec::new();
+    program.extend(const32(1, 32));
+    program.push(write_csr(K16_CSR_TRAP_VECTOR, 1));
+    program.push(const4(1, K16_INTERRUPT_SOURCE_TIMER0 as u8));
+    program.push(write_csr(K16_CSR_INTERRUPT_MASK, 1));
+    program.push(const4(1, 1));
+    program.push(write_csr(K16_CSR_INTERRUPT_ENABLE, 1));
+    program.push(const4(2, 9));
+    program.push(halt());
+    program.extend([0; 6]);
+    program.push(const4(K16_STACK_POINTER_REGISTER, 4));
+    program.push(iret());
+    write_words(&mut bus, 0, &program);
+    let mut cpu = K16Cpu::new_with_stack(0, 60);
+
+    assert_eq!(
+        cpu.run_until_signal(&mut bus, 6).unwrap(),
+        K16Signal::StepLimitExceeded,
+    );
+
+    cpu.request_interrupt(K16_INTERRUPT_SOURCE_TIMER0, 77);
+
+    assert_eq!(cpu.run_until_signal(&mut bus, 16).unwrap(), K16Signal::Halt);
+    assert_eq!(cpu.register(2), 9);
+    assert_eq!(cpu.register(usize::from(K16_STACK_POINTER_REGISTER)), 60);
+}
+
+#[test]
 fn k16_timer_interrupt_remains_pending_while_masked() {
     let mut bus = MachineBus::new(64).unwrap();
     write_words(

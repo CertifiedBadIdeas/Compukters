@@ -466,11 +466,12 @@ then sets `pc = trap_vector`.
 Asynchronous interrupts are delivered between guest instructions. Delivery
 requires `interrupt_enable != 0` and a source bit present in both
 `interrupt_pending` and `interrupt_mask`. Entering an interrupt records the
-interrupted `pc`, records the cause/value, clears the delivered pending bit,
-sets `pc = trap_vector`, and disables global interrupt delivery. `iret`
-resumes at `trap_pc` and re-enables global interrupt delivery. Nested
-interrupts, interrupt priorities, and separate interrupt-controller hardware
-are not part of this ABI slice.
+interrupted `pc`, interrupted stack pointer, and cause/value, clears the
+delivered pending bit, sets `pc = trap_vector`, and disables global interrupt
+delivery. `iret` restores the interrupted stack pointer, resumes at `trap_pc`,
+and re-enables global interrupt delivery. Nested interrupts, interrupt
+priorities, and separate interrupt-controller hardware are not part of this ABI
+slice.
 
 Current trap and interrupt causes:
 

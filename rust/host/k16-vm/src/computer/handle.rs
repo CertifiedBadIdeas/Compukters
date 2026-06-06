@@ -205,6 +205,17 @@ impl K16ComputerHandle {
             .boot_handoff_k16_from_ram(entry_pc, byte_len, max_steps)
     }
 
+    pub fn boot_handoff_k16_from_guest_ram_with_stack(
+        &mut self,
+        entry_pc: u32,
+        byte_len: u32,
+        max_steps: u64,
+        stack_top: u32,
+    ) -> Result<CpuId, BootHandoffError> {
+        self.machine
+            .boot_handoff_k16_from_ram_with_stack(entry_pc, byte_len, max_steps, stack_top)
+    }
+
     pub fn exec_k16e_program_from_bytes(
         &mut self,
         program: &[u8],

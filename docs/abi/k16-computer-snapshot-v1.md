@@ -61,7 +61,7 @@ offset  size  field
 0x28    4     interrupt_mask
 0x2C    4     interrupt_pending
 0x30    4     timer0_interrupt_value
-0x34    4     reserved: 0
+0x34    4     trap_stack_pointer
 0x38    64    registers r0..r15, 32-bit each
 0x78    8     metrics_steps
 ```

@@ -54,6 +54,14 @@ pub mod cpu {
         pub const STORE_FAULT: u32 = 4;
         pub const EXPLICIT_TRAP: u32 = 5;
         pub const TIMER0_INTERRUPT: u32 = 0x8000_0001;
+
+        pub const fn is_interrupt(cause: u32) -> bool {
+            (cause as i32) < 0
+        }
+
+        pub const fn interrupt_source(cause: u32) -> u32 {
+            (cause << 1) >> 1
+        }
     }
 
     pub mod interrupt_source {
@@ -241,6 +249,16 @@ mod tests {
         assert_eq!(cpu::csr::INTERRUPT_PENDING, 7);
         assert_eq!(cpu::interrupt_source::TIMER0, 0x0000_0001);
         assert_eq!(cpu::trap_cause::TIMER0_INTERRUPT, 0x8000_0001);
+        assert!(cpu::trap_cause::is_interrupt(
+            cpu::trap_cause::TIMER0_INTERRUPT
+        ));
+        assert!(!cpu::trap_cause::is_interrupt(
+            cpu::trap_cause::ILLEGAL_INSTRUCTION
+        ));
+        assert_eq!(
+            cpu::trap_cause::interrupt_source(cpu::trap_cause::TIMER0_INTERRUPT),
+            cpu::interrupt_source::TIMER0
+        );
     }
 
     #[test]

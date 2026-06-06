@@ -31,6 +31,8 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("tasks.register(\"linkK16BiosFlash\")"))
         assertTrue(source.contains("fun Project.compileK16GuestRustBin("))
         assertTrue(source.contains("ProcessBuilder(command)"))
+        assertTrue(source.contains("k16-cpu-helpers"))
+        assertTrue(source.contains("rust/host/k16-tools/Cargo.toml"))
         assertTrue(source.contains("rootProject.tasks.named(\"prepareK16Toolchain\")"))
         assertTrue(source.contains("resolveK16Toolchain()"))
         assertTrue(rootBuildScript.contains("prepareK16Toolchain"))
@@ -122,7 +124,7 @@ class K16FirmwareResourceTest {
             val debug = runtime.outputSnapshot().decodeToString()
 
             assertEquals(
-                NativeK16ComputerControl.STATUS_HALTED,
+                NativeK16ComputerControl.STATUS_READY,
                 control.status,
                 "display row 0: $row0, panic code: ${control.panicCode}, debug: $debug",
             )
@@ -154,7 +156,7 @@ class K16FirmwareResourceTest {
             val bootSnapshot = runtime.display0Snapshot() ?: error("display0 boot snapshot should exist")
             val bootRow0 = displayRow(bootSnapshot, 0)
 
-            assertEquals(NativeK16ComputerControl.STATUS_HALTED, bootControl.status)
+            assertEquals(NativeK16ComputerControl.STATUS_READY, bootControl.status)
             assertEquals("KERNEL OK", bootRow0)
         }
     }
@@ -173,7 +175,7 @@ class K16FirmwareResourceTest {
                 storage0Path = storage0Path,
             ).use { runtime ->
                 val control = runThroughBiosSplashAndBoot(runtime)
-                assertEquals(NativeK16ComputerControl.STATUS_HALTED, control.status)
+                assertEquals(NativeK16ComputerControl.STATUS_READY, control.status)
                 runtime.machineSnapshot()
             }
         val storage0BeforeRestore = storage0Path.readBytes()
@@ -187,8 +189,8 @@ class K16FirmwareResourceTest {
             val snapshot = restored.display0Snapshot() ?: error("restored display0 snapshot should exist")
             val row0 = displayRow(snapshot, 0)
 
-            assertEquals(NativeK16ComputerControl.STATUS_HALTED, control.status)
-            assertEquals(75, control.panicCode)
+            assertEquals(NativeK16ComputerControl.STATUS_READY, control.status)
+            assertEquals(0, control.panicCode)
             assertEquals("KERNEL OK", row0)
         }
         assertContentEquals(storage0BeforeRestore, storage0Path.readBytes())

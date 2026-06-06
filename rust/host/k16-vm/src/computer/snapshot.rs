@@ -273,7 +273,7 @@ fn encode_cpu_record(
             write_u32(bytes, cpu.interrupt_mask);
             write_u32(bytes, cpu.interrupt_pending);
             write_u32(bytes, cpu.timer0_interrupt_value);
-            write_u32(bytes, 0);
+            write_u32(bytes, cpu.trap_stack_pointer);
             for register in cpu.registers {
                 write_u32(bytes, register);
             }
@@ -523,12 +523,7 @@ fn decode_cpu_record(bytes: &[u8], index: u32) -> Result<ComputerCpuSnapshotReco
     let interrupt_mask = read_u32(bytes, 40)?;
     let interrupt_pending = read_u32(bytes, 44)?;
     let timer0_interrupt_value = read_u32(bytes, 48)?;
-    let reserved = read_u32(bytes, 52)?;
-    if reserved != 0 {
-        return Err(format!(
-            "unsupported ComputerMachine snapshot CPU {index} reserved field {reserved:#010x}"
-        ));
-    }
+    let trap_stack_pointer = read_u32(bytes, 52)?;
     let mut registers = [0_u32; 16];
     for (register_index, register) in registers.iter_mut().enumerate() {
         *register = read_u32(bytes, 56 + register_index * 4)?;
@@ -542,6 +537,7 @@ fn decode_cpu_record(bytes: &[u8], index: u32) -> Result<ComputerCpuSnapshotReco
             trap_cause,
             trap_pc,
             trap_value,
+            trap_stack_pointer,
             interrupt_enable,
             interrupt_mask,
             interrupt_pending,

@@ -433,11 +433,11 @@ fn computer_machine_snapshot_v1_rejects_invalid_cpu_record_fields() {
         "unsupported ComputerMachine snapshot K16 CPU state 99"
     );
 
-    let mut bad_reserved = snapshot.clone();
-    bad_reserved[cpu_record + 52..cpu_record + 56].copy_from_slice(&1_u32.to_le_bytes());
+    let mut bad_interrupt_enable = snapshot.clone();
+    bad_interrupt_enable[cpu_record + 36..cpu_record + 40].copy_from_slice(&2_u32.to_le_bytes());
     assert_eq!(
-        decode_snapshot_v1(&bad_reserved).unwrap_err(),
-        "unsupported ComputerMachine snapshot CPU 0 reserved field 0x00000001"
+        decode_snapshot_v1(&bad_interrupt_enable).unwrap_err(),
+        "unsupported ComputerMachine snapshot K16 CPU interrupt_enable value 2"
     );
 
     let mut bad_max_steps = snapshot;

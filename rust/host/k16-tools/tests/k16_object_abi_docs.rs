@@ -64,11 +64,15 @@ fn k16_object_abi_docs_define_freestanding_runtime_boundary() {
     for required in [
         "k16 runtime k16-startup -o <startup.ko>",
         "k16 runtime k16-memory-helpers -o <helpers.ko>",
+        "k16 runtime k16-cpu-helpers -o <cpu-helpers.ko>",
         "`_start`",
         "`main`",
         "`__k16_memcpy`",
         "`__k16_memset`",
         "`__k16_memmove`",
+        "`__k16_yield_once`",
+        "`__k16_write_trap_vector`",
+        "`__k16_iret_once`",
         "rust/guest/k16-rt/src/no_core_helpers.rs",
         "requires `K16_RUSTC`",
         "`K16_LLVM_BIN_DIR`",
@@ -97,6 +101,7 @@ fn active_abi_docs_use_k16_for_machine_tooling_commands() {
         "k16 disasm",
         "k16 runtime k16-startup",
         "k16 runtime k16-memory-helpers",
+        "k16 runtime k16-cpu-helpers",
         "k16 link",
         "K16 tooling",
     ] {

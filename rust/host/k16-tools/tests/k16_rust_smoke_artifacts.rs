@@ -34,6 +34,36 @@ fn k16_guest_interrupt_smoke_artifacts_are_documented() {
 }
 
 #[test]
+fn k16_kernel_timer_smoke_artifacts_are_documented() {
+    let root = repo_root();
+    let smoke_script = root.join("tools/k16-kernel-timer-smoke.sh");
+    let docs = root.join("docs/toolchains/k16-kernel-timer-smoke.md");
+
+    let script = fs::read_to_string(&smoke_script).expect("kernel timer smoke script exists");
+    assert!(script.contains("rust/guest/k16-kernel/Cargo.toml"));
+    assert!(script.contains("--k16-target=kernel"));
+    assert!(script.contains("k16-cpu-helpers"));
+    assert!(script.contains("decode_k16_executable"));
+    assert!(script.contains("K16eAbiKind::Kernel"));
+    assert!(script.contains("boot_handoff_k16_from_guest_ram"));
+    assert!(script.contains("advance_game_tick"));
+    assert!(script.contains("signal=yield"));
+    assert!(script.contains("debug_suffix=7c"));
+    assert!(!script.contains("intc0"));
+    assert!(!script.contains("RUX16"));
+
+    let docs = fs::read_to_string(&docs).expect("kernel timer smoke docs exist");
+    assert!(docs.contains("tools/k16-kernel-timer-smoke.sh"));
+    assert!(docs.contains("rust/guest/k16-kernel"));
+    assert!(docs.contains("k16-cpu-helpers"));
+    assert!(docs.contains("timer0"));
+    assert!(docs.contains("READY"));
+    assert!(docs.contains("debug_suffix=7c"));
+    assert!(!docs.contains("intc0"));
+    assert!(!docs.contains("RUX16"));
+}
+
+#[test]
 fn rust_nocore_smoke_artifacts_are_documented_and_strict() {
     let root = repo_root();
     let target_spec = root.join("tools/k16-unknown-kraftos.json");

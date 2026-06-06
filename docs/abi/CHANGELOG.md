@@ -59,6 +59,8 @@
   under `rust/guest`.
 - `k16 runtime k16-memory-helpers` now compiles its helper source from
   `rust/guest/k16-rt`, so host tooling no longer owns guest runtime code.
+- `k16 runtime k16-cpu-helpers` now provides explicit K16 CPU helper symbols
+  for halt, yield, CSR access, and interrupt return used by `k16-rt`.
 - `k16 runtime k16-memory-helpers` now owns the first integer compiler-rt
   helper implementations: `__divdi3`, `__udivdi3`, `__moddi3`, and
   `__umoddi3`.
