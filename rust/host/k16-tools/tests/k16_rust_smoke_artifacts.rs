@@ -70,6 +70,32 @@ fn k16_kernel_timer_smoke_artifacts_are_documented() {
 }
 
 #[test]
+fn kraft_std_layering_rule_is_documented_and_enforced() {
+    let root = repo_root();
+    let docs = root.join("docs/toolchains/kraft-std.md");
+    let k16_rt_manifest = root.join("rust/guest/k16-rt/Cargo.toml");
+    let kraft_std_source = root.join("rust/guest/kraft-std/src/lib.rs");
+
+    let docs = fs::read_to_string(&docs).expect("kraft-std docs exist");
+    assert!(docs.contains("## Layering Rule"));
+    assert!(docs.contains("`kraft-std` may depend on `k16-rt`"));
+    assert!(docs.contains("`k16-rt` must not depend on `kraft-std`"));
+    assert!(docs.contains("must not expose `pub use k16_rt::*`"));
+
+    let k16_rt_manifest = fs::read_to_string(&k16_rt_manifest).expect("k16-rt manifest exists");
+    assert!(
+        !k16_rt_manifest.contains("kraft-std"),
+        "k16-rt must stay below kraft-std and must not depend on it"
+    );
+
+    let kraft_std_source = fs::read_to_string(&kraft_std_source).expect("kraft-std source exists");
+    assert!(
+        !kraft_std_source.contains("pub use k16_rt::*"),
+        "kraft-std must expose userland APIs instead of re-exporting all runtime internals"
+    );
+}
+
+#[test]
 fn rust_nocore_smoke_artifacts_are_documented_and_strict() {
     let root = repo_root();
     let target_spec = root.join("tools/k16-unknown-kraftos.json");
