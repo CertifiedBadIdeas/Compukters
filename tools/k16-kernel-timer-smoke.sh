@@ -336,8 +336,78 @@ fn main() {
         process::exit(1);
     }
 
+    let mut unknown_handle =
+        K16ComputerHandle::create_k16_bios_flash(&[0x01, 0x00], 64 * 1024, 1_000_000)
+            .expect("K16 computer creates for unknown syscall smoke");
+    unknown_handle
+        .write_guest_ram_bytes(executable.load_addr, &executable.payload)
+        .expect("kernel payload writes to guest RAM for unknown syscall smoke");
+    unknown_handle
+        .boot_handoff_k16_from_guest_ram_with_stack(
+            executable.entry_pc,
+            executable.payload.len() as u32,
+            1_000_000,
+            KERNEL_STACK_TOP,
+        )
+        .expect("kernel boot handoff succeeds for unknown syscall smoke");
+    let unknown_first = unknown_handle
+        .run_k16_until_signal()
+        .expect("unknown syscall smoke reaches kernel idle");
+    if unknown_first != K16Signal::Yield {
+        dump_cpu_snapshot(&mut unknown_handle);
+        eprintln!(
+            "expected initial signal=yield before unknown syscall probe, got {unknown_first:?}"
+        );
+        process::exit(1);
+    }
+    let unknown_pc = boot_cpu_pc(&mut unknown_handle);
+    unknown_handle
+        .write_guest_ram_bytes(SYSCALL_PROBE_ADDR, &unknown_syscall_probe())
+        .expect("unknown syscall probe writes to guest RAM");
+    unknown_handle
+        .write_guest_ram_bytes(unknown_pc, &jump_to_syscall_probe(SYSCALL_PROBE_ADDR))
+        .expect("unknown syscall trampoline writes to guest RAM");
+    let unknown = unknown_handle
+        .run_k16_until_signal()
+        .expect("unknown syscall probe reaches kernel trap halt");
+    if unknown != K16Signal::Halt {
+        dump_cpu_snapshot(&mut unknown_handle);
+        eprintln!(
+            "expected signal=halt from unknown syscall kernel trap, got {unknown:?}"
+        );
+        process::exit(1);
+    }
+    let unknown_control = unknown_handle.control();
+    if unknown_control.status != ComputerMachine::STATUS_HALTED {
+        dump_cpu_snapshot(&mut unknown_handle);
+        eprintln!(
+            "expected HALTED host status after unknown syscall trap halt, got {}",
+            unknown_control.status
+        );
+        process::exit(1);
+    }
+    if unknown_control.panic_code != ComputerMachine::STATUS_PANIC {
+        dump_cpu_snapshot(&mut unknown_handle);
+        eprintln!(
+            "expected panic_code=PANIC after unknown syscall, got {}",
+            unknown_control.panic_code
+        );
+        process::exit(1);
+    }
+    if !unknown_handle
+        .debug_output_bytes()
+        .ends_with(b"K16 KERNEL TRAP\n")
+    {
+        dump_cpu_snapshot(&mut unknown_handle);
+        eprintln!(
+            "expected unknown syscall debug suffix to be K16 KERNEL TRAP, got {}",
+            hex_bytes(unknown_handle.debug_output_bytes())
+        );
+        process::exit(1);
+    }
+
     println!(
-        "first_signal=yield timer_signals=yield,yield syscall_signal=yield sleep_signal=yield continuation_signal=yield status=READY debug_suffix=7c7c53217c continuation_r2=83 continuation_r3=0 continuation_r4=0 continuation_r5=0"
+        "first_signal=yield timer_signals=yield,yield syscall_signal=yield sleep_signal=yield continuation_signal=yield status=READY debug_suffix=7c7c53217c continuation_r2=83 continuation_r3=0 continuation_r4=0 continuation_r5=0 unknown_signal=halt unknown_status=HALTED unknown_panic_code=4 unknown_debug_suffix=4b3136204b45524e454c20545241500a"
     );
 }
 
@@ -402,6 +472,16 @@ fn returning_syscall_probe(patch_pc: u32, original_bytes: &[u8]) -> Vec<u8> {
     emit_word(&mut bytes, load32(3, 14));
     emit_alu_rrr(&mut bytes, 14, 0x0, 14, 13);
     emit_word(&mut bytes, load32(4, 14));
+    emit_const32(&mut bytes, 14, computer_abi::CONTROL_YIELD);
+    emit_word(&mut bytes, const4(1, 1));
+    emit_word(&mut bytes, store32(14, 1));
+    bytes
+}
+
+fn unknown_syscall_probe() -> Vec<u8> {
+    let mut bytes = Vec::new();
+    emit_const32(&mut bytes, 1, 0xffff_fffe);
+    emit_word(&mut bytes, syscall(1));
     emit_const32(&mut bytes, 14, computer_abi::CONTROL_YIELD);
     emit_word(&mut bytes, const4(1, 1));
     emit_word(&mut bytes, store32(14, 1));
@@ -502,6 +582,10 @@ require_contains "$WORK_DIR/runner.stdout" "continuation_r2=83"
 require_contains "$WORK_DIR/runner.stdout" "continuation_r3=0"
 require_contains "$WORK_DIR/runner.stdout" "continuation_r4=0"
 require_contains "$WORK_DIR/runner.stdout" "continuation_r5=0"
+require_contains "$WORK_DIR/runner.stdout" "unknown_signal=halt"
+require_contains "$WORK_DIR/runner.stdout" "unknown_status=HALTED"
+require_contains "$WORK_DIR/runner.stdout" "unknown_panic_code=4"
+require_contains "$WORK_DIR/runner.stdout" "unknown_debug_suffix=4b3136204b45524e454c20545241500a"
 
 cat "$WORK_DIR/runner.stdout"
 echo "K16 kernel timer smoke passed"
