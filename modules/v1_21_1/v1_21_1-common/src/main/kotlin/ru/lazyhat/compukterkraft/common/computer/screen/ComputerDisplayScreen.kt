@@ -27,6 +27,7 @@ import net.minecraft.resources.ResourceLocation
 import net.minecraft.util.FastColor
 import net.minecraft.world.entity.player.Inventory
 import ru.lazyhat.compukterkraft.common.computer.client.ClientDisplayBuffer
+import ru.lazyhat.compukterkraft.common.computer.client.ClientDisplayBuffers
 import ru.lazyhat.compukterkraft.common.computer.input.ClientInputHandler
 import ru.lazyhat.compukterkraft.common.computer.menu.AbstractComputerMenu
 import ru.lazyhat.compukterkraft.common.computer.network.server.DisplayAttachServerMessage
@@ -35,6 +36,8 @@ import ru.lazyhat.compukterkraft.common.computer.network.server.DisplayResizeSer
 import ru.lazyhat.compukterkraft.common.network.ClientNetworking
 import ru.lazyhat.compukterkraft.common.platform.MinecraftInputProvider
 import ru.lazyhat.compukterkraft.common.ui.program.DslContainerScreen
+import ru.lazyhat.compukterkraft.common.utils.computerDataTagCopy
+import ru.lazyhat.compukterkraft.common.utils.computerID
 import ru.lazyhat.compukterkraft.core.gui.TerminalFontConstants
 import ru.lazyhat.compukterkraft.core.gui.TerminalRect
 import ru.lazyhat.compukterkraft.core.gui.WorkbenchTerminalInputController
@@ -128,7 +131,7 @@ abstract class ComputerDisplayScreen<T : AbstractComputerMenu>(
     private fun attachDisplayEndpoint() {
         val displayWidth = currentDisplayWidth()
         val displayHeight = currentDisplayHeight()
-        menu.clientSide.attachDisplayBuffer(ClientDisplayBuffer(displayId, displayWidth, displayHeight))
+        menu.clientSide.attachDisplayBuffer(displayBuffer(displayWidth, displayHeight))
         ClientNetworking.sendToServer(DisplayAttachServerMessage(menu, displayId, displayWidth, displayHeight))
     }
 
@@ -137,7 +140,7 @@ abstract class ComputerDisplayScreen<T : AbstractComputerMenu>(
         val displayHeight = currentDisplayHeight()
         val buffer = menu.clientSide.displayBuffer
         if (buffer == null || buffer.width != displayWidth || buffer.height != displayHeight) {
-            menu.clientSide.attachDisplayBuffer(ClientDisplayBuffer(displayId, displayWidth, displayHeight))
+            menu.clientSide.attachDisplayBuffer(displayBuffer(displayWidth, displayHeight))
             ClientNetworking.sendToServer(DisplayResizeServerMessage(menu, displayId, displayWidth, displayHeight))
         }
     }
@@ -154,9 +157,20 @@ abstract class ComputerDisplayScreen<T : AbstractComputerMenu>(
     private fun resetDisplayBuffer() {
         val displayWidth = currentDisplayWidth()
         val displayHeight = currentDisplayHeight()
+        menu.displayStack.computerDataTagCopy()?.computerID?.let { computerId ->
+            ClientDisplayBuffers.remove(computerId, displayId, displayWidth, displayHeight)
+        }
         menu.clientSide.detachDisplayBuffer()
         menu.clientSide.attachDisplayBuffer(ClientDisplayBuffer(displayId, displayWidth, displayHeight))
     }
+
+    private fun displayBuffer(
+        displayWidth: Int,
+        displayHeight: Int,
+    ): ClientDisplayBuffer =
+        menu.displayStack.computerDataTagCopy()?.computerID?.let { computerId ->
+            ClientDisplayBuffers.getOrCreate(computerId, displayId, displayWidth, displayHeight)
+        } ?: ClientDisplayBuffer(displayId, displayWidth, displayHeight)
 
     private fun drawDisplayTexture(guiGraphics: GuiGraphics) {
         if (!menu.isComputerOn) return
