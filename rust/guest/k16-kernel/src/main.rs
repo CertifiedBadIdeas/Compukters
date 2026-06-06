@@ -71,6 +71,11 @@ fn dispatch_syscall(number: u32) -> ! {
         unsafe { k16_rt::iret_with_r0(syscall::STATUS_OK) }
     }
 
+    if number == syscall::YIELD {
+        k16_rt::yield_once();
+        unsafe { k16_rt::iret_with_r0(syscall::STATUS_OK) }
+    }
+
     kernel_trap();
 }
 

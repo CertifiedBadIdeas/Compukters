@@ -217,3 +217,14 @@ fn debug_write_byte_uses_named_syscall_and_low_byte_argument() {
     assert_eq!(crate::trap::test_syscall_arg0(), 0x21);
     assert_eq!(returned, k16_abi::syscall::STATUS_OK);
 }
+
+#[test]
+fn yield_syscall_uses_named_syscall_and_returns_status_ok() {
+    crate::trap::reset_test_interrupts();
+    crate::trap::set_test_syscall_return(k16_abi::syscall::STATUS_OK);
+
+    let returned = yield_syscall();
+
+    assert_eq!(crate::trap::test_syscall_number(), k16_abi::syscall::YIELD);
+    assert_eq!(returned, k16_abi::syscall::STATUS_OK);
+}

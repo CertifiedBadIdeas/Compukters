@@ -52,6 +52,7 @@ fn k16_kernel_timer_smoke_artifacts_are_documented() {
     assert!(script.contains("debug_suffix=7c7c5321"));
     assert!(script.contains("continuation_r2=83"));
     assert!(script.contains("continuation_r3=0"));
+    assert!(script.contains("continuation_r4=0"));
     assert!(!script.contains("intc0"));
     assert!(!script.contains("RUX16"));
 
@@ -65,6 +66,7 @@ fn k16_kernel_timer_smoke_artifacts_are_documented() {
     assert!(docs.contains("debug_suffix=7c7c5321"));
     assert!(docs.contains("continuation_r2=83"));
     assert!(docs.contains("continuation_r3=0"));
+    assert!(docs.contains("continuation_r4=0"));
     assert!(!docs.contains("intc0"));
     assert!(!docs.contains("RUX16"));
 }

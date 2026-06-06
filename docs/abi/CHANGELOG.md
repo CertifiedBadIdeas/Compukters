@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Added `k16_abi::syscall::YIELD` and the matching `k16-rt`
+  `yield_syscall()` wrapper. The Rust kernel yields once to the host while
+  handling the syscall, then returns `STATUS_OK` through `iret`.
 - Named the current K16 syscall ABI v0 proof services in `k16_abi::syscall`
   and exposed `k16-rt` wrappers for `debug_marker()` and
   `debug_write_byte(byte)`.

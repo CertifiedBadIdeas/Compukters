@@ -1,6 +1,6 @@
 # kraft-std Guest Library
 
-Issue: [#192](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/192)
+Issue: [#192](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/192), [#194](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/194)
 
 `rust/guest/kraft-std` is the experimental KraftOS userland library boundary for
 guest Rust programs. It is intentionally separate from the lower-level K16
@@ -18,10 +18,11 @@ The initial `kraft-std` surface is deliberately small:
 | --- | --- | --- |
 | `kraft_std::debug::marker()` | `k16_rt::debug_marker()` | Calls the current debug marker proof syscall and returns the kernel result. |
 | `kraft_std::debug::write_byte(byte)` | `k16_rt::debug_write_byte(byte)` | Calls the current debug byte proof syscall and returns the kernel status. |
+| `kraft_std::thread::yield_now()` | `k16_rt::yield_syscall()` | Requests one OS-level yield through the kernel syscall path. |
 | `kraft_std::prelude` | n/a | Re-exports the early userland modules intended for guest programs. |
 
 `kraft-std` is `#![no_std]`. It is not Rust's hosted `std`, a POSIX layer, or a
-complete OS API. Allocator support, files, input, sleep/yield, process/task
+complete OS API. Allocator support, files, input, sleep, process/task
 management, and a stable error model are separate future slices.
 
 ## Layering Rule
