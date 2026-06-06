@@ -25,13 +25,15 @@ import net.minecraft.gametest.framework.GameTestHelper
 import net.minecraft.world.entity.EntityType
 import net.minecraft.world.item.ItemStack
 import net.minecraft.world.level.GameType
+import net.minecraft.world.level.block.entity.BlockEntity
 import net.neoforged.neoforge.gametest.GameTestHolder
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate
 import ru.lazyhat.compukterkraft.common.computer.block.AbstractComputerBlockEntity
-import ru.lazyhat.compukterkraft.common.computer.item.ComputerItem
+import ru.lazyhat.compukterkraft.common.notebook.item.NotebookItem
 import ru.lazyhat.compukterkraft.common.utils.computerDataTagCopy
 import ru.lazyhat.compukterkraft.common.utils.computerID
 import ru.lazyhat.compukterkraft.common.utils.computerLabel
+import ru.lazyhat.compukterkraft.common.utils.runtimeSnapshot
 import ru.lazyhat.compukterkraft.core.MOD_ID
 import ru.lazyhat.compukterkraft.impl.ModRegistry
 
@@ -41,9 +43,9 @@ class ComputerBlockGameTest {
     private fun placeComputer(
         helper: GameTestHelper,
         pos: BlockPos,
-        stack: ItemStack = ItemStack(ModRegistry.Items.COMPUTER_ADVANCED.get()),
+        stack: ItemStack = ItemStack(ModRegistry.Items.NOTEBOOK.get()),
     ) {
-        val block = ModRegistry.Blocks.COMPUTER_ADVANCED.get()
+        val block = ModRegistry.Blocks.NOTEBOOK.get()
         val player = helper.makeMockPlayer(GameType.SURVIVAL)
         helper.setBlock(pos, block)
         block.setPlacedBy(
@@ -85,6 +87,70 @@ class ComputerBlockGameTest {
         }
     }
 
+    @GameTest(template = "computer_platform", templateNamespace = MOD_ID)
+    fun runtimeSnapshotSurvivesBlockEntityReload(helper: GameTestHelper) {
+        val pos = BlockPos(1, 2, 1)
+        val absolutePos = helper.absolutePos(pos)
+        placeComputer(helper, pos)
+
+        helper.runAfterDelay(5L) {
+            val computer = ComputerGameTestEnvironment.computerAt(helper.level, absolutePos)
+            computer.getOrCreateRuntimeDevice().turnOn()
+        }
+
+        helper.runAfterDelay(25L) {
+            val originalComputer = ComputerGameTestEnvironment.computerAt(helper.level, absolutePos)
+            val expectedId =
+                requireNotNull(originalComputer.computerID) {
+                    "Expected placed computer block entity to keep an allocated id"
+                }
+            val savedTag = originalComputer.saveWithFullMetadata(helper.level.registryAccess())
+            val savedSnapshot = savedTag.runtimeSnapshot
+
+            helper.assertTrue(
+                savedSnapshot != null && savedSnapshot.isNotEmpty(),
+                "Expected live K16 runtime snapshot to be saved into block entity NBT",
+            )
+
+            helper.level.removeBlockEntity(absolutePos)
+            helper.assertFalse(
+                ComputerGameTestEnvironment.hasRegisteredServerComputer(helper.level, absolutePos),
+                "Expected removing the block entity to release the registered runtime device",
+            )
+
+            val restoredComputer =
+                requireNotNull(
+                    BlockEntity.loadStatic(
+                        absolutePos,
+                        helper.level.getBlockState(absolutePos),
+                        savedTag,
+                        helper.level.registryAccess(),
+                    ) as? AbstractComputerBlockEntity,
+                ) {
+                    "Expected saved computer NBT to load an AbstractComputerBlockEntity"
+                }
+            helper.level.setBlockEntity(restoredComputer)
+
+            val reloadedComputer = ComputerGameTestEnvironment.computerAt(helper.level, absolutePos)
+            helper.assertTrue(
+                reloadedComputer.computerID == expectedId,
+                "Expected reloaded computer to preserve id $expectedId, actual ${reloadedComputer.computerID}",
+            )
+
+            reloadedComputer.getOrCreateRuntimeDevice()
+            val reloadedSnapshot = reloadedComputer.saveWithFullMetadata(helper.level.registryAccess()).runtimeSnapshot
+            helper.assertTrue(
+                ComputerGameTestEnvironment.hasRegisteredServerComputer(helper.level, absolutePos),
+                "Expected reloaded computer to recreate a registered runtime device",
+            )
+            helper.assertTrue(
+                reloadedSnapshot?.isNotEmpty() == true,
+                "Expected reloaded computer to expose a runtime snapshot after recreation",
+            )
+            helper.succeed()
+        }
+    }
+
     @Suppress("DEPRECATION")
     @GameTest(template = "computer_platform", templateNamespace = MOD_ID)
     fun creativeDestroyDropsComputerItemWithIdAndLabel(helper: GameTestHelper) {
@@ -93,7 +159,7 @@ class ComputerBlockGameTest {
         val expectedId = 42
         val expectedLabel = "Atlas"
         val creativePlayer = helper.makeMockServerPlayerInLevel()
-        val sourceStack = (ModRegistry.Items.COMPUTER_ADVANCED.get() as ComputerItem).create(expectedId, expectedLabel)
+        val sourceStack = (ModRegistry.Items.NOTEBOOK.get() as NotebookItem).create(expectedId, expectedLabel)
 
         creativePlayer.abilities.instabuild = true
 
@@ -121,12 +187,12 @@ class ComputerBlockGameTest {
         }
 
         helper.runAfterDelay(7L) {
-            helper.assertItemEntityPresent(ModRegistry.Items.COMPUTER_ADVANCED.get(), pos, 2.0)
+            helper.assertItemEntityPresent(ModRegistry.Items.NOTEBOOK.get(), pos, 2.0)
 
             val droppedStack =
                 helper
                     .getEntities(EntityType.ITEM, pos, 2.0)
-                    .single { it.item.`is`(ModRegistry.Items.COMPUTER_ADVANCED.get()) }
+                    .single { it.item.`is`(ModRegistry.Items.NOTEBOOK.get()) }
                     .item
 
             with(droppedStack.computerDataTagCopy()!!) {
