@@ -117,6 +117,9 @@ fn disassemble_instruction(
             0x000 => DisassembledInstruction::single("nop".to_string()),
             0x001 => DisassembledInstruction::single("halt".to_string()),
             0x004 => DisassembledInstruction::single("iret".to_string()),
+            _ if b == 0 && c == 0x5 => {
+                DisassembledInstruction::single(format!("syscall r{a}"))
+            }
             _ if c == 0x2 => DisassembledInstruction::single(format!("read_csr r{a}, {b}")),
             _ if c == 0x3 => DisassembledInstruction::single(format!("write_csr {a}, r{b}")),
             _ => return Err(invalid_instruction(pc, word, "unknown system instruction")),

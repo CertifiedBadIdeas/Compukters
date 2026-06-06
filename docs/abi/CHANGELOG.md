@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Added K16 `syscall rA` as a returning explicit-trap entry. It records the
+  next PC in `trap_pc`, stores the syscall number from `rA` in `trap_value`,
+  disables interrupt delivery during the handler, and resumes through `iret`.
 - K16 profile v2 hardware table entries now include `irq_source` as a fourth
   `u32` field. `timer0` advertises source bit `0x00000001`; non-interrupting
   devices advertise `0`.

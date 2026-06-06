@@ -162,6 +162,7 @@ k16-vm = { path = "$ROOT/rust/host/k16-vm" }
 TOML
 
 cat > "$WORK_DIR/runner/src/main.rs" <<'RS'
+use k16_vm::computer_abi;
 use k16_vm::computer_machine::{decode_snapshot_v1, ComputerCpuSnapshotRecord, ComputerMachine};
 use k16_vm::k16::K16Signal;
 use k16_vm::k16_computer::K16ComputerHandle;
@@ -169,8 +170,8 @@ use k16_vm::k16e::{self, K16eAbiKind};
 use std::{env, fs, process};
 
 fn main() {
-    const K16_CSR_TRAP_CAUSE: u32 = 2;
     const KERNEL_STACK_TOP: u32 = 0x0001_0000;
+    const SYSCALL_PROBE_ADDR: u32 = 0x0000_9000;
 
     let kernel_path = env::args().nth(1).expect("kernel path argument");
     let kernel = fs::read(&kernel_path).expect("kernel K16E reads");
@@ -251,29 +252,37 @@ fn main() {
     }
 
     let syscall_pc = boot_cpu_pc(&mut handle);
+    let trampoline = jump_to_syscall_probe(SYSCALL_PROBE_ADDR);
+    let original_bytes = original_guest_bytes(&executable, syscall_pc, trampoline.len());
     handle
-        .write_guest_ram_bytes(syscall_pc, &write_csr_word(K16_CSR_TRAP_CAUSE, 0))
-        .expect("explicit trap syscall probe writes to guest RAM");
+        .write_guest_ram_bytes(
+            SYSCALL_PROBE_ADDR,
+            &returning_syscall_probe(syscall_pc, &original_bytes),
+        )
+        .expect("returning syscall probe writes to guest RAM");
+    handle
+        .write_guest_ram_bytes(syscall_pc, &trampoline)
+        .expect("returning syscall probe writes to guest RAM");
     let fourth = handle
         .run_k16_until_signal()
-        .expect("explicit trap syscall probe runs");
+        .expect("returning syscall probe runs");
     if fourth != K16Signal::Yield {
         dump_cpu_snapshot(&mut handle);
         eprintln!("debug_bytes={}", hex_bytes(handle.debug_output_bytes()));
-        eprintln!("expected signal=yield after explicit trap syscall, got {fourth:?}");
+        eprintln!("expected signal=yield after returning syscall continuation, got {fourth:?}");
         process::exit(1);
     }
-    if !handle.debug_output_bytes().ends_with(b"||S") {
+    let continuation_r2 = boot_cpu_register(&mut handle, 2);
+    if continuation_r2 != 7 {
         dump_cpu_snapshot(&mut handle);
         eprintln!(
-            "expected debug_suffix=7c7c53 after syscall proof, got {}",
-            hex_bytes(handle.debug_output_bytes())
+            "expected continuation_r2=7 after returning syscall proof, got {continuation_r2}"
         );
         process::exit(1);
     }
 
     println!(
-        "first_signal=yield timer_signals=yield,yield syscall_signal=yield status=READY debug_suffix=7c7c53"
+        "first_signal=yield timer_signals=yield,yield syscall_signal=yield status=READY debug_suffix=7c7c continuation_r2=7"
     );
 }
 
@@ -281,9 +290,77 @@ fn hex_bytes(bytes: &[u8]) -> String {
     bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
-fn write_csr_word(csr: u32, src: u8) -> [u8; 2] {
-    let word = 0x0003 | ((csr as u16) << 8) | (u16::from(src) << 4);
-    word.to_le_bytes()
+fn jump_to_syscall_probe(address: u32) -> Vec<u8> {
+    let mut bytes = Vec::new();
+    emit_const32(&mut bytes, 14, address);
+    emit_word(&mut bytes, jump(14));
+    bytes
+}
+
+fn returning_syscall_probe(patch_pc: u32, original_bytes: &[u8]) -> Vec<u8> {
+    let original_low = u32::from_le_bytes(
+        original_bytes[0..4]
+            .try_into()
+            .expect("low original bytes decode"),
+    );
+    let original_high = u32::from_le_bytes(
+        original_bytes[4..8]
+            .try_into()
+            .expect("high original bytes decode"),
+    );
+    let mut bytes = Vec::new();
+    emit_const32(&mut bytes, 14, patch_pc);
+    emit_const32(&mut bytes, 1, original_low);
+    emit_word(&mut bytes, store32(14, 1));
+    emit_const32(&mut bytes, 13, 4);
+    emit_alu_rrr(&mut bytes, 14, 0x0, 14, 13);
+    emit_const32(&mut bytes, 1, original_high);
+    emit_word(&mut bytes, store32(14, 1));
+    emit_word(&mut bytes, const4(0, 2));
+    emit_word(&mut bytes, syscall(0));
+    emit_word(&mut bytes, const4(2, 7));
+    emit_const32(&mut bytes, 14, computer_abi::CONTROL_YIELD);
+    emit_word(&mut bytes, const4(1, 1));
+    emit_word(&mut bytes, store32(14, 1));
+    bytes
+}
+
+fn emit_const32(bytes: &mut Vec<u8>, register: u8, value: u32) {
+    emit_word(bytes, 0xe001 | (u16::from(register) << 8));
+    emit_word(bytes, (value & 0xffff) as u16);
+    emit_word(bytes, (value >> 16) as u16);
+}
+
+fn emit_word(bytes: &mut Vec<u8>, word: u16) {
+    bytes.extend_from_slice(&word.to_le_bytes());
+}
+
+fn emit_alu_rrr(bytes: &mut Vec<u8>, dst: u8, subop: u8, lhs: u8, rhs: u8) {
+    emit_word(bytes, 0x2000 | (u16::from(dst) << 8) | u16::from(subop));
+    emit_word(bytes, (u16::from(lhs) << 4) | u16::from(rhs));
+}
+
+fn const4(register: u8, value: u8) -> u16 {
+    0x1000 | (u16::from(register) << 8) | u16::from(value & 0x0f)
+}
+
+fn syscall(register: u8) -> u16 {
+    0x0005 | (u16::from(register) << 8)
+}
+
+fn jump(register: u8) -> u16 {
+    0x7000 | (u16::from(register) << 8)
+}
+
+fn store32(addr: u8, src: u8) -> u16 {
+    0x5002 | (u16::from(addr) << 8) | (u16::from(src) << 4)
+}
+
+fn original_guest_bytes(executable: &k16e::K16eExecutable, address: u32, len: usize) -> Vec<u8> {
+    let start = address
+        .checked_sub(executable.load_addr)
+        .expect("patch address is inside kernel payload") as usize;
+    executable.payload[start..start + len].to_vec()
 }
 
 fn boot_cpu_pc(handle: &mut K16ComputerHandle) -> u32 {
@@ -292,6 +369,14 @@ fn boot_cpu_pc(handle: &mut K16ComputerHandle) -> u32 {
     let record = snapshot.cpus.into_iter().next().expect("boot CPU exists");
     let ComputerCpuSnapshotRecord::K16 { cpu, .. } = record;
     cpu.pc
+}
+
+fn boot_cpu_register(handle: &mut K16ComputerHandle, register: usize) -> u32 {
+    let snapshot_bytes = handle.snapshot_v1().expect("snapshot encodes");
+    let snapshot = decode_snapshot_v1(&snapshot_bytes).expect("snapshot decodes");
+    let record = snapshot.cpus.into_iter().next().expect("boot CPU exists");
+    let ComputerCpuSnapshotRecord::K16 { cpu, .. } = record;
+    cpu.registers[register]
 }
 
 fn dump_cpu_snapshot(handle: &mut K16ComputerHandle) {
@@ -325,7 +410,8 @@ RS
 "$HOST_CARGO" run --quiet --offline --manifest-path "$WORK_DIR/runner/Cargo.toml" -- "$KERNEL_KX" \
     > "$WORK_DIR/runner.stdout"
 require_contains "$WORK_DIR/runner.stdout" "signal=yield"
-require_contains "$WORK_DIR/runner.stdout" "debug_suffix=7c7c53"
+require_contains "$WORK_DIR/runner.stdout" "debug_suffix=7c7c"
+require_contains "$WORK_DIR/runner.stdout" "continuation_r2=7"
 
 cat "$WORK_DIR/runner.stdout"
 echo "K16 kernel timer smoke passed"

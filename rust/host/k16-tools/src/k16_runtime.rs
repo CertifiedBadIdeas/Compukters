@@ -121,6 +121,13 @@ pub fn k16_cpu_helpers_object() -> Vec<u8> {
         &mut text,
         &mut strtab,
         &mut symtab,
+        "__k16_syscall_once",
+        &[syscall(ARG0_REGISTER), ret()],
+    );
+    emit_symbol_function(
+        &mut text,
+        &mut strtab,
+        &mut symtab,
         "__k16_write_interrupt_enable",
         &[
             write_csr(k16_vm::k16::K16_CSR_INTERRUPT_ENABLE, ARG0_REGISTER),
@@ -300,6 +307,10 @@ fn halt() -> u16 {
 
 fn iret() -> u16 {
     0x0004
+}
+
+fn syscall(register: u8) -> u16 {
+    0x0005 | (u16::from(register) << 8)
 }
 
 fn ret() -> u16 {

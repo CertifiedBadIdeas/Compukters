@@ -134,6 +134,7 @@ pub enum DecodedInstruction {
     Call { target: usize },
     Ret,
     Iret,
+    Syscall { number: usize },
     ReadCsr { dst: usize, csr: u32 },
     WriteCsr { csr: u32, src: usize },
 }
@@ -168,6 +169,7 @@ impl InstructionDecoder for K16Decoder {
                 0x000 => DecodedInstruction::Nop,
                 0x001 => DecodedInstruction::Halt,
                 0x004 => DecodedInstruction::Iret,
+                _ if b == 0 && c == 0x5 => DecodedInstruction::Syscall { number: a },
                 _ if c == 0x2 => DecodedInstruction::ReadCsr {
                     dst: a,
                     csr: b as u32,
@@ -617,6 +619,10 @@ impl K16Cpu {
                 self.return_from_interrupt();
                 Ok(None)
             }
+            DecodedInstruction::Syscall { number } => {
+                self.raise_syscall(self.pc, self.registers[number])?;
+                Ok(None)
+            }
             DecodedInstruction::ReadCsr { dst, csr } => {
                 self.read_csr_into_register(fault_pc, dst, csr)?;
                 Ok(None)
@@ -876,6 +882,17 @@ impl K16Cpu {
     ) -> Result<(), K16Trap> {
         self.raise_exception(K16_TRAP_CAUSE_EXPLICIT_TRAP, fault_pc, value, message)
             .map(|_| ())
+    }
+
+    fn raise_syscall(&mut self, continuation_pc: u32, number: u32) -> Result<(), K16Trap> {
+        self.raise_exception(
+            K16_TRAP_CAUSE_EXPLICIT_TRAP,
+            continuation_pc,
+            number,
+            format!("syscall {number}"),
+        )?;
+        self.interrupt_enable = false;
+        Ok(())
     }
 
     fn raise_exception(
