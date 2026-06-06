@@ -15,7 +15,9 @@ const TIMER0_MONOTONIC_NANOS_LOW: u32 = 0x1000_060c;
 const TIMER0_MONOTONIC_NANOS_HIGH: u32 = 0x1000_0610;
 
 #[cfg(test)]
-use core::sync::atomic::{AtomicU64, Ordering};
+use core::sync::atomic::{AtomicU32, AtomicU64, Ordering};
+
+pub use k16_abi::cpu;
 
 #[cfg(test)]
 static TEST_TIMER0_GAME_TICKS: AtomicU64 = AtomicU64::new(0);
@@ -23,10 +25,32 @@ static TEST_TIMER0_GAME_TICKS: AtomicU64 = AtomicU64::new(0);
 static TEST_TIMER0_MONOTONIC_NANOS: AtomicU64 = AtomicU64::new(0);
 #[cfg(test)]
 static TEST_YIELD_COUNT: AtomicU64 = AtomicU64::new(0);
+#[cfg(test)]
+static TEST_TRAP_VECTOR: AtomicU32 = AtomicU32::new(0);
+#[cfg(test)]
+static TEST_TRAP_CAUSE: AtomicU32 = AtomicU32::new(0);
+#[cfg(test)]
+static TEST_TRAP_PC: AtomicU32 = AtomicU32::new(0);
+#[cfg(test)]
+static TEST_TRAP_VALUE: AtomicU32 = AtomicU32::new(0);
+#[cfg(test)]
+static TEST_INTERRUPT_ENABLE: AtomicU32 = AtomicU32::new(0);
+#[cfg(test)]
+static TEST_INTERRUPT_MASK: AtomicU32 = AtomicU32::new(0);
+#[cfg(test)]
+static TEST_INTERRUPT_PENDING: AtomicU32 = AtomicU32::new(0);
 
 #[cfg(not(test))]
 extern "C" {
     fn __k16_halt_once();
+    fn __k16_iret_once() -> !;
+    fn __k16_write_trap_vector(value: u32);
+    fn __k16_read_trap_cause() -> u32;
+    fn __k16_read_trap_pc() -> u32;
+    fn __k16_read_trap_value() -> u32;
+    fn __k16_write_interrupt_enable(value: u32);
+    fn __k16_write_interrupt_mask(value: u32);
+    fn __k16_read_interrupt_pending() -> u32;
 }
 
 #[cfg(not(test))]
@@ -52,6 +76,113 @@ pub fn halt_once() {}
 pub fn yield_once() {
     TEST_YIELD_COUNT.fetch_add(1, Ordering::Relaxed);
     TEST_TIMER0_GAME_TICKS.fetch_add(1, Ordering::Relaxed);
+}
+
+#[cfg(not(test))]
+#[inline(always)]
+pub unsafe fn install_trap_vector(address: u32) {
+    unsafe {
+        __k16_write_trap_vector(address);
+    }
+}
+
+#[cfg(test)]
+pub unsafe fn install_trap_vector(address: u32) {
+    TEST_TRAP_VECTOR.store(address, Ordering::Relaxed);
+}
+
+#[cfg(not(test))]
+#[inline(always)]
+pub fn trap_cause() -> u32 {
+    unsafe { __k16_read_trap_cause() }
+}
+
+#[cfg(test)]
+pub fn trap_cause() -> u32 {
+    TEST_TRAP_CAUSE.load(Ordering::Relaxed)
+}
+
+#[cfg(not(test))]
+#[inline(always)]
+pub fn trap_pc() -> u32 {
+    unsafe { __k16_read_trap_pc() }
+}
+
+#[cfg(test)]
+pub fn trap_pc() -> u32 {
+    TEST_TRAP_PC.load(Ordering::Relaxed)
+}
+
+#[cfg(not(test))]
+#[inline(always)]
+pub fn trap_value() -> u32 {
+    unsafe { __k16_read_trap_value() }
+}
+
+#[cfg(test)]
+pub fn trap_value() -> u32 {
+    TEST_TRAP_VALUE.load(Ordering::Relaxed)
+}
+
+#[cfg(not(test))]
+#[inline(always)]
+pub unsafe fn set_interrupt_mask(mask: u32) {
+    unsafe {
+        __k16_write_interrupt_mask(mask);
+    }
+}
+
+#[cfg(test)]
+pub unsafe fn set_interrupt_mask(mask: u32) {
+    TEST_INTERRUPT_MASK.store(mask, Ordering::Relaxed);
+}
+
+#[cfg(not(test))]
+#[inline(always)]
+pub fn interrupt_pending() -> u32 {
+    unsafe { __k16_read_interrupt_pending() }
+}
+
+#[cfg(test)]
+pub fn interrupt_pending() -> u32 {
+    TEST_INTERRUPT_PENDING.load(Ordering::Relaxed)
+}
+
+#[cfg(not(test))]
+#[inline(always)]
+pub unsafe fn enable_interrupts() {
+    unsafe {
+        __k16_write_interrupt_enable(1);
+    }
+}
+
+#[cfg(test)]
+pub unsafe fn enable_interrupts() {
+    TEST_INTERRUPT_ENABLE.store(1, Ordering::Relaxed);
+}
+
+#[cfg(not(test))]
+#[inline(always)]
+pub fn disable_interrupts() {
+    unsafe {
+        __k16_write_interrupt_enable(0);
+    }
+}
+
+#[cfg(test)]
+pub fn disable_interrupts() {
+    TEST_INTERRUPT_ENABLE.store(0, Ordering::Relaxed);
+}
+
+#[cfg(not(test))]
+#[inline(always)]
+pub unsafe fn iret_once() -> ! {
+    unsafe { __k16_iret_once() }
+}
+
+#[cfg(test)]
+pub unsafe fn iret_once() -> ! {
+    panic!("k16 interrupt return is only available on the K16 target")
 }
 
 #[cfg(not(test))]
@@ -126,6 +257,40 @@ fn set_test_timer0_monotonic_nanos(value: u64) {
 #[cfg(test)]
 fn test_yield_count() -> u64 {
     TEST_YIELD_COUNT.load(Ordering::Relaxed)
+}
+
+#[cfg(test)]
+fn reset_test_interrupts() {
+    TEST_TRAP_VECTOR.store(0, Ordering::Relaxed);
+    TEST_TRAP_CAUSE.store(0, Ordering::Relaxed);
+    TEST_TRAP_PC.store(0, Ordering::Relaxed);
+    TEST_TRAP_VALUE.store(0, Ordering::Relaxed);
+    TEST_INTERRUPT_ENABLE.store(0, Ordering::Relaxed);
+    TEST_INTERRUPT_MASK.store(0, Ordering::Relaxed);
+    TEST_INTERRUPT_PENDING.store(0, Ordering::Relaxed);
+}
+
+#[cfg(test)]
+fn set_test_trap_state(cause: u32, pc: u32, value: u32) {
+    TEST_TRAP_CAUSE.store(cause, Ordering::Relaxed);
+    TEST_TRAP_PC.store(pc, Ordering::Relaxed);
+    TEST_TRAP_VALUE.store(value, Ordering::Relaxed);
+    TEST_INTERRUPT_PENDING.store(value, Ordering::Relaxed);
+}
+
+#[cfg(test)]
+fn test_trap_vector() -> u32 {
+    TEST_TRAP_VECTOR.load(Ordering::Relaxed)
+}
+
+#[cfg(test)]
+fn test_interrupt_enable() -> u32 {
+    TEST_INTERRUPT_ENABLE.load(Ordering::Relaxed)
+}
+
+#[cfg(test)]
+fn test_interrupt_mask() -> u32 {
+    TEST_INTERRUPT_MASK.load(Ordering::Relaxed)
 }
 
 pub fn halt_forever() -> ! {
@@ -398,5 +563,36 @@ mod tests {
 
         assert_eq!(test_yield_count(), 5);
         assert_eq!(timer0_game_ticks(), 5);
+    }
+
+    #[test]
+    fn interrupt_helpers_update_test_csr_state() {
+        reset_test_interrupts();
+
+        unsafe {
+            install_trap_vector(0x0000_1234);
+            set_interrupt_mask(k16_abi::cpu::interrupt_source::TIMER0);
+            enable_interrupts();
+        }
+        set_test_trap_state(
+            k16_abi::cpu::trap_cause::TIMER0_INTERRUPT,
+            0x0000_2000,
+            k16_abi::cpu::interrupt_source::TIMER0,
+        );
+
+        assert_eq!(test_trap_vector(), 0x0000_1234);
+        assert_eq!(
+            test_interrupt_mask(),
+            k16_abi::cpu::interrupt_source::TIMER0
+        );
+        assert_eq!(test_interrupt_enable(), 1);
+        assert_eq!(trap_cause(), k16_abi::cpu::trap_cause::TIMER0_INTERRUPT);
+        assert_eq!(trap_pc(), 0x0000_2000);
+        assert_eq!(trap_value(), k16_abi::cpu::interrupt_source::TIMER0);
+        assert_eq!(interrupt_pending(), k16_abi::cpu::interrupt_source::TIMER0);
+
+        disable_interrupts();
+
+        assert_eq!(test_interrupt_enable(), 0);
     }
 }
