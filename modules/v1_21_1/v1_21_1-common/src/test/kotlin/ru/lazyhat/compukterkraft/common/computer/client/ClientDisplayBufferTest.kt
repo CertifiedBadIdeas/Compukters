@@ -25,6 +25,7 @@ import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayTile
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class ClientDisplayBufferTest {
@@ -99,5 +100,43 @@ class ClientDisplayBufferTest {
         val copied = IntArray(2)
         buffer.copyFrontArgbRegion(ClientDisplayBuffer.Region(1, 1, 2, 1), copied)
         assertEquals(listOf(0xFFFF0000.toInt(), 0xFF00FF00.toInt()), copied.toList())
+    }
+
+    @Test
+    fun cacheReusesReceivedBufferForSameComputerDisplayGeometry() {
+        val cache = ClientDisplayBufferCache()
+        val firstBuffer = cache.getOrCreate(computerId = 42, displayId = 1, width = 2, height = 1)
+        val frame =
+            DisplayFrameDelta(
+                displayId = 1,
+                sequence = 1,
+                width = 2,
+                height = 1,
+                pixelFormat = DisplayPixelFormat.RGB565,
+                fullRefresh = true,
+                tiles = listOf(DisplayTile(0, 0, 0, 0, 2, 1, byteArrayOf(0xF8.toByte(), 0x00, 0x07, 0xE0.toByte()))),
+            )
+
+        assertTrue(firstBuffer.apply(frame))
+        firstBuffer.swapIfDirty()
+
+        val reopenedBuffer = cache.getOrCreate(computerId = 42, displayId = 1, width = 2, height = 1)
+
+        assertSame(firstBuffer, reopenedBuffer)
+        assertTrue(reopenedBuffer.hasReceivedFrames)
+        assertEquals(listOf(0xFFFF0000.toInt(), 0xFF00FF00.toInt()), reopenedBuffer.frontArgb().toList())
+    }
+
+    @Test
+    fun cacheRemoveDropsStoredBufferForPowerOffReset() {
+        val cache = ClientDisplayBufferCache()
+        val firstBuffer = cache.getOrCreate(computerId = 42, displayId = 1, width = 2, height = 1)
+
+        cache.remove(computerId = 42, displayId = 1, width = 2, height = 1)
+
+        val nextBuffer = cache.getOrCreate(computerId = 42, displayId = 1, width = 2, height = 1)
+
+        assertFalse(nextBuffer === firstBuffer)
+        assertFalse(nextBuffer.hasReceivedFrames)
     }
 }
