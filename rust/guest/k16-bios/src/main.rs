@@ -14,7 +14,7 @@ pub extern "C" fn _start() -> ! {
     clear_display();
     print_bios_banner();
     print_bios_debug();
-    k16_rt::yield_once();
+    k16_rt::sleep_ticks(1);
 
     let image = unsafe {
         load_k16e_from_storage0(

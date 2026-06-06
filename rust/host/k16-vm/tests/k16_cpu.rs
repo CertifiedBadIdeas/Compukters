@@ -532,6 +532,39 @@ fn k16_syscall_captures_first_argument_from_r2() {
 }
 
 #[test]
+fn k16_iret_allows_one_continuation_instruction_before_pending_interrupt() {
+    let mut bus = MachineBus::new(64).unwrap();
+    let mut program = Vec::new();
+    program.extend(const32(1, 32));
+    program.push(write_csr(K16_CSR_TRAP_VECTOR, 1));
+    program.push(const4(1, K16_INTERRUPT_SOURCE_TIMER0 as u8));
+    program.push(write_csr(K16_CSR_INTERRUPT_MASK, 1));
+    program.push(const4(1, 1));
+    program.push(write_csr(K16_CSR_INTERRUPT_ENABLE, 1));
+    program.push(const4(13, 0));
+    program.push(const4(1, 5));
+    program.push(syscall(1));
+    program.extend(add(6, 0, 13));
+    program.push(halt());
+    program.extend([0; 4]);
+    program.push(read_csr(0, K16_CSR_TRAP_CAUSE));
+    program.push(iret());
+    write_words(&mut bus, 0, &program);
+    let mut cpu = K16Cpu::new(0);
+
+    assert_eq!(
+        cpu.run_until_signal(&mut bus, 10).unwrap(),
+        K16Signal::StepLimitExceeded,
+    );
+    assert_eq!(cpu.pc(), 34);
+
+    cpu.request_interrupt(K16_INTERRUPT_SOURCE_TIMER0, 77);
+
+    assert_eq!(cpu.run_until_signal(&mut bus, 16).unwrap(), K16Signal::Halt);
+    assert_eq!(cpu.register(6), K16_TRAP_CAUSE_EXPLICIT_TRAP);
+}
+
+#[test]
 fn k16_timer_interrupt_remains_pending_while_masked() {
     let mut bus = MachineBus::new(64).unwrap();
     write_words(

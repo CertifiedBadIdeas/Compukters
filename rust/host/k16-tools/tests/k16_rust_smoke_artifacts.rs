@@ -49,10 +49,12 @@ fn k16_kernel_timer_smoke_artifacts_are_documented() {
     assert!(script.contains("advance_game_tick"));
     assert!(script.contains("syscall"));
     assert!(script.contains("signal=yield"));
-    assert!(script.contains("debug_suffix=7c7c5321"));
+    assert!(script.contains("SLEEP_TICKS"));
+    assert!(script.contains("debug_suffix=7c7c53217c"));
     assert!(script.contains("continuation_r2=83"));
     assert!(script.contains("continuation_r3=0"));
     assert!(script.contains("continuation_r4=0"));
+    assert!(script.contains("continuation_r5=0"));
     assert!(!script.contains("intc0"));
     assert!(!script.contains("RUX16"));
 
@@ -63,12 +65,24 @@ fn k16_kernel_timer_smoke_artifacts_are_documented() {
     assert!(docs.contains("timer0"));
     assert!(docs.contains("syscall"));
     assert!(docs.contains("READY"));
-    assert!(docs.contains("debug_suffix=7c7c5321"));
+    assert!(docs.contains("SLEEP_TICKS"));
+    assert!(docs.contains("debug_suffix=7c7c53217c"));
     assert!(docs.contains("continuation_r2=83"));
     assert!(docs.contains("continuation_r3=0"));
     assert!(docs.contains("continuation_r4=0"));
+    assert!(docs.contains("continuation_r5=0"));
     assert!(!docs.contains("intc0"));
     assert!(!docs.contains("RUX16"));
+}
+
+#[test]
+fn k16_bios_splash_uses_sleep_boundary() {
+    let root = repo_root();
+    let bios_source = root.join("rust/guest/k16-bios/src/main.rs");
+
+    let source = fs::read_to_string(&bios_source).expect("K16 BIOS source exists");
+    assert!(source.contains("k16_rt::sleep_ticks(1);"));
+    assert!(!source.contains("k16_rt::yield_once();"));
 }
 
 #[test]

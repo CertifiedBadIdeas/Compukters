@@ -481,8 +481,10 @@ receives `number` in `r1` and `arg0` in `r2`, executes `syscall r1`, and lets
 the CPU capture `r2` into `trap_arg0` before entering the kernel. The kernel
 interprets `trap_value` as the syscall number, reads `trap_arg0` for the first
 argument, may clobber `r1..r4`, and returns a `u32` result by placing it in
-`r0` before `iret`. Registers `r5..r15` are preserved unless a future ABI
-revision extends the clobber set.
+`r0` before `iret`. After `iret`, pending interrupt delivery is deferred for
+one guest instruction so the caller can consume or save `r0` before an
+asynchronous interrupt can enter the trap vector. Registers `r5..r15` are
+preserved unless a future ABI revision extends the clobber set.
 
 K16 syscall ABI v0 names the current Rust-kernel proof services in
 `k16_abi::syscall`:
@@ -492,6 +494,7 @@ K16 syscall ABI v0 names the current Rust-kernel proof services in
 | `DEBUG_MARKER` | `2` | `k16_rt::debug_marker()` | Kernel writes `S` to debug output and returns `DEBUG_MARKER_RETURN`. |
 | `DEBUG_WRITE_BYTE` | `3` | `k16_rt::debug_write_byte(byte)` | Kernel writes the low byte supplied in `trap_arg0` and returns `STATUS_OK`. |
 | `YIELD` | `4` | `k16_rt::yield_syscall()` | Kernel yields once to the host and then returns `STATUS_OK`. |
+| `SLEEP_TICKS` | `5` | `k16_rt::sleep_ticks_syscall(ticks)` | Kernel yields until `timer0.game_ticks` advances by `ticks`, then returns `STATUS_OK`. |
 | `DEBUG_MARKER_RETURN` | `0x53` | n/a | Proof return value for `DEBUG_MARKER`. |
 | `STATUS_OK` | `0` | n/a | Successful proof-service status. |
 
@@ -504,9 +507,10 @@ requires `interrupt_enable != 0` and a source bit present in both
 interrupted `pc`, interrupted stack pointer, and cause/value, clears the
 delivered pending bit, sets `pc = trap_vector`, and disables global interrupt
 delivery. `iret` restores the interrupted stack pointer, resumes at `trap_pc`,
-and re-enables global interrupt delivery. Nested interrupts, interrupt
-priorities, and separate interrupt-controller hardware are not part of this ABI
-slice.
+and re-enables global interrupt delivery. If another interrupt is already
+pending when `iret` returns, delivery is deferred until after one resumed guest
+instruction. Nested interrupts, interrupt priorities, and separate
+interrupt-controller hardware are not part of this ABI slice.
 
 Current trap and interrupt causes:
 

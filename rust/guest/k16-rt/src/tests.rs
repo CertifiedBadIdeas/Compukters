@@ -228,3 +228,18 @@ fn yield_syscall_uses_named_syscall_and_returns_status_ok() {
     assert_eq!(crate::trap::test_syscall_number(), k16_abi::syscall::YIELD);
     assert_eq!(returned, k16_abi::syscall::STATUS_OK);
 }
+
+#[test]
+fn sleep_ticks_syscall_uses_named_syscall_and_tick_argument() {
+    crate::trap::reset_test_interrupts();
+    crate::trap::set_test_syscall_return(k16_abi::syscall::STATUS_OK);
+
+    let returned = sleep_ticks_syscall(3);
+
+    assert_eq!(
+        crate::trap::test_syscall_number(),
+        k16_abi::syscall::SLEEP_TICKS
+    );
+    assert_eq!(crate::trap::test_syscall_arg0(), 3);
+    assert_eq!(returned, k16_abi::syscall::STATUS_OK);
+}

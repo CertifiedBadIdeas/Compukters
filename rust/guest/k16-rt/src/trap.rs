@@ -149,6 +149,11 @@ pub fn yield_syscall() -> u32 {
     syscall0(k16_abi::syscall::YIELD)
 }
 
+#[inline(always)]
+pub fn sleep_ticks_syscall(ticks: u32) -> u32 {
+    syscall1(k16_abi::syscall::SLEEP_TICKS, ticks)
+}
+
 #[cfg(not(any(test, feature = "host-test")))]
 #[inline(always)]
 pub unsafe fn set_interrupt_mask(mask: u32) {

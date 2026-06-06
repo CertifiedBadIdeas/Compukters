@@ -332,6 +332,7 @@ pub struct K16Cpu {
     trap_arg0: u32,
     trap_stack_pointer: u32,
     interrupt_enable: bool,
+    interrupt_delivery_inhibited: bool,
     interrupt_mask: u32,
     interrupt_pending: u32,
     timer0_interrupt_value: u32,
@@ -351,6 +352,7 @@ impl K16Cpu {
             trap_arg0: 0,
             trap_stack_pointer: 0,
             interrupt_enable: false,
+            interrupt_delivery_inhibited: false,
             interrupt_mask: 0,
             interrupt_pending: 0,
             timer0_interrupt_value: 0,
@@ -411,6 +413,7 @@ impl K16Cpu {
             trap_arg0: snapshot.trap_arg0,
             trap_stack_pointer: snapshot.trap_stack_pointer,
             interrupt_enable: snapshot.interrupt_enable,
+            interrupt_delivery_inhibited: false,
             interrupt_mask: snapshot.interrupt_mask,
             interrupt_pending: snapshot.interrupt_pending,
             timer0_interrupt_value: snapshot.timer0_interrupt_value,
@@ -474,7 +477,9 @@ impl K16Cpu {
             }
         }
 
-        if self.try_deliver_interrupt()? {
+        if self.interrupt_delivery_inhibited {
+            self.interrupt_delivery_inhibited = false;
+        } else if self.try_deliver_interrupt()? {
             return Ok(None);
         }
 
@@ -850,6 +855,7 @@ impl K16Cpu {
         self.registers[usize::from(K16_STACK_POINTER_REGISTER)] = self.trap_stack_pointer;
         self.pc = self.trap_pc;
         self.interrupt_enable = true;
+        self.interrupt_delivery_inhibited = true;
     }
 
     fn raise_load_fault(
