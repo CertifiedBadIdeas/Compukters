@@ -13,6 +13,59 @@ mod trap;
 #[cfg(test)]
 mod tests;
 
+#[cfg(any(test, feature = "host-test"))]
+pub mod host_test {
+    pub use k16_abi::syscall::{DEBUG_MARKER, DEBUG_MARKER_RETURN, DEBUG_WRITE_BYTE, STATUS_OK};
+
+    pub fn reset_syscalls() {
+        crate::trap::reset_test_interrupts();
+    }
+
+    pub fn set_syscall_return(value: u32) {
+        crate::trap::set_test_syscall_return(value);
+    }
+
+    pub fn syscall_number() -> u32 {
+        crate::trap::test_syscall_number()
+    }
+
+    pub fn syscall_arg0() -> u32 {
+        crate::trap::test_syscall_arg0()
+    }
+
+    pub fn reset_timer0() {
+        crate::time::reset_test_timer0();
+    }
+
+    pub fn set_timer0_game_ticks(value: u64) {
+        crate::time::set_test_timer0_game_ticks(value);
+    }
+
+    pub fn set_timer0_monotonic_nanos(value: u64) {
+        crate::time::set_test_timer0_monotonic_nanos(value);
+    }
+
+    pub fn yield_count() -> u64 {
+        crate::control::test_yield_count()
+    }
+
+    pub fn set_trap_state(cause: u32, pc: u32, value: u32) {
+        crate::trap::set_test_trap_state(cause, pc, value);
+    }
+
+    pub fn trap_vector() -> u32 {
+        crate::trap::test_trap_vector()
+    }
+
+    pub fn interrupt_enable() -> u32 {
+        crate::trap::test_interrupt_enable()
+    }
+
+    pub fn interrupt_mask() -> u32 {
+        crate::trap::test_interrupt_mask()
+    }
+}
+
 pub use control::{halt_forever, halt_once, yield_once};
 pub use exports::{abort, memcmp, memcpy, memmove, memset};
 pub use int64::{k16_div64, k16_mod64, k16_udiv64, k16_umod64};
