@@ -70,6 +70,13 @@ pub mod cpu {
     }
 }
 
+pub mod syscall {
+    pub const DEBUG_MARKER: u32 = 2;
+    pub const DEBUG_WRITE_BYTE: u32 = 3;
+    pub const DEBUG_MARKER_RETURN: u32 = 0x53;
+    pub const STATUS_OK: u32 = 0;
+}
+
 pub mod computer {
     pub mod profile {
         pub const BOOT_INFO_MAGIC: u32 = u32::from_le_bytes(*b"RXBI");
@@ -369,6 +376,14 @@ mod tests {
             cpu::trap_cause::interrupt_source(cpu::trap_cause::TIMER0_INTERRUPT),
             cpu::interrupt_source::TIMER0
         );
+    }
+
+    #[test]
+    fn syscall_constants_match_current_k16_kernel_proof_surface() {
+        assert_eq!(syscall::DEBUG_MARKER, 2);
+        assert_eq!(syscall::DEBUG_WRITE_BYTE, 3);
+        assert_eq!(syscall::DEBUG_MARKER_RETURN, 0x53);
+        assert_eq!(syscall::STATUS_OK, 0);
     }
 
     #[test]

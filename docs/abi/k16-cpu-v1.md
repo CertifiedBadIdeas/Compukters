@@ -484,6 +484,19 @@ argument, may clobber `r1..r4`, and returns a `u32` result by placing it in
 `r0` before `iret`. Registers `r5..r15` are preserved unless a future ABI
 revision extends the clobber set.
 
+K16 syscall ABI v0 names the current Rust-kernel proof services in
+`k16_abi::syscall`:
+
+| Constant | Number / value | Runtime wrapper | Meaning |
+| --- | ---: | --- | --- |
+| `DEBUG_MARKER` | `2` | `k16_rt::debug_marker()` | Kernel writes `S` to debug output and returns `DEBUG_MARKER_RETURN`. |
+| `DEBUG_WRITE_BYTE` | `3` | `k16_rt::debug_write_byte(byte)` | Kernel writes the low byte supplied in `trap_arg0` and returns `STATUS_OK`. |
+| `DEBUG_MARKER_RETURN` | `0x53` | n/a | Proof return value for `DEBUG_MARKER`. |
+| `STATUS_OK` | `0` | n/a | Successful proof-service status. |
+
+These names describe the current ABI proof surface. They are not a complete OS
+service table, scheduler API, filesystem API, or process model.
+
 Asynchronous interrupts are delivered between guest instructions. Delivery
 requires `interrupt_enable != 0` and a source bit present in both
 `interrupt_pending` and `interrupt_mask`. Entering an interrupt records the

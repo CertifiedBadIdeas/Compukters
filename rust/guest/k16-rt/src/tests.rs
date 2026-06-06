@@ -170,9 +170,9 @@ fn syscall0_returns_test_syscall_value() {
     crate::trap::reset_test_interrupts();
     crate::trap::set_test_syscall_return(0x53);
 
-    let returned = syscall0(2);
+    let returned = syscall0(0x20);
 
-    assert_eq!(crate::trap::test_syscall_number(), 2);
+    assert_eq!(crate::trap::test_syscall_number(), 0x20);
     assert_eq!(returned, 0x53);
 }
 
@@ -181,10 +181,39 @@ fn syscall1_records_argument_and_returns_test_syscall_value() {
     crate::trap::reset_test_interrupts();
     crate::trap::set_test_syscall_return(0);
 
-    let returned = syscall1(3, 0x21);
+    let returned = syscall1(0x30, 0x21);
 
-    assert_eq!(crate::trap::test_syscall_number(), 3);
+    assert_eq!(crate::trap::test_syscall_number(), 0x30);
     assert_eq!(crate::trap::test_syscall_arg0(), 0x21);
     assert_eq!(syscall_arg0(), 0x21);
     assert_eq!(returned, 0);
+}
+
+#[test]
+fn debug_marker_uses_named_syscall_and_returns_marker_value() {
+    crate::trap::reset_test_interrupts();
+    crate::trap::set_test_syscall_return(k16_abi::syscall::DEBUG_MARKER_RETURN);
+
+    let returned = debug_marker();
+
+    assert_eq!(
+        crate::trap::test_syscall_number(),
+        k16_abi::syscall::DEBUG_MARKER
+    );
+    assert_eq!(returned, k16_abi::syscall::DEBUG_MARKER_RETURN);
+}
+
+#[test]
+fn debug_write_byte_uses_named_syscall_and_low_byte_argument() {
+    crate::trap::reset_test_interrupts();
+    crate::trap::set_test_syscall_return(k16_abi::syscall::STATUS_OK);
+
+    let returned = debug_write_byte(0x21);
+
+    assert_eq!(
+        crate::trap::test_syscall_number(),
+        k16_abi::syscall::DEBUG_WRITE_BYTE
+    );
+    assert_eq!(crate::trap::test_syscall_arg0(), 0x21);
+    assert_eq!(returned, k16_abi::syscall::STATUS_OK);
 }

@@ -20,7 +20,7 @@ pub use k16_abi::cpu;
 pub use memory::{k16_memcmp, k16_memcpy, k16_memmove, k16_memset};
 pub use time::{sleep_ticks, timer0_game_ticks, timer0_monotonic_nanos, yield_frames};
 pub use trap::{
-    disable_interrupts, enable_interrupts, install_trap_vector, interrupt_pending, iret_once,
-    iret_with_r0, set_interrupt_mask, syscall0, syscall1, syscall_arg0, syscall_once, trap_cause,
-    trap_pc, trap_value,
+    debug_marker, debug_write_byte, disable_interrupts, enable_interrupts, install_trap_vector,
+    interrupt_pending, iret_once, iret_with_r0, set_interrupt_mask, syscall0, syscall1,
+    syscall_arg0, syscall_once, trap_cause, trap_pc, trap_value,
 };
