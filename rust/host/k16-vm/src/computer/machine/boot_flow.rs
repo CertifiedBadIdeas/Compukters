@@ -38,16 +38,59 @@ pub(super) fn boot_handoff_k16_from_ram(
     byte_len: u32,
     max_steps: u64,
 ) -> Result<CpuId, BootHandoffError> {
+    boot_handoff_k16_from_ram_inner(machine, entry_pc, byte_len, max_steps, None)
+}
+
+pub(super) fn boot_handoff_k16_from_ram_with_stack(
+    machine: &mut ComputerMachine,
+    entry_pc: u32,
+    byte_len: u32,
+    max_steps: u64,
+    stack_top: u32,
+) -> Result<CpuId, BootHandoffError> {
+    boot_handoff_k16_from_ram_inner(machine, entry_pc, byte_len, max_steps, Some(stack_top))
+}
+
+fn boot_handoff_k16_from_ram_inner(
+    machine: &mut ComputerMachine,
+    entry_pc: u32,
+    byte_len: u32,
+    max_steps: u64,
+    stack_top: Option<u32>,
+) -> Result<CpuId, BootHandoffError> {
     let boot_cpu = machine.boot_cpu.ok_or(BootHandoffError::MissingBootCpu)?;
     if byte_len == 0 {
         return Err(BootHandoffError::EmptyImage);
     }
     checked_ram_range(entry_pc, byte_len, machine.bus.memory().len())?;
+    if let Some(stack_top) = stack_top {
+        validate_stack_top(stack_top, machine.bus.memory().len())?;
+    }
     machine.cpus[boot_cpu] = ComputerCpuContext::K16 {
-        cpu: K16Cpu::new(entry_pc),
+        cpu: match stack_top {
+            Some(stack_top) => K16Cpu::new_with_stack(entry_pc, stack_top),
+            None => K16Cpu::new(entry_pc),
+        },
         max_steps: max_steps.max(1),
     };
     Ok(boot_cpu)
+}
+
+fn validate_stack_top(stack_top: u32, ram_len: usize) -> Result<(), BootHandoffError> {
+    if stack_top % 4 != 0 {
+        return Err(BootHandoffError::StackTopMisaligned { stack_top });
+    }
+    let stack_top = usize::try_from(stack_top).map_err(|_| BootHandoffError::StackTopOutOfBounds {
+        stack_top,
+        ram_len,
+    })?;
+    if stack_top == 0 || stack_top > ram_len {
+        return Err(BootHandoffError::StackTopOutOfBounds {
+            stack_top: stack_top as u32,
+            ram_len,
+        });
+    }
+    Ok(())
 }
 
 pub(super) fn run_boot_k16_until_signal(

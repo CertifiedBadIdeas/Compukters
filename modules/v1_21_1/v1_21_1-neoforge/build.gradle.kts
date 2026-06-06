@@ -104,6 +104,8 @@ val k16KernelManifest = rootProject.layout.projectDirectory.file("rust/guest/k16
 val k16KernelSource = rootProject.layout.projectDirectory.file("rust/guest/k16-kernel/src/main.rs")
 val k16BootChainManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-boot-chain/Cargo.toml")
 val k16BootChainSource = rootProject.layout.projectDirectory.dir("rust/guest/k16-boot-chain/src")
+val k16HostToolsManifest = rootProject.layout.projectDirectory.file("rust/host/k16-tools/Cargo.toml")
+val k16HostToolsSource = rootProject.layout.projectDirectory.dir("rust/host/k16-tools/src")
 val k16RustTargetSpec = rootProject.layout.projectDirectory.file("tools/k16-unknown-kraftos.json")
 val k16ToolchainConfig = rootProject.layout.projectDirectory.file("config/k16-toolchain.json")
 val k16BiosFlashResource = generatedK16FirmwareResources.map { it.file("firmware/k16-bios.kflash") }
@@ -221,8 +223,34 @@ fun Project.compileK16GuestRustBin(
 ) {
     val toolchain = resolveK16Toolchain()
     val profile = k16FirmwareProfileName()
+    val cpuHelpers = targetDir.resolve("k16-cpu-helpers.o")
     output.parentFile.mkdirs()
+    cpuHelpers.parentFile.mkdirs()
     deleteK16RustBinOutputs(targetDir, binName, profile)
+    val helperCommand =
+        listOf(
+            "cargo",
+            "run",
+            "--quiet",
+            "--offline",
+            "--manifest-path",
+            k16HostToolsManifest.asFile.absolutePath,
+            "--bin",
+            "k16",
+            "--",
+            "runtime",
+            "k16-cpu-helpers",
+            "-o",
+            cpuHelpers.absolutePath,
+        )
+    val helperProcessBuilder =
+        ProcessBuilder(helperCommand)
+            .directory(projectDir)
+            .inheritIO()
+    val helperExitCode = helperProcessBuilder.start().waitFor()
+    check(helperExitCode == 0) {
+        "K16 CPU helper build for $binName failed with exit code $helperExitCode"
+    }
     val command =
         listOf(toolchain.cargo.absolutePath, "rustc") +
             k16CargoProfileArgs(profile) +
@@ -257,7 +285,7 @@ fun Project.compileK16GuestRustBin(
     processBuilder.environment()["RUSTC"] = toolchain.rustc.absolutePath
     processBuilder.environment()["RUSTC_BOOTSTRAP"] = "1"
     processBuilder.environment()["RUSTFLAGS"] =
-        "-C linker=${toolchain.linker.absolutePath} -C link-arg=--k16-target=$k16Target -Cjump-tables=no -Cdebuginfo=0 -Cdebug-assertions=off -Coverflow-checks=off -Zub-checks=no"
+        "-C linker=${toolchain.linker.absolutePath} -C link-arg=${cpuHelpers.absolutePath} -C link-arg=--k16-target=$k16Target -Cjump-tables=no -Cdebuginfo=0 -Cdebug-assertions=off -Coverflow-checks=off -Zub-checks=no"
     val exitCode = processBuilder.start().waitFor()
     check(exitCode == 0) {
         "K16 Rust firmware build for $binName failed with exit code $exitCode"
@@ -279,6 +307,8 @@ val linkK16BiosFlash =
         inputs.file(k16BiosSource)
         inputs.file(k16BootChainManifest)
         inputs.dir(k16BootChainSource)
+        inputs.file(k16HostToolsManifest)
+        inputs.dir(k16HostToolsSource)
         inputs.file(k16RustTargetSpec)
         inputs.file(k16ToolchainConfig)
         inputs.property("k16FirmwareProfile", k16FirmwareProfile)
@@ -305,6 +335,8 @@ val compileK16SystemBoot =
         inputs.file(k16BootSource)
         inputs.file(k16BootChainManifest)
         inputs.dir(k16BootChainSource)
+        inputs.file(k16HostToolsManifest)
+        inputs.dir(k16HostToolsSource)
         inputs.file(k16RustTargetSpec)
         inputs.file(k16ToolchainConfig)
         inputs.property("k16FirmwareProfile", k16FirmwareProfile)
@@ -330,6 +362,8 @@ val compileK16SystemKernel =
         inputs.file(k16KernelManifest)
         inputs.file(k16KernelSource)
         inputs.file(k16RustTargetSpec)
+        inputs.file(k16HostToolsManifest)
+        inputs.dir(k16HostToolsSource)
         inputs.file(k16ToolchainConfig)
         inputs.property("k16FirmwareProfile", k16FirmwareProfile)
         outputs.file(k16KernelArtifact)

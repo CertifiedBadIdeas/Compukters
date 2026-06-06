@@ -5,14 +5,35 @@ extern crate k16_rt;
 
 use core::panic::PanicInfo;
 use k16_abi::computer::{control, debug, display0, status};
+use k16_rt::cpu;
+
+static mut KERNEL_TIMER0_TICKS: u32 = 0;
 
 #[no_mangle]
 pub extern "C" fn _start() -> ! {
     clear_display();
     print_kernel_ok_display();
     print_kernel_ok_debug();
-    set_halted(75);
-    wait_forever()
+    install_timer0_interrupt_handler();
+    set_ready();
+    idle_forever()
+}
+
+extern "C" fn timer0_interrupt_handler() -> ! {
+    let trap_cause = k16_rt::trap_cause();
+    if !cpu::trap_cause::is_interrupt(trap_cause)
+        || cpu::trap_cause::interrupt_source(trap_cause) != cpu::interrupt_source::TIMER0
+    {
+        print_kernel_trap_debug();
+        set_panic();
+        wait_forever();
+    }
+
+    unsafe {
+        KERNEL_TIMER0_TICKS = KERNEL_TIMER0_TICKS.wrapping_add(1);
+    }
+    print_debug_byte(b'|');
+    unsafe { k16_rt::iret_once() }
 }
 
 #[panic_handler]
@@ -84,16 +105,43 @@ fn print_kernel_panic_debug() {
     print_debug_byte(b'\n');
 }
 
+fn print_kernel_trap_debug() {
+    print_debug_byte(b'K');
+    print_debug_byte(b'1');
+    print_debug_byte(b'6');
+    print_debug_byte(b' ');
+    print_debug_byte(b'K');
+    print_debug_byte(b'E');
+    print_debug_byte(b'R');
+    print_debug_byte(b'N');
+    print_debug_byte(b'E');
+    print_debug_byte(b'L');
+    print_debug_byte(b' ');
+    print_debug_byte(b'T');
+    print_debug_byte(b'R');
+    print_debug_byte(b'A');
+    print_debug_byte(b'P');
+    print_debug_byte(b'\n');
+}
+
 fn print_debug_byte(byte: u8) {
     unsafe {
         write_u8(debug::WRITE, byte);
     }
 }
 
-fn set_halted(code: i32) {
+fn install_timer0_interrupt_handler() {
     unsafe {
-        write_i32(control::PANIC_CODE, code);
-        write_i32(control::STATUS, status::HALTED);
+        k16_rt::install_trap_vector(timer0_interrupt_handler as *const () as usize as u32);
+        k16_rt::set_interrupt_mask(cpu::interrupt_source::TIMER0);
+        k16_rt::enable_interrupts();
+    }
+}
+
+fn set_ready() {
+    unsafe {
+        write_i32(control::PANIC_CODE, 0);
+        write_i32(control::STATUS, status::READY);
     }
 }
 
@@ -114,4 +162,10 @@ unsafe fn write_u8(address: u32, value: u8) {
 
 fn wait_forever() -> ! {
     k16_rt::halt_forever()
+}
+
+fn idle_forever() -> ! {
+    loop {
+        k16_rt::yield_once();
+    }
 }

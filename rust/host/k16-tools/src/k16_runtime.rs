@@ -15,6 +15,7 @@ const R_K16_CALL32: u32 = 2;
 const SCRATCH_REGISTER: u8 = 14;
 const STACK_POINTER_REGISTER: u8 = 15;
 const RETURN_REGISTER: u8 = 0;
+const ARG0_REGISTER: u8 = 1;
 
 pub const STARTUP_SYMBOL: &str = "_start";
 pub const MAIN_SYMBOL: &str = "main";
@@ -51,6 +52,118 @@ pub fn k16_startup_object() -> Vec<u8> {
     write_u32(&mut rela, 0);
 
     elf_object(&text, &rela, &symtab, &strtab)
+}
+
+pub fn k16_cpu_helpers_object() -> Vec<u8> {
+    let mut text = Vec::new();
+    let mut strtab = Vec::from([0]);
+    let mut symtab = Vec::new();
+    symtab.extend([0u8; 16]);
+
+    emit_symbol_function(
+        &mut text,
+        &mut strtab,
+        &mut symtab,
+        "__k16_halt_once",
+        &[halt()],
+    );
+    let yield_words = [
+        emit_const32_word(RETURN_REGISTER),
+        k16_vm::computer_abi::CONTROL_YIELD as u16,
+        (k16_vm::computer_abi::CONTROL_YIELD >> 16) as u16,
+        const4(ARG0_REGISTER, 1),
+        store32(RETURN_REGISTER, ARG0_REGISTER),
+        ret(),
+    ];
+    emit_symbol_function(
+        &mut text,
+        &mut strtab,
+        &mut symtab,
+        "__k16_yield_once",
+        &yield_words,
+    );
+    emit_symbol_function(
+        &mut text,
+        &mut strtab,
+        &mut symtab,
+        "__k16_iret_once",
+        &[iret()],
+    );
+    emit_symbol_function(
+        &mut text,
+        &mut strtab,
+        &mut symtab,
+        "__k16_write_trap_vector",
+        &[write_csr(k16_vm::k16::K16_CSR_TRAP_VECTOR, ARG0_REGISTER), ret()],
+    );
+    emit_symbol_function(
+        &mut text,
+        &mut strtab,
+        &mut symtab,
+        "__k16_read_trap_cause",
+        &[read_csr(RETURN_REGISTER, k16_vm::k16::K16_CSR_TRAP_CAUSE), ret()],
+    );
+    emit_symbol_function(
+        &mut text,
+        &mut strtab,
+        &mut symtab,
+        "__k16_read_trap_pc",
+        &[read_csr(RETURN_REGISTER, k16_vm::k16::K16_CSR_TRAP_PC), ret()],
+    );
+    emit_symbol_function(
+        &mut text,
+        &mut strtab,
+        &mut symtab,
+        "__k16_read_trap_value",
+        &[read_csr(RETURN_REGISTER, k16_vm::k16::K16_CSR_TRAP_VALUE), ret()],
+    );
+    emit_symbol_function(
+        &mut text,
+        &mut strtab,
+        &mut symtab,
+        "__k16_write_interrupt_enable",
+        &[
+            write_csr(k16_vm::k16::K16_CSR_INTERRUPT_ENABLE, ARG0_REGISTER),
+            ret(),
+        ],
+    );
+    emit_symbol_function(
+        &mut text,
+        &mut strtab,
+        &mut symtab,
+        "__k16_write_interrupt_mask",
+        &[
+            write_csr(k16_vm::k16::K16_CSR_INTERRUPT_MASK, ARG0_REGISTER),
+            ret(),
+        ],
+    );
+    emit_symbol_function(
+        &mut text,
+        &mut strtab,
+        &mut symtab,
+        "__k16_read_interrupt_pending",
+        &[
+            read_csr(RETURN_REGISTER, k16_vm::k16::K16_CSR_INTERRUPT_PENDING),
+            ret(),
+        ],
+    );
+
+    elf_object(&text, &[], &symtab, &strtab)
+}
+
+fn emit_symbol_function(
+    text: &mut Vec<u8>,
+    strtab: &mut Vec<u8>,
+    symtab: &mut Vec<u8>,
+    name: &str,
+    words: &[u16],
+) {
+    let name_offset = push_string(strtab, name);
+    let value = text.len() as u32;
+    for word in words {
+        emit_word(text, *word);
+    }
+    write_symbol(symtab, name_offset, value, text.len() as u32 - value, 0x12, 1);
 }
 
 fn elf_object(text: &[u8], rela: &[u8], symtab: &[u8], strtab: &[u8]) -> Vec<u8> {
@@ -156,9 +269,17 @@ fn elf_object(text: &[u8], rela: &[u8], symtab: &[u8], strtab: &[u8]) -> Vec<u8>
 }
 
 fn emit_const32(bytes: &mut Vec<u8>, register: u8, value: u32) {
-    emit_word(bytes, 0xe001 | (u16::from(register) << 8));
+    emit_word(bytes, emit_const32_word(register));
     emit_word(bytes, (value & 0xffff) as u16);
     emit_word(bytes, (value >> 16) as u16);
+}
+
+fn emit_const32_word(register: u8) -> u16 {
+    0xe001 | (u16::from(register) << 8)
+}
+
+fn const4(dst: u8, value: u8) -> u16 {
+    0x1000 | (u16::from(dst) << 8) | u16::from(value & 0x0f)
 }
 
 fn call(register: u8) -> u16 {
@@ -169,8 +290,28 @@ fn store8(addr: u8, src: u8) -> u16 {
     0x5000 | (u16::from(addr) << 8) | (u16::from(src) << 4)
 }
 
+fn store32(addr: u8, src: u8) -> u16 {
+    0x5002 | (u16::from(addr) << 8) | (u16::from(src) << 4)
+}
+
 fn halt() -> u16 {
     0x0001
+}
+
+fn iret() -> u16 {
+    0x0004
+}
+
+fn ret() -> u16 {
+    0x9000
+}
+
+fn read_csr(dst: u8, csr: u32) -> u16 {
+    0x0002 | (u16::from(dst) << 8) | ((csr as u16) << 4)
+}
+
+fn write_csr(csr: u32, src: u8) -> u16 {
+    0x0003 | ((csr as u16) << 8) | (u16::from(src) << 4)
 }
 
 fn emit_word(bytes: &mut Vec<u8>, word: u16) {

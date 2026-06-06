@@ -26,7 +26,7 @@ pub fn run_k16_cli(args: Vec<String>) -> Result<(), String> {
 }
 
 fn usage_error() -> Result<(), String> {
-    Err("usage: k16 link [--target <boot|kernel|program>] <input.ko>... -o <output.kx>\n       k16 runtime <k16-startup|k16-memory-helpers> -o <output.ko>\n       k16 run <program.kx>\n       k16 run-bios <bios.kflash>\n       k16 disasm --target <bios|boot|kernel|program> <input>\n       k16 inspect <blob>\n       k16 volume <create|init|put-boot|put-kernel> ...\n       k16 fs <filesystem> ...".to_string())
+    Err("usage: k16 link [--target <boot|kernel|program>] <input.ko>... -o <output.kx>\n       k16 runtime <k16-startup|k16-memory-helpers|k16-cpu-helpers> -o <output.ko>\n       k16 run <program.kx>\n       k16 run-bios <bios.kflash>\n       k16 disasm --target <bios|boot|kernel|program> <input>\n       k16 inspect <blob>\n       k16 volume <create|init|put-boot|put-kernel> ...\n       k16 fs <filesystem> ...".to_string())
 }
 
 fn run_program(args: &[String]) -> Result<(), String> {
@@ -131,6 +131,14 @@ fn run_runtime(args: &[String]) -> Result<(), String> {
                 return runtime_usage_error();
             }
             build_k16_memory_helpers(Path::new(&args[2]))
+        }
+        "k16-cpu-helpers" => {
+            if args.len() != 3 || args[1] != "-o" {
+                return runtime_usage_error();
+            }
+            let bytes = k16_runtime::k16_cpu_helpers_object();
+            fs::write(&args[2], bytes)
+                .map_err(|error| format!("failed to write {}: {error}", args[2]))
         }
         _ => runtime_usage_error(),
     }
@@ -600,7 +608,7 @@ fn link_usage_message() -> String {
 }
 
 fn runtime_usage_error() -> Result<(), String> {
-    Err("usage: k16 runtime <k16-startup|k16-memory-helpers> -o <output.ko>".to_string())
+    Err("usage: k16 runtime <k16-startup|k16-memory-helpers|k16-cpu-helpers> -o <output.ko>".to_string())
 }
 
 fn run_usage_error() -> Result<(), String> {

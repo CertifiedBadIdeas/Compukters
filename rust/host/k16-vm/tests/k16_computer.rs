@@ -237,6 +237,38 @@ fn k16_computer_handle_boot_handoff_starts_k16_from_guest_ram_without_host_decod
 }
 
 #[test]
+fn k16_computer_handle_boot_handoff_can_install_kernel_stack_top() {
+    let bios = k16_words(&[k16_halt()]);
+    let entry_pc = 4096;
+    let helper_pc = entry_pc + 10;
+    let mut words = Vec::new();
+    words.extend(k16_const32(14, helper_pc));
+    words.push(k16_call(14));
+    words.push(k16_halt());
+    words.extend(k16_const32(0, ComputerMachine::CONTROL_PANIC_CODE));
+    words.extend(k16_const32(1, 42));
+    words.push(k16_store32(0, 1));
+    words.push(k16_ret());
+    let program = k16_words(&words);
+    let mut handle = K16ComputerHandle::create_k16_bios_flash(&bios, 64 * 1024, 128)
+        .expect("K16 BIOS flash computer creates");
+    handle.write_guest_ram_bytes(entry_pc, &program).unwrap();
+
+    let cpu_id = handle
+        .boot_handoff_k16_from_guest_ram_with_stack(
+            entry_pc,
+            program.len() as u32,
+            128,
+            0x0001_0000,
+        )
+        .expect("boot handoff accepts in-RAM K16 program and stack top");
+
+    assert_eq!(cpu_id, 0);
+    assert_eq!(handle.run_k16_until_signal().unwrap(), K16Signal::Halt);
+    assert_eq!(handle.control().panic_code, 42);
+}
+
+#[test]
 fn k16_computer_handle_k16_firmware_writes_debug_and_control_mmio() {
     let bios = k16_words(&[k16_halt()]);
     let entry_pc = 4096;

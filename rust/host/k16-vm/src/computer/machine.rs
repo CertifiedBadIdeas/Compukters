@@ -38,6 +38,13 @@ enum ComputerCpuContext {
 pub enum BootHandoffError {
     MissingBootCpu,
     EmptyImage,
+    StackTopMisaligned {
+        stack_top: u32,
+    },
+    StackTopOutOfBounds {
+        stack_top: u32,
+        ram_len: usize,
+    },
     RamRangeOverflow {
         image_addr: u32,
         image_len: u32,
@@ -54,6 +61,14 @@ impl Display for BootHandoffError {
         match self {
             Self::MissingBootCpu => formatter.write_str("boot CPU is not spawned"),
             Self::EmptyImage => formatter.write_str("boot handoff image is empty"),
+            Self::StackTopMisaligned { stack_top } => write!(
+                formatter,
+                "boot handoff stack top {stack_top:#010x} is not 4-byte aligned",
+            ),
+            Self::StackTopOutOfBounds { stack_top, ram_len } => write!(
+                formatter,
+                "boot handoff stack top {stack_top:#010x} is outside {ram_len} bytes",
+            ),
             Self::RamRangeOverflow {
                 image_addr,
                 image_len,
@@ -341,6 +356,18 @@ impl ComputerMachine {
         max_steps: u64,
     ) -> Result<CpuId, BootHandoffError> {
         boot_flow::boot_handoff_k16_from_ram(self, entry_pc, byte_len, max_steps)
+    }
+
+    pub fn boot_handoff_k16_from_ram_with_stack(
+        &mut self,
+        entry_pc: u32,
+        byte_len: u32,
+        max_steps: u64,
+        stack_top: u32,
+    ) -> Result<CpuId, BootHandoffError> {
+        boot_flow::boot_handoff_k16_from_ram_with_stack(
+            self, entry_pc, byte_len, max_steps, stack_top,
+        )
     }
 
     pub fn boot_cpu_id(&self) -> Option<CpuId> {
