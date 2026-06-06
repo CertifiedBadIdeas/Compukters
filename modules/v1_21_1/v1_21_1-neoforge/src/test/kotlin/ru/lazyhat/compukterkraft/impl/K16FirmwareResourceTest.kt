@@ -8,6 +8,7 @@ import ru.lazyhat.compukterkraft.lang.runtime.storage.K16_VOLUME_MAGIC_BYTES
 import ru.lazyhat.compukterkraft.lang.runtime.storage.K16SystemVolumeWorkspace
 import java.nio.file.Path
 import kotlin.io.path.createTempDirectory
+import kotlin.io.path.readBytes
 import kotlin.io.path.readText
 import kotlin.io.path.writeBytes
 import kotlin.test.Test
@@ -126,6 +127,41 @@ class K16FirmwareResourceTest {
             )
             assertEquals("KERNEL OK", row0, "panic code: ${control.panicCode}, debug: $debug")
         }
+    }
+
+    @Test
+    fun bundledK16SystemStorage0RestoresRustKernelRuntimeSnapshot() {
+        val workspace = createTempDirectory("k16-firmware-restore-test-")
+        val biosFlashPath = workspace.resolve("bios.kflash")
+        val storage0Path = workspace.resolve("storage0.kv")
+        biosFlashPath.writeBytes(K16BiosFlashWorkspace.loadBiosFlashResource(classLoader = javaClass.classLoader))
+        storage0Path.writeBytes(K16SystemVolumeWorkspace.loadStorage0VolumeResource(classLoader = javaClass.classLoader))
+
+        val machineSnapshot =
+            K16ComputerRuntimeFactory.createFromBiosFlash(
+                biosFlashPath = biosFlashPath,
+                storage0Path = storage0Path,
+            ).use { runtime ->
+                val control = runtime.tick(maxTurns = 1_000_000)
+                assertEquals(NativeK16ComputerControl.STATUS_HALTED, control.status)
+                runtime.machineSnapshot()
+            }
+        val storage0BeforeRestore = storage0Path.readBytes()
+
+        K16ComputerRuntimeFactory.restoreFromBiosFlashSnapshot(
+            biosFlashPath = biosFlashPath,
+            storage0Path = storage0Path,
+            snapshot = machineSnapshot,
+        ).use { restored ->
+            val control = restored.control()
+            val snapshot = restored.display0Snapshot() ?: error("restored display0 snapshot should exist")
+            val row0 = displayRow(snapshot, 0)
+
+            assertEquals(NativeK16ComputerControl.STATUS_HALTED, control.status)
+            assertEquals(75, control.panicCode)
+            assertEquals("KERNEL OK", row0)
+        }
+        assertContentEquals(storage0BeforeRestore, storage0Path.readBytes())
     }
 
     private fun displayRow(
