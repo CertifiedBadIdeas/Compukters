@@ -60,28 +60,26 @@ fn dispatch_synchronous_trap(cause: u32) -> ! {
 }
 
 fn dispatch_syscall(number: u32) -> ! {
-    if number == syscall::DEBUG_MARKER {
-        print_debug_byte(b'S');
-        set_ready();
-        unsafe { k16_rt::iret_with_r0(syscall::DEBUG_MARKER_RETURN) }
+    match number {
+        syscall::DEBUG_MARKER => {
+            print_debug_byte(b'S');
+            set_ready();
+            unsafe { k16_rt::iret_with_r0(syscall::DEBUG_MARKER_RETURN) }
+        }
+        syscall::DEBUG_WRITE_BYTE => {
+            print_debug_byte((k16_rt::syscall_arg0() & 0xff) as u8);
+            unsafe { k16_rt::iret_with_r0(syscall::STATUS_OK) }
+        }
+        syscall::YIELD => {
+            k16_rt::yield_once();
+            unsafe { k16_rt::iret_with_r0(syscall::STATUS_OK) }
+        }
+        syscall::SLEEP_TICKS => {
+            sleep_ticks(k16_rt::syscall_arg0());
+            unsafe { k16_rt::iret_with_r0(syscall::STATUS_OK) }
+        }
+        _ => kernel_trap(),
     }
-
-    if number == syscall::DEBUG_WRITE_BYTE {
-        print_debug_byte((k16_rt::syscall_arg0() & 0xff) as u8);
-        unsafe { k16_rt::iret_with_r0(syscall::STATUS_OK) }
-    }
-
-    if number == syscall::YIELD {
-        k16_rt::yield_once();
-        unsafe { k16_rt::iret_with_r0(syscall::STATUS_OK) }
-    }
-
-    if number == syscall::SLEEP_TICKS {
-        sleep_ticks(k16_rt::syscall_arg0());
-        unsafe { k16_rt::iret_with_r0(syscall::STATUS_OK) }
-    }
-
-    kernel_trap();
 }
 
 fn sleep_ticks(ticks: u32) {
