@@ -173,10 +173,9 @@ use std::{env, fs, process};
 
 const SYSCALL_PROBE_ADDR: u32 = 0x0000_9000;
 const SYSCALL_PROBE_SCRATCH_ADDR: u32 = 0x0000_9100;
+const KERNEL_STACK_TOP: u32 = 0x0001_0000;
 
 fn main() {
-    const KERNEL_STACK_TOP: u32 = 0x0001_0000;
-
     let kernel_path = env::args().nth(1).expect("kernel path argument");
     let kernel = fs::read(&kernel_path).expect("kernel K16E reads");
     let executable = k16e::decode_k16_executable(&kernel).expect("kernel K16E decodes");
@@ -185,11 +184,25 @@ fn main() {
         process::exit(1);
     }
 
+    let mut handle = boot_kernel(&executable, "main smoke");
+    assert_initial_kernel_idle(&mut handle);
+    run_timer_heartbeat_smoke(&mut handle);
+    run_known_syscall_smoke(&mut handle, &executable);
+    run_unknown_syscall_smoke(&executable);
+
+    println!(
+        "first_signal=yield timer_signals=yield,yield syscall_signal=yield sleep_signal=yield continuation_signal=yield status=READY debug_suffix=7c7c53217c continuation_r2=83 continuation_r3=0 continuation_r4=0 continuation_r5=0 unknown_signal=halt unknown_status=HALTED unknown_panic_code=4 unknown_debug_suffix=4b3136204b45524e454c20545241500a"
+    );
+}
+
+fn boot_kernel(executable: &k16e::K16eExecutable, context: &str) -> K16ComputerHandle {
     let mut handle = K16ComputerHandle::create_k16_bios_flash(&[0x01, 0x00], 64 * 1024, 1_000_000)
-        .expect("K16 computer creates");
+        .unwrap_or_else(|error| panic!("K16 computer creates for {context}: {error}"));
     handle
         .write_guest_ram_bytes(executable.load_addr, &executable.payload)
-        .expect("kernel payload writes to guest RAM");
+        .unwrap_or_else(|error| {
+            panic!("kernel payload writes to guest RAM for {context}: {error}")
+        });
     handle
         .boot_handoff_k16_from_guest_ram_with_stack(
             executable.entry_pc,
@@ -197,8 +210,11 @@ fn main() {
             1_000_000,
             KERNEL_STACK_TOP,
         )
-        .expect("kernel boot handoff succeeds");
+        .unwrap_or_else(|error| panic!("kernel boot handoff succeeds for {context}: {error}"));
+    handle
+}
 
+fn assert_initial_kernel_idle(handle: &mut K16ComputerHandle) {
     let first = handle.run_k16_until_signal().expect("initial kernel run succeeds");
     if first != K16Signal::Yield {
         eprintln!("expected signal=yield from live kernel idle loop, got {first:?}");
@@ -216,19 +232,21 @@ fn main() {
         );
         process::exit(1);
     }
+}
 
+fn run_timer_heartbeat_smoke(handle: &mut K16ComputerHandle) {
     handle.advance_game_tick();
     let second = handle
         .run_k16_until_signal()
         .expect("first timer0 resume succeeds");
     if second != K16Signal::Yield {
-        dump_cpu_snapshot(&mut handle);
+        dump_cpu_snapshot(handle);
         eprintln!("debug_bytes={}", hex_bytes(handle.debug_output_bytes()));
         eprintln!("expected signal=yield after timer0 heartbeat, got {second:?}");
         process::exit(1);
     }
     if !handle.debug_output_bytes().ends_with(&[b'|']) {
-        dump_cpu_snapshot(&mut handle);
+        dump_cpu_snapshot(handle);
         eprintln!(
             "expected debug_suffix=7c after timer0 heartbeat, got {}",
             hex_bytes(handle.debug_output_bytes())
@@ -241,23 +259,28 @@ fn main() {
         .run_k16_until_signal()
         .expect("second timer0 resume succeeds");
     if third != K16Signal::Yield {
-        dump_cpu_snapshot(&mut handle);
+        dump_cpu_snapshot(handle);
         eprintln!("debug_bytes={}", hex_bytes(handle.debug_output_bytes()));
         eprintln!("expected signal=yield after second timer0 heartbeat, got {third:?}");
         process::exit(1);
     }
     if !handle.debug_output_bytes().ends_with(b"||") {
-        dump_cpu_snapshot(&mut handle);
+        dump_cpu_snapshot(handle);
         eprintln!(
             "expected debug_suffix=7c7c after repeated timer0 heartbeat, got {}",
             hex_bytes(handle.debug_output_bytes())
         );
         process::exit(1);
     }
+}
 
-    let syscall_pc = boot_cpu_pc(&mut handle);
+fn run_known_syscall_smoke(
+    handle: &mut K16ComputerHandle,
+    executable: &k16e::K16eExecutable,
+) {
+    let syscall_pc = boot_cpu_pc(handle);
     let trampoline = jump_to_syscall_probe(SYSCALL_PROBE_ADDR);
-    let original_bytes = original_guest_bytes(&executable, syscall_pc, trampoline.len());
+    let original_bytes = original_guest_bytes(executable, syscall_pc, trampoline.len());
     handle
         .write_guest_ram_bytes(
             SYSCALL_PROBE_ADDR,
@@ -271,7 +294,7 @@ fn main() {
         .run_k16_until_signal()
         .expect("yield syscall handler runs");
     if fourth != K16Signal::Yield {
-        dump_cpu_snapshot(&mut handle);
+        dump_cpu_snapshot(handle);
         eprintln!("debug_bytes={}", hex_bytes(handle.debug_output_bytes()));
         eprintln!("expected signal=yield from yield syscall handler, got {fourth:?}");
         process::exit(1);
@@ -280,7 +303,7 @@ fn main() {
         .run_k16_until_signal()
         .expect("sleep syscall handler runs before target tick");
     if fifth != K16Signal::Yield {
-        dump_cpu_snapshot(&mut handle);
+        dump_cpu_snapshot(handle);
         eprintln!("debug_bytes={}", hex_bytes(handle.debug_output_bytes()));
         eprintln!("expected signal=yield from sleep syscall handler, got {fifth:?}");
         process::exit(1);
@@ -290,66 +313,55 @@ fn main() {
         .run_k16_until_signal()
         .expect("returning syscall probe continuation runs after sleep tick");
     if sixth != K16Signal::Yield {
-        dump_cpu_snapshot(&mut handle);
+        dump_cpu_snapshot(handle);
         eprintln!("debug_bytes={}", hex_bytes(handle.debug_output_bytes()));
         eprintln!("expected signal=yield after sleep syscall continuation, got {sixth:?}");
         process::exit(1);
     }
-    let continuation_r2 = boot_cpu_register(&mut handle, 2);
+    let continuation_r2 = boot_cpu_register(handle, 2);
     if continuation_r2 != 83 {
-        dump_cpu_snapshot(&mut handle);
+        dump_cpu_snapshot(handle);
         eprintln!(
             "expected continuation_r2=83 after returning syscall proof, got {continuation_r2}"
         );
         process::exit(1);
     }
-    let continuation_r3 = boot_cpu_register(&mut handle, 3);
+    let continuation_r3 = boot_cpu_register(handle, 3);
     if continuation_r3 != 0 {
-        dump_cpu_snapshot(&mut handle);
+        dump_cpu_snapshot(handle);
         eprintln!(
             "expected continuation_r3=0 after syscall1 debug-write proof, got {continuation_r3}"
         );
         process::exit(1);
     }
-    let continuation_r4 = boot_cpu_register(&mut handle, 4);
+    let continuation_r4 = boot_cpu_register(handle, 4);
     if continuation_r4 != 0 {
-        dump_cpu_snapshot(&mut handle);
+        dump_cpu_snapshot(handle);
         eprintln!(
             "expected continuation_r4=0 after yield syscall proof, got {continuation_r4}"
         );
         process::exit(1);
     }
-    let continuation_r5 = boot_cpu_register(&mut handle, 5);
+    let continuation_r5 = boot_cpu_register(handle, 5);
     if continuation_r5 != 0 {
-        dump_cpu_snapshot(&mut handle);
+        dump_cpu_snapshot(handle);
         eprintln!(
             "expected continuation_r5=0 after sleep syscall proof, got {continuation_r5}"
         );
         process::exit(1);
     }
     if !handle.debug_output_bytes().ends_with(b"||S!|") {
-        dump_cpu_snapshot(&mut handle);
+        dump_cpu_snapshot(handle);
         eprintln!(
             "expected debug_suffix=7c7c53217c after sleep syscall tick proof, got {}",
             hex_bytes(handle.debug_output_bytes())
         );
         process::exit(1);
     }
+}
 
-    let mut unknown_handle =
-        K16ComputerHandle::create_k16_bios_flash(&[0x01, 0x00], 64 * 1024, 1_000_000)
-            .expect("K16 computer creates for unknown syscall smoke");
-    unknown_handle
-        .write_guest_ram_bytes(executable.load_addr, &executable.payload)
-        .expect("kernel payload writes to guest RAM for unknown syscall smoke");
-    unknown_handle
-        .boot_handoff_k16_from_guest_ram_with_stack(
-            executable.entry_pc,
-            executable.payload.len() as u32,
-            1_000_000,
-            KERNEL_STACK_TOP,
-        )
-        .expect("kernel boot handoff succeeds for unknown syscall smoke");
+fn run_unknown_syscall_smoke(executable: &k16e::K16eExecutable) {
+    let mut unknown_handle = boot_kernel(executable, "unknown syscall smoke");
     let unknown_first = unknown_handle
         .run_k16_until_signal()
         .expect("unknown syscall smoke reaches kernel idle");
@@ -405,10 +417,6 @@ fn main() {
         );
         process::exit(1);
     }
-
-    println!(
-        "first_signal=yield timer_signals=yield,yield syscall_signal=yield sleep_signal=yield continuation_signal=yield status=READY debug_suffix=7c7c53217c continuation_r2=83 continuation_r3=0 continuation_r4=0 continuation_r5=0 unknown_signal=halt unknown_status=HALTED unknown_panic_code=4 unknown_debug_suffix=4b3136204b45524e454c20545241500a"
-    );
 }
 
 fn hex_bytes(bytes: &[u8]) -> String {
