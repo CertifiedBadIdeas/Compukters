@@ -19,7 +19,13 @@ fn k16_inspect_identifies_partitioned_volume() {
     let path = temp_file("storage0.kv");
     let media_path = temp_file("storage0-media.bin");
     assert!(Command::new(k16_binary())
-        .args(["volume", "init", path.to_str().unwrap(), "--size", TEST_VOLUME_SIZE])
+        .args([
+            "volume",
+            "init",
+            path.to_str().unwrap(),
+            "--size",
+            TEST_VOLUME_SIZE
+        ])
         .status()
         .expect("volume init runs")
         .success());

@@ -38,7 +38,13 @@ fn k16_volume_create_writes_empty_k16vol_header() {
 fn k16_volume_init_writes_k16pt_boot_and_root_partitions() {
     let path = temp_file("init-storage0.kv");
     let output = Command::new(k16_binary())
-        .args(["volume", "init", path.to_str().unwrap(), "--size", TEST_VOLUME_SIZE])
+        .args([
+            "volume",
+            "init",
+            path.to_str().unwrap(),
+            "--size",
+            TEST_VOLUME_SIZE,
+        ])
         .output()
         .expect("k16 runs");
 
