@@ -6,6 +6,10 @@ pub type MmioDeviceId = usize;
 pub trait MmioDevice: Any {
     fn size(&self) -> u32;
 
+    fn take_yield_signal(&mut self) -> bool {
+        false
+    }
+
     fn load_i32(&self, offset: u32) -> Result<i32, MemoryFault>;
 
     fn store_i32(&mut self, offset: u32, value: i32) -> Result<(), MemoryFault>;
@@ -176,6 +180,12 @@ impl MachineBus {
 impl MemoryBus for MachineBus {
     fn len(&self) -> usize {
         self.memory.len()
+    }
+
+    fn take_yield_signal(&mut self) -> bool {
+        self.regions
+            .iter_mut()
+            .any(|region| region.device.take_yield_signal())
     }
 
     fn load_i32(&self, address: u32) -> Result<i32, MemoryFault> {

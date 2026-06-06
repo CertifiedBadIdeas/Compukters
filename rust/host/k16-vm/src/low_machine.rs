@@ -28,6 +28,10 @@ pub struct MachineMemory {
 pub trait MemoryBus {
     fn len(&self) -> usize;
 
+    fn take_yield_signal(&mut self) -> bool {
+        false
+    }
+
     fn load_i32(&self, address: u32) -> Result<i32, MemoryFault>;
 
     fn store_i32(&mut self, address: u32, value: i32) -> Result<(), MemoryFault>;

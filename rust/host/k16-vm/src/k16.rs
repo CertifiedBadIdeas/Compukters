@@ -19,6 +19,7 @@ pub const K16_TRAP_CAUSE_EXPLICIT_TRAP: u32 = 5;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum K16Signal {
     Halt,
+    Yield,
     StepLimitExceeded,
 }
 
@@ -428,7 +429,7 @@ impl K16Cpu {
         self.metrics.steps += 1;
         self.pc = decode.next_pc;
 
-        match decode.instruction {
+        let signal = match decode.instruction {
             DecodedInstruction::Nop => Ok(None),
             DecodedInstruction::Halt => {
                 self.state = K16State::Halted;
@@ -567,7 +568,11 @@ impl K16Cpu {
                 self.write_csr_from_register(fault_pc, csr, src)?;
                 Ok(None)
             }
+        }?;
+        if signal.is_none() && bus.take_yield_signal() {
+            return Ok(Some(K16Signal::Yield));
         }
+        Ok(signal)
     }
 
     fn load_u8_into_register(

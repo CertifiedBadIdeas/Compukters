@@ -6,6 +6,7 @@ pub(crate) struct ComputerControlDevice {
     pub(crate) status: i32,
     pub(crate) panic_code: i32,
     pub(crate) exit_code: i32,
+    yield_requested: bool,
 }
 
 impl ComputerControlDevice {
@@ -16,6 +17,7 @@ impl ComputerControlDevice {
             status: computer_abi::STATUS_RESET,
             panic_code: 0,
             exit_code: 0,
+            yield_requested: false,
         }
     }
 
@@ -35,6 +37,7 @@ impl ComputerControlDevice {
             0 => Ok(self.status),
             4 => Ok(self.panic_code),
             8 => Ok(self.exit_code),
+            12 => Ok(i32::from(self.yield_requested)),
             _ => Err(MemoryFault::new(format!(
                 "computer control offset {offset} is not mapped",
             ))),
@@ -47,11 +50,21 @@ impl MmioDevice for ComputerControlDevice {
         Self::SIZE
     }
 
+    fn take_yield_signal(&mut self) -> bool {
+        let requested = self.yield_requested;
+        self.yield_requested = false;
+        requested
+    }
+
     fn load_i32(&self, offset: u32) -> Result<i32, MemoryFault> {
         self.value_for_offset(offset)
     }
 
     fn store_i32(&mut self, offset: u32, value: i32) -> Result<(), MemoryFault> {
+        if offset == 12 {
+            self.yield_requested = value != 0;
+            return Ok(());
+        }
         *self.register_for_offset(offset)? = value;
         Ok(())
     }

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Added `control + 0x0c` as a guest-visible `yield` request register. A
+  non-zero write pauses the current VM tick after the current instruction and
+  resumes execution on the next host tick without changing durable control
+  snapshot state.
 - Added `framebuffer0` to K16 computer profile v1 as a guest-visible RGB565
   pixel MMIO device. Guest code can blit little-endian RGB565 rectangles from
   RAM and explicitly present dirty tiles through the existing display-frame

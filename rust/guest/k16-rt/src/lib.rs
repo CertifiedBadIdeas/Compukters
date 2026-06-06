@@ -4,6 +4,9 @@
 extern crate std;
 
 #[cfg(not(test))]
+const CONTROL_YIELD: u32 = 0x1000_000c;
+
+#[cfg(not(test))]
 extern "C" {
     fn __k16_halt_once();
 }
@@ -16,8 +19,19 @@ pub fn halt_once() {
     }
 }
 
+#[cfg(not(test))]
+#[inline(always)]
+pub fn yield_once() {
+    unsafe {
+        core::ptr::write_volatile(CONTROL_YIELD as usize as *mut i32, 1);
+    }
+}
+
 #[cfg(test)]
 pub fn halt_once() {}
+
+#[cfg(test)]
+pub fn yield_once() {}
 
 pub fn halt_forever() -> ! {
     loop {

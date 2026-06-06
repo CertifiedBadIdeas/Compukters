@@ -536,6 +536,7 @@ fn run_kfs(args: &[String]) -> Result<(), String> {
 fn signal_name(signal: K16Signal) -> &'static str {
     match signal {
         K16Signal::Halt => "halt",
+        K16Signal::Yield => "yield",
         K16Signal::StepLimitExceeded => "step-limit-exceeded",
     }
 }

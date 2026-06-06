@@ -130,6 +130,35 @@ class K16FirmwareResourceTest {
     }
 
     @Test
+    fun bundledK16BiosSplashIsObservableBeforeStorageBoot() {
+        val workspace = createTempDirectory("k16-firmware-splash-test-")
+        val biosFlashPath = workspace.resolve("bios.kflash")
+        val storage0Path = workspace.resolve("storage0.kv")
+        biosFlashPath.writeBytes(K16BiosFlashWorkspace.loadBiosFlashResource(classLoader = javaClass.classLoader))
+        storage0Path.writeBytes(K16SystemVolumeWorkspace.loadStorage0VolumeResource(classLoader = javaClass.classLoader))
+
+        K16ComputerRuntimeFactory.createFromBiosFlash(
+            biosFlashPath = biosFlashPath,
+            storage0Path = storage0Path,
+        ).use { runtime ->
+            val splashControl = runtime.tick(maxTurns = 1)
+            val splashSnapshot = runtime.display0Snapshot() ?: error("display0 splash snapshot should exist")
+            val splashRow0 = displayRow(splashSnapshot, 0)
+
+            assertEquals(NativeK16ComputerControl.STATUS_BOOTING, splashControl.status)
+            assertEquals("K16 BIOS", splashRow0)
+            assertFalse("KERNEL OK" in splashRow0)
+
+            val bootControl = runtime.tick(maxTurns = 1_000_000)
+            val bootSnapshot = runtime.display0Snapshot() ?: error("display0 boot snapshot should exist")
+            val bootRow0 = displayRow(bootSnapshot, 0)
+
+            assertEquals(NativeK16ComputerControl.STATUS_HALTED, bootControl.status)
+            assertEquals("KERNEL OK", bootRow0)
+        }
+    }
+
+    @Test
     fun bundledK16SystemStorage0RestoresRustKernelRuntimeSnapshot() {
         val workspace = createTempDirectory("k16-firmware-restore-test-")
         val biosFlashPath = workspace.resolve("bios.kflash")
