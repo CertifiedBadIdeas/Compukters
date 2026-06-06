@@ -144,6 +144,11 @@ pub fn debug_write_byte(byte: u8) -> u32 {
     syscall1(k16_abi::syscall::DEBUG_WRITE_BYTE, u32::from(byte))
 }
 
+#[inline(always)]
+pub fn yield_syscall() -> u32 {
+    syscall0(k16_abi::syscall::YIELD)
+}
+
 #[cfg(not(any(test, feature = "host-test")))]
 #[inline(always)]
 pub unsafe fn set_interrupt_mask(mask: u32) {

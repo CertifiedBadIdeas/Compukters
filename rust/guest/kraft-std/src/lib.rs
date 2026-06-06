@@ -16,6 +16,12 @@ pub mod debug {
     }
 }
 
+pub mod thread {
+    pub fn yield_now() {
+        let _ = k16_rt::yield_syscall();
+    }
+}
+
 pub mod prelude {
-    pub use crate::debug;
+    pub use crate::{debug, thread};
 }

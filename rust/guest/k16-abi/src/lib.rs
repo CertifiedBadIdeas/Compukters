@@ -73,6 +73,7 @@ pub mod cpu {
 pub mod syscall {
     pub const DEBUG_MARKER: u32 = 2;
     pub const DEBUG_WRITE_BYTE: u32 = 3;
+    pub const YIELD: u32 = 4;
     pub const DEBUG_MARKER_RETURN: u32 = 0x53;
     pub const STATUS_OK: u32 = 0;
 }
@@ -382,6 +383,7 @@ mod tests {
     fn syscall_constants_match_current_k16_kernel_proof_surface() {
         assert_eq!(syscall::DEBUG_MARKER, 2);
         assert_eq!(syscall::DEBUG_WRITE_BYTE, 3);
+        assert_eq!(syscall::YIELD, 4);
         assert_eq!(syscall::DEBUG_MARKER_RETURN, 0x53);
         assert_eq!(syscall::STATUS_OK, 0);
     }

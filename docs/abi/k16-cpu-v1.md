@@ -491,6 +491,7 @@ K16 syscall ABI v0 names the current Rust-kernel proof services in
 | --- | ---: | --- | --- |
 | `DEBUG_MARKER` | `2` | `k16_rt::debug_marker()` | Kernel writes `S` to debug output and returns `DEBUG_MARKER_RETURN`. |
 | `DEBUG_WRITE_BYTE` | `3` | `k16_rt::debug_write_byte(byte)` | Kernel writes the low byte supplied in `trap_arg0` and returns `STATUS_OK`. |
+| `YIELD` | `4` | `k16_rt::yield_syscall()` | Kernel yields once to the host and then returns `STATUS_OK`. |
 | `DEBUG_MARKER_RETURN` | `0x53` | n/a | Proof return value for `DEBUG_MARKER`. |
 | `STATUS_OK` | `0` | n/a | Successful proof-service status. |
 
