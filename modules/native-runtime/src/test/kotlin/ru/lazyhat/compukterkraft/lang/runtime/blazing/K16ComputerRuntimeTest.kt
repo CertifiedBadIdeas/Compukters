@@ -96,6 +96,23 @@ class K16ComputerRuntimeTest {
     }
 
     @Test
+    fun returnsAfterYieldSignalWithoutConsumingTheNextTurn() {
+        val bindings = EchoBindings()
+        bindings.signals += NativeK16ComputerSignal.Yield
+        bindings.signals += NativeK16ComputerSignal.Halt
+        bindings.control = NativeK16ComputerControl(status = 1, exitCode = 0, panicCode = 0)
+        val runtime = K16ComputerRuntime(handle = 25L, bindings = bindings, defaultMaxTurnsPerTick = 8)
+
+        assertEquals(NativeK16ComputerControl(status = 1, exitCode = 0, panicCode = 0), runtime.tick())
+        assertEquals(1, bindings.runUntilSignalCalls)
+
+        bindings.control = NativeK16ComputerControl(status = 3, exitCode = 0, panicCode = 0)
+
+        assertEquals(NativeK16ComputerControl(status = 3, exitCode = 0, panicCode = 0), runtime.tick())
+        assertEquals(2, bindings.runUntilSignalCalls)
+    }
+
+    @Test
     fun exposesDisplaySnapshotAndPollsOnlyChangedSequences() {
         val bindings = EchoBindings()
         val runtime = K16ComputerRuntime(handle = 11L, bindings = bindings)
@@ -147,12 +164,16 @@ class K16ComputerRuntimeTest {
         var machineSnapshot: ByteArray = ByteArray(0)
         var control: NativeK16ComputerControl = NativeK16ComputerControl(status = 1, exitCode = 0, panicCode = 0)
         var signal: NativeK16ComputerSignal = NativeK16ComputerSignal.Pause
+        val signals = ArrayDeque<NativeK16ComputerSignal>()
         var runUntilSignalCalls = 0
             private set
         private val pendingOutput = ArrayDeque<ByteArray>()
 
         override fun runUntilSignal(handle: Long): NativeK16ComputerSignal {
             runUntilSignalCalls += 1
+            if (signals.isNotEmpty()) {
+                return signals.removeFirst()
+            }
             return signal
         }
 

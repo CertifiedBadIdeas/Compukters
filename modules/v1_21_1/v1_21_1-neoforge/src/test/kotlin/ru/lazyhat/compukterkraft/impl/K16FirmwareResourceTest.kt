@@ -2,6 +2,7 @@ package ru.lazyhat.compukterkraft.impl
 
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16ComputerDisplaySnapshot
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16BiosFlashWorkspace
+import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16ComputerRuntime
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16ComputerRuntimeFactory
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16ComputerControl
 import ru.lazyhat.compukterkraft.lang.runtime.storage.K16_VOLUME_MAGIC_BYTES
@@ -115,7 +116,7 @@ class K16FirmwareResourceTest {
             biosFlashPath = biosFlashPath,
             storage0Path = storage0Path,
         ).use { runtime ->
-            val control = runtime.tick(maxTurns = 1_000_000)
+            val control = runThroughBiosSplashAndBoot(runtime)
             val snapshot = runtime.display0Snapshot() ?: error("display0 snapshot should exist")
             val row0 = displayRow(snapshot, 0)
             val debug = runtime.outputSnapshot().decodeToString()
@@ -141,7 +142,7 @@ class K16FirmwareResourceTest {
             biosFlashPath = biosFlashPath,
             storage0Path = storage0Path,
         ).use { runtime ->
-            val splashControl = runtime.tick(maxTurns = 1)
+            val splashControl = runtime.tick()
             val splashSnapshot = runtime.display0Snapshot() ?: error("display0 splash snapshot should exist")
             val splashRow0 = displayRow(splashSnapshot, 0)
 
@@ -171,7 +172,7 @@ class K16FirmwareResourceTest {
                 biosFlashPath = biosFlashPath,
                 storage0Path = storage0Path,
             ).use { runtime ->
-                val control = runtime.tick(maxTurns = 1_000_000)
+                val control = runThroughBiosSplashAndBoot(runtime)
                 assertEquals(NativeK16ComputerControl.STATUS_HALTED, control.status)
                 runtime.machineSnapshot()
             }
@@ -205,5 +206,11 @@ class K16FirmwareResourceTest {
                 .indexOfLast { it != ' '.code.toByte() && it != 0.toByte() }
                 .let { if (it < 0) 0 else it + 1 }
         return cells.copyOfRange(0, visibleEnd).decodeToString()
+    }
+
+    private fun runThroughBiosSplashAndBoot(runtime: K16ComputerRuntime): NativeK16ComputerControl {
+        val splashControl = runtime.tick()
+        assertEquals(NativeK16ComputerControl.STATUS_BOOTING, splashControl.status)
+        return runtime.tick(maxTurns = 1_000_000)
     }
 }
