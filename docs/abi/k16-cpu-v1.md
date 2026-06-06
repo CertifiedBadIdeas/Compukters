@@ -441,6 +441,7 @@ CSR instructions use the zero-opcode encoding family:
 read_csr   0x0ab2    rA = csr(B)
 write_csr  0x0ab3    csr(A) = rB
 iret       0x0004    pc = trap_pc; interrupt_enable = 1
+syscall    0x0a05    trap_cause = explicit trap; trap_value = rA; trap_pc = next pc
 ```
 
 The active v1 CSRs are:
@@ -462,6 +463,14 @@ Synchronous exceptions are delivered immediately when the faulting instruction
 is decoded or executed. If `trap_vector = 0`, the VM reports a hard CPU trap to
 the host. Otherwise the CPU records `trap_cause`, `trap_pc`, and `trap_value`,
 then sets `pc = trap_vector`.
+
+The `syscall rA` instruction is the returning explicit-trap entry for guest
+OS services. It records `trap_cause = 0x00000005`,
+`trap_value = rA`, and `trap_pc` as the next instruction after `syscall`, then
+records the current stack pointer as `trap_stack_pointer` and enters
+`trap_vector` with interrupt delivery disabled until `iret`. A kernel handler
+can complete the service and use `iret` to resume the caller after the `syscall`
+instruction.
 
 Asynchronous interrupts are delivered between guest instructions. Delivery
 requires `interrupt_enable != 0` and a source bit present in both

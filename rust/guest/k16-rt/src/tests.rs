@@ -152,3 +152,15 @@ fn interrupt_helpers_update_test_csr_state() {
 
     assert_eq!(crate::trap::test_interrupt_enable(), 0);
 }
+
+#[test]
+fn syscall_helper_records_test_syscall_number() {
+    crate::trap::reset_test_interrupts();
+
+    syscall_once(k16_abi::cpu::csr::TRAP_CAUSE);
+
+    assert_eq!(
+        crate::trap::test_syscall_number(),
+        k16_abi::cpu::csr::TRAP_CAUSE
+    );
+}

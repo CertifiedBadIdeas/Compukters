@@ -2,7 +2,7 @@ use k16_vm::k16::{
     K16Cpu, K16Signal, K16_CSR_INTERRUPT_ENABLE, K16_CSR_INTERRUPT_MASK, K16_CSR_INTERRUPT_PENDING,
     K16_CSR_TRAP_CAUSE, K16_CSR_TRAP_PC, K16_CSR_TRAP_VALUE, K16_CSR_TRAP_VECTOR,
     K16_INTERRUPT_SOURCE_TIMER0, K16_STACK_POINTER_REGISTER, K16_TRAP_CAUSE_ILLEGAL_INSTRUCTION,
-    K16_TRAP_CAUSE_TIMER0_INTERRUPT,
+    K16_TRAP_CAUSE_EXPLICIT_TRAP, K16_TRAP_CAUSE_TIMER0_INTERRUPT,
 };
 use k16_vm::low_bus::{MachineBus, MmioDevice};
 use k16_vm::low_machine::MemoryFault;
@@ -484,6 +484,31 @@ fn k16_iret_restores_interrupted_stack_pointer() {
 }
 
 #[test]
+fn k16_syscall_enters_vector_and_iret_resumes_next_instruction() {
+    let mut bus = MachineBus::new(64).unwrap();
+    let mut program = Vec::new();
+    program.extend(const32(1, 24));
+    program.push(write_csr(K16_CSR_TRAP_VECTOR, 1));
+    program.push(const4(2, K16_CSR_TRAP_CAUSE as u8));
+    program.push(syscall(2));
+    program.push(const4(6, 9));
+    program.push(halt());
+    program.extend([0; 6]);
+    program.push(read_csr(3, K16_CSR_TRAP_CAUSE));
+    program.push(read_csr(4, K16_CSR_TRAP_PC));
+    program.push(read_csr(5, K16_CSR_TRAP_VALUE));
+    program.push(iret());
+    write_words(&mut bus, 0, &program);
+    let mut cpu = K16Cpu::new(0);
+
+    assert_eq!(cpu.run_until_signal(&mut bus, 16).unwrap(), K16Signal::Halt);
+    assert_eq!(cpu.register(3), K16_TRAP_CAUSE_EXPLICIT_TRAP);
+    assert_eq!(cpu.register(4), 12);
+    assert_eq!(cpu.register(5), K16_CSR_TRAP_CAUSE);
+    assert_eq!(cpu.register(6), 9);
+}
+
+#[test]
 fn k16_timer_interrupt_remains_pending_while_masked() {
     let mut bus = MachineBus::new(64).unwrap();
     write_words(
@@ -652,6 +677,10 @@ fn ret() -> u16 {
 
 fn iret() -> u16 {
     0x0004
+}
+
+fn syscall(register: u8) -> u16 {
+    0x0005 | (u16::from(register) << 8)
 }
 
 fn branch_if_zero(register: u8, offset_words: i8) -> u16 {

@@ -62,7 +62,7 @@ fn dispatch_syscall(number: u32) -> ! {
     if number == SYSCALL_DEBUG_MARKER {
         print_debug_byte(b'S');
         set_ready();
-        idle_forever();
+        unsafe { k16_rt::iret_once() }
     }
 
     kernel_trap();
