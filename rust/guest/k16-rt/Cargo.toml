@@ -6,3 +6,5 @@ edition = "2021"
 [lib]
 path = "src/lib.rs"
 
+[dependencies]
+k16-abi = { path = "../k16-abi" }

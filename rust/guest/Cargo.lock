@@ -42,3 +42,6 @@ dependencies = [
 [[package]]
 name = "k16-rt"
 version = "0.1.0"
+dependencies = [
+ "k16-abi",
+]
