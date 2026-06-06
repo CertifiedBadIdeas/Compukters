@@ -55,10 +55,12 @@ abstract class ComputerDisplayScreen<T : AbstractComputerMenu>(
     protected abstract val terminalRows: Int
 
     private val displayTexture: DisplayTextureCache by lazy { DisplayTextureCache(displayId) }
+    private var lastMenuPowerState: Boolean? = null
 
     override fun init() {
         super.init()
         attachDisplayEndpoint()
+        lastMenuPowerState = menu.isComputerOn
         focusFirstNodeIfUnfocused()
     }
 
@@ -80,6 +82,7 @@ abstract class ComputerDisplayScreen<T : AbstractComputerMenu>(
 
     override fun containerTick() {
         super.containerTick()
+        syncDisplayPowerState()
         menu.clientSide.displayBuffer?.swapIfDirty()
         syncDisplayEndpoint()
         focusFirstNodeIfUnfocused()
@@ -137,6 +140,22 @@ abstract class ComputerDisplayScreen<T : AbstractComputerMenu>(
             menu.clientSide.attachDisplayBuffer(ClientDisplayBuffer(displayId, displayWidth, displayHeight))
             ClientNetworking.sendToServer(DisplayResizeServerMessage(menu, displayId, displayWidth, displayHeight))
         }
+    }
+
+    private fun syncDisplayPowerState() {
+        val currentPowerState = menu.isComputerOn
+        val lastPowerState = lastMenuPowerState
+        if (lastPowerState == true && !currentPowerState) {
+            resetDisplayBuffer()
+        }
+        lastMenuPowerState = currentPowerState
+    }
+
+    private fun resetDisplayBuffer() {
+        val displayWidth = currentDisplayWidth()
+        val displayHeight = currentDisplayHeight()
+        menu.clientSide.detachDisplayBuffer()
+        menu.clientSide.attachDisplayBuffer(ClientDisplayBuffer(displayId, displayWidth, displayHeight))
     }
 
     private fun drawDisplayTexture(guiGraphics: GuiGraphics) {
