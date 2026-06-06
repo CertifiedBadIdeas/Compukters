@@ -69,7 +69,7 @@ fn computer_machine_writes_display0_hardware_entry() {
     assert_eq!(read_u32(machine.memory(), 0x18), 7);
     assert_hardware_entry(
         machine.memory(),
-        64,
+        76,
         computer_abi::COMPUTER_HARDWARE_ID_DISPLAY0,
         computer_abi::DISPLAY0_BASE,
         computer_abi::DISPLAY0_SIZE,
@@ -83,7 +83,7 @@ fn computer_machine_writes_framebuffer0_hardware_entry() {
     assert_eq!(read_u32(machine.memory(), 0x18), 7);
     assert_hardware_entry(
         machine.memory(),
-        76,
+        92,
         computer_abi::COMPUTER_HARDWARE_ID_FRAMEBUFFER0,
         computer_abi::FRAMEBUFFER0_BASE,
         computer_abi::FRAMEBUFFER0_SIZE,
@@ -329,45 +329,46 @@ fn computer_machine_writes_static_hardware_table_for_mmio_ranges() {
     );
     assert_hardware_entry(
         machine.memory(),
-        40,
+        44,
         computer_abi::COMPUTER_HARDWARE_ID_DEBUG,
         computer_abi::DEBUG_BASE,
         computer_abi::PROFILE_V2_PAGE_SIZE,
     );
     assert_hardware_entry(
         machine.memory(),
-        52,
+        60,
         computer_abi::COMPUTER_HARDWARE_ID_SERIAL_INPUT,
         computer_abi::SERIAL_INPUT_BASE,
         computer_abi::PROFILE_V2_PAGE_SIZE,
     );
     assert_hardware_entry(
         machine.memory(),
-        64,
+        76,
         computer_abi::COMPUTER_HARDWARE_ID_DISPLAY0,
         computer_abi::DISPLAY0_BASE,
         computer_abi::PROFILE_V2_PAGE_SIZE,
     );
     assert_hardware_entry(
         machine.memory(),
-        76,
+        92,
         computer_abi::COMPUTER_HARDWARE_ID_FRAMEBUFFER0,
         computer_abi::FRAMEBUFFER0_BASE,
         computer_abi::PROFILE_V2_PAGE_SIZE,
     );
     assert_hardware_entry(
         machine.memory(),
-        88,
+        108,
         computer_abi::COMPUTER_HARDWARE_ID_STORAGE0,
         computer_abi::STORAGE0_BASE,
         computer_abi::PROFILE_V2_PAGE_SIZE,
     );
-    assert_hardware_entry(
+    assert_hardware_entry_with_irq(
         machine.memory(),
-        100,
+        124,
         computer_abi::COMPUTER_HARDWARE_ID_TIMER0,
         computer_abi::TIMER0_BASE,
         computer_abi::PROFILE_V2_PAGE_SIZE,
+        crate::k16::K16_INTERRUPT_SOURCE_TIMER0,
     );
 }
 
@@ -386,45 +387,46 @@ fn computer_machine_can_be_created_from_explicit_computer_v1_profile() {
     );
     assert_hardware_entry(
         machine.memory(),
-        40,
+        44,
         computer_abi::COMPUTER_HARDWARE_ID_DEBUG,
         computer_abi::DEBUG_BASE,
         computer_abi::PROFILE_V2_PAGE_SIZE,
     );
     assert_hardware_entry(
         machine.memory(),
-        52,
+        60,
         computer_abi::COMPUTER_HARDWARE_ID_SERIAL_INPUT,
         computer_abi::SERIAL_INPUT_BASE,
         computer_abi::PROFILE_V2_PAGE_SIZE,
     );
     assert_hardware_entry(
         machine.memory(),
-        64,
+        76,
         computer_abi::COMPUTER_HARDWARE_ID_DISPLAY0,
         computer_abi::DISPLAY0_BASE,
         computer_abi::PROFILE_V2_PAGE_SIZE,
     );
     assert_hardware_entry(
         machine.memory(),
-        76,
+        92,
         computer_abi::COMPUTER_HARDWARE_ID_FRAMEBUFFER0,
         computer_abi::FRAMEBUFFER0_BASE,
         computer_abi::PROFILE_V2_PAGE_SIZE,
     );
     assert_hardware_entry(
         machine.memory(),
-        88,
+        108,
         computer_abi::COMPUTER_HARDWARE_ID_STORAGE0,
         computer_abi::STORAGE0_BASE,
         computer_abi::PROFILE_V2_PAGE_SIZE,
     );
-    assert_hardware_entry(
+    assert_hardware_entry_with_irq(
         machine.memory(),
-        100,
+        124,
         computer_abi::COMPUTER_HARDWARE_ID_TIMER0,
         computer_abi::TIMER0_BASE,
         computer_abi::PROFILE_V2_PAGE_SIZE,
+        crate::k16::K16_INTERRUPT_SOURCE_TIMER0,
     );
 }
 
@@ -757,7 +759,7 @@ fn computer_machine_profile_controls_which_hardware_entries_are_visible() {
     );
     assert_hardware_entry(
         machine.memory(),
-        40,
+        44,
         computer_abi::COMPUTER_HARDWARE_ID_DEBUG,
         computer_abi::DEBUG_BASE,
         computer_abi::PROFILE_V2_PAGE_SIZE,
@@ -1223,9 +1225,21 @@ fn assert_hardware_entry(
     mmio_base: u32,
     mmio_size: u32,
 ) {
+    assert_hardware_entry_with_irq(memory, address, id, mmio_base, mmio_size, 0);
+}
+
+fn assert_hardware_entry_with_irq(
+    memory: &crate::low_machine::MachineMemory,
+    address: u32,
+    id: u32,
+    mmio_base: u32,
+    mmio_size: u32,
+    irq_source: u32,
+) {
     assert_eq!(read_u32(memory, address), id);
     assert_eq!(read_u32(memory, address + 4), mmio_base);
     assert_eq!(read_u32(memory, address + 8), mmio_size);
+    assert_eq!(read_u32(memory, address + 12), irq_source);
 }
 
 fn storage0_machine_with_media(media: Vec<u8>, read_only: bool) -> ComputerMachine {

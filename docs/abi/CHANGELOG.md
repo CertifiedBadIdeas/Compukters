@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- K16 profile v2 hardware table entries now include `irq_source` as a fourth
+  `u32` field. `timer0` advertises source bit `0x00000001`; non-interrupting
+  devices advertise `0`.
 - Added K16 CPU timer interrupt foundation: interrupt enable/mask/pending
   CSRs, `iret`, and `timer0` pending delivery on host game-tick advance.
   `K16SNAP` CPU records now preserve interrupt CSR state and pending timer0

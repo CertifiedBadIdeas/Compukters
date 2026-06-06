@@ -154,7 +154,8 @@ BootInfo size is 28 bytes.
 The hardware table is an array of fixed-size entries. All fields are
 little-endian `u32`.
 
-The table describes guest-visible MMIO ranges. It does not describe device
+The table describes guest-visible MMIO ranges and the CPU interrupt source bit
+associated with each interrupt-capable device. It does not describe device
 classes, physical connector kinds, capabilities, flags, or hotplug state.
 
 The semantic meaning of each entry is defined by the target machine profile.
@@ -164,15 +165,22 @@ offset  size  name
 0x00    4     id
 0x04    4     mmio_base
 0x08    4     mmio_size
+0x0C    4     irq_source
 ```
 
-Entry size is 12 bytes.
+Entry size is 16 bytes.
 
 `id` is stable for the current boot and must be unique within the hardware
 table.
 
 `mmio_base` and `mmio_size` describe the MMIO range. Both must be non-zero and
 aligned to `page_size`.
+
+`irq_source` is `0` when the device does not raise CPU interrupts. Nonzero
+values are CPU interrupt source bits that guest kernel code can OR into the CPU
+interrupt mask after installing a trap vector. Interrupt delivery semantics are
+defined by `k16-cpu-v1.md`; the hardware table only exposes the static
+device-to-source mapping for this boot.
 
 Hardware table entries are static for the whole boot. This profile has no
 hotplug; physical attachment changes become guest-visible only after a reboot
@@ -188,6 +196,8 @@ Valid profile v2 entries follow these rules:
 - `mmio_base` and `mmio_size` must be non-zero.
 - `mmio_base` and `mmio_size` must be aligned to `page_size`.
 - MMIO ranges must not overlap RAM.
+- `irq_source` may be zero or a CPU interrupt source bit defined by the target
+  machine profile.
 - MMIO ranges must not overlap each other.
 - The host assigns all MMIO ranges before boot.
 - The VM execution core must not infer or allocate MMIO ranges.

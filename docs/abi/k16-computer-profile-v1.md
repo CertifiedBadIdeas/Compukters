@@ -50,19 +50,23 @@ The first RAM page is reserved for boot data.
 The profile defines these stable hardware IDs for the current boot:
 
 ```text
-id  name          mmio_base     mmio_size
-1   control       0x1000_0000   0x0000_0100
-2   debug         0x1000_0100   0x0000_0100
-3   serial-input  0x1000_0200   0x0000_0100
-4   display0      0x1000_0300   0x0000_0100
-5   storage0      0x1000_0400   0x0000_0100
-6   framebuffer0  0x1000_0500   0x0000_0100
-7   timer0        0x1000_0600   0x0000_0100
+id  name          mmio_base     mmio_size     irq_source
+1   control       0x1000_0000   0x0000_0100   0x0000_0000
+2   debug         0x1000_0100   0x0000_0100   0x0000_0000
+3   serial-input  0x1000_0200   0x0000_0100   0x0000_0000
+4   display0      0x1000_0300   0x0000_0100   0x0000_0000
+5   storage0      0x1000_0400   0x0000_0100   0x0000_0000
+6   framebuffer0  0x1000_0500   0x0000_0100   0x0000_0000
+7   timer0        0x1000_0600   0x0000_0100   0x0000_0001
 ```
 
 Firmware should discover these ranges through `BootInfo.hardware_table_addr` and
 `BootInfo.hardware_count`. The numeric addresses above are the current profile
 assignment, not a CPU feature.
+
+Firmware should also discover interrupt routing from each entry's `irq_source`.
+`timer0` currently raises CPU interrupt source bit `0x00000001`; other devices
+in this profile do not raise interrupts and expose `0`.
 
 ## Control MMIO
 
@@ -285,10 +289,11 @@ once for each high-level runtime tick before native CPU turns run. It follows
 Minecraft/server simulation time, so guest OS sleep, scheduler ticks, firmware
 delays, and device cooldowns should use this counter.
 
-When `game_ticks` advances, the host sets the CPU timer0 pending interrupt
-source (`0x00000001`) with `trap_value = low32(game_ticks)`. Firmware or kernel
-code that does not install `trap_vector`, set `interrupt_mask`, and enable
-`interrupt_enable` continues to observe timer0 purely by polling.
+When `game_ticks` advances, the host sets the CPU pending interrupt source
+advertised by the `timer0` hardware-table entry with
+`trap_value = low32(game_ticks)`. Firmware or kernel code that does not install
+`trap_vector`, set `interrupt_mask`, and enable `interrupt_enable` continues to
+observe timer0 purely by polling.
 
 `monotonic_nanos` is a `u64` split into low/high `u32` words. It measures host
 monotonic elapsed nanoseconds since the native machine/runtime instance was

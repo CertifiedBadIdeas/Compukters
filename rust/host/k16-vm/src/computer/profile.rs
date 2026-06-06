@@ -3,6 +3,7 @@ use crate::computer::devices::{
     StoragePortDevice, TextDisplayDevice, TimerDevice,
 };
 use crate::computer_abi;
+use crate::k16::K16_INTERRUPT_SOURCE_TIMER0;
 use crate::low_machine::MemoryFault;
 use std::path::{Path, PathBuf};
 
@@ -232,6 +233,10 @@ impl ComputerHardwareConfig {
     pub(crate) fn mmio_size(&self) -> u32 {
         self.device.mmio_size()
     }
+
+    pub(crate) fn irq_source(&self) -> u32 {
+        self.device.irq_source()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -288,6 +293,13 @@ impl ComputerHardwareDevice {
             Self::Timer => TimerDevice::SIZE,
         }
     }
+
+    fn irq_source(&self) -> u32 {
+        match self {
+            Self::Timer => K16_INTERRUPT_SOURCE_TIMER0,
+            _ => 0,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -295,6 +307,7 @@ pub(crate) struct HardwareTableEntry {
     pub(crate) id: u32,
     pub(crate) mmio_base: u32,
     pub(crate) mmio_size: u32,
+    pub(crate) irq_source: u32,
 }
 
 pub(crate) fn validate_profile_v2(profile: &ComputerMachineProfile) -> Result<(), MemoryFault> {

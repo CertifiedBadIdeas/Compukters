@@ -56,6 +56,7 @@ fn hardware_table_entries(profile: &ComputerMachineProfile) -> Vec<HardwareTable
             id: hardware.id,
             mmio_base: hardware.mmio_base,
             mmio_size: hardware.mmio_size(),
+            irq_source: hardware.irq_source(),
         })
         .collect()
 }
@@ -150,6 +151,7 @@ fn write_profile_v2_boot_info(
             entry.id,
             entry.mmio_base,
             entry.mmio_size,
+            entry.irq_source,
         )?;
     }
     Ok(())
@@ -161,10 +163,12 @@ fn write_hardware_entry(
     id: u32,
     mmio_base: u32,
     mmio_size: u32,
+    irq_source: u32,
 ) -> Result<(), MemoryFault> {
     write_u32(memory, address, id)?;
     write_u32(memory, address + 4, mmio_base)?;
-    write_u32(memory, address + 8, mmio_size)
+    write_u32(memory, address + 8, mmio_size)?;
+    write_u32(memory, address + 12, irq_source)
 }
 
 fn write_u32(memory: &mut MachineMemory, address: u32, value: u32) -> Result<(), MemoryFault> {

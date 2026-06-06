@@ -70,6 +70,89 @@ pub mod cpu {
 }
 
 pub mod computer {
+    pub mod profile {
+        pub const BOOT_INFO_MAGIC: u32 = u32::from_le_bytes(*b"RXBI");
+        pub const VERSION: u32 = 2;
+        pub const BOOT_INFO_ADDR: u32 = 0x0000_0000;
+        pub const BOOT_INFO_SIZE: u32 = 28;
+        pub const HARDWARE_ENTRY_SIZE: u32 = 16;
+
+        #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+        pub struct BootInfo {
+            pub ram_size: u32,
+            pub page_size: u32,
+            pub program_base: u32,
+            pub hardware_table_addr: u32,
+            pub hardware_count: u32,
+        }
+
+        #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+        pub struct HardwareEntry {
+            pub id: u32,
+            pub mmio_base: u32,
+            pub mmio_size: u32,
+            pub irq_source: u32,
+        }
+
+        pub unsafe fn read_boot_info() -> Option<BootInfo> {
+            let base = BOOT_INFO_ADDR;
+            let magic = unsafe { read_u32(base) };
+            if magic != BOOT_INFO_MAGIC {
+                return None;
+            }
+            let version = unsafe { read_u32(base + 4) };
+            if version != VERSION {
+                return None;
+            }
+            Some(BootInfo {
+                ram_size: unsafe { read_u32(base + 8) },
+                page_size: unsafe { read_u32(base + 12) },
+                program_base: unsafe { read_u32(base + 16) },
+                hardware_table_addr: unsafe { read_u32(base + 20) },
+                hardware_count: unsafe { read_u32(base + 24) },
+            })
+        }
+
+        pub unsafe fn read_hardware_entry(address: u32) -> HardwareEntry {
+            HardwareEntry {
+                id: unsafe { read_u32(address) },
+                mmio_base: unsafe { read_u32(address + 4) },
+                mmio_size: unsafe { read_u32(address + 8) },
+                irq_source: unsafe { read_u32(address + 12) },
+            }
+        }
+
+        pub unsafe fn find_hardware_entry(id: u32) -> Option<HardwareEntry> {
+            let boot_info = unsafe { read_boot_info()? };
+            let mut index = 0;
+            while index < boot_info.hardware_count {
+                let address = boot_info
+                    .hardware_table_addr
+                    .wrapping_add(index.wrapping_mul(HARDWARE_ENTRY_SIZE));
+                let entry = unsafe { read_hardware_entry(address) };
+                if entry.id == id {
+                    return Some(entry);
+                }
+                index += 1;
+            }
+            None
+        }
+
+        unsafe fn read_u32(address: u32) -> u32 {
+            unsafe { core::ptr::read_volatile(address as usize as *const u32) }
+        }
+    }
+
+    pub mod hardware_id {
+        pub const CONTROL: u32 = 1;
+        pub const DEBUG: u32 = 2;
+        pub const SERIAL_INPUT: u32 = 3;
+        pub const DISPLAY0: u32 = 4;
+        pub const STORAGE0: u32 = 5;
+        pub const FRAMEBUFFER0: u32 = 6;
+        pub const TIMER0: u32 = 7;
+    }
+
     pub mod control {
         pub const BASE: u32 = 0x1000_0000;
         pub const STATUS: u32 = 0x1000_0000;
@@ -239,6 +322,31 @@ mod tests {
         assert_eq!(computer::timer0::MONOTONIC_NANOS_LOW, 0x1000_060c);
         assert_eq!(computer::timer0::MONOTONIC_NANOS_HIGH, 0x1000_0610);
         assert_eq!(computer::timer0::TIMER_VERSION, 1);
+        assert_eq!(computer::profile::BOOT_INFO_MAGIC, 0x4942_5852);
+        assert_eq!(computer::profile::VERSION, 2);
+        assert_eq!(computer::profile::BOOT_INFO_SIZE, 28);
+        assert_eq!(computer::profile::HARDWARE_ENTRY_SIZE, 16);
+        assert_eq!(computer::hardware_id::TIMER0, 7);
+    }
+
+    #[test]
+    fn profile_structs_parse_expected_values() {
+        let boot_info = computer::profile::BootInfo {
+            ram_size: 1024,
+            page_size: 256,
+            program_base: 256,
+            hardware_table_addr: 28,
+            hardware_count: 7,
+        };
+        let timer0 = computer::profile::HardwareEntry {
+            id: computer::hardware_id::TIMER0,
+            mmio_base: computer::timer0::BASE,
+            mmio_size: computer::timer0::SIZE,
+            irq_source: cpu::interrupt_source::TIMER0,
+        };
+
+        assert_eq!(boot_info.hardware_table_addr, 28);
+        assert_eq!(timer0.irq_source, 1);
     }
 
     #[test]
