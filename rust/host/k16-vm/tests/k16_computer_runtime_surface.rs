@@ -69,6 +69,7 @@ fn k16_computer_handle_source_does_not_expose_low_image_startup_or_handoff() {
     for required_name in [
         "createK16ComputerFromBiosFlashNative",
         "restoreK16ComputerFromBiosFlashSnapshotNative",
+        "advanceK16ComputerGameTickNative",
         "runK16ComputerUntilSignalNative",
         "k16ComputerControlNative",
         "k16ComputerDebugOutputNative",

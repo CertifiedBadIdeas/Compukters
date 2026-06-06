@@ -123,6 +123,7 @@ class K16ComputerRuntimeFactoryTest {
             listOf(
                 "createK16ComputerFromBiosFlashNative",
                 "restoreK16ComputerFromBiosFlashSnapshotNative",
+                "advanceK16ComputerGameTickNative",
                 "runK16ComputerUntilSignalNative",
                 "k16ComputerControlNative",
                 "k16ComputerDebugOutputNative",

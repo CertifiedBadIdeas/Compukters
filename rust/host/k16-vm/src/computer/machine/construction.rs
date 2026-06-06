@@ -1,7 +1,7 @@
 use super::ComputerMachine;
 use crate::computer::devices::{
     ComputerControlDevice, DebugSerialDevice, FramebufferDevice, K16VolumeFileStorageMedia,
-    SerialInputDevice, StoragePortDevice, TextDisplayDevice,
+    SerialInputDevice, StoragePortDevice, TextDisplayDevice, TimerDevice,
 };
 use crate::computer::profile::{
     validate_profile_v2, ComputerHardwareConfig, ComputerHardwareDevice, ComputerMachineProfile,
@@ -30,6 +30,7 @@ pub(super) fn from_profile(
         display0_device_id: device_ids.text_display,
         framebuffer0_device_id: device_ids.framebuffer,
         storage0_device_id: device_ids.storage_port,
+        timer0_device_id: device_ids.timer,
         bios_flash_device_id: None,
         cpus: Vec::new(),
         boot_cpu: None,
@@ -44,6 +45,7 @@ struct ConstructionDeviceIds {
     text_display: Option<MmioDeviceId>,
     framebuffer: Option<MmioDeviceId>,
     storage_port: Option<MmioDeviceId>,
+    timer: Option<MmioDeviceId>,
 }
 
 fn hardware_table_entries(profile: &ComputerMachineProfile) -> Vec<HardwareTableEntry> {
@@ -85,6 +87,7 @@ fn map_hardware_device(
         ComputerHardwareDevice::TextDisplay => Box::new(TextDisplayDevice::new()),
         ComputerHardwareDevice::Framebuffer => Box::new(FramebufferDevice::new()),
         ComputerHardwareDevice::StoragePort(config) => Box::new(storage_port_device(config)?),
+        ComputerHardwareDevice::Timer => Box::new(TimerDevice::new()),
     };
     bus.map_mmio(hardware.mmio_base, device)
 }
@@ -110,6 +113,7 @@ impl ConstructionDeviceIds {
             ComputerHardwareDevice::TextDisplay => self.text_display = Some(device_id),
             ComputerHardwareDevice::Framebuffer => self.framebuffer = Some(device_id),
             ComputerHardwareDevice::StoragePort(_) => self.storage_port = Some(device_id),
+            ComputerHardwareDevice::Timer => self.timer = Some(device_id),
         }
     }
 }

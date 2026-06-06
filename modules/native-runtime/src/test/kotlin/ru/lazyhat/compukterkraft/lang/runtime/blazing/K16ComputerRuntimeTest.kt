@@ -93,6 +93,19 @@ class K16ComputerRuntimeTest {
         assertEquals(NativeK16ComputerControl(status = 3, exitCode = 0, panicCode = 2), runtime.tick())
 
         assertEquals(1, bindings.runUntilSignalCalls)
+        assertEquals(listOf(21L), bindings.advanceGameTickHandles)
+    }
+
+    @Test
+    fun advancesGameTickOncePerRuntimeTickBeforeNativeTurns() {
+        val bindings = EchoBindings()
+        val runtime = K16ComputerRuntime(handle = 29L, bindings = bindings, defaultMaxTurnsPerTick = 3)
+
+        runtime.tick()
+
+        assertEquals(3, bindings.runUntilSignalCalls)
+        assertEquals(listOf(29L), bindings.advanceGameTickHandles)
+        assertEquals(listOf("advance", "run", "run", "run"), bindings.callOrder)
     }
 
     @Test
@@ -105,11 +118,13 @@ class K16ComputerRuntimeTest {
 
         assertEquals(NativeK16ComputerControl(status = 1, exitCode = 0, panicCode = 0), runtime.tick())
         assertEquals(1, bindings.runUntilSignalCalls)
+        assertEquals(listOf(25L), bindings.advanceGameTickHandles)
 
         bindings.control = NativeK16ComputerControl(status = 3, exitCode = 0, panicCode = 0)
 
         assertEquals(NativeK16ComputerControl(status = 3, exitCode = 0, panicCode = 0), runtime.tick())
         assertEquals(2, bindings.runUntilSignalCalls)
+        assertEquals(listOf(25L, 25L), bindings.advanceGameTickHandles)
     }
 
     @Test
@@ -158,6 +173,8 @@ class K16ComputerRuntimeTest {
         val serialInputs = mutableListOf<ByteArray>()
         val freedHandles = mutableListOf<Long>()
         val machineSnapshotHandles = mutableListOf<Long>()
+        val advanceGameTickHandles = mutableListOf<Long>()
+        val callOrder = mutableListOf<String>()
         var displaySnapshot: NativeK16ComputerDisplaySnapshot? = null
         var framebufferFrames: ByteArray = ByteArray(0)
         var storage0Media: ByteArray? = null
@@ -171,10 +188,16 @@ class K16ComputerRuntimeTest {
 
         override fun runUntilSignal(handle: Long): NativeK16ComputerSignal {
             runUntilSignalCalls += 1
+            callOrder += "run"
             if (signals.isNotEmpty()) {
                 return signals.removeFirst()
             }
             return signal
+        }
+
+        override fun advanceGameTick(handle: Long) {
+            advanceGameTickHandles += handle
+            callOrder += "advance"
         }
 
         override fun control(handle: Long): NativeK16ComputerControl =

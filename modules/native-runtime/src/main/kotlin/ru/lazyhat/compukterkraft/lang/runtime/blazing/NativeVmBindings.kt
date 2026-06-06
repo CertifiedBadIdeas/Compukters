@@ -171,6 +171,11 @@ object NativeVmBindings {
         return NativeK16ComputerSignal.from(runK16ComputerUntilSignalNative(handle))
     }
 
+    fun advanceK16ComputerGameTick(handle: Long) {
+        require(handle != 0L) { "Native K16 computer handle is zero" }
+        advanceK16ComputerGameTickNative(handle)
+    }
+
     fun k16ComputerControl(handle: Long): NativeK16ComputerControl {
         require(handle != 0L) { "Native K16 computer handle is zero" }
         return NativeK16ComputerControl.from(k16ComputerControlNative(handle))
@@ -252,6 +257,9 @@ object NativeVmBindings {
 
     @JvmStatic
     private external fun runK16ComputerUntilSignalNative(handle: Long): LongArray
+
+    @JvmStatic
+    private external fun advanceK16ComputerGameTickNative(handle: Long)
 
     @JvmStatic
     private external fun k16ComputerControlNative(handle: Long): LongArray

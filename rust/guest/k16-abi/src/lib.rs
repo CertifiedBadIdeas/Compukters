@@ -169,6 +169,18 @@ pub mod computer {
         pub const COMMAND_PRESENT: i32 = 3;
     }
 
+    pub mod timer0 {
+        pub const BASE: u32 = 0x1000_0600;
+        pub const VERSION: u32 = 0x1000_0600;
+        pub const GAME_TICKS_LOW: u32 = 0x1000_0604;
+        pub const GAME_TICKS_HIGH: u32 = 0x1000_0608;
+        pub const MONOTONIC_NANOS_LOW: u32 = 0x1000_060c;
+        pub const MONOTONIC_NANOS_HIGH: u32 = 0x1000_0610;
+        pub const SIZE: u32 = 256;
+
+        pub const TIMER_VERSION: i32 = 1;
+    }
+
     pub mod memory {
         pub const RAM_BASE: u32 = 0x0000_0000;
     }
@@ -187,6 +199,13 @@ mod tests {
         assert_eq!(computer::display0::COMMAND, 0x1000_0310);
         assert_eq!(computer::storage0::COMMAND, 0x1000_040c);
         assert_eq!(computer::framebuffer0::COMMAND, 0x1000_0510);
+        assert_eq!(computer::timer0::BASE, 0x1000_0600);
+        assert_eq!(computer::timer0::VERSION, 0x1000_0600);
+        assert_eq!(computer::timer0::GAME_TICKS_LOW, 0x1000_0604);
+        assert_eq!(computer::timer0::GAME_TICKS_HIGH, 0x1000_0608);
+        assert_eq!(computer::timer0::MONOTONIC_NANOS_LOW, 0x1000_060c);
+        assert_eq!(computer::timer0::MONOTONIC_NANOS_HIGH, 0x1000_0610);
+        assert_eq!(computer::timer0::TIMER_VERSION, 1);
     }
 
     #[test]

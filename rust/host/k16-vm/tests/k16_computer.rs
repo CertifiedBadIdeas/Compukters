@@ -72,6 +72,74 @@ fn k16_computer_handle_accepts_storage0_volume_path() {
 }
 
 #[test]
+fn k16_computer_profile_exposes_timer0_hardware_entry_and_mmio() {
+    let mut machine = ComputerMachine::new(1024).expect("machine creates");
+
+    assert_eq!(read_u32(machine.memory(), 0x18), 7);
+    assert_hardware_entry(
+        machine.memory(),
+        100,
+        ComputerMachine::HARDWARE_ID_TIMER0,
+        ComputerMachine::TIMER0_BASE,
+        ComputerMachine::TIMER0_SIZE,
+    );
+    assert_eq!(
+        machine
+            .memory_map()
+            .region("timer0")
+            .expect("timer0 is mapped")
+            .base,
+        ComputerMachine::TIMER0_BASE,
+    );
+    assert_eq!(
+        machine
+            .bus_load_i32(ComputerMachine::TIMER0_VERSION)
+            .unwrap(),
+        ComputerMachine::TIMER0_VERSION_VALUE,
+    );
+    assert_eq!(
+        machine
+            .bus_load_i32(ComputerMachine::TIMER0_GAME_TICKS_LOW)
+            .unwrap(),
+        0,
+    );
+    assert_eq!(
+        machine
+            .bus_load_i32(ComputerMachine::TIMER0_GAME_TICKS_HIGH)
+            .unwrap(),
+        0,
+    );
+
+    machine.advance_game_tick();
+
+    assert_eq!(
+        machine
+            .bus_load_i32(ComputerMachine::TIMER0_GAME_TICKS_LOW)
+            .unwrap(),
+        1,
+    );
+}
+
+#[test]
+fn k16_computer_handle_guest_reads_timer0_game_ticks_after_host_advance() {
+    let mut words = Vec::new();
+    words.extend(k16_const32(0, ComputerMachine::TIMER0_GAME_TICKS_LOW));
+    words.push(k16_load32(1, 0));
+    words.extend(k16_const32(0, ComputerMachine::CONTROL_PANIC_CODE));
+    words.push(k16_store32(0, 1));
+    words.push(k16_halt());
+    let bios = k16_words(&words);
+    let mut handle = K16ComputerHandle::create_k16_bios_flash(&bios, 64 * 1024, 128)
+        .expect("K16 BIOS flash computer creates");
+
+    handle.advance_game_tick();
+    handle.advance_game_tick();
+
+    assert_eq!(handle.run_k16_until_signal().unwrap(), K16Signal::Halt);
+    assert_eq!(handle.control().panic_code, 2);
+}
+
+#[test]
 fn k16_computer_handle_bios_flash_reads_storage0_version_from_path() {
     let mut words = Vec::new();
     words.extend(k16_const32(0, ComputerMachine::STORAGE0_VERSION));
@@ -389,6 +457,22 @@ fn temp_volume_path(name: &str) -> std::path::PathBuf {
         "k16-computer-{name}-{}-{nanos}.kv",
         std::process::id()
     ))
+}
+
+fn read_u32(memory: &k16_vm::low_machine::MachineMemory, address: u32) -> u32 {
+    u32::from_le_bytes(memory.load_i32(address).unwrap().to_le_bytes())
+}
+
+fn assert_hardware_entry(
+    memory: &k16_vm::low_machine::MachineMemory,
+    address: u32,
+    id: u32,
+    base: u32,
+    size: u32,
+) {
+    assert_eq!(read_u32(memory, address), id);
+    assert_eq!(read_u32(memory, address + 4), base);
+    assert_eq!(read_u32(memory, address + 8), size);
 }
 
 fn k16_words(words: &[u16]) -> Vec<u8> {

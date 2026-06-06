@@ -100,6 +100,9 @@ fn device_snapshot_records(machine: &ComputerMachine) -> Vec<ComputerDeviceSnaps
             sequence: snapshot.sequence,
         });
     }
+    if let Some(game_ticks) = machine.timer0_game_ticks() {
+        devices.push(ComputerDeviceSnapshotRecord::Timer0 { game_ticks });
+    }
     devices
 }
 
@@ -166,6 +169,13 @@ fn restore_device_snapshot_record(
                 bytes_done,
                 sequence,
             });
+        }
+        ComputerDeviceSnapshotRecord::Timer0 { game_ticks } => {
+            let timer0 = machine.timer0_device_mut().ok_or_else(|| {
+                "ComputerMachine snapshot contains timer0 device state but profile has no timer0 device"
+                    .to_string()
+            })?;
+            timer0.restore_game_ticks(game_ticks);
         }
     }
     Ok(())

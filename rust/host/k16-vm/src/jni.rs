@@ -125,6 +125,19 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
 }
 
 #[no_mangle]
+pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_advanceK16ComputerGameTickNative(
+    mut env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    handle: jlong,
+) {
+    let handle = match k16_computer_handle_mut(&mut env, handle) {
+        Some(handle) => handle,
+        None => return,
+    };
+    handle.advance_game_tick();
+}
+
+#[no_mangle]
 pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_k16ComputerControlNative(
     mut env: JNIEnv<'_>,
     _class: JClass<'_>,
