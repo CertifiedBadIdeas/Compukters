@@ -7,35 +7,45 @@ use core::panic::PanicInfo;
 use k16_abi::computer::{control, debug, display0, hardware_id, profile, status};
 use k16_rt::cpu;
 
-static mut KERNEL_TIMER0_TICKS: u32 = 0;
 static mut TIMER0_IRQ_SOURCE: u32 = 0;
+static mut TIMER0_TICKS: u32 = 0;
+static mut TIMER0_LAST_GAME_TICK: u32 = 0;
 
 #[no_mangle]
 pub extern "C" fn _start() -> ! {
     clear_display();
     print_kernel_ok_display();
     print_kernel_ok_debug();
-    install_timer0_interrupt_handler();
+    initialize_interrupts();
     set_ready();
     idle_forever()
 }
 
-extern "C" fn timer0_interrupt_handler() -> ! {
+extern "C" fn kernel_trap_vector() -> ! {
     let trap_cause = k16_rt::trap_cause();
-    let timer0_irq_source = unsafe { TIMER0_IRQ_SOURCE };
-    if !cpu::trap_cause::is_interrupt(trap_cause)
-        || cpu::trap_cause::interrupt_source(trap_cause) != timer0_irq_source
-    {
-        print_kernel_trap_debug();
-        set_panic();
-        wait_forever();
+    if cpu::trap_cause::is_interrupt(trap_cause) {
+        dispatch_interrupt(cpu::trap_cause::interrupt_source(trap_cause));
+        unsafe { k16_rt::iret_once() }
     }
 
+    kernel_trap();
+}
+
+fn dispatch_interrupt(source: u32) {
+    if unsafe { TIMER0_IRQ_SOURCE } == source {
+        handle_timer0_interrupt();
+        return;
+    }
+
+    kernel_trap();
+}
+
+fn handle_timer0_interrupt() {
     unsafe {
-        KERNEL_TIMER0_TICKS = KERNEL_TIMER0_TICKS.wrapping_add(1);
+        TIMER0_TICKS = TIMER0_TICKS.wrapping_add(1);
+        TIMER0_LAST_GAME_TICK = k16_rt::trap_value();
     }
     print_debug_byte(b'|');
-    unsafe { k16_rt::iret_once() }
 }
 
 #[panic_handler]
@@ -132,17 +142,16 @@ fn print_debug_byte(byte: u8) {
     }
 }
 
-fn install_timer0_interrupt_handler() {
-    let timer0_irq_source = timer0_irq_source_or_panic();
+fn initialize_interrupts() {
+    let interrupt_mask = register_timer0_driver();
     unsafe {
-        TIMER0_IRQ_SOURCE = timer0_irq_source;
-        k16_rt::install_trap_vector(timer0_interrupt_handler as *const () as usize as u32);
-        k16_rt::set_interrupt_mask(timer0_irq_source);
+        k16_rt::install_trap_vector(kernel_trap_vector as *const () as usize as u32);
+        k16_rt::set_interrupt_mask(interrupt_mask);
         k16_rt::enable_interrupts();
     }
 }
 
-fn timer0_irq_source_or_panic() -> u32 {
+fn register_timer0_driver() -> u32 {
     let timer0 = unsafe { profile::find_hardware_entry(hardware_id::TIMER0) };
     let Some(timer0) = timer0 else {
         print_kernel_panic_debug();
@@ -154,7 +163,18 @@ fn timer0_irq_source_or_panic() -> u32 {
         set_panic();
         wait_forever();
     }
+    unsafe {
+        TIMER0_IRQ_SOURCE = timer0.irq_source;
+        TIMER0_TICKS = 0;
+        TIMER0_LAST_GAME_TICK = 0;
+    }
     timer0.irq_source
+}
+
+fn kernel_trap() -> ! {
+    print_kernel_trap_debug();
+    set_panic();
+    wait_forever();
 }
 
 fn set_ready() {

@@ -212,8 +212,9 @@ fn main() {
     }
 
     handle.advance_game_tick();
-
-    let second = handle.run_k16_until_signal().expect("resumed kernel run succeeds");
+    let second = handle
+        .run_k16_until_signal()
+        .expect("first timer0 resume succeeds");
     if second != K16Signal::Yield {
         dump_cpu_snapshot(&mut handle);
         eprintln!("debug_bytes={}", hex_bytes(handle.debug_output_bytes()));
@@ -229,8 +230,27 @@ fn main() {
         process::exit(1);
     }
 
+    handle.advance_game_tick();
+    let third = handle
+        .run_k16_until_signal()
+        .expect("second timer0 resume succeeds");
+    if third != K16Signal::Yield {
+        dump_cpu_snapshot(&mut handle);
+        eprintln!("debug_bytes={}", hex_bytes(handle.debug_output_bytes()));
+        eprintln!("expected signal=yield after second timer0 heartbeat, got {third:?}");
+        process::exit(1);
+    }
+    if !handle.debug_output_bytes().ends_with(b"||") {
+        dump_cpu_snapshot(&mut handle);
+        eprintln!(
+            "expected debug_suffix=7c7c after repeated timer0 heartbeat, got {}",
+            hex_bytes(handle.debug_output_bytes())
+        );
+        process::exit(1);
+    }
+
     println!(
-        "first_signal=yield second_signal=yield status=READY debug_suffix=7c"
+        "first_signal=yield timer_signals=yield,yield status=READY debug_suffix=7c7c"
     );
 }
 
@@ -269,7 +289,7 @@ RS
 "$HOST_CARGO" run --quiet --offline --manifest-path "$WORK_DIR/runner/Cargo.toml" -- "$KERNEL_KX" \
     > "$WORK_DIR/runner.stdout"
 require_contains "$WORK_DIR/runner.stdout" "signal=yield"
-require_contains "$WORK_DIR/runner.stdout" "debug_suffix=7c"
+require_contains "$WORK_DIR/runner.stdout" "debug_suffix=7c7c"
 
 cat "$WORK_DIR/runner.stdout"
 echo "K16 kernel timer smoke passed"
