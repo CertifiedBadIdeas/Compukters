@@ -158,10 +158,12 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+k16-abi = { path = "$ROOT/rust/guest/k16-abi" }
 k16-vm = { path = "$ROOT/rust/host/k16-vm" }
 TOML
 
 cat > "$WORK_DIR/runner/src/main.rs" <<'RS'
+use k16_abi::syscall;
 use k16_vm::computer_abi;
 use k16_vm::computer_machine::{decode_snapshot_v1, ComputerCpuSnapshotRecord, ComputerMachine};
 use k16_vm::k16::K16Signal;
@@ -332,11 +334,11 @@ fn returning_syscall_probe(patch_pc: u32, original_bytes: &[u8]) -> Vec<u8> {
     emit_alu_rrr(&mut bytes, 14, 0x0, 14, 13);
     emit_const32(&mut bytes, 1, original_high);
     emit_word(&mut bytes, store32(14, 1));
-    emit_word(&mut bytes, const4(0, 2));
+    emit_const32(&mut bytes, 0, syscall::DEBUG_MARKER);
     emit_word(&mut bytes, syscall(0));
     emit_word(&mut bytes, const4(13, 0));
     emit_alu_rrr(&mut bytes, 12, 0x0, 0, 13);
-    emit_word(&mut bytes, const4(1, 3));
+    emit_const32(&mut bytes, 1, syscall::DEBUG_WRITE_BYTE);
     emit_const32(&mut bytes, 2, 0x0000_0021);
     emit_word(&mut bytes, syscall(1));
     emit_word(&mut bytes, const4(13, 0));

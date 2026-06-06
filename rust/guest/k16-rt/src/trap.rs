@@ -134,6 +134,16 @@ pub fn syscall1(number: u32, arg0: u32) -> u32 {
     TEST_SYSCALL_RETURN.load(Ordering::Relaxed)
 }
 
+#[inline(always)]
+pub fn debug_marker() -> u32 {
+    syscall0(k16_abi::syscall::DEBUG_MARKER)
+}
+
+#[inline(always)]
+pub fn debug_write_byte(byte: u8) -> u32 {
+    syscall1(k16_abi::syscall::DEBUG_WRITE_BYTE, u32::from(byte))
+}
+
 #[cfg(not(test))]
 #[inline(always)]
 pub unsafe fn set_interrupt_mask(mask: u32) {

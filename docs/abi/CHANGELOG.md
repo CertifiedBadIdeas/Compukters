@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Named the current K16 syscall ABI v0 proof services in `k16_abi::syscall`
+  and exposed `k16-rt` wrappers for `debug_marker()` and
+  `debug_write_byte(byte)`.
 - Added K16 syscall argument capture for `syscall1(number, arg0) -> u32`.
   `syscall` now captures guest `r2` into the read-only `trap_arg0` CSR, and the
   Rust kernel uses it for the first debug-write-byte syscall proof.
