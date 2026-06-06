@@ -108,12 +108,15 @@ class NativeK16ComputerDisplaySnapshot(
 sealed interface NativeK16ComputerSignal {
     data object Halt : NativeK16ComputerSignal
 
+    data object Yield : NativeK16ComputerSignal
+
     data object Pause : NativeK16ComputerSignal
 
     companion object {
         fun from(values: LongArray): NativeK16ComputerSignal =
             when (val tag = values.getOrElse(0) { 0L }) {
                 1L -> Halt
+                7L -> Yield
                 6L -> Pause
                 else -> error("Unknown native K16 computer signal tag: $tag")
             }
