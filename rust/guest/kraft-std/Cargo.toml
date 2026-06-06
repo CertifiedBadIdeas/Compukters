@@ -1,13 +1,14 @@
 [package]
-name = "k16-rt"
+name = "kraft-std"
 version = "0.1.0"
 edition = "2021"
 
 [features]
-host-test = []
+host-test = ["k16-rt/host-test"]
 
 [lib]
 path = "src/lib.rs"
+test = false
 
 [dependencies]
-k16-abi = { path = "../k16-abi" }
+k16-rt = { path = "../k16-rt" }
