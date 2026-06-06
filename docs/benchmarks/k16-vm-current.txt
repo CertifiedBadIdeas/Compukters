@@ -1,6 +1,6 @@
 K16 VM benchmark current snapshot
 
-Recorded at: 2026-06-06T08:12:39Z
+Recorded at: 2026-06-06T08:34:20Z
 Command: cargo run --release --example vm_microbenchmarks -- 100000 5
 Host: Linux 7.0.11-zen1-1-zen x86_64 GNU/Linux
 CPU: AMD Ryzen 7 7700 8-Core Processor
@@ -11,13 +11,13 @@ This file is the current repo-tracked benchmark snapshot. Git history is
 the benchmark history; use git diff or git show <commit>:docs/benchmarks/k16-vm-current.txt.
 
 workload       vm           iterations   checksum   best_nanos   nanos/iter  vs_native  native_pct
-compute-loop   k16              100000     100000      5011194       50.112   217.783x    21778.3%
+compute-loop   k16              100000     100000      5030156       50.302   218.607x    21860.7%
 compute-loop   native-rust      100000     100000        23010        0.230     1.000x      100.0%
-memory-loop    k16              100000     100000      9059832       90.598   196.996x    19699.6%
+memory-loop    k16              100000     100000      9157202       91.572   199.113x    19911.3%
 memory-loop    native-rust      100000     100000        45990        0.460     1.000x      100.0%
-mmio-loop      k16              100000     100000      8321365       83.214    40.215x     4021.5%
+mmio-loop      k16              100000     100000      8310293       83.103    40.162x     4016.2%
 mmio-loop      native-rust      100000     100000       206920        2.069     1.000x      100.0%
-branch-mix     k16              100000     200000      9838450       98.385   213.879x    21387.9%
+branch-mix     k16              100000     200000      9759512       97.595   212.163x    21216.3%
 branch-mix     native-rust      100000     200000        46000        0.460     1.000x      100.0%
-call-loop      k16              100000     100000      8990933       89.909    78.216x     7821.6%
+call-loop      k16              100000     100000      9082113       90.821    79.009x     7900.9%
 call-loop      native-rust      100000     100000       114950        1.149     1.000x      100.0%
