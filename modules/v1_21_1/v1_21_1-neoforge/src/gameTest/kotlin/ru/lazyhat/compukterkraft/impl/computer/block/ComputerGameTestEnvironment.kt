@@ -21,15 +21,15 @@ package ru.lazyhat.compukterkraft.impl.computer.block
 
 import net.minecraft.core.BlockPos
 import net.minecraft.server.level.ServerLevel
-import ru.lazyhat.compukterkraft.common.computer.block.ComputerBlockEntity
+import ru.lazyhat.compukterkraft.common.computer.block.AbstractComputerBlockEntity
 import ru.lazyhat.compukterkraft.common.computer.context.ServerContext
 
 object ComputerGameTestEnvironment {
     fun computerAt(
         level: ServerLevel,
         pos: BlockPos,
-    ): ComputerBlockEntity =
-        requireNotNull(level.getBlockEntity(pos) as? ComputerBlockEntity) {
+    ): AbstractComputerBlockEntity =
+        requireNotNull(level.getBlockEntity(pos) as? AbstractComputerBlockEntity) {
             "Expected computer block entity at $pos"
         }
 
@@ -45,8 +45,8 @@ object ComputerGameTestEnvironment {
         level: ServerLevel,
         pos: BlockPos,
     ): Boolean {
-        val computer = level.getBlockEntity(pos) as? ComputerBlockEntity ?: return false
+        val computer = level.getBlockEntity(pos) as? AbstractComputerBlockEntity ?: return false
         val id = computer.computerID ?: return false
-        return ServerContext.deviceManager.get(id) != null
+        return ServerContext.get(id) != null
     }
 }
