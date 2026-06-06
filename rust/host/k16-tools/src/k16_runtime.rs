@@ -94,28 +94,40 @@ pub fn k16_cpu_helpers_object() -> Vec<u8> {
         &mut strtab,
         &mut symtab,
         "__k16_write_trap_vector",
-        &[write_csr(k16_vm::k16::K16_CSR_TRAP_VECTOR, ARG0_REGISTER), ret()],
+        &[
+            write_csr(k16_vm::k16::K16_CSR_TRAP_VECTOR, ARG0_REGISTER),
+            ret(),
+        ],
     );
     emit_symbol_function(
         &mut text,
         &mut strtab,
         &mut symtab,
         "__k16_read_trap_cause",
-        &[read_csr(RETURN_REGISTER, k16_vm::k16::K16_CSR_TRAP_CAUSE), ret()],
+        &[
+            read_csr(RETURN_REGISTER, k16_vm::k16::K16_CSR_TRAP_CAUSE),
+            ret(),
+        ],
     );
     emit_symbol_function(
         &mut text,
         &mut strtab,
         &mut symtab,
         "__k16_read_trap_pc",
-        &[read_csr(RETURN_REGISTER, k16_vm::k16::K16_CSR_TRAP_PC), ret()],
+        &[
+            read_csr(RETURN_REGISTER, k16_vm::k16::K16_CSR_TRAP_PC),
+            ret(),
+        ],
     );
     emit_symbol_function(
         &mut text,
         &mut strtab,
         &mut symtab,
         "__k16_read_trap_value",
-        &[read_csr(RETURN_REGISTER, k16_vm::k16::K16_CSR_TRAP_VALUE), ret()],
+        &[
+            read_csr(RETURN_REGISTER, k16_vm::k16::K16_CSR_TRAP_VALUE),
+            ret(),
+        ],
     );
     emit_symbol_function(
         &mut text,
@@ -123,6 +135,27 @@ pub fn k16_cpu_helpers_object() -> Vec<u8> {
         &mut symtab,
         "__k16_syscall_once",
         &[syscall(ARG0_REGISTER), ret()],
+    );
+    emit_symbol_function(
+        &mut text,
+        &mut strtab,
+        &mut symtab,
+        "__k16_syscall0",
+        &[syscall(ARG0_REGISTER), ret()],
+    );
+    let copy_arg0_to_return = add(RETURN_REGISTER, ARG0_REGISTER, SCRATCH_REGISTER);
+    let iret_with_r0_words = [
+        const4(SCRATCH_REGISTER, 0),
+        copy_arg0_to_return[0],
+        copy_arg0_to_return[1],
+        iret(),
+    ];
+    emit_symbol_function(
+        &mut text,
+        &mut strtab,
+        &mut symtab,
+        "__k16_iret_with_r0",
+        &iret_with_r0_words,
     );
     emit_symbol_function(
         &mut text,
@@ -170,7 +203,14 @@ fn emit_symbol_function(
     for word in words {
         emit_word(text, *word);
     }
-    write_symbol(symtab, name_offset, value, text.len() as u32 - value, 0x12, 1);
+    write_symbol(
+        symtab,
+        name_offset,
+        value,
+        text.len() as u32 - value,
+        0x12,
+        1,
+    );
 }
 
 fn elf_object(text: &[u8], rela: &[u8], symtab: &[u8], strtab: &[u8]) -> Vec<u8> {
@@ -287,6 +327,17 @@ fn emit_const32_word(register: u8) -> u16 {
 
 fn const4(dst: u8, value: u8) -> u16 {
     0x1000 | (u16::from(dst) << 8) | u16::from(value & 0x0f)
+}
+
+fn add(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
+    alu_rrr(dst, 0x0, lhs, rhs)
+}
+
+fn alu_rrr(dst: u8, subop: u8, lhs: u8, rhs: u8) -> [u16; 2] {
+    [
+        0x2000 | (u16::from(dst) << 8) | u16::from(subop),
+        (u16::from(lhs) << 4) | u16::from(rhs),
+    ]
 }
 
 fn call(register: u8) -> u16 {

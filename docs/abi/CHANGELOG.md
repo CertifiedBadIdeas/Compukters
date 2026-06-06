@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Defined K16 syscall ABI v0 for the first Rust kernel services. `k16-rt`
+  exposes a returning `syscall0(number) -> u32` helper, the kernel returns
+  through `r0`, and `k16-cpu-helpers` provides `__k16_iret_with_r0` for
+  explicit kernel-side syscall returns.
 - Added K16 `syscall rA` as a returning explicit-trap entry. It records the
   next PC in `trap_pc`, stores the syscall number from `rA` in `trap_value`,
   disables interrupt delivery during the handler, and resumes through `iret`.

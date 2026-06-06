@@ -74,6 +74,8 @@ fn k16_object_abi_docs_define_freestanding_runtime_boundary() {
         "`__k16_write_trap_vector`",
         "`__k16_iret_once`",
         "`__k16_syscall_once`",
+        "`__k16_syscall0`",
+        "`__k16_iret_with_r0`",
         "rust/guest/k16-rt/src/no_core_helpers.rs",
         "requires `K16_RUSTC`",
         "`K16_LLVM_BIN_DIR`",
