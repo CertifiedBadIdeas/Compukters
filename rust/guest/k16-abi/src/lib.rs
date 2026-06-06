@@ -42,6 +42,7 @@ pub mod computer {
         pub const STATUS: u32 = 0x1000_0000;
         pub const PANIC_CODE: u32 = 0x1000_0004;
         pub const EXIT_CODE: u32 = 0x1000_0008;
+        pub const YIELD: u32 = 0x1000_000c;
         pub const SIZE: u32 = 256;
     }
 
@@ -180,6 +181,7 @@ mod tests {
     #[test]
     fn computer_mmio_constants_match_current_k16_profile() {
         assert_eq!(computer::control::BASE, 0x1000_0000);
+        assert_eq!(computer::control::YIELD, 0x1000_000c);
         assert_eq!(computer::debug::WRITE, 0x1000_0100);
         assert_eq!(computer::serial_input::READ, 0x1000_0204);
         assert_eq!(computer::display0::COMMAND, 0x1000_0310);

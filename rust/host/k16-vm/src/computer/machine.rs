@@ -116,6 +116,7 @@ impl ComputerMachine {
     pub const CONTROL_STATUS: u32 = computer_abi::CONTROL_STATUS;
     pub const CONTROL_PANIC_CODE: u32 = computer_abi::CONTROL_PANIC_CODE;
     pub const CONTROL_EXIT_CODE: u32 = computer_abi::CONTROL_EXIT_CODE;
+    pub const CONTROL_YIELD: u32 = computer_abi::CONTROL_YIELD;
     pub const CONTROL_SIZE: u32 = computer_abi::CONTROL_SIZE;
     pub const DEBUG_BASE: u32 = computer_abi::DEBUG_BASE;
     pub const DEBUG_WRITE: u32 = computer_abi::DEBUG_WRITE;

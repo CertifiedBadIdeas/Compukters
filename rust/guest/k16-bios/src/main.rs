@@ -10,9 +10,11 @@ use k16_boot_chain::{enter_loaded_image, load_k16e_from_storage0, K16eAbiKind};
 
 #[no_mangle]
 pub extern "C" fn _start() -> ! {
+    set_booting();
     clear_display();
     print_bios_banner();
     print_bios_debug();
+    k16_rt::yield_once();
 
     let image = unsafe {
         load_k16e_from_storage0(
@@ -92,6 +94,12 @@ fn print_display_byte(byte: u8) {
     unsafe {
         write_u8(display0::DATA, byte);
         write_i32(display0::COMMAND, display0::COMMAND_PUT_BYTE_AT_CURSOR);
+    }
+}
+
+fn set_booting() {
+    unsafe {
+        write_i32(control::STATUS, status::BOOTING);
     }
 }
 

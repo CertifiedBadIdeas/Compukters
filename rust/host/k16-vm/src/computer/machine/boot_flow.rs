@@ -75,6 +75,7 @@ pub(super) fn run_boot_k16_until_signal(
         Ok(K16Signal::Halt) => {
             set_halted_exit_code(machine, 0)?;
         }
+        Ok(K16Signal::Yield) => {}
         Ok(K16Signal::StepLimitExceeded) => {}
         Err(message) => {
             set_panic_from_fault(machine, message)?;

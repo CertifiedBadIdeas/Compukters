@@ -73,6 +73,7 @@ offset  size  name
 0x00    4     status
 0x04    4     panic_code
 0x08    4     exit_code
+0x0c    4     yield
 ```
 
 Status values:
@@ -88,6 +89,10 @@ Status values:
 The CPU `halt` signal still terminates execution from the host perspective.
 Writing control registers is a firmware convention for exposing state to the
 host and UI.
+
+Writing a non-zero value to `yield` requests a host-visible pause after the
+current instruction. The CPU remains runnable and resumes on the next host tick.
+The register is edge-like VM state, not durable machine state.
 
 ## Debug MMIO
 

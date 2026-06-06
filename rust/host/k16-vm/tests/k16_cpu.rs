@@ -20,6 +20,33 @@ fn k16_fetches_decodes_and_executes_words_from_guest_memory() {
 }
 
 #[test]
+fn k16_yield_signal_is_resumable() {
+    let mut bus = MachineBus::new(64).unwrap();
+    bus.map_mmio(
+        0x1000_0000,
+        Box::new(YieldDevice {
+            yield_requested: false,
+        }),
+    )
+    .unwrap();
+    let mut program = Vec::new();
+    program.extend(const32(1, 0x1000_000c));
+    program.push(const4(2, 1));
+    program.push(store32(1, 2));
+    program.push(halt());
+    write_words(&mut bus, 0, &program);
+    let mut cpu = K16Cpu::new(0);
+
+    assert_eq!(
+        cpu.run_until_signal(&mut bus, 16).unwrap(),
+        K16Signal::Yield
+    );
+    assert_eq!(cpu.pc(), 10);
+    assert_eq!(cpu.run_until_signal(&mut bus, 16).unwrap(), K16Signal::Halt);
+    assert_eq!(cpu.pc(), 12);
+}
+
+#[test]
 fn k16_loads_and_stores_regular_ram_through_machine_bus() {
     let mut bus = MachineBus::new(64).unwrap();
     bus.store_i32(12, 0x0102_0304).unwrap();
@@ -554,6 +581,33 @@ impl MmioDevice for RegisterDevice {
     fn store_i32(&mut self, offset: u32, value: i32) -> Result<(), MemoryFault> {
         assert_eq!(offset, 0);
         self.value = value;
+        Ok(())
+    }
+}
+
+struct YieldDevice {
+    yield_requested: bool,
+}
+
+impl MmioDevice for YieldDevice {
+    fn size(&self) -> u32 {
+        16
+    }
+
+    fn take_yield_signal(&mut self) -> bool {
+        let requested = self.yield_requested;
+        self.yield_requested = false;
+        requested
+    }
+
+    fn load_i32(&self, offset: u32) -> Result<i32, MemoryFault> {
+        assert_eq!(offset, 12);
+        Ok(i32::from(self.yield_requested))
+    }
+
+    fn store_i32(&mut self, offset: u32, value: i32) -> Result<(), MemoryFault> {
+        assert_eq!(offset, 12);
+        self.yield_requested = value != 0;
         Ok(())
     }
 }

@@ -1002,6 +1002,7 @@ fn computer_machine_constants_match_profile_v2_abi() {
         ComputerMachine::CONTROL_EXIT_CODE,
         computer_abi::CONTROL_EXIT_CODE,
     );
+    assert_eq!(ComputerMachine::CONTROL_YIELD, computer_abi::CONTROL_YIELD);
     assert_eq!(ComputerMachine::CONTROL_SIZE, computer_abi::CONTROL_SIZE);
     assert_eq!(ComputerMachine::DEBUG_BASE, computer_abi::DEBUG_BASE);
     assert_eq!(ComputerMachine::DEBUG_WRITE, computer_abi::DEBUG_WRITE);

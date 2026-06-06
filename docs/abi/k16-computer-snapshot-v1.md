@@ -91,6 +91,7 @@ kind  payload
 ```
 
 Unknown device kinds are rejected. `control` payloads must be exactly 12 bytes.
+The transient `control.yield` request bit is not serialized.
 `debug` payloads may be empty. `display0` payloads must contain at least 24
 bytes of metadata, and the remaining cell byte count must equal
 `columns * rows`. `storage0` controller payloads must be exactly 36 bytes.
