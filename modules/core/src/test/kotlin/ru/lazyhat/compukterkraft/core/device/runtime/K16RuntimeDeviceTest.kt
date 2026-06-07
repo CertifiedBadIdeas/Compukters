@@ -335,6 +335,55 @@ class K16RuntimeDeviceTest {
     }
 
     @Test
+    fun keepsFramebufferFramesUntilDisplaySessionAttaches() {
+        val endpoint = RecordingK16Endpoint()
+        val displayNetwork = RecordingDisplayNetworkBridge()
+        val device =
+            K16RuntimeDevice(
+                deviceId = 31,
+                properties = DeviceProperties(DeviceFamily.NORMAL, label = null),
+                endpointFactory = { endpoint },
+                stateSink = {},
+                displayNetwork = displayNetwork,
+            )
+        val playerUuid = UUID.randomUUID()
+        val frame =
+            DisplayFrameDelta(
+                displayId = 1,
+                sequence = 1,
+                width = 320,
+                height = 200,
+                pixelFormat = DisplayPixelFormat.RGB565,
+                fullRefresh = false,
+                tiles =
+                    listOf(
+                        DisplayTile(
+                            tileX = 0,
+                            tileY = 0,
+                            x = 0,
+                            y = 0,
+                            width = 1,
+                            height = 1,
+                            payload = byteArrayOf(0xF8.toByte(), 0x00),
+                        ),
+                    ),
+            )
+
+        device.turnOn()
+        endpoint.enqueueFramebufferFrames(encodeDisplayFrames(listOf(frame)))
+        device.serverTick()
+        waitUntil { endpoint.tickCalls == 1 }
+
+        assertEquals(0, displayNetwork.sentFrames.size)
+
+        device.attachDisplaySession(playerUuid, containerId = 32, displayId = 1, width = 320, height = 200)
+        device.serverTick()
+
+        assertEquals(1, displayNetwork.sentFrames.size)
+        assertEquals(frame, displayNetwork.sentFrames.single().frame)
+    }
+
+    @Test
     fun stopsTickingEndpointAfterTerminalControlStatus() {
         val endpoint = RecordingK16Endpoint()
         endpoint.control = NativeK16ComputerControl(status = K16RuntimeDevice.STATUS_HALTED, exitCode = 0, panicCode = 2)
