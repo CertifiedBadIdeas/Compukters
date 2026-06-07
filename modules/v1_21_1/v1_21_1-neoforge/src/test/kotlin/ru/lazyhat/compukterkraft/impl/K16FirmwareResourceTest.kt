@@ -379,7 +379,7 @@ class K16FirmwareResourceTest {
         val shellSource = Path.of("../../../rust/guest/k16-kernel/src/shell.rs").readText()
 
         assertTrue(shellSource.contains("const PROMPT: &[u8] = b\"K16> \""))
-        assertTrue(shellSource.contains("fn prompt()"))
+        assertTrue(shellSource.contains("fn write_prompt()"))
         assertTrue(shellSource.contains("fn read_line_byte("))
         assertTrue(shellSource.contains("core::ptr::read_volatile"))
         assertTrue(shellSource.contains("fn is_ok("), "shell should dispatch ok")
@@ -388,6 +388,30 @@ class K16FirmwareResourceTest {
         assertTrue(shellSource.contains("fn is_help("), "shell should dispatch help")
         assertTrue(shellSource.contains("HELP\\nOK\\nCLEAR\\nECHO\\n"), "help should print a readable command list")
         assertTrue(shellSource.contains("b\"ERR\\n\""), "unknown commands should report a short error")
+    }
+
+    @Test
+    fun k16KernelShellDefinesReadableDispatcherSemantics() {
+        val shellSource = Path.of("../../../rust/guest/k16-kernel/src/shell.rs").readText()
+
+        assertTrue(
+            shellSource.contains("dispatch_line(line_addr, line_len);"),
+            "handle_line should delegate command routing to a named dispatcher",
+        )
+        assertTrue(shellSource.contains("fn dispatch_line("), "shell should name the dispatch boundary")
+        assertTrue(shellSource.contains("fn write_prompt()"), "shell should name prompt output")
+        assertTrue(shellSource.contains("fn matches_command("), "shell should share exact command matching")
+        assertTrue(shellSource.contains("fn is_echo_command("), "shell should name echo command matching")
+        assertTrue(shellSource.contains("fn run_empty()"), "shell should name empty-line behavior")
+        assertTrue(shellSource.contains("fn run_ok()"), "shell should name the ok command")
+        assertTrue(shellSource.contains("fn run_help()"), "shell should name the help command")
+        assertTrue(shellSource.contains("fn run_clear()"), "shell should name the clear command")
+        assertTrue(shellSource.contains("fn run_echo("), "shell should name the echo command")
+        assertTrue(shellSource.contains("fn run_unknown()"), "shell should name unknown-command behavior")
+        assertTrue(
+            shellSource.contains("console::flush();\n    true"),
+            "handle_line should keep flushing once after dispatch and return true",
+        )
     }
 
     @Test
@@ -553,6 +577,31 @@ class K16FirmwareResourceTest {
             assertEquals(NativeK16ComputerControl.STATUS_READY, control.status)
             NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
 
+            runShellCommand(runtime, "ok", expectVisiblePixels = true)
+            runShellCommand(runtime, "help", expectVisiblePixels = true)
+            runShellCommand(runtime, "clear", expectVisiblePixels = false)
+            runShellCommand(runtime, "echo ok", expectVisiblePixels = true)
+            runShellCommand(runtime, "wat", expectVisiblePixels = true)
+        }
+    }
+
+    @Test
+    fun bundledK16KernelShellDispatcherKeepsCurrentCommandsAlive() {
+        val workspace = createTempDirectory("k16-shell-dispatcher-test-")
+        val biosFlashPath = workspace.resolve("bios.kflash")
+        val storage0Path = workspace.resolve("storage0.kv")
+        biosFlashPath.writeBytes(K16BiosFlashWorkspace.loadBiosFlashResource(classLoader = javaClass.classLoader))
+        storage0Path.writeBytes(K16SystemVolumeWorkspace.loadStorage0VolumeResource(classLoader = javaClass.classLoader))
+
+        K16ComputerRuntimeFactory.createFromBiosFlash(
+            biosFlashPath = biosFlashPath,
+            storage0Path = storage0Path,
+        ).use { runtime ->
+            val control = runThroughBiosSplashAndBoot(runtime)
+            assertEquals(NativeK16ComputerControl.STATUS_READY, control.status)
+            NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
+
+            runShellCommand(runtime, "", expectVisiblePixels = true)
             runShellCommand(runtime, "ok", expectVisiblePixels = true)
             runShellCommand(runtime, "help", expectVisiblePixels = true)
             runShellCommand(runtime, "clear", expectVisiblePixels = false)
