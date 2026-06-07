@@ -132,7 +132,10 @@ empty, it returns `0`.
 
 ## Display0 MMIO
 
-The display0 range provides a text-mode display surface for firmware.
+Deprecated: the display0 range provides a legacy text-mode display surface for
+old firmware paths. New OS, kernel console, and terminal work must render text
+inside guest code and present pixels through `gpu0` instead. The VM must not own
+fonts, glyphs, text cells, cursor state, terminal state, or shell behavior.
 
 Initial dimensions:
 
