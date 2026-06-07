@@ -4,7 +4,7 @@ use crate::mmio;
 
 pub fn clear(color: u16) {
     unsafe {
-        mmio::write_i32(gpu0::COLOR, i32::from(color));
+        mmio::write_i32(gpu0::COLOR, color as i32);
         mmio::write_i32(gpu0::COMMAND, gpu0::COMMAND_CLEAR);
     }
 }

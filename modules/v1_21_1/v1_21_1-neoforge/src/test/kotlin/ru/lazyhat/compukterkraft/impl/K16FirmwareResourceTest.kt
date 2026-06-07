@@ -22,6 +22,11 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
+private const val K16_KERNEL_LOAD_ADDR = 0x0000_5000
+private const val K16_KERNEL_LIMIT_BYTES = 0x0000_8000 - K16_KERNEL_LOAD_ADDR
+private const val K16_KERNEL_MIN_HEADROOM_BYTES = 1024
+private const val K16_KERNEL_SHELL_EXPANSION_HEADROOM_BYTES = 2500
+
 class K16FirmwareResourceTest {
     @Test
     fun bundledK16FirmwareBuildUsesK16GradleSurface() {
@@ -50,6 +55,8 @@ class K16FirmwareResourceTest {
         assertFalse(source.contains("providers.environmentVariable(\"K16_LD\")"))
         assertTrue(source.contains("-C linker="))
         assertTrue(source.contains("-C link-arg=--k16-target=\$k16Target"))
+        assertTrue(source.contains("\"opt-level=z\""))
+        assertTrue(source.contains("-Copt-level=z"))
         assertTrue(source.contains("k16Target = \"bios\""))
         assertTrue(source.contains("k16Target = \"boot\""))
         assertTrue(source.contains("k16Target = \"kernel\""))
@@ -283,9 +290,6 @@ class K16FirmwareResourceTest {
     fun bundledK16KernelPayloadKeepsMinimumHeadroom() {
         val artifactPath = Path.of("build/generated/k16-firmware-artifacts/display-ok.kx")
         val bytes = artifactPath.readBytes()
-        val kernelLoadAddr = 0x0000_5000
-        val kernelLimitBytes = 0x0000_8000 - kernelLoadAddr
-        val minHeadroomBytes = 1024
 
         assertContentEquals("K16E".encodeToByteArray(), bytes.copyOfRange(0, 4))
         assertEquals(1, bytes.u16Le(offset = 4), "K16E version")
@@ -294,21 +298,34 @@ class K16FirmwareResourceTest {
         assertEquals(1, bytes.u32Le(offset = 20), "K16E section count")
         assertEquals(2, bytes.u32Le(offset = 24), "K16E ABI kind should be kernel")
         assertEquals(1, bytes.u32Le(offset = 32), "K16E section kind should be load")
-        assertEquals(kernelLoadAddr, bytes.u32Le(offset = 36), "K16E kernel load address")
+        assertEquals(K16_KERNEL_LOAD_ADDR, bytes.u32Le(offset = 36), "K16E kernel load address")
         assertEquals(52, bytes.u32Le(offset = 40), "K16E kernel payload offset")
 
         val payloadBytes = bytes.u32Le(offset = 44)
         val memorySize = bytes.u32Le(offset = 48)
-        val headroomBytes = kernelLimitBytes - payloadBytes
+        val headroomBytes = K16_KERNEL_LIMIT_BYTES - payloadBytes
 
         assertEquals(payloadBytes, memorySize, "K16E kernel memory size should match file size")
         assertTrue(
-            payloadBytes <= kernelLimitBytes,
-            "K16 kernel payload is too large: payload=$payloadBytes limit=$kernelLimitBytes",
+            payloadBytes <= K16_KERNEL_LIMIT_BYTES,
+            "K16 kernel payload is too large: payload=$payloadBytes limit=$K16_KERNEL_LIMIT_BYTES",
         )
         assertTrue(
-            headroomBytes >= minHeadroomBytes,
-            "K16 kernel payload headroom is too low: payload=$payloadBytes headroom=$headroomBytes min=$minHeadroomBytes",
+            headroomBytes >= K16_KERNEL_MIN_HEADROOM_BYTES,
+            "K16 kernel payload headroom is too low: payload=$payloadBytes headroom=$headroomBytes min=$K16_KERNEL_MIN_HEADROOM_BYTES",
+        )
+    }
+
+    @Test
+    fun bundledK16KernelPayloadKeepsShellExpansionHeadroom() {
+        val artifactPath = Path.of("build/generated/k16-firmware-artifacts/display-ok.kx")
+        val bytes = artifactPath.readBytes()
+        val payloadBytes = bytes.u32Le(offset = 44)
+        val headroomBytes = K16_KERNEL_LIMIT_BYTES - payloadBytes
+
+        assertTrue(
+            headroomBytes >= K16_KERNEL_SHELL_EXPANSION_HEADROOM_BYTES,
+            "K16 kernel shell expansion headroom is too low: payload=$payloadBytes headroom=$headroomBytes min=$K16_KERNEL_SHELL_EXPANSION_HEADROOM_BYTES",
         )
     }
 

@@ -32,8 +32,10 @@ pub fn clear() {
 }
 
 pub fn write_bytes(bytes: &[u8]) {
-    for &byte in bytes {
-        write_byte(byte);
+    let mut index = 0;
+    while index < bytes.len() {
+        write_byte(bytes[index]);
+        index += 1;
     }
 }
 
@@ -95,7 +97,7 @@ fn write_tab() {
     loop {
         write_byte(b' ');
         let cursor = unsafe { CURSOR_X };
-        if cursor % 4 == 0 {
+        if cursor & 3 == 0 {
             break;
         }
     }
@@ -117,23 +119,6 @@ unsafe fn scroll_up() {
 fn set_cell(column: usize, row: usize, byte: u8) {
     unsafe {
         write_cell(cell_index(column, row), byte);
-    }
-}
-
-fn repaint_all() {
-    gpu::clear(BACKGROUND);
-    let mut row = 0;
-    while row < ROWS {
-        repaint_row(row);
-        row += 1;
-    }
-}
-
-fn repaint_row(row: usize) {
-    let mut column = 0;
-    while column < COLUMNS {
-        repaint_cell(column, row);
-        column += 1;
     }
 }
 
