@@ -11,6 +11,7 @@ pub const K16_CSR_INTERRUPT_PENDING: u32 = 7;
 pub const K16_CSR_TRAP_ARG0: u32 = 8;
 
 pub const K16_INTERRUPT_SOURCE_TIMER0: u32 = 1;
+pub const K16_INTERRUPT_SOURCE_KEYBOARD0: u32 = 2;
 
 /// K16 ABI register reserved as the stack pointer. The stack lives in guest RAM,
 /// uses 4-byte slots, and grows toward lower addresses.
@@ -22,6 +23,7 @@ pub const K16_TRAP_CAUSE_LOAD_FAULT: u32 = 3;
 pub const K16_TRAP_CAUSE_STORE_FAULT: u32 = 4;
 pub const K16_TRAP_CAUSE_EXPLICIT_TRAP: u32 = 5;
 pub const K16_TRAP_CAUSE_TIMER0_INTERRUPT: u32 = 0x8000_0001;
+pub const K16_TRAP_CAUSE_KEYBOARD0_INTERRUPT: u32 = 0x8000_0002;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum K16Signal {
@@ -828,6 +830,7 @@ impl K16Cpu {
             K16_INTERRUPT_SOURCE_TIMER0 => {
                 (K16_TRAP_CAUSE_TIMER0_INTERRUPT, self.timer0_interrupt_value)
             }
+            K16_INTERRUPT_SOURCE_KEYBOARD0 => (K16_TRAP_CAUSE_KEYBOARD0_INTERRUPT, 0),
             _ => return Ok(false),
         };
         if self.trap_vector == 0 {

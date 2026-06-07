@@ -55,6 +55,7 @@ pub mod cpu {
         pub const STORE_FAULT: u32 = 4;
         pub const EXPLICIT_TRAP: u32 = 5;
         pub const TIMER0_INTERRUPT: u32 = 0x8000_0001;
+        pub const KEYBOARD0_INTERRUPT: u32 = 0x8000_0002;
 
         pub const fn is_interrupt(cause: u32) -> bool {
             (cause as i32) < 0
@@ -67,6 +68,7 @@ pub mod cpu {
 
     pub mod interrupt_source {
         pub const TIMER0: u32 = 0x0000_0001;
+        pub const KEYBOARD0: u32 = 0x0000_0002;
     }
 }
 
@@ -161,6 +163,7 @@ pub mod computer {
         pub const STORAGE0: u32 = 5;
         pub const FRAMEBUFFER0: u32 = 6;
         pub const TIMER0: u32 = 7;
+        pub const KEYBOARD0: u32 = 8;
     }
 
     pub mod control {
@@ -307,6 +310,45 @@ pub mod computer {
         pub const TIMER_VERSION: i32 = 1;
     }
 
+    pub mod keyboard0 {
+        pub const BASE: u32 = 0x1000_0700;
+        pub const VERSION: u32 = 0x1000_0700;
+        pub const QUEUE_LEN: u32 = 0x1000_0704;
+        pub const STATUS: u32 = 0x1000_0708;
+        pub const EVENT_KIND: u32 = 0x1000_070c;
+        pub const CODE: u32 = 0x1000_0710;
+        pub const MODIFIERS: u32 = 0x1000_0714;
+        pub const FLAGS: u32 = 0x1000_0718;
+        pub const SEQUENCE_LOW: u32 = 0x1000_071c;
+        pub const SEQUENCE_HIGH: u32 = 0x1000_0720;
+        pub const COMMAND: u32 = 0x1000_0724;
+        pub const DROPPED_COUNT: u32 = 0x1000_0728;
+        pub const SIZE: u32 = 256;
+
+        pub const KEYBOARD_VERSION: i32 = 1;
+
+        pub const EVENT_NONE: i32 = 0;
+        pub const EVENT_KEY_DOWN: i32 = 1;
+        pub const EVENT_KEY_UP: i32 = 2;
+        pub const EVENT_CHAR: i32 = 3;
+        pub const EVENT_PASTE_BYTE: i32 = 4;
+
+        pub const STATUS_EMPTY: i32 = 0;
+        pub const STATUS_READY: i32 = 1;
+        pub const STATUS_OVERFLOW: i32 = 2;
+
+        pub const COMMAND_NOP: i32 = 0;
+        pub const COMMAND_CONSUME: i32 = 1;
+        pub const COMMAND_CLEAR: i32 = 2;
+
+        pub const FLAG_REPEAT: i32 = 0x0000_0001;
+
+        pub const MOD_SHIFT: i32 = 0x0000_0001;
+        pub const MOD_CONTROL: i32 = 0x0000_0002;
+        pub const MOD_ALT: i32 = 0x0000_0004;
+        pub const MOD_SUPER: i32 = 0x0000_0008;
+    }
+
     pub mod memory {
         pub const RAM_BASE: u32 = 0x0000_0000;
     }
@@ -332,11 +374,42 @@ mod tests {
         assert_eq!(computer::timer0::MONOTONIC_NANOS_LOW, 0x1000_060c);
         assert_eq!(computer::timer0::MONOTONIC_NANOS_HIGH, 0x1000_0610);
         assert_eq!(computer::timer0::TIMER_VERSION, 1);
+        assert_eq!(computer::keyboard0::BASE, 0x1000_0700);
+        assert_eq!(computer::keyboard0::VERSION, 0x1000_0700);
+        assert_eq!(computer::keyboard0::QUEUE_LEN, 0x1000_0704);
+        assert_eq!(computer::keyboard0::STATUS, 0x1000_0708);
+        assert_eq!(computer::keyboard0::EVENT_KIND, 0x1000_070c);
+        assert_eq!(computer::keyboard0::CODE, 0x1000_0710);
+        assert_eq!(computer::keyboard0::MODIFIERS, 0x1000_0714);
+        assert_eq!(computer::keyboard0::FLAGS, 0x1000_0718);
+        assert_eq!(computer::keyboard0::SEQUENCE_LOW, 0x1000_071c);
+        assert_eq!(computer::keyboard0::SEQUENCE_HIGH, 0x1000_0720);
+        assert_eq!(computer::keyboard0::COMMAND, 0x1000_0724);
+        assert_eq!(computer::keyboard0::DROPPED_COUNT, 0x1000_0728);
+        assert_eq!(computer::keyboard0::SIZE, 256);
+        assert_eq!(computer::keyboard0::KEYBOARD_VERSION, 1);
+        assert_eq!(computer::keyboard0::EVENT_NONE, 0);
+        assert_eq!(computer::keyboard0::EVENT_KEY_DOWN, 1);
+        assert_eq!(computer::keyboard0::EVENT_KEY_UP, 2);
+        assert_eq!(computer::keyboard0::EVENT_CHAR, 3);
+        assert_eq!(computer::keyboard0::EVENT_PASTE_BYTE, 4);
+        assert_eq!(computer::keyboard0::STATUS_EMPTY, 0);
+        assert_eq!(computer::keyboard0::STATUS_READY, 1);
+        assert_eq!(computer::keyboard0::STATUS_OVERFLOW, 2);
+        assert_eq!(computer::keyboard0::COMMAND_NOP, 0);
+        assert_eq!(computer::keyboard0::COMMAND_CONSUME, 1);
+        assert_eq!(computer::keyboard0::COMMAND_CLEAR, 2);
+        assert_eq!(computer::keyboard0::FLAG_REPEAT, 0x0000_0001);
+        assert_eq!(computer::keyboard0::MOD_SHIFT, 0x0000_0001);
+        assert_eq!(computer::keyboard0::MOD_CONTROL, 0x0000_0002);
+        assert_eq!(computer::keyboard0::MOD_ALT, 0x0000_0004);
+        assert_eq!(computer::keyboard0::MOD_SUPER, 0x0000_0008);
         assert_eq!(computer::profile::BOOT_INFO_MAGIC, 0x4942_5852);
         assert_eq!(computer::profile::VERSION, 2);
         assert_eq!(computer::profile::BOOT_INFO_SIZE, 28);
         assert_eq!(computer::profile::HARDWARE_ENTRY_SIZE, 16);
         assert_eq!(computer::hardware_id::TIMER0, 7);
+        assert_eq!(computer::hardware_id::KEYBOARD0, 8);
     }
 
     #[test]
@@ -346,7 +419,7 @@ mod tests {
             page_size: 256,
             program_base: 256,
             hardware_table_addr: 28,
-            hardware_count: 7,
+            hardware_count: 8,
         };
         let timer0 = computer::profile::HardwareEntry {
             id: computer::hardware_id::TIMER0,
@@ -354,9 +427,16 @@ mod tests {
             mmio_size: computer::timer0::SIZE,
             irq_source: cpu::interrupt_source::TIMER0,
         };
+        let keyboard0 = computer::profile::HardwareEntry {
+            id: computer::hardware_id::KEYBOARD0,
+            mmio_base: computer::keyboard0::BASE,
+            mmio_size: computer::keyboard0::SIZE,
+            irq_source: cpu::interrupt_source::KEYBOARD0,
+        };
 
         assert_eq!(boot_info.hardware_table_addr, 28);
         assert_eq!(timer0.irq_source, 1);
+        assert_eq!(keyboard0.irq_source, 2);
     }
 
     #[test]
@@ -367,9 +447,14 @@ mod tests {
         assert_eq!(cpu::csr::INTERRUPT_PENDING, 7);
         assert_eq!(cpu::csr::TRAP_ARG0, 8);
         assert_eq!(cpu::interrupt_source::TIMER0, 0x0000_0001);
+        assert_eq!(cpu::interrupt_source::KEYBOARD0, 0x0000_0002);
         assert_eq!(cpu::trap_cause::TIMER0_INTERRUPT, 0x8000_0001);
+        assert_eq!(cpu::trap_cause::KEYBOARD0_INTERRUPT, 0x8000_0002);
         assert!(cpu::trap_cause::is_interrupt(
             cpu::trap_cause::TIMER0_INTERRUPT
+        ));
+        assert!(cpu::trap_cause::is_interrupt(
+            cpu::trap_cause::KEYBOARD0_INTERRUPT
         ));
         assert!(!cpu::trap_cause::is_interrupt(
             cpu::trap_cause::ILLEGAL_INSTRUCTION
@@ -377,6 +462,10 @@ mod tests {
         assert_eq!(
             cpu::trap_cause::interrupt_source(cpu::trap_cause::TIMER0_INTERRUPT),
             cpu::interrupt_source::TIMER0
+        );
+        assert_eq!(
+            cpu::trap_cause::interrupt_source(cpu::trap_cause::KEYBOARD0_INTERRUPT),
+            cpu::interrupt_source::KEYBOARD0
         );
     }
 

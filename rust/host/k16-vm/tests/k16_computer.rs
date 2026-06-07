@@ -1,7 +1,8 @@
 use k16_vm::computer_machine::ComputerMachine;
 use k16_vm::k16::{
-    K16Signal, K16_CSR_INTERRUPT_ENABLE, K16_CSR_INTERRUPT_MASK, K16_CSR_TRAP_VALUE,
-    K16_CSR_TRAP_VECTOR, K16_INTERRUPT_SOURCE_TIMER0,
+    K16Signal, K16_CSR_INTERRUPT_ENABLE, K16_CSR_INTERRUPT_MASK, K16_CSR_TRAP_CAUSE,
+    K16_CSR_TRAP_VALUE, K16_CSR_TRAP_VECTOR, K16_INTERRUPT_SOURCE_KEYBOARD0,
+    K16_INTERRUPT_SOURCE_TIMER0, K16_TRAP_CAUSE_KEYBOARD0_INTERRUPT,
 };
 use k16_vm::k16_computer::{K16ComputerControl, K16ComputerHandle};
 use std::fs;
@@ -78,7 +79,7 @@ fn k16_computer_handle_accepts_storage0_volume_path() {
 fn k16_computer_profile_exposes_timer0_hardware_entry_and_mmio() {
     let mut machine = ComputerMachine::new(1024).expect("machine creates");
 
-    assert_eq!(read_u32(machine.memory(), 0x18), 7);
+    assert_eq!(read_u32(machine.memory(), 0x18), 8);
     assert_hardware_entry_with_irq(
         machine.memory(),
         124,
@@ -87,6 +88,14 @@ fn k16_computer_profile_exposes_timer0_hardware_entry_and_mmio() {
         ComputerMachine::TIMER0_SIZE,
         k16_vm::k16::K16_INTERRUPT_SOURCE_TIMER0,
     );
+    assert_hardware_entry_with_irq(
+        machine.memory(),
+        140,
+        ComputerMachine::HARDWARE_ID_KEYBOARD0,
+        ComputerMachine::KEYBOARD0_BASE,
+        ComputerMachine::KEYBOARD0_SIZE,
+        k16_vm::k16::K16_INTERRUPT_SOURCE_KEYBOARD0,
+    );
     assert_eq!(
         machine
             .memory_map()
@@ -94,6 +103,14 @@ fn k16_computer_profile_exposes_timer0_hardware_entry_and_mmio() {
             .expect("timer0 is mapped")
             .base,
         ComputerMachine::TIMER0_BASE,
+    );
+    assert_eq!(
+        machine
+            .memory_map()
+            .region("keyboard0")
+            .expect("keyboard0 is mapped")
+            .base,
+        ComputerMachine::KEYBOARD0_BASE,
     );
     assert_eq!(
         machine
@@ -171,6 +188,34 @@ fn k16_computer_handle_advance_game_tick_requests_timer0_interrupt() {
 
     assert_eq!(handle.run_k16_until_signal().unwrap(), K16Signal::Halt);
     assert_eq!(handle.control().panic_code, 1);
+}
+
+#[test]
+fn k16_computer_handle_keyboard0_input_requests_keyboard0_interrupt() {
+    let mut words = Vec::new();
+    words.extend(k16_const32(1, ComputerMachine::K16_BIOS_FLASH_BASE + 32));
+    words.push(k16_write_csr(K16_CSR_TRAP_VECTOR, 1));
+    words.push(k16_const4(1, K16_INTERRUPT_SOURCE_KEYBOARD0 as u8));
+    words.push(k16_write_csr(K16_CSR_INTERRUPT_MASK, 1));
+    words.push(k16_const4(1, 1));
+    words.push(k16_write_csr(K16_CSR_INTERRUPT_ENABLE, 1));
+    words.extend(k16_const32(0, ComputerMachine::CONTROL_PANIC_CODE));
+    words.push(k16_store32(0, 3));
+    words.push(k16_halt());
+    words.extend([0; 3]);
+    words.push(k16_read_csr(3, K16_CSR_TRAP_CAUSE));
+    words.push(k16_iret());
+    let bios = k16_words(&words);
+    let mut handle = K16ComputerHandle::create_k16_bios_flash(&bios, 64 * 1024, 64)
+        .expect("K16 BIOS flash computer creates");
+
+    handle.push_keyboard_char(b'K');
+
+    assert_eq!(handle.run_k16_until_signal().unwrap(), K16Signal::Halt);
+    assert_eq!(
+        u32::from_le_bytes(handle.control().panic_code.to_le_bytes()),
+        K16_TRAP_CAUSE_KEYBOARD0_INTERRUPT,
+    );
 }
 
 #[test]

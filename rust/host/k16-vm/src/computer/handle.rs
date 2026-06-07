@@ -179,6 +179,22 @@ impl K16ComputerHandle {
         self.machine.push_serial_input(bytes);
     }
 
+    pub fn push_keyboard_key_down(&mut self, code: u32, repeat: bool, modifiers: i32) {
+        self.machine.push_keyboard_key_down(code, repeat, modifiers);
+    }
+
+    pub fn push_keyboard_key_up(&mut self, code: u32, modifiers: i32) {
+        self.machine.push_keyboard_key_up(code, modifiers);
+    }
+
+    pub fn push_keyboard_char(&mut self, byte: u8) {
+        self.machine.push_keyboard_char(byte);
+    }
+
+    pub fn push_keyboard_paste_byte(&mut self, byte: u8) {
+        self.machine.push_keyboard_paste_byte(byte);
+    }
+
     pub fn storage0_media_snapshot(&self) -> Option<Vec<u8>> {
         self.machine.storage0_media_bytes()
     }

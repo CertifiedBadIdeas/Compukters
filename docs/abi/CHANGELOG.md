@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Added K16 computer-profile `keyboard0` as a PC-like MMIO event queue at
+  `0x1000_0700` with hardware id `8` and interrupt source `0x00000002`.
+  It delivers trap cause `0x80000002`; the host-side Rust VM now snapshots
+  pending keyboard events separately from the existing UART-style
+  `serial-input` byte queue.
 - Added `k16_abi::syscall::SLEEP_TICKS` and the matching `k16-rt`
   `sleep_ticks_syscall(ticks)` wrapper. The Rust kernel implements the first
   single-task blocking sleep syscall by yielding until `timer0.game_ticks`
