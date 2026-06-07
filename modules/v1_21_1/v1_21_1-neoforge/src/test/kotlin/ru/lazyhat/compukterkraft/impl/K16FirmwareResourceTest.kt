@@ -10,6 +10,7 @@ import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayPixelFormat
 import ru.lazyhat.compukterkraft.lang.runtime.storage.K16_VOLUME_MAGIC_BYTES
 import ru.lazyhat.compukterkraft.lang.runtime.storage.K16SystemVolumeWorkspace
+import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.io.path.createTempDirectory
 import kotlin.io.path.readBytes
@@ -144,6 +145,7 @@ class K16FirmwareResourceTest {
                 "font.rs",
                 "keyboard.rs",
                 "line.rs",
+                "shell.rs",
             )
 
         for (fileName in checkedFiles) {
@@ -176,7 +178,7 @@ class K16FirmwareResourceTest {
 
         assertTrue(
             lineSource.contains("const LINE_BUFFER_ADDR:"),
-            "line discipline should keep editable input storage in guest RAM",
+            "line discipline should keep a guest RAM completed-line handoff address",
         )
         assertFalse(
             lineSource.contains("static mut BUFFER: [u8;"),
@@ -204,6 +206,21 @@ class K16FirmwareResourceTest {
     }
 
     @Test
+    fun k16KernelLineDisciplineHandsCompletedLinesToShell() {
+        val kernelSourceDir = Path.of("../../../rust/guest/k16-kernel/src")
+        val shellPath = kernelSourceDir.resolve("shell.rs")
+        val mainSource = kernelSourceDir.resolve("main.rs").readText()
+        val lineSource = kernelSourceDir.resolve("line.rs").readText()
+        val keyboardSource = kernelSourceDir.resolve("keyboard.rs").readText()
+
+        assertTrue(Files.exists(shellPath), "kernel shell module should exist")
+        assertTrue(mainSource.contains("mod shell;"), "main.rs should register the shell module")
+        assertTrue(mainSource.contains("shell::init();"), "kernel startup should initialize the shell module")
+        assertTrue(lineSource.contains("shell::handle_line"), "line discipline should hand completed lines to shell")
+        assertFalse(keyboardSource.contains("shell::"), "keyboard.rs must not call shell directly")
+    }
+
+    @Test
     fun bundledK16KernelEchoesKeyboardCharThroughGpuConsole() {
         val workspace = createTempDirectory("k16-keyboard-console-test-")
         val biosFlashPath = workspace.resolve("bios.kflash")
@@ -228,6 +245,30 @@ class K16FirmwareResourceTest {
                 frames.any { it.pixelFormat == DisplayPixelFormat.RGB565 && it.hasVisiblePixels() },
                 "keyboard char input should produce a new visible gpu0 console frame",
             )
+        }
+    }
+
+    @Test
+    fun bundledK16KernelShellHandoffHandlesEnterWithoutPanic() {
+        val workspace = createTempDirectory("k16-shell-handoff-test-")
+        val biosFlashPath = workspace.resolve("bios.kflash")
+        val storage0Path = workspace.resolve("storage0.kv")
+        biosFlashPath.writeBytes(K16BiosFlashWorkspace.loadBiosFlashResource(classLoader = javaClass.classLoader))
+        storage0Path.writeBytes(K16SystemVolumeWorkspace.loadStorage0VolumeResource(classLoader = javaClass.classLoader))
+
+        K16ComputerRuntimeFactory.createFromBiosFlash(
+            biosFlashPath = biosFlashPath,
+            storage0Path = storage0Path,
+        ).use { runtime ->
+            val control = runThroughBiosSplashAndBoot(runtime)
+            assertEquals(NativeK16ComputerControl.STATUS_READY, control.status)
+            NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
+
+            runtime.pushKeyboardChar('\n'.code.toByte())
+            val afterInputControl = runtime.tick(maxTurns = 128)
+
+            assertEquals(NativeK16ComputerControl.STATUS_READY, afterInputControl.status)
+            assertEquals(0, afterInputControl.panicCode)
         }
     }
 
