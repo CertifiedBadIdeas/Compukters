@@ -158,17 +158,20 @@ class K16FirmwareResourceTest {
     }
 
     @Test
-    fun k16KernelConsoleKeepsCellGridAndScrolls() {
+    fun k16KernelConsoleKeepsCellGridAndClearOnOverflow() {
         val consoleSource = Path.of("../../../rust/guest/k16-kernel/src/console.rs").readText()
 
         assertTrue(consoleSource.contains("const CELLS_ADDR:"), "kernel console should keep guest cell state")
         assertTrue(consoleSource.contains("fn read_cell("), "kernel console should read cells from guest RAM")
         assertTrue(consoleSource.contains("fn write_cell("), "kernel console should write cells into guest RAM")
-        assertTrue(consoleSource.contains("fn scroll_up("), "kernel console should scroll at the bottom row")
-        assertTrue(consoleSource.contains("fn repaint_row("), "kernel console should repaint rows from cell state")
+        assertTrue(consoleSource.contains("fn scroll_up("), "kernel console should keep a bottom-overflow boundary")
+        assertTrue(
+            consoleSource.contains("gpu::clear(BACKGROUND);"),
+            "bottom overflow should clear the gpu0 console in this payload-budgeted shell slice",
+        )
         assertFalse(
             consoleSource.contains("else {\n            CURSOR_Y = 0;\n        }"),
-            "bottom overflow must scroll instead of wrapping to row zero",
+            "bottom overflow must not wrap to row zero",
         )
     }
 
@@ -183,6 +186,20 @@ class K16FirmwareResourceTest {
         assertFalse(
             lineSource.contains("static mut BUFFER: [u8;"),
             "line discipline must not embed the editable input buffer into the K16E payload",
+        )
+    }
+
+    @Test
+    fun k16KernelLineDisciplineStoresCompletedLineBytesInGuestRam() {
+        val lineSource = Path.of("../../../rust/guest/k16-kernel/src/line.rs").readText()
+
+        assertTrue(
+            lineSource.contains("LINE_BUFFER_ADDR + BUFFER_LEN as u32"),
+            "line discipline should address the current byte inside the guest RAM handoff buffer",
+        )
+        assertTrue(
+            lineSource.contains("core::ptr::write_volatile"),
+            "line discipline should write printable input bytes into guest RAM before shell handoff",
         )
     }
 
@@ -218,6 +235,36 @@ class K16FirmwareResourceTest {
         assertTrue(mainSource.contains("shell::init();"), "kernel startup should initialize the shell module")
         assertTrue(lineSource.contains("shell::handle_line"), "line discipline should hand completed lines to shell")
         assertFalse(keyboardSource.contains("shell::"), "keyboard.rs must not call shell directly")
+    }
+
+    @Test
+    fun k16KernelShellDefinesPromptAndBuiltins() {
+        val shellSource = Path.of("../../../rust/guest/k16-kernel/src/shell.rs").readText()
+
+        assertTrue(shellSource.contains("const PROMPT: &[u8] = b\"K \""))
+        assertTrue(shellSource.contains("fn prompt()"))
+        assertTrue(shellSource.contains("fn read_line_byte("))
+        assertTrue(shellSource.contains("core::ptr::read_volatile"))
+        assertTrue(shellSource.contains("fn is_ok("), "shell should dispatch ok")
+        assertTrue(shellSource.contains("fn is_clear("), "shell should dispatch clear")
+        assertTrue(shellSource.contains("fn is_echo("), "shell should dispatch echo")
+        assertTrue(shellSource.contains("b\"ERR\\n\""), "unknown commands should report a short error")
+    }
+
+    @Test
+    fun k16KernelFontCoversWorkingShellText() {
+        val fontSource = Path.of("../../../rust/guest/k16-kernel/src/font.rs").readText()
+        val requiredGlyphs =
+            listOf(
+                "b'E'",
+                "b'K'",
+                "b'O'",
+                "b'R'",
+            )
+
+        for (glyph in requiredGlyphs) {
+            assertTrue(fontSource.contains(glyph), "font should contain shell glyph $glyph")
+        }
     }
 
     @Test
@@ -314,6 +361,29 @@ class K16FirmwareResourceTest {
 
             assertEquals(NativeK16ComputerControl.STATUS_READY, afterInputControl.status)
             assertEquals(0, afterInputControl.panicCode)
+        }
+    }
+
+    @Test
+    fun bundledK16KernelShellRunsBasicCommandsWithoutPanic() {
+        val workspace = createTempDirectory("k16-shell-commands-test-")
+        val biosFlashPath = workspace.resolve("bios.kflash")
+        val storage0Path = workspace.resolve("storage0.kv")
+        biosFlashPath.writeBytes(K16BiosFlashWorkspace.loadBiosFlashResource(classLoader = javaClass.classLoader))
+        storage0Path.writeBytes(K16SystemVolumeWorkspace.loadStorage0VolumeResource(classLoader = javaClass.classLoader))
+
+        K16ComputerRuntimeFactory.createFromBiosFlash(
+            biosFlashPath = biosFlashPath,
+            storage0Path = storage0Path,
+        ).use { runtime ->
+            val control = runThroughBiosSplashAndBoot(runtime)
+            assertEquals(NativeK16ComputerControl.STATUS_READY, control.status)
+            NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
+
+            runShellCommand(runtime, "ok", expectVisiblePixels = true)
+            runShellCommand(runtime, "clear", expectVisiblePixels = false)
+            runShellCommand(runtime, "echo ok", expectVisiblePixels = true)
+            runShellCommand(runtime, "wat", expectVisiblePixels = true)
         }
     }
 
@@ -502,5 +572,28 @@ class K16FirmwareResourceTest {
         val splashControl = runtime.tick()
         assertEquals(NativeK16ComputerControl.STATUS_BOOTING, splashControl.status)
         return runtime.tick(maxTurns = 1_000_000)
+    }
+
+    private fun runShellCommand(
+        runtime: K16ComputerRuntime,
+        command: String,
+        expectVisiblePixels: Boolean,
+    ) {
+        for (byte in "$command\n".encodeToByteArray()) {
+            runtime.pushKeyboardChar(byte)
+        }
+        val control = runtime.tick(maxTurns = 256)
+        val frames = NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
+
+        assertEquals(NativeK16ComputerControl.STATUS_READY, control.status, "command: $command")
+        assertEquals(0, control.panicCode, "command: $command")
+        assertTrue(
+            frames.any { it.pixelFormat == DisplayPixelFormat.RGB565 },
+            "shell command should produce gpu0 frames; command: $command",
+        )
+        assertTrue(
+            !expectVisiblePixels || frames.any { it.pixelFormat == DisplayPixelFormat.RGB565 && it.hasVisiblePixels() },
+            "shell command should produce visible gpu0 frames; command: $command",
+        )
     }
 }

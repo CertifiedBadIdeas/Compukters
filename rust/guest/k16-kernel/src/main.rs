@@ -21,7 +21,7 @@ use core::panic::PanicInfo;
 #[no_mangle]
 pub extern "C" fn _start() -> ! {
     console::init();
-    console::write_bytes(b"KERNEL OK\nKERNEL OK");
+    console::write_bytes(b"KERNEL OK\n");
     console::flush();
     shell::init();
     debug::print_kernel_ok();
