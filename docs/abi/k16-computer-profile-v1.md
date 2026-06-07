@@ -56,7 +56,7 @@ id  name          mmio_base     mmio_size     irq_source
 3   serial-input  0x1000_0200   0x0000_0100   0x0000_0000
 4   display0      0x1000_0300   0x0000_0100   0x0000_0000
 5   storage0      0x1000_0400   0x0000_0100   0x0000_0000
-6   framebuffer0  0x1000_0500   0x0000_0100   0x0000_0000
+6   gpu0          0x1000_0500   0x0000_0100   0x0000_0000
 7   timer0        0x1000_0600   0x0000_0100   0x0000_0001
 8   keyboard0     0x1000_0700   0x0000_0100   0x0000_0002
 ```
@@ -177,11 +177,13 @@ bits 20..31  y
 The sequence registers expose a monotonic `u64` split into low/high `u32`
 words. It advances when visible display state changes through a display command.
 
-## Framebuffer0 MMIO
+## Gpu0 MMIO
 
-The framebuffer0 range provides a pixel display surface for firmware and kernel
-graphics. It is independent from the text-mode `display0` device. Pixel output
-does not go through text cells or host text rendering.
+The gpu0 range provides a simple 2D pixel graphics adapter for firmware and
+kernel graphics. It is independent from the text-mode `display0` device. Pixel
+output does not go through text cells or host text rendering. The VM does not
+render fonts, glyphs, terminal state, windows, shaders, or 3D; guest software
+owns those layers and writes pixels through gpu0.
 
 Initial dimensions:
 
@@ -248,17 +250,17 @@ Commands:
 3  present
 ```
 
-`clear` fills the framebuffer with `color`. `color` uses the low 16 bits as an
-RGB565 value.
+`clear` fills the gpu0 pixel surface with `color`. `color` uses the low 16 bits
+as an RGB565 value.
 
-`blit_buffer` copies a rectangle from guest RAM into the framebuffer. Firmware
-writes `x`, `y`, `rect_width`, `rect_height`, `buffer_addr`, and
+`blit_buffer` copies a rectangle from guest RAM into the gpu0 pixel surface.
+Firmware writes `x`, `y`, `rect_width`, `rect_height`, `buffer_addr`, and
 `buffer_stride_bytes`, then writes `command = blit_buffer`. The source buffer
 must contain at least `rect_height` rows, each with `buffer_stride_bytes`
 bytes. `buffer_stride_bytes` must be at least `rect_width * 2`.
 
-`present` emits dirty framebuffer tiles to the host display-frame path and
-increments the framebuffer sequence if a frame is emitted. Dirty pixels are not
+`present` emits dirty gpu0 tiles to the host display-frame path and increments
+the gpu0 sequence if a frame is emitted. Dirty pixels are not
 sent to the host until firmware writes `command = present`.
 
 ## Timer0 MMIO

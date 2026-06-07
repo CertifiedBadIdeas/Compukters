@@ -515,7 +515,7 @@ class K16RuntimeDevice(
         private fun refreshCaches(endpoint: K16ComputerEndpoint) {
             outputCache = endpoint.outputSnapshot()
             display0Cache = endpoint.display0Snapshot()
-            val frameBytes = endpoint.drainFramebuffer0Frames()
+            val frameBytes = endpoint.drainGpu0Frames()
             if (frameBytes.isNotEmpty()) {
                 displayFrameCache.addAll(NativeDisplayFrameCodec.decodeFrames(frameBytes))
             }

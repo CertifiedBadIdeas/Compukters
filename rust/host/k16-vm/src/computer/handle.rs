@@ -171,8 +171,8 @@ impl K16ComputerHandle {
         self.machine.display0_snapshot().map(Into::into)
     }
 
-    pub fn drain_framebuffer0_frames(&mut self) -> Vec<DisplayFrameDelta> {
-        self.machine.drain_framebuffer0_frames()
+    pub fn drain_gpu0_frames(&mut self) -> Vec<DisplayFrameDelta> {
+        self.machine.drain_gpu0_frames()
     }
 
     pub fn push_serial_input(&mut self, bytes: &[u8]) {

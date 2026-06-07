@@ -57,7 +57,7 @@ RuntimeDevice.boot()
               ├─ Kraft16 CPU fetching instructions from mapped BIOS flash
               ├─ storage0 boot media
               ├─ flat RAM + MMIO bus (control, debug-serial, serial-input,
-              │   text-display, framebuffer0, storage0, bios-flash)
+              │   text-display, gpu0, storage0, bios-flash)
               └─ exposes control / debug / display snapshot over JNI
 
 RuntimeDevice.serverTick(gameTime)
@@ -82,7 +82,7 @@ RuntimeDevice.close()
 │    ├─ MMIO storage0        ◄──► boot media                           │
 │    ├─ MMIO bios flash      ──►  read-only firmware mapping           │
 │    ├─ MMIO text display    ──►  K16ComputerTextDisplaySnapshot       │
-│    └─ MMIO framebuffer0    ──►  DisplayFrameDelta values             │
+│    └─ MMIO gpu0            ──►  DisplayFrameDelta values             │
 └──────────────────────────────────────────┬──────────────────────────┘
                                            │ JNI run-until-signal
                                            ▼
@@ -107,8 +107,8 @@ RuntimeDevice.close()
 ```
 
 The text display device exposes a character cell buffer with cursor and a
-monotonic sequence number for delta detection. The framebuffer device converts
-guest RAM blits into display frame deltas. The client sends discrete input
+monotonic sequence number for delta detection. The gpu0 device converts guest
+RAM pixel blits into display frame deltas. The client sends discrete input
 events into the serial-input MMIO device. There is no multi-process scheduling
 and no host-call opcode — host-side interaction happens purely through
 memory-mapped registers.

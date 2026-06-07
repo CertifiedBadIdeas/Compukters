@@ -61,7 +61,7 @@ interface K16ComputerRuntimeBindings {
 
     fun display0Snapshot(handle: Long): NativeK16ComputerDisplaySnapshot?
 
-    fun drainFramebuffer0Frames(handle: Long): ByteArray
+    fun drainGpu0Frames(handle: Long): ByteArray
 
     fun storage0MediaSnapshot(handle: Long): ByteArray?
 
@@ -109,7 +109,7 @@ object NativeK16ComputerRuntimeBindings : K16ComputerRuntimeBindings {
 
     override fun display0Snapshot(handle: Long): NativeK16ComputerDisplaySnapshot? = NativeVmBindings.k16ComputerDisplay0Snapshot(handle)
 
-    override fun drainFramebuffer0Frames(handle: Long): ByteArray = NativeVmBindings.drainK16ComputerFramebuffer0Frames(handle)
+    override fun drainGpu0Frames(handle: Long): ByteArray = NativeVmBindings.drainK16ComputerGpu0Frames(handle)
 
     override fun storage0MediaSnapshot(handle: Long): ByteArray? = NativeVmBindings.k16ComputerStorage0MediaSnapshot(handle)
 
@@ -183,7 +183,7 @@ interface K16ComputerEndpoint : AutoCloseable {
 
     fun pollDisplay0Snapshot(): NativeK16ComputerDisplaySnapshot?
 
-    fun drainFramebuffer0Frames(): ByteArray
+    fun drainGpu0Frames(): ByteArray
 
     fun clearOutput()
 
@@ -294,9 +294,9 @@ class K16ComputerRuntime(
         return snapshot
     }
 
-    override fun drainFramebuffer0Frames(): ByteArray {
+    override fun drainGpu0Frames(): ByteArray {
         ensureOpen()
-        return bindings.drainFramebuffer0Frames(handle)
+        return bindings.drainGpu0Frames(handle)
     }
 
     override fun clearOutput() {

@@ -1,7 +1,7 @@
 use super::ComputerMachine;
 use crate::computer::devices::{
-    ComputerControlDevice, DebugSerialDevice, FramebufferDevice, K16VolumeFileStorageMedia,
-    KeyboardDevice, SerialInputDevice, StoragePortDevice, TextDisplayDevice, TimerDevice,
+    ComputerControlDevice, DebugSerialDevice, GpuDevice, K16VolumeFileStorageMedia, KeyboardDevice,
+    SerialInputDevice, StoragePortDevice, TextDisplayDevice, TimerDevice,
 };
 use crate::computer::profile::{
     validate_profile_v2, ComputerHardwareConfig, ComputerHardwareDevice, ComputerMachineProfile,
@@ -28,7 +28,7 @@ pub(super) fn from_profile(
         debug_device_id: device_ids.debug_serial,
         serial_input_device_id: device_ids.serial_input,
         display0_device_id: device_ids.text_display,
-        framebuffer0_device_id: device_ids.framebuffer,
+        gpu0_device_id: device_ids.gpu,
         storage0_device_id: device_ids.storage_port,
         timer0_device_id: device_ids.timer,
         keyboard0_device_id: device_ids.keyboard,
@@ -44,7 +44,7 @@ struct ConstructionDeviceIds {
     debug_serial: Option<MmioDeviceId>,
     serial_input: Option<MmioDeviceId>,
     text_display: Option<MmioDeviceId>,
-    framebuffer: Option<MmioDeviceId>,
+    gpu: Option<MmioDeviceId>,
     storage_port: Option<MmioDeviceId>,
     timer: Option<MmioDeviceId>,
     keyboard: Option<MmioDeviceId>,
@@ -88,7 +88,7 @@ fn map_hardware_device(
         ComputerHardwareDevice::DebugSerial => Box::new(DebugSerialDevice::new()),
         ComputerHardwareDevice::SerialInput => Box::new(SerialInputDevice::new()),
         ComputerHardwareDevice::TextDisplay => Box::new(TextDisplayDevice::new()),
-        ComputerHardwareDevice::Framebuffer => Box::new(FramebufferDevice::new()),
+        ComputerHardwareDevice::Gpu => Box::new(GpuDevice::new()),
         ComputerHardwareDevice::StoragePort(config) => Box::new(storage_port_device(config)?),
         ComputerHardwareDevice::Timer => Box::new(TimerDevice::new()),
         ComputerHardwareDevice::Keyboard => Box::new(KeyboardDevice::new()),
@@ -115,7 +115,7 @@ impl ConstructionDeviceIds {
             ComputerHardwareDevice::DebugSerial => self.debug_serial = Some(device_id),
             ComputerHardwareDevice::SerialInput => self.serial_input = Some(device_id),
             ComputerHardwareDevice::TextDisplay => self.text_display = Some(device_id),
-            ComputerHardwareDevice::Framebuffer => self.framebuffer = Some(device_id),
+            ComputerHardwareDevice::Gpu => self.gpu = Some(device_id),
             ComputerHardwareDevice::StoragePort(_) => self.storage_port = Some(device_id),
             ComputerHardwareDevice::Timer => self.timer = Some(device_id),
             ComputerHardwareDevice::Keyboard => self.keyboard = Some(device_id),

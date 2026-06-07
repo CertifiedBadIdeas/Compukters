@@ -50,6 +50,6 @@ interface ComputerMenu {
     val clientSide: MenuSide.Client
         get() = side as MenuSide.Client
 
-    /** Apply a framebuffer delta to the client-side display buffer. */
+    /** Apply a pixel display-frame delta to the client-side display buffer. */
     fun handleDisplayFrame(frame: DisplayFrameDelta)
 }

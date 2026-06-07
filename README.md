@@ -12,8 +12,8 @@ it is a native Rust virtual machine (`k16-vm`) wrapped via JNI.
 - 🖥 **Kraft16 VM** — a deterministic, sandboxed virtual machine implemented in
   Rust. Boots K16 code from per-computer `bios.kflash` files and storage0
   `.kv` boot media.
-- 🔌 **Display + input devices** — accelerated framebuffer with `copyRect` /
-  `blitMono` primitives, terminal input queue, and a per-device runtime workspace.
+- 🔌 **Display + input devices** — `gpu0` pixel output, keyboard/input queues,
+  and a per-device runtime workspace.
 
 ## Status
 

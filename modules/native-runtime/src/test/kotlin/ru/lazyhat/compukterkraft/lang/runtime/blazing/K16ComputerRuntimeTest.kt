@@ -198,7 +198,7 @@ class K16ComputerRuntimeTest {
         val advanceGameTickHandles = mutableListOf<Long>()
         val callOrder = mutableListOf<String>()
         var displaySnapshot: NativeK16ComputerDisplaySnapshot? = null
-        var framebufferFrames: ByteArray = ByteArray(0)
+        var gpuFrames: ByteArray = ByteArray(0)
         var storage0Media: ByteArray? = null
         var machineSnapshot: ByteArray = ByteArray(0)
         var control: NativeK16ComputerControl = NativeK16ComputerControl(status = 1, exitCode = 0, panicCode = 0)
@@ -273,7 +273,7 @@ class K16ComputerRuntimeTest {
 
         override fun display0Snapshot(handle: Long): NativeK16ComputerDisplaySnapshot? = displaySnapshot
 
-        override fun drainFramebuffer0Frames(handle: Long): ByteArray = framebufferFrames.copyOf()
+        override fun drainGpu0Frames(handle: Long): ByteArray = gpuFrames.copyOf()
 
         override fun storage0MediaSnapshot(handle: Long): ByteArray? = storage0Media?.copyOf()
 
