@@ -169,6 +169,58 @@ class K16FirmwareResourceTest {
     }
 
     @Test
+    fun bundledK16KernelEchoesKeyboardCharThroughGpuConsole() {
+        val workspace = createTempDirectory("k16-keyboard-console-test-")
+        val biosFlashPath = workspace.resolve("bios.kflash")
+        val storage0Path = workspace.resolve("storage0.kv")
+        biosFlashPath.writeBytes(K16BiosFlashWorkspace.loadBiosFlashResource(classLoader = javaClass.classLoader))
+        storage0Path.writeBytes(K16SystemVolumeWorkspace.loadStorage0VolumeResource(classLoader = javaClass.classLoader))
+
+        K16ComputerRuntimeFactory.createFromBiosFlash(
+            biosFlashPath = biosFlashPath,
+            storage0Path = storage0Path,
+        ).use { runtime ->
+            val control = runThroughBiosSplashAndBoot(runtime)
+            assertEquals(NativeK16ComputerControl.STATUS_READY, control.status)
+            NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
+
+            runtime.pushKeyboardChar('O'.code.toByte())
+            val afterInputControl = runtime.tick(maxTurns = 64)
+            val frames = NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
+
+            assertEquals(NativeK16ComputerControl.STATUS_READY, afterInputControl.status)
+            assertTrue(
+                frames.any { it.pixelFormat == DisplayPixelFormat.RGB565 && it.hasVisiblePixels() },
+                "keyboard char input should produce a new visible gpu0 console frame",
+            )
+        }
+    }
+
+    @Test
+    fun bundledK16KernelConsumesKeyboardKeyEventsWithoutPanic() {
+        val workspace = createTempDirectory("k16-keyboard-key-test-")
+        val biosFlashPath = workspace.resolve("bios.kflash")
+        val storage0Path = workspace.resolve("storage0.kv")
+        biosFlashPath.writeBytes(K16BiosFlashWorkspace.loadBiosFlashResource(classLoader = javaClass.classLoader))
+        storage0Path.writeBytes(K16SystemVolumeWorkspace.loadStorage0VolumeResource(classLoader = javaClass.classLoader))
+
+        K16ComputerRuntimeFactory.createFromBiosFlash(
+            biosFlashPath = biosFlashPath,
+            storage0Path = storage0Path,
+        ).use { runtime ->
+            val control = runThroughBiosSplashAndBoot(runtime)
+            assertEquals(NativeK16ComputerControl.STATUS_READY, control.status)
+
+            runtime.pushKeyboardKeyDown(key = 65, repeat = false)
+            runtime.pushKeyboardKeyUp(key = 65)
+            val afterInputControl = runtime.tick(maxTurns = 64)
+
+            assertEquals(NativeK16ComputerControl.STATUS_READY, afterInputControl.status)
+            assertEquals(0, afterInputControl.panicCode)
+        }
+    }
+
+    @Test
     fun bundledK16BiosSplashIsObservableBeforeStorageBoot() {
         val workspace = createTempDirectory("k16-firmware-splash-test-")
         val biosFlashPath = workspace.resolve("bios.kflash")
