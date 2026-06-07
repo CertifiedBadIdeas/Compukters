@@ -9,6 +9,7 @@ mod debug;
 mod font;
 mod gpu;
 mod keyboard;
+mod line;
 mod mmio;
 mod syscall;
 mod timer;
@@ -36,7 +37,7 @@ fn panic(_info: &PanicInfo) -> ! {
 
 fn idle_forever() -> ! {
     loop {
-        keyboard::drain_to_console();
+        keyboard::drain_to_line();
         k16_rt::yield_once();
     }
 }

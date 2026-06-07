@@ -1,20 +1,19 @@
 use k16_abi::computer::keyboard0;
 
-use crate::{console, mmio};
+use crate::{line, mmio};
 
-pub fn drain_to_console() {
+pub fn drain_to_line() {
     let mut wrote = false;
     while status() != keyboard0::STATUS_EMPTY {
         let event_kind = unsafe { mmio::read_i32(keyboard0::EVENT_KIND) };
         let code = unsafe { mmio::read_i32(keyboard0::CODE) };
         if event_kind == keyboard0::EVENT_CHAR || event_kind == keyboard0::EVENT_PASTE_BYTE {
-            console::write_byte(code as u8);
-            wrote = true;
+            wrote |= line::input_byte(code as u8);
         }
         consume();
     }
     if wrote {
-        console::flush();
+        line::flush();
     }
 }
 
