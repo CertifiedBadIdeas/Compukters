@@ -386,8 +386,23 @@ class K16FirmwareResourceTest {
         assertTrue(shellSource.contains("fn is_clear("), "shell should dispatch clear")
         assertTrue(shellSource.contains("fn is_echo("), "shell should dispatch echo")
         assertTrue(shellSource.contains("fn is_help("), "shell should dispatch help")
-        assertTrue(shellSource.contains("HELP\\nOK\\nCLEAR\\nECHO\\n"), "help should print a readable command list")
+        assertTrue(shellSource.contains("HELP\\nOK\\nCLEAR\\nECHO\\nTICKS\\n"), "help should print a readable command list")
         assertTrue(shellSource.contains("b\"ERR\\n\""), "unknown commands should report a short error")
+    }
+
+    @Test
+    fun k16KernelShellDefinesTicksCommand() {
+        val shellSource = Path.of("../../../rust/guest/k16-kernel/src/shell.rs").readText()
+        val timerSource = Path.of("../../../rust/guest/k16-kernel/src/timer.rs").readText()
+
+        assertTrue(shellSource.contains("use crate::{console, timer};"), "shell should use the kernel timer module")
+        assertTrue(shellSource.contains("fn is_ticks("), "ticks should have a named matcher")
+        assertTrue(shellSource.contains("fn run_ticks()"), "ticks should have a named runner")
+        assertTrue(shellSource.contains("timer::game_ticks()"), "ticks should read time through the kernel timer module")
+        assertTrue(shellSource.contains("b\"TICKS 0x\""), "ticks should print a stable hex prefix")
+        assertTrue(shellSource.contains("fn write_u64_hex("), "ticks should use a small u64 formatter")
+        assertTrue(shellSource.contains("fn write_hex_nibble("), "ticks should format nibbles without std formatting")
+        assertTrue(timerSource.contains("pub fn game_ticks() -> u64"), "timer module should expose current game ticks")
     }
 
     @Test
@@ -581,6 +596,7 @@ class K16FirmwareResourceTest {
             runShellCommand(runtime, "help", expectVisiblePixels = true)
             runShellCommand(runtime, "clear", expectVisiblePixels = false)
             runShellCommand(runtime, "echo ok", expectVisiblePixels = true)
+            runShellCommand(runtime, "ticks", expectVisiblePixels = true)
             runShellCommand(runtime, "wat", expectVisiblePixels = true)
         }
     }
@@ -606,6 +622,7 @@ class K16FirmwareResourceTest {
             runShellCommand(runtime, "help", expectVisiblePixels = true)
             runShellCommand(runtime, "clear", expectVisiblePixels = false)
             runShellCommand(runtime, "echo ok", expectVisiblePixels = true)
+            runShellCommand(runtime, "ticks", expectVisiblePixels = true)
             runShellCommand(runtime, "wat", expectVisiblePixels = true)
         }
     }
