@@ -1,6 +1,6 @@
-use k16_abi::computer::{hardware_id, profile, timer0};
+use k16_abi::computer::{hardware_id, profile};
 
-use crate::{control, debug, mmio};
+use crate::{control, debug};
 
 static mut TIMER0_IRQ_SOURCE: u32 = 0;
 
@@ -27,14 +27,10 @@ pub fn handle_interrupt() {
 }
 
 pub fn sleep_ticks(ticks: u32) {
-    let start = game_ticks_low();
-    while game_ticks_low().wrapping_sub(start) < ticks {
+    let target = k16_rt::timer0_game_ticks().saturating_add(u64::from(ticks));
+    while k16_rt::timer0_game_ticks() < target {
         k16_rt::yield_once();
     }
-}
-
-fn game_ticks_low() -> u32 {
-    unsafe { mmio::read_i32(timer0::GAME_TICKS_LOW) as u32 }
 }
 
 fn kernel_panic_forever() -> ! {

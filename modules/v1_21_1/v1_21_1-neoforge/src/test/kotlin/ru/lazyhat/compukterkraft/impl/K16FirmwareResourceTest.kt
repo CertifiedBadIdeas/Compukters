@@ -275,6 +275,20 @@ class K16FirmwareResourceTest {
     }
 
     @Test
+    fun k16KernelSleepTicksUsesRuntimeU64GameTicks() {
+        val timerSource = Path.of("../../../rust/guest/k16-kernel/src/timer.rs").readText()
+
+        assertTrue(
+            timerSource.contains("k16_rt::timer0_game_ticks()"),
+            "kernel sleep_ticks should use the runtime u64 timer0 game tick helper",
+        )
+        assertFalse(
+            timerSource.contains("timer0::GAME_TICKS_LOW"),
+            "kernel sleep_ticks should not downgrade timer0 game ticks to low32 polling",
+        )
+    }
+
+    @Test
     fun k16KernelPayloadBudgetToolExists() {
         val toolPath = Path.of("../../../tools/k16-kernel-payload-budget.sh")
 
