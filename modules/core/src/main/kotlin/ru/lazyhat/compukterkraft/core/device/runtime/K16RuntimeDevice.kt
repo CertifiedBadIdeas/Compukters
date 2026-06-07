@@ -27,18 +27,17 @@ import ru.lazyhat.compukterkraft.core.device.runtime.ports.DisplayNetworkBridge
 import ru.lazyhat.compukterkraft.core.device.runtime.ports.NoopDisplayNetworkBridge
 import ru.lazyhat.compukterkraft.core.device.vm.display.NativeDisplayFrameCodec
 import ru.lazyhat.compukterkraft.core.gui.TerminalFontConstants
-import ru.lazyhat.compukterkraft.core.input.KeyCodes
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16ComputerEndpoint
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16ComputerControl
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16ComputerDisplaySnapshot
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
 import java.nio.ByteBuffer
+import java.util.UUID
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CompletionException
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.atomic.AtomicBoolean
-import java.util.UUID
 
 interface RuntimeDeviceSerialEndpoint {
     fun pushSerialInput(bytes: ByteArray)
@@ -125,20 +124,47 @@ class K16RuntimeDevice(
         }
     }
 
-    override fun close() =
-        shutdown()
+    override fun close() = shutdown()
 
     override fun queueEvent(
         event: String,
         arguments: Array<Any>,
     ) {
         when (event) {
-            "turn_on" -> turnOn()
-            "shutdown", "terminate" -> shutdown()
-            "reboot" -> reboot()
-            "char" -> pushSerialInput(argumentBytes(arguments.firstOrNull()) ?: return)
-            "paste" -> pushSerialInput(argumentBytes(arguments.firstOrNull()) ?: return)
-            "key" -> pushSerialInput(keySerialBytes(arguments.firstOrNull()) ?: return)
+            "turn_on" -> {
+                turnOn()
+            }
+
+            "shutdown", "terminate" -> {
+                shutdown()
+            }
+
+            "reboot" -> {
+                reboot()
+            }
+
+            "char" -> {
+                pushKeyboardChar(argumentBytes(arguments.firstOrNull())?.firstOrNull() ?: return)
+            }
+
+            "paste" -> {
+                pushKeyboardPasteBytes(argumentBytes(arguments.firstOrNull()) ?: return)
+            }
+
+            "key" -> {
+                pushKeyboardKeyDown(
+                    key = argumentInt(arguments.getOrNull(0)) ?: return,
+                    repeat = argumentBoolean(arguments.getOrNull(1)) ?: false,
+                    modifiers = 0,
+                )
+            }
+
+            "key_up" -> {
+                pushKeyboardKeyUp(
+                    key = argumentInt(arguments.getOrNull(0)) ?: return,
+                    modifiers = 0,
+                )
+            }
         }
     }
 
@@ -146,15 +172,36 @@ class K16RuntimeDevice(
         endpoint?.pushInput(bytes)
     }
 
-    override fun serialOutputSnapshot(): ByteArray =
-        endpoint?.outputSnapshot() ?: ByteArray(0)
+    override fun serialOutputSnapshot(): ByteArray = endpoint?.outputSnapshot() ?: ByteArray(0)
 
     override fun clearSerialOutput() {
         endpoint?.clearOutput()
     }
 
-    override fun snapshotRuntimeState(): ByteArray? =
-        endpoint?.machineSnapshot()
+    private fun pushKeyboardKeyDown(
+        key: Int,
+        repeat: Boolean,
+        modifiers: Int,
+    ) {
+        endpoint?.pushKeyboardKeyDown(key, repeat, modifiers)
+    }
+
+    private fun pushKeyboardKeyUp(
+        key: Int,
+        modifiers: Int,
+    ) {
+        endpoint?.pushKeyboardKeyUp(key, modifiers)
+    }
+
+    private fun pushKeyboardChar(value: Byte) {
+        endpoint?.pushKeyboardChar(value)
+    }
+
+    private fun pushKeyboardPasteBytes(bytes: ByteArray) {
+        endpoint?.pushKeyboardPasteBytes(bytes)
+    }
+
+    override fun snapshotRuntimeState(): ByteArray? = endpoint?.machineSnapshot()
 
     override fun attachDisplaySession(
         playerUuid: UUID,
@@ -189,21 +236,27 @@ class K16RuntimeDevice(
 
     private fun argumentBytes(value: Any?): ByteArray? =
         when (value) {
-            is ByteArray -> value.copyOf()
+            is ByteArray -> {
+                value.copyOf()
+            }
+
             is ByteBuffer -> {
                 val duplicate = value.asReadOnlyBuffer()
                 ByteArray(duplicate.remaining()).also(duplicate::get)
             }
-            is String -> value.encodeToByteArray()
-            else -> null
+
+            is String -> {
+                value.encodeToByteArray()
+            }
+
+            else -> {
+                null
+            }
         }
 
-    private fun keySerialBytes(value: Any?): ByteArray? =
-        when (value as? Int) {
-            KeyCodes.KEY_ENTER, KeyCodes.KEY_KP_ENTER -> byteArrayOf('\n'.code.toByte())
-            KeyCodes.KEY_BACKSPACE -> byteArrayOf(0x08)
-            else -> null
-        }
+    private fun argumentInt(value: Any?): Int? = value as? Int
+
+    private fun argumentBoolean(value: Any?): Boolean? = value as? Boolean
 
     private fun flushSerialOutput(current: K16EndpointWorker) {
         if (displaySessions.isEmpty()) return
@@ -287,11 +340,14 @@ class K16RuntimeDevice(
             Thread(::runWorker, "compukterkraft-k16-$deviceId").apply {
                 isDaemon = true
             }
+
         @Volatile
         private var outputCache: ByteArray = ByteArray(0)
+
         @Volatile
         private var display0Cache: NativeK16ComputerDisplaySnapshot? = null
         private val displayFrameCache = ConcurrentLinkedQueue<DisplayFrameDelta>()
+
         @Volatile
         var terminalControlReached: Boolean = false
             private set
@@ -318,6 +374,37 @@ class K16RuntimeDevice(
             }
         }
 
+        fun pushKeyboardKeyDown(
+            key: Int,
+            repeat: Boolean,
+            modifiers: Int,
+        ) {
+            if (!closed.get()) {
+                commands.offer(Command.PushKeyboardKeyDown(key, repeat, modifiers))
+            }
+        }
+
+        fun pushKeyboardKeyUp(
+            key: Int,
+            modifiers: Int,
+        ) {
+            if (!closed.get()) {
+                commands.offer(Command.PushKeyboardKeyUp(key, modifiers))
+            }
+        }
+
+        fun pushKeyboardChar(value: Byte) {
+            if (!closed.get()) {
+                commands.offer(Command.PushKeyboardChar(value))
+            }
+        }
+
+        fun pushKeyboardPasteBytes(bytes: ByteArray) {
+            if (!closed.get() && bytes.isNotEmpty()) {
+                commands.offer(Command.PushKeyboardPasteBytes(bytes.copyOf()))
+            }
+        }
+
         fun outputSnapshot(): ByteArray = outputCache.copyOf()
 
         fun display0Snapshot(): NativeK16ComputerDisplaySnapshot? = display0Cache
@@ -330,10 +417,11 @@ class K16RuntimeDevice(
             }
 
         fun pollDisplay0Snapshot(): NativeK16ComputerDisplaySnapshot? {
-            val snapshot = display0Cache ?: run {
-                lastPolledDisplay0Sequence = null
-                return null
-            }
+            val snapshot =
+                display0Cache ?: run {
+                    lastPolledDisplay0Sequence = null
+                    return null
+                }
             if (lastPolledDisplay0Sequence == snapshot.sequence) {
                 return null
             }
@@ -384,13 +472,39 @@ class K16RuntimeDevice(
                                 refreshCaches(endpoint)
                             }
                         }
-                        is Command.PushInput -> endpoint.pushInput(command.bytes)
+
+                        is Command.PushInput -> {
+                            endpoint.pushInput(command.bytes)
+                        }
+
+                        is Command.PushKeyboardKeyDown -> {
+                            endpoint.pushKeyboardKeyDown(command.key, command.repeat, command.modifiers)
+                        }
+
+                        is Command.PushKeyboardKeyUp -> {
+                            endpoint.pushKeyboardKeyUp(command.key, command.modifiers)
+                        }
+
+                        is Command.PushKeyboardChar -> {
+                            endpoint.pushKeyboardChar(command.value)
+                        }
+
+                        is Command.PushKeyboardPasteBytes -> {
+                            endpoint.pushKeyboardPasteBytes(command.bytes)
+                        }
+
                         Command.ClearOutput -> {
                             endpoint.clearOutput()
                             refreshCaches(endpoint)
                         }
-                        is Command.MachineSnapshot -> command.response.complete(endpoint.machineSnapshot())
-                        Command.Close -> break
+
+                        is Command.MachineSnapshot -> {
+                            command.response.complete(endpoint.machineSnapshot())
+                        }
+
+                        Command.Close -> {
+                            break
+                        }
                     }
                 }
             } finally {
@@ -409,9 +523,36 @@ class K16RuntimeDevice(
 
         private sealed interface Command {
             data object Tick : Command
-            data class PushInput(val bytes: ByteArray) : Command
+
+            data class PushInput(
+                val bytes: ByteArray,
+            ) : Command
+
+            data class PushKeyboardKeyDown(
+                val key: Int,
+                val repeat: Boolean,
+                val modifiers: Int,
+            ) : Command
+
+            data class PushKeyboardKeyUp(
+                val key: Int,
+                val modifiers: Int,
+            ) : Command
+
+            data class PushKeyboardChar(
+                val value: Byte,
+            ) : Command
+
+            data class PushKeyboardPasteBytes(
+                val bytes: ByteArray,
+            ) : Command
+
             data object ClearOutput : Command
-            data class MachineSnapshot(val response: CompletableFuture<ByteArray>) : Command
+
+            data class MachineSnapshot(
+                val response: CompletableFuture<ByteArray>,
+            ) : Command
+
             data object Close : Command
         }
     }

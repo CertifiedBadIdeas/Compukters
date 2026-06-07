@@ -34,6 +34,29 @@ interface K16ComputerRuntimeBindings {
         bytes: ByteArray,
     )
 
+    fun pushKeyboardKeyDown(
+        handle: Long,
+        key: Int,
+        repeat: Boolean,
+        modifiers: Int,
+    )
+
+    fun pushKeyboardKeyUp(
+        handle: Long,
+        key: Int,
+        modifiers: Int,
+    )
+
+    fun pushKeyboardChar(
+        handle: Long,
+        value: Byte,
+    )
+
+    fun pushKeyboardPasteBytes(
+        handle: Long,
+        bytes: ByteArray,
+    )
+
     fun drainDebugOutput(handle: Long): ByteArray
 
     fun display0Snapshot(handle: Long): NativeK16ComputerDisplaySnapshot?
@@ -58,6 +81,29 @@ object NativeK16ComputerRuntimeBindings : K16ComputerRuntimeBindings {
         handle: Long,
         bytes: ByteArray,
     ) = NativeVmBindings.pushK16ComputerSerialInput(handle, bytes)
+
+    override fun pushKeyboardKeyDown(
+        handle: Long,
+        key: Int,
+        repeat: Boolean,
+        modifiers: Int,
+    ) = NativeVmBindings.pushK16ComputerKeyboardKeyDown(handle, key, repeat, modifiers)
+
+    override fun pushKeyboardKeyUp(
+        handle: Long,
+        key: Int,
+        modifiers: Int,
+    ) = NativeVmBindings.pushK16ComputerKeyboardKeyUp(handle, key, modifiers)
+
+    override fun pushKeyboardChar(
+        handle: Long,
+        value: Byte,
+    ) = NativeVmBindings.pushK16ComputerKeyboardChar(handle, value)
+
+    override fun pushKeyboardPasteBytes(
+        handle: Long,
+        bytes: ByteArray,
+    ) = NativeVmBindings.pushK16ComputerKeyboardPasteBytes(handle, bytes)
 
     override fun drainDebugOutput(handle: Long): ByteArray = NativeVmBindings.drainK16ComputerDebugOutput(handle)
 
@@ -114,6 +160,21 @@ object K16ComputerRuntimeFactory {
 interface K16ComputerEndpoint : AutoCloseable {
     fun pushInput(bytes: ByteArray)
 
+    fun pushKeyboardKeyDown(
+        key: Int,
+        repeat: Boolean,
+        modifiers: Int = 0,
+    )
+
+    fun pushKeyboardKeyUp(
+        key: Int,
+        modifiers: Int = 0,
+    )
+
+    fun pushKeyboardChar(value: Byte)
+
+    fun pushKeyboardPasteBytes(bytes: ByteArray)
+
     fun tick(maxTurns: Int = 8): NativeK16ComputerControl
 
     fun outputSnapshot(): ByteArray
@@ -153,6 +214,35 @@ class K16ComputerRuntime(
     }
 
     fun pushInput(text: String) = pushInput(text.encodeToByteArray())
+
+    override fun pushKeyboardKeyDown(
+        key: Int,
+        repeat: Boolean,
+        modifiers: Int,
+    ) {
+        ensureOpen()
+        bindings.pushKeyboardKeyDown(handle, key, repeat, modifiers)
+    }
+
+    override fun pushKeyboardKeyUp(
+        key: Int,
+        modifiers: Int,
+    ) {
+        ensureOpen()
+        bindings.pushKeyboardKeyUp(handle, key, modifiers)
+    }
+
+    override fun pushKeyboardChar(value: Byte) {
+        ensureOpen()
+        bindings.pushKeyboardChar(handle, value)
+    }
+
+    override fun pushKeyboardPasteBytes(bytes: ByteArray) {
+        ensureOpen()
+        if (bytes.isNotEmpty()) {
+            bindings.pushKeyboardPasteBytes(handle, bytes)
+        }
+    }
 
     fun tick(): NativeK16ComputerControl = tick(defaultMaxTurnsPerTick)
 

@@ -109,7 +109,7 @@ class K16RuntimeDeviceTest {
             )
 
         device.turnOn()
-        device.queueEvent("char", arrayOf(byteArrayOf('R'.code.toByte())))
+        device.pushSerialInput(byteArrayOf('R'.code.toByte()))
         device.serverTick()
         waitUntil { endpoint.tickCalls == 1 && device.serialOutputSnapshot().decodeToString() == "R" }
 
@@ -194,7 +194,7 @@ class K16RuntimeDeviceTest {
     }
 
     @Test
-    fun mapsPasteEventsToSerialBytesWithoutConsumingCallerBuffer() {
+    fun mapsPasteEventsToKeyboard0WithoutConsumingCallerBuffer() {
         val endpoint = RecordingK16Endpoint()
         val device =
             K16RuntimeDevice(
@@ -207,9 +207,10 @@ class K16RuntimeDeviceTest {
 
         device.turnOn()
         device.queueEvent("paste", arrayOf(paste))
-        waitUntil { endpoint.inputs.isNotEmpty() }
+        waitUntil { endpoint.keyboardPasteBytes.isNotEmpty() }
 
-        assertEquals("Hi", endpoint.inputs.single().decodeToString())
+        assertEquals("Hi", endpoint.keyboardPasteBytes.single().decodeToString())
+        assertEquals(emptyList(), endpoint.inputs.map { it.decodeToString() })
         assertEquals(0, paste.position())
     }
 
@@ -388,7 +389,7 @@ class K16RuntimeDeviceTest {
     }
 
     @Test
-    fun dispatchesCharacterInputThroughSerialEchoToDisplayFrame() {
+    fun dispatchesCharacterInputThroughKeyboard0Endpoint() {
         val endpoint = RecordingK16Endpoint()
         val displayNetwork = RecordingDisplayNetworkBridge()
         val device =
@@ -404,17 +405,15 @@ class K16RuntimeDeviceTest {
         device.attachDisplaySession(playerUuid, containerId = 18, displayId = 1, width = 36, height = 27)
         device.turnOn()
         DeviceEvents.dispatch(device, KeyInputEvent.Character('R'.code.toByte()))
-        device.serverTick()
-        waitUntil { device.serialOutputSnapshot().decodeToString() == "R" }
-        device.serverTick()
+        waitUntil { endpoint.keyboardChars.isNotEmpty() }
 
-        assertEquals(listOf("R"), endpoint.inputs.map { it.decodeToString() })
-        assertEquals(1, displayNetwork.sentFrames.size)
-        assertTrue(displayNetwork.sentFrames.single().frame.tiles.single().payload.any { it != 0.toByte() })
+        assertEquals(listOf('R'.code.toByte()), endpoint.keyboardChars)
+        assertEquals(emptyList(), endpoint.inputs.map { it.decodeToString() })
+        assertEquals(0, displayNetwork.sentFrames.size)
     }
 
     @Test
-    fun dispatchesPasteInputThroughSerialEchoToDisplayFrame() {
+    fun dispatchesPasteInputThroughKeyboard0Endpoint() {
         val endpoint = RecordingK16Endpoint()
         val displayNetwork = RecordingDisplayNetworkBridge()
         val device =
@@ -429,16 +428,15 @@ class K16RuntimeDeviceTest {
         device.attachDisplaySession(UUID.randomUUID(), containerId = 19, displayId = 1, width = 36, height = 27)
         device.turnOn()
         DeviceEvents.dispatch(device, PasteInputEvent(ByteBuffer.wrap("K16".encodeToByteArray())))
-        device.serverTick()
-        waitUntil { device.serialOutputSnapshot().decodeToString() == "K16" }
-        device.serverTick()
+        waitUntil { endpoint.keyboardPasteBytes.isNotEmpty() }
 
-        assertEquals(listOf("K16"), endpoint.inputs.map { it.decodeToString() })
-        assertEquals(1, displayNetwork.sentFrames.size)
+        assertEquals(listOf("K16"), endpoint.keyboardPasteBytes.map { it.decodeToString() })
+        assertEquals(emptyList(), endpoint.inputs.map { it.decodeToString() })
+        assertEquals(0, displayNetwork.sentFrames.size)
     }
 
     @Test
-    fun dispatchesEnterKeyAsSerialNewline() {
+    fun dispatchesKeyDownThroughKeyboard0Endpoint() {
         val endpoint = RecordingK16Endpoint()
         val device =
             K16RuntimeDevice(
@@ -450,13 +448,14 @@ class K16RuntimeDeviceTest {
 
         device.turnOn()
         DeviceEvents.dispatch(device, KeyInputEvent.Down(KeyCodes.KEY_ENTER, repeat = false))
-        waitUntil { endpoint.inputs.isNotEmpty() }
+        waitUntil { endpoint.keyboardKeyDowns.isNotEmpty() }
 
-        assertEquals(listOf("\n"), endpoint.inputs.map { it.decodeToString() })
+        assertEquals(listOf(KeyboardKeyDown(KeyCodes.KEY_ENTER, repeat = false)), endpoint.keyboardKeyDowns)
+        assertEquals(emptyList(), endpoint.inputs.map { it.decodeToString() })
     }
 
     @Test
-    fun dispatchesBackspaceKeyAsSerialBackspace() {
+    fun dispatchesKeyUpThroughKeyboard0Endpoint() {
         val endpoint = RecordingK16Endpoint()
         val device =
             K16RuntimeDevice(
@@ -467,10 +466,11 @@ class K16RuntimeDeviceTest {
             )
 
         device.turnOn()
-        DeviceEvents.dispatch(device, KeyInputEvent.Down(KeyCodes.KEY_BACKSPACE, repeat = false))
-        waitUntil { endpoint.inputs.isNotEmpty() }
+        DeviceEvents.dispatch(device, KeyInputEvent.Up(KeyCodes.KEY_BACKSPACE))
+        waitUntil { endpoint.keyboardKeyUps.isNotEmpty() }
 
-        assertEquals(listOf(listOf(0x08)), endpoint.inputs.map { it.map(Byte::toInt) })
+        assertEquals(listOf(KeyCodes.KEY_BACKSPACE), endpoint.keyboardKeyUps)
+        assertEquals(emptyList(), endpoint.inputs.map { it.decodeToString() })
     }
 
     @Test
@@ -534,6 +534,10 @@ class K16RuntimeDeviceTest {
 
     private open class RecordingK16Endpoint : K16ComputerEndpoint {
         val inputs: MutableList<ByteArray> = Collections.synchronizedList(mutableListOf())
+        val keyboardKeyDowns: MutableList<KeyboardKeyDown> = Collections.synchronizedList(mutableListOf())
+        val keyboardKeyUps: MutableList<Int> = Collections.synchronizedList(mutableListOf())
+        val keyboardChars: MutableList<Byte> = Collections.synchronizedList(mutableListOf())
+        val keyboardPasteBytes: MutableList<ByteArray> = Collections.synchronizedList(mutableListOf())
         @Volatile
         var tickCalls = 0
             private set
@@ -550,6 +554,29 @@ class K16RuntimeDeviceTest {
 
         override fun pushInput(bytes: ByteArray) {
             inputs += bytes.copyOf()
+        }
+
+        override fun pushKeyboardKeyDown(
+            key: Int,
+            repeat: Boolean,
+            modifiers: Int,
+        ) {
+            keyboardKeyDowns += KeyboardKeyDown(key, repeat, modifiers)
+        }
+
+        override fun pushKeyboardKeyUp(
+            key: Int,
+            modifiers: Int,
+        ) {
+            keyboardKeyUps += key
+        }
+
+        override fun pushKeyboardChar(value: Byte) {
+            keyboardChars += value
+        }
+
+        override fun pushKeyboardPasteBytes(bytes: ByteArray) {
+            keyboardPasteBytes += bytes.copyOf()
         }
 
         override open fun tick(maxTurns: Int): NativeK16ComputerControl {
@@ -599,6 +626,12 @@ class K16RuntimeDeviceTest {
             framebufferFrameBatches += bytes.copyOf()
         }
     }
+
+    private data class KeyboardKeyDown(
+        val key: Int,
+        val repeat: Boolean,
+        val modifiers: Int = 0,
+    )
 
     private fun encodeDisplayFrames(frames: List<DisplayFrameDelta>): ByteArray {
         val payloadBytes = frames.sumOf { frame -> frame.tiles.sumOf { it.payload.size } }
