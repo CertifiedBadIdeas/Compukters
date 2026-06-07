@@ -27,7 +27,6 @@ import ru.lazyhat.compukterkraft.core.device.input.PasteInputEvent
 import ru.lazyhat.compukterkraft.core.device.runtime.ports.DisplayNetworkBridge
 import ru.lazyhat.compukterkraft.core.input.KeyCodes
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16ComputerControl
-import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16ComputerDisplaySnapshot
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16ComputerEndpoint
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayPixelFormat
@@ -94,6 +93,31 @@ class K16RuntimeDeviceTest {
         val source = k16RuntimeDevicePath.readText()
         assertTrue(source.contains("class K16RuntimeDevice"))
         assertFalse(source.contains("class RuxRuntimeDevice"))
+    }
+
+    @Test
+    fun runtimeDeviceDoesNotRenderDisplay0Snapshots() {
+        val source =
+            root.resolve(
+                Path.of(
+                    "modules",
+                    "core",
+                    "src",
+                    "main",
+                    "kotlin",
+                    "ru",
+                    "lazyhat",
+                    "compukterkraft",
+                    "core",
+                    "device",
+                    "runtime",
+                    "K16RuntimeDevice.kt",
+                ),
+            ).readText()
+
+        assertFalse(source.contains("display0Snapshot"))
+        assertFalse(source.contains("flushK16DisplaySnapshot"))
+        assertFalse(source.contains("displaySnapshotRefreshDisplayIds"))
     }
 
     @Test
@@ -246,45 +270,6 @@ class K16RuntimeDeviceTest {
     }
 
     @Test
-    fun sendsK16DisplaySnapshotFrameToAttachedDisplaySessions() {
-        val endpoint = RecordingK16Endpoint()
-        val displayNetwork = RecordingDisplayNetworkBridge()
-        val device =
-            K16RuntimeDevice(
-                deviceId = 14,
-                properties = DeviceProperties(DeviceFamily.NORMAL, label = null),
-                endpointFactory = { endpoint },
-                stateSink = {},
-                displayNetwork = displayNetwork,
-            )
-        val playerUuid = UUID.randomUUID()
-
-        endpoint.displaySnapshot =
-            NativeK16ComputerDisplaySnapshot(
-                columns = 80,
-                rows = 25,
-                cursorX = 3,
-                cursorY = 0,
-                sequence = 1,
-                cells = "K16".encodeToByteArray() + ByteArray(80 * 25 - 3),
-            )
-        device.attachDisplaySession(playerUuid, containerId = 20, displayId = 1, width = 400, height = 200)
-        device.turnOn()
-        device.serverTick()
-        device.serverTick()
-
-        assertEquals(1, displayNetwork.sentFrames.size)
-        val sent = displayNetwork.sentFrames.single()
-        assertEquals(playerUuid, sent.playerUuid)
-        assertEquals(20, sent.containerId)
-        assertEquals(1, sent.frame.displayId)
-        assertEquals(400, sent.frame.width)
-        assertEquals(200, sent.frame.height)
-        assertTrue(sent.frame.fullRefresh)
-        assertTrue(sent.frame.tiles.single().payload.any { it != 0.toByte() })
-    }
-
-    @Test
     fun sendsFramebufferFramesToAttachedDisplaySessions() {
         val endpoint = RecordingK16Endpoint()
         val displayNetwork = RecordingDisplayNetworkBridge()
@@ -330,42 +315,6 @@ class K16RuntimeDeviceTest {
 
         assertEquals(1, displayNetwork.sentFrames.size)
         assertEquals(frame, displayNetwork.sentFrames.single().frame)
-    }
-
-    @Test
-    fun sendsCurrentK16DisplaySnapshotWhenDisplaySessionReopensWithoutNewVmFrame() {
-        val endpoint = RecordingK16Endpoint()
-        val displayNetwork = RecordingDisplayNetworkBridge()
-        val device =
-            K16RuntimeDevice(
-                deviceId = 15,
-                properties = DeviceProperties(DeviceFamily.NORMAL, label = null),
-                endpointFactory = { endpoint },
-                stateSink = {},
-                displayNetwork = displayNetwork,
-            )
-        val playerUuid = UUID.randomUUID()
-        endpoint.displaySnapshot =
-            NativeK16ComputerDisplaySnapshot(
-                columns = 80,
-                rows = 25,
-                cursorX = 0,
-                cursorY = 0,
-                sequence = 1,
-                cells = "No Bootable Device".encodeToByteArray() + ByteArray(80 * 25 - "No Bootable Device".length),
-            )
-
-        device.attachDisplaySession(playerUuid, containerId = 20, displayId = 1, width = 400, height = 200)
-        device.turnOn()
-        device.serverTick()
-        device.detachDisplaySession(playerUuid, displayId = 1)
-        device.attachDisplaySession(playerUuid, containerId = 21, displayId = 1, width = 400, height = 200)
-        device.serverTick()
-
-        assertEquals(2, displayNetwork.sentFrames.size)
-        assertEquals(listOf(20, 21), displayNetwork.sentFrames.map { it.containerId })
-        assertTrue(displayNetwork.sentFrames.all { it.frame.fullRefresh })
-        assertTrue(displayNetwork.sentFrames.last().frame.tiles.single().payload.any { it != 0.toByte() })
     }
 
     @Test
@@ -545,10 +494,8 @@ class K16RuntimeDeviceTest {
         @Volatile
         var closeCalls = 0
             private set
-        var displaySnapshot: NativeK16ComputerDisplaySnapshot? = null
         var runtimeSnapshot: ByteArray = ByteArray(0)
         var control: NativeK16ComputerControl = NativeK16ComputerControl(status = K16RuntimeDevice.STATUS_READY, exitCode = 0, panicCode = 0)
-        private var lastPolledDisplaySequence: Long? = null
         private val injectedOutput = StringBuilder()
         private val gpuFrameBatches = ArrayDeque<ByteArray>()
 
@@ -588,20 +535,6 @@ class K16RuntimeDeviceTest {
         override fun outputSnapshot(): ByteArray =
             (inputs.fold(ByteArray(0)) { acc, bytes -> acc + bytes }.decodeToString() + injectedOutput)
                 .encodeToByteArray()
-
-        override fun display0Snapshot(): NativeK16ComputerDisplaySnapshot? = displaySnapshot
-
-        override fun pollDisplay0Snapshot(): NativeK16ComputerDisplaySnapshot? {
-            val snapshot = displaySnapshot ?: run {
-                lastPolledDisplaySequence = null
-                return null
-            }
-            if (lastPolledDisplaySequence == snapshot.sequence) {
-                return null
-            }
-            lastPolledDisplaySequence = snapshot.sequence
-            return snapshot
-        }
 
         override fun drainGpu0Frames(): ByteArray =
             if (gpuFrameBatches.isEmpty()) {

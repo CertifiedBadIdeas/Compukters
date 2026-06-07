@@ -5,7 +5,7 @@ extern crate k16_rt;
 
 use core::panic::PanicInfo;
 
-use k16_abi::computer::{control, debug, display0, status};
+use k16_abi::computer::{control, debug, gpu0, status};
 use k16_boot_chain::{enter_loaded_image, load_k16e_from_storage0, K16eAbiKind};
 
 #[no_mangle]
@@ -46,54 +46,109 @@ fn panic(_info: &PanicInfo) -> ! {
 
 fn clear_display() {
     unsafe {
-        write_i32(display0::COMMAND, display0::COMMAND_CLEAR);
+        write_i32(gpu0::COLOR, 0);
+        write_i32(gpu0::COMMAND, gpu0::COMMAND_CLEAR);
     }
 }
 
 fn print_bios_banner() {
-    unsafe {
-        write_i32(display0::CURSOR_X, 0);
-        write_i32(display0::CURSOR_Y, 0);
-    }
-    print_display_byte(b'K');
-    print_display_byte(b'1');
-    print_display_byte(b'6');
-    print_display_byte(b' ');
-    print_display_byte(b'B');
-    print_display_byte(b'I');
-    print_display_byte(b'O');
-    print_display_byte(b'S');
+    draw_display_line(8, 8, b"K16 BIOS");
+    present_display();
 }
 
 fn print_no_bootable_device() {
-    unsafe {
-        write_i32(display0::CURSOR_X, 0);
-        write_i32(display0::CURSOR_Y, 2);
-    }
-    print_display_byte(b'N');
-    print_display_byte(b'o');
-    print_display_byte(b' ');
-    print_display_byte(b'b');
-    print_display_byte(b'o');
-    print_display_byte(b'o');
-    print_display_byte(b't');
-    print_display_byte(b'a');
-    print_display_byte(b'b');
-    print_display_byte(b'l');
-    print_display_byte(b'e');
-    print_display_byte(b' ');
-    print_display_byte(b'd');
-    print_display_byte(b'e');
-    print_display_byte(b'v');
-    print_display_byte(b'i');
-    print_display_byte(b'c');
-    print_display_byte(b'e');
+    draw_display_line(8, 24, b"NO BOOTABLE DEVICE");
+    present_display();
 }
 
-fn print_display_byte(byte: u8) {
+fn draw_display_line(x: i32, y: i32, bytes: &[u8]) {
+    let mut column = 0;
+    while column < bytes.len() {
+        draw_display_glyph(x + (column as i32) * 8, y, glyph(bytes[column]));
+        column += 1;
+    }
+}
+
+fn draw_display_glyph(x: i32, y: i32, rows: [u8; 7]) {
+    let mut pixels = [0u16; 8 * 8];
+    let mut row = 0;
+    while row < rows.len() {
+        let bits = rows[row];
+        let mut column = 0;
+        while column < 5 {
+            if (bits & (1 << (4 - column))) != 0 {
+                pixels[row * 8 + column] = 0x07e0;
+            }
+            column += 1;
+        }
+        row += 1;
+    }
     unsafe {
-        write_u8(display0::DATA, byte);
-        write_i32(display0::COMMAND, display0::COMMAND_PUT_BYTE_AT_CURSOR);
+        write_i32(gpu0::X, x);
+        write_i32(gpu0::Y, y);
+        write_i32(gpu0::RECT_WIDTH, 8);
+        write_i32(gpu0::RECT_HEIGHT, 8);
+        write_i32(gpu0::BUFFER_ADDR, pixels.as_ptr() as u32 as i32);
+        write_i32(gpu0::BUFFER_STRIDE_BYTES, 16);
+        write_i32(gpu0::COMMAND, gpu0::COMMAND_BLIT_BUFFER);
+    }
+}
+
+fn present_display() {
+    unsafe {
+        write_i32(gpu0::COMMAND, gpu0::COMMAND_PRESENT);
+    }
+}
+
+fn glyph(byte: u8) -> [u8; 7] {
+    match byte {
+        b'1' => [
+            0b00100, 0b01100, 0b00100, 0b00100, 0b00100, 0b00100, 0b01110,
+        ],
+        b'6' => [
+            0b01110, 0b10000, 0b10000, 0b11110, 0b10001, 0b10001, 0b01110,
+        ],
+        b'A' => [
+            0b01110, 0b10001, 0b10001, 0b11111, 0b10001, 0b10001, 0b10001,
+        ],
+        b'B' => [
+            0b11110, 0b10001, 0b10001, 0b11110, 0b10001, 0b10001, 0b11110,
+        ],
+        b'C' => [
+            0b01111, 0b10000, 0b10000, 0b10000, 0b10000, 0b10000, 0b01111,
+        ],
+        b'D' => [
+            0b11110, 0b10001, 0b10001, 0b10001, 0b10001, 0b10001, 0b11110,
+        ],
+        b'E' => [
+            0b11111, 0b10000, 0b10000, 0b11110, 0b10000, 0b10000, 0b11111,
+        ],
+        b'I' => [
+            0b11111, 0b00100, 0b00100, 0b00100, 0b00100, 0b00100, 0b11111,
+        ],
+        b'K' => [
+            0b10001, 0b10010, 0b10100, 0b11000, 0b10100, 0b10010, 0b10001,
+        ],
+        b'L' => [
+            0b10000, 0b10000, 0b10000, 0b10000, 0b10000, 0b10000, 0b11111,
+        ],
+        b'N' => [
+            0b10001, 0b11001, 0b10101, 0b10011, 0b10001, 0b10001, 0b10001,
+        ],
+        b'O' => [
+            0b01110, 0b10001, 0b10001, 0b10001, 0b10001, 0b10001, 0b01110,
+        ],
+        b'S' => [
+            0b01111, 0b10000, 0b10000, 0b01110, 0b00001, 0b00001, 0b11110,
+        ],
+        b'T' => [
+            0b11111, 0b00100, 0b00100, 0b00100, 0b00100, 0b00100, 0b00100,
+        ],
+        b'V' => [
+            0b10001, 0b10001, 0b10001, 0b10001, 0b10001, 0b01010, 0b00100,
+        ],
+        b' ' => [0, 0, 0, 0, 0, 0, 0],
+        _ => [0b11111, 0b00001, 0b00010, 0b00100, 0b00100, 0, 0b00100],
     }
 }
 

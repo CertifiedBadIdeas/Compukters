@@ -1,6 +1,6 @@
 use crate::computer::devices::{
-    ComputerControlDevice, ComputerTextDisplaySnapshot, DebugSerialDevice, GpuDevice,
-    KeyboardDevice, SerialInputDevice, StoragePortDevice, TextDisplayDevice, TimerDevice,
+    ComputerControlDevice, DebugSerialDevice, GpuDevice, KeyboardDevice, SerialInputDevice,
+    StoragePortDevice, TimerDevice,
 };
 use crate::computer::profile::ComputerMachineProfile;
 use crate::computer_abi;
@@ -21,7 +21,6 @@ pub struct ComputerMachine {
     control_device_id: Option<MmioDeviceId>,
     debug_device_id: Option<MmioDeviceId>,
     serial_input_device_id: Option<MmioDeviceId>,
-    display0_device_id: Option<MmioDeviceId>,
     gpu0_device_id: Option<MmioDeviceId>,
     storage0_device_id: Option<MmioDeviceId>,
     timer0_device_id: Option<MmioDeviceId>,
@@ -126,7 +125,6 @@ impl ComputerMachine {
     pub const HARDWARE_ID_CONTROL: u32 = computer_abi::COMPUTER_HARDWARE_ID_CONTROL;
     pub const HARDWARE_ID_DEBUG: u32 = computer_abi::COMPUTER_HARDWARE_ID_DEBUG;
     pub const HARDWARE_ID_SERIAL_INPUT: u32 = computer_abi::COMPUTER_HARDWARE_ID_SERIAL_INPUT;
-    pub const HARDWARE_ID_DISPLAY0: u32 = computer_abi::COMPUTER_HARDWARE_ID_DISPLAY0;
     pub const HARDWARE_ID_STORAGE0: u32 = computer_abi::COMPUTER_HARDWARE_ID_STORAGE0;
     pub const HARDWARE_ID_GPU0: u32 = computer_abi::COMPUTER_HARDWARE_ID_GPU0;
     pub const HARDWARE_ID_TIMER0: u32 = computer_abi::COMPUTER_HARDWARE_ID_TIMER0;
@@ -144,21 +142,6 @@ impl ComputerMachine {
     pub const SERIAL_INPUT_READY: u32 = computer_abi::SERIAL_INPUT_READY;
     pub const SERIAL_INPUT_READ: u32 = computer_abi::SERIAL_INPUT_READ;
     pub const SERIAL_INPUT_SIZE: u32 = computer_abi::SERIAL_INPUT_SIZE;
-    pub const DISPLAY0_BASE: u32 = computer_abi::DISPLAY0_BASE;
-    pub const DISPLAY0_COLUMNS: u32 = computer_abi::DISPLAY0_COLUMNS;
-    pub const DISPLAY0_ROWS: u32 = computer_abi::DISPLAY0_ROWS;
-    pub const DISPLAY0_CURSOR_X: u32 = computer_abi::DISPLAY0_CURSOR_X;
-    pub const DISPLAY0_CURSOR_Y: u32 = computer_abi::DISPLAY0_CURSOR_Y;
-    pub const DISPLAY0_COMMAND: u32 = computer_abi::DISPLAY0_COMMAND;
-    pub const DISPLAY0_DATA: u32 = computer_abi::DISPLAY0_DATA;
-    pub const DISPLAY0_SEQUENCE_LOW: u32 = computer_abi::DISPLAY0_SEQUENCE_LOW;
-    pub const DISPLAY0_SEQUENCE_HIGH: u32 = computer_abi::DISPLAY0_SEQUENCE_HIGH;
-    pub const DISPLAY0_SIZE: u32 = computer_abi::DISPLAY0_SIZE;
-    pub const DISPLAY0_COMMAND_CLEAR: i32 = computer_abi::DISPLAY0_COMMAND_CLEAR;
-    pub const DISPLAY0_COMMAND_PUT_BYTE_AT_CURSOR: i32 =
-        computer_abi::DISPLAY0_COMMAND_PUT_BYTE_AT_CURSOR;
-    pub const DISPLAY0_COMMAND_PUT_BYTE_AT_XY: i32 = computer_abi::DISPLAY0_COMMAND_PUT_BYTE_AT_XY;
-    pub const DISPLAY0_COMMAND_NEWLINE: i32 = computer_abi::DISPLAY0_COMMAND_NEWLINE;
     pub const GPU0_BASE: u32 = computer_abi::GPU0_BASE;
     pub const GPU0_WIDTH: u32 = computer_abi::GPU0_WIDTH;
     pub const GPU0_HEIGHT: u32 = computer_abi::GPU0_HEIGHT;
@@ -280,7 +263,6 @@ impl ComputerMachine {
         self.push_memory_map_region(&mut map, self.control_device_id, "control");
         self.push_memory_map_region(&mut map, self.debug_device_id, "debug");
         self.push_memory_map_region(&mut map, self.serial_input_device_id, "serial-input");
-        self.push_memory_map_region(&mut map, self.display0_device_id, "display0");
         self.push_memory_map_region(&mut map, self.gpu0_device_id, "gpu0");
         self.push_memory_map_region(&mut map, self.storage0_device_id, "storage0");
         self.push_memory_map_region(&mut map, self.timer0_device_id, "timer0");
@@ -488,14 +470,6 @@ impl ComputerMachine {
             .unwrap_or(0)
     }
 
-    pub fn display0_snapshot(&self) -> Option<ComputerTextDisplaySnapshot> {
-        self.display0_device().map(TextDisplayDevice::snapshot)
-    }
-
-    pub fn display0_sequence(&self) -> Option<u64> {
-        self.display0_device().map(TextDisplayDevice::sequence)
-    }
-
     pub fn drain_gpu0_frames(&mut self) -> Vec<DisplayFrameDelta> {
         self.gpu0_device_mut()
             .map(GpuDevice::drain_frames)
@@ -577,16 +551,6 @@ impl ComputerMachine {
     fn serial_input_device_mut(&mut self) -> Option<&mut SerialInputDevice> {
         self.serial_input_device_id
             .and_then(|id| self.bus.device_mut::<SerialInputDevice>(id))
-    }
-
-    fn display0_device(&self) -> Option<&TextDisplayDevice> {
-        self.display0_device_id
-            .and_then(|id| self.bus.device::<TextDisplayDevice>(id))
-    }
-
-    fn display0_device_mut(&mut self) -> Option<&mut TextDisplayDevice> {
-        self.display0_device_id
-            .and_then(|id| self.bus.device_mut::<TextDisplayDevice>(id))
     }
 
     fn gpu0_device_mut(&mut self) -> Option<&mut GpuDevice> {

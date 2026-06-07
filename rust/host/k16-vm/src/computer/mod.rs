@@ -4,9 +4,8 @@ pub mod machine;
 pub mod profile;
 pub mod snapshot;
 
-pub use devices::ComputerTextDisplaySnapshot;
 pub(crate) use devices::KeyboardEvent;
-pub use handle::{K16ComputerControl, K16ComputerHandle, K16ComputerTextDisplaySnapshot};
+pub use handle::{K16ComputerControl, K16ComputerHandle};
 pub use machine::{
     BootHandoffError, ComputerMachine, ComputerMemoryMap, ComputerMemoryRegion, CpuId,
 };

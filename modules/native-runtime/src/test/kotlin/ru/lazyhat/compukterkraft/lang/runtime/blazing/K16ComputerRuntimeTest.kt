@@ -146,41 +146,6 @@ class K16ComputerRuntimeTest {
     }
 
     @Test
-    fun exposesDisplaySnapshotAndPollsOnlyChangedSequences() {
-        val bindings = EchoBindings()
-        val runtime = K16ComputerRuntime(handle = 11L, bindings = bindings)
-        val first =
-            NativeK16ComputerDisplaySnapshot(
-                columns = 80,
-                rows = 25,
-                cursorX = 1,
-                cursorY = 0,
-                sequence = 1,
-                cells = byteArrayOf('A'.code.toByte()),
-            )
-        val second =
-            NativeK16ComputerDisplaySnapshot(
-                columns = 80,
-                rows = 25,
-                cursorX = 2,
-                cursorY = 0,
-                sequence = 2,
-                cells = byteArrayOf('A'.code.toByte(), 'B'.code.toByte()),
-            )
-
-        bindings.displaySnapshot = first
-
-        assertEquals(first, runtime.display0Snapshot())
-        assertEquals(first, runtime.pollDisplay0Snapshot())
-        assertEquals(null, runtime.pollDisplay0Snapshot())
-
-        bindings.displaySnapshot = second
-
-        assertEquals(second, runtime.pollDisplay0Snapshot())
-        assertEquals(null, runtime.pollDisplay0Snapshot())
-    }
-
-    @Test
     fun rejectsZeroHandle() {
         assertFailsWith<IllegalArgumentException> {
             K16ComputerRuntime(handle = 0L, bindings = EchoBindings())
@@ -197,7 +162,6 @@ class K16ComputerRuntimeTest {
         val machineSnapshotHandles = mutableListOf<Long>()
         val advanceGameTickHandles = mutableListOf<Long>()
         val callOrder = mutableListOf<String>()
-        var displaySnapshot: NativeK16ComputerDisplaySnapshot? = null
         var gpuFrames: ByteArray = ByteArray(0)
         var storage0Media: ByteArray? = null
         var machineSnapshot: ByteArray = ByteArray(0)
@@ -270,8 +234,6 @@ class K16ComputerRuntimeTest {
             } else {
                 pendingOutput.removeFirst()
             }
-
-        override fun display0Snapshot(handle: Long): NativeK16ComputerDisplaySnapshot? = displaySnapshot
 
         override fun drainGpu0Frames(handle: Long): ByteArray = gpuFrames.copyOf()
 

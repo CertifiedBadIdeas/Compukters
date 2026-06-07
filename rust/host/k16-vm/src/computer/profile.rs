@@ -1,6 +1,6 @@
 use crate::computer::devices::{
     ComputerControlDevice, DebugSerialDevice, GpuDevice, KeyboardDevice, SerialInputDevice,
-    StoragePortDevice, TextDisplayDevice, TimerDevice,
+    StoragePortDevice, TimerDevice,
 };
 use crate::computer_abi;
 use crate::k16::{K16_INTERRUPT_SOURCE_KEYBOARD0, K16_INTERRUPT_SOURCE_TIMER0};
@@ -39,10 +39,6 @@ impl ComputerMachineProfile {
                 computer_abi::COMPUTER_HARDWARE_ID_SERIAL_INPUT,
                 computer_abi::SERIAL_INPUT_BASE,
             ))
-            .with_hardware(ComputerHardwareConfig::text_display(
-                computer_abi::COMPUTER_HARDWARE_ID_DISPLAY0,
-                computer_abi::DISPLAY0_BASE,
-            ))
             .with_hardware(ComputerHardwareConfig::gpu(
                 computer_abi::COMPUTER_HARDWARE_ID_GPU0,
                 computer_abi::GPU0_BASE,
@@ -78,10 +74,6 @@ impl ComputerMachineProfile {
             .with_hardware(ComputerHardwareConfig::serial_input(
                 computer_abi::COMPUTER_HARDWARE_ID_SERIAL_INPUT,
                 computer_abi::SERIAL_INPUT_BASE,
-            ))
-            .with_hardware(ComputerHardwareConfig::text_display(
-                computer_abi::COMPUTER_HARDWARE_ID_DISPLAY0,
-                computer_abi::DISPLAY0_BASE,
             ))
             .with_hardware(ComputerHardwareConfig::gpu(
                 computer_abi::COMPUTER_HARDWARE_ID_GPU0,
@@ -119,10 +111,6 @@ impl ComputerMachineProfile {
             .with_hardware(ComputerHardwareConfig::serial_input(
                 computer_abi::COMPUTER_HARDWARE_ID_SERIAL_INPUT,
                 computer_abi::SERIAL_INPUT_BASE,
-            ))
-            .with_hardware(ComputerHardwareConfig::text_display(
-                computer_abi::COMPUTER_HARDWARE_ID_DISPLAY0,
-                computer_abi::DISPLAY0_BASE,
             ))
             .with_hardware(ComputerHardwareConfig::gpu(
                 computer_abi::COMPUTER_HARDWARE_ID_GPU0,
@@ -178,14 +166,6 @@ impl ComputerHardwareConfig {
             id,
             mmio_base,
             device: ComputerHardwareDevice::SerialInput,
-        }
-    }
-
-    pub fn text_display(id: u32, mmio_base: u32) -> Self {
-        Self {
-            id,
-            mmio_base,
-            device: ComputerHardwareDevice::TextDisplay,
         }
     }
 
@@ -264,7 +244,6 @@ pub(crate) enum ComputerHardwareDevice {
     Control,
     DebugSerial,
     SerialInput,
-    TextDisplay,
     Gpu,
     StoragePort(StoragePortConfig),
     Timer,
@@ -308,7 +287,6 @@ impl ComputerHardwareDevice {
             Self::Control => ComputerControlDevice::SIZE,
             Self::DebugSerial => DebugSerialDevice::SIZE,
             Self::SerialInput => SerialInputDevice::SIZE,
-            Self::TextDisplay => TextDisplayDevice::SIZE,
             Self::Gpu => GpuDevice::SIZE,
             Self::StoragePort(_) => StoragePortDevice::SIZE,
             Self::Timer => TimerDevice::SIZE,

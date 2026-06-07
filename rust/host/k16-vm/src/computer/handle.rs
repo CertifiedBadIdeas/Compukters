@@ -1,6 +1,4 @@
-use crate::computer::{
-    BootHandoffError, ComputerMachine, ComputerMachineProfile, ComputerTextDisplaySnapshot, CpuId,
-};
+use crate::computer::{BootHandoffError, ComputerMachine, ComputerMachineProfile, CpuId};
 use crate::display::DisplayFrameDelta;
 use crate::k16::K16Signal;
 use crate::k16e;
@@ -17,29 +15,6 @@ pub struct K16ComputerControl {
 pub struct K16ComputerHandle {
     machine: ComputerMachine,
     boot_cpu: CpuId,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct K16ComputerTextDisplaySnapshot {
-    pub columns: u32,
-    pub rows: u32,
-    pub cursor_x: u32,
-    pub cursor_y: u32,
-    pub sequence: u64,
-    pub cells: Vec<u8>,
-}
-
-impl From<ComputerTextDisplaySnapshot> for K16ComputerTextDisplaySnapshot {
-    fn from(snapshot: ComputerTextDisplaySnapshot) -> Self {
-        Self {
-            columns: snapshot.columns,
-            rows: snapshot.rows,
-            cursor_x: snapshot.cursor_x,
-            cursor_y: snapshot.cursor_y,
-            sequence: snapshot.sequence,
-            cells: snapshot.cells,
-        }
-    }
 }
 
 impl K16ComputerHandle {
@@ -165,10 +140,6 @@ impl K16ComputerHandle {
 
     pub fn drain_debug_output_bytes(&mut self) -> Vec<u8> {
         self.machine.drain_debug_output_bytes()
-    }
-
-    pub fn display0_snapshot(&self) -> Option<K16ComputerTextDisplaySnapshot> {
-        self.machine.display0_snapshot().map(Into::into)
     }
 
     pub fn drain_gpu0_frames(&mut self) -> Vec<DisplayFrameDelta> {

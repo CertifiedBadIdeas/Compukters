@@ -54,7 +54,6 @@ id  name          mmio_base     mmio_size     irq_source
 1   control       0x1000_0000   0x0000_0100   0x0000_0000
 2   debug         0x1000_0100   0x0000_0100   0x0000_0000
 3   serial-input  0x1000_0200   0x0000_0100   0x0000_0000
-4   display0      0x1000_0300   0x0000_0100   0x0000_0000
 5   storage0      0x1000_0400   0x0000_0100   0x0000_0000
 6   gpu0          0x1000_0500   0x0000_0100   0x0000_0000
 7   timer0        0x1000_0600   0x0000_0100   0x0000_0001
@@ -64,6 +63,10 @@ id  name          mmio_base     mmio_size     irq_source
 Firmware should discover these ranges through `BootInfo.hardware_table_addr` and
 `BootInfo.hardware_count`. The numeric addresses above are the current profile
 assignment, not a CPU feature.
+
+Hardware id `4` and MMIO page `0x1000_0300..0x1000_0400` are retired and
+unmapped in the active K16 computer profile. Firmware must not probe or depend
+on a host-owned text display surface.
 
 Firmware should also discover interrupt routing from each entry's `irq_source`.
 `timer0` currently raises CPU interrupt source bit `0x00000001`; `keyboard0`
@@ -130,63 +133,14 @@ offset  size  name
 A byte load from `read` consumes and returns one queued byte. If the queue is
 empty, it returns `0`.
 
-## Display0 MMIO
-
-Deprecated: the display0 range provides a legacy text-mode display surface for
-old firmware paths. New OS, kernel console, and terminal work must render text
-inside guest code and present pixels through `gpu0` instead. The VM must not own
-fonts, glyphs, text cells, cursor state, terminal state, or shell behavior.
-
-Initial dimensions:
-
-```text
-80 columns x 25 rows
-```
-
-All multi-byte registers are little-endian.
-
-```text
-offset  size  access  name
-0x00    4     R       columns
-0x04    4     R       rows
-0x08    4     R/W     cursor_x
-0x0C    4     R/W     cursor_y
-0x10    4     W       command
-0x14    4     W       data
-0x18    4     R       sequence_low
-0x1C    4     R       sequence_high
-```
-
-Commands:
-
-```text
-1  clear
-2  put_byte_at_cursor
-3  put_byte_at_xy
-4  newline
-```
-
-Firmware writes `data` first, then writes `command`. A command write consumes
-the current data register value.
-
-`put_byte_at_xy` uses packed data:
-
-```text
-bits 0..7    byte
-bits 8..19   x
-bits 20..31  y
-```
-
-The sequence registers expose a monotonic `u64` split into low/high `u32`
-words. It advances when visible display state changes through a display command.
-
 ## Gpu0 MMIO
 
 The gpu0 range provides a simple 2D pixel graphics adapter for firmware and
-kernel graphics. It is independent from the text-mode `display0` device. Pixel
-output does not go through text cells or host text rendering. The VM does not
-render fonts, glyphs, terminal state, windows, shaders, or 3D; guest software
-owns those layers and writes pixels through gpu0.
+kernel graphics. It is the only display-output device in the active K16
+computer profile. Pixel output does not go through text cells or host text
+rendering. The VM does not render fonts, glyphs, terminal state, windows,
+shaders, or 3D; guest software owns those layers and writes pixels through
+gpu0.
 
 Initial dimensions:
 

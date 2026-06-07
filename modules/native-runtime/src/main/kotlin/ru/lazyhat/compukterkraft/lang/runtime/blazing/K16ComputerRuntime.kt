@@ -59,8 +59,6 @@ interface K16ComputerRuntimeBindings {
 
     fun drainDebugOutput(handle: Long): ByteArray
 
-    fun display0Snapshot(handle: Long): NativeK16ComputerDisplaySnapshot?
-
     fun drainGpu0Frames(handle: Long): ByteArray
 
     fun storage0MediaSnapshot(handle: Long): ByteArray?
@@ -106,8 +104,6 @@ object NativeK16ComputerRuntimeBindings : K16ComputerRuntimeBindings {
     ) = NativeVmBindings.pushK16ComputerKeyboardPasteBytes(handle, bytes)
 
     override fun drainDebugOutput(handle: Long): ByteArray = NativeVmBindings.drainK16ComputerDebugOutput(handle)
-
-    override fun display0Snapshot(handle: Long): NativeK16ComputerDisplaySnapshot? = NativeVmBindings.k16ComputerDisplay0Snapshot(handle)
 
     override fun drainGpu0Frames(handle: Long): ByteArray = NativeVmBindings.drainK16ComputerGpu0Frames(handle)
 
@@ -179,10 +175,6 @@ interface K16ComputerEndpoint : AutoCloseable {
 
     fun outputSnapshot(): ByteArray
 
-    fun display0Snapshot(): NativeK16ComputerDisplaySnapshot?
-
-    fun pollDisplay0Snapshot(): NativeK16ComputerDisplaySnapshot?
-
     fun drainGpu0Frames(): ByteArray
 
     fun clearOutput()
@@ -197,7 +189,6 @@ class K16ComputerRuntime(
     private val storage0Sink: ((ByteArray) -> Unit)? = null,
 ) : K16ComputerEndpoint {
     private val terminalOutput = ByteArrayOutputStream()
-    private var lastDisplay0Sequence: Long? = null
     private var terminalControl: NativeK16ComputerControl? = null
     private var closed = false
 
@@ -273,25 +264,6 @@ class K16ComputerRuntime(
     override fun outputSnapshot(): ByteArray {
         ensureOpen()
         return terminalOutput.toByteArray()
-    }
-
-    override fun display0Snapshot(): NativeK16ComputerDisplaySnapshot? {
-        ensureOpen()
-        return bindings.display0Snapshot(handle)
-    }
-
-    override fun pollDisplay0Snapshot(): NativeK16ComputerDisplaySnapshot? {
-        ensureOpen()
-        val snapshot =
-            bindings.display0Snapshot(handle) ?: run {
-                lastDisplay0Sequence = null
-                return null
-            }
-        if (lastDisplay0Sequence == snapshot.sequence) {
-            return null
-        }
-        lastDisplay0Sequence = snapshot.sequence
-        return snapshot
     }
 
     override fun drainGpu0Frames(): ByteArray {

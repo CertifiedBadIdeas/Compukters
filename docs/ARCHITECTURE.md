@@ -81,7 +81,6 @@ RuntimeDevice.close()
 │    ├─ MMIO serial input    ◄──  player keyboard events               │
 │    ├─ MMIO storage0        ◄──► boot media                           │
 │    ├─ MMIO bios flash      ──►  read-only firmware mapping           │
-│    ├─ MMIO text display    ──►  K16ComputerTextDisplaySnapshot       │
 │    └─ MMIO gpu0            ──►  DisplayFrameDelta values             │
 └──────────────────────────────────────────┬──────────────────────────┘
                                            │ JNI run-until-signal

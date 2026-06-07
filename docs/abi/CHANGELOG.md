@@ -164,8 +164,10 @@
   backend/toolchain concerns outside the VM implementation.
 - Added experimental `K16SNAP` v1 as the host-side `ComputerMachine` snapshot
   container. It records a versioned header, full RAM bytes, and K16 CPU
-  continuation records; `control`, `debug`, `display0`, and serial input
-  device state plus `storage0` controller registers are now restored.
+  continuation records; `control`, `debug`, serial input device state,
+  `storage0` controller registers, `timer0` game ticks, and pending
+  `keyboard0` events are now restored. The retired host-owned text display
+  surface is not part of active snapshots.
 - Added `k16-cpu-v1.md` and reserved `r15` as the K16 stack pointer. The stack
   lives in guest RAM, grows downward, and uses 4-byte slots in the first ABI
   slice.

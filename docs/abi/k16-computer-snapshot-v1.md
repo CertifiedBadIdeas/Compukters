@@ -11,8 +11,8 @@ across host unload/load boundaries.
 
 The current v1 slice records a versioned header, full RAM bytes, fixed-size
 K16 CPU continuation records, including trap and interrupt CSR state, and
-explicit device records for `control`, `debug`, `display0`, serial input, the
-`storage0` controller, `timer0` game ticks, and pending `keyboard0` events.
+explicit device records for `control`, `debug`, serial input, the `storage0`
+controller, `timer0` game ticks, and pending `keyboard0` events.
 
 ## File Layout
 
@@ -92,8 +92,6 @@ Supported device kinds:
 kind  payload
 1     control: status i32, panic_code i32, exit_code i32
 2     debug: raw debug output bytes
-3     display0: columns u32, rows u32, cursor_x u32, cursor_y u32,
-      sequence u64, followed by cell bytes
 4     serial input: pending input bytes in read order
 5     storage0 controller: status i32, error i32, lba_low u32,
       lba_high u32, block_count u32, buffer_addr u32, bytes_done u32,
@@ -106,9 +104,7 @@ kind  payload
 
 Unknown device kinds are rejected. `control` payloads must be exactly 12 bytes.
 The transient `control.yield` request bit is not serialized.
-`debug` payloads may be empty. `display0` payloads must contain at least 24
-bytes of metadata, and the remaining cell byte count must equal
-`columns * rows`. `storage0` controller payloads must be exactly 36 bytes.
+`debug` payloads may be empty. `storage0` controller payloads must be exactly 36 bytes.
 `timer0` payloads must be exactly 8 bytes. `keyboard0` payloads must contain
 16 bytes of metadata followed by exactly `event_count * 16` event bytes.
 
@@ -126,12 +122,11 @@ queue exactly, including `sequence` and `dropped_count`.
 ## Restore Semantics
 
 Full restore recreates RAM, CPU contexts, `boot_cpu_id`, `control` state,
-`debug` output, `display0` screen state, pending serial input bytes, and
-`storage0` controller registers, `timer0.game_ticks`, and pending `keyboard0`
-events from the snapshot against an explicitly provided
-`ComputerMachineProfile`. Restore must reject a snapshot when its `ram_size`
-differs from the target profile memory size, when the boot CPU id points
-outside the CPU table, when a CPU record contains an unsupported
+`debug` output, pending serial input bytes, `storage0` controller registers,
+`timer0.game_ticks`, and pending `keyboard0` events from the snapshot against an
+explicitly provided `ComputerMachineProfile`. Restore must reject a snapshot
+when its `ram_size` differs from the target profile memory size, when the boot
+CPU id points outside the CPU table, when a CPU record contains an unsupported
 kind/state/reserved field, or when the target profile does not expose a device
 recorded by the snapshot.
 
@@ -158,7 +153,6 @@ A decoder must reject:
 - truncated device record headers or payloads;
 - unknown device kinds;
 - invalid fixed-size device payload lengths;
-- invalid `display0` cell counts;
 - invalid `storage0` controller payload length;
 - invalid `timer0` payload length;
 - invalid `keyboard0` payload length;

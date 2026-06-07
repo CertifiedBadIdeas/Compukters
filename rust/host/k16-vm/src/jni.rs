@@ -6,7 +6,7 @@ use jni::JNIEnv;
 
 use crate::display::{DisplayFrameDelta, PixelFormat};
 use crate::k16::K16Signal;
-use crate::k16_computer::{K16ComputerHandle, K16ComputerTextDisplaySnapshot};
+use crate::k16_computer::K16ComputerHandle;
 
 #[no_mangle]
 pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_createK16ComputerFromBiosFlashNative(
@@ -182,23 +182,6 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
         None => return null_mut(),
     };
     byte_array_or_throw(&mut env, &handle.drain_debug_output_bytes())
-}
-
-#[no_mangle]
-pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_k16ComputerDisplay0SnapshotNative(
-    mut env: JNIEnv<'_>,
-    _class: JClass<'_>,
-    handle: jlong,
-) -> jbyteArray {
-    let handle = match k16_computer_handle_mut(&mut env, handle) {
-        Some(handle) => handle,
-        None => return null_mut(),
-    };
-    let payload = match handle.display0_snapshot() {
-        Some(snapshot) => encode_k16_computer_text_display_snapshot(&snapshot),
-        None => Vec::new(),
-    };
-    byte_array_or_throw(&mut env, &payload)
 }
 
 #[no_mangle]
@@ -385,32 +368,12 @@ fn k16_signal_values(signal: K16Signal) -> [jlong; 2] {
     }
 }
 
-fn push_u32(out: &mut Vec<u8>, value: u32) {
-    out.extend_from_slice(&value.to_le_bytes());
-}
-
-fn push_u64(out: &mut Vec<u8>, value: u64) {
+fn push_i64(out: &mut Vec<u8>, value: i64) {
     out.extend_from_slice(&value.to_le_bytes());
 }
 
 fn push_i32(out: &mut Vec<u8>, value: i32) {
     out.extend_from_slice(&value.to_le_bytes());
-}
-
-fn push_i64(out: &mut Vec<u8>, value: i64) {
-    out.extend_from_slice(&value.to_le_bytes());
-}
-
-fn encode_k16_computer_text_display_snapshot(snapshot: &K16ComputerTextDisplaySnapshot) -> Vec<u8> {
-    let mut out = Vec::with_capacity(28 + snapshot.cells.len());
-    push_u32(&mut out, snapshot.columns);
-    push_u32(&mut out, snapshot.rows);
-    push_u32(&mut out, snapshot.cursor_x);
-    push_u32(&mut out, snapshot.cursor_y);
-    push_u64(&mut out, snapshot.sequence);
-    push_u32(&mut out, snapshot.cells.len() as u32);
-    out.extend_from_slice(&snapshot.cells);
-    out
 }
 
 fn encode_display_frame_deltas(frames: &[DisplayFrameDelta]) -> Vec<u8> {
