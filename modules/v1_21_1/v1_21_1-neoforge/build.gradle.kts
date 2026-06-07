@@ -271,6 +271,8 @@ fun Project.compileK16GuestRustBin(
                 "-C",
                 "panic=abort",
                 "-C",
+                "opt-level=z",
+                "-C",
                 "relocation-model=static",
                 "-Cjump-tables=no",
                 "-Cdebuginfo=0",
@@ -285,7 +287,7 @@ fun Project.compileK16GuestRustBin(
     processBuilder.environment()["RUSTC"] = toolchain.rustc.absolutePath
     processBuilder.environment()["RUSTC_BOOTSTRAP"] = "1"
     processBuilder.environment()["RUSTFLAGS"] =
-        "-C linker=${toolchain.linker.absolutePath} -C link-arg=${cpuHelpers.absolutePath} -C link-arg=--k16-target=$k16Target -Cjump-tables=no -Cdebuginfo=0 -Cdebug-assertions=off -Coverflow-checks=off -Zub-checks=no"
+        "-C linker=${toolchain.linker.absolutePath} -C link-arg=${cpuHelpers.absolutePath} -C link-arg=--k16-target=$k16Target -Copt-level=z -Cjump-tables=no -Cdebuginfo=0 -Cdebug-assertions=off -Coverflow-checks=off -Zub-checks=no"
     val exitCode = processBuilder.start().waitFor()
     check(exitCode == 0) {
         "K16 Rust firmware build for $binName failed with exit code $exitCode"

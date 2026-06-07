@@ -1,6 +1,6 @@
 K16 VM benchmark current snapshot
 
-Recorded at: 2026-06-07T11:39:22Z
+Recorded at: 2026-06-07T12:10:35Z
 Command: cargo run --release --example vm_microbenchmarks -- 100000 5
 Host: Linux 7.0.11-zen1-1-zen x86_64 GNU/Linux
 CPU: AMD Ryzen 7 7700 8-Core Processor
@@ -11,13 +11,13 @@ This file is the current repo-tracked benchmark snapshot. Git history is
 the benchmark history; use git diff or git show <commit>:docs/benchmarks/k16-vm-current.txt.
 
 workload       vm           iterations   checksum   best_nanos   nanos/iter  vs_native  native_pct
-compute-loop   k16              100000     100000      5790635       57.906   251.657x    25165.7%
+compute-loop   k16              100000     100000      5899741       58.997   256.399x    25639.9%
 compute-loop   native-rust      100000     100000        23010        0.230     1.000x      100.0%
-memory-loop    k16              100000     100000     10506643      105.066   228.455x    22845.5%
+memory-loop    k16              100000     100000     10557233      105.572   229.555x    22955.5%
 memory-loop    native-rust      100000     100000        45990        0.460     1.000x      100.0%
-mmio-loop      k16              100000     100000     10337415      103.374    49.409x     4940.9%
-mmio-loop      native-rust      100000     100000       209220        2.092     1.000x      100.0%
-branch-mix     k16              100000     200000     11268542      112.685   244.968x    24496.8%
+mmio-loop      k16              100000     100000     10239303      102.393    48.898x     4889.8%
+mmio-loop      native-rust      100000     100000       209400        2.094     1.000x      100.0%
+branch-mix     k16              100000     200000     11284371      112.844   245.312x    24531.2%
 branch-mix     native-rust      100000     200000        46000        0.460     1.000x      100.0%
-call-loop      k16              100000     100000     10533523      105.335    91.604x     9160.4%
-call-loop      native-rust      100000     100000       114990        1.150     1.000x      100.0%
+call-loop      k16              100000     100000     10513733      105.137    91.384x     9138.4%
+call-loop      native-rust      100000     100000       115050        1.151     1.000x      100.0%
