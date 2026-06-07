@@ -43,7 +43,7 @@ interface RuntimeDeviceLifecycle {
  *  device implementations can plug into the existing event-dispatch pipeline. */
 interface RuntimeDeviceInput : DeviceEvents.Receiver
 
-/** Display-session role: per-player framebuffer endpoint attachments. */
+/** Display-session role: per-player pixel display endpoint attachments. */
 interface RuntimeDeviceDisplaySessions {
     fun attachDisplaySession(
         playerUuid: UUID,

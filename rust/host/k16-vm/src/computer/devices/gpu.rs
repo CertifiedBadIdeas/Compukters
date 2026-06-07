@@ -3,7 +3,7 @@ use crate::display::{DisplayEngine, DisplayFrameDelta, PixelFormat};
 use crate::low_bus::MmioDevice;
 use crate::low_machine::{MachineMemory, MemoryFault};
 
-pub(crate) struct FramebufferDevice {
+pub(crate) struct GpuDevice {
     display: DisplayEngine,
     pending_frames: Vec<DisplayFrameDelta>,
     status: i32,
@@ -18,8 +18,8 @@ pub(crate) struct FramebufferDevice {
     sequence: u64,
 }
 
-impl FramebufferDevice {
-    pub(crate) const SIZE: u32 = computer_abi::FRAMEBUFFER0_SIZE;
+impl GpuDevice {
+    pub(crate) const SIZE: u32 = computer_abi::GPU0_SIZE;
     const DISPLAY_ID: i32 = 1;
     const WIDTH: i32 = 320;
     const HEIGHT: i32 = 200;
@@ -33,10 +33,10 @@ impl FramebufferDevice {
                 Self::HEIGHT,
                 PixelFormat::Rgb565,
             )
-            .expect("framebuffer0 default geometry must be valid"),
+            .expect("gpu0 default geometry must be valid"),
             pending_frames: Vec::new(),
-            status: computer_abi::FRAMEBUFFER0_STATUS_READY,
-            error: computer_abi::FRAMEBUFFER0_ERROR_NONE,
+            status: computer_abi::GPU0_STATUS_READY,
+            error: computer_abi::GPU0_ERROR_NONE,
             x: 0,
             y: 0,
             rect_width: Self::WIDTH,
@@ -57,7 +57,7 @@ impl FramebufferDevice {
             0 => Ok(Self::WIDTH),
             4 => Ok(Self::HEIGHT),
             8 => Ok((Self::WIDTH as u32 * Self::BYTES_PER_PIXEL) as i32),
-            12 => Ok(computer_abi::FRAMEBUFFER0_PIXEL_FORMAT_RGB565),
+            12 => Ok(computer_abi::GPU0_PIXEL_FORMAT_RGB565),
             20 => Ok(self.status),
             24 => Ok(self.error),
             28 => Ok(self.x),
@@ -70,7 +70,7 @@ impl FramebufferDevice {
             56 => Ok((self.sequence as u32) as i32),
             60 => Ok((self.sequence >> 32) as u32 as i32),
             _ => Err(MemoryFault::new(format!(
-                "computer framebuffer0 offset {offset} is not readable",
+                "computer gpu0 offset {offset} is not readable",
             ))),
         }
     }
@@ -107,7 +107,7 @@ impl FramebufferDevice {
                 Ok(())
             }
             _ => Err(MemoryFault::new(format!(
-                "computer framebuffer0 offset {offset} is not writable",
+                "computer gpu0 offset {offset} is not writable",
             ))),
         }
     }
@@ -117,33 +117,33 @@ impl FramebufferDevice {
         command: i32,
         memory: Option<&mut MachineMemory>,
     ) -> Result<(), MemoryFault> {
-        self.error = computer_abi::FRAMEBUFFER0_ERROR_NONE;
-        self.status = computer_abi::FRAMEBUFFER0_STATUS_READY;
+        self.error = computer_abi::GPU0_ERROR_NONE;
+        self.status = computer_abi::GPU0_STATUS_READY;
         match command {
-            computer_abi::FRAMEBUFFER0_COMMAND_NOP => Ok(()),
-            computer_abi::FRAMEBUFFER0_COMMAND_CLEAR => {
+            computer_abi::GPU0_COMMAND_NOP => Ok(()),
+            computer_abi::GPU0_COMMAND_CLEAR => {
                 self.display.clear(self.color);
-                self.status = computer_abi::FRAMEBUFFER0_STATUS_DONE;
+                self.status = computer_abi::GPU0_STATUS_DONE;
                 Ok(())
             }
-            computer_abi::FRAMEBUFFER0_COMMAND_BLIT_BUFFER => {
+            computer_abi::GPU0_COMMAND_BLIT_BUFFER => {
                 let Some(memory) = memory else {
-                    self.set_error(computer_abi::FRAMEBUFFER0_ERROR_BUFFER_OUT_OF_BOUNDS);
+                    self.set_error(computer_abi::GPU0_ERROR_BUFFER_OUT_OF_BOUNDS);
                     return Ok(());
                 };
                 self.blit_buffer(memory);
                 Ok(())
             }
-            computer_abi::FRAMEBUFFER0_COMMAND_PRESENT => {
+            computer_abi::GPU0_COMMAND_PRESENT => {
                 if let Some(frame) = self.display.present() {
                     self.sequence = frame.sequence as u64;
                     self.pending_frames.push(frame);
                 }
-                self.status = computer_abi::FRAMEBUFFER0_STATUS_DONE;
+                self.status = computer_abi::GPU0_STATUS_DONE;
                 Ok(())
             }
             _ => {
-                self.set_error(computer_abi::FRAMEBUFFER0_ERROR_INVALID_COMMAND);
+                self.set_error(computer_abi::GPU0_ERROR_INVALID_COMMAND);
                 Ok(())
             }
         }
@@ -151,7 +151,7 @@ impl FramebufferDevice {
 
     fn blit_buffer(&mut self, memory: &MachineMemory) {
         if self.rect_width <= 0 || self.rect_height <= 0 {
-            self.set_error(computer_abi::FRAMEBUFFER0_ERROR_INVALID_RECT);
+            self.set_error(computer_abi::GPU0_ERROR_INVALID_RECT);
             return;
         }
         let min_stride = match u32::try_from(self.rect_width)
@@ -160,12 +160,12 @@ impl FramebufferDevice {
         {
             Some(value) => value,
             None => {
-                self.set_error(computer_abi::FRAMEBUFFER0_ERROR_INVALID_RECT);
+                self.set_error(computer_abi::GPU0_ERROR_INVALID_RECT);
                 return;
             }
         };
         if self.buffer_stride_bytes < min_stride {
-            self.set_error(computer_abi::FRAMEBUFFER0_ERROR_INVALID_STRIDE);
+            self.set_error(computer_abi::GPU0_ERROR_INVALID_STRIDE);
             return;
         }
         let rows = self.rect_height as u32;
@@ -175,19 +175,19 @@ impl FramebufferDevice {
         {
             Some(value) => value,
             None => {
-                self.set_error(computer_abi::FRAMEBUFFER0_ERROR_BUFFER_OUT_OF_BOUNDS);
+                self.set_error(computer_abi::GPU0_ERROR_BUFFER_OUT_OF_BOUNDS);
                 return;
             }
         };
         let byte_len = match last_row_offset.checked_add(min_stride) {
             Some(value) => value,
             None => {
-                self.set_error(computer_abi::FRAMEBUFFER0_ERROR_BUFFER_OUT_OF_BOUNDS);
+                self.set_error(computer_abi::GPU0_ERROR_BUFFER_OUT_OF_BOUNDS);
                 return;
             }
         };
         if !ram_range_in_bounds(self.buffer_addr, byte_len, memory.len()) {
-            self.set_error(computer_abi::FRAMEBUFFER0_ERROR_BUFFER_OUT_OF_BOUNDS);
+            self.set_error(computer_abi::GPU0_ERROR_BUFFER_OUT_OF_BOUNDS);
             return;
         }
         for row in 0..self.rect_height {
@@ -196,24 +196,24 @@ impl FramebufferDevice {
                 let source = self.buffer_addr + row_offset + col as u32 * Self::BYTES_PER_PIXEL;
                 let lo = memory
                     .load_u8(source)
-                    .expect("framebuffer0 source range was prevalidated");
+                    .expect("gpu0 source range was prevalidated");
                 let hi = memory
                     .load_u8(source + 1)
-                    .expect("framebuffer0 source range was prevalidated");
+                    .expect("gpu0 source range was prevalidated");
                 let rgb565 = u16::from_le_bytes([lo, hi]);
                 self.display.set_pixel(self.x + col, self.y + row, rgb565);
             }
         }
-        self.status = computer_abi::FRAMEBUFFER0_STATUS_DONE;
+        self.status = computer_abi::GPU0_STATUS_DONE;
     }
 
     fn set_error(&mut self, error: i32) {
-        self.status = computer_abi::FRAMEBUFFER0_STATUS_ERROR;
+        self.status = computer_abi::GPU0_STATUS_ERROR;
         self.error = error;
     }
 }
 
-impl MmioDevice for FramebufferDevice {
+impl MmioDevice for GpuDevice {
     fn size(&self) -> u32 {
         Self::SIZE
     }

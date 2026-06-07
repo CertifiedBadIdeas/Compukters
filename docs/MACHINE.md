@@ -122,7 +122,7 @@ Background coroutine
 - `hostCallManager` хранит запросы VM к хосту и ожидаемые ответы.
 - `programLoader` читает исходники программ из workspace.
 - `pathResolver` реализует текущую рабочую директорию и нормализацию путей.
-- `displayRegistry` хранит display/framebuffer state, из которого `RuntimeDeviceImpl` flush-ит `DisplayFrameDelta` в клиентские display sessions.
+- `displayRegistry` хранит display/pixel-buffer state, из которого `RuntimeDeviceImpl` flush-ит `DisplayFrameDelta` в клиентские display sessions.
 - `ipcRegistry` хранит локальные каналы; stdio для ROM/process code задается только соглашением поверх `ipc`.
 - для Rust image runtime целевой архитектурой теперь считается отдельный shared `DeviceRuntimeKernel`, который должен забрать device-local ownership у `eventManager` и `ipcRegistry`, оставив Kotlin-хосту только world-facing integration;
 - `runtime` это API-объект, который получает выполняемая программа.
@@ -524,7 +524,7 @@ return candidate
 
 Это принципиальный момент.
 
-Видимый runtime UI должен рисоваться через `display::*`: ROM/user code обновляет framebuffer в `DisplayRegistry`, серверный tick flush-ит dirty frames через display sessions, а клиентский Computer screen рендерит `ClientDisplayBuffer`.
+Видимый runtime UI должен рисоваться через `display::*`: ROM/user code обновляет pixel buffer в `DisplayRegistry`, серверный tick flush-ит dirty frames через display sessions, а клиентский Computer screen рендерит `ClientDisplayBuffer`.
 
 Это значит:
 
@@ -548,7 +548,7 @@ stdio-v1 <stdin-channel-id> <stdout-channel-id> <stderr-channel-id> <argument>
 
 ### 11.3. Display state
 
-Runtime Computer UI физически представлен display/framebuffer state, который затем кодируется в `DisplayFrameDelta`. Workbench live terminal attach сейчас не читает VM terminal snapshot; future live viewer должен подключаться к display sessions, а не reintroduce stdout transport.
+Runtime Computer UI физически представлен display/pixel-buffer state, который затем кодируется в `DisplayFrameDelta`. Workbench live terminal attach сейчас не читает VM terminal snapshot; future live viewer должен подключаться к display sessions, а не reintroduce stdout transport.
 
 ## 12. Как запускаются программы
 
@@ -1093,7 +1093,7 @@ ROM-файл `shell.ck` показывает, как предполагаетс�
 
 Во время `RuntimeDeviceImpl.serverTick()` после обработки host calls вызывается `flushDisplaySessions()`:
 
-1. `DisplayRegistry` отдает dirty framebuffer deltas;
+1. `DisplayRegistry` отдает dirty pixel-buffer deltas;
 2. сервер проверяет, что display session еще привязана к player/container/device/display;
 3. dirty frame отправляется как `FrameDeltaClientMessage`;
 4. клиент применяет frame к `ClientDisplayBuffer` и рендерит его в Computer screen.
@@ -1116,7 +1116,7 @@ VM не создает terminal snapshot и не рассылает stdout bytes
 
 Есть. Ограничивается `profile.resources.queues.eventQueueSlots`, при переполнении используется `DROP_OLDEST`.
 
-### 16.4. Размер display framebuffer
+### 16.4. Размер display pixel buffer
 
 Есть. Ограничивается display profile/resources и client display session dimensions.
 
@@ -1245,7 +1245,7 @@ BIOS и shell лежат в ROM как `.ck` файлы. Их можно чит�
 - двигаемая серверными тиками через slice permits;
 - ограниченная по времени slice и по размеру event queue;
 - изолированная в пределах workspace конкретного компьютера;
-- работающая с файлами через host calls, с display framebuffer через `display::*`, а с process I/O через VM-local `ipc` conventions;
+- работающая с файлами через host calls, с display pixel buffer через `display::*`, а с process I/O через VM-local `ipc` conventions;
 - запускающая BIOS и shell как обычные программы на том же языке;
 - публикующая внутрь программ модульный API через `RuntimeHostBridge`.
 

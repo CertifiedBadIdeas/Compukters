@@ -1,5 +1,5 @@
 use crate::computer::devices::{
-    ComputerControlDevice, DebugSerialDevice, FramebufferDevice, KeyboardDevice, SerialInputDevice,
+    ComputerControlDevice, DebugSerialDevice, GpuDevice, KeyboardDevice, SerialInputDevice,
     StoragePortDevice, TextDisplayDevice, TimerDevice,
 };
 use crate::computer_abi;
@@ -43,9 +43,9 @@ impl ComputerMachineProfile {
                 computer_abi::COMPUTER_HARDWARE_ID_DISPLAY0,
                 computer_abi::DISPLAY0_BASE,
             ))
-            .with_hardware(ComputerHardwareConfig::framebuffer(
-                computer_abi::COMPUTER_HARDWARE_ID_FRAMEBUFFER0,
-                computer_abi::FRAMEBUFFER0_BASE,
+            .with_hardware(ComputerHardwareConfig::gpu(
+                computer_abi::COMPUTER_HARDWARE_ID_GPU0,
+                computer_abi::GPU0_BASE,
             ))
             .with_hardware(ComputerHardwareConfig::storage_port(
                 computer_abi::COMPUTER_HARDWARE_ID_STORAGE0,
@@ -83,9 +83,9 @@ impl ComputerMachineProfile {
                 computer_abi::COMPUTER_HARDWARE_ID_DISPLAY0,
                 computer_abi::DISPLAY0_BASE,
             ))
-            .with_hardware(ComputerHardwareConfig::framebuffer(
-                computer_abi::COMPUTER_HARDWARE_ID_FRAMEBUFFER0,
-                computer_abi::FRAMEBUFFER0_BASE,
+            .with_hardware(ComputerHardwareConfig::gpu(
+                computer_abi::COMPUTER_HARDWARE_ID_GPU0,
+                computer_abi::GPU0_BASE,
             ))
             .with_hardware(ComputerHardwareConfig::storage_port_with_media(
                 computer_abi::COMPUTER_HARDWARE_ID_STORAGE0,
@@ -124,9 +124,9 @@ impl ComputerMachineProfile {
                 computer_abi::COMPUTER_HARDWARE_ID_DISPLAY0,
                 computer_abi::DISPLAY0_BASE,
             ))
-            .with_hardware(ComputerHardwareConfig::framebuffer(
-                computer_abi::COMPUTER_HARDWARE_ID_FRAMEBUFFER0,
-                computer_abi::FRAMEBUFFER0_BASE,
+            .with_hardware(ComputerHardwareConfig::gpu(
+                computer_abi::COMPUTER_HARDWARE_ID_GPU0,
+                computer_abi::GPU0_BASE,
             ))
             .with_hardware(ComputerHardwareConfig::storage_port_with_k16_volume_file(
                 computer_abi::COMPUTER_HARDWARE_ID_STORAGE0,
@@ -189,11 +189,11 @@ impl ComputerHardwareConfig {
         }
     }
 
-    pub fn framebuffer(id: u32, mmio_base: u32) -> Self {
+    pub fn gpu(id: u32, mmio_base: u32) -> Self {
         Self {
             id,
             mmio_base,
-            device: ComputerHardwareDevice::Framebuffer,
+            device: ComputerHardwareDevice::Gpu,
         }
     }
 
@@ -265,7 +265,7 @@ pub(crate) enum ComputerHardwareDevice {
     DebugSerial,
     SerialInput,
     TextDisplay,
-    Framebuffer,
+    Gpu,
     StoragePort(StoragePortConfig),
     Timer,
     Keyboard,
@@ -309,7 +309,7 @@ impl ComputerHardwareDevice {
             Self::DebugSerial => DebugSerialDevice::SIZE,
             Self::SerialInput => SerialInputDevice::SIZE,
             Self::TextDisplay => TextDisplayDevice::SIZE,
-            Self::Framebuffer => FramebufferDevice::SIZE,
+            Self::Gpu => GpuDevice::SIZE,
             Self::StoragePort(_) => StoragePortDevice::SIZE,
             Self::Timer => TimerDevice::SIZE,
             Self::Keyboard => KeyboardDevice::SIZE,

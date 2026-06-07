@@ -161,7 +161,7 @@ pub mod computer {
         pub const SERIAL_INPUT: u32 = 3;
         pub const DISPLAY0: u32 = 4;
         pub const STORAGE0: u32 = 5;
-        pub const FRAMEBUFFER0: u32 = 6;
+        pub const GPU0: u32 = 6;
         pub const TIMER0: u32 = 7;
         pub const KEYBOARD0: u32 = 8;
     }
@@ -260,7 +260,7 @@ pub mod computer {
         pub const MEDIA_ERROR: i32 = 3;
     }
 
-    pub mod framebuffer0 {
+    pub mod gpu0 {
         pub const BASE: u32 = 0x1000_0500;
         pub const WIDTH: u32 = 0x1000_0500;
         pub const HEIGHT: u32 = 0x1000_0504;
@@ -366,7 +366,7 @@ mod tests {
         assert_eq!(computer::serial_input::READ, 0x1000_0204);
         assert_eq!(computer::display0::COMMAND, 0x1000_0310);
         assert_eq!(computer::storage0::COMMAND, 0x1000_040c);
-        assert_eq!(computer::framebuffer0::COMMAND, 0x1000_0510);
+        assert_eq!(computer::gpu0::COMMAND, 0x1000_0510);
         assert_eq!(computer::timer0::BASE, 0x1000_0600);
         assert_eq!(computer::timer0::VERSION, 0x1000_0600);
         assert_eq!(computer::timer0::GAME_TICKS_LOW, 0x1000_0604);

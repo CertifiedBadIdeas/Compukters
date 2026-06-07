@@ -84,7 +84,7 @@ granularity used for:
 - the reserved boot page;
 - program load base for RAM-loaded guest programs;
 - MMIO range alignment;
-- framebuffer and command-buffer alignment recommendations;
+- pixel display and command-buffer alignment recommendations;
 - future memory-protection work.
 
 Rules:

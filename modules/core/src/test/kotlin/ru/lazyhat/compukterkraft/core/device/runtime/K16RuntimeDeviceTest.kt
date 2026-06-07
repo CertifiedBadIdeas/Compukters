@@ -550,7 +550,7 @@ class K16RuntimeDeviceTest {
         var control: NativeK16ComputerControl = NativeK16ComputerControl(status = K16RuntimeDevice.STATUS_READY, exitCode = 0, panicCode = 0)
         private var lastPolledDisplaySequence: Long? = null
         private val injectedOutput = StringBuilder()
-        private val framebufferFrameBatches = ArrayDeque<ByteArray>()
+        private val gpuFrameBatches = ArrayDeque<ByteArray>()
 
         override fun pushInput(bytes: ByteArray) {
             inputs += bytes.copyOf()
@@ -603,11 +603,11 @@ class K16RuntimeDeviceTest {
             return snapshot
         }
 
-        override fun drainFramebuffer0Frames(): ByteArray =
-            if (framebufferFrameBatches.isEmpty()) {
+        override fun drainGpu0Frames(): ByteArray =
+            if (gpuFrameBatches.isEmpty()) {
                 ByteArray(0)
             } else {
-                framebufferFrameBatches.removeFirst()
+                gpuFrameBatches.removeFirst()
             }
 
         override fun clearOutput() = Unit
@@ -623,7 +623,7 @@ class K16RuntimeDeviceTest {
         }
 
         fun enqueueFramebufferFrames(bytes: ByteArray) {
-            framebufferFrameBatches += bytes.copyOf()
+            gpuFrameBatches += bytes.copyOf()
         }
     }
 

@@ -1,6 +1,6 @@
 use super::ComputerMachine;
 use crate::computer::devices::{
-    ComputerControlDevice, DebugSerialDevice, FramebufferDevice, KeyboardDevice, SerialInputDevice,
+    ComputerControlDevice, DebugSerialDevice, GpuDevice, KeyboardDevice, SerialInputDevice,
     TextDisplayDevice,
 };
 use crate::computer::profile::{ComputerHardwareConfig, ComputerMachineProfile};
@@ -206,16 +206,16 @@ fn computer_machine_writes_keyboard0_hardware_entry() {
 }
 
 #[test]
-fn computer_machine_writes_framebuffer0_hardware_entry() {
+fn computer_machine_writes_gpu0_hardware_entry() {
     let machine = ComputerMachine::new(1024).unwrap();
 
     assert_eq!(read_u32(machine.memory(), 0x18), 8);
     assert_hardware_entry(
         machine.memory(),
         92,
-        computer_abi::COMPUTER_HARDWARE_ID_FRAMEBUFFER0,
-        computer_abi::FRAMEBUFFER0_BASE,
-        computer_abi::FRAMEBUFFER0_SIZE,
+        computer_abi::COMPUTER_HARDWARE_ID_GPU0,
+        computer_abi::GPU0_BASE,
+        computer_abi::GPU0_SIZE,
     );
 }
 
@@ -265,52 +265,46 @@ fn computer_display0_put_byte_updates_snapshot_and_sequence() {
 }
 
 #[test]
-fn computer_framebuffer0_blits_guest_ram_to_frame_delta() {
+fn computer_gpu0_blits_guest_ram_to_frame_delta() {
     let mut machine = ComputerMachine::new(1024).unwrap();
     machine
         .write_guest_ram_bytes(0x0100, &[0x00, 0xF8, 0xE0, 0x07, 0x1F, 0x00, 0xFF, 0xFF])
         .unwrap();
 
+    machine.bus.store_i32(ComputerMachine::GPU0_X, 0).unwrap();
+    machine.bus.store_i32(ComputerMachine::GPU0_Y, 0).unwrap();
     machine
         .bus
-        .store_i32(ComputerMachine::FRAMEBUFFER0_X, 0)
+        .store_i32(ComputerMachine::GPU0_RECT_WIDTH, 2)
         .unwrap();
     machine
         .bus
-        .store_i32(ComputerMachine::FRAMEBUFFER0_Y, 0)
+        .store_i32(ComputerMachine::GPU0_RECT_HEIGHT, 2)
         .unwrap();
     machine
         .bus
-        .store_i32(ComputerMachine::FRAMEBUFFER0_RECT_WIDTH, 2)
+        .store_i32(ComputerMachine::GPU0_BUFFER_ADDR, 0x0100)
         .unwrap();
     machine
         .bus
-        .store_i32(ComputerMachine::FRAMEBUFFER0_RECT_HEIGHT, 2)
-        .unwrap();
-    machine
-        .bus
-        .store_i32(ComputerMachine::FRAMEBUFFER0_BUFFER_ADDR, 0x0100)
-        .unwrap();
-    machine
-        .bus
-        .store_i32(ComputerMachine::FRAMEBUFFER0_BUFFER_STRIDE_BYTES, 4)
+        .store_i32(ComputerMachine::GPU0_BUFFER_STRIDE_BYTES, 4)
         .unwrap();
     machine
         .bus
         .store_i32(
-            ComputerMachine::FRAMEBUFFER0_COMMAND,
-            ComputerMachine::FRAMEBUFFER0_COMMAND_BLIT_BUFFER,
+            ComputerMachine::GPU0_COMMAND,
+            ComputerMachine::GPU0_COMMAND_BLIT_BUFFER,
         )
         .unwrap();
     machine
         .bus
         .store_i32(
-            ComputerMachine::FRAMEBUFFER0_COMMAND,
-            ComputerMachine::FRAMEBUFFER0_COMMAND_PRESENT,
+            ComputerMachine::GPU0_COMMAND,
+            ComputerMachine::GPU0_COMMAND_PRESENT,
         )
         .unwrap();
 
-    let frames = machine.drain_framebuffer0_frames();
+    let frames = machine.drain_gpu0_frames();
 
     assert_eq!(frames.len(), 1);
     let frame = &frames[0];
@@ -480,8 +474,8 @@ fn computer_machine_writes_static_hardware_table_for_mmio_ranges() {
     assert_hardware_entry(
         machine.memory(),
         92,
-        computer_abi::COMPUTER_HARDWARE_ID_FRAMEBUFFER0,
-        computer_abi::FRAMEBUFFER0_BASE,
+        computer_abi::COMPUTER_HARDWARE_ID_GPU0,
+        computer_abi::GPU0_BASE,
         computer_abi::PROFILE_V2_PAGE_SIZE,
     );
     assert_hardware_entry(
@@ -546,8 +540,8 @@ fn computer_machine_can_be_created_from_explicit_computer_v1_profile() {
     assert_hardware_entry(
         machine.memory(),
         92,
-        computer_abi::COMPUTER_HARDWARE_ID_FRAMEBUFFER0,
-        computer_abi::FRAMEBUFFER0_BASE,
+        computer_abi::COMPUTER_HARDWARE_ID_GPU0,
+        computer_abi::GPU0_BASE,
         computer_abi::PROFILE_V2_PAGE_SIZE,
     );
     assert_hardware_entry(
@@ -1224,21 +1218,15 @@ fn computer_machine_constants_match_profile_v2_abi() {
         ComputerMachine::DISPLAY0_COMMAND_NEWLINE,
         computer_abi::DISPLAY0_COMMAND_NEWLINE,
     );
+    assert_eq!(ComputerMachine::GPU0_BASE, computer_abi::GPU0_BASE,);
+    assert_eq!(ComputerMachine::GPU0_COMMAND, computer_abi::GPU0_COMMAND,);
     assert_eq!(
-        ComputerMachine::FRAMEBUFFER0_BASE,
-        computer_abi::FRAMEBUFFER0_BASE,
+        ComputerMachine::GPU0_COMMAND_BLIT_BUFFER,
+        computer_abi::GPU0_COMMAND_BLIT_BUFFER,
     );
     assert_eq!(
-        ComputerMachine::FRAMEBUFFER0_COMMAND,
-        computer_abi::FRAMEBUFFER0_COMMAND,
-    );
-    assert_eq!(
-        ComputerMachine::FRAMEBUFFER0_COMMAND_BLIT_BUFFER,
-        computer_abi::FRAMEBUFFER0_COMMAND_BLIT_BUFFER,
-    );
-    assert_eq!(
-        ComputerMachine::FRAMEBUFFER0_COMMAND_PRESENT,
-        computer_abi::FRAMEBUFFER0_COMMAND_PRESENT,
+        ComputerMachine::GPU0_COMMAND_PRESENT,
+        computer_abi::GPU0_COMMAND_PRESENT,
     );
     assert_eq!(ComputerMachine::STATUS_RESET, computer_abi::STATUS_RESET);
     assert_eq!(
@@ -1256,14 +1244,14 @@ fn computer_mmio_device_sizes_match_profile_v2_abi() {
     let debug = DebugSerialDevice::new();
     let serial_input = SerialInputDevice::new();
     let display = TextDisplayDevice::new();
-    let framebuffer = FramebufferDevice::new();
+    let gpu = GpuDevice::new();
     let keyboard = KeyboardDevice::new();
 
     assert_eq!(control.size(), computer_abi::CONTROL_SIZE);
     assert_eq!(debug.size(), computer_abi::DEBUG_SIZE);
     assert_eq!(serial_input.size(), computer_abi::SERIAL_INPUT_SIZE);
     assert_eq!(display.size(), computer_abi::DISPLAY0_SIZE);
-    assert_eq!(framebuffer.size(), computer_abi::FRAMEBUFFER0_SIZE);
+    assert_eq!(gpu.size(), computer_abi::GPU0_SIZE);
     assert_eq!(keyboard.size(), computer_abi::KEYBOARD0_SIZE);
 }
 
@@ -1328,16 +1316,16 @@ fn computer_memory_map_describes_display0_mmio_region() {
 }
 
 #[test]
-fn computer_memory_map_describes_framebuffer0_mmio_region() {
+fn computer_memory_map_describes_gpu0_mmio_region() {
     let machine = ComputerMachine::new(1024).unwrap();
     let map = machine.memory_map();
 
-    let framebuffer = map.region("framebuffer0").unwrap();
+    let gpu = map.region("gpu0").unwrap();
 
-    assert_eq!(framebuffer.base, computer_abi::FRAMEBUFFER0_BASE);
-    assert_eq!(framebuffer.size, computer_abi::FRAMEBUFFER0_SIZE);
-    assert!(framebuffer.readable);
-    assert!(framebuffer.writable);
+    assert_eq!(gpu.base, computer_abi::GPU0_BASE);
+    assert_eq!(gpu.size, computer_abi::GPU0_SIZE);
+    assert!(gpu.readable);
+    assert!(gpu.writable);
 }
 
 #[test]

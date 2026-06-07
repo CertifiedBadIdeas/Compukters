@@ -1,5 +1,5 @@
 use crate::computer::devices::{
-    ComputerControlDevice, ComputerTextDisplaySnapshot, DebugSerialDevice, FramebufferDevice,
+    ComputerControlDevice, ComputerTextDisplaySnapshot, DebugSerialDevice, GpuDevice,
     KeyboardDevice, SerialInputDevice, StoragePortDevice, TextDisplayDevice, TimerDevice,
 };
 use crate::computer::profile::ComputerMachineProfile;
@@ -22,7 +22,7 @@ pub struct ComputerMachine {
     debug_device_id: Option<MmioDeviceId>,
     serial_input_device_id: Option<MmioDeviceId>,
     display0_device_id: Option<MmioDeviceId>,
-    framebuffer0_device_id: Option<MmioDeviceId>,
+    gpu0_device_id: Option<MmioDeviceId>,
     storage0_device_id: Option<MmioDeviceId>,
     timer0_device_id: Option<MmioDeviceId>,
     keyboard0_device_id: Option<MmioDeviceId>,
@@ -128,7 +128,7 @@ impl ComputerMachine {
     pub const HARDWARE_ID_SERIAL_INPUT: u32 = computer_abi::COMPUTER_HARDWARE_ID_SERIAL_INPUT;
     pub const HARDWARE_ID_DISPLAY0: u32 = computer_abi::COMPUTER_HARDWARE_ID_DISPLAY0;
     pub const HARDWARE_ID_STORAGE0: u32 = computer_abi::COMPUTER_HARDWARE_ID_STORAGE0;
-    pub const HARDWARE_ID_FRAMEBUFFER0: u32 = computer_abi::COMPUTER_HARDWARE_ID_FRAMEBUFFER0;
+    pub const HARDWARE_ID_GPU0: u32 = computer_abi::COMPUTER_HARDWARE_ID_GPU0;
     pub const HARDWARE_ID_TIMER0: u32 = computer_abi::COMPUTER_HARDWARE_ID_TIMER0;
     pub const HARDWARE_ID_KEYBOARD0: u32 = computer_abi::COMPUTER_HARDWARE_ID_KEYBOARD0;
     pub const CONTROL_BASE: u32 = computer_abi::CONTROL_BASE;
@@ -159,43 +159,37 @@ impl ComputerMachine {
         computer_abi::DISPLAY0_COMMAND_PUT_BYTE_AT_CURSOR;
     pub const DISPLAY0_COMMAND_PUT_BYTE_AT_XY: i32 = computer_abi::DISPLAY0_COMMAND_PUT_BYTE_AT_XY;
     pub const DISPLAY0_COMMAND_NEWLINE: i32 = computer_abi::DISPLAY0_COMMAND_NEWLINE;
-    pub const FRAMEBUFFER0_BASE: u32 = computer_abi::FRAMEBUFFER0_BASE;
-    pub const FRAMEBUFFER0_WIDTH: u32 = computer_abi::FRAMEBUFFER0_WIDTH;
-    pub const FRAMEBUFFER0_HEIGHT: u32 = computer_abi::FRAMEBUFFER0_HEIGHT;
-    pub const FRAMEBUFFER0_STRIDE_BYTES: u32 = computer_abi::FRAMEBUFFER0_STRIDE_BYTES;
-    pub const FRAMEBUFFER0_PIXEL_FORMAT: u32 = computer_abi::FRAMEBUFFER0_PIXEL_FORMAT;
-    pub const FRAMEBUFFER0_COMMAND: u32 = computer_abi::FRAMEBUFFER0_COMMAND;
-    pub const FRAMEBUFFER0_STATUS: u32 = computer_abi::FRAMEBUFFER0_STATUS;
-    pub const FRAMEBUFFER0_ERROR: u32 = computer_abi::FRAMEBUFFER0_ERROR;
-    pub const FRAMEBUFFER0_X: u32 = computer_abi::FRAMEBUFFER0_X;
-    pub const FRAMEBUFFER0_Y: u32 = computer_abi::FRAMEBUFFER0_Y;
-    pub const FRAMEBUFFER0_RECT_WIDTH: u32 = computer_abi::FRAMEBUFFER0_RECT_WIDTH;
-    pub const FRAMEBUFFER0_RECT_HEIGHT: u32 = computer_abi::FRAMEBUFFER0_RECT_HEIGHT;
-    pub const FRAMEBUFFER0_BUFFER_ADDR: u32 = computer_abi::FRAMEBUFFER0_BUFFER_ADDR;
-    pub const FRAMEBUFFER0_BUFFER_STRIDE_BYTES: u32 =
-        computer_abi::FRAMEBUFFER0_BUFFER_STRIDE_BYTES;
-    pub const FRAMEBUFFER0_COLOR: u32 = computer_abi::FRAMEBUFFER0_COLOR;
-    pub const FRAMEBUFFER0_SEQUENCE_LOW: u32 = computer_abi::FRAMEBUFFER0_SEQUENCE_LOW;
-    pub const FRAMEBUFFER0_SEQUENCE_HIGH: u32 = computer_abi::FRAMEBUFFER0_SEQUENCE_HIGH;
-    pub const FRAMEBUFFER0_SIZE: u32 = computer_abi::FRAMEBUFFER0_SIZE;
-    pub const FRAMEBUFFER0_PIXEL_FORMAT_RGB565: i32 =
-        computer_abi::FRAMEBUFFER0_PIXEL_FORMAT_RGB565;
-    pub const FRAMEBUFFER0_STATUS_READY: i32 = computer_abi::FRAMEBUFFER0_STATUS_READY;
-    pub const FRAMEBUFFER0_STATUS_DONE: i32 = computer_abi::FRAMEBUFFER0_STATUS_DONE;
-    pub const FRAMEBUFFER0_STATUS_ERROR: i32 = computer_abi::FRAMEBUFFER0_STATUS_ERROR;
-    pub const FRAMEBUFFER0_ERROR_NONE: i32 = computer_abi::FRAMEBUFFER0_ERROR_NONE;
-    pub const FRAMEBUFFER0_ERROR_INVALID_COMMAND: i32 =
-        computer_abi::FRAMEBUFFER0_ERROR_INVALID_COMMAND;
-    pub const FRAMEBUFFER0_ERROR_BUFFER_OUT_OF_BOUNDS: i32 =
-        computer_abi::FRAMEBUFFER0_ERROR_BUFFER_OUT_OF_BOUNDS;
-    pub const FRAMEBUFFER0_ERROR_INVALID_RECT: i32 = computer_abi::FRAMEBUFFER0_ERROR_INVALID_RECT;
-    pub const FRAMEBUFFER0_ERROR_INVALID_STRIDE: i32 =
-        computer_abi::FRAMEBUFFER0_ERROR_INVALID_STRIDE;
-    pub const FRAMEBUFFER0_COMMAND_NOP: i32 = computer_abi::FRAMEBUFFER0_COMMAND_NOP;
-    pub const FRAMEBUFFER0_COMMAND_CLEAR: i32 = computer_abi::FRAMEBUFFER0_COMMAND_CLEAR;
-    pub const FRAMEBUFFER0_COMMAND_BLIT_BUFFER: i32 =
-        computer_abi::FRAMEBUFFER0_COMMAND_BLIT_BUFFER;
-    pub const FRAMEBUFFER0_COMMAND_PRESENT: i32 = computer_abi::FRAMEBUFFER0_COMMAND_PRESENT;
+    pub const GPU0_BASE: u32 = computer_abi::GPU0_BASE;
+    pub const GPU0_WIDTH: u32 = computer_abi::GPU0_WIDTH;
+    pub const GPU0_HEIGHT: u32 = computer_abi::GPU0_HEIGHT;
+    pub const GPU0_STRIDE_BYTES: u32 = computer_abi::GPU0_STRIDE_BYTES;
+    pub const GPU0_PIXEL_FORMAT: u32 = computer_abi::GPU0_PIXEL_FORMAT;
+    pub const GPU0_COMMAND: u32 = computer_abi::GPU0_COMMAND;
+    pub const GPU0_STATUS: u32 = computer_abi::GPU0_STATUS;
+    pub const GPU0_ERROR: u32 = computer_abi::GPU0_ERROR;
+    pub const GPU0_X: u32 = computer_abi::GPU0_X;
+    pub const GPU0_Y: u32 = computer_abi::GPU0_Y;
+    pub const GPU0_RECT_WIDTH: u32 = computer_abi::GPU0_RECT_WIDTH;
+    pub const GPU0_RECT_HEIGHT: u32 = computer_abi::GPU0_RECT_HEIGHT;
+    pub const GPU0_BUFFER_ADDR: u32 = computer_abi::GPU0_BUFFER_ADDR;
+    pub const GPU0_BUFFER_STRIDE_BYTES: u32 = computer_abi::GPU0_BUFFER_STRIDE_BYTES;
+    pub const GPU0_COLOR: u32 = computer_abi::GPU0_COLOR;
+    pub const GPU0_SEQUENCE_LOW: u32 = computer_abi::GPU0_SEQUENCE_LOW;
+    pub const GPU0_SEQUENCE_HIGH: u32 = computer_abi::GPU0_SEQUENCE_HIGH;
+    pub const GPU0_SIZE: u32 = computer_abi::GPU0_SIZE;
+    pub const GPU0_PIXEL_FORMAT_RGB565: i32 = computer_abi::GPU0_PIXEL_FORMAT_RGB565;
+    pub const GPU0_STATUS_READY: i32 = computer_abi::GPU0_STATUS_READY;
+    pub const GPU0_STATUS_DONE: i32 = computer_abi::GPU0_STATUS_DONE;
+    pub const GPU0_STATUS_ERROR: i32 = computer_abi::GPU0_STATUS_ERROR;
+    pub const GPU0_ERROR_NONE: i32 = computer_abi::GPU0_ERROR_NONE;
+    pub const GPU0_ERROR_INVALID_COMMAND: i32 = computer_abi::GPU0_ERROR_INVALID_COMMAND;
+    pub const GPU0_ERROR_BUFFER_OUT_OF_BOUNDS: i32 = computer_abi::GPU0_ERROR_BUFFER_OUT_OF_BOUNDS;
+    pub const GPU0_ERROR_INVALID_RECT: i32 = computer_abi::GPU0_ERROR_INVALID_RECT;
+    pub const GPU0_ERROR_INVALID_STRIDE: i32 = computer_abi::GPU0_ERROR_INVALID_STRIDE;
+    pub const GPU0_COMMAND_NOP: i32 = computer_abi::GPU0_COMMAND_NOP;
+    pub const GPU0_COMMAND_CLEAR: i32 = computer_abi::GPU0_COMMAND_CLEAR;
+    pub const GPU0_COMMAND_BLIT_BUFFER: i32 = computer_abi::GPU0_COMMAND_BLIT_BUFFER;
+    pub const GPU0_COMMAND_PRESENT: i32 = computer_abi::GPU0_COMMAND_PRESENT;
     pub const STORAGE0_BASE: u32 = computer_abi::STORAGE0_BASE;
     pub const STORAGE0_VERSION: u32 = computer_abi::STORAGE0_VERSION;
     pub const STORAGE0_STATUS: u32 = computer_abi::STORAGE0_STATUS;
@@ -287,7 +281,7 @@ impl ComputerMachine {
         self.push_memory_map_region(&mut map, self.debug_device_id, "debug");
         self.push_memory_map_region(&mut map, self.serial_input_device_id, "serial-input");
         self.push_memory_map_region(&mut map, self.display0_device_id, "display0");
-        self.push_memory_map_region(&mut map, self.framebuffer0_device_id, "framebuffer0");
+        self.push_memory_map_region(&mut map, self.gpu0_device_id, "gpu0");
         self.push_memory_map_region(&mut map, self.storage0_device_id, "storage0");
         self.push_memory_map_region(&mut map, self.timer0_device_id, "timer0");
         self.push_memory_map_region(&mut map, self.keyboard0_device_id, "keyboard0");
@@ -502,9 +496,9 @@ impl ComputerMachine {
         self.display0_device().map(TextDisplayDevice::sequence)
     }
 
-    pub fn drain_framebuffer0_frames(&mut self) -> Vec<DisplayFrameDelta> {
-        self.framebuffer0_device_mut()
-            .map(FramebufferDevice::drain_frames)
+    pub fn drain_gpu0_frames(&mut self) -> Vec<DisplayFrameDelta> {
+        self.gpu0_device_mut()
+            .map(GpuDevice::drain_frames)
             .unwrap_or_default()
     }
 
@@ -595,9 +589,9 @@ impl ComputerMachine {
             .and_then(|id| self.bus.device_mut::<TextDisplayDevice>(id))
     }
 
-    fn framebuffer0_device_mut(&mut self) -> Option<&mut FramebufferDevice> {
-        self.framebuffer0_device_id
-            .and_then(|id| self.bus.device_mut::<FramebufferDevice>(id))
+    fn gpu0_device_mut(&mut self) -> Option<&mut GpuDevice> {
+        self.gpu0_device_id
+            .and_then(|id| self.bus.device_mut::<GpuDevice>(id))
     }
 
     fn storage0_device(&self) -> Option<&StoragePortDevice> {

@@ -195,9 +195,9 @@ object NativeVmBindings {
         return NativeK16ComputerDisplaySnapshot.from(k16ComputerDisplay0SnapshotNative(handle))
     }
 
-    fun drainK16ComputerFramebuffer0Frames(handle: Long): ByteArray {
+    fun drainK16ComputerGpu0Frames(handle: Long): ByteArray {
         require(handle != 0L) { "Native K16 computer handle is zero" }
-        return drainK16ComputerFramebuffer0FramesNative(handle)
+        return drainK16ComputerGpu0FramesNative(handle)
     }
 
     fun k16ComputerStorage0MediaSnapshot(handle: Long): ByteArray? {
@@ -308,7 +308,7 @@ object NativeVmBindings {
     private external fun k16ComputerDisplay0SnapshotNative(handle: Long): ByteArray
 
     @JvmStatic
-    private external fun drainK16ComputerFramebuffer0FramesNative(handle: Long): ByteArray
+    private external fun drainK16ComputerGpu0FramesNative(handle: Long): ByteArray
 
     @JvmStatic
     private external fun k16ComputerStorage0MediaSnapshotNative(handle: Long): ByteArray

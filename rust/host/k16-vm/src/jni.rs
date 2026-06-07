@@ -202,7 +202,7 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
 }
 
 #[no_mangle]
-pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_drainK16ComputerFramebuffer0FramesNative(
+pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_drainK16ComputerGpu0FramesNative(
     mut env: JNIEnv<'_>,
     _class: JClass<'_>,
     handle: jlong,
@@ -211,7 +211,7 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
         Some(handle) => handle,
         None => return null_mut(),
     };
-    let frames = handle.drain_framebuffer0_frames();
+    let frames = handle.drain_gpu0_frames();
     byte_array_or_throw(&mut env, &encode_display_frame_deltas(&frames))
 }
 
