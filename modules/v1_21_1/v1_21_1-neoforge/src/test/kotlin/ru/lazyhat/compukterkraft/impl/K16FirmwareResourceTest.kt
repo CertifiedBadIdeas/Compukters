@@ -154,6 +154,21 @@ class K16FirmwareResourceTest {
     }
 
     @Test
+    fun k16KernelConsoleKeepsCellGridAndScrolls() {
+        val consoleSource = Path.of("../../../rust/guest/k16-kernel/src/console.rs").readText()
+
+        assertTrue(consoleSource.contains("const CELLS_ADDR:"), "kernel console should keep guest cell state")
+        assertTrue(consoleSource.contains("fn read_cell("), "kernel console should read cells from guest RAM")
+        assertTrue(consoleSource.contains("fn write_cell("), "kernel console should write cells into guest RAM")
+        assertTrue(consoleSource.contains("fn scroll_up("), "kernel console should scroll at the bottom row")
+        assertTrue(consoleSource.contains("fn repaint_row("), "kernel console should repaint rows from cell state")
+        assertFalse(
+            consoleSource.contains("else {\n            CURSOR_Y = 0;\n        }"),
+            "bottom overflow must scroll instead of wrapping to row zero",
+        )
+    }
+
+    @Test
     fun bundledK16BiosSplashIsObservableBeforeStorageBoot() {
         val workspace = createTempDirectory("k16-firmware-splash-test-")
         val biosFlashPath = workspace.resolve("bios.kflash")
@@ -242,7 +257,30 @@ class K16FirmwareResourceTest {
             frames.any { it.pixelFormat == DisplayPixelFormat.RGB565 && it.hasVisiblePixels() },
             "kernel should render visible console pixels through gpu0; frames: ${frames.size}, panic code: ${control.panicCode}, debug: $debug",
         )
+        assertTrue(
+            frames.any { it.pixelFormat == DisplayPixelFormat.RGB565 && it.hasVisiblePixelsAtOrBelow(globalY = 9) },
+            "kernel console should render multiline output below the first text row; frames: ${frames.size}, panic code: ${control.panicCode}, debug: $debug",
+        )
     }
+
+    private fun DisplayFrameDelta.hasVisiblePixelsAtOrBelow(globalY: Int): Boolean =
+        tiles.any { tile ->
+            var row = 0
+            while (row < tile.height) {
+                if (tile.y + row >= globalY) {
+                    var column = 0
+                    while (column < tile.width) {
+                        val offset = (row * tile.width + column) * 2
+                        if (tile.payload[offset] != 0.toByte() || tile.payload[offset + 1] != 0.toByte()) {
+                            return@any true
+                        }
+                        column += 1
+                    }
+                }
+                row += 1
+            }
+            false
+        }
 
     private fun runThroughBiosSplashAndBoot(runtime: K16ComputerRuntime): NativeK16ComputerControl {
         val splashControl = runtime.tick()
