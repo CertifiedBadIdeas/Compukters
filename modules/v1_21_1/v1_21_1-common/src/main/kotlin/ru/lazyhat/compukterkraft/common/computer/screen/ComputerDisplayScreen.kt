@@ -104,7 +104,27 @@ abstract class ComputerDisplayScreen<T : AbstractComputerMenu>(
         keyCode: Int,
         scanCode: Int,
         modifiers: Int,
-    ): Boolean = isInventoryKey(keyCode, scanCode) || super.keyPressed(keyCode, scanCode, modifiers)
+    ): Boolean {
+        if (menu.isComputerOn && terminalInput.keyPressed(keyCode, scanCode, modifiers)) return true
+        return isInventoryKey(keyCode, scanCode) || super.keyPressed(keyCode, scanCode, modifiers)
+    }
+
+    override fun keyReleased(
+        keyCode: Int,
+        scanCode: Int,
+        modifiers: Int,
+    ): Boolean {
+        if (menu.isComputerOn && terminalInput.keyReleased(keyCode, scanCode)) return true
+        return super.keyReleased(keyCode, scanCode, modifiers)
+    }
+
+    override fun charTyped(
+        codePoint: Char,
+        modifiers: Int,
+    ): Boolean {
+        if (menu.isComputerOn && terminalInput.charTyped(codePoint)) return true
+        return super.charTyped(codePoint, modifiers)
+    }
 
     protected abstract fun currentLayout(): WorkbenchTerminalLayout
 
@@ -126,6 +146,18 @@ abstract class ComputerDisplayScreen<T : AbstractComputerMenu>(
         width: Int,
         height: Int,
     ): String = "$width x $height"
+
+    protected fun currentDisplayBounds(layout: WorkbenchTerminalLayout): TerminalRect {
+        val surface = layout.terminalSurfaceBounds
+        val width = currentDisplayWidth()
+        val height = currentDisplayHeight()
+        return TerminalRect(
+            x = surface.x + (surface.width - width) / 2,
+            y = surface.y + (surface.height - height) / 2,
+            width = width,
+            height = height,
+        )
+    }
 
     private fun attachDisplayEndpoint() {
         val displayWidth = currentDisplayWidth()
@@ -175,7 +207,7 @@ abstract class ComputerDisplayScreen<T : AbstractComputerMenu>(
         if (!menu.isComputerOn) return
         val buffer = menu.clientSide.displayBuffer ?: return
         if (!buffer.hasReceivedFrames) return
-        displayTexture.draw(guiGraphics, buffer, currentLayout().terminalBounds)
+        displayTexture.draw(guiGraphics, buffer, currentDisplayBounds(currentLayout()))
     }
 
     private fun isInventoryKey(

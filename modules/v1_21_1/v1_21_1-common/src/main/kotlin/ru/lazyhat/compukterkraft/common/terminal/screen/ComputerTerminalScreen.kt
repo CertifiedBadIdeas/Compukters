@@ -95,11 +95,12 @@ open class ComputerTerminalScreen<T : AbstractComputerMenu>(
 
         val rebootBtn = statusButtonBounds(layout.statusBounds, slotFromRight = 0)
         val powerBtn = statusButtonBounds(layout.statusBounds, slotFromRight = 1)
+        val displayBounds = currentDisplayBounds(layout)
 
         val statusRelX = layout.statusBounds.x - leftPos
         val statusRelY = layout.statusBounds.y - topPos
-        val terminalRelX = layout.terminalBounds.x - leftPos
-        val terminalRelY = layout.terminalBounds.y - topPos
+        val displayRelX = displayBounds.x - leftPos
+        val displayRelY = displayBounds.y - topPos
         val surfaceRelX = layout.terminalSurfaceBounds.x - leftPos
         val surfaceRelY = layout.terminalSurfaceBounds.y - topPos
         val powerRelX = powerBtn.x - leftPos
@@ -147,8 +148,8 @@ open class ComputerTerminalScreen<T : AbstractComputerMenu>(
                 canvas(
                     modifier =
                         Modifier
-                            .offset(terminalRelX, terminalRelY)
-                            .size(layout.terminalBounds.width, layout.terminalBounds.height)
+                            .offset(displayRelX, displayRelY)
+                            .size(displayBounds.width, displayBounds.height)
                             .focusable(
                                 id = "computer-display",
                                 onKeyPressed = { keyCode -> terminalInput.keyPressed(keyCode, 0, 0) },
@@ -156,7 +157,7 @@ open class ComputerTerminalScreen<T : AbstractComputerMenu>(
                                 onCharTyped = { ch -> terminalInput.charTyped(ch) },
                             ),
                 ) {
-                    drawDisplayPlaceholder(layout.terminalBounds.width, layout.terminalBounds.height)
+                    drawDisplayPlaceholder(displayBounds.width, displayBounds.height)
                 }
             }
 

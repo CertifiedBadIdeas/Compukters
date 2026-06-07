@@ -76,6 +76,15 @@ class ComputerTerminalScreenArchitectureTest {
     fun computerScreenKeepsInventoryKeyAsTextInputInsteadOfClosingScreen() {
         assertTrue(displaySource.contains("keyInventory"))
         assertTrue(displaySource.contains(".matches(keyCode, scanCode)"))
+        assertTrue(displaySource.contains("terminalInput.keyPressed(keyCode, scanCode, modifiers)"))
+    }
+
+    @Test
+    fun computerScreenRoutesTypedInputWithoutDependingOnCanvasFocus() {
+        assertTrue(displaySource.contains("override fun keyReleased("))
+        assertTrue(displaySource.contains("terminalInput.keyReleased(keyCode, scanCode)"))
+        assertTrue(displaySource.contains("override fun charTyped("))
+        assertTrue(displaySource.contains("terminalInput.charTyped(codePoint)"))
     }
 
     @Test
@@ -102,5 +111,17 @@ class ComputerTerminalScreenArchitectureTest {
         assertTrue(notebookSource.contains("displayResolutionText(currentDisplayWidth(), currentDisplayHeight())"))
         assertFalse(notebookSource.contains("TERMINAL_COLUMNS * TerminalFontConstants.FONT_WIDTH"))
         assertFalse(notebookSource.contains("TERMINAL_ROWS * TerminalFontConstants.FONT_HEIGHT"))
+    }
+
+    @Test
+    fun computerScreenDisplaysGpu0AtNativeSizeInsideTerminalSurface() {
+        assertTrue(displaySource.contains("currentDisplayBounds(layout: WorkbenchTerminalLayout)"))
+        assertTrue(displaySource.contains("layout.terminalSurfaceBounds"))
+        assertTrue(displaySource.contains("displayTexture.draw(guiGraphics, buffer, currentDisplayBounds(currentLayout()))"))
+        assertTrue(terminalSource.contains("val displayBounds = currentDisplayBounds(layout)"))
+        assertTrue(terminalSource.contains(".size(displayBounds.width, displayBounds.height)"))
+        assertTrue(notebookSource.contains("val displayBounds = currentDisplayBounds(layout)"))
+        assertTrue(notebookSource.contains(".size(displayBounds.width, displayBounds.height)"))
+        assertFalse(displaySource.contains("displayTexture.draw(guiGraphics, buffer, currentLayout().terminalBounds)"))
     }
 }

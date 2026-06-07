@@ -63,8 +63,9 @@ class NotebookScreen(
 
     override fun content(): UiElement {
         val layout = currentLayout()
-        val terminalRelX = layout.terminalBounds.x - leftPos
-        val terminalRelY = layout.terminalBounds.y - topPos
+        val displayBounds = currentDisplayBounds(layout)
+        val displayRelX = displayBounds.x - leftPos
+        val displayRelY = displayBounds.y - topPos
         val surfaceRelX = layout.terminalSurfaceBounds.x - leftPos
         val surfaceRelY = layout.terminalSurfaceBounds.y - topPos
         val statusRelX = layout.statusBounds.x - leftPos
@@ -96,8 +97,8 @@ class NotebookScreen(
                 canvas(
                     modifier =
                         Modifier
-                            .offset(terminalRelX, terminalRelY)
-                            .size(layout.terminalBounds.width, layout.terminalBounds.height)
+                            .offset(displayRelX, displayRelY)
+                            .size(displayBounds.width, displayBounds.height)
                             .focusable(
                                 id = "notebook-display",
                                 onKeyPressed = { keyCode -> terminalInput.keyPressed(keyCode, 0, 0) },
@@ -105,7 +106,7 @@ class NotebookScreen(
                                 onCharTyped = { ch -> terminalInput.charTyped(ch) },
                             ),
                 ) {
-                    drawDisplayPlaceholder(layout.terminalBounds.width, layout.terminalBounds.height)
+                    drawDisplayPlaceholder(displayBounds.width, displayBounds.height)
                 }
             }
 
