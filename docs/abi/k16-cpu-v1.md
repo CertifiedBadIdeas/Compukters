@@ -521,12 +521,14 @@ Current trap and interrupt causes:
 0x00000004  store fault
 0x00000005  explicit trap
 0x80000001  timer0 interrupt
+0x80000002  keyboard0 interrupt
 ```
 
 Current interrupt source bits:
 
 ```text
 bit 0 / mask 0x00000001  timer0 game tick
+bit 1 / mask 0x00000002  keyboard0 input available
 ```
 
 ## Compiler-Generated Register Saves

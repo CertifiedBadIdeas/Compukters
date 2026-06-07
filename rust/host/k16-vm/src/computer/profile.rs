@@ -1,9 +1,9 @@
 use crate::computer::devices::{
-    ComputerControlDevice, DebugSerialDevice, FramebufferDevice, SerialInputDevice,
+    ComputerControlDevice, DebugSerialDevice, FramebufferDevice, KeyboardDevice, SerialInputDevice,
     StoragePortDevice, TextDisplayDevice, TimerDevice,
 };
 use crate::computer_abi;
-use crate::k16::K16_INTERRUPT_SOURCE_TIMER0;
+use crate::k16::{K16_INTERRUPT_SOURCE_KEYBOARD0, K16_INTERRUPT_SOURCE_TIMER0};
 use crate::low_machine::MemoryFault;
 use std::path::{Path, PathBuf};
 
@@ -55,6 +55,10 @@ impl ComputerMachineProfile {
                 computer_abi::COMPUTER_HARDWARE_ID_TIMER0,
                 computer_abi::TIMER0_BASE,
             ))
+            .with_hardware(ComputerHardwareConfig::keyboard(
+                computer_abi::COMPUTER_HARDWARE_ID_KEYBOARD0,
+                computer_abi::KEYBOARD0_BASE,
+            ))
     }
 
     pub fn computer_v1_with_storage0_media(
@@ -93,6 +97,10 @@ impl ComputerMachineProfile {
                 computer_abi::COMPUTER_HARDWARE_ID_TIMER0,
                 computer_abi::TIMER0_BASE,
             ))
+            .with_hardware(ComputerHardwareConfig::keyboard(
+                computer_abi::COMPUTER_HARDWARE_ID_KEYBOARD0,
+                computer_abi::KEYBOARD0_BASE,
+            ))
     }
 
     pub fn computer_v1_with_storage0_path(
@@ -128,6 +136,10 @@ impl ComputerMachineProfile {
             .with_hardware(ComputerHardwareConfig::timer(
                 computer_abi::COMPUTER_HARDWARE_ID_TIMER0,
                 computer_abi::TIMER0_BASE,
+            ))
+            .with_hardware(ComputerHardwareConfig::keyboard(
+                computer_abi::COMPUTER_HARDWARE_ID_KEYBOARD0,
+                computer_abi::KEYBOARD0_BASE,
             ))
     }
 
@@ -230,6 +242,14 @@ impl ComputerHardwareConfig {
         }
     }
 
+    pub fn keyboard(id: u32, mmio_base: u32) -> Self {
+        Self {
+            id,
+            mmio_base,
+            device: ComputerHardwareDevice::Keyboard,
+        }
+    }
+
     pub(crate) fn mmio_size(&self) -> u32 {
         self.device.mmio_size()
     }
@@ -248,6 +268,7 @@ pub(crate) enum ComputerHardwareDevice {
     Framebuffer,
     StoragePort(StoragePortConfig),
     Timer,
+    Keyboard,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -291,12 +312,14 @@ impl ComputerHardwareDevice {
             Self::Framebuffer => FramebufferDevice::SIZE,
             Self::StoragePort(_) => StoragePortDevice::SIZE,
             Self::Timer => TimerDevice::SIZE,
+            Self::Keyboard => KeyboardDevice::SIZE,
         }
     }
 
     fn irq_source(&self) -> u32 {
         match self {
             Self::Timer => K16_INTERRUPT_SOURCE_TIMER0,
+            Self::Keyboard => K16_INTERRUPT_SOURCE_KEYBOARD0,
             _ => 0,
         }
     }

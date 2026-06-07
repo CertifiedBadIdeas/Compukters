@@ -103,6 +103,13 @@ fn device_snapshot_records(machine: &ComputerMachine) -> Vec<ComputerDeviceSnaps
     if let Some(game_ticks) = machine.timer0_game_ticks() {
         devices.push(ComputerDeviceSnapshotRecord::Timer0 { game_ticks });
     }
+    if let Some(keyboard0) = machine.keyboard0_device() {
+        devices.push(ComputerDeviceSnapshotRecord::Keyboard0 {
+            events: keyboard0.events(),
+            sequence: keyboard0.sequence(),
+            dropped_count: keyboard0.dropped_count(),
+        });
+    }
     devices
 }
 
@@ -176,6 +183,17 @@ fn restore_device_snapshot_record(
                     .to_string()
             })?;
             timer0.restore_game_ticks(game_ticks);
+        }
+        ComputerDeviceSnapshotRecord::Keyboard0 {
+            events,
+            sequence,
+            dropped_count,
+        } => {
+            let keyboard0 = machine.keyboard0_device_mut().ok_or_else(|| {
+                "ComputerMachine snapshot contains keyboard0 device state but profile has no keyboard0 device"
+                    .to_string()
+            })?;
+            keyboard0.restore_snapshot(events, sequence, dropped_count)?;
         }
     }
     Ok(())

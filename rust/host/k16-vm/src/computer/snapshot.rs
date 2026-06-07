@@ -1,5 +1,6 @@
+use crate::computer::devices::validate_keyboard_event;
 use crate::computer::profile::ComputerMachineProfile;
-use crate::computer::ComputerTextDisplaySnapshot;
+use crate::computer::{ComputerTextDisplaySnapshot, KeyboardEvent};
 use crate::k16::{K16CpuSnapshot, K16CpuSnapshotState};
 
 pub const COMPUTER_SNAPSHOT_V1_MAGIC: &[u8; 8] = b"K16SNAP\0";
@@ -13,6 +14,7 @@ pub const COMPUTER_SNAPSHOT_V1_DISPLAY0_DEVICE_KIND: u32 = 3;
 pub const COMPUTER_SNAPSHOT_V1_SERIAL_INPUT_DEVICE_KIND: u32 = 4;
 pub const COMPUTER_SNAPSHOT_V1_STORAGE0_DEVICE_KIND: u32 = 5;
 pub const COMPUTER_SNAPSHOT_V1_TIMER0_DEVICE_KIND: u32 = 6;
+pub const COMPUTER_SNAPSHOT_V1_KEYBOARD0_DEVICE_KIND: u32 = 7;
 const NO_BOOT_CPU: u32 = u32::MAX;
 const K16_CPU_STATE_RUNNING: u32 = 1;
 const K16_CPU_STATE_HALTED: u32 = 2;
@@ -21,6 +23,8 @@ const CONTROL_DEVICE_PAYLOAD_SIZE: usize = 12;
 const DISPLAY0_DEVICE_PAYLOAD_HEADER_SIZE: usize = 24;
 const STORAGE0_DEVICE_PAYLOAD_SIZE: usize = 36;
 const TIMER0_DEVICE_PAYLOAD_SIZE: usize = 8;
+const KEYBOARD0_DEVICE_PAYLOAD_HEADER_SIZE: usize = 16;
+const KEYBOARD0_EVENT_RECORD_SIZE: usize = 16;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ComputerMachineSnapshotHeader {
@@ -74,6 +78,11 @@ pub enum ComputerDeviceSnapshotRecord {
     },
     Timer0 {
         game_ticks: u64,
+    },
+    Keyboard0 {
+        events: Vec<KeyboardEvent>,
+        sequence: u64,
+        dropped_count: u32,
     },
 }
 
@@ -294,6 +303,9 @@ fn device_record_size(record: &ComputerDeviceSnapshotRecord) -> usize {
         ComputerDeviceSnapshotRecord::SerialInput { bytes } => bytes.len(),
         ComputerDeviceSnapshotRecord::Storage0 { .. } => STORAGE0_DEVICE_PAYLOAD_SIZE,
         ComputerDeviceSnapshotRecord::Timer0 { .. } => TIMER0_DEVICE_PAYLOAD_SIZE,
+        ComputerDeviceSnapshotRecord::Keyboard0 { events, .. } => {
+            KEYBOARD0_DEVICE_PAYLOAD_HEADER_SIZE + events.len() * KEYBOARD0_EVENT_RECORD_SIZE
+        }
     }
 }
 
@@ -373,6 +385,41 @@ fn encode_device_record(
             write_u32(bytes, COMPUTER_SNAPSHOT_V1_TIMER0_DEVICE_KIND);
             write_u32(bytes, TIMER0_DEVICE_PAYLOAD_SIZE as u32);
             write_u64(bytes, *game_ticks);
+        }
+        ComputerDeviceSnapshotRecord::Keyboard0 {
+            events,
+            sequence,
+            dropped_count,
+        } => {
+            let event_bytes = events
+                .len()
+                .checked_mul(KEYBOARD0_EVENT_RECORD_SIZE)
+                .ok_or_else(|| {
+                    "snapshot keyboard0 event payload size overflows usize".to_string()
+                })?;
+            let payload_size = KEYBOARD0_DEVICE_PAYLOAD_HEADER_SIZE
+                .checked_add(event_bytes)
+                .ok_or_else(|| {
+                    "snapshot keyboard0 device payload size overflows usize".to_string()
+                })?;
+            let payload_size = u32::try_from(payload_size).map_err(|_| {
+                "snapshot keyboard0 device payload size does not fit u32".to_string()
+            })?;
+            write_u32(bytes, COMPUTER_SNAPSHOT_V1_KEYBOARD0_DEVICE_KIND);
+            write_u32(bytes, payload_size);
+            write_u64(bytes, *sequence);
+            write_u32(bytes, *dropped_count);
+            write_u32(
+                bytes,
+                u32::try_from(events.len())
+                    .map_err(|_| "snapshot keyboard0 event count does not fit u32".to_string())?,
+            );
+            for event in events {
+                write_u32(bytes, event.kind);
+                write_u32(bytes, event.code);
+                write_u32(bytes, event.modifiers);
+                write_u32(bytes, event.flags);
+            }
         }
     }
     Ok(())
@@ -495,6 +542,56 @@ fn decode_device_record(
             }
             ComputerDeviceSnapshotRecord::Timer0 {
                 game_ticks: read_u64(payload, 0)?,
+            }
+        }
+        COMPUTER_SNAPSHOT_V1_KEYBOARD0_DEVICE_KIND => {
+            if payload.len() < KEYBOARD0_DEVICE_PAYLOAD_HEADER_SIZE {
+                return Err(format!(
+                    "ComputerMachine snapshot keyboard0 device payload has {} bytes but expected at least {KEYBOARD0_DEVICE_PAYLOAD_HEADER_SIZE}",
+                    payload.len()
+                ));
+            }
+            let sequence = read_u64(payload, 0)?;
+            let dropped_count = read_u32(payload, 8)?;
+            let event_count = read_u32(payload, 12)?;
+            let event_count = usize::try_from(event_count).map_err(|_| {
+                "ComputerMachine snapshot keyboard0 event count does not fit usize".to_string()
+            })?;
+            let expected_payload_size = KEYBOARD0_DEVICE_PAYLOAD_HEADER_SIZE
+                .checked_add(
+                    event_count
+                        .checked_mul(KEYBOARD0_EVENT_RECORD_SIZE)
+                        .ok_or_else(|| {
+                            "ComputerMachine snapshot keyboard0 event payload size overflows usize"
+                                .to_string()
+                        })?,
+                )
+                .ok_or_else(|| {
+                    "ComputerMachine snapshot keyboard0 payload size overflows usize".to_string()
+                })?;
+            if payload.len() != expected_payload_size {
+                return Err(format!(
+                    "ComputerMachine snapshot keyboard0 device payload has {} bytes but expected {expected_payload_size}",
+                    payload.len()
+                ));
+            }
+            let mut events = Vec::with_capacity(event_count);
+            let mut event_offset = KEYBOARD0_DEVICE_PAYLOAD_HEADER_SIZE;
+            for _ in 0..event_count {
+                let event = KeyboardEvent {
+                    kind: read_u32(payload, event_offset)?,
+                    code: read_u32(payload, event_offset + 4)?,
+                    modifiers: read_u32(payload, event_offset + 8)?,
+                    flags: read_u32(payload, event_offset + 12)?,
+                };
+                validate_keyboard_event(event)?;
+                events.push(event);
+                event_offset += KEYBOARD0_EVENT_RECORD_SIZE;
+            }
+            ComputerDeviceSnapshotRecord::Keyboard0 {
+                events,
+                sequence,
+                dropped_count,
             }
         }
         _ => {

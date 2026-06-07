@@ -1,11 +1,11 @@
 use crate::computer::devices::{
     ComputerControlDevice, ComputerTextDisplaySnapshot, DebugSerialDevice, FramebufferDevice,
-    SerialInputDevice, StoragePortDevice, TextDisplayDevice, TimerDevice,
+    KeyboardDevice, SerialInputDevice, StoragePortDevice, TextDisplayDevice, TimerDevice,
 };
 use crate::computer::profile::ComputerMachineProfile;
 use crate::computer_abi;
 use crate::display::DisplayFrameDelta;
-use crate::k16::{K16Cpu, K16Signal, K16_INTERRUPT_SOURCE_TIMER0};
+use crate::k16::{K16Cpu, K16Signal, K16_INTERRUPT_SOURCE_KEYBOARD0, K16_INTERRUPT_SOURCE_TIMER0};
 use crate::low_bus::{MachineBus, MmioDeviceId};
 use crate::low_machine::{MachineMemory, MemoryFault};
 use std::fmt::{Display, Formatter};
@@ -25,6 +25,7 @@ pub struct ComputerMachine {
     framebuffer0_device_id: Option<MmioDeviceId>,
     storage0_device_id: Option<MmioDeviceId>,
     timer0_device_id: Option<MmioDeviceId>,
+    keyboard0_device_id: Option<MmioDeviceId>,
     bios_flash_device_id: Option<MmioDeviceId>,
     cpus: Vec<ComputerCpuContext>,
     boot_cpu: Option<CpuId>,
@@ -129,6 +130,7 @@ impl ComputerMachine {
     pub const HARDWARE_ID_STORAGE0: u32 = computer_abi::COMPUTER_HARDWARE_ID_STORAGE0;
     pub const HARDWARE_ID_FRAMEBUFFER0: u32 = computer_abi::COMPUTER_HARDWARE_ID_FRAMEBUFFER0;
     pub const HARDWARE_ID_TIMER0: u32 = computer_abi::COMPUTER_HARDWARE_ID_TIMER0;
+    pub const HARDWARE_ID_KEYBOARD0: u32 = computer_abi::COMPUTER_HARDWARE_ID_KEYBOARD0;
     pub const CONTROL_BASE: u32 = computer_abi::CONTROL_BASE;
     pub const CONTROL_STATUS: u32 = computer_abi::CONTROL_STATUS;
     pub const CONTROL_PANIC_CODE: u32 = computer_abi::CONTROL_PANIC_CODE;
@@ -219,6 +221,19 @@ impl ComputerMachine {
     pub const TIMER0_MONOTONIC_NANOS_HIGH: u32 = computer_abi::TIMER0_MONOTONIC_NANOS_HIGH;
     pub const TIMER0_SIZE: u32 = computer_abi::TIMER0_SIZE;
     pub const TIMER0_VERSION_VALUE: i32 = computer_abi::TIMER0_VERSION_VALUE;
+    pub const KEYBOARD0_BASE: u32 = computer_abi::KEYBOARD0_BASE;
+    pub const KEYBOARD0_VERSION: u32 = computer_abi::KEYBOARD0_VERSION;
+    pub const KEYBOARD0_QUEUE_LEN: u32 = computer_abi::KEYBOARD0_QUEUE_LEN;
+    pub const KEYBOARD0_STATUS: u32 = computer_abi::KEYBOARD0_STATUS;
+    pub const KEYBOARD0_EVENT_KIND: u32 = computer_abi::KEYBOARD0_EVENT_KIND;
+    pub const KEYBOARD0_CODE: u32 = computer_abi::KEYBOARD0_CODE;
+    pub const KEYBOARD0_MODIFIERS: u32 = computer_abi::KEYBOARD0_MODIFIERS;
+    pub const KEYBOARD0_FLAGS: u32 = computer_abi::KEYBOARD0_FLAGS;
+    pub const KEYBOARD0_SEQUENCE_LOW: u32 = computer_abi::KEYBOARD0_SEQUENCE_LOW;
+    pub const KEYBOARD0_SEQUENCE_HIGH: u32 = computer_abi::KEYBOARD0_SEQUENCE_HIGH;
+    pub const KEYBOARD0_COMMAND: u32 = computer_abi::KEYBOARD0_COMMAND;
+    pub const KEYBOARD0_DROPPED_COUNT: u32 = computer_abi::KEYBOARD0_DROPPED_COUNT;
+    pub const KEYBOARD0_SIZE: u32 = computer_abi::KEYBOARD0_SIZE;
     pub const K16_BIOS_FLASH_BASE: u32 = 0xFFF0_0000;
     pub const STATUS_RESET: i32 = computer_abi::STATUS_RESET;
     pub const STATUS_BOOTING: i32 = computer_abi::STATUS_BOOTING;
@@ -275,6 +290,7 @@ impl ComputerMachine {
         self.push_memory_map_region(&mut map, self.framebuffer0_device_id, "framebuffer0");
         self.push_memory_map_region(&mut map, self.storage0_device_id, "storage0");
         self.push_memory_map_region(&mut map, self.timer0_device_id, "timer0");
+        self.push_memory_map_region(&mut map, self.keyboard0_device_id, "keyboard0");
         self.push_memory_map_region_with_flags(
             &mut map,
             self.bios_flash_device_id,
@@ -428,6 +444,56 @@ impl ComputerMachine {
             .unwrap_or(0)
     }
 
+    pub fn push_keyboard_key_down(&mut self, code: u32, repeat: bool, modifiers: i32) {
+        let became_ready = if let Some(device) = self.keyboard0_device_mut() {
+            let was_empty = device.len() == 0;
+            device.push_key_down(code, repeat, u32::from_le_bytes(modifiers.to_le_bytes()));
+            was_empty && device.len() > 0
+        } else {
+            false
+        };
+        self.request_keyboard0_interrupt_if_ready(became_ready);
+    }
+
+    pub fn push_keyboard_key_up(&mut self, code: u32, modifiers: i32) {
+        let became_ready = if let Some(device) = self.keyboard0_device_mut() {
+            let was_empty = device.len() == 0;
+            device.push_key_up(code, u32::from_le_bytes(modifiers.to_le_bytes()));
+            was_empty && device.len() > 0
+        } else {
+            false
+        };
+        self.request_keyboard0_interrupt_if_ready(became_ready);
+    }
+
+    pub fn push_keyboard_char(&mut self, byte: u8) {
+        let became_ready = if let Some(device) = self.keyboard0_device_mut() {
+            let was_empty = device.len() == 0;
+            device.push_char(byte);
+            was_empty && device.len() > 0
+        } else {
+            false
+        };
+        self.request_keyboard0_interrupt_if_ready(became_ready);
+    }
+
+    pub fn push_keyboard_paste_byte(&mut self, byte: u8) {
+        let became_ready = if let Some(device) = self.keyboard0_device_mut() {
+            let was_empty = device.len() == 0;
+            device.push_paste_byte(byte);
+            was_empty && device.len() > 0
+        } else {
+            false
+        };
+        self.request_keyboard0_interrupt_if_ready(became_ready);
+    }
+
+    pub fn keyboard0_len(&self) -> usize {
+        self.keyboard0_device()
+            .map(KeyboardDevice::len)
+            .unwrap_or(0)
+    }
+
     pub fn display0_snapshot(&self) -> Option<ComputerTextDisplaySnapshot> {
         self.display0_device().map(TextDisplayDevice::snapshot)
     }
@@ -554,6 +620,16 @@ impl ComputerMachine {
             .and_then(|id| self.bus.device_mut::<TimerDevice>(id))
     }
 
+    fn keyboard0_device(&self) -> Option<&KeyboardDevice> {
+        self.keyboard0_device_id
+            .and_then(|id| self.bus.device::<KeyboardDevice>(id))
+    }
+
+    fn keyboard0_device_mut(&mut self) -> Option<&mut KeyboardDevice> {
+        self.keyboard0_device_id
+            .and_then(|id| self.bus.device_mut::<KeyboardDevice>(id))
+    }
+
     fn request_boot_cpu_interrupt(&mut self, source: u32, value: u32) {
         let Some(cpu_id) = self.boot_cpu else {
             return;
@@ -563,6 +639,12 @@ impl ComputerMachine {
         };
         match cpu {
             ComputerCpuContext::K16 { cpu, .. } => cpu.request_interrupt(source, value),
+        }
+    }
+
+    fn request_keyboard0_interrupt_if_ready(&mut self, became_ready: bool) {
+        if became_ready {
+            self.request_boot_cpu_interrupt(K16_INTERRUPT_SOURCE_KEYBOARD0, 0);
         }
     }
 

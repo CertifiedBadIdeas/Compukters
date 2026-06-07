@@ -58,6 +58,7 @@ id  name          mmio_base     mmio_size     irq_source
 5   storage0      0x1000_0400   0x0000_0100   0x0000_0000
 6   framebuffer0  0x1000_0500   0x0000_0100   0x0000_0000
 7   timer0        0x1000_0600   0x0000_0100   0x0000_0001
+8   keyboard0     0x1000_0700   0x0000_0100   0x0000_0002
 ```
 
 Firmware should discover these ranges through `BootInfo.hardware_table_addr` and
@@ -65,8 +66,9 @@ Firmware should discover these ranges through `BootInfo.hardware_table_addr` and
 assignment, not a CPU feature.
 
 Firmware should also discover interrupt routing from each entry's `irq_source`.
-`timer0` currently raises CPU interrupt source bit `0x00000001`; other devices
-in this profile do not raise interrupts and expose `0`.
+`timer0` currently raises CPU interrupt source bit `0x00000001`; `keyboard0`
+raises CPU interrupt source bit `0x00000002` when input becomes available.
+Other devices in this profile do not raise interrupts and expose `0`.
 
 ## Control MMIO
 
@@ -307,6 +309,94 @@ CPU execution progress is a separate concept from `timer0`. K16 currently
 tracks VM steps internally, not physical CPU cycles. If guest-visible CPU work
 counters become necessary, they should be exposed as future performance or
 progress counters rather than as the OS sleep timer.
+
+## Keyboard0 MMIO
+
+The keyboard0 range exposes a PC-like keyboard event queue. It is independent
+from `serial-input`, which remains a UART-style byte stream. Keyboard0 preserves
+key up/down events, character bytes, paste bytes, repeat state, and modifier
+bits for guest firmware and kernel code.
+
+All multi-byte registers are little-endian.
+
+```text
+offset  size  access  name
+0x00    4     R       version
+0x04    4     R       queue_len
+0x08    4     R       status
+0x0C    4     R       event_kind
+0x10    4     R       code
+0x14    4     R       modifiers
+0x18    4     R       flags
+0x1C    4     R       sequence_low
+0x20    4     R       sequence_high
+0x24    4     W       command
+0x28    4     R       dropped_count
+```
+
+Version:
+
+```text
+1  keyboard MMIO v1
+```
+
+Status values:
+
+```text
+0  empty
+1  ready
+2  overflow
+```
+
+Event kinds:
+
+```text
+0  none
+1  key_down
+2  key_up
+3  char
+4  paste_byte
+```
+
+Commands:
+
+```text
+0  nop
+1  consume
+2  clear
+```
+
+Flag bits:
+
+```text
+bit 0  repeat
+```
+
+Modifier bits:
+
+```text
+bit 0  shift
+bit 1  control
+bit 2  alt
+bit 3  super
+```
+
+`event_kind`, `code`, `modifiers`, and `flags` describe the front queued
+event. When the queue is empty, these fields return `0`. For `key_down` and
+`key_up`, `code` is the stable host key code. For `char` and `paste_byte`,
+`code` contains the unsigned byte value in bits `0..7`.
+
+Writing `consume` removes the front event if one is present. Writing `clear`
+removes all pending events and advances `sequence`. The queue capacity is 256
+events. When the queue is full, the host drops the newest event and increments
+`dropped_count`; already queued input remains readable.
+
+`sequence` increments when the host accepts an input event and when guest code
+clears the queue. It does not increment when guest code consumes one event.
+
+When keyboard0 transitions from empty to non-empty, the host requests the CPU
+interrupt source advertised by the hardware-table entry. Guest code can still
+observe the device purely by polling.
 
 ## Storage0 MMIO
 

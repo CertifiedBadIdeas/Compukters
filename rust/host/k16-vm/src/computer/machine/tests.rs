@@ -1,6 +1,6 @@
 use super::ComputerMachine;
 use crate::computer::devices::{
-    ComputerControlDevice, DebugSerialDevice, FramebufferDevice, SerialInputDevice,
+    ComputerControlDevice, DebugSerialDevice, FramebufferDevice, KeyboardDevice, SerialInputDevice,
     TextDisplayDevice,
 };
 use crate::computer::profile::{ComputerHardwareConfig, ComputerMachineProfile};
@@ -63,10 +63,124 @@ fn computer_serial_input_device_reports_ready_and_consumes_bytes() {
 }
 
 #[test]
+fn computer_keyboard0_device_reports_front_event_and_consumes_it() {
+    let mut machine = ComputerMachine::new(1024).unwrap();
+
+    machine.push_keyboard_key_down(257, true, computer_abi::KEYBOARD0_MOD_CONTROL);
+    machine.push_keyboard_char(b'R');
+
+    assert_eq!(
+        machine
+            .bus
+            .load_i32(ComputerMachine::KEYBOARD0_QUEUE_LEN)
+            .unwrap(),
+        2
+    );
+    assert_eq!(
+        machine
+            .bus
+            .load_i32(ComputerMachine::KEYBOARD0_STATUS)
+            .unwrap(),
+        computer_abi::KEYBOARD0_STATUS_READY
+    );
+    assert_eq!(
+        machine
+            .bus
+            .load_i32(ComputerMachine::KEYBOARD0_EVENT_KIND)
+            .unwrap(),
+        computer_abi::KEYBOARD0_EVENT_KEY_DOWN
+    );
+    assert_eq!(
+        machine
+            .bus
+            .load_i32(ComputerMachine::KEYBOARD0_CODE)
+            .unwrap(),
+        257
+    );
+    assert_eq!(
+        machine
+            .bus
+            .load_i32(ComputerMachine::KEYBOARD0_MODIFIERS)
+            .unwrap(),
+        computer_abi::KEYBOARD0_MOD_CONTROL
+    );
+    assert_eq!(
+        machine
+            .bus
+            .load_i32(ComputerMachine::KEYBOARD0_FLAGS)
+            .unwrap(),
+        computer_abi::KEYBOARD0_FLAG_REPEAT
+    );
+
+    machine
+        .bus
+        .store_i32(
+            ComputerMachine::KEYBOARD0_COMMAND,
+            computer_abi::KEYBOARD0_COMMAND_CONSUME,
+        )
+        .unwrap();
+
+    assert_eq!(
+        machine
+            .bus
+            .load_i32(ComputerMachine::KEYBOARD0_EVENT_KIND)
+            .unwrap(),
+        computer_abi::KEYBOARD0_EVENT_CHAR
+    );
+    assert_eq!(
+        machine
+            .bus
+            .load_i32(ComputerMachine::KEYBOARD0_CODE)
+            .unwrap(),
+        i32::from(b'R')
+    );
+    assert_eq!(machine.keyboard0_len(), 1);
+}
+
+#[test]
+fn computer_keyboard0_clear_empties_queue_and_advances_sequence() {
+    let mut machine = ComputerMachine::new(1024).unwrap();
+
+    machine.push_keyboard_char(b'A');
+    let sequence_before_clear = read_keyboard0_sequence(&machine);
+
+    machine
+        .bus
+        .store_i32(
+            ComputerMachine::KEYBOARD0_COMMAND,
+            computer_abi::KEYBOARD0_COMMAND_CLEAR,
+        )
+        .unwrap();
+
+    assert_eq!(machine.keyboard0_len(), 0);
+    assert_eq!(
+        machine
+            .bus
+            .load_i32(ComputerMachine::KEYBOARD0_STATUS)
+            .unwrap(),
+        computer_abi::KEYBOARD0_STATUS_EMPTY
+    );
+    assert!(read_keyboard0_sequence(&machine) > sequence_before_clear);
+}
+
+#[test]
+fn computer_keyboard0_drops_newest_event_on_overflow() {
+    let mut keyboard = KeyboardDevice::with_capacity_for_tests(2);
+
+    keyboard.push_char(b'A');
+    keyboard.push_char(b'B');
+    keyboard.push_char(b'C');
+
+    assert_eq!(keyboard.len(), 2);
+    assert_eq!(keyboard.dropped_count(), 1);
+    assert_eq!(keyboard.front_event().unwrap().code, u32::from(b'A'));
+}
+
+#[test]
 fn computer_machine_writes_display0_hardware_entry() {
     let machine = ComputerMachine::new(1024).unwrap();
 
-    assert_eq!(read_u32(machine.memory(), 0x18), 7);
+    assert_eq!(read_u32(machine.memory(), 0x18), 8);
     assert_hardware_entry(
         machine.memory(),
         76,
@@ -77,10 +191,25 @@ fn computer_machine_writes_display0_hardware_entry() {
 }
 
 #[test]
+fn computer_machine_writes_keyboard0_hardware_entry() {
+    let machine = ComputerMachine::new(1024).unwrap();
+
+    assert_eq!(read_u32(machine.memory(), 0x18), 8);
+    assert_hardware_entry_with_irq(
+        machine.memory(),
+        140,
+        computer_abi::COMPUTER_HARDWARE_ID_KEYBOARD0,
+        computer_abi::KEYBOARD0_BASE,
+        computer_abi::KEYBOARD0_SIZE,
+        computer_abi::K16_INTERRUPT_SOURCE_KEYBOARD0,
+    );
+}
+
+#[test]
 fn computer_machine_writes_framebuffer0_hardware_entry() {
     let machine = ComputerMachine::new(1024).unwrap();
 
-    assert_eq!(read_u32(machine.memory(), 0x18), 7);
+    assert_eq!(read_u32(machine.memory(), 0x18), 8);
     assert_hardware_entry(
         machine.memory(),
         92,
@@ -313,7 +442,7 @@ fn computer_machine_writes_machine_profile_v2_boot_info() {
         read_u32(machine.memory(), 0x14),
         ComputerMachine::PROFILE_V2_BOOT_INFO_SIZE
     );
-    assert_eq!(read_u32(machine.memory(), 0x18), 7);
+    assert_eq!(read_u32(machine.memory(), 0x18), 8);
 }
 
 #[test]
@@ -370,6 +499,14 @@ fn computer_machine_writes_static_hardware_table_for_mmio_ranges() {
         computer_abi::PROFILE_V2_PAGE_SIZE,
         crate::k16::K16_INTERRUPT_SOURCE_TIMER0,
     );
+    assert_hardware_entry_with_irq(
+        machine.memory(),
+        140,
+        computer_abi::COMPUTER_HARDWARE_ID_KEYBOARD0,
+        computer_abi::KEYBOARD0_BASE,
+        computer_abi::PROFILE_V2_PAGE_SIZE,
+        crate::k16::K16_INTERRUPT_SOURCE_KEYBOARD0,
+    );
 }
 
 #[test]
@@ -377,7 +514,7 @@ fn computer_machine_can_be_created_from_explicit_computer_v1_profile() {
     let profile = ComputerMachineProfile::computer_v1(1024);
     let machine = ComputerMachine::from_profile(profile).unwrap();
 
-    assert_eq!(read_u32(machine.memory(), 0x18), 7);
+    assert_eq!(read_u32(machine.memory(), 0x18), 8);
     assert_hardware_entry(
         machine.memory(),
         28,
@@ -1120,12 +1257,14 @@ fn computer_mmio_device_sizes_match_profile_v2_abi() {
     let serial_input = SerialInputDevice::new();
     let display = TextDisplayDevice::new();
     let framebuffer = FramebufferDevice::new();
+    let keyboard = KeyboardDevice::new();
 
     assert_eq!(control.size(), computer_abi::CONTROL_SIZE);
     assert_eq!(debug.size(), computer_abi::DEBUG_SIZE);
     assert_eq!(serial_input.size(), computer_abi::SERIAL_INPUT_SIZE);
     assert_eq!(display.size(), computer_abi::DISPLAY0_SIZE);
     assert_eq!(framebuffer.size(), computer_abi::FRAMEBUFFER0_SIZE);
+    assert_eq!(keyboard.size(), computer_abi::KEYBOARD0_SIZE);
 }
 
 #[test]
@@ -1214,8 +1353,68 @@ fn computer_memory_map_describes_timer0_mmio_region() {
     assert!(timer.writable);
 }
 
+#[test]
+fn computer_memory_map_describes_keyboard0_mmio_region() {
+    let machine = ComputerMachine::new(1024).unwrap();
+    let map = machine.memory_map();
+
+    let keyboard = map.region("keyboard0").unwrap();
+
+    assert_eq!(keyboard.base, computer_abi::KEYBOARD0_BASE);
+    assert_eq!(keyboard.size, computer_abi::KEYBOARD0_SIZE);
+    assert!(keyboard.readable);
+    assert!(keyboard.writable);
+}
+
+#[test]
+fn computer_snapshot_restores_keyboard0_pending_events() {
+    let mut machine = ComputerMachine::new(1024).unwrap();
+    machine.push_keyboard_key_up(257, computer_abi::KEYBOARD0_MOD_CONTROL);
+    machine.push_keyboard_paste_byte(b'K');
+
+    let snapshot = machine.snapshot_v1().unwrap();
+    let restored =
+        ComputerMachine::restore_snapshot_v1(ComputerMachineProfile::computer_v1(1024), &snapshot)
+            .unwrap();
+
+    assert_eq!(restored.keyboard0_len(), 2);
+    assert_eq!(
+        restored
+            .bus
+            .load_i32(ComputerMachine::KEYBOARD0_EVENT_KIND)
+            .unwrap(),
+        computer_abi::KEYBOARD0_EVENT_KEY_UP
+    );
+    assert_eq!(
+        restored
+            .bus
+            .load_i32(ComputerMachine::KEYBOARD0_CODE)
+            .unwrap(),
+        257
+    );
+    assert_eq!(
+        restored
+            .bus
+            .load_i32(ComputerMachine::KEYBOARD0_MODIFIERS)
+            .unwrap(),
+        computer_abi::KEYBOARD0_MOD_CONTROL
+    );
+}
+
 fn read_u32(memory: &crate::low_machine::MachineMemory, address: u32) -> u32 {
     u32::from_le_bytes(memory.load_i32(address).unwrap().to_le_bytes())
+}
+
+fn read_keyboard0_sequence(machine: &ComputerMachine) -> u64 {
+    let low = machine
+        .bus
+        .load_i32(ComputerMachine::KEYBOARD0_SEQUENCE_LOW)
+        .unwrap() as u32;
+    let high = machine
+        .bus
+        .load_i32(ComputerMachine::KEYBOARD0_SEQUENCE_HIGH)
+        .unwrap() as u32;
+    u64::from(low) | (u64::from(high) << 32)
 }
 
 fn assert_hardware_entry(
