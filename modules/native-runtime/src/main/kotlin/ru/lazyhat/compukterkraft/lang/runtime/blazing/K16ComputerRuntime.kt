@@ -171,6 +171,8 @@ interface K16ComputerEndpoint : AutoCloseable {
 
     fun pushKeyboardPasteBytes(bytes: ByteArray)
 
+    fun advanceGameTicks(ticks: Long)
+
     fun tick(maxTurns: Int = 8): NativeK16ComputerControl
 
     fun outputSnapshot(): ByteArray
@@ -205,6 +207,17 @@ class K16ComputerRuntime(
     }
 
     fun pushInput(text: String) = pushInput(text.encodeToByteArray())
+
+    override fun advanceGameTicks(ticks: Long) {
+        ensureOpen()
+        require(ticks >= 0) { "ticks must be non-negative" }
+        terminalControl?.let { return }
+        var remaining = ticks
+        while (remaining > 0) {
+            bindings.advanceGameTick(handle)
+            remaining -= 1
+        }
+    }
 
     override fun pushKeyboardKeyDown(
         key: Int,
@@ -241,7 +254,6 @@ class K16ComputerRuntime(
         ensureOpen()
         require(maxTurns >= 0) { "maxTurns must be non-negative" }
         terminalControl?.let { return it }
-        bindings.advanceGameTick(handle)
         repeat(maxTurns) {
             val signal = bindings.runUntilSignal(handle)
             appendNativeOutput()

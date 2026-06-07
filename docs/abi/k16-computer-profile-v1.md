@@ -246,9 +246,11 @@ Version:
 ```
 
 `game_ticks` is a `u64` split into low/high `u32` words. The host advances it
-once for each high-level runtime tick before native CPU turns run. It follows
-Minecraft/server simulation time, so guest OS sleep, scheduler ticks, firmware
-delays, and device cooldowns should use this counter.
+from Minecraft/server simulation time. Runtime implementations may coalesce CPU
+execution permits while the VM worker is busy, but they must still apply every
+elapsed host game tick to timer0 before the next guest CPU slice. Guest OS
+sleep, scheduler ticks, firmware delays, and device cooldowns should use this
+counter.
 
 When `game_ticks` advances, the host sets the CPU pending interrupt source
 advertised by the `timer0` hardware-table entry with

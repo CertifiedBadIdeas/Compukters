@@ -269,7 +269,7 @@ class K16RuntimeDeviceTest {
     }
 
     @Test
-    fun preservesEveryServerTickWhileEndpointWorkerIsBusy() {
+    fun coalescesExecutionPermitWhileEndpointWorkerIsBusy() {
         val tickEntered = CountDownLatch(1)
         val releaseTick = CountDownLatch(1)
         val endpoint =
@@ -297,7 +297,11 @@ class K16RuntimeDeviceTest {
         }
 
         releaseTick.countDown()
-        waitUntil { endpoint.tickCalls == 4 }
+
+        waitUntil { endpoint.tickCalls >= 2 && endpoint.advancedGameTicks.sum() == 4L }
+
+        assertEquals(2, endpoint.tickCalls)
+        assertEquals(listOf(1L, 3L), endpoint.advancedGameTicks)
         device.shutdown()
     }
 
@@ -616,6 +620,7 @@ class K16RuntimeDeviceTest {
         @Volatile
         var tickCalls = 0
             private set
+        val advancedGameTicks: MutableList<Long> = Collections.synchronizedList(mutableListOf())
         val tickThreadIds: MutableList<Long> = Collections.synchronizedList(mutableListOf())
         @Volatile
         var closeCalls = 0
@@ -650,6 +655,10 @@ class K16RuntimeDeviceTest {
 
         override fun pushKeyboardPasteBytes(bytes: ByteArray) {
             keyboardPasteBytes += bytes.copyOf()
+        }
+
+        override fun advanceGameTicks(ticks: Long) {
+            advancedGameTicks += ticks
         }
 
         override open fun tick(maxTurns: Int): NativeK16ComputerControl {

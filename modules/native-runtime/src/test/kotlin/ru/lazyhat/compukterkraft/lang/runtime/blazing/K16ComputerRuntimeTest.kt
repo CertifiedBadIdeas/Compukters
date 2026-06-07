@@ -111,19 +111,31 @@ class K16ComputerRuntimeTest {
         assertEquals(NativeK16ComputerControl(status = 3, exitCode = 0, panicCode = 2), runtime.tick())
 
         assertEquals(1, bindings.runUntilSignalCalls)
-        assertEquals(listOf(21L), bindings.advanceGameTickHandles)
+        assertEquals(emptyList(), bindings.advanceGameTickHandles)
     }
 
     @Test
-    fun advancesGameTickOncePerRuntimeTickBeforeNativeTurns() {
+    fun advancesGameTicksWithoutRunningNativeTurns() {
+        val bindings = EchoBindings()
+        val runtime = K16ComputerRuntime(handle = 29L, bindings = bindings, defaultMaxTurnsPerTick = 3)
+
+        runtime.advanceGameTicks(3)
+
+        assertEquals(0, bindings.runUntilSignalCalls)
+        assertEquals(listOf(29L, 29L, 29L), bindings.advanceGameTickHandles)
+        assertEquals(listOf("advance", "advance", "advance"), bindings.callOrder)
+    }
+
+    @Test
+    fun runtimeTickDoesNotAdvanceGameTicks() {
         val bindings = EchoBindings()
         val runtime = K16ComputerRuntime(handle = 29L, bindings = bindings, defaultMaxTurnsPerTick = 3)
 
         runtime.tick()
 
         assertEquals(3, bindings.runUntilSignalCalls)
-        assertEquals(listOf(29L), bindings.advanceGameTickHandles)
-        assertEquals(listOf("advance", "run", "run", "run"), bindings.callOrder)
+        assertEquals(emptyList(), bindings.advanceGameTickHandles)
+        assertEquals(listOf("run", "run", "run"), bindings.callOrder)
     }
 
     @Test
@@ -136,13 +148,13 @@ class K16ComputerRuntimeTest {
 
         assertEquals(NativeK16ComputerControl(status = 1, exitCode = 0, panicCode = 0), runtime.tick())
         assertEquals(1, bindings.runUntilSignalCalls)
-        assertEquals(listOf(25L), bindings.advanceGameTickHandles)
+        assertEquals(emptyList(), bindings.advanceGameTickHandles)
 
         bindings.control = NativeK16ComputerControl(status = 3, exitCode = 0, panicCode = 0)
 
         assertEquals(NativeK16ComputerControl(status = 3, exitCode = 0, panicCode = 0), runtime.tick())
         assertEquals(2, bindings.runUntilSignalCalls)
-        assertEquals(listOf(25L, 25L), bindings.advanceGameTickHandles)
+        assertEquals(emptyList(), bindings.advanceGameTickHandles)
     }
 
     @Test
