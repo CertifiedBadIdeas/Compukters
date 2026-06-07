@@ -12,7 +12,7 @@ does not define guest ABI. Guest-visible contracts live under `docs/abi/`.
 | `rust/host/k16-vm/src/low_bus.rs` | Routes memory accesses either to flat RAM or to mapped MMIO devices. |
 | `rust/host/k16-vm/src/low_machine.rs` | Flat little-endian guest RAM and the `MemoryBus` trait used by CPUs. |
 | `rust/host/k16-vm/src/k16.rs` | Kraft16 CPU state, instruction decoder, execution loop, traps, CSR handling, and call stack semantics. |
-| `rust/host/k16-vm/src/computer/devices.rs` | Host implementations of K16 MMIO devices: control, debug serial, serial input, display0, gpu0, storage0, and BIOS flash. |
+| `rust/host/k16-vm/src/computer/devices.rs` | Host implementations of K16 MMIO devices: control, debug serial, serial input, gpu0, storage0, keyboard0, timer0, and BIOS flash. |
 | `rust/host/k16-vm/src/computer/profile.rs` | Declarative hardware profiles and hardware-table validation. |
 | `rust/host/k16-vm/src/computer/snapshot.rs` | Host-side `ComputerMachine` snapshot encoding and decoding. |
 
@@ -104,8 +104,8 @@ It owns:
 - the CPU table;
 - the boot CPU id;
 - snapshot creation and restore;
-- host-visible accessors for control, debug output, serial input, display, and
-  gpu0 display frames.
+- host-visible accessors for control, debug output, serial input, keyboard
+  input, and gpu0 display frames.
 
 It does not decode instructions itself. It delegates execution to `K16Cpu` and
 reacts to the returned signal or error.
@@ -127,7 +127,6 @@ Device state is host-owned. For example:
 
 - `DebugSerialDevice` collects bytes for host-side draining.
 - `SerialInputDevice` consumes bytes pushed by the host.
-- `TextDisplayDevice` exposes a character-cell snapshot.
 - `GpuDevice` turns guest RAM blits into `DisplayFrameDelta` values.
 - `StoragePortDevice` copies blocks between guest RAM and storage media.
 - `BiosFlashDevice` exposes read-only firmware bytes at the high BIOS address.

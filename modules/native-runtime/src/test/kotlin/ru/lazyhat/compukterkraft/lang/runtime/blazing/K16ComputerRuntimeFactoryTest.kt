@@ -128,7 +128,6 @@ class K16ComputerRuntimeFactoryTest {
                 "k16ComputerControlNative",
                 "k16ComputerDebugOutputNative",
                 "drainK16ComputerDebugOutputNative",
-                "k16ComputerDisplay0SnapshotNative",
                 "k16ComputerStorage0MediaSnapshotNative",
                 "k16ComputerMachineSnapshotNative",
                 "pushK16ComputerSerialInputNative",
@@ -146,6 +145,7 @@ class K16ComputerRuntimeFactoryTest {
                 "ruxComputerControlNative",
                 "ruxComputerDebugOutputNative",
                 "drainRuxComputerDebugOutputNative",
+                "k16ComputerDisplay0SnapshotNative",
                 "ruxComputerDisplay0SnapshotNative",
                 "ruxComputerStorage0MediaSnapshotNative",
                 "ruxComputerMachineSnapshotNative",
@@ -201,7 +201,7 @@ class K16ComputerRuntimeFactoryTest {
         assertTrue(source.contains("interface K16ComputerRuntimeBindings"))
         assertTrue(source.contains("NativeK16ComputerControl"))
         assertTrue(source.contains("NativeK16ComputerSignal"))
-        assertTrue(source.contains("NativeK16ComputerDisplaySnapshot"))
+        assertFalse(source.contains("NativeK16ComputerDisplaySnapshot"))
         assertTrue(source.contains("object K16ComputerRuntimeFactory"))
         assertTrue(source.contains("interface K16ComputerEndpoint"))
         assertTrue(source.contains("class K16ComputerRuntime"))

@@ -23,25 +23,6 @@ fn k16_computer_handle_fails_when_memory_is_too_small() {
 }
 
 #[test]
-fn k16_computer_handle_exposes_display0_snapshot() {
-    let bios = k16_words(&k16_display_firmware_words());
-    let mut handle = K16ComputerHandle::create_k16_bios_flash(&bios, 64 * 1024, 128)
-        .expect("K16 BIOS flash computer creates");
-
-    assert_eq!(handle.run_k16_until_signal().unwrap(), K16Signal::Halt);
-
-    let snapshot = handle
-        .display0_snapshot()
-        .expect("computer profile maps display0");
-    assert_eq!(snapshot.columns, 80);
-    assert_eq!(snapshot.rows, 25);
-    assert_eq!(snapshot.cursor_x, 3);
-    assert_eq!(snapshot.cursor_y, 0);
-    assert_eq!(snapshot.sequence, 3);
-    assert_eq!(&snapshot.cells[..3], b"RUX");
-}
-
-#[test]
 fn k16_computer_handle_accepts_storage0_media_and_exposes_snapshot() {
     let bios = k16_words(&[k16_halt()]);
     let media = vec![7; 1024];
@@ -79,10 +60,10 @@ fn k16_computer_handle_accepts_storage0_volume_path() {
 fn k16_computer_profile_exposes_timer0_hardware_entry_and_mmio() {
     let mut machine = ComputerMachine::new(1024).expect("machine creates");
 
-    assert_eq!(read_u32(machine.memory(), 0x18), 8);
+    assert_eq!(read_u32(machine.memory(), 0x18), 7);
     assert_hardware_entry_with_irq(
         machine.memory(),
-        124,
+        108,
         ComputerMachine::HARDWARE_ID_TIMER0,
         ComputerMachine::TIMER0_BASE,
         ComputerMachine::TIMER0_SIZE,
@@ -90,7 +71,7 @@ fn k16_computer_profile_exposes_timer0_hardware_entry_and_mmio() {
     );
     assert_hardware_entry_with_irq(
         machine.memory(),
-        140,
+        124,
         ComputerMachine::HARDWARE_ID_KEYBOARD0,
         ComputerMachine::KEYBOARD0_BASE,
         ComputerMachine::KEYBOARD0_SIZE,
@@ -646,27 +627,6 @@ fn k16_mmio_firmware_words() -> Vec<u16> {
     words.extend(k16_const32(0, ComputerMachine::CONTROL_PANIC_CODE));
     words.extend(k16_const32(1, 0x16));
     words.push(k16_store32(0, 1));
-    words.push(k16_halt());
-    words
-}
-
-fn k16_display_firmware_words() -> Vec<u16> {
-    let mut words = Vec::new();
-    words.extend(k16_const32(0, ComputerMachine::DISPLAY0_DATA));
-    words.extend(k16_const32(1, ComputerMachine::DISPLAY0_COMMAND));
-    words.extend(k16_const32(2, u32::from(b'R')));
-    words.push(k16_store32(0, 2));
-    words.extend(k16_const32(
-        3,
-        ComputerMachine::DISPLAY0_COMMAND_PUT_BYTE_AT_CURSOR as u32,
-    ));
-    words.push(k16_store32(1, 3));
-    words.extend(k16_const32(2, u32::from(b'U')));
-    words.push(k16_store32(0, 2));
-    words.push(k16_store32(1, 3));
-    words.extend(k16_const32(2, u32::from(b'X')));
-    words.push(k16_store32(0, 2));
-    words.push(k16_store32(1, 3));
     words.push(k16_halt());
     words
 }

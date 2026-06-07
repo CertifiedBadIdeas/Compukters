@@ -29,7 +29,6 @@ import ru.lazyhat.compukterkraft.core.device.vm.display.NativeDisplayFrameCodec
 import ru.lazyhat.compukterkraft.core.gui.TerminalFontConstants
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16ComputerEndpoint
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16ComputerControl
-import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16ComputerDisplaySnapshot
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
 import java.nio.ByteBuffer
 import java.util.UUID
@@ -62,7 +61,6 @@ class K16RuntimeDevice(
     private var endpoint: K16EndpointWorker? = null
     private val displaySessions = DisplaySessionTracker()
     private val renderers = mutableMapOf<Int, SerialTextDisplayRenderer>()
-    private val displaySnapshotRefreshDisplayIds = mutableSetOf<Int>()
     private var labelBacking: String? = properties.label
     private var renderedSerialBytes = 0
     private var terminalControlReached = false
@@ -105,7 +103,6 @@ class K16RuntimeDevice(
         renderedSerialBytes = 0
         terminalControlReached = false
         renderers.clear()
-        displaySnapshotRefreshDisplayIds.clear()
         current.close()
         stateSink.onPowerStateChanged(false)
     }
@@ -119,7 +116,7 @@ class K16RuntimeDevice(
         val current = endpoint ?: return
         current.requestTick()
         terminalControlReached = current.terminalControlReached
-        if (!flushFramebufferFrames(current) && !flushK16DisplaySnapshot(current)) {
+        if (!flushFramebufferFrames(current)) {
             flushSerialOutput(current)
         }
     }
@@ -211,7 +208,6 @@ class K16RuntimeDevice(
         height: Int,
     ) {
         displaySessions.attach(playerUuid, containerId, displayId, width, height)
-        displaySnapshotRefreshDisplayIds += displayId
     }
 
     override fun resizeDisplaySession(
@@ -222,7 +218,6 @@ class K16RuntimeDevice(
     ) {
         displaySessions.resize(playerUuid, displayId, width, height)
         renderers.remove(displayId)
-        displaySnapshotRefreshDisplayIds += displayId
     }
 
     override fun detachDisplaySession(
@@ -231,7 +226,6 @@ class K16RuntimeDevice(
     ) {
         val detachedDisplayId = displaySessions.detach(playerUuid, displayId) ?: return
         renderers.remove(detachedDisplayId)
-        displaySnapshotRefreshDisplayIds.remove(detachedDisplayId)
     }
 
     private fun argumentBytes(value: Any?): ByteArray? =
@@ -278,32 +272,6 @@ class K16RuntimeDevice(
         }
     }
 
-    private fun flushK16DisplaySnapshot(current: K16EndpointWorker): Boolean {
-        if (current.display0Snapshot() == null) return false
-        if (displaySessions.isEmpty()) return true
-        val refreshDisplayIds = displaySnapshotRefreshDisplayIds.toSet()
-        val snapshot =
-            if (refreshDisplayIds.isNotEmpty()) {
-                current.display0Snapshot().also { current.pollDisplay0Snapshot() }
-            } else {
-                current.pollDisplay0Snapshot()
-            } ?: return true
-        for (endpoint in displaySessions.activeEndpoints()) {
-            val renderer = SerialTextDisplayRenderer(snapshot.columns, snapshot.rows)
-            renderer.replaceCells(snapshot.cells)
-            val frame =
-                renderer.renderFrame(
-                    displayId = endpoint.displayId,
-                    pixelWidth = endpoint.width,
-                    pixelHeight = endpoint.height,
-                    sequence = snapshot.sequence,
-                )
-            sendFrame(endpoint.displayId, frame)
-        }
-        displaySnapshotRefreshDisplayIds.removeAll(refreshDisplayIds)
-        return true
-    }
-
     private fun flushFramebufferFrames(current: K16EndpointWorker): Boolean {
         val frames = current.drainDisplayFrames()
         if (frames.isEmpty()) return false
@@ -344,14 +312,11 @@ class K16RuntimeDevice(
         @Volatile
         private var outputCache: ByteArray = ByteArray(0)
 
-        @Volatile
-        private var display0Cache: NativeK16ComputerDisplaySnapshot? = null
         private val displayFrameCache = ConcurrentLinkedQueue<DisplayFrameDelta>()
 
         @Volatile
         var terminalControlReached: Boolean = false
             private set
-        private var lastPolledDisplay0Sequence: Long? = null
 
         fun start() {
             workerThread.start()
@@ -407,27 +372,12 @@ class K16RuntimeDevice(
 
         fun outputSnapshot(): ByteArray = outputCache.copyOf()
 
-        fun display0Snapshot(): NativeK16ComputerDisplaySnapshot? = display0Cache
-
         fun drainDisplayFrames(): List<DisplayFrameDelta> =
             buildList {
                 while (true) {
                     add(displayFrameCache.poll() ?: break)
                 }
             }
-
-        fun pollDisplay0Snapshot(): NativeK16ComputerDisplaySnapshot? {
-            val snapshot =
-                display0Cache ?: run {
-                    lastPolledDisplay0Sequence = null
-                    return null
-                }
-            if (lastPolledDisplay0Sequence == snapshot.sequence) {
-                return null
-            }
-            lastPolledDisplay0Sequence = snapshot.sequence
-            return snapshot
-        }
 
         fun clearOutput() {
             outputCache = ByteArray(0)
@@ -514,7 +464,6 @@ class K16RuntimeDevice(
 
         private fun refreshCaches(endpoint: K16ComputerEndpoint) {
             outputCache = endpoint.outputSnapshot()
-            display0Cache = endpoint.display0Snapshot()
             val frameBytes = endpoint.drainGpu0Frames()
             if (frameBytes.isNotEmpty()) {
                 displayFrameCache.addAll(NativeDisplayFrameCodec.decodeFrames(frameBytes))

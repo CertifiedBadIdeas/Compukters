@@ -70,16 +70,6 @@ fn run_bios(args: &[String]) -> Result<(), String> {
         control.panic_code,
         String::from_utf8_lossy(handle.debug_output_bytes()).escape_debug()
     );
-    if let Some(snapshot) = handle.display0_snapshot() {
-        println!(
-            "display0_row0={}",
-            display_row(&snapshot.cells, snapshot.columns, 0)
-        );
-        println!(
-            "display0_row2={}",
-            display_row(&snapshot.cells, snapshot.columns, 2)
-        );
-    }
     Ok(())
 }
 
@@ -565,20 +555,6 @@ fn hex_bytes(bytes: &[u8]) -> String {
     output
 }
 
-fn display_row(cells: &[u8], columns: u32, row: u32) -> String {
-    let start = (row * columns) as usize;
-    let end = start + columns as usize;
-    let Some(row_cells) = cells.get(start..end) else {
-        return String::new();
-    };
-    let visible_end = row_cells
-        .iter()
-        .rposition(|byte| *byte != b' ' && *byte != 0)
-        .map(|index| index + 1)
-        .unwrap_or(0);
-    String::from_utf8_lossy(&row_cells[..visible_end]).into_owned()
-}
-
 fn parse_blocks(value: &str) -> Result<u32, String> {
     let blocks = value
         .parse::<u32>()
@@ -608,7 +584,10 @@ fn link_usage_message() -> String {
 }
 
 fn runtime_usage_error() -> Result<(), String> {
-    Err("usage: k16 runtime <k16-startup|k16-memory-helpers|k16-cpu-helpers> -o <output.ko>".to_string())
+    Err(
+        "usage: k16 runtime <k16-startup|k16-memory-helpers|k16-cpu-helpers> -o <output.ko>"
+            .to_string(),
+    )
 }
 
 fn run_usage_error() -> Result<(), String> {

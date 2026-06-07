@@ -159,7 +159,6 @@ pub mod computer {
         pub const CONTROL: u32 = 1;
         pub const DEBUG: u32 = 2;
         pub const SERIAL_INPUT: u32 = 3;
-        pub const DISPLAY0: u32 = 4;
         pub const STORAGE0: u32 = 5;
         pub const GPU0: u32 = 6;
         pub const TIMER0: u32 = 7;
@@ -194,24 +193,6 @@ pub mod computer {
         pub const READY: u32 = 0x1000_0200;
         pub const READ: u32 = 0x1000_0204;
         pub const SIZE: u32 = 256;
-    }
-
-    pub mod display0 {
-        pub const BASE: u32 = 0x1000_0300;
-        pub const COLUMNS: u32 = 0x1000_0300;
-        pub const ROWS: u32 = 0x1000_0304;
-        pub const CURSOR_X: u32 = 0x1000_0308;
-        pub const CURSOR_Y: u32 = 0x1000_030c;
-        pub const COMMAND: u32 = 0x1000_0310;
-        pub const DATA: u32 = 0x1000_0314;
-        pub const SEQUENCE_LOW: u32 = 0x1000_0318;
-        pub const SEQUENCE_HIGH: u32 = 0x1000_031c;
-        pub const SIZE: u32 = 256;
-
-        pub const COMMAND_CLEAR: i32 = 1;
-        pub const COMMAND_PUT_BYTE_AT_CURSOR: i32 = 2;
-        pub const COMMAND_PUT_BYTE_AT_XY: i32 = 3;
-        pub const COMMAND_NEWLINE: i32 = 4;
     }
 
     pub mod storage0 {
@@ -364,7 +345,6 @@ mod tests {
         assert_eq!(computer::control::YIELD, 0x1000_000c);
         assert_eq!(computer::debug::WRITE, 0x1000_0100);
         assert_eq!(computer::serial_input::READ, 0x1000_0204);
-        assert_eq!(computer::display0::COMMAND, 0x1000_0310);
         assert_eq!(computer::storage0::COMMAND, 0x1000_040c);
         assert_eq!(computer::gpu0::COMMAND, 0x1000_0510);
         assert_eq!(computer::timer0::BASE, 0x1000_0600);
@@ -419,7 +399,7 @@ mod tests {
             page_size: 256,
             program_base: 256,
             hardware_table_addr: 28,
-            hardware_count: 8,
+            hardware_count: 7,
         };
         let timer0 = computer::profile::HardwareEntry {
             id: computer::hardware_id::TIMER0,
@@ -481,8 +461,8 @@ mod tests {
 
     #[test]
     fn mmio_helper_preserves_typed_address() {
-        let register = unsafe { mmio::<u32>(computer::display0::DATA) };
+        let register = unsafe { mmio::<u32>(computer::gpu0::COMMAND) };
 
-        assert_eq!(register.as_ptr() as usize, 0x1000_0314);
+        assert_eq!(register.as_ptr() as usize, 0x1000_0510);
     }
 }

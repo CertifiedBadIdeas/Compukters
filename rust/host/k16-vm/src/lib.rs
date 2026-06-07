@@ -1,7 +1,6 @@
 pub mod computer;
 pub mod computer_abi;
 pub mod computer_machine {
-    pub use crate::computer::devices::ComputerTextDisplaySnapshot;
     pub use crate::computer::machine::{
         BootHandoffError, ComputerMachine, ComputerMemoryMap, ComputerMemoryRegion, CpuId,
     };
@@ -20,9 +19,7 @@ pub mod k16e;
 pub mod low_bus;
 pub mod low_machine;
 pub mod k16_computer {
-    pub use crate::computer::handle::{
-        K16ComputerControl, K16ComputerHandle, K16ComputerTextDisplaySnapshot,
-    };
+    pub use crate::computer::handle::{K16ComputerControl, K16ComputerHandle};
     pub use crate::computer::machine::BootHandoffError;
 }
 pub mod storage_image;

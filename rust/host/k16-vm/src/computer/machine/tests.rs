@@ -1,7 +1,6 @@
 use super::ComputerMachine;
 use crate::computer::devices::{
     ComputerControlDevice, DebugSerialDevice, GpuDevice, KeyboardDevice, SerialInputDevice,
-    TextDisplayDevice,
 };
 use crate::computer::profile::{ComputerHardwareConfig, ComputerMachineProfile};
 use crate::computer_abi;
@@ -177,27 +176,21 @@ fn computer_keyboard0_drops_newest_event_on_overflow() {
 }
 
 #[test]
-fn computer_machine_writes_display0_hardware_entry() {
+fn computer_machine_omits_display0_hardware_entry() {
     let machine = ComputerMachine::new(1024).unwrap();
 
-    assert_eq!(read_u32(machine.memory(), 0x18), 8);
-    assert_hardware_entry(
-        machine.memory(),
-        76,
-        computer_abi::COMPUTER_HARDWARE_ID_DISPLAY0,
-        computer_abi::DISPLAY0_BASE,
-        computer_abi::DISPLAY0_SIZE,
-    );
+    assert_eq!(read_u32(machine.memory(), 0x18), 7);
+    assert!(machine.memory_map().region("display0").is_none());
 }
 
 #[test]
 fn computer_machine_writes_keyboard0_hardware_entry() {
     let machine = ComputerMachine::new(1024).unwrap();
 
-    assert_eq!(read_u32(machine.memory(), 0x18), 8);
+    assert_eq!(read_u32(machine.memory(), 0x18), 7);
     assert_hardware_entry_with_irq(
         machine.memory(),
-        140,
+        124,
         computer_abi::COMPUTER_HARDWARE_ID_KEYBOARD0,
         computer_abi::KEYBOARD0_BASE,
         computer_abi::KEYBOARD0_SIZE,
@@ -209,59 +202,14 @@ fn computer_machine_writes_keyboard0_hardware_entry() {
 fn computer_machine_writes_gpu0_hardware_entry() {
     let machine = ComputerMachine::new(1024).unwrap();
 
-    assert_eq!(read_u32(machine.memory(), 0x18), 8);
+    assert_eq!(read_u32(machine.memory(), 0x18), 7);
     assert_hardware_entry(
         machine.memory(),
-        92,
+        76,
         computer_abi::COMPUTER_HARDWARE_ID_GPU0,
         computer_abi::GPU0_BASE,
         computer_abi::GPU0_SIZE,
     );
-}
-
-#[test]
-fn computer_display0_mmio_reports_dimensions() {
-    let machine = ComputerMachine::new(1024).unwrap();
-
-    assert_eq!(
-        machine
-            .bus
-            .load_i32(ComputerMachine::DISPLAY0_COLUMNS)
-            .unwrap(),
-        80,
-    );
-    assert_eq!(
-        machine
-            .bus
-            .load_i32(ComputerMachine::DISPLAY0_ROWS)
-            .unwrap(),
-        25,
-    );
-}
-
-#[test]
-fn computer_display0_put_byte_updates_snapshot_and_sequence() {
-    let mut machine = ComputerMachine::new(1024).unwrap();
-
-    machine
-        .bus
-        .store_i32(ComputerMachine::DISPLAY0_DATA, i32::from(b'R'))
-        .unwrap();
-    machine
-        .bus
-        .store_i32(
-            ComputerMachine::DISPLAY0_COMMAND,
-            ComputerMachine::DISPLAY0_COMMAND_PUT_BYTE_AT_CURSOR,
-        )
-        .unwrap();
-
-    let snapshot = machine.display0_snapshot().unwrap();
-    assert_eq!(snapshot.columns, 80);
-    assert_eq!(snapshot.rows, 25);
-    assert_eq!(snapshot.cursor_x, 1);
-    assert_eq!(snapshot.cursor_y, 0);
-    assert_eq!(snapshot.sequence, 1);
-    assert_eq!(snapshot.cells[0], b'R');
 }
 
 #[test]
@@ -317,76 +265,6 @@ fn computer_gpu0_blits_guest_ram_to_frame_delta() {
 }
 
 #[test]
-fn computer_display0_put_byte_accepts_byte_data_write() {
-    let mut machine = ComputerMachine::new(1024).unwrap();
-
-    machine
-        .bus
-        .store_u8(ComputerMachine::DISPLAY0_DATA, b'K')
-        .unwrap();
-    machine
-        .bus
-        .store_i32(
-            ComputerMachine::DISPLAY0_COMMAND,
-            ComputerMachine::DISPLAY0_COMMAND_PUT_BYTE_AT_CURSOR,
-        )
-        .unwrap();
-
-    let snapshot = machine.display0_snapshot().unwrap();
-    assert_eq!(snapshot.cursor_x, 1);
-    assert_eq!(snapshot.sequence, 1);
-    assert_eq!(snapshot.cells[0], b'K');
-}
-
-#[test]
-fn computer_display0_clear_and_newline_are_deterministic() {
-    let mut machine = ComputerMachine::new(1024).unwrap();
-
-    machine
-        .bus
-        .store_i32(ComputerMachine::DISPLAY0_DATA, i32::from(b'A'))
-        .unwrap();
-    machine
-        .bus
-        .store_i32(
-            ComputerMachine::DISPLAY0_COMMAND,
-            ComputerMachine::DISPLAY0_COMMAND_PUT_BYTE_AT_CURSOR,
-        )
-        .unwrap();
-    machine
-        .bus
-        .store_i32(
-            ComputerMachine::DISPLAY0_COMMAND,
-            ComputerMachine::DISPLAY0_COMMAND_NEWLINE,
-        )
-        .unwrap();
-    machine
-        .bus
-        .store_i32(ComputerMachine::DISPLAY0_DATA, i32::from(b'B'))
-        .unwrap();
-    machine
-        .bus
-        .store_i32(
-            ComputerMachine::DISPLAY0_COMMAND,
-            ComputerMachine::DISPLAY0_COMMAND_PUT_BYTE_AT_CURSOR,
-        )
-        .unwrap();
-    machine
-        .bus
-        .store_i32(
-            ComputerMachine::DISPLAY0_COMMAND,
-            ComputerMachine::DISPLAY0_COMMAND_CLEAR,
-        )
-        .unwrap();
-
-    let snapshot = machine.display0_snapshot().unwrap();
-    assert_eq!(snapshot.cursor_x, 0);
-    assert_eq!(snapshot.cursor_y, 0);
-    assert_eq!(snapshot.sequence, 4);
-    assert!(snapshot.cells.iter().all(|cell| *cell == 0));
-}
-
-#[test]
 fn computer_debug_serial_output_can_be_drained_incrementally() {
     let mut machine = ComputerMachine::new(1024).unwrap();
 
@@ -436,7 +314,7 @@ fn computer_machine_writes_machine_profile_v2_boot_info() {
         read_u32(machine.memory(), 0x14),
         ComputerMachine::PROFILE_V2_BOOT_INFO_SIZE
     );
-    assert_eq!(read_u32(machine.memory(), 0x18), 8);
+    assert_eq!(read_u32(machine.memory(), 0x18), 7);
 }
 
 #[test]
@@ -467,27 +345,20 @@ fn computer_machine_writes_static_hardware_table_for_mmio_ranges() {
     assert_hardware_entry(
         machine.memory(),
         76,
-        computer_abi::COMPUTER_HARDWARE_ID_DISPLAY0,
-        computer_abi::DISPLAY0_BASE,
-        computer_abi::PROFILE_V2_PAGE_SIZE,
-    );
-    assert_hardware_entry(
-        machine.memory(),
-        92,
         computer_abi::COMPUTER_HARDWARE_ID_GPU0,
         computer_abi::GPU0_BASE,
         computer_abi::PROFILE_V2_PAGE_SIZE,
     );
     assert_hardware_entry(
         machine.memory(),
-        108,
+        92,
         computer_abi::COMPUTER_HARDWARE_ID_STORAGE0,
         computer_abi::STORAGE0_BASE,
         computer_abi::PROFILE_V2_PAGE_SIZE,
     );
     assert_hardware_entry_with_irq(
         machine.memory(),
-        124,
+        108,
         computer_abi::COMPUTER_HARDWARE_ID_TIMER0,
         computer_abi::TIMER0_BASE,
         computer_abi::PROFILE_V2_PAGE_SIZE,
@@ -495,7 +366,7 @@ fn computer_machine_writes_static_hardware_table_for_mmio_ranges() {
     );
     assert_hardware_entry_with_irq(
         machine.memory(),
-        140,
+        124,
         computer_abi::COMPUTER_HARDWARE_ID_KEYBOARD0,
         computer_abi::KEYBOARD0_BASE,
         computer_abi::PROFILE_V2_PAGE_SIZE,
@@ -508,7 +379,7 @@ fn computer_machine_can_be_created_from_explicit_computer_v1_profile() {
     let profile = ComputerMachineProfile::computer_v1(1024);
     let machine = ComputerMachine::from_profile(profile).unwrap();
 
-    assert_eq!(read_u32(machine.memory(), 0x18), 8);
+    assert_eq!(read_u32(machine.memory(), 0x18), 7);
     assert_hardware_entry(
         machine.memory(),
         28,
@@ -533,27 +404,20 @@ fn computer_machine_can_be_created_from_explicit_computer_v1_profile() {
     assert_hardware_entry(
         machine.memory(),
         76,
-        computer_abi::COMPUTER_HARDWARE_ID_DISPLAY0,
-        computer_abi::DISPLAY0_BASE,
-        computer_abi::PROFILE_V2_PAGE_SIZE,
-    );
-    assert_hardware_entry(
-        machine.memory(),
-        92,
         computer_abi::COMPUTER_HARDWARE_ID_GPU0,
         computer_abi::GPU0_BASE,
         computer_abi::PROFILE_V2_PAGE_SIZE,
     );
     assert_hardware_entry(
         machine.memory(),
-        108,
+        92,
         computer_abi::COMPUTER_HARDWARE_ID_STORAGE0,
         computer_abi::STORAGE0_BASE,
         computer_abi::PROFILE_V2_PAGE_SIZE,
     );
     assert_hardware_entry_with_irq(
         machine.memory(),
-        124,
+        108,
         computer_abi::COMPUTER_HARDWARE_ID_TIMER0,
         computer_abi::TIMER0_BASE,
         computer_abi::PROFILE_V2_PAGE_SIZE,
@@ -896,7 +760,6 @@ fn computer_machine_profile_controls_which_hardware_entries_are_visible() {
         computer_abi::PROFILE_V2_PAGE_SIZE,
     );
     assert!(machine.memory_map().region("display0").is_none());
-    assert!(machine.display0_snapshot().is_none());
 }
 
 #[test]
@@ -1133,10 +996,6 @@ fn computer_machine_constants_match_profile_v2_abi() {
         computer_abi::COMPUTER_HARDWARE_ID_SERIAL_INPUT,
     );
     assert_eq!(
-        ComputerMachine::HARDWARE_ID_DISPLAY0,
-        computer_abi::COMPUTER_HARDWARE_ID_DISPLAY0,
-    );
-    assert_eq!(
         ComputerMachine::HARDWARE_ID_TIMER0,
         computer_abi::COMPUTER_HARDWARE_ID_TIMER0,
     );
@@ -1174,50 +1033,6 @@ fn computer_machine_constants_match_profile_v2_abi() {
         ComputerMachine::SERIAL_INPUT_SIZE,
         computer_abi::SERIAL_INPUT_SIZE,
     );
-    assert_eq!(ComputerMachine::DISPLAY0_BASE, computer_abi::DISPLAY0_BASE);
-    assert_eq!(
-        ComputerMachine::DISPLAY0_COLUMNS,
-        computer_abi::DISPLAY0_COLUMNS,
-    );
-    assert_eq!(ComputerMachine::DISPLAY0_ROWS, computer_abi::DISPLAY0_ROWS);
-    assert_eq!(
-        ComputerMachine::DISPLAY0_CURSOR_X,
-        computer_abi::DISPLAY0_CURSOR_X,
-    );
-    assert_eq!(
-        ComputerMachine::DISPLAY0_CURSOR_Y,
-        computer_abi::DISPLAY0_CURSOR_Y,
-    );
-    assert_eq!(
-        ComputerMachine::DISPLAY0_COMMAND,
-        computer_abi::DISPLAY0_COMMAND,
-    );
-    assert_eq!(ComputerMachine::DISPLAY0_DATA, computer_abi::DISPLAY0_DATA);
-    assert_eq!(
-        ComputerMachine::DISPLAY0_SEQUENCE_LOW,
-        computer_abi::DISPLAY0_SEQUENCE_LOW,
-    );
-    assert_eq!(
-        ComputerMachine::DISPLAY0_SEQUENCE_HIGH,
-        computer_abi::DISPLAY0_SEQUENCE_HIGH,
-    );
-    assert_eq!(ComputerMachine::DISPLAY0_SIZE, computer_abi::DISPLAY0_SIZE);
-    assert_eq!(
-        ComputerMachine::DISPLAY0_COMMAND_CLEAR,
-        computer_abi::DISPLAY0_COMMAND_CLEAR,
-    );
-    assert_eq!(
-        ComputerMachine::DISPLAY0_COMMAND_PUT_BYTE_AT_CURSOR,
-        computer_abi::DISPLAY0_COMMAND_PUT_BYTE_AT_CURSOR,
-    );
-    assert_eq!(
-        ComputerMachine::DISPLAY0_COMMAND_PUT_BYTE_AT_XY,
-        computer_abi::DISPLAY0_COMMAND_PUT_BYTE_AT_XY,
-    );
-    assert_eq!(
-        ComputerMachine::DISPLAY0_COMMAND_NEWLINE,
-        computer_abi::DISPLAY0_COMMAND_NEWLINE,
-    );
     assert_eq!(ComputerMachine::GPU0_BASE, computer_abi::GPU0_BASE,);
     assert_eq!(ComputerMachine::GPU0_COMMAND, computer_abi::GPU0_COMMAND,);
     assert_eq!(
@@ -1243,14 +1058,12 @@ fn computer_mmio_device_sizes_match_profile_v2_abi() {
     let control = ComputerControlDevice::new();
     let debug = DebugSerialDevice::new();
     let serial_input = SerialInputDevice::new();
-    let display = TextDisplayDevice::new();
     let gpu = GpuDevice::new();
     let keyboard = KeyboardDevice::new();
 
     assert_eq!(control.size(), computer_abi::CONTROL_SIZE);
     assert_eq!(debug.size(), computer_abi::DEBUG_SIZE);
     assert_eq!(serial_input.size(), computer_abi::SERIAL_INPUT_SIZE);
-    assert_eq!(display.size(), computer_abi::DISPLAY0_SIZE);
     assert_eq!(gpu.size(), computer_abi::GPU0_SIZE);
     assert_eq!(keyboard.size(), computer_abi::KEYBOARD0_SIZE);
 }
@@ -1301,18 +1114,6 @@ fn computer_memory_map_describes_serial_input_mmio_region() {
     assert_eq!(serial_input.size, computer_abi::SERIAL_INPUT_SIZE);
     assert!(serial_input.readable);
     assert!(serial_input.writable);
-}
-
-#[test]
-fn computer_memory_map_describes_display0_mmio_region() {
-    let machine = ComputerMachine::new(1024).unwrap();
-    let map = machine.memory_map();
-    let display = map.region("display0").unwrap();
-
-    assert_eq!(display.base, computer_abi::DISPLAY0_BASE);
-    assert_eq!(display.size, computer_abi::DISPLAY0_SIZE);
-    assert!(display.readable);
-    assert!(display.writable);
 }
 
 #[test]

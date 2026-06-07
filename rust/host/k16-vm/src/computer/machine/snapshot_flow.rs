@@ -77,11 +77,6 @@ fn device_snapshot_records(machine: &ComputerMachine) -> Vec<ComputerDeviceSnaps
             bytes: debug.bytes().to_vec(),
         });
     }
-    if let Some(display0) = machine.display0_device() {
-        devices.push(ComputerDeviceSnapshotRecord::Display0 {
-            snapshot: display0.snapshot(),
-        });
-    }
     if let Some(serial_input) = machine.serial_input_device() {
         devices.push(ComputerDeviceSnapshotRecord::SerialInput {
             bytes: serial_input.bytes(),
@@ -137,13 +132,6 @@ fn restore_device_snapshot_record(
                     .to_string()
             })?;
             debug.restore_bytes(bytes);
-        }
-        ComputerDeviceSnapshotRecord::Display0 { snapshot } => {
-            let display0 = machine.display0_device_mut().ok_or_else(|| {
-                "ComputerMachine snapshot contains display0 device state but profile has no display0 device"
-                    .to_string()
-            })?;
-            display0.restore_snapshot(snapshot)?;
         }
         ComputerDeviceSnapshotRecord::SerialInput { bytes } => {
             let serial_input = machine.serial_input_device_mut().ok_or_else(|| {
