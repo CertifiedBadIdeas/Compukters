@@ -29,7 +29,7 @@ fn write_printable(byte: u8) -> bool {
         );
         BUFFER_LEN += 1;
     }
-    console::write_byte(display_byte(byte));
+    console::write_byte(byte);
     true
 }
 
@@ -52,12 +52,4 @@ fn complete_current() -> bool {
     };
     console::write_byte(b'\n');
     shell::handle_line(LINE_BUFFER_ADDR, completed_len)
-}
-
-fn display_byte(byte: u8) -> u8 {
-    if byte >= b'a' && byte <= b'z' {
-        byte - 32
-    } else {
-        byte
-    }
 }
