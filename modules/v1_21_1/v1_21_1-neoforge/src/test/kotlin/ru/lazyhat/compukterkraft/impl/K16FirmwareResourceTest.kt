@@ -1,5 +1,8 @@
 package ru.lazyhat.compukterkraft.impl
 
+import ru.lazyhat.compukterkraft.core.block.DeviceFamily
+import ru.lazyhat.compukterkraft.core.device.DeviceProperties
+import ru.lazyhat.compukterkraft.core.device.runtime.K16RuntimeDevice
 import ru.lazyhat.compukterkraft.core.device.vm.display.NativeDisplayFrameCodec
 import ru.lazyhat.compukterkraft.core.input.KeyCodes
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16BiosFlashWorkspace
@@ -10,6 +13,8 @@ import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayPixelFormat
 import ru.lazyhat.compukterkraft.lang.runtime.storage.K16_VOLUME_MAGIC_BYTES
 import ru.lazyhat.compukterkraft.lang.runtime.storage.K16SystemVolumeWorkspace
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.io.path.createTempDirectory
@@ -117,6 +122,42 @@ class K16FirmwareResourceTest {
 
         assertTrue(bytes.size > 512, "K16 system storage0 volume resource should not be empty")
         assertContentEquals(K16_VOLUME_MAGIC_BYTES, bytes.copyOfRange(0, K16_VOLUME_MAGIC_BYTES.size))
+    }
+
+    @Test
+    fun k16RuntimeDeviceServerTicksAdvanceNativeTimer0Snapshot() {
+        val workspace = createTempDirectory("k16-runtime-device-timer-test-")
+        val biosFlashPath = workspace.resolve("bios.kflash")
+        val storage0Path = workspace.resolve("storage0.kv")
+        biosFlashPath.writeBytes(K16BiosFlashWorkspace.loadBiosFlashResource(classLoader = javaClass.classLoader))
+        storage0Path.writeBytes(K16SystemVolumeWorkspace.loadStorage0VolumeResource(classLoader = javaClass.classLoader))
+        val device =
+            K16RuntimeDevice(
+                deviceId = 218,
+                properties = DeviceProperties(DeviceFamily.NORMAL, label = null),
+                endpointFactory = {
+                    K16ComputerRuntimeFactory.createFromBiosFlash(
+                        biosFlashPath = biosFlashPath,
+                        storage0Path = storage0Path,
+                    )
+                },
+                stateSink = {},
+            )
+
+        try {
+            device.turnOn()
+            repeat(5) {
+                device.serverTick()
+            }
+
+            val snapshot = requireNotNull(device.snapshotRuntimeState()) {
+                "K16 runtime device should expose a native machine snapshot while powered on"
+            }
+
+            assertEquals(5L, snapshotTimer0GameTicks(snapshot))
+        } finally {
+            device.close()
+        }
     }
 
     @Test
@@ -599,6 +640,57 @@ class K16FirmwareResourceTest {
             runShellCommand(runtime, "echo ok", expectVisiblePixels = true)
             runShellCommand(runtime, "ticks", expectVisiblePixels = true)
             runShellCommand(runtime, "wat", expectVisiblePixels = true)
+        }
+    }
+
+    @Test
+    fun bundledK16KernelTicksCommandReadsAdvancingTimer0() {
+        val workspace = createTempDirectory("k16-shell-ticks-output-test-")
+        val biosFlashPath = workspace.resolve("bios.kflash")
+        val storage0Path = workspace.resolve("storage0.kv")
+        biosFlashPath.writeBytes(K16BiosFlashWorkspace.loadBiosFlashResource(classLoader = javaClass.classLoader))
+        storage0Path.writeBytes(K16SystemVolumeWorkspace.loadStorage0VolumeResource(classLoader = javaClass.classLoader))
+
+        K16ComputerRuntimeFactory.createFromBiosFlash(
+            biosFlashPath = biosFlashPath,
+            storage0Path = storage0Path,
+        ).use { runtime ->
+            val control = runThroughBiosSplashAndBoot(runtime)
+            assertEquals(NativeK16ComputerControl.STATUS_READY, control.status)
+            NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
+            runShellCommand(runtime, "clear", expectVisiblePixels = false)
+            NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
+
+            val currentTicks = snapshotTimer0GameTicks(runtime.machineSnapshot())
+            val deltaToMakeCommandPrintLowNibbleFive = (5L - ((currentTicks + 1) and 0xF) + 16L) and 0xF
+            val ticksAfterManualAdvance = currentTicks + deltaToMakeCommandPrintLowNibbleFive
+            val expectedTicksAfterCommand = ticksAfterManualAdvance + 1
+            runtime.advanceGameTicks(deltaToMakeCommandPrintLowNibbleFive)
+            assertEquals(
+                ticksAfterManualAdvance,
+                snapshotTimer0GameTicks(runtime.machineSnapshot()),
+                "runtime.advanceGameTicks should advance timer0 in the machine snapshot before the shell command runs",
+            )
+            for (byte in "ticks\n".encodeToByteArray()) {
+                runtime.pushKeyboardChar(byte)
+            }
+            val afterTicksControl = runRuntimeServerTick(runtime, maxTurns = 256)
+            assertEquals(
+                expectedTicksAfterCommand,
+                snapshotTimer0GameTicks(runtime.machineSnapshot()),
+                "server tick should add one timer0 game tick before executing the shell command",
+            )
+            val terminalRow = snapshotRamBytes(runtime.machineSnapshot(), start = 0x8000 + 53, size = 53)
+                .toString(Charsets.US_ASCII)
+            val expectedLowHex = (expectedTicksAfterCommand and 0xffff_ffffL).toString(16).padStart(8, '0')
+            val expectedTerminalPrefix = "TICKS 0x00000000$expectedLowHex"
+
+            assertEquals(NativeK16ComputerControl.STATUS_READY, afterTicksControl.status)
+            assertTrue(
+                terminalRow.startsWith(expectedTerminalPrefix),
+                "ticks output should read the current timer0 value; expected prefix: $expectedTerminalPrefix, " +
+                    "actual terminal row: $terminalRow",
+            )
         }
     }
 
@@ -1154,4 +1246,43 @@ class K16FirmwareResourceTest {
             "shell command should produce visible gpu0 frames; command: $command",
         )
     }
+
+    private fun snapshotTimer0GameTicks(snapshot: ByteArray): Long {
+        val buffer = ByteBuffer.wrap(snapshot).order(ByteOrder.LITTLE_ENDIAN)
+        assertContentEquals("K16SNAP\u0000".encodeToByteArray(), snapshot.copyOfRange(0, 8))
+        val headerSize = buffer.getShort(0x0A).toInt()
+        val ramSize = buffer.getLong(0x10)
+        val cpuCount = buffer.getInt(0x18)
+        val deviceCount = buffer.getInt(0x20)
+        var offset = headerSize + ramSize.toInt() + cpuCount * K16_SNAPSHOT_CPU_RECORD_SIZE
+        repeat(deviceCount) {
+            val deviceKind = buffer.getInt(offset)
+            val payloadSize = buffer.getInt(offset + 4)
+            val payloadOffset = offset + K16_SNAPSHOT_DEVICE_HEADER_SIZE
+            if (deviceKind == K16_SNAPSHOT_TIMER0_DEVICE_KIND) {
+                assertEquals(K16_SNAPSHOT_TIMER0_PAYLOAD_SIZE, payloadSize)
+                return buffer.getLong(payloadOffset)
+            }
+            offset = payloadOffset + payloadSize
+        }
+        error("K16SNAP did not contain a timer0 device record")
+    }
+
+    private fun snapshotRamBytes(
+        snapshot: ByteArray,
+        start: Int,
+        size: Int,
+    ): ByteArray {
+        val buffer = ByteBuffer.wrap(snapshot).order(ByteOrder.LITTLE_ENDIAN)
+        assertContentEquals("K16SNAP\u0000".encodeToByteArray(), snapshot.copyOfRange(0, 8))
+        val headerSize = buffer.getShort(0x0A).toInt()
+        val ramSize = buffer.getLong(0x10)
+        require(start >= 0 && size >= 0 && start + size <= ramSize)
+        return snapshot.copyOfRange(headerSize + start, headerSize + start + size)
+    }
 }
+
+private const val K16_SNAPSHOT_CPU_RECORD_SIZE = 132
+private const val K16_SNAPSHOT_DEVICE_HEADER_SIZE = 8
+private const val K16_SNAPSHOT_TIMER0_DEVICE_KIND = 6
+private const val K16_SNAPSHOT_TIMER0_PAYLOAD_SIZE = 8
