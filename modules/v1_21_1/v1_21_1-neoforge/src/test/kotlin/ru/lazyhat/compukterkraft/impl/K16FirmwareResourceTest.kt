@@ -1,10 +1,13 @@
 package ru.lazyhat.compukterkraft.impl
 
+import ru.lazyhat.compukterkraft.core.device.vm.display.NativeDisplayFrameCodec
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16ComputerDisplaySnapshot
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16BiosFlashWorkspace
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16ComputerRuntime
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16ComputerRuntimeFactory
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16ComputerControl
+import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
+import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayPixelFormat
 import ru.lazyhat.compukterkraft.lang.runtime.storage.K16_VOLUME_MAGIC_BYTES
 import ru.lazyhat.compukterkraft.lang.runtime.storage.K16SystemVolumeWorkspace
 import java.nio.file.Path
@@ -119,16 +122,34 @@ class K16FirmwareResourceTest {
             storage0Path = storage0Path,
         ).use { runtime ->
             val control = runThroughBiosSplashAndBoot(runtime)
-            val snapshot = runtime.display0Snapshot() ?: error("display0 snapshot should exist")
-            val row0 = displayRow(snapshot, 0)
             val debug = runtime.outputSnapshot().decodeToString()
 
             assertEquals(
                 NativeK16ComputerControl.STATUS_READY,
                 control.status,
-                "display row 0: $row0, panic code: ${control.panicCode}, debug: $debug",
+                "panic code: ${control.panicCode}, debug: $debug",
             )
-            assertEquals("KERNEL OK", row0, "panic code: ${control.panicCode}, debug: $debug")
+            assertKernelGpuConsoleVisible(runtime, control, debug)
+        }
+    }
+
+    @Test
+    fun k16KernelConsoleDoesNotUseDisplay0() {
+        val kernelSourceDir = Path.of("../../../rust/guest/k16-kernel/src")
+        val checkedFiles =
+            listOf(
+                "main.rs",
+                "console.rs",
+                "gpu.rs",
+                "font.rs",
+            )
+
+        for (fileName in checkedFiles) {
+            val source = kernelSourceDir.resolve(fileName).readText()
+            assertFalse(
+                source.contains("display0"),
+                "$fileName must keep the kernel console path gpu0-only",
+            )
         }
     }
 
@@ -153,11 +174,10 @@ class K16FirmwareResourceTest {
             assertFalse("KERNEL OK" in splashRow0)
 
             val bootControl = runtime.tick(maxTurns = 1_000_000)
-            val bootSnapshot = runtime.display0Snapshot() ?: error("display0 boot snapshot should exist")
-            val bootRow0 = displayRow(bootSnapshot, 0)
+            val debug = runtime.outputSnapshot().decodeToString()
 
             assertEquals(NativeK16ComputerControl.STATUS_READY, bootControl.status)
-            assertEquals("KERNEL OK", bootRow0)
+            assertKernelGpuConsoleVisible(runtime, bootControl, debug)
         }
     }
 
@@ -186,12 +206,9 @@ class K16FirmwareResourceTest {
             snapshot = machineSnapshot,
         ).use { restored ->
             val control = restored.control()
-            val snapshot = restored.display0Snapshot() ?: error("restored display0 snapshot should exist")
-            val row0 = displayRow(snapshot, 0)
 
             assertEquals(NativeK16ComputerControl.STATUS_READY, control.status)
             assertEquals(0, control.panicCode)
-            assertEquals("KERNEL OK", row0)
         }
         assertContentEquals(storage0BeforeRestore, storage0Path.readBytes())
     }
@@ -208,6 +225,23 @@ class K16FirmwareResourceTest {
                 .indexOfLast { it != ' '.code.toByte() && it != 0.toByte() }
                 .let { if (it < 0) 0 else it + 1 }
         return cells.copyOfRange(0, visibleEnd).decodeToString()
+    }
+
+    private fun DisplayFrameDelta.hasVisiblePixels(): Boolean =
+        tiles.any { tile ->
+            tile.payload.asSequence().any { it != 0.toByte() }
+        }
+
+    private fun assertKernelGpuConsoleVisible(
+        runtime: K16ComputerRuntime,
+        control: NativeK16ComputerControl,
+        debug: String,
+    ) {
+        val frames = NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
+        assertTrue(
+            frames.any { it.pixelFormat == DisplayPixelFormat.RGB565 && it.hasVisiblePixels() },
+            "kernel should render visible console pixels through gpu0; frames: ${frames.size}, panic code: ${control.panicCode}, debug: $debug",
+        )
     }
 
     private fun runThroughBiosSplashAndBoot(runtime: K16ComputerRuntime): NativeK16ComputerControl {

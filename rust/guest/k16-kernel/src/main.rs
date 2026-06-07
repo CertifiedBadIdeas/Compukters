@@ -3,9 +3,11 @@
 
 extern crate k16_rt;
 
+mod console;
 mod control;
 mod debug;
-mod display;
+mod font;
+mod gpu;
 mod mmio;
 mod syscall;
 mod timer;
@@ -15,8 +17,9 @@ use core::panic::PanicInfo;
 
 #[no_mangle]
 pub extern "C" fn _start() -> ! {
-    display::clear();
-    display::print_kernel_ok();
+    console::init();
+    console::write_bytes(b"KERNEL OK");
+    console::flush();
     debug::print_kernel_ok();
     trap::initialize();
     control::set_ready();

@@ -115,6 +115,7 @@ RUSTC_BOOTSTRAP=1 \
 RUSTFLAGS="-C linker=$K16_LINKER -C link-arg=$WORK_DIR/cpu-helpers.o -C link-arg=--k16-target=kernel -Cjump-tables=no -Cdebuginfo=0 -Cdebug-assertions=off -Coverflow-checks=off -Zub-checks=no" \
 "$CARGO" \
     rustc \
+    --release \
     -Z build-std=core \
     -Z json-target-spec \
     --manifest-path "$ROOT/rust/guest/k16-kernel/Cargo.toml" \
@@ -138,7 +139,7 @@ RUSTFLAGS="-C linker=$K16_LINKER -C link-arg=$WORK_DIR/cpu-helpers.o -C link-arg
     }
 
 mapfile -t kernel_matches < <(
-    find "$KERNEL_TARGET_DIR/k16-unknown-kraftos/debug/deps" \
+    find "$KERNEL_TARGET_DIR/k16-unknown-kraftos/release/deps" \
         -maxdepth 1 \
         -type f \
         -name 'k16_kernel-*' \
