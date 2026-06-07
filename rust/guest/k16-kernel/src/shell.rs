@@ -104,9 +104,8 @@ fn run_echo(line_addr: u32, line_len: usize) {
 }
 
 fn run_ticks() {
-    console::write_bytes(b"TICKS 0x");
-    console::write_bytes(b"00000000");
-    write_u32_hex(timer::game_ticks_low());
+    console::write_bytes(b"TICKS ");
+    write_u32_decimal(timer::game_ticks_low());
     console::write_byte(b'\n');
     write_prompt();
 }
@@ -128,22 +127,39 @@ fn read_line_byte(line_addr: u32, offset: usize) -> u8 {
     unsafe { core::ptr::read_volatile((line_addr + offset as u32) as usize as *const u8) }
 }
 
-fn write_u32_hex(value: u32) {
-    let mut shift = 28;
-    loop {
-        write_hex_nibble(((value >> shift) & 0xf) as u8);
-        if shift == 0 {
-            break;
-        }
-        shift -= 4;
-    }
-}
+fn write_u32_decimal(value: u32) {
+    const POWERS_OF_TEN: [u32; 10] = [
+        1_000_000_000,
+        100_000_000,
+        10_000_000,
+        1_000_000,
+        100_000,
+        10_000,
+        1_000,
+        100,
+        10,
+        1,
+    ];
 
-fn write_hex_nibble(nibble: u8) {
-    let byte = if nibble < 10 {
-        b'0' + nibble
-    } else {
-        b'a' + (nibble - 10)
-    };
-    console::write_byte(byte);
+    if value == 0 {
+        console::write_byte(b'0');
+        return;
+    }
+
+    let mut remaining = value;
+    let mut started = false;
+    let mut index = 0;
+    while index < POWERS_OF_TEN.len() {
+        let power = POWERS_OF_TEN[index];
+        let mut digit = 0;
+        while remaining >= power {
+            remaining -= power;
+            digit += 1;
+        }
+        if digit != 0 || started {
+            console::write_byte(b'0' + digit);
+            started = true;
+        }
+        index += 1;
+    }
 }

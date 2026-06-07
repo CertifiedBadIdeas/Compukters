@@ -662,10 +662,10 @@ class K16FirmwareResourceTest {
             NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
 
             val currentTicks = snapshotTimer0GameTicks(runtime.machineSnapshot())
-            val deltaToMakeCommandPrintLowNibbleFive = (5L - ((currentTicks + 1) and 0xF) + 16L) and 0xF
-            val ticksAfterManualAdvance = currentTicks + deltaToMakeCommandPrintLowNibbleFive
+            val deltaToMakeCommandPrintKnownValue = 14L
+            val ticksAfterManualAdvance = currentTicks + deltaToMakeCommandPrintKnownValue
             val expectedTicksAfterCommand = ticksAfterManualAdvance + 1
-            runtime.advanceGameTicks(deltaToMakeCommandPrintLowNibbleFive)
+            runtime.advanceGameTicks(deltaToMakeCommandPrintKnownValue)
             assertEquals(
                 ticksAfterManualAdvance,
                 snapshotTimer0GameTicks(runtime.machineSnapshot()),
@@ -682,8 +682,7 @@ class K16FirmwareResourceTest {
             )
             val terminalRow = snapshotRamBytes(runtime.machineSnapshot(), start = 0x8000 + 53, size = 53)
                 .toString(Charsets.US_ASCII)
-            val expectedLowHex = (expectedTicksAfterCommand and 0xffff_ffffL).toString(16).padStart(8, '0')
-            val expectedTerminalPrefix = "TICKS 0x00000000$expectedLowHex"
+            val expectedTerminalPrefix = "TICKS ${expectedTicksAfterCommand and 0xffff_ffffL}"
 
             assertEquals(NativeK16ComputerControl.STATUS_READY, afterTicksControl.status)
             assertTrue(
