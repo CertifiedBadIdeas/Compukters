@@ -56,6 +56,9 @@ class WorkbenchTerminalInputController(
             val repeat = keysDown.get(actualKey)
             keysDown.set(actualKey)
             inputSink.accept(KeyInputEvent.Down(actualKey, repeat))
+            if (actualKey == KeyCodes.KEY_ENTER || actualKey == KeyCodes.KEY_KP_ENTER) {
+                inputSink.accept(KeyInputEvent.Character('\n'.code.toByte()))
+            }
         }
         return true
     }
