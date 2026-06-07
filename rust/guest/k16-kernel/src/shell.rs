@@ -105,7 +105,8 @@ fn run_echo(line_addr: u32, line_len: usize) {
 
 fn run_ticks() {
     console::write_bytes(b"TICKS 0x");
-    write_u64_hex(timer::game_ticks());
+    console::write_bytes(b"00000000");
+    write_u32_hex(timer::game_ticks_low());
     console::write_byte(b'\n');
     write_prompt();
 }
@@ -127,8 +128,8 @@ fn read_line_byte(line_addr: u32, offset: usize) -> u8 {
     unsafe { core::ptr::read_volatile((line_addr + offset as u32) as usize as *const u8) }
 }
 
-fn write_u64_hex(value: u64) {
-    let mut shift = 60;
+fn write_u32_hex(value: u32) {
+    let mut shift = 28;
     loop {
         write_hex_nibble(((value >> shift) & 0xf) as u8);
         if shift == 0 {
