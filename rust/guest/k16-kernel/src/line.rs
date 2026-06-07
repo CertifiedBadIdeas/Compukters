@@ -1,10 +1,9 @@
-use crate::console;
+use crate::{console, shell};
 
 const MAX_LINE_BYTES: usize = 128;
 const LINE_BUFFER_ADDR: u32 = 0x0000_8800;
 
 static mut BUFFER_LEN: usize = 0;
-static mut COMPLETED_LEN: usize = 0;
 
 pub fn input_byte(byte: u8) -> bool {
     match byte {
@@ -24,7 +23,6 @@ fn write_printable(byte: u8) -> bool {
         if BUFFER_LEN >= MAX_LINE_BYTES {
             return false;
         }
-        write_buffer_byte(BUFFER_LEN, byte);
         BUFFER_LEN += 1;
     }
     console::write_byte(byte);
@@ -37,23 +35,17 @@ fn backspace() -> bool {
             return false;
         }
         BUFFER_LEN -= 1;
-        write_buffer_byte(BUFFER_LEN, 0);
     }
     console::write_byte(b'\x08');
     true
 }
 
 fn complete_current() -> bool {
-    unsafe {
-        COMPLETED_LEN = BUFFER_LEN;
+    let completed_len = unsafe {
+        let completed_len = BUFFER_LEN;
         BUFFER_LEN = 0;
-    }
+        completed_len
+    };
     console::write_byte(b'\n');
-    true
-}
-
-fn write_buffer_byte(index: usize, value: u8) {
-    unsafe {
-        core::ptr::write_volatile((LINE_BUFFER_ADDR + index as u32) as usize as *mut u8, value);
-    }
+    shell::handle_line(LINE_BUFFER_ADDR, completed_len)
 }
