@@ -4,23 +4,18 @@ const FOREGROUND: u16 = 0xffff;
 const BACKGROUND: u16 = 0x0000;
 const GLYPH_PIXELS: usize = font::GLYPH_WIDTH * font::GLYPH_HEIGHT;
 const GLYPH_STRIDE_BYTES: u32 = (font::GLYPH_WIDTH * 2) as u32;
-const MAX_COLUMNS: usize = 320 / font::CELL_WIDTH;
-const MAX_ROWS: usize = 200 / font::CELL_HEIGHT;
+const COLUMNS: usize = 320 / font::CELL_WIDTH;
+const ROWS: usize = 200 / font::CELL_HEIGHT;
+const CELL_COUNT: usize = COLUMNS * ROWS;
 const CELLS_ADDR: u32 = 0x0000_8000;
 
 static mut GLYPH_BUFFER: [u16; GLYPH_PIXELS] = [0; GLYPH_PIXELS];
 
-static mut COLUMNS: usize = 0;
-static mut ROWS: usize = 0;
 static mut CURSOR_X: usize = 0;
 static mut CURSOR_Y: usize = 0;
 
 pub fn init() {
-    let width = gpu::width().max(0) as usize;
-    let height = gpu::height().max(0) as usize;
     unsafe {
-        COLUMNS = (width / font::CELL_WIDTH).clamp(1, MAX_COLUMNS);
-        ROWS = (height / font::CELL_HEIGHT).clamp(1, MAX_ROWS);
         CURSOR_X = 0;
         CURSOR_Y = 0;
     }
@@ -107,38 +102,16 @@ fn write_tab() {
 }
 
 unsafe fn clear_cells() {
-    let cell_count = COLUMNS * ROWS;
     let mut index = 0;
-    while index < cell_count {
+    while index < CELL_COUNT {
         write_cell(index, b' ');
         index += 1;
     }
 }
 
 unsafe fn scroll_up() {
-    if ROWS <= 1 {
-        clear_cells();
-        repaint_all();
-        return;
-    }
-    let last_row = ROWS - 1;
-    let mut row = 1;
-    while row < ROWS {
-        let mut col = 0;
-        while col < COLUMNS {
-            let source = cell_index(col, row);
-            let target = cell_index(col, row - 1);
-            write_cell(target, read_cell(source));
-            col += 1;
-        }
-        row += 1;
-    }
-    let mut col = 0;
-    while col < COLUMNS {
-        write_cell(cell_index(col, last_row), b' ');
-        col += 1;
-    }
-    repaint_all();
+    clear_cells();
+    gpu::clear(BACKGROUND);
 }
 
 fn set_cell(column: usize, row: usize, byte: u8) {
@@ -149,22 +122,18 @@ fn set_cell(column: usize, row: usize, byte: u8) {
 
 fn repaint_all() {
     gpu::clear(BACKGROUND);
-    unsafe {
-        let mut row = 0;
-        while row < ROWS {
-            repaint_row(row);
-            row += 1;
-        }
+    let mut row = 0;
+    while row < ROWS {
+        repaint_row(row);
+        row += 1;
     }
 }
 
 fn repaint_row(row: usize) {
-    unsafe {
-        let mut column = 0;
-        while column < COLUMNS {
-            repaint_cell(column, row);
-            column += 1;
-        }
+    let mut column = 0;
+    while column < COLUMNS {
+        repaint_cell(column, row);
+        column += 1;
     }
 }
 
@@ -175,7 +144,7 @@ fn repaint_cell(column: usize, row: usize) {
 }
 
 fn cell_index(column: usize, row: usize) -> usize {
-    row * unsafe { COLUMNS } + column
+    row * COLUMNS + column
 }
 
 unsafe fn read_cell(index: usize) -> u8 {

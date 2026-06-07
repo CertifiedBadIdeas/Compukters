@@ -23,9 +23,13 @@ fn write_printable(byte: u8) -> bool {
         if BUFFER_LEN >= MAX_LINE_BYTES {
             return false;
         }
+        core::ptr::write_volatile(
+            (LINE_BUFFER_ADDR + BUFFER_LEN as u32) as usize as *mut u8,
+            byte,
+        );
         BUFFER_LEN += 1;
     }
-    console::write_byte(byte);
+    console::write_byte(display_byte(byte));
     true
 }
 
@@ -48,4 +52,12 @@ fn complete_current() -> bool {
     };
     console::write_byte(b'\n');
     shell::handle_line(LINE_BUFFER_ADDR, completed_len)
+}
+
+fn display_byte(byte: u8) -> u8 {
+    if byte >= b'a' && byte <= b'z' {
+        byte - 32
+    } else {
+        byte
+    }
 }
