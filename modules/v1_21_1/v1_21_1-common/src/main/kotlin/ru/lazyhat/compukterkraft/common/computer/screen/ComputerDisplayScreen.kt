@@ -38,7 +38,6 @@ import ru.lazyhat.compukterkraft.common.platform.MinecraftInputProvider
 import ru.lazyhat.compukterkraft.common.ui.program.DslContainerScreen
 import ru.lazyhat.compukterkraft.common.utils.computerDataTagCopy
 import ru.lazyhat.compukterkraft.common.utils.computerID
-import ru.lazyhat.compukterkraft.core.gui.TerminalFontConstants
 import ru.lazyhat.compukterkraft.core.gui.TerminalRect
 import ru.lazyhat.compukterkraft.core.gui.WorkbenchTerminalInputController
 import ru.lazyhat.compukterkraft.core.gui.WorkbenchTerminalLayout
@@ -119,9 +118,9 @@ abstract class ComputerDisplayScreen<T : AbstractComputerMenu>(
         }
     }
 
-    protected fun currentDisplayWidth(): Int = (terminalColumns * TerminalFontConstants.FONT_WIDTH).coerceAtLeast(64)
+    protected fun currentDisplayWidth(): Int = K16_GPU0_WIDTH
 
-    protected fun currentDisplayHeight(): Int = (terminalRows * TerminalFontConstants.FONT_HEIGHT).coerceAtLeast(48)
+    protected fun currentDisplayHeight(): Int = K16_GPU0_HEIGHT
 
     protected fun displayResolutionText(
         width: Int,
@@ -275,6 +274,8 @@ abstract class ComputerDisplayScreen<T : AbstractComputerMenu>(
     }
 
     private companion object {
+        private const val K16_GPU0_WIDTH = 320
+        private const val K16_GPU0_HEIGHT = 200
         private val DISPLAY_PLACEHOLDER = Color.hex(0xFF05070AU)
     }
 }

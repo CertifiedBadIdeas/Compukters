@@ -26,7 +26,6 @@ import ru.lazyhat.compukterkraft.common.computer.screen.ComputerDisplayScreen
 import ru.lazyhat.compukterkraft.core.Config
 import ru.lazyhat.compukterkraft.core.device.input.ComputerControlAction
 import ru.lazyhat.compukterkraft.core.device.input.ControlInputEvent
-import ru.lazyhat.compukterkraft.core.gui.TerminalFontConstants
 import ru.lazyhat.compukterkraft.core.gui.WorkbenchTerminalLayout
 import ru.lazyhat.compukterkraft.core.gui.WorkbenchTerminalMetrics
 import ru.lazyhat.compukterkraft.core.ui.foundation.Color
@@ -123,7 +122,7 @@ class NotebookScreen(
                 modifier = Modifier.offset(statusRelX + 8, statusRelY + 6),
                 color = DIM,
             ) {
-                "${TERMINAL_COLUMNS * TerminalFontConstants.FONT_WIDTH} x ${TERMINAL_ROWS * TerminalFontConstants.FONT_HEIGHT}"
+                displayResolutionText(currentDisplayWidth(), currentDisplayHeight())
             }
             moduleBay(moduleBayX, moduleBayY)
 

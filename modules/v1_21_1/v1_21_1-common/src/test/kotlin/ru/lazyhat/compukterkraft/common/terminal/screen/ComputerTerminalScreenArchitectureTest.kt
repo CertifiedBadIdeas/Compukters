@@ -34,6 +34,10 @@ class ComputerTerminalScreenArchitectureTest {
         Paths
             .get("src/main/kotlin/ru/lazyhat/compukterkraft/common/computer/screen/ComputerDisplayScreen.kt")
             .readText()
+    private val notebookSource =
+        Paths
+            .get("src/main/kotlin/ru/lazyhat/compukterkraft/common/notebook/screen/NotebookScreen.kt")
+            .readText()
 
     @Test
     fun computerScreenUsesDisplayBufferNotTerminalBuffer() {
@@ -87,5 +91,16 @@ class ComputerTerminalScreenArchitectureTest {
         assertTrue(displaySource.contains("menu.clientSide.detachDisplayBuffer()"))
         assertTrue(displaySource.contains("menu.clientSide.attachDisplayBuffer(ClientDisplayBuffer(displayId, displayWidth, displayHeight))"))
         assertTrue(displaySource.contains("if (!buffer.hasReceivedFrames) return"))
+    }
+
+    @Test
+    fun computerScreenUsesGpu0ResolutionForDisplayEndpoint() {
+        assertTrue(displaySource.contains("K16_GPU0_WIDTH"))
+        assertTrue(displaySource.contains("K16_GPU0_HEIGHT"))
+        assertFalse(displaySource.contains("terminalColumns * TerminalFontConstants.FONT_WIDTH"))
+        assertFalse(displaySource.contains("terminalRows * TerminalFontConstants.FONT_HEIGHT"))
+        assertTrue(notebookSource.contains("displayResolutionText(currentDisplayWidth(), currentDisplayHeight())"))
+        assertFalse(notebookSource.contains("TERMINAL_COLUMNS * TerminalFontConstants.FONT_WIDTH"))
+        assertFalse(notebookSource.contains("TERMINAL_ROWS * TerminalFontConstants.FONT_HEIGHT"))
     }
 }
