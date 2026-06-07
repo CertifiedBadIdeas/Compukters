@@ -26,7 +26,6 @@ import ru.lazyhat.compukterkraft.core.device.runtime.ports.DeviceStateSink
 import ru.lazyhat.compukterkraft.core.device.runtime.ports.DisplayNetworkBridge
 import ru.lazyhat.compukterkraft.core.device.runtime.ports.NoopDisplayNetworkBridge
 import ru.lazyhat.compukterkraft.core.device.vm.display.NativeDisplayFrameCodec
-import ru.lazyhat.compukterkraft.core.gui.TerminalFontConstants
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16ComputerEndpoint
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16ComputerControl
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
@@ -60,9 +59,7 @@ class K16RuntimeDevice(
 
     private var endpoint: K16EndpointWorker? = null
     private val displaySessions = DisplaySessionTracker()
-    private val renderers = mutableMapOf<Int, SerialTextDisplayRenderer>()
     private var labelBacking: String? = properties.label
-    private var renderedSerialBytes = 0
     private var terminalControlReached = false
     private var runtimeFailureMessageBacking: String? = null
 
@@ -100,9 +97,7 @@ class K16RuntimeDevice(
     override fun shutdown() {
         val current = endpoint ?: return
         endpoint = null
-        renderedSerialBytes = 0
         terminalControlReached = false
-        renderers.clear()
         current.close()
         stateSink.onPowerStateChanged(false)
     }
@@ -116,9 +111,7 @@ class K16RuntimeDevice(
         val current = endpoint ?: return
         current.requestTick()
         terminalControlReached = current.terminalControlReached
-        if (!flushFramebufferFrames(current)) {
-            flushSerialOutput(current)
-        }
+        flushFramebufferFrames(current)
     }
 
     override fun close() = shutdown()
@@ -217,15 +210,13 @@ class K16RuntimeDevice(
         height: Int,
     ) {
         displaySessions.resize(playerUuid, displayId, width, height)
-        renderers.remove(displayId)
     }
 
     override fun detachDisplaySession(
         playerUuid: UUID,
         displayId: Int,
     ) {
-        val detachedDisplayId = displaySessions.detach(playerUuid, displayId) ?: return
-        renderers.remove(detachedDisplayId)
+        displaySessions.detach(playerUuid, displayId)
     }
 
     private fun argumentBytes(value: Any?): ByteArray? =
@@ -251,26 +242,6 @@ class K16RuntimeDevice(
     private fun argumentInt(value: Any?): Int? = value as? Int
 
     private fun argumentBoolean(value: Any?): Boolean? = value as? Boolean
-
-    private fun flushSerialOutput(current: K16EndpointWorker) {
-        if (displaySessions.isEmpty()) return
-        val output = current.outputSnapshot()
-        if (output.size <= renderedSerialBytes) return
-        val newBytes = output.copyOfRange(renderedSerialBytes, output.size)
-        renderedSerialBytes = output.size
-        for (endpoint in displaySessions.activeEndpoints()) {
-            val renderer =
-                renderers.getOrPut(endpoint.displayId) {
-                    SerialTextDisplayRenderer(
-                        columns = (endpoint.width / TerminalFontConstants.FONT_WIDTH).coerceAtLeast(1),
-                        rows = (endpoint.height / TerminalFontConstants.FONT_HEIGHT).coerceAtLeast(1),
-                    )
-                }
-            renderer.append(newBytes)
-            val frame = renderer.renderFrame(endpoint.displayId, endpoint.width, endpoint.height)
-            sendFrame(endpoint.displayId, frame)
-        }
-    }
 
     private fun flushFramebufferFrames(current: K16EndpointWorker): Boolean {
         val frames = current.drainDisplayFrames()
