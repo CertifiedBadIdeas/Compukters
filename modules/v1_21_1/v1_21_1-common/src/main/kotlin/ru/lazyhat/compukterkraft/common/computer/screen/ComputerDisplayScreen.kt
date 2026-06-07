@@ -185,6 +185,10 @@ abstract class ComputerDisplayScreen<T : AbstractComputerMenu>(
         lastMenuPowerState = currentPowerState
     }
 
+    protected fun resetDisplayBufferForRuntimeRestart() {
+        resetDisplayBuffer()
+    }
+
     private fun resetDisplayBuffer() {
         val displayWidth = currentDisplayWidth()
         val displayHeight = currentDisplayHeight()

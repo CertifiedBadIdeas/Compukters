@@ -103,6 +103,15 @@ class ComputerTerminalScreenArchitectureTest {
     }
 
     @Test
+    fun computerScreenResetsClientDisplayBufferBeforeRebootAction() {
+        assertTrue(displaySource.contains("protected fun resetDisplayBufferForRuntimeRestart()"))
+        assertTrue(terminalSource.contains("resetDisplayBufferForRuntimeRestart()"))
+        assertTrue(terminalSource.contains("ControlInputEvent(ComputerControlAction.REBOOT)"))
+        assertTrue(notebookSource.contains("resetDisplayBufferForRuntimeRestart()"))
+        assertTrue(notebookSource.contains("ComputerControlAction.REBOOT"))
+    }
+
+    @Test
     fun computerScreenUsesGpu0ResolutionForDisplayEndpoint() {
         assertTrue(displaySource.contains("K16_GPU0_WIDTH"))
         assertTrue(displaySource.contains("K16_GPU0_HEIGHT"))

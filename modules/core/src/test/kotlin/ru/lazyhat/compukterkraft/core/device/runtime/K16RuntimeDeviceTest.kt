@@ -175,6 +175,33 @@ class K16RuntimeDeviceTest {
     }
 
     @Test
+    fun rebootClosesRunningEndpointAndStartsReplacement() {
+        val endpoints = mutableListOf<RecordingK16Endpoint>()
+        val powerChanges = mutableListOf<Boolean>()
+        val device =
+            K16RuntimeDevice(
+                deviceId = 31,
+                properties = DeviceProperties(DeviceFamily.NORMAL, label = "K16"),
+                endpointFactory = {
+                    RecordingK16Endpoint().also { endpoints += it }
+                },
+                stateSink = { powerChanges += it },
+            )
+
+        device.turnOn()
+        assertTrue(device.isOn)
+        assertEquals(1, endpoints.size)
+
+        device.reboot()
+
+        assertTrue(device.isOn)
+        assertEquals(2, endpoints.size)
+        assertEquals(1, endpoints[0].closeCalls)
+        assertEquals(0, endpoints[1].closeCalls)
+        assertEquals(listOf(true, false, true), powerChanges)
+    }
+
+    @Test
     fun serverTickDoesNotExecuteK16EndpointOnCallerThread() {
         val endpoint = RecordingK16Endpoint()
         val device =
