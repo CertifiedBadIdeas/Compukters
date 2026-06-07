@@ -1,6 +1,7 @@
 package ru.lazyhat.compukterkraft.impl
 
 import ru.lazyhat.compukterkraft.core.device.vm.display.NativeDisplayFrameCodec
+import ru.lazyhat.compukterkraft.core.input.KeyCodes
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16BiosFlashWorkspace
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16ComputerRuntime
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16ComputerRuntimeFactory
@@ -855,6 +856,58 @@ class K16FirmwareResourceTest {
 
             assertEquals(NativeK16ComputerControl.STATUS_READY, afterInputControl.status)
             assertEquals(0, afterInputControl.panicCode)
+        }
+    }
+
+    @Test
+    fun bundledK16KernelShellHandlesEnterAndBackspaceKeyEvents() {
+        val workspace = createTempDirectory("k16-shell-special-keys-test-")
+        val biosFlashPath = workspace.resolve("bios.kflash")
+        val storage0Path = workspace.resolve("storage0.kv")
+        biosFlashPath.writeBytes(K16BiosFlashWorkspace.loadBiosFlashResource(classLoader = javaClass.classLoader))
+        storage0Path.writeBytes(K16SystemVolumeWorkspace.loadStorage0VolumeResource(classLoader = javaClass.classLoader))
+
+        K16ComputerRuntimeFactory.createFromBiosFlash(
+            biosFlashPath = biosFlashPath,
+            storage0Path = storage0Path,
+        ).use { runtime ->
+            val control = runThroughBiosSplashAndBoot(runtime)
+            assertEquals(NativeK16ComputerControl.STATUS_READY, control.status)
+            NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
+
+            "cleax".forEach { runtime.pushKeyboardChar(it.code.toByte()) }
+            assertEquals(NativeK16ComputerControl.STATUS_READY, runtime.tick(maxTurns = 256).status)
+            NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
+
+            runtime.pushKeyboardKeyDown(key = KeyCodes.KEY_BACKSPACE, repeat = false)
+            assertEquals(NativeK16ComputerControl.STATUS_READY, runtime.tick(maxTurns = 256).status)
+            NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
+
+            runtime.pushKeyboardChar('r'.code.toByte())
+            assertEquals(NativeK16ComputerControl.STATUS_READY, runtime.tick(maxTurns = 256).status)
+            NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
+
+            runtime.pushKeyboardKeyDown(key = KeyCodes.KEY_ENTER, repeat = false)
+            val afterEnterControl = runtime.tick(maxTurns = 256)
+            val frames = NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
+            val framebuffer = composeRgb565Framebuffer(frames, width = 320, height = 200)
+
+            assertEquals(NativeK16ComputerControl.STATUS_READY, afterEnterControl.status)
+            assertEquals(0, afterEnterControl.panicCode)
+            assertTrue(
+                frames.any { it.pixelFormat == DisplayPixelFormat.RGB565 },
+                "Enter key-down should complete the clear command and produce a gpu0 frame",
+            )
+            assertContentEquals(
+                intArrayOf(0b10001, 0b10010, 0b10100, 0b11000, 0b10100, 0b10010, 0b10001),
+                framebuffer.glyphRowsAt(x = 0, y = 1),
+                "Backspace key-down should erase x so cleax+r becomes clear and redraws the prompt",
+            )
+            assertContentEquals(
+                intArrayOf(0, 0, 0, 0, 0, 0, 0),
+                framebuffer.glyphRowsAt(x = 0, y = 9),
+                "clear via Enter key-down should leave the second terminal row blank",
+            )
         }
     }
 
