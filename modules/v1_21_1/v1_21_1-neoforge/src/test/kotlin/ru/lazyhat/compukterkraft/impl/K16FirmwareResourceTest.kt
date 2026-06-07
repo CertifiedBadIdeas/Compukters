@@ -193,6 +193,8 @@ class K16FirmwareResourceTest {
                 "keyboard.rs",
                 "line.rs",
                 "shell.rs",
+                "terminal.rs",
+                "terminal_render.rs",
             )
 
         for (fileName in checkedFiles) {
@@ -214,23 +216,42 @@ class K16FirmwareResourceTest {
 
     @Test
     fun k16KernelConsoleKeepsCellGridAndScrollsOnOverflow() {
-        val consoleSource = Path.of("../../../rust/guest/k16-kernel/src/console.rs").readText()
+        val kernelSourceDir = Path.of("../../../rust/guest/k16-kernel/src")
+        val consoleSource = kernelSourceDir.resolve("console.rs").readText()
+        val terminalSource = kernelSourceDir.resolve("terminal.rs").readText()
+        val terminalRenderSource = kernelSourceDir.resolve("terminal_render.rs").readText()
 
-        assertTrue(consoleSource.contains("const CELLS_ADDR:"), "kernel console should keep guest cell state")
-        assertTrue(consoleSource.contains("fn read_cell("), "kernel console should read cells from guest RAM")
-        assertTrue(consoleSource.contains("fn write_cell("), "kernel console should write cells into guest RAM")
-        assertTrue(consoleSource.contains("fn scroll_up("), "kernel console should keep a bottom-overflow boundary")
+        assertTrue(consoleSource.contains("use crate::terminal;"), "console facade should delegate to terminal state")
+        assertFalse(consoleSource.contains("static mut CURSOR_X:"), "console facade must not own cursor state")
+        assertFalse(consoleSource.contains("static mut GLYPH_BUFFER:"), "console facade must not own glyph buffers")
+        assertFalse(consoleSource.contains("fn render_glyph("), "console facade must not rasterize glyphs")
+        assertFalse(consoleSource.contains("fn blit_glyph("), "console facade must not blit glyphs")
+        assertFalse(consoleSource.contains("const CELLS_ADDR:"), "console facade must not own guest cell storage")
+
+        assertTrue(terminalSource.contains("const CELLS_ADDR:"), "terminal should keep guest cell state")
+        assertTrue(terminalSource.contains("static mut CURSOR_X:"), "terminal should own cursor state")
+        assertTrue(terminalSource.contains("fn read_cell("), "terminal should read cells from guest RAM")
+        assertTrue(terminalSource.contains("fn write_cell("), "terminal should write cells into guest RAM")
+        assertTrue(terminalSource.contains("fn scroll_up("), "terminal should keep a bottom-overflow boundary")
         assertTrue(
-            consoleSource.contains("copy_scrolled_cells();"),
+            terminalSource.contains("copy_scrolled_cells();"),
             "bottom overflow should preserve true scroll contents in guest cell state",
         )
         assertTrue(
-            consoleSource.contains("repaint_all_cells();"),
+            terminalSource.contains("repaint_all_cells();"),
             "bottom overflow should repaint the scrolled guest cell grid through gpu0",
         )
         assertFalse(
-            consoleSource.contains("else {\n            CURSOR_Y = 0;\n        }"),
+            terminalSource.contains("else {\n            CURSOR_Y = 0;\n        }"),
             "bottom overflow must not wrap to row zero",
+        )
+
+        assertTrue(terminalRenderSource.contains("static mut GLYPH_BUFFER:"), "terminal renderer should own glyph buffers")
+        assertTrue(terminalRenderSource.contains("fn render_glyph("), "terminal renderer should rasterize glyphs")
+        assertTrue(terminalRenderSource.contains("fn blit_glyph("), "terminal renderer should blit glyphs")
+        assertTrue(
+            terminalRenderSource.contains("gpu::blit_buffer("),
+            "terminal renderer should keep visible output on gpu0",
         )
     }
 

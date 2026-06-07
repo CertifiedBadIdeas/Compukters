@@ -14,6 +14,8 @@ mod line;
 mod mmio;
 mod shell;
 mod syscall;
+mod terminal;
+mod terminal_render;
 mod timer;
 mod trap;
 
