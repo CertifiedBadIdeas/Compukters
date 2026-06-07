@@ -40,6 +40,24 @@ class K16ComputerRuntimeTest {
     }
 
     @Test
+    fun pushesKeyboard0InputThroughDedicatedBindings() {
+        val bindings = EchoBindings()
+        val runtime = K16ComputerRuntime(handle = 8L, bindings = bindings)
+
+        runtime.pushKeyboardKeyDown(key = 257, repeat = true, modifiers = 2)
+        runtime.pushKeyboardKeyUp(key = 257, modifiers = 2)
+        runtime.pushKeyboardChar('R'.code.toByte())
+        runtime.pushKeyboardPasteBytes("K16".encodeToByteArray())
+        runtime.pushKeyboardPasteBytes(ByteArray(0))
+
+        assertEquals(listOf(KeyboardKeyDown(handle = 8L, key = 257, repeat = true, modifiers = 2)), bindings.keyboardKeyDowns)
+        assertEquals(listOf(KeyboardKeyUp(handle = 8L, key = 257, modifiers = 2)), bindings.keyboardKeyUps)
+        assertEquals(listOf(KeyboardChar(handle = 8L, value = 'R'.code.toByte())), bindings.keyboardChars)
+        assertEquals(listOf("K16"), bindings.keyboardPasteBytes.map { it.bytes.decodeToString() })
+        assertEquals(emptyList(), bindings.serialInputs.map { it.decodeToString() })
+    }
+
+    @Test
     fun freesNativeHandleOnlyOnce() {
         val bindings = EchoBindings()
         val runtime = K16ComputerRuntime(handle = 9L, bindings = bindings)
@@ -171,6 +189,10 @@ class K16ComputerRuntimeTest {
 
     private class EchoBindings : K16ComputerRuntimeBindings {
         val serialInputs = mutableListOf<ByteArray>()
+        val keyboardKeyDowns = mutableListOf<KeyboardKeyDown>()
+        val keyboardKeyUps = mutableListOf<KeyboardKeyUp>()
+        val keyboardChars = mutableListOf<KeyboardChar>()
+        val keyboardPasteBytes = mutableListOf<KeyboardPasteBytes>()
         val freedHandles = mutableListOf<Long>()
         val machineSnapshotHandles = mutableListOf<Long>()
         val advanceGameTickHandles = mutableListOf<Long>()
@@ -211,6 +233,37 @@ class K16ComputerRuntimeTest {
             pendingOutput += bytes.copyOf()
         }
 
+        override fun pushKeyboardKeyDown(
+            handle: Long,
+            key: Int,
+            repeat: Boolean,
+            modifiers: Int,
+        ) {
+            keyboardKeyDowns += KeyboardKeyDown(handle, key, repeat, modifiers)
+        }
+
+        override fun pushKeyboardKeyUp(
+            handle: Long,
+            key: Int,
+            modifiers: Int,
+        ) {
+            keyboardKeyUps += KeyboardKeyUp(handle, key, modifiers)
+        }
+
+        override fun pushKeyboardChar(
+            handle: Long,
+            value: Byte,
+        ) {
+            keyboardChars += KeyboardChar(handle, value)
+        }
+
+        override fun pushKeyboardPasteBytes(
+            handle: Long,
+            bytes: ByteArray,
+        ) {
+            keyboardPasteBytes += KeyboardPasteBytes(handle, bytes.copyOf())
+        }
+
         override fun drainDebugOutput(handle: Long): ByteArray =
             if (pendingOutput.isEmpty()) {
                 ByteArray(0)
@@ -232,5 +285,39 @@ class K16ComputerRuntimeTest {
         override fun free(handle: Long) {
             freedHandles += handle
         }
+    }
+
+    private data class KeyboardKeyDown(
+        val handle: Long,
+        val key: Int,
+        val repeat: Boolean,
+        val modifiers: Int,
+    )
+
+    private data class KeyboardKeyUp(
+        val handle: Long,
+        val key: Int,
+        val modifiers: Int,
+    )
+
+    private data class KeyboardChar(
+        val handle: Long,
+        val value: Byte,
+    )
+
+    private data class KeyboardPasteBytes(
+        val handle: Long,
+        val bytes: ByteArray,
+    ) {
+        override fun equals(other: Any?): Boolean =
+            this === other ||
+                (
+                    other is KeyboardPasteBytes &&
+                        handle == other.handle &&
+                        bytes.contentEquals(other.bytes)
+                )
+
+        override fun hashCode(): Int =
+            31 * handle.hashCode() + bytes.contentHashCode()
     }
 }

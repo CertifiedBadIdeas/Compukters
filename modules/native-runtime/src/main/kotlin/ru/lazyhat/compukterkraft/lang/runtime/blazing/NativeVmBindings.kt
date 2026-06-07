@@ -26,8 +26,7 @@ data class NativeK16ComputerControl(
     val exitCode: Int,
     val panicCode: Int,
 ) {
-    fun isTerminal(): Boolean =
-        status == STATUS_HALTED || status == STATUS_PANIC
+    fun isTerminal(): Boolean = status == STATUS_HALTED || status == STATUS_PANIC
 
     companion object {
         const val STATUS_RESET: Int = 0
@@ -219,6 +218,41 @@ object NativeVmBindings {
         pushK16ComputerSerialInputNative(handle, bytes)
     }
 
+    fun pushK16ComputerKeyboardKeyDown(
+        handle: Long,
+        key: Int,
+        repeat: Boolean,
+        modifiers: Int,
+    ) {
+        require(handle != 0L) { "Native K16 computer handle is zero" }
+        pushK16ComputerKeyboardKeyDownNative(handle, key, repeat, modifiers)
+    }
+
+    fun pushK16ComputerKeyboardKeyUp(
+        handle: Long,
+        key: Int,
+        modifiers: Int,
+    ) {
+        require(handle != 0L) { "Native K16 computer handle is zero" }
+        pushK16ComputerKeyboardKeyUpNative(handle, key, modifiers)
+    }
+
+    fun pushK16ComputerKeyboardChar(
+        handle: Long,
+        value: Byte,
+    ) {
+        require(handle != 0L) { "Native K16 computer handle is zero" }
+        pushK16ComputerKeyboardCharNative(handle, value)
+    }
+
+    fun pushK16ComputerKeyboardPasteBytes(
+        handle: Long,
+        bytes: ByteArray,
+    ) {
+        require(handle != 0L) { "Native K16 computer handle is zero" }
+        pushK16ComputerKeyboardPasteBytesNative(handle, bytes)
+    }
+
     fun freeK16Computer(handle: Long) {
         if (handle != 0L) {
             freeK16ComputerNative(handle)
@@ -284,6 +318,33 @@ object NativeVmBindings {
 
     @JvmStatic
     private external fun pushK16ComputerSerialInputNative(
+        handle: Long,
+        bytes: ByteArray,
+    )
+
+    @JvmStatic
+    private external fun pushK16ComputerKeyboardKeyDownNative(
+        handle: Long,
+        key: Int,
+        repeat: Boolean,
+        modifiers: Int,
+    )
+
+    @JvmStatic
+    private external fun pushK16ComputerKeyboardKeyUpNative(
+        handle: Long,
+        key: Int,
+        modifiers: Int,
+    )
+
+    @JvmStatic
+    private external fun pushK16ComputerKeyboardCharNative(
+        handle: Long,
+        value: Byte,
+    )
+
+    @JvmStatic
+    private external fun pushK16ComputerKeyboardPasteBytesNative(
         handle: Long,
         bytes: ByteArray,
     )

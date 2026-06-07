@@ -1,7 +1,7 @@
 use std::ptr::null_mut;
 
 use jni::objects::{JByteArray, JClass, JString};
-use jni::sys::{jbyteArray, jint, jlong, jlongArray};
+use jni::sys::{jboolean, jbyte, jbyteArray, jint, jlong, jlongArray};
 use jni::JNIEnv;
 
 use crate::display::{DisplayFrameDelta, PixelFormat};
@@ -271,6 +271,77 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
         }
     };
     handle.push_serial_input(&bytes);
+}
+
+#[no_mangle]
+pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_pushK16ComputerKeyboardKeyDownNative(
+    mut env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    handle: jlong,
+    key: jint,
+    repeat: jboolean,
+    modifiers: jint,
+) {
+    let handle = match k16_computer_handle_mut(&mut env, handle) {
+        Some(handle) => handle,
+        None => return,
+    };
+    handle.push_keyboard_key_down(key as u32, repeat != 0, modifiers);
+}
+
+#[no_mangle]
+pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_pushK16ComputerKeyboardKeyUpNative(
+    mut env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    handle: jlong,
+    key: jint,
+    modifiers: jint,
+) {
+    let handle = match k16_computer_handle_mut(&mut env, handle) {
+        Some(handle) => handle,
+        None => return,
+    };
+    handle.push_keyboard_key_up(key as u32, modifiers);
+}
+
+#[no_mangle]
+pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_pushK16ComputerKeyboardCharNative(
+    mut env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    handle: jlong,
+    value: jbyte,
+) {
+    let handle = match k16_computer_handle_mut(&mut env, handle) {
+        Some(handle) => handle,
+        None => return,
+    };
+    handle.push_keyboard_char(value as u8);
+}
+
+#[no_mangle]
+pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_pushK16ComputerKeyboardPasteBytesNative(
+    mut env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    handle: jlong,
+    bytes: JByteArray<'_>,
+) {
+    let handle = match k16_computer_handle_mut(&mut env, handle) {
+        Some(handle) => handle,
+        None => return,
+    };
+    let bytes = match env.convert_byte_array(&bytes) {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            let _ = env.throw_new(
+                "java/lang/IllegalArgumentException",
+                format!("Cannot read K16 computer keyboard paste bytes: {error}"),
+            );
+            return;
+        }
+    };
+    for byte in bytes {
+        handle.push_keyboard_paste_byte(byte);
+    }
 }
 
 #[no_mangle]
