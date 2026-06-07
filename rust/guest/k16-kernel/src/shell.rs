@@ -1,6 +1,6 @@
 use crate::console;
 
-const PROMPT: &[u8] = b"K ";
+const PROMPT: &[u8] = b"K16> ";
 
 pub fn init() {
     prompt();

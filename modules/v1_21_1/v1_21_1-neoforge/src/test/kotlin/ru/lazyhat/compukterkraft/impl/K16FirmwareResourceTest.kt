@@ -69,6 +69,8 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("rust/guest/k16-bios"))
         assertTrue(source.contains("rust/guest/k16-boot"))
         assertTrue(source.contains("rust/guest/k16-kernel"))
+        assertTrue(source.contains("dir(\"rust/guest/k16-kernel/src\")"))
+        assertTrue(source.contains("inputs.dir(k16KernelSource)"))
         assertTrue(source.contains("toolchain.cli.absolutePath"))
         assertFalse(source.contains(".toolchain/build/cargo/k16-tools"))
         assertFalse(source.contains("environment(\"CARGO_TARGET_DIR\""))
@@ -248,7 +250,7 @@ class K16FirmwareResourceTest {
     fun k16KernelShellDefinesPromptAndBuiltins() {
         val shellSource = Path.of("../../../rust/guest/k16-kernel/src/shell.rs").readText()
 
-        assertTrue(shellSource.contains("const PROMPT: &[u8] = b\"K \""))
+        assertTrue(shellSource.contains("const PROMPT: &[u8] = b\"K16> \""))
         assertTrue(shellSource.contains("fn prompt()"))
         assertTrue(shellSource.contains("fn read_line_byte("))
         assertTrue(shellSource.contains("core::ptr::read_volatile"))
@@ -267,6 +269,9 @@ class K16FirmwareResourceTest {
                 "b'K'",
                 "b'O'",
                 "b'R'",
+                "b'1'",
+                "b'6'",
+                "b'>'",
             )
 
         for (glyph in requiredGlyphs) {
@@ -298,6 +303,17 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("KERNEL_LOAD_ADDR=0x00005000"))
         assertTrue(source.contains("KERNEL_LIMIT_BYTES=12288"))
         assertTrue(source.contains("MIN_HEADROOM_BYTES"))
+    }
+
+    @Test
+    fun k16KernelTimerSmokeBuildUsesFirmwareSizeProfile() {
+        val toolPath = Path.of("../../../tools/k16-kernel-timer-smoke.sh")
+
+        assertTrue(Files.exists(toolPath), "K16 kernel timer smoke tool should exist")
+
+        val source = toolPath.readText()
+        assertTrue(source.contains("-Copt-level=z"))
+        assertTrue(source.contains("-C opt-level=z"))
     }
 
     @Test

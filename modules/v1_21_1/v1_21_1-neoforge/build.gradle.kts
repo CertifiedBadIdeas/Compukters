@@ -101,7 +101,7 @@ val k16BiosSource = rootProject.layout.projectDirectory.file("rust/guest/k16-bio
 val k16BootManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-boot/Cargo.toml")
 val k16BootSource = rootProject.layout.projectDirectory.file("rust/guest/k16-boot/src/main.rs")
 val k16KernelManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-kernel/Cargo.toml")
-val k16KernelSource = rootProject.layout.projectDirectory.file("rust/guest/k16-kernel/src/main.rs")
+val k16KernelSource = rootProject.layout.projectDirectory.dir("rust/guest/k16-kernel/src")
 val k16BootChainManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-boot-chain/Cargo.toml")
 val k16BootChainSource = rootProject.layout.projectDirectory.dir("rust/guest/k16-boot-chain/src")
 val k16HostToolsManifest = rootProject.layout.projectDirectory.file("rust/host/k16-tools/Cargo.toml")
@@ -362,7 +362,7 @@ val compileK16SystemKernel =
         group = "k16"
         inputs.file(k16GuestManifest)
         inputs.file(k16KernelManifest)
-        inputs.file(k16KernelSource)
+        inputs.dir(k16KernelSource)
         inputs.file(k16RustTargetSpec)
         inputs.file(k16HostToolsManifest)
         inputs.dir(k16HostToolsSource)

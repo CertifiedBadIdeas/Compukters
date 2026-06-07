@@ -112,7 +112,7 @@ KERNEL_TARGET_DIR="$WORK_DIR/kernel-target"
 run_k16_tool runtime k16-cpu-helpers -o "$WORK_DIR/cpu-helpers.o"
 RUSTC="$RUSTC" \
 RUSTC_BOOTSTRAP=1 \
-RUSTFLAGS="-C linker=$K16_LINKER -C link-arg=$WORK_DIR/cpu-helpers.o -C link-arg=--k16-target=kernel -Cjump-tables=no -Cdebuginfo=0 -Cdebug-assertions=off -Coverflow-checks=off -Zub-checks=no" \
+RUSTFLAGS="-C linker=$K16_LINKER -C link-arg=$WORK_DIR/cpu-helpers.o -C link-arg=--k16-target=kernel -Copt-level=z -Cjump-tables=no -Cdebuginfo=0 -Cdebug-assertions=off -Coverflow-checks=off -Zub-checks=no" \
 "$CARGO" \
     rustc \
     --release \
@@ -125,6 +125,7 @@ RUSTFLAGS="-C linker=$K16_LINKER -C link-arg=$WORK_DIR/cpu-helpers.o -C link-arg
     --target-dir "$KERNEL_TARGET_DIR" \
     -- \
     -C panic=abort \
+    -C opt-level=z \
     -C relocation-model=static \
     -Cjump-tables=no \
     -Cdebuginfo=0 \
