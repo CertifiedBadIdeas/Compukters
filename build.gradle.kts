@@ -437,15 +437,10 @@ tasks.register<Zip>("packageBuiltK16Toolchain") {
 }
 
 tasks.register<GenerateK16FontTablesTask>("generateK16FontTables") {
-    description = "Generates Rust and Kotlin terminal font tables from the K16 bitmap font source."
+    description = "Generates Rust terminal font tables from the K16 bitmap font source."
     group = "k16"
     fontFile.set(layout.projectDirectory.file("assets/k16/fonts/k16-mono-5x7.font"))
     rustOutput.set(layout.projectDirectory.file("rust/host/k16-vm/src/generated/font_mono5x7.rs"))
-    kotlinOutput.set(
-        layout.projectDirectory.file(
-            "modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/gui/GeneratedTerminalFont.kt",
-        ),
-    )
 }
 
 tasks.register<GenerateK16FontSpecimenTask>("generateK16FontSpecimen") {

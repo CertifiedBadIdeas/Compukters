@@ -121,6 +121,30 @@ class K16RuntimeDeviceTest {
     }
 
     @Test
+    fun runtimeDeviceDoesNotRenderSerialOutputAsDisplayFrames() {
+        val source =
+            root.resolve(
+                Path.of(
+                    "modules",
+                    "core",
+                    "src",
+                    "main",
+                    "kotlin",
+                    "ru",
+                    "lazyhat",
+                    "compukterkraft",
+                    "core",
+                    "device",
+                    "runtime",
+                    "K16RuntimeDevice.kt",
+                ),
+            ).readText()
+
+        assertFalse(source.contains("flushSerialOutput"))
+        assertFalse(source.contains("SerialTextDisplayRenderer"))
+    }
+
+    @Test
     fun ownsK16EndpointAndTicksItWhilePoweredOn() {
         val endpoint = RecordingK16Endpoint()
         val powerChanges = mutableListOf<Boolean>()
@@ -239,7 +263,7 @@ class K16RuntimeDeviceTest {
     }
 
     @Test
-    fun sendsSerialOutputFrameToAttachedDisplaySessions() {
+    fun doesNotSendSerialOutputFrameToAttachedDisplaySessions() {
         val endpoint = RecordingK16Endpoint()
         val displayNetwork = RecordingDisplayNetworkBridge()
         val device =
@@ -259,14 +283,7 @@ class K16RuntimeDeviceTest {
         waitUntil { device.serialOutputSnapshot().decodeToString() == "K16!" }
         device.serverTick()
 
-        assertEquals(1, displayNetwork.sentFrames.size)
-        val sent = displayNetwork.sentFrames.single()
-        assertEquals(playerUuid, sent.playerUuid)
-        assertEquals(17, sent.containerId)
-        assertEquals(1, sent.frame.displayId)
-        assertEquals(36, sent.frame.width)
-        assertEquals(27, sent.frame.height)
-        assertTrue(sent.frame.fullRefresh)
+        assertEquals(0, displayNetwork.sentFrames.size)
     }
 
     @Test

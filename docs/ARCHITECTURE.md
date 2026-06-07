@@ -57,13 +57,13 @@ RuntimeDevice.boot()
               ├─ Kraft16 CPU fetching instructions from mapped BIOS flash
               ├─ storage0 boot media
               ├─ flat RAM + MMIO bus (control, debug-serial, serial-input,
-              │   text-display, gpu0, storage0, bios-flash)
-              └─ exposes control / debug / display snapshot over JNI
+              │   gpu0, storage0, keyboard0, timer0, bios-flash)
+              └─ exposes control / debug bytes / gpu0 display frames over JNI
 
 RuntimeDevice.serverTick(gameTime)
   ├─ advance native VM until pause / halt
-  ├─ pull text display state
-  └─ drain debug serial bytes
+  ├─ drain gpu0 display frames
+  └─ cache debug serial bytes for diagnostics
 
 RuntimeDevice.close()
   └─ NativeVmBindings.freeK16Computer(handle)
@@ -90,7 +90,7 @@ RuntimeDevice.close()
 │                                                                     │
 │  RuntimeDevice.serverTick()                                          │
 │    ├─ NativeVmBindings advances the VM until pause / halt            │
-│    ├─ poll display snapshot / debug output                           │
+│    ├─ drain gpu0 frames / cache debug output                          │
 │    ├─ flushDisplaySessions → FrameDeltaClientMessage                 │
 │    └─ react to control register (halt / crash / reboot)              │
 └──────────────────────────────────────────┬──────────────────────────┘
@@ -105,9 +105,8 @@ RuntimeDevice.close()
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-The text display device exposes a character cell buffer with cursor and a
-monotonic sequence number for delta detection. The gpu0 device converts guest
-RAM pixel blits into display frame deltas. The client sends discrete input
-events into the serial-input MMIO device. There is no multi-process scheduling
-and no host-call opcode — host-side interaction happens purely through
-memory-mapped registers.
+The gpu0 device converts guest RAM pixel blits into display frame deltas. Debug
+serial output remains a byte stream for diagnostics and is not rendered into
+display frames by the host. The client sends discrete input events into guest
+input devices. There is no multi-process scheduling and no host-call opcode;
+host-side interaction happens purely through memory-mapped registers.
