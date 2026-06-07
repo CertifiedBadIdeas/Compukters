@@ -59,6 +59,7 @@ class K16RuntimeDevice(
 
     private var endpoint: K16EndpointWorker? = null
     private val displaySessions = DisplaySessionTracker()
+    private val pendingDisplayFrames = mutableListOf<DisplayFrameDelta>()
     private var labelBacking: String? = properties.label
     private var terminalControlReached = false
     private var runtimeFailureMessageBacking: String? = null
@@ -98,6 +99,7 @@ class K16RuntimeDevice(
         val current = endpoint ?: return
         endpoint = null
         terminalControlReached = false
+        pendingDisplayFrames.clear()
         current.close()
         stateSink.onPowerStateChanged(false)
     }
@@ -201,6 +203,7 @@ class K16RuntimeDevice(
         height: Int,
     ) {
         displaySessions.attach(playerUuid, containerId, displayId, width, height)
+        flushPendingDisplayFrames()
     }
 
     override fun resizeDisplaySession(
@@ -210,6 +213,7 @@ class K16RuntimeDevice(
         height: Int,
     ) {
         displaySessions.resize(playerUuid, displayId, width, height)
+        flushPendingDisplayFrames()
     }
 
     override fun detachDisplaySession(
@@ -244,27 +248,41 @@ class K16RuntimeDevice(
     private fun argumentBoolean(value: Any?): Boolean? = value as? Boolean
 
     private fun flushFramebufferFrames(current: K16EndpointWorker): Boolean {
-        val frames = current.drainDisplayFrames()
-        if (frames.isEmpty()) return false
+        pendingDisplayFrames.addAll(current.drainDisplayFrames())
+        return flushPendingDisplayFrames()
+    }
+
+    private fun flushPendingDisplayFrames(): Boolean {
+        if (pendingDisplayFrames.isEmpty()) return false
+        val frames = pendingDisplayFrames.toList()
+        pendingDisplayFrames.clear()
+        var sentAny = false
         for (frame in frames) {
-            sendFrame(frame.displayId, frame)
+            if (sendFrame(frame.displayId, frame)) {
+                sentAny = true
+            } else {
+                pendingDisplayFrames += frame
+            }
         }
-        return true
+        return sentAny
     }
 
     private fun sendFrame(
         displayId: Int,
         frame: ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta,
-    ) {
+    ): Boolean {
         val toDetach = mutableListOf<Pair<UUID, Int>>()
+        var sent = false
         for (session in displaySessions.sessionsSnapshot().filter { it.displayId == displayId }) {
             if (!displayNetwork.isDisplaySessionStillBound(session.playerUuid, session.containerId, deviceId, session.displayId)) {
                 toDetach += session.playerUuid to session.displayId
                 continue
             }
             displayNetwork.sendDisplayFrame(session.playerUuid, session.containerId, frame)
+            sent = true
         }
         toDetach.forEach { (playerUuid, detachedDisplayId) -> detachDisplaySession(playerUuid, detachedDisplayId) }
+        return sent
     }
 
     private class K16EndpointWorker(
