@@ -221,6 +221,51 @@ class K16FirmwareResourceTest {
     }
 
     @Test
+    fun k16KernelPayloadBudgetToolExists() {
+        val toolPath = Path.of("../../../tools/k16-kernel-payload-budget.sh")
+
+        assertTrue(Files.exists(toolPath), "K16 kernel payload budget tool should exist")
+
+        val source = toolPath.readText()
+        assertTrue(source.contains("KERNEL_LOAD_ADDR=0x00005000"))
+        assertTrue(source.contains("KERNEL_LIMIT_BYTES=12288"))
+        assertTrue(source.contains("MIN_HEADROOM_BYTES"))
+    }
+
+    @Test
+    fun bundledK16KernelPayloadKeepsMinimumHeadroom() {
+        val artifactPath = Path.of("build/generated/k16-firmware-artifacts/display-ok.kx")
+        val bytes = artifactPath.readBytes()
+        val kernelLoadAddr = 0x0000_5000
+        val kernelLimitBytes = 0x0000_8000 - kernelLoadAddr
+        val minHeadroomBytes = 1024
+
+        assertContentEquals("K16E".encodeToByteArray(), bytes.copyOfRange(0, 4))
+        assertEquals(1, bytes.u16Le(offset = 4), "K16E version")
+        assertEquals(32, bytes.u16Le(offset = 6), "K16E header size")
+        assertEquals(32, bytes.u32Le(offset = 16), "K16E section table offset")
+        assertEquals(1, bytes.u32Le(offset = 20), "K16E section count")
+        assertEquals(2, bytes.u32Le(offset = 24), "K16E ABI kind should be kernel")
+        assertEquals(1, bytes.u32Le(offset = 32), "K16E section kind should be load")
+        assertEquals(kernelLoadAddr, bytes.u32Le(offset = 36), "K16E kernel load address")
+        assertEquals(52, bytes.u32Le(offset = 40), "K16E kernel payload offset")
+
+        val payloadBytes = bytes.u32Le(offset = 44)
+        val memorySize = bytes.u32Le(offset = 48)
+        val headroomBytes = kernelLimitBytes - payloadBytes
+
+        assertEquals(payloadBytes, memorySize, "K16E kernel memory size should match file size")
+        assertTrue(
+            payloadBytes <= kernelLimitBytes,
+            "K16 kernel payload is too large: payload=$payloadBytes limit=$kernelLimitBytes",
+        )
+        assertTrue(
+            headroomBytes >= minHeadroomBytes,
+            "K16 kernel payload headroom is too low: payload=$payloadBytes headroom=$headroomBytes min=$minHeadroomBytes",
+        )
+    }
+
+    @Test
     fun bundledK16KernelEchoesKeyboardCharThroughGpuConsole() {
         val workspace = createTempDirectory("k16-keyboard-console-test-")
         val biosFlashPath = workspace.resolve("bios.kflash")
@@ -407,6 +452,16 @@ class K16FirmwareResourceTest {
         tiles.any { tile ->
             tile.payload.asSequence().any { it != 0.toByte() }
         }
+
+    private fun ByteArray.u16Le(offset: Int): Int =
+        (this[offset].toInt() and 0xFF) or
+            ((this[offset + 1].toInt() and 0xFF) shl 8)
+
+    private fun ByteArray.u32Le(offset: Int): Int =
+        (this[offset].toInt() and 0xFF) or
+            ((this[offset + 1].toInt() and 0xFF) shl 8) or
+            ((this[offset + 2].toInt() and 0xFF) shl 16) or
+            ((this[offset + 3].toInt() and 0xFF) shl 24)
 
     private fun assertKernelGpuConsoleVisible(
         runtime: K16ComputerRuntime,
