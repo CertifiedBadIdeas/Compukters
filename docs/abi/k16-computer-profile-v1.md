@@ -340,6 +340,14 @@ bit 2  alt
 bit 3  super
 ```
 
+Named key codes:
+
+```text
+257  enter
+259  backspace
+335  keypad enter
+```
+
 `event_kind`, `code`, `modifiers`, and `flags` describe the front queued
 event. When the queue is empty, these fields return `0`. For `key_down` and
 `key_up`, `code` is the stable host key code. For `char` and `paste_byte`,

@@ -328,6 +328,10 @@ pub mod computer {
         pub const MOD_CONTROL: i32 = 0x0000_0002;
         pub const MOD_ALT: i32 = 0x0000_0004;
         pub const MOD_SUPER: i32 = 0x0000_0008;
+
+        pub const KEY_ENTER: i32 = 257;
+        pub const KEY_KP_ENTER: i32 = 335;
+        pub const KEY_BACKSPACE: i32 = 259;
     }
 
     pub mod memory {
@@ -384,6 +388,9 @@ mod tests {
         assert_eq!(computer::keyboard0::MOD_CONTROL, 0x0000_0002);
         assert_eq!(computer::keyboard0::MOD_ALT, 0x0000_0004);
         assert_eq!(computer::keyboard0::MOD_SUPER, 0x0000_0008);
+        assert_eq!(computer::keyboard0::KEY_ENTER, 257);
+        assert_eq!(computer::keyboard0::KEY_KP_ENTER, 335);
+        assert_eq!(computer::keyboard0::KEY_BACKSPACE, 259);
         assert_eq!(computer::profile::BOOT_INFO_MAGIC, 0x4942_5852);
         assert_eq!(computer::profile::VERSION, 2);
         assert_eq!(computer::profile::BOOT_INFO_SIZE, 28);
