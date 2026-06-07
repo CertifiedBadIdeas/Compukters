@@ -46,6 +46,7 @@ class K16FontTableGeneratorTest {
         assertTrue(generatorSource.contains("guestRustSource"))
         assertTrue(generatorSource.contains("renderGuestRust"))
         assertTrue(generatorSource.contains("MONO5X7_ROWS"))
+        assertTrue(generatorSource.contains("[[u8; GLYPH_HEIGHT]; 128]"))
         assertTrue(taskSource.contains("guestRustOutput"))
         assertTrue(rootBuild.contains("rust/guest/k16-kernel/src/generated/font_mono5x7.rs"))
     }
