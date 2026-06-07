@@ -139,6 +139,7 @@ class NotebookScreen(
                 y = statusRelY + 3,
                 label = { "REBOOT" },
                 enabled = { menu.isComputerOn },
+                beforeAction = { resetDisplayBufferForRuntimeRestart() },
                 action = { ComputerControlAction.REBOOT },
             )
         }
@@ -160,12 +161,14 @@ class NotebookScreen(
         y: Int,
         label: () -> String,
         enabled: () -> Boolean,
+        beforeAction: () -> Unit = {},
         action: () -> ComputerControlAction,
     ) {
         button(
             modifier = Modifier.offset(x, y).size(68, 14),
             onClick = {
                 if (enabled()) {
+                    beforeAction()
                     inputHandler.accept(ControlInputEvent(action()))
                 }
             },

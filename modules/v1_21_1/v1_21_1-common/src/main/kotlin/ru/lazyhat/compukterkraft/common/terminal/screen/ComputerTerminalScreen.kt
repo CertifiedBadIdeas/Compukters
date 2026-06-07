@@ -207,6 +207,7 @@ open class ComputerTerminalScreen<T : AbstractComputerMenu>(
                         .hoverable(rebootHover)
                         .tooltip(CompukterTranslatable.Gui.Control.reboot),
                 onClick = {
+                    resetDisplayBufferForRuntimeRestart()
                     inputHandler.accept(ControlInputEvent(ComputerControlAction.REBOOT))
                 },
             ) {

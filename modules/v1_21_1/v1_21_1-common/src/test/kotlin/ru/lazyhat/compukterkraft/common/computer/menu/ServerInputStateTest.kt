@@ -24,6 +24,8 @@ import net.minecraft.world.entity.player.Player
 import net.minecraft.world.inventory.AbstractContainerMenu
 import net.minecraft.world.item.ItemStack
 import ru.lazyhat.compukterkraft.core.block.DeviceFamily
+import ru.lazyhat.compukterkraft.core.device.input.ComputerControlAction
+import ru.lazyhat.compukterkraft.core.device.input.ControlInputEvent
 import ru.lazyhat.compukterkraft.core.device.input.KeyInputEvent
 import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeDevice
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
@@ -54,6 +56,22 @@ class ServerInputStateTest {
         )
     }
 
+    @Test
+    fun controlRebootCallsRuntimeDeviceReboot() {
+        SharedConstants.tryDetectVersion()
+        Bootstrap.bootStrap()
+
+        val device = RecordingRuntimeDevice()
+        val menu = TestComputerMenu(device)
+
+        menu.serverSide.input.accept(ControlInputEvent(ComputerControlAction.REBOOT))
+
+        assertEquals(1, device.rebootCalls)
+        assertEquals(0, device.turnOnCalls)
+        assertEquals(0, device.shutdownCalls)
+        assertEquals(emptyList(), device.events)
+    }
+
     private data class QueuedEvent(
         val name: String,
         val arguments: List<Any>,
@@ -61,17 +79,26 @@ class ServerInputStateTest {
 
     private class RecordingRuntimeDevice : RuntimeDevice {
         val events = mutableListOf<QueuedEvent>()
+        var turnOnCalls = 0
+        var shutdownCalls = 0
+        var rebootCalls = 0
 
         override val deviceId: Int = 1
         override val isOn: Boolean = true
         override val family: DeviceFamily = DeviceFamily.NORMAL
         override var label: String? = null
 
-        override fun turnOn() = Unit
+        override fun turnOn() {
+            turnOnCalls += 1
+        }
 
-        override fun shutdown() = Unit
+        override fun shutdown() {
+            shutdownCalls += 1
+        }
 
-        override fun reboot() = Unit
+        override fun reboot() {
+            rebootCalls += 1
+        }
 
         override fun serverTick() = Unit
 
