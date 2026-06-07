@@ -142,6 +142,8 @@ class K16FirmwareResourceTest {
                 "console.rs",
                 "gpu.rs",
                 "font.rs",
+                "keyboard.rs",
+                "line.rs",
             )
 
         for (fileName in checkedFiles) {
@@ -169,6 +171,39 @@ class K16FirmwareResourceTest {
     }
 
     @Test
+    fun k16KernelLineDisciplineKeepsInputBufferOutOfKernelPayload() {
+        val lineSource = Path.of("../../../rust/guest/k16-kernel/src/line.rs").readText()
+
+        assertTrue(
+            lineSource.contains("const LINE_BUFFER_ADDR:"),
+            "line discipline should keep editable input storage in guest RAM",
+        )
+        assertFalse(
+            lineSource.contains("static mut BUFFER: [u8;"),
+            "line discipline must not embed the editable input buffer into the K16E payload",
+        )
+    }
+
+    @Test
+    fun k16KernelKeyboardInputGoesThroughLineDiscipline() {
+        val kernelSourceDir = Path.of("../../../rust/guest/k16-kernel/src")
+        val keyboardSource = kernelSourceDir.resolve("keyboard.rs").readText()
+
+        assertTrue(
+            keyboardSource.contains("line::input_byte"),
+            "keyboard character input should flow through the kernel line discipline",
+        )
+        assertFalse(
+            keyboardSource.contains("use crate::{console, mmio}"),
+            "keyboard.rs must not import the console directly",
+        )
+        assertFalse(
+            keyboardSource.contains("console::write_byte"),
+            "keyboard.rs must not echo bytes directly to the console",
+        )
+    }
+
+    @Test
     fun bundledK16KernelEchoesKeyboardCharThroughGpuConsole() {
         val workspace = createTempDirectory("k16-keyboard-console-test-")
         val biosFlashPath = workspace.resolve("bios.kflash")
@@ -192,6 +227,39 @@ class K16FirmwareResourceTest {
             assertTrue(
                 frames.any { it.pixelFormat == DisplayPixelFormat.RGB565 && it.hasVisiblePixels() },
                 "keyboard char input should produce a new visible gpu0 console frame",
+            )
+        }
+    }
+
+    @Test
+    fun bundledK16KernelLineDisciplineHandlesBackspaceAndEnter() {
+        val workspace = createTempDirectory("k16-line-discipline-test-")
+        val biosFlashPath = workspace.resolve("bios.kflash")
+        val storage0Path = workspace.resolve("storage0.kv")
+        biosFlashPath.writeBytes(K16BiosFlashWorkspace.loadBiosFlashResource(classLoader = javaClass.classLoader))
+        storage0Path.writeBytes(K16SystemVolumeWorkspace.loadStorage0VolumeResource(classLoader = javaClass.classLoader))
+
+        K16ComputerRuntimeFactory.createFromBiosFlash(
+            biosFlashPath = biosFlashPath,
+            storage0Path = storage0Path,
+        ).use { runtime ->
+            val control = runThroughBiosSplashAndBoot(runtime)
+            assertEquals(NativeK16ComputerControl.STATUS_READY, control.status)
+            NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
+
+            runtime.pushKeyboardChar('A'.code.toByte())
+            runtime.pushKeyboardChar('B'.code.toByte())
+            runtime.pushKeyboardChar('\b'.code.toByte())
+            runtime.pushKeyboardChar('C'.code.toByte())
+            runtime.pushKeyboardChar('\n'.code.toByte())
+            val afterInputControl = runtime.tick(maxTurns = 128)
+            val frames = NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
+
+            assertEquals(NativeK16ComputerControl.STATUS_READY, afterInputControl.status)
+            assertEquals(0, afterInputControl.panicCode)
+            assertTrue(
+                frames.any { it.pixelFormat == DisplayPixelFormat.RGB565 && it.hasVisiblePixels() },
+                "line discipline editing should produce visible gpu0 console frames",
             )
         }
     }
