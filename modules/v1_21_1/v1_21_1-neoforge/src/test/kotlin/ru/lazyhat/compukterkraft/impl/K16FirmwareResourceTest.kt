@@ -318,6 +318,8 @@ class K16FirmwareResourceTest {
 
         assertTrue(fontSource.contains("font_mono5x7::MONO5X7_ROWS"))
         assertTrue(fontSource.contains("font_mono5x7::FALLBACK_ROWS"))
+        assertTrue(fontSource.contains("MONO5X7_ROWS[byte as usize]"))
+        assertFalse(fontSource.contains("byte -"), "kernel font lookup should not use range-offset indexing")
         assertFalse(fontSource.contains("match byte"), "kernel font lookup should stay table-driven")
     }
 
@@ -502,9 +504,14 @@ class K16FirmwareResourceTest {
 
             assertEquals(NativeK16ComputerControl.STATUS_READY, afterInputControl.status)
             assertContentEquals(
-                intArrayOf(0b00000, 0b00000, 0b01110, 0b00001, 0b01111, 0b10001, 0b01111),
+                intArrayOf(0, 0, 0, 0, 0, 0, 0),
+                framebuffer.glyphRowsAt(x = 9 * 6, y = 9),
+                "printable ASCII input should render space as a blank glyph",
+            )
+            assertContentEquals(
+                intArrayOf(0b01110, 0b10001, 0b10001, 0b11111, 0b10001, 0b10001, 0b10001),
                 framebuffer.glyphRowsAt(x = 10 * 6, y = 9),
-                "printable ASCII input should render lowercase a through the guest kernel font",
+                "printable ASCII input should render uppercase A through the guest kernel font",
             )
         }
     }
