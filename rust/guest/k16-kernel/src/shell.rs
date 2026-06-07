@@ -13,6 +13,9 @@ pub fn handle_line(line_addr: u32, line_len: usize) -> bool {
     } else if is_ok(line_addr, line_len) {
         console::write_bytes(b"OK\n");
         prompt();
+    } else if is_help(line_addr, line_len) {
+        console::write_bytes(b"HELP\nOK\nCLEAR\nECHO\n");
+        prompt();
     } else if is_clear(line_addr, line_len) {
         console::clear();
         prompt();
@@ -43,6 +46,14 @@ fn is_clear(line_addr: u32, line_len: usize) -> bool {
         && read_line_byte(line_addr, 2) == b'e'
         && read_line_byte(line_addr, 3) == b'a'
         && read_line_byte(line_addr, 4) == b'r'
+}
+
+fn is_help(line_addr: u32, line_len: usize) -> bool {
+    line_len == 4
+        && read_line_byte(line_addr, 0) == b'h'
+        && read_line_byte(line_addr, 1) == b'e'
+        && read_line_byte(line_addr, 2) == b'l'
+        && read_line_byte(line_addr, 3) == b'p'
 }
 
 fn is_echo(line_addr: u32, line_len: usize) -> bool {

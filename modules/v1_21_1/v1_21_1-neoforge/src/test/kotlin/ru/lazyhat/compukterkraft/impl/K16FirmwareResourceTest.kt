@@ -213,7 +213,7 @@ class K16FirmwareResourceTest {
     }
 
     @Test
-    fun k16KernelConsoleKeepsCellGridAndClearOnOverflow() {
+    fun k16KernelConsoleKeepsCellGridAndScrollsOnOverflow() {
         val consoleSource = Path.of("../../../rust/guest/k16-kernel/src/console.rs").readText()
 
         assertTrue(consoleSource.contains("const CELLS_ADDR:"), "kernel console should keep guest cell state")
@@ -221,8 +221,12 @@ class K16FirmwareResourceTest {
         assertTrue(consoleSource.contains("fn write_cell("), "kernel console should write cells into guest RAM")
         assertTrue(consoleSource.contains("fn scroll_up("), "kernel console should keep a bottom-overflow boundary")
         assertTrue(
-            consoleSource.contains("gpu::clear(BACKGROUND);"),
-            "bottom overflow should clear the gpu0 console in this payload-budgeted shell slice",
+            consoleSource.contains("copy_scrolled_cells();"),
+            "bottom overflow should preserve true scroll contents in guest cell state",
+        )
+        assertTrue(
+            consoleSource.contains("repaint_all_cells();"),
+            "bottom overflow should repaint the scrolled guest cell grid through gpu0",
         )
         assertFalse(
             consoleSource.contains("else {\n            CURSOR_Y = 0;\n        }"),
@@ -303,26 +307,18 @@ class K16FirmwareResourceTest {
         assertTrue(shellSource.contains("fn is_ok("), "shell should dispatch ok")
         assertTrue(shellSource.contains("fn is_clear("), "shell should dispatch clear")
         assertTrue(shellSource.contains("fn is_echo("), "shell should dispatch echo")
+        assertTrue(shellSource.contains("fn is_help("), "shell should dispatch help")
+        assertTrue(shellSource.contains("HELP\\nOK\\nCLEAR\\nECHO\\n"), "help should print a readable command list")
         assertTrue(shellSource.contains("b\"ERR\\n\""), "unknown commands should report a short error")
     }
 
     @Test
     fun k16KernelFontCoversWorkingShellText() {
         val fontSource = Path.of("../../../rust/guest/k16-kernel/src/font.rs").readText()
-        val requiredGlyphs =
-            listOf(
-                "b'E'",
-                "b'K'",
-                "b'O'",
-                "b'R'",
-                "b'1'",
-                "b'6'",
-                "b'>'",
-            )
 
-        for (glyph in requiredGlyphs) {
-            assertTrue(fontSource.contains(glyph), "font should contain shell glyph $glyph")
-        }
+        assertTrue(fontSource.contains("font_mono5x7::MONO5X7_ROWS"))
+        assertTrue(fontSource.contains("font_mono5x7::FALLBACK_ROWS"))
+        assertFalse(fontSource.contains("match byte"), "kernel font lookup should stay table-driven")
     }
 
     @Test
@@ -474,9 +470,42 @@ class K16FirmwareResourceTest {
             NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
 
             runShellCommand(runtime, "ok", expectVisiblePixels = true)
+            runShellCommand(runtime, "help", expectVisiblePixels = true)
             runShellCommand(runtime, "clear", expectVisiblePixels = false)
             runShellCommand(runtime, "echo ok", expectVisiblePixels = true)
             runShellCommand(runtime, "wat", expectVisiblePixels = true)
+        }
+    }
+
+    @Test
+    fun bundledK16KernelShellRendersPrintableAsciiInputThroughGpuConsole() {
+        val workspace = createTempDirectory("k16-shell-printable-ascii-test-")
+        val biosFlashPath = workspace.resolve("bios.kflash")
+        val storage0Path = workspace.resolve("storage0.kv")
+        biosFlashPath.writeBytes(K16BiosFlashWorkspace.loadBiosFlashResource(classLoader = javaClass.classLoader))
+        storage0Path.writeBytes(K16SystemVolumeWorkspace.loadStorage0VolumeResource(classLoader = javaClass.classLoader))
+
+        K16ComputerRuntimeFactory.createFromBiosFlash(
+            biosFlashPath = biosFlashPath,
+            storage0Path = storage0Path,
+        ).use { runtime ->
+            val control = runThroughBiosSplashAndBoot(runtime)
+            assertEquals(NativeK16ComputerControl.STATUS_READY, control.status)
+            NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
+
+            for (byte in "echo abc xyz 0123456789 !?\n".encodeToByteArray()) {
+                runtime.pushKeyboardChar(byte)
+            }
+            val afterInputControl = runtime.tick(maxTurns = 512)
+            val frames = NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
+            val framebuffer = composeRgb565Framebuffer(frames, width = 320, height = 200)
+
+            assertEquals(NativeK16ComputerControl.STATUS_READY, afterInputControl.status)
+            assertContentEquals(
+                intArrayOf(0b00000, 0b00000, 0b01110, 0b00001, 0b01111, 0b10001, 0b01111),
+                framebuffer.glyphRowsAt(x = 10 * 6, y = 9),
+                "printable ASCII input should render lowercase a through the guest kernel font",
+            )
         }
     }
 

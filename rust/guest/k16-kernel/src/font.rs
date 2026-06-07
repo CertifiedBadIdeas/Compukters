@@ -1,37 +1,13 @@
-pub const GLYPH_WIDTH: usize = 5;
-pub const GLYPH_HEIGHT: usize = 7;
-pub const CELL_WIDTH: usize = 6;
-pub const CELL_HEIGHT: usize = 8;
+use crate::generated::font_mono5x7;
+
+pub const GLYPH_WIDTH: usize = font_mono5x7::GLYPH_WIDTH;
+pub const GLYPH_HEIGHT: usize = font_mono5x7::GLYPH_HEIGHT;
+pub const CELL_WIDTH: usize = font_mono5x7::CELL_WIDTH;
+pub const CELL_HEIGHT: usize = font_mono5x7::CELL_HEIGHT;
 
 pub fn glyph(byte: u8) -> [u8; GLYPH_HEIGHT] {
-    match byte {
-        b'1' => [
-            0b00100, 0b01100, 0b00100, 0b00100, 0b00100, 0b00100, 0b01110,
-        ],
-        b'6' => [
-            0b00110, 0b01000, 0b10000, 0b11110, 0b10001, 0b10001, 0b01110,
-        ],
-        b'>' => [
-            0b10000, 0b01000, 0b00100, 0b00010, 0b00100, 0b01000, 0b10000,
-        ],
-        b'E' => [
-            0b11111, 0b10000, 0b10000, 0b11110, 0b10000, 0b10000, 0b11111,
-        ],
-        b'K' => [
-            0b10001, 0b10010, 0b10100, 0b11000, 0b10100, 0b10010, 0b10001,
-        ],
-        b'L' => [
-            0b10000, 0b10000, 0b10000, 0b10000, 0b10000, 0b10000, 0b11111,
-        ],
-        b'N' => [
-            0b10001, 0b11001, 0b10101, 0b10011, 0b10001, 0b10001, 0b10001,
-        ],
-        b'O' => [
-            0b01110, 0b10001, 0b10001, 0b10001, 0b10001, 0b10001, 0b01110,
-        ],
-        b'R' => [
-            0b11110, 0b10001, 0b10001, 0b11110, 0b10100, 0b10010, 0b10001,
-        ],
-        _ => [0; GLYPH_HEIGHT],
+    if byte < font_mono5x7::MONO5X7_FIRST || byte > font_mono5x7::MONO5X7_LAST {
+        return font_mono5x7::FALLBACK_ROWS;
     }
+    font_mono5x7::MONO5X7_ROWS[(byte - font_mono5x7::MONO5X7_FIRST) as usize]
 }

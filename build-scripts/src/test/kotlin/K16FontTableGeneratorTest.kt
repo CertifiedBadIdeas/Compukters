@@ -38,6 +38,19 @@ class K16FontTableGeneratorTest {
     }
 
     @Test
+    fun generatorDefinesGuestRustFontTableOutput() {
+        val generatorSource = Path.of("src", "main", "kotlin", "K16FontTableGenerator.kt").readText()
+        val taskSource = Path.of("src", "main", "kotlin", "GenerateK16FontTablesTask.kt").readText()
+        val rootBuild = Path.of("..", "build.gradle.kts").readText()
+
+        assertTrue(generatorSource.contains("guestRustSource"))
+        assertTrue(generatorSource.contains("renderGuestRust"))
+        assertTrue(generatorSource.contains("MONO5X7_ROWS"))
+        assertTrue(taskSource.contains("guestRustOutput"))
+        assertTrue(rootBuild.contains("rust/guest/k16-kernel/src/generated/font_mono5x7.rs"))
+    }
+
+    @Test
     fun generatesMarkdownSpecimenFromK16FontSource() {
         val source = Path.of("..", "assets", "k16", "fonts", "k16-mono-5x7.font").readText()
 

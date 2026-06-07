@@ -112,8 +112,43 @@ unsafe fn clear_cells() {
 }
 
 unsafe fn scroll_up() {
-    clear_cells();
+    copy_scrolled_cells();
+    clear_last_row();
     gpu::clear(BACKGROUND);
+    repaint_all_cells();
+}
+
+unsafe fn copy_scrolled_cells() {
+    let mut row = 1;
+    while row < ROWS {
+        let mut column = 0;
+        while column < COLUMNS {
+            let value = read_cell(cell_index(column, row));
+            write_cell(cell_index(column, row - 1), value);
+            column += 1;
+        }
+        row += 1;
+    }
+}
+
+unsafe fn clear_last_row() {
+    let mut column = 0;
+    while column < COLUMNS {
+        write_cell(cell_index(column, ROWS - 1), b' ');
+        column += 1;
+    }
+}
+
+fn repaint_all_cells() {
+    let mut row = 0;
+    while row < ROWS {
+        let mut column = 0;
+        while column < COLUMNS {
+            repaint_cell(column, row);
+            column += 1;
+        }
+        row += 1;
+    }
 }
 
 fn set_cell(column: usize, row: usize, byte: u8) {

@@ -441,6 +441,7 @@ tasks.register<GenerateK16FontTablesTask>("generateK16FontTables") {
     group = "k16"
     fontFile.set(layout.projectDirectory.file("assets/k16/fonts/k16-mono-5x7.font"))
     rustOutput.set(layout.projectDirectory.file("rust/host/k16-vm/src/generated/font_mono5x7.rs"))
+    guestRustOutput.set(layout.projectDirectory.file("rust/guest/k16-kernel/src/generated/font_mono5x7.rs"))
 }
 
 tasks.register<GenerateK16FontSpecimenTask>("generateK16FontSpecimen") {
