@@ -256,6 +256,36 @@ class K16FirmwareResourceTest {
     }
 
     @Test
+    fun k16KernelTerminalDefinesReadableByteSemantics() {
+        val terminalSource = Path.of("../../../rust/guest/k16-kernel/src/terminal.rs").readText()
+
+        assertTrue(
+            terminalSource.contains("pub fn clear() {\n    clear_terminal();\n}"),
+            "terminal public clear should delegate to the named clear operation",
+        )
+        assertTrue(
+            terminalSource.contains("b'\\n' => move_to_next_line(),"),
+            "newline byte should move to the next terminal line",
+        )
+        assertTrue(
+            terminalSource.contains("b'\\r' => move_to_column_start(),"),
+            "carriage return byte should move to column zero",
+        )
+        assertTrue(
+            terminalSource.contains("b'\\x08' => erase_previous_cell(),"),
+            "backspace byte should erase the previous visible cell",
+        )
+        assertTrue(
+            terminalSource.contains("b'\\t' => write_tab_spaces(),"),
+            "tab byte should expand to terminal spaces",
+        )
+        assertTrue(
+            terminalSource.contains("0x20..=0x7e => put_printable_byte(byte),"),
+            "printable ASCII bytes should flow through the printable byte handler",
+        )
+    }
+
+    @Test
     fun k16KernelLineDisciplineKeepsInputBufferOutOfKernelPayload() {
         val lineSource = Path.of("../../../rust/guest/k16-kernel/src/line.rs").readText()
 
@@ -570,6 +600,84 @@ class K16FirmwareResourceTest {
             assertTrue(
                 frames.any { it.pixelFormat == DisplayPixelFormat.RGB565 && it.hasVisiblePixels() },
                 "line discipline editing should produce visible gpu0 console frames",
+            )
+        }
+    }
+
+    @Test
+    fun bundledK16KernelTerminalEditingClearAndScrollStayVisible() {
+        val workspace = createTempDirectory("k16-terminal-contract-test-")
+        val biosFlashPath = workspace.resolve("bios.kflash")
+        val storage0Path = workspace.resolve("storage0.kv")
+        biosFlashPath.writeBytes(K16BiosFlashWorkspace.loadBiosFlashResource(classLoader = javaClass.classLoader))
+        storage0Path.writeBytes(K16SystemVolumeWorkspace.loadStorage0VolumeResource(classLoader = javaClass.classLoader))
+
+        K16ComputerRuntimeFactory.createFromBiosFlash(
+            biosFlashPath = biosFlashPath,
+            storage0Path = storage0Path,
+        ).use { runtime ->
+            val control = runThroughBiosSplashAndBoot(runtime)
+            assertEquals(NativeK16ComputerControl.STATUS_READY, control.status)
+            NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
+
+            for (byte in byteArrayOf('A'.code.toByte(), 'B'.code.toByte(), '\b'.code.toByte(), 'C'.code.toByte(), '\n'.code.toByte())) {
+                runtime.pushKeyboardChar(byte)
+            }
+            var afterInputControl = runtime.tick(maxTurns = 128)
+            var frames = NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
+            var framebuffer = composeRgb565Framebuffer(frames, width = 320, height = 200)
+
+            assertEquals(NativeK16ComputerControl.STATUS_READY, afterInputControl.status)
+            assertEquals(0, afterInputControl.panicCode)
+            assertContentEquals(
+                intArrayOf(0b01110, 0b10001, 0b10001, 0b11111, 0b10001, 0b10001, 0b10001),
+                framebuffer.glyphRowsAt(x = 5 * 6, y = 9),
+                "editable terminal input should leave the first typed glyph after the prompt",
+            )
+            assertContentEquals(
+                intArrayOf(0b01111, 0b10000, 0b10000, 0b10000, 0b10000, 0b10000, 0b01111),
+                framebuffer.glyphRowsAt(x = 6 * 6, y = 9),
+                "backspace should erase B so C occupies the second typed cell",
+            )
+            assertContentEquals(
+                intArrayOf(0, 0, 0, 0, 0, 0, 0),
+                framebuffer.glyphRowsAt(x = 7 * 6, y = 9),
+                "backspace editing should not leave a stale third glyph",
+            )
+
+            NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
+            for (byte in "clear\n".encodeToByteArray()) {
+                runtime.pushKeyboardChar(byte)
+            }
+            afterInputControl = runtime.tick(maxTurns = 256)
+            frames = NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
+            framebuffer = composeRgb565Framebuffer(frames, width = 320, height = 200)
+
+            assertEquals(NativeK16ComputerControl.STATUS_READY, afterInputControl.status)
+            assertEquals(0, afterInputControl.panicCode)
+            assertContentEquals(
+                intArrayOf(0b10001, 0b10010, 0b10100, 0b11000, 0b10100, 0b10010, 0b10001),
+                framebuffer.glyphRowsAt(x = 0, y = 1),
+                "clear should redraw the shell prompt at the first terminal row",
+            )
+            assertContentEquals(
+                intArrayOf(0, 0, 0, 0, 0, 0, 0),
+                framebuffer.glyphRowsAt(x = 0, y = 9),
+                "clear should leave the second terminal row blank",
+            )
+
+            NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
+            repeat(30) {
+                runtime.pushKeyboardChar('\n'.code.toByte())
+            }
+            afterInputControl = runtime.tick(maxTurns = 2_048)
+            frames = NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
+
+            assertEquals(NativeK16ComputerControl.STATUS_READY, afterInputControl.status)
+            assertEquals(0, afterInputControl.panicCode)
+            assertTrue(
+                frames.any { it.pixelFormat == DisplayPixelFormat.RGB565 && it.hasVisiblePixelsAtOrBelow(globalY = 24 * 8) },
+                "blank-line overflow should keep rendering visible terminal pixels on the bottom row after scroll",
             )
         }
     }

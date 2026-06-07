@@ -9,20 +9,11 @@ static mut CURSOR_X: usize = 0;
 static mut CURSOR_Y: usize = 0;
 
 pub fn init() {
-    unsafe {
-        CURSOR_X = 0;
-        CURSOR_Y = 0;
-    }
-    clear();
+    clear_terminal();
 }
 
 pub fn clear() {
-    unsafe {
-        CURSOR_X = 0;
-        CURSOR_Y = 0;
-        clear_cells();
-    }
-    terminal_render::clear_screen();
+    clear_terminal();
 }
 
 pub fn write_bytes(bytes: &[u8]) {
@@ -35,13 +26,11 @@ pub fn write_bytes(bytes: &[u8]) {
 
 pub fn write_byte(byte: u8) {
     match byte {
-        b'\n' => newline(),
-        b'\r' => unsafe {
-            CURSOR_X = 0;
-        },
-        b'\x08' => backspace(),
-        b'\t' => write_tab(),
-        0x20..=0x7e => write_printable(byte),
+        b'\n' => move_to_next_line(),
+        b'\r' => move_to_column_start(),
+        b'\x08' => erase_previous_cell(),
+        b'\t' => write_tab_spaces(),
+        0x20..=0x7e => put_printable_byte(byte),
         _ => {}
     }
 }
@@ -50,10 +39,31 @@ pub fn flush() {
     terminal_render::flush();
 }
 
-fn write_printable(byte: u8) {
+fn clear_terminal() {
+    reset_cursor();
+    unsafe {
+        clear_cells();
+    }
+    terminal_render::clear_screen();
+}
+
+fn reset_cursor() {
+    unsafe {
+        CURSOR_X = 0;
+        CURSOR_Y = 0;
+    }
+}
+
+fn move_to_column_start() {
+    unsafe {
+        CURSOR_X = 0;
+    }
+}
+
+fn put_printable_byte(byte: u8) {
     unsafe {
         if CURSOR_X >= COLUMNS {
-            newline();
+            move_to_next_line();
         }
         let x = CURSOR_X;
         let y = CURSOR_Y;
@@ -63,7 +73,7 @@ fn write_printable(byte: u8) {
     }
 }
 
-fn newline() {
+fn move_to_next_line() {
     unsafe {
         CURSOR_X = 0;
         if CURSOR_Y + 1 < ROWS {
@@ -74,7 +84,7 @@ fn newline() {
     }
 }
 
-fn backspace() {
+fn erase_previous_cell() {
     unsafe {
         if CURSOR_X == 0 {
             return;
@@ -87,7 +97,7 @@ fn backspace() {
     }
 }
 
-fn write_tab() {
+fn write_tab_spaces() {
     loop {
         write_byte(b' ');
         let cursor = unsafe { CURSOR_X };
