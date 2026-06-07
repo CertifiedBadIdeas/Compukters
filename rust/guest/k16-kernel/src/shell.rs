@@ -68,19 +68,11 @@ fn is_echo(line_addr: u32, line_len: usize) -> bool {
 fn write_echo_tail(line_addr: u32, line_len: usize) {
     let mut offset = 5;
     while offset < line_len {
-        console::write_byte(display_byte(read_line_byte(line_addr, offset)));
+        console::write_byte(read_line_byte(line_addr, offset));
         offset += 1;
     }
 }
 
 fn read_line_byte(line_addr: u32, offset: usize) -> u8 {
     unsafe { core::ptr::read_volatile((line_addr + offset as u32) as usize as *const u8) }
-}
-
-fn display_byte(byte: u8) -> u8 {
-    if byte >= b'a' && byte <= b'z' {
-        byte - 32
-    } else {
-        byte
-    }
 }
