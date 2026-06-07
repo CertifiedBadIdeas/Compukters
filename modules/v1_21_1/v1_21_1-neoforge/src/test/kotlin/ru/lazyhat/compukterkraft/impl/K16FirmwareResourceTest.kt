@@ -155,12 +155,12 @@ class K16FirmwareResourceTest {
             biosFlashPath = biosFlashPath,
             storage0Path = storage0Path,
         ).use { runtime ->
-            var control = runtime.tick()
+            var control = runRuntimeServerTick(runtime)
             var frames = NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
 
             var tick = 1
             while (tick < 24 && control.status != NativeK16ComputerControl.STATUS_READY) {
-                control = runtime.tick()
+                control = runRuntimeServerTick(runtime)
                 frames = NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
                 tick += 1
             }
@@ -542,7 +542,7 @@ class K16FirmwareResourceTest {
             NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
 
             runtime.pushKeyboardChar('O'.code.toByte())
-            val afterInputControl = runtime.tick(maxTurns = 64)
+            val afterInputControl = runRuntimeServerTick(runtime, maxTurns = 64)
             val frames = NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
 
             assertEquals(NativeK16ComputerControl.STATUS_READY, afterInputControl.status)
@@ -570,7 +570,7 @@ class K16FirmwareResourceTest {
             NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
 
             runtime.pushKeyboardChar('\n'.code.toByte())
-            val afterInputControl = runtime.tick(maxTurns = 128)
+            val afterInputControl = runRuntimeServerTick(runtime, maxTurns = 128)
 
             assertEquals(NativeK16ComputerControl.STATUS_READY, afterInputControl.status)
             assertEquals(0, afterInputControl.panicCode)
@@ -647,7 +647,7 @@ class K16FirmwareResourceTest {
             for (byte in "echo abc xyz 0123456789 !?\n".encodeToByteArray()) {
                 runtime.pushKeyboardChar(byte)
             }
-            val afterInputControl = runtime.tick(maxTurns = 512)
+            val afterInputControl = runRuntimeServerTick(runtime, maxTurns = 512)
             val frames = NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
             val framebuffer = composeRgb565Framebuffer(frames, width = 320, height = 200)
 
@@ -686,7 +686,7 @@ class K16FirmwareResourceTest {
             runtime.pushKeyboardChar('\b'.code.toByte())
             runtime.pushKeyboardChar('C'.code.toByte())
             runtime.pushKeyboardChar('\n'.code.toByte())
-            val afterInputControl = runtime.tick(maxTurns = 128)
+            val afterInputControl = runRuntimeServerTick(runtime, maxTurns = 128)
             val frames = NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
 
             assertEquals(NativeK16ComputerControl.STATUS_READY, afterInputControl.status)
@@ -716,7 +716,7 @@ class K16FirmwareResourceTest {
 
             runtime.pushKeyboardChar('\b'.code.toByte())
             runtime.pushKeyboardChar('A'.code.toByte())
-            var afterInputControl = runtime.tick(maxTurns = 128)
+            var afterInputControl = runRuntimeServerTick(runtime, maxTurns = 128)
             var frames = NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
             val framebuffer = composeRgb565Framebuffer(frames, width = 320, height = 200)
 
@@ -730,7 +730,7 @@ class K16FirmwareResourceTest {
 
             NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
             runtime.pushKeyboardChar('\r'.code.toByte())
-            afterInputControl = runtime.tick(maxTurns = 128)
+            afterInputControl = runRuntimeServerTick(runtime, maxTurns = 128)
             frames = NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
 
             assertEquals(NativeK16ComputerControl.STATUS_READY, afterInputControl.status)
@@ -745,7 +745,7 @@ class K16FirmwareResourceTest {
                 runtime.pushKeyboardChar('a'.code.toByte())
             }
             runtime.pushKeyboardChar('\n'.code.toByte())
-            afterInputControl = runtime.tick(maxTurns = 1_024)
+            afterInputControl = runRuntimeServerTick(runtime, maxTurns = 1_024)
             frames = NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
 
             assertEquals(NativeK16ComputerControl.STATUS_READY, afterInputControl.status)
@@ -776,7 +776,7 @@ class K16FirmwareResourceTest {
             for (byte in byteArrayOf('A'.code.toByte(), 'B'.code.toByte(), '\b'.code.toByte(), 'C'.code.toByte(), '\n'.code.toByte())) {
                 runtime.pushKeyboardChar(byte)
             }
-            var afterInputControl = runtime.tick(maxTurns = 128)
+            var afterInputControl = runRuntimeServerTick(runtime, maxTurns = 128)
             var frames = NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
             var framebuffer = composeRgb565Framebuffer(frames, width = 320, height = 200)
 
@@ -802,7 +802,7 @@ class K16FirmwareResourceTest {
             for (byte in "clear\n".encodeToByteArray()) {
                 runtime.pushKeyboardChar(byte)
             }
-            afterInputControl = runtime.tick(maxTurns = 256)
+            afterInputControl = runRuntimeServerTick(runtime, maxTurns = 256)
             frames = NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
             framebuffer = composeRgb565Framebuffer(frames, width = 320, height = 200)
 
@@ -823,7 +823,7 @@ class K16FirmwareResourceTest {
             repeat(30) {
                 runtime.pushKeyboardChar('\n'.code.toByte())
             }
-            afterInputControl = runtime.tick(maxTurns = 2_048)
+            afterInputControl = runRuntimeServerTick(runtime, maxTurns = 2_048)
             frames = NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
 
             assertEquals(NativeK16ComputerControl.STATUS_READY, afterInputControl.status)
@@ -852,7 +852,7 @@ class K16FirmwareResourceTest {
 
             runtime.pushKeyboardKeyDown(key = 65, repeat = false)
             runtime.pushKeyboardKeyUp(key = 65)
-            val afterInputControl = runtime.tick(maxTurns = 64)
+            val afterInputControl = runRuntimeServerTick(runtime, maxTurns = 64)
 
             assertEquals(NativeK16ComputerControl.STATUS_READY, afterInputControl.status)
             assertEquals(0, afterInputControl.panicCode)
@@ -876,19 +876,19 @@ class K16FirmwareResourceTest {
             NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
 
             "cleax".forEach { runtime.pushKeyboardChar(it.code.toByte()) }
-            assertEquals(NativeK16ComputerControl.STATUS_READY, runtime.tick(maxTurns = 256).status)
+            assertEquals(NativeK16ComputerControl.STATUS_READY, runRuntimeServerTick(runtime, maxTurns = 256).status)
             NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
 
             runtime.pushKeyboardKeyDown(key = KeyCodes.KEY_BACKSPACE, repeat = false)
-            assertEquals(NativeK16ComputerControl.STATUS_READY, runtime.tick(maxTurns = 256).status)
+            assertEquals(NativeK16ComputerControl.STATUS_READY, runRuntimeServerTick(runtime, maxTurns = 256).status)
             NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
 
             runtime.pushKeyboardChar('r'.code.toByte())
-            assertEquals(NativeK16ComputerControl.STATUS_READY, runtime.tick(maxTurns = 256).status)
+            assertEquals(NativeK16ComputerControl.STATUS_READY, runRuntimeServerTick(runtime, maxTurns = 256).status)
             NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
 
             runtime.pushKeyboardKeyDown(key = KeyCodes.KEY_ENTER, repeat = false)
-            val afterEnterControl = runtime.tick(maxTurns = 256)
+            val afterEnterControl = runRuntimeServerTick(runtime, maxTurns = 256)
             val frames = NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
             val framebuffer = composeRgb565Framebuffer(frames, width = 320, height = 200)
 
@@ -923,7 +923,7 @@ class K16FirmwareResourceTest {
             biosFlashPath = biosFlashPath,
             storage0Path = storage0Path,
         ).use { runtime ->
-            val splashControl = runtime.tick()
+            val splashControl = runRuntimeServerTick(runtime)
             val splashFrames = NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
 
             assertEquals(NativeK16ComputerControl.STATUS_BOOTING, splashControl.status)
@@ -935,7 +935,7 @@ class K16FirmwareResourceTest {
             var bootControl = splashControl
             var tick = 1
             while (tick < 24 && bootControl.status != NativeK16ComputerControl.STATUS_READY) {
-                bootControl = runtime.tick(maxTurns = 1_000_000)
+                bootControl = runRuntimeServerTick(runtime, maxTurns = 1_000_000)
                 tick += 1
             }
             val debug = runtime.outputSnapshot().decodeToString()
@@ -957,7 +957,7 @@ class K16FirmwareResourceTest {
             biosFlashPath = biosFlashPath,
             storage0Path = storage0Path,
         ).use { runtime ->
-            runtime.tick()
+            runRuntimeServerTick(runtime)
             val splashFrames = NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
             val framebuffer = composeRgb565Framebuffer(splashFrames, width = 320, height = 200)
 
@@ -1113,15 +1113,23 @@ class K16FirmwareResourceTest {
         }
 
     private fun runThroughBiosSplashAndBoot(runtime: K16ComputerRuntime): NativeK16ComputerControl {
-        val splashControl = runtime.tick()
+        val splashControl = runRuntimeServerTick(runtime)
         assertEquals(NativeK16ComputerControl.STATUS_BOOTING, splashControl.status)
         var control = splashControl
         var tick = 1
         while (tick < 24 && control.status != NativeK16ComputerControl.STATUS_READY) {
-            control = runtime.tick(maxTurns = 1_000_000)
+            control = runRuntimeServerTick(runtime, maxTurns = 1_000_000)
             tick += 1
         }
         return control
+    }
+
+    private fun runRuntimeServerTick(
+        runtime: K16ComputerRuntime,
+        maxTurns: Int = 8,
+    ): NativeK16ComputerControl {
+        runtime.advanceGameTicks(1)
+        return runtime.tick(maxTurns = maxTurns)
     }
 
     private fun runShellCommand(
@@ -1132,7 +1140,7 @@ class K16FirmwareResourceTest {
         for (byte in "$command\n".encodeToByteArray()) {
             runtime.pushKeyboardChar(byte)
         }
-        val control = runtime.tick(maxTurns = 256)
+        val control = runRuntimeServerTick(runtime, maxTurns = 256)
         val frames = NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
 
         assertEquals(NativeK16ComputerControl.STATUS_READY, control.status, "command: $command")

@@ -36,6 +36,7 @@ import java.util.concurrent.CompletionException
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 
 interface RuntimeDeviceSerialEndpoint {
     fun pushSerialInput(bytes: ByteArray)
@@ -292,6 +293,8 @@ class K16RuntimeDevice(
         private val commands = LinkedBlockingQueue<Command>()
         private val startup = CompletableFuture<Unit>()
         private val closed = AtomicBoolean(false)
+        private val tickRequested = AtomicBoolean(false)
+        private val pendingGameTicks = AtomicLong()
         private val workerThread =
             Thread(::runWorker, "compukterkraft-k16-$deviceId").apply {
                 isDaemon = true
@@ -317,7 +320,10 @@ class K16RuntimeDevice(
 
         fun requestTick() {
             if (!closed.get() && !terminalControlReached) {
-                commands.offer(Command.Tick)
+                pendingGameTicks.incrementAndGet()
+                if (tickRequested.compareAndSet(false, true)) {
+                    commands.offer(Command.Tick)
+                }
             }
         }
 
@@ -403,7 +409,12 @@ class K16RuntimeDevice(
                 while (true) {
                     when (val command = commands.take()) {
                         Command.Tick -> {
+                            tickRequested.set(false)
                             if (!terminalControlReached) {
+                                val gameTicks = pendingGameTicks.getAndSet(0)
+                                if (gameTicks > 0) {
+                                    endpoint.advanceGameTicks(gameTicks)
+                                }
                                 val control = endpoint.tick()
                                 terminalControlReached = control.isTerminal()
                                 refreshCaches(endpoint)
