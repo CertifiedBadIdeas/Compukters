@@ -314,6 +314,33 @@ class K16FirmwareResourceTest {
     }
 
     @Test
+    fun k16KernelLineDisciplineDefinesReadableEditingSemantics() {
+        val lineSource = Path.of("../../../rust/guest/k16-kernel/src/line.rs").readText()
+
+        assertTrue(
+            lineSource.contains("0x20..=0x7e => append_printable_byte(byte),"),
+            "printable input bytes should flow through a named append operation",
+        )
+        assertTrue(
+            lineSource.contains("b'\\x08' | 0x7f => erase_previous_byte(),"),
+            "backspace and delete should flow through a named erase operation",
+        )
+        assertTrue(
+            lineSource.contains("b'\\n' | b'\\r' => complete_line(),"),
+            "newline and carriage return should complete the current line",
+        )
+        assertTrue(lineSource.contains("fn line_is_full()"), "line discipline should name the full-buffer guard")
+        assertTrue(lineSource.contains("fn reset_buffer()"), "line discipline should name the buffer reset operation")
+        assertTrue(lineSource.contains("fn store_line_byte("), "line discipline should name guest RAM byte storage")
+        assertTrue(lineSource.contains("fn echo_printable_byte("), "line discipline should name printable echo")
+        assertTrue(lineSource.contains("fn echo_backspace()"), "line discipline should name backspace echo")
+        assertTrue(
+            lineSource.contains("shell::handle_line(LINE_BUFFER_ADDR, completed_len)"),
+            "line completion should continue to hand the completed guest RAM line to the shell",
+        )
+    }
+
+    @Test
     fun k16KernelKeyboardInputGoesThroughLineDiscipline() {
         val kernelSourceDir = Path.of("../../../rust/guest/k16-kernel/src")
         val keyboardSource = kernelSourceDir.resolve("keyboard.rs").readText()
@@ -600,6 +627,65 @@ class K16FirmwareResourceTest {
             assertTrue(
                 frames.any { it.pixelFormat == DisplayPixelFormat.RGB565 && it.hasVisiblePixels() },
                 "line discipline editing should produce visible gpu0 console frames",
+            )
+        }
+    }
+
+    @Test
+    fun bundledK16KernelLineDisciplineHandlesEmptyBackspaceCarriageReturnAndOverflow() {
+        val workspace = createTempDirectory("k16-line-contract-test-")
+        val biosFlashPath = workspace.resolve("bios.kflash")
+        val storage0Path = workspace.resolve("storage0.kv")
+        biosFlashPath.writeBytes(K16BiosFlashWorkspace.loadBiosFlashResource(classLoader = javaClass.classLoader))
+        storage0Path.writeBytes(K16SystemVolumeWorkspace.loadStorage0VolumeResource(classLoader = javaClass.classLoader))
+
+        K16ComputerRuntimeFactory.createFromBiosFlash(
+            biosFlashPath = biosFlashPath,
+            storage0Path = storage0Path,
+        ).use { runtime ->
+            val control = runThroughBiosSplashAndBoot(runtime)
+            assertEquals(NativeK16ComputerControl.STATUS_READY, control.status)
+            NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
+
+            runtime.pushKeyboardChar('\b'.code.toByte())
+            runtime.pushKeyboardChar('A'.code.toByte())
+            var afterInputControl = runtime.tick(maxTurns = 128)
+            var frames = NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
+            val framebuffer = composeRgb565Framebuffer(frames, width = 320, height = 200)
+
+            assertEquals(NativeK16ComputerControl.STATUS_READY, afterInputControl.status)
+            assertEquals(0, afterInputControl.panicCode)
+            assertContentEquals(
+                intArrayOf(0b01110, 0b10001, 0b10001, 0b11111, 0b10001, 0b10001, 0b10001),
+                framebuffer.glyphRowsAt(x = 5 * 6, y = 9),
+                "empty-line backspace should not move the cursor before the first input cell",
+            )
+
+            NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
+            runtime.pushKeyboardChar('\r'.code.toByte())
+            afterInputControl = runtime.tick(maxTurns = 128)
+            frames = NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
+
+            assertEquals(NativeK16ComputerControl.STATUS_READY, afterInputControl.status)
+            assertEquals(0, afterInputControl.panicCode)
+            assertTrue(
+                frames.any { it.pixelFormat == DisplayPixelFormat.RGB565 },
+                "carriage return should complete the line and produce gpu0 terminal frames",
+            )
+
+            NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
+            repeat(140) {
+                runtime.pushKeyboardChar('a'.code.toByte())
+            }
+            runtime.pushKeyboardChar('\n'.code.toByte())
+            afterInputControl = runtime.tick(maxTurns = 1_024)
+            frames = NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
+
+            assertEquals(NativeK16ComputerControl.STATUS_READY, afterInputControl.status)
+            assertEquals(0, afterInputControl.panicCode)
+            assertTrue(
+                frames.any { it.pixelFormat == DisplayPixelFormat.RGB565 && it.hasVisiblePixels() },
+                "line overflow should reject extra input without panicking or losing gpu0 output",
             )
         }
     }
