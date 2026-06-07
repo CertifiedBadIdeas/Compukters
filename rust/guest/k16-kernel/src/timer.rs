@@ -26,9 +26,13 @@ pub fn handle_interrupt() {
     debug::print_byte(b'|');
 }
 
+pub fn game_ticks() -> u64 {
+    k16_rt::timer0_game_ticks()
+}
+
 pub fn sleep_ticks(ticks: u32) {
-    let target = k16_rt::timer0_game_ticks().saturating_add(u64::from(ticks));
-    while k16_rt::timer0_game_ticks() < target {
+    let target = game_ticks().saturating_add(u64::from(ticks));
+    while game_ticks() < target {
         k16_rt::yield_once();
     }
 }

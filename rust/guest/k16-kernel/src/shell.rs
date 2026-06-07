@@ -1,4 +1,4 @@
-use crate::console;
+use crate::{console, timer};
 
 const PROMPT: &[u8] = b"K16> ";
 
@@ -22,6 +22,8 @@ fn dispatch_line(line_addr: u32, line_len: usize) {
         run_help();
     } else if is_clear(line_addr, line_len) {
         run_clear();
+    } else if is_ticks(line_addr, line_len) {
+        run_ticks();
     } else if is_echo_command(line_addr, line_len) {
         run_echo(line_addr, line_len);
     } else {
@@ -43,6 +45,10 @@ fn is_clear(line_addr: u32, line_len: usize) -> bool {
 
 fn is_help(line_addr: u32, line_len: usize) -> bool {
     matches_command(line_addr, line_len, b"help")
+}
+
+fn is_ticks(line_addr: u32, line_len: usize) -> bool {
+    matches_command(line_addr, line_len, b"ticks")
 }
 
 fn is_echo(line_addr: u32, line_len: usize) -> bool {
@@ -82,7 +88,7 @@ fn run_ok() {
 }
 
 fn run_help() {
-    console::write_bytes(b"HELP\nOK\nCLEAR\nECHO\n");
+    console::write_bytes(b"HELP\nOK\nCLEAR\nECHO\nTICKS\n");
     write_prompt();
 }
 
@@ -93,6 +99,13 @@ fn run_clear() {
 
 fn run_echo(line_addr: u32, line_len: usize) {
     write_echo_tail(line_addr, line_len);
+    console::write_byte(b'\n');
+    write_prompt();
+}
+
+fn run_ticks() {
+    console::write_bytes(b"TICKS 0x");
+    write_u64_hex(timer::game_ticks());
     console::write_byte(b'\n');
     write_prompt();
 }
@@ -112,4 +125,24 @@ fn write_echo_tail(line_addr: u32, line_len: usize) {
 
 fn read_line_byte(line_addr: u32, offset: usize) -> u8 {
     unsafe { core::ptr::read_volatile((line_addr + offset as u32) as usize as *const u8) }
+}
+
+fn write_u64_hex(value: u64) {
+    let mut shift = 60;
+    loop {
+        write_hex_nibble(((value >> shift) & 0xf) as u8);
+        if shift == 0 {
+            break;
+        }
+        shift -= 4;
+    }
+}
+
+fn write_hex_nibble(nibble: u8) {
+    let byte = if nibble < 10 {
+        b'0' + nibble
+    } else {
+        b'a' + (nibble - 10)
+    };
+    console::write_byte(byte);
 }
