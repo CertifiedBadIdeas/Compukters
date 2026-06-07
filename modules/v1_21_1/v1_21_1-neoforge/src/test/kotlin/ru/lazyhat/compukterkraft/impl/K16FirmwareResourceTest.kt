@@ -158,7 +158,7 @@ class K16FirmwareResourceTest {
             var frames = NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
 
             var tick = 1
-            while (tick < 20 && control.status != NativeK16ComputerControl.STATUS_READY) {
+            while (tick < 24 && control.status != NativeK16ComputerControl.STATUS_READY) {
                 control = runtime.tick()
                 frames = NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
                 tick += 1
@@ -558,11 +558,52 @@ class K16FirmwareResourceTest {
                 "BIOS splash should be visible through gpu0",
             )
 
-            val bootControl = runtime.tick(maxTurns = 1_000_000)
+            var bootControl = splashControl
+            var tick = 1
+            while (tick < 24 && bootControl.status != NativeK16ComputerControl.STATUS_READY) {
+                bootControl = runtime.tick(maxTurns = 1_000_000)
+                tick += 1
+            }
             val debug = runtime.outputSnapshot().decodeToString()
 
             assertEquals(NativeK16ComputerControl.STATUS_READY, bootControl.status)
             assertKernelGpuConsoleVisible(runtime, bootControl, debug)
+        }
+    }
+
+    @Test
+    fun bundledK16BiosSplashRendersDistinctBannerGlyphs() {
+        val workspace = createTempDirectory("k16-firmware-splash-glyph-test-")
+        val biosFlashPath = workspace.resolve("bios.kflash")
+        val storage0Path = workspace.resolve("storage0.kv")
+        biosFlashPath.writeBytes(K16BiosFlashWorkspace.loadBiosFlashResource(classLoader = javaClass.classLoader))
+        storage0Path.writeBytes(K16SystemVolumeWorkspace.loadStorage0VolumeResource(classLoader = javaClass.classLoader))
+
+        K16ComputerRuntimeFactory.createFromBiosFlash(
+            biosFlashPath = biosFlashPath,
+            storage0Path = storage0Path,
+        ).use { runtime ->
+            runtime.tick()
+            val splashFrames = NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
+            val framebuffer = composeRgb565Framebuffer(splashFrames, width = 320, height = 200)
+
+            val expectedGlyphs =
+                mapOf(
+                    0 to intArrayOf(0b10001, 0b10010, 0b10100, 0b11000, 0b10100, 0b10010, 0b10001),
+                    1 to intArrayOf(0b00100, 0b01100, 0b00100, 0b00100, 0b00100, 0b00100, 0b01110),
+                    2 to intArrayOf(0b01110, 0b10000, 0b10000, 0b11110, 0b10001, 0b10001, 0b01110),
+                    4 to intArrayOf(0b11110, 0b10001, 0b10001, 0b11110, 0b10001, 0b10001, 0b11110),
+                    5 to intArrayOf(0b11111, 0b00100, 0b00100, 0b00100, 0b00100, 0b00100, 0b11111),
+                    6 to intArrayOf(0b01110, 0b10001, 0b10001, 0b10001, 0b10001, 0b10001, 0b01110),
+                    7 to intArrayOf(0b01111, 0b10000, 0b10000, 0b01110, 0b00001, 0b00001, 0b11110),
+                )
+            for ((column, rows) in expectedGlyphs) {
+                assertContentEquals(
+                    rows,
+                    framebuffer.glyphRowsAt(x = 8 + column * 8, y = 8),
+                    "BIOS banner glyph column $column should match K16 BIOS text instead of fallback glyphs",
+                )
+            }
         }
     }
 
@@ -613,6 +654,55 @@ class K16FirmwareResourceTest {
             ((this[offset + 2].toInt() and 0xFF) shl 16) or
             ((this[offset + 3].toInt() and 0xFF) shl 24)
 
+    private fun composeRgb565Framebuffer(
+        frames: List<DisplayFrameDelta>,
+        width: Int,
+        height: Int,
+    ): IntArray {
+        val pixels = IntArray(width * height)
+        for (frame in frames) {
+            require(frame.width == width && frame.height == height)
+            require(frame.pixelFormat == DisplayPixelFormat.RGB565)
+            if (frame.fullRefresh) pixels.fill(0)
+            for (tile in frame.tiles) {
+                var offset = 0
+                var row = 0
+                while (row < tile.height) {
+                    var column = 0
+                    while (column < tile.width) {
+                        val hi = tile.payload[offset++].toInt() and 0xFF
+                        val lo = tile.payload[offset++].toInt() and 0xFF
+                        pixels[(tile.y + row) * width + tile.x + column] = (hi shl 8) or lo
+                        column += 1
+                    }
+                    row += 1
+                }
+            }
+        }
+        return pixels
+    }
+
+    private fun IntArray.glyphRowsAt(
+        x: Int,
+        y: Int,
+    ): IntArray {
+        val rows = IntArray(7)
+        var row = 0
+        while (row < rows.size) {
+            var bits = 0
+            var column = 0
+            while (column < 5) {
+                if (this[(y + row) * 320 + x + column] != 0) {
+                    bits = bits or (1 shl (4 - column))
+                }
+                column += 1
+            }
+            rows[row] = bits
+            row += 1
+        }
+        return rows
+    }
+
     private fun assertKernelGpuConsoleVisible(
         runtime: K16ComputerRuntime,
         control: NativeK16ComputerControl,
@@ -651,7 +741,13 @@ class K16FirmwareResourceTest {
     private fun runThroughBiosSplashAndBoot(runtime: K16ComputerRuntime): NativeK16ComputerControl {
         val splashControl = runtime.tick()
         assertEquals(NativeK16ComputerControl.STATUS_BOOTING, splashControl.status)
-        return runtime.tick(maxTurns = 1_000_000)
+        var control = splashControl
+        var tick = 1
+        while (tick < 24 && control.status != NativeK16ComputerControl.STATUS_READY) {
+            control = runtime.tick(maxTurns = 1_000_000)
+            tick += 1
+        }
+        return control
     }
 
     private fun runShellCommand(
