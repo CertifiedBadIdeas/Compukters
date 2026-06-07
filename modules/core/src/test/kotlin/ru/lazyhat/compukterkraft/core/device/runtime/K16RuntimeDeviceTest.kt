@@ -269,6 +269,39 @@ class K16RuntimeDeviceTest {
     }
 
     @Test
+    fun preservesEveryServerTickWhileEndpointWorkerIsBusy() {
+        val tickEntered = CountDownLatch(1)
+        val releaseTick = CountDownLatch(1)
+        val endpoint =
+            BlockingFirstTickK16Endpoint(
+                tickEntered = tickEntered,
+                releaseTick = releaseTick,
+            )
+        val device =
+            K16RuntimeDevice(
+                deviceId = 22,
+                properties = DeviceProperties(DeviceFamily.NORMAL, label = null),
+                endpointFactory = { endpoint },
+                stateSink = {},
+            )
+
+        device.turnOn()
+        device.serverTick()
+        assertTrue(
+            tickEntered.await(2, TimeUnit.SECONDS),
+            "Expected worker to enter the first K16 endpoint tick.",
+        )
+
+        repeat(3) {
+            device.serverTick()
+        }
+
+        releaseTick.countDown()
+        waitUntil { endpoint.tickCalls == 4 }
+        device.shutdown()
+    }
+
+    @Test
     fun mapsPasteEventsToKeyboard0WithoutConsumingCallerBuffer() {
         val endpoint = RecordingK16Endpoint()
         val device =

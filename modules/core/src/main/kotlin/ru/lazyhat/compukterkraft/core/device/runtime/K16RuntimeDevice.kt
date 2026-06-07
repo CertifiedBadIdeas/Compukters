@@ -292,7 +292,6 @@ class K16RuntimeDevice(
         private val commands = LinkedBlockingQueue<Command>()
         private val startup = CompletableFuture<Unit>()
         private val closed = AtomicBoolean(false)
-        private val tickRequested = AtomicBoolean(false)
         private val workerThread =
             Thread(::runWorker, "compukterkraft-k16-$deviceId").apply {
                 isDaemon = true
@@ -317,7 +316,7 @@ class K16RuntimeDevice(
         }
 
         fun requestTick() {
-            if (!closed.get() && !terminalControlReached && tickRequested.compareAndSet(false, true)) {
+            if (!closed.get() && !terminalControlReached) {
                 commands.offer(Command.Tick)
             }
         }
@@ -404,7 +403,6 @@ class K16RuntimeDevice(
                 while (true) {
                     when (val command = commands.take()) {
                         Command.Tick -> {
-                            tickRequested.set(false)
                             if (!terminalControlReached) {
                                 val control = endpoint.tick()
                                 terminalControlReached = control.isTerminal()
