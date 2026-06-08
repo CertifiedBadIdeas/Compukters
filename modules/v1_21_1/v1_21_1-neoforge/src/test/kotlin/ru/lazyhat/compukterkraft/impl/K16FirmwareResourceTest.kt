@@ -440,13 +440,16 @@ class K16FirmwareResourceTest {
         assertTrue(shellSource.contains("use crate::{console, timer};"), "shell should use the kernel timer module")
         assertTrue(shellSource.contains("fn is_ticks("), "ticks should have a named matcher")
         assertTrue(shellSource.contains("fn run_ticks()"), "ticks should have a named runner")
-        assertTrue(shellSource.contains("timer::game_ticks()"), "ticks should read time through the kernel timer module")
+        assertTrue(shellSource.contains("timer::now_ticks()"), "ticks should read a named tick instant")
         assertTrue(shellSource.contains("b\"TICKS \""), "ticks should print a stable decimal prefix")
-        assertTrue(shellSource.contains("fn write_u64_parts_decimal("), "ticks should use an explicit low/high formatter")
-        assertTrue(shellSource.contains("fn double_decimal_digits_and_add_bit("), "ticks should avoid guest u64 division")
+        assertTrue(shellSource.contains(".write_decimal()"), "ticks should format through the tick instant abstraction")
+        assertFalse(shellSource.contains("write_u64_parts_decimal"), "shell should not format raw timer parts directly")
+        assertFalse(shellSource.contains("double_decimal_digits_and_add_bit"), "shell should not own low-level decimal conversion")
         assertTrue(timerSource.contains("pub type U64Parts = k16_rt::U64Parts"), "timer module should expose explicit low/high timer parts")
-        assertTrue(timerSource.contains("pub fn game_ticks() -> U64Parts"), "timer module should expose current game ticks")
-        assertTrue(timerSource.contains("pub fn monotonic_nanos() -> U64Parts"), "timer module should expose monotonic nanos")
+        assertTrue(timerSource.contains("pub struct TickInstant"), "timer module should expose a named tick instant")
+        assertTrue(timerSource.contains("pub struct TickDuration"), "timer module should expose a named tick duration")
+        assertTrue(timerSource.contains("pub fn now_ticks() -> TickInstant"), "timer module should expose current game ticks as an instant")
+        assertTrue(timerSource.contains("pub fn monotonic_nanos() -> U64Parts"), "timer module should keep monotonic nanos as diagnostic parts")
         assertFalse(timerSource.contains("k16_rt::trap_value()"), "timer value should come from MMIO instead of interrupt payload")
     }
 
@@ -500,6 +503,14 @@ class K16FirmwareResourceTest {
             "kernel sleep_ticks should use the runtime full-width timer0 helper",
         )
         assertTrue(
+            timerSource.contains("TickInstant::now()"),
+            "kernel sleep_ticks should start from a named tick instant",
+        )
+        assertTrue(
+            timerSource.contains("TickDuration::from_ticks(ticks)"),
+            "kernel sleep_ticks should express the delay as a tick duration",
+        )
+        assertTrue(
             runtimeSource.contains("read_split_u64_parts(TIMER0_GAME_TICKS_LOW, TIMER0_GAME_TICKS_HIGH)"),
             "runtime should read full-width game ticks from timer0 MMIO",
         )
@@ -513,8 +524,9 @@ class K16FirmwareResourceTest {
                 runtimeLibSource.contains("U64Parts"),
             "runtime should export the reusable low/high timer API",
         )
-        assertTrue(timerSource.contains("fn add_ticks("), "kernel sleep_ticks should build a full-width deadline")
+        assertTrue(timerSource.contains("fn checked_add("), "kernel sleep_ticks should build a full-width deadline")
         assertTrue(timerSource.contains("fn has_reached("), "kernel sleep_ticks should compare full-width deadlines")
+        assertFalse(timerSource.contains("fn add_ticks("), "kernel sleep_ticks should not expose raw add helpers")
     }
 
     @Test

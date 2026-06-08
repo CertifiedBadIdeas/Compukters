@@ -105,7 +105,7 @@ fn run_echo(line_addr: u32, line_len: usize) {
 
 fn run_ticks() {
     console::write_bytes(b"TICKS ");
-    write_u64_parts_decimal(timer::game_ticks());
+    timer::now_ticks().write_decimal();
     console::write_byte(b'\n');
     write_prompt();
 }
@@ -125,53 +125,4 @@ fn write_echo_tail(line_addr: u32, line_len: usize) {
 
 fn read_line_byte(line_addr: u32, offset: usize) -> u8 {
     unsafe { core::ptr::read_volatile((line_addr + offset as u32) as usize as *const u8) }
-}
-
-fn write_u64_parts_decimal(value: timer::U64Parts) {
-    let mut digits = [0_u8; 20];
-
-    append_word_bits(&mut digits, value.high);
-    append_word_bits(&mut digits, value.low);
-    write_decimal_digits(&digits);
-}
-
-fn append_word_bits(digits: &mut [u8; 20], word: u32) {
-    let mut bit_index = 0;
-    while bit_index < 32 {
-        let bit = ((word >> (31 - bit_index)) & 1) as u8;
-        double_decimal_digits_and_add_bit(digits, bit);
-        bit_index += 1;
-    }
-}
-
-fn double_decimal_digits_and_add_bit(digits: &mut [u8; 20], bit: u8) {
-    let mut carry = bit;
-    let mut index = digits.len();
-    while index > 0 {
-        index -= 1;
-        let doubled = digits[index] * 2 + carry;
-        if doubled >= 10 {
-            digits[index] = doubled - 10;
-            carry = 1;
-        } else {
-            digits[index] = doubled;
-            carry = 0;
-        }
-    }
-}
-
-fn write_decimal_digits(digits: &[u8; 20]) {
-    let mut started = false;
-    let mut index = 0;
-    while index < digits.len() {
-        let digit = digits[index];
-        if digit != 0 || started {
-            console::write_byte(b'0' + digit);
-            started = true;
-        }
-        index += 1;
-    }
-    if !started {
-        console::write_byte(b'0');
-    }
 }
