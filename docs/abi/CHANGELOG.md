@@ -12,7 +12,7 @@
   `serial-input` byte queue.
 - Added `k16_abi::syscall::SLEEP_TICKS` and the matching `k16-rt`
   `sleep_ticks_syscall(ticks)` wrapper. The Rust kernel implements the first
-  single-task blocking sleep syscall by yielding until `timer0.game_ticks`
+  single-task blocking sleep syscall by waiting until `timer0.game_ticks`
   reaches the target tick. The BIOS splash now uses `k16_rt::sleep_ticks(20)`
   instead of a plain yield boundary.
 - `iret` now defers pending interrupt delivery for one guest instruction after

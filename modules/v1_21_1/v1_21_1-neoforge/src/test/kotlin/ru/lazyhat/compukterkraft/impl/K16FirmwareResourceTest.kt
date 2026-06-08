@@ -521,6 +521,14 @@ class K16FirmwareResourceTest {
             "kernel sleep_ticks should express the delay as a tick duration",
         )
         assertTrue(
+            timerSource.contains("k16_rt::wait_once();"),
+            "kernel sleep_ticks should use the resumable wait primitive while blocked",
+        )
+        assertFalse(
+            timerSource.contains("k16_rt::yield_once();"),
+            "kernel sleep_ticks should not busy-yield directly",
+        )
+        assertTrue(
             runtimeSource.contains("read_split_u64_parts(TIMER0_GAME_TICKS_LOW, TIMER0_GAME_TICKS_HIGH)"),
             "runtime should read full-width game ticks from timer0 MMIO",
         )
