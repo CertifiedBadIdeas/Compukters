@@ -106,7 +106,7 @@ pub fn monotonic_nanos() -> U64Parts {
 pub fn sleep_ticks(ticks: u32) {
     let target = TickInstant::now().checked_add(TickDuration::from_ticks(ticks));
     while !TickInstant::now().has_reached(target) {
-        k16_rt::yield_once();
+        k16_rt::wait_once();
     }
 }
 

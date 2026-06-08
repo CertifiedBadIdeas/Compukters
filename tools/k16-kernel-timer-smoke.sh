@@ -193,7 +193,7 @@ fn main() {
     run_unknown_syscall_smoke(&executable);
 
     println!(
-        "first_signal=yield timer_signals=yield,yield syscall_signal=yield sleep_signal=yield continuation_signal=yield status=READY debug_suffix=7c7c53217c continuation_r2=83 continuation_r3=0 continuation_r4=0 continuation_r5=0 unknown_signal=halt unknown_status=HALTED unknown_panic_code=4 unknown_debug_suffix=4b3136204b45524e454c20545241500a"
+        "first_signal=wait timer_signals=wait,wait syscall_signal=yield sleep_signal=wait continuation_signal=yield status=READY debug_suffix=7c7c53217c continuation_r2=83 continuation_r3=0 continuation_r4=0 continuation_r5=0 unknown_signal=halt unknown_status=HALTED unknown_panic_code=4 unknown_debug_suffix=4b3136204b45524e454c20545241500a"
     );
 }
 
@@ -218,8 +218,8 @@ fn boot_kernel(executable: &k16e::K16eExecutable, context: &str) -> K16ComputerH
 
 fn assert_initial_kernel_idle(handle: &mut K16ComputerHandle) {
     let first = handle.run_k16_until_signal().expect("initial kernel run succeeds");
-    if first != K16Signal::Yield {
-        eprintln!("expected signal=yield from live kernel idle loop, got {first:?}");
+    if first != K16Signal::Wait {
+        eprintln!("expected signal=wait from live kernel idle loop, got {first:?}");
         process::exit(1);
     }
     let control = handle.control();
@@ -241,10 +241,10 @@ fn run_timer_heartbeat_smoke(handle: &mut K16ComputerHandle) {
     let second = handle
         .run_k16_until_signal()
         .expect("first timer0 resume succeeds");
-    if second != K16Signal::Yield {
+    if second != K16Signal::Wait {
         dump_cpu_snapshot(handle);
         eprintln!("debug_bytes={}", hex_bytes(handle.debug_output_bytes()));
-        eprintln!("expected signal=yield after timer0 heartbeat, got {second:?}");
+        eprintln!("expected signal=wait after timer0 heartbeat, got {second:?}");
         process::exit(1);
     }
     if !handle.debug_output_bytes().ends_with(&[b'|']) {
@@ -260,10 +260,10 @@ fn run_timer_heartbeat_smoke(handle: &mut K16ComputerHandle) {
     let third = handle
         .run_k16_until_signal()
         .expect("second timer0 resume succeeds");
-    if third != K16Signal::Yield {
+    if third != K16Signal::Wait {
         dump_cpu_snapshot(handle);
         eprintln!("debug_bytes={}", hex_bytes(handle.debug_output_bytes()));
-        eprintln!("expected signal=yield after second timer0 heartbeat, got {third:?}");
+        eprintln!("expected signal=wait after second timer0 heartbeat, got {third:?}");
         process::exit(1);
     }
     if !handle.debug_output_bytes().ends_with(b"||") {
@@ -304,10 +304,10 @@ fn run_known_syscall_smoke(
     let fifth = handle
         .run_k16_until_signal()
         .expect("sleep syscall handler runs before target tick");
-    if fifth != K16Signal::Yield {
+    if fifth != K16Signal::Wait {
         dump_cpu_snapshot(handle);
         eprintln!("debug_bytes={}", hex_bytes(handle.debug_output_bytes()));
-        eprintln!("expected signal=yield from sleep syscall handler, got {fifth:?}");
+        eprintln!("expected signal=wait from sleep syscall handler, got {fifth:?}");
         process::exit(1);
     }
     handle.advance_game_tick();
@@ -367,10 +367,10 @@ fn run_unknown_syscall_smoke(executable: &k16e::K16eExecutable) {
     let unknown_first = unknown_handle
         .run_k16_until_signal()
         .expect("unknown syscall smoke reaches kernel idle");
-    if unknown_first != K16Signal::Yield {
+    if unknown_first != K16Signal::Wait {
         dump_cpu_snapshot(&mut unknown_handle);
         eprintln!(
-            "expected initial signal=yield before unknown syscall probe, got {unknown_first:?}"
+            "expected initial signal=wait before unknown syscall probe, got {unknown_first:?}"
         );
         process::exit(1);
     }
@@ -586,7 +586,7 @@ RS
 
 "$HOST_CARGO" run --quiet --offline --manifest-path "$WORK_DIR/runner/Cargo.toml" -- "$KERNEL_KX" \
     > "$WORK_DIR/runner.stdout"
-require_contains "$WORK_DIR/runner.stdout" "signal=yield"
+require_contains "$WORK_DIR/runner.stdout" "sleep_signal=wait"
 require_contains "$WORK_DIR/runner.stdout" "debug_suffix=7c7c53217c"
 require_contains "$WORK_DIR/runner.stdout" "continuation_r2=83"
 require_contains "$WORK_DIR/runner.stdout" "continuation_r3=0"
