@@ -15,6 +15,12 @@ static TEST_TIMER0_GAME_TICKS: AtomicU64 = AtomicU64::new(0);
 #[cfg(any(test, feature = "host-test"))]
 static TEST_TIMER0_MONOTONIC_NANOS: AtomicU64 = AtomicU64::new(0);
 
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub struct U64Parts {
+    pub high: u32,
+    pub low: u32,
+}
+
 #[cfg(not(any(test, feature = "host-test")))]
 pub fn timer0_game_ticks() -> u64 {
     read_split_u64(TIMER0_GAME_TICKS_LOW, TIMER0_GAME_TICKS_HIGH)
@@ -35,6 +41,26 @@ pub fn timer0_monotonic_nanos() -> u64 {
     TEST_TIMER0_MONOTONIC_NANOS.load(Ordering::Relaxed)
 }
 
+#[cfg(not(any(test, feature = "host-test")))]
+pub fn timer0_game_ticks_parts() -> U64Parts {
+    read_split_u64_parts(TIMER0_GAME_TICKS_LOW, TIMER0_GAME_TICKS_HIGH)
+}
+
+#[cfg(any(test, feature = "host-test"))]
+pub fn timer0_game_ticks_parts() -> U64Parts {
+    split_u64(TEST_TIMER0_GAME_TICKS.load(Ordering::Relaxed))
+}
+
+#[cfg(not(any(test, feature = "host-test")))]
+pub fn timer0_monotonic_nanos_parts() -> U64Parts {
+    read_split_u64_parts(TIMER0_MONOTONIC_NANOS_LOW, TIMER0_MONOTONIC_NANOS_HIGH)
+}
+
+#[cfg(any(test, feature = "host-test"))]
+pub fn timer0_monotonic_nanos_parts() -> U64Parts {
+    split_u64(TEST_TIMER0_MONOTONIC_NANOS.load(Ordering::Relaxed))
+}
+
 pub fn yield_frames(frames: u64) {
     let mut remaining = frames;
     while remaining > 0 {
@@ -52,13 +78,30 @@ pub fn sleep_ticks(ticks: u64) {
 
 #[cfg(not(any(test, feature = "host-test")))]
 fn read_split_u64(low_addr: u32, high_addr: u32) -> u64 {
+    let parts = read_split_u64_parts(low_addr, high_addr);
+    (u64::from(parts.high) << 32) | u64::from(parts.low)
+}
+
+#[cfg(not(any(test, feature = "host-test")))]
+fn read_split_u64_parts(low_addr: u32, high_addr: u32) -> U64Parts {
     loop {
         let high_before = read_mmio_u32(high_addr);
         let low = read_mmio_u32(low_addr);
         let high_after = read_mmio_u32(high_addr);
         if high_before == high_after {
-            return (u64::from(high_after) << 32) | u64::from(low);
+            return U64Parts {
+                high: high_after,
+                low,
+            };
         }
+    }
+}
+
+#[cfg(any(test, feature = "host-test"))]
+fn split_u64(value: u64) -> U64Parts {
+    U64Parts {
+        high: (value >> 32) as u32,
+        low: value as u32,
     }
 }
 

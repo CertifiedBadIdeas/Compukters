@@ -269,6 +269,11 @@ it should not drive simulation sleeps.
 
 Multi-word reads are not atomic. Firmware that requires a stable `u64` should
 read high, then low, then high again and retry if the two high words differ.
+Guest runtime libraries that cannot rely on native `u64` code generation or
+calling conventions should expose these counters as explicit low/high `u32`
+parts. The current `k16-rt` convention names that representation `U64Parts`
+with `high` and `low` fields and provides part-based helpers for both
+`game_ticks` and `monotonic_nanos`.
 
 CPU execution progress is a separate concept from `timer0`. K16 currently
 tracks VM steps internally, not physical CPU cycles. If guest-visible CPU work
