@@ -329,6 +329,31 @@ fn k16_disasm_prints_call_and_ret_instructions() {
 }
 
 #[test]
+fn k16_disasm_prints_wait_instruction() {
+    let artifact_path = temp_file("bios-wait.flash");
+    fs::write(&artifact_path, words_to_bytes(&[wait(), halt()])).expect("artifact writes");
+
+    let output = Command::new(k16_binary())
+        .args([
+            "disasm",
+            "--target",
+            "bios",
+            artifact_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("k16 disasm runs");
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("fff00000: 0006  wait"), "stdout: {stdout}");
+    assert!(stdout.contains("fff00002: 0001  halt"), "stdout: {stdout}");
+}
+
+#[test]
 fn k16_disasm_prints_complete_instruction_surface_multiword_raw_words_and_branch_labels() {
     let artifact_path = temp_file("bios-labels.flash");
     fs::write(
@@ -632,4 +657,8 @@ fn ret() -> u16 {
 
 fn halt() -> u16 {
     0x0001
+}
+
+fn wait() -> u16 {
+    0x0006
 }

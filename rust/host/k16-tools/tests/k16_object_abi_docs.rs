@@ -70,6 +70,7 @@ fn k16_object_abi_docs_define_freestanding_runtime_boundary() {
         "`__k16_memcpy`",
         "`__k16_memset`",
         "`__k16_memmove`",
+        "`__k16_wait_once`",
         "`__k16_yield_once`",
         "`__k16_write_trap_vector`",
         "`__k16_iret_once`",

@@ -28,6 +28,7 @@ pub const K16_TRAP_CAUSE_KEYBOARD0_INTERRUPT: u32 = 0x8000_0002;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum K16Signal {
     Halt,
+    Wait,
     Yield,
     StepLimitExceeded,
 }
@@ -108,6 +109,7 @@ pub struct DecodeResult {
 pub enum DecodedInstruction {
     Nop,
     Halt,
+    Wait,
     Const4 { dst: usize, value: u32 },
     Const32 { dst: usize, value: u32 },
     Add { dst: usize, lhs: usize, rhs: usize },
@@ -173,6 +175,7 @@ impl InstructionDecoder for K16Decoder {
                 0x000 => DecodedInstruction::Nop,
                 0x001 => DecodedInstruction::Halt,
                 0x004 => DecodedInstruction::Iret,
+                0x006 => DecodedInstruction::Wait,
                 _ if b == 0 && c == 0x5 => DecodedInstruction::Syscall { number: a },
                 _ if c == 0x2 => DecodedInstruction::ReadCsr {
                     dst: a,
@@ -504,6 +507,7 @@ impl K16Cpu {
                 self.state = K16State::Halted;
                 Ok(Some(K16Signal::Halt))
             }
+            DecodedInstruction::Wait => Ok(Some(K16Signal::Wait)),
             DecodedInstruction::Const4 { dst, value } => {
                 self.registers[dst] = value;
                 Ok(None)

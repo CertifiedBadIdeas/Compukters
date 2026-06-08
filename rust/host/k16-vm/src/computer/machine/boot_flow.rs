@@ -80,10 +80,8 @@ fn validate_stack_top(stack_top: u32, ram_len: usize) -> Result<(), BootHandoffE
     if stack_top % 4 != 0 {
         return Err(BootHandoffError::StackTopMisaligned { stack_top });
     }
-    let stack_top = usize::try_from(stack_top).map_err(|_| BootHandoffError::StackTopOutOfBounds {
-        stack_top,
-        ram_len,
-    })?;
+    let stack_top = usize::try_from(stack_top)
+        .map_err(|_| BootHandoffError::StackTopOutOfBounds { stack_top, ram_len })?;
     if stack_top == 0 || stack_top > ram_len {
         return Err(BootHandoffError::StackTopOutOfBounds {
             stack_top: stack_top as u32,
@@ -118,6 +116,7 @@ pub(super) fn run_boot_k16_until_signal(
         Ok(K16Signal::Halt) => {
             set_halted_exit_code(machine, 0)?;
         }
+        Ok(K16Signal::Wait) => {}
         Ok(K16Signal::Yield) => {}
         Ok(K16Signal::StepLimitExceeded) => {}
         Err(message) => {

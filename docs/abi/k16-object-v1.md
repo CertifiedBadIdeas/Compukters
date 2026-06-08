@@ -135,6 +135,7 @@ Runtime helper symbol names:
 `__lshrdi3`      provided by k16-memory-helpers
 `__ashrdi3`      provided by k16-memory-helpers
 `__k16_halt_once`              provided by k16-cpu-helpers
+`__k16_wait_once`              provided by k16-cpu-helpers
 `__k16_yield_once`             provided by k16-cpu-helpers
 `__k16_iret_once`              provided by k16-cpu-helpers
 `__k16_write_trap_vector`      provided by k16-cpu-helpers

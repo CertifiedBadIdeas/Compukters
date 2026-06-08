@@ -115,6 +115,20 @@ class K16ComputerRuntimeTest {
     }
 
     @Test
+    fun waitSignalRemainsNonTerminal() {
+        val bindings = EchoBindings()
+        bindings.control = NativeK16ComputerControl(status = 2, exitCode = 0, panicCode = 0)
+        bindings.signal = NativeK16ComputerSignal.Wait
+        val runtime = K16ComputerRuntime(handle = 23L, bindings = bindings, defaultMaxTurnsPerTick = 8)
+
+        assertEquals(NativeK16ComputerControl(status = 2, exitCode = 0, panicCode = 0), runtime.tick())
+        assertEquals(NativeK16ComputerControl(status = 2, exitCode = 0, panicCode = 0), runtime.tick())
+
+        assertEquals(2, bindings.runUntilSignalCalls)
+        assertEquals(emptyList(), bindings.advanceGameTickHandles)
+    }
+
+    @Test
     fun advancesGameTicksWithoutRunningNativeTurns() {
         val bindings = EchoBindings()
         val runtime = K16ComputerRuntime(handle = 29L, bindings = bindings, defaultMaxTurnsPerTick = 3)
