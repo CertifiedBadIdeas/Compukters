@@ -230,3 +230,6 @@ profile.
 
 The CPU `halt` signal is not poweroff. It only reports a terminal execution
 state to the host.
+
+The CPU `wait` signal is not halt or poweroff. It is a non-terminal scheduling
+boundary intended for guest idle loops.

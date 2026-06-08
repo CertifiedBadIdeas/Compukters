@@ -81,7 +81,7 @@ fn k16_bios_splash_uses_sleep_boundary() {
     let bios_source = root.join("rust/guest/k16-bios/src/main.rs");
 
     let source = fs::read_to_string(&bios_source).expect("K16 BIOS source exists");
-    assert!(source.contains("k16_rt::sleep_ticks(1);"));
+    assert!(source.contains("k16_rt::sleep_ticks(20);"));
     assert!(!source.contains("k16_rt::yield_once();"));
 }
 

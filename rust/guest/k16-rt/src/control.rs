@@ -1,6 +1,7 @@
 #[cfg(not(any(test, feature = "host-test")))]
 extern "C" {
     fn __k16_halt_once();
+    fn __k16_wait_once();
     fn __k16_yield_once();
 }
 
@@ -20,6 +21,14 @@ pub fn halt_once() {
 
 #[cfg(not(any(test, feature = "host-test")))]
 #[inline(always)]
+pub fn wait_once() {
+    unsafe {
+        __k16_wait_once();
+    }
+}
+
+#[cfg(not(any(test, feature = "host-test")))]
+#[inline(always)]
 pub fn yield_once() {
     unsafe {
         __k16_yield_once();
@@ -28,6 +37,9 @@ pub fn yield_once() {
 
 #[cfg(any(test, feature = "host-test"))]
 pub fn halt_once() {}
+
+#[cfg(any(test, feature = "host-test"))]
+pub fn wait_once() {}
 
 #[cfg(any(test, feature = "host-test"))]
 pub fn yield_once() {

@@ -67,6 +67,13 @@ pub fn k16_cpu_helpers_object() -> Vec<u8> {
         "__k16_halt_once",
         &[halt()],
     );
+    emit_symbol_function(
+        &mut text,
+        &mut strtab,
+        &mut symtab,
+        "__k16_wait_once",
+        &[wait(), ret()],
+    );
     let yield_words = [
         emit_const32_word(RETURN_REGISTER),
         k16_vm::computer_abi::CONTROL_YIELD as u16,
@@ -371,6 +378,10 @@ fn store32(addr: u8, src: u8) -> u16 {
 
 fn halt() -> u16 {
     0x0001
+}
+
+fn wait() -> u16 {
+    0x0006
 }
 
 fn iret() -> u16 {

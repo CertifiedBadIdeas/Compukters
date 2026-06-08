@@ -68,7 +68,7 @@ pub mod host_test {
     }
 }
 
-pub use control::{halt_forever, halt_once, yield_once};
+pub use control::{halt_forever, halt_once, wait_once, yield_once};
 pub use exports::{abort, memcmp, memcpy, memmove, memset};
 pub use int64::{k16_div64, k16_mod64, k16_udiv64, k16_umod64};
 pub use k16_abi::cpu;

@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Added K16 `wait` (`0x0006`) as a resumable, non-terminal CPU signal and
+  exposed it through `k16-rt::wait_once()`. The Rust kernel idle loop drains
+  keyboard input and then waits instead of busy-yielding directly.
 - Added K16 computer-profile `keyboard0` as a PC-like MMIO event queue at
   `0x1000_0700` with hardware id `8` and interrupt source `0x00000002`.
   It delivers trap cause `0x80000002`; the host-side Rust VM now snapshots
@@ -10,7 +13,7 @@
 - Added `k16_abi::syscall::SLEEP_TICKS` and the matching `k16-rt`
   `sleep_ticks_syscall(ticks)` wrapper. The Rust kernel implements the first
   single-task blocking sleep syscall by yielding until `timer0.game_ticks`
-  reaches the target tick. The BIOS splash now uses `k16_rt::sleep_ticks(1)`
+  reaches the target tick. The BIOS splash now uses `k16_rt::sleep_ticks(20)`
   instead of a plain yield boundary.
 - `iret` now defers pending interrupt delivery for one guest instruction after
   returning. This lets returning syscalls expose `r0` to the caller before a

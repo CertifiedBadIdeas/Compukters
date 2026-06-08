@@ -50,6 +50,19 @@ fn k16_yield_signal_is_resumable() {
 }
 
 #[test]
+fn k16_wait_signal_is_resumable_without_terminal_halt() {
+    let mut bus = MachineBus::new(64).unwrap();
+    let program = vec![wait(), const4(1, 7), halt()];
+    write_words(&mut bus, 0, &program);
+    let mut cpu = K16Cpu::new(0);
+
+    assert_eq!(cpu.run_until_signal(&mut bus, 16).unwrap(), K16Signal::Wait);
+    assert_eq!(cpu.pc(), 2);
+    assert_eq!(cpu.run_until_signal(&mut bus, 16).unwrap(), K16Signal::Halt);
+    assert_eq!(cpu.register(1), 7);
+}
+
+#[test]
 fn k16_loads_and_stores_regular_ram_through_machine_bus() {
     let mut bus = MachineBus::new(64).unwrap();
     bus.store_i32(12, 0x0102_0304).unwrap();
@@ -762,6 +775,10 @@ fn encode_signed_nibble(value: i8) -> u16 {
 
 fn halt() -> u16 {
     0x0001
+}
+
+fn wait() -> u16 {
+    0x0006
 }
 
 struct RegisterDevice {

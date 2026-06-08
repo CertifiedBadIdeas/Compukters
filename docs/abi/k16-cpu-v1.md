@@ -441,8 +441,16 @@ CSR instructions use the zero-opcode encoding family:
 read_csr   0x0ab2    rA = csr(B)
 write_csr  0x0ab3    csr(A) = rB
 iret       0x0004    pc = trap_pc; interrupt_enable = 1
+wait       0x0006    report non-terminal wait signal to host
 syscall    0x0a05    trap_cause = explicit trap; trap_value = rA; trap_pc = next pc
 ```
+
+`halt` is the terminal guest execution stop. `wait` is a resumable host-visible
+boundary for idle loops: the CPU reports a `wait` signal after advancing `pc`
+and remains runnable, so the next host tick resumes at the following
+instruction. Guest OS code should use `wait` for idle turns that have no work
+until the host schedules the VM again, normally after input or timer progress.
+`yield` remains the control-MMIO/syscall cooperative pause mechanism.
 
 The active v1 CSRs are:
 

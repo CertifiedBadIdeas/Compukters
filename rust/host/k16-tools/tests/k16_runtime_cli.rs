@@ -242,6 +242,75 @@ fn k16_runtime_cpu_helpers_resolve_k16_cpu_symbols() {
 }
 
 #[test]
+fn k16_runtime_wait_helper_returns_to_caller_after_resuming() {
+    let startup_path = temp_file("wait-helper-startup.o");
+    let helper_path = temp_file("wait-helpers.o");
+    let main_path = temp_file("wait-helper-main.o");
+    let output_path = temp_file("wait-helper-program.k16e");
+    fs::write(&main_path, k16_main_waiting_once_then_returning_7()).expect("main object writes");
+
+    let startup_output = Command::new(k16_binary())
+        .args([
+            "runtime",
+            "k16-startup",
+            "-o",
+            startup_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("k16 runtime startup runs");
+    assert!(
+        startup_output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&startup_output.stderr)
+    );
+
+    let helper_output = Command::new(k16_binary())
+        .args([
+            "runtime",
+            "k16-cpu-helpers",
+            "-o",
+            helper_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("k16 runtime cpu helpers runs");
+    assert!(
+        helper_output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&helper_output.stderr)
+    );
+
+    let link_output = Command::new(k16_binary())
+        .args([
+            "link",
+            "--target",
+            "program",
+            startup_path.to_str().unwrap(),
+            main_path.to_str().unwrap(),
+            helper_path.to_str().unwrap(),
+            "-o",
+            output_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("k16 link runs");
+    assert!(
+        link_output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&link_output.stderr)
+    );
+
+    let program = fs::read(output_path).expect("linked program reads");
+    let mut handle = K16ComputerHandle::create_k16_bios_flash(&[0x01, 0x00], 64 * 1024, 1_000_000)
+        .expect("K16 computer creates");
+    handle
+        .exec_k16e_program_from_bytes(&program, 1_000_000)
+        .expect("program installs");
+
+    assert_eq!(handle.run_k16_until_signal().unwrap(), K16Signal::Wait);
+    assert_eq!(handle.run_k16_until_signal().unwrap(), K16Signal::Halt);
+    assert_eq!(handle.debug_output_bytes(), &[7]);
+}
+
+#[test]
 fn k16_runtime_memory_helpers_require_custom_k16_rustc() {
     let helper_path = temp_file("memory-helpers.o");
 
@@ -284,6 +353,14 @@ fn k16_main_calling_undefined_helper_with_arg(helper: &str, arg: u32) -> Vec<u8>
     text.extend(arg.to_le_bytes());
     text.extend([0x01, 0xee, 0, 0, 0, 0, 0x00, 0x8e, 0x00, 0x90]);
     k16_object("main", &text, Some((8, 2, helper)))
+}
+
+fn k16_main_waiting_once_then_returning_7() -> Vec<u8> {
+    k16_object(
+        "main",
+        &[0x01, 0xee, 0, 0, 0, 0, 0x00, 0x8e, 0x07, 0x10, 0x00, 0x90],
+        Some((2, 2, "__k16_wait_once")),
+    )
 }
 
 fn k16_object(defined_symbol: &str, text: &[u8], relocation: Option<(u32, u32, &str)>) -> Vec<u8> {

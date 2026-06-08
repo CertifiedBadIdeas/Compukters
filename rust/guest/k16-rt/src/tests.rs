@@ -138,6 +138,15 @@ fn yield_frames_and_sleep_ticks_use_yield_boundaries() {
 }
 
 #[test]
+fn wait_once_is_a_runtime_control_boundary() {
+    crate::control::reset_test_yield_count();
+
+    wait_once();
+
+    assert_eq!(crate::control::test_yield_count(), 0);
+}
+
+#[test]
 fn interrupt_helpers_update_test_csr_state() {
     crate::trap::reset_test_interrupts();
 

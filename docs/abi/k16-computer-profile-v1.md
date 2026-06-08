@@ -100,6 +100,10 @@ The CPU `halt` signal still terminates execution from the host perspective.
 Writing control registers is a firmware convention for exposing state to the
 host and UI.
 
+The CPU `wait` signal is non-terminal. It returns control to the host without
+changing the durable control status, and execution resumes at the next guest
+instruction when the host runs the VM again.
+
 Writing a non-zero value to `yield` requests a host-visible pause after the
 current instruction. The CPU remains runnable and resumes on the next host tick.
 The register is edge-like VM state, not durable machine state.

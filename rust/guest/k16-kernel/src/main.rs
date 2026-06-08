@@ -42,7 +42,11 @@ fn panic(_info: &PanicInfo) -> ! {
 
 fn idle_forever() -> ! {
     loop {
-        keyboard::drain_to_line();
-        k16_rt::yield_once();
+        idle_once();
     }
+}
+
+fn idle_once() {
+    keyboard::drain_to_line();
+    k16_rt::wait_once();
 }

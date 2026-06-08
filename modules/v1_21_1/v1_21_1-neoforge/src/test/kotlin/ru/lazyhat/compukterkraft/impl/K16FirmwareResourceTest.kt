@@ -478,6 +478,16 @@ class K16FirmwareResourceTest {
     }
 
     @Test
+    fun k16KernelIdleUsesWaitPrimitive() {
+        val mainSource = Path.of("../../../rust/guest/k16-kernel/src/main.rs").readText()
+
+        assertTrue(mainSource.contains("fn idle_once()"), "kernel idle should name one idle turn")
+        assertTrue(mainSource.contains("keyboard::drain_to_line();"), "kernel idle should drain keyboard before waiting")
+        assertTrue(mainSource.contains("k16_rt::wait_once();"), "kernel idle should use the resumable wait primitive")
+        assertFalse(mainSource.contains("k16_rt::yield_once();"), "kernel idle should not busy-yield directly")
+    }
+
+    @Test
     fun k16KernelFontCoversWorkingShellText() {
         val fontSource = Path.of("../../../rust/guest/k16-kernel/src/font.rs").readText()
         val lineSource = Path.of("../../../rust/guest/k16-kernel/src/line.rs").readText()

@@ -363,6 +363,7 @@ fn k16_computer_handle_mut(
 fn k16_signal_values(signal: K16Signal) -> [jlong; 2] {
     match signal {
         K16Signal::Halt => [1, 0],
+        K16Signal::Wait => [8, 0],
         K16Signal::Yield => [7, 0],
         K16Signal::StepLimitExceeded => [6, 0],
     }
