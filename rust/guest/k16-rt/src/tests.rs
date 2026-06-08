@@ -108,6 +108,21 @@ fn timer0_helpers_read_test_counters() {
 }
 
 #[test]
+fn timer0_part_helpers_read_high_and_low_words() {
+    crate::time::reset_test_timer0();
+    crate::time::set_test_timer0_game_ticks(0x0000_0002_0000_002a);
+    crate::time::set_test_timer0_monotonic_nanos(0x0000_0003_0000_004d);
+
+    let game_ticks = timer0_game_ticks_parts();
+    let monotonic_nanos = timer0_monotonic_nanos_parts();
+
+    assert_eq!(game_ticks.high, 2);
+    assert_eq!(game_ticks.low, 42);
+    assert_eq!(monotonic_nanos.high, 3);
+    assert_eq!(monotonic_nanos.low, 77);
+}
+
+#[test]
 fn yield_frames_and_sleep_ticks_use_yield_boundaries() {
     crate::time::reset_test_timer0();
 

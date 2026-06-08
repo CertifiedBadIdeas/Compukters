@@ -444,8 +444,9 @@ class K16FirmwareResourceTest {
         assertTrue(shellSource.contains("b\"TICKS \""), "ticks should print a stable decimal prefix")
         assertTrue(shellSource.contains("fn write_u64_parts_decimal("), "ticks should use an explicit low/high formatter")
         assertTrue(shellSource.contains("fn double_decimal_digits_and_add_bit("), "ticks should avoid guest u64 division")
-        assertTrue(timerSource.contains("pub struct U64Parts"), "timer module should expose explicit low/high timer parts")
+        assertTrue(timerSource.contains("pub type U64Parts = k16_rt::U64Parts"), "timer module should expose explicit low/high timer parts")
         assertTrue(timerSource.contains("pub fn game_ticks() -> U64Parts"), "timer module should expose current game ticks")
+        assertTrue(timerSource.contains("pub fn monotonic_nanos() -> U64Parts"), "timer module should expose monotonic nanos")
         assertFalse(timerSource.contains("k16_rt::trap_value()"), "timer value should come from MMIO instead of interrupt payload")
     }
 
@@ -491,10 +492,26 @@ class K16FirmwareResourceTest {
     @Test
     fun k16KernelSleepTicksUsesTimer0MmioParts() {
         val timerSource = Path.of("../../../rust/guest/k16-kernel/src/timer.rs").readText()
+        val runtimeSource = Path.of("../../../rust/guest/k16-rt/src/time.rs").readText()
+        val runtimeLibSource = Path.of("../../../rust/guest/k16-rt/src/lib.rs").readText()
 
         assertTrue(
-            timerSource.contains("read_split_u64_parts(timer0::GAME_TICKS_LOW, timer0::GAME_TICKS_HIGH)"),
-            "kernel sleep_ticks should use full-width timer0 MMIO reads",
+            timerSource.contains("k16_rt::timer0_game_ticks_parts()"),
+            "kernel sleep_ticks should use the runtime full-width timer0 helper",
+        )
+        assertTrue(
+            runtimeSource.contains("read_split_u64_parts(TIMER0_GAME_TICKS_LOW, TIMER0_GAME_TICKS_HIGH)"),
+            "runtime should read full-width game ticks from timer0 MMIO",
+        )
+        assertTrue(
+            runtimeSource.contains("read_split_u64_parts(TIMER0_MONOTONIC_NANOS_LOW, TIMER0_MONOTONIC_NANOS_HIGH)"),
+            "runtime should read full-width monotonic nanos from timer0 MMIO",
+        )
+        assertTrue(
+            runtimeLibSource.contains("timer0_game_ticks_parts") &&
+                runtimeLibSource.contains("timer0_monotonic_nanos_parts") &&
+                runtimeLibSource.contains("U64Parts"),
+            "runtime should export the reusable low/high timer API",
         )
         assertTrue(timerSource.contains("fn add_ticks("), "kernel sleep_ticks should build a full-width deadline")
         assertTrue(timerSource.contains("fn has_reached("), "kernel sleep_ticks should compare full-width deadlines")

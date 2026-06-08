@@ -1,14 +1,10 @@
-use k16_abi::computer::{hardware_id, profile, timer0};
+use k16_abi::computer::{hardware_id, profile};
 
-use crate::{control, debug, mmio};
+use crate::{control, debug};
 
 static mut TIMER0_IRQ_SOURCE: u32 = 0;
 
-#[derive(Copy, Clone)]
-pub struct U64Parts {
-    pub high: u32,
-    pub low: u32,
-}
+pub type U64Parts = k16_rt::U64Parts;
 
 pub fn register_driver() -> u32 {
     let timer0 = unsafe { profile::find_hardware_entry(hardware_id::TIMER0) };
@@ -33,7 +29,11 @@ pub fn handle_interrupt() {
 }
 
 pub fn game_ticks() -> U64Parts {
-    read_split_u64_parts(timer0::GAME_TICKS_LOW, timer0::GAME_TICKS_HIGH)
+    k16_rt::timer0_game_ticks_parts()
+}
+
+pub fn monotonic_nanos() -> U64Parts {
+    k16_rt::timer0_monotonic_nanos_parts()
 }
 
 pub fn sleep_ticks(ticks: u32) {
@@ -41,24 +41,6 @@ pub fn sleep_ticks(ticks: u32) {
     while !has_reached(game_ticks(), target) {
         k16_rt::yield_once();
     }
-}
-
-fn read_split_u64_parts(low_addr: u32, high_addr: u32) -> U64Parts {
-    loop {
-        let high_before = read_mmio_u32(high_addr);
-        let low = read_mmio_u32(low_addr);
-        let high_after = read_mmio_u32(high_addr);
-        if high_before == high_after {
-            return U64Parts {
-                high: high_after,
-                low,
-            };
-        }
-    }
-}
-
-fn read_mmio_u32(address: u32) -> u32 {
-    unsafe { mmio::read_i32(address) as u32 }
 }
 
 fn add_ticks(start: U64Parts, ticks: u32) -> U64Parts {
