@@ -1,9 +1,14 @@
-use k16_abi::computer::{hardware_id, profile};
+use k16_abi::computer::{hardware_id, profile, timer0};
 
-use crate::{control, debug};
+use crate::{control, debug, mmio};
 
 static mut TIMER0_IRQ_SOURCE: u32 = 0;
-static mut TIMER0_GAME_TICKS_LOW: u32 = 0;
+
+#[derive(Copy, Clone)]
+pub struct U64Parts {
+    pub high: u32,
+    pub low: u32,
+}
 
 pub fn register_driver() -> u32 {
     let timer0 = unsafe { profile::find_hardware_entry(hardware_id::TIMER0) };
@@ -24,24 +29,60 @@ pub fn handles_interrupt(source: u32) -> bool {
 }
 
 pub fn handle_interrupt() {
-    unsafe {
-        core::ptr::write_volatile(
-            core::ptr::addr_of_mut!(TIMER0_GAME_TICKS_LOW),
-            k16_rt::trap_value(),
-        );
-    }
     debug::print_byte(b'|');
 }
 
-pub fn game_ticks_low() -> u32 {
-    unsafe { core::ptr::read_volatile(core::ptr::addr_of!(TIMER0_GAME_TICKS_LOW)) }
+pub fn game_ticks() -> U64Parts {
+    read_split_u64_parts(timer0::GAME_TICKS_LOW, timer0::GAME_TICKS_HIGH)
 }
 
 pub fn sleep_ticks(ticks: u32) {
-    let start = game_ticks_low();
-    while game_ticks_low().wrapping_sub(start) < ticks {
+    let target = add_ticks(game_ticks(), ticks);
+    while !has_reached(game_ticks(), target) {
         k16_rt::yield_once();
     }
+}
+
+fn read_split_u64_parts(low_addr: u32, high_addr: u32) -> U64Parts {
+    loop {
+        let high_before = read_mmio_u32(high_addr);
+        let low = read_mmio_u32(low_addr);
+        let high_after = read_mmio_u32(high_addr);
+        if high_before == high_after {
+            return U64Parts {
+                high: high_after,
+                low,
+            };
+        }
+    }
+}
+
+fn read_mmio_u32(address: u32) -> u32 {
+    unsafe { mmio::read_i32(address) as u32 }
+}
+
+fn add_ticks(start: U64Parts, ticks: u32) -> U64Parts {
+    let (low, carry) = start.low.overflowing_add(ticks);
+    if carry {
+        if start.high == u32::MAX {
+            return U64Parts {
+                high: u32::MAX,
+                low: u32::MAX,
+            };
+        }
+        return U64Parts {
+            high: start.high + 1,
+            low,
+        };
+    }
+    U64Parts {
+        high: start.high,
+        low,
+    }
+}
+
+fn has_reached(now: U64Parts, target: U64Parts) -> bool {
+    now.high > target.high || (now.high == target.high && now.low >= target.low)
 }
 
 fn kernel_panic_forever() -> ! {

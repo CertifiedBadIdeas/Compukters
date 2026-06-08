@@ -441,10 +441,12 @@ class K16FirmwareResourceTest {
         assertTrue(shellSource.contains("fn is_ticks("), "ticks should have a named matcher")
         assertTrue(shellSource.contains("fn run_ticks()"), "ticks should have a named runner")
         assertTrue(shellSource.contains("timer::game_ticks()"), "ticks should read time through the kernel timer module")
-        assertTrue(shellSource.contains("b\"TICKS 0x\""), "ticks should print a stable hex prefix")
-        assertTrue(shellSource.contains("fn write_u64_hex("), "ticks should use a small u64 formatter")
-        assertTrue(shellSource.contains("fn write_hex_nibble("), "ticks should format nibbles without std formatting")
-        assertTrue(timerSource.contains("pub fn game_ticks() -> u64"), "timer module should expose current game ticks")
+        assertTrue(shellSource.contains("b\"TICKS \""), "ticks should print a stable decimal prefix")
+        assertTrue(shellSource.contains("fn write_u64_parts_decimal("), "ticks should use an explicit low/high formatter")
+        assertTrue(shellSource.contains("fn double_decimal_digits_and_add_bit("), "ticks should avoid guest u64 division")
+        assertTrue(timerSource.contains("pub struct U64Parts"), "timer module should expose explicit low/high timer parts")
+        assertTrue(timerSource.contains("pub fn game_ticks() -> U64Parts"), "timer module should expose current game ticks")
+        assertFalse(timerSource.contains("k16_rt::trap_value()"), "timer value should come from MMIO instead of interrupt payload")
     }
 
     @Test
@@ -487,17 +489,15 @@ class K16FirmwareResourceTest {
     }
 
     @Test
-    fun k16KernelSleepTicksUsesRuntimeU64GameTicks() {
+    fun k16KernelSleepTicksUsesTimer0MmioParts() {
         val timerSource = Path.of("../../../rust/guest/k16-kernel/src/timer.rs").readText()
 
         assertTrue(
-            timerSource.contains("k16_rt::timer0_game_ticks()"),
-            "kernel sleep_ticks should use the runtime u64 timer0 game tick helper",
+            timerSource.contains("read_split_u64_parts(timer0::GAME_TICKS_LOW, timer0::GAME_TICKS_HIGH)"),
+            "kernel sleep_ticks should use full-width timer0 MMIO reads",
         )
-        assertFalse(
-            timerSource.contains("timer0::GAME_TICKS_LOW"),
-            "kernel sleep_ticks should not downgrade timer0 game ticks to low32 polling",
-        )
+        assertTrue(timerSource.contains("fn add_ticks("), "kernel sleep_ticks should build a full-width deadline")
+        assertTrue(timerSource.contains("fn has_reached("), "kernel sleep_ticks should compare full-width deadlines")
     }
 
     @Test
@@ -688,6 +688,53 @@ class K16FirmwareResourceTest {
             assertTrue(
                 terminalRow.startsWith(expectedTerminalPrefix),
                 "ticks output should read the current timer0 value; expected prefix: $expectedTerminalPrefix, " +
+                    "actual terminal row: $terminalRow",
+            )
+        }
+    }
+
+    @Test
+    fun bundledK16KernelTicksCommandReadsFullWidthTimer0FromMmio() {
+        val workspace = createTempDirectory("k16-shell-ticks-u64-output-test-")
+        val biosFlashPath = workspace.resolve("bios.kflash")
+        val storage0Path = workspace.resolve("storage0.kv")
+        biosFlashPath.writeBytes(K16BiosFlashWorkspace.loadBiosFlashResource(classLoader = javaClass.classLoader))
+        storage0Path.writeBytes(K16SystemVolumeWorkspace.loadStorage0VolumeResource(classLoader = javaClass.classLoader))
+
+        val bootedSnapshot =
+            K16ComputerRuntimeFactory.createFromBiosFlash(
+                biosFlashPath = biosFlashPath,
+                storage0Path = storage0Path,
+            ).use { runtime ->
+                val control = runThroughBiosSplashAndBoot(runtime)
+                assertEquals(NativeK16ComputerControl.STATUS_READY, control.status)
+                runtime.machineSnapshot()
+            }
+        val restoredGameTicks = 0x0000_0001_0000_002aL
+        val expectedTicksAfterCommand = restoredGameTicks + 2
+        val highTimerSnapshot = snapshotWithTimer0GameTicks(bootedSnapshot, restoredGameTicks)
+
+        K16ComputerRuntimeFactory.restoreFromBiosFlashSnapshot(
+            biosFlashPath = biosFlashPath,
+            storage0Path = storage0Path,
+            snapshot = highTimerSnapshot,
+        ).use { runtime ->
+            NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
+            runShellCommand(runtime, "clear", expectVisiblePixels = false)
+            NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
+
+            for (byte in "ticks\n".encodeToByteArray()) {
+                runtime.pushKeyboardChar(byte)
+            }
+            val afterTicksControl = runRuntimeServerTick(runtime, maxTurns = 256)
+            val terminalRow = snapshotRamBytes(runtime.machineSnapshot(), start = 0x8000 + 53, size = 53)
+                .toString(Charsets.US_ASCII)
+            val expectedTerminalPrefix = "TICKS $expectedTicksAfterCommand"
+
+            assertEquals(NativeK16ComputerControl.STATUS_READY, afterTicksControl.status)
+            assertTrue(
+                terminalRow.startsWith(expectedTerminalPrefix),
+                "ticks output should read full timer0 MMIO value; expected prefix: $expectedTerminalPrefix, " +
                     "actual terminal row: $terminalRow",
             )
         }
@@ -1261,6 +1308,29 @@ class K16FirmwareResourceTest {
             if (deviceKind == K16_SNAPSHOT_TIMER0_DEVICE_KIND) {
                 assertEquals(K16_SNAPSHOT_TIMER0_PAYLOAD_SIZE, payloadSize)
                 return buffer.getLong(payloadOffset)
+            }
+            offset = payloadOffset + payloadSize
+        }
+        error("K16SNAP did not contain a timer0 device record")
+    }
+
+    private fun snapshotWithTimer0GameTicks(snapshot: ByteArray, gameTicks: Long): ByteArray {
+        val editedSnapshot = snapshot.copyOf()
+        val buffer = ByteBuffer.wrap(editedSnapshot).order(ByteOrder.LITTLE_ENDIAN)
+        assertContentEquals("K16SNAP\u0000".encodeToByteArray(), snapshot.copyOfRange(0, 8))
+        val headerSize = buffer.getShort(0x0A).toInt()
+        val ramSize = buffer.getLong(0x10)
+        val cpuCount = buffer.getInt(0x18)
+        val deviceCount = buffer.getInt(0x20)
+        var offset = headerSize + ramSize.toInt() + cpuCount * K16_SNAPSHOT_CPU_RECORD_SIZE
+        repeat(deviceCount) {
+            val deviceKind = buffer.getInt(offset)
+            val payloadSize = buffer.getInt(offset + 4)
+            val payloadOffset = offset + K16_SNAPSHOT_DEVICE_HEADER_SIZE
+            if (deviceKind == K16_SNAPSHOT_TIMER0_DEVICE_KIND) {
+                assertEquals(K16_SNAPSHOT_TIMER0_PAYLOAD_SIZE, payloadSize)
+                buffer.putLong(payloadOffset, gameTicks)
+                return editedSnapshot
             }
             offset = payloadOffset + payloadSize
         }

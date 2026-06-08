@@ -253,8 +253,12 @@ sleep, scheduler ticks, firmware delays, and device cooldowns should use this
 counter.
 
 When `game_ticks` advances, the host sets the CPU pending interrupt source
-advertised by the `timer0` hardware-table entry with
-`trap_value = low32(game_ticks)`. Firmware or kernel code that does not install
+advertised by the `timer0` hardware-table entry. The interrupt means that a
+timer event occurred; it is not the authoritative transport for the current
+time value. Guest code that needs the current time must read the timer0 MMIO
+counter. Current hosts may still place `low32(game_ticks)` in `trap_value` as a
+diagnostic compatibility payload, but firmware and kernels must not depend on
+that payload for timekeeping. Firmware or kernel code that does not install
 `trap_vector`, set `interrupt_mask`, and enable `interrupt_enable` continues to
 observe timer0 purely by polling.
 
