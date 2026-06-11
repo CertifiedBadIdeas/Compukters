@@ -135,6 +135,13 @@ class RuntimeProfilingTest {
         collector.recordNativeDisplayFrameBytes(bytes = 128)
         collector.recordNativeDaemonTick(activeNanos = 100, turns = 2, halted = 1, hostRequests = 3, idle = false)
         collector.recordNativeDaemonTick(activeNanos = 50, turns = 0, halted = 0, hostRequests = 0, idle = true)
+        collector.recordK16WaitEnter()
+        collector.recordK16WaitEnter()
+        collector.recordK16WaitTimerWakeup()
+        collector.recordK16WaitInputWakeup()
+        collector.recordK16WaitIdleSkip()
+        collector.recordK16WaitIdleSkip()
+        collector.recordK16WaitIdleSkip()
         collector.recordVmInstruction(VmInstructionKind.CALL_BUILTIN, nanos = 40)
         collector.recordVmInstruction(VmInstructionKind.CALL_BUILTIN, nanos = 60)
         collector.recordVmInstruction(VmInstructionKind.PUSH_INT, nanos = 10)
@@ -178,6 +185,10 @@ class RuntimeProfilingTest {
         assertEquals(2, snapshot.vm.nativeDaemonTurns)
         assertEquals(1, snapshot.vm.nativeDaemonHaltedProcesses)
         assertEquals(3, snapshot.vm.nativeDaemonHostRequests)
+        assertEquals(2, snapshot.vm.k16WaitEntries)
+        assertEquals(1, snapshot.vm.k16WaitTimerWakeups)
+        assertEquals(1, snapshot.vm.k16WaitInputWakeups)
+        assertEquals(3, snapshot.vm.k16WaitIdleSkips)
         val blitCall = snapshot.hostCalls.first { it.moduleName == "display" && it.functionName == "blitMono5x7Packed" }
         assertEquals(2, blitCall.calls)
         assertEquals(150, blitCall.nanos)
@@ -208,6 +219,10 @@ class RuntimeProfilingTest {
             summary.contains("    nativeDaemon: ticks=2, active=150 ns, idle=1, turns=2, halted=1, hostRequests=3"),
             summary,
         )
+        assertTrue(
+            summary.contains("    k16Wait: entries=2, timerWakeups=1, inputWakeups=1, idleSkips=3"),
+            summary,
+        )
         assertTrue(summary.contains("  host-calls: calls="), summary)
         assertTrue(
             summary.contains("    display.blitMono5x7Packed: count=2, total=150 ns, wait=100 ns, active=50 ns, avgActive=25 ns"),
@@ -233,6 +248,10 @@ class RuntimeProfilingTest {
         collector.recordNativeDisplayPumpWait(nanos = 100)
         collector.recordNativeDisplayFrameBytes(bytes = 128)
         collector.recordNativeDaemonTick(activeNanos = 100, turns = 2, halted = 1, hostRequests = 3, idle = false)
+        collector.recordK16WaitEnter()
+        collector.recordK16WaitTimerWakeup()
+        collector.recordK16WaitInputWakeup()
+        collector.recordK16WaitIdleSkip()
         collector.recordVmInstruction(VmInstructionKind.CALL_BUILTIN, nanos = 90)
 
         assertEquals(RuntimeProfilingSnapshot(), collector.snapshot())

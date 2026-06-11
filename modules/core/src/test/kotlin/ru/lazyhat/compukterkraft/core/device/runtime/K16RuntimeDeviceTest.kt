@@ -365,6 +365,50 @@ class K16RuntimeDeviceTest {
     }
 
     @Test
+    fun recordsK16WaitEntriesAndWakeReasons() {
+        val endpoint = RecordingK16Endpoint()
+        val metrics = RecordingRuntimeMetricsCollector()
+        endpoint.tickResults +=
+            K16ComputerTickResult(
+                signal = NativeK16ComputerSignal.Wait,
+                control = NativeK16ComputerControl(status = K16RuntimeDevice.STATUS_READY, exitCode = 0, panicCode = 0),
+            )
+        endpoint.tickResults +=
+            K16ComputerTickResult(
+                signal = NativeK16ComputerSignal.Wait,
+                control = NativeK16ComputerControl(status = K16RuntimeDevice.STATUS_READY, exitCode = 0, panicCode = 0),
+            )
+        endpoint.tickResults +=
+            K16ComputerTickResult(
+                signal = NativeK16ComputerSignal.Yield,
+                control = NativeK16ComputerControl(status = K16RuntimeDevice.STATUS_READY, exitCode = 0, panicCode = 0),
+            )
+        val device =
+            K16RuntimeDevice(
+                deviceId = 25,
+                properties = DeviceProperties(DeviceFamily.NORMAL, label = null),
+                endpointFactory = { endpoint },
+                stateSink = {},
+                metricsCollector = metrics,
+            )
+
+        device.turnOn()
+        device.serverTick()
+        waitUntil { endpoint.tickCalls == 1 }
+        device.serverTick()
+        waitUntil { endpoint.tickCalls == 2 }
+        DeviceEvents.dispatch(device, KeyInputEvent.Character('R'.code.toByte()))
+        waitUntil { endpoint.tickCalls == 3 && endpoint.keyboardChars.isNotEmpty() }
+
+        val snapshot = metrics.snapshot()
+        assertEquals(2, snapshot.vm.k16WaitEntries)
+        assertEquals(1, snapshot.vm.k16WaitTimerWakeups)
+        assertEquals(1, snapshot.vm.k16WaitInputWakeups)
+        assertEquals(0, snapshot.vm.k16WaitIdleSkips)
+        device.shutdown()
+    }
+
+    @Test
     fun mapsPasteEventsToKeyboard0WithoutConsumingCallerBuffer() {
         val endpoint = RecordingK16Endpoint()
         val device =
