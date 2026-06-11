@@ -456,3 +456,19 @@ tasks.named("processResources") {
     dependsOn(linkK16BiosFlash)
     dependsOn(compileK16SystemStorage0)
 }
+
+tasks.register<Test>("profileK16RuntimeWait") {
+    description = "Runs the bundled K16 runtime wait profiling workload and prints runtime metrics."
+    group = "verification"
+    dependsOn(tasks.named("buildK16VmNativeLibrary"))
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    useJUnitPlatform()
+    filter {
+        includeTestsMatching("ru.lazyhat.compukterkraft.impl.K16RuntimeWaitProfilingTest")
+    }
+    systemProperty("k16.vm.native.library", k16VmNativeLibrary.asFile.absolutePath)
+    testLogging {
+        showStandardStreams = true
+    }
+}
