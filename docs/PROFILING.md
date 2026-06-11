@@ -65,97 +65,40 @@ git diff docs/benchmarks/k16-vm-current.txt
 git show <commit>:docs/benchmarks/k16-vm-current.txt
 ```
 
-## Runtime/display profiling workload
+## K16 Runtime Wait Profiling
 
-Runtime VM profiling records the Rust image runtime path. Use `profileRuntimeVmImage` to build the native library, run the profiling workload, write the stable raw profile, and archive a timestamped run with Markdown.
+Use `profileK16RuntimeWait` to build the local debug K16 JNI library, boot the bundled K16 BIOS/storage resources through
+`K16RuntimeDevice`, drive a small timer/input wait workload, and print the runtime profiling summary to the terminal:
 
 ```bash
-./gradlew profileRuntimeVmImage
+./gradlew-sandbox profileK16RuntimeWait
 ```
 
-The task builds the local Rust JNI library and runs the terminal profiling workloads through the same image runtime path used by computer programs. It always writes the latest raw profile to:
+The task runs only `K16RuntimeWaitProfilingTest` and keeps normal gameplay on the default no-op collector. The profiling
+path injects `RecordingRuntimeMetricsCollector` only for the report test.
+
+The output is grouped into the existing multi-line runtime summary. The K16 wait line is the main scheduling signal:
 
 ```text
-modules/v1_21_1/v1_21_1-neoforge/build/reports/profiling/runtime-vm-image.tsv
+k16Wait: entries=..., timerWakeups=..., inputWakeups=..., idleSkips=...
 ```
 
-Each run is also archived under a timestamped directory:
+- `entries` counts guest `WAIT` exits observed by the K16 runtime worker.
+- `timerWakeups` counts waits resumed by a later server tick/game tick.
+- `inputWakeups` counts waits resumed by queued input.
+- `idleSkips` counts worker tick commands that found the guest already waiting with no new event to process.
 
-```text
-modules/v1_21_1/v1_21_1-neoforge/build/reports/profiling/runs/<timestamp>/runtime-vm-image.tsv
-modules/v1_21_1/v1_21_1-neoforge/build/reports/profiling/runs/<timestamp>/runtime-vm-image.md
-modules/v1_21_1/v1_21_1-neoforge/build/reports/profiling/runs/<timestamp>/metadata.properties
-```
-
-Use the stable TSV for scripts that only need the latest profile. Use the timestamped archive for before/after comparisons across commits or local experiments. Profiles include every workload collected by the task, with runtime, display, client display, compiler, host-call, terminal input-to-client, and held-Enter backlog metrics. The task runs a short warm-up before collecting measurements, but the workloads are still integration diagnostics rather than strict microbenchmarks.
-
-The archived workload set includes both a compact terminal workload and `default-size terminal`, which uses the same pixel dimensions as `ComputerTerminalScreen` (`DEFAULT_COMPUTER_TERM_WIDTH * FONT_WIDTH` by `DEFAULT_COMPUTER_TERM_HEIGHT * FONT_HEIGHT`). Use the default-size workload when checking whether gpu0 pixel payload, client apply, and front snapshot copy costs scale with the real in-game terminal size.
-
-Host-call timing is split into `total`, `wait`, and `active` in runtime summaries and Markdown reports. `total` is
-wall-clock latency for the host call. `wait` is time spent in intentionally blocking calls such as `runtime.poll` and
-`ipc.read`, where the VM is waiting for input or an event. `active` is `total - wait` and is the better number for
-CPU/work hotspot comparisons. Keep `total` in mind for user-visible latency.
-
-Generate a historical Markdown comparison over every archived run:
-
-```bash
-./gradlew profileRuntimeVmComparison
-```
-
-This task runs a fresh `profileRuntimeVmImage` first, then scans every `runs/*/runtime-vm-image.tsv` and writes:
-
-```text
-modules/v1_21_1/v1_21_1-neoforge/build/reports/profiling/runtime-vm-comparison.md
-```
-
-The comparison report does not hard-code workload names. If a future profiling run adds a new workload or host call, it appears in the historical report automatically.
-
-Run the bundled terminal profiling workload:
-
-```bash
-./gradlew \
-  -Dk16.vm.native.library="$PWD/.toolchain/build/cargo/k16-vm/debug/libk16_vm.so" \
-  :v1_21_1-neoforge:test \
-  --tests ru.lazyhat.compukterkraft.impl.computer.vm.RuntimeDisplayProfilingTest \
-  --info
-```
-
-Run only the held-Enter backlog workload:
-
-```bash
-./gradlew \
-  -Dk16.vm.native.library="$PWD/.toolchain/build/cargo/k16-vm/debug/libk16_vm.so" \
-  :v1_21_1-neoforge:test \
-  --tests ru.lazyhat.compukterkraft.impl.computer.vm.RuntimeDisplayProfilingTest.heldEnterWorkloadProducesBacklogProfilingMetrics \
-  --info
-```
-
-The output is grouped into multi-line, indented sections:
-
-- `display:` with `operations`, `frames`, and `frame-build` subsections for display counts, areas, payload bytes, timings, and averages;
-- `ClientDisplayProfilingSnapshot(...)` with client-side frame apply, swap, and front snapshot copy counts/timings. In the profiling workload, server display frames are drained every simulated tick and passed through `ClientDisplayBuffer`, so these numbers approximate the cost of a frame reaching the client buffer. They do not include Minecraft `NativeImage.upload` GPU texture upload time;
-- `runtime:` with `tick`, `host-queue`, `display-runtime`, `vm`, `signals`, `host-calls`, and `instructions` subsections;
-- `compiler:` with `totals` and `phases` subsections for compile, parse, analyze, and codegen metrics.
-
-The Markdown report also includes terminal pipeline phase rows for terminal workloads:
-
-- `Input phase to client` measures the elapsed profiling workload time from queuing the typed `help` characters through the fixed input tick window, including display frame drain and client buffer apply work.
-- `Input client frames` counts frames applied by the client buffer during that input phase.
-- `Enter phase to client` and `Enter client frames` do the same for the Enter/key-submit phase.
-
-The held-Enter workload additionally prints a `held-enter:` line with accepted repeated Enter events, settle ticks,
-maximum/final queued VM events, maximum/final pending host calls, and drained display frame count. It does not filter
-repeated Enter; it measures terminal/shell backlog behavior under repeat input.
+These numbers are local diagnostics, not historical benchmark artifacts. Git remains the history for committed benchmark
+snapshots such as `docs/benchmarks/k16-vm-current.txt`.
 
 ## JFR
 
 JFR is available with the JDK and is the first external profiler to try.
 
 ```bash
-./gradlew :v1_21_1-neoforge:test \
-  --tests ru.lazyhat.compukterkraft.impl.computer.vm.RuntimeDisplayProfilingTest \
-  --info \
-  -Dorg.gradle.jvmargs="-XX:StartFlightRecording=filename=build/reports/profiling/runtime-display.jfr,settings=profile,dumponexit=true"
+./gradlew-sandbox \
+  -Dorg.gradle.jvmargs="-XX:StartFlightRecording=filename=build/reports/profiling/runtime-display.jfr,settings=profile,dumponexit=true" \
+  profileK16RuntimeWait
 ```
 
 If Gradle daemon JVM arguments are already configured locally, stop daemons before rerunning:
@@ -170,7 +113,8 @@ Open the `.jfr` file in JDK Mission Control or another JFR viewer. Compare CPU a
 
 async-profiler is optional and depends on local OS/tooling setup.
 
-Use it when JFR shows a broad hotspot and you need flamegraphs. Attach to the Gradle test JVM that is running `RuntimeDisplayProfilingTest`, collect CPU or allocation data, then compare the flamegraph with the in-code summaries.
+Use it when JFR shows a broad hotspot and you need flamegraphs. Attach to the Gradle test JVM that is running
+`profileK16RuntimeWait`, collect CPU or allocation data, then compare the flamegraph with the in-code summaries.
 
 ## Native candidate heuristic
 

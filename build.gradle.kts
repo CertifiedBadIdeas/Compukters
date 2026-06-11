@@ -173,6 +173,12 @@ tasks.named("clean") {
     dependsOn(cleanWorkspace)
 }
 
+tasks.register("profileK16RuntimeWait") {
+    description = "Runs the bundled K16 runtime wait profiling workload."
+    group = "verification"
+    dependsOn(":v1_21_1-neoforge:profileK16RuntimeWait")
+}
+
 val configureK16Llvm =
     tasks.register<Exec>("configureK16Llvm") {
         description = "Configures the source-built K16 LLVM tree in .toolchain/build."
