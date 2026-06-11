@@ -175,6 +175,12 @@ interface K16ComputerEndpoint : AutoCloseable {
 
     fun tick(maxTurns: Int = 8): NativeK16ComputerControl
 
+    fun tickUntilSignal(maxTurns: Int = 8): K16ComputerTickResult =
+        K16ComputerTickResult(
+            signal = NativeK16ComputerSignal.Pause,
+            control = tick(maxTurns),
+        )
+
     fun outputSnapshot(): ByteArray
 
     fun drainGpu0Frames(): ByteArray
@@ -183,6 +189,11 @@ interface K16ComputerEndpoint : AutoCloseable {
 
     fun machineSnapshot(): ByteArray
 }
+
+data class K16ComputerTickResult(
+    val signal: NativeK16ComputerSignal,
+    val control: NativeK16ComputerControl,
+)
 
 class K16ComputerRuntime(
     private val handle: Long,
@@ -250,10 +261,18 @@ class K16ComputerRuntime(
 
     fun tick(): NativeK16ComputerControl = tick(defaultMaxTurnsPerTick)
 
+    fun tickUntilSignal(): K16ComputerTickResult = tickUntilSignal(defaultMaxTurnsPerTick)
+
     override fun tick(maxTurns: Int): NativeK16ComputerControl {
+        return tickUntilSignal(maxTurns).control
+    }
+
+    override fun tickUntilSignal(maxTurns: Int): K16ComputerTickResult {
         ensureOpen()
         require(maxTurns >= 0) { "maxTurns must be non-negative" }
-        terminalControl?.let { return it }
+        terminalControl?.let {
+            return K16ComputerTickResult(signal = NativeK16ComputerSignal.Halt, control = it)
+        }
         repeat(maxTurns) {
             val signal = bindings.runUntilSignal(handle)
             appendNativeOutput()
@@ -262,10 +281,13 @@ class K16ComputerRuntime(
                 if (signal == NativeK16ComputerSignal.Halt) {
                     terminalControl = control
                 }
-                return control
+                return K16ComputerTickResult(signal = signal, control = control)
             }
         }
-        return bindings.control(handle)
+        return K16ComputerTickResult(
+            signal = NativeK16ComputerSignal.Pause,
+            control = bindings.control(handle),
+        )
     }
 
     fun control(): NativeK16ComputerControl {

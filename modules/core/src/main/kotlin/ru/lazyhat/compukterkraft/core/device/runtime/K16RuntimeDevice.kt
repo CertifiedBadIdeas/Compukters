@@ -28,6 +28,7 @@ import ru.lazyhat.compukterkraft.core.device.runtime.ports.NoopDisplayNetworkBri
 import ru.lazyhat.compukterkraft.core.device.vm.display.NativeDisplayFrameCodec
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16ComputerEndpoint
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16ComputerControl
+import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16ComputerSignal
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
 import java.nio.ByteBuffer
 import java.util.UUID
@@ -406,6 +407,7 @@ class K16RuntimeDevice(
                 return
             }
             try {
+                var waitingForEvent = false
                 while (true) {
                     when (val command = commands.take()) {
                         Command.Tick -> {
@@ -415,30 +417,45 @@ class K16RuntimeDevice(
                                 if (gameTicks > 0) {
                                     endpoint.advanceGameTicks(gameTicks)
                                 }
-                                val control = endpoint.tick()
-                                terminalControlReached = control.isTerminal()
-                                refreshCaches(endpoint)
+                                if (gameTicks > 0 || !waitingForEvent) {
+                                    waitingForEvent = runEndpointSlice(endpoint)
+                                }
                             }
                         }
 
                         is Command.PushInput -> {
                             endpoint.pushInput(command.bytes)
+                            if (waitingForEvent) {
+                                waitingForEvent = runEndpointSlice(endpoint)
+                            }
                         }
 
                         is Command.PushKeyboardKeyDown -> {
                             endpoint.pushKeyboardKeyDown(command.key, command.repeat, command.modifiers)
+                            if (waitingForEvent) {
+                                waitingForEvent = runEndpointSlice(endpoint)
+                            }
                         }
 
                         is Command.PushKeyboardKeyUp -> {
                             endpoint.pushKeyboardKeyUp(command.key, command.modifiers)
+                            if (waitingForEvent) {
+                                waitingForEvent = runEndpointSlice(endpoint)
+                            }
                         }
 
                         is Command.PushKeyboardChar -> {
                             endpoint.pushKeyboardChar(command.value)
+                            if (waitingForEvent) {
+                                waitingForEvent = runEndpointSlice(endpoint)
+                            }
                         }
 
                         is Command.PushKeyboardPasteBytes -> {
                             endpoint.pushKeyboardPasteBytes(command.bytes)
+                            if (waitingForEvent) {
+                                waitingForEvent = runEndpointSlice(endpoint)
+                            }
                         }
 
                         Command.ClearOutput -> {
@@ -458,6 +475,14 @@ class K16RuntimeDevice(
             } finally {
                 endpoint.close()
             }
+        }
+
+        private fun runEndpointSlice(endpoint: K16ComputerEndpoint): Boolean {
+            val result = endpoint.tickUntilSignal()
+            terminalControlReached =
+                result.control.isTerminal() || result.signal == NativeK16ComputerSignal.Halt
+            refreshCaches(endpoint)
+            return !terminalControlReached && result.signal == NativeK16ComputerSignal.Wait
         }
 
         private fun refreshCaches(endpoint: K16ComputerEndpoint) {
