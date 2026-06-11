@@ -26,8 +26,10 @@ import ru.lazyhat.compukterkraft.core.device.input.KeyInputEvent
 import ru.lazyhat.compukterkraft.core.device.input.PasteInputEvent
 import ru.lazyhat.compukterkraft.core.device.runtime.ports.DisplayNetworkBridge
 import ru.lazyhat.compukterkraft.core.input.KeyCodes
-import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16ComputerControl
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16ComputerEndpoint
+import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16ComputerTickResult
+import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16ComputerControl
+import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16ComputerSignal
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayPixelFormat
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayTile
@@ -302,6 +304,63 @@ class K16RuntimeDeviceTest {
 
         assertEquals(2, endpoint.tickCalls)
         assertEquals(listOf(1L, 3L), endpoint.advancedGameTicks)
+        device.shutdown()
+    }
+
+    @Test
+    fun keyboardInputWakesEndpointAfterWaitSignalWithoutAdvancingGameTicks() {
+        val endpoint = RecordingK16Endpoint()
+        endpoint.tickResults +=
+            K16ComputerTickResult(
+                signal = NativeK16ComputerSignal.Wait,
+                control = NativeK16ComputerControl(status = K16RuntimeDevice.STATUS_READY, exitCode = 0, panicCode = 0),
+            )
+        endpoint.tickResults +=
+            K16ComputerTickResult(
+                signal = NativeK16ComputerSignal.Yield,
+                control = NativeK16ComputerControl(status = K16RuntimeDevice.STATUS_READY, exitCode = 0, panicCode = 0),
+            )
+        val device =
+            K16RuntimeDevice(
+                deviceId = 23,
+                properties = DeviceProperties(DeviceFamily.NORMAL, label = null),
+                endpointFactory = { endpoint },
+                stateSink = {},
+            )
+
+        device.turnOn()
+        device.serverTick()
+        waitUntil { endpoint.tickCalls == 1 }
+
+        DeviceEvents.dispatch(device, KeyInputEvent.Character('R'.code.toByte()))
+        waitUntil { endpoint.tickCalls == 2 && endpoint.keyboardChars.isNotEmpty() }
+
+        assertEquals(listOf(1L), endpoint.advancedGameTicks)
+        assertEquals(listOf('R'.code.toByte()), endpoint.keyboardChars)
+        device.shutdown()
+    }
+
+    @Test
+    fun endpointWorkerUsesDetailedTickResultForRunnableYieldSignal() {
+        val endpoint = RecordingK16Endpoint()
+        endpoint.tickResults +=
+            K16ComputerTickResult(
+                signal = NativeK16ComputerSignal.Yield,
+                control = NativeK16ComputerControl(status = K16RuntimeDevice.STATUS_READY, exitCode = 0, panicCode = 0),
+            )
+        val device =
+            K16RuntimeDevice(
+                deviceId = 24,
+                properties = DeviceProperties(DeviceFamily.NORMAL, label = null),
+                endpointFactory = { endpoint },
+                stateSink = {},
+            )
+
+        device.turnOn()
+        device.serverTick()
+        waitUntil { endpoint.tickCalls == 1 }
+
+        assertEquals(1, endpoint.tickUntilSignalCalls)
         device.shutdown()
     }
 
@@ -620,8 +679,12 @@ class K16RuntimeDeviceTest {
         @Volatile
         var tickCalls = 0
             private set
+        @Volatile
+        var tickUntilSignalCalls = 0
+            private set
         val advancedGameTicks: MutableList<Long> = Collections.synchronizedList(mutableListOf())
         val tickThreadIds: MutableList<Long> = Collections.synchronizedList(mutableListOf())
+        val tickResults = ArrayDeque<K16ComputerTickResult>()
         @Volatile
         var closeCalls = 0
             private set
@@ -662,10 +725,30 @@ class K16RuntimeDeviceTest {
         }
 
         override open fun tick(maxTurns: Int): NativeK16ComputerControl {
+            beforeTick()
+            return nextTickResult().control
+        }
+
+        override fun tickUntilSignal(maxTurns: Int): K16ComputerTickResult {
+            tickUntilSignalCalls += 1
+            beforeTick()
+            return nextTickResult()
+        }
+
+        protected open fun beforeTick() {
             tickCalls += 1
             tickThreadIds += Thread.currentThread().id
-            return control
         }
+
+        private fun nextTickResult(): K16ComputerTickResult =
+            if (tickResults.isEmpty()) {
+                K16ComputerTickResult(
+                    signal = NativeK16ComputerSignal.Pause,
+                    control = control,
+                )
+            } else {
+                tickResults.removeFirst()
+            }
 
         override fun outputSnapshot(): ByteArray =
             (inputs.fold(ByteArray(0)) { acc, bytes -> acc + bytes }.decodeToString() + injectedOutput)
@@ -738,13 +821,13 @@ class K16RuntimeDeviceTest {
     ) : RecordingK16Endpoint() {
         private var firstTick = true
 
-        override fun tick(maxTurns: Int): NativeK16ComputerControl {
+        override fun beforeTick() {
             if (firstTick) {
                 firstTick = false
                 tickEntered.countDown()
                 releaseTick.await(2, TimeUnit.SECONDS)
             }
-            return super.tick(maxTurns)
+            super.beforeTick()
         }
     }
 

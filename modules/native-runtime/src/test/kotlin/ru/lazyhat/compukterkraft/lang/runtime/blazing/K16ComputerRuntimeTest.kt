@@ -129,6 +129,44 @@ class K16ComputerRuntimeTest {
     }
 
     @Test
+    fun tickUntilSignalReportsWaitWithCurrentControl() {
+        val bindings = EchoBindings()
+        bindings.control = NativeK16ComputerControl(status = 2, exitCode = 0, panicCode = 0)
+        bindings.signal = NativeK16ComputerSignal.Wait
+        val runtime = K16ComputerRuntime(handle = 24L, bindings = bindings, defaultMaxTurnsPerTick = 8)
+
+        assertEquals(
+            K16ComputerTickResult(
+                signal = NativeK16ComputerSignal.Wait,
+                control = NativeK16ComputerControl(status = 2, exitCode = 0, panicCode = 0),
+            ),
+            runtime.tickUntilSignal(),
+        )
+
+        assertEquals(1, bindings.runUntilSignalCalls)
+        assertEquals(emptyList(), bindings.advanceGameTickHandles)
+    }
+
+    @Test
+    fun tickUntilSignalReportsYieldWithoutConsumingTheNextTurn() {
+        val bindings = EchoBindings()
+        bindings.signals += NativeK16ComputerSignal.Yield
+        bindings.signals += NativeK16ComputerSignal.Halt
+        bindings.control = NativeK16ComputerControl(status = 2, exitCode = 0, panicCode = 0)
+        val runtime = K16ComputerRuntime(handle = 26L, bindings = bindings, defaultMaxTurnsPerTick = 8)
+
+        assertEquals(
+            K16ComputerTickResult(
+                signal = NativeK16ComputerSignal.Yield,
+                control = NativeK16ComputerControl(status = 2, exitCode = 0, panicCode = 0),
+            ),
+            runtime.tickUntilSignal(),
+        )
+
+        assertEquals(1, bindings.runUntilSignalCalls)
+    }
+
+    @Test
     fun advancesGameTicksWithoutRunningNativeTurns() {
         val bindings = EchoBindings()
         val runtime = K16ComputerRuntime(handle = 29L, bindings = bindings, defaultMaxTurnsPerTick = 3)
