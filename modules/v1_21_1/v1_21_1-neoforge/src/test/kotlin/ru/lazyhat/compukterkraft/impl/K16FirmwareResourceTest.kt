@@ -943,6 +943,47 @@ class K16FirmwareResourceTest {
     }
 
     @Test
+    fun bundledK16KernelBackspaceAfterAutoWrapReturnsToPreviousRow() {
+        val workspace = createTempDirectory("k16-line-wrap-backspace-test-")
+        val biosFlashPath = workspace.resolve("bios.kflash")
+        val storage0Path = workspace.resolve("storage0.kv")
+        biosFlashPath.writeBytes(K16BiosFlashWorkspace.loadBiosFlashResource(classLoader = javaClass.classLoader))
+        storage0Path.writeBytes(K16SystemVolumeWorkspace.loadStorage0VolumeResource(classLoader = javaClass.classLoader))
+
+        K16ComputerRuntimeFactory.createFromBiosFlash(
+            biosFlashPath = biosFlashPath,
+            storage0Path = storage0Path,
+        ).use { runtime ->
+            val control = runThroughBiosSplashAndBoot(runtime)
+            assertEquals(NativeK16ComputerControl.STATUS_READY, control.status)
+            NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
+
+            repeat(49) {
+                runtime.pushKeyboardChar('a'.code.toByte())
+            }
+            runtime.pushKeyboardChar('\b'.code.toByte())
+            runtime.pushKeyboardChar('\b'.code.toByte())
+            runtime.pushKeyboardChar('z'.code.toByte())
+            val afterInputControl = runRuntimeServerTick(runtime, maxTurns = 512)
+            val secondTerminalRow = snapshotRamBytes(runtime.machineSnapshot(), start = 0x8000 + 53, size = 53)
+            val thirdTerminalRow = snapshotRamBytes(runtime.machineSnapshot(), start = 0x8000 + 53 * 2, size = 53)
+
+            assertEquals(NativeK16ComputerControl.STATUS_READY, afterInputControl.status)
+            assertEquals(0, afterInputControl.panicCode)
+            assertEquals(
+                'z'.code.toByte(),
+                secondTerminalRow[52],
+                "backspace at the start of an auto-wrapped row should return to the previous row",
+            )
+            assertEquals(
+                ' '.code.toByte(),
+                thirdTerminalRow[0],
+                "the wrapped row should be blank after erasing the wrapped character and previous-row character",
+            )
+        }
+    }
+
+    @Test
     fun bundledK16KernelTerminalEditingClearAndScrollStayVisible() {
         val workspace = createTempDirectory("k16-terminal-contract-test-")
         val biosFlashPath = workspace.resolve("bios.kflash")
