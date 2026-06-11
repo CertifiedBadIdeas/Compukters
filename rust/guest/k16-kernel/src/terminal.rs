@@ -87,7 +87,11 @@ fn move_to_next_line() {
 fn erase_previous_cell() {
     unsafe {
         if CURSOR_X == 0 {
-            return;
+            if CURSOR_Y == 0 {
+                return;
+            }
+            CURSOR_Y -= 1;
+            CURSOR_X = COLUMNS;
         }
         CURSOR_X -= 1;
         let x = CURSOR_X;
