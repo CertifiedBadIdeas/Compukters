@@ -53,6 +53,7 @@ class K16RuntimeDevice(
     private val endpointFactory: () -> K16ComputerEndpoint,
     private val stateSink: DeviceStateSink,
     private val displayNetwork: DisplayNetworkBridge = NoopDisplayNetworkBridge,
+    private val metricsCollector: RuntimeMetricsCollector = NoOpRuntimeMetricsCollector,
 ) : RuntimeDevice,
     RuntimeDeviceSerialEndpoint,
     RuntimeDeviceSnapshotPersistence,
@@ -82,7 +83,7 @@ class K16RuntimeDevice(
         if (endpoint != null) return
         val worker =
             try {
-                K16EndpointWorker(deviceId, endpointFactory).also { it.start() }
+                K16EndpointWorker(deviceId, endpointFactory, metricsCollector).also { it.start() }
             } catch (error: Throwable) {
                 runtimeFailureMessageBacking = error.message ?: error::class.java.name
                 LOGGER.error(error) {
@@ -290,6 +291,7 @@ class K16RuntimeDevice(
     private class K16EndpointWorker(
         deviceId: Int,
         private val endpointFactory: () -> K16ComputerEndpoint,
+        private val metricsCollector: RuntimeMetricsCollector,
     ) : AutoCloseable {
         private val commands = LinkedBlockingQueue<Command>()
         private val startup = CompletableFuture<Unit>()
@@ -418,7 +420,12 @@ class K16RuntimeDevice(
                                     endpoint.advanceGameTicks(gameTicks)
                                 }
                                 if (gameTicks > 0 || !waitingForEvent) {
+                                    if (waitingForEvent && gameTicks > 0) {
+                                        metricsCollector.recordK16WaitTimerWakeup()
+                                    }
                                     waitingForEvent = runEndpointSlice(endpoint)
+                                } else {
+                                    metricsCollector.recordK16WaitIdleSkip()
                                 }
                             }
                         }
@@ -426,6 +433,7 @@ class K16RuntimeDevice(
                         is Command.PushInput -> {
                             endpoint.pushInput(command.bytes)
                             if (waitingForEvent) {
+                                metricsCollector.recordK16WaitInputWakeup()
                                 waitingForEvent = runEndpointSlice(endpoint)
                             }
                         }
@@ -433,6 +441,7 @@ class K16RuntimeDevice(
                         is Command.PushKeyboardKeyDown -> {
                             endpoint.pushKeyboardKeyDown(command.key, command.repeat, command.modifiers)
                             if (waitingForEvent) {
+                                metricsCollector.recordK16WaitInputWakeup()
                                 waitingForEvent = runEndpointSlice(endpoint)
                             }
                         }
@@ -440,6 +449,7 @@ class K16RuntimeDevice(
                         is Command.PushKeyboardKeyUp -> {
                             endpoint.pushKeyboardKeyUp(command.key, command.modifiers)
                             if (waitingForEvent) {
+                                metricsCollector.recordK16WaitInputWakeup()
                                 waitingForEvent = runEndpointSlice(endpoint)
                             }
                         }
@@ -447,6 +457,7 @@ class K16RuntimeDevice(
                         is Command.PushKeyboardChar -> {
                             endpoint.pushKeyboardChar(command.value)
                             if (waitingForEvent) {
+                                metricsCollector.recordK16WaitInputWakeup()
                                 waitingForEvent = runEndpointSlice(endpoint)
                             }
                         }
@@ -454,6 +465,7 @@ class K16RuntimeDevice(
                         is Command.PushKeyboardPasteBytes -> {
                             endpoint.pushKeyboardPasteBytes(command.bytes)
                             if (waitingForEvent) {
+                                metricsCollector.recordK16WaitInputWakeup()
                                 waitingForEvent = runEndpointSlice(endpoint)
                             }
                         }
@@ -482,7 +494,11 @@ class K16RuntimeDevice(
             terminalControlReached =
                 result.control.isTerminal() || result.signal == NativeK16ComputerSignal.Halt
             refreshCaches(endpoint)
-            return !terminalControlReached && result.signal == NativeK16ComputerSignal.Wait
+            val waitingForEvent = !terminalControlReached && result.signal == NativeK16ComputerSignal.Wait
+            if (waitingForEvent) {
+                metricsCollector.recordK16WaitEnter()
+            }
+            return waitingForEvent
         }
 
         private fun refreshCaches(endpoint: K16ComputerEndpoint) {

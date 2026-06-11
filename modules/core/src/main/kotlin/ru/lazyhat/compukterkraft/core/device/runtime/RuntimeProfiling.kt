@@ -86,6 +86,14 @@ interface RuntimeMetricsCollector {
         idle: Boolean,
     )
 
+    fun recordK16WaitEnter()
+
+    fun recordK16WaitTimerWakeup()
+
+    fun recordK16WaitInputWakeup()
+
+    fun recordK16WaitIdleSkip()
+
     fun snapshot(): RuntimeProfilingSnapshot
 }
 
@@ -147,6 +155,10 @@ data class RuntimeVmMetrics(
     val nativeDaemonTurns: Long = 0,
     val nativeDaemonHaltedProcesses: Long = 0,
     val nativeDaemonHostRequests: Long = 0,
+    val k16WaitEntries: Long = 0,
+    val k16WaitTimerWakeups: Long = 0,
+    val k16WaitInputWakeups: Long = 0,
+    val k16WaitIdleSkips: Long = 0,
 ) {
     val nativeWaitSignals: Long get() = waitPollSignals
 }
@@ -198,6 +210,9 @@ data class RuntimeProfilingSnapshot(
             )
             appendLine(
                 "    nativeDaemon: ticks=${vm.nativeDaemonTicks}, active=${vm.nativeDaemonActiveNanos.nanos()}, idle=${vm.nativeDaemonIdleTicks}, turns=${vm.nativeDaemonTurns}, halted=${vm.nativeDaemonHaltedProcesses}, hostRequests=${vm.nativeDaemonHostRequests}",
+            )
+            appendLine(
+                "    k16Wait: entries=${vm.k16WaitEntries}, timerWakeups=${vm.k16WaitTimerWakeups}, inputWakeups=${vm.k16WaitInputWakeups}, idleSkips=${vm.k16WaitIdleSkips}",
             )
             appendLine(
                 "  signals: halt=${vm.haltSignals}, pause=${vm.pauseSignals}, yield=${vm.yieldSignals}, sleep=${vm.sleepSignals}, waitEvent=${vm.waitEventSignals}, waitPoll=${vm.waitPollSignals}, waitProcess=${vm.waitProcessSignals}, hostCall=${vm.hostCallSignals}",
@@ -316,6 +331,14 @@ object NoOpRuntimeMetricsCollector : RuntimeMetricsCollector {
         idle: Boolean,
     ) = Unit
 
+    override fun recordK16WaitEnter() = Unit
+
+    override fun recordK16WaitTimerWakeup() = Unit
+
+    override fun recordK16WaitInputWakeup() = Unit
+
+    override fun recordK16WaitIdleSkip() = Unit
+
     override fun snapshot(): RuntimeProfilingSnapshot = RuntimeProfilingSnapshot()
 }
 
@@ -374,6 +397,10 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
     private val nativeDaemonTurns = AtomicLong()
     private val nativeDaemonHaltedProcesses = AtomicLong()
     private val nativeDaemonHostRequests = AtomicLong()
+    private val k16WaitEntries = AtomicLong()
+    private val k16WaitTimerWakeups = AtomicLong()
+    private val k16WaitInputWakeups = AtomicLong()
+    private val k16WaitIdleSkips = AtomicLong()
     private val hostCalls = ConcurrentHashMap<Pair<String, String>, RuntimeCounter>()
     private val instructions = ConcurrentHashMap<VmInstructionKind, RuntimeCounter>()
 
@@ -501,6 +528,22 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
         if (idle) nativeDaemonIdleTicks.incrementAndGet()
     }
 
+    override fun recordK16WaitEnter() {
+        k16WaitEntries.incrementAndGet()
+    }
+
+    override fun recordK16WaitTimerWakeup() {
+        k16WaitTimerWakeups.incrementAndGet()
+    }
+
+    override fun recordK16WaitInputWakeup() {
+        k16WaitInputWakeups.incrementAndGet()
+    }
+
+    override fun recordK16WaitIdleSkip() {
+        k16WaitIdleSkips.incrementAndGet()
+    }
+
     override fun snapshot(): RuntimeProfilingSnapshot =
         RuntimeProfilingSnapshot(
             tick =
@@ -546,6 +589,10 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
                     nativeDaemonTurns = nativeDaemonTurns.get(),
                     nativeDaemonHaltedProcesses = nativeDaemonHaltedProcesses.get(),
                     nativeDaemonHostRequests = nativeDaemonHostRequests.get(),
+                    k16WaitEntries = k16WaitEntries.get(),
+                    k16WaitTimerWakeups = k16WaitTimerWakeups.get(),
+                    k16WaitInputWakeups = k16WaitInputWakeups.get(),
+                    k16WaitIdleSkips = k16WaitIdleSkips.get(),
                 ),
             hostCalls =
                 hostCalls
