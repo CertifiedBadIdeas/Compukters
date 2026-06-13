@@ -180,6 +180,25 @@ fn interrupt_helpers_update_test_csr_state() {
 }
 
 #[test]
+fn trap_frame_helpers_copy_saved_resume_state() {
+    crate::trap::reset_test_interrupts();
+    let mut source = TrapFrame::default();
+    source.registers[0] = 0x0000_00a0;
+    source.registers[1] = 0x0000_00a1;
+    source.registers[15] = 0x0000_00af;
+    source.resume_pc = 0x0000_2000;
+    source.stack_pointer = 0x0000_3000;
+    source.interrupt_enable = 1;
+
+    let restored_r0 = unsafe { restore_trap_frame(&source) };
+    let mut saved = TrapFrame::default();
+    save_trap_frame(&mut saved);
+
+    assert_eq!(restored_r0, source.registers[0]);
+    assert_eq!(saved, source);
+}
+
+#[test]
 fn syscall_helper_records_test_syscall_number() {
     crate::trap::reset_test_interrupts();
 

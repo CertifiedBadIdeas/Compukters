@@ -139,6 +139,8 @@ Runtime helper symbol names:
 `__k16_wait_once`              provided by k16-cpu-helpers
 `__k16_yield_once`             provided by k16-cpu-helpers
 `__k16_iret_once`              provided by k16-cpu-helpers
+`__k16_save_trap_frame`        provided by k16-cpu-helpers
+`__k16_restore_trap_frame`     provided by k16-cpu-helpers
 `__k16_write_trap_vector`      provided by k16-cpu-helpers
 `__k16_read_trap_cause`        provided by k16-cpu-helpers
 `__k16_read_trap_pc`           provided by k16-cpu-helpers
@@ -155,6 +157,12 @@ Runtime helper symbol names:
 `__k16_write_interrupt_mask`   provided by k16-cpu-helpers
 `__k16_read_interrupt_pending` provided by k16-cpu-helpers
 ```
+
+`__k16_save_trap_frame` writes the current saved CPU trap frame into the
+`k16_rt::TrapFrame` layout: `r0..r15`, `resume_pc`, `stack_pointer`, and
+`interrupt_enable`. `__k16_restore_trap_frame` restores `r1..r15` plus the
+resume fields and returns the saved `r0`; kernel code passes that return value
+to `__k16_iret_with_r0` when entering the restored context.
 
 Missing helper symbols are link-time errors. The linker must not synthesize
 helper bodies, fall back to VM hooks, or ask the VM to resolve runtime helpers.

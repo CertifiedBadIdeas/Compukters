@@ -89,7 +89,7 @@ pub use time::{
 pub use trap::{
     debug_marker, debug_write_byte, disable_interrupts, enable_interrupts, exit_syscall,
     install_trap_vector, interrupt_pending, iret_once, iret_with_r0, read_syscall,
-    set_interrupt_mask, sleep_ticks_syscall, syscall0, syscall1, syscall3, syscall_arg0,
-    syscall_arg1, syscall_arg2, syscall_once, trap_cause, trap_pc, trap_value, write_syscall,
-    yield_syscall,
+    restore_trap_frame, save_trap_frame, set_interrupt_mask, sleep_ticks_syscall, syscall0,
+    syscall1, syscall3, syscall_arg0, syscall_arg1, syscall_arg2, syscall_once, trap_cause,
+    trap_pc, trap_value, write_syscall, yield_syscall, TrapFrame,
 };

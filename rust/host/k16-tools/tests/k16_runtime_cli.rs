@@ -1,7 +1,11 @@
 use k16_tools::k16_runtime;
 use k16_tools::k16e;
 use k16_vm::computer_machine::{decode_snapshot_v1, ComputerCpuSnapshotRecord};
-use k16_vm::k16::{K16Cpu, K16Signal, K16_CSR_TRAP_VECTOR};
+use k16_vm::k16::{
+    K16Cpu, K16Signal, K16_CSR_TRAP_FRAME_INDEX, K16_CSR_TRAP_FRAME_REGISTER,
+    K16_CSR_TRAP_INTERRUPT_ENABLE, K16_CSR_TRAP_RESUME_PC, K16_CSR_TRAP_STACK_POINTER,
+    K16_CSR_TRAP_VECTOR,
+};
 use k16_vm::k16_computer::K16ComputerHandle;
 use k16_vm::low_machine::MachineMemory;
 use std::fs;
@@ -305,6 +309,92 @@ fn k16_runtime_syscall3_helper_loads_fourth_argument_from_stack() {
             .any(|window| window == expected_bytes.as_slice()),
         "syscall3 helper must load the current Rust backend's stack argument slot into r4 before executing syscall r1",
     );
+}
+
+#[test]
+fn k16_runtime_trap_frame_helpers_use_saved_frame_csrs() {
+    let helper_object = k16_runtime::k16_cpu_helpers_object();
+    for symbol in [
+        b"__k16_save_trap_frame".as_slice(),
+        b"__k16_restore_trap_frame".as_slice(),
+    ] {
+        assert!(
+            helper_object
+                .windows(symbol.len())
+                .any(|window| window == symbol),
+            "trap frame helper object must export {}",
+            String::from_utf8_lossy(symbol),
+        );
+    }
+    let save_prefix = [
+        const4(14, 0),
+        write_csr(K16_CSR_TRAP_FRAME_INDEX, 14),
+        read_csr(0, K16_CSR_TRAP_FRAME_REGISTER),
+        const32(14, 0)[0],
+        const32(14, 0)[1],
+        const32(14, 0)[2],
+        add(14, 1, 14)[0],
+        add(14, 1, 14)[1],
+        store32(14, 0),
+        const4(14, 1),
+        write_csr(K16_CSR_TRAP_FRAME_INDEX, 14),
+        read_csr(0, K16_CSR_TRAP_FRAME_REGISTER),
+    ];
+    let restore_resume_pc = [
+        const32(14, 64)[0],
+        const32(14, 64)[1],
+        const32(14, 64)[2],
+        add(14, 1, 14)[0],
+        add(14, 1, 14)[1],
+        load32(0, 14),
+        write_csr(K16_CSR_TRAP_RESUME_PC, 0),
+    ];
+    let restore_stack_pointer = [
+        const32(14, 68)[0],
+        const32(14, 68)[1],
+        const32(14, 68)[2],
+        add(14, 1, 14)[0],
+        add(14, 1, 14)[1],
+        load32(0, 14),
+        write_csr(K16_CSR_TRAP_STACK_POINTER, 0),
+    ];
+    let restore_interrupt_enable = [
+        const32(14, 72)[0],
+        const32(14, 72)[1],
+        const32(14, 72)[2],
+        add(14, 1, 14)[0],
+        add(14, 1, 14)[1],
+        load32(0, 14),
+        write_csr(K16_CSR_TRAP_INTERRUPT_ENABLE, 0),
+    ];
+    let restore_return = [
+        const32(14, 0)[0],
+        const32(14, 0)[1],
+        const32(14, 0)[2],
+        add(14, 1, 14)[0],
+        add(14, 1, 14)[1],
+        load32(0, 14),
+        ret(),
+    ];
+
+    for (name, words) in [
+        ("save prefix", save_prefix.as_slice()),
+        ("restore resume pc", restore_resume_pc.as_slice()),
+        ("restore stack pointer", restore_stack_pointer.as_slice()),
+        (
+            "restore interrupt enable",
+            restore_interrupt_enable.as_slice(),
+        ),
+        ("restore return r0", restore_return.as_slice()),
+    ] {
+        let expected_bytes = words_to_bytes(words);
+        assert!(
+            helper_object
+                .windows(expected_bytes.len())
+                .any(|window| window == expected_bytes.as_slice()),
+            "trap frame helper object must contain {name} sequence",
+        );
+    }
 }
 
 #[test]
@@ -1048,6 +1138,10 @@ fn iret() -> u16 {
 
 fn ret() -> u16 {
     0x9000
+}
+
+fn read_csr(dst: u8, csr: u32) -> u16 {
+    0x0002 | (u16::from(dst) << 8) | (((csr as u16) & 0x0f) << 4)
 }
 
 fn write_csr(csr: u32, src: u8) -> u16 {
