@@ -17,6 +17,122 @@ pub enum ProcessLoadError {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ProcessSwitchError {
+    ChildAlreadyRunning,
+    NoRunningChild,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ProcessId {
+    Init,
+    Child,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ProcessState {
+    Empty,
+    Running,
+    BlockedOnChild,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct ProcessContext {
+    pub entry_pc: u32,
+    pub stack_top: u32,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct ChildLaunch {
+    pub id: ProcessId,
+    pub context: ProcessContext,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct InitResume {
+    pub id: ProcessId,
+    pub context: ProcessContext,
+    pub child_exit_status: u32,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct ProcessTable {
+    init: ProcessSlot,
+    child: ProcessSlot,
+}
+
+impl ProcessTable {
+    pub const fn new(init_context: ProcessContext) -> Self {
+        Self {
+            init: ProcessSlot {
+                state: ProcessState::Running,
+                context: init_context,
+                exit_status: 0,
+            },
+            child: ProcessSlot {
+                state: ProcessState::Empty,
+                context: ProcessContext {
+                    entry_pc: 0,
+                    stack_top: 0,
+                },
+                exit_status: 0,
+            },
+        }
+    }
+
+    pub fn begin_child_run(
+        &mut self,
+        child_plan: DynamicUserLoadPlan,
+    ) -> Result<ChildLaunch, ProcessSwitchError> {
+        if self.child.state == ProcessState::Running {
+            return Err(ProcessSwitchError::ChildAlreadyRunning);
+        }
+        let context = ProcessContext {
+            entry_pc: child_plan.entry_pc,
+            stack_top: child_plan.stack_top,
+        };
+        self.init.state = ProcessState::BlockedOnChild;
+        self.child = ProcessSlot {
+            state: ProcessState::Running,
+            context,
+            exit_status: 0,
+        };
+        Ok(ChildLaunch {
+            id: ProcessId::Child,
+            context,
+        })
+    }
+
+    pub fn finish_child(&mut self, status: u32) -> Result<InitResume, ProcessSwitchError> {
+        if self.child.state != ProcessState::Running {
+            return Err(ProcessSwitchError::NoRunningChild);
+        }
+        self.child.state = ProcessState::Empty;
+        self.child.exit_status = status;
+        self.init.state = ProcessState::Running;
+        Ok(InitResume {
+            id: ProcessId::Init,
+            context: self.init.context,
+            child_exit_status: status,
+        })
+    }
+
+    pub const fn init_state(&self) -> ProcessState {
+        self.init.state
+    }
+
+    pub const fn child_state(&self) -> ProcessState {
+        self.child.state
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+struct ProcessSlot {
+    state: ProcessState,
+    context: ProcessContext,
+    exit_status: u32,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct UserArena {
     start: u32,
     end: u32,
@@ -484,5 +600,86 @@ mod tests {
             u32::from_le_bytes([memory[4], memory[5], memory[6], memory[7]]),
             0x0000_9006
         );
+    }
+
+    #[test]
+    fn process_table_blocks_init_while_child_is_running() {
+        let mut table = ProcessTable::new(ProcessContext {
+            entry_pc: 0x0000_8000,
+            stack_top: 0x0001_0000,
+        });
+        let child_plan = DynamicUserLoadPlan {
+            load_base: 0x0000_a000,
+            load_end: 0x0000_a020,
+            entry_pc: 0x0000_a004,
+            stack_top: 0x0001_0000,
+            payload_dst: 0x0000_a000,
+            payload_len: 16,
+            zero_fill_addr: 0x0000_a010,
+            zero_fill_len: 16,
+        };
+
+        let child = table.begin_child_run(child_plan).expect("child starts");
+
+        assert_eq!(child.id, ProcessId::Child);
+        assert_eq!(
+            child.context,
+            ProcessContext {
+                entry_pc: 0x0000_a004,
+                stack_top: 0x0001_0000,
+            }
+        );
+        assert_eq!(table.init_state(), ProcessState::BlockedOnChild);
+        assert_eq!(table.child_state(), ProcessState::Running);
+    }
+
+    #[test]
+    fn process_table_rejects_nested_child_run() {
+        let mut table = ProcessTable::new(ProcessContext {
+            entry_pc: 0x0000_8000,
+            stack_top: 0x0001_0000,
+        });
+        let child_plan = DynamicUserLoadPlan {
+            load_base: 0x0000_a000,
+            load_end: 0x0000_a020,
+            entry_pc: 0x0000_a004,
+            stack_top: 0x0001_0000,
+            payload_dst: 0x0000_a000,
+            payload_len: 16,
+            zero_fill_addr: 0x0000_a010,
+            zero_fill_len: 16,
+        };
+        table.begin_child_run(child_plan).expect("child starts");
+
+        assert_eq!(
+            table.begin_child_run(child_plan),
+            Err(ProcessSwitchError::ChildAlreadyRunning)
+        );
+    }
+
+    #[test]
+    fn process_table_child_exit_unblocks_init_with_status() {
+        let mut table = ProcessTable::new(ProcessContext {
+            entry_pc: 0x0000_8000,
+            stack_top: 0x0001_0000,
+        });
+        let child_plan = DynamicUserLoadPlan {
+            load_base: 0x0000_a000,
+            load_end: 0x0000_a020,
+            entry_pc: 0x0000_a004,
+            stack_top: 0x0001_0000,
+            payload_dst: 0x0000_a000,
+            payload_len: 16,
+            zero_fill_addr: 0x0000_a010,
+            zero_fill_len: 16,
+        };
+        table.begin_child_run(child_plan).expect("child starts");
+
+        let resumed = table.finish_child(7).expect("init resumes");
+
+        assert_eq!(resumed.id, ProcessId::Init);
+        assert_eq!(resumed.child_exit_status, 7);
+        assert_eq!(table.init_state(), ProcessState::Running);
+        assert_eq!(table.child_state(), ProcessState::Empty);
     }
 }
