@@ -504,6 +504,24 @@ class K16FirmwareResourceTest {
     }
 
     @Test
+    fun k16KernelReadSyscallUsesKeyboardInputPath() {
+        val kernelSourceDir = Path.of("../../../rust/guest/k16-kernel/src")
+        val syscallSource = kernelSourceDir.resolve("syscall.rs").readText()
+        val stdinSource = kernelSourceDir.resolve("stdin.rs").readText()
+        val mainSource = kernelSourceDir.resolve("main.rs").readText()
+
+        assertTrue(mainSource.contains("mod stdin;"), "kernel should register fd stdin input")
+        assertTrue(syscallSource.contains("abi_syscall::READ"), "syscall dispatch should handle fd reads")
+        assertTrue(
+            syscallSource.contains("stdin::read(ptr, len)"),
+            "READ(FD_STDIN, ptr, len) should delegate to the stdin input path",
+        )
+        assertTrue(stdinSource.contains("keyboard0::EVENT_CHAR"), "stdin should consume keyboard character events")
+        assertTrue(stdinSource.contains("keyboard0::EVENT_PASTE_BYTE"), "stdin should consume paste byte events")
+        assertTrue(stdinSource.contains("k16_rt::yield_once()"), "blocking stdin reads should yield to the host")
+    }
+
+    @Test
     fun k16KernelLegacyShellIsNotRegisteredByCurrentEntrypoint() {
         val kernelSourceDir = Path.of("../../../rust/guest/k16-kernel/src")
         val shellPath = kernelSourceDir.resolve("shell.rs")

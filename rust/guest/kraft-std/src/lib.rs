@@ -51,6 +51,14 @@ pub mod io {
             }
             Ok(())
         }
+
+        pub fn read(self, bytes: &mut [u8]) -> Result<usize, Error> {
+            let returned = k16_rt::read_syscall(self.0, bytes.as_mut_ptr(), bytes.len());
+            if (returned as i32) < 0 {
+                return Err(Error::Syscall(returned));
+            }
+            Ok(returned as usize)
+        }
     }
 
     pub fn stdin() -> Fd {

@@ -510,9 +510,10 @@ K16 syscall ABI v0 names the current Rust-kernel proof services in
 | `SLEEP_TICKS` | `5` | `k16_rt::sleep_ticks_syscall(ticks)` | Kernel waits until `timer0.game_ticks` advances by `ticks`, then returns `STATUS_OK`. |
 | `EXIT` | `6` | `k16_rt::exit_syscall(status)` | Terminates the current single-task program and halts the VM with the supplied status. |
 | `WRITE` | `7` | `k16_rt::write_syscall(fd, ptr, len)` | Writes bytes from guest memory to fd `1` or `2`; returns byte count or a negative K16 error. |
+| `READ` | `8` | `k16_rt::read_syscall(fd, ptr, len)` | Reads bytes from fd `0` into guest memory; blocks by yielding until input is available, then returns byte count or a negative K16 error. |
 | `DEBUG_MARKER_RETURN` | `0x53` | n/a | Proof return value for `DEBUG_MARKER`. |
 | `STATUS_OK` | `0` | n/a | Successful proof-service status. |
-| `FD_STDIN` | `0` | n/a | Reserved standard input descriptor; `READ` is not implemented in this slice. |
+| `FD_STDIN` | `0` | n/a | Standard input descriptor accepted by `READ`. |
 | `FD_STDOUT` | `1` | n/a | Standard output descriptor accepted by `WRITE`. |
 | `FD_STDERR` | `2` | n/a | Standard error descriptor accepted by `WRITE`. |
 | `ERROR_BAD_FD` | `0xffff_fff7` | n/a | Negative K16 error value corresponding to POSIX-aware `EBADF` semantics. |

@@ -1,6 +1,6 @@
 use k16_abi::syscall as abi_syscall;
 
-use crate::{console, control, debug, timer, trap};
+use crate::{console, control, debug, stdin, timer, trap};
 
 pub fn dispatch(number: u32) -> ! {
     match number {
@@ -27,6 +27,15 @@ pub fn dispatch(number: u32) -> ! {
                 Err(error) => unsafe { k16_rt::iret_with_r0(error) },
             }
         }
+        abi_syscall::READ => {
+            let fd = k16_rt::syscall_arg0();
+            let ptr = k16_rt::syscall_arg1();
+            let len = k16_rt::syscall_arg2();
+            match read_fd(fd, ptr, len) {
+                Ok(read) => unsafe { k16_rt::iret_with_r0(read) },
+                Err(error) => unsafe { k16_rt::iret_with_r0(error) },
+            }
+        }
         abi_syscall::YIELD => {
             k16_rt::yield_once();
             unsafe { k16_rt::iret_with_r0(abi_syscall::STATUS_OK) }
@@ -42,6 +51,13 @@ pub fn dispatch(number: u32) -> ! {
 fn write_fd(fd: u32, ptr: u32, len: u32) -> Result<u32, u32> {
     match fd {
         abi_syscall::FD_STDOUT | abi_syscall::FD_STDERR => write_guest_bytes(ptr, len),
+        _ => Err(abi_syscall::ERROR_BAD_FD),
+    }
+}
+
+fn read_fd(fd: u32, ptr: u32, len: u32) -> Result<u32, u32> {
+    match fd {
+        abi_syscall::FD_STDIN => stdin::read(ptr, len),
         _ => Err(abi_syscall::ERROR_BAD_FD),
     }
 }
