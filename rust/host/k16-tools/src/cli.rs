@@ -1,5 +1,6 @@
 use crate::artifact::K16ArtifactTarget;
 use crate::{inspect, k16_disasm, k16_runtime, k16fs, object_link, volume};
+use k16_vm::computer_machine::{decode_snapshot_v1, ComputerCpuSnapshotRecord};
 use k16_vm::k16::K16Signal;
 use k16_vm::k16_computer::K16ComputerHandle;
 use std::env;
@@ -40,15 +41,40 @@ fn run_program(args: &[String]) -> Result<(), String> {
     handle
         .exec_k16e_program_from_bytes(&program, 1_000_000)
         .map_err(|error| format!("failed to install K16E program: {error}"))?;
-    let signal = handle
-        .run_k16_until_signal()
-        .map_err(|error| format!("failed to run K16 program: {error}"))?;
-    println!(
-        "signal={} debug_bytes={}",
-        signal_name(signal),
-        hex_bytes(handle.debug_output_bytes())
-    );
+    match handle.run_k16_until_signal() {
+        Ok(signal) => {
+            println!(
+                "signal={} debug_bytes={}",
+                signal_name(signal),
+                hex_bytes(handle.debug_output_bytes())
+            );
+        }
+        Err(error) => {
+            if let Some(exit_status) = standalone_program_exit_status(&handle, &error) {
+                println!(
+                    "signal=halt exit_status={} debug_bytes={}",
+                    exit_status,
+                    hex_bytes(handle.debug_output_bytes())
+                );
+                return Ok(());
+            }
+            return Err(format!("failed to run K16 program: {error}"));
+        }
+    }
     Ok(())
+}
+
+fn standalone_program_exit_status(handle: &K16ComputerHandle, error: &str) -> Option<u32> {
+    if !error.contains("unhandled exception cause 5")
+        || !error.contains(&format!("syscall {}", k16_abi::syscall::EXIT))
+    {
+        return None;
+    }
+    let snapshot_bytes = handle.snapshot_v1().ok()?;
+    let snapshot = decode_snapshot_v1(&snapshot_bytes).ok()?;
+    let first_cpu = snapshot.cpus.first()?;
+    let ComputerCpuSnapshotRecord::K16 { cpu, .. } = first_cpu;
+    Some(cpu.registers[2])
 }
 
 fn run_bios(args: &[String]) -> Result<(), String> {

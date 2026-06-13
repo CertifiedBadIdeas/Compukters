@@ -227,13 +227,16 @@ fn rust_nocore_smoke_artifacts_are_documented_and_strict() {
     assert!(core_script.contains("-Z json-target-spec"));
     assert!(core_script.contains("[lib]"));
     assert!(core_script.contains("--lib"));
-    assert!(core_script.contains("RUSTFLAGS=\"-Cjump-tables=no -Cdebuginfo=0\""));
+    assert!(core_script.contains("RUSTFLAGS=\"-Copt-level=z -Cjump-tables=no -Cdebuginfo=0\""));
+    assert!(core_script.contains("-Copt-level=z"));
     assert!(core_script.contains("-Cjump-tables=no"));
     assert!(core_script.contains("-Cdebuginfo=0"));
     assert!(core_script.contains("#![no_std]"));
     assert!(!core_script.contains("[[bin]]"));
     assert!(!core_script.contains("#![no_main]"));
     assert!(core_script.contains("core::hint::spin_loop"));
+    assert!(core_script.contains("RUSTC_BOOTSTRAP"));
+    assert!(core_script.contains("K16_KEEP_WORK_DIR"));
     assert!(core_script.contains("K16_RUSTC"));
     assert!(core_script.contains("K16_LLVM_BIN_DIR"));
     assert!(core_script.contains(".toolchain/build/llvm/k16-min/bin"));
@@ -245,7 +248,7 @@ fn rust_nocore_smoke_artifacts_are_documented_and_strict() {
     assert!(core_script.contains("K16 Rust core build failed."));
     assert!(core_script.contains("cargo-rustc.stderr"));
     assert!(core_script.contains("main.kx"));
-    assert!(core_script.contains("debug_bytes=2a"));
+    assert!(core_script.contains("signal=halt exit_status=42 debug_bytes="));
     assert!(core_script.contains("--bin k16"));
     assert!(!core_script.contains("#![no_core]"));
     assert!(!core_script.contains("extern crate alloc"));
@@ -342,13 +345,16 @@ fn rust_nocore_smoke_artifacts_are_documented_and_strict() {
     assert!(core_docs.contains("tools/k16-rust-core-smoke.sh"));
     assert!(core_docs.contains("-Z build-std=core"));
     assert!(core_docs.contains("core only"));
-    assert!(core_docs.contains("library crate with an exported C ABI `main`"));
+    assert!(core_docs.contains("library crate"));
+    assert!(core_docs.contains("exported C ABI `main`"));
+    assert!(core_docs.contains("RUSTC_BOOTSTRAP=1"));
+    assert!(core_docs.contains("-Copt-level=z"));
     assert!(core_docs.contains("-Cdebuginfo=0"));
     assert!(core_docs.contains("no alloc"));
     assert!(core_docs.contains("no std"));
     assert!(core_docs.contains("K16_RUSTC"));
     assert!(core_docs.contains("K16_LLVM_BIN_DIR"));
-    assert!(core_docs.contains("debug_bytes=2a"));
+    assert!(core_docs.contains("signal=halt exit_status=42 debug_bytes="));
     assert!(!core_docs.contains("tools/rux16-rust-core-smoke.sh"));
     assert!(!core_docs.contains("RUX16_RUSTC"));
 

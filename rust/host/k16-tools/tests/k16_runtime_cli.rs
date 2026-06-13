@@ -69,7 +69,7 @@ fn k16_runtime_startup_links_returning_main_and_requires_exit_syscall_handler() 
 }
 
 #[test]
-fn k16_run_reports_missing_exit_syscall_handler_for_startup_program() {
+fn k16_run_reports_startup_exit_status_for_standalone_program() {
     let startup_path = temp_file("run-startup.o");
     let main_path = temp_file("run-main.o");
     let output_path = temp_file("run-program.k16e");
@@ -113,14 +113,17 @@ fn k16_run_reports_missing_exit_syscall_handler_for_startup_program() {
         .output()
         .expect("k16 run runs");
 
-    assert!(!run_output.status.success());
-    assert_eq!(String::from_utf8_lossy(&run_output.stdout), "");
-    let stderr = String::from_utf8_lossy(&run_output.stderr);
     assert!(
-        stderr.contains("failed to run K16 program: unhandled exception cause 5")
-            && stderr.contains("syscall 6"),
-        "stderr: {stderr}"
+        run_output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&run_output.stderr)
     );
+    assert_eq!(
+        String::from_utf8_lossy(&run_output.stdout),
+        "signal=halt exit_status=42 debug_bytes=\n"
+    );
+    let stderr = String::from_utf8_lossy(&run_output.stderr);
+    assert!(stderr.is_empty(), "stderr: {stderr}");
 }
 
 #[test]

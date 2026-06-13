@@ -61,9 +61,17 @@ RUSTC="$(resolve_command "$RUSTC")"
 require_file "$LLVM_READOBJ"
 require_readable "$TARGET_SPEC"
 export K16_LLVM_BIN_DIR="$LLVM_BIN_DIR"
+export RUSTC_BOOTSTRAP="${RUSTC_BOOTSTRAP:-1}"
 
 WORK_DIR="$(mktemp -d)"
-trap 'rm -rf "$WORK_DIR"' EXIT
+cleanup() {
+    if [[ "${K16_KEEP_WORK_DIR:-0}" == "1" ]]; then
+        echo "K16 Rust core smoke work dir kept at $WORK_DIR" >&2
+    else
+        rm -rf "$WORK_DIR"
+    fi
+}
+trap cleanup EXIT
 
 "$CARGO" -Z help > "$WORK_DIR/cargo-z-help.txt" 2> "$WORK_DIR/cargo-z-help.stderr" || {
     echo "K16 Rust core smoke requires nightly-capable cargo with -Z build-std support." >&2
@@ -118,7 +126,7 @@ fn panic(_info: &PanicInfo<'_>) -> ! {
 RS
 
 if ! RUSTC="$RUSTC" \
-    RUSTFLAGS="-Cjump-tables=no -Cdebuginfo=0" \
+    RUSTFLAGS="-Copt-level=z -Cjump-tables=no -Cdebuginfo=0" \
     "$CARGO" \
         rustc \
         -Z build-std=core \
@@ -129,6 +137,7 @@ if ! RUSTC="$RUSTC" \
         --lib \
         -- \
         -C panic=abort \
+        -Copt-level=z \
         -C relocation-model=static \
         -Cjump-tables=no \
         -Cdebuginfo=0 \
@@ -153,7 +162,7 @@ require_contains "$WORK_DIR/main-kx.txt" "kind=K16E"
 require_contains "$WORK_DIR/main-kx.txt" "K16E abi=program entry_pc=0x00008000 load_addr=0x00008000"
 
 run_k16 run "$WORK_DIR/main.kx" > "$WORK_DIR/main-run.txt"
-require_contains "$WORK_DIR/main-run.txt" "signal=halt debug_bytes=2a"
+require_contains "$WORK_DIR/main-run.txt" "signal=halt exit_status=42 debug_bytes="
 
 echo "Rust core object checks passed"
 echo "KX link and execution checks passed"
