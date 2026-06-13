@@ -3,18 +3,18 @@
 
 use core::panic::PanicInfo;
 
+use k16_init::{Command, InputLine};
 use kraft_std::prelude::*;
 
 const PROMPT: &[u8] = b"INIT> ";
 const NEWLINE: &[u8] = b"\n";
 const HELP: &[u8] = b"HELP\nCLEAR\nECHO\nTICKS\n";
-const INPUT_CAPACITY: usize = 128;
 
 #[no_mangle]
 pub extern "C" fn main() -> ! {
     let stdin = io::stdin();
     let stdout = io::stdout();
-    let mut input = [0u8; INPUT_CAPACITY];
+    let mut input = InputLine::new();
     let mut read_buffer = [0u8; 1];
 
     must_write(stdout, b"K16 INIT\n");
@@ -27,11 +27,10 @@ pub extern "C" fn main() -> ! {
 fn read_and_dispatch_line(
     stdin: io::Fd,
     stdout: io::Fd,
-    input: &mut [u8; INPUT_CAPACITY],
+    input: &mut InputLine,
     read_buffer: &mut [u8; 1],
 ) {
-    clear_input(input);
-    let mut line_len = 0;
+    input.clear();
     loop {
         let read = match stdin.read(read_buffer) {
             Ok(read) => read,
@@ -42,22 +41,16 @@ fn read_and_dispatch_line(
             match read_buffer[index] {
                 b'\n' | b'\r' => {
                     must_write(stdout, NEWLINE);
-                    if line_len < INPUT_CAPACITY {
-                        input[line_len] = 0;
-                    }
-                    dispatch_line(stdout, input, line_len);
+                    dispatch_command(stdout, input.command());
                     return;
                 }
                 b'\x08' | 0x7f => {
-                    if line_len > 0 {
-                        line_len -= 1;
+                    if input.backspace() {
                         must_write(stdout, b"\x08");
                     }
                 }
                 byte @ 0x20..=0x7e => {
-                    if line_len < INPUT_CAPACITY {
-                        input[line_len] = byte;
-                        line_len += 1;
+                    if input.push_printable(byte) {
                         must_write(stdout, &[byte]);
                     }
                 }
@@ -68,55 +61,18 @@ fn read_and_dispatch_line(
     }
 }
 
-fn dispatch_line(stdout: io::Fd, input: &[u8], line_len: usize) {
-    if line_len == 0 {
-        return;
-    }
-    if matches_command(input, b"help") {
-        must_write(stdout, HELP);
-    } else if matches_command(input, b"clear") {
-        must_write(stdout, b"\x0c");
-    } else if matches_command(input, b"ticks") {
-        run_ticks(stdout);
-    } else if is_echo_command(input, line_len) {
-        run_echo(stdout, input, line_len);
-    } else {
-        must_write(stdout, b"ERR\n");
-    }
-}
-
-fn clear_input(input: &mut [u8; INPUT_CAPACITY]) {
-    let mut index = 0;
-    while index < input.len() {
-        input[index] = 0;
-        index += 1;
-    }
-}
-
-fn matches_command(input: &[u8], command: &[u8]) -> bool {
-    let mut index = 0;
-    while index < command.len() {
-        if input[index] != command[index] {
-            return false;
+fn dispatch_command(stdout: io::Fd, command: Command<'_>) {
+    match command {
+        Command::Empty => {}
+        Command::Help => must_write(stdout, HELP),
+        Command::Clear => must_write(stdout, b"\x0c"),
+        Command::Ticks => run_ticks(stdout),
+        Command::Echo(bytes) => {
+            must_write(stdout, bytes);
+            must_write(stdout, NEWLINE);
         }
-        index += 1;
+        Command::Unknown => must_write(stdout, b"ERR\n"),
     }
-    input[index] == 0
-}
-
-fn is_echo_command(input: &[u8], line_len: usize) -> bool {
-    line_len >= 4
-        && input[0] == b'e'
-        && input[1] == b'c'
-        && input[2] == b'h'
-        && input[3] == b'o'
-        && (line_len == 4 || input[4] == b' ')
-}
-
-fn run_echo(stdout: io::Fd, input: &[u8], line_len: usize) {
-    let start = if line_len > 4 { 5 } else { 4 };
-    must_write(stdout, &input[start..line_len]);
-    must_write(stdout, NEWLINE);
 }
 
 fn run_ticks(stdout: io::Fd) {

@@ -462,6 +462,139 @@ fn k16_runtime_memory_helpers_require_custom_k16_rustc() {
     assert!(!helper_path.exists());
 }
 
+#[test]
+#[ignore = "direct Rust u64 libcalls currently do not match the K16 helper ABI; tracked by issue #236"]
+fn k16_rust_u64_division_libcall_returns_expected_exit_status() {
+    let work_dir = temp_dir("u64-libcall");
+    let src_dir = work_dir.join("src");
+    fs::create_dir_all(&src_dir).expect("source directory creates");
+    fs::write(
+        work_dir.join("Cargo.toml"),
+        r#"[package]
+name = "k16-u64-libcall-repro"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "k16_u64_libcall_repro"
+path = "src/main.rs"
+test = false
+"#,
+    )
+    .expect("Cargo.toml writes");
+    fs::write(
+        src_dir.join("main.rs"),
+        r#"#![no_std]
+
+use core::panic::PanicInfo;
+
+static DIVIDEND: u64 = 100;
+static DIVISOR: u64 = 10;
+
+#[no_mangle]
+pub extern "C" fn main() -> i32 {
+    let dividend = read_u64(&DIVIDEND);
+    let divisor = read_u64(&DIVISOR);
+    if divisor == 0 {
+        return 7;
+    }
+    let quotient = dividend / divisor;
+    let remainder = dividend % divisor;
+
+    if quotient == 10 && remainder == 0 {
+        42
+    } else {
+        (quotient & 0xff) as i32
+    }
+}
+
+#[inline(never)]
+fn read_u64(value: &u64) -> u64 {
+    unsafe { core::ptr::read_volatile(value) }
+}
+
+#[panic_handler]
+fn panic(_info: &PanicInfo<'_>) -> ! {
+    loop {
+        core::hint::spin_loop();
+    }
+}
+"#,
+    )
+    .expect("main.rs writes");
+
+    let cargo_output = Command::new(k16_cargo())
+        .args([
+            "rustc",
+            "-Z",
+            "build-std=core",
+            "-Z",
+            "json-target-spec",
+            "--manifest-path",
+            work_dir.join("Cargo.toml").to_str().unwrap(),
+            "--target",
+            k16_target_spec().to_str().unwrap(),
+            "--target-dir",
+            work_dir.join("target").to_str().unwrap(),
+            "--lib",
+            "--",
+            "-C",
+            "panic=abort",
+            "-Copt-level=z",
+            "-C",
+            "relocation-model=static",
+            "-Cjump-tables=no",
+            "-Cdebuginfo=0",
+            &format!("--emit=obj={}", work_dir.join("main.o").display()),
+        ])
+        .env("RUSTC", k16_rustc())
+        .env("RUSTC_BOOTSTRAP", "1")
+        .env("RUSTFLAGS", "-Copt-level=z -Cjump-tables=no -Cdebuginfo=0")
+        .output()
+        .expect("cargo rustc runs");
+    assert!(
+        cargo_output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&cargo_output.stderr)
+    );
+
+    write_runtime_object("k16-startup", &work_dir.join("startup.o"));
+    write_runtime_object("k16-memory-helpers", &work_dir.join("helpers.o"));
+
+    let link_output = Command::new(k16_binary())
+        .args([
+            "link",
+            "--target",
+            "program",
+            work_dir.join("startup.o").to_str().unwrap(),
+            work_dir.join("main.o").to_str().unwrap(),
+            work_dir.join("helpers.o").to_str().unwrap(),
+            "-o",
+            work_dir.join("main.kx").to_str().unwrap(),
+        ])
+        .output()
+        .expect("k16 link runs");
+    assert!(
+        link_output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&link_output.stderr)
+    );
+
+    let run_output = Command::new(k16_binary())
+        .args(["run", work_dir.join("main.kx").to_str().unwrap()])
+        .output()
+        .expect("k16 run runs");
+    assert!(
+        run_output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&run_output.stderr)
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&run_output.stdout),
+        "signal=halt exit_status=42 debug_bytes=\n"
+    );
+}
+
 fn k16_main_returning_42_object() -> Vec<u8> {
     k16_object("main", &[0x01, 0xe0, 42, 0, 0, 0, 0x00, 0x90], None)
 }
@@ -683,8 +816,56 @@ fn temp_file(name: &str) -> PathBuf {
     path
 }
 
+fn temp_dir(name: &str) -> PathBuf {
+    let path = std::env::temp_dir().join(format!("k16-runtime-cli-{}-{name}", std::process::id()));
+    let _ = fs::remove_dir_all(&path);
+    path
+}
+
 fn k16_binary() -> String {
     std::env::var("CARGO_BIN_EXE_k16").expect("Cargo exposes k16 binary path")
+}
+
+fn k16_cargo() -> String {
+    std::env::var("K16_CARGO").unwrap_or_else(|_| "cargo".to_string())
+}
+
+fn k16_rustc() -> String {
+    std::env::var("K16_RUSTC").expect("K16_RUSTC points at the custom K16 rustc")
+}
+
+fn k16_target_spec() -> PathBuf {
+    repo_root().join("tools/k16-unknown-kraftos.json")
+}
+
+fn k16_llvm_bin_dir() -> PathBuf {
+    repo_root().join(".toolchain/build/llvm/k16-min/bin")
+}
+
+fn repo_root() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("k16-tools parent exists")
+        .parent()
+        .expect("host parent exists")
+        .parent()
+        .expect("rust parent exists")
+        .to_path_buf()
+}
+
+fn write_runtime_object(name: &str, path: &std::path::Path) {
+    let output = Command::new(k16_binary())
+        .args(["runtime", name, "-o", path.to_str().unwrap()])
+        .env("K16_RUSTC", k16_rustc())
+        .env("K16_RUST_TARGET_JSON", k16_target_spec())
+        .env("K16_LLVM_BIN_DIR", k16_llvm_bin_dir())
+        .output()
+        .expect("k16 runtime runs");
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
 }
 
 fn words_to_bytes(words: &[u16]) -> Vec<u8> {
