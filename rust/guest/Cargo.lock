@@ -51,6 +51,7 @@ version = "0.1.0"
 dependencies = [
  "k16-abi",
  "k16-boot-chain",
+ "k16-image",
  "k16-rt",
 ]
 
