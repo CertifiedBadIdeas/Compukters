@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- LLVM K16 lowering now reserves outgoing stack-argument space in the function
+  call frame instead of moving `sp` around each call. This keeps incoming stack
+  arguments stable while a callee prepares another call, fixing direct Rust
+  `u64`/`i64` div/rem and 64-bit shift helper calls through
+  `k16-memory-helpers`.
 - The bundled `/bin/init.kx` now owns the minimal interactive shell proof over
   fd stdin/stdout (`help`, `clear`, `echo`, `ticks`, and prompt handling). The
   kernel no longer carries the legacy shell/line/keyboard command dispatcher;

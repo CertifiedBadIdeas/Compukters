@@ -111,12 +111,18 @@ require_contains "$WORK_DIR/main-kx.disasm" "ret"
 run_k16 run "$WORK_DIR/main.kx" > "$WORK_DIR/main-run.txt"
 require_contains "$WORK_DIR/main-run.txt" "signal=halt debug_bytes=2a"
 
-require_clang_failure "$WORK_DIR/i64-return.c" "K16 multi-value returns are not implemented"
+"$CLANG" --target=k16 -ffreestanding -fno-builtin -nostdlib \
+    -c "$WORK_DIR/i64-return.c" -o "$WORK_DIR/i64-return.o"
+
+"$CLANG" --target=k16 -ffreestanding -fno-builtin -nostdlib \
+    -c "$WORK_DIR/four-args.c" -o "$WORK_DIR/four-args.o"
+
+"$CLANG" --target=k16 -ffreestanding -fno-builtin -nostdlib \
+    -c "$WORK_DIR/indirect-call.c" -o "$WORK_DIR/indirect-call.o"
+
 require_clang_failure "$WORK_DIR/varargs.c" "K16 varargs are not implemented"
-require_clang_failure "$WORK_DIR/four-args.c" "K16 stack arguments are not implemented"
-require_clang_failure "$WORK_DIR/indirect-call.c" "K16 only supports direct calls"
 
 echo "freestanding C compile checks passed"
 echo "KX link and execution checks passed"
-echo "unsupported C feature checks passed"
+echo "unsupported C varargs check passed"
 echo "K16 clang smoke passed"

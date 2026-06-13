@@ -463,8 +463,7 @@ fn k16_runtime_memory_helpers_require_custom_k16_rustc() {
 }
 
 #[test]
-#[ignore = "direct Rust u64 libcalls currently do not match the K16 helper ABI; tracked by issue #236"]
-fn k16_rust_u64_division_libcall_returns_expected_exit_status() {
+fn k16_rust_wide_integer_libcalls_return_expected_exit_status() {
     let work_dir = temp_dir("u64-libcall");
     let src_dir = work_dir.join("src");
     fs::create_dir_all(&src_dir).expect("source directory creates");
@@ -488,28 +487,84 @@ test = false
 
 use core::panic::PanicInfo;
 
-static DIVIDEND: u64 = 100;
-static DIVISOR: u64 = 10;
+static U64_DIVIDEND: u64 = 0x0000_0002_0000_0000;
+static U64_DIVISOR: u64 = 2;
+static U64_REMAINDER_DIVIDEND: u64 = 0x0000_0001_0000_0007;
+static U64_REMAINDER_DIVISOR: u64 = 3;
+static I64_DIVIDEND: i64 = -9_000_000_000;
+static I64_DIVISOR: i64 = 3;
+static I64_REMAINDER_DIVIDEND: i64 = -4_294_967_300;
+static I64_REMAINDER_DIVISOR: i64 = 7;
+static SHIFT_VALUE: u64 = 0x0000_0001_0000_0001;
+static SHIFT_HIGH_BIT: u64 = 0x8000_0000_0000_0000;
+static SAR_VALUE: i64 = -4;
+static SHIFT_33: u32 = 33;
+static SHIFT_63: u32 = 63;
+static SHIFT_1: u32 = 1;
 
 #[no_mangle]
 pub extern "C" fn main() -> i32 {
-    let dividend = read_u64(&DIVIDEND);
-    let divisor = read_u64(&DIVISOR);
-    if divisor == 0 {
+    let u64_divisor = read_u64(&U64_DIVISOR);
+    if u64_divisor == 0 {
         return 7;
     }
-    let quotient = dividend / divisor;
-    let remainder = dividend % divisor;
-
-    if quotient == 10 && remainder == 0 {
-        42
-    } else {
-        (quotient & 0xff) as i32
+    if read_u64(&U64_DIVIDEND) / u64_divisor != 0x0000_0001_0000_0000 {
+        return 10;
     }
+    let u64_remainder_divisor = read_u64(&U64_REMAINDER_DIVISOR);
+    if u64_remainder_divisor == 0 {
+        return 8;
+    }
+    if read_u64(&U64_REMAINDER_DIVIDEND) % u64_remainder_divisor != 2 {
+        return 11;
+    }
+    let i64_divisor = read_i64(&I64_DIVISOR);
+    if i64_divisor == 0 {
+        return 9;
+    }
+    let i64_dividend = read_i64(&I64_DIVIDEND);
+    if i64_dividend == i64::MIN && i64_divisor == -1 {
+        return 18;
+    }
+    if i64_dividend / i64_divisor != -3_000_000_000 {
+        return 12;
+    }
+    let i64_remainder_divisor = read_i64(&I64_REMAINDER_DIVISOR);
+    if i64_remainder_divisor == 0 {
+        return 17;
+    }
+    let i64_remainder_dividend = read_i64(&I64_REMAINDER_DIVIDEND);
+    if i64_remainder_dividend == i64::MIN && i64_remainder_divisor == -1 {
+        return 19;
+    }
+    if i64_remainder_dividend % i64_remainder_divisor != -1 {
+        return 13;
+    }
+    if read_u64(&SHIFT_VALUE) << read_u32(&SHIFT_33) != 0x0000_0002_0000_0000 {
+        return 14;
+    }
+    if read_u64(&SHIFT_HIGH_BIT) >> read_u32(&SHIFT_63) != 1 {
+        return 15;
+    }
+    if read_i64(&SAR_VALUE) >> read_u32(&SHIFT_1) != -2 {
+        return 16;
+    }
+
+    42
 }
 
 #[inline(never)]
 fn read_u64(value: &u64) -> u64 {
+    unsafe { core::ptr::read_volatile(value) }
+}
+
+#[inline(never)]
+fn read_i64(value: &i64) -> i64 {
+    unsafe { core::ptr::read_volatile(value) }
+}
+
+#[inline(never)]
+fn read_u32(value: &u32) -> u32 {
     unsafe { core::ptr::read_volatile(value) }
 }
 
