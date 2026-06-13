@@ -14,7 +14,11 @@ pub fn disassemble_artifact(
     options: DisassembleOptions,
 ) -> Result<String, String> {
     let (bytes, base_address) = match target {
-        K16ArtifactTarget::Boot | K16ArtifactTarget::Kernel | K16ArtifactTarget::Program => {
+        K16ArtifactTarget::Boot
+        | K16ArtifactTarget::Kernel
+        | K16ArtifactTarget::Program
+        | K16ArtifactTarget::ProgramInit
+        | K16ArtifactTarget::ProgramChild => {
             let executable = k16e::decode_k16_executable(bytes)?;
             let expected = target.fixed_image_abi_kind().unwrap();
             if executable.abi_kind != expected {

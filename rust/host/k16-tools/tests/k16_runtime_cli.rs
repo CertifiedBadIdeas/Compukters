@@ -9,6 +9,39 @@ use std::path::PathBuf;
 use std::process::Command;
 
 #[test]
+fn k16_runtime_startup_accepts_program_slot_target_stack_top() {
+    let startup_path = temp_file("startup-program-init.o");
+
+    let runtime_output = Command::new(k16_binary())
+        .args([
+            "runtime",
+            "k16-startup",
+            "--target",
+            "program-init",
+            "-o",
+            startup_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("k16 runtime runs");
+    assert!(
+        runtime_output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&runtime_output.stderr)
+    );
+
+    let startup_object = fs::read(startup_path).expect("startup object reads");
+    let expected_stack_top_words = const32(15, 0xc000);
+    let expected_stack_top_bytes = words_to_bytes(&expected_stack_top_words);
+
+    assert!(
+        startup_object
+            .windows(expected_stack_top_bytes.len())
+            .any(|window| window == expected_stack_top_bytes.as_slice()),
+        "program-init startup object must initialize r15 to 0xc000"
+    );
+}
+
+#[test]
 fn k16_runtime_startup_links_returning_main_and_requires_exit_syscall_handler() {
     let startup_path = temp_file("startup.o");
     let main_path = temp_file("main.o");

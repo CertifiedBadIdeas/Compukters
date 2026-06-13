@@ -85,17 +85,19 @@ scripts for the host while it builds freestanding K16 `core`.
 The first freestanding startup object is generated with:
 
 ```text
-k16 runtime k16-startup -o <startup.ko>
+k16 runtime k16-startup [--target <program|program-init|program-child>] -o <startup.ko>
 k16 runtime k16-memory-helpers -o <helpers.ko>
 k16 runtime k16-cpu-helpers -o <cpu-helpers.ko>
 ```
 
 The startup object defines `_start` and requires an application-defined `main`.
 The linker uses `_start` as the final `K16E` entry symbol. At runtime `_start`
-initializes `sp` to the program stack top, calls `main`, passes the returned
-`r0` value to the K16 `EXIT` syscall as the process status, and keeps a
-trailing `halt` instruction as a fail-closed boundary if a broken kernel
-returns from `EXIT`.
+initializes `sp` to the selected program target stack top, calls `main`, passes
+the returned `r0` value to the K16 `EXIT` syscall as the process status, and
+keeps a trailing `halt` instruction as a fail-closed boundary if a broken
+kernel returns from `EXIT`. The default startup target is the standalone
+`program` profile. `program-init` uses stack top `0x0000c000`; `program` and
+`program-child` use stack top `0x00010000`.
 
 The memory and integer helper object is built from the guest Rust `#![no_core]`
 runtime source at `rust/guest/k16-rt/src/no_core_helpers.rs`. Building it requires
@@ -225,8 +227,9 @@ use `_start` unless the command line explicitly chooses another defined symbol.
 Bootloader and kernel profiles may use their profile-specific entry symbol, but
 the resolved entry address must still satisfy the `K16E` entry validation rules.
 The current linker profile bases are fixed: bootloader at `0x00000800`, kernel
-at `0x00005000`, and user program at `0x00008000`. Linkers must reject payloads
-that exceed the reserved range for the selected profile.
+at `0x00004000`, standalone user program at `0x00008000`, init process program
+at `0x00008000`, and child process program at `0x0000c000`. Linkers must reject
+payloads that exceed the reserved range for the selected profile.
 
 ## Relocations
 

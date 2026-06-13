@@ -24,12 +24,15 @@ pub const STARTUP_SYMBOL: &str = "_start";
 pub const MAIN_SYMBOL: &str = "main";
 
 pub fn k16_startup_object() -> Vec<u8> {
+    k16_startup_object_for_target(K16ArtifactTarget::Program)
+}
+
+pub fn k16_startup_object_for_target(target: K16ArtifactTarget) -> Vec<u8> {
+    let stack_top = target
+        .stack_top()
+        .expect("K16 startup object target must have a user stack");
     let mut text = Vec::new();
-    emit_const32(
-        &mut text,
-        STACK_POINTER_REGISTER,
-        K16ArtifactTarget::PROGRAM_STACK_TOP,
-    );
+    emit_const32(&mut text, STACK_POINTER_REGISTER, stack_top);
     emit_const32(&mut text, SCRATCH_REGISTER, 0);
     emit_word(&mut text, call(SCRATCH_REGISTER));
     emit_const32(&mut text, ARG0_REGISTER, k16_abi::syscall::EXIT);
