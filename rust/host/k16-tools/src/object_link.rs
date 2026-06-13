@@ -56,8 +56,21 @@ pub fn link_k16_objects_to_k16e(
     } else {
         0
     };
-    let mut linked = link_objects(&objects, load_addr, bios_prefix_len)?;
+    let mut linked = link_objects(
+        &objects,
+        load_addr,
+        bios_prefix_len,
+        target == K16ArtifactTarget::ProgramDynamic,
+    )?;
     validate_payload_range(target, linked.memory_size)?;
+    if target == K16ArtifactTarget::ProgramDynamic {
+        return k16e::encode_dynamic_k16_program(
+            &linked.payload,
+            linked.memory_size,
+            linked.entry_pc,
+            &linked.relocations,
+        );
+    }
     match target.fixed_image_abi_kind() {
         Some(abi_kind) => k16e::encode_k16_executable_with_memory_size(
             &linked.payload,
@@ -97,6 +110,7 @@ struct LinkedImage {
     payload: Vec<u8>,
     memory_size: u32,
     entry_pc: u32,
+    relocations: Vec<k16e::K16eRelocation>,
 }
 
 impl LinkedImage {
@@ -115,12 +129,14 @@ fn link_objects(
     objects: &[ParsedObject],
     load_addr: u32,
     prefix_len: usize,
+    emit_dynamic_relocations: bool,
 ) -> Result<LinkedImage, String> {
     let retained_sections = reachable_alloc_sections(objects)?;
     let mut payload = vec![0; prefix_len];
     let mut memory_size =
         u32::try_from(prefix_len).map_err(|_| "linked K16 payload is too large".to_string())?;
     let mut section_offsets: Vec<Vec<Option<u32>>> = Vec::new();
+    let mut dynamic_relocations = Vec::new();
 
     for (object_index, object) in objects.iter().enumerate() {
         let mut object_offsets = vec![None; object.sections.len()];
@@ -267,6 +283,14 @@ fn link_objects(
                 load_addr,
                 &object.name,
             )?;
+            if emit_dynamic_relocations {
+                if let Some(kind) = dynamic_relocation_kind(relocation.kind)? {
+                    dynamic_relocations.push(k16e::K16eRelocation {
+                        offset: output_offset,
+                        kind,
+                    });
+                }
+            }
         }
     }
 
@@ -277,6 +301,7 @@ fn link_objects(
         payload,
         memory_size,
         entry_pc,
+        relocations: dynamic_relocations,
     })
 }
 
@@ -555,6 +580,16 @@ fn apply_relocation(
             field.copy_from_slice(&word.to_le_bytes());
             Ok(())
         }
+        other => Err(format!("unsupported K16 relocation {other}")),
+    }
+}
+
+fn dynamic_relocation_kind(kind: u32) -> Result<Option<k16e::K16eRelocationKind>, String> {
+    match kind {
+        R_K16_NONE => Ok(None),
+        R_K16_ABS32 => Ok(Some(k16e::K16eRelocationKind::Abs32)),
+        R_K16_CALL32 => Ok(Some(k16e::K16eRelocationKind::Call32)),
+        R_K16_BRANCH4 => Ok(None),
         other => Err(format!("unsupported K16 relocation {other}")),
     }
 }

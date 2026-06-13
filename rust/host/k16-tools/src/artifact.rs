@@ -6,6 +6,7 @@ pub enum K16ArtifactTarget {
     Boot,
     Kernel,
     Program,
+    ProgramDynamic,
 }
 
 impl K16ArtifactTarget {
@@ -20,8 +21,9 @@ impl K16ArtifactTarget {
             "boot" => Ok(Self::Boot),
             "kernel" => Ok(Self::Kernel),
             "program" => Ok(Self::Program),
+            "program-dynamic" => Ok(Self::ProgramDynamic),
             _ => Err(format!(
-                "unknown artifact target `{value}`; expected bios, boot, kernel, or program"
+                "unknown artifact target `{value}`; expected bios, boot, kernel, program, or program-dynamic"
             )),
         }
     }
@@ -32,6 +34,7 @@ impl K16ArtifactTarget {
             Self::Boot => Self::BOOT_LOAD_BASE,
             Self::Kernel => Self::KERNEL_LOAD_BASE,
             Self::Program => Self::PROGRAM_LOAD_BASE,
+            Self::ProgramDynamic => 0,
         }
     }
 
@@ -39,7 +42,7 @@ impl K16ArtifactTarget {
         match self {
             Self::Boot => Some(Self::KERNEL_LOAD_BASE),
             Self::Kernel => Some(Self::PROGRAM_LOAD_BASE),
-            Self::Program => Some(Self::PROGRAM_STACK_TOP),
+            Self::Program | Self::ProgramDynamic => Some(Self::PROGRAM_STACK_TOP),
             Self::Bios => None,
         }
     }
@@ -49,6 +52,7 @@ impl K16ArtifactTarget {
             Self::Boot => Some(k16e::K16eAbiKind::Bootloader),
             Self::Kernel => Some(k16e::K16eAbiKind::Kernel),
             Self::Program => Some(k16e::K16eAbiKind::Program),
+            Self::ProgramDynamic => None,
             Self::Bios => None,
         }
     }

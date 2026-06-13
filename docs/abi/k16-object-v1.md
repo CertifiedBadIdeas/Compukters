@@ -7,7 +7,7 @@ Status: experimental.
 K16 relocatable objects use ELF32 little-endian `ET_REL` files. This is the
 first object format accepted by the LLVM-facing K16 toolchain. LLVM must emit
 relocatable objects, not `K16E`; K16 tooling links those objects into final
-`K16E` bootloader, kernel, or program images.
+`K16E` bootloader, kernel, standalone program, or dynamic user program images.
 
 This boundary keeps the VM independent from LLVM and from object-file details.
 The VM must not parse ELF, read relocation records, resolve symbols, or know
@@ -23,7 +23,7 @@ The static pipeline is:
 LLVM backend or handwritten K16 object fixtures
   -> K16 ELF32 ET_REL object
   -> K16 linker
-  -> K16E fixed image
+  -> K16E fixed image or dynamic user program
   -> storage media or guest exec service
   -> VM loader
 ```
@@ -35,12 +35,14 @@ does not implement. Unsupported relocations are link-time errors.
 The current tool entry point is:
 
 ```text
-k16 link --target <bios|boot|kernel|program> <input.ko>... -o <output>
+k16 link --target <bios|boot|kernel|program|program-dynamic> <input.ko>... -o <output>
 ```
 
 The command accepts K16 ELF32 `ET_REL` inputs, resolves static symbols,
-applies supported relocations, and emits a validated single-load-section
-`K16E` for bootloader, kernel, and program targets. The `bios` target emits raw
+applies supported relocations, and emits a validated fixed-image `K16E` for
+bootloader, kernel, and standalone program targets. The `program-dynamic`
+target emits a K16E v2 dynamic user program with base-relative payload
+addresses and loader-applied relocation metadata. The `bios` target emits raw
 BIOS flash bytes and prefixes them with a reset-address trampoline that
 initializes `sp` to the current fixed 64 KiB stack top and jumps to `_start`.
 

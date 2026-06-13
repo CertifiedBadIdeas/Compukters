@@ -25,6 +25,10 @@ pub fn disassemble_artifact(
             }
             (executable.payload, executable.load_addr)
         }
+        K16ArtifactTarget::ProgramDynamic => {
+            let executable = k16e::decode_dynamic_k16_program(bytes)?;
+            (executable.payload, 0)
+        }
         K16ArtifactTarget::Bios => (bytes.to_vec(), target.base_address()),
     };
     if bytes.len() % 2 != 0 {

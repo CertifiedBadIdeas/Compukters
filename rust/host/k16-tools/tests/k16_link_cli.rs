@@ -4,6 +4,47 @@ use std::path::PathBuf;
 use std::process::Command;
 
 #[test]
+fn k16_link_emits_dynamic_program_with_relocation_records() {
+    let object_path = temp_file("dynamic-abs32.o");
+    let output_path = temp_file("dynamic-abs32.k16e");
+    fs::write(&object_path, k16_object_with_text_relocation(1)).expect("object writes");
+
+    let output = Command::new(k16_binary())
+        .args([
+            "link",
+            "--target",
+            "program-dynamic",
+            object_path.to_str().unwrap(),
+            "-o",
+            output_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("k16 link runs");
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let bytes = fs::read(output_path).expect("K16E output reads");
+    let executable = k16e::decode_dynamic_k16_program(&bytes).expect("linked dynamic K16E decodes");
+
+    assert_eq!(executable.entry_offset, 0);
+    assert_eq!(executable.memory_size, 8);
+    assert_eq!(
+        executable.payload,
+        vec![0x01, 0xe4, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00]
+    );
+    assert_eq!(
+        executable.relocations,
+        vec![k16e::K16eRelocation {
+            offset: 2,
+            kind: k16e::K16eRelocationKind::Abs32,
+        }]
+    );
+}
+
+#[test]
 fn k16_link_converts_k16_object_with_abs32_relocation_to_program_k16e() {
     let object_path = temp_file("abs32.o");
     let output_path = temp_file("abs32.k16e");

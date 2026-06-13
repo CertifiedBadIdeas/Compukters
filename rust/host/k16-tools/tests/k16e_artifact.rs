@@ -1,4 +1,22 @@
+use k16_tools::artifact::K16ArtifactTarget;
 use k16_tools::k16e;
+
+#[test]
+fn k16e_program_dynamic_target_has_no_fixed_physical_base() {
+    assert_eq!(
+        K16ArtifactTarget::parse("program-dynamic"),
+        Ok(K16ArtifactTarget::ProgramDynamic)
+    );
+    assert_eq!(K16ArtifactTarget::ProgramDynamic.base_address(), 0);
+    assert_eq!(
+        K16ArtifactTarget::ProgramDynamic.payload_end_limit(),
+        Some(0x1_0000)
+    );
+    assert_eq!(
+        K16ArtifactTarget::ProgramDynamic.fixed_image_abi_kind(),
+        None
+    );
+}
 
 #[test]
 fn k16e_dynamic_program_encodes_relocation_records_without_fixed_load_base() {

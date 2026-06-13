@@ -27,7 +27,7 @@ pub fn run_k16_cli(args: Vec<String>) -> Result<(), String> {
 }
 
 fn usage_error() -> Result<(), String> {
-    Err("usage: k16 link [--target <boot|kernel|program>] <input.ko>... -o <output.kx>\n       k16 runtime <k16-startup|k16-memory-helpers|k16-cpu-helpers> -o <output.ko>\n       k16 run <program.kx>\n       k16 run-bios <bios.kflash>\n       k16 disasm --target <bios|boot|kernel|program> [--start <pc>] [--count <instructions>] <input>\n       k16 inspect <blob>\n       k16 volume <create|init|put-boot|put-kernel> ...\n       k16 fs <filesystem> ...".to_string())
+    Err("usage: k16 link [--target <boot|kernel|program|program-dynamic>] <input.ko>... -o <output.kx>\n       k16 runtime <k16-startup|k16-memory-helpers|k16-cpu-helpers> -o <output.ko>\n       k16 run <program.kx>\n       k16 run-bios <bios.kflash>\n       k16 disasm --target <bios|boot|kernel|program|program-dynamic> [--start <pc>] [--count <instructions>] <input>\n       k16 inspect <blob>\n       k16 volume <create|init|put-boot|put-kernel> ...\n       k16 fs <filesystem> ...".to_string())
 }
 
 fn run_program(args: &[String]) -> Result<(), String> {
@@ -651,7 +651,8 @@ fn link_usage_error() -> Result<LinkConfig, String> {
 }
 
 fn link_usage_message() -> String {
-    "usage: k16 link [--target <boot|kernel|program>] <input.ko>... -o <output.kx>".to_string()
+    "usage: k16 link [--target <boot|kernel|program|program-dynamic>] <input.ko>... -o <output.kx>"
+        .to_string()
 }
 
 fn runtime_usage_error() -> Result<(), String> {
@@ -674,7 +675,7 @@ fn disasm_usage_error() -> Result<DisasmConfig, String> {
 }
 
 fn disasm_usage_message() -> String {
-    "usage: k16 disasm --target <bios|boot|kernel|program> [--start <pc>] [--count <instructions>] <input>".to_string()
+    "usage: k16 disasm --target <bios|boot|kernel|program|program-dynamic> [--start <pc>] [--count <instructions>] <input>".to_string()
 }
 
 fn inspect_usage_error() -> Result<(), String> {
