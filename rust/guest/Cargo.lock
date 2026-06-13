@@ -29,8 +29,13 @@ name = "k16-boot-chain"
 version = "0.1.0"
 dependencies = [
  "k16-abi",
+ "k16-image",
  "k16-storage",
 ]
+
+[[package]]
+name = "k16-image"
+version = "0.1.0"
 
 [[package]]
 name = "k16-init"
