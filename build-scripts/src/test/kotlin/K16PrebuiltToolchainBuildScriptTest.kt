@@ -38,11 +38,13 @@ class K16PrebuiltToolchainBuildScriptTest {
         val docs = root.resolve("docs/toolchains/k16-prebuilt-toolchain.md").readText()
 
         assertTrue(config.contains("\"artifactBaseUrl\""))
+        assertTrue(config.contains("\"pin\": \"k16-dev-2026-06-13\""))
+        assertTrue(config.contains("k16-toolchain-k16-dev-2026-06-13"))
         assertTrue(config.contains("\"sha256\""))
         assertTrue(config.contains(".zip"))
         assertFalse(config.contains(".tar.zst"))
         assertTrue(config.contains("\"linux-x86_64\""))
-        assertTrue(config.contains("\"891872ad71e7d93474c32bac9ead9a3ab031f0de6c51788b16326599a7787f1e\""))
+        assertFalse(config.contains("\"891872ad71e7d93474c32bac9ead9a3ab031f0de6c51788b16326599a7787f1e\""))
 
         assertTrue(rootBuildScript.contains("downloadK16ToolchainArchive"))
         assertTrue(rootBuildScript.contains("installK16Toolchain"))
@@ -72,7 +74,7 @@ class K16PrebuiltToolchainBuildScriptTest {
         assertTrue(rootBuildScript.contains("stageK16SourceHostTools"))
         assertTrue(rootBuildScript.contains("source-host-tools"))
         assertTrue(rootBuildScript.contains("k16SourceHostToolsToolchainInstallRoot"))
-        assertTrue(rootBuildScript.contains("dependsOn(stageK16SourceHostTools)"))
+        assertTrue(rootBuildScript.contains("if (k16ToolchainModeName() == \"source-host-tools\")"))
         assertTrue(rootBuildScript.contains("exclude(\"bin/k16-ld\", \"bin/k16\")"))
         assertTrue(rootBuildScript.contains("\"source-host-tools\" ->"))
         assertTrue(rootBuildScript.contains("\"source-prebuilt-host-tools\""))

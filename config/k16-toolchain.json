@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "pin": "k16-dev-2026-06-04",
-  "artifactBaseUrl": "https://github.com/CertifiedBadIdeas/Compukter-Kraft/releases/download/k16-toolchain-k16-dev-2026-06-04",
+  "pin": "k16-dev-2026-06-13",
+  "artifactBaseUrl": "https://github.com/CertifiedBadIdeas/Compukter-Kraft/releases/download/k16-toolchain-k16-dev-2026-06-13",
   "requiredExecutables": [
     "bin/cargo",
     "bin/rustc",
@@ -10,19 +10,19 @@
   ],
   "hosts": {
     "linux-x86_64": {
-      "archive": "k16-toolchain-k16-dev-2026-06-04-linux-x86_64.zip",
-      "sha256": "891872ad71e7d93474c32bac9ead9a3ab031f0de6c51788b16326599a7787f1e"
+      "archive": "k16-toolchain-k16-dev-2026-06-13-linux-x86_64.zip",
+      "sha256": "1d9969e0f71a8e1c1795d17733102a2634276f4c525f0e7b4c7c51f6ffe4f968"
     },
     "linux-aarch64": {
-      "archive": "k16-toolchain-k16-dev-2026-06-04-linux-aarch64.zip",
+      "archive": "k16-toolchain-k16-dev-2026-06-13-linux-aarch64.zip",
       "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
     },
     "macos-aarch64": {
-      "archive": "k16-toolchain-k16-dev-2026-06-04-macos-aarch64.zip",
+      "archive": "k16-toolchain-k16-dev-2026-06-13-macos-aarch64.zip",
       "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
     },
     "windows-x86_64": {
-      "archive": "k16-toolchain-k16-dev-2026-06-04-windows-x86_64.zip",
+      "archive": "k16-toolchain-k16-dev-2026-06-13-windows-x86_64.zip",
       "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
     }
   }

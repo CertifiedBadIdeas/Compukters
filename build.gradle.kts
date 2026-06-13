@@ -693,7 +693,9 @@ val prepareK16Toolchain =
         group = "k16"
         dependsOn(installK16Toolchain)
         dependsOn(stageK16Toolchain)
-        dependsOn(stageK16SourceHostTools)
+        if (k16ToolchainModeName() == "source-host-tools") {
+            dependsOn(stageK16SourceHostTools)
+        }
         inputs.property("k16ToolchainMode", providers.gradleProperty("k16ToolchainMode").orElse("prebuilt"))
 
         doLast {
