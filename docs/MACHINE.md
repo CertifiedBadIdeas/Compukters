@@ -26,7 +26,7 @@ VM здесь состоит из четырех слоев:
    Хост одной VM. Запускает программу на фоновой корутине, держит состояние VM, очередь событий, очередь host calls, display registry, IPC registry и runtime-объекты.
 
 3. `VmRuntime`
-   Реализация runtime API, которую видит исполняемая программа. Через нее язык получает доступ к `display`, `system`, `filesystem`, `events`, `process`, `ipc`, `strings`, а также к операциям `sleep` и `yield`.
+   Реализация runtime API, которую видит исполняемая программа. Через нее язык получает доступ к `display`, `system`, `events`, `process`, `ipc`, `strings`, а также к операциям `sleep` и `yield`.
 
 4. `CkVmImageComputerProgram` / `NativeImageVmRunner`
    Исполнитель Rust image VM. Kotlin frontend временно компилирует исходник в `CkVmImage`, а runtime запускает его через JNI и `native/ckl-vm`.
@@ -64,23 +64,19 @@ Background coroutine
 - поднимает fixed thread pool из 2 потоков;
 - превращает его в coroutine dispatcher;
 - хранит таблицу активных `ComputerVmHandle` по `computerId`;
-- создает `ComputerWorkspaceHost`, который дает доступ к файловому пространству компьютеров;
-- создает `ComputerWorkspaceInitializer`, который при первом запуске клонирует ROM-файлы в рабочую папку компьютера.
-
 При `getOrCreate(...)` supervisor создает `BackgroundComputerVm` и передает в нее:
 
 - `computerId`;
 - `ComputerProfile`;
 - coroutine dispatcher;
 - `labelProvider`;
-- logger;
-- `workspace`.
+- logger.
 
 ### `ComputerManager`
 
 Файл: `mod/src/main/kotlin/ck/mod/context/ComputerManager.kt`
 
-Это реестр более высокого уровня. Он держит и `ServerComputer`, и сами VM-хэндлы, а доступ к workspace и IDE проксирует через supervisor.
+Это реестр более высокого уровня. Он держит и `ServerComputer`, и сами VM-хэндлы, а доступ к IDE проксирует через supervisor.
 
 ### `ServerComputer`
 
@@ -89,7 +85,6 @@ Background coroutine
 Это главный серверный оркестратор жизненного цикла компьютера:
 
 - выбирает профиль через `ComputerProfileRegistry.forFamily(...)`;
-- при `turnOn()` инициализирует workspace;
 - удаляет старую VM, если она осталась;
 - получает или создает новую `BackgroundComputerVm`;
 - вызывает `boot()`;
@@ -107,8 +102,6 @@ Background coroutine
 - `stateManager = VmStateManager()`
 - `eventManager = EventManager(profile.maxEventQueueSize)`
 - `hostCallManager = HostCallManager()`
-- `programLoader = WorkspaceProgramLoader(workspace)`
-- `pathResolver = VmPathResolver()`
 - `displayRegistry = DisplayRegistry()` — источник runtime UI frames для клиентского Computer screen;
 - `ipcRegistry = IpcChannelRegistry()` — VM-local текстовые каналы без встроенной семантики stdin/stdout/stderr;
 - `runtime = createRuntime("", "")`
@@ -120,8 +113,6 @@ Background coroutine
 - `stateManager` хранит жизненный цикл и данные планировщика.
 - `eventManager` хранит очередь входящих событий.
 - `hostCallManager` хранит запросы VM к хосту и ожидаемые ответы.
-- `programLoader` читает исходники программ из workspace.
-- `pathResolver` реализует текущую рабочую директорию и нормализацию путей.
 - `displayRegistry` хранит display/pixel-buffer state, из которого `RuntimeDeviceImpl` flush-ит `DisplayFrameDelta` в клиентские display sessions.
 - `ipcRegistry` хранит локальные каналы; stdio для ROM/process code задается только соглашением поверх `ipc`.
 - для Rust image runtime целевой архитектурой теперь считается отдельный shared `DeviceRuntimeKernel`, который должен забрать device-local ownership у `eventManager` и `ipcRegistry`, оставив Kotlin-хосту только world-facing integration;
@@ -134,10 +125,9 @@ Background coroutine
 Когда сервер вызывает `ServerComputer.turnOn()`:
 
 1. Проверяется, что компьютер еще не включен.
-2. `ComputerWorkspaceInitializer.ensureInitialized(instanceID)` создает папку компьютера и, если это первый запуск, копирует в нее ROM.
-3. Старая VM удаляется через `computerManager.removeVm(instanceID, VmStopReason.CLOSED)`.
-4. Создается новая `BackgroundComputerVm`.
-5. Вызывается `handle.boot()`.
+2. Старая VM удаляется через `computerManager.removeVm(instanceID, VmStopReason.CLOSED)`.
+3. Создается новая `BackgroundComputerVm`.
+4. Вызывается `handle.boot()`.
 6. Запускается наблюдение за terminal states через `observeLifecycle(handle)`.
 
 ### 4.2. Что делает `boot()`
@@ -148,9 +138,7 @@ Background coroutine
 2. Переводит состояние в `VmState.Booting`.
 3. Запускает фоновую корутину `runner = scope.launch { ... }`.
 4. Внутри корутины:
-   - загружает boot script через `WorkspaceProgramLoader.load(computerId, profile.bootScriptName)`;
    - компилирует исходник через `ComputerProgramCompiler.compile(...)`;
-   - если исходник отсутствует, останавливает VM с ошибкой;
    - если компиляция не удалась, останавливает VM с ошибкой;
    - ждет разрешения на выполнение через `awaitSlicePermit()`;
    - вызывает `program.run(runtime)`;
@@ -159,32 +147,7 @@ Background coroutine
 
 Именно это событие потом может подобрать код внутри программы через `pullEvent()`.
 
-### 4.3. Что запускается как boot script
-
-Имя boot script живет в `ComputerProfile.bootScriptName` и по умолчанию равно `bios.ck`.
-
-Firmware-файл `firmware/bios.ck` рисует bootstrap status через `display::*`, проверяет user `boot.ck` и запускает его с tagged stdio descriptor:
-
-```ck
-pub fun main() {
-   val input: Int = ipc::open()
-   val output: Int = ipc::open()
-   val error: Int = ipc::open()
-   process::run("boot.ck", "stdio-v1 " + input + " " + output + " " + error + " ")
-}
-```
-
-То есть фактический boot flow такой:
-
-1. VM поднимается.
-2. Компилируется hidden firmware `bios.ck`.
-3. `bios.ck` рисует bootstrap status через `display::*`.
-4. `bios.ck` запускает user `boot.ck` с `stdio-v1` descriptor.
-5. Default user `boot.ck` делегирует в `terminal.ck`, который сам рендерит shell output через `display::*`.
-
-Это поведение дополнительно подтверждается тестом `LanguageWorkspaceRuntimeTest`, который проверяет, что seeded `boot.ck` forward-ит текущий stdio descriptor в `terminal.ck`.
-
-### 4.4. Выключение и перезапуск
+### 4.3. Выключение и перезапуск
 
 Остановка идет через `BackgroundComputerVm.stop(...)`, который внутри `scope.launch` вызывает `stopInternal(reason)`.
 
@@ -208,7 +171,7 @@ pub fun main() {
 VM спроектирована как кооперативная система с двумя основными контекстами:
 
 1. Фоновая coroutine VM
-   Именно здесь исполняется байткод программы и вызываются API `runtime.display`, `runtime.filesystem`, `runtime.process`, `runtime.system`, `runtime.ipc`.
+   Именно здесь исполняется байткод программы и вызываются API `runtime.display`, `runtime.process`, `runtime.system`, `runtime.ipc`.
 
 2. Server tick thread
    Именно отсюда сервер вызывает:
@@ -364,7 +327,7 @@ Terminal transitions защищены через `Mutex` внутри `VmLifecyc
 
 Файл: `mod/src/main/kotlin/ck/mod/computer/vm/HostCallManager.kt`
 
-Host calls нужны для операций, которые выполняются на стороне сервера, а не внутри VM-корутины. В текущей реализации это файловая система.
+Host calls нужны для операций, которые выполняются на стороне сервера, а не внутри VM-корутины.
 
 Структура:
 
@@ -392,135 +355,11 @@ Host calls нужны для операций, которые выполняют
 
 Внутри `HostCallManager.awaitHostCall(...)` такой результат превращается в `error(result.message)`, то есть в исключение внутри VM-кода.
 
-Это значит:
+Такой результат всплывает обратно в VM как ошибка выполнения. Если программа его не обработает, VM может завершиться с `Crashed(...)`.
 
-- файловые ошибки не теряются;
-- они всплывают обратно в VM как ошибка выполнения;
-- если программа их не обработает, VM может завершиться с `Crashed(...)`.
+## 10. Как работает runtime output
 
-## 10. Как устроена файловая система
-
-### 10.1. Workspace abstraction
-
-Базовый интерфейс это `ComputerWorkspace` из `compiler/src/main/kotlin/ck/lang/runtime/ComputerVmModels.kt`.
-
-Он умеет:
-
-- `list(...)`
-- `readDocument(...)`
-- `isDirectory(...)`
-- `writeDocument(...)`
-- `makeDirectory(...)`
-- `deleteDocument(...)`
-
-Конкретная реализация на стороне мода это `ComputerWorkspaceHost`.
-
-### 10.2. Где лежат файлы компьютера
-
-`ComputerVmSupervisor` создает workspace под путем:
-
-```text
-<world root>/<mod id>/computers/<computerId>/
-```
-
-У каждого компьютера своя отдельная папка.
-
-### 10.3. Инициализация ROM
-
-Когда компьютер запускается впервые, `ComputerWorkspaceInitializer.ensureInitialized(computerId)`:
-
-- создает папку компьютера;
-- читает generated `rom/rom.index` из ресурсов мода;
-- копирует перечисленные файлы в workspace;
-- не перезаписывает уже существующие файлы.
-
-`rom/rom.index` и `firmware/firmware.index` генерируются Gradle-таской из `src/main/resources/rom/**/*.ck` и
-`src/main/resources/firmware/**/*.ck`, поэтому вложенные ROM/firmware файлы попадают в manifest автоматически.
-Тесты подтверждают, что в новый workspace копируются пользовательские ROM-программы вроде `boot.ck`, `shell.ck`
-и команд из `bin/*.ck`, firmware `bios.ck` не копируется в пользовательский workspace, а повторная инициализация
-не трогает уже измененные файлы.
-
-### 10.4. Root jail и защита от path traversal
-
-Самая важная часть находится в `ComputerWorkspaceHost.resolve(...)`:
-
-```kotlin
-val root = computerRoot(computerId)
-root.createDirectories()
-val candidate = root.resolve(path.trimStart('/')).normalize()
-require(candidate.startsWith(root)) { "Path escapes computer workspace: $path" }
-return candidate
-```
-
-Это дает сразу несколько гарантий:
-
-- любой путь всегда разрешается относительно корня конкретного компьютера;
-- `normalize()` схлопывает `.` и `..`;
-- попытка выйти наружу через `../` приводит к исключению;
-- один компьютер не может вылезти в файлы другого компьютера или мира.
-
-Это поведение подтверждается тестом `rejectsPathTraversalOutsideWorkspace()`.
-
-### 10.5. Поведение конкретных файловых операций
-
-#### `list(computerId, path)`
-
-- если путь не существует, возвращает пустой список;
-- если путь это файл, возвращает список из одного элемента;
-- если путь это директория, перечисляет детей, сортирует по имени и возвращает `ComputerWorkspaceEntry`.
-
-#### `readDocument(computerId, path)`
-
-- возвращает `null`, если файла нет или если путь указывает на директорию;
-- иначе возвращает `ComputerWorkspaceDocument(path, text, version)`.
-
-#### `writeDocument(computerId, path, text)`
-
-- создает родительские директории;
-- пишет UTF-8 текст;
-- использует `CREATE` + `TRUNCATE_EXISTING`.
-
-#### `makeDirectory(computerId, path)`
-
-- если объект уже существует, возвращает `true`, только если это директория;
-- иначе создает директорию и возвращает `true`.
-
-#### `deleteDocument(computerId, path)`
-
-- использует `Files.deleteIfExists(target)`;
-- возвращает `false`, если объекта нет.
-
-### 10.6. Как программы получают доступ к файлам
-
-На уровне VM `VmFileSystemApi` не трогает файловую систему напрямую. Вместо этого она:
-
-1. прогоняет путь через `ctx.resolvePath(path)`;
-2. превращает операцию в `HostCall.FileExists`, `HostCall.FileReadText`, `HostCall.FileWriteText` и так далее;
-3. ждет ответ от сервера через `awaitHostCall(...)`.
-
-Это важно: filesystem находится за host-call boundary.
-
-### 10.7. Нормализация путей внутри VM
-
-Файл: `mod/src/main/kotlin/ck/mod/computer/vm/VmRuntimeSupport.kt`
-
-`VmPathResolver`:
-
-- хранит `workingDirectory`;
-- понимает абсолютные пути вида `/boot/init.ck`;
-- понимает относительные пути;
-- схлопывает `.` и `..`;
-- никогда не хранит ведущий `/`, то есть внутренний канонический путь выглядит как `rom/shell.ck` или `boot/init.ck`.
-
-Примеры из теста:
-
-- `resolve(".") -> "rom/bin"`
-- `resolve("../shell.ck") -> "rom/shell.ck"`
-- `resolve("/boot/init.ck") -> "boot/init.ck"`
-
-## 11. Как работает runtime output
-
-### 11.1. Runtime UI идет через display frames
+### 10.1. Runtime UI идет через display frames
 
 Это принципиальный момент.
 
@@ -534,7 +373,7 @@ return candidate
 
 Сервер для обычного Computer GUI читает display deltas через `flushDisplaySessions()`. VM больше не публикует terminal screen snapshots.
 
-### 11.2. ROM stdio поверх IPC
+### 10.2. ROM stdio поверх IPC
 
 IPC остается низкоуровневым VM-local transport-ом. Семантика stdin/stdout/stderr появляется только как ROM/process convention:
 
@@ -546,21 +385,13 @@ stdio-v1 <stdin-channel-id> <stdout-channel-id> <stderr-channel-id> <argument>
 
 `process::run(path, argument)` и `process::spawn(path, argument)` не знают о stdio на уровне типа. Если `argument` является valid `stdio-v1` descriptor-ом, launch/compile/runtime errors дочернего процесса записываются в descriptor stderr channel. Если descriptor отсутствует или malformed, ошибка остается только в server log и exit code.
 
-### 11.3. Display state
+### 10.3. Display state
 
 Runtime Computer UI физически представлен display/pixel-buffer state, который затем кодируется в `DisplayFrameDelta`. Workbench live terminal attach сейчас не читает VM terminal snapshot; future live viewer должен подключаться к display sessions, а не reintroduce stdout transport.
 
-## 12. Как запускаются программы
+## 11. Как запускаются программы
 
-### 12.1. Загрузка исходника
-
-`WorkspaceProgramLoader.load(computerId, path)`:
-
-- читает `ComputerWorkspaceDocument` из workspace;
-- если файла нет, возвращает `null`;
-- иначе возвращает `LoadedComputerProgramSource(path, source)`.
-
-### 12.2. Компиляция
+### 11.1. Компиляция
 
 `ComputerProgramCompiler.compile(path, source)`:
 
@@ -571,7 +402,7 @@ Runtime Computer UI физически представлен display/pixel-buff
 5. проверяет encoded CKIM size против ROM limit профиля;
 6. иначе возвращает `CkVmImageComputerProgram(image)`.
 
-### 12.3. Выполнение
+### 11.2. Выполнение
 
 `CkVmImageComputerProgram.run(runtime)`:
 
@@ -586,61 +417,7 @@ Runtime Computer UI физически представлен display/pixel-buff
    - `WaitEvent(filter)` -> вызывает `runtime.pullEvent(filter)` и возвращает событие в VM, когда event value codec появится;
    - `HostCall(module, function, args)` -> вызывает `RuntimeHostBridge.invoke(...)` и возвращает результат в Rust image VM.
 
-### 12.4. `process.run(...)`
-
-Файл: `mod/src/main/kotlin/ck/mod/computer/vm/VmProcessApi.kt`
-
-Когда программа вызывает `process.run(path, argument)`:
-
-1. `VmProcessApi` пытается загрузить исходник через `programLoader.load(computerId, resolved)`;
-2. если файл не найден, пишет лог и возвращает код выхода `1`;
-3. компилирует программу;
-4. если компиляция провалена, печатает `Compilation Error: ...` в терминал и возвращает `1`;
-5. если все успешно, создает новый runtime через `runtimeCreator(workingDirectory, argument)`;
-6. запускает `program.run(newRuntime)`;
-7. если программа завершилась без исключения, возвращает `0`;
-8. если было исключение, печатает `Program error: ...` и возвращает `1`.
-
-### 12.5. Что передается дочерней программе
-
-При `process.run(...)` дочерняя программа получает:
-
-- тот же `computerId`;
-- тот же `profile`;
-- тот же `screenBuffer` для legacy staged compatibility;
-- тот же `displayRegistry`;
-- тот же `workspace`;
-- тот же `VmContext`;
-- текущую рабочую директорию родителя;
-- аргумент `argument`, переданный в `process.run(...)`.
-
-Но runtime при этом создается заново, то есть дочерняя программа получает свежие API-объекты вокруг того же VM-контекста.
-
-### 12.6. Важный нюанс `process.run`
-
-В текущей реализации `VmProcessApi.run(...)` делает:
-
-```kotlin
-val resolved = path
-```
-
-а не:
-
-```kotlin
-val resolved = ctx.resolvePath(path)
-```
-
-То есть `process.run(...)` сейчас не нормализует путь через `VmPathResolver`, в отличие от файловых операций и `changeDirectory(...)`.
-
-Практическое следствие:
-
-- файловая система уважает текущую рабочую директорию;
-- `process.changeDirectory(...)` тоже уважает ее;
-- а `process.run(...)` в текущем коде использует путь как есть.
-
-Это не домысел, а реальное поведение кода. Поэтому документацию и ожидания надо строить именно так.
-
-## 13. Memory Model VM
+## 12. Memory Model VM
 
 Runtime memory now belongs to the Rust image VM. Kotlin still defines `VmValue` for host-call boundary values and uses `BytecodeModule` as temporary compiler scaffolding, but Kotlin/JVM no longer owns an interpreter heap, frame stack, or instruction pointer.
 
@@ -653,7 +430,7 @@ Runtime memory now belongs to the Rust image VM. Kotlin still defines `VmValue` 
 
 Практический вывод: новые runtime features должны добавлять поддержку в `CkVmImage` lowering, CKIM ABI и Rust image runner, а не восстанавливать Kotlin/JVM interpreter.
 
-### 13.2. Какие значения умеет хранить VM
+### 12.1. Какие значения умеет хранить VM
 
 Значения представлены sealed-типом `VmValue`:
 
@@ -667,7 +444,7 @@ Runtime memory now belongs to the Rust image VM. Kotlin still defines `VmValue` 
 
 Следовательно, локальная переменная в памяти VM это просто один элемент `VmValue` внутри `locals[slot]`.
 
-### 13.3. Как компилятор привязывает переменную к памяти
+### 12.2. Как компилятор привязывает переменную к памяти
 
 При компиляции функции `LanguageFrontend.FunctionCompiler` строит:
 
@@ -685,7 +462,7 @@ Runtime memory now belongs to the Rust image VM. Kotlin still defines `VmValue` 
 
 Именно так имя переменной превращается в индекс ячейки локальной памяти.
 
-### 13.4. Что происходит при `val x = 42`
+### 12.3. Что происходит при `val x = 42`
 
 Допустим, есть такой код:
 
@@ -769,7 +546,7 @@ stack = []
 
 Это и есть момент, где переменная реально оказывается в памяти VM.
 
-### 13.5. Что происходит, когда переменная читается
+### 12.4. Что происходит, когда переменная читается
 
 Если дальше есть:
 
@@ -789,7 +566,7 @@ is Instruction.LoadLocal -> {
 
 То есть значение не копируется в новую «ячейку памяти», а просто берется из `locals[slot]` и кладется на стек вычислений.
 
-### 13.6. Что происходит при `if`
+### 12.5. Что происходит при `if`
 
 Допустим, есть код:
 
@@ -834,7 +611,7 @@ end:
 - временно кладет его в `stack`;
 - меняет `instructionPointer`.
 
-### 13.7. Что происходит при `while`
+### 12.6. Что происходит при `while`
 
 Допустим:
 
@@ -876,7 +653,7 @@ loopEnd:
 - вычисления через `stack`;
 - перепрыгивание `instructionPointer`.
 
-### 13.8. Что происходит при вызове функции
+### 12.7. Что происходит при вызове функции
 
 Допустим, есть:
 
@@ -917,7 +694,7 @@ frames = [
 
 То есть у каждой функции свои собственные `locals` и свой собственный `stack`.
 
-### 13.9. Что происходит при `return`
+### 12.8. Что происходит при `return`
 
 Когда callee делает `Instruction.Return`, VM вызывает `handleReturn(result)`:
 
@@ -928,7 +705,7 @@ frames = [
 
 То есть память вызываемой функции уничтожается просто удалением ее `FrameState` из стека кадров.
 
-### 13.10. Что происходит со struct/record
+### 12.9. Что происходит со struct/record
 
 Когда программа строит record, VM не выделяет отдельный heap-object своей собственной VM-модели. Она просто создает:
 
@@ -942,7 +719,7 @@ VmValue.RecordValue(typeName, fields)
 - в `locals[slot]`, если его сохранили в переменную;
 - в `caller.stack`, если его вернули из функции.
 
-### 13.11. Что важно про `var` и присваивание
+### 12.10. Что важно про `var` и присваивание
 
 В AST у `VariableDeclarationStatement` есть поле `mutable`, то есть язык различает `val` и `var`.
 
@@ -958,28 +735,11 @@ VmValue.RecordValue(typeName, fields)
 2. компилятор уже заранее назначил переменной `slot`;
 3. `StoreLocal(slot)` перекладывает верхушку стека в `locals[slot]`.
 
-## 14. Какой API доступен программам внутри VM
+## 13. Какой API доступен программам внутри VM
 
 API маппится через `RuntimeHostBridge` в `compiler/src/main/kotlin/ck/lang/runtime/RuntimeHostBridge.kt`.
 
-### 14.1. Модуль `filesystem`
-
-Доступные функции:
-
-- `filesystem.exists(path): Bool`
-- `filesystem.isDirectory(path): Bool`
-- `filesystem.readText(path): String`
-- `filesystem.writeText(path, text): Unit`
-- `filesystem.makeDir(path): Bool`
-- `filesystem.remove(path): Bool`
-- `filesystem.list(path = ""): String`
-
-Особенности:
-
-- `readText(...)` на уровне bridge превращает `null` в пустую строку `""`.
-- `list(...)` возвращает уже отформатированную строку, а не список структур.
-
-### 14.2. Модуль `system`
+### 13.1. Модуль `system`
 
 Доступные функции:
 
@@ -996,7 +756,7 @@ API маппится через `RuntimeHostBridge` в `compiler/src/main/kotlin
 - что умеет объект `ComputerSystemApi` внутри runtime;
 - что реально проброшено в язык через `RuntimeHostBridge`.
 
-### 14.3. Модуль `terminal`
+### 13.2. Модуль `terminal`
 
 Доступные функции:
 
@@ -1006,7 +766,7 @@ API маппится через `RuntimeHostBridge` в `compiler/src/main/kotlin
 - `terminal.clear(): Unit`
 - `terminal.setCursor(x, y): Unit`
 
-### 14.4. Модуль `process`
+### 13.3. Модуль `process`
 
 Доступные функции:
 
@@ -1016,7 +776,7 @@ API маппится через `RuntimeHostBridge` в `compiler/src/main/kotlin
 - `process.run(path): Int`
 - `process.run(path, argument): Int`
 
-### 14.5. Модуль `strings`
+### 13.4. Модуль `strings`
 
 Доступные функции:
 
@@ -1025,14 +785,14 @@ API маппится через `RuntimeHostBridge` в `compiler/src/main/kotlin
 - `strings.afterSpace(text): String`
 - `strings.isBlank(text): Bool`
 
-### 14.6. Глобальные builtins
+### 13.5. Глобальные builtins
 
 На уровне `Instruction.CallBuiltin` без module name доступны:
 
 - `yield()` -> возвращает `VmSignal.Yield`
 - `sleep(ticks)` -> возвращает `VmSignal.Sleep(ticks)`
 
-### 14.7. Модуль `events`
+### 13.6. Модуль `events`
 
 Поддерживается builtin:
 
@@ -1040,13 +800,12 @@ API маппится через `RuntimeHostBridge` в `compiler/src/main/kotlin
 
 Он превращается в `VmSignal.WaitEvent(filter)`.
 
-### 14.8. Capability checks
+### 13.7. Capability checks
 
 Перед вызовом модульной функции `RuntimeHostBridge.ensureCapability(moduleName)` проверяет, разрешена ли capability в `runtime.profile.allowedCapabilities`.
 
 Соответствие сейчас такое:
 
-- `filesystem` -> `FILESYSTEM`
 - `system` -> `SYSTEM`
 - `terminal` -> `TERMINAL`
 - `events` -> `EVENTS`
@@ -1058,7 +817,7 @@ API маппится через `RuntimeHostBridge` в `compiler/src/main/kotlin
 Capability <module> is not allowed for this computer profile.
 ```
 
-### 14.9. Что пока не реализовано полноценно
+### 13.8. Что пока не реализовано полноценно
 
 `VmRuntime` содержит поля:
 
@@ -1067,7 +826,7 @@ Capability <module> is not allowed for this computer profile.
 
 Но в `RuntimeHostBridge` нет экспорта модулей `redstone` и `peripherals`. То есть соответствующие capability могут быть в профиле, но языкового API для них в показанном коде пока нет.
 
-## 15. Как работает shell и пользовательские команды
+## 14. Как работает shell и пользовательские команды
 
 ROM-файл `shell.ck` показывает, как предполагается работа системы изнутри:
 
@@ -1078,18 +837,13 @@ ROM-файл `shell.ck` показывает, как предполагаетс�
   - `cd`
   - `reboot`
   - `shutdown`
-- остальные команды обнаруживает в `bin/` и запускает через `process.run("bin/" + command + ".ck", encode(ctx, argument))`,
-  где `encode` импортирован из `stdio.ck`.
-
 Команда `cd` использует `process.changeDirectory(...)`.
 
 Команда `pwd` запускает `bin/pwd.ck`, который печатает `process.currentDirectory()`.
 
-Команда `ls` запускает `bin/ls.ck`, который печатает `filesystem.list(...)`.
-
 То есть shell здесь не встроен в движок VM. Это обычная программа на том же языке, которая использует тот же API, что и пользовательский код.
 
-## 16. Display frames и синхронизация с клиентом
+## 15. Display frames и синхронизация с клиентом
 
 Во время `RuntimeDeviceImpl.serverTick()` после обработки host calls вызывается `flushDisplaySessions()`:
 
@@ -1100,7 +854,7 @@ ROM-файл `shell.ck` показывает, как предполагаетс�
 
 VM не создает terminal snapshot и не рассылает stdout bytes. Видимый текст shell существует только потому, что ROM `terminal.ck` сам превращает stdout/stderr IPC chunks в draw calls `display::*`.
 
-## 17. Что именно ограничивает ресурсы
+## 16. Что именно ограничивает ресурсы
 
 Сводка по реальным ограничениям:
 
@@ -1120,91 +874,56 @@ VM не создает terminal snapshot и не рассылает stdout bytes
 
 Есть. Ограничивается display profile/resources и client display session dimensions.
 
-### 16.5. Доступ к файловой системе
-
-Есть. Ограничивается корнем workspace конкретного компьютера и path traversal guard через `startsWith(root)`.
-
-### 16.6. Capability-based API access
+### 16.5. Capability-based API access
 
 Есть. `RuntimeHostBridge.ensureCapability(...)` блокирует вызовы модулей, если capability не разрешена профилем.
 
-### 16.7. Ограничение числа host calls
+### 16.6. Ограничение числа host calls
 
 Есть. Ограничивается `profile.resources.queues.hostCallQueueSlots`. При переполнении новый host call отклоняется с ошибкой `Host call queue is full (...)`.
 
-### 16.8. Ограничение числа процессов
+### 16.7. Ограничение числа процессов
 
 Явного лимита нет. `process.run(...)` просто синхронно запускает другую программу на том же VM-контексте.
 
-### 16.9. Ограничение памяти программы
+### 16.8. Ограничение памяти программы
 
 Есть. Ограничивается `profile.resources.memory.vmRamBytes`. Сейчас это логическая оценка текущего VM state: locals, operand stack, strings и record values. При превышении VM падает с ошибкой `VM out of memory ...`.
 
-### 16.10. Ограничение размера программы
+### 16.9. Ограничение размера программы
 
 Есть. Ограничивается `profile.resources.storage.programRomBytes`. Проверяется по размеру скомпилированного `BytecodeModule`, а не по размеру исходника. Слишком большая boot- или child-программа отклоняется до старта выполнения.
 
-### 16.11. Ограничение диска компьютера
+## 17. Что стоит понимать как важные нюансы реализации
 
-Есть. Ограничивается `profile.resources.storage.diskBytes`. Проверяется в `ComputerWorkspaceHost` на операциях записи по реальному размеру файлов внутри workspace конкретного компьютера.
-
-## 18. Что стоит понимать как важные нюансы реализации
-
-### 17.1. Runtime display и файловая система устроены по-разному
+### 17.1. Runtime display и process I/O устроены по-разному
 
 - runtime UI работает через `DisplayRegistry`/display frame deltas;
-- IPC/stdio channels являются локальным process convention и сами по себе ничего не рендерят;
-- файловая система ходит через `HostCallManager` и серверный `HostCallDispatcher`.
+- IPC/stdio channels являются локальным process convention и сами по себе ничего не рендерят.
 
 Это разное поведение и разная стоимость операций.
 
-При этом filesystem все еще обслуживается через server tick orchestration. Полной отвязки VM и host execution от тиков в текущей реализации еще нет.
-
 ### 17.2. Shell это не системная магия, а обычная программа
 
-BIOS и shell лежат в ROM как `.ck` файлы. Их можно читать, а в случае уже созданного workspace даже менять вручную. Инициализатор не перезаписывает существующие файлы.
+Shell здесь не встроен в движок VM. Это обычная программа на том же языке, которая использует тот же API, что и пользовательский код.
 
 ### 17.3. `system.queueEvent(...)` есть в runtime API, но не экспортирован в bridge
 
 Если смотреть только на `VmSystemApi`, можно решить, что программы могут свободно кидать события. Но по факту надо смотреть `RuntimeHostBridge`: именно он определяет, что доступно языку.
 
-### 17.4. `process.run(...)` не использует `resolvePath(...)`
-
-Это заметное отличие от остальных файловых операций. Если будет отладка поведения shell и относительных путей, это одно из первых мест, куда надо смотреть.
-
-### 17.5. CPU и yield теперь разделены на две разные семантики
+### 17.4. CPU и yield теперь разделены на две разные семантики
 
 - явный builtin `yield()` возвращает в программу `unit` после возобновления;
 - служебная пауза scheduler по instruction budget ничего в стек не пушит.
 
 Это важно, иначе таймслайс-паузы портили бы стек значений VM.
 
-## 19. Какие тесты подтверждают поведение
-
-### `mod/src/test/kotlin/LanguageWorkspaceRuntimeTest.kt`
-
-Подтверждает, что:
-
-- ROM-овский `bios.ck` компилируется;
-- его первый значимый шаг это вызов `process.run("shell.ck")`;
-- после возврата из `process.run` байткодная программа завершается.
-
-### `mod/src/test/kotlin/FileComputerWorkspaceTest.kt`
-
-Подтверждает, что:
-
-- документы читаются и записываются в workspace;
-- разные world roots изолированы друг от друга;
-- traversal через `../` запрещен;
-- запись сверх disk quota отклоняется;
-- ROM копируется в новый workspace;
-- повторная инициализация не затирает измененные файлы.
+## 18. Какие тесты подтверждают поведение
 
 ### `mod/src/test/kotlin/ck/mod/computer/vm/VmRuntimeSupportTest.kt`
 
 Подтверждает, что:
 
-- path resolver работает как раньше;
 - event text decoder работает как раньше;
 - host call queue ограничена и отклоняет новые вызовы при переполнении.
 
@@ -1228,15 +947,7 @@ BIOS и shell лежат в ROM как `.ck` файлы. Их можно чит�
 - VM RAM limit реально ограничивает выполнение;
 - существующие host/sleep/yield сценарии не сломаны новой моделью.
 
-### `mod/src/test/kotlin/ck/mod/application/runtime/ComputerProgramSupportTest.kt`
-
-Подтверждает, что:
-
-- `WorkspaceProgramLoader` корректно загружает `.ck` файлы из workspace;
-- при отсутствии файла возвращается `null`;
-- `ComputerProgramCompiler` правильно сообщает compile errors вместо генерации исполняемой программы.
-
-## 20. Короткий итог
+## 19. Короткий итог
 
 Фактически VM в Compukter-Kraft это:
 
@@ -1244,8 +955,7 @@ BIOS и shell лежат в ROM как `.ck` файлы. Их можно чит�
 - исполняемая на фоновой корутине;
 - двигаемая серверными тиками через slice permits;
 - ограниченная по времени slice и по размеру event queue;
-- изолированная в пределах workspace конкретного компьютера;
-- работающая с файлами через host calls, с display pixel buffer через `display::*`, а с process I/O через VM-local `ipc` conventions;
+- работающая с display pixel buffer через `display::*`, а с process I/O через VM-local `ipc` conventions;
 - запускающая BIOS и shell как обычные программы на том же языке;
 - публикующая внутрь программ модульный API через `RuntimeHostBridge`.
 
@@ -1254,8 +964,6 @@ BIOS и shell лежат в ROM как `.ck` файлы. Их можно чит�
 1. `mod/src/main/kotlin/ck/mod/computer/vm/BackgroundComputerVm.kt`
 2. `mod/src/main/kotlin/ck/mod/computer/ServerComputer.kt`
 3. `mod/src/main/kotlin/ck/mod/computer/vm/VmProcessApi.kt`
-4. `mod/src/main/kotlin/ck/mod/computer/vm/VmFileSystemApi.kt`
-5. `modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/api/VmProcessApi.kt`
-6. `modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/DeviceWorkspaceHost.kt`
-7. `modules/compiler/src/main/kotlin/ru/lazyhat/compukterkraft/lang/runtime/DeviceRuntime.kt`
-8. `modules/compiler/src/main/kotlin/ru/lazyhat/compukterkraft/lang/runtime/RuntimeHostBridge.kt`
+4. `modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/api/VmProcessApi.kt`
+5. `modules/compiler/src/main/kotlin/ru/lazyhat/compukterkraft/lang/runtime/DeviceRuntime.kt`
+6. `modules/compiler/src/main/kotlin/ru/lazyhat/compukterkraft/lang/runtime/RuntimeHostBridge.kt`
