@@ -76,6 +76,8 @@ fn k16_object_abi_docs_define_freestanding_runtime_boundary() {
         "`__k16_yield_once`",
         "`__k16_write_trap_vector`",
         "`__k16_iret_once`",
+        "`__k16_save_trap_frame`",
+        "`__k16_restore_trap_frame`",
         "`__k16_syscall_once`",
         "`__k16_syscall0`",
         "`__k16_syscall1`",

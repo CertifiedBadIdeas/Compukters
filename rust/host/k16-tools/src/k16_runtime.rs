@@ -20,6 +20,10 @@ const ARG1_REGISTER: u8 = 2;
 const ARG2_REGISTER: u8 = 3;
 const SYSCALL_ARG2_REGISTER: u8 = 4;
 
+const TRAP_FRAME_RESUME_PC_OFFSET: u32 = 16 * 4;
+const TRAP_FRAME_STACK_POINTER_OFFSET: u32 = TRAP_FRAME_RESUME_PC_OFFSET + 4;
+const TRAP_FRAME_INTERRUPT_ENABLE_OFFSET: u32 = TRAP_FRAME_STACK_POINTER_OFFSET + 4;
+
 pub const STARTUP_SYMBOL: &str = "_start";
 pub const MAIN_SYMBOL: &str = "main";
 
@@ -113,6 +117,22 @@ pub fn k16_cpu_helpers_object() -> Vec<u8> {
         &mut symtab,
         "__k16_iret_once",
         &[iret()],
+    );
+    let save_trap_frame_words = save_trap_frame_words();
+    emit_symbol_function(
+        &mut text,
+        &mut strtab,
+        &mut symtab,
+        "__k16_save_trap_frame",
+        &save_trap_frame_words,
+    );
+    let restore_trap_frame_words = restore_trap_frame_words();
+    emit_symbol_function(
+        &mut text,
+        &mut strtab,
+        &mut symtab,
+        "__k16_restore_trap_frame",
+        &restore_trap_frame_words,
     );
     emit_symbol_function(
         &mut text,
@@ -283,6 +303,95 @@ pub fn k16_cpu_helpers_object() -> Vec<u8> {
     );
 
     elf_object(&text, &[], &symtab, &strtab)
+}
+
+fn save_trap_frame_words() -> Vec<u16> {
+    let mut words = Vec::new();
+    for register in 0..16 {
+        words.push(const4(SCRATCH_REGISTER, register));
+        words.push(write_csr(
+            k16_vm::k16::K16_CSR_TRAP_FRAME_INDEX,
+            SCRATCH_REGISTER,
+        ));
+        words.push(read_csr(
+            RETURN_REGISTER,
+            k16_vm::k16::K16_CSR_TRAP_FRAME_REGISTER,
+        ));
+        words.extend(store_return_to_arg0_offset(register as u32 * 4));
+    }
+    words.push(read_csr(
+        RETURN_REGISTER,
+        k16_vm::k16::K16_CSR_TRAP_RESUME_PC,
+    ));
+    words.extend(store_return_to_arg0_offset(TRAP_FRAME_RESUME_PC_OFFSET));
+    words.push(read_csr(
+        RETURN_REGISTER,
+        k16_vm::k16::K16_CSR_TRAP_STACK_POINTER,
+    ));
+    words.extend(store_return_to_arg0_offset(TRAP_FRAME_STACK_POINTER_OFFSET));
+    words.push(read_csr(
+        RETURN_REGISTER,
+        k16_vm::k16::K16_CSR_TRAP_INTERRUPT_ENABLE,
+    ));
+    words.extend(store_return_to_arg0_offset(
+        TRAP_FRAME_INTERRUPT_ENABLE_OFFSET,
+    ));
+    words.push(ret());
+    words
+}
+
+fn restore_trap_frame_words() -> Vec<u16> {
+    let mut words = Vec::new();
+    for register in 1..16 {
+        words.push(const4(SCRATCH_REGISTER, register));
+        words.push(write_csr(
+            k16_vm::k16::K16_CSR_TRAP_FRAME_INDEX,
+            SCRATCH_REGISTER,
+        ));
+        words.extend(load_return_from_arg0_offset(register as u32 * 4));
+        words.push(write_csr(
+            k16_vm::k16::K16_CSR_TRAP_FRAME_REGISTER,
+            RETURN_REGISTER,
+        ));
+    }
+    words.extend(load_return_from_arg0_offset(TRAP_FRAME_RESUME_PC_OFFSET));
+    words.push(write_csr(
+        k16_vm::k16::K16_CSR_TRAP_RESUME_PC,
+        RETURN_REGISTER,
+    ));
+    words.extend(load_return_from_arg0_offset(
+        TRAP_FRAME_STACK_POINTER_OFFSET,
+    ));
+    words.push(write_csr(
+        k16_vm::k16::K16_CSR_TRAP_STACK_POINTER,
+        RETURN_REGISTER,
+    ));
+    words.extend(load_return_from_arg0_offset(
+        TRAP_FRAME_INTERRUPT_ENABLE_OFFSET,
+    ));
+    words.push(write_csr(
+        k16_vm::k16::K16_CSR_TRAP_INTERRUPT_ENABLE,
+        RETURN_REGISTER,
+    ));
+    words.extend(load_return_from_arg0_offset(0));
+    words.push(ret());
+    words
+}
+
+fn store_return_to_arg0_offset(offset: u32) -> Vec<u16> {
+    let mut words = Vec::new();
+    words.extend(const32_words(SCRATCH_REGISTER, offset));
+    words.extend(add(SCRATCH_REGISTER, ARG0_REGISTER, SCRATCH_REGISTER));
+    words.push(store32(SCRATCH_REGISTER, RETURN_REGISTER));
+    words
+}
+
+fn load_return_from_arg0_offset(offset: u32) -> Vec<u16> {
+    let mut words = Vec::new();
+    words.extend(const32_words(SCRATCH_REGISTER, offset));
+    words.extend(add(SCRATCH_REGISTER, ARG0_REGISTER, SCRATCH_REGISTER));
+    words.push(load32(RETURN_REGISTER, SCRATCH_REGISTER));
+    words
 }
 
 fn syscall3_fixed_number_words(number: u32) -> Vec<u16> {

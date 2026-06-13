@@ -1,5 +1,33 @@
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TrapFrame {
+    pub registers: [u32; 16],
+    pub resume_pc: u32,
+    pub stack_pointer: u32,
+    pub interrupt_enable: u32,
+}
+
+impl TrapFrame {
+    pub const fn zeroed() -> Self {
+        Self {
+            registers: [0; 16],
+            resume_pc: 0,
+            stack_pointer: 0,
+            interrupt_enable: 0,
+        }
+    }
+}
+
+impl Default for TrapFrame {
+    fn default() -> Self {
+        Self::zeroed()
+    }
+}
+
 #[cfg(not(any(test, feature = "host-test")))]
 extern "C" {
+    fn __k16_save_trap_frame(frame: *mut TrapFrame);
+    fn __k16_restore_trap_frame(frame: *const TrapFrame) -> u32;
     fn __k16_iret_once() -> !;
     fn __k16_write_trap_vector(value: u32);
     fn __k16_read_trap_cause() -> u32;
@@ -21,10 +49,11 @@ extern "C" {
 }
 
 #[cfg(any(test, feature = "host-test"))]
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 
 #[cfg(any(test, feature = "host-test"))]
 std::thread_local! {
+    static TEST_TRAP_FRAME: RefCell<TrapFrame> = const { RefCell::new(TrapFrame::zeroed()) };
     static TEST_TRAP_VECTOR: Cell<u32> = const { Cell::new(0) };
     static TEST_TRAP_CAUSE: Cell<u32> = const { Cell::new(0) };
     static TEST_TRAP_PC: Cell<u32> = const { Cell::new(0) };
@@ -51,6 +80,35 @@ macro_rules! test_state_load {
     ($name:ident) => {
         $name.with(|cell| cell.get())
     };
+}
+
+#[cfg(not(any(test, feature = "host-test")))]
+#[inline(always)]
+pub fn save_trap_frame(frame: &mut TrapFrame) {
+    unsafe {
+        __k16_save_trap_frame(frame as *mut TrapFrame);
+    }
+}
+
+#[cfg(any(test, feature = "host-test"))]
+pub fn save_trap_frame(frame: &mut TrapFrame) {
+    TEST_TRAP_FRAME.with(|cell| {
+        *frame = *cell.borrow();
+    });
+}
+
+#[cfg(not(any(test, feature = "host-test")))]
+#[inline(always)]
+pub unsafe fn restore_trap_frame(frame: &TrapFrame) -> u32 {
+    unsafe { __k16_restore_trap_frame(frame as *const TrapFrame) }
+}
+
+#[cfg(any(test, feature = "host-test"))]
+pub unsafe fn restore_trap_frame(frame: &TrapFrame) -> u32 {
+    TEST_TRAP_FRAME.with(|cell| {
+        *cell.borrow_mut() = *frame;
+    });
+    frame.registers[0]
 }
 
 #[cfg(not(any(test, feature = "host-test")))]
@@ -309,6 +367,9 @@ pub unsafe fn iret_with_r0(_value: u32) -> ! {
 
 #[cfg(any(test, feature = "host-test"))]
 pub(crate) fn reset_test_interrupts() {
+    TEST_TRAP_FRAME.with(|cell| {
+        *cell.borrow_mut() = TrapFrame::zeroed();
+    });
     test_state_store!(TEST_TRAP_VECTOR, 0);
     test_state_store!(TEST_TRAP_CAUSE, 0);
     test_state_store!(TEST_TRAP_PC, 0);
