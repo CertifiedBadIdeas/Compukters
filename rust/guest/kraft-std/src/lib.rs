@@ -37,13 +37,15 @@ pub mod io {
     pub struct Fd(u32);
 
     impl Fd {
+        #[inline(always)]
         pub const fn raw(self) -> u32 {
             self.0
         }
 
+        #[inline(always)]
         pub fn write_all(self, bytes: &[u8]) -> Result<(), Error> {
             let returned = k16_rt::write_syscall(self.0, bytes.as_ptr(), bytes.len());
-            if (returned as i32) < 0 {
+            if is_error_status(returned) {
                 return Err(Error::Syscall(returned));
             }
             if returned != bytes.len() as u32 {
@@ -52,23 +54,32 @@ pub mod io {
             Ok(())
         }
 
+        #[inline(always)]
         pub fn read(self, bytes: &mut [u8]) -> Result<usize, Error> {
             let returned = k16_rt::read_syscall(self.0, bytes.as_mut_ptr(), bytes.len());
-            if (returned as i32) < 0 {
+            if is_error_status(returned) {
                 return Err(Error::Syscall(returned));
             }
             Ok(returned as usize)
         }
     }
 
+    #[inline(always)]
+    fn is_error_status(status: u32) -> bool {
+        status & 0x8000_0000 != 0
+    }
+
+    #[inline(always)]
     pub fn stdin() -> Fd {
         Fd(k16_abi::syscall::FD_STDIN)
     }
 
+    #[inline(always)]
     pub fn stdout() -> Fd {
         Fd(k16_abi::syscall::FD_STDOUT)
     }
 
+    #[inline(always)]
     pub fn stderr() -> Fd {
         Fd(k16_abi::syscall::FD_STDERR)
     }

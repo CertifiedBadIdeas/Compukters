@@ -1,7 +1,9 @@
+use k16_tools::k16_runtime;
 use k16_tools::k16e;
 use k16_vm::computer_machine::{decode_snapshot_v1, ComputerCpuSnapshotRecord};
-use k16_vm::k16::K16Signal;
+use k16_vm::k16::{K16Cpu, K16Signal, K16_CSR_TRAP_VECTOR};
 use k16_vm::k16_computer::K16ComputerHandle;
+use k16_vm::low_machine::MachineMemory;
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
@@ -246,6 +248,115 @@ fn k16_runtime_cpu_helpers_resolve_k16_cpu_symbols() {
     let snapshot = decode_snapshot_v1(&snapshot_bytes).expect("snapshot decodes");
     let ComputerCpuSnapshotRecord::K16 { cpu, .. } = &snapshot.cpus[0];
     assert_eq!(cpu.trap_vector, 0x1234);
+}
+
+#[test]
+fn k16_runtime_syscall3_helper_loads_fourth_argument_from_stack() {
+    let helper_object = k16_runtime::k16_cpu_helpers_object();
+    let expected_words = [
+        const4(14, 4),
+        add(14, 15, 14)[0],
+        add(14, 15, 14)[1],
+        load32(4, 14),
+        syscall(1),
+        ret(),
+    ];
+    let expected_bytes = words_to_bytes(&expected_words);
+
+    assert!(
+        helper_object
+            .windows(expected_bytes.len())
+            .any(|window| window == expected_bytes.as_slice()),
+        "syscall3 helper must load the current Rust backend's stack argument slot into r4 before executing syscall r1",
+    );
+}
+
+#[test]
+fn k16_runtime_syscall3_helper_captures_stack_argument_at_runtime() {
+    const ENTRY_PC: u32 = 0x8000;
+    const TRAP_VECTOR: u32 = 0x8080;
+    const HELPER_PC: u32 = 0x80a0;
+    const STACK_TOP: u32 = 0x1_0000;
+
+    let mut memory = MachineMemory::zeroed(64 * 1024).expect("memory creates");
+    let mut caller = Vec::new();
+    caller.extend(const32(14, TRAP_VECTOR));
+    caller.push(write_csr(K16_CSR_TRAP_VECTOR, 14));
+    caller.extend(const32(1, 0x40));
+    caller.extend(const32(2, 0x11));
+    caller.extend(const32(3, 0x22));
+    caller.extend(const32(14, u32::MAX - 3));
+    caller.extend(add(15, 15, 14));
+    caller.extend(const32(14, 0x33));
+    caller.push(store32(15, 14));
+    caller.extend(const32(14, HELPER_PC));
+    caller.push(call(14));
+    caller.push(const4(14, 4));
+    caller.extend(add(15, 15, 14));
+    caller.push(halt());
+    write_words(&mut memory, ENTRY_PC, &caller);
+    write_words(
+        &mut memory,
+        HELPER_PC,
+        &[
+            const4(14, 4),
+            add(14, 15, 14)[0],
+            add(14, 15, 14)[1],
+            load32(4, 14),
+            syscall(1),
+            ret(),
+        ],
+    );
+    write_words(&mut memory, TRAP_VECTOR, &[const4(0, 7), iret()]);
+
+    let mut cpu = K16Cpu::new_with_stack(ENTRY_PC, STACK_TOP);
+
+    assert_eq!(
+        cpu.run_until_signal(&mut memory, 64).expect("cpu runs"),
+        K16Signal::Halt,
+    );
+
+    let snapshot = cpu.snapshot();
+    assert_eq!(snapshot.trap_value, 0x40);
+    assert_eq!(snapshot.trap_arg0, 0x11);
+    assert_eq!(snapshot.trap_arg1, 0x22);
+    assert_eq!(snapshot.trap_arg2, 0x33);
+    assert_eq!(snapshot.registers[0], 7);
+    assert_eq!(snapshot.registers[15], STACK_TOP);
+}
+
+#[test]
+fn k16_runtime_fd_syscall_helpers_do_not_require_stack_arguments() {
+    let helper_object = k16_runtime::k16_cpu_helpers_object();
+
+    for (number, name) in [(7_u32, "write"), (8_u32, "read")] {
+        let mut expected_words = Vec::new();
+        expected_words.extend(push_register(1));
+        expected_words.extend(push_register(2));
+        expected_words.extend(push_register(3));
+        expected_words.extend(push_register(4));
+        expected_words.extend(push_scratch_register());
+        expected_words.extend(const32(14, 0));
+        expected_words.extend(add(4, 3, 14));
+        expected_words.extend(add(3, 2, 14));
+        expected_words.extend(add(2, 1, 14));
+        expected_words.extend(const32(1, number));
+        expected_words.push(syscall(1));
+        expected_words.extend(pop_scratch_register());
+        expected_words.extend(pop_register(4));
+        expected_words.extend(pop_register(3));
+        expected_words.extend(pop_register(2));
+        expected_words.extend(pop_register(1));
+        expected_words.push(ret());
+        let expected_bytes = words_to_bytes(&expected_words);
+
+        assert!(
+            helper_object
+                .windows(expected_bytes.len())
+                .any(|window| window == expected_bytes.as_slice()),
+            "{name} syscall helper must pass fd/ptr/len without a stack-passed fourth argument",
+        );
+    }
 }
 
 #[test]
@@ -571,6 +682,108 @@ fn temp_file(name: &str) -> PathBuf {
 
 fn k16_binary() -> String {
     std::env::var("CARGO_BIN_EXE_k16").expect("Cargo exposes k16 binary path")
+}
+
+fn words_to_bytes(words: &[u16]) -> Vec<u8> {
+    let mut bytes = Vec::with_capacity(words.len() * 2);
+    for word in words {
+        write_u16(&mut bytes, *word);
+    }
+    bytes
+}
+
+fn write_words(memory: &mut MachineMemory, address: u32, words: &[u16]) {
+    for (index, word) in words.iter().enumerate() {
+        memory
+            .store_u8(address + (index as u32 * 2), (word & 0x00ff) as u8)
+            .expect("low instruction byte stores");
+        memory
+            .store_u8(address + (index as u32 * 2) + 1, (word >> 8) as u8)
+            .expect("high instruction byte stores");
+    }
+}
+
+fn const32(register: u8, value: u32) -> [u16; 3] {
+    [
+        0xe001 | (u16::from(register) << 8),
+        (value & 0xffff) as u16,
+        (value >> 16) as u16,
+    ]
+}
+
+fn const4(dst: u8, value: u8) -> u16 {
+    0x1000 | (u16::from(dst) << 8) | u16::from(value & 0x0f)
+}
+
+fn push_register(register: u8) -> Vec<u16> {
+    let mut words = Vec::new();
+    words.extend(const32(14, 0xffff_fffc));
+    words.extend(add(15, 15, 14));
+    words.push(store32(15, register));
+    words
+}
+
+fn pop_register(register: u8) -> Vec<u16> {
+    let mut words = Vec::new();
+    words.push(load32(register, 15));
+    words.push(const4(14, 4));
+    words.extend(add(15, 15, 14));
+    words
+}
+
+fn push_scratch_register() -> Vec<u16> {
+    let mut words = Vec::new();
+    words.extend(const32(4, 0xffff_fffc));
+    words.extend(add(15, 15, 4));
+    words.push(store32(15, 14));
+    words
+}
+
+fn pop_scratch_register() -> Vec<u16> {
+    let mut words = Vec::new();
+    words.push(load32(14, 15));
+    words.push(const4(4, 4));
+    words.extend(add(15, 15, 4));
+    words
+}
+
+fn add(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
+    [
+        0x2000 | (u16::from(dst) << 8),
+        (u16::from(lhs) << 4) | u16::from(rhs),
+    ]
+}
+
+fn load32(dst: u8, addr: u8) -> u16 {
+    0x4002 | (u16::from(dst) << 8) | (u16::from(addr) << 4)
+}
+
+fn store32(addr: u8, src: u8) -> u16 {
+    0x5002 | (u16::from(addr) << 8) | (u16::from(src) << 4)
+}
+
+fn call(register: u8) -> u16 {
+    0x8000 | (u16::from(register) << 8)
+}
+
+fn syscall(register: u8) -> u16 {
+    0x0005 | (u16::from(register) << 8)
+}
+
+fn iret() -> u16 {
+    0x0004
+}
+
+fn ret() -> u16 {
+    0x9000
+}
+
+fn write_csr(csr: u32, src: u8) -> u16 {
+    0x0003 | (((csr as u16) & 0xff) << 8) | (u16::from(src) << 4)
+}
+
+fn halt() -> u16 {
+    0x0001
 }
 
 fn write_u16(bytes: &mut Vec<u8>, value: u16) {

@@ -36,29 +36,26 @@ import kotlin.test.assertTrue
 
 class K16ShellRuntimeSmokeTest {
     @Test
-    fun runtimeDeviceAcceptsKeyboardInputAndReturnsShellPrompt() {
+    fun runtimeDeviceAcceptsKeyboardInputThroughUserlandInit() {
         val device = createDevice()
 
         try {
             device.turnOn()
-            waitForTerminalText(device, "K16> ")
+            waitForTerminalText(device, "INIT> ")
 
-            dispatchText(device, "help\n")
-            waitForTerminalText(device, "HELP")
-            waitForTerminalText(device, "TICKS")
-            waitForTerminalText(device, "K16> help")
+            dispatchText(device, "abc\n")
+            waitForTerminalText(device, "READ abc")
+            waitForTerminalText(device, "INIT> READ abc")
 
             val terminal = terminalText(requireNotNull(device.snapshotRuntimeState()))
-            val commandPromptIndex = terminal.indexOf("K16> help")
-            val helpOutputIndex = terminal.indexOf("HELP", startIndex = commandPromptIndex)
-            val ticksOutputIndex = terminal.indexOf("TICKS", startIndex = helpOutputIndex)
-            val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = ticksOutputIndex)
+            val promptIndex = terminal.indexOf("INIT> ")
+            val readOutputIndex = terminal.indexOf("READ abc", startIndex = promptIndex)
+            val returnedPromptIndex = terminal.indexOf("INIT> ", startIndex = readOutputIndex)
             assertTrue(
-                commandPromptIndex >= 0 &&
-                    helpOutputIndex > commandPromptIndex &&
-                    ticksOutputIndex > helpOutputIndex &&
-                    returnedPromptIndex > ticksOutputIndex,
-                "shell should echo UI-style keyboard input and return a prompt after command output; terminal: $terminal",
+                promptIndex >= 0 &&
+                    readOutputIndex > promptIndex &&
+                    returnedPromptIndex > readOutputIndex,
+                "userland init should read UI-style keyboard input, write it through stdout, and return a prompt; terminal: $terminal",
             )
         } finally {
             device.close()

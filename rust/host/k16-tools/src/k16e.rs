@@ -40,11 +40,24 @@ pub struct K16eExecutable {
     pub abi_kind: K16eAbiKind,
     pub entry_pc: u32,
     pub load_addr: u32,
+    pub memory_size: u32,
     pub payload: Vec<u8>,
 }
 
 pub fn encode_k16_executable(
     payload: &[u8],
+    abi_kind: K16eAbiKind,
+    entry_pc: u32,
+    load_addr: u32,
+) -> Result<Vec<u8>, String> {
+    let memory_size =
+        u32::try_from(payload.len()).map_err(|_| "K16E payload is too large".to_string())?;
+    encode_k16_executable_with_memory_size(payload, memory_size, abi_kind, entry_pc, load_addr)
+}
+
+pub fn encode_k16_executable_with_memory_size(
+    payload: &[u8],
+    memory_size: u32,
     abi_kind: K16eAbiKind,
     entry_pc: u32,
     load_addr: u32,
@@ -57,9 +70,15 @@ pub fn encode_k16_executable(
     }
     let payload_size =
         u32::try_from(payload.len()).map_err(|_| "K16E payload is too large".to_string())?;
-    validate_entry_inside_payload(entry_pc, load_addr, payload_size)?;
+    if memory_size < payload_size {
+        return Err("K16E memory size is smaller than payload size".to_string());
+    }
+    if memory_size % 2 != 0 {
+        return Err("K16E K16 memory size must be even".to_string());
+    }
+    validate_entry_inside_payload(entry_pc, load_addr, memory_size)?;
     load_addr
-        .checked_add(payload_size)
+        .checked_add(memory_size)
         .ok_or_else(|| "K16E load range overflows address space".to_string())?;
 
     let capacity = usize::try_from(K16E_PAYLOAD_OFFSET_SINGLE_LOAD)
@@ -82,7 +101,7 @@ pub fn encode_k16_executable(
     write_u32(&mut bytes, load_addr);
     write_u32(&mut bytes, K16E_PAYLOAD_OFFSET_SINGLE_LOAD);
     write_u32(&mut bytes, payload_size);
-    write_u32(&mut bytes, payload_size);
+    write_u32(&mut bytes, memory_size);
 
     bytes.extend_from_slice(payload);
     Ok(bytes)
@@ -144,11 +163,14 @@ pub fn decode_k16_executable(bytes: &[u8]) -> Result<K16eExecutable, String> {
     if file_size == 0 {
         return Err("K16E payload is empty".to_string());
     }
-    if file_size != memory_size {
-        return Err("K16E zero-fill sections are not supported yet".to_string());
+    if memory_size < file_size {
+        return Err("K16E memory size is smaller than payload size".to_string());
     }
     if file_size % 2 != 0 {
         return Err("K16E K16 payload length must be even".to_string());
+    }
+    if memory_size % 2 != 0 {
+        return Err("K16E K16 memory size must be even".to_string());
     }
     validate_entry_inside_payload(entry_pc, load_addr, memory_size)?;
     let end = file_offset
@@ -166,6 +188,7 @@ pub fn decode_k16_executable(bytes: &[u8]) -> Result<K16eExecutable, String> {
         abi_kind,
         entry_pc,
         load_addr,
+        memory_size,
         payload,
     })
 }

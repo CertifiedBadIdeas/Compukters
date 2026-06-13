@@ -32,6 +32,7 @@ pub struct K16eExecutable {
     pub abi_kind: K16eAbiKind,
     pub entry_pc: u32,
     pub load_addr: u32,
+    pub memory_size: u32,
     pub payload: Vec<u8>,
 }
 
@@ -99,11 +100,14 @@ pub fn decode_k16_executable(bytes: &[u8]) -> Result<K16eExecutable, String> {
     if file_size == 0 {
         return Err("K16E payload is empty".to_string());
     }
-    if file_size != memory_size {
-        return Err("K16E zero-fill sections are not supported yet".to_string());
+    if memory_size < file_size {
+        return Err("K16E memory size is smaller than payload size".to_string());
     }
     if file_size % 2 != 0 {
         return Err("K16E K16 payload length must be even".to_string());
+    }
+    if memory_size % 2 != 0 {
+        return Err("K16E K16 memory size must be even".to_string());
     }
     validate_entry_inside_payload(entry_pc, load_addr, memory_size)?;
     let end = file_offset
@@ -121,6 +125,7 @@ pub fn decode_k16_executable(bytes: &[u8]) -> Result<K16eExecutable, String> {
         abi_kind,
         entry_pc,
         load_addr,
+        memory_size,
         payload,
     })
 }

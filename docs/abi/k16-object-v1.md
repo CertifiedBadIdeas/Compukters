@@ -290,12 +290,14 @@ The v1 linker is static only:
 5. Lay out retained `.text.k16*`, `.rodata`, `.data`, and `.bss` sections in
    the selected target profile address space.
 6. Apply supported RELA relocations from retained sections.
-7. Emit a single-load-section `K16E` image for the selected ABI kind.
+7. Emit a single-load-section `K16E` image for the selected ABI kind. The
+   emitted `file_size` covers initialized payload bytes, while `memory_size`
+   covers initialized bytes plus any trailing `.bss` zero-fill tail.
 
-The first `K16E` format has no zero-fill section, so a v1 object-to-`K16E`
-linker must either include `.bss` in the emitted load payload as zero bytes or
-reject `.bss` for profiles that cannot represent it yet. It must not rely on a
-loader-side zero-fill relocation step.
+For `K16E` output, `.bss` must not be serialized as object-file bytes when it
+is only trailing zero-filled memory. The linker represents it by increasing the
+K16E section `memory_size`; loaders copy `file_size` bytes and zero-fill the
+remaining memory range.
 
 ## Unsupported Features
 

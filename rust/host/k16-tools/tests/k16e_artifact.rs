@@ -35,6 +35,31 @@ fn k16e_decodes_single_k16_load_segment() {
     assert_eq!(executable.abi_kind, k16e::K16eAbiKind::Kernel);
     assert_eq!(executable.entry_pc, 0x4000);
     assert_eq!(executable.load_addr, 0x4000);
+    assert_eq!(executable.memory_size, 2);
+    assert_eq!(executable.payload, vec![0x01, 0x00]);
+}
+
+#[test]
+fn k16e_encodes_and_decodes_zero_fill_tail() {
+    let bytes = k16e::encode_k16_executable_with_memory_size(
+        &[0x01, 0x00],
+        8,
+        k16e::K16eAbiKind::Program,
+        0x8000,
+        0x8000,
+    )
+    .expect("K16E encodes zero-fill tail");
+
+    assert_eq!(u32_at(&bytes, 44), 2);
+    assert_eq!(u32_at(&bytes, 48), 8);
+    assert_eq!(&bytes[52..], &[0x01, 0x00]);
+
+    let executable = k16e::decode_k16_executable(&bytes).expect("K16E decodes zero-fill tail");
+
+    assert_eq!(executable.abi_kind, k16e::K16eAbiKind::Program);
+    assert_eq!(executable.entry_pc, 0x8000);
+    assert_eq!(executable.load_addr, 0x8000);
+    assert_eq!(executable.memory_size, 8);
     assert_eq!(executable.payload, vec![0x01, 0x00]);
 }
 

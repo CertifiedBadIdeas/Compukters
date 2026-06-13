@@ -3,11 +3,11 @@ use k16_rt::cpu;
 use crate::{control, debug, syscall, timer};
 
 pub fn initialize() {
-    let interrupt_mask = timer::register_driver();
+    timer::register_driver();
     unsafe {
         k16_rt::install_trap_vector(kernel_trap_vector as *const () as usize as u32);
-        k16_rt::set_interrupt_mask(interrupt_mask);
-        k16_rt::enable_interrupts();
+        k16_rt::set_interrupt_mask(0);
+        k16_rt::disable_interrupts();
     }
 }
 

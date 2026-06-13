@@ -51,6 +51,7 @@ pub enum K16CpuSnapshotState {
 pub struct K16CpuSnapshot {
     pub pc: u32,
     pub registers: [u32; 16],
+    pub trap_registers: [u32; 16],
     pub trap_vector: u32,
     pub trap_cause: u32,
     pub trap_pc: u32,
@@ -334,6 +335,7 @@ enum K16State {
 pub struct K16Cpu {
     pc: u32,
     registers: [u32; 16],
+    trap_registers: [u32; 16],
     trap_vector: u32,
     trap_cause: u32,
     trap_pc: u32,
@@ -342,8 +344,9 @@ pub struct K16Cpu {
     trap_arg1: u32,
     trap_arg2: u32,
     trap_stack_pointer: u32,
+    trap_interrupt_enable: bool,
     interrupt_enable: bool,
-    interrupt_delivery_inhibited: bool,
+    interrupt_delivery_inhibited_steps: u8,
     interrupt_mask: u32,
     interrupt_pending: u32,
     timer0_interrupt_value: u32,
@@ -356,6 +359,7 @@ impl K16Cpu {
         Self {
             pc: entry_pc,
             registers: [0; 16],
+            trap_registers: [0; 16],
             trap_vector: 0,
             trap_cause: 0,
             trap_pc: 0,
@@ -364,8 +368,9 @@ impl K16Cpu {
             trap_arg1: 0,
             trap_arg2: 0,
             trap_stack_pointer: 0,
+            trap_interrupt_enable: false,
             interrupt_enable: false,
-            interrupt_delivery_inhibited: false,
+            interrupt_delivery_inhibited_steps: 0,
             interrupt_mask: 0,
             interrupt_pending: 0,
             timer0_interrupt_value: 0,
@@ -396,6 +401,7 @@ impl K16Cpu {
         K16CpuSnapshot {
             pc: self.pc,
             registers: self.registers,
+            trap_registers: self.trap_registers,
             trap_vector: self.trap_vector,
             trap_cause: self.trap_cause,
             trap_pc: self.trap_pc,
@@ -421,6 +427,7 @@ impl K16Cpu {
         Self {
             pc: snapshot.pc,
             registers: snapshot.registers,
+            trap_registers: snapshot.trap_registers,
             trap_vector: snapshot.trap_vector,
             trap_cause: snapshot.trap_cause,
             trap_pc: snapshot.trap_pc,
@@ -429,8 +436,9 @@ impl K16Cpu {
             trap_arg1: snapshot.trap_arg1,
             trap_arg2: snapshot.trap_arg2,
             trap_stack_pointer: snapshot.trap_stack_pointer,
+            trap_interrupt_enable: false,
             interrupt_enable: snapshot.interrupt_enable,
-            interrupt_delivery_inhibited: false,
+            interrupt_delivery_inhibited_steps: 0,
             interrupt_mask: snapshot.interrupt_mask,
             interrupt_pending: snapshot.interrupt_pending,
             timer0_interrupt_value: snapshot.timer0_interrupt_value,
@@ -496,8 +504,8 @@ impl K16Cpu {
             }
         }
 
-        if self.interrupt_delivery_inhibited {
-            self.interrupt_delivery_inhibited = false;
+        if self.interrupt_delivery_inhibited_steps > 0 {
+            self.interrupt_delivery_inhibited_steps -= 1;
         } else if self.try_deliver_interrupt()? {
             return Ok(None);
         }
@@ -868,6 +876,7 @@ impl K16Cpu {
             return Err(trap);
         }
         self.interrupt_pending &= !source;
+        self.trap_registers = self.registers;
         self.trap_cause = cause;
         self.trap_pc = self.pc;
         self.trap_value = value;
@@ -875,16 +884,20 @@ impl K16Cpu {
         self.trap_arg1 = 0;
         self.trap_arg2 = 0;
         self.trap_stack_pointer = self.registers[usize::from(K16_STACK_POINTER_REGISTER)];
+        self.trap_interrupt_enable = self.interrupt_enable;
         self.pc = self.trap_vector;
         self.interrupt_enable = false;
         Ok(true)
     }
 
     fn return_from_interrupt(&mut self) {
+        let return_value = self.registers[0];
+        self.registers = self.trap_registers;
+        self.registers[0] = return_value;
         self.registers[usize::from(K16_STACK_POINTER_REGISTER)] = self.trap_stack_pointer;
         self.pc = self.trap_pc;
-        self.interrupt_enable = true;
-        self.interrupt_delivery_inhibited = true;
+        self.interrupt_enable = self.trap_interrupt_enable;
+        self.interrupt_delivery_inhibited_steps = 2;
     }
 
     fn raise_load_fault(
@@ -966,6 +979,7 @@ impl K16Cpu {
             self.state = K16State::Trapped(trap.to_string());
             return Err(trap);
         }
+        self.trap_registers = self.registers;
         self.trap_cause = cause;
         self.trap_pc = fault_pc;
         self.trap_value = value;
@@ -973,6 +987,7 @@ impl K16Cpu {
         self.trap_arg1 = 0;
         self.trap_arg2 = 0;
         self.trap_stack_pointer = self.registers[usize::from(K16_STACK_POINTER_REGISTER)];
+        self.trap_interrupt_enable = self.interrupt_enable;
         self.pc = self.trap_vector;
         Ok(None)
     }

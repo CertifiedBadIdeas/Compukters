@@ -1,7 +1,7 @@
 use k16_vm::k16::{
     K16Cpu, K16Signal, K16_CSR_INTERRUPT_ENABLE, K16_CSR_INTERRUPT_MASK, K16_CSR_INTERRUPT_PENDING,
-    K16_CSR_TRAP_ARG0, K16_CSR_TRAP_ARG1, K16_CSR_TRAP_ARG2, K16_CSR_TRAP_CAUSE,
-    K16_CSR_TRAP_PC, K16_CSR_TRAP_VALUE, K16_CSR_TRAP_VECTOR, K16_INTERRUPT_SOURCE_TIMER0,
+    K16_CSR_TRAP_ARG0, K16_CSR_TRAP_ARG1, K16_CSR_TRAP_ARG2, K16_CSR_TRAP_CAUSE, K16_CSR_TRAP_PC,
+    K16_CSR_TRAP_VALUE, K16_CSR_TRAP_VECTOR, K16_INTERRUPT_SOURCE_TIMER0,
     K16_STACK_POINTER_REGISTER, K16_TRAP_CAUSE_EXPLICIT_TRAP, K16_TRAP_CAUSE_ILLEGAL_INSTRUCTION,
     K16_TRAP_CAUSE_TIMER0_INTERRUPT,
 };
@@ -432,9 +432,10 @@ fn k16_unhandled_exception_is_a_hard_error() {
 
 #[test]
 fn k16_timer_interrupt_enters_vector_and_iret_resumes_guest_pc() {
-    let mut bus = MachineBus::new(64).unwrap();
+    let mut bus = MachineBus::new(128).unwrap();
+    let handler_pc = 32;
     let mut program = Vec::new();
-    program.extend(const32(1, 32));
+    program.extend(const32(1, handler_pc));
     program.push(write_csr(K16_CSR_TRAP_VECTOR, 1));
     program.push(const4(1, K16_INTERRUPT_SOURCE_TIMER0 as u8));
     program.push(write_csr(K16_CSR_INTERRUPT_MASK, 1));
@@ -442,12 +443,19 @@ fn k16_timer_interrupt_enters_vector_and_iret_resumes_guest_pc() {
     program.push(write_csr(K16_CSR_INTERRUPT_ENABLE, 1));
     program.push(const4(2, 9));
     program.push(halt());
-    program.extend([0; 6]);
-    program.push(read_csr(3, K16_CSR_TRAP_CAUSE));
-    program.push(read_csr(4, K16_CSR_TRAP_PC));
-    program.push(read_csr(5, K16_CSR_TRAP_VALUE));
-    program.push(iret());
     write_words(&mut bus, 0, &program);
+    let mut handler = Vec::new();
+    handler.push(read_csr(3, K16_CSR_TRAP_CAUSE));
+    handler.extend(const32(8, 96));
+    handler.push(store32(8, 3));
+    handler.push(read_csr(4, K16_CSR_TRAP_PC));
+    handler.extend(const32(8, 100));
+    handler.push(store32(8, 4));
+    handler.push(read_csr(5, K16_CSR_TRAP_VALUE));
+    handler.extend(const32(8, 104));
+    handler.push(store32(8, 5));
+    handler.push(iret());
+    write_words(&mut bus, handler_pc, &handler);
     let mut cpu = K16Cpu::new(0);
 
     assert_eq!(
@@ -460,9 +468,12 @@ fn k16_timer_interrupt_enters_vector_and_iret_resumes_guest_pc() {
 
     assert_eq!(cpu.run_until_signal(&mut bus, 16).unwrap(), K16Signal::Halt);
     assert_eq!(cpu.register(2), 9);
-    assert_eq!(cpu.register(3), K16_TRAP_CAUSE_TIMER0_INTERRUPT);
-    assert_eq!(cpu.register(4), 16);
-    assert_eq!(cpu.register(5), 77);
+    assert_eq!(
+        bus.load_i32(96).unwrap() as u32,
+        K16_TRAP_CAUSE_TIMER0_INTERRUPT
+    );
+    assert_eq!(bus.load_i32(100).unwrap(), 16);
+    assert_eq!(bus.load_i32(104).unwrap(), 77);
     assert_eq!(cpu.csr(K16_CSR_INTERRUPT_PENDING), Some(0));
     assert_eq!(cpu.csr(K16_CSR_INTERRUPT_ENABLE), Some(1));
 }
@@ -499,34 +510,99 @@ fn k16_iret_restores_interrupted_stack_pointer() {
 
 #[test]
 fn k16_syscall_enters_vector_and_iret_resumes_next_instruction() {
-    let mut bus = MachineBus::new(64).unwrap();
+    let mut bus = MachineBus::new(128).unwrap();
+    let handler_pc = 64;
     let mut program = Vec::new();
-    program.extend(const32(1, 24));
+    program.extend(const32(1, handler_pc));
     program.push(write_csr(K16_CSR_TRAP_VECTOR, 1));
     program.push(const4(2, K16_CSR_TRAP_CAUSE as u8));
     program.push(syscall(2));
     program.push(const4(6, 9));
     program.push(halt());
-    program.extend([0; 6]);
-    program.push(read_csr(3, K16_CSR_TRAP_CAUSE));
-    program.push(read_csr(4, K16_CSR_TRAP_PC));
-    program.push(read_csr(5, K16_CSR_TRAP_VALUE));
-    program.push(iret());
     write_words(&mut bus, 0, &program);
+    let mut handler = Vec::new();
+    handler.push(read_csr(3, K16_CSR_TRAP_CAUSE));
+    handler.extend(const32(8, 96));
+    handler.push(store32(8, 3));
+    handler.push(read_csr(4, K16_CSR_TRAP_PC));
+    handler.extend(const32(8, 100));
+    handler.push(store32(8, 4));
+    handler.push(read_csr(5, K16_CSR_TRAP_VALUE));
+    handler.extend(const32(8, 104));
+    handler.push(store32(8, 5));
+    handler.push(iret());
+    write_words(&mut bus, handler_pc, &handler);
     let mut cpu = K16Cpu::new(0);
 
     assert_eq!(cpu.run_until_signal(&mut bus, 16).unwrap(), K16Signal::Halt);
-    assert_eq!(cpu.register(3), K16_TRAP_CAUSE_EXPLICIT_TRAP);
-    assert_eq!(cpu.register(4), 12);
-    assert_eq!(cpu.register(5), K16_CSR_TRAP_CAUSE);
+    assert_eq!(
+        bus.load_i32(96).unwrap() as u32,
+        K16_TRAP_CAUSE_EXPLICIT_TRAP
+    );
+    assert_eq!(bus.load_i32(100).unwrap(), 12);
+    assert_eq!(bus.load_i32(104).unwrap(), K16_CSR_TRAP_CAUSE as i32);
     assert_eq!(cpu.register(6), 9);
 }
 
 #[test]
-fn k16_syscall_captures_arguments_from_r2_r3_r4() {
+fn k16_iret_preserves_interrupted_registers_and_returns_r0() {
+    let mut bus = MachineBus::new(96).unwrap();
+    let mut program = Vec::new();
+    program.extend(const32(1, 48));
+    program.push(write_csr(K16_CSR_TRAP_VECTOR, 1));
+    program.extend(const32(5, 0x55aa_0005));
+    program.extend(const32(6, 0x55aa_0006));
+    program.push(const4(1, 7));
+    program.push(syscall(1));
+    program.push(halt());
+    program.extend([0; 11]);
+    program.push(const4(0, 9));
+    program.push(const4(5, 1));
+    program.push(const4(6, 2));
+    program.push(iret());
+    write_words(&mut bus, 0, &program);
+    let mut cpu = K16Cpu::new(0);
+
+    assert_eq!(cpu.run_until_signal(&mut bus, 32).unwrap(), K16Signal::Halt);
+    assert_eq!(cpu.register(0), 9);
+    assert_eq!(cpu.register(5), 0x55aa_0005);
+    assert_eq!(cpu.register(6), 0x55aa_0006);
+}
+
+#[test]
+fn k16_syscall_iret_restores_disabled_interrupt_state() {
     let mut bus = MachineBus::new(64).unwrap();
     let mut program = Vec::new();
-    program.extend(const32(1, 36));
+    program.extend(const32(1, 32));
+    program.push(write_csr(K16_CSR_TRAP_VECTOR, 1));
+    program.push(const4(1, K16_INTERRUPT_SOURCE_TIMER0 as u8));
+    program.push(write_csr(K16_CSR_INTERRUPT_MASK, 1));
+    program.push(const4(1, 5));
+    program.push(syscall(1));
+    program.push(const4(6, 9));
+    program.push(halt());
+    program.extend([0; 7]);
+    program.push(iret());
+    write_words(&mut bus, 0, &program);
+    let mut cpu = K16Cpu::new(0);
+
+    cpu.request_interrupt(K16_INTERRUPT_SOURCE_TIMER0, 77);
+
+    assert_eq!(cpu.run_until_signal(&mut bus, 16).unwrap(), K16Signal::Halt);
+    assert_eq!(cpu.register(6), 9);
+    assert_eq!(cpu.csr(K16_CSR_INTERRUPT_ENABLE), Some(0));
+    assert_eq!(
+        cpu.csr(K16_CSR_INTERRUPT_PENDING),
+        Some(K16_INTERRUPT_SOURCE_TIMER0),
+    );
+}
+
+#[test]
+fn k16_syscall_captures_arguments_from_r2_r3_r4() {
+    let mut bus = MachineBus::new(256).unwrap();
+    let handler_pc = 96;
+    let mut program = Vec::new();
+    program.extend(const32(1, handler_pc));
     program.push(write_csr(K16_CSR_TRAP_VECTOR, 1));
     program.push(const4(1, 3));
     program.extend(const32(2, 0x0000_0021));
@@ -534,24 +610,69 @@ fn k16_syscall_captures_arguments_from_r2_r3_r4() {
     program.extend(const32(4, 0x0000_0023));
     program.push(syscall(1));
     program.push(halt());
-    program.extend([0; 6]);
-    program.push(read_csr(3, K16_CSR_TRAP_VALUE));
-    program.push(read_csr(4, K16_CSR_TRAP_ARG0));
-    program.push(read_csr(5, K16_CSR_TRAP_ARG1));
-    program.push(read_csr(6, K16_CSR_TRAP_ARG2));
-    program.push(iret());
     write_words(&mut bus, 0, &program);
+    let mut handler = Vec::new();
+    handler.push(read_csr(3, K16_CSR_TRAP_VALUE));
+    handler.extend(const32(8, 192));
+    handler.push(store32(8, 3));
+    handler.push(read_csr(4, K16_CSR_TRAP_ARG0));
+    handler.extend(const32(8, 196));
+    handler.push(store32(8, 4));
+    handler.push(read_csr(5, K16_CSR_TRAP_ARG1));
+    handler.extend(const32(8, 200));
+    handler.push(store32(8, 5));
+    handler.push(read_csr(6, K16_CSR_TRAP_ARG2));
+    handler.extend(const32(8, 204));
+    handler.push(store32(8, 6));
+    handler.push(iret());
+    write_words(&mut bus, handler_pc, &handler);
     let mut cpu = K16Cpu::new(0);
 
-    assert_eq!(cpu.run_until_signal(&mut bus, 20).unwrap(), K16Signal::Halt);
-    assert_eq!(cpu.register(3), 3);
-    assert_eq!(cpu.register(4), 0x21);
-    assert_eq!(cpu.register(5), 0x22);
-    assert_eq!(cpu.register(6), 0x23);
+    assert_eq!(cpu.run_until_signal(&mut bus, 32).unwrap(), K16Signal::Halt);
+    assert_eq!(bus.load_i32(192).unwrap(), 3);
+    assert_eq!(bus.load_i32(196).unwrap(), 0x21);
+    assert_eq!(bus.load_i32(200).unwrap(), 0x22);
+    assert_eq!(bus.load_i32(204).unwrap(), 0x23);
 }
 
 #[test]
-fn k16_iret_allows_one_continuation_instruction_before_pending_interrupt() {
+fn k16_iret_allows_helper_ret_and_caller_result_copy_before_pending_interrupt() {
+    let mut bus = MachineBus::new(160).unwrap();
+    let mut program = Vec::new();
+    program.extend(const32(1, 112));
+    program.push(write_csr(K16_CSR_TRAP_VECTOR, 1));
+    program.push(const4(1, K16_INTERRUPT_SOURCE_TIMER0 as u8));
+    program.push(write_csr(K16_CSR_INTERRUPT_MASK, 1));
+    program.push(const4(1, 1));
+    program.push(write_csr(K16_CSR_INTERRUPT_ENABLE, 1));
+    program.push(const4(13, 0));
+    program.push(const4(1, 5));
+    program.extend(const32(14, 80));
+    program.push(call(14));
+    program.extend(add(6, 0, 13));
+    program.push(halt());
+    write_words(&mut bus, 0, &program);
+    write_words(&mut bus, 80, &[syscall(1), ret()]);
+    let trap_handler = [read_csr(0, K16_CSR_TRAP_CAUSE), iret()];
+    write_words(&mut bus, 112, &trap_handler);
+    let mut cpu = K16Cpu::new_with_stack(0, 128);
+
+    for _ in 0..32 {
+        if cpu.pc() == 112 {
+            break;
+        }
+        assert!(cpu.step(&mut bus).unwrap().is_none());
+    }
+    assert_eq!(cpu.pc(), 112);
+
+    cpu.request_interrupt(K16_INTERRUPT_SOURCE_TIMER0, 77);
+
+    assert_eq!(cpu.run_until_signal(&mut bus, 32).unwrap(), K16Signal::Halt);
+    assert_eq!(cpu.register(6), K16_TRAP_CAUSE_EXPLICIT_TRAP);
+}
+
+#[test]
+fn k16_iret_allows_direct_caller_result_copy_before_pending_interrupt() {
     let mut bus = MachineBus::new(64).unwrap();
     let mut program = Vec::new();
     program.extend(const32(1, 32));

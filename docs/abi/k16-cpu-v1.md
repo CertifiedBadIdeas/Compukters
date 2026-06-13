@@ -440,7 +440,7 @@ CSR instructions use the zero-opcode encoding family:
 ```text
 read_csr   0x0ab2    rA = csr(B)
 write_csr  0x0ab3    csr(A) = rB
-iret       0x0004    pc = trap_pc; interrupt_enable = 1
+iret       0x0004    restore interrupted frame; pc = trap_pc; r0 = handler result
 wait       0x0006    report non-terminal wait signal to host
 syscall    0x0a05    trap_cause = explicit trap; trap_value = rA; trap_pc = next pc
 ```
@@ -473,7 +473,7 @@ Writes to read-only CSRs raise an explicit synchronous trap.
 Synchronous exceptions are delivered immediately when the faulting instruction
 is decoded or executed. If `trap_vector = 0`, the VM reports a hard CPU trap to
 the host. Otherwise the CPU records `trap_cause`, `trap_pc`, and `trap_value`,
-then sets `pc = trap_vector`.
+then saves the interrupted register frame and sets `pc = trap_vector`.
 
 The `syscall rA` instruction is the returning explicit-trap entry for guest
 OS services. It records `trap_cause = 0x00000005`,
@@ -492,12 +492,13 @@ arg2)` receives `number` in `r1` and the three syscall arguments in `r2`, `r3`,
 and `r4`. At the `syscall r1` boundary the CPU captures `r2`, `r3`, and `r4`
 into `trap_arg0`, `trap_arg1`, and `trap_arg2` before entering the kernel. The
 kernel interprets `trap_value` as the syscall number, reads the captured
-`trap_arg*` CSRs for arguments, may clobber `r1..r4`, and returns a `u32`
-result by placing it in `r0` before `iret`. After `iret`, pending interrupt
-delivery is deferred for one guest instruction so the caller can consume or
-save `r0` before an asynchronous interrupt can enter the trap vector.
-Registers `r5..r15` are preserved unless a future ABI revision extends the
-clobber set.
+`trap_arg*` CSRs for arguments, may freely use registers while running in the
+trap vector, and returns a `u32` result by placing it in `r0` before `iret`.
+`iret` restores the interrupted user register frame for `r1..r15`; the current
+handler `r0` becomes the caller-visible return value. After `iret`, pending
+interrupt delivery is deferred for two resumed guest instructions so helper
+code can return to the caller and the caller can consume or save `r0` before an
+asynchronous interrupt can enter the trap vector.
 
 K16 syscall ABI v0 names the current Rust-kernel proof services in
 `k16_abi::syscall`:
@@ -510,7 +511,7 @@ K16 syscall ABI v0 names the current Rust-kernel proof services in
 | `SLEEP_TICKS` | `5` | `k16_rt::sleep_ticks_syscall(ticks)` | Kernel waits until `timer0.game_ticks` advances by `ticks`, then returns `STATUS_OK`. |
 | `EXIT` | `6` | `k16_rt::exit_syscall(status)` | Terminates the current single-task program and halts the VM with the supplied status. |
 | `WRITE` | `7` | `k16_rt::write_syscall(fd, ptr, len)` | Writes bytes from guest memory to fd `1` or `2`; returns byte count or a negative K16 error. |
-| `READ` | `8` | `k16_rt::read_syscall(fd, ptr, len)` | Reads bytes from fd `0` into guest memory; blocks by yielding until input is available, then returns byte count or a negative K16 error. |
+| `READ` | `8` | `k16_rt::read_syscall(fd, ptr, len)` | Reads bytes from fd `0` into guest memory; blocks by waiting until input is available, then returns byte count or a negative K16 error. |
 | `DEBUG_MARKER_RETURN` | `0x53` | n/a | Proof return value for `DEBUG_MARKER`. |
 | `STATUS_OK` | `0` | n/a | Successful proof-service status. |
 | `FD_STDIN` | `0` | n/a | Standard input descriptor accepted by `READ`. |
@@ -527,10 +528,12 @@ requires `interrupt_enable != 0` and a source bit present in both
 `interrupt_pending` and `interrupt_mask`. Entering an interrupt records the
 interrupted `pc`, interrupted stack pointer, and cause/value, clears the
 delivered pending bit, sets `pc = trap_vector`, and disables global interrupt
-delivery. `iret` restores the interrupted stack pointer, resumes at `trap_pc`,
-and re-enables global interrupt delivery. If another interrupt is already
-pending when `iret` returns, delivery is deferred until after one resumed guest
-instruction. Nested interrupts, interrupt priorities, and separate
+delivery. `iret` restores the interrupted user register frame for `r1..r15`,
+uses the handler's current `r0` as the resumed `r0`, restores the interrupted
+stack pointer, resumes at `trap_pc`, and restores the saved interrupt-enable
+state. If another interrupt is already pending when `iret` returns, delivery is
+deferred until after two resumed guest instructions. Nested interrupts,
+interrupt priorities, and separate
 interrupt-controller hardware are not part of this ABI slice.
 
 Current trap and interrupt causes:

@@ -17,7 +17,7 @@ pub fn read(ptr: u32, len: u32) -> Result<u32, u32> {
     while copied == 0 {
         copied = drain_available_bytes(ptr, len);
         if copied == 0 {
-            k16_rt::yield_once();
+            k16_rt::wait_once();
         }
     }
     Ok(copied)

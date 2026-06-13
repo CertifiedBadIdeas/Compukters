@@ -12,6 +12,8 @@ extern "C" {
     fn __k16_syscall0(number: u32) -> u32;
     fn __k16_syscall1(number: u32, arg0: u32) -> u32;
     fn __k16_syscall3(number: u32, arg0: u32, arg1: u32, arg2: u32) -> u32;
+    fn __k16_write_syscall(fd: u32, ptr: u32, len: u32) -> u32;
+    fn __k16_read_syscall(fd: u32, ptr: u32, len: u32) -> u32;
     fn __k16_iret_with_r0(value: u32) -> !;
     fn __k16_write_interrupt_enable(value: u32);
     fn __k16_write_interrupt_mask(value: u32);
@@ -205,11 +207,25 @@ pub fn exit_syscall(status: u32) -> ! {
 }
 
 #[inline(always)]
+#[cfg(not(any(test, feature = "host-test")))]
+pub fn write_syscall(fd: u32, ptr: *const u8, len: usize) -> u32 {
+    unsafe { __k16_write_syscall(fd, ptr as usize as u32, len as u32) }
+}
+
+#[inline(always)]
+#[cfg(any(test, feature = "host-test"))]
 pub fn write_syscall(fd: u32, ptr: *const u8, len: usize) -> u32 {
     syscall3(k16_abi::syscall::WRITE, fd, ptr as usize as u32, len as u32)
 }
 
 #[inline(always)]
+#[cfg(not(any(test, feature = "host-test")))]
+pub fn read_syscall(fd: u32, ptr: *mut u8, len: usize) -> u32 {
+    unsafe { __k16_read_syscall(fd, ptr as usize as u32, len as u32) }
+}
+
+#[inline(always)]
+#[cfg(any(test, feature = "host-test"))]
 pub fn read_syscall(fd: u32, ptr: *mut u8, len: usize) -> u32 {
     syscall3(k16_abi::syscall::READ, fd, ptr as usize as u32, len as u32)
 }

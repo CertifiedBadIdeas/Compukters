@@ -109,6 +109,14 @@ fn kraft_std_layering_rule_is_documented_and_enforced() {
         !kraft_std_source.contains("pub use k16_rt::*"),
         "kraft-std must expose userland APIs instead of re-exporting all runtime internals"
     );
+    assert!(
+        kraft_std_source.contains("#[inline(always)]\n        pub fn read("),
+        "kraft-std fd read must stay inline until K16 Rust aggregate return ABI is validated"
+    );
+    assert!(
+        kraft_std_source.contains("#[inline(always)]\n        pub fn write_all("),
+        "kraft-std fd write_all must stay inline until K16 Rust aggregate return ABI is validated"
+    );
 }
 
 #[test]

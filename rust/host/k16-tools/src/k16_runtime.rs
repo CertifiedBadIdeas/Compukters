@@ -16,6 +16,9 @@ const SCRATCH_REGISTER: u8 = 14;
 const STACK_POINTER_REGISTER: u8 = 15;
 const RETURN_REGISTER: u8 = 0;
 const ARG0_REGISTER: u8 = 1;
+const ARG1_REGISTER: u8 = 2;
+const ARG2_REGISTER: u8 = 3;
+const SYSCALL_ARG2_REGISTER: u8 = 4;
 
 pub const STARTUP_SYMBOL: &str = "_start";
 pub const MAIN_SYMBOL: &str = "main";
@@ -187,12 +190,37 @@ pub fn k16_cpu_helpers_object() -> Vec<u8> {
         "__k16_syscall1",
         &[syscall(ARG0_REGISTER), ret()],
     );
+    let write_syscall_words = syscall3_fixed_number_words(k16_abi::syscall::WRITE);
+    emit_symbol_function(
+        &mut text,
+        &mut strtab,
+        &mut symtab,
+        "__k16_write_syscall",
+        &write_syscall_words,
+    );
+    let read_syscall_words = syscall3_fixed_number_words(k16_abi::syscall::READ);
+    emit_symbol_function(
+        &mut text,
+        &mut strtab,
+        &mut symtab,
+        "__k16_read_syscall",
+        &read_syscall_words,
+    );
+    let stack_arg0_addr = add(SCRATCH_REGISTER, STACK_POINTER_REGISTER, SCRATCH_REGISTER);
+    let syscall3_words = [
+        const4(SCRATCH_REGISTER, 4),
+        stack_arg0_addr[0],
+        stack_arg0_addr[1],
+        load32(SYSCALL_ARG2_REGISTER, SCRATCH_REGISTER),
+        syscall(ARG0_REGISTER),
+        ret(),
+    ];
     emit_symbol_function(
         &mut text,
         &mut strtab,
         &mut symtab,
         "__k16_syscall3",
-        &[syscall(ARG0_REGISTER), ret()],
+        &syscall3_words,
     );
     let copy_arg0_to_return = add(RETURN_REGISTER, ARG0_REGISTER, SCRATCH_REGISTER);
     let iret_with_r0_words = [
@@ -240,6 +268,77 @@ pub fn k16_cpu_helpers_object() -> Vec<u8> {
     );
 
     elf_object(&text, &[], &symtab, &strtab)
+}
+
+fn syscall3_fixed_number_words(number: u32) -> Vec<u16> {
+    let copy_arg2_to_syscall_arg2 = add(SYSCALL_ARG2_REGISTER, ARG2_REGISTER, SCRATCH_REGISTER);
+    let copy_arg1_to_syscall_arg1 = add(ARG2_REGISTER, ARG1_REGISTER, SCRATCH_REGISTER);
+    let copy_arg0_to_syscall_arg0 = add(ARG1_REGISTER, ARG0_REGISTER, SCRATCH_REGISTER);
+    let mut words = Vec::new();
+    for register in ARG0_REGISTER..=SYSCALL_ARG2_REGISTER {
+        words.extend(push_register(register));
+    }
+    words.extend(push_scratch_register());
+    words.extend(const32_words(SCRATCH_REGISTER, 0));
+    words.extend(copy_arg2_to_syscall_arg2);
+    words.extend(copy_arg1_to_syscall_arg1);
+    words.extend(copy_arg0_to_syscall_arg0);
+    words.extend(const32_words(ARG0_REGISTER, number));
+    words.push(syscall(ARG0_REGISTER));
+    words.extend(pop_scratch_register());
+    for register in (ARG0_REGISTER..=SYSCALL_ARG2_REGISTER).rev() {
+        words.extend(pop_register(register));
+    }
+    words.push(ret());
+    words
+}
+
+fn push_register(register: u8) -> Vec<u16> {
+    let mut words = Vec::new();
+    words.extend(const32_words(SCRATCH_REGISTER, 0xffff_fffc));
+    words.extend(add(
+        STACK_POINTER_REGISTER,
+        STACK_POINTER_REGISTER,
+        SCRATCH_REGISTER,
+    ));
+    words.push(store32(STACK_POINTER_REGISTER, register));
+    words
+}
+
+fn pop_register(register: u8) -> Vec<u16> {
+    let mut words = Vec::new();
+    words.push(load32(register, STACK_POINTER_REGISTER));
+    words.push(const4(SCRATCH_REGISTER, 4));
+    words.extend(add(
+        STACK_POINTER_REGISTER,
+        STACK_POINTER_REGISTER,
+        SCRATCH_REGISTER,
+    ));
+    words
+}
+
+fn push_scratch_register() -> Vec<u16> {
+    let mut words = Vec::new();
+    words.extend(const32_words(SYSCALL_ARG2_REGISTER, 0xffff_fffc));
+    words.extend(add(
+        STACK_POINTER_REGISTER,
+        STACK_POINTER_REGISTER,
+        SYSCALL_ARG2_REGISTER,
+    ));
+    words.push(store32(STACK_POINTER_REGISTER, SCRATCH_REGISTER));
+    words
+}
+
+fn pop_scratch_register() -> Vec<u16> {
+    let mut words = Vec::new();
+    words.push(load32(SCRATCH_REGISTER, STACK_POINTER_REGISTER));
+    words.push(const4(SYSCALL_ARG2_REGISTER, 4));
+    words.extend(add(
+        STACK_POINTER_REGISTER,
+        STACK_POINTER_REGISTER,
+        SYSCALL_ARG2_REGISTER,
+    ));
+    words
 }
 
 fn emit_symbol_function(
@@ -372,6 +471,14 @@ fn emit_const32(bytes: &mut Vec<u8>, register: u8, value: u32) {
     emit_word(bytes, (value >> 16) as u16);
 }
 
+fn const32_words(register: u8, value: u32) -> [u16; 3] {
+    [
+        emit_const32_word(register),
+        (value & 0xffff) as u16,
+        (value >> 16) as u16,
+    ]
+}
+
 fn emit_const32_word(register: u8) -> u16 {
     0xe001 | (u16::from(register) << 8)
 }
@@ -397,6 +504,10 @@ fn call(register: u8) -> u16 {
 
 fn store32(addr: u8, src: u8) -> u16 {
     0x5002 | (u16::from(addr) << 8) | (u16::from(src) << 4)
+}
+
+fn load32(dst: u8, addr: u8) -> u16 {
+    0x4002 | (u16::from(dst) << 8) | (u16::from(addr) << 4)
 }
 
 fn halt() -> u16 {
