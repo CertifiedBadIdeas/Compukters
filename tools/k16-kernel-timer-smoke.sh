@@ -198,7 +198,7 @@ fn main() {
 }
 
 fn boot_kernel(executable: &k16e::K16eExecutable, context: &str) -> K16ComputerHandle {
-    let mut handle = K16ComputerHandle::create_k16_bios_flash(&[0x01, 0x00], 64 * 1024, 1_000_000)
+    let mut handle = K16ComputerHandle::create_k16_bios_flash(&[0x01, 0x00], 128 * 1024, 1_000_000)
         .unwrap_or_else(|error| panic!("K16 computer creates for {context}: {error}"));
     handle
         .write_guest_ram_bytes(executable.load_addr, &executable.payload)

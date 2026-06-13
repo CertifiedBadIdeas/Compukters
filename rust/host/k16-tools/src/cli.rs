@@ -36,7 +36,7 @@ fn run_program(args: &[String]) -> Result<(), String> {
     }
     let program =
         fs::read(&args[0]).map_err(|error| format!("failed to read {}: {error}", args[0]))?;
-    let mut handle = K16ComputerHandle::create_k16_bios_flash(&[0x01, 0x00], 64 * 1024, 1_000_000)
+    let mut handle = K16ComputerHandle::create_k16_bios_flash(&[0x01, 0x00], 128 * 1024, 1_000_000)
         .map_err(|error| format!("failed to create K16 computer: {error}"))?;
     handle
         .exec_k16e_program_from_bytes(&program, 1_000_000)
@@ -83,7 +83,7 @@ fn run_bios(args: &[String]) -> Result<(), String> {
     }
     let bios_flash =
         fs::read(&args[0]).map_err(|error| format!("failed to read {}: {error}", args[0]))?;
-    let mut handle = K16ComputerHandle::create_k16_bios_flash(&bios_flash, 64 * 1024, 1_000_000)
+    let mut handle = K16ComputerHandle::create_k16_bios_flash(&bios_flash, 128 * 1024, 1_000_000)
         .map_err(|error| format!("failed to create K16 BIOS computer: {error}"))?;
     let signal = handle
         .run_k16_until_signal()

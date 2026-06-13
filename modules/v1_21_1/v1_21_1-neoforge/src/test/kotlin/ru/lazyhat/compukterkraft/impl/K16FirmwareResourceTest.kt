@@ -29,7 +29,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 private const val K16_KERNEL_LOAD_ADDR = 0x0000_4000
-private const val K16_KERNEL_LIMIT_BYTES = 0x0000_8000 - K16_KERNEL_LOAD_ADDR
+private const val K16_KERNEL_LIMIT_BYTES = 0x0001_0000 - K16_KERNEL_LOAD_ADDR
 private const val K16_KERNEL_MIN_HEADROOM_BYTES = 1024
 private const val K16_TERMINAL_CELLS_ADDR = 0x0000_3000
 private const val K16_TERMINAL_COLUMNS = 53
@@ -643,7 +643,7 @@ class K16FirmwareResourceTest {
 
         val source = toolPath.readText()
         assertTrue(source.contains("KERNEL_LOAD_ADDR=0x00004000"))
-        assertTrue(source.contains("KERNEL_LIMIT_BYTES=16384"))
+        assertTrue(source.contains("KERNEL_LIMIT_BYTES=49152"))
         assertTrue(source.contains("MIN_HEADROOM_BYTES"))
     }
 
@@ -824,7 +824,7 @@ class K16FirmwareResourceTest {
                     "server tick should add one timer0 game tick before executing the shell command",
                 )
                 val terminalRow =
-                    snapshotRamBytes(runtime.machineSnapshot(), start = 0x8000 + 53, size = 53)
+                    snapshotRamBytes(runtime.machineSnapshot(), start = 0x1_0000 + 53, size = 53)
                         .toString(Charsets.US_ASCII)
                 val expectedTerminalPrefix = "TICKS ${expectedTicksAfterCommand and 0xffff_ffffL}"
 
@@ -875,7 +875,7 @@ class K16FirmwareResourceTest {
                 }
                 val afterTicksControl = runRuntimeServerTick(runtime, maxTurns = 256)
                 val terminalRow =
-                    snapshotRamBytes(runtime.machineSnapshot(), start = 0x8000 + 53, size = 53)
+                    snapshotRamBytes(runtime.machineSnapshot(), start = 0x1_0000 + 53, size = 53)
                         .toString(Charsets.US_ASCII)
                 val expectedTerminalPrefix = "TICKS $expectedTicksAfterCommand"
 
@@ -1076,8 +1076,8 @@ class K16FirmwareResourceTest {
                 runtime.pushKeyboardChar('\b'.code.toByte())
                 runtime.pushKeyboardChar('z'.code.toByte())
                 val afterInputControl = runRuntimeServerTick(runtime, maxTurns = 512)
-                val secondTerminalRow = snapshotRamBytes(runtime.machineSnapshot(), start = 0x8000 + 53, size = 53)
-                val thirdTerminalRow = snapshotRamBytes(runtime.machineSnapshot(), start = 0x8000 + 53 * 2, size = 53)
+                val secondTerminalRow = snapshotRamBytes(runtime.machineSnapshot(), start = 0x1_0000 + 53, size = 53)
+                val thirdTerminalRow = snapshotRamBytes(runtime.machineSnapshot(), start = 0x1_0000 + 53 * 2, size = 53)
 
                 assertEquals(NativeK16ComputerControl.STATUS_READY, afterInputControl.status)
                 assertEquals(0, afterInputControl.panicCode)

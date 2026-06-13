@@ -10,7 +10,7 @@ fn k16e_program_dynamic_target_has_no_fixed_physical_base() {
     assert_eq!(K16ArtifactTarget::ProgramDynamic.base_address(), 0);
     assert_eq!(
         K16ArtifactTarget::ProgramDynamic.payload_end_limit(),
-        Some(0x1_0000)
+        Some(0x2_0000)
     );
     assert_eq!(
         K16ArtifactTarget::ProgramDynamic.fixed_image_abi_kind(),

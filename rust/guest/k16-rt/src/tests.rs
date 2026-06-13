@@ -328,6 +328,24 @@ fn read_syscall_uses_fd_pointer_and_length_arguments() {
 }
 
 #[test]
+fn run_syscall_uses_path_pointer_and_length_arguments() {
+    crate::trap::reset_test_interrupts();
+    crate::trap::set_test_syscall_return(17);
+    let path = *b"/bin/hello.kx";
+
+    let returned = run_syscall(path.as_ptr(), path.len());
+
+    assert_eq!(crate::trap::test_syscall_number(), k16_abi::syscall::RUN);
+    assert_eq!(
+        crate::trap::test_syscall_arg0(),
+        path.as_ptr() as usize as u32
+    );
+    assert_eq!(crate::trap::test_syscall_arg1(), path.len() as u32);
+    assert_eq!(crate::trap::test_syscall_arg2(), 0);
+    assert_eq!(returned, 17);
+}
+
+#[test]
 fn debug_marker_uses_named_syscall_and_returns_marker_value() {
     crate::trap::reset_test_interrupts();
     crate::trap::set_test_syscall_return(k16_abi::syscall::DEBUG_MARKER_RETURN);

@@ -115,7 +115,7 @@ object NativeK16ComputerRuntimeBindings : K16ComputerRuntimeBindings {
 }
 
 object K16ComputerRuntimeFactory {
-    const val DEFAULT_MEMORY_SIZE: Int = 64 * 1024
+    const val DEFAULT_MEMORY_SIZE: Int = 128 * 1024
     const val DEFAULT_SLICE_BUDGET_NANOS: Long = 1_000_000
 
     fun createFromBiosFlash(

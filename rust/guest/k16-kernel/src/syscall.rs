@@ -40,6 +40,14 @@ pub fn dispatch(number: u32) -> ! {
                 Err(error) => unsafe { k16_rt::iret_with_r0(error) },
             }
         }
+        abi_syscall::RUN => {
+            let ptr = k16_rt::syscall_arg0();
+            let len = k16_rt::syscall_arg1();
+            match prepare_run(ptr, len) {
+                Ok(launch) => unsafe { process::enter_child_context(launch) },
+                Err(error) => unsafe { k16_rt::iret_with_r0(error) },
+            }
+        }
         abi_syscall::YIELD => {
             k16_rt::yield_once();
             unsafe { k16_rt::iret_with_r0(abi_syscall::STATUS_OK) }
@@ -66,15 +74,22 @@ fn read_fd(fd: u32, ptr: u32, len: u32) -> Result<u32, u32> {
     }
 }
 
+fn prepare_run(ptr: u32, len: u32) -> Result<process::ChildLaunch, u32> {
+    if len == 0 || len > process::MAX_RUN_PATH_BYTES as u32 {
+        return Err(abi_syscall::ERROR_INVALID);
+    }
+    if !valid_guest_buffer(ptr, len) {
+        return Err(abi_syscall::ERROR_FAULT);
+    }
+    let path = unsafe { core::slice::from_raw_parts(ptr as usize as *const u8, len as usize) };
+    unsafe { process::begin_loaded_child_from_path(path) }
+}
+
 fn write_guest_bytes(ptr: u32, len: u32) -> Result<u32, u32> {
     if len == 0 {
         return Ok(0);
     }
-    let end = match ptr.checked_add(len) {
-        Some(value) => value,
-        None => return Err(abi_syscall::ERROR_FAULT),
-    };
-    if ptr < 0x0000_8000 || end > 0x0001_0000 {
+    if !valid_guest_buffer(ptr, len) {
         return Err(abi_syscall::ERROR_FAULT);
     }
     let mut offset = 0;
@@ -85,4 +100,11 @@ fn write_guest_bytes(ptr: u32, len: u32) -> Result<u32, u32> {
     }
     console::flush();
     Ok(len)
+}
+
+fn valid_guest_buffer(ptr: u32, len: u32) -> bool {
+    let Some(end) = ptr.checked_add(len) else {
+        return false;
+    };
+    ptr >= 0x0001_0000 && end <= 0x0002_0000
 }

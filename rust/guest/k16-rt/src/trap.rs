@@ -293,6 +293,11 @@ pub fn read_syscall(fd: u32, ptr: *mut u8, len: usize) -> u32 {
     syscall3(k16_abi::syscall::READ, fd, ptr as usize as u32, len as u32)
 }
 
+#[inline(always)]
+pub fn run_syscall(path: *const u8, len: usize) -> u32 {
+    syscall3(k16_abi::syscall::RUN, path as usize as u32, len as u32, 0)
+}
+
 #[cfg(not(any(test, feature = "host-test")))]
 #[inline(always)]
 pub unsafe fn set_interrupt_mask(mask: u32) {
