@@ -81,6 +81,7 @@ pub mod syscall {
     pub const SLEEP_TICKS: u32 = 5;
     pub const EXIT: u32 = 6;
     pub const WRITE: u32 = 7;
+    pub const READ: u32 = 8;
     pub const FD_STDIN: u32 = 0;
     pub const FD_STDOUT: u32 = 1;
     pub const FD_STDERR: u32 = 2;
@@ -475,6 +476,7 @@ mod tests {
         assert_eq!(syscall::SLEEP_TICKS, 5);
         assert_eq!(syscall::EXIT, 6);
         assert_eq!(syscall::WRITE, 7);
+        assert_eq!(syscall::READ, 8);
         assert_eq!(syscall::FD_STDIN, 0);
         assert_eq!(syscall::FD_STDOUT, 1);
         assert_eq!(syscall::FD_STDERR, 2);

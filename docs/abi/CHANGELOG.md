@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Added `READ(fd, ptr, len)` to the K16 fd syscall ABI for `FD_STDIN`.
+  The Rust kernel blocks by yielding to the host until keyboard input is
+  available, copies bytes into validated user-program memory, and returns the
+  byte count or a negative K16 error.
 - Added POSIX-aware K16 fd syscall ABI primitives: `EXIT(status)` and
   `WRITE(fd, ptr, len)`, with reserved descriptors `0` stdin, `1` stdout, and
   `2` stderr.

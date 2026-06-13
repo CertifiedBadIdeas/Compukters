@@ -11,6 +11,7 @@ mod generated;
 mod gpu;
 mod init;
 mod mmio;
+mod stdin;
 mod syscall;
 mod terminal;
 mod terminal_render;

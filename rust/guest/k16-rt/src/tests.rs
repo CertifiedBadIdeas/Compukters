@@ -252,6 +252,24 @@ fn write_syscall_uses_fd_pointer_and_length_arguments() {
 }
 
 #[test]
+fn read_syscall_uses_fd_pointer_and_length_arguments() {
+    crate::trap::reset_test_interrupts();
+    crate::trap::set_test_syscall_return(3);
+    let mut bytes = [0u8; 3];
+
+    let returned = read_syscall(k16_abi::syscall::FD_STDIN, bytes.as_mut_ptr(), bytes.len());
+
+    assert_eq!(crate::trap::test_syscall_number(), k16_abi::syscall::READ);
+    assert_eq!(crate::trap::test_syscall_arg0(), k16_abi::syscall::FD_STDIN);
+    assert_eq!(
+        crate::trap::test_syscall_arg1(),
+        bytes.as_mut_ptr() as usize as u32
+    );
+    assert_eq!(crate::trap::test_syscall_arg2(), 3);
+    assert_eq!(returned, 3);
+}
+
+#[test]
 fn debug_marker_uses_named_syscall_and_returns_marker_value() {
     crate::trap::reset_test_interrupts();
     crate::trap::set_test_syscall_return(k16_abi::syscall::DEBUG_MARKER_RETURN);
