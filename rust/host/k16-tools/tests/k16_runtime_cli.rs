@@ -9,6 +9,39 @@ use std::path::PathBuf;
 use std::process::Command;
 
 #[test]
+fn k16_runtime_startup_accepts_dynamic_program_target_without_fixed_stack_top() {
+    let startup_path = temp_file("startup-program-dynamic.o");
+
+    let runtime_output = Command::new(k16_binary())
+        .args([
+            "runtime",
+            "k16-startup",
+            "--target",
+            "program-dynamic",
+            "-o",
+            startup_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("k16 runtime runs");
+    assert!(
+        runtime_output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&runtime_output.stderr)
+    );
+
+    let startup_object = fs::read(startup_path).expect("startup object reads");
+    let fixed_stack_top_words = const32(15, 0x1_0000);
+    let fixed_stack_top_bytes = words_to_bytes(&fixed_stack_top_words);
+
+    assert!(
+        !startup_object
+            .windows(fixed_stack_top_bytes.len())
+            .any(|window| window == fixed_stack_top_bytes.as_slice()),
+        "program-dynamic startup must use the kernel-provided r15 stack top"
+    );
+}
+
+#[test]
 fn k16_runtime_startup_links_returning_main_and_requires_exit_syscall_handler() {
     let startup_path = temp_file("startup.o");
     let main_path = temp_file("main.o");

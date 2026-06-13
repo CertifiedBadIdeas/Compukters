@@ -24,12 +24,27 @@ pub const STARTUP_SYMBOL: &str = "_start";
 pub const MAIN_SYMBOL: &str = "main";
 
 pub fn k16_startup_object() -> Vec<u8> {
+    k16_startup_object_for_target(K16ArtifactTarget::Program).expect("program startup target")
+}
+
+pub fn k16_startup_object_for_target(target: K16ArtifactTarget) -> Result<Vec<u8>, String> {
+    let fixed_stack_top = match target {
+        K16ArtifactTarget::Program => Some(K16ArtifactTarget::PROGRAM_STACK_TOP),
+        K16ArtifactTarget::ProgramDynamic => None,
+        other => {
+            return Err(format!(
+                "k16-startup target {other:?} is not a user program target"
+            ));
+        }
+    };
     let mut text = Vec::new();
-    emit_const32(
-        &mut text,
-        STACK_POINTER_REGISTER,
-        K16ArtifactTarget::PROGRAM_STACK_TOP,
-    );
+    if let Some(stack_top) = fixed_stack_top {
+        emit_const32(&mut text, STACK_POINTER_REGISTER, stack_top);
+    }
+    let main_relocation_offset =
+        text.len()
+            .checked_add(2)
+            .ok_or_else(|| "K16 startup relocation offset overflows".to_string())? as u32;
     emit_const32(&mut text, SCRATCH_REGISTER, 0);
     emit_word(&mut text, call(SCRATCH_REGISTER));
     emit_const32(&mut text, ARG0_REGISTER, k16_abi::syscall::EXIT);
@@ -50,11 +65,11 @@ pub fn k16_startup_object() -> Vec<u8> {
     write_symbol(&mut symtab, main_name, 0, 0, 0x12, 0);
 
     let mut rela = Vec::new();
-    write_u32(&mut rela, 8);
+    write_u32(&mut rela, main_relocation_offset);
     write_u32(&mut rela, (2 << 8) | R_K16_CALL32);
     write_u32(&mut rela, 0);
 
-    elf_object(&text, &rela, &symtab, &strtab)
+    Ok(elf_object(&text, &rela, &symtab, &strtab))
 }
 
 pub fn k16_cpu_helpers_object() -> Vec<u8> {

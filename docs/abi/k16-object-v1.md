@@ -87,7 +87,7 @@ scripts for the host while it builds freestanding K16 `core`.
 The first freestanding startup object is generated with:
 
 ```text
-k16 runtime k16-startup -o <startup.ko>
+k16 runtime k16-startup [--target <program|program-dynamic>] -o <startup.ko>
 k16 runtime k16-memory-helpers -o <helpers.ko>
 k16 runtime k16-cpu-helpers -o <cpu-helpers.ko>
 ```
@@ -97,7 +97,9 @@ The linker uses `_start` as the final `K16E` entry symbol. At runtime `_start`
 initializes `sp` to the program stack top, calls `main`, passes the returned
 `r0` value to the K16 `EXIT` syscall as the process status, and keeps a
 trailing `halt` instruction as a fail-closed boundary if a broken kernel
-returns from `EXIT`.
+returns from `EXIT`. For `--target program-dynamic`, startup assumes the kernel
+has already installed the selected process stack top in `r15` before entering
+`_start`; it must not bake a fixed physical stack top into the artifact.
 
 The memory and integer helper object is built from the guest Rust `#![no_core]`
 runtime source at `rust/guest/k16-rt/src/no_core_helpers.rs`. Building it requires

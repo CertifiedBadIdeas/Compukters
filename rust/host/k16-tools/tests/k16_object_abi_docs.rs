@@ -64,7 +64,7 @@ fn k16_object_abi_docs_define_freestanding_runtime_boundary() {
     let docs = normalized_doc("docs/abi/k16-object-v1.md");
 
     for required in [
-        "k16 runtime k16-startup -o <startup.ko>",
+        "k16 runtime k16-startup [--target <program|program-dynamic>] -o <startup.ko>",
         "k16 runtime k16-memory-helpers -o <helpers.ko>",
         "k16 runtime k16-cpu-helpers -o <cpu-helpers.ko>",
         "`_start`",
@@ -91,6 +91,7 @@ fn k16_object_abi_docs_define_freestanding_runtime_boundary() {
         "Missing helper symbols are link-time errors",
         "The helper object is not implicit",
         "passes the returned `r0` value to the K16 `EXIT` syscall as the process status",
+        "For `--target program-dynamic`, startup assumes the kernel has already installed the selected process stack top in `r15`",
     ] {
         assert!(
             docs.contains(required),

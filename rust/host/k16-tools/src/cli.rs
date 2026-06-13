@@ -27,7 +27,7 @@ pub fn run_k16_cli(args: Vec<String>) -> Result<(), String> {
 }
 
 fn usage_error() -> Result<(), String> {
-    Err("usage: k16 link [--target <boot|kernel|program|program-dynamic>] <input.ko>... -o <output.kx>\n       k16 runtime <k16-startup|k16-memory-helpers|k16-cpu-helpers> -o <output.ko>\n       k16 run <program.kx>\n       k16 run-bios <bios.kflash>\n       k16 disasm --target <bios|boot|kernel|program|program-dynamic> [--start <pc>] [--count <instructions>] <input>\n       k16 inspect <blob>\n       k16 volume <create|init|put-boot|put-kernel> ...\n       k16 fs <filesystem> ...".to_string())
+    Err("usage: k16 link [--target <boot|kernel|program|program-dynamic>] <input.ko>... -o <output.kx>\n       k16 runtime <k16-startup|k16-memory-helpers|k16-cpu-helpers> [--target <program|program-dynamic>] -o <output.ko>\n       k16 run <program.kx>\n       k16 run-bios <bios.kflash>\n       k16 disasm --target <bios|boot|kernel|program|program-dynamic> [--start <pc>] [--count <instructions>] <input>\n       k16 inspect <blob>\n       k16 volume <create|init|put-boot|put-kernel> ...\n       k16 fs <filesystem> ...".to_string())
 }
 
 fn run_program(args: &[String]) -> Result<(), String> {
@@ -135,12 +135,10 @@ fn run_runtime(args: &[String]) -> Result<(), String> {
     };
     match command.as_str() {
         "k16-startup" => {
-            if args.len() != 3 || args[1] != "-o" {
-                return runtime_usage_error();
-            }
-            let bytes = k16_runtime::k16_startup_object();
-            fs::write(&args[2], bytes)
-                .map_err(|error| format!("failed to write {}: {error}", args[2]))
+            let config = parse_runtime_startup_args(&args[1..])?;
+            let bytes = k16_runtime::k16_startup_object_for_target(config.target)?;
+            fs::write(&config.output_path, bytes)
+                .map_err(|error| format!("failed to write {}: {error}", config.output_path))
         }
         "k16-memory-helpers" => {
             if args.len() != 3 || args[1] != "-o" {
@@ -158,6 +156,41 @@ fn run_runtime(args: &[String]) -> Result<(), String> {
         }
         _ => runtime_usage_error(),
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct RuntimeStartupConfig {
+    target: K16ArtifactTarget,
+    output_path: String,
+}
+
+fn parse_runtime_startup_args(args: &[String]) -> Result<RuntimeStartupConfig, String> {
+    let mut target = K16ArtifactTarget::Program;
+    let mut output_path = None;
+    let mut index = 0;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--target" => {
+                let Some(value) = args.get(index + 1) else {
+                    return Err(runtime_usage_message());
+                };
+                target = K16ArtifactTarget::parse(value)?;
+                index += 2;
+            }
+            "-o" => {
+                let Some(value) = args.get(index + 1) else {
+                    return Err(runtime_usage_message());
+                };
+                output_path = Some(value.clone());
+                index += 2;
+            }
+            _ => return Err(runtime_usage_message()),
+        }
+    }
+    Ok(RuntimeStartupConfig {
+        target,
+        output_path: output_path.ok_or_else(runtime_usage_message)?,
+    })
 }
 
 fn build_k16_memory_helpers(output_path: &Path) -> Result<(), String> {
@@ -656,10 +689,11 @@ fn link_usage_message() -> String {
 }
 
 fn runtime_usage_error() -> Result<(), String> {
-    Err(
-        "usage: k16 runtime <k16-startup|k16-memory-helpers|k16-cpu-helpers> -o <output.ko>"
-            .to_string(),
-    )
+    Err(runtime_usage_message())
+}
+
+fn runtime_usage_message() -> String {
+    "usage: k16 runtime <k16-startup|k16-memory-helpers|k16-cpu-helpers> [--target <program|program-dynamic>] -o <output.ko>".to_string()
 }
 
 fn run_usage_error() -> Result<(), String> {
