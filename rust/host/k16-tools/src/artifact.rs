@@ -12,8 +12,8 @@ pub enum K16ArtifactTarget {
 impl K16ArtifactTarget {
     pub const BOOT_LOAD_BASE: u32 = 0x0800;
     pub const KERNEL_LOAD_BASE: u32 = 0x4000;
-    pub const PROGRAM_LOAD_BASE: u32 = 0x8000;
-    pub const PROGRAM_STACK_TOP: u32 = 0x1_0000;
+    pub const PROGRAM_LOAD_BASE: u32 = 0x1_0000;
+    pub const PROGRAM_STACK_TOP: u32 = 0x2_0000;
 
     pub fn parse(value: &str) -> Result<Self, String> {
         match value {

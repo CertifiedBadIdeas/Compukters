@@ -394,7 +394,7 @@ by different layers:
 bios        firmware-owned temporary stack if needed
 boot        BIOS or boot entry contract initializes boot stack top
 kernel      bootloader passes or installs kernel stack top before entry
-program     compiler profile initializes the first user stack top at 0x00010000
+program     compiler profile initializes the first user stack top at 0x00020000
 ```
 
 The current implementation only reserves the convention and proves the memory
@@ -523,13 +523,19 @@ K16 syscall ABI v0 names the current Rust-kernel proof services in
 | `EXIT` | `6` | `k16_rt::exit_syscall(status)` | Terminates the current process. With no child process active, the kernel halts the VM with the supplied status; when a child is running under the kernel process model, the status is returned to the blocked init process. |
 | `WRITE` | `7` | `k16_rt::write_syscall(fd, ptr, len)` | Writes bytes from guest memory to fd `1` or `2`; returns byte count or a negative K16 error. |
 | `READ` | `8` | `k16_rt::read_syscall(fd, ptr, len)` | Reads bytes from fd `0` into guest memory; blocks by waiting until input is available, then returns byte count or a negative K16 error. |
+| `RUN` | `9` | `k16_rt::run_syscall(path, len)` | Synchronously loads a dynamic `/bin/*.kx` user program from `ROOT`/K16FS on `storage0`, blocks init while the child runs, and returns the child exit status or a negative K16 error. |
 | `DEBUG_MARKER_RETURN` | `0x53` | n/a | Proof return value for `DEBUG_MARKER`. |
 | `STATUS_OK` | `0` | n/a | Successful proof-service status. |
 | `FD_STDIN` | `0` | n/a | Standard input descriptor accepted by `READ`. |
 | `FD_STDOUT` | `1` | n/a | Standard output descriptor accepted by `WRITE`. |
 | `FD_STDERR` | `2` | n/a | Standard error descriptor accepted by `WRITE`. |
 | `ERROR_BAD_FD` | `0xffff_fff7` | n/a | Negative K16 error value corresponding to POSIX-aware `EBADF` semantics. |
+| `ERROR_BUSY` | `0xffff_fff0` | n/a | Negative K16 error value corresponding to POSIX-aware `EBUSY` semantics. |
+| `ERROR_EXEC_FORMAT` | `0xffff_fff8` | n/a | Negative K16 error value corresponding to POSIX-aware `ENOEXEC` semantics. |
 | `ERROR_FAULT` | `0xffff_fff2` | n/a | Negative K16 error value corresponding to POSIX-aware `EFAULT` semantics. |
+| `ERROR_INVALID` | `0xffff_ffea` | n/a | Negative K16 error value corresponding to POSIX-aware `EINVAL` semantics. |
+| `ERROR_NO_ENTRY` | `0xffff_fffe` | n/a | Negative K16 error value corresponding to POSIX-aware `ENOENT` semantics. |
+| `ERROR_NO_MEMORY` | `0xffff_fff4` | n/a | Negative K16 error value corresponding to POSIX-aware `ENOMEM` semantics. |
 
 These names describe the current ABI proof surface. They are not a complete OS
 service table, scheduler API, filesystem API, or process model.

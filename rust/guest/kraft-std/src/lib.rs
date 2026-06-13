@@ -98,8 +98,22 @@ pub mod io {
 }
 
 pub mod process {
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub enum Error {
+        Syscall(u32),
+    }
+
     pub fn exit(status: u32) -> ! {
         k16_rt::exit_syscall(status)
+    }
+
+    #[inline(always)]
+    pub fn run(path: &str) -> Result<u32, Error> {
+        let returned = k16_rt::run_syscall(path.as_ptr(), path.len());
+        if returned & 0x8000_0000 != 0 {
+            return Err(Error::Syscall(returned));
+        }
+        Ok(returned)
     }
 }
 

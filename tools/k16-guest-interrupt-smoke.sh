@@ -242,7 +242,7 @@ use std::{env, fs, process};
 fn main() {
     let program_path = env::args().nth(1).expect("program path argument");
     let program = fs::read(&program_path).expect("K16E program reads");
-    let mut handle = K16ComputerHandle::create_k16_bios_flash(&[0x01, 0x00], 64 * 1024, 1_000_000)
+    let mut handle = K16ComputerHandle::create_k16_bios_flash(&[0x01, 0x00], 128 * 1024, 1_000_000)
         .expect("K16 computer creates");
     handle
         .exec_k16e_program_from_bytes(&program, 1_000_000)

@@ -2,8 +2,8 @@ use k16_abi::{computer::keyboard0, syscall as abi_syscall};
 
 use crate::mmio;
 
-const PROGRAM_BASE: u32 = 0x0000_8000;
-const PROGRAM_LIMIT: u32 = 0x0001_0000;
+const PROGRAM_BASE: u32 = 0x0001_0000;
+const PROGRAM_LIMIT: u32 = 0x0002_0000;
 
 pub fn read(ptr: u32, len: u32) -> Result<u32, u32> {
     if len == 0 {

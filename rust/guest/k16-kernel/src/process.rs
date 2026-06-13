@@ -8,6 +8,8 @@ const BIN_COMPONENT: &[u8] = b"bin";
 const BIN_PREFIX: &[u8] = b"/bin/";
 const KX_SUFFIX: &[u8] = b".kx";
 const K16FS_MAX_NAME_BYTES: usize = 56;
+pub const MAX_RUN_PATH_BYTES: usize = BIN_PREFIX.len() + K16FS_MAX_NAME_BYTES;
+const USER_PROGRAM_LIMIT: u32 = 0x0002_0000;
 #[cfg(any(not(test), feature = "host-test"))]
 static PROCESS_TABLE: KernelProcessTable =
     KernelProcessTable::new(ProcessTable::new(ProcessContext {
@@ -116,6 +118,7 @@ pub struct InitResume {
 pub struct ProcessTable {
     init: ProcessSlot,
     child: ProcessSlot,
+    child_load_base: Option<u32>,
 }
 
 impl ProcessTable {
@@ -136,7 +139,31 @@ impl ProcessTable {
                 frame: TrapFrame::zeroed(),
                 exit_status: 0,
             },
+            child_load_base: None,
         }
+    }
+
+    pub fn initialize_init_image(
+        &mut self,
+        image: k16_boot_chain::LoadedImage,
+    ) -> Result<(), ProcessLoadError> {
+        if image.load_addr >= image.load_end || image.load_end > USER_PROGRAM_LIMIT {
+            return Err(ProcessLoadError::InvalidArena);
+        }
+        self.init.context = ProcessContext {
+            entry_pc: image.entry_pc,
+            stack_top: USER_PROGRAM_LIMIT,
+        };
+        self.child_load_base = Some(align_up(image.load_end, LOAD_ALIGNMENT)?);
+        Ok(())
+    }
+
+    pub fn child_arena_for_init_frame(
+        &self,
+        init_frame: TrapFrame,
+    ) -> Result<UserArena, ProcessLoadError> {
+        let load_base = self.child_load_base.ok_or(ProcessLoadError::InvalidArena)?;
+        UserArena::new(load_base, init_frame.stack_pointer)
     }
 
     pub fn begin_child_run(
@@ -231,6 +258,29 @@ pub unsafe fn begin_loaded_child(
 }
 
 #[cfg(any(not(test), feature = "host-test"))]
+pub unsafe fn initialize_init_process(
+    image: k16_boot_chain::LoadedImage,
+) -> Result<(), ProcessLoadError> {
+    unsafe { PROCESS_TABLE.get().initialize_init_image(image) }
+}
+
+#[cfg(any(not(test), feature = "host-test"))]
+pub unsafe fn begin_loaded_child_from_path(path: &[u8]) -> Result<ChildLaunch, u32> {
+    let mut init_frame = k16_rt::TrapFrame::zeroed();
+    k16_rt::save_trap_frame(&mut init_frame);
+    let init_frame = TrapFrame::from(init_frame);
+    let table = unsafe { PROCESS_TABLE.get() };
+    let arena = table
+        .child_arena_for_init_frame(init_frame)
+        .map_err(run_status_from_load_error)?;
+    let child_plan = unsafe { load_dynamic_user_program_from_storage0(path, arena) }
+        .map_err(run_status_from_load_error)?;
+    table
+        .begin_child_run_from_frame(child_plan, init_frame)
+        .map_err(run_status_from_switch_error)
+}
+
+#[cfg(any(not(test), feature = "host-test"))]
 pub unsafe fn enter_child_context(launch: ChildLaunch) -> ! {
     let frame = k16_rt::TrapFrame::from(launch.frame);
     let _saved_r0 = unsafe { k16_rt::restore_trap_frame(&frame) };
@@ -247,6 +297,24 @@ pub unsafe fn resume_init_context(resume: InitResume) -> ! {
     let frame = k16_rt::TrapFrame::from(resume.frame);
     let _saved_r0 = unsafe { k16_rt::restore_trap_frame(&frame) };
     unsafe { k16_rt::iret_with_r0(resume.child_exit_status) }
+}
+
+pub const fn run_status_from_load_error(error: ProcessLoadError) -> u32 {
+    match error {
+        ProcessLoadError::InvalidPath => k16_abi::syscall::ERROR_INVALID,
+        ProcessLoadError::InvalidArena
+        | ProcessLoadError::AddressOverflow
+        | ProcessLoadError::ProgramTooLarge => k16_abi::syscall::ERROR_NO_MEMORY,
+        ProcessLoadError::InvalidImage => k16_abi::syscall::ERROR_EXEC_FORMAT,
+        ProcessLoadError::Storage => k16_abi::syscall::ERROR_NO_ENTRY,
+    }
+}
+
+pub const fn run_status_from_switch_error(error: ProcessSwitchError) -> u32 {
+    match error {
+        ProcessSwitchError::ChildAlreadyRunning => k16_abi::syscall::ERROR_BUSY,
+        ProcessSwitchError::NoRunningChild => k16_abi::syscall::ERROR_INVALID,
+    }
 }
 
 #[cfg(any(not(test), feature = "host-test"))]
@@ -861,5 +929,55 @@ mod tests {
         assert_eq!(resumed.frame, init_frame);
         assert_eq!(resumed.context.entry_pc, init_frame.resume_pc);
         assert_eq!(resumed.context.stack_top, init_frame.stack_pointer);
+    }
+
+    #[test]
+    fn init_loaded_image_defines_child_arena_after_init_image() {
+        let image = k16_boot_chain::LoadedImage {
+            entry_pc: 0x0001_0000,
+            load_addr: 0x0001_0000,
+            load_end: 0x0001_0a20,
+        };
+        let mut table = ProcessTable::new(ProcessContext {
+            entry_pc: 0,
+            stack_top: 0,
+        });
+        table
+            .initialize_init_image(image)
+            .expect("init image records");
+        let mut init_frame = TrapFrame::zeroed();
+        init_frame.stack_pointer = 0x0001_f000;
+
+        let arena = table
+            .child_arena_for_init_frame(init_frame)
+            .expect("arena is valid");
+        let plan = plan_dynamic_user_load(
+            arena,
+            DynamicUserImage {
+                entry_offset: 0,
+                file_size: 8,
+                memory_size: 16,
+            },
+        )
+        .expect("child fits after loaded init image");
+
+        assert_eq!(plan.load_base, 0x0001_0a20);
+        assert_eq!(plan.stack_top, 0x0001_f000);
+    }
+
+    #[test]
+    fn run_status_maps_load_and_switch_errors_to_negative_syscall_statuses() {
+        assert_eq!(
+            run_status_from_load_error(ProcessLoadError::InvalidPath),
+            k16_abi::syscall::ERROR_INVALID
+        );
+        assert_eq!(
+            run_status_from_load_error(ProcessLoadError::InvalidImage),
+            k16_abi::syscall::ERROR_EXEC_FORMAT
+        );
+        assert_eq!(
+            run_status_from_switch_error(ProcessSwitchError::ChildAlreadyRunning),
+            k16_abi::syscall::ERROR_BUSY
+        );
     }
 }

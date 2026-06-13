@@ -41,6 +41,8 @@ impl LoadError {
 #[derive(Clone, Copy)]
 pub struct LoadedImage {
     pub entry_pc: u32,
+    pub load_addr: u32,
+    pub load_end: u32,
 }
 
 pub unsafe fn load_k16e_from_storage0(
@@ -94,6 +96,8 @@ unsafe fn load_k16e_file(expected_abi_kind: K16eAbiKind) -> Result<LoadedImage, 
     unsafe { zero_fill_ram(plan.zero_fill_addr, plan.zero_fill_len) };
     Ok(LoadedImage {
         entry_pc: plan.entry_pc,
+        load_addr: plan.load_addr,
+        load_end: plan.load_addr + plan.memory_size,
     })
 }
 

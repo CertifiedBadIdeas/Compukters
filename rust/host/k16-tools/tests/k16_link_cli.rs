@@ -70,15 +70,15 @@ fn k16_link_converts_k16_object_with_abs32_relocation_to_program_k16e() {
     let bytes = fs::read(output_path).expect("K16E output reads");
     let executable = k16e::decode_k16_executable(&bytes).expect("linked K16E decodes");
     assert_eq!(executable.abi_kind, k16e::K16eAbiKind::Program);
-    assert_eq!(executable.entry_pc, 0x8000);
-    assert_eq!(executable.load_addr, 0x8000);
+    assert_eq!(executable.entry_pc, 0x1_0000);
+    assert_eq!(executable.load_addr, 0x1_0000);
     assert_eq!(&bytes[0..4], b"K16E");
-    assert_eq!(u32_at(&bytes, 12), 0x8000);
+    assert_eq!(u32_at(&bytes, 12), 0x1_0000);
     assert_eq!(u32_at(&bytes, 24), 3);
-    assert_eq!(u32_at(&bytes, 36), 0x8000);
+    assert_eq!(u32_at(&bytes, 36), 0x1_0000);
     assert_eq!(
         &bytes[52..],
-        &[0x01, 0xe4, 0x00, 0x80, 0x00, 0x00, 0x01, 0x00]
+        &[0x01, 0xe4, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00]
     );
 }
 
@@ -109,7 +109,7 @@ fn k16_link_converts_k16_object_to_raw_bios_flash() {
     assert_eq!(
         bytes,
         [
-            0x01, 0xef, 0x00, 0x00, 0x01, 0x00, 0x01, 0xee, 0x0e, 0x00, 0xf0, 0xff, 0x00, 0x7e,
+            0x01, 0xef, 0x00, 0x00, 0x02, 0x00, 0x01, 0xee, 0x0e, 0x00, 0xf0, 0xff, 0x00, 0x7e,
             0x01, 0xe4, 0x0e, 0x00, 0xf0, 0xff, 0x01, 0x00,
         ],
         "BIOS flash output should be raw K16 bytes with an entry trampoline, not K16E"
@@ -142,7 +142,7 @@ fn k16_link_accepts_rust_rodata_alloc_sections() {
     let bytes = fs::read(output_path).expect("BIOS flash output reads");
     assert_eq!(
         &bytes[..14],
-        &[0x01, 0xef, 0x00, 0x00, 0x01, 0x00, 0x01, 0xee, 0x0e, 0x00, 0xf0, 0xff, 0x00, 0x7e,]
+        &[0x01, 0xef, 0x00, 0x00, 0x02, 0x00, 0x01, 0xee, 0x0e, 0x00, 0xf0, 0xff, 0x00, 0x7e,]
     );
     assert_eq!(
         &bytes[14..22],
@@ -177,7 +177,7 @@ fn k16_link_discards_unreferenced_alloc_rodata_sections() {
     let bytes = fs::read(output_path).expect("BIOS flash output reads");
     assert_eq!(
         &bytes[..14],
-        &[0x01, 0xef, 0x00, 0x00, 0x01, 0x00, 0x01, 0xee, 0x0e, 0x00, 0xf0, 0xff, 0x00, 0x7e,]
+        &[0x01, 0xef, 0x00, 0x00, 0x02, 0x00, 0x01, 0xee, 0x0e, 0x00, 0xf0, 0xff, 0x00, 0x7e,]
     );
     assert_eq!(&bytes[14..], &[0x01, 0x00]);
     assert!(
@@ -213,10 +213,10 @@ fn k16_link_ignores_absolute_file_symbols_from_llvm_objects() {
     );
     let bytes = fs::read(output_path).expect("K16E output reads");
     let executable = k16e::decode_k16_executable(&bytes).expect("linked K16E decodes");
-    assert_eq!(executable.entry_pc, 0x8000);
+    assert_eq!(executable.entry_pc, 0x1_0000);
     assert_eq!(
         &bytes[52..],
-        &[0x01, 0xe4, 0x00, 0x80, 0x00, 0x00, 0x01, 0x00]
+        &[0x01, 0xe4, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00]
     );
 }
 
@@ -246,14 +246,14 @@ fn k16_link_emits_bss_as_k16e_zero_fill_memory_tail() {
     let bytes = fs::read(output_path).expect("K16E output reads");
     let executable = k16e::decode_k16_executable(&bytes).expect("linked K16E decodes");
 
-    assert_eq!(executable.entry_pc, 0x8000);
-    assert_eq!(executable.load_addr, 0x8000);
+    assert_eq!(executable.entry_pc, 0x1_0000);
+    assert_eq!(executable.load_addr, 0x1_0000);
     assert_eq!(executable.memory_size, 16);
     assert_eq!(u32_at(&bytes, 44), 8);
     assert_eq!(u32_at(&bytes, 48), 16);
     assert_eq!(
         &bytes[52..],
-        &[0x01, 0xe4, 0x08, 0x80, 0x00, 0x00, 0x01, 0x00]
+        &[0x01, 0xe4, 0x08, 0x00, 0x01, 0x00, 0x01, 0x00]
     );
 }
 

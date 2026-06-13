@@ -87,11 +87,17 @@ pub mod syscall {
     pub const EXIT: u32 = 6;
     pub const WRITE: u32 = 7;
     pub const READ: u32 = 8;
+    pub const RUN: u32 = 9;
     pub const FD_STDIN: u32 = 0;
     pub const FD_STDOUT: u32 = 1;
     pub const FD_STDERR: u32 = 2;
     pub const ERROR_BAD_FD: u32 = 0xffff_fff7;
+    pub const ERROR_BUSY: u32 = 0xffff_fff0;
+    pub const ERROR_EXEC_FORMAT: u32 = 0xffff_fff8;
     pub const ERROR_FAULT: u32 = 0xffff_fff2;
+    pub const ERROR_INVALID: u32 = 0xffff_ffea;
+    pub const ERROR_NO_ENTRY: u32 = 0xffff_fffe;
+    pub const ERROR_NO_MEMORY: u32 = 0xffff_fff4;
     pub const DEBUG_MARKER_RETURN: u32 = 0x53;
     pub const STATUS_OK: u32 = 0;
 }
@@ -487,11 +493,17 @@ mod tests {
         assert_eq!(syscall::EXIT, 6);
         assert_eq!(syscall::WRITE, 7);
         assert_eq!(syscall::READ, 8);
+        assert_eq!(syscall::RUN, 9);
         assert_eq!(syscall::FD_STDIN, 0);
         assert_eq!(syscall::FD_STDOUT, 1);
         assert_eq!(syscall::FD_STDERR, 2);
         assert_eq!(syscall::ERROR_BAD_FD, 0xffff_fff7);
+        assert_eq!(syscall::ERROR_BUSY, 0xffff_fff0);
+        assert_eq!(syscall::ERROR_EXEC_FORMAT, 0xffff_fff8);
         assert_eq!(syscall::ERROR_FAULT, 0xffff_fff2);
+        assert_eq!(syscall::ERROR_INVALID, 0xffff_ffea);
+        assert_eq!(syscall::ERROR_NO_ENTRY, 0xffff_fffe);
+        assert_eq!(syscall::ERROR_NO_MEMORY, 0xffff_fff4);
         assert_eq!(syscall::DEBUG_MARKER_RETURN, 0x53);
         assert_eq!(syscall::STATUS_OK, 0);
     }
