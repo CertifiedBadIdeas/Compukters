@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- K16E now has a v2 dynamic user-program extension for future kernel-selected
+  userland load addresses. Dynamic `program` artifacts store an entry offset,
+  load payload, memory size, and relocation table instead of a fixed physical
+  `load_addr`; fixed-image K16E v1 remains valid for bootloader, kernel, and
+  standalone tool paths.
 - LLVM K16 lowering now reserves outgoing stack-argument space in the function
   call frame instead of moving `sp` around each call. This keeps incoming stack
   arguments stable while a callee prepares another call, fixing direct Rust

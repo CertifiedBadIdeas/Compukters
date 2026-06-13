@@ -1,6 +1,41 @@
 use k16_tools::k16e;
 
 #[test]
+fn k16e_dynamic_program_encodes_relocation_records_without_fixed_load_base() {
+    let bytes = k16e::encode_dynamic_k16_program(
+        &[0x01, 0xe1, 0x00, 0x00, 0x00, 0x00, 0x00, 0x90],
+        12,
+        0,
+        &[k16e::K16eRelocation {
+            offset: 2,
+            kind: k16e::K16eRelocationKind::Abs32,
+        }],
+    )
+    .expect("dynamic K16E encodes");
+
+    assert_eq!(&bytes[0..4], b"K16E");
+    assert_eq!(u16_at(&bytes, 4), 2);
+    assert_eq!(u32_at(&bytes, 12), 0);
+    assert_eq!(u32_at(&bytes, 36), 0);
+
+    let executable = k16e::decode_dynamic_k16_program(&bytes).expect("dynamic K16E decodes");
+
+    assert_eq!(executable.entry_offset, 0);
+    assert_eq!(executable.memory_size, 12);
+    assert_eq!(
+        executable.payload,
+        vec![0x01, 0xe1, 0x00, 0x00, 0x00, 0x00, 0x00, 0x90]
+    );
+    assert_eq!(
+        executable.relocations,
+        vec![k16e::K16eRelocation {
+            offset: 2,
+            kind: k16e::K16eRelocationKind::Abs32,
+        }]
+    );
+}
+
+#[test]
 fn k16e_encodes_single_k16_load_segment() {
     let bytes =
         k16e::encode_k16_executable(&[0x01, 0x00], k16e::K16eAbiKind::Bootloader, 0x800, 0x800)

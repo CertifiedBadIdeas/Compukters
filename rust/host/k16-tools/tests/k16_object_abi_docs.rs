@@ -127,3 +127,22 @@ fn active_abi_docs_use_k16_for_machine_tooling_commands() {
         );
     }
 }
+
+#[test]
+fn active_abi_docs_define_dynamic_user_program_loading_contract() {
+    let docs = normalized_doc("docs/abi/k16e-v1.md");
+
+    for required in [
+        "K16E v2 dynamic user programs",
+        "do not carry a fixed physical load address",
+        "The kernel loader chooses the load base",
+        "section 1 kind 2 (relocations)",
+        "1 abs32",
+        "2 call32",
+    ] {
+        assert!(
+            docs.contains(required),
+            "K16E ABI docs must contain `{required}`"
+        );
+    }
+}
