@@ -21,32 +21,37 @@ extern "C" {
 }
 
 #[cfg(any(test, feature = "host-test"))]
-use core::sync::atomic::{AtomicU32, Ordering};
+use std::cell::Cell;
 
 #[cfg(any(test, feature = "host-test"))]
-static TEST_TRAP_VECTOR: AtomicU32 = AtomicU32::new(0);
+std::thread_local! {
+    static TEST_TRAP_VECTOR: Cell<u32> = const { Cell::new(0) };
+    static TEST_TRAP_CAUSE: Cell<u32> = const { Cell::new(0) };
+    static TEST_TRAP_PC: Cell<u32> = const { Cell::new(0) };
+    static TEST_TRAP_VALUE: Cell<u32> = const { Cell::new(0) };
+    static TEST_SYSCALL_NUMBER: Cell<u32> = const { Cell::new(0) };
+    static TEST_SYSCALL_ARG0: Cell<u32> = const { Cell::new(0) };
+    static TEST_SYSCALL_ARG1: Cell<u32> = const { Cell::new(0) };
+    static TEST_SYSCALL_ARG2: Cell<u32> = const { Cell::new(0) };
+    static TEST_SYSCALL_RETURN: Cell<u32> = const { Cell::new(0) };
+    static TEST_INTERRUPT_ENABLE: Cell<u32> = const { Cell::new(0) };
+    static TEST_INTERRUPT_MASK: Cell<u32> = const { Cell::new(0) };
+    static TEST_INTERRUPT_PENDING: Cell<u32> = const { Cell::new(0) };
+}
+
 #[cfg(any(test, feature = "host-test"))]
-static TEST_TRAP_CAUSE: AtomicU32 = AtomicU32::new(0);
+macro_rules! test_state_store {
+    ($name:ident, $value:expr) => {
+        $name.with(|cell| cell.set($value))
+    };
+}
+
 #[cfg(any(test, feature = "host-test"))]
-static TEST_TRAP_PC: AtomicU32 = AtomicU32::new(0);
-#[cfg(any(test, feature = "host-test"))]
-static TEST_TRAP_VALUE: AtomicU32 = AtomicU32::new(0);
-#[cfg(any(test, feature = "host-test"))]
-static TEST_SYSCALL_NUMBER: AtomicU32 = AtomicU32::new(0);
-#[cfg(any(test, feature = "host-test"))]
-static TEST_SYSCALL_ARG0: AtomicU32 = AtomicU32::new(0);
-#[cfg(any(test, feature = "host-test"))]
-static TEST_SYSCALL_ARG1: AtomicU32 = AtomicU32::new(0);
-#[cfg(any(test, feature = "host-test"))]
-static TEST_SYSCALL_ARG2: AtomicU32 = AtomicU32::new(0);
-#[cfg(any(test, feature = "host-test"))]
-static TEST_SYSCALL_RETURN: AtomicU32 = AtomicU32::new(0);
-#[cfg(any(test, feature = "host-test"))]
-static TEST_INTERRUPT_ENABLE: AtomicU32 = AtomicU32::new(0);
-#[cfg(any(test, feature = "host-test"))]
-static TEST_INTERRUPT_MASK: AtomicU32 = AtomicU32::new(0);
-#[cfg(any(test, feature = "host-test"))]
-static TEST_INTERRUPT_PENDING: AtomicU32 = AtomicU32::new(0);
+macro_rules! test_state_load {
+    ($name:ident) => {
+        $name.with(|cell| cell.get())
+    };
+}
 
 #[cfg(not(any(test, feature = "host-test")))]
 #[inline(always)]
@@ -58,7 +63,7 @@ pub unsafe fn install_trap_vector(address: u32) {
 
 #[cfg(any(test, feature = "host-test"))]
 pub unsafe fn install_trap_vector(address: u32) {
-    TEST_TRAP_VECTOR.store(address, Ordering::Relaxed);
+    test_state_store!(TEST_TRAP_VECTOR, address);
 }
 
 #[cfg(not(any(test, feature = "host-test")))]
@@ -69,7 +74,7 @@ pub fn trap_cause() -> u32 {
 
 #[cfg(any(test, feature = "host-test"))]
 pub fn trap_cause() -> u32 {
-    TEST_TRAP_CAUSE.load(Ordering::Relaxed)
+    test_state_load!(TEST_TRAP_CAUSE)
 }
 
 #[cfg(not(any(test, feature = "host-test")))]
@@ -80,7 +85,7 @@ pub fn trap_pc() -> u32 {
 
 #[cfg(any(test, feature = "host-test"))]
 pub fn trap_pc() -> u32 {
-    TEST_TRAP_PC.load(Ordering::Relaxed)
+    test_state_load!(TEST_TRAP_PC)
 }
 
 #[cfg(not(any(test, feature = "host-test")))]
@@ -91,7 +96,7 @@ pub fn trap_value() -> u32 {
 
 #[cfg(any(test, feature = "host-test"))]
 pub fn trap_value() -> u32 {
-    TEST_TRAP_VALUE.load(Ordering::Relaxed)
+    test_state_load!(TEST_TRAP_VALUE)
 }
 
 #[cfg(not(any(test, feature = "host-test")))]
@@ -102,7 +107,7 @@ pub fn syscall_arg0() -> u32 {
 
 #[cfg(any(test, feature = "host-test"))]
 pub fn syscall_arg0() -> u32 {
-    TEST_SYSCALL_ARG0.load(Ordering::Relaxed)
+    test_state_load!(TEST_SYSCALL_ARG0)
 }
 
 #[cfg(not(any(test, feature = "host-test")))]
@@ -113,7 +118,7 @@ pub fn syscall_arg1() -> u32 {
 
 #[cfg(any(test, feature = "host-test"))]
 pub fn syscall_arg1() -> u32 {
-    TEST_SYSCALL_ARG1.load(Ordering::Relaxed)
+    test_state_load!(TEST_SYSCALL_ARG1)
 }
 
 #[cfg(not(any(test, feature = "host-test")))]
@@ -124,7 +129,7 @@ pub fn syscall_arg2() -> u32 {
 
 #[cfg(any(test, feature = "host-test"))]
 pub fn syscall_arg2() -> u32 {
-    TEST_SYSCALL_ARG2.load(Ordering::Relaxed)
+    test_state_load!(TEST_SYSCALL_ARG2)
 }
 
 #[cfg(not(any(test, feature = "host-test")))]
@@ -137,7 +142,7 @@ pub fn syscall_once(number: u32) {
 
 #[cfg(any(test, feature = "host-test"))]
 pub fn syscall_once(number: u32) {
-    TEST_SYSCALL_NUMBER.store(number, Ordering::Relaxed);
+    test_state_store!(TEST_SYSCALL_NUMBER, number);
 }
 
 #[cfg(not(any(test, feature = "host-test")))]
@@ -148,8 +153,8 @@ pub fn syscall0(number: u32) -> u32 {
 
 #[cfg(any(test, feature = "host-test"))]
 pub fn syscall0(number: u32) -> u32 {
-    TEST_SYSCALL_NUMBER.store(number, Ordering::Relaxed);
-    TEST_SYSCALL_RETURN.load(Ordering::Relaxed)
+    test_state_store!(TEST_SYSCALL_NUMBER, number);
+    test_state_load!(TEST_SYSCALL_RETURN)
 }
 
 #[cfg(not(any(test, feature = "host-test")))]
@@ -160,9 +165,9 @@ pub fn syscall1(number: u32, arg0: u32) -> u32 {
 
 #[cfg(any(test, feature = "host-test"))]
 pub fn syscall1(number: u32, arg0: u32) -> u32 {
-    TEST_SYSCALL_NUMBER.store(number, Ordering::Relaxed);
-    TEST_SYSCALL_ARG0.store(arg0, Ordering::Relaxed);
-    TEST_SYSCALL_RETURN.load(Ordering::Relaxed)
+    test_state_store!(TEST_SYSCALL_NUMBER, number);
+    test_state_store!(TEST_SYSCALL_ARG0, arg0);
+    test_state_load!(TEST_SYSCALL_RETURN)
 }
 
 #[cfg(not(any(test, feature = "host-test")))]
@@ -173,11 +178,11 @@ pub fn syscall3(number: u32, arg0: u32, arg1: u32, arg2: u32) -> u32 {
 
 #[cfg(any(test, feature = "host-test"))]
 pub fn syscall3(number: u32, arg0: u32, arg1: u32, arg2: u32) -> u32 {
-    TEST_SYSCALL_NUMBER.store(number, Ordering::Relaxed);
-    TEST_SYSCALL_ARG0.store(arg0, Ordering::Relaxed);
-    TEST_SYSCALL_ARG1.store(arg1, Ordering::Relaxed);
-    TEST_SYSCALL_ARG2.store(arg2, Ordering::Relaxed);
-    TEST_SYSCALL_RETURN.load(Ordering::Relaxed)
+    test_state_store!(TEST_SYSCALL_NUMBER, number);
+    test_state_store!(TEST_SYSCALL_ARG0, arg0);
+    test_state_store!(TEST_SYSCALL_ARG1, arg1);
+    test_state_store!(TEST_SYSCALL_ARG2, arg2);
+    test_state_load!(TEST_SYSCALL_RETURN)
 }
 
 #[inline(always)]
@@ -240,7 +245,7 @@ pub unsafe fn set_interrupt_mask(mask: u32) {
 
 #[cfg(any(test, feature = "host-test"))]
 pub unsafe fn set_interrupt_mask(mask: u32) {
-    TEST_INTERRUPT_MASK.store(mask, Ordering::Relaxed);
+    test_state_store!(TEST_INTERRUPT_MASK, mask);
 }
 
 #[cfg(not(any(test, feature = "host-test")))]
@@ -251,7 +256,7 @@ pub fn interrupt_pending() -> u32 {
 
 #[cfg(any(test, feature = "host-test"))]
 pub fn interrupt_pending() -> u32 {
-    TEST_INTERRUPT_PENDING.load(Ordering::Relaxed)
+    test_state_load!(TEST_INTERRUPT_PENDING)
 }
 
 #[cfg(not(any(test, feature = "host-test")))]
@@ -264,7 +269,7 @@ pub unsafe fn enable_interrupts() {
 
 #[cfg(any(test, feature = "host-test"))]
 pub unsafe fn enable_interrupts() {
-    TEST_INTERRUPT_ENABLE.store(1, Ordering::Relaxed);
+    test_state_store!(TEST_INTERRUPT_ENABLE, 1);
 }
 
 #[cfg(not(any(test, feature = "host-test")))]
@@ -277,7 +282,7 @@ pub fn disable_interrupts() {
 
 #[cfg(any(test, feature = "host-test"))]
 pub fn disable_interrupts() {
-    TEST_INTERRUPT_ENABLE.store(0, Ordering::Relaxed);
+    test_state_store!(TEST_INTERRUPT_ENABLE, 0);
 }
 
 #[cfg(not(any(test, feature = "host-test")))]
@@ -304,64 +309,64 @@ pub unsafe fn iret_with_r0(_value: u32) -> ! {
 
 #[cfg(any(test, feature = "host-test"))]
 pub(crate) fn reset_test_interrupts() {
-    TEST_TRAP_VECTOR.store(0, Ordering::Relaxed);
-    TEST_TRAP_CAUSE.store(0, Ordering::Relaxed);
-    TEST_TRAP_PC.store(0, Ordering::Relaxed);
-    TEST_TRAP_VALUE.store(0, Ordering::Relaxed);
-    TEST_SYSCALL_NUMBER.store(0, Ordering::Relaxed);
-    TEST_SYSCALL_ARG0.store(0, Ordering::Relaxed);
-    TEST_SYSCALL_ARG1.store(0, Ordering::Relaxed);
-    TEST_SYSCALL_ARG2.store(0, Ordering::Relaxed);
-    TEST_SYSCALL_RETURN.store(0, Ordering::Relaxed);
-    TEST_INTERRUPT_ENABLE.store(0, Ordering::Relaxed);
-    TEST_INTERRUPT_MASK.store(0, Ordering::Relaxed);
-    TEST_INTERRUPT_PENDING.store(0, Ordering::Relaxed);
+    test_state_store!(TEST_TRAP_VECTOR, 0);
+    test_state_store!(TEST_TRAP_CAUSE, 0);
+    test_state_store!(TEST_TRAP_PC, 0);
+    test_state_store!(TEST_TRAP_VALUE, 0);
+    test_state_store!(TEST_SYSCALL_NUMBER, 0);
+    test_state_store!(TEST_SYSCALL_ARG0, 0);
+    test_state_store!(TEST_SYSCALL_ARG1, 0);
+    test_state_store!(TEST_SYSCALL_ARG2, 0);
+    test_state_store!(TEST_SYSCALL_RETURN, 0);
+    test_state_store!(TEST_INTERRUPT_ENABLE, 0);
+    test_state_store!(TEST_INTERRUPT_MASK, 0);
+    test_state_store!(TEST_INTERRUPT_PENDING, 0);
 }
 
 #[cfg(any(test, feature = "host-test"))]
 pub(crate) fn set_test_trap_state(cause: u32, pc: u32, value: u32) {
-    TEST_TRAP_CAUSE.store(cause, Ordering::Relaxed);
-    TEST_TRAP_PC.store(pc, Ordering::Relaxed);
-    TEST_TRAP_VALUE.store(value, Ordering::Relaxed);
-    TEST_INTERRUPT_PENDING.store(value, Ordering::Relaxed);
+    test_state_store!(TEST_TRAP_CAUSE, cause);
+    test_state_store!(TEST_TRAP_PC, pc);
+    test_state_store!(TEST_TRAP_VALUE, value);
+    test_state_store!(TEST_INTERRUPT_PENDING, value);
 }
 
 #[cfg(any(test, feature = "host-test"))]
 pub(crate) fn set_test_syscall_return(value: u32) {
-    TEST_SYSCALL_RETURN.store(value, Ordering::Relaxed);
+    test_state_store!(TEST_SYSCALL_RETURN, value);
 }
 
 #[cfg(any(test, feature = "host-test"))]
 pub(crate) fn test_trap_vector() -> u32 {
-    TEST_TRAP_VECTOR.load(Ordering::Relaxed)
+    test_state_load!(TEST_TRAP_VECTOR)
 }
 
 #[cfg(any(test, feature = "host-test"))]
 pub(crate) fn test_syscall_number() -> u32 {
-    TEST_SYSCALL_NUMBER.load(Ordering::Relaxed)
+    test_state_load!(TEST_SYSCALL_NUMBER)
 }
 
 #[cfg(any(test, feature = "host-test"))]
 pub(crate) fn test_syscall_arg0() -> u32 {
-    TEST_SYSCALL_ARG0.load(Ordering::Relaxed)
+    test_state_load!(TEST_SYSCALL_ARG0)
 }
 
 #[cfg(any(test, feature = "host-test"))]
 pub(crate) fn test_syscall_arg1() -> u32 {
-    TEST_SYSCALL_ARG1.load(Ordering::Relaxed)
+    test_state_load!(TEST_SYSCALL_ARG1)
 }
 
 #[cfg(any(test, feature = "host-test"))]
 pub(crate) fn test_syscall_arg2() -> u32 {
-    TEST_SYSCALL_ARG2.load(Ordering::Relaxed)
+    test_state_load!(TEST_SYSCALL_ARG2)
 }
 
 #[cfg(any(test, feature = "host-test"))]
 pub(crate) fn test_interrupt_enable() -> u32 {
-    TEST_INTERRUPT_ENABLE.load(Ordering::Relaxed)
+    test_state_load!(TEST_INTERRUPT_ENABLE)
 }
 
 #[cfg(any(test, feature = "host-test"))]
 pub(crate) fn test_interrupt_mask() -> u32 {
-    TEST_INTERRUPT_MASK.load(Ordering::Relaxed)
+    test_state_load!(TEST_INTERRUPT_MASK)
 }

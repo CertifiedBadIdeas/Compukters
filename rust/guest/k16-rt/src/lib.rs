@@ -1,6 +1,6 @@
 #![no_std]
 
-#[cfg(test)]
+#[cfg(any(test, feature = "host-test"))]
 extern crate std;
 
 mod control;
