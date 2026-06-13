@@ -211,6 +211,21 @@ impl K16ComputerHandle {
         let executable = k16e::decode_program_k16_executable(program)?;
         self.machine
             .write_guest_ram_bytes(executable.load_addr, &executable.payload)?;
+        let payload_size = u32::try_from(executable.payload.len())
+            .map_err(|_| "K16E payload is too large".to_string())?;
+        if executable.memory_size > payload_size {
+            let zero_fill_addr = executable
+                .load_addr
+                .checked_add(payload_size)
+                .ok_or_else(|| "K16E zero-fill range overflows".to_string())?;
+            let zero_fill_len = executable.memory_size - payload_size;
+            let zeros = vec![
+                0;
+                usize::try_from(zero_fill_len)
+                    .map_err(|_| "K16E zero-fill range is too large".to_string())?
+            ];
+            self.machine.write_guest_ram_bytes(zero_fill_addr, &zeros)?;
+        }
         self.machine
             .boot_handoff_k16_from_ram(executable.entry_pc, 2, max_steps)
             .map_err(|error| error.to_string())

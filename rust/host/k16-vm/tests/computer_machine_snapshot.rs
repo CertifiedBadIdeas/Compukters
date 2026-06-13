@@ -119,10 +119,10 @@ fn computer_machine_snapshot_v1_restores_k16_interrupt_state() {
         ComputerMachine::CONTROL_PANIC_CODE as u16,
         0x1000,
     ]);
-    words.push(store32(0, 3));
     words.push(halt());
     words.extend([0; 3]);
     words.push(read_csr(3, K16_CSR_TRAP_VALUE));
+    words.push(store32(0, 3));
     words.push(iret());
     let bios = k16_words(&[halt()]);
     let program = k16_words(&words);

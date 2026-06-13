@@ -31,6 +31,9 @@ import kotlin.test.assertTrue
 private const val K16_KERNEL_LOAD_ADDR = 0x0000_4000
 private const val K16_KERNEL_LIMIT_BYTES = 0x0000_8000 - K16_KERNEL_LOAD_ADDR
 private const val K16_KERNEL_MIN_HEADROOM_BYTES = 1024
+private const val K16_TERMINAL_CELLS_ADDR = 0x0000_3000
+private const val K16_TERMINAL_COLUMNS = 53
+private const val K16_TERMINAL_ROWS = 25
 private const val LEGACY_KERNEL_SHELL_DISABLED =
     "Legacy kernel shell runtime path is no longer active; shell behavior is moving to userland init programs."
 
@@ -240,12 +243,52 @@ class K16FirmwareResourceTest {
     }
 
     @Test
-    fun bundledK16InitUsesStdoutAndExitInsteadOfDebugOutput() {
+    fun bundledK16InitUsesFdStdinAndStdoutInsteadOfDebugOutput() {
         val source = Path.of("../../../rust/guest/k16-init/src/main.rs").readText()
 
-        assertTrue(source.contains("io::stdout().write_all(b\"K16 INIT\\n\")"))
-        assertTrue(source.contains("process::exit(0)"))
+        assertTrue(source.contains("io::stdout()"))
+        assertTrue(source.contains("io::stdin()"))
+        assertTrue(source.contains("static mut INPUT: [u8; INPUT_CAPACITY]"))
+        assertTrue(source.contains("stdin.read(input)"))
+        assertTrue(source.contains("core::slice::from_raw_parts_mut"))
+        assertTrue(source.contains("const PROMPT: &[u8] = b\"INIT> \""))
+        assertTrue(source.contains("const PREFIX: &[u8] = b\"READ \""))
+        assertFalse(source.contains("process::exit(0)"))
         assertFalse(source.contains("debug::write_byte"))
+    }
+
+    @Test
+    fun bundledK16InitReadsKeyboardInputThroughFdStdin() {
+        val workspace = createTempDirectory("k16-init-stdin-test-")
+        val biosFlashPath = workspace.resolve("bios.kflash")
+        val storage0Path = workspace.resolve("storage0.kv")
+        biosFlashPath.writeBytes(K16BiosFlashWorkspace.loadBiosFlashResource(classLoader = javaClass.classLoader))
+        storage0Path.writeBytes(K16SystemVolumeWorkspace.loadStorage0VolumeResource(classLoader = javaClass.classLoader))
+
+        K16ComputerRuntimeFactory
+            .createFromBiosFlash(
+                biosFlashPath = biosFlashPath,
+                storage0Path = storage0Path,
+            ).use { runtime ->
+                val readyControl = runUntilTerminalText(runtime, "INIT> ")
+                assertEquals(
+                    NativeK16ComputerControl.STATUS_READY,
+                    readyControl.status,
+                    "init should wait for stdin after prompt; control: $readyControl; terminal: ${terminalText(runtime.machineSnapshot())}",
+                )
+
+                for (byte in "abc\n".encodeToByteArray()) {
+                    runtime.pushKeyboardChar(byte)
+                }
+                val afterInputControl = continueUntilTerminalText(runtime, "READ abc", readyControl)
+                val terminal = terminalText(runtime.machineSnapshot())
+
+                assertEquals(NativeK16ComputerControl.STATUS_READY, afterInputControl.status)
+                assertTrue(
+                    terminal.contains("INIT> READ abc"),
+                    "init should read stdin bytes and write them through stdout; terminal: $terminal",
+                )
+            }
     }
 
     @Test
@@ -518,7 +561,7 @@ class K16FirmwareResourceTest {
         )
         assertTrue(stdinSource.contains("keyboard0::EVENT_CHAR"), "stdin should consume keyboard character events")
         assertTrue(stdinSource.contains("keyboard0::EVENT_PASTE_BYTE"), "stdin should consume paste byte events")
-        assertTrue(stdinSource.contains("k16_rt::yield_once()"), "blocking stdin reads should yield to the host")
+        assertTrue(stdinSource.contains("k16_rt::wait_once()"), "blocking stdin reads should wait for host input without nesting syscalls")
     }
 
     @Test
@@ -1509,6 +1552,37 @@ class K16FirmwareResourceTest {
         return control
     }
 
+    private fun runUntilTerminalText(
+        runtime: K16ComputerRuntime,
+        expected: String,
+    ): NativeK16ComputerControl {
+        var control = runThroughBiosSplashAndBoot(runtime)
+        return continueUntilTerminalText(runtime, expected, control)
+    }
+
+    private fun continueUntilTerminalText(
+        runtime: K16ComputerRuntime,
+        expected: String,
+        initialControl: NativeK16ComputerControl,
+    ): NativeK16ComputerControl {
+        var control = initialControl
+        repeat(32) {
+            val terminal = terminalText(runtime.machineSnapshot())
+            if (terminal.contains(expected)) {
+                return control
+            }
+            control = runRuntimeServerTick(runtime, maxTurns = 1_000_000)
+        }
+        val snapshot = runtime.machineSnapshot()
+        val terminal = terminalText(snapshot)
+        val debug = runtime.outputSnapshot().decodeToString()
+        error(
+            "K16 firmware test did not observe '$expected'; status: ${control.status}; " +
+                snapshotBootCpuDebug(snapshot) + "; " +
+                "keyboard0Events: ${snapshotKeyboard0EventCount(snapshot)}; debug: $debug; terminal: $terminal",
+        )
+    }
+
     private fun runRuntimeServerTick(
         runtime: K16ComputerRuntime,
         maxTurns: Int = 8,
@@ -1561,6 +1635,42 @@ class K16FirmwareResourceTest {
         error("K16SNAP did not contain a timer0 device record")
     }
 
+    private fun snapshotBootCpuDebug(snapshot: ByteArray): String {
+        val buffer = ByteBuffer.wrap(snapshot).order(ByteOrder.LITTLE_ENDIAN)
+        assertContentEquals("K16SNAP\u0000".encodeToByteArray(), snapshot.copyOfRange(0, 8))
+        val headerSize = buffer.getShort(0x0A).toInt()
+        val ramSize = buffer.getLong(0x10)
+        val cpuCount = buffer.getInt(0x18)
+        require(cpuCount > 0)
+        val cpuOffset = headerSize + ramSize.toInt()
+        return "bootPc: ${buffer.getInt(cpuOffset + 0x10).toString(16)}; " +
+            "trapPc: ${buffer.getInt(cpuOffset + 0x1c).toString(16)}; " +
+            "trapCause: ${buffer.getInt(cpuOffset + 0x18).toString(16)}; " +
+            "trapValue: ${buffer.getInt(cpuOffset + 0x20).toString(16)}; " +
+            "sp: ${buffer.getInt(cpuOffset + 0x38 + 15 * 4).toString(16)}; " +
+            "r0: ${buffer.getInt(cpuOffset + 0x38).toString(16)}"
+    }
+
+    private fun snapshotKeyboard0EventCount(snapshot: ByteArray): Int {
+        val buffer = ByteBuffer.wrap(snapshot).order(ByteOrder.LITTLE_ENDIAN)
+        assertContentEquals("K16SNAP\u0000".encodeToByteArray(), snapshot.copyOfRange(0, 8))
+        val headerSize = buffer.getShort(0x0A).toInt()
+        val ramSize = buffer.getLong(0x10)
+        val cpuCount = buffer.getInt(0x18)
+        val deviceCount = buffer.getInt(0x20)
+        var offset = headerSize + ramSize.toInt() + cpuCount * K16_SNAPSHOT_CPU_RECORD_SIZE
+        repeat(deviceCount) {
+            val deviceKind = buffer.getInt(offset)
+            val payloadSize = buffer.getInt(offset + 4)
+            val payloadOffset = offset + K16_SNAPSHOT_DEVICE_HEADER_SIZE
+            if (deviceKind == K16_SNAPSHOT_KEYBOARD0_DEVICE_KIND) {
+                return buffer.getInt(payloadOffset + 12)
+            }
+            offset = payloadOffset + payloadSize
+        }
+        error("K16SNAP did not contain a keyboard0 device record")
+    }
+
     private fun snapshotWithTimer0GameTicks(
         snapshot: ByteArray,
         gameTicks: Long,
@@ -1599,6 +1709,14 @@ class K16FirmwareResourceTest {
         require(start >= 0 && size >= 0 && start + size <= ramSize)
         return snapshot.copyOfRange(headerSize + start, headerSize + start + size)
     }
+
+    private fun terminalText(snapshot: ByteArray): String =
+        snapshotRamBytes(
+            snapshot = snapshot,
+            start = K16_TERMINAL_CELLS_ADDR,
+            size = K16_TERMINAL_ROWS * K16_TERMINAL_COLUMNS,
+        ).map { byte -> if (byte in 0x20..0x7e) byte.toInt().toChar() else ' ' }
+            .joinToString(separator = "")
 
     private fun runK16Tool(vararg args: String) {
         val executable = k16ToolExecutable()
@@ -1645,7 +1763,8 @@ class K16FirmwareResourceTest {
     }
 }
 
-private const val K16_SNAPSHOT_CPU_RECORD_SIZE = 140
+private const val K16_SNAPSHOT_CPU_RECORD_SIZE = 204
 private const val K16_SNAPSHOT_DEVICE_HEADER_SIZE = 8
 private const val K16_SNAPSHOT_TIMER0_DEVICE_KIND = 6
+private const val K16_SNAPSHOT_KEYBOARD0_DEVICE_KIND = 7
 private const val K16_SNAPSHOT_TIMER0_PAYLOAD_SIZE = 8

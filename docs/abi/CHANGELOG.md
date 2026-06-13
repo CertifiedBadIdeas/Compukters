@@ -2,8 +2,21 @@
 
 ## Unreleased
 
+- K16E single-load sections now allow `memory_size >= file_size`. Loaders copy
+  the file payload and zero-fill the tail, which lets the object linker
+  represent trailing `.bss` without serializing zero bytes into the file.
+- K16 trap entry now saves the interrupted register frame. `iret` restores
+  `r1..r15`, keeps the handler's current `r0` as the caller-visible return
+  value, and restores the saved interrupt-enable state. `K16SNAP` CPU records
+  now include the saved trap register frame so snapshots taken inside a trap can
+  resume through `iret`.
+- `k16-cpu-helpers` now emits fixed-number `READ`/`WRITE` fd syscall helpers
+  that pass `fd`, `ptr`, and `len` without relying on a stack-passed fourth
+  Rust argument and preserve the scratch register around the trap boundary.
+  `kraft-std` keeps fd methods inline until the K16 Rust aggregate-return ABI is
+  validated for cross-crate `Result<usize, Error>` returns.
 - Added `READ(fd, ptr, len)` to the K16 fd syscall ABI for `FD_STDIN`.
-  The Rust kernel blocks by yielding to the host until keyboard input is
+  The Rust kernel blocks by waiting for the host until keyboard input is
   available, copies bytes into validated user-program memory, and returns the
   byte count or a negative K16 error.
 - Added POSIX-aware K16 fd syscall ABI primitives: `EXIT(status)` and
@@ -26,9 +39,9 @@
   single-task blocking sleep syscall by waiting until `timer0.game_ticks`
   reaches the target tick. The BIOS splash now uses `k16_rt::sleep_ticks(20)`
   instead of a plain yield boundary.
-- `iret` now defers pending interrupt delivery for one guest instruction after
-  returning. This lets returning syscalls expose `r0` to the caller before a
-  pending timer interrupt can enter the trap vector.
+- `iret` now defers pending interrupt delivery for two resumed guest
+  instructions after returning. This lets returning syscall helpers expose `r0`
+  to the caller before a pending timer interrupt can enter the trap vector.
 - Added `k16_abi::syscall::YIELD` and the matching `k16-rt`
   `yield_syscall()` wrapper. The Rust kernel yields once to the host while
   handling the syscall, then returns `STATUS_OK` through `iret`.

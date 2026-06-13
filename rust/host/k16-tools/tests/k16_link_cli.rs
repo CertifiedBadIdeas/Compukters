@@ -180,6 +180,43 @@ fn k16_link_ignores_absolute_file_symbols_from_llvm_objects() {
 }
 
 #[test]
+fn k16_link_emits_bss_as_k16e_zero_fill_memory_tail() {
+    let object_path = temp_file("bss.o");
+    let output_path = temp_file("bss.k16e");
+    fs::write(&object_path, k16_object_with_referenced_bss_section()).expect("object writes");
+
+    let output = Command::new(k16_binary())
+        .args([
+            "link",
+            "--target",
+            "program",
+            object_path.to_str().unwrap(),
+            "-o",
+            output_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("k16 link runs");
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let bytes = fs::read(output_path).expect("K16E output reads");
+    let executable = k16e::decode_k16_executable(&bytes).expect("linked K16E decodes");
+
+    assert_eq!(executable.entry_pc, 0x8000);
+    assert_eq!(executable.load_addr, 0x8000);
+    assert_eq!(executable.memory_size, 16);
+    assert_eq!(u32_at(&bytes, 44), 8);
+    assert_eq!(u32_at(&bytes, 48), 16);
+    assert_eq!(
+        &bytes[52..],
+        &[0x01, 0xe4, 0x08, 0x80, 0x00, 0x00, 0x01, 0x00]
+    );
+}
+
+#[test]
 fn k16_link_rejects_unsupported_relocation_without_raw_fallback() {
     let object_path = temp_file("bad-reloc.o");
     let output_path = temp_file("bad-reloc.k16e");
@@ -499,6 +536,118 @@ fn k16_object_with_rodata_section(rodata: &[u8], reference_rodata: bool) -> Vec<
     section(
         &mut bytes,
         57,
+        3,
+        0,
+        0,
+        shstrtab_offset,
+        shstrtab.len() as u32,
+        0,
+        0,
+        1,
+        0,
+    );
+
+    bytes
+}
+
+fn k16_object_with_referenced_bss_section() -> Vec<u8> {
+    let text = [0x01, 0xe4, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00];
+    let shstrtab = b"\0.text.k16\0.rela.text.k16\0.bss\0.symtab\0.strtab\0.shstrtab\0";
+    let mut strtab = Vec::from([0]);
+    let bss_name = push_string(&mut strtab, "__bss");
+    let start_name = push_string(&mut strtab, "_start");
+    let mut symtab = Vec::new();
+    symtab.extend([0u8; 16]);
+    write_symbol(&mut symtab, bss_name, 0, 8, 0x00, 3);
+    write_symbol(&mut symtab, start_name, 0, text.len() as u32, 0x12, 1);
+    let local_symbol_count = 2u32;
+
+    let mut rela = Vec::new();
+    write_u32(&mut rela, 2);
+    write_u32(&mut rela, (1 << 8) | 1);
+    write_u32(&mut rela, 0);
+
+    let text_offset = 52u32;
+    let rela_offset = align(text_offset + text.len() as u32, 4);
+    let symtab_offset = align(rela_offset + rela.len() as u32, 4);
+    let strtab_offset = align(symtab_offset + symtab.len() as u32, 4);
+    let shstrtab_offset = align(strtab_offset + strtab.len() as u32, 4);
+    let shoff = align(shstrtab_offset + shstrtab.len() as u32, 4);
+
+    let mut bytes = Vec::new();
+    bytes.extend([0x7f, b'E', b'L', b'F', 1, 1, 1, 0]);
+    bytes.extend([0u8; 8]);
+    write_u16(&mut bytes, 1);
+    write_u16(&mut bytes, 0x5258);
+    write_u32(&mut bytes, 1);
+    write_u32(&mut bytes, 0);
+    write_u32(&mut bytes, 0);
+    write_u32(&mut bytes, shoff);
+    write_u32(&mut bytes, 0);
+    write_u16(&mut bytes, 52);
+    write_u16(&mut bytes, 0);
+    write_u16(&mut bytes, 0);
+    write_u16(&mut bytes, 40);
+    write_u16(&mut bytes, 7);
+    write_u16(&mut bytes, 6);
+
+    pad_to(&mut bytes, text_offset);
+    bytes.extend(text);
+    pad_to(&mut bytes, rela_offset);
+    bytes.extend(rela);
+    pad_to(&mut bytes, symtab_offset);
+    bytes.extend_from_slice(&symtab);
+    pad_to(&mut bytes, strtab_offset);
+    bytes.extend_from_slice(&strtab);
+    pad_to(&mut bytes, shstrtab_offset);
+    bytes.extend(shstrtab);
+    pad_to(&mut bytes, shoff);
+
+    bytes.extend([0u8; 40]);
+    section(
+        &mut bytes,
+        1,
+        1,
+        0x6,
+        0,
+        text_offset,
+        text.len() as u32,
+        0,
+        0,
+        2,
+        0,
+    );
+    section(&mut bytes, 11, 4, 0, 0, rela_offset, 12, 4, 1, 4, 12);
+    section(&mut bytes, 26, 8, 0x3, 0, 0, 8, 0, 0, 4, 0);
+    section(
+        &mut bytes,
+        31,
+        2,
+        0,
+        0,
+        symtab_offset,
+        symtab.len() as u32,
+        5,
+        local_symbol_count,
+        4,
+        16,
+    );
+    section(
+        &mut bytes,
+        39,
+        3,
+        0,
+        0,
+        strtab_offset,
+        strtab.len() as u32,
+        0,
+        0,
+        1,
+        0,
+    );
+    section(
+        &mut bytes,
+        47,
         3,
         0,
         0,

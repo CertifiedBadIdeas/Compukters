@@ -27,7 +27,7 @@ pub enum K16eAbiKind {
     Program = 3,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct LoadError {
     code: i32,
 }
@@ -51,6 +51,15 @@ impl LoadError {
 #[derive(Clone, Copy)]
 pub struct LoadedImage {
     pub entry_pc: u32,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+struct K16eLoadPlan {
+    entry_pc: u32,
+    load_addr: u32,
+    file_size: u32,
+    zero_fill_addr: u32,
+    zero_fill_len: u32,
 }
 
 const STATE_PARTITION_START_LBA: u32 = 0x0000_0200;
@@ -262,7 +271,29 @@ unsafe fn load_k16e_file(expected_abi_kind: K16eAbiKind) -> Result<LoadedImage, 
     let load_addr = scratch_u32(36);
     let file_size = scratch_u32(44);
     let memory_size = scratch_u32(48);
-    if file_size == 0 || file_size != memory_size || file_size % 2 != 0 {
+    let plan = k16e_load_plan(entry_pc, load_addr, file_size, memory_size)?;
+    let file_end = match K16E_PAYLOAD_OFFSET.checked_add(file_size) {
+        Some(value) => value,
+        None => return Err(LoadError::INVALID_EXECUTABLE),
+    };
+    if file_end > unsafe { read_u32(STATE_INODE_SIZE_BYTES) } {
+        return Err(LoadError::INVALID_EXECUTABLE);
+    }
+
+    unsafe { copy_file_range_to_ram(K16E_PAYLOAD_OFFSET, plan.load_addr, plan.file_size)? };
+    unsafe { zero_fill_ram(plan.zero_fill_addr, plan.zero_fill_len) };
+    Ok(LoadedImage {
+        entry_pc: plan.entry_pc,
+    })
+}
+
+fn k16e_load_plan(
+    entry_pc: u32,
+    load_addr: u32,
+    file_size: u32,
+    memory_size: u32,
+) -> Result<K16eLoadPlan, LoadError> {
+    if file_size == 0 || memory_size < file_size || file_size % 2 != 0 || memory_size % 2 != 0 {
         return Err(LoadError::INVALID_EXECUTABLE);
     }
     let load_end = match load_addr.checked_add(memory_size) {
@@ -272,16 +303,17 @@ unsafe fn load_k16e_file(expected_abi_kind: K16eAbiKind) -> Result<LoadedImage, 
     if entry_pc < load_addr || entry_pc >= load_end || entry_pc % 2 != 0 {
         return Err(LoadError::INVALID_EXECUTABLE);
     }
-    let file_end = match K16E_PAYLOAD_OFFSET.checked_add(file_size) {
+    let zero_fill_addr = match load_addr.checked_add(file_size) {
         Some(value) => value,
         None => return Err(LoadError::INVALID_EXECUTABLE),
     };
-    if file_end > unsafe { read_u32(STATE_INODE_SIZE_BYTES) } {
-        return Err(LoadError::INVALID_EXECUTABLE);
-    }
-
-    unsafe { copy_file_range_to_ram(K16E_PAYLOAD_OFFSET, load_addr, file_size)? };
-    Ok(LoadedImage { entry_pc })
+    Ok(K16eLoadPlan {
+        entry_pc,
+        load_addr,
+        file_size,
+        zero_fill_addr,
+        zero_fill_len: memory_size - file_size,
+    })
 }
 
 unsafe fn copy_file_range_to_ram(
@@ -484,6 +516,14 @@ unsafe fn copy_ram_to_ram(src_addr: u32, dst_addr: u32, len: u32) {
     }
 }
 
+unsafe fn zero_fill_ram(dst_addr: u32, len: u32) {
+    let mut offset = 0;
+    while offset < len {
+        unsafe { write_u8(dst_addr + offset, 0) };
+        offset += 1;
+    }
+}
+
 fn min_u32(left: u32, right: u32) -> u32 {
     if left < right {
         left
@@ -526,4 +566,33 @@ unsafe fn write_u32(address: u32, value: u32) {
 
 unsafe fn write_u8(address: u32, value: u8) {
     unsafe { core::ptr::write_volatile(address as usize as *mut u8, value) }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn k16e_load_plan_accepts_zero_fill_tail() {
+        let plan = k16e_load_plan(0x8000, 0x8000, 2, 8).expect("plan validates");
+
+        assert_eq!(
+            plan,
+            K16eLoadPlan {
+                entry_pc: 0x8000,
+                load_addr: 0x8000,
+                file_size: 2,
+                zero_fill_addr: 0x8002,
+                zero_fill_len: 6,
+            }
+        );
+    }
+
+    #[test]
+    fn k16e_load_plan_rejects_memory_smaller_than_file() {
+        assert_eq!(
+            k16e_load_plan(0x8000, 0x8000, 8, 2),
+            Err(LoadError::INVALID_EXECUTABLE)
+        );
+    }
 }

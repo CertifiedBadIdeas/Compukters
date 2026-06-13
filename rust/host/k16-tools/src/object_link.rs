@@ -57,27 +57,30 @@ pub fn link_k16_objects_to_k16e(
         0
     };
     let mut linked = link_objects(&objects, load_addr, bios_prefix_len)?;
-    validate_payload_range(target, linked.payload.len())?;
+    validate_payload_range(target, linked.memory_size)?;
     match target.fixed_image_abi_kind() {
-        Some(abi_kind) => {
-            k16e::encode_k16_executable(&linked.payload, abi_kind, linked.entry_pc, load_addr)
-        }
+        Some(abi_kind) => k16e::encode_k16_executable_with_memory_size(
+            &linked.payload,
+            linked.memory_size,
+            abi_kind,
+            linked.entry_pc,
+            load_addr,
+        ),
         None => {
+            linked.materialize_memory_payload()?;
             write_bios_entry_trampoline(&mut linked.payload, linked.entry_pc)?;
             Ok(linked.payload)
         }
     }
 }
 
-fn validate_payload_range(target: K16ArtifactTarget, payload_len: usize) -> Result<(), String> {
+fn validate_payload_range(target: K16ArtifactTarget, memory_size: u32) -> Result<(), String> {
     let Some(limit) = target.payload_end_limit() else {
         return Ok(());
     };
-    let payload_len =
-        u32::try_from(payload_len).map_err(|_| "linked K16 payload is too large".to_string())?;
     let end = target
         .base_address()
-        .checked_add(payload_len)
+        .checked_add(memory_size)
         .ok_or_else(|| "linked K16 payload range overflows".to_string())?;
     if end > limit {
         return Err(format!(
@@ -92,7 +95,20 @@ fn validate_payload_range(target: K16ArtifactTarget, payload_len: usize) -> Resu
 
 struct LinkedImage {
     payload: Vec<u8>,
+    memory_size: u32,
     entry_pc: u32,
+}
+
+impl LinkedImage {
+    fn materialize_memory_payload(&mut self) -> Result<(), String> {
+        let memory_size = usize::try_from(self.memory_size)
+            .map_err(|_| "linked K16 payload is too large".to_string())?;
+        if self.payload.len() > memory_size {
+            return Err("linked K16 payload exceeds memory size".to_string());
+        }
+        self.payload.resize(memory_size, 0);
+        Ok(())
+    }
 }
 
 fn link_objects(
@@ -102,6 +118,8 @@ fn link_objects(
 ) -> Result<LinkedImage, String> {
     let retained_sections = reachable_alloc_sections(objects)?;
     let mut payload = vec![0; prefix_len];
+    let mut memory_size =
+        u32::try_from(prefix_len).map_err(|_| "linked K16 payload is too large".to_string())?;
     let mut section_offsets: Vec<Vec<Option<u32>>> = Vec::new();
 
     for (object_index, object) in objects.iter().enumerate() {
@@ -116,22 +134,21 @@ fn link_objects(
                 continue;
             }
             validate_alloc_section(section)?;
-            align_payload(&mut payload, section.alignment)?;
-            let output_offset = u32::try_from(payload.len())
-                .map_err(|_| "linked K16 payload is too large".to_string())?;
+            memory_size = align_memory_size(memory_size, section.alignment)?;
+            let output_offset = memory_size;
             object_offsets[section.index] = Some(output_offset);
             match section.kind {
-                SHT_PROGBITS => payload.extend_from_slice(&section.bytes),
+                SHT_PROGBITS => {
+                    ensure_payload_len(&mut payload, memory_size)?;
+                    payload.extend_from_slice(&section.bytes);
+                    memory_size = memory_size
+                        .checked_add(section.size)
+                        .ok_or_else(|| "linked K16 payload is too large".to_string())?;
+                }
                 SHT_NOBITS => {
-                    let size = usize::try_from(section.size)
-                        .map_err(|_| "K16 NOBITS section is too large".to_string())?;
-                    payload.resize(
-                        payload
-                            .len()
-                            .checked_add(size)
-                            .ok_or_else(|| "linked K16 payload is too large".to_string())?,
-                        0,
-                    );
+                    memory_size = memory_size
+                        .checked_add(section.size)
+                        .ok_or_else(|| "linked K16 payload is too large".to_string())?;
                 }
                 _ => return Err(format!("unsupported alloc section type {}", section.kind)),
             }
@@ -139,11 +156,18 @@ fn link_objects(
         section_offsets.push(object_offsets);
     }
 
-    if payload.len() == prefix_len {
+    if memory_size
+        == u32::try_from(prefix_len).map_err(|_| "linked K16 payload is too large".to_string())?
+    {
         return Err("K16 link produced an empty payload".to_string());
     }
     if payload.len() % 2 != 0 {
         payload.push(0);
+    }
+    if memory_size % 2 != 0 {
+        memory_size = memory_size
+            .checked_add(1)
+            .ok_or_else(|| "linked K16 payload is too large".to_string())?;
     }
 
     let mut defined_symbols = HashMap::new();
@@ -249,7 +273,11 @@ fn link_objects(
     let entry_pc = *defined_symbols
         .get("_start")
         .ok_or_else(|| "K16 link requires defined entry symbol `_start`".to_string())?;
-    Ok(LinkedImage { payload, entry_pc })
+    Ok(LinkedImage {
+        payload,
+        memory_size,
+        entry_pc,
+    })
 }
 
 fn reachable_alloc_sections(objects: &[ParsedObject]) -> Result<Vec<Vec<bool>>, String> {
@@ -531,14 +559,19 @@ fn apply_relocation(
     }
 }
 
-fn align_payload(payload: &mut Vec<u8>, alignment: u32) -> Result<(), String> {
+fn align_memory_size(memory_size: u32, alignment: u32) -> Result<u32, String> {
     if alignment == 0 {
         return Err("K16 alloc section alignment must be non-zero".to_string());
     }
-    let alignment = usize::try_from(alignment)
-        .map_err(|_| "K16 alloc section alignment is too large".to_string())?;
-    let aligned = payload.len().div_ceil(alignment) * alignment;
-    payload.resize(aligned, 0);
+    Ok(memory_size.div_ceil(alignment) * alignment)
+}
+
+fn ensure_payload_len(payload: &mut Vec<u8>, len: u32) -> Result<(), String> {
+    let len = usize::try_from(len).map_err(|_| "linked K16 payload is too large".to_string())?;
+    if payload.len() > len {
+        return Err("linked K16 payload exceeds memory size".to_string());
+    }
+    payload.resize(len, 0);
     Ok(())
 }
 

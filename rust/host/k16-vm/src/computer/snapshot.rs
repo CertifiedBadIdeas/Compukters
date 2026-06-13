@@ -7,7 +7,7 @@ pub const COMPUTER_SNAPSHOT_V1_MAGIC: &[u8; 8] = b"K16SNAP\0";
 pub const COMPUTER_SNAPSHOT_V1_VERSION: u16 = 1;
 pub const COMPUTER_SNAPSHOT_V1_HEADER_SIZE: usize = 40;
 pub const COMPUTER_SNAPSHOT_V1_K16_CPU_KIND: u32 = 1;
-pub const COMPUTER_SNAPSHOT_V1_K16_CPU_RECORD_SIZE: usize = 140;
+pub const COMPUTER_SNAPSHOT_V1_K16_CPU_RECORD_SIZE: usize = 204;
 pub const COMPUTER_SNAPSHOT_V1_CONTROL_DEVICE_KIND: u32 = 1;
 pub const COMPUTER_SNAPSHOT_V1_DEBUG_DEVICE_KIND: u32 = 2;
 pub const COMPUTER_SNAPSHOT_V1_SERIAL_INPUT_DEVICE_KIND: u32 = 4;
@@ -285,6 +285,9 @@ fn encode_cpu_record(
             write_u32(bytes, cpu.trap_arg0);
             write_u32(bytes, cpu.trap_arg1);
             write_u32(bytes, cpu.trap_arg2);
+            for register in cpu.trap_registers {
+                write_u32(bytes, register);
+            }
         }
     }
     Ok(())
@@ -566,10 +569,15 @@ fn decode_cpu_record(bytes: &[u8], index: u32) -> Result<ComputerCpuSnapshotReco
     let trap_arg0 = read_u32(bytes, 128)?;
     let trap_arg1 = read_u32(bytes, 132)?;
     let trap_arg2 = read_u32(bytes, 136)?;
+    let mut trap_registers = [0_u32; 16];
+    for (register_index, register) in trap_registers.iter_mut().enumerate() {
+        *register = read_u32(bytes, 140 + register_index * 4)?;
+    }
     Ok(ComputerCpuSnapshotRecord::K16 {
         cpu: K16CpuSnapshot {
             pc,
             registers,
+            trap_registers,
             trap_vector,
             trap_cause,
             trap_pc,

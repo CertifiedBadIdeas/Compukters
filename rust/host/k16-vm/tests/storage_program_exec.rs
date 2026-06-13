@@ -23,6 +23,27 @@ fn runtime_exec_runs_program_k16e_payload_from_entry_pc() {
 }
 
 #[test]
+fn runtime_exec_zero_fills_program_k16e_memory_tail() {
+    let bios = k16_words(&[k16_halt()]);
+    let program_payload = k16_words(&[k16_halt()]);
+    let init = encode_k16e_with_memory_size(3, 0x8000, 0x8000, &program_payload, 8);
+    let mut handle =
+        K16ComputerHandle::create_k16_bios_flash(&bios, 64 * 1024, 8).expect("VM creates");
+    handle
+        .write_guest_ram_bytes(0x8000, &[0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff, 0x11, 0x22])
+        .expect("seed RAM");
+
+    handle
+        .exec_k16e_program_from_bytes(&init, 256)
+        .expect("program K16E transfers into K16 execution");
+
+    assert_eq!(
+        handle.read_guest_ram_bytes(0x8000, 8).expect("read RAM"),
+        vec![0x01, 0x00, 0, 0, 0, 0, 0, 0]
+    );
+}
+
+#[test]
 fn runtime_reader_loads_program_k16e_from_root_k16fs() {
     let init = encode_k16e(3, 0x8000, 0x8000, &[0x01, 0x00]);
     let root = rootfs_with_file("/bin/init.kx", &init);
@@ -151,6 +172,16 @@ fn encode_directory_entry(image: &mut [u8], offset: usize, inode_id: u32, name: 
 }
 
 fn encode_k16e(abi_kind: u32, entry_pc: u32, load_addr: u32, payload: &[u8]) -> Vec<u8> {
+    encode_k16e_with_memory_size(abi_kind, entry_pc, load_addr, payload, payload.len() as u32)
+}
+
+fn encode_k16e_with_memory_size(
+    abi_kind: u32,
+    entry_pc: u32,
+    load_addr: u32,
+    payload: &[u8],
+    memory_size: u32,
+) -> Vec<u8> {
     let mut bytes = Vec::new();
     bytes.extend_from_slice(b"K16E");
     bytes.extend_from_slice(&1_u16.to_le_bytes());
@@ -166,7 +197,7 @@ fn encode_k16e(abi_kind: u32, entry_pc: u32, load_addr: u32, payload: &[u8]) -> 
     bytes.extend_from_slice(&load_addr.to_le_bytes());
     bytes.extend_from_slice(&52_u32.to_le_bytes());
     bytes.extend_from_slice(&(payload.len() as u32).to_le_bytes());
-    bytes.extend_from_slice(&(payload.len() as u32).to_le_bytes());
+    bytes.extend_from_slice(&memory_size.to_le_bytes());
     bytes.extend_from_slice(payload);
     bytes
 }
