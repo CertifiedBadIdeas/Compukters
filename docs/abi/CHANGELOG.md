@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- K16 tooling now defines explicit `program-init` and `program-child` K16E
+  linker profiles for the first process-context userland proof. `program-init`
+  links at `0x00008000` with stack top `0x0000c000`; `program-child` links at
+  `0x0000c000` with stack top `0x00010000`. The existing standalone `program`
+  profile remains `0x00008000..0x00010000`.
 - LLVM K16 lowering now reserves outgoing stack-argument space in the function
   call frame instead of moving `sp` around each call. This keeps incoming stack
   arguments stable while a callee prepares another call, fixing direct Rust
