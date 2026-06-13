@@ -1,6 +1,6 @@
 use k16_abi::computer::{hardware_id, profile};
 
-use crate::{console, control, debug};
+use crate::{control, debug};
 
 static mut TIMER0_IRQ_SOURCE: u32 = 0;
 
@@ -53,14 +53,6 @@ impl TickInstant {
         self.parts.high > deadline.parts.high
             || (self.parts.high == deadline.parts.high && self.parts.low >= deadline.parts.low)
     }
-
-    pub fn write_decimal(self) {
-        let mut digits = [0_u8; 20];
-
-        append_word_bits(&mut digits, self.parts.high);
-        append_word_bits(&mut digits, self.parts.low);
-        write_decimal_digits(&digits);
-    }
 }
 
 impl TickDuration {
@@ -107,47 +99,6 @@ pub fn sleep_ticks(ticks: u32) {
     let target = TickInstant::now().checked_add(TickDuration::from_ticks(ticks));
     while !TickInstant::now().has_reached(target) {
         k16_rt::wait_once();
-    }
-}
-
-fn append_word_bits(digits: &mut [u8; 20], word: u32) {
-    let mut bit_index = 0;
-    while bit_index < 32 {
-        let bit = ((word >> (31 - bit_index)) & 1) as u8;
-        double_decimal_digits_and_add_bit(digits, bit);
-        bit_index += 1;
-    }
-}
-
-fn double_decimal_digits_and_add_bit(digits: &mut [u8; 20], bit: u8) {
-    let mut carry = bit;
-    let mut index = digits.len();
-    while index > 0 {
-        index -= 1;
-        let doubled = digits[index] * 2 + carry;
-        if doubled >= 10 {
-            digits[index] = doubled - 10;
-            carry = 1;
-        } else {
-            digits[index] = doubled;
-            carry = 0;
-        }
-    }
-}
-
-fn write_decimal_digits(digits: &[u8; 20]) {
-    let mut started = false;
-    let mut index = 0;
-    while index < digits.len() {
-        let digit = digits[index];
-        if digit != 0 || started {
-            console::write_byte(b'0' + digit);
-            started = true;
-        }
-        index += 1;
-    }
-    if !started {
-        console::write_byte(b'0');
     }
 }
 

@@ -4,6 +4,7 @@ members = [
     "k16-bios",
     "k16-boot",
     "k16-boot-chain",
+    "k16-init",
     "k16-kernel",
     "k16-rt",
     "kraft-std",

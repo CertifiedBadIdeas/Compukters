@@ -91,6 +91,7 @@ val generatedK16GuestTarget = layout.buildDirectory.dir("generated/k16-guest-tar
 val generatedK16BiosTarget = generatedK16GuestTarget.map { it.dir("bios") }
 val generatedK16BootTarget = generatedK16GuestTarget.map { it.dir("boot") }
 val generatedK16KernelTarget = generatedK16GuestTarget.map { it.dir("kernel") }
+val generatedK16InitTarget = generatedK16GuestTarget.map { it.dir("init") }
 val k16FirmwareProfile =
     providers
         .gradleProperty("k16FirmwareProfile")
@@ -102,6 +103,8 @@ val k16BootManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-b
 val k16BootSource = rootProject.layout.projectDirectory.file("rust/guest/k16-boot/src/main.rs")
 val k16KernelManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-kernel/Cargo.toml")
 val k16KernelSource = rootProject.layout.projectDirectory.dir("rust/guest/k16-kernel/src")
+val k16InitManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-init/Cargo.toml")
+val k16InitSource = rootProject.layout.projectDirectory.file("rust/guest/k16-init/src/main.rs")
 val k16BootChainManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-boot-chain/Cargo.toml")
 val k16BootChainSource = rootProject.layout.projectDirectory.dir("rust/guest/k16-boot-chain/src")
 val k16HostToolsManifest = rootProject.layout.projectDirectory.file("rust/host/k16-tools/Cargo.toml")
@@ -111,6 +114,7 @@ val k16ToolchainConfig = rootProject.layout.projectDirectory.file("config/k16-to
 val k16BiosFlashResource = generatedK16FirmwareResources.map { it.file("firmware/k16-bios.kflash") }
 val k16BootArtifact = generatedK16FirmwareArtifacts.map { it.file("kernel-loader.kb") }
 val k16KernelArtifact = generatedK16FirmwareArtifacts.map { it.file("display-ok.kx") }
+val k16InitArtifact = generatedK16FirmwareArtifacts.map { it.file("init.kx") }
 val k16SystemStorage0Resource = generatedK16FirmwareResources.map { it.file("firmware/k16-system-storage0.kv") }
 
 fun deleteK16RustBinOutputs(
@@ -224,33 +228,50 @@ fun Project.compileK16GuestRustBin(
     val toolchain = resolveK16Toolchain()
     val profile = k16FirmwareProfileName()
     val cpuHelpers = targetDir.resolve("k16-cpu-helpers.o")
+    val startup = targetDir.resolve("k16-startup.o")
     output.parentFile.mkdirs()
     cpuHelpers.parentFile.mkdirs()
     deleteK16RustBinOutputs(targetDir, binName, profile)
-    val helperCommand =
-        listOf(
-            "cargo",
-            "run",
-            "--quiet",
-            "--offline",
-            "--manifest-path",
-            k16HostToolsManifest.asFile.absolutePath,
-            "--bin",
-            "k16",
-            "--",
-            "runtime",
-            "k16-cpu-helpers",
-            "-o",
-            cpuHelpers.absolutePath,
-        )
-    val helperProcessBuilder =
-        ProcessBuilder(helperCommand)
-            .directory(projectDir)
-            .inheritIO()
-    val helperExitCode = helperProcessBuilder.start().waitFor()
-    check(helperExitCode == 0) {
-        "K16 CPU helper build for $binName failed with exit code $helperExitCode"
+    fun buildRuntimeObject(
+        runtimeObject: String,
+        output: File,
+    ) {
+        val helperCommand =
+            listOf(
+                "cargo",
+                "run",
+                "--quiet",
+                "--offline",
+                "--manifest-path",
+                k16HostToolsManifest.asFile.absolutePath,
+                "--bin",
+                "k16",
+                "--",
+                "runtime",
+                runtimeObject,
+                "-o",
+                output.absolutePath,
+            )
+        val helperProcessBuilder =
+            ProcessBuilder(helperCommand)
+                .directory(projectDir)
+                .inheritIO()
+        val helperExitCode = helperProcessBuilder.start().waitFor()
+        check(helperExitCode == 0) {
+            "K16 runtime object build for $runtimeObject failed with exit code $helperExitCode"
+        }
     }
+    buildRuntimeObject("k16-cpu-helpers", cpuHelpers)
+    if (k16Target == "program") {
+        buildRuntimeObject("k16-startup", startup)
+    }
+    val runtimeLinkArgs =
+        buildList {
+            if (k16Target == "program") {
+                add("-C link-arg=${startup.absolutePath}")
+            }
+            add("-C link-arg=${cpuHelpers.absolutePath}")
+        }.joinToString(" ")
     val command =
         listOf(toolchain.cargo.absolutePath, "rustc") +
             k16CargoProfileArgs(profile) +
@@ -287,7 +308,7 @@ fun Project.compileK16GuestRustBin(
     processBuilder.environment()["RUSTC"] = toolchain.rustc.absolutePath
     processBuilder.environment()["RUSTC_BOOTSTRAP"] = "1"
     processBuilder.environment()["RUSTFLAGS"] =
-        "-C linker=${toolchain.linker.absolutePath} -C link-arg=${cpuHelpers.absolutePath} -C link-arg=--k16-target=$k16Target -Copt-level=z -Cjump-tables=no -Cdebuginfo=0 -Cdebug-assertions=off -Coverflow-checks=off -Zub-checks=no"
+        "-C linker=${toolchain.linker.absolutePath} $runtimeLinkArgs -C link-arg=--k16-target=$k16Target -Copt-level=z -Cjump-tables=no -Cdebuginfo=0 -Cdebug-assertions=off -Coverflow-checks=off -Zub-checks=no"
     val exitCode = processBuilder.start().waitFor()
     check(exitCode == 0) {
         "K16 Rust firmware build for $binName failed with exit code $exitCode"
@@ -382,6 +403,32 @@ val compileK16SystemKernel =
         }
     }
 
+val compileK16SystemInit =
+    tasks.register("compileK16SystemInit") {
+        description = "Compiles and links the bundled Rust K16 init program into a K16E program artifact."
+        group = "k16"
+        inputs.file(k16GuestManifest)
+        inputs.file(k16InitManifest)
+        inputs.file(k16InitSource)
+        inputs.file(k16HostToolsManifest)
+        inputs.dir(k16HostToolsSource)
+        inputs.file(k16RustTargetSpec)
+        inputs.file(k16ToolchainConfig)
+        inputs.property("k16FirmwareProfile", k16FirmwareProfile)
+        outputs.file(k16InitArtifact)
+        dependsOn(rootProject.tasks.named("prepareK16Toolchain"))
+
+        doLast {
+            project.compileK16GuestRustBin(
+                manifest = k16InitManifest.asFile,
+                targetDir = generatedK16InitTarget.get().asFile,
+                binName = "k16-init",
+                k16Target = "program",
+                output = k16InitArtifact.get().asFile,
+            )
+        }
+    }
+
 val createK16SystemStorage0 =
     tasks.register<Exec>("createK16SystemStorage0") {
         description = "Creates the bundled K16 system storage0 volume resource."
@@ -448,13 +495,69 @@ val compileK16SystemStorage0 =
         }
     }
 
+val putK16SystemStorage0Init =
+    tasks.register("putK16SystemStorage0Init") {
+        description = "Writes the bundled K16 init program into ROOT K16FS /bin/init.kx."
+        group = "k16"
+        dependsOn(compileK16SystemStorage0, compileK16SystemInit)
+        dependsOn(rootProject.tasks.named("prepareK16Toolchain"))
+        inputs.file(k16ToolchainConfig)
+        inputs.file(k16InitArtifact)
+
+        doLast {
+            val toolchain = resolveK16Toolchain()
+            val rootPartition = temporaryDir.resolve("root.kfs")
+            fun runK16Command(vararg args: String) {
+                val command = listOf(toolchain.cli.absolutePath) + args.toList()
+                val exitCode =
+                    ProcessBuilder(command)
+                        .directory(projectDir)
+                        .inheritIO()
+                        .start()
+                        .waitFor()
+                check(exitCode == 0) {
+                    "K16 init storage command failed with exit code $exitCode: ${command.joinToString(" ")}"
+                }
+            }
+            runK16Command(
+                "volume",
+                "extract-partition",
+                k16SystemStorage0Resource.get().asFile.absolutePath,
+                "ROOT",
+                rootPartition.absolutePath,
+            )
+            runK16Command(
+                "fs",
+                "kfs",
+                "mkdir",
+                rootPartition.absolutePath,
+                "/bin",
+            )
+            runK16Command(
+                "fs",
+                "kfs",
+                "put",
+                rootPartition.absolutePath,
+                "/bin/init.kx",
+                k16InitArtifact.get().asFile.absolutePath,
+            )
+            runK16Command(
+                "volume",
+                "replace-partition",
+                k16SystemStorage0Resource.get().asFile.absolutePath,
+                "ROOT",
+                rootPartition.absolutePath,
+            )
+        }
+    }
+
 sourceSets.main {
     resources.srcDir(generatedK16FirmwareResources)
 }
 
 tasks.named("processResources") {
     dependsOn(linkK16BiosFlash)
-    dependsOn(compileK16SystemStorage0)
+    dependsOn(putK16SystemStorage0Init)
 }
 
 tasks.register<Test>("profileK16RuntimeWait") {

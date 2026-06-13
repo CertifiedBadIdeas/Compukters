@@ -1,5 +1,5 @@
 [package]
-name = "k16-kernel"
+name = "k16-init"
 version = "0.1.0"
 edition = "2021"
 
@@ -7,12 +7,11 @@ edition = "2021"
 k16-target = []
 
 [[bin]]
-name = "k16-kernel"
+name = "k16-init"
 path = "src/main.rs"
 test = false
 required-features = ["k16-target"]
 
 [dependencies]
-k16-abi = { path = "../k16-abi" }
-k16-boot-chain = { path = "../k16-boot-chain" }
 k16-rt = { path = "../k16-rt" }
+kraft-std = { path = "../kraft-std" }
