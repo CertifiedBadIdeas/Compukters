@@ -94,8 +94,8 @@ fun Project.readK16ToolchainPin(): K16ToolchainPin {
 
 fun Project.k16ToolchainModeName(): String {
     val mode = providers.gradleProperty("k16ToolchainMode").orElse("prebuilt").get()
-    check(mode == "prebuilt" || mode == "local") {
-        "k16ToolchainMode must be 'prebuilt' or 'local', got: $mode"
+    check(mode == "prebuilt" || mode == "source-host-tools" || mode == "local") {
+        "k16ToolchainMode must be 'prebuilt', 'source-host-tools', or 'local', got: $mode"
     }
     return mode
 }
@@ -104,6 +104,9 @@ fun Project.k16ToolchainWorkspaceRoot(): File = rootProject.file(".toolchain/k16
 
 fun Project.defaultK16ToolchainRoot(pin: K16ToolchainPin = readK16ToolchainPin()): File =
     k16ToolchainWorkspaceRoot().resolve(pin.pin).resolve(currentK16VmNativePlatform().id)
+
+fun Project.sourceK16HostToolsToolchainRoot(pin: K16ToolchainPin = readK16ToolchainPin()): File =
+    k16ToolchainWorkspaceRoot().resolve("${pin.pin}-source-host-tools").resolve(currentK16VmNativePlatform().id)
 
 fun Project.explicitK16ToolchainRoot(): File? {
     val explicitDir = providers.gradleProperty("k16ToolchainDir").orNull
@@ -142,6 +145,16 @@ fun Project.resolveK16Toolchain(): K16Toolchain {
             validateK16ToolchainPath(
                 root = defaultK16ToolchainRoot(pin),
                 origin = "stageK16Toolchain",
+                requiredExecutables = pin.requiredExecutables,
+            )
+        }
+        "source-host-tools" -> {
+            check(explicitK16ToolchainRoot() == null) {
+                "k16ToolchainMode=source-host-tools does not accept k16ToolchainDir; it stages a dedicated source-host-tools toolchain workspace"
+            }
+            validateK16ToolchainPath(
+                root = sourceK16HostToolsToolchainRoot(pin),
+                origin = "stageK16SourceHostTools",
                 requiredExecutables = pin.requiredExecutables,
             )
         }

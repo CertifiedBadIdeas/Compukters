@@ -28,6 +28,7 @@ val k16ToolchainPin = readK16ToolchainPin()
 val downloadedK16ToolchainArchives = layout.buildDirectory.dir("k16-toolchain-archives")
 val packagedK16ToolchainArchives = layout.buildDirectory.dir("k16-toolchain-packages")
 val k16ToolchainInstallRoot = defaultK16ToolchainRoot(k16ToolchainPin)
+val k16SourceHostToolsToolchainInstallRoot = sourceK16HostToolsToolchainRoot(k16ToolchainPin)
 val k16ToolchainArchive = downloadedK16ToolchainArchives.map { it.file(k16ToolchainPin.archive) }
 val k16ToolchainArchiveUrl =
     providers
@@ -92,6 +93,13 @@ val k16LlvmBuildTargets =
         "llc",
         "opt",
     ) + k16LlvmHostLibraryTargets
+
+fun k16ToolchainUsesPrebuiltBase(): Boolean =
+    when (k16ToolchainModeName()) {
+        "prebuilt", "source-host-tools" -> true
+        "local" -> false
+        else -> error("unreachable")
+    }
 
 fun requireDirectory(
     directory: File,
@@ -316,6 +324,10 @@ val buildK16HostTools =
         inputs.dir(rootProject.file("rust/host/k16-tools/src"))
         inputs.file(rootProject.file("rust/host/k16-tools/Cargo.toml"))
         inputs.file(rootProject.file("rust/host/k16-tools/Cargo.lock"))
+        inputs.dir(rootProject.file("rust/host/k16-vm/src"))
+        inputs.file(rootProject.file("rust/host/k16-vm/Cargo.toml"))
+        inputs.dir(rootProject.file("rust/guest/k16-abi/src"))
+        inputs.file(rootProject.file("rust/guest/k16-abi/Cargo.toml"))
         outputs.file(k16BuiltLd)
         outputs.file(k16BuiltCli)
         commandLine("cargo", "build", "--release", "--bins")
@@ -466,7 +478,7 @@ val downloadK16ToolchainArchive =
         inputs.property("archiveSha256", k16ToolchainPin.sha256)
         outputs.file(k16ToolchainArchive)
         onlyIf {
-            k16ToolchainModeName() == "prebuilt" &&
+            k16ToolchainUsesPrebuiltBase() &&
                 explicitK16ToolchainRoot() == null &&
                 !isK16ToolchainInstalled(k16ToolchainInstallRoot, k16ToolchainPin.requiredExecutables)
         }
@@ -506,7 +518,7 @@ val installK16Toolchain =
         from({ zipTree(k16ToolchainArchive.get().asFile) })
         into(k16ToolchainInstallRoot)
         onlyIf {
-            k16ToolchainModeName() == "prebuilt" &&
+            k16ToolchainUsesPrebuiltBase() &&
                 explicitK16ToolchainRoot() == null &&
                 !isK16ToolchainInstalled(k16ToolchainInstallRoot, k16ToolchainPin.requiredExecutables)
         }
@@ -618,12 +630,70 @@ val stageK16Toolchain =
         }
     }
 
+val stageK16SourceHostTools =
+    tasks.register<Sync>("stageK16SourceHostTools") {
+        description = "Stages a prebuilt-backed K16 toolchain with source-built host tools."
+        group = "k16"
+        dependsOn(installK16Toolchain)
+        dependsOn(buildK16HostTools)
+        into(k16SourceHostToolsToolchainInstallRoot)
+        onlyIf {
+            k16ToolchainModeName() == "source-host-tools"
+        }
+        from(k16ToolchainInstallRoot) {
+            exclude("bin/k16-ld", "bin/k16")
+        }
+        from(k16BuiltLd) {
+            into("bin")
+            rename { "k16-ld" }
+            filePermissions { unix("rwxr-xr-x") }
+        }
+        from(k16BuiltCli) {
+            into("bin")
+            rename { "k16" }
+            filePermissions { unix("rwxr-xr-x") }
+        }
+
+        doFirst {
+            check(explicitK16ToolchainRoot() == null) {
+                "k16ToolchainMode=source-host-tools stages into a dedicated .toolchain workspace and does not accept k16ToolchainDir"
+            }
+            validateK16ToolchainPath(
+                root = k16ToolchainInstallRoot,
+                origin = "source-host-tools prebuilt base",
+                requiredExecutables = k16ToolchainPin.requiredExecutables,
+            )
+            requireBuiltFile(k16BuiltLd, "k16-ld", "buildK16HostTools", executable = true)
+            requireBuiltFile(k16BuiltCli, "k16", "buildK16HostTools", executable = true)
+        }
+
+        doLast {
+            k16SourceHostToolsToolchainInstallRoot.resolve("manifest.json").writeText(
+                """
+                {
+                  "schemaVersion": 1,
+                  "pin": "${k16ToolchainPin.pin}",
+                  "host": "${k16VmNativePlatform.id}",
+                  "archive": "${k16ToolchainPin.archive}",
+                  "source": "source-prebuilt-host-tools"
+                }
+                """.trimIndent() + "\n",
+            )
+            validateK16ToolchainPath(
+                root = k16SourceHostToolsToolchainInstallRoot,
+                origin = "stageK16SourceHostTools",
+                requiredExecutables = k16ToolchainPin.requiredExecutables,
+            )
+        }
+    }
+
 val prepareK16Toolchain =
     tasks.register("prepareK16Toolchain") {
         description = "Prepares the selected K16 toolchain mode and validates the resolved install layout."
         group = "k16"
         dependsOn(installK16Toolchain)
         dependsOn(stageK16Toolchain)
+        dependsOn(stageK16SourceHostTools)
         inputs.property("k16ToolchainMode", providers.gradleProperty("k16ToolchainMode").orElse("prebuilt"))
 
         doLast {
