@@ -91,6 +91,49 @@ For manual shell usage, Gradle can print the selected toolchain paths:
 ./gradlew-sandbox :printK16ToolchainEnv
 ```
 
+## Development Host Tools
+
+When only `rust/host/k16-tools` or its local Rust dependencies changed, use the
+development sandbox wrapper:
+
+```bash
+./gradlew-sandbox-dev :v1_21_1-neoforge:processResources
+```
+
+It is equivalent to running `./gradlew-sandbox` with
+`-Pk16ToolchainMode=source-host-tools` appended after the user-provided
+arguments. This mode prepares the normal pinned prebuilt toolchain first, then
+rebuilds the checked-out K16 host tools and overlays only:
+
+```text
+bin/k16-ld
+bin/k16
+```
+
+The pinned `cargo`, `rustc`, sysroot, and host runtime libraries remain from the
+prebuilt toolchain. This keeps normal builds reproducible while letting local
+firmware builds pick up fresh linker and volume-tool changes without publishing
+a new prebuilt archive.
+
+The source-host-tools install layout is separate from the pinned prebuilt
+layout:
+
+```text
+.toolchain/k16/<pin>-source-host-tools/<host>/
+```
+
+Regular `prebuilt` builds continue to resolve `.toolchain/k16/<pin>/<host>/`.
+
+The explicit form is:
+
+```bash
+./gradlew-sandbox :v1_21_1-neoforge:processResources \
+  -Pk16ToolchainMode=source-host-tools
+```
+
+`source-host-tools` does not accept `k16ToolchainDir`; it always stages a
+dedicated dev layout from the pinned `.toolchain/k16/<pin>/<host>/` workspace.
+
 ## Explicit Local Toolchain
 
 Toolchain developers do not need to publish a release asset for every local
