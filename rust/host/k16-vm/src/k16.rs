@@ -11,6 +11,11 @@ pub const K16_CSR_INTERRUPT_PENDING: u32 = 7;
 pub const K16_CSR_TRAP_ARG0: u32 = 8;
 pub const K16_CSR_TRAP_ARG1: u32 = 9;
 pub const K16_CSR_TRAP_ARG2: u32 = 10;
+pub const K16_CSR_TRAP_FRAME_INDEX: u32 = 11;
+pub const K16_CSR_TRAP_FRAME_REGISTER: u32 = 12;
+pub const K16_CSR_TRAP_RESUME_PC: u32 = 13;
+pub const K16_CSR_TRAP_STACK_POINTER: u32 = 14;
+pub const K16_CSR_TRAP_INTERRUPT_ENABLE: u32 = 15;
 
 pub const K16_INTERRUPT_SOURCE_TIMER0: u32 = 1;
 pub const K16_INTERRUPT_SOURCE_KEYBOARD0: u32 = 2;
@@ -343,6 +348,7 @@ pub struct K16Cpu {
     trap_arg0: u32,
     trap_arg1: u32,
     trap_arg2: u32,
+    trap_frame_index: usize,
     trap_stack_pointer: u32,
     trap_interrupt_enable: bool,
     interrupt_enable: bool,
@@ -367,6 +373,7 @@ impl K16Cpu {
             trap_arg0: 0,
             trap_arg1: 0,
             trap_arg2: 0,
+            trap_frame_index: 0,
             trap_stack_pointer: 0,
             trap_interrupt_enable: false,
             interrupt_enable: false,
@@ -435,6 +442,7 @@ impl K16Cpu {
             trap_arg0: snapshot.trap_arg0,
             trap_arg1: snapshot.trap_arg1,
             trap_arg2: snapshot.trap_arg2,
+            trap_frame_index: 0,
             trap_stack_pointer: snapshot.trap_stack_pointer,
             trap_interrupt_enable: false,
             interrupt_enable: snapshot.interrupt_enable,
@@ -471,6 +479,11 @@ impl K16Cpu {
             K16_CSR_TRAP_ARG0 => Some(self.trap_arg0),
             K16_CSR_TRAP_ARG1 => Some(self.trap_arg1),
             K16_CSR_TRAP_ARG2 => Some(self.trap_arg2),
+            K16_CSR_TRAP_FRAME_INDEX => Some(self.trap_frame_index as u32),
+            K16_CSR_TRAP_FRAME_REGISTER => Some(self.trap_registers[self.trap_frame_index]),
+            K16_CSR_TRAP_RESUME_PC => Some(self.trap_pc),
+            K16_CSR_TRAP_STACK_POINTER => Some(self.trap_stack_pointer),
+            K16_CSR_TRAP_INTERRUPT_ENABLE => Some(u32::from(self.trap_interrupt_enable)),
             K16_CSR_INTERRUPT_ENABLE => Some(u32::from(self.interrupt_enable)),
             K16_CSR_INTERRUPT_MASK => Some(self.interrupt_mask),
             K16_CSR_INTERRUPT_PENDING => Some(self.interrupt_pending),
@@ -836,6 +849,25 @@ impl K16Cpu {
             K16_CSR_TRAP_VECTOR => self.trap_vector = self.registers[src],
             K16_CSR_TRAP_CAUSE | K16_CSR_TRAP_PC | K16_CSR_TRAP_VALUE => {
                 return self.raise_explicit_trap(fault_pc, csr, format!("csr {csr} is read-only"));
+            }
+            K16_CSR_TRAP_FRAME_INDEX => {
+                let index = self.registers[src];
+                if index >= 16 {
+                    return self.raise_explicit_trap(
+                        fault_pc,
+                        index,
+                        format!("trap frame register index {index} is out of range"),
+                    );
+                }
+                self.trap_frame_index = index as usize;
+            }
+            K16_CSR_TRAP_FRAME_REGISTER => {
+                self.trap_registers[self.trap_frame_index] = self.registers[src];
+            }
+            K16_CSR_TRAP_RESUME_PC => self.trap_pc = self.registers[src],
+            K16_CSR_TRAP_STACK_POINTER => self.trap_stack_pointer = self.registers[src],
+            K16_CSR_TRAP_INTERRUPT_ENABLE => {
+                self.trap_interrupt_enable = self.registers[src] != 0;
             }
             K16_CSR_INTERRUPT_ENABLE => self.interrupt_enable = self.registers[src] != 0,
             K16_CSR_INTERRUPT_MASK => self.interrupt_mask = self.registers[src],
