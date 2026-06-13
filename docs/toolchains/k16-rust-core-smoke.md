@@ -7,9 +7,10 @@
 `tools/k16-rust-core-smoke.sh` is the first strict proof path for ordinary
 freestanding Rust on K16. It uses Cargo's nightly `-Z build-std=core` and
 `-Z json-target-spec` path to build Rust `core` for
-`tools/k16-unknown-kraftos.json`, then compiles a tiny `#![no_std]` library crate with an exported C ABI `main`, links the emitted object through `k16
-link`, and executes it through the VM. The final executable link is owned by
-`k16 link`, not by Cargo or host `lld`.
+`tools/k16-unknown-kraftos.json`, then compiles a tiny `#![no_std]` library crate
+with an exported C ABI `main`, links the emitted object through `k16 link`, and
+executes it through the VM. The final executable link is owned by `k16 link`,
+not by Cargo or host `lld`.
 
 The smoke passes `-C jump-tables=no` because the current K16 ABI slice does not
 yet define a jump-table object/relocation contract for Rust `core`. Switches
@@ -18,6 +19,11 @@ must lower to explicit branch code until that ABI is added.
 The smoke also passes `-Cdebuginfo=0` because the current object linker
 explicitly rejects debug relocation semantics. Debug object support must be
 added as a separate ABI/tooling slice before enabling debuginfo here.
+
+The smoke uses `RUSTC_BOOTSTRAP=1` and `-Copt-level=z`, matching the production
+guest firmware build profile closely enough for standalone local verification.
+That keeps the script aligned with the same unstable custom-target path used by
+the Gradle-built guest artifacts.
 
 This smoke is core only: no alloc, no std, no panic unwinding, and no hidden VM
 or host fallback path. Missing target support or missing helper symbols must
@@ -50,21 +56,23 @@ K16 Rust core smoke passed
 ```
 
 The test program returns `42` through the existing `k16-startup -> main`
-contract, so a successful VM run observes:
+contract when the K16 `usize` width is 32 bits. A successful VM run observes:
 
 ```text
-debug_bytes=2a
+signal=halt exit_status=42 debug_bytes=
 ```
 
 ## Current Result
 
 The smoke passes with the aligned local K16 stage1 Rust toolchain and the pinned
 K16 LLVM checkout. That proves the strict `core` sysroot path can build a
-`#![no_std]` K16 object, link it through the K16 object pipeline, and execute the
-resulting `K16E` program in the VM.
+`#![no_std]` K16 object, link it through the K16 object pipeline, execute the
+resulting `K16E` program in the VM, and report the `main` return value through
+the standalone `k16 run` path.
 
-This does not enable `alloc`, hosted `std`, panic unwinding, or debug object
-relocations. Those remain separate ABI and runtime slices.
+This does not enable `alloc`, hosted `std`, panic unwinding, debug object
+relocations, or direct Rust `u64` division libcalls. Those remain separate ABI
+and runtime slices.
 
 ## Firmware Tier
 
