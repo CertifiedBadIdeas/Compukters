@@ -1,8 +1,14 @@
 const LOAD_ALIGNMENT: u32 = 2;
 const STACK_ALIGNMENT: u32 = 4;
+const ROOT_PARTITION: &[u8; 4] = b"ROOT";
+const BIN_COMPONENT: &[u8] = b"bin";
+const BIN_PREFIX: &[u8] = b"/bin/";
+const KX_SUFFIX: &[u8] = b".kx";
+const K16FS_MAX_NAME_BYTES: usize = 56;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum ProcessLoadError {
+    InvalidPath,
     InvalidArena,
     InvalidImage,
     AddressOverflow,
@@ -14,6 +20,37 @@ pub enum ProcessLoadError {
 pub struct UserArena {
     start: u32,
     end: u32,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct UserProgramPath<'a> {
+    components: [&'a [u8]; 2],
+}
+
+impl<'a> UserProgramPath<'a> {
+    pub fn parse(path: &'a [u8]) -> Result<Self, ProcessLoadError> {
+        if !path.starts_with(BIN_PREFIX) {
+            return Err(ProcessLoadError::InvalidPath);
+        }
+        let name = &path[BIN_PREFIX.len()..];
+        if name.is_empty()
+            || name.len() > K16FS_MAX_NAME_BYTES
+            || !name.ends_with(KX_SUFFIX)
+            || name.contains(&b'/')
+            || name == b".kx"
+            || name == b".."
+            || name.starts_with(b".")
+        {
+            return Err(ProcessLoadError::InvalidPath);
+        }
+        Ok(Self {
+            components: [BIN_COMPONENT, name],
+        })
+    }
+
+    pub const fn components(&self) -> &[&'a [u8]; 2] {
+        &self.components
+    }
 }
 
 impl UserArena {
@@ -98,6 +135,18 @@ pub fn plan_dynamic_user_load(
         zero_fill_addr,
         zero_fill_len: image.memory_size - image.file_size,
     })
+}
+
+pub unsafe fn load_dynamic_user_program_from_storage0(
+    path: &[u8],
+    arena: UserArena,
+) -> Result<DynamicUserLoadPlan, ProcessLoadError> {
+    let path = UserProgramPath::parse(path)?;
+    unsafe {
+        k16_storage::open_file_from_storage0(ROOT_PARTITION, path.components())
+            .map_err(|_| ProcessLoadError::Storage)?;
+        load_selected_dynamic_user_program(arena)
+    }
 }
 
 pub unsafe fn load_selected_dynamic_user_program(
@@ -310,6 +359,40 @@ mod tests {
                 file_size: 8,
                 memory_size: 12,
             }
+        );
+    }
+
+    #[test]
+    fn user_program_path_accepts_absolute_bin_kx_path() {
+        let path = UserProgramPath::parse(b"/bin/hello.kx").expect("path parses");
+
+        assert_eq!(
+            path.components(),
+            &[b"bin".as_slice(), b"hello.kx".as_slice()]
+        );
+    }
+
+    #[test]
+    fn user_program_path_rejects_non_program_paths() {
+        assert_eq!(
+            UserProgramPath::parse(b"bin/hello.kx"),
+            Err(ProcessLoadError::InvalidPath)
+        );
+        assert_eq!(
+            UserProgramPath::parse(b"/boot/kernel.kx"),
+            Err(ProcessLoadError::InvalidPath)
+        );
+        assert_eq!(
+            UserProgramPath::parse(b"/bin/../init.kx"),
+            Err(ProcessLoadError::InvalidPath)
+        );
+        assert_eq!(
+            UserProgramPath::parse(b"/bin/tools/echo.kx"),
+            Err(ProcessLoadError::InvalidPath)
+        );
+        assert_eq!(
+            UserProgramPath::parse(b"/bin/echo"),
+            Err(ProcessLoadError::InvalidPath)
         );
     }
 
