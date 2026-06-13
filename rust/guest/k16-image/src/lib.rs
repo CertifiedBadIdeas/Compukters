@@ -57,6 +57,16 @@ pub struct DynamicK16ImageHeader<'a> {
     relocation_table: &'a [u8],
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct DynamicK16ImageMetadata {
+    pub entry_offset: u32,
+    pub payload_offset: u32,
+    pub file_size: u32,
+    pub memory_size: u32,
+    pub relocation_table_offset: u32,
+    pub relocation_count: u32,
+}
+
 impl DynamicK16ImageHeader<'_> {
     pub fn relocation(&self, index: u32) -> Option<K16eRelocation> {
         if index >= self.relocation_count {
@@ -109,28 +119,71 @@ pub fn parse_fixed_k16e_v1(
 }
 
 pub fn parse_dynamic_k16e_v2(image: &[u8]) -> Result<DynamicK16ImageHeader<'_>, K16ImageError> {
-    if image.len() < DYNAMIC_K16E_V2_HEADER_SIZE as usize
-        || header_bytes(image, 0, b"K16E").is_err()
-        || read_u16_le(image, 4)? != 2
-        || read_u16_le(image, 6)? != K16E_HEADER_SIZE
-        || read_u16_le(image, 8)? != K16E_ISA_K16
-        || read_u16_le(image, 10)? != 0
-        || read_u32_le(image, 16)? != K16E_SECTION_TABLE_OFFSET
-        || read_u32_le(image, 20)? != 2
-        || read_u32_le(image, 24)? != K16eAbiKind::Program as u32
-        || read_u32_le(image, 28)? != 0
-        || read_u32_le(image, 32)? != K16E_SECTION_KIND_LOAD
-        || read_u32_le(image, 36)? != 0
-        || read_u32_le(image, 40)? != DYNAMIC_K16E_V2_PAYLOAD_OFFSET
-        || read_u32_le(image, 52)? != K16E_SECTION_KIND_RELOCATIONS
-        || read_u32_le(image, 56)? != 0
+    let metadata = parse_dynamic_k16e_v2_header(image, image.len() as u32)?;
+    let file_end = metadata
+        .relocation_table_offset
+        .checked_add(
+            metadata
+                .relocation_count
+                .checked_mul(K16E_RELOCATION_RECORD_SIZE)
+                .ok_or(K16ImageError::InvalidExecutable)?,
+        )
+        .ok_or(K16ImageError::InvalidExecutable)?;
+    let relocation_table_start = match usize::try_from(metadata.relocation_table_offset) {
+        Ok(value) => value,
+        Err(_) => return Err(K16ImageError::InvalidExecutable),
+    };
+    let relocation_table_end = match usize::try_from(file_end) {
+        Ok(value) => value,
+        Err(_) => return Err(K16ImageError::InvalidExecutable),
+    };
+    let relocation_table = match image.get(relocation_table_start..relocation_table_end) {
+        Some(value) => value,
+        None => return Err(K16ImageError::InvalidExecutable),
+    };
+    validate_dynamic_relocations(
+        metadata.memory_size,
+        relocation_table,
+        metadata.relocation_count,
+    )?;
+
+    Ok(DynamicK16ImageHeader {
+        entry_offset: metadata.entry_offset,
+        payload_offset: metadata.payload_offset,
+        file_size: metadata.file_size,
+        memory_size: metadata.memory_size,
+        relocation_table_offset: metadata.relocation_table_offset,
+        relocation_count: metadata.relocation_count,
+        relocation_table,
+    })
+}
+
+pub fn parse_dynamic_k16e_v2_header(
+    header: &[u8],
+    inode_size: u32,
+) -> Result<DynamicK16ImageMetadata, K16ImageError> {
+    if header.len() < DYNAMIC_K16E_V2_HEADER_SIZE as usize
+        || header_bytes(header, 0, b"K16E").is_err()
+        || read_u16_le(header, 4)? != 2
+        || read_u16_le(header, 6)? != K16E_HEADER_SIZE
+        || read_u16_le(header, 8)? != K16E_ISA_K16
+        || read_u16_le(header, 10)? != 0
+        || read_u32_le(header, 16)? != K16E_SECTION_TABLE_OFFSET
+        || read_u32_le(header, 20)? != 2
+        || read_u32_le(header, 24)? != K16eAbiKind::Program as u32
+        || read_u32_le(header, 28)? != 0
+        || read_u32_le(header, 32)? != K16E_SECTION_KIND_LOAD
+        || read_u32_le(header, 36)? != 0
+        || read_u32_le(header, 40)? != DYNAMIC_K16E_V2_PAYLOAD_OFFSET
+        || read_u32_le(header, 52)? != K16E_SECTION_KIND_RELOCATIONS
+        || read_u32_le(header, 56)? != 0
     {
         return Err(K16ImageError::InvalidExecutable);
     }
 
-    let entry_offset = read_u32_le(image, 12)?;
-    let file_size = read_u32_le(image, 44)?;
-    let memory_size = read_u32_le(image, 48)?;
+    let entry_offset = read_u32_le(header, 12)?;
+    let file_size = read_u32_le(header, 44)?;
+    let memory_size = read_u32_le(header, 48)?;
     if file_size == 0 || memory_size < file_size || file_size % 2 != 0 || memory_size % 2 != 0 {
         return Err(K16ImageError::InvalidExecutable);
     }
@@ -138,9 +191,9 @@ pub fn parse_dynamic_k16e_v2(image: &[u8]) -> Result<DynamicK16ImageHeader<'_>, 
         return Err(K16ImageError::InvalidExecutable);
     }
 
-    let relocation_table_offset = read_u32_le(image, 60)?;
-    let relocation_table_size = read_u32_le(image, 64)?;
-    let relocation_count = read_u32_le(image, 68)?;
+    let relocation_table_offset = read_u32_le(header, 60)?;
+    let relocation_table_size = read_u32_le(header, 64)?;
+    let relocation_count = read_u32_le(header, 68)?;
     let payload_end = match DYNAMIC_K16E_V2_PAYLOAD_OFFSET.checked_add(file_size) {
         Some(value) => value,
         None => return Err(K16ImageError::InvalidExecutable),
@@ -160,33 +213,33 @@ pub fn parse_dynamic_k16e_v2(image: &[u8]) -> Result<DynamicK16ImageHeader<'_>, 
         Some(value) => value,
         None => return Err(K16ImageError::InvalidExecutable),
     };
-    if file_end > image.len() as u32 {
+    if file_end > inode_size {
         return Err(K16ImageError::InvalidExecutable);
     }
 
-    let relocation_table_start = match usize::try_from(relocation_table_offset) {
-        Ok(value) => value,
-        Err(_) => return Err(K16ImageError::InvalidExecutable),
-    };
-    let relocation_table_end = match usize::try_from(file_end) {
-        Ok(value) => value,
-        Err(_) => return Err(K16ImageError::InvalidExecutable),
-    };
-    let relocation_table = match image.get(relocation_table_start..relocation_table_end) {
-        Some(value) => value,
-        None => return Err(K16ImageError::InvalidExecutable),
-    };
-    validate_dynamic_relocations(memory_size, relocation_table, relocation_count)?;
-
-    Ok(DynamicK16ImageHeader {
+    Ok(DynamicK16ImageMetadata {
         entry_offset,
         payload_offset: DYNAMIC_K16E_V2_PAYLOAD_OFFSET,
         file_size,
         memory_size,
         relocation_table_offset,
         relocation_count,
-        relocation_table,
     })
+}
+
+pub fn parse_k16e_relocation_record(
+    record: &[u8],
+    memory_size: u32,
+) -> Result<K16eRelocation, K16ImageError> {
+    if record.len() < K16E_RELOCATION_RECORD_SIZE as usize {
+        return Err(K16ImageError::InvalidExecutable);
+    }
+    let relocation = K16eRelocation {
+        offset: read_u32_le(record, 0)?,
+        kind: decode_relocation_kind(read_u32_le(record, 4)?)?,
+    };
+    validate_dynamic_relocation(memory_size, relocation)?;
+    Ok(relocation)
 }
 
 fn fixed_k16e_load_plan(
@@ -234,22 +287,33 @@ fn validate_dynamic_relocations(
             Ok(value) => value,
             Err(_) => return Err(K16ImageError::InvalidExecutable),
         };
-        let offset = read_u32_le(relocation_table, table_offset)?;
-        let kind = decode_relocation_kind(read_u32_le(relocation_table, table_offset + 4)?)?;
-        if offset % 2 != 0 {
-            return Err(K16ImageError::InvalidExecutable);
-        }
-        let width = match kind {
-            K16eRelocationKind::Abs32 | K16eRelocationKind::Call32 => 4,
-        };
-        let end = match offset.checked_add(width) {
+        let record_end = table_offset + K16E_RELOCATION_RECORD_SIZE as usize;
+        let record = match relocation_table.get(table_offset..record_end) {
             Some(value) => value,
             None => return Err(K16ImageError::InvalidExecutable),
         };
-        if end > memory_size {
-            return Err(K16ImageError::InvalidExecutable);
-        }
+        parse_k16e_relocation_record(record, memory_size)?;
         index += 1;
+    }
+    Ok(())
+}
+
+fn validate_dynamic_relocation(
+    memory_size: u32,
+    relocation: K16eRelocation,
+) -> Result<(), K16ImageError> {
+    if relocation.offset % 2 != 0 {
+        return Err(K16ImageError::InvalidExecutable);
+    }
+    let width = match relocation.kind {
+        K16eRelocationKind::Abs32 | K16eRelocationKind::Call32 => 4,
+    };
+    let end = match relocation.offset.checked_add(width) {
+        Some(value) => value,
+        None => return Err(K16ImageError::InvalidExecutable),
+    };
+    if end > memory_size {
+        return Err(K16ImageError::InvalidExecutable);
     }
     Ok(())
 }
@@ -413,6 +477,31 @@ mod tests {
     }
 
     #[test]
+    fn dynamic_k16e_v2_header_only_parser_uses_inode_size_for_ranges() {
+        let image = dynamic_program_image();
+
+        let header =
+            parse_dynamic_k16e_v2_header(&image[..72], image.len() as u32).expect("header parses");
+
+        assert_eq!(header.entry_offset, 2);
+        assert_eq!(header.payload_offset, 72);
+        assert_eq!(header.file_size, 8);
+        assert_eq!(header.memory_size, 12);
+        assert_eq!(header.relocation_table_offset, 80);
+        assert_eq!(header.relocation_count, 1);
+    }
+
+    #[test]
+    fn dynamic_k16e_v2_header_only_parser_rejects_truncated_inode_ranges() {
+        let image = dynamic_program_image();
+
+        assert_eq!(
+            parse_dynamic_k16e_v2_header(&image[..72], 87),
+            Err(K16ImageError::InvalidExecutable)
+        );
+    }
+
+    #[test]
     fn dynamic_k16e_v2_rejects_fixed_v1_image() {
         assert_eq!(
             parse_dynamic_k16e_v2(&fixed_header()),
@@ -439,6 +528,21 @@ mod tests {
         assert_eq!(
             parse_dynamic_k16e_v2(&image),
             Err(K16ImageError::InvalidExecutable)
+        );
+    }
+
+    #[test]
+    fn k16e_relocation_record_parses_single_storage_record() {
+        let mut record = [0u8; 8];
+        write_u32_le(&mut record, 0, 6);
+        write_u32_le(&mut record, 4, 2);
+
+        assert_eq!(
+            parse_k16e_relocation_record(&record, 12),
+            Ok(K16eRelocation {
+                offset: 6,
+                kind: K16eRelocationKind::Call32,
+            })
         );
     }
 }

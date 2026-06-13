@@ -53,6 +53,7 @@ dependencies = [
  "k16-boot-chain",
  "k16-image",
  "k16-rt",
+ "k16-storage",
 ]
 
 [[package]]
