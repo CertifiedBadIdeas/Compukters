@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- The bundled `/bin/init.kx` now owns the minimal interactive shell proof over
+  fd stdin/stdout (`help`, `clear`, `echo`, `ticks`, and prompt handling). The
+  kernel no longer carries the legacy shell/line/keyboard command dispatcher;
+  it keeps terminal, driver, syscall, and init-loading responsibilities.
+- `kraft-std` now exposes `time::game_ticks()` and `time::game_ticks_parts()`
+  for userland programs. The init `ticks` command formats full-width timer0
+  game ticks without relying on 64-bit division.
+- The K16 terminal treats form feed (`0x0c`) as a clear-screen control byte, so
+  userland programs can request terminal clear through stdout.
 - `k16 disasm` now accepts `--start <pc>` and `--count <instructions>` for
   strict PC-window disassembly. This keeps current `K16E` inspection useful
   when linked payloads contain code plus data/rodata and the executable format

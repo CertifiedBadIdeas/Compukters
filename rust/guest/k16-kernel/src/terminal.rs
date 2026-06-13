@@ -28,6 +28,7 @@ pub fn write_byte(byte: u8) {
     match byte {
         b'\n' => move_to_next_line(),
         b'\r' => move_to_column_start(),
+        b'\x0c' => clear_terminal(),
         b'\x08' => erase_previous_cell(),
         b'\t' => write_tab_spaces(),
         0x20..=0x7e => put_printable_byte(byte),
