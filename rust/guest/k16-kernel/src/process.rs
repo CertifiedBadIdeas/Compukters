@@ -7,6 +7,7 @@ pub enum ProcessLoadError {
     InvalidImage,
     AddressOverflow,
     ProgramTooLarge,
+    Storage,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -42,6 +43,14 @@ impl DynamicUserImage {
             entry_offset: header.entry_offset,
             file_size: header.file_size,
             memory_size: header.memory_size,
+        }
+    }
+
+    pub const fn from_k16e_metadata(metadata: k16_image::DynamicK16ImageMetadata) -> Self {
+        Self {
+            entry_offset: metadata.entry_offset,
+            file_size: metadata.file_size,
+            memory_size: metadata.memory_size,
         }
     }
 }
@@ -91,6 +100,42 @@ pub fn plan_dynamic_user_load(
     })
 }
 
+pub unsafe fn load_selected_dynamic_user_program(
+    arena: UserArena,
+) -> Result<DynamicUserLoadPlan, ProcessLoadError> {
+    unsafe {
+        k16_storage::copy_selected_file_range_to_ram(
+            0,
+            k16_storage::SCRATCH_ADDR,
+            k16_image::DYNAMIC_K16E_V2_HEADER_SIZE,
+        )
+        .map_err(|_| ProcessLoadError::Storage)?;
+    }
+    let header = unsafe {
+        core::slice::from_raw_parts(
+            k16_storage::SCRATCH_ADDR as usize as *const u8,
+            k16_image::DYNAMIC_K16E_V2_HEADER_SIZE as usize,
+        )
+    };
+    let metadata = k16_image::parse_dynamic_k16e_v2_header(header, unsafe {
+        k16_storage::selected_file_size()
+    })
+    .map_err(|_| ProcessLoadError::InvalidImage)?;
+    let plan = plan_dynamic_user_load(arena, DynamicUserImage::from_k16e_metadata(metadata))?;
+
+    unsafe {
+        k16_storage::copy_selected_file_range_to_ram(
+            metadata.payload_offset,
+            plan.payload_dst,
+            plan.payload_len,
+        )
+        .map_err(|_| ProcessLoadError::Storage)?;
+        zero_fill_ram(plan.zero_fill_addr, plan.zero_fill_len);
+        apply_selected_file_relocations(metadata, plan)?;
+    }
+    Ok(plan)
+}
+
 fn validate_dynamic_image(image: DynamicUserImage) -> Result<(), ProcessLoadError> {
     if image.file_size == 0
         || image.memory_size < image.file_size
@@ -102,6 +147,105 @@ fn validate_dynamic_image(image: DynamicUserImage) -> Result<(), ProcessLoadErro
         return Err(ProcessLoadError::InvalidImage);
     }
     Ok(())
+}
+
+unsafe fn apply_selected_file_relocations(
+    metadata: k16_image::DynamicK16ImageMetadata,
+    plan: DynamicUserLoadPlan,
+) -> Result<(), ProcessLoadError> {
+    let mut index = 0;
+    while index < metadata.relocation_count {
+        let relocation_offset = metadata
+            .relocation_table_offset
+            .checked_add(
+                index
+                    .checked_mul(k16_image::K16E_RELOCATION_RECORD_SIZE)
+                    .ok_or(ProcessLoadError::AddressOverflow)?,
+            )
+            .ok_or(ProcessLoadError::AddressOverflow)?;
+        unsafe {
+            k16_storage::copy_selected_file_range_to_ram(
+                relocation_offset,
+                k16_storage::SCRATCH_ADDR,
+                k16_image::K16E_RELOCATION_RECORD_SIZE,
+            )
+            .map_err(|_| ProcessLoadError::Storage)?;
+        }
+        let record = unsafe {
+            core::slice::from_raw_parts(
+                k16_storage::SCRATCH_ADDR as usize as *const u8,
+                k16_image::K16E_RELOCATION_RECORD_SIZE as usize,
+            )
+        };
+        let relocation = k16_image::parse_k16e_relocation_record(record, metadata.memory_size)
+            .map_err(|_| ProcessLoadError::InvalidImage)?;
+        unsafe { apply_dynamic_relocation_to_ram(plan, relocation)? };
+        index += 1;
+    }
+    Ok(())
+}
+
+unsafe fn apply_dynamic_relocation_to_ram(
+    plan: DynamicUserLoadPlan,
+    relocation: k16_image::K16eRelocation,
+) -> Result<(), ProcessLoadError> {
+    let field_addr = plan
+        .load_base
+        .checked_add(relocation.offset)
+        .ok_or(ProcessLoadError::AddressOverflow)?;
+    let value = unsafe { read_u32(field_addr) };
+    let relocated = value
+        .checked_add(plan.load_base)
+        .ok_or(ProcessLoadError::AddressOverflow)?;
+    unsafe { write_u32(field_addr, relocated) };
+    Ok(())
+}
+
+#[cfg(test)]
+fn apply_dynamic_relocation_to_slice(
+    memory: &mut [u8],
+    memory_base: u32,
+    plan: DynamicUserLoadPlan,
+    relocation: k16_image::K16eRelocation,
+) -> Result<(), ProcessLoadError> {
+    let field_addr = plan
+        .load_base
+        .checked_add(relocation.offset)
+        .ok_or(ProcessLoadError::AddressOverflow)?;
+    let field_offset = field_addr
+        .checked_sub(memory_base)
+        .ok_or(ProcessLoadError::AddressOverflow)?;
+    let field_offset =
+        usize::try_from(field_offset).map_err(|_| ProcessLoadError::AddressOverflow)?;
+    let field = memory
+        .get_mut(field_offset..field_offset + 4)
+        .ok_or(ProcessLoadError::AddressOverflow)?;
+    let value = u32::from_le_bytes([field[0], field[1], field[2], field[3]]);
+    let relocated = value
+        .checked_add(plan.load_base)
+        .ok_or(ProcessLoadError::AddressOverflow)?;
+    field.copy_from_slice(&relocated.to_le_bytes());
+    Ok(())
+}
+
+unsafe fn zero_fill_ram(dst_addr: u32, len: u32) {
+    let mut offset = 0;
+    while offset < len {
+        unsafe { write_u8(dst_addr + offset, 0) };
+        offset += 1;
+    }
+}
+
+unsafe fn read_u32(address: u32) -> u32 {
+    unsafe { core::ptr::read_volatile(address as usize as *const u32) }
+}
+
+unsafe fn write_u32(address: u32, value: u32) {
+    unsafe { core::ptr::write_volatile(address as usize as *mut u32, value) }
+}
+
+unsafe fn write_u8(address: u32, value: u8) {
+    unsafe { core::ptr::write_volatile(address as usize as *mut u8, value) }
 }
 
 fn align_up(value: u32, alignment: u32) -> Result<u32, ProcessLoadError> {
@@ -224,6 +368,38 @@ mod tests {
                 },
             ),
             Err(ProcessLoadError::InvalidImage)
+        );
+    }
+
+    #[test]
+    fn dynamic_user_relocation_adds_selected_load_base_to_field() {
+        let plan = DynamicUserLoadPlan {
+            load_base: 0x0000_9000,
+            load_end: 0x0000_900c,
+            entry_pc: 0x0000_9000,
+            stack_top: 0x0001_0000,
+            payload_dst: 0x0000_9000,
+            payload_len: 8,
+            zero_fill_addr: 0x0000_9008,
+            zero_fill_len: 4,
+        };
+        let mut memory = [0u8; 16];
+        memory[4..8].copy_from_slice(&0x0000_0006u32.to_le_bytes());
+
+        apply_dynamic_relocation_to_slice(
+            &mut memory,
+            0x0000_9000,
+            plan,
+            k16_image::K16eRelocation {
+                offset: 4,
+                kind: k16_image::K16eRelocationKind::Abs32,
+            },
+        )
+        .expect("relocation applies");
+
+        assert_eq!(
+            u32::from_le_bytes([memory[4], memory[5], memory[6], memory[7]]),
+            0x0000_9006
         );
     }
 }
