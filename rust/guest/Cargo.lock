@@ -59,5 +59,6 @@ dependencies = [
 name = "kraft-std"
 version = "0.1.0"
 dependencies = [
+ "k16-abi",
  "k16-rt",
 ]

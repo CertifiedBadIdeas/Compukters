@@ -464,6 +464,8 @@ csr  access  name               semantics
 6    R/W     interrupt_mask     enabled interrupt source bitmask
 7    R       interrupt_pending  pending interrupt source bitmask
 8    R       trap_arg0          first captured syscall argument, or 0 otherwise
+9    R       trap_arg1          second captured syscall argument, or 0 otherwise
+10   R       trap_arg2          third captured syscall argument, or 0 otherwise
 ```
 
 Writes to read-only CSRs raise an explicit synchronous trap.
@@ -485,14 +487,17 @@ The initial K16 syscall ABI v0 is a guest/runtime convention layered on this
 CPU instruction. The CPU does not decode syscall tables. `k16-rt`
 `syscall0(number)` receives `number` in the Rust arg0 register (`r1`), executes
 `syscall r1`, and returns the kernel result from `r0`. `syscall1(number, arg0)`
-receives `number` in `r1` and `arg0` in `r2`, executes `syscall r1`, and lets
-the CPU capture `r2` into `trap_arg0` before entering the kernel. The kernel
-interprets `trap_value` as the syscall number, reads `trap_arg0` for the first
-argument, may clobber `r1..r4`, and returns a `u32` result by placing it in
-`r0` before `iret`. After `iret`, pending interrupt delivery is deferred for
-one guest instruction so the caller can consume or save `r0` before an
-asynchronous interrupt can enter the trap vector. Registers `r5..r15` are
-preserved unless a future ABI revision extends the clobber set.
+receives `number` in `r1` and `arg0` in `r2`. `syscall3(number, arg0, arg1,
+arg2)` receives `number` in `r1` and the three syscall arguments in `r2`, `r3`,
+and `r4`. At the `syscall r1` boundary the CPU captures `r2`, `r3`, and `r4`
+into `trap_arg0`, `trap_arg1`, and `trap_arg2` before entering the kernel. The
+kernel interprets `trap_value` as the syscall number, reads the captured
+`trap_arg*` CSRs for arguments, may clobber `r1..r4`, and returns a `u32`
+result by placing it in `r0` before `iret`. After `iret`, pending interrupt
+delivery is deferred for one guest instruction so the caller can consume or
+save `r0` before an asynchronous interrupt can enter the trap vector.
+Registers `r5..r15` are preserved unless a future ABI revision extends the
+clobber set.
 
 K16 syscall ABI v0 names the current Rust-kernel proof services in
 `k16_abi::syscall`:
@@ -503,8 +508,15 @@ K16 syscall ABI v0 names the current Rust-kernel proof services in
 | `DEBUG_WRITE_BYTE` | `3` | `k16_rt::debug_write_byte(byte)` | Kernel writes the low byte supplied in `trap_arg0` and returns `STATUS_OK`. |
 | `YIELD` | `4` | `k16_rt::yield_syscall()` | Kernel yields once to the host and then returns `STATUS_OK`. |
 | `SLEEP_TICKS` | `5` | `k16_rt::sleep_ticks_syscall(ticks)` | Kernel waits until `timer0.game_ticks` advances by `ticks`, then returns `STATUS_OK`. |
+| `EXIT` | `6` | `k16_rt::exit_syscall(status)` | Terminates the current single-task program and halts the VM with the supplied status. |
+| `WRITE` | `7` | `k16_rt::write_syscall(fd, ptr, len)` | Writes bytes from guest memory to fd `1` or `2`; returns byte count or a negative K16 error. |
 | `DEBUG_MARKER_RETURN` | `0x53` | n/a | Proof return value for `DEBUG_MARKER`. |
 | `STATUS_OK` | `0` | n/a | Successful proof-service status. |
+| `FD_STDIN` | `0` | n/a | Reserved standard input descriptor; `READ` is not implemented in this slice. |
+| `FD_STDOUT` | `1` | n/a | Standard output descriptor accepted by `WRITE`. |
+| `FD_STDERR` | `2` | n/a | Standard error descriptor accepted by `WRITE`. |
+| `ERROR_BAD_FD` | `0xffff_fff7` | n/a | Negative K16 error value corresponding to POSIX-aware `EBADF` semantics. |
+| `ERROR_FAULT` | `0xffff_fff2` | n/a | Negative K16 error value corresponding to POSIX-aware `EFAULT` semantics. |
 
 These names describe the current ABI proof surface. They are not a complete OS
 service table, scheduler API, filesystem API, or process model.

@@ -78,6 +78,9 @@ fn k16_object_abi_docs_define_freestanding_runtime_boundary() {
         "`__k16_syscall0`",
         "`__k16_syscall1`",
         "`__k16_read_trap_arg0`",
+        "`__k16_read_trap_arg1`",
+        "`__k16_read_trap_arg2`",
+        "`__k16_syscall3`",
         "`__k16_iret_with_r0`",
         "rust/guest/k16-rt/src/no_core_helpers.rs",
         "requires `K16_RUSTC`",
@@ -85,7 +88,7 @@ fn k16_object_abi_docs_define_freestanding_runtime_boundary() {
         "Rust-built helper object",
         "Missing helper symbols are link-time errors",
         "The helper object is not implicit",
-        "The startup object writes the low byte of `main`'s `r0` return value to `debug::WRITE`",
+        "passes the returned `r0` value to the K16 `EXIT` syscall as the process status",
     ] {
         assert!(
             docs.contains(required),

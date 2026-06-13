@@ -92,13 +92,10 @@ k16 runtime k16-cpu-helpers -o <cpu-helpers.ko>
 
 The startup object defines `_start` and requires an application-defined `main`.
 The linker uses `_start` as the final `K16E` entry symbol. At runtime `_start`
-initializes `sp` to the program stack top, calls `main`, then terminates through
-the first observable proof path.
-
-The startup object writes the low byte of `main`'s `r0` return value to
-`debug::WRITE`, then executes `halt`. This deliberately small behavior is the
-initial return-42/add proof boundary. It is not a libc, an OS ABI, or a syscall
-surface.
+initializes `sp` to the program stack top, calls `main`, passes the returned
+`r0` value to the K16 `EXIT` syscall as the process status, and keeps a
+trailing `halt` instruction as a fail-closed boundary if a broken kernel
+returns from `EXIT`.
 
 The memory and integer helper object is built from the guest Rust `#![no_core]`
 runtime source at `rust/guest/k16-rt/src/no_core_helpers.rs`. Building it requires
@@ -143,9 +140,12 @@ Runtime helper symbol names:
 `__k16_read_trap_pc`           provided by k16-cpu-helpers
 `__k16_read_trap_value`        provided by k16-cpu-helpers
 `__k16_read_trap_arg0`         provided by k16-cpu-helpers
+`__k16_read_trap_arg1`         provided by k16-cpu-helpers
+`__k16_read_trap_arg2`         provided by k16-cpu-helpers
 `__k16_syscall_once`           provided by k16-cpu-helpers
 `__k16_syscall0`               provided by k16-cpu-helpers
 `__k16_syscall1`               provided by k16-cpu-helpers
+`__k16_syscall3`               provided by k16-cpu-helpers
 `__k16_iret_with_r0`           provided by k16-cpu-helpers
 `__k16_write_interrupt_enable` provided by k16-cpu-helpers
 `__k16_write_interrupt_mask`   provided by k16-cpu-helpers

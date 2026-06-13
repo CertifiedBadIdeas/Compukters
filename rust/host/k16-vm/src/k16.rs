@@ -9,6 +9,8 @@ pub const K16_CSR_INTERRUPT_ENABLE: u32 = 5;
 pub const K16_CSR_INTERRUPT_MASK: u32 = 6;
 pub const K16_CSR_INTERRUPT_PENDING: u32 = 7;
 pub const K16_CSR_TRAP_ARG0: u32 = 8;
+pub const K16_CSR_TRAP_ARG1: u32 = 9;
+pub const K16_CSR_TRAP_ARG2: u32 = 10;
 
 pub const K16_INTERRUPT_SOURCE_TIMER0: u32 = 1;
 pub const K16_INTERRUPT_SOURCE_KEYBOARD0: u32 = 2;
@@ -54,6 +56,8 @@ pub struct K16CpuSnapshot {
     pub trap_pc: u32,
     pub trap_value: u32,
     pub trap_arg0: u32,
+    pub trap_arg1: u32,
+    pub trap_arg2: u32,
     pub trap_stack_pointer: u32,
     pub interrupt_enable: bool,
     pub interrupt_mask: u32,
@@ -335,6 +339,8 @@ pub struct K16Cpu {
     trap_pc: u32,
     trap_value: u32,
     trap_arg0: u32,
+    trap_arg1: u32,
+    trap_arg2: u32,
     trap_stack_pointer: u32,
     interrupt_enable: bool,
     interrupt_delivery_inhibited: bool,
@@ -355,6 +361,8 @@ impl K16Cpu {
             trap_pc: 0,
             trap_value: 0,
             trap_arg0: 0,
+            trap_arg1: 0,
+            trap_arg2: 0,
             trap_stack_pointer: 0,
             interrupt_enable: false,
             interrupt_delivery_inhibited: false,
@@ -393,6 +401,8 @@ impl K16Cpu {
             trap_pc: self.trap_pc,
             trap_value: self.trap_value,
             trap_arg0: self.trap_arg0,
+            trap_arg1: self.trap_arg1,
+            trap_arg2: self.trap_arg2,
             trap_stack_pointer: self.trap_stack_pointer,
             interrupt_enable: self.interrupt_enable,
             interrupt_mask: self.interrupt_mask,
@@ -416,6 +426,8 @@ impl K16Cpu {
             trap_pc: snapshot.trap_pc,
             trap_value: snapshot.trap_value,
             trap_arg0: snapshot.trap_arg0,
+            trap_arg1: snapshot.trap_arg1,
+            trap_arg2: snapshot.trap_arg2,
             trap_stack_pointer: snapshot.trap_stack_pointer,
             interrupt_enable: snapshot.interrupt_enable,
             interrupt_delivery_inhibited: false,
@@ -449,6 +461,8 @@ impl K16Cpu {
             K16_CSR_TRAP_PC => Some(self.trap_pc),
             K16_CSR_TRAP_VALUE => Some(self.trap_value),
             K16_CSR_TRAP_ARG0 => Some(self.trap_arg0),
+            K16_CSR_TRAP_ARG1 => Some(self.trap_arg1),
+            K16_CSR_TRAP_ARG2 => Some(self.trap_arg2),
             K16_CSR_INTERRUPT_ENABLE => Some(u32::from(self.interrupt_enable)),
             K16_CSR_INTERRUPT_MASK => Some(self.interrupt_mask),
             K16_CSR_INTERRUPT_PENDING => Some(self.interrupt_pending),
@@ -638,7 +652,13 @@ impl K16Cpu {
                 Ok(None)
             }
             DecodedInstruction::Syscall { number } => {
-                self.raise_syscall(self.pc, self.registers[number], self.registers[2])?;
+                self.raise_syscall(
+                    self.pc,
+                    self.registers[number],
+                    self.registers[2],
+                    self.registers[3],
+                    self.registers[4],
+                )?;
                 Ok(None)
             }
             DecodedInstruction::ReadCsr { dst, csr } => {
@@ -852,6 +872,8 @@ impl K16Cpu {
         self.trap_pc = self.pc;
         self.trap_value = value;
         self.trap_arg0 = 0;
+        self.trap_arg1 = 0;
+        self.trap_arg2 = 0;
         self.trap_stack_pointer = self.registers[usize::from(K16_STACK_POINTER_REGISTER)];
         self.pc = self.trap_vector;
         self.interrupt_enable = false;
@@ -910,6 +932,8 @@ impl K16Cpu {
         continuation_pc: u32,
         number: u32,
         arg0: u32,
+        arg1: u32,
+        arg2: u32,
     ) -> Result<(), K16Trap> {
         self.raise_exception(
             K16_TRAP_CAUSE_EXPLICIT_TRAP,
@@ -918,6 +942,8 @@ impl K16Cpu {
             format!("syscall {number}"),
         )?;
         self.trap_arg0 = arg0;
+        self.trap_arg1 = arg1;
+        self.trap_arg2 = arg2;
         self.interrupt_enable = false;
         Ok(())
     }
@@ -944,6 +970,8 @@ impl K16Cpu {
         self.trap_pc = fault_pc;
         self.trap_value = value;
         self.trap_arg0 = 0;
+        self.trap_arg1 = 0;
+        self.trap_arg2 = 0;
         self.trap_stack_pointer = self.registers[usize::from(K16_STACK_POINTER_REGISTER)];
         self.pc = self.trap_vector;
         Ok(None)

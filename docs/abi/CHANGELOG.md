@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Added POSIX-aware K16 fd syscall ABI primitives: `EXIT(status)` and
+  `WRITE(fd, ptr, len)`, with reserved descriptors `0` stdin, `1` stdout, and
+  `2` stderr.
+- Extended K16 syscall argument capture to `trap_arg0..trap_arg2` and added
+  `k16-rt::syscall3`.
+- Updated K16 program startup to terminate through `EXIT` instead of debug
+  MMIO.
 - Added K16 `wait` (`0x0006`) as a resumable, non-terminal CPU signal and
   exposed it through `k16-rt::wait_once()`. The Rust kernel idle loop drains
   keyboard input and then waits instead of busy-yielding directly.

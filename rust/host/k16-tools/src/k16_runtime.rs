@@ -29,12 +29,12 @@ pub fn k16_startup_object() -> Vec<u8> {
     );
     emit_const32(&mut text, SCRATCH_REGISTER, 0);
     emit_word(&mut text, call(SCRATCH_REGISTER));
-    emit_const32(
-        &mut text,
-        SCRATCH_REGISTER,
-        k16_vm::computer_abi::DEBUG_WRITE,
-    );
-    emit_word(&mut text, store8(SCRATCH_REGISTER, RETURN_REGISTER));
+    emit_const32(&mut text, ARG0_REGISTER, k16_abi::syscall::EXIT);
+    emit_const32(&mut text, SCRATCH_REGISTER, 0);
+    let copy_return_to_syscall_arg0 = add(2, RETURN_REGISTER, SCRATCH_REGISTER);
+    emit_word(&mut text, copy_return_to_syscall_arg0[0]);
+    emit_word(&mut text, copy_return_to_syscall_arg0[1]);
+    emit_word(&mut text, syscall(ARG0_REGISTER));
     emit_word(&mut text, halt());
 
     let mut strtab = Vec::from([0]);
@@ -150,6 +150,26 @@ pub fn k16_cpu_helpers_object() -> Vec<u8> {
         &mut text,
         &mut strtab,
         &mut symtab,
+        "__k16_read_trap_arg1",
+        &[
+            read_csr(RETURN_REGISTER, k16_vm::k16::K16_CSR_TRAP_ARG1),
+            ret(),
+        ],
+    );
+    emit_symbol_function(
+        &mut text,
+        &mut strtab,
+        &mut symtab,
+        "__k16_read_trap_arg2",
+        &[
+            read_csr(RETURN_REGISTER, k16_vm::k16::K16_CSR_TRAP_ARG2),
+            ret(),
+        ],
+    );
+    emit_symbol_function(
+        &mut text,
+        &mut strtab,
+        &mut symtab,
         "__k16_syscall_once",
         &[syscall(ARG0_REGISTER), ret()],
     );
@@ -165,6 +185,13 @@ pub fn k16_cpu_helpers_object() -> Vec<u8> {
         &mut strtab,
         &mut symtab,
         "__k16_syscall1",
+        &[syscall(ARG0_REGISTER), ret()],
+    );
+    emit_symbol_function(
+        &mut text,
+        &mut strtab,
+        &mut symtab,
+        "__k16_syscall3",
         &[syscall(ARG0_REGISTER), ret()],
     );
     let copy_arg0_to_return = add(RETURN_REGISTER, ARG0_REGISTER, SCRATCH_REGISTER);
@@ -366,10 +393,6 @@ fn alu_rrr(dst: u8, subop: u8, lhs: u8, rhs: u8) -> [u16; 2] {
 
 fn call(register: u8) -> u16 {
     0x8000 | (u16::from(register) << 8)
-}
-
-fn store8(addr: u8, src: u8) -> u16 {
-    0x5000 | (u16::from(addr) << 8) | (u16::from(src) << 4)
 }
 
 fn store32(addr: u8, src: u8) -> u16 {

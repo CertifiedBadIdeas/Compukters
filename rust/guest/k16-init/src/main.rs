@@ -7,13 +7,11 @@ use kraft_std::prelude::*;
 
 #[no_mangle]
 pub extern "C" fn main() -> u32 {
-    for byte in b"K16 INIT\n" {
-        debug::write_byte(*byte);
-    }
-    0
+    let _ = io::stdout().write_all(b"K16 INIT\n");
+    process::exit(0)
 }
 
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {
-    k16_rt::halt_forever()
+    process::exit(1)
 }

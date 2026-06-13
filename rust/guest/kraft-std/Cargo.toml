@@ -11,4 +11,5 @@ path = "src/lib.rs"
 test = false
 
 [dependencies]
+k16-abi = { path = "../k16-abi" }
 k16-rt = { path = "../k16-rt" }

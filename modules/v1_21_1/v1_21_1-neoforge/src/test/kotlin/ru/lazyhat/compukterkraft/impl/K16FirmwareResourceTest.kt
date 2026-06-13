@@ -28,7 +28,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-private const val K16_KERNEL_LOAD_ADDR = 0x0000_5000
+private const val K16_KERNEL_LOAD_ADDR = 0x0000_4000
 private const val K16_KERNEL_LIMIT_BYTES = 0x0000_8000 - K16_KERNEL_LOAD_ADDR
 private const val K16_KERNEL_MIN_HEADROOM_BYTES = 1024
 private const val LEGACY_KERNEL_SHELL_DISABLED =
@@ -232,9 +232,20 @@ class K16FirmwareResourceTest {
                     control.status,
                     "panic code: ${control.panicCode}, debug: $debug",
                 )
-                assertTrue(debug.contains("K16 INIT\n"), "boot should launch /bin/init.kx; debug: $debug")
+                assertEquals(0, control.exitCode)
+                assertTrue(debug.contains("K16 BOOT\n"), "bootloader debug output should remain visible; debug: $debug")
+                assertFalse(debug.contains("K16 INIT\n"), "init output should go through stdout, not debug; debug: $debug")
                 assertKernelGpuConsoleVisible(runtime, control, debug)
             }
+    }
+
+    @Test
+    fun bundledK16InitUsesStdoutAndExitInsteadOfDebugOutput() {
+        val source = Path.of("../../../rust/guest/k16-init/src/main.rs").readText()
+
+        assertTrue(source.contains("io::stdout().write_all(b\"K16 INIT\\n\")"))
+        assertTrue(source.contains("process::exit(0)"))
+        assertFalse(source.contains("debug::write_byte"))
     }
 
     @Test
@@ -258,10 +269,10 @@ class K16FirmwareResourceTest {
                     control.status,
                     "init should return through the K16 program startup halt boundary; panic code: ${control.panicCode}, debug: $debug",
                 )
-                assertTrue(
-                    debug.contains("K16 INIT\n"),
-                    "debug output should prove that /bin/init.kx ran; debug: $debug",
-                )
+                assertEquals(0, control.exitCode)
+                assertTrue(debug.contains("K16 BOOT\n"), "bootloader debug output should remain visible; debug: $debug")
+                assertFalse(debug.contains("K16 INIT\n"), "init output should go through stdout, not debug; debug: $debug")
+                assertKernelGpuConsoleVisible(runtime, control, debug)
             }
     }
 
@@ -296,7 +307,9 @@ class K16FirmwareResourceTest {
                     control.status,
                     "default runtime ticks should boot through /bin/init.kx; tick: $tick, panic code: ${control.panicCode}, debug: $debug",
                 )
-                assertTrue(debug.contains("K16 INIT\n"), "default runtime ticks should launch init; debug: $debug")
+                assertEquals(0, control.exitCode)
+                assertTrue(debug.contains("K16 BOOT\n"), "bootloader debug output should remain visible; debug: $debug")
+                assertFalse(debug.contains("K16 INIT\n"), "init output should go through stdout, not debug; debug: $debug")
                 assertTrue(
                     sawVisibleFrame,
                     "default runtime ticks should produce gpu0 console frames; tick: $tick, panic code: ${control.panicCode}, debug: $debug",
@@ -352,6 +365,14 @@ class K16FirmwareResourceTest {
         assertFalse(consoleSource.contains("const CELLS_ADDR:"), "console facade must not own guest cell storage")
 
         assertTrue(terminalSource.contains("const CELLS_ADDR:"), "terminal should keep guest cell state")
+        assertTrue(
+            terminalSource.contains("const CELLS_ADDR: u32 = 0x0000_3000;"),
+            "terminal cells should live below the kernel image instead of overlapping program memory",
+        )
+        assertFalse(
+            terminalSource.contains("const CELLS_ADDR: u32 = 0x0000_8000;"),
+            "terminal cells must not overlap the program load address",
+        )
         assertTrue(terminalSource.contains("static mut CURSOR_X:"), "terminal should own cursor state")
         assertTrue(terminalSource.contains("fn read_cell("), "terminal should read cells from guest RAM")
         assertTrue(terminalSource.contains("fn write_cell("), "terminal should write cells into guest RAM")
@@ -565,10 +586,13 @@ class K16FirmwareResourceTest {
     fun k16KernelEntrypointLaunchesInitProgram() {
         val mainSource = Path.of("../../../rust/guest/k16-kernel/src/main.rs").readText()
 
+        assertTrue(mainSource.contains("mod console;"), "kernel should register console for fd stdout")
         assertTrue(mainSource.contains("mod init;"), "kernel should register the init launcher module")
+        assertTrue(mainSource.contains("console::init();"), "kernel should initialize console before userland")
         assertTrue(mainSource.contains("trap::initialize();"), "kernel should initialize traps before userland")
         assertTrue(mainSource.contains("control::set_ready();"), "kernel should mark the machine ready before entering init")
         assertTrue(mainSource.contains("init::launch()"), "kernel entrypoint should launch ROOT:/bin/init.kx")
+        assertFalse(mainSource.contains("mod shell;"), "kernel entrypoint should not register the legacy shell")
         assertFalse(mainSource.contains("shell::init();"), "kernel entrypoint should not start the legacy shell")
         assertFalse(mainSource.contains("fn idle_once()"), "kernel entrypoint should not remain in the legacy idle loop")
     }
@@ -640,8 +664,8 @@ class K16FirmwareResourceTest {
         assertTrue(Files.exists(toolPath), "K16 kernel payload budget tool should exist")
 
         val source = toolPath.readText()
-        assertTrue(source.contains("KERNEL_LOAD_ADDR=0x00005000"))
-        assertTrue(source.contains("KERNEL_LIMIT_BYTES=12288"))
+        assertTrue(source.contains("KERNEL_LOAD_ADDR=0x00004000"))
+        assertTrue(source.contains("KERNEL_LIMIT_BYTES=16384"))
         assertTrue(source.contains("MIN_HEADROOM_BYTES"))
     }
 
@@ -1283,7 +1307,9 @@ class K16FirmwareResourceTest {
                 val debug = runtime.outputSnapshot().decodeToString()
 
                 assertEquals(NativeK16ComputerControl.STATUS_HALTED, bootControl.status)
-                assertTrue(debug.contains("K16 INIT\n"), "boot should launch init after BIOS splash; debug: $debug")
+                assertEquals(0, bootControl.exitCode)
+                assertTrue(debug.contains("K16 BOOT\n"), "bootloader debug output should remain visible; debug: $debug")
+                assertFalse(debug.contains("K16 INIT\n"), "init output should go through stdout, not debug; debug: $debug")
                 assertKernelGpuConsoleVisible(runtime, bootControl, debug)
             }
     }
@@ -1601,7 +1627,7 @@ class K16FirmwareResourceTest {
     }
 }
 
-private const val K16_SNAPSHOT_CPU_RECORD_SIZE = 132
+private const val K16_SNAPSHOT_CPU_RECORD_SIZE = 140
 private const val K16_SNAPSHOT_DEVICE_HEADER_SIZE = 8
 private const val K16_SNAPSHOT_TIMER0_DEVICE_KIND = 6
 private const val K16_SNAPSHOT_TIMER0_PAYLOAD_SIZE = 8
