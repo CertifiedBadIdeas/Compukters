@@ -8,7 +8,8 @@
   `main` into an ELF32 relocatable object.
 - `k16 runtime k16-startup` and `k16 link --target program` package the object
   as a normal program `K16E`.
-- `k16 disasm --target program` checks the linked K16 code.
+- `k16 disasm --target program --start 0x8000 --count ...` checks the linked
+  K16 code without decoding any following non-code payload bytes.
 - `k16 run` executes the `K16E` in the VM and observes `42` as
   `debug_bytes=2a`.
 - stack-passed arguments and indirect calls lower to the documented K16 call

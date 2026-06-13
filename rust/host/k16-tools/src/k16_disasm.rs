@@ -2,7 +2,17 @@ use crate::artifact::K16ArtifactTarget;
 use crate::k16e;
 use std::collections::BTreeSet;
 
-pub fn disassemble_artifact(bytes: &[u8], target: K16ArtifactTarget) -> Result<String, String> {
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct DisassembleOptions {
+    pub start: Option<u32>,
+    pub count: Option<usize>,
+}
+
+pub fn disassemble_artifact(
+    bytes: &[u8],
+    target: K16ArtifactTarget,
+    options: DisassembleOptions,
+) -> Result<String, String> {
     let (bytes, base_address) = match target {
         K16ArtifactTarget::Boot | K16ArtifactTarget::Kernel | K16ArtifactTarget::Program => {
             let executable = k16e::decode_k16_executable(bytes)?;
@@ -21,10 +31,13 @@ pub fn disassemble_artifact(bytes: &[u8], target: K16ArtifactTarget) -> Result<S
         return Err("K16 artifact byte length must be even".to_string());
     }
     let words = decode_words(&bytes);
-    let labels = collect_branch_labels(&words, base_address)?;
+    let start_pc = options.start.unwrap_or(base_address);
+    let start_index = instruction_index_for_pc(start_pc, base_address, words.len())?;
+    let labels = collect_branch_labels(&words, base_address, start_index, options.count)?;
     let mut output = String::new();
-    let mut index = 0;
-    while index < words.len() {
+    let mut index = start_index;
+    let mut decoded_count = 0;
+    while index < words.len() && should_decode_more(decoded_count, options.count) {
         let pc = base_address
             .checked_add((index as u32) * 2)
             .ok_or_else(|| "K16 artifact address overflows u32".to_string())?;
@@ -35,6 +48,7 @@ pub fn disassemble_artifact(bytes: &[u8], target: K16ArtifactTarget) -> Result<S
         let raw_words = format_raw_words(&words, index, instruction.width);
         output.push_str(&format!("{pc:08x}: {raw_words}  {}\n", instruction.text));
         index += instruction.width;
+        decoded_count += 1;
     }
     Ok(output)
 }
@@ -46,10 +60,16 @@ fn decode_words(bytes: &[u8]) -> Vec<u16> {
         .collect()
 }
 
-fn collect_branch_labels(words: &[u16], base_address: u32) -> Result<BTreeSet<u32>, String> {
+fn collect_branch_labels(
+    words: &[u16],
+    base_address: u32,
+    start_index: usize,
+    count: Option<usize>,
+) -> Result<BTreeSet<u32>, String> {
     let mut labels = BTreeSet::new();
-    let mut index = 0;
-    while index < words.len() {
+    let mut index = start_index;
+    let mut decoded_count = 0;
+    while index < words.len() && should_decode_more(decoded_count, count) {
         let pc = base_address
             .checked_add((index as u32) * 2)
             .ok_or_else(|| "K16 artifact address overflows u32".to_string())?;
@@ -58,8 +78,48 @@ fn collect_branch_labels(words: &[u16], base_address: u32) -> Result<BTreeSet<u3
             labels.insert(target);
         }
         index += instruction.width;
+        decoded_count += 1;
     }
     Ok(labels)
+}
+
+fn instruction_index_for_pc(
+    pc: u32,
+    base_address: u32,
+    word_count: usize,
+) -> Result<usize, String> {
+    if pc < base_address {
+        return Err(format!(
+            "K16 disassembly start {pc:#010x} is before artifact base {base_address:#010x}"
+        ));
+    }
+    let byte_offset = pc - base_address;
+    if byte_offset % 2 != 0 {
+        return Err(format!(
+            "K16 disassembly start {pc:#010x} is not 2-byte aligned"
+        ));
+    }
+    let index = usize::try_from(byte_offset / 2)
+        .map_err(|_| format!("K16 disassembly start {pc:#010x} is too large"))?;
+    if index >= word_count {
+        let byte_len = u32::try_from(word_count)
+            .ok()
+            .and_then(|words| words.checked_mul(2))
+            .and_then(|bytes| base_address.checked_add(bytes))
+            .map(|end| format!("{base_address:#010x}..{end:#010x}"))
+            .unwrap_or_else(|| format!("{base_address:#010x}..<overflow>"));
+        return Err(format!(
+            "K16 disassembly start {pc:#010x} is outside artifact range {byte_len}"
+        ));
+    }
+    Ok(index)
+}
+
+fn should_decode_more(decoded_count: usize, count: Option<usize>) -> bool {
+    match count {
+        Some(limit) => decoded_count < limit,
+        None => true,
+    }
 }
 
 fn format_raw_words(words: &[u16], index: usize, width: usize) -> String {
