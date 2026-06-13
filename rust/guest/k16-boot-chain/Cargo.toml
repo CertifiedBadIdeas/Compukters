@@ -5,3 +5,4 @@ edition = "2021"
 
 [dependencies]
 k16-abi = { path = "../k16-abi" }
+k16-storage = { path = "../k16-storage" }

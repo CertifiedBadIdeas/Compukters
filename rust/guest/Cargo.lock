@@ -29,6 +29,7 @@ name = "k16-boot-chain"
 version = "0.1.0"
 dependencies = [
  "k16-abi",
+ "k16-storage",
 ]
 
 [[package]]
@@ -50,6 +51,13 @@ dependencies = [
 
 [[package]]
 name = "k16-rt"
+version = "0.1.0"
+dependencies = [
+ "k16-abi",
+]
+
+[[package]]
+name = "k16-storage"
 version = "0.1.0"
 dependencies = [
  "k16-abi",
