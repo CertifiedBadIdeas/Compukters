@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [features]
+host-test = ["k16-rt/host-test"]
 k16-target = []
 
 [[bin]]
