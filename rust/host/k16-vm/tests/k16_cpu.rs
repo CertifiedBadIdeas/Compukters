@@ -1,8 +1,10 @@
 use k16_vm::k16::{
     K16Cpu, K16Signal, K16_CSR_INTERRUPT_ENABLE, K16_CSR_INTERRUPT_MASK, K16_CSR_INTERRUPT_PENDING,
-    K16_CSR_TRAP_ARG0, K16_CSR_TRAP_ARG1, K16_CSR_TRAP_ARG2, K16_CSR_TRAP_CAUSE, K16_CSR_TRAP_PC,
-    K16_CSR_TRAP_VALUE, K16_CSR_TRAP_VECTOR, K16_INTERRUPT_SOURCE_TIMER0,
-    K16_STACK_POINTER_REGISTER, K16_TRAP_CAUSE_EXPLICIT_TRAP, K16_TRAP_CAUSE_ILLEGAL_INSTRUCTION,
+    K16_CSR_TRAP_ARG0, K16_CSR_TRAP_ARG1, K16_CSR_TRAP_ARG2, K16_CSR_TRAP_CAUSE,
+    K16_CSR_TRAP_FRAME_INDEX, K16_CSR_TRAP_FRAME_REGISTER, K16_CSR_TRAP_INTERRUPT_ENABLE,
+    K16_CSR_TRAP_PC, K16_CSR_TRAP_RESUME_PC, K16_CSR_TRAP_STACK_POINTER, K16_CSR_TRAP_VALUE,
+    K16_CSR_TRAP_VECTOR, K16_INTERRUPT_SOURCE_TIMER0, K16_STACK_POINTER_REGISTER,
+    K16_TRAP_CAUSE_EXPLICIT_TRAP, K16_TRAP_CAUSE_ILLEGAL_INSTRUCTION,
     K16_TRAP_CAUSE_TIMER0_INTERRUPT,
 };
 use k16_vm::low_bus::{MachineBus, MmioDevice};
@@ -567,6 +569,54 @@ fn k16_iret_preserves_interrupted_registers_and_returns_r0() {
     assert_eq!(cpu.register(0), 9);
     assert_eq!(cpu.register(5), 0x55aa_0005);
     assert_eq!(cpu.register(6), 0x55aa_0006);
+}
+
+#[test]
+fn k16_saved_trap_frame_csrs_can_override_iret_resume_context() {
+    let mut bus = MachineBus::new(256).unwrap();
+    let handler_pc = 96;
+    let resume_pc = 160;
+    let stack_top = 224;
+    let mut program = Vec::new();
+    program.extend(const32(1, handler_pc));
+    program.push(write_csr(K16_CSR_TRAP_VECTOR, 1));
+    program.extend(const32(K16_STACK_POINTER_REGISTER, 0x0000_00c0));
+    program.extend(const32(2, 0x1111_2222));
+    program.push(const4(1, 6));
+    program.push(syscall(1));
+    program.push(halt());
+    write_words(&mut bus, 0, &program);
+
+    let mut handler = Vec::new();
+    handler.push(const4(7, 2));
+    handler.push(write_csr(K16_CSR_TRAP_FRAME_INDEX, 7));
+    handler.push(read_csr(3, K16_CSR_TRAP_FRAME_REGISTER));
+    handler.extend(const32(8, 240));
+    handler.push(store32(8, 3));
+    handler.extend(const32(4, 0x3333_4444));
+    handler.push(write_csr(K16_CSR_TRAP_FRAME_REGISTER, 4));
+    handler.extend(const32(5, resume_pc));
+    handler.push(write_csr(K16_CSR_TRAP_RESUME_PC, 5));
+    handler.extend(const32(6, stack_top));
+    handler.push(write_csr(K16_CSR_TRAP_STACK_POINTER, 6));
+    handler.push(const4(7, 1));
+    handler.push(write_csr(K16_CSR_TRAP_INTERRUPT_ENABLE, 7));
+    handler.push(const4(0, 7));
+    handler.push(iret());
+    write_words(&mut bus, handler_pc, &handler);
+    write_words(&mut bus, resume_pc, &[const4(9, 5), halt()]);
+    let mut cpu = K16Cpu::new(0);
+
+    assert_eq!(cpu.run_until_signal(&mut bus, 64).unwrap(), K16Signal::Halt);
+    assert_eq!(bus.load_i32(240).unwrap() as u32, 0x1111_2222);
+    assert_eq!(cpu.register(0), 7);
+    assert_eq!(cpu.register(2), 0x3333_4444);
+    assert_eq!(cpu.register(9), 5);
+    assert_eq!(
+        cpu.register(usize::from(K16_STACK_POINTER_REGISTER)),
+        stack_top
+    );
+    assert_eq!(cpu.csr(K16_CSR_INTERRUPT_ENABLE), Some(1));
 }
 
 #[test]

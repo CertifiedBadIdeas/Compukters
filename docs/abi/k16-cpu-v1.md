@@ -464,9 +464,15 @@ csr  access  name               semantics
 8    R       trap_arg0          first captured syscall argument, or 0 otherwise
 9    R       trap_arg1          second captured syscall argument, or 0 otherwise
 10   R       trap_arg2          third captured syscall argument, or 0 otherwise
+11   R/W     trap_frame_index   selected saved trap register index, 0..15
+12   R/W     trap_frame_register selected saved trap register value
+13   R/W     trap_resume_pc     `iret` resume PC
+14   R/W     trap_stack_pointer `iret` resume stack pointer
+15   R/W     trap_interrupt_enable `iret` restored interrupt-enable state
 ```
 
-Writes to read-only CSRs raise an explicit synchronous trap.
+Writes to read-only CSRs raise an explicit synchronous trap. Writing a
+`trap_frame_index` outside `0..15` also raises an explicit synchronous trap.
 
 Synchronous exceptions are delivered immediately when the faulting instruction
 is decoded or executed. If `trap_vector = 0`, the VM reports a hard CPU trap to
@@ -497,6 +503,13 @@ handler `r0` becomes the caller-visible return value. After `iret`, pending
 interrupt delivery is deferred for two resumed guest instructions so helper
 code can return to the caller and the caller can consume or save `r0` before an
 asynchronous interrupt can enter the trap vector.
+
+Kernel code can rewrite the saved trap frame before `iret`. `trap_resume_pc`,
+`trap_stack_pointer`, and `trap_interrupt_enable` directly control the
+corresponding `iret` restore fields. `trap_frame_index` selects a saved register
+slot and `trap_frame_register` reads or writes that slot. This selector pair is
+used instead of assigning one CSR per register because the v1 CSR instruction
+encoding has a 4-bit CSR number field.
 
 K16 syscall ABI v0 names the current Rust-kernel proof services in
 `k16_abi::syscall`:

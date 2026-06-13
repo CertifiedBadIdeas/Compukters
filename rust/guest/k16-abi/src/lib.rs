@@ -48,6 +48,11 @@ pub mod cpu {
         pub const TRAP_ARG0: u32 = 8;
         pub const TRAP_ARG1: u32 = 9;
         pub const TRAP_ARG2: u32 = 10;
+        pub const TRAP_FRAME_INDEX: u32 = 11;
+        pub const TRAP_FRAME_REGISTER: u32 = 12;
+        pub const TRAP_RESUME_PC: u32 = 13;
+        pub const TRAP_STACK_POINTER: u32 = 14;
+        pub const TRAP_INTERRUPT_ENABLE: u32 = 15;
     }
 
     pub mod trap_cause {
@@ -445,6 +450,11 @@ mod tests {
         assert_eq!(cpu::csr::TRAP_ARG0, 8);
         assert_eq!(cpu::csr::TRAP_ARG1, 9);
         assert_eq!(cpu::csr::TRAP_ARG2, 10);
+        assert_eq!(cpu::csr::TRAP_FRAME_INDEX, 11);
+        assert_eq!(cpu::csr::TRAP_FRAME_REGISTER, 12);
+        assert_eq!(cpu::csr::TRAP_RESUME_PC, 13);
+        assert_eq!(cpu::csr::TRAP_STACK_POINTER, 14);
+        assert_eq!(cpu::csr::TRAP_INTERRUPT_ENABLE, 15);
         assert_eq!(cpu::interrupt_source::TIMER0, 0x0000_0001);
         assert_eq!(cpu::interrupt_source::KEYBOARD0, 0x0000_0002);
         assert_eq!(cpu::trap_cause::TIMER0_INTERRUPT, 0x8000_0001);
