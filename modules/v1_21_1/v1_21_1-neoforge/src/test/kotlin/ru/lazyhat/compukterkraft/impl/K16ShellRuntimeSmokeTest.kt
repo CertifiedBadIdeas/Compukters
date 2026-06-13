@@ -43,19 +43,24 @@ class K16ShellRuntimeSmokeTest {
             device.turnOn()
             waitForTerminalText(device, "INIT> ")
 
-            dispatchText(device, "abc\n")
-            waitForTerminalText(device, "READ abc")
-            waitForTerminalText(device, "INIT> READ abc")
+            dispatchText(device, "echo abc\n")
+            waitForTerminalText(device, "abc")
+            waitForTerminalText(device, "INIT> echo abc")
+
+            dispatchText(device, "ticks\n")
+            waitForTerminalText(device, "TICKS ")
 
             val terminal = terminalText(requireNotNull(device.snapshotRuntimeState()))
             val promptIndex = terminal.indexOf("INIT> ")
-            val readOutputIndex = terminal.indexOf("READ abc", startIndex = promptIndex)
-            val returnedPromptIndex = terminal.indexOf("INIT> ", startIndex = readOutputIndex)
+            val echoOutputIndex = terminal.indexOf("abc", startIndex = promptIndex)
+            val ticksOutputIndex = terminal.indexOf("TICKS ", startIndex = echoOutputIndex)
+            val returnedPromptIndex = terminal.indexOf("INIT> ", startIndex = ticksOutputIndex)
             assertTrue(
                 promptIndex >= 0 &&
-                    readOutputIndex > promptIndex &&
-                    returnedPromptIndex > readOutputIndex,
-                "userland init should read UI-style keyboard input, write it through stdout, and return a prompt; terminal: $terminal",
+                    echoOutputIndex > promptIndex &&
+                    ticksOutputIndex > echoOutputIndex &&
+                    returnedPromptIndex > ticksOutputIndex,
+                "userland init should dispatch shell commands through fd stdin/stdout and return a prompt; terminal: $terminal",
             )
         } finally {
             device.close()

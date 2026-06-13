@@ -26,6 +26,18 @@ pub mod thread {
     }
 }
 
+pub mod time {
+    pub type U64Parts = k16_rt::U64Parts;
+
+    pub fn game_ticks() -> u64 {
+        k16_rt::timer0_game_ticks()
+    }
+
+    pub fn game_ticks_parts() -> U64Parts {
+        k16_rt::timer0_game_ticks_parts()
+    }
+}
+
 pub mod io {
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     pub enum Error {
@@ -92,5 +104,5 @@ pub mod process {
 }
 
 pub mod prelude {
-    pub use crate::{debug, io, process, thread};
+    pub use crate::{debug, io, process, thread, time};
 }
