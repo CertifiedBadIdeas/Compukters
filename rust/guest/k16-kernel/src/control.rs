@@ -28,6 +28,12 @@ pub fn set_panic_code(code: i32) {
     }
 }
 
+pub fn set_exit_code(code: u32) {
+    unsafe {
+        mmio::write_i32(control_mmio::EXIT_CODE, code as i32);
+    }
+}
+
 pub fn wait_forever() -> ! {
     k16_rt::halt_forever()
 }

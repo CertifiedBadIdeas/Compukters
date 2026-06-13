@@ -214,6 +214,44 @@ fn syscall1_records_argument_and_returns_test_syscall_value() {
 }
 
 #[test]
+fn syscall3_records_arguments_and_returns_test_syscall_value() {
+    crate::trap::reset_test_interrupts();
+    crate::trap::set_test_syscall_return(7);
+
+    let returned = syscall3(0x40, 0x11, 0x22, 0x33);
+
+    assert_eq!(crate::trap::test_syscall_number(), 0x40);
+    assert_eq!(crate::trap::test_syscall_arg0(), 0x11);
+    assert_eq!(crate::trap::test_syscall_arg1(), 0x22);
+    assert_eq!(crate::trap::test_syscall_arg2(), 0x33);
+    assert_eq!(syscall_arg0(), 0x11);
+    assert_eq!(syscall_arg1(), 0x22);
+    assert_eq!(syscall_arg2(), 0x33);
+    assert_eq!(returned, 7);
+}
+
+#[test]
+fn write_syscall_uses_fd_pointer_and_length_arguments() {
+    crate::trap::reset_test_interrupts();
+    crate::trap::set_test_syscall_return(3);
+    let bytes = *b"abc";
+
+    let returned = write_syscall(k16_abi::syscall::FD_STDOUT, bytes.as_ptr(), bytes.len());
+
+    assert_eq!(crate::trap::test_syscall_number(), k16_abi::syscall::WRITE);
+    assert_eq!(
+        crate::trap::test_syscall_arg0(),
+        k16_abi::syscall::FD_STDOUT
+    );
+    assert_eq!(
+        crate::trap::test_syscall_arg1(),
+        bytes.as_ptr() as usize as u32
+    );
+    assert_eq!(crate::trap::test_syscall_arg2(), 3);
+    assert_eq!(returned, 3);
+}
+
+#[test]
 fn debug_marker_uses_named_syscall_and_returns_marker_value() {
     crate::trap::reset_test_interrupts();
     crate::trap::set_test_syscall_return(k16_abi::syscall::DEBUG_MARKER_RETURN);

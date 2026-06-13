@@ -75,9 +75,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "k16-abi"
+version = "0.1.0"
+
+[[package]]
 name = "k16-tools"
 version = "0.1.0"
 dependencies = [
+ "k16-abi",
  "k16-vm",
 ]
 

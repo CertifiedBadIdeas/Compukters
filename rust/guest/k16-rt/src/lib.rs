@@ -16,7 +16,8 @@ mod tests;
 #[cfg(any(test, feature = "host-test"))]
 pub mod host_test {
     pub use k16_abi::syscall::{
-        DEBUG_MARKER, DEBUG_MARKER_RETURN, DEBUG_WRITE_BYTE, SLEEP_TICKS, STATUS_OK, YIELD,
+        DEBUG_MARKER, DEBUG_MARKER_RETURN, DEBUG_WRITE_BYTE, ERROR_BAD_FD, ERROR_FAULT, EXIT,
+        FD_STDERR, FD_STDIN, FD_STDOUT, SLEEP_TICKS, STATUS_OK, WRITE, YIELD,
     };
 
     pub fn reset_syscalls() {
@@ -33,6 +34,14 @@ pub mod host_test {
 
     pub fn syscall_arg0() -> u32 {
         crate::trap::test_syscall_arg0()
+    }
+
+    pub fn syscall_arg1() -> u32 {
+        crate::trap::test_syscall_arg1()
+    }
+
+    pub fn syscall_arg2() -> u32 {
+        crate::trap::test_syscall_arg2()
     }
 
     pub fn reset_timer0() {
@@ -78,7 +87,8 @@ pub use time::{
     timer0_monotonic_nanos_parts, yield_frames, U64Parts,
 };
 pub use trap::{
-    debug_marker, debug_write_byte, disable_interrupts, enable_interrupts, install_trap_vector,
-    interrupt_pending, iret_once, iret_with_r0, set_interrupt_mask, sleep_ticks_syscall, syscall0,
-    syscall1, syscall_arg0, syscall_once, trap_cause, trap_pc, trap_value, yield_syscall,
+    debug_marker, debug_write_byte, disable_interrupts, enable_interrupts, exit_syscall,
+    install_trap_vector, interrupt_pending, iret_once, iret_with_r0, set_interrupt_mask,
+    sleep_ticks_syscall, syscall0, syscall1, syscall3, syscall_arg0, syscall_arg1, syscall_arg2,
+    syscall_once, trap_cause, trap_pc, trap_value, write_syscall, yield_syscall,
 };

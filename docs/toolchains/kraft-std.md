@@ -1,6 +1,6 @@
 # kraft-std Guest Library
 
-Issue: [#192](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/192), [#194](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/194), [#195](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/195)
+Issue: [#192](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/192), [#194](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/194), [#195](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/195), [#230](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/230)
 
 `rust/guest/kraft-std` is the experimental KraftOS userland library boundary for
 guest Rust programs. It is intentionally separate from the lower-level K16
@@ -18,13 +18,19 @@ The initial `kraft-std` surface is deliberately small:
 | --- | --- | --- |
 | `kraft_std::debug::marker()` | `k16_rt::debug_marker()` | Calls the current debug marker proof syscall and returns the kernel result. |
 | `kraft_std::debug::write_byte(byte)` | `k16_rt::debug_write_byte(byte)` | Calls the current debug byte proof syscall and returns the kernel status. |
+| `kraft_std::io::stdout().write_all(bytes)` | `k16_rt::write_syscall(FD_STDOUT, ptr, len)` | Writes a byte slice to stdout through the kernel fd ABI. |
+| `kraft_std::io::stderr().write_all(bytes)` | `k16_rt::write_syscall(FD_STDERR, ptr, len)` | Writes a byte slice to stderr through the kernel fd ABI. |
+| `kraft_std::process::exit(status)` | `k16_rt::exit_syscall(status)` | Terminates the current single-task program through the kernel. |
 | `kraft_std::thread::yield_now()` | `k16_rt::yield_syscall()` | Requests one OS-level yield through the kernel syscall path. |
 | `kraft_std::thread::sleep_ticks(ticks)` | `k16_rt::sleep_ticks_syscall(ticks)` | Requests a timer0 game-tick sleep through the kernel syscall path. |
 | `kraft_std::prelude` | n/a | Re-exports the early userland modules intended for guest programs. |
 
+`debug::*` is diagnostic. Normal user output should go through `io` and the
+kernel fd syscall ABI, not debug MMIO.
+
 `kraft-std` is `#![no_std]`. It is not Rust's hosted `std`, a POSIX layer, or a
 complete OS API. Allocator support, files, input, process/task management, and
-a stable error model are separate future slices.
+full POSIX compatibility are separate future slices.
 
 ## Layering Rule
 

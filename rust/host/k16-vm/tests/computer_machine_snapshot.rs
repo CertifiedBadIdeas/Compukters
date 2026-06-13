@@ -153,13 +153,15 @@ fn computer_machine_snapshot_v1_restores_k16_interrupt_state() {
 }
 
 #[test]
-fn computer_machine_snapshot_v1_preserves_k16_trap_arg0() {
+fn computer_machine_snapshot_v1_preserves_k16_trap_args() {
     let entry_pc = 0x100;
     let mut words = Vec::new();
-    words.extend([const32(1), (entry_pc + 18) as u16, 0]);
+    words.extend([const32(1), (entry_pc + 30) as u16, 0]);
     words.push(write_csr(K16_CSR_TRAP_VECTOR, 1));
     words.push(const4(1, 3));
     words.extend([const32(2), 0x21, 0]);
+    words.extend([const32(3), 0x22, 0]);
+    words.extend([const32(4), 0x23, 0]);
     words.push(syscall(1));
     let bios = k16_words(&[halt()]);
     let program = k16_words(&words);
@@ -167,7 +169,7 @@ fn computer_machine_snapshot_v1_preserves_k16_trap_arg0() {
         ComputerMachine::from_k16_bios_flash(&bios, 1024, 5).expect("machine creates");
     machine.write_guest_ram_bytes(entry_pc, &program).unwrap();
     machine
-        .boot_handoff_k16_from_ram(entry_pc, program.len() as u32, 6)
+        .boot_handoff_k16_from_ram(entry_pc, program.len() as u32, 8)
         .expect("boot handoff succeeds");
 
     assert_eq!(
@@ -180,6 +182,8 @@ fn computer_machine_snapshot_v1_preserves_k16_trap_arg0() {
     let ComputerCpuSnapshotRecord::K16 { cpu, .. } = &decoded.cpus[0];
 
     assert_eq!(cpu.trap_arg0, 0x21);
+    assert_eq!(cpu.trap_arg1, 0x22);
+    assert_eq!(cpu.trap_arg2, 0x23);
 }
 
 #[test]

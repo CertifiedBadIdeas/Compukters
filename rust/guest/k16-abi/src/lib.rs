@@ -46,6 +46,8 @@ pub mod cpu {
         pub const INTERRUPT_MASK: u32 = 6;
         pub const INTERRUPT_PENDING: u32 = 7;
         pub const TRAP_ARG0: u32 = 8;
+        pub const TRAP_ARG1: u32 = 9;
+        pub const TRAP_ARG2: u32 = 10;
     }
 
     pub mod trap_cause {
@@ -77,6 +79,13 @@ pub mod syscall {
     pub const DEBUG_WRITE_BYTE: u32 = 3;
     pub const YIELD: u32 = 4;
     pub const SLEEP_TICKS: u32 = 5;
+    pub const EXIT: u32 = 6;
+    pub const WRITE: u32 = 7;
+    pub const FD_STDIN: u32 = 0;
+    pub const FD_STDOUT: u32 = 1;
+    pub const FD_STDERR: u32 = 2;
+    pub const ERROR_BAD_FD: u32 = 0xffff_fff7;
+    pub const ERROR_FAULT: u32 = 0xffff_fff2;
     pub const DEBUG_MARKER_RETURN: u32 = 0x53;
     pub const STATUS_OK: u32 = 0;
 }
@@ -433,6 +442,8 @@ mod tests {
         assert_eq!(cpu::csr::INTERRUPT_MASK, 6);
         assert_eq!(cpu::csr::INTERRUPT_PENDING, 7);
         assert_eq!(cpu::csr::TRAP_ARG0, 8);
+        assert_eq!(cpu::csr::TRAP_ARG1, 9);
+        assert_eq!(cpu::csr::TRAP_ARG2, 10);
         assert_eq!(cpu::interrupt_source::TIMER0, 0x0000_0001);
         assert_eq!(cpu::interrupt_source::KEYBOARD0, 0x0000_0002);
         assert_eq!(cpu::trap_cause::TIMER0_INTERRUPT, 0x8000_0001);
@@ -462,6 +473,13 @@ mod tests {
         assert_eq!(syscall::DEBUG_WRITE_BYTE, 3);
         assert_eq!(syscall::YIELD, 4);
         assert_eq!(syscall::SLEEP_TICKS, 5);
+        assert_eq!(syscall::EXIT, 6);
+        assert_eq!(syscall::WRITE, 7);
+        assert_eq!(syscall::FD_STDIN, 0);
+        assert_eq!(syscall::FD_STDOUT, 1);
+        assert_eq!(syscall::FD_STDERR, 2);
+        assert_eq!(syscall::ERROR_BAD_FD, 0xffff_fff7);
+        assert_eq!(syscall::ERROR_FAULT, 0xffff_fff2);
         assert_eq!(syscall::DEBUG_MARKER_RETURN, 0x53);
         assert_eq!(syscall::STATUS_OK, 0);
     }

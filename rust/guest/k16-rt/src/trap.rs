@@ -6,9 +6,12 @@ extern "C" {
     fn __k16_read_trap_pc() -> u32;
     fn __k16_read_trap_value() -> u32;
     fn __k16_read_trap_arg0() -> u32;
+    fn __k16_read_trap_arg1() -> u32;
+    fn __k16_read_trap_arg2() -> u32;
     fn __k16_syscall_once(number: u32);
     fn __k16_syscall0(number: u32) -> u32;
     fn __k16_syscall1(number: u32, arg0: u32) -> u32;
+    fn __k16_syscall3(number: u32, arg0: u32, arg1: u32, arg2: u32) -> u32;
     fn __k16_iret_with_r0(value: u32) -> !;
     fn __k16_write_interrupt_enable(value: u32);
     fn __k16_write_interrupt_mask(value: u32);
@@ -30,6 +33,10 @@ static TEST_TRAP_VALUE: AtomicU32 = AtomicU32::new(0);
 static TEST_SYSCALL_NUMBER: AtomicU32 = AtomicU32::new(0);
 #[cfg(any(test, feature = "host-test"))]
 static TEST_SYSCALL_ARG0: AtomicU32 = AtomicU32::new(0);
+#[cfg(any(test, feature = "host-test"))]
+static TEST_SYSCALL_ARG1: AtomicU32 = AtomicU32::new(0);
+#[cfg(any(test, feature = "host-test"))]
+static TEST_SYSCALL_ARG2: AtomicU32 = AtomicU32::new(0);
 #[cfg(any(test, feature = "host-test"))]
 static TEST_SYSCALL_RETURN: AtomicU32 = AtomicU32::new(0);
 #[cfg(any(test, feature = "host-test"))]
@@ -98,6 +105,28 @@ pub fn syscall_arg0() -> u32 {
 
 #[cfg(not(any(test, feature = "host-test")))]
 #[inline(always)]
+pub fn syscall_arg1() -> u32 {
+    unsafe { __k16_read_trap_arg1() }
+}
+
+#[cfg(any(test, feature = "host-test"))]
+pub fn syscall_arg1() -> u32 {
+    TEST_SYSCALL_ARG1.load(Ordering::Relaxed)
+}
+
+#[cfg(not(any(test, feature = "host-test")))]
+#[inline(always)]
+pub fn syscall_arg2() -> u32 {
+    unsafe { __k16_read_trap_arg2() }
+}
+
+#[cfg(any(test, feature = "host-test"))]
+pub fn syscall_arg2() -> u32 {
+    TEST_SYSCALL_ARG2.load(Ordering::Relaxed)
+}
+
+#[cfg(not(any(test, feature = "host-test")))]
+#[inline(always)]
 pub fn syscall_once(number: u32) {
     unsafe {
         __k16_syscall_once(number);
@@ -134,6 +163,21 @@ pub fn syscall1(number: u32, arg0: u32) -> u32 {
     TEST_SYSCALL_RETURN.load(Ordering::Relaxed)
 }
 
+#[cfg(not(any(test, feature = "host-test")))]
+#[inline(always)]
+pub fn syscall3(number: u32, arg0: u32, arg1: u32, arg2: u32) -> u32 {
+    unsafe { __k16_syscall3(number, arg0, arg1, arg2) }
+}
+
+#[cfg(any(test, feature = "host-test"))]
+pub fn syscall3(number: u32, arg0: u32, arg1: u32, arg2: u32) -> u32 {
+    TEST_SYSCALL_NUMBER.store(number, Ordering::Relaxed);
+    TEST_SYSCALL_ARG0.store(arg0, Ordering::Relaxed);
+    TEST_SYSCALL_ARG1.store(arg1, Ordering::Relaxed);
+    TEST_SYSCALL_ARG2.store(arg2, Ordering::Relaxed);
+    TEST_SYSCALL_RETURN.load(Ordering::Relaxed)
+}
+
 #[inline(always)]
 pub fn debug_marker() -> u32 {
     syscall0(k16_abi::syscall::DEBUG_MARKER)
@@ -152,6 +196,17 @@ pub fn yield_syscall() -> u32 {
 #[inline(always)]
 pub fn sleep_ticks_syscall(ticks: u32) -> u32 {
     syscall1(k16_abi::syscall::SLEEP_TICKS, ticks)
+}
+
+#[inline(always)]
+pub fn exit_syscall(status: u32) -> ! {
+    let _ = syscall1(k16_abi::syscall::EXIT, status);
+    crate::halt_forever()
+}
+
+#[inline(always)]
+pub fn write_syscall(fd: u32, ptr: *const u8, len: usize) -> u32 {
+    syscall3(k16_abi::syscall::WRITE, fd, ptr as usize as u32, len as u32)
 }
 
 #[cfg(not(any(test, feature = "host-test")))]
@@ -234,6 +289,8 @@ pub(crate) fn reset_test_interrupts() {
     TEST_TRAP_VALUE.store(0, Ordering::Relaxed);
     TEST_SYSCALL_NUMBER.store(0, Ordering::Relaxed);
     TEST_SYSCALL_ARG0.store(0, Ordering::Relaxed);
+    TEST_SYSCALL_ARG1.store(0, Ordering::Relaxed);
+    TEST_SYSCALL_ARG2.store(0, Ordering::Relaxed);
     TEST_SYSCALL_RETURN.store(0, Ordering::Relaxed);
     TEST_INTERRUPT_ENABLE.store(0, Ordering::Relaxed);
     TEST_INTERRUPT_MASK.store(0, Ordering::Relaxed);
@@ -266,6 +323,16 @@ pub(crate) fn test_syscall_number() -> u32 {
 #[cfg(any(test, feature = "host-test"))]
 pub(crate) fn test_syscall_arg0() -> u32 {
     TEST_SYSCALL_ARG0.load(Ordering::Relaxed)
+}
+
+#[cfg(any(test, feature = "host-test"))]
+pub(crate) fn test_syscall_arg1() -> u32 {
+    TEST_SYSCALL_ARG1.load(Ordering::Relaxed)
+}
+
+#[cfg(any(test, feature = "host-test"))]
+pub(crate) fn test_syscall_arg2() -> u32 {
+    TEST_SYSCALL_ARG2.load(Ordering::Relaxed)
 }
 
 #[cfg(any(test, feature = "host-test"))]

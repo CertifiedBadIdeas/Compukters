@@ -1,5 +1,5 @@
 use k16_tools::k16e;
-use k16_vm::computer_machine::{decode_snapshot_v1, ComputerCpuSnapshotRecord, ComputerMachine};
+use k16_vm::computer_machine::{decode_snapshot_v1, ComputerCpuSnapshotRecord};
 use k16_vm::k16::K16Signal;
 use k16_vm::k16_computer::K16ComputerHandle;
 use std::fs;
@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use std::process::Command;
 
 #[test]
-fn k16_runtime_startup_links_returning_main_and_exposes_return_byte() {
+fn k16_runtime_startup_links_returning_main_and_requires_exit_syscall_handler() {
     let startup_path = temp_file("startup.o");
     let main_path = temp_file("main.o");
     let output_path = temp_file("program.k16e");
@@ -55,13 +55,19 @@ fn k16_runtime_startup_links_returning_main_and_exposes_return_byte() {
     handle
         .exec_k16e_program_from_bytes(&program, 1_000_000)
         .expect("program installs");
-    assert_eq!(handle.run_k16_until_signal().unwrap(), K16Signal::Halt);
-    assert_eq!(handle.debug_output_bytes(), &[42]);
-    assert_eq!(handle.control().status, ComputerMachine::STATUS_HALTED);
+    let error = handle
+        .run_k16_until_signal()
+        .expect_err("startup EXIT syscall requires a kernel trap handler");
+
+    assert!(
+        error.contains("unhandled exception cause 5") && error.contains("syscall 6"),
+        "error: {error}"
+    );
+    assert_eq!(handle.debug_output_bytes(), &[]);
 }
 
 #[test]
-fn k16_run_executes_program_k16e_and_prints_debug_output_hex() {
+fn k16_run_reports_missing_exit_syscall_handler_for_startup_program() {
     let startup_path = temp_file("run-startup.o");
     let main_path = temp_file("run-main.o");
     let output_path = temp_file("run-program.k16e");
@@ -105,14 +111,13 @@ fn k16_run_executes_program_k16e_and_prints_debug_output_hex() {
         .output()
         .expect("k16 run runs");
 
+    assert!(!run_output.status.success());
+    assert_eq!(String::from_utf8_lossy(&run_output.stdout), "");
+    let stderr = String::from_utf8_lossy(&run_output.stderr);
     assert!(
-        run_output.status.success(),
-        "stderr: {}",
-        String::from_utf8_lossy(&run_output.stderr)
-    );
-    assert_eq!(
-        String::from_utf8_lossy(&run_output.stdout),
-        "signal=halt debug_bytes=2a\n"
+        stderr.contains("failed to run K16 program: unhandled exception cause 5")
+            && stderr.contains("syscall 6"),
+        "stderr: {stderr}"
     );
 }
 
@@ -232,9 +237,11 @@ fn k16_runtime_cpu_helpers_resolve_k16_cpu_symbols() {
         .exec_k16e_program_from_bytes(&program, 1_000_000)
         .expect("program installs");
 
-    assert_eq!(handle.run_k16_until_signal().unwrap(), K16Signal::Halt);
-    assert_eq!(handle.debug_output_bytes(), &[0]);
-    assert_eq!(handle.control().status, ComputerMachine::STATUS_HALTED);
+    assert_eq!(
+        handle.run_k16_until_signal().unwrap(),
+        K16Signal::StepLimitExceeded
+    );
+    assert_eq!(handle.debug_output_bytes(), &[]);
     let snapshot_bytes = handle.snapshot_v1().expect("snapshot encodes");
     let snapshot = decode_snapshot_v1(&snapshot_bytes).expect("snapshot decodes");
     let ComputerCpuSnapshotRecord::K16 { cpu, .. } = &snapshot.cpus[0];
@@ -306,8 +313,14 @@ fn k16_runtime_wait_helper_returns_to_caller_after_resuming() {
         .expect("program installs");
 
     assert_eq!(handle.run_k16_until_signal().unwrap(), K16Signal::Wait);
-    assert_eq!(handle.run_k16_until_signal().unwrap(), K16Signal::Halt);
-    assert_eq!(handle.debug_output_bytes(), &[7]);
+    let error = handle
+        .run_k16_until_signal()
+        .expect_err("startup EXIT syscall requires a kernel trap handler");
+    assert!(
+        error.contains("unhandled exception cause 5") && error.contains("syscall 6"),
+        "error: {error}"
+    );
+    assert_eq!(handle.debug_output_bytes(), &[]);
 }
 
 #[test]

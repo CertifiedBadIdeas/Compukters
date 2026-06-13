@@ -26,6 +26,52 @@ pub mod thread {
     }
 }
 
+pub mod io {
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub enum Error {
+        ShortWrite,
+        Syscall(u32),
+    }
+
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub struct Fd(u32);
+
+    impl Fd {
+        pub const fn raw(self) -> u32 {
+            self.0
+        }
+
+        pub fn write_all(self, bytes: &[u8]) -> Result<(), Error> {
+            let returned = k16_rt::write_syscall(self.0, bytes.as_ptr(), bytes.len());
+            if (returned as i32) < 0 {
+                return Err(Error::Syscall(returned));
+            }
+            if returned != bytes.len() as u32 {
+                return Err(Error::ShortWrite);
+            }
+            Ok(())
+        }
+    }
+
+    pub fn stdin() -> Fd {
+        Fd(k16_abi::syscall::FD_STDIN)
+    }
+
+    pub fn stdout() -> Fd {
+        Fd(k16_abi::syscall::FD_STDOUT)
+    }
+
+    pub fn stderr() -> Fd {
+        Fd(k16_abi::syscall::FD_STDERR)
+    }
+}
+
+pub mod process {
+    pub fn exit(status: u32) -> ! {
+        k16_rt::exit_syscall(status)
+    }
+}
+
 pub mod prelude {
-    pub use crate::{debug, thread};
+    pub use crate::{debug, io, process, thread};
 }

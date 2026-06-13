@@ -3,7 +3,7 @@ use crate::terminal_render;
 const COLUMNS: usize = 320 / terminal_render::CELL_WIDTH;
 const ROWS: usize = 200 / terminal_render::CELL_HEIGHT;
 const CELL_COUNT: usize = COLUMNS * ROWS;
-const CELLS_ADDR: u32 = 0x0000_8000;
+const CELLS_ADDR: u32 = 0x0000_3000;
 
 static mut CURSOR_X: usize = 0;
 static mut CURSOR_Y: usize = 0;

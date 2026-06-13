@@ -10,10 +10,11 @@ K16 now has enough LLVM-facing infrastructure for a tiny freestanding C proof:
 
 - a K16 LLVM backend prototype can emit ELF32 relocatable objects;
 - Clang can compile the current `--target=k16` backend into `.text.k16`;
-- `k16 runtime k16-startup` provides `_start`, calls `main`, and exposes the
-  low byte of the return value through `debug::WRITE`;
+- `k16 runtime k16-startup` provides `_start`, calls `main`, and terminates
+  through the K16 `EXIT` syscall with the returned `r0` value as status;
 - `k16 link --target program` converts K16 objects into a `K16E` program;
-- `k16 run` executes that `K16E` in the VM and observes `debug_bytes=2a`.
+- bundled firmware executes that `K16E` under the Rust kernel syscall handler
+  and observes the process exit status.
 
 That proves the CPU/object/K16E path, not Rust support. Rust requires a target
 description, language runtime decisions, panic behavior, compiler helper
