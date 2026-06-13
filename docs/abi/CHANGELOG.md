@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- `k16 disasm` now accepts `--start <pc>` and `--count <instructions>` for
+  strict PC-window disassembly. This keeps current `K16E` inspection useful
+  when linked payloads contain code plus data/rodata and the executable format
+  does not carry `.text` boundaries.
 - K16E single-load sections now allow `memory_size >= file_size`. Loaders copy
   the file payload and zero-fill the tail, which lets the object linker
   represent trailing `.bss` without serializing zero bytes into the file.

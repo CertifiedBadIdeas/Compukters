@@ -59,6 +59,49 @@ fn k16_disasm_prints_program_artifact_from_program_load_base() {
 }
 
 #[test]
+fn k16_disasm_prints_program_window_without_decoding_following_data() {
+    let artifact_path = temp_file("program-with-data.kx");
+    fs::write(
+        &artifact_path,
+        k16_tools::k16e::encode_k16_executable(
+            &words_to_bytes(&[const4(1, 7), halt(), 0x316b]),
+            k16_tools::k16e::K16eAbiKind::Program,
+            0x8000,
+            0x8000,
+        )
+        .expect("K16E encodes"),
+    )
+    .expect("artifact writes");
+
+    let output = Command::new(k16_binary())
+        .args([
+            "disasm",
+            "--target",
+            "program",
+            "--start",
+            "0x00008000",
+            "--count",
+            "2",
+            artifact_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("k16 disasm runs");
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("00008000: 1107  const4 r1, 7"),
+        "stdout: {stdout}"
+    );
+    assert!(stdout.contains("00008002: 0001  halt"), "stdout: {stdout}");
+    assert!(!stdout.contains("316b"), "stdout: {stdout}");
+}
+
+#[test]
 fn k16_disasm_prints_boot_artifact_from_boot_load_base() {
     let artifact_path = temp_file("boot.kb");
     fs::write(

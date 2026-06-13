@@ -26,7 +26,7 @@ pub fn run_k16_cli(args: Vec<String>) -> Result<(), String> {
 }
 
 fn usage_error() -> Result<(), String> {
-    Err("usage: k16 link [--target <boot|kernel|program>] <input.ko>... -o <output.kx>\n       k16 runtime <k16-startup|k16-memory-helpers|k16-cpu-helpers> -o <output.ko>\n       k16 run <program.kx>\n       k16 run-bios <bios.kflash>\n       k16 disasm --target <bios|boot|kernel|program> <input>\n       k16 inspect <blob>\n       k16 volume <create|init|put-boot|put-kernel> ...\n       k16 fs <filesystem> ...".to_string())
+    Err("usage: k16 link [--target <boot|kernel|program>] <input.ko>... -o <output.kx>\n       k16 runtime <k16-startup|k16-memory-helpers|k16-cpu-helpers> -o <output.ko>\n       k16 run <program.kx>\n       k16 run-bios <bios.kflash>\n       k16 disasm --target <bios|boot|kernel|program> [--start <pc>] [--count <instructions>] <input>\n       k16 inspect <blob>\n       k16 volume <create|init|put-boot|put-kernel> ...\n       k16 fs <filesystem> ...".to_string())
 }
 
 fn run_program(args: &[String]) -> Result<(), String> {
@@ -280,7 +280,7 @@ fn run_disasm(args: &[String]) -> Result<(), String> {
     let config = parse_disasm_args(args)?;
     let bytes = fs::read(&config.input_path)
         .map_err(|error| format!("failed to read {}: {error}", config.input_path))?;
-    let disassembly = k16_disasm::disassemble_artifact(&bytes, config.target)?;
+    let disassembly = k16_disasm::disassemble_artifact(&bytes, config.target, config.options)?;
     print!("{disassembly}");
     Ok(())
 }
@@ -288,11 +288,14 @@ fn run_disasm(args: &[String]) -> Result<(), String> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct DisasmConfig {
     target: K16ArtifactTarget,
+    options: k16_disasm::DisassembleOptions,
     input_path: String,
 }
 
 fn parse_disasm_args(args: &[String]) -> Result<DisasmConfig, String> {
     let mut target = None;
+    let mut start = None;
+    let mut count = None;
     let mut input_path = None;
     let mut index = 0;
     while index < args.len() {
@@ -302,6 +305,23 @@ fn parse_disasm_args(args: &[String]) -> Result<DisasmConfig, String> {
                     return disasm_usage_error();
                 };
                 target = Some(K16ArtifactTarget::parse(value)?);
+                index += 2;
+            }
+            "--start" => {
+                let Some(value) = args.get(index + 1) else {
+                    return disasm_usage_error();
+                };
+                start = Some(parse_u32_number(value, "disassembly start")?);
+                index += 2;
+            }
+            "--count" => {
+                let Some(value) = args.get(index + 1) else {
+                    return disasm_usage_error();
+                };
+                count = Some(parse_positive_usize(
+                    value,
+                    "disassembly instruction count",
+                )?);
                 index += 2;
             }
             value if value.starts_with('-') => return disasm_usage_error(),
@@ -316,6 +336,7 @@ fn parse_disasm_args(args: &[String]) -> Result<DisasmConfig, String> {
     }
     Ok(DisasmConfig {
         target: target.ok_or_else(disasm_usage_message)?,
+        options: k16_disasm::DisassembleOptions { start, count },
         input_path: input_path.ok_or_else(disasm_usage_message)?,
     })
 }
@@ -576,6 +597,29 @@ fn parse_size(value: &str) -> Result<usize, String> {
     Ok(size)
 }
 
+fn parse_u32_number(value: &str, name: &str) -> Result<u32, String> {
+    let digits = value
+        .strip_prefix("0x")
+        .or_else(|| value.strip_prefix("0X"));
+    match digits {
+        Some(hex) => u32::from_str_radix(hex, 16)
+            .map_err(|_| format!("invalid {name} `{value}`; expected u32")),
+        None => value
+            .parse::<u32>()
+            .map_err(|_| format!("invalid {name} `{value}`; expected u32")),
+    }
+}
+
+fn parse_positive_usize(value: &str, name: &str) -> Result<usize, String> {
+    let parsed = value
+        .parse::<usize>()
+        .map_err(|_| format!("invalid {name} `{value}`; expected positive integer"))?;
+    if parsed == 0 {
+        return Err(format!("{name} must be positive"));
+    }
+    Ok(parsed)
+}
+
 fn link_usage_error() -> Result<LinkConfig, String> {
     Err(link_usage_message())
 }
@@ -604,7 +648,7 @@ fn disasm_usage_error() -> Result<DisasmConfig, String> {
 }
 
 fn disasm_usage_message() -> String {
-    "usage: k16 disasm --target <bios|boot|kernel|program> <input>".to_string()
+    "usage: k16 disasm --target <bios|boot|kernel|program> [--start <pc>] [--count <instructions>] <input>".to_string()
 }
 
 fn inspect_usage_error() -> Result<(), String> {
