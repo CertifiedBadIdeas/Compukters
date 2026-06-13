@@ -1,4 +1,6 @@
 use crate::*;
+use std::sync::{Arc, Barrier};
+use std::thread;
 
 #[test]
 fn memcpy_copies_bytes_without_touching_return_value() {
@@ -228,6 +230,43 @@ fn syscall3_records_arguments_and_returns_test_syscall_value() {
     assert_eq!(syscall_arg1(), 0x22);
     assert_eq!(syscall_arg2(), 0x33);
     assert_eq!(returned, 7);
+}
+
+#[test]
+fn host_test_syscall_state_is_isolated_between_threads() {
+    let ready = Arc::new(Barrier::new(2));
+    let overwritten = Arc::new(Barrier::new(2));
+
+    let left_ready = Arc::clone(&ready);
+    let left_overwritten = Arc::clone(&overwritten);
+    let left = thread::spawn(move || {
+        crate::trap::reset_test_interrupts();
+        syscall1(0x30, 0x21);
+        left_ready.wait();
+        left_overwritten.wait();
+
+        (
+            crate::trap::test_syscall_number(),
+            crate::trap::test_syscall_arg0(),
+        )
+    });
+
+    let right_ready = Arc::clone(&ready);
+    let right_overwritten = Arc::clone(&overwritten);
+    let right = thread::spawn(move || {
+        right_ready.wait();
+        crate::trap::reset_test_interrupts();
+        syscall3(0x40, 0x11, 0x22, 0x33);
+        right_overwritten.wait();
+
+        (
+            crate::trap::test_syscall_number(),
+            crate::trap::test_syscall_arg0(),
+        )
+    });
+
+    assert_eq!(left.join().expect("left thread returns"), (0x30, 0x21));
+    assert_eq!(right.join().expect("right thread returns"), (0x40, 0x11));
 }
 
 #[test]
