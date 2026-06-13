@@ -16,6 +16,18 @@ pub fn set_panic() {
     }
 }
 
+pub fn set_halted() {
+    unsafe {
+        mmio::write_i32(control_mmio::STATUS, status::HALTED);
+    }
+}
+
+pub fn set_panic_code(code: i32) {
+    unsafe {
+        mmio::write_i32(control_mmio::PANIC_CODE, code);
+    }
+}
+
 pub fn wait_forever() -> ! {
     k16_rt::halt_forever()
 }
