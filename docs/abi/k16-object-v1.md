@@ -109,12 +109,12 @@ K16 platform helpers used by `k16-rt` for halt, CSR access, and interrupt
 return. These helpers are explicit link inputs; the VM and linker do not
 synthesize them.
 
-Cargo-built Rust `bin` crates use the normal `core` plus `compiler_builtins`
-`rlib` inputs produced by `-Zbuild-std=core`. In that path,
-`compiler_builtins` owns compiler arithmetic helpers such as `__udivdi3` and
-`__umoddi3`; `k16-rt` owns K16 platform/runtime symbols such as `abort` and the
-small C ABI memory helpers. The object linker does not synthesize any of these
-symbols.
+Cargo-built Rust `bin` crates use the normal `core` inputs produced by
+`-Zbuild-std=core`. The standalone K16 runtime path links explicit runtime
+objects instead of asking the object linker to synthesize platform symbols:
+`k16-memory-helpers` owns the small C ABI memory helpers and the current i64/u64
+compiler-rt helpers, while `k16-cpu-helpers` owns K16 CPU control helpers such
+as halt, wait, yield, CSR access, syscalls, and interrupt return.
 
 Runtime helper symbol names:
 

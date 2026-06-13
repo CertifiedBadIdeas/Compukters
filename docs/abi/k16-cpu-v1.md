@@ -84,9 +84,9 @@ values must explicitly perform signed interpretation during lowering; the ABI
 slot itself does not carry signedness.
 
 The first value model supports up to four scalar `i32` return slots in
-`r0..r3`. This covers LLVM/Rust scalar pair-style returns such as small
-result/status aggregates without adding a hidden return pointer. `i64`,
-aggregate-by-value arguments, memory-returned structs, varargs, and implicit
+`r0..r3`. This covers `i64` returns and LLVM/Rust scalar pair-style returns
+such as small result/status aggregates without adding a hidden return pointer.
+Aggregate-by-value arguments, memory-returned structs, varargs, and implicit
 return slots are unsupported in v1.
 
 ### LLVM-Facing Register Calling Convention
@@ -124,15 +124,14 @@ Arguments are numbered in source order. Logical arguments 0, 1, and 2 use
 `r1`, `r2`, and `r3`. Logical argument 3 is stack argument 0, logical argument
 4 is stack argument 1, and so on.
 
-The caller reserves the outgoing stack-argument area before `call`:
+The caller reserves the outgoing stack-argument area in its call frame and
+stores stack-passed arguments before `call`:
 
 ```text
-sp = sp - stack_arg_bytes
 store32 [sp + 0], stack_arg0
 store32 [sp + 4], stack_arg1
 ...
 call target
-sp = sp + stack_arg_bytes
 ```
 
 `call` pushes the return PC after the outgoing stack-argument area has been
@@ -148,7 +147,7 @@ reserved. On callee entry:
 Therefore stack argument 0 is at `[sp + 4]` for a callee that addresses
 arguments relative to `sp` before installing a frame pointer. The `ret`
 instruction pops only the return PC; the caller removes the outgoing
-stack-argument area after `ret`.
+stack-argument area when its call frame is released.
 
 ### LLVM-Facing Frame Layout
 
@@ -194,7 +193,6 @@ stack-backed helper locals and local byte arrays inside helper frames.
 The initial target must reject or lower through deliberate helper/runtime
 symbols, not silent fallback behavior:
 
-- `i64` arguments and returns;
 - aggregate-by-value arguments;
 - struct returns;
 - varargs;

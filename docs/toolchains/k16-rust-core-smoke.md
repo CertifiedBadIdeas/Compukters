@@ -70,9 +70,9 @@ K16 LLVM checkout. That proves the strict `core` sysroot path can build a
 resulting `K16E` program in the VM, and report the `main` return value through
 the standalone `k16 run` path.
 
-This does not enable `alloc`, hosted `std`, panic unwinding, debug object
-relocations, or direct Rust `u64` division libcalls. Those remain separate ABI
-and runtime slices.
+This does not enable `alloc`, hosted `std`, panic unwinding, or debug object
+relocations. Direct Rust `u64`/`i64` div/rem and 64-bit shift libcalls are
+covered by the standalone K16 runtime helper path.
 
 ## Firmware Tier
 

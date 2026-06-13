@@ -265,17 +265,17 @@ pub unsafe extern "C" fn __k16_memcpy(dst: *mut u8, src: *const u8, n: usize) ->
 }
 
 #[no_mangle]
-pub extern "C" fn __udivdi3(lhs: u64, rhs: u64) -> u64 {
+pub fn __udivdi3(lhs: u64, rhs: u64) -> u64 {
     k16_udiv64(lhs, rhs)
 }
 
 #[no_mangle]
-pub extern "C" fn __umoddi3(lhs: u64, rhs: u64) -> u64 {
+pub fn __umoddi3(lhs: u64, rhs: u64) -> u64 {
     k16_umod64(lhs, rhs)
 }
 
 #[no_mangle]
-pub extern "C" fn __ashldi3(value: u64, shift: u32) -> u64 {
+pub fn __ashldi3(value: u64, shift: u32) -> u64 {
     let mut count = shift as usize;
     while count > 63usize {
         count = count - 64usize;
@@ -293,7 +293,7 @@ pub extern "C" fn __ashldi3(value: u64, shift: u32) -> u64 {
 }
 
 #[no_mangle]
-pub extern "C" fn __lshrdi3(value: u64, shift: u32) -> u64 {
+pub fn __lshrdi3(value: u64, shift: u32) -> u64 {
     let mut count = shift as usize;
     while count > 63usize {
         count = count - 64usize;
@@ -311,7 +311,7 @@ pub extern "C" fn __lshrdi3(value: u64, shift: u32) -> u64 {
 }
 
 #[no_mangle]
-pub extern "C" fn __ashrdi3(value: i64, shift: u32) -> i64 {
+pub fn __ashrdi3(value: i64, shift: u32) -> i64 {
     let mut count = shift as usize;
     while count > 63usize {
         count = count - 64usize;
@@ -338,12 +338,12 @@ pub extern "C" fn __ashrdi3(value: i64, shift: u32) -> i64 {
 }
 
 #[no_mangle]
-pub extern "C" fn __divdi3(lhs: i64, rhs: i64) -> i64 {
+pub fn __divdi3(lhs: i64, rhs: i64) -> i64 {
     k16_div64(lhs, rhs)
 }
 
 #[no_mangle]
-pub extern "C" fn __moddi3(lhs: i64, rhs: i64) -> i64 {
+pub fn __moddi3(lhs: i64, rhs: i64) -> i64 {
     k16_mod64(lhs, rhs)
 }
 

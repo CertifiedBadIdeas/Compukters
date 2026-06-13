@@ -196,10 +196,19 @@ require_contains "$WORK_DIR/stack-local-main-kx.disasm" "store32 [r13], r0"
 require_contains "$WORK_DIR/stack-local-main-kx.disasm" "load32 r0, [r13]"
 require_contains "$WORK_DIR/stack-local-main-kx.disasm" "add r15, r15, r13"
 
-require_llc_failure "$WORK_DIR/i64-return.ll" "LLVM ERROR: K16 multi-value returns are not implemented"
+"$LLC" -mtriple=k16 -filetype=asm "$WORK_DIR/four-args.ll" -o "$WORK_DIR/four-args.s"
+require_contains "$WORK_DIR/four-args.s" "const32 r13, 4"
+require_contains "$WORK_DIR/four-args.s" "add r13, r15, r13"
+require_contains "$WORK_DIR/four-args.s" "load32"
+
+"$LLC" -mtriple=k16 -filetype=asm "$WORK_DIR/indirect-call.ll" -o "$WORK_DIR/indirect-call.s"
+require_contains "$WORK_DIR/indirect-call.s" "call r1"
+
+"$LLC" -mtriple=k16 -filetype=asm "$WORK_DIR/i64-return.ll" -o "$WORK_DIR/i64-return.s"
+require_contains "$WORK_DIR/i64-return.s" "const32 r0, 42"
+require_contains "$WORK_DIR/i64-return.s" "const32 r1, 0"
+
 require_llc_failure "$WORK_DIR/varargs.ll" "LLVM ERROR: K16 varargs are not implemented"
-require_llc_failure "$WORK_DIR/four-args.ll" "LLVM ERROR: K16 stack arguments are not implemented"
-require_llc_failure "$WORK_DIR/indirect-call.ll" "LLVM ERROR: K16 only supports direct calls"
 
 echo "direct LLVM call relocation checks passed"
 echo "stack-local LLVM lowering checks passed"
