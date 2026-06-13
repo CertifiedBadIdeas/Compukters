@@ -27,7 +27,7 @@ pub fn run_k16_cli(args: Vec<String>) -> Result<(), String> {
 }
 
 fn usage_error() -> Result<(), String> {
-    Err("usage: k16 link [--target <boot|kernel|program|program-init|program-child>] <input.ko>... -o <output.kx>\n       k16 runtime <k16-startup|k16-memory-helpers|k16-cpu-helpers> [--target <program|program-init|program-child>] -o <output.ko>\n       k16 run <program.kx>\n       k16 run-bios <bios.kflash>\n       k16 disasm --target <bios|boot|kernel|program|program-init|program-child> [--start <pc>] [--count <instructions>] <input>\n       k16 inspect <blob>\n       k16 volume <create|init|put-boot|put-kernel> ...\n       k16 fs <filesystem> ...".to_string())
+    Err("usage: k16 link [--target <boot|kernel|program>] <input.ko>... -o <output.kx>\n       k16 runtime <k16-startup|k16-memory-helpers|k16-cpu-helpers> -o <output.ko>\n       k16 run <program.kx>\n       k16 run-bios <bios.kflash>\n       k16 disasm --target <bios|boot|kernel|program> [--start <pc>] [--count <instructions>] <input>\n       k16 inspect <blob>\n       k16 volume <create|init|put-boot|put-kernel> ...\n       k16 fs <filesystem> ...".to_string())
 }
 
 fn run_program(args: &[String]) -> Result<(), String> {
@@ -135,10 +135,12 @@ fn run_runtime(args: &[String]) -> Result<(), String> {
     };
     match command.as_str() {
         "k16-startup" => {
-            let config = parse_runtime_startup_args(&args[1..])?;
-            let bytes = k16_runtime::k16_startup_object_for_target(config.target);
-            fs::write(&config.output_path, bytes)
-                .map_err(|error| format!("failed to write {}: {error}", config.output_path))
+            if args.len() != 3 || args[1] != "-o" {
+                return runtime_usage_error();
+            }
+            let bytes = k16_runtime::k16_startup_object();
+            fs::write(&args[2], bytes)
+                .map_err(|error| format!("failed to write {}: {error}", args[2]))
         }
         "k16-memory-helpers" => {
             if args.len() != 3 || args[1] != "-o" {
@@ -156,46 +158,6 @@ fn run_runtime(args: &[String]) -> Result<(), String> {
         }
         _ => runtime_usage_error(),
     }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct RuntimeStartupConfig {
-    target: K16ArtifactTarget,
-    output_path: String,
-}
-
-fn parse_runtime_startup_args(args: &[String]) -> Result<RuntimeStartupConfig, String> {
-    let mut target = K16ArtifactTarget::Program;
-    let mut output_path = None;
-    let mut index = 0;
-    while index < args.len() {
-        match args[index].as_str() {
-            "--target" => {
-                let Some(value) = args.get(index + 1) else {
-                    return Err(runtime_usage_message());
-                };
-                target = K16ArtifactTarget::parse(value)?;
-                if target.stack_top().is_none() {
-                    return Err(format!(
-                        "k16-startup target {target:?} has no user stack top"
-                    ));
-                }
-                index += 2;
-            }
-            "-o" => {
-                let Some(value) = args.get(index + 1) else {
-                    return Err(runtime_usage_message());
-                };
-                output_path = Some(value.clone());
-                index += 2;
-            }
-            _ => return Err(runtime_usage_message()),
-        }
-    }
-    Ok(RuntimeStartupConfig {
-        target,
-        output_path: output_path.ok_or_else(runtime_usage_message)?,
-    })
 }
 
 fn build_k16_memory_helpers(output_path: &Path) -> Result<(), String> {
@@ -689,15 +651,14 @@ fn link_usage_error() -> Result<LinkConfig, String> {
 }
 
 fn link_usage_message() -> String {
-    "usage: k16 link [--target <boot|kernel|program|program-init|program-child>] <input.ko>... -o <output.kx>".to_string()
+    "usage: k16 link [--target <boot|kernel|program>] <input.ko>... -o <output.kx>".to_string()
 }
 
 fn runtime_usage_error() -> Result<(), String> {
-    Err(runtime_usage_message())
-}
-
-fn runtime_usage_message() -> String {
-    "usage: k16 runtime <k16-startup|k16-memory-helpers|k16-cpu-helpers> [--target <program|program-init|program-child>] -o <output.ko>".to_string()
+    Err(
+        "usage: k16 runtime <k16-startup|k16-memory-helpers|k16-cpu-helpers> -o <output.ko>"
+            .to_string(),
+    )
 }
 
 fn run_usage_error() -> Result<(), String> {
@@ -713,7 +674,7 @@ fn disasm_usage_error() -> Result<DisasmConfig, String> {
 }
 
 fn disasm_usage_message() -> String {
-    "usage: k16 disasm --target <bios|boot|kernel|program|program-init|program-child> [--start <pc>] [--count <instructions>] <input>".to_string()
+    "usage: k16 disasm --target <bios|boot|kernel|program> [--start <pc>] [--count <instructions>] <input>".to_string()
 }
 
 fn inspect_usage_error() -> Result<(), String> {

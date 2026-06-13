@@ -1,49 +1,4 @@
-use k16_tools::artifact::K16ArtifactTarget;
 use k16_tools::k16e;
-
-#[test]
-fn k16e_program_slot_targets_keep_init_and_child_in_separate_ranges() {
-    assert_eq!(
-        K16ArtifactTarget::parse("program-init"),
-        Ok(K16ArtifactTarget::ProgramInit)
-    );
-    assert_eq!(
-        K16ArtifactTarget::parse("program-child"),
-        Ok(K16ArtifactTarget::ProgramChild)
-    );
-
-    assert_eq!(K16ArtifactTarget::ProgramInit.base_address(), 0x8000);
-    assert_eq!(
-        K16ArtifactTarget::ProgramInit.payload_end_limit(),
-        Some(0xc000)
-    );
-    assert_eq!(K16ArtifactTarget::ProgramInit.stack_top(), Some(0xc000));
-    assert_eq!(
-        K16ArtifactTarget::ProgramInit.fixed_image_abi_kind(),
-        Some(k16e::K16eAbiKind::Program)
-    );
-
-    assert_eq!(K16ArtifactTarget::ProgramChild.base_address(), 0xc000);
-    assert_eq!(
-        K16ArtifactTarget::ProgramChild.payload_end_limit(),
-        Some(0x1_0000)
-    );
-    assert_eq!(K16ArtifactTarget::ProgramChild.stack_top(), Some(0x1_0000));
-    assert_eq!(
-        K16ArtifactTarget::ProgramChild.fixed_image_abi_kind(),
-        Some(k16e::K16eAbiKind::Program)
-    );
-}
-
-#[test]
-fn k16e_standalone_program_target_keeps_existing_full_user_range() {
-    assert_eq!(K16ArtifactTarget::Program.base_address(), 0x8000);
-    assert_eq!(
-        K16ArtifactTarget::Program.payload_end_limit(),
-        Some(0x1_0000)
-    );
-    assert_eq!(K16ArtifactTarget::Program.stack_top(), Some(0x1_0000));
-}
 
 #[test]
 fn k16e_encodes_single_k16_load_segment() {
