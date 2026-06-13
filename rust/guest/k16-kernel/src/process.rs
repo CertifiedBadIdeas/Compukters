@@ -1,3 +1,6 @@
+#[cfg(any(not(test), feature = "host-test"))]
+use core::cell::UnsafeCell;
+
 const LOAD_ALIGNMENT: u32 = 2;
 const STACK_ALIGNMENT: u32 = 4;
 const ROOT_PARTITION: &[u8; 4] = b"ROOT";
@@ -5,6 +8,33 @@ const BIN_COMPONENT: &[u8] = b"bin";
 const BIN_PREFIX: &[u8] = b"/bin/";
 const KX_SUFFIX: &[u8] = b".kx";
 const K16FS_MAX_NAME_BYTES: usize = 56;
+#[cfg(any(not(test), feature = "host-test"))]
+static PROCESS_TABLE: KernelProcessTable =
+    KernelProcessTable::new(ProcessTable::new(ProcessContext {
+        entry_pc: 0,
+        stack_top: 0,
+    }));
+
+#[cfg(any(not(test), feature = "host-test"))]
+struct KernelProcessTable {
+    table: UnsafeCell<ProcessTable>,
+}
+
+#[cfg(any(not(test), feature = "host-test"))]
+unsafe impl Sync for KernelProcessTable {}
+
+#[cfg(any(not(test), feature = "host-test"))]
+impl KernelProcessTable {
+    const fn new(table: ProcessTable) -> Self {
+        Self {
+            table: UnsafeCell::new(table),
+        }
+    }
+
+    unsafe fn get(&self) -> &mut ProcessTable {
+        unsafe { &mut *self.table.get() }
+    }
+}
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum ProcessLoadError {
@@ -41,16 +71,44 @@ pub struct ProcessContext {
     pub stack_top: u32,
 }
 
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TrapFrame {
+    pub registers: [u32; 16],
+    pub resume_pc: u32,
+    pub stack_pointer: u32,
+    pub interrupt_enable: u32,
+}
+
+impl TrapFrame {
+    pub const fn zeroed() -> Self {
+        Self {
+            registers: [0; 16],
+            resume_pc: 0,
+            stack_pointer: 0,
+            interrupt_enable: 0,
+        }
+    }
+}
+
+impl Default for TrapFrame {
+    fn default() -> Self {
+        Self::zeroed()
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct ChildLaunch {
     pub id: ProcessId,
     pub context: ProcessContext,
+    pub frame: TrapFrame,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct InitResume {
     pub id: ProcessId,
     pub context: ProcessContext,
+    pub frame: TrapFrame,
     pub child_exit_status: u32,
 }
 
@@ -66,6 +124,7 @@ impl ProcessTable {
             init: ProcessSlot {
                 state: ProcessState::Running,
                 context: init_context,
+                frame: TrapFrame::zeroed(),
                 exit_status: 0,
             },
             child: ProcessSlot {
@@ -74,6 +133,7 @@ impl ProcessTable {
                     entry_pc: 0,
                     stack_top: 0,
                 },
+                frame: TrapFrame::zeroed(),
                 exit_status: 0,
             },
         }
@@ -83,6 +143,14 @@ impl ProcessTable {
         &mut self,
         child_plan: DynamicUserLoadPlan,
     ) -> Result<ChildLaunch, ProcessSwitchError> {
+        self.begin_child_run_from_frame(child_plan, TrapFrame::zeroed())
+    }
+
+    pub fn begin_child_run_from_frame(
+        &mut self,
+        child_plan: DynamicUserLoadPlan,
+        init_frame: TrapFrame,
+    ) -> Result<ChildLaunch, ProcessSwitchError> {
         if self.child.state == ProcessState::Running {
             return Err(ProcessSwitchError::ChildAlreadyRunning);
         }
@@ -90,15 +158,23 @@ impl ProcessTable {
             entry_pc: child_plan.entry_pc,
             stack_top: child_plan.stack_top,
         };
+        let child_frame = child_frame_for_context(context);
         self.init.state = ProcessState::BlockedOnChild;
+        self.init.context = ProcessContext {
+            entry_pc: init_frame.resume_pc,
+            stack_top: init_frame.stack_pointer,
+        };
+        self.init.frame = init_frame;
         self.child = ProcessSlot {
             state: ProcessState::Running,
             context,
+            frame: child_frame,
             exit_status: 0,
         };
         Ok(ChildLaunch {
             id: ProcessId::Child,
             context,
+            frame: child_frame,
         })
     }
 
@@ -112,6 +188,7 @@ impl ProcessTable {
         Ok(InitResume {
             id: ProcessId::Init,
             context: self.init.context,
+            frame: self.init.frame,
             child_exit_status: status,
         })
     }
@@ -129,7 +206,71 @@ impl ProcessTable {
 struct ProcessSlot {
     state: ProcessState,
     context: ProcessContext,
+    frame: TrapFrame,
     exit_status: u32,
+}
+
+pub const fn child_frame_for_context(context: ProcessContext) -> TrapFrame {
+    let mut frame = TrapFrame::zeroed();
+    frame.resume_pc = context.entry_pc;
+    frame.stack_pointer = context.stack_top;
+    frame
+}
+
+#[cfg(any(not(test), feature = "host-test"))]
+pub unsafe fn begin_loaded_child(
+    child_plan: DynamicUserLoadPlan,
+) -> Result<ChildLaunch, ProcessSwitchError> {
+    let mut init_frame = k16_rt::TrapFrame::zeroed();
+    k16_rt::save_trap_frame(&mut init_frame);
+    unsafe {
+        PROCESS_TABLE
+            .get()
+            .begin_child_run_from_frame(child_plan, TrapFrame::from(init_frame))
+    }
+}
+
+#[cfg(any(not(test), feature = "host-test"))]
+pub unsafe fn enter_child_context(launch: ChildLaunch) -> ! {
+    let frame = k16_rt::TrapFrame::from(launch.frame);
+    let _saved_r0 = unsafe { k16_rt::restore_trap_frame(&frame) };
+    unsafe { k16_rt::iret_with_r0(0) }
+}
+
+#[cfg(any(not(test), feature = "host-test"))]
+pub unsafe fn finish_child_for_exit(status: u32) -> Result<InitResume, ProcessSwitchError> {
+    unsafe { PROCESS_TABLE.get().finish_child(status) }
+}
+
+#[cfg(any(not(test), feature = "host-test"))]
+pub unsafe fn resume_init_context(resume: InitResume) -> ! {
+    let frame = k16_rt::TrapFrame::from(resume.frame);
+    let _saved_r0 = unsafe { k16_rt::restore_trap_frame(&frame) };
+    unsafe { k16_rt::iret_with_r0(resume.child_exit_status) }
+}
+
+#[cfg(any(not(test), feature = "host-test"))]
+impl From<k16_rt::TrapFrame> for TrapFrame {
+    fn from(frame: k16_rt::TrapFrame) -> Self {
+        Self {
+            registers: frame.registers,
+            resume_pc: frame.resume_pc,
+            stack_pointer: frame.stack_pointer,
+            interrupt_enable: frame.interrupt_enable,
+        }
+    }
+}
+
+#[cfg(any(not(test), feature = "host-test"))]
+impl From<TrapFrame> for k16_rt::TrapFrame {
+    fn from(frame: TrapFrame) -> Self {
+        Self {
+            registers: frame.registers,
+            resume_pc: frame.resume_pc,
+            stack_pointer: frame.stack_pointer,
+            interrupt_enable: frame.interrupt_enable,
+        }
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -681,5 +822,44 @@ mod tests {
         assert_eq!(resumed.child_exit_status, 7);
         assert_eq!(table.init_state(), ProcessState::Running);
         assert_eq!(table.child_state(), ProcessState::Empty);
+    }
+
+    #[test]
+    fn process_table_preserves_init_frame_and_builds_child_frame() {
+        let mut table = ProcessTable::new(ProcessContext {
+            entry_pc: 0,
+            stack_top: 0,
+        });
+        let mut init_frame = TrapFrame::default();
+        init_frame.registers[1] = 0x0000_0011;
+        init_frame.resume_pc = 0x0000_8100;
+        init_frame.stack_pointer = 0x0000_f000;
+        init_frame.interrupt_enable = 1;
+        let child_plan = DynamicUserLoadPlan {
+            load_base: 0x0000_a000,
+            load_end: 0x0000_a020,
+            entry_pc: 0x0000_a004,
+            stack_top: 0x0000_e000,
+            payload_dst: 0x0000_a000,
+            payload_len: 16,
+            zero_fill_addr: 0x0000_a010,
+            zero_fill_len: 16,
+        };
+
+        let child = table
+            .begin_child_run_from_frame(child_plan, init_frame)
+            .expect("child starts");
+
+        assert_eq!(child.frame.resume_pc, child.context.entry_pc);
+        assert_eq!(child.frame.stack_pointer, child.context.stack_top);
+        assert_eq!(child.frame.registers, [0; 16]);
+        assert_eq!(child.frame.interrupt_enable, 0);
+
+        let resumed = table.finish_child(17).expect("init resumes");
+
+        assert_eq!(resumed.child_exit_status, 17);
+        assert_eq!(resumed.frame, init_frame);
+        assert_eq!(resumed.context.entry_pc, init_frame.resume_pc);
+        assert_eq!(resumed.context.stack_top, init_frame.stack_pointer);
     }
 }

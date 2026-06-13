@@ -520,7 +520,7 @@ K16 syscall ABI v0 names the current Rust-kernel proof services in
 | `DEBUG_WRITE_BYTE` | `3` | `k16_rt::debug_write_byte(byte)` | Kernel writes the low byte supplied in `trap_arg0` and returns `STATUS_OK`. |
 | `YIELD` | `4` | `k16_rt::yield_syscall()` | Kernel yields once to the host and then returns `STATUS_OK`. |
 | `SLEEP_TICKS` | `5` | `k16_rt::sleep_ticks_syscall(ticks)` | Kernel waits until `timer0.game_ticks` advances by `ticks`, then returns `STATUS_OK`. |
-| `EXIT` | `6` | `k16_rt::exit_syscall(status)` | Terminates the current single-task program and halts the VM with the supplied status. |
+| `EXIT` | `6` | `k16_rt::exit_syscall(status)` | Terminates the current process. With no child process active, the kernel halts the VM with the supplied status; when a child is running under the kernel process model, the status is returned to the blocked init process. |
 | `WRITE` | `7` | `k16_rt::write_syscall(fd, ptr, len)` | Writes bytes from guest memory to fd `1` or `2`; returns byte count or a negative K16 error. |
 | `READ` | `8` | `k16_rt::read_syscall(fd, ptr, len)` | Reads bytes from fd `0` into guest memory; blocks by waiting until input is available, then returns byte count or a negative K16 error. |
 | `DEBUG_MARKER_RETURN` | `0x53` | n/a | Proof return value for `DEBUG_MARKER`. |

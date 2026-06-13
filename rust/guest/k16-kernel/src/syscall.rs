@@ -1,6 +1,6 @@
 use k16_abi::syscall as abi_syscall;
 
-use crate::{console, control, debug, stdin, timer, trap};
+use crate::{console, control, debug, process, stdin, timer, trap};
 
 pub fn dispatch(number: u32) -> ! {
     match number {
@@ -14,7 +14,11 @@ pub fn dispatch(number: u32) -> ! {
             unsafe { k16_rt::iret_with_r0(abi_syscall::STATUS_OK) }
         }
         abi_syscall::EXIT => {
-            control::set_exit_code(k16_rt::syscall_arg0());
+            let status = k16_rt::syscall_arg0();
+            if let Ok(resume) = unsafe { process::finish_child_for_exit(status) } {
+                unsafe { process::resume_init_context(resume) }
+            }
+            control::set_exit_code(status);
             control::set_halted();
             control::wait_forever()
         }
