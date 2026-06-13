@@ -27,6 +27,8 @@ fn k16_object_abi_docs_define_elf_relocatable_contract() {
         "LLVM must emit relocatable objects, not `K16E`",
         "The VM must not parse ELF",
         "Unsupported relocations are link-time errors",
+        "k16 link --target <bios|boot|kernel|program|program-dynamic>",
+        "`program-dynamic` target emits a K16E v2 dynamic user program",
         "SHF_ALLOC",
         "SHT_NOBITS",
         ".text.k16",
