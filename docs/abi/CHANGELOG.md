@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Added single-argument K16 child process launches. `RUN` keeps the existing
+  `RUN(path, len, 0)` no-argument form and adds `RUN(request, len, 1)` for a
+  bounded request block containing one argv byte string. The kernel copies the
+  argv entry into the child arena before the heap, enters the child with `argc`
+  in `r1` and the argv table pointer in `r2`, and `kraft-std` exposes
+  `process::run_with_args` plus a small `process::Argv` reader. Bundled `cat`
+  now reads the path it receives from init as `cat <path>`.
 - Added K16 userland heap syscalls: `BRK(addr)` sets the current child
   program break, and `SBRK(delta)` grows it and returns the previous break.
   The Rust kernel bounds the heap to the child process arena below the saved
@@ -23,7 +30,7 @@
   `READ(fd, ptr, len)` now reads both stdin and regular files, and
   `CLOSE(fd)` releases regular file descriptors. `kraft-std::fs` exposes the
   initial `open`, `File::read`, and `File::close` surface, and bundled
-  userland now includes `/bin/cat.kx` reading `/etc/motd`.
+  userland now includes `/bin/cat.kx` as the first file-reading utility.
 - `k16 runtime k16-memory-helpers` now exports freestanding `memcpy`,
   `memset`, and `memmove` aliases in addition to the existing `__k16_*`
   symbols, so Rust-generated aggregate copies can link without relying on

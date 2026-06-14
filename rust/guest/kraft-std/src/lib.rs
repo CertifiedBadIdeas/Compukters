@@ -213,9 +213,56 @@ pub mod heap {
 static GLOBAL_ALLOCATOR: heap::SbrkAllocator = heap::SbrkAllocator;
 
 pub mod process {
+    use core::{ptr, slice};
+
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     pub enum Error {
+        InvalidArgument,
         Syscall(u32),
+    }
+
+    #[repr(C)]
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub struct Arg {
+        ptr: *const u8,
+        len: u32,
+    }
+
+    impl Arg {
+        pub const fn from_slice(bytes: &[u8]) -> Self {
+            Self {
+                ptr: bytes.as_ptr(),
+                len: bytes.len() as u32,
+            }
+        }
+
+        pub unsafe fn as_slice(self) -> &'static [u8] {
+            unsafe { slice::from_raw_parts(self.ptr, self.len as usize) }
+        }
+    }
+
+    #[derive(Clone, Copy, Debug)]
+    pub struct Argv {
+        argc: u32,
+        argv: *const Arg,
+    }
+
+    impl Argv {
+        pub const unsafe fn from_raw(argc: u32, argv: *const Arg) -> Self {
+            Self { argc, argv }
+        }
+
+        pub const fn len(self) -> usize {
+            self.argc as usize
+        }
+
+        pub fn get(self, index: usize) -> Option<&'static [u8]> {
+            if index >= self.len() || self.argv.is_null() {
+                return None;
+            }
+            let arg = unsafe { ptr::read(self.argv.add(index)) };
+            Some(unsafe { arg.as_slice() })
+        }
     }
 
     pub fn exit(status: u32) -> ! {
@@ -229,6 +276,59 @@ pub mod process {
             return Err(Error::Syscall(returned));
         }
         Ok(returned)
+    }
+
+    pub fn run_with_args(path: &str, args: &[&str]) -> Result<u32, Error> {
+        let request = RunArgvRequest::new(path, args)?;
+        let returned = k16_rt::run_argv_syscall(request.bytes.as_ptr(), request.len);
+        if returned & 0x8000_0000 != 0 {
+            return Err(Error::Syscall(returned));
+        }
+        Ok(returned)
+    }
+
+    struct RunArgvRequest {
+        bytes: [u8; k16_abi::syscall::MAX_RUN_ARGV_REQUEST_BYTES],
+        len: usize,
+    }
+
+    impl RunArgvRequest {
+        fn new(path: &str, args: &[&str]) -> Result<Self, Error> {
+            if args.len() != k16_abi::syscall::MAX_RUN_ARGS {
+                return Err(Error::InvalidArgument);
+            }
+            let mut request = Self {
+                bytes: [0; k16_abi::syscall::MAX_RUN_ARGV_REQUEST_BYTES],
+                len: 0,
+            };
+            request.push_u32(k16_abi::syscall::RUN_ARGV_MAGIC)?;
+            request.push_u32(path.len() as u32)?;
+            let bytes = args[0].as_bytes();
+            if bytes.len() > k16_abi::syscall::MAX_RUN_ARG_BYTES {
+                return Err(Error::InvalidArgument);
+            }
+            request.push_u32(bytes.len() as u32)?;
+            request.push_bytes(path.as_bytes())?;
+            request.push_bytes(bytes)?;
+            Ok(request)
+        }
+
+        fn push_u32(&mut self, value: u32) -> Result<(), Error> {
+            self.push_bytes(&value.to_le_bytes())
+        }
+
+        fn push_bytes(&mut self, bytes: &[u8]) -> Result<(), Error> {
+            let end = self
+                .len
+                .checked_add(bytes.len())
+                .ok_or(Error::InvalidArgument)?;
+            if end > self.bytes.len() {
+                return Err(Error::InvalidArgument);
+            }
+            self.bytes[self.len..end].copy_from_slice(bytes);
+            self.len = end;
+            Ok(())
+        }
     }
 }
 

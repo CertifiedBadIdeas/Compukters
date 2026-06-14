@@ -115,6 +115,16 @@ val k16CatSource = rootProject.layout.projectDirectory.file("rust/guest/k16-cat/
 val k16MotdSource = rootProject.layout.projectDirectory.file("rust/guest/k16-cat/motd.txt")
 val k16AllocTestManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-alloc-test/Cargo.toml")
 val k16AllocTestSource = rootProject.layout.projectDirectory.file("rust/guest/k16-alloc-test/src/main.rs")
+val k16AbiManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-abi/Cargo.toml")
+val k16AbiSource = rootProject.layout.projectDirectory.dir("rust/guest/k16-abi/src")
+val k16RtManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-rt/Cargo.toml")
+val k16RtSource = rootProject.layout.projectDirectory.dir("rust/guest/k16-rt/src")
+val k16ImageManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-image/Cargo.toml")
+val k16ImageSource = rootProject.layout.projectDirectory.dir("rust/guest/k16-image/src")
+val k16StorageManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-storage/Cargo.toml")
+val k16StorageSource = rootProject.layout.projectDirectory.dir("rust/guest/k16-storage/src")
+val kraftStdManifest = rootProject.layout.projectDirectory.file("rust/guest/kraft-std/Cargo.toml")
+val kraftStdSource = rootProject.layout.projectDirectory.dir("rust/guest/kraft-std/src")
 val k16BootChainManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-boot-chain/Cargo.toml")
 val k16BootChainSource = rootProject.layout.projectDirectory.dir("rust/guest/k16-boot-chain/src")
 val k16HostToolsManifest = rootProject.layout.projectDirectory.file("rust/host/k16-tools/Cargo.toml")
@@ -225,6 +235,27 @@ fun k16CargoProfileArgs(profile: String): List<String> =
         "release" -> listOf("--release")
         else -> error("Unsupported K16 firmware profile: $profile")
     }
+
+fun org.gradle.api.Task.inputsK16RuntimeCrates() {
+    inputs.file(k16AbiManifest)
+    inputs.dir(k16AbiSource)
+    inputs.file(k16RtManifest)
+    inputs.dir(k16RtSource)
+}
+
+fun org.gradle.api.Task.inputsKraftStdCrate() {
+    inputs.file(kraftStdManifest)
+    inputs.dir(kraftStdSource)
+}
+
+fun org.gradle.api.Task.inputsK16KernelCrates() {
+    inputs.file(k16ImageManifest)
+    inputs.dir(k16ImageSource)
+    inputs.file(k16StorageManifest)
+    inputs.dir(k16StorageSource)
+    inputs.file(k16BootChainManifest)
+    inputs.dir(k16BootChainSource)
+}
 
 fun k16RustBinProfileDir(
     targetDir: File,
@@ -406,6 +437,8 @@ val compileK16SystemKernel =
         inputs.file(k16GuestManifest)
         inputs.file(k16KernelManifest)
         inputs.dir(k16KernelSource)
+        inputsK16RuntimeCrates()
+        inputsK16KernelCrates()
         inputs.file(k16RustTargetSpec)
         inputs.file(k16HostToolsManifest)
         inputs.dir(k16HostToolsSource)
@@ -432,6 +465,8 @@ val compileK16SystemInit =
         inputs.file(k16GuestManifest)
         inputs.file(k16InitManifest)
         inputs.dir(k16InitSource)
+        inputsK16RuntimeCrates()
+        inputsKraftStdCrate()
         inputs.file(k16HostToolsManifest)
         inputs.dir(k16HostToolsSource)
         inputs.file(k16RustTargetSpec)
@@ -459,6 +494,8 @@ val compileK16SystemUname =
         inputs.file(k16GuestManifest)
         inputs.file(k16UnameManifest)
         inputs.file(k16UnameSource)
+        inputsK16RuntimeCrates()
+        inputsKraftStdCrate()
         inputs.file(k16HostToolsManifest)
         inputs.dir(k16HostToolsSource)
         inputs.file(k16RustTargetSpec)
@@ -485,6 +522,8 @@ val compileK16SystemCat =
         inputs.file(k16GuestManifest)
         inputs.file(k16CatManifest)
         inputs.file(k16CatSource)
+        inputsK16RuntimeCrates()
+        inputsKraftStdCrate()
         inputs.file(k16HostToolsManifest)
         inputs.dir(k16HostToolsSource)
         inputs.file(k16RustTargetSpec)
@@ -511,6 +550,8 @@ val compileK16SystemAllocTest =
         inputs.file(k16GuestManifest)
         inputs.file(k16AllocTestManifest)
         inputs.file(k16AllocTestSource)
+        inputsK16RuntimeCrates()
+        inputsKraftStdCrate()
         inputs.file(k16HostToolsManifest)
         inputs.dir(k16HostToolsSource)
         inputs.file(k16RustTargetSpec)

@@ -11,7 +11,7 @@ pub enum Command<'a> {
     Clear,
     Ticks,
     Uname,
-    Cat,
+    Cat(&'a [u8]),
     AllocTest,
     Echo(&'a [u8]),
     Unknown,
@@ -65,8 +65,8 @@ pub fn classify_line(input: &[u8], line_len: usize) -> Command<'_> {
         Command::Ticks
     } else if matches_command(input, b"uname") {
         Command::Uname
-    } else if matches_command(input, b"cat") {
-        Command::Cat
+    } else if is_cat_command(input, line_len) {
+        Command::Cat(&input[4..line_len])
     } else if matches_command(input, b"alloc") {
         Command::AllocTest
     } else if is_echo_command(input, line_len) {
@@ -88,6 +88,10 @@ fn is_echo_command(input: &[u8], line_len: usize) -> bool {
         && input[2] == b'h'
         && input[3] == b'o'
         && (line_len == 4 || input[4] == b' ')
+}
+
+fn is_cat_command(input: &[u8], line_len: usize) -> bool {
+    line_len > 4 && input[0] == b'c' && input[1] == b'a' && input[2] == b't' && input[3] == b' '
 }
 
 #[cfg(test)]
@@ -157,11 +161,11 @@ mod tests {
     #[test]
     fn cat_command_is_recognized_as_process_run_utility() {
         let mut line = InputLine::new();
-        for byte in b"cat" {
+        for byte in b"cat /etc/motd" {
             assert!(line.push_printable(*byte));
         }
 
-        assert_eq!(line.command(), Command::Cat);
+        assert_eq!(line.command(), Command::Cat(b"/etc/motd"));
     }
 
     #[test]

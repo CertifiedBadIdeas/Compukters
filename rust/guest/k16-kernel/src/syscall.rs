@@ -74,7 +74,8 @@ pub fn dispatch(number: u32) -> ! {
         abi_syscall::RUN => {
             let ptr = k16_rt::syscall_arg0();
             let len = k16_rt::syscall_arg1();
-            match prepare_run(ptr, len) {
+            let format = k16_rt::syscall_arg2();
+            match prepare_run(ptr, len, format) {
                 Ok(launch) => unsafe { process::enter_child_context(launch) },
                 Err(error) => unsafe { k16_rt::iret_with_r0(error) },
             }
@@ -135,15 +136,26 @@ fn grow_program_break(delta: u32) -> Result<u32, u32> {
     unsafe { process::grow_current_program_break(delta).map_err(process::heap_status_from_error) }
 }
 
-fn prepare_run(ptr: u32, len: u32) -> Result<process::ChildLaunch, u32> {
-    if len == 0 || len > process::MAX_RUN_PATH_BYTES as u32 {
-        return Err(abi_syscall::ERROR_INVALID);
-    }
+fn prepare_run(ptr: u32, len: u32, format: u32) -> Result<process::ChildLaunch, u32> {
     if !valid_guest_buffer(ptr, len) {
         return Err(abi_syscall::ERROR_FAULT);
     }
-    let path = unsafe { core::slice::from_raw_parts(ptr as usize as *const u8, len as usize) };
-    unsafe { process::begin_loaded_child_from_path(path) }
+    let bytes = unsafe { core::slice::from_raw_parts(ptr as usize as *const u8, len as usize) };
+    match format {
+        abi_syscall::RUN_FORMAT_PATH => {
+            if len == 0 || len > process::MAX_RUN_PATH_BYTES as u32 {
+                return Err(abi_syscall::ERROR_INVALID);
+            }
+            unsafe { process::begin_loaded_child_from_path(bytes) }
+        }
+        abi_syscall::RUN_FORMAT_ARGV => {
+            if len == 0 || len > k16_abi::syscall::MAX_RUN_ARGV_REQUEST_BYTES as u32 {
+                return Err(abi_syscall::ERROR_INVALID);
+            }
+            unsafe { process::begin_loaded_child_from_argv_request(bytes) }
+        }
+        _ => Err(abi_syscall::ERROR_INVALID),
+    }
 }
 
 fn write_guest_bytes(ptr: u32, len: u32) -> Result<u32, u32> {

@@ -393,7 +393,7 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("stdin.read(read_buffer)"))
         assertTrue(source.contains("dispatch_command(stdout, input.command())"))
         assertTrue(source.contains("const PROMPT: &[u8] = b\"INIT> \""))
-        assertTrue(source.contains("const HELP: &[u8] = b\"HELP\\nCLEAR\\nECHO\\nTICKS\\nUNAME\\nCAT\\nALLOC\\n\""))
+        assertTrue(source.contains("const HELP: &[u8] = b\"HELP\\nCLEAR\\nECHO\\nTICKS\\nUNAME\\nCAT <PATH>\\nALLOC\\n\""))
         assertTrue(source.contains("run_ticks(stdout)"))
         assertTrue(source.contains("process::run(\"/bin/uname.kx\")"))
         assertFalse(source.contains("process::exit(0)"))
@@ -665,13 +665,13 @@ class K16FirmwareResourceTest {
         assertTrue(initSource.contains("fn run_cat("), "init should name the cat command")
         assertTrue(initSource.contains("fn run_alloc_test("), "init should name the alloc command")
         assertTrue(initLibSource.contains("Command::Uname"), "init should classify the uname command")
-        assertTrue(initLibSource.contains("Command::Cat"), "init should classify the cat command")
+        assertTrue(initLibSource.contains("Command::Cat(&"), "init should classify cat with a path argument")
         assertTrue(initLibSource.contains("Command::AllocTest"), "init should classify the alloc command")
         assertTrue(
-            initSource.contains("HELP\\nCLEAR\\nECHO\\nTICKS\\nUNAME\\nCAT\\nALLOC\\n"),
+            initSource.contains("HELP\\nCLEAR\\nECHO\\nTICKS\\nUNAME\\nCAT <PATH>\\nALLOC\\n"),
             "help should print a readable command list",
         )
-        assertTrue(initSource.contains("process::run(\"/bin/cat.kx\")"))
+        assertTrue(initSource.contains("process::run_with_args(\"/bin/cat.kx\", &[path])"))
         assertTrue(initSource.contains("process::run(\"/bin/alloc-test.kx\")"))
         assertTrue(initSource.contains("b\"ERR\\n\""), "unknown commands should report a short error")
     }
@@ -681,7 +681,9 @@ class K16FirmwareResourceTest {
         val catSource = Path.of("../../../rust/guest/k16-cat/src/main.rs").readText()
         val stdSource = Path.of("../../../rust/guest/kraft-std/src/lib.rs").readText()
 
-        assertTrue(catSource.contains("fs::open(\"/etc/motd\")"))
+        assertTrue(catSource.contains("process::Argv::from_raw(argc, argv)"))
+        assertTrue(catSource.contains("argv.get(0)"))
+        assertTrue(catSource.contains("fs::open(path)"))
         assertTrue(catSource.contains(".read("))
         assertTrue(catSource.contains(".close()"))
         assertTrue(catSource.contains("io::stdout()"))

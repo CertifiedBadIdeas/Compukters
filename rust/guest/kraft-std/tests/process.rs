@@ -22,6 +22,54 @@ fn process_run_delegates_to_runtime_run_syscall() {
 }
 
 #[test]
+fn process_run_with_args_encodes_argv_request_for_runtime_run_syscall() {
+    k16_rt::host_test::reset_syscalls();
+    k16_rt::host_test::set_syscall_return(17);
+
+    let status = kraft_std::process::run_with_args("/bin/cat.kx", &["/etc/motd"]);
+
+    assert_eq!(status, Ok(17));
+    assert_eq!(k16_rt::host_test::syscall_number(), k16_rt::host_test::RUN);
+    let request_ptr = k16_rt::host_test::syscall_arg0();
+    let request_len = k16_rt::host_test::syscall_arg1();
+    assert_ne!(request_ptr, 0);
+    assert!(request_len > "/bin/cat.kx".len() as u32);
+    assert_eq!(
+        k16_rt::host_test::syscall_arg2(),
+        k16_rt::host_test::RUN_FORMAT_ARGV
+    );
+}
+
+#[test]
+fn process_run_with_args_requires_exactly_one_argument() {
+    k16_rt::host_test::reset_syscalls();
+
+    let missing = kraft_std::process::run_with_args("/bin/cat.kx", &[]);
+    let extra = kraft_std::process::run_with_args("/bin/cat.kx", &["/etc/motd", "--verbose"]);
+
+    assert_eq!(missing, Err(kraft_std::process::Error::InvalidArgument));
+    assert_eq!(extra, Err(kraft_std::process::Error::InvalidArgument));
+    assert_eq!(k16_rt::host_test::syscall_number(), 0);
+}
+
+#[test]
+fn argv_reader_returns_child_argument_bytes_from_raw_table() {
+    let first = b"/etc/motd";
+    let second = b"--verbose";
+    let raw = [
+        kraft_std::process::Arg::from_slice(first),
+        kraft_std::process::Arg::from_slice(second),
+    ];
+
+    let args = unsafe { kraft_std::process::Argv::from_raw(2, raw.as_ptr()) };
+
+    assert_eq!(args.len(), 2);
+    assert_eq!(args.get(0), Some(first.as_slice()));
+    assert_eq!(args.get(1), Some(second.as_slice()));
+    assert_eq!(args.get(2), None);
+}
+
+#[test]
 fn process_run_reports_negative_syscall_status_as_error() {
     k16_rt::host_test::reset_syscalls();
     k16_rt::host_test::set_syscall_return(k16_rt::host_test::ERROR_NO_ENTRY);
