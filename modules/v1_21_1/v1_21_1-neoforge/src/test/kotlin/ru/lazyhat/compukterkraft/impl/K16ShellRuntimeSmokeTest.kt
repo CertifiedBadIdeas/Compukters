@@ -59,6 +59,14 @@ class K16ShellRuntimeSmokeTest {
                 unameCommandIndex >= 0 && unameOutputIndex > unameCommandIndex && returnedPromptIndex > unameOutputIndex
             }
 
+            dispatchText(device, "cat /etc/motd\n")
+            waitForTerminal(device, "cat output and returned prompt") { terminal ->
+                val catCommandIndex = terminal.indexOf("INIT> cat /etc/motd")
+                val catOutputIndex = terminal.indexOf("K16 FS OK", startIndex = catCommandIndex + "INIT> cat /etc/motd".length)
+                val returnedPromptIndex = terminal.indexOf("INIT> ", startIndex = catOutputIndex)
+                catCommandIndex >= 0 && catOutputIndex > catCommandIndex && returnedPromptIndex > catOutputIndex
+            }
+
             dispatchText(device, "alloc\n")
             waitForTerminal(device, "alloc output and returned prompt") { terminal ->
                 val allocCommandIndex = terminal.indexOf("INIT> alloc")
@@ -74,7 +82,10 @@ class K16ShellRuntimeSmokeTest {
             val unameCommandIndex = terminal.indexOf("INIT> uname", startIndex = ticksOutputIndex)
             val unameOutputIndex = terminal.indexOf("K16", startIndex = unameCommandIndex + "INIT> uname".length)
             val unameReturnedPromptIndex = terminal.indexOf("INIT> ", startIndex = unameOutputIndex)
-            val allocCommandIndex = terminal.indexOf("INIT> alloc", startIndex = unameReturnedPromptIndex)
+            val catCommandIndex = terminal.indexOf("INIT> cat /etc/motd", startIndex = unameReturnedPromptIndex)
+            val catOutputIndex = terminal.indexOf("K16 FS OK", startIndex = catCommandIndex + "INIT> cat /etc/motd".length)
+            val catReturnedPromptIndex = terminal.indexOf("INIT> ", startIndex = catOutputIndex)
+            val allocCommandIndex = terminal.indexOf("INIT> alloc", startIndex = catReturnedPromptIndex)
             val allocOutputIndex = terminal.indexOf("ALLOC", startIndex = allocCommandIndex + "INIT> alloc".length)
             val returnedPromptIndex = terminal.indexOf("INIT> ", startIndex = allocOutputIndex)
             assertTrue(
@@ -84,7 +95,10 @@ class K16ShellRuntimeSmokeTest {
                     unameCommandIndex > ticksOutputIndex &&
                     unameOutputIndex > unameCommandIndex &&
                     unameReturnedPromptIndex > unameOutputIndex &&
-                    allocCommandIndex >= unameReturnedPromptIndex &&
+                    catCommandIndex >= unameReturnedPromptIndex &&
+                    catOutputIndex > catCommandIndex &&
+                    catReturnedPromptIndex > catOutputIndex &&
+                    allocCommandIndex >= catReturnedPromptIndex &&
                     allocOutputIndex > allocCommandIndex &&
                     returnedPromptIndex > allocOutputIndex,
                 "userland init should dispatch shell commands through fd stdin/stdout and return a prompt; terminal: $terminal",

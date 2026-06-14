@@ -6,16 +6,23 @@ use core::panic::PanicInfo;
 use kraft_std::prelude::*;
 
 #[no_mangle]
-pub extern "C" fn main() -> ! {
-    match print_motd() {
+pub extern "C" fn main(argc: u32, argv: *const process::Arg) -> ! {
+    match print_first_arg(argc, argv) {
         Ok(()) => process::exit(0),
         Err(()) => process::exit(1),
     }
 }
 
-fn print_motd() -> Result<(), ()> {
+fn print_first_arg(argc: u32, argv: *const process::Arg) -> Result<(), ()> {
+    let argv = unsafe { process::Argv::from_raw(argc, argv) };
+    let path = argv.get(0).ok_or(())?;
+    let path = core::str::from_utf8(path).map_err(|_| ())?;
+    print_file(path)
+}
+
+fn print_file(path: &str) -> Result<(), ()> {
     let stdout = io::stdout();
-    let file = fs::open("/etc/motd").map_err(|_| ())?;
+    let file = fs::open(path).map_err(|_| ())?;
     let mut buffer = [0u8; 64];
     loop {
         let read = file.read(&mut buffer).map_err(|_| ())?;

@@ -523,7 +523,7 @@ K16 syscall ABI v0 names the current Rust-kernel proof services in
 | `EXIT` | `6` | `k16_rt::exit_syscall(status)` | Terminates the current process. With no child process active, the kernel halts the VM with the supplied status; when a child is running under the kernel process model, the status is returned to the blocked init process. |
 | `WRITE` | `7` | `k16_rt::write_syscall(fd, ptr, len)` | Writes bytes from guest memory to fd `1` or `2`; returns byte count or a negative K16 error. |
 | `READ` | `8` | `k16_rt::read_syscall(fd, ptr, len)` | Reads bytes from fd `0` or an open regular file fd into guest memory; stdin blocks by waiting until input is available, regular files advance their descriptor offset, and the syscall returns byte count or a negative K16 error. |
-| `RUN` | `9` | `k16_rt::run_syscall(path, len)` | Synchronously loads a dynamic `/bin/*.kx` user program from `ROOT`/K16FS on `storage0`, blocks init while the child runs, and returns the child exit status or a negative K16 error. |
+| `RUN` | `9` | `k16_rt::run_syscall(path, len)`, `k16_rt::run_argv_syscall(request, len)` | Synchronously loads a dynamic `/bin/*.kx` user program from `ROOT`/K16FS on `storage0`, blocks init while the child runs, and returns the child exit status or a negative K16 error. `trap_arg2 = 0` means `trap_arg0/trap_arg1` are a raw path pointer/length. `trap_arg2 = 1` means they are a bounded argv request block beginning with `RUN_ARGV_MAGIC`. |
 | `OPEN` | `10` | `k16_rt::open_syscall(path, len, flags)` | Opens an absolute read-only ROOT/K16FS regular file path from `storage0`; `flags` must be `0`, and success returns a regular file fd starting at `3`. |
 | `CLOSE` | `11` | `k16_rt::close_syscall(fd)` | Closes a regular file fd. Standard descriptors `0..=2` are not closeable. |
 | `BRK` | `12` | `k16_rt::brk_syscall(addr)` | Sets the current child process program break to `addr` and returns the resulting break, or a negative K16 error. The break must stay inside the kernel-selected child heap arena. |
@@ -551,6 +551,15 @@ child's loaded image while init is blocked in `RUN`. Child load arenas start
 after init's current program break, so child loading cannot overwrite init heap
 allocations. The child heap limit is below a guard area under init's saved stack
 pointer, so child heap growth cannot overwrite the live init stack.
+
+For argv launches, the first K16 ABI form copies one bounded argument byte
+string into the child arena after the loaded image and before the child heap.
+The request block is `u32 magic`, `u32 path_len`, `u32 arg_len`, followed by
+the path bytes and argument bytes. On child entry, `r1` contains `argc` and
+`r2` contains a pointer to an argv table of `(ptr, len)` entries. The K16
+startup object does not clobber `r1` or `r2` before calling `main`, so
+no-argument `main()` programs remain valid while argv-aware programs may
+declare an entry that accepts those first two C ABI arguments.
 
 Asynchronous interrupts are delivered between guest instructions. Delivery
 requires `interrupt_enable != 0` and a source bit present in both

@@ -92,6 +92,12 @@ pub mod syscall {
     pub const CLOSE: u32 = 11;
     pub const BRK: u32 = 12;
     pub const SBRK: u32 = 13;
+    pub const RUN_FORMAT_PATH: u32 = 0;
+    pub const RUN_FORMAT_ARGV: u32 = 1;
+    pub const RUN_ARGV_MAGIC: u32 = u32::from_le_bytes(*b"RARG");
+    pub const MAX_RUN_ARGS: usize = 1;
+    pub const MAX_RUN_ARG_BYTES: usize = 128;
+    pub const MAX_RUN_ARGV_REQUEST_BYTES: usize = 256;
     pub const FD_STDIN: u32 = 0;
     pub const FD_STDOUT: u32 = 1;
     pub const FD_STDERR: u32 = 2;

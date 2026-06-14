@@ -1,6 +1,6 @@
 # kraft-std Guest Library
 
-Issue: [#192](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/192), [#194](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/194), [#195](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/195), [#230](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/230), [#232](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/232), [#247](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/247), [#248](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/248)
+Issue: [#192](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/192), [#194](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/194), [#195](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/195), [#230](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/230), [#232](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/232), [#247](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/247), [#248](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/248), [#249](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/249)
 
 `rust/guest/kraft-std` is the experimental KraftOS userland library boundary for
 guest Rust programs. It is intentionally separate from the lower-level K16
@@ -28,6 +28,9 @@ The initial `kraft-std` surface is deliberately small:
 | `kraft_std::heap::sbrk(delta)` | `k16_rt::sbrk_syscall(delta)` | Grows the current child program break and returns the previous break. |
 | `kraft_std::heap::SbrkAllocator` | `BRK`/`SBRK` syscall ABI | Guest global allocator used by `alloc` collections. Allocation is monotonic; deallocation is currently a no-op. |
 | `kraft_std::process::exit(status)` | `k16_rt::exit_syscall(status)` | Terminates the current single-task program through the kernel. |
+| `kraft_std::process::run(path)` | `k16_rt::run_syscall(path, len)` | Runs a dynamic `/bin/*.kx` child program with no arguments. |
+| `kraft_std::process::run_with_args(path, args)` | `k16_rt::run_argv_syscall(request, len)` | Runs a dynamic child program with one bounded argv byte string. |
+| `kraft_std::process::Argv::from_raw(argc, argv)` | K16 child-entry `r1`/`r2` argv ABI | Reads the argv table installed by the kernel for argv-aware child programs. |
 | `kraft_std::thread::yield_now()` | `k16_rt::yield_syscall()` | Requests one OS-level yield through the kernel syscall path. |
 | `kraft_std::thread::sleep_ticks(ticks)` | `k16_rt::sleep_ticks_syscall(ticks)` | Requests a timer0 game-tick sleep through the kernel syscall path. |
 | `kraft_std::prelude` | n/a | Re-exports the early userland modules intended for guest programs. |

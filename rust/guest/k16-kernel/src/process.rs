@@ -11,6 +11,7 @@ const BIN_PREFIX: &[u8] = b"/bin/";
 const KX_SUFFIX: &[u8] = b".kx";
 const K16FS_MAX_NAME_BYTES: usize = 56;
 pub const MAX_RUN_PATH_BYTES: usize = BIN_PREFIX.len() + K16FS_MAX_NAME_BYTES;
+const CHILD_ARG_ENTRY_BYTES: u32 = 8;
 const USER_PROGRAM_LIMIT: u32 = 0x0002_0000;
 // Keep relocation records outside k16_storage::SCRATCH_ADDR: storage reads use
 // that block as staging, and records may straddle a storage block boundary.
@@ -248,10 +249,27 @@ impl ProcessTable {
         self.begin_child_run_from_frame(child_plan, TrapFrame::zeroed())
     }
 
+    pub fn begin_child_run_with_argv(
+        &mut self,
+        child_plan: DynamicUserLoadPlan,
+        argv: ChildArgv,
+    ) -> Result<ChildLaunch, ProcessSwitchError> {
+        self.begin_child_run_from_frame_and_argv(child_plan, TrapFrame::zeroed(), argv)
+    }
+
     pub fn begin_child_run_from_frame(
         &mut self,
         child_plan: DynamicUserLoadPlan,
         init_frame: TrapFrame,
+    ) -> Result<ChildLaunch, ProcessSwitchError> {
+        self.begin_child_run_from_frame_and_argv(child_plan, init_frame, ChildArgv::empty())
+    }
+
+    pub fn begin_child_run_from_frame_and_argv(
+        &mut self,
+        child_plan: DynamicUserLoadPlan,
+        init_frame: TrapFrame,
+        argv: ChildArgv,
     ) -> Result<ChildLaunch, ProcessSwitchError> {
         if self.child_state_runtime() == PROCESS_STATE_RUNNING {
             return Err(ProcessSwitchError::ChildAlreadyRunning);
@@ -260,8 +278,10 @@ impl ProcessTable {
             entry_pc: child_plan.entry_pc,
             stack_top: child_plan.stack_top,
         };
-        let child_frame = child_frame_for_context(context);
-        let heap = HeapState::from_child_plan(child_plan)
+        let mut child_frame = child_frame_for_context(context);
+        child_frame.registers[1] = argv.argc;
+        child_frame.registers[2] = argv.table_ptr;
+        let heap = HeapState::from_bounds(child_plan.load_end.max(argv.end), child_plan.stack_top)
             .map_err(|_| ProcessSwitchError::NoRunningChild)?;
         unsafe { core::ptr::write_volatile(&mut self.init_state, PROCESS_STATE_BLOCKED_ON_CHILD) };
         self.init_context = ProcessContext {
@@ -369,23 +389,19 @@ pub const fn child_frame_for_context(context: ProcessContext) -> TrapFrame {
     frame
 }
 
-#[cfg(any(not(test), feature = "host-test"))]
-pub unsafe fn begin_loaded_child(
-    child_plan: DynamicUserLoadPlan,
-) -> Result<ChildLaunch, ProcessSwitchError> {
-    #[cfg(not(test))]
-    {
-        unsafe { save_runtime_init_frame() };
-        return unsafe { begin_loaded_child_plan_runtime(child_plan) };
-    }
-    #[cfg(test)]
-    {
-        let mut init_frame = k16_rt::TrapFrame::zeroed();
-        k16_rt::save_trap_frame(&mut init_frame);
-        unsafe {
-            PROCESS_TABLE
-                .get()
-                .begin_child_run_from_frame(child_plan, TrapFrame::from(init_frame))
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct ChildArgv {
+    pub argc: u32,
+    pub table_ptr: u32,
+    pub end: u32,
+}
+
+impl ChildArgv {
+    pub const fn empty() -> Self {
+        Self {
+            argc: 0,
+            table_ptr: 0,
+            end: 0,
         }
     }
 }
@@ -425,23 +441,7 @@ pub unsafe fn initialize_init_process(
 pub unsafe fn begin_loaded_child_from_path(path: &[u8]) -> Result<ChildLaunch, u32> {
     #[cfg(not(test))]
     {
-        let mut init_frame = k16_rt::TrapFrame::zeroed();
-        k16_rt::save_trap_frame(&mut init_frame);
-        unsafe { save_runtime_init_frame() };
-        let initial_child_load_base =
-            unsafe { read_runtime_word(core::ptr::addr_of_mut!(RUNTIME_CHILD_LOAD_BASE)) };
-        let init_program_break =
-            unsafe { read_runtime_word(core::ptr::addr_of_mut!(RUNTIME_INIT_PROGRAM_BREAK)) };
-        let load_base = initial_child_load_base.max(init_program_break);
-        if load_base == 0 {
-            return Err(run_status_from_load_error(ProcessLoadError::Storage));
-        }
-        let arena = UserArena::new(load_base, init_frame.stack_pointer)
-            .map_err(|_| run_status_from_load_error(ProcessLoadError::ProgramTooLarge))?;
-        let child_plan = unsafe { load_dynamic_user_program_from_storage0(path, arena) }
-            .map_err(run_status_from_load_error)?;
-        return unsafe { begin_loaded_child_plan_runtime(child_plan) }
-            .map_err(run_status_from_switch_error);
+        return unsafe { begin_loaded_child_runtime(path, &[]) };
     }
     #[cfg(test)]
     {
@@ -460,9 +460,62 @@ pub unsafe fn begin_loaded_child_from_path(path: &[u8]) -> Result<ChildLaunch, u
     }
 }
 
+#[cfg(any(not(test), feature = "host-test"))]
+pub unsafe fn begin_loaded_child_from_argv_request(request: &[u8]) -> Result<ChildLaunch, u32> {
+    let request = RunArgvRequest::parse(request).map_err(run_status_from_load_error)?;
+    #[cfg(not(test))]
+    {
+        return unsafe { begin_loaded_child_runtime(request.path, request.arg) };
+    }
+    #[cfg(test)]
+    {
+        let mut init_frame = k16_rt::TrapFrame::zeroed();
+        k16_rt::save_trap_frame(&mut init_frame);
+        let init_frame = TrapFrame::from(init_frame);
+        let table = unsafe { PROCESS_TABLE.get() };
+        let arena = table
+            .child_arena_for_init_frame(init_frame)
+            .map_err(run_status_from_load_error)?;
+        let child_plan = unsafe { load_dynamic_user_program_from_storage0(request.path, arena) }
+            .map_err(run_status_from_load_error)?;
+        let argv = unsafe { install_child_argv1(child_plan, request.arg) }
+            .map_err(run_status_from_load_error)?;
+        table
+            .begin_child_run_from_frame_and_argv(child_plan, init_frame, argv)
+            .map_err(run_status_from_switch_error)
+    }
+}
+
 #[cfg(not(test))]
-unsafe fn begin_loaded_child_plan_runtime(
+unsafe fn begin_loaded_child_runtime(path: &[u8], arg: &[u8]) -> Result<ChildLaunch, u32> {
+    let mut init_frame = k16_rt::TrapFrame::zeroed();
+    k16_rt::save_trap_frame(&mut init_frame);
+    unsafe { save_runtime_init_frame() };
+    let initial_child_load_base =
+        unsafe { read_runtime_word(core::ptr::addr_of_mut!(RUNTIME_CHILD_LOAD_BASE)) };
+    let init_program_break =
+        unsafe { read_runtime_word(core::ptr::addr_of_mut!(RUNTIME_INIT_PROGRAM_BREAK)) };
+    let load_base = initial_child_load_base.max(init_program_break);
+    if load_base == 0 {
+        return Err(run_status_from_load_error(ProcessLoadError::Storage));
+    }
+    let arena = UserArena::new(load_base, init_frame.stack_pointer)
+        .map_err(|_| run_status_from_load_error(ProcessLoadError::ProgramTooLarge))?;
+    let child_plan = unsafe { load_dynamic_user_program_from_storage0(path, arena) }
+        .map_err(run_status_from_load_error)?;
+    let argv = if arg.is_empty() {
+        ChildArgv::empty()
+    } else {
+        unsafe { install_child_argv1(child_plan, arg) }.map_err(run_status_from_load_error)?
+    };
+    unsafe { begin_loaded_child_plan_runtime_with_argv(child_plan, argv) }
+        .map_err(run_status_from_switch_error)
+}
+
+#[cfg(not(test))]
+unsafe fn begin_loaded_child_plan_runtime_with_argv(
     child_plan: DynamicUserLoadPlan,
+    argv: ChildArgv,
 ) -> Result<ChildLaunch, ProcessSwitchError> {
     if unsafe { runtime_child_state() } == PROCESS_STATE_RUNNING {
         return Err(ProcessSwitchError::ChildAlreadyRunning);
@@ -471,8 +524,13 @@ unsafe fn begin_loaded_child_plan_runtime(
         entry_pc: child_plan.entry_pc,
         stack_top: child_plan.stack_top,
     };
-    let child_frame = child_frame_for_context(context);
-    unsafe { initialize_runtime_heap(child_plan).map_err(|_| ProcessSwitchError::NoRunningChild)? };
+    let mut child_frame = child_frame_for_context(context);
+    child_frame.registers[1] = argv.argc;
+    child_frame.registers[2] = argv.table_ptr;
+    unsafe {
+        initialize_runtime_heap_from_bounds(child_plan.load_end.max(argv.end), child_plan.stack_top)
+            .map_err(|_| ProcessSwitchError::NoRunningChild)?
+    };
     unsafe { set_runtime_child_state_running() };
     Ok(ChildLaunch {
         id: ProcessId::Child,
@@ -570,8 +628,11 @@ fn runtime_child_state_addr() -> u32 {
 }
 
 #[cfg(not(test))]
-unsafe fn initialize_runtime_heap(child_plan: DynamicUserLoadPlan) -> Result<(), HeapError> {
-    let heap = HeapState::from_child_plan(child_plan)?;
+unsafe fn initialize_runtime_heap_from_bounds(
+    load_end: u32,
+    stack_top: u32,
+) -> Result<(), HeapError> {
+    let heap = HeapState::from_bounds(load_end, stack_top)?;
     unsafe {
         write_runtime_word(
             core::ptr::addr_of_mut!(RUNTIME_CHILD_HEAP_START),
@@ -754,10 +815,6 @@ impl HeapState {
         }
         Ok(Self { start, limit })
     }
-
-    fn from_child_plan(child_plan: DynamicUserLoadPlan) -> Result<Self, HeapError> {
-        Self::from_bounds(child_plan.load_end, child_plan.stack_top)
-    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -840,6 +897,89 @@ pub struct DynamicUserLoadPlan {
     pub payload_len: u32,
     pub zero_fill_addr: u32,
     pub zero_fill_len: u32,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct RunArgvRequest<'a> {
+    pub path: &'a [u8],
+    pub arg: &'a [u8],
+}
+
+impl<'a> RunArgvRequest<'a> {
+    pub fn parse(bytes: &'a [u8]) -> Result<Self, ProcessLoadError> {
+        if bytes.len() < 12 {
+            return Err(ProcessLoadError::InvalidPath);
+        }
+        if read_request_u32(bytes, 0)? != k16_abi::syscall::RUN_ARGV_MAGIC {
+            return Err(ProcessLoadError::InvalidPath);
+        }
+        let path_len = read_request_u32(bytes, 4)? as usize;
+        let len = read_request_u32(bytes, 8)? as usize;
+        if len > k16_abi::syscall::MAX_RUN_ARG_BYTES {
+            return Err(ProcessLoadError::InvalidPath);
+        }
+        let path_start = 12_usize;
+        let path_end = path_start
+            .checked_add(path_len)
+            .ok_or(ProcessLoadError::InvalidPath)?;
+        let path = bytes
+            .get(path_start..path_end)
+            .ok_or(ProcessLoadError::InvalidPath)?;
+        let arg_start = path_end;
+        let arg_end = arg_start
+            .checked_add(len)
+            .ok_or(ProcessLoadError::InvalidPath)?;
+        if arg_end != bytes.len() {
+            return Err(ProcessLoadError::InvalidPath);
+        }
+        let arg = bytes
+            .get(arg_start..arg_end)
+            .ok_or(ProcessLoadError::InvalidPath)?;
+        Ok(Self { path, arg })
+    }
+}
+
+fn read_request_u32(bytes: &[u8], offset: usize) -> Result<u32, ProcessLoadError> {
+    let end = offset.checked_add(4).ok_or(ProcessLoadError::InvalidPath)?;
+    let word = bytes
+        .get(offset..end)
+        .ok_or(ProcessLoadError::InvalidPath)?;
+    Ok(u32::from_le_bytes([word[0], word[1], word[2], word[3]]))
+}
+
+pub unsafe fn install_child_argv1(
+    plan: DynamicUserLoadPlan,
+    arg: &[u8],
+) -> Result<ChildArgv, ProcessLoadError> {
+    if arg.len() > k16_abi::syscall::MAX_RUN_ARG_BYTES {
+        return Err(ProcessLoadError::InvalidPath);
+    }
+    let table_ptr = align_up(plan.load_end, STACK_ALIGNMENT)?;
+    let arg_ptr = table_ptr
+        .checked_add(CHILD_ARG_ENTRY_BYTES)
+        .ok_or(ProcessLoadError::AddressOverflow)?;
+    let arg_len = arg.len() as u32;
+    unsafe {
+        write_u32_le(table_ptr, arg_ptr);
+        write_u32_le(table_ptr + 4, arg_len);
+        copy_bytes_to_ram(arg, arg_ptr);
+    }
+    let end = align_up(
+        arg_ptr
+            .checked_add(arg_len)
+            .ok_or(ProcessLoadError::AddressOverflow)?,
+        HEAP_ALIGNMENT,
+    )?;
+    let heap_limit =
+        heap_limit_from_stack_top(plan.stack_top).map_err(|_| ProcessLoadError::ProgramTooLarge)?;
+    if end > heap_limit {
+        return Err(ProcessLoadError::ProgramTooLarge);
+    }
+    Ok(ChildArgv {
+        argc: 1,
+        table_ptr,
+        end,
+    })
 }
 
 pub fn plan_dynamic_user_load(
@@ -1126,6 +1266,14 @@ unsafe fn zero_fill_ram(dst_addr: u32, len: u32) {
     }
 }
 
+unsafe fn copy_bytes_to_ram(bytes: &[u8], dst_addr: u32) {
+    let mut offset = 0;
+    while offset < bytes.len() {
+        unsafe { write_u8(dst_addr + offset as u32, bytes[offset]) };
+        offset += 1;
+    }
+}
+
 unsafe fn read_u32_le(address: u32) -> u32 {
     let b0 = unsafe { read_u8(address) };
     let b1 = unsafe { read_u8(address + 1) };
@@ -1392,6 +1540,51 @@ mod tests {
 
         assert_eq!(table.program_break(), Ok(0x0000_a024));
         assert_eq!(table.heap_limit(), Ok(0x0000_ff00));
+    }
+
+    #[test]
+    fn process_table_places_child_argv_before_heap_start() {
+        let mut table = ProcessTable::new(ProcessContext {
+            entry_pc: 0x0000_8000,
+            stack_top: 0x0001_0000,
+        });
+        let child_plan = DynamicUserLoadPlan {
+            load_base: 0x0000_a000,
+            load_end: 0x0000_a020,
+            entry_pc: 0x0000_a004,
+            stack_top: 0x0001_0000,
+            payload_dst: 0x0000_a000,
+            payload_len: 16,
+            zero_fill_addr: 0x0000_a010,
+            zero_fill_len: 16,
+        };
+        let argv = ChildArgv {
+            argc: 1,
+            table_ptr: 0x0000_a024,
+            end: 0x0000_a038,
+        };
+
+        let child = table
+            .begin_child_run_with_argv(child_plan, argv)
+            .expect("child starts with argv");
+
+        assert_eq!(child.frame.registers[1], 1);
+        assert_eq!(child.frame.registers[2], 0x0000_a024);
+        assert_eq!(table.program_break(), Ok(0x0000_a038));
+    }
+
+    #[test]
+    fn run_argv_request_rejects_trailing_bytes_after_one_argument() {
+        let bytes = [
+            b'R', b'A', b'R', b'G', 11, 0, 0, 0, 9, 0, 0, 0, b'/', b'b', b'i', b'n', b'/', b'c',
+            b'a', b't', b'.', b'k', b'x', b'/', b'e', b't', b'c', b'/', b'm', b'o', b't', b'd',
+            b'!',
+        ];
+
+        assert_eq!(
+            RunArgvRequest::parse(&bytes),
+            Err(ProcessLoadError::InvalidPath)
+        );
     }
 
     #[test]

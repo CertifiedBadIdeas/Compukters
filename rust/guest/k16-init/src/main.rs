@@ -8,7 +8,7 @@ use kraft_std::prelude::*;
 
 const PROMPT: &[u8] = b"INIT> ";
 const NEWLINE: &[u8] = b"\n";
-const HELP: &[u8] = b"HELP\nCLEAR\nECHO\nTICKS\nUNAME\nCAT\nALLOC\n";
+const HELP: &[u8] = b"HELP\nCLEAR\nECHO\nTICKS\nUNAME\nCAT <PATH>\nALLOC\n";
 
 #[no_mangle]
 pub extern "C" fn main() -> ! {
@@ -68,7 +68,7 @@ fn dispatch_command(stdout: io::Fd, command: Command<'_>) {
         Command::Clear => must_write(stdout, b"\x0c"),
         Command::Ticks => run_ticks(stdout),
         Command::Uname => run_uname(stdout),
-        Command::Cat => run_cat(stdout),
+        Command::Cat(path) => run_cat(stdout, path),
         Command::AllocTest => run_alloc_test(stdout),
         Command::Echo(bytes) => {
             must_write(stdout, bytes);
@@ -87,29 +87,32 @@ fn run_ticks(stdout: io::Fd) {
 fn run_uname(stdout: io::Fd) {
     match process::run("/bin/uname.kx") {
         Ok(_) => {}
-        Err(process::Error::Syscall(status)) => {
-            must_write(stdout, b"ERR ");
-            must_write(stdout, run_error_name(status));
-            must_write(stdout, NEWLINE);
-        }
+        Err(error) => write_run_error(stdout, error),
     }
 }
 
-fn run_cat(stdout: io::Fd) {
-    match process::run("/bin/cat.kx") {
+fn run_cat(stdout: io::Fd, path: &[u8]) {
+    let Ok(path) = core::str::from_utf8(path) else {
+        must_write(stdout, b"ERR\n");
+        return;
+    };
+    match process::run_with_args("/bin/cat.kx", &[path]) {
         Ok(_) => {}
-        Err(process::Error::Syscall(status)) => {
-            must_write(stdout, b"ERR ");
-            must_write(stdout, run_error_name(status));
-            must_write(stdout, NEWLINE);
-        }
+        Err(error) => write_run_error(stdout, error),
     }
 }
 
 fn run_alloc_test(stdout: io::Fd) {
     match process::run("/bin/alloc-test.kx") {
         Ok(_) => {}
-        Err(process::Error::Syscall(status)) => {
+        Err(error) => write_run_error(stdout, error),
+    }
+}
+
+fn write_run_error(stdout: io::Fd, error: process::Error) {
+    match error {
+        process::Error::InvalidArgument => must_write(stdout, b"ERR INVAL\n"),
+        process::Error::Syscall(status) => {
             must_write(stdout, b"ERR ");
             must_write(stdout, run_error_name(status));
             must_write(stdout, NEWLINE);

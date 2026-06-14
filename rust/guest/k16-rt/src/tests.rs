@@ -346,6 +346,27 @@ fn run_syscall_uses_path_pointer_and_length_arguments() {
 }
 
 #[test]
+fn run_argv_syscall_uses_request_pointer_length_and_format_arguments() {
+    crate::trap::reset_test_interrupts();
+    crate::trap::set_test_syscall_return(19);
+    let request = *b"argv-request";
+
+    let returned = run_argv_syscall(request.as_ptr(), request.len());
+
+    assert_eq!(crate::trap::test_syscall_number(), k16_abi::syscall::RUN);
+    assert_eq!(
+        crate::trap::test_syscall_arg0(),
+        request.as_ptr() as usize as u32
+    );
+    assert_eq!(crate::trap::test_syscall_arg1(), request.len() as u32);
+    assert_eq!(
+        crate::trap::test_syscall_arg2(),
+        k16_abi::syscall::RUN_FORMAT_ARGV
+    );
+    assert_eq!(returned, 19);
+}
+
+#[test]
 fn open_syscall_uses_path_pointer_length_and_flags_arguments() {
     crate::trap::reset_test_interrupts();
     crate::trap::set_test_syscall_return(3);

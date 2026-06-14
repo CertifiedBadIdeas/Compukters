@@ -299,7 +299,22 @@ pub fn read_syscall(fd: u32, ptr: *mut u8, len: usize) -> u32 {
 
 #[inline(always)]
 pub fn run_syscall(path: *const u8, len: usize) -> u32 {
-    syscall3(k16_abi::syscall::RUN, path as usize as u32, len as u32, 0)
+    syscall3(
+        k16_abi::syscall::RUN,
+        path as usize as u32,
+        len as u32,
+        k16_abi::syscall::RUN_FORMAT_PATH,
+    )
+}
+
+#[inline(always)]
+pub fn run_argv_syscall(request: *const u8, len: usize) -> u32 {
+    syscall3(
+        k16_abi::syscall::RUN,
+        request as usize as u32,
+        len as u32,
+        k16_abi::syscall::RUN_FORMAT_ARGV,
+    )
 }
 
 #[inline(always)]
