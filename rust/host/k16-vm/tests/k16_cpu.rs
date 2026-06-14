@@ -200,6 +200,107 @@ fn cpu_mmu_translated_store_reports_permission_fault_on_read_only_mapping() {
 }
 
 #[test]
+fn k16_syscall_from_translated_user_enters_physical_kernel_and_iret_restores_user_mode() {
+    const RAM_SIZE: u32 = 0x4000;
+    const SETUP_PC: u32 = 0x0000;
+    const HANDLER_PC: u32 = 0x0100;
+    const USER_PHYSICAL_PC: u32 = 0x1000;
+    const USER_PHYSICAL_DATA: u32 = 0x2000;
+    const HANDLER_PHYSICAL_PROOF: u32 = 0x3000;
+    const USER_VIRTUAL_PC: u32 = 0x4000;
+    const USER_VIRTUAL_DATA: u32 = 0x8000;
+    const USER_STACK_TOP: u32 = 0x9000;
+    const RETURN_VALUE: u32 = 0x1234_5678;
+
+    let mut bus = MachineBus::new(RAM_SIZE as usize).unwrap();
+    let mut spaces = MmuAddressSpaces::new();
+    let address_space = spaces.create(RAM_SIZE).unwrap();
+    let space = spaces.get_mut(address_space).unwrap();
+    space
+        .map_pages(
+            USER_VIRTUAL_PC,
+            USER_PHYSICAL_PC,
+            1,
+            MmuMapFlags::USER_ACCESSIBLE | MmuMapFlags::EXECUTABLE,
+        )
+        .unwrap();
+    space
+        .map_pages(
+            USER_VIRTUAL_DATA,
+            USER_PHYSICAL_DATA,
+            1,
+            MmuMapFlags::USER_ACCESSIBLE | MmuMapFlags::WRITABLE,
+        )
+        .unwrap();
+    write_words(
+        &mut bus,
+        SETUP_PC,
+        &[
+            const32(1, HANDLER_PC)[0],
+            const32(1, HANDLER_PC)[1],
+            const32(1, HANDLER_PC)[2],
+            write_csr(K16_CSR_TRAP_VECTOR, 1),
+            wait(),
+        ],
+    );
+    write_words(
+        &mut bus,
+        HANDLER_PC,
+        &[
+            read_csr(3, K16_CSR_TRAP_CAUSE),
+            const32(8, HANDLER_PHYSICAL_PROOF)[0],
+            const32(8, HANDLER_PHYSICAL_PROOF)[1],
+            const32(8, HANDLER_PHYSICAL_PROOF)[2],
+            store32(8, 3),
+            const32(0, RETURN_VALUE)[0],
+            const32(0, RETURN_VALUE)[1],
+            const32(0, RETURN_VALUE)[2],
+            iret(),
+        ],
+    );
+    write_words(
+        &mut bus,
+        USER_PHYSICAL_PC,
+        &[
+            const4(1, 7),
+            syscall(1),
+            const32(2, USER_VIRTUAL_DATA)[0],
+            const32(2, USER_VIRTUAL_DATA)[1],
+            const32(2, USER_VIRTUAL_DATA)[2],
+            store32(2, 0),
+            halt(),
+        ],
+    );
+    let mut cpu = K16Cpu::new(SETUP_PC);
+
+    assert_eq!(
+        cpu.run_until_signal_with_mmu(&mut bus, &spaces, 16)
+            .unwrap(),
+        K16Signal::Wait,
+    );
+    cpu.enter_user_address_space(address_space, USER_VIRTUAL_PC, USER_STACK_TOP);
+
+    assert_eq!(
+        cpu.run_until_signal_with_mmu(&mut bus, &spaces, 32)
+            .unwrap(),
+        K16Signal::Halt,
+    );
+    assert_eq!(
+        bus.load_i32(HANDLER_PHYSICAL_PROOF).unwrap() as u32,
+        K16_TRAP_CAUSE_EXPLICIT_TRAP,
+    );
+    assert_eq!(
+        bus.load_i32(USER_PHYSICAL_DATA).unwrap() as u32,
+        RETURN_VALUE
+    );
+    assert_eq!(
+        cpu.address_mode(),
+        K16AddressMode::Translated { address_space },
+    );
+    assert_eq!(cpu.privilege_mode(), K16PrivilegeMode::User);
+}
+
+#[test]
 fn k16_uses_r15_as_stack_pointer_into_guest_ram() {
     let mut bus = MachineBus::new(128).unwrap();
     let stack_top = 96;

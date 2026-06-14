@@ -477,15 +477,18 @@ Writes to read-only CSRs raise an explicit synchronous trap. Writing a
 Synchronous exceptions are delivered immediately when the faulting instruction
 is decoded or executed. If `trap_vector = 0`, the VM reports a hard CPU trap to
 the host. Otherwise the CPU records `trap_cause`, `trap_pc`, and `trap_value`,
-then saves the interrupted register frame and sets `pc = trap_vector`.
+then saves the interrupted register frame, stack pointer, interrupt state,
+address mode, and privilege mode. Trap entry then switches execution to
+physical/kernel mode and sets `pc = trap_vector`, so a translated user program
+enters a physical-mode kernel handler.
 
 The `syscall rA` instruction is the returning explicit-trap entry for guest
 OS services. It records `trap_cause = 0x00000005`,
 `trap_value = rA`, and `trap_pc` as the next instruction after `syscall`, then
 records the current stack pointer as `trap_stack_pointer` and enters
-`trap_vector` with interrupt delivery disabled until `iret`. A kernel handler
-can complete the service and use `iret` to resume the caller after the `syscall`
-instruction.
+`trap_vector` in physical/kernel mode with interrupt delivery disabled until
+`iret`. A kernel handler can complete the service and use `iret` to resume the
+caller after the `syscall` instruction.
 
 The initial K16 syscall ABI v0 is a guest/runtime convention layered on this
 CPU instruction. The CPU does not decode syscall tables. `k16-rt`
@@ -499,9 +502,11 @@ kernel interprets `trap_value` as the syscall number, reads the captured
 `trap_arg*` CSRs for arguments, may freely use registers while running in the
 trap vector, and returns a `u32` result by placing it in `r0` before `iret`.
 `iret` restores the interrupted user register frame for `r1..r15`; the current
-handler `r0` becomes the caller-visible return value. After `iret`, pending
-interrupt delivery is deferred for two resumed guest instructions so helper
-code can return to the caller and the caller can consume or save `r0` before an
+handler `r0` becomes the caller-visible return value. `iret` also restores the
+interrupted address mode and privilege mode, so a syscall from translated user
+execution returns to translated user execution. After `iret`, pending interrupt
+delivery is deferred for two resumed guest instructions so helper code can
+return to the caller and the caller can consume or save `r0` before an
 asynchronous interrupt can enter the trap vector.
 
 Kernel code can rewrite the saved trap frame before `iret`. `trap_resume_pc`,

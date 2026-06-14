@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- K16 trap, syscall, fault, and interrupt entry now save the interrupted
+  address/privilege mode, enter the trap vector in physical/kernel mode, and
+  restore the interrupted mode on `iret`. This lets translated user code call a
+  physical-mode kernel handler and resume translated execution afterward.
 - Added the K16 `mmu0` MMIO control device as the first privileged guest
   interface to the host-managed MMU. Kernel-mode guest code can create address
   spaces, map/protect pages, and activate translated user execution for the
