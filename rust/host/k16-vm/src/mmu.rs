@@ -8,6 +8,12 @@ pub enum MmuAccess {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MmuPrivilege {
+    Kernel,
+    User,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MmuFaultKind {
     NotPresent,
     Permission,
@@ -25,7 +31,8 @@ pub struct MmuFault {
 pub struct MmuMapFlags(u32);
 
 impl MmuMapFlags {
-    pub const USER: Self = Self(1 << 0);
+    pub const NONE: Self = Self(0);
+    pub const USER_ACCESSIBLE: Self = Self(1 << 0);
     pub const WRITABLE: Self = Self(1 << 1);
     pub const EXECUTABLE: Self = Self(1 << 2);
 
@@ -161,9 +168,6 @@ impl MmuAddressSpace {
         page_count: u32,
         flags: MmuMapFlags,
     ) -> Result<(), MmuFault> {
-        if !flags.contains(MmuMapFlags::USER) {
-            return Err(invalid_mapping_fault(virtual_start));
-        }
         self.replace_mapped_range(virtual_start, page_count, Some(flags))
     }
 
@@ -171,7 +175,12 @@ impl MmuAddressSpace {
         self.replace_mapped_range(virtual_start, page_count, None)
     }
 
-    pub fn translate(&self, address: u32, access: MmuAccess) -> Result<u32, MmuFault> {
+    pub fn translate(
+        &self,
+        address: u32,
+        access: MmuAccess,
+        privilege: MmuPrivilege,
+    ) -> Result<u32, MmuFault> {
         let mapping = self
             .mappings
             .iter()
@@ -182,7 +191,8 @@ impl MmuAddressSpace {
                 access,
                 kind: MmuFaultKind::NotPresent,
             })?;
-        if !mapping.flags.contains(MmuMapFlags::USER)
+        if matches!(privilege, MmuPrivilege::User)
+            && !mapping.flags.contains(MmuMapFlags::USER_ACCESSIBLE)
             || matches!(access, MmuAccess::Fetch)
                 && !mapping.flags.contains(MmuMapFlags::EXECUTABLE)
             || matches!(access, MmuAccess::Store) && !mapping.flags.contains(MmuMapFlags::WRITABLE)
@@ -258,11 +268,7 @@ impl MmuAddressSpace {
         flags: MmuMapFlags,
     ) -> Result<Mapping, MmuFault> {
         let fault = invalid_mapping_fault(virtual_start);
-        if page_count == 0
-            || !is_page_aligned(virtual_start)
-            || !is_page_aligned(physical_start)
-            || !flags.contains(MmuMapFlags::USER)
-        {
+        if page_count == 0 || !is_page_aligned(virtual_start) || !is_page_aligned(physical_start) {
             return Err(fault);
         }
         let Some(virtual_end) = byte_len(page_count).and_then(|len| virtual_start.checked_add(len))

@@ -1,12 +1,12 @@
 use k16_vm::k16::{
-    K16AddressTranslation, K16Cpu, K16Signal, K16_CSR_INTERRUPT_ENABLE, K16_CSR_INTERRUPT_MASK,
-    K16_CSR_INTERRUPT_PENDING, K16_CSR_TRAP_ARG0, K16_CSR_TRAP_ARG1, K16_CSR_TRAP_ARG2,
-    K16_CSR_TRAP_CAUSE, K16_CSR_TRAP_FRAME_INDEX, K16_CSR_TRAP_FRAME_REGISTER,
+    K16AddressMode, K16Cpu, K16PrivilegeMode, K16Signal, K16_CSR_INTERRUPT_ENABLE,
+    K16_CSR_INTERRUPT_MASK, K16_CSR_INTERRUPT_PENDING, K16_CSR_TRAP_ARG0, K16_CSR_TRAP_ARG1,
+    K16_CSR_TRAP_ARG2, K16_CSR_TRAP_CAUSE, K16_CSR_TRAP_FRAME_INDEX, K16_CSR_TRAP_FRAME_REGISTER,
     K16_CSR_TRAP_INTERRUPT_ENABLE, K16_CSR_TRAP_PC, K16_CSR_TRAP_RESUME_PC,
     K16_CSR_TRAP_STACK_POINTER, K16_CSR_TRAP_VALUE, K16_CSR_TRAP_VECTOR,
     K16_INTERRUPT_SOURCE_TIMER0, K16_STACK_POINTER_REGISTER, K16_TRAP_CAUSE_EXPLICIT_TRAP,
-    K16_TRAP_CAUSE_ILLEGAL_INSTRUCTION, K16_TRAP_CAUSE_STORE_FAULT,
-    K16_TRAP_CAUSE_TIMER0_INTERRUPT,
+    K16_TRAP_CAUSE_ILLEGAL_INSTRUCTION, K16_TRAP_CAUSE_INSTRUCTION_FETCH_FAULT,
+    K16_TRAP_CAUSE_STORE_FAULT, K16_TRAP_CAUSE_TIMER0_INTERRUPT,
 };
 use k16_vm::low_bus::{MachineBus, MmioDevice};
 use k16_vm::low_machine::MemoryFault;
@@ -89,6 +89,14 @@ fn k16_loads_and_stores_regular_ram_through_machine_bus() {
 }
 
 #[test]
+fn cpu_mmu_defaults_to_physical_address_mode_and_kernel_privilege() {
+    let cpu = K16Cpu::new(0);
+
+    assert_eq!(cpu.address_mode(), K16AddressMode::Physical);
+    assert_eq!(cpu.privilege_mode(), K16PrivilegeMode::Kernel);
+}
+
+#[test]
 fn cpu_mmu_translated_execution_fetches_loads_and_stores_through_active_address_space() {
     const RAM_SIZE: u32 = 0x3000;
     let mut bus = MachineBus::new(RAM_SIZE as usize).unwrap();
@@ -96,10 +104,10 @@ fn cpu_mmu_translated_execution_fetches_loads_and_stores_through_active_address_
     let address_space = spaces.create(RAM_SIZE).unwrap();
     let space = spaces.get_mut(address_space).unwrap();
     space
-        .map_pages(0x4000, 0, 1, MmuMapFlags::USER | MmuMapFlags::EXECUTABLE)
+        .map_pages(0x4000, 0, 1, MmuMapFlags::EXECUTABLE)
         .unwrap();
     space
-        .map_pages(0x8000, 0x1000, 1, MmuMapFlags::USER | MmuMapFlags::WRITABLE)
+        .map_pages(0x8000, 0x1000, 1, MmuMapFlags::WRITABLE)
         .unwrap();
     bus.store_i32(0x1000, 0x0102_0304).unwrap();
     write_words(
@@ -118,7 +126,7 @@ fn cpu_mmu_translated_execution_fetches_loads_and_stores_through_active_address_
         ],
     );
     let mut cpu = K16Cpu::new(0x4000);
-    cpu.set_address_translation(K16AddressTranslation::Translated { address_space });
+    cpu.set_address_mode(K16AddressMode::Translated { address_space });
 
     assert_eq!(
         cpu.run_until_signal_with_mmu(&mut bus, &spaces, 16)
@@ -131,6 +139,30 @@ fn cpu_mmu_translated_execution_fetches_loads_and_stores_through_active_address_
 }
 
 #[test]
+fn cpu_mmu_user_mode_rejects_supervisor_only_instruction_fetch() {
+    const RAM_SIZE: u32 = 0x3000;
+    let mut bus = MachineBus::new(RAM_SIZE as usize).unwrap();
+    let mut spaces = MmuAddressSpaces::new();
+    let address_space = spaces.create(RAM_SIZE).unwrap();
+    let space = spaces.get_mut(address_space).unwrap();
+    space
+        .map_pages(0x4000, 0, 1, MmuMapFlags::EXECUTABLE)
+        .unwrap();
+    write_words(&mut bus, 0, &[halt()]);
+    let mut cpu = K16Cpu::new(0x4000);
+    cpu.set_address_mode(K16AddressMode::Translated { address_space });
+    cpu.set_privilege_mode(K16PrivilegeMode::User);
+
+    let trap = cpu
+        .run_until_signal_with_mmu(&mut bus, &spaces, 16)
+        .expect_err("user mode should not fetch from supervisor-only mapping");
+    assert_eq!(trap.cause(), K16_TRAP_CAUSE_INSTRUCTION_FETCH_FAULT);
+    assert_eq!(trap.pc(), 0x4000);
+    assert_eq!(trap.value(), 0x4000);
+    assert!(trap.to_string().contains("MMU permission fault"));
+}
+
+#[test]
 fn cpu_mmu_translated_store_reports_permission_fault_on_read_only_mapping() {
     const RAM_SIZE: u32 = 0x3000;
     let mut bus = MachineBus::new(RAM_SIZE as usize).unwrap();
@@ -138,10 +170,10 @@ fn cpu_mmu_translated_store_reports_permission_fault_on_read_only_mapping() {
     let address_space = spaces.create(RAM_SIZE).unwrap();
     let space = spaces.get_mut(address_space).unwrap();
     space
-        .map_pages(0x4000, 0, 1, MmuMapFlags::USER | MmuMapFlags::EXECUTABLE)
+        .map_pages(0x4000, 0, 1, MmuMapFlags::EXECUTABLE)
         .unwrap();
     space
-        .map_pages(0x8000, 0x1000, 1, MmuMapFlags::USER)
+        .map_pages(0x8000, 0x1000, 1, MmuMapFlags::USER_ACCESSIBLE)
         .unwrap();
     write_words(
         &mut bus,
@@ -156,7 +188,7 @@ fn cpu_mmu_translated_store_reports_permission_fault_on_read_only_mapping() {
         ],
     );
     let mut cpu = K16Cpu::new(0x4000);
-    cpu.set_address_translation(K16AddressTranslation::Translated { address_space });
+    cpu.set_address_mode(K16AddressMode::Translated { address_space });
 
     let trap = cpu
         .run_until_signal_with_mmu(&mut bus, &spaces, 16)
