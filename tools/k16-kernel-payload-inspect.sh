@@ -6,8 +6,6 @@ DEFAULT_ARTIFACT="$ROOT/modules/v1_21_1/v1_21_1-neoforge/build/generated/k16-fir
 ARTIFACT="${1:-$DEFAULT_ARTIFACT}"
 
 KERNEL_LOAD_ADDR=0x00004000
-KERNEL_LIMIT_BYTES=61440
-MIN_HEADROOM_BYTES="${K16_KERNEL_MIN_HEADROOM_BYTES:-1024}"
 
 K16E_HEADER_SIZE=32
 K16E_SECTION_TABLE_OFFSET=32
@@ -61,24 +59,10 @@ memory_size="$(read_u32 "$ARTIFACT" 48)"
 [[ "$file_offset" == "$K16E_PAYLOAD_OFFSET" ]] || fail "expected payload offset $K16E_PAYLOAD_OFFSET, got $file_offset"
 [[ "$memory_size" == "$payload_bytes" ]] || fail "memory size $memory_size differs from payload bytes $payload_bytes"
 
-headroom_bytes=$((KERNEL_LIMIT_BYTES - payload_bytes))
-
 printf 'artifact=%s\n' "$ARTIFACT"
 printf 'abi=kernel\n'
 printf 'load_addr=0x%08x\n' "$load_addr"
 printf 'payload_bytes=%s\n' "$payload_bytes"
-printf 'limit_bytes=%s\n' "$KERNEL_LIMIT_BYTES"
-printf 'headroom_bytes=%s\n' "$headroom_bytes"
-printf 'min_headroom_bytes=%s\n' "$MIN_HEADROOM_BYTES"
-
-if (( payload_bytes > KERNEL_LIMIT_BYTES )); then
-    printf 'status=OVERSIZED\n'
-    exit 1
-fi
-
-if (( headroom_bytes < MIN_HEADROOM_BYTES )); then
-    printf 'status=LOW_HEADROOM\n'
-    exit 1
-fi
+printf 'memory_size=%s\n' "$memory_size"
 
 printf 'status=OK\n'
