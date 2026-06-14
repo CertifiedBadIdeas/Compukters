@@ -65,7 +65,7 @@ class ComputerRuntimeDeviceFactoryArchitectureTest {
                 .of("src/main/kotlin/ru/lazyhat/compukterkraft/common/computer/block/ComputerRuntimeDeviceFactory.kt")
                 .readText()
 
-        val consumeIndex = source.indexOf("val snapshot = tile.consumePendingRuntimeSnapshot()")
+        val consumeIndex = source.indexOf("tile.consumePendingRuntimeSnapshot()")
         val endpointIndex = source.indexOf("createK16ComputerEndpoint(biosFlashPath, storage0, snapshot)")
         val restoreIndex = source.indexOf("K16ComputerRuntimeFactory.restoreFromBiosFlashSnapshot")
         val freshBootIndex = source.indexOf("K16ComputerRuntimeFactory.createFromBiosFlash")
@@ -76,6 +76,24 @@ class ComputerRuntimeDeviceFactoryArchitectureTest {
         assertTrue(freshBootIndex >= 0, "factory should keep a fresh boot branch")
         assertTrue(restoreIndex > freshBootIndex, "restore should remain the non-null snapshot branch after fresh boot")
         assertFalse(source.contains("var pendingRuntimeSnapshot"))
+    }
+
+    @Test
+    fun inGameK16ComputerFallsBackToDurableRuntimeSnapshotBeforeFreshBoot() {
+        val source =
+            Path
+                .of("src/main/kotlin/ru/lazyhat/compukterkraft/common/computer/block/ComputerRuntimeDeviceFactory.kt")
+                .readText()
+
+        val storeIndex = source.indexOf("K16RuntimeSnapshotStore(worldRoot)")
+        val consumeIndex = source.indexOf("tile.consumePendingRuntimeSnapshot()")
+        val durableReadIndex = source.indexOf("snapshotStore.readComputerSnapshotOrNull(deviceId)")
+        val endpointIndex = source.indexOf("createK16ComputerEndpoint(biosFlashPath, storage0, snapshot)")
+
+        assertTrue(storeIndex >= 0, "factory should create a runtime snapshot store from the world root")
+        assertTrue(consumeIndex >= 0, "factory should still prefer pending NBT snapshots first")
+        assertTrue(durableReadIndex > consumeIndex, "factory should read durable snapshot only after pending NBT is absent")
+        assertTrue(endpointIndex > durableReadIndex, "factory should pass the resolved snapshot into endpoint creation")
     }
 
     @Test
@@ -112,6 +130,24 @@ class ComputerRuntimeDeviceFactoryArchitectureTest {
         assertTrue(source.contains("?.snapshotRuntimeState()"), "saving should prefer the live runtime snapshot when present")
         assertTrue(source.contains("?: pendingRuntimeSnapshot?.copyOf()"), "saving should preserve pending snapshot bytes when runtime is absent")
         assertTrue(source.contains("consumePendingRuntimeSnapshot"))
+    }
+
+    @Test
+    fun computerBlockEntityPersistsRuntimeSnapshotBytesToDurableStore() {
+        val source =
+            Path
+                .of("src/main/kotlin/ru/lazyhat/compukterkraft/common/computer/block/AbstractComputerBlockEntity.kt")
+                .readText()
+
+        val snapshotStoreIndex = source.indexOf("private fun runtimeSnapshotStore(): K16RuntimeSnapshotStore?")
+        val writeMethodIndex = source.indexOf("private fun persistRuntimeSnapshot(snapshot: ByteArray)")
+        val liveSaveIndex = source.indexOf("persistRuntimeSnapshot(snapshot)", source.indexOf("private fun runtimeSnapshotForSave()"))
+        val releaseIndex = source.indexOf("persistRuntimeSnapshot(it)", source.indexOf("protected fun releaseRuntimeDevice()"))
+
+        assertTrue(snapshotStoreIndex >= 0, "block entity should resolve a durable runtime snapshot store from the server level")
+        assertTrue(writeMethodIndex >= 0, "block entity should centralize durable runtime snapshot writes")
+        assertTrue(liveSaveIndex >= 0, "saving a live runtime snapshot should write the durable snapshot store")
+        assertTrue(releaseIndex >= 0, "capturing an unload snapshot should write the durable snapshot store")
     }
 
     @Test

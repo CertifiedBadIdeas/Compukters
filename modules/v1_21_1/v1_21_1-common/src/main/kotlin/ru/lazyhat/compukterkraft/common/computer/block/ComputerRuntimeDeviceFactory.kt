@@ -28,6 +28,7 @@ import ru.lazyhat.compukterkraft.core.device.runtime.K16RuntimeDevice
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16BiosFlashWorkspace
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16ComputerRuntimeFactory
 import ru.lazyhat.compukterkraft.lang.runtime.storage.FileK16VolumeStore
+import ru.lazyhat.compukterkraft.lang.runtime.storage.K16RuntimeSnapshotStore
 import ru.lazyhat.compukterkraft.lang.runtime.storage.K16SystemVolumeWorkspace
 import ru.lazyhat.compukterkraft.lang.runtime.storage.K16VolumeBlob
 import java.nio.file.Path
@@ -41,6 +42,7 @@ object ComputerRuntimeDeviceFactory {
         val host = BlockEntityRuntimeDeviceHost(level, tile)
         val worldRoot = level.server.getWorldPath(LevelResource.ROOT)
         val volumeStore = FileK16VolumeStore(worldRoot)
+        val snapshotStore = K16RuntimeSnapshotStore(worldRoot)
         val workspace = worldRoot.resolve("compukterkraft").resolve("computers").resolve(deviceId.toString())
         return K16RuntimeDevice(
             deviceId = deviceId,
@@ -49,7 +51,9 @@ object ComputerRuntimeDeviceFactory {
                 K16SystemVolumeWorkspace.prepareStorage0Volume(workspace)
                 val storage0 = volumeStore.openOrCreateComputerVolume(deviceId, "storage0")
                 val biosFlashPath = K16BiosFlashWorkspace.prepareBiosFlash(workspace)
-                val snapshot = tile.consumePendingRuntimeSnapshot()
+                val snapshot =
+                    tile.consumePendingRuntimeSnapshot()
+                        ?: snapshotStore.readComputerSnapshotOrNull(deviceId)
                 createK16ComputerEndpoint(biosFlashPath, storage0, snapshot)
             },
             stateSink = host.stateSink,
