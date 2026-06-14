@@ -1,5 +1,7 @@
 use crate::low_machine::{MemoryBus, MemoryFault};
-use crate::mmu::{MmuAccess, MmuAddressSpace, MmuAddressSpaceId, MmuAddressSpaces, MmuFault};
+use crate::mmu::{
+    MmuAccess, MmuAddressSpace, MmuAddressSpaceId, MmuAddressSpaces, MmuFault, MmuPrivilege,
+};
 use std::fmt::{Display, Formatter};
 
 pub const K16_CSR_TRAP_VECTOR: u32 = 1;
@@ -47,9 +49,24 @@ pub struct K16Metrics {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum K16AddressTranslation {
+pub enum K16AddressMode {
     Physical,
     Translated { address_space: MmuAddressSpaceId },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum K16PrivilegeMode {
+    Kernel,
+    User,
+}
+
+impl K16PrivilegeMode {
+    fn mmu_privilege(self) -> MmuPrivilege {
+        match self {
+            Self::Kernel => MmuPrivilege::Kernel,
+            Self::User => MmuPrivilege::User,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -375,7 +392,8 @@ pub struct K16Cpu {
     interrupt_mask: u32,
     interrupt_pending: u32,
     timer0_interrupt_value: u32,
-    address_translation: K16AddressTranslation,
+    address_mode: K16AddressMode,
+    privilege_mode: K16PrivilegeMode,
     state: K16State,
     metrics: K16Metrics,
 }
@@ -401,7 +419,8 @@ impl K16Cpu {
             interrupt_mask: 0,
             interrupt_pending: 0,
             timer0_interrupt_value: 0,
-            address_translation: K16AddressTranslation::Physical,
+            address_mode: K16AddressMode::Physical,
+            privilege_mode: K16PrivilegeMode::Kernel,
             state: K16State::Running,
             metrics: K16Metrics { steps: 0 },
         }
@@ -425,12 +444,20 @@ impl K16Cpu {
         &self.metrics
     }
 
-    pub fn address_translation(&self) -> K16AddressTranslation {
-        self.address_translation
+    pub fn address_mode(&self) -> K16AddressMode {
+        self.address_mode
     }
 
-    pub fn set_address_translation(&mut self, address_translation: K16AddressTranslation) {
-        self.address_translation = address_translation;
+    pub fn set_address_mode(&mut self, address_mode: K16AddressMode) {
+        self.address_mode = address_mode;
+    }
+
+    pub fn privilege_mode(&self) -> K16PrivilegeMode {
+        self.privilege_mode
+    }
+
+    pub fn set_privilege_mode(&mut self, privilege_mode: K16PrivilegeMode) {
+        self.privilege_mode = privilege_mode;
     }
 
     pub fn snapshot(&self) -> K16CpuSnapshot {
@@ -479,7 +506,8 @@ impl K16Cpu {
             interrupt_mask: snapshot.interrupt_mask,
             interrupt_pending: snapshot.interrupt_pending,
             timer0_interrupt_value: snapshot.timer0_interrupt_value,
-            address_translation: K16AddressTranslation::Physical,
+            address_mode: K16AddressMode::Physical,
+            privilege_mode: K16PrivilegeMode::Kernel,
             state: match snapshot.state {
                 K16CpuSnapshotState::Running => K16State::Running,
                 K16CpuSnapshotState::Halted => K16State::Halted,
@@ -756,9 +784,9 @@ impl K16Cpu {
         address_spaces: Option<&'a MmuAddressSpaces>,
         default_load_access: MmuAccess,
     ) -> Result<CpuMemoryBus<'a>, K16Trap> {
-        let address_space = match self.address_translation {
-            K16AddressTranslation::Physical => None,
-            K16AddressTranslation::Translated { address_space } => {
+        let address_space = match self.address_mode {
+            K16AddressMode::Physical => None,
+            K16AddressMode::Translated { address_space } => {
                 Some(
                     address_spaces
                         .and_then(|spaces| spaces.get(address_space))
@@ -774,6 +802,7 @@ impl K16Cpu {
             bus,
             address_space,
             default_load_access,
+            privilege: self.privilege_mode.mmu_privilege(),
         })
     }
 
@@ -1145,6 +1174,7 @@ struct CpuMemoryBus<'a> {
     bus: &'a mut dyn MemoryBus,
     address_space: Option<&'a MmuAddressSpace>,
     default_load_access: MmuAccess,
+    privilege: MmuPrivilege,
 }
 
 impl CpuMemoryBus<'_> {
@@ -1180,7 +1210,7 @@ impl CpuMemoryBus<'_> {
     fn translate(&self, address: u32, access: MmuAccess) -> Result<u32, MemoryFault> {
         match self.address_space {
             Some(address_space) => address_space
-                .translate(address, access)
+                .translate(address, access, self.privilege)
                 .map_err(mmu_memory_fault),
             None => Ok(address),
         }

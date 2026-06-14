@@ -1,6 +1,6 @@
 use k16_vm::mmu::{
     MmuAccess, MmuAddressSpace, MmuAddressSpaces, MmuFault, MmuFaultKind, MmuMapFlags,
-    K16_VM_PAGE_SIZE,
+    MmuPrivilege, K16_VM_PAGE_SIZE,
 };
 
 #[test]
@@ -13,21 +13,50 @@ fn mmu_maps_contiguous_virtual_pages_to_physical_pages() {
             0x0001_0000,
             0x0000_4000,
             2,
-            MmuMapFlags::USER | MmuMapFlags::WRITABLE | MmuMapFlags::EXECUTABLE,
+            MmuMapFlags::USER_ACCESSIBLE | MmuMapFlags::WRITABLE | MmuMapFlags::EXECUTABLE,
         )
         .unwrap();
 
     assert_eq!(
-        space.translate(0x0001_0123, MmuAccess::Fetch).unwrap(),
+        space
+            .translate(0x0001_0123, MmuAccess::Fetch, MmuPrivilege::User)
+            .unwrap(),
         0x0000_4123
     );
     assert_eq!(
-        space.translate(0x0001_1ffc, MmuAccess::Load).unwrap(),
+        space
+            .translate(0x0001_1ffc, MmuAccess::Load, MmuPrivilege::User)
+            .unwrap(),
         0x0000_5ffc
     );
     assert_eq!(
-        space.translate(0x0001_1000, MmuAccess::Store).unwrap(),
+        space
+            .translate(0x0001_1000, MmuAccess::Store, MmuPrivilege::User)
+            .unwrap(),
         0x0000_5000
+    );
+}
+
+#[test]
+fn mmu_privilege_distinguishes_kernel_supervisor_pages_from_user_pages() {
+    let mut space = MmuAddressSpace::new(148 * 1024);
+    space
+        .map_pages(0x0001_0000, 0x0000_4000, 1, MmuMapFlags::EXECUTABLE)
+        .unwrap();
+
+    assert_eq!(
+        space
+            .translate(0x0001_0000, MmuAccess::Fetch, MmuPrivilege::Kernel)
+            .unwrap(),
+        0x0000_4000
+    );
+    assert_eq!(
+        space.translate(0x0001_0000, MmuAccess::Fetch, MmuPrivilege::User),
+        Err(MmuFault {
+            address: 0x0001_0000,
+            access: MmuAccess::Fetch,
+            kind: MmuFaultKind::Permission,
+        })
     );
 }
 
@@ -35,11 +64,11 @@ fn mmu_maps_contiguous_virtual_pages_to_physical_pages() {
 fn mmu_rejects_unmapped_and_permission_denied_accesses() {
     let mut space = MmuAddressSpace::new(148 * 1024);
     space
-        .map_pages(0x0001_0000, 0x0000_4000, 1, MmuMapFlags::USER)
+        .map_pages(0x0001_0000, 0x0000_4000, 1, MmuMapFlags::USER_ACCESSIBLE)
         .unwrap();
 
     assert_eq!(
-        space.translate(0x0002_0000, MmuAccess::Load),
+        space.translate(0x0002_0000, MmuAccess::Load, MmuPrivilege::User),
         Err(MmuFault {
             address: 0x0002_0000,
             access: MmuAccess::Load,
@@ -47,7 +76,7 @@ fn mmu_rejects_unmapped_and_permission_denied_accesses() {
         })
     );
     assert_eq!(
-        space.translate(0x0001_0000, MmuAccess::Store),
+        space.translate(0x0001_0000, MmuAccess::Store, MmuPrivilege::User),
         Err(MmuFault {
             address: 0x0001_0000,
             access: MmuAccess::Store,
@@ -55,7 +84,7 @@ fn mmu_rejects_unmapped_and_permission_denied_accesses() {
         })
     );
     assert_eq!(
-        space.translate(0x0001_0000, MmuAccess::Fetch),
+        space.translate(0x0001_0000, MmuAccess::Fetch, MmuPrivilege::User),
         Err(MmuFault {
             address: 0x0001_0000,
             access: MmuAccess::Fetch,
@@ -67,7 +96,7 @@ fn mmu_rejects_unmapped_and_permission_denied_accesses() {
 #[test]
 fn mmu_rejects_invalid_mappings() {
     let mut space = MmuAddressSpace::new(148 * 1024);
-    let flags = MmuMapFlags::USER;
+    let flags = MmuMapFlags::USER_ACCESSIBLE;
 
     assert_invalid_mapping(space.map_pages(0x0001_0001, 0x0000_4000, 1, flags));
     assert_invalid_mapping(space.map_pages(0x0001_0000, 0x0000_4001, 1, flags));
@@ -97,20 +126,26 @@ fn mmu_protects_and_unmaps_existing_pages() {
             0x0001_0000,
             0x0000_4000,
             2,
-            MmuMapFlags::USER | MmuMapFlags::WRITABLE,
+            MmuMapFlags::USER_ACCESSIBLE | MmuMapFlags::WRITABLE,
         )
         .unwrap();
 
     space
-        .protect_pages(0x0001_0000, 2, MmuMapFlags::USER | MmuMapFlags::EXECUTABLE)
+        .protect_pages(
+            0x0001_0000,
+            2,
+            MmuMapFlags::USER_ACCESSIBLE | MmuMapFlags::EXECUTABLE,
+        )
         .unwrap();
 
     assert_eq!(
-        space.translate(0x0001_0000, MmuAccess::Fetch).unwrap(),
+        space
+            .translate(0x0001_0000, MmuAccess::Fetch, MmuPrivilege::User)
+            .unwrap(),
         0x0000_4000
     );
     assert_eq!(
-        space.translate(0x0001_0000, MmuAccess::Store),
+        space.translate(0x0001_0000, MmuAccess::Store, MmuPrivilege::User),
         Err(MmuFault {
             address: 0x0001_0000,
             access: MmuAccess::Store,
@@ -120,7 +155,7 @@ fn mmu_protects_and_unmaps_existing_pages() {
 
     space.unmap_pages(0x0001_0000, 2).unwrap();
     assert_eq!(
-        space.translate(0x0001_0000, MmuAccess::Load),
+        space.translate(0x0001_0000, MmuAccess::Load, MmuPrivilege::User),
         Err(MmuFault {
             address: 0x0001_0000,
             access: MmuAccess::Load,
@@ -137,29 +172,33 @@ fn mmu_protects_and_unmaps_subranges_inside_existing_extent() {
             0x0001_0000,
             0x0000_4000,
             3,
-            MmuMapFlags::USER | MmuMapFlags::WRITABLE,
+            MmuMapFlags::USER_ACCESSIBLE | MmuMapFlags::WRITABLE,
         )
         .unwrap();
 
     space
-        .protect_pages(0x0001_1000, 1, MmuMapFlags::USER)
+        .protect_pages(0x0001_1000, 1, MmuMapFlags::USER_ACCESSIBLE)
         .unwrap();
 
-    assert!(space.translate(0x0001_0000, MmuAccess::Store).is_ok());
+    assert!(space
+        .translate(0x0001_0000, MmuAccess::Store, MmuPrivilege::User)
+        .is_ok());
     assert_eq!(
-        space.translate(0x0001_1000, MmuAccess::Store),
+        space.translate(0x0001_1000, MmuAccess::Store, MmuPrivilege::User),
         Err(MmuFault {
             address: 0x0001_1000,
             access: MmuAccess::Store,
             kind: MmuFaultKind::Permission,
         })
     );
-    assert!(space.translate(0x0001_2000, MmuAccess::Store).is_ok());
+    assert!(space
+        .translate(0x0001_2000, MmuAccess::Store, MmuPrivilege::User)
+        .is_ok());
 
     space.unmap_pages(0x0001_1000, 1).unwrap();
 
     assert_eq!(
-        space.translate(0x0001_1000, MmuAccess::Load),
+        space.translate(0x0001_1000, MmuAccess::Load, MmuPrivilege::User),
         Err(MmuFault {
             address: 0x0001_1000,
             access: MmuAccess::Load,
@@ -167,7 +206,9 @@ fn mmu_protects_and_unmaps_subranges_inside_existing_extent() {
         })
     );
     assert_eq!(
-        space.translate(0x0001_2000, MmuAccess::Load).unwrap(),
+        space
+            .translate(0x0001_2000, MmuAccess::Load, MmuPrivilege::User)
+            .unwrap(),
         0x0000_6000
     );
 }
