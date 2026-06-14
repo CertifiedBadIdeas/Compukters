@@ -254,10 +254,7 @@ fn write_guest_bytes(ptr: u32, len: u32) -> Result<u32, u32> {
 }
 
 fn valid_guest_buffer(ptr: u32, len: u32) -> bool {
-    let Some(end) = ptr.checked_add(len) else {
-        return false;
-    };
-    ptr >= 0x0001_0000 && end <= 0x0002_5000
+    unsafe { process::current_process_contains_buffer(ptr, len) }
 }
 
 fn read_u32_le(bytes: &[u8], offset: usize) -> u32 {
@@ -282,4 +279,20 @@ unsafe fn write_u32_le(ptr: u32, value: u32) {
 
 fn fs_error_to_status(error: fs::FsError) -> u32 {
     error.0
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn process_memory_buffer_validation_uses_supplied_range() {
+        let memory = process::ProcessMemory::new(0x0001_3000, 0x0001_9000).unwrap();
+
+        assert!(memory.contains_buffer(0x0001_3000, 4));
+        assert!(memory.contains_buffer(0x0001_8ffc, 4));
+        assert!(!memory.contains_buffer(0x0001_2ffc, 4));
+        assert!(!memory.contains_buffer(0x0001_8ffe, 4));
+        assert!(!memory.contains_buffer(0xffff_fffc, 8));
+    }
 }

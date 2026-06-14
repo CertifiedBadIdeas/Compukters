@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- K16 foreground processes now carry explicit guest-physical memory ranges.
+  Init derives its range from the loaded image plus the current machine
+  profile boundary, children derive theirs from the selected load base and
+  stack top, and syscall/stdin user-pointer validation checks the current
+  foreground process range instead of a global hard-coded user window. This is
+  still physical memory only; it does not add virtual memory or page tables.
 - The bundled K16 shell now resolves executable command names containing `/`
   through the current working directory. Bare commands still launch
   `/bin/<name>.kx`, while explicit paths such as `/bin/uname.kx` and

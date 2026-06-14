@@ -394,12 +394,12 @@ by different layers:
 bios        firmware-owned temporary stack if needed
 boot        BIOS or boot entry contract initializes boot stack top
 kernel      bootloader passes or installs kernel stack top before entry
-program     compiler profile initializes the first user stack top at 0x00025000
+program     OS exec service supplies the process stack top for the loaded image
 ```
 
 The current implementation only reserves the convention and proves the memory
-behavior. Kernel/user privilege separation and dynamic per-process stack
-allocation are later ABI slices.
+behavior. Kernel/user privilege separation, virtual memory, and page-table
+address translation are later ABI slices.
 
 ## Call And Return
 
@@ -557,11 +557,19 @@ child. `EXIT` clears the current child slot and restores the waiting parent
 trap frame with the child status in `r0`. There is no background scheduling,
 preemption, fork, pipe, or virtual-memory isolation in this model.
 
+Each foreground process records an explicit guest-physical memory range
+`memory_start..memory_end`. The init process range is derived from the loaded
+init image and the current machine profile's available user RAM boundary. A
+child process range is derived from the kernel-selected child load base and
+stack top. Syscalls that consume user pointers validate buffers against the
+current foreground process range rather than a global hard-coded user window.
+
 Each foreground process has its own monotonic heap after its loaded image. A
 child load arena starts after the current parent's program break, so child
-loading cannot overwrite parent heap allocations. The child heap limit is below
-a guard area under the parent's saved stack pointer, so child heap growth cannot
-overwrite the live parent stack.
+loading cannot overwrite parent heap allocations. The child arena end is the
+lower of the current parent's saved stack pointer and `memory_end`. The child
+heap limit is below a guard area under that stack top, so child heap growth
+cannot overwrite the live parent stack or escape the parent's process range.
 
 Regular file descriptors returned by `OPEN` are process-owned. A foreground
 process can `READ` or `CLOSE` only regular fds it opened, and `EXIT` releases
