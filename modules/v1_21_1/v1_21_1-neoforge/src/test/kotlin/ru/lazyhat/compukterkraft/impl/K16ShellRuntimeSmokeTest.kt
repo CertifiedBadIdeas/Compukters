@@ -38,7 +38,7 @@ import kotlin.test.assertTrue
 class K16ShellRuntimeSmokeTest {
     @Test
     fun runtimeDeviceAcceptsKeyboardInputThroughUserlandShell() {
-        val device = createDevice()
+        val device = createDevice(deviceId = 226)
 
         try {
             device.turnOn()
@@ -197,7 +197,7 @@ class K16ShellRuntimeSmokeTest {
 
     @Test
     fun runtimeDeviceAcceptsLongHeapBackedEchoInputThroughUserlandShell() {
-        val device = createDevice()
+        val device = createDevice(deviceId = 227)
         val payload = "x".repeat(180)
 
         try {
@@ -216,7 +216,50 @@ class K16ShellRuntimeSmokeTest {
         }
     }
 
-    private fun createDevice(): K16RuntimeDevice {
+    @Test
+    fun runtimeDeviceRunsExplicitExecutablePathsThroughUserlandShell() {
+        val device = createDevice(deviceId = 228)
+
+        try {
+            device.turnOn()
+            waitForTerminalText(device, "K16> ")
+
+            dispatchText(device, "/bin/uname.kx\n")
+            waitForTerminal(device, "absolute executable path output and returned prompt") { terminal ->
+                val commandIndex = terminal.indexOf("K16> /bin/uname.kx")
+                val outputIndex = terminal.indexOf("K16", startIndex = commandIndex + "K16> /bin/uname.kx".length)
+                val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex)
+                commandIndex >= 0 && outputIndex > commandIndex && returnedPromptIndex > outputIndex
+            }
+
+            dispatchText(device, "cd /bin\n")
+            waitForTerminal(device, "cd bin returned prompt") { terminal ->
+                val commandIndex = terminal.indexOf("K16> cd /bin")
+                val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = commandIndex + "K16> cd /bin".length)
+                commandIndex >= 0 && returnedPromptIndex > commandIndex
+            }
+
+            dispatchText(device, "./uname.kx\n")
+            waitForTerminal(device, "cwd relative executable path output and returned prompt") { terminal ->
+                val commandIndex = terminal.indexOf("K16> ./uname.kx")
+                val outputIndex = terminal.indexOf("K16", startIndex = commandIndex + "K16> ./uname.kx".length)
+                val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex)
+                commandIndex >= 0 && outputIndex > commandIndex && returnedPromptIndex > outputIndex
+            }
+
+            dispatchText(device, "/bin/nosuch.kx\n")
+            waitForTerminal(device, "missing absolute executable path reports no entry and returned prompt") { terminal ->
+                val commandIndex = terminal.indexOf("K16> /bin/nosuch.kx")
+                val outputIndex = terminal.indexOf("ERR NOENT", startIndex = commandIndex + "K16> /bin/nosuch.kx".length)
+                val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex)
+                commandIndex >= 0 && outputIndex > commandIndex && returnedPromptIndex > outputIndex
+            }
+        } finally {
+            device.close()
+        }
+    }
+
+    private fun createDevice(deviceId: Int): K16RuntimeDevice {
         val workspace = createTempDirectory("k16-shell-runtime-smoke-")
         val biosFlashPath = workspace.resolve("bios.kflash")
         val storage0Path = workspace.resolve("storage0.kv")
@@ -224,7 +267,7 @@ class K16ShellRuntimeSmokeTest {
         storage0Path.writeBytes(K16SystemVolumeWorkspace.loadStorage0VolumeResource(classLoader = javaClass.classLoader))
 
         return K16RuntimeDevice(
-            deviceId = 226,
+            deviceId = deviceId,
             properties = DeviceProperties(DeviceFamily.NORMAL, label = "shell-smoke"),
             endpointFactory = {
                 K16ComputerRuntimeFactory.createFromBiosFlash(

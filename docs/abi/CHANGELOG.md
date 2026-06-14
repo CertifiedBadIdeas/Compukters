@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- The bundled K16 shell now resolves executable command names containing `/`
+  through the current working directory. Bare commands still launch
+  `/bin/<name>.kx`, while explicit paths such as `/bin/uname.kx` and
+  `./uname.kx` run without adding another `/bin/` prefix or `.kx` suffix.
 - Added read-only K16 path metadata syscall `STAT(path, len, metadata_ptr)`.
   The kernel resolves absolute ROOT/K16FS paths on `storage0`, returns
   `FILE_TYPE_REGULAR` or `FILE_TYPE_DIRECTORY` plus `size_bytes` in a fixed

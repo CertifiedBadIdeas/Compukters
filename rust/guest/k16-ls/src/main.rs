@@ -5,6 +5,9 @@ use core::panic::PanicInfo;
 
 use kraft_std::prelude::*;
 
+static mut CHILD_PATH: [u8; k16_abi::syscall::MAX_STAT_PATH_BYTES] =
+    [0; k16_abi::syscall::MAX_STAT_PATH_BYTES];
+
 #[no_mangle]
 pub extern "C" fn main(argc: u32, argv: *const process::Arg) -> ! {
     match list_first_arg_or_default(argc, argv) {
@@ -21,6 +24,7 @@ fn list_first_arg_or_default(argc: u32, argv: *const process::Arg) -> Result<(),
 fn list_dir(path: &str) -> Result<(), ()> {
     let stdout = io::stdout();
     let mut buffer = [0u8; 256];
+    let child_path = child_path_buffer();
     let read = fs::read_dir(path, &mut buffer).map_err(|_| ())?;
     let mut cursor = 0;
     while cursor < read {
@@ -29,8 +33,7 @@ fn list_dir(path: &str) -> Result<(), ()> {
             cursor += 1;
         }
         let name = &buffer[start..cursor];
-        let mut child_path = [0u8; k16_abi::syscall::MAX_STAT_PATH_BYTES];
-        let child_path_len = join_child_path(path.as_bytes(), name, &mut child_path)?;
+        let child_path_len = join_child_path(path.as_bytes(), name, child_path)?;
         let child_path = core::str::from_utf8(&child_path[..child_path_len]).map_err(|_| ())?;
         let metadata = fs::metadata(child_path).map_err(|_| ())?;
         stdout.write_all(name).map_err(|_| ())?;
@@ -41,6 +44,10 @@ fn list_dir(path: &str) -> Result<(), ()> {
         cursor += 1;
     }
     Ok(())
+}
+
+fn child_path_buffer() -> &'static mut [u8; k16_abi::syscall::MAX_STAT_PATH_BYTES] {
+    unsafe { &mut *core::ptr::addr_of_mut!(CHILD_PATH) }
 }
 
 fn join_child_path(base: &[u8], name: &[u8], out: &mut [u8]) -> Result<usize, ()> {
