@@ -44,6 +44,8 @@ extern "C" {
     fn __k16_read_syscall(fd: u32, ptr: u32, len: u32) -> u32;
     fn __k16_open_syscall(ptr: u32, len: u32, flags: u32) -> u32;
     fn __k16_close_syscall(fd: u32) -> u32;
+    fn __k16_brk_syscall(addr: u32) -> u32;
+    fn __k16_sbrk_syscall(delta: u32) -> u32;
     fn __k16_iret_with_r0(value: u32) -> !;
     fn __k16_write_interrupt_enable(value: u32);
     fn __k16_write_interrupt_mask(value: u32);
@@ -327,6 +329,30 @@ pub fn close_syscall(fd: u32) -> u32 {
 #[cfg(any(test, feature = "host-test"))]
 pub fn close_syscall(fd: u32) -> u32 {
     syscall1(k16_abi::syscall::CLOSE, fd)
+}
+
+#[inline(always)]
+#[cfg(not(any(test, feature = "host-test")))]
+pub fn brk_syscall(addr: u32) -> u32 {
+    unsafe { __k16_brk_syscall(addr) }
+}
+
+#[inline(always)]
+#[cfg(any(test, feature = "host-test"))]
+pub fn brk_syscall(addr: u32) -> u32 {
+    syscall1(k16_abi::syscall::BRK, addr)
+}
+
+#[inline(always)]
+#[cfg(not(any(test, feature = "host-test")))]
+pub fn sbrk_syscall(delta: u32) -> u32 {
+    unsafe { __k16_sbrk_syscall(delta) }
+}
+
+#[inline(always)]
+#[cfg(any(test, feature = "host-test"))]
+pub fn sbrk_syscall(delta: u32) -> u32 {
+    syscall1(k16_abi::syscall::SBRK, delta)
 }
 
 #[cfg(not(any(test, feature = "host-test")))]

@@ -526,6 +526,8 @@ K16 syscall ABI v0 names the current Rust-kernel proof services in
 | `RUN` | `9` | `k16_rt::run_syscall(path, len)` | Synchronously loads a dynamic `/bin/*.kx` user program from `ROOT`/K16FS on `storage0`, blocks init while the child runs, and returns the child exit status or a negative K16 error. |
 | `OPEN` | `10` | `k16_rt::open_syscall(path, len, flags)` | Opens an absolute read-only ROOT/K16FS regular file path from `storage0`; `flags` must be `0`, and success returns a regular file fd starting at `3`. |
 | `CLOSE` | `11` | `k16_rt::close_syscall(fd)` | Closes a regular file fd. Standard descriptors `0..=2` are not closeable. |
+| `BRK` | `12` | `k16_rt::brk_syscall(addr)` | Sets the current child process program break to `addr` and returns the resulting break, or a negative K16 error. The break must stay inside the kernel-selected child heap arena. |
+| `SBRK` | `13` | `k16_rt::sbrk_syscall(delta)` | Grows the current child process program break by `delta` bytes and returns the previous break, or a negative K16 error. |
 | `DEBUG_MARKER_RETURN` | `0x53` | n/a | Proof return value for `DEBUG_MARKER`. |
 | `STATUS_OK` | `0` | n/a | Successful proof-service status. |
 | `FD_STDIN` | `0` | n/a | Standard input descriptor accepted by `READ`. |
@@ -542,6 +544,11 @@ K16 syscall ABI v0 names the current Rust-kernel proof services in
 
 These names describe the current ABI proof surface. They are not a complete OS
 service table, scheduler API, filesystem API, or process model.
+
+`BRK` and `SBRK` operate only while a child process is running. The kernel
+chooses the child load base, zero-filled memory extent, initial break, and heap
+limit at `RUN` time. The heap limit is below a guard area under init's saved
+stack pointer, so child heap growth cannot overwrite the live init stack.
 
 Asynchronous interrupts are delivered between guest instructions. Delivery
 requires `interrupt_enable != 0` and a source bit present in both

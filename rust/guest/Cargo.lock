@@ -7,6 +7,13 @@ name = "k16-abi"
 version = "0.1.0"
 
 [[package]]
+name = "k16-alloc-test"
+version = "0.1.0"
+dependencies = [
+ "kraft-std",
+]
+
+[[package]]
 name = "k16-bios"
 version = "0.1.0"
 dependencies = [

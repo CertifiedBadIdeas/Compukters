@@ -146,6 +146,72 @@ pub mod fs {
     }
 }
 
+pub mod heap {
+    use core::alloc::{GlobalAlloc, Layout};
+    use core::ptr;
+
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub enum Error {
+        Syscall(u32),
+    }
+
+    pub struct SbrkAllocator;
+
+    unsafe impl GlobalAlloc for SbrkAllocator {
+        unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+            let Some(delta) = allocation_delta(layout) else {
+                return ptr::null_mut();
+            };
+            let old_break = match sbrk(delta) {
+                Ok(old_break) => old_break,
+                Err(_) => return ptr::null_mut(),
+            };
+            let Some(aligned) = align_up(old_break, layout.align() as u32) else {
+                return ptr::null_mut();
+            };
+            aligned as usize as *mut u8
+        }
+
+        unsafe fn dealloc(&self, _ptr: *mut u8, _layout: Layout) {}
+    }
+
+    pub fn brk(address: u32) -> Result<u32, Error> {
+        let returned = k16_rt::brk_syscall(address);
+        if is_error_status(returned) {
+            return Err(Error::Syscall(returned));
+        }
+        Ok(returned)
+    }
+
+    pub fn sbrk(delta: u32) -> Result<u32, Error> {
+        let returned = k16_rt::sbrk_syscall(delta);
+        if is_error_status(returned) {
+            return Err(Error::Syscall(returned));
+        }
+        Ok(returned)
+    }
+
+    fn allocation_delta(layout: Layout) -> Option<u32> {
+        let size = u32::try_from(layout.size()).ok()?;
+        let align = u32::try_from(layout.align()).ok()?;
+        size.checked_add(align.checked_sub(1)?)
+    }
+
+    fn align_up(value: u32, alignment: u32) -> Option<u32> {
+        let mask = alignment.checked_sub(1)?;
+        value.checked_add(mask).map(|value| value & !mask)
+    }
+
+    #[inline(always)]
+    fn is_error_status(status: u32) -> bool {
+        status & 0x8000_0000 != 0
+    }
+}
+
+#[cfg(not(any(test, feature = "host-test")))]
+#[global_allocator]
+static GLOBAL_ALLOCATOR: heap::SbrkAllocator = heap::SbrkAllocator;
+
 pub mod process {
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     pub enum Error {
@@ -167,5 +233,5 @@ pub mod process {
 }
 
 pub mod prelude {
-    pub use crate::{debug, fs, io, process, thread, time};
+    pub use crate::{debug, fs, heap, io, process, thread, time};
 }

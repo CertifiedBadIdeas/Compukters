@@ -57,6 +57,20 @@ pub fn dispatch(number: u32) -> ! {
                 Err(error) => unsafe { k16_rt::iret_with_r0(error) },
             }
         }
+        abi_syscall::BRK => {
+            let address = k16_rt::syscall_arg0();
+            match set_program_break(address) {
+                Ok(program_break) => unsafe { k16_rt::iret_with_r0(program_break) },
+                Err(error) => unsafe { k16_rt::iret_with_r0(error) },
+            }
+        }
+        abi_syscall::SBRK => {
+            let delta = k16_rt::syscall_arg0();
+            match grow_program_break(delta) {
+                Ok(old_break) => unsafe { k16_rt::iret_with_r0(old_break) },
+                Err(error) => unsafe { k16_rt::iret_with_r0(error) },
+            }
+        }
         abi_syscall::RUN => {
             let ptr = k16_rt::syscall_arg0();
             let len = k16_rt::syscall_arg1();
@@ -111,6 +125,14 @@ fn open_fd(ptr: u32, len: u32, flags: u32) -> Result<u32, u32> {
 
 fn close_fd(fd: u32) -> Result<(), u32> {
     unsafe { fs::close_file_fd(fd).map_err(fs_error_to_status) }
+}
+
+fn set_program_break(address: u32) -> Result<u32, u32> {
+    unsafe { process::set_current_program_break(address).map_err(process::heap_status_from_error) }
+}
+
+fn grow_program_break(delta: u32) -> Result<u32, u32> {
+    unsafe { process::grow_current_program_break(delta).map_err(process::heap_status_from_error) }
 }
 
 fn prepare_run(ptr: u32, len: u32) -> Result<process::ChildLaunch, u32> {

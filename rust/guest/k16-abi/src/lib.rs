@@ -90,6 +90,8 @@ pub mod syscall {
     pub const RUN: u32 = 9;
     pub const OPEN: u32 = 10;
     pub const CLOSE: u32 = 11;
+    pub const BRK: u32 = 12;
+    pub const SBRK: u32 = 13;
     pub const FD_STDIN: u32 = 0;
     pub const FD_STDOUT: u32 = 1;
     pub const FD_STDERR: u32 = 2;
@@ -499,6 +501,8 @@ mod tests {
         assert_eq!(syscall::RUN, 9);
         assert_eq!(syscall::OPEN, 10);
         assert_eq!(syscall::CLOSE, 11);
+        assert_eq!(syscall::BRK, 12);
+        assert_eq!(syscall::SBRK, 13);
         assert_eq!(syscall::FD_STDIN, 0);
         assert_eq!(syscall::FD_STDOUT, 1);
         assert_eq!(syscall::FD_STDERR, 2);

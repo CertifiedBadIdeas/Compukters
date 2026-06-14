@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- Added K16 userland heap syscalls: `BRK(addr)` sets the current child
+  program break, and `SBRK(delta)` grows it and returns the previous break.
+  The Rust kernel bounds the heap to the child process arena below the saved
+  init stack guard and returns `ERROR_NO_MEMORY` for out-of-range growth.
+  `kraft-std` now exposes `heap::{brk, sbrk}` and installs a guest
+  `SbrkAllocator`, while bundled userland includes `/bin/alloc-test.kx` as an
+  `alloc::Vec` smoke utility reachable from init through the `alloc` command.
+- K16 dynamic user-program relocation staging no longer reuses the storage
+  scratch buffer. Relocation records can straddle K16FS block boundaries, and
+  reading such a record into the same scratch page used by block staging could
+  corrupt the first half of the copied record before relocation parsing.
 - Added read-only K16 filesystem fd syscalls for ROOT/K16FS on `storage0`:
   `OPEN(path, len, flags)` allocates file descriptors starting at `3`,
   `READ(fd, ptr, len)` now reads both stdin and regular files, and

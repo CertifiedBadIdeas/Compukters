@@ -3,6 +3,8 @@ use core::cell::UnsafeCell;
 
 const LOAD_ALIGNMENT: u32 = 2;
 const STACK_ALIGNMENT: u32 = 4;
+const HEAP_ALIGNMENT: u32 = 4;
+const STACK_GUARD_BYTES: u32 = 0x100;
 const ROOT_PARTITION: &[u8; 4] = b"ROOT";
 const BIN_COMPONENT: &[u8] = b"bin";
 const BIN_PREFIX: &[u8] = b"/bin/";
@@ -10,6 +12,9 @@ const KX_SUFFIX: &[u8] = b".kx";
 const K16FS_MAX_NAME_BYTES: usize = 56;
 pub const MAX_RUN_PATH_BYTES: usize = BIN_PREFIX.len() + K16FS_MAX_NAME_BYTES;
 const USER_PROGRAM_LIMIT: u32 = 0x0002_0000;
+// Keep relocation records outside k16_storage::SCRATCH_ADDR: storage reads use
+// that block as staging, and records may straddle a storage block boundary.
+const RELOCATION_RECORD_ADDR: u32 = 0x0000_0500;
 #[cfg(feature = "host-test")]
 #[allow(dead_code)]
 static PROCESS_TABLE: KernelProcessTable =
@@ -21,9 +26,15 @@ static PROCESS_TABLE: KernelProcessTable =
 static RUNTIME_INIT_FRAME: KernelCell<k16_rt::TrapFrame> =
     KernelCell::new(k16_rt::TrapFrame::zeroed());
 #[cfg(not(test))]
-static RUNTIME_CHILD_STATE: KernelCell<ProcessState> = KernelCell::new(PROCESS_STATE_EMPTY);
+static mut RUNTIME_CHILD_STATE: ProcessState = PROCESS_STATE_EMPTY;
 #[cfg(not(test))]
-static RUNTIME_CHILD_LOAD_BASE: KernelCell<u32> = KernelCell::new(0);
+static mut RUNTIME_CHILD_LOAD_BASE: u32 = 0;
+#[cfg(not(test))]
+static mut RUNTIME_HEAP_START: u32 = 0;
+#[cfg(not(test))]
+static mut RUNTIME_PROGRAM_BREAK: u32 = 0;
+#[cfg(not(test))]
+static mut RUNTIME_HEAP_LIMIT: u32 = 0;
 
 #[cfg(feature = "host-test")]
 #[allow(dead_code)]
@@ -83,6 +94,12 @@ pub enum ProcessLoadError {
 pub enum ProcessSwitchError {
     ChildAlreadyRunning,
     NoRunningChild,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum HeapError {
+    NoRunningChild,
+    OutOfMemory,
 }
 
 #[repr(u32)]
@@ -155,6 +172,9 @@ pub struct ProcessTable {
     child_frame: TrapFrame,
     child_exit_status: u32,
     child_load_base: u32,
+    heap_start: u32,
+    program_break: u32,
+    heap_limit: u32,
 }
 
 impl ProcessTable {
@@ -171,6 +191,9 @@ impl ProcessTable {
             child_frame: TrapFrame::zeroed(),
             child_exit_status: 0,
             child_load_base: 0,
+            heap_start: 0,
+            program_break: 0,
+            heap_limit: 0,
         }
     }
 
@@ -221,6 +244,8 @@ impl ProcessTable {
             stack_top: child_plan.stack_top,
         };
         let child_frame = child_frame_for_context(context);
+        let heap = HeapState::from_child_plan(child_plan)
+            .map_err(|_| ProcessSwitchError::NoRunningChild)?;
         unsafe { core::ptr::write_volatile(&mut self.init_state, PROCESS_STATE_BLOCKED_ON_CHILD) };
         self.init_context = ProcessContext {
             entry_pc: init_frame.resume_pc,
@@ -231,6 +256,9 @@ impl ProcessTable {
         self.child_context = context;
         self.child_frame = child_frame;
         self.child_exit_status = 0;
+        self.heap_start = heap.start;
+        self.program_break = heap.start;
+        self.heap_limit = heap.limit;
         Ok(ChildLaunch {
             id: ProcessId::Child,
             context,
@@ -244,6 +272,9 @@ impl ProcessTable {
         }
         unsafe { core::ptr::write_volatile(&mut self.child_state, PROCESS_STATE_EMPTY) };
         self.child_exit_status = status;
+        self.heap_start = 0;
+        self.program_break = 0;
+        self.heap_limit = 0;
         unsafe { core::ptr::write_volatile(&mut self.init_state, PROCESS_STATE_RUNNING) };
         Ok(InitResume {
             id: ProcessId::Init,
@@ -261,8 +292,41 @@ impl ProcessTable {
         self.child_state
     }
 
+    pub fn program_break(&self) -> Result<u32, HeapError> {
+        self.require_running_child()?;
+        Ok(self.program_break)
+    }
+
+    pub fn heap_limit(&self) -> Result<u32, HeapError> {
+        self.require_running_child()?;
+        Ok(self.heap_limit)
+    }
+
+    pub fn set_program_break(&mut self, address: u32) -> Result<u32, HeapError> {
+        self.require_running_child()?;
+        if address < self.heap_start || address > self.heap_limit {
+            return Err(HeapError::OutOfMemory);
+        }
+        self.program_break = address;
+        Ok(address)
+    }
+
+    pub fn grow_program_break(&mut self, delta: u32) -> Result<u32, HeapError> {
+        let old_break = self.program_break()?;
+        let new_break = old_break.checked_add(delta).ok_or(HeapError::OutOfMemory)?;
+        self.set_program_break(new_break)?;
+        Ok(old_break)
+    }
+
     fn child_state_runtime(&self) -> ProcessState {
         unsafe { core::ptr::read_volatile(&self.child_state) }
+    }
+
+    fn require_running_child(&self) -> Result<(), HeapError> {
+        if self.child_state_runtime() != PROCESS_STATE_RUNNING {
+            return Err(HeapError::NoRunningChild);
+        }
+        Ok(())
     }
 }
 
@@ -303,7 +367,12 @@ pub unsafe fn initialize_init_process(
         if image.load_addr >= image.load_end || image.load_end > USER_PROGRAM_LIMIT {
             return Err(ProcessLoadError::InvalidArena);
         }
-        *unsafe { RUNTIME_CHILD_LOAD_BASE.get() } = align_up(image.load_end, LOAD_ALIGNMENT)?;
+        unsafe {
+            write_runtime_word(
+                core::ptr::addr_of_mut!(RUNTIME_CHILD_LOAD_BASE),
+                align_up(image.load_end, LOAD_ALIGNMENT)?,
+            );
+        }
         return Ok(());
     }
     #[cfg(test)]
@@ -319,7 +388,8 @@ pub unsafe fn begin_loaded_child_from_path(path: &[u8]) -> Result<ChildLaunch, u
         let mut init_frame = k16_rt::TrapFrame::zeroed();
         k16_rt::save_trap_frame(&mut init_frame);
         unsafe { save_runtime_init_frame() };
-        let load_base = *unsafe { RUNTIME_CHILD_LOAD_BASE.get() };
+        let load_base =
+            unsafe { read_runtime_word(core::ptr::addr_of_mut!(RUNTIME_CHILD_LOAD_BASE)) };
         if load_base == 0 {
             return Err(run_status_from_load_error(ProcessLoadError::Storage));
         }
@@ -359,6 +429,7 @@ unsafe fn begin_loaded_child_plan_runtime(
         stack_top: child_plan.stack_top,
     };
     let child_frame = child_frame_for_context(context);
+    unsafe { initialize_runtime_heap(child_plan).map_err(|_| ProcessSwitchError::NoRunningChild)? };
     unsafe { set_runtime_child_state_running() };
     Ok(ChildLaunch {
         id: ProcessId::Child,
@@ -393,6 +464,7 @@ unsafe fn finish_child_runtime(status: u32) -> Result<InitResume, ProcessSwitchE
         return Err(ProcessSwitchError::NoRunningChild);
     }
     unsafe { set_runtime_child_state_empty() };
+    unsafe { clear_runtime_heap() };
     Ok(InitResume {
         id: ProcessId::Init,
         context: ProcessContext {
@@ -402,6 +474,30 @@ unsafe fn finish_child_runtime(status: u32) -> Result<InitResume, ProcessSwitchE
         frame: TrapFrame::zeroed(),
         child_exit_status: status,
     })
+}
+
+#[cfg(any(not(test), feature = "host-test"))]
+pub unsafe fn set_current_program_break(address: u32) -> Result<u32, HeapError> {
+    #[cfg(not(test))]
+    {
+        return unsafe { set_runtime_program_break(address) };
+    }
+    #[cfg(test)]
+    {
+        unsafe { PROCESS_TABLE.get().set_program_break(address) }
+    }
+}
+
+#[cfg(any(not(test), feature = "host-test"))]
+pub unsafe fn grow_current_program_break(delta: u32) -> Result<u32, HeapError> {
+    #[cfg(not(test))]
+    {
+        return unsafe { grow_runtime_program_break(delta) };
+    }
+    #[cfg(test)]
+    {
+        unsafe { PROCESS_TABLE.get().grow_program_break(delta) }
+    }
 }
 
 #[cfg(not(test))]
@@ -417,19 +513,72 @@ unsafe fn runtime_child_state() -> ProcessState {
 
 #[cfg(not(test))]
 unsafe fn set_runtime_child_state_running() {
-    let address = runtime_child_state_addr();
-    unsafe { core::ptr::write_volatile(address as usize as *mut u32, 1) }
+    unsafe { write_runtime_word(core::ptr::addr_of_mut!(RUNTIME_CHILD_STATE), 1) }
 }
 
 #[cfg(not(test))]
 unsafe fn set_runtime_child_state_empty() {
-    let address = runtime_child_state_addr();
-    unsafe { core::ptr::write_volatile(address as usize as *mut u32, 0) }
+    unsafe { write_runtime_word(core::ptr::addr_of_mut!(RUNTIME_CHILD_STATE), 0) }
 }
 
 #[cfg(not(test))]
 fn runtime_child_state_addr() -> u32 {
-    RUNTIME_CHILD_STATE.value.get() as usize as u32
+    core::ptr::addr_of_mut!(RUNTIME_CHILD_STATE) as usize as u32
+}
+
+#[cfg(not(test))]
+unsafe fn initialize_runtime_heap(child_plan: DynamicUserLoadPlan) -> Result<(), HeapError> {
+    let heap = HeapState::from_child_plan(child_plan)?;
+    unsafe {
+        write_runtime_word(core::ptr::addr_of_mut!(RUNTIME_HEAP_START), heap.start);
+        write_runtime_word(core::ptr::addr_of_mut!(RUNTIME_PROGRAM_BREAK), heap.start);
+        write_runtime_word(core::ptr::addr_of_mut!(RUNTIME_HEAP_LIMIT), heap.limit);
+    }
+    Ok(())
+}
+
+#[cfg(not(test))]
+unsafe fn clear_runtime_heap() {
+    unsafe {
+        write_runtime_word(core::ptr::addr_of_mut!(RUNTIME_HEAP_START), 0);
+        write_runtime_word(core::ptr::addr_of_mut!(RUNTIME_PROGRAM_BREAK), 0);
+        write_runtime_word(core::ptr::addr_of_mut!(RUNTIME_HEAP_LIMIT), 0);
+    }
+}
+
+#[cfg(not(test))]
+unsafe fn set_runtime_program_break(address: u32) -> Result<u32, HeapError> {
+    if unsafe { runtime_child_state() } != PROCESS_STATE_RUNNING {
+        return Err(HeapError::NoRunningChild);
+    }
+    let heap_start = unsafe { read_runtime_word(core::ptr::addr_of_mut!(RUNTIME_HEAP_START)) };
+    let heap_limit = unsafe { read_runtime_word(core::ptr::addr_of_mut!(RUNTIME_HEAP_LIMIT)) };
+    if address < heap_start || address > heap_limit {
+        return Err(HeapError::OutOfMemory);
+    }
+    unsafe { write_runtime_word(core::ptr::addr_of_mut!(RUNTIME_PROGRAM_BREAK), address) };
+    Ok(address)
+}
+
+#[cfg(not(test))]
+unsafe fn grow_runtime_program_break(delta: u32) -> Result<u32, HeapError> {
+    if unsafe { runtime_child_state() } != PROCESS_STATE_RUNNING {
+        return Err(HeapError::NoRunningChild);
+    }
+    let old_break = unsafe { read_runtime_word(core::ptr::addr_of_mut!(RUNTIME_PROGRAM_BREAK)) };
+    let new_break = old_break.checked_add(delta).ok_or(HeapError::OutOfMemory)?;
+    unsafe { set_runtime_program_break(new_break)? };
+    Ok(old_break)
+}
+
+#[cfg(not(test))]
+unsafe fn read_runtime_word(address: *mut u32) -> u32 {
+    unsafe { core::ptr::read_volatile(address) }
+}
+
+#[cfg(not(test))]
+unsafe fn write_runtime_word(address: *mut u32, value: u32) {
+    unsafe { core::ptr::write_volatile(address, value) }
 }
 
 #[cfg(not(test))]
@@ -472,6 +621,13 @@ pub const fn run_status_from_switch_error(error: ProcessSwitchError) -> u32 {
     }
 }
 
+pub const fn heap_status_from_error(error: HeapError) -> u32 {
+    match error {
+        HeapError::NoRunningChild => k16_abi::syscall::ERROR_INVALID,
+        HeapError::OutOfMemory => k16_abi::syscall::ERROR_NO_MEMORY,
+    }
+}
+
 #[cfg(any(not(test), feature = "host-test"))]
 impl From<k16_rt::TrapFrame> for TrapFrame {
     fn from(frame: k16_rt::TrapFrame) -> Self {
@@ -500,6 +656,24 @@ impl From<TrapFrame> for k16_rt::TrapFrame {
 pub struct UserArena {
     start: u32,
     end: u32,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+struct HeapState {
+    start: u32,
+    limit: u32,
+}
+
+impl HeapState {
+    fn from_child_plan(child_plan: DynamicUserLoadPlan) -> Result<Self, HeapError> {
+        let start =
+            align_up(child_plan.load_end, HEAP_ALIGNMENT).map_err(|_| HeapError::OutOfMemory)?;
+        let limit = heap_limit_from_stack_top(child_plan.stack_top)?;
+        if start > limit {
+            return Err(HeapError::OutOfMemory);
+        }
+        Ok(Self { start, limit })
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -595,7 +769,10 @@ pub fn plan_dynamic_user_load(
     let load_end = load_base
         .checked_add(image.memory_size)
         .ok_or(ProcessLoadError::AddressOverflow)?;
-    if load_end >= stack_top {
+    let heap_start = align_up(load_end, HEAP_ALIGNMENT)?;
+    let heap_limit =
+        heap_limit_from_stack_top(stack_top).map_err(|_| ProcessLoadError::ProgramTooLarge)?;
+    if heap_start > heap_limit {
         return Err(ProcessLoadError::ProgramTooLarge);
     }
     let entry_pc = load_base
@@ -646,15 +823,25 @@ pub unsafe fn load_selected_dynamic_user_program(
             k16_image::DYNAMIC_K16E_V2_HEADER_SIZE as usize,
         )
     };
-    let metadata = k16_image::parse_dynamic_k16e_v2_header(header, unsafe {
-        k16_storage::selected_file_size()
-    })
-    .map_err(|_| ProcessLoadError::InvalidImage)?;
-    let plan = plan_dynamic_user_load(arena, DynamicUserImage::from_k16e_metadata(metadata))?;
+    validate_dynamic_header_bytes(header, unsafe { k16_storage::selected_file_size() })?;
+    let entry_offset = header_u32(header, 12);
+    let payload_offset = header_u32(header, 40);
+    let file_size = header_u32(header, 44);
+    let memory_size = header_u32(header, 48);
+    let relocation_table_offset = header_u32(header, 60);
+    let relocation_count = header_u32(header, 68);
+    let plan = plan_dynamic_user_load(
+        arena,
+        DynamicUserImage {
+            entry_offset,
+            file_size,
+            memory_size,
+        },
+    )?;
 
     unsafe {
         k16_storage::copy_selected_file_range_to_ram(
-            metadata.payload_offset,
+            payload_offset,
             plan.payload_dst,
             plan.payload_len,
         )
@@ -662,7 +849,12 @@ pub unsafe fn load_selected_dynamic_user_program(
     }
     unsafe {
         zero_fill_ram(plan.zero_fill_addr, plan.zero_fill_len);
-        apply_selected_file_relocations(metadata, plan)?;
+        apply_selected_file_relocations(
+            relocation_table_offset,
+            relocation_count,
+            memory_size,
+            plan,
+        )?;
     }
     Ok(plan)
 }
@@ -681,13 +873,14 @@ fn validate_dynamic_image(image: DynamicUserImage) -> Result<(), ProcessLoadErro
 }
 
 unsafe fn apply_selected_file_relocations(
-    metadata: k16_image::DynamicK16ImageMetadata,
+    relocation_table_offset: u32,
+    relocation_count: u32,
+    memory_size: u32,
     plan: DynamicUserLoadPlan,
 ) -> Result<(), ProcessLoadError> {
     let mut index = 0;
-    while index < metadata.relocation_count {
-        let relocation_offset = metadata
-            .relocation_table_offset
+    while index < relocation_count {
+        let relocation_offset = relocation_table_offset
             .checked_add(
                 index
                     .checked_mul(k16_image::K16E_RELOCATION_RECORD_SIZE)
@@ -697,32 +890,114 @@ unsafe fn apply_selected_file_relocations(
         unsafe {
             k16_storage::copy_selected_file_range_to_ram(
                 relocation_offset,
-                k16_storage::SCRATCH_ADDR,
+                RELOCATION_RECORD_ADDR,
                 k16_image::K16E_RELOCATION_RECORD_SIZE,
             )
             .map_err(|_| ProcessLoadError::Storage)?;
         }
-        let record = unsafe {
-            core::slice::from_raw_parts(
-                k16_storage::SCRATCH_ADDR as usize as *const u8,
-                k16_image::K16E_RELOCATION_RECORD_SIZE as usize,
-            )
-        };
-        let relocation = k16_image::parse_k16e_relocation_record(record, metadata.memory_size)
-            .map_err(|_| ProcessLoadError::InvalidImage)?;
-        unsafe { apply_dynamic_relocation_to_ram(plan, relocation)? };
+        let relocation_offset = unsafe { read_u32_le(RELOCATION_RECORD_ADDR) };
+        let relocation_kind = unsafe { read_u32_le(RELOCATION_RECORD_ADDR + 4) };
+        validate_dynamic_relocation_record(relocation_offset, relocation_kind, memory_size)?;
+        unsafe { apply_dynamic_relocation_to_ram(plan, relocation_offset)? };
         index += 1;
     }
     Ok(())
 }
 
+fn validate_dynamic_header_bytes(header: &[u8], inode_size: u32) -> Result<(), ProcessLoadError> {
+    if header.len() < k16_image::DYNAMIC_K16E_V2_HEADER_SIZE as usize
+        || header.get(0..4) != Some(b"K16E")
+        || header_u16(header, 4) != 2
+        || header_u16(header, 6) != 32
+        || header_u16(header, 8) != 1
+        || header_u16(header, 10) != 0
+        || header_u32(header, 16) != 32
+        || header_u32(header, 20) != 2
+        || header_u32(header, 24) != k16_image::K16eAbiKind::Program as u32
+        || header_u32(header, 28) != 0
+        || header_u32(header, 32) != 1
+        || header_u32(header, 36) != 0
+        || header_u32(header, 40) != k16_image::DYNAMIC_K16E_V2_PAYLOAD_OFFSET
+        || header_u32(header, 52) != 2
+        || header_u32(header, 56) != 0
+    {
+        return Err(ProcessLoadError::InvalidImage);
+    }
+
+    let entry_offset = header_u32(header, 12);
+    let file_size = header_u32(header, 44);
+    let memory_size = header_u32(header, 48);
+    if file_size == 0 || memory_size < file_size || file_size % 2 != 0 || memory_size % 2 != 0 {
+        return Err(ProcessLoadError::InvalidImage);
+    }
+    if entry_offset >= memory_size || entry_offset % 2 != 0 {
+        return Err(ProcessLoadError::InvalidImage);
+    }
+
+    let relocation_table_offset = header_u32(header, 60);
+    let relocation_table_size = header_u32(header, 64);
+    let relocation_count = header_u32(header, 68);
+    let payload_end = k16_image::DYNAMIC_K16E_V2_PAYLOAD_OFFSET
+        .checked_add(file_size)
+        .ok_or(ProcessLoadError::InvalidImage)?;
+    if relocation_table_offset != payload_end {
+        return Err(ProcessLoadError::InvalidImage);
+    }
+    let expected_relocation_table_size = relocation_count
+        .checked_mul(k16_image::K16E_RELOCATION_RECORD_SIZE)
+        .ok_or(ProcessLoadError::InvalidImage)?;
+    if relocation_table_size != expected_relocation_table_size {
+        return Err(ProcessLoadError::InvalidImage);
+    }
+    let file_end = relocation_table_offset
+        .checked_add(relocation_table_size)
+        .ok_or(ProcessLoadError::InvalidImage)?;
+    if file_end > inode_size {
+        return Err(ProcessLoadError::InvalidImage);
+    }
+    Ok(())
+}
+
+fn validate_dynamic_relocation_record(
+    offset: u32,
+    kind: u32,
+    memory_size: u32,
+) -> Result<(), ProcessLoadError> {
+    if kind != 1 && kind != 2 {
+        return Err(ProcessLoadError::InvalidImage);
+    }
+    if offset % 2 != 0 {
+        return Err(ProcessLoadError::InvalidImage);
+    }
+    let end = offset
+        .checked_add(4)
+        .ok_or(ProcessLoadError::InvalidImage)?;
+    if end > memory_size {
+        return Err(ProcessLoadError::InvalidImage);
+    }
+    Ok(())
+}
+
+fn header_u16(bytes: &[u8], offset: usize) -> u16 {
+    u16::from_le_bytes([bytes[offset], bytes[offset + 1]])
+}
+
+fn header_u32(bytes: &[u8], offset: usize) -> u32 {
+    u32::from_le_bytes([
+        bytes[offset],
+        bytes[offset + 1],
+        bytes[offset + 2],
+        bytes[offset + 3],
+    ])
+}
+
 unsafe fn apply_dynamic_relocation_to_ram(
     plan: DynamicUserLoadPlan,
-    relocation: k16_image::K16eRelocation,
+    relocation_offset: u32,
 ) -> Result<(), ProcessLoadError> {
     let field_addr = plan
         .load_base
-        .checked_add(relocation.offset)
+        .checked_add(relocation_offset)
         .ok_or(ProcessLoadError::AddressOverflow)?;
     let value = unsafe { read_u32_le(field_addr) };
     let relocated = value
@@ -737,11 +1012,11 @@ fn apply_dynamic_relocation_to_slice(
     memory: &mut [u8],
     memory_base: u32,
     plan: DynamicUserLoadPlan,
-    relocation: k16_image::K16eRelocation,
+    relocation_offset: u32,
 ) -> Result<(), ProcessLoadError> {
     let field_addr = plan
         .load_base
-        .checked_add(relocation.offset)
+        .checked_add(relocation_offset)
         .ok_or(ProcessLoadError::AddressOverflow)?;
     let field_offset = field_addr
         .checked_sub(memory_base)
@@ -803,6 +1078,13 @@ fn align_up(value: u32, alignment: u32) -> Result<u32, ProcessLoadError> {
 
 const fn align_down(value: u32, alignment: u32) -> u32 {
     value & !(alignment - 1)
+}
+
+fn heap_limit_from_stack_top(stack_top: u32) -> Result<u32, HeapError> {
+    let guarded = stack_top
+        .checked_sub(STACK_GUARD_BYTES)
+        .ok_or(HeapError::OutOfMemory)?;
+    Ok(align_down(guarded, STACK_ALIGNMENT))
 }
 
 #[cfg(test)]
@@ -965,16 +1247,8 @@ mod tests {
         let mut memory = [0u8; 16];
         memory[4..8].copy_from_slice(&0x0000_0006u32.to_le_bytes());
 
-        apply_dynamic_relocation_to_slice(
-            &mut memory,
-            0x0000_9000,
-            plan,
-            k16_image::K16eRelocation {
-                offset: 4,
-                kind: k16_image::K16eRelocationKind::Abs32,
-            },
-        )
-        .expect("relocation applies");
+        apply_dynamic_relocation_to_slice(&mut memory, 0x0000_9000, plan, 4)
+            .expect("relocation applies");
 
         assert_eq!(
             u32::from_le_bytes([memory[4], memory[5], memory[6], memory[7]]),
@@ -1011,6 +1285,114 @@ mod tests {
         );
         assert_eq!(table.init_state(), PROCESS_STATE_BLOCKED_ON_CHILD);
         assert_eq!(table.child_state(), PROCESS_STATE_RUNNING);
+    }
+
+    #[test]
+    fn process_table_initializes_child_heap_from_load_end_and_stack_guard() {
+        let mut table = ProcessTable::new(ProcessContext {
+            entry_pc: 0x0000_8000,
+            stack_top: 0x0001_0000,
+        });
+        let child_plan = DynamicUserLoadPlan {
+            load_base: 0x0000_a000,
+            load_end: 0x0000_a022,
+            entry_pc: 0x0000_a004,
+            stack_top: 0x0001_0000,
+            payload_dst: 0x0000_a000,
+            payload_len: 16,
+            zero_fill_addr: 0x0000_a010,
+            zero_fill_len: 16,
+        };
+
+        table.begin_child_run(child_plan).expect("child starts");
+
+        assert_eq!(table.program_break(), Ok(0x0000_a024));
+        assert_eq!(table.heap_limit(), Ok(0x0000_ff00));
+    }
+
+    #[test]
+    fn process_table_brk_accepts_only_current_child_heap_range() {
+        let mut table = ProcessTable::new(ProcessContext {
+            entry_pc: 0x0000_8000,
+            stack_top: 0x0001_0000,
+        });
+        let child_plan = DynamicUserLoadPlan {
+            load_base: 0x0000_a000,
+            load_end: 0x0000_a020,
+            entry_pc: 0x0000_a004,
+            stack_top: 0x0001_0000,
+            payload_dst: 0x0000_a000,
+            payload_len: 16,
+            zero_fill_addr: 0x0000_a010,
+            zero_fill_len: 16,
+        };
+        table.begin_child_run(child_plan).expect("child starts");
+
+        assert_eq!(table.set_program_break(0x0000_a040), Ok(0x0000_a040));
+        assert_eq!(table.program_break(), Ok(0x0000_a040));
+        assert_eq!(
+            table.set_program_break(0x0000_a01c),
+            Err(HeapError::OutOfMemory)
+        );
+        assert_eq!(
+            table.set_program_break(0x0000_ff04),
+            Err(HeapError::OutOfMemory)
+        );
+    }
+
+    #[test]
+    fn process_table_sbrk_returns_old_break_and_rejects_overflow() {
+        let mut table = ProcessTable::new(ProcessContext {
+            entry_pc: 0x0000_8000,
+            stack_top: 0x0001_0000,
+        });
+        let child_plan = DynamicUserLoadPlan {
+            load_base: 0x0000_a000,
+            load_end: 0x0000_a020,
+            entry_pc: 0x0000_a004,
+            stack_top: 0x0001_0000,
+            payload_dst: 0x0000_a000,
+            payload_len: 16,
+            zero_fill_addr: 0x0000_a010,
+            zero_fill_len: 16,
+        };
+        table.begin_child_run(child_plan).expect("child starts");
+
+        assert_eq!(table.grow_program_break(0x20), Ok(0x0000_a020));
+        assert_eq!(table.program_break(), Ok(0x0000_a040));
+        assert_eq!(
+            table.grow_program_break(0x6000),
+            Err(HeapError::OutOfMemory)
+        );
+        assert_eq!(
+            table.set_program_break(0xffff_fffc),
+            Err(HeapError::OutOfMemory)
+        );
+    }
+
+    #[test]
+    fn process_table_heap_is_available_only_while_child_runs() {
+        let mut table = ProcessTable::new(ProcessContext {
+            entry_pc: 0x0000_8000,
+            stack_top: 0x0001_0000,
+        });
+
+        assert_eq!(table.program_break(), Err(HeapError::NoRunningChild));
+
+        let child_plan = DynamicUserLoadPlan {
+            load_base: 0x0000_a000,
+            load_end: 0x0000_a020,
+            entry_pc: 0x0000_a004,
+            stack_top: 0x0001_0000,
+            payload_dst: 0x0000_a000,
+            payload_len: 16,
+            zero_fill_addr: 0x0000_a010,
+            zero_fill_len: 16,
+        };
+        table.begin_child_run(child_plan).expect("child starts");
+        table.finish_child(0).expect("init resumes");
+
+        assert_eq!(table.program_break(), Err(HeapError::NoRunningChild));
     }
 
     #[test]
@@ -1236,6 +1618,14 @@ mod tests {
         assert_eq!(
             run_status_from_switch_error(ProcessSwitchError::NoRunningChild),
             k16_abi::syscall::ERROR_INVALID
+        );
+        assert_eq!(
+            heap_status_from_error(HeapError::NoRunningChild),
+            k16_abi::syscall::ERROR_INVALID
+        );
+        assert_eq!(
+            heap_status_from_error(HeapError::OutOfMemory),
+            k16_abi::syscall::ERROR_NO_MEMORY
         );
     }
 }
