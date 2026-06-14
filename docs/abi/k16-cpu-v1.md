@@ -525,7 +525,7 @@ K16 syscall ABI v0 names the current Rust-kernel proof services in
 | `READ` | `8` | `k16_rt::read_syscall(fd, ptr, len)` | Reads bytes from fd `0` or an open regular file fd into guest memory; stdin blocks by waiting until input is available, regular files advance their descriptor offset, and the syscall returns byte count or a negative K16 error. |
 | `RUN` | `9` | `k16_rt::run_syscall(path, len)`, `k16_rt::run_argv_syscall(request, len)` | Synchronously loads a dynamic `/bin/*.kx` user program from `ROOT`/K16FS on `storage0`, blocks the current foreground process while the child runs, and returns the child exit status or a negative K16 error. `trap_arg2 = 0` means `trap_arg0/trap_arg1` are a raw path pointer/length. `trap_arg2 = 1` means they are a bounded argv request block beginning with `RUN_ARGV_MAGIC`. |
 | `OPEN` | `10` | `k16_rt::open_syscall(path, len, flags)` | Opens an absolute read-only ROOT/K16FS regular file path from `storage0`; `flags` must be `0`, and success returns a regular file fd starting at `3`. |
-| `CLOSE` | `11` | `k16_rt::close_syscall(fd)` | Closes a regular file fd. Standard descriptors `0..=2` are not closeable. |
+| `CLOSE` | `11` | `k16_rt::close_syscall(fd)` | Closes a regular file fd owned by the current foreground process. Standard descriptors `0..=2` are not closeable. |
 | `BRK` | `12` | `k16_rt::brk_syscall(addr)` | Sets the current foreground process program break to `addr` and returns the resulting break, or a negative K16 error. The break must stay inside the kernel-selected heap arena for that process. |
 | `SBRK` | `13` | `k16_rt::sbrk_syscall(delta)` | Grows the current foreground process program break by `delta` bytes and returns the previous break, or a negative K16 error. |
 | `DEBUG_MARKER_RETURN` | `0x53` | n/a | Proof return value for `DEBUG_MARKER`. |
@@ -558,6 +558,13 @@ child load arena starts after the current parent's program break, so child
 loading cannot overwrite parent heap allocations. The child heap limit is below
 a guard area under the parent's saved stack pointer, so child heap growth cannot
 overwrite the live parent stack.
+
+Regular file descriptors returned by `OPEN` are process-owned. A foreground
+process can `READ` or `CLOSE` only regular fds it opened, and `EXIT` releases
+only the exiting process's regular fds before resuming the waiting parent. There
+is no fd inheritance across `RUN` in this model. Stdio descriptors `0`, `1`,
+and `2` remain a shared kernel convention and are not stored in the regular fd
+table.
 
 For argv launches, the first K16 ABI form copies one bounded argument byte
 string into the child arena after the loaded image and before the child heap.

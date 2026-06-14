@@ -15,8 +15,9 @@ pub fn dispatch(number: u32) -> ! {
         }
         abi_syscall::EXIT => {
             let status = k16_rt::syscall_arg0();
+            let exiting_pid = unsafe { process::current_process_slot() };
+            unsafe { fs::close_file_fds_for_process(exiting_pid) };
             if let Ok(resume) = unsafe { process::finish_child_for_exit(status) } {
-                unsafe { fs::close_all_file_fds() };
                 unsafe { process::resume_init_context(resume) }
             }
             control::set_exit_code(status);
@@ -109,7 +110,10 @@ fn read_fd(fd: u32, ptr: u32, len: u32) -> Result<u32, u32> {
     match fd {
         abi_syscall::FD_STDIN => stdin::read(ptr, len),
         abi_syscall::FD_STDOUT | abi_syscall::FD_STDERR => Err(abi_syscall::ERROR_BAD_FD),
-        _ => unsafe { fs::read_file_fd(fd, ptr, len).map_err(fs_error_to_status) },
+        _ => match unsafe { fs::read_file_fd_for_process(current_process_id(), fd, ptr, len) } {
+            Ok(read) => Ok(read),
+            Err(error) => Err(fs_error_to_status(error)),
+        },
     }
 }
 
@@ -121,11 +125,21 @@ fn open_fd(ptr: u32, len: u32, flags: u32) -> Result<u32, u32> {
         return Err(abi_syscall::ERROR_FAULT);
     }
     let path = unsafe { core::slice::from_raw_parts(ptr as usize as *const u8, len as usize) };
-    unsafe { fs::open_root_file(path, flags).map_err(fs_error_to_status) }
+    match unsafe { fs::open_root_file_for_process(current_process_id(), path, flags) } {
+        Ok(fd) => Ok(fd),
+        Err(error) => Err(fs_error_to_status(error)),
+    }
 }
 
 fn close_fd(fd: u32) -> Result<(), u32> {
-    unsafe { fs::close_file_fd(fd).map_err(fs_error_to_status) }
+    match unsafe { fs::close_file_fd_for_process(current_process_id(), fd) } {
+        Ok(()) => Ok(()),
+        Err(error) => Err(fs_error_to_status(error)),
+    }
+}
+
+fn current_process_id() -> u32 {
+    unsafe { process::current_process_slot() }
 }
 
 fn set_program_break(address: u32) -> Result<u32, u32> {
@@ -183,12 +197,5 @@ fn valid_guest_buffer(ptr: u32, len: u32) -> bool {
 }
 
 fn fs_error_to_status(error: fs::FsError) -> u32 {
-    match error {
-        fs::FsError::BadFd => abi_syscall::ERROR_BAD_FD,
-        fs::FsError::Fault => abi_syscall::ERROR_FAULT,
-        fs::FsError::InvalidPath | fs::FsError::InvalidFlags => abi_syscall::ERROR_INVALID,
-        fs::FsError::NoEntry => abi_syscall::ERROR_NO_ENTRY,
-        fs::FsError::NoFd => abi_syscall::ERROR_NO_FD,
-        fs::FsError::Storage => abi_syscall::ERROR_NO_ENTRY,
-    }
+    error.0
 }

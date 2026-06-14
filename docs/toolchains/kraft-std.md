@@ -22,8 +22,8 @@ The initial `kraft-std` surface is deliberately small:
 | `kraft_std::io::stdout().write_all(bytes)` | `k16_rt::write_syscall(FD_STDOUT, ptr, len)` | Writes a byte slice to stdout through the kernel fd ABI. |
 | `kraft_std::io::stderr().write_all(bytes)` | `k16_rt::write_syscall(FD_STDERR, ptr, len)` | Writes a byte slice to stderr through the kernel fd ABI. |
 | `kraft_std::fs::open(path)` | `k16_rt::open_syscall(path, len, 0)` | Opens an absolute read-only ROOT/K16FS file path and returns a regular file descriptor. |
-| `kraft_std::fs::File::read(bytes)` | `k16_rt::read_syscall(fd, ptr, len)` | Reads bytes from an open regular file and advances its descriptor offset. |
-| `kraft_std::fs::File::close()` | `k16_rt::close_syscall(fd)` | Releases an open regular file descriptor. |
+| `kraft_std::fs::File::read(bytes)` | `k16_rt::read_syscall(fd, ptr, len)` | Reads bytes from a regular file descriptor owned by the current foreground process and advances its descriptor offset. |
+| `kraft_std::fs::File::close()` | `k16_rt::close_syscall(fd)` | Releases an open regular file descriptor owned by the current foreground process. |
 | `kraft_std::heap::brk(address)` | `k16_rt::brk_syscall(address)` | Sets the current foreground process program break and returns the resulting break. |
 | `kraft_std::heap::sbrk(delta)` | `k16_rt::sbrk_syscall(delta)` | Grows the current foreground process program break and returns the previous break. |
 | `kraft_std::heap::SbrkAllocator` | `BRK`/`SBRK` syscall ABI | Guest global allocator used by `alloc` collections. Allocation is monotonic; deallocation is currently a no-op. |
@@ -40,7 +40,8 @@ kernel fd syscall ABI, not debug MMIO.
 
 `kraft-std` is `#![no_std]`. It is not Rust's hosted `std`, a POSIX layer, or a
 complete OS API. The current filesystem surface is a read-only ROOT/K16FS proof
-for absolute paths. The current allocator surface is a monotonic `SBRK`-backed
+for absolute paths; regular file descriptors are process-owned and are not
+inherited across `process::run`. The current allocator surface is a monotonic `SBRK`-backed
 guest allocator for foreground userland programs. Directory iteration, writable
 files, background process/task management, allocator reuse, and full POSIX
 compatibility are separate future slices.
