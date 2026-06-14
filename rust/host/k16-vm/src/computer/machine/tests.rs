@@ -245,6 +245,278 @@ fn computer_machine_mmu0_guest_kernel_enters_translated_user_execution() {
 }
 
 #[test]
+fn computer_machine_mmu0_copies_from_translated_user_buffer_across_pages() {
+    const RAM_SIZE: usize = 0x6000;
+    const KERNEL_PC: u32 = 0x0000;
+    const KERNEL_BUFFER: u32 = 0x0100;
+    const USER_VIRTUAL_BASE: u32 = 0x4000;
+    const USER_VIRTUAL_BUFFER: u32 = 0x4ff8;
+    const USER_PHYSICAL_BASE: u32 = 0x2000;
+    const USER_PHYSICAL_BUFFER: u32 = 0x2ff8;
+    const BYTE_COUNT: u32 = 16;
+    const SOURCE_BYTES: &[u8] = b"abcdefghijklmnop";
+
+    let mut machine = ComputerMachine::new(RAM_SIZE).unwrap();
+    let address_space = machine.create_mmu_address_space().unwrap();
+    machine
+        .map_mmu_pages(
+            address_space,
+            USER_VIRTUAL_BASE,
+            USER_PHYSICAL_BASE,
+            2,
+            MmuMapFlags::USER_ACCESSIBLE,
+        )
+        .unwrap();
+    machine
+        .write_guest_ram_bytes(KERNEL_PC, &k16_words(&[k16_nop(), k16_halt()]))
+        .unwrap();
+    machine
+        .write_guest_ram_bytes(USER_PHYSICAL_BUFFER, SOURCE_BYTES)
+        .unwrap();
+    let boot_cpu = machine.install_k16_boot_cpu_for_tests(KERNEL_PC, 16);
+
+    submit_mmu0_command(
+        &mut machine,
+        address_space.raw(),
+        USER_VIRTUAL_BUFFER,
+        KERNEL_BUFFER,
+        BYTE_COUNT,
+        ComputerMachine::MMU0_COMMAND_COPY_FROM_USER,
+    );
+
+    assert_eq!(
+        machine.run_boot_k16_until_signal(boot_cpu).unwrap(),
+        K16Signal::Halt,
+    );
+    assert_eq!(
+        machine
+            .read_guest_ram_bytes(KERNEL_BUFFER, BYTE_COUNT)
+            .unwrap(),
+        SOURCE_BYTES,
+    );
+    assert_eq!(
+        machine.bus_load_i32(ComputerMachine::MMU0_STATUS).unwrap(),
+        ComputerMachine::MMU0_STATUS_DONE,
+    );
+    assert_eq!(
+        machine.bus_load_i32(ComputerMachine::MMU0_RESULT).unwrap() as u32,
+        BYTE_COUNT,
+    );
+}
+
+#[test]
+fn computer_machine_mmu0_copies_to_translated_user_buffer_across_pages() {
+    const RAM_SIZE: usize = 0x6000;
+    const KERNEL_PC: u32 = 0x0000;
+    const KERNEL_BUFFER: u32 = 0x0100;
+    const USER_VIRTUAL_BASE: u32 = 0x4000;
+    const USER_VIRTUAL_BUFFER: u32 = 0x4ff8;
+    const USER_PHYSICAL_BASE: u32 = 0x2000;
+    const USER_PHYSICAL_BUFFER: u32 = 0x2ff8;
+    const BYTE_COUNT: u32 = 16;
+    const SOURCE_BYTES: &[u8] = b"ABCDEFGHIJKLMNOP";
+
+    let mut machine = ComputerMachine::new(RAM_SIZE).unwrap();
+    let address_space = machine.create_mmu_address_space().unwrap();
+    machine
+        .map_mmu_pages(
+            address_space,
+            USER_VIRTUAL_BASE,
+            USER_PHYSICAL_BASE,
+            2,
+            MmuMapFlags::USER_ACCESSIBLE | MmuMapFlags::WRITABLE,
+        )
+        .unwrap();
+    machine
+        .write_guest_ram_bytes(KERNEL_PC, &k16_words(&[k16_nop(), k16_halt()]))
+        .unwrap();
+    machine
+        .write_guest_ram_bytes(KERNEL_BUFFER, SOURCE_BYTES)
+        .unwrap();
+    let boot_cpu = machine.install_k16_boot_cpu_for_tests(KERNEL_PC, 16);
+
+    submit_mmu0_command(
+        &mut machine,
+        address_space.raw(),
+        USER_VIRTUAL_BUFFER,
+        KERNEL_BUFFER,
+        BYTE_COUNT,
+        ComputerMachine::MMU0_COMMAND_COPY_TO_USER,
+    );
+
+    assert_eq!(
+        machine.run_boot_k16_until_signal(boot_cpu).unwrap(),
+        K16Signal::Halt,
+    );
+    assert_eq!(
+        machine
+            .read_guest_ram_bytes(USER_PHYSICAL_BUFFER, BYTE_COUNT)
+            .unwrap(),
+        SOURCE_BYTES,
+    );
+    assert_eq!(
+        machine.bus_load_i32(ComputerMachine::MMU0_STATUS).unwrap(),
+        ComputerMachine::MMU0_STATUS_DONE,
+    );
+    assert_eq!(
+        machine.bus_load_i32(ComputerMachine::MMU0_RESULT).unwrap() as u32,
+        BYTE_COUNT,
+    );
+}
+
+#[test]
+fn computer_machine_mmu0_copy_reports_invalid_address_space() {
+    const RAM_SIZE: usize = 0x2000;
+    const KERNEL_PC: u32 = 0x0000;
+
+    let mut machine = ComputerMachine::new(RAM_SIZE).unwrap();
+    machine
+        .write_guest_ram_bytes(KERNEL_PC, &k16_words(&[k16_nop(), k16_halt()]))
+        .unwrap();
+    let boot_cpu = machine.install_k16_boot_cpu_for_tests(KERNEL_PC, 16);
+
+    submit_mmu0_command(
+        &mut machine,
+        99,
+        0x4000,
+        0x0100,
+        4,
+        ComputerMachine::MMU0_COMMAND_COPY_FROM_USER,
+    );
+
+    assert_eq!(
+        machine.run_boot_k16_until_signal(boot_cpu).unwrap(),
+        K16Signal::Halt,
+    );
+    assert_mmu0_error(&machine, ComputerMachine::MMU0_ERROR_INVALID_ADDRESS_SPACE);
+}
+
+#[test]
+fn computer_machine_mmu0_copy_to_user_reports_permission_fault_for_read_only_mapping() {
+    const RAM_SIZE: usize = 0x4000;
+    const KERNEL_PC: u32 = 0x0000;
+    const KERNEL_BUFFER: u32 = 0x0100;
+    const USER_VIRTUAL_BASE: u32 = 0x4000;
+    const USER_PHYSICAL_BASE: u32 = 0x2000;
+
+    let mut machine = ComputerMachine::new(RAM_SIZE).unwrap();
+    let address_space = machine.create_mmu_address_space().unwrap();
+    machine
+        .map_mmu_pages(
+            address_space,
+            USER_VIRTUAL_BASE,
+            USER_PHYSICAL_BASE,
+            1,
+            MmuMapFlags::USER_ACCESSIBLE,
+        )
+        .unwrap();
+    machine
+        .write_guest_ram_bytes(KERNEL_PC, &k16_words(&[k16_nop(), k16_halt()]))
+        .unwrap();
+    machine
+        .write_guest_ram_bytes(KERNEL_BUFFER, b"ABCD")
+        .unwrap();
+    let boot_cpu = machine.install_k16_boot_cpu_for_tests(KERNEL_PC, 16);
+
+    submit_mmu0_command(
+        &mut machine,
+        address_space.raw(),
+        USER_VIRTUAL_BASE,
+        KERNEL_BUFFER,
+        4,
+        ComputerMachine::MMU0_COMMAND_COPY_TO_USER,
+    );
+
+    assert_eq!(
+        machine.run_boot_k16_until_signal(boot_cpu).unwrap(),
+        K16Signal::Halt,
+    );
+    assert_mmu0_error(&machine, ComputerMachine::MMU0_ERROR_TRANSLATION_FAULT);
+    assert_eq!(
+        machine.read_guest_ram_bytes(USER_PHYSICAL_BASE, 4).unwrap(),
+        [0, 0, 0, 0],
+    );
+}
+
+#[test]
+fn computer_machine_mmu0_copy_from_user_reports_physical_out_of_bounds() {
+    const RAM_SIZE: usize = 0x4000;
+    const KERNEL_PC: u32 = 0x0000;
+    const USER_VIRTUAL_BASE: u32 = 0x4000;
+    const USER_PHYSICAL_BASE: u32 = 0x2000;
+
+    let mut machine = ComputerMachine::new(RAM_SIZE).unwrap();
+    let address_space = machine.create_mmu_address_space().unwrap();
+    machine
+        .map_mmu_pages(
+            address_space,
+            USER_VIRTUAL_BASE,
+            USER_PHYSICAL_BASE,
+            1,
+            MmuMapFlags::USER_ACCESSIBLE,
+        )
+        .unwrap();
+    machine
+        .write_guest_ram_bytes(KERNEL_PC, &k16_words(&[k16_nop(), k16_halt()]))
+        .unwrap();
+    let boot_cpu = machine.install_k16_boot_cpu_for_tests(KERNEL_PC, 16);
+
+    submit_mmu0_command(
+        &mut machine,
+        address_space.raw(),
+        USER_VIRTUAL_BASE,
+        (RAM_SIZE as u32) - 2,
+        4,
+        ComputerMachine::MMU0_COMMAND_COPY_FROM_USER,
+    );
+
+    assert_eq!(
+        machine.run_boot_k16_until_signal(boot_cpu).unwrap(),
+        K16Signal::Halt,
+    );
+    assert_mmu0_error(&machine, ComputerMachine::MMU0_ERROR_PHYSICAL_OUT_OF_BOUNDS);
+}
+
+#[test]
+fn computer_machine_mmu0_copy_reports_byte_count_overflow() {
+    const RAM_SIZE: usize = 0x4000;
+    const KERNEL_PC: u32 = 0x0000;
+    const USER_VIRTUAL_BASE: u32 = 0x4000;
+    const USER_PHYSICAL_BASE: u32 = 0x2000;
+
+    let mut machine = ComputerMachine::new(RAM_SIZE).unwrap();
+    let address_space = machine.create_mmu_address_space().unwrap();
+    machine
+        .map_mmu_pages(
+            address_space,
+            USER_VIRTUAL_BASE,
+            USER_PHYSICAL_BASE,
+            1,
+            MmuMapFlags::USER_ACCESSIBLE,
+        )
+        .unwrap();
+    machine
+        .write_guest_ram_bytes(KERNEL_PC, &k16_words(&[k16_nop(), k16_halt()]))
+        .unwrap();
+    let boot_cpu = machine.install_k16_boot_cpu_for_tests(KERNEL_PC, 16);
+
+    submit_mmu0_command(
+        &mut machine,
+        address_space.raw(),
+        USER_VIRTUAL_BASE,
+        u32::MAX - 1,
+        4,
+        ComputerMachine::MMU0_COMMAND_COPY_FROM_USER,
+    );
+
+    assert_eq!(
+        machine.run_boot_k16_until_signal(boot_cpu).unwrap(),
+        K16Signal::Halt,
+    );
+    assert_mmu0_error(&machine, ComputerMachine::MMU0_ERROR_BYTE_COUNT_OVERFLOW);
+}
+
+#[test]
 fn computer_serial_input_device_reports_ready_and_consumes_bytes() {
     let mut machine = ComputerMachine::new(1024).unwrap();
     machine.push_serial_input(b"OK");
@@ -1306,6 +1578,10 @@ fn computer_machine_constants_match_profile_v2_abi() {
         ComputerMachine::MMU0_PAGE_COUNT,
         computer_abi::MMU0_PAGE_COUNT,
     );
+    assert_eq!(
+        ComputerMachine::MMU0_BYTE_COUNT,
+        computer_abi::MMU0_BYTE_COUNT,
+    );
     assert_eq!(ComputerMachine::MMU0_FLAGS, computer_abi::MMU0_FLAGS);
     assert_eq!(ComputerMachine::MMU0_ENTRY_PC, computer_abi::MMU0_ENTRY_PC);
     assert_eq!(
@@ -1314,6 +1590,34 @@ fn computer_machine_constants_match_profile_v2_abi() {
     );
     assert_eq!(ComputerMachine::MMU0_RESULT, computer_abi::MMU0_RESULT);
     assert_eq!(ComputerMachine::MMU0_SIZE, computer_abi::MMU0_SIZE);
+    assert_eq!(
+        ComputerMachine::MMU0_ERROR_NONE,
+        computer_abi::MMU0_ERROR_NONE
+    );
+    assert_eq!(
+        ComputerMachine::MMU0_ERROR_INVALID_COMMAND,
+        computer_abi::MMU0_ERROR_INVALID_COMMAND,
+    );
+    assert_eq!(
+        ComputerMachine::MMU0_ERROR_INVALID_ARGUMENT,
+        computer_abi::MMU0_ERROR_INVALID_ARGUMENT,
+    );
+    assert_eq!(
+        ComputerMachine::MMU0_ERROR_INVALID_ADDRESS_SPACE,
+        computer_abi::MMU0_ERROR_INVALID_ADDRESS_SPACE,
+    );
+    assert_eq!(
+        ComputerMachine::MMU0_ERROR_TRANSLATION_FAULT,
+        computer_abi::MMU0_ERROR_TRANSLATION_FAULT,
+    );
+    assert_eq!(
+        ComputerMachine::MMU0_ERROR_PHYSICAL_OUT_OF_BOUNDS,
+        computer_abi::MMU0_ERROR_PHYSICAL_OUT_OF_BOUNDS,
+    );
+    assert_eq!(
+        ComputerMachine::MMU0_ERROR_BYTE_COUNT_OVERFLOW,
+        computer_abi::MMU0_ERROR_BYTE_COUNT_OVERFLOW,
+    );
     assert_eq!(
         ComputerMachine::MMU0_COMMAND_CREATE_ADDRESS_SPACE,
         computer_abi::MMU0_COMMAND_CREATE_ADDRESS_SPACE,
@@ -1329,6 +1633,14 @@ fn computer_machine_constants_match_profile_v2_abi() {
     assert_eq!(
         ComputerMachine::MMU0_COMMAND_ACTIVATE_USER_ADDRESS_SPACE,
         computer_abi::MMU0_COMMAND_ACTIVATE_USER_ADDRESS_SPACE,
+    );
+    assert_eq!(
+        ComputerMachine::MMU0_COMMAND_COPY_FROM_USER,
+        computer_abi::MMU0_COMMAND_COPY_FROM_USER,
+    );
+    assert_eq!(
+        ComputerMachine::MMU0_COMMAND_COPY_TO_USER,
+        computer_abi::MMU0_COMMAND_COPY_TO_USER,
     );
 }
 
@@ -1565,6 +1877,10 @@ fn k16_const32(register: u8, value: u32) -> [u16; 3] {
     ]
 }
 
+fn k16_nop() -> u16 {
+    0x0000
+}
+
 fn k16_add(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
     [
         0x2000 | (u16::from(dst) << 8),
@@ -1582,6 +1898,42 @@ fn k16_store32(addr: u8, src: u8) -> u16 {
 
 fn k16_halt() -> u16 {
     0x0001
+}
+
+fn submit_mmu0_command(
+    machine: &mut ComputerMachine,
+    address_space: u32,
+    virtual_start: u32,
+    physical_start: u32,
+    byte_count: u32,
+    command: i32,
+) {
+    machine
+        .bus_store_i32(ComputerMachine::MMU0_ADDRESS_SPACE, address_space as i32)
+        .unwrap();
+    machine
+        .bus_store_i32(ComputerMachine::MMU0_VIRTUAL_START, virtual_start as i32)
+        .unwrap();
+    machine
+        .bus_store_i32(ComputerMachine::MMU0_PHYSICAL_START, physical_start as i32)
+        .unwrap();
+    machine
+        .bus_store_i32(ComputerMachine::MMU0_BYTE_COUNT, byte_count as i32)
+        .unwrap();
+    machine
+        .bus_store_i32(ComputerMachine::MMU0_COMMAND, command)
+        .unwrap();
+}
+
+fn assert_mmu0_error(machine: &ComputerMachine, error: i32) {
+    assert_eq!(
+        machine.bus_load_i32(ComputerMachine::MMU0_STATUS).unwrap(),
+        ComputerMachine::MMU0_STATUS_ERROR,
+    );
+    assert_eq!(
+        machine.bus_load_i32(ComputerMachine::MMU0_ERROR).unwrap(),
+        error,
+    );
 }
 
 fn temp_volume_path(name: &str) -> std::path::PathBuf {

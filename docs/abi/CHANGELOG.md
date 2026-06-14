@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Added K16 `mmu0` `copy_from_user` and `copy_to_user` commands for physical
+  kernel syscall handlers. They copy bytes between translated user virtual
+  memory and physical kernel buffers, report deterministic `mmu0` errors for
+  invalid address spaces, translation faults, physical bounds failures, and
+  byte-count overflow, and return the copied byte count in `result`.
 - K16 trap, syscall, fault, and interrupt entry now save the interrupted
   address/privilege mode, enter the trap vector in physical/kernel mode, and
   restore the interrupted mode on `iret`. This lets translated user code call a

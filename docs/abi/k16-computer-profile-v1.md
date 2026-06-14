@@ -400,7 +400,7 @@ offset  size  access  name
 0x10    4     R/W     address_space
 0x14    4     R/W     virtual_start
 0x18    4     R/W     physical_start
-0x1C    4     R/W     page_count
+0x1C    4     R/W     page_count / byte_count
 0x20    4     R/W     flags
 0x24    4     R/W     entry_pc
 0x28    4     R/W     stack_pointer
@@ -427,6 +427,10 @@ Error values:
 0  none
 1  invalid_command
 2  invalid_argument
+3  invalid_address_space
+4  translation_fault
+5  physical_out_of_bounds
+6  byte_count_overflow
 ```
 
 Commands:
@@ -437,6 +441,8 @@ Commands:
 2  map_pages
 3  protect_pages
 4  activate_user_address_space
+5  copy_from_user
+6  copy_to_user
 ```
 
 Flag bits:
@@ -453,9 +459,22 @@ bit 2  executable
 uses `address_space`, `entry_pc`, and `stack_pointer`, then switches the current
 K16 CPU to translated user execution at `entry_pc`.
 
-The VM rejects unknown address spaces, unknown flag bits, unaligned mappings,
-zero page counts, overlapping virtual mappings, and physical ranges outside
-guest RAM by setting `status = error` and `error = invalid_argument`.
+`copy_from_user` and `copy_to_user` use `address_space`, `virtual_start`,
+`physical_start`, and `byte_count` (the register at offset `0x1C`). Both
+commands are intended for physical/kernel syscall handlers. `copy_from_user`
+loads bytes from translated user virtual memory and writes them into physical
+kernel RAM. `copy_to_user` loads bytes from physical kernel RAM and stores them
+into translated user virtual memory. The requested user pages must be
+user-accessible; `copy_to_user` additionally requires writable mappings.
+Successful copy commands return the copied byte count in `result`.
+
+The VM rejects unknown flag bits, unaligned mappings, zero page counts,
+overlapping virtual mappings, and other malformed map/protect arguments by
+setting `status = error` and `error = invalid_argument`. Unknown address spaces
+produce `invalid_address_space`. Failed user translation or permission checks
+produce `translation_fault`. Physical kernel buffer ranges outside guest RAM
+produce `physical_out_of_bounds`; overflowing byte ranges produce
+`byte_count_overflow`.
 
 ## Storage0 MMIO
 
