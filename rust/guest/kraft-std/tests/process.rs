@@ -26,7 +26,7 @@ fn process_run_with_args_encodes_argv_request_for_runtime_run_syscall() {
     k16_rt::host_test::reset_syscalls();
     k16_rt::host_test::set_syscall_return(17);
 
-    let status = kraft_std::process::run_with_args("/bin/cat.kx", &["/etc/motd"]);
+    let status = kraft_std::process::run_with_args("/bin/cat.kx", &["/etc/motd", "--verbose"]);
 
     assert_eq!(status, Ok(17));
     assert_eq!(k16_rt::host_test::syscall_number(), k16_rt::host_test::RUN);
@@ -41,15 +41,42 @@ fn process_run_with_args_encodes_argv_request_for_runtime_run_syscall() {
 }
 
 #[test]
-fn process_run_with_args_requires_exactly_one_argument() {
+fn process_run_with_args_encodes_multiple_argument_request_bytes() {
+    let request =
+        kraft_std::process::host_test::encode_run_argv_request("/bin/cat.kx", &["/etc/motd", "-n"])
+            .unwrap();
+    let bytes = &request.bytes[..request.len];
+
+    assert_eq!(read_u32(bytes, 0), k16_abi::syscall::RUN_ARGV_MAGIC);
+    assert_eq!(read_u32(bytes, 4), 11);
+    assert_eq!(read_u32(bytes, 8), 2);
+    assert_eq!(read_u32(bytes, 12), 9);
+    assert_eq!(read_u32(bytes, 16), 2);
+    assert_eq!(&bytes[20..31], b"/bin/cat.kx");
+    assert_eq!(&bytes[31..40], b"/etc/motd");
+    assert_eq!(&bytes[40..42], b"-n");
+}
+
+#[test]
+fn process_run_with_args_requires_at_least_one_and_at_most_max_arguments() {
     k16_rt::host_test::reset_syscalls();
 
     let missing = kraft_std::process::run_with_args("/bin/cat.kx", &[]);
-    let extra = kraft_std::process::run_with_args("/bin/cat.kx", &["/etc/motd", "--verbose"]);
+    let extra =
+        kraft_std::process::run_with_args("/bin/cat.kx", &["one", "two", "three", "four", "five"]);
 
     assert_eq!(missing, Err(kraft_std::process::Error::InvalidArgument));
     assert_eq!(extra, Err(kraft_std::process::Error::InvalidArgument));
     assert_eq!(k16_rt::host_test::syscall_number(), 0);
+}
+
+fn read_u32(bytes: &[u8], offset: usize) -> u32 {
+    u32::from_le_bytes([
+        bytes[offset],
+        bytes[offset + 1],
+        bytes[offset + 2],
+        bytes[offset + 3],
+    ])
 }
 
 #[test]
