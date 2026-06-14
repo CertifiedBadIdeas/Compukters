@@ -17,46 +17,9 @@ static PROCESS_TABLE: KernelProcessTable =
         entry_pc: 0,
         stack_top: 0,
     }));
-// Keep the runtime trap frame as scalar words: the current K16 backend is more
-// reliable with scalar statics than with nested static struct/array fields.
 #[cfg(not(test))]
-static RUNTIME_INIT_R0: KernelCell<u32> = KernelCell::new(0);
-#[cfg(not(test))]
-static RUNTIME_INIT_R1: KernelCell<u32> = KernelCell::new(0);
-#[cfg(not(test))]
-static RUNTIME_INIT_R2: KernelCell<u32> = KernelCell::new(0);
-#[cfg(not(test))]
-static RUNTIME_INIT_R3: KernelCell<u32> = KernelCell::new(0);
-#[cfg(not(test))]
-static RUNTIME_INIT_R4: KernelCell<u32> = KernelCell::new(0);
-#[cfg(not(test))]
-static RUNTIME_INIT_R5: KernelCell<u32> = KernelCell::new(0);
-#[cfg(not(test))]
-static RUNTIME_INIT_R6: KernelCell<u32> = KernelCell::new(0);
-#[cfg(not(test))]
-static RUNTIME_INIT_R7: KernelCell<u32> = KernelCell::new(0);
-#[cfg(not(test))]
-static RUNTIME_INIT_R8: KernelCell<u32> = KernelCell::new(0);
-#[cfg(not(test))]
-static RUNTIME_INIT_R9: KernelCell<u32> = KernelCell::new(0);
-#[cfg(not(test))]
-static RUNTIME_INIT_R10: KernelCell<u32> = KernelCell::new(0);
-#[cfg(not(test))]
-static RUNTIME_INIT_R11: KernelCell<u32> = KernelCell::new(0);
-#[cfg(not(test))]
-static RUNTIME_INIT_R12: KernelCell<u32> = KernelCell::new(0);
-#[cfg(not(test))]
-static RUNTIME_INIT_R13: KernelCell<u32> = KernelCell::new(0);
-#[cfg(not(test))]
-static RUNTIME_INIT_R14: KernelCell<u32> = KernelCell::new(0);
-#[cfg(not(test))]
-static RUNTIME_INIT_R15: KernelCell<u32> = KernelCell::new(0);
-#[cfg(not(test))]
-static RUNTIME_INIT_RESUME_PC: KernelCell<u32> = KernelCell::new(0);
-#[cfg(not(test))]
-static RUNTIME_INIT_STACK_POINTER: KernelCell<u32> = KernelCell::new(0);
-#[cfg(not(test))]
-static RUNTIME_INIT_INTERRUPT_ENABLE: KernelCell<u32> = KernelCell::new(0);
+static RUNTIME_INIT_FRAME: KernelCell<k16_rt::TrapFrame> =
+    KernelCell::new(k16_rt::TrapFrame::zeroed());
 #[cfg(not(test))]
 static RUNTIME_CHILD_STATE: KernelCell<ProcessState> = KernelCell::new(PROCESS_STATE_EMPTY);
 #[cfg(not(test))]
@@ -310,97 +273,13 @@ pub const fn child_frame_for_context(context: ProcessContext) -> TrapFrame {
     frame
 }
 
-#[cfg(not(test))]
-macro_rules! save_runtime_init_frame_words {
-    ($frame:ident) => {{
-        core::ptr::write_volatile(
-            runtime_init_r0_addr() as usize as *mut u32,
-            $frame.registers[0],
-        );
-        core::ptr::write_volatile(
-            runtime_init_r1_addr() as usize as *mut u32,
-            $frame.registers[1],
-        );
-        core::ptr::write_volatile(
-            runtime_init_r2_addr() as usize as *mut u32,
-            $frame.registers[2],
-        );
-        core::ptr::write_volatile(
-            runtime_init_r3_addr() as usize as *mut u32,
-            $frame.registers[3],
-        );
-        core::ptr::write_volatile(
-            runtime_init_r4_addr() as usize as *mut u32,
-            $frame.registers[4],
-        );
-        core::ptr::write_volatile(
-            runtime_init_r5_addr() as usize as *mut u32,
-            $frame.registers[5],
-        );
-        core::ptr::write_volatile(
-            runtime_init_r6_addr() as usize as *mut u32,
-            $frame.registers[6],
-        );
-        core::ptr::write_volatile(
-            runtime_init_r7_addr() as usize as *mut u32,
-            $frame.registers[7],
-        );
-        core::ptr::write_volatile(
-            runtime_init_r8_addr() as usize as *mut u32,
-            $frame.registers[8],
-        );
-        core::ptr::write_volatile(
-            runtime_init_r9_addr() as usize as *mut u32,
-            $frame.registers[9],
-        );
-        core::ptr::write_volatile(
-            runtime_init_r10_addr() as usize as *mut u32,
-            $frame.registers[10],
-        );
-        core::ptr::write_volatile(
-            runtime_init_r11_addr() as usize as *mut u32,
-            $frame.registers[11],
-        );
-        core::ptr::write_volatile(
-            runtime_init_r12_addr() as usize as *mut u32,
-            $frame.registers[12],
-        );
-        core::ptr::write_volatile(
-            runtime_init_r13_addr() as usize as *mut u32,
-            $frame.registers[13],
-        );
-        core::ptr::write_volatile(
-            runtime_init_r14_addr() as usize as *mut u32,
-            $frame.registers[14],
-        );
-        core::ptr::write_volatile(
-            runtime_init_r15_addr() as usize as *mut u32,
-            $frame.registers[15],
-        );
-        core::ptr::write_volatile(
-            runtime_init_resume_pc_addr() as usize as *mut u32,
-            $frame.resume_pc,
-        );
-        core::ptr::write_volatile(
-            runtime_init_stack_pointer_addr() as usize as *mut u32,
-            $frame.stack_pointer,
-        );
-        core::ptr::write_volatile(
-            runtime_init_interrupt_enable_addr() as usize as *mut u32,
-            $frame.interrupt_enable,
-        );
-    }};
-}
-
 #[cfg(any(not(test), feature = "host-test"))]
 pub unsafe fn begin_loaded_child(
     child_plan: DynamicUserLoadPlan,
 ) -> Result<ChildLaunch, ProcessSwitchError> {
     #[cfg(not(test))]
     {
-        let mut init_frame = k16_rt::TrapFrame::zeroed();
-        k16_rt::save_trap_frame(&mut init_frame);
-        save_runtime_init_frame_words!(init_frame);
+        unsafe { save_runtime_init_frame() };
         return unsafe { begin_loaded_child_plan_runtime(child_plan) };
     }
     #[cfg(test)]
@@ -439,7 +318,7 @@ pub unsafe fn begin_loaded_child_from_path(path: &[u8]) -> Result<ChildLaunch, u
     {
         let mut init_frame = k16_rt::TrapFrame::zeroed();
         k16_rt::save_trap_frame(&mut init_frame);
-        save_runtime_init_frame_words!(init_frame);
+        unsafe { save_runtime_init_frame() };
         let load_base = *unsafe { RUNTIME_CHILD_LOAD_BASE.get() };
         if load_base == 0 {
             return Err(run_status_from_load_error(ProcessLoadError::Storage));
@@ -526,6 +405,12 @@ unsafe fn finish_child_runtime(status: u32) -> Result<InitResume, ProcessSwitchE
 }
 
 #[cfg(not(test))]
+unsafe fn save_runtime_init_frame() {
+    let saved = unsafe { RUNTIME_INIT_FRAME.get() };
+    k16_rt::save_trap_frame(saved);
+}
+
+#[cfg(not(test))]
 unsafe fn runtime_child_state() -> ProcessState {
     unsafe { read_u32_le(runtime_child_state_addr()) }
 }
@@ -548,131 +433,16 @@ fn runtime_child_state_addr() -> u32 {
 }
 
 #[cfg(not(test))]
-unsafe fn runtime_init_frame() -> k16_rt::TrapFrame {
-    let mut frame = k16_rt::TrapFrame::zeroed();
-    frame.registers[0] = unsafe { read_u32_le(runtime_init_r0_addr()) };
-    frame.registers[1] = unsafe { read_u32_le(runtime_init_r1_addr()) };
-    frame.registers[2] = unsafe { read_u32_le(runtime_init_r2_addr()) };
-    frame.registers[3] = unsafe { read_u32_le(runtime_init_r3_addr()) };
-    frame.registers[4] = unsafe { read_u32_le(runtime_init_r4_addr()) };
-    frame.registers[5] = unsafe { read_u32_le(runtime_init_r5_addr()) };
-    frame.registers[6] = unsafe { read_u32_le(runtime_init_r6_addr()) };
-    frame.registers[7] = unsafe { read_u32_le(runtime_init_r7_addr()) };
-    frame.registers[8] = unsafe { read_u32_le(runtime_init_r8_addr()) };
-    frame.registers[9] = unsafe { read_u32_le(runtime_init_r9_addr()) };
-    frame.registers[10] = unsafe { read_u32_le(runtime_init_r10_addr()) };
-    frame.registers[11] = unsafe { read_u32_le(runtime_init_r11_addr()) };
-    frame.registers[12] = unsafe { read_u32_le(runtime_init_r12_addr()) };
-    frame.registers[13] = unsafe { read_u32_le(runtime_init_r13_addr()) };
-    frame.registers[14] = unsafe { read_u32_le(runtime_init_r14_addr()) };
-    frame.registers[15] = unsafe { read_u32_le(runtime_init_r15_addr()) };
-    frame.resume_pc = unsafe { read_u32_le(runtime_init_resume_pc_addr()) };
-    frame.stack_pointer = unsafe { read_u32_le(runtime_init_stack_pointer_addr()) };
-    frame.interrupt_enable = unsafe { read_u32_le(runtime_init_interrupt_enable_addr()) };
-    frame
-}
-
-#[cfg(not(test))]
-fn runtime_init_r0_addr() -> u32 {
-    RUNTIME_INIT_R0.value.get() as usize as u32
-}
-
-#[cfg(not(test))]
-fn runtime_init_r1_addr() -> u32 {
-    RUNTIME_INIT_R1.value.get() as usize as u32
-}
-
-#[cfg(not(test))]
-fn runtime_init_r2_addr() -> u32 {
-    RUNTIME_INIT_R2.value.get() as usize as u32
-}
-
-#[cfg(not(test))]
-fn runtime_init_r3_addr() -> u32 {
-    RUNTIME_INIT_R3.value.get() as usize as u32
-}
-
-#[cfg(not(test))]
-fn runtime_init_r4_addr() -> u32 {
-    RUNTIME_INIT_R4.value.get() as usize as u32
-}
-
-#[cfg(not(test))]
-fn runtime_init_r5_addr() -> u32 {
-    RUNTIME_INIT_R5.value.get() as usize as u32
-}
-
-#[cfg(not(test))]
-fn runtime_init_r6_addr() -> u32 {
-    RUNTIME_INIT_R6.value.get() as usize as u32
-}
-
-#[cfg(not(test))]
-fn runtime_init_r7_addr() -> u32 {
-    RUNTIME_INIT_R7.value.get() as usize as u32
-}
-
-#[cfg(not(test))]
-fn runtime_init_r8_addr() -> u32 {
-    RUNTIME_INIT_R8.value.get() as usize as u32
-}
-
-#[cfg(not(test))]
-fn runtime_init_r9_addr() -> u32 {
-    RUNTIME_INIT_R9.value.get() as usize as u32
-}
-
-#[cfg(not(test))]
-fn runtime_init_r10_addr() -> u32 {
-    RUNTIME_INIT_R10.value.get() as usize as u32
-}
-
-#[cfg(not(test))]
-fn runtime_init_r11_addr() -> u32 {
-    RUNTIME_INIT_R11.value.get() as usize as u32
-}
-
-#[cfg(not(test))]
-fn runtime_init_r12_addr() -> u32 {
-    RUNTIME_INIT_R12.value.get() as usize as u32
-}
-
-#[cfg(not(test))]
-fn runtime_init_r13_addr() -> u32 {
-    RUNTIME_INIT_R13.value.get() as usize as u32
-}
-
-#[cfg(not(test))]
-fn runtime_init_r14_addr() -> u32 {
-    RUNTIME_INIT_R14.value.get() as usize as u32
-}
-
-#[cfg(not(test))]
-fn runtime_init_r15_addr() -> u32 {
-    RUNTIME_INIT_R15.value.get() as usize as u32
-}
-
-#[cfg(not(test))]
-fn runtime_init_resume_pc_addr() -> u32 {
-    RUNTIME_INIT_RESUME_PC.value.get() as usize as u32
-}
-
-#[cfg(not(test))]
-fn runtime_init_stack_pointer_addr() -> u32 {
-    RUNTIME_INIT_STACK_POINTER.value.get() as usize as u32
-}
-
-#[cfg(not(test))]
-fn runtime_init_interrupt_enable_addr() -> u32 {
-    RUNTIME_INIT_INTERRUPT_ENABLE.value.get() as usize as u32
+unsafe fn restore_runtime_init_frame() -> u32 {
+    let saved = unsafe { RUNTIME_INIT_FRAME.get() };
+    unsafe { k16_rt::restore_trap_frame(&*saved) }
 }
 
 #[cfg(any(not(test), feature = "host-test"))]
 pub unsafe fn resume_init_context(resume: InitResume) -> ! {
     #[cfg(not(test))]
     {
-        let frame = unsafe { runtime_init_frame() };
-        let _saved_r0 = unsafe { k16_rt::restore_trap_frame(&frame) };
+        let _saved_r0 = unsafe { restore_runtime_init_frame() };
         unsafe { k16_rt::iret_with_r0(resume.child_exit_status) }
     }
     #[cfg(test)]
