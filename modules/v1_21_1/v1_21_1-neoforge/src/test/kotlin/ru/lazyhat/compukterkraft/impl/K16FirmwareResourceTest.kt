@@ -178,6 +178,42 @@ class K16FirmwareResourceTest {
     }
 
     @Test
+    fun bundledK16SystemStorage0ContainsUnameProgram() {
+        val workspace = createTempDirectory("k16-uname-storage-test-")
+        val storage0 = workspace.resolve("storage0.kv")
+        val root = workspace.resolve("root.kfs")
+        val uname = workspace.resolve("uname.kx")
+        storage0.writeBytes(K16SystemVolumeWorkspace.loadStorage0VolumeResource(classLoader = javaClass.classLoader))
+
+        runK16Tool(
+            "volume",
+            "extract-partition",
+            storage0.toString(),
+            "ROOT",
+            root.toString(),
+        )
+        runK16Tool(
+            "fs",
+            "kfs",
+            "get",
+            root.toString(),
+            "/bin/uname.kx",
+            uname.toString(),
+        )
+
+        val bytes = uname.readBytes()
+        assertTrue(bytes.size > 72, "bundled /bin/uname.kx should be a non-empty dynamic K16E program")
+        assertContentEquals(
+            byteArrayOf('K'.code.toByte(), '1'.code.toByte(), '6'.code.toByte(), 'E'.code.toByte()),
+            bytes.copyOfRange(0, 4),
+        )
+        val version = ByteBuffer.wrap(bytes, 0x04, 2).order(ByteOrder.LITTLE_ENDIAN).short.toInt()
+        val abiKind = ByteBuffer.wrap(bytes, 0x18, 4).order(ByteOrder.LITTLE_ENDIAN).int
+        assertEquals(2, version, "bundled /bin/uname.kx must use dynamic K16E v2")
+        assertEquals(3, abiKind, "bundled /bin/uname.kx must use K16E abi kind program")
+    }
+
+    @Test
     fun k16RuntimeDeviceServerTicksAdvanceNativeTimer0Snapshot() {
         val workspace = createTempDirectory("k16-runtime-device-timer-test-")
         val biosFlashPath = workspace.resolve("bios.kflash")
@@ -247,12 +283,13 @@ class K16FirmwareResourceTest {
 
         assertTrue(source.contains("io::stdout()"))
         assertTrue(source.contains("io::stdin()"))
-        assertTrue(source.contains("let mut input = [0u8; INPUT_CAPACITY]"))
+        assertTrue(source.contains("let mut input = InputLine::new()"))
         assertTrue(source.contains("stdin.read(read_buffer)"))
-        assertTrue(source.contains("dispatch_line(stdout, input, line_len)"))
+        assertTrue(source.contains("dispatch_command(stdout, input.command())"))
         assertTrue(source.contains("const PROMPT: &[u8] = b\"INIT> \""))
-        assertTrue(source.contains("const HELP: &[u8] = b\"HELP\\nCLEAR\\nECHO\\nTICKS\\n\""))
+        assertTrue(source.contains("const HELP: &[u8] = b\"HELP\\nCLEAR\\nECHO\\nTICKS\\nUNAME\\n\""))
         assertTrue(source.contains("run_ticks(stdout)"))
+        assertTrue(source.contains("process::run(\"/bin/uname.kx\")"))
         assertFalse(source.contains("process::exit(0)"))
         assertFalse(source.contains("debug::write_byte"))
     }
@@ -500,20 +537,23 @@ class K16FirmwareResourceTest {
         assertFalse(Files.exists(kernelSourceDir.resolve("keyboard.rs")), "kernel keyboard line path should be removed")
         assertFalse(mainSource.contains("mod shell;"), "main.rs should not register the legacy shell module")
         assertFalse(mainSource.contains("shell::init();"), "kernel startup should not initialize the legacy shell module")
-        assertTrue(initSource.contains("fn dispatch_line("), "userland init should own shell command dispatch")
+        assertTrue(initSource.contains("fn dispatch_command("), "userland init should own shell command dispatch")
     }
 
     @Test
     fun k16UserlandInitDefinesPromptAndBuiltins() {
         val initSource = Path.of("../../../rust/guest/k16-init/src/main.rs").readText()
+        val initLibSource = Path.of("../../../rust/guest/k16-init/src/lib.rs").readText()
 
         assertTrue(initSource.contains("const PROMPT: &[u8] = b\"INIT> \""))
-        assertTrue(initSource.contains("fn dispatch_line("), "init should name the dispatch boundary")
-        assertTrue(initSource.contains("fn matches_command("), "init should share command matching")
-        assertTrue(initSource.contains("fn is_echo_command("), "init should name echo command matching")
-        assertTrue(initSource.contains("fn run_echo("), "init should name the echo command")
+        assertTrue(initSource.contains("fn dispatch_command("), "init should name the dispatch boundary")
+        assertTrue(initLibSource.contains("fn matches_command("), "init should share command matching")
+        assertTrue(initLibSource.contains("fn is_echo_command("), "init should name echo command matching")
+        assertTrue(initSource.contains("Command::Echo(bytes)"), "init should handle the echo command")
         assertTrue(initSource.contains("fn run_ticks("), "init should name the ticks command")
-        assertTrue(initSource.contains("HELP\\nCLEAR\\nECHO\\nTICKS\\n"), "help should print a readable command list")
+        assertTrue(initSource.contains("fn run_uname("), "init should name the uname command")
+        assertTrue(initLibSource.contains("Command::Uname"), "init should classify the uname command")
+        assertTrue(initSource.contains("HELP\\nCLEAR\\nECHO\\nTICKS\\nUNAME\\n"), "help should print a readable command list")
         assertTrue(initSource.contains("b\"ERR\\n\""), "unknown commands should report a short error")
     }
 
@@ -559,7 +599,7 @@ class K16FirmwareResourceTest {
             initSource.contains("b'\\n' | b'\\r'"),
             "newline and carriage return should complete the current userland line",
         )
-        assertTrue(initSource.contains("clear_input(input)"), "init should clear stale line bytes before each prompt")
+        assertTrue(initSource.contains("input.clear()"), "init should clear stale line bytes before each prompt")
     }
 
     @Test

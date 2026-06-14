@@ -8,7 +8,7 @@ use kraft_std::prelude::*;
 
 const PROMPT: &[u8] = b"INIT> ";
 const NEWLINE: &[u8] = b"\n";
-const HELP: &[u8] = b"HELP\nCLEAR\nECHO\nTICKS\n";
+const HELP: &[u8] = b"HELP\nCLEAR\nECHO\nTICKS\nUNAME\n";
 
 #[no_mangle]
 pub extern "C" fn main() -> ! {
@@ -67,6 +67,7 @@ fn dispatch_command(stdout: io::Fd, command: Command<'_>) {
         Command::Help => must_write(stdout, HELP),
         Command::Clear => must_write(stdout, b"\x0c"),
         Command::Ticks => run_ticks(stdout),
+        Command::Uname => run_uname(stdout),
         Command::Echo(bytes) => {
             must_write(stdout, bytes);
             must_write(stdout, NEWLINE);
@@ -79,6 +80,29 @@ fn run_ticks(stdout: io::Fd) {
     must_write(stdout, b"TICKS ");
     write_decimal_parts(stdout, time::game_ticks_parts());
     must_write(stdout, NEWLINE);
+}
+
+fn run_uname(stdout: io::Fd) {
+    match process::run("/bin/uname.kx") {
+        Ok(_) => {}
+        Err(process::Error::Syscall(status)) => {
+            must_write(stdout, b"ERR ");
+            must_write(stdout, run_error_name(status));
+            must_write(stdout, NEWLINE);
+        }
+    }
+}
+
+fn run_error_name(status: u32) -> &'static [u8] {
+    match status {
+        0xffff_fffe => b"NOENT",
+        0xffff_fff8 => b"NOEXEC",
+        0xffff_fff4 => b"NOMEM",
+        0xffff_fff2 => b"FAULT",
+        0xffff_fff0 => b"BUSY",
+        0xffff_ffea => b"INVAL",
+        _ => b"RUN",
+    }
 }
 
 fn write_decimal_parts(stdout: io::Fd, parts: time::U64Parts) {

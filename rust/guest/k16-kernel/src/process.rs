@@ -10,22 +10,90 @@ const KX_SUFFIX: &[u8] = b".kx";
 const K16FS_MAX_NAME_BYTES: usize = 56;
 pub const MAX_RUN_PATH_BYTES: usize = BIN_PREFIX.len() + K16FS_MAX_NAME_BYTES;
 const USER_PROGRAM_LIMIT: u32 = 0x0002_0000;
-#[cfg(any(not(test), feature = "host-test"))]
+#[cfg(feature = "host-test")]
+#[allow(dead_code)]
 static PROCESS_TABLE: KernelProcessTable =
     KernelProcessTable::new(ProcessTable::new(ProcessContext {
         entry_pc: 0,
         stack_top: 0,
     }));
+// Keep the runtime trap frame as scalar words: the current K16 backend is more
+// reliable with scalar statics than with nested static struct/array fields.
+#[cfg(not(test))]
+static RUNTIME_INIT_R0: KernelCell<u32> = KernelCell::new(0);
+#[cfg(not(test))]
+static RUNTIME_INIT_R1: KernelCell<u32> = KernelCell::new(0);
+#[cfg(not(test))]
+static RUNTIME_INIT_R2: KernelCell<u32> = KernelCell::new(0);
+#[cfg(not(test))]
+static RUNTIME_INIT_R3: KernelCell<u32> = KernelCell::new(0);
+#[cfg(not(test))]
+static RUNTIME_INIT_R4: KernelCell<u32> = KernelCell::new(0);
+#[cfg(not(test))]
+static RUNTIME_INIT_R5: KernelCell<u32> = KernelCell::new(0);
+#[cfg(not(test))]
+static RUNTIME_INIT_R6: KernelCell<u32> = KernelCell::new(0);
+#[cfg(not(test))]
+static RUNTIME_INIT_R7: KernelCell<u32> = KernelCell::new(0);
+#[cfg(not(test))]
+static RUNTIME_INIT_R8: KernelCell<u32> = KernelCell::new(0);
+#[cfg(not(test))]
+static RUNTIME_INIT_R9: KernelCell<u32> = KernelCell::new(0);
+#[cfg(not(test))]
+static RUNTIME_INIT_R10: KernelCell<u32> = KernelCell::new(0);
+#[cfg(not(test))]
+static RUNTIME_INIT_R11: KernelCell<u32> = KernelCell::new(0);
+#[cfg(not(test))]
+static RUNTIME_INIT_R12: KernelCell<u32> = KernelCell::new(0);
+#[cfg(not(test))]
+static RUNTIME_INIT_R13: KernelCell<u32> = KernelCell::new(0);
+#[cfg(not(test))]
+static RUNTIME_INIT_R14: KernelCell<u32> = KernelCell::new(0);
+#[cfg(not(test))]
+static RUNTIME_INIT_R15: KernelCell<u32> = KernelCell::new(0);
+#[cfg(not(test))]
+static RUNTIME_INIT_RESUME_PC: KernelCell<u32> = KernelCell::new(0);
+#[cfg(not(test))]
+static RUNTIME_INIT_STACK_POINTER: KernelCell<u32> = KernelCell::new(0);
+#[cfg(not(test))]
+static RUNTIME_INIT_INTERRUPT_ENABLE: KernelCell<u32> = KernelCell::new(0);
+#[cfg(not(test))]
+static RUNTIME_CHILD_STATE: KernelCell<ProcessState> = KernelCell::new(PROCESS_STATE_EMPTY);
+#[cfg(not(test))]
+static RUNTIME_CHILD_LOAD_BASE: KernelCell<u32> = KernelCell::new(0);
 
-#[cfg(any(not(test), feature = "host-test"))]
+#[cfg(feature = "host-test")]
+#[allow(dead_code)]
 struct KernelProcessTable {
     table: UnsafeCell<ProcessTable>,
 }
 
-#[cfg(any(not(test), feature = "host-test"))]
+#[cfg(feature = "host-test")]
 unsafe impl Sync for KernelProcessTable {}
 
-#[cfg(any(not(test), feature = "host-test"))]
+#[cfg(not(test))]
+struct KernelCell<T> {
+    value: UnsafeCell<T>,
+}
+
+#[cfg(not(test))]
+unsafe impl<T> Sync for KernelCell<T> {}
+
+#[cfg(not(test))]
+impl<T> KernelCell<T> {
+    const fn new(value: T) -> Self {
+        Self {
+            value: UnsafeCell::new(value),
+        }
+    }
+
+    unsafe fn get(&self) -> &mut T {
+        unsafe { &mut *self.value.get() }
+    }
+}
+
+#[cfg(feature = "host-test")]
+#[allow(dead_code)]
 impl KernelProcessTable {
     const fn new(table: ProcessTable) -> Self {
         Self {
@@ -54,18 +122,18 @@ pub enum ProcessSwitchError {
     NoRunningChild,
 }
 
+#[repr(u32)]
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum ProcessId {
     Init,
     Child,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum ProcessState {
-    Empty,
-    Running,
-    BlockedOnChild,
-}
+pub type ProcessState = u32;
+
+pub const PROCESS_STATE_EMPTY: ProcessState = 0;
+pub const PROCESS_STATE_RUNNING: ProcessState = 1;
+pub const PROCESS_STATE_BLOCKED_ON_CHILD: ProcessState = 2;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct ProcessContext {
@@ -116,30 +184,30 @@ pub struct InitResume {
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct ProcessTable {
-    init: ProcessSlot,
-    child: ProcessSlot,
-    child_load_base: Option<u32>,
+    init_state: ProcessState,
+    init_context: ProcessContext,
+    init_frame: TrapFrame,
+    child_state: ProcessState,
+    child_context: ProcessContext,
+    child_frame: TrapFrame,
+    child_exit_status: u32,
+    child_load_base: u32,
 }
 
 impl ProcessTable {
     pub const fn new(init_context: ProcessContext) -> Self {
         Self {
-            init: ProcessSlot {
-                state: ProcessState::Running,
-                context: init_context,
-                frame: TrapFrame::zeroed(),
-                exit_status: 0,
+            init_state: PROCESS_STATE_RUNNING,
+            init_context,
+            init_frame: TrapFrame::zeroed(),
+            child_state: PROCESS_STATE_EMPTY,
+            child_context: ProcessContext {
+                entry_pc: 0,
+                stack_top: 0,
             },
-            child: ProcessSlot {
-                state: ProcessState::Empty,
-                context: ProcessContext {
-                    entry_pc: 0,
-                    stack_top: 0,
-                },
-                frame: TrapFrame::zeroed(),
-                exit_status: 0,
-            },
-            child_load_base: None,
+            child_frame: TrapFrame::zeroed(),
+            child_exit_status: 0,
+            child_load_base: 0,
         }
     }
 
@@ -150,11 +218,11 @@ impl ProcessTable {
         if image.load_addr >= image.load_end || image.load_end > USER_PROGRAM_LIMIT {
             return Err(ProcessLoadError::InvalidArena);
         }
-        self.init.context = ProcessContext {
+        self.init_context = ProcessContext {
             entry_pc: image.entry_pc,
             stack_top: USER_PROGRAM_LIMIT,
         };
-        self.child_load_base = Some(align_up(image.load_end, LOAD_ALIGNMENT)?);
+        self.child_load_base = align_up(image.load_end, LOAD_ALIGNMENT)?;
         Ok(())
     }
 
@@ -162,8 +230,12 @@ impl ProcessTable {
         &self,
         init_frame: TrapFrame,
     ) -> Result<UserArena, ProcessLoadError> {
-        let load_base = self.child_load_base.ok_or(ProcessLoadError::InvalidArena)?;
+        if self.child_load_base == 0 {
+            return Err(ProcessLoadError::Storage);
+        }
+        let load_base = self.child_load_base;
         UserArena::new(load_base, init_frame.stack_pointer)
+            .map_err(|_| ProcessLoadError::ProgramTooLarge)
     }
 
     pub fn begin_child_run(
@@ -178,7 +250,7 @@ impl ProcessTable {
         child_plan: DynamicUserLoadPlan,
         init_frame: TrapFrame,
     ) -> Result<ChildLaunch, ProcessSwitchError> {
-        if self.child.state == ProcessState::Running {
+        if self.child_state_runtime() == PROCESS_STATE_RUNNING {
             return Err(ProcessSwitchError::ChildAlreadyRunning);
         }
         let context = ProcessContext {
@@ -186,18 +258,16 @@ impl ProcessTable {
             stack_top: child_plan.stack_top,
         };
         let child_frame = child_frame_for_context(context);
-        self.init.state = ProcessState::BlockedOnChild;
-        self.init.context = ProcessContext {
+        unsafe { core::ptr::write_volatile(&mut self.init_state, PROCESS_STATE_BLOCKED_ON_CHILD) };
+        self.init_context = ProcessContext {
             entry_pc: init_frame.resume_pc,
             stack_top: init_frame.stack_pointer,
         };
-        self.init.frame = init_frame;
-        self.child = ProcessSlot {
-            state: ProcessState::Running,
-            context,
-            frame: child_frame,
-            exit_status: 0,
-        };
+        self.init_frame = init_frame;
+        unsafe { core::ptr::write_volatile(&mut self.child_state, PROCESS_STATE_RUNNING) };
+        self.child_context = context;
+        self.child_frame = child_frame;
+        self.child_exit_status = 0;
         Ok(ChildLaunch {
             id: ProcessId::Child,
             context,
@@ -206,35 +276,31 @@ impl ProcessTable {
     }
 
     pub fn finish_child(&mut self, status: u32) -> Result<InitResume, ProcessSwitchError> {
-        if self.child.state != ProcessState::Running {
+        if self.child_state_runtime() != PROCESS_STATE_RUNNING {
             return Err(ProcessSwitchError::NoRunningChild);
         }
-        self.child.state = ProcessState::Empty;
-        self.child.exit_status = status;
-        self.init.state = ProcessState::Running;
+        unsafe { core::ptr::write_volatile(&mut self.child_state, PROCESS_STATE_EMPTY) };
+        self.child_exit_status = status;
+        unsafe { core::ptr::write_volatile(&mut self.init_state, PROCESS_STATE_RUNNING) };
         Ok(InitResume {
             id: ProcessId::Init,
-            context: self.init.context,
-            frame: self.init.frame,
+            context: self.init_context,
+            frame: self.init_frame,
             child_exit_status: status,
         })
     }
 
     pub const fn init_state(&self) -> ProcessState {
-        self.init.state
+        self.init_state
     }
 
     pub const fn child_state(&self) -> ProcessState {
-        self.child.state
+        self.child_state
     }
-}
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-struct ProcessSlot {
-    state: ProcessState,
-    context: ProcessContext,
-    frame: TrapFrame,
-    exit_status: u32,
+    fn child_state_runtime(&self) -> ProcessState {
+        unsafe { core::ptr::read_volatile(&self.child_state) }
+    }
 }
 
 pub const fn child_frame_for_context(context: ProcessContext) -> TrapFrame {
@@ -244,16 +310,108 @@ pub const fn child_frame_for_context(context: ProcessContext) -> TrapFrame {
     frame
 }
 
+#[cfg(not(test))]
+macro_rules! save_runtime_init_frame_words {
+    ($frame:ident) => {{
+        core::ptr::write_volatile(
+            runtime_init_r0_addr() as usize as *mut u32,
+            $frame.registers[0],
+        );
+        core::ptr::write_volatile(
+            runtime_init_r1_addr() as usize as *mut u32,
+            $frame.registers[1],
+        );
+        core::ptr::write_volatile(
+            runtime_init_r2_addr() as usize as *mut u32,
+            $frame.registers[2],
+        );
+        core::ptr::write_volatile(
+            runtime_init_r3_addr() as usize as *mut u32,
+            $frame.registers[3],
+        );
+        core::ptr::write_volatile(
+            runtime_init_r4_addr() as usize as *mut u32,
+            $frame.registers[4],
+        );
+        core::ptr::write_volatile(
+            runtime_init_r5_addr() as usize as *mut u32,
+            $frame.registers[5],
+        );
+        core::ptr::write_volatile(
+            runtime_init_r6_addr() as usize as *mut u32,
+            $frame.registers[6],
+        );
+        core::ptr::write_volatile(
+            runtime_init_r7_addr() as usize as *mut u32,
+            $frame.registers[7],
+        );
+        core::ptr::write_volatile(
+            runtime_init_r8_addr() as usize as *mut u32,
+            $frame.registers[8],
+        );
+        core::ptr::write_volatile(
+            runtime_init_r9_addr() as usize as *mut u32,
+            $frame.registers[9],
+        );
+        core::ptr::write_volatile(
+            runtime_init_r10_addr() as usize as *mut u32,
+            $frame.registers[10],
+        );
+        core::ptr::write_volatile(
+            runtime_init_r11_addr() as usize as *mut u32,
+            $frame.registers[11],
+        );
+        core::ptr::write_volatile(
+            runtime_init_r12_addr() as usize as *mut u32,
+            $frame.registers[12],
+        );
+        core::ptr::write_volatile(
+            runtime_init_r13_addr() as usize as *mut u32,
+            $frame.registers[13],
+        );
+        core::ptr::write_volatile(
+            runtime_init_r14_addr() as usize as *mut u32,
+            $frame.registers[14],
+        );
+        core::ptr::write_volatile(
+            runtime_init_r15_addr() as usize as *mut u32,
+            $frame.registers[15],
+        );
+        core::ptr::write_volatile(
+            runtime_init_resume_pc_addr() as usize as *mut u32,
+            $frame.resume_pc,
+        );
+        core::ptr::write_volatile(
+            runtime_init_stack_pointer_addr() as usize as *mut u32,
+            $frame.stack_pointer,
+        );
+        core::ptr::write_volatile(
+            runtime_init_interrupt_enable_addr() as usize as *mut u32,
+            $frame.interrupt_enable,
+        );
+    }};
+}
+
 #[cfg(any(not(test), feature = "host-test"))]
 pub unsafe fn begin_loaded_child(
     child_plan: DynamicUserLoadPlan,
 ) -> Result<ChildLaunch, ProcessSwitchError> {
-    let mut init_frame = k16_rt::TrapFrame::zeroed();
-    k16_rt::save_trap_frame(&mut init_frame);
-    unsafe {
-        PROCESS_TABLE
-            .get()
-            .begin_child_run_from_frame(child_plan, TrapFrame::from(init_frame))
+    #[cfg(not(test))]
+    {
+        let mut init_frame = k16_rt::TrapFrame::zeroed();
+        k16_rt::save_trap_frame(&mut init_frame);
+        save_runtime_init_frame_words!(init_frame);
+        return unsafe { begin_loaded_child_plan_runtime(child_plan) };
+    }
+    #[cfg(test)]
+    {
+        let mut init_frame = k16_rt::TrapFrame::zeroed();
+        k16_rt::save_trap_frame(&mut init_frame);
+        unsafe {
+            PROCESS_TABLE
+                .get()
+                .begin_child_run_from_frame(child_plan, TrapFrame::from(init_frame))
+        }
     }
 }
 
@@ -261,23 +419,73 @@ pub unsafe fn begin_loaded_child(
 pub unsafe fn initialize_init_process(
     image: k16_boot_chain::LoadedImage,
 ) -> Result<(), ProcessLoadError> {
-    unsafe { PROCESS_TABLE.get().initialize_init_image(image) }
+    #[cfg(not(test))]
+    {
+        if image.load_addr >= image.load_end || image.load_end > USER_PROGRAM_LIMIT {
+            return Err(ProcessLoadError::InvalidArena);
+        }
+        *unsafe { RUNTIME_CHILD_LOAD_BASE.get() } = align_up(image.load_end, LOAD_ALIGNMENT)?;
+        return Ok(());
+    }
+    #[cfg(test)]
+    {
+        unsafe { PROCESS_TABLE.get().initialize_init_image(image) }
+    }
 }
 
 #[cfg(any(not(test), feature = "host-test"))]
 pub unsafe fn begin_loaded_child_from_path(path: &[u8]) -> Result<ChildLaunch, u32> {
-    let mut init_frame = k16_rt::TrapFrame::zeroed();
-    k16_rt::save_trap_frame(&mut init_frame);
-    let init_frame = TrapFrame::from(init_frame);
-    let table = unsafe { PROCESS_TABLE.get() };
-    let arena = table
-        .child_arena_for_init_frame(init_frame)
-        .map_err(run_status_from_load_error)?;
-    let child_plan = unsafe { load_dynamic_user_program_from_storage0(path, arena) }
-        .map_err(run_status_from_load_error)?;
-    table
-        .begin_child_run_from_frame(child_plan, init_frame)
-        .map_err(run_status_from_switch_error)
+    #[cfg(not(test))]
+    {
+        let mut init_frame = k16_rt::TrapFrame::zeroed();
+        k16_rt::save_trap_frame(&mut init_frame);
+        save_runtime_init_frame_words!(init_frame);
+        let load_base = *unsafe { RUNTIME_CHILD_LOAD_BASE.get() };
+        if load_base == 0 {
+            return Err(run_status_from_load_error(ProcessLoadError::Storage));
+        }
+        let arena = UserArena::new(load_base, init_frame.stack_pointer)
+            .map_err(|_| run_status_from_load_error(ProcessLoadError::ProgramTooLarge))?;
+        let child_plan = unsafe { load_dynamic_user_program_from_storage0(path, arena) }
+            .map_err(run_status_from_load_error)?;
+        return unsafe { begin_loaded_child_plan_runtime(child_plan) }
+            .map_err(run_status_from_switch_error);
+    }
+    #[cfg(test)]
+    {
+        let mut init_frame = k16_rt::TrapFrame::zeroed();
+        k16_rt::save_trap_frame(&mut init_frame);
+        let init_frame = TrapFrame::from(init_frame);
+        let table = unsafe { PROCESS_TABLE.get() };
+        let arena = table
+            .child_arena_for_init_frame(init_frame)
+            .map_err(run_status_from_load_error)?;
+        let child_plan = unsafe { load_dynamic_user_program_from_storage0(path, arena) }
+            .map_err(run_status_from_load_error)?;
+        table
+            .begin_child_run_from_frame(child_plan, init_frame)
+            .map_err(run_status_from_switch_error)
+    }
+}
+
+#[cfg(not(test))]
+unsafe fn begin_loaded_child_plan_runtime(
+    child_plan: DynamicUserLoadPlan,
+) -> Result<ChildLaunch, ProcessSwitchError> {
+    if unsafe { runtime_child_state() } == PROCESS_STATE_RUNNING {
+        return Err(ProcessSwitchError::ChildAlreadyRunning);
+    }
+    let context = ProcessContext {
+        entry_pc: child_plan.entry_pc,
+        stack_top: child_plan.stack_top,
+    };
+    let child_frame = child_frame_for_context(context);
+    unsafe { set_runtime_child_state_running() };
+    Ok(ChildLaunch {
+        id: ProcessId::Child,
+        context,
+        frame: child_frame,
+    })
 }
 
 #[cfg(any(not(test), feature = "host-test"))]
@@ -289,23 +497,200 @@ pub unsafe fn enter_child_context(launch: ChildLaunch) -> ! {
 
 #[cfg(any(not(test), feature = "host-test"))]
 pub unsafe fn finish_child_for_exit(status: u32) -> Result<InitResume, ProcessSwitchError> {
-    unsafe { PROCESS_TABLE.get().finish_child(status) }
+    #[cfg(not(test))]
+    {
+        return unsafe { finish_child_runtime(status) };
+    }
+    #[cfg(test)]
+    {
+        unsafe { PROCESS_TABLE.get().finish_child(status) }
+    }
+}
+
+#[cfg(not(test))]
+unsafe fn finish_child_runtime(status: u32) -> Result<InitResume, ProcessSwitchError> {
+    let child_state = unsafe { runtime_child_state() };
+    if child_state != PROCESS_STATE_RUNNING {
+        return Err(ProcessSwitchError::NoRunningChild);
+    }
+    unsafe { set_runtime_child_state_empty() };
+    Ok(InitResume {
+        id: ProcessId::Init,
+        context: ProcessContext {
+            entry_pc: 0,
+            stack_top: 0,
+        },
+        frame: TrapFrame::zeroed(),
+        child_exit_status: status,
+    })
+}
+
+#[cfg(not(test))]
+unsafe fn runtime_child_state() -> ProcessState {
+    unsafe { read_u32_le(runtime_child_state_addr()) }
+}
+
+#[cfg(not(test))]
+unsafe fn set_runtime_child_state_running() {
+    let address = runtime_child_state_addr();
+    unsafe { core::ptr::write_volatile(address as usize as *mut u32, 1) }
+}
+
+#[cfg(not(test))]
+unsafe fn set_runtime_child_state_empty() {
+    let address = runtime_child_state_addr();
+    unsafe { core::ptr::write_volatile(address as usize as *mut u32, 0) }
+}
+
+#[cfg(not(test))]
+fn runtime_child_state_addr() -> u32 {
+    RUNTIME_CHILD_STATE.value.get() as usize as u32
+}
+
+#[cfg(not(test))]
+unsafe fn runtime_init_frame() -> k16_rt::TrapFrame {
+    let mut frame = k16_rt::TrapFrame::zeroed();
+    frame.registers[0] = unsafe { read_u32_le(runtime_init_r0_addr()) };
+    frame.registers[1] = unsafe { read_u32_le(runtime_init_r1_addr()) };
+    frame.registers[2] = unsafe { read_u32_le(runtime_init_r2_addr()) };
+    frame.registers[3] = unsafe { read_u32_le(runtime_init_r3_addr()) };
+    frame.registers[4] = unsafe { read_u32_le(runtime_init_r4_addr()) };
+    frame.registers[5] = unsafe { read_u32_le(runtime_init_r5_addr()) };
+    frame.registers[6] = unsafe { read_u32_le(runtime_init_r6_addr()) };
+    frame.registers[7] = unsafe { read_u32_le(runtime_init_r7_addr()) };
+    frame.registers[8] = unsafe { read_u32_le(runtime_init_r8_addr()) };
+    frame.registers[9] = unsafe { read_u32_le(runtime_init_r9_addr()) };
+    frame.registers[10] = unsafe { read_u32_le(runtime_init_r10_addr()) };
+    frame.registers[11] = unsafe { read_u32_le(runtime_init_r11_addr()) };
+    frame.registers[12] = unsafe { read_u32_le(runtime_init_r12_addr()) };
+    frame.registers[13] = unsafe { read_u32_le(runtime_init_r13_addr()) };
+    frame.registers[14] = unsafe { read_u32_le(runtime_init_r14_addr()) };
+    frame.registers[15] = unsafe { read_u32_le(runtime_init_r15_addr()) };
+    frame.resume_pc = unsafe { read_u32_le(runtime_init_resume_pc_addr()) };
+    frame.stack_pointer = unsafe { read_u32_le(runtime_init_stack_pointer_addr()) };
+    frame.interrupt_enable = unsafe { read_u32_le(runtime_init_interrupt_enable_addr()) };
+    frame
+}
+
+#[cfg(not(test))]
+fn runtime_init_r0_addr() -> u32 {
+    RUNTIME_INIT_R0.value.get() as usize as u32
+}
+
+#[cfg(not(test))]
+fn runtime_init_r1_addr() -> u32 {
+    RUNTIME_INIT_R1.value.get() as usize as u32
+}
+
+#[cfg(not(test))]
+fn runtime_init_r2_addr() -> u32 {
+    RUNTIME_INIT_R2.value.get() as usize as u32
+}
+
+#[cfg(not(test))]
+fn runtime_init_r3_addr() -> u32 {
+    RUNTIME_INIT_R3.value.get() as usize as u32
+}
+
+#[cfg(not(test))]
+fn runtime_init_r4_addr() -> u32 {
+    RUNTIME_INIT_R4.value.get() as usize as u32
+}
+
+#[cfg(not(test))]
+fn runtime_init_r5_addr() -> u32 {
+    RUNTIME_INIT_R5.value.get() as usize as u32
+}
+
+#[cfg(not(test))]
+fn runtime_init_r6_addr() -> u32 {
+    RUNTIME_INIT_R6.value.get() as usize as u32
+}
+
+#[cfg(not(test))]
+fn runtime_init_r7_addr() -> u32 {
+    RUNTIME_INIT_R7.value.get() as usize as u32
+}
+
+#[cfg(not(test))]
+fn runtime_init_r8_addr() -> u32 {
+    RUNTIME_INIT_R8.value.get() as usize as u32
+}
+
+#[cfg(not(test))]
+fn runtime_init_r9_addr() -> u32 {
+    RUNTIME_INIT_R9.value.get() as usize as u32
+}
+
+#[cfg(not(test))]
+fn runtime_init_r10_addr() -> u32 {
+    RUNTIME_INIT_R10.value.get() as usize as u32
+}
+
+#[cfg(not(test))]
+fn runtime_init_r11_addr() -> u32 {
+    RUNTIME_INIT_R11.value.get() as usize as u32
+}
+
+#[cfg(not(test))]
+fn runtime_init_r12_addr() -> u32 {
+    RUNTIME_INIT_R12.value.get() as usize as u32
+}
+
+#[cfg(not(test))]
+fn runtime_init_r13_addr() -> u32 {
+    RUNTIME_INIT_R13.value.get() as usize as u32
+}
+
+#[cfg(not(test))]
+fn runtime_init_r14_addr() -> u32 {
+    RUNTIME_INIT_R14.value.get() as usize as u32
+}
+
+#[cfg(not(test))]
+fn runtime_init_r15_addr() -> u32 {
+    RUNTIME_INIT_R15.value.get() as usize as u32
+}
+
+#[cfg(not(test))]
+fn runtime_init_resume_pc_addr() -> u32 {
+    RUNTIME_INIT_RESUME_PC.value.get() as usize as u32
+}
+
+#[cfg(not(test))]
+fn runtime_init_stack_pointer_addr() -> u32 {
+    RUNTIME_INIT_STACK_POINTER.value.get() as usize as u32
+}
+
+#[cfg(not(test))]
+fn runtime_init_interrupt_enable_addr() -> u32 {
+    RUNTIME_INIT_INTERRUPT_ENABLE.value.get() as usize as u32
 }
 
 #[cfg(any(not(test), feature = "host-test"))]
 pub unsafe fn resume_init_context(resume: InitResume) -> ! {
-    let frame = k16_rt::TrapFrame::from(resume.frame);
-    let _saved_r0 = unsafe { k16_rt::restore_trap_frame(&frame) };
-    unsafe { k16_rt::iret_with_r0(resume.child_exit_status) }
+    #[cfg(not(test))]
+    {
+        let frame = unsafe { runtime_init_frame() };
+        let _saved_r0 = unsafe { k16_rt::restore_trap_frame(&frame) };
+        unsafe { k16_rt::iret_with_r0(resume.child_exit_status) }
+    }
+    #[cfg(test)]
+    {
+        let frame = k16_rt::TrapFrame::from(resume.frame);
+        let _saved_r0 = unsafe { k16_rt::restore_trap_frame(&frame) };
+        unsafe { k16_rt::iret_with_r0(resume.child_exit_status) }
+    }
 }
 
 pub const fn run_status_from_load_error(error: ProcessLoadError) -> u32 {
     match error {
         ProcessLoadError::InvalidPath => k16_abi::syscall::ERROR_INVALID,
-        ProcessLoadError::InvalidArena
-        | ProcessLoadError::AddressOverflow
-        | ProcessLoadError::ProgramTooLarge => k16_abi::syscall::ERROR_NO_MEMORY,
-        ProcessLoadError::InvalidImage => k16_abi::syscall::ERROR_EXEC_FORMAT,
+        ProcessLoadError::InvalidArena => k16_abi::syscall::ERROR_NO_MEMORY,
+        ProcessLoadError::AddressOverflow | ProcessLoadError::InvalidImage => {
+            k16_abi::syscall::ERROR_EXEC_FORMAT
+        }
+        ProcessLoadError::ProgramTooLarge => k16_abi::syscall::ERROR_NO_MEMORY,
         ProcessLoadError::Storage => k16_abi::syscall::ERROR_NO_ENTRY,
     }
 }
@@ -470,8 +855,8 @@ pub unsafe fn load_dynamic_user_program_from_storage0(
     unsafe {
         k16_storage::open_file_from_storage0(ROOT_PARTITION, path.components())
             .map_err(|_| ProcessLoadError::Storage)?;
-        load_selected_dynamic_user_program(arena)
     }
+    unsafe { load_selected_dynamic_user_program(arena) }
 }
 
 pub unsafe fn load_selected_dynamic_user_program(
@@ -504,6 +889,8 @@ pub unsafe fn load_selected_dynamic_user_program(
             plan.payload_len,
         )
         .map_err(|_| ProcessLoadError::Storage)?;
+    }
+    unsafe {
         zero_fill_ram(plan.zero_fill_addr, plan.zero_fill_len);
         apply_selected_file_relocations(metadata, plan)?;
     }
@@ -567,11 +954,11 @@ unsafe fn apply_dynamic_relocation_to_ram(
         .load_base
         .checked_add(relocation.offset)
         .ok_or(ProcessLoadError::AddressOverflow)?;
-    let value = unsafe { read_u32(field_addr) };
+    let value = unsafe { read_u32_le(field_addr) };
     let relocated = value
         .checked_add(plan.load_base)
         .ok_or(ProcessLoadError::AddressOverflow)?;
-    unsafe { write_u32(field_addr, relocated) };
+    unsafe { write_u32_le(field_addr, relocated) };
     Ok(())
 }
 
@@ -610,12 +997,26 @@ unsafe fn zero_fill_ram(dst_addr: u32, len: u32) {
     }
 }
 
-unsafe fn read_u32(address: u32) -> u32 {
-    unsafe { core::ptr::read_volatile(address as usize as *const u32) }
+unsafe fn read_u32_le(address: u32) -> u32 {
+    let b0 = unsafe { read_u8(address) };
+    let b1 = unsafe { read_u8(address + 1) };
+    let b2 = unsafe { read_u8(address + 2) };
+    let b3 = unsafe { read_u8(address + 3) };
+    u32::from_le_bytes([b0, b1, b2, b3])
 }
 
-unsafe fn write_u32(address: u32, value: u32) {
-    unsafe { core::ptr::write_volatile(address as usize as *mut u32, value) }
+unsafe fn write_u32_le(address: u32, value: u32) {
+    let bytes = value.to_le_bytes();
+    unsafe {
+        write_u8(address, bytes[0]);
+        write_u8(address + 1, bytes[1]);
+        write_u8(address + 2, bytes[2]);
+        write_u8(address + 3, bytes[3]);
+    }
+}
+
+unsafe fn read_u8(address: u32) -> u8 {
+    unsafe { core::ptr::read_volatile(address as usize as *const u8) }
 }
 
 unsafe fn write_u8(address: u32, value: u8) {
@@ -838,8 +1239,8 @@ mod tests {
                 stack_top: 0x0001_0000,
             }
         );
-        assert_eq!(table.init_state(), ProcessState::BlockedOnChild);
-        assert_eq!(table.child_state(), ProcessState::Running);
+        assert_eq!(table.init_state(), PROCESS_STATE_BLOCKED_ON_CHILD);
+        assert_eq!(table.child_state(), PROCESS_STATE_RUNNING);
     }
 
     #[test]
@@ -888,8 +1289,8 @@ mod tests {
 
         assert_eq!(resumed.id, ProcessId::Init);
         assert_eq!(resumed.child_exit_status, 7);
-        assert_eq!(table.init_state(), ProcessState::Running);
-        assert_eq!(table.child_state(), ProcessState::Empty);
+        assert_eq!(table.init_state(), PROCESS_STATE_RUNNING);
+        assert_eq!(table.child_state(), PROCESS_STATE_EMPTY);
     }
 
     #[test]
@@ -966,6 +1367,73 @@ mod tests {
     }
 
     #[test]
+    fn child_arena_rejects_program_that_would_overlap_live_init_stack() {
+        let image = k16_boot_chain::LoadedImage {
+            entry_pc: 0x0001_0000,
+            load_addr: 0x0001_0000,
+            load_end: 0x0001_0a20,
+        };
+        let mut table = ProcessTable::new(ProcessContext {
+            entry_pc: 0,
+            stack_top: 0,
+        });
+        table
+            .initialize_init_image(image)
+            .expect("init image records");
+        let mut init_frame = TrapFrame::zeroed();
+        init_frame.stack_pointer = 0x0001_0b00;
+
+        let arena = table
+            .child_arena_for_init_frame(init_frame)
+            .expect("arena records live init stack boundary");
+        assert_eq!(
+            plan_dynamic_user_load(
+                arena,
+                DynamicUserImage {
+                    entry_offset: 0,
+                    file_size: 0x400,
+                    memory_size: 0x400,
+                },
+            ),
+            Err(ProcessLoadError::ProgramTooLarge)
+        );
+    }
+
+    #[test]
+    fn child_arena_uses_live_init_stack_as_child_stack_top() {
+        let image = k16_boot_chain::LoadedImage {
+            entry_pc: 0x0001_0000,
+            load_addr: 0x0001_0000,
+            load_end: 0x0001_0a20,
+        };
+        let mut table = ProcessTable::new(ProcessContext {
+            entry_pc: 0,
+            stack_top: 0,
+        });
+        table
+            .initialize_init_image(image)
+            .expect("init image records");
+        let mut init_frame = TrapFrame::zeroed();
+        init_frame.stack_pointer = 0x0001_2000;
+
+        let arena = table
+            .child_arena_for_init_frame(init_frame)
+            .expect("arena uses live init stack boundary");
+        let plan = plan_dynamic_user_load(
+            arena,
+            DynamicUserImage {
+                entry_offset: 0,
+                file_size: 0x400,
+                memory_size: 0x400,
+            },
+        )
+        .expect("small child fits between loaded init and init stack top");
+
+        assert_eq!(plan.load_base, 0x0001_0a20);
+        assert_eq!(plan.stack_top, 0x0001_2000);
+    }
+
+    #[test]
     fn run_status_maps_load_and_switch_errors_to_negative_syscall_statuses() {
         assert_eq!(
             run_status_from_load_error(ProcessLoadError::InvalidPath),
@@ -976,8 +1444,28 @@ mod tests {
             k16_abi::syscall::ERROR_EXEC_FORMAT
         );
         assert_eq!(
+            run_status_from_load_error(ProcessLoadError::AddressOverflow),
+            k16_abi::syscall::ERROR_EXEC_FORMAT
+        );
+        assert_eq!(
+            run_status_from_load_error(ProcessLoadError::InvalidArena),
+            k16_abi::syscall::ERROR_NO_MEMORY
+        );
+        assert_eq!(
+            run_status_from_load_error(ProcessLoadError::ProgramTooLarge),
+            k16_abi::syscall::ERROR_NO_MEMORY
+        );
+        assert_eq!(
+            run_status_from_load_error(ProcessLoadError::Storage),
+            k16_abi::syscall::ERROR_NO_ENTRY
+        );
+        assert_eq!(
             run_status_from_switch_error(ProcessSwitchError::ChildAlreadyRunning),
             k16_abi::syscall::ERROR_BUSY
+        );
+        assert_eq!(
+            run_status_from_switch_error(ProcessSwitchError::NoRunningChild),
+            k16_abi::syscall::ERROR_INVALID
         );
     }
 }

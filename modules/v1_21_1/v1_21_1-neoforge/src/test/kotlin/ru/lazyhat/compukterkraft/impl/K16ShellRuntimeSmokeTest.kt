@@ -50,16 +50,28 @@ class K16ShellRuntimeSmokeTest {
             dispatchText(device, "ticks\n")
             waitForTerminalText(device, "TICKS ")
 
+            dispatchText(device, "uname\n")
+            waitForTerminal(device, "uname output and returned prompt") { terminal ->
+                val unameCommandIndex = terminal.indexOf("INIT> uname")
+                val unameOutputIndex = terminal.indexOf("K16", startIndex = unameCommandIndex + "INIT> uname".length)
+                val returnedPromptIndex = terminal.indexOf("INIT> ", startIndex = unameOutputIndex)
+                unameCommandIndex >= 0 && unameOutputIndex > unameCommandIndex && returnedPromptIndex > unameOutputIndex
+            }
+
             val terminal = terminalText(requireNotNull(device.snapshotRuntimeState()))
             val promptIndex = terminal.indexOf("INIT> ")
             val echoOutputIndex = terminal.indexOf("abc", startIndex = promptIndex)
             val ticksOutputIndex = terminal.indexOf("TICKS ", startIndex = echoOutputIndex)
-            val returnedPromptIndex = terminal.indexOf("INIT> ", startIndex = ticksOutputIndex)
+            val unameCommandIndex = terminal.indexOf("INIT> uname", startIndex = ticksOutputIndex)
+            val unameOutputIndex = terminal.indexOf("K16", startIndex = unameCommandIndex + "INIT> uname".length)
+            val returnedPromptIndex = terminal.indexOf("INIT> ", startIndex = unameOutputIndex)
             assertTrue(
                 promptIndex >= 0 &&
                     echoOutputIndex > promptIndex &&
                     ticksOutputIndex > echoOutputIndex &&
-                    returnedPromptIndex > ticksOutputIndex,
+                    unameCommandIndex > ticksOutputIndex &&
+                    unameOutputIndex > unameCommandIndex &&
+                    returnedPromptIndex > unameOutputIndex,
                 "userland init should dispatch shell commands through fd stdin/stdout and return a prompt; terminal: $terminal",
             )
         } finally {
@@ -100,15 +112,22 @@ class K16ShellRuntimeSmokeTest {
     private fun waitForTerminalText(
         device: K16RuntimeDevice,
         expected: String,
+    ) = waitForTerminal(device, "'$expected'") { terminal -> terminal.contains(expected) }
+
+    private fun waitForTerminal(
+        device: K16RuntimeDevice,
+        description: String,
+        predicate: (String) -> Boolean,
     ) {
         repeat(80) {
             tickAndSync(device)
             val snapshot = device.snapshotRuntimeState()
-            if (snapshot != null && terminalText(snapshot).contains(expected)) return
+            if (snapshot != null && predicate(terminalText(snapshot))) return
             Thread.sleep(10)
         }
-        val terminal = device.snapshotRuntimeState()?.let(::terminalText) ?: "<no snapshot>"
-        error("K16 shell runtime smoke did not observe '$expected'; terminal: $terminal")
+        val snapshot = device.snapshotRuntimeState()
+        val terminal = snapshot?.let(::terminalText) ?: "<no snapshot>"
+        error("K16 shell runtime smoke did not observe $description; terminal: $terminal")
     }
 
     private fun tickAndSync(device: K16RuntimeDevice) {
