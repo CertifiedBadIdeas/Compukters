@@ -5,8 +5,9 @@ use k16_vm::computer_machine::{
 };
 use k16_vm::k16::{
     K16Signal, K16_CSR_INTERRUPT_ENABLE, K16_CSR_INTERRUPT_MASK, K16_CSR_TRAP_VALUE,
-    K16_CSR_TRAP_VECTOR, K16_INTERRUPT_SOURCE_TIMER0,
+    K16_CSR_TRAP_VECTOR, K16_INTERRUPT_SOURCE_TIMER0, K16_STACK_POINTER_REGISTER,
 };
+use k16_vm::mmu::MmuMapFlags;
 
 const CONTROL_DEVICE_RECORD_SIZE: usize = 20;
 const EMPTY_DEBUG_DEVICE_RECORD_SIZE: usize = 8;
@@ -184,6 +185,79 @@ fn computer_machine_snapshot_v1_preserves_k16_trap_args() {
     assert_eq!(cpu.trap_arg0, 0x21);
     assert_eq!(cpu.trap_arg1, 0x22);
     assert_eq!(cpu.trap_arg2, 0x23);
+}
+
+#[test]
+fn computer_machine_snapshot_v1_preserves_k16_trap_kernel_stack_pointer() {
+    const RAM_SIZE: usize = 0x5000;
+    const KERNEL_PC: u32 = 0x0100;
+    const USER_VIRTUAL_PC: u32 = 0x4000;
+    const USER_CODE_PHYSICAL: u32 = 0x1000;
+    const KERNEL_STACK_TOP: u32 = 0x3800;
+    const USER_STACK_TOP: u32 = 0x9000;
+
+    let kernel = k16_words(&[
+        const32(1),
+        ComputerMachine::CONTROL_YIELD as u16,
+        (ComputerMachine::CONTROL_YIELD >> 16) as u16,
+        const4(2, 1),
+        store32(1, 2),
+        halt(),
+    ]);
+    let user = k16_words(&[wait()]);
+    let bios = k16_words(&[halt()]);
+    let (mut machine, _) =
+        ComputerMachine::from_k16_bios_flash(&bios, RAM_SIZE, 8).expect("machine creates");
+    machine.write_guest_ram_bytes(KERNEL_PC, &kernel).unwrap();
+    machine
+        .write_guest_ram_bytes(USER_CODE_PHYSICAL, &user)
+        .unwrap();
+    let address_space = machine.create_mmu_address_space().unwrap();
+    machine
+        .map_mmu_pages(
+            address_space,
+            USER_VIRTUAL_PC,
+            USER_CODE_PHYSICAL,
+            1,
+            MmuMapFlags::USER_ACCESSIBLE | MmuMapFlags::EXECUTABLE,
+        )
+        .unwrap();
+    let boot_cpu = machine
+        .boot_handoff_k16_from_ram_with_stack(KERNEL_PC, kernel.len() as u32, 32, KERNEL_STACK_TOP)
+        .expect("boot handoff succeeds");
+    machine
+        .bus_store_i32(
+            ComputerMachine::MMU0_ADDRESS_SPACE,
+            address_space.raw() as i32,
+        )
+        .unwrap();
+    machine
+        .bus_store_i32(ComputerMachine::MMU0_ENTRY_PC, USER_VIRTUAL_PC as i32)
+        .unwrap();
+    machine
+        .bus_store_i32(ComputerMachine::MMU0_STACK_POINTER, USER_STACK_TOP as i32)
+        .unwrap();
+    machine
+        .bus_store_i32(
+            ComputerMachine::MMU0_COMMAND,
+            ComputerMachine::MMU0_COMMAND_ACTIVATE_USER_ADDRESS_SPACE,
+        )
+        .unwrap();
+
+    assert_eq!(
+        machine.run_boot_k16_until_signal(boot_cpu).unwrap(),
+        K16Signal::Wait
+    );
+
+    let snapshot = machine.snapshot_v1().expect("snapshot encodes");
+    let decoded = decode_snapshot_v1(&snapshot).expect("snapshot decodes");
+    let ComputerCpuSnapshotRecord::K16 { cpu, .. } = &decoded.cpus[0];
+
+    assert_eq!(cpu.trap_kernel_stack_pointer, KERNEL_STACK_TOP);
+    assert_eq!(
+        cpu.registers[usize::from(K16_STACK_POINTER_REGISTER)],
+        USER_STACK_TOP
+    );
 }
 
 #[test]
@@ -561,6 +635,10 @@ fn const32(dst: u16) -> u16 {
 
 fn store32(addr: u16, src: u16) -> u16 {
     0x5002 | (addr << 8) | (src << 4)
+}
+
+fn wait() -> u16 {
+    0x0006
 }
 
 fn read_csr(dst: u16, csr: u32) -> u16 {

@@ -207,8 +207,10 @@ fn k16_syscall_from_translated_user_enters_physical_kernel_and_iret_restores_use
     const USER_PHYSICAL_PC: u32 = 0x1000;
     const USER_PHYSICAL_DATA: u32 = 0x2000;
     const HANDLER_PHYSICAL_PROOF: u32 = 0x3000;
+    const HANDLER_PHYSICAL_STACK_PROOF: u32 = 0x3004;
     const USER_VIRTUAL_PC: u32 = 0x4000;
     const USER_VIRTUAL_DATA: u32 = 0x8000;
+    const KERNEL_STACK_TOP: u32 = 0x3800;
     const USER_STACK_TOP: u32 = 0x9000;
     const RETURN_VALUE: u32 = 0x1234_5678;
 
@@ -240,6 +242,9 @@ fn k16_syscall_from_translated_user_enters_physical_kernel_and_iret_restores_use
             const32(1, HANDLER_PC)[1],
             const32(1, HANDLER_PC)[2],
             write_csr(K16_CSR_TRAP_VECTOR, 1),
+            const32(K16_STACK_POINTER_REGISTER, KERNEL_STACK_TOP)[0],
+            const32(K16_STACK_POINTER_REGISTER, KERNEL_STACK_TOP)[1],
+            const32(K16_STACK_POINTER_REGISTER, KERNEL_STACK_TOP)[2],
             wait(),
         ],
     );
@@ -252,6 +257,10 @@ fn k16_syscall_from_translated_user_enters_physical_kernel_and_iret_restores_use
             const32(8, HANDLER_PHYSICAL_PROOF)[1],
             const32(8, HANDLER_PHYSICAL_PROOF)[2],
             store32(8, 3),
+            const32(8, HANDLER_PHYSICAL_STACK_PROOF)[0],
+            const32(8, HANDLER_PHYSICAL_STACK_PROOF)[1],
+            const32(8, HANDLER_PHYSICAL_STACK_PROOF)[2],
+            store32(8, K16_STACK_POINTER_REGISTER),
             const32(0, RETURN_VALUE)[0],
             const32(0, RETURN_VALUE)[1],
             const32(0, RETURN_VALUE)[2],
@@ -290,8 +299,16 @@ fn k16_syscall_from_translated_user_enters_physical_kernel_and_iret_restores_use
         K16_TRAP_CAUSE_EXPLICIT_TRAP,
     );
     assert_eq!(
+        bus.load_i32(HANDLER_PHYSICAL_STACK_PROOF).unwrap() as u32,
+        KERNEL_STACK_TOP,
+    );
+    assert_eq!(
         bus.load_i32(USER_PHYSICAL_DATA).unwrap() as u32,
         RETURN_VALUE
+    );
+    assert_eq!(
+        cpu.register(K16_STACK_POINTER_REGISTER as usize),
+        USER_STACK_TOP,
     );
     assert_eq!(
         cpu.address_mode(),

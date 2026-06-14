@@ -37,7 +37,7 @@ offset  size  field
 The fixed payload prefix must contain:
 
 ```text
-header_size + ram_size + cpu_count * 204
+header_size + ram_size + cpu_count * 208
 ```
 
 The final file size is that fixed prefix plus the decoded sizes of all device
@@ -68,6 +68,7 @@ offset  size  field
 0x84    4     trap_arg1
 0x88    4     trap_arg2
 0x8C    64    saved trap registers r0..r15, 32-bit each
+0xCC    4     trap_kernel_stack_pointer
 ```
 
 `max_steps` must be non-zero when restoring a CPU context. The trapped state is
@@ -79,7 +80,9 @@ preserve captured syscall arguments while the CPU is inside a synchronous
 syscall trap; they are `0` for non-syscall traps and interrupts. Saved trap
 registers preserve the interrupted register frame so `iret` after restore can
 resume guest code with the same user registers, except for the `r0` return value
-written by the trap handler.
+written by the trap handler. `trap_kernel_stack_pointer` is the physical kernel
+stack pointer captured when translated user execution was activated; trap entry
+from translated user execution switches the live stack pointer to this value.
 
 ## Device Record Layout
 

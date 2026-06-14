@@ -480,15 +480,19 @@ the host. Otherwise the CPU records `trap_cause`, `trap_pc`, and `trap_value`,
 then saves the interrupted register frame, stack pointer, interrupt state,
 address mode, and privilege mode. Trap entry then switches execution to
 physical/kernel mode and sets `pc = trap_vector`, so a translated user program
-enters a physical-mode kernel handler.
+enters a physical-mode kernel handler. If the trap interrupted translated user
+execution, the live stack pointer is also switched to the kernel stack pointer
+captured when that user address space was activated; `trap_stack_pointer`
+continues to hold the interrupted user stack pointer for `iret`.
 
 The `syscall rA` instruction is the returning explicit-trap entry for guest
 OS services. It records `trap_cause = 0x00000005`,
 `trap_value = rA`, and `trap_pc` as the next instruction after `syscall`, then
 records the current stack pointer as `trap_stack_pointer` and enters
 `trap_vector` in physical/kernel mode with interrupt delivery disabled until
-`iret`. A kernel handler can complete the service and use `iret` to resume the
-caller after the `syscall` instruction.
+`iret`. For translated user callers, the handler starts on the saved kernel
+stack rather than the interrupted user stack. A kernel handler can complete the
+service and use `iret` to resume the caller after the `syscall` instruction.
 
 The initial K16 syscall ABI v0 is a guest/runtime convention layered on this
 CPU instruction. The CPU does not decode syscall tables. `k16-rt`
