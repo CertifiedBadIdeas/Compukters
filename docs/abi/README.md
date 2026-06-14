@@ -16,6 +16,8 @@ Current specifications:
   bootloader, kernel, and user-space program images.
 - `k16-cpu-v1.md`: experimental K16 CPU ABI, including the register file and
   stack pointer convention.
+- `k16-virtual-memory-v1.md`: planned K16 virtual-memory and process
+  address-space contract for a later CPU/MMU ABI slice.
 - `k16-storage-volume-v1.md`: current storage0 volume and partitioned `K16PT`
   layout.
 - `k16fs-v1.md`: extent-based filesystem targeted for the `ROOT` partition in
