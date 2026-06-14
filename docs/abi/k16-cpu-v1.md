@@ -522,8 +522,10 @@ K16 syscall ABI v0 names the current Rust-kernel proof services in
 | `SLEEP_TICKS` | `5` | `k16_rt::sleep_ticks_syscall(ticks)` | Kernel waits until `timer0.game_ticks` advances by `ticks`, then returns `STATUS_OK`. |
 | `EXIT` | `6` | `k16_rt::exit_syscall(status)` | Terminates the current process. With no child process active, the kernel halts the VM with the supplied status; when a child is running under the kernel process model, the status is returned to the blocked init process. |
 | `WRITE` | `7` | `k16_rt::write_syscall(fd, ptr, len)` | Writes bytes from guest memory to fd `1` or `2`; returns byte count or a negative K16 error. |
-| `READ` | `8` | `k16_rt::read_syscall(fd, ptr, len)` | Reads bytes from fd `0` into guest memory; blocks by waiting until input is available, then returns byte count or a negative K16 error. |
+| `READ` | `8` | `k16_rt::read_syscall(fd, ptr, len)` | Reads bytes from fd `0` or an open regular file fd into guest memory; stdin blocks by waiting until input is available, regular files advance their descriptor offset, and the syscall returns byte count or a negative K16 error. |
 | `RUN` | `9` | `k16_rt::run_syscall(path, len)` | Synchronously loads a dynamic `/bin/*.kx` user program from `ROOT`/K16FS on `storage0`, blocks init while the child runs, and returns the child exit status or a negative K16 error. |
+| `OPEN` | `10` | `k16_rt::open_syscall(path, len, flags)` | Opens an absolute read-only ROOT/K16FS regular file path from `storage0`; `flags` must be `0`, and success returns a regular file fd starting at `3`. |
+| `CLOSE` | `11` | `k16_rt::close_syscall(fd)` | Closes a regular file fd. Standard descriptors `0..=2` are not closeable. |
 | `DEBUG_MARKER_RETURN` | `0x53` | n/a | Proof return value for `DEBUG_MARKER`. |
 | `STATUS_OK` | `0` | n/a | Successful proof-service status. |
 | `FD_STDIN` | `0` | n/a | Standard input descriptor accepted by `READ`. |
@@ -535,6 +537,7 @@ K16 syscall ABI v0 names the current Rust-kernel proof services in
 | `ERROR_FAULT` | `0xffff_fff2` | n/a | Negative K16 error value corresponding to POSIX-aware `EFAULT` semantics. |
 | `ERROR_INVALID` | `0xffff_ffea` | n/a | Negative K16 error value corresponding to POSIX-aware `EINVAL` semantics. |
 | `ERROR_NO_ENTRY` | `0xffff_fffe` | n/a | Negative K16 error value corresponding to POSIX-aware `ENOENT` semantics. |
+| `ERROR_NO_FD` | `0xffff_ffe8` | n/a | Negative K16 error value used when no regular file descriptor slot is available. |
 | `ERROR_NO_MEMORY` | `0xffff_fff4` | n/a | Negative K16 error value corresponding to POSIX-aware `ENOMEM` semantics. |
 
 These names describe the current ABI proof surface. They are not a complete OS

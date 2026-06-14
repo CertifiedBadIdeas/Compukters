@@ -1,6 +1,6 @@
 use k16_abi::syscall as abi_syscall;
 
-use crate::{console, control, debug, process, stdin, timer, trap};
+use crate::{console, control, debug, fs, process, stdin, timer, trap};
 
 pub fn dispatch(number: u32) -> ! {
     match number {
@@ -16,6 +16,7 @@ pub fn dispatch(number: u32) -> ! {
         abi_syscall::EXIT => {
             let status = k16_rt::syscall_arg0();
             if let Ok(resume) = unsafe { process::finish_child_for_exit(status) } {
+                unsafe { fs::close_all_file_fds() };
                 unsafe { process::resume_init_context(resume) }
             }
             control::set_exit_code(status);
@@ -37,6 +38,22 @@ pub fn dispatch(number: u32) -> ! {
             let len = k16_rt::syscall_arg2();
             match read_fd(fd, ptr, len) {
                 Ok(read) => unsafe { k16_rt::iret_with_r0(read) },
+                Err(error) => unsafe { k16_rt::iret_with_r0(error) },
+            }
+        }
+        abi_syscall::OPEN => {
+            let ptr = k16_rt::syscall_arg0();
+            let len = k16_rt::syscall_arg1();
+            let flags = k16_rt::syscall_arg2();
+            match open_fd(ptr, len, flags) {
+                Ok(fd) => unsafe { k16_rt::iret_with_r0(fd) },
+                Err(error) => unsafe { k16_rt::iret_with_r0(error) },
+            }
+        }
+        abi_syscall::CLOSE => {
+            let fd = k16_rt::syscall_arg0();
+            match close_fd(fd) {
+                Ok(()) => unsafe { k16_rt::iret_with_r0(abi_syscall::STATUS_OK) },
                 Err(error) => unsafe { k16_rt::iret_with_r0(error) },
             }
         }
@@ -68,10 +85,32 @@ fn write_fd(fd: u32, ptr: u32, len: u32) -> Result<u32, u32> {
 }
 
 fn read_fd(fd: u32, ptr: u32, len: u32) -> Result<u32, u32> {
+    if len == 0 {
+        return Ok(0);
+    }
+    if !valid_guest_buffer(ptr, len) {
+        return Err(abi_syscall::ERROR_FAULT);
+    }
     match fd {
         abi_syscall::FD_STDIN => stdin::read(ptr, len),
-        _ => Err(abi_syscall::ERROR_BAD_FD),
+        abi_syscall::FD_STDOUT | abi_syscall::FD_STDERR => Err(abi_syscall::ERROR_BAD_FD),
+        _ => unsafe { fs::read_file_fd(fd, ptr, len).map_err(fs_error_to_status) },
     }
+}
+
+fn open_fd(ptr: u32, len: u32, flags: u32) -> Result<u32, u32> {
+    if len == 0 || len > fs::MAX_OPEN_PATH_BYTES {
+        return Err(abi_syscall::ERROR_INVALID);
+    }
+    if !valid_guest_buffer(ptr, len) {
+        return Err(abi_syscall::ERROR_FAULT);
+    }
+    let path = unsafe { core::slice::from_raw_parts(ptr as usize as *const u8, len as usize) };
+    unsafe { fs::open_root_file(path, flags).map_err(fs_error_to_status) }
+}
+
+fn close_fd(fd: u32) -> Result<(), u32> {
+    unsafe { fs::close_file_fd(fd).map_err(fs_error_to_status) }
 }
 
 fn prepare_run(ptr: u32, len: u32) -> Result<process::ChildLaunch, u32> {
@@ -107,4 +146,15 @@ fn valid_guest_buffer(ptr: u32, len: u32) -> bool {
         return false;
     };
     ptr >= 0x0001_0000 && end <= 0x0002_0000
+}
+
+fn fs_error_to_status(error: fs::FsError) -> u32 {
+    match error {
+        fs::FsError::BadFd => abi_syscall::ERROR_BAD_FD,
+        fs::FsError::Fault => abi_syscall::ERROR_FAULT,
+        fs::FsError::InvalidPath | fs::FsError::InvalidFlags => abi_syscall::ERROR_INVALID,
+        fs::FsError::NoEntry => abi_syscall::ERROR_NO_ENTRY,
+        fs::FsError::NoFd => abi_syscall::ERROR_NO_FD,
+        fs::FsError::Storage => abi_syscall::ERROR_NO_ENTRY,
+    }
 }

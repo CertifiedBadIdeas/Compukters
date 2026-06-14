@@ -9,6 +9,7 @@ pub enum Command<'a> {
     Clear,
     Ticks,
     Uname,
+    Cat,
     Echo(&'a [u8]),
     Unknown,
 }
@@ -76,6 +77,8 @@ pub fn classify_line(input: &[u8], line_len: usize) -> Command<'_> {
         Command::Ticks
     } else if matches_command(input, b"uname") {
         Command::Uname
+    } else if matches_command(input, b"cat") {
+        Command::Cat
     } else if is_echo_command(input, line_len) {
         let start = if line_len > 4 { 5 } else { 4 };
         Command::Echo(&input[start..line_len])
@@ -131,5 +134,15 @@ mod tests {
         }
 
         assert_eq!(line.command(), Command::Uname);
+    }
+
+    #[test]
+    fn cat_command_is_recognized_as_process_run_utility() {
+        let mut line = InputLine::new();
+        for byte in b"cat" {
+            assert!(line.push_printable(*byte));
+        }
+
+        assert_eq!(line.command(), Command::Cat);
     }
 }

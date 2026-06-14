@@ -455,7 +455,7 @@ fn k16_runtime_syscall3_helper_captures_stack_argument_at_runtime() {
 fn k16_runtime_fd_syscall_helpers_do_not_require_stack_arguments() {
     let helper_object = k16_runtime::k16_cpu_helpers_object();
 
-    for (number, name) in [(7_u32, "write"), (8_u32, "read")] {
+    for (number, name) in [(7_u32, "write"), (8_u32, "read"), (10_u32, "open")] {
         let mut expected_words = Vec::new();
         expected_words.extend(push_register(1));
         expected_words.extend(push_register(2));
@@ -483,6 +483,31 @@ fn k16_runtime_fd_syscall_helpers_do_not_require_stack_arguments() {
             "{name} syscall helper must pass fd/ptr/len without a stack-passed fourth argument",
         );
     }
+}
+
+#[test]
+fn k16_runtime_close_syscall_helper_uses_fixed_number_and_fd_argument() {
+    let helper_object = k16_runtime::k16_cpu_helpers_object();
+    let mut expected_words = Vec::new();
+    expected_words.extend(push_register(1));
+    expected_words.extend(push_register(2));
+    expected_words.extend(push_scratch_register());
+    expected_words.extend(const32(14, 0));
+    expected_words.extend(add(2, 1, 14));
+    expected_words.extend(const32(1, 11));
+    expected_words.push(syscall(1));
+    expected_words.extend(pop_scratch_register());
+    expected_words.extend(pop_register(2));
+    expected_words.extend(pop_register(1));
+    expected_words.push(ret());
+    let expected_bytes = words_to_bytes(&expected_words);
+
+    assert!(
+        helper_object
+            .windows(expected_bytes.len())
+            .any(|window| window == expected_bytes.as_slice()),
+        "close syscall helper must pass fd as arg0 with the fixed CLOSE syscall number",
+    );
 }
 
 #[test]
