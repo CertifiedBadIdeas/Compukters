@@ -60,6 +60,60 @@ fn active_abi_index_lists_k16_object_contract() {
 }
 
 #[test]
+fn k16_abi_conformance_matrix_docs_list_supported_backend_contracts() {
+    let matrix = normalized_doc("docs/abi/k16-abi-conformance-matrix.md");
+    let index = normalized_doc("docs/abi/README.md");
+    let toolchain_docs = normalized_doc("docs/toolchains/k16-prebuilt-toolchain.md");
+
+    for required in [
+        "K16 ABI Conformance Matrix",
+        "scalar arguments and returns",
+        "stack-passed arguments",
+        "multi-register returns",
+        "small aggregate returns",
+        "aggregate-by-value arguments",
+        "global-address addends",
+        "static aggregate field addresses",
+        "memory helper libcalls",
+        "runtime helper symbols",
+        "struct returns are unsupported",
+        "varargs are unsupported",
+        "dynamic linking is unsupported",
+        "call-stack-args.ll",
+        "multi-return-registers.ll",
+        "aggregate-byvalue.ll",
+        "aggregate-static-frame.ll",
+        "global-address-offset.ll",
+        "mem-intrinsics.ll",
+        "k16_runtime_cli",
+        "k16_rust_smoke_artifacts",
+        ".toolchain/build/llvm/k16-min/bin/llvm-lit toolchains/Compukter-Kraft-llvm/llvm/test/CodeGen/K16",
+    ] {
+        assert!(
+            matrix.contains(required),
+            "K16 ABI conformance matrix must contain `{required}`"
+        );
+    }
+
+    assert!(
+        index.contains("k16-abi-conformance-matrix.md"),
+        "active ABI index must list k16-abi-conformance-matrix.md"
+    );
+    assert!(
+        toolchain_docs.contains("k16-abi-conformance-matrix.md"),
+        "prebuilt toolchain docs must link the K16 ABI conformance matrix"
+    );
+    assert!(
+        toolchain_docs.contains("cargo test --test k16_runtime_cli"),
+        "prebuilt toolchain docs must name the runtime CLI smoke command"
+    );
+    assert!(
+        toolchain_docs.contains("cargo test --test k16_rust_smoke_artifacts"),
+        "prebuilt toolchain docs must name the Rust smoke artifact command"
+    );
+}
+
+#[test]
 fn k16_object_abi_docs_define_freestanding_runtime_boundary() {
     let docs = normalized_doc("docs/abi/k16-object-v1.md");
 

@@ -8,6 +8,8 @@ chosen, but the files here are the current references for firmware and tooling.
 
 Current specifications:
 
+- `k16-abi-conformance-matrix.md`: maintainer checklist mapping supported
+  K16 ABI patterns to lit, Rust smoke, and documentation tests.
 - `k16-object-v1.md`: experimental ELF32 relocatable object ABI for external
   K16 toolchains before final `K16E` linking.
 - `k16e-v1.md`: experimental guest-loadable executable container for K16
