@@ -4,9 +4,9 @@
 
 - Added the planned K16 virtual-memory/address-space ABI direction. The current
   VM remains physical-memory-only, but the documented direction is a small
-  user-translated process model: physical BIOS/boot/kernel execution, 4 KiB
-  user pages, kernel-owned page tables, page-fault traps, and explicit kernel
-  copy helpers for user syscall buffers.
+  user-translated process model: physical BIOS/boot/kernel execution, 1 KiB
+  user pages, host-managed address-space maps, page-fault traps, and explicit
+  kernel copy helpers for user syscall buffers.
 - K16 host tooling no longer caps bootloader and kernel `K16E` payloads at the
   next fixed-image load base. Their fixed load bases remain unchanged, loaders
   still validate encoded address ranges, and the fixed-image
