@@ -59,6 +59,15 @@ pub fn dispatch(number: u32) -> ! {
                 Err(error) => unsafe { k16_rt::iret_with_r0(error) },
             }
         }
+        abi_syscall::STAT => {
+            let ptr = k16_rt::syscall_arg0();
+            let len = k16_rt::syscall_arg1();
+            let out_ptr = k16_rt::syscall_arg2();
+            match stat_path(ptr, len, out_ptr) {
+                Ok(()) => unsafe { k16_rt::iret_with_r0(abi_syscall::STATUS_OK) },
+                Err(error) => unsafe { k16_rt::iret_with_r0(error) },
+            }
+        }
         abi_syscall::CLOSE => {
             let fd = k16_rt::syscall_arg0();
             match close_fd(fd) {
@@ -166,6 +175,26 @@ fn read_dir(ptr: u32, len: u32) -> Result<u32, u32> {
     }
 }
 
+fn stat_path(ptr: u32, len: u32, out_ptr: u32) -> Result<(), u32> {
+    if len == 0 || len > fs::MAX_STAT_PATH_BYTES {
+        return Err(abi_syscall::ERROR_INVALID);
+    }
+    if !valid_guest_buffer(ptr, len)
+        || !valid_guest_buffer(out_ptr, abi_syscall::STAT_METADATA_BYTES as u32)
+    {
+        return Err(abi_syscall::ERROR_FAULT);
+    }
+    let path = unsafe { core::slice::from_raw_parts(ptr as usize as *const u8, len as usize) };
+    let metadata = unsafe { fs::stat_root_path(path).map_err(fs_error_to_status)? };
+    unsafe {
+        write_u32_le(out_ptr, metadata.file_type);
+        write_u32_le(out_ptr + 4, metadata.size_bytes);
+        write_u32_le(out_ptr + 8, 0);
+        write_u32_le(out_ptr + 12, 0);
+    }
+    Ok(())
+}
+
 fn close_fd(fd: u32) -> Result<(), u32> {
     match unsafe { fs::close_file_fd_for_process(current_process_id(), fd) } {
         Ok(()) => Ok(()),
@@ -228,7 +257,7 @@ fn valid_guest_buffer(ptr: u32, len: u32) -> bool {
     let Some(end) = ptr.checked_add(len) else {
         return false;
     };
-    ptr >= 0x0001_0000 && end <= 0x0002_4000
+    ptr >= 0x0001_0000 && end <= 0x0002_5000
 }
 
 fn read_u32_le(bytes: &[u8], offset: usize) -> u32 {
@@ -238,6 +267,17 @@ fn read_u32_le(bytes: &[u8], offset: usize) -> u32 {
         bytes[offset + 2],
         bytes[offset + 3],
     ])
+}
+
+unsafe fn write_u32_le(ptr: u32, value: u32) {
+    let bytes = value.to_le_bytes();
+    let mut offset = 0;
+    while offset < bytes.len() {
+        unsafe {
+            core::ptr::write_volatile((ptr + offset as u32) as usize as *mut u8, bytes[offset]);
+        }
+        offset += 1;
+    }
 }
 
 fn fs_error_to_status(error: fs::FsError) -> u32 {

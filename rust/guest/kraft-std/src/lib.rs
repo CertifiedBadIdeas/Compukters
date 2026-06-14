@@ -105,6 +105,18 @@ pub mod fs {
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     pub struct File(u32);
 
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub enum FileType {
+        Regular,
+        Directory,
+    }
+
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub struct Metadata {
+        pub file_type: FileType,
+        pub size_bytes: u32,
+    }
+
     impl File {
         #[inline(always)]
         pub const fn from_raw(fd: u32) -> Self {
@@ -150,6 +162,18 @@ pub mod fs {
         Ok(returned as usize)
     }
 
+    pub fn metadata(path: &str) -> Result<Metadata, Error> {
+        if path.len() > k16_abi::syscall::MAX_STAT_PATH_BYTES {
+            return Err(Error::InvalidArgument);
+        }
+        let mut bytes = [0u8; k16_abi::syscall::STAT_METADATA_BYTES];
+        let returned = k16_rt::stat_syscall(path.as_ptr(), path.len(), bytes.as_mut_ptr());
+        if is_error_status(returned) {
+            return Err(Error::Syscall(returned));
+        }
+        Metadata::from_bytes(&bytes)
+    }
+
     struct ReadDirRequest {
         bytes: [u8; k16_abi::syscall::MAX_READ_DIR_REQUEST_BYTES],
         len: usize,
@@ -190,6 +214,29 @@ pub mod fs {
             self.len = end;
             Ok(())
         }
+    }
+
+    impl Metadata {
+        fn from_bytes(bytes: &[u8; k16_abi::syscall::STAT_METADATA_BYTES]) -> Result<Self, Error> {
+            let file_type = match read_u32_le(bytes, 0) {
+                k16_abi::syscall::FILE_TYPE_REGULAR => FileType::Regular,
+                k16_abi::syscall::FILE_TYPE_DIRECTORY => FileType::Directory,
+                _ => return Err(Error::InvalidArgument),
+            };
+            Ok(Self {
+                file_type,
+                size_bytes: read_u32_le(bytes, 4),
+            })
+        }
+    }
+
+    fn read_u32_le(bytes: &[u8], offset: usize) -> u32 {
+        u32::from_le_bytes([
+            bytes[offset],
+            bytes[offset + 1],
+            bytes[offset + 2],
+            bytes[offset + 3],
+        ])
     }
 
     #[inline(always)]

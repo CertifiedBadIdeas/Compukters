@@ -88,7 +88,7 @@ fn k16_runtime_startup_links_returning_main_and_requires_exit_syscall_handler() 
 
     let program = fs::read(output_path).expect("linked program reads");
     let executable = k16e::decode_k16_executable(&program).expect("linked K16E decodes");
-    assert_eq!(executable.entry_pc, 0x1_2000);
+    assert_eq!(executable.entry_pc, 0x1_3000);
 
     let mut handle = K16ComputerHandle::create_k16_bios_flash(
         &[0x01, 0x00],

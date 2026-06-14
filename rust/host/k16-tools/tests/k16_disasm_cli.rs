@@ -66,8 +66,8 @@ fn k16_disasm_prints_program_window_without_decoding_following_data() {
         k16_tools::k16e::encode_k16_executable(
             &words_to_bytes(&[const4(1, 7), halt(), 0x316b]),
             k16_tools::k16e::K16eAbiKind::Program,
-            0x1_2000,
-            0x1_2000,
+            0x1_3000,
+            0x1_3000,
         )
         .expect("K16E encodes"),
     )
@@ -79,7 +79,7 @@ fn k16_disasm_prints_program_window_without_decoding_following_data() {
             "--target",
             "program",
             "--start",
-            "0x00012000",
+            "0x00013000",
             "--count",
             "2",
             artifact_path.to_str().unwrap(),
@@ -94,10 +94,10 @@ fn k16_disasm_prints_program_window_without_decoding_following_data() {
     );
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
-        stdout.contains("00012000: 1107  const4 r1, 7"),
+        stdout.contains("00013000: 1107  const4 r1, 7"),
         "stdout: {stdout}"
     );
-    assert!(stdout.contains("00012002: 0001  halt"), "stdout: {stdout}");
+    assert!(stdout.contains("00013002: 0001  halt"), "stdout: {stdout}");
     assert!(!stdout.contains("316b"), "stdout: {stdout}");
 }
 

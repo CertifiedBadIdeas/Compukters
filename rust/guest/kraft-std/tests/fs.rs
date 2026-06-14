@@ -85,6 +85,37 @@ fn fs_read_dir_rejects_too_long_path_before_syscall() {
 }
 
 #[test]
+fn fs_metadata_delegates_to_stat_syscall_and_reports_negative_status() {
+    k16_rt::host_test::reset_syscalls();
+    k16_rt::host_test::set_syscall_return(k16_rt::host_test::ERROR_NO_ENTRY);
+
+    let metadata = fs::metadata("/bin/cat.kx");
+
+    assert_eq!(
+        metadata,
+        Err(fs::Error::Syscall(k16_rt::host_test::ERROR_NO_ENTRY))
+    );
+    assert_eq!(k16_rt::host_test::syscall_number(), k16_rt::host_test::STAT);
+    assert_eq!(
+        k16_rt::host_test::syscall_arg0(),
+        "/bin/cat.kx".as_ptr() as usize as u32
+    );
+    assert_eq!(k16_rt::host_test::syscall_arg1(), 11);
+    assert_ne!(k16_rt::host_test::syscall_arg2(), 0);
+}
+
+#[test]
+fn fs_metadata_rejects_too_long_path_before_syscall() {
+    k16_rt::host_test::reset_syscalls();
+    let path = "x".repeat(k16_abi::syscall::MAX_STAT_PATH_BYTES + 1);
+
+    let metadata = fs::metadata(&path);
+
+    assert_eq!(metadata, Err(fs::Error::InvalidArgument));
+    assert_eq!(k16_rt::host_test::syscall_number(), 0);
+}
+
+#[test]
 fn fs_reports_negative_syscall_status_as_error() {
     k16_rt::host_test::reset_syscalls();
     k16_rt::host_test::set_syscall_return(k16_rt::host_test::ERROR_NO_ENTRY);

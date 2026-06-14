@@ -73,6 +73,7 @@ dependencies = [
 name = "k16-ls"
 version = "0.1.0"
 dependencies = [
+ "k16-abi",
  "kraft-std",
 ]
 

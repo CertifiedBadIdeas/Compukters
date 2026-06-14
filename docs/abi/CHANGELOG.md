@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Added read-only K16 path metadata syscall `STAT(path, len, metadata_ptr)`.
+  The kernel resolves absolute ROOT/K16FS paths on `storage0`, returns
+  `FILE_TYPE_REGULAR` or `FILE_TYPE_DIRECTORY` plus `size_bytes` in a fixed
+  16-byte response buffer, and maps missing paths to the existing negative K16
+  error statuses. `kraft-std::fs::metadata` exposes this to userland, and
+  bundled `/bin/ls.kx` uses it to mark directories with `/`.
 - Regular K16 filesystem descriptors are now owned by the foreground process
   that opened them. `READ` and `CLOSE` reject regular fds owned by another
   process, and `EXIT` releases only the exiting process's regular fds before
@@ -52,9 +58,9 @@
 - Added the K16 `RUN(path, len)` syscall for init-owned child process launch
   from `/bin/*.kx`, with negative K16 error status values for invalid paths,
   missing entries, invalid executables, no memory, and busy child state. The
-  active fixed-image program profile now starts at `0x00012000`, and the
-  default K16 VM RAM profile is 144 KiB with the first user stack top at
-  `0x00024000`, so the kernel has room for the dynamic-loader path before the
+  active fixed-image program profile now starts at `0x00013000`, and the
+  default K16 VM RAM profile is 148 KiB with the first user stack top at
+  `0x00025000`, so the kernel has room for the dynamic-loader path before the
   first user program without shrinking the foreground child arena.
 - K16E now has a v2 dynamic user-program extension for future kernel-selected
   userland load addresses. Dynamic `program` artifacts store an entry offset,

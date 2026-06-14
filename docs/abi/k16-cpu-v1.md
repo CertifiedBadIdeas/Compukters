@@ -394,7 +394,7 @@ by different layers:
 bios        firmware-owned temporary stack if needed
 boot        BIOS or boot entry contract initializes boot stack top
 kernel      bootloader passes or installs kernel stack top before entry
-program     compiler profile initializes the first user stack top at 0x00024000
+program     compiler profile initializes the first user stack top at 0x00025000
 ```
 
 The current implementation only reserves the convention and proves the memory
@@ -528,8 +528,12 @@ K16 syscall ABI v0 names the current Rust-kernel proof services in
 | `CLOSE` | `11` | `k16_rt::close_syscall(fd)` | Closes a regular file fd owned by the current foreground process. Standard descriptors `0..=2` are not closeable. |
 | `BRK` | `12` | `k16_rt::brk_syscall(addr)` | Sets the current foreground process program break to `addr` and returns the resulting break, or a negative K16 error. The break must stay inside the kernel-selected heap arena for that process. |
 | `SBRK` | `13` | `k16_rt::sbrk_syscall(delta)` | Grows the current foreground process program break by `delta` bytes and returns the previous break, or a negative K16 error. |
+| `READ_DIR` | `14` | `k16_rt::read_dir_syscall(request, len)` | Reads a ROOT/K16FS directory listing from `storage0` into a caller-provided buffer. The request is `u32 magic`, `u32 path_len`, `u32 out_ptr`, `u32 out_len`, followed by path bytes. |
+| `STAT` | `15` | `k16_rt::stat_syscall(path, len, metadata)` | Reads ROOT/K16FS path metadata from `storage0` into a 16-byte response buffer. Word 0 is `FILE_TYPE_REGULAR` or `FILE_TYPE_DIRECTORY`; word 1 is `size_bytes`; words 2 and 3 are reserved zero. |
 | `DEBUG_MARKER_RETURN` | `0x53` | n/a | Proof return value for `DEBUG_MARKER`. |
 | `STATUS_OK` | `0` | n/a | Successful proof-service status. |
+| `FILE_TYPE_REGULAR` | `1` | n/a | `STAT` response kind for a regular file. |
+| `FILE_TYPE_DIRECTORY` | `2` | n/a | `STAT` response kind for a directory. |
 | `FD_STDIN` | `0` | n/a | Standard input descriptor accepted by `READ`. |
 | `FD_STDOUT` | `1` | n/a | Standard output descriptor accepted by `WRITE`. |
 | `FD_STDERR` | `2` | n/a | Standard error descriptor accepted by `WRITE`. |
