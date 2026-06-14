@@ -37,14 +37,16 @@ impl KernelFileDescriptorTable {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum FsError {
-    BadFd,
-    Fault,
-    InvalidPath,
-    InvalidFlags,
-    NoEntry,
-    NoFd,
-    Storage,
+pub struct FsError(pub u32);
+
+#[allow(non_upper_case_globals)]
+impl FsError {
+    pub const BadFd: Self = Self(k16_abi::syscall::ERROR_BAD_FD);
+    pub const InvalidPath: Self = Self(k16_abi::syscall::ERROR_INVALID);
+    pub const InvalidFlags: Self = Self(k16_abi::syscall::ERROR_INVALID);
+    pub const NoEntry: Self = Self(k16_abi::syscall::ERROR_NO_ENTRY);
+    pub const NoFd: Self = Self(k16_abi::syscall::ERROR_NO_FD);
+    pub const Storage: Self = Self(k16_abi::syscall::ERROR_NO_ENTRY);
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -164,6 +166,7 @@ impl From<FileMetadata> for k16_storage::FileMetadata {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct FileDescriptor {
+    owner_pid: u32,
     metadata: FileMetadata,
     offset: u32,
 }
@@ -181,10 +184,19 @@ impl FileDescriptorTable {
     }
 
     pub fn open(&mut self, metadata: FileMetadata) -> Result<u32, FsError> {
+        self.open_for_process(0, metadata)
+    }
+
+    pub fn open_for_process(
+        &mut self,
+        owner_pid: u32,
+        metadata: FileMetadata,
+    ) -> Result<u32, FsError> {
         let mut index = 0;
         while index < self.slots.len() {
             if self.slots[index].is_none() {
                 self.slots[index] = Some(FileDescriptor {
+                    owner_pid,
                     metadata,
                     offset: 0,
                 });
@@ -196,7 +208,16 @@ impl FileDescriptorTable {
     }
 
     pub fn read_plan(&self, fd: u32, len: u32) -> Result<(u32, u32), FsError> {
-        let descriptor = self.descriptor(fd)?;
+        self.read_plan_for_process(0, fd, len)
+    }
+
+    pub fn read_plan_for_process(
+        &self,
+        owner_pid: u32,
+        fd: u32,
+        len: u32,
+    ) -> Result<(u32, u32), FsError> {
+        let descriptor = self.descriptor_for_process(owner_pid, fd)?;
         let remaining = descriptor
             .metadata
             .size_bytes
@@ -205,7 +226,16 @@ impl FileDescriptorTable {
     }
 
     pub fn advance(&mut self, fd: u32, len: u32) -> Result<(), FsError> {
-        let descriptor = self.descriptor_mut(fd)?;
+        self.advance_for_process(0, fd, len)
+    }
+
+    pub fn advance_for_process(
+        &mut self,
+        owner_pid: u32,
+        fd: u32,
+        len: u32,
+    ) -> Result<(), FsError> {
+        let descriptor = self.descriptor_mut_for_process(owner_pid, fd)?;
         let remaining = descriptor
             .metadata
             .size_bytes
@@ -218,16 +248,26 @@ impl FileDescriptorTable {
     }
 
     pub fn metadata(&self, fd: u32) -> Result<FileMetadata, FsError> {
-        Ok(self.descriptor(fd)?.metadata)
+        self.metadata_for_process(0, fd)
+    }
+
+    pub fn metadata_for_process(&self, owner_pid: u32, fd: u32) -> Result<FileMetadata, FsError> {
+        Ok(self.descriptor_for_process(owner_pid, fd)?.metadata)
     }
 
     pub fn close(&mut self, fd: u32) -> Result<(), FsError> {
+        self.close_for_process(0, fd)
+    }
+
+    pub fn close_for_process(&mut self, owner_pid: u32, fd: u32) -> Result<(), FsError> {
         let index = fd_index(fd)?;
-        if self.slots[index].is_none() {
-            return Err(FsError::BadFd);
+        match self.slots[index] {
+            Some(descriptor) if descriptor.owner_pid == owner_pid => {
+                self.slots[index] = None;
+                Ok(())
+            }
+            _ => Err(FsError::BadFd),
         }
-        self.slots[index] = None;
-        Ok(())
     }
 
     pub fn close_all(&mut self) {
@@ -238,19 +278,43 @@ impl FileDescriptorTable {
         }
     }
 
-    fn descriptor(&self, fd: u32) -> Result<&FileDescriptor, FsError> {
-        let index = fd_index(fd)?;
-        self.slots[index].as_ref().ok_or(FsError::BadFd)
+    pub fn close_all_for_process(&mut self, owner_pid: u32) {
+        let mut index = 0;
+        while index < self.slots.len() {
+            if matches!(self.slots[index], Some(descriptor) if descriptor.owner_pid == owner_pid) {
+                self.slots[index] = None;
+            }
+            index += 1;
+        }
     }
 
-    fn descriptor_mut(&mut self, fd: u32) -> Result<&mut FileDescriptor, FsError> {
+    fn descriptor_for_process(&self, owner_pid: u32, fd: u32) -> Result<&FileDescriptor, FsError> {
         let index = fd_index(fd)?;
-        self.slots[index].as_mut().ok_or(FsError::BadFd)
+        match self.slots[index].as_ref() {
+            Some(descriptor) if descriptor.owner_pid == owner_pid => Ok(descriptor),
+            _ => Err(FsError::BadFd),
+        }
+    }
+
+    fn descriptor_mut_for_process(
+        &mut self,
+        owner_pid: u32,
+        fd: u32,
+    ) -> Result<&mut FileDescriptor, FsError> {
+        let index = fd_index(fd)?;
+        match self.slots[index].as_mut() {
+            Some(descriptor) if descriptor.owner_pid == owner_pid => Ok(descriptor),
+            _ => Err(FsError::BadFd),
+        }
     }
 }
 
 #[cfg(any(not(test), feature = "host-test"))]
-pub unsafe fn open_root_file(path: &[u8], flags: u32) -> Result<u32, FsError> {
+pub unsafe fn open_root_file_for_process(
+    owner_pid: u32,
+    path: &[u8],
+    flags: u32,
+) -> Result<u32, FsError> {
     if flags != OPEN_READ_ONLY {
         return Err(FsError::InvalidFlags);
     }
@@ -261,32 +325,51 @@ pub unsafe fn open_root_file(path: &[u8], flags: u32) -> Result<u32, FsError> {
             .map_err(storage_error_to_fs_error)?;
         k16_storage::selected_file_metadata()
     };
-    unsafe { RUNTIME_FD_TABLE.get().open(FileMetadata::from(metadata)) }
+    unsafe {
+        RUNTIME_FD_TABLE
+            .get()
+            .open_for_process(owner_pid, FileMetadata::from(metadata))
+    }
 }
 
 #[cfg(any(not(test), feature = "host-test"))]
-pub unsafe fn read_file_fd(fd: u32, ptr: u32, len: u32) -> Result<u32, FsError> {
-    let (file_offset, read_len) = unsafe { RUNTIME_FD_TABLE.get().read_plan(fd, len)? };
+pub unsafe fn read_file_fd_for_process(
+    owner_pid: u32,
+    fd: u32,
+    ptr: u32,
+    len: u32,
+) -> Result<u32, FsError> {
+    let descriptor = unsafe {
+        RUNTIME_FD_TABLE
+            .get()
+            .descriptor_mut_for_process(owner_pid, fd)?
+    };
+    let remaining = descriptor
+        .metadata
+        .size_bytes
+        .saturating_sub(descriptor.offset);
+    let file_offset = descriptor.offset;
+    let read_len = min_u32(len, remaining);
     if read_len == 0 {
         return Ok(0);
     }
-    let metadata = unsafe { RUNTIME_FD_TABLE.get().metadata(fd)? };
+    let metadata = descriptor.metadata;
     unsafe {
         k16_storage::copy_file_range_to_ram(metadata.into(), file_offset, ptr, read_len)
             .map_err(storage_error_to_fs_error)?;
-        RUNTIME_FD_TABLE.get().advance(fd, read_len)?;
     }
+    descriptor.offset += read_len;
     Ok(read_len)
 }
 
 #[cfg(any(not(test), feature = "host-test"))]
-pub unsafe fn close_file_fd(fd: u32) -> Result<(), FsError> {
-    unsafe { RUNTIME_FD_TABLE.get().close(fd) }
+pub unsafe fn close_file_fd_for_process(owner_pid: u32, fd: u32) -> Result<(), FsError> {
+    unsafe { RUNTIME_FD_TABLE.get().close_for_process(owner_pid, fd) }
 }
 
 #[cfg(any(not(test), feature = "host-test"))]
-pub unsafe fn close_all_file_fds() {
-    unsafe { RUNTIME_FD_TABLE.get().close_all() }
+pub unsafe fn close_file_fds_for_process(owner_pid: u32) {
+    unsafe { RUNTIME_FD_TABLE.get().close_all_for_process(owner_pid) }
 }
 
 #[cfg(any(not(test), feature = "host-test"))]
@@ -399,5 +482,37 @@ mod tests {
         assert_eq!(table.read_plan(first, 1), Err(FsError::BadFd));
         assert_eq!(table.read_plan(second, 1), Err(FsError::BadFd));
         assert_eq!(table.open(FileMetadata::empty()), Ok(first));
+    }
+
+    #[test]
+    fn file_descriptor_table_closes_only_owned_regular_file_fds() {
+        let mut table = FileDescriptorTable::new();
+        let parent_pid = 1;
+        let child_pid = 2;
+        let parent_fd = table
+            .open_for_process(parent_pid, FileMetadata::empty())
+            .expect("parent fd allocates");
+        let child_fd = table
+            .open_for_process(child_pid, FileMetadata::empty())
+            .expect("child fd allocates");
+
+        table.close_all_for_process(child_pid);
+
+        assert_eq!(
+            table.read_plan_for_process(parent_pid, parent_fd, 1),
+            Ok((0, 0))
+        );
+        assert_eq!(
+            table.read_plan_for_process(child_pid, parent_fd, 1),
+            Err(FsError::BadFd)
+        );
+        assert_eq!(
+            table.read_plan_for_process(child_pid, child_fd, 1),
+            Err(FsError::BadFd)
+        );
+        assert_eq!(
+            table.open_for_process(child_pid, FileMetadata::empty()),
+            Ok(child_fd)
+        );
     }
 }

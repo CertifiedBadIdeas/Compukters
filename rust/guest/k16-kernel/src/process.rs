@@ -389,7 +389,9 @@ impl ProcessTable {
         if parent_slot >= MAX_PROCESS_SLOTS {
             return Err(ProcessSwitchError::NoRunningChild);
         }
-        unsafe { core::ptr::write_volatile(&mut self.slots[child_slot].state, PROCESS_STATE_EMPTY) };
+        unsafe {
+            core::ptr::write_volatile(&mut self.slots[child_slot].state, PROCESS_STATE_EMPTY)
+        };
         self.slots[child_slot].exit_status = status;
         self.slots[child_slot].clear();
         self.slots[parent_slot].exit_status = status;
@@ -456,7 +458,11 @@ impl ProcessTable {
         if current.heap_start == 0 {
             return Err(HeapError::NoRunningChild);
         }
-        Ok((current.heap_start, current.program_break, current.heap_limit))
+        Ok((
+            current.heap_start,
+            current.program_break,
+            current.heap_limit,
+        ))
     }
 }
 
@@ -502,10 +508,7 @@ pub unsafe fn initialize_init_process(
             );
             write_runtime_word(runtime_slot_parent_ptr(1), NO_PARENT_SLOT);
             write_runtime_word(runtime_slot_parent_ptr(2), NO_PARENT_SLOT);
-            write_runtime_word(
-                runtime_slot_heap_start_ptr(INIT_PROCESS_SLOT),
-                heap.start,
-            );
+            write_runtime_word(runtime_slot_heap_start_ptr(INIT_PROCESS_SLOT), heap.start);
             write_runtime_word(
                 runtime_slot_program_break_ptr(INIT_PROCESS_SLOT),
                 heap.start,
@@ -623,7 +626,10 @@ unsafe fn begin_loaded_child_plan_runtime_with_argv(
     };
     unsafe {
         write_runtime_word(runtime_slot_parent_ptr(child_slot), parent_slot as u32);
-        write_runtime_word(core::ptr::addr_of_mut!(RUNTIME_CURRENT_SLOT), child_slot as u32);
+        write_runtime_word(
+            core::ptr::addr_of_mut!(RUNTIME_CURRENT_SLOT),
+            child_slot as u32,
+        );
     }
     Ok(ChildLaunch {
         id: ProcessId::from_slot(child_slot),
@@ -651,14 +657,25 @@ pub unsafe fn finish_child_for_exit(status: u32) -> Result<InitResume, ProcessSw
     }
 }
 
+#[cfg(any(not(test), feature = "host-test"))]
+pub unsafe fn current_process_slot() -> u32 {
+    #[cfg(not(test))]
+    {
+        return unsafe { read_runtime_word(core::ptr::addr_of_mut!(RUNTIME_CURRENT_SLOT)) };
+    }
+    #[cfg(test)]
+    {
+        unsafe { PROCESS_TABLE.get().current_slot as u32 }
+    }
+}
+
 #[cfg(not(test))]
 unsafe fn finish_child_runtime(status: u32) -> Result<InitResume, ProcessSwitchError> {
     let current_slot = unsafe { runtime_current_slot() };
     if current_slot == INIT_PROCESS_SLOT {
         return Err(ProcessSwitchError::NoRunningChild);
     }
-    let parent_slot =
-        unsafe { read_runtime_word(runtime_slot_parent_ptr(current_slot)) } as usize;
+    let parent_slot = unsafe { read_runtime_word(runtime_slot_parent_ptr(current_slot)) } as usize;
     if parent_slot >= MAX_PROCESS_SLOTS {
         return Err(ProcessSwitchError::NoRunningChild);
     }
@@ -666,7 +683,10 @@ unsafe fn finish_child_runtime(status: u32) -> Result<InitResume, ProcessSwitchE
     unsafe {
         write_runtime_word(runtime_slot_parent_ptr(current_slot), NO_PARENT_SLOT);
         clear_runtime_heap(current_slot);
-        write_runtime_word(core::ptr::addr_of_mut!(RUNTIME_CURRENT_SLOT), parent_slot as u32);
+        write_runtime_word(
+            core::ptr::addr_of_mut!(RUNTIME_CURRENT_SLOT),
+            parent_slot as u32,
+        );
     }
     Ok(InitResume {
         id: ProcessId::from_slot(parent_slot),

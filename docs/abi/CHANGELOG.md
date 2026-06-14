@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Regular K16 filesystem descriptors are now owned by the foreground process
+  that opened them. `READ` and `CLOSE` reject regular fds owned by another
+  process, and `EXIT` releases only the exiting process's regular fds before
+  resuming its waiting parent. Stdio descriptors `0`, `1`, and `2` remain a
+  shared convention rather than entries in the regular fd table.
 - Added a bounded K16 foreground process table. `RUN` now blocks the current
   foreground process rather than a hard-coded init slot, so bundled init can
   launch `/bin/shell.kx` and the shell can synchronously run utilities such as
