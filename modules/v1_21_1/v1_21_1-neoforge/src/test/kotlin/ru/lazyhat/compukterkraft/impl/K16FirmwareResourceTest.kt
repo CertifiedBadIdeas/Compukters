@@ -453,8 +453,9 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("run_cd(stdout, cwd, path_buffer, path)"))
         assertTrue(source.contains("run_ticks(stdout)"))
         assertTrue(source.contains("run_exec(stdout, cwd, arg_paths, program_path, name, args)"))
-        assertTrue(source.contains("const BIN_PREFIX: &[u8] = b\"/bin/\""))
-        assertTrue(source.contains("const PROGRAM_SUFFIX: &[u8] = b\".kx\""))
+        val shellLibSource = Path.of("../../../rust/guest/k16-shell/src/lib.rs").readText()
+        assertTrue(shellLibSource.contains("const BIN_PREFIX: &[u8] = b\"/bin/\""))
+        assertTrue(shellLibSource.contains("const PROGRAM_SUFFIX: &[u8] = b\".kx\""))
         assertFalse(source.contains("process::exit(0)"))
         assertFalse(source.contains("debug::write_byte"))
     }
@@ -731,7 +732,7 @@ class K16FirmwareResourceTest {
         assertTrue(shellSource.contains("fn run_pwd("), "shell should name the pwd command")
         assertTrue(shellSource.contains("fn run_cd("), "shell should name the cd command")
         assertTrue(shellSource.contains("fn run_ticks("), "shell should name the ticks command")
-        assertTrue(shellSource.contains("fn run_exec("), "shell should use generic /bin exec dispatch")
+        assertTrue(shellSource.contains("fn run_exec("), "shell should use generic exec dispatch")
         assertFalse(shellSource.contains("fn run_uname("), "uname should not need a hardcoded dispatch branch")
         assertFalse(shellSource.contains("fn run_ls("), "ls should not need a hardcoded dispatch branch")
         assertFalse(shellSource.contains("fn run_cat("), "cat should not need a hardcoded dispatch branch")
@@ -748,9 +749,11 @@ class K16FirmwareResourceTest {
             "help should print a readable command list",
         )
         assertTrue(shellSource.contains("fs::metadata(path)"), "cd should validate paths through stat metadata")
+        assertTrue(shellLibSource.contains("pub fn resolve_executable_path("), "executable path resolution should be tested in the shell library")
+        assertTrue(shellSource.contains("resolve_executable_path(cwd, name, program_path)"), "shell should resolve executable paths through cwd")
         assertTrue(shellSource.contains("should_resolve_path_arg(name)"), "ls/cat should keep cwd-aware path args")
-        assertTrue(shellSource.contains("const ALLOC_ALIAS: &[u8] = b\"alloc\""), "alloc should remain a shell alias")
-        assertTrue(shellSource.contains("const ALLOC_PROGRAM: &[u8] = b\"alloc-test\""), "alloc should target alloc-test.kx")
+        assertTrue(shellLibSource.contains("const ALLOC_ALIAS: &[u8] = b\"alloc\""), "alloc should remain a shell alias")
+        assertTrue(shellLibSource.contains("const ALLOC_PROGRAM: &[u8] = b\"alloc-test\""), "alloc should target alloc-test.kx")
         assertTrue(shellSource.contains("write_run_error(stdout, error)"), "missing programs should report run errors")
     }
 
@@ -778,6 +781,7 @@ class K16FirmwareResourceTest {
 
         assertTrue(lsSource.contains("process::Argv::from_raw(argc, argv)"))
         assertTrue(lsSource.contains("k16_ls::for_each_path_arg_or_default(argv.len(), |index| argv.get(index), list_dir)"))
+        assertTrue(lsSource.contains("static mut CHILD_PATH"), "ls should keep child path scratch space off the stack")
         assertTrue(lsLibSource.contains("pub const DEFAULT_PATH: &str = \"/bin\""))
         assertTrue(lsLibSource.contains("while index < arg_count"), "ls should visit every argv path")
         assertTrue(lsSource.contains("fs::read_dir(path, &mut buffer)"))

@@ -3,7 +3,9 @@
 
 use core::panic::PanicInfo;
 
-use k16_shell::{Command, CommandArgs, InputLine, PathBuffer, WorkingDirectory};
+use k16_shell::{
+    resolve_executable_path, Command, CommandArgs, InputLine, PathBuffer, WorkingDirectory,
+};
 use kraft_std::prelude::*;
 
 const PROMPT: &[u8] = b"K16> ";
@@ -169,7 +171,12 @@ fn run_exec(
     name: &[u8],
     args: CommandArgs<'_>,
 ) {
-    if build_program_path(name, program_path).is_err() {
+    if command_name_has_separator(name) {
+        if resolve_executable_path(cwd, name, program_path).is_err() {
+            must_write(stdout, b"ERR INVAL\n");
+            return;
+        }
+    } else if build_program_path(name, program_path).is_err() {
         must_write(stdout, b"ERR INVAL\n");
         return;
     }
@@ -224,18 +231,28 @@ fn run_exec(
     }
 }
 
-fn build_program_path(name: &[u8], out: &mut PathBuffer) -> Result<(), ()> {
+fn should_resolve_path_arg(name: &[u8]) -> bool {
+    matches!(name, b"ls" | b"cat")
+}
+
+fn command_name_has_separator(name: &[u8]) -> bool {
+    let mut index = 0;
+    while index < name.len() {
+        if name[index] == b'/' {
+            return true;
+        }
+        index += 1;
+    }
+    false
+}
+
+fn build_program_path(name: &[u8], out: &mut PathBuffer) -> Result<(), k16_shell::PathError> {
     let name = if name == ALLOC_ALIAS {
         ALLOC_PROGRAM
     } else {
         name
     };
     out.replace_with_parts(BIN_PREFIX, name, PROGRAM_SUFFIX)
-        .map_err(|_| ())
-}
-
-fn should_resolve_path_arg(name: &[u8]) -> bool {
-    matches!(name, b"ls" | b"cat")
 }
 
 fn write_run_error(stdout: io::Fd, error: process::Error) {

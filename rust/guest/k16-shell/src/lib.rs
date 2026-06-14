@@ -6,6 +6,10 @@ use alloc::vec::Vec;
 
 pub const MAX_PATH_BYTES: usize = k16_abi::syscall::MAX_STAT_PATH_BYTES;
 pub const MAX_COMMAND_ARGS: usize = k16_abi::syscall::MAX_RUN_ARGS;
+const BIN_PREFIX: &[u8] = b"/bin/";
+const PROGRAM_SUFFIX: &[u8] = b".kx";
+const ALLOC_ALIAS: &[u8] = b"alloc";
+const ALLOC_PROGRAM: &[u8] = b"alloc-test";
 const EMPTY_ARG: &[u8] = b"";
 
 #[derive(Debug, Eq, PartialEq)]
@@ -189,6 +193,34 @@ impl Default for WorkingDirectory {
     fn default() -> Self {
         Self::new()
     }
+}
+
+#[inline(always)]
+pub fn resolve_executable_path(
+    cwd: &WorkingDirectory,
+    name: &[u8],
+    out: &mut PathBuffer,
+) -> Result<(), PathError> {
+    if has_path_separator(name) {
+        return cwd.resolve_into(name, out);
+    }
+    let name = if name == ALLOC_ALIAS {
+        ALLOC_PROGRAM
+    } else {
+        name
+    };
+    out.replace_with_parts(BIN_PREFIX, name, PROGRAM_SUFFIX)
+}
+
+fn has_path_separator(bytes: &[u8]) -> bool {
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index] == b'/' {
+            return true;
+        }
+        index += 1;
+    }
+    false
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -622,6 +654,48 @@ mod tests {
         let mut path = PathBuffer::new();
 
         path.replace_with_parts(b"/bin/", b"uname", b".kx").unwrap();
+
+        assert_eq!(path.as_bytes(), b"/bin/uname.kx");
+    }
+
+    #[test]
+    fn executable_path_resolver_keeps_bare_commands_in_bin() {
+        let cwd = WorkingDirectory::new();
+        let mut path = PathBuffer::new();
+
+        super::resolve_executable_path(&cwd, b"uname", &mut path).unwrap();
+
+        assert_eq!(path.as_bytes(), b"/bin/uname.kx");
+    }
+
+    #[test]
+    fn executable_path_resolver_keeps_alloc_alias_in_bin() {
+        let cwd = WorkingDirectory::new();
+        let mut path = PathBuffer::new();
+
+        super::resolve_executable_path(&cwd, b"alloc", &mut path).unwrap();
+
+        assert_eq!(path.as_bytes(), b"/bin/alloc-test.kx");
+    }
+
+    #[test]
+    fn executable_path_resolver_accepts_absolute_program_path() {
+        let cwd = WorkingDirectory::new();
+        let mut path = PathBuffer::new();
+
+        super::resolve_executable_path(&cwd, b"/bin/uname.kx", &mut path).unwrap();
+
+        assert_eq!(path.as_bytes(), b"/bin/uname.kx");
+    }
+
+    #[test]
+    fn executable_path_resolver_accepts_cwd_relative_program_path() {
+        let mut cwd = WorkingDirectory::new();
+        let mut path = PathBuffer::new();
+        cwd.resolve_into(b"/bin", &mut path).unwrap();
+        cwd.set_from_resolved(&path).unwrap();
+
+        super::resolve_executable_path(&cwd, b"./uname.kx", &mut path).unwrap();
 
         assert_eq!(path.as_bytes(), b"/bin/uname.kx");
     }
