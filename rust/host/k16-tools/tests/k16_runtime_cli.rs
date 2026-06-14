@@ -825,8 +825,7 @@ impl Frame {
     }
 }
 
-static PAIR_LO: u32 = 19;
-static PAIR_HI: u32 = 23;
+static PAIR: Pair = Pair { lo: 19, hi: 23 };
 static FRAME: Frame = Frame {
     regs: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
     resume_pc: 0x1234_5678,
@@ -837,7 +836,7 @@ static REG_INDEX: u32 = 14;
 
 #[no_mangle]
 pub extern "C" fn main() -> i32 {
-    let pair = make_pair(read_u32(&PAIR_LO), read_u32(&PAIR_HI));
+    let pair = make_pair(read_u32(&PAIR.lo), read_u32(&PAIR.hi));
     if sum_pair(pair) != 42 {
         return 10;
     }
@@ -856,7 +855,7 @@ pub extern "C" fn main() -> i32 {
         return 13;
     }
 
-    if read_stack_pointer(&copied) != 0x0001_ffc0 {
+    if read_stack_pointer(&FRAME) != 0x0001_ffc0 {
         return 14;
     }
     if read_register(&FRAME, read_u32(&REG_INDEX) as usize) != 14 {
