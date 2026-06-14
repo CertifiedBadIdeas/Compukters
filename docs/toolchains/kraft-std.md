@@ -51,3 +51,9 @@ standard-library surface.
 Host tests for crates layered on `k16-rt` use the explicit `k16-rt/host-test`
 feature. That feature enables runtime stubs and `k16_rt::host_test` observation
 helpers for tests only; it is not a guest fallback path.
+
+The fd methods are normal cross-crate methods, not an inline-only ABI escape
+hatch. `rust/host/k16-tools` keeps a K16 Result-return smoke that links a
+temporary user program against `kraft-std` through `k16-ld` and verifies
+`io::stdout().write_all(...)` plus `io::stdin().read(...)` across that crate
+boundary.

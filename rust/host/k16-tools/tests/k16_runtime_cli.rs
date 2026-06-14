@@ -9,7 +9,7 @@ use k16_vm::k16::{
 use k16_vm::k16_computer::K16ComputerHandle;
 use k16_vm::low_machine::MachineMemory;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 #[test]
@@ -999,6 +999,148 @@ fn panic(_info: &PanicInfo<'_>) -> ! {
     );
 }
 
+#[test]
+fn k16_rust_kraft_std_fd_cross_crate_smoke_reports_success_status() {
+    let work_dir = temp_dir("kraft-std-fd-smoke");
+    let src_dir = work_dir.join("src");
+    fs::create_dir_all(&src_dir).expect("source directory creates");
+    fs::write(
+        work_dir.join("Cargo.toml"),
+        format!(
+            r#"[package]
+name = "kraft-std-fd-smoke"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+kraft-std = {{ path = "{}" }}
+"#,
+            repo_root().join("rust/guest/kraft-std").display()
+        ),
+    )
+    .expect("Cargo.toml writes");
+    fs::write(
+        src_dir.join("main.rs"),
+        r#"#![no_std]
+#![no_main]
+
+use core::panic::PanicInfo;
+use kraft_std::prelude::*;
+
+const CONTROL_STATUS: *mut u32 = 0x1000_0000 as *mut u32;
+
+#[no_mangle]
+pub extern "C" fn _start() -> ! {
+    let status = smoke_status();
+    unsafe {
+        core::ptr::write_volatile(CONTROL_STATUS, status);
+    }
+    loop {
+        core::hint::spin_loop();
+    }
+}
+
+#[inline(never)]
+fn smoke_status() -> u32 {
+    if io::stdout().write_all(b"hello").is_err() {
+        return 10;
+    }
+    if io::stderr().write_all(b"!").is_err() {
+        return 11;
+    }
+
+    let mut buffer = [0_u8; 4];
+    match io::stdin().read(&mut buffer) {
+        Ok(2) => {}
+        Ok(_) => return 12,
+        Err(_) => return 13,
+    }
+
+    42
+}
+
+#[panic_handler]
+fn panic(_info: &PanicInfo<'_>) -> ! {
+    loop {
+        core::hint::spin_loop();
+    }
+}
+"#,
+    )
+    .expect("main.rs writes");
+
+    write_runtime_object("k16-memory-helpers", &work_dir.join("helpers.o"));
+    fs::write(
+        &work_dir.join("write-stub.o"),
+        k16_write_syscall_stub_object(),
+    )
+    .expect("write syscall stub writes");
+    fs::write(
+        &work_dir.join("read-stub.o"),
+        k16_read_syscall_stub_object(),
+    )
+    .expect("read syscall stub writes");
+
+    let rustflags = format!(
+        "-C linker={} -C link-arg={} -C link-arg={} -C link-arg={} -C link-arg=--k16-target=bios -Copt-level=z -Cjump-tables=no -Cdebuginfo=0 -Cdebug-assertions=off -Coverflow-checks=off -Zub-checks=no",
+        k16_ld_binary(),
+        work_dir.join("helpers.o").display(),
+        work_dir.join("write-stub.o").display(),
+        work_dir.join("read-stub.o").display(),
+    );
+    let cargo_output = Command::new(k16_cargo())
+        .args([
+            "rustc",
+            "-Z",
+            "build-std=core",
+            "-Z",
+            "json-target-spec",
+            "--manifest-path",
+            work_dir.join("Cargo.toml").to_str().unwrap(),
+            "--target",
+            k16_target_spec().to_str().unwrap(),
+            "--target-dir",
+            work_dir.join("target").to_str().unwrap(),
+            "--bin",
+            "kraft-std-fd-smoke",
+            "--",
+            "-C",
+            "panic=abort",
+            "-C",
+            "relocation-model=static",
+            "-Cjump-tables=no",
+            "-Cdebuginfo=0",
+            "-Cdebug-assertions=off",
+            "-Coverflow-checks=off",
+            "-Zub-checks=no",
+        ])
+        .env("RUSTC", k16_rustc())
+        .env("RUSTC_BOOTSTRAP", "1")
+        .env("RUSTFLAGS", rustflags)
+        .output()
+        .expect("cargo rustc runs");
+    assert!(
+        cargo_output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&cargo_output.stderr)
+    );
+
+    let linked_bios = find_linked_rust_bin(&work_dir);
+    let run_output = Command::new(k16_binary())
+        .args(["run-bios", linked_bios.to_str().unwrap()])
+        .output()
+        .expect("k16 run-bios runs");
+    assert!(
+        run_output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&run_output.stderr)
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&run_output.stdout),
+        "signal=step-limit-exceeded status=42 panic_code=0 debug_text=\n"
+    );
+}
+
 fn k16_main_returning_42_object() -> Vec<u8> {
     k16_object("main", &[0x01, 0xe0, 42, 0, 0, 0, 0x00, 0x90], None)
 }
@@ -1025,6 +1167,21 @@ fn k16_main_waiting_once_then_returning_7() -> Vec<u8> {
         &[0x01, 0xee, 0, 0, 0, 0, 0x00, 0x8e, 0x07, 0x10, 0x00, 0x90],
         Some((2, 2, "__k16_wait_once")),
     )
+}
+
+fn k16_write_syscall_stub_object() -> Vec<u8> {
+    let mut words = Vec::new();
+    words.extend(const32(14, 0));
+    words.extend(add(0, 3, 14));
+    words.push(ret());
+    k16_object("__k16_write_syscall", &words_to_bytes(&words), None)
+}
+
+fn k16_read_syscall_stub_object() -> Vec<u8> {
+    let mut words = Vec::new();
+    words.extend(const32(0, 2));
+    words.push(ret());
+    k16_object("__k16_read_syscall", &words_to_bytes(&words), None)
 }
 
 fn k16_object(defined_symbol: &str, text: &[u8], relocation: Option<(u32, u32, &str)>) -> Vec<u8> {
@@ -1226,8 +1383,38 @@ fn temp_dir(name: &str) -> PathBuf {
     path
 }
 
+fn find_linked_rust_bin(work_dir: &Path) -> PathBuf {
+    let deps_dir = work_dir
+        .join("target")
+        .join("k16-unknown-kraftos")
+        .join("debug")
+        .join("deps");
+    let candidates = fs::read_dir(&deps_dir)
+        .expect("target deps dir reads")
+        .map(|entry| entry.expect("target dep entry reads").path())
+        .filter(|path| path.is_file())
+        .filter(|path| {
+            !matches!(
+                path.extension().and_then(|extension| extension.to_str()),
+                Some("d" | "o" | "rlib" | "rmeta")
+            )
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        candidates.len(),
+        1,
+        "expected exactly one linked Rust bin artifact in {}: {candidates:?}",
+        deps_dir.display()
+    );
+    candidates.into_iter().next().expect("one candidate exists")
+}
+
 fn k16_binary() -> String {
     std::env::var("CARGO_BIN_EXE_k16").expect("Cargo exposes k16 binary path")
+}
+
+fn k16_ld_binary() -> String {
+    std::env::var("CARGO_BIN_EXE_k16-ld").expect("Cargo exposes k16-ld binary path")
 }
 
 fn k16_cargo() -> String {

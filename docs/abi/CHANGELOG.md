@@ -48,8 +48,9 @@
 - `k16-cpu-helpers` now emits fixed-number `READ`/`WRITE` fd syscall helpers
   that pass `fd`, `ptr`, and `len` without relying on a stack-passed fourth
   Rust argument and preserve the scratch register around the trap boundary.
-  `kraft-std` keeps fd methods inline until the K16 Rust aggregate-return ABI is
-  validated for cross-crate `Result<usize, Error>` returns.
+  `kraft-std` fd methods are now normal cross-crate methods; the K16 Rust smoke
+  suite verifies `Result`-returning fd reads and writes through `kraft-std`
+  without relying on an inline-only ABI guard.
 - Added `READ(fd, ptr, len)` to the K16 fd syscall ABI for `FD_STDIN`.
   The Rust kernel blocks by waiting for the host until keyboard input is
   available, copies bytes into validated user-program memory, and returns the
