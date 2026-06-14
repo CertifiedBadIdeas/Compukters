@@ -37,57 +37,57 @@ import kotlin.test.assertTrue
 
 class K16ShellRuntimeSmokeTest {
     @Test
-    fun runtimeDeviceAcceptsKeyboardInputThroughUserlandInit() {
+    fun runtimeDeviceAcceptsKeyboardInputThroughUserlandShell() {
         val device = createDevice()
 
         try {
             device.turnOn()
-            waitForTerminalText(device, "INIT> ")
+            waitForTerminalText(device, "K16> ")
 
             dispatchText(device, "echo abc\n")
             waitForTerminalText(device, "abc")
-            waitForTerminalText(device, "INIT> echo abc")
+            waitForTerminalText(device, "K16> echo abc")
 
             dispatchText(device, "ticks\n")
             waitForTerminalText(device, "TICKS ")
 
             dispatchText(device, "uname\n")
             waitForTerminal(device, "uname output and returned prompt") { terminal ->
-                val unameCommandIndex = terminal.indexOf("INIT> uname")
-                val unameOutputIndex = terminal.indexOf("K16", startIndex = unameCommandIndex + "INIT> uname".length)
-                val returnedPromptIndex = terminal.indexOf("INIT> ", startIndex = unameOutputIndex)
+                val unameCommandIndex = terminal.indexOf("K16> uname")
+                val unameOutputIndex = terminal.indexOf("K16", startIndex = unameCommandIndex + "K16> uname".length)
+                val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = unameOutputIndex)
                 unameCommandIndex >= 0 && unameOutputIndex > unameCommandIndex && returnedPromptIndex > unameOutputIndex
             }
 
             dispatchText(device, "cat /etc/motd\n")
             waitForTerminal(device, "cat output and returned prompt") { terminal ->
-                val catCommandIndex = terminal.indexOf("INIT> cat /etc/motd")
-                val catOutputIndex = terminal.indexOf("K16 FS OK", startIndex = catCommandIndex + "INIT> cat /etc/motd".length)
-                val returnedPromptIndex = terminal.indexOf("INIT> ", startIndex = catOutputIndex)
+                val catCommandIndex = terminal.indexOf("K16> cat /etc/motd")
+                val catOutputIndex = terminal.indexOf("K16 FS OK", startIndex = catCommandIndex + "K16> cat /etc/motd".length)
+                val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = catOutputIndex)
                 catCommandIndex >= 0 && catOutputIndex > catCommandIndex && returnedPromptIndex > catOutputIndex
             }
 
             dispatchText(device, "alloc\n")
             waitForTerminal(device, "alloc output and returned prompt") { terminal ->
-                val allocCommandIndex = terminal.indexOf("INIT> alloc")
-                val allocOutputIndex = terminal.indexOf("ALLOC", startIndex = allocCommandIndex + "INIT> alloc".length)
-                val returnedPromptIndex = terminal.indexOf("INIT> ", startIndex = allocOutputIndex)
+                val allocCommandIndex = terminal.indexOf("K16> alloc")
+                val allocOutputIndex = terminal.indexOf("ALLOC", startIndex = allocCommandIndex + "K16> alloc".length)
+                val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = allocOutputIndex)
                 allocCommandIndex >= 0 && allocOutputIndex > allocCommandIndex && returnedPromptIndex > allocOutputIndex
             }
 
             val terminal = terminalText(requireNotNull(device.snapshotRuntimeState()))
-            val promptIndex = terminal.indexOf("INIT> ")
+            val promptIndex = terminal.indexOf("K16> ")
             val echoOutputIndex = terminal.indexOf("abc", startIndex = promptIndex)
             val ticksOutputIndex = terminal.indexOf("TICKS ", startIndex = echoOutputIndex)
-            val unameCommandIndex = terminal.indexOf("INIT> uname", startIndex = ticksOutputIndex)
-            val unameOutputIndex = terminal.indexOf("K16", startIndex = unameCommandIndex + "INIT> uname".length)
-            val unameReturnedPromptIndex = terminal.indexOf("INIT> ", startIndex = unameOutputIndex)
-            val catCommandIndex = terminal.indexOf("INIT> cat /etc/motd", startIndex = unameReturnedPromptIndex)
-            val catOutputIndex = terminal.indexOf("K16 FS OK", startIndex = catCommandIndex + "INIT> cat /etc/motd".length)
-            val catReturnedPromptIndex = terminal.indexOf("INIT> ", startIndex = catOutputIndex)
-            val allocCommandIndex = terminal.indexOf("INIT> alloc", startIndex = catReturnedPromptIndex)
-            val allocOutputIndex = terminal.indexOf("ALLOC", startIndex = allocCommandIndex + "INIT> alloc".length)
-            val returnedPromptIndex = terminal.indexOf("INIT> ", startIndex = allocOutputIndex)
+            val unameCommandIndex = terminal.indexOf("K16> uname", startIndex = ticksOutputIndex)
+            val unameOutputIndex = terminal.indexOf("K16", startIndex = unameCommandIndex + "K16> uname".length)
+            val unameReturnedPromptIndex = terminal.indexOf("K16> ", startIndex = unameOutputIndex)
+            val catCommandIndex = terminal.indexOf("K16> cat /etc/motd", startIndex = unameReturnedPromptIndex)
+            val catOutputIndex = terminal.indexOf("K16 FS OK", startIndex = catCommandIndex + "K16> cat /etc/motd".length)
+            val catReturnedPromptIndex = terminal.indexOf("K16> ", startIndex = catOutputIndex)
+            val allocCommandIndex = terminal.indexOf("K16> alloc", startIndex = catReturnedPromptIndex)
+            val allocOutputIndex = terminal.indexOf("ALLOC", startIndex = allocCommandIndex + "K16> alloc".length)
+            val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = allocOutputIndex)
             assertTrue(
                 promptIndex >= 0 &&
                     echoOutputIndex > promptIndex &&
@@ -101,7 +101,7 @@ class K16ShellRuntimeSmokeTest {
                     allocCommandIndex >= catReturnedPromptIndex &&
                     allocOutputIndex > allocCommandIndex &&
                     returnedPromptIndex > allocOutputIndex,
-                "userland init should dispatch shell commands through fd stdin/stdout and return a prompt; terminal: $terminal",
+                "userland shell should dispatch commands through fd stdin/stdout and return a prompt; terminal: $terminal",
             )
         } finally {
             device.close()
@@ -109,19 +109,19 @@ class K16ShellRuntimeSmokeTest {
     }
 
     @Test
-    fun runtimeDeviceAcceptsLongHeapBackedEchoInputThroughUserlandInit() {
+    fun runtimeDeviceAcceptsLongHeapBackedEchoInputThroughUserlandShell() {
         val device = createDevice()
         val payload = "x".repeat(180)
 
         try {
             device.turnOn()
-            waitForTerminalText(device, "INIT> ")
+            waitForTerminalText(device, "K16> ")
 
             dispatchPasteText(device, "echo $payload\n")
             waitForTerminal(device, "long echo output and returned prompt") { terminal ->
-                val commandIndex = terminal.indexOf("INIT> echo $payload")
-                val outputIndex = terminal.indexOf(payload, startIndex = commandIndex + "INIT> echo ".length)
-                val returnedPromptIndex = terminal.indexOf("INIT> ", startIndex = outputIndex + payload.length)
+                val commandIndex = terminal.indexOf("K16> echo $payload")
+                val outputIndex = terminal.indexOf(payload, startIndex = commandIndex + "K16> echo ".length)
+                val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex + payload.length)
                 commandIndex >= 0 && outputIndex > commandIndex && returnedPromptIndex > outputIndex
             }
         } finally {

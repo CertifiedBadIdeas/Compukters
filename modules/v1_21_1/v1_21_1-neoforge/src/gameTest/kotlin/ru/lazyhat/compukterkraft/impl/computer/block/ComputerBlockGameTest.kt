@@ -112,7 +112,7 @@ class ComputerBlockGameTest {
                 }
             val originalDevice = originalComputer.getOrCreateRuntimeDevice()
             waitForSavedTerminalSnapshot(helper, originalComputer, "initial shell prompt") { terminal ->
-                terminal.contains("INIT> ")
+                terminal.contains("K16> ")
             }
             dispatchText(originalDevice, "echo $marker\n")
             waitForSavedTerminalSnapshot(helper, originalComputer, "echoed reload marker") { terminal ->

@@ -5,7 +5,7 @@ members = [
     "k16-boot",
     "k16-boot-chain",
     "k16-image",
-    "k16-init",
+    "k16-shell",
     "k16-cat",
     "k16-alloc-test",
     "k16-kernel",
