@@ -3,24 +3,34 @@
 
 use core::panic::PanicInfo;
 
-use k16_shell::{Command, InputLine};
+use k16_shell::{Command, InputLine, PathBuffer, WorkingDirectory};
 use kraft_std::prelude::*;
 
 const PROMPT: &[u8] = b"K16> ";
 const NEWLINE: &[u8] = b"\n";
-const HELP: &[u8] = b"HELP\nCLEAR\nECHO\nTICKS\nUNAME\nLS [PATH]\nCAT <PATH>\nALLOC\n";
+const HELP: &[u8] =
+    b"HELP\nCLEAR\nPWD\nCD [PATH]\nECHO\nTICKS\nUNAME\nLS [PATH]\nCAT <PATH>\nALLOC\n";
 
 #[no_mangle]
 pub extern "C" fn main() -> ! {
     let stdin = io::stdin();
     let stdout = io::stdout();
     let mut input = InputLine::new();
+    let mut cwd = WorkingDirectory::new();
     let mut read_buffer = [0u8; 1];
+    let mut path_buffer = PathBuffer::new();
 
     must_write(stdout, b"K16 SHELL\n");
     loop {
         must_write(stdout, PROMPT);
-        read_and_dispatch_line(stdin, stdout, &mut input, &mut read_buffer);
+        read_and_dispatch_line(
+            stdin,
+            stdout,
+            &mut input,
+            &mut cwd,
+            &mut path_buffer,
+            &mut read_buffer,
+        );
     }
 }
 
@@ -28,6 +38,8 @@ fn read_and_dispatch_line(
     stdin: io::Fd,
     stdout: io::Fd,
     input: &mut InputLine,
+    cwd: &mut WorkingDirectory,
+    path_buffer: &mut PathBuffer,
     read_buffer: &mut [u8; 1],
 ) {
     input.clear();
@@ -41,7 +53,7 @@ fn read_and_dispatch_line(
             match read_buffer[index] {
                 b'\n' | b'\r' => {
                     must_write(stdout, NEWLINE);
-                    dispatch_command(stdout, input.command());
+                    dispatch_command(stdout, cwd, path_buffer, input.command());
                     return;
                 }
                 b'\x08' | 0x7f => {
@@ -61,21 +73,64 @@ fn read_and_dispatch_line(
     }
 }
 
-fn dispatch_command(stdout: io::Fd, command: Command<'_>) {
+fn dispatch_command(
+    stdout: io::Fd,
+    cwd: &mut WorkingDirectory,
+    path_buffer: &mut PathBuffer,
+    command: Command<'_>,
+) {
     match command {
         Command::Empty => {}
         Command::Help => must_write(stdout, HELP),
         Command::Clear => must_write(stdout, b"\x0c"),
+        Command::Pwd => run_pwd(stdout, cwd),
+        Command::Cd(path) => run_cd(stdout, cwd, path_buffer, path),
         Command::Ticks => run_ticks(stdout),
         Command::Uname => run_uname(stdout),
-        Command::Ls(path) => run_ls(stdout, path),
-        Command::Cat(path) => run_cat(stdout, path),
+        Command::Ls(path) => run_ls(stdout, cwd, path_buffer, path),
+        Command::Cat(path) => run_cat(stdout, cwd, path_buffer, path),
         Command::AllocTest => run_alloc_test(stdout),
         Command::Echo(bytes) => {
             must_write(stdout, bytes);
             must_write(stdout, NEWLINE);
         }
         Command::Unknown => must_write(stdout, b"ERR\n"),
+    }
+}
+
+fn run_pwd(stdout: io::Fd, cwd: &WorkingDirectory) {
+    must_write(stdout, cwd.as_bytes());
+    must_write(stdout, NEWLINE);
+}
+
+fn run_cd(
+    stdout: io::Fd,
+    cwd: &mut WorkingDirectory,
+    path_buffer: &mut PathBuffer,
+    path: Option<&[u8]>,
+) {
+    let path = path.unwrap_or(b"/");
+    if cwd.resolve_into(path, path_buffer).is_err() {
+        must_write(stdout, b"ERR INVAL\n");
+        return;
+    }
+    let Ok(path) = path_buffer.as_str() else {
+        must_write(stdout, b"ERR INVAL\n");
+        return;
+    };
+    match fs::metadata(path) {
+        Ok(metadata) if metadata.file_type == fs::FileType::Directory => {
+            if cwd.set_from_resolved(path_buffer).is_err() {
+                must_write(stdout, b"ERR INVAL\n");
+            }
+        }
+        Ok(_) => must_write(stdout, b"ERR INVAL\n"),
+        Err(fs::Error::InvalidArgument) => must_write(stdout, b"ERR INVAL\n"),
+        Err(fs::Error::Syscall(status)) => {
+            must_write(stdout, b"ERR ");
+            must_write(stdout, run_error_name(status));
+            must_write(stdout, NEWLINE);
+        }
     }
 }
 
@@ -92,7 +147,12 @@ fn run_uname(stdout: io::Fd) {
     }
 }
 
-fn run_ls(stdout: io::Fd, path: Option<&[u8]>) {
+fn run_ls(
+    stdout: io::Fd,
+    cwd: &WorkingDirectory,
+    path_buffer: &mut PathBuffer,
+    path: Option<&[u8]>,
+) {
     let Some(path) = path else {
         match process::run("/bin/ls.kx") {
             Ok(_) => {}
@@ -100,8 +160,12 @@ fn run_ls(stdout: io::Fd, path: Option<&[u8]>) {
         }
         return;
     };
-    let Ok(path) = core::str::from_utf8(path) else {
-        must_write(stdout, b"ERR\n");
+    if cwd.resolve_into(path, path_buffer).is_err() {
+        must_write(stdout, b"ERR INVAL\n");
+        return;
+    }
+    let Ok(path) = path_buffer.as_str() else {
+        must_write(stdout, b"ERR INVAL\n");
         return;
     };
     match process::run_with_args("/bin/ls.kx", &[path]) {
@@ -110,9 +174,13 @@ fn run_ls(stdout: io::Fd, path: Option<&[u8]>) {
     }
 }
 
-fn run_cat(stdout: io::Fd, path: &[u8]) {
-    let Ok(path) = core::str::from_utf8(path) else {
-        must_write(stdout, b"ERR\n");
+fn run_cat(stdout: io::Fd, cwd: &WorkingDirectory, path_buffer: &mut PathBuffer, path: &[u8]) {
+    if cwd.resolve_into(path, path_buffer).is_err() {
+        must_write(stdout, b"ERR INVAL\n");
+        return;
+    }
+    let Ok(path) = path_buffer.as_str() else {
+        must_write(stdout, b"ERR INVAL\n");
         return;
     };
     match process::run_with_args("/bin/cat.kx", &[path]) {
