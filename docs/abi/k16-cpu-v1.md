@@ -570,6 +570,22 @@ base and stack top. Syscalls that consume user pointers validate buffers
 against the current foreground process range rather than a global hard-coded
 user window.
 
+This is now a transitional physical-or-translated pointer model. If the current
+process has no address-space id, the kernel treats syscall pointers as
+guest-physical addresses, validates them against that process range, and copies
+bytes directly from or to physical RAM. If the current process has an
+address-space id, the kernel treats syscall pointers as user virtual addresses
+and moves bytes through the privileged `mmu0` `copy_from_user` and
+`copy_to_user` commands. `mmu0` status errors, short copy results, invalid
+physical process ranges, and arithmetic overflow are reported to userland as
+the existing negative K16 `ERROR_FAULT` value.
+
+The current production process launcher still starts foreground processes
+without an address-space id. Assigning address-space ids to live translated
+processes also requires a kernel-stack trap-entry step, because trap entry
+saves the interrupted stack pointer but does not itself switch `sp` to a
+separate kernel stack.
+
 Each foreground process has its own monotonic heap after its loaded image. A
 child load arena starts after the current parent's program break, so child
 loading cannot overwrite parent heap allocations. The child arena end is the

@@ -54,9 +54,46 @@ impl StorageError {
     pub const STORAGE_BLOCK_SIZE: Self = Self { code: 17 };
     pub const STORAGE_MEDIA: Self = Self { code: 18 };
     pub const OUTPUT_BUFFER_TOO_SMALL: Self = Self { code: 19 };
+    pub const OUTPUT_TRANSFER: Self = Self { code: 20 };
 
     pub const fn code(self) -> i32 {
         self.code
+    }
+}
+
+pub trait DirectoryListingSink {
+    unsafe fn push_byte(&mut self, byte: u8) -> Result<(), StorageError>;
+    fn written(&self) -> u32;
+}
+
+pub struct RamDirectoryListingSink {
+    dst_addr: u32,
+    len: u32,
+    written: u32,
+}
+
+impl RamDirectoryListingSink {
+    pub const fn new(dst_addr: u32, len: u32) -> Self {
+        Self {
+            dst_addr,
+            len,
+            written: 0,
+        }
+    }
+}
+
+impl DirectoryListingSink for RamDirectoryListingSink {
+    unsafe fn push_byte(&mut self, byte: u8) -> Result<(), StorageError> {
+        if self.written >= self.len {
+            return Err(StorageError::OUTPUT_BUFFER_TOO_SMALL);
+        }
+        unsafe { write_u8(self.dst_addr + self.written, byte) };
+        self.written += 1;
+        Ok(())
+    }
+
+    fn written(&self) -> u32 {
+        self.written
     }
 }
 
@@ -88,10 +125,19 @@ pub unsafe fn read_directory_from_storage0(
     dst_addr: u32,
     len: u32,
 ) -> Result<u32, StorageError> {
+    let mut sink = RamDirectoryListingSink::new(dst_addr, len);
+    unsafe { read_directory_from_storage0_into(partition_type, path, &mut sink) }
+}
+
+pub unsafe fn read_directory_from_storage0_into<S: DirectoryListingSink>(
+    partition_type: &[u8; 4],
+    path: &[&[u8]],
+    sink: &mut S,
+) -> Result<u32, StorageError> {
     unsafe { read_partition(partition_type)? };
     unsafe { read_superblock()? };
     unsafe { find_directory_inode(path)? };
-    unsafe { copy_selected_directory_listing_to_ram(dst_addr, len) }
+    unsafe { copy_selected_directory_listing_into(sink) }
 }
 
 pub unsafe fn stat_path_from_storage0(
@@ -342,6 +388,13 @@ pub unsafe fn copy_selected_directory_listing_to_ram(
     dst_addr: u32,
     len: u32,
 ) -> Result<u32, StorageError> {
+    let mut sink = RamDirectoryListingSink::new(dst_addr, len);
+    unsafe { copy_selected_directory_listing_into(&mut sink) }
+}
+
+pub unsafe fn copy_selected_directory_listing_into<S: DirectoryListingSink>(
+    sink: &mut S,
+) -> Result<u32, StorageError> {
     if unsafe { read_u32(STATE_INODE_STATE) as u8 } != 2
         || unsafe { read_u32(STATE_INODE_SIZE_BYTES) } % K16FS_DIRECTORY_ENTRY_SIZE != 0
     {
@@ -349,7 +402,6 @@ pub unsafe fn copy_selected_directory_listing_to_ram(
     }
 
     let mut remaining = unsafe { read_u32(STATE_INODE_SIZE_BYTES) };
-    let mut written: u32 = 0;
     let mut extent_index = 0;
     while extent_index < unsafe { read_u32(STATE_INODE_EXTENT_COUNT) as usize } {
         let extent_start_block =
@@ -375,26 +427,14 @@ pub unsafe fn copy_selected_directory_listing_to_ram(
                         {
                             return Err(StorageError::INVALID_FILESYSTEM);
                         }
-                        let needed = match name_len.checked_add(1) {
-                            Some(value) => value,
-                            None => return Err(StorageError::INVALID_FILESYSTEM),
-                        };
-                        if match written.checked_add(needed) {
-                            Some(value) => value > len,
-                            None => true,
-                        } {
-                            return Err(StorageError::OUTPUT_BUFFER_TOO_SMALL);
-                        }
                         let mut name_offset = 0;
                         while name_offset < name_len {
                             unsafe {
-                                write_u8(dst_addr + written, scratch_u8(offset + 8 + name_offset));
+                                sink.push_byte(scratch_u8(offset + 8 + name_offset))?;
                             }
-                            written += 1;
                             name_offset += 1;
                         }
-                        unsafe { write_u8(dst_addr + written, b'\n') };
-                        written += 1;
+                        unsafe { sink.push_byte(b'\n')? };
                     }
                     _ => return Err(StorageError::INVALID_FILESYSTEM),
                 }
@@ -409,7 +449,7 @@ pub unsafe fn copy_selected_directory_listing_to_ram(
     if remaining != 0 {
         return Err(StorageError::INVALID_FILESYSTEM);
     }
-    Ok(written)
+    Ok(sink.written())
 }
 
 pub unsafe fn copy_selected_file_range_to_ram(

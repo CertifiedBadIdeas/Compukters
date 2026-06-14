@@ -1,4 +1,3 @@
-#[cfg(any(not(test), feature = "host-test"))]
 use core::cell::UnsafeCell;
 
 const LOAD_ALIGNMENT: u32 = 2;
@@ -20,7 +19,7 @@ const RELOCATION_RECORD_ADDR: u32 = 0x0000_0500;
 const MAX_PROCESS_SLOTS: usize = 3;
 const INIT_PROCESS_SLOT: usize = 0;
 const NO_PARENT_SLOT: u32 = u32::MAX;
-#[cfg(feature = "host-test")]
+#[cfg(any(test, feature = "host-test"))]
 #[allow(dead_code)]
 static PROCESS_TABLE: KernelProcessTable =
     KernelProcessTable::new(ProcessTable::new(ProcessContext {
@@ -69,14 +68,20 @@ static mut RUNTIME_SLOT0_MEMORY_END: u32 = 0;
 static mut RUNTIME_SLOT1_MEMORY_END: u32 = 0;
 #[cfg(not(test))]
 static mut RUNTIME_SLOT2_MEMORY_END: u32 = 0;
+#[cfg(not(test))]
+static mut RUNTIME_SLOT0_ADDRESS_SPACE: u32 = 0;
+#[cfg(not(test))]
+static mut RUNTIME_SLOT1_ADDRESS_SPACE: u32 = 0;
+#[cfg(not(test))]
+static mut RUNTIME_SLOT2_ADDRESS_SPACE: u32 = 0;
 
-#[cfg(feature = "host-test")]
+#[cfg(any(test, feature = "host-test"))]
 #[allow(dead_code)]
 struct KernelProcessTable {
     table: UnsafeCell<ProcessTable>,
 }
 
-#[cfg(feature = "host-test")]
+#[cfg(any(test, feature = "host-test"))]
 unsafe impl Sync for KernelProcessTable {}
 
 #[cfg(not(test))]
@@ -100,7 +105,7 @@ impl<T> KernelCell<T> {
     }
 }
 
-#[cfg(feature = "host-test")]
+#[cfg(any(test, feature = "host-test"))]
 #[allow(dead_code)]
 impl KernelProcessTable {
     const fn new(table: ProcessTable) -> Self {
@@ -260,6 +265,7 @@ struct ProcessSlot {
     heap_start: u32,
     program_break: u32,
     heap_limit: u32,
+    address_space: Option<u32>,
 }
 
 #[cfg(any(test, feature = "host-test"))]
@@ -279,6 +285,7 @@ impl ProcessSlot {
             heap_start: 0,
             program_break: 0,
             heap_limit: 0,
+            address_space: None,
         }
     }
 
@@ -294,6 +301,7 @@ impl ProcessSlot {
             heap_start: 0,
             program_break: 0,
             heap_limit: 0,
+            address_space: None,
         }
     }
 
@@ -493,6 +501,20 @@ impl ProcessTable {
             return Err(HeapError::NoRunningChild);
         }
         Ok(current)
+    }
+
+    pub fn current_address_space(&self) -> Option<u32> {
+        self.slots[self.current_slot].address_space
+    }
+
+    #[cfg(test)]
+    pub fn set_current_address_space(&mut self, address_space: Option<u32>) {
+        self.slots[self.current_slot].address_space = address_space;
+    }
+
+    #[cfg(test)]
+    pub fn set_current_memory(&mut self, memory: ProcessMemory) {
+        self.slots[self.current_slot].memory = memory;
     }
 
     pub fn current_contains_buffer(&self, ptr: u32, len: u32) -> bool {
@@ -798,7 +820,6 @@ pub unsafe fn set_current_program_break(address: u32) -> Result<u32, HeapError> 
     }
 }
 
-#[cfg(any(not(test), feature = "host-test"))]
 pub unsafe fn current_process_contains_buffer(ptr: u32, len: u32) -> bool {
     #[cfg(not(test))]
     {
@@ -811,6 +832,34 @@ pub unsafe fn current_process_contains_buffer(ptr: u32, len: u32) -> bool {
     {
         unsafe { PROCESS_TABLE.get().current_contains_buffer(ptr, len) }
     }
+}
+
+pub unsafe fn current_process_address_space() -> Option<u32> {
+    #[cfg(not(test))]
+    {
+        let current_slot = unsafe { runtime_current_slot() };
+        let address_space =
+            unsafe { read_runtime_word(runtime_slot_address_space_ptr(current_slot)) };
+        return if address_space == 0 {
+            None
+        } else {
+            Some(address_space)
+        };
+    }
+    #[cfg(test)]
+    {
+        unsafe { PROCESS_TABLE.get().current_address_space() }
+    }
+}
+
+#[cfg(test)]
+pub fn set_current_process_address_space_for_tests(address_space: Option<u32>) {
+    unsafe { PROCESS_TABLE.get().set_current_address_space(address_space) }
+}
+
+#[cfg(test)]
+pub fn set_current_process_memory_for_tests(memory: ProcessMemory) {
+    unsafe { PROCESS_TABLE.get().set_current_memory(memory) }
 }
 
 #[cfg(any(not(test), feature = "host-test"))]
@@ -896,6 +945,15 @@ fn runtime_slot_memory_end_ptr(slot: usize) -> *mut u32 {
         INIT_PROCESS_SLOT => core::ptr::addr_of_mut!(RUNTIME_SLOT0_MEMORY_END),
         1 => core::ptr::addr_of_mut!(RUNTIME_SLOT1_MEMORY_END),
         _ => core::ptr::addr_of_mut!(RUNTIME_SLOT2_MEMORY_END),
+    }
+}
+
+#[cfg(not(test))]
+fn runtime_slot_address_space_ptr(slot: usize) -> *mut u32 {
+    match slot {
+        INIT_PROCESS_SLOT => core::ptr::addr_of_mut!(RUNTIME_SLOT0_ADDRESS_SPACE),
+        1 => core::ptr::addr_of_mut!(RUNTIME_SLOT1_ADDRESS_SPACE),
+        _ => core::ptr::addr_of_mut!(RUNTIME_SLOT2_ADDRESS_SPACE),
     }
 }
 

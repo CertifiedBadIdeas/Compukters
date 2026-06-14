@@ -1,6 +1,10 @@
 use k16_abi::syscall as abi_syscall;
 
-use crate::{console, control, debug, fs, process, stdin, timer, trap};
+use crate::{console, control, debug, fs, process, stdin, timer, trap, user_buffer};
+
+const USER_IO_CHUNK_BYTES: usize = 256;
+const MAX_OPEN_PATH_BYTES: usize = fs::MAX_OPEN_PATH_BYTES as usize;
+const MAX_STAT_PATH_BYTES: usize = fs::MAX_STAT_PATH_BYTES as usize;
 
 pub fn dispatch(number: u32) -> ! {
     match number {
@@ -127,10 +131,7 @@ fn read_fd(fd: u32, ptr: u32, len: u32) -> Result<u32, u32> {
     match fd {
         abi_syscall::FD_STDIN => stdin::read(ptr, len),
         abi_syscall::FD_STDOUT | abi_syscall::FD_STDERR => Err(abi_syscall::ERROR_BAD_FD),
-        _ => match unsafe { fs::read_file_fd_for_process(current_process_id(), fd, ptr, len) } {
-            Ok(read) => Ok(read),
-            Err(error) => Err(fs_error_to_status(error)),
-        },
+        _ => read_file_fd(fd, ptr, len),
     }
 }
 
@@ -138,10 +139,8 @@ fn open_fd(ptr: u32, len: u32, flags: u32) -> Result<u32, u32> {
     if len == 0 || len > fs::MAX_OPEN_PATH_BYTES {
         return Err(abi_syscall::ERROR_INVALID);
     }
-    if !valid_guest_buffer(ptr, len) {
-        return Err(abi_syscall::ERROR_FAULT);
-    }
-    let path = unsafe { core::slice::from_raw_parts(ptr as usize as *const u8, len as usize) };
+    let mut path = [0_u8; MAX_OPEN_PATH_BYTES];
+    let path = user_buffer::copy_from_user_into(ptr, len, &mut path)?;
     match unsafe { fs::open_root_file_for_process(current_process_id(), path, flags) } {
         Ok(fd) => Ok(fd),
         Err(error) => Err(fs_error_to_status(error)),
@@ -152,10 +151,8 @@ fn read_dir(ptr: u32, len: u32) -> Result<u32, u32> {
     if len < 16 || len > abi_syscall::MAX_READ_DIR_REQUEST_BYTES as u32 {
         return Err(abi_syscall::ERROR_INVALID);
     }
-    if !valid_guest_buffer(ptr, len) {
-        return Err(abi_syscall::ERROR_FAULT);
-    }
-    let request = unsafe { core::slice::from_raw_parts(ptr as usize as *const u8, len as usize) };
+    let mut request = [0_u8; abi_syscall::MAX_READ_DIR_REQUEST_BYTES];
+    let request = user_buffer::copy_from_user_into(ptr, len, &mut request)?;
     if read_u32_le(request, 0) != abi_syscall::READ_DIR_REQUEST_MAGIC {
         return Err(abi_syscall::ERROR_INVALID);
     }
@@ -169,7 +166,8 @@ fn read_dir(ptr: u32, len: u32) -> Result<u32, u32> {
         return Err(abi_syscall::ERROR_FAULT);
     }
     let path = &request[16..len as usize];
-    match unsafe { fs::read_root_directory(path, out_ptr, out_len) } {
+    let mut sink = UserDirectoryByteSink::new(out_ptr, out_len);
+    match unsafe { fs::read_root_directory_into(path, &mut sink) } {
         Ok(written) => Ok(written),
         Err(error) => Err(fs_error_to_status(error)),
     }
@@ -179,19 +177,16 @@ fn stat_path(ptr: u32, len: u32, out_ptr: u32) -> Result<(), u32> {
     if len == 0 || len > fs::MAX_STAT_PATH_BYTES {
         return Err(abi_syscall::ERROR_INVALID);
     }
-    if !valid_guest_buffer(ptr, len)
-        || !valid_guest_buffer(out_ptr, abi_syscall::STAT_METADATA_BYTES as u32)
-    {
+    let mut path = [0_u8; MAX_STAT_PATH_BYTES];
+    let path = user_buffer::copy_from_user_into(ptr, len, &mut path)?;
+    if !valid_guest_buffer(out_ptr, abi_syscall::STAT_METADATA_BYTES as u32) {
         return Err(abi_syscall::ERROR_FAULT);
     }
-    let path = unsafe { core::slice::from_raw_parts(ptr as usize as *const u8, len as usize) };
     let metadata = unsafe { fs::stat_root_path(path).map_err(fs_error_to_status)? };
-    unsafe {
-        write_u32_le(out_ptr, metadata.file_type);
-        write_u32_le(out_ptr + 4, metadata.size_bytes);
-        write_u32_le(out_ptr + 8, 0);
-        write_u32_le(out_ptr + 12, 0);
-    }
+    let mut metadata_bytes = [0_u8; abi_syscall::STAT_METADATA_BYTES];
+    write_u32_le(&mut metadata_bytes, 0, metadata.file_type);
+    write_u32_le(&mut metadata_bytes, 4, metadata.size_bytes);
+    user_buffer::copy_to_user(out_ptr, &metadata_bytes)?;
     Ok(())
 }
 
@@ -215,21 +210,21 @@ fn grow_program_break(delta: u32) -> Result<u32, u32> {
 }
 
 fn prepare_run(ptr: u32, len: u32, format: u32) -> Result<process::ChildLaunch, u32> {
-    if !valid_guest_buffer(ptr, len) {
-        return Err(abi_syscall::ERROR_FAULT);
-    }
-    let bytes = unsafe { core::slice::from_raw_parts(ptr as usize as *const u8, len as usize) };
     match format {
         abi_syscall::RUN_FORMAT_PATH => {
             if len == 0 || len > process::MAX_RUN_PATH_BYTES as u32 {
                 return Err(abi_syscall::ERROR_INVALID);
             }
+            let mut bytes = [0_u8; process::MAX_RUN_PATH_BYTES];
+            let bytes = user_buffer::copy_from_user_into(ptr, len, &mut bytes)?;
             unsafe { process::begin_loaded_child_from_path(bytes) }
         }
         abi_syscall::RUN_FORMAT_ARGV => {
             if len == 0 || len > k16_abi::syscall::MAX_RUN_ARGV_REQUEST_BYTES as u32 {
                 return Err(abi_syscall::ERROR_INVALID);
             }
+            let mut bytes = [0_u8; k16_abi::syscall::MAX_RUN_ARGV_REQUEST_BYTES];
+            let bytes = user_buffer::copy_from_user_into(ptr, len, &mut bytes)?;
             unsafe { process::begin_loaded_child_from_argv_request(bytes) }
         }
         _ => Err(abi_syscall::ERROR_INVALID),
@@ -240,21 +235,22 @@ fn write_guest_bytes(ptr: u32, len: u32) -> Result<u32, u32> {
     if len == 0 {
         return Ok(0);
     }
-    if !valid_guest_buffer(ptr, len) {
-        return Err(abi_syscall::ERROR_FAULT);
-    }
-    let mut offset = 0;
-    while offset < len {
-        let byte = unsafe { core::ptr::read_volatile((ptr + offset) as usize as *const u8) };
-        console::write_byte(byte);
-        offset += 1;
+    let mut written = 0;
+    while written < len {
+        let chunk_len = min_u32(len - written, USER_IO_CHUNK_BYTES as u32);
+        let mut chunk = [0_u8; USER_IO_CHUNK_BYTES];
+        let chunk = user_buffer::copy_from_user_into(ptr + written, chunk_len, &mut chunk)?;
+        for byte in chunk {
+            console::write_byte(*byte);
+        }
+        written += chunk_len;
     }
     console::flush();
     Ok(len)
 }
 
 fn valid_guest_buffer(ptr: u32, len: u32) -> bool {
-    unsafe { process::current_process_contains_buffer(ptr, len) }
+    user_buffer::valid_user_buffer(ptr, len)
 }
 
 fn read_u32_le(bytes: &[u8], offset: usize) -> u32 {
@@ -266,14 +262,84 @@ fn read_u32_le(bytes: &[u8], offset: usize) -> u32 {
     ])
 }
 
-unsafe fn write_u32_le(ptr: u32, value: u32) {
-    let bytes = value.to_le_bytes();
-    let mut offset = 0;
-    while offset < bytes.len() {
-        unsafe {
-            core::ptr::write_volatile((ptr + offset as u32) as usize as *mut u8, bytes[offset]);
+fn write_u32_le(dst: &mut [u8], offset: usize, value: u32) {
+    let src = value.to_le_bytes();
+    let mut index = 0;
+    while index < src.len() {
+        dst[offset + index] = src[index];
+        index += 1;
+    }
+}
+
+fn read_file_fd(fd: u32, ptr: u32, len: u32) -> Result<u32, u32> {
+    let mut total_read = 0;
+    while total_read < len {
+        let chunk_len = min_u32(len - total_read, USER_IO_CHUNK_BYTES as u32);
+        let mut chunk = [0_u8; USER_IO_CHUNK_BYTES];
+        let read = match unsafe {
+            fs::copy_file_fd_range_to_ram_for_process(
+                current_process_id(),
+                fd,
+                chunk.as_mut_ptr() as usize as u32,
+                chunk_len,
+            )
+        } {
+            Ok(read) => read,
+            Err(error) => return Err(fs_error_to_status(error)),
+        };
+        if read == 0 {
+            return Ok(total_read);
         }
-        offset += 1;
+        user_buffer::copy_to_user(ptr + total_read, &chunk[..read as usize])?;
+        match unsafe { fs::advance_file_fd_for_process(current_process_id(), fd, read) } {
+            Ok(()) => {}
+            Err(error) => return Err(fs_error_to_status(error)),
+        }
+        total_read += read;
+        if read < chunk_len {
+            return Ok(total_read);
+        }
+    }
+    Ok(total_read)
+}
+
+fn min_u32(left: u32, right: u32) -> u32 {
+    if left < right {
+        left
+    } else {
+        right
+    }
+}
+
+struct UserDirectoryByteSink {
+    ptr: u32,
+    len: u32,
+    written: u32,
+}
+
+impl UserDirectoryByteSink {
+    const fn new(ptr: u32, len: u32) -> Self {
+        Self {
+            ptr,
+            len,
+            written: 0,
+        }
+    }
+}
+
+impl fs::DirectoryByteSink for UserDirectoryByteSink {
+    fn push_byte(&mut self, byte: u8) -> Result<(), fs::FsError> {
+        if self.written >= self.len {
+            return Err(fs::FsError::NoMemory);
+        }
+        let bytes = [byte];
+        user_buffer::copy_to_user(self.ptr + self.written, &bytes).map_err(fs::FsError)?;
+        self.written += 1;
+        Ok(())
+    }
+
+    fn written(&self) -> u32 {
+        self.written
     }
 }
 

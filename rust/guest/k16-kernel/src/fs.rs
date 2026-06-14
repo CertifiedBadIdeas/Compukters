@@ -49,7 +49,65 @@ impl FsError {
     pub const NoEntry: Self = Self(k16_abi::syscall::ERROR_NO_ENTRY);
     pub const NoFd: Self = Self(k16_abi::syscall::ERROR_NO_FD);
     pub const NoMemory: Self = Self(k16_abi::syscall::ERROR_NO_MEMORY);
+    pub const Fault: Self = Self(k16_abi::syscall::ERROR_FAULT);
     pub const Storage: Self = Self(k16_abi::syscall::ERROR_NO_ENTRY);
+}
+
+pub trait DirectoryByteSink {
+    fn push_byte(&mut self, byte: u8) -> Result<(), FsError>;
+    fn written(&self) -> u32;
+}
+
+#[cfg(any(not(test), feature = "host-test"))]
+struct StorageDirectoryByteSink<'a, S: DirectoryByteSink> {
+    sink: &'a mut S,
+}
+
+#[cfg(any(not(test), feature = "host-test"))]
+impl<S: DirectoryByteSink> k16_storage::DirectoryListingSink for StorageDirectoryByteSink<'_, S> {
+    unsafe fn push_byte(&mut self, byte: u8) -> Result<(), k16_storage::StorageError> {
+        self.sink
+            .push_byte(byte)
+            .map_err(fs_error_to_storage_output_error)
+    }
+
+    fn written(&self) -> u32 {
+        self.sink.written()
+    }
+}
+
+#[cfg(any(not(test), feature = "host-test"))]
+struct RamDirectoryByteSink {
+    ptr: u32,
+    len: u32,
+    written: u32,
+}
+
+#[cfg(any(not(test), feature = "host-test"))]
+impl RamDirectoryByteSink {
+    const fn new(ptr: u32, len: u32) -> Self {
+        Self {
+            ptr,
+            len,
+            written: 0,
+        }
+    }
+}
+
+#[cfg(any(not(test), feature = "host-test"))]
+impl DirectoryByteSink for RamDirectoryByteSink {
+    fn push_byte(&mut self, byte: u8) -> Result<(), FsError> {
+        if self.written >= self.len {
+            return Err(FsError::NoMemory);
+        }
+        unsafe { core::ptr::write_volatile((self.ptr + self.written) as usize as *mut u8, byte) };
+        self.written += 1;
+        Ok(())
+    }
+
+    fn written(&self) -> u32 {
+        self.written
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -346,10 +404,22 @@ pub unsafe fn read_file_fd_for_process(
     ptr: u32,
     len: u32,
 ) -> Result<u32, FsError> {
+    let read_len = unsafe { copy_file_fd_range_to_ram_for_process(owner_pid, fd, ptr, len)? };
+    unsafe { advance_file_fd_for_process(owner_pid, fd, read_len)? };
+    Ok(read_len)
+}
+
+#[cfg(any(not(test), feature = "host-test"))]
+pub unsafe fn copy_file_fd_range_to_ram_for_process(
+    owner_pid: u32,
+    fd: u32,
+    ptr: u32,
+    len: u32,
+) -> Result<u32, FsError> {
     let descriptor = unsafe {
         RUNTIME_FD_TABLE
             .get()
-            .descriptor_mut_for_process(owner_pid, fd)?
+            .descriptor_for_process(owner_pid, fd)?
     };
     let remaining = descriptor
         .metadata
@@ -365,17 +435,43 @@ pub unsafe fn read_file_fd_for_process(
         k16_storage::copy_file_range_to_ram(metadata.into(), file_offset, ptr, read_len)
             .map_err(storage_error_to_fs_error)?;
     }
-    descriptor.offset += read_len;
     Ok(read_len)
 }
 
 #[cfg(any(not(test), feature = "host-test"))]
+pub unsafe fn advance_file_fd_for_process(
+    owner_pid: u32,
+    fd: u32,
+    len: u32,
+) -> Result<(), FsError> {
+    unsafe {
+        RUNTIME_FD_TABLE
+            .get()
+            .advance_for_process(owner_pid, fd, len)
+    }
+}
+
+#[cfg(any(not(test), feature = "host-test"))]
 pub unsafe fn read_root_directory(path: &[u8], ptr: u32, len: u32) -> Result<u32, FsError> {
+    let mut sink = RamDirectoryByteSink::new(ptr, len);
+    unsafe { read_root_directory_into(path, &mut sink) }
+}
+
+#[cfg(any(not(test), feature = "host-test"))]
+pub unsafe fn read_root_directory_into<S: DirectoryByteSink>(
+    path: &[u8],
+    sink: &mut S,
+) -> Result<u32, FsError> {
     let path = RootDirectoryPath::parse(path)?;
     let components = path.components();
+    let mut storage_sink = StorageDirectoryByteSink { sink };
     unsafe {
-        k16_storage::read_directory_from_storage0(ROOT_PARTITION, components.as_slice(), ptr, len)
-            .map_err(storage_error_to_fs_error)
+        k16_storage::read_directory_from_storage0_into(
+            ROOT_PARTITION,
+            components.as_slice(),
+            &mut storage_sink,
+        )
+        .map_err(storage_error_to_fs_error)
     }
 }
 
@@ -409,8 +505,21 @@ fn storage_error_to_fs_error(error: k16_storage::StorageError) -> FsError {
         FsError::NoEntry
     } else if error == k16_storage::StorageError::OUTPUT_BUFFER_TOO_SMALL {
         FsError::NoMemory
+    } else if error == k16_storage::StorageError::OUTPUT_TRANSFER {
+        FsError::Fault
     } else {
         FsError::Storage
+    }
+}
+
+#[cfg(any(not(test), feature = "host-test"))]
+fn fs_error_to_storage_output_error(error: FsError) -> k16_storage::StorageError {
+    if error == FsError::NoMemory {
+        k16_storage::StorageError::OUTPUT_BUFFER_TOO_SMALL
+    } else if error == FsError::Fault {
+        k16_storage::StorageError::OUTPUT_TRANSFER
+    } else {
+        k16_storage::StorageError::INVALID_FILESYSTEM
     }
 }
 
