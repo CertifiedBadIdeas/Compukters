@@ -460,6 +460,18 @@ impl K16Cpu {
         self.privilege_mode = privilege_mode;
     }
 
+    pub fn enter_user_address_space(
+        &mut self,
+        address_space: MmuAddressSpaceId,
+        entry_pc: u32,
+        stack_pointer: u32,
+    ) {
+        self.address_mode = K16AddressMode::Translated { address_space };
+        self.privilege_mode = K16PrivilegeMode::User;
+        self.pc = entry_pc;
+        self.registers[usize::from(K16_STACK_POINTER_REGISTER)] = stack_pointer;
+    }
+
     pub fn snapshot(&self) -> K16CpuSnapshot {
         K16CpuSnapshot {
             pc: self.pc,

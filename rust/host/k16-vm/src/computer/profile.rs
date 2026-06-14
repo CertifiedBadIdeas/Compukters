@@ -1,6 +1,6 @@
 use crate::computer::devices::{
-    ComputerControlDevice, DebugSerialDevice, GpuDevice, KeyboardDevice, SerialInputDevice,
-    StoragePortDevice, TimerDevice,
+    ComputerControlDevice, DebugSerialDevice, GpuDevice, KeyboardDevice, MmuControlDevice,
+    SerialInputDevice, StoragePortDevice, TimerDevice,
 };
 use crate::computer_abi;
 use crate::k16::{K16_INTERRUPT_SOURCE_KEYBOARD0, K16_INTERRUPT_SOURCE_TIMER0};
@@ -55,6 +55,10 @@ impl ComputerMachineProfile {
                 computer_abi::COMPUTER_HARDWARE_ID_KEYBOARD0,
                 computer_abi::KEYBOARD0_BASE,
             ))
+            .with_hardware(ComputerHardwareConfig::mmu(
+                computer_abi::COMPUTER_HARDWARE_ID_MMU0,
+                computer_abi::MMU0_BASE,
+            ))
     }
 
     pub fn computer_v1_with_storage0_media(
@@ -93,6 +97,10 @@ impl ComputerMachineProfile {
                 computer_abi::COMPUTER_HARDWARE_ID_KEYBOARD0,
                 computer_abi::KEYBOARD0_BASE,
             ))
+            .with_hardware(ComputerHardwareConfig::mmu(
+                computer_abi::COMPUTER_HARDWARE_ID_MMU0,
+                computer_abi::MMU0_BASE,
+            ))
     }
 
     pub fn computer_v1_with_storage0_path(
@@ -128,6 +136,10 @@ impl ComputerMachineProfile {
             .with_hardware(ComputerHardwareConfig::keyboard(
                 computer_abi::COMPUTER_HARDWARE_ID_KEYBOARD0,
                 computer_abi::KEYBOARD0_BASE,
+            ))
+            .with_hardware(ComputerHardwareConfig::mmu(
+                computer_abi::COMPUTER_HARDWARE_ID_MMU0,
+                computer_abi::MMU0_BASE,
             ))
     }
 
@@ -230,6 +242,14 @@ impl ComputerHardwareConfig {
         }
     }
 
+    pub fn mmu(id: u32, mmio_base: u32) -> Self {
+        Self {
+            id,
+            mmio_base,
+            device: ComputerHardwareDevice::Mmu,
+        }
+    }
+
     pub(crate) fn mmio_size(&self) -> u32 {
         self.device.mmio_size()
     }
@@ -248,6 +268,7 @@ pub(crate) enum ComputerHardwareDevice {
     StoragePort(StoragePortConfig),
     Timer,
     Keyboard,
+    Mmu,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -291,6 +312,7 @@ impl ComputerHardwareDevice {
             Self::StoragePort(_) => StoragePortDevice::SIZE,
             Self::Timer => TimerDevice::SIZE,
             Self::Keyboard => KeyboardDevice::SIZE,
+            Self::Mmu => MmuControlDevice::SIZE,
         }
     }
 

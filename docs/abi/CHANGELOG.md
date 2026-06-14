@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Added the K16 `mmu0` MMIO control device as the first privileged guest
+  interface to the host-managed MMU. Kernel-mode guest code can create address
+  spaces, map/protect pages, and activate translated user execution for the
+  current K16 CPU while physical boot remains the default.
 - Added the planned K16 virtual-memory/address-space ABI direction. The current
   VM remains physical-memory-only, but the documented direction is a small
   user-translated process model: physical BIOS/boot/kernel execution, 4 KiB

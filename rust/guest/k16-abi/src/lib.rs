@@ -206,6 +206,7 @@ pub mod computer {
         pub const GPU0: u32 = 6;
         pub const TIMER0: u32 = 7;
         pub const KEYBOARD0: u32 = 8;
+        pub const MMU0: u32 = 9;
     }
 
     pub mod control {
@@ -377,6 +378,39 @@ pub mod computer {
         pub const KEY_BACKSPACE: i32 = 259;
     }
 
+    pub mod mmu0 {
+        pub const BASE: u32 = 0x1000_0800;
+        pub const VERSION: u32 = 0x1000_0800;
+        pub const STATUS: u32 = 0x1000_0804;
+        pub const ERROR: u32 = 0x1000_0808;
+        pub const COMMAND: u32 = 0x1000_080c;
+        pub const ADDRESS_SPACE: u32 = 0x1000_0810;
+        pub const VIRTUAL_START: u32 = 0x1000_0814;
+        pub const PHYSICAL_START: u32 = 0x1000_0818;
+        pub const PAGE_COUNT: u32 = 0x1000_081c;
+        pub const FLAGS: u32 = 0x1000_0820;
+        pub const ENTRY_PC: u32 = 0x1000_0824;
+        pub const STACK_POINTER: u32 = 0x1000_0828;
+        pub const RESULT: u32 = 0x1000_082c;
+        pub const SIZE: u32 = 256;
+
+        pub const MMU_VERSION: i32 = 1;
+        pub const STATUS_READY: i32 = 0;
+        pub const STATUS_DONE: i32 = 1;
+        pub const STATUS_ERROR: i32 = 2;
+        pub const ERROR_NONE: i32 = 0;
+        pub const ERROR_INVALID_COMMAND: i32 = 1;
+        pub const ERROR_INVALID_ARGUMENT: i32 = 2;
+        pub const COMMAND_NOP: i32 = 0;
+        pub const COMMAND_CREATE_ADDRESS_SPACE: i32 = 1;
+        pub const COMMAND_MAP_PAGES: i32 = 2;
+        pub const COMMAND_PROTECT_PAGES: i32 = 3;
+        pub const COMMAND_ACTIVATE_USER_ADDRESS_SPACE: i32 = 4;
+        pub const FLAG_USER_ACCESSIBLE: i32 = 0x0000_0001;
+        pub const FLAG_WRITABLE: i32 = 0x0000_0002;
+        pub const FLAG_EXECUTABLE: i32 = 0x0000_0004;
+    }
+
     pub mod memory {
         pub const RAM_BASE: u32 = 0x0000_0000;
     }
@@ -434,12 +468,42 @@ mod tests {
         assert_eq!(computer::keyboard0::KEY_ENTER, 257);
         assert_eq!(computer::keyboard0::KEY_KP_ENTER, 335);
         assert_eq!(computer::keyboard0::KEY_BACKSPACE, 259);
+        assert_eq!(computer::mmu0::BASE, 0x1000_0800);
+        assert_eq!(computer::mmu0::VERSION, 0x1000_0800);
+        assert_eq!(computer::mmu0::STATUS, 0x1000_0804);
+        assert_eq!(computer::mmu0::ERROR, 0x1000_0808);
+        assert_eq!(computer::mmu0::COMMAND, 0x1000_080c);
+        assert_eq!(computer::mmu0::ADDRESS_SPACE, 0x1000_0810);
+        assert_eq!(computer::mmu0::VIRTUAL_START, 0x1000_0814);
+        assert_eq!(computer::mmu0::PHYSICAL_START, 0x1000_0818);
+        assert_eq!(computer::mmu0::PAGE_COUNT, 0x1000_081c);
+        assert_eq!(computer::mmu0::FLAGS, 0x1000_0820);
+        assert_eq!(computer::mmu0::ENTRY_PC, 0x1000_0824);
+        assert_eq!(computer::mmu0::STACK_POINTER, 0x1000_0828);
+        assert_eq!(computer::mmu0::RESULT, 0x1000_082c);
+        assert_eq!(computer::mmu0::SIZE, 256);
+        assert_eq!(computer::mmu0::MMU_VERSION, 1);
+        assert_eq!(computer::mmu0::STATUS_READY, 0);
+        assert_eq!(computer::mmu0::STATUS_DONE, 1);
+        assert_eq!(computer::mmu0::STATUS_ERROR, 2);
+        assert_eq!(computer::mmu0::ERROR_NONE, 0);
+        assert_eq!(computer::mmu0::ERROR_INVALID_COMMAND, 1);
+        assert_eq!(computer::mmu0::ERROR_INVALID_ARGUMENT, 2);
+        assert_eq!(computer::mmu0::COMMAND_NOP, 0);
+        assert_eq!(computer::mmu0::COMMAND_CREATE_ADDRESS_SPACE, 1);
+        assert_eq!(computer::mmu0::COMMAND_MAP_PAGES, 2);
+        assert_eq!(computer::mmu0::COMMAND_PROTECT_PAGES, 3);
+        assert_eq!(computer::mmu0::COMMAND_ACTIVATE_USER_ADDRESS_SPACE, 4);
+        assert_eq!(computer::mmu0::FLAG_USER_ACCESSIBLE, 0x0000_0001);
+        assert_eq!(computer::mmu0::FLAG_WRITABLE, 0x0000_0002);
+        assert_eq!(computer::mmu0::FLAG_EXECUTABLE, 0x0000_0004);
         assert_eq!(computer::profile::BOOT_INFO_MAGIC, 0x4942_5852);
         assert_eq!(computer::profile::VERSION, 2);
         assert_eq!(computer::profile::BOOT_INFO_SIZE, 28);
         assert_eq!(computer::profile::HARDWARE_ENTRY_SIZE, 16);
         assert_eq!(computer::hardware_id::TIMER0, 7);
         assert_eq!(computer::hardware_id::KEYBOARD0, 8);
+        assert_eq!(computer::hardware_id::MMU0, 9);
     }
 
     #[test]

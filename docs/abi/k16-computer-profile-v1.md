@@ -58,6 +58,7 @@ id  name          mmio_base     mmio_size     irq_source
 6   gpu0          0x1000_0500   0x0000_0100   0x0000_0000
 7   timer0        0x1000_0600   0x0000_0100   0x0000_0001
 8   keyboard0     0x1000_0700   0x0000_0100   0x0000_0002
+9   mmu0          0x1000_0800   0x0000_0100   0x0000_0000
 ```
 
 Firmware should discover these ranges through `BootInfo.hardware_table_addr` and
@@ -379,6 +380,82 @@ clears the queue. It does not increment when guest code consumes one event.
 When keyboard0 transitions from empty to non-empty, the host requests the CPU
 interrupt source advertised by the hardware-table entry. Guest code can still
 observe the device purely by polling.
+
+## Mmu0 MMIO
+
+The `mmu0` range exposes the host-managed K16 MMU control surface to privileged
+guest kernel code. User programs must not receive direct mappings to this
+device. The device is command-based: guest code writes argument registers, then
+writes `command`; the host applies the command before guest execution
+continues.
+
+All multi-byte registers are little-endian.
+
+```text
+offset  size  access  name
+0x00    4     R       version
+0x04    4     R       status
+0x08    4     R       error
+0x0C    4     W       command
+0x10    4     R/W     address_space
+0x14    4     R/W     virtual_start
+0x18    4     R/W     physical_start
+0x1C    4     R/W     page_count
+0x20    4     R/W     flags
+0x24    4     R/W     entry_pc
+0x28    4     R/W     stack_pointer
+0x2C    4     R       result
+```
+
+Version:
+
+```text
+1  mmu MMIO v1
+```
+
+Status values:
+
+```text
+0  ready
+1  done
+2  error
+```
+
+Error values:
+
+```text
+0  none
+1  invalid_command
+2  invalid_argument
+```
+
+Commands:
+
+```text
+0  nop
+1  create_address_space
+2  map_pages
+3  protect_pages
+4  activate_user_address_space
+```
+
+Flag bits:
+
+```text
+bit 0  user_accessible
+bit 1  writable
+bit 2  executable
+```
+
+`create_address_space` returns the new address-space id in `result`.
+`map_pages` and `protect_pages` use `address_space`, `virtual_start`,
+`physical_start`, `page_count`, and `flags`. `activate_user_address_space`
+uses `address_space`, `entry_pc`, and `stack_pointer`, then switches the current
+K16 CPU to translated user execution at `entry_pc`.
+
+The VM rejects unknown address spaces, unknown flag bits, unaligned mappings,
+zero page counts, overlapping virtual mappings, and physical ranges outside
+guest RAM by setting `status = error` and `error = invalid_argument`.
 
 ## Storage0 MMIO
 
