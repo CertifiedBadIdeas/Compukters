@@ -257,6 +257,8 @@ impl ComputerMachine {
     pub const MMU0_COMMAND_COPY_TO_USER: i32 = computer_abi::MMU0_COMMAND_COPY_TO_USER;
     pub const MMU0_COMMAND_SET_TRAP_RETURN_PHYSICAL: i32 =
         computer_abi::MMU0_COMMAND_SET_TRAP_RETURN_PHYSICAL;
+    pub const MMU0_COMMAND_SET_TRAP_RETURN_ADDRESS_SPACE: i32 =
+        computer_abi::MMU0_COMMAND_SET_TRAP_RETURN_ADDRESS_SPACE;
     pub const MMU0_FLAG_USER_ACCESSIBLE: i32 = computer_abi::MMU0_FLAG_USER_ACCESSIBLE;
     pub const MMU0_FLAG_WRITABLE: i32 = computer_abi::MMU0_FLAG_WRITABLE;
     pub const MMU0_FLAG_EXECUTABLE: i32 = computer_abi::MMU0_FLAG_EXECUTABLE;

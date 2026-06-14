@@ -94,6 +94,7 @@ pub mod syscall {
     pub const SBRK: u32 = 13;
     pub const READ_DIR: u32 = 14;
     pub const STAT: u32 = 15;
+    pub const GAME_TICKS: u32 = 16;
     pub const RUN_FORMAT_PATH: u32 = 0;
     pub const RUN_FORMAT_ARGV: u32 = 1;
     pub const RUN_ARGV_MAGIC: u32 = u32::from_le_bytes(*b"RARG");
@@ -107,6 +108,7 @@ pub mod syscall {
     pub const MAX_READ_DIR_REQUEST_BYTES: usize = 16 + MAX_READ_DIR_PATH_BYTES;
     pub const MAX_STAT_PATH_BYTES: usize = MAX_READ_DIR_PATH_BYTES;
     pub const STAT_METADATA_BYTES: usize = 16;
+    pub const GAME_TICKS_BYTES: usize = 8;
     pub const FILE_TYPE_REGULAR: u32 = 1;
     pub const FILE_TYPE_DIRECTORY: u32 = 2;
     pub const FD_STDIN: u32 = 0;
@@ -414,6 +416,7 @@ pub mod computer {
         pub const COMMAND_COPY_FROM_USER: i32 = 5;
         pub const COMMAND_COPY_TO_USER: i32 = 6;
         pub const COMMAND_SET_TRAP_RETURN_PHYSICAL: i32 = 7;
+        pub const COMMAND_SET_TRAP_RETURN_ADDRESS_SPACE: i32 = 8;
         pub const FLAG_USER_ACCESSIBLE: i32 = 0x0000_0001;
         pub const FLAG_WRITABLE: i32 = 0x0000_0002;
         pub const FLAG_EXECUTABLE: i32 = 0x0000_0004;
@@ -510,6 +513,7 @@ mod tests {
         assert_eq!(computer::mmu0::COMMAND_COPY_FROM_USER, 5);
         assert_eq!(computer::mmu0::COMMAND_COPY_TO_USER, 6);
         assert_eq!(computer::mmu0::COMMAND_SET_TRAP_RETURN_PHYSICAL, 7);
+        assert_eq!(computer::mmu0::COMMAND_SET_TRAP_RETURN_ADDRESS_SPACE, 8);
         assert_eq!(computer::mmu0::FLAG_USER_ACCESSIBLE, 0x0000_0001);
         assert_eq!(computer::mmu0::FLAG_WRITABLE, 0x0000_0002);
         assert_eq!(computer::mmu0::FLAG_EXECUTABLE, 0x0000_0004);
@@ -602,6 +606,7 @@ mod tests {
         assert_eq!(syscall::SBRK, 13);
         assert_eq!(syscall::READ_DIR, 14);
         assert_eq!(syscall::STAT, 15);
+        assert_eq!(syscall::GAME_TICKS, 16);
         assert_eq!(syscall::RUN_ARGV_MAGIC, 0x4752_4152);
         assert_eq!(syscall::MAX_RUN_ARGS, 4);
         assert_eq!(syscall::MAX_RUN_PATH_BYTES, 61);
@@ -612,6 +617,7 @@ mod tests {
         assert_eq!(syscall::MAX_READ_DIR_REQUEST_BYTES, 244);
         assert_eq!(syscall::MAX_STAT_PATH_BYTES, 228);
         assert_eq!(syscall::STAT_METADATA_BYTES, 16);
+        assert_eq!(syscall::GAME_TICKS_BYTES, 8);
         assert_eq!(syscall::FILE_TYPE_REGULAR, 1);
         assert_eq!(syscall::FILE_TYPE_DIRECTORY, 2);
         assert_eq!(syscall::FD_STDIN, 0);

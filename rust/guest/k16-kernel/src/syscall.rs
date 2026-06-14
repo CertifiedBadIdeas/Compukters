@@ -72,6 +72,13 @@ pub fn dispatch(number: u32) -> ! {
                 Err(error) => unsafe { k16_rt::iret_with_r0(error) },
             }
         }
+        abi_syscall::GAME_TICKS => {
+            let out_ptr = k16_rt::syscall_arg0();
+            match game_ticks(out_ptr) {
+                Ok(()) => unsafe { k16_rt::iret_with_r0(abi_syscall::STATUS_OK) },
+                Err(error) => unsafe { k16_rt::iret_with_r0(error) },
+            }
+        }
         abi_syscall::CLOSE => {
             let fd = k16_rt::syscall_arg0();
             match close_fd(fd) {
@@ -187,6 +194,18 @@ fn stat_path(ptr: u32, len: u32, out_ptr: u32) -> Result<(), u32> {
     write_u32_le(&mut metadata_bytes, 0, metadata.file_type);
     write_u32_le(&mut metadata_bytes, 4, metadata.size_bytes);
     user_buffer::copy_to_user(out_ptr, &metadata_bytes)?;
+    Ok(())
+}
+
+fn game_ticks(out_ptr: u32) -> Result<(), u32> {
+    if !valid_guest_buffer(out_ptr, abi_syscall::GAME_TICKS_BYTES as u32) {
+        return Err(abi_syscall::ERROR_FAULT);
+    }
+    let ticks = timer::game_ticks();
+    let mut bytes = [0_u8; abi_syscall::GAME_TICKS_BYTES];
+    write_u32_le(&mut bytes, 0, ticks.low);
+    write_u32_le(&mut bytes, 4, ticks.high);
+    user_buffer::copy_to_user(out_ptr, &bytes)?;
     Ok(())
 }
 

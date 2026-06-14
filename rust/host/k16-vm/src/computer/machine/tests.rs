@@ -334,6 +334,128 @@ fn computer_machine_mmu0_can_override_trap_return_to_physical_context() {
 }
 
 #[test]
+fn computer_machine_mmu0_can_override_trap_return_to_translated_parent_context() {
+    const RAM_SIZE: usize = 0x5000;
+    const SETUP_PC: u32 = 0x0100;
+    const HANDLER_PC: u32 = 0x0200;
+    const CHILD_PHYSICAL_PC: u32 = 0x1000;
+    const CHILD_VIRTUAL_PC: u32 = 0x5000;
+    const PARENT_PHYSICAL_PC: u32 = 0x3000;
+    const PARENT_VIRTUAL_PC: u32 = 0x7000;
+    const PARENT_PROOF_PHYSICAL: u32 = 0x3100;
+    const PARENT_PROOF_VIRTUAL: u32 = 0x7100;
+    const KERNEL_STACK_TOP: u32 = 0x4800;
+    const PARENT_KERNEL_STACK_TOP: u32 = 0x4400;
+    const CHILD_STACK_TOP: u32 = 0x9000;
+
+    let mut machine = ComputerMachine::new(RAM_SIZE).unwrap();
+    let setup = k16_words(&[
+        k16_const32(1, HANDLER_PC)[0],
+        k16_const32(1, HANDLER_PC)[1],
+        k16_const32(1, HANDLER_PC)[2],
+        k16_write_csr(K16_CSR_TRAP_VECTOR, 1),
+        k16_const32(K16_STACK_POINTER_REGISTER, KERNEL_STACK_TOP)[0],
+        k16_const32(K16_STACK_POINTER_REGISTER, KERNEL_STACK_TOP)[1],
+        k16_const32(K16_STACK_POINTER_REGISTER, KERNEL_STACK_TOP)[2],
+        k16_wait(),
+    ]);
+    let handler = k16_words(&[
+        k16_const32(1, PARENT_VIRTUAL_PC)[0],
+        k16_const32(1, PARENT_VIRTUAL_PC)[1],
+        k16_const32(1, PARENT_VIRTUAL_PC)[2],
+        k16_write_csr(K16_CSR_TRAP_RESUME_PC, 1),
+        k16_const32(1, ComputerMachine::MMU0_ADDRESS_SPACE)[0],
+        k16_const32(1, ComputerMachine::MMU0_ADDRESS_SPACE)[1],
+        k16_const32(1, ComputerMachine::MMU0_ADDRESS_SPACE)[2],
+        k16_const4(2, 1),
+        k16_store32(1, 2),
+        k16_const32(1, ComputerMachine::MMU0_PHYSICAL_START)[0],
+        k16_const32(1, ComputerMachine::MMU0_PHYSICAL_START)[1],
+        k16_const32(1, ComputerMachine::MMU0_PHYSICAL_START)[2],
+        k16_const32(2, PARENT_KERNEL_STACK_TOP)[0],
+        k16_const32(2, PARENT_KERNEL_STACK_TOP)[1],
+        k16_const32(2, PARENT_KERNEL_STACK_TOP)[2],
+        k16_store32(1, 2),
+        k16_const32(1, ComputerMachine::MMU0_COMMAND)[0],
+        k16_const32(1, ComputerMachine::MMU0_COMMAND)[1],
+        k16_const32(1, ComputerMachine::MMU0_COMMAND)[2],
+        k16_const4(
+            2,
+            ComputerMachine::MMU0_COMMAND_SET_TRAP_RETURN_ADDRESS_SPACE as u8,
+        ),
+        k16_store32(1, 2),
+        k16_iret(),
+    ]);
+    let child = k16_words(&[k16_syscall(1), k16_halt()]);
+    let parent = k16_words(&[
+        k16_const32(1, PARENT_PROOF_VIRTUAL)[0],
+        k16_const32(1, PARENT_PROOF_VIRTUAL)[1],
+        k16_const32(1, PARENT_PROOF_VIRTUAL)[2],
+        k16_const4(2, 1),
+        k16_store32(1, 2),
+        k16_halt(),
+    ]);
+    machine.write_guest_ram_bytes(SETUP_PC, &setup).unwrap();
+    machine.write_guest_ram_bytes(HANDLER_PC, &handler).unwrap();
+    machine
+        .write_guest_ram_bytes(CHILD_PHYSICAL_PC, &child)
+        .unwrap();
+    machine
+        .write_guest_ram_bytes(PARENT_PHYSICAL_PC, &parent)
+        .unwrap();
+    let parent_address_space = machine.create_mmu_address_space().unwrap();
+    assert_eq!(parent_address_space.raw(), 1);
+    machine
+        .map_mmu_pages(
+            parent_address_space,
+            PARENT_VIRTUAL_PC,
+            PARENT_PHYSICAL_PC,
+            1,
+            MmuMapFlags::USER_ACCESSIBLE | MmuMapFlags::WRITABLE | MmuMapFlags::EXECUTABLE,
+        )
+        .unwrap();
+    let child_address_space = machine.create_mmu_address_space().unwrap();
+    machine
+        .map_mmu_pages(
+            child_address_space,
+            CHILD_VIRTUAL_PC,
+            CHILD_PHYSICAL_PC,
+            1,
+            MmuMapFlags::USER_ACCESSIBLE | MmuMapFlags::EXECUTABLE,
+        )
+        .unwrap();
+    let boot_cpu = machine.install_k16_boot_cpu_for_tests(SETUP_PC, 64);
+
+    assert_eq!(
+        machine.run_boot_k16_until_signal(boot_cpu).unwrap(),
+        K16Signal::Wait,
+    );
+    machine
+        .k16_cpu_mut(boot_cpu)
+        .unwrap()
+        .enter_user_address_space(child_address_space, CHILD_VIRTUAL_PC, CHILD_STACK_TOP);
+
+    assert_eq!(
+        machine.run_boot_k16_until_signal(boot_cpu).unwrap(),
+        K16Signal::Halt,
+    );
+    assert_eq!(machine.memory().load_i32(PARENT_PROOF_PHYSICAL).unwrap(), 1);
+    assert_eq!(
+        machine.k16_cpu_mut(boot_cpu).unwrap().address_mode(),
+        K16AddressMode::Translated {
+            address_space: parent_address_space
+        }
+    );
+    assert_eq!(
+        machine
+            .k16_cpu_mut(boot_cpu)
+            .unwrap()
+            .trap_kernel_stack_pointer(),
+        PARENT_KERNEL_STACK_TOP
+    );
+}
+
+#[test]
 fn computer_machine_mmu0_activation_uses_command_kernel_stack_for_user_traps() {
     const RAM_SIZE: usize = 0x6000;
     const KERNEL_PC: u32 = 0x0100;
@@ -1956,6 +2078,10 @@ fn computer_machine_constants_match_profile_v2_abi() {
     assert_eq!(
         ComputerMachine::MMU0_COMMAND_COPY_TO_USER,
         computer_abi::MMU0_COMMAND_COPY_TO_USER,
+    );
+    assert_eq!(
+        ComputerMachine::MMU0_COMMAND_SET_TRAP_RETURN_ADDRESS_SPACE,
+        computer_abi::MMU0_COMMAND_SET_TRAP_RETURN_ADDRESS_SPACE,
     );
 }
 

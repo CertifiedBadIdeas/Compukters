@@ -356,6 +356,28 @@ pub fn stat_syscall(path: *const u8, len: usize, metadata: *mut u8) -> u32 {
 
 #[inline(always)]
 #[cfg(not(any(test, feature = "host-test")))]
+pub fn game_ticks_syscall(out: *mut u8) -> u32 {
+    syscall1(k16_abi::syscall::GAME_TICKS, out as usize as u32)
+}
+
+#[inline(always)]
+#[cfg(any(test, feature = "host-test"))]
+pub fn game_ticks_syscall(out: *mut u8) -> u32 {
+    let returned = syscall1(k16_abi::syscall::GAME_TICKS, out as usize as u32);
+    if returned == k16_abi::syscall::STATUS_OK {
+        let ticks = crate::time::timer0_game_ticks_parts();
+        let mut bytes = [0u8; k16_abi::syscall::GAME_TICKS_BYTES];
+        bytes[0..4].copy_from_slice(&ticks.low.to_le_bytes());
+        bytes[4..8].copy_from_slice(&ticks.high.to_le_bytes());
+        unsafe {
+            core::ptr::copy_nonoverlapping(bytes.as_ptr(), out, bytes.len());
+        }
+    }
+    returned
+}
+
+#[inline(always)]
+#[cfg(not(any(test, feature = "host-test")))]
 pub fn close_syscall(fd: u32) -> u32 {
     unsafe { __k16_close_syscall(fd) }
 }

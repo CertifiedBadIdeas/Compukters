@@ -29,12 +29,26 @@ pub mod thread {
 pub mod time {
     pub type U64Parts = k16_rt::U64Parts;
 
-    pub fn game_ticks() -> u64 {
-        k16_rt::timer0_game_ticks()
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub enum Error {
+        Syscall(u32),
     }
 
-    pub fn game_ticks_parts() -> U64Parts {
-        k16_rt::timer0_game_ticks_parts()
+    pub fn game_ticks() -> Result<u64, Error> {
+        let parts = game_ticks_parts()?;
+        Ok((u64::from(parts.high) << 32) | u64::from(parts.low))
+    }
+
+    pub fn game_ticks_parts() -> Result<U64Parts, Error> {
+        let mut bytes = [0u8; k16_abi::syscall::GAME_TICKS_BYTES];
+        let returned = k16_rt::game_ticks_syscall(bytes.as_mut_ptr());
+        if returned != k16_abi::syscall::STATUS_OK {
+            return Err(Error::Syscall(returned));
+        }
+        Ok(U64Parts {
+            low: u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]),
+            high: u32::from_le_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]),
+        })
     }
 }
 

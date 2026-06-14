@@ -481,6 +481,10 @@ impl K16Cpu {
         self.trap_kernel_stack_pointer
     }
 
+    pub fn set_trap_kernel_stack_pointer(&mut self, stack_pointer: u32) {
+        self.trap_kernel_stack_pointer = stack_pointer;
+    }
+
     pub fn enter_user_address_space(
         &mut self,
         address_space: MmuAddressSpaceId,

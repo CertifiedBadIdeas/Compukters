@@ -7,8 +7,6 @@ const STACK_GUARD_BYTES: u32 = 0x100;
 const ROOT_PARTITION: &[u8; 4] = b"ROOT";
 const BIN_COMPONENT: &[u8] = b"bin";
 const BIN_PREFIX: &[u8] = b"/bin/";
-#[cfg(not(test))]
-const SHELL_PATH: &[u8] = b"/bin/shell.kx";
 const KX_SUFFIX: &[u8] = b".kx";
 const K16FS_MAX_NAME_BYTES: usize = 56;
 pub const MAX_RUN_PATH_BYTES: usize = BIN_PREFIX.len() + K16FS_MAX_NAME_BYTES;
@@ -35,6 +33,9 @@ static RUNTIME_SLOT0_FRAME: KernelCell<k16_rt::TrapFrame> =
     KernelCell::new(k16_rt::TrapFrame::zeroed());
 #[cfg(not(test))]
 static RUNTIME_SLOT1_FRAME: KernelCell<k16_rt::TrapFrame> =
+    KernelCell::new(k16_rt::TrapFrame::zeroed());
+#[cfg(not(test))]
+static RUNTIME_SLOT2_FRAME: KernelCell<k16_rt::TrapFrame> =
     KernelCell::new(k16_rt::TrapFrame::zeroed());
 #[cfg(not(test))]
 static mut RUNTIME_CURRENT_SLOT: u32 = 0;
@@ -78,6 +79,12 @@ static mut RUNTIME_SLOT0_ADDRESS_SPACE: u32 = 0;
 static mut RUNTIME_SLOT1_ADDRESS_SPACE: u32 = 0;
 #[cfg(not(test))]
 static mut RUNTIME_SLOT2_ADDRESS_SPACE: u32 = 0;
+#[cfg(not(test))]
+static mut RUNTIME_SLOT0_KERNEL_STACK_TOP: u32 = 0;
+#[cfg(not(test))]
+static mut RUNTIME_SLOT1_KERNEL_STACK_TOP: u32 = 0;
+#[cfg(not(test))]
+static mut RUNTIME_SLOT2_KERNEL_STACK_TOP: u32 = 0;
 
 #[cfg(any(test, feature = "host-test"))]
 #[allow(dead_code)]
@@ -265,6 +272,16 @@ pub struct InitResume {
     pub frame: TrapFrame,
     pub child_exit_status: u32,
     pub address_space: Option<u32>,
+    pub kernel_stack_top: Option<u32>,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum TrapReturnOverride {
+    Physical,
+    Translated {
+        address_space: u32,
+        kernel_stack_top: u32,
+    },
 }
 
 #[cfg(any(test, feature = "host-test"))]
@@ -281,6 +298,7 @@ struct ProcessSlot {
     program_break: u32,
     heap_limit: u32,
     address_space: Option<u32>,
+    kernel_stack_top: Option<u32>,
 }
 
 #[cfg(any(test, feature = "host-test"))]
@@ -301,6 +319,7 @@ impl ProcessSlot {
             program_break: 0,
             heap_limit: 0,
             address_space: None,
+            kernel_stack_top: None,
         }
     }
 
@@ -317,6 +336,7 @@ impl ProcessSlot {
             program_break: 0,
             heap_limit: 0,
             address_space: None,
+            kernel_stack_top: None,
         }
     }
 
@@ -489,6 +509,7 @@ impl ProcessTable {
         frame.registers[2] = argv.table_ptr;
         let child = &mut self.slots[self.current_slot];
         child.address_space = Some(translated.address_space);
+        child.kernel_stack_top = Some(translated.kernel_stack_top);
         child.context = context;
         child.frame = frame;
         launch.context = context;
@@ -526,6 +547,7 @@ impl ProcessTable {
             frame: parent.frame,
             child_exit_status: status,
             address_space: parent.address_space,
+            kernel_stack_top: parent.kernel_stack_top,
         })
     }
 
@@ -728,16 +750,9 @@ pub unsafe fn begin_loaded_child_from_argv_request(request: &[u8]) -> Result<Chi
 #[cfg(not(test))]
 unsafe fn begin_loaded_child_runtime(path: &[u8], args: &[&[u8]]) -> Result<ChildLaunch, u32> {
     let current_slot = unsafe { runtime_current_slot() };
-    if current_slot + 1 >= MAX_PROCESS_SLOTS {
-        return Err(run_status_from_switch_error(
-            ProcessSwitchError::ChildAlreadyRunning,
-        ));
-    }
-    if unsafe { read_runtime_address_space(current_slot) }.is_some() {
-        return Err(run_status_from_switch_error(
-            ProcessSwitchError::ChildAlreadyRunning,
-        ));
-    }
+    let current_address_space = unsafe { read_runtime_address_space(current_slot) };
+    let _child_slot = runtime_child_slot_for_parent(current_slot, current_address_space)
+        .map_err(run_status_from_switch_error)?;
     let caller_frame = unsafe { save_runtime_process_frame(current_slot) };
     let caller_program_break =
         unsafe { read_runtime_word(runtime_slot_program_break_ptr(current_slot)) };
@@ -746,7 +761,7 @@ unsafe fn begin_loaded_child_runtime(path: &[u8], args: &[&[u8]]) -> Result<Chil
     if caller_program_break == 0 {
         return Err(run_status_from_load_error(ProcessLoadError::Storage));
     }
-    let translated_child = path != SHELL_PATH;
+    let translated_child = should_translate_runtime_child_path(path);
     let parent_stack_limit = caller_frame.stack_pointer.min(caller_memory.end);
     let (arena_end, kernel_stack_top) = if translated_child {
         translated_child_arena_end(parent_stack_limit)
@@ -779,10 +794,9 @@ unsafe fn begin_loaded_child_plan_runtime_with_argv(
     translated: Option<TranslatedUserLaunch>,
 ) -> Result<ChildLaunch, ProcessSwitchError> {
     let parent_slot = unsafe { runtime_current_slot() };
-    let child_slot = parent_slot + 1;
-    if child_slot >= MAX_PROCESS_SLOTS {
-        return Err(ProcessSwitchError::ChildAlreadyRunning);
-    }
+    let child_slot = runtime_child_slot_for_parent(parent_slot, unsafe {
+        read_runtime_address_space(parent_slot)
+    })?;
     let context = translated
         .map(|launch| ProcessContext {
             entry_pc: launch.entry_pc,
@@ -804,6 +818,12 @@ unsafe fn begin_loaded_child_plan_runtime_with_argv(
         write_runtime_word(
             runtime_slot_address_space_ptr(child_slot),
             translated.map(|launch| launch.address_space).unwrap_or(0),
+        );
+        write_runtime_word(
+            runtime_slot_kernel_stack_top_ptr(child_slot),
+            translated
+                .map(|launch| launch.kernel_stack_top)
+                .unwrap_or(0),
         );
         initialize_runtime_heap_from_bounds(
             child_slot,
@@ -894,6 +914,7 @@ unsafe fn finish_child_runtime(status: u32) -> Result<InitResume, ProcessSwitchE
         write_runtime_word(runtime_slot_parent_ptr(current_slot), NO_PARENT_SLOT);
         clear_runtime_process_memory(current_slot);
         clear_runtime_address_space(current_slot);
+        clear_runtime_kernel_stack_top(current_slot);
         clear_runtime_heap(current_slot);
         write_runtime_word(
             core::ptr::addr_of_mut!(RUNTIME_CURRENT_SLOT),
@@ -909,6 +930,7 @@ unsafe fn finish_child_runtime(status: u32) -> Result<InitResume, ProcessSwitchE
         frame,
         child_exit_status: status,
         address_space: unsafe { read_runtime_address_space(parent_slot) },
+        kernel_stack_top: unsafe { read_runtime_kernel_stack_top(parent_slot) },
     })
 }
 
@@ -965,6 +987,21 @@ unsafe fn clear_runtime_address_space(slot: usize) {
     unsafe { write_runtime_word(runtime_slot_address_space_ptr(slot), 0) }
 }
 
+#[cfg(not(test))]
+unsafe fn read_runtime_kernel_stack_top(slot: usize) -> Option<u32> {
+    let kernel_stack_top = unsafe { read_runtime_word(runtime_slot_kernel_stack_top_ptr(slot)) };
+    if kernel_stack_top == 0 {
+        None
+    } else {
+        Some(kernel_stack_top)
+    }
+}
+
+#[cfg(not(test))]
+unsafe fn clear_runtime_kernel_stack_top(slot: usize) {
+    unsafe { write_runtime_word(runtime_slot_kernel_stack_top_ptr(slot), 0) }
+}
+
 #[cfg(test)]
 pub fn set_current_process_address_space_for_tests(address_space: Option<u32>) {
     unsafe { PROCESS_TABLE.get().set_current_address_space(address_space) }
@@ -1012,7 +1049,8 @@ fn runtime_slot_parent_ptr(slot: usize) -> *mut u32 {
 fn runtime_slot_frame(slot: usize) -> &'static KernelCell<k16_rt::TrapFrame> {
     match slot {
         INIT_PROCESS_SLOT => &RUNTIME_SLOT0_FRAME,
-        _ => &RUNTIME_SLOT1_FRAME,
+        1 => &RUNTIME_SLOT1_FRAME,
+        _ => &RUNTIME_SLOT2_FRAME,
     }
 }
 
@@ -1067,6 +1105,15 @@ fn runtime_slot_address_space_ptr(slot: usize) -> *mut u32 {
         INIT_PROCESS_SLOT => core::ptr::addr_of_mut!(RUNTIME_SLOT0_ADDRESS_SPACE),
         1 => core::ptr::addr_of_mut!(RUNTIME_SLOT1_ADDRESS_SPACE),
         _ => core::ptr::addr_of_mut!(RUNTIME_SLOT2_ADDRESS_SPACE),
+    }
+}
+
+#[cfg(not(test))]
+fn runtime_slot_kernel_stack_top_ptr(slot: usize) -> *mut u32 {
+    match slot {
+        INIT_PROCESS_SLOT => core::ptr::addr_of_mut!(RUNTIME_SLOT0_KERNEL_STACK_TOP),
+        1 => core::ptr::addr_of_mut!(RUNTIME_SLOT1_KERNEL_STACK_TOP),
+        _ => core::ptr::addr_of_mut!(RUNTIME_SLOT2_KERNEL_STACK_TOP),
     }
 }
 
@@ -1160,7 +1207,15 @@ pub unsafe fn resume_init_context(resume: InitResume) -> ! {
     {
         let frame = k16_rt::TrapFrame::from(resume.frame);
         let _saved_r0 = unsafe { k16_rt::restore_trap_frame(&frame) };
-        if resume.address_space.is_none() && unsafe { mmu0_set_trap_return_physical() }.is_err() {
+        let override_result = match trap_return_override_for_resume(resume) {
+            Ok(TrapReturnOverride::Physical) => unsafe { mmu0_set_trap_return_physical() },
+            Ok(TrapReturnOverride::Translated {
+                address_space,
+                kernel_stack_top,
+            }) => unsafe { mmu0_set_trap_return_address_space(address_space, kernel_stack_top) },
+            Err(_) => Err(ProcessLoadError::Storage),
+        };
+        if override_result.is_err() {
             halt_runtime_with_panic_code(k16_abi::syscall::ERROR_FAULT as i32);
         }
         unsafe { k16_rt::iret_with_r0(resume.child_exit_status) }
@@ -1170,6 +1225,38 @@ pub unsafe fn resume_init_context(resume: InitResume) -> ! {
         let frame = k16_rt::TrapFrame::from(resume.frame);
         let _saved_r0 = unsafe { k16_rt::restore_trap_frame(&frame) };
         unsafe { k16_rt::iret_with_r0(resume.child_exit_status) }
+    }
+}
+
+fn should_translate_runtime_child_path(_path: &[u8]) -> bool {
+    true
+}
+
+fn runtime_child_slot_for_parent(
+    current_slot: usize,
+    _current_address_space: Option<u32>,
+) -> Result<usize, ProcessSwitchError> {
+    let child_slot = current_slot + 1;
+    if child_slot >= MAX_PROCESS_SLOTS {
+        return Err(ProcessSwitchError::ChildAlreadyRunning);
+    }
+    Ok(child_slot)
+}
+
+fn trap_return_override_for_resume(
+    resume: InitResume,
+) -> Result<TrapReturnOverride, ProcessSwitchError> {
+    match resume.address_space {
+        Some(address_space) => {
+            let Some(kernel_stack_top) = resume.kernel_stack_top else {
+                return Err(ProcessSwitchError::NoRunningChild);
+            };
+            Ok(TrapReturnOverride::Translated {
+                address_space,
+                kernel_stack_top,
+            })
+        }
+        None => Ok(TrapReturnOverride::Physical),
     }
 }
 
@@ -1549,6 +1636,21 @@ unsafe fn mmu0_activate_user_address_space(
 #[cfg(not(test))]
 unsafe fn mmu0_set_trap_return_physical() -> Result<(), ProcessLoadError> {
     unsafe { submit_mmu0_command(k16_abi::computer::mmu0::COMMAND_SET_TRAP_RETURN_PHYSICAL) }
+}
+
+#[cfg(not(test))]
+unsafe fn mmu0_set_trap_return_address_space(
+    address_space: u32,
+    kernel_stack_pointer: u32,
+) -> Result<(), ProcessLoadError> {
+    unsafe {
+        crate::mmio::write_i32(k16_abi::computer::mmu0::ADDRESS_SPACE, address_space as i32);
+        crate::mmio::write_i32(
+            k16_abi::computer::mmu0::PHYSICAL_START,
+            kernel_stack_pointer as i32,
+        );
+        submit_mmu0_command(k16_abi::computer::mmu0::COMMAND_SET_TRAP_RETURN_ADDRESS_SPACE)
+    }
 }
 
 #[cfg(any(not(test), feature = "host-test"))]
@@ -2476,6 +2578,54 @@ mod tests {
         assert_eq!(
             translated_child_arena_end(0x0002_0003),
             Ok((0x0001_f000, 0x0002_0000))
+        );
+    }
+
+    #[test]
+    fn runtime_launch_policy_translates_shell_and_nested_utility_children() {
+        assert!(should_translate_runtime_child_path(b"/bin/shell.kx"));
+        assert!(should_translate_runtime_child_path(b"/bin/cat.kx"));
+        assert!(runtime_child_slot_for_parent(0, None).is_ok());
+        assert!(runtime_child_slot_for_parent(1, Some(7)).is_ok());
+        assert_eq!(
+            runtime_child_slot_for_parent(2, Some(9)),
+            Err(ProcessSwitchError::ChildAlreadyRunning)
+        );
+    }
+
+    #[test]
+    fn translated_parent_resume_requires_trap_return_address_space_override() {
+        let resume = InitResume {
+            id: ProcessId::Child,
+            context: ProcessContext {
+                entry_pc: 0x0001_5004,
+                stack_top: 0x0001_f000,
+            },
+            frame: TrapFrame {
+                resume_pc: 0x0001_5004,
+                stack_pointer: 0x0001_f000,
+                interrupt_enable: 1,
+                ..TrapFrame::zeroed()
+            },
+            child_exit_status: 0,
+            address_space: Some(7),
+            kernel_stack_top: Some(0x0001_d000),
+        };
+
+        assert_eq!(
+            trap_return_override_for_resume(resume),
+            Ok(TrapReturnOverride::Translated {
+                address_space: 7,
+                kernel_stack_top: 0x0001_d000,
+            })
+        );
+
+        assert_eq!(
+            trap_return_override_for_resume(InitResume {
+                kernel_stack_top: None,
+                ..resume
+            }),
+            Err(ProcessSwitchError::NoRunningChild)
         );
     }
 
