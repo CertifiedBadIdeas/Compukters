@@ -91,7 +91,7 @@ val generatedK16GuestTarget = layout.buildDirectory.dir("generated/k16-guest-tar
 val generatedK16BiosTarget = generatedK16GuestTarget.map { it.dir("bios") }
 val generatedK16BootTarget = generatedK16GuestTarget.map { it.dir("boot") }
 val generatedK16KernelTarget = generatedK16GuestTarget.map { it.dir("kernel") }
-val generatedK16InitTarget = generatedK16GuestTarget.map { it.dir("init") }
+val generatedK16ShellTarget = generatedK16GuestTarget.map { it.dir("shell") }
 val generatedK16UnameTarget = generatedK16GuestTarget.map { it.dir("uname") }
 val generatedK16CatTarget = generatedK16GuestTarget.map { it.dir("cat") }
 val generatedK16AllocTestTarget = generatedK16GuestTarget.map { it.dir("alloc-test") }
@@ -106,8 +106,8 @@ val k16BootManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-b
 val k16BootSource = rootProject.layout.projectDirectory.file("rust/guest/k16-boot/src/main.rs")
 val k16KernelManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-kernel/Cargo.toml")
 val k16KernelSource = rootProject.layout.projectDirectory.dir("rust/guest/k16-kernel/src")
-val k16InitManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-init/Cargo.toml")
-val k16InitSource = rootProject.layout.projectDirectory.dir("rust/guest/k16-init/src")
+val k16ShellManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-shell/Cargo.toml")
+val k16ShellSource = rootProject.layout.projectDirectory.dir("rust/guest/k16-shell/src")
 val k16UnameManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-uname/Cargo.toml")
 val k16UnameSource = rootProject.layout.projectDirectory.file("rust/guest/k16-uname/src/main.rs")
 val k16CatManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-cat/Cargo.toml")
@@ -134,7 +134,7 @@ val k16ToolchainConfig = rootProject.layout.projectDirectory.file("config/k16-to
 val k16BiosFlashResource = generatedK16FirmwareResources.map { it.file("firmware/k16-bios.kflash") }
 val k16BootArtifact = generatedK16FirmwareArtifacts.map { it.file("kernel-loader.kb") }
 val k16KernelArtifact = generatedK16FirmwareArtifacts.map { it.file("display-ok.kx") }
-val k16InitArtifact = generatedK16FirmwareArtifacts.map { it.file("init.kx") }
+val k16ShellArtifact = generatedK16FirmwareArtifacts.map { it.file("init.kx") }
 val k16UnameArtifact = generatedK16FirmwareArtifacts.map { it.file("uname.kx") }
 val k16CatArtifact = generatedK16FirmwareArtifacts.map { it.file("cat.kx") }
 val k16AllocTestArtifact = generatedK16FirmwareArtifacts.map { it.file("alloc-test.kx") }
@@ -458,13 +458,13 @@ val compileK16SystemKernel =
         }
     }
 
-val compileK16SystemInit =
-    tasks.register("compileK16SystemInit") {
-        description = "Compiles and links the bundled Rust K16 init program into a K16E program artifact."
+val compileK16SystemShell =
+    tasks.register("compileK16SystemShell") {
+        description = "Compiles and links the bundled Rust K16 shell program into the boot K16E program artifact."
         group = "k16"
         inputs.file(k16GuestManifest)
-        inputs.file(k16InitManifest)
-        inputs.dir(k16InitSource)
+        inputs.file(k16ShellManifest)
+        inputs.dir(k16ShellSource)
         inputsK16RuntimeCrates()
         inputsKraftStdCrate()
         inputs.file(k16HostToolsManifest)
@@ -472,16 +472,16 @@ val compileK16SystemInit =
         inputs.file(k16RustTargetSpec)
         inputs.file(k16ToolchainConfig)
         inputs.property("k16FirmwareProfile", k16FirmwareProfile)
-        outputs.file(k16InitArtifact)
+        outputs.file(k16ShellArtifact)
         dependsOn(rootProject.tasks.named("prepareK16Toolchain"))
 
         doLast {
             project.compileK16GuestRustBin(
-                manifest = k16InitManifest.asFile,
-                targetDir = generatedK16InitTarget.get().asFile,
-                binName = "k16-init",
+                manifest = k16ShellManifest.asFile,
+                targetDir = generatedK16ShellTarget.get().asFile,
+                binName = "k16-shell",
                 k16Target = "program",
-                output = k16InitArtifact.get().asFile,
+                output = k16ShellArtifact.get().asFile,
                 buildStd = "core,alloc",
             )
         }
@@ -642,10 +642,10 @@ val putK16SystemStorage0Init =
     tasks.register("putK16SystemStorage0Init") {
         description = "Writes the bundled K16 user programs into ROOT K16FS /bin."
         group = "k16"
-        dependsOn(compileK16SystemStorage0, compileK16SystemInit, compileK16SystemUname, compileK16SystemCat, compileK16SystemAllocTest)
+        dependsOn(compileK16SystemStorage0, compileK16SystemShell, compileK16SystemUname, compileK16SystemCat, compileK16SystemAllocTest)
         dependsOn(rootProject.tasks.named("prepareK16Toolchain"))
         inputs.file(k16ToolchainConfig)
-        inputs.file(k16InitArtifact)
+        inputs.file(k16ShellArtifact)
         inputs.file(k16UnameArtifact)
         inputs.file(k16CatArtifact)
         inputs.file(k16AllocTestArtifact)
@@ -694,7 +694,7 @@ val putK16SystemStorage0Init =
                 "put",
                 rootPartition.absolutePath,
                 "/bin/init.kx",
-                k16InitArtifact.get().asFile.absolutePath,
+                k16ShellArtifact.get().asFile.absolutePath,
             )
             runK16Command(
                 "fs",

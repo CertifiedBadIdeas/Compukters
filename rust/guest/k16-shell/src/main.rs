@@ -3,10 +3,10 @@
 
 use core::panic::PanicInfo;
 
-use k16_init::{Command, InputLine};
+use k16_shell::{Command, InputLine};
 use kraft_std::prelude::*;
 
-const PROMPT: &[u8] = b"INIT> ";
+const PROMPT: &[u8] = b"K16> ";
 const NEWLINE: &[u8] = b"\n";
 const HELP: &[u8] = b"HELP\nCLEAR\nECHO\nTICKS\nUNAME\nCAT <PATH>\nALLOC\n";
 
@@ -17,7 +17,7 @@ pub extern "C" fn main() -> ! {
     let mut input = InputLine::new();
     let mut read_buffer = [0u8; 1];
 
-    must_write(stdout, b"K16 INIT\n");
+    must_write(stdout, b"K16 SHELL\n");
     loop {
         must_write(stdout, PROMPT);
         read_and_dispatch_line(stdin, stdout, &mut input, &mut read_buffer);

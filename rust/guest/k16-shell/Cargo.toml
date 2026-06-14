@@ -1,5 +1,5 @@
 [package]
-name = "k16-init"
+name = "k16-shell"
 version = "0.1.0"
 edition = "2021"
 
@@ -7,7 +7,7 @@ edition = "2021"
 k16-target = []
 
 [[bin]]
-name = "k16-init"
+name = "k16-shell"
 path = "src/main.rs"
 test = false
 required-features = ["k16-target"]

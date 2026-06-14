@@ -35,7 +35,7 @@ private const val K16_TERMINAL_CELLS_ADDR = 0x0000_3000
 private const val K16_TERMINAL_COLUMNS = 53
 private const val K16_TERMINAL_ROWS = 25
 private const val LEGACY_KERNEL_SHELL_DISABLED =
-    "Legacy kernel shell runtime path is no longer active; shell behavior is moving to userland init programs."
+    "Legacy kernel shell runtime path is no longer active; shell behavior is owned by a userland shell program."
 
 class K16FirmwareResourceTest {
     @Test
@@ -80,31 +80,31 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("rust/guest/k16-bios"))
         assertTrue(source.contains("rust/guest/k16-boot"))
         assertTrue(source.contains("rust/guest/k16-kernel"))
-        assertTrue(source.contains("rust/guest/k16-init"))
+        assertTrue(source.contains("rust/guest/k16-shell"))
         assertTrue(source.contains("rust/guest/k16-cat"))
         assertTrue(source.contains("rust/guest/k16-alloc-test"))
-        assertTrue(source.contains("k16InitManifest"))
-        assertTrue(source.contains("k16InitSource"))
+        assertTrue(source.contains("k16ShellManifest"))
+        assertTrue(source.contains("k16ShellSource"))
         assertTrue(source.contains("k16CatManifest"))
         assertTrue(source.contains("k16CatSource"))
         assertTrue(source.contains("k16AllocTestManifest"))
         assertTrue(source.contains("k16AllocTestSource"))
-        assertTrue(source.contains("generatedK16InitTarget"))
+        assertTrue(source.contains("generatedK16ShellTarget"))
         assertTrue(source.contains("generatedK16CatTarget"))
         assertTrue(source.contains("generatedK16AllocTestTarget"))
-        assertTrue(source.contains("k16InitArtifact"))
+        assertTrue(source.contains("k16ShellArtifact"))
         assertTrue(source.contains("k16CatArtifact"))
         assertTrue(source.contains("k16AllocTestArtifact"))
-        assertTrue(source.contains("compileK16SystemInit"))
+        assertTrue(source.contains("compileK16SystemShell"))
         assertTrue(source.contains("compileK16SystemCat"))
         assertTrue(source.contains("compileK16SystemAllocTest"))
         assertTrue(source.contains("putK16SystemStorage0Init"))
-        assertTrue(source.contains("binName = \"k16-init\""))
+        assertTrue(source.contains("binName = \"k16-shell\""))
         assertTrue(source.contains("binName = \"k16-cat\""))
         assertTrue(source.contains("binName = \"k16-alloc-test\""))
         assertTrue(
-            source.contains("output = k16InitArtifact.get().asFile,\n                buildStd = \"core,alloc\""),
-            "init uses alloc-backed input and should build core+alloc",
+            source.contains("output = k16ShellArtifact.get().asFile,\n                buildStd = \"core,alloc\""),
+            "shell uses alloc-backed input and should build core+alloc",
         )
         assertTrue(source.contains("\"/bin\""))
         assertTrue(source.contains("\"/etc\""))
@@ -115,9 +115,10 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("\"extract-partition\""))
         assertTrue(source.contains("\"replace-partition\""))
         assertTrue(source.contains("dir(\"rust/guest/k16-kernel/src\")"))
-        assertTrue(source.contains("dir(\"rust/guest/k16-init/src\")"))
+        assertTrue(source.contains("dir(\"rust/guest/k16-shell/src\")"))
         assertTrue(source.contains("inputs.dir(k16KernelSource)"))
-        assertTrue(source.contains("inputs.dir(k16InitSource)"))
+        assertTrue(source.contains("inputs.dir(k16ShellSource)"))
+        assertFalse(source.contains("rust/guest/k16-init"), "interactive shell should not be owned by an init-named crate")
         assertTrue(source.contains("toolchain.cli.absolutePath"))
         assertFalse(source.contains(".toolchain/build/cargo/k16-tools"))
         assertFalse(source.contains("environment(\"CARGO_TARGET_DIR\""))
@@ -378,21 +379,21 @@ class K16FirmwareResourceTest {
                     "panic code: ${control.panicCode}, debug: $debug",
                 )
                 assertTrue(debug.contains("K16 BOOT\n"), "bootloader debug output should remain visible; debug: $debug")
-                assertFalse(debug.contains("K16 INIT\n"), "init output should go through stdout, not debug; debug: $debug")
+                assertFalse(debug.contains("K16 SHELL\n"), "shell output should go through stdout, not debug; debug: $debug")
                 assertKernelGpuConsoleVisible(runtime, control, debug)
             }
     }
 
     @Test
-    fun bundledK16InitUsesFdStdinAndStdoutInsteadOfDebugOutput() {
-        val source = Path.of("../../../rust/guest/k16-init/src/main.rs").readText()
+    fun bundledK16ShellUsesFdStdinAndStdoutInsteadOfDebugOutput() {
+        val source = Path.of("../../../rust/guest/k16-shell/src/main.rs").readText()
 
         assertTrue(source.contains("io::stdout()"))
         assertTrue(source.contains("io::stdin()"))
         assertTrue(source.contains("let mut input = InputLine::new()"))
         assertTrue(source.contains("stdin.read(read_buffer)"))
         assertTrue(source.contains("dispatch_command(stdout, input.command())"))
-        assertTrue(source.contains("const PROMPT: &[u8] = b\"INIT> \""))
+        assertTrue(source.contains("const PROMPT: &[u8] = b\"K16> \""))
         assertTrue(source.contains("const HELP: &[u8] = b\"HELP\\nCLEAR\\nECHO\\nTICKS\\nUNAME\\nCAT <PATH>\\nALLOC\\n\""))
         assertTrue(source.contains("run_ticks(stdout)"))
         assertTrue(source.contains("process::run(\"/bin/uname.kx\")"))
@@ -401,7 +402,7 @@ class K16FirmwareResourceTest {
     }
 
     @Test
-    fun bundledK16InitReadsKeyboardInputThroughFdStdin() {
+    fun bundledK16ShellReadsKeyboardInputThroughFdStdin() {
         val workspace = createTempDirectory("k16-init-stdin-test-")
         val biosFlashPath = workspace.resolve("bios.kflash")
         val storage0Path = workspace.resolve("storage0.kv")
@@ -413,11 +414,11 @@ class K16FirmwareResourceTest {
                 biosFlashPath = biosFlashPath,
                 storage0Path = storage0Path,
             ).use { runtime ->
-                val readyControl = runUntilTerminalText(runtime, "INIT> ")
+                val readyControl = runUntilTerminalText(runtime, "K16> ")
                 assertEquals(
                     NativeK16ComputerControl.STATUS_READY,
                     readyControl.status,
-                    "init should wait for stdin after prompt; control: $readyControl; terminal: ${terminalText(runtime.machineSnapshot())}",
+                    "shell should wait for stdin after prompt; control: $readyControl; terminal: ${terminalText(runtime.machineSnapshot())}",
                 )
 
                 for (byte in "echo abc\n".encodeToByteArray()) {
@@ -428,8 +429,8 @@ class K16FirmwareResourceTest {
 
                 assertEquals(NativeK16ComputerControl.STATUS_READY, afterInputControl.status)
                 assertTrue(
-                    terminal.contains("INIT> echo abc") && terminal.contains("abc"),
-                    "init should read stdin bytes and dispatch echo through stdout; terminal: $terminal",
+                    terminal.contains("K16> echo abc") && terminal.contains("abc"),
+                    "shell should read stdin bytes and dispatch echo through stdout; terminal: $terminal",
                 )
             }
     }
@@ -456,7 +457,7 @@ class K16FirmwareResourceTest {
                     "init should remain ready while waiting for fd stdin; panic code: ${control.panicCode}, debug: $debug",
                 )
                 assertTrue(debug.contains("K16 BOOT\n"), "bootloader debug output should remain visible; debug: $debug")
-                assertFalse(debug.contains("K16 INIT\n"), "init output should go through stdout, not debug; debug: $debug")
+                assertFalse(debug.contains("K16 SHELL\n"), "shell output should go through stdout, not debug; debug: $debug")
                 assertKernelGpuConsoleVisible(runtime, control, debug)
             }
     }
@@ -493,7 +494,7 @@ class K16FirmwareResourceTest {
                     "default runtime ticks should boot through /bin/init.kx; tick: $tick, panic code: ${control.panicCode}, debug: $debug",
                 )
                 assertTrue(debug.contains("K16 BOOT\n"), "bootloader debug output should remain visible; debug: $debug")
-                assertFalse(debug.contains("K16 INIT\n"), "init output should go through stdout, not debug; debug: $debug")
+                assertFalse(debug.contains("K16 SHELL\n"), "shell output should go through stdout, not debug; debug: $debug")
                 assertTrue(
                     sawVisibleFrame,
                     "default runtime ticks should produce gpu0 console frames; tick: $tick, panic code: ${control.panicCode}, debug: $debug",
@@ -636,44 +637,46 @@ class K16FirmwareResourceTest {
     fun k16KernelLegacyShellPathIsRemovedFromCurrentSource() {
         val kernelSourceDir = Path.of("../../../rust/guest/k16-kernel/src")
         val mainSource = kernelSourceDir.resolve("main.rs").readText()
-        val initSource = Path.of("../../../rust/guest/k16-init/src/main.rs").readText()
+        val shellSource = Path.of("../../../rust/guest/k16-shell/src/main.rs").readText()
 
         assertFalse(Files.exists(kernelSourceDir.resolve("shell.rs")), "kernel shell dispatcher should be removed")
         assertFalse(Files.exists(kernelSourceDir.resolve("line.rs")), "kernel line discipline should be removed")
         assertFalse(Files.exists(kernelSourceDir.resolve("keyboard.rs")), "kernel keyboard line path should be removed")
         assertFalse(mainSource.contains("mod shell;"), "main.rs should not register the legacy shell module")
         assertFalse(mainSource.contains("shell::init();"), "kernel startup should not initialize the legacy shell module")
-        assertTrue(initSource.contains("fn dispatch_command("), "userland init should own shell command dispatch")
+        assertFalse(Files.exists(Path.of("../../../rust/guest/k16-init/Cargo.toml")), "interactive shell should not live in a k16-init crate")
+        assertFalse(Files.exists(Path.of("../../../rust/guest/k16-init/src/main.rs")), "interactive shell source should not live under k16-init")
+        assertTrue(shellSource.contains("fn dispatch_command("), "userland shell should own command dispatch")
     }
 
     @Test
-    fun k16UserlandInitDefinesPromptAndBuiltins() {
-        val initSource = Path.of("../../../rust/guest/k16-init/src/main.rs").readText()
-        val initLibSource = Path.of("../../../rust/guest/k16-init/src/lib.rs").readText()
+    fun k16UserlandShellDefinesPromptAndBuiltins() {
+        val shellSource = Path.of("../../../rust/guest/k16-shell/src/main.rs").readText()
+        val shellLibSource = Path.of("../../../rust/guest/k16-shell/src/lib.rs").readText()
 
-        assertTrue(initSource.contains("const PROMPT: &[u8] = b\"INIT> \""))
-        assertTrue(initSource.contains("fn dispatch_command("), "init should name the dispatch boundary")
-        assertTrue(initLibSource.contains("use alloc::vec::Vec;"), "init input should be backed by heap allocation")
-        assertTrue(initLibSource.contains("bytes: Vec<u8>"), "init input should not use a fixed byte array")
-        assertTrue(initLibSource.contains("try_reserve(1)"), "input allocation failure should be deterministic")
-        assertFalse(initLibSource.contains("INPUT_CAPACITY"), "init input should not carry the old fixed line cap")
-        assertTrue(initLibSource.contains("fn matches_command("), "init should share command matching")
-        assertTrue(initLibSource.contains("fn is_echo_command("), "init should name echo command matching")
-        assertTrue(initSource.contains("Command::Echo(bytes)"), "init should handle the echo command")
-        assertTrue(initSource.contains("fn run_ticks("), "init should name the ticks command")
-        assertTrue(initSource.contains("fn run_uname("), "init should name the uname command")
-        assertTrue(initSource.contains("fn run_cat("), "init should name the cat command")
-        assertTrue(initSource.contains("fn run_alloc_test("), "init should name the alloc command")
-        assertTrue(initLibSource.contains("Command::Uname"), "init should classify the uname command")
-        assertTrue(initLibSource.contains("Command::Cat(&"), "init should classify cat with a path argument")
-        assertTrue(initLibSource.contains("Command::AllocTest"), "init should classify the alloc command")
+        assertTrue(shellSource.contains("const PROMPT: &[u8] = b\"K16> \""))
+        assertTrue(shellSource.contains("fn dispatch_command("), "shell should name the dispatch boundary")
+        assertTrue(shellLibSource.contains("use alloc::vec::Vec;"), "shell input should be backed by heap allocation")
+        assertTrue(shellLibSource.contains("bytes: Vec<u8>"), "shell input should not use a fixed byte array")
+        assertTrue(shellLibSource.contains("try_reserve(1)"), "input allocation failure should be deterministic")
+        assertFalse(shellLibSource.contains("INPUT_CAPACITY"), "shell input should not carry the old fixed line cap")
+        assertTrue(shellLibSource.contains("fn matches_command("), "shell should share command matching")
+        assertTrue(shellLibSource.contains("fn is_echo_command("), "shell should name echo command matching")
+        assertTrue(shellSource.contains("Command::Echo(bytes)"), "shell should handle the echo command")
+        assertTrue(shellSource.contains("fn run_ticks("), "shell should name the ticks command")
+        assertTrue(shellSource.contains("fn run_uname("), "shell should name the uname command")
+        assertTrue(shellSource.contains("fn run_cat("), "shell should name the cat command")
+        assertTrue(shellSource.contains("fn run_alloc_test("), "shell should name the alloc command")
+        assertTrue(shellLibSource.contains("Command::Uname"), "shell should classify the uname command")
+        assertTrue(shellLibSource.contains("Command::Cat(&"), "shell should classify cat with a path argument")
+        assertTrue(shellLibSource.contains("Command::AllocTest"), "shell should classify the alloc command")
         assertTrue(
-            initSource.contains("HELP\\nCLEAR\\nECHO\\nTICKS\\nUNAME\\nCAT <PATH>\\nALLOC\\n"),
+            shellSource.contains("HELP\\nCLEAR\\nECHO\\nTICKS\\nUNAME\\nCAT <PATH>\\nALLOC\\n"),
             "help should print a readable command list",
         )
-        assertTrue(initSource.contains("process::run_with_args(\"/bin/cat.kx\", &[path])"))
-        assertTrue(initSource.contains("process::run(\"/bin/alloc-test.kx\")"))
-        assertTrue(initSource.contains("b\"ERR\\n\""), "unknown commands should report a short error")
+        assertTrue(shellSource.contains("process::run_with_args(\"/bin/cat.kx\", &[path])"))
+        assertTrue(shellSource.contains("process::run(\"/bin/alloc-test.kx\")"))
+        assertTrue(shellSource.contains("b\"ERR\\n\""), "unknown commands should report a short error")
     }
 
     @Test
@@ -707,16 +710,16 @@ class K16FirmwareResourceTest {
 
     @Test
     fun k16UserlandTicksUsesKraftStdTimeApi() {
-        val initSource = Path.of("../../../rust/guest/k16-init/src/main.rs").readText()
+        val shellSource = Path.of("../../../rust/guest/k16-shell/src/main.rs").readText()
         val stdSource = Path.of("../../../rust/guest/kraft-std/src/lib.rs").readText()
         val timerSource = Path.of("../../../rust/guest/k16-kernel/src/timer.rs").readText()
 
-        assertTrue(initSource.contains("time::game_ticks_parts()"), "init ticks should read time through kraft-std")
-        assertTrue(initSource.contains("b\"TICKS \""), "ticks should print a stable decimal prefix")
-        assertTrue(initSource.contains("fn write_decimal_parts("), "init should format full-width timer parts")
+        assertTrue(shellSource.contains("time::game_ticks_parts()"), "shell ticks should read time through kraft-std")
+        assertTrue(shellSource.contains("b\"TICKS \""), "ticks should print a stable decimal prefix")
+        assertTrue(shellSource.contains("fn write_decimal_parts("), "shell should format full-width timer parts")
         assertTrue(
-            initSource.contains("double_decimal_digits_and_add_bit"),
-            "init should format decimal without relying on 64-bit division",
+            shellSource.contains("double_decimal_digits_and_add_bit"),
+            "shell should format decimal without relying on 64-bit division",
         )
         assertTrue(stdSource.contains("pub mod time"), "kraft-std should expose a time module")
         assertTrue(stdSource.contains("pub fn game_ticks_parts() -> U64Parts"), "kraft-std should expose timer0 parts")
@@ -732,22 +735,22 @@ class K16FirmwareResourceTest {
     }
 
     @Test
-    fun k16UserlandInitDefinesReadableLineEditingSemantics() {
-        val initSource = Path.of("../../../rust/guest/k16-init/src/main.rs").readText()
+    fun k16UserlandShellDefinesReadableLineEditingSemantics() {
+        val shellSource = Path.of("../../../rust/guest/k16-shell/src/main.rs").readText()
 
         assertTrue(
-            initSource.contains("0x20..=0x7e"),
+            shellSource.contains("0x20..=0x7e"),
             "printable input bytes should flow through a named printable branch",
         )
         assertTrue(
-            initSource.contains("b'\\x08' | 0x7f"),
+            shellSource.contains("b'\\x08' | 0x7f"),
             "backspace and delete should erase editable userland input",
         )
         assertTrue(
-            initSource.contains("b'\\n' | b'\\r'"),
+            shellSource.contains("b'\\n' | b'\\r'"),
             "newline and carriage return should complete the current userland line",
         )
-        assertTrue(initSource.contains("input.clear()"), "init should clear stale line bytes before each prompt")
+        assertTrue(shellSource.contains("input.clear()"), "shell should clear stale line bytes before each prompt")
     }
 
     @Test
@@ -768,14 +771,14 @@ class K16FirmwareResourceTest {
     @Test
     fun k16KernelFontCoversWorkingShellText() {
         val fontSource = Path.of("../../../rust/guest/k16-kernel/src/font.rs").readText()
-        val initSource = Path.of("../../../rust/guest/k16-init/src/main.rs").readText()
+        val shellSource = Path.of("../../../rust/guest/k16-shell/src/main.rs").readText()
 
         assertTrue(fontSource.contains("font_mono5x7::MONO5X7_ROWS"))
         assertTrue(fontSource.contains("font_mono5x7::FALLBACK_ROWS"))
         assertTrue(fontSource.contains("MONO5X7_ROWS[byte as usize]"))
         assertFalse(fontSource.contains("byte -"), "kernel font lookup should not use range-offset indexing")
         assertFalse(fontSource.contains("match byte"), "kernel font lookup should stay table-driven")
-        assertFalse(initSource.contains("fn display_byte("), "userland shell echo should not force uppercase display")
+        assertFalse(shellSource.contains("fn display_byte("), "userland shell echo should not force uppercase display")
     }
 
     @Test
@@ -1474,7 +1477,7 @@ class K16FirmwareResourceTest {
 
                 assertEquals(NativeK16ComputerControl.STATUS_READY, bootControl.status)
                 assertTrue(debug.contains("K16 BOOT\n"), "bootloader debug output should remain visible; debug: $debug")
-                assertFalse(debug.contains("K16 INIT\n"), "init output should go through stdout, not debug; debug: $debug")
+                assertFalse(debug.contains("K16 SHELL\n"), "shell output should go through stdout, not debug; debug: $debug")
                 assertKernelGpuConsoleVisible(runtime, bootControl, debug)
             }
     }
