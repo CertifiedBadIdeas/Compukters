@@ -3,7 +3,7 @@
 
 use core::panic::PanicInfo;
 
-use k16_shell::{Command, InputLine, PathBuffer, WorkingDirectory};
+use k16_shell::{Command, CommandArgs, InputLine, PathBuffer, WorkingDirectory};
 use kraft_std::prelude::*;
 
 const PROMPT: &[u8] = b"K16> ";
@@ -89,6 +89,7 @@ fn dispatch_command(
 ) {
     match command {
         Command::Empty => {}
+        Command::Invalid => must_write(stdout, b"ERR INVAL\n"),
         Command::Help => must_write(stdout, HELP),
         Command::Clear => must_write(stdout, b"\x0c"),
         Command::Pwd => run_pwd(stdout, cwd),
@@ -98,7 +99,9 @@ fn dispatch_command(
             must_write(stdout, bytes);
             must_write(stdout, NEWLINE);
         }
-        Command::Exec { name, arg } => run_exec(stdout, cwd, path_buffer, program_path, name, arg),
+        Command::Exec { name, args } => {
+            run_exec(stdout, cwd, path_buffer, program_path, name, args)
+        }
     }
 }
 
@@ -150,7 +153,7 @@ fn run_exec(
     path_buffer: &mut PathBuffer,
     program_path: &mut PathBuffer,
     name: &[u8],
-    arg: Option<&[u8]>,
+    args: CommandArgs<'_>,
 ) {
     if build_program_path(name, program_path).is_err() {
         must_write(stdout, b"ERR INVAL\n");
@@ -160,16 +163,19 @@ fn run_exec(
         must_write(stdout, b"ERR INVAL\n");
         return;
     };
-    let Some(arg) = arg else {
+    if args.is_empty() {
         match process::run(program_path) {
             Ok(_) => {}
             Err(error) => write_run_error(stdout, error),
         }
         return;
-    };
+    }
 
+    let raw_args = args.as_slice();
+    let mut argv = [""; k16_abi::syscall::MAX_RUN_ARGS];
+    let mut index = 0;
     if should_resolve_path_arg(name) {
-        if cwd.resolve_into(arg, path_buffer).is_err() {
+        if cwd.resolve_into(raw_args[0], path_buffer).is_err() {
             must_write(stdout, b"ERR INVAL\n");
             return;
         }
@@ -177,19 +183,21 @@ fn run_exec(
             must_write(stdout, b"ERR INVAL\n");
             return;
         };
-        match process::run_with_args(program_path, &[arg]) {
-            Ok(_) => {}
-            Err(error) => write_run_error(stdout, error),
-        }
-    } else {
-        let Ok(arg) = core::str::from_utf8(arg) else {
+        argv[0] = arg;
+        index = 1;
+    }
+    while index < raw_args.len() {
+        let raw_arg = raw_args[index];
+        let Ok(arg) = core::str::from_utf8(raw_arg) else {
             must_write(stdout, b"ERR INVAL\n");
             return;
         };
-        match process::run_with_args(program_path, &[arg]) {
-            Ok(_) => {}
-            Err(error) => write_run_error(stdout, error),
-        }
+        argv[index] = arg;
+        index += 1;
+    }
+    match process::run_with_args(program_path, &argv[..raw_args.len()]) {
+        Ok(_) => {}
+        Err(error) => write_run_error(stdout, error),
     }
 }
 

@@ -393,7 +393,10 @@ pub mod process {
 
     impl RunArgvRequest {
         fn new(path: &str, args: &[&str]) -> Result<Self, Error> {
-            if args.len() != k16_abi::syscall::MAX_RUN_ARGS {
+            if args.is_empty() || args.len() > k16_abi::syscall::MAX_RUN_ARGS {
+                return Err(Error::InvalidArgument);
+            }
+            if path.len() > k16_abi::syscall::MAX_RUN_PATH_BYTES {
                 return Err(Error::InvalidArgument);
             }
             let mut request = Self {
@@ -402,13 +405,18 @@ pub mod process {
             };
             request.push_u32(k16_abi::syscall::RUN_ARGV_MAGIC)?;
             request.push_u32(path.len() as u32)?;
-            let bytes = args[0].as_bytes();
-            if bytes.len() > k16_abi::syscall::MAX_RUN_ARG_BYTES {
-                return Err(Error::InvalidArgument);
+            request.push_u32(args.len() as u32)?;
+            for arg in args {
+                let bytes = arg.as_bytes();
+                if bytes.len() > k16_abi::syscall::MAX_RUN_ARG_BYTES {
+                    return Err(Error::InvalidArgument);
+                }
+                request.push_u32(bytes.len() as u32)?;
             }
-            request.push_u32(bytes.len() as u32)?;
             request.push_bytes(path.as_bytes())?;
-            request.push_bytes(bytes)?;
+            for arg in args {
+                request.push_bytes(arg.as_bytes())?;
+            }
             Ok(request)
         }
 
@@ -427,6 +435,27 @@ pub mod process {
             self.bytes[self.len..end].copy_from_slice(bytes);
             self.len = end;
             Ok(())
+        }
+    }
+
+    #[cfg(feature = "host-test")]
+    pub mod host_test {
+        use super::{Error, RunArgvRequest};
+
+        pub struct EncodedRunArgvRequest {
+            pub bytes: [u8; k16_abi::syscall::MAX_RUN_ARGV_REQUEST_BYTES],
+            pub len: usize,
+        }
+
+        pub fn encode_run_argv_request(
+            path: &str,
+            args: &[&str],
+        ) -> Result<EncodedRunArgvRequest, Error> {
+            let request = RunArgvRequest::new(path, args)?;
+            Ok(EncodedRunArgvRequest {
+                bytes: request.bytes,
+                len: request.len,
+            })
         }
     }
 }

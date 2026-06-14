@@ -570,14 +570,16 @@ is no fd inheritance across `RUN` in this model. Stdio descriptors `0`, `1`,
 and `2` remain a shared kernel convention and are not stored in the regular fd
 table.
 
-For argv launches, the first K16 ABI form copies one bounded argument byte
-string into the child arena after the loaded image and before the child heap.
-The request block is `u32 magic`, `u32 path_len`, `u32 arg_len`, followed by
-the path bytes and argument bytes. On child entry, `r1` contains `argc` and
-`r2` contains a pointer to an argv table of `(ptr, len)` entries. The K16
-startup object does not clobber `r1` or `r2` before calling `main`, so
-no-argument `main()` programs remain valid while argv-aware programs may
-declare an entry that accepts those first two C ABI arguments.
+For argv launches, the K16 ABI copies up to four bounded argument byte strings
+into the child arena after the loaded image and before the child heap. The
+request block is `u32 magic`, `u32 path_len`, `u32 argc`, `u32 arg_len[argc]`,
+followed by the path bytes and each argument byte string in order. `argc` must
+be in `1..=4`, each argument is limited to 128 bytes, and the path is limited
+to 61 bytes. On child entry, `r1` contains `argc` and `r2` contains a pointer to
+an argv table of `(ptr, len)` entries. The K16 startup object does not clobber
+`r1` or `r2` before calling `main`, so no-argument `main()` programs remain
+valid while argv-aware programs may declare an entry that accepts those first
+two C ABI arguments.
 
 Asynchronous interrupts are delivered between guest instructions. Delivery
 requires `interrupt_enable != 0` and a source bit present in both

@@ -5,6 +5,8 @@ extern crate alloc;
 use alloc::vec::Vec;
 
 pub const MAX_PATH_BYTES: usize = k16_abi::syscall::MAX_STAT_PATH_BYTES;
+pub const MAX_COMMAND_ARGS: usize = k16_abi::syscall::MAX_RUN_ARGS;
+const EMPTY_ARG: &[u8] = b"";
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum PathError {
@@ -192,6 +194,7 @@ impl Default for WorkingDirectory {
 #[derive(Debug, Eq, PartialEq)]
 pub enum Command<'a> {
     Empty,
+    Invalid,
     Help,
     Clear,
     Pwd,
@@ -200,8 +203,56 @@ pub enum Command<'a> {
     Echo(&'a [u8]),
     Exec {
         name: &'a [u8],
-        arg: Option<&'a [u8]>,
+        args: CommandArgs<'a>,
     },
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CommandArgs<'a> {
+    args: [&'a [u8]; MAX_COMMAND_ARGS],
+    len: usize,
+}
+
+impl<'a> CommandArgs<'a> {
+    pub const fn empty() -> Self {
+        Self {
+            args: [EMPTY_ARG; MAX_COMMAND_ARGS],
+            len: 0,
+        }
+    }
+
+    pub fn from_slice(args: &[&'a [u8]]) -> Option<Self> {
+        let mut out = Self::empty();
+        let mut index = 0;
+        while index < args.len() {
+            if out.push(args[index]).is_err() {
+                return None;
+            }
+            index += 1;
+        }
+        Some(out)
+    }
+
+    pub const fn len(&self) -> usize {
+        self.len
+    }
+
+    pub const fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
+    pub fn as_slice(&self) -> &[&'a [u8]] {
+        &self.args[..self.len]
+    }
+
+    fn push(&mut self, arg: &'a [u8]) -> Result<(), ()> {
+        if self.len >= self.args.len() {
+            return Err(());
+        }
+        self.args[self.len] = arg;
+        self.len += 1;
+        Ok(())
+    }
 }
 
 pub struct InputLine {
@@ -283,24 +334,43 @@ fn is_cd_command(input: &[u8], line_len: usize) -> bool {
 
 fn classify_exec(input: &[u8], line_len: usize) -> Command<'_> {
     let mut cursor = 0;
-    while cursor < line_len && input[cursor] != b' ' {
+    while cursor < line_len && input[cursor].is_ascii_whitespace() {
         cursor += 1;
     }
     if cursor == line_len {
-        return Command::Exec {
-            name: &input[..line_len],
-            arg: None,
-        };
+        return Command::Empty;
     }
-    Command::Exec {
-        name: &input[..cursor],
-        arg: Some(&input[cursor + 1..line_len]),
+    let name_start = cursor;
+    while cursor < line_len && !input[cursor].is_ascii_whitespace() {
+        cursor += 1;
     }
+    let name = &input[name_start..cursor];
+    if name.is_empty() {
+        return Command::Invalid;
+    }
+
+    let mut args = CommandArgs::empty();
+    loop {
+        while cursor < line_len && input[cursor].is_ascii_whitespace() {
+            cursor += 1;
+        }
+        if cursor == line_len {
+            break;
+        }
+        let start = cursor;
+        while cursor < line_len && !input[cursor].is_ascii_whitespace() {
+            cursor += 1;
+        }
+        if args.push(&input[start..cursor]).is_err() {
+            return Command::Invalid;
+        }
+    }
+    Command::Exec { name, args }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{Command, InputLine, PathBuffer, WorkingDirectory};
+    use super::{Command, CommandArgs, InputLine, PathBuffer, WorkingDirectory};
 
     #[test]
     fn reused_line_accepts_short_command_after_long_command() {
@@ -363,7 +433,7 @@ mod tests {
             line.command(),
             Command::Exec {
                 name: b"uname",
-                arg: None
+                args: CommandArgs::empty()
             }
         );
     }
@@ -409,7 +479,7 @@ mod tests {
             line.command(),
             Command::Exec {
                 name: b"cat",
-                arg: Some(b"/etc/motd")
+                args: CommandArgs::from_slice(&[b"/etc/motd".as_slice()]).unwrap()
             }
         );
     }
@@ -425,7 +495,7 @@ mod tests {
             line.command(),
             Command::Exec {
                 name: b"ls",
-                arg: None
+                args: CommandArgs::empty()
             }
         );
     }
@@ -441,7 +511,7 @@ mod tests {
             line.command(),
             Command::Exec {
                 name: b"ls",
-                arg: Some(b"/bin")
+                args: CommandArgs::from_slice(&[b"/bin".as_slice()]).unwrap()
             }
         );
     }
@@ -457,7 +527,7 @@ mod tests {
             line.command(),
             Command::Exec {
                 name: b"alloc",
-                arg: None
+                args: CommandArgs::empty()
             }
         );
     }
@@ -473,9 +543,29 @@ mod tests {
             line.command(),
             Command::Exec {
                 name: b"foo",
-                arg: Some(b"bar baz")
+                args: CommandArgs::from_slice(&[b"bar".as_slice(), b"baz".as_slice()]).unwrap()
             }
         );
+    }
+
+    #[test]
+    fn exec_parser_splits_repeated_ascii_whitespace_arguments() {
+        let command = super::classify_line(b"foo   bar\tbaz", 13);
+
+        assert_eq!(
+            command,
+            Command::Exec {
+                name: b"foo",
+                args: CommandArgs::from_slice(&[b"bar".as_slice(), b"baz".as_slice()]).unwrap()
+            }
+        );
+    }
+
+    #[test]
+    fn exec_parser_rejects_more_than_max_arguments() {
+        let command = super::classify_line(b"foo one two three four five", 27);
+
+        assert_eq!(command, Command::Invalid);
     }
 
     #[test]

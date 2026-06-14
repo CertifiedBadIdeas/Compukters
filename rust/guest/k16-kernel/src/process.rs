@@ -551,7 +551,7 @@ pub unsafe fn begin_loaded_child_from_argv_request(request: &[u8]) -> Result<Chi
     let request = RunArgvRequest::parse(request).map_err(run_status_from_load_error)?;
     #[cfg(not(test))]
     {
-        return unsafe { begin_loaded_child_runtime(request.path, request.arg) };
+        return unsafe { begin_loaded_child_runtime(request.path, request.args()) };
     }
     #[cfg(test)]
     {
@@ -564,7 +564,7 @@ pub unsafe fn begin_loaded_child_from_argv_request(request: &[u8]) -> Result<Chi
             .map_err(run_status_from_load_error)?;
         let child_plan = unsafe { load_dynamic_user_program_from_storage0(request.path, arena) }
             .map_err(run_status_from_load_error)?;
-        let argv = unsafe { install_child_argv1(child_plan, request.arg) }
+        let argv = unsafe { install_child_argv(child_plan, request.args()) }
             .map_err(run_status_from_load_error)?;
         table
             .begin_child_run_from_frame_and_argv(child_plan, init_frame, argv)
@@ -573,7 +573,7 @@ pub unsafe fn begin_loaded_child_from_argv_request(request: &[u8]) -> Result<Chi
 }
 
 #[cfg(not(test))]
-unsafe fn begin_loaded_child_runtime(path: &[u8], arg: &[u8]) -> Result<ChildLaunch, u32> {
+unsafe fn begin_loaded_child_runtime(path: &[u8], args: &[&[u8]]) -> Result<ChildLaunch, u32> {
     let current_slot = unsafe { runtime_current_slot() };
     if current_slot + 1 >= MAX_PROCESS_SLOTS {
         return Err(run_status_from_switch_error(
@@ -590,11 +590,8 @@ unsafe fn begin_loaded_child_runtime(path: &[u8], arg: &[u8]) -> Result<ChildLau
         .map_err(|_| run_status_from_load_error(ProcessLoadError::ProgramTooLarge))?;
     let child_plan = unsafe { load_dynamic_user_program_from_storage0(path, arena) }
         .map_err(run_status_from_load_error)?;
-    let argv = if arg.is_empty() {
-        ChildArgv::empty()
-    } else {
-        unsafe { install_child_argv1(child_plan, arg) }.map_err(run_status_from_load_error)?
-    };
+    let argv =
+        unsafe { install_child_argv(child_plan, args) }.map_err(run_status_from_load_error)?;
     unsafe { begin_loaded_child_plan_runtime_with_argv(child_plan, argv) }
         .map_err(run_status_from_switch_error)
 }
@@ -1014,10 +1011,15 @@ pub struct DynamicUserLoadPlan {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct RunArgvRequest<'a> {
     pub path: &'a [u8],
-    pub arg: &'a [u8],
+    argc: usize,
+    args: [&'a [u8]; k16_abi::syscall::MAX_RUN_ARGS],
 }
 
 impl<'a> RunArgvRequest<'a> {
+    pub fn args(&self) -> &[&'a [u8]] {
+        &self.args[..self.argc]
+    }
+
     pub fn parse(bytes: &'a [u8]) -> Result<Self, ProcessLoadError> {
         if bytes.len() < 12 {
             return Err(ProcessLoadError::InvalidPath);
@@ -1026,28 +1028,49 @@ impl<'a> RunArgvRequest<'a> {
             return Err(ProcessLoadError::InvalidPath);
         }
         let path_len = read_request_u32(bytes, 4)? as usize;
-        let len = read_request_u32(bytes, 8)? as usize;
-        if len > k16_abi::syscall::MAX_RUN_ARG_BYTES {
+        if path_len > k16_abi::syscall::MAX_RUN_PATH_BYTES {
             return Err(ProcessLoadError::InvalidPath);
         }
-        let path_start = 12_usize;
+        let argc = read_request_u32(bytes, 8)? as usize;
+        if argc == 0 || argc > k16_abi::syscall::MAX_RUN_ARGS {
+            return Err(ProcessLoadError::InvalidPath);
+        }
+        let mut arg_lengths = [0_usize; k16_abi::syscall::MAX_RUN_ARGS];
+        let mut index = 0;
+        while index < argc {
+            let len = read_request_u32(bytes, 12 + index * 4)? as usize;
+            if len > k16_abi::syscall::MAX_RUN_ARG_BYTES {
+                return Err(ProcessLoadError::InvalidPath);
+            }
+            arg_lengths[index] = len;
+            index += 1;
+        }
+        let path_start = 12_usize
+            .checked_add(argc.checked_mul(4).ok_or(ProcessLoadError::InvalidPath)?)
+            .ok_or(ProcessLoadError::InvalidPath)?;
         let path_end = path_start
             .checked_add(path_len)
             .ok_or(ProcessLoadError::InvalidPath)?;
         let path = bytes
             .get(path_start..path_end)
             .ok_or(ProcessLoadError::InvalidPath)?;
-        let arg_start = path_end;
-        let arg_end = arg_start
-            .checked_add(len)
-            .ok_or(ProcessLoadError::InvalidPath)?;
-        if arg_end != bytes.len() {
+        let mut args = [&[][..]; k16_abi::syscall::MAX_RUN_ARGS];
+        let mut cursor = path_end;
+        let mut index = 0;
+        while index < argc {
+            let arg_end = cursor
+                .checked_add(arg_lengths[index])
+                .ok_or(ProcessLoadError::InvalidPath)?;
+            args[index] = bytes
+                .get(cursor..arg_end)
+                .ok_or(ProcessLoadError::InvalidPath)?;
+            cursor = arg_end;
+            index += 1;
+        }
+        if cursor != bytes.len() {
             return Err(ProcessLoadError::InvalidPath);
         }
-        let arg = bytes
-            .get(arg_start..arg_end)
-            .ok_or(ProcessLoadError::InvalidPath)?;
-        Ok(Self { path, arg })
+        Ok(Self { path, argc, args })
     }
 }
 
@@ -1059,36 +1082,55 @@ fn read_request_u32(bytes: &[u8], offset: usize) -> Result<u32, ProcessLoadError
     Ok(u32::from_le_bytes([word[0], word[1], word[2], word[3]]))
 }
 
-pub unsafe fn install_child_argv1(
+pub unsafe fn install_child_argv(
     plan: DynamicUserLoadPlan,
-    arg: &[u8],
+    args: &[&[u8]],
 ) -> Result<ChildArgv, ProcessLoadError> {
-    if arg.len() > k16_abi::syscall::MAX_RUN_ARG_BYTES {
+    if args.is_empty() {
+        return Ok(ChildArgv::empty());
+    }
+    if args.len() > k16_abi::syscall::MAX_RUN_ARGS {
         return Err(ProcessLoadError::InvalidPath);
     }
     let table_ptr = align_up(plan.load_end, STACK_ALIGNMENT)?;
-    let arg_ptr = table_ptr
-        .checked_add(CHILD_ARG_ENTRY_BYTES)
+    let table_bytes = (args.len() as u32)
+        .checked_mul(CHILD_ARG_ENTRY_BYTES)
         .ok_or(ProcessLoadError::AddressOverflow)?;
-    let arg_len = arg.len() as u32;
-    unsafe {
-        write_u32_le(table_ptr, arg_ptr);
-        write_u32_le(table_ptr + 4, arg_len);
-        copy_bytes_to_ram(arg, arg_ptr);
+    let arg_data_ptr = table_ptr
+        .checked_add(table_bytes)
+        .ok_or(ProcessLoadError::AddressOverflow)?;
+    let mut cursor = arg_data_ptr;
+    for arg in args {
+        if arg.len() > k16_abi::syscall::MAX_RUN_ARG_BYTES {
+            return Err(ProcessLoadError::InvalidPath);
+        }
+        cursor = cursor
+            .checked_add(arg.len() as u32)
+            .ok_or(ProcessLoadError::AddressOverflow)?;
     }
-    let end = align_up(
-        arg_ptr
-            .checked_add(arg_len)
-            .ok_or(ProcessLoadError::AddressOverflow)?,
-        HEAP_ALIGNMENT,
-    )?;
+    let end = align_up(cursor, HEAP_ALIGNMENT)?;
     let heap_limit =
         heap_limit_from_stack_top(plan.stack_top).map_err(|_| ProcessLoadError::ProgramTooLarge)?;
     if end > heap_limit {
         return Err(ProcessLoadError::ProgramTooLarge);
     }
+    let mut arg_ptr = arg_data_ptr;
+    let mut index = 0_u32;
+    for arg in args {
+        let entry_ptr = table_ptr + index * CHILD_ARG_ENTRY_BYTES;
+        let arg_len = arg.len() as u32;
+        unsafe {
+            write_u32_le(entry_ptr, arg_ptr);
+            write_u32_le(entry_ptr + 4, arg_len);
+            copy_bytes_to_ram(arg, arg_ptr);
+        }
+        arg_ptr = arg_ptr
+            .checked_add(arg_len)
+            .ok_or(ProcessLoadError::AddressOverflow)?;
+        index += 1;
+    }
     Ok(ChildArgv {
-        argc: 1,
+        argc: args.len() as u32,
         table_ptr,
         end,
     })
@@ -1686,11 +1728,25 @@ mod tests {
     }
 
     #[test]
-    fn run_argv_request_rejects_trailing_bytes_after_one_argument() {
+    fn run_argv_request_parses_multiple_arguments() {
         let bytes = [
-            b'R', b'A', b'R', b'G', 11, 0, 0, 0, 9, 0, 0, 0, b'/', b'b', b'i', b'n', b'/', b'c',
-            b'a', b't', b'.', b'k', b'x', b'/', b'e', b't', b'c', b'/', b'm', b'o', b't', b'd',
-            b'!',
+            b'R', b'A', b'R', b'G', 11, 0, 0, 0, 2, 0, 0, 0, 9, 0, 0, 0, 2, 0, 0, 0, b'/', b'b',
+            b'i', b'n', b'/', b'c', b'a', b't', b'.', b'k', b'x', b'/', b'e', b't', b'c', b'/',
+            b'm', b'o', b't', b'd', b'-', b'n',
+        ];
+
+        let request = RunArgvRequest::parse(&bytes).unwrap();
+
+        assert_eq!(request.path, b"/bin/cat.kx");
+        assert_eq!(request.args(), &[b"/etc/motd".as_slice(), b"-n".as_slice()]);
+    }
+
+    #[test]
+    fn run_argv_request_rejects_trailing_bytes_after_declared_arguments() {
+        let bytes = [
+            b'R', b'A', b'R', b'G', 11, 0, 0, 0, 1, 0, 0, 0, 9, 0, 0, 0, b'/', b'b', b'i', b'n',
+            b'/', b'c', b'a', b't', b'.', b'k', b'x', b'/', b'e', b't', b'c', b'/', b'm', b'o',
+            b't', b'd', b'!',
         ];
 
         assert_eq!(

@@ -451,7 +451,7 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("run_pwd(stdout, cwd)"))
         assertTrue(source.contains("run_cd(stdout, cwd, path_buffer, path)"))
         assertTrue(source.contains("run_ticks(stdout)"))
-        assertTrue(source.contains("run_exec(stdout, cwd, path_buffer, program_path, name, arg)"))
+        assertTrue(source.contains("run_exec(stdout, cwd, path_buffer, program_path, name, args)"))
         assertTrue(source.contains("const BIN_PREFIX: &[u8] = b\"/bin/\""))
         assertTrue(source.contains("const PROGRAM_SUFFIX: &[u8] = b\".kx\""))
         assertFalse(source.contains("process::exit(0)"))
