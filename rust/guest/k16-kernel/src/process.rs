@@ -12,7 +12,7 @@ const KX_SUFFIX: &[u8] = b".kx";
 const K16FS_MAX_NAME_BYTES: usize = 56;
 pub const MAX_RUN_PATH_BYTES: usize = BIN_PREFIX.len() + K16FS_MAX_NAME_BYTES;
 const CHILD_ARG_ENTRY_BYTES: u32 = 8;
-const USER_PROGRAM_LIMIT: u32 = 0x0002_5000;
+const DEFAULT_INIT_MEMORY_END: u32 = 0x0002_5000;
 // Keep relocation records outside k16_storage::SCRATCH_ADDR: storage reads use
 // that block as staging, and records may straddle a storage block boundary.
 const RELOCATION_RECORD_ADDR: u32 = 0x0000_0500;
@@ -56,6 +56,18 @@ static mut RUNTIME_SLOT0_HEAP_LIMIT: u32 = 0;
 static mut RUNTIME_SLOT1_HEAP_LIMIT: u32 = 0;
 #[cfg(not(test))]
 static mut RUNTIME_SLOT2_HEAP_LIMIT: u32 = 0;
+#[cfg(not(test))]
+static mut RUNTIME_SLOT0_MEMORY_START: u32 = 0;
+#[cfg(not(test))]
+static mut RUNTIME_SLOT1_MEMORY_START: u32 = 0;
+#[cfg(not(test))]
+static mut RUNTIME_SLOT2_MEMORY_START: u32 = 0;
+#[cfg(not(test))]
+static mut RUNTIME_SLOT0_MEMORY_END: u32 = 0;
+#[cfg(not(test))]
+static mut RUNTIME_SLOT1_MEMORY_END: u32 = 0;
+#[cfg(not(test))]
+static mut RUNTIME_SLOT2_MEMORY_END: u32 = 0;
 
 #[cfg(feature = "host-test")]
 #[allow(dead_code)]
@@ -157,6 +169,42 @@ pub struct ProcessContext {
     pub stack_top: u32,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct ProcessMemory {
+    pub start: u32,
+    pub end: u32,
+}
+
+impl ProcessMemory {
+    pub const fn empty() -> Self {
+        Self { start: 0, end: 0 }
+    }
+
+    pub fn new(start: u32, end: u32) -> Result<Self, ProcessLoadError> {
+        if start >= end {
+            return Err(ProcessLoadError::InvalidArena);
+        }
+        Ok(Self { start, end })
+    }
+
+    pub fn for_loaded_image(
+        image: k16_boot_chain::LoadedImage,
+        memory_end: u32,
+    ) -> Result<Self, ProcessLoadError> {
+        if image.load_addr >= image.load_end || image.load_end > memory_end {
+            return Err(ProcessLoadError::InvalidArena);
+        }
+        Self::new(image.load_addr, memory_end)
+    }
+
+    pub fn contains_buffer(self, ptr: u32, len: u32) -> bool {
+        let Some(end) = ptr.checked_add(len) else {
+            return false;
+        };
+        ptr >= self.start && end <= self.end
+    }
+}
+
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TrapFrame {
@@ -206,6 +254,7 @@ struct ProcessSlot {
     context: ProcessContext,
     frame: TrapFrame,
     exit_status: u32,
+    memory: ProcessMemory,
     load_base: u32,
     heap_start: u32,
     program_break: u32,
@@ -224,6 +273,7 @@ impl ProcessSlot {
             },
             frame: TrapFrame::zeroed(),
             exit_status: 0,
+            memory: ProcessMemory::empty(),
             load_base: 0,
             heap_start: 0,
             program_break: 0,
@@ -238,6 +288,7 @@ impl ProcessSlot {
             context,
             frame: TrapFrame::zeroed(),
             exit_status: 0,
+            memory: ProcessMemory::empty(),
             load_base: 0,
             heap_start: 0,
             program_break: 0,
@@ -274,16 +325,23 @@ impl ProcessTable {
         &mut self,
         image: k16_boot_chain::LoadedImage,
     ) -> Result<(), ProcessLoadError> {
-        if image.load_addr >= image.load_end || image.load_end > USER_PROGRAM_LIMIT {
-            return Err(ProcessLoadError::InvalidArena);
-        }
+        self.initialize_init_image_in_memory(image, DEFAULT_INIT_MEMORY_END)
+    }
+
+    pub fn initialize_init_image_in_memory(
+        &mut self,
+        image: k16_boot_chain::LoadedImage,
+        memory_end: u32,
+    ) -> Result<(), ProcessLoadError> {
+        let memory = ProcessMemory::for_loaded_image(image, memory_end)?;
         let init_slot = &mut self.slots[INIT_PROCESS_SLOT];
         init_slot.context = ProcessContext {
             entry_pc: image.entry_pc,
-            stack_top: USER_PROGRAM_LIMIT,
+            stack_top: memory.end,
         };
+        init_slot.memory = memory;
         init_slot.load_base = align_up(image.load_end, LOAD_ALIGNMENT)?;
-        let heap = HeapState::from_bounds(image.load_end, USER_PROGRAM_LIMIT)
+        let heap = HeapState::from_bounds(image.load_end, memory.end)
             .map_err(|_| ProcessLoadError::ProgramTooLarge)?;
         init_slot.heap_start = heap.start;
         init_slot.program_break = heap.start;
@@ -300,8 +358,8 @@ impl ProcessTable {
             return Err(ProcessLoadError::Storage);
         }
         let load_base = caller.program_break.max(caller.load_base);
-        UserArena::new(load_base, init_frame.stack_pointer)
-            .map_err(|_| ProcessLoadError::ProgramTooLarge)
+        let arena_end = init_frame.stack_pointer.min(caller.memory.end);
+        UserArena::new(load_base, arena_end).map_err(|_| ProcessLoadError::ProgramTooLarge)
     }
 
     pub fn begin_child_run(
@@ -364,6 +422,8 @@ impl ProcessTable {
         child.context = context;
         child.frame = child_frame;
         child.exit_status = 0;
+        child.memory = ProcessMemory::new(child_plan.load_base, child_plan.stack_top)
+            .map_err(|_| ProcessSwitchError::NoRunningChild)?;
         child.load_base = align_up(child_plan.load_end, LOAD_ALIGNMENT)
             .map_err(|_| ProcessSwitchError::NoRunningChild)?;
         child.heap_start = heap.start;
@@ -424,6 +484,20 @@ impl ProcessTable {
     pub fn heap_limit(&self) -> Result<u32, HeapError> {
         let (_, _, heap_limit) = self.current_heap()?;
         Ok(heap_limit)
+    }
+
+    pub fn current_memory(&self) -> Result<ProcessMemory, HeapError> {
+        let current = self.slots[self.current_slot].memory;
+        if current.start == 0 {
+            return Err(HeapError::NoRunningChild);
+        }
+        Ok(current)
+    }
+
+    pub fn current_contains_buffer(&self, ptr: u32, len: u32) -> bool {
+        self.current_memory()
+            .map(|memory| memory.contains_buffer(ptr, len))
+            .unwrap_or(false)
     }
 
     pub fn set_program_break(&mut self, address: u32) -> Result<u32, HeapError> {
@@ -496,10 +570,8 @@ pub unsafe fn initialize_init_process(
 ) -> Result<(), ProcessLoadError> {
     #[cfg(not(test))]
     {
-        if image.load_addr >= image.load_end || image.load_end > USER_PROGRAM_LIMIT {
-            return Err(ProcessLoadError::InvalidArena);
-        }
-        let heap = HeapState::from_bounds(image.load_end, USER_PROGRAM_LIMIT)
+        let memory = ProcessMemory::for_loaded_image(image, DEFAULT_INIT_MEMORY_END)?;
+        let heap = HeapState::from_bounds(image.load_end, memory.end)
             .map_err(|_| ProcessLoadError::ProgramTooLarge)?;
         unsafe {
             write_runtime_word(
@@ -508,6 +580,7 @@ pub unsafe fn initialize_init_process(
             );
             write_runtime_word(runtime_slot_parent_ptr(1), NO_PARENT_SLOT);
             write_runtime_word(runtime_slot_parent_ptr(2), NO_PARENT_SLOT);
+            write_runtime_process_memory(INIT_PROCESS_SLOT, memory);
             write_runtime_word(runtime_slot_heap_start_ptr(INIT_PROCESS_SLOT), heap.start);
             write_runtime_word(
                 runtime_slot_program_break_ptr(INIT_PROCESS_SLOT),
@@ -583,11 +656,16 @@ unsafe fn begin_loaded_child_runtime(path: &[u8], args: &[&[u8]]) -> Result<Chil
     let caller_frame = unsafe { save_runtime_process_frame(current_slot) };
     let caller_program_break =
         unsafe { read_runtime_word(runtime_slot_program_break_ptr(current_slot)) };
+    let caller_memory = unsafe { read_runtime_process_memory(current_slot) }
+        .ok_or_else(|| run_status_from_load_error(ProcessLoadError::Storage))?;
     if caller_program_break == 0 {
         return Err(run_status_from_load_error(ProcessLoadError::Storage));
     }
-    let arena = UserArena::new(caller_program_break, caller_frame.stack_pointer)
-        .map_err(|_| run_status_from_load_error(ProcessLoadError::ProgramTooLarge))?;
+    let arena = UserArena::new(
+        caller_program_break,
+        caller_frame.stack_pointer.min(caller_memory.end),
+    )
+    .map_err(|_| run_status_from_load_error(ProcessLoadError::ProgramTooLarge))?;
     let child_plan = unsafe { load_dynamic_user_program_from_storage0(path, arena) }
         .map_err(run_status_from_load_error)?;
     let argv =
@@ -614,6 +692,11 @@ unsafe fn begin_loaded_child_plan_runtime_with_argv(
     child_frame.registers[1] = argv.argc;
     child_frame.registers[2] = argv.table_ptr;
     unsafe {
+        write_runtime_process_memory(
+            child_slot,
+            ProcessMemory::new(child_plan.load_base, child_plan.stack_top)
+                .map_err(|_| ProcessSwitchError::NoRunningChild)?,
+        );
         initialize_runtime_heap_from_bounds(
             child_slot,
             child_plan.load_end.max(argv.end),
@@ -679,6 +762,7 @@ unsafe fn finish_child_runtime(status: u32) -> Result<InitResume, ProcessSwitchE
     let frame = TrapFrame::from(unsafe { *runtime_slot_frame(parent_slot).get() });
     unsafe {
         write_runtime_word(runtime_slot_parent_ptr(current_slot), NO_PARENT_SLOT);
+        clear_runtime_process_memory(current_slot);
         clear_runtime_heap(current_slot);
         write_runtime_word(
             core::ptr::addr_of_mut!(RUNTIME_CURRENT_SLOT),
@@ -705,6 +789,21 @@ pub unsafe fn set_current_program_break(address: u32) -> Result<u32, HeapError> 
     #[cfg(test)]
     {
         unsafe { PROCESS_TABLE.get().set_program_break(address) }
+    }
+}
+
+#[cfg(any(not(test), feature = "host-test"))]
+pub unsafe fn current_process_contains_buffer(ptr: u32, len: u32) -> bool {
+    #[cfg(not(test))]
+    {
+        let current_slot = unsafe { runtime_current_slot() };
+        return unsafe { read_runtime_process_memory(current_slot) }
+            .map(|memory| memory.contains_buffer(ptr, len))
+            .unwrap_or(false);
+    }
+    #[cfg(test)]
+    {
+        unsafe { PROCESS_TABLE.get().current_contains_buffer(ptr, len) }
     }
 }
 
@@ -773,6 +872,47 @@ fn runtime_slot_heap_limit_ptr(slot: usize) -> *mut u32 {
         INIT_PROCESS_SLOT => core::ptr::addr_of_mut!(RUNTIME_SLOT0_HEAP_LIMIT),
         1 => core::ptr::addr_of_mut!(RUNTIME_SLOT1_HEAP_LIMIT),
         _ => core::ptr::addr_of_mut!(RUNTIME_SLOT2_HEAP_LIMIT),
+    }
+}
+
+#[cfg(not(test))]
+fn runtime_slot_memory_start_ptr(slot: usize) -> *mut u32 {
+    match slot {
+        INIT_PROCESS_SLOT => core::ptr::addr_of_mut!(RUNTIME_SLOT0_MEMORY_START),
+        1 => core::ptr::addr_of_mut!(RUNTIME_SLOT1_MEMORY_START),
+        _ => core::ptr::addr_of_mut!(RUNTIME_SLOT2_MEMORY_START),
+    }
+}
+
+#[cfg(not(test))]
+fn runtime_slot_memory_end_ptr(slot: usize) -> *mut u32 {
+    match slot {
+        INIT_PROCESS_SLOT => core::ptr::addr_of_mut!(RUNTIME_SLOT0_MEMORY_END),
+        1 => core::ptr::addr_of_mut!(RUNTIME_SLOT1_MEMORY_END),
+        _ => core::ptr::addr_of_mut!(RUNTIME_SLOT2_MEMORY_END),
+    }
+}
+
+#[cfg(not(test))]
+unsafe fn write_runtime_process_memory(slot: usize, memory: ProcessMemory) {
+    unsafe {
+        write_runtime_word(runtime_slot_memory_start_ptr(slot), memory.start);
+        write_runtime_word(runtime_slot_memory_end_ptr(slot), memory.end);
+    }
+}
+
+#[cfg(not(test))]
+unsafe fn read_runtime_process_memory(slot: usize) -> Option<ProcessMemory> {
+    let start = unsafe { read_runtime_word(runtime_slot_memory_start_ptr(slot)) };
+    let end = unsafe { read_runtime_word(runtime_slot_memory_end_ptr(slot)) };
+    ProcessMemory::new(start, end).ok()
+}
+
+#[cfg(not(test))]
+unsafe fn clear_runtime_process_memory(slot: usize) {
+    unsafe {
+        write_runtime_word(runtime_slot_memory_start_ptr(slot), 0);
+        write_runtime_word(runtime_slot_memory_end_ptr(slot), 0);
     }
 }
 
@@ -1777,6 +1917,63 @@ mod tests {
     }
 
     #[test]
+    fn process_table_initializes_init_heap_from_explicit_memory_range() {
+        let mut table = ProcessTable::new(ProcessContext {
+            entry_pc: 0,
+            stack_top: 0,
+        });
+
+        table
+            .initialize_init_image_in_memory(
+                k16_boot_chain::LoadedImage {
+                    load_addr: 0x0001_3000,
+                    load_end: 0x0001_4022,
+                    entry_pc: 0x0001_3004,
+                },
+                0x0001_9000,
+            )
+            .expect("init image initializes inside explicit memory range");
+
+        assert_eq!(
+            table.current_memory(),
+            Ok(ProcessMemory {
+                start: 0x0001_3000,
+                end: 0x0001_9000,
+            })
+        );
+        assert_eq!(table.program_break(), Ok(0x0001_4024));
+        assert_eq!(table.heap_limit(), Ok(0x0001_8f00));
+        assert_eq!(
+            table.slots[INIT_PROCESS_SLOT].context.stack_top,
+            0x0001_9000
+        );
+    }
+
+    #[test]
+    fn process_table_buffer_validation_uses_current_process_memory() {
+        let mut table = ProcessTable::new(ProcessContext {
+            entry_pc: 0,
+            stack_top: 0,
+        });
+        table
+            .initialize_init_image_in_memory(
+                k16_boot_chain::LoadedImage {
+                    load_addr: 0x0001_3000,
+                    load_end: 0x0001_4020,
+                    entry_pc: 0x0001_3004,
+                },
+                0x0001_9000,
+            )
+            .expect("init image initializes");
+
+        assert!(table.current_contains_buffer(0x0001_3000, 4));
+        assert!(table.current_contains_buffer(0x0001_8ffc, 4));
+        assert!(!table.current_contains_buffer(0x0001_2ffc, 4));
+        assert!(!table.current_contains_buffer(0x0001_8ffe, 4));
+        assert!(!table.current_contains_buffer(0xffff_fffc, 8));
+    }
+
+    #[test]
     fn process_table_child_arena_starts_after_current_init_break() {
         let mut table = ProcessTable::new(ProcessContext {
             entry_pc: 0,
@@ -1802,6 +1999,77 @@ mod tests {
 
         assert_eq!(arena.start, 0x0000_9120);
         assert_eq!(arena.end, 0x0001_f000);
+    }
+
+    #[test]
+    fn process_table_child_arena_is_clamped_to_current_memory_end() {
+        let mut table = ProcessTable::new(ProcessContext {
+            entry_pc: 0,
+            stack_top: 0,
+        });
+        table
+            .initialize_init_image_in_memory(
+                k16_boot_chain::LoadedImage {
+                    load_addr: 0x0001_3000,
+                    load_end: 0x0001_4000,
+                    entry_pc: 0x0001_3004,
+                },
+                0x0001_9000,
+            )
+            .expect("init image initializes");
+
+        let arena = table
+            .child_arena_for_init_frame(TrapFrame {
+                stack_pointer: 0x0002_0000,
+                ..TrapFrame::zeroed()
+            })
+            .expect("arena is clamped to init memory");
+
+        assert_eq!(arena.start, 0x0001_4000);
+        assert_eq!(arena.end, 0x0001_9000);
+    }
+
+    #[test]
+    fn process_table_switches_current_memory_to_child_range() {
+        let mut table = ProcessTable::new(ProcessContext {
+            entry_pc: 0,
+            stack_top: 0,
+        });
+        table
+            .initialize_init_image_in_memory(
+                k16_boot_chain::LoadedImage {
+                    load_addr: 0x0001_3000,
+                    load_end: 0x0001_4000,
+                    entry_pc: 0x0001_3004,
+                },
+                0x0002_0000,
+            )
+            .expect("init image initializes");
+        let child_plan = DynamicUserLoadPlan {
+            load_base: 0x0001_5000,
+            load_end: 0x0001_6020,
+            entry_pc: 0x0001_5004,
+            stack_top: 0x0001_c000,
+            payload_dst: 0x0001_5000,
+            payload_len: 16,
+            zero_fill_addr: 0x0001_5010,
+            zero_fill_len: 16,
+        };
+
+        table
+            .begin_child_run(child_plan)
+            .expect("child starts with its own range");
+
+        assert_eq!(
+            table.current_memory(),
+            Ok(ProcessMemory {
+                start: 0x0001_5000,
+                end: 0x0001_c000,
+            })
+        );
+        assert!(table.current_contains_buffer(0x0001_5000, 4));
+        assert!(!table.current_contains_buffer(0x0001_4000, 4));
+        assert!(!table.current_contains_buffer(0x0001_c000, 4));
     }
 
     #[test]

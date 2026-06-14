@@ -1,9 +1,6 @@
 use k16_abi::{computer::keyboard0, syscall as abi_syscall};
 
-use crate::mmio;
-
-const PROGRAM_BASE: u32 = 0x0001_0000;
-const PROGRAM_LIMIT: u32 = 0x0002_5000;
+use crate::{mmio, process};
 
 pub fn read(ptr: u32, len: u32) -> Result<u32, u32> {
     if len == 0 {
@@ -24,10 +21,7 @@ pub fn read(ptr: u32, len: u32) -> Result<u32, u32> {
 }
 
 fn valid_guest_buffer(ptr: u32, len: u32) -> bool {
-    let Some(end) = ptr.checked_add(len) else {
-        return false;
-    };
-    ptr >= PROGRAM_BASE && end <= PROGRAM_LIMIT
+    unsafe { process::current_process_contains_buffer(ptr, len) }
 }
 
 fn drain_available_bytes(ptr: u32, len: u32) -> u32 {
