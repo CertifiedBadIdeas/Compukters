@@ -98,6 +98,14 @@ pub struct K16CpuSnapshot {
     pub metrics_steps: u64,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct K16CpuModeSnapshot {
+    pub address_mode: K16AddressMode,
+    pub privilege_mode: K16PrivilegeMode,
+    pub trap_address_mode: K16AddressMode,
+    pub trap_privilege_mode: K16PrivilegeMode,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct K16Trap {
     cause: u32,
@@ -475,6 +483,22 @@ impl K16Cpu {
     ) {
         self.trap_address_mode = address_mode;
         self.trap_privilege_mode = privilege_mode;
+    }
+
+    pub fn mode_snapshot(&self) -> K16CpuModeSnapshot {
+        K16CpuModeSnapshot {
+            address_mode: self.address_mode,
+            privilege_mode: self.privilege_mode,
+            trap_address_mode: self.trap_address_mode,
+            trap_privilege_mode: self.trap_privilege_mode,
+        }
+    }
+
+    pub fn restore_mode_snapshot(&mut self, snapshot: K16CpuModeSnapshot) {
+        self.address_mode = snapshot.address_mode;
+        self.privilege_mode = snapshot.privilege_mode;
+        self.trap_address_mode = snapshot.trap_address_mode;
+        self.trap_privilege_mode = snapshot.trap_privilege_mode;
     }
 
     pub fn trap_kernel_stack_pointer(&self) -> u32 {

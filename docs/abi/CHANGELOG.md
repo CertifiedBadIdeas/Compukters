@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- `K16SNAP` now records translated execution state needed to restore
+  VM-enabled user processes. Snapshot device record kind `9` stores `mmu0`
+  address-space mappings plus per-CPU address/privilege mode overrides, so a
+  snapshot taken while `/bin/shell.kx` or a nested utility is running in
+  translated user mode can resume after restore instead of rebooting into a
+  broken physical-mode continuation.
 - K16 production `RUN` now launches `/bin/shell.kx` and shell-started
   `/bin/*.kx` utility children in host-managed translated address spaces. The
   first production mappings are identity-mapped over kernel-selected child

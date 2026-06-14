@@ -12,7 +12,8 @@ across host unload/load boundaries.
 The current v1 slice records a versioned header, full RAM bytes, fixed-size
 K16 CPU continuation records, including trap and interrupt CSR state, and
 explicit device records for `control`, `debug`, serial input, the `storage0`
-controller, `timer0` game ticks, and pending `keyboard0` events.
+controller, `timer0` game ticks, pending `keyboard0` events, and optional
+`mmu0` translated address-space state.
 
 ## File Layout
 
@@ -109,6 +110,9 @@ kind  payload
 7     keyboard0: sequence u64, dropped_count u32, event_count u32,
       followed by event_count records of event_kind u32, code u32,
       modifiers u32, flags u32
+9     mmu0: next_address_space_id u32, address_space_count u32,
+      cpu_mode_count u32, reserved u32, followed by address-space records and
+      CPU mode records
 ```
 
 Unknown device kinds are rejected. `control` payloads must be exactly 12 bytes.
@@ -116,6 +120,8 @@ The transient `control.yield` request bit is not serialized.
 `debug` payloads may be empty. `storage0` controller payloads must be exactly 36 bytes.
 `timer0` payloads must be exactly 8 bytes. `keyboard0` payloads must contain
 16 bytes of metadata followed by exactly `event_count * 16` event bytes.
+`mmu0` payloads are present only when translated address spaces exist or a CPU
+mode differs from the default physical/kernel state.
 
 `storage0` media contents are not stored in `K16SNAP`; they remain part of the
 configured storage media. `STORAGE0_MEDIA_STATUS` is derived from the restored
@@ -128,16 +134,53 @@ fresh host monotonic origin.
 `keyboard0` pending events are serialized in read order. Restore recreates the
 queue exactly, including `sequence` and `dropped_count`.
 
+`mmu0` address-space records preserve host-managed translated mappings. Each
+address-space record is:
+
+```text
+offset  size  field
+0x00    4     address_space_id
+0x04    4     mapping_count
+0x08    ...   mapping records
+```
+
+Each mapping record is 16 bytes:
+
+```text
+offset  size  field
+0x00    4     virtual_start
+0x04    4     physical_start
+0x08    4     page_count
+0x0C    4     flags: bit 0 user_accessible, bit 1 writable, bit 2 executable
+```
+
+Each CPU mode record is 28 bytes:
+
+```text
+offset  size  field
+0x00    4     cpu_index
+0x04    8     current address mode: u32 kind, u32 address_space_id
+0x0C    4     current privilege mode
+0x10    8     saved trap-return address mode: u32 kind, u32 address_space_id
+0x18    4     saved trap-return privilege mode
+```
+
+Address mode kind `0` is physical and uses address-space id `0`. Address mode
+kind `1` is translated and uses the supplied address-space id. Privilege mode
+`0` is kernel and `1` is user.
+
 ## Restore Semantics
 
 Full restore recreates RAM, CPU contexts, `boot_cpu_id`, `control` state,
 `debug` output, pending serial input bytes, `storage0` controller registers,
-`timer0.game_ticks`, and pending `keyboard0` events from the snapshot against an
-explicitly provided `ComputerMachineProfile`. Restore must reject a snapshot
-when its `ram_size` differs from the target profile memory size, when the boot
-CPU id points outside the CPU table, when a CPU record contains an unsupported
-kind/state/reserved field, or when the target profile does not expose a device
-recorded by the snapshot.
+`timer0.game_ticks`, pending `keyboard0` events, `mmu0` address-space maps, and
+non-default CPU address/privilege modes from the snapshot against an explicitly
+provided `ComputerMachineProfile`. Restore must reject a snapshot when its
+`ram_size` differs from the target profile memory size, when the boot CPU id
+points outside the CPU table, when a CPU record contains an unsupported
+kind/state/reserved field, when an `mmu0` mapping is invalid for the target
+profile RAM size, or when the target profile does not expose a device recorded
+by the snapshot.
 
 RAM-only restore remains available as an explicitly named operation for tooling
 that only wants RAM bytes. It does not recreate CPU contexts, boot CPU id,
@@ -166,6 +209,8 @@ A decoder must reject:
 - invalid `timer0` payload length;
 - invalid `keyboard0` payload length;
 - invalid `keyboard0` event kind or flags;
+- invalid `mmu0` payload length, mapping flags, mapping ranges, duplicate
+  address-space ids, or CPU mode indices outside the CPU table;
 - trailing bytes after declared device records.
 
 There is no fallback decoder for unknown snapshot formats.

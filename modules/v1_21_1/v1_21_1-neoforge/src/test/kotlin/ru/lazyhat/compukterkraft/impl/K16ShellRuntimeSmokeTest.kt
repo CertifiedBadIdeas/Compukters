@@ -259,7 +259,89 @@ class K16ShellRuntimeSmokeTest {
         }
     }
 
-    private fun createDevice(deviceId: Int): K16RuntimeDevice {
+    @Test
+    fun runtimeDeviceRebootsAfterNestedShellReportsBusy() {
+        val device = createDevice(deviceId = 229)
+
+        try {
+            device.turnOn()
+            waitForTerminalText(device, "K16> ")
+
+            dispatchText(device, "shell\n")
+            waitForTerminal(device, "nested shell prompt") { terminal ->
+                val commandIndex = terminal.indexOf("K16> shell")
+                val nestedBannerIndex = terminal.indexOf("K16 SHELL", startIndex = commandIndex + "K16> shell".length)
+                val nestedPromptIndex = terminal.indexOf("K16> ", startIndex = nestedBannerIndex + "K16 SHELL".length)
+                commandIndex >= 0 && nestedBannerIndex > commandIndex && nestedPromptIndex > nestedBannerIndex
+            }
+
+            dispatchText(device, "shell\n")
+            waitForTerminal(device, "nested shell busy error") { terminal ->
+                val firstCommandIndex = terminal.indexOf("K16> shell")
+                val nestedCommandIndex =
+                    terminal.indexOf("K16> shell", startIndex = firstCommandIndex + "K16> shell".length)
+                val busyIndex = terminal.indexOf("ERR BUSY", startIndex = nestedCommandIndex + "K16> shell".length)
+                val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = busyIndex + "ERR BUSY".length)
+                nestedCommandIndex >= 0 && busyIndex > nestedCommandIndex && returnedPromptIndex > busyIndex
+            }
+
+            device.reboot()
+
+            waitForTerminal(device, "fresh shell prompt after nested-shell reboot") { terminal ->
+                terminal.contains("K16 SHELL") && terminal.contains("K16> ")
+            }
+        } finally {
+            device.close()
+        }
+    }
+
+    @Test
+    fun runtimeDeviceRestoresSnapshotAfterNestedShellReportsBusy() {
+        val device = createDevice(deviceId = 230)
+
+        try {
+            device.turnOn()
+            waitForTerminalText(device, "K16> ")
+
+            dispatchText(device, "shell\n")
+            waitForTerminal(device, "nested shell prompt") { terminal ->
+                val commandIndex = terminal.indexOf("K16> shell")
+                val nestedBannerIndex = terminal.indexOf("K16 SHELL", startIndex = commandIndex + "K16> shell".length)
+                val nestedPromptIndex = terminal.indexOf("K16> ", startIndex = nestedBannerIndex + "K16 SHELL".length)
+                commandIndex >= 0 && nestedBannerIndex > commandIndex && nestedPromptIndex > nestedBannerIndex
+            }
+
+            dispatchText(device, "shell\n")
+            waitForTerminal(device, "nested shell busy error before snapshot") { terminal ->
+                terminal.contains("ERR BUSY")
+            }
+
+            val snapshot = requireNotNull(device.snapshotRuntimeState())
+            device.close()
+
+            val restored = createDevice(deviceId = 231, snapshot = snapshot)
+            try {
+                restored.turnOn()
+                waitForTerminal(restored, "restored shell prompt after nested-shell snapshot") { terminal ->
+                    terminal.contains("K16> ")
+                }
+
+                dispatchText(restored, "echo restored\n")
+                waitForTerminal(restored, "restored shell remains interactive") { terminal ->
+                    terminal.contains("restored")
+                }
+            } finally {
+                restored.close()
+            }
+        } finally {
+            device.close()
+        }
+    }
+
+    private fun createDevice(
+        deviceId: Int,
+        snapshot: ByteArray? = null,
+    ): K16RuntimeDevice {
         val workspace = createTempDirectory("k16-shell-runtime-smoke-")
         val biosFlashPath = workspace.resolve("bios.kflash")
         val storage0Path = workspace.resolve("storage0.kv")
@@ -270,10 +352,18 @@ class K16ShellRuntimeSmokeTest {
             deviceId = deviceId,
             properties = DeviceProperties(DeviceFamily.NORMAL, label = "shell-smoke"),
             endpointFactory = {
-                K16ComputerRuntimeFactory.createFromBiosFlash(
-                    biosFlashPath = biosFlashPath,
-                    storage0Path = storage0Path,
-                )
+                if (snapshot == null) {
+                    K16ComputerRuntimeFactory.createFromBiosFlash(
+                        biosFlashPath = biosFlashPath,
+                        storage0Path = storage0Path,
+                    )
+                } else {
+                    K16ComputerRuntimeFactory.restoreFromBiosFlashSnapshot(
+                        biosFlashPath = biosFlashPath,
+                        storage0Path = storage0Path,
+                        snapshot = snapshot,
+                    )
+                }
             },
             stateSink = {},
         )

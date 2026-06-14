@@ -36,6 +36,15 @@ impl MmuMapFlags {
     pub const WRITABLE: Self = Self(1 << 1);
     pub const EXECUTABLE: Self = Self(1 << 2);
 
+    pub fn from_bits(bits: u32) -> Option<Self> {
+        let known = Self::USER_ACCESSIBLE.0 | Self::WRITABLE.0 | Self::EXECUTABLE.0;
+        (bits & !known == 0).then_some(Self(bits))
+    }
+
+    pub fn bits(self) -> u32 {
+        self.0
+    }
+
     fn contains(self, other: Self) -> bool {
         self.0 & other.0 == other.0
     }
@@ -102,6 +111,26 @@ pub struct MmuAddressSpaces {
     spaces: Vec<(MmuAddressSpaceId, MmuAddressSpace)>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MmuMappingSnapshot {
+    pub virtual_start: u32,
+    pub physical_start: u32,
+    pub page_count: u32,
+    pub flags: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MmuAddressSpaceSnapshot {
+    pub id: MmuAddressSpaceId,
+    pub mappings: Vec<MmuMappingSnapshot>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MmuAddressSpacesSnapshot {
+    pub next_id: u32,
+    pub spaces: Vec<MmuAddressSpaceSnapshot>,
+}
+
 impl MmuAddressSpaces {
     pub fn new() -> Self {
         Self {
@@ -143,6 +172,81 @@ impl MmuAddressSpaces {
         };
         self.spaces.remove(index);
         true
+    }
+
+    pub fn snapshot(&self) -> MmuAddressSpacesSnapshot {
+        MmuAddressSpacesSnapshot {
+            next_id: self.next_id,
+            spaces: self
+                .spaces
+                .iter()
+                .map(|(id, space)| MmuAddressSpaceSnapshot {
+                    id: *id,
+                    mappings: space
+                        .mappings
+                        .iter()
+                        .copied()
+                        .map(|mapping| MmuMappingSnapshot {
+                            virtual_start: mapping.virtual_start,
+                            physical_start: mapping.physical_start,
+                            page_count: mapping.page_count,
+                            flags: mapping.flags.bits(),
+                        })
+                        .collect(),
+                })
+                .collect(),
+        }
+    }
+
+    pub fn from_snapshot(
+        ram_size: u32,
+        snapshot: MmuAddressSpacesSnapshot,
+    ) -> Result<Self, String> {
+        if snapshot.next_id == 0 {
+            return Err("MMU snapshot next address-space id must be non-zero".to_string());
+        }
+        let mut restored = Self {
+            next_id: snapshot.next_id,
+            spaces: Vec::with_capacity(snapshot.spaces.len()),
+        };
+        for space_snapshot in snapshot.spaces {
+            if space_snapshot.id.raw() == 0 || space_snapshot.id.raw() >= snapshot.next_id {
+                return Err(format!(
+                    "MMU snapshot address-space id {} is outside the valid id range",
+                    space_snapshot.id.raw()
+                ));
+            }
+            if restored.get(space_snapshot.id).is_some() {
+                return Err(format!(
+                    "MMU snapshot contains duplicate address-space id {}",
+                    space_snapshot.id.raw()
+                ));
+            }
+            let mut space = MmuAddressSpace::new(ram_size);
+            for mapping in space_snapshot.mappings {
+                let flags = MmuMapFlags::from_bits(mapping.flags).ok_or_else(|| {
+                    format!(
+                        "MMU snapshot mapping has unsupported flags {:#010x}",
+                        mapping.flags
+                    )
+                })?;
+                space
+                    .map_pages(
+                        mapping.virtual_start,
+                        mapping.physical_start,
+                        mapping.page_count,
+                        flags,
+                    )
+                    .map_err(|fault| {
+                        format!(
+                            "MMU snapshot mapping is invalid at virtual address {:#010x}: {:?}",
+                            fault.address, fault.kind
+                        )
+                    })?;
+            }
+            restored.spaces.push((space_snapshot.id, space));
+        }
+        Ok(restored)
     }
 }
 

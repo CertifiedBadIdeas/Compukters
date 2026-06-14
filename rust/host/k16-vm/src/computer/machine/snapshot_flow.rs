@@ -2,8 +2,11 @@ use super::{ComputerCpuContext, ComputerMachine};
 use crate::computer::devices::StoragePortControllerSnapshot;
 use crate::computer::profile::ComputerMachineProfile;
 use crate::computer::snapshot;
-use crate::computer::snapshot::{ComputerCpuSnapshotRecord, ComputerDeviceSnapshotRecord};
-use crate::k16::K16Cpu;
+use crate::computer::snapshot::{
+    ComputerCpuSnapshotRecord, ComputerDeviceSnapshotRecord, K16CpuModeSnapshotRecord,
+};
+use crate::k16::{K16AddressMode, K16Cpu, K16CpuModeSnapshot, K16PrivilegeMode};
+use crate::mmu::MmuAddressSpaces;
 
 pub(super) fn snapshot_v1(machine: &ComputerMachine) -> Result<Vec<u8>, String> {
     let cpus = machine
@@ -105,6 +108,25 @@ fn device_snapshot_records(machine: &ComputerMachine) -> Vec<ComputerDeviceSnaps
             dropped_count: keyboard0.dropped_count(),
         });
     }
+    let address_spaces = machine.address_spaces.snapshot();
+    let cpu_modes = machine
+        .cpus
+        .iter()
+        .enumerate()
+        .filter_map(|(cpu_index, cpu)| {
+            let mode = cpu.mode_snapshot();
+            (mode != default_cpu_mode_snapshot()).then_some(K16CpuModeSnapshotRecord {
+                cpu_index: cpu_index as u32,
+                mode,
+            })
+        })
+        .collect::<Vec<_>>();
+    if !address_spaces.spaces.is_empty() || !cpu_modes.is_empty() {
+        devices.push(ComputerDeviceSnapshotRecord::Mmu0 {
+            address_spaces,
+            cpu_modes,
+        });
+    }
     devices
 }
 
@@ -183,8 +205,61 @@ fn restore_device_snapshot_record(
             })?;
             keyboard0.restore_snapshot(events, sequence, dropped_count)?;
         }
+        ComputerDeviceSnapshotRecord::Mmu0 {
+            address_spaces,
+            cpu_modes,
+        } => {
+            machine.address_spaces =
+                MmuAddressSpaces::from_snapshot(machine.memory().len() as u32, address_spaces)?;
+            for cpu_mode in cpu_modes {
+                validate_cpu_mode_snapshot(&machine.address_spaces, cpu_mode.mode)?;
+                let cpu_index = usize::try_from(cpu_mode.cpu_index)
+                    .map_err(|_| "ComputerMachine snapshot CPU mode index does not fit usize")?;
+                let cpu = machine.cpus.get_mut(cpu_index).ok_or_else(|| {
+                    format!(
+                        "ComputerMachine snapshot CPU mode index {} is outside CPU table",
+                        cpu_mode.cpu_index
+                    )
+                })?;
+                cpu.restore_mode_snapshot(cpu_mode.mode);
+            }
+        }
     }
     Ok(())
+}
+
+fn validate_cpu_mode_snapshot(
+    address_spaces: &MmuAddressSpaces,
+    snapshot: K16CpuModeSnapshot,
+) -> Result<(), String> {
+    validate_address_mode_snapshot(address_spaces, snapshot.address_mode)?;
+    validate_address_mode_snapshot(address_spaces, snapshot.trap_address_mode)?;
+    Ok(())
+}
+
+fn validate_address_mode_snapshot(
+    address_spaces: &MmuAddressSpaces,
+    mode: K16AddressMode,
+) -> Result<(), String> {
+    let K16AddressMode::Translated { address_space } = mode else {
+        return Ok(());
+    };
+    address_spaces.get(address_space).ok_or_else(|| {
+        format!(
+            "ComputerMachine snapshot CPU mode references missing MMU address-space id {}",
+            address_space.raw()
+        )
+    })?;
+    Ok(())
+}
+
+fn default_cpu_mode_snapshot() -> K16CpuModeSnapshot {
+    K16CpuModeSnapshot {
+        address_mode: K16AddressMode::Physical,
+        privilege_mode: K16PrivilegeMode::Kernel,
+        trap_address_mode: K16AddressMode::Physical,
+        trap_privilege_mode: K16PrivilegeMode::Kernel,
+    }
 }
 
 impl ComputerCpuContext {
@@ -210,6 +285,18 @@ impl ComputerCpuContext {
                     max_steps,
                 })
             }
+        }
+    }
+
+    fn mode_snapshot(&self) -> K16CpuModeSnapshot {
+        match self {
+            ComputerCpuContext::K16 { cpu, .. } => cpu.mode_snapshot(),
+        }
+    }
+
+    fn restore_mode_snapshot(&mut self, snapshot: K16CpuModeSnapshot) {
+        match self {
+            ComputerCpuContext::K16 { cpu, .. } => cpu.restore_mode_snapshot(snapshot),
         }
     }
 }
