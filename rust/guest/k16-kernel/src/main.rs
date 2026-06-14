@@ -7,6 +7,7 @@ mod console;
 mod control;
 mod debug;
 mod font;
+mod fs;
 mod generated;
 mod gpu;
 mod init;

@@ -95,6 +95,57 @@ pub mod io {
     }
 }
 
+pub mod fs {
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub enum Error {
+        Syscall(u32),
+    }
+
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub struct File(u32);
+
+    impl File {
+        #[inline(always)]
+        pub const fn from_raw(fd: u32) -> Self {
+            Self(fd)
+        }
+
+        #[inline(always)]
+        pub const fn raw(self) -> u32 {
+            self.0
+        }
+
+        pub fn read(self, bytes: &mut [u8]) -> Result<usize, Error> {
+            let returned = k16_rt::read_syscall(self.0, bytes.as_mut_ptr(), bytes.len());
+            if is_error_status(returned) {
+                return Err(Error::Syscall(returned));
+            }
+            Ok(returned as usize)
+        }
+
+        pub fn close(self) -> Result<(), Error> {
+            let returned = k16_rt::close_syscall(self.0);
+            if is_error_status(returned) {
+                return Err(Error::Syscall(returned));
+            }
+            Ok(())
+        }
+    }
+
+    pub fn open(path: &str) -> Result<File, Error> {
+        let returned = k16_rt::open_syscall(path.as_ptr(), path.len(), 0);
+        if is_error_status(returned) {
+            return Err(Error::Syscall(returned));
+        }
+        Ok(File(returned))
+    }
+
+    #[inline(always)]
+    fn is_error_status(status: u32) -> bool {
+        status & 0x8000_0000 != 0
+    }
+}
+
 pub mod process {
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     pub enum Error {
@@ -116,5 +167,5 @@ pub mod process {
 }
 
 pub mod prelude {
-    pub use crate::{debug, io, process, thread, time};
+    pub use crate::{debug, fs, io, process, thread, time};
 }

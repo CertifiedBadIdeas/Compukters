@@ -81,15 +81,25 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("rust/guest/k16-boot"))
         assertTrue(source.contains("rust/guest/k16-kernel"))
         assertTrue(source.contains("rust/guest/k16-init"))
+        assertTrue(source.contains("rust/guest/k16-cat"))
         assertTrue(source.contains("k16InitManifest"))
         assertTrue(source.contains("k16InitSource"))
+        assertTrue(source.contains("k16CatManifest"))
+        assertTrue(source.contains("k16CatSource"))
         assertTrue(source.contains("generatedK16InitTarget"))
+        assertTrue(source.contains("generatedK16CatTarget"))
         assertTrue(source.contains("k16InitArtifact"))
+        assertTrue(source.contains("k16CatArtifact"))
         assertTrue(source.contains("compileK16SystemInit"))
+        assertTrue(source.contains("compileK16SystemCat"))
         assertTrue(source.contains("putK16SystemStorage0Init"))
         assertTrue(source.contains("binName = \"k16-init\""))
+        assertTrue(source.contains("binName = \"k16-cat\""))
         assertTrue(source.contains("\"/bin\""))
+        assertTrue(source.contains("\"/etc\""))
         assertTrue(source.contains("\"/bin/init.kx\""))
+        assertTrue(source.contains("\"/bin/cat.kx\""))
+        assertTrue(source.contains("\"/etc/motd\""))
         assertTrue(source.contains("\"extract-partition\""))
         assertTrue(source.contains("\"replace-partition\""))
         assertTrue(source.contains("dir(\"rust/guest/k16-kernel/src\")"))
@@ -214,6 +224,52 @@ class K16FirmwareResourceTest {
     }
 
     @Test
+    fun bundledK16SystemStorage0ContainsCatProgramAndMotdFile() {
+        val workspace = createTempDirectory("k16-cat-storage-test-")
+        val storage0 = workspace.resolve("storage0.kv")
+        val root = workspace.resolve("root.kfs")
+        val cat = workspace.resolve("cat.kx")
+        val motd = workspace.resolve("motd.txt")
+        storage0.writeBytes(K16SystemVolumeWorkspace.loadStorage0VolumeResource(classLoader = javaClass.classLoader))
+
+        runK16Tool(
+            "volume",
+            "extract-partition",
+            storage0.toString(),
+            "ROOT",
+            root.toString(),
+        )
+        runK16Tool(
+            "fs",
+            "kfs",
+            "get",
+            root.toString(),
+            "/bin/cat.kx",
+            cat.toString(),
+        )
+        runK16Tool(
+            "fs",
+            "kfs",
+            "get",
+            root.toString(),
+            "/etc/motd",
+            motd.toString(),
+        )
+
+        val bytes = cat.readBytes()
+        assertTrue(bytes.size > 72, "bundled /bin/cat.kx should be a non-empty dynamic K16E program")
+        assertContentEquals(
+            byteArrayOf('K'.code.toByte(), '1'.code.toByte(), '6'.code.toByte(), 'E'.code.toByte()),
+            bytes.copyOfRange(0, 4),
+        )
+        val version = ByteBuffer.wrap(bytes, 0x04, 2).order(ByteOrder.LITTLE_ENDIAN).short.toInt()
+        val abiKind = ByteBuffer.wrap(bytes, 0x18, 4).order(ByteOrder.LITTLE_ENDIAN).int
+        assertEquals(2, version, "bundled /bin/cat.kx must use dynamic K16E v2")
+        assertEquals(3, abiKind, "bundled /bin/cat.kx must use K16E abi kind program")
+        assertEquals("K16 FS OK\n", motd.readText())
+    }
+
+    @Test
     fun k16RuntimeDeviceServerTicksAdvanceNativeTimer0Snapshot() {
         val workspace = createTempDirectory("k16-runtime-device-timer-test-")
         val biosFlashPath = workspace.resolve("bios.kflash")
@@ -287,7 +343,7 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("stdin.read(read_buffer)"))
         assertTrue(source.contains("dispatch_command(stdout, input.command())"))
         assertTrue(source.contains("const PROMPT: &[u8] = b\"INIT> \""))
-        assertTrue(source.contains("const HELP: &[u8] = b\"HELP\\nCLEAR\\nECHO\\nTICKS\\nUNAME\\n\""))
+        assertTrue(source.contains("const HELP: &[u8] = b\"HELP\\nCLEAR\\nECHO\\nTICKS\\nUNAME\\nCAT\\n\""))
         assertTrue(source.contains("run_ticks(stdout)"))
         assertTrue(source.contains("process::run(\"/bin/uname.kx\")"))
         assertFalse(source.contains("process::exit(0)"))
@@ -552,9 +608,28 @@ class K16FirmwareResourceTest {
         assertTrue(initSource.contains("Command::Echo(bytes)"), "init should handle the echo command")
         assertTrue(initSource.contains("fn run_ticks("), "init should name the ticks command")
         assertTrue(initSource.contains("fn run_uname("), "init should name the uname command")
+        assertTrue(initSource.contains("fn run_cat("), "init should name the cat command")
         assertTrue(initLibSource.contains("Command::Uname"), "init should classify the uname command")
-        assertTrue(initSource.contains("HELP\\nCLEAR\\nECHO\\nTICKS\\nUNAME\\n"), "help should print a readable command list")
+        assertTrue(initLibSource.contains("Command::Cat"), "init should classify the cat command")
+        assertTrue(
+            initSource.contains("HELP\\nCLEAR\\nECHO\\nTICKS\\nUNAME\\nCAT\\n"),
+            "help should print a readable command list",
+        )
+        assertTrue(initSource.contains("process::run(\"/bin/cat.kx\")"))
         assertTrue(initSource.contains("b\"ERR\\n\""), "unknown commands should report a short error")
+    }
+
+    @Test
+    fun k16CatUtilityReadsMotdThroughKraftStdFs() {
+        val catSource = Path.of("../../../rust/guest/k16-cat/src/main.rs").readText()
+        val stdSource = Path.of("../../../rust/guest/kraft-std/src/lib.rs").readText()
+
+        assertTrue(catSource.contains("fs::open(\"/etc/motd\")"))
+        assertTrue(catSource.contains(".read("))
+        assertTrue(catSource.contains(".close()"))
+        assertTrue(catSource.contains("io::stdout()"))
+        assertTrue(stdSource.contains("pub mod fs"), "kraft-std should expose a filesystem module")
+        assertTrue(stdSource.contains("pub fn open(path: &str) -> Result<File, Error>"))
     }
 
     @Test

@@ -241,6 +241,22 @@ pub fn k16_cpu_helpers_object() -> Vec<u8> {
         "__k16_read_syscall",
         &read_syscall_words,
     );
+    let open_syscall_words = syscall3_fixed_number_words(k16_abi::syscall::OPEN);
+    emit_symbol_function(
+        &mut text,
+        &mut strtab,
+        &mut symtab,
+        "__k16_open_syscall",
+        &open_syscall_words,
+    );
+    let close_syscall_words = syscall1_fixed_number_words(k16_abi::syscall::CLOSE);
+    emit_symbol_function(
+        &mut text,
+        &mut strtab,
+        &mut symtab,
+        "__k16_close_syscall",
+        &close_syscall_words,
+    );
     let stack_arg0_addr = add(SCRATCH_REGISTER, STACK_POINTER_REGISTER, SCRATCH_REGISTER);
     let syscall3_words = [
         const4(SCRATCH_REGISTER, 4),
@@ -413,6 +429,23 @@ fn syscall3_fixed_number_words(number: u32) -> Vec<u16> {
     for register in (ARG0_REGISTER..=SYSCALL_ARG2_REGISTER).rev() {
         words.extend(pop_register(register));
     }
+    words.push(ret());
+    words
+}
+
+fn syscall1_fixed_number_words(number: u32) -> Vec<u16> {
+    let copy_arg0_to_syscall_arg0 = add(ARG1_REGISTER, ARG0_REGISTER, SCRATCH_REGISTER);
+    let mut words = Vec::new();
+    words.extend(push_register(ARG0_REGISTER));
+    words.extend(push_register(ARG1_REGISTER));
+    words.extend(push_scratch_register());
+    words.extend(const32_words(SCRATCH_REGISTER, 0));
+    words.extend(copy_arg0_to_syscall_arg0);
+    words.extend(const32_words(ARG0_REGISTER, number));
+    words.push(syscall(ARG0_REGISTER));
+    words.extend(pop_scratch_register());
+    words.extend(pop_register(ARG1_REGISTER));
+    words.extend(pop_register(ARG0_REGISTER));
     words.push(ret());
     words
 }

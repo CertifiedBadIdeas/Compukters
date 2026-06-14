@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Added read-only K16 filesystem fd syscalls for ROOT/K16FS on `storage0`:
+  `OPEN(path, len, flags)` allocates file descriptors starting at `3`,
+  `READ(fd, ptr, len)` now reads both stdin and regular files, and
+  `CLOSE(fd)` releases regular file descriptors. `kraft-std::fs` exposes the
+  initial `open`, `File::read`, and `File::close` surface, and bundled
+  userland now includes `/bin/cat.kx` reading `/etc/motd`.
 - `k16 runtime k16-memory-helpers` now exports freestanding `memcpy`,
   `memset`, and `memmove` aliases in addition to the existing `__k16_*`
   symbols, so Rust-generated aggregate copies can link without relying on

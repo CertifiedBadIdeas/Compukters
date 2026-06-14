@@ -8,7 +8,7 @@ use kraft_std::prelude::*;
 
 const PROMPT: &[u8] = b"INIT> ";
 const NEWLINE: &[u8] = b"\n";
-const HELP: &[u8] = b"HELP\nCLEAR\nECHO\nTICKS\nUNAME\n";
+const HELP: &[u8] = b"HELP\nCLEAR\nECHO\nTICKS\nUNAME\nCAT\n";
 
 #[no_mangle]
 pub extern "C" fn main() -> ! {
@@ -68,6 +68,7 @@ fn dispatch_command(stdout: io::Fd, command: Command<'_>) {
         Command::Clear => must_write(stdout, b"\x0c"),
         Command::Ticks => run_ticks(stdout),
         Command::Uname => run_uname(stdout),
+        Command::Cat => run_cat(stdout),
         Command::Echo(bytes) => {
             must_write(stdout, bytes);
             must_write(stdout, NEWLINE);
@@ -84,6 +85,17 @@ fn run_ticks(stdout: io::Fd) {
 
 fn run_uname(stdout: io::Fd) {
     match process::run("/bin/uname.kx") {
+        Ok(_) => {}
+        Err(process::Error::Syscall(status)) => {
+            must_write(stdout, b"ERR ");
+            must_write(stdout, run_error_name(status));
+            must_write(stdout, NEWLINE);
+        }
+    }
+}
+
+fn run_cat(stdout: io::Fd) {
+    match process::run("/bin/cat.kx") {
         Ok(_) => {}
         Err(process::Error::Syscall(status)) => {
             must_write(stdout, b"ERR ");

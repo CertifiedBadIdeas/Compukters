@@ -346,6 +346,36 @@ fn run_syscall_uses_path_pointer_and_length_arguments() {
 }
 
 #[test]
+fn open_syscall_uses_path_pointer_length_and_flags_arguments() {
+    crate::trap::reset_test_interrupts();
+    crate::trap::set_test_syscall_return(3);
+    let path = *b"/etc/motd";
+
+    let returned = open_syscall(path.as_ptr(), path.len(), 0);
+
+    assert_eq!(crate::trap::test_syscall_number(), k16_abi::syscall::OPEN);
+    assert_eq!(
+        crate::trap::test_syscall_arg0(),
+        path.as_ptr() as usize as u32
+    );
+    assert_eq!(crate::trap::test_syscall_arg1(), path.len() as u32);
+    assert_eq!(crate::trap::test_syscall_arg2(), 0);
+    assert_eq!(returned, 3);
+}
+
+#[test]
+fn close_syscall_uses_fd_argument() {
+    crate::trap::reset_test_interrupts();
+    crate::trap::set_test_syscall_return(k16_abi::syscall::STATUS_OK);
+
+    let returned = close_syscall(3);
+
+    assert_eq!(crate::trap::test_syscall_number(), k16_abi::syscall::CLOSE);
+    assert_eq!(crate::trap::test_syscall_arg0(), 3);
+    assert_eq!(returned, k16_abi::syscall::STATUS_OK);
+}
+
+#[test]
 fn debug_marker_uses_named_syscall_and_returns_marker_value() {
     crate::trap::reset_test_interrupts();
     crate::trap::set_test_syscall_return(k16_abi::syscall::DEBUG_MARKER_RETURN);
