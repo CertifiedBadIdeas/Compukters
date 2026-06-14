@@ -10,6 +10,7 @@ use crate::computer::profile::{
 use crate::computer_abi;
 use crate::low_bus::{MachineBus, MmioDevice, MmioDeviceId};
 use crate::low_machine::{MachineMemory, MemoryFault};
+use crate::mmu::MmuAddressSpaces;
 
 pub(super) fn from_profile(
     profile: ComputerMachineProfile,
@@ -34,6 +35,7 @@ pub(super) fn from_profile(
         bios_flash_device_id: None,
         cpus: Vec::new(),
         boot_cpu: None,
+        address_spaces: MmuAddressSpaces::new(),
     })
 }
 

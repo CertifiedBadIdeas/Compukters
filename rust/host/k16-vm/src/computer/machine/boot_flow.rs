@@ -108,7 +108,7 @@ pub(super) fn run_boot_k16_until_signal(
             .ok_or_else(|| format!("CPU {cpu_id} is not present"))?;
         match cpu {
             ComputerCpuContext::K16 { cpu, max_steps } => cpu
-                .run_until_signal(&mut machine.bus, *max_steps)
+                .run_until_signal_with_mmu(&mut machine.bus, &machine.address_spaces, *max_steps)
                 .map_err(|error| error.to_string()),
         }
     };
