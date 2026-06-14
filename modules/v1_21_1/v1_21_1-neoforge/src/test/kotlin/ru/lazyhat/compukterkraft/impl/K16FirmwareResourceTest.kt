@@ -443,15 +443,16 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("let mut input = InputLine::new()"))
         assertTrue(source.contains("let mut cwd = WorkingDirectory::new()"))
         assertTrue(source.contains("stdin.read(read_buffer)"))
-        assertTrue(source.contains("dispatch_command(stdout, cwd, path_buffer, program_path, input.command())"))
+        assertTrue(source.contains("dispatch_command("))
+        assertTrue(source.contains("arg_paths"))
         assertTrue(source.contains("const PROMPT: &[u8] = b\"K16> \""))
         assertTrue(source.contains("const HELP: &[u8]"), "shell should define help text")
         assertTrue(source.contains("PWD\\nCD [PATH]"), "help should list cwd builtins")
-        assertTrue(source.contains("LS [PATH]\\nCAT <PATH>"), "help should list filesystem utilities")
+        assertTrue(source.contains("LS [PATH...]\\nCAT <PATH...>"), "help should list filesystem utilities")
         assertTrue(source.contains("run_pwd(stdout, cwd)"))
         assertTrue(source.contains("run_cd(stdout, cwd, path_buffer, path)"))
         assertTrue(source.contains("run_ticks(stdout)"))
-        assertTrue(source.contains("run_exec(stdout, cwd, path_buffer, program_path, name, args)"))
+        assertTrue(source.contains("run_exec(stdout, cwd, arg_paths, program_path, name, args)"))
         assertTrue(source.contains("const BIN_PREFIX: &[u8] = b\"/bin/\""))
         assertTrue(source.contains("const PROGRAM_SUFFIX: &[u8] = b\".kx\""))
         assertFalse(source.contains("process::exit(0)"))
@@ -743,7 +744,7 @@ class K16FirmwareResourceTest {
         assertFalse(shellLibSource.contains("Command::Cat(&"), "shell should not carry a cat command variant")
         assertFalse(shellLibSource.contains("Command::AllocTest"), "shell should not carry an alloc command variant")
         assertTrue(
-            shellSource.contains("HELP\\nCLEAR\\nPWD\\nCD [PATH]\\nECHO\\nTICKS\\nUNAME\\nLS [PATH]\\nCAT <PATH>\\nALLOC\\n"),
+            shellSource.contains("HELP\\nCLEAR\\nPWD\\nCD [PATH]\\nECHO\\nTICKS\\nUNAME\\nLS [PATH...]\\nCAT <PATH...>\\nALLOC\\n"),
             "help should print a readable command list",
         )
         assertTrue(shellSource.contains("fs::metadata(path)"), "cd should validate paths through stat metadata")
@@ -756,16 +757,32 @@ class K16FirmwareResourceTest {
     @Test
     fun k16CatUtilityReadsMotdThroughKraftStdFs() {
         val catSource = Path.of("../../../rust/guest/k16-cat/src/main.rs").readText()
+        val catLibSource = Path.of("../../../rust/guest/k16-cat/src/lib.rs").readText()
         val stdSource = Path.of("../../../rust/guest/kraft-std/src/lib.rs").readText()
 
         assertTrue(catSource.contains("process::Argv::from_raw(argc, argv)"))
-        assertTrue(catSource.contains("argv.get(0)"))
+        assertTrue(catSource.contains("k16_cat::for_each_path_arg(argv.len(), |index| argv.get(index), print_file)"))
+        assertTrue(catLibSource.contains("while index < arg_count"), "cat should visit every argv path")
         assertTrue(catSource.contains("fs::open(path)"))
         assertTrue(catSource.contains(".read("))
         assertTrue(catSource.contains(".close()"))
         assertTrue(catSource.contains("io::stdout()"))
         assertTrue(stdSource.contains("pub mod fs"), "kraft-std should expose a filesystem module")
         assertTrue(stdSource.contains("pub fn open(path: &str) -> Result<File, Error>"))
+    }
+
+    @Test
+    fun k16LsUtilityListsEveryArgvPathThroughKraftStdFs() {
+        val lsSource = Path.of("../../../rust/guest/k16-ls/src/main.rs").readText()
+        val lsLibSource = Path.of("../../../rust/guest/k16-ls/src/lib.rs").readText()
+
+        assertTrue(lsSource.contains("process::Argv::from_raw(argc, argv)"))
+        assertTrue(lsSource.contains("k16_ls::for_each_path_arg_or_default(argv.len(), |index| argv.get(index), list_dir)"))
+        assertTrue(lsLibSource.contains("pub const DEFAULT_PATH: &str = \"/bin\""))
+        assertTrue(lsLibSource.contains("while index < arg_count"), "ls should visit every argv path")
+        assertTrue(lsSource.contains("fs::read_dir(path, &mut buffer)"))
+        assertTrue(lsSource.contains("fs::metadata(child_path)"))
+        assertTrue(lsSource.contains("io::stdout()"))
     }
 
     @Test
