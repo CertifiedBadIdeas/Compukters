@@ -107,7 +107,7 @@ val k16BootSource = rootProject.layout.projectDirectory.file("rust/guest/k16-boo
 val k16KernelManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-kernel/Cargo.toml")
 val k16KernelSource = rootProject.layout.projectDirectory.dir("rust/guest/k16-kernel/src")
 val k16InitManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-init/Cargo.toml")
-val k16InitSource = rootProject.layout.projectDirectory.file("rust/guest/k16-init/src/main.rs")
+val k16InitSource = rootProject.layout.projectDirectory.dir("rust/guest/k16-init/src")
 val k16UnameManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-uname/Cargo.toml")
 val k16UnameSource = rootProject.layout.projectDirectory.file("rust/guest/k16-uname/src/main.rs")
 val k16CatManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-cat/Cargo.toml")
@@ -431,7 +431,7 @@ val compileK16SystemInit =
         group = "k16"
         inputs.file(k16GuestManifest)
         inputs.file(k16InitManifest)
-        inputs.file(k16InitSource)
+        inputs.dir(k16InitSource)
         inputs.file(k16HostToolsManifest)
         inputs.dir(k16HostToolsSource)
         inputs.file(k16RustTargetSpec)
@@ -447,6 +447,7 @@ val compileK16SystemInit =
                 binName = "k16-init",
                 k16Target = "program",
                 output = k16InitArtifact.get().asFile,
+                buildStd = "core,alloc",
             )
         }
     }

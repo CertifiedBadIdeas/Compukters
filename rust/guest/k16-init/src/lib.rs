@@ -1,6 +1,8 @@
 #![no_std]
 
-pub const INPUT_CAPACITY: usize = 128;
+extern crate alloc;
+
+use alloc::vec::Vec;
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum Command<'a> {
@@ -16,47 +18,32 @@ pub enum Command<'a> {
 }
 
 pub struct InputLine {
-    bytes: [u8; INPUT_CAPACITY],
-    len: usize,
+    bytes: Vec<u8>,
 }
 
 impl InputLine {
-    pub const fn new() -> Self {
-        Self {
-            bytes: [0; INPUT_CAPACITY],
-            len: 0,
-        }
+    pub fn new() -> Self {
+        Self { bytes: Vec::new() }
     }
 
     pub fn clear(&mut self) {
-        self.len = 0;
-        let mut index = 0;
-        while index < self.bytes.len() {
-            self.bytes[index] = 0;
-            index += 1;
-        }
+        self.bytes.clear();
     }
 
     pub fn push_printable(&mut self, byte: u8) -> bool {
-        if self.len >= INPUT_CAPACITY {
+        if self.bytes.try_reserve(1).is_err() {
             return false;
         }
-        self.bytes[self.len] = byte;
-        self.len += 1;
+        self.bytes.push(byte);
         true
     }
 
     pub fn backspace(&mut self) -> bool {
-        if self.len == 0 {
-            return false;
-        }
-        self.len -= 1;
-        self.bytes[self.len] = 0;
-        true
+        self.bytes.pop().is_some()
     }
 
     pub fn command(&self) -> Command<'_> {
-        classify_line(&self.bytes, self.len)
+        classify_line(&self.bytes, self.bytes.len())
     }
 }
 
@@ -91,14 +78,7 @@ pub fn classify_line(input: &[u8], line_len: usize) -> Command<'_> {
 }
 
 fn matches_command(input: &[u8], command: &[u8]) -> bool {
-    let mut index = 0;
-    while index < command.len() {
-        if input[index] != command[index] {
-            return false;
-        }
-        index += 1;
-    }
-    input[index] == 0
+    input == command
 }
 
 fn is_echo_command(input: &[u8], line_len: usize) -> bool {
@@ -126,6 +106,41 @@ mod tests {
         for byte in b"help" {
             assert!(line.push_printable(*byte));
         }
+        assert_eq!(line.command(), Command::Help);
+    }
+
+    #[test]
+    fn long_echo_line_exceeds_old_fixed_capacity() {
+        let mut line = InputLine::new();
+        for byte in b"echo " {
+            assert!(line.push_printable(*byte));
+        }
+        for _ in 0..160 {
+            assert!(line.push_printable(b'x'));
+        }
+
+        let Command::Echo(bytes) = line.command() else {
+            panic!("long echo should remain an echo command");
+        };
+        assert_eq!(bytes.len(), 160);
+        assert!(bytes.iter().all(|byte| *byte == b'x'));
+    }
+
+    #[test]
+    fn long_line_can_be_cleared_and_reused_for_short_command() {
+        let mut line = InputLine::new();
+        for byte in b"echo " {
+            assert!(line.push_printable(*byte));
+        }
+        for _ in 0..160 {
+            assert!(line.push_printable(b'x'));
+        }
+
+        line.clear();
+        for byte in b"help" {
+            assert!(line.push_printable(*byte));
+        }
+
         assert_eq!(line.command(), Command::Help);
     }
 

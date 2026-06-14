@@ -9,6 +9,11 @@
   `kraft-std` now exposes `heap::{brk, sbrk}` and installs a guest
   `SbrkAllocator`, while bundled userland includes `/bin/alloc-test.kx` as an
   `alloc::Vec` smoke utility reachable from init through the `alloc` command.
+- The init userland program now has its own `BRK`/`SBRK` heap, and child
+  program load arenas start after init's current program break. The init shell
+  input line is backed by `alloc::Vec`, so normal line editing is no longer
+  capped by the old 128-byte fixed buffer; allocation failure rejects the next
+  printable byte without dispatching a partial command.
 - K16 dynamic user-program relocation staging no longer reuses the storage
   scratch buffer. Relocation records can straddle K16FS block boundaries, and
   reading such a record into the same scratch page used by block staging could

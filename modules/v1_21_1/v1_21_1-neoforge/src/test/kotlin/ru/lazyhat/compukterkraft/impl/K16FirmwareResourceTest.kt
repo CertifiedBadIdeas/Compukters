@@ -102,6 +102,10 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("binName = \"k16-init\""))
         assertTrue(source.contains("binName = \"k16-cat\""))
         assertTrue(source.contains("binName = \"k16-alloc-test\""))
+        assertTrue(
+            source.contains("output = k16InitArtifact.get().asFile,\n                buildStd = \"core,alloc\""),
+            "init uses alloc-backed input and should build core+alloc",
+        )
         assertTrue(source.contains("\"/bin\""))
         assertTrue(source.contains("\"/etc\""))
         assertTrue(source.contains("\"/bin/init.kx\""))
@@ -111,7 +115,9 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("\"extract-partition\""))
         assertTrue(source.contains("\"replace-partition\""))
         assertTrue(source.contains("dir(\"rust/guest/k16-kernel/src\")"))
+        assertTrue(source.contains("dir(\"rust/guest/k16-init/src\")"))
         assertTrue(source.contains("inputs.dir(k16KernelSource)"))
+        assertTrue(source.contains("inputs.dir(k16InitSource)"))
         assertTrue(source.contains("toolchain.cli.absolutePath"))
         assertFalse(source.contains(".toolchain/build/cargo/k16-tools"))
         assertFalse(source.contains("environment(\"CARGO_TARGET_DIR\""))
@@ -647,6 +653,10 @@ class K16FirmwareResourceTest {
 
         assertTrue(initSource.contains("const PROMPT: &[u8] = b\"INIT> \""))
         assertTrue(initSource.contains("fn dispatch_command("), "init should name the dispatch boundary")
+        assertTrue(initLibSource.contains("use alloc::vec::Vec;"), "init input should be backed by heap allocation")
+        assertTrue(initLibSource.contains("bytes: Vec<u8>"), "init input should not use a fixed byte array")
+        assertTrue(initLibSource.contains("try_reserve(1)"), "input allocation failure should be deterministic")
+        assertFalse(initLibSource.contains("INPUT_CAPACITY"), "init input should not carry the old fixed line cap")
         assertTrue(initLibSource.contains("fn matches_command("), "init should share command matching")
         assertTrue(initLibSource.contains("fn is_echo_command("), "init should name echo command matching")
         assertTrue(initSource.contains("Command::Echo(bytes)"), "init should handle the echo command")

@@ -38,9 +38,13 @@ kernel fd syscall ABI, not debug MMIO.
 `kraft-std` is `#![no_std]`. It is not Rust's hosted `std`, a POSIX layer, or a
 complete OS API. The current filesystem surface is a read-only ROOT/K16FS proof
 for absolute paths. The current allocator surface is a monotonic `SBRK`-backed
-guest allocator for child programs. Directory iteration, writable files,
-process/task management, allocator reuse, and full POSIX compatibility are
-separate future slices.
+guest allocator for init and child userland programs. Directory iteration,
+writable files, process/task management, allocator reuse, and full POSIX
+compatibility are separate future slices.
+
+The bundled init shell uses this allocator for its editable input line. When
+allocation is exhausted, printable input that cannot be stored is not echoed and
+is not included in the command buffer.
 
 ## Layering Rule
 
