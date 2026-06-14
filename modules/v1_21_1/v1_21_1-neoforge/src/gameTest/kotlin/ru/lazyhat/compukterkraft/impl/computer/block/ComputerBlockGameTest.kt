@@ -35,7 +35,12 @@ import ru.lazyhat.compukterkraft.common.utils.computerID
 import ru.lazyhat.compukterkraft.common.utils.computerLabel
 import ru.lazyhat.compukterkraft.common.utils.runtimeSnapshot
 import ru.lazyhat.compukterkraft.core.MOD_ID
+import ru.lazyhat.compukterkraft.core.device.DeviceEvents
+import ru.lazyhat.compukterkraft.core.device.input.KeyInputEvent
+import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeDevice
 import ru.lazyhat.compukterkraft.impl.ModRegistry
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 
 @GameTestHolder(MOD_ID)
 @PrefixGameTestTemplate(false)
@@ -91,6 +96,7 @@ class ComputerBlockGameTest {
     fun runtimeSnapshotSurvivesBlockEntityReload(helper: GameTestHelper) {
         val pos = BlockPos(1, 2, 1)
         val absolutePos = helper.absolutePos(pos)
+        val marker = "reload-marker"
         placeComputer(helper, pos)
 
         helper.runAfterDelay(5L) {
@@ -104,6 +110,15 @@ class ComputerBlockGameTest {
                 requireNotNull(originalComputer.computerID) {
                     "Expected placed computer block entity to keep an allocated id"
                 }
+            val originalDevice = originalComputer.getOrCreateRuntimeDevice()
+            waitForSavedTerminalSnapshot(helper, originalComputer, "initial shell prompt") { terminal ->
+                terminal.contains("INIT> ")
+            }
+            dispatchText(originalDevice, "echo $marker\n")
+            waitForSavedTerminalSnapshot(helper, originalComputer, "echoed reload marker") { terminal ->
+                terminal.contains(marker)
+            }
+
             val savedTag = originalComputer.saveWithFullMetadata(helper.level.registryAccess())
             val savedSnapshot = savedTag.runtimeSnapshot
 
@@ -137,7 +152,11 @@ class ComputerBlockGameTest {
                 "Expected reloaded computer to preserve id $expectedId, actual ${reloadedComputer.computerID}",
             )
 
-            reloadedComputer.getOrCreateRuntimeDevice()
+            reloadedComputer.getOrCreateRuntimeDevice().turnOn()
+            val restoredSnapshot =
+                waitForSavedTerminalSnapshot(helper, reloadedComputer, "restored reload marker") { terminal ->
+                    terminal.contains(marker)
+                }
             val reloadedSnapshot = reloadedComputer.saveWithFullMetadata(helper.level.registryAccess()).runtimeSnapshot
             helper.assertTrue(
                 ComputerGameTestEnvironment.hasRegisteredServerComputer(helper.level, absolutePos),
@@ -146,6 +165,10 @@ class ComputerBlockGameTest {
             helper.assertTrue(
                 reloadedSnapshot?.isNotEmpty() == true,
                 "Expected reloaded computer to expose a runtime snapshot after recreation",
+            )
+            helper.assertTrue(
+                terminalText(restoredSnapshot).contains(marker),
+                "Expected restored K16 runtime terminal state to contain '$marker'",
             )
             helper.succeed()
         }
@@ -208,4 +231,55 @@ class ComputerBlockGameTest {
             helper.succeed()
         }
     }
+
+    private fun dispatchText(
+        device: RuntimeDevice,
+        text: String,
+    ) {
+        for (byte in text.encodeToByteArray()) {
+            DeviceEvents.dispatch(device, KeyInputEvent.Character(byte))
+        }
+    }
+
+    private fun waitForSavedTerminalSnapshot(
+        helper: GameTestHelper,
+        computer: AbstractComputerBlockEntity,
+        description: String,
+        predicate: (String) -> Boolean,
+    ): ByteArray {
+        var lastTerminal = "<no snapshot>"
+        repeat(80) {
+            computer.serverTick()
+            val snapshot = computer.saveWithFullMetadata(helper.level.registryAccess()).runtimeSnapshot
+            if (snapshot != null) {
+                val terminal = terminalText(snapshot)
+                if (predicate(terminal)) return snapshot
+                lastTerminal = terminal
+            }
+            Thread.sleep(10)
+        }
+        error("Expected $description in K16 terminal snapshot; terminal: $lastTerminal")
+    }
+
+    private fun terminalText(snapshot: ByteArray): String =
+        snapshotRamBytes(snapshot, start = K16_TERMINAL_CELLS_ADDR, size = K16_TERMINAL_ROWS * K16_TERMINAL_COLUMNS)
+            .map { byte -> if (byte in 0x20..0x7e) byte.toInt().toChar() else ' ' }
+            .joinToString(separator = "")
+
+    private fun snapshotRamBytes(
+        snapshot: ByteArray,
+        start: Int,
+        size: Int,
+    ): ByteArray {
+        val buffer = ByteBuffer.wrap(snapshot).order(ByteOrder.LITTLE_ENDIAN)
+        require(snapshot.copyOfRange(0, 8).contentEquals("K16SNAP\u0000".encodeToByteArray()))
+        val headerSize = buffer.getShort(0x0A).toInt()
+        val ramSize = buffer.getLong(0x10)
+        require(start >= 0 && size >= 0 && start + size <= ramSize)
+        return snapshot.copyOfRange(headerSize + start, headerSize + start + size)
+    }
 }
+
+private const val K16_TERMINAL_CELLS_ADDR = 0x3000
+private const val K16_TERMINAL_COLUMNS = 53
+private const val K16_TERMINAL_ROWS = 25
