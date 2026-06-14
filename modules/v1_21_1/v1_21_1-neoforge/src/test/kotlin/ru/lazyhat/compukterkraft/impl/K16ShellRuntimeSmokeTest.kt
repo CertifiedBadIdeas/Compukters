@@ -51,6 +51,14 @@ class K16ShellRuntimeSmokeTest {
             dispatchText(device, "ticks\n")
             waitForTerminalText(device, "TICKS ")
 
+            dispatchText(device, "pwd\n")
+            waitForTerminal(device, "initial pwd output and returned prompt") { terminal ->
+                val pwdCommandIndex = terminal.indexOf("K16> pwd")
+                val pwdOutputIndex = terminal.indexOf("/", startIndex = pwdCommandIndex + "K16> pwd".length)
+                val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = pwdOutputIndex)
+                pwdCommandIndex >= 0 && pwdOutputIndex > pwdCommandIndex && returnedPromptIndex > pwdOutputIndex
+            }
+
             dispatchText(device, "uname\n")
             waitForTerminal(device, "uname output and returned prompt") { terminal ->
                 val unameCommandIndex = terminal.indexOf("K16> uname")
@@ -59,18 +67,60 @@ class K16ShellRuntimeSmokeTest {
                 unameCommandIndex >= 0 && unameOutputIndex > unameCommandIndex && returnedPromptIndex > unameOutputIndex
             }
 
-            dispatchText(device, "cat /etc/motd\n")
-            waitForTerminal(device, "cat output and returned prompt") { terminal ->
-                val catCommandIndex = terminal.indexOf("K16> cat /etc/motd")
-                val catOutputIndex = terminal.indexOf("K16 FS OK", startIndex = catCommandIndex + "K16> cat /etc/motd".length)
+            dispatchText(device, "cd etc\n")
+            waitForTerminal(device, "cd etc returned prompt") { terminal ->
+                val cdCommandIndex = terminal.indexOf("K16> cd etc")
+                val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = cdCommandIndex + "K16> cd etc".length)
+                cdCommandIndex >= 0 && returnedPromptIndex > cdCommandIndex
+            }
+
+            dispatchText(device, "pwd\n")
+            waitForTerminal(device, "changed pwd output and returned prompt") { terminal ->
+                val firstPwdPromptIndex = terminal.indexOf("K16> pwd")
+                val pwdCommandIndex = terminal.indexOf("K16> pwd", startIndex = firstPwdPromptIndex + "K16> pwd".length)
+                val pwdOutputIndex = terminal.indexOf("/etc", startIndex = pwdCommandIndex + "K16> pwd".length)
+                val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = pwdOutputIndex)
+                pwdCommandIndex >= 0 && pwdOutputIndex > pwdCommandIndex && returnedPromptIndex > pwdOutputIndex
+            }
+
+            dispatchText(device, "cat motd\n")
+            waitForTerminal(device, "relative cat output and returned prompt") { terminal ->
+                val catCommandIndex = terminal.indexOf("K16> cat motd")
+                val catOutputIndex = terminal.indexOf("K16 FS OK", startIndex = catCommandIndex + "K16> cat motd".length)
                 val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = catOutputIndex)
                 catCommandIndex >= 0 && catOutputIndex > catCommandIndex && returnedPromptIndex > catOutputIndex
+            }
+
+            dispatchText(device, "cd motd\n")
+            waitForTerminal(device, "cd rejects regular file and returned prompt") { terminal ->
+                val cdCommandIndex = terminal.indexOf("K16> cd motd")
+                val errorIndex = terminal.indexOf("ERR INVAL", startIndex = cdCommandIndex + "K16> cd motd".length)
+                val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = errorIndex)
+                cdCommandIndex >= 0 && errorIndex > cdCommandIndex && returnedPromptIndex > errorIndex
+            }
+
+            dispatchText(device, "pwd\n")
+            waitForTerminal(device, "failed cd keeps pwd and returned prompt") { terminal ->
+                val secondPwdPromptIndex = terminal.indexOf("K16> pwd")
+                val thirdPwdPromptIndex = terminal.indexOf("K16> pwd", startIndex = secondPwdPromptIndex + "K16> pwd".length)
+                val pwdCommandIndex = terminal.indexOf("K16> pwd", startIndex = thirdPwdPromptIndex + "K16> pwd".length)
+                val pwdOutputIndex = terminal.indexOf("/etc", startIndex = pwdCommandIndex + "K16> pwd".length)
+                val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = pwdOutputIndex)
+                pwdCommandIndex >= 0 && pwdOutputIndex > pwdCommandIndex && returnedPromptIndex > pwdOutputIndex
             }
 
             dispatchText(device, "ls /bin\n")
             waitForTerminal(device, "ls output and returned prompt") { terminal ->
                 val lsCommandIndex = terminal.indexOf("K16> ls /bin")
                 val lsOutputIndex = terminal.indexOf("ls.kx", startIndex = lsCommandIndex + "K16> ls /bin".length)
+                val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = lsOutputIndex)
+                lsCommandIndex >= 0 && lsOutputIndex > lsCommandIndex && returnedPromptIndex > lsOutputIndex
+            }
+
+            dispatchText(device, "ls ../bin\n")
+            waitForTerminal(device, "relative ls output and returned prompt") { terminal ->
+                val lsCommandIndex = terminal.indexOf("K16> ls ../bin")
+                val lsOutputIndex = terminal.indexOf("ls.kx", startIndex = lsCommandIndex + "K16> ls ../bin".length)
                 val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = lsOutputIndex)
                 lsCommandIndex >= 0 && lsOutputIndex > lsCommandIndex && returnedPromptIndex > lsOutputIndex
             }
@@ -92,44 +142,23 @@ class K16ShellRuntimeSmokeTest {
             }
 
             val terminal = terminalText(requireNotNull(device.snapshotRuntimeState()))
-            val promptIndex = terminal.indexOf("K16> ")
-            val echoOutputIndex = terminal.indexOf("abc", startIndex = promptIndex)
-            val ticksOutputIndex = terminal.indexOf("TICKS ", startIndex = echoOutputIndex)
-            val unameCommandIndex = terminal.indexOf("K16> uname", startIndex = ticksOutputIndex)
-            val unameOutputIndex = terminal.indexOf("K16", startIndex = unameCommandIndex + "K16> uname".length)
-            val unameReturnedPromptIndex = terminal.indexOf("K16> ", startIndex = unameOutputIndex)
-            val catCommandIndex = terminal.indexOf("K16> cat /etc/motd", startIndex = unameReturnedPromptIndex)
-            val catOutputIndex = terminal.indexOf("K16 FS OK", startIndex = catCommandIndex + "K16> cat /etc/motd".length)
-            val catReturnedPromptIndex = terminal.indexOf("K16> ", startIndex = catOutputIndex)
-            val lsCommandIndex = terminal.indexOf("K16> ls /bin", startIndex = catReturnedPromptIndex)
-            val lsOutputIndex = terminal.indexOf("ls.kx", startIndex = lsCommandIndex + "K16> ls /bin".length)
-            val lsReturnedPromptIndex = terminal.indexOf("K16> ", startIndex = lsOutputIndex)
-            val rootLsCommandIndex = terminal.indexOf("K16> ls /", startIndex = lsReturnedPromptIndex)
-            val rootLsOutputIndex = terminal.indexOf("bin/", startIndex = rootLsCommandIndex + "K16> ls /".length)
-            val rootLsReturnedPromptIndex = terminal.indexOf("K16> ", startIndex = rootLsOutputIndex)
-            val allocCommandIndex = terminal.indexOf("K16> alloc", startIndex = rootLsReturnedPromptIndex)
-            val allocOutputIndex = terminal.indexOf("ALLOC", startIndex = allocCommandIndex + "K16> alloc".length)
-            val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = allocOutputIndex)
-            assertTrue(
-                promptIndex >= 0 &&
-                    echoOutputIndex > promptIndex &&
-                    ticksOutputIndex > echoOutputIndex &&
-                    unameCommandIndex > ticksOutputIndex &&
-                    unameOutputIndex > unameCommandIndex &&
-                    unameReturnedPromptIndex > unameOutputIndex &&
-                    catCommandIndex >= unameReturnedPromptIndex &&
-                    catOutputIndex > catCommandIndex &&
-                    catReturnedPromptIndex > catOutputIndex &&
-                    lsCommandIndex >= catReturnedPromptIndex &&
-                    lsOutputIndex > lsCommandIndex &&
-                    lsReturnedPromptIndex > lsOutputIndex &&
-                    rootLsCommandIndex >= lsReturnedPromptIndex &&
-                    rootLsOutputIndex > rootLsCommandIndex &&
-                    rootLsReturnedPromptIndex > rootLsOutputIndex &&
-                    allocCommandIndex >= rootLsReturnedPromptIndex &&
-                    allocOutputIndex > allocCommandIndex &&
-                    returnedPromptIndex > allocOutputIndex,
-                "userland shell should dispatch commands through fd stdin/stdout and return a prompt; terminal: $terminal",
+            assertOrderedFragments(
+                terminal,
+                listOf(
+                    "K16> cd motd",
+                    "ERR INVAL",
+                    "K16> pwd",
+                    "/etc",
+                    "K16> ls /bin",
+                    "ls.kx",
+                    "K16> ls ../bin",
+                    "ls.kx",
+                    "K16> ls /",
+                    "bin/",
+                    "K16> alloc",
+                    "ALLOC",
+                    "K16> ",
+                ),
             )
         } finally {
             device.close()
@@ -214,6 +243,18 @@ class K16ShellRuntimeSmokeTest {
         val snapshot = device.snapshotRuntimeState()
         val terminal = snapshot?.let(::terminalText) ?: "<no snapshot>"
         error("K16 shell runtime smoke did not observe $description; terminal: $terminal")
+    }
+
+    private fun assertOrderedFragments(
+        terminal: String,
+        fragments: List<String>,
+    ) {
+        var cursor = 0
+        for (fragment in fragments) {
+            val index = terminal.indexOf(fragment, startIndex = cursor)
+            assertTrue(index >= 0, "missing fragment '$fragment' after $cursor; terminal: $terminal")
+            cursor = index + fragment.length
+        }
     }
 
     private fun tickAndSync(device: K16RuntimeDevice) {

@@ -88,6 +88,7 @@ dependencies = [
 name = "k16-shell"
 version = "0.1.0"
 dependencies = [
+ "k16-abi",
  "k16-rt",
  "kraft-std",
 ]

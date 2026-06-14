@@ -4,11 +4,171 @@ extern crate alloc;
 
 use alloc::vec::Vec;
 
+pub const MAX_PATH_BYTES: usize = k16_abi::syscall::MAX_STAT_PATH_BYTES;
+
+#[derive(Debug, Eq, PartialEq)]
+pub enum PathError {
+    Invalid,
+    TooLong,
+}
+
+pub struct PathBuffer {
+    bytes: [u8; MAX_PATH_BYTES],
+    len: usize,
+}
+
+impl PathBuffer {
+    pub const fn new() -> Self {
+        Self {
+            bytes: [0; MAX_PATH_BYTES],
+            len: 0,
+        }
+    }
+
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.bytes[..self.len]
+    }
+
+    pub fn as_str(&self) -> Result<&str, PathError> {
+        core::str::from_utf8(self.as_bytes()).map_err(|_| PathError::Invalid)
+    }
+
+    fn clear(&mut self) {
+        self.len = 0;
+    }
+
+    fn push_root(&mut self) {
+        self.bytes[0] = b'/';
+        self.len = 1;
+    }
+
+    fn copy_from(&mut self, bytes: &[u8]) -> Result<(), PathError> {
+        if bytes.is_empty() || bytes.len() > self.bytes.len() {
+            return Err(PathError::TooLong);
+        }
+        self.bytes[..bytes.len()].copy_from_slice(bytes);
+        self.len = bytes.len();
+        Ok(())
+    }
+
+    fn push_component(&mut self, component: &[u8]) -> Result<(), PathError> {
+        if component.is_empty() {
+            return Err(PathError::Invalid);
+        }
+        let separator_len = if self.as_bytes() == b"/" { 0 } else { 1 };
+        let end = self
+            .len
+            .checked_add(separator_len)
+            .and_then(|value| value.checked_add(component.len()))
+            .ok_or(PathError::TooLong)?;
+        if end > self.bytes.len() {
+            return Err(PathError::TooLong);
+        }
+        if separator_len == 1 {
+            self.bytes[self.len] = b'/';
+            self.len += 1;
+        }
+        self.bytes[self.len..end].copy_from_slice(component);
+        self.len = end;
+        Ok(())
+    }
+
+    fn pop_component(&mut self) {
+        if self.as_bytes() == b"/" {
+            return;
+        }
+        let mut index = self.len;
+        while index > 0 {
+            index -= 1;
+            if self.bytes[index] == b'/' {
+                self.len = if index == 0 { 1 } else { index };
+                return;
+            }
+        }
+        self.push_root();
+    }
+}
+
+impl Default for PathBuffer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+pub struct WorkingDirectory {
+    path: PathBuffer,
+}
+
+impl WorkingDirectory {
+    pub fn new() -> Self {
+        let mut path = PathBuffer::new();
+        path.bytes[0] = b'/';
+        path.len = 1;
+        Self { path }
+    }
+
+    pub fn as_bytes(&self) -> &[u8] {
+        self.path.as_bytes()
+    }
+
+    pub fn resolve_into(&self, input: &[u8], out: &mut PathBuffer) -> Result<(), PathError> {
+        if input.is_empty() {
+            return Err(PathError::Invalid);
+        }
+        out.clear();
+        if input[0] == b'/' {
+            out.push_root();
+        } else {
+            out.copy_from(self.as_bytes())?;
+        }
+
+        let mut cursor = 0;
+        while cursor < input.len() {
+            while cursor < input.len() && input[cursor] == b'/' {
+                cursor += 1;
+            }
+            let start = cursor;
+            while cursor < input.len() && input[cursor] != b'/' {
+                cursor += 1;
+            }
+            if start == cursor {
+                continue;
+            }
+            let component = &input[start..cursor];
+            if component == b"." {
+                continue;
+            }
+            if component == b".." {
+                out.pop_component();
+            } else {
+                out.push_component(component)?;
+            }
+        }
+        Ok(())
+    }
+
+    pub fn set_from_resolved(&mut self, path: &PathBuffer) -> Result<(), PathError> {
+        let bytes = path.as_bytes();
+        if bytes.is_empty() || bytes[0] != b'/' {
+            return Err(PathError::Invalid);
+        }
+        self.path.copy_from(bytes)
+    }
+}
+
+impl Default for WorkingDirectory {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[derive(Debug, Eq, PartialEq)]
 pub enum Command<'a> {
     Empty,
     Help,
     Clear,
+    Pwd,
+    Cd(Option<&'a [u8]>),
     Ticks,
     Uname,
     Ls(Option<&'a [u8]>),
@@ -62,6 +222,12 @@ pub fn classify_line(input: &[u8], line_len: usize) -> Command<'_> {
         Command::Help
     } else if matches_command(input, b"clear") {
         Command::Clear
+    } else if matches_command(input, b"pwd") {
+        Command::Pwd
+    } else if matches_command(input, b"cd") {
+        Command::Cd(None)
+    } else if is_cd_command(input, line_len) {
+        Command::Cd(Some(&input[3..line_len]))
     } else if matches_command(input, b"ticks") {
         Command::Ticks
     } else if matches_command(input, b"uname") {
@@ -99,13 +265,17 @@ fn is_cat_command(input: &[u8], line_len: usize) -> bool {
     line_len > 4 && input[0] == b'c' && input[1] == b'a' && input[2] == b't' && input[3] == b' '
 }
 
+fn is_cd_command(input: &[u8], line_len: usize) -> bool {
+    line_len > 3 && input[0] == b'c' && input[1] == b'd' && input[2] == b' '
+}
+
 fn is_ls_command(input: &[u8], line_len: usize) -> bool {
     line_len > 3 && input[0] == b'l' && input[1] == b's' && input[2] == b' '
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{Command, InputLine};
+    use super::{Command, InputLine, PathBuffer, WorkingDirectory};
 
     #[test]
     fn reused_line_accepts_short_command_after_long_command() {
@@ -168,6 +338,36 @@ mod tests {
     }
 
     #[test]
+    fn pwd_command_is_recognized_as_shell_builtin() {
+        let mut line = InputLine::new();
+        for byte in b"pwd" {
+            assert!(line.push_printable(*byte));
+        }
+
+        assert_eq!(line.command(), Command::Pwd);
+    }
+
+    #[test]
+    fn cd_command_without_argument_is_recognized_as_root_change() {
+        let mut line = InputLine::new();
+        for byte in b"cd" {
+            assert!(line.push_printable(*byte));
+        }
+
+        assert_eq!(line.command(), Command::Cd(None));
+    }
+
+    #[test]
+    fn cd_command_with_path_is_recognized_as_shell_builtin() {
+        let mut line = InputLine::new();
+        for byte in b"cd ../bin" {
+            assert!(line.push_printable(*byte));
+        }
+
+        assert_eq!(line.command(), Command::Cd(Some(b"../bin")));
+    }
+
+    #[test]
     fn cat_command_is_recognized_as_process_run_utility() {
         let mut line = InputLine::new();
         for byte in b"cat /etc/motd" {
@@ -205,5 +405,54 @@ mod tests {
         }
 
         assert_eq!(line.command(), Command::AllocTest);
+    }
+
+    #[test]
+    fn working_directory_starts_at_root() {
+        let cwd = WorkingDirectory::new();
+
+        assert_eq!(cwd.as_bytes(), b"/");
+    }
+
+    #[test]
+    fn path_buffer_resolves_absolute_path_components() {
+        let cwd = WorkingDirectory::new();
+        let mut path = PathBuffer::new();
+
+        cwd.resolve_into(b"/bin/../etc//motd", &mut path).unwrap();
+
+        assert_eq!(path.as_bytes(), b"/etc/motd");
+    }
+
+    #[test]
+    fn path_buffer_resolves_relative_path_from_cwd() {
+        let mut cwd = WorkingDirectory::new();
+        let mut path = PathBuffer::new();
+        cwd.resolve_into(b"etc", &mut path).unwrap();
+        cwd.set_from_resolved(&path).unwrap();
+
+        cwd.resolve_into(b"../bin/./ls.kx", &mut path).unwrap();
+
+        assert_eq!(path.as_bytes(), b"/bin/ls.kx");
+    }
+
+    #[test]
+    fn path_buffer_keeps_parent_of_root_at_root() {
+        let cwd = WorkingDirectory::new();
+        let mut path = PathBuffer::new();
+
+        cwd.resolve_into(b"../../", &mut path).unwrap();
+
+        assert_eq!(path.as_bytes(), b"/");
+    }
+
+    #[test]
+    fn path_buffer_rejects_overlong_paths() {
+        let cwd = WorkingDirectory::new();
+        let mut path = PathBuffer::new();
+        let mut input = [b'a'; super::MAX_PATH_BYTES + 1];
+        input[0] = b'/';
+
+        assert!(cwd.resolve_into(&input, &mut path).is_err());
     }
 }
