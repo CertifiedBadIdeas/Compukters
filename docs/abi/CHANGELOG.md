@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Added a bounded K16 foreground process table. `RUN` now blocks the current
+  foreground process rather than a hard-coded init slot, so bundled init can
+  launch `/bin/shell.kx` and the shell can synchronously run utilities such as
+  `/bin/uname.kx`, `/bin/cat.kx`, and `/bin/alloc-test.kx`. `EXIT` resumes the
+  waiting parent frame with the child status in `r0`. This remains cooperative:
+  there is no scheduler, fork, pipe, or virtual-memory isolation.
+- Split bundled init from the interactive shell. `/bin/init.kx` is now a small
+  launcher program that calls `process::run("/bin/shell.kx")`; the interactive
+  shell is packaged separately as `/bin/shell.kx`.
 - Added single-argument K16 child process launches. `RUN` keeps the existing
   `RUN(path, len, 0)` no-argument form and adds `RUN(request, len, 1)` for a
   bounded request block containing one argv byte string. The kernel copies the
@@ -9,10 +18,10 @@
   in `r1` and the argv table pointer in `r2`, and `kraft-std` exposes
   `process::run_with_args` plus a small `process::Argv` reader. Bundled `cat`
   now reads the path it receives from init as `cat <path>`.
-- Added K16 userland heap syscalls: `BRK(addr)` sets the current child
+- Added K16 userland heap syscalls: `BRK(addr)` sets the current foreground
   program break, and `SBRK(delta)` grows it and returns the previous break.
-  The Rust kernel bounds the heap to the child process arena below the saved
-  init stack guard and returns `ERROR_NO_MEMORY` for out-of-range growth.
+  The Rust kernel bounds the heap to the process arena below the saved parent
+  stack guard and returns `ERROR_NO_MEMORY` for out-of-range growth.
   `kraft-std` now exposes `heap::{brk, sbrk}` and installs a guest
   `SbrkAllocator`, while bundled userland includes `/bin/alloc-test.kx` as an
   `alloc::Vec` smoke utility reachable from init through the `alloc` command.

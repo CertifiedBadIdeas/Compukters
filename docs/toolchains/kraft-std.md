@@ -24,12 +24,12 @@ The initial `kraft-std` surface is deliberately small:
 | `kraft_std::fs::open(path)` | `k16_rt::open_syscall(path, len, 0)` | Opens an absolute read-only ROOT/K16FS file path and returns a regular file descriptor. |
 | `kraft_std::fs::File::read(bytes)` | `k16_rt::read_syscall(fd, ptr, len)` | Reads bytes from an open regular file and advances its descriptor offset. |
 | `kraft_std::fs::File::close()` | `k16_rt::close_syscall(fd)` | Releases an open regular file descriptor. |
-| `kraft_std::heap::brk(address)` | `k16_rt::brk_syscall(address)` | Sets the current child program break and returns the resulting break. |
-| `kraft_std::heap::sbrk(delta)` | `k16_rt::sbrk_syscall(delta)` | Grows the current child program break and returns the previous break. |
+| `kraft_std::heap::brk(address)` | `k16_rt::brk_syscall(address)` | Sets the current foreground process program break and returns the resulting break. |
+| `kraft_std::heap::sbrk(delta)` | `k16_rt::sbrk_syscall(delta)` | Grows the current foreground process program break and returns the previous break. |
 | `kraft_std::heap::SbrkAllocator` | `BRK`/`SBRK` syscall ABI | Guest global allocator used by `alloc` collections. Allocation is monotonic; deallocation is currently a no-op. |
-| `kraft_std::process::exit(status)` | `k16_rt::exit_syscall(status)` | Terminates the current single-task program through the kernel. |
-| `kraft_std::process::run(path)` | `k16_rt::run_syscall(path, len)` | Runs a dynamic `/bin/*.kx` child program with no arguments. |
-| `kraft_std::process::run_with_args(path, args)` | `k16_rt::run_argv_syscall(request, len)` | Runs a dynamic child program with one bounded argv byte string. |
+| `kraft_std::process::exit(status)` | `k16_rt::exit_syscall(status)` | Terminates the current foreground process through the kernel. |
+| `kraft_std::process::run(path)` | `k16_rt::run_syscall(path, len)` | Runs a dynamic `/bin/*.kx` foreground child program with no arguments. |
+| `kraft_std::process::run_with_args(path, args)` | `k16_rt::run_argv_syscall(request, len)` | Runs a dynamic foreground child program with one bounded argv byte string. |
 | `kraft_std::process::Argv::from_raw(argc, argv)` | K16 child-entry `r1`/`r2` argv ABI | Reads the argv table installed by the kernel for argv-aware child programs. |
 | `kraft_std::thread::yield_now()` | `k16_rt::yield_syscall()` | Requests one OS-level yield through the kernel syscall path. |
 | `kraft_std::thread::sleep_ticks(ticks)` | `k16_rt::sleep_ticks_syscall(ticks)` | Requests a timer0 game-tick sleep through the kernel syscall path. |
@@ -41,8 +41,8 @@ kernel fd syscall ABI, not debug MMIO.
 `kraft-std` is `#![no_std]`. It is not Rust's hosted `std`, a POSIX layer, or a
 complete OS API. The current filesystem surface is a read-only ROOT/K16FS proof
 for absolute paths. The current allocator surface is a monotonic `SBRK`-backed
-guest allocator for init and child userland programs. Directory iteration,
-writable files, process/task management, allocator reuse, and full POSIX
+guest allocator for foreground userland programs. Directory iteration, writable
+files, background process/task management, allocator reuse, and full POSIX
 compatibility are separate future slices.
 
 The bundled init shell uses this allocator for its editable input line. When

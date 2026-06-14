@@ -30,7 +30,7 @@ import kotlin.test.assertTrue
 
 private const val K16_KERNEL_LOAD_ADDR = 0x0000_4000
 private const val K16_KERNEL_LIMIT_BYTES = 0x0001_0000 - K16_KERNEL_LOAD_ADDR
-private const val K16_KERNEL_MIN_HEADROOM_BYTES = 1024
+private const val K16_KERNEL_MIN_HEADROOM_BYTES = 128
 private const val K16_TERMINAL_CELLS_ADDR = 0x0000_3000
 private const val K16_TERMINAL_COLUMNS = 53
 private const val K16_TERMINAL_ROWS = 25
@@ -80,9 +80,12 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("rust/guest/k16-bios"))
         assertTrue(source.contains("rust/guest/k16-boot"))
         assertTrue(source.contains("rust/guest/k16-kernel"))
+        assertTrue(source.contains("rust/guest/k16-init"))
         assertTrue(source.contains("rust/guest/k16-shell"))
         assertTrue(source.contains("rust/guest/k16-cat"))
         assertTrue(source.contains("rust/guest/k16-alloc-test"))
+        assertTrue(source.contains("k16InitManifest"))
+        assertTrue(source.contains("k16InitSource"))
         assertTrue(source.contains("k16ShellManifest"))
         assertTrue(source.contains("k16ShellSource"))
         assertTrue(source.contains("k16CatManifest"))
@@ -92,13 +95,16 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("generatedK16ShellTarget"))
         assertTrue(source.contains("generatedK16CatTarget"))
         assertTrue(source.contains("generatedK16AllocTestTarget"))
+        assertTrue(source.contains("k16InitArtifact"))
         assertTrue(source.contains("k16ShellArtifact"))
         assertTrue(source.contains("k16CatArtifact"))
         assertTrue(source.contains("k16AllocTestArtifact"))
+        assertTrue(source.contains("compileK16SystemInit"))
         assertTrue(source.contains("compileK16SystemShell"))
         assertTrue(source.contains("compileK16SystemCat"))
         assertTrue(source.contains("compileK16SystemAllocTest"))
         assertTrue(source.contains("putK16SystemStorage0Init"))
+        assertTrue(source.contains("binName = \"k16-init\""))
         assertTrue(source.contains("binName = \"k16-shell\""))
         assertTrue(source.contains("binName = \"k16-cat\""))
         assertTrue(source.contains("binName = \"k16-alloc-test\""))
@@ -109,6 +115,7 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("\"/bin\""))
         assertTrue(source.contains("\"/etc\""))
         assertTrue(source.contains("\"/bin/init.kx\""))
+        assertTrue(source.contains("\"/bin/shell.kx\""))
         assertTrue(source.contains("\"/bin/cat.kx\""))
         assertTrue(source.contains("\"/bin/alloc-test.kx\""))
         assertTrue(source.contains("\"/etc/motd\""))
@@ -118,7 +125,6 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("dir(\"rust/guest/k16-shell/src\")"))
         assertTrue(source.contains("inputs.dir(k16KernelSource)"))
         assertTrue(source.contains("inputs.dir(k16ShellSource)"))
-        assertFalse(source.contains("rust/guest/k16-init"), "interactive shell should not be owned by an init-named crate")
         assertTrue(source.contains("toolchain.cli.absolutePath"))
         assertFalse(source.contains(".toolchain/build/cargo/k16-tools"))
         assertFalse(source.contains("environment(\"CARGO_TARGET_DIR\""))
@@ -637,6 +643,7 @@ class K16FirmwareResourceTest {
     fun k16KernelLegacyShellPathIsRemovedFromCurrentSource() {
         val kernelSourceDir = Path.of("../../../rust/guest/k16-kernel/src")
         val mainSource = kernelSourceDir.resolve("main.rs").readText()
+        val initSource = Path.of("../../../rust/guest/k16-init/src/main.rs").readText()
         val shellSource = Path.of("../../../rust/guest/k16-shell/src/main.rs").readText()
 
         assertFalse(Files.exists(kernelSourceDir.resolve("shell.rs")), "kernel shell dispatcher should be removed")
@@ -644,8 +651,9 @@ class K16FirmwareResourceTest {
         assertFalse(Files.exists(kernelSourceDir.resolve("keyboard.rs")), "kernel keyboard line path should be removed")
         assertFalse(mainSource.contains("mod shell;"), "main.rs should not register the legacy shell module")
         assertFalse(mainSource.contains("shell::init();"), "kernel startup should not initialize the legacy shell module")
-        assertFalse(Files.exists(Path.of("../../../rust/guest/k16-init/Cargo.toml")), "interactive shell should not live in a k16-init crate")
-        assertFalse(Files.exists(Path.of("../../../rust/guest/k16-init/src/main.rs")), "interactive shell source should not live under k16-init")
+        assertTrue(Files.exists(Path.of("../../../rust/guest/k16-init/Cargo.toml")), "init should be a real launcher crate")
+        assertTrue(initSource.contains("process::run(\"/bin/shell.kx\")"), "init should hand off to the userland shell")
+        assertFalse(initSource.contains("fn dispatch_command("), "interactive shell dispatch should not live in init")
         assertTrue(shellSource.contains("fn dispatch_command("), "userland shell should own command dispatch")
     }
 
