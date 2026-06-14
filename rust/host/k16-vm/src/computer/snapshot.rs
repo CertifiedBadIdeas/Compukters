@@ -7,7 +7,7 @@ pub const COMPUTER_SNAPSHOT_V1_MAGIC: &[u8; 8] = b"K16SNAP\0";
 pub const COMPUTER_SNAPSHOT_V1_VERSION: u16 = 1;
 pub const COMPUTER_SNAPSHOT_V1_HEADER_SIZE: usize = 40;
 pub const COMPUTER_SNAPSHOT_V1_K16_CPU_KIND: u32 = 1;
-pub const COMPUTER_SNAPSHOT_V1_K16_CPU_RECORD_SIZE: usize = 204;
+pub const COMPUTER_SNAPSHOT_V1_K16_CPU_RECORD_SIZE: usize = 208;
 pub const COMPUTER_SNAPSHOT_V1_CONTROL_DEVICE_KIND: u32 = 1;
 pub const COMPUTER_SNAPSHOT_V1_DEBUG_DEVICE_KIND: u32 = 2;
 pub const COMPUTER_SNAPSHOT_V1_SERIAL_INPUT_DEVICE_KIND: u32 = 4;
@@ -288,6 +288,7 @@ fn encode_cpu_record(
             for register in cpu.trap_registers {
                 write_u32(bytes, register);
             }
+            write_u32(bytes, cpu.trap_kernel_stack_pointer);
         }
     }
     Ok(())
@@ -573,6 +574,7 @@ fn decode_cpu_record(bytes: &[u8], index: u32) -> Result<ComputerCpuSnapshotReco
     for (register_index, register) in trap_registers.iter_mut().enumerate() {
         *register = read_u32(bytes, 140 + register_index * 4)?;
     }
+    let trap_kernel_stack_pointer = read_u32(bytes, 204)?;
     Ok(ComputerCpuSnapshotRecord::K16 {
         cpu: K16CpuSnapshot {
             pc,
@@ -586,6 +588,7 @@ fn decode_cpu_record(bytes: &[u8], index: u32) -> Result<ComputerCpuSnapshotReco
             trap_arg1,
             trap_arg2,
             trap_stack_pointer,
+            trap_kernel_stack_pointer,
             interrupt_enable,
             interrupt_mask,
             interrupt_pending,

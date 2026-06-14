@@ -89,6 +89,7 @@ pub struct K16CpuSnapshot {
     pub trap_arg1: u32,
     pub trap_arg2: u32,
     pub trap_stack_pointer: u32,
+    pub trap_kernel_stack_pointer: u32,
     pub interrupt_enable: bool,
     pub interrupt_mask: u32,
     pub interrupt_pending: u32,
@@ -386,6 +387,7 @@ pub struct K16Cpu {
     trap_arg2: u32,
     trap_frame_index: usize,
     trap_stack_pointer: u32,
+    trap_kernel_stack_pointer: u32,
     trap_interrupt_enable: bool,
     trap_address_mode: K16AddressMode,
     trap_privilege_mode: K16PrivilegeMode,
@@ -415,6 +417,7 @@ impl K16Cpu {
             trap_arg2: 0,
             trap_frame_index: 0,
             trap_stack_pointer: 0,
+            trap_kernel_stack_pointer: 0,
             trap_interrupt_enable: false,
             trap_address_mode: K16AddressMode::Physical,
             trap_privilege_mode: K16PrivilegeMode::Kernel,
@@ -470,6 +473,7 @@ impl K16Cpu {
         entry_pc: u32,
         stack_pointer: u32,
     ) {
+        self.trap_kernel_stack_pointer = self.registers[usize::from(K16_STACK_POINTER_REGISTER)];
         self.address_mode = K16AddressMode::Translated { address_space };
         self.privilege_mode = K16PrivilegeMode::User;
         self.pc = entry_pc;
@@ -489,6 +493,7 @@ impl K16Cpu {
             trap_arg1: self.trap_arg1,
             trap_arg2: self.trap_arg2,
             trap_stack_pointer: self.trap_stack_pointer,
+            trap_kernel_stack_pointer: self.trap_kernel_stack_pointer,
             interrupt_enable: self.interrupt_enable,
             interrupt_mask: self.interrupt_mask,
             interrupt_pending: self.interrupt_pending,
@@ -516,6 +521,7 @@ impl K16Cpu {
             trap_arg2: snapshot.trap_arg2,
             trap_frame_index: 0,
             trap_stack_pointer: snapshot.trap_stack_pointer,
+            trap_kernel_stack_pointer: snapshot.trap_kernel_stack_pointer,
             trap_interrupt_enable: false,
             trap_address_mode: K16AddressMode::Physical,
             trap_privilege_mode: K16PrivilegeMode::Kernel,
@@ -1048,6 +1054,7 @@ impl K16Cpu {
         self.trap_privilege_mode = self.privilege_mode;
         self.address_mode = K16AddressMode::Physical;
         self.privilege_mode = K16PrivilegeMode::Kernel;
+        self.switch_to_trap_kernel_stack();
         self.pc = self.trap_vector;
         self.interrupt_enable = false;
         Ok(true)
@@ -1157,8 +1164,17 @@ impl K16Cpu {
         self.trap_privilege_mode = self.privilege_mode;
         self.address_mode = K16AddressMode::Physical;
         self.privilege_mode = K16PrivilegeMode::Kernel;
+        self.switch_to_trap_kernel_stack();
         self.pc = self.trap_vector;
         Ok(None)
+    }
+
+    fn switch_to_trap_kernel_stack(&mut self) {
+        if self.trap_privilege_mode == K16PrivilegeMode::User && self.trap_kernel_stack_pointer != 0
+        {
+            self.registers[usize::from(K16_STACK_POINTER_REGISTER)] =
+                self.trap_kernel_stack_pointer;
+        }
     }
 
     pub fn run_until_signal(

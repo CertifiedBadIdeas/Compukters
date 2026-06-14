@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- K16 trap entry from translated user execution now switches the live stack
+  pointer to the physical kernel stack captured by `mmu0`
+  `activate_user_address_space`, while `iret` still restores the interrupted
+  user stack through `trap_stack_pointer`. `K16SNAP` CPU records now include
+  `trap_kernel_stack_pointer`, increasing the fixed K16 CPU record size from
+  204 to 208 bytes.
 - K16 syscall handlers now route user-buffer copies through a shared kernel
   helper. Physical foreground processes keep the existing process-range
   validation and physical RAM copies, while VM-enabled processes use the
