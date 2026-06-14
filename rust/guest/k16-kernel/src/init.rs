@@ -1,4 +1,7 @@
-use k16_boot_chain::{enter_loaded_image, load_k16e_from_storage0, K16eAbiKind, LoadError};
+use k16_boot_chain::{
+    enter_loaded_image, load_k16e_from_storage0, user_memory_end_from_current_boot_info,
+    K16eAbiKind, LoadError,
+};
 
 use crate::{control, debug, process};
 
@@ -12,8 +15,14 @@ pub fn launch() -> ! {
     };
     match image {
         Ok(image) => {
-            if unsafe { process::initialize_init_process(image) }.is_err() {
-                fail(LoadError::INVALID_EXECUTABLE);
+            let memory_end = unsafe { user_memory_end_from_current_boot_info(image) };
+            match memory_end {
+                Ok(memory_end) => {
+                    if unsafe { process::initialize_init_process(image, memory_end) }.is_err() {
+                        fail(LoadError::INVALID_EXECUTABLE);
+                    }
+                }
+                Err(error) => fail(error),
             }
             unsafe { enter_loaded_image(image) }
         }

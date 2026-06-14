@@ -12,6 +12,7 @@ const KX_SUFFIX: &[u8] = b".kx";
 const K16FS_MAX_NAME_BYTES: usize = 56;
 pub const MAX_RUN_PATH_BYTES: usize = BIN_PREFIX.len() + K16FS_MAX_NAME_BYTES;
 const CHILD_ARG_ENTRY_BYTES: u32 = 8;
+#[cfg(any(test, feature = "host-test"))]
 const DEFAULT_INIT_MEMORY_END: u32 = 0x0002_5000;
 // Keep relocation records outside k16_storage::SCRATCH_ADDR: storage reads use
 // that block as staging, and records may straddle a storage block boundary.
@@ -567,10 +568,11 @@ impl ChildArgv {
 #[cfg(any(not(test), feature = "host-test"))]
 pub unsafe fn initialize_init_process(
     image: k16_boot_chain::LoadedImage,
+    memory_end: u32,
 ) -> Result<(), ProcessLoadError> {
     #[cfg(not(test))]
     {
-        let memory = ProcessMemory::for_loaded_image(image, DEFAULT_INIT_MEMORY_END)?;
+        let memory = ProcessMemory::for_loaded_image(image, memory_end)?;
         let heap = HeapState::from_bounds(image.load_end, memory.end)
             .map_err(|_| ProcessLoadError::ProgramTooLarge)?;
         unsafe {
@@ -592,7 +594,11 @@ pub unsafe fn initialize_init_process(
     }
     #[cfg(test)]
     {
-        unsafe { PROCESS_TABLE.get().initialize_init_image(image) }
+        unsafe {
+            PROCESS_TABLE
+                .get()
+                .initialize_init_image_in_memory(image, memory_end)
+        }
     }
 }
 
