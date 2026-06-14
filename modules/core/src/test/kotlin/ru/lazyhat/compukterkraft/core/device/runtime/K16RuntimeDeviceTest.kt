@@ -37,6 +37,7 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.file.Path
 import java.util.Collections
+import java.util.concurrent.CompletableFuture
 import java.util.UUID
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -702,6 +703,29 @@ class K16RuntimeDeviceTest {
         assertEquals(null, device.snapshotRuntimeState())
     }
 
+    @Test
+    fun failedEndpointSnapshotRecordsRuntimeFailureWithoutBlockingCaller() {
+        val endpoint = RecordingK16Endpoint()
+        endpoint.snapshotFailure = IllegalStateException("snapshot encoder failed")
+        val device =
+            K16RuntimeDevice(
+                deviceId = 18,
+                properties = DeviceProperties(DeviceFamily.NORMAL, label = null),
+                endpointFactory = { endpoint },
+                stateSink = {},
+            )
+
+        device.turnOn()
+
+        val snapshot =
+            CompletableFuture.supplyAsync {
+                device.snapshotRuntimeState()
+            }.get(2, TimeUnit.SECONDS)
+
+        assertEquals(null, snapshot)
+        assertEquals("snapshot encoder failed", device.runtimeFailureMessage)
+    }
+
     private fun waitUntil(
         timeoutMillis: Long = 2_000,
         predicate: () -> Boolean,
@@ -733,6 +757,7 @@ class K16RuntimeDeviceTest {
         var closeCalls = 0
             private set
         var runtimeSnapshot: ByteArray = ByteArray(0)
+        var snapshotFailure: RuntimeException? = null
         var control: NativeK16ComputerControl = NativeK16ComputerControl(status = K16RuntimeDevice.STATUS_READY, exitCode = 0, panicCode = 0)
         private val injectedOutput = StringBuilder()
         private val gpuFrameBatches = ArrayDeque<ByteArray>()
@@ -807,7 +832,10 @@ class K16RuntimeDeviceTest {
 
         override fun clearOutput() = Unit
 
-        override fun machineSnapshot(): ByteArray = runtimeSnapshot.copyOf()
+        override fun machineSnapshot(): ByteArray {
+            snapshotFailure?.let { throw it }
+            return runtimeSnapshot.copyOf()
+        }
 
         override fun close() {
             closeCalls += 1

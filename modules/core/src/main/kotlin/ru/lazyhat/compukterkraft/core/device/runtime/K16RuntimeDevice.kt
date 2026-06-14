@@ -85,10 +85,7 @@ class K16RuntimeDevice(
             try {
                 K16EndpointWorker(deviceId, endpointFactory, metricsCollector).also { it.start() }
             } catch (error: Throwable) {
-                runtimeFailureMessageBacking = error.message ?: error::class.java.name
-                LOGGER.error(error) {
-                    "K16RuntimeDevice $deviceId failed to start: $runtimeFailureMessageBacking"
-                }
+                recordRuntimeFailure(error, "start")
                 stateSink.onPowerStateChanged(false)
                 return
             }
@@ -196,7 +193,26 @@ class K16RuntimeDevice(
         endpoint?.pushKeyboardPasteBytes(bytes)
     }
 
-    override fun snapshotRuntimeState(): ByteArray? = endpoint?.machineSnapshot()
+    override fun snapshotRuntimeState(): ByteArray? {
+        val current = endpoint ?: return null
+        return try {
+            current.machineSnapshot()
+        } catch (error: Throwable) {
+            recordRuntimeFailure(error, "snapshot")
+            null
+        }
+    }
+
+    private fun recordRuntimeFailure(
+        error: Throwable,
+        action: String,
+    ) {
+        val cause = (error as? CompletionException)?.cause ?: error
+        runtimeFailureMessageBacking = cause.message ?: cause::class.java.name
+        LOGGER.error(cause) {
+            "K16RuntimeDevice $deviceId failed to $action: $runtimeFailureMessageBacking"
+        }
+    }
 
     override fun attachDisplaySession(
         playerUuid: UUID,
@@ -476,7 +492,11 @@ class K16RuntimeDevice(
                         }
 
                         is Command.MachineSnapshot -> {
-                            command.response.complete(endpoint.machineSnapshot())
+                            try {
+                                command.response.complete(endpoint.machineSnapshot())
+                            } catch (error: Throwable) {
+                                command.response.completeExceptionally(error)
+                            }
                         }
 
                         Command.Close -> {
