@@ -387,6 +387,8 @@ pub struct K16Cpu {
     trap_frame_index: usize,
     trap_stack_pointer: u32,
     trap_interrupt_enable: bool,
+    trap_address_mode: K16AddressMode,
+    trap_privilege_mode: K16PrivilegeMode,
     interrupt_enable: bool,
     interrupt_delivery_inhibited_steps: u8,
     interrupt_mask: u32,
@@ -414,6 +416,8 @@ impl K16Cpu {
             trap_frame_index: 0,
             trap_stack_pointer: 0,
             trap_interrupt_enable: false,
+            trap_address_mode: K16AddressMode::Physical,
+            trap_privilege_mode: K16PrivilegeMode::Kernel,
             interrupt_enable: false,
             interrupt_delivery_inhibited_steps: 0,
             interrupt_mask: 0,
@@ -513,6 +517,8 @@ impl K16Cpu {
             trap_frame_index: 0,
             trap_stack_pointer: snapshot.trap_stack_pointer,
             trap_interrupt_enable: false,
+            trap_address_mode: K16AddressMode::Physical,
+            trap_privilege_mode: K16PrivilegeMode::Kernel,
             interrupt_enable: snapshot.interrupt_enable,
             interrupt_delivery_inhibited_steps: 0,
             interrupt_mask: snapshot.interrupt_mask,
@@ -1038,6 +1044,10 @@ impl K16Cpu {
         self.trap_arg2 = 0;
         self.trap_stack_pointer = self.registers[usize::from(K16_STACK_POINTER_REGISTER)];
         self.trap_interrupt_enable = self.interrupt_enable;
+        self.trap_address_mode = self.address_mode;
+        self.trap_privilege_mode = self.privilege_mode;
+        self.address_mode = K16AddressMode::Physical;
+        self.privilege_mode = K16PrivilegeMode::Kernel;
         self.pc = self.trap_vector;
         self.interrupt_enable = false;
         Ok(true)
@@ -1050,6 +1060,8 @@ impl K16Cpu {
         self.registers[usize::from(K16_STACK_POINTER_REGISTER)] = self.trap_stack_pointer;
         self.pc = self.trap_pc;
         self.interrupt_enable = self.trap_interrupt_enable;
+        self.address_mode = self.trap_address_mode;
+        self.privilege_mode = self.trap_privilege_mode;
         self.interrupt_delivery_inhibited_steps = 2;
     }
 
@@ -1141,6 +1153,10 @@ impl K16Cpu {
         self.trap_arg2 = 0;
         self.trap_stack_pointer = self.registers[usize::from(K16_STACK_POINTER_REGISTER)];
         self.trap_interrupt_enable = self.interrupt_enable;
+        self.trap_address_mode = self.address_mode;
+        self.trap_privilege_mode = self.privilege_mode;
+        self.address_mode = K16AddressMode::Physical;
+        self.privilege_mode = K16PrivilegeMode::Kernel;
         self.pc = self.trap_vector;
         Ok(None)
     }

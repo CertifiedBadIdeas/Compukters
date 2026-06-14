@@ -4,12 +4,14 @@
 
 ## Status
 
-Status: planned design.
+Status: partially implemented design.
 
 This document defines the first intended K16 virtual-memory and process
-address-space contract. It is not implemented by the current VM, kernel,
-bootloader, or toolchain. Existing K16 systems remain physical-memory-only
-until a later CPU/MMU ABI slice explicitly implements and enables this model.
+address-space contract. The current VM implements the host MMU map, CPU
+address/privilege modes, privileged `mmu0` map controls, and trap/`iret` mode
+switching. The guest kernel, bootloader, and bundled userland still use the
+physical-memory process model until later slices migrate process loading and
+syscall user-buffer handling.
 
 The design is intentionally smaller than a desktop or server OS MMU, but it is
 still a real host-enforced address translation boundary. K16 is a Minecraft mod
