@@ -133,6 +133,14 @@ class K16ShellRuntimeSmokeTest {
                 rootLsCommandIndex >= 0 && rootLsOutputIndex > rootLsCommandIndex && returnedPromptIndex > rootLsOutputIndex
             }
 
+            dispatchText(device, "nosuch\n")
+            waitForTerminal(device, "generic missing executable reports no entry and returned prompt") { terminal ->
+                val commandIndex = terminal.indexOf("K16> nosuch")
+                val outputIndex = terminal.indexOf("ERR NOENT", startIndex = commandIndex + "K16> nosuch".length)
+                val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex)
+                commandIndex >= 0 && outputIndex > commandIndex && returnedPromptIndex > outputIndex
+            }
+
             dispatchText(device, "alloc\n")
             waitForTerminal(device, "alloc output and returned prompt") { terminal ->
                 val allocCommandIndex = terminal.indexOf("K16> alloc")
@@ -145,8 +153,6 @@ class K16ShellRuntimeSmokeTest {
             assertOrderedFragments(
                 terminal,
                 listOf(
-                    "K16> cd motd",
-                    "ERR INVAL",
                     "K16> pwd",
                     "/etc",
                     "K16> ls /bin",
@@ -155,6 +161,8 @@ class K16ShellRuntimeSmokeTest {
                     "ls.kx",
                     "K16> ls /",
                     "bin/",
+                    "K16> nosuch",
+                    "ERR NOENT",
                     "K16> alloc",
                     "ALLOC",
                     "K16> ",

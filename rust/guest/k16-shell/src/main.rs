@@ -10,6 +10,10 @@ const PROMPT: &[u8] = b"K16> ";
 const NEWLINE: &[u8] = b"\n";
 const HELP: &[u8] =
     b"HELP\nCLEAR\nPWD\nCD [PATH]\nECHO\nTICKS\nUNAME\nLS [PATH]\nCAT <PATH>\nALLOC\n";
+const BIN_PREFIX: &[u8] = b"/bin/";
+const PROGRAM_SUFFIX: &[u8] = b".kx";
+const ALLOC_ALIAS: &[u8] = b"alloc";
+const ALLOC_PROGRAM: &[u8] = b"alloc-test";
 
 #[no_mangle]
 pub extern "C" fn main() -> ! {
@@ -19,6 +23,7 @@ pub extern "C" fn main() -> ! {
     let mut cwd = WorkingDirectory::new();
     let mut read_buffer = [0u8; 1];
     let mut path_buffer = PathBuffer::new();
+    let mut program_path = PathBuffer::new();
 
     must_write(stdout, b"K16 SHELL\n");
     loop {
@@ -29,6 +34,7 @@ pub extern "C" fn main() -> ! {
             &mut input,
             &mut cwd,
             &mut path_buffer,
+            &mut program_path,
             &mut read_buffer,
         );
     }
@@ -40,6 +46,7 @@ fn read_and_dispatch_line(
     input: &mut InputLine,
     cwd: &mut WorkingDirectory,
     path_buffer: &mut PathBuffer,
+    program_path: &mut PathBuffer,
     read_buffer: &mut [u8; 1],
 ) {
     input.clear();
@@ -53,7 +60,7 @@ fn read_and_dispatch_line(
             match read_buffer[index] {
                 b'\n' | b'\r' => {
                     must_write(stdout, NEWLINE);
-                    dispatch_command(stdout, cwd, path_buffer, input.command());
+                    dispatch_command(stdout, cwd, path_buffer, program_path, input.command());
                     return;
                 }
                 b'\x08' | 0x7f => {
@@ -77,6 +84,7 @@ fn dispatch_command(
     stdout: io::Fd,
     cwd: &mut WorkingDirectory,
     path_buffer: &mut PathBuffer,
+    program_path: &mut PathBuffer,
     command: Command<'_>,
 ) {
     match command {
@@ -86,15 +94,11 @@ fn dispatch_command(
         Command::Pwd => run_pwd(stdout, cwd),
         Command::Cd(path) => run_cd(stdout, cwd, path_buffer, path),
         Command::Ticks => run_ticks(stdout),
-        Command::Uname => run_uname(stdout),
-        Command::Ls(path) => run_ls(stdout, cwd, path_buffer, path),
-        Command::Cat(path) => run_cat(stdout, cwd, path_buffer, path),
-        Command::AllocTest => run_alloc_test(stdout),
         Command::Echo(bytes) => {
             must_write(stdout, bytes);
             must_write(stdout, NEWLINE);
         }
-        Command::Unknown => must_write(stdout, b"ERR\n"),
+        Command::Exec { name, arg } => run_exec(stdout, cwd, path_buffer, program_path, name, arg),
     }
 }
 
@@ -140,60 +144,67 @@ fn run_ticks(stdout: io::Fd) {
     must_write(stdout, NEWLINE);
 }
 
-fn run_uname(stdout: io::Fd) {
-    match process::run("/bin/uname.kx") {
-        Ok(_) => {}
-        Err(error) => write_run_error(stdout, error),
-    }
-}
-
-fn run_ls(
+fn run_exec(
     stdout: io::Fd,
     cwd: &WorkingDirectory,
     path_buffer: &mut PathBuffer,
-    path: Option<&[u8]>,
+    program_path: &mut PathBuffer,
+    name: &[u8],
+    arg: Option<&[u8]>,
 ) {
-    let Some(path) = path else {
-        match process::run("/bin/ls.kx") {
+    if build_program_path(name, program_path).is_err() {
+        must_write(stdout, b"ERR INVAL\n");
+        return;
+    }
+    let Ok(program_path) = program_path.as_str() else {
+        must_write(stdout, b"ERR INVAL\n");
+        return;
+    };
+    let Some(arg) = arg else {
+        match process::run(program_path) {
             Ok(_) => {}
             Err(error) => write_run_error(stdout, error),
         }
         return;
     };
-    if cwd.resolve_into(path, path_buffer).is_err() {
-        must_write(stdout, b"ERR INVAL\n");
-        return;
-    }
-    let Ok(path) = path_buffer.as_str() else {
-        must_write(stdout, b"ERR INVAL\n");
-        return;
-    };
-    match process::run_with_args("/bin/ls.kx", &[path]) {
-        Ok(_) => {}
-        Err(error) => write_run_error(stdout, error),
+
+    if should_resolve_path_arg(name) {
+        if cwd.resolve_into(arg, path_buffer).is_err() {
+            must_write(stdout, b"ERR INVAL\n");
+            return;
+        }
+        let Ok(arg) = path_buffer.as_str() else {
+            must_write(stdout, b"ERR INVAL\n");
+            return;
+        };
+        match process::run_with_args(program_path, &[arg]) {
+            Ok(_) => {}
+            Err(error) => write_run_error(stdout, error),
+        }
+    } else {
+        let Ok(arg) = core::str::from_utf8(arg) else {
+            must_write(stdout, b"ERR INVAL\n");
+            return;
+        };
+        match process::run_with_args(program_path, &[arg]) {
+            Ok(_) => {}
+            Err(error) => write_run_error(stdout, error),
+        }
     }
 }
 
-fn run_cat(stdout: io::Fd, cwd: &WorkingDirectory, path_buffer: &mut PathBuffer, path: &[u8]) {
-    if cwd.resolve_into(path, path_buffer).is_err() {
-        must_write(stdout, b"ERR INVAL\n");
-        return;
-    }
-    let Ok(path) = path_buffer.as_str() else {
-        must_write(stdout, b"ERR INVAL\n");
-        return;
+fn build_program_path(name: &[u8], out: &mut PathBuffer) -> Result<(), ()> {
+    let name = if name == ALLOC_ALIAS {
+        ALLOC_PROGRAM
+    } else {
+        name
     };
-    match process::run_with_args("/bin/cat.kx", &[path]) {
-        Ok(_) => {}
-        Err(error) => write_run_error(stdout, error),
-    }
+    out.replace_with_parts(BIN_PREFIX, name, PROGRAM_SUFFIX)
+        .map_err(|_| ())
 }
 
-fn run_alloc_test(stdout: io::Fd) {
-    match process::run("/bin/alloc-test.kx") {
-        Ok(_) => {}
-        Err(error) => write_run_error(stdout, error),
-    }
+fn should_resolve_path_arg(name: &[u8]) -> bool {
+    matches!(name, b"ls" | b"cat")
 }
 
 fn write_run_error(stdout: io::Fd, error: process::Error) {

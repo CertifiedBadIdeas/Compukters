@@ -33,6 +33,33 @@ impl PathBuffer {
         core::str::from_utf8(self.as_bytes()).map_err(|_| PathError::Invalid)
     }
 
+    pub fn replace_with_parts(
+        &mut self,
+        prefix: &[u8],
+        middle: &[u8],
+        suffix: &[u8],
+    ) -> Result<(), PathError> {
+        if middle.is_empty() {
+            return Err(PathError::Invalid);
+        }
+        let end = prefix
+            .len()
+            .checked_add(middle.len())
+            .and_then(|value| value.checked_add(suffix.len()))
+            .ok_or(PathError::TooLong)?;
+        if end > self.bytes.len() {
+            return Err(PathError::TooLong);
+        }
+        let mut cursor = 0;
+        self.bytes[cursor..cursor + prefix.len()].copy_from_slice(prefix);
+        cursor += prefix.len();
+        self.bytes[cursor..cursor + middle.len()].copy_from_slice(middle);
+        cursor += middle.len();
+        self.bytes[cursor..cursor + suffix.len()].copy_from_slice(suffix);
+        self.len = end;
+        Ok(())
+    }
+
     fn clear(&mut self) {
         self.len = 0;
     }
@@ -170,12 +197,11 @@ pub enum Command<'a> {
     Pwd,
     Cd(Option<&'a [u8]>),
     Ticks,
-    Uname,
-    Ls(Option<&'a [u8]>),
-    Cat(&'a [u8]),
-    AllocTest,
     Echo(&'a [u8]),
-    Unknown,
+    Exec {
+        name: &'a [u8],
+        arg: Option<&'a [u8]>,
+    },
 }
 
 pub struct InputLine {
@@ -230,21 +256,11 @@ pub fn classify_line(input: &[u8], line_len: usize) -> Command<'_> {
         Command::Cd(Some(&input[3..line_len]))
     } else if matches_command(input, b"ticks") {
         Command::Ticks
-    } else if matches_command(input, b"uname") {
-        Command::Uname
-    } else if matches_command(input, b"ls") {
-        Command::Ls(None)
-    } else if is_ls_command(input, line_len) {
-        Command::Ls(Some(&input[3..line_len]))
-    } else if is_cat_command(input, line_len) {
-        Command::Cat(&input[4..line_len])
-    } else if matches_command(input, b"alloc") {
-        Command::AllocTest
     } else if is_echo_command(input, line_len) {
         let start = if line_len > 4 { 5 } else { 4 };
         Command::Echo(&input[start..line_len])
     } else {
-        Command::Unknown
+        classify_exec(input, line_len)
     }
 }
 
@@ -261,16 +277,25 @@ fn is_echo_command(input: &[u8], line_len: usize) -> bool {
         && (line_len == 4 || input[4] == b' ')
 }
 
-fn is_cat_command(input: &[u8], line_len: usize) -> bool {
-    line_len > 4 && input[0] == b'c' && input[1] == b'a' && input[2] == b't' && input[3] == b' '
-}
-
 fn is_cd_command(input: &[u8], line_len: usize) -> bool {
     line_len > 3 && input[0] == b'c' && input[1] == b'd' && input[2] == b' '
 }
 
-fn is_ls_command(input: &[u8], line_len: usize) -> bool {
-    line_len > 3 && input[0] == b'l' && input[1] == b's' && input[2] == b' '
+fn classify_exec(input: &[u8], line_len: usize) -> Command<'_> {
+    let mut cursor = 0;
+    while cursor < line_len && input[cursor] != b' ' {
+        cursor += 1;
+    }
+    if cursor == line_len {
+        return Command::Exec {
+            name: &input[..line_len],
+            arg: None,
+        };
+    }
+    Command::Exec {
+        name: &input[..cursor],
+        arg: Some(&input[cursor + 1..line_len]),
+    }
 }
 
 #[cfg(test)]
@@ -334,7 +359,13 @@ mod tests {
             assert!(line.push_printable(*byte));
         }
 
-        assert_eq!(line.command(), Command::Uname);
+        assert_eq!(
+            line.command(),
+            Command::Exec {
+                name: b"uname",
+                arg: None
+            }
+        );
     }
 
     #[test]
@@ -368,43 +399,83 @@ mod tests {
     }
 
     #[test]
-    fn cat_command_is_recognized_as_process_run_utility() {
+    fn cat_command_is_recognized_as_generic_exec_with_argument() {
         let mut line = InputLine::new();
         for byte in b"cat /etc/motd" {
             assert!(line.push_printable(*byte));
         }
 
-        assert_eq!(line.command(), Command::Cat(b"/etc/motd"));
+        assert_eq!(
+            line.command(),
+            Command::Exec {
+                name: b"cat",
+                arg: Some(b"/etc/motd")
+            }
+        );
     }
 
     #[test]
-    fn ls_command_without_argument_is_recognized_as_process_run_utility() {
+    fn ls_command_without_argument_is_recognized_as_generic_exec() {
         let mut line = InputLine::new();
         for byte in b"ls" {
             assert!(line.push_printable(*byte));
         }
 
-        assert_eq!(line.command(), Command::Ls(None));
+        assert_eq!(
+            line.command(),
+            Command::Exec {
+                name: b"ls",
+                arg: None
+            }
+        );
     }
 
     #[test]
-    fn ls_command_with_path_is_recognized_as_process_run_utility() {
+    fn ls_command_with_path_is_recognized_as_generic_exec_with_argument() {
         let mut line = InputLine::new();
         for byte in b"ls /bin" {
             assert!(line.push_printable(*byte));
         }
 
-        assert_eq!(line.command(), Command::Ls(Some(b"/bin")));
+        assert_eq!(
+            line.command(),
+            Command::Exec {
+                name: b"ls",
+                arg: Some(b"/bin")
+            }
+        );
     }
 
     #[test]
-    fn alloc_command_is_recognized_as_process_run_utility() {
+    fn alloc_command_is_recognized_as_generic_exec_alias() {
         let mut line = InputLine::new();
         for byte in b"alloc" {
             assert!(line.push_printable(*byte));
         }
 
-        assert_eq!(line.command(), Command::AllocTest);
+        assert_eq!(
+            line.command(),
+            Command::Exec {
+                name: b"alloc",
+                arg: None
+            }
+        );
+    }
+
+    #[test]
+    fn unknown_command_is_recognized_as_generic_exec() {
+        let mut line = InputLine::new();
+        for byte in b"foo bar baz" {
+            assert!(line.push_printable(*byte));
+        }
+
+        assert_eq!(
+            line.command(),
+            Command::Exec {
+                name: b"foo",
+                arg: Some(b"bar baz")
+            }
+        );
     }
 
     #[test]
@@ -454,5 +525,14 @@ mod tests {
         input[0] = b'/';
 
         assert!(cwd.resolve_into(&input, &mut path).is_err());
+    }
+
+    #[test]
+    fn path_buffer_replaces_with_program_path_parts() {
+        let mut path = PathBuffer::new();
+
+        path.replace_with_parts(b"/bin/", b"uname", b".kx").unwrap();
+
+        assert_eq!(path.as_bytes(), b"/bin/uname.kx");
     }
 }
