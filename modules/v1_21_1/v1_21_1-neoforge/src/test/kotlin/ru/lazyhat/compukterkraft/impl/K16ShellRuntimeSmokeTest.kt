@@ -23,6 +23,7 @@ import ru.lazyhat.compukterkraft.core.block.DeviceFamily
 import ru.lazyhat.compukterkraft.core.device.DeviceEvents
 import ru.lazyhat.compukterkraft.core.device.DeviceProperties
 import ru.lazyhat.compukterkraft.core.device.input.KeyInputEvent
+import ru.lazyhat.compukterkraft.core.device.input.PasteInputEvent
 import ru.lazyhat.compukterkraft.core.device.runtime.K16RuntimeDevice
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16BiosFlashWorkspace
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16ComputerRuntimeFactory
@@ -93,6 +94,27 @@ class K16ShellRuntimeSmokeTest {
         }
     }
 
+    @Test
+    fun runtimeDeviceAcceptsLongHeapBackedEchoInputThroughUserlandInit() {
+        val device = createDevice()
+        val payload = "x".repeat(180)
+
+        try {
+            device.turnOn()
+            waitForTerminalText(device, "INIT> ")
+
+            dispatchPasteText(device, "echo $payload\n")
+            waitForTerminal(device, "long echo output and returned prompt") { terminal ->
+                val commandIndex = terminal.indexOf("INIT> echo $payload")
+                val outputIndex = terminal.indexOf(payload, startIndex = commandIndex + "INIT> echo ".length)
+                val returnedPromptIndex = terminal.indexOf("INIT> ", startIndex = outputIndex + payload.length)
+                commandIndex >= 0 && outputIndex > commandIndex && returnedPromptIndex > outputIndex
+            }
+        } finally {
+            device.close()
+        }
+    }
+
     private fun createDevice(): K16RuntimeDevice {
         val workspace = createTempDirectory("k16-shell-runtime-smoke-")
         val biosFlashPath = workspace.resolve("bios.kflash")
@@ -120,6 +142,14 @@ class K16ShellRuntimeSmokeTest {
         for (byte in text.encodeToByteArray()) {
             DeviceEvents.dispatch(device, KeyInputEvent.Character(byte))
         }
+        tickAndSync(device)
+    }
+
+    private fun dispatchPasteText(
+        device: K16RuntimeDevice,
+        text: String,
+    ) {
+        DeviceEvents.dispatch(device, PasteInputEvent(ByteBuffer.wrap(text.encodeToByteArray())))
         tickAndSync(device)
     }
 

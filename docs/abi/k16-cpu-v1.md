@@ -545,10 +545,12 @@ K16 syscall ABI v0 names the current Rust-kernel proof services in
 These names describe the current ABI proof surface. They are not a complete OS
 service table, scheduler API, filesystem API, or process model.
 
-`BRK` and `SBRK` operate only while a child process is running. The kernel
-chooses the child load base, zero-filled memory extent, initial break, and heap
-limit at `RUN` time. The heap limit is below a guard area under init's saved
-stack pointer, so child heap growth cannot overwrite the live init stack.
+`BRK` and `SBRK` operate for the current user process. Init has its own heap
+after its loaded image, and a child process gets a separate heap after the
+child's loaded image while init is blocked in `RUN`. Child load arenas start
+after init's current program break, so child loading cannot overwrite init heap
+allocations. The child heap limit is below a guard area under init's saved stack
+pointer, so child heap growth cannot overwrite the live init stack.
 
 Asynchronous interrupts are delivered between guest instructions. Delivery
 requires `interrupt_enable != 0` and a source bit present in both
