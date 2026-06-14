@@ -11,11 +11,12 @@ address-space contract. It is not implemented by the current VM, kernel,
 bootloader, or toolchain. Existing K16 systems remain physical-memory-only
 until a later CPU/MMU ABI slice explicitly implements and enables this model.
 
-The design is intentionally smaller than a desktop or server OS MMU. K16 is a
-Minecraft mod computer, closer in spirit to OpenComputers than to commodity
-hardware. The goal is to remove fragile physical userland layout constraints
-and make process isolation understandable, not to implement fork, demand
-paging, copy-on-write, shared libraries, or kernel virtual memory.
+The design is intentionally smaller than a desktop or server OS MMU, but it is
+still a real host-enforced address translation boundary. K16 is a Minecraft mod
+computer, closer in spirit to OpenComputers than to commodity hardware. The
+goal is to remove fragile physical userland layout constraints and make
+process isolation understandable, not to implement fork, demand paging,
+copy-on-write, shared libraries, or kernel virtual memory.
 
 ## Relationship To Current ABIs
 
@@ -26,8 +27,8 @@ granularity, not an MMU page.
 `k16-cpu-v1.md` remains physical-memory-only. It already states that privilege
 levels, virtual memory, and page-table translation are later ABI slices. Its
 4-bit CSR namespace is currently full, so MMU controls must be introduced by a
-future CPU ABI revision or an explicit MMU control device. They must not be
-silently retrofitted into unused v1 behavior.
+future CPU ABI revision or an explicit host MMU control device. They must not
+be silently retrofitted into unused v1 behavior.
 
 `k16e-v1.md` dynamic user programs remain base-relative executable images. VM
 address spaces do not require a new executable container: the kernel may load a
@@ -41,6 +42,8 @@ and enter the image at `virtual_base + entry_offset`.
   physical arena chosen by the kernel.
 - Let the kernel validate user pointers by translation and page permissions
   instead of by hard-coded physical ranges.
+- Keep the MMU implementation in the host VM/runtime rather than requiring a
+  guest-visible hardware page walker.
 - Keep the first implementation small enough for the current cooperative
   process model.
 - Preserve the existing K16E dynamic-program direction.
@@ -51,6 +54,7 @@ and enter the image at `virtual_base + entry_offset`.
 - `fork`, copy-on-write, `mmap`, demand paging, swap, shared libraries, TLS, or
   dynamic linking.
 - A kernel virtual address map in the first implementation.
+- Guest RAM page-table walking in the first implementation.
 - User-accessible MMIO mappings.
 - Multiple CPU cores, TLB shootdown, ASIDs, or SMP memory ordering.
 - Retiring physical-mode firmware, boot, or kernel execution.
@@ -62,13 +66,13 @@ K16 has two execution address modes:
 ```text
 physical mode       current behavior; instruction fetches, loads, and stores
                     use guest physical addresses
-user-translated     instruction fetches, loads, and stores use the current
-                    process page table
+user-translated     instruction fetches, loads, and stores are translated by
+                    the host MMU through the current address-space map
 ```
 
 The VM starts in physical mode. BIOS, bootloader, and kernel entry run in
 physical mode. The kernel may enter user-translated mode only after it has
-constructed a page table for the target process.
+constructed an address-space map for the target process.
 
 Trap and interrupt entry switches back to physical mode before executing the
 kernel trap vector. `iret` restores the interrupted address mode together with
@@ -84,7 +88,7 @@ The first user layout reserves a null page and leaves the high half unmapped
 for future kernel or shared mappings:
 
 ```text
-0x0000_0000..0x0000_0fff  unmapped null guard
+0x0000_0000..0x0000_03ff  unmapped null guard
 0x0001_0000..0x7fff_ffff  user image, heap, argv, and stack mappings
 0x8000_0000..0xffff_ffff  reserved, unmapped in v1 user processes
 ```
@@ -104,70 +108,86 @@ arena and the virtual mapping.
 Virtual memory v1 uses a fixed MMU page size:
 
 ```text
-K16_VM_PAGE_SIZE = 4096 bytes
+K16_VM_PAGE_SIZE = 1024 bytes
 ```
 
 This is independent from profile v2 `BootInfo.page_size`. The current computer
-profile uses a 148 KiB RAM size, which is exactly 37 VM pages. A 4 KiB MMU page
-keeps page tables small enough for the mod computer while avoiding a large
-number of tiny 256-byte PTEs.
+profile uses a 148 KiB RAM size, which is exactly 148 VM pages. A 1 KiB page is
+small enough for fine-grained user image, heap, argv, and stack placement in a
+small mod computer, while still avoiding the churn of 256-byte protection
+entries.
 
-## Page Tables
+## Host MMU Map
 
-Virtual memory v1 uses a two-level 32-bit page table with 4 KiB pages.
+Virtual memory v1 uses host-managed address-space maps, not guest RAM
+page-table walking. A map is a list of non-overlapping page extents owned by
+the VM/runtime and configured by the guest kernel through a future CPU/MMU ABI
+slice.
+
+This matches the host-implemented nature of the K16 MMU. With 1 KiB pages and
+4-byte entries, a hardware-style table page would hold only 256 entries. A
+full 32-bit virtual address space would then need either a three-level radix
+walk or page-table pages larger than the VM page size. That machinery is useful
+for real hardware, but it adds little value to a small host-driven mod
+computer. Extent mappings keep the visible ABI small while still providing real
+host-enforced translation, permissions, and page faults.
+
+Each mapping entry has these semantic fields:
 
 ```text
-virtual address bits:
-31..22  level-1 index
-21..12  level-2 index
-11..0   page offset
+virtual_page     virtual start address / 1024
+physical_page    physical RAM start address / 1024
+page_count       number of contiguous pages in this extent
+flags            user, writable, executable
 ```
 
-Each page-table page is 4096 bytes and contains 1024 little-endian `u32`
-entries. The current page-table root is a guest physical address aligned to
-4096 bytes.
-
-PDE and PTE format:
-
-```text
-bit  0      valid
-bit  1      user
-bit  2      writable
-bit  3      executable
-bits 4..11  reserved, must be zero
-bits 12..31 physical page base bits 12..31
-```
-
-A level-1 entry points to a level-2 page table. A level-2 entry points to a
-physical data/code page. Both levels must have `valid = 1`. Reserved bits must
-be zero. Physical page bases must be 4096-byte aligned and must point inside
-guest RAM. v1 page tables do not map MMIO ranges.
+The host MMU rejects mappings that overlap an existing virtual page range, use
+zero `page_count`, point outside guest RAM, or point at MMIO. Physical bases
+and virtual bases must be 1024-byte aligned. v1 does not support aliasing the
+same virtual page to multiple physical pages.
 
 The first implementation does not need ASIDs or a guest-visible TLB. If the VM
-adds an internal TLB later, changing the active page-table root or any valid
-PTE must make subsequent translated accesses observe the new mapping before
-returning to user code.
+adds an internal TLB later, changing the active address-space map or any
+mapping entry must make subsequent translated accesses observe the new mapping
+before returning to user code.
+
+## Minimum Host MMU Operations
+
+The later CPU/MMU ABI slice should expose these operations to the guest kernel:
+
+```text
+create_address_space() -> address_space_id
+destroy_address_space(address_space_id)
+map_pages(address_space_id, virtual_page, physical_page, page_count, flags)
+unmap_pages(address_space_id, virtual_page, page_count)
+protect_pages(address_space_id, virtual_page, page_count, flags)
+activate_user_address_space(address_space_id, entry_pc, stack_pointer)
+```
+
+These operations may be encoded as new CPU ABI controls or as an explicit MMU
+control device. The exact encoding is deliberately left to the implementation
+slice, but the semantics are part of this ABI direction: user translation is
+host-enforced, and the kernel configures mappings instead of publishing raw
+page-table memory for the host to walk.
 
 ## Permissions
 
 Translated accesses check permissions after translation:
 
 ```text
-instruction fetch  requires valid, user, executable
-load               requires valid, user
-store              requires valid, user, writable
+instruction fetch  requires mapped, user, executable
+load               requires mapped, user
+store              requires mapped, user, writable
 ```
 
 The first design has no supervisor-translated mode. Kernel code runs in
 physical mode and must not directly dereference user virtual pointers. Kernel
 syscall handlers copy user buffers through explicit translation helpers that
-check the interrupted process page table and requested access type.
+check the interrupted process address-space map and requested access type.
 
-Executable pages are not implicitly readable by instruction fetch. Ordinary
-loads from code pages are allowed only if the PTE also satisfies the load
-rules. v1 does not define a separate readable bit; a valid user page is
-readable unless the access is an instruction fetch or store that needs stronger
-permission.
+Executable pages are not special for ordinary loads. v1 does not define a
+separate readable bit; a mapped user page is readable unless the access is an
+instruction fetch or store that needs stronger permission.
 
 ## Faults
 
@@ -181,27 +201,26 @@ trap_cause  page fault cause value assigned by the CPU ABI revision
 trap_pc     faulting instruction PC
 trap_value  faulting virtual address
 trap_arg0   access kind: 1 = fetch, 2 = load, 3 = store
-trap_arg1   fault reason: 1 = not present, 2 = permission, 3 = malformed table
+trap_arg1   fault reason: 1 = not present, 2 = permission, 3 = invalid mapping
 ```
 
 If no trap vector is installed, the VM reports a hard CPU trap to the host, as
 with other synchronous CPU exceptions. If a trap vector is installed, the CPU
 enters it in physical mode.
 
-Malformed page tables are guest faults, not host panics. Examples include
-reserved bits set, unaligned table/page base, physical page outside RAM, or
-attempted MMIO mapping.
+Invalid MMU mappings are guest faults, not host panics. Examples include
+unknown address-space handles, unaligned virtual or physical pages, physical
+pages outside RAM, overlapping mappings, or attempted MMIO mappings.
 
 ## Kernel And Syscalls
 
-The kernel owns all page tables. User processes cannot write page tables
-directly unless the kernel deliberately maps a page-table page writable into a
-user address space, which v1 forbids.
+The kernel owns all address-space maps. User processes cannot create, destroy,
+map, unmap, or modify mappings directly.
 
 For syscall arguments that are guest pointers:
 
 1. The CPU enters the trap vector in physical mode.
-2. The kernel reads the interrupted process page-table root from its process
+2. The kernel reads the interrupted process address-space id from its process
    table or saved trap metadata.
 3. The kernel translates and copies user buffers using access-specific helpers.
 4. Invalid user pointers return existing negative K16 `ERROR_FAULT` where the
@@ -226,7 +245,7 @@ The first VM-enabled user launch should:
 
 1. Load a dynamic K16E `program` image into kernel-selected physical pages.
 2. Allocate zero-filled physical pages for `.bss`, heap, argv, and stack.
-3. Create a page table mapping those pages into the process virtual layout.
+3. Create a host MMU address-space map for those pages.
 4. Enter user-translated mode at `user_image_base + entry_offset`.
 5. Set user `sp` to the selected virtual stack top.
 
@@ -240,9 +259,9 @@ The intended follow-up slices are:
 
 1. Add a VM-internal address translation module and tests while leaving
    physical mode as the default and only active runtime mode.
-2. Add explicit CPU/MMU control state in a versioned ABI slice, including page
-   fault reporting and mode switching on trap/`iret`.
-3. Add kernel-owned page-table construction for one child process while init
+2. Add host-managed address-space map operations in a versioned CPU/MMU ABI
+   slice, including page fault reporting and mode switching on trap/`iret`.
+3. Add kernel-owned address-space construction for one child process while init
    can remain physical.
 4. Convert syscall user-buffer validation from physical range checks to
    translation-based copy helpers for VM-enabled processes.
