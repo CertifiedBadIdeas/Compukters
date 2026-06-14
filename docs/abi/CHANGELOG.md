@@ -2,14 +2,21 @@
 
 ## Unreleased
 
-- K16 production `RUN` now launches shell-started non-shell `/bin/*.kx`
-  utility children in host-managed translated address spaces. The first
-  production mapping is identity-mapped over the kernel-selected child backing
-  range. `/bin/init.kx` and `/bin/shell.kx` remain physical in this
-  transitional slice; nested `RUN` from a translated child returns the existing
-  busy error until translated parent resume is implemented. Added `mmu0`
-  `set_trap_return_physical` so `EXIT` from a translated child can resume the
-  physical parent frame through `iret`.
+- K16 production `RUN` now launches `/bin/shell.kx` and shell-started
+  `/bin/*.kx` utility children in host-managed translated address spaces. The
+  first production mappings are identity-mapped over kernel-selected child
+  backing ranges, and the current foreground depth supports physical init ->
+  translated shell -> translated utility execution. Added `mmu0`
+  `set_trap_return_address_space`, which takes a parent address-space id plus a
+  physical kernel trap stack pointer, so `EXIT` from a translated utility can
+  resume a translated shell frame through `iret`. The existing
+  `set_trap_return_physical` path remains for returning from translated shell
+  to physical init.
+- Added K16 syscall `GAME_TICKS` (`16`) so translated userland reads the
+  current timer tick through the kernel instead of direct `timer0` MMIO.
+  `k16_rt::game_ticks_syscall(out)` writes the 8-byte little-endian
+  `{ low, high }` tick value to a user buffer, and `kraft-std::time` exposes
+  this as a `Result` so syscall errors are reported explicitly.
 - K16 translated child activation now restores the saved child trap register
   frame before entering user-translated mode, so argv and other entry
   registers survive the `mmu0` activation boundary. The launcher also reserves

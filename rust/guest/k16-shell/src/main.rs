@@ -159,8 +159,17 @@ fn run_cd(
 
 fn run_ticks(stdout: io::Fd) {
     must_write(stdout, b"TICKS ");
-    write_decimal_parts(stdout, time::game_ticks_parts());
-    must_write(stdout, NEWLINE);
+    match time::game_ticks_parts() {
+        Ok(parts) => {
+            write_decimal_parts(stdout, parts);
+            must_write(stdout, NEWLINE);
+        }
+        Err(time::Error::Syscall(status)) => {
+            must_write(stdout, b"ERR ");
+            must_write(stdout, run_error_name(status));
+            must_write(stdout, NEWLINE);
+        }
+    }
 }
 
 fn run_exec(

@@ -428,6 +428,25 @@ fn stat_syscall_uses_path_pointer_length_and_output_pointer_arguments() {
 }
 
 #[test]
+fn game_ticks_syscall_uses_output_pointer_argument() {
+    crate::trap::reset_test_interrupts();
+    crate::trap::set_test_syscall_return(k16_abi::syscall::STATUS_OK);
+    let mut bytes = [0u8; k16_abi::syscall::GAME_TICKS_BYTES];
+
+    let returned = game_ticks_syscall(bytes.as_mut_ptr());
+
+    assert_eq!(
+        crate::trap::test_syscall_number(),
+        k16_abi::syscall::GAME_TICKS
+    );
+    assert_eq!(
+        crate::trap::test_syscall_arg0(),
+        bytes.as_mut_ptr() as usize as u32
+    );
+    assert_eq!(returned, k16_abi::syscall::STATUS_OK);
+}
+
+#[test]
 fn close_syscall_uses_fd_argument() {
     crate::trap::reset_test_interrupts();
     crate::trap::set_test_syscall_return(k16_abi::syscall::STATUS_OK);

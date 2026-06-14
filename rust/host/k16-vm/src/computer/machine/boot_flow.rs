@@ -225,6 +225,24 @@ fn apply_mmu0_command(
                 .set_trap_return_mode(K16AddressMode::Physical, K16PrivilegeMode::Kernel);
             Ok(0)
         }
+        computer_abi::MMU0_COMMAND_SET_TRAP_RETURN_ADDRESS_SPACE => {
+            if command.physical_start == 0 {
+                return Err(computer_abi::MMU0_ERROR_INVALID_ARGUMENT);
+            }
+            let address_space = MmuAddressSpaceId::from_raw(command.address_space);
+            if machine.address_spaces.get(address_space).is_none() {
+                return Err(computer_abi::MMU0_ERROR_INVALID_ADDRESS_SPACE);
+            }
+            let cpu = machine
+                .k16_cpu_mut(cpu_id)
+                .map_err(|_| computer_abi::MMU0_ERROR_INVALID_ARGUMENT)?;
+            cpu.set_trap_kernel_stack_pointer(command.physical_start);
+            cpu.set_trap_return_mode(
+                K16AddressMode::Translated { address_space },
+                K16PrivilegeMode::User,
+            );
+            Ok(0)
+        }
         computer_abi::MMU0_COMMAND_NOP => Ok(0),
         _ => Err(computer_abi::MMU0_ERROR_INVALID_COMMAND),
     }

@@ -444,6 +444,7 @@ Commands:
 5  copy_from_user
 6  copy_to_user
 7  set_trap_return_physical
+8  set_trap_return_address_space
 ```
 
 Flag bits:
@@ -476,7 +477,14 @@ Successful copy commands return the copied byte count in `result`.
 `set_trap_return_physical` takes no argument registers. It changes the current
 CPU's saved trap-return mode to physical/kernel so the next `iret` resumes a
 physical-mode parent frame. The command is intended for the transitional
-process model where a physical shell can synchronously run a translated child.
+process model where a physical parent can synchronously run a translated child.
+
+`set_trap_return_address_space` uses `address_space` plus a non-zero
+`physical_start`. It changes the current CPU's saved trap-return mode to
+translated/user for the supplied address space, and installs `physical_start`
+as the physical kernel stack pointer used by later traps from that resumed user
+context. The command is intended for the transitional process model where a
+translated shell can synchronously run a translated utility child.
 
 The VM rejects unknown flag bits, unaligned mappings, zero page counts,
 overlapping virtual mappings, and other malformed map/protect arguments by

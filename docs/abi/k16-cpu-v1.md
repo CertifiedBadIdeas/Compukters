@@ -539,6 +539,7 @@ K16 syscall ABI v0 names the current Rust-kernel proof services in
 | `SBRK` | `13` | `k16_rt::sbrk_syscall(delta)` | Grows the current foreground process program break by `delta` bytes and returns the previous break, or a negative K16 error. |
 | `READ_DIR` | `14` | `k16_rt::read_dir_syscall(request, len)` | Reads a ROOT/K16FS directory listing from `storage0` into a caller-provided buffer. The request is `u32 magic`, `u32 path_len`, `u32 out_ptr`, `u32 out_len`, followed by path bytes. |
 | `STAT` | `15` | `k16_rt::stat_syscall(path, len, metadata)` | Reads ROOT/K16FS path metadata from `storage0` into a 16-byte response buffer. Word 0 is `FILE_TYPE_REGULAR` or `FILE_TYPE_DIRECTORY`; word 1 is `size_bytes`; words 2 and 3 are reserved zero. |
+| `GAME_TICKS` | `16` | `k16_rt::game_ticks_syscall(out)` | Copies the current `timer0.game_ticks` value into an 8-byte user buffer as little-endian `{ low, high }` words and returns `STATUS_OK`, or returns a negative K16 error. |
 | `DEBUG_MARKER_RETURN` | `0x53` | n/a | Proof return value for `DEBUG_MARKER`. |
 | `STATUS_OK` | `0` | n/a | Successful proof-service status. |
 | `FILE_TYPE_REGULAR` | `1` | n/a | `STAT` response kind for a regular file. |
@@ -584,21 +585,21 @@ and moves bytes through the privileged `mmu0` `copy_from_user` and
 physical process ranges, and arithmetic overflow are reported to userland as
 the existing negative K16 `ERROR_FAULT` value.
 
-The current production process launcher is transitional. `/bin/init.kx` and
-`/bin/shell.kx` still run as physical foreground processes. A physical shell
-launching any other `/bin/*.kx` utility creates a host-managed `mmu0` address
-space, maps the child backing pages into that address space, activates
-translated user execution for the child, and records the child address-space id
-for syscall user-buffer copies. Before activation, the kernel restores the
-child's saved trap register frame and passes a dedicated physical kernel trap
-stack to `mmu0`; this preserves entry registers such as `argc` in `r1` and
-`argv` in `r2` while keeping later translated-user traps off the child user
-stack. `RUN` from an already translated process is not enabled in this slice;
-it returns the existing busy error until the process model can restore a
-translated parent context. When a translated child exits to a physical parent,
-the kernel uses `mmu0` `set_trap_return_physical` before `iret` so the saved
-parent frame resumes in physical/kernel mode instead of the child's interrupted
-translated mode.
+The current production process launcher is transitional. `/bin/init.kx` still
+runs as a physical foreground process, but `/bin/shell.kx` and shell-launched
+`/bin/*.kx` utilities run in host-managed `mmu0` address spaces. `RUN` creates
+an address space for the child, maps the child backing pages into that address
+space, activates translated user execution for the child, and records the child
+address-space id for syscall user-buffer copies. Before activation, the kernel
+restores the child's saved trap register frame and passes a dedicated physical
+kernel trap stack to `mmu0`; this preserves entry registers such as `argc` in
+`r1` and `argv` in `r2` while keeping later translated-user traps off the child
+user stack. When a translated child exits to a translated parent, the kernel
+uses `mmu0` `set_trap_return_address_space` with the parent address-space id
+and parent physical kernel trap stack before `iret`, so the saved parent frame
+resumes in translated/user mode. When a translated child exits to physical
+init, the kernel uses `mmu0` `set_trap_return_physical` before `iret` so the
+saved parent frame resumes in physical/kernel mode.
 
 Each foreground process has its own monotonic heap after its loaded image. A
 child load arena starts after the current parent's program break, so child

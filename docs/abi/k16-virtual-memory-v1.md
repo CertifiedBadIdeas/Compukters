@@ -12,10 +12,11 @@ This document defines the first intended K16 virtual-memory and process
 address-space contract. The current VM implements the host MMU map, CPU
 address/privilege modes, privileged `mmu0` map controls, and trap/`iret` mode
 switching. The guest kernel also uses `mmu0` copy helpers for translated
-syscall buffers and can launch shell-started utility children in a
-host-managed translated address space. BIOS, bootloader, kernel, init, and the
-interactive shell still run in physical mode in this slice; nested `RUN` from a
-translated child is intentionally left for a later process-model step.
+syscall buffers, launches `/bin/shell.kx` in a host-managed translated address
+space, and supports shell-started translated utility children for the current
+fixed foreground depth. BIOS, bootloader, kernel, and init still run in
+physical mode in this slice; a more general process lifecycle is intentionally
+left for later process-model work.
 
 The design is intentionally smaller than a desktop or server OS MMU, but it is
 still a real host-enforced address translation boundary. K16 is a Minecraft mod
@@ -167,6 +168,7 @@ activate_user_address_space(address_space_id, entry_pc, user_stack_pointer, kern
 copy_from_user(address_space_id, user_virtual_addr, kernel_physical_addr, byte_count)
 copy_to_user(address_space_id, user_virtual_addr, kernel_physical_addr, byte_count)
 set_trap_return_physical()
+set_trap_return_address_space(address_space_id, kernel_stack_pointer)
 ```
 
 `activate_user_address_space` switches the current K16 CPU to translated user
@@ -185,8 +187,14 @@ boundary without directly dereferencing user virtual pointers.
 
 `set_trap_return_physical` lets a physical/kernel trap handler override the
 saved `iret` address mode after servicing a translated child. The current
-production process path uses it when a translated child exits and the blocked
-parent is still a physical-mode shell.
+production process path uses it when translated shell exits and the blocked
+parent is still physical init.
+
+`set_trap_return_address_space` lets a physical/kernel trap handler override
+the saved `iret` address mode to a translated parent address space and restore
+that parent context's physical kernel trap stack pointer. The current
+production process path uses it when a translated utility exits and the blocked
+parent is the translated shell.
 
 ## Permissions
 
@@ -259,8 +267,8 @@ Physical boot flow remains unchanged:
 host -> BIOS flash -> bootloader -> kernel in physical mode
 ```
 
-The first VM-enabled production user launch does this for shell-started
-non-shell utilities:
+The VM-enabled production user launch does this for `/bin/shell.kx` and
+shell-started utilities:
 
 1. Load a dynamic K16E `program` image into kernel-selected physical pages.
 2. Use the child arena for `.bss`, heap, argv, and stack.
@@ -287,13 +295,16 @@ The implementation sequence is:
 2. Add host-managed address-space map operations in a versioned CPU/MMU ABI
    slice, including command-based user-mode activation. Done.
 3. Add kernel-owned address-space construction for one child process while init
-   can remain physical. Done for shell-launched non-shell utilities.
+   can remain physical. Done for shell and shell-launched utilities at the
+   current foreground depth.
 4. Convert syscall user-buffer validation from physical range checks to the
    implemented `mmu0` copy helpers for VM-enabled processes. Done.
-5. Move init and shell into VM-enabled user processes after the child path is
+5. Move init into a VM-enabled user process after the shell and child path is
    stable. Pending.
 6. Enable nested translated `RUN` by adding a translated-parent trap-return
-   path instead of only the physical-parent return override. Pending.
+   path instead of only the physical-parent return override. Done for the
+   current init -> shell -> utility foreground depth; a general process
+   lifecycle remains pending.
 
 Each slice should keep existing physical boot and storage behavior working.
 
