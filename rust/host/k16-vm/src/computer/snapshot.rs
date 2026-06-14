@@ -1,7 +1,12 @@
 use crate::computer::devices::validate_keyboard_event;
 use crate::computer::profile::ComputerMachineProfile;
 use crate::computer::KeyboardEvent;
-use crate::k16::{K16CpuSnapshot, K16CpuSnapshotState};
+use crate::k16::{
+    K16AddressMode, K16CpuModeSnapshot, K16CpuSnapshot, K16CpuSnapshotState, K16PrivilegeMode,
+};
+use crate::mmu::{
+    MmuAddressSpaceId, MmuAddressSpaceSnapshot, MmuAddressSpacesSnapshot, MmuMappingSnapshot,
+};
 
 pub const COMPUTER_SNAPSHOT_V1_MAGIC: &[u8; 8] = b"K16SNAP\0";
 pub const COMPUTER_SNAPSHOT_V1_VERSION: u16 = 1;
@@ -14,6 +19,7 @@ pub const COMPUTER_SNAPSHOT_V1_SERIAL_INPUT_DEVICE_KIND: u32 = 4;
 pub const COMPUTER_SNAPSHOT_V1_STORAGE0_DEVICE_KIND: u32 = 5;
 pub const COMPUTER_SNAPSHOT_V1_TIMER0_DEVICE_KIND: u32 = 6;
 pub const COMPUTER_SNAPSHOT_V1_KEYBOARD0_DEVICE_KIND: u32 = 7;
+pub const COMPUTER_SNAPSHOT_V1_MMU0_DEVICE_KIND: u32 = 9;
 const NO_BOOT_CPU: u32 = u32::MAX;
 const K16_CPU_STATE_RUNNING: u32 = 1;
 const K16_CPU_STATE_HALTED: u32 = 2;
@@ -23,6 +29,10 @@ const STORAGE0_DEVICE_PAYLOAD_SIZE: usize = 36;
 const TIMER0_DEVICE_PAYLOAD_SIZE: usize = 8;
 const KEYBOARD0_DEVICE_PAYLOAD_HEADER_SIZE: usize = 16;
 const KEYBOARD0_EVENT_RECORD_SIZE: usize = 16;
+const MMU0_DEVICE_PAYLOAD_HEADER_SIZE: usize = 16;
+const MMU0_ADDRESS_SPACE_RECORD_HEADER_SIZE: usize = 8;
+const MMU0_MAPPING_RECORD_SIZE: usize = 16;
+const MMU0_CPU_MODE_RECORD_SIZE: usize = 28;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ComputerMachineSnapshotHeader {
@@ -79,6 +89,16 @@ pub enum ComputerDeviceSnapshotRecord {
         sequence: u64,
         dropped_count: u32,
     },
+    Mmu0 {
+        address_spaces: MmuAddressSpacesSnapshot,
+        cpu_modes: Vec<K16CpuModeSnapshotRecord>,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct K16CpuModeSnapshotRecord {
+    pub cpu_index: u32,
+    pub mode: K16CpuModeSnapshot,
 }
 
 pub fn encode_snapshot_v1(
@@ -304,6 +324,21 @@ fn device_record_size(record: &ComputerDeviceSnapshotRecord) -> usize {
         ComputerDeviceSnapshotRecord::Keyboard0 { events, .. } => {
             KEYBOARD0_DEVICE_PAYLOAD_HEADER_SIZE + events.len() * KEYBOARD0_EVENT_RECORD_SIZE
         }
+        ComputerDeviceSnapshotRecord::Mmu0 {
+            address_spaces,
+            cpu_modes,
+        } => {
+            MMU0_DEVICE_PAYLOAD_HEADER_SIZE
+                + address_spaces
+                    .spaces
+                    .iter()
+                    .map(|space| {
+                        MMU0_ADDRESS_SPACE_RECORD_HEADER_SIZE
+                            + space.mappings.len() * MMU0_MAPPING_RECORD_SIZE
+                    })
+                    .sum::<usize>()
+                + cpu_modes.len() * MMU0_CPU_MODE_RECORD_SIZE
+        }
     }
 }
 
@@ -399,6 +434,73 @@ fn encode_device_record(
                 write_u32(bytes, event.code);
                 write_u32(bytes, event.modifiers);
                 write_u32(bytes, event.flags);
+            }
+        }
+        ComputerDeviceSnapshotRecord::Mmu0 {
+            address_spaces,
+            cpu_modes,
+        } => {
+            let address_space_bytes =
+                address_spaces
+                    .spaces
+                    .iter()
+                    .try_fold(0_usize, |size, space| {
+                        size.checked_add(MMU0_ADDRESS_SPACE_RECORD_HEADER_SIZE)
+                            .and_then(|size| {
+                                space
+                                    .mappings
+                                    .len()
+                                    .checked_mul(MMU0_MAPPING_RECORD_SIZE)
+                                    .and_then(|mapping_bytes| size.checked_add(mapping_bytes))
+                            })
+                    });
+            let cpu_mode_bytes = cpu_modes
+                .len()
+                .checked_mul(MMU0_CPU_MODE_RECORD_SIZE)
+                .ok_or_else(|| "snapshot mmu0 CPU mode payload size overflows usize".to_string())?;
+            let payload_size = MMU0_DEVICE_PAYLOAD_HEADER_SIZE
+                .checked_add(address_space_bytes.ok_or_else(|| {
+                    "snapshot mmu0 address-space payload size overflows usize".to_string()
+                })?)
+                .and_then(|size| size.checked_add(cpu_mode_bytes))
+                .ok_or_else(|| "snapshot mmu0 device payload size overflows usize".to_string())?;
+            let payload_size = u32::try_from(payload_size)
+                .map_err(|_| "snapshot mmu0 device payload size does not fit u32".to_string())?;
+            write_u32(bytes, COMPUTER_SNAPSHOT_V1_MMU0_DEVICE_KIND);
+            write_u32(bytes, payload_size);
+            write_u32(bytes, address_spaces.next_id);
+            write_u32(
+                bytes,
+                u32::try_from(address_spaces.spaces.len()).map_err(|_| {
+                    "snapshot mmu0 address-space count does not fit u32".to_string()
+                })?,
+            );
+            write_u32(
+                bytes,
+                u32::try_from(cpu_modes.len())
+                    .map_err(|_| "snapshot mmu0 CPU mode count does not fit u32".to_string())?,
+            );
+            write_u32(bytes, 0);
+            for space in &address_spaces.spaces {
+                write_u32(bytes, space.id.raw());
+                write_u32(
+                    bytes,
+                    u32::try_from(space.mappings.len())
+                        .map_err(|_| "snapshot mmu0 mapping count does not fit u32".to_string())?,
+                );
+                for mapping in &space.mappings {
+                    write_u32(bytes, mapping.virtual_start);
+                    write_u32(bytes, mapping.physical_start);
+                    write_u32(bytes, mapping.page_count);
+                    write_u32(bytes, mapping.flags);
+                }
+            }
+            for cpu_mode in cpu_modes {
+                write_u32(bytes, cpu_mode.cpu_index);
+                encode_address_mode(bytes, cpu_mode.mode.address_mode);
+                encode_privilege_mode(bytes, cpu_mode.mode.privilege_mode);
+                encode_address_mode(bytes, cpu_mode.mode.trap_address_mode);
+                encode_privilege_mode(bytes, cpu_mode.mode.trap_privilege_mode);
             }
         }
     }
@@ -534,6 +636,88 @@ fn decode_device_record(
                 dropped_count,
             }
         }
+        COMPUTER_SNAPSHOT_V1_MMU0_DEVICE_KIND => {
+            if payload.len() < MMU0_DEVICE_PAYLOAD_HEADER_SIZE {
+                return Err(format!(
+                    "ComputerMachine snapshot mmu0 device payload has {} bytes but expected at least {MMU0_DEVICE_PAYLOAD_HEADER_SIZE}",
+                    payload.len()
+                ));
+            }
+            let next_id = read_u32(payload, 0)?;
+            let space_count = usize::try_from(read_u32(payload, 4)?).map_err(|_| {
+                "ComputerMachine snapshot mmu0 address-space count does not fit usize".to_string()
+            })?;
+            let cpu_mode_count = usize::try_from(read_u32(payload, 8)?).map_err(|_| {
+                "ComputerMachine snapshot mmu0 CPU mode count does not fit usize".to_string()
+            })?;
+            let reserved = read_u32(payload, 12)?;
+            if reserved != 0 {
+                return Err(format!(
+                    "unsupported ComputerMachine snapshot mmu0 reserved field {reserved:#010x}"
+                ));
+            }
+            let mut offset = MMU0_DEVICE_PAYLOAD_HEADER_SIZE;
+            let mut spaces = Vec::with_capacity(space_count);
+            for _ in 0..space_count {
+                let id = MmuAddressSpaceId::from_raw(read_u32(payload, offset)?);
+                let mapping_count =
+                    usize::try_from(read_u32(payload, offset + 4)?).map_err(|_| {
+                        "ComputerMachine snapshot mmu0 mapping count does not fit usize".to_string()
+                    })?;
+                offset = offset
+                    .checked_add(MMU0_ADDRESS_SPACE_RECORD_HEADER_SIZE)
+                    .ok_or_else(|| {
+                        "ComputerMachine snapshot mmu0 payload offset overflows usize".to_string()
+                    })?;
+                let mut mappings = Vec::with_capacity(mapping_count);
+                for _ in 0..mapping_count {
+                    mappings.push(MmuMappingSnapshot {
+                        virtual_start: read_u32(payload, offset)?,
+                        physical_start: read_u32(payload, offset + 4)?,
+                        page_count: read_u32(payload, offset + 8)?,
+                        flags: read_u32(payload, offset + 12)?,
+                    });
+                    offset = offset
+                        .checked_add(MMU0_MAPPING_RECORD_SIZE)
+                        .ok_or_else(|| {
+                            "ComputerMachine snapshot mmu0 payload offset overflows usize"
+                                .to_string()
+                        })?;
+                }
+                spaces.push(MmuAddressSpaceSnapshot { id, mappings });
+            }
+            let mut cpu_modes = Vec::with_capacity(cpu_mode_count);
+            for _ in 0..cpu_mode_count {
+                let cpu_index = read_u32(payload, offset)?;
+                let (address_mode, next_offset) = decode_address_mode(payload, offset + 4)?;
+                let privilege_mode = decode_privilege_mode(read_u32(payload, next_offset)?)?;
+                let (trap_address_mode, next_offset) =
+                    decode_address_mode(payload, next_offset + 4)?;
+                let trap_privilege_mode = decode_privilege_mode(read_u32(payload, next_offset)?)?;
+                offset = next_offset.checked_add(4).ok_or_else(|| {
+                    "ComputerMachine snapshot mmu0 payload offset overflows usize".to_string()
+                })?;
+                cpu_modes.push(K16CpuModeSnapshotRecord {
+                    cpu_index,
+                    mode: K16CpuModeSnapshot {
+                        address_mode,
+                        privilege_mode,
+                        trap_address_mode,
+                        trap_privilege_mode,
+                    },
+                });
+            }
+            if offset != payload.len() {
+                return Err(format!(
+                    "ComputerMachine snapshot mmu0 device has {} trailing payload bytes",
+                    payload.len() - offset
+                ));
+            }
+            ComputerDeviceSnapshotRecord::Mmu0 {
+                address_spaces: MmuAddressSpacesSnapshot { next_id, spaces },
+                cpu_modes,
+            }
+        }
         _ => {
             return Err(format!(
                 "unsupported ComputerMachine snapshot device {index} kind {kind}"
@@ -615,6 +799,52 @@ fn encode_k16_state(state: K16CpuSnapshotState) -> u32 {
         K16CpuSnapshotState::Running => K16_CPU_STATE_RUNNING,
         K16CpuSnapshotState::Halted => K16_CPU_STATE_HALTED,
         K16CpuSnapshotState::Trapped => K16_CPU_STATE_TRAPPED,
+    }
+}
+
+fn encode_address_mode(bytes: &mut Vec<u8>, mode: K16AddressMode) {
+    match mode {
+        K16AddressMode::Physical => {
+            write_u32(bytes, 0);
+            write_u32(bytes, 0);
+        }
+        K16AddressMode::Translated { address_space } => {
+            write_u32(bytes, 1);
+            write_u32(bytes, address_space.raw());
+        }
+    }
+}
+
+fn decode_address_mode(bytes: &[u8], offset: usize) -> Result<(K16AddressMode, usize), String> {
+    let mode = match read_u32(bytes, offset)? {
+        0 => K16AddressMode::Physical,
+        1 => K16AddressMode::Translated {
+            address_space: MmuAddressSpaceId::from_raw(read_u32(bytes, offset + 4)?),
+        },
+        value => {
+            return Err(format!(
+                "unsupported ComputerMachine snapshot K16 CPU address mode {value}"
+            ))
+        }
+    };
+    Ok((mode, offset + 8))
+}
+
+fn encode_privilege_mode(bytes: &mut Vec<u8>, mode: K16PrivilegeMode) {
+    let value = match mode {
+        K16PrivilegeMode::Kernel => 0,
+        K16PrivilegeMode::User => 1,
+    };
+    write_u32(bytes, value);
+}
+
+fn decode_privilege_mode(value: u32) -> Result<K16PrivilegeMode, String> {
+    match value {
+        0 => Ok(K16PrivilegeMode::Kernel),
+        1 => Ok(K16PrivilegeMode::User),
+        _ => Err(format!(
+            "unsupported ComputerMachine snapshot K16 CPU privilege mode {value}"
+        )),
     }
 }
 
