@@ -19,6 +19,7 @@ mod terminal;
 mod terminal_render;
 mod timer;
 mod trap;
+mod user_buffer;
 
 use core::panic::PanicInfo;
 

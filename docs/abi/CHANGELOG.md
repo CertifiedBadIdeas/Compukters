@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- K16 syscall handlers now route user-buffer copies through a shared kernel
+  helper. Physical foreground processes keep the existing process-range
+  validation and physical RAM copies, while VM-enabled processes use the
+  `mmu0` `copy_from_user`/`copy_to_user` commands for `WRITE`, `READ`,
+  `OPEN`, `RUN`, `READ_DIR`, `STAT`, and stdin/file output buffers. Failed
+  translated copies return the existing negative K16 `ERROR_FAULT` status.
+  Production process launch still does not assign address-space ids; enabling
+  live translated user syscalls also needs a separate kernel-stack trap-entry
+  step.
 - Added K16 `mmu0` `copy_from_user` and `copy_to_user` commands for physical
   kernel syscall handlers. They copy bytes between translated user virtual
   memory and physical kernel buffers, report deterministic `mmu0` errors for
