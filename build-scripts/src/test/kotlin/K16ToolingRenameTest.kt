@@ -83,8 +83,8 @@ class K16ToolingRenameTest {
         assertTrue(kernel.contains("#![no_std]"))
         assertTrue(kernel.contains("#![no_main]"))
         assertTrue(kernel.contains("extern \"C\" fn _start() -> !"))
-        assertTrue(kernel.contains("print_kernel_ok_display"))
-        assertTrue(kernel.contains("print_kernel_ok_debug"))
+        assertTrue(kernel.contains("debug::print_kernel_ok()"))
+        assertTrue(kernel.contains("init::launch()"))
     }
 
     @Test
@@ -125,15 +125,16 @@ class K16ToolingRenameTest {
     }
 
     @Test
-    fun rustFirmwareGradleBuildsCoreOnlyArtifacts() {
+    fun rustFirmwareGradleBuildsConfiguredCoreOrAllocArtifacts() {
         val buildScript = root.resolve("modules/v1_21_1/v1_21_1-neoforge/build.gradle.kts").readText()
 
-        assertTrue(buildScript.contains("-Zbuild-std=core"))
+        assertTrue(buildScript.contains("buildStd: String = \"core\""))
+        assertTrue(buildScript.contains("-Zbuild-std=\$buildStd"))
+        assertTrue(buildScript.contains("buildStd = \"core,alloc\""))
         assertTrue(buildScript.contains("-Zjson-target-spec"))
         assertTrue(buildScript.contains("\"RUSTFLAGS\""))
-        assertTrue(buildScript.contains("-C linker=\${k16HostLinker.asFile.absolutePath}"))
+        assertTrue(buildScript.contains("-C linker=\${toolchain.linker.absolutePath}"))
         assertTrue(buildScript.contains("-Cjump-tables=no"))
-        assertFalse(buildScript.contains("build-std=core,alloc"))
         assertFalse(buildScript.contains("build-std=std"))
     }
 

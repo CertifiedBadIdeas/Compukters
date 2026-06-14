@@ -1,6 +1,6 @@
 # kraft-std Guest Library
 
-Issue: [#192](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/192), [#194](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/194), [#195](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/195), [#230](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/230), [#232](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/232), [#247](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/247)
+Issue: [#192](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/192), [#194](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/194), [#195](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/195), [#230](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/230), [#232](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/232), [#247](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/247), [#248](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/248)
 
 `rust/guest/kraft-std` is the experimental KraftOS userland library boundary for
 guest Rust programs. It is intentionally separate from the lower-level K16
@@ -24,6 +24,9 @@ The initial `kraft-std` surface is deliberately small:
 | `kraft_std::fs::open(path)` | `k16_rt::open_syscall(path, len, 0)` | Opens an absolute read-only ROOT/K16FS file path and returns a regular file descriptor. |
 | `kraft_std::fs::File::read(bytes)` | `k16_rt::read_syscall(fd, ptr, len)` | Reads bytes from an open regular file and advances its descriptor offset. |
 | `kraft_std::fs::File::close()` | `k16_rt::close_syscall(fd)` | Releases an open regular file descriptor. |
+| `kraft_std::heap::brk(address)` | `k16_rt::brk_syscall(address)` | Sets the current child program break and returns the resulting break. |
+| `kraft_std::heap::sbrk(delta)` | `k16_rt::sbrk_syscall(delta)` | Grows the current child program break and returns the previous break. |
+| `kraft_std::heap::SbrkAllocator` | `BRK`/`SBRK` syscall ABI | Guest global allocator used by `alloc` collections. Allocation is monotonic; deallocation is currently a no-op. |
 | `kraft_std::process::exit(status)` | `k16_rt::exit_syscall(status)` | Terminates the current single-task program through the kernel. |
 | `kraft_std::thread::yield_now()` | `k16_rt::yield_syscall()` | Requests one OS-level yield through the kernel syscall path. |
 | `kraft_std::thread::sleep_ticks(ticks)` | `k16_rt::sleep_ticks_syscall(ticks)` | Requests a timer0 game-tick sleep through the kernel syscall path. |
@@ -34,9 +37,10 @@ kernel fd syscall ABI, not debug MMIO.
 
 `kraft-std` is `#![no_std]`. It is not Rust's hosted `std`, a POSIX layer, or a
 complete OS API. The current filesystem surface is a read-only ROOT/K16FS proof
-for absolute paths. Allocator support, directory iteration, writable files,
-process/task management, and full POSIX compatibility are separate future
-slices.
+for absolute paths. The current allocator surface is a monotonic `SBRK`-backed
+guest allocator for child programs. Directory iteration, writable files,
+process/task management, allocator reuse, and full POSIX compatibility are
+separate future slices.
 
 ## Layering Rule
 

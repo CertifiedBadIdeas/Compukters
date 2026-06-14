@@ -58,20 +58,34 @@ class K16ShellRuntimeSmokeTest {
                 unameCommandIndex >= 0 && unameOutputIndex > unameCommandIndex && returnedPromptIndex > unameOutputIndex
             }
 
+            dispatchText(device, "alloc\n")
+            waitForTerminal(device, "alloc output and returned prompt") { terminal ->
+                val allocCommandIndex = terminal.indexOf("INIT> alloc")
+                val allocOutputIndex = terminal.indexOf("ALLOC", startIndex = allocCommandIndex + "INIT> alloc".length)
+                val returnedPromptIndex = terminal.indexOf("INIT> ", startIndex = allocOutputIndex)
+                allocCommandIndex >= 0 && allocOutputIndex > allocCommandIndex && returnedPromptIndex > allocOutputIndex
+            }
+
             val terminal = terminalText(requireNotNull(device.snapshotRuntimeState()))
             val promptIndex = terminal.indexOf("INIT> ")
             val echoOutputIndex = terminal.indexOf("abc", startIndex = promptIndex)
             val ticksOutputIndex = terminal.indexOf("TICKS ", startIndex = echoOutputIndex)
             val unameCommandIndex = terminal.indexOf("INIT> uname", startIndex = ticksOutputIndex)
             val unameOutputIndex = terminal.indexOf("K16", startIndex = unameCommandIndex + "INIT> uname".length)
-            val returnedPromptIndex = terminal.indexOf("INIT> ", startIndex = unameOutputIndex)
+            val unameReturnedPromptIndex = terminal.indexOf("INIT> ", startIndex = unameOutputIndex)
+            val allocCommandIndex = terminal.indexOf("INIT> alloc", startIndex = unameReturnedPromptIndex)
+            val allocOutputIndex = terminal.indexOf("ALLOC", startIndex = allocCommandIndex + "INIT> alloc".length)
+            val returnedPromptIndex = terminal.indexOf("INIT> ", startIndex = allocOutputIndex)
             assertTrue(
                 promptIndex >= 0 &&
                     echoOutputIndex > promptIndex &&
                     ticksOutputIndex > echoOutputIndex &&
                     unameCommandIndex > ticksOutputIndex &&
                     unameOutputIndex > unameCommandIndex &&
-                    returnedPromptIndex > unameOutputIndex,
+                    unameReturnedPromptIndex > unameOutputIndex &&
+                    allocCommandIndex >= unameReturnedPromptIndex &&
+                    allocOutputIndex > allocCommandIndex &&
+                    returnedPromptIndex > allocOutputIndex,
                 "userland init should dispatch shell commands through fd stdin/stdout and return a prompt; terminal: $terminal",
             )
         } finally {

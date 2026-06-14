@@ -82,23 +82,31 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("rust/guest/k16-kernel"))
         assertTrue(source.contains("rust/guest/k16-init"))
         assertTrue(source.contains("rust/guest/k16-cat"))
+        assertTrue(source.contains("rust/guest/k16-alloc-test"))
         assertTrue(source.contains("k16InitManifest"))
         assertTrue(source.contains("k16InitSource"))
         assertTrue(source.contains("k16CatManifest"))
         assertTrue(source.contains("k16CatSource"))
+        assertTrue(source.contains("k16AllocTestManifest"))
+        assertTrue(source.contains("k16AllocTestSource"))
         assertTrue(source.contains("generatedK16InitTarget"))
         assertTrue(source.contains("generatedK16CatTarget"))
+        assertTrue(source.contains("generatedK16AllocTestTarget"))
         assertTrue(source.contains("k16InitArtifact"))
         assertTrue(source.contains("k16CatArtifact"))
+        assertTrue(source.contains("k16AllocTestArtifact"))
         assertTrue(source.contains("compileK16SystemInit"))
         assertTrue(source.contains("compileK16SystemCat"))
+        assertTrue(source.contains("compileK16SystemAllocTest"))
         assertTrue(source.contains("putK16SystemStorage0Init"))
         assertTrue(source.contains("binName = \"k16-init\""))
         assertTrue(source.contains("binName = \"k16-cat\""))
+        assertTrue(source.contains("binName = \"k16-alloc-test\""))
         assertTrue(source.contains("\"/bin\""))
         assertTrue(source.contains("\"/etc\""))
         assertTrue(source.contains("\"/bin/init.kx\""))
         assertTrue(source.contains("\"/bin/cat.kx\""))
+        assertTrue(source.contains("\"/bin/alloc-test.kx\""))
         assertTrue(source.contains("\"/etc/motd\""))
         assertTrue(source.contains("\"extract-partition\""))
         assertTrue(source.contains("\"replace-partition\""))
@@ -270,6 +278,42 @@ class K16FirmwareResourceTest {
     }
 
     @Test
+    fun bundledK16SystemStorage0ContainsAllocTestProgram() {
+        val workspace = createTempDirectory("k16-alloc-test-storage-test-")
+        val storage0 = workspace.resolve("storage0.kv")
+        val root = workspace.resolve("root.kfs")
+        val allocTest = workspace.resolve("alloc-test.kx")
+        storage0.writeBytes(K16SystemVolumeWorkspace.loadStorage0VolumeResource(classLoader = javaClass.classLoader))
+
+        runK16Tool(
+            "volume",
+            "extract-partition",
+            storage0.toString(),
+            "ROOT",
+            root.toString(),
+        )
+        runK16Tool(
+            "fs",
+            "kfs",
+            "get",
+            root.toString(),
+            "/bin/alloc-test.kx",
+            allocTest.toString(),
+        )
+
+        val bytes = allocTest.readBytes()
+        assertTrue(bytes.size > 72, "bundled /bin/alloc-test.kx should be a non-empty dynamic K16E program")
+        assertContentEquals(
+            byteArrayOf('K'.code.toByte(), '1'.code.toByte(), '6'.code.toByte(), 'E'.code.toByte()),
+            bytes.copyOfRange(0, 4),
+        )
+        val version = ByteBuffer.wrap(bytes, 0x04, 2).order(ByteOrder.LITTLE_ENDIAN).short.toInt()
+        val abiKind = ByteBuffer.wrap(bytes, 0x18, 4).order(ByteOrder.LITTLE_ENDIAN).int
+        assertEquals(2, version, "bundled /bin/alloc-test.kx must use dynamic K16E v2")
+        assertEquals(3, abiKind, "bundled /bin/alloc-test.kx must use K16E abi kind program")
+    }
+
+    @Test
     fun k16RuntimeDeviceServerTicksAdvanceNativeTimer0Snapshot() {
         val workspace = createTempDirectory("k16-runtime-device-timer-test-")
         val biosFlashPath = workspace.resolve("bios.kflash")
@@ -343,7 +387,7 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("stdin.read(read_buffer)"))
         assertTrue(source.contains("dispatch_command(stdout, input.command())"))
         assertTrue(source.contains("const PROMPT: &[u8] = b\"INIT> \""))
-        assertTrue(source.contains("const HELP: &[u8] = b\"HELP\\nCLEAR\\nECHO\\nTICKS\\nUNAME\\nCAT\\n\""))
+        assertTrue(source.contains("const HELP: &[u8] = b\"HELP\\nCLEAR\\nECHO\\nTICKS\\nUNAME\\nCAT\\nALLOC\\n\""))
         assertTrue(source.contains("run_ticks(stdout)"))
         assertTrue(source.contains("process::run(\"/bin/uname.kx\")"))
         assertFalse(source.contains("process::exit(0)"))
@@ -609,13 +653,16 @@ class K16FirmwareResourceTest {
         assertTrue(initSource.contains("fn run_ticks("), "init should name the ticks command")
         assertTrue(initSource.contains("fn run_uname("), "init should name the uname command")
         assertTrue(initSource.contains("fn run_cat("), "init should name the cat command")
+        assertTrue(initSource.contains("fn run_alloc_test("), "init should name the alloc command")
         assertTrue(initLibSource.contains("Command::Uname"), "init should classify the uname command")
         assertTrue(initLibSource.contains("Command::Cat"), "init should classify the cat command")
+        assertTrue(initLibSource.contains("Command::AllocTest"), "init should classify the alloc command")
         assertTrue(
-            initSource.contains("HELP\\nCLEAR\\nECHO\\nTICKS\\nUNAME\\nCAT\\n"),
+            initSource.contains("HELP\\nCLEAR\\nECHO\\nTICKS\\nUNAME\\nCAT\\nALLOC\\n"),
             "help should print a readable command list",
         )
         assertTrue(initSource.contains("process::run(\"/bin/cat.kx\")"))
+        assertTrue(initSource.contains("process::run(\"/bin/alloc-test.kx\")"))
         assertTrue(initSource.contains("b\"ERR\\n\""), "unknown commands should report a short error")
     }
 
@@ -630,6 +677,20 @@ class K16FirmwareResourceTest {
         assertTrue(catSource.contains("io::stdout()"))
         assertTrue(stdSource.contains("pub mod fs"), "kraft-std should expose a filesystem module")
         assertTrue(stdSource.contains("pub fn open(path: &str) -> Result<File, Error>"))
+    }
+
+    @Test
+    fun k16AllocTestUtilityUsesKraftStdAllocator() {
+        val allocSource = Path.of("../../../rust/guest/k16-alloc-test/src/main.rs").readText()
+        val stdSource = Path.of("../../../rust/guest/kraft-std/src/lib.rs").readText()
+
+        assertTrue(allocSource.contains("extern crate alloc"))
+        assertTrue(allocSource.contains("Vec::new()"))
+        assertTrue(allocSource.contains(".push("))
+        assertTrue(allocSource.contains("io::stdout()"))
+        assertTrue(stdSource.contains("pub mod heap"), "kraft-std should expose heap helpers")
+        assertTrue(stdSource.contains("#[global_allocator]"), "kraft-std should install the guest allocator")
+        assertTrue(stdSource.contains("pub struct SbrkAllocator"), "kraft-std should name the sbrk allocator")
     }
 
     @Test

@@ -376,6 +376,30 @@ fn close_syscall_uses_fd_argument() {
 }
 
 #[test]
+fn brk_syscall_uses_address_argument() {
+    crate::trap::reset_test_interrupts();
+    crate::trap::set_test_syscall_return(0x0001_2000);
+
+    let returned = brk_syscall(0x0001_2000);
+
+    assert_eq!(crate::trap::test_syscall_number(), k16_abi::syscall::BRK);
+    assert_eq!(crate::trap::test_syscall_arg0(), 0x0001_2000);
+    assert_eq!(returned, 0x0001_2000);
+}
+
+#[test]
+fn sbrk_syscall_uses_delta_argument() {
+    crate::trap::reset_test_interrupts();
+    crate::trap::set_test_syscall_return(0x0001_1000);
+
+    let returned = sbrk_syscall(64);
+
+    assert_eq!(crate::trap::test_syscall_number(), k16_abi::syscall::SBRK);
+    assert_eq!(crate::trap::test_syscall_arg0(), 64);
+    assert_eq!(returned, 0x0001_1000);
+}
+
+#[test]
 fn debug_marker_uses_named_syscall_and_returns_marker_value() {
     crate::trap::reset_test_interrupts();
     crate::trap::set_test_syscall_return(k16_abi::syscall::DEBUG_MARKER_RETURN);

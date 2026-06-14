@@ -302,13 +302,15 @@ fn validate_dynamic_relocation(
     memory_size: u32,
     relocation: K16eRelocation,
 ) -> Result<(), K16ImageError> {
-    if relocation.offset % 2 != 0 {
+    validate_dynamic_relocation_parts(memory_size, relocation.offset)
+}
+
+fn validate_dynamic_relocation_parts(memory_size: u32, offset: u32) -> Result<(), K16ImageError> {
+    if offset % 2 != 0 {
         return Err(K16ImageError::InvalidExecutable);
     }
-    let width = match relocation.kind {
-        K16eRelocationKind::Abs32 | K16eRelocationKind::Call32 => 4,
-    };
-    let end = match relocation.offset.checked_add(width) {
+    let width = 4;
+    let end = match offset.checked_add(width) {
         Some(value) => value,
         None => return Err(K16ImageError::InvalidExecutable),
     };

@@ -257,6 +257,22 @@ pub fn k16_cpu_helpers_object() -> Vec<u8> {
         "__k16_close_syscall",
         &close_syscall_words,
     );
+    let brk_syscall_words = syscall1_fixed_number_words(k16_abi::syscall::BRK);
+    emit_symbol_function(
+        &mut text,
+        &mut strtab,
+        &mut symtab,
+        "__k16_brk_syscall",
+        &brk_syscall_words,
+    );
+    let sbrk_syscall_words = syscall1_fixed_number_words(k16_abi::syscall::SBRK);
+    emit_symbol_function(
+        &mut text,
+        &mut strtab,
+        &mut symtab,
+        "__k16_sbrk_syscall",
+        &sbrk_syscall_words,
+    );
     let stack_arg0_addr = add(SCRATCH_REGISTER, STACK_POINTER_REGISTER, SCRATCH_REGISTER);
     let syscall3_words = [
         const4(SCRATCH_REGISTER, 4),

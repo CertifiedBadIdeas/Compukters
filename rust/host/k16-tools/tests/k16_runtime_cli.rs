@@ -488,13 +488,26 @@ fn k16_runtime_fd_syscall_helpers_do_not_require_stack_arguments() {
 #[test]
 fn k16_runtime_close_syscall_helper_uses_fixed_number_and_fd_argument() {
     let helper_object = k16_runtime::k16_cpu_helpers_object();
+
+    assert_fixed_syscall1_helper(&helper_object, 11, "close");
+}
+
+#[test]
+fn k16_runtime_heap_syscall_helpers_use_fixed_numbers_and_single_argument() {
+    let helper_object = k16_runtime::k16_cpu_helpers_object();
+
+    assert_fixed_syscall1_helper(&helper_object, 12, "brk");
+    assert_fixed_syscall1_helper(&helper_object, 13, "sbrk");
+}
+
+fn assert_fixed_syscall1_helper(helper_object: &[u8], number: u32, name: &str) {
     let mut expected_words = Vec::new();
     expected_words.extend(push_register(1));
     expected_words.extend(push_register(2));
     expected_words.extend(push_scratch_register());
     expected_words.extend(const32(14, 0));
     expected_words.extend(add(2, 1, 14));
-    expected_words.extend(const32(1, 11));
+    expected_words.extend(const32(1, number));
     expected_words.push(syscall(1));
     expected_words.extend(pop_scratch_register());
     expected_words.extend(pop_register(2));
@@ -506,7 +519,7 @@ fn k16_runtime_close_syscall_helper_uses_fixed_number_and_fd_argument() {
         helper_object
             .windows(expected_bytes.len())
             .any(|window| window == expected_bytes.as_slice()),
-        "close syscall helper must pass fd as arg0 with the fixed CLOSE syscall number",
+        "{name} syscall helper must pass one argument with its fixed syscall number",
     );
 }
 
