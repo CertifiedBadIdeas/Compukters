@@ -5,8 +5,6 @@ use core::panic::PanicInfo;
 
 use kraft_std::prelude::*;
 
-const DEFAULT_PATH: &str = "/bin";
-
 #[no_mangle]
 pub extern "C" fn main(argc: u32, argv: *const process::Arg) -> ! {
     match list_first_arg_or_default(argc, argv) {
@@ -17,11 +15,7 @@ pub extern "C" fn main(argc: u32, argv: *const process::Arg) -> ! {
 
 fn list_first_arg_or_default(argc: u32, argv: *const process::Arg) -> Result<(), ()> {
     let argv = unsafe { process::Argv::from_raw(argc, argv) };
-    let path = match argv.get(0) {
-        Some(path) => core::str::from_utf8(path).map_err(|_| ())?,
-        None => DEFAULT_PATH,
-    };
-    list_dir(path)
+    k16_ls::for_each_path_arg_or_default(argv.len(), |index| argv.get(index), list_dir)
 }
 
 fn list_dir(path: &str) -> Result<(), ()> {

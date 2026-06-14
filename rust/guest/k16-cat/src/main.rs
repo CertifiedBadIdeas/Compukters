@@ -15,9 +15,7 @@ pub extern "C" fn main(argc: u32, argv: *const process::Arg) -> ! {
 
 fn print_first_arg(argc: u32, argv: *const process::Arg) -> Result<(), ()> {
     let argv = unsafe { process::Argv::from_raw(argc, argv) };
-    let path = argv.get(0).ok_or(())?;
-    let path = core::str::from_utf8(path).map_err(|_| ())?;
-    print_file(path)
+    k16_cat::for_each_path_arg(argv.len(), |index| argv.get(index), print_file)
 }
 
 fn print_file(path: &str) -> Result<(), ()> {

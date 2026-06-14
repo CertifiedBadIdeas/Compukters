@@ -28,9 +28,10 @@
   copies argv entries into the child arena before the heap, enters the child
   with `argc` in `r1` and the argv table pointer in `r2`, and `kraft-std`
   exposes `process::run_with_args` plus a small `process::Argv` reader.
-  Bundled `cat` now reads the path it receives from init as `cat <path>`, and
-  the bundled shell tokenizes external commands into whitespace-separated
-  argv entries.
+  Bundled `cat` and `ls` now consume every supplied path argv entry in order,
+  and the bundled shell tokenizes external commands into whitespace-separated
+  argv entries while resolving each `cat`/`ls` path argument against the
+  current directory.
 - Added K16 userland heap syscalls: `BRK(addr)` sets the current foreground
   program break, and `SBRK(delta)` grows it and returns the previous break.
   The Rust kernel bounds the heap to the process arena below the saved parent

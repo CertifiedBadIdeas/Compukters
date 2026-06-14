@@ -9,7 +9,7 @@ use kraft_std::prelude::*;
 const PROMPT: &[u8] = b"K16> ";
 const NEWLINE: &[u8] = b"\n";
 const HELP: &[u8] =
-    b"HELP\nCLEAR\nPWD\nCD [PATH]\nECHO\nTICKS\nUNAME\nLS [PATH]\nCAT <PATH>\nALLOC\n";
+    b"HELP\nCLEAR\nPWD\nCD [PATH]\nECHO\nTICKS\nUNAME\nLS [PATH...]\nCAT <PATH...>\nALLOC\n";
 const BIN_PREFIX: &[u8] = b"/bin/";
 const PROGRAM_SUFFIX: &[u8] = b".kx";
 const ALLOC_ALIAS: &[u8] = b"alloc";
@@ -24,6 +24,12 @@ pub extern "C" fn main() -> ! {
     let mut read_buffer = [0u8; 1];
     let mut path_buffer = PathBuffer::new();
     let mut program_path = PathBuffer::new();
+    let mut arg_paths = [
+        PathBuffer::new(),
+        PathBuffer::new(),
+        PathBuffer::new(),
+        PathBuffer::new(),
+    ];
 
     must_write(stdout, b"K16 SHELL\n");
     loop {
@@ -35,6 +41,7 @@ pub extern "C" fn main() -> ! {
             &mut cwd,
             &mut path_buffer,
             &mut program_path,
+            &mut arg_paths,
             &mut read_buffer,
         );
     }
@@ -47,6 +54,7 @@ fn read_and_dispatch_line(
     cwd: &mut WorkingDirectory,
     path_buffer: &mut PathBuffer,
     program_path: &mut PathBuffer,
+    arg_paths: &mut [PathBuffer; k16_abi::syscall::MAX_RUN_ARGS],
     read_buffer: &mut [u8; 1],
 ) {
     input.clear();
@@ -60,7 +68,14 @@ fn read_and_dispatch_line(
             match read_buffer[index] {
                 b'\n' | b'\r' => {
                     must_write(stdout, NEWLINE);
-                    dispatch_command(stdout, cwd, path_buffer, program_path, input.command());
+                    dispatch_command(
+                        stdout,
+                        cwd,
+                        path_buffer,
+                        program_path,
+                        arg_paths,
+                        input.command(),
+                    );
                     return;
                 }
                 b'\x08' | 0x7f => {
@@ -85,6 +100,7 @@ fn dispatch_command(
     cwd: &mut WorkingDirectory,
     path_buffer: &mut PathBuffer,
     program_path: &mut PathBuffer,
+    arg_paths: &mut [PathBuffer; k16_abi::syscall::MAX_RUN_ARGS],
     command: Command<'_>,
 ) {
     match command {
@@ -99,9 +115,7 @@ fn dispatch_command(
             must_write(stdout, bytes);
             must_write(stdout, NEWLINE);
         }
-        Command::Exec { name, args } => {
-            run_exec(stdout, cwd, path_buffer, program_path, name, args)
-        }
+        Command::Exec { name, args } => run_exec(stdout, cwd, arg_paths, program_path, name, args),
     }
 }
 
@@ -150,7 +164,7 @@ fn run_ticks(stdout: io::Fd) {
 fn run_exec(
     stdout: io::Fd,
     cwd: &WorkingDirectory,
-    path_buffer: &mut PathBuffer,
+    arg_paths: &mut [PathBuffer; k16_abi::syscall::MAX_RUN_ARGS],
     program_path: &mut PathBuffer,
     name: &[u8],
     args: CommandArgs<'_>,
@@ -173,27 +187,36 @@ fn run_exec(
 
     let raw_args = args.as_slice();
     let mut argv = [""; k16_abi::syscall::MAX_RUN_ARGS];
-    let mut index = 0;
     if should_resolve_path_arg(name) {
-        if cwd.resolve_into(raw_args[0], path_buffer).is_err() {
-            must_write(stdout, b"ERR INVAL\n");
-            return;
+        let mut index = 0;
+        while index < raw_args.len() {
+            let raw_arg = raw_args[index];
+            if cwd.resolve_into(raw_arg, &mut arg_paths[index]).is_err() {
+                must_write(stdout, b"ERR INVAL\n");
+                return;
+            }
+            index += 1;
         }
-        let Ok(arg) = path_buffer.as_str() else {
-            must_write(stdout, b"ERR INVAL\n");
-            return;
-        };
-        argv[0] = arg;
-        index = 1;
-    }
-    while index < raw_args.len() {
-        let raw_arg = raw_args[index];
-        let Ok(arg) = core::str::from_utf8(raw_arg) else {
-            must_write(stdout, b"ERR INVAL\n");
-            return;
-        };
-        argv[index] = arg;
-        index += 1;
+        let mut index = 0;
+        while index < raw_args.len() {
+            let Ok(arg) = arg_paths[index].as_str() else {
+                must_write(stdout, b"ERR INVAL\n");
+                return;
+            };
+            argv[index] = arg;
+            index += 1;
+        }
+    } else {
+        let mut index = 0;
+        while index < raw_args.len() {
+            let raw_arg = raw_args[index];
+            let Ok(arg) = core::str::from_utf8(raw_arg) else {
+                must_write(stdout, b"ERR INVAL\n");
+                return;
+            };
+            argv[index] = arg;
+            index += 1;
+        }
     }
     match process::run_with_args(program_path, &argv[..raw_args.len()]) {
         Ok(_) => {}

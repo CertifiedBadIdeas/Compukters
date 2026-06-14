@@ -91,6 +91,19 @@ class K16ShellRuntimeSmokeTest {
                 catCommandIndex >= 0 && catOutputIndex > catCommandIndex && returnedPromptIndex > catOutputIndex
             }
 
+            dispatchText(device, "cat motd motd\n")
+            waitForTerminal(device, "multi-argv relative cat output and returned prompt") { terminal ->
+                val catCommandIndex = terminal.indexOf("K16> cat motd motd")
+                val firstOutputIndex =
+                    terminal.indexOf("K16 FS OK", startIndex = catCommandIndex + "K16> cat motd motd".length)
+                val secondOutputIndex = terminal.indexOf("K16 FS OK", startIndex = firstOutputIndex + "K16 FS OK".length)
+                val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = secondOutputIndex)
+                catCommandIndex >= 0 &&
+                    firstOutputIndex > catCommandIndex &&
+                    secondOutputIndex > firstOutputIndex &&
+                    returnedPromptIndex > secondOutputIndex
+            }
+
             dispatchText(device, "cd motd\n")
             waitForTerminal(device, "cd rejects regular file and returned prompt") { terminal ->
                 val cdCommandIndex = terminal.indexOf("K16> cd motd")
@@ -133,6 +146,18 @@ class K16ShellRuntimeSmokeTest {
                 rootLsCommandIndex >= 0 && rootLsOutputIndex > rootLsCommandIndex && returnedPromptIndex > rootLsOutputIndex
             }
 
+            dispatchText(device, "ls / /bin\n")
+            waitForTerminal(device, "multi-argv ls output and returned prompt") { terminal ->
+                val lsCommandIndex = terminal.indexOf("K16> ls / /bin")
+                val rootOutputIndex = terminal.indexOf("bin/", startIndex = lsCommandIndex + "K16> ls / /bin".length)
+                val binOutputIndex = terminal.indexOf("ls.kx", startIndex = rootOutputIndex + "bin/".length)
+                val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = binOutputIndex)
+                lsCommandIndex >= 0 &&
+                    rootOutputIndex > lsCommandIndex &&
+                    binOutputIndex > rootOutputIndex &&
+                    returnedPromptIndex > binOutputIndex
+            }
+
             dispatchText(device, "nosuch\n")
             waitForTerminal(device, "generic missing executable reports no entry and returned prompt") { terminal ->
                 val commandIndex = terminal.indexOf("K16> nosuch")
@@ -153,14 +178,11 @@ class K16ShellRuntimeSmokeTest {
             assertOrderedFragments(
                 terminal,
                 listOf(
-                    "K16> pwd",
-                    "/etc",
-                    "K16> ls /bin",
-                    "ls.kx",
-                    "K16> ls ../bin",
-                    "ls.kx",
                     "K16> ls /",
                     "bin/",
+                    "K16> ls / /bin",
+                    "bin/",
+                    "ls.kx",
                     "K16> nosuch",
                     "ERR NOENT",
                     "K16> alloc",
