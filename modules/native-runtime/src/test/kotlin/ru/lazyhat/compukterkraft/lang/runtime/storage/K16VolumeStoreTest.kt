@@ -23,6 +23,7 @@ import java.nio.file.Path
 import kotlin.io.path.createDirectories
 import kotlin.io.path.createTempDirectory
 import kotlin.io.path.exists
+import kotlin.io.path.readBytes
 import kotlin.io.path.readText
 import kotlin.io.path.writeBytes
 import kotlin.test.Test
@@ -107,6 +108,40 @@ class K16VolumeStoreTest {
             blob.write(8, byteArrayOf(1, 2, 3, 4))
             blob.flush()
         }
+
+        store.openOrCreateComputerVolume(42, "storage0").use { blob ->
+            assertContentEquals(byteArrayOf(1, 2, 3, 4), blob.read(8, 4))
+        }
+    }
+
+    @Test
+    fun `flush preserves a last known good backup`() {
+        val root = createTempDirectory("k16-volume-store-test-")
+        val store = FileK16VolumeStore(root, defaultStorage0Size = 16)
+
+        store.openOrCreateComputerVolume(42, "storage0").use { blob ->
+            blob.write(8, byteArrayOf(1, 2, 3, 4))
+            blob.flush()
+        }
+
+        assertTrue(volumeBackupPath(root).exists())
+
+        store.openOrCreateComputerVolume(42, "storage0").use { blob ->
+            assertContentEquals(byteArrayOf(1, 2, 3, 4), blob.read(8, 4))
+        }
+    }
+
+    @Test
+    fun `truncated current volume recovers from last known good backup`() {
+        val root = createTempDirectory("k16-volume-store-test-")
+        val store = FileK16VolumeStore(root, defaultStorage0Size = 16)
+
+        store.openOrCreateComputerVolume(42, "storage0").use { blob ->
+            blob.write(8, byteArrayOf(1, 2, 3, 4))
+            blob.flush()
+            blob.write(8, byteArrayOf(5, 6, 7, 8))
+        }
+        volumePath(root).writeBytes(volumePath(root).readBytes().copyOf(K16_VOLUME_HEADER_SIZE + 8))
 
         store.openOrCreateComputerVolume(42, "storage0").use { blob ->
             assertContentEquals(byteArrayOf(1, 2, 3, 4), blob.read(8, 4))
@@ -225,4 +260,7 @@ class K16VolumeStoreTest {
 
     private fun volumePath(root: java.nio.file.Path) =
         root.resolve("compukterkraft/computers/42/volumes/storage0.kv")
+
+    private fun volumeBackupPath(root: java.nio.file.Path) =
+        root.resolve("compukterkraft/computers/42/volumes/storage0.kv.bak")
 }

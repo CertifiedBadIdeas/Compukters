@@ -23,7 +23,12 @@ import java.io.IOException
 import java.io.RandomAccessFile
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.nio.channels.FileChannel
+import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.StandardCopyOption.ATOMIC_MOVE
+import java.nio.file.StandardCopyOption.REPLACE_EXISTING
+import java.nio.file.StandardOpenOption.WRITE
 import kotlin.io.path.createDirectories
 import kotlin.io.path.exists
 
@@ -100,11 +105,18 @@ class FileK16VolumeStore(
 
     fun openOrCreate(identity: K16VolumeIdentity): K16VolumeBlob {
         val path = pathFor(identity)
+        val backupPath = backupPathFor(path)
         path.parent.createDirectories()
         if (!path.exists()) {
-            createNewVolume(path, defaultStorage0Size)
+            if (backupPath.exists()) {
+                restoreVolumeBackup(path, backupPath)
+            } else {
+                createNewVolume(path, defaultStorage0Size)
+            }
+        } else {
+            recoverVolumeIfNeeded(path, backupPath)
         }
-        return openExisting(path)
+        return openExisting(path, backupPath)
     }
 
     private fun pathFor(identity: K16VolumeIdentity): Path =
@@ -144,7 +156,95 @@ class FileK16VolumeStore(
         }
     }
 
-    private fun openExisting(path: Path): K16VolumeBlob {
+    private fun backupPathFor(path: Path): Path =
+        path.resolveSibling("${path.fileName}.bak")
+
+    private fun recoverVolumeIfNeeded(
+        path: Path,
+        backupPath: Path,
+    ) {
+        try {
+            validateVolume(path)
+            return
+        } catch (currentFailure: K16VolumeException) {
+            if (!backupPath.exists()) throw currentFailure
+            try {
+                validateVolume(backupPath)
+            } catch (backupFailure: K16VolumeException) {
+                currentFailure.addSuppressed(backupFailure)
+                throw currentFailure
+            }
+            restoreVolumeBackup(path, backupPath)
+        }
+    }
+
+    private fun restoreVolumeBackup(
+        path: Path,
+        backupPath: Path,
+    ) {
+        try {
+            copyAtomically(backupPath, path)
+        } catch (error: IOException) {
+            throw K16VolumeException(
+                K16VolumeError.IoFailure,
+                "Cannot restore K16 volume backup from $backupPath to $path",
+                error,
+            )
+        }
+    }
+
+    private fun preserveVolumeBackup(
+        path: Path,
+        backupPath: Path,
+    ) {
+        validateVolume(path)
+        try {
+            copyAtomically(path, backupPath)
+        } catch (error: IOException) {
+            throw K16VolumeException(
+                K16VolumeError.IoFailure,
+                "Cannot preserve K16 volume backup from $path to $backupPath",
+                error,
+            )
+        }
+    }
+
+    private fun copyAtomically(
+        source: Path,
+        target: Path,
+    ) {
+        target.parent.createDirectories()
+        val temp = Files.createTempFile(target.parent, "${target.fileName}.", ".tmp")
+        try {
+            Files.copy(source, temp, REPLACE_EXISTING)
+            FileChannel.open(temp, WRITE).use { channel ->
+                channel.force(true)
+            }
+            Files.move(temp, target, REPLACE_EXISTING, ATOMIC_MOVE)
+        } finally {
+            Files.deleteIfExists(temp)
+        }
+    }
+
+    private fun validateVolume(path: Path): Long =
+        try {
+            RandomAccessFile(path.toFile(), "r").use { file ->
+                readAndValidateHeader(path, file)
+            }
+        } catch (error: K16VolumeException) {
+            throw error
+        } catch (error: IOException) {
+            throw K16VolumeException(
+                K16VolumeError.IoFailure,
+                "Cannot validate K16 volume at $path",
+                error,
+            )
+        }
+
+    private fun openExisting(
+        path: Path,
+        backupPath: Path,
+    ): K16VolumeBlob {
         try {
             val file = RandomAccessFile(path.toFile(), "rw")
             val logicalSize =
@@ -154,7 +254,13 @@ class FileK16VolumeStore(
                     file.close()
                     throw error
                 }
-            return FileK16VolumeBlob(path, file, logicalSize, maxVolumeSize)
+            return FileK16VolumeBlob(
+                path = path,
+                file = file,
+                initialSize = logicalSize,
+                maxVolumeSize = maxVolumeSize,
+                preserveBackup = { preserveVolumeBackup(path, backupPath) },
+            )
         } catch (error: K16VolumeException) {
             throw error
         } catch (error: IOException) {
@@ -241,6 +347,7 @@ private class FileK16VolumeBlob(
     private val file: RandomAccessFile,
     initialSize: Long,
     private val maxVolumeSize: Long,
+    private val preserveBackup: () -> Unit,
 ) : K16VolumeBlob {
     private var closed = false
     private var currentSize = initialSize
@@ -322,6 +429,7 @@ private class FileK16VolumeBlob(
                 error,
             )
         }
+        preserveBackup()
     }
 
     override fun close() {
