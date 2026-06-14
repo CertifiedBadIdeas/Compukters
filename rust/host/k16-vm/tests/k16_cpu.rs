@@ -1,14 +1,16 @@
 use k16_vm::k16::{
-    K16Cpu, K16Signal, K16_CSR_INTERRUPT_ENABLE, K16_CSR_INTERRUPT_MASK, K16_CSR_INTERRUPT_PENDING,
-    K16_CSR_TRAP_ARG0, K16_CSR_TRAP_ARG1, K16_CSR_TRAP_ARG2, K16_CSR_TRAP_CAUSE,
-    K16_CSR_TRAP_FRAME_INDEX, K16_CSR_TRAP_FRAME_REGISTER, K16_CSR_TRAP_INTERRUPT_ENABLE,
-    K16_CSR_TRAP_PC, K16_CSR_TRAP_RESUME_PC, K16_CSR_TRAP_STACK_POINTER, K16_CSR_TRAP_VALUE,
-    K16_CSR_TRAP_VECTOR, K16_INTERRUPT_SOURCE_TIMER0, K16_STACK_POINTER_REGISTER,
-    K16_TRAP_CAUSE_EXPLICIT_TRAP, K16_TRAP_CAUSE_ILLEGAL_INSTRUCTION,
+    K16AddressTranslation, K16Cpu, K16Signal, K16_CSR_INTERRUPT_ENABLE, K16_CSR_INTERRUPT_MASK,
+    K16_CSR_INTERRUPT_PENDING, K16_CSR_TRAP_ARG0, K16_CSR_TRAP_ARG1, K16_CSR_TRAP_ARG2,
+    K16_CSR_TRAP_CAUSE, K16_CSR_TRAP_FRAME_INDEX, K16_CSR_TRAP_FRAME_REGISTER,
+    K16_CSR_TRAP_INTERRUPT_ENABLE, K16_CSR_TRAP_PC, K16_CSR_TRAP_RESUME_PC,
+    K16_CSR_TRAP_STACK_POINTER, K16_CSR_TRAP_VALUE, K16_CSR_TRAP_VECTOR,
+    K16_INTERRUPT_SOURCE_TIMER0, K16_STACK_POINTER_REGISTER, K16_TRAP_CAUSE_EXPLICIT_TRAP,
+    K16_TRAP_CAUSE_ILLEGAL_INSTRUCTION, K16_TRAP_CAUSE_STORE_FAULT,
     K16_TRAP_CAUSE_TIMER0_INTERRUPT,
 };
 use k16_vm::low_bus::{MachineBus, MmioDevice};
 use k16_vm::low_machine::MemoryFault;
+use k16_vm::mmu::{MmuAddressSpaces, MmuMapFlags};
 
 #[test]
 fn k16_fetches_decodes_and_executes_words_from_guest_memory() {
@@ -84,6 +86,85 @@ fn k16_loads_and_stores_regular_ram_through_machine_bus() {
     assert_eq!(cpu.run_until_signal(&mut bus, 16).unwrap(), K16Signal::Halt,);
     assert_eq!(cpu.register(2), 0x0102_0304);
     assert_eq!(bus.load_i32(14).unwrap(), 0x0102_0304);
+}
+
+#[test]
+fn cpu_mmu_translated_execution_fetches_loads_and_stores_through_active_address_space() {
+    const RAM_SIZE: u32 = 0x3000;
+    let mut bus = MachineBus::new(RAM_SIZE as usize).unwrap();
+    let mut spaces = MmuAddressSpaces::new();
+    let address_space = spaces.create(RAM_SIZE).unwrap();
+    let space = spaces.get_mut(address_space).unwrap();
+    space
+        .map_pages(0x4000, 0, 1, MmuMapFlags::USER | MmuMapFlags::EXECUTABLE)
+        .unwrap();
+    space
+        .map_pages(0x8000, 0x1000, 1, MmuMapFlags::USER | MmuMapFlags::WRITABLE)
+        .unwrap();
+    bus.store_i32(0x1000, 0x0102_0304).unwrap();
+    write_words(
+        &mut bus,
+        0,
+        &[
+            const32(1, 0x8000)[0],
+            const32(1, 0x8000)[1],
+            const32(1, 0x8000)[2],
+            load32(2, 1),
+            const4(3, 4),
+            add(1, 1, 3)[0],
+            add(1, 1, 3)[1],
+            store32(1, 2),
+            halt(),
+        ],
+    );
+    let mut cpu = K16Cpu::new(0x4000);
+    cpu.set_address_translation(K16AddressTranslation::Translated { address_space });
+
+    assert_eq!(
+        cpu.run_until_signal_with_mmu(&mut bus, &spaces, 16)
+            .unwrap(),
+        K16Signal::Halt,
+    );
+    assert_eq!(cpu.pc(), 0x4012);
+    assert_eq!(cpu.register(2), 0x0102_0304);
+    assert_eq!(bus.load_i32(0x1004).unwrap(), 0x0102_0304);
+}
+
+#[test]
+fn cpu_mmu_translated_store_reports_permission_fault_on_read_only_mapping() {
+    const RAM_SIZE: u32 = 0x3000;
+    let mut bus = MachineBus::new(RAM_SIZE as usize).unwrap();
+    let mut spaces = MmuAddressSpaces::new();
+    let address_space = spaces.create(RAM_SIZE).unwrap();
+    let space = spaces.get_mut(address_space).unwrap();
+    space
+        .map_pages(0x4000, 0, 1, MmuMapFlags::USER | MmuMapFlags::EXECUTABLE)
+        .unwrap();
+    space
+        .map_pages(0x8000, 0x1000, 1, MmuMapFlags::USER)
+        .unwrap();
+    write_words(
+        &mut bus,
+        0,
+        &[
+            const32(1, 0x8000)[0],
+            const32(1, 0x8000)[1],
+            const32(1, 0x8000)[2],
+            const4(2, 7),
+            store32(1, 2),
+            halt(),
+        ],
+    );
+    let mut cpu = K16Cpu::new(0x4000);
+    cpu.set_address_translation(K16AddressTranslation::Translated { address_space });
+
+    let trap = cpu
+        .run_until_signal_with_mmu(&mut bus, &spaces, 16)
+        .expect_err("store to read-only translated mapping should trap");
+    assert_eq!(trap.cause(), K16_TRAP_CAUSE_STORE_FAULT);
+    assert_eq!(trap.pc(), 0x4008);
+    assert_eq!(trap.value(), 0x8000);
+    assert!(trap.to_string().contains("MMU permission fault"));
 }
 
 #[test]

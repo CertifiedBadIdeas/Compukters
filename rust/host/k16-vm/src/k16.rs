@@ -1,4 +1,5 @@
 use crate::low_machine::{MemoryBus, MemoryFault};
+use crate::mmu::{MmuAccess, MmuAddressSpace, MmuAddressSpaceId, MmuAddressSpaces, MmuFault};
 use std::fmt::{Display, Formatter};
 
 pub const K16_CSR_TRAP_VECTOR: u32 = 1;
@@ -43,6 +44,12 @@ pub enum K16Signal {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct K16Metrics {
     pub steps: u64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum K16AddressTranslation {
+    Physical,
+    Translated { address_space: MmuAddressSpaceId },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -98,6 +105,18 @@ impl K16Trap {
             value,
             message: message.into(),
         }
+    }
+
+    pub fn cause(&self) -> u32 {
+        self.cause
+    }
+
+    pub fn pc(&self) -> u32 {
+        self.pc
+    }
+
+    pub fn value(&self) -> u32 {
+        self.value
     }
 }
 
@@ -356,6 +375,7 @@ pub struct K16Cpu {
     interrupt_mask: u32,
     interrupt_pending: u32,
     timer0_interrupt_value: u32,
+    address_translation: K16AddressTranslation,
     state: K16State,
     metrics: K16Metrics,
 }
@@ -381,6 +401,7 @@ impl K16Cpu {
             interrupt_mask: 0,
             interrupt_pending: 0,
             timer0_interrupt_value: 0,
+            address_translation: K16AddressTranslation::Physical,
             state: K16State::Running,
             metrics: K16Metrics { steps: 0 },
         }
@@ -402,6 +423,14 @@ impl K16Cpu {
 
     pub fn metrics(&self) -> &K16Metrics {
         &self.metrics
+    }
+
+    pub fn address_translation(&self) -> K16AddressTranslation {
+        self.address_translation
+    }
+
+    pub fn set_address_translation(&mut self, address_translation: K16AddressTranslation) {
+        self.address_translation = address_translation;
     }
 
     pub fn snapshot(&self) -> K16CpuSnapshot {
@@ -450,6 +479,7 @@ impl K16Cpu {
             interrupt_mask: snapshot.interrupt_mask,
             interrupt_pending: snapshot.interrupt_pending,
             timer0_interrupt_value: snapshot.timer0_interrupt_value,
+            address_translation: K16AddressTranslation::Physical,
             state: match snapshot.state {
                 K16CpuSnapshotState::Running => K16State::Running,
                 K16CpuSnapshotState::Halted => K16State::Halted,
@@ -499,13 +529,30 @@ impl K16Cpu {
     }
 
     pub fn step(&mut self, bus: &mut dyn MemoryBus) -> Result<Option<K16Signal>, K16Trap> {
-        self.step_with_decoder(bus, &mut K16Decoder::new())
+        self.step_with_decoder_and_mmu(bus, &mut K16Decoder::new(), None)
+    }
+
+    pub fn step_with_mmu(
+        &mut self,
+        bus: &mut dyn MemoryBus,
+        address_spaces: &MmuAddressSpaces,
+    ) -> Result<Option<K16Signal>, K16Trap> {
+        self.step_with_decoder_and_mmu(bus, &mut K16Decoder::new(), Some(address_spaces))
     }
 
     pub fn step_with_decoder(
         &mut self,
         bus: &mut dyn MemoryBus,
         decoder: &mut dyn InstructionDecoder,
+    ) -> Result<Option<K16Signal>, K16Trap> {
+        self.step_with_decoder_and_mmu(bus, decoder, None)
+    }
+
+    fn step_with_decoder_and_mmu(
+        &mut self,
+        bus: &mut dyn MemoryBus,
+        decoder: &mut dyn InstructionDecoder,
+        address_spaces: Option<&MmuAddressSpaces>,
     ) -> Result<Option<K16Signal>, K16Trap> {
         match &self.state {
             K16State::Running => {}
@@ -527,7 +574,11 @@ impl K16Cpu {
         // count the instruction, advance to the decoder-provided next PC, then
         // let control flow instructions override PC during execution.
         let fault_pc = self.pc;
-        let decode = match decoder.decode(bus, self.pc) {
+        let decode = {
+            let mut fetch_bus = self.cpu_bus(bus, address_spaces, MmuAccess::Fetch)?;
+            decoder.decode(&mut fetch_bus, self.pc)
+        };
+        let decode = match decode {
             Ok(decode) => decode,
             Err(error) => {
                 return self.raise_exception(error.cause, fault_pc, error.value, error.to_string());
@@ -536,6 +587,7 @@ impl K16Cpu {
         self.metrics.steps += 1;
         self.pc = decode.next_pc;
 
+        let mut data_bus = self.cpu_bus(bus, address_spaces, MmuAccess::Load)?;
         let signal = match decode.instruction {
             DecodedInstruction::Nop => Ok(None),
             DecodedInstruction::Halt => {
@@ -621,27 +673,27 @@ impl K16Cpu {
                 Ok(None)
             }
             DecodedInstruction::Load8 { dst, addr } => {
-                self.load_u8_into_register(bus, fault_pc, dst, addr)?;
+                self.load_u8_into_register(&mut data_bus, fault_pc, dst, addr)?;
                 Ok(None)
             }
             DecodedInstruction::Load16 { dst, addr } => {
-                self.load_u16_into_register(bus, fault_pc, dst, addr)?;
+                self.load_u16_into_register(&mut data_bus, fault_pc, dst, addr)?;
                 Ok(None)
             }
             DecodedInstruction::Load32 { dst, addr } => {
-                self.load_i32_into_register(bus, fault_pc, dst, addr)?;
+                self.load_i32_into_register(&mut data_bus, fault_pc, dst, addr)?;
                 Ok(None)
             }
             DecodedInstruction::Store8 { addr, src } => {
-                self.store_u8_from_register(bus, fault_pc, addr, src)?;
+                self.store_u8_from_register(&mut data_bus, fault_pc, addr, src)?;
                 Ok(None)
             }
             DecodedInstruction::Store16 { addr, src } => {
-                self.store_u16_from_register(bus, fault_pc, addr, src)?;
+                self.store_u16_from_register(&mut data_bus, fault_pc, addr, src)?;
                 Ok(None)
             }
             DecodedInstruction::Store32 { addr, src } => {
-                self.store_i32_from_register(bus, fault_pc, addr, src)?;
+                self.store_i32_from_register(&mut data_bus, fault_pc, addr, src)?;
                 Ok(None)
             }
             DecodedInstruction::BranchIfZero { src, target_pc } => {
@@ -661,11 +713,11 @@ impl K16Cpu {
                 Ok(None)
             }
             DecodedInstruction::Call { target } => {
-                self.call_register_target(bus, fault_pc, target)?;
+                self.call_register_target(&mut data_bus, fault_pc, target)?;
                 Ok(None)
             }
             DecodedInstruction::Ret => {
-                self.return_from_stack(bus, fault_pc)?;
+                self.return_from_stack(&mut data_bus, fault_pc)?;
                 Ok(None)
             }
             DecodedInstruction::Iret => {
@@ -691,10 +743,38 @@ impl K16Cpu {
                 Ok(None)
             }
         }?;
+        drop(data_bus);
         if signal.is_none() && bus.take_yield_signal() {
             return Ok(Some(K16Signal::Yield));
         }
         Ok(signal)
+    }
+
+    fn cpu_bus<'a>(
+        &self,
+        bus: &'a mut dyn MemoryBus,
+        address_spaces: Option<&'a MmuAddressSpaces>,
+        default_load_access: MmuAccess,
+    ) -> Result<CpuMemoryBus<'a>, K16Trap> {
+        let address_space = match self.address_translation {
+            K16AddressTranslation::Physical => None,
+            K16AddressTranslation::Translated { address_space } => {
+                Some(
+                    address_spaces
+                        .and_then(|spaces| spaces.get(address_space))
+                        .ok_or_else(|| {
+                            K16Trap::new(format!(
+                                "translated address mode requires active MMU address space {address_space:?}"
+                            ))
+                        })?,
+                )
+            }
+        };
+        Ok(CpuMemoryBus {
+            bus,
+            address_space,
+            default_load_access,
+        })
     }
 
     fn load_u8_into_register(
@@ -1032,6 +1112,20 @@ impl K16Cpu {
         self.run_until_signal_with_decoder(bus, &mut K16Decoder::new(), max_steps)
     }
 
+    pub fn run_until_signal_with_mmu(
+        &mut self,
+        bus: &mut dyn MemoryBus,
+        address_spaces: &MmuAddressSpaces,
+        max_steps: u64,
+    ) -> Result<K16Signal, K16Trap> {
+        for _ in 0..max_steps {
+            if let Some(signal) = self.step_with_mmu(bus, address_spaces)? {
+                return Ok(signal);
+            }
+        }
+        Ok(K16Signal::StepLimitExceeded)
+    }
+
     pub fn run_until_signal_with_decoder(
         &mut self,
         bus: &mut dyn MemoryBus,
@@ -1045,6 +1139,123 @@ impl K16Cpu {
         }
         Ok(K16Signal::StepLimitExceeded)
     }
+}
+
+struct CpuMemoryBus<'a> {
+    bus: &'a mut dyn MemoryBus,
+    address_space: Option<&'a MmuAddressSpace>,
+    default_load_access: MmuAccess,
+}
+
+impl CpuMemoryBus<'_> {
+    fn translate_contiguous(
+        &self,
+        address: u32,
+        size: u32,
+        access: MmuAccess,
+    ) -> Result<u32, MemoryFault> {
+        let physical_start = self.translate(address, access)?;
+        for offset in 1..size {
+            let virtual_address = address.checked_add(offset).ok_or_else(|| {
+                MemoryFault::new(format!(
+                    "translated memory access starts at {address:#010x} and overflows u32"
+                ))
+            })?;
+            let expected_physical = physical_start.checked_add(offset).ok_or_else(|| {
+                MemoryFault::new(format!(
+                    "translated physical access starts at {physical_start:#010x} and overflows u32"
+                ))
+            })?;
+            let actual_physical = self.translate(virtual_address, access)?;
+            if actual_physical != expected_physical {
+                return Err(MemoryFault::new(format!(
+                    "translated memory access {address:#010x}..{:#010x} is not physically contiguous",
+                    address + size
+                )));
+            }
+        }
+        Ok(physical_start)
+    }
+
+    fn translate(&self, address: u32, access: MmuAccess) -> Result<u32, MemoryFault> {
+        match self.address_space {
+            Some(address_space) => address_space
+                .translate(address, access)
+                .map_err(mmu_memory_fault),
+            None => Ok(address),
+        }
+    }
+}
+
+impl MemoryBus for CpuMemoryBus<'_> {
+    fn len(&self) -> usize {
+        self.bus.len()
+    }
+
+    fn take_yield_signal(&mut self) -> bool {
+        self.bus.take_yield_signal()
+    }
+
+    fn load_i32(&self, address: u32) -> Result<i32, MemoryFault> {
+        let physical = self.translate_contiguous(address, 4, self.default_load_access)?;
+        let bus: &dyn MemoryBus = &*self.bus;
+        bus.load_i32(physical)
+    }
+
+    fn store_i32(&mut self, address: u32, value: i32) -> Result<(), MemoryFault> {
+        let physical = self.translate_contiguous(address, 4, MmuAccess::Store)?;
+        self.bus.store_i32(physical, value)
+    }
+
+    fn load_u8(&self, address: u32) -> Result<u8, MemoryFault> {
+        let physical = self.translate(address, self.default_load_access)?;
+        let bus: &dyn MemoryBus = &*self.bus;
+        bus.load_u8(physical)
+    }
+
+    fn store_u8(&mut self, address: u32, value: u8) -> Result<(), MemoryFault> {
+        let physical = self.translate(address, MmuAccess::Store)?;
+        self.bus.store_u8(physical, value)
+    }
+
+    fn load_u16(&self, address: u32) -> Result<u16, MemoryFault> {
+        let physical = self.translate_contiguous(address, 2, self.default_load_access)?;
+        let bus: &dyn MemoryBus = &*self.bus;
+        bus.load_u16(physical)
+    }
+
+    fn store_u16(&mut self, address: u32, value: u16) -> Result<(), MemoryFault> {
+        let physical = self.translate_contiguous(address, 2, MmuAccess::Store)?;
+        self.bus.store_u16(physical, value)
+    }
+
+    fn load_u64(&self, address: u32) -> Result<u64, MemoryFault> {
+        let physical = self.translate_contiguous(address, 8, self.default_load_access)?;
+        let bus: &dyn MemoryBus = &*self.bus;
+        bus.load_u64(physical)
+    }
+
+    fn store_u64(&mut self, address: u32, value: u64) -> Result<(), MemoryFault> {
+        let physical = self.translate_contiguous(address, 8, MmuAccess::Store)?;
+        self.bus.store_u64(physical, value)
+    }
+}
+
+fn mmu_memory_fault(fault: MmuFault) -> MemoryFault {
+    let kind = match fault.kind {
+        crate::mmu::MmuFaultKind::NotPresent => "not-present",
+        crate::mmu::MmuFaultKind::Permission => "permission",
+        crate::mmu::MmuFaultKind::InvalidMapping => "invalid-mapping",
+    };
+    let access = match fault.access {
+        MmuAccess::Fetch => "fetch",
+        MmuAccess::Load => "load",
+        MmuAccess::Store => "store",
+    };
+    MemoryFault::new(format!(
+        "MMU {kind} fault for {access} at virtual address {:#010x}",
+        fault.address
+    ))
 }
 
 fn illegal_instruction(pc: u32, word: u16) -> K16Trap {
