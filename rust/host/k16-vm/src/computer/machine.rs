@@ -5,9 +5,13 @@ use crate::computer::devices::{
 use crate::computer::profile::ComputerMachineProfile;
 use crate::computer_abi;
 use crate::display::DisplayFrameDelta;
-use crate::k16::{K16Cpu, K16Signal, K16_INTERRUPT_SOURCE_KEYBOARD0, K16_INTERRUPT_SOURCE_TIMER0};
+use crate::k16::{
+    K16AddressMode, K16Cpu, K16PrivilegeMode, K16Signal, K16_INTERRUPT_SOURCE_KEYBOARD0,
+    K16_INTERRUPT_SOURCE_TIMER0,
+};
 use crate::low_bus::{MachineBus, MmioDeviceId};
 use crate::low_machine::{MachineMemory, MemoryFault};
+use crate::mmu::{MmuAddressSpaceId, MmuAddressSpaces, MmuFault, MmuMapFlags};
 use std::fmt::{Display, Formatter};
 
 mod boot_flow;
@@ -28,6 +32,7 @@ pub struct ComputerMachine {
     bios_flash_device_id: Option<MmioDeviceId>,
     cpus: Vec<ComputerCpuContext>,
     boot_cpu: Option<CpuId>,
+    address_spaces: MmuAddressSpaces,
 }
 
 enum ComputerCpuContext {
@@ -374,6 +379,65 @@ impl ComputerMachine {
         boot_flow::run_boot_k16_until_signal(self, cpu_id)
     }
 
+    pub fn create_mmu_address_space(&mut self) -> Result<MmuAddressSpaceId, MmuFault> {
+        self.address_spaces.create(self.memory().len() as u32)
+    }
+
+    pub fn map_mmu_pages(
+        &mut self,
+        address_space: MmuAddressSpaceId,
+        virtual_start: u32,
+        physical_start: u32,
+        page_count: u32,
+        flags: MmuMapFlags,
+    ) -> Result<(), MmuFault> {
+        self.address_spaces
+            .get_mut(address_space)
+            .ok_or(MmuFault {
+                address: virtual_start,
+                access: crate::mmu::MmuAccess::Load,
+                kind: crate::mmu::MmuFaultKind::InvalidMapping,
+            })?
+            .map_pages(virtual_start, physical_start, page_count, flags)
+    }
+
+    pub fn protect_mmu_pages(
+        &mut self,
+        address_space: MmuAddressSpaceId,
+        virtual_start: u32,
+        page_count: u32,
+        flags: MmuMapFlags,
+    ) -> Result<(), MmuFault> {
+        self.address_spaces
+            .get_mut(address_space)
+            .ok_or(MmuFault {
+                address: virtual_start,
+                access: crate::mmu::MmuAccess::Load,
+                kind: crate::mmu::MmuFaultKind::InvalidMapping,
+            })?
+            .protect_pages(virtual_start, page_count, flags)
+    }
+
+    pub fn set_k16_cpu_address_mode(
+        &mut self,
+        cpu_id: CpuId,
+        address_mode: K16AddressMode,
+    ) -> Result<(), String> {
+        let cpu = self.k16_cpu_mut(cpu_id)?;
+        cpu.set_address_mode(address_mode);
+        Ok(())
+    }
+
+    pub fn set_k16_cpu_privilege_mode(
+        &mut self,
+        cpu_id: CpuId,
+        privilege_mode: K16PrivilegeMode,
+    ) -> Result<(), String> {
+        let cpu = self.k16_cpu_mut(cpu_id)?;
+        cpu.set_privilege_mode(privilege_mode);
+        Ok(())
+    }
+
     pub fn control_status(&self) -> i32 {
         self.control_device()
             .map(|device| device.status)
@@ -606,9 +670,34 @@ impl ComputerMachine {
         }
     }
 
+    fn k16_cpu_mut(&mut self, cpu_id: CpuId) -> Result<&mut K16Cpu, String> {
+        let cpu = self
+            .cpus
+            .get_mut(cpu_id)
+            .ok_or_else(|| format!("CPU {cpu_id} is not present"))?;
+        match cpu {
+            ComputerCpuContext::K16 { cpu, .. } => Ok(cpu),
+        }
+    }
+
     fn control_device_mut(&mut self) -> Option<&mut ComputerControlDevice> {
         self.control_device_id
             .and_then(|id| self.bus.device_mut::<ComputerControlDevice>(id))
+    }
+
+    #[cfg(test)]
+    pub(crate) fn install_k16_boot_cpu_for_tests(
+        &mut self,
+        entry_pc: u32,
+        max_steps: u64,
+    ) -> CpuId {
+        let cpu_id = self.cpus.len();
+        self.cpus.push(ComputerCpuContext::K16 {
+            cpu: K16Cpu::new(entry_pc),
+            max_steps: max_steps.max(1),
+        });
+        self.boot_cpu = Some(cpu_id);
+        cpu_id
     }
 }
 

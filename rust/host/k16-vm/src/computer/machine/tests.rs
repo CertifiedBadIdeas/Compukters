@@ -4,7 +4,9 @@ use crate::computer::devices::{
 };
 use crate::computer::profile::{ComputerHardwareConfig, ComputerMachineProfile};
 use crate::computer_abi;
+use crate::k16::{K16AddressMode, K16PrivilegeMode, K16Signal};
 use crate::low_bus::MmioDevice;
+use crate::mmu::MmuMapFlags;
 use std::fs;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -15,6 +17,85 @@ fn computer_machine_owns_shared_physical_ram() {
     machine.memory_mut().store_i32(128, 42).unwrap();
 
     assert_eq!(machine.memory().load_i32(128).unwrap(), 42);
+}
+
+#[test]
+fn computer_machine_mmu_defaults_to_physical_kernel_boot_execution() {
+    let bios = k16_words(&[k16_halt()]);
+    let (mut machine, boot_cpu) = ComputerMachine::from_k16_bios_flash(&bios, 1024, 8).unwrap();
+
+    assert_eq!(
+        machine.run_boot_k16_until_signal(boot_cpu).unwrap(),
+        K16Signal::Halt,
+    );
+    assert_eq!(machine.control_status(), ComputerMachine::STATUS_HALTED);
+    assert_eq!(machine.exit_code(), 0);
+}
+
+#[test]
+fn computer_machine_mmu_runs_boot_cpu_through_virtual_pc_and_data_mapping() {
+    const RAM_SIZE: usize = 0x3000;
+    let mut machine = ComputerMachine::new(RAM_SIZE).unwrap();
+    let program = k16_words(&[
+        k16_const32(1, 0x8000)[0],
+        k16_const32(1, 0x8000)[1],
+        k16_const32(1, 0x8000)[2],
+        k16_load32(2, 1),
+        k16_const4(3, 4),
+        k16_add(1, 1, 3)[0],
+        k16_add(1, 1, 3)[1],
+        k16_store32(1, 2),
+        k16_halt(),
+    ]);
+    machine.write_guest_ram_bytes(0, &program).unwrap();
+    machine.bus_store_i32(0x1000, 0x0102_0304).unwrap();
+    let address_space = machine.create_mmu_address_space().unwrap();
+    machine
+        .map_mmu_pages(address_space, 0x4000, 0, 1, MmuMapFlags::EXECUTABLE)
+        .unwrap();
+    machine
+        .map_mmu_pages(address_space, 0x8000, 0x1000, 1, MmuMapFlags::WRITABLE)
+        .unwrap();
+    let boot_cpu = machine.install_k16_boot_cpu_for_tests(0x4000, 16);
+    machine
+        .set_k16_cpu_address_mode(boot_cpu, K16AddressMode::Translated { address_space })
+        .unwrap();
+    machine
+        .set_k16_cpu_privilege_mode(boot_cpu, K16PrivilegeMode::Kernel)
+        .unwrap();
+
+    assert_eq!(
+        machine.run_boot_k16_until_signal(boot_cpu).unwrap(),
+        K16Signal::Halt,
+    );
+    assert_eq!(machine.bus_load_i32(0x1004).unwrap(), 0x0102_0304);
+    assert_eq!(machine.control_status(), ComputerMachine::STATUS_HALTED);
+}
+
+#[test]
+fn computer_machine_mmu_user_mode_faults_on_supervisor_only_mapping() {
+    const RAM_SIZE: usize = 0x3000;
+    let mut machine = ComputerMachine::new(RAM_SIZE).unwrap();
+    machine
+        .write_guest_ram_bytes(0, &k16_words(&[k16_halt()]))
+        .unwrap();
+    let address_space = machine.create_mmu_address_space().unwrap();
+    machine
+        .map_mmu_pages(address_space, 0x4000, 0, 1, MmuMapFlags::EXECUTABLE)
+        .unwrap();
+    let boot_cpu = machine.install_k16_boot_cpu_for_tests(0x4000, 16);
+    machine
+        .set_k16_cpu_address_mode(boot_cpu, K16AddressMode::Translated { address_space })
+        .unwrap();
+    machine
+        .set_k16_cpu_privilege_mode(boot_cpu, K16PrivilegeMode::User)
+        .unwrap();
+
+    let error = machine
+        .run_boot_k16_until_signal(boot_cpu)
+        .expect_err("user mode should not fetch supervisor-only mapping");
+    assert!(error.contains("MMU permission fault"));
+    assert_eq!(machine.control_status(), ComputerMachine::STATUS_PANIC);
 }
 
 #[test]
@@ -1249,6 +1330,45 @@ fn write_k16_volume(path: &std::path::Path, payload: &[u8]) {
     bytes.extend_from_slice(&(payload.len() as u64).to_le_bytes());
     bytes.extend_from_slice(payload);
     fs::write(path, bytes).unwrap();
+}
+
+fn k16_words(words: &[u16]) -> Vec<u8> {
+    let mut bytes = Vec::with_capacity(words.len() * 2);
+    for word in words {
+        bytes.extend_from_slice(&word.to_le_bytes());
+    }
+    bytes
+}
+
+fn k16_const4(register: u8, value: u8) -> u16 {
+    0x1000 | (u16::from(register) << 8) | u16::from(value & 0x0f)
+}
+
+fn k16_const32(register: u8, value: u32) -> [u16; 3] {
+    [
+        0xe001 | (u16::from(register) << 8),
+        (value & 0xffff) as u16,
+        (value >> 16) as u16,
+    ]
+}
+
+fn k16_add(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
+    [
+        0x2000 | (u16::from(dst) << 8),
+        (u16::from(lhs) << 4) | u16::from(rhs),
+    ]
+}
+
+fn k16_load32(dst: u8, addr: u8) -> u16 {
+    0x4002 | (u16::from(dst) << 8) | (u16::from(addr) << 4)
+}
+
+fn k16_store32(addr: u8, src: u8) -> u16 {
+    0x5002 | (u16::from(addr) << 8) | (u16::from(src) << 4)
+}
+
+fn k16_halt() -> u16 {
+    0x0001
 }
 
 fn temp_volume_path(name: &str) -> std::path::PathBuf {
