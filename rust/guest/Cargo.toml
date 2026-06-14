@@ -9,6 +9,7 @@ members = [
     "k16-kernel",
     "k16-rt",
     "k16-storage",
+    "k16-uname",
     "kraft-std",
 ]
 resolver = "2"
