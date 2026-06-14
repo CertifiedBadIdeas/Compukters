@@ -88,7 +88,7 @@ The first user layout reserves a null page and leaves the high half unmapped
 for future kernel or shared mappings:
 
 ```text
-0x0000_0000..0x0000_03ff  unmapped null guard
+0x0000_0000..0x0000_0fff  unmapped null guard
 0x0001_0000..0x7fff_ffff  user image, heap, argv, and stack mappings
 0x8000_0000..0xffff_ffff  reserved, unmapped in v1 user processes
 ```
@@ -108,14 +108,13 @@ arena and the virtual mapping.
 Virtual memory v1 uses a fixed MMU page size:
 
 ```text
-K16_VM_PAGE_SIZE = 1024 bytes
+K16_VM_PAGE_SIZE = 4096 bytes
 ```
 
 This is independent from profile v2 `BootInfo.page_size`. The current computer
-profile uses a 148 KiB RAM size, which is exactly 148 VM pages. A 1 KiB page is
-small enough for fine-grained user image, heap, argv, and stack placement in a
-small mod computer, while still avoiding the churn of 256-byte protection
-entries.
+profile uses a 148 KiB RAM size, which is exactly 37 VM pages. A 4 KiB page
+keeps the first address-space maps compact while still giving the kernel a
+useful protection boundary for user image, heap, argv, and stack placement.
 
 ## Host MMU Map
 
@@ -124,26 +123,24 @@ page-table walking. A map is a list of non-overlapping page extents owned by
 the VM/runtime and configured by the guest kernel through a future CPU/MMU ABI
 slice.
 
-This matches the host-implemented nature of the K16 MMU. With 1 KiB pages and
-4-byte entries, a hardware-style table page would hold only 256 entries. A
-full 32-bit virtual address space would then need either a three-level radix
-walk or page-table pages larger than the VM page size. That machinery is useful
-for real hardware, but it adds little value to a small host-driven mod
-computer. Extent mappings keep the visible ABI small while still providing real
-host-enforced translation, permissions, and page faults.
+This matches the host-implemented nature of the K16 MMU. A hardware-style
+guest page-table walker is useful for real hardware, but it adds little value
+to a small host-driven mod computer. Extent mappings keep the visible ABI small
+while still providing real host-enforced translation, permissions, and page
+faults.
 
 Each mapping entry has these semantic fields:
 
 ```text
-virtual_page     virtual start address / 1024
-physical_page    physical RAM start address / 1024
+virtual_page     virtual start address / 4096
+physical_page    physical RAM start address / 4096
 page_count       number of contiguous pages in this extent
 flags            user, writable, executable
 ```
 
 The host MMU rejects mappings that overlap an existing virtual page range, use
 zero `page_count`, point outside guest RAM, or point at MMIO. Physical bases
-and virtual bases must be 1024-byte aligned. v1 does not support aliasing the
+and virtual bases must be 4096-byte aligned. v1 does not support aliasing the
 same virtual page to multiple physical pages.
 
 The first implementation does not need ASIDs or a guest-visible TLB. If the VM
