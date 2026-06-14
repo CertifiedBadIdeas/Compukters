@@ -52,6 +52,13 @@ name = "k16-image"
 version = "0.1.0"
 
 [[package]]
+name = "k16-init"
+version = "0.1.0"
+dependencies = [
+ "kraft-std",
+]
+
+[[package]]
 name = "k16-kernel"
 version = "0.1.0"
 dependencies = [

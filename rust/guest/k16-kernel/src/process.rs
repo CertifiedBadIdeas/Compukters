@@ -16,6 +16,9 @@ const USER_PROGRAM_LIMIT: u32 = 0x0002_0000;
 // Keep relocation records outside k16_storage::SCRATCH_ADDR: storage reads use
 // that block as staging, and records may straddle a storage block boundary.
 const RELOCATION_RECORD_ADDR: u32 = 0x0000_0500;
+const MAX_PROCESS_SLOTS: usize = 3;
+const INIT_PROCESS_SLOT: usize = 0;
+const NO_PARENT_SLOT: u32 = u32::MAX;
 #[cfg(feature = "host-test")]
 #[allow(dead_code)]
 static PROCESS_TABLE: KernelProcessTable =
@@ -24,24 +27,35 @@ static PROCESS_TABLE: KernelProcessTable =
         stack_top: 0,
     }));
 #[cfg(not(test))]
-static RUNTIME_INIT_FRAME: KernelCell<k16_rt::TrapFrame> =
+static RUNTIME_SLOT0_FRAME: KernelCell<k16_rt::TrapFrame> =
     KernelCell::new(k16_rt::TrapFrame::zeroed());
 #[cfg(not(test))]
-static mut RUNTIME_CHILD_STATE: ProcessState = PROCESS_STATE_EMPTY;
+static RUNTIME_SLOT1_FRAME: KernelCell<k16_rt::TrapFrame> =
+    KernelCell::new(k16_rt::TrapFrame::zeroed());
 #[cfg(not(test))]
-static mut RUNTIME_CHILD_LOAD_BASE: u32 = 0;
+static mut RUNTIME_CURRENT_SLOT: u32 = 0;
 #[cfg(not(test))]
-static mut RUNTIME_INIT_HEAP_START: u32 = 0;
+static mut RUNTIME_SLOT1_PARENT: u32 = NO_PARENT_SLOT;
 #[cfg(not(test))]
-static mut RUNTIME_INIT_PROGRAM_BREAK: u32 = 0;
+static mut RUNTIME_SLOT2_PARENT: u32 = NO_PARENT_SLOT;
 #[cfg(not(test))]
-static mut RUNTIME_INIT_HEAP_LIMIT: u32 = 0;
+static mut RUNTIME_SLOT0_HEAP_START: u32 = 0;
 #[cfg(not(test))]
-static mut RUNTIME_CHILD_HEAP_START: u32 = 0;
+static mut RUNTIME_SLOT1_HEAP_START: u32 = 0;
 #[cfg(not(test))]
-static mut RUNTIME_CHILD_PROGRAM_BREAK: u32 = 0;
+static mut RUNTIME_SLOT2_HEAP_START: u32 = 0;
 #[cfg(not(test))]
-static mut RUNTIME_CHILD_HEAP_LIMIT: u32 = 0;
+static mut RUNTIME_SLOT0_PROGRAM_BREAK: u32 = 0;
+#[cfg(not(test))]
+static mut RUNTIME_SLOT1_PROGRAM_BREAK: u32 = 0;
+#[cfg(not(test))]
+static mut RUNTIME_SLOT2_PROGRAM_BREAK: u32 = 0;
+#[cfg(not(test))]
+static mut RUNTIME_SLOT0_HEAP_LIMIT: u32 = 0;
+#[cfg(not(test))]
+static mut RUNTIME_SLOT1_HEAP_LIMIT: u32 = 0;
+#[cfg(not(test))]
+static mut RUNTIME_SLOT2_HEAP_LIMIT: u32 = 0;
 
 #[cfg(feature = "host-test")]
 #[allow(dead_code)]
@@ -114,12 +128,27 @@ pub enum HeapError {
 pub enum ProcessId {
     Init,
     Child,
+    Foreground2,
 }
 
+impl ProcessId {
+    const fn from_slot(slot: usize) -> Self {
+        match slot {
+            INIT_PROCESS_SLOT => Self::Init,
+            1 => Self::Child,
+            _ => Self::Foreground2,
+        }
+    }
+}
+
+#[cfg(any(test, feature = "host-test"))]
 pub type ProcessState = u32;
 
+#[cfg(any(test, feature = "host-test"))]
 pub const PROCESS_STATE_EMPTY: ProcessState = 0;
+#[cfg(any(test, feature = "host-test"))]
 pub const PROCESS_STATE_RUNNING: ProcessState = 1;
+#[cfg(any(test, feature = "host-test"))]
 pub const PROCESS_STATE_BLOCKED_ON_CHILD: ProcessState = 2;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -169,44 +198,75 @@ pub struct InitResume {
     pub child_exit_status: u32,
 }
 
+#[cfg(any(test, feature = "host-test"))]
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub struct ProcessTable {
-    init_state: ProcessState,
-    init_context: ProcessContext,
-    init_frame: TrapFrame,
-    child_state: ProcessState,
-    child_context: ProcessContext,
-    child_frame: TrapFrame,
-    child_exit_status: u32,
-    child_load_base: u32,
-    init_heap_start: u32,
-    init_program_break: u32,
-    init_heap_limit: u32,
-    child_heap_start: u32,
-    child_program_break: u32,
-    child_heap_limit: u32,
+struct ProcessSlot {
+    state: ProcessState,
+    parent_slot: u32,
+    context: ProcessContext,
+    frame: TrapFrame,
+    exit_status: u32,
+    load_base: u32,
+    heap_start: u32,
+    program_break: u32,
+    heap_limit: u32,
 }
 
-impl ProcessTable {
-    pub const fn new(init_context: ProcessContext) -> Self {
+#[cfg(any(test, feature = "host-test"))]
+impl ProcessSlot {
+    const fn empty() -> Self {
         Self {
-            init_state: PROCESS_STATE_RUNNING,
-            init_context,
-            init_frame: TrapFrame::zeroed(),
-            child_state: PROCESS_STATE_EMPTY,
-            child_context: ProcessContext {
+            state: PROCESS_STATE_EMPTY,
+            parent_slot: NO_PARENT_SLOT,
+            context: ProcessContext {
                 entry_pc: 0,
                 stack_top: 0,
             },
-            child_frame: TrapFrame::zeroed(),
-            child_exit_status: 0,
-            child_load_base: 0,
-            init_heap_start: 0,
-            init_program_break: 0,
-            init_heap_limit: 0,
-            child_heap_start: 0,
-            child_program_break: 0,
-            child_heap_limit: 0,
+            frame: TrapFrame::zeroed(),
+            exit_status: 0,
+            load_base: 0,
+            heap_start: 0,
+            program_break: 0,
+            heap_limit: 0,
+        }
+    }
+
+    const fn init(context: ProcessContext) -> Self {
+        Self {
+            state: PROCESS_STATE_RUNNING,
+            parent_slot: NO_PARENT_SLOT,
+            context,
+            frame: TrapFrame::zeroed(),
+            exit_status: 0,
+            load_base: 0,
+            heap_start: 0,
+            program_break: 0,
+            heap_limit: 0,
+        }
+    }
+
+    fn clear(&mut self) {
+        *self = Self::empty();
+    }
+}
+
+#[cfg(any(test, feature = "host-test"))]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct ProcessTable {
+    slots: [ProcessSlot; MAX_PROCESS_SLOTS],
+    current_slot: usize,
+}
+
+#[cfg(any(test, feature = "host-test"))]
+impl ProcessTable {
+    pub const fn new(init_context: ProcessContext) -> Self {
+        Self {
+            slots: [
+                ProcessSlot::init(init_context),
+                ProcessSlot::empty(),
+                ProcessSlot::empty(),
+            ],
+            current_slot: INIT_PROCESS_SLOT,
         }
     }
 
@@ -217,16 +277,17 @@ impl ProcessTable {
         if image.load_addr >= image.load_end || image.load_end > USER_PROGRAM_LIMIT {
             return Err(ProcessLoadError::InvalidArena);
         }
-        self.init_context = ProcessContext {
+        let init_slot = &mut self.slots[INIT_PROCESS_SLOT];
+        init_slot.context = ProcessContext {
             entry_pc: image.entry_pc,
             stack_top: USER_PROGRAM_LIMIT,
         };
-        self.child_load_base = align_up(image.load_end, LOAD_ALIGNMENT)?;
+        init_slot.load_base = align_up(image.load_end, LOAD_ALIGNMENT)?;
         let heap = HeapState::from_bounds(image.load_end, USER_PROGRAM_LIMIT)
             .map_err(|_| ProcessLoadError::ProgramTooLarge)?;
-        self.init_heap_start = heap.start;
-        self.init_program_break = heap.start;
-        self.init_heap_limit = heap.limit;
+        init_slot.heap_start = heap.start;
+        init_slot.program_break = heap.start;
+        init_slot.heap_limit = heap.limit;
         Ok(())
     }
 
@@ -234,10 +295,11 @@ impl ProcessTable {
         &self,
         init_frame: TrapFrame,
     ) -> Result<UserArena, ProcessLoadError> {
-        if self.child_load_base == 0 {
+        let caller = &self.slots[self.current_slot];
+        if caller.load_base == 0 {
             return Err(ProcessLoadError::Storage);
         }
-        let load_base = self.init_program_break.max(self.child_load_base);
+        let load_base = caller.program_break.max(caller.load_base);
         UserArena::new(load_base, init_frame.stack_pointer)
             .map_err(|_| ProcessLoadError::ProgramTooLarge)
     }
@@ -271,7 +333,14 @@ impl ProcessTable {
         init_frame: TrapFrame,
         argv: ChildArgv,
     ) -> Result<ChildLaunch, ProcessSwitchError> {
-        if self.child_state_runtime() == PROCESS_STATE_RUNNING {
+        if self.slots[self.current_slot].state != PROCESS_STATE_RUNNING {
+            return Err(ProcessSwitchError::NoRunningChild);
+        }
+        let child_slot = self
+            .next_empty_child_slot()
+            .ok_or(ProcessSwitchError::ChildAlreadyRunning)?;
+        let parent_slot = self.current_slot;
+        if parent_slot == child_slot {
             return Err(ProcessSwitchError::ChildAlreadyRunning);
         }
         let context = ProcessContext {
@@ -283,50 +352,66 @@ impl ProcessTable {
         child_frame.registers[2] = argv.table_ptr;
         let heap = HeapState::from_bounds(child_plan.load_end.max(argv.end), child_plan.stack_top)
             .map_err(|_| ProcessSwitchError::NoRunningChild)?;
-        unsafe { core::ptr::write_volatile(&mut self.init_state, PROCESS_STATE_BLOCKED_ON_CHILD) };
-        self.init_context = ProcessContext {
+        let parent = &mut self.slots[parent_slot];
+        unsafe { core::ptr::write_volatile(&mut parent.state, PROCESS_STATE_BLOCKED_ON_CHILD) };
+        parent.context = ProcessContext {
             entry_pc: init_frame.resume_pc,
             stack_top: init_frame.stack_pointer,
         };
-        self.init_frame = init_frame;
-        unsafe { core::ptr::write_volatile(&mut self.child_state, PROCESS_STATE_RUNNING) };
-        self.child_context = context;
-        self.child_frame = child_frame;
-        self.child_exit_status = 0;
-        self.child_heap_start = heap.start;
-        self.child_program_break = heap.start;
-        self.child_heap_limit = heap.limit;
+        parent.frame = init_frame;
+        let child = &mut self.slots[child_slot];
+        child.parent_slot = parent_slot as u32;
+        child.context = context;
+        child.frame = child_frame;
+        child.exit_status = 0;
+        child.load_base = align_up(child_plan.load_end, LOAD_ALIGNMENT)
+            .map_err(|_| ProcessSwitchError::NoRunningChild)?;
+        child.heap_start = heap.start;
+        child.program_break = heap.start;
+        child.heap_limit = heap.limit;
+        unsafe { core::ptr::write_volatile(&mut child.state, PROCESS_STATE_RUNNING) };
+        self.current_slot = child_slot;
         Ok(ChildLaunch {
-            id: ProcessId::Child,
+            id: ProcessId::from_slot(child_slot),
             context,
             frame: child_frame,
         })
     }
 
     pub fn finish_child(&mut self, status: u32) -> Result<InitResume, ProcessSwitchError> {
-        if self.child_state_runtime() != PROCESS_STATE_RUNNING {
+        if self.current_slot == INIT_PROCESS_SLOT
+            || self.slots[self.current_slot].state != PROCESS_STATE_RUNNING
+        {
             return Err(ProcessSwitchError::NoRunningChild);
         }
-        unsafe { core::ptr::write_volatile(&mut self.child_state, PROCESS_STATE_EMPTY) };
-        self.child_exit_status = status;
-        self.child_heap_start = 0;
-        self.child_program_break = 0;
-        self.child_heap_limit = 0;
-        unsafe { core::ptr::write_volatile(&mut self.init_state, PROCESS_STATE_RUNNING) };
+        let child_slot = self.current_slot;
+        let parent_slot = self.slots[child_slot].parent_slot as usize;
+        if parent_slot >= MAX_PROCESS_SLOTS {
+            return Err(ProcessSwitchError::NoRunningChild);
+        }
+        unsafe { core::ptr::write_volatile(&mut self.slots[child_slot].state, PROCESS_STATE_EMPTY) };
+        self.slots[child_slot].exit_status = status;
+        self.slots[child_slot].clear();
+        self.slots[parent_slot].exit_status = status;
+        unsafe {
+            core::ptr::write_volatile(&mut self.slots[parent_slot].state, PROCESS_STATE_RUNNING)
+        };
+        self.current_slot = parent_slot;
+        let parent = self.slots[parent_slot];
         Ok(InitResume {
-            id: ProcessId::Init,
-            context: self.init_context,
-            frame: self.init_frame,
+            id: ProcessId::from_slot(parent_slot),
+            context: parent.context,
+            frame: parent.frame,
             child_exit_status: status,
         })
     }
 
     pub const fn init_state(&self) -> ProcessState {
-        self.init_state
+        self.slots[INIT_PROCESS_SLOT].state
     }
 
     pub const fn child_state(&self) -> ProcessState {
-        self.child_state
+        self.slots[1].state
     }
 
     pub fn program_break(&self) -> Result<u32, HeapError> {
@@ -344,11 +429,7 @@ impl ProcessTable {
         if address < heap_start || address > heap_limit {
             return Err(HeapError::OutOfMemory);
         }
-        if self.child_state_runtime() == PROCESS_STATE_RUNNING {
-            self.child_program_break = address;
-        } else {
-            self.init_program_break = address;
-        }
+        self.slots[self.current_slot].program_break = address;
         Ok(address)
     }
 
@@ -359,26 +440,23 @@ impl ProcessTable {
         Ok(old_break)
     }
 
-    fn child_state_runtime(&self) -> ProcessState {
-        unsafe { core::ptr::read_volatile(&self.child_state) }
+    fn next_empty_child_slot(&self) -> Option<usize> {
+        let mut slot = 1;
+        while slot < MAX_PROCESS_SLOTS {
+            if self.slots[slot].state == PROCESS_STATE_EMPTY {
+                return Some(slot);
+            }
+            slot += 1;
+        }
+        None
     }
 
     fn current_heap(&self) -> Result<(u32, u32, u32), HeapError> {
-        if self.child_state_runtime() == PROCESS_STATE_RUNNING {
-            return Ok((
-                self.child_heap_start,
-                self.child_program_break,
-                self.child_heap_limit,
-            ));
-        }
-        if self.init_heap_start == 0 {
+        let current = self.slots[self.current_slot];
+        if current.heap_start == 0 {
             return Err(HeapError::NoRunningChild);
         }
-        Ok((
-            self.init_heap_start,
-            self.init_program_break,
-            self.init_heap_limit,
-        ))
+        Ok((current.heap_start, current.program_break, current.heap_limit))
     }
 }
 
@@ -419,15 +497,20 @@ pub unsafe fn initialize_init_process(
             .map_err(|_| ProcessLoadError::ProgramTooLarge)?;
         unsafe {
             write_runtime_word(
-                core::ptr::addr_of_mut!(RUNTIME_CHILD_LOAD_BASE),
-                align_up(image.load_end, LOAD_ALIGNMENT)?,
+                core::ptr::addr_of_mut!(RUNTIME_CURRENT_SLOT),
+                INIT_PROCESS_SLOT as u32,
             );
-            write_runtime_word(core::ptr::addr_of_mut!(RUNTIME_INIT_HEAP_START), heap.start);
+            write_runtime_word(runtime_slot_parent_ptr(1), NO_PARENT_SLOT);
+            write_runtime_word(runtime_slot_parent_ptr(2), NO_PARENT_SLOT);
             write_runtime_word(
-                core::ptr::addr_of_mut!(RUNTIME_INIT_PROGRAM_BREAK),
+                runtime_slot_heap_start_ptr(INIT_PROCESS_SLOT),
                 heap.start,
             );
-            write_runtime_word(core::ptr::addr_of_mut!(RUNTIME_INIT_HEAP_LIMIT), heap.limit);
+            write_runtime_word(
+                runtime_slot_program_break_ptr(INIT_PROCESS_SLOT),
+                heap.start,
+            );
+            write_runtime_word(runtime_slot_heap_limit_ptr(INIT_PROCESS_SLOT), heap.limit);
         }
         return Ok(());
     }
@@ -488,18 +571,19 @@ pub unsafe fn begin_loaded_child_from_argv_request(request: &[u8]) -> Result<Chi
 
 #[cfg(not(test))]
 unsafe fn begin_loaded_child_runtime(path: &[u8], arg: &[u8]) -> Result<ChildLaunch, u32> {
-    let mut init_frame = k16_rt::TrapFrame::zeroed();
-    k16_rt::save_trap_frame(&mut init_frame);
-    unsafe { save_runtime_init_frame() };
-    let initial_child_load_base =
-        unsafe { read_runtime_word(core::ptr::addr_of_mut!(RUNTIME_CHILD_LOAD_BASE)) };
-    let init_program_break =
-        unsafe { read_runtime_word(core::ptr::addr_of_mut!(RUNTIME_INIT_PROGRAM_BREAK)) };
-    let load_base = initial_child_load_base.max(init_program_break);
-    if load_base == 0 {
+    let current_slot = unsafe { runtime_current_slot() };
+    if current_slot + 1 >= MAX_PROCESS_SLOTS {
+        return Err(run_status_from_switch_error(
+            ProcessSwitchError::ChildAlreadyRunning,
+        ));
+    }
+    let caller_frame = unsafe { save_runtime_process_frame(current_slot) };
+    let caller_program_break =
+        unsafe { read_runtime_word(runtime_slot_program_break_ptr(current_slot)) };
+    if caller_program_break == 0 {
         return Err(run_status_from_load_error(ProcessLoadError::Storage));
     }
-    let arena = UserArena::new(load_base, init_frame.stack_pointer)
+    let arena = UserArena::new(caller_program_break, caller_frame.stack_pointer)
         .map_err(|_| run_status_from_load_error(ProcessLoadError::ProgramTooLarge))?;
     let child_plan = unsafe { load_dynamic_user_program_from_storage0(path, arena) }
         .map_err(run_status_from_load_error)?;
@@ -517,7 +601,9 @@ unsafe fn begin_loaded_child_plan_runtime_with_argv(
     child_plan: DynamicUserLoadPlan,
     argv: ChildArgv,
 ) -> Result<ChildLaunch, ProcessSwitchError> {
-    if unsafe { runtime_child_state() } == PROCESS_STATE_RUNNING {
+    let parent_slot = unsafe { runtime_current_slot() };
+    let child_slot = parent_slot + 1;
+    if child_slot >= MAX_PROCESS_SLOTS {
         return Err(ProcessSwitchError::ChildAlreadyRunning);
     }
     let context = ProcessContext {
@@ -528,12 +614,19 @@ unsafe fn begin_loaded_child_plan_runtime_with_argv(
     child_frame.registers[1] = argv.argc;
     child_frame.registers[2] = argv.table_ptr;
     unsafe {
-        initialize_runtime_heap_from_bounds(child_plan.load_end.max(argv.end), child_plan.stack_top)
-            .map_err(|_| ProcessSwitchError::NoRunningChild)?
+        initialize_runtime_heap_from_bounds(
+            child_slot,
+            child_plan.load_end.max(argv.end),
+            child_plan.stack_top,
+        )
+        .map_err(|_| ProcessSwitchError::NoRunningChild)?
     };
-    unsafe { set_runtime_child_state_running() };
+    unsafe {
+        write_runtime_word(runtime_slot_parent_ptr(child_slot), parent_slot as u32);
+        write_runtime_word(core::ptr::addr_of_mut!(RUNTIME_CURRENT_SLOT), child_slot as u32);
+    }
     Ok(ChildLaunch {
-        id: ProcessId::Child,
+        id: ProcessId::from_slot(child_slot),
         context,
         frame: child_frame,
     })
@@ -560,19 +653,28 @@ pub unsafe fn finish_child_for_exit(status: u32) -> Result<InitResume, ProcessSw
 
 #[cfg(not(test))]
 unsafe fn finish_child_runtime(status: u32) -> Result<InitResume, ProcessSwitchError> {
-    let child_state = unsafe { runtime_child_state() };
-    if child_state != PROCESS_STATE_RUNNING {
+    let current_slot = unsafe { runtime_current_slot() };
+    if current_slot == INIT_PROCESS_SLOT {
         return Err(ProcessSwitchError::NoRunningChild);
     }
-    unsafe { set_runtime_child_state_empty() };
-    unsafe { clear_runtime_heap() };
+    let parent_slot =
+        unsafe { read_runtime_word(runtime_slot_parent_ptr(current_slot)) } as usize;
+    if parent_slot >= MAX_PROCESS_SLOTS {
+        return Err(ProcessSwitchError::NoRunningChild);
+    }
+    let frame = TrapFrame::from(unsafe { *runtime_slot_frame(parent_slot).get() });
+    unsafe {
+        write_runtime_word(runtime_slot_parent_ptr(current_slot), NO_PARENT_SLOT);
+        clear_runtime_heap(current_slot);
+        write_runtime_word(core::ptr::addr_of_mut!(RUNTIME_CURRENT_SLOT), parent_slot as u32);
+    }
     Ok(InitResume {
-        id: ProcessId::Init,
+        id: ProcessId::from_slot(parent_slot),
         context: ProcessContext {
-            entry_pc: 0,
-            stack_top: 0,
+            entry_pc: frame.resume_pc,
+            stack_top: frame.stack_pointer,
         },
-        frame: TrapFrame::zeroed(),
+        frame,
         child_exit_status: status,
     })
 }
@@ -602,109 +704,104 @@ pub unsafe fn grow_current_program_break(delta: u32) -> Result<u32, HeapError> {
 }
 
 #[cfg(not(test))]
-unsafe fn save_runtime_init_frame() {
-    let saved = unsafe { RUNTIME_INIT_FRAME.get() };
+unsafe fn save_runtime_process_frame(slot: usize) -> TrapFrame {
+    let saved = unsafe { runtime_slot_frame(slot).get() };
     k16_rt::save_trap_frame(saved);
+    TrapFrame::from(*saved)
 }
 
 #[cfg(not(test))]
-unsafe fn runtime_child_state() -> ProcessState {
-    unsafe { read_u32_le(runtime_child_state_addr()) }
+unsafe fn runtime_current_slot() -> usize {
+    unsafe { read_runtime_word(core::ptr::addr_of_mut!(RUNTIME_CURRENT_SLOT)) as usize }
 }
 
 #[cfg(not(test))]
-unsafe fn set_runtime_child_state_running() {
-    unsafe { write_runtime_word(core::ptr::addr_of_mut!(RUNTIME_CHILD_STATE), 1) }
+fn runtime_slot_parent_ptr(slot: usize) -> *mut u32 {
+    match slot {
+        1 => core::ptr::addr_of_mut!(RUNTIME_SLOT1_PARENT),
+        2 => core::ptr::addr_of_mut!(RUNTIME_SLOT2_PARENT),
+        _ => core::ptr::addr_of_mut!(RUNTIME_SLOT1_PARENT),
+    }
 }
 
 #[cfg(not(test))]
-unsafe fn set_runtime_child_state_empty() {
-    unsafe { write_runtime_word(core::ptr::addr_of_mut!(RUNTIME_CHILD_STATE), 0) }
+fn runtime_slot_frame(slot: usize) -> &'static KernelCell<k16_rt::TrapFrame> {
+    match slot {
+        INIT_PROCESS_SLOT => &RUNTIME_SLOT0_FRAME,
+        _ => &RUNTIME_SLOT1_FRAME,
+    }
 }
 
 #[cfg(not(test))]
-fn runtime_child_state_addr() -> u32 {
-    core::ptr::addr_of_mut!(RUNTIME_CHILD_STATE) as usize as u32
+fn runtime_slot_heap_start_ptr(slot: usize) -> *mut u32 {
+    match slot {
+        INIT_PROCESS_SLOT => core::ptr::addr_of_mut!(RUNTIME_SLOT0_HEAP_START),
+        1 => core::ptr::addr_of_mut!(RUNTIME_SLOT1_HEAP_START),
+        _ => core::ptr::addr_of_mut!(RUNTIME_SLOT2_HEAP_START),
+    }
+}
+
+#[cfg(not(test))]
+fn runtime_slot_program_break_ptr(slot: usize) -> *mut u32 {
+    match slot {
+        INIT_PROCESS_SLOT => core::ptr::addr_of_mut!(RUNTIME_SLOT0_PROGRAM_BREAK),
+        1 => core::ptr::addr_of_mut!(RUNTIME_SLOT1_PROGRAM_BREAK),
+        _ => core::ptr::addr_of_mut!(RUNTIME_SLOT2_PROGRAM_BREAK),
+    }
+}
+
+#[cfg(not(test))]
+fn runtime_slot_heap_limit_ptr(slot: usize) -> *mut u32 {
+    match slot {
+        INIT_PROCESS_SLOT => core::ptr::addr_of_mut!(RUNTIME_SLOT0_HEAP_LIMIT),
+        1 => core::ptr::addr_of_mut!(RUNTIME_SLOT1_HEAP_LIMIT),
+        _ => core::ptr::addr_of_mut!(RUNTIME_SLOT2_HEAP_LIMIT),
+    }
 }
 
 #[cfg(not(test))]
 unsafe fn initialize_runtime_heap_from_bounds(
+    slot: usize,
     load_end: u32,
     stack_top: u32,
 ) -> Result<(), HeapError> {
     let heap = HeapState::from_bounds(load_end, stack_top)?;
     unsafe {
-        write_runtime_word(
-            core::ptr::addr_of_mut!(RUNTIME_CHILD_HEAP_START),
-            heap.start,
-        );
-        write_runtime_word(
-            core::ptr::addr_of_mut!(RUNTIME_CHILD_PROGRAM_BREAK),
-            heap.start,
-        );
-        write_runtime_word(
-            core::ptr::addr_of_mut!(RUNTIME_CHILD_HEAP_LIMIT),
-            heap.limit,
-        );
+        write_runtime_word(runtime_slot_heap_start_ptr(slot), heap.start);
+        write_runtime_word(runtime_slot_program_break_ptr(slot), heap.start);
+        write_runtime_word(runtime_slot_heap_limit_ptr(slot), heap.limit);
     }
     Ok(())
 }
 
 #[cfg(not(test))]
-unsafe fn clear_runtime_heap() {
+unsafe fn clear_runtime_heap(slot: usize) {
     unsafe {
-        write_runtime_word(core::ptr::addr_of_mut!(RUNTIME_CHILD_HEAP_START), 0);
-        write_runtime_word(core::ptr::addr_of_mut!(RUNTIME_CHILD_PROGRAM_BREAK), 0);
-        write_runtime_word(core::ptr::addr_of_mut!(RUNTIME_CHILD_HEAP_LIMIT), 0);
+        write_runtime_word(runtime_slot_heap_start_ptr(slot), 0);
+        write_runtime_word(runtime_slot_program_break_ptr(slot), 0);
+        write_runtime_word(runtime_slot_heap_limit_ptr(slot), 0);
     }
 }
 
 #[cfg(not(test))]
 unsafe fn set_runtime_program_break(address: u32) -> Result<u32, HeapError> {
-    let child_running = unsafe { runtime_child_state() } == PROCESS_STATE_RUNNING;
-    let heap_start = unsafe {
-        read_runtime_word(if child_running {
-            core::ptr::addr_of_mut!(RUNTIME_CHILD_HEAP_START)
-        } else {
-            core::ptr::addr_of_mut!(RUNTIME_INIT_HEAP_START)
-        })
-    };
-    let heap_limit = unsafe {
-        read_runtime_word(if child_running {
-            core::ptr::addr_of_mut!(RUNTIME_CHILD_HEAP_LIMIT)
-        } else {
-            core::ptr::addr_of_mut!(RUNTIME_INIT_HEAP_LIMIT)
-        })
-    };
+    let current_slot = unsafe { runtime_current_slot() };
+    let heap_start = unsafe { read_runtime_word(runtime_slot_heap_start_ptr(current_slot)) };
+    let heap_limit = unsafe { read_runtime_word(runtime_slot_heap_limit_ptr(current_slot)) };
     if heap_start == 0 {
         return Err(HeapError::NoRunningChild);
     }
     if address < heap_start || address > heap_limit {
         return Err(HeapError::OutOfMemory);
     }
-    unsafe {
-        write_runtime_word(
-            if child_running {
-                core::ptr::addr_of_mut!(RUNTIME_CHILD_PROGRAM_BREAK)
-            } else {
-                core::ptr::addr_of_mut!(RUNTIME_INIT_PROGRAM_BREAK)
-            },
-            address,
-        )
-    };
+    unsafe { write_runtime_word(runtime_slot_program_break_ptr(current_slot), address) };
     Ok(address)
 }
 
 #[cfg(not(test))]
 unsafe fn grow_runtime_program_break(delta: u32) -> Result<u32, HeapError> {
-    let child_running = unsafe { runtime_child_state() } == PROCESS_STATE_RUNNING;
-    let old_break = unsafe {
-        read_runtime_word(if child_running {
-            core::ptr::addr_of_mut!(RUNTIME_CHILD_PROGRAM_BREAK)
-        } else {
-            core::ptr::addr_of_mut!(RUNTIME_INIT_PROGRAM_BREAK)
-        })
-    };
+    let current_slot = unsafe { runtime_current_slot() };
+    let old_break = unsafe { read_runtime_word(runtime_slot_program_break_ptr(current_slot)) };
     if old_break == 0 {
         return Err(HeapError::NoRunningChild);
     }
@@ -723,17 +820,12 @@ unsafe fn write_runtime_word(address: *mut u32, value: u32) {
     unsafe { core::ptr::write_volatile(address, value) }
 }
 
-#[cfg(not(test))]
-unsafe fn restore_runtime_init_frame() -> u32 {
-    let saved = unsafe { RUNTIME_INIT_FRAME.get() };
-    unsafe { k16_rt::restore_trap_frame(&*saved) }
-}
-
 #[cfg(any(not(test), feature = "host-test"))]
 pub unsafe fn resume_init_context(resume: InitResume) -> ! {
     #[cfg(not(test))]
     {
-        let _saved_r0 = unsafe { restore_runtime_init_frame() };
+        let frame = k16_rt::TrapFrame::from(resume.frame);
+        let _saved_r0 = unsafe { k16_rt::restore_trap_frame(&frame) };
         unsafe { k16_rt::iret_with_r0(resume.child_exit_status) }
     }
     #[cfg(test)]
@@ -1722,12 +1814,12 @@ mod tests {
     }
 
     #[test]
-    fn process_table_rejects_nested_child_run() {
+    fn process_table_allows_nested_foreground_child_run() {
         let mut table = ProcessTable::new(ProcessContext {
             entry_pc: 0x0000_8000,
             stack_top: 0x0001_0000,
         });
-        let child_plan = DynamicUserLoadPlan {
+        let shell_plan = DynamicUserLoadPlan {
             load_base: 0x0000_a000,
             load_end: 0x0000_a020,
             entry_pc: 0x0000_a004,
@@ -1737,12 +1829,45 @@ mod tests {
             zero_fill_addr: 0x0000_a010,
             zero_fill_len: 16,
         };
-        table.begin_child_run(child_plan).expect("child starts");
+        let utility_plan = DynamicUserLoadPlan {
+            load_base: 0x0000_b000,
+            load_end: 0x0000_b020,
+            entry_pc: 0x0000_b004,
+            stack_top: 0x0000_f000,
+            payload_dst: 0x0000_b000,
+            payload_len: 16,
+            zero_fill_addr: 0x0000_b010,
+            zero_fill_len: 16,
+        };
+        let init_frame = TrapFrame {
+            resume_pc: 0x0000_8100,
+            stack_pointer: 0x0000_ff00,
+            ..TrapFrame::zeroed()
+        };
+        let shell_frame = TrapFrame {
+            resume_pc: 0x0000_a100,
+            stack_pointer: 0x0000_ef00,
+            ..TrapFrame::zeroed()
+        };
 
-        assert_eq!(
-            table.begin_child_run(child_plan),
-            Err(ProcessSwitchError::ChildAlreadyRunning)
-        );
+        let shell = table
+            .begin_child_run_from_frame(shell_plan, init_frame)
+            .expect("shell starts");
+        let utility = table
+            .begin_child_run_from_frame(utility_plan, shell_frame)
+            .expect("utility starts from shell");
+
+        assert_ne!(utility.id, shell.id);
+
+        let resumed_shell = table.finish_child(5).expect("shell resumes");
+        assert_eq!(resumed_shell.id, shell.id);
+        assert_eq!(resumed_shell.child_exit_status, 5);
+        assert_eq!(resumed_shell.frame, shell_frame);
+
+        let resumed_init = table.finish_child(7).expect("init resumes");
+        assert_eq!(resumed_init.id, ProcessId::Init);
+        assert_eq!(resumed_init.child_exit_status, 7);
+        assert_eq!(resumed_init.frame, init_frame);
     }
 
     #[test]

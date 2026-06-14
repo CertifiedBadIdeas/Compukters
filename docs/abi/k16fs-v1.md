@@ -179,7 +179,8 @@ The current guest boot chain uses the same K16FS structure:
 ```text
 BIOS       -> storage0 BOOT/K16FS /boot/loader.kb -> bootloader
 bootloader -> storage0 ROOT/K16FS /boot/kernel.kx -> kernel
-kernel     -> storage0 ROOT/K16FS /bin/init.kx    -> program
+kernel     -> storage0 ROOT/K16FS /bin/init.kx    -> init launcher
+init       -> storage0 ROOT/K16FS /bin/shell.kx   -> shell
 ```
 
 Guest loaders treat missing paths, malformed metadata, or wrong executable ABI

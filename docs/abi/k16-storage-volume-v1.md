@@ -162,6 +162,8 @@ The current boot chain is:
 6. Kernel reads `/bin/init.kx` from the `ROOT` K16FS partition.
 7. Kernel validates the program `K16E`, copies its payload to `load_addr`, and
    jumps to `entry_pc`.
+8. The bundled init program synchronously launches `/bin/shell.kx` through the
+   K16 `RUN` syscall.
 
 There is no fallback probing for fixed boot records, alternate paths, or raw
 instruction bytes.
