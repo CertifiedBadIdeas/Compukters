@@ -54,7 +54,6 @@ pub mod io {
             self.0
         }
 
-        #[inline(always)]
         pub fn write_all(self, bytes: &[u8]) -> Result<(), Error> {
             let returned = k16_rt::write_syscall(self.0, bytes.as_ptr(), bytes.len());
             if is_error_status(returned) {
@@ -66,7 +65,6 @@ pub mod io {
             Ok(())
         }
 
-        #[inline(always)]
         pub fn read(self, bytes: &mut [u8]) -> Result<usize, Error> {
             let returned = k16_rt::read_syscall(self.0, bytes.as_mut_ptr(), bytes.len());
             if is_error_status(returned) {
