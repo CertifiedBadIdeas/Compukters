@@ -55,6 +55,36 @@ fn file_close_delegates_to_close_syscall() {
 }
 
 #[test]
+fn fs_read_dir_delegates_to_read_dir_syscall() {
+    k16_rt::host_test::reset_syscalls();
+    k16_rt::host_test::set_syscall_return(24);
+    let mut bytes = [0u8; 128];
+
+    let read = fs::read_dir("/bin", &mut bytes);
+
+    assert_eq!(read, Ok(24));
+    assert_eq!(
+        k16_rt::host_test::syscall_number(),
+        k16_rt::host_test::READ_DIR
+    );
+    assert_ne!(k16_rt::host_test::syscall_arg0(), 0);
+    assert_eq!(k16_rt::host_test::syscall_arg1(), 20);
+    assert_eq!(k16_rt::host_test::syscall_arg2(), 0);
+}
+
+#[test]
+fn fs_read_dir_rejects_too_long_path_before_syscall() {
+    k16_rt::host_test::reset_syscalls();
+    let mut bytes = [0u8; 128];
+    let path = "x".repeat(k16_abi::syscall::MAX_READ_DIR_PATH_BYTES + 1);
+
+    let read = fs::read_dir(&path, &mut bytes);
+
+    assert_eq!(read, Err(fs::Error::InvalidArgument));
+    assert_eq!(k16_rt::host_test::syscall_number(), 0);
+}
+
+#[test]
 fn fs_reports_negative_syscall_status_as_error() {
     k16_rt::host_test::reset_syscalls();
     k16_rt::host_test::set_syscall_return(k16_rt::host_test::ERROR_NO_ENTRY);

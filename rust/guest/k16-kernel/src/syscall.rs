@@ -51,6 +51,14 @@ pub fn dispatch(number: u32) -> ! {
                 Err(error) => unsafe { k16_rt::iret_with_r0(error) },
             }
         }
+        abi_syscall::READ_DIR => {
+            let ptr = k16_rt::syscall_arg0();
+            let len = k16_rt::syscall_arg1();
+            match read_dir(ptr, len) {
+                Ok(written) => unsafe { k16_rt::iret_with_r0(written) },
+                Err(error) => unsafe { k16_rt::iret_with_r0(error) },
+            }
+        }
         abi_syscall::CLOSE => {
             let fd = k16_rt::syscall_arg0();
             match close_fd(fd) {
@@ -131,6 +139,33 @@ fn open_fd(ptr: u32, len: u32, flags: u32) -> Result<u32, u32> {
     }
 }
 
+fn read_dir(ptr: u32, len: u32) -> Result<u32, u32> {
+    if len < 16 || len > abi_syscall::MAX_READ_DIR_REQUEST_BYTES as u32 {
+        return Err(abi_syscall::ERROR_INVALID);
+    }
+    if !valid_guest_buffer(ptr, len) {
+        return Err(abi_syscall::ERROR_FAULT);
+    }
+    let request = unsafe { core::slice::from_raw_parts(ptr as usize as *const u8, len as usize) };
+    if read_u32_le(request, 0) != abi_syscall::READ_DIR_REQUEST_MAGIC {
+        return Err(abi_syscall::ERROR_INVALID);
+    }
+    let path_len = read_u32_le(request, 4);
+    if path_len == 0 || path_len > fs::MAX_READ_DIR_PATH_BYTES || len != 16 + path_len {
+        return Err(abi_syscall::ERROR_INVALID);
+    }
+    let out_ptr = read_u32_le(request, 8);
+    let out_len = read_u32_le(request, 12);
+    if out_len != 0 && !valid_guest_buffer(out_ptr, out_len) {
+        return Err(abi_syscall::ERROR_FAULT);
+    }
+    let path = &request[16..len as usize];
+    match unsafe { fs::read_root_directory(path, out_ptr, out_len) } {
+        Ok(written) => Ok(written),
+        Err(error) => Err(fs_error_to_status(error)),
+    }
+}
+
 fn close_fd(fd: u32) -> Result<(), u32> {
     match unsafe { fs::close_file_fd_for_process(current_process_id(), fd) } {
         Ok(()) => Ok(()),
@@ -193,7 +228,16 @@ fn valid_guest_buffer(ptr: u32, len: u32) -> bool {
     let Some(end) = ptr.checked_add(len) else {
         return false;
     };
-    ptr >= 0x0001_0000 && end <= 0x0002_0000
+    ptr >= 0x0001_0000 && end <= 0x0002_4000
+}
+
+fn read_u32_le(bytes: &[u8], offset: usize) -> u32 {
+    u32::from_le_bytes([
+        bytes[offset],
+        bytes[offset + 1],
+        bytes[offset + 2],
+        bytes[offset + 3],
+    ])
 }
 
 fn fs_error_to_status(error: fs::FsError) -> u32 {

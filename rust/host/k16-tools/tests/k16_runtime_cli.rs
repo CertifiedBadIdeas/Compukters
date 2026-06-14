@@ -1,3 +1,4 @@
+use k16_tools::artifact::K16ArtifactTarget;
 use k16_tools::k16_runtime;
 use k16_tools::k16e;
 use k16_vm::computer_machine::{decode_snapshot_v1, ComputerCpuSnapshotRecord};
@@ -34,7 +35,7 @@ fn k16_runtime_startup_accepts_dynamic_program_target_without_fixed_stack_top() 
     );
 
     let startup_object = fs::read(startup_path).expect("startup object reads");
-    let fixed_stack_top_words = const32(15, 0x2_0000);
+    let fixed_stack_top_words = const32(15, K16ArtifactTarget::PROGRAM_STACK_TOP);
     let fixed_stack_top_bytes = words_to_bytes(&fixed_stack_top_words);
 
     assert!(
@@ -87,10 +88,14 @@ fn k16_runtime_startup_links_returning_main_and_requires_exit_syscall_handler() 
 
     let program = fs::read(output_path).expect("linked program reads");
     let executable = k16e::decode_k16_executable(&program).expect("linked K16E decodes");
-    assert_eq!(executable.entry_pc, 0x1_0000);
+    assert_eq!(executable.entry_pc, 0x1_2000);
 
-    let mut handle = K16ComputerHandle::create_k16_bios_flash(&[0x01, 0x00], 128 * 1024, 1_000_000)
-        .expect("K16 computer creates");
+    let mut handle = K16ComputerHandle::create_k16_bios_flash(
+        &[0x01, 0x00],
+        K16ArtifactTarget::DEFAULT_MEMORY_SIZE,
+        1_000_000,
+    )
+    .expect("K16 computer creates");
     handle
         .exec_k16e_program_from_bytes(&program, 1_000_000)
         .expect("program installs");
@@ -273,8 +278,12 @@ fn k16_runtime_cpu_helpers_resolve_k16_cpu_symbols() {
     );
 
     let program = fs::read(output_path).expect("linked program reads");
-    let mut handle = K16ComputerHandle::create_k16_bios_flash(&[0x01, 0x00], 128 * 1024, 1_000_000)
-        .expect("K16 computer creates");
+    let mut handle = K16ComputerHandle::create_k16_bios_flash(
+        &[0x01, 0x00],
+        K16ArtifactTarget::DEFAULT_MEMORY_SIZE,
+        1_000_000,
+    )
+    .expect("K16 computer creates");
     handle
         .exec_k16e_program_from_bytes(&program, 1_000_000)
         .expect("program installs");
@@ -402,9 +411,10 @@ fn k16_runtime_syscall3_helper_captures_stack_argument_at_runtime() {
     const ENTRY_PC: u32 = 0x8000;
     const TRAP_VECTOR: u32 = 0x8080;
     const HELPER_PC: u32 = 0x80a0;
-    const STACK_TOP: u32 = 0x2_0000;
+    const STACK_TOP: u32 = K16ArtifactTarget::PROGRAM_STACK_TOP;
 
-    let mut memory = MachineMemory::zeroed(128 * 1024).expect("memory creates");
+    let mut memory =
+        MachineMemory::zeroed(K16ArtifactTarget::DEFAULT_MEMORY_SIZE).expect("memory creates");
     let mut caller = Vec::new();
     caller.extend(const32(14, TRAP_VECTOR));
     caller.push(write_csr(K16_CSR_TRAP_VECTOR, 14));
@@ -581,8 +591,12 @@ fn k16_runtime_wait_helper_returns_to_caller_after_resuming() {
     );
 
     let program = fs::read(output_path).expect("linked program reads");
-    let mut handle = K16ComputerHandle::create_k16_bios_flash(&[0x01, 0x00], 128 * 1024, 1_000_000)
-        .expect("K16 computer creates");
+    let mut handle = K16ComputerHandle::create_k16_bios_flash(
+        &[0x01, 0x00],
+        K16ArtifactTarget::DEFAULT_MEMORY_SIZE,
+        1_000_000,
+    )
+    .expect("K16 computer creates");
     handle
         .exec_k16e_program_from_bytes(&program, 1_000_000)
         .expect("program installs");

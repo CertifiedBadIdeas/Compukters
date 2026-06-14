@@ -394,7 +394,7 @@ by different layers:
 bios        firmware-owned temporary stack if needed
 boot        BIOS or boot entry contract initializes boot stack top
 kernel      bootloader passes or installs kernel stack top before entry
-program     compiler profile initializes the first user stack top at 0x00020000
+program     compiler profile initializes the first user stack top at 0x00024000
 ```
 
 The current implementation only reserves the convention and proves the memory

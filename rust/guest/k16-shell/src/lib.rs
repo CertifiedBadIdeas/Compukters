@@ -11,6 +11,7 @@ pub enum Command<'a> {
     Clear,
     Ticks,
     Uname,
+    Ls(Option<&'a [u8]>),
     Cat(&'a [u8]),
     AllocTest,
     Echo(&'a [u8]),
@@ -65,6 +66,10 @@ pub fn classify_line(input: &[u8], line_len: usize) -> Command<'_> {
         Command::Ticks
     } else if matches_command(input, b"uname") {
         Command::Uname
+    } else if matches_command(input, b"ls") {
+        Command::Ls(None)
+    } else if is_ls_command(input, line_len) {
+        Command::Ls(Some(&input[3..line_len]))
     } else if is_cat_command(input, line_len) {
         Command::Cat(&input[4..line_len])
     } else if matches_command(input, b"alloc") {
@@ -92,6 +97,10 @@ fn is_echo_command(input: &[u8], line_len: usize) -> bool {
 
 fn is_cat_command(input: &[u8], line_len: usize) -> bool {
     line_len > 4 && input[0] == b'c' && input[1] == b'a' && input[2] == b't' && input[3] == b' '
+}
+
+fn is_ls_command(input: &[u8], line_len: usize) -> bool {
+    line_len > 3 && input[0] == b'l' && input[1] == b's' && input[2] == b' '
 }
 
 #[cfg(test)]
@@ -166,6 +175,26 @@ mod tests {
         }
 
         assert_eq!(line.command(), Command::Cat(b"/etc/motd"));
+    }
+
+    #[test]
+    fn ls_command_without_argument_is_recognized_as_process_run_utility() {
+        let mut line = InputLine::new();
+        for byte in b"ls" {
+            assert!(line.push_printable(*byte));
+        }
+
+        assert_eq!(line.command(), Command::Ls(None));
+    }
+
+    #[test]
+    fn ls_command_with_path_is_recognized_as_process_run_utility() {
+        let mut line = InputLine::new();
+        for byte in b"ls /bin" {
+            assert!(line.push_printable(*byte));
+        }
+
+        assert_eq!(line.command(), Command::Ls(Some(b"/bin")));
     }
 
     #[test]

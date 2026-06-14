@@ -7,6 +7,7 @@ const ROOT_PARTITION: &[u8; 4] = b"ROOT";
 pub const OPEN_READ_ONLY: u32 = 0;
 pub const MAX_OPEN_PATH_BYTES: u32 =
     1 + (MAX_PATH_COMPONENTS as u32 * MAX_NAME_BYTES as u32) + (MAX_PATH_COMPONENTS as u32 - 1);
+pub const MAX_READ_DIR_PATH_BYTES: u32 = MAX_OPEN_PATH_BYTES;
 
 #[cfg(any(not(test), feature = "host-test"))]
 use core::cell::UnsafeCell;
@@ -46,6 +47,7 @@ impl FsError {
     pub const InvalidFlags: Self = Self(k16_abi::syscall::ERROR_INVALID);
     pub const NoEntry: Self = Self(k16_abi::syscall::ERROR_NO_ENTRY);
     pub const NoFd: Self = Self(k16_abi::syscall::ERROR_NO_FD);
+    pub const NoMemory: Self = Self(k16_abi::syscall::ERROR_NO_MEMORY);
     pub const Storage: Self = Self(k16_abi::syscall::ERROR_NO_ENTRY);
 }
 
@@ -62,45 +64,14 @@ pub struct RootFilePathComponents<'a> {
     count: usize,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RootDirectoryPath {
+    path: RootFilePath,
+}
+
 impl RootFilePath {
     pub fn parse(path: &[u8]) -> Result<Self, FsError> {
-        if !path.starts_with(b"/") || path.len() == 1 || path.ends_with(b"/") {
-            return Err(FsError::InvalidPath);
-        }
-
-        let mut parsed = Self {
-            bytes: [[0; MAX_NAME_BYTES]; MAX_PATH_COMPONENTS],
-            lens: [0; MAX_PATH_COMPONENTS],
-            count: 0,
-        };
-        let mut cursor = 1;
-        while cursor < path.len() {
-            if parsed.count == MAX_PATH_COMPONENTS {
-                return Err(FsError::InvalidPath);
-            }
-            let start = cursor;
-            while cursor < path.len() && path[cursor] != b'/' {
-                cursor += 1;
-            }
-            let component = &path[start..cursor];
-            if component.is_empty()
-                || component.len() > MAX_NAME_BYTES
-                || component == b"."
-                || component == b".."
-            {
-                return Err(FsError::InvalidPath);
-            }
-            let index = parsed.count;
-            let mut byte_index = 0;
-            while byte_index < component.len() {
-                parsed.bytes[index][byte_index] = component[byte_index];
-                byte_index += 1;
-            }
-            parsed.lens[index] = component.len();
-            parsed.count += 1;
-            cursor += 1;
-        }
-        Ok(parsed)
+        parse_root_path(path, false)
     }
 
     pub fn components(&self) -> RootFilePathComponents<'_> {
@@ -114,6 +85,18 @@ impl RootFilePath {
             components,
             count: self.count,
         }
+    }
+}
+
+impl RootDirectoryPath {
+    pub fn parse(path: &[u8]) -> Result<Self, FsError> {
+        Ok(Self {
+            path: parse_root_path(path, true)?,
+        })
+    }
+
+    pub fn components(&self) -> RootFilePathComponents<'_> {
+        self.path.components()
     }
 }
 
@@ -363,6 +346,16 @@ pub unsafe fn read_file_fd_for_process(
 }
 
 #[cfg(any(not(test), feature = "host-test"))]
+pub unsafe fn read_root_directory(path: &[u8], ptr: u32, len: u32) -> Result<u32, FsError> {
+    let path = RootDirectoryPath::parse(path)?;
+    let components = path.components();
+    unsafe {
+        k16_storage::read_directory_from_storage0(ROOT_PARTITION, components.as_slice(), ptr, len)
+            .map_err(storage_error_to_fs_error)
+    }
+}
+
+#[cfg(any(not(test), feature = "host-test"))]
 pub unsafe fn close_file_fd_for_process(owner_pid: u32, fd: u32) -> Result<(), FsError> {
     unsafe { RUNTIME_FD_TABLE.get().close_for_process(owner_pid, fd) }
 }
@@ -376,9 +369,62 @@ pub unsafe fn close_file_fds_for_process(owner_pid: u32) {
 fn storage_error_to_fs_error(error: k16_storage::StorageError) -> FsError {
     if error == k16_storage::StorageError::PATH_NOT_FOUND {
         FsError::NoEntry
+    } else if error == k16_storage::StorageError::OUTPUT_BUFFER_TOO_SMALL {
+        FsError::NoMemory
     } else {
         FsError::Storage
     }
+}
+
+fn parse_root_path(path: &[u8], allow_root: bool) -> Result<RootFilePath, FsError> {
+    if !path.starts_with(b"/") || path.ends_with(b"/") && path.len() > 1 {
+        return Err(FsError::InvalidPath);
+    }
+    if path.len() == 1 {
+        return if allow_root {
+            Ok(RootFilePath {
+                bytes: [[0; MAX_NAME_BYTES]; MAX_PATH_COMPONENTS],
+                lens: [0; MAX_PATH_COMPONENTS],
+                count: 0,
+            })
+        } else {
+            Err(FsError::InvalidPath)
+        };
+    }
+
+    let mut parsed = RootFilePath {
+        bytes: [[0; MAX_NAME_BYTES]; MAX_PATH_COMPONENTS],
+        lens: [0; MAX_PATH_COMPONENTS],
+        count: 0,
+    };
+    let mut cursor = 1;
+    while cursor < path.len() {
+        if parsed.count == MAX_PATH_COMPONENTS {
+            return Err(FsError::InvalidPath);
+        }
+        let start = cursor;
+        while cursor < path.len() && path[cursor] != b'/' {
+            cursor += 1;
+        }
+        let component = &path[start..cursor];
+        if component.is_empty()
+            || component.len() > MAX_NAME_BYTES
+            || component == b"."
+            || component == b".."
+        {
+            return Err(FsError::InvalidPath);
+        }
+        let index = parsed.count;
+        let mut byte_index = 0;
+        while byte_index < component.len() {
+            parsed.bytes[index][byte_index] = component[byte_index];
+            byte_index += 1;
+        }
+        parsed.lens[index] = component.len();
+        parsed.count += 1;
+        cursor += 1;
+    }
+    Ok(parsed)
 }
 
 fn fd_index(fd: u32) -> Result<usize, FsError> {
@@ -427,6 +473,15 @@ mod tests {
             RootFilePath::parse(b"/a/b/c/d/e.txt"),
             Err(FsError::InvalidPath)
         );
+    }
+
+    #[test]
+    fn root_directory_path_accepts_root_and_absolute_directory_path() {
+        let root = RootDirectoryPath::parse(b"/").expect("root parses");
+        assert!(root.components().as_slice().is_empty());
+
+        let bin = RootDirectoryPath::parse(b"/bin").expect("directory parses");
+        assert_eq!(bin.components().as_slice(), &[b"bin".as_slice()]);
     }
 
     #[test]

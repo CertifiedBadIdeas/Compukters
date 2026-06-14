@@ -8,7 +8,7 @@ use kraft_std::prelude::*;
 
 const PROMPT: &[u8] = b"K16> ";
 const NEWLINE: &[u8] = b"\n";
-const HELP: &[u8] = b"HELP\nCLEAR\nECHO\nTICKS\nUNAME\nCAT <PATH>\nALLOC\n";
+const HELP: &[u8] = b"HELP\nCLEAR\nECHO\nTICKS\nUNAME\nLS [PATH]\nCAT <PATH>\nALLOC\n";
 
 #[no_mangle]
 pub extern "C" fn main() -> ! {
@@ -68,6 +68,7 @@ fn dispatch_command(stdout: io::Fd, command: Command<'_>) {
         Command::Clear => must_write(stdout, b"\x0c"),
         Command::Ticks => run_ticks(stdout),
         Command::Uname => run_uname(stdout),
+        Command::Ls(path) => run_ls(stdout, path),
         Command::Cat(path) => run_cat(stdout, path),
         Command::AllocTest => run_alloc_test(stdout),
         Command::Echo(bytes) => {
@@ -86,6 +87,24 @@ fn run_ticks(stdout: io::Fd) {
 
 fn run_uname(stdout: io::Fd) {
     match process::run("/bin/uname.kx") {
+        Ok(_) => {}
+        Err(error) => write_run_error(stdout, error),
+    }
+}
+
+fn run_ls(stdout: io::Fd, path: Option<&[u8]>) {
+    let Some(path) = path else {
+        match process::run("/bin/ls.kx") {
+            Ok(_) => {}
+            Err(error) => write_run_error(stdout, error),
+        }
+        return;
+    };
+    let Ok(path) = core::str::from_utf8(path) else {
+        must_write(stdout, b"ERR\n");
+        return;
+    };
+    match process::run_with_args("/bin/ls.kx", &[path]) {
         Ok(_) => {}
         Err(error) => write_run_error(stdout, error),
     }

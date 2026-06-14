@@ -92,12 +92,16 @@ pub mod syscall {
     pub const CLOSE: u32 = 11;
     pub const BRK: u32 = 12;
     pub const SBRK: u32 = 13;
+    pub const READ_DIR: u32 = 14;
     pub const RUN_FORMAT_PATH: u32 = 0;
     pub const RUN_FORMAT_ARGV: u32 = 1;
     pub const RUN_ARGV_MAGIC: u32 = u32::from_le_bytes(*b"RARG");
     pub const MAX_RUN_ARGS: usize = 1;
     pub const MAX_RUN_ARG_BYTES: usize = 128;
     pub const MAX_RUN_ARGV_REQUEST_BYTES: usize = 256;
+    pub const READ_DIR_REQUEST_MAGIC: u32 = u32::from_le_bytes(*b"RDIR");
+    pub const MAX_READ_DIR_PATH_BYTES: usize = 228;
+    pub const MAX_READ_DIR_REQUEST_BYTES: usize = 16 + MAX_READ_DIR_PATH_BYTES;
     pub const FD_STDIN: u32 = 0;
     pub const FD_STDOUT: u32 = 1;
     pub const FD_STDERR: u32 = 2;
@@ -509,6 +513,10 @@ mod tests {
         assert_eq!(syscall::CLOSE, 11);
         assert_eq!(syscall::BRK, 12);
         assert_eq!(syscall::SBRK, 13);
+        assert_eq!(syscall::READ_DIR, 14);
+        assert_eq!(syscall::READ_DIR_REQUEST_MAGIC, 0x5249_4452);
+        assert_eq!(syscall::MAX_READ_DIR_PATH_BYTES, 228);
+        assert_eq!(syscall::MAX_READ_DIR_REQUEST_BYTES, 244);
         assert_eq!(syscall::FD_STDIN, 0);
         assert_eq!(syscall::FD_STDOUT, 1);
         assert_eq!(syscall::FD_STDERR, 2);

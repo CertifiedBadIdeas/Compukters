@@ -70,6 +70,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "k16-ls"
+version = "0.1.0"
+dependencies = [
+ "kraft-std",
+]
+
+[[package]]
 name = "k16-rt"
 version = "0.1.0"
 dependencies = [
