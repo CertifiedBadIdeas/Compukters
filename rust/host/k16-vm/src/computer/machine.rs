@@ -227,6 +227,7 @@ impl ComputerMachine {
     pub const MMU0_VIRTUAL_START: u32 = computer_abi::MMU0_VIRTUAL_START;
     pub const MMU0_PHYSICAL_START: u32 = computer_abi::MMU0_PHYSICAL_START;
     pub const MMU0_PAGE_COUNT: u32 = computer_abi::MMU0_PAGE_COUNT;
+    pub const MMU0_BYTE_COUNT: u32 = computer_abi::MMU0_BYTE_COUNT;
     pub const MMU0_FLAGS: u32 = computer_abi::MMU0_FLAGS;
     pub const MMU0_ENTRY_PC: u32 = computer_abi::MMU0_ENTRY_PC;
     pub const MMU0_STACK_POINTER: u32 = computer_abi::MMU0_STACK_POINTER;
@@ -239,6 +240,12 @@ impl ComputerMachine {
     pub const MMU0_ERROR_NONE: i32 = computer_abi::MMU0_ERROR_NONE;
     pub const MMU0_ERROR_INVALID_COMMAND: i32 = computer_abi::MMU0_ERROR_INVALID_COMMAND;
     pub const MMU0_ERROR_INVALID_ARGUMENT: i32 = computer_abi::MMU0_ERROR_INVALID_ARGUMENT;
+    pub const MMU0_ERROR_INVALID_ADDRESS_SPACE: i32 =
+        computer_abi::MMU0_ERROR_INVALID_ADDRESS_SPACE;
+    pub const MMU0_ERROR_TRANSLATION_FAULT: i32 = computer_abi::MMU0_ERROR_TRANSLATION_FAULT;
+    pub const MMU0_ERROR_PHYSICAL_OUT_OF_BOUNDS: i32 =
+        computer_abi::MMU0_ERROR_PHYSICAL_OUT_OF_BOUNDS;
+    pub const MMU0_ERROR_BYTE_COUNT_OVERFLOW: i32 = computer_abi::MMU0_ERROR_BYTE_COUNT_OVERFLOW;
     pub const MMU0_COMMAND_NOP: i32 = computer_abi::MMU0_COMMAND_NOP;
     pub const MMU0_COMMAND_CREATE_ADDRESS_SPACE: i32 =
         computer_abi::MMU0_COMMAND_CREATE_ADDRESS_SPACE;
@@ -246,6 +253,8 @@ impl ComputerMachine {
     pub const MMU0_COMMAND_PROTECT_PAGES: i32 = computer_abi::MMU0_COMMAND_PROTECT_PAGES;
     pub const MMU0_COMMAND_ACTIVATE_USER_ADDRESS_SPACE: i32 =
         computer_abi::MMU0_COMMAND_ACTIVATE_USER_ADDRESS_SPACE;
+    pub const MMU0_COMMAND_COPY_FROM_USER: i32 = computer_abi::MMU0_COMMAND_COPY_FROM_USER;
+    pub const MMU0_COMMAND_COPY_TO_USER: i32 = computer_abi::MMU0_COMMAND_COPY_TO_USER;
     pub const MMU0_FLAG_USER_ACCESSIBLE: i32 = computer_abi::MMU0_FLAG_USER_ACCESSIBLE;
     pub const MMU0_FLAG_WRITABLE: i32 = computer_abi::MMU0_FLAG_WRITABLE;
     pub const MMU0_FLAG_EXECUTABLE: i32 = computer_abi::MMU0_FLAG_EXECUTABLE;

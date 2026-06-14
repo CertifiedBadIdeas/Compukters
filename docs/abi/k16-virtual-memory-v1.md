@@ -160,6 +160,8 @@ create_address_space() -> address_space_id
 map_pages(address_space_id, virtual_page, physical_page, page_count, flags)
 protect_pages(address_space_id, virtual_page, page_count, flags)
 activate_user_address_space(address_space_id, entry_pc, stack_pointer)
+copy_from_user(address_space_id, user_virtual_addr, kernel_physical_addr, byte_count)
+copy_to_user(address_space_id, user_virtual_addr, kernel_physical_addr, byte_count)
 ```
 
 `activate_user_address_space` switches the current K16 CPU to translated user
@@ -171,7 +173,9 @@ for the host to walk.
 
 Address-space destruction and unmapping are intentionally left for a later
 lifecycle slice. The first control boundary is enough to construct mappings and
-enter one translated user context without changing physical-mode boot.
+enter one translated user context without changing physical-mode boot. The copy
+commands let physical/kernel syscall handlers move bytes across the user/kernel
+boundary without directly dereferencing user virtual pointers.
 
 ## Permissions
 
@@ -225,7 +229,7 @@ For syscall arguments that are guest pointers:
 1. The CPU enters the trap vector in physical mode.
 2. The kernel reads the interrupted process address-space id from its process
    table or saved trap metadata.
-3. The kernel translates and copies user buffers using access-specific helpers.
+3. The kernel translates and copies user buffers through `mmu0` copy commands.
 4. Invalid user pointers return existing negative K16 `ERROR_FAULT` where the
    current syscall ABI expects recoverable pointer errors.
 5. CPU instruction-fetch/load/store faults in user code enter the trap vector
@@ -266,8 +270,8 @@ The intended follow-up slices are:
    slice, including command-based user-mode activation.
 3. Add kernel-owned address-space construction for one child process while init
    can remain physical.
-4. Convert syscall user-buffer validation from physical range checks to
-   translation-based copy helpers for VM-enabled processes.
+4. Convert syscall user-buffer validation from physical range checks to the
+   implemented `mmu0` copy helpers for VM-enabled processes.
 5. Move init and shell into VM-enabled user processes after the child path is
    stable.
 

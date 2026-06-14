@@ -4,7 +4,7 @@ use crate::computer::devices::MmuControlCommand;
 use crate::computer::profile::ComputerMachineProfile;
 use crate::computer_abi;
 use crate::k16::{K16Cpu, K16Signal};
-use crate::mmu::{MmuAddressSpaceId, MmuMapFlags};
+use crate::mmu::{MmuAccess, MmuAddressSpace, MmuAddressSpaceId, MmuMapFlags, MmuPrivilege};
 
 pub(super) fn from_k16_bios_flash(
     bios_flash: &[u8],
@@ -196,7 +196,7 @@ fn apply_mmu0_command(
         computer_abi::MMU0_COMMAND_ACTIVATE_USER_ADDRESS_SPACE => {
             let address_space = MmuAddressSpaceId::from_raw(command.address_space);
             if machine.address_spaces.get(address_space).is_none() {
-                return Err(computer_abi::MMU0_ERROR_INVALID_ARGUMENT);
+                return Err(computer_abi::MMU0_ERROR_INVALID_ADDRESS_SPACE);
             }
             machine
                 .k16_cpu_mut(cpu_id)
@@ -204,9 +204,128 @@ fn apply_mmu0_command(
                 .enter_user_address_space(address_space, command.entry_pc, command.stack_pointer);
             Ok(0)
         }
+        computer_abi::MMU0_COMMAND_COPY_FROM_USER => copy_from_user(machine, command),
+        computer_abi::MMU0_COMMAND_COPY_TO_USER => copy_to_user(machine, command),
         computer_abi::MMU0_COMMAND_NOP => Ok(0),
         _ => Err(computer_abi::MMU0_ERROR_INVALID_COMMAND),
     }
+}
+
+fn copy_from_user(machine: &mut ComputerMachine, command: MmuControlCommand) -> Result<u32, i32> {
+    let address_space = machine
+        .address_spaces
+        .get(MmuAddressSpaceId::from_raw(command.address_space))
+        .ok_or(computer_abi::MMU0_ERROR_INVALID_ADDRESS_SPACE)?;
+    validate_mmu0_physical_range(machine, command.physical_start, command.page_count)?;
+    let bytes = read_user_bytes(
+        address_space,
+        machine,
+        command.virtual_start,
+        command.page_count,
+    )?;
+    for (offset, byte) in bytes.iter().copied().enumerate() {
+        machine
+            .bus
+            .memory_mut()
+            .store_u8(command.physical_start + offset as u32, byte)
+            .map_err(|_| computer_abi::MMU0_ERROR_PHYSICAL_OUT_OF_BOUNDS)?;
+    }
+    Ok(command.page_count)
+}
+
+fn copy_to_user(machine: &mut ComputerMachine, command: MmuControlCommand) -> Result<u32, i32> {
+    validate_mmu0_physical_range(machine, command.physical_start, command.page_count)?;
+    let bytes = read_physical_bytes(machine, command.physical_start, command.page_count)?;
+    let address_space = machine
+        .address_spaces
+        .get(MmuAddressSpaceId::from_raw(command.address_space))
+        .ok_or(computer_abi::MMU0_ERROR_INVALID_ADDRESS_SPACE)?;
+    let physical_destinations = translate_user_range(
+        address_space,
+        command.virtual_start,
+        command.page_count,
+        MmuAccess::Store,
+    )?;
+    for (physical, byte) in physical_destinations.into_iter().zip(bytes) {
+        machine
+            .bus
+            .memory_mut()
+            .store_u8(physical, byte)
+            .map_err(|_| computer_abi::MMU0_ERROR_PHYSICAL_OUT_OF_BOUNDS)?;
+    }
+    Ok(command.page_count)
+}
+
+fn read_user_bytes(
+    address_space: &MmuAddressSpace,
+    machine: &ComputerMachine,
+    virtual_start: u32,
+    byte_count: u32,
+) -> Result<Vec<u8>, i32> {
+    translate_user_range(address_space, virtual_start, byte_count, MmuAccess::Load)?
+        .into_iter()
+        .map(|physical| {
+            machine
+                .bus
+                .memory()
+                .load_u8(physical)
+                .map_err(|_| computer_abi::MMU0_ERROR_PHYSICAL_OUT_OF_BOUNDS)
+        })
+        .collect()
+}
+
+fn read_physical_bytes(
+    machine: &ComputerMachine,
+    physical_start: u32,
+    byte_count: u32,
+) -> Result<Vec<u8>, i32> {
+    validate_mmu0_physical_range(machine, physical_start, byte_count)?;
+    (0..byte_count)
+        .map(|offset| {
+            machine
+                .bus
+                .memory()
+                .load_u8(physical_start + offset)
+                .map_err(|_| computer_abi::MMU0_ERROR_PHYSICAL_OUT_OF_BOUNDS)
+        })
+        .collect()
+}
+
+fn translate_user_range(
+    address_space: &MmuAddressSpace,
+    virtual_start: u32,
+    byte_count: u32,
+    access: MmuAccess,
+) -> Result<Vec<u32>, i32> {
+    let capacity =
+        usize::try_from(byte_count).map_err(|_| computer_abi::MMU0_ERROR_BYTE_COUNT_OVERFLOW)?;
+    let mut physical = Vec::with_capacity(capacity);
+    for offset in 0..byte_count {
+        let virtual_address = virtual_start
+            .checked_add(offset)
+            .ok_or(computer_abi::MMU0_ERROR_BYTE_COUNT_OVERFLOW)?;
+        physical.push(
+            address_space
+                .translate(virtual_address, access, MmuPrivilege::User)
+                .map_err(|_| computer_abi::MMU0_ERROR_TRANSLATION_FAULT)?,
+        );
+    }
+    Ok(physical)
+}
+
+fn validate_mmu0_physical_range(
+    machine: &ComputerMachine,
+    physical_start: u32,
+    byte_count: u32,
+) -> Result<(), i32> {
+    checked_ram_range(physical_start, byte_count, machine.bus.memory().len()).map_err(|error| {
+        if matches!(error, BootHandoffError::RamRangeOverflow { .. }) {
+            computer_abi::MMU0_ERROR_BYTE_COUNT_OVERFLOW
+        } else {
+            computer_abi::MMU0_ERROR_PHYSICAL_OUT_OF_BOUNDS
+        }
+    })?;
+    Ok(())
 }
 
 fn mmu0_flags(raw: u32) -> Result<MmuMapFlags, i32> {
