@@ -18,6 +18,7 @@ pub mod k16;
 pub mod k16e;
 pub mod low_bus;
 pub mod low_machine;
+pub mod mmu;
 pub mod k16_computer {
     pub use crate::computer::handle::{K16ComputerControl, K16ComputerHandle};
     pub use crate::computer::machine::BootHandoffError;
