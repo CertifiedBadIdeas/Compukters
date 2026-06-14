@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- K16 host tooling no longer caps bootloader and kernel `K16E` payloads at the
+  next fixed-image load base. Their fixed load bases remain unchanged, loaders
+  still validate encoded address ranges, and the fixed-image
+  `program`/`program-dynamic` targets remain bounded by the current program
+  stack top. The old kernel payload budget/headroom script is now a kernel
+  payload inspector.
 - The K16 kernel now derives init's upper process memory boundary from profile
   v2 `BootInfo.ram_size` instead of a kernel-local machine-profile constant.
   Boot-info validation rejects missing or too-small RAM boundaries before

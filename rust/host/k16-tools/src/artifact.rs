@@ -41,10 +41,8 @@ impl K16ArtifactTarget {
 
     pub fn payload_end_limit(self) -> Option<u32> {
         match self {
-            Self::Boot => Some(Self::KERNEL_LOAD_BASE),
-            Self::Kernel => Some(Self::PROGRAM_LOAD_BASE),
             Self::Program | Self::ProgramDynamic => Some(Self::PROGRAM_STACK_TOP),
-            Self::Bios => None,
+            Self::Bios | Self::Boot | Self::Kernel => None,
         }
     }
 

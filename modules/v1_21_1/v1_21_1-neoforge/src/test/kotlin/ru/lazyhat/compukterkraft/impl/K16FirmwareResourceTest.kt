@@ -29,8 +29,6 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 private const val K16_KERNEL_LOAD_ADDR = 0x0000_4000
-private const val K16_KERNEL_LIMIT_BYTES = 0x0001_4000 - K16_KERNEL_LOAD_ADDR
-private const val K16_KERNEL_MIN_HEADROOM_BYTES = 128
 private const val K16_TERMINAL_CELLS_ADDR = 0x0000_3000
 private const val K16_TERMINAL_COLUMNS = 53
 private const val K16_TERMINAL_ROWS = 25
@@ -922,15 +920,18 @@ class K16FirmwareResourceTest {
     }
 
     @Test
-    fun k16KernelPayloadBudgetToolExists() {
-        val toolPath = Path.of("../../../tools/k16-kernel-payload-budget.sh")
+    fun k16KernelPayloadInspectToolDoesNotEnforceFixedWindowBudget() {
+        val toolPath = Path.of("../../../tools/k16-kernel-payload-inspect.sh")
 
-        assertTrue(Files.exists(toolPath), "K16 kernel payload budget tool should exist")
+        assertTrue(Files.exists(toolPath), "K16 kernel payload inspect tool should exist")
 
         val source = toolPath.readText()
         assertTrue(source.contains("KERNEL_LOAD_ADDR=0x00004000"))
-        assertTrue(source.contains("KERNEL_LIMIT_BYTES=61440"))
-        assertTrue(source.contains("MIN_HEADROOM_BYTES"))
+        assertTrue(source.contains("payload_bytes="))
+        assertTrue(source.contains("memory_size="))
+        assertFalse(source.contains("KERNEL_LIMIT_BYTES"))
+        assertFalse(source.contains("MIN_HEADROOM_BYTES"))
+        assertFalse(source.contains("headroom_bytes"))
     }
 
     @Test
@@ -945,7 +946,7 @@ class K16FirmwareResourceTest {
     }
 
     @Test
-    fun bundledK16KernelPayloadKeepsMinimumHeadroom() {
+    fun bundledK16KernelPayloadUsesFixedLoadBaseWithoutFixedWindowBudget() {
         val artifactPath = Path.of("build/generated/k16-firmware-artifacts/display-ok.kx")
         val bytes = artifactPath.readBytes()
 
@@ -961,30 +962,9 @@ class K16FirmwareResourceTest {
 
         val payloadBytes = bytes.u32Le(offset = 44)
         val memorySize = bytes.u32Le(offset = 48)
-        val headroomBytes = K16_KERNEL_LIMIT_BYTES - payloadBytes
 
+        assertTrue(payloadBytes > 0, "K16 kernel payload should not be empty")
         assertEquals(payloadBytes, memorySize, "K16E kernel memory size should match file size")
-        assertTrue(
-            payloadBytes <= K16_KERNEL_LIMIT_BYTES,
-            "K16 kernel payload is too large: payload=$payloadBytes limit=$K16_KERNEL_LIMIT_BYTES",
-        )
-        assertTrue(
-            headroomBytes >= K16_KERNEL_MIN_HEADROOM_BYTES,
-            "K16 kernel payload headroom is too low: payload=$payloadBytes headroom=$headroomBytes min=$K16_KERNEL_MIN_HEADROOM_BYTES",
-        )
-    }
-
-    @Test
-    fun bundledK16KernelPayloadNoLongerBudgetsForKernelShellExpansion() {
-        val artifactPath = Path.of("build/generated/k16-firmware-artifacts/display-ok.kx")
-        val bytes = artifactPath.readBytes()
-        val payloadBytes = bytes.u32Le(offset = 44)
-        val headroomBytes = K16_KERNEL_LIMIT_BYTES - payloadBytes
-
-        assertTrue(
-            headroomBytes >= K16_KERNEL_MIN_HEADROOM_BYTES,
-            "K16 kernel init-launch payload headroom is too low: payload=$payloadBytes headroom=$headroomBytes min=$K16_KERNEL_MIN_HEADROOM_BYTES",
-        )
     }
 
     @Test

@@ -19,6 +19,20 @@ fn k16e_program_dynamic_target_has_no_fixed_physical_base() {
 }
 
 #[test]
+fn k16e_boot_and_kernel_targets_do_not_cap_payloads_at_neighboring_windows() {
+    assert_eq!(K16ArtifactTarget::Boot.payload_end_limit(), None);
+    assert_eq!(K16ArtifactTarget::Kernel.payload_end_limit(), None);
+    assert_eq!(
+        K16ArtifactTarget::Program.payload_end_limit(),
+        Some(K16ArtifactTarget::PROGRAM_STACK_TOP)
+    );
+    assert_eq!(
+        K16ArtifactTarget::ProgramDynamic.payload_end_limit(),
+        Some(K16ArtifactTarget::PROGRAM_STACK_TOP)
+    );
+}
+
+#[test]
 fn k16e_dynamic_program_encodes_relocation_records_without_fixed_load_base() {
     let bytes = k16e::encode_dynamic_k16_program(
         &[0x01, 0xe1, 0x00, 0x00, 0x00, 0x00, 0x00, 0x90],

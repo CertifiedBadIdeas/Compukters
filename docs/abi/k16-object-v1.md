@@ -240,8 +240,10 @@ use `_start` unless the command line explicitly chooses another defined symbol.
 Bootloader and kernel profiles may use their profile-specific entry symbol, but
 the resolved entry address must still satisfy the `K16E` entry validation rules.
 The current linker profile bases are fixed: bootloader at `0x00000800`, kernel
-at `0x00004000`, and first user program at `0x00013000`. Linkers must reject payloads
-that exceed the reserved range for the selected profile.
+at `0x00004000`, and first user program at `0x00013000`. Bootloader and kernel
+payloads are not capped by neighboring fixed-image load bases. Program and
+dynamic-program payloads must still fit below the current program stack top
+selected by the profile.
 
 ## Relocations
 
