@@ -345,6 +345,16 @@ pub fn read_dir_syscall(request: *const u8, len: usize) -> u32 {
 }
 
 #[inline(always)]
+pub fn stat_syscall(path: *const u8, len: usize, metadata: *mut u8) -> u32 {
+    syscall3(
+        k16_abi::syscall::STAT,
+        path as usize as u32,
+        len as u32,
+        metadata as usize as u32,
+    )
+}
+
+#[inline(always)]
 #[cfg(not(any(test, feature = "host-test")))]
 pub fn close_syscall(fd: u32) -> u32 {
     unsafe { __k16_close_syscall(fd) }

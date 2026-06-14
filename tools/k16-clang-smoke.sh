@@ -101,9 +101,9 @@ run_k16 link --target program "$WORK_DIR/startup.o" "$WORK_DIR/main.o" -o "$WORK
 
 run_k16 inspect "$WORK_DIR/main.kx" > "$WORK_DIR/main-kx.txt"
 require_contains "$WORK_DIR/main-kx.txt" "kind=K16E"
-require_contains "$WORK_DIR/main-kx.txt" "K16E abi=program entry_pc=0x00012000 load_addr=0x00012000"
+require_contains "$WORK_DIR/main-kx.txt" "K16E abi=program entry_pc=0x00013000 load_addr=0x00013000"
 
-run_k16 disasm --target program --start 0x12000 --count 96 "$WORK_DIR/main.kx" > "$WORK_DIR/main-kx.disasm"
+run_k16 disasm --target program --start 0x13000 --count 96 "$WORK_DIR/main.kx" > "$WORK_DIR/main-kx.disasm"
 require_contains "$WORK_DIR/main-kx.disasm" "call r14"
 require_contains "$WORK_DIR/main-kx.disasm" "const32 r0, 0x0000002a"
 require_contains "$WORK_DIR/main-kx.disasm" "ret"

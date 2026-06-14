@@ -28,7 +28,48 @@ fn list_dir(path: &str) -> Result<(), ()> {
     let stdout = io::stdout();
     let mut buffer = [0u8; 256];
     let read = fs::read_dir(path, &mut buffer).map_err(|_| ())?;
-    stdout.write_all(&buffer[..read]).map_err(|_| ())
+    let mut cursor = 0;
+    while cursor < read {
+        let start = cursor;
+        while cursor < read && buffer[cursor] != b'\n' {
+            cursor += 1;
+        }
+        let name = &buffer[start..cursor];
+        let mut child_path = [0u8; k16_abi::syscall::MAX_STAT_PATH_BYTES];
+        let child_path_len = join_child_path(path.as_bytes(), name, &mut child_path)?;
+        let child_path = core::str::from_utf8(&child_path[..child_path_len]).map_err(|_| ())?;
+        let metadata = fs::metadata(child_path).map_err(|_| ())?;
+        stdout.write_all(name).map_err(|_| ())?;
+        if metadata.file_type == fs::FileType::Directory {
+            stdout.write_all(b"/").map_err(|_| ())?;
+        }
+        stdout.write_all(b"\n").map_err(|_| ())?;
+        cursor += 1;
+    }
+    Ok(())
+}
+
+fn join_child_path(base: &[u8], name: &[u8], out: &mut [u8]) -> Result<usize, ()> {
+    if name.is_empty() || base.is_empty() {
+        return Err(());
+    }
+    let separator_len = if base == b"/" { 0 } else { 1 };
+    let len = base
+        .len()
+        .checked_add(separator_len)
+        .and_then(|value| value.checked_add(name.len()))
+        .ok_or(())?;
+    if len > out.len() {
+        return Err(());
+    }
+    out[..base.len()].copy_from_slice(base);
+    let mut cursor = base.len();
+    if separator_len == 1 {
+        out[cursor] = b'/';
+        cursor += 1;
+    }
+    out[cursor..cursor + name.len()].copy_from_slice(name);
+    Ok(len)
 }
 
 #[panic_handler]

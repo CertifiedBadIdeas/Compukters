@@ -26,6 +26,19 @@ pub struct FileMetadata {
     pub extent_block_counts: [u32; K16FS_MAX_INLINE_EXTENTS],
 }
 
+#[repr(u32)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PathKind {
+    Regular = k16_abi::syscall::FILE_TYPE_REGULAR,
+    Directory = k16_abi::syscall::FILE_TYPE_DIRECTORY,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PathMetadata {
+    pub kind: PathKind,
+    pub size_bytes: u32,
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct StorageError {
     code: i32,
@@ -81,8 +94,30 @@ pub unsafe fn read_directory_from_storage0(
     unsafe { copy_selected_directory_listing_to_ram(dst_addr, len) }
 }
 
+pub unsafe fn stat_path_from_storage0(
+    partition_type: &[u8; 4],
+    path: &[&[u8]],
+) -> Result<PathMetadata, StorageError> {
+    unsafe { read_partition(partition_type)? };
+    unsafe { read_superblock()? };
+    unsafe { find_path_inode(path)? };
+    unsafe { selected_path_metadata() }
+}
+
 pub unsafe fn selected_file_size() -> u32 {
     unsafe { read_u32(STATE_INODE_SIZE_BYTES) }
+}
+
+pub unsafe fn selected_path_metadata() -> Result<PathMetadata, StorageError> {
+    let kind = match unsafe { read_u32(STATE_INODE_STATE) as u8 } {
+        1 => PathKind::Regular,
+        2 => PathKind::Directory,
+        _ => return Err(StorageError::INVALID_FILESYSTEM),
+    };
+    Ok(PathMetadata {
+        kind,
+        size_bytes: unsafe { selected_file_size() },
+    })
 }
 
 pub unsafe fn selected_file_metadata() -> FileMetadata {
@@ -227,6 +262,26 @@ unsafe fn find_directory_inode(path: &[&[u8]]) -> Result<(), StorageError> {
         return Err(StorageError::PATH_NOT_FOUND);
     }
     Ok(())
+}
+
+unsafe fn find_path_inode(path: &[&[u8]]) -> Result<(), StorageError> {
+    let mut inode_id = unsafe { read_u32(STATE_SUPERBLOCK_ROOT_INODE_ID) };
+    if path.is_empty() {
+        unsafe { read_inode(inode_id)? };
+        return Ok(());
+    }
+
+    let mut index = 0;
+    while index < path.len() {
+        unsafe { read_inode(inode_id)? };
+        if unsafe { read_u32(STATE_INODE_STATE) as u8 } != 2 {
+            return Err(StorageError::PATH_NOT_FOUND);
+        }
+        inode_id = unsafe { find_directory_entry(path[index])? };
+        index += 1;
+    }
+
+    unsafe { read_inode(inode_id) }
 }
 
 unsafe fn find_directory_entry(name: &[u8]) -> Result<u32, StorageError> {
@@ -662,5 +717,25 @@ mod tests {
     fn storage_error_code_is_public_for_boot_chain_mapping() {
         assert_eq!(StorageError::STORAGE_VERSION.code(), 10);
         assert_eq!(StorageError::OUTPUT_BUFFER_TOO_SMALL.code(), 19);
+    }
+
+    #[test]
+    fn path_metadata_kind_values_are_stable_for_kernel_stat_abi() {
+        assert_eq!(
+            PathKind::Regular as u32,
+            k16_abi::syscall::FILE_TYPE_REGULAR
+        );
+        assert_eq!(
+            PathKind::Directory as u32,
+            k16_abi::syscall::FILE_TYPE_DIRECTORY
+        );
+
+        let metadata = PathMetadata {
+            kind: PathKind::Regular,
+            size_bytes: 42,
+        };
+
+        assert_eq!(metadata.kind, PathKind::Regular);
+        assert_eq!(metadata.size_bytes, 42);
     }
 }

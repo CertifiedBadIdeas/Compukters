@@ -8,6 +8,7 @@ pub const OPEN_READ_ONLY: u32 = 0;
 pub const MAX_OPEN_PATH_BYTES: u32 =
     1 + (MAX_PATH_COMPONENTS as u32 * MAX_NAME_BYTES as u32) + (MAX_PATH_COMPONENTS as u32 - 1);
 pub const MAX_READ_DIR_PATH_BYTES: u32 = MAX_OPEN_PATH_BYTES;
+pub const MAX_STAT_PATH_BYTES: u32 = MAX_OPEN_PATH_BYTES;
 
 #[cfg(any(not(test), feature = "host-test"))]
 use core::cell::UnsafeCell;
@@ -69,6 +70,11 @@ pub struct RootDirectoryPath {
     path: RootFilePath,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RootMetadataPath {
+    path: RootFilePath,
+}
+
 impl RootFilePath {
     pub fn parse(path: &[u8]) -> Result<Self, FsError> {
         parse_root_path(path, false)
@@ -100,6 +106,18 @@ impl RootDirectoryPath {
     }
 }
 
+impl RootMetadataPath {
+    pub fn parse(path: &[u8]) -> Result<Self, FsError> {
+        Ok(Self {
+            path: parse_root_path(path, true)?,
+        })
+    }
+
+    pub fn components(&self) -> RootFilePathComponents<'_> {
+        self.path.components()
+    }
+}
+
 impl<'a> RootFilePathComponents<'a> {
     pub fn as_slice(&self) -> &[&'a [u8]] {
         &self.components[..self.count]
@@ -112,6 +130,12 @@ pub struct FileMetadata {
     pub extent_count: u32,
     pub extent_start_blocks: [u32; 4],
     pub extent_block_counts: [u32; 4],
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PathMetadata {
+    pub file_type: u32,
+    pub size_bytes: u32,
 }
 
 impl FileMetadata {
@@ -356,6 +380,20 @@ pub unsafe fn read_root_directory(path: &[u8], ptr: u32, len: u32) -> Result<u32
 }
 
 #[cfg(any(not(test), feature = "host-test"))]
+pub unsafe fn stat_root_path(path: &[u8]) -> Result<PathMetadata, FsError> {
+    let path = RootMetadataPath::parse(path)?;
+    let components = path.components();
+    let metadata = unsafe {
+        k16_storage::stat_path_from_storage0(ROOT_PARTITION, components.as_slice())
+            .map_err(storage_error_to_fs_error)?
+    };
+    Ok(PathMetadata {
+        file_type: metadata.kind as u32,
+        size_bytes: metadata.size_bytes,
+    })
+}
+
+#[cfg(any(not(test), feature = "host-test"))]
 pub unsafe fn close_file_fd_for_process(owner_pid: u32, fd: u32) -> Result<(), FsError> {
     unsafe { RUNTIME_FD_TABLE.get().close_for_process(owner_pid, fd) }
 }
@@ -482,6 +520,21 @@ mod tests {
 
         let bin = RootDirectoryPath::parse(b"/bin").expect("directory parses");
         assert_eq!(bin.components().as_slice(), &[b"bin".as_slice()]);
+    }
+
+    #[test]
+    fn root_metadata_path_accepts_root_file_and_directory_paths() {
+        let root = RootMetadataPath::parse(b"/").expect("root parses");
+        assert!(root.components().as_slice().is_empty());
+
+        let bin = RootMetadataPath::parse(b"/bin").expect("directory parses");
+        assert_eq!(bin.components().as_slice(), &[b"bin".as_slice()]);
+
+        let cat = RootMetadataPath::parse(b"/bin/cat.kx").expect("file parses");
+        assert_eq!(
+            cat.components().as_slice(),
+            &[b"bin".as_slice(), b"cat.kx".as_slice()]
+        );
     }
 
     #[test]

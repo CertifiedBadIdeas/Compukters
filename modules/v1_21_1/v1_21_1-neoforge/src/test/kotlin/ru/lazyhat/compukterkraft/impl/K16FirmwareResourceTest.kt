@@ -675,6 +675,11 @@ class K16FirmwareResourceTest {
 
         assertTrue(mainSource.contains("mod stdin;"), "kernel should register fd stdin input")
         assertTrue(syscallSource.contains("abi_syscall::READ"), "syscall dispatch should handle fd reads")
+        assertTrue(syscallSource.contains("abi_syscall::STAT"), "syscall dispatch should handle path metadata")
+        assertTrue(
+            syscallSource.contains("fs::stat_root_path(path)"),
+            "STAT(path, len, out) should delegate to the ROOT/K16FS metadata path",
+        )
         assertTrue(
             syscallSource.contains("stdin::read(ptr, len)"),
             "READ(FD_STDIN, ptr, len) should delegate to the stdin input path",
@@ -890,7 +895,7 @@ class K16FirmwareResourceTest {
 
         val source = toolPath.readText()
         assertTrue(source.contains("KERNEL_LOAD_ADDR=0x00004000"))
-        assertTrue(source.contains("KERNEL_LIMIT_BYTES=57344"))
+        assertTrue(source.contains("KERNEL_LIMIT_BYTES=61440"))
         assertTrue(source.contains("MIN_HEADROOM_BYTES"))
     }
 
@@ -1071,7 +1076,7 @@ class K16FirmwareResourceTest {
                     "server tick should add one timer0 game tick before executing the shell command",
                 )
                 val terminalRow =
-                    snapshotRamBytes(runtime.machineSnapshot(), start = 0x1_2000 + 53, size = 53)
+                    snapshotRamBytes(runtime.machineSnapshot(), start = 0x1_3000 + 53, size = 53)
                         .toString(Charsets.US_ASCII)
                 val expectedTerminalPrefix = "TICKS ${expectedTicksAfterCommand and 0xffff_ffffL}"
 
@@ -1122,7 +1127,7 @@ class K16FirmwareResourceTest {
                 }
                 val afterTicksControl = runRuntimeServerTick(runtime, maxTurns = 256)
                 val terminalRow =
-                    snapshotRamBytes(runtime.machineSnapshot(), start = 0x1_2000 + 53, size = 53)
+                    snapshotRamBytes(runtime.machineSnapshot(), start = 0x1_3000 + 53, size = 53)
                         .toString(Charsets.US_ASCII)
                 val expectedTerminalPrefix = "TICKS $expectedTicksAfterCommand"
 
@@ -1323,8 +1328,8 @@ class K16FirmwareResourceTest {
                 runtime.pushKeyboardChar('\b'.code.toByte())
                 runtime.pushKeyboardChar('z'.code.toByte())
                 val afterInputControl = runRuntimeServerTick(runtime, maxTurns = 512)
-                val secondTerminalRow = snapshotRamBytes(runtime.machineSnapshot(), start = 0x1_2000 + 53, size = 53)
-                val thirdTerminalRow = snapshotRamBytes(runtime.machineSnapshot(), start = 0x1_2000 + 53 * 2, size = 53)
+                val secondTerminalRow = snapshotRamBytes(runtime.machineSnapshot(), start = 0x1_3000 + 53, size = 53)
+                val thirdTerminalRow = snapshotRamBytes(runtime.machineSnapshot(), start = 0x1_3000 + 53 * 2, size = 53)
 
                 assertEquals(NativeK16ComputerControl.STATUS_READY, afterInputControl.status)
                 assertEquals(0, afterInputControl.panicCode)

@@ -75,6 +75,14 @@ class K16ShellRuntimeSmokeTest {
                 lsCommandIndex >= 0 && lsOutputIndex > lsCommandIndex && returnedPromptIndex > lsOutputIndex
             }
 
+            dispatchText(device, "ls /\n")
+            waitForTerminal(device, "root ls output marks directories and returned prompt") { terminal ->
+                val rootLsCommandIndex = terminal.indexOf("K16> ls /")
+                val rootLsOutputIndex = terminal.indexOf("bin/", startIndex = rootLsCommandIndex + "K16> ls /".length)
+                val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = rootLsOutputIndex)
+                rootLsCommandIndex >= 0 && rootLsOutputIndex > rootLsCommandIndex && returnedPromptIndex > rootLsOutputIndex
+            }
+
             dispatchText(device, "alloc\n")
             waitForTerminal(device, "alloc output and returned prompt") { terminal ->
                 val allocCommandIndex = terminal.indexOf("K16> alloc")
@@ -96,7 +104,10 @@ class K16ShellRuntimeSmokeTest {
             val lsCommandIndex = terminal.indexOf("K16> ls /bin", startIndex = catReturnedPromptIndex)
             val lsOutputIndex = terminal.indexOf("ls.kx", startIndex = lsCommandIndex + "K16> ls /bin".length)
             val lsReturnedPromptIndex = terminal.indexOf("K16> ", startIndex = lsOutputIndex)
-            val allocCommandIndex = terminal.indexOf("K16> alloc", startIndex = lsReturnedPromptIndex)
+            val rootLsCommandIndex = terminal.indexOf("K16> ls /", startIndex = lsReturnedPromptIndex)
+            val rootLsOutputIndex = terminal.indexOf("bin/", startIndex = rootLsCommandIndex + "K16> ls /".length)
+            val rootLsReturnedPromptIndex = terminal.indexOf("K16> ", startIndex = rootLsOutputIndex)
+            val allocCommandIndex = terminal.indexOf("K16> alloc", startIndex = rootLsReturnedPromptIndex)
             val allocOutputIndex = terminal.indexOf("ALLOC", startIndex = allocCommandIndex + "K16> alloc".length)
             val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = allocOutputIndex)
             assertTrue(
@@ -112,7 +123,10 @@ class K16ShellRuntimeSmokeTest {
                     lsCommandIndex >= catReturnedPromptIndex &&
                     lsOutputIndex > lsCommandIndex &&
                     lsReturnedPromptIndex > lsOutputIndex &&
-                    allocCommandIndex >= lsReturnedPromptIndex &&
+                    rootLsCommandIndex >= lsReturnedPromptIndex &&
+                    rootLsOutputIndex > rootLsCommandIndex &&
+                    rootLsReturnedPromptIndex > rootLsOutputIndex &&
+                    allocCommandIndex >= rootLsReturnedPromptIndex &&
                     allocOutputIndex > allocCommandIndex &&
                     returnedPromptIndex > allocOutputIndex,
                 "userland shell should dispatch commands through fd stdin/stdout and return a prompt; terminal: $terminal",

@@ -406,6 +406,28 @@ fn read_dir_syscall_uses_request_pointer_length_and_reserved_argument() {
 }
 
 #[test]
+fn stat_syscall_uses_path_pointer_length_and_output_pointer_arguments() {
+    crate::trap::reset_test_interrupts();
+    crate::trap::set_test_syscall_return(k16_abi::syscall::STATUS_OK);
+    let path = *b"/bin/cat.kx";
+    let mut metadata = [0u8; k16_abi::syscall::STAT_METADATA_BYTES];
+
+    let returned = stat_syscall(path.as_ptr(), path.len(), metadata.as_mut_ptr());
+
+    assert_eq!(crate::trap::test_syscall_number(), k16_abi::syscall::STAT);
+    assert_eq!(
+        crate::trap::test_syscall_arg0(),
+        path.as_ptr() as usize as u32
+    );
+    assert_eq!(crate::trap::test_syscall_arg1(), path.len() as u32);
+    assert_eq!(
+        crate::trap::test_syscall_arg2(),
+        metadata.as_mut_ptr() as usize as u32
+    );
+    assert_eq!(returned, k16_abi::syscall::STATUS_OK);
+}
+
+#[test]
 fn close_syscall_uses_fd_argument() {
     crate::trap::reset_test_interrupts();
     crate::trap::set_test_syscall_return(k16_abi::syscall::STATUS_OK);

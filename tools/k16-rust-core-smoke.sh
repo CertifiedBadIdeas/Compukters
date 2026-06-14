@@ -159,7 +159,7 @@ run_k16 runtime k16-memory-helpers -o "$WORK_DIR/helpers.o"
 run_k16 link --target program "$WORK_DIR/startup.o" "$WORK_DIR/main.o" "$WORK_DIR/helpers.o" -o "$WORK_DIR/main.kx"
 run_k16 inspect "$WORK_DIR/main.kx" > "$WORK_DIR/main-kx.txt"
 require_contains "$WORK_DIR/main-kx.txt" "kind=K16E"
-require_contains "$WORK_DIR/main-kx.txt" "K16E abi=program entry_pc=0x00012000 load_addr=0x00012000"
+require_contains "$WORK_DIR/main-kx.txt" "K16E abi=program entry_pc=0x00013000 load_addr=0x00013000"
 
 run_k16 run "$WORK_DIR/main.kx" > "$WORK_DIR/main-run.txt"
 require_contains "$WORK_DIR/main-run.txt" "signal=halt exit_status=42 debug_bytes="
