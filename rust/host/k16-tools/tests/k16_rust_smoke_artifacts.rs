@@ -267,6 +267,9 @@ fn rust_nocore_smoke_artifacts_are_documented_and_strict() {
     assert!(helpers.contains("__k16_memcpy"));
     assert!(helpers.contains("__k16_memset"));
     assert!(helpers.contains("__k16_memmove"));
+    assert!(helpers.contains("fn memcpy("));
+    assert!(helpers.contains("fn memset("));
+    assert!(helpers.contains("fn memmove("));
     assert!(helpers.contains("__divdi3"));
     assert!(helpers.contains("__udivdi3"));
     assert!(helpers.contains("__moddi3"));

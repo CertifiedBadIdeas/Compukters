@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- `k16 runtime k16-memory-helpers` now exports freestanding `memcpy`,
+  `memset`, and `memmove` aliases in addition to the existing `__k16_*`
+  symbols, so Rust-generated aggregate copies can link without relying on
+  synthesized helper symbols.
 - Added the K16 `RUN(path, len)` syscall for init-owned child process launch
   from `/bin/*.kx`, with negative K16 error status values for invalid paths,
   missing entries, invalid executables, no memory, and busy child state. The
