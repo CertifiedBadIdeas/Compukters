@@ -12,7 +12,7 @@ const KX_SUFFIX: &[u8] = b".kx";
 const K16FS_MAX_NAME_BYTES: usize = 56;
 pub const MAX_RUN_PATH_BYTES: usize = BIN_PREFIX.len() + K16FS_MAX_NAME_BYTES;
 const CHILD_ARG_ENTRY_BYTES: u32 = 8;
-const USER_PROGRAM_LIMIT: u32 = 0x0002_0000;
+const USER_PROGRAM_LIMIT: u32 = 0x0002_4000;
 // Keep relocation records outside k16_storage::SCRATCH_ADDR: storage reads use
 // that block as staging, and records may straddle a storage block boundary.
 const RELOCATION_RECORD_ADDR: u32 = 0x0000_0500;
@@ -1715,7 +1715,7 @@ mod tests {
             .expect("init image initializes");
 
         assert_eq!(table.program_break(), Ok(0x0000_9024));
-        assert_eq!(table.heap_limit(), Ok(0x0001_ff00));
+        assert_eq!(table.heap_limit(), Ok(0x0002_3f00));
         assert_eq!(table.grow_program_break(0x20), Ok(0x0000_9024));
         assert_eq!(table.program_break(), Ok(0x0000_9044));
     }

@@ -52,9 +52,10 @@
 - Added the K16 `RUN(path, len)` syscall for init-owned child process launch
   from `/bin/*.kx`, with negative K16 error status values for invalid paths,
   missing entries, invalid executables, no memory, and busy child state. The
-  active fixed-image program profile now starts at `0x00010000`, and the
-  default K16 VM RAM profile is 128 KiB so the kernel has room for the
-  dynamic-loader path before the first user program.
+  active fixed-image program profile now starts at `0x00012000`, and the
+  default K16 VM RAM profile is 144 KiB with the first user stack top at
+  `0x00024000`, so the kernel has room for the dynamic-loader path before the
+  first user program without shrinking the foreground child arena.
 - K16E now has a v2 dynamic user-program extension for future kernel-selected
   userland load addresses. Dynamic `program` artifacts store an entry offset,
   load payload, memory size, and relocation table instead of a fixed physical

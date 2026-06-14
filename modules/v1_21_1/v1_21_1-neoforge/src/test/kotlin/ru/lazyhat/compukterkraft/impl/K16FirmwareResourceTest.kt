@@ -29,7 +29,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 private const val K16_KERNEL_LOAD_ADDR = 0x0000_4000
-private const val K16_KERNEL_LIMIT_BYTES = 0x0001_0000 - K16_KERNEL_LOAD_ADDR
+private const val K16_KERNEL_LIMIT_BYTES = 0x0001_4000 - K16_KERNEL_LOAD_ADDR
 private const val K16_KERNEL_MIN_HEADROOM_BYTES = 128
 private const val K16_TERMINAL_CELLS_ADDR = 0x0000_3000
 private const val K16_TERMINAL_COLUMNS = 53
@@ -82,30 +82,37 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("rust/guest/k16-kernel"))
         assertTrue(source.contains("rust/guest/k16-init"))
         assertTrue(source.contains("rust/guest/k16-shell"))
+        assertTrue(source.contains("rust/guest/k16-ls"))
         assertTrue(source.contains("rust/guest/k16-cat"))
         assertTrue(source.contains("rust/guest/k16-alloc-test"))
         assertTrue(source.contains("k16InitManifest"))
         assertTrue(source.contains("k16InitSource"))
         assertTrue(source.contains("k16ShellManifest"))
         assertTrue(source.contains("k16ShellSource"))
+        assertTrue(source.contains("k16LsManifest"))
+        assertTrue(source.contains("k16LsSource"))
         assertTrue(source.contains("k16CatManifest"))
         assertTrue(source.contains("k16CatSource"))
         assertTrue(source.contains("k16AllocTestManifest"))
         assertTrue(source.contains("k16AllocTestSource"))
         assertTrue(source.contains("generatedK16ShellTarget"))
+        assertTrue(source.contains("generatedK16LsTarget"))
         assertTrue(source.contains("generatedK16CatTarget"))
         assertTrue(source.contains("generatedK16AllocTestTarget"))
         assertTrue(source.contains("k16InitArtifact"))
         assertTrue(source.contains("k16ShellArtifact"))
+        assertTrue(source.contains("k16LsArtifact"))
         assertTrue(source.contains("k16CatArtifact"))
         assertTrue(source.contains("k16AllocTestArtifact"))
         assertTrue(source.contains("compileK16SystemInit"))
         assertTrue(source.contains("compileK16SystemShell"))
+        assertTrue(source.contains("compileK16SystemLs"))
         assertTrue(source.contains("compileK16SystemCat"))
         assertTrue(source.contains("compileK16SystemAllocTest"))
         assertTrue(source.contains("putK16SystemStorage0Init"))
         assertTrue(source.contains("binName = \"k16-init\""))
         assertTrue(source.contains("binName = \"k16-shell\""))
+        assertTrue(source.contains("binName = \"k16-ls\""))
         assertTrue(source.contains("binName = \"k16-cat\""))
         assertTrue(source.contains("binName = \"k16-alloc-test\""))
         assertTrue(
@@ -116,6 +123,7 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("\"/etc\""))
         assertTrue(source.contains("\"/bin/init.kx\""))
         assertTrue(source.contains("\"/bin/shell.kx\""))
+        assertTrue(source.contains("\"/bin/ls.kx\""))
         assertTrue(source.contains("\"/bin/cat.kx\""))
         assertTrue(source.contains("\"/bin/alloc-test.kx\""))
         assertTrue(source.contains("\"/etc/motd\""))
@@ -291,6 +299,42 @@ class K16FirmwareResourceTest {
     }
 
     @Test
+    fun bundledK16SystemStorage0ContainsLsProgram() {
+        val workspace = createTempDirectory("k16-ls-storage-test-")
+        val storage0 = workspace.resolve("storage0.kv")
+        val root = workspace.resolve("root.kfs")
+        val ls = workspace.resolve("ls.kx")
+        storage0.writeBytes(K16SystemVolumeWorkspace.loadStorage0VolumeResource(classLoader = javaClass.classLoader))
+
+        runK16Tool(
+            "volume",
+            "extract-partition",
+            storage0.toString(),
+            "ROOT",
+            root.toString(),
+        )
+        runK16Tool(
+            "fs",
+            "kfs",
+            "get",
+            root.toString(),
+            "/bin/ls.kx",
+            ls.toString(),
+        )
+
+        val bytes = ls.readBytes()
+        assertTrue(bytes.size > 72, "bundled /bin/ls.kx should be a non-empty dynamic K16E program")
+        assertContentEquals(
+            byteArrayOf('K'.code.toByte(), '1'.code.toByte(), '6'.code.toByte(), 'E'.code.toByte()),
+            bytes.copyOfRange(0, 4),
+        )
+        val version = ByteBuffer.wrap(bytes, 0x04, 2).order(ByteOrder.LITTLE_ENDIAN).short.toInt()
+        val abiKind = ByteBuffer.wrap(bytes, 0x18, 4).order(ByteOrder.LITTLE_ENDIAN).int
+        assertEquals(2, version, "bundled /bin/ls.kx must use dynamic K16E v2")
+        assertEquals(3, abiKind, "bundled /bin/ls.kx must use K16E abi kind program")
+    }
+
+    @Test
     fun bundledK16SystemStorage0ContainsAllocTestProgram() {
         val workspace = createTempDirectory("k16-alloc-test-storage-test-")
         val storage0 = workspace.resolve("storage0.kv")
@@ -400,9 +444,10 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("stdin.read(read_buffer)"))
         assertTrue(source.contains("dispatch_command(stdout, input.command())"))
         assertTrue(source.contains("const PROMPT: &[u8] = b\"K16> \""))
-        assertTrue(source.contains("const HELP: &[u8] = b\"HELP\\nCLEAR\\nECHO\\nTICKS\\nUNAME\\nCAT <PATH>\\nALLOC\\n\""))
+        assertTrue(source.contains("const HELP: &[u8] = b\"HELP\\nCLEAR\\nECHO\\nTICKS\\nUNAME\\nLS [PATH]\\nCAT <PATH>\\nALLOC\\n\""))
         assertTrue(source.contains("run_ticks(stdout)"))
         assertTrue(source.contains("process::run(\"/bin/uname.kx\")"))
+        assertTrue(source.contains("process::run(\"/bin/ls.kx\")"))
         assertFalse(source.contains("process::exit(0)"))
         assertFalse(source.contains("debug::write_byte"))
     }
@@ -673,15 +718,18 @@ class K16FirmwareResourceTest {
         assertTrue(shellSource.contains("Command::Echo(bytes)"), "shell should handle the echo command")
         assertTrue(shellSource.contains("fn run_ticks("), "shell should name the ticks command")
         assertTrue(shellSource.contains("fn run_uname("), "shell should name the uname command")
+        assertTrue(shellSource.contains("fn run_ls("), "shell should name the ls command")
         assertTrue(shellSource.contains("fn run_cat("), "shell should name the cat command")
         assertTrue(shellSource.contains("fn run_alloc_test("), "shell should name the alloc command")
         assertTrue(shellLibSource.contains("Command::Uname"), "shell should classify the uname command")
+        assertTrue(shellLibSource.contains("Command::Ls("), "shell should classify ls with an optional path argument")
         assertTrue(shellLibSource.contains("Command::Cat(&"), "shell should classify cat with a path argument")
         assertTrue(shellLibSource.contains("Command::AllocTest"), "shell should classify the alloc command")
         assertTrue(
-            shellSource.contains("HELP\\nCLEAR\\nECHO\\nTICKS\\nUNAME\\nCAT <PATH>\\nALLOC\\n"),
+            shellSource.contains("HELP\\nCLEAR\\nECHO\\nTICKS\\nUNAME\\nLS [PATH]\\nCAT <PATH>\\nALLOC\\n"),
             "help should print a readable command list",
         )
+        assertTrue(shellSource.contains("process::run_with_args(\"/bin/ls.kx\", &[path])"))
         assertTrue(shellSource.contains("process::run_with_args(\"/bin/cat.kx\", &[path])"))
         assertTrue(shellSource.contains("process::run(\"/bin/alloc-test.kx\")"))
         assertTrue(shellSource.contains("b\"ERR\\n\""), "unknown commands should report a short error")
@@ -842,7 +890,7 @@ class K16FirmwareResourceTest {
 
         val source = toolPath.readText()
         assertTrue(source.contains("KERNEL_LOAD_ADDR=0x00004000"))
-        assertTrue(source.contains("KERNEL_LIMIT_BYTES=49152"))
+        assertTrue(source.contains("KERNEL_LIMIT_BYTES=57344"))
         assertTrue(source.contains("MIN_HEADROOM_BYTES"))
     }
 
@@ -1023,7 +1071,7 @@ class K16FirmwareResourceTest {
                     "server tick should add one timer0 game tick before executing the shell command",
                 )
                 val terminalRow =
-                    snapshotRamBytes(runtime.machineSnapshot(), start = 0x1_0000 + 53, size = 53)
+                    snapshotRamBytes(runtime.machineSnapshot(), start = 0x1_2000 + 53, size = 53)
                         .toString(Charsets.US_ASCII)
                 val expectedTerminalPrefix = "TICKS ${expectedTicksAfterCommand and 0xffff_ffffL}"
 
@@ -1074,7 +1122,7 @@ class K16FirmwareResourceTest {
                 }
                 val afterTicksControl = runRuntimeServerTick(runtime, maxTurns = 256)
                 val terminalRow =
-                    snapshotRamBytes(runtime.machineSnapshot(), start = 0x1_0000 + 53, size = 53)
+                    snapshotRamBytes(runtime.machineSnapshot(), start = 0x1_2000 + 53, size = 53)
                         .toString(Charsets.US_ASCII)
                 val expectedTerminalPrefix = "TICKS $expectedTicksAfterCommand"
 
@@ -1275,8 +1323,8 @@ class K16FirmwareResourceTest {
                 runtime.pushKeyboardChar('\b'.code.toByte())
                 runtime.pushKeyboardChar('z'.code.toByte())
                 val afterInputControl = runRuntimeServerTick(runtime, maxTurns = 512)
-                val secondTerminalRow = snapshotRamBytes(runtime.machineSnapshot(), start = 0x1_0000 + 53, size = 53)
-                val thirdTerminalRow = snapshotRamBytes(runtime.machineSnapshot(), start = 0x1_0000 + 53 * 2, size = 53)
+                val secondTerminalRow = snapshotRamBytes(runtime.machineSnapshot(), start = 0x1_2000 + 53, size = 53)
+                val thirdTerminalRow = snapshotRamBytes(runtime.machineSnapshot(), start = 0x1_2000 + 53 * 2, size = 53)
 
                 assertEquals(NativeK16ComputerControl.STATUS_READY, afterInputControl.status)
                 assertEquals(0, afterInputControl.panicCode)

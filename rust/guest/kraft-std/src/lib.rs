@@ -98,6 +98,7 @@ pub mod io {
 pub mod fs {
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     pub enum Error {
+        InvalidArgument,
         Syscall(u32),
     }
 
@@ -138,6 +139,57 @@ pub mod fs {
             return Err(Error::Syscall(returned));
         }
         Ok(File(returned))
+    }
+
+    pub fn read_dir(path: &str, out: &mut [u8]) -> Result<usize, Error> {
+        let request = ReadDirRequest::new(path, out)?;
+        let returned = k16_rt::read_dir_syscall(request.bytes.as_ptr(), request.len);
+        if is_error_status(returned) {
+            return Err(Error::Syscall(returned));
+        }
+        Ok(returned as usize)
+    }
+
+    struct ReadDirRequest {
+        bytes: [u8; k16_abi::syscall::MAX_READ_DIR_REQUEST_BYTES],
+        len: usize,
+    }
+
+    impl ReadDirRequest {
+        fn new(path: &str, out: &mut [u8]) -> Result<Self, Error> {
+            if path.len() > k16_abi::syscall::MAX_READ_DIR_PATH_BYTES
+                || out.len() > u32::MAX as usize
+            {
+                return Err(Error::InvalidArgument);
+            }
+            let mut request = Self {
+                bytes: [0; k16_abi::syscall::MAX_READ_DIR_REQUEST_BYTES],
+                len: 0,
+            };
+            request.push_u32(k16_abi::syscall::READ_DIR_REQUEST_MAGIC)?;
+            request.push_u32(path.len() as u32)?;
+            request.push_u32(out.as_mut_ptr() as usize as u32)?;
+            request.push_u32(out.len() as u32)?;
+            request.push_bytes(path.as_bytes())?;
+            Ok(request)
+        }
+
+        fn push_u32(&mut self, value: u32) -> Result<(), Error> {
+            self.push_bytes(&value.to_le_bytes())
+        }
+
+        fn push_bytes(&mut self, bytes: &[u8]) -> Result<(), Error> {
+            let end = self
+                .len
+                .checked_add(bytes.len())
+                .ok_or(Error::InvalidArgument)?;
+            if end > self.bytes.len() {
+                return Err(Error::InvalidArgument);
+            }
+            self.bytes[self.len..end].copy_from_slice(bytes);
+            self.len = end;
+            Ok(())
+        }
     }
 
     #[inline(always)]
