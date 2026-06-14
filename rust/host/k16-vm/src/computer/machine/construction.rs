@@ -1,7 +1,7 @@
 use super::ComputerMachine;
 use crate::computer::devices::{
     ComputerControlDevice, DebugSerialDevice, GpuDevice, K16VolumeFileStorageMedia, KeyboardDevice,
-    SerialInputDevice, StoragePortDevice, TimerDevice,
+    MmuControlDevice, SerialInputDevice, StoragePortDevice, TimerDevice,
 };
 use crate::computer::profile::{
     validate_profile_v2, ComputerHardwareConfig, ComputerHardwareDevice, ComputerMachineProfile,
@@ -32,6 +32,7 @@ pub(super) fn from_profile(
         storage0_device_id: device_ids.storage_port,
         timer0_device_id: device_ids.timer,
         keyboard0_device_id: device_ids.keyboard,
+        mmu0_device_id: device_ids.mmu,
         bios_flash_device_id: None,
         cpus: Vec::new(),
         boot_cpu: None,
@@ -48,6 +49,7 @@ struct ConstructionDeviceIds {
     storage_port: Option<MmioDeviceId>,
     timer: Option<MmioDeviceId>,
     keyboard: Option<MmioDeviceId>,
+    mmu: Option<MmioDeviceId>,
 }
 
 fn hardware_table_entries(profile: &ComputerMachineProfile) -> Vec<HardwareTableEntry> {
@@ -91,6 +93,7 @@ fn map_hardware_device(
         ComputerHardwareDevice::StoragePort(config) => Box::new(storage_port_device(config)?),
         ComputerHardwareDevice::Timer => Box::new(TimerDevice::new()),
         ComputerHardwareDevice::Keyboard => Box::new(KeyboardDevice::new()),
+        ComputerHardwareDevice::Mmu => Box::new(MmuControlDevice::new()),
     };
     bus.map_mmio(hardware.mmio_base, device)
 }
@@ -117,6 +120,7 @@ impl ConstructionDeviceIds {
             ComputerHardwareDevice::StoragePort(_) => self.storage_port = Some(device_id),
             ComputerHardwareDevice::Timer => self.timer = Some(device_id),
             ComputerHardwareDevice::Keyboard => self.keyboard = Some(device_id),
+            ComputerHardwareDevice::Mmu => self.mmu = Some(device_id),
         }
     }
 }

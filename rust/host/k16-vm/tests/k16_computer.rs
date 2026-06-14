@@ -60,7 +60,7 @@ fn k16_computer_handle_accepts_storage0_volume_path() {
 fn k16_computer_profile_exposes_timer0_hardware_entry_and_mmio() {
     let mut machine = ComputerMachine::new(1024).expect("machine creates");
 
-    assert_eq!(read_u32(machine.memory(), 0x18), 7);
+    assert_eq!(read_u32(machine.memory(), 0x18), 8);
     assert_hardware_entry_with_irq(
         machine.memory(),
         108,
@@ -77,6 +77,14 @@ fn k16_computer_profile_exposes_timer0_hardware_entry_and_mmio() {
         ComputerMachine::KEYBOARD0_SIZE,
         k16_vm::k16::K16_INTERRUPT_SOURCE_KEYBOARD0,
     );
+    assert_hardware_entry_with_irq(
+        machine.memory(),
+        140,
+        ComputerMachine::HARDWARE_ID_MMU0,
+        ComputerMachine::MMU0_BASE,
+        ComputerMachine::MMU0_SIZE,
+        0,
+    );
     assert_eq!(
         machine
             .memory_map()
@@ -92,6 +100,14 @@ fn k16_computer_profile_exposes_timer0_hardware_entry_and_mmio() {
             .expect("keyboard0 is mapped")
             .base,
         ComputerMachine::KEYBOARD0_BASE,
+    );
+    assert_eq!(
+        machine
+            .memory_map()
+            .region("mmu0")
+            .expect("mmu0 is mapped")
+            .base,
+        ComputerMachine::MMU0_BASE,
     );
     assert_eq!(
         machine

@@ -150,22 +150,26 @@ before returning to user code.
 
 ## Minimum Host MMU Operations
 
-The later CPU/MMU ABI slice should expose these operations to the guest kernel:
+The initial implemented CPU/MMU ABI slice exposes these operations to the guest
+kernel through the `mmu0` MMIO control device:
 
 ```text
 create_address_space() -> address_space_id
-destroy_address_space(address_space_id)
 map_pages(address_space_id, virtual_page, physical_page, page_count, flags)
-unmap_pages(address_space_id, virtual_page, page_count)
 protect_pages(address_space_id, virtual_page, page_count, flags)
 activate_user_address_space(address_space_id, entry_pc, stack_pointer)
 ```
 
-These operations may be encoded as new CPU ABI controls or as an explicit MMU
-control device. The exact encoding is deliberately left to the implementation
-slice, but the semantics are part of this ABI direction: user translation is
-host-enforced, and the kernel configures mappings instead of publishing raw
-page-table memory for the host to walk.
+`activate_user_address_space` switches the current K16 CPU to translated user
+execution. The command device itself does not own address spaces; it records
+guest commands, and `ComputerMachine` applies them to its host-managed MMU
+registry before guest execution continues. User translation is host-enforced,
+and the kernel configures mappings instead of publishing raw page-table memory
+for the host to walk.
+
+Address-space destruction and unmapping are intentionally left for a later
+lifecycle slice. The first control boundary is enough to construct mappings and
+enter one translated user context without changing physical-mode boot.
 
 ## Permissions
 
@@ -257,7 +261,7 @@ The intended follow-up slices are:
 1. Add a VM-internal address translation module and tests while leaving
    physical mode as the default and only active runtime mode.
 2. Add host-managed address-space map operations in a versioned CPU/MMU ABI
-   slice, including page fault reporting and mode switching on trap/`iret`.
+   slice, including command-based user-mode activation.
 3. Add kernel-owned address-space construction for one child process while init
    can remain physical.
 4. Convert syscall user-buffer validation from physical range checks to

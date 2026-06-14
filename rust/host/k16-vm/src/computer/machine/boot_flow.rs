@@ -1,7 +1,10 @@
 use super::{checked_ram_range, BootHandoffError, ComputerCpuContext, ComputerMachine, CpuId};
 use crate::computer::devices::BiosFlashDevice;
+use crate::computer::devices::MmuControlCommand;
 use crate::computer::profile::ComputerMachineProfile;
+use crate::computer_abi;
 use crate::k16::{K16Cpu, K16Signal};
+use crate::mmu::{MmuAddressSpaceId, MmuMapFlags};
 
 pub(super) fn from_k16_bios_flash(
     bios_flash: &[u8],
@@ -101,29 +104,129 @@ pub(super) fn run_boot_k16_until_signal(
     // ComputerMachine owns the full-computer reaction to CPU results. The CPU
     // executes instructions; the machine translates halt/fault outcomes into
     // control-device state visible to the host.
-    let signal = {
-        let cpu = machine
-            .cpus
-            .get_mut(cpu_id)
-            .ok_or_else(|| format!("CPU {cpu_id} is not present"))?;
-        match cpu {
-            ComputerCpuContext::K16 { cpu, max_steps } => cpu
-                .run_until_signal_with_mmu(&mut machine.bus, &machine.address_spaces, *max_steps)
-                .map_err(|error| error.to_string()),
+    loop {
+        let signal = {
+            let cpu = machine
+                .cpus
+                .get_mut(cpu_id)
+                .ok_or_else(|| format!("CPU {cpu_id} is not present"))?;
+            match cpu {
+                ComputerCpuContext::K16 { cpu, max_steps } => cpu
+                    .run_until_signal_with_mmu(
+                        &mut machine.bus,
+                        &machine.address_spaces,
+                        *max_steps,
+                    )
+                    .map_err(|error| error.to_string()),
+            }
+        };
+        if matches!(signal, Ok(K16Signal::Yield)) && apply_pending_mmu0_command(machine, cpu_id)? {
+            continue;
+        }
+        match &signal {
+            Ok(K16Signal::Halt) => {
+                set_halted_exit_code(machine, 0)?;
+            }
+            Ok(K16Signal::Wait) => {}
+            Ok(K16Signal::Yield) => {}
+            Ok(K16Signal::StepLimitExceeded) => {}
+            Err(message) => {
+                set_panic_from_fault(machine, message)?;
+            }
+        }
+        return signal;
+    }
+}
+
+fn apply_pending_mmu0_command(
+    machine: &mut ComputerMachine,
+    cpu_id: CpuId,
+) -> Result<bool, String> {
+    let Some(command) = machine.take_pending_mmu0_command() else {
+        return Ok(false);
+    };
+    let result = match apply_mmu0_command(machine, cpu_id, command) {
+        Ok(result) => {
+            machine.finish_mmu0_success(result);
+            Ok(())
+        }
+        Err(error) => {
+            machine.finish_mmu0_error(error);
+            Ok(())
         }
     };
-    match &signal {
-        Ok(K16Signal::Halt) => {
-            set_halted_exit_code(machine, 0)?;
+    result.map(|()| true)
+}
+
+fn apply_mmu0_command(
+    machine: &mut ComputerMachine,
+    cpu_id: CpuId,
+    command: MmuControlCommand,
+) -> Result<u32, i32> {
+    match command.command {
+        computer_abi::MMU0_COMMAND_CREATE_ADDRESS_SPACE => machine
+            .create_mmu_address_space()
+            .map(MmuAddressSpaceId::raw)
+            .map_err(|_| computer_abi::MMU0_ERROR_INVALID_ARGUMENT),
+        computer_abi::MMU0_COMMAND_MAP_PAGES => {
+            let flags = mmu0_flags(command.flags)?;
+            machine
+                .map_mmu_pages(
+                    MmuAddressSpaceId::from_raw(command.address_space),
+                    command.virtual_start,
+                    command.physical_start,
+                    command.page_count,
+                    flags,
+                )
+                .map(|()| 0)
+                .map_err(|_| computer_abi::MMU0_ERROR_INVALID_ARGUMENT)
         }
-        Ok(K16Signal::Wait) => {}
-        Ok(K16Signal::Yield) => {}
-        Ok(K16Signal::StepLimitExceeded) => {}
-        Err(message) => {
-            set_panic_from_fault(machine, message)?;
+        computer_abi::MMU0_COMMAND_PROTECT_PAGES => {
+            let flags = mmu0_flags(command.flags)?;
+            machine
+                .protect_mmu_pages(
+                    MmuAddressSpaceId::from_raw(command.address_space),
+                    command.virtual_start,
+                    command.page_count,
+                    flags,
+                )
+                .map(|()| 0)
+                .map_err(|_| computer_abi::MMU0_ERROR_INVALID_ARGUMENT)
         }
+        computer_abi::MMU0_COMMAND_ACTIVATE_USER_ADDRESS_SPACE => {
+            let address_space = MmuAddressSpaceId::from_raw(command.address_space);
+            if machine.address_spaces.get(address_space).is_none() {
+                return Err(computer_abi::MMU0_ERROR_INVALID_ARGUMENT);
+            }
+            machine
+                .k16_cpu_mut(cpu_id)
+                .map_err(|_| computer_abi::MMU0_ERROR_INVALID_ARGUMENT)?
+                .enter_user_address_space(address_space, command.entry_pc, command.stack_pointer);
+            Ok(0)
+        }
+        computer_abi::MMU0_COMMAND_NOP => Ok(0),
+        _ => Err(computer_abi::MMU0_ERROR_INVALID_COMMAND),
     }
-    signal
+}
+
+fn mmu0_flags(raw: u32) -> Result<MmuMapFlags, i32> {
+    let known = (computer_abi::MMU0_FLAG_USER_ACCESSIBLE
+        | computer_abi::MMU0_FLAG_WRITABLE
+        | computer_abi::MMU0_FLAG_EXECUTABLE) as u32;
+    if raw & !known != 0 {
+        return Err(computer_abi::MMU0_ERROR_INVALID_ARGUMENT);
+    }
+    let mut flags = MmuMapFlags::NONE;
+    if raw & computer_abi::MMU0_FLAG_USER_ACCESSIBLE as u32 != 0 {
+        flags = flags | MmuMapFlags::USER_ACCESSIBLE;
+    }
+    if raw & computer_abi::MMU0_FLAG_WRITABLE as u32 != 0 {
+        flags = flags | MmuMapFlags::WRITABLE;
+    }
+    if raw & computer_abi::MMU0_FLAG_EXECUTABLE as u32 != 0 {
+        flags = flags | MmuMapFlags::EXECUTABLE;
+    }
+    Ok(flags)
 }
 
 pub(super) fn map_k16_bios_flash(

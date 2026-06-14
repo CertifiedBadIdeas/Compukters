@@ -1,6 +1,7 @@
 use super::ComputerMachine;
 use crate::computer::devices::{
-    ComputerControlDevice, DebugSerialDevice, GpuDevice, KeyboardDevice, SerialInputDevice,
+    ComputerControlDevice, DebugSerialDevice, GpuDevice, KeyboardDevice, MmuControlDevice,
+    SerialInputDevice,
 };
 use crate::computer::profile::{ComputerHardwareConfig, ComputerMachineProfile};
 use crate::computer_abi;
@@ -96,6 +97,151 @@ fn computer_machine_mmu_user_mode_faults_on_supervisor_only_mapping() {
         .expect_err("user mode should not fetch supervisor-only mapping");
     assert!(error.contains("MMU permission fault"));
     assert_eq!(machine.control_status(), ComputerMachine::STATUS_PANIC);
+}
+
+#[test]
+fn computer_machine_mmu0_guest_kernel_enters_translated_user_execution() {
+    const RAM_SIZE: usize = 0x4000;
+    const KERNEL_PC: u32 = 0x0100;
+    const USER_VIRTUAL_PC: u32 = 0x4000;
+    const USER_VIRTUAL_DATA: u32 = 0x8000;
+    const USER_STACK_TOP: u32 = 0x9000;
+    const USER_CODE_PHYSICAL: u32 = 0x1000;
+    const USER_DATA_PHYSICAL: u32 = 0x2000;
+
+    let mut machine = ComputerMachine::new(RAM_SIZE).unwrap();
+    let kernel = k16_words(&[
+        k16_const32(1, ComputerMachine::MMU0_BASE)[0],
+        k16_const32(1, ComputerMachine::MMU0_BASE)[1],
+        k16_const32(1, ComputerMachine::MMU0_BASE)[2],
+        k16_const4(3, 12),
+        k16_add(7, 1, 3)[0],
+        k16_add(7, 1, 3)[1],
+        k16_const4(2, ComputerMachine::MMU0_COMMAND_CREATE_ADDRESS_SPACE as u8),
+        k16_store32(7, 2),
+        k16_const32(3, 44)[0],
+        k16_const32(3, 44)[1],
+        k16_const32(3, 44)[2],
+        k16_add(4, 1, 3)[0],
+        k16_add(4, 1, 3)[1],
+        k16_load32(5, 4),
+        k16_const32(3, 16)[0],
+        k16_const32(3, 16)[1],
+        k16_const32(3, 16)[2],
+        k16_add(4, 1, 3)[0],
+        k16_add(4, 1, 3)[1],
+        k16_store32(4, 5),
+        k16_const32(3, 20)[0],
+        k16_const32(3, 20)[1],
+        k16_const32(3, 20)[2],
+        k16_add(4, 1, 3)[0],
+        k16_add(4, 1, 3)[1],
+        k16_const32(6, USER_VIRTUAL_PC)[0],
+        k16_const32(6, USER_VIRTUAL_PC)[1],
+        k16_const32(6, USER_VIRTUAL_PC)[2],
+        k16_store32(4, 6),
+        k16_const32(3, 24)[0],
+        k16_const32(3, 24)[1],
+        k16_const32(3, 24)[2],
+        k16_add(4, 1, 3)[0],
+        k16_add(4, 1, 3)[1],
+        k16_const32(6, USER_CODE_PHYSICAL)[0],
+        k16_const32(6, USER_CODE_PHYSICAL)[1],
+        k16_const32(6, USER_CODE_PHYSICAL)[2],
+        k16_store32(4, 6),
+        k16_const32(3, 28)[0],
+        k16_const32(3, 28)[1],
+        k16_const32(3, 28)[2],
+        k16_add(4, 1, 3)[0],
+        k16_add(4, 1, 3)[1],
+        k16_const4(6, 1),
+        k16_store32(4, 6),
+        k16_const32(3, 32)[0],
+        k16_const32(3, 32)[1],
+        k16_const32(3, 32)[2],
+        k16_add(4, 1, 3)[0],
+        k16_add(4, 1, 3)[1],
+        k16_const4(6, 5),
+        k16_store32(4, 6),
+        k16_const4(2, ComputerMachine::MMU0_COMMAND_MAP_PAGES as u8),
+        k16_store32(7, 2),
+        k16_const32(3, 20)[0],
+        k16_const32(3, 20)[1],
+        k16_const32(3, 20)[2],
+        k16_add(4, 1, 3)[0],
+        k16_add(4, 1, 3)[1],
+        k16_const32(6, USER_VIRTUAL_DATA)[0],
+        k16_const32(6, USER_VIRTUAL_DATA)[1],
+        k16_const32(6, USER_VIRTUAL_DATA)[2],
+        k16_store32(4, 6),
+        k16_const32(3, 24)[0],
+        k16_const32(3, 24)[1],
+        k16_const32(3, 24)[2],
+        k16_add(4, 1, 3)[0],
+        k16_add(4, 1, 3)[1],
+        k16_const32(6, USER_DATA_PHYSICAL)[0],
+        k16_const32(6, USER_DATA_PHYSICAL)[1],
+        k16_const32(6, USER_DATA_PHYSICAL)[2],
+        k16_store32(4, 6),
+        k16_const32(3, 32)[0],
+        k16_const32(3, 32)[1],
+        k16_const32(3, 32)[2],
+        k16_add(4, 1, 3)[0],
+        k16_add(4, 1, 3)[1],
+        k16_const4(6, 3),
+        k16_store32(4, 6),
+        k16_const4(2, ComputerMachine::MMU0_COMMAND_MAP_PAGES as u8),
+        k16_store32(7, 2),
+        k16_const32(3, 36)[0],
+        k16_const32(3, 36)[1],
+        k16_const32(3, 36)[2],
+        k16_add(4, 1, 3)[0],
+        k16_add(4, 1, 3)[1],
+        k16_const32(6, USER_VIRTUAL_PC)[0],
+        k16_const32(6, USER_VIRTUAL_PC)[1],
+        k16_const32(6, USER_VIRTUAL_PC)[2],
+        k16_store32(4, 6),
+        k16_const32(3, 40)[0],
+        k16_const32(3, 40)[1],
+        k16_const32(3, 40)[2],
+        k16_add(4, 1, 3)[0],
+        k16_add(4, 1, 3)[1],
+        k16_const32(6, USER_STACK_TOP)[0],
+        k16_const32(6, USER_STACK_TOP)[1],
+        k16_const32(6, USER_STACK_TOP)[2],
+        k16_store32(4, 6),
+        k16_const4(
+            2,
+            ComputerMachine::MMU0_COMMAND_ACTIVATE_USER_ADDRESS_SPACE as u8,
+        ),
+        k16_store32(7, 2),
+        k16_halt(),
+    ]);
+    let user = k16_words(&[
+        k16_const32(1, USER_VIRTUAL_DATA)[0],
+        k16_const32(1, USER_VIRTUAL_DATA)[1],
+        k16_const32(1, USER_VIRTUAL_DATA)[2],
+        k16_const32(2, 0x1122_3344)[0],
+        k16_const32(2, 0x1122_3344)[1],
+        k16_const32(2, 0x1122_3344)[2],
+        k16_store32(1, 2),
+        k16_halt(),
+    ]);
+    machine.write_guest_ram_bytes(KERNEL_PC, &kernel).unwrap();
+    machine
+        .write_guest_ram_bytes(USER_CODE_PHYSICAL, &user)
+        .unwrap();
+    let boot_cpu = machine.install_k16_boot_cpu_for_tests(KERNEL_PC, 256);
+
+    assert_eq!(
+        machine.run_boot_k16_until_signal(boot_cpu).unwrap(),
+        K16Signal::Halt,
+    );
+    assert_eq!(
+        machine.bus_load_i32(USER_DATA_PHYSICAL).unwrap(),
+        0x1122_3344
+    );
+    assert_eq!(machine.control_status(), ComputerMachine::STATUS_HALTED);
 }
 
 #[test]
@@ -260,7 +406,7 @@ fn computer_keyboard0_drops_newest_event_on_overflow() {
 fn computer_machine_omits_display0_hardware_entry() {
     let machine = ComputerMachine::new(1024).unwrap();
 
-    assert_eq!(read_u32(machine.memory(), 0x18), 7);
+    assert_eq!(read_u32(machine.memory(), 0x18), 8);
     assert!(machine.memory_map().region("display0").is_none());
 }
 
@@ -268,7 +414,7 @@ fn computer_machine_omits_display0_hardware_entry() {
 fn computer_machine_writes_keyboard0_hardware_entry() {
     let machine = ComputerMachine::new(1024).unwrap();
 
-    assert_eq!(read_u32(machine.memory(), 0x18), 7);
+    assert_eq!(read_u32(machine.memory(), 0x18), 8);
     assert_hardware_entry_with_irq(
         machine.memory(),
         124,
@@ -283,7 +429,7 @@ fn computer_machine_writes_keyboard0_hardware_entry() {
 fn computer_machine_writes_gpu0_hardware_entry() {
     let machine = ComputerMachine::new(1024).unwrap();
 
-    assert_eq!(read_u32(machine.memory(), 0x18), 7);
+    assert_eq!(read_u32(machine.memory(), 0x18), 8);
     assert_hardware_entry(
         machine.memory(),
         76,
@@ -395,7 +541,7 @@ fn computer_machine_writes_machine_profile_v2_boot_info() {
         read_u32(machine.memory(), 0x14),
         ComputerMachine::PROFILE_V2_BOOT_INFO_SIZE
     );
-    assert_eq!(read_u32(machine.memory(), 0x18), 7);
+    assert_eq!(read_u32(machine.memory(), 0x18), 8);
 }
 
 #[test]
@@ -453,6 +599,13 @@ fn computer_machine_writes_static_hardware_table_for_mmio_ranges() {
         computer_abi::PROFILE_V2_PAGE_SIZE,
         crate::k16::K16_INTERRUPT_SOURCE_KEYBOARD0,
     );
+    assert_hardware_entry(
+        machine.memory(),
+        140,
+        computer_abi::COMPUTER_HARDWARE_ID_MMU0,
+        computer_abi::MMU0_BASE,
+        computer_abi::PROFILE_V2_PAGE_SIZE,
+    );
 }
 
 #[test]
@@ -460,7 +613,7 @@ fn computer_machine_can_be_created_from_explicit_computer_v1_profile() {
     let profile = ComputerMachineProfile::computer_v1(1024);
     let machine = ComputerMachine::from_profile(profile).unwrap();
 
-    assert_eq!(read_u32(machine.memory(), 0x18), 7);
+    assert_eq!(read_u32(machine.memory(), 0x18), 8);
     assert_hardware_entry(
         machine.memory(),
         28,
@@ -1132,6 +1285,51 @@ fn computer_machine_constants_match_profile_v2_abi() {
     assert_eq!(ComputerMachine::STATUS_READY, computer_abi::STATUS_READY);
     assert_eq!(ComputerMachine::STATUS_HALTED, computer_abi::STATUS_HALTED);
     assert_eq!(ComputerMachine::STATUS_PANIC, computer_abi::STATUS_PANIC);
+    assert_eq!(ComputerMachine::MMU0_BASE, computer_abi::MMU0_BASE);
+    assert_eq!(ComputerMachine::MMU0_VERSION, computer_abi::MMU0_VERSION);
+    assert_eq!(ComputerMachine::MMU0_STATUS, computer_abi::MMU0_STATUS);
+    assert_eq!(ComputerMachine::MMU0_ERROR, computer_abi::MMU0_ERROR);
+    assert_eq!(ComputerMachine::MMU0_COMMAND, computer_abi::MMU0_COMMAND);
+    assert_eq!(
+        ComputerMachine::MMU0_ADDRESS_SPACE,
+        computer_abi::MMU0_ADDRESS_SPACE,
+    );
+    assert_eq!(
+        ComputerMachine::MMU0_VIRTUAL_START,
+        computer_abi::MMU0_VIRTUAL_START,
+    );
+    assert_eq!(
+        ComputerMachine::MMU0_PHYSICAL_START,
+        computer_abi::MMU0_PHYSICAL_START,
+    );
+    assert_eq!(
+        ComputerMachine::MMU0_PAGE_COUNT,
+        computer_abi::MMU0_PAGE_COUNT,
+    );
+    assert_eq!(ComputerMachine::MMU0_FLAGS, computer_abi::MMU0_FLAGS);
+    assert_eq!(ComputerMachine::MMU0_ENTRY_PC, computer_abi::MMU0_ENTRY_PC);
+    assert_eq!(
+        ComputerMachine::MMU0_STACK_POINTER,
+        computer_abi::MMU0_STACK_POINTER,
+    );
+    assert_eq!(ComputerMachine::MMU0_RESULT, computer_abi::MMU0_RESULT);
+    assert_eq!(ComputerMachine::MMU0_SIZE, computer_abi::MMU0_SIZE);
+    assert_eq!(
+        ComputerMachine::MMU0_COMMAND_CREATE_ADDRESS_SPACE,
+        computer_abi::MMU0_COMMAND_CREATE_ADDRESS_SPACE,
+    );
+    assert_eq!(
+        ComputerMachine::MMU0_COMMAND_MAP_PAGES,
+        computer_abi::MMU0_COMMAND_MAP_PAGES,
+    );
+    assert_eq!(
+        ComputerMachine::MMU0_COMMAND_PROTECT_PAGES,
+        computer_abi::MMU0_COMMAND_PROTECT_PAGES,
+    );
+    assert_eq!(
+        ComputerMachine::MMU0_COMMAND_ACTIVATE_USER_ADDRESS_SPACE,
+        computer_abi::MMU0_COMMAND_ACTIVATE_USER_ADDRESS_SPACE,
+    );
 }
 
 #[test]
@@ -1141,12 +1339,14 @@ fn computer_mmio_device_sizes_match_profile_v2_abi() {
     let serial_input = SerialInputDevice::new();
     let gpu = GpuDevice::new();
     let keyboard = KeyboardDevice::new();
+    let mmu = MmuControlDevice::new();
 
     assert_eq!(control.size(), computer_abi::CONTROL_SIZE);
     assert_eq!(debug.size(), computer_abi::DEBUG_SIZE);
     assert_eq!(serial_input.size(), computer_abi::SERIAL_INPUT_SIZE);
     assert_eq!(gpu.size(), computer_abi::GPU0_SIZE);
     assert_eq!(keyboard.size(), computer_abi::KEYBOARD0_SIZE);
+    assert_eq!(mmu.size(), computer_abi::MMU0_SIZE);
 }
 
 #[test]
@@ -1234,6 +1434,19 @@ fn computer_memory_map_describes_keyboard0_mmio_region() {
     assert_eq!(keyboard.size, computer_abi::KEYBOARD0_SIZE);
     assert!(keyboard.readable);
     assert!(keyboard.writable);
+}
+
+#[test]
+fn computer_memory_map_describes_mmu0_mmio_region() {
+    let machine = ComputerMachine::new(1024).unwrap();
+    let map = machine.memory_map();
+
+    let mmu = map.region("mmu0").unwrap();
+
+    assert_eq!(mmu.base, computer_abi::MMU0_BASE);
+    assert_eq!(mmu.size, computer_abi::MMU0_SIZE);
+    assert!(mmu.readable);
+    assert!(mmu.writable);
 }
 
 #[test]

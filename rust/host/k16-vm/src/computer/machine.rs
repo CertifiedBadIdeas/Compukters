@@ -1,6 +1,6 @@
 use crate::computer::devices::{
-    ComputerControlDevice, DebugSerialDevice, GpuDevice, KeyboardDevice, SerialInputDevice,
-    StoragePortDevice, TimerDevice,
+    ComputerControlDevice, DebugSerialDevice, GpuDevice, KeyboardDevice, MmuControlCommand,
+    MmuControlDevice, SerialInputDevice, StoragePortDevice, TimerDevice,
 };
 use crate::computer::profile::ComputerMachineProfile;
 use crate::computer_abi;
@@ -29,6 +29,7 @@ pub struct ComputerMachine {
     storage0_device_id: Option<MmioDeviceId>,
     timer0_device_id: Option<MmioDeviceId>,
     keyboard0_device_id: Option<MmioDeviceId>,
+    mmu0_device_id: Option<MmioDeviceId>,
     bios_flash_device_id: Option<MmioDeviceId>,
     cpus: Vec<ComputerCpuContext>,
     boot_cpu: Option<CpuId>,
@@ -134,6 +135,7 @@ impl ComputerMachine {
     pub const HARDWARE_ID_GPU0: u32 = computer_abi::COMPUTER_HARDWARE_ID_GPU0;
     pub const HARDWARE_ID_TIMER0: u32 = computer_abi::COMPUTER_HARDWARE_ID_TIMER0;
     pub const HARDWARE_ID_KEYBOARD0: u32 = computer_abi::COMPUTER_HARDWARE_ID_KEYBOARD0;
+    pub const HARDWARE_ID_MMU0: u32 = computer_abi::COMPUTER_HARDWARE_ID_MMU0;
     pub const CONTROL_BASE: u32 = computer_abi::CONTROL_BASE;
     pub const CONTROL_STATUS: u32 = computer_abi::CONTROL_STATUS;
     pub const CONTROL_PANIC_CODE: u32 = computer_abi::CONTROL_PANIC_CODE;
@@ -216,6 +218,37 @@ impl ComputerMachine {
     pub const KEYBOARD0_COMMAND: u32 = computer_abi::KEYBOARD0_COMMAND;
     pub const KEYBOARD0_DROPPED_COUNT: u32 = computer_abi::KEYBOARD0_DROPPED_COUNT;
     pub const KEYBOARD0_SIZE: u32 = computer_abi::KEYBOARD0_SIZE;
+    pub const MMU0_BASE: u32 = computer_abi::MMU0_BASE;
+    pub const MMU0_VERSION: u32 = computer_abi::MMU0_VERSION;
+    pub const MMU0_STATUS: u32 = computer_abi::MMU0_STATUS;
+    pub const MMU0_ERROR: u32 = computer_abi::MMU0_ERROR;
+    pub const MMU0_COMMAND: u32 = computer_abi::MMU0_COMMAND;
+    pub const MMU0_ADDRESS_SPACE: u32 = computer_abi::MMU0_ADDRESS_SPACE;
+    pub const MMU0_VIRTUAL_START: u32 = computer_abi::MMU0_VIRTUAL_START;
+    pub const MMU0_PHYSICAL_START: u32 = computer_abi::MMU0_PHYSICAL_START;
+    pub const MMU0_PAGE_COUNT: u32 = computer_abi::MMU0_PAGE_COUNT;
+    pub const MMU0_FLAGS: u32 = computer_abi::MMU0_FLAGS;
+    pub const MMU0_ENTRY_PC: u32 = computer_abi::MMU0_ENTRY_PC;
+    pub const MMU0_STACK_POINTER: u32 = computer_abi::MMU0_STACK_POINTER;
+    pub const MMU0_RESULT: u32 = computer_abi::MMU0_RESULT;
+    pub const MMU0_SIZE: u32 = computer_abi::MMU0_SIZE;
+    pub const MMU0_VERSION_VALUE: i32 = computer_abi::MMU0_VERSION_VALUE;
+    pub const MMU0_STATUS_READY: i32 = computer_abi::MMU0_STATUS_READY;
+    pub const MMU0_STATUS_DONE: i32 = computer_abi::MMU0_STATUS_DONE;
+    pub const MMU0_STATUS_ERROR: i32 = computer_abi::MMU0_STATUS_ERROR;
+    pub const MMU0_ERROR_NONE: i32 = computer_abi::MMU0_ERROR_NONE;
+    pub const MMU0_ERROR_INVALID_COMMAND: i32 = computer_abi::MMU0_ERROR_INVALID_COMMAND;
+    pub const MMU0_ERROR_INVALID_ARGUMENT: i32 = computer_abi::MMU0_ERROR_INVALID_ARGUMENT;
+    pub const MMU0_COMMAND_NOP: i32 = computer_abi::MMU0_COMMAND_NOP;
+    pub const MMU0_COMMAND_CREATE_ADDRESS_SPACE: i32 =
+        computer_abi::MMU0_COMMAND_CREATE_ADDRESS_SPACE;
+    pub const MMU0_COMMAND_MAP_PAGES: i32 = computer_abi::MMU0_COMMAND_MAP_PAGES;
+    pub const MMU0_COMMAND_PROTECT_PAGES: i32 = computer_abi::MMU0_COMMAND_PROTECT_PAGES;
+    pub const MMU0_COMMAND_ACTIVATE_USER_ADDRESS_SPACE: i32 =
+        computer_abi::MMU0_COMMAND_ACTIVATE_USER_ADDRESS_SPACE;
+    pub const MMU0_FLAG_USER_ACCESSIBLE: i32 = computer_abi::MMU0_FLAG_USER_ACCESSIBLE;
+    pub const MMU0_FLAG_WRITABLE: i32 = computer_abi::MMU0_FLAG_WRITABLE;
+    pub const MMU0_FLAG_EXECUTABLE: i32 = computer_abi::MMU0_FLAG_EXECUTABLE;
     pub const K16_BIOS_FLASH_BASE: u32 = 0xFFF0_0000;
     pub const STATUS_RESET: i32 = computer_abi::STATUS_RESET;
     pub const STATUS_BOOTING: i32 = computer_abi::STATUS_BOOTING;
@@ -272,6 +305,7 @@ impl ComputerMachine {
         self.push_memory_map_region(&mut map, self.storage0_device_id, "storage0");
         self.push_memory_map_region(&mut map, self.timer0_device_id, "timer0");
         self.push_memory_map_region(&mut map, self.keyboard0_device_id, "keyboard0");
+        self.push_memory_map_region(&mut map, self.mmu0_device_id, "mmu0");
         self.push_memory_map_region_with_flags(
             &mut map,
             self.bios_flash_device_id,
@@ -436,6 +470,24 @@ impl ComputerMachine {
         let cpu = self.k16_cpu_mut(cpu_id)?;
         cpu.set_privilege_mode(privilege_mode);
         Ok(())
+    }
+
+    pub(crate) fn take_pending_mmu0_command(&mut self) -> Option<MmuControlCommand> {
+        self.mmu0_device_id
+            .and_then(|id| self.bus.device_mut::<MmuControlDevice>(id))
+            .and_then(MmuControlDevice::take_pending_command)
+    }
+
+    pub(crate) fn finish_mmu0_success(&mut self, result: u32) {
+        if let Some(device) = self.mmu0_device_mut() {
+            device.finish_success(result);
+        }
+    }
+
+    pub(crate) fn finish_mmu0_error(&mut self, error: i32) {
+        if let Some(device) = self.mmu0_device_mut() {
+            device.finish_error(error);
+        }
     }
 
     pub fn control_status(&self) -> i32 {
@@ -620,6 +672,11 @@ impl ComputerMachine {
     fn gpu0_device_mut(&mut self) -> Option<&mut GpuDevice> {
         self.gpu0_device_id
             .and_then(|id| self.bus.device_mut::<GpuDevice>(id))
+    }
+
+    fn mmu0_device_mut(&mut self) -> Option<&mut MmuControlDevice> {
+        self.mmu0_device_id
+            .and_then(|id| self.bus.device_mut::<MmuControlDevice>(id))
     }
 
     fn storage0_device(&self) -> Option<&StoragePortDevice> {

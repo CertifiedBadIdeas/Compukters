@@ -86,6 +86,16 @@ pub struct MmuAddressSpace {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct MmuAddressSpaceId(u32);
 
+impl MmuAddressSpaceId {
+    pub fn from_raw(raw: u32) -> Self {
+        Self(raw)
+    }
+
+    pub fn raw(self) -> u32 {
+        self.0
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MmuAddressSpaces {
     next_id: u32,
