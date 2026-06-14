@@ -125,6 +125,9 @@ Runtime helper symbol names:
 ```text
 `_start`          provided by k16-startup
 `main`            required application entry called by _start
+`memcpy`          provided by k16-memory-helpers
+`memset`          provided by k16-memory-helpers
+`memmove`         provided by k16-memory-helpers
 `__k16_memcpy`  provided by k16-memory-helpers
 `__k16_memset`  provided by k16-memory-helpers
 `__k16_memmove` provided by k16-memory-helpers

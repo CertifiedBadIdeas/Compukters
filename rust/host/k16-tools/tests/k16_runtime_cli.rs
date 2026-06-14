@@ -773,6 +773,233 @@ fn panic(_info: &PanicInfo<'_>) -> ! {
     );
 }
 
+#[test]
+fn k16_rust_aggregate_smoke_returns_expected_exit_status() {
+    let work_dir = temp_dir("aggregate-smoke");
+    let src_dir = work_dir.join("src");
+    fs::create_dir_all(&src_dir).expect("source directory creates");
+    fs::write(
+        work_dir.join("Cargo.toml"),
+        r#"[package]
+name = "k16-aggregate-smoke"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "k16_aggregate_smoke"
+path = "src/main.rs"
+test = false
+"#,
+    )
+    .expect("Cargo.toml writes");
+    fs::write(
+        src_dir.join("main.rs"),
+        r#"#![no_std]
+
+use core::panic::PanicInfo;
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct Pair {
+    lo: u32,
+    hi: u32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct Frame {
+    regs: [u32; 16],
+    resume_pc: u32,
+    stack_pointer: u32,
+    interrupt_enable: u32,
+}
+
+impl Frame {
+    const fn zeroed() -> Self {
+        Self {
+            regs: [0; 16],
+            resume_pc: 0,
+            stack_pointer: 0,
+            interrupt_enable: 0,
+        }
+    }
+}
+
+static PAIR_LO: u32 = 19;
+static PAIR_HI: u32 = 23;
+static FRAME: Frame = Frame {
+    regs: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+    resume_pc: 0x1234_5678,
+    stack_pointer: 0x0001_ffc0,
+    interrupt_enable: 1,
+};
+static REG_INDEX: u32 = 14;
+
+#[no_mangle]
+pub extern "C" fn main() -> i32 {
+    let pair = make_pair(read_u32(&PAIR_LO), read_u32(&PAIR_HI));
+    if sum_pair(pair) != 42 {
+        return 10;
+    }
+
+    let frame = read_frame(&FRAME);
+    if check_frame_by_value(frame) != 42 {
+        return 11;
+    }
+
+    let mut copied = Frame::zeroed();
+    copy_frame(&mut copied, &frame);
+    if copied.regs[14] != 14 {
+        return 12;
+    }
+    if copied.stack_pointer != 0x0001_ffc0 {
+        return 13;
+    }
+
+    if read_stack_pointer(&copied) != 0x0001_ffc0 {
+        return 14;
+    }
+    if read_register(&FRAME, read_u32(&REG_INDEX) as usize) != 14 {
+        return 15;
+    }
+
+    42
+}
+
+#[inline(never)]
+fn make_pair(lo: u32, hi: u32) -> Pair {
+    Pair { lo, hi }
+}
+
+#[inline(never)]
+fn sum_pair(pair: Pair) -> u32 {
+    pair.lo + pair.hi
+}
+
+#[inline(never)]
+fn read_frame(frame: &Frame) -> Frame {
+    unsafe { core::ptr::read_volatile(frame) }
+}
+
+#[inline(never)]
+fn check_frame_by_value(frame: Frame) -> i32 {
+    if frame.regs[14] != 14 {
+        return 20;
+    }
+    if frame.resume_pc != 0x1234_5678 {
+        return 21;
+    }
+    if frame.stack_pointer != 0x0001_ffc0 {
+        return 22;
+    }
+    if frame.interrupt_enable != 1 {
+        return 23;
+    }
+    42
+}
+
+#[inline(never)]
+fn copy_frame(out: &mut Frame, frame: &Frame) {
+    *out = read_frame(frame);
+}
+
+#[inline(never)]
+fn read_stack_pointer(frame: &Frame) -> u32 {
+    unsafe { core::ptr::read_volatile(&frame.stack_pointer) }
+}
+
+#[inline(never)]
+fn read_register(frame: &Frame, index: usize) -> u32 {
+    unsafe { core::ptr::read_volatile(frame.regs.as_ptr().add(index)) }
+}
+
+#[inline(never)]
+fn read_u32(value: &u32) -> u32 {
+    unsafe { core::ptr::read_volatile(value) }
+}
+
+#[panic_handler]
+fn panic(_info: &PanicInfo<'_>) -> ! {
+    loop {
+        core::hint::spin_loop();
+    }
+}
+"#,
+    )
+    .expect("main.rs writes");
+
+    let cargo_output = Command::new(k16_cargo())
+        .args([
+            "rustc",
+            "-Z",
+            "build-std=core",
+            "-Z",
+            "json-target-spec",
+            "--manifest-path",
+            work_dir.join("Cargo.toml").to_str().unwrap(),
+            "--target",
+            k16_target_spec().to_str().unwrap(),
+            "--target-dir",
+            work_dir.join("target").to_str().unwrap(),
+            "--lib",
+            "--",
+            "-C",
+            "panic=abort",
+            "-Copt-level=z",
+            "-C",
+            "relocation-model=static",
+            "-Cjump-tables=no",
+            "-Cdebuginfo=0",
+            &format!("--emit=obj={}", work_dir.join("main.o").display()),
+        ])
+        .env("RUSTC", k16_rustc())
+        .env("RUSTC_BOOTSTRAP", "1")
+        .env("RUSTFLAGS", "-Copt-level=z -Cjump-tables=no -Cdebuginfo=0")
+        .output()
+        .expect("cargo rustc runs");
+    assert!(
+        cargo_output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&cargo_output.stderr)
+    );
+
+    write_runtime_object("k16-startup", &work_dir.join("startup.o"));
+    write_runtime_object("k16-memory-helpers", &work_dir.join("helpers.o"));
+
+    let link_output = Command::new(k16_binary())
+        .args([
+            "link",
+            "--target",
+            "program",
+            work_dir.join("startup.o").to_str().unwrap(),
+            work_dir.join("main.o").to_str().unwrap(),
+            work_dir.join("helpers.o").to_str().unwrap(),
+            "-o",
+            work_dir.join("main.kx").to_str().unwrap(),
+        ])
+        .output()
+        .expect("k16 link runs");
+    assert!(
+        link_output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&link_output.stderr)
+    );
+
+    let run_output = Command::new(k16_binary())
+        .args(["run", work_dir.join("main.kx").to_str().unwrap()])
+        .output()
+        .expect("k16 run runs");
+    assert!(
+        run_output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&run_output.stderr)
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&run_output.stdout),
+        "signal=halt exit_status=42 debug_bytes=\n"
+    );
+}
+
 fn k16_main_returning_42_object() -> Vec<u8> {
     k16_object("main", &[0x01, 0xe0, 42, 0, 0, 0, 0x00, 0x90], None)
 }

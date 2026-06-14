@@ -265,6 +265,11 @@ pub unsafe extern "C" fn __k16_memcpy(dst: *mut u8, src: *const u8, n: usize) ->
 }
 
 #[no_mangle]
+pub unsafe extern "C" fn memcpy(dst: *mut u8, src: *const u8, n: usize) -> *mut u8 {
+    unsafe { __k16_memcpy(dst, src, n) }
+}
+
+#[no_mangle]
 pub fn __udivdi3(lhs: u64, rhs: u64) -> u64 {
     k16_udiv64(lhs, rhs)
 }
@@ -446,6 +451,11 @@ pub unsafe extern "C" fn __k16_memset(dst: *mut u8, value: i32, n: usize) -> *mu
 }
 
 #[no_mangle]
+pub unsafe extern "C" fn memset(dst: *mut u8, value: i32, n: usize) -> *mut u8 {
+    unsafe { __k16_memset(dst, value, n) }
+}
+
+#[no_mangle]
 pub unsafe extern "C" fn __k16_memmove(dst: *mut u8, src: *const u8, n: usize) -> *mut u8 {
     let dst_addr = dst as usize;
     let src_addr = src as usize;
@@ -467,4 +477,9 @@ pub unsafe extern "C" fn __k16_memmove(dst: *mut u8, src: *const u8, n: usize) -
         }
     }
     dst
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn memmove(dst: *mut u8, src: *const u8, n: usize) -> *mut u8 {
+    unsafe { __k16_memmove(dst, src, n) }
 }
