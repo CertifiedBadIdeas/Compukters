@@ -141,6 +141,13 @@ offset  size  name
 
 `version` is `2` for this profile.
 
+`ram_size` is the size of the byte-addressed guest RAM region beginning at
+`0x0000_0000`. The current K16 boot chain preserves this field for later boot
+stages, and the Rust kernel uses it as the upper guest-physical boundary for
+the initial user process after validating that the loaded init image fits below
+it. This is a physical memory boundary; it does not imply virtual addressing,
+page tables, or per-process remapping.
+
 `hardware_table_addr` is a RAM address when `hardware_count > 0`. For small
 hardware tables the host should place the table inside the boot page after
 `BootInfo`.

@@ -559,10 +559,11 @@ preemption, fork, pipe, or virtual-memory isolation in this model.
 
 Each foreground process records an explicit guest-physical memory range
 `memory_start..memory_end`. The init process range is derived from the loaded
-init image and the current machine profile's available user RAM boundary. A
-child process range is derived from the kernel-selected child load base and
-stack top. Syscalls that consume user pointers validate buffers against the
-current foreground process range rather than a global hard-coded user window.
+init image and the profile v2 `BootInfo.ram_size` value preserved by the boot
+chain. A child process range is derived from the kernel-selected child load
+base and stack top. Syscalls that consume user pointers validate buffers
+against the current foreground process range rather than a global hard-coded
+user window.
 
 Each foreground process has its own monotonic heap after its loaded image. A
 child load arena starts after the current parent's program break, so child

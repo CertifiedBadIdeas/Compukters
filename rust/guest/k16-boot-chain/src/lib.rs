@@ -1,5 +1,7 @@
 #![no_std]
 
+use k16_abi::computer::profile;
+
 pub const SCRATCH_ADDR: u32 = k16_storage::SCRATCH_ADDR;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -24,6 +26,7 @@ impl LoadError {
     pub const STORAGE_TRANSFER: Self = Self { code: 16 };
     pub const STORAGE_BLOCK_SIZE: Self = Self { code: 17 };
     pub const STORAGE_MEDIA: Self = Self { code: 18 };
+    pub const INVALID_BOOT_INFO: Self = Self { code: 19 };
 
     pub const fn code(self) -> i32 {
         self.code
@@ -61,6 +64,24 @@ pub unsafe fn enter_loaded_image(image: LoadedImage) -> ! {
     let entry: extern "C" fn() -> ! =
         unsafe { core::mem::transmute::<usize, extern "C" fn() -> !>(image.entry_pc as usize) };
     entry()
+}
+
+pub fn user_memory_end_from_boot_info(
+    boot_info: profile::BootInfo,
+    image: LoadedImage,
+) -> Result<u32, LoadError> {
+    if boot_info.page_size == 0 || image.load_addr >= image.load_end {
+        return Err(LoadError::INVALID_BOOT_INFO);
+    }
+    if boot_info.ram_size <= image.load_end {
+        return Err(LoadError::INVALID_BOOT_INFO);
+    }
+    Ok(boot_info.ram_size)
+}
+
+pub unsafe fn user_memory_end_from_current_boot_info(image: LoadedImage) -> Result<u32, LoadError> {
+    let boot_info = unsafe { profile::read_boot_info() }.ok_or(LoadError::INVALID_BOOT_INFO)?;
+    user_memory_end_from_boot_info(boot_info, image)
 }
 
 unsafe fn load_k16e_file(expected_abi_kind: K16eAbiKind) -> Result<LoadedImage, LoadError> {
@@ -121,4 +142,48 @@ unsafe fn zero_fill_ram(dst_addr: u32, len: u32) {
 
 unsafe fn write_u8(address: u32, value: u8) {
     unsafe { core::ptr::write_volatile(address as usize as *mut u8, value) }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use k16_abi::computer::profile::BootInfo;
+
+    fn boot_info(ram_size: u32) -> BootInfo {
+        BootInfo {
+            ram_size,
+            page_size: 256,
+            program_base: 0x0000_0100,
+            hardware_table_addr: 28,
+            hardware_count: 0,
+        }
+    }
+
+    #[test]
+    fn boot_info_ram_size_defines_user_memory_end() {
+        let image = LoadedImage {
+            entry_pc: 0x0001_3000,
+            load_addr: 0x0001_3000,
+            load_end: 0x0001_4100,
+        };
+
+        assert_eq!(
+            user_memory_end_from_boot_info(boot_info(0x0003_0000), image),
+            Ok(0x0003_0000)
+        );
+    }
+
+    #[test]
+    fn boot_info_ram_size_must_contain_loaded_user_image() {
+        let image = LoadedImage {
+            entry_pc: 0x0001_3000,
+            load_addr: 0x0001_3000,
+            load_end: 0x0001_4100,
+        };
+
+        assert_eq!(
+            user_memory_end_from_boot_info(boot_info(0x0001_4000), image),
+            Err(LoadError::INVALID_BOOT_INFO)
+        );
+    }
 }

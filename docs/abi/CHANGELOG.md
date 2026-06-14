@@ -2,9 +2,14 @@
 
 ## Unreleased
 
+- The K16 kernel now derives init's upper process memory boundary from profile
+  v2 `BootInfo.ram_size` instead of a kernel-local machine-profile constant.
+  Boot-info validation rejects missing or too-small RAM boundaries before
+  entering userland. The boot chain still uses physical memory only; this does
+  not add virtual memory or page tables.
 - K16 foreground processes now carry explicit guest-physical memory ranges.
-  Init derives its range from the loaded image plus the current machine
-  profile boundary, children derive theirs from the selected load base and
+  Init derives its range from the loaded image plus the boot-provided RAM
+  boundary, children derive theirs from the selected load base and
   stack top, and syscall/stdin user-pointer validation checks the current
   foreground process range instead of a global hard-coded user window. This is
   still physical memory only; it does not add virtual memory or page tables.
