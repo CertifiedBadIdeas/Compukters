@@ -7,10 +7,14 @@ const STACK_GUARD_BYTES: u32 = 0x100;
 const ROOT_PARTITION: &[u8; 4] = b"ROOT";
 const BIN_COMPONENT: &[u8] = b"bin";
 const BIN_PREFIX: &[u8] = b"/bin/";
+#[cfg(not(test))]
+const SHELL_PATH: &[u8] = b"/bin/shell.kx";
 const KX_SUFFIX: &[u8] = b".kx";
 const K16FS_MAX_NAME_BYTES: usize = 56;
 pub const MAX_RUN_PATH_BYTES: usize = BIN_PREFIX.len() + K16FS_MAX_NAME_BYTES;
 const CHILD_ARG_ENTRY_BYTES: u32 = 8;
+const VM_PAGE_SIZE: u32 = 4096;
+const TRANSLATED_TRAP_STACK_BYTES: u32 = VM_PAGE_SIZE;
 #[cfg(any(test, feature = "host-test"))]
 const DEFAULT_INIT_MEMORY_END: u32 = 0x0002_5000;
 // Keep relocation records outside k16_storage::SCRATCH_ADDR: storage reads use
@@ -242,6 +246,16 @@ pub struct ChildLaunch {
     pub id: ProcessId,
     pub context: ProcessContext,
     pub frame: TrapFrame,
+    pub address_space: Option<u32>,
+    pub kernel_stack_top: Option<u32>,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct TranslatedUserLaunch {
+    pub address_space: u32,
+    pub entry_pc: u32,
+    pub stack_top: u32,
+    pub kernel_stack_top: u32,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -250,6 +264,7 @@ pub struct InitResume {
     pub context: ProcessContext,
     pub frame: TrapFrame,
     pub child_exit_status: u32,
+    pub address_space: Option<u32>,
 }
 
 #[cfg(any(test, feature = "host-test"))]
@@ -444,7 +459,43 @@ impl ProcessTable {
             id: ProcessId::from_slot(child_slot),
             context,
             frame: child_frame,
+            address_space: None,
+            kernel_stack_top: None,
         })
+    }
+
+    pub fn begin_translated_child_run(
+        &mut self,
+        child_plan: DynamicUserLoadPlan,
+        translated: TranslatedUserLaunch,
+    ) -> Result<ChildLaunch, ProcessSwitchError> {
+        self.begin_translated_child_run_with_argv(child_plan, ChildArgv::empty(), translated)
+    }
+
+    pub fn begin_translated_child_run_with_argv(
+        &mut self,
+        child_plan: DynamicUserLoadPlan,
+        argv: ChildArgv,
+        translated: TranslatedUserLaunch,
+    ) -> Result<ChildLaunch, ProcessSwitchError> {
+        let mut launch =
+            self.begin_child_run_from_frame_and_argv(child_plan, TrapFrame::zeroed(), argv)?;
+        let context = ProcessContext {
+            entry_pc: translated.entry_pc,
+            stack_top: translated.stack_top,
+        };
+        let mut frame = child_frame_for_context(context);
+        frame.registers[1] = argv.argc;
+        frame.registers[2] = argv.table_ptr;
+        let child = &mut self.slots[self.current_slot];
+        child.address_space = Some(translated.address_space);
+        child.context = context;
+        child.frame = frame;
+        launch.context = context;
+        launch.frame = frame;
+        launch.address_space = Some(translated.address_space);
+        launch.kernel_stack_top = Some(translated.kernel_stack_top);
+        Ok(launch)
     }
 
     pub fn finish_child(&mut self, status: u32) -> Result<InitResume, ProcessSwitchError> {
@@ -474,6 +525,7 @@ impl ProcessTable {
             context: parent.context,
             frame: parent.frame,
             child_exit_status: status,
+            address_space: parent.address_space,
         })
     }
 
@@ -681,6 +733,11 @@ unsafe fn begin_loaded_child_runtime(path: &[u8], args: &[&[u8]]) -> Result<Chil
             ProcessSwitchError::ChildAlreadyRunning,
         ));
     }
+    if unsafe { read_runtime_address_space(current_slot) }.is_some() {
+        return Err(run_status_from_switch_error(
+            ProcessSwitchError::ChildAlreadyRunning,
+        ));
+    }
     let caller_frame = unsafe { save_runtime_process_frame(current_slot) };
     let caller_program_break =
         unsafe { read_runtime_word(runtime_slot_program_break_ptr(current_slot)) };
@@ -689,16 +746,29 @@ unsafe fn begin_loaded_child_runtime(path: &[u8], args: &[&[u8]]) -> Result<Chil
     if caller_program_break == 0 {
         return Err(run_status_from_load_error(ProcessLoadError::Storage));
     }
-    let arena = UserArena::new(
-        caller_program_break,
-        caller_frame.stack_pointer.min(caller_memory.end),
-    )
-    .map_err(|_| run_status_from_load_error(ProcessLoadError::ProgramTooLarge))?;
+    let translated_child = path != SHELL_PATH;
+    let parent_stack_limit = caller_frame.stack_pointer.min(caller_memory.end);
+    let (arena_end, kernel_stack_top) = if translated_child {
+        translated_child_arena_end(parent_stack_limit)
+            .map_err(|_| run_status_from_load_error(ProcessLoadError::ProgramTooLarge))?
+    } else {
+        (parent_stack_limit, 0)
+    };
+    let arena = UserArena::new(caller_program_break, arena_end)
+        .map_err(|_| run_status_from_load_error(ProcessLoadError::ProgramTooLarge))?;
     let child_plan = unsafe { load_dynamic_user_program_from_storage0(path, arena) }
         .map_err(run_status_from_load_error)?;
     let argv =
         unsafe { install_child_argv(child_plan, args) }.map_err(run_status_from_load_error)?;
-    unsafe { begin_loaded_child_plan_runtime_with_argv(child_plan, argv) }
+    let translated = if translated_child {
+        Some(
+            unsafe { create_translated_user_launch(child_plan, kernel_stack_top) }
+                .map_err(run_status_from_load_error)?,
+        )
+    } else {
+        None
+    };
+    unsafe { begin_loaded_child_plan_runtime_with_argv(child_plan, argv, translated) }
         .map_err(run_status_from_switch_error)
 }
 
@@ -706,16 +776,22 @@ unsafe fn begin_loaded_child_runtime(path: &[u8], args: &[&[u8]]) -> Result<Chil
 unsafe fn begin_loaded_child_plan_runtime_with_argv(
     child_plan: DynamicUserLoadPlan,
     argv: ChildArgv,
+    translated: Option<TranslatedUserLaunch>,
 ) -> Result<ChildLaunch, ProcessSwitchError> {
     let parent_slot = unsafe { runtime_current_slot() };
     let child_slot = parent_slot + 1;
     if child_slot >= MAX_PROCESS_SLOTS {
         return Err(ProcessSwitchError::ChildAlreadyRunning);
     }
-    let context = ProcessContext {
-        entry_pc: child_plan.entry_pc,
-        stack_top: child_plan.stack_top,
-    };
+    let context = translated
+        .map(|launch| ProcessContext {
+            entry_pc: launch.entry_pc,
+            stack_top: launch.stack_top,
+        })
+        .unwrap_or(ProcessContext {
+            entry_pc: child_plan.entry_pc,
+            stack_top: child_plan.stack_top,
+        });
     let mut child_frame = child_frame_for_context(context);
     child_frame.registers[1] = argv.argc;
     child_frame.registers[2] = argv.table_ptr;
@@ -724,6 +800,10 @@ unsafe fn begin_loaded_child_plan_runtime_with_argv(
             child_slot,
             ProcessMemory::new(child_plan.load_base, child_plan.stack_top)
                 .map_err(|_| ProcessSwitchError::NoRunningChild)?,
+        );
+        write_runtime_word(
+            runtime_slot_address_space_ptr(child_slot),
+            translated.map(|launch| launch.address_space).unwrap_or(0),
         );
         initialize_runtime_heap_from_bounds(
             child_slot,
@@ -743,11 +823,33 @@ unsafe fn begin_loaded_child_plan_runtime_with_argv(
         id: ProcessId::from_slot(child_slot),
         context,
         frame: child_frame,
+        address_space: translated.map(|launch| launch.address_space),
+        kernel_stack_top: translated.map(|launch| launch.kernel_stack_top),
     })
 }
 
 #[cfg(any(not(test), feature = "host-test"))]
 pub unsafe fn enter_child_context(launch: ChildLaunch) -> ! {
+    if let Some(address_space) = launch.address_space {
+        let Some(kernel_stack_top) = launch.kernel_stack_top else {
+            halt_runtime_with_panic_code(k16_abi::syscall::ERROR_INVALID as i32);
+        };
+        let frame = k16_rt::TrapFrame::from(launch.frame);
+        let _saved_r0 = unsafe { k16_rt::restore_trap_frame(&frame) };
+        let result = unsafe {
+            mmu0_activate_user_address_space(
+                address_space,
+                launch.context.entry_pc,
+                launch.context.stack_top,
+                kernel_stack_top,
+            )
+        };
+        if result.is_err() {
+            halt_runtime_with_panic_code(k16_abi::syscall::ERROR_FAULT as i32);
+        } else {
+            halt_runtime_with_panic_code(k16_abi::syscall::ERROR_INVALID as i32);
+        }
+    }
     let frame = k16_rt::TrapFrame::from(launch.frame);
     let _saved_r0 = unsafe { k16_rt::restore_trap_frame(&frame) };
     unsafe { k16_rt::iret_with_r0(0) }
@@ -791,6 +893,7 @@ unsafe fn finish_child_runtime(status: u32) -> Result<InitResume, ProcessSwitchE
     unsafe {
         write_runtime_word(runtime_slot_parent_ptr(current_slot), NO_PARENT_SLOT);
         clear_runtime_process_memory(current_slot);
+        clear_runtime_address_space(current_slot);
         clear_runtime_heap(current_slot);
         write_runtime_word(
             core::ptr::addr_of_mut!(RUNTIME_CURRENT_SLOT),
@@ -805,6 +908,7 @@ unsafe fn finish_child_runtime(status: u32) -> Result<InitResume, ProcessSwitchE
         },
         frame,
         child_exit_status: status,
+        address_space: unsafe { read_runtime_address_space(parent_slot) },
     })
 }
 
@@ -838,18 +942,27 @@ pub unsafe fn current_process_address_space() -> Option<u32> {
     #[cfg(not(test))]
     {
         let current_slot = unsafe { runtime_current_slot() };
-        let address_space =
-            unsafe { read_runtime_word(runtime_slot_address_space_ptr(current_slot)) };
-        return if address_space == 0 {
-            None
-        } else {
-            Some(address_space)
-        };
+        return unsafe { read_runtime_address_space(current_slot) };
     }
     #[cfg(test)]
     {
         unsafe { PROCESS_TABLE.get().current_address_space() }
     }
+}
+
+#[cfg(not(test))]
+unsafe fn read_runtime_address_space(slot: usize) -> Option<u32> {
+    let address_space = unsafe { read_runtime_word(runtime_slot_address_space_ptr(slot)) };
+    if address_space == 0 {
+        None
+    } else {
+        Some(address_space)
+    }
+}
+
+#[cfg(not(test))]
+unsafe fn clear_runtime_address_space(slot: usize) {
+    unsafe { write_runtime_word(runtime_slot_address_space_ptr(slot), 0) }
 }
 
 #[cfg(test)]
@@ -1047,6 +1160,9 @@ pub unsafe fn resume_init_context(resume: InitResume) -> ! {
     {
         let frame = k16_rt::TrapFrame::from(resume.frame);
         let _saved_r0 = unsafe { k16_rt::restore_trap_frame(&frame) };
+        if resume.address_space.is_none() && unsafe { mmu0_set_trap_return_physical() }.is_err() {
+            halt_runtime_with_panic_code(k16_abi::syscall::ERROR_FAULT as i32);
+        }
         unsafe { k16_rt::iret_with_r0(resume.child_exit_status) }
     }
     #[cfg(test)]
@@ -1173,6 +1289,17 @@ impl UserArena {
         }
         Ok(Self { start, end })
     }
+}
+
+fn translated_child_arena_end(parent_stack_limit: u32) -> Result<(u32, u32), ProcessLoadError> {
+    let kernel_stack_top = align_down(parent_stack_limit, STACK_ALIGNMENT);
+    let child_arena_end = kernel_stack_top
+        .checked_sub(TRANSLATED_TRAP_STACK_BYTES)
+        .ok_or(ProcessLoadError::ProgramTooLarge)?;
+    Ok((
+        align_down(child_arena_end, STACK_ALIGNMENT),
+        kernel_stack_top,
+    ))
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -1338,6 +1465,114 @@ pub unsafe fn install_child_argv(
         table_ptr,
         end,
     })
+}
+
+unsafe fn create_translated_user_launch(
+    plan: DynamicUserLoadPlan,
+    kernel_stack_top: u32,
+) -> Result<TranslatedUserLaunch, ProcessLoadError> {
+    let map_start = page_align_down(plan.load_base);
+    let map_end = page_align_up(plan.stack_top)?;
+    if map_start >= map_end {
+        return Err(ProcessLoadError::InvalidArena);
+    }
+    let page_count = (map_end - map_start) / VM_PAGE_SIZE;
+    let address_space = unsafe { mmu0_create_address_space()? };
+    unsafe {
+        mmu0_map_pages(
+            address_space,
+            map_start,
+            map_start,
+            page_count,
+            k16_abi::computer::mmu0::FLAG_USER_ACCESSIBLE
+                | k16_abi::computer::mmu0::FLAG_WRITABLE
+                | k16_abi::computer::mmu0::FLAG_EXECUTABLE,
+        )?;
+    }
+    Ok(TranslatedUserLaunch {
+        address_space,
+        entry_pc: plan.entry_pc,
+        stack_top: plan.stack_top,
+        kernel_stack_top,
+    })
+}
+
+unsafe fn mmu0_create_address_space() -> Result<u32, ProcessLoadError> {
+    unsafe {
+        submit_mmu0_command(k16_abi::computer::mmu0::COMMAND_CREATE_ADDRESS_SPACE)?;
+        let address_space = crate::mmio::read_i32(k16_abi::computer::mmu0::RESULT) as u32;
+        if address_space == 0 {
+            return Err(ProcessLoadError::Storage);
+        }
+        Ok(address_space)
+    }
+}
+
+unsafe fn mmu0_map_pages(
+    address_space: u32,
+    virtual_start: u32,
+    physical_start: u32,
+    page_count: u32,
+    flags: i32,
+) -> Result<(), ProcessLoadError> {
+    unsafe {
+        crate::mmio::write_i32(k16_abi::computer::mmu0::ADDRESS_SPACE, address_space as i32);
+        crate::mmio::write_i32(k16_abi::computer::mmu0::VIRTUAL_START, virtual_start as i32);
+        crate::mmio::write_i32(
+            k16_abi::computer::mmu0::PHYSICAL_START,
+            physical_start as i32,
+        );
+        crate::mmio::write_i32(k16_abi::computer::mmu0::PAGE_COUNT, page_count as i32);
+        crate::mmio::write_i32(k16_abi::computer::mmu0::FLAGS, flags);
+        submit_mmu0_command(k16_abi::computer::mmu0::COMMAND_MAP_PAGES)
+    }
+}
+
+unsafe fn mmu0_activate_user_address_space(
+    address_space: u32,
+    entry_pc: u32,
+    stack_pointer: u32,
+    kernel_stack_pointer: u32,
+) -> Result<(), ProcessLoadError> {
+    unsafe {
+        crate::mmio::write_i32(k16_abi::computer::mmu0::ADDRESS_SPACE, address_space as i32);
+        crate::mmio::write_i32(
+            k16_abi::computer::mmu0::PHYSICAL_START,
+            kernel_stack_pointer as i32,
+        );
+        crate::mmio::write_i32(k16_abi::computer::mmu0::ENTRY_PC, entry_pc as i32);
+        crate::mmio::write_i32(k16_abi::computer::mmu0::STACK_POINTER, stack_pointer as i32);
+        submit_mmu0_command(k16_abi::computer::mmu0::COMMAND_ACTIVATE_USER_ADDRESS_SPACE)
+    }
+}
+
+#[cfg(not(test))]
+unsafe fn mmu0_set_trap_return_physical() -> Result<(), ProcessLoadError> {
+    unsafe { submit_mmu0_command(k16_abi::computer::mmu0::COMMAND_SET_TRAP_RETURN_PHYSICAL) }
+}
+
+#[cfg(any(not(test), feature = "host-test"))]
+fn halt_runtime_with_panic_code(code: i32) -> ! {
+    unsafe {
+        crate::mmio::write_i32(k16_abi::computer::control::PANIC_CODE, code);
+        crate::mmio::write_i32(
+            k16_abi::computer::control::STATUS,
+            k16_abi::computer::status::HALTED,
+        );
+    }
+    k16_rt::halt_forever()
+}
+
+unsafe fn submit_mmu0_command(command: i32) -> Result<(), ProcessLoadError> {
+    unsafe {
+        crate::mmio::write_i32(k16_abi::computer::mmu0::COMMAND, command);
+        if crate::mmio::read_i32(k16_abi::computer::mmu0::STATUS)
+            != k16_abi::computer::mmu0::STATUS_DONE
+        {
+            return Err(ProcessLoadError::Storage);
+        }
+    }
+    Ok(())
 }
 
 pub fn plan_dynamic_user_load(
@@ -1668,6 +1903,14 @@ fn align_up(value: u32, alignment: u32) -> Result<u32, ProcessLoadError> {
 
 const fn align_down(value: u32, alignment: u32) -> u32 {
     value & !(alignment - 1)
+}
+
+const fn page_align_down(value: u32) -> u32 {
+    value & !(VM_PAGE_SIZE - 1)
+}
+
+fn page_align_up(value: u32) -> Result<u32, ProcessLoadError> {
+    align_up(value, VM_PAGE_SIZE)
 }
 
 fn heap_limit_from_stack_top(stack_top: u32) -> Result<u32, HeapError> {
@@ -2137,6 +2380,220 @@ mod tests {
     }
 
     #[test]
+    fn process_table_records_translated_child_address_space_and_virtual_context() {
+        let mut table = ProcessTable::new(ProcessContext {
+            entry_pc: 0,
+            stack_top: 0,
+        });
+        table
+            .initialize_init_image_in_memory(
+                k16_boot_chain::LoadedImage {
+                    load_addr: 0x0001_3000,
+                    load_end: 0x0001_4000,
+                    entry_pc: 0x0001_3004,
+                },
+                0x0002_0000,
+            )
+            .expect("init image initializes");
+        let child_plan = DynamicUserLoadPlan {
+            load_base: 0x0001_5000,
+            load_end: 0x0001_6020,
+            entry_pc: 0x0001_5004,
+            stack_top: 0x0001_c000,
+            payload_dst: 0x0001_5000,
+            payload_len: 16,
+            zero_fill_addr: 0x0001_5010,
+            zero_fill_len: 16,
+        };
+        let translated = TranslatedUserLaunch {
+            address_space: 7,
+            entry_pc: 0x0001_0004,
+            stack_top: 0x0001_7000,
+            kernel_stack_top: 0x0001_8000,
+        };
+
+        let child = table
+            .begin_translated_child_run(child_plan, translated)
+            .expect("translated child starts");
+
+        assert_eq!(child.context.entry_pc, translated.entry_pc);
+        assert_eq!(child.context.stack_top, translated.stack_top);
+        assert_eq!(child.kernel_stack_top, Some(translated.kernel_stack_top));
+        assert_eq!(table.current_address_space(), Some(7));
+        assert_eq!(
+            table.current_memory(),
+            Ok(ProcessMemory {
+                start: 0x0001_5000,
+                end: 0x0001_c000,
+            })
+        );
+    }
+
+    #[test]
+    fn process_table_preserves_argv_for_translated_child() {
+        let mut table = ProcessTable::new(ProcessContext {
+            entry_pc: 0,
+            stack_top: 0,
+        });
+        let child_plan = DynamicUserLoadPlan {
+            load_base: 0x0001_5000,
+            load_end: 0x0001_6020,
+            entry_pc: 0x0001_5004,
+            stack_top: 0x0001_c000,
+            payload_dst: 0x0001_5000,
+            payload_len: 16,
+            zero_fill_addr: 0x0001_5010,
+            zero_fill_len: 16,
+        };
+        let argv = ChildArgv {
+            argc: 2,
+            table_ptr: 0x0001_6040,
+            end: 0x0001_6080,
+        };
+        let translated = TranslatedUserLaunch {
+            address_space: 9,
+            entry_pc: 0x0001_0004,
+            stack_top: 0x0001_7000,
+            kernel_stack_top: 0x0001_8000,
+        };
+
+        let child = table
+            .begin_translated_child_run_with_argv(child_plan, argv, translated)
+            .expect("translated argv child starts");
+
+        assert_eq!(child.frame.registers[1], 2);
+        assert_eq!(child.frame.registers[2], 0x0001_6040);
+        assert_eq!(child.address_space, Some(9));
+        assert_eq!(child.kernel_stack_top, Some(0x0001_8000));
+    }
+
+    #[test]
+    fn translated_child_arena_reserves_kernel_trap_stack_below_parent_stack() {
+        assert_eq!(
+            translated_child_arena_end(0x0002_0000),
+            Ok((0x0001_f000, 0x0002_0000))
+        );
+        assert_eq!(
+            translated_child_arena_end(0x0002_0003),
+            Ok((0x0001_f000, 0x0002_0000))
+        );
+    }
+
+    #[test]
+    fn translated_user_launch_maps_child_backing_pages() {
+        crate::mmio::reset_test_state();
+        crate::mmio::set_test_mmu0_result(7, k16_abi::computer::mmu0::STATUS_DONE, 0);
+        let child_plan = DynamicUserLoadPlan {
+            load_base: 0x0001_5020,
+            load_end: 0x0001_6020,
+            entry_pc: 0x0001_5024,
+            stack_top: 0x0001_c000,
+            payload_dst: 0x0001_5020,
+            payload_len: 16,
+            zero_fill_addr: 0x0001_5030,
+            zero_fill_len: 16,
+        };
+
+        let translated = unsafe { create_translated_user_launch(child_plan, 0x0001_d000) }
+            .expect("translated launch maps");
+
+        assert_eq!(
+            translated,
+            TranslatedUserLaunch {
+                address_space: 7,
+                entry_pc: 0x0001_5024,
+                stack_top: 0x0001_c000,
+                kernel_stack_top: 0x0001_d000,
+            }
+        );
+        let writes = crate::mmio::take_test_writes();
+        let writes = writes.as_slice();
+        assert_eq!(writes.len(), 7);
+        assert_eq!(
+            writes[0],
+            (
+                k16_abi::computer::mmu0::COMMAND,
+                k16_abi::computer::mmu0::COMMAND_CREATE_ADDRESS_SPACE as u32,
+            )
+        );
+        assert_eq!(writes[1], (k16_abi::computer::mmu0::ADDRESS_SPACE, 7));
+        assert_eq!(
+            writes[2],
+            (k16_abi::computer::mmu0::VIRTUAL_START, 0x0001_5000)
+        );
+        assert_eq!(
+            writes[3],
+            (k16_abi::computer::mmu0::PHYSICAL_START, 0x0001_5000)
+        );
+        assert_eq!(writes[4], (k16_abi::computer::mmu0::PAGE_COUNT, 7));
+        assert_eq!(
+            writes[5],
+            (
+                k16_abi::computer::mmu0::FLAGS,
+                (k16_abi::computer::mmu0::FLAG_USER_ACCESSIBLE
+                    | k16_abi::computer::mmu0::FLAG_WRITABLE
+                    | k16_abi::computer::mmu0::FLAG_EXECUTABLE) as u32,
+            )
+        );
+        assert_eq!(
+            writes[6],
+            (
+                k16_abi::computer::mmu0::COMMAND,
+                k16_abi::computer::mmu0::COMMAND_MAP_PAGES as u32,
+            )
+        );
+    }
+
+    #[test]
+    fn translated_user_launch_activation_submits_entry_and_stack() {
+        crate::mmio::reset_test_state();
+        crate::mmio::set_test_mmu0_result(0, k16_abi::computer::mmu0::STATUS_DONE, 0);
+        let translated = TranslatedUserLaunch {
+            address_space: 7,
+            entry_pc: 0x0001_5024,
+            stack_top: 0x0001_c000,
+            kernel_stack_top: 0x0001_d000,
+        };
+
+        unsafe {
+            mmu0_activate_user_address_space(
+                translated.address_space,
+                translated.entry_pc,
+                translated.stack_top,
+                translated.kernel_stack_top,
+            )
+        }
+        .expect("activation command submits");
+
+        let writes = crate::mmio::take_test_writes();
+        let writes = writes.as_slice();
+        assert_eq!(writes.len(), 5);
+        assert_eq!(writes[0], (k16_abi::computer::mmu0::ADDRESS_SPACE, 7));
+        assert_eq!(
+            writes[1],
+            (
+                k16_abi::computer::mmu0::PHYSICAL_START,
+                translated.kernel_stack_top
+            )
+        );
+        assert_eq!(
+            writes[2],
+            (k16_abi::computer::mmu0::ENTRY_PC, translated.entry_pc)
+        );
+        assert_eq!(
+            writes[3],
+            (k16_abi::computer::mmu0::STACK_POINTER, translated.stack_top,)
+        );
+        assert_eq!(
+            writes[4],
+            (
+                k16_abi::computer::mmu0::COMMAND,
+                k16_abi::computer::mmu0::COMMAND_ACTIVATE_USER_ADDRESS_SPACE as u32,
+            )
+        );
+    }
+
+    #[test]
     fn process_table_brk_accepts_only_current_child_heap_range() {
         let mut table = ProcessTable::new(ProcessContext {
             entry_pc: 0x0000_8000,
@@ -2302,6 +2759,30 @@ mod tests {
         assert_eq!(resumed.child_exit_status, 7);
         assert_eq!(table.init_state(), PROCESS_STATE_RUNNING);
         assert_eq!(table.child_state(), PROCESS_STATE_EMPTY);
+    }
+
+    #[test]
+    fn process_table_child_exit_reports_parent_address_space() {
+        let mut table = ProcessTable::new(ProcessContext {
+            entry_pc: 0,
+            stack_top: 0,
+        });
+        table.set_current_address_space(Some(5));
+        let child_plan = DynamicUserLoadPlan {
+            load_base: 0x0000_a000,
+            load_end: 0x0000_a020,
+            entry_pc: 0x0000_a004,
+            stack_top: 0x0001_0000,
+            payload_dst: 0x0000_a000,
+            payload_len: 16,
+            zero_fill_addr: 0x0000_a010,
+            zero_fill_len: 16,
+        };
+        table.begin_child_run(child_plan).expect("child starts");
+
+        let resumed = table.finish_child(0).expect("parent resumes");
+
+        assert_eq!(resumed.address_space, Some(5));
     }
 
     #[test]

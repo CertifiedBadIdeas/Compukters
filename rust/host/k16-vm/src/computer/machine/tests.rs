@@ -5,7 +5,11 @@ use crate::computer::devices::{
 };
 use crate::computer::profile::{ComputerHardwareConfig, ComputerMachineProfile};
 use crate::computer_abi;
-use crate::k16::{K16AddressMode, K16PrivilegeMode, K16Signal};
+use crate::k16::{
+    K16AddressMode, K16PrivilegeMode, K16Signal, K16_CSR_TRAP_FRAME_INDEX,
+    K16_CSR_TRAP_FRAME_REGISTER, K16_CSR_TRAP_RESUME_PC, K16_CSR_TRAP_VECTOR,
+    K16_STACK_POINTER_REGISTER,
+};
 use crate::low_bus::MmioDevice;
 use crate::mmu::MmuMapFlags;
 use std::fs;
@@ -242,6 +246,317 @@ fn computer_machine_mmu0_guest_kernel_enters_translated_user_execution() {
         0x1122_3344
     );
     assert_eq!(machine.control_status(), ComputerMachine::STATUS_HALTED);
+}
+
+#[test]
+fn computer_machine_mmu0_can_override_trap_return_to_physical_context() {
+    const RAM_SIZE: usize = 0x4000;
+    const SETUP_PC: u32 = 0x0100;
+    const HANDLER_PC: u32 = 0x0200;
+    const PARENT_PC: u32 = 0x0300;
+    const USER_PHYSICAL_PC: u32 = 0x1000;
+    const USER_VIRTUAL_PC: u32 = 0x4000;
+    const PARENT_PROOF: u32 = 0x3000;
+    const KERNEL_STACK_TOP: u32 = 0x3800;
+    const USER_STACK_TOP: u32 = 0x9000;
+
+    let mut machine = ComputerMachine::new(RAM_SIZE).unwrap();
+    let setup = k16_words(&[
+        k16_const32(1, HANDLER_PC)[0],
+        k16_const32(1, HANDLER_PC)[1],
+        k16_const32(1, HANDLER_PC)[2],
+        k16_write_csr(K16_CSR_TRAP_VECTOR, 1),
+        k16_const32(K16_STACK_POINTER_REGISTER, KERNEL_STACK_TOP)[0],
+        k16_const32(K16_STACK_POINTER_REGISTER, KERNEL_STACK_TOP)[1],
+        k16_const32(K16_STACK_POINTER_REGISTER, KERNEL_STACK_TOP)[2],
+        k16_wait(),
+    ]);
+    let handler = k16_words(&[
+        k16_const32(1, PARENT_PC)[0],
+        k16_const32(1, PARENT_PC)[1],
+        k16_const32(1, PARENT_PC)[2],
+        k16_write_csr(K16_CSR_TRAP_RESUME_PC, 1),
+        k16_const32(1, ComputerMachine::MMU0_COMMAND)[0],
+        k16_const32(1, ComputerMachine::MMU0_COMMAND)[1],
+        k16_const32(1, ComputerMachine::MMU0_COMMAND)[2],
+        k16_const4(
+            2,
+            ComputerMachine::MMU0_COMMAND_SET_TRAP_RETURN_PHYSICAL as u8,
+        ),
+        k16_store32(1, 2),
+        k16_iret(),
+    ]);
+    let parent = k16_words(&[
+        k16_const32(1, PARENT_PROOF)[0],
+        k16_const32(1, PARENT_PROOF)[1],
+        k16_const32(1, PARENT_PROOF)[2],
+        k16_const4(2, 1),
+        k16_store32(1, 2),
+        k16_halt(),
+    ]);
+    let user = k16_words(&[k16_syscall(1), k16_halt()]);
+    machine.write_guest_ram_bytes(SETUP_PC, &setup).unwrap();
+    machine.write_guest_ram_bytes(HANDLER_PC, &handler).unwrap();
+    machine.write_guest_ram_bytes(PARENT_PC, &parent).unwrap();
+    machine
+        .write_guest_ram_bytes(USER_PHYSICAL_PC, &user)
+        .unwrap();
+    let address_space = machine.create_mmu_address_space().unwrap();
+    machine
+        .map_mmu_pages(
+            address_space,
+            USER_VIRTUAL_PC,
+            USER_PHYSICAL_PC,
+            1,
+            MmuMapFlags::USER_ACCESSIBLE | MmuMapFlags::EXECUTABLE,
+        )
+        .unwrap();
+    let boot_cpu = machine.install_k16_boot_cpu_for_tests(SETUP_PC, 64);
+
+    assert_eq!(
+        machine.run_boot_k16_until_signal(boot_cpu).unwrap(),
+        K16Signal::Wait,
+    );
+    machine
+        .k16_cpu_mut(boot_cpu)
+        .unwrap()
+        .enter_user_address_space(address_space, USER_VIRTUAL_PC, USER_STACK_TOP);
+
+    assert_eq!(
+        machine.run_boot_k16_until_signal(boot_cpu).unwrap(),
+        K16Signal::Halt,
+    );
+    assert_eq!(machine.memory().load_i32(PARENT_PROOF).unwrap(), 1);
+    assert_eq!(
+        machine.k16_cpu_mut(boot_cpu).unwrap().address_mode(),
+        K16AddressMode::Physical
+    );
+}
+
+#[test]
+fn computer_machine_mmu0_activation_uses_command_kernel_stack_for_user_traps() {
+    const RAM_SIZE: usize = 0x6000;
+    const KERNEL_PC: u32 = 0x0100;
+    const HANDLER_PC: u32 = 0x0200;
+    const USER_PHYSICAL_PC: u32 = 0x1000;
+    const USER_VIRTUAL_PC: u32 = 0x4000;
+    const PROOF_ADDR: u32 = 0x3000;
+    const PARENT_STACK_TOP: u32 = 0x2800;
+    const KERNEL_STACK_TOP: u32 = 0x3800;
+    const BOOT_STACK_TOP: u32 = 0x4800;
+    const USER_STACK_TOP: u32 = 0x9000;
+
+    let bios = k16_words(&[k16_halt()]);
+    let (mut machine, _) =
+        ComputerMachine::from_k16_bios_flash(&bios, RAM_SIZE, 8).expect("machine creates");
+    let address_space = machine.create_mmu_address_space().unwrap();
+    machine
+        .map_mmu_pages(
+            address_space,
+            USER_VIRTUAL_PC,
+            USER_PHYSICAL_PC,
+            1,
+            MmuMapFlags::USER_ACCESSIBLE | MmuMapFlags::EXECUTABLE,
+        )
+        .unwrap();
+
+    let kernel = k16_words(&[
+        k16_const32(1, HANDLER_PC)[0],
+        k16_const32(1, HANDLER_PC)[1],
+        k16_const32(1, HANDLER_PC)[2],
+        k16_write_csr(K16_CSR_TRAP_VECTOR, 1),
+        k16_const32(K16_STACK_POINTER_REGISTER, PARENT_STACK_TOP)[0],
+        k16_const32(K16_STACK_POINTER_REGISTER, PARENT_STACK_TOP)[1],
+        k16_const32(K16_STACK_POINTER_REGISTER, PARENT_STACK_TOP)[2],
+        k16_const32(1, ComputerMachine::MMU0_ADDRESS_SPACE)[0],
+        k16_const32(1, ComputerMachine::MMU0_ADDRESS_SPACE)[1],
+        k16_const32(1, ComputerMachine::MMU0_ADDRESS_SPACE)[2],
+        k16_const32(2, address_space.raw())[0],
+        k16_const32(2, address_space.raw())[1],
+        k16_const32(2, address_space.raw())[2],
+        k16_store32(1, 2),
+        k16_const32(1, ComputerMachine::MMU0_PHYSICAL_START)[0],
+        k16_const32(1, ComputerMachine::MMU0_PHYSICAL_START)[1],
+        k16_const32(1, ComputerMachine::MMU0_PHYSICAL_START)[2],
+        k16_const32(2, KERNEL_STACK_TOP)[0],
+        k16_const32(2, KERNEL_STACK_TOP)[1],
+        k16_const32(2, KERNEL_STACK_TOP)[2],
+        k16_store32(1, 2),
+        k16_const32(1, ComputerMachine::MMU0_ENTRY_PC)[0],
+        k16_const32(1, ComputerMachine::MMU0_ENTRY_PC)[1],
+        k16_const32(1, ComputerMachine::MMU0_ENTRY_PC)[2],
+        k16_const32(2, USER_VIRTUAL_PC)[0],
+        k16_const32(2, USER_VIRTUAL_PC)[1],
+        k16_const32(2, USER_VIRTUAL_PC)[2],
+        k16_store32(1, 2),
+        k16_const32(1, ComputerMachine::MMU0_STACK_POINTER)[0],
+        k16_const32(1, ComputerMachine::MMU0_STACK_POINTER)[1],
+        k16_const32(1, ComputerMachine::MMU0_STACK_POINTER)[2],
+        k16_const32(2, USER_STACK_TOP)[0],
+        k16_const32(2, USER_STACK_TOP)[1],
+        k16_const32(2, USER_STACK_TOP)[2],
+        k16_store32(1, 2),
+        k16_const32(1, ComputerMachine::MMU0_COMMAND)[0],
+        k16_const32(1, ComputerMachine::MMU0_COMMAND)[1],
+        k16_const32(1, ComputerMachine::MMU0_COMMAND)[2],
+        k16_const4(
+            2,
+            ComputerMachine::MMU0_COMMAND_ACTIVATE_USER_ADDRESS_SPACE as u8,
+        ),
+        k16_store32(1, 2),
+        k16_halt(),
+    ]);
+    let handler = k16_words(&[
+        k16_const32(1, PROOF_ADDR)[0],
+        k16_const32(1, PROOF_ADDR)[1],
+        k16_const32(1, PROOF_ADDR)[2],
+        k16_store32(1, K16_STACK_POINTER_REGISTER),
+        k16_halt(),
+    ]);
+    let user = k16_words(&[k16_syscall(0), k16_halt()]);
+    machine.write_guest_ram_bytes(KERNEL_PC, &kernel).unwrap();
+    machine.write_guest_ram_bytes(HANDLER_PC, &handler).unwrap();
+    machine
+        .write_guest_ram_bytes(USER_PHYSICAL_PC, &user)
+        .unwrap();
+    let boot_cpu = machine
+        .boot_handoff_k16_from_ram_with_stack(KERNEL_PC, kernel.len() as u32, 128, BOOT_STACK_TOP)
+        .expect("boot handoff succeeds");
+
+    assert_eq!(
+        machine.run_boot_k16_until_signal(boot_cpu).unwrap(),
+        K16Signal::Halt,
+    );
+    assert_eq!(
+        machine.memory().load_i32(PROOF_ADDR).unwrap(),
+        KERNEL_STACK_TOP as i32
+    );
+    assert_ne!(
+        machine.memory().load_i32(PROOF_ADDR).unwrap(),
+        BOOT_STACK_TOP as i32
+    );
+    assert_ne!(
+        machine.memory().load_i32(PROOF_ADDR).unwrap(),
+        PARENT_STACK_TOP as i32
+    );
+}
+
+#[test]
+fn computer_machine_mmu0_activation_enters_user_with_restored_trap_frame_registers() {
+    const RAM_SIZE: usize = 0x6000;
+    const KERNEL_PC: u32 = 0x0100;
+    const USER_PHYSICAL_PC: u32 = 0x1000;
+    const USER_DATA_PHYSICAL: u32 = 0x2000;
+    const USER_VIRTUAL_PC: u32 = 0x4000;
+    const USER_VIRTUAL_DATA: u32 = 0x8000;
+    const KERNEL_STACK_TOP: u32 = 0x3800;
+    const USER_STACK_TOP: u32 = 0x9000;
+
+    let bios = k16_words(&[k16_halt()]);
+    let (mut machine, _) =
+        ComputerMachine::from_k16_bios_flash(&bios, RAM_SIZE, 8).expect("machine creates");
+    let address_space = machine.create_mmu_address_space().unwrap();
+    machine
+        .map_mmu_pages(
+            address_space,
+            USER_VIRTUAL_PC,
+            USER_PHYSICAL_PC,
+            1,
+            MmuMapFlags::USER_ACCESSIBLE | MmuMapFlags::EXECUTABLE,
+        )
+        .unwrap();
+    machine
+        .map_mmu_pages(
+            address_space,
+            USER_VIRTUAL_DATA,
+            USER_DATA_PHYSICAL,
+            1,
+            MmuMapFlags::USER_ACCESSIBLE | MmuMapFlags::WRITABLE,
+        )
+        .unwrap();
+
+    let kernel = k16_words(&[
+        k16_const4(1, 1),
+        k16_write_csr(K16_CSR_TRAP_FRAME_INDEX, 1),
+        k16_const32(2, 0x1111)[0],
+        k16_const32(2, 0x1111)[1],
+        k16_const32(2, 0x1111)[2],
+        k16_write_csr(K16_CSR_TRAP_FRAME_REGISTER, 2),
+        k16_const4(1, 2),
+        k16_write_csr(K16_CSR_TRAP_FRAME_INDEX, 1),
+        k16_const32(2, 0x2222)[0],
+        k16_const32(2, 0x2222)[1],
+        k16_const32(2, 0x2222)[2],
+        k16_write_csr(K16_CSR_TRAP_FRAME_REGISTER, 2),
+        k16_const32(1, ComputerMachine::MMU0_ADDRESS_SPACE)[0],
+        k16_const32(1, ComputerMachine::MMU0_ADDRESS_SPACE)[1],
+        k16_const32(1, ComputerMachine::MMU0_ADDRESS_SPACE)[2],
+        k16_const32(2, address_space.raw())[0],
+        k16_const32(2, address_space.raw())[1],
+        k16_const32(2, address_space.raw())[2],
+        k16_store32(1, 2),
+        k16_const32(1, ComputerMachine::MMU0_PHYSICAL_START)[0],
+        k16_const32(1, ComputerMachine::MMU0_PHYSICAL_START)[1],
+        k16_const32(1, ComputerMachine::MMU0_PHYSICAL_START)[2],
+        k16_const32(2, KERNEL_STACK_TOP)[0],
+        k16_const32(2, KERNEL_STACK_TOP)[1],
+        k16_const32(2, KERNEL_STACK_TOP)[2],
+        k16_store32(1, 2),
+        k16_const32(1, ComputerMachine::MMU0_ENTRY_PC)[0],
+        k16_const32(1, ComputerMachine::MMU0_ENTRY_PC)[1],
+        k16_const32(1, ComputerMachine::MMU0_ENTRY_PC)[2],
+        k16_const32(2, USER_VIRTUAL_PC)[0],
+        k16_const32(2, USER_VIRTUAL_PC)[1],
+        k16_const32(2, USER_VIRTUAL_PC)[2],
+        k16_store32(1, 2),
+        k16_const32(1, ComputerMachine::MMU0_STACK_POINTER)[0],
+        k16_const32(1, ComputerMachine::MMU0_STACK_POINTER)[1],
+        k16_const32(1, ComputerMachine::MMU0_STACK_POINTER)[2],
+        k16_const32(2, USER_STACK_TOP)[0],
+        k16_const32(2, USER_STACK_TOP)[1],
+        k16_const32(2, USER_STACK_TOP)[2],
+        k16_store32(1, 2),
+        k16_const32(1, ComputerMachine::MMU0_COMMAND)[0],
+        k16_const32(1, ComputerMachine::MMU0_COMMAND)[1],
+        k16_const32(1, ComputerMachine::MMU0_COMMAND)[2],
+        k16_const4(
+            2,
+            ComputerMachine::MMU0_COMMAND_ACTIVATE_USER_ADDRESS_SPACE as u8,
+        ),
+        k16_store32(1, 2),
+        k16_halt(),
+    ]);
+    let user = k16_words(&[
+        k16_const32(3, USER_VIRTUAL_DATA)[0],
+        k16_const32(3, USER_VIRTUAL_DATA)[1],
+        k16_const32(3, USER_VIRTUAL_DATA)[2],
+        k16_store32(3, 1),
+        k16_const32(3, USER_VIRTUAL_DATA + 4)[0],
+        k16_const32(3, USER_VIRTUAL_DATA + 4)[1],
+        k16_const32(3, USER_VIRTUAL_DATA + 4)[2],
+        k16_store32(3, 2),
+        k16_halt(),
+    ]);
+    machine.write_guest_ram_bytes(KERNEL_PC, &kernel).unwrap();
+    machine
+        .write_guest_ram_bytes(USER_PHYSICAL_PC, &user)
+        .unwrap();
+    let boot_cpu = machine
+        .boot_handoff_k16_from_ram_with_stack(KERNEL_PC, kernel.len() as u32, 128, KERNEL_STACK_TOP)
+        .expect("boot handoff succeeds");
+
+    assert_eq!(
+        machine.run_boot_k16_until_signal(boot_cpu).unwrap(),
+        K16Signal::Halt,
+    );
+    assert_eq!(
+        machine.memory().load_i32(USER_DATA_PHYSICAL).unwrap(),
+        0x1111
+    );
+    assert_eq!(
+        machine.memory().load_i32(USER_DATA_PHYSICAL + 4).unwrap(),
+        0x2222
+    );
 }
 
 #[test]
@@ -1894,6 +2209,22 @@ fn k16_load32(dst: u8, addr: u8) -> u16 {
 
 fn k16_store32(addr: u8, src: u8) -> u16 {
     0x5002 | (u16::from(addr) << 8) | (u16::from(src) << 4)
+}
+
+fn k16_write_csr(csr: u32, src: u8) -> u16 {
+    0x0003 | ((csr as u16) << 8) | (u16::from(src) << 4)
+}
+
+fn k16_syscall(register: u8) -> u16 {
+    0x0005 | (u16::from(register) << 8)
+}
+
+fn k16_iret() -> u16 {
+    0x0004
+}
+
+fn k16_wait() -> u16 {
+    0x0006
 }
 
 fn k16_halt() -> u16 {

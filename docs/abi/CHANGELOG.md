@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- K16 production `RUN` now launches shell-started non-shell `/bin/*.kx`
+  utility children in host-managed translated address spaces. The first
+  production mapping is identity-mapped over the kernel-selected child backing
+  range. `/bin/init.kx` and `/bin/shell.kx` remain physical in this
+  transitional slice; nested `RUN` from a translated child returns the existing
+  busy error until translated parent resume is implemented. Added `mmu0`
+  `set_trap_return_physical` so `EXIT` from a translated child can resume the
+  physical parent frame through `iret`.
+- K16 translated child activation now restores the saved child trap register
+  frame before entering user-translated mode, so argv and other entry
+  registers survive the `mmu0` activation boundary. The launcher also reserves
+  a dedicated physical kernel trap stack below the physical parent stack and
+  passes it through `mmu0` `activate_user_address_space` using
+  `physical_start`.
 - K16 trap entry from translated user execution now switches the live stack
   pointer to the physical kernel stack captured by `mmu0`
   `activate_user_address_space`, while `iret` still restores the interrupted
@@ -14,9 +28,6 @@
   `mmu0` `copy_from_user`/`copy_to_user` commands for `WRITE`, `READ`,
   `OPEN`, `RUN`, `READ_DIR`, `STAT`, and stdin/file output buffers. Failed
   translated copies return the existing negative K16 `ERROR_FAULT` status.
-  Production process launch still does not assign address-space ids; enabling
-  live translated user syscalls also needs a separate kernel-stack trap-entry
-  step.
 - Added K16 `mmu0` `copy_from_user` and `copy_to_user` commands for physical
   kernel syscall handlers. They copy bytes between translated user virtual
   memory and physical kernel buffers, report deterministic `mmu0` errors for
@@ -115,9 +126,9 @@
 - Added the K16 `RUN(path, len)` syscall for init-owned child process launch
   from `/bin/*.kx`, with negative K16 error status values for invalid paths,
   missing entries, invalid executables, no memory, and busy child state. The
-  active fixed-image program profile now starts at `0x00013000`, and the
-  default K16 VM RAM profile is 148 KiB with the first user stack top at
-  `0x00025000`, so the kernel has room for the dynamic-loader path before the
+  active fixed-image program profile now starts at `0x00015000`, and the
+  default K16 VM RAM profile is 192 KiB with the first user stack top at
+  `0x00030000`, so the kernel has room for the dynamic-loader path before the
   first user program without shrinking the foreground child arena.
 - K16E now has a v2 dynamic user-program extension for future kernel-selected
   userland load addresses. Dynamic `program` artifacts store an entry offset,

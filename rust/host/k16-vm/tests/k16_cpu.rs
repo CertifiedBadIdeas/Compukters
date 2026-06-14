@@ -318,6 +318,95 @@ fn k16_syscall_from_translated_user_enters_physical_kernel_and_iret_restores_use
 }
 
 #[test]
+fn k16_trap_return_mode_can_be_overridden_to_physical_parent_context() {
+    const RAM_SIZE: u32 = 0x4000;
+    const SETUP_PC: u32 = 0x0000;
+    const HANDLER_PC: u32 = 0x0100;
+    const PARENT_PC: u32 = 0x0200;
+    const USER_PHYSICAL_PC: u32 = 0x1000;
+    const PARENT_PROOF: u32 = 0x3000;
+    const USER_VIRTUAL_PC: u32 = 0x4000;
+    const KERNEL_STACK_TOP: u32 = 0x3800;
+    const USER_STACK_TOP: u32 = 0x9000;
+
+    let mut bus = MachineBus::new(RAM_SIZE as usize).unwrap();
+    let mut spaces = MmuAddressSpaces::new();
+    let address_space = spaces.create(RAM_SIZE).unwrap();
+    let space = spaces.get_mut(address_space).unwrap();
+    space
+        .map_pages(
+            USER_VIRTUAL_PC,
+            USER_PHYSICAL_PC,
+            1,
+            MmuMapFlags::USER_ACCESSIBLE | MmuMapFlags::EXECUTABLE,
+        )
+        .unwrap();
+    write_words(
+        &mut bus,
+        SETUP_PC,
+        &[
+            const32(1, HANDLER_PC)[0],
+            const32(1, HANDLER_PC)[1],
+            const32(1, HANDLER_PC)[2],
+            write_csr(K16_CSR_TRAP_VECTOR, 1),
+            const32(K16_STACK_POINTER_REGISTER, KERNEL_STACK_TOP)[0],
+            const32(K16_STACK_POINTER_REGISTER, KERNEL_STACK_TOP)[1],
+            const32(K16_STACK_POINTER_REGISTER, KERNEL_STACK_TOP)[2],
+            wait(),
+        ],
+    );
+    write_words(
+        &mut bus,
+        HANDLER_PC,
+        &[
+            const32(1, PARENT_PC)[0],
+            const32(1, PARENT_PC)[1],
+            const32(1, PARENT_PC)[2],
+            write_csr(K16_CSR_TRAP_RESUME_PC, 1),
+            wait(),
+            iret(),
+        ],
+    );
+    write_words(
+        &mut bus,
+        PARENT_PC,
+        &[
+            const32(1, PARENT_PROOF)[0],
+            const32(1, PARENT_PROOF)[1],
+            const32(1, PARENT_PROOF)[2],
+            const4(2, 1),
+            store32(1, 2),
+            halt(),
+        ],
+    );
+    write_words(&mut bus, USER_PHYSICAL_PC, &[syscall(1), halt()]);
+    let mut cpu = K16Cpu::new(SETUP_PC);
+
+    assert_eq!(
+        cpu.run_until_signal_with_mmu(&mut bus, &spaces, 16)
+            .unwrap(),
+        K16Signal::Wait,
+    );
+    cpu.enter_user_address_space(address_space, USER_VIRTUAL_PC, USER_STACK_TOP);
+    assert_eq!(
+        cpu.run_until_signal_with_mmu(&mut bus, &spaces, 16)
+            .unwrap(),
+        K16Signal::Wait,
+    );
+
+    cpu.set_trap_return_mode(K16AddressMode::Physical, K16PrivilegeMode::Kernel);
+
+    assert_eq!(
+        cpu.run_until_signal_with_mmu(&mut bus, &spaces, 16)
+            .unwrap(),
+        K16Signal::Halt,
+    );
+    assert_eq!(bus.load_i32(PARENT_PROOF).unwrap(), 1);
+    assert_eq!(cpu.address_mode(), K16AddressMode::Physical);
+    assert_eq!(cpu.privilege_mode(), K16PrivilegeMode::Kernel);
+}
+
+#[test]
 fn k16_uses_r15_as_stack_pointer_into_guest_ram() {
     let mut bus = MachineBus::new(128).unwrap();
     let stack_top = 96;

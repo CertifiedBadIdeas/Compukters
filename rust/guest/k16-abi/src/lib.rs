@@ -413,6 +413,7 @@ pub mod computer {
         pub const COMMAND_ACTIVATE_USER_ADDRESS_SPACE: i32 = 4;
         pub const COMMAND_COPY_FROM_USER: i32 = 5;
         pub const COMMAND_COPY_TO_USER: i32 = 6;
+        pub const COMMAND_SET_TRAP_RETURN_PHYSICAL: i32 = 7;
         pub const FLAG_USER_ACCESSIBLE: i32 = 0x0000_0001;
         pub const FLAG_WRITABLE: i32 = 0x0000_0002;
         pub const FLAG_EXECUTABLE: i32 = 0x0000_0004;
@@ -508,6 +509,7 @@ mod tests {
         assert_eq!(computer::mmu0::COMMAND_ACTIVATE_USER_ADDRESS_SPACE, 4);
         assert_eq!(computer::mmu0::COMMAND_COPY_FROM_USER, 5);
         assert_eq!(computer::mmu0::COMMAND_COPY_TO_USER, 6);
+        assert_eq!(computer::mmu0::COMMAND_SET_TRAP_RETURN_PHYSICAL, 7);
         assert_eq!(computer::mmu0::FLAG_USER_ACCESSIBLE, 0x0000_0001);
         assert_eq!(computer::mmu0::FLAG_WRITABLE, 0x0000_0002);
         assert_eq!(computer::mmu0::FLAG_EXECUTABLE, 0x0000_0004);

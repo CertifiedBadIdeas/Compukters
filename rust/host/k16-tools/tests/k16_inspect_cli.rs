@@ -80,8 +80,8 @@ fn k16_inspect_identifies_standalone_k16fs_and_k16e() {
         k16e::encode_k16_executable(
             &[0x01, 0x00],
             k16e::K16eAbiKind::Program,
-            0x1_3000,
-            0x1_3000,
+            0x1_5000,
+            0x1_5000,
         )
         .expect("K16E encodes"),
     )
@@ -112,7 +112,7 @@ fn k16_inspect_identifies_standalone_k16fs_and_k16e() {
     );
     assert_eq!(
         String::from_utf8(k16e_output.stdout).expect("K16E inspect stdout is UTF-8"),
-        "kind=K16E\nK16E abi=program entry_pc=0x00013000 load_addr=0x00013000 payload_bytes=2\n",
+        "kind=K16E\nK16E abi=program entry_pc=0x00015000 load_addr=0x00015000 payload_bytes=2\n",
     );
 }
 

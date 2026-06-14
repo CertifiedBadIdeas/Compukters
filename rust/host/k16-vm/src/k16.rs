@@ -436,6 +436,7 @@ impl K16Cpu {
     pub fn new_with_stack(entry_pc: u32, stack_top: u32) -> Self {
         let mut cpu = Self::new(entry_pc);
         cpu.registers[usize::from(K16_STACK_POINTER_REGISTER)] = stack_top;
+        cpu.trap_kernel_stack_pointer = stack_top;
         cpu
     }
 
@@ -467,13 +468,43 @@ impl K16Cpu {
         self.privilege_mode = privilege_mode;
     }
 
+    pub fn set_trap_return_mode(
+        &mut self,
+        address_mode: K16AddressMode,
+        privilege_mode: K16PrivilegeMode,
+    ) {
+        self.trap_address_mode = address_mode;
+        self.trap_privilege_mode = privilege_mode;
+    }
+
+    pub fn trap_kernel_stack_pointer(&self) -> u32 {
+        self.trap_kernel_stack_pointer
+    }
+
     pub fn enter_user_address_space(
         &mut self,
         address_space: MmuAddressSpaceId,
         entry_pc: u32,
         stack_pointer: u32,
     ) {
-        self.trap_kernel_stack_pointer = self.registers[usize::from(K16_STACK_POINTER_REGISTER)];
+        let kernel_stack_pointer = self.registers[usize::from(K16_STACK_POINTER_REGISTER)];
+        self.enter_user_address_space_with_kernel_stack(
+            address_space,
+            entry_pc,
+            stack_pointer,
+            kernel_stack_pointer,
+        );
+    }
+
+    pub fn enter_user_address_space_with_kernel_stack(
+        &mut self,
+        address_space: MmuAddressSpaceId,
+        entry_pc: u32,
+        stack_pointer: u32,
+        kernel_stack_pointer: u32,
+    ) {
+        self.registers = self.trap_registers;
+        self.trap_kernel_stack_pointer = kernel_stack_pointer;
         self.address_mode = K16AddressMode::Translated { address_space };
         self.privilege_mode = K16PrivilegeMode::User;
         self.pc = entry_pc;
