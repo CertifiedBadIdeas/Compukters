@@ -1,6 +1,8 @@
 # K16 Virtual Memory v1
 
-> Issue: [#263](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/263)
+> Issues:
+> [#263](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/263),
+> [#273](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/273)
 
 ## Status
 
@@ -9,9 +11,11 @@ Status: partially implemented design.
 This document defines the first intended K16 virtual-memory and process
 address-space contract. The current VM implements the host MMU map, CPU
 address/privilege modes, privileged `mmu0` map controls, and trap/`iret` mode
-switching. The guest kernel, bootloader, and bundled userland still use the
-physical-memory process model until later slices migrate process loading and
-syscall user-buffer handling.
+switching. The guest kernel also uses `mmu0` copy helpers for translated
+syscall buffers and can launch shell-started utility children in a
+host-managed translated address space. BIOS, bootloader, kernel, init, and the
+interactive shell still run in physical mode in this slice; nested `RUN` from a
+translated child is intentionally left for a later process-model step.
 
 The design is intentionally smaller than a desktop or server OS MMU, but it is
 still a real host-enforced address translation boundary. K16 is a Minecraft mod
@@ -26,11 +30,11 @@ copy-on-write, shared libraries, or kernel virtual memory.
 address space. Its `page_size` field is still a boot-layout and MMIO alignment
 granularity, not an MMU page.
 
-`k16-cpu-v1.md` remains physical-memory-only. It already states that privilege
-levels, virtual memory, and page-table translation are later ABI slices. Its
-4-bit CSR namespace is currently full, so MMU controls must be introduced by a
-future CPU ABI revision or an explicit host MMU control device. They must not
-be silently retrofitted into unused v1 behavior.
+`k16-cpu-v1.md` defines the CPU-visible physical and user-translated execution
+modes, trap entry back to physical/kernel mode, and `iret` restoration of the
+saved mode. The host-managed MMU controls are exposed through the `mmu0`
+computer-profile device rather than guest-visible page tables or new CPU
+instruction encodings.
 
 `k16e-v1.md` dynamic user programs remain base-relative executable images. VM
 address spaces do not require a new executable container: the kernel may load a
@@ -114,7 +118,7 @@ K16_VM_PAGE_SIZE = 4096 bytes
 ```
 
 This is independent from profile v2 `BootInfo.page_size`. The current computer
-profile uses a 148 KiB RAM size, which is exactly 37 VM pages. A 4 KiB page
+profile uses a 192 KiB RAM size, which is exactly 48 VM pages. A 4 KiB page
 keeps the first address-space maps compact while still giving the kernel a
 useful protection boundary for user image, heap, argv, and stack placement.
 
@@ -159,23 +163,30 @@ kernel through the `mmu0` MMIO control device:
 create_address_space() -> address_space_id
 map_pages(address_space_id, virtual_page, physical_page, page_count, flags)
 protect_pages(address_space_id, virtual_page, page_count, flags)
-activate_user_address_space(address_space_id, entry_pc, stack_pointer)
+activate_user_address_space(address_space_id, entry_pc, user_stack_pointer, kernel_stack_pointer)
 copy_from_user(address_space_id, user_virtual_addr, kernel_physical_addr, byte_count)
 copy_to_user(address_space_id, user_virtual_addr, kernel_physical_addr, byte_count)
+set_trap_return_physical()
 ```
 
 `activate_user_address_space` switches the current K16 CPU to translated user
-execution. The command device itself does not own address spaces; it records
-guest commands, and `ComputerMachine` applies them to its host-managed MMU
-registry before guest execution continues. User translation is host-enforced,
-and the kernel configures mappings instead of publishing raw page-table memory
-for the host to walk.
+execution with a user stack pointer and a physical kernel trap stack pointer.
+The command device itself does not own address spaces; it records guest
+commands, and `ComputerMachine` applies them to its host-managed MMU registry
+before guest execution continues. User translation is host-enforced, and the
+kernel configures mappings instead of publishing raw page-table memory for the
+host to walk.
 
 Address-space destruction and unmapping are intentionally left for a later
 lifecycle slice. The first control boundary is enough to construct mappings and
 enter one translated user context without changing physical-mode boot. The copy
 commands let physical/kernel syscall handlers move bytes across the user/kernel
 boundary without directly dereferencing user virtual pointers.
+
+`set_trap_return_physical` lets a physical/kernel trap handler override the
+saved `iret` address mode after servicing a translated child. The current
+production process path uses it when a translated child exits and the blocked
+parent is still a physical-mode shell.
 
 ## Permissions
 
@@ -248,32 +259,41 @@ Physical boot flow remains unchanged:
 host -> BIOS flash -> bootloader -> kernel in physical mode
 ```
 
-The first VM-enabled user launch should:
+The first VM-enabled production user launch does this for shell-started
+non-shell utilities:
 
 1. Load a dynamic K16E `program` image into kernel-selected physical pages.
-2. Allocate zero-filled physical pages for `.bss`, heap, argv, and stack.
-3. Create a host MMU address-space map for those pages.
-4. Enter user-translated mode at `user_image_base + entry_offset`.
-5. Set user `sp` to the selected virtual stack top.
+2. Use the child arena for `.bss`, heap, argv, and stack.
+3. Reserve a small physical kernel trap stack below the physical parent stack.
+4. Create a host MMU address-space map for the page-aligned child backing
+   range.
+5. Restore the child entry register frame, including argv registers.
+6. Enter user-translated mode at the dynamic image entry PC.
+7. Set user `sp` to the selected child stack top and the trap stack to the
+   reserved physical kernel stack.
 
-The dynamic image relocation base becomes the selected virtual image base, not
-the physical load base. This lets user pointers remain stable while physical
-backing pages are chosen by the kernel.
+This first production mapping is identity-mapped: child virtual addresses equal
+the kernel-selected physical backing addresses. It still gives the host VM a
+real address-space id, permission checks, trap-mode separation, and `mmu0`
+copy-helper boundary. Decoupling the user virtual base from the physical load
+base remains the next layout step after the translated process path is stable.
 
 ## Implementation Sequence
 
-The intended follow-up slices are:
+The implementation sequence is:
 
 1. Add a VM-internal address translation module and tests while leaving
-   physical mode as the default and only active runtime mode.
+   physical mode as the default and only active runtime mode. Done.
 2. Add host-managed address-space map operations in a versioned CPU/MMU ABI
-   slice, including command-based user-mode activation.
+   slice, including command-based user-mode activation. Done.
 3. Add kernel-owned address-space construction for one child process while init
-   can remain physical.
+   can remain physical. Done for shell-launched non-shell utilities.
 4. Convert syscall user-buffer validation from physical range checks to the
-   implemented `mmu0` copy helpers for VM-enabled processes.
+   implemented `mmu0` copy helpers for VM-enabled processes. Done.
 5. Move init and shell into VM-enabled user processes after the child path is
-   stable.
+   stable. Pending.
+6. Enable nested translated `RUN` by adding a translated-parent trap-return
+   path instead of only the physical-parent return override. Pending.
 
 Each slice should keep existing physical boot and storage behavior working.
 

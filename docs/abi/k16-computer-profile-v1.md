@@ -443,6 +443,7 @@ Commands:
 4  activate_user_address_space
 5  copy_from_user
 6  copy_to_user
+7  set_trap_return_physical
 ```
 
 Flag bits:
@@ -457,7 +458,11 @@ bit 2  executable
 `map_pages` and `protect_pages` use `address_space`, `virtual_start`,
 `physical_start`, `page_count`, and `flags`. `activate_user_address_space`
 uses `address_space`, `entry_pc`, and `stack_pointer`, then switches the current
-K16 CPU to translated user execution at `entry_pc`.
+K16 CPU to translated user execution at `entry_pc`. For this command,
+`stack_pointer` is the user stack pointer and a non-zero `physical_start`
+selects the physical kernel stack pointer used for later traps from that user
+context. If `physical_start` is zero, the VM preserves the CPU's existing
+trap-kernel-stack pointer for compatibility with older activation callers.
 
 `copy_from_user` and `copy_to_user` use `address_space`, `virtual_start`,
 `physical_start`, and `byte_count` (the register at offset `0x1C`). Both
@@ -467,6 +472,11 @@ kernel RAM. `copy_to_user` loads bytes from physical kernel RAM and stores them
 into translated user virtual memory. The requested user pages must be
 user-accessible; `copy_to_user` additionally requires writable mappings.
 Successful copy commands return the copied byte count in `result`.
+
+`set_trap_return_physical` takes no argument registers. It changes the current
+CPU's saved trap-return mode to physical/kernel so the next `iret` resumes a
+physical-mode parent frame. The command is intended for the transitional
+process model where a physical shell can synchronously run a translated child.
 
 The VM rejects unknown flag bits, unaligned mappings, zero page counts,
 overlapping virtual mappings, and other malformed map/protect arguments by

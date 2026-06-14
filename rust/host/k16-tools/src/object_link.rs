@@ -34,6 +34,7 @@ const R_K16_BRANCH4: u32 = 3;
 const BIOS_ENTRY_TRAMPOLINE_LEN: usize = 14;
 const BIOS_ENTRY_TRAMPOLINE_TARGET_REG: u16 = 14;
 const BIOS_ENTRY_TRAMPOLINE_STACK_REG: u16 = 15;
+const IMAGE_END_SYMBOL: &str = "__k16_image_end";
 
 #[derive(Debug, Clone)]
 pub struct K16LinkInput<'a> {
@@ -231,6 +232,14 @@ fn link_objects(
             }
         }
     }
+    let image_end = load_addr
+        .checked_add(memory_size)
+        .ok_or_else(|| "linked K16 payload range overflows".to_string())?;
+    if let Some(previous) = defined_symbols.insert(IMAGE_END_SYMBOL.to_string(), image_end) {
+        return Err(format!(
+            "duplicate K16 symbol `{IMAGE_END_SYMBOL}` at {previous:#010x} and {image_end:#010x}"
+        ));
+    }
 
     for (object_index, object) in objects.iter().enumerate() {
         for relocation in &object.relocations {
@@ -393,6 +402,9 @@ fn relocated_symbol_section(
     symbol: &Symbol,
 ) -> Result<Option<(usize, usize)>, String> {
     if symbol.section_index == SHN_UNDEF {
+        if is_synthetic_symbol(&symbol.name) {
+            return Ok(None);
+        }
         return unique_global_definition(objects, &symbol.name)?
             .map(Some)
             .ok_or_else(|| {
@@ -406,6 +418,10 @@ fn relocated_symbol_section(
         return Ok(None);
     }
     Ok(Some((object_index, usize::from(symbol.section_index))))
+}
+
+fn is_synthetic_symbol(name: &str) -> bool {
+    name == IMAGE_END_SYMBOL
 }
 
 fn mark_alloc_section(

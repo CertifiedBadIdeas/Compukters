@@ -3,7 +3,7 @@ use crate::computer::devices::BiosFlashDevice;
 use crate::computer::devices::MmuControlCommand;
 use crate::computer::profile::ComputerMachineProfile;
 use crate::computer_abi;
-use crate::k16::{K16Cpu, K16Signal};
+use crate::k16::{K16AddressMode, K16Cpu, K16PrivilegeMode, K16Signal};
 use crate::mmu::{MmuAccess, MmuAddressSpace, MmuAddressSpaceId, MmuMapFlags, MmuPrivilege};
 
 pub(super) fn from_k16_bios_flash(
@@ -198,14 +198,33 @@ fn apply_mmu0_command(
             if machine.address_spaces.get(address_space).is_none() {
                 return Err(computer_abi::MMU0_ERROR_INVALID_ADDRESS_SPACE);
             }
-            machine
+            let cpu = machine
                 .k16_cpu_mut(cpu_id)
-                .map_err(|_| computer_abi::MMU0_ERROR_INVALID_ARGUMENT)?
-                .enter_user_address_space(address_space, command.entry_pc, command.stack_pointer);
+                .map_err(|_| computer_abi::MMU0_ERROR_INVALID_ARGUMENT)?;
+            let kernel_stack_pointer = match command.physical_start {
+                0 => match cpu.trap_kernel_stack_pointer() {
+                    0 => cpu.register(usize::from(crate::k16::K16_STACK_POINTER_REGISTER)),
+                    stack_pointer => stack_pointer,
+                },
+                stack_pointer => stack_pointer,
+            };
+            cpu.enter_user_address_space_with_kernel_stack(
+                address_space,
+                command.entry_pc,
+                command.stack_pointer,
+                kernel_stack_pointer,
+            );
             Ok(0)
         }
         computer_abi::MMU0_COMMAND_COPY_FROM_USER => copy_from_user(machine, command),
         computer_abi::MMU0_COMMAND_COPY_TO_USER => copy_to_user(machine, command),
+        computer_abi::MMU0_COMMAND_SET_TRAP_RETURN_PHYSICAL => {
+            machine
+                .k16_cpu_mut(cpu_id)
+                .map_err(|_| computer_abi::MMU0_ERROR_INVALID_ARGUMENT)?
+                .set_trap_return_mode(K16AddressMode::Physical, K16PrivilegeMode::Kernel);
+            Ok(0)
+        }
         computer_abi::MMU0_COMMAND_NOP => Ok(0),
         _ => Err(computer_abi::MMU0_ERROR_INVALID_COMMAND),
     }

@@ -70,15 +70,48 @@ fn k16_link_converts_k16_object_with_abs32_relocation_to_program_k16e() {
     let bytes = fs::read(output_path).expect("K16E output reads");
     let executable = k16e::decode_k16_executable(&bytes).expect("linked K16E decodes");
     assert_eq!(executable.abi_kind, k16e::K16eAbiKind::Program);
-    assert_eq!(executable.entry_pc, 0x1_3000);
-    assert_eq!(executable.load_addr, 0x1_3000);
+    assert_eq!(executable.entry_pc, 0x1_5000);
+    assert_eq!(executable.load_addr, 0x1_5000);
     assert_eq!(&bytes[0..4], b"K16E");
-    assert_eq!(u32_at(&bytes, 12), 0x1_3000);
+    assert_eq!(u32_at(&bytes, 12), 0x1_5000);
     assert_eq!(u32_at(&bytes, 24), 3);
-    assert_eq!(u32_at(&bytes, 36), 0x1_3000);
+    assert_eq!(u32_at(&bytes, 36), 0x1_5000);
     assert_eq!(
         &bytes[52..],
-        &[0x01, 0xe4, 0x00, 0x30, 0x01, 0x00, 0x01, 0x00]
+        &[0x01, 0xe4, 0x00, 0x50, 0x01, 0x00, 0x01, 0x00]
+    );
+}
+
+#[test]
+fn k16_link_resolves_synthetic_image_end_symbol() {
+    let object_path = temp_file("image-end.o");
+    let output_path = temp_file("image-end.k16e");
+    fs::write(&object_path, k16_object_with_image_end_relocation()).expect("object writes");
+
+    let output = Command::new(k16_binary())
+        .args([
+            "link",
+            "--target",
+            "program",
+            object_path.to_str().unwrap(),
+            "-o",
+            output_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("k16 link runs");
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let bytes = fs::read(output_path).expect("K16E output reads");
+    let executable = k16e::decode_k16_executable(&bytes).expect("linked K16E decodes");
+    assert_eq!(executable.load_addr, 0x1_5000);
+    assert_eq!(executable.memory_size, 8);
+    assert_eq!(
+        &bytes[52..],
+        &[0x01, 0xe4, 0x08, 0x50, 0x01, 0x00, 0x01, 0x00]
     );
 }
 
@@ -109,7 +142,7 @@ fn k16_link_converts_k16_object_to_raw_bios_flash() {
     assert_eq!(
         bytes,
         [
-            0x01, 0xef, 0x00, 0x50, 0x02, 0x00, 0x01, 0xee, 0x0e, 0x00, 0xf0, 0xff, 0x00, 0x7e,
+            0x01, 0xef, 0x00, 0x00, 0x03, 0x00, 0x01, 0xee, 0x0e, 0x00, 0xf0, 0xff, 0x00, 0x7e,
             0x01, 0xe4, 0x0e, 0x00, 0xf0, 0xff, 0x01, 0x00,
         ],
         "BIOS flash output should be raw K16 bytes with an entry trampoline, not K16E"
@@ -142,7 +175,7 @@ fn k16_link_accepts_rust_rodata_alloc_sections() {
     let bytes = fs::read(output_path).expect("BIOS flash output reads");
     assert_eq!(
         &bytes[..14],
-        &[0x01, 0xef, 0x00, 0x50, 0x02, 0x00, 0x01, 0xee, 0x0e, 0x00, 0xf0, 0xff, 0x00, 0x7e,]
+        &[0x01, 0xef, 0x00, 0x00, 0x03, 0x00, 0x01, 0xee, 0x0e, 0x00, 0xf0, 0xff, 0x00, 0x7e,]
     );
     assert_eq!(
         &bytes[14..22],
@@ -177,7 +210,7 @@ fn k16_link_discards_unreferenced_alloc_rodata_sections() {
     let bytes = fs::read(output_path).expect("BIOS flash output reads");
     assert_eq!(
         &bytes[..14],
-        &[0x01, 0xef, 0x00, 0x50, 0x02, 0x00, 0x01, 0xee, 0x0e, 0x00, 0xf0, 0xff, 0x00, 0x7e,]
+        &[0x01, 0xef, 0x00, 0x00, 0x03, 0x00, 0x01, 0xee, 0x0e, 0x00, 0xf0, 0xff, 0x00, 0x7e,]
     );
     assert_eq!(&bytes[14..], &[0x01, 0x00]);
     assert!(
@@ -213,10 +246,10 @@ fn k16_link_ignores_absolute_file_symbols_from_llvm_objects() {
     );
     let bytes = fs::read(output_path).expect("K16E output reads");
     let executable = k16e::decode_k16_executable(&bytes).expect("linked K16E decodes");
-    assert_eq!(executable.entry_pc, 0x1_3000);
+    assert_eq!(executable.entry_pc, 0x1_5000);
     assert_eq!(
         &bytes[52..],
-        &[0x01, 0xe4, 0x00, 0x30, 0x01, 0x00, 0x01, 0x00]
+        &[0x01, 0xe4, 0x00, 0x50, 0x01, 0x00, 0x01, 0x00]
     );
 }
 
@@ -246,14 +279,14 @@ fn k16_link_emits_bss_as_k16e_zero_fill_memory_tail() {
     let bytes = fs::read(output_path).expect("K16E output reads");
     let executable = k16e::decode_k16_executable(&bytes).expect("linked K16E decodes");
 
-    assert_eq!(executable.entry_pc, 0x1_3000);
-    assert_eq!(executable.load_addr, 0x1_3000);
+    assert_eq!(executable.entry_pc, 0x1_5000);
+    assert_eq!(executable.load_addr, 0x1_5000);
     assert_eq!(executable.memory_size, 16);
     assert_eq!(u32_at(&bytes, 44), 8);
     assert_eq!(u32_at(&bytes, 48), 16);
     assert_eq!(
         &bytes[52..],
-        &[0x01, 0xe4, 0x08, 0x30, 0x01, 0x00, 0x01, 0x00]
+        &[0x01, 0xe4, 0x08, 0x50, 0x01, 0x00, 0x01, 0x00]
     );
 }
 
@@ -319,9 +352,32 @@ fn k16_object_with_absolute_file_symbol() -> Vec<u8> {
     k16_object_with_text_relocation_config(1, true)
 }
 
+fn k16_object_with_image_end_relocation() -> Vec<u8> {
+    k16_object_with_text_relocation_to_symbol(1, "__k16_image_end")
+}
+
 fn k16_object_with_text_relocation_config(
     relocation_type: u32,
     include_absolute_file_symbol: bool,
+) -> Vec<u8> {
+    k16_object_with_text_relocation_to_symbol_config(
+        relocation_type,
+        include_absolute_file_symbol,
+        "_start",
+    )
+}
+
+fn k16_object_with_text_relocation_to_symbol(
+    relocation_type: u32,
+    relocation_symbol: &str,
+) -> Vec<u8> {
+    k16_object_with_text_relocation_to_symbol_config(relocation_type, false, relocation_symbol)
+}
+
+fn k16_object_with_text_relocation_to_symbol_config(
+    relocation_type: u32,
+    include_absolute_file_symbol: bool,
+    relocation_symbol: &str,
 ) -> Vec<u8> {
     let text = [0x01, 0xe4, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00];
     let shstrtab = b"\0.text.k16\0.rela.text.k16\0.symtab\0.strtab\0.shstrtab\0";
@@ -329,6 +385,11 @@ fn k16_object_with_text_relocation_config(
     let mut local_symbol_count = 1u32;
     let file_name = include_absolute_file_symbol.then(|| push_string(&mut strtab, "<stdin>"));
     let start_name = push_string(&mut strtab, "_start");
+    let relocation_name = if relocation_symbol == "_start" {
+        start_name
+    } else {
+        push_string(&mut strtab, relocation_symbol)
+    };
     let mut symtab = Vec::new();
     symtab.extend([0u8; 16]);
     if let Some(file_name) = file_name {
@@ -337,10 +398,18 @@ fn k16_object_with_text_relocation_config(
     }
     let start_symbol_index = local_symbol_count;
     write_symbol(&mut symtab, start_name, 0, text.len() as u32, 0x12, 1);
+    let relocation_symbol_index = if relocation_symbol == "_start" {
+        start_symbol_index
+    } else {
+        start_symbol_index + 1
+    };
+    if relocation_symbol != "_start" {
+        write_symbol(&mut symtab, relocation_name, 0, 0, 0x10, 0);
+    }
 
     let mut rela = Vec::new();
     write_u32(&mut rela, 2);
-    write_u32(&mut rela, (start_symbol_index << 8) | relocation_type);
+    write_u32(&mut rela, (relocation_symbol_index << 8) | relocation_type);
     write_u32(&mut rela, 0);
 
     let text_offset = 52u32;

@@ -564,7 +564,7 @@ nested utility. `RUN` saves the current process trap frame, marks that process
 blocked on its child, loads the child in a kernel-selected arena, and enters the
 child. `EXIT` clears the current child slot and restores the waiting parent
 trap frame with the child status in `r0`. There is no background scheduling,
-preemption, fork, pipe, or virtual-memory isolation in this model.
+preemption, fork, or pipe in this model.
 
 Each foreground process records an explicit guest-physical memory range
 `memory_start..memory_end`. The init process range is derived from the loaded
@@ -584,18 +584,30 @@ and moves bytes through the privileged `mmu0` `copy_from_user` and
 physical process ranges, and arithmetic overflow are reported to userland as
 the existing negative K16 `ERROR_FAULT` value.
 
-The current production process launcher still starts foreground processes
-without an address-space id. Assigning address-space ids to live translated
-processes also requires a kernel-stack trap-entry step, because trap entry
-saves the interrupted stack pointer but does not itself switch `sp` to a
-separate kernel stack.
+The current production process launcher is transitional. `/bin/init.kx` and
+`/bin/shell.kx` still run as physical foreground processes. A physical shell
+launching any other `/bin/*.kx` utility creates a host-managed `mmu0` address
+space, maps the child backing pages into that address space, activates
+translated user execution for the child, and records the child address-space id
+for syscall user-buffer copies. Before activation, the kernel restores the
+child's saved trap register frame and passes a dedicated physical kernel trap
+stack to `mmu0`; this preserves entry registers such as `argc` in `r1` and
+`argv` in `r2` while keeping later translated-user traps off the child user
+stack. `RUN` from an already translated process is not enabled in this slice;
+it returns the existing busy error until the process model can restore a
+translated parent context. When a translated child exits to a physical parent,
+the kernel uses `mmu0` `set_trap_return_physical` before `iret` so the saved
+parent frame resumes in physical/kernel mode instead of the child's interrupted
+translated mode.
 
 Each foreground process has its own monotonic heap after its loaded image. A
 child load arena starts after the current parent's program break, so child
 loading cannot overwrite parent heap allocations. The child arena end is the
-lower of the current parent's saved stack pointer and `memory_end`. The child
-heap limit is below a guard area under that stack top, so child heap growth
-cannot overwrite the live parent stack or escape the parent's process range.
+lower of the current parent's saved stack pointer and `memory_end`; translated
+children reserve a kernel trap stack below that parent stack before placing the
+child stack and heap. The child heap limit is below a guard area under the
+child stack top, so child heap growth cannot overwrite the live parent stack,
+the translated child trap stack, or escape the parent's process range.
 
 Regular file descriptors returned by `OPEN` are process-owned. A foreground
 process can `READ` or `CLOSE` only regular fds it opened, and `EXIT` releases
