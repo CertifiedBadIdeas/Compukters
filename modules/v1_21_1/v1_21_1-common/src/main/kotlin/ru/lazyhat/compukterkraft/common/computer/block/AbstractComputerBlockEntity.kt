@@ -29,6 +29,7 @@ import net.minecraft.world.inventory.MenuConstructor
 import net.minecraft.world.level.block.entity.BlockEntity
 import net.minecraft.world.level.block.entity.BlockEntityType
 import net.minecraft.world.level.block.state.BlockState
+import net.minecraft.world.level.storage.LevelResource
 import ru.lazyhat.compukterkraft.common.computer.context.ServerContext
 import ru.lazyhat.compukterkraft.common.utils.computerID
 import ru.lazyhat.compukterkraft.common.utils.computerLabel
@@ -38,6 +39,7 @@ import ru.lazyhat.compukterkraft.common.utils.updateBlock
 import ru.lazyhat.compukterkraft.core.block.DeviceFamily
 import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeDevice
 import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeDeviceSnapshotPersistence
+import ru.lazyhat.compukterkraft.lang.runtime.storage.K16RuntimeSnapshotStore
 
 abstract class AbstractComputerBlockEntity(
     type: BlockEntityType<out AbstractComputerBlockEntity>,
@@ -164,6 +166,7 @@ abstract class AbstractComputerBlockEntity(
                         .get(deviceId)
                         ?.snapshotRuntimeState()
                         ?.let {
+                            persistRuntimeSnapshot(it)
                             pendingRuntimeSnapshot = it.copyOf()
                             setChanged()
                         }
@@ -177,13 +180,28 @@ abstract class AbstractComputerBlockEntity(
             !isRemoved &&
             currentState.block == blockState.block
 
-    private fun runtimeSnapshotForSave(): ByteArray? =
-        _computerID
-            ?.takeIf { ServerContext.isInitialized }
-            ?.let(ServerContext::get)
-            ?.snapshotRuntimeState()
-            ?.copyOf()
-            ?: pendingRuntimeSnapshot?.copyOf()
+    private fun runtimeSnapshotForSave(): ByteArray? {
+        val snapshot =
+            _computerID
+                ?.takeIf { ServerContext.isInitialized }
+                ?.let(ServerContext::get)
+                ?.snapshotRuntimeState()
+                ?.copyOf()
+                ?: pendingRuntimeSnapshot?.copyOf()
+        snapshot?.let { persistRuntimeSnapshot(snapshot) }
+        return snapshot
+    }
+
+    private fun persistRuntimeSnapshot(snapshot: ByteArray) {
+        val computerId = _computerID ?: return
+        runtimeSnapshotStore()?.writeComputerSnapshot(computerId, snapshot)
+    }
+
+    private fun runtimeSnapshotStore(): K16RuntimeSnapshotStore? =
+        (level as? ServerLevel)
+            ?.server
+            ?.getWorldPath(LevelResource.ROOT)
+            ?.let(::K16RuntimeSnapshotStore)
 
     private fun RuntimeDevice.snapshotRuntimeState(): ByteArray? =
         (this as? RuntimeDeviceSnapshotPersistence)?.snapshotRuntimeState()
