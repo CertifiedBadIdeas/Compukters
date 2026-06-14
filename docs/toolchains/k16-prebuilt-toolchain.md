@@ -207,6 +207,20 @@ It writes the pinned host archive name from `config/k16-toolchain.json` and
 prints the resulting SHA-256. Release archives are produced only from this
 source-built path.
 
+Before packaging or publishing a new archive, run the relevant checks from
+`docs/abi/k16-abi-conformance-matrix.md`. At minimum, backend or Rust target
+changes should pass the K16 lit suite and the host-tool smoke tests:
+
+```bash
+.toolchain/build/llvm/k16-min/bin/llvm-lit toolchains/Compukter-Kraft-llvm/llvm/test/CodeGen/K16
+```
+
+```bash
+cd rust/host/k16-tools
+cargo test --test k16_runtime_cli
+cargo test --test k16_rust_smoke_artifacts
+```
+
 If the toolchain was built outside Gradle, stage the install layout for one host
 from already-built binaries:
 
