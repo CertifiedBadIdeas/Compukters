@@ -1594,6 +1594,79 @@ pub struct DynamicUserLoadPlan {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct MappedDynamicUserLoadPlan {
+    virtual_plan: DynamicUserLoadPlan,
+    map_start: u32,
+    backing_start: u32,
+    page_count: u32,
+}
+
+impl MappedDynamicUserLoadPlan {
+    pub fn new(
+        virtual_plan: DynamicUserLoadPlan,
+        map_start: u32,
+        backing_start: u32,
+        page_count: u32,
+    ) -> Result<Self, ProcessLoadError> {
+        if page_count == 0 || map_start % VM_PAGE_SIZE != 0 || backing_start % VM_PAGE_SIZE != 0 {
+            return Err(ProcessLoadError::InvalidArena);
+        }
+        let mapped_end = map_start
+            .checked_add(
+                page_count
+                    .checked_mul(VM_PAGE_SIZE)
+                    .ok_or(ProcessLoadError::AddressOverflow)?,
+            )
+            .ok_or(ProcessLoadError::AddressOverflow)?;
+        if virtual_plan.load_base < map_start || virtual_plan.stack_top > mapped_end {
+            return Err(ProcessLoadError::InvalidArena);
+        }
+        Ok(Self {
+            virtual_plan,
+            map_start,
+            backing_start,
+            page_count,
+        })
+    }
+
+    pub const fn virtual_plan(&self) -> DynamicUserLoadPlan {
+        self.virtual_plan
+    }
+
+    pub const fn backing_start(&self) -> u32 {
+        self.backing_start
+    }
+
+    pub fn payload_dst(&self) -> u32 {
+        self.translate_address(self.virtual_plan.payload_dst)
+            .expect("validated payload address translates")
+    }
+
+    pub fn zero_fill_addr(&self) -> u32 {
+        self.translate_address(self.virtual_plan.zero_fill_addr)
+            .expect("validated zero-fill address translates")
+    }
+
+    pub fn relocation_field_addr(&self, relocation_offset: u32) -> Result<u32, ProcessLoadError> {
+        let field_addr = self
+            .virtual_plan
+            .load_base
+            .checked_add(relocation_offset)
+            .ok_or(ProcessLoadError::AddressOverflow)?;
+        self.translate_address(field_addr)
+    }
+
+    fn translate_address(&self, virtual_address: u32) -> Result<u32, ProcessLoadError> {
+        let offset = virtual_address
+            .checked_sub(self.map_start)
+            .ok_or(ProcessLoadError::InvalidArena)?;
+        self.backing_start
+            .checked_add(offset)
+            .ok_or(ProcessLoadError::AddressOverflow)
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct RunArgvRequest<'a> {
     pub path: &'a [u8],
     argc: usize,
@@ -2192,6 +2265,30 @@ fn apply_dynamic_relocation_to_slice(
     Ok(())
 }
 
+#[cfg(test)]
+fn apply_dynamic_relocation_to_mapped_slice(
+    memory: &mut [u8],
+    memory_base: u32,
+    plan: MappedDynamicUserLoadPlan,
+    relocation_offset: u32,
+) -> Result<(), ProcessLoadError> {
+    let field_addr = plan.relocation_field_addr(relocation_offset)?;
+    let field_offset = field_addr
+        .checked_sub(memory_base)
+        .ok_or(ProcessLoadError::AddressOverflow)?;
+    let field_offset =
+        usize::try_from(field_offset).map_err(|_| ProcessLoadError::AddressOverflow)?;
+    let field = memory
+        .get_mut(field_offset..field_offset + 4)
+        .ok_or(ProcessLoadError::AddressOverflow)?;
+    let value = u32::from_le_bytes([field[0], field[1], field[2], field[3]]);
+    let relocated = value
+        .checked_add(plan.virtual_plan().load_base)
+        .ok_or(ProcessLoadError::AddressOverflow)?;
+    field.copy_from_slice(&relocated.to_le_bytes());
+    Ok(())
+}
+
 unsafe fn zero_fill_ram(dst_addr: u32, len: u32) {
     let mut offset = 0;
     while offset < len {
@@ -2370,6 +2467,59 @@ mod tests {
         assert_eq!(plan.zero_fill_len, 4);
         assert_eq!(plan.load_end, 0x0000_900e);
         assert_eq!(plan.stack_top, 0x0001_0000);
+    }
+
+    #[test]
+    fn mapped_dynamic_user_load_plan_translates_kernel_writes_to_backing_pages() {
+        let plan = DynamicUserLoadPlan {
+            load_base: 0x0001_5020,
+            load_end: 0x0001_6020,
+            entry_pc: 0x0001_5024,
+            stack_top: 0x0001_c000,
+            payload_dst: 0x0001_5020,
+            payload_len: 16,
+            zero_fill_addr: 0x0001_5030,
+            zero_fill_len: 16,
+        };
+
+        let mapped = MappedDynamicUserLoadPlan::new(plan, 0x0001_5000, 0x0000_9000, 7)
+            .expect("mapped load plan is valid");
+
+        assert_eq!(mapped.virtual_plan(), plan);
+        assert_eq!(mapped.backing_start(), 0x0000_9000);
+        assert_eq!(mapped.payload_dst(), 0x0000_9020);
+        assert_eq!(mapped.zero_fill_addr(), 0x0000_9030);
+        assert_eq!(mapped.relocation_field_addr(4), Ok(0x0000_9024));
+        assert_eq!(
+            MappedDynamicUserLoadPlan::new(plan, 0x0001_5000, 0x0000_9000, 6),
+            Err(ProcessLoadError::InvalidArena)
+        );
+    }
+
+    #[test]
+    fn mapped_dynamic_relocation_reads_physical_field_and_writes_virtual_value() {
+        let plan = DynamicUserLoadPlan {
+            load_base: 0x0001_5020,
+            load_end: 0x0001_6020,
+            entry_pc: 0x0001_5024,
+            stack_top: 0x0001_c000,
+            payload_dst: 0x0001_5020,
+            payload_len: 16,
+            zero_fill_addr: 0x0001_5030,
+            zero_fill_len: 16,
+        };
+        let mapped = MappedDynamicUserLoadPlan::new(plan, 0x0001_5000, 0x0000_9000, 7)
+            .expect("mapped load plan is valid");
+        let mut memory = [0u8; 0x80];
+        write_u32_le(&mut memory, 0x24, 0x20);
+
+        apply_dynamic_relocation_to_mapped_slice(&mut memory, 0x0000_9000, mapped, 4)
+            .expect("relocation applies");
+
+        assert_eq!(
+            u32::from_le_bytes([memory[0x24], memory[0x25], memory[0x26], memory[0x27]]),
+            0x0001_5040
+        );
     }
 
     #[test]
