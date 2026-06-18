@@ -27,7 +27,7 @@ pub fn dispatch(number: u32) -> ! {
                     control::set_panic_code(abi_syscall::ERROR_FAULT as i32);
                     control::wait_forever()
                 }
-                unsafe { process::resume_init_context(resume) }
+                unsafe { process::resume_parent_context(resume) }
             }
             control::set_exit_code(status);
             control::set_halted();

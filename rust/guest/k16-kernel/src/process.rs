@@ -156,7 +156,7 @@ pub enum HeapError {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum ProcessId {
     Init,
-    Child,
+    Foreground1,
     Foreground2,
 }
 
@@ -164,7 +164,7 @@ impl ProcessId {
     const fn from_slot(slot: usize) -> Self {
         match slot {
             INIT_PROCESS_SLOT => Self::Init,
-            1 => Self::Child,
+            1 => Self::Foreground1,
             _ => Self::Foreground2,
         }
     }
@@ -266,7 +266,7 @@ pub struct TranslatedUserLaunch {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub struct InitResume {
+pub struct ParentResume {
     pub id: ProcessId,
     pub context: ProcessContext,
     pub frame: TrapFrame,
@@ -520,7 +520,7 @@ impl ProcessTable {
         Ok(launch)
     }
 
-    pub fn finish_child(&mut self, status: u32) -> Result<InitResume, ProcessSwitchError> {
+    pub fn finish_child(&mut self, status: u32) -> Result<ParentResume, ProcessSwitchError> {
         if self.current_slot == INIT_PROCESS_SLOT
             || self.slots[self.current_slot].state != PROCESS_STATE_RUNNING
         {
@@ -543,7 +543,7 @@ impl ProcessTable {
         };
         self.current_slot = parent_slot;
         let parent = self.slots[parent_slot];
-        Ok(InitResume {
+        Ok(ParentResume {
             id: ProcessId::from_slot(parent_slot),
             context: parent.context,
             frame: parent.frame,
@@ -879,7 +879,7 @@ pub unsafe fn enter_child_context(launch: ChildLaunch) -> ! {
 }
 
 #[cfg(any(not(test), feature = "host-test"))]
-pub unsafe fn finish_child_for_exit(status: u32) -> Result<InitResume, ProcessSwitchError> {
+pub unsafe fn finish_child_for_exit(status: u32) -> Result<ParentResume, ProcessSwitchError> {
     #[cfg(not(test))]
     {
         return unsafe { finish_child_runtime(status) };
@@ -903,7 +903,7 @@ pub unsafe fn current_process_slot() -> u32 {
 }
 
 #[cfg(not(test))]
-unsafe fn finish_child_runtime(status: u32) -> Result<InitResume, ProcessSwitchError> {
+unsafe fn finish_child_runtime(status: u32) -> Result<ParentResume, ProcessSwitchError> {
     let current_slot = unsafe { runtime_current_slot() };
     if current_slot == INIT_PROCESS_SLOT {
         return Err(ProcessSwitchError::NoRunningChild);
@@ -925,7 +925,7 @@ unsafe fn finish_child_runtime(status: u32) -> Result<InitResume, ProcessSwitchE
             parent_slot as u32,
         );
     }
-    Ok(InitResume {
+    Ok(ParentResume {
         id: ProcessId::from_slot(parent_slot),
         context: ProcessContext {
             entry_pc: frame.resume_pc,
@@ -1207,7 +1207,7 @@ unsafe fn write_runtime_word(address: *mut u32, value: u32) {
 }
 
 #[cfg(any(not(test), feature = "host-test"))]
-pub unsafe fn resume_init_context(resume: InitResume) -> ! {
+pub unsafe fn resume_parent_context(resume: ParentResume) -> ! {
     #[cfg(not(test))]
     {
         let frame = k16_rt::TrapFrame::from(resume.frame);
@@ -1249,7 +1249,7 @@ fn runtime_child_slot_for_parent(
 }
 
 fn trap_return_override_for_resume(
-    resume: InitResume,
+    resume: ParentResume,
 ) -> Result<TrapReturnOverride, ProcessSwitchError> {
     match resume.address_space {
         Some(address_space) => {
@@ -1669,7 +1669,7 @@ unsafe fn mmu0_set_trap_return_address_space(
     }
 }
 
-pub unsafe fn destroy_exited_address_space(resume: InitResume) -> Result<(), ProcessLoadError> {
+pub unsafe fn destroy_exited_address_space(resume: ParentResume) -> Result<(), ProcessLoadError> {
     let Some(address_space) = resume.exited_address_space else {
         return Ok(());
     };
@@ -2233,7 +2233,7 @@ mod tests {
 
         let child = table.begin_child_run(child_plan).expect("child starts");
 
-        assert_eq!(child.id, ProcessId::Child);
+        assert_eq!(child.id, ProcessId::Foreground1);
         assert_eq!(
             child.context,
             ProcessContext {
@@ -2243,6 +2243,13 @@ mod tests {
         );
         assert_eq!(table.init_state(), PROCESS_STATE_BLOCKED_ON_CHILD);
         assert_eq!(table.child_state(), PROCESS_STATE_RUNNING);
+    }
+
+    #[test]
+    fn process_ids_name_foreground_slots_by_depth() {
+        assert_eq!(ProcessId::from_slot(0), ProcessId::Init);
+        assert_eq!(ProcessId::from_slot(1), ProcessId::Foreground1);
+        assert_eq!(ProcessId::from_slot(2), ProcessId::Foreground2);
     }
 
     #[test]
@@ -2618,8 +2625,8 @@ mod tests {
 
     #[test]
     fn translated_parent_resume_requires_trap_return_address_space_override() {
-        let resume = InitResume {
-            id: ProcessId::Child,
+        let resume = ParentResume {
+            id: ProcessId::Foreground1,
             context: ProcessContext {
                 entry_pc: 0x0001_5004,
                 stack_top: 0x0001_f000,
@@ -2645,7 +2652,7 @@ mod tests {
         );
 
         assert_eq!(
-            trap_return_override_for_resume(InitResume {
+            trap_return_override_for_resume(ParentResume {
                 kernel_stack_top: None,
                 ..resume
             }),
@@ -2763,7 +2770,7 @@ mod tests {
     fn destroy_exited_address_space_submits_destroy_for_translated_child() {
         crate::mmio::reset_test_state();
         crate::mmio::set_test_mmu0_result(0, k16_abi::computer::mmu0::STATUS_DONE, 0);
-        let resume = InitResume {
+        let resume = ParentResume {
             id: ProcessId::Init,
             context: ProcessContext {
                 entry_pc: 0,
