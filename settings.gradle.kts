@@ -53,6 +53,7 @@ fun include(
 }
 
 include("native-runtime", modulesDir)
+include("ui-dsl", modulesDir)
 include("core", modulesDir)
 
 val v1_21_1Dir = modulesDir.resolve("v1_21_1")
