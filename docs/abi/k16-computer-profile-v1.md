@@ -445,6 +445,7 @@ Commands:
 6  copy_to_user
 7  set_trap_return_physical
 8  set_trap_return_address_space
+9  destroy_address_space
 ```
 
 Flag bits:
@@ -485,6 +486,11 @@ translated/user for the supplied address space, and installs `physical_start`
 as the physical kernel stack pointer used by later traps from that resumed user
 context. The command is intended for the transitional process model where a
 translated shell can synchronously run a translated utility child.
+
+`destroy_address_space` uses `address_space` and removes that host-managed
+address space plus all of its mappings. Destroying a missing id produces
+`invalid_address_space`. The current K16 kernel uses this during process
+`EXIT` for translated children before returning to the blocked parent frame.
 
 The VM rejects unknown flag bits, unaligned mappings, zero page counts,
 overlapping virtual mappings, and other malformed map/protect arguments by

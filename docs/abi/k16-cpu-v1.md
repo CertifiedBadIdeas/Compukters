@@ -600,6 +600,8 @@ and parent physical kernel trap stack before `iret`, so the saved parent frame
 resumes in translated/user mode. When a translated child exits to physical
 init, the kernel uses `mmu0` `set_trap_return_physical` before `iret` so the
 saved parent frame resumes in physical/kernel mode.
+In both cases, the kernel destroys the exiting translated child's `mmu0`
+address space before returning to the parent.
 
 Each foreground process has its own monotonic heap after its loaded image. A
 child load arena starts after the current parent's program break, so child

@@ -22,6 +22,11 @@ pub fn dispatch(number: u32) -> ! {
             let exiting_pid = unsafe { process::current_process_slot() };
             unsafe { fs::close_file_fds_for_process(exiting_pid) };
             if let Ok(resume) = unsafe { process::finish_child_for_exit(status) } {
+                if unsafe { process::destroy_exited_address_space(resume) }.is_err() {
+                    control::set_panic();
+                    control::set_panic_code(abi_syscall::ERROR_FAULT as i32);
+                    control::wait_forever()
+                }
                 unsafe { process::resume_init_context(resume) }
             }
             control::set_exit_code(status);

@@ -259,6 +259,8 @@ impl ComputerMachine {
         computer_abi::MMU0_COMMAND_SET_TRAP_RETURN_PHYSICAL;
     pub const MMU0_COMMAND_SET_TRAP_RETURN_ADDRESS_SPACE: i32 =
         computer_abi::MMU0_COMMAND_SET_TRAP_RETURN_ADDRESS_SPACE;
+    pub const MMU0_COMMAND_DESTROY_ADDRESS_SPACE: i32 =
+        computer_abi::MMU0_COMMAND_DESTROY_ADDRESS_SPACE;
     pub const MMU0_FLAG_USER_ACCESSIBLE: i32 = computer_abi::MMU0_FLAG_USER_ACCESSIBLE;
     pub const MMU0_FLAG_WRITABLE: i32 = computer_abi::MMU0_FLAG_WRITABLE;
     pub const MMU0_FLAG_EXECUTABLE: i32 = computer_abi::MMU0_FLAG_EXECUTABLE;
@@ -428,6 +430,10 @@ impl ComputerMachine {
 
     pub fn create_mmu_address_space(&mut self) -> Result<MmuAddressSpaceId, MmuFault> {
         self.address_spaces.create(self.memory().len() as u32)
+    }
+
+    pub fn destroy_mmu_address_space(&mut self, address_space: MmuAddressSpaceId) -> bool {
+        self.address_spaces.destroy(address_space)
     }
 
     pub fn map_mmu_pages(

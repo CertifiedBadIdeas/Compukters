@@ -829,6 +829,82 @@ fn computer_machine_mmu0_copy_reports_invalid_address_space() {
 }
 
 #[test]
+fn computer_machine_mmu_address_space_destroy_removes_mappings() {
+    let mut machine = ComputerMachine::new(0x4000).unwrap();
+    let address_space = machine.create_mmu_address_space().unwrap();
+    machine
+        .map_mmu_pages(
+            address_space,
+            0x4000,
+            0x1000,
+            1,
+            MmuMapFlags::USER_ACCESSIBLE | MmuMapFlags::WRITABLE,
+        )
+        .unwrap();
+
+    assert!(machine.destroy_mmu_address_space(address_space));
+
+    assert!(machine
+        .map_mmu_pages(
+            address_space,
+            0x8000,
+            0x2000,
+            1,
+            MmuMapFlags::USER_ACCESSIBLE,
+        )
+        .is_err());
+    assert!(!machine.destroy_mmu_address_space(address_space));
+}
+
+#[test]
+fn computer_machine_mmu0_destroy_address_space_command_removes_mappings() {
+    const KERNEL_PC: u32 = 0x0000;
+
+    let mut machine = ComputerMachine::new(0x4000).unwrap();
+    let address_space = machine.create_mmu_address_space().unwrap();
+    machine
+        .map_mmu_pages(
+            address_space,
+            0x4000,
+            0x1000,
+            1,
+            MmuMapFlags::USER_ACCESSIBLE | MmuMapFlags::WRITABLE,
+        )
+        .unwrap();
+    machine
+        .write_guest_ram_bytes(KERNEL_PC, &k16_words(&[k16_nop(), k16_halt()]))
+        .unwrap();
+    let boot_cpu = machine.install_k16_boot_cpu_for_tests(KERNEL_PC, 16);
+
+    submit_mmu0_command(
+        &mut machine,
+        address_space.raw(),
+        0,
+        0,
+        0,
+        ComputerMachine::MMU0_COMMAND_DESTROY_ADDRESS_SPACE,
+    );
+
+    assert_eq!(
+        machine.run_boot_k16_until_signal(boot_cpu).unwrap(),
+        K16Signal::Halt,
+    );
+    assert_eq!(
+        machine.bus_load_i32(ComputerMachine::MMU0_STATUS).unwrap(),
+        ComputerMachine::MMU0_STATUS_DONE,
+    );
+    assert!(machine
+        .map_mmu_pages(
+            address_space,
+            0x8000,
+            0x2000,
+            1,
+            MmuMapFlags::USER_ACCESSIBLE,
+        )
+        .is_err());
+}
+
+#[test]
 fn computer_machine_mmu0_copy_to_user_reports_permission_fault_for_read_only_mapping() {
     const RAM_SIZE: usize = 0x4000;
     const KERNEL_PC: u32 = 0x0000;
@@ -2082,6 +2158,10 @@ fn computer_machine_constants_match_profile_v2_abi() {
     assert_eq!(
         ComputerMachine::MMU0_COMMAND_SET_TRAP_RETURN_ADDRESS_SPACE,
         computer_abi::MMU0_COMMAND_SET_TRAP_RETURN_ADDRESS_SPACE,
+    );
+    assert_eq!(
+        ComputerMachine::MMU0_COMMAND_DESTROY_ADDRESS_SPACE,
+        computer_abi::MMU0_COMMAND_DESTROY_ADDRESS_SPACE,
     );
 }
 

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Added `mmu0` `destroy_address_space` (`9`) and wired the K16 kernel process
+  lifecycle to destroy a translated child address space on `EXIT` before
+  returning to the blocked parent frame. This keeps translated shell/utility
+  runs from accumulating stale host-managed address spaces.
 - `K16SNAP` now records translated execution state needed to restore
   VM-enabled user processes. Snapshot device record kind `9` stores `mmu0`
   address-space mappings plus per-CPU address/privilege mode overrides, so a
