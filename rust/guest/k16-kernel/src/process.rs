@@ -976,7 +976,13 @@ unsafe fn begin_loaded_child_runtime(path: &[u8], args: &[&[u8]]) -> Result<Chil
     } else {
         (parent_stack_limit, 0)
     };
-    let arena = UserArena::new(caller_program_break, arena_end)
+    let arena_start = if translated_child {
+        translated_child_arena_start(caller_program_break)
+            .map_err(|_| run_status_from_load_error(ProcessLoadError::ProgramTooLarge))?
+    } else {
+        caller_program_break
+    };
+    let arena = UserArena::new(arena_start, arena_end)
         .map_err(|_| run_status_from_load_error(ProcessLoadError::ProgramTooLarge))?;
     if translated_child {
         let allocator = unsafe { (*RUNTIME_PAGE_ALLOCATOR.get()).as_mut() }
@@ -1678,6 +1684,10 @@ fn translated_child_arena_end(parent_stack_limit: u32) -> Result<(u32, u32), Pro
     ))
 }
 
+fn translated_child_arena_start(program_break: u32) -> Result<u32, ProcessLoadError> {
+    align_up(program_break, VM_PAGE_SIZE)
+}
+
 fn translated_init_arena_end(memory_end: u32) -> Result<(u32, u32), ProcessLoadError> {
     translated_child_arena_end(memory_end)
 }
@@ -1766,7 +1776,10 @@ pub struct DynamicUserLoadPlan {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct MappedDynamicUserLoadPlan {
     virtual_plan: DynamicUserLoadPlan,
-    map_start: u32,
+    image_map_start: u32,
+    image_page_count: u32,
+    stack_map_start: u32,
+    stack_page_count: u32,
     backing_start: u32,
     page_count: u32,
 }
@@ -1793,7 +1806,60 @@ impl MappedDynamicUserLoadPlan {
         }
         Ok(Self {
             virtual_plan,
-            map_start,
+            image_map_start: map_start,
+            image_page_count: page_count,
+            stack_map_start: 0,
+            stack_page_count: 0,
+            backing_start,
+            page_count,
+        })
+    }
+
+    pub fn new_committed(
+        virtual_plan: DynamicUserLoadPlan,
+        image_map_start: u32,
+        image_page_count: u32,
+        stack_map_start: u32,
+        stack_page_count: u32,
+        backing_start: u32,
+    ) -> Result<Self, ProcessLoadError> {
+        if image_page_count == 0
+            || stack_page_count > 1
+            || image_map_start % VM_PAGE_SIZE != 0
+            || stack_map_start % VM_PAGE_SIZE != 0
+            || backing_start % VM_PAGE_SIZE != 0
+        {
+            return Err(ProcessLoadError::InvalidArena);
+        }
+        let page_count = image_page_count
+            .checked_add(stack_page_count)
+            .ok_or(ProcessLoadError::AddressOverflow)?;
+        let image_mapped_end = image_map_start
+            .checked_add(
+                image_page_count
+                    .checked_mul(VM_PAGE_SIZE)
+                    .ok_or(ProcessLoadError::AddressOverflow)?,
+            )
+            .ok_or(ProcessLoadError::AddressOverflow)?;
+        if virtual_plan.load_base < image_map_start || virtual_plan.load_end > image_mapped_end {
+            return Err(ProcessLoadError::InvalidArena);
+        }
+        if stack_page_count > 0 {
+            let stack_mapped_end = stack_map_start
+                .checked_add(VM_PAGE_SIZE)
+                .ok_or(ProcessLoadError::AddressOverflow)?;
+            if virtual_plan.stack_top <= stack_map_start
+                || virtual_plan.stack_top > stack_mapped_end
+            {
+                return Err(ProcessLoadError::InvalidArena);
+            }
+        }
+        Ok(Self {
+            virtual_plan,
+            image_map_start,
+            image_page_count,
+            stack_map_start,
+            stack_page_count,
             backing_start,
             page_count,
         })
@@ -1804,7 +1870,19 @@ impl MappedDynamicUserLoadPlan {
     }
 
     pub const fn map_start(&self) -> u32 {
-        self.map_start
+        self.image_map_start
+    }
+
+    pub const fn image_page_count(&self) -> u32 {
+        self.image_page_count
+    }
+
+    pub const fn stack_map_start(&self) -> u32 {
+        self.stack_map_start
+    }
+
+    pub const fn stack_page_count(&self) -> u32 {
+        self.stack_page_count
     }
 
     pub const fn backing_start(&self) -> u32 {
@@ -1835,12 +1913,46 @@ impl MappedDynamicUserLoadPlan {
     }
 
     fn translate_address(&self, virtual_address: u32) -> Result<u32, ProcessLoadError> {
-        let offset = virtual_address
-            .checked_sub(self.map_start)
-            .ok_or(ProcessLoadError::InvalidArena)?;
-        self.backing_start
-            .checked_add(offset)
-            .ok_or(ProcessLoadError::AddressOverflow)
+        let image_mapped_end = self
+            .image_map_start
+            .checked_add(
+                self.image_page_count
+                    .checked_mul(VM_PAGE_SIZE)
+                    .ok_or(ProcessLoadError::AddressOverflow)?,
+            )
+            .ok_or(ProcessLoadError::AddressOverflow)?;
+        if virtual_address >= self.image_map_start && virtual_address < image_mapped_end {
+            let offset = virtual_address
+                .checked_sub(self.image_map_start)
+                .ok_or(ProcessLoadError::InvalidArena)?;
+            return self
+                .backing_start
+                .checked_add(offset)
+                .ok_or(ProcessLoadError::AddressOverflow);
+        }
+        if self.stack_page_count > 0 {
+            let stack_mapped_end = self
+                .stack_map_start
+                .checked_add(VM_PAGE_SIZE)
+                .ok_or(ProcessLoadError::AddressOverflow)?;
+            if virtual_address >= self.stack_map_start && virtual_address < stack_mapped_end {
+                let stack_backing_start = self
+                    .backing_start
+                    .checked_add(
+                        self.image_page_count
+                            .checked_mul(VM_PAGE_SIZE)
+                            .ok_or(ProcessLoadError::AddressOverflow)?,
+                    )
+                    .ok_or(ProcessLoadError::AddressOverflow)?;
+                let offset = virtual_address
+                    .checked_sub(self.stack_map_start)
+                    .ok_or(ProcessLoadError::InvalidArena)?;
+                return stack_backing_start
+                    .checked_add(offset)
+                    .ok_or(ProcessLoadError::AddressOverflow);
+            }
+        }
+        Err(ProcessLoadError::InvalidArena)
     }
 }
 
@@ -1848,16 +1960,32 @@ fn allocate_mapped_dynamic_user_load_plan(
     plan: DynamicUserLoadPlan,
     allocator: &mut crate::page_alloc::PageFrameAllocator,
 ) -> Result<MappedDynamicUserLoadPlan, ProcessLoadError> {
-    let map_start = page_align_down(plan.load_base);
-    let map_end = page_align_up(plan.stack_top)?;
-    if map_start >= map_end {
+    let image_map_start = page_align_down(plan.load_base);
+    let image_map_end = page_align_up(plan.load_end)?;
+    if image_map_start >= image_map_end || plan.stack_top == 0 {
         return Err(ProcessLoadError::InvalidArena);
     }
-    let page_count = (map_end - map_start) / VM_PAGE_SIZE;
+    let image_page_count = (image_map_end - image_map_start) / VM_PAGE_SIZE;
+    let stack_map_start = page_align_down(plan.stack_top - 1);
+    let stack_page_count = if stack_map_start < image_map_end {
+        0
+    } else {
+        1
+    };
+    let page_count = image_page_count
+        .checked_add(stack_page_count)
+        .ok_or(ProcessLoadError::AddressOverflow)?;
     let backing = allocator
         .allocate_contiguous(page_count)
         .map_err(page_alloc_error_to_process_load_error)?;
-    MappedDynamicUserLoadPlan::new(plan, map_start, backing.start, backing.frame_count)
+    MappedDynamicUserLoadPlan::new_committed(
+        plan,
+        image_map_start,
+        image_page_count,
+        stack_map_start,
+        stack_page_count,
+        backing.start,
+    )
 }
 
 fn free_mapped_dynamic_user_load_plan(
@@ -2066,7 +2194,7 @@ unsafe fn create_translated_user_launch_from_mapped(
             address_space,
             mapped.map_start(),
             mapped.backing_start(),
-            mapped.page_count(),
+            mapped.image_page_count(),
             k16_abi::computer::mmu0::FLAG_USER_ACCESSIBLE
                 | k16_abi::computer::mmu0::FLAG_WRITABLE
                 | k16_abi::computer::mmu0::FLAG_EXECUTABLE,
@@ -2075,6 +2203,31 @@ unsafe fn create_translated_user_launch_from_mapped(
     if let Err(error) = map_result {
         let _ = unsafe { mmu0_destroy_address_space(address_space) };
         return Err(error);
+    }
+    if mapped.stack_page_count() > 0 {
+        let stack_backing_start = mapped
+            .backing_start()
+            .checked_add(
+                mapped
+                    .image_page_count()
+                    .checked_mul(VM_PAGE_SIZE)
+                    .ok_or(ProcessLoadError::AddressOverflow)?,
+            )
+            .ok_or(ProcessLoadError::AddressOverflow)?;
+        let stack_map_result = unsafe {
+            mmu0_map_pages(
+                address_space,
+                mapped.stack_map_start(),
+                stack_backing_start,
+                mapped.stack_page_count(),
+                k16_abi::computer::mmu0::FLAG_USER_ACCESSIBLE
+                    | k16_abi::computer::mmu0::FLAG_WRITABLE,
+            )
+        };
+        if let Err(error) = stack_map_result {
+            let _ = unsafe { mmu0_destroy_address_space(address_space) };
+            return Err(error);
+        }
     }
     let plan = mapped.virtual_plan();
     Ok(TranslatedUserLaunch {
@@ -2180,8 +2333,8 @@ pub unsafe fn destroy_exited_address_space(resume: ParentResume) -> Result<(), P
     }
     #[cfg(not(test))]
     if let Some(backing_pages) = resume.exited_backing_pages {
-        let allocator = unsafe { (*RUNTIME_PAGE_ALLOCATOR.get()).as_mut() }
-            .ok_or(ProcessLoadError::Storage)?;
+        let allocator =
+            unsafe { (*RUNTIME_PAGE_ALLOCATOR.get()).as_mut() }.ok_or(ProcessLoadError::Storage)?;
         allocator
             .free_contiguous(backing_pages)
             .map_err(page_alloc_error_to_process_load_error)?;
@@ -2891,15 +3044,53 @@ mod tests {
         assert_eq!(mapped.virtual_plan(), plan);
         assert_eq!(mapped.map_start(), 0x0001_5000);
         assert_eq!(mapped.backing_start(), 0x0000_9000);
-        assert_eq!(mapped.page_count(), 7);
+        assert_eq!(mapped.image_page_count(), 2);
+        assert_eq!(mapped.stack_map_start(), 0x0001_b000);
+        assert_eq!(mapped.stack_page_count(), 1);
+        assert_eq!(mapped.page_count(), 3);
         assert_eq!(
             allocator
                 .allocate_contiguous(1)
                 .expect("next frame allocates"),
             crate::page_alloc::FrameRange {
-                start: 0x0001_0000,
+                start: 0x0000_c000,
                 frame_count: 1,
             }
+        );
+    }
+
+    #[test]
+    fn mapped_dynamic_user_load_plan_leaves_uncommitted_arena_pages_free() {
+        let mut allocator =
+            crate::page_alloc::PageFrameAllocator::new(0x0003_0000).expect("allocator initializes");
+        allocator
+            .reserve_range(0, 0x0001_6000)
+            .expect("kernel image reserves");
+        allocator
+            .reserve_range(0x0002_f000, 0x0003_0000)
+            .expect("kernel trap stack reserves");
+        let init_plan = DynamicUserLoadPlan {
+            load_base: 0x0001_6000,
+            load_end: 0x0001_6612,
+            entry_pc: 0x0001_606e,
+            stack_top: 0x0002_f000,
+            payload_dst: 0x0001_6000,
+            payload_len: 0x612,
+            zero_fill_addr: 0x0001_6612,
+            zero_fill_len: 0,
+        };
+
+        let mapped = allocate_mapped_dynamic_user_load_plan(init_plan, &mut allocator)
+            .expect("init backing allocates");
+
+        assert_eq!(mapped.map_start(), 0x0001_6000);
+        assert_eq!(mapped.image_page_count(), 1);
+        assert_eq!(mapped.stack_map_start(), 0x0002_e000);
+        assert_eq!(mapped.stack_page_count(), 1);
+        assert_eq!(mapped.page_count(), 2);
+        assert!(
+            allocator.free_frames() >= 20,
+            "uncommitted arena pages should remain available for shell child"
         );
     }
 
@@ -2927,11 +3118,11 @@ mod tests {
 
         assert_eq!(
             allocator
-                .allocate_contiguous(7)
+                .allocate_contiguous(3)
                 .expect("released frames allocate"),
             crate::page_alloc::FrameRange {
                 start: 0x0000_9000,
-                frame_count: 7,
+                frame_count: 3,
             }
         );
     }
@@ -3427,6 +3618,12 @@ mod tests {
     }
 
     #[test]
+    fn translated_child_arena_start_rounds_parent_break_to_page_boundary() {
+        assert_eq!(translated_child_arena_start(0x0001_6614), Ok(0x0001_7000));
+        assert_eq!(translated_child_arena_start(0x0001_7000), Ok(0x0001_7000));
+    }
+
+    #[test]
     fn translated_init_arena_reserves_top_page_for_kernel_trap_stack() {
         assert_eq!(
             translated_init_arena_end(0x0003_0000),
@@ -3640,7 +3837,7 @@ mod tests {
                 kernel_stack_top: 0x0001_d000,
                 backing_pages: Some(crate::page_alloc::FrameRange {
                     start: 0x0000_9000,
-                    frame_count: 7,
+                    frame_count: 3,
                 }),
             }
         );
@@ -3654,13 +3851,13 @@ mod tests {
             writes[3],
             (k16_abi::computer::mmu0::PHYSICAL_START, 0x0000_9000)
         );
-        assert_eq!(writes[4], (k16_abi::computer::mmu0::PAGE_COUNT, 7));
+        assert_eq!(writes[4], (k16_abi::computer::mmu0::PAGE_COUNT, 2));
         assert_eq!(
             allocator
                 .allocate_contiguous(1)
                 .expect("next frame allocates"),
             crate::page_alloc::FrameRange {
-                start: 0x0001_0000,
+                start: 0x0000_c000,
                 frame_count: 1,
             }
         );

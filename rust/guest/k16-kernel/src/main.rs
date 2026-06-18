@@ -13,6 +13,7 @@ mod gpu;
 mod init;
 mod memory_layout;
 mod mmio;
+mod page_alloc;
 mod process;
 mod stdin;
 mod syscall;
