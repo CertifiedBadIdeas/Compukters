@@ -19,7 +19,7 @@
 
 package ru.lazyhat.compukterkraft.common.ui.dsl
 
-import net.minecraft.network.chat.Component
+import net.minecraft.network.chat.contents.TranslatableContents
 import ru.lazyhat.compukterkraft.common.localization.CompukterComponents
 import ru.lazyhat.compukterkraft.common.localization.CompukterKeys
 import ru.lazyhat.compukterkraft.common.localization.CompukterTranslatable
@@ -38,8 +38,14 @@ class CompukterLangGenerationSmokeTest {
             CompukterTranslatable.Gui.Terminal.connecting.value
                 .isNotBlank(),
         )
-        assertTrue(CompukterComponents.Gui.Terminal.connecting is Component)
-        assertTrue(CompukterComponents.Gui.Tooltip.computerId("42") is Component)
+        assertEquals(
+            "gui.compukterkraft.terminal.connecting",
+            (CompukterComponents.Gui.Terminal.connecting.contents as TranslatableContents).key,
+        )
+        assertEquals(
+            "gui.compukterkraft.tooltip.computer_id",
+            (CompukterComponents.Gui.Tooltip.computerId("42").contents as TranslatableContents).key,
+        )
         assertEquals(
             "itemGroup.compukterkraft",
             CompukterKeys.ItemGroup.COMPUKTERKRAFT,
