@@ -52,6 +52,20 @@ dependencies {
 included-build coordinate. In-tree Compukter Kraft usage remains
 `projects.uiDsl` until the repository split happens.
 
+## Consumer Fixture
+
+The repository includes a standalone consumer fixture that exercises the same
+coordinate through a Gradle composite build:
+
+```bash
+./gradlew-sandbox-dev -p fixtures/ui-dsl-consumer test
+```
+
+This fixture intentionally lives outside the main production module graph. It
+depends on `implementation("ru.lazyhat:kraft-ui-dsl")` and maps that coordinate
+to `:ui-dsl` through dependency substitution, matching the intended external
+source-consumption path before the DSL moves to its own repository.
+
 ## Boundary
 
 The DSL module must not depend on Minecraft, NeoForge, Architectury, Compukter
