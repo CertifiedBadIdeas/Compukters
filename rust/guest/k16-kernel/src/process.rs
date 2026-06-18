@@ -87,6 +87,9 @@ static mut RUNTIME_SLOT1_KERNEL_STACK_TOP: u32 = 0;
 #[cfg(not(test))]
 static mut RUNTIME_SLOT2_KERNEL_STACK_TOP: u32 = 0;
 #[cfg(not(test))]
+static RUNTIME_PAGE_ALLOCATOR: KernelCell<Option<crate::page_alloc::PageFrameAllocator>> =
+    KernelCell::new(None);
+#[cfg(not(test))]
 unsafe extern "C" {
     static __k16_image_end: u8;
 }
@@ -752,12 +755,24 @@ pub unsafe fn begin_translated_init_from_storage0(
     path: &[u8],
     boot_info: k16_abi::computer::profile::BootInfo,
 ) -> Result<ChildLaunch, ProcessLoadError> {
+    let kernel_image_end = unsafe { initial_user_kernel_image_end() };
     let (arena, kernel_stack_top) =
         translated_init_user_arena(boot_info.program_base, boot_info.ram_size, unsafe {
             initial_user_kernel_reserved_end()
         })?;
     let child_plan = unsafe { load_dynamic_user_program_from_storage0(path, arena)? };
-    let translated = unsafe { create_translated_user_launch(child_plan, kernel_stack_top)? };
+    let mut allocator = crate::page_alloc::PageFrameAllocator::new_for_kernel(
+        translated_init_kernel_reserved_ranges(
+            boot_info.program_base,
+            boot_info.ram_size,
+            kernel_image_end,
+            kernel_stack_top,
+        ),
+    )
+    .map_err(page_alloc_error_to_process_load_error)?;
+    let translated = unsafe {
+        create_translated_user_launch_with_allocator(child_plan, kernel_stack_top, &mut allocator)?
+    };
     let memory = ProcessMemory::new(child_plan.load_base, translated.stack_top)?;
     let heap = HeapState::from_bounds(child_plan.load_end, memory.end)
         .map_err(|_| ProcessLoadError::ProgramTooLarge)?;
@@ -789,6 +804,7 @@ pub unsafe fn begin_translated_init_from_storage0(
             translated.kernel_stack_top,
         );
         *runtime_slot_frame(INIT_PROCESS_SLOT).get() = k16_rt::TrapFrame::from(frame);
+        *RUNTIME_PAGE_ALLOCATOR.get() = Some(allocator);
     }
     Ok(ChildLaunch {
         id: ProcessId::Init,
@@ -1511,10 +1527,33 @@ fn translated_init_user_arena(
     Ok((UserArena::new(arena_start, arena_end)?, kernel_stack_top))
 }
 
+fn translated_init_kernel_reserved_ranges(
+    program_base: u32,
+    ram_size: u32,
+    kernel_image_end: u32,
+    kernel_stack_top: u32,
+) -> crate::page_alloc::KernelReservedRanges {
+    crate::page_alloc::KernelReservedRanges {
+        ram_size,
+        boot_reserved_end: program_base,
+        loader_scratch_end: INITIAL_USER_LOADER_SCRATCH_END,
+        kernel_image_end,
+        terminal_cells_end: crate::memory_layout::terminal_cells_end(),
+        init_kernel_stack_top: kernel_stack_top,
+        init_kernel_stack_bytes: TRANSLATED_TRAP_STACK_BYTES,
+    }
+}
+
 #[cfg(not(test))]
 unsafe fn initial_user_kernel_reserved_end() -> u32 {
-    let image_end = core::ptr::addr_of!(__k16_image_end) as u32;
+    let image_end = unsafe { initial_user_kernel_image_end() };
     image_end.max(crate::memory_layout::terminal_cells_end())
+}
+
+#[cfg(not(test))]
+unsafe fn initial_user_kernel_image_end() -> u32 {
+    let image_end = core::ptr::addr_of!(__k16_image_end) as u32;
+    image_end
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -1714,6 +1753,60 @@ unsafe fn create_translated_user_launch(
         stack_top: plan.stack_top,
         kernel_stack_top,
     })
+}
+
+unsafe fn create_translated_user_launch_with_allocator(
+    plan: DynamicUserLoadPlan,
+    kernel_stack_top: u32,
+    allocator: &mut crate::page_alloc::PageFrameAllocator,
+) -> Result<TranslatedUserLaunch, ProcessLoadError> {
+    let map_start = page_align_down(plan.load_base);
+    let map_end = page_align_up(plan.stack_top)?;
+    if map_start >= map_end {
+        return Err(ProcessLoadError::InvalidArena);
+    }
+    let page_count = (map_end - map_start) / VM_PAGE_SIZE;
+    let backing = allocator
+        .allocate_contiguous(page_count)
+        .map_err(page_alloc_error_to_process_load_error)?;
+    let address_space = match unsafe { mmu0_create_address_space() } {
+        Ok(address_space) => address_space,
+        Err(error) => {
+            let _ = allocator.free_contiguous(backing);
+            return Err(error);
+        }
+    };
+    let map_result = unsafe {
+        mmu0_map_pages(
+            address_space,
+            map_start,
+            backing.start,
+            page_count,
+            k16_abi::computer::mmu0::FLAG_USER_ACCESSIBLE
+                | k16_abi::computer::mmu0::FLAG_WRITABLE
+                | k16_abi::computer::mmu0::FLAG_EXECUTABLE,
+        )
+    };
+    if let Err(error) = map_result {
+        let _ = unsafe { mmu0_destroy_address_space(address_space) };
+        let _ = allocator.free_contiguous(backing);
+        return Err(error);
+    }
+    Ok(TranslatedUserLaunch {
+        address_space,
+        entry_pc: plan.entry_pc,
+        stack_top: plan.stack_top,
+        kernel_stack_top,
+    })
+}
+
+fn page_alloc_error_to_process_load_error(
+    error: crate::page_alloc::PageAllocError,
+) -> ProcessLoadError {
+    match error {
+        crate::page_alloc::PageAllocError::InvalidRange => ProcessLoadError::InvalidArena,
+        crate::page_alloc::PageAllocError::OutOfMemory => ProcessLoadError::ProgramTooLarge,
+    }
 }
 
 unsafe fn mmu0_create_address_space() -> Result<u32, ProcessLoadError> {
@@ -2773,6 +2866,32 @@ mod tests {
     }
 
     #[test]
+    fn translated_init_kernel_reserved_ranges_match_initial_arena_bounds() {
+        let (arena, kernel_stack_top) =
+            translated_init_user_arena(0x0000_0100, 0x0003_0000, 0x0000_8450)
+                .expect("arena initializes");
+        let mut allocator = crate::page_alloc::PageFrameAllocator::new_for_kernel(
+            translated_init_kernel_reserved_ranges(
+                0x0000_0100,
+                0x0003_0000,
+                0x0000_8450,
+                kernel_stack_top,
+            ),
+        )
+        .expect("allocator initializes");
+
+        assert_eq!(
+            allocator
+                .allocate_contiguous(1)
+                .expect("first frame allocates"),
+            crate::page_alloc::FrameRange {
+                start: arena.start,
+                frame_count: 1,
+            }
+        );
+    }
+
+    #[test]
     fn runtime_launch_policy_translates_shell_and_nested_utility_children() {
         assert!(should_translate_runtime_child_path(b"/bin/shell.kx"));
         assert!(should_translate_runtime_child_path(b"/bin/cat.kx"));
@@ -2883,6 +3002,62 @@ mod tests {
                 k16_abi::computer::mmu0::COMMAND,
                 k16_abi::computer::mmu0::COMMAND_MAP_PAGES as u32,
             )
+        );
+    }
+
+    #[test]
+    fn translated_user_launch_allocates_child_backing_pages() {
+        crate::mmio::reset_test_state();
+        crate::mmio::set_test_mmu0_result(7, k16_abi::computer::mmu0::STATUS_DONE, 0);
+        let mut allocator =
+            crate::page_alloc::PageFrameAllocator::new(0x0003_0000).expect("allocator initializes");
+        allocator
+            .reserve_range(0, 0x0000_9000)
+            .expect("kernel frames reserve");
+        let child_plan = DynamicUserLoadPlan {
+            load_base: 0x0001_5020,
+            load_end: 0x0001_6020,
+            entry_pc: 0x0001_5024,
+            stack_top: 0x0001_c000,
+            payload_dst: 0x0001_5020,
+            payload_len: 16,
+            zero_fill_addr: 0x0001_5030,
+            zero_fill_len: 16,
+        };
+
+        let translated = unsafe {
+            create_translated_user_launch_with_allocator(child_plan, 0x0001_d000, &mut allocator)
+        }
+        .expect("translated launch maps");
+
+        assert_eq!(
+            translated,
+            TranslatedUserLaunch {
+                address_space: 7,
+                entry_pc: 0x0001_5024,
+                stack_top: 0x0001_c000,
+                kernel_stack_top: 0x0001_d000,
+            }
+        );
+        let writes = crate::mmio::take_test_writes();
+        let writes = writes.as_slice();
+        assert_eq!(
+            writes[2],
+            (k16_abi::computer::mmu0::VIRTUAL_START, 0x0001_5000)
+        );
+        assert_eq!(
+            writes[3],
+            (k16_abi::computer::mmu0::PHYSICAL_START, 0x0000_9000)
+        );
+        assert_eq!(writes[4], (k16_abi::computer::mmu0::PAGE_COUNT, 7));
+        assert_eq!(
+            allocator
+                .allocate_contiguous(1)
+                .expect("next frame allocates"),
+            crate::page_alloc::FrameRange {
+                start: 0x0001_0000,
+                frame_count: 1,
+            }
         );
     }
 
