@@ -16,6 +16,46 @@ pub struct FrameRange {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct KernelReservedRanges {
+    pub ram_size: u32,
+    pub boot_reserved_end: u32,
+    pub loader_scratch_end: u32,
+    pub kernel_image_end: u32,
+    pub terminal_cells_end: u32,
+    pub init_kernel_stack_top: u32,
+    pub init_kernel_stack_bytes: u32,
+}
+
+impl KernelReservedRanges {
+    fn lower_reserved_end(self) -> u32 {
+        let mut end = self.boot_reserved_end;
+        if self.loader_scratch_end > end {
+            end = self.loader_scratch_end;
+        }
+        if self.kernel_image_end > end {
+            end = self.kernel_image_end;
+        }
+        if self.terminal_cells_end > end {
+            end = self.terminal_cells_end;
+        }
+        end
+    }
+
+    fn init_kernel_stack_start(self) -> Result<u32, PageAllocError> {
+        if self.init_kernel_stack_bytes == 0
+            || self.init_kernel_stack_top % PAGE_SIZE != 0
+            || self.init_kernel_stack_bytes % PAGE_SIZE != 0
+            || self.init_kernel_stack_top > self.ram_size
+        {
+            return Err(PageAllocError::InvalidRange);
+        }
+        self.init_kernel_stack_top
+            .checked_sub(self.init_kernel_stack_bytes)
+            .ok_or(PageAllocError::InvalidRange)
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PageFrameAllocator {
     total_frames: u32,
     reserved: [u32; BIT_WORDS],
@@ -36,6 +76,18 @@ impl PageFrameAllocator {
             reserved: [0; BIT_WORDS],
             allocated: [0; BIT_WORDS],
         })
+    }
+
+    pub fn new_for_kernel(ranges: KernelReservedRanges) -> Result<Self, PageAllocError> {
+        let mut allocator = Self::new(ranges.ram_size)?;
+        let lower_reserved_end = ranges.lower_reserved_end();
+        if lower_reserved_end > 0 {
+            allocator.reserve_range(0, lower_reserved_end)?;
+        }
+
+        let stack_start = ranges.init_kernel_stack_start()?;
+        allocator.reserve_range(stack_start, ranges.init_kernel_stack_top)?;
+        Ok(allocator)
     }
 
     pub const fn total_frames(&self) -> u32 {
@@ -256,6 +308,64 @@ mod tests {
         assert_eq!(
             allocator.allocate_contiguous(2),
             Err(PageAllocError::OutOfMemory)
+        );
+    }
+
+    #[test]
+    fn kernel_reserved_ranges_mark_kernel_owned_frames_unavailable() {
+        let mut allocator = PageFrameAllocator::new_for_kernel(KernelReservedRanges {
+            ram_size: 0x0003_0000,
+            boot_reserved_end: 0x0000_0100,
+            loader_scratch_end: 0x0000_0800,
+            kernel_image_end: 0x0000_8450,
+            terminal_cells_end: 0x0000_352d,
+            init_kernel_stack_top: 0x0003_0000,
+            init_kernel_stack_bytes: PAGE_SIZE,
+        })
+        .expect("kernel allocator initializes");
+
+        assert!(allocator.is_frame_reserved(0));
+        assert!(allocator.is_frame_reserved(3));
+        assert!(allocator.is_frame_reserved(8));
+        assert!(allocator.is_frame_reserved(47));
+
+        let range = allocator.allocate_contiguous(1).expect("frame allocates");
+
+        assert_eq!(
+            range,
+            FrameRange {
+                start: 0x0000_9000,
+                frame_count: 1,
+            }
+        );
+    }
+
+    #[test]
+    fn kernel_reserved_ranges_reject_invalid_init_stack() {
+        assert_eq!(
+            PageFrameAllocator::new_for_kernel(KernelReservedRanges {
+                ram_size: 0x0001_0000,
+                boot_reserved_end: 0x0000_0100,
+                loader_scratch_end: 0x0000_0800,
+                kernel_image_end: 0x0000_8450,
+                terminal_cells_end: 0x0000_352d,
+                init_kernel_stack_top: 0x0002_0000,
+                init_kernel_stack_bytes: PAGE_SIZE,
+            }),
+            Err(PageAllocError::InvalidRange)
+        );
+
+        assert_eq!(
+            PageFrameAllocator::new_for_kernel(KernelReservedRanges {
+                ram_size: 0x0001_0000,
+                boot_reserved_end: 0x0000_0100,
+                loader_scratch_end: 0x0000_0800,
+                kernel_image_end: 0x0000_8450,
+                terminal_cells_end: 0x0000_352d,
+                init_kernel_stack_top: 0x0000_0800,
+                init_kernel_stack_bytes: PAGE_SIZE,
+            }),
+            Err(PageAllocError::InvalidRange)
         );
     }
 }
