@@ -713,6 +713,66 @@ impl ChildArgv {
     }
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+struct ChildArgvLayout {
+    argc: u32,
+    table_ptr: u32,
+    arg_data_ptr: u32,
+    end: u32,
+}
+
+impl ChildArgvLayout {
+    fn new(plan: DynamicUserLoadPlan, args: &[&[u8]]) -> Result<Self, ProcessLoadError> {
+        if args.is_empty() {
+            return Ok(Self {
+                argc: 0,
+                table_ptr: 0,
+                arg_data_ptr: 0,
+                end: 0,
+            });
+        }
+        if args.len() > k16_abi::syscall::MAX_RUN_ARGS {
+            return Err(ProcessLoadError::InvalidPath);
+        }
+        let table_ptr = align_up(plan.load_end, STACK_ALIGNMENT)?;
+        let table_bytes = (args.len() as u32)
+            .checked_mul(CHILD_ARG_ENTRY_BYTES)
+            .ok_or(ProcessLoadError::AddressOverflow)?;
+        let arg_data_ptr = table_ptr
+            .checked_add(table_bytes)
+            .ok_or(ProcessLoadError::AddressOverflow)?;
+        let mut cursor = arg_data_ptr;
+        for arg in args {
+            if arg.len() > k16_abi::syscall::MAX_RUN_ARG_BYTES {
+                return Err(ProcessLoadError::InvalidPath);
+            }
+            cursor = cursor
+                .checked_add(arg.len() as u32)
+                .ok_or(ProcessLoadError::AddressOverflow)?;
+        }
+        let end = align_up(cursor, HEAP_ALIGNMENT)?;
+        let heap_limit = heap_limit_from_stack_top(plan.stack_top)
+            .map_err(|_| ProcessLoadError::ProgramTooLarge)?;
+        if end > heap_limit {
+            return Err(ProcessLoadError::ProgramTooLarge);
+        }
+        Ok(Self {
+            argc: args.len() as u32,
+            table_ptr,
+            arg_data_ptr,
+            end,
+        })
+    }
+
+    const fn child_argv(self) -> ChildArgv {
+        ChildArgv {
+            argc: self.argc,
+            table_ptr: self.table_ptr,
+            end: self.end,
+        }
+    }
+}
+
 #[cfg(any(not(test), feature = "host-test"))]
 pub unsafe fn initialize_init_process(
     image: k16_boot_chain::LoadedImage,
@@ -760,7 +820,6 @@ pub unsafe fn begin_translated_init_from_storage0(
         translated_init_user_arena(boot_info.program_base, boot_info.ram_size, unsafe {
             initial_user_kernel_reserved_end()
         })?;
-    let child_plan = unsafe { load_dynamic_user_program_from_storage0(path, arena)? };
     let mut allocator = crate::page_alloc::PageFrameAllocator::new_for_kernel(
         translated_init_kernel_reserved_ranges(
             boot_info.program_base,
@@ -770,8 +829,17 @@ pub unsafe fn begin_translated_init_from_storage0(
         ),
     )
     .map_err(page_alloc_error_to_process_load_error)?;
-    let translated = unsafe {
-        create_translated_user_launch_with_allocator(child_plan, kernel_stack_top, &mut allocator)?
+    let mapped_child_plan =
+        unsafe { load_dynamic_user_program_from_storage0_mapped(path, arena, &mut allocator)? };
+    let child_plan = mapped_child_plan.virtual_plan();
+    let translated = match unsafe {
+        create_translated_user_launch_from_mapped(mapped_child_plan, kernel_stack_top)
+    } {
+        Ok(translated) => translated,
+        Err(error) => {
+            let _ = free_mapped_dynamic_user_load_plan(mapped_child_plan, &mut allocator);
+            return Err(error);
+        }
     };
     let memory = ProcessMemory::new(child_plan.load_base, translated.stack_top)?;
     let heap = HeapState::from_bounds(child_plan.load_end, memory.end)
@@ -1633,8 +1701,16 @@ impl MappedDynamicUserLoadPlan {
         self.virtual_plan
     }
 
+    pub const fn map_start(&self) -> u32 {
+        self.map_start
+    }
+
     pub const fn backing_start(&self) -> u32 {
         self.backing_start
+    }
+
+    pub const fn page_count(&self) -> u32 {
+        self.page_count
     }
 
     pub fn payload_dst(&self) -> u32 {
@@ -1664,6 +1740,34 @@ impl MappedDynamicUserLoadPlan {
             .checked_add(offset)
             .ok_or(ProcessLoadError::AddressOverflow)
     }
+}
+
+fn allocate_mapped_dynamic_user_load_plan(
+    plan: DynamicUserLoadPlan,
+    allocator: &mut crate::page_alloc::PageFrameAllocator,
+) -> Result<MappedDynamicUserLoadPlan, ProcessLoadError> {
+    let map_start = page_align_down(plan.load_base);
+    let map_end = page_align_up(plan.stack_top)?;
+    if map_start >= map_end {
+        return Err(ProcessLoadError::InvalidArena);
+    }
+    let page_count = (map_end - map_start) / VM_PAGE_SIZE;
+    let backing = allocator
+        .allocate_contiguous(page_count)
+        .map_err(page_alloc_error_to_process_load_error)?;
+    MappedDynamicUserLoadPlan::new(plan, map_start, backing.start, backing.frame_count)
+}
+
+fn free_mapped_dynamic_user_load_plan(
+    plan: MappedDynamicUserLoadPlan,
+    allocator: &mut crate::page_alloc::PageFrameAllocator,
+) -> Result<(), ProcessLoadError> {
+    allocator
+        .free_contiguous(crate::page_alloc::FrameRange {
+            start: plan.backing_start(),
+            frame_count: plan.page_count(),
+        })
+        .map_err(page_alloc_error_to_process_load_error)
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -1744,38 +1848,14 @@ pub unsafe fn install_child_argv(
     plan: DynamicUserLoadPlan,
     args: &[&[u8]],
 ) -> Result<ChildArgv, ProcessLoadError> {
+    let layout = ChildArgvLayout::new(plan, args)?;
     if args.is_empty() {
-        return Ok(ChildArgv::empty());
+        return Ok(layout.child_argv());
     }
-    if args.len() > k16_abi::syscall::MAX_RUN_ARGS {
-        return Err(ProcessLoadError::InvalidPath);
-    }
-    let table_ptr = align_up(plan.load_end, STACK_ALIGNMENT)?;
-    let table_bytes = (args.len() as u32)
-        .checked_mul(CHILD_ARG_ENTRY_BYTES)
-        .ok_or(ProcessLoadError::AddressOverflow)?;
-    let arg_data_ptr = table_ptr
-        .checked_add(table_bytes)
-        .ok_or(ProcessLoadError::AddressOverflow)?;
-    let mut cursor = arg_data_ptr;
-    for arg in args {
-        if arg.len() > k16_abi::syscall::MAX_RUN_ARG_BYTES {
-            return Err(ProcessLoadError::InvalidPath);
-        }
-        cursor = cursor
-            .checked_add(arg.len() as u32)
-            .ok_or(ProcessLoadError::AddressOverflow)?;
-    }
-    let end = align_up(cursor, HEAP_ALIGNMENT)?;
-    let heap_limit =
-        heap_limit_from_stack_top(plan.stack_top).map_err(|_| ProcessLoadError::ProgramTooLarge)?;
-    if end > heap_limit {
-        return Err(ProcessLoadError::ProgramTooLarge);
-    }
-    let mut arg_ptr = arg_data_ptr;
+    let mut arg_ptr = layout.arg_data_ptr;
     let mut index = 0_u32;
     for arg in args {
-        let entry_ptr = table_ptr + index * CHILD_ARG_ENTRY_BYTES;
+        let entry_ptr = layout.table_ptr + index * CHILD_ARG_ENTRY_BYTES;
         let arg_len = arg.len() as u32;
         unsafe {
             write_u32_le(entry_ptr, arg_ptr);
@@ -1787,11 +1867,36 @@ pub unsafe fn install_child_argv(
             .ok_or(ProcessLoadError::AddressOverflow)?;
         index += 1;
     }
-    Ok(ChildArgv {
-        argc: args.len() as u32,
-        table_ptr,
-        end,
-    })
+    Ok(layout.child_argv())
+}
+
+pub unsafe fn install_mapped_child_argv(
+    plan: MappedDynamicUserLoadPlan,
+    args: &[&[u8]],
+) -> Result<ChildArgv, ProcessLoadError> {
+    let virtual_plan = plan.virtual_plan();
+    let layout = ChildArgvLayout::new(virtual_plan, args)?;
+    if args.is_empty() {
+        return Ok(layout.child_argv());
+    }
+    let mut arg_ptr = layout.arg_data_ptr;
+    let mut index = 0_u32;
+    for arg in args {
+        let entry_ptr = layout.table_ptr + index * CHILD_ARG_ENTRY_BYTES;
+        let arg_len = arg.len() as u32;
+        let physical_entry_ptr = plan.translate_address(entry_ptr)?;
+        let physical_arg_ptr = plan.translate_address(arg_ptr)?;
+        unsafe {
+            write_u32_le(physical_entry_ptr, arg_ptr);
+            write_u32_le(physical_entry_ptr + 4, arg_len);
+            copy_bytes_to_ram(arg, physical_arg_ptr);
+        }
+        arg_ptr = arg_ptr
+            .checked_add(arg_len)
+            .ok_or(ProcessLoadError::AddressOverflow)?;
+        index += 1;
+    }
+    Ok(layout.child_argv())
 }
 
 unsafe fn create_translated_user_launch(
@@ -1828,33 +1933,36 @@ unsafe fn create_translated_user_launch(
     })
 }
 
+#[cfg(test)]
 unsafe fn create_translated_user_launch_with_allocator(
     plan: DynamicUserLoadPlan,
     kernel_stack_top: u32,
     allocator: &mut crate::page_alloc::PageFrameAllocator,
 ) -> Result<TranslatedUserLaunch, ProcessLoadError> {
-    let map_start = page_align_down(plan.load_base);
-    let map_end = page_align_up(plan.stack_top)?;
-    if map_start >= map_end {
-        return Err(ProcessLoadError::InvalidArena);
-    }
-    let page_count = (map_end - map_start) / VM_PAGE_SIZE;
-    let backing = allocator
-        .allocate_contiguous(page_count)
-        .map_err(page_alloc_error_to_process_load_error)?;
-    let address_space = match unsafe { mmu0_create_address_space() } {
-        Ok(address_space) => address_space,
+    let mapped = allocate_mapped_dynamic_user_load_plan(plan, allocator)?;
+    match unsafe { create_translated_user_launch_from_mapped(mapped, kernel_stack_top) } {
+        Ok(launch) => Ok(launch),
         Err(error) => {
-            let _ = allocator.free_contiguous(backing);
-            return Err(error);
+            let _ = allocator.free_contiguous(crate::page_alloc::FrameRange {
+                start: mapped.backing_start(),
+                frame_count: mapped.page_count(),
+            });
+            Err(error)
         }
-    };
+    }
+}
+
+unsafe fn create_translated_user_launch_from_mapped(
+    mapped: MappedDynamicUserLoadPlan,
+    kernel_stack_top: u32,
+) -> Result<TranslatedUserLaunch, ProcessLoadError> {
+    let address_space = unsafe { mmu0_create_address_space()? };
     let map_result = unsafe {
         mmu0_map_pages(
             address_space,
-            map_start,
-            backing.start,
-            page_count,
+            mapped.map_start(),
+            mapped.backing_start(),
+            mapped.page_count(),
             k16_abi::computer::mmu0::FLAG_USER_ACCESSIBLE
                 | k16_abi::computer::mmu0::FLAG_WRITABLE
                 | k16_abi::computer::mmu0::FLAG_EXECUTABLE,
@@ -1862,9 +1970,9 @@ unsafe fn create_translated_user_launch_with_allocator(
     };
     if let Err(error) = map_result {
         let _ = unsafe { mmu0_destroy_address_space(address_space) };
-        let _ = allocator.free_contiguous(backing);
         return Err(error);
     }
+    let plan = mapped.virtual_plan();
     Ok(TranslatedUserLaunch {
         address_space,
         entry_pc: plan.entry_pc,
@@ -2037,6 +2145,19 @@ pub unsafe fn load_dynamic_user_program_from_storage0(
     unsafe { load_selected_dynamic_user_program(arena) }
 }
 
+pub unsafe fn load_dynamic_user_program_from_storage0_mapped(
+    path: &[u8],
+    arena: UserArena,
+    allocator: &mut crate::page_alloc::PageFrameAllocator,
+) -> Result<MappedDynamicUserLoadPlan, ProcessLoadError> {
+    let path = UserProgramPath::parse(path)?;
+    unsafe {
+        k16_storage::open_file_from_storage0(ROOT_PARTITION, path.components())
+            .map_err(|_| ProcessLoadError::Storage)?;
+    }
+    unsafe { load_selected_dynamic_user_program_mapped(arena, allocator) }
+}
+
 pub unsafe fn load_selected_dynamic_user_program(
     arena: UserArena,
 ) -> Result<DynamicUserLoadPlan, ProcessLoadError> {
@@ -2090,6 +2211,69 @@ pub unsafe fn load_selected_dynamic_user_program(
     Ok(plan)
 }
 
+pub unsafe fn load_selected_dynamic_user_program_mapped(
+    arena: UserArena,
+    allocator: &mut crate::page_alloc::PageFrameAllocator,
+) -> Result<MappedDynamicUserLoadPlan, ProcessLoadError> {
+    unsafe {
+        k16_storage::copy_selected_file_range_to_ram(
+            0,
+            k16_storage::SCRATCH_ADDR,
+            k16_image::DYNAMIC_K16E_V2_HEADER_SIZE,
+        )
+        .map_err(|_| ProcessLoadError::Storage)?;
+    }
+    let header = unsafe {
+        core::slice::from_raw_parts(
+            k16_storage::SCRATCH_ADDR as usize as *const u8,
+            k16_image::DYNAMIC_K16E_V2_HEADER_SIZE as usize,
+        )
+    };
+    validate_dynamic_header_bytes(header, unsafe { k16_storage::selected_file_size() })?;
+    let entry_offset = header_u32(header, 12);
+    let payload_offset = header_u32(header, 40);
+    let file_size = header_u32(header, 44);
+    let memory_size = header_u32(header, 48);
+    let relocation_table_offset = header_u32(header, 60);
+    let relocation_count = header_u32(header, 68);
+    let plan = plan_dynamic_user_load(
+        arena,
+        DynamicUserImage {
+            entry_offset,
+            file_size,
+            memory_size,
+        },
+    )?;
+    let mapped = allocate_mapped_dynamic_user_load_plan(plan, allocator)?;
+
+    if let Err(error) = unsafe {
+        k16_storage::copy_selected_file_range_to_ram(
+            payload_offset,
+            mapped.payload_dst(),
+            plan.payload_len,
+        )
+        .map_err(|_| ProcessLoadError::Storage)
+    } {
+        let _ = free_mapped_dynamic_user_load_plan(mapped, allocator);
+        return Err(error);
+    }
+    unsafe {
+        zero_fill_ram(mapped.zero_fill_addr(), plan.zero_fill_len);
+    }
+    if let Err(error) = unsafe {
+        apply_selected_file_relocations_mapped(
+            relocation_table_offset,
+            relocation_count,
+            memory_size,
+            mapped,
+        )
+    } {
+        let _ = free_mapped_dynamic_user_load_plan(mapped, allocator);
+        return Err(error);
+    }
+    Ok(mapped)
+}
+
 fn validate_dynamic_image(image: DynamicUserImage) -> Result<(), ProcessLoadError> {
     if image.file_size == 0
         || image.memory_size < image.file_size
@@ -2130,6 +2314,38 @@ unsafe fn apply_selected_file_relocations(
         let relocation_kind = unsafe { read_u32_le(RELOCATION_RECORD_ADDR + 4) };
         validate_dynamic_relocation_record(relocation_offset, relocation_kind, memory_size)?;
         unsafe { apply_dynamic_relocation_to_ram(plan, relocation_offset)? };
+        index += 1;
+    }
+    Ok(())
+}
+
+unsafe fn apply_selected_file_relocations_mapped(
+    relocation_table_offset: u32,
+    relocation_count: u32,
+    memory_size: u32,
+    plan: MappedDynamicUserLoadPlan,
+) -> Result<(), ProcessLoadError> {
+    let mut index = 0;
+    while index < relocation_count {
+        let relocation_offset = relocation_table_offset
+            .checked_add(
+                index
+                    .checked_mul(k16_image::K16E_RELOCATION_RECORD_SIZE)
+                    .ok_or(ProcessLoadError::AddressOverflow)?,
+            )
+            .ok_or(ProcessLoadError::AddressOverflow)?;
+        unsafe {
+            k16_storage::copy_selected_file_range_to_ram(
+                relocation_offset,
+                RELOCATION_RECORD_ADDR,
+                k16_image::K16E_RELOCATION_RECORD_SIZE,
+            )
+            .map_err(|_| ProcessLoadError::Storage)?;
+        }
+        let relocation_offset = unsafe { read_u32_le(RELOCATION_RECORD_ADDR) };
+        let relocation_kind = unsafe { read_u32_le(RELOCATION_RECORD_ADDR + 4) };
+        validate_dynamic_relocation_record(relocation_offset, relocation_kind, memory_size)?;
+        unsafe { apply_dynamic_relocation_to_mapped_ram(plan, relocation_offset)? };
         index += 1;
     }
     Ok(())
@@ -2233,6 +2449,19 @@ unsafe fn apply_dynamic_relocation_to_ram(
     let value = unsafe { read_u32_le(field_addr) };
     let relocated = value
         .checked_add(plan.load_base)
+        .ok_or(ProcessLoadError::AddressOverflow)?;
+    unsafe { write_u32_le(field_addr, relocated) };
+    Ok(())
+}
+
+unsafe fn apply_dynamic_relocation_to_mapped_ram(
+    plan: MappedDynamicUserLoadPlan,
+    relocation_offset: u32,
+) -> Result<(), ProcessLoadError> {
+    let field_addr = plan.relocation_field_addr(relocation_offset)?;
+    let value = unsafe { read_u32_le(field_addr) };
+    let relocated = value
+        .checked_add(plan.virtual_plan().load_base)
         .ok_or(ProcessLoadError::AddressOverflow)?;
     unsafe { write_u32_le(field_addr, relocated) };
     Ok(())
@@ -2523,6 +2752,75 @@ mod tests {
     }
 
     #[test]
+    fn mapped_dynamic_user_load_plan_allocates_backing_pages_from_allocator() {
+        let plan = DynamicUserLoadPlan {
+            load_base: 0x0001_5020,
+            load_end: 0x0001_6020,
+            entry_pc: 0x0001_5024,
+            stack_top: 0x0001_c000,
+            payload_dst: 0x0001_5020,
+            payload_len: 16,
+            zero_fill_addr: 0x0001_5030,
+            zero_fill_len: 16,
+        };
+        let mut allocator =
+            crate::page_alloc::PageFrameAllocator::new(0x0003_0000).expect("allocator initializes");
+        allocator
+            .reserve_range(0, 0x0000_9000)
+            .expect("kernel frames reserve");
+
+        let mapped = allocate_mapped_dynamic_user_load_plan(plan, &mut allocator)
+            .expect("mapped load plan allocates");
+
+        assert_eq!(mapped.virtual_plan(), plan);
+        assert_eq!(mapped.map_start(), 0x0001_5000);
+        assert_eq!(mapped.backing_start(), 0x0000_9000);
+        assert_eq!(mapped.page_count(), 7);
+        assert_eq!(
+            allocator
+                .allocate_contiguous(1)
+                .expect("next frame allocates"),
+            crate::page_alloc::FrameRange {
+                start: 0x0001_0000,
+                frame_count: 1,
+            }
+        );
+    }
+
+    #[test]
+    fn mapped_dynamic_user_load_plan_releases_backing_pages_to_allocator() {
+        let plan = DynamicUserLoadPlan {
+            load_base: 0x0001_5020,
+            load_end: 0x0001_6020,
+            entry_pc: 0x0001_5024,
+            stack_top: 0x0001_c000,
+            payload_dst: 0x0001_5020,
+            payload_len: 16,
+            zero_fill_addr: 0x0001_5030,
+            zero_fill_len: 16,
+        };
+        let mut allocator =
+            crate::page_alloc::PageFrameAllocator::new(0x0003_0000).expect("allocator initializes");
+        allocator
+            .reserve_range(0, 0x0000_9000)
+            .expect("kernel frames reserve");
+        let mapped = allocate_mapped_dynamic_user_load_plan(plan, &mut allocator)
+            .expect("mapped load plan allocates");
+
+        free_mapped_dynamic_user_load_plan(mapped, &mut allocator).expect("mapped load plan frees");
+
+        assert_eq!(
+            allocator
+                .allocate_contiguous(7)
+                .expect("released frames allocate"),
+            crate::page_alloc::FrameRange {
+                start: 0x0000_9000,
+                frame_count: 7,
+            }
+        );
+    }
+
+    #[test]
     fn dynamic_user_load_plan_rejects_program_that_would_reach_stack() {
         let arena = UserArena::new(0x0000_9000, 0x0000_9010).expect("arena is valid");
 
@@ -2670,6 +2968,39 @@ mod tests {
         assert_eq!(child.frame.registers[1], 1);
         assert_eq!(child.frame.registers[2], 0x0000_a024);
         assert_eq!(table.program_break(), Ok(0x0000_a038));
+    }
+
+    #[test]
+    fn mapped_child_argv_layout_keeps_child_addresses_virtual() {
+        let child_plan = DynamicUserLoadPlan {
+            load_base: 0x0001_5020,
+            load_end: 0x0001_6020,
+            entry_pc: 0x0001_5024,
+            stack_top: 0x0001_c000,
+            payload_dst: 0x0001_5020,
+            payload_len: 16,
+            zero_fill_addr: 0x0001_5030,
+            zero_fill_len: 16,
+        };
+        let mapped = MappedDynamicUserLoadPlan::new(child_plan, 0x0001_5000, 0x0000_9000, 7)
+            .expect("mapped load plan initializes");
+        let args = &[b"alpha".as_slice(), b"beta".as_slice()];
+
+        let layout = ChildArgvLayout::new(child_plan, args).expect("argv layout initializes");
+
+        assert_eq!(
+            layout.child_argv(),
+            ChildArgv {
+                argc: 2,
+                table_ptr: 0x0001_6020,
+                end: 0x0001_603c,
+            }
+        );
+        assert_eq!(mapped.translate_address(layout.table_ptr), Ok(0x0000_a020));
+        assert_eq!(
+            mapped.translate_address(layout.arg_data_ptr),
+            Ok(0x0000_a030)
+        );
     }
 
     #[test]
@@ -3209,6 +3540,48 @@ mod tests {
                 frame_count: 1,
             }
         );
+    }
+
+    #[test]
+    fn translated_user_launch_maps_preloaded_backing_pages() {
+        crate::mmio::reset_test_state();
+        crate::mmio::set_test_mmu0_result(7, k16_abi::computer::mmu0::STATUS_DONE, 0);
+        let child_plan = DynamicUserLoadPlan {
+            load_base: 0x0001_5020,
+            load_end: 0x0001_6020,
+            entry_pc: 0x0001_5024,
+            stack_top: 0x0001_c000,
+            payload_dst: 0x0001_5020,
+            payload_len: 16,
+            zero_fill_addr: 0x0001_5030,
+            zero_fill_len: 16,
+        };
+        let mapped = MappedDynamicUserLoadPlan::new(child_plan, 0x0001_5000, 0x0000_9000, 7)
+            .expect("mapped load plan initializes");
+
+        let translated = unsafe { create_translated_user_launch_from_mapped(mapped, 0x0001_d000) }
+            .expect("translated launch maps");
+
+        assert_eq!(
+            translated,
+            TranslatedUserLaunch {
+                address_space: 7,
+                entry_pc: 0x0001_5024,
+                stack_top: 0x0001_c000,
+                kernel_stack_top: 0x0001_d000,
+            }
+        );
+        let writes = crate::mmio::take_test_writes();
+        let writes = writes.as_slice();
+        assert_eq!(
+            writes[2],
+            (k16_abi::computer::mmu0::VIRTUAL_START, 0x0001_5000)
+        );
+        assert_eq!(
+            writes[3],
+            (k16_abi::computer::mmu0::PHYSICAL_START, 0x0000_9000)
+        );
+        assert_eq!(writes[4], (k16_abi::computer::mmu0::PAGE_COUNT, 7));
     }
 
     #[test]
