@@ -169,6 +169,7 @@ copy_from_user(address_space_id, user_virtual_addr, kernel_physical_addr, byte_c
 copy_to_user(address_space_id, user_virtual_addr, kernel_physical_addr, byte_count)
 set_trap_return_physical()
 set_trap_return_address_space(address_space_id, kernel_stack_pointer)
+destroy_address_space(address_space_id)
 ```
 
 `activate_user_address_space` switches the current K16 CPU to translated user
@@ -179,11 +180,13 @@ before guest execution continues. User translation is host-enforced, and the
 kernel configures mappings instead of publishing raw page-table memory for the
 host to walk.
 
-Address-space destruction and unmapping are intentionally left for a later
-lifecycle slice. The first control boundary is enough to construct mappings and
-enter one translated user context without changing physical-mode boot. The copy
-commands let physical/kernel syscall handlers move bytes across the user/kernel
-boundary without directly dereferencing user virtual pointers.
+`destroy_address_space` removes a host-managed address space and all mappings
+owned by that address space. The current kernel uses it as part of translated
+process `EXIT` cleanup before returning to the blocked parent frame. The first
+slice still has no partial unmap syscall; short-lived process address spaces
+are reclaimed as a whole. The copy commands let physical/kernel syscall
+handlers move bytes across the user/kernel boundary without directly
+dereferencing user virtual pointers.
 
 `set_trap_return_physical` lets a physical/kernel trap handler override the
 saved `iret` address mode after servicing a translated child. The current

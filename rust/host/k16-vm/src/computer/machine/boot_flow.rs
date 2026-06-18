@@ -243,6 +243,14 @@ fn apply_mmu0_command(
             );
             Ok(0)
         }
+        computer_abi::MMU0_COMMAND_DESTROY_ADDRESS_SPACE => {
+            let address_space = MmuAddressSpaceId::from_raw(command.address_space);
+            if machine.destroy_mmu_address_space(address_space) {
+                Ok(0)
+            } else {
+                Err(computer_abi::MMU0_ERROR_INVALID_ADDRESS_SPACE)
+            }
+        }
         computer_abi::MMU0_COMMAND_NOP => Ok(0),
         _ => Err(computer_abi::MMU0_ERROR_INVALID_COMMAND),
     }

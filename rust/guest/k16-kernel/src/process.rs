@@ -273,6 +273,7 @@ pub struct InitResume {
     pub child_exit_status: u32,
     pub address_space: Option<u32>,
     pub kernel_stack_top: Option<u32>,
+    pub exited_address_space: Option<u32>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -530,6 +531,7 @@ impl ProcessTable {
         if parent_slot >= MAX_PROCESS_SLOTS {
             return Err(ProcessSwitchError::NoRunningChild);
         }
+        let exited_address_space = self.slots[child_slot].address_space;
         unsafe {
             core::ptr::write_volatile(&mut self.slots[child_slot].state, PROCESS_STATE_EMPTY)
         };
@@ -548,6 +550,7 @@ impl ProcessTable {
             child_exit_status: status,
             address_space: parent.address_space,
             kernel_stack_top: parent.kernel_stack_top,
+            exited_address_space,
         })
     }
 
@@ -910,6 +913,7 @@ unsafe fn finish_child_runtime(status: u32) -> Result<InitResume, ProcessSwitchE
         return Err(ProcessSwitchError::NoRunningChild);
     }
     let frame = TrapFrame::from(unsafe { *runtime_slot_frame(parent_slot).get() });
+    let exited_address_space = unsafe { read_runtime_address_space(current_slot) };
     unsafe {
         write_runtime_word(runtime_slot_parent_ptr(current_slot), NO_PARENT_SLOT);
         clear_runtime_process_memory(current_slot);
@@ -931,6 +935,7 @@ unsafe fn finish_child_runtime(status: u32) -> Result<InitResume, ProcessSwitchE
         child_exit_status: status,
         address_space: unsafe { read_runtime_address_space(parent_slot) },
         kernel_stack_top: unsafe { read_runtime_kernel_stack_top(parent_slot) },
+        exited_address_space,
     })
 }
 
@@ -1565,7 +1570,7 @@ unsafe fn create_translated_user_launch(
     }
     let page_count = (map_end - map_start) / VM_PAGE_SIZE;
     let address_space = unsafe { mmu0_create_address_space()? };
-    unsafe {
+    let map_result = unsafe {
         mmu0_map_pages(
             address_space,
             map_start,
@@ -1574,7 +1579,11 @@ unsafe fn create_translated_user_launch(
             k16_abi::computer::mmu0::FLAG_USER_ACCESSIBLE
                 | k16_abi::computer::mmu0::FLAG_WRITABLE
                 | k16_abi::computer::mmu0::FLAG_EXECUTABLE,
-        )?;
+        )
+    };
+    if let Err(error) = map_result {
+        let _ = unsafe { mmu0_destroy_address_space(address_space) };
+        return Err(error);
     }
     Ok(TranslatedUserLaunch {
         address_space,
@@ -1615,6 +1624,13 @@ unsafe fn mmu0_map_pages(
     }
 }
 
+unsafe fn mmu0_destroy_address_space(address_space: u32) -> Result<(), ProcessLoadError> {
+    unsafe {
+        crate::mmio::write_i32(k16_abi::computer::mmu0::ADDRESS_SPACE, address_space as i32);
+        submit_mmu0_command(k16_abi::computer::mmu0::COMMAND_DESTROY_ADDRESS_SPACE)
+    }
+}
+
 unsafe fn mmu0_activate_user_address_space(
     address_space: u32,
     entry_pc: u32,
@@ -1651,6 +1667,13 @@ unsafe fn mmu0_set_trap_return_address_space(
         );
         submit_mmu0_command(k16_abi::computer::mmu0::COMMAND_SET_TRAP_RETURN_ADDRESS_SPACE)
     }
+}
+
+pub unsafe fn destroy_exited_address_space(resume: InitResume) -> Result<(), ProcessLoadError> {
+    let Some(address_space) = resume.exited_address_space else {
+        return Ok(());
+    };
+    unsafe { mmu0_destroy_address_space(address_space) }
 }
 
 #[cfg(any(not(test), feature = "host-test"))]
@@ -2610,6 +2633,7 @@ mod tests {
             child_exit_status: 0,
             address_space: Some(7),
             kernel_stack_top: Some(0x0001_d000),
+            exited_address_space: None,
         };
 
         assert_eq!(
@@ -2691,6 +2715,79 @@ mod tests {
                 k16_abi::computer::mmu0::COMMAND,
                 k16_abi::computer::mmu0::COMMAND_MAP_PAGES as u32,
             )
+        );
+    }
+
+    #[test]
+    fn translated_user_launch_destroys_address_space_when_mapping_fails() {
+        crate::mmio::reset_test_state();
+        crate::mmio::set_test_mmu0_status_script(
+            7,
+            &[
+                k16_abi::computer::mmu0::STATUS_DONE,
+                k16_abi::computer::mmu0::STATUS_ERROR,
+                k16_abi::computer::mmu0::STATUS_DONE,
+            ],
+        );
+        let child_plan = DynamicUserLoadPlan {
+            load_base: 0x0001_5020,
+            load_end: 0x0001_6020,
+            entry_pc: 0x0001_5024,
+            stack_top: 0x0001_c000,
+            payload_dst: 0x0001_5020,
+            payload_len: 16,
+            zero_fill_addr: 0x0001_5030,
+            zero_fill_len: 16,
+        };
+
+        let error = unsafe { create_translated_user_launch(child_plan, 0x0001_d000) }
+            .expect_err("map failure rejects translated launch");
+
+        assert_eq!(error, ProcessLoadError::Storage);
+        let writes = crate::mmio::take_test_writes();
+        let writes = writes.as_slice();
+        assert_eq!(
+            writes[writes.len() - 2],
+            (k16_abi::computer::mmu0::ADDRESS_SPACE, 7)
+        );
+        assert_eq!(
+            writes[writes.len() - 1],
+            (
+                k16_abi::computer::mmu0::COMMAND,
+                k16_abi::computer::mmu0::COMMAND_DESTROY_ADDRESS_SPACE as u32,
+            )
+        );
+    }
+
+    #[test]
+    fn destroy_exited_address_space_submits_destroy_for_translated_child() {
+        crate::mmio::reset_test_state();
+        crate::mmio::set_test_mmu0_result(0, k16_abi::computer::mmu0::STATUS_DONE, 0);
+        let resume = InitResume {
+            id: ProcessId::Init,
+            context: ProcessContext {
+                entry_pc: 0,
+                stack_top: 0,
+            },
+            frame: TrapFrame::zeroed(),
+            child_exit_status: 0,
+            address_space: None,
+            kernel_stack_top: None,
+            exited_address_space: Some(11),
+        };
+
+        unsafe { destroy_exited_address_space(resume) }.expect("destroy succeeds");
+
+        let writes = crate::mmio::take_test_writes();
+        assert_eq!(
+            writes.as_slice(),
+            &[
+                (k16_abi::computer::mmu0::ADDRESS_SPACE, 11),
+                (
+                    k16_abi::computer::mmu0::COMMAND,
+                    k16_abi::computer::mmu0::COMMAND_DESTROY_ADDRESS_SPACE as u32,
+                ),
+            ]
         );
     }
 
@@ -2933,6 +3030,38 @@ mod tests {
         let resumed = table.finish_child(0).expect("parent resumes");
 
         assert_eq!(resumed.address_space, Some(5));
+    }
+
+    #[test]
+    fn process_table_child_exit_reports_exited_address_space_for_cleanup() {
+        let mut table = ProcessTable::new(ProcessContext {
+            entry_pc: 0,
+            stack_top: 0,
+        });
+        let child_plan = DynamicUserLoadPlan {
+            load_base: 0x0000_a000,
+            load_end: 0x0000_a020,
+            entry_pc: 0x0000_a004,
+            stack_top: 0x0001_0000,
+            payload_dst: 0x0000_a000,
+            payload_len: 16,
+            zero_fill_addr: 0x0000_a010,
+            zero_fill_len: 16,
+        };
+        let translated = TranslatedUserLaunch {
+            address_space: 9,
+            entry_pc: 0x0000_a004,
+            stack_top: 0x0001_0000,
+            kernel_stack_top: 0x0000_f000,
+        };
+        table
+            .begin_translated_child_run(child_plan, translated)
+            .expect("translated child starts");
+
+        let resumed = table.finish_child(0).expect("parent resumes");
+
+        assert_eq!(resumed.exited_address_space, Some(9));
+        assert_eq!(resumed.address_space, None);
     }
 
     #[test]
