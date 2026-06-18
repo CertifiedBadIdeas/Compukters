@@ -68,7 +68,8 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("k16Target = \"bios\""))
         assertTrue(source.contains("k16Target = \"boot\""))
         assertTrue(source.contains("k16Target = \"kernel\""))
-        assertTrue(source.contains("k16Target = \"program\""))
+        assertTrue(source.contains("k16Target = \"program-dynamic\""))
+        assertFalse(source.contains("k16Target = \"program\""))
         assertFalse(source.contains("tasks.register<Exec>(\"compileK16BiosObject\")"))
         assertFalse(source.contains("tasks.register<Exec>(\"compileK16SystemBootObject\")"))
         assertFalse(source.contains("tasks.register<Exec>(\"compileK16SystemKernelObject\")"))
@@ -109,6 +110,10 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("compileK16SystemAllocTest"))
         assertTrue(source.contains("putK16SystemStorage0Init"))
         assertTrue(source.contains("binName = \"k16-init\""))
+        assertTrue(
+            source.contains("binName = \"k16-init\",\n                k16Target = \"program-dynamic\""),
+            "init must use dynamic program startup so the kernel-provided translated stack pointer is preserved",
+        )
         assertTrue(source.contains("binName = \"k16-shell\""))
         assertTrue(source.contains("binName = \"k16-ls\""))
         assertTrue(source.contains("binName = \"k16-cat\""))
@@ -568,6 +573,7 @@ class K16FirmwareResourceTest {
                 "console.rs",
                 "gpu.rs",
                 "font.rs",
+                "memory_layout.rs",
                 "terminal.rs",
                 "terminal_render.rs",
             )
@@ -593,6 +599,7 @@ class K16FirmwareResourceTest {
     fun k16KernelConsoleKeepsCellGridAndScrollsOnOverflow() {
         val kernelSourceDir = Path.of("../../../rust/guest/k16-kernel/src")
         val consoleSource = kernelSourceDir.resolve("console.rs").readText()
+        val memoryLayoutSource = kernelSourceDir.resolve("memory_layout.rs").readText()
         val terminalSource = kernelSourceDir.resolve("terminal.rs").readText()
         val terminalRenderSource = kernelSourceDir.resolve("terminal_render.rs").readText()
 
@@ -605,11 +612,15 @@ class K16FirmwareResourceTest {
 
         assertTrue(terminalSource.contains("const CELLS_ADDR:"), "terminal should keep guest cell state")
         assertTrue(
-            terminalSource.contains("const CELLS_ADDR: u32 = 0x0000_3000;"),
+            terminalSource.contains("memory_layout::TERMINAL_CELLS_ADDR"),
+            "terminal should use the shared kernel memory layout for guest cell storage",
+        )
+        assertTrue(
+            memoryLayoutSource.contains("pub const TERMINAL_CELLS_ADDR: u32 = 0x0000_3000;"),
             "terminal cells should live below the kernel image instead of overlapping program memory",
         )
         assertFalse(
-            terminalSource.contains("const CELLS_ADDR: u32 = 0x0000_8000;"),
+            memoryLayoutSource.contains("pub const TERMINAL_CELLS_ADDR: u32 = 0x0000_8000;"),
             "terminal cells must not overlap the program load address",
         )
         assertTrue(terminalSource.contains("static mut CURSOR_X:"), "terminal should own cursor state")
@@ -1728,7 +1739,7 @@ class K16FirmwareResourceTest {
         while (tick < 24 && control.status != NativeK16ComputerControl.STATUS_READY &&
             control.status != NativeK16ComputerControl.STATUS_HALTED
         ) {
-            control = runRuntimeServerTick(runtime, maxTurns = 1_000_000)
+            control = runRuntimeServerTick(runtime, maxTurns = 1)
             tick += 1
         }
         return control

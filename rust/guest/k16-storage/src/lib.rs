@@ -3,8 +3,8 @@
 use k16_abi::computer::storage0;
 
 pub const SCRATCH_ADDR: u32 = 0x0000_0600;
+pub const BLOCK_SIZE: u32 = 512;
 
-const BLOCK_SIZE: u32 = 512;
 const K16PT_MAGIC: &[u8; 5] = b"K16PT";
 const K16PT_VERSION: u8 = 1;
 const K16PT_HEADER_SIZE: u32 = 16;

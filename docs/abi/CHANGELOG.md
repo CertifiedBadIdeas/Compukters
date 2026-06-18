@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- K16 now launches `/bin/init.kx` itself in a host-managed translated address
+  space. The kernel reserves the top 4 KiB page below `BootInfo.ram_size` as
+  init's physical kernel trap stack, starts init's user arena at the next 4 KiB
+  page after `BootInfo.program_base`, storage loader scratch, kernel image, and
+  kernel terminal state, and enters init through `mmu0`
+  `activate_user_address_space` instead of physical `enter_loaded_image`.
 - Added `mmu0` `destroy_address_space` (`9`) and wired the K16 kernel process
   lifecycle to destroy a translated child address space on `EXIT` before
   returning to the blocked parent frame. This keeps translated shell/utility
@@ -15,13 +21,13 @@
 - K16 production `RUN` now launches `/bin/shell.kx` and shell-started
   `/bin/*.kx` utility children in host-managed translated address spaces. The
   first production mappings are identity-mapped over kernel-selected child
-  backing ranges, and the current foreground depth supports physical init ->
+  backing ranges, and the current foreground depth supports translated init ->
   translated shell -> translated utility execution. Added `mmu0`
   `set_trap_return_address_space`, which takes a parent address-space id plus a
   physical kernel trap stack pointer, so `EXIT` from a translated utility can
   resume a translated shell frame through `iret`. The existing
-  `set_trap_return_physical` path remains for returning from translated shell
-  to physical init.
+  `set_trap_return_physical` command remains for compatibility with older
+  physical-parent paths.
 - Added K16 syscall `GAME_TICKS` (`16`) so translated userland reads the
   current timer tick through the kernel instead of direct `timer0` MMIO.
   `k16_rt::game_ticks_syscall(out)` writes the 8-byte little-endian

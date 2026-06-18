@@ -489,7 +489,7 @@ val compileK16SystemInit =
                 manifest = k16InitManifest.asFile,
                 targetDir = generatedK16GuestTarget.get().dir("init").asFile,
                 binName = "k16-init",
-                k16Target = "program",
+                k16Target = "program-dynamic",
                 output = k16InitArtifact.get().asFile,
             )
         }
