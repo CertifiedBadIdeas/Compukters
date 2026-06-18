@@ -1,23 +1,35 @@
 # UI DSL Source Consumption
 
-The reusable UI DSL lives in the Gradle project `:ui-dsl`.
+The reusable UI DSL lives in the Git submodule `vendor/ui-dsl`. Compukter Kraft
+still exposes it to the main Gradle build as the project `:ui-dsl`.
 
 The first supported external consumption mode is source-based. It does not
 require Maven Central, GitHub Packages, JitPack, or any other artifact host.
 
 ## Git Submodule
 
-Add the future DSL repository as a submodule in the consuming project:
+Clone Compukter Kraft with submodules or initialize the DSL submodule after
+checkout:
 
 ```bash
-git submodule add <dsl-repository-url> vendor/kraft-ui-dsl
+git submodule update --init vendor/ui-dsl
+```
+
+External consumers can add the DSL repository as a submodule in their own
+project:
+
+```bash
+git submodule add https://github.com/CertifiedBadIdeas/ui-dsl vendor/ui-dsl
 ```
 
 Then include it as a Gradle composite build:
 
 ```kotlin
 pluginManagement {
-    includeBuild("vendor/kraft-ui-dsl/build-scripts")
+    repositories {
+        gradlePluginPortal()
+        mavenCentral()
+    }
 }
 
 dependencyResolutionManagement {
@@ -27,7 +39,7 @@ dependencyResolutionManagement {
     }
 }
 
-includeBuild("vendor/kraft-ui-dsl")
+includeBuild("vendor/ui-dsl")
 ```
 
 The consumer then depends on the module using the coordinate exposed by the
@@ -39,8 +51,7 @@ dependencies {
 }
 ```
 
-Until the DSL is moved into a separate repository, Compukter Kraft consumes it
-as a normal in-tree Gradle project dependency:
+Compukter Kraft consumes the submodule as a normal Gradle project dependency:
 
 ```kotlin
 dependencies {
@@ -48,9 +59,9 @@ dependencies {
 }
 ```
 
-`implementation("ru.lazyhat:kraft-ui-dsl")` is the intended standalone
-included-build coordinate. In-tree Compukter Kraft usage remains
-`projects.uiDsl` until the repository split happens.
+`implementation("ru.lazyhat:kraft-ui-dsl")` is the standalone included-build
+coordinate. In-tree Compukter Kraft usage remains `projects.uiDsl` while
+`settings.gradle.kts` maps `:ui-dsl` to `vendor/ui-dsl`.
 
 ## Consumer Fixture
 
@@ -62,9 +73,9 @@ coordinate through a Gradle composite build:
 ```
 
 This fixture intentionally lives outside the main production module graph. It
-depends on `implementation("ru.lazyhat:kraft-ui-dsl")` and maps that coordinate
-to `:ui-dsl` through dependency substitution, matching the intended external
-source-consumption path before the DSL moves to its own repository.
+depends on `implementation("ru.lazyhat:kraft-ui-dsl")` and includes
+`vendor/ui-dsl` as a composite build, matching the intended external
+source-consumption path.
 
 ## Boundary
 
