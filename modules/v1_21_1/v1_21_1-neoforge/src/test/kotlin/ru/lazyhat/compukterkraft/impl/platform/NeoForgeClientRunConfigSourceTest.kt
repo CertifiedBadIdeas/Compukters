@@ -36,6 +36,20 @@ class NeoForgeClientRunConfigSourceTest {
         )
     }
 
+    @Test
+    fun neoforgeClientRuntimeIncludesReusableUiDslModule() {
+        val source = neoforgeBuildFile().readText()
+
+        assertTrue(
+            source.contains("sourceSet(\"main\", project(projects.uiDsl.path))"),
+            "NeoForge dev runtime should expose :ui-dsl classes through the main mod source set.",
+        )
+        assertTrue(
+            source.contains("shadowBundle(project(path = projects.uiDsl.path"),
+            "Production NeoForge jar should bundle :ui-dsl with the loader leaf.",
+        )
+    }
+
     private fun neoforgeBuildFile(): Path {
         val candidates =
             listOf(
