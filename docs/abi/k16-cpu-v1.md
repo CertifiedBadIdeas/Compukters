@@ -535,8 +535,8 @@ K16 syscall ABI v0 names the current Rust-kernel proof services in
 | `RUN` | `9` | `k16_rt::run_syscall(path, len)`, `k16_rt::run_argv_syscall(request, len)` | Synchronously loads a dynamic `/bin/*.kx` user program from `ROOT`/K16FS on `storage0`, blocks the current foreground process while the child runs, and returns the child exit status or a negative K16 error. `trap_arg2 = 0` means `trap_arg0/trap_arg1` are a raw path pointer/length. `trap_arg2 = 1` means they are a bounded argv request block beginning with `RUN_ARGV_MAGIC`. |
 | `OPEN` | `10` | `k16_rt::open_syscall(path, len, flags)` | Opens an absolute read-only ROOT/K16FS regular file path from `storage0`; `flags` must be `0`, and success returns a regular file fd starting at `3`. |
 | `CLOSE` | `11` | `k16_rt::close_syscall(fd)` | Closes a regular file fd owned by the current foreground process. Standard descriptors `0..=2` are not closeable. |
-| `BRK` | `12` | `k16_rt::brk_syscall(addr)` | Sets the current foreground process program break to `addr` and returns the resulting break, or a negative K16 error. The break must stay inside the kernel-selected heap arena for that process. |
-| `SBRK` | `13` | `k16_rt::sbrk_syscall(delta)` | Grows the current foreground process program break by `delta` bytes and returns the previous break, or a negative K16 error. |
+| `BRK` | `12` | `k16_rt::brk_syscall(addr)` | Sets the current foreground process program break to `addr` and returns the resulting break, or a negative K16 error. The break must stay inside the kernel-selected heap arena for that process. For translated processes, growing the break commits any newly crossed heap VM pages through the kernel page allocator. |
+| `SBRK` | `13` | `k16_rt::sbrk_syscall(delta)` | Grows the current foreground process program break by `delta` bytes and returns the previous break, or a negative K16 error. For translated processes, newly committed heap pages are mapped user-writable and non-executable. |
 | `READ_DIR` | `14` | `k16_rt::read_dir_syscall(request, len)` | Reads a ROOT/K16FS directory listing from `storage0` into a caller-provided buffer. The request is `u32 magic`, `u32 path_len`, `u32 out_ptr`, `u32 out_len`, followed by path bytes. |
 | `STAT` | `15` | `k16_rt::stat_syscall(path, len, metadata)` | Reads ROOT/K16FS path metadata from `storage0` into a 16-byte response buffer. Word 0 is `FILE_TYPE_REGULAR` or `FILE_TYPE_DIRECTORY`; word 1 is `size_bytes`; words 2 and 3 are reserved zero. |
 | `GAME_TICKS` | `16` | `k16_rt::game_ticks_syscall(out)` | Copies the current `timer0.game_ticks` value into an 8-byte user buffer as little-endian `{ low, high }` words and returns `STATUS_OK`, or returns a negative K16 error. |
@@ -588,17 +588,17 @@ the existing negative K16 `ERROR_FAULT` value.
 
 The production process launcher runs `/bin/init.kx`, `/bin/shell.kx`, and
 shell-launched `/bin/*.kx` utilities in host-managed `mmu0` address spaces.
-The kernel maps each process backing range into its address space, activates
-translated user execution, and records the address-space id for syscall
-user-buffer copies. For init, the kernel reserves the top 4 KiB page below the
-boot-provided `BootInfo.ram_size` boundary as a physical kernel trap stack and
-places init's user stack below that page. Init's lower user arena boundary is
-not a fixed window: it is the next 4 KiB page after the maximum of
-`BootInfo.program_base`, the storage loader scratch range, the linked kernel
-image end, and kernel terminal state. For `RUN` children, the kernel
-reserves a physical kernel trap stack below the saved parent stack before
-placing the child stack. Before child activation, the kernel restores the
-child's saved trap register frame; this preserves entry registers such as
+The kernel maps the loaded image pages and selected user stack page into each
+address space, activates translated user execution, and records the
+address-space id for syscall user-buffer copies. For init, the kernel reserves
+the top 4 KiB page below the boot-provided `BootInfo.ram_size` boundary as a
+physical kernel trap stack and places init's user stack below that page. Init's
+lower user arena boundary is not a fixed window: it is the next 4 KiB page
+after the maximum of `BootInfo.program_base`, the storage loader scratch range,
+the linked kernel image end, and kernel terminal state. For `RUN` children, the
+kernel reserves a physical kernel trap stack below the saved parent stack
+before placing the child stack. Before child activation, the kernel restores
+the child's saved trap register frame; this preserves entry registers such as
 `argc` in `r1` and `argv` in `r2` while keeping later translated-user traps off
 the child user stack. When a translated child exits to a translated parent, the
 kernel uses `mmu0` `set_trap_return_address_space` with the parent
@@ -613,7 +613,11 @@ lower of the current parent's saved stack pointer and `memory_end`; translated
 children reserve a kernel trap stack below that parent stack before placing the
 child stack and heap. The child heap limit is below a guard area under the
 child stack top, so child heap growth cannot overwrite the live parent stack,
-the translated child trap stack, or escape the parent's process range.
+the translated child trap stack, or escape the parent's process range. For
+translated processes, the image page containing the initial heap start is
+already mapped by the loader. Later `BRK`/`SBRK` growth commits additional heap
+pages lazily at 4 KiB boundaries, maps them user-writable and non-executable,
+and releases the heap backing frames when the process exits.
 
 Regular file descriptors returned by `OPEN` are process-owned. A foreground
 process can `READ` or `CLOSE` only regular fds it opened, and `EXIT` releases

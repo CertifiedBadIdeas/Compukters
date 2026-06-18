@@ -99,6 +99,18 @@ static mut RUNTIME_SLOT1_BACKING_FRAME_COUNT: u32 = 0;
 #[cfg(not(test))]
 static mut RUNTIME_SLOT2_BACKING_FRAME_COUNT: u32 = 0;
 #[cfg(not(test))]
+static mut RUNTIME_SLOT0_HEAP_BACKING_START: u32 = 0;
+#[cfg(not(test))]
+static mut RUNTIME_SLOT1_HEAP_BACKING_START: u32 = 0;
+#[cfg(not(test))]
+static mut RUNTIME_SLOT2_HEAP_BACKING_START: u32 = 0;
+#[cfg(not(test))]
+static mut RUNTIME_SLOT0_HEAP_BACKING_FRAME_COUNT: u32 = 0;
+#[cfg(not(test))]
+static mut RUNTIME_SLOT1_HEAP_BACKING_FRAME_COUNT: u32 = 0;
+#[cfg(not(test))]
+static mut RUNTIME_SLOT2_HEAP_BACKING_FRAME_COUNT: u32 = 0;
+#[cfg(not(test))]
 static RUNTIME_PAGE_ALLOCATOR: KernelCell<Option<crate::page_alloc::PageFrameAllocator>> =
     KernelCell::new(None);
 #[cfg(not(test))]
@@ -296,6 +308,7 @@ pub struct ParentResume {
     pub kernel_stack_top: Option<u32>,
     pub exited_address_space: Option<u32>,
     pub exited_backing_pages: Option<crate::page_alloc::FrameRange>,
+    pub exited_heap_pages: Option<crate::page_alloc::FrameRange>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -621,6 +634,7 @@ impl ProcessTable {
             kernel_stack_top: parent.kernel_stack_top,
             exited_address_space,
             exited_backing_pages,
+            exited_heap_pages: None,
         })
     }
 
@@ -893,6 +907,7 @@ pub unsafe fn begin_translated_init_from_storage0(
             translated.kernel_stack_top,
         );
         write_runtime_backing_pages(INIT_PROCESS_SLOT, translated.backing_pages);
+        write_runtime_heap_backing_pages(INIT_PROCESS_SLOT, None);
         *runtime_slot_frame(INIT_PROCESS_SLOT).get() = k16_rt::TrapFrame::from(frame);
         *RUNTIME_PAGE_ALLOCATOR.get() = Some(allocator);
     }
@@ -1068,6 +1083,7 @@ unsafe fn begin_loaded_child_plan_runtime_with_argv(
             child_slot,
             translated.and_then(|launch| launch.backing_pages),
         );
+        write_runtime_heap_backing_pages(child_slot, None);
         initialize_runtime_heap_from_bounds(
             child_slot,
             child_plan.load_end.max(argv.end),
@@ -1155,12 +1171,14 @@ unsafe fn finish_child_runtime(status: u32) -> Result<ParentResume, ProcessSwitc
     let frame = TrapFrame::from(unsafe { *runtime_slot_frame(parent_slot).get() });
     let exited_address_space = unsafe { read_runtime_address_space(current_slot) };
     let exited_backing_pages = unsafe { read_runtime_backing_pages(current_slot) };
+    let exited_heap_pages = unsafe { read_runtime_heap_backing_pages(current_slot) };
     unsafe {
         write_runtime_word(runtime_slot_parent_ptr(current_slot), NO_PARENT_SLOT);
         clear_runtime_process_memory(current_slot);
         clear_runtime_address_space(current_slot);
         clear_runtime_kernel_stack_top(current_slot);
         clear_runtime_backing_pages(current_slot);
+        clear_runtime_heap_backing_pages(current_slot);
         clear_runtime_heap(current_slot);
         write_runtime_word(
             core::ptr::addr_of_mut!(RUNTIME_CURRENT_SLOT),
@@ -1179,6 +1197,7 @@ unsafe fn finish_child_runtime(status: u32) -> Result<ParentResume, ProcessSwitc
         kernel_stack_top: unsafe { read_runtime_kernel_stack_top(parent_slot) },
         exited_address_space,
         exited_backing_pages,
+        exited_heap_pages,
     })
 }
 
@@ -1384,6 +1403,24 @@ fn runtime_slot_backing_frame_count_ptr(slot: usize) -> *mut u32 {
 }
 
 #[cfg(not(test))]
+fn runtime_slot_heap_backing_start_ptr(slot: usize) -> *mut u32 {
+    match slot {
+        INIT_PROCESS_SLOT => core::ptr::addr_of_mut!(RUNTIME_SLOT0_HEAP_BACKING_START),
+        1 => core::ptr::addr_of_mut!(RUNTIME_SLOT1_HEAP_BACKING_START),
+        _ => core::ptr::addr_of_mut!(RUNTIME_SLOT2_HEAP_BACKING_START),
+    }
+}
+
+#[cfg(not(test))]
+fn runtime_slot_heap_backing_frame_count_ptr(slot: usize) -> *mut u32 {
+    match slot {
+        INIT_PROCESS_SLOT => core::ptr::addr_of_mut!(RUNTIME_SLOT0_HEAP_BACKING_FRAME_COUNT),
+        1 => core::ptr::addr_of_mut!(RUNTIME_SLOT1_HEAP_BACKING_FRAME_COUNT),
+        _ => core::ptr::addr_of_mut!(RUNTIME_SLOT2_HEAP_BACKING_FRAME_COUNT),
+    }
+}
+
+#[cfg(not(test))]
 unsafe fn write_runtime_process_memory(slot: usize, memory: ProcessMemory) {
     unsafe {
         write_runtime_word(runtime_slot_memory_start_ptr(slot), memory.start);
@@ -1436,6 +1473,35 @@ unsafe fn clear_runtime_backing_pages(slot: usize) {
 }
 
 #[cfg(not(test))]
+unsafe fn write_runtime_heap_backing_pages(
+    slot: usize,
+    backing_pages: Option<crate::page_alloc::FrameRange>,
+) {
+    let start = backing_pages.map(|range| range.start).unwrap_or(0);
+    let frame_count = backing_pages.map(|range| range.frame_count).unwrap_or(0);
+    unsafe {
+        write_runtime_word(runtime_slot_heap_backing_start_ptr(slot), start);
+        write_runtime_word(runtime_slot_heap_backing_frame_count_ptr(slot), frame_count);
+    }
+}
+
+#[cfg(not(test))]
+unsafe fn read_runtime_heap_backing_pages(slot: usize) -> Option<crate::page_alloc::FrameRange> {
+    let start = unsafe { read_runtime_word(runtime_slot_heap_backing_start_ptr(slot)) };
+    let frame_count = unsafe { read_runtime_word(runtime_slot_heap_backing_frame_count_ptr(slot)) };
+    if frame_count == 0 {
+        None
+    } else {
+        Some(crate::page_alloc::FrameRange { start, frame_count })
+    }
+}
+
+#[cfg(not(test))]
+unsafe fn clear_runtime_heap_backing_pages(slot: usize) {
+    unsafe { write_runtime_heap_backing_pages(slot, None) }
+}
+
+#[cfg(not(test))]
 unsafe fn initialize_runtime_heap_from_bounds(
     slot: usize,
     load_end: u32,
@@ -1463,6 +1529,7 @@ unsafe fn clear_runtime_heap(slot: usize) {
 unsafe fn set_runtime_program_break(address: u32) -> Result<u32, HeapError> {
     let current_slot = unsafe { runtime_current_slot() };
     let heap_start = unsafe { read_runtime_word(runtime_slot_heap_start_ptr(current_slot)) };
+    let old_break = unsafe { read_runtime_word(runtime_slot_program_break_ptr(current_slot)) };
     let heap_limit = unsafe { read_runtime_word(runtime_slot_heap_limit_ptr(current_slot)) };
     if heap_start == 0 {
         return Err(HeapError::NoRunningChild);
@@ -1470,8 +1537,51 @@ unsafe fn set_runtime_program_break(address: u32) -> Result<u32, HeapError> {
     if address < heap_start || address > heap_limit {
         return Err(HeapError::OutOfMemory);
     }
+    if address > old_break {
+        if let Some(address_space) = unsafe { read_runtime_address_space(current_slot) } {
+            unsafe {
+                commit_runtime_heap_growth(current_slot, heap_start, address_space, address)?
+            };
+        }
+    }
     unsafe { write_runtime_word(runtime_slot_program_break_ptr(current_slot), address) };
     Ok(address)
+}
+
+#[cfg(not(test))]
+unsafe fn commit_runtime_heap_growth(
+    slot: usize,
+    heap_start: u32,
+    address_space: u32,
+    requested_break: u32,
+) -> Result<(), HeapError> {
+    let existing = unsafe { read_runtime_heap_backing_pages(slot) };
+    let committed_end = heap_committed_end(heap_start, existing.map(|range| range.frame_count))?;
+    let Some((virtual_start, page_count)) =
+        heap_growth_commit_range(committed_end, requested_break)?
+    else {
+        return Ok(());
+    };
+    let allocator =
+        unsafe { (*RUNTIME_PAGE_ALLOCATOR.get()).as_mut() }.ok_or(HeapError::OutOfMemory)?;
+    let backing = allocator
+        .allocate_contiguous(page_count)
+        .map_err(|_| HeapError::OutOfMemory)?;
+    let coalesced = match coalesce_heap_backing_range(existing, backing) {
+        Ok(coalesced) => coalesced,
+        Err(error) => {
+            let _ = allocator.free_contiguous(backing);
+            return Err(error);
+        }
+    };
+    if unsafe { map_translated_heap_pages(address_space, virtual_start, backing.start, page_count) }
+        .is_err()
+    {
+        let _ = allocator.free_contiguous(backing);
+        return Err(HeapError::OutOfMemory);
+    }
+    unsafe { write_runtime_heap_backing_pages(slot, coalesced) };
+    Ok(())
 }
 
 #[cfg(not(test))]
@@ -2282,6 +2392,24 @@ unsafe fn mmu0_map_pages(
     }
 }
 
+unsafe fn map_translated_heap_pages(
+    address_space: u32,
+    virtual_start: u32,
+    physical_start: u32,
+    page_count: u32,
+) -> Result<(), ProcessLoadError> {
+    unsafe {
+        mmu0_map_pages(
+            address_space,
+            virtual_start,
+            physical_start,
+            page_count,
+            k16_abi::computer::mmu0::FLAG_USER_ACCESSIBLE
+                | k16_abi::computer::mmu0::FLAG_WRITABLE,
+        )
+    }
+}
+
 unsafe fn mmu0_destroy_address_space(address_space: u32) -> Result<(), ProcessLoadError> {
     unsafe {
         crate::mmio::write_i32(k16_abi::computer::mmu0::ADDRESS_SPACE, address_space as i32);
@@ -2337,6 +2465,14 @@ pub unsafe fn destroy_exited_address_space(resume: ParentResume) -> Result<(), P
             unsafe { (*RUNTIME_PAGE_ALLOCATOR.get()).as_mut() }.ok_or(ProcessLoadError::Storage)?;
         allocator
             .free_contiguous(backing_pages)
+            .map_err(page_alloc_error_to_process_load_error)?;
+    }
+    #[cfg(not(test))]
+    if let Some(heap_pages) = resume.exited_heap_pages {
+        let allocator =
+            unsafe { (*RUNTIME_PAGE_ALLOCATOR.get()).as_mut() }.ok_or(ProcessLoadError::Storage)?;
+        allocator
+            .free_contiguous(heap_pages)
             .map_err(page_alloc_error_to_process_load_error)?;
     }
     Ok(())
@@ -2849,6 +2985,62 @@ fn page_align_up(value: u32) -> Result<u32, ProcessLoadError> {
     align_up(value, VM_PAGE_SIZE)
 }
 
+fn heap_page_align_up(value: u32) -> Result<u32, HeapError> {
+    align_up(value, VM_PAGE_SIZE).map_err(|_| HeapError::OutOfMemory)
+}
+
+fn heap_committed_end(heap_start: u32, heap_frame_count: Option<u32>) -> Result<u32, HeapError> {
+    let base = heap_page_align_up(heap_start)?;
+    let bytes = heap_frame_count
+        .unwrap_or(0)
+        .checked_mul(VM_PAGE_SIZE)
+        .ok_or(HeapError::OutOfMemory)?;
+    base.checked_add(bytes).ok_or(HeapError::OutOfMemory)
+}
+
+fn heap_growth_commit_range(
+    committed_end: u32,
+    requested_break: u32,
+) -> Result<Option<(u32, u32)>, HeapError> {
+    if committed_end % VM_PAGE_SIZE != 0 {
+        return Err(HeapError::OutOfMemory);
+    }
+    if requested_break <= committed_end {
+        return Ok(None);
+    }
+    let map_end = heap_page_align_up(requested_break)?;
+    let page_count = (map_end - committed_end) / VM_PAGE_SIZE;
+    Ok(Some((committed_end, page_count)))
+}
+
+fn coalesce_heap_backing_range(
+    existing: Option<crate::page_alloc::FrameRange>,
+    next: crate::page_alloc::FrameRange,
+) -> Result<Option<crate::page_alloc::FrameRange>, HeapError> {
+    let Some(existing) = existing else {
+        return Ok(Some(next));
+    };
+    let existing_end = existing
+        .start
+        .checked_add(
+            existing
+                .frame_count
+                .checked_mul(VM_PAGE_SIZE)
+                .ok_or(HeapError::OutOfMemory)?,
+        )
+        .ok_or(HeapError::OutOfMemory)?;
+    if existing_end != next.start {
+        return Err(HeapError::OutOfMemory);
+    }
+    Ok(Some(crate::page_alloc::FrameRange {
+        start: existing.start,
+        frame_count: existing
+            .frame_count
+            .checked_add(next.frame_count)
+            .ok_or(HeapError::OutOfMemory)?,
+    }))
+}
+
 fn heap_limit_from_stack_top(stack_top: u32) -> Result<u32, HeapError> {
     let guarded = stack_top
         .checked_sub(STACK_GUARD_BYTES)
@@ -3124,6 +3316,91 @@ mod tests {
                 start: 0x0000_9000,
                 frame_count: 3,
             }
+        );
+    }
+
+    #[test]
+    fn heap_growth_commit_range_starts_after_current_mapped_page() {
+        assert_eq!(
+            heap_committed_end(0x0001_6612, None),
+            Ok(0x0001_7000)
+        );
+        assert_eq!(
+            heap_committed_end(0x0001_6612, Some(2)),
+            Ok(0x0001_9000)
+        );
+        assert_eq!(
+            heap_growth_commit_range(0x0001_7000, 0x0001_6fff),
+            Ok(None)
+        );
+        assert_eq!(
+            heap_growth_commit_range(0x0001_7000, 0x0001_7001),
+            Ok(Some((0x0001_7000, 1)))
+        );
+        assert_eq!(
+            heap_growth_commit_range(0x0001_7000, 0x0001_9004),
+            Ok(Some((0x0001_7000, 3)))
+        );
+    }
+
+    #[test]
+    fn translated_heap_pages_are_mapped_writable_without_execute() {
+        crate::mmio::reset_test_state();
+        crate::mmio::set_test_mmu0_result(0, k16_abi::computer::mmu0::STATUS_DONE, 0);
+
+        unsafe { map_translated_heap_pages(7, 0x0001_7000, 0x0000_c000, 2) }
+            .expect("heap pages map");
+
+        let writes = crate::mmio::take_test_writes();
+        let writes = writes.as_slice();
+        assert_eq!(writes[0], (k16_abi::computer::mmu0::ADDRESS_SPACE, 7));
+        assert_eq!(
+            writes[1],
+            (k16_abi::computer::mmu0::VIRTUAL_START, 0x0001_7000)
+        );
+        assert_eq!(
+            writes[2],
+            (k16_abi::computer::mmu0::PHYSICAL_START, 0x0000_c000)
+        );
+        assert_eq!(writes[3], (k16_abi::computer::mmu0::PAGE_COUNT, 2));
+        assert_eq!(
+            writes[4],
+            (
+                k16_abi::computer::mmu0::FLAGS,
+                (k16_abi::computer::mmu0::FLAG_USER_ACCESSIBLE
+                    | k16_abi::computer::mmu0::FLAG_WRITABLE) as u32
+            )
+        );
+        assert_eq!(
+            writes[5],
+            (
+                k16_abi::computer::mmu0::COMMAND,
+                k16_abi::computer::mmu0::COMMAND_MAP_PAGES as u32
+            )
+        );
+    }
+
+    #[test]
+    fn heap_backing_range_coalesces_adjacent_growth() {
+        let initial = crate::page_alloc::FrameRange {
+            start: 0x0000_c000,
+            frame_count: 2,
+        };
+        let next = crate::page_alloc::FrameRange {
+            start: 0x0000_e000,
+            frame_count: 1,
+        };
+
+        assert_eq!(
+            coalesce_heap_backing_range(Some(initial), next),
+            Ok(Some(crate::page_alloc::FrameRange {
+                start: 0x0000_c000,
+                frame_count: 3,
+            }))
+        );
+        assert_eq!(
+            coalesce_heap_backing_range(None, initial),
+            Ok(Some(initial))
         );
     }
 
@@ -3718,6 +3995,7 @@ mod tests {
             kernel_stack_top: Some(0x0001_d000),
             exited_address_space: None,
             exited_backing_pages: None,
+            exited_heap_pages: None,
         };
 
         assert_eq!(
@@ -3966,6 +4244,7 @@ mod tests {
             kernel_stack_top: None,
             exited_address_space: Some(11),
             exited_backing_pages: None,
+            exited_heap_pages: None,
         };
 
         unsafe { destroy_exited_address_space(resume) }.expect("destroy succeeds");

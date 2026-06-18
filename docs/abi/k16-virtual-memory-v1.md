@@ -273,7 +273,8 @@ host -> BIOS flash -> bootloader -> kernel in physical mode -> translated init
 The VM-enabled production user launch does this for `/bin/init.kx`,
 `/bin/shell.kx`, and shell-started utilities:
 
-1. Load a dynamic K16E `program` image into kernel-selected physical pages.
+1. Load a dynamic K16E `program` image into kernel-selected allocator-backed
+   physical pages.
 2. Use the process arena for `.bss`, heap, optional argv, and stack.
 3. Reserve a small physical kernel trap stack outside the user stack: for init,
    the top 4 KiB page below `BootInfo.ram_size`; for children, below the
@@ -282,18 +283,21 @@ The VM-enabled production user launch does this for `/bin/init.kx`,
    after the maximum of `BootInfo.program_base`, storage loader scratch, linked
    kernel image end, and kernel terminal state. For children, start after the
    current process break.
-5. Create a host MMU address-space map for the page-aligned process backing
-   range.
+5. Create a host MMU address space and map the loaded image pages plus the
+   selected user stack page into it.
 6. Restore the entry register frame, including argv registers for child runs.
 7. Enter user-translated mode at the dynamic image entry PC.
 8. Set user `sp` to the selected process stack top and the trap stack to the
    reserved physical kernel stack.
 
-This first production mapping is identity-mapped: child virtual addresses equal
-the kernel-selected physical backing addresses. It still gives the host VM a
-real address-space id, permission checks, trap-mode separation, and `mmu0`
-copy-helper boundary. Decoupling the user virtual base from the physical load
-base remains the next layout step after the translated process path is stable.
+The production mapping is not a fixed physical window: user virtual addresses
+come from the process arena, while physical backing pages come from the kernel
+page-frame allocator. At launch, only the loaded image pages and selected user
+stack page are committed. Heap pages are committed later by `BRK`/`SBRK` when
+the break crosses a previously unmapped 4 KiB VM page boundary; those pages are
+mapped user-writable and non-executable. This gives the host VM a real
+address-space id, permission checks, trap-mode separation, and `mmu0`
+copy-helper boundary without guest-visible page tables.
 
 ## Implementation Sequence
 

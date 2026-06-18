@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- K16 translated `BRK`/`SBRK` now commit heap pages through the kernel page
+  allocator when the program break crosses a previously unmapped 4 KiB VM page
+  boundary. Launch-time mappings cover only the loaded image pages and the user
+  stack page; process-owned heap backing pages are released on `EXIT` together
+  with the translated address space backing.
 - K16 now launches `/bin/init.kx` itself in a host-managed translated address
   space. The kernel reserves the top 4 KiB page below `BootInfo.ram_size` as
   init's physical kernel trap stack, starts init's user arena at the next 4 KiB
