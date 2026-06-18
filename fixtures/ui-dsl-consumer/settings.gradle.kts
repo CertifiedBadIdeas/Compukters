@@ -31,10 +31,6 @@ dependencyResolutionManagement {
     }
 }
 
-includeBuild("../..") {
-    dependencySubstitution {
-        substitute(module("ru.lazyhat:kraft-ui-dsl")).using(project(":ui-dsl"))
-    }
-}
+includeBuild("../../vendor/ui-dsl")
 
 rootProject.name = "ui-dsl-consumer-fixture"

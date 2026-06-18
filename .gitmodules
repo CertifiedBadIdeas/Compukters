@@ -6,3 +6,6 @@
 	path = toolchains/Compukter-Kraft-rust
 	url = git@github.com:CertifiedBadIdeas/Compukter-Kraft-rust.git
 	branch = k16
+[submodule "vendor/ui-dsl"]
+	path = vendor/ui-dsl
+	url = https://github.com/CertifiedBadIdeas/ui-dsl
