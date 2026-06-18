@@ -22,6 +22,7 @@ plugins {
 }
 
 dependencies {
+    api(projects.uiDsl)
     implementation(projects.nativeRuntime)
     implementation(libs.kotlinx.coroutines.core)
     api(libs.kotlinx.collections.immutable)

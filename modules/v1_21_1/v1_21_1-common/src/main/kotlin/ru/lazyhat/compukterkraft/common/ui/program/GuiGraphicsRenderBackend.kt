@@ -21,12 +21,12 @@ package ru.lazyhat.compukterkraft.common.ui.program
 
 import net.minecraft.client.gui.Font
 import net.minecraft.client.gui.GuiGraphics
-import ru.lazyhat.compukterkraft.core.ui.editor.CodeEditorMetrics
-import ru.lazyhat.compukterkraft.core.ui.editor.EditorViewModel
-import ru.lazyhat.compukterkraft.core.ui.foundation.Color
-import ru.lazyhat.compukterkraft.core.ui.program.RenderBackend
-import ru.lazyhat.compukterkraft.core.workbench.highlightColor
-import ru.lazyhat.compukterkraft.lang.runtime.IdeDiagnosticSeverity
+import ru.lazyhat.kraftui.editor.CodeEditorMetrics
+import ru.lazyhat.kraftui.editor.DiagnosticSeverity
+import ru.lazyhat.kraftui.editor.EditorViewModel
+import ru.lazyhat.kraftui.editor.HighlightTokenKind
+import ru.lazyhat.kraftui.foundation.Color
+import ru.lazyhat.kraftui.program.RenderBackend
 import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
 
 class GuiGraphicsRenderBackend(
@@ -64,10 +64,14 @@ class GuiGraphicsRenderBackend(
     override fun drawTerminalSurface(
         x: Int,
         y: Int,
-        snapshot: ScreenBufferSnapshot,
+        snapshot: Any,
     ) {
+        val screenSnapshot =
+            requireNotNull(snapshot as? ScreenBufferSnapshot) {
+                "GuiGraphicsRenderBackend expected ScreenBufferSnapshot terminal payload, got ${snapshot::class.qualifiedName}"
+            }
         graphics.fill(x - 1, y - 1, x + 1, y + 1, 0xFF222938.toInt())
-        TerminalSurfaceBridge.draw(graphics, x, y, snapshot)
+        TerminalSurfaceBridge.draw(graphics, x, y, screenSnapshot)
     }
 
     override fun pushClip(
@@ -182,7 +186,7 @@ class GuiGraphicsRenderBackend(
 
             // Cursor caret (blinking by tick).
             if (cursorVisibleRow in 0 until visibleLines) {
-                val tick = ru.lazyhat.compukterkraft.core.ui.foundation.TickContext.current
+                val tick = ru.lazyhat.kraftui.foundation.TickContext.current
                 if ((tick / 15) % 2 == 0) {
                     val line = lines.getOrNull(viewModel.cursorLine) ?: ""
                     val col = viewModel.cursorColumn.coerceIn(0, line.length)
@@ -201,9 +205,9 @@ class GuiGraphicsRenderBackend(
                 val markerY = y + visibleRow * fontHeight
                 val color =
                     when (diag.severity) {
-                        IdeDiagnosticSeverity.ERROR -> 0xFFE05555.toInt()
-                        IdeDiagnosticSeverity.WARNING -> 0xFFE0A96D.toInt()
-                        IdeDiagnosticSeverity.INFO -> 0xFF6D9DE0.toInt()
+                        DiagnosticSeverity.ERROR -> 0xFFE05555.toInt()
+                        DiagnosticSeverity.WARNING -> 0xFFE0A96D.toInt()
+                        DiagnosticSeverity.INFO -> 0xFF6D9DE0.toInt()
                     }
                 graphics.fill(x, markerY, x + 2, markerY + fontHeight, color)
             }
@@ -213,4 +217,20 @@ class GuiGraphicsRenderBackend(
     }
 
     override fun measureText(text: String): Int = font.width(text)
+
+    private fun highlightColor(kind: HighlightTokenKind): Int =
+        when (kind) {
+            HighlightTokenKind.KEYWORD -> 0x8EC5FF
+            HighlightTokenKind.STRING -> 0xD9C27C
+            HighlightTokenKind.NUMBER -> 0xC6A0F6
+            HighlightTokenKind.BOOLEAN -> 0xC6A0F6
+            HighlightTokenKind.NULL -> 0xC6A0F6
+            HighlightTokenKind.IDENTIFIER -> 0xE6ECF5
+            HighlightTokenKind.FUNCTION -> 0x8BD5CA
+            HighlightTokenKind.TYPE -> 0xF5B971
+            HighlightTokenKind.MODULE -> 0x7FC1FF
+            HighlightTokenKind.FIELD -> 0xA8D68F
+            HighlightTokenKind.OPERATOR -> 0xE6ECF5
+            HighlightTokenKind.PUNCTUATION -> 0xB0B8C5
+        }
 }

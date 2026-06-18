@@ -30,19 +30,19 @@ import ru.lazyhat.compukterkraft.core.device.input.ComputerControlAction
 import ru.lazyhat.compukterkraft.core.device.input.ControlInputEvent
 import ru.lazyhat.compukterkraft.core.gui.TerminalRect
 import ru.lazyhat.compukterkraft.core.gui.WorkbenchTerminalMetrics
-import ru.lazyhat.compukterkraft.core.ui.foundation.CanvasScope
-import ru.lazyhat.compukterkraft.core.ui.foundation.Color
-import ru.lazyhat.compukterkraft.core.ui.foundation.HoverState
-import ru.lazyhat.compukterkraft.core.ui.foundation.UiElement
-import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.Modifier
-import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.background
-import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.focusable
-import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.hoverable
-import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.offset
-import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.size
-import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.tooltip
-import ru.lazyhat.compukterkraft.core.ui.foundation.ui
-import ru.lazyhat.compukterkraft.core.ui.foundation.value
+import ru.lazyhat.kraftui.foundation.CanvasScope
+import ru.lazyhat.kraftui.foundation.Color
+import ru.lazyhat.kraftui.foundation.HoverState
+import ru.lazyhat.kraftui.foundation.UiElement
+import ru.lazyhat.kraftui.foundation.modifier.Modifier
+import ru.lazyhat.kraftui.foundation.modifier.background
+import ru.lazyhat.kraftui.foundation.modifier.focusable
+import ru.lazyhat.kraftui.foundation.modifier.hoverable
+import ru.lazyhat.kraftui.foundation.modifier.offset
+import ru.lazyhat.kraftui.foundation.modifier.size
+import ru.lazyhat.kraftui.foundation.modifier.tooltip
+import ru.lazyhat.kraftui.foundation.ui
+import ru.lazyhat.kraftui.foundation.value
 
 /**
  * Terminal screen authored with the UI DSL. Mirrors the historical

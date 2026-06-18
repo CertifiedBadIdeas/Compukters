@@ -41,8 +41,8 @@ import ru.lazyhat.compukterkraft.common.utils.computerID
 import ru.lazyhat.compukterkraft.core.gui.TerminalRect
 import ru.lazyhat.compukterkraft.core.gui.WorkbenchTerminalInputController
 import ru.lazyhat.compukterkraft.core.gui.WorkbenchTerminalLayout
-import ru.lazyhat.compukterkraft.core.ui.foundation.CanvasScope
-import ru.lazyhat.compukterkraft.core.ui.foundation.Color
+import ru.lazyhat.kraftui.foundation.CanvasScope
+import ru.lazyhat.kraftui.foundation.Color
 
 abstract class ComputerDisplayScreen<T : AbstractComputerMenu>(
     container: T,
