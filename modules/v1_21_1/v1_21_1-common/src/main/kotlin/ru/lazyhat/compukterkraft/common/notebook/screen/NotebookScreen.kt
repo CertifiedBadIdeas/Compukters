@@ -28,15 +28,15 @@ import ru.lazyhat.compukterkraft.core.device.input.ComputerControlAction
 import ru.lazyhat.compukterkraft.core.device.input.ControlInputEvent
 import ru.lazyhat.compukterkraft.core.gui.WorkbenchTerminalLayout
 import ru.lazyhat.compukterkraft.core.gui.WorkbenchTerminalMetrics
-import ru.lazyhat.compukterkraft.core.ui.foundation.Color
-import ru.lazyhat.compukterkraft.core.ui.foundation.UiElement
-import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.Modifier
-import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.background
-import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.focusable
-import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.offset
-import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.size
-import ru.lazyhat.compukterkraft.core.ui.foundation.ui
-import ru.lazyhat.compukterkraft.core.ui.foundation.value
+import ru.lazyhat.kraftui.foundation.Color
+import ru.lazyhat.kraftui.foundation.UiElement
+import ru.lazyhat.kraftui.foundation.modifier.Modifier
+import ru.lazyhat.kraftui.foundation.modifier.background
+import ru.lazyhat.kraftui.foundation.modifier.focusable
+import ru.lazyhat.kraftui.foundation.modifier.offset
+import ru.lazyhat.kraftui.foundation.modifier.size
+import ru.lazyhat.kraftui.foundation.ui
+import ru.lazyhat.kraftui.foundation.value
 
 private enum class NotebookRuntimeState(
     val label: String,
@@ -156,7 +156,7 @@ class NotebookScreen(
             contentTopInset = NOTEBOOK_CONTENT_TOP,
         )
 
-    private fun ru.lazyhat.compukterkraft.core.ui.foundation.UiScope.laptopButton(
+    private fun ru.lazyhat.kraftui.foundation.UiScope.laptopButton(
         x: Int,
         y: Int,
         label: () -> String,
@@ -184,7 +184,7 @@ class NotebookScreen(
         }
     }
 
-    private fun ru.lazyhat.compukterkraft.core.ui.foundation.UiScope.moduleBay(
+    private fun ru.lazyhat.kraftui.foundation.UiScope.moduleBay(
         x: Int,
         y: Int,
     ) {
@@ -203,7 +203,7 @@ class NotebookScreen(
         }
     }
 
-    private fun ru.lazyhat.compukterkraft.core.ui.foundation.CanvasScope.drawButtonChrome(color: Color) {
+    private fun ru.lazyhat.kraftui.foundation.CanvasScope.drawButtonChrome(color: Color) {
         fillRect(0, 0, 68, 14, color)
         fillRect(0, 0, 68, 1, BUTTON_BORDER)
         fillRect(0, 13, 68, 1, BUTTON_BORDER)

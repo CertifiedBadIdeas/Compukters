@@ -22,6 +22,10 @@ plugins {
     alias(libs.plugins.commonConvention)
 }
 
+dependencies {
+    implementation(projects.uiDsl)
+}
+
 val generateLocalizationApi =
     tasks.register<GenerateLocalizationApiTask>("generateLocalizationApi") {
         description =

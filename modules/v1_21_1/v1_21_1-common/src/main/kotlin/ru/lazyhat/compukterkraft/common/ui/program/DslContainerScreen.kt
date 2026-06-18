@@ -5,9 +5,9 @@ import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen
 import net.minecraft.network.chat.Component
 import net.minecraft.world.entity.player.Inventory
 import net.minecraft.world.inventory.AbstractContainerMenu
-import ru.lazyhat.compukterkraft.core.ui.foundation.UiElement
-import ru.lazyhat.compukterkraft.core.ui.program.ScreenProgramCompiler
-import ru.lazyhat.compukterkraft.core.ui.program.ScreenRuntimeExecutor
+import ru.lazyhat.kraftui.foundation.UiElement
+import ru.lazyhat.kraftui.program.ScreenProgramCompiler
+import ru.lazyhat.kraftui.program.ScreenRuntimeExecutor
 
 /**
  * Base class for Minecraft container screens whose content is described with
@@ -47,7 +47,7 @@ abstract class DslContainerScreen<T : AbstractContainerMenu>(
     /**
      * Discard the cached executor so the next [renderBg] recompiles from
      * scratch. Call this when the *shape* of [content] would differ — most
-     * dynamic content should instead use [ru.lazyhat.compukterkraft.core.ui.foundation.Value]s and not require
+     * dynamic content should instead use [ru.lazyhat.kraftui.foundation.Value]s and not require
      * a rebuild.
      */
     protected fun invalidate() {

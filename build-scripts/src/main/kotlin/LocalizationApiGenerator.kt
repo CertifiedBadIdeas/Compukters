@@ -72,7 +72,7 @@ class LocalizationApiGenerator(
         buildString {
             appendLine("package $packageName")
             appendLine()
-            appendLine("import ru.lazyhat.compukterkraft.core.ui.foundation.Value")
+            appendLine("import ru.lazyhat.kraftui.foundation.Value")
             appendLine("import ru.lazyhat.compukterkraft.common.ui.dsl.translatable")
             appendLine()
             append(

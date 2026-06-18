@@ -1,7 +1,7 @@
 package ru.lazyhat.compukterkraft.common.ui.dsl
 
 import net.minecraft.network.chat.Component
-import ru.lazyhat.compukterkraft.core.ui.foundation.Value
+import ru.lazyhat.kraftui.foundation.Value
 
 class TranslatableValueConstant(
     key: String,
