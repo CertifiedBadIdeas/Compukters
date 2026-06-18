@@ -1,9 +1,9 @@
-use crate::terminal_render;
+use crate::{memory_layout, terminal_render};
 
-const COLUMNS: usize = 320 / terminal_render::CELL_WIDTH;
-const ROWS: usize = 200 / terminal_render::CELL_HEIGHT;
+const COLUMNS: usize = memory_layout::TERMINAL_COLUMNS as usize;
+const ROWS: usize = memory_layout::TERMINAL_ROWS as usize;
 const CELL_COUNT: usize = COLUMNS * ROWS;
-const CELLS_ADDR: u32 = 0x0000_3000;
+const CELLS_ADDR: u32 = memory_layout::TERMINAL_CELLS_ADDR;
 
 static mut CURSOR_X: usize = 0;
 static mut CURSOR_Y: usize = 0;

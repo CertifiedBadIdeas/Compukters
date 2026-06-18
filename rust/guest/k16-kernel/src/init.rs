@@ -1,33 +1,32 @@
-use k16_boot_chain::{
-    enter_loaded_image, load_k16e_from_storage0, user_memory_end_from_current_boot_info,
-    K16eAbiKind, LoadError,
-};
+use k16_boot_chain::LoadError;
 
 use crate::{control, debug, process};
 
 pub fn launch() -> ! {
-    let image = unsafe {
-        load_k16e_from_storage0(
-            b"ROOT",
-            &[b"bin".as_slice(), b"init.kx".as_slice()],
-            K16eAbiKind::Program,
-        )
-    };
-    match image {
-        Ok(image) => {
-            let memory_end = unsafe { user_memory_end_from_current_boot_info(image) };
-            match memory_end {
-                Ok(memory_end) => {
-                    if unsafe { process::initialize_init_process(image, memory_end) }.is_err() {
-                        fail(LoadError::INVALID_EXECUTABLE);
-                    }
-                }
-                Err(error) => fail(error),
+    let boot_info = unsafe { k16_abi::computer::profile::read_boot_info() };
+    match boot_info {
+        Some(boot_info) => {
+            let launch =
+                unsafe { process::begin_translated_init_from_storage0(b"/bin/init.kx", boot_info) };
+            match launch {
+                Ok(launch) => unsafe { process::enter_child_context(launch) },
+                Err(error) => fail_process_load(error),
             }
-            unsafe { enter_loaded_image(image) }
         }
-        Err(error) => fail(error),
+        None => fail(LoadError::INVALID_BOOT_INFO),
     }
+}
+
+fn fail_process_load(error: process::ProcessLoadError) -> ! {
+    let load_error = match error {
+        process::ProcessLoadError::InvalidPath => LoadError::PATH_NOT_FOUND,
+        process::ProcessLoadError::InvalidImage => LoadError::INVALID_EXECUTABLE,
+        process::ProcessLoadError::AddressOverflow
+        | process::ProcessLoadError::InvalidArena
+        | process::ProcessLoadError::ProgramTooLarge => LoadError::INVALID_BOOT_INFO,
+        process::ProcessLoadError::Storage => LoadError::PATH_NOT_FOUND,
+    };
+    fail(load_error)
 }
 
 fn fail(error: LoadError) -> ! {

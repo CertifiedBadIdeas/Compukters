@@ -1,0 +1,8 @@
+pub const TERMINAL_CELLS_ADDR: u32 = 0x0000_3000;
+pub const TERMINAL_COLUMNS: u32 = 53;
+pub const TERMINAL_ROWS: u32 = 25;
+pub const TERMINAL_CELL_COUNT: u32 = TERMINAL_COLUMNS * TERMINAL_ROWS;
+
+pub const fn terminal_cells_end() -> u32 {
+    TERMINAL_CELLS_ADDR + TERMINAL_CELL_COUNT
+}

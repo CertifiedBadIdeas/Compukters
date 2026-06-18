@@ -575,7 +575,8 @@ base and stack top. Syscalls that consume user pointers validate buffers
 against the current foreground process range rather than a global hard-coded
 user window.
 
-This is now a transitional physical-or-translated pointer model. If the current
+This is now a translated user-process model with a remaining physical pointer
+compatibility path for kernel tests and legacy launch code. If the current
 process has no address-space id, the kernel treats syscall pointers as
 guest-physical addresses, validates them against that process range, and copies
 bytes directly from or to physical RAM. If the current process has an
@@ -585,23 +586,25 @@ and moves bytes through the privileged `mmu0` `copy_from_user` and
 physical process ranges, and arithmetic overflow are reported to userland as
 the existing negative K16 `ERROR_FAULT` value.
 
-The current production process launcher is transitional. `/bin/init.kx` still
-runs as a physical foreground process, but `/bin/shell.kx` and shell-launched
-`/bin/*.kx` utilities run in host-managed `mmu0` address spaces. `RUN` creates
-an address space for the child, maps the child backing pages into that address
-space, activates translated user execution for the child, and records the child
-address-space id for syscall user-buffer copies. Before activation, the kernel
-restores the child's saved trap register frame and passes a dedicated physical
-kernel trap stack to `mmu0`; this preserves entry registers such as `argc` in
-`r1` and `argv` in `r2` while keeping later translated-user traps off the child
-user stack. When a translated child exits to a translated parent, the kernel
-uses `mmu0` `set_trap_return_address_space` with the parent address-space id
-and parent physical kernel trap stack before `iret`, so the saved parent frame
-resumes in translated/user mode. When a translated child exits to physical
-init, the kernel uses `mmu0` `set_trap_return_physical` before `iret` so the
-saved parent frame resumes in physical/kernel mode.
-In both cases, the kernel destroys the exiting translated child's `mmu0`
-address space before returning to the parent.
+The production process launcher runs `/bin/init.kx`, `/bin/shell.kx`, and
+shell-launched `/bin/*.kx` utilities in host-managed `mmu0` address spaces.
+The kernel maps each process backing range into its address space, activates
+translated user execution, and records the address-space id for syscall
+user-buffer copies. For init, the kernel reserves the top 4 KiB page below the
+boot-provided `BootInfo.ram_size` boundary as a physical kernel trap stack and
+places init's user stack below that page. Init's lower user arena boundary is
+not a fixed window: it is the next 4 KiB page after the maximum of
+`BootInfo.program_base`, the storage loader scratch range, the linked kernel
+image end, and kernel terminal state. For `RUN` children, the kernel
+reserves a physical kernel trap stack below the saved parent stack before
+placing the child stack. Before child activation, the kernel restores the
+child's saved trap register frame; this preserves entry registers such as
+`argc` in `r1` and `argv` in `r2` while keeping later translated-user traps off
+the child user stack. When a translated child exits to a translated parent, the
+kernel uses `mmu0` `set_trap_return_address_space` with the parent
+address-space id and parent physical kernel trap stack before `iret`, so the
+saved parent frame resumes in translated/user mode. The kernel destroys the
+exiting translated child's `mmu0` address space before returning to the parent.
 
 Each foreground process has its own monotonic heap after its loaded image. A
 child load arena starts after the current parent's program break, so child

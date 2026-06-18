@@ -11,6 +11,7 @@ mod fs;
 mod generated;
 mod gpu;
 mod init;
+mod memory_layout;
 mod mmio;
 mod process;
 mod stdin;

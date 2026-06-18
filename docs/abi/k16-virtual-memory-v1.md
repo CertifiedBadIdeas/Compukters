@@ -12,10 +12,10 @@ This document defines the first intended K16 virtual-memory and process
 address-space contract. The current VM implements the host MMU map, CPU
 address/privilege modes, privileged `mmu0` map controls, and trap/`iret` mode
 switching. The guest kernel also uses `mmu0` copy helpers for translated
-syscall buffers, launches `/bin/shell.kx` in a host-managed translated address
-space, and supports shell-started translated utility children for the current
-fixed foreground depth. BIOS, bootloader, kernel, and init still run in
-physical mode in this slice; a more general process lifecycle is intentionally
+syscall buffers, launches `/bin/init.kx` and `/bin/shell.kx` in host-managed
+translated address spaces, and supports shell-started translated utility
+children for the current fixed foreground depth. BIOS, bootloader, and kernel
+still run in physical mode; a more general process lifecycle is intentionally
 left for later process-model work.
 
 The design is intentionally smaller than a desktop or server OS MMU, but it is
@@ -189,9 +189,9 @@ handlers move bytes across the user/kernel boundary without directly
 dereferencing user virtual pointers.
 
 `set_trap_return_physical` lets a physical/kernel trap handler override the
-saved `iret` address mode after servicing a translated child. The current
-production process path uses it when translated shell exits and the blocked
-parent is still physical init.
+saved `iret` address mode after servicing a translated child. It remains a
+compatibility command for transitional physical-parent paths, but the current
+bundled init/shell/utility foreground chain uses translated parent resumes.
 
 `set_trap_return_address_space` lets a physical/kernel trap handler override
 the saved `iret` address mode to a translated parent address space and restore
@@ -267,20 +267,26 @@ allocator constraint for the kernel-selected backing pages.
 Physical boot flow remains unchanged:
 
 ```text
-host -> BIOS flash -> bootloader -> kernel in physical mode
+host -> BIOS flash -> bootloader -> kernel in physical mode -> translated init
 ```
 
-The VM-enabled production user launch does this for `/bin/shell.kx` and
-shell-started utilities:
+The VM-enabled production user launch does this for `/bin/init.kx`,
+`/bin/shell.kx`, and shell-started utilities:
 
 1. Load a dynamic K16E `program` image into kernel-selected physical pages.
-2. Use the child arena for `.bss`, heap, argv, and stack.
-3. Reserve a small physical kernel trap stack below the physical parent stack.
-4. Create a host MMU address-space map for the page-aligned child backing
+2. Use the process arena for `.bss`, heap, optional argv, and stack.
+3. Reserve a small physical kernel trap stack outside the user stack: for init,
+   the top 4 KiB page below `BootInfo.ram_size`; for children, below the
+   saved parent stack.
+4. For init, choose the lower user arena boundary from the next 4 KiB page
+   after the maximum of `BootInfo.program_base`, storage loader scratch, linked
+   kernel image end, and kernel terminal state. For children, start after the
+   current process break.
+5. Create a host MMU address-space map for the page-aligned process backing
    range.
-5. Restore the child entry register frame, including argv registers.
-6. Enter user-translated mode at the dynamic image entry PC.
-7. Set user `sp` to the selected child stack top and the trap stack to the
+6. Restore the entry register frame, including argv registers for child runs.
+7. Enter user-translated mode at the dynamic image entry PC.
+8. Set user `sp` to the selected process stack top and the trap stack to the
    reserved physical kernel stack.
 
 This first production mapping is identity-mapped: child virtual addresses equal
@@ -303,7 +309,7 @@ The implementation sequence is:
 4. Convert syscall user-buffer validation from physical range checks to the
    implemented `mmu0` copy helpers for VM-enabled processes. Done.
 5. Move init into a VM-enabled user process after the shell and child path is
-   stable. Pending.
+   stable. Done for bundled `/bin/init.kx`.
 6. Enable nested translated `RUN` by adding a translated-parent trap-return
    path instead of only the physical-parent return override. Done for the
    current init -> shell -> utility foreground depth; a general process

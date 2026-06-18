@@ -13,6 +13,7 @@ pub const MAX_RUN_PATH_BYTES: usize = BIN_PREFIX.len() + K16FS_MAX_NAME_BYTES;
 const CHILD_ARG_ENTRY_BYTES: u32 = 8;
 const VM_PAGE_SIZE: u32 = 4096;
 const TRANSLATED_TRAP_STACK_BYTES: u32 = VM_PAGE_SIZE;
+const INITIAL_USER_LOADER_SCRATCH_END: u32 = k16_storage::SCRATCH_ADDR + k16_storage::BLOCK_SIZE;
 #[cfg(any(test, feature = "host-test"))]
 const DEFAULT_INIT_MEMORY_END: u32 = 0x0002_5000;
 // Keep relocation records outside k16_storage::SCRATCH_ADDR: storage reads use
@@ -85,6 +86,10 @@ static mut RUNTIME_SLOT0_KERNEL_STACK_TOP: u32 = 0;
 static mut RUNTIME_SLOT1_KERNEL_STACK_TOP: u32 = 0;
 #[cfg(not(test))]
 static mut RUNTIME_SLOT2_KERNEL_STACK_TOP: u32 = 0;
+#[cfg(not(test))]
+unsafe extern "C" {
+    static __k16_image_end: u8;
+}
 
 #[cfg(any(test, feature = "host-test"))]
 #[allow(dead_code)]
@@ -394,6 +399,47 @@ impl ProcessTable {
         Ok(())
     }
 
+    pub fn initialize_translated_init_plan_in_memory(
+        &mut self,
+        plan: DynamicUserLoadPlan,
+        memory_end: u32,
+        translated: TranslatedUserLaunch,
+    ) -> Result<ChildLaunch, ProcessLoadError> {
+        let memory = ProcessMemory::new(plan.load_base, translated.stack_top)?;
+        if translated.kernel_stack_top != memory_end
+            || translated.entry_pc != plan.entry_pc
+            || translated.stack_top != plan.stack_top
+            || translated.stack_top >= translated.kernel_stack_top
+        {
+            return Err(ProcessLoadError::InvalidArena);
+        }
+        let init_slot = &mut self.slots[INIT_PROCESS_SLOT];
+        let context = ProcessContext {
+            entry_pc: translated.entry_pc,
+            stack_top: translated.stack_top,
+        };
+        let frame = child_frame_for_context(context);
+        init_slot.context = context;
+        init_slot.frame = frame;
+        init_slot.memory = memory;
+        init_slot.load_base = align_up(plan.load_end, LOAD_ALIGNMENT)?;
+        let heap = HeapState::from_bounds(plan.load_end, memory.end)
+            .map_err(|_| ProcessLoadError::ProgramTooLarge)?;
+        init_slot.heap_start = heap.start;
+        init_slot.program_break = heap.start;
+        init_slot.heap_limit = heap.limit;
+        init_slot.address_space = Some(translated.address_space);
+        init_slot.kernel_stack_top = Some(translated.kernel_stack_top);
+        self.current_slot = INIT_PROCESS_SLOT;
+        Ok(ChildLaunch {
+            id: ProcessId::Init,
+            context,
+            frame,
+            address_space: Some(translated.address_space),
+            kernel_stack_top: Some(translated.kernel_stack_top),
+        })
+    }
+
     pub fn child_arena_for_init_frame(
         &self,
         init_frame: TrapFrame,
@@ -699,6 +745,58 @@ pub unsafe fn initialize_init_process(
                 .initialize_init_image_in_memory(image, memory_end)
         }
     }
+}
+
+#[cfg(not(test))]
+pub unsafe fn begin_translated_init_from_storage0(
+    path: &[u8],
+    boot_info: k16_abi::computer::profile::BootInfo,
+) -> Result<ChildLaunch, ProcessLoadError> {
+    let (arena, kernel_stack_top) =
+        translated_init_user_arena(boot_info.program_base, boot_info.ram_size, unsafe {
+            initial_user_kernel_reserved_end()
+        })?;
+    let child_plan = unsafe { load_dynamic_user_program_from_storage0(path, arena)? };
+    let translated = unsafe { create_translated_user_launch(child_plan, kernel_stack_top)? };
+    let memory = ProcessMemory::new(child_plan.load_base, translated.stack_top)?;
+    let heap = HeapState::from_bounds(child_plan.load_end, memory.end)
+        .map_err(|_| ProcessLoadError::ProgramTooLarge)?;
+    let context = ProcessContext {
+        entry_pc: translated.entry_pc,
+        stack_top: translated.stack_top,
+    };
+    let frame = child_frame_for_context(context);
+    unsafe {
+        write_runtime_word(
+            core::ptr::addr_of_mut!(RUNTIME_CURRENT_SLOT),
+            INIT_PROCESS_SLOT as u32,
+        );
+        write_runtime_word(runtime_slot_parent_ptr(1), NO_PARENT_SLOT);
+        write_runtime_word(runtime_slot_parent_ptr(2), NO_PARENT_SLOT);
+        write_runtime_process_memory(INIT_PROCESS_SLOT, memory);
+        write_runtime_word(runtime_slot_heap_start_ptr(INIT_PROCESS_SLOT), heap.start);
+        write_runtime_word(
+            runtime_slot_program_break_ptr(INIT_PROCESS_SLOT),
+            heap.start,
+        );
+        write_runtime_word(runtime_slot_heap_limit_ptr(INIT_PROCESS_SLOT), heap.limit);
+        write_runtime_word(
+            runtime_slot_address_space_ptr(INIT_PROCESS_SLOT),
+            translated.address_space,
+        );
+        write_runtime_word(
+            runtime_slot_kernel_stack_top_ptr(INIT_PROCESS_SLOT),
+            translated.kernel_stack_top,
+        );
+        *runtime_slot_frame(INIT_PROCESS_SLOT).get() = k16_rt::TrapFrame::from(frame);
+    }
+    Ok(ChildLaunch {
+        id: ProcessId::Init,
+        context,
+        frame,
+        address_space: Some(translated.address_space),
+        kernel_stack_top: Some(translated.kernel_stack_top),
+    })
 }
 
 #[cfg(any(not(test), feature = "host-test"))]
@@ -1392,6 +1490,31 @@ fn translated_child_arena_end(parent_stack_limit: u32) -> Result<(u32, u32), Pro
         align_down(child_arena_end, STACK_ALIGNMENT),
         kernel_stack_top,
     ))
+}
+
+fn translated_init_arena_end(memory_end: u32) -> Result<(u32, u32), ProcessLoadError> {
+    translated_child_arena_end(memory_end)
+}
+
+fn translated_init_user_arena(
+    program_base: u32,
+    memory_end: u32,
+    kernel_reserved_end: u32,
+) -> Result<(UserArena, u32), ProcessLoadError> {
+    let (arena_end, kernel_stack_top) = translated_init_arena_end(memory_end)?;
+    let arena_start = align_up(
+        program_base
+            .max(INITIAL_USER_LOADER_SCRATCH_END)
+            .max(kernel_reserved_end),
+        VM_PAGE_SIZE,
+    )?;
+    Ok((UserArena::new(arena_start, arena_end)?, kernel_stack_top))
+}
+
+#[cfg(not(test))]
+unsafe fn initial_user_kernel_reserved_end() -> u32 {
+    let image_end = core::ptr::addr_of!(__k16_image_end) as u32;
+    image_end.max(crate::memory_layout::terminal_cells_end())
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -2612,6 +2735,44 @@ mod tests {
     }
 
     #[test]
+    fn translated_init_arena_reserves_top_page_for_kernel_trap_stack() {
+        assert_eq!(
+            translated_init_arena_end(0x0003_0000),
+            Ok((0x0002_f000, 0x0003_0000))
+        );
+        assert_eq!(
+            translated_init_user_arena(0x0000_1000, 0x0003_0000, 0),
+            Ok((
+                UserArena {
+                    start: 0x0000_1000,
+                    end: 0x0002_f000,
+                },
+                0x0003_0000,
+            ))
+        );
+        assert_eq!(
+            translated_init_user_arena(0x0000_0100, 0x0003_0000, 0),
+            Ok((
+                UserArena {
+                    start: 0x0000_1000,
+                    end: 0x0002_f000,
+                },
+                0x0003_0000,
+            ))
+        );
+        assert_eq!(
+            translated_init_user_arena(0x0000_0100, 0x0003_0000, 0x0000_352d),
+            Ok((
+                UserArena {
+                    start: 0x0000_4000,
+                    end: 0x0002_f000,
+                },
+                0x0003_0000,
+            ))
+        );
+    }
+
+    #[test]
     fn runtime_launch_policy_translates_shell_and_nested_utility_children() {
         assert!(should_translate_runtime_child_path(b"/bin/shell.kx"));
         assert!(should_translate_runtime_child_path(b"/bin/cat.kx"));
@@ -3142,6 +3303,48 @@ mod tests {
 
         assert_eq!(plan.load_base, 0x0001_0a20);
         assert_eq!(plan.stack_top, 0x0001_f000);
+    }
+
+    #[test]
+    fn process_table_records_translated_init_address_space_and_reserved_kernel_stack() {
+        let plan = DynamicUserLoadPlan {
+            load_base: 0x0001_0000,
+            load_end: 0x0001_0a20,
+            entry_pc: 0x0001_0004,
+            stack_top: 0x0002_f000,
+            payload_dst: 0x0001_0000,
+            payload_len: 0x0a20,
+            zero_fill_addr: 0x0001_0a20,
+            zero_fill_len: 0,
+        };
+        let translated = TranslatedUserLaunch {
+            address_space: 7,
+            entry_pc: 0x0001_0004,
+            stack_top: 0x0002_f000,
+            kernel_stack_top: 0x0003_0000,
+        };
+        let mut table = ProcessTable::new(ProcessContext {
+            entry_pc: 0,
+            stack_top: 0,
+        });
+
+        let launch = table
+            .initialize_translated_init_plan_in_memory(plan, 0x0003_0000, translated)
+            .expect("translated init image records");
+
+        assert_eq!(launch.id, ProcessId::Init);
+        assert_eq!(launch.address_space, Some(7));
+        assert_eq!(launch.kernel_stack_top, Some(0x0003_0000));
+        assert_eq!(launch.context.entry_pc, 0x0001_0004);
+        assert_eq!(launch.context.stack_top, 0x0002_f000);
+        assert_eq!(table.current_address_space(), Some(7));
+        assert_eq!(
+            table.current_memory(),
+            Ok(ProcessMemory {
+                start: 0x0001_0000,
+                end: 0x0002_f000,
+            })
+        );
     }
 
     #[test]
