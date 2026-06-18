@@ -1956,7 +1956,7 @@ class K16FirmwareResourceTest {
     }
 }
 
-private const val K16_SNAPSHOT_CPU_RECORD_SIZE = 204
+private const val K16_SNAPSHOT_CPU_RECORD_SIZE = 208
 private const val K16_SNAPSHOT_DEVICE_HEADER_SIZE = 8
 private const val K16_SNAPSHOT_TIMER0_DEVICE_KIND = 6
 private const val K16_SNAPSHOT_KEYBOARD0_DEVICE_KIND = 7
