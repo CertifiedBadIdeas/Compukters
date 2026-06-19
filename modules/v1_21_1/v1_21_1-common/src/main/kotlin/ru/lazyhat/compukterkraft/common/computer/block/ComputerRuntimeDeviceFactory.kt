@@ -51,13 +51,14 @@ object ComputerRuntimeDeviceFactory {
             endpointFactory = {
                 val profile = DeviceProfileRegistry.forFamily(tile.family)
                 val memorySize = k16MemorySizeBytes(profile.resources.memory.vmRamBytes)
+                val maxSteps = k16MaxSteps(profile.resources.cpu.wallTimeGuardNanosPerSlice)
                 K16SystemVolumeWorkspace.prepareStorage0Volume(workspace)
                 val storage0 = volumeStore.openOrCreateComputerVolume(deviceId, "storage0")
                 val biosFlashPath = K16BiosFlashWorkspace.prepareBiosFlash(workspace)
                 val snapshot =
                     tile.consumePendingRuntimeSnapshot()
                         ?: snapshotStore.readComputerSnapshotOrNull(deviceId)
-                createK16ComputerEndpoint(biosFlashPath, storage0, snapshot, memorySize)
+                createK16ComputerEndpoint(biosFlashPath, storage0, snapshot, memorySize, maxSteps)
             },
             stateSink = host.stateSink,
             displayNetwork = host.displayNetwork,
@@ -71,11 +72,19 @@ object ComputerRuntimeDeviceFactory {
         return vmRamBytes.toInt()
     }
 
+    private fun k16MaxSteps(wallTimeGuardNanosPerSlice: Long): Long {
+        require(wallTimeGuardNanosPerSlice > 0) {
+            "K16 VM max steps must be positive: $wallTimeGuardNanosPerSlice"
+        }
+        return wallTimeGuardNanosPerSlice
+    }
+
     private fun createK16ComputerEndpoint(
         biosFlashPath: Path,
         storage0: K16VolumeBlob,
         snapshot: ByteArray?,
         memorySize: Int,
+        maxSteps: Long,
     ) =
         try {
             val storage0Path = storage0.path
@@ -85,6 +94,7 @@ object ComputerRuntimeDeviceFactory {
                     biosFlashPath = biosFlashPath,
                     storage0Path = storage0Path,
                     memorySize = memorySize,
+                    maxSteps = maxSteps,
                 )
             } else {
                 K16ComputerRuntimeFactory.restoreFromBiosFlashSnapshot(
