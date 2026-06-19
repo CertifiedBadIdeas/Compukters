@@ -51,7 +51,7 @@ object ComputerRuntimeDeviceFactory {
             endpointFactory = {
                 val profile = DeviceProfileRegistry.forFamily(tile.family)
                 val memorySize = k16MemorySizeBytes(profile.resources.memory.vmRamBytes)
-                val maxSteps = k16MaxSteps(profile.resources.cpu.wallTimeGuardNanosPerSlice)
+                val maxSteps = k16MaxSteps(profile.resources.cpu.maxStepsPerSlice)
                 K16SystemVolumeWorkspace.prepareStorage0Volume(workspace)
                 val storage0 = volumeStore.openOrCreateComputerVolume(deviceId, "storage0")
                 val biosFlashPath = K16BiosFlashWorkspace.prepareBiosFlash(workspace)
@@ -72,11 +72,11 @@ object ComputerRuntimeDeviceFactory {
         return vmRamBytes.toInt()
     }
 
-    private fun k16MaxSteps(wallTimeGuardNanosPerSlice: Long): Long {
-        require(wallTimeGuardNanosPerSlice > 0) {
-            "K16 VM max steps must be positive: $wallTimeGuardNanosPerSlice"
+    private fun k16MaxSteps(maxStepsPerSlice: Long): Long {
+        require(maxStepsPerSlice > 0) {
+            "K16 VM max steps must be positive: $maxStepsPerSlice"
         }
-        return wallTimeGuardNanosPerSlice
+        return maxStepsPerSlice
     }
 
     private fun createK16ComputerEndpoint(

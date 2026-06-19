@@ -108,7 +108,7 @@ class ComputerRuntimeDeviceFactoryArchitectureTest {
                 .readText()
 
         val profileIndex = source.indexOf("DeviceProfileRegistry.forFamily(tile.family)")
-        val budgetIndex = source.indexOf("profile.resources.cpu.wallTimeGuardNanosPerSlice")
+        val budgetIndex = source.indexOf("profile.resources.cpu.maxStepsPerSlice")
         val endpointIndex = source.indexOf("createK16ComputerEndpoint(biosFlashPath, storage0, snapshot, memorySize, maxSteps)")
         val freshBootBudgetIndex =
             source.indexOf("maxSteps = maxSteps", source.indexOf("K16ComputerRuntimeFactory.createFromBiosFlash"))
