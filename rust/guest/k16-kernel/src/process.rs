@@ -338,6 +338,74 @@ struct RuntimeExitedResources {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
+struct ProcessResources {
+    memory: ProcessMemory,
+    load_base: u32,
+    heap: RuntimeHeapState,
+    address_space: Option<u32>,
+    kernel_stack_top: Option<u32>,
+    backing_pages: Option<crate::page_alloc::FrameRange>,
+    heap_backing_pages: Option<crate::page_alloc::FrameRange>,
+}
+
+impl ProcessResources {
+    fn for_child_plan(
+        child_plan: DynamicUserLoadPlan,
+        argv: ChildArgv,
+        translated: Option<TranslatedUserLaunch>,
+    ) -> Result<Self, ProcessSwitchError> {
+        Ok(Self {
+            memory: ProcessMemory::new(child_plan.load_base, child_plan.stack_top)
+                .map_err(|_| ProcessSwitchError::NoRunningChild)?,
+            load_base: align_up(child_plan.load_end, LOAD_ALIGNMENT)
+                .map_err(|_| ProcessSwitchError::NoRunningChild)?,
+            heap: RuntimeHeapState::from_bounds(
+                child_plan.load_end.max(argv.end),
+                child_plan.stack_top,
+            )
+            .map_err(|_| ProcessSwitchError::NoRunningChild)?,
+            address_space: translated.map(|launch| launch.address_space),
+            kernel_stack_top: translated.map(|launch| launch.kernel_stack_top),
+            backing_pages: translated.and_then(|launch| launch.backing_pages),
+            heap_backing_pages: None,
+        })
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+struct ProcessDescriptor {
+    context: ProcessContext,
+    frame: TrapFrame,
+    resources: ProcessResources,
+}
+
+impl ProcessDescriptor {
+    fn for_child_plan(
+        child_plan: DynamicUserLoadPlan,
+        argv: ChildArgv,
+        translated: Option<TranslatedUserLaunch>,
+    ) -> Result<Self, ProcessSwitchError> {
+        let context = translated
+            .map(|launch| ProcessContext {
+                entry_pc: launch.entry_pc,
+                stack_top: launch.stack_top,
+            })
+            .unwrap_or(ProcessContext {
+                entry_pc: child_plan.entry_pc,
+                stack_top: child_plan.stack_top,
+            });
+        let mut frame = child_frame_for_context(context);
+        frame.registers[1] = argv.argc;
+        frame.registers[2] = argv.table_ptr;
+        Ok(Self {
+            context,
+            frame,
+            resources: ProcessResources::for_child_plan(child_plan, argv, translated)?,
+        })
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 struct RuntimeForegroundSlotState {
     parent_slot: u32,
     memory: Option<ProcessMemory>,
@@ -349,6 +417,18 @@ struct RuntimeForegroundSlotState {
 }
 
 impl RuntimeForegroundSlotState {
+    const fn from_process_resources(parent_slot: u32, resources: ProcessResources) -> Self {
+        Self {
+            parent_slot,
+            memory: Some(resources.memory),
+            heap: Some(resources.heap),
+            address_space: resources.address_space,
+            kernel_stack_top: resources.kernel_stack_top,
+            backing_pages: resources.backing_pages,
+            heap_backing_pages: resources.heap_backing_pages,
+        }
+    }
+
     const fn exited_resources(self) -> RuntimeExitedResources {
         RuntimeExitedResources {
             address_space: self.address_space,
@@ -575,6 +655,16 @@ impl ProcessTable {
         init_frame: TrapFrame,
         argv: ChildArgv,
     ) -> Result<ChildLaunch, ProcessSwitchError> {
+        self.begin_child_run_from_frame_argv_and_translation(child_plan, init_frame, argv, None)
+    }
+
+    fn begin_child_run_from_frame_argv_and_translation(
+        &mut self,
+        child_plan: DynamicUserLoadPlan,
+        init_frame: TrapFrame,
+        argv: ChildArgv,
+        translated: Option<TranslatedUserLaunch>,
+    ) -> Result<ChildLaunch, ProcessSwitchError> {
         if self.slots[self.current_slot].state != PROCESS_STATE_RUNNING {
             return Err(ProcessSwitchError::NoRunningChild);
         }
@@ -585,15 +675,7 @@ impl ProcessTable {
         if parent_slot == child_slot {
             return Err(ProcessSwitchError::ChildAlreadyRunning);
         }
-        let context = ProcessContext {
-            entry_pc: child_plan.entry_pc,
-            stack_top: child_plan.stack_top,
-        };
-        let mut child_frame = child_frame_for_context(context);
-        child_frame.registers[1] = argv.argc;
-        child_frame.registers[2] = argv.table_ptr;
-        let heap = HeapState::from_bounds(child_plan.load_end.max(argv.end), child_plan.stack_top)
-            .map_err(|_| ProcessSwitchError::NoRunningChild)?;
+        let descriptor = ProcessDescriptor::for_child_plan(child_plan, argv, translated)?;
         let parent = &mut self.slots[parent_slot];
         unsafe { core::ptr::write_volatile(&mut parent.state, PROCESS_STATE_BLOCKED_ON_CHILD) };
         parent.context = ProcessContext {
@@ -603,24 +685,25 @@ impl ProcessTable {
         parent.frame = init_frame;
         let child = &mut self.slots[child_slot];
         child.parent_slot = parent_slot as u32;
-        child.context = context;
-        child.frame = child_frame;
+        child.context = descriptor.context;
+        child.frame = descriptor.frame;
         child.exit_status = 0;
-        child.memory = ProcessMemory::new(child_plan.load_base, child_plan.stack_top)
-            .map_err(|_| ProcessSwitchError::NoRunningChild)?;
-        child.load_base = align_up(child_plan.load_end, LOAD_ALIGNMENT)
-            .map_err(|_| ProcessSwitchError::NoRunningChild)?;
-        child.heap_start = heap.start;
-        child.program_break = heap.start;
-        child.heap_limit = heap.limit;
+        child.memory = descriptor.resources.memory;
+        child.load_base = descriptor.resources.load_base;
+        child.heap_start = descriptor.resources.heap.start;
+        child.program_break = descriptor.resources.heap.program_break;
+        child.heap_limit = descriptor.resources.heap.limit;
+        child.address_space = descriptor.resources.address_space;
+        child.kernel_stack_top = descriptor.resources.kernel_stack_top;
+        child.backing_pages = descriptor.resources.backing_pages;
         unsafe { core::ptr::write_volatile(&mut child.state, PROCESS_STATE_RUNNING) };
         self.current_slot = child_slot;
         Ok(ChildLaunch {
             id: ProcessId::from_slot(child_slot),
-            context,
-            frame: child_frame,
-            address_space: None,
-            kernel_stack_top: None,
+            context: descriptor.context,
+            frame: descriptor.frame,
+            address_space: descriptor.resources.address_space,
+            kernel_stack_top: descriptor.resources.kernel_stack_top,
         })
     }
 
@@ -638,26 +721,12 @@ impl ProcessTable {
         argv: ChildArgv,
         translated: TranslatedUserLaunch,
     ) -> Result<ChildLaunch, ProcessSwitchError> {
-        let mut launch =
-            self.begin_child_run_from_frame_and_argv(child_plan, TrapFrame::zeroed(), argv)?;
-        let context = ProcessContext {
-            entry_pc: translated.entry_pc,
-            stack_top: translated.stack_top,
-        };
-        let mut frame = child_frame_for_context(context);
-        frame.registers[1] = argv.argc;
-        frame.registers[2] = argv.table_ptr;
-        let child = &mut self.slots[self.current_slot];
-        child.address_space = Some(translated.address_space);
-        child.kernel_stack_top = Some(translated.kernel_stack_top);
-        child.backing_pages = translated.backing_pages;
-        child.context = context;
-        child.frame = frame;
-        launch.context = context;
-        launch.frame = frame;
-        launch.address_space = Some(translated.address_space);
-        launch.kernel_stack_top = Some(translated.kernel_stack_top);
-        Ok(launch)
+        self.begin_child_run_from_frame_argv_and_translation(
+            child_plan,
+            TrapFrame::zeroed(),
+            argv,
+            Some(translated),
+        )
     }
 
     pub fn finish_child(&mut self, status: u32) -> Result<ParentResume, ProcessSwitchError> {
@@ -1110,32 +1179,11 @@ unsafe fn begin_loaded_child_plan_runtime_with_argv(
     let child_slot = runtime_child_slot_for_parent(parent_slot, unsafe {
         read_runtime_address_space(parent_slot)
     })?;
-    let context = translated
-        .map(|launch| ProcessContext {
-            entry_pc: launch.entry_pc,
-            stack_top: launch.stack_top,
-        })
-        .unwrap_or(ProcessContext {
-            entry_pc: child_plan.entry_pc,
-            stack_top: child_plan.stack_top,
-        });
-    let mut child_frame = child_frame_for_context(context);
-    child_frame.registers[1] = argv.argc;
-    child_frame.registers[2] = argv.table_ptr;
-    let memory = ProcessMemory::new(child_plan.load_base, child_plan.stack_top)
-        .map_err(|_| ProcessSwitchError::NoRunningChild)?;
-    let heap =
-        RuntimeHeapState::from_bounds(child_plan.load_end.max(argv.end), child_plan.stack_top)
-            .map_err(|_| ProcessSwitchError::NoRunningChild)?;
-    let child_state = RuntimeForegroundSlotState {
-        parent_slot: parent_slot as u32,
-        memory: Some(memory),
-        heap: Some(heap),
-        address_space: translated.map(|launch| launch.address_space),
-        kernel_stack_top: translated.map(|launch| launch.kernel_stack_top),
-        backing_pages: translated.and_then(|launch| launch.backing_pages),
-        heap_backing_pages: None,
-    };
+    let descriptor = ProcessDescriptor::for_child_plan(child_plan, argv, translated)?;
+    let child_state = RuntimeForegroundSlotState::from_process_resources(
+        parent_slot as u32,
+        descriptor.resources,
+    );
     unsafe {
         write_runtime_foreground_slot_state(child_slot, child_state);
         write_runtime_word(
@@ -1145,10 +1193,10 @@ unsafe fn begin_loaded_child_plan_runtime_with_argv(
     }
     Ok(ChildLaunch {
         id: ProcessId::from_slot(child_slot),
-        context,
-        frame: child_frame,
-        address_space: translated.map(|launch| launch.address_space),
-        kernel_stack_top: translated.map(|launch| launch.kernel_stack_top),
+        context: descriptor.context,
+        frame: descriptor.frame,
+        address_space: descriptor.resources.address_space,
+        kernel_stack_top: descriptor.resources.kernel_stack_top,
     })
 }
 
@@ -3625,6 +3673,117 @@ mod tests {
         assert_eq!(child.frame.registers[1], 1);
         assert_eq!(child.frame.registers[2], 0x0000_a024);
         assert_eq!(table.program_break(), Ok(0x0000_a038));
+    }
+
+    #[test]
+    fn process_descriptor_builds_translated_child_context_frame_and_resources() {
+        let child_plan = DynamicUserLoadPlan {
+            load_base: 0x0000_a000,
+            load_end: 0x0000_a022,
+            entry_pc: 0x0000_a004,
+            stack_top: 0x0001_0000,
+            payload_dst: 0x0000_a000,
+            payload_len: 16,
+            zero_fill_addr: 0x0000_a010,
+            zero_fill_len: 16,
+        };
+        let argv = ChildArgv {
+            argc: 2,
+            table_ptr: 0x0000_a024,
+            end: 0x0000_a038,
+        };
+        let translated = TranslatedUserLaunch {
+            address_space: 7,
+            entry_pc: 0x0000_a004,
+            stack_top: 0x0001_0000,
+            kernel_stack_top: 0x0001_1000,
+            backing_pages: Some(crate::page_alloc::FrameRange {
+                start: 0x0002_0000,
+                frame_count: 3,
+            }),
+        };
+
+        let descriptor = ProcessDescriptor::for_child_plan(child_plan, argv, Some(translated))
+            .expect("descriptor builds");
+
+        assert_eq!(
+            descriptor.context,
+            ProcessContext {
+                entry_pc: 0x0000_a004,
+                stack_top: 0x0001_0000,
+            }
+        );
+        assert_eq!(descriptor.frame.resume_pc, 0x0000_a004);
+        assert_eq!(descriptor.frame.stack_pointer, 0x0001_0000);
+        assert_eq!(descriptor.frame.registers[1], 2);
+        assert_eq!(descriptor.frame.registers[2], 0x0000_a024);
+        assert_eq!(
+            descriptor.resources,
+            ProcessResources {
+                memory: ProcessMemory {
+                    start: 0x0000_a000,
+                    end: 0x0001_0000,
+                },
+                load_base: 0x0000_a022,
+                heap: RuntimeHeapState {
+                    start: 0x0000_a038,
+                    program_break: 0x0000_a038,
+                    limit: 0x0000_ff00,
+                },
+                address_space: Some(7),
+                kernel_stack_top: Some(0x0001_1000),
+                backing_pages: Some(crate::page_alloc::FrameRange {
+                    start: 0x0002_0000,
+                    frame_count: 3,
+                }),
+                heap_backing_pages: None,
+            }
+        );
+    }
+
+    #[test]
+    fn runtime_foreground_slot_state_is_created_from_process_resources() {
+        let resources = ProcessResources {
+            memory: ProcessMemory {
+                start: 0x0000_a000,
+                end: 0x0001_0000,
+            },
+            load_base: 0x0000_a020,
+            heap: RuntimeHeapState {
+                start: 0x0000_a020,
+                program_break: 0x0000_a040,
+                limit: 0x0000_ff00,
+            },
+            address_space: Some(11),
+            kernel_stack_top: Some(0x0001_1000),
+            backing_pages: Some(crate::page_alloc::FrameRange {
+                start: 0x0002_0000,
+                frame_count: 3,
+            }),
+            heap_backing_pages: Some(crate::page_alloc::FrameRange {
+                start: 0x0002_3000,
+                frame_count: 1,
+            }),
+        };
+
+        assert_eq!(
+            RuntimeForegroundSlotState::from_process_resources(1, resources),
+            RuntimeForegroundSlotState {
+                parent_slot: 1,
+                memory: Some(resources.memory),
+                heap: Some(resources.heap),
+                address_space: Some(11),
+                kernel_stack_top: Some(0x0001_1000),
+                backing_pages: Some(crate::page_alloc::FrameRange {
+                    start: 0x0002_0000,
+                    frame_count: 3,
+                }),
+                heap_backing_pages: Some(crate::page_alloc::FrameRange {
+                    start: 0x0002_3000,
+                    frame_count: 1,
+                }),
+            }
+        );
     }
 
     #[test]
