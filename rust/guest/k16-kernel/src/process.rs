@@ -213,6 +213,69 @@ pub const PROCESS_STATE_RUNNING: ProcessState = 1;
 #[cfg(any(test, feature = "host-test"))]
 pub const PROCESS_STATE_BLOCKED_ON_CHILD: ProcessState = 2;
 
+#[cfg(any(test, feature = "host-test"))]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+struct ProcessSlotLifecycle {
+    state: ProcessState,
+    parent_slot: u32,
+}
+
+#[cfg(any(test, feature = "host-test"))]
+impl ProcessSlotLifecycle {
+    const fn empty() -> Self {
+        Self {
+            state: PROCESS_STATE_EMPTY,
+            parent_slot: NO_PARENT_SLOT,
+        }
+    }
+
+    const fn running_root() -> Self {
+        Self {
+            state: PROCESS_STATE_RUNNING,
+            parent_slot: NO_PARENT_SLOT,
+        }
+    }
+
+    const fn running_child(parent_slot: usize) -> Self {
+        Self {
+            state: PROCESS_STATE_RUNNING,
+            parent_slot: parent_slot as u32,
+        }
+    }
+
+    fn block_on_child(self) -> Result<Self, ProcessSwitchError> {
+        if self.state != PROCESS_STATE_RUNNING {
+            return Err(ProcessSwitchError::NoRunningChild);
+        }
+        Ok(Self {
+            state: PROCESS_STATE_BLOCKED_ON_CHILD,
+            parent_slot: self.parent_slot,
+        })
+    }
+
+    const fn resume_after_child(self) -> Self {
+        Self {
+            state: PROCESS_STATE_RUNNING,
+            parent_slot: self.parent_slot,
+        }
+    }
+
+    fn running_parent_slot(self) -> Result<usize, ProcessSwitchError> {
+        if self.state != PROCESS_STATE_RUNNING {
+            return Err(ProcessSwitchError::NoRunningChild);
+        }
+        let parent_slot = self.parent_slot as usize;
+        if parent_slot >= MAX_PROCESS_SLOTS {
+            return Err(ProcessSwitchError::NoRunningChild);
+        }
+        Ok(parent_slot)
+    }
+
+    const fn is_empty(self) -> bool {
+        self.state == PROCESS_STATE_EMPTY
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct ProcessContext {
     pub entry_pc: u32,
@@ -575,9 +638,10 @@ struct ProcessSlot {
 #[cfg(any(test, feature = "host-test"))]
 impl ProcessSlot {
     const fn empty() -> Self {
+        let lifecycle = ProcessSlotLifecycle::empty();
         Self {
-            state: PROCESS_STATE_EMPTY,
-            parent_slot: NO_PARENT_SLOT,
+            state: lifecycle.state,
+            parent_slot: lifecycle.parent_slot,
             context: ProcessContext {
                 entry_pc: 0,
                 stack_top: 0,
@@ -597,9 +661,10 @@ impl ProcessSlot {
     }
 
     const fn init(context: ProcessContext) -> Self {
+        let lifecycle = ProcessSlotLifecycle::running_root();
         Self {
-            state: PROCESS_STATE_RUNNING,
-            parent_slot: NO_PARENT_SLOT,
+            state: lifecycle.state,
+            parent_slot: lifecycle.parent_slot,
             context,
             frame: TrapFrame::zeroed(),
             exit_status: 0,
@@ -617,6 +682,18 @@ impl ProcessSlot {
 
     fn clear(&mut self) {
         *self = Self::empty();
+    }
+
+    const fn lifecycle(&self) -> ProcessSlotLifecycle {
+        ProcessSlotLifecycle {
+            state: self.state,
+            parent_slot: self.parent_slot,
+        }
+    }
+
+    fn set_lifecycle(&mut self, lifecycle: ProcessSlotLifecycle) {
+        self.parent_slot = lifecycle.parent_slot;
+        unsafe { core::ptr::write_volatile(&mut self.state, lifecycle.state) };
     }
 
     fn initialize_from_descriptor(&mut self, descriptor: ProcessDescriptor) {
@@ -745,9 +822,7 @@ impl ProcessTable {
         argv: ChildArgv,
         translated: Option<TranslatedUserLaunch>,
     ) -> Result<ChildLaunch, ProcessSwitchError> {
-        if self.slots[self.current_slot].state != PROCESS_STATE_RUNNING {
-            return Err(ProcessSwitchError::NoRunningChild);
-        }
+        let parent_lifecycle = self.slots[self.current_slot].lifecycle().block_on_child()?;
         let child_slot = self
             .next_empty_child_slot()
             .ok_or(ProcessSwitchError::ChildAlreadyRunning)?;
@@ -757,17 +832,16 @@ impl ProcessTable {
         }
         let descriptor = ProcessDescriptor::for_child_plan(child_plan, argv, translated)?;
         let parent = &mut self.slots[parent_slot];
-        unsafe { core::ptr::write_volatile(&mut parent.state, PROCESS_STATE_BLOCKED_ON_CHILD) };
+        parent.set_lifecycle(parent_lifecycle);
         parent.context = ProcessContext {
             entry_pc: init_frame.resume_pc,
             stack_top: init_frame.stack_pointer,
         };
         parent.frame = init_frame;
         let child = &mut self.slots[child_slot];
-        child.parent_slot = parent_slot as u32;
+        child.set_lifecycle(ProcessSlotLifecycle::running_child(parent_slot));
         child.initialize_from_descriptor(descriptor);
         child.exit_status = 0;
-        unsafe { core::ptr::write_volatile(&mut child.state, PROCESS_STATE_RUNNING) };
         self.current_slot = child_slot;
         Ok(descriptor.launch(ProcessId::from_slot(child_slot)))
     }
@@ -795,26 +869,19 @@ impl ProcessTable {
     }
 
     pub fn finish_child(&mut self, status: u32) -> Result<ParentResume, ProcessSwitchError> {
-        if self.current_slot == INIT_PROCESS_SLOT
-            || self.slots[self.current_slot].state != PROCESS_STATE_RUNNING
-        {
+        if self.current_slot == INIT_PROCESS_SLOT {
             return Err(ProcessSwitchError::NoRunningChild);
         }
         let child_slot = self.current_slot;
-        let parent_slot = self.slots[child_slot].parent_slot as usize;
-        if parent_slot >= MAX_PROCESS_SLOTS {
-            return Err(ProcessSwitchError::NoRunningChild);
-        }
+        let child_lifecycle = self.slots[child_slot].lifecycle();
+        let parent_slot = child_lifecycle.running_parent_slot()?;
         let exited_resources = self.slots[child_slot].owned_resources();
-        unsafe {
-            core::ptr::write_volatile(&mut self.slots[child_slot].state, PROCESS_STATE_EMPTY)
-        };
+        self.slots[child_slot].set_lifecycle(ProcessSlotLifecycle::empty());
         self.slots[child_slot].exit_status = status;
         self.slots[child_slot].clear();
         self.slots[parent_slot].exit_status = status;
-        unsafe {
-            core::ptr::write_volatile(&mut self.slots[parent_slot].state, PROCESS_STATE_RUNNING)
-        };
+        let parent_lifecycle = self.slots[parent_slot].lifecycle().resume_after_child();
+        self.slots[parent_slot].set_lifecycle(parent_lifecycle);
         self.current_slot = parent_slot;
         let parent = self.slots[parent_slot];
         Ok(ParentResume {
@@ -895,7 +962,7 @@ impl ProcessTable {
     fn next_empty_child_slot(&self) -> Option<usize> {
         let mut slot = 1;
         while slot < MAX_PROCESS_SLOTS {
-            if self.slots[slot].state == PROCESS_STATE_EMPTY {
+            if self.slots[slot].lifecycle().is_empty() {
                 return Some(slot);
             }
             slot += 1;
@@ -3668,6 +3735,54 @@ mod tests {
         );
         assert_eq!(table.init_state(), PROCESS_STATE_BLOCKED_ON_CHILD);
         assert_eq!(table.child_state(), PROCESS_STATE_RUNNING);
+    }
+
+    #[test]
+    fn process_lifecycle_blocks_parent_and_starts_child_with_parent_link() {
+        let parent = ProcessSlotLifecycle::running_root();
+
+        assert_eq!(
+            parent.block_on_child(),
+            Ok(ProcessSlotLifecycle {
+                state: PROCESS_STATE_BLOCKED_ON_CHILD,
+                parent_slot: NO_PARENT_SLOT,
+            })
+        );
+        assert_eq!(
+            ProcessSlotLifecycle::running_child(1),
+            ProcessSlotLifecycle {
+                state: PROCESS_STATE_RUNNING,
+                parent_slot: 1,
+            }
+        );
+    }
+
+    #[test]
+    fn process_lifecycle_rejects_invalid_running_child_parent_link() {
+        assert_eq!(
+            ProcessSlotLifecycle {
+                state: PROCESS_STATE_EMPTY,
+                parent_slot: 0,
+            }
+            .running_parent_slot(),
+            Err(ProcessSwitchError::NoRunningChild)
+        );
+        assert_eq!(
+            ProcessSlotLifecycle {
+                state: PROCESS_STATE_RUNNING,
+                parent_slot: NO_PARENT_SLOT,
+            }
+            .running_parent_slot(),
+            Err(ProcessSwitchError::NoRunningChild)
+        );
+        assert_eq!(
+            ProcessSlotLifecycle {
+                state: PROCESS_STATE_RUNNING,
+                parent_slot: MAX_PROCESS_SLOTS as u32,
+            }
+            .running_parent_slot(),
+            Err(ProcessSwitchError::NoRunningChild)
+        );
     }
 
     #[test]
