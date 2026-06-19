@@ -66,7 +66,7 @@ class ComputerRuntimeDeviceFactoryArchitectureTest {
                 .readText()
 
         val consumeIndex = source.indexOf("tile.consumePendingRuntimeSnapshot()")
-        val endpointIndex = source.indexOf("createK16ComputerEndpoint(biosFlashPath, storage0, snapshot)")
+        val endpointIndex = source.indexOf("createK16ComputerEndpoint(biosFlashPath, storage0, snapshot, memorySize)")
         val restoreIndex = source.indexOf("K16ComputerRuntimeFactory.restoreFromBiosFlashSnapshot")
         val freshBootIndex = source.indexOf("K16ComputerRuntimeFactory.createFromBiosFlash")
 
@@ -79,6 +79,28 @@ class ComputerRuntimeDeviceFactoryArchitectureTest {
     }
 
     @Test
+    fun inGameK16ComputerUsesDeviceProfileRamForFreshBootAndRestore() {
+        val source =
+            Path
+                .of("src/main/kotlin/ru/lazyhat/compukterkraft/common/computer/block/ComputerRuntimeDeviceFactory.kt")
+                .readText()
+
+        val profileIndex = source.indexOf("DeviceProfileRegistry.forFamily(tile.family)")
+        val ramIndex = source.indexOf("profile.resources.memory.vmRamBytes")
+        val endpointIndex = source.indexOf("createK16ComputerEndpoint(biosFlashPath, storage0, snapshot, memorySize)")
+        val freshBootMemoryIndex =
+            source.indexOf("memorySize = memorySize", source.indexOf("K16ComputerRuntimeFactory.createFromBiosFlash"))
+        val restoreMemoryIndex =
+            source.indexOf("memorySize = memorySize", source.indexOf("K16ComputerRuntimeFactory.restoreFromBiosFlashSnapshot"))
+
+        assertTrue(profileIndex >= 0, "factory should resolve the active device profile from the block family")
+        assertTrue(ramIndex > profileIndex, "factory should derive K16 RAM from profile memory resources")
+        assertTrue(endpointIndex > ramIndex, "factory should pass profile RAM into endpoint creation")
+        assertTrue(freshBootMemoryIndex > endpointIndex, "fresh K16 boot should use profile RAM")
+        assertTrue(restoreMemoryIndex > freshBootMemoryIndex, "K16 restore should use the same profile RAM")
+    }
+
+    @Test
     fun inGameK16ComputerFallsBackToDurableRuntimeSnapshotBeforeFreshBoot() {
         val source =
             Path
@@ -88,7 +110,7 @@ class ComputerRuntimeDeviceFactoryArchitectureTest {
         val storeIndex = source.indexOf("K16RuntimeSnapshotStore(worldRoot)")
         val consumeIndex = source.indexOf("tile.consumePendingRuntimeSnapshot()")
         val durableReadIndex = source.indexOf("snapshotStore.readComputerSnapshotOrNull(deviceId)")
-        val endpointIndex = source.indexOf("createK16ComputerEndpoint(biosFlashPath, storage0, snapshot)")
+        val endpointIndex = source.indexOf("createK16ComputerEndpoint(biosFlashPath, storage0, snapshot, memorySize)")
 
         assertTrue(storeIndex >= 0, "factory should create a runtime snapshot store from the world root")
         assertTrue(consumeIndex >= 0, "factory should still prefer pending NBT snapshots first")
