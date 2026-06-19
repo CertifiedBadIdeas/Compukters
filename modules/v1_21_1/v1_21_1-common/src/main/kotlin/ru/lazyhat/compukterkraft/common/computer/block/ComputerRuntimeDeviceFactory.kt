@@ -25,6 +25,7 @@ import ru.lazyhat.compukterkraft.common.computer.context.BlockEntityRuntimeDevic
 import ru.lazyhat.compukterkraft.core.device.DeviceProperties
 import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeDevice
 import ru.lazyhat.compukterkraft.core.device.runtime.K16RuntimeDevice
+import ru.lazyhat.compukterkraft.core.device.vm.DeviceProfileRegistry
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16BiosFlashWorkspace
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16ComputerRuntimeFactory
 import ru.lazyhat.compukterkraft.lang.runtime.storage.FileK16VolumeStore
@@ -48,23 +49,33 @@ object ComputerRuntimeDeviceFactory {
             deviceId = deviceId,
             properties = DeviceProperties(tile.family, tile.label),
             endpointFactory = {
+                val profile = DeviceProfileRegistry.forFamily(tile.family)
+                val memorySize = k16MemorySizeBytes(profile.resources.memory.vmRamBytes)
                 K16SystemVolumeWorkspace.prepareStorage0Volume(workspace)
                 val storage0 = volumeStore.openOrCreateComputerVolume(deviceId, "storage0")
                 val biosFlashPath = K16BiosFlashWorkspace.prepareBiosFlash(workspace)
                 val snapshot =
                     tile.consumePendingRuntimeSnapshot()
                         ?: snapshotStore.readComputerSnapshotOrNull(deviceId)
-                createK16ComputerEndpoint(biosFlashPath, storage0, snapshot)
+                createK16ComputerEndpoint(biosFlashPath, storage0, snapshot, memorySize)
             },
             stateSink = host.stateSink,
             displayNetwork = host.displayNetwork,
         )
     }
 
+    private fun k16MemorySizeBytes(vmRamBytes: Long): Int {
+        require(vmRamBytes in 1..Int.MAX_VALUE.toLong()) {
+            "K16 VM RAM size must fit in signed 32-bit bytes: $vmRamBytes"
+        }
+        return vmRamBytes.toInt()
+    }
+
     private fun createK16ComputerEndpoint(
         biosFlashPath: Path,
         storage0: K16VolumeBlob,
         snapshot: ByteArray?,
+        memorySize: Int,
     ) =
         try {
             val storage0Path = storage0.path
@@ -73,12 +84,14 @@ object ComputerRuntimeDeviceFactory {
                 K16ComputerRuntimeFactory.createFromBiosFlash(
                     biosFlashPath = biosFlashPath,
                     storage0Path = storage0Path,
+                    memorySize = memorySize,
                 )
             } else {
                 K16ComputerRuntimeFactory.restoreFromBiosFlashSnapshot(
                     biosFlashPath = biosFlashPath,
                     storage0Path = storage0Path,
                     snapshot = snapshot,
+                    memorySize = memorySize,
                 )
             }
         } catch (error: Throwable) {
