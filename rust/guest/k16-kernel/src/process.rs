@@ -313,6 +313,64 @@ pub struct ParentResume {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
+struct RuntimeHeapState {
+    start: u32,
+    program_break: u32,
+    limit: u32,
+}
+
+impl RuntimeHeapState {
+    fn from_bounds(load_end: u32, stack_top: u32) -> Result<Self, HeapError> {
+        let heap = HeapState::from_bounds(load_end, stack_top)?;
+        Ok(Self {
+            start: heap.start,
+            program_break: heap.start,
+            limit: heap.limit,
+        })
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+struct RuntimeExitedResources {
+    address_space: Option<u32>,
+    backing_pages: Option<crate::page_alloc::FrameRange>,
+    heap_pages: Option<crate::page_alloc::FrameRange>,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+struct RuntimeForegroundSlotState {
+    parent_slot: u32,
+    memory: Option<ProcessMemory>,
+    heap: Option<RuntimeHeapState>,
+    address_space: Option<u32>,
+    kernel_stack_top: Option<u32>,
+    backing_pages: Option<crate::page_alloc::FrameRange>,
+    heap_backing_pages: Option<crate::page_alloc::FrameRange>,
+}
+
+impl RuntimeForegroundSlotState {
+    const fn exited_resources(self) -> RuntimeExitedResources {
+        RuntimeExitedResources {
+            address_space: self.address_space,
+            backing_pages: self.backing_pages,
+            heap_pages: self.heap_backing_pages,
+        }
+    }
+
+    const fn cleared_after_exit(self) -> Self {
+        Self {
+            parent_slot: NO_PARENT_SLOT,
+            memory: None,
+            heap: None,
+            address_space: None,
+            kernel_stack_top: None,
+            backing_pages: None,
+            heap_backing_pages: None,
+        }
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum TrapReturnOverride {
     Physical,
     Translated {
@@ -1064,36 +1122,22 @@ unsafe fn begin_loaded_child_plan_runtime_with_argv(
     let mut child_frame = child_frame_for_context(context);
     child_frame.registers[1] = argv.argc;
     child_frame.registers[2] = argv.table_ptr;
-    unsafe {
-        write_runtime_process_memory(
-            child_slot,
-            ProcessMemory::new(child_plan.load_base, child_plan.stack_top)
-                .map_err(|_| ProcessSwitchError::NoRunningChild)?,
-        );
-        write_runtime_word(
-            runtime_slot_address_space_ptr(child_slot),
-            translated.map(|launch| launch.address_space).unwrap_or(0),
-        );
-        write_runtime_word(
-            runtime_slot_kernel_stack_top_ptr(child_slot),
-            translated
-                .map(|launch| launch.kernel_stack_top)
-                .unwrap_or(0),
-        );
-        write_runtime_backing_pages(
-            child_slot,
-            translated.and_then(|launch| launch.backing_pages),
-        );
-        write_runtime_heap_backing_pages(child_slot, None);
-        initialize_runtime_heap_from_bounds(
-            child_slot,
-            child_plan.load_end.max(argv.end),
-            child_plan.stack_top,
-        )
-        .map_err(|_| ProcessSwitchError::NoRunningChild)?
+    let memory = ProcessMemory::new(child_plan.load_base, child_plan.stack_top)
+        .map_err(|_| ProcessSwitchError::NoRunningChild)?;
+    let heap =
+        RuntimeHeapState::from_bounds(child_plan.load_end.max(argv.end), child_plan.stack_top)
+            .map_err(|_| ProcessSwitchError::NoRunningChild)?;
+    let child_state = RuntimeForegroundSlotState {
+        parent_slot: parent_slot as u32,
+        memory: Some(memory),
+        heap: Some(heap),
+        address_space: translated.map(|launch| launch.address_space),
+        kernel_stack_top: translated.map(|launch| launch.kernel_stack_top),
+        backing_pages: translated.and_then(|launch| launch.backing_pages),
+        heap_backing_pages: None,
     };
     unsafe {
-        write_runtime_word(runtime_slot_parent_ptr(child_slot), parent_slot as u32);
+        write_runtime_foreground_slot_state(child_slot, child_state);
         write_runtime_word(
             core::ptr::addr_of_mut!(RUNTIME_CURRENT_SLOT),
             child_slot as u32,
@@ -1170,17 +1214,10 @@ unsafe fn finish_child_runtime(status: u32) -> Result<ParentResume, ProcessSwitc
         return Err(ProcessSwitchError::NoRunningChild);
     }
     let frame = TrapFrame::from(unsafe { *runtime_slot_frame(parent_slot).get() });
-    let exited_address_space = unsafe { read_runtime_address_space(current_slot) };
-    let exited_backing_pages = unsafe { read_runtime_backing_pages(current_slot) };
-    let exited_heap_pages = unsafe { read_runtime_heap_backing_pages(current_slot) };
+    let exited_state = unsafe { read_runtime_foreground_slot_state(current_slot) };
+    let exited_resources = exited_state.exited_resources();
     unsafe {
-        write_runtime_word(runtime_slot_parent_ptr(current_slot), NO_PARENT_SLOT);
-        clear_runtime_process_memory(current_slot);
-        clear_runtime_address_space(current_slot);
-        clear_runtime_kernel_stack_top(current_slot);
-        clear_runtime_backing_pages(current_slot);
-        clear_runtime_heap_backing_pages(current_slot);
-        clear_runtime_heap(current_slot);
+        write_runtime_foreground_slot_state(current_slot, exited_state.cleared_after_exit());
         write_runtime_word(
             core::ptr::addr_of_mut!(RUNTIME_CURRENT_SLOT),
             parent_slot as u32,
@@ -1196,9 +1233,9 @@ unsafe fn finish_child_runtime(status: u32) -> Result<ParentResume, ProcessSwitc
         child_exit_status: status,
         address_space: unsafe { read_runtime_address_space(parent_slot) },
         kernel_stack_top: unsafe { read_runtime_kernel_stack_top(parent_slot) },
-        exited_address_space,
-        exited_backing_pages,
-        exited_heap_pages,
+        exited_address_space: exited_resources.address_space,
+        exited_backing_pages: exited_resources.backing_pages,
+        exited_heap_pages: exited_resources.heap_pages,
     })
 }
 
@@ -1251,11 +1288,6 @@ unsafe fn read_runtime_address_space(slot: usize) -> Option<u32> {
 }
 
 #[cfg(not(test))]
-unsafe fn clear_runtime_address_space(slot: usize) {
-    unsafe { write_runtime_word(runtime_slot_address_space_ptr(slot), 0) }
-}
-
-#[cfg(not(test))]
 unsafe fn read_runtime_kernel_stack_top(slot: usize) -> Option<u32> {
     let kernel_stack_top = unsafe { read_runtime_word(runtime_slot_kernel_stack_top_ptr(slot)) };
     if kernel_stack_top == 0 {
@@ -1263,11 +1295,6 @@ unsafe fn read_runtime_kernel_stack_top(slot: usize) -> Option<u32> {
     } else {
         Some(kernel_stack_top)
     }
-}
-
-#[cfg(not(test))]
-unsafe fn clear_runtime_kernel_stack_top(slot: usize) {
-    unsafe { write_runtime_word(runtime_slot_kernel_stack_top_ptr(slot), 0) }
 }
 
 #[cfg(test)]
@@ -1437,10 +1464,55 @@ unsafe fn read_runtime_process_memory(slot: usize) -> Option<ProcessMemory> {
 }
 
 #[cfg(not(test))]
-unsafe fn clear_runtime_process_memory(slot: usize) {
+unsafe fn read_runtime_foreground_slot_state(slot: usize) -> RuntimeForegroundSlotState {
+    let parent_slot = unsafe { read_runtime_word(runtime_slot_parent_ptr(slot)) };
+    let heap_start = unsafe { read_runtime_word(runtime_slot_heap_start_ptr(slot)) };
+    let program_break = unsafe { read_runtime_word(runtime_slot_program_break_ptr(slot)) };
+    let heap_limit = unsafe { read_runtime_word(runtime_slot_heap_limit_ptr(slot)) };
+    let heap = if heap_start == 0 {
+        None
+    } else {
+        Some(RuntimeHeapState {
+            start: heap_start,
+            program_break,
+            limit: heap_limit,
+        })
+    };
+    RuntimeForegroundSlotState {
+        parent_slot,
+        memory: unsafe { read_runtime_process_memory(slot) },
+        heap,
+        address_space: unsafe { read_runtime_address_space(slot) },
+        kernel_stack_top: unsafe { read_runtime_kernel_stack_top(slot) },
+        backing_pages: unsafe { read_runtime_backing_pages(slot) },
+        heap_backing_pages: unsafe { read_runtime_heap_backing_pages(slot) },
+    }
+}
+
+#[cfg(not(test))]
+unsafe fn write_runtime_foreground_slot_state(slot: usize, state: RuntimeForegroundSlotState) {
+    let memory = state.memory.unwrap_or(ProcessMemory { start: 0, end: 0 });
+    let heap = state.heap.unwrap_or(RuntimeHeapState {
+        start: 0,
+        program_break: 0,
+        limit: 0,
+    });
     unsafe {
-        write_runtime_word(runtime_slot_memory_start_ptr(slot), 0);
-        write_runtime_word(runtime_slot_memory_end_ptr(slot), 0);
+        write_runtime_word(runtime_slot_parent_ptr(slot), state.parent_slot);
+        write_runtime_process_memory(slot, memory);
+        write_runtime_word(runtime_slot_heap_start_ptr(slot), heap.start);
+        write_runtime_word(runtime_slot_program_break_ptr(slot), heap.program_break);
+        write_runtime_word(runtime_slot_heap_limit_ptr(slot), heap.limit);
+        write_runtime_word(
+            runtime_slot_address_space_ptr(slot),
+            state.address_space.unwrap_or(0),
+        );
+        write_runtime_word(
+            runtime_slot_kernel_stack_top_ptr(slot),
+            state.kernel_stack_top.unwrap_or(0),
+        );
+        write_runtime_backing_pages(slot, state.backing_pages);
+        write_runtime_heap_backing_pages(slot, state.heap_backing_pages);
     }
 }
 
@@ -1469,11 +1541,6 @@ unsafe fn read_runtime_backing_pages(slot: usize) -> Option<crate::page_alloc::F
 }
 
 #[cfg(not(test))]
-unsafe fn clear_runtime_backing_pages(slot: usize) {
-    unsafe { write_runtime_backing_pages(slot, None) }
-}
-
-#[cfg(not(test))]
 unsafe fn write_runtime_heap_backing_pages(
     slot: usize,
     backing_pages: Option<crate::page_alloc::FrameRange>,
@@ -1494,35 +1561,6 @@ unsafe fn read_runtime_heap_backing_pages(slot: usize) -> Option<crate::page_all
         None
     } else {
         Some(crate::page_alloc::FrameRange { start, frame_count })
-    }
-}
-
-#[cfg(not(test))]
-unsafe fn clear_runtime_heap_backing_pages(slot: usize) {
-    unsafe { write_runtime_heap_backing_pages(slot, None) }
-}
-
-#[cfg(not(test))]
-unsafe fn initialize_runtime_heap_from_bounds(
-    slot: usize,
-    load_end: u32,
-    stack_top: u32,
-) -> Result<(), HeapError> {
-    let heap = HeapState::from_bounds(load_end, stack_top)?;
-    unsafe {
-        write_runtime_word(runtime_slot_heap_start_ptr(slot), heap.start);
-        write_runtime_word(runtime_slot_program_break_ptr(slot), heap.start);
-        write_runtime_word(runtime_slot_heap_limit_ptr(slot), heap.limit);
-    }
-    Ok(())
-}
-
-#[cfg(not(test))]
-unsafe fn clear_runtime_heap(slot: usize) {
-    unsafe {
-        write_runtime_word(runtime_slot_heap_start_ptr(slot), 0);
-        write_runtime_word(runtime_slot_program_break_ptr(slot), 0);
-        write_runtime_word(runtime_slot_heap_limit_ptr(slot), 0);
     }
 }
 
@@ -2449,8 +2487,7 @@ unsafe fn map_translated_heap_pages(
             virtual_start,
             physical_start,
             page_count,
-            k16_abi::computer::mmu0::FLAG_USER_ACCESSIBLE
-                | k16_abi::computer::mmu0::FLAG_WRITABLE,
+            k16_abi::computer::mmu0::FLAG_USER_ACCESSIBLE | k16_abi::computer::mmu0::FLAG_WRITABLE,
         )
     }
 }
@@ -3366,18 +3403,9 @@ mod tests {
 
     #[test]
     fn heap_growth_commit_range_starts_after_current_mapped_page() {
-        assert_eq!(
-            heap_committed_end(0x0001_6612, None),
-            Ok(0x0001_7000)
-        );
-        assert_eq!(
-            heap_committed_end(0x0001_6612, Some(2)),
-            Ok(0x0001_9000)
-        );
-        assert_eq!(
-            heap_growth_commit_range(0x0001_7000, 0x0001_6fff),
-            Ok(None)
-        );
+        assert_eq!(heap_committed_end(0x0001_6612, None), Ok(0x0001_7000));
+        assert_eq!(heap_committed_end(0x0001_6612, Some(2)), Ok(0x0001_9000));
+        assert_eq!(heap_growth_commit_range(0x0001_7000, 0x0001_6fff), Ok(None));
         assert_eq!(
             heap_growth_commit_range(0x0001_7000, 0x0001_7001),
             Ok(Some((0x0001_7000, 1)))
@@ -4023,14 +4051,8 @@ mod tests {
 
     #[test]
     fn runtime_slot_policy_reuses_first_empty_foreground_slot() {
-        assert_eq!(
-            child_slot_from_occupancy(0, [false, true]),
-            Ok(1)
-        );
-        assert_eq!(
-            child_slot_from_occupancy(1, [true, false]),
-            Ok(2)
-        );
+        assert_eq!(child_slot_from_occupancy(0, [false, true]), Ok(1));
+        assert_eq!(child_slot_from_occupancy(1, [true, false]), Ok(2));
     }
 
     #[test]
@@ -4604,6 +4626,88 @@ mod tests {
 
         assert_eq!(resumed.exited_address_space, Some(9));
         assert_eq!(resumed.address_space, None);
+    }
+
+    #[test]
+    fn runtime_foreground_slot_state_reports_exited_resources() {
+        assert_eq!(
+            RuntimeHeapState::from_bounds(0x0001_2000, 0x0001_f000),
+            Ok(RuntimeHeapState {
+                start: 0x0001_2000,
+                program_break: 0x0001_2000,
+                limit: 0x0001_ef00,
+            })
+        );
+        let state = RuntimeForegroundSlotState {
+            parent_slot: 1,
+            memory: ProcessMemory::new(0x0001_0000, 0x0001_f000).ok(),
+            heap: Some(RuntimeHeapState {
+                start: 0x0001_2000,
+                program_break: 0x0001_3000,
+                limit: 0x0001_e000,
+            }),
+            address_space: Some(7),
+            kernel_stack_top: Some(0x0001_f000),
+            backing_pages: Some(crate::page_alloc::FrameRange {
+                start: 0x0000_9000,
+                frame_count: 2,
+            }),
+            heap_backing_pages: Some(crate::page_alloc::FrameRange {
+                start: 0x0000_b000,
+                frame_count: 1,
+            }),
+        };
+
+        assert_eq!(
+            state.exited_resources(),
+            RuntimeExitedResources {
+                address_space: Some(7),
+                backing_pages: Some(crate::page_alloc::FrameRange {
+                    start: 0x0000_9000,
+                    frame_count: 2,
+                }),
+                heap_pages: Some(crate::page_alloc::FrameRange {
+                    start: 0x0000_b000,
+                    frame_count: 1,
+                }),
+            }
+        );
+    }
+
+    #[test]
+    fn runtime_foreground_slot_state_clears_owned_state_after_exit() {
+        let state = RuntimeForegroundSlotState {
+            parent_slot: 1,
+            memory: ProcessMemory::new(0x0001_0000, 0x0001_f000).ok(),
+            heap: Some(RuntimeHeapState {
+                start: 0x0001_2000,
+                program_break: 0x0001_3000,
+                limit: 0x0001_e000,
+            }),
+            address_space: Some(7),
+            kernel_stack_top: Some(0x0001_f000),
+            backing_pages: Some(crate::page_alloc::FrameRange {
+                start: 0x0000_9000,
+                frame_count: 2,
+            }),
+            heap_backing_pages: Some(crate::page_alloc::FrameRange {
+                start: 0x0000_b000,
+                frame_count: 1,
+            }),
+        };
+
+        assert_eq!(
+            state.cleared_after_exit(),
+            RuntimeForegroundSlotState {
+                parent_slot: NO_PARENT_SLOT,
+                memory: None,
+                heap: None,
+                address_space: None,
+                kernel_stack_top: None,
+                backing_pages: None,
+                heap_backing_pages: None,
+            }
+        );
     }
 
     #[test]
