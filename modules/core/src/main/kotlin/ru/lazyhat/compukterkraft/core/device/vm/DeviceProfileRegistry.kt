@@ -36,12 +36,12 @@ object DeviceProfileRegistry {
                 DeviceProfile(
                     id = "normal",
                     displayName = "Normal Computer",
-                    cpuBudgetNanosPerSlice = 10_000,
+                    maxStepsPerSlice = 10_000,
                     maxEventQueueSize = 32,
                     allowedCapabilities = defaultCapabilities(),
                     resources =
                         defaultResources(
-                            wallTimeGuardNanosPerSlice = 10_000,
+                            maxStepsPerSlice = 10_000,
                             eventQueueSlots = 32,
                             vmRamBytes = Config.computerRamLimit.toLong(),
                             diskBytes = Config.computerSpaceLimit.toLong(),
@@ -53,12 +53,12 @@ object DeviceProfileRegistry {
                 DeviceProfile(
                     id = "advanced",
                     displayName = "Advanced Computer",
-                    cpuBudgetNanosPerSlice = 100_000,
+                    maxStepsPerSlice = 100_000,
                     maxEventQueueSize = 64,
                     allowedCapabilities = defaultCapabilities(),
                     resources =
                         defaultResources(
-                            wallTimeGuardNanosPerSlice = 100_000,
+                            maxStepsPerSlice = 100_000,
                             eventQueueSlots = 32,
                             vmRamBytes = Config.computerRamLimit.toLong(),
                             diskBytes = Config.computerSpaceLimit.toLong(),
@@ -70,12 +70,12 @@ object DeviceProfileRegistry {
                 DeviceProfile(
                     id = "command",
                     displayName = "Command Computer",
-                    cpuBudgetNanosPerSlice = 4_000_000,
+                    maxStepsPerSlice = 4_000_000,
                     maxEventQueueSize = 256,
                     allowedCapabilities = defaultCapabilities() + DeviceCapability.REDSTONE + DeviceCapability.PERIPHERALS,
                     resources =
                         defaultResources(
-                            wallTimeGuardNanosPerSlice = 4_000_000,
+                            maxStepsPerSlice = 4_000_000,
                             eventQueueSlots = 256,
                             vmRamBytes = Config.computerRamLimit.toLong(),
                             diskBytes = Config.computerSpaceLimit.toLong(),
@@ -85,7 +85,7 @@ object DeviceProfileRegistry {
         }
 
     private fun defaultResources(
-        wallTimeGuardNanosPerSlice: Long,
+        maxStepsPerSlice: Long,
         eventQueueSlots: Int,
         vmRamBytes: Long,
         diskBytes: Long,
@@ -93,7 +93,7 @@ object DeviceProfileRegistry {
         DeviceResources(
             cpu =
                 DeviceCpuResources(
-                    wallTimeGuardNanosPerSlice = wallTimeGuardNanosPerSlice,
+                    maxStepsPerSlice = maxStepsPerSlice,
                 ),
             memory = DeviceMemoryResources(vmRamBytes = vmRamBytes),
             storage = DeviceStorageResources(diskBytes = diskBytes),

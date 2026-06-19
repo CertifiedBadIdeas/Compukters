@@ -208,30 +208,21 @@ Scheduling point возникает в двух местах:
 
 Со стороны VM корутина вызывает `awaitSlicePermit()` и блокируется, пока сервер не даст следующий permit.
 
-### 6.2. Временной бюджет на slice
+### 6.2. Step budget на slice
 
-У каждого профиля есть `cpuBudgetNanosPerSlice`:
+У каждого профиля есть `maxStepsPerSlice`:
 
-- Normal Computer: `1_000_000` ns
-- Advanced Computer: `2_000_000` ns
-- Command Computer: `4_000_000` ns
+- Normal Computer: `10_000` VM steps
+- Advanced Computer: `100_000` VM steps
+- Command Computer: `4_000_000` VM steps
 
-Когда VM получает permit, `awaitSlicePermit()` выставляет новый дедлайн:
-
-```kotlin
-stateManager.updateSliceDeadlineNanos(profile.cpuBudgetNanosPerSlice)
-```
-
-Это просто:
+Когда K16 VM получает permit, host runtime передает этот лимит как `maxSteps`:
 
 ```kotlin
-sliceDeadlineNanos = System.nanoTime() + budgetNanos
+K16ComputerRuntimeFactory.createFromBiosFlash(maxSteps = profile.resources.cpu.maxStepsPerSlice)
 ```
 
-Дальше каждый scheduling point делает:
-
-- если `System.nanoTime() >= sliceDeadlineNanos`, VM обязана остановиться и ждать следующий permit;
-- иначе вызывается `kotlinx.coroutines.yield()`.
+Это не wall-time окно: K16 останавливает выполнение после указанного числа VM steps или раньше, если сама дошла до сигнала ожидания/вывода.
 
 ### 6.3. Ограничение по инструкциям
 
@@ -858,13 +849,13 @@ VM не создает terminal snapshot и не рассылает stdout bytes
 
 Сводка по реальным ограничениям:
 
-### 16.1. CPU time per slice
+### 16.1. CPU steps per slice
 
-Есть, но теперь это только safety guard. Ограничивается `profile.resources.cpu.wallTimeGuardNanosPerSlice`.
+Есть. Ограничивается `profile.resources.cpu.maxStepsPerSlice`.
 
 ### 16.2. Частота кооперативной отдачи управления
 
-Есть. Основной CPU-лимит задается wall-time окном `profile.resources.cpu.wallTimeGuardNanosPerSlice`; фиксированный turn cap используется только как safety guard executor'а.
+Есть. Основной CPU-лимит задается step budget через `profile.resources.cpu.maxStepsPerSlice`; фиксированный turn cap используется только как safety guard executor'а.
 
 ### 16.3. Event queue size
 
@@ -943,7 +934,7 @@ Shell здесь не встроен в движок VM. Это обычная �
 
 Подтверждает, что:
 
-- execution window берется из `profile.resources.cpu.wallTimeGuardNanosPerSlice`;
+- execution window берется из `profile.resources.cpu.maxStepsPerSlice`;
 - VM RAM limit реально ограничивает выполнение;
 - существующие host/sleep/yield сценарии не сломаны новой моделью.
 

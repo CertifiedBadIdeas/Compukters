@@ -31,7 +31,7 @@ enum class DeviceCapability {
 }
 
 data class DeviceCpuResources(
-    val wallTimeGuardNanosPerSlice: Long,
+    val maxStepsPerSlice: Long,
 )
 
 data class DeviceMemoryResources(
@@ -59,12 +59,12 @@ data class DeviceResources(
 data class DeviceProfile(
     val id: String,
     val displayName: String,
-    val cpuBudgetNanosPerSlice: Long,
+    val maxStepsPerSlice: Long,
     val maxEventQueueSize: Int,
     val allowedCapabilities: Set<DeviceCapability> = DeviceCapability.entries.toSet(),
     val resources: DeviceResources =
         DeviceResources(
-            cpu = DeviceCpuResources(wallTimeGuardNanosPerSlice = cpuBudgetNanosPerSlice),
+            cpu = DeviceCpuResources(maxStepsPerSlice = maxStepsPerSlice),
             queues = DeviceQueueResources(eventQueueSlots = maxEventQueueSize),
         ),
 )
