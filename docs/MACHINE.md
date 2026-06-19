@@ -877,9 +877,11 @@ VM не создает terminal snapshot и не рассылает stdout bytes
 
 Явного лимита нет. `process.run(...)` просто синхронно запускает другую программу на том же VM-контексте.
 
-### 16.8. Ограничение памяти программы
+### 16.8. Ограничение K16 guest RAM
 
-Есть. Ограничивается `profile.resources.memory.vmRamBytes`. Сейчас это логическая оценка текущего VM state: locals, operand stack, strings и record values. При превышении VM падает с ошибкой `VM out of memory ...`.
+Есть. Production K16 runtime берет размер RAM из `profile.resources.memory.vmRamBytes`, который для обычных профилей приходит из `Config.computerRamLimit`.
+
+Для bundled K16 OS/userland есть явный boot floor: `K16ComputerRuntimeFactory.MINIMUM_BOOT_MEMORY_SIZE` (`256 * 1024` bytes). Если профиль задает меньше, runtime creation завершается fail-fast ошибкой вида `K16 VM RAM size is too small: ...; minimum required is ...`. Это не fallback: host не поднимает RAM автоматически.
 
 ### 16.9. Ограничение размера программы
 
