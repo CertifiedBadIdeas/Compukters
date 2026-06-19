@@ -50,7 +50,11 @@ object ComputerRuntimeDeviceFactory {
             properties = DeviceProperties(tile.family, tile.label),
             endpointFactory = {
                 val profile = DeviceProfileRegistry.forFamily(tile.family)
-                val memorySize = k16MemorySizeBytes(profile.resources.memory.vmRamBytes)
+                val memorySize =
+                    k16MemorySizeBytes(
+                        vmRamBytes = profile.resources.memory.vmRamBytes,
+                        minimumBootMemorySize = K16ComputerRuntimeFactory.MINIMUM_BOOT_MEMORY_SIZE,
+                    )
                 val maxSteps = k16MaxSteps(profile.resources.cpu.maxStepsPerSlice)
                 K16SystemVolumeWorkspace.prepareStorage0Volume(workspace)
                 val storage0 = volumeStore.openOrCreateComputerVolume(deviceId, "storage0")
@@ -65,9 +69,15 @@ object ComputerRuntimeDeviceFactory {
         )
     }
 
-    private fun k16MemorySizeBytes(vmRamBytes: Long): Int {
+    private fun k16MemorySizeBytes(
+        vmRamBytes: Long,
+        minimumBootMemorySize: Int,
+    ): Int {
         require(vmRamBytes in 1..Int.MAX_VALUE.toLong()) {
             "K16 VM RAM size must fit in signed 32-bit bytes: $vmRamBytes"
+        }
+        require(vmRamBytes >= minimumBootMemorySize) {
+            "K16 VM RAM size is too small: $vmRamBytes bytes; minimum required is $minimumBootMemorySize bytes"
         }
         return vmRamBytes.toInt()
     }

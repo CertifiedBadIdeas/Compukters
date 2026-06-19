@@ -101,6 +101,26 @@ class ComputerRuntimeDeviceFactoryArchitectureTest {
     }
 
     @Test
+    fun inGameK16ComputerRejectsProfileRamBelowBootMinimum() {
+        val source =
+            Path
+                .of("src/main/kotlin/ru/lazyhat/compukterkraft/common/computer/block/ComputerRuntimeDeviceFactory.kt")
+                .readText()
+
+        val profileRamIndex = source.indexOf("profile.resources.memory.vmRamBytes")
+        val minimumIndex = source.indexOf("K16ComputerRuntimeFactory.MINIMUM_BOOT_MEMORY_SIZE")
+        val requireIndex = source.indexOf("require(vmRamBytes >= minimumBootMemorySize)", minimumIndex)
+        val messageIndex = source.indexOf("K16 VM RAM size is too small:", requireIndex)
+        val minimumMessageIndex = source.indexOf("minimum required is", messageIndex)
+
+        assertTrue(profileRamIndex >= 0, "factory should derive K16 RAM from profile memory resources")
+        assertTrue(minimumIndex > profileRamIndex, "factory should pass the production boot minimum into RAM validation")
+        assertTrue(requireIndex > minimumIndex, "factory should fail fast before native runtime creation when RAM is too small")
+        assertTrue(messageIndex > requireIndex, "too-small RAM diagnostics should include actual and minimum byte sizes")
+        assertTrue(minimumMessageIndex > messageIndex, "too-small RAM diagnostics should include the minimum byte size")
+    }
+
+    @Test
     fun inGameK16ComputerUsesDeviceProfileCpuBudgetForFreshBoot() {
         val source =
             Path

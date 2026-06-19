@@ -73,6 +73,12 @@ class K16ComputerRuntimeFactoryTest {
     }
 
     @Test
+    fun minimumBootMemorySizeDocumentsProductionBootFloor() {
+        assertEquals(256 * 1024, K16ComputerRuntimeFactory.MINIMUM_BOOT_MEMORY_SIZE)
+        assertEquals(K16ComputerRuntimeFactory.DEFAULT_MEMORY_SIZE, K16ComputerRuntimeFactory.MINIMUM_BOOT_MEMORY_SIZE)
+    }
+
+    @Test
     fun runtimeUsesK16KotlinBindingSurface() {
         val runtimeSource =
             root
