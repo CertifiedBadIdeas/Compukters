@@ -68,6 +68,11 @@ class K16ComputerRuntimeFactoryTest {
     }
 
     @Test
+    fun defaultMemorySizeLeavesRoomForNestedTranslatedShells() {
+        assertEquals(256 * 1024, K16ComputerRuntimeFactory.DEFAULT_MEMORY_SIZE)
+    }
+
+    @Test
     fun runtimeUsesK16KotlinBindingSurface() {
         val runtimeSource =
             root

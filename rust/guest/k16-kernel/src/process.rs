@@ -23,7 +23,6 @@ const MAX_PROCESS_SLOTS: usize = 3;
 const FOREGROUND_PROCESS_SLOTS: usize = MAX_PROCESS_SLOTS - 1;
 const INIT_PROCESS_SLOT: usize = 0;
 const NO_PARENT_SLOT: u32 = u32::MAX;
-#[cfg(any(test, feature = "host-test"))]
 const NO_CHILD_SLOT: u32 = u32::MAX;
 #[cfg(any(test, feature = "host-test"))]
 #[allow(dead_code)]
@@ -47,6 +46,12 @@ static mut RUNTIME_CURRENT_SLOT: u32 = 0;
 static mut RUNTIME_SLOT1_PARENT: u32 = NO_PARENT_SLOT;
 #[cfg(not(test))]
 static mut RUNTIME_SLOT2_PARENT: u32 = NO_PARENT_SLOT;
+#[cfg(not(test))]
+static mut RUNTIME_SLOT0_BLOCKED_CHILD: u32 = NO_CHILD_SLOT;
+#[cfg(not(test))]
+static mut RUNTIME_SLOT1_BLOCKED_CHILD: u32 = NO_CHILD_SLOT;
+#[cfg(not(test))]
+static mut RUNTIME_SLOT2_BLOCKED_CHILD: u32 = NO_CHILD_SLOT;
 #[cfg(not(test))]
 static mut RUNTIME_SLOT0_HEAP_START: u32 = 0;
 #[cfg(not(test))]
@@ -294,6 +299,54 @@ impl ProcessSlotLifecycle {
 
     const fn is_empty(self) -> bool {
         self.state == PROCESS_STATE_EMPTY
+    }
+}
+
+#[cfg(test)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+struct RuntimeProcessLinkage {
+    parent_slot: u32,
+    blocked_child_slot: u32,
+}
+
+#[cfg(test)]
+impl RuntimeProcessLinkage {
+    const fn root() -> Self {
+        Self {
+            parent_slot: NO_PARENT_SLOT,
+            blocked_child_slot: NO_CHILD_SLOT,
+        }
+    }
+
+    fn block_on_child(self, child_slot: usize) -> Result<Self, ProcessSwitchError> {
+        if self.blocked_child_slot != NO_CHILD_SLOT || child_slot >= MAX_PROCESS_SLOTS {
+            return Err(ProcessSwitchError::NoRunningChild);
+        }
+        Ok(Self {
+            parent_slot: self.parent_slot,
+            blocked_child_slot: child_slot as u32,
+        })
+    }
+
+    fn resume_after_child(self, child_slot: usize) -> Result<Self, ProcessSwitchError> {
+        if self.blocked_child_slot as usize != child_slot {
+            return Err(ProcessSwitchError::NoRunningChild);
+        }
+        Ok(Self {
+            parent_slot: self.parent_slot,
+            blocked_child_slot: NO_CHILD_SLOT,
+        })
+    }
+
+    fn running_parent_slot(self) -> Result<usize, ProcessSwitchError> {
+        if self.blocked_child_slot != NO_CHILD_SLOT {
+            return Err(ProcessSwitchError::NoRunningChild);
+        }
+        let parent_slot = self.parent_slot as usize;
+        if parent_slot >= MAX_PROCESS_SLOTS {
+            return Err(ProcessSwitchError::NoRunningChild);
+        }
+        Ok(parent_slot)
     }
 }
 
@@ -585,6 +638,7 @@ impl ProcessDescriptor {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 struct RuntimeForegroundSlotState {
     parent_slot: u32,
+    blocked_child_slot: u32,
     memory: Option<ProcessMemory>,
     heap: Option<RuntimeHeapState>,
     address_space: Option<u32>,
@@ -598,6 +652,7 @@ impl RuntimeForegroundSlotState {
         let owned_resources = resources.owned_resources();
         Self {
             parent_slot,
+            blocked_child_slot: NO_CHILD_SLOT,
             memory: Some(resources.memory),
             heap: Some(resources.heap),
             address_space: owned_resources.address_space,
@@ -618,6 +673,7 @@ impl RuntimeForegroundSlotState {
     const fn cleared_after_exit(self) -> Self {
         Self {
             parent_slot: NO_PARENT_SLOT,
+            blocked_child_slot: NO_CHILD_SLOT,
             memory: None,
             heap: None,
             address_space: None,
@@ -1111,8 +1167,9 @@ pub unsafe fn initialize_init_process(
                 core::ptr::addr_of_mut!(RUNTIME_CURRENT_SLOT),
                 INIT_PROCESS_SLOT as u32,
             );
-            write_runtime_word(runtime_slot_parent_ptr(1), NO_PARENT_SLOT);
-            write_runtime_word(runtime_slot_parent_ptr(2), NO_PARENT_SLOT);
+            write_runtime_process_linkage(INIT_PROCESS_SLOT, NO_PARENT_SLOT, NO_CHILD_SLOT);
+            write_runtime_process_linkage(1, NO_PARENT_SLOT, NO_CHILD_SLOT);
+            write_runtime_process_linkage(2, NO_PARENT_SLOT, NO_CHILD_SLOT);
             write_runtime_process_resources(INIT_PROCESS_SLOT, descriptor.resources);
             *runtime_slot_frame(INIT_PROCESS_SLOT).get() =
                 k16_rt::TrapFrame::from(descriptor.frame);
@@ -1170,8 +1227,9 @@ pub unsafe fn begin_translated_init_from_storage0(
             core::ptr::addr_of_mut!(RUNTIME_CURRENT_SLOT),
             INIT_PROCESS_SLOT as u32,
         );
-        write_runtime_word(runtime_slot_parent_ptr(1), NO_PARENT_SLOT);
-        write_runtime_word(runtime_slot_parent_ptr(2), NO_PARENT_SLOT);
+        write_runtime_process_linkage(INIT_PROCESS_SLOT, NO_PARENT_SLOT, NO_CHILD_SLOT);
+        write_runtime_process_linkage(1, NO_PARENT_SLOT, NO_CHILD_SLOT);
+        write_runtime_process_linkage(2, NO_PARENT_SLOT, NO_CHILD_SLOT);
         write_runtime_process_resources(INIT_PROCESS_SLOT, descriptor.resources);
         *runtime_slot_frame(INIT_PROCESS_SLOT).get() = k16_rt::TrapFrame::from(descriptor.frame);
         *RUNTIME_PAGE_ALLOCATOR.get() = Some(allocator);
@@ -1310,12 +1368,17 @@ unsafe fn begin_loaded_child_plan_runtime_with_argv(
     let child_slot = runtime_child_slot_for_parent(parent_slot, unsafe {
         read_runtime_address_space(parent_slot)
     })?;
+    if unsafe { read_runtime_blocked_child_slot(parent_slot) } != NO_CHILD_SLOT {
+        return Err(ProcessSwitchError::NoRunningChild);
+    }
+    let parent_parent_slot = unsafe { read_runtime_parent_slot(parent_slot) };
     let descriptor = ProcessDescriptor::for_child_plan(child_plan, argv, translated)?;
     let child_state = RuntimeForegroundSlotState::from_process_resources(
         parent_slot as u32,
         descriptor.resources,
     );
     unsafe {
+        write_runtime_process_linkage(parent_slot, parent_parent_slot, child_slot as u32);
         write_runtime_foreground_slot_state(child_slot, child_state);
         write_runtime_word(
             core::ptr::addr_of_mut!(RUNTIME_CURRENT_SLOT),
@@ -1388,8 +1451,11 @@ unsafe fn finish_child_runtime(status: u32) -> Result<ParentResume, ProcessSwitc
     if current_slot == INIT_PROCESS_SLOT {
         return Err(ProcessSwitchError::NoRunningChild);
     }
-    let parent_slot = unsafe { read_runtime_word(runtime_slot_parent_ptr(current_slot)) } as usize;
-    if parent_slot >= MAX_PROCESS_SLOTS {
+    let parent_slot = unsafe { read_runtime_parent_slot(current_slot) } as usize;
+    if parent_slot >= MAX_PROCESS_SLOTS
+        || unsafe { read_runtime_blocked_child_slot(current_slot) } != NO_CHILD_SLOT
+        || unsafe { read_runtime_blocked_child_slot(parent_slot) } as usize != current_slot
+    {
         return Err(ProcessSwitchError::NoRunningChild);
     }
     let frame = TrapFrame::from(unsafe { *runtime_slot_frame(parent_slot).get() });
@@ -1397,6 +1463,7 @@ unsafe fn finish_child_runtime(status: u32) -> Result<ParentResume, ProcessSwitc
     let exited_resources = exited_state.owned_resources();
     unsafe {
         write_runtime_foreground_slot_state(current_slot, exited_state.cleared_after_exit());
+        write_runtime_word(runtime_slot_blocked_child_ptr(parent_slot), NO_CHILD_SLOT);
         write_runtime_word(
             core::ptr::addr_of_mut!(RUNTIME_CURRENT_SLOT),
             parent_slot as u32,
@@ -1516,6 +1583,15 @@ fn runtime_slot_parent_ptr(slot: usize) -> *mut u32 {
         1 => core::ptr::addr_of_mut!(RUNTIME_SLOT1_PARENT),
         2 => core::ptr::addr_of_mut!(RUNTIME_SLOT2_PARENT),
         _ => core::ptr::addr_of_mut!(RUNTIME_SLOT1_PARENT),
+    }
+}
+
+#[cfg(not(test))]
+fn runtime_slot_blocked_child_ptr(slot: usize) -> *mut u32 {
+    match slot {
+        INIT_PROCESS_SLOT => core::ptr::addr_of_mut!(RUNTIME_SLOT0_BLOCKED_CHILD),
+        1 => core::ptr::addr_of_mut!(RUNTIME_SLOT1_BLOCKED_CHILD),
+        _ => core::ptr::addr_of_mut!(RUNTIME_SLOT2_BLOCKED_CHILD),
     }
 }
 
@@ -1666,8 +1742,31 @@ unsafe fn read_runtime_process_memory(slot: usize) -> Option<ProcessMemory> {
 }
 
 #[cfg(not(test))]
+unsafe fn read_runtime_parent_slot(slot: usize) -> u32 {
+    if slot == INIT_PROCESS_SLOT {
+        NO_PARENT_SLOT
+    } else {
+        unsafe { read_runtime_word(runtime_slot_parent_ptr(slot)) }
+    }
+}
+
+#[cfg(not(test))]
+unsafe fn read_runtime_blocked_child_slot(slot: usize) -> u32 {
+    unsafe { read_runtime_word(runtime_slot_blocked_child_ptr(slot)) }
+}
+
+#[cfg(not(test))]
+unsafe fn write_runtime_process_linkage(slot: usize, parent_slot: u32, blocked_child_slot: u32) {
+    unsafe {
+        if slot != INIT_PROCESS_SLOT {
+            write_runtime_word(runtime_slot_parent_ptr(slot), parent_slot);
+        }
+        write_runtime_word(runtime_slot_blocked_child_ptr(slot), blocked_child_slot);
+    }
+}
+
+#[cfg(not(test))]
 unsafe fn read_runtime_foreground_slot_state(slot: usize) -> RuntimeForegroundSlotState {
-    let parent_slot = unsafe { read_runtime_word(runtime_slot_parent_ptr(slot)) };
     let heap_start = unsafe { read_runtime_word(runtime_slot_heap_start_ptr(slot)) };
     let program_break = unsafe { read_runtime_word(runtime_slot_program_break_ptr(slot)) };
     let heap_limit = unsafe { read_runtime_word(runtime_slot_heap_limit_ptr(slot)) };
@@ -1681,7 +1780,8 @@ unsafe fn read_runtime_foreground_slot_state(slot: usize) -> RuntimeForegroundSl
         })
     };
     RuntimeForegroundSlotState {
-        parent_slot,
+        parent_slot: unsafe { read_runtime_parent_slot(slot) },
+        blocked_child_slot: unsafe { read_runtime_blocked_child_slot(slot) },
         memory: unsafe { read_runtime_process_memory(slot) },
         heap,
         address_space: unsafe { read_runtime_address_space(slot) },
@@ -1700,7 +1800,7 @@ unsafe fn write_runtime_foreground_slot_state(slot: usize, state: RuntimeForegro
         limit: 0,
     });
     unsafe {
-        write_runtime_word(runtime_slot_parent_ptr(slot), state.parent_slot);
+        write_runtime_process_linkage(slot, state.parent_slot, state.blocked_child_slot);
         write_runtime_process_memory(slot, memory);
         write_runtime_word(runtime_slot_heap_start_ptr(slot), heap.start);
         write_runtime_word(runtime_slot_program_break_ptr(slot), heap.program_break);
@@ -4015,6 +4115,7 @@ mod tests {
             RuntimeForegroundSlotState::from_process_resources(1, resources),
             RuntimeForegroundSlotState {
                 parent_slot: 1,
+                blocked_child_slot: NO_CHILD_SLOT,
                 memory: Some(resources.memory),
                 heap: Some(resources.heap),
                 address_space: Some(11),
@@ -4028,6 +4129,50 @@ mod tests {
                     frame_count: 1,
                 }),
             }
+        );
+    }
+
+    #[test]
+    fn runtime_process_linkage_blocks_and_resumes_specific_child() {
+        let root = RuntimeProcessLinkage::root();
+        let blocked = root.block_on_child(1).expect("root blocks on child");
+
+        assert_eq!(
+            blocked,
+            RuntimeProcessLinkage {
+                parent_slot: NO_PARENT_SLOT,
+                blocked_child_slot: 1,
+            }
+        );
+        assert_eq!(blocked.resume_after_child(1), Ok(root));
+        assert_eq!(
+            blocked.resume_after_child(2),
+            Err(ProcessSwitchError::NoRunningChild)
+        );
+    }
+
+    #[test]
+    fn runtime_process_linkage_validates_running_child_parent_slot() {
+        assert_eq!(
+            RuntimeProcessLinkage {
+                parent_slot: INIT_PROCESS_SLOT as u32,
+                blocked_child_slot: NO_CHILD_SLOT,
+            }
+            .running_parent_slot()
+            .expect("child reports parent"),
+            INIT_PROCESS_SLOT
+        );
+        assert_eq!(
+            RuntimeProcessLinkage::root().running_parent_slot(),
+            Err(ProcessSwitchError::NoRunningChild)
+        );
+        assert_eq!(
+            RuntimeProcessLinkage {
+                parent_slot: INIT_PROCESS_SLOT as u32,
+                blocked_child_slot: 2,
+            }
+            .running_parent_slot(),
+            Err(ProcessSwitchError::NoRunningChild)
         );
     }
 
@@ -5247,6 +5392,7 @@ mod tests {
         );
         let state = RuntimeForegroundSlotState {
             parent_slot: 1,
+            blocked_child_slot: NO_CHILD_SLOT,
             memory: ProcessMemory::new(0x0001_0000, 0x0001_f000).ok(),
             heap: Some(RuntimeHeapState {
                 start: 0x0001_2000,
@@ -5285,6 +5431,7 @@ mod tests {
     fn runtime_foreground_slot_state_clears_owned_state_after_exit() {
         let state = RuntimeForegroundSlotState {
             parent_slot: 1,
+            blocked_child_slot: 2,
             memory: ProcessMemory::new(0x0001_0000, 0x0001_f000).ok(),
             heap: Some(RuntimeHeapState {
                 start: 0x0001_2000,
@@ -5307,6 +5454,7 @@ mod tests {
             state.cleared_after_exit(),
             RuntimeForegroundSlotState {
                 parent_slot: NO_PARENT_SLOT,
+                blocked_child_slot: NO_CHILD_SLOT,
                 memory: None,
                 heap: None,
                 address_space: None,
