@@ -24,6 +24,8 @@ const FOREGROUND_PROCESS_SLOTS: usize = MAX_PROCESS_SLOTS - 1;
 const INIT_PROCESS_SLOT: usize = 0;
 const NO_PARENT_SLOT: u32 = u32::MAX;
 #[cfg(any(test, feature = "host-test"))]
+const NO_CHILD_SLOT: u32 = u32::MAX;
+#[cfg(any(test, feature = "host-test"))]
 #[allow(dead_code)]
 static PROCESS_TABLE: KernelProcessTable =
     KernelProcessTable::new(ProcessTable::new(ProcessContext {
@@ -218,6 +220,7 @@ pub const PROCESS_STATE_BLOCKED_ON_CHILD: ProcessState = 2;
 struct ProcessSlotLifecycle {
     state: ProcessState,
     parent_slot: u32,
+    blocked_child_slot: u32,
 }
 
 #[cfg(any(test, feature = "host-test"))]
@@ -226,6 +229,7 @@ impl ProcessSlotLifecycle {
         Self {
             state: PROCESS_STATE_EMPTY,
             parent_slot: NO_PARENT_SLOT,
+            blocked_child_slot: NO_CHILD_SLOT,
         }
     }
 
@@ -233,6 +237,7 @@ impl ProcessSlotLifecycle {
         Self {
             state: PROCESS_STATE_RUNNING,
             parent_slot: NO_PARENT_SLOT,
+            blocked_child_slot: NO_CHILD_SLOT,
         }
     }
 
@@ -240,28 +245,44 @@ impl ProcessSlotLifecycle {
         Self {
             state: PROCESS_STATE_RUNNING,
             parent_slot: parent_slot as u32,
+            blocked_child_slot: NO_CHILD_SLOT,
         }
     }
 
-    fn block_on_child(self) -> Result<Self, ProcessSwitchError> {
-        if self.state != PROCESS_STATE_RUNNING {
+    fn require_running(self) -> Result<Self, ProcessSwitchError> {
+        if self.state != PROCESS_STATE_RUNNING || self.blocked_child_slot != NO_CHILD_SLOT {
+            return Err(ProcessSwitchError::NoRunningChild);
+        }
+        Ok(self)
+    }
+
+    fn block_on_child(self, child_slot: usize) -> Result<Self, ProcessSwitchError> {
+        self.require_running()?;
+        if child_slot >= MAX_PROCESS_SLOTS {
             return Err(ProcessSwitchError::NoRunningChild);
         }
         Ok(Self {
             state: PROCESS_STATE_BLOCKED_ON_CHILD,
             parent_slot: self.parent_slot,
+            blocked_child_slot: child_slot as u32,
         })
     }
 
-    const fn resume_after_child(self) -> Self {
-        Self {
+    fn resume_after_child(self, child_slot: usize) -> Result<Self, ProcessSwitchError> {
+        if self.state != PROCESS_STATE_BLOCKED_ON_CHILD
+            || self.blocked_child_slot as usize != child_slot
+        {
+            return Err(ProcessSwitchError::NoRunningChild);
+        }
+        Ok(Self {
             state: PROCESS_STATE_RUNNING,
             parent_slot: self.parent_slot,
-        }
+            blocked_child_slot: NO_CHILD_SLOT,
+        })
     }
 
     fn running_parent_slot(self) -> Result<usize, ProcessSwitchError> {
-        if self.state != PROCESS_STATE_RUNNING {
+        if self.state != PROCESS_STATE_RUNNING || self.blocked_child_slot != NO_CHILD_SLOT {
             return Err(ProcessSwitchError::NoRunningChild);
         }
         let parent_slot = self.parent_slot as usize;
@@ -621,6 +642,7 @@ pub enum TrapReturnOverride {
 struct ProcessSlot {
     state: ProcessState,
     parent_slot: u32,
+    blocked_child_slot: u32,
     context: ProcessContext,
     frame: TrapFrame,
     exit_status: u32,
@@ -642,6 +664,7 @@ impl ProcessSlot {
         Self {
             state: lifecycle.state,
             parent_slot: lifecycle.parent_slot,
+            blocked_child_slot: lifecycle.blocked_child_slot,
             context: ProcessContext {
                 entry_pc: 0,
                 stack_top: 0,
@@ -665,6 +688,7 @@ impl ProcessSlot {
         Self {
             state: lifecycle.state,
             parent_slot: lifecycle.parent_slot,
+            blocked_child_slot: lifecycle.blocked_child_slot,
             context,
             frame: TrapFrame::zeroed(),
             exit_status: 0,
@@ -688,11 +712,13 @@ impl ProcessSlot {
         ProcessSlotLifecycle {
             state: self.state,
             parent_slot: self.parent_slot,
+            blocked_child_slot: self.blocked_child_slot,
         }
     }
 
     fn set_lifecycle(&mut self, lifecycle: ProcessSlotLifecycle) {
         self.parent_slot = lifecycle.parent_slot;
+        self.blocked_child_slot = lifecycle.blocked_child_slot;
         unsafe { core::ptr::write_volatile(&mut self.state, lifecycle.state) };
     }
 
@@ -822,7 +848,9 @@ impl ProcessTable {
         argv: ChildArgv,
         translated: Option<TranslatedUserLaunch>,
     ) -> Result<ChildLaunch, ProcessSwitchError> {
-        let parent_lifecycle = self.slots[self.current_slot].lifecycle().block_on_child()?;
+        let parent_lifecycle = self.slots[self.current_slot]
+            .lifecycle()
+            .require_running()?;
         let child_slot = self
             .next_empty_child_slot()
             .ok_or(ProcessSwitchError::ChildAlreadyRunning)?;
@@ -831,6 +859,7 @@ impl ProcessTable {
             return Err(ProcessSwitchError::ChildAlreadyRunning);
         }
         let descriptor = ProcessDescriptor::for_child_plan(child_plan, argv, translated)?;
+        let parent_lifecycle = parent_lifecycle.block_on_child(child_slot)?;
         let parent = &mut self.slots[parent_slot];
         parent.set_lifecycle(parent_lifecycle);
         parent.context = ProcessContext {
@@ -875,12 +904,14 @@ impl ProcessTable {
         let child_slot = self.current_slot;
         let child_lifecycle = self.slots[child_slot].lifecycle();
         let parent_slot = child_lifecycle.running_parent_slot()?;
+        let parent_lifecycle = self.slots[parent_slot]
+            .lifecycle()
+            .resume_after_child(child_slot)?;
         let exited_resources = self.slots[child_slot].owned_resources();
         self.slots[child_slot].set_lifecycle(ProcessSlotLifecycle::empty());
         self.slots[child_slot].exit_status = status;
         self.slots[child_slot].clear();
         self.slots[parent_slot].exit_status = status;
-        let parent_lifecycle = self.slots[parent_slot].lifecycle().resume_after_child();
         self.slots[parent_slot].set_lifecycle(parent_lifecycle);
         self.current_slot = parent_slot;
         let parent = self.slots[parent_slot];
@@ -3742,10 +3773,11 @@ mod tests {
         let parent = ProcessSlotLifecycle::running_root();
 
         assert_eq!(
-            parent.block_on_child(),
+            parent.block_on_child(1),
             Ok(ProcessSlotLifecycle {
                 state: PROCESS_STATE_BLOCKED_ON_CHILD,
                 parent_slot: NO_PARENT_SLOT,
+                blocked_child_slot: 1,
             })
         );
         assert_eq!(
@@ -3753,6 +3785,7 @@ mod tests {
             ProcessSlotLifecycle {
                 state: PROCESS_STATE_RUNNING,
                 parent_slot: 1,
+                blocked_child_slot: NO_CHILD_SLOT,
             }
         );
     }
@@ -3763,6 +3796,7 @@ mod tests {
             ProcessSlotLifecycle {
                 state: PROCESS_STATE_EMPTY,
                 parent_slot: 0,
+                blocked_child_slot: NO_CHILD_SLOT,
             }
             .running_parent_slot(),
             Err(ProcessSwitchError::NoRunningChild)
@@ -3771,6 +3805,7 @@ mod tests {
             ProcessSlotLifecycle {
                 state: PROCESS_STATE_RUNNING,
                 parent_slot: NO_PARENT_SLOT,
+                blocked_child_slot: NO_CHILD_SLOT,
             }
             .running_parent_slot(),
             Err(ProcessSwitchError::NoRunningChild)
@@ -3779,8 +3814,47 @@ mod tests {
             ProcessSlotLifecycle {
                 state: PROCESS_STATE_RUNNING,
                 parent_slot: MAX_PROCESS_SLOTS as u32,
+                blocked_child_slot: NO_CHILD_SLOT,
             }
             .running_parent_slot(),
+            Err(ProcessSwitchError::NoRunningChild)
+        );
+        assert_eq!(
+            ProcessSlotLifecycle {
+                state: PROCESS_STATE_RUNNING,
+                parent_slot: INIT_PROCESS_SLOT as u32,
+                blocked_child_slot: 1,
+            }
+            .running_parent_slot(),
+            Err(ProcessSwitchError::NoRunningChild)
+        );
+        assert_eq!(
+            ProcessSlotLifecycle {
+                state: PROCESS_STATE_RUNNING,
+                parent_slot: NO_PARENT_SLOT,
+                blocked_child_slot: 1,
+            }
+            .block_on_child(2),
+            Err(ProcessSwitchError::NoRunningChild)
+        );
+    }
+
+    #[test]
+    fn process_lifecycle_resume_validates_blocked_child_link() {
+        let blocked = ProcessSlotLifecycle::running_root()
+            .block_on_child(1)
+            .expect("parent blocks on child");
+
+        assert_eq!(
+            blocked.resume_after_child(1),
+            Ok(ProcessSlotLifecycle::running_root())
+        );
+        assert_eq!(
+            blocked.resume_after_child(2),
+            Err(ProcessSwitchError::NoRunningChild)
+        );
+        assert_eq!(
+            ProcessSlotLifecycle::running_root().resume_after_child(1),
             Err(ProcessSwitchError::NoRunningChild)
         );
     }
@@ -5044,6 +5118,64 @@ mod tests {
         assert_eq!(resumed.child_exit_status, 7);
         assert_eq!(table.init_state(), PROCESS_STATE_RUNNING);
         assert_eq!(table.child_state(), PROCESS_STATE_EMPTY);
+    }
+
+    #[test]
+    fn process_table_child_start_records_blocked_child_link() {
+        let mut table = ProcessTable::new(ProcessContext {
+            entry_pc: 0x0000_8000,
+            stack_top: 0x0001_0000,
+        });
+        let child_plan = DynamicUserLoadPlan {
+            load_base: 0x0000_a000,
+            load_end: 0x0000_a020,
+            entry_pc: 0x0000_a004,
+            stack_top: 0x0001_0000,
+            payload_dst: 0x0000_a000,
+            payload_len: 16,
+            zero_fill_addr: 0x0000_a010,
+            zero_fill_len: 16,
+        };
+
+        table.begin_child_run(child_plan).expect("child starts");
+
+        assert_eq!(
+            table.slots[INIT_PROCESS_SLOT].lifecycle(),
+            ProcessSlotLifecycle {
+                state: PROCESS_STATE_BLOCKED_ON_CHILD,
+                parent_slot: NO_PARENT_SLOT,
+                blocked_child_slot: 1,
+            }
+        );
+    }
+
+    #[test]
+    fn process_table_child_finish_rejects_mismatched_blocked_child_link() {
+        let mut table = ProcessTable::new(ProcessContext {
+            entry_pc: 0x0000_8000,
+            stack_top: 0x0001_0000,
+        });
+        let child_plan = DynamicUserLoadPlan {
+            load_base: 0x0000_a000,
+            load_end: 0x0000_a020,
+            entry_pc: 0x0000_a004,
+            stack_top: 0x0001_0000,
+            payload_dst: 0x0000_a000,
+            payload_len: 16,
+            zero_fill_addr: 0x0000_a010,
+            zero_fill_len: 16,
+        };
+        table.begin_child_run(child_plan).expect("child starts");
+        table.slots[INIT_PROCESS_SLOT].set_lifecycle(
+            ProcessSlotLifecycle::running_root()
+                .block_on_child(2)
+                .expect("parent blocks on another child"),
+        );
+
+        assert_eq!(
+            table.finish_child(0),
+            Err(ProcessSwitchError::NoRunningChild)
+        );
     }
 
     #[test]
