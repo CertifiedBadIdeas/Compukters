@@ -20,6 +20,7 @@ const DEFAULT_INIT_MEMORY_END: u32 = 0x0002_5000;
 // that block as staging, and records may straddle a storage block boundary.
 const RELOCATION_RECORD_ADDR: u32 = 0x0000_0500;
 const MAX_PROCESS_SLOTS: usize = 3;
+const FOREGROUND_PROCESS_SLOTS: usize = MAX_PROCESS_SLOTS - 1;
 const INIT_PROCESS_SLOT: usize = 0;
 const NO_PARENT_SLOT: u32 = u32::MAX;
 #[cfg(any(test, feature = "host-test"))]
@@ -1641,11 +1642,55 @@ fn runtime_child_slot_for_parent(
     current_slot: usize,
     _current_address_space: Option<u32>,
 ) -> Result<usize, ProcessSwitchError> {
-    let child_slot = current_slot + 1;
-    if child_slot >= MAX_PROCESS_SLOTS {
+    #[cfg(not(test))]
+    {
+        return child_slot_from_occupancy(current_slot, unsafe {
+            runtime_foreground_slot_occupancy()
+        });
+    }
+    #[cfg(test)]
+    {
+        let mut occupied = [false; FOREGROUND_PROCESS_SLOTS];
+        let mut slot = 1;
+        while slot <= current_slot && slot < MAX_PROCESS_SLOTS {
+            occupied[slot - 1] = true;
+            slot += 1;
+        }
+        child_slot_from_occupancy(current_slot, occupied)
+    }
+}
+
+fn child_slot_from_occupancy(
+    parent_slot: usize,
+    foreground_occupied: [bool; FOREGROUND_PROCESS_SLOTS],
+) -> Result<usize, ProcessSwitchError> {
+    if parent_slot >= MAX_PROCESS_SLOTS {
         return Err(ProcessSwitchError::ChildAlreadyRunning);
     }
-    Ok(child_slot)
+    if parent_slot != INIT_PROCESS_SLOT && !foreground_occupied[parent_slot - 1] {
+        return Err(ProcessSwitchError::ChildAlreadyRunning);
+    }
+    let mut index = 0;
+    while index < FOREGROUND_PROCESS_SLOTS {
+        if !foreground_occupied[index] {
+            return Ok(index + 1);
+        }
+        index += 1;
+    }
+    Err(ProcessSwitchError::ChildAlreadyRunning)
+}
+
+#[cfg(not(test))]
+unsafe fn runtime_foreground_slot_occupancy() -> [bool; FOREGROUND_PROCESS_SLOTS] {
+    let mut occupied = [false; FOREGROUND_PROCESS_SLOTS];
+    let mut index = 0;
+    while index < FOREGROUND_PROCESS_SLOTS {
+        let slot = index + 1;
+        occupied[index] =
+            unsafe { read_runtime_word(runtime_slot_parent_ptr(slot)) } != NO_PARENT_SLOT;
+        index += 1;
+    }
+    occupied
 }
 
 fn trap_return_override_for_resume(
@@ -3972,6 +4017,30 @@ mod tests {
         assert!(runtime_child_slot_for_parent(1, Some(7)).is_ok());
         assert_eq!(
             runtime_child_slot_for_parent(2, Some(9)),
+            Err(ProcessSwitchError::ChildAlreadyRunning)
+        );
+    }
+
+    #[test]
+    fn runtime_slot_policy_reuses_first_empty_foreground_slot() {
+        assert_eq!(
+            child_slot_from_occupancy(0, [false, true]),
+            Ok(1)
+        );
+        assert_eq!(
+            child_slot_from_occupancy(1, [true, false]),
+            Ok(2)
+        );
+    }
+
+    #[test]
+    fn runtime_slot_policy_reports_busy_when_no_foreground_slot_is_free() {
+        assert_eq!(
+            child_slot_from_occupancy(1, [true, true]),
+            Err(ProcessSwitchError::ChildAlreadyRunning)
+        );
+        assert_eq!(
+            child_slot_from_occupancy(MAX_PROCESS_SLOTS, [false, false]),
             Err(ProcessSwitchError::ChildAlreadyRunning)
         );
     }
