@@ -349,6 +349,48 @@ struct ProcessResources {
 }
 
 impl ProcessResources {
+    fn for_loaded_init_image(
+        image: k16_boot_chain::LoadedImage,
+        memory_end: u32,
+    ) -> Result<Self, ProcessLoadError> {
+        let memory = ProcessMemory::for_loaded_image(image, memory_end)?;
+        Ok(Self {
+            memory,
+            load_base: align_up(image.load_end, LOAD_ALIGNMENT)?,
+            heap: RuntimeHeapState::from_bounds(image.load_end, memory.end)
+                .map_err(|_| ProcessLoadError::ProgramTooLarge)?,
+            address_space: None,
+            kernel_stack_top: None,
+            backing_pages: None,
+            heap_backing_pages: None,
+        })
+    }
+
+    fn for_translated_init_plan(
+        plan: DynamicUserLoadPlan,
+        memory_end: u32,
+        translated: TranslatedUserLaunch,
+    ) -> Result<Self, ProcessLoadError> {
+        let memory = ProcessMemory::new(plan.load_base, translated.stack_top)?;
+        if translated.kernel_stack_top != memory_end
+            || translated.entry_pc != plan.entry_pc
+            || translated.stack_top != plan.stack_top
+            || translated.stack_top >= translated.kernel_stack_top
+        {
+            return Err(ProcessLoadError::InvalidArena);
+        }
+        Ok(Self {
+            memory,
+            load_base: align_up(plan.load_end, LOAD_ALIGNMENT)?,
+            heap: RuntimeHeapState::from_bounds(plan.load_end, memory.end)
+                .map_err(|_| ProcessLoadError::ProgramTooLarge)?,
+            address_space: Some(translated.address_space),
+            kernel_stack_top: Some(translated.kernel_stack_top),
+            backing_pages: translated.backing_pages,
+            heap_backing_pages: None,
+        })
+    }
+
     fn for_child_plan(
         child_plan: DynamicUserLoadPlan,
         argv: ChildArgv,
@@ -380,6 +422,39 @@ struct ProcessDescriptor {
 }
 
 impl ProcessDescriptor {
+    fn for_loaded_init_image(
+        image: k16_boot_chain::LoadedImage,
+        memory_end: u32,
+    ) -> Result<Self, ProcessLoadError> {
+        let resources = ProcessResources::for_loaded_init_image(image, memory_end)?;
+        let context = ProcessContext {
+            entry_pc: image.entry_pc,
+            stack_top: resources.memory.end,
+        };
+        Ok(Self {
+            context,
+            frame: child_frame_for_context(context),
+            resources,
+        })
+    }
+
+    fn for_translated_init_plan(
+        plan: DynamicUserLoadPlan,
+        memory_end: u32,
+        translated: TranslatedUserLaunch,
+    ) -> Result<Self, ProcessLoadError> {
+        let resources = ProcessResources::for_translated_init_plan(plan, memory_end, translated)?;
+        let context = ProcessContext {
+            entry_pc: translated.entry_pc,
+            stack_top: translated.stack_top,
+        };
+        Ok(Self {
+            context,
+            frame: child_frame_for_context(context),
+            resources,
+        })
+    }
+
     fn for_child_plan(
         child_plan: DynamicUserLoadPlan,
         argv: ChildArgv,
@@ -402,6 +477,16 @@ impl ProcessDescriptor {
             frame,
             resources: ProcessResources::for_child_plan(child_plan, argv, translated)?,
         })
+    }
+
+    const fn launch(self, id: ProcessId) -> ChildLaunch {
+        ChildLaunch {
+            id,
+            context: self.context,
+            frame: self.frame,
+            address_space: self.resources.address_space,
+            kernel_stack_top: self.resources.kernel_stack_top,
+        }
     }
 }
 
@@ -521,6 +606,19 @@ impl ProcessSlot {
     fn clear(&mut self) {
         *self = Self::empty();
     }
+
+    fn initialize_from_descriptor(&mut self, descriptor: ProcessDescriptor) {
+        self.context = descriptor.context;
+        self.frame = descriptor.frame;
+        self.memory = descriptor.resources.memory;
+        self.load_base = descriptor.resources.load_base;
+        self.heap_start = descriptor.resources.heap.start;
+        self.program_break = descriptor.resources.heap.program_break;
+        self.heap_limit = descriptor.resources.heap.limit;
+        self.address_space = descriptor.resources.address_space;
+        self.kernel_stack_top = descriptor.resources.kernel_stack_top;
+        self.backing_pages = descriptor.resources.backing_pages;
+    }
 }
 
 #[cfg(any(test, feature = "host-test"))]
@@ -555,19 +653,9 @@ impl ProcessTable {
         image: k16_boot_chain::LoadedImage,
         memory_end: u32,
     ) -> Result<(), ProcessLoadError> {
-        let memory = ProcessMemory::for_loaded_image(image, memory_end)?;
+        let descriptor = ProcessDescriptor::for_loaded_init_image(image, memory_end)?;
         let init_slot = &mut self.slots[INIT_PROCESS_SLOT];
-        init_slot.context = ProcessContext {
-            entry_pc: image.entry_pc,
-            stack_top: memory.end,
-        };
-        init_slot.memory = memory;
-        init_slot.load_base = align_up(image.load_end, LOAD_ALIGNMENT)?;
-        let heap = HeapState::from_bounds(image.load_end, memory.end)
-            .map_err(|_| ProcessLoadError::ProgramTooLarge)?;
-        init_slot.heap_start = heap.start;
-        init_slot.program_break = heap.start;
-        init_slot.heap_limit = heap.limit;
+        init_slot.initialize_from_descriptor(descriptor);
         Ok(())
     }
 
@@ -577,40 +665,11 @@ impl ProcessTable {
         memory_end: u32,
         translated: TranslatedUserLaunch,
     ) -> Result<ChildLaunch, ProcessLoadError> {
-        let memory = ProcessMemory::new(plan.load_base, translated.stack_top)?;
-        if translated.kernel_stack_top != memory_end
-            || translated.entry_pc != plan.entry_pc
-            || translated.stack_top != plan.stack_top
-            || translated.stack_top >= translated.kernel_stack_top
-        {
-            return Err(ProcessLoadError::InvalidArena);
-        }
+        let descriptor = ProcessDescriptor::for_translated_init_plan(plan, memory_end, translated)?;
         let init_slot = &mut self.slots[INIT_PROCESS_SLOT];
-        let context = ProcessContext {
-            entry_pc: translated.entry_pc,
-            stack_top: translated.stack_top,
-        };
-        let frame = child_frame_for_context(context);
-        init_slot.context = context;
-        init_slot.frame = frame;
-        init_slot.memory = memory;
-        init_slot.load_base = align_up(plan.load_end, LOAD_ALIGNMENT)?;
-        let heap = HeapState::from_bounds(plan.load_end, memory.end)
-            .map_err(|_| ProcessLoadError::ProgramTooLarge)?;
-        init_slot.heap_start = heap.start;
-        init_slot.program_break = heap.start;
-        init_slot.heap_limit = heap.limit;
-        init_slot.address_space = Some(translated.address_space);
-        init_slot.kernel_stack_top = Some(translated.kernel_stack_top);
-        init_slot.backing_pages = translated.backing_pages;
+        init_slot.initialize_from_descriptor(descriptor);
         self.current_slot = INIT_PROCESS_SLOT;
-        Ok(ChildLaunch {
-            id: ProcessId::Init,
-            context,
-            frame,
-            address_space: Some(translated.address_space),
-            kernel_stack_top: Some(translated.kernel_stack_top),
-        })
+        Ok(descriptor.launch(ProcessId::Init))
     }
 
     pub fn child_arena_for_init_frame(
@@ -685,26 +744,11 @@ impl ProcessTable {
         parent.frame = init_frame;
         let child = &mut self.slots[child_slot];
         child.parent_slot = parent_slot as u32;
-        child.context = descriptor.context;
-        child.frame = descriptor.frame;
+        child.initialize_from_descriptor(descriptor);
         child.exit_status = 0;
-        child.memory = descriptor.resources.memory;
-        child.load_base = descriptor.resources.load_base;
-        child.heap_start = descriptor.resources.heap.start;
-        child.program_break = descriptor.resources.heap.program_break;
-        child.heap_limit = descriptor.resources.heap.limit;
-        child.address_space = descriptor.resources.address_space;
-        child.kernel_stack_top = descriptor.resources.kernel_stack_top;
-        child.backing_pages = descriptor.resources.backing_pages;
         unsafe { core::ptr::write_volatile(&mut child.state, PROCESS_STATE_RUNNING) };
         self.current_slot = child_slot;
-        Ok(ChildLaunch {
-            id: ProcessId::from_slot(child_slot),
-            context: descriptor.context,
-            frame: descriptor.frame,
-            address_space: descriptor.resources.address_space,
-            kernel_stack_top: descriptor.resources.kernel_stack_top,
-        })
+        Ok(descriptor.launch(ProcessId::from_slot(child_slot)))
     }
 
     pub fn begin_translated_child_run(
@@ -943,9 +987,7 @@ pub unsafe fn initialize_init_process(
 ) -> Result<(), ProcessLoadError> {
     #[cfg(not(test))]
     {
-        let memory = ProcessMemory::for_loaded_image(image, memory_end)?;
-        let heap = HeapState::from_bounds(image.load_end, memory.end)
-            .map_err(|_| ProcessLoadError::ProgramTooLarge)?;
+        let descriptor = ProcessDescriptor::for_loaded_init_image(image, memory_end)?;
         unsafe {
             write_runtime_word(
                 core::ptr::addr_of_mut!(RUNTIME_CURRENT_SLOT),
@@ -953,13 +995,9 @@ pub unsafe fn initialize_init_process(
             );
             write_runtime_word(runtime_slot_parent_ptr(1), NO_PARENT_SLOT);
             write_runtime_word(runtime_slot_parent_ptr(2), NO_PARENT_SLOT);
-            write_runtime_process_memory(INIT_PROCESS_SLOT, memory);
-            write_runtime_word(runtime_slot_heap_start_ptr(INIT_PROCESS_SLOT), heap.start);
-            write_runtime_word(
-                runtime_slot_program_break_ptr(INIT_PROCESS_SLOT),
-                heap.start,
-            );
-            write_runtime_word(runtime_slot_heap_limit_ptr(INIT_PROCESS_SLOT), heap.limit);
+            write_runtime_process_resources(INIT_PROCESS_SLOT, descriptor.resources);
+            *runtime_slot_frame(INIT_PROCESS_SLOT).get() =
+                k16_rt::TrapFrame::from(descriptor.frame);
         }
         return Ok(());
     }
@@ -1004,14 +1042,11 @@ pub unsafe fn begin_translated_init_from_storage0(
             return Err(error);
         }
     };
-    let memory = ProcessMemory::new(child_plan.load_base, translated.stack_top)?;
-    let heap = HeapState::from_bounds(child_plan.load_end, memory.end)
-        .map_err(|_| ProcessLoadError::ProgramTooLarge)?;
-    let context = ProcessContext {
-        entry_pc: translated.entry_pc,
-        stack_top: translated.stack_top,
-    };
-    let frame = child_frame_for_context(context);
+    let descriptor = ProcessDescriptor::for_translated_init_plan(
+        child_plan,
+        translated.kernel_stack_top,
+        translated,
+    )?;
     unsafe {
         write_runtime_word(
             core::ptr::addr_of_mut!(RUNTIME_CURRENT_SLOT),
@@ -1019,33 +1054,11 @@ pub unsafe fn begin_translated_init_from_storage0(
         );
         write_runtime_word(runtime_slot_parent_ptr(1), NO_PARENT_SLOT);
         write_runtime_word(runtime_slot_parent_ptr(2), NO_PARENT_SLOT);
-        write_runtime_process_memory(INIT_PROCESS_SLOT, memory);
-        write_runtime_word(runtime_slot_heap_start_ptr(INIT_PROCESS_SLOT), heap.start);
-        write_runtime_word(
-            runtime_slot_program_break_ptr(INIT_PROCESS_SLOT),
-            heap.start,
-        );
-        write_runtime_word(runtime_slot_heap_limit_ptr(INIT_PROCESS_SLOT), heap.limit);
-        write_runtime_word(
-            runtime_slot_address_space_ptr(INIT_PROCESS_SLOT),
-            translated.address_space,
-        );
-        write_runtime_word(
-            runtime_slot_kernel_stack_top_ptr(INIT_PROCESS_SLOT),
-            translated.kernel_stack_top,
-        );
-        write_runtime_backing_pages(INIT_PROCESS_SLOT, translated.backing_pages);
-        write_runtime_heap_backing_pages(INIT_PROCESS_SLOT, None);
-        *runtime_slot_frame(INIT_PROCESS_SLOT).get() = k16_rt::TrapFrame::from(frame);
+        write_runtime_process_resources(INIT_PROCESS_SLOT, descriptor.resources);
+        *runtime_slot_frame(INIT_PROCESS_SLOT).get() = k16_rt::TrapFrame::from(descriptor.frame);
         *RUNTIME_PAGE_ALLOCATOR.get() = Some(allocator);
     }
-    Ok(ChildLaunch {
-        id: ProcessId::Init,
-        context,
-        frame,
-        address_space: Some(translated.address_space),
-        kernel_stack_top: Some(translated.kernel_stack_top),
-    })
+    Ok(descriptor.launch(ProcessId::Init))
 }
 
 #[cfg(any(not(test), feature = "host-test"))]
@@ -1501,6 +1514,29 @@ unsafe fn write_runtime_process_memory(slot: usize, memory: ProcessMemory) {
     unsafe {
         write_runtime_word(runtime_slot_memory_start_ptr(slot), memory.start);
         write_runtime_word(runtime_slot_memory_end_ptr(slot), memory.end);
+    }
+}
+
+#[cfg(not(test))]
+unsafe fn write_runtime_process_resources(slot: usize, resources: ProcessResources) {
+    unsafe {
+        write_runtime_process_memory(slot, resources.memory);
+        write_runtime_word(runtime_slot_heap_start_ptr(slot), resources.heap.start);
+        write_runtime_word(
+            runtime_slot_program_break_ptr(slot),
+            resources.heap.program_break,
+        );
+        write_runtime_word(runtime_slot_heap_limit_ptr(slot), resources.heap.limit);
+        write_runtime_word(
+            runtime_slot_address_space_ptr(slot),
+            resources.address_space.unwrap_or(0),
+        );
+        write_runtime_word(
+            runtime_slot_kernel_stack_top_ptr(slot),
+            resources.kernel_stack_top.unwrap_or(0),
+        );
+        write_runtime_backing_pages(slot, resources.backing_pages);
+        write_runtime_heap_backing_pages(slot, resources.heap_backing_pages);
     }
 }
 
@@ -3898,6 +3934,110 @@ mod tests {
         assert_eq!(
             table.slots[INIT_PROCESS_SLOT].context.stack_top,
             0x0001_9000
+        );
+    }
+
+    #[test]
+    fn process_descriptor_builds_loaded_init_context_frame_and_resources() {
+        let image = k16_boot_chain::LoadedImage {
+            load_addr: 0x0001_3000,
+            load_end: 0x0001_4022,
+            entry_pc: 0x0001_3004,
+        };
+
+        let descriptor = ProcessDescriptor::for_loaded_init_image(image, 0x0001_9000)
+            .expect("descriptor builds");
+
+        assert_eq!(
+            descriptor.context,
+            ProcessContext {
+                entry_pc: 0x0001_3004,
+                stack_top: 0x0001_9000,
+            }
+        );
+        assert_eq!(descriptor.frame.resume_pc, 0x0001_3004);
+        assert_eq!(descriptor.frame.stack_pointer, 0x0001_9000);
+        assert_eq!(
+            descriptor.resources,
+            ProcessResources {
+                memory: ProcessMemory {
+                    start: 0x0001_3000,
+                    end: 0x0001_9000,
+                },
+                load_base: 0x0001_4022,
+                heap: RuntimeHeapState {
+                    start: 0x0001_4024,
+                    program_break: 0x0001_4024,
+                    limit: 0x0001_8f00,
+                },
+                address_space: None,
+                kernel_stack_top: None,
+                backing_pages: None,
+                heap_backing_pages: None,
+            }
+        );
+    }
+
+    #[test]
+    fn process_descriptor_builds_translated_init_context_frame_and_resources() {
+        let plan = DynamicUserLoadPlan {
+            load_base: 0x0001_5000,
+            load_end: 0x0001_6022,
+            entry_pc: 0x0001_5004,
+            stack_top: 0x0002_f000,
+            payload_dst: 0x0001_5000,
+            payload_len: 16,
+            zero_fill_addr: 0x0001_5010,
+            zero_fill_len: 16,
+        };
+        let translated = TranslatedUserLaunch {
+            address_space: 9,
+            entry_pc: 0x0001_5004,
+            stack_top: 0x0002_f000,
+            kernel_stack_top: 0x0003_0000,
+            backing_pages: Some(crate::page_alloc::FrameRange {
+                start: 0x0000_9000,
+                frame_count: 3,
+            }),
+        };
+
+        let descriptor = ProcessDescriptor::for_translated_init_plan(
+            plan,
+            translated.kernel_stack_top,
+            translated,
+        )
+        .expect("descriptor builds");
+
+        assert_eq!(
+            descriptor.context,
+            ProcessContext {
+                entry_pc: 0x0001_5004,
+                stack_top: 0x0002_f000,
+            }
+        );
+        assert_eq!(descriptor.frame.resume_pc, 0x0001_5004);
+        assert_eq!(descriptor.frame.stack_pointer, 0x0002_f000);
+        assert_eq!(
+            descriptor.resources,
+            ProcessResources {
+                memory: ProcessMemory {
+                    start: 0x0001_5000,
+                    end: 0x0002_f000,
+                },
+                load_base: 0x0001_6022,
+                heap: RuntimeHeapState {
+                    start: 0x0001_6024,
+                    program_break: 0x0001_6024,
+                    limit: 0x0002_ef00,
+                },
+                address_space: Some(9),
+                kernel_stack_top: Some(0x0003_0000),
+                backing_pages: Some(crate::page_alloc::FrameRange {
+                    start: 0x0000_9000,
+                    frame_count: 3,
+                }),
+                heap_backing_pages: None,
+            }
         );
     }
 
