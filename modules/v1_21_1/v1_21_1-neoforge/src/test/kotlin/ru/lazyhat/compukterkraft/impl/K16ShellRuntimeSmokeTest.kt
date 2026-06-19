@@ -30,7 +30,10 @@ import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16ComputerRuntimeFactory
 import ru.lazyhat.compukterkraft.lang.runtime.storage.K16SystemVolumeWorkspace
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.nio.file.Files
+import java.nio.file.Path
 import kotlin.io.path.createTempDirectory
+import kotlin.io.path.readText
 import kotlin.io.path.writeBytes
 import kotlin.test.Test
 import kotlin.test.assertTrue
@@ -260,6 +263,50 @@ class K16ShellRuntimeSmokeTest {
     }
 
     @Test
+    fun runtimeDeviceShellExecFailsWhenProgramIsMissingFromRootFilesystem() {
+        val device =
+            createDevice(deviceId = 232) { storage0Path ->
+                val root = storage0Path.parent.resolve("root.kfs")
+                runK16Tool(
+                    "volume",
+                    "extract-partition",
+                    storage0Path.toString(),
+                    "ROOT",
+                    root.toString(),
+                )
+                runK16Tool(
+                    "fs",
+                    "kfs",
+                    "rm",
+                    root.toString(),
+                    "/bin/uname.kx",
+                )
+                runK16Tool(
+                    "volume",
+                    "replace-partition",
+                    storage0Path.toString(),
+                    "ROOT",
+                    root.toString(),
+                )
+            }
+
+        try {
+            device.turnOn()
+            waitForTerminalText(device, "K16> ")
+
+            dispatchText(device, "uname\n")
+            waitForTerminal(device, "missing storage-backed uname executable reports no entry") { terminal ->
+                val commandIndex = terminal.indexOf("K16> uname")
+                val outputIndex = terminal.indexOf("ERR NOENT", startIndex = commandIndex + "K16> uname".length)
+                val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex)
+                commandIndex >= 0 && outputIndex > commandIndex && returnedPromptIndex > outputIndex
+            }
+        } finally {
+            device.close()
+        }
+    }
+
+    @Test
     fun runtimeDeviceRebootsAfterNestedShellReportsBusy() {
         val device = createDevice(deviceId = 229)
 
@@ -341,12 +388,14 @@ class K16ShellRuntimeSmokeTest {
     private fun createDevice(
         deviceId: Int,
         snapshot: ByteArray? = null,
+        configureStorage0: (Path) -> Unit = {},
     ): K16RuntimeDevice {
         val workspace = createTempDirectory("k16-shell-runtime-smoke-")
         val biosFlashPath = workspace.resolve("bios.kflash")
         val storage0Path = workspace.resolve("storage0.kv")
         biosFlashPath.writeBytes(K16BiosFlashWorkspace.loadBiosFlashResource(classLoader = javaClass.classLoader))
         storage0Path.writeBytes(K16SystemVolumeWorkspace.loadStorage0VolumeResource(classLoader = javaClass.classLoader))
+        configureStorage0(storage0Path)
 
         return K16RuntimeDevice(
             deviceId = deviceId,
@@ -441,6 +490,50 @@ class K16ShellRuntimeSmokeTest {
         val ramSize = buffer.getLong(0x10)
         require(start >= 0 && size >= 0 && start + size <= ramSize)
         return snapshot.copyOfRange(headerSize + start, headerSize + start + size)
+    }
+
+    private fun runK16Tool(vararg args: String) {
+        val executable = k16ToolExecutable()
+        assertTrue(Files.isExecutable(executable), "K16 tool should be executable at $executable")
+        val process =
+            ProcessBuilder(listOf(executable.toString()) + args.toList())
+                .redirectErrorStream(true)
+                .start()
+        val output = process.inputStream.use { it.readBytes().decodeToString() }
+        val exitCode = process.waitFor()
+        assertTrue(exitCode == 0, "k16 ${args.joinToString(" ")} failed:\n$output")
+    }
+
+    private fun k16ToolExecutable(): Path {
+        val toolchainConfig = Path.of("../../../config/k16-toolchain.json").readText()
+        val pin =
+            Regex(""""pin"\s*:\s*"([^"]+)"""")
+                .find(toolchainConfig)
+                ?.groupValues
+                ?.get(1)
+                ?: error("K16 toolchain config should declare pin")
+        val root = Path.of("../../../.toolchain/k16/$pin/${currentK16ToolchainHostId()}")
+        assertTrue(Files.isDirectory(root), "K16 toolchain root should exist at $root")
+        return root.resolve("bin/k16")
+    }
+
+    private fun currentK16ToolchainHostId(): String {
+        val osName = System.getProperty("os.name").lowercase()
+        val arch = System.getProperty("os.arch").lowercase()
+        val os =
+            when {
+                osName.contains("linux") -> "linux"
+                osName.contains("mac") || osName.contains("darwin") -> "macos"
+                osName.contains("windows") -> "windows"
+                else -> error("Unsupported K16 toolchain OS: $osName")
+            }
+        val cpu =
+            when (arch) {
+                "x86_64", "amd64" -> "x86_64"
+                "aarch64", "arm64" -> "aarch64"
+                else -> error("Unsupported K16 toolchain architecture: $arch")
+            }
+        return "$os-$cpu"
     }
 }
 

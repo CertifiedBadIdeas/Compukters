@@ -164,6 +164,11 @@ The current boot chain is:
    jumps to `entry_pc`.
 8. The bundled init program synchronously launches `/bin/shell.kx` through the
    K16 `RUN` syscall.
+9. The shell launches foreground utilities by resolving command names to
+   `/bin/*.kx` and issuing the same K16 `RUN` syscall. The kernel must open the
+   requested program file from the `ROOT` K16FS partition, validate the dynamic
+   `K16E` program image, and start the child process. A missing utility file is
+   a hard `NOENT`-style launch failure, not a fallback to a bundled program.
 
 There is no fallback probing for fixed boot records, alternate paths, or raw
 instruction bytes.
