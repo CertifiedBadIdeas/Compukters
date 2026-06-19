@@ -331,7 +331,7 @@ impl RuntimeHeapState {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-struct RuntimeExitedResources {
+struct ProcessOwnedResources {
     address_space: Option<u32>,
     backing_pages: Option<crate::page_alloc::FrameRange>,
     heap_pages: Option<crate::page_alloc::FrameRange>,
@@ -349,6 +349,14 @@ struct ProcessResources {
 }
 
 impl ProcessResources {
+    const fn owned_resources(self) -> ProcessOwnedResources {
+        ProcessOwnedResources {
+            address_space: self.address_space,
+            backing_pages: self.backing_pages,
+            heap_pages: self.heap_backing_pages,
+        }
+    }
+
     fn for_loaded_init_image(
         image: k16_boot_chain::LoadedImage,
         memory_end: u32,
@@ -503,19 +511,20 @@ struct RuntimeForegroundSlotState {
 
 impl RuntimeForegroundSlotState {
     const fn from_process_resources(parent_slot: u32, resources: ProcessResources) -> Self {
+        let owned_resources = resources.owned_resources();
         Self {
             parent_slot,
             memory: Some(resources.memory),
             heap: Some(resources.heap),
-            address_space: resources.address_space,
+            address_space: owned_resources.address_space,
             kernel_stack_top: resources.kernel_stack_top,
-            backing_pages: resources.backing_pages,
-            heap_backing_pages: resources.heap_backing_pages,
+            backing_pages: owned_resources.backing_pages,
+            heap_backing_pages: owned_resources.heap_pages,
         }
     }
 
-    const fn exited_resources(self) -> RuntimeExitedResources {
-        RuntimeExitedResources {
+    const fn owned_resources(self) -> ProcessOwnedResources {
+        ProcessOwnedResources {
             address_space: self.address_space,
             backing_pages: self.backing_pages,
             heap_pages: self.heap_backing_pages,
@@ -560,6 +569,7 @@ struct ProcessSlot {
     address_space: Option<u32>,
     kernel_stack_top: Option<u32>,
     backing_pages: Option<crate::page_alloc::FrameRange>,
+    heap_backing_pages: Option<crate::page_alloc::FrameRange>,
 }
 
 #[cfg(any(test, feature = "host-test"))]
@@ -582,6 +592,7 @@ impl ProcessSlot {
             address_space: None,
             kernel_stack_top: None,
             backing_pages: None,
+            heap_backing_pages: None,
         }
     }
 
@@ -600,6 +611,7 @@ impl ProcessSlot {
             address_space: None,
             kernel_stack_top: None,
             backing_pages: None,
+            heap_backing_pages: None,
         }
     }
 
@@ -618,6 +630,15 @@ impl ProcessSlot {
         self.address_space = descriptor.resources.address_space;
         self.kernel_stack_top = descriptor.resources.kernel_stack_top;
         self.backing_pages = descriptor.resources.backing_pages;
+        self.heap_backing_pages = descriptor.resources.heap_backing_pages;
+    }
+
+    const fn owned_resources(self) -> ProcessOwnedResources {
+        ProcessOwnedResources {
+            address_space: self.address_space,
+            backing_pages: self.backing_pages,
+            heap_pages: self.heap_backing_pages,
+        }
     }
 }
 
@@ -784,8 +805,7 @@ impl ProcessTable {
         if parent_slot >= MAX_PROCESS_SLOTS {
             return Err(ProcessSwitchError::NoRunningChild);
         }
-        let exited_address_space = self.slots[child_slot].address_space;
-        let exited_backing_pages = self.slots[child_slot].backing_pages;
+        let exited_resources = self.slots[child_slot].owned_resources();
         unsafe {
             core::ptr::write_volatile(&mut self.slots[child_slot].state, PROCESS_STATE_EMPTY)
         };
@@ -804,9 +824,9 @@ impl ProcessTable {
             child_exit_status: status,
             address_space: parent.address_space,
             kernel_stack_top: parent.kernel_stack_top,
-            exited_address_space,
-            exited_backing_pages,
-            exited_heap_pages: None,
+            exited_address_space: exited_resources.address_space,
+            exited_backing_pages: exited_resources.backing_pages,
+            exited_heap_pages: exited_resources.heap_pages,
         })
     }
 
@@ -1276,7 +1296,7 @@ unsafe fn finish_child_runtime(status: u32) -> Result<ParentResume, ProcessSwitc
     }
     let frame = TrapFrame::from(unsafe { *runtime_slot_frame(parent_slot).get() });
     let exited_state = unsafe { read_runtime_foreground_slot_state(current_slot) };
-    let exited_resources = exited_state.exited_resources();
+    let exited_resources = exited_state.owned_resources();
     unsafe {
         write_runtime_foreground_slot_state(current_slot, exited_state.cleared_after_exit());
         write_runtime_word(
@@ -3823,6 +3843,47 @@ mod tests {
     }
 
     #[test]
+    fn process_resources_reports_owned_resources_for_cleanup() {
+        let resources = ProcessResources {
+            memory: ProcessMemory {
+                start: 0x0000_a000,
+                end: 0x0001_0000,
+            },
+            load_base: 0x0000_a020,
+            heap: RuntimeHeapState {
+                start: 0x0000_a020,
+                program_break: 0x0000_a040,
+                limit: 0x0000_ff00,
+            },
+            address_space: Some(11),
+            kernel_stack_top: Some(0x0001_1000),
+            backing_pages: Some(crate::page_alloc::FrameRange {
+                start: 0x0002_0000,
+                frame_count: 3,
+            }),
+            heap_backing_pages: Some(crate::page_alloc::FrameRange {
+                start: 0x0002_3000,
+                frame_count: 1,
+            }),
+        };
+
+        assert_eq!(
+            resources.owned_resources(),
+            ProcessOwnedResources {
+                address_space: Some(11),
+                backing_pages: Some(crate::page_alloc::FrameRange {
+                    start: 0x0002_0000,
+                    frame_count: 3,
+                }),
+                heap_pages: Some(crate::page_alloc::FrameRange {
+                    start: 0x0002_3000,
+                    frame_count: 1,
+                }),
+            }
+        );
+    }
+
+    #[test]
     fn mapped_child_argv_layout_keeps_child_addresses_virtual() {
         let child_plan = DynamicUserLoadPlan {
             load_base: 0x0001_5020,
@@ -4928,7 +4989,7 @@ mod tests {
     }
 
     #[test]
-    fn runtime_foreground_slot_state_reports_exited_resources() {
+    fn runtime_foreground_slot_state_reports_owned_resources() {
         assert_eq!(
             RuntimeHeapState::from_bounds(0x0001_2000, 0x0001_f000),
             Ok(RuntimeHeapState {
@@ -4958,8 +5019,8 @@ mod tests {
         };
 
         assert_eq!(
-            state.exited_resources(),
-            RuntimeExitedResources {
+            state.owned_resources(),
+            ProcessOwnedResources {
                 address_space: Some(7),
                 backing_pages: Some(crate::page_alloc::FrameRange {
                     start: 0x0000_9000,
@@ -5010,7 +5071,7 @@ mod tests {
     }
 
     #[test]
-    fn process_table_child_exit_reports_exited_backing_pages_for_cleanup() {
+    fn process_table_child_exit_reports_owned_resources_for_cleanup() {
         let mut table = ProcessTable::new(ProcessContext {
             entry_pc: 0,
             stack_top: 0,
@@ -5039,10 +5100,21 @@ mod tests {
         table
             .begin_translated_child_run(child_plan, translated)
             .expect("translated child starts");
+        table.slots[1].heap_backing_pages = Some(crate::page_alloc::FrameRange {
+            start: 0x0002_8000,
+            frame_count: 1,
+        });
 
         let resumed = table.finish_child(0).expect("parent resumes");
 
         assert_eq!(resumed.exited_backing_pages, Some(backing_pages));
+        assert_eq!(
+            resumed.exited_heap_pages,
+            Some(crate::page_alloc::FrameRange {
+                start: 0x0002_8000,
+                frame_count: 1,
+            })
+        );
     }
 
     #[test]
