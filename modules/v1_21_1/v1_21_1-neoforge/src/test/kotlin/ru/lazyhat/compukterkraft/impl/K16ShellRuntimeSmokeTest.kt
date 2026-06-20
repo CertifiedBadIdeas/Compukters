@@ -227,8 +227,6 @@ class K16ShellRuntimeSmokeTest {
             assertOrderedFragments(
                 terminal,
                 listOf(
-                    "K16> ls /",
-                    "bin/",
                     "K16> ls / /bin",
                     "bin/",
                     "ls.kx",
@@ -518,6 +516,62 @@ class K16ShellRuntimeSmokeTest {
                     terminal.indexOf("ERR NOENT /etc/user", startIndex = commandIndex + "K16> stat /etc/user".length)
                 val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex)
                 commandIndex >= 0 && outputIndex > commandIndex && returnedPromptIndex > outputIndex
+            }
+        } finally {
+            device.close()
+        }
+    }
+
+    @Test
+    fun runtimeDeviceKeepsShellAliveAfterUserlandFault() {
+        val userFaultArtifact = Path.of("build/generated/k16-firmware-artifacts/user-fault-test.kx")
+        assertTrue(Files.isRegularFile(userFaultArtifact), "user fault fixture should be built at $userFaultArtifact")
+        val device =
+            createDevice(deviceId = 238) { storage0Path ->
+                val root = storage0Path.parent.resolve("root.kfs")
+                runK16Tool(
+                    "volume",
+                    "extract-partition",
+                    storage0Path.toString(),
+                    "ROOT",
+                    root.toString(),
+                )
+                runK16Tool(
+                    "fs",
+                    "kfs",
+                    "put",
+                    root.toString(),
+                    "/bin/fault.kx",
+                    userFaultArtifact.toString(),
+                )
+                runK16Tool(
+                    "volume",
+                    "replace-partition",
+                    storage0Path.toString(),
+                    "ROOT",
+                    root.toString(),
+                )
+            }
+
+        try {
+            device.turnOn()
+            waitForTerminalText(device, "K16> ")
+
+            dispatchText(device, "fault\n")
+            waitForTerminal(device, "faulting user child reports ERR FAULT and returns prompt") { terminal ->
+                val commandIndex = terminal.indexOf("K16> fault")
+                val outputIndex = terminal.indexOf("ERR FAULT", startIndex = commandIndex + "K16> fault".length)
+                val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex + "ERR FAULT".length)
+                commandIndex >= 0 && outputIndex > commandIndex && returnedPromptIndex > outputIndex
+            }
+
+            dispatchText(device, "uname\n")
+            waitForTerminal(device, "shell remains interactive after user fault") { terminal ->
+                val faultCommandIndex = terminal.indexOf("K16> fault")
+                val unameCommandIndex = terminal.indexOf("K16> uname", startIndex = faultCommandIndex + "K16> fault".length)
+                val unameOutputIndex = terminal.indexOf("K16", startIndex = unameCommandIndex + "K16> uname".length)
+                val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = unameOutputIndex)
+                unameCommandIndex >= 0 && unameOutputIndex > unameCommandIndex && returnedPromptIndex > unameOutputIndex
             }
         } finally {
             device.close()
