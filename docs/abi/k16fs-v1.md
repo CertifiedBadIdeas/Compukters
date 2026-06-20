@@ -151,6 +151,8 @@ The current compiler crate provides:
 - absolute-path file creation and full-file reads;
 - absolute-path file deletion;
 - directory listing.
+- guest-side create/truncate/write for regular files through the kernel fd ABI,
+  currently limited to preallocated inline extents and no append/seek/grow.
 
 The host-side read path used to model future bootloader behavior is:
 
@@ -162,14 +164,14 @@ This reader composes byte-level volume partition extraction with K16FS absolute
 path lookup. It is not a fallback path and does not make `k16 volume`
 filesystem-aware.
 
-The VM runtime also has a read-only storage image reader for the guest-visible
+The VM runtime also has a storage image reader/writer for the guest-visible
 media payload:
 
 ```text
 storage0 media bytes -> K16PT ROOT partition -> K16FS superblock -> absolute path
 ```
 
-This runtime reader starts at LBA0 of the storage media payload. It does not
+This runtime path starts at LBA0 of the storage media payload. It does not
 accept a host `.kv` path and does not strip the 16-byte `K16VOL` host file
 header. The storage backend performs that file-to-media translation before the
 guest-visible storage path sees any bytes.
@@ -207,4 +209,5 @@ must stay in `k16 fs <filesystem>` subcommands. The current `put-boot` and
 `put-kernel` commands are boot-chain installation helpers that write the
 standard system files into the active K16FS-backed volume layout.
 
-Overwrite remains next-step work under the same K16FS v1 contract.
+Append, seek, directory growth, and multi-extent guest-side file growth remain
+next-step work under the same K16FS v1 contract.

@@ -111,6 +111,10 @@ pub mod syscall {
     pub const GAME_TICKS_BYTES: usize = 8;
     pub const FILE_TYPE_REGULAR: u32 = 1;
     pub const FILE_TYPE_DIRECTORY: u32 = 2;
+    pub const OPEN_READ_ONLY: u32 = 0;
+    pub const OPEN_WRITE_ONLY: u32 = 1;
+    pub const OPEN_CREATE: u32 = 1 << 1;
+    pub const OPEN_TRUNCATE: u32 = 1 << 2;
     pub const FD_STDIN: u32 = 0;
     pub const FD_STDOUT: u32 = 1;
     pub const FD_STDERR: u32 = 2;
@@ -609,6 +613,10 @@ mod tests {
         assert_eq!(syscall::READ_DIR, 14);
         assert_eq!(syscall::STAT, 15);
         assert_eq!(syscall::GAME_TICKS, 16);
+        assert_eq!(syscall::OPEN_READ_ONLY, 0);
+        assert_eq!(syscall::OPEN_WRITE_ONLY, 1);
+        assert_eq!(syscall::OPEN_CREATE, 2);
+        assert_eq!(syscall::OPEN_TRUNCATE, 4);
         assert_eq!(syscall::RUN_ARGV_MAGIC, 0x4752_4152);
         assert_eq!(syscall::MAX_RUN_ARGS, 4);
         assert_eq!(syscall::MAX_RUN_PATH_BYTES, 61);

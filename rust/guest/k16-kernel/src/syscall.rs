@@ -130,8 +130,36 @@ pub fn dispatch(number: u32) -> ! {
 fn write_fd(fd: u32, ptr: u32, len: u32) -> Result<u32, u32> {
     match fd {
         abi_syscall::FD_STDOUT | abi_syscall::FD_STDERR => write_guest_bytes(ptr, len),
-        _ => Err(abi_syscall::ERROR_BAD_FD),
+        abi_syscall::FD_STDIN => Err(abi_syscall::ERROR_BAD_FD),
+        _ => write_file_fd(fd, ptr, len),
     }
+}
+
+fn write_file_fd(fd: u32, ptr: u32, len: u32) -> Result<u32, u32> {
+    if len == 0 {
+        return Ok(0);
+    }
+    if !valid_guest_buffer(ptr, len) {
+        return Err(abi_syscall::ERROR_FAULT);
+    }
+    let mut total_written = 0;
+    while total_written < len {
+        let chunk_len = min_u32(len - total_written, USER_IO_CHUNK_BYTES as u32);
+        let mut chunk = [0_u8; USER_IO_CHUNK_BYTES];
+        user_buffer::copy_from_user_into(ptr + total_written, chunk_len, &mut chunk)?;
+        match unsafe {
+            fs::copy_ram_to_file_fd_range_for_process(
+                current_process_id(),
+                fd,
+                chunk.as_ptr() as usize as u32,
+                chunk_len,
+            )
+        } {
+            Ok(written) => total_written += written,
+            Err(error) => return Err(fs_error_to_status(error)),
+        }
+    }
+    Ok(total_written)
 }
 
 fn read_fd(fd: u32, ptr: u32, len: u32) -> Result<u32, u32> {

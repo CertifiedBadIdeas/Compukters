@@ -20,6 +20,28 @@ fn fs_open_delegates_to_open_syscall_read_only() {
 }
 
 #[test]
+fn fs_create_delegates_to_open_syscall_write_create_truncate() {
+    k16_rt::host_test::reset_syscalls();
+    k16_rt::host_test::set_syscall_return(3);
+
+    let file = fs::create("/etc/user.txt");
+
+    assert_eq!(file.map(|file| file.raw()), Ok(3));
+    assert_eq!(k16_rt::host_test::syscall_number(), k16_rt::host_test::OPEN);
+    assert_eq!(
+        k16_rt::host_test::syscall_arg0(),
+        "/etc/user.txt".as_ptr() as usize as u32
+    );
+    assert_eq!(k16_rt::host_test::syscall_arg1(), 13);
+    assert_eq!(
+        k16_rt::host_test::syscall_arg2(),
+        k16_abi::syscall::OPEN_WRITE_ONLY
+            | k16_abi::syscall::OPEN_CREATE
+            | k16_abi::syscall::OPEN_TRUNCATE,
+    );
+}
+
+#[test]
 fn file_read_delegates_to_read_syscall() {
     k16_rt::host_test::reset_syscalls();
     k16_rt::host_test::set_syscall_return(4);
@@ -36,6 +58,28 @@ fn file_read_delegates_to_read_syscall() {
         bytes.as_mut_ptr() as usize as u32
     );
     assert_eq!(k16_rt::host_test::syscall_arg2(), 8);
+}
+
+#[test]
+fn file_write_all_delegates_to_write_syscall() {
+    k16_rt::host_test::reset_syscalls();
+    k16_rt::host_test::set_syscall_return(5);
+    let file = fs::File::from_raw(3);
+    let bytes = b"hello";
+
+    let written = file.write_all(bytes);
+
+    assert_eq!(written, Ok(()));
+    assert_eq!(
+        k16_rt::host_test::syscall_number(),
+        k16_rt::host_test::WRITE
+    );
+    assert_eq!(k16_rt::host_test::syscall_arg0(), 3);
+    assert_eq!(
+        k16_rt::host_test::syscall_arg1(),
+        bytes.as_ptr() as usize as u32
+    );
+    assert_eq!(k16_rt::host_test::syscall_arg2(), 5);
 }
 
 #[test]
