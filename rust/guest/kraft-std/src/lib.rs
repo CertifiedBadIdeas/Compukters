@@ -890,6 +890,46 @@ pub mod process {
         }
     }
 
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub struct ProcessId {
+        raw: u32,
+    }
+
+    impl ProcessId {
+        #[inline(always)]
+        pub const fn from_raw(raw: u32) -> Self {
+            Self { raw }
+        }
+
+        #[inline(always)]
+        pub const fn raw(self) -> u32 {
+            self.raw
+        }
+    }
+
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub struct WaitStatus {
+        pid: ProcessId,
+        status: ExitStatus,
+    }
+
+    impl WaitStatus {
+        #[inline(always)]
+        pub const fn new(pid: ProcessId, status: ExitStatus) -> Self {
+            Self { pid, status }
+        }
+
+        #[inline(always)]
+        pub const fn pid(self) -> ProcessId {
+            self.pid
+        }
+
+        #[inline(always)]
+        pub const fn status(self) -> ExitStatus {
+            self.status
+        }
+    }
+
     #[repr(C)]
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     pub struct Arg {
@@ -948,12 +988,45 @@ pub mod process {
     }
 
     pub fn run_with_args(path: &str, args: &[&str]) -> Result<ExitStatus, Error> {
-        let request = RunArgvRequest::new(path, args)?;
+        let request = RunArgvRequest::new(k16_abi::syscall::RUN_ARGV_MAGIC, path, args)?;
         let returned = k16_rt::run_argv_syscall(request.bytes.as_ptr(), request.len);
         if returned & 0x8000_0000 != 0 {
             return Err(Error::Syscall(returned));
         }
         Ok(ExitStatus::new(returned))
+    }
+
+    #[inline(always)]
+    pub fn spawn_with_args(path: &str, args: &[&str]) -> Result<ProcessId, Error> {
+        let request = RunArgvRequest::new(k16_abi::syscall::SPAWN_ARGV_MAGIC, path, args)?;
+        let returned = k16_rt::spawn_argv_syscall(request.bytes.as_ptr(), request.len);
+        if returned & 0x8000_0000 != 0 || returned == 0 {
+            return Err(Error::Syscall(returned));
+        }
+        Ok(ProcessId::from_raw(returned))
+    }
+
+    #[inline(always)]
+    pub fn wait(pid: ProcessId) -> Result<WaitStatus, Error> {
+        wait_raw(pid.raw())
+    }
+
+    #[inline(always)]
+    pub fn wait_any() -> Result<WaitStatus, Error> {
+        wait_raw(0)
+    }
+
+    #[inline(always)]
+    fn wait_raw(pid: u32) -> Result<WaitStatus, Error> {
+        let mut status = 0_u32;
+        let returned = k16_rt::wait_syscall(pid, &mut status);
+        if returned & 0x8000_0000 != 0 || returned == 0 {
+            return Err(Error::Syscall(returned));
+        }
+        Ok(WaitStatus::new(
+            ProcessId::from_raw(returned),
+            ExitStatus::new(status),
+        ))
     }
 
     struct RunArgvRequest {
@@ -962,7 +1035,8 @@ pub mod process {
     }
 
     impl RunArgvRequest {
-        fn new(path: &str, args: &[&str]) -> Result<Self, Error> {
+        #[inline(always)]
+        fn new(magic: u32, path: &str, args: &[&str]) -> Result<Self, Error> {
             if args.is_empty() || args.len() > k16_abi::syscall::MAX_RUN_ARGS {
                 return Err(Error::InvalidArgument);
             }
@@ -973,7 +1047,7 @@ pub mod process {
                 bytes: [0; k16_abi::syscall::MAX_RUN_ARGV_REQUEST_BYTES],
                 len: 0,
             };
-            request.push_u32(k16_abi::syscall::RUN_ARGV_MAGIC)?;
+            request.push_u32(magic)?;
             request.push_u32(path.len() as u32)?;
             request.push_u32(args.len() as u32)?;
             for arg in args {
@@ -1021,7 +1095,7 @@ pub mod process {
             path: &str,
             args: &[&str],
         ) -> Result<EncodedRunArgvRequest, Error> {
-            let request = RunArgvRequest::new(path, args)?;
+            let request = RunArgvRequest::new(k16_abi::syscall::RUN_ARGV_MAGIC, path, args)?;
             Ok(EncodedRunArgvRequest {
                 bytes: request.bytes,
                 len: request.len,

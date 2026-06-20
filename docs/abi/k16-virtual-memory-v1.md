@@ -277,13 +277,14 @@ The VM-enabled production user launch does this for `/bin/init.kx`,
 1. Load a dynamic K16E `program` image into kernel-selected allocator-backed
    physical pages.
 2. Use the process arena for `.bss`, heap, optional argv, and stack.
-3. Reserve a small physical kernel trap stack outside the user stack: for init,
+3. Reserve a small physical kernel trap stack outside user memory: for init,
    the top 4 KiB page below `BootInfo.ram_size`; for children, below the
    saved parent stack.
 4. For init, choose the lower user arena boundary from the next 4 KiB page
    after the maximum of `BootInfo.program_base`, storage loader scratch, linked
-   kernel image end, and kernel terminal state. For children, start after the
-   current process break.
+   kernel image end, and kernel terminal state. For translated children, reuse
+   the caller's user virtual arena bounds in a new address space instead of
+   carving a child virtual arena out of the caller's live physical stack.
 5. Create a host MMU address space and map the loaded image pages plus the
    selected committed user stack pages into it.
 6. Restore the entry register frame, including argv registers for child runs.

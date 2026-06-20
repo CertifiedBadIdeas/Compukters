@@ -43,6 +43,7 @@ fn run() -> Result<(), u32> {
     expect_fault(k16_rt::mkdir_syscall(bad_const, 1))?;
     expect_fault(k16_rt::rmdir_syscall(bad_const, 1))?;
     expect_fault(k16_rt::run_syscall(bad_const, 1))?;
+    expect_fault(k16_rt::spawn_argv_syscall(bad_const, 1))?;
 
     io::stdout()
         .write_all(b"SYSCALL FAULTS OK\n")

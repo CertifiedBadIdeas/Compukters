@@ -367,6 +367,42 @@ fn run_argv_syscall_uses_request_pointer_length_and_format_arguments() {
 }
 
 #[test]
+fn spawn_argv_syscall_uses_request_pointer_length_and_reserved_argument() {
+    crate::trap::reset_test_interrupts();
+    crate::trap::set_test_syscall_return(2);
+    let request = [0x53_u8; 24];
+
+    let returned = spawn_argv_syscall(request.as_ptr(), request.len());
+
+    assert_eq!(returned, 2);
+    assert_eq!(crate::trap::test_syscall_number(), k16_abi::syscall::SPAWN);
+    assert_eq!(
+        crate::trap::test_syscall_arg0(),
+        request.as_ptr() as usize as u32
+    );
+    assert_eq!(crate::trap::test_syscall_arg1(), request.len() as u32);
+    assert_eq!(crate::trap::test_syscall_arg2(), 0);
+}
+
+#[test]
+fn wait_syscall_uses_pid_and_status_pointer_arguments() {
+    crate::trap::reset_test_interrupts();
+    crate::trap::set_test_syscall_return(2);
+    let mut status = 0_u32;
+
+    let returned = wait_syscall(7, &mut status);
+
+    assert_eq!(returned, 2);
+    assert_eq!(crate::trap::test_syscall_number(), k16_abi::syscall::WAIT);
+    assert_eq!(crate::trap::test_syscall_arg0(), 7);
+    assert_eq!(
+        crate::trap::test_syscall_arg1(),
+        (&mut status as *mut u32) as usize as u32
+    );
+    assert_eq!(crate::trap::test_syscall_arg2(), 0);
+}
+
+#[test]
 fn open_syscall_uses_path_pointer_length_and_flags_arguments() {
     crate::trap::reset_test_interrupts();
     crate::trap::set_test_syscall_return(3);

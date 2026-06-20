@@ -61,6 +61,55 @@ fn process_run_with_args_encodes_multiple_argument_request_bytes() {
 }
 
 #[test]
+fn process_spawn_with_args_encodes_argv_request_for_runtime_spawn_syscall() {
+    k16_rt::host_test::reset_syscalls();
+    k16_rt::host_test::set_syscall_return(2);
+
+    let pid = kraft_std::process::spawn_with_args("/bin/cat.kx", &["/etc/motd", "--verbose"])
+        .expect("spawn_with_args returns child pid");
+
+    assert_eq!(pid.raw(), 2);
+    assert_eq!(
+        k16_rt::host_test::syscall_number(),
+        k16_rt::host_test::SPAWN
+    );
+    let request_ptr = k16_rt::host_test::syscall_arg0();
+    let request_len = k16_rt::host_test::syscall_arg1();
+    assert_ne!(request_ptr, 0);
+    assert!(request_len > "/bin/cat.kx".len() as u32);
+    assert_eq!(k16_rt::host_test::syscall_arg2(), 0);
+}
+
+#[test]
+fn process_wait_delegates_to_runtime_wait_syscall_and_returns_status() {
+    k16_rt::host_test::reset_syscalls();
+    k16_rt::host_test::set_syscall_return(2);
+
+    let waited = kraft_std::process::wait(kraft_std::process::ProcessId::from_raw(2))
+        .expect("wait returns child status");
+
+    assert_eq!(waited.pid().raw(), 2);
+    assert_eq!(waited.status().code(), 0);
+    assert!(waited.status().success());
+    assert_eq!(k16_rt::host_test::syscall_number(), k16_rt::host_test::WAIT);
+    assert_eq!(k16_rt::host_test::syscall_arg0(), 2);
+    assert_ne!(k16_rt::host_test::syscall_arg1(), 0);
+    assert_eq!(k16_rt::host_test::syscall_arg2(), 0);
+}
+
+#[test]
+fn process_wait_any_uses_zero_pid() {
+    k16_rt::host_test::reset_syscalls();
+    k16_rt::host_test::set_syscall_return(3);
+
+    let waited = kraft_std::process::wait_any().expect("wait_any returns child status");
+
+    assert_eq!(waited.pid().raw(), 3);
+    assert_eq!(k16_rt::host_test::syscall_number(), k16_rt::host_test::WAIT);
+    assert_eq!(k16_rt::host_test::syscall_arg0(), 0);
+}
+
+#[test]
 fn process_run_with_args_requires_at_least_one_and_at_most_max_arguments() {
     k16_rt::host_test::reset_syscalls();
 
