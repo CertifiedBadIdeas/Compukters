@@ -144,6 +144,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "k16-syscall-fault-test"
+version = "0.1.0"
+dependencies = [
+ "k16-abi",
+ "k16-rt",
+ "kraft-std",
+]
+
+[[package]]
 name = "k16-uname"
 version = "0.1.0"
 dependencies = [

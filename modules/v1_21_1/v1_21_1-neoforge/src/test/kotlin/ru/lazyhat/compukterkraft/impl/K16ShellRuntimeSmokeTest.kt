@@ -579,6 +579,64 @@ class K16ShellRuntimeSmokeTest {
     }
 
     @Test
+    fun runtimeDeviceKeepsShellAliveAfterInvalidSyscallPointers() {
+        val syscallFaultArtifact = Path.of("build/generated/k16-firmware-artifacts/syscall-fault-test.kx")
+        assertTrue(Files.isRegularFile(syscallFaultArtifact), "syscall fault fixture should be built at $syscallFaultArtifact")
+        val device =
+            createDevice(deviceId = 239) { storage0Path ->
+                val root = storage0Path.parent.resolve("root.kfs")
+                runK16Tool(
+                    "volume",
+                    "extract-partition",
+                    storage0Path.toString(),
+                    "ROOT",
+                    root.toString(),
+                )
+                runK16Tool(
+                    "fs",
+                    "kfs",
+                    "put",
+                    root.toString(),
+                    "/bin/sysfault.kx",
+                    syscallFaultArtifact.toString(),
+                )
+                runK16Tool(
+                    "volume",
+                    "replace-partition",
+                    storage0Path.toString(),
+                    "ROOT",
+                    root.toString(),
+                )
+            }
+
+        try {
+            device.turnOn()
+            waitForTerminalText(device, "K16> ")
+
+            dispatchText(device, "sysfault\n")
+            waitForTerminal(device, "invalid syscall pointer child reports ERR FAULT and returns prompt") { terminal ->
+                val commandIndex = terminal.indexOf("K16> sysfault")
+                val markerIndex =
+                    terminal.indexOf("SYSCALL FAULTS OK", startIndex = commandIndex + "K16> sysfault".length)
+                val outputIndex = terminal.indexOf("ERR FAULT", startIndex = markerIndex + "SYSCALL FAULTS OK".length)
+                val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex + "ERR FAULT".length)
+                commandIndex >= 0 && markerIndex > commandIndex && outputIndex > markerIndex && returnedPromptIndex > outputIndex
+            }
+
+            dispatchText(device, "uname\n")
+            waitForTerminal(device, "shell remains interactive after invalid syscall pointers") { terminal ->
+                val faultCommandIndex = terminal.indexOf("K16> sysfault")
+                val unameCommandIndex = terminal.indexOf("K16> uname", startIndex = faultCommandIndex + "K16> sysfault".length)
+                val unameOutputIndex = terminal.indexOf("K16", startIndex = unameCommandIndex + "K16> uname".length)
+                val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = unameOutputIndex)
+                unameCommandIndex >= 0 && unameOutputIndex > unameCommandIndex && returnedPromptIndex > unameOutputIndex
+            }
+        } finally {
+            device.close()
+        }
+    }
+
+    @Test
     fun runtimeDeviceGrowsUserDirectoryThroughUserlandShell() {
         val device = createDevice(deviceId = 236)
 
