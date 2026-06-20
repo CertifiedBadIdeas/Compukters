@@ -186,7 +186,7 @@ fn run_cd(
         }
         Err(fs::Error::Syscall(status)) => {
             must_write(stdout, b"ERR ");
-            must_write(stdout, run_error_name(status));
+            must_write(stdout, status::syscall_status_name_or(status, b"RUN"));
             must_write(stdout, NEWLINE);
             status
         }
@@ -206,7 +206,7 @@ fn run_ticks(stdout: io::Fd) -> u32 {
         }
         Err(time::Error::Syscall(status)) => {
             must_write(stdout, b"ERR ");
-            must_write(stdout, run_error_name(status));
+            must_write(stdout, status::syscall_status_name_or(status, b"RUN"));
             must_write(stdout, NEWLINE);
             status
         }
@@ -312,7 +312,7 @@ fn write_run_error(stdout: io::Fd, error: process::Error) -> u32 {
         }
         process::Error::Syscall(status) => {
             must_write(stdout, b"ERR ");
-            must_write(stdout, run_error_name(status));
+            must_write(stdout, status::syscall_status_name_or(status, b"RUN"));
             must_write(stdout, NEWLINE);
             status
         }
@@ -322,7 +322,7 @@ fn write_run_error(stdout: io::Fd, error: process::Error) -> u32 {
 fn write_status(stdout: io::Fd, status: u32) {
     must_write(stdout, b"STATUS ");
     if status & 0x8000_0000 != 0 {
-        must_write(stdout, run_error_name(status));
+        must_write(stdout, status::syscall_status_name_or(status, b"RUN"));
     } else {
         write_decimal_words(stdout, 0, status);
     }
@@ -336,18 +336,6 @@ fn write_child_exit_status(stdout: io::Fd, status: u32) {
     must_write(stdout, b"ERR EXIT ");
     write_decimal_words(stdout, 0, status);
     must_write(stdout, NEWLINE);
-}
-
-fn run_error_name(status: u32) -> &'static [u8] {
-    match status {
-        0xffff_fffe => b"NOENT",
-        0xffff_fff8 => b"NOEXEC",
-        0xffff_fff4 => b"NOMEM",
-        0xffff_fff2 => b"FAULT",
-        0xffff_fff0 => b"BUSY",
-        0xffff_ffea => b"INVAL",
-        _ => b"RUN",
-    }
 }
 
 fn write_decimal_words(stdout: io::Fd, high: u32, low: u32) {

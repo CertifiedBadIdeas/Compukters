@@ -79,8 +79,12 @@ fn write_error(error: MoveError) -> Result<(), io::Error> {
     let stdout = io::stdout();
     match error {
         MoveError::InvalidArgument => stdout.write_all(b"ERR INVAL\n"),
-        MoveError::Source(path, error) => write_path_error(stdout, fs_error_name(error), path),
-        MoveError::Destination(path, error) => write_path_error(stdout, fs_error_name(error), path),
+        MoveError::Source(path, error) => {
+            write_path_error(stdout, status::fs_error_name_or(error, b"RENAME"), path)
+        }
+        MoveError::Destination(path, error) => {
+            write_path_error(stdout, status::fs_error_name_or(error, b"RENAME"), path)
+        }
     }
 }
 
@@ -90,24 +94,6 @@ fn write_path_error(stdout: io::Fd, name: &[u8], path: &str) -> Result<(), io::E
     stdout.write_all(b" ")?;
     stdout.write_all(path.as_bytes())?;
     stdout.write_all(b"\n")
-}
-
-fn fs_error_name(error: fs::Error) -> &'static [u8] {
-    match error {
-        fs::Error::InvalidArgument => b"INVAL",
-        fs::Error::Syscall(status) => status_name(status),
-    }
-}
-
-fn status_name(status: u32) -> &'static [u8] {
-    match status {
-        0xffff_fffe => b"NOENT",
-        0xffff_ffea => b"INVAL",
-        0xffff_fff4 => b"NOMEM",
-        0xffff_fff2 => b"FAULT",
-        0xffff_fff0 => b"BUSY",
-        _ => b"RENAME",
-    }
 }
 
 fn is_no_entry_status(status: u32) -> bool {

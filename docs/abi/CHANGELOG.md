@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- `kraft-std` now exposes shared K16 syscall/fs status-name helpers. Bundled
+  filesystem utilities and the shell use the shared names for diagnostics while
+  preserving each command's existing generic fallback label for unknown errors.
 - The bundled K16 shell now resolves relative filesystem path arguments for the
   write-side workflow consistently with read/list/remove utilities. `write`
   resolves only its path argument, preserving `--append` and payload arguments

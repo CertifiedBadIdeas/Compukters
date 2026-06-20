@@ -28,7 +28,7 @@ fn list_dir(path: &str) -> Result<(), ()> {
     let read = match fs::read_dir(path, &mut buffer) {
         Ok(read) => read,
         Err(error) => {
-            write_ls_error(stdout, fs_error_name(error), path)?;
+            write_ls_error(stdout, status::fs_error_name_or(error, b"READDIR"), path)?;
             return Err(());
         }
     };
@@ -44,7 +44,11 @@ fn list_dir(path: &str) -> Result<(), ()> {
         let metadata = match fs::metadata(child_path) {
             Ok(metadata) => metadata,
             Err(error) => {
-                write_ls_error(stdout, fs_error_name(error), child_path)?;
+                write_ls_error(
+                    stdout,
+                    status::fs_error_name_or(error, b"READDIR"),
+                    child_path,
+                )?;
                 return Err(());
             }
         };
@@ -64,22 +68,6 @@ fn write_ls_error(stdout: io::Fd, name: &[u8], path: &str) -> Result<(), ()> {
     stdout.write_all(b" ").map_err(|_| ())?;
     stdout.write_all(path.as_bytes()).map_err(|_| ())?;
     stdout.write_all(b"\n").map_err(|_| ())
-}
-
-fn fs_error_name(error: fs::Error) -> &'static [u8] {
-    match error {
-        fs::Error::InvalidArgument => b"INVAL",
-        fs::Error::Syscall(status) => status_name(status),
-    }
-}
-
-fn status_name(status: u32) -> &'static [u8] {
-    match status {
-        0xffff_fffe => b"NOENT",
-        0xffff_ffea => b"INVAL",
-        0xffff_fff2 => b"FAULT",
-        _ => b"READDIR",
-    }
 }
 
 fn child_path_buffer() -> &'static mut [u8; k16_abi::syscall::MAX_STAT_PATH_BYTES] {

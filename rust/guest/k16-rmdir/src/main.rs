@@ -50,7 +50,11 @@ fn remove_path(path: &str) -> Result<(), ()> {
             Err(())
         }
         Err(fs::Error::Syscall(status)) => {
-            write_rmdir_error(stdout, status_name(status), path)?;
+            write_rmdir_error(
+                stdout,
+                status::syscall_status_name_or(status, b"RMDIR"),
+                path,
+            )?;
             Err(())
         }
     }
@@ -62,17 +66,6 @@ fn write_rmdir_error(stdout: io::Fd, name: &[u8], path: &str) -> Result<(), ()> 
     stdout.write_all(b" ").map_err(|_| ())?;
     stdout.write_all(path.as_bytes()).map_err(|_| ())?;
     stdout.write_all(b"\n").map_err(|_| ())
-}
-
-fn status_name(status: u32) -> &'static [u8] {
-    match status {
-        0xffff_fffe => b"NOENT",
-        0xffff_ffef => b"NOTEMPTY",
-        0xffff_ffea => b"INVAL",
-        0xffff_fff4 => b"NOMEM",
-        0xffff_fff2 => b"FAULT",
-        _ => b"RMDIR",
-    }
 }
 
 #[panic_handler]
