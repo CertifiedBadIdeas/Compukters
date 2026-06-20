@@ -21,13 +21,14 @@ pub fn dispatch(number: u32) -> ! {
             let status = k16_rt::syscall_arg0();
             let exiting_pid = unsafe { process::current_process_slot() };
             unsafe { fs::close_file_fds_for_process(exiting_pid) };
-            if let Ok(resume) = unsafe { process::finish_child_for_exit(status) } {
-                if unsafe { process::destroy_exited_address_space(resume) }.is_err() {
+            let mut resume = process::ParentResume::empty();
+            if unsafe { process::finish_child_for_exit_into(status, &mut resume) }.is_ok() {
+                if unsafe { process::destroy_exited_address_space(&resume) }.is_err() {
                     control::set_panic();
                     control::set_panic_code(abi_syscall::ERROR_FAULT as i32);
                     control::wait_forever()
                 }
-                unsafe { process::resume_parent_context(resume) }
+                unsafe { process::resume_parent_context(&resume) }
             }
             control::set_exit_code(status);
             control::set_halted();
