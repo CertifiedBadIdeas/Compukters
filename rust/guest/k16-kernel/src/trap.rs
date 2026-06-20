@@ -64,6 +64,12 @@ fn exit_current_child_after_user_fault(status: u32) -> ! {
     unsafe { fs::close_file_fds_for_process(exiting_pid) };
     let mut resume = process::ParentResume::empty();
     if unsafe { process::finish_child_for_exit_into(status, &mut resume) }.is_ok() {
+        if resume.wait_status_ptr != 0
+            && syscall::write_wait_status(resume.wait_status_ptr, status).is_err()
+        {
+            resume.wait_status_ptr = 0;
+            resume.child_exit_status = k16_abi::syscall::ERROR_FAULT;
+        }
         if unsafe { process::destroy_exited_address_space(&resume) }.is_err() {
             control::set_panic();
             control::set_panic_code(k16_abi::syscall::ERROR_FAULT as i32);

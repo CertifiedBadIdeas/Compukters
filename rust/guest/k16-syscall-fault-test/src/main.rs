@@ -38,6 +38,20 @@ fn run() -> Result<(), u32> {
     expect_fault(k16_rt::stat_syscall(b"/".as_ptr(), 1, bad_mut))?;
     expect_fault(k16_rt::game_ticks_syscall(bad_mut))?;
     expect_fault(k16_rt::read_dir_syscall(bad_const, 16))?;
+    let mut read_dir_request = [0_u8; 17];
+    write_u32_le(
+        &mut read_dir_request,
+        0,
+        k16_abi::syscall::READ_DIR_REQUEST_MAGIC,
+    );
+    write_u32_le(&mut read_dir_request, 4, 1);
+    write_u32_le(&mut read_dir_request, 8, BAD_PTR as u32);
+    write_u32_le(&mut read_dir_request, 12, 1);
+    read_dir_request[16] = b'/';
+    expect_fault(k16_rt::read_dir_syscall(
+        read_dir_request.as_ptr(),
+        read_dir_request.len(),
+    ))?;
     expect_fault(k16_rt::rename_syscall(bad_const, 12))?;
     expect_fault(k16_rt::unlink_syscall(bad_const, 1))?;
     expect_fault(k16_rt::mkdir_syscall(bad_const, 1))?;
@@ -46,6 +60,12 @@ fn run() -> Result<(), u32> {
     expect_fault(k16_rt::spawn_argv_syscall(bad_const, 1))?;
     let child = process::spawn_with_args("/bin/cat.kx", &["/etc/motd"]).map_err(|_| 1u32)?;
     expect_fault(k16_rt::wait_syscall(child.raw(), bad_mut as *mut u32))?;
+    let faulting_child =
+        process::spawn_with_args("/bin/fault.kx", &["/bin/fault.kx"]).map_err(|_| 1u32)?;
+    expect_fault(k16_rt::wait_syscall(
+        faulting_child.raw(),
+        bad_mut as *mut u32,
+    ))?;
 
     io::stdout()
         .write_all(b"SYSCALL FAULTS OK\n")
@@ -58,6 +78,15 @@ fn expect_fault(status: u32) -> Result<(), u32> {
         Ok(())
     } else {
         Err(1)
+    }
+}
+
+fn write_u32_le(dst: &mut [u8], offset: usize, value: u32) {
+    let bytes = value.to_le_bytes();
+    let mut index = 0;
+    while index < bytes.len() {
+        dst[offset + index] = bytes[index];
+        index += 1;
     }
 }
 
