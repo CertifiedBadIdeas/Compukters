@@ -8,7 +8,7 @@ use kraft_std::prelude::*;
 #[no_mangle]
 pub extern "C" fn main() -> ! {
     match process::run("/bin/shell.kx") {
-        Ok(status) => process::exit(status),
+        Ok(status) => process::exit(status.code()),
         Err(_) => process::exit(1),
     }
 }

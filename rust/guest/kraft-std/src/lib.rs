@@ -486,6 +486,25 @@ pub mod process {
         Syscall(u32),
     }
 
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub struct ExitStatus {
+        code: u32,
+    }
+
+    impl ExitStatus {
+        pub const fn new(code: u32) -> Self {
+            Self { code }
+        }
+
+        pub const fn code(self) -> u32 {
+            self.code
+        }
+
+        pub const fn success(self) -> bool {
+            self.code == 0
+        }
+    }
+
     #[repr(C)]
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     pub struct Arg {
@@ -535,21 +554,21 @@ pub mod process {
     }
 
     #[inline(always)]
-    pub fn run(path: &str) -> Result<u32, Error> {
+    pub fn run(path: &str) -> Result<ExitStatus, Error> {
         let returned = k16_rt::run_syscall(path.as_ptr(), path.len());
         if returned & 0x8000_0000 != 0 {
             return Err(Error::Syscall(returned));
         }
-        Ok(returned)
+        Ok(ExitStatus::new(returned))
     }
 
-    pub fn run_with_args(path: &str, args: &[&str]) -> Result<u32, Error> {
+    pub fn run_with_args(path: &str, args: &[&str]) -> Result<ExitStatus, Error> {
         let request = RunArgvRequest::new(path, args)?;
         let returned = k16_rt::run_argv_syscall(request.bytes.as_ptr(), request.len);
         if returned & 0x8000_0000 != 0 {
             return Err(Error::Syscall(returned));
         }
-        Ok(returned)
+        Ok(ExitStatus::new(returned))
     }
 
     struct RunArgvRequest {
