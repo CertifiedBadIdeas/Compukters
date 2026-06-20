@@ -15,26 +15,7 @@ pub extern "C" fn main(argc: u32, argv: *const process::Arg) -> ! {
 
 fn mkdir_args(argc: u32, argv: *const process::Arg) -> Result<(), ()> {
     let argv = unsafe { process::Argv::from_raw(argc, argv) };
-    if argv.len() == 0 {
-        return Err(());
-    }
-    let mut index = 0;
-    let mut ok = true;
-    while index < argv.len() {
-        let Some(path) = argv.get(index) else {
-            return Err(());
-        };
-        let path = core::str::from_utf8(path).map_err(|_| ())?;
-        if create_path(path).is_err() {
-            ok = false;
-        }
-        index += 1;
-    }
-    if ok {
-        Ok(())
-    } else {
-        Err(())
-    }
+    coreutils::for_each_path_arg(argv.len(), |index| argv.get(index), create_path)
 }
 
 fn create_path(path: &str) -> Result<(), ()> {

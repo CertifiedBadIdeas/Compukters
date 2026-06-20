@@ -244,34 +244,14 @@ fn run_exec(
 
     let raw_args = args.as_slice();
     let mut argv = [""; k16_abi::syscall::MAX_RUN_ARGS];
-    let mut index = 0;
-    while index < raw_args.len() {
-        let raw_arg = raw_args[index];
-        if coreutils::should_resolve_path_arg(name, raw_args, index) {
-            if cwd.resolve_into(raw_arg, &mut arg_paths[index]).is_err() {
-                must_write(stdout, b"ERR INVAL\n");
-                return k16_abi::syscall::ERROR_INVALID;
-            }
-        }
-        index += 1;
+    let mut resolved_args = [false; k16_abi::syscall::MAX_RUN_ARGS];
+    if prepare_resolved_run_args(cwd, name, raw_args, arg_paths, &mut resolved_args).is_err() {
+        must_write(stdout, b"ERR INVAL\n");
+        return k16_abi::syscall::ERROR_INVALID;
     }
-    let mut index = 0;
-    while index < raw_args.len() {
-        let raw_arg = raw_args[index];
-        if coreutils::should_resolve_path_arg(name, raw_args, index) {
-            let Ok(arg) = arg_paths[index].as_str() else {
-                must_write(stdout, b"ERR INVAL\n");
-                return k16_abi::syscall::ERROR_INVALID;
-            };
-            argv[index] = arg;
-        } else {
-            let Ok(arg) = core::str::from_utf8(raw_arg) else {
-                must_write(stdout, b"ERR INVAL\n");
-                return k16_abi::syscall::ERROR_INVALID;
-            };
-            argv[index] = arg;
-        }
-        index += 1;
+    if fill_run_argv(raw_args, arg_paths, &resolved_args, &mut argv).is_err() {
+        must_write(stdout, b"ERR INVAL\n");
+        return k16_abi::syscall::ERROR_INVALID;
     }
     match process::run_with_args(program_path, &argv[..raw_args.len()]) {
         Ok(status) => {
@@ -280,6 +260,43 @@ fn run_exec(
         }
         Err(error) => write_run_error(stdout, error),
     }
+}
+
+fn prepare_resolved_run_args(
+    cwd: &WorkingDirectory,
+    name: &[u8],
+    raw_args: &[&[u8]],
+    arg_paths: &mut [PathBuffer; k16_abi::syscall::MAX_RUN_ARGS],
+    resolved_args: &mut [bool; k16_abi::syscall::MAX_RUN_ARGS],
+) -> Result<(), ()> {
+    let mut index = 0;
+    while index < raw_args.len() {
+        if coreutils::should_resolve_path_arg(name, raw_args, index) {
+            cwd.resolve_into(raw_args[index], &mut arg_paths[index])
+                .map_err(|_| ())?;
+            resolved_args[index] = true;
+        }
+        index += 1;
+    }
+    Ok(())
+}
+
+fn fill_run_argv<'a>(
+    raw_args: &[&'a [u8]],
+    arg_paths: &'a [PathBuffer; k16_abi::syscall::MAX_RUN_ARGS],
+    resolved_args: &[bool; k16_abi::syscall::MAX_RUN_ARGS],
+    argv: &mut [&'a str; k16_abi::syscall::MAX_RUN_ARGS],
+) -> Result<(), ()> {
+    let mut index = 0;
+    while index < raw_args.len() {
+        argv[index] = if resolved_args[index] {
+            arg_paths[index].as_str().map_err(|_| ())?
+        } else {
+            core::str::from_utf8(raw_args[index]).map_err(|_| ())?
+        };
+        index += 1;
+    }
+    Ok(())
 }
 
 fn command_name_has_separator(name: &[u8]) -> bool {

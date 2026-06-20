@@ -130,6 +130,31 @@ pub mod path {
         len: usize,
     }
 
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    pub struct PathRef<'a> {
+        value: &'a str,
+    }
+
+    impl<'a> PathRef<'a> {
+        pub fn try_from_str(value: &'a str) -> Result<Self, PathError> {
+            if value.is_empty() {
+                return Err(PathError::Invalid);
+            }
+            if value.len() > MAX_PATH_BYTES {
+                return Err(PathError::TooLong);
+            }
+            Ok(Self { value })
+        }
+
+        pub const fn as_str(self) -> &'a str {
+            self.value
+        }
+
+        pub const fn as_bytes(self) -> &'a [u8] {
+            self.value.as_bytes()
+        }
+    }
+
     impl PathBuffer {
         pub const fn new() -> Self {
             Self {
@@ -304,6 +329,8 @@ pub mod path {
 }
 
 pub mod fs {
+    use crate::path::PathRef;
+
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     pub enum Error {
         InvalidArgument,
@@ -422,6 +449,14 @@ pub mod fs {
         if path.len() > k16_abi::syscall::MAX_STAT_PATH_BYTES {
             return Err(Error::InvalidArgument);
         }
+        metadata_raw(path)
+    }
+
+    pub fn metadata_path(path: PathRef<'_>) -> Result<Metadata, Error> {
+        metadata_raw(path.as_str())
+    }
+
+    fn metadata_raw(path: &str) -> Result<Metadata, Error> {
         let mut bytes = [0u8; k16_abi::syscall::STAT_METADATA_BYTES];
         let returned = k16_rt::stat_syscall(path.as_ptr(), path.len(), bytes.as_mut_ptr());
         if is_error_status(returned) {
@@ -704,6 +739,51 @@ pub mod status {
 }
 
 pub mod coreutils {
+    pub fn for_each_path_arg<'a>(
+        arg_count: usize,
+        mut arg_at: impl FnMut(usize) -> Option<&'a [u8]>,
+        mut visit: impl FnMut(&'a str) -> Result<(), ()>,
+    ) -> Result<(), ()> {
+        if arg_count == 0 {
+            return Err(());
+        }
+        for_each_present_path_arg(arg_count, &mut arg_at, &mut visit)
+    }
+
+    pub fn for_each_path_arg_or_default<'a>(
+        arg_count: usize,
+        mut arg_at: impl FnMut(usize) -> Option<&'a [u8]>,
+        default_path: &'a str,
+        mut visit: impl FnMut(&'a str) -> Result<(), ()>,
+    ) -> Result<(), ()> {
+        if arg_count == 0 {
+            return visit(default_path);
+        }
+        for_each_present_path_arg(arg_count, &mut arg_at, &mut visit)
+    }
+
+    fn for_each_present_path_arg<'a>(
+        arg_count: usize,
+        arg_at: &mut impl FnMut(usize) -> Option<&'a [u8]>,
+        visit: &mut impl FnMut(&'a str) -> Result<(), ()>,
+    ) -> Result<(), ()> {
+        let mut index = 0;
+        let mut failed = false;
+        while index < arg_count {
+            let path = arg_at(index).ok_or(())?;
+            let path = core::str::from_utf8(path).map_err(|_| ())?;
+            if visit(path).is_err() {
+                failed = true;
+            }
+            index += 1;
+        }
+        if failed {
+            Err(())
+        } else {
+            Ok(())
+        }
+    }
+
     #[inline(always)]
     pub fn should_resolve_path_arg(command: &[u8], args: &[&[u8]], index: usize) -> bool {
         match command {
