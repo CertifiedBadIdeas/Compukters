@@ -243,6 +243,27 @@ class K16ShellRuntimeSmokeTest {
     }
 
     @Test
+    fun runtimeDeviceRunsSpawnWaitProcTestThroughUserlandShell() {
+        val device = createDevice(deviceId = 247)
+
+        try {
+            device.turnOn()
+            waitForTerminalText(device, "K16> ")
+
+            dispatchText(device, "proc-test\n")
+            waitForTerminal(device, "proc-test spawned cat, waited, and returned prompt") { terminal ->
+                val commandIndex = terminal.indexOf("K16> proc-test")
+                val motdIndex = terminal.indexOf("K16 FS OK", startIndex = commandIndex + "K16> proc-test".length)
+                val okIndex = terminal.indexOf("PROC OK", startIndex = motdIndex + "K16 FS OK".length)
+                val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = okIndex + "PROC OK".length)
+                commandIndex >= 0 && motdIndex > commandIndex && okIndex > motdIndex && returnedPromptIndex > okIndex
+            }
+        } finally {
+            device.close()
+        }
+    }
+
+    @Test
     fun runtimeDeviceReportsNonZeroChildExitStatusThroughUserlandShell() {
         val device = createDevice(deviceId = 241)
 
@@ -979,6 +1000,7 @@ class K16ShellRuntimeSmokeTest {
                 )
             cursor = runShellCommandAndWait(device, cursor, "uname", "final uname returns prompt after cleanup stress", "K16")
             cursor = runShellCommandAndWait(device, cursor, "shell", "nested shell returns prompt", "K16 SHELL")
+            cursor = runShellCommandAndWait(device, cursor, "shell", "second nested shell returns prompt", "K16 SHELL")
             cursor = runShellCommandAndWait(device, cursor, "shell", "nested shell busy returns prompt", "ERR BUSY")
             runShellCommandAndWait(device, cursor, "echo nested-ok", "nested shell remains interactive after busy child", "nested-ok")
         } finally {
@@ -1203,13 +1225,25 @@ class K16ShellRuntimeSmokeTest {
             }
 
             dispatchText(device, "shell\n")
+            waitForTerminal(device, "second nested shell prompt") { terminal ->
+                val firstCommandIndex = terminal.indexOf("K16> shell")
+                val secondCommandIndex =
+                    terminal.indexOf("K16> shell", startIndex = firstCommandIndex + "K16> shell".length)
+                val secondBannerIndex = terminal.indexOf("K16 SHELL", startIndex = secondCommandIndex + "K16> shell".length)
+                val secondPromptIndex = terminal.indexOf("K16> ", startIndex = secondBannerIndex + "K16 SHELL".length)
+                secondCommandIndex >= 0 && secondBannerIndex > secondCommandIndex && secondPromptIndex > secondBannerIndex
+            }
+
+            dispatchText(device, "shell\n")
             waitForTerminal(device, "nested shell busy error") { terminal ->
                 val firstCommandIndex = terminal.indexOf("K16> shell")
-                val nestedCommandIndex =
+                val secondCommandIndex =
                     terminal.indexOf("K16> shell", startIndex = firstCommandIndex + "K16> shell".length)
-                val busyIndex = terminal.indexOf("ERR BUSY", startIndex = nestedCommandIndex + "K16> shell".length)
+                val busyCommandIndex =
+                    terminal.indexOf("K16> shell", startIndex = secondCommandIndex + "K16> shell".length)
+                val busyIndex = terminal.indexOf("ERR BUSY", startIndex = busyCommandIndex + "K16> shell".length)
                 val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = busyIndex + "ERR BUSY".length)
-                nestedCommandIndex >= 0 && busyIndex > nestedCommandIndex && returnedPromptIndex > busyIndex
+                busyCommandIndex >= 0 && busyIndex > busyCommandIndex && returnedPromptIndex > busyIndex
             }
 
             device.reboot()
@@ -1239,8 +1273,23 @@ class K16ShellRuntimeSmokeTest {
             }
 
             dispatchText(device, "shell\n")
+            waitForTerminal(device, "second nested shell prompt before snapshot") { terminal ->
+                val firstCommandIndex = terminal.indexOf("K16> shell")
+                val secondCommandIndex =
+                    terminal.indexOf("K16> shell", startIndex = firstCommandIndex + "K16> shell".length)
+                val secondBannerIndex = terminal.indexOf("K16 SHELL", startIndex = secondCommandIndex + "K16> shell".length)
+                val secondPromptIndex = terminal.indexOf("K16> ", startIndex = secondBannerIndex + "K16 SHELL".length)
+                secondCommandIndex >= 0 && secondBannerIndex > secondCommandIndex && secondPromptIndex > secondBannerIndex
+            }
+
+            dispatchText(device, "shell\n")
             waitForTerminal(device, "nested shell busy error before snapshot") { terminal ->
-                terminal.contains("ERR BUSY")
+                val firstCommandIndex = terminal.indexOf("K16> shell")
+                val secondCommandIndex =
+                    terminal.indexOf("K16> shell", startIndex = firstCommandIndex + "K16> shell".length)
+                val busyCommandIndex =
+                    terminal.indexOf("K16> shell", startIndex = secondCommandIndex + "K16> shell".length)
+                terminal.indexOf("ERR BUSY", startIndex = busyCommandIndex + "K16> shell".length) > busyCommandIndex
             }
 
             val snapshot = requireNotNull(device.snapshotRuntimeState())
