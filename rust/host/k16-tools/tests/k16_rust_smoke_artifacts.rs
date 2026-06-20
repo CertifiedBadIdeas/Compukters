@@ -136,10 +136,21 @@ fn kraftos_rust_std_sys_hooks_live_in_named_modules() {
     assert!(stdio_mod.contains("mod kraftos;"));
     assert!(stdio_mod.contains("pub use kraftos::*;"));
 
+    let fs_mod = fs::read_to_string(std_sys.join("fs/mod.rs")).expect("fs sys mod exists");
+    assert!(fs_mod.contains("target_os = \"kraftos\""));
+    assert!(fs_mod.contains("mod kraftos;"));
+    assert!(fs_mod.contains("use kraftos as imp;"));
+
     let unsupported_stdio =
         fs::read_to_string(std_sys.join("stdio/unsupported.rs")).expect("unsupported stdio exists");
     assert!(!unsupported_stdio.contains("target_os = \"kraftos\""));
     assert!(!unsupported_stdio.contains("__k16_write_syscall"));
+
+    let unsupported_fs =
+        fs::read_to_string(std_sys.join("fs/unsupported.rs")).expect("unsupported fs exists");
+    assert!(!unsupported_fs.contains("__k16_open_syscall"));
+    assert!(!unsupported_fs.contains("__k16_read_syscall"));
+    assert!(!unsupported_fs.contains("__k16_close_syscall"));
 
     let kraftos_stdio =
         fs::read_to_string(std_sys.join("stdio/kraftos.rs")).expect("KraftOS stdio exists");
@@ -149,6 +160,12 @@ fn kraftos_rust_std_sys_hooks_live_in_named_modules() {
     let kraftos_alloc =
         fs::read_to_string(std_sys.join("alloc/kraftos.rs")).expect("KraftOS alloc exists");
     assert!(kraftos_alloc.contains("__k16_sbrk_syscall"));
+
+    let kraftos_fs = fs::read_to_string(std_sys.join("fs/kraftos.rs")).expect("KraftOS fs exists");
+    assert!(kraftos_fs.contains("__k16_open_syscall"));
+    assert!(kraftos_fs.contains("__k16_read_syscall"));
+    assert!(kraftos_fs.contains("__k16_close_syscall"));
+    assert!(kraftos_fs.contains("OPEN_READ_ONLY"));
 }
 
 #[test]
