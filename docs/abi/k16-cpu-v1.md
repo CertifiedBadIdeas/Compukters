@@ -604,8 +604,8 @@ the existing negative K16 `ERROR_FAULT` value.
 
 The production process launcher runs `/bin/init.kx`, `/bin/shell.kx`, and
 shell-launched `/bin/*.kx` utilities in host-managed `mmu0` address spaces.
-The kernel maps the loaded image pages and selected user stack page into each
-address space, activates translated user execution, and records the
+The kernel maps the loaded image pages and selected committed user stack pages
+into each address space, activates translated user execution, and records the
 address-space id for syscall user-buffer copies. For init, the kernel reserves
 the top 4 KiB page below the boot-provided `BootInfo.ram_size` boundary as a
 physical kernel trap stack and places init's user stack below that page. Init's
@@ -627,13 +627,14 @@ child load arena starts after the current parent's program break, so child
 loading cannot overwrite parent heap allocations. The child arena end is the
 lower of the current parent's saved stack pointer and `memory_end`; translated
 children reserve a kernel trap stack below that parent stack before placing the
-child stack and heap. The child heap limit is below a guard area under the
-child stack top, so child heap growth cannot overwrite the live parent stack,
-the translated child trap stack, or escape the parent's process range. For
-translated processes, the image page containing the initial heap start is
-already mapped by the loader. Later `BRK`/`SBRK` growth commits additional heap
-pages lazily at 4 KiB boundaries, maps them user-writable and non-executable,
-and releases the heap backing frames when the process exits.
+child stack and heap. Translated user launches reserve two 4 KiB user stack
+pages below the selected stack top and keep a 4 KiB guard below that stack
+range. The heap limit is below the guard, so child heap growth cannot overwrite
+the live parent stack, the translated child trap stack, or escape the parent's
+process range. For translated processes, the image page containing the initial
+heap start is already mapped by the loader. Later `BRK`/`SBRK` growth commits
+additional heap pages lazily at 4 KiB boundaries, maps them user-writable and
+non-executable, and releases the heap backing frames when the process exits.
 
 Regular file descriptors returned by `OPEN` are process-owned. A foreground
 process can `READ` or `CLOSE` only regular fds it opened, and `EXIT` releases
@@ -652,6 +653,14 @@ an argv table of `(ptr, len)` entries. The K16 startup object does not clobber
 `r1` or `r2` before calling `main`, so no-argument `main()` programs remain
 valid while argv-aware programs may declare an entry that accepts those first
 two C ABI arguments.
+
+Bounded syscall request buffers may live on the translated user stack when
+their maximum size is part of the ABI and remains comfortably below the
+committed stack range. The current large request builders are `READ_DIR` at
+244 bytes, `RENAME` at 468 bytes, and `RUN_ARGV` at 601 bytes. Larger future
+request formats should use heap-backed user buffers or a narrower syscall ABI
+instead of relying on more stack growth. Kernel-side syscall staging buffers
+remain separately bounded and are not part of the user stack budget.
 
 Asynchronous interrupts are delivered between guest instructions. Delivery
 requires `interrupt_enable != 0` and a source bit present in both

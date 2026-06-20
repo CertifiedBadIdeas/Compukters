@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- K16 translated user launches now reserve two 4 KiB user stack pages and keep
+  a 4 KiB heap guard below them. Launch-time mappings cover the loaded image
+  pages plus the committed user stack pages, and `BRK`/`SBRK` heap limits now
+  stop below the whole reserved stack range instead of only below the stack
+  pointer. This makes large userland syscall request builders fail by normal
+  heap/stack policy instead of silently colliding with a one-page stack.
 - Added K16 `RENAME` (`21`) plus bundled `/bin/mv.kx` for regular-file
   metadata moves inside ROOT/K16FS. The kernel rejects open source files with
   `ERROR_BUSY`, rejects existing destinations with `ERROR_INVALID`, and does
@@ -31,9 +37,9 @@
   `write --append <path> <payload>` smoke coverage.
 - K16 translated `BRK`/`SBRK` now commit heap pages through the kernel page
   allocator when the program break crosses a previously unmapped 4 KiB VM page
-  boundary. Launch-time mappings cover only the loaded image pages and the user
-  stack page; process-owned heap backing pages are released on `EXIT` together
-  with the translated address space backing.
+  boundary. Launch-time mappings cover only the loaded image pages and the
+  initial committed user stack pages; process-owned heap backing pages are
+  released on `EXIT` together with the translated address space backing.
 - K16 now launches `/bin/init.kx` itself in a host-managed translated address
   space. The kernel reserves the top 4 KiB page below `BootInfo.ram_size` as
   init's physical kernel trap stack, starts init's user arena at the next 4 KiB
