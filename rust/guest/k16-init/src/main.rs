@@ -5,12 +5,24 @@ use core::panic::PanicInfo;
 
 use kraft_std::prelude::*;
 
+const SHELL_PATH: &str = "/bin/shell.kx";
+const SHELL_ARGS: [&str; 1] = [SHELL_PATH];
+
 #[no_mangle]
 pub extern "C" fn main() -> ! {
-    match process::run("/bin/shell.kx") {
-        Ok(status) => process::exit(status.code()),
-        Err(_) => process::exit(1),
+    loop {
+        match run_shell_once() {
+            Ok(status) if status.success() => {}
+            Ok(status) => process::exit(status.code()),
+            Err(_) => process::exit(1),
+        }
     }
+}
+
+fn run_shell_once() -> Result<process::ExitStatus, process::Error> {
+    let shell = process::spawn_with_args(SHELL_PATH, &SHELL_ARGS)?;
+    let waited = process::wait(shell)?;
+    Ok(waited.status())
 }
 
 #[panic_handler]
