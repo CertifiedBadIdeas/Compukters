@@ -10,6 +10,10 @@
   direct child, writes its exit status to `out_status_ptr` when it exits, and
   returns the reaped PID. `RUN` remains the synchronous compatibility path and
   still returns child exit status directly.
+- The K16 kernel now implements `RUN` through the same internal child
+  creation and wait lifecycle as `SPAWN` plus `WAIT`. This preserves the
+  guest-visible synchronous `RUN` ABI while keeping process setup on one kernel
+  path.
 - The direct K16 runtime factory default RAM size is now 1 MiB while the boot
   floor remains 256 KiB, matching the production config headroom needed for
   nested translated shell smoke coverage.
