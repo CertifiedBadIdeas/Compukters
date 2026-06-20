@@ -61,6 +61,15 @@ pub fn dispatch(number: u32) -> ! {
                 Err(error) => unsafe { k16_rt::iret_with_r0(error) },
             }
         }
+        abi_syscall::SEEK => {
+            let fd = k16_rt::syscall_arg0();
+            let offset = k16_rt::syscall_arg1();
+            let whence = k16_rt::syscall_arg2();
+            match seek_fd(fd, offset, whence) {
+                Ok(new_offset) => unsafe { k16_rt::iret_with_r0(new_offset) },
+                Err(error) => unsafe { k16_rt::iret_with_r0(error) },
+            }
+        }
         abi_syscall::READ_DIR => {
             let ptr = k16_rt::syscall_arg0();
             let len = k16_rt::syscall_arg1();
@@ -160,6 +169,21 @@ fn write_file_fd(fd: u32, ptr: u32, len: u32) -> Result<u32, u32> {
         }
     }
     Ok(total_written)
+}
+
+fn seek_fd(fd: u32, offset: u32, whence: u32) -> Result<u32, u32> {
+    match fd {
+        abi_syscall::FD_STDIN | abi_syscall::FD_STDOUT | abi_syscall::FD_STDERR => {
+            Err(abi_syscall::ERROR_BAD_FD)
+        }
+        _ => {
+            match unsafe { fs::seek_file_fd_for_process(current_process_id(), fd, offset, whence) }
+            {
+                Ok(new_offset) => Ok(new_offset),
+                Err(error) => Err(fs_error_to_status(error)),
+            }
+        }
+    }
 }
 
 fn read_fd(fd: u32, ptr: u32, len: u32) -> Result<u32, u32> {

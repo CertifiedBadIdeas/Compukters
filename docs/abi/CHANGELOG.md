@@ -2,11 +2,14 @@
 
 ## Unreleased
 
-- Added K16 writable regular file fd mode for ROOT/K16FS. `OPEN` now accepts
-  `OPEN_WRITE_ONLY | OPEN_CREATE | OPEN_TRUNCATE`, `WRITE` can write to the
-  returned regular file fd, and bundled userland includes `/bin/write.kx` for
-  `write <path> <payload>` smoke coverage. Guest-side file growth remains
-  limited to the file's preallocated inline extents.
+- Added K16 writable regular file fd modes for ROOT/K16FS. `OPEN` now accepts
+  `OPEN_WRITE_ONLY | OPEN_CREATE | OPEN_TRUNCATE` and
+  `OPEN_WRITE_ONLY | OPEN_CREATE | OPEN_APPEND`; `WRITE` can write to returned
+  regular file fds, `SEEK` (`17`) can move regular file fd offsets inside the
+  current file size, and K16FS can grow the last inline extent when the next
+  contiguous blocks are free. Bundled userland includes `/bin/write.kx` with
+  `write <path> <payload>` and `write --append <path> <payload>` smoke
+  coverage.
 - K16 translated `BRK`/`SBRK` now commit heap pages through the kernel page
   allocator when the program break crosses a previously unmapped 4 KiB VM page
   boundary. Launch-time mappings cover only the loaded image pages and the user

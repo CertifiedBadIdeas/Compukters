@@ -168,6 +168,14 @@ pub mod fs {
             Ok(())
         }
 
+        pub fn seek_start(self, offset: u32) -> Result<u32, Error> {
+            seek(self.0, offset, k16_abi::syscall::SEEK_SET)
+        }
+
+        pub fn seek_end(self) -> Result<u32, Error> {
+            seek(self.0, 0, k16_abi::syscall::SEEK_END)
+        }
+
         pub fn close(self) -> Result<(), Error> {
             let returned = k16_rt::close_syscall(self.0);
             if is_error_status(returned) {
@@ -193,6 +201,20 @@ pub mod fs {
             k16_abi::syscall::OPEN_WRITE_ONLY
                 | k16_abi::syscall::OPEN_CREATE
                 | k16_abi::syscall::OPEN_TRUNCATE,
+        );
+        if is_error_status(returned) {
+            return Err(Error::Syscall(returned));
+        }
+        Ok(File(returned))
+    }
+
+    pub fn append(path: &str) -> Result<File, Error> {
+        let returned = k16_rt::open_syscall(
+            path.as_ptr(),
+            path.len(),
+            k16_abi::syscall::OPEN_WRITE_ONLY
+                | k16_abi::syscall::OPEN_CREATE
+                | k16_abi::syscall::OPEN_APPEND,
         );
         if is_error_status(returned) {
             return Err(Error::Syscall(returned));
@@ -289,6 +311,14 @@ pub mod fs {
     #[inline(always)]
     fn is_error_status(status: u32) -> bool {
         status & 0x8000_0000 != 0
+    }
+
+    fn seek(fd: u32, offset: u32, whence: u32) -> Result<u32, Error> {
+        let returned = k16_rt::seek_syscall(fd, offset, whence);
+        if is_error_status(returned) {
+            return Err(Error::Syscall(returned));
+        }
+        Ok(returned)
     }
 }
 

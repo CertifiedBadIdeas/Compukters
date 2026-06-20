@@ -879,7 +879,7 @@ class K16FirmwareResourceTest {
         assertFalse(shellLibSource.contains("Command::Cat(&"), "shell should not carry a cat command variant")
         assertFalse(shellLibSource.contains("Command::AllocTest"), "shell should not carry an alloc command variant")
         assertTrue(
-            shellSource.contains("HELP\\nCLEAR\\nPWD\\nCD [PATH]\\nECHO\\nTICKS\\nUNAME\\nLS [PATH...]\\nCAT <PATH...>\\nSTAT <PATH...>\\nWRITE <PATH> <TEXT>\\nALLOC\\n"),
+            shellSource.contains("HELP\\nCLEAR\\nPWD\\nCD [PATH]\\nECHO\\nTICKS\\nUNAME\\nLS [PATH...]\\nCAT <PATH...>\\nSTAT <PATH...>\\nWRITE [--append] <PATH> <TEXT>\\nALLOC\\n"),
             "help should print a readable command list",
         )
         assertTrue(shellSource.contains("fs::metadata(path)"), "cd should validate paths through stat metadata")
@@ -929,12 +929,14 @@ class K16FirmwareResourceTest {
         val stdSource = Path.of("../../../rust/guest/kraft-std/src/lib.rs").readText()
 
         assertTrue(writeSource.contains("process::Argv::from_raw(argc, argv)"))
-        assertTrue(writeSource.contains("argv.len() != 2"))
+        assertTrue(writeSource.contains("3 if argv.get(0) == Some(b\"--append\".as_slice())"))
         assertTrue(writeSource.contains("fs::create(path)"))
+        assertTrue(writeSource.contains("fs::append(path)"))
         assertTrue(writeSource.contains("file.write_all(payload)"))
         assertTrue(writeSource.contains("file.close()"))
         assertTrue(writeSource.contains("b\"WROTE \""))
         assertTrue(stdSource.contains("pub fn create(path: &str) -> Result<File, Error>"))
+        assertTrue(stdSource.contains("pub fn append(path: &str) -> Result<File, Error>"))
         assertTrue(stdSource.contains("pub fn write_all(self, bytes: &[u8]) -> Result<(), Error>"))
     }
 
