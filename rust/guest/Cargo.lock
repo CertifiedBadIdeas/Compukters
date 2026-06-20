@@ -94,6 +94,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "k16-stat"
+version = "0.1.0"
+dependencies = [
+ "k16-abi",
+ "kraft-std",
+]
+
+[[package]]
 name = "k16-storage"
 version = "0.1.0"
 dependencies = [
