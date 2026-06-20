@@ -16,3 +16,6 @@ required-features = ["k16-target"]
 k16-abi = { path = "../k16-abi" }
 k16-rt = { path = "../k16-rt" }
 kraft-std = { path = "../kraft-std" }
+
+[dev-dependencies]
+kraft-std = { path = "../kraft-std", features = ["host-test"] }

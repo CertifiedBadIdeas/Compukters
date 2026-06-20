@@ -116,6 +116,193 @@ pub mod io {
     }
 }
 
+pub mod path {
+    pub const MAX_PATH_BYTES: usize = k16_abi::syscall::MAX_STAT_PATH_BYTES;
+
+    #[derive(Debug, Eq, PartialEq)]
+    pub enum PathError {
+        Invalid,
+        TooLong,
+    }
+
+    pub struct PathBuffer {
+        bytes: [u8; MAX_PATH_BYTES],
+        len: usize,
+    }
+
+    impl PathBuffer {
+        pub const fn new() -> Self {
+            Self {
+                bytes: [0; MAX_PATH_BYTES],
+                len: 0,
+            }
+        }
+
+        pub fn as_bytes(&self) -> &[u8] {
+            &self.bytes[..self.len]
+        }
+
+        pub fn as_str(&self) -> Result<&str, PathError> {
+            core::str::from_utf8(self.as_bytes()).map_err(|_| PathError::Invalid)
+        }
+
+        pub fn replace_with_parts(
+            &mut self,
+            prefix: &[u8],
+            middle: &[u8],
+            suffix: &[u8],
+        ) -> Result<(), PathError> {
+            if middle.is_empty() {
+                return Err(PathError::Invalid);
+            }
+            let end = prefix
+                .len()
+                .checked_add(middle.len())
+                .and_then(|value| value.checked_add(suffix.len()))
+                .ok_or(PathError::TooLong)?;
+            if end > self.bytes.len() {
+                return Err(PathError::TooLong);
+            }
+            let mut cursor = 0;
+            self.bytes[cursor..cursor + prefix.len()].copy_from_slice(prefix);
+            cursor += prefix.len();
+            self.bytes[cursor..cursor + middle.len()].copy_from_slice(middle);
+            cursor += middle.len();
+            self.bytes[cursor..cursor + suffix.len()].copy_from_slice(suffix);
+            self.len = end;
+            Ok(())
+        }
+
+        fn clear(&mut self) {
+            self.len = 0;
+        }
+
+        fn push_root(&mut self) {
+            self.bytes[0] = b'/';
+            self.len = 1;
+        }
+
+        fn copy_from(&mut self, bytes: &[u8]) -> Result<(), PathError> {
+            if bytes.is_empty() || bytes.len() > self.bytes.len() {
+                return Err(PathError::TooLong);
+            }
+            self.bytes[..bytes.len()].copy_from_slice(bytes);
+            self.len = bytes.len();
+            Ok(())
+        }
+
+        fn push_component(&mut self, component: &[u8]) -> Result<(), PathError> {
+            if component.is_empty() {
+                return Err(PathError::Invalid);
+            }
+            let separator_len = if self.as_bytes() == b"/" { 0 } else { 1 };
+            let end = self
+                .len
+                .checked_add(separator_len)
+                .and_then(|value| value.checked_add(component.len()))
+                .ok_or(PathError::TooLong)?;
+            if end > self.bytes.len() {
+                return Err(PathError::TooLong);
+            }
+            if separator_len == 1 {
+                self.bytes[self.len] = b'/';
+                self.len += 1;
+            }
+            self.bytes[self.len..end].copy_from_slice(component);
+            self.len = end;
+            Ok(())
+        }
+
+        fn pop_component(&mut self) {
+            if self.as_bytes() == b"/" {
+                return;
+            }
+            let mut index = self.len;
+            while index > 0 {
+                index -= 1;
+                if self.bytes[index] == b'/' {
+                    self.len = if index == 0 { 1 } else { index };
+                    return;
+                }
+            }
+            self.push_root();
+        }
+    }
+
+    impl Default for PathBuffer {
+        fn default() -> Self {
+            Self::new()
+        }
+    }
+
+    pub struct WorkingDirectory {
+        path: PathBuffer,
+    }
+
+    impl WorkingDirectory {
+        pub fn new() -> Self {
+            let mut path = PathBuffer::new();
+            path.bytes[0] = b'/';
+            path.len = 1;
+            Self { path }
+        }
+
+        pub fn as_bytes(&self) -> &[u8] {
+            self.path.as_bytes()
+        }
+
+        pub fn resolve_into(&self, input: &[u8], out: &mut PathBuffer) -> Result<(), PathError> {
+            if input.is_empty() {
+                return Err(PathError::Invalid);
+            }
+            out.clear();
+            if input[0] == b'/' {
+                out.push_root();
+            } else {
+                out.copy_from(self.as_bytes())?;
+            }
+
+            let mut cursor = 0;
+            while cursor < input.len() {
+                while cursor < input.len() && input[cursor] == b'/' {
+                    cursor += 1;
+                }
+                let start = cursor;
+                while cursor < input.len() && input[cursor] != b'/' {
+                    cursor += 1;
+                }
+                if start == cursor {
+                    continue;
+                }
+                let component = &input[start..cursor];
+                if component == b"." {
+                    continue;
+                }
+                if component == b".." {
+                    out.pop_component();
+                } else {
+                    out.push_component(component)?;
+                }
+            }
+            Ok(())
+        }
+
+        pub fn set_from_resolved(&mut self, path: &PathBuffer) -> Result<(), PathError> {
+            let bytes = path.as_bytes();
+            if bytes.is_empty() || bytes[0] != b'/' {
+                return Err(PathError::Invalid);
+            }
+            self.path.copy_from(bytes)
+        }
+    }
+
+    impl Default for WorkingDirectory {
+        fn default() -> Self {
+            Self::new()
+        }
+    }
+}
+
 pub mod fs {
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     pub enum Error {
@@ -706,5 +893,5 @@ pub mod process {
 }
 
 pub mod prelude {
-    pub use crate::{coreutils, debug, fs, heap, io, process, status, thread, time};
+    pub use crate::{coreutils, debug, fs, heap, io, path, process, status, thread, time};
 }
