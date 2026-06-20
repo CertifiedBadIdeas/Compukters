@@ -17,6 +17,10 @@
   lifecycle to destroy a translated child address space on `EXIT` before
   returning to the blocked parent frame. This keeps translated shell/utility
   runs from accumulating stale host-managed address spaces.
+- Added bundled `/bin/stat.kx` as the first user-facing `STAT` syscall
+  utility. The shell now lists `STAT <PATH...>` in help, and `stat` prints
+  stable `FILE <size> <path>`, `DIR <size> <path>`, or `ERR <status> <path>`
+  lines using `kraft-std::fs::metadata`.
 - `K16SNAP` now records translated execution state needed to restore
   VM-enabled user processes. Snapshot device record kind `9` stores `mmu0`
   address-space mappings plus per-CPU address/privilege mode overrides, so a

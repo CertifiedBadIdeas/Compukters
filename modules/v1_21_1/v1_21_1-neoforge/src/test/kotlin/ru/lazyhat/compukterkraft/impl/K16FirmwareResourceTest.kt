@@ -83,6 +83,7 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("rust/guest/k16-shell"))
         assertTrue(source.contains("rust/guest/k16-ls"))
         assertTrue(source.contains("rust/guest/k16-cat"))
+        assertTrue(source.contains("rust/guest/k16-stat"))
         assertTrue(source.contains("rust/guest/k16-alloc-test"))
         assertTrue(source.contains("k16InitManifest"))
         assertTrue(source.contains("k16InitSource"))
@@ -92,21 +93,26 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("k16LsSource"))
         assertTrue(source.contains("k16CatManifest"))
         assertTrue(source.contains("k16CatSource"))
+        assertTrue(source.contains("k16StatManifest"))
+        assertTrue(source.contains("k16StatSource"))
         assertTrue(source.contains("k16AllocTestManifest"))
         assertTrue(source.contains("k16AllocTestSource"))
         assertTrue(source.contains("generatedK16ShellTarget"))
         assertTrue(source.contains("generatedK16LsTarget"))
         assertTrue(source.contains("generatedK16CatTarget"))
+        assertTrue(source.contains("generatedK16StatTarget"))
         assertTrue(source.contains("generatedK16AllocTestTarget"))
         assertTrue(source.contains("k16InitArtifact"))
         assertTrue(source.contains("k16ShellArtifact"))
         assertTrue(source.contains("k16LsArtifact"))
         assertTrue(source.contains("k16CatArtifact"))
+        assertTrue(source.contains("k16StatArtifact"))
         assertTrue(source.contains("k16AllocTestArtifact"))
         assertTrue(source.contains("compileK16SystemInit"))
         assertTrue(source.contains("compileK16SystemShell"))
         assertTrue(source.contains("compileK16SystemLs"))
         assertTrue(source.contains("compileK16SystemCat"))
+        assertTrue(source.contains("compileK16SystemStat"))
         assertTrue(source.contains("compileK16SystemAllocTest"))
         assertTrue(source.contains("putK16SystemStorage0Init"))
         assertTrue(source.contains("binName = \"k16-init\""))
@@ -117,6 +123,7 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("binName = \"k16-shell\""))
         assertTrue(source.contains("binName = \"k16-ls\""))
         assertTrue(source.contains("binName = \"k16-cat\""))
+        assertTrue(source.contains("binName = \"k16-stat\""))
         assertTrue(source.contains("binName = \"k16-alloc-test\""))
         assertTrue(
             source.contains("output = k16ShellArtifact.get().asFile,\n                buildStd = \"core,alloc\""),
@@ -128,6 +135,7 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("\"/bin/shell.kx\""))
         assertTrue(source.contains("\"/bin/ls.kx\""))
         assertTrue(source.contains("\"/bin/cat.kx\""))
+        assertTrue(source.contains("\"/bin/stat.kx\""))
         assertTrue(source.contains("\"/bin/alloc-test.kx\""))
         assertTrue(source.contains("\"/etc/motd\""))
         assertTrue(source.contains("\"extract-partition\""))
@@ -338,6 +346,42 @@ class K16FirmwareResourceTest {
     }
 
     @Test
+    fun bundledK16SystemStorage0ContainsStatProgram() {
+        val workspace = createTempDirectory("k16-stat-storage-test-")
+        val storage0 = workspace.resolve("storage0.kv")
+        val root = workspace.resolve("root.kfs")
+        val stat = workspace.resolve("stat.kx")
+        storage0.writeBytes(K16SystemVolumeWorkspace.loadStorage0VolumeResource(classLoader = javaClass.classLoader))
+
+        runK16Tool(
+            "volume",
+            "extract-partition",
+            storage0.toString(),
+            "ROOT",
+            root.toString(),
+        )
+        runK16Tool(
+            "fs",
+            "kfs",
+            "get",
+            root.toString(),
+            "/bin/stat.kx",
+            stat.toString(),
+        )
+
+        val bytes = stat.readBytes()
+        assertTrue(bytes.size > 72, "bundled /bin/stat.kx should be a non-empty dynamic K16E program")
+        assertContentEquals(
+            byteArrayOf('K'.code.toByte(), '1'.code.toByte(), '6'.code.toByte(), 'E'.code.toByte()),
+            bytes.copyOfRange(0, 4),
+        )
+        val version = ByteBuffer.wrap(bytes, 0x04, 2).order(ByteOrder.LITTLE_ENDIAN).short.toInt()
+        val abiKind = ByteBuffer.wrap(bytes, 0x18, 4).order(ByteOrder.LITTLE_ENDIAN).int
+        assertEquals(2, version, "bundled /bin/stat.kx must use dynamic K16E v2")
+        assertEquals(3, abiKind, "bundled /bin/stat.kx must use K16E abi kind program")
+    }
+
+    @Test
     fun bundledK16SystemStorage0ContainsAllocTestProgram() {
         val workspace = createTempDirectory("k16-alloc-test-storage-test-")
         val storage0 = workspace.resolve("storage0.kv")
@@ -451,7 +495,7 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("const PROMPT: &[u8] = b\"K16> \""))
         assertTrue(source.contains("const HELP: &[u8]"), "shell should define help text")
         assertTrue(source.contains("PWD\\nCD [PATH]"), "help should list cwd builtins")
-        assertTrue(source.contains("LS [PATH...]\\nCAT <PATH...>"), "help should list filesystem utilities")
+        assertTrue(source.contains("LS [PATH...]\\nCAT <PATH...>\\nSTAT <PATH...>"), "help should list filesystem utilities")
         assertTrue(source.contains("run_pwd(stdout, cwd)"))
         assertTrue(source.contains("run_cd(stdout, cwd, path_buffer, path)"))
         assertTrue(source.contains("run_ticks(stdout)"))
@@ -754,7 +798,7 @@ class K16FirmwareResourceTest {
         assertFalse(shellLibSource.contains("Command::Cat(&"), "shell should not carry a cat command variant")
         assertFalse(shellLibSource.contains("Command::AllocTest"), "shell should not carry an alloc command variant")
         assertTrue(
-            shellSource.contains("HELP\\nCLEAR\\nPWD\\nCD [PATH]\\nECHO\\nTICKS\\nUNAME\\nLS [PATH...]\\nCAT <PATH...>\\nALLOC\\n"),
+            shellSource.contains("HELP\\nCLEAR\\nPWD\\nCD [PATH]\\nECHO\\nTICKS\\nUNAME\\nLS [PATH...]\\nCAT <PATH...>\\nSTAT <PATH...>\\nALLOC\\n"),
             "help should print a readable command list",
         )
         assertTrue(shellSource.contains("fs::metadata(path)"), "cd should validate paths through stat metadata")
@@ -826,7 +870,10 @@ class K16FirmwareResourceTest {
             "shell should format decimal without relying on 64-bit division",
         )
         assertTrue(stdSource.contains("pub mod time"), "kraft-std should expose a time module")
-        assertTrue(stdSource.contains("pub fn game_ticks_parts() -> U64Parts"), "kraft-std should expose timer0 parts")
+        assertTrue(
+            stdSource.contains("pub fn game_ticks_parts() -> Result<U64Parts, Error>"),
+            "kraft-std should expose fallible timer0 parts",
+        )
         assertTrue(timerSource.contains("pub type U64Parts = k16_rt::U64Parts"), "timer module should expose explicit low/high timer parts")
         assertTrue(timerSource.contains("pub struct TickInstant"), "timer module should expose a named tick instant")
         assertTrue(timerSource.contains("pub struct TickDuration"), "timer module should expose a named tick duration")

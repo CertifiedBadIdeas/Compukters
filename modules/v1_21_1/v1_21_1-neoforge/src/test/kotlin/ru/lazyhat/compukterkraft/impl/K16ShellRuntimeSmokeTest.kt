@@ -107,6 +107,34 @@ class K16ShellRuntimeSmokeTest {
                     returnedPromptIndex > secondOutputIndex
             }
 
+            dispatchText(device, "stat /etc/motd\n")
+            waitForTerminal(device, "stat regular file metadata and returned prompt") { terminal ->
+                val statCommandIndex = terminal.indexOf("K16> stat /etc/motd")
+                val statOutputIndex =
+                    terminal.indexOf("FILE 10 /etc/motd", startIndex = statCommandIndex + "K16> stat /etc/motd".length)
+                val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = statOutputIndex)
+                statCommandIndex >= 0 && statOutputIndex > statCommandIndex && returnedPromptIndex > statOutputIndex
+            }
+
+            dispatchText(device, "stat /bin\n")
+            waitForTerminal(device, "stat directory metadata and returned prompt") { terminal ->
+                val statCommandIndex = terminal.indexOf("K16> stat /bin")
+                val dirPrefixIndex = terminal.indexOf("DIR ", startIndex = statCommandIndex + "K16> stat /bin".length)
+                val pathIndex = terminal.indexOf(" /bin", startIndex = dirPrefixIndex + "DIR ".length)
+                val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = pathIndex)
+                statCommandIndex >= 0 && dirPrefixIndex > statCommandIndex && pathIndex > dirPrefixIndex &&
+                    returnedPromptIndex > pathIndex
+            }
+
+            dispatchText(device, "stat /nosuch\n")
+            waitForTerminal(device, "stat missing path reports no entry and returned prompt") { terminal ->
+                val statCommandIndex = terminal.indexOf("K16> stat /nosuch")
+                val errorIndex =
+                    terminal.indexOf("ERR NOENT /nosuch", startIndex = statCommandIndex + "K16> stat /nosuch".length)
+                val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = errorIndex)
+                statCommandIndex >= 0 && errorIndex > statCommandIndex && returnedPromptIndex > errorIndex
+            }
+
             dispatchText(device, "cd motd\n")
             waitForTerminal(device, "cd rejects regular file and returned prompt") { terminal ->
                 val cdCommandIndex = terminal.indexOf("K16> cd motd")
