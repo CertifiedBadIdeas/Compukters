@@ -57,6 +57,7 @@ impl FsError {
     pub const NoEntry: Self = Self(k16_abi::syscall::ERROR_NO_ENTRY);
     pub const NoFd: Self = Self(k16_abi::syscall::ERROR_NO_FD);
     pub const NoMemory: Self = Self(k16_abi::syscall::ERROR_NO_MEMORY);
+    pub const NotEmpty: Self = Self(k16_abi::syscall::ERROR_NOT_EMPTY);
     pub const Busy: Self = Self(k16_abi::syscall::ERROR_BUSY);
     pub const Fault: Self = Self(k16_abi::syscall::ERROR_FAULT);
     pub const Storage: Self = Self(k16_abi::syscall::ERROR_NO_ENTRY);
@@ -538,6 +539,26 @@ pub unsafe fn remove_root_file_for_process(path: &[u8]) -> Result<(), FsError> {
 }
 
 #[cfg(any(not(test), feature = "host-test"))]
+pub unsafe fn create_root_directory(path: &[u8]) -> Result<(), FsError> {
+    let path = RootFilePath::parse(path)?;
+    let components = path.components();
+    unsafe {
+        k16_storage::create_directory_from_storage0(ROOT_PARTITION, components.as_slice())
+            .map_err(storage_error_to_fs_error)
+    }
+}
+
+#[cfg(any(not(test), feature = "host-test"))]
+pub unsafe fn remove_root_directory(path: &[u8]) -> Result<(), FsError> {
+    let path = RootFilePath::parse(path)?;
+    let components = path.components();
+    unsafe {
+        k16_storage::remove_directory_from_storage0(ROOT_PARTITION, components.as_slice())
+            .map_err(storage_error_to_fs_error)
+    }
+}
+
+#[cfg(any(not(test), feature = "host-test"))]
 pub unsafe fn copy_file_fd_range_to_ram_for_process(
     owner_pid: u32,
     fd: u32,
@@ -665,6 +686,8 @@ fn storage_error_to_fs_error(error: k16_storage::StorageError) -> FsError {
         FsError::NoMemory
     } else if error == k16_storage::StorageError::OUTPUT_TRANSFER {
         FsError::Fault
+    } else if error == k16_storage::StorageError::PATH_NOT_EMPTY {
+        FsError::NotEmpty
     } else {
         FsError::Storage
     }

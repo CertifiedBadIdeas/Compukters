@@ -161,6 +161,46 @@ fn fs_remove_file_delegates_to_unlink_syscall() {
 }
 
 #[test]
+fn fs_create_dir_delegates_to_mkdir_syscall() {
+    k16_rt::host_test::reset_syscalls();
+    k16_rt::host_test::set_syscall_return(k16_rt::host_test::STATUS_OK);
+
+    let created = fs::create_dir("/etc/user");
+
+    assert_eq!(created, Ok(()));
+    assert_eq!(
+        k16_rt::host_test::syscall_number(),
+        k16_rt::host_test::MKDIR
+    );
+    assert_eq!(
+        k16_rt::host_test::syscall_arg0(),
+        "/etc/user".as_ptr() as usize as u32
+    );
+    assert_eq!(k16_rt::host_test::syscall_arg1(), 9);
+    assert_eq!(k16_rt::host_test::syscall_arg2(), 0);
+}
+
+#[test]
+fn fs_remove_dir_delegates_to_rmdir_syscall() {
+    k16_rt::host_test::reset_syscalls();
+    k16_rt::host_test::set_syscall_return(k16_rt::host_test::STATUS_OK);
+
+    let removed = fs::remove_dir("/etc/user");
+
+    assert_eq!(removed, Ok(()));
+    assert_eq!(
+        k16_rt::host_test::syscall_number(),
+        k16_rt::host_test::RMDIR
+    );
+    assert_eq!(
+        k16_rt::host_test::syscall_arg0(),
+        "/etc/user".as_ptr() as usize as u32
+    );
+    assert_eq!(k16_rt::host_test::syscall_arg1(), 9);
+    assert_eq!(k16_rt::host_test::syscall_arg2(), 0);
+}
+
+#[test]
 fn file_close_delegates_to_close_syscall() {
     k16_rt::host_test::reset_syscalls();
     k16_rt::host_test::set_syscall_return(k16_rt::host_test::STATUS_OK);

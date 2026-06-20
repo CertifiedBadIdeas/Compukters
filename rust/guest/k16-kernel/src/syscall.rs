@@ -95,6 +95,22 @@ pub fn dispatch(number: u32) -> ! {
                 Err(error) => unsafe { k16_rt::iret_with_r0(error) },
             }
         }
+        abi_syscall::MKDIR => {
+            let ptr = k16_rt::syscall_arg0();
+            let len = k16_rt::syscall_arg1();
+            match mkdir_path(ptr, len) {
+                Ok(()) => unsafe { k16_rt::iret_with_r0(abi_syscall::STATUS_OK) },
+                Err(error) => unsafe { k16_rt::iret_with_r0(error) },
+            }
+        }
+        abi_syscall::RMDIR => {
+            let ptr = k16_rt::syscall_arg0();
+            let len = k16_rt::syscall_arg1();
+            match rmdir_path(ptr, len) {
+                Ok(()) => unsafe { k16_rt::iret_with_r0(abi_syscall::STATUS_OK) },
+                Err(error) => unsafe { k16_rt::iret_with_r0(error) },
+            }
+        }
         abi_syscall::GAME_TICKS => {
             let out_ptr = k16_rt::syscall_arg0();
             match game_ticks(out_ptr) {
@@ -270,6 +286,30 @@ fn unlink_path(ptr: u32, len: u32) -> Result<(), u32> {
     let mut path = [0_u8; MAX_STAT_PATH_BYTES];
     let path = user_buffer::copy_from_user_into(ptr, len, &mut path)?;
     match unsafe { fs::remove_root_file_for_process(path) } {
+        Ok(()) => Ok(()),
+        Err(error) => Err(fs_error_to_status(error)),
+    }
+}
+
+fn mkdir_path(ptr: u32, len: u32) -> Result<(), u32> {
+    if len == 0 || len > fs::MAX_STAT_PATH_BYTES {
+        return Err(abi_syscall::ERROR_INVALID);
+    }
+    let mut path = [0_u8; MAX_STAT_PATH_BYTES];
+    let path = user_buffer::copy_from_user_into(ptr, len, &mut path)?;
+    match unsafe { fs::create_root_directory(path) } {
+        Ok(()) => Ok(()),
+        Err(error) => Err(fs_error_to_status(error)),
+    }
+}
+
+fn rmdir_path(ptr: u32, len: u32) -> Result<(), u32> {
+    if len == 0 || len > fs::MAX_STAT_PATH_BYTES {
+        return Err(abi_syscall::ERROR_INVALID);
+    }
+    let mut path = [0_u8; MAX_STAT_PATH_BYTES];
+    let path = user_buffer::copy_from_user_into(ptr, len, &mut path)?;
+    match unsafe { fs::remove_root_directory(path) } {
         Ok(()) => Ok(()),
         Err(error) => Err(fs_error_to_status(error)),
     }
