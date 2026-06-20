@@ -710,6 +710,59 @@ class K16ShellRuntimeSmokeTest {
     }
 
     @Test
+    fun runtimeDevicePersistsShellWrittenFileAcrossStorageRestart() {
+        val workspace = createTempDirectory("k16-shell-storage-restart-smoke-")
+        val biosFlashPath = workspace.resolve("bios.kflash")
+        val storage0Path = workspace.resolve("storage0.kv")
+        biosFlashPath.writeBytes(K16BiosFlashWorkspace.loadBiosFlashResource(classLoader = javaClass.classLoader))
+        storage0Path.writeBytes(K16SystemVolumeWorkspace.loadStorage0VolumeResource(classLoader = javaClass.classLoader))
+
+        val first = createDeviceWithExistingStorage(deviceId = 245, biosFlashPath = biosFlashPath, storage0Path = storage0Path)
+        try {
+            first.turnOn()
+            waitForTerminalText(first, "K16> ")
+
+            var cursor = 0
+            cursor =
+                runShellCommandAndWait(
+                    first,
+                    cursor,
+                    "write /etc/persist.txt alpha",
+                    "write creates persistent file before restart",
+                    "WROTE 5 /etc/persist.txt",
+                )
+            runShellCommandAndWait(
+                first,
+                cursor,
+                "cat /etc/persist.txt",
+                "written file is readable before restart",
+                "alpha",
+            )
+        } finally {
+            first.close()
+        }
+
+        val second = createDeviceWithExistingStorage(deviceId = 246, biosFlashPath = biosFlashPath, storage0Path = storage0Path)
+        try {
+            second.turnOn()
+            waitForTerminalText(second, "K16> ")
+
+            var cursor = 0
+            cursor =
+                runShellCommandAndWait(
+                    second,
+                    cursor,
+                    "cat /etc/persist.txt",
+                    "written file is readable after fresh boot with same storage0",
+                    "alpha",
+                )
+            runShellCommandAndWait(second, cursor, "status", "cat after storage restart reports success", "STATUS 0")
+        } finally {
+            second.close()
+        }
+    }
+
+    @Test
     fun runtimeDeviceKeepsShellAliveAfterUserlandFault() {
         val userFaultArtifact = Path.of("build/generated/k16-firmware-artifacts/user-fault-test.kx")
         assertTrue(Files.isRegularFile(userFaultArtifact), "user fault fixture should be built at $userFaultArtifact")
@@ -1224,6 +1277,20 @@ class K16ShellRuntimeSmokeTest {
         storage0Path.writeBytes(K16SystemVolumeWorkspace.loadStorage0VolumeResource(classLoader = javaClass.classLoader))
         configureStorage0(storage0Path)
 
+        return createDeviceWithExistingStorage(
+            deviceId = deviceId,
+            biosFlashPath = biosFlashPath,
+            storage0Path = storage0Path,
+            snapshot = snapshot,
+        )
+    }
+
+    private fun createDeviceWithExistingStorage(
+        deviceId: Int,
+        biosFlashPath: Path,
+        storage0Path: Path,
+        snapshot: ByteArray? = null,
+    ): K16RuntimeDevice {
         return K16RuntimeDevice(
             deviceId = deviceId,
             properties = DeviceProperties(DeviceFamily.NORMAL, label = "shell-smoke"),
