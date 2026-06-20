@@ -104,6 +104,7 @@ val generatedK16WriteTarget = generatedK16GuestTarget.map { it.dir("write") }
 val generatedK16RmTarget = generatedK16GuestTarget.map { it.dir("rm") }
 val generatedK16MkdirTarget = generatedK16GuestTarget.map { it.dir("mkdir") }
 val generatedK16RmdirTarget = generatedK16GuestTarget.map { it.dir("rmdir") }
+val generatedK16HostedHelloTarget = generatedK16GuestTarget.map { it.dir("hosted-hello") }
 val generatedK16AllocTestTarget = generatedK16GuestTarget.map { it.dir("alloc-test") }
 val generatedK16ProcTestTarget = generatedK16GuestTarget.map { it.dir("proc-test") }
 val generatedK16SyscallFaultTestTarget = generatedK16GuestTarget.map { it.dir("syscall-fault-test") }
@@ -143,6 +144,8 @@ val k16MkdirManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-
 val k16MkdirSource = rootProject.layout.projectDirectory.file("rust/guest/k16-mkdir/src/main.rs")
 val k16RmdirManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-rmdir/Cargo.toml")
 val k16RmdirSource = rootProject.layout.projectDirectory.file("rust/guest/k16-rmdir/src/main.rs")
+val k16HostedHelloManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-hosted-hello/Cargo.toml")
+val k16HostedHelloSource = rootProject.layout.projectDirectory.file("rust/guest/k16-hosted-hello/src/main.rs")
 val k16MotdSource = rootProject.layout.projectDirectory.file("rust/guest/k16-cat/motd.txt")
 val k16AllocTestManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-alloc-test/Cargo.toml")
 val k16AllocTestSource = rootProject.layout.projectDirectory.file("rust/guest/k16-alloc-test/src/main.rs")
@@ -183,6 +186,7 @@ val k16WriteArtifact = generatedK16FirmwareArtifacts.map { it.file("write.kx") }
 val k16RmArtifact = generatedK16FirmwareArtifacts.map { it.file("rm.kx") }
 val k16MkdirArtifact = generatedK16FirmwareArtifacts.map { it.file("mkdir.kx") }
 val k16RmdirArtifact = generatedK16FirmwareArtifacts.map { it.file("rmdir.kx") }
+val k16HostedHelloArtifact = generatedK16FirmwareArtifacts.map { it.file("hosted-hello.kx") }
 val k16AllocTestArtifact = generatedK16FirmwareArtifacts.map { it.file("alloc-test.kx") }
 val k16ProcTestArtifact = generatedK16FirmwareArtifacts.map { it.file("proc-test.kx") }
 val k16SyscallFaultTestArtifact = generatedK16FirmwareArtifacts.map { it.file("syscall-fault-test.kx") }
@@ -318,6 +322,7 @@ fun Project.compileK16GuestRustBin(
     k16Target: String,
     output: File,
     buildStd: String = "core",
+    buildStdFeatures: String? = null,
 ) {
     val toolchain = resolveK16Toolchain()
     val profile = k16FirmwareProfileName()
@@ -379,6 +384,13 @@ fun Project.compileK16GuestRustBin(
             k16CargoProfileArgs(profile) +
             listOf(
                 "-Zbuild-std=$buildStd",
+            ) +
+            buildList {
+                if (buildStdFeatures != null) {
+                    add("-Zbuild-std-features=$buildStdFeatures")
+                }
+            } +
+            listOf(
                 "-Zjson-target-spec",
                 "--manifest-path",
                 manifest.absolutePath,
@@ -410,7 +422,7 @@ fun Project.compileK16GuestRustBin(
     processBuilder.environment()["RUSTC"] = toolchain.rustc.absolutePath
     processBuilder.environment()["RUSTC_BOOTSTRAP"] = "1"
     processBuilder.environment()["RUSTFLAGS"] =
-        "-C linker=${toolchain.linker.absolutePath} $runtimeLinkArgs -C link-arg=--k16-target=$k16Target -Copt-level=z -Cjump-tables=no -Cdebuginfo=0 -Cdebug-assertions=off -Coverflow-checks=off -Zub-checks=no"
+        "-C linker=${toolchain.linker.absolutePath} $runtimeLinkArgs -C link-arg=--k16-target=$k16Target -Cpasses=lower-atomic -Copt-level=z -Cjump-tables=no -Cdebuginfo=0 -Cdebug-assertions=off -Coverflow-checks=off -Zub-checks=no"
     val exitCode = processBuilder.start().waitFor()
     check(exitCode == 0) {
         "K16 Rust firmware build for $binName failed with exit code $exitCode"
@@ -869,6 +881,34 @@ val compileK16SystemAllocTest =
                 k16Target = "program-dynamic",
                 output = k16AllocTestArtifact.get().asFile,
                 buildStd = "core,alloc",
+            )
+        }
+    }
+
+val compileK16HostedHello =
+    tasks.register("compileK16HostedHello") {
+        description = "Compiles and links the K16 hosted std hello proof program into a dynamic K16E program artifact."
+        group = "k16"
+        inputs.file(k16GuestManifest)
+        inputs.file(k16HostedHelloManifest)
+        inputs.file(k16HostedHelloSource)
+        inputs.file(k16HostToolsManifest)
+        inputs.dir(k16HostToolsSource)
+        inputs.file(k16RustTargetSpec)
+        inputs.file(k16ToolchainConfig)
+        inputs.property("k16FirmwareProfile", k16FirmwareProfile)
+        outputs.file(k16HostedHelloArtifact)
+        dependsOn(rootProject.tasks.named("prepareK16Toolchain"))
+
+        doLast {
+            project.compileK16GuestRustBin(
+                manifest = k16HostedHelloManifest.asFile,
+                targetDir = generatedK16HostedHelloTarget.get().asFile,
+                binName = "k16-hosted-hello",
+                k16Target = "program-dynamic",
+                output = k16HostedHelloArtifact.get().asFile,
+                buildStd = "std,panic_abort",
+                buildStdFeatures = "compiler-builtins-mem",
             )
         }
     }

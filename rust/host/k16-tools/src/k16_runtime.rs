@@ -33,7 +33,7 @@ pub fn k16_startup_object() -> Vec<u8> {
 
 pub fn k16_startup_object_for_target(target: K16ArtifactTarget) -> Result<Vec<u8>, String> {
     let fixed_stack_top = match target {
-        K16ArtifactTarget::Program => Some(K16ArtifactTarget::PROGRAM_STACK_TOP),
+        K16ArtifactTarget::Program => Some(K16ArtifactTarget::PROGRAM_INITIAL_STACK_POINTER),
         K16ArtifactTarget::ProgramDynamic => None,
         other => {
             return Err(format!(
@@ -47,8 +47,11 @@ pub fn k16_startup_object_for_target(target: K16ArtifactTarget) -> Result<Vec<u8
     }
     let main_relocation_offset =
         text.len()
-            .checked_add(2)
+            .checked_add(20)
             .ok_or_else(|| "K16 startup relocation offset overflows".to_string())? as u32;
+    emit_const32(&mut text, ARG0_REGISTER, 0);
+    emit_const32(&mut text, ARG1_REGISTER, 0);
+    emit_const32(&mut text, ARG2_REGISTER, 0);
     emit_const32(&mut text, SCRATCH_REGISTER, 0);
     emit_word(&mut text, call(SCRATCH_REGISTER));
     emit_const32(&mut text, ARG0_REGISTER, k16_abi::syscall::EXIT);
@@ -211,6 +214,15 @@ pub fn k16_cpu_helpers_object() -> Vec<u8> {
         "__k16_syscall_once",
         &[syscall(ARG0_REGISTER), ret()],
     );
+    let abort_words = [
+        emit_const32_word(ARG0_REGISTER),
+        k16_abi::syscall::EXIT as u16,
+        (k16_abi::syscall::EXIT >> 16) as u16,
+        const4(ARG1_REGISTER, 1),
+        syscall(ARG0_REGISTER),
+        halt(),
+    ];
+    emit_symbol_function(&mut text, &mut strtab, &mut symtab, "abort", &abort_words);
     emit_symbol_function(
         &mut text,
         &mut strtab,

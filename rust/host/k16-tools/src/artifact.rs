@@ -13,7 +13,8 @@ impl K16ArtifactTarget {
     pub const BOOT_LOAD_BASE: u32 = 0x0800;
     pub const KERNEL_LOAD_BASE: u32 = 0x4000;
     pub const PROGRAM_LOAD_BASE: u32 = 0x1_5000;
-    pub const PROGRAM_STACK_TOP: u32 = 0x3_0000;
+    pub const PROGRAM_STACK_TOP: u32 = 0x8_0000;
+    pub const PROGRAM_INITIAL_STACK_POINTER: u32 = Self::PROGRAM_STACK_TOP - 16;
     pub const DEFAULT_MEMORY_SIZE: usize = Self::PROGRAM_STACK_TOP as usize;
 
     pub fn parse(value: &str) -> Result<Self, String> {
@@ -41,7 +42,8 @@ impl K16ArtifactTarget {
 
     pub fn payload_end_limit(self) -> Option<u32> {
         match self {
-            Self::Program | Self::ProgramDynamic => Some(Self::PROGRAM_STACK_TOP),
+            Self::Program => Some(Self::PROGRAM_STACK_TOP),
+            Self::ProgramDynamic => None,
             Self::Bios | Self::Boot | Self::Kernel => None,
         }
     }

@@ -1,6 +1,6 @@
 # kraft-std Guest Library
 
-Issue: [#192](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/192), [#194](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/194), [#195](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/195), [#230](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/230), [#232](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/232), [#247](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/247), [#248](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/248), [#249](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/249), [#295](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/295), [#296](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/296), [#297](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/297)
+Issue: [#192](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/192), [#194](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/194), [#195](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/195), [#230](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/230), [#232](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/232), [#247](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/247), [#248](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/248), [#249](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/249), [#295](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/295), [#296](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/296), [#297](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/297), [#333](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/333)
 
 `rust/guest/kraft-std` is the experimental KraftOS userland library boundary for
 guest Rust programs. It is intentionally separate from the lower-level K16
@@ -58,6 +58,13 @@ under Rust `std`, libc, libc++, and KraftOS-specific extensions. In that model,
 `kraft-std` remains the current incubator for userland API decisions and the
 future extension crate for K16/KraftOS APIs that do not belong in language
 standard libraries.
+
+The first hosted Rust stage is a narrow proof, not a replacement for
+`kraft-std`. `rust/guest/k16-hosted-hello` uses ordinary Rust `std`, ordinary
+`fn main()`, stdout, and panic-abort, and is built by the
+`:v1_21_1-neoforge:compileK16HostedHello` Gradle task. Broader hosted `std`
+coverage remains gated on explicit OS-backed APIs rather than silent no-op
+platform behavior.
 
 The current filesystem surface is a small ROOT/K16FS proof for absolute paths:
 read-only opens, create/truncate write-only opens, whole-slice writes within

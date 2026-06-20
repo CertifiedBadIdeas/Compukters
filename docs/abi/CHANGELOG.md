@@ -216,6 +216,13 @@
   `program`/`program-dynamic` targets remain bounded by the current program
   stack top. The old kernel payload budget/headroom script is now a kernel
   payload inspector.
+- K16 host tooling now uses a 512 KiB standalone program RAM/stack profile and no
+  longer applies the fixed-image payload cap to `program-dynamic` artifacts.
+  Dynamic user programs remain base-relative and are still range-checked by the
+  loader/runtime that chooses their concrete arena.
+- The K16 Rust target spec now identifies the OS as `kraftos` instead of using
+  `target_os = "none"` with a KraftOS environment marker. KraftOS-specific
+  `std` platform hooks should key off `target_os = "kraftos"`.
 - The K16 kernel now derives init's upper process memory boundary from profile
   v2 `BootInfo.ram_size` instead of a kernel-local machine-profile constant.
   Boot-info validation rejects missing or too-small RAM boundaries before

@@ -1,7 +1,7 @@
 {
   "llvm-target": "k16",
   "arch": "k16",
-  "os": "none",
+  "os": "kraftos",
   "vendor": "unknown",
   "env": "",
   "target-endian": "little",
@@ -15,7 +15,7 @@
   "function-sections": true,
   "disable-redzone": true,
   "singlethread": true,
-  "atomic-cas": false,
-  "max-atomic-width": 0,
+  "atomic-cas": true,
+  "max-atomic-width": 32,
   "linker-flavor": "ld.lld"
 }

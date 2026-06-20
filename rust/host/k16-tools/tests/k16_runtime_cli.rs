@@ -35,7 +35,7 @@ fn k16_runtime_startup_accepts_dynamic_program_target_without_fixed_stack_top() 
     );
 
     let startup_object = fs::read(startup_path).expect("startup object reads");
-    let fixed_stack_top_words = const32(15, K16ArtifactTarget::PROGRAM_STACK_TOP);
+    let fixed_stack_top_words = const32(15, K16ArtifactTarget::PROGRAM_INITIAL_STACK_POINTER);
     let fixed_stack_top_bytes = words_to_bytes(&fixed_stack_top_words);
 
     assert!(
@@ -1193,6 +1193,188 @@ fn panic(_info: &PanicInfo<'_>) -> ! {
     );
 }
 
+#[test]
+fn k16_rust_hosted_std_main_println_exits_successfully() {
+    let work_dir = temp_dir("hosted-std-main");
+    let src_dir = work_dir.join("src");
+    fs::create_dir_all(&src_dir).expect("source directory creates");
+    fs::write(
+        work_dir.join("Cargo.toml"),
+        r#"[package]
+name = "k16-hosted-std-main"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "k16-hosted-std-main"
+path = "src/main.rs"
+test = false
+"#,
+    )
+    .expect("Cargo.toml writes");
+    fs::write(
+        src_dir.join("main.rs"),
+        r#"use std::io::Write;
+
+fn main() {
+    println!("hosted std hello");
+    std::io::stdout().flush().unwrap();
+}
+"#,
+    )
+    .expect("main.rs writes");
+
+    write_runtime_object_for_target("k16-startup", "program", &work_dir.join("startup.o"));
+    write_k16_debug_write_syscall_stub(&work_dir);
+
+    let rustflags = format!(
+        "-C linker={} -C link-arg={} -C link-arg={} -C link-arg={} -C link-arg=--k16-target=program -Cpasses=lower-atomic -Copt-level=z -Cjump-tables=no -Cdebuginfo=0 -Cdebug-assertions=off -Coverflow-checks=off -Zub-checks=no",
+        k16_ld_binary(),
+        work_dir.join("startup.o").display(),
+        work_dir.join("write-stub.o").display(),
+        work_dir.join("abort.o").display(),
+    );
+    let cargo_output = Command::new(k16_cargo())
+        .args([
+            "rustc",
+            "-Z",
+            "build-std=std,panic_abort",
+            "-Z",
+            "build-std-features=compiler-builtins-mem",
+            "-Z",
+            "json-target-spec",
+            "--manifest-path",
+            work_dir.join("Cargo.toml").to_str().unwrap(),
+            "--target",
+            k16_target_spec().to_str().unwrap(),
+            "--target-dir",
+            work_dir.join("target").to_str().unwrap(),
+            "--bin",
+            "k16-hosted-std-main",
+            "--",
+            "-C",
+            "panic=abort",
+            "-C",
+            "relocation-model=static",
+            "-Cjump-tables=no",
+            "-Cdebuginfo=0",
+            "-Cdebug-assertions=off",
+            "-Coverflow-checks=off",
+            "-Zub-checks=no",
+        ])
+        .env("RUSTC", k16_rustc())
+        .env("RUSTC_BOOTSTRAP", "1")
+        .env("RUSTFLAGS", rustflags)
+        .output()
+        .expect("cargo rustc runs");
+    assert!(
+        cargo_output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&cargo_output.stderr)
+    );
+
+    let linked_program = find_linked_rust_bin(&work_dir);
+    let run_output = Command::new(k16_binary())
+        .args(["run", linked_program.to_str().unwrap()])
+        .output()
+        .expect("k16 run runs");
+    assert!(
+        run_output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&run_output.stderr)
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&run_output.stdout),
+        "signal=halt exit_status=0 debug_bytes=686f73746564207374642068656c6c6f0a\n"
+    );
+}
+
+fn write_k16_debug_write_syscall_stub(work_dir: &Path) {
+    let stub_dir = work_dir.join("write-stub");
+    let src_dir = stub_dir.join("src");
+    fs::create_dir_all(&src_dir).expect("write stub source directory creates");
+    fs::write(
+        stub_dir.join("Cargo.toml"),
+        r#"[package]
+name = "k16-debug-write-syscall-stub"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "k16_debug_write_syscall_stub"
+path = "src/lib.rs"
+test = false
+"#,
+    )
+    .expect("write stub Cargo.toml writes");
+    fs::write(
+        src_dir.join("lib.rs"),
+        r#"#![no_std]
+
+const DEBUG_WRITE: *mut u8 = 0x1000_0100 as *mut u8;
+const FD_STDOUT: u32 = 1;
+const FD_STDERR: u32 = 2;
+const ERROR_BAD_FD: u32 = 0xffff_fff7;
+
+#[no_mangle]
+pub extern "C" fn __k16_write_syscall(fd: u32, ptr: *const u8, len: u32) -> u32 {
+    if fd != FD_STDOUT && fd != FD_STDERR {
+        return ERROR_BAD_FD;
+    }
+    let mut index = 0;
+    while index < len {
+        unsafe {
+            let byte = core::ptr::read_volatile(ptr.add(index as usize));
+            core::ptr::write_volatile(DEBUG_WRITE, byte);
+        }
+        index += 1;
+    }
+    len
+}
+
+"#,
+    )
+    .expect("write stub lib.rs writes");
+    fs::write(work_dir.join("abort.o"), k16_abort_object()).expect("abort object writes");
+    let cargo_output = Command::new(k16_cargo())
+        .args([
+            "rustc",
+            "-Z",
+            "build-std=core",
+            "-Z",
+            "json-target-spec",
+            "--manifest-path",
+            stub_dir.join("Cargo.toml").to_str().unwrap(),
+            "--target",
+            k16_target_spec().to_str().unwrap(),
+            "--target-dir",
+            stub_dir.join("target").to_str().unwrap(),
+            "--lib",
+            "--",
+            "-C",
+            "panic=abort",
+            "-Copt-level=z",
+            "-C",
+            "relocation-model=static",
+            "-Cjump-tables=no",
+            "-Cdebuginfo=0",
+            &format!("--emit=obj={}", work_dir.join("write-stub.o").display()),
+        ])
+        .env("RUSTC", k16_rustc())
+        .env("RUSTC_BOOTSTRAP", "1")
+        .env(
+            "RUSTFLAGS",
+            "-Cpasses=lower-atomic -Copt-level=z -Cjump-tables=no -Cdebuginfo=0",
+        )
+        .output()
+        .expect("write stub cargo rustc runs");
+    assert!(
+        cargo_output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&cargo_output.stderr)
+    );
+}
+
 fn k16_main_returning_42_object() -> Vec<u8> {
     k16_object("main", &[0x01, 0xe0, 42, 0, 0, 0, 0x00, 0x90], None)
 }
@@ -1219,6 +1401,16 @@ fn k16_main_waiting_once_then_returning_7() -> Vec<u8> {
         &[0x01, 0xee, 0, 0, 0, 0, 0x00, 0x8e, 0x07, 0x10, 0x00, 0x90],
         Some((2, 2, "__k16_wait_once")),
     )
+}
+
+fn k16_abort_object() -> Vec<u8> {
+    let mut words = Vec::new();
+    words.extend(const32(1, k16_abi::syscall::EXIT));
+    words.push(const4(2, 1));
+    words.push(syscall(1));
+    words.push(halt());
+    let text = words_to_bytes(&words);
+    k16_object("abort", &text, None)
 }
 
 fn k16_write_syscall_stub_object() -> Vec<u8> {
@@ -1497,8 +1689,18 @@ fn repo_root() -> PathBuf {
 }
 
 fn write_runtime_object(name: &str, path: &std::path::Path) {
+    write_runtime_object_args(name, &["-o", path.to_str().unwrap()]);
+}
+
+fn write_runtime_object_for_target(name: &str, target: &str, path: &std::path::Path) {
+    write_runtime_object_args(name, &["--target", target, "-o", path.to_str().unwrap()]);
+}
+
+fn write_runtime_object_args(name: &str, args: &[&str]) {
+    let mut command_args = vec!["runtime", name];
+    command_args.extend_from_slice(args);
     let output = Command::new(k16_binary())
-        .args(["runtime", name, "-o", path.to_str().unwrap()])
+        .args(command_args)
         .env("K16_RUSTC", k16_rustc())
         .env("K16_RUST_TARGET_JSON", k16_target_spec())
         .env("K16_LLVM_BIN_DIR", k16_llvm_bin_dir())
