@@ -291,6 +291,53 @@ class K16ShellRuntimeSmokeTest {
     }
 
     @Test
+    fun runtimeDeviceContinuesMultiPathCoreutilsAfterPerPathErrors() {
+        val device = createDevice(deviceId = 243)
+
+        try {
+            device.turnOn()
+            waitForTerminalText(device, "K16> ")
+
+            var cursor = 0
+            cursor =
+                runShellCommandAndWait(
+                    device,
+                    cursor,
+                    "cat /etc/missing /etc/motd",
+                    "cat reports missing path and still prints later existing file",
+                    "ERR NOENT /etc/missing",
+                    "K16 FS OK",
+                    "ERR EXIT 1",
+                )
+            cursor = runShellCommandAndWait(device, cursor, "status", "cat mixed result is remembered", "STATUS 1")
+            cursor =
+                runShellCommandAndWait(
+                    device,
+                    cursor,
+                    "stat /etc/missing /etc/motd",
+                    "stat reports missing path and still prints later existing metadata",
+                    "ERR NOENT /etc/missing",
+                    "FILE 10 /etc/motd",
+                    "ERR EXIT 1",
+                )
+            cursor = runShellCommandAndWait(device, cursor, "status", "stat mixed result is remembered", "STATUS 1")
+            cursor =
+                runShellCommandAndWait(
+                    device,
+                    cursor,
+                    "ls /etc/missing /bin",
+                    "ls reports missing path and still lists later existing directory",
+                    "ERR NOENT /etc/missing",
+                    "ls.kx",
+                    "ERR EXIT 1",
+                )
+            runShellCommandAndWait(device, cursor, "status", "ls mixed result is remembered", "STATUS 1")
+        } finally {
+            device.close()
+        }
+    }
+
+    @Test
     fun runtimeDeviceAcceptsLongHeapBackedEchoInputThroughUserlandShell() {
         val device = createDevice(deviceId = 227)
         val payload = "x".repeat(180)
