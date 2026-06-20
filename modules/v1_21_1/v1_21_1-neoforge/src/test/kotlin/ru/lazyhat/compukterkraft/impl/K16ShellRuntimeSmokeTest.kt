@@ -243,6 +243,26 @@ class K16ShellRuntimeSmokeTest {
     }
 
     @Test
+    fun runtimeDeviceReportsNonZeroChildExitStatusThroughUserlandShell() {
+        val device = createDevice(deviceId = 241)
+
+        try {
+            device.turnOn()
+            waitForTerminalText(device, "K16> ")
+
+            runShellCommandAndWait(
+                device,
+                cursor = 0,
+                command = "cat /etc/missing",
+                description = "cat missing file reports child exit status and returns prompt",
+                "ERR EXIT 1",
+            )
+        } finally {
+            device.close()
+        }
+    }
+
+    @Test
     fun runtimeDeviceAcceptsLongHeapBackedEchoInputThroughUserlandShell() {
         val device = createDevice(deviceId = 227)
         val payload = "x".repeat(180)

@@ -204,7 +204,11 @@ kinds as hard load failures. Shell-launched foreground utilities use the same
 K16 `RUN` kernel boundary as init-launched shell startup: the shell resolves the
 command to a `/bin/*.kx` path, the kernel opens that file from ROOT/K16FS on
 `storage0`, validates the dynamic `K16E` program image, and starts the child
-process. There is no bundled-program fallback when the file is missing.
+process. `RUN` returns a non-negative child exit status after a successful
+launch, or a negative K16 error when launch/fault handling fails before normal
+child completion. The bundled shell prints non-zero child statuses as
+`ERR EXIT <status>`. There is no bundled-program fallback when the file is
+missing.
 
 The public CLI namespace is filesystem-specific:
 
