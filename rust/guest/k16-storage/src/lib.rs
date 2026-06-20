@@ -56,6 +56,7 @@ impl StorageError {
     pub const STORAGE_MEDIA: Self = Self { code: 18 };
     pub const OUTPUT_BUFFER_TOO_SMALL: Self = Self { code: 19 };
     pub const OUTPUT_TRANSFER: Self = Self { code: 20 };
+    pub const PATH_NOT_EMPTY: Self = Self { code: 21 };
 
     pub const fn code(self) -> i32 {
         self.code
@@ -224,6 +225,57 @@ pub unsafe fn remove_file_from_storage0(
         extent_block_counts: [0; K16FS_MAX_INLINE_EXTENTS],
     };
     unsafe { encode_deleted_file_inode(deleted)? };
+    unsafe { encode_deleted_directory_entry_at(slot_block, slot_offset) }
+}
+
+pub unsafe fn create_directory_from_storage0(
+    partition_type: &[u8; 4],
+    path: &[&[u8]],
+) -> Result<(), StorageError> {
+    if path.is_empty() {
+        return Err(StorageError::PATH_NOT_FOUND);
+    }
+    unsafe { read_partition(partition_type)? };
+    unsafe { read_superblock()? };
+    unsafe { create_empty_directory(path) }
+}
+
+pub unsafe fn remove_directory_from_storage0(
+    partition_type: &[u8; 4],
+    path: &[&[u8]],
+) -> Result<(), StorageError> {
+    if path.is_empty() {
+        return Err(StorageError::PATH_NOT_FOUND);
+    }
+    unsafe { read_partition(partition_type)? };
+    unsafe { read_superblock()? };
+    let parent_len = path.len() - 1;
+    unsafe { find_directory_inode(&path[..parent_len])? };
+    let (inode_id, slot_block, slot_offset) =
+        unsafe { find_directory_entry_slot(path[parent_len])? };
+    unsafe { read_inode(inode_id)? };
+    if unsafe { read_u32(STATE_INODE_STATE) as u8 } != 2 {
+        return Err(StorageError::PATH_NOT_FOUND);
+    }
+    unsafe { ensure_selected_directory_is_empty()? };
+    let metadata = unsafe { selected_file_metadata() };
+    let mut extent_index = 0;
+    while extent_index < metadata.extent_count as usize {
+        let start_block = metadata.extent_start_blocks[extent_index];
+        let block_count = metadata.extent_block_counts[extent_index];
+        validate_extent(start_block, block_count, unsafe {
+            read_u32(STATE_SUPERBLOCK_TOTAL_BLOCKS)
+        })?;
+        let mut block = start_block;
+        while block < start_block + block_count {
+            unsafe { clear_scratch_block() };
+            unsafe { write_fs_block(block)? };
+            unsafe { mark_block_free(block)? };
+            block += 1;
+        }
+        extent_index += 1;
+    }
+    unsafe { encode_deleted_directory_inode(metadata)? };
     unsafe { encode_deleted_directory_entry_at(slot_block, slot_offset) }
 }
 
@@ -452,6 +504,45 @@ unsafe fn create_empty_file(path: &[&[u8]]) -> Result<FileMetadata, StorageError
     unsafe { encode_selected_inode_size(parent_inode_id, new_size)? };
     unsafe { read_inode(inode_id)? };
     Ok(unsafe { selected_file_metadata() })
+}
+
+unsafe fn create_empty_directory(path: &[&[u8]]) -> Result<(), StorageError> {
+    let parent_len = path.len() - 1;
+    let name = path[parent_len];
+    unsafe { find_directory_inode(&path[..parent_len])? };
+    match unsafe { find_directory_entry(name) } {
+        Ok(_) => return Err(StorageError::INVALID_FILESYSTEM),
+        Err(error) if error == StorageError::PATH_NOT_FOUND => {}
+        Err(error) => return Err(error),
+    }
+    unsafe { find_selected_directory_free_slot()? };
+    let parent_inode_id = unsafe { read_u32(STATE_SELECTED_INODE_ID) };
+    let slot_block = unsafe { read_u32(STATE_DIRECTORY_SLOT_BLOCK) };
+    let slot_offset = unsafe { read_u32(STATE_DIRECTORY_SLOT_OFFSET) };
+    let slot_directory_offset = unsafe { read_u32(STATE_DIRECTORY_SLOT_DIRECTORY_OFFSET) };
+    let inode_id = unsafe { allocate_inode()? };
+    let start_block = unsafe { allocate_contiguous_blocks(1)? };
+    unsafe { clear_scratch_block() };
+    unsafe { write_fs_block(start_block)? };
+    let mut extent_start_blocks = [0; K16FS_MAX_INLINE_EXTENTS];
+    let mut extent_block_counts = [0; K16FS_MAX_INLINE_EXTENTS];
+    extent_start_blocks[0] = start_block;
+    extent_block_counts[0] = 1;
+    let metadata = FileMetadata {
+        inode_id,
+        size_bytes: 0,
+        extent_count: 1,
+        extent_start_blocks,
+        extent_block_counts,
+    };
+    unsafe { encode_directory_inode(metadata)? };
+    unsafe { encode_directory_entry_at(slot_block, slot_offset, inode_id, name)? };
+    unsafe { read_inode(parent_inode_id)? };
+    let new_size = max_u32(
+        unsafe { read_u32(STATE_INODE_SIZE_BYTES) },
+        slot_directory_offset + K16FS_DIRECTORY_ENTRY_SIZE,
+    );
+    unsafe { encode_selected_inode_size(parent_inode_id, new_size) }
 }
 
 unsafe fn truncate_selected_file() -> Result<(), StorageError> {
@@ -698,6 +789,47 @@ pub unsafe fn copy_selected_directory_listing_into<S: DirectoryListingSink>(
     Ok(sink.written())
 }
 
+unsafe fn ensure_selected_directory_is_empty() -> Result<(), StorageError> {
+    if unsafe { read_u32(STATE_INODE_STATE) as u8 } != 2
+        || unsafe { read_u32(STATE_INODE_SIZE_BYTES) } % K16FS_DIRECTORY_ENTRY_SIZE != 0
+    {
+        return Err(StorageError::INVALID_FILESYSTEM);
+    }
+
+    let mut remaining = unsafe { read_u32(STATE_INODE_SIZE_BYTES) };
+    let mut extent_index = 0;
+    while extent_index < unsafe { read_u32(STATE_INODE_EXTENT_COUNT) as usize } {
+        let extent_start_block =
+            unsafe { read_u32(STATE_INODE_EXTENT_START_BLOCKS + extent_index as u32 * 4) };
+        let extent_block_count =
+            unsafe { read_u32(STATE_INODE_EXTENT_BLOCK_COUNTS + extent_index as u32 * 4) };
+        validate_extent(extent_start_block, extent_block_count, unsafe {
+            read_u32(STATE_SUPERBLOCK_TOTAL_BLOCKS)
+        })?;
+        let mut block_index = 0;
+        while block_index < extent_block_count {
+            unsafe { read_fs_block(extent_start_block + block_index)? };
+            let mut offset = 0;
+            while offset < BLOCK_SIZE && remaining > 0 {
+                match scratch_u8(offset) {
+                    0 | 2 => {}
+                    1 => return Err(StorageError::PATH_NOT_EMPTY),
+                    _ => return Err(StorageError::INVALID_FILESYSTEM),
+                }
+                remaining -= K16FS_DIRECTORY_ENTRY_SIZE;
+                offset += K16FS_DIRECTORY_ENTRY_SIZE;
+            }
+            block_index += 1;
+        }
+        extent_index += 1;
+    }
+
+    if remaining != 0 {
+        return Err(StorageError::INVALID_FILESYSTEM);
+    }
+    Ok(())
+}
+
 pub unsafe fn copy_selected_file_range_to_ram(
     file_offset: u32,
     dst_addr: u32,
@@ -879,6 +1011,19 @@ unsafe fn encode_file_inode(metadata: FileMetadata) -> Result<(), StorageError> 
     }
 }
 
+unsafe fn encode_directory_inode(metadata: FileMetadata) -> Result<(), StorageError> {
+    unsafe {
+        encode_inode(
+            metadata.inode_id,
+            2,
+            metadata.size_bytes,
+            metadata.extent_count,
+            &metadata.extent_start_blocks,
+            &metadata.extent_block_counts,
+        )
+    }
+}
+
 unsafe fn encode_deleted_file_inode(metadata: FileMetadata) -> Result<(), StorageError> {
     unsafe {
         encode_inode(
@@ -888,6 +1033,19 @@ unsafe fn encode_deleted_file_inode(metadata: FileMetadata) -> Result<(), Storag
             metadata.extent_count,
             &metadata.extent_start_blocks,
             &metadata.extent_block_counts,
+        )
+    }
+}
+
+unsafe fn encode_deleted_directory_inode(metadata: FileMetadata) -> Result<(), StorageError> {
+    unsafe {
+        encode_inode(
+            metadata.inode_id,
+            3,
+            0,
+            0,
+            &[0; K16FS_MAX_INLINE_EXTENTS],
+            &[0; K16FS_MAX_INLINE_EXTENTS],
         )
     }
 }

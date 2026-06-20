@@ -12,6 +12,8 @@ members = [
     "k16-stat",
     "k16-write",
     "k16-rm",
+    "k16-mkdir",
+    "k16-rmdir",
     "k16-alloc-test",
     "k16-kernel",
     "k16-rt",

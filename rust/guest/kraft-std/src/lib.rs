@@ -254,6 +254,28 @@ pub mod fs {
         Ok(())
     }
 
+    pub fn create_dir(path: &str) -> Result<(), Error> {
+        if path.len() > k16_abi::syscall::MAX_STAT_PATH_BYTES {
+            return Err(Error::InvalidArgument);
+        }
+        let returned = k16_rt::mkdir_syscall(path.as_ptr(), path.len());
+        if is_error_status(returned) {
+            return Err(Error::Syscall(returned));
+        }
+        Ok(())
+    }
+
+    pub fn remove_dir(path: &str) -> Result<(), Error> {
+        if path.len() > k16_abi::syscall::MAX_STAT_PATH_BYTES {
+            return Err(Error::InvalidArgument);
+        }
+        let returned = k16_rt::rmdir_syscall(path.as_ptr(), path.len());
+        if is_error_status(returned) {
+            return Err(Error::Syscall(returned));
+        }
+        Ok(())
+    }
+
     struct ReadDirRequest {
         bytes: [u8; k16_abi::syscall::MAX_READ_DIR_REQUEST_BYTES],
         len: usize,

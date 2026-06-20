@@ -97,6 +97,8 @@ pub mod syscall {
     pub const GAME_TICKS: u32 = 16;
     pub const SEEK: u32 = 17;
     pub const UNLINK: u32 = 18;
+    pub const MKDIR: u32 = 19;
+    pub const RMDIR: u32 = 20;
     pub const RUN_FORMAT_PATH: u32 = 0;
     pub const RUN_FORMAT_ARGV: u32 = 1;
     pub const RUN_ARGV_MAGIC: u32 = u32::from_le_bytes(*b"RARG");
@@ -131,6 +133,7 @@ pub mod syscall {
     pub const ERROR_NO_FD: u32 = 0xffff_ffe8;
     pub const ERROR_NO_ENTRY: u32 = 0xffff_fffe;
     pub const ERROR_NO_MEMORY: u32 = 0xffff_fff4;
+    pub const ERROR_NOT_EMPTY: u32 = 0xffff_ffef;
     pub const DEBUG_MARKER_RETURN: u32 = 0x53;
     pub const STATUS_OK: u32 = 0;
 }
@@ -620,6 +623,8 @@ mod tests {
         assert_eq!(syscall::GAME_TICKS, 16);
         assert_eq!(syscall::SEEK, 17);
         assert_eq!(syscall::UNLINK, 18);
+        assert_eq!(syscall::MKDIR, 19);
+        assert_eq!(syscall::RMDIR, 20);
         assert_eq!(syscall::OPEN_READ_ONLY, 0);
         assert_eq!(syscall::OPEN_WRITE_ONLY, 1);
         assert_eq!(syscall::OPEN_CREATE, 2);
@@ -638,6 +643,7 @@ mod tests {
         assert_eq!(syscall::MAX_STAT_PATH_BYTES, 228);
         assert_eq!(syscall::STAT_METADATA_BYTES, 16);
         assert_eq!(syscall::GAME_TICKS_BYTES, 8);
+        assert_eq!(syscall::ERROR_NOT_EMPTY, 0xffff_ffef);
         assert_eq!(syscall::FILE_TYPE_REGULAR, 1);
         assert_eq!(syscall::FILE_TYPE_DIRECTORY, 2);
         assert_eq!(syscall::FD_STDIN, 0);

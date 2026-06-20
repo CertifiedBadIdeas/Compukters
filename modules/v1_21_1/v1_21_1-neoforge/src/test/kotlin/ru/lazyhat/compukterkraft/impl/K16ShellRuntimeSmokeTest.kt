@@ -339,6 +339,66 @@ class K16ShellRuntimeSmokeTest {
                 val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex)
                 commandIndex >= 0 && outputIndex > commandIndex && returnedPromptIndex > outputIndex
             }
+
+            dispatchText(device, "mkdir /etc/user\n")
+            waitForTerminal(device, "mkdir output and returned prompt") { terminal ->
+                val commandIndex = terminal.lastIndexOf("K16> mkdir /etc/user")
+                val outputIndex = terminal.indexOf("CREATED /etc/user", startIndex = commandIndex + "K16> mkdir /etc/user".length)
+                val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex)
+                commandIndex >= 0 && outputIndex > commandIndex && returnedPromptIndex > outputIndex
+            }
+
+            dispatchText(device, "stat /etc/user\n")
+            waitForTerminal(device, "stat output for created directory and returned prompt") { terminal ->
+                val commandIndex = terminal.lastIndexOf("K16> stat /etc/user")
+                val outputIndex = terminal.indexOf("DIR ", startIndex = commandIndex + "K16> stat /etc/user".length)
+                val pathIndex = terminal.indexOf("/etc/user", startIndex = outputIndex)
+                val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = pathIndex)
+                commandIndex >= 0 && outputIndex > commandIndex && pathIndex > outputIndex && returnedPromptIndex > pathIndex
+            }
+
+            dispatchText(device, "write /etc/user/file.txt data\n")
+            waitForTerminal(device, "nested file write output and returned prompt") { terminal ->
+                val commandIndex = terminal.lastIndexOf("K16> write /etc/user/file.txt data")
+                val outputIndex =
+                    terminal.indexOf("WROTE 4 /etc/user/file.txt", startIndex = commandIndex + "K16> write /etc/user/file.txt data".length)
+                val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex)
+                commandIndex >= 0 && outputIndex > commandIndex && returnedPromptIndex > outputIndex
+            }
+
+            dispatchText(device, "rmdir /etc/user\n")
+            waitForTerminal(device, "rmdir non-empty directory error and returned prompt") { terminal ->
+                val commandIndex = terminal.lastIndexOf("K16> rmdir /etc/user")
+                val outputIndex = terminal.indexOf("ERR NOTEMPTY /etc/user", startIndex = commandIndex + "K16> rmdir /etc/user".length)
+                val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex)
+                commandIndex >= 0 && outputIndex > commandIndex && returnedPromptIndex > outputIndex
+            }
+
+            dispatchText(device, "rm /etc/user/file.txt\n")
+            waitForTerminal(device, "nested file rm output and returned prompt") { terminal ->
+                val commandIndex = terminal.lastIndexOf("K16> rm /etc/user/file.txt")
+                val outputIndex =
+                    terminal.indexOf("REMOVED /etc/user/file.txt", startIndex = commandIndex + "K16> rm /etc/user/file.txt".length)
+                val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex)
+                commandIndex >= 0 && outputIndex > commandIndex && returnedPromptIndex > outputIndex
+            }
+
+            dispatchText(device, "rmdir /etc/user\n")
+            waitForTerminal(device, "rmdir empty directory output and returned prompt") { terminal ->
+                val commandIndex = terminal.lastIndexOf("K16> rmdir /etc/user")
+                val outputIndex = terminal.indexOf("REMOVED /etc/user", startIndex = commandIndex + "K16> rmdir /etc/user".length)
+                val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex)
+                commandIndex >= 0 && outputIndex > commandIndex && returnedPromptIndex > outputIndex
+            }
+
+            dispatchText(device, "stat /etc/user\n")
+            waitForTerminal(device, "stat output after removed directory and returned prompt") { terminal ->
+                val commandIndex = terminal.lastIndexOf("K16> stat /etc/user")
+                val outputIndex =
+                    terminal.indexOf("ERR NOENT /etc/user", startIndex = commandIndex + "K16> stat /etc/user".length)
+                val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex)
+                commandIndex >= 0 && outputIndex > commandIndex && returnedPromptIndex > outputIndex
+            }
         } finally {
             device.close()
         }

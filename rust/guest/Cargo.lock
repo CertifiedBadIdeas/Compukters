@@ -78,7 +78,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "k16-mkdir"
+version = "0.1.0"
+dependencies = [
+ "kraft-std",
+]
+
+[[package]]
 name = "k16-rm"
+version = "0.1.0"
+dependencies = [
+ "kraft-std",
+]
+
+[[package]]
+name = "k16-rmdir"
 version = "0.1.0"
 dependencies = [
  "kraft-std",

@@ -1,6 +1,6 @@
 # kraft-std Guest Library
 
-Issue: [#192](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/192), [#194](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/194), [#195](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/195), [#230](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/230), [#232](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/232), [#247](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/247), [#248](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/248), [#249](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/249), [#295](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/295), [#296](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/296)
+Issue: [#192](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/192), [#194](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/194), [#195](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/195), [#230](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/230), [#232](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/232), [#247](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/247), [#248](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/248), [#249](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/249), [#295](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/295), [#296](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/296), [#297](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/297)
 
 `rust/guest/kraft-std` is the experimental KraftOS userland library boundary for
 guest Rust programs. It is intentionally separate from the lower-level K16
@@ -30,6 +30,8 @@ The initial `kraft-std` surface is deliberately small:
 | `kraft_std::fs::File::seek_end()` | `k16_rt::seek_syscall(fd, 0, SEEK_END)` | Sets a regular file descriptor offset to EOF and returns the file size. |
 | `kraft_std::fs::File::close()` | `k16_rt::close_syscall(fd)` | Releases an open regular file descriptor owned by the current foreground process. |
 | `kraft_std::fs::remove_file(path)` | `k16_rt::unlink_syscall(path, len)` | Removes an absolute ROOT/K16FS regular file path. Directories and files with open kernel fds are rejected by the kernel. |
+| `kraft_std::fs::create_dir(path)` | `k16_rt::mkdir_syscall(path, len)` | Creates an absolute ROOT/K16FS directory path. Parent directories must already exist. |
+| `kraft_std::fs::remove_dir(path)` | `k16_rt::rmdir_syscall(path, len)` | Removes an empty absolute ROOT/K16FS directory path. Non-empty directories are rejected by the kernel. |
 | `kraft_std::heap::brk(address)` | `k16_rt::brk_syscall(address)` | Sets the current foreground process program break and returns the resulting break. |
 | `kraft_std::heap::sbrk(delta)` | `k16_rt::sbrk_syscall(delta)` | Grows the current foreground process program break and returns the previous break. |
 | `kraft_std::heap::SbrkAllocator` | `BRK`/`SBRK` syscall ABI | Guest global allocator used by `alloc` collections. Allocation is monotonic; deallocation is currently a no-op. |
@@ -47,7 +49,8 @@ kernel fd syscall ABI, not debug MMIO.
 `kraft-std` is `#![no_std]`. It is not Rust's hosted `std`, a POSIX layer, or a
 complete OS API. The current filesystem surface is a small ROOT/K16FS proof for
 absolute paths: read-only opens, create/truncate write-only opens, whole-slice
-writes within preallocated file extents, directory listing, and metadata.
+writes within preallocated file extents, directory creation/removal, directory
+listing, and metadata.
 Regular file descriptors are process-owned and are not inherited across
 `process::run`. The current allocator surface is a monotonic `SBRK`-backed
 guest allocator for foreground userland programs. Append, seek, multi-extent

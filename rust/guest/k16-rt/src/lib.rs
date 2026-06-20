@@ -17,9 +17,9 @@ mod tests;
 pub mod host_test {
     pub use k16_abi::syscall::{
         BRK, CLOSE, DEBUG_MARKER, DEBUG_MARKER_RETURN, DEBUG_WRITE_BYTE, ERROR_BAD_FD, ERROR_FAULT,
-        ERROR_NO_ENTRY, ERROR_NO_MEMORY, EXIT, FD_STDERR, FD_STDIN, FD_STDOUT, GAME_TICKS, OPEN,
-        READ, READ_DIR, RUN, RUN_FORMAT_ARGV, SBRK, SEEK, SLEEP_TICKS, STAT, STATUS_OK, UNLINK,
-        WRITE, YIELD,
+        ERROR_NOT_EMPTY, ERROR_NO_ENTRY, ERROR_NO_MEMORY, EXIT, FD_STDERR, FD_STDIN, FD_STDOUT,
+        GAME_TICKS, MKDIR, OPEN, READ, READ_DIR, RMDIR, RUN, RUN_FORMAT_ARGV, SBRK, SEEK,
+        SLEEP_TICKS, STAT, STATUS_OK, UNLINK, WRITE, YIELD,
     };
 
     pub fn reset_syscalls() {
@@ -92,9 +92,9 @@ pub use time::{
 pub use trap::{
     brk_syscall, close_syscall, debug_marker, debug_write_byte, disable_interrupts,
     enable_interrupts, exit_syscall, game_ticks_syscall, install_trap_vector, interrupt_pending,
-    iret_once, iret_with_r0, open_syscall, read_dir_syscall, read_syscall, restore_trap_frame,
-    run_argv_syscall, run_syscall, save_trap_frame, sbrk_syscall, seek_syscall, set_interrupt_mask,
-    sleep_ticks_syscall, stat_syscall, syscall0, syscall1, syscall3, syscall_arg0, syscall_arg1,
-    syscall_arg2, syscall_once, trap_cause, trap_pc, trap_value, unlink_syscall, write_syscall,
-    yield_syscall, TrapFrame,
+    iret_once, iret_with_r0, mkdir_syscall, open_syscall, read_dir_syscall, read_syscall,
+    restore_trap_frame, rmdir_syscall, run_argv_syscall, run_syscall, save_trap_frame,
+    sbrk_syscall, seek_syscall, set_interrupt_mask, sleep_ticks_syscall, stat_syscall, syscall0,
+    syscall1, syscall3, syscall_arg0, syscall_arg1, syscall_arg2, syscall_once, trap_cause,
+    trap_pc, trap_value, unlink_syscall, write_syscall, yield_syscall, TrapFrame,
 };

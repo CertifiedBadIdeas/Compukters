@@ -542,6 +542,8 @@ K16 syscall ABI v0 names the current Rust-kernel proof services in
 | `GAME_TICKS` | `16` | `k16_rt::game_ticks_syscall(out)` | Copies the current `timer0.game_ticks` value into an 8-byte user buffer as little-endian `{ low, high }` words and returns `STATUS_OK`, or returns a negative K16 error. |
 | `SEEK` | `17` | `k16_rt::seek_syscall(fd, offset, whence)` | Sets a regular file descriptor offset and returns the new offset. `SEEK_SET` accepts offsets inside the current file size. `SEEK_END` currently accepts only offset `0` and returns EOF. Standard descriptors are not seekable. |
 | `UNLINK` | `18` | `k16_rt::unlink_syscall(path, len)` | Removes an absolute ROOT/K16FS regular file path from `storage0`. Directories are rejected, and files with an open kernel fd are rejected with `ERROR_BUSY`. Returns `STATUS_OK` or a negative K16 error. |
+| `MKDIR` | `19` | `k16_rt::mkdir_syscall(path, len)` | Creates an absolute ROOT/K16FS directory path on `storage0`. Parent directories must already exist. Returns `STATUS_OK` or a negative K16 error. |
+| `RMDIR` | `20` | `k16_rt::rmdir_syscall(path, len)` | Removes an empty absolute ROOT/K16FS directory path from `storage0`. Regular files are rejected, and non-empty directories return `ERROR_NOT_EMPTY`. Returns `STATUS_OK` or a negative K16 error. |
 | `DEBUG_MARKER_RETURN` | `0x53` | n/a | Proof return value for `DEBUG_MARKER`. |
 | `STATUS_OK` | `0` | n/a | Successful proof-service status. |
 | `FILE_TYPE_REGULAR` | `1` | n/a | `STAT` response kind for a regular file. |
@@ -564,6 +566,7 @@ K16 syscall ABI v0 names the current Rust-kernel proof services in
 | `ERROR_NO_ENTRY` | `0xffff_fffe` | n/a | Negative K16 error value corresponding to POSIX-aware `ENOENT` semantics. |
 | `ERROR_NO_FD` | `0xffff_ffe8` | n/a | Negative K16 error value used when no regular file descriptor slot is available. |
 | `ERROR_NO_MEMORY` | `0xffff_fff4` | n/a | Negative K16 error value corresponding to POSIX-aware `ENOMEM` semantics. |
+| `ERROR_NOT_EMPTY` | `0xffff_ffef` | n/a | Negative K16 error value used when `RMDIR` rejects a directory with live entries. |
 
 These names describe the current ABI proof surface. They are not a complete OS
 service table, scheduler API, filesystem API, or process model.

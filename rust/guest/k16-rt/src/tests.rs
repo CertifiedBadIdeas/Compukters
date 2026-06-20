@@ -417,6 +417,42 @@ fn unlink_syscall_uses_path_pointer_length_and_reserved_argument() {
 }
 
 #[test]
+fn mkdir_syscall_uses_path_pointer_length_and_reserved_argument() {
+    crate::trap::reset_test_interrupts();
+    crate::trap::set_test_syscall_return(k16_abi::syscall::STATUS_OK);
+    let path = *b"/etc/user";
+
+    let returned = mkdir_syscall(path.as_ptr(), path.len());
+
+    assert_eq!(crate::trap::test_syscall_number(), k16_abi::syscall::MKDIR);
+    assert_eq!(
+        crate::trap::test_syscall_arg0(),
+        path.as_ptr() as usize as u32
+    );
+    assert_eq!(crate::trap::test_syscall_arg1(), path.len() as u32);
+    assert_eq!(crate::trap::test_syscall_arg2(), 0);
+    assert_eq!(returned, k16_abi::syscall::STATUS_OK);
+}
+
+#[test]
+fn rmdir_syscall_uses_path_pointer_length_and_reserved_argument() {
+    crate::trap::reset_test_interrupts();
+    crate::trap::set_test_syscall_return(k16_abi::syscall::STATUS_OK);
+    let path = *b"/etc/user";
+
+    let returned = rmdir_syscall(path.as_ptr(), path.len());
+
+    assert_eq!(crate::trap::test_syscall_number(), k16_abi::syscall::RMDIR);
+    assert_eq!(
+        crate::trap::test_syscall_arg0(),
+        path.as_ptr() as usize as u32
+    );
+    assert_eq!(crate::trap::test_syscall_arg1(), path.len() as u32);
+    assert_eq!(crate::trap::test_syscall_arg2(), 0);
+    assert_eq!(returned, k16_abi::syscall::STATUS_OK);
+}
+
+#[test]
 fn read_dir_syscall_uses_request_pointer_length_and_reserved_argument() {
     crate::trap::reset_test_interrupts();
     crate::trap::set_test_syscall_return(24);
