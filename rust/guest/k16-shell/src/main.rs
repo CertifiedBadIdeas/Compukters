@@ -10,7 +10,7 @@ use kraft_std::prelude::*;
 const PROMPT: &[u8] = b"K16> ";
 const NEWLINE: &[u8] = b"\n";
 const HELP: &[u8] =
-    b"HELP\nCLEAR\nPWD\nCD [PATH]\nECHO\nTICKS\nSTATUS\nUNAME\nLS [PATH...]\nCAT <PATH...>\nCP <SRC> <DST>\nMV <SRC> <DST>\nSTAT <PATH...>\nWRITE [--append] <PATH> <TEXT>\nRM <PATH...>\nMKDIR <PATH...>\nRMDIR <PATH...>\nALLOC\n";
+    b"HELP\nCLEAR\nPWD\nCD [PATH]\nECHO\nTICKS\nSTATUS\nEXIT [CODE]\nUNAME\nLS [PATH...]\nCAT <PATH...>\nCP <SRC> <DST>\nMV <SRC> <DST>\nSTAT <PATH...>\nWRITE [--append] <PATH> <TEXT>\nRM <PATH...>\nMKDIR <PATH...>\nRMDIR <PATH...>\nALLOC\n";
 const BIN_PREFIX: &[u8] = b"/bin/";
 const PROGRAM_SUFFIX: &[u8] = b".kx";
 const ALLOC_ALIAS: &[u8] = b"alloc";
@@ -134,6 +134,13 @@ fn dispatch_command(
             *last_status = run_ticks(stdout);
         }
         Command::Status => write_status(stdout, *last_status),
+        Command::Exit(code) => match parse_exit_status(code) {
+            Ok(status) => process::exit(status),
+            Err(()) => {
+                must_write(stdout, b"ERR INVAL\n");
+                *last_status = k16_abi::syscall::ERROR_INVALID;
+            }
+        },
         Command::Echo(bytes) => {
             must_write(stdout, bytes);
             must_write(stdout, NEWLINE);
@@ -143,6 +150,29 @@ fn dispatch_command(
             *last_status = run_exec(stdout, cwd, arg_paths, program_path, name, args);
         }
     }
+}
+
+fn parse_exit_status(code: Option<&[u8]>) -> Result<u32, ()> {
+    let Some(bytes) = code else {
+        return Ok(0);
+    };
+    if bytes.is_empty() {
+        return Err(());
+    }
+    let mut status = 0_u32;
+    let mut index = 0;
+    while index < bytes.len() {
+        let byte = bytes[index];
+        if !byte.is_ascii_digit() {
+            return Err(());
+        }
+        status = status
+            .checked_mul(10)
+            .and_then(|value| value.checked_add((byte - b'0') as u32))
+            .ok_or(())?;
+        index += 1;
+    }
+    Ok(status)
 }
 
 fn run_pwd(stdout: io::Fd, cwd: &WorkingDirectory) {

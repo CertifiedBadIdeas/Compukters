@@ -50,6 +50,7 @@ pub enum Command<'a> {
     Cd(Option<&'a [u8]>),
     Ticks,
     Status,
+    Exit(Option<&'a [u8]>),
     Echo(&'a [u8]),
     Exec {
         name: &'a [u8],
@@ -159,6 +160,11 @@ pub fn classify_line(input: &[u8], line_len: usize) -> Command<'_> {
         Command::Ticks
     } else if matches_command(input, b"status") {
         Command::Status
+    } else if let Some(exit) = classify_exit(input, line_len) {
+        match exit {
+            Ok(code) => Command::Exit(code),
+            Err(()) => Command::Invalid,
+        }
     } else if is_echo_command(input, line_len) {
         let start = if line_len > 4 { 5 } else { 4 };
         Command::Echo(&input[start..line_len])
@@ -182,6 +188,39 @@ fn is_echo_command(input: &[u8], line_len: usize) -> bool {
 
 fn is_cd_command(input: &[u8], line_len: usize) -> bool {
     line_len > 3 && input[0] == b'c' && input[1] == b'd' && input[2] == b' '
+}
+
+fn classify_exit(input: &[u8], line_len: usize) -> Option<Result<Option<&[u8]>, ()>> {
+    let command = b"exit";
+    if input == command {
+        return Some(Ok(None));
+    }
+    if line_len <= command.len() || !input.starts_with(command) {
+        return None;
+    }
+    if !input[command.len()].is_ascii_whitespace() {
+        return None;
+    }
+    let mut cursor = command.len();
+    while cursor < line_len && input[cursor].is_ascii_whitespace() {
+        cursor += 1;
+    }
+    if cursor == line_len {
+        return Some(Ok(None));
+    }
+    let start = cursor;
+    while cursor < line_len && !input[cursor].is_ascii_whitespace() {
+        cursor += 1;
+    }
+    let arg = &input[start..cursor];
+    while cursor < line_len && input[cursor].is_ascii_whitespace() {
+        cursor += 1;
+    }
+    if cursor == line_len {
+        Some(Ok(Some(arg)))
+    } else {
+        Some(Err(()))
+    }
 }
 
 fn classify_exec(input: &[u8], line_len: usize) -> Command<'_> {
@@ -309,6 +348,33 @@ mod tests {
         }
 
         assert_eq!(line.command(), Command::Status);
+    }
+
+    #[test]
+    fn exit_command_is_recognized_as_shell_builtin() {
+        let mut line = InputLine::new();
+        for byte in b"exit" {
+            assert!(line.push_printable(*byte));
+        }
+
+        assert_eq!(line.command(), Command::Exit(None));
+    }
+
+    #[test]
+    fn exit_command_with_code_is_recognized_as_shell_builtin() {
+        let mut line = InputLine::new();
+        for byte in b"exit 7" {
+            assert!(line.push_printable(*byte));
+        }
+
+        assert_eq!(line.command(), Command::Exit(Some(b"7")));
+    }
+
+    #[test]
+    fn exit_command_rejects_more_than_one_argument() {
+        let command = super::classify_line(b"exit 1 2", 8);
+
+        assert_eq!(command, Command::Invalid);
     }
 
     #[test]
