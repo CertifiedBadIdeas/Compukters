@@ -24,6 +24,9 @@ const RELOCATION_RECORD_ADDR: u32 = 0x0000_0500;
 const MAX_PROCESS_SLOTS: usize = 3;
 const FOREGROUND_PROCESS_SLOTS: usize = MAX_PROCESS_SLOTS - 1;
 const INIT_PROCESS_SLOT: usize = 0;
+const INIT_PROCESS_PID: u32 = 1;
+const FIRST_CHILD_PROCESS_PID: u32 = 2;
+const NO_PROCESS_PID: u32 = 0;
 const NO_PARENT_SLOT: u32 = u32::MAX;
 const NO_CHILD_SLOT: u32 = u32::MAX;
 #[cfg(any(test, feature = "host-test"))]
@@ -44,6 +47,20 @@ static RUNTIME_SLOT2_FRAME: KernelCell<k16_rt::TrapFrame> =
     KernelCell::new(k16_rt::TrapFrame::zeroed());
 #[cfg(not(test))]
 static mut RUNTIME_CURRENT_SLOT: u32 = 0;
+#[cfg(not(test))]
+static mut RUNTIME_NEXT_PID: u32 = FIRST_CHILD_PROCESS_PID;
+#[cfg(not(test))]
+static mut RUNTIME_SLOT0_PID: u32 = INIT_PROCESS_PID;
+#[cfg(not(test))]
+static mut RUNTIME_SLOT1_PID: u32 = NO_PROCESS_PID;
+#[cfg(not(test))]
+static mut RUNTIME_SLOT2_PID: u32 = NO_PROCESS_PID;
+#[cfg(not(test))]
+static mut RUNTIME_SLOT0_PARENT_PID: u32 = NO_PROCESS_PID;
+#[cfg(not(test))]
+static mut RUNTIME_SLOT1_PARENT_PID: u32 = NO_PROCESS_PID;
+#[cfg(not(test))]
+static mut RUNTIME_SLOT2_PARENT_PID: u32 = NO_PROCESS_PID;
 #[cfg(not(test))]
 static mut RUNTIME_SLOT1_PARENT: u32 = NO_PARENT_SLOT;
 #[cfg(not(test))]
@@ -194,21 +211,18 @@ pub enum HeapError {
     OutOfMemory,
 }
 
-#[repr(u32)]
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum ProcessId {
-    Init,
-    Foreground1,
-    Foreground2,
-}
+pub struct ProcessId(u32);
 
 impl ProcessId {
-    const fn from_slot(slot: usize) -> Self {
-        match slot {
-            INIT_PROCESS_SLOT => Self::Init,
-            1 => Self::Foreground1,
-            _ => Self::Foreground2,
-        }
+    pub const INIT: Self = Self(INIT_PROCESS_PID);
+
+    pub const fn from_raw(pid: u32) -> Self {
+        Self(pid)
+    }
+
+    pub const fn raw(self) -> u32 {
+        self.0
     }
 }
 
@@ -454,7 +468,7 @@ pub struct ParentResume {
 impl ParentResume {
     pub const fn empty() -> Self {
         Self {
-            id: ProcessId::Init,
+            id: ProcessId::INIT,
             context: ProcessContext {
                 entry_pc: 0,
                 stack_top: 0,
@@ -658,6 +672,8 @@ impl ProcessDescriptor {
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 struct RuntimeForegroundSlotState {
+    pid: ProcessId,
+    parent_pid: Option<ProcessId>,
     parent_slot: u32,
     blocked_child_slot: u32,
     memory: Option<ProcessMemory>,
@@ -669,9 +685,16 @@ struct RuntimeForegroundSlotState {
 }
 
 impl RuntimeForegroundSlotState {
-    const fn from_process_resources(parent_slot: u32, resources: ProcessResources) -> Self {
+    const fn from_process_resources(
+        pid: ProcessId,
+        parent_pid: Option<ProcessId>,
+        parent_slot: u32,
+        resources: ProcessResources,
+    ) -> Self {
         let owned_resources = resources.owned_resources();
         Self {
+            pid,
+            parent_pid,
             parent_slot,
             blocked_child_slot: NO_CHILD_SLOT,
             memory: Some(resources.memory),
@@ -693,6 +716,8 @@ impl RuntimeForegroundSlotState {
 
     const fn cleared_after_exit(self) -> Self {
         Self {
+            pid: ProcessId::from_raw(NO_PROCESS_PID),
+            parent_pid: None,
             parent_slot: NO_PARENT_SLOT,
             blocked_child_slot: NO_CHILD_SLOT,
             memory: None,
@@ -717,6 +742,8 @@ pub enum TrapReturnOverride {
 #[cfg(any(test, feature = "host-test"))]
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 struct ProcessSlot {
+    pid: ProcessId,
+    parent_pid: Option<ProcessId>,
     state: ProcessState,
     parent_slot: u32,
     blocked_child_slot: u32,
@@ -739,6 +766,8 @@ impl ProcessSlot {
     const fn empty() -> Self {
         let lifecycle = ProcessSlotLifecycle::empty();
         Self {
+            pid: ProcessId::from_raw(NO_PROCESS_PID),
+            parent_pid: None,
             state: lifecycle.state,
             parent_slot: lifecycle.parent_slot,
             blocked_child_slot: lifecycle.blocked_child_slot,
@@ -763,6 +792,8 @@ impl ProcessSlot {
     const fn init(context: ProcessContext) -> Self {
         let lifecycle = ProcessSlotLifecycle::running_root();
         Self {
+            pid: ProcessId::INIT,
+            parent_pid: None,
             state: lifecycle.state,
             parent_slot: lifecycle.parent_slot,
             blocked_child_slot: lifecycle.blocked_child_slot,
@@ -813,6 +844,11 @@ impl ProcessSlot {
         self.heap_backing_pages = descriptor.resources.heap_backing_pages;
     }
 
+    fn initialize_identity(&mut self, pid: ProcessId, parent_pid: Option<ProcessId>) {
+        self.pid = pid;
+        self.parent_pid = parent_pid;
+    }
+
     const fn owned_resources(self) -> ProcessOwnedResources {
         ProcessOwnedResources {
             address_space: self.address_space,
@@ -827,6 +863,7 @@ impl ProcessSlot {
 pub struct ProcessTable {
     slots: [ProcessSlot; MAX_PROCESS_SLOTS],
     current_slot: usize,
+    next_pid: u32,
 }
 
 #[cfg(any(test, feature = "host-test"))]
@@ -839,6 +876,7 @@ impl ProcessTable {
                 ProcessSlot::empty(),
             ],
             current_slot: INIT_PROCESS_SLOT,
+            next_pid: FIRST_CHILD_PROCESS_PID,
         }
     }
 
@@ -870,7 +908,7 @@ impl ProcessTable {
         let init_slot = &mut self.slots[INIT_PROCESS_SLOT];
         init_slot.initialize_from_descriptor(descriptor);
         self.current_slot = INIT_PROCESS_SLOT;
-        Ok(descriptor.launch(ProcessId::Init))
+        Ok(descriptor.launch(ProcessId::INIT))
     }
 
     pub fn child_arena_for_init_frame(
@@ -936,6 +974,8 @@ impl ProcessTable {
             return Err(ProcessSwitchError::ChildAlreadyRunning);
         }
         let descriptor = ProcessDescriptor::for_child_plan(child_plan, argv, translated)?;
+        let child_pid = self.allocate_pid()?;
+        let parent_pid = self.slots[parent_slot].pid;
         let parent_lifecycle = parent_lifecycle.block_on_child(child_slot)?;
         let parent = &mut self.slots[parent_slot];
         parent.set_lifecycle(parent_lifecycle);
@@ -946,10 +986,11 @@ impl ProcessTable {
         parent.frame = init_frame;
         let child = &mut self.slots[child_slot];
         child.set_lifecycle(ProcessSlotLifecycle::running_child(parent_slot));
+        child.initialize_identity(child_pid, Some(parent_pid));
         child.initialize_from_descriptor(descriptor);
         child.exit_status = 0;
         self.current_slot = child_slot;
-        Ok(descriptor.launch(ProcessId::from_slot(child_slot)))
+        Ok(descriptor.launch(child_pid))
     }
 
     pub fn begin_translated_child_run(
@@ -993,7 +1034,7 @@ impl ProcessTable {
         self.current_slot = parent_slot;
         let parent = self.slots[parent_slot];
         Ok(ParentResume {
-            id: ProcessId::from_slot(parent_slot),
+            id: parent.pid,
             context: parent.context,
             frame: parent.frame,
             child_exit_status: status,
@@ -1007,6 +1048,22 @@ impl ProcessTable {
 
     pub const fn init_state(&self) -> ProcessState {
         self.slots[INIT_PROCESS_SLOT].state
+    }
+
+    pub const fn init_pid(&self) -> ProcessId {
+        self.slots[INIT_PROCESS_SLOT].pid
+    }
+
+    pub const fn init_parent_pid(&self) -> Option<ProcessId> {
+        self.slots[INIT_PROCESS_SLOT].parent_pid
+    }
+
+    pub const fn current_pid(&self) -> ProcessId {
+        self.slots[self.current_slot].pid
+    }
+
+    pub const fn current_parent_pid(&self) -> Option<ProcessId> {
+        self.slots[self.current_slot].parent_pid
     }
 
     pub const fn child_state(&self) -> ProcessState {
@@ -1076,6 +1133,15 @@ impl ProcessTable {
             slot += 1;
         }
         None
+    }
+
+    fn allocate_pid(&mut self) -> Result<ProcessId, ProcessSwitchError> {
+        let pid = self.next_pid;
+        self.next_pid = self
+            .next_pid
+            .checked_add(1)
+            .ok_or(ProcessSwitchError::ChildAlreadyRunning)?;
+        Ok(ProcessId::from_raw(pid))
     }
 
     fn current_heap(&self) -> Result<(u32, u32, u32), HeapError> {
@@ -1188,6 +1254,13 @@ pub unsafe fn initialize_init_process(
                 core::ptr::addr_of_mut!(RUNTIME_CURRENT_SLOT),
                 INIT_PROCESS_SLOT as u32,
             );
+            write_runtime_word(
+                core::ptr::addr_of_mut!(RUNTIME_NEXT_PID),
+                FIRST_CHILD_PROCESS_PID,
+            );
+            write_runtime_process_identity(INIT_PROCESS_SLOT, ProcessId::INIT, None);
+            write_runtime_process_identity(1, ProcessId::from_raw(NO_PROCESS_PID), None);
+            write_runtime_process_identity(2, ProcessId::from_raw(NO_PROCESS_PID), None);
             write_runtime_process_linkage(INIT_PROCESS_SLOT, NO_PARENT_SLOT, NO_CHILD_SLOT);
             write_runtime_process_linkage(1, NO_PARENT_SLOT, NO_CHILD_SLOT);
             write_runtime_process_linkage(2, NO_PARENT_SLOT, NO_CHILD_SLOT);
@@ -1248,6 +1321,13 @@ pub unsafe fn begin_translated_init_from_storage0(
             core::ptr::addr_of_mut!(RUNTIME_CURRENT_SLOT),
             INIT_PROCESS_SLOT as u32,
         );
+        write_runtime_word(
+            core::ptr::addr_of_mut!(RUNTIME_NEXT_PID),
+            FIRST_CHILD_PROCESS_PID,
+        );
+        write_runtime_process_identity(INIT_PROCESS_SLOT, ProcessId::INIT, None);
+        write_runtime_process_identity(1, ProcessId::from_raw(NO_PROCESS_PID), None);
+        write_runtime_process_identity(2, ProcessId::from_raw(NO_PROCESS_PID), None);
         write_runtime_process_linkage(INIT_PROCESS_SLOT, NO_PARENT_SLOT, NO_CHILD_SLOT);
         write_runtime_process_linkage(1, NO_PARENT_SLOT, NO_CHILD_SLOT);
         write_runtime_process_linkage(2, NO_PARENT_SLOT, NO_CHILD_SLOT);
@@ -1255,7 +1335,7 @@ pub unsafe fn begin_translated_init_from_storage0(
         *runtime_slot_frame(INIT_PROCESS_SLOT).get() = k16_rt::TrapFrame::from(descriptor.frame);
         *RUNTIME_PAGE_ALLOCATOR.get() = Some(allocator);
     }
-    Ok(descriptor.launch(ProcessId::Init))
+    Ok(descriptor.launch(ProcessId::INIT))
 }
 
 #[cfg(any(not(test), feature = "host-test"))]
@@ -1394,7 +1474,11 @@ unsafe fn begin_loaded_child_plan_runtime_with_argv(
     }
     let parent_parent_slot = unsafe { read_runtime_parent_slot(parent_slot) };
     let descriptor = ProcessDescriptor::for_child_plan(child_plan, argv, translated)?;
+    let child_pid = unsafe { allocate_runtime_pid()? };
+    let parent_pid = unsafe { read_runtime_pid(parent_slot) };
     let child_state = RuntimeForegroundSlotState::from_process_resources(
+        child_pid,
+        Some(parent_pid),
         parent_slot as u32,
         descriptor.resources,
     );
@@ -1407,7 +1491,7 @@ unsafe fn begin_loaded_child_plan_runtime_with_argv(
         );
     }
     Ok(ChildLaunch {
-        id: ProcessId::from_slot(child_slot),
+        id: child_state.pid,
         context: descriptor.context,
         frame: descriptor.frame,
         address_space: descriptor.resources.address_space,
@@ -1505,7 +1589,7 @@ unsafe fn finish_child_runtime_into(
         );
     }
     *out = ParentResume {
-        id: ProcessId::from_slot(parent_slot),
+        id: unsafe { read_runtime_pid(parent_slot) },
         context: ProcessContext {
             entry_pc: frame.resume_pc,
             stack_top: frame.stack_pointer,
@@ -1611,6 +1695,36 @@ unsafe fn save_runtime_process_frame(slot: usize) -> TrapFrame {
 #[cfg(not(test))]
 unsafe fn runtime_current_slot() -> usize {
     unsafe { read_runtime_word(core::ptr::addr_of_mut!(RUNTIME_CURRENT_SLOT)) as usize }
+}
+
+#[cfg(not(test))]
+unsafe fn allocate_runtime_pid() -> Result<ProcessId, ProcessSwitchError> {
+    let pid = unsafe { read_runtime_word(core::ptr::addr_of_mut!(RUNTIME_NEXT_PID)) };
+    let next = pid
+        .checked_add(1)
+        .ok_or(ProcessSwitchError::ChildAlreadyRunning)?;
+    unsafe {
+        write_runtime_word(core::ptr::addr_of_mut!(RUNTIME_NEXT_PID), next);
+    }
+    Ok(ProcessId::from_raw(pid))
+}
+
+#[cfg(not(test))]
+fn runtime_slot_pid_ptr(slot: usize) -> *mut u32 {
+    match slot {
+        INIT_PROCESS_SLOT => core::ptr::addr_of_mut!(RUNTIME_SLOT0_PID),
+        1 => core::ptr::addr_of_mut!(RUNTIME_SLOT1_PID),
+        _ => core::ptr::addr_of_mut!(RUNTIME_SLOT2_PID),
+    }
+}
+
+#[cfg(not(test))]
+fn runtime_slot_parent_pid_ptr(slot: usize) -> *mut u32 {
+    match slot {
+        INIT_PROCESS_SLOT => core::ptr::addr_of_mut!(RUNTIME_SLOT0_PARENT_PID),
+        1 => core::ptr::addr_of_mut!(RUNTIME_SLOT1_PARENT_PID),
+        _ => core::ptr::addr_of_mut!(RUNTIME_SLOT2_PARENT_PID),
+    }
 }
 
 #[cfg(not(test))]
@@ -1778,6 +1892,36 @@ unsafe fn read_runtime_process_memory(slot: usize) -> Option<ProcessMemory> {
 }
 
 #[cfg(not(test))]
+unsafe fn read_runtime_pid(slot: usize) -> ProcessId {
+    ProcessId::from_raw(unsafe { read_runtime_word(runtime_slot_pid_ptr(slot)) })
+}
+
+#[cfg(not(test))]
+unsafe fn read_runtime_parent_pid(slot: usize) -> Option<ProcessId> {
+    let pid = unsafe { read_runtime_word(runtime_slot_parent_pid_ptr(slot)) };
+    if pid == NO_PROCESS_PID {
+        None
+    } else {
+        Some(ProcessId::from_raw(pid))
+    }
+}
+
+#[cfg(not(test))]
+unsafe fn write_runtime_process_identity(
+    slot: usize,
+    pid: ProcessId,
+    parent_pid: Option<ProcessId>,
+) {
+    unsafe {
+        write_runtime_word(runtime_slot_pid_ptr(slot), pid.raw());
+        write_runtime_word(
+            runtime_slot_parent_pid_ptr(slot),
+            parent_pid.map(|pid| pid.raw()).unwrap_or(NO_PROCESS_PID),
+        );
+    }
+}
+
+#[cfg(not(test))]
 unsafe fn read_runtime_parent_slot(slot: usize) -> u32 {
     if slot == INIT_PROCESS_SLOT {
         NO_PARENT_SLOT
@@ -1816,6 +1960,8 @@ unsafe fn read_runtime_foreground_slot_state(slot: usize) -> RuntimeForegroundSl
         })
     };
     RuntimeForegroundSlotState {
+        pid: unsafe { read_runtime_pid(slot) },
+        parent_pid: unsafe { read_runtime_parent_pid(slot) },
         parent_slot: unsafe { read_runtime_parent_slot(slot) },
         blocked_child_slot: unsafe { read_runtime_blocked_child_slot(slot) },
         memory: unsafe { read_runtime_process_memory(slot) },
@@ -1836,6 +1982,7 @@ unsafe fn write_runtime_foreground_slot_state(slot: usize, state: RuntimeForegro
         limit: 0,
     });
     unsafe {
+        write_runtime_process_identity(slot, state.pid, state.parent_pid);
         write_runtime_process_linkage(slot, state.parent_slot, state.blocked_child_slot);
         write_runtime_process_memory(slot, memory);
         write_runtime_word(runtime_slot_heap_start_ptr(slot), heap.start);
@@ -3939,7 +4086,7 @@ mod tests {
 
         let child = table.begin_child_run(child_plan).expect("child starts");
 
-        assert_eq!(child.id, ProcessId::Foreground1);
+        assert_eq!(child.id, ProcessId::from_raw(2));
         assert_eq!(
             child.context,
             ProcessContext {
@@ -3949,6 +4096,72 @@ mod tests {
         );
         assert_eq!(table.init_state(), PROCESS_STATE_BLOCKED_ON_CHILD);
         assert_eq!(table.child_state(), PROCESS_STATE_RUNNING);
+    }
+
+    #[test]
+    fn process_table_initializes_init_with_pid_one() {
+        let table = ProcessTable::new(ProcessContext {
+            entry_pc: 0x0000_8000,
+            stack_top: 0x0001_0000,
+        });
+
+        assert_eq!(table.init_pid(), ProcessId::from_raw(1));
+        assert_eq!(table.init_parent_pid(), None);
+        assert_eq!(table.current_pid(), ProcessId::from_raw(1));
+    }
+
+    #[test]
+    fn process_table_allocates_child_pid_and_records_parent_pid() {
+        let mut table = ProcessTable::new(ProcessContext {
+            entry_pc: 0x0000_8000,
+            stack_top: 0x0001_0000,
+        });
+        let child_plan = DynamicUserLoadPlan {
+            load_base: 0x0000_a000,
+            load_end: 0x0000_a020,
+            entry_pc: 0x0000_a004,
+            stack_top: 0x0001_0000,
+            payload_dst: 0x0000_a000,
+            payload_len: 16,
+            zero_fill_addr: 0x0000_a010,
+            zero_fill_len: 16,
+        };
+
+        let child = table.begin_child_run(child_plan).expect("child starts");
+
+        assert_eq!(child.id, ProcessId::from_raw(2));
+        assert_eq!(table.current_pid(), ProcessId::from_raw(2));
+        assert_eq!(table.current_parent_pid(), Some(ProcessId::from_raw(1)));
+    }
+
+    #[test]
+    fn process_table_allocates_stable_pid_after_child_slot_reuse() {
+        let mut table = ProcessTable::new(ProcessContext {
+            entry_pc: 0x0000_8000,
+            stack_top: 0x0001_0000,
+        });
+        let child_plan = DynamicUserLoadPlan {
+            load_base: 0x0000_a000,
+            load_end: 0x0000_a020,
+            entry_pc: 0x0000_a004,
+            stack_top: 0x0001_0000,
+            payload_dst: 0x0000_a000,
+            payload_len: 16,
+            zero_fill_addr: 0x0000_a010,
+            zero_fill_len: 16,
+        };
+
+        let first = table
+            .begin_child_run(child_plan)
+            .expect("first child starts");
+        table.finish_child(0).expect("init resumes");
+        let second = table
+            .begin_child_run(child_plan)
+            .expect("second child starts");
+
+        assert_eq!(first.id, ProcessId::from_raw(2));
+        assert_eq!(second.id, ProcessId::from_raw(3));
+        assert_ne!(first.id, second.id);
     }
 
     #[test]
@@ -4043,10 +4256,9 @@ mod tests {
     }
 
     #[test]
-    fn process_ids_name_foreground_slots_by_depth() {
-        assert_eq!(ProcessId::from_slot(0), ProcessId::Init);
-        assert_eq!(ProcessId::from_slot(1), ProcessId::Foreground1);
-        assert_eq!(ProcessId::from_slot(2), ProcessId::Foreground2);
+    fn process_ids_are_numeric_pids_not_slots() {
+        assert_eq!(ProcessId::INIT.raw(), 1);
+        assert_eq!(ProcessId::from_raw(2).raw(), 2);
     }
 
     #[test]
@@ -4195,8 +4407,15 @@ mod tests {
         };
 
         assert_eq!(
-            RuntimeForegroundSlotState::from_process_resources(1, resources),
+            RuntimeForegroundSlotState::from_process_resources(
+                ProcessId::from_raw(2),
+                Some(ProcessId::INIT),
+                1,
+                resources,
+            ),
             RuntimeForegroundSlotState {
+                pid: ProcessId::from_raw(2),
+                parent_pid: Some(ProcessId::INIT),
                 parent_slot: 1,
                 blocked_child_slot: NO_CHILD_SLOT,
                 memory: Some(resources.memory),
@@ -4847,7 +5066,7 @@ mod tests {
     #[test]
     fn translated_parent_resume_requires_trap_return_address_space_override() {
         let resume = ParentResume {
-            id: ProcessId::Foreground1,
+            id: ProcessId::from_raw(2),
             context: ProcessContext {
                 entry_pc: 0x0001_5004,
                 stack_top: 0x0001_f000,
@@ -5101,7 +5320,7 @@ mod tests {
         crate::mmio::reset_test_state();
         crate::mmio::set_test_mmu0_result(0, k16_abi::computer::mmu0::STATUS_DONE, 0);
         let resume = ParentResume {
-            id: ProcessId::Init,
+            id: ProcessId::INIT,
             context: ProcessContext {
                 entry_pc: 0,
                 stack_top: 0,
@@ -5317,7 +5536,7 @@ mod tests {
         assert_eq!(resumed_shell.frame, shell_frame);
 
         let resumed_init = table.finish_child(7).expect("init resumes");
-        assert_eq!(resumed_init.id, ProcessId::Init);
+        assert_eq!(resumed_init.id, ProcessId::INIT);
         assert_eq!(resumed_init.child_exit_status, 7);
         assert_eq!(resumed_init.frame, init_frame);
     }
@@ -5342,7 +5561,7 @@ mod tests {
 
         let resumed = table.finish_child(7).expect("init resumes");
 
-        assert_eq!(resumed.id, ProcessId::Init);
+        assert_eq!(resumed.id, ProcessId::INIT);
         assert_eq!(resumed.child_exit_status, 7);
         assert_eq!(table.init_state(), PROCESS_STATE_RUNNING);
         assert_eq!(table.child_state(), PROCESS_STATE_EMPTY);
@@ -5474,6 +5693,8 @@ mod tests {
             })
         );
         let state = RuntimeForegroundSlotState {
+            pid: ProcessId::from_raw(2),
+            parent_pid: Some(ProcessId::INIT),
             parent_slot: 1,
             blocked_child_slot: NO_CHILD_SLOT,
             memory: ProcessMemory::new(0x0001_0000, 0x0001_f000).ok(),
@@ -5513,6 +5734,8 @@ mod tests {
     #[test]
     fn runtime_foreground_slot_state_clears_owned_state_after_exit() {
         let state = RuntimeForegroundSlotState {
+            pid: ProcessId::from_raw(3),
+            parent_pid: Some(ProcessId::from_raw(2)),
             parent_slot: 1,
             blocked_child_slot: 2,
             memory: ProcessMemory::new(0x0001_0000, 0x0001_f000).ok(),
@@ -5536,6 +5759,8 @@ mod tests {
         assert_eq!(
             state.cleared_after_exit(),
             RuntimeForegroundSlotState {
+                pid: ProcessId::from_raw(NO_PROCESS_PID),
+                parent_pid: None,
                 parent_slot: NO_PARENT_SLOT,
                 blocked_child_slot: NO_CHILD_SLOT,
                 memory: None,
@@ -5696,7 +5921,7 @@ mod tests {
             .initialize_translated_init_plan_in_memory(plan, 0x0003_0000, translated)
             .expect("translated init image records");
 
-        assert_eq!(launch.id, ProcessId::Init);
+        assert_eq!(launch.id, ProcessId::INIT);
         assert_eq!(launch.address_space, Some(7));
         assert_eq!(launch.kernel_stack_top, Some(0x0003_0000));
         assert_eq!(launch.context.entry_pc, 0x0001_0004);

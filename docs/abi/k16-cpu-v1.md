@@ -586,6 +586,13 @@ child. `EXIT` clears the current child slot and restores the waiting parent
 trap frame with the child status in `r0`. There is no background scheduling,
 preemption, fork, or pipe in this model.
 
+Each process table entry also records a kernel-owned PID and optional parent
+PID. Init is PID 1, and child launches allocate monotonic non-slot PIDs starting
+at 2, so a reused foreground slot does not reuse its prior PID. These PIDs are
+not exposed by the current syscall ABI: `RUN` remains synchronous and returns
+child exit status or a negative K16 error, not a PID. The PID metadata is
+reserved for future process APIs such as `SPAWN`/`WAIT`.
+
 Each foreground process records an explicit guest-physical memory range
 `memory_start..memory_end`. The init process range is derived from the loaded
 init image and the profile v2 `BootInfo.ram_size` value preserved by the boot
