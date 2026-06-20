@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- `kraft-std` now exposes `path::PathBuffer` and
+  `path::WorkingDirectory` for bounded K16 userland path normalization. The
+  K16 shell now consumes that shared path API instead of owning its own cwd
+  normalization types.
 - `kraft-std` now exposes the bundled coreutils path-argument resolution policy
   used by the K16 shell when preparing `RUN` argv paths. The shell no longer
   owns the per-command filesystem argument table directly.

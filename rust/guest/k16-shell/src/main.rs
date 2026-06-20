@@ -3,9 +3,8 @@
 
 use core::panic::PanicInfo;
 
-use k16_shell::{
-    resolve_executable_path, Command, CommandArgs, InputLine, PathBuffer, WorkingDirectory,
-};
+use k16_shell::{resolve_executable_path, Command, CommandArgs, InputLine};
+use kraft_std::path::{PathBuffer, PathError, WorkingDirectory};
 use kraft_std::prelude::*;
 
 const PROMPT: &[u8] = b"K16> ";
@@ -294,7 +293,7 @@ fn command_name_has_separator(name: &[u8]) -> bool {
     false
 }
 
-fn build_program_path(name: &[u8], out: &mut PathBuffer) -> Result<(), k16_shell::PathError> {
+fn build_program_path(name: &[u8], out: &mut PathBuffer) -> Result<(), PathError> {
     let name = if name == ALLOC_ALIAS {
         ALLOC_PROGRAM
     } else {
