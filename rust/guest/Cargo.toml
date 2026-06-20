@@ -9,6 +9,7 @@ members = [
     "k16-shell",
     "k16-ls",
     "k16-cat",
+    "k16-cp",
     "k16-stat",
     "k16-write",
     "k16-rm",

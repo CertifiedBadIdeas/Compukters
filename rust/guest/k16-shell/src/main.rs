@@ -11,7 +11,7 @@ use kraft_std::prelude::*;
 const PROMPT: &[u8] = b"K16> ";
 const NEWLINE: &[u8] = b"\n";
 const HELP: &[u8] =
-    b"HELP\nCLEAR\nPWD\nCD [PATH]\nECHO\nTICKS\nUNAME\nLS [PATH...]\nCAT <PATH...>\nSTAT <PATH...>\nWRITE [--append] <PATH> <TEXT>\nRM <PATH...>\nMKDIR <PATH...>\nRMDIR <PATH...>\nALLOC\n";
+    b"HELP\nCLEAR\nPWD\nCD [PATH]\nECHO\nTICKS\nUNAME\nLS [PATH...]\nCAT <PATH...>\nCP <SRC> <DST>\nSTAT <PATH...>\nWRITE [--append] <PATH> <TEXT>\nRM <PATH...>\nMKDIR <PATH...>\nRMDIR <PATH...>\nALLOC\n";
 const BIN_PREFIX: &[u8] = b"/bin/";
 const PROGRAM_SUFFIX: &[u8] = b".kx";
 const ALLOC_ALIAS: &[u8] = b"alloc";
@@ -244,7 +244,7 @@ fn run_exec(
 }
 
 fn should_resolve_path_arg(name: &[u8]) -> bool {
-    matches!(name, b"ls" | b"cat")
+    matches!(name, b"ls" | b"cat" | b"cp")
 }
 
 fn command_name_has_separator(name: &[u8]) -> bool {
