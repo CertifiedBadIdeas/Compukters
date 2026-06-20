@@ -141,6 +141,26 @@ fn file_seek_end_delegates_to_seek_syscall() {
 }
 
 #[test]
+fn fs_remove_file_delegates_to_unlink_syscall() {
+    k16_rt::host_test::reset_syscalls();
+    k16_rt::host_test::set_syscall_return(k16_rt::host_test::STATUS_OK);
+
+    let removed = fs::remove_file("/etc/user.txt");
+
+    assert_eq!(removed, Ok(()));
+    assert_eq!(
+        k16_rt::host_test::syscall_number(),
+        k16_rt::host_test::UNLINK
+    );
+    assert_eq!(
+        k16_rt::host_test::syscall_arg0(),
+        "/etc/user.txt".as_ptr() as usize as u32
+    );
+    assert_eq!(k16_rt::host_test::syscall_arg1(), 13);
+    assert_eq!(k16_rt::host_test::syscall_arg2(), 0);
+}
+
+#[test]
 fn file_close_delegates_to_close_syscall() {
     k16_rt::host_test::reset_syscalls();
     k16_rt::host_test::set_syscall_return(k16_rt::host_test::STATUS_OK);

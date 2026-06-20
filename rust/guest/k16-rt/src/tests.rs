@@ -399,6 +399,24 @@ fn seek_syscall_uses_fd_offset_and_whence_arguments() {
 }
 
 #[test]
+fn unlink_syscall_uses_path_pointer_length_and_reserved_argument() {
+    crate::trap::reset_test_interrupts();
+    crate::trap::set_test_syscall_return(k16_abi::syscall::STATUS_OK);
+    let path = *b"/etc/user.txt";
+
+    let returned = unlink_syscall(path.as_ptr(), path.len());
+
+    assert_eq!(crate::trap::test_syscall_number(), k16_abi::syscall::UNLINK);
+    assert_eq!(
+        crate::trap::test_syscall_arg0(),
+        path.as_ptr() as usize as u32
+    );
+    assert_eq!(crate::trap::test_syscall_arg1(), path.len() as u32);
+    assert_eq!(crate::trap::test_syscall_arg2(), 0);
+    assert_eq!(returned, k16_abi::syscall::STATUS_OK);
+}
+
+#[test]
 fn read_dir_syscall_uses_request_pointer_length_and_reserved_argument() {
     crate::trap::reset_test_interrupts();
     crate::trap::set_test_syscall_return(24);

@@ -57,6 +57,7 @@ impl FsError {
     pub const NoEntry: Self = Self(k16_abi::syscall::ERROR_NO_ENTRY);
     pub const NoFd: Self = Self(k16_abi::syscall::ERROR_NO_FD);
     pub const NoMemory: Self = Self(k16_abi::syscall::ERROR_NO_MEMORY);
+    pub const Busy: Self = Self(k16_abi::syscall::ERROR_BUSY);
     pub const Fault: Self = Self(k16_abi::syscall::ERROR_FAULT);
     pub const Storage: Self = Self(k16_abi::syscall::ERROR_NO_ENTRY);
 }
@@ -420,6 +421,18 @@ impl FileDescriptorTable {
         }
     }
 
+    pub fn has_open_inode(&self, inode_id: u32) -> bool {
+        let mut index = 0;
+        while index < self.slots.len() {
+            if matches!(self.slots[index], Some(descriptor) if descriptor.metadata.inode_id == inode_id)
+            {
+                return true;
+            }
+            index += 1;
+        }
+        false
+    }
+
     fn descriptor_for_process(&self, owner_pid: u32, fd: u32) -> Result<&FileDescriptor, FsError> {
         let index = fd_index(fd)?;
         match self.slots[index].as_ref() {
@@ -504,6 +517,24 @@ pub unsafe fn read_file_fd_for_process(
     let read_len = unsafe { copy_file_fd_range_to_ram_for_process(owner_pid, fd, ptr, len)? };
     unsafe { advance_file_fd_for_process(owner_pid, fd, read_len)? };
     Ok(read_len)
+}
+
+#[cfg(any(not(test), feature = "host-test"))]
+pub unsafe fn remove_root_file_for_process(path: &[u8]) -> Result<(), FsError> {
+    let path = RootFilePath::parse(path)?;
+    let components = path.components();
+    unsafe {
+        k16_storage::open_file_from_storage0(ROOT_PARTITION, components.as_slice())
+            .map_err(storage_error_to_fs_error)?;
+    }
+    let metadata = unsafe { k16_storage::selected_file_metadata() };
+    if unsafe { RUNTIME_FD_TABLE.get().has_open_inode(metadata.inode_id) } {
+        return Err(FsError::Busy);
+    }
+    unsafe {
+        k16_storage::remove_file_from_storage0(ROOT_PARTITION, components.as_slice())
+            .map_err(storage_error_to_fs_error)
+    }
 }
 
 #[cfg(any(not(test), feature = "host-test"))]
@@ -910,5 +941,25 @@ mod tests {
             table.seek_for_process(1, fd, 12, k16_abi::syscall::SEEK_SET),
             Err(FsError::InvalidFlags)
         );
+    }
+
+    #[test]
+    fn file_descriptor_table_reports_open_inode_for_busy_unlink() {
+        let mut table = FileDescriptorTable::new();
+        let metadata = FileMetadata {
+            inode_id: 42,
+            size_bytes: 5,
+            extent_count: 1,
+            extent_start_blocks: [9, 0, 0, 0],
+            extent_block_counts: [1, 0, 0, 0],
+        };
+        let fd = table
+            .open_for_process(1, metadata, OPEN_READ_ONLY)
+            .expect("fd allocates");
+
+        assert!(table.has_open_inode(42));
+        assert!(!table.has_open_inode(43));
+        table.close_for_process(1, fd).expect("fd closes");
+        assert!(!table.has_open_inode(42));
     }
 }

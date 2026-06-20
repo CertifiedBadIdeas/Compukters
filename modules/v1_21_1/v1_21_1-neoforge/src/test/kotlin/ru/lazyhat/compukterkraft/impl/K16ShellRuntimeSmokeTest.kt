@@ -322,6 +322,23 @@ class K16ShellRuntimeSmokeTest {
                 val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex)
                 commandIndex >= 0 && outputIndex > commandIndex && returnedPromptIndex > outputIndex
             }
+
+            dispatchText(device, "rm /etc/user.txt\n")
+            waitForTerminal(device, "rm output and returned prompt") { terminal ->
+                val commandIndex = terminal.lastIndexOf("K16> rm /etc/user.txt")
+                val outputIndex = terminal.indexOf("REMOVED /etc/user.txt", startIndex = commandIndex + "K16> rm /etc/user.txt".length)
+                val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex)
+                commandIndex >= 0 && outputIndex > commandIndex && returnedPromptIndex > outputIndex
+            }
+
+            dispatchText(device, "stat /etc/user.txt\n")
+            waitForTerminal(device, "stat output after removed file and returned prompt") { terminal ->
+                val commandIndex = terminal.lastIndexOf("K16> stat /etc/user.txt")
+                val outputIndex =
+                    terminal.indexOf("ERR NOENT /etc/user.txt", startIndex = commandIndex + "K16> stat /etc/user.txt".length)
+                val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex)
+                commandIndex >= 0 && outputIndex > commandIndex && returnedPromptIndex > outputIndex
+            }
         } finally {
             device.close()
         }

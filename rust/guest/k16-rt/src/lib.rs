@@ -18,8 +18,8 @@ pub mod host_test {
     pub use k16_abi::syscall::{
         BRK, CLOSE, DEBUG_MARKER, DEBUG_MARKER_RETURN, DEBUG_WRITE_BYTE, ERROR_BAD_FD, ERROR_FAULT,
         ERROR_NO_ENTRY, ERROR_NO_MEMORY, EXIT, FD_STDERR, FD_STDIN, FD_STDOUT, GAME_TICKS, OPEN,
-        READ, READ_DIR, RUN, RUN_FORMAT_ARGV, SBRK, SEEK, SLEEP_TICKS, STAT, STATUS_OK, WRITE,
-        YIELD,
+        READ, READ_DIR, RUN, RUN_FORMAT_ARGV, SBRK, SEEK, SLEEP_TICKS, STAT, STATUS_OK, UNLINK,
+        WRITE, YIELD,
     };
 
     pub fn reset_syscalls() {
@@ -95,6 +95,6 @@ pub use trap::{
     iret_once, iret_with_r0, open_syscall, read_dir_syscall, read_syscall, restore_trap_frame,
     run_argv_syscall, run_syscall, save_trap_frame, sbrk_syscall, seek_syscall, set_interrupt_mask,
     sleep_ticks_syscall, stat_syscall, syscall0, syscall1, syscall3, syscall_arg0, syscall_arg1,
-    syscall_arg2, syscall_once, trap_cause, trap_pc, trap_value, write_syscall, yield_syscall,
-    TrapFrame,
+    syscall_arg2, syscall_once, trap_cause, trap_pc, trap_value, unlink_syscall, write_syscall,
+    yield_syscall, TrapFrame,
 };
