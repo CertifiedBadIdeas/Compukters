@@ -445,7 +445,7 @@ fn wait_for_child(pid: u32, out_status: u32) -> Result<process::ChildLaunch, u32
     unsafe { process::wait_for_child_from_syscall(process::ProcessId::from_raw(pid), out_status) }
 }
 
-fn write_wait_status(out_status: u32, status: u32) -> Result<(), u32> {
+pub(crate) fn write_wait_status(out_status: u32, status: u32) -> Result<(), u32> {
     user_buffer::copy_to_user(out_status, &status.to_le_bytes()).map(|_| ())
 }
 

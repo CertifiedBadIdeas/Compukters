@@ -6,6 +6,9 @@
   waiting parent when the final exit-status write faults, instead of turning
   the fault into a kernel panic. The bundled syscall fault fixture now covers a
   spawned child plus a bad translated status pointer.
+- Translated user fault exits now complete the same `WAIT` status write path as
+  explicit `EXIT`, including returning `ERROR_FAULT` to the waiting parent when
+  the wait-status pointer faults.
 - The bounded K16 foreground process table now provides three child slots
   after init, allowing the production `init -> shell -> utility -> utility`
   shape used by shell-launched tools that spawn another program. The bundled

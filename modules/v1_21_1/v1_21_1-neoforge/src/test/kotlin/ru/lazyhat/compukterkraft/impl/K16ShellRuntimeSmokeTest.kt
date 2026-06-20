@@ -841,7 +841,9 @@ class K16ShellRuntimeSmokeTest {
 
     @Test
     fun runtimeDeviceKeepsShellAliveAfterInvalidSyscallPointers() {
+        val userFaultArtifact = Path.of("build/generated/k16-firmware-artifacts/user-fault-test.kx")
         val syscallFaultArtifact = Path.of("build/generated/k16-firmware-artifacts/syscall-fault-test.kx")
+        assertTrue(Files.isRegularFile(userFaultArtifact), "user fault fixture should be built at $userFaultArtifact")
         assertTrue(Files.isRegularFile(syscallFaultArtifact), "syscall fault fixture should be built at $syscallFaultArtifact")
         val device =
             createDevice(deviceId = 239) { storage0Path ->
@@ -860,6 +862,14 @@ class K16ShellRuntimeSmokeTest {
                     root.toString(),
                     "/bin/sysfault.kx",
                     syscallFaultArtifact.toString(),
+                )
+                runK16Tool(
+                    "fs",
+                    "kfs",
+                    "put",
+                    root.toString(),
+                    "/bin/fault.kx",
+                    userFaultArtifact.toString(),
                 )
                 runK16Tool(
                     "volume",
