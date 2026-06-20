@@ -919,19 +919,20 @@ class K16FirmwareResourceTest {
         assertFalse(shellSource.contains("fn run_alloc_test("), "alloc should not need a hardcoded dispatch branch")
         assertTrue(shellLibSource.contains("Command::Pwd"), "shell should classify the pwd command")
         assertTrue(shellLibSource.contains("Command::Cd("), "shell should classify cd with an optional path argument")
+        assertTrue(shellLibSource.contains("Command::Exit("), "shell should classify exit with an optional status code")
         assertTrue(shellLibSource.contains("Command::Exec"), "shell should classify non-builtins as generic exec")
         assertFalse(shellLibSource.contains("Command::Uname"), "shell should not carry a uname command variant")
         assertFalse(shellLibSource.contains("Command::Ls("), "shell should not carry an ls command variant")
         assertFalse(shellLibSource.contains("Command::Cat(&"), "shell should not carry a cat command variant")
         assertFalse(shellLibSource.contains("Command::AllocTest"), "shell should not carry an alloc command variant")
         assertTrue(
-            shellSource.contains("HELP\\nCLEAR\\nPWD\\nCD [PATH]\\nECHO\\nTICKS\\nUNAME\\nLS [PATH...]\\nCAT <PATH...>\\nSTAT <PATH...>\\nWRITE [--append] <PATH> <TEXT>\\nRM <PATH...>\\nMKDIR <PATH...>\\nRMDIR <PATH...>\\nALLOC\\n"),
+            shellSource.contains("HELP\\nCLEAR\\nPWD\\nCD [PATH]\\nECHO\\nTICKS\\nSTATUS\\nEXIT [CODE]\\nUNAME\\nLS [PATH...]\\nCAT <PATH...>\\nCP <SRC> <DST>\\nMV <SRC> <DST>\\nSTAT <PATH...>\\nWRITE [--append] <PATH> <TEXT>\\nRM <PATH...>\\nMKDIR <PATH...>\\nRMDIR <PATH...>\\nALLOC\\n"),
             "help should print a readable command list",
         )
-        assertTrue(shellSource.contains("fs::metadata(path)"), "cd should validate paths through stat metadata")
+        assertTrue(shellSource.contains("fs::metadata_path(path_ref)"), "cd should validate paths through stat metadata")
         assertTrue(shellLibSource.contains("pub fn resolve_executable_path("), "executable path resolution should be tested in the shell library")
         assertTrue(shellSource.contains("resolve_executable_path(cwd, name, program_path)"), "shell should resolve executable paths through cwd")
-        assertTrue(shellSource.contains("should_resolve_path_arg(name)"), "ls/cat should keep cwd-aware path args")
+        assertTrue(shellSource.contains("should_resolve_path_arg(name, raw_args, index)"), "filesystem utilities should keep cwd-aware path args")
         assertTrue(shellLibSource.contains("const ALLOC_ALIAS: &[u8] = b\"alloc\""), "alloc should remain a shell alias")
         assertTrue(shellLibSource.contains("const ALLOC_PROGRAM: &[u8] = b\"alloc-test\""), "alloc should target alloc-test.kx")
         assertTrue(shellSource.contains("write_run_error(stdout, error)"), "missing programs should report run errors")

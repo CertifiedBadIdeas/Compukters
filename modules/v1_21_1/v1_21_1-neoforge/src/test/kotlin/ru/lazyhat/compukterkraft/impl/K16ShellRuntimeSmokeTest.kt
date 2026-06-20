@@ -284,6 +284,24 @@ class K16ShellRuntimeSmokeTest {
     }
 
     @Test
+    fun runtimeDeviceRestartsShellAfterExitCommand() {
+        val device = createDevice(deviceId = 244)
+
+        try {
+            device.turnOn()
+            waitForTerminalText(device, "K16> ")
+
+            var cursor = 0
+            cursor = runShellCommandAndWait(device, cursor, "exit nope", "invalid exit keeps shell running", "ERR INVAL")
+            cursor = runShellCommandAndWait(device, cursor, "status", "invalid exit status is remembered", "STATUS INVAL")
+            cursor = runShellCommandAndWait(device, cursor, "exit", "clean shell exit restarts through init", "K16 SHELL")
+            runShellCommandAndWait(device, cursor, "status", "restarted shell has clean status", "STATUS 0")
+        } finally {
+            device.close()
+        }
+    }
+
+    @Test
     fun runtimeDeviceTracksLastCommandStatusThroughUserlandShell() {
         val device = createDevice(deviceId = 242)
 

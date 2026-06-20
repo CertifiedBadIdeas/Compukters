@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- The bundled K16 shell now includes an `exit [code]` builtin. `exit` ends the
+  shell with status `0`, causing supervised init to restart it; `exit <code>`
+  exits with the parsed decimal status, while invalid arguments print
+  `ERR INVAL` and keep the shell running.
 - `RUN` now accepts only the structured argv request format
   (`RUN_ARGV_MAGIC`) and `kraft-std` exposes only `process::run_with_args`.
   The legacy raw-path `RUN(path, len, 0)` / `process::run(path)` launch path
