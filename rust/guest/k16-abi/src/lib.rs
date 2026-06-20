@@ -99,6 +99,7 @@ pub mod syscall {
     pub const UNLINK: u32 = 18;
     pub const MKDIR: u32 = 19;
     pub const RMDIR: u32 = 20;
+    pub const RENAME: u32 = 21;
     pub const RUN_FORMAT_PATH: u32 = 0;
     pub const RUN_FORMAT_ARGV: u32 = 1;
     pub const RUN_ARGV_MAGIC: u32 = u32::from_le_bytes(*b"RARG");
@@ -111,6 +112,9 @@ pub mod syscall {
     pub const MAX_READ_DIR_PATH_BYTES: usize = 228;
     pub const MAX_READ_DIR_REQUEST_BYTES: usize = 16 + MAX_READ_DIR_PATH_BYTES;
     pub const MAX_STAT_PATH_BYTES: usize = MAX_READ_DIR_PATH_BYTES;
+    pub const RENAME_REQUEST_MAGIC: u32 = u32::from_le_bytes(*b"RNAM");
+    pub const MAX_RENAME_PATH_BYTES: usize = MAX_READ_DIR_PATH_BYTES;
+    pub const MAX_RENAME_REQUEST_BYTES: usize = 12 + MAX_RENAME_PATH_BYTES * 2;
     pub const STAT_METADATA_BYTES: usize = 16;
     pub const GAME_TICKS_BYTES: usize = 8;
     pub const FILE_TYPE_REGULAR: u32 = 1;
@@ -625,6 +629,7 @@ mod tests {
         assert_eq!(syscall::UNLINK, 18);
         assert_eq!(syscall::MKDIR, 19);
         assert_eq!(syscall::RMDIR, 20);
+        assert_eq!(syscall::RENAME, 21);
         assert_eq!(syscall::OPEN_READ_ONLY, 0);
         assert_eq!(syscall::OPEN_WRITE_ONLY, 1);
         assert_eq!(syscall::OPEN_CREATE, 2);
@@ -640,6 +645,9 @@ mod tests {
         assert_eq!(syscall::READ_DIR_REQUEST_MAGIC, 0x5249_4452);
         assert_eq!(syscall::MAX_READ_DIR_PATH_BYTES, 228);
         assert_eq!(syscall::MAX_READ_DIR_REQUEST_BYTES, 244);
+        assert_eq!(syscall::RENAME_REQUEST_MAGIC, 0x4d41_4e52);
+        assert_eq!(syscall::MAX_RENAME_PATH_BYTES, 228);
+        assert_eq!(syscall::MAX_RENAME_REQUEST_BYTES, 468);
         assert_eq!(syscall::MAX_STAT_PATH_BYTES, 228);
         assert_eq!(syscall::STAT_METADATA_BYTES, 16);
         assert_eq!(syscall::GAME_TICKS_BYTES, 8);

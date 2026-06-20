@@ -10,6 +10,7 @@ members = [
     "k16-ls",
     "k16-cat",
     "k16-cp",
+    "k16-mv",
     "k16-stat",
     "k16-write",
     "k16-rm",

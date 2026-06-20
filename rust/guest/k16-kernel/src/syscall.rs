@@ -111,6 +111,14 @@ pub fn dispatch(number: u32) -> ! {
                 Err(error) => unsafe { k16_rt::iret_with_r0(error) },
             }
         }
+        abi_syscall::RENAME => {
+            let ptr = k16_rt::syscall_arg0();
+            let len = k16_rt::syscall_arg1();
+            match rename_path(ptr, len) {
+                Ok(()) => unsafe { k16_rt::iret_with_r0(abi_syscall::STATUS_OK) },
+                Err(error) => unsafe { k16_rt::iret_with_r0(error) },
+            }
+        }
         abi_syscall::GAME_TICKS => {
             let out_ptr = k16_rt::syscall_arg0();
             match game_ticks(out_ptr) {
@@ -310,6 +318,35 @@ fn rmdir_path(ptr: u32, len: u32) -> Result<(), u32> {
     let mut path = [0_u8; MAX_STAT_PATH_BYTES];
     let path = user_buffer::copy_from_user_into(ptr, len, &mut path)?;
     match unsafe { fs::remove_root_directory(path) } {
+        Ok(()) => Ok(()),
+        Err(error) => Err(fs_error_to_status(error)),
+    }
+}
+
+fn rename_path(ptr: u32, len: u32) -> Result<(), u32> {
+    if len < 12 || len > abi_syscall::MAX_RENAME_REQUEST_BYTES as u32 {
+        return Err(abi_syscall::ERROR_INVALID);
+    }
+    let mut request = [0_u8; abi_syscall::MAX_RENAME_REQUEST_BYTES];
+    let request = user_buffer::copy_from_user_into(ptr, len, &mut request)?;
+    if read_u32_le(request, 0) != abi_syscall::RENAME_REQUEST_MAGIC {
+        return Err(abi_syscall::ERROR_INVALID);
+    }
+    let old_path_len = read_u32_le(request, 4);
+    let new_path_len = read_u32_le(request, 8);
+    if old_path_len == 0
+        || new_path_len == 0
+        || old_path_len > fs::MAX_STAT_PATH_BYTES
+        || new_path_len > fs::MAX_STAT_PATH_BYTES
+        || len != 12 + old_path_len + new_path_len
+    {
+        return Err(abi_syscall::ERROR_INVALID);
+    }
+    let old_path_start = 12;
+    let new_path_start = old_path_start + old_path_len as usize;
+    let old_path = &request[old_path_start..new_path_start];
+    let new_path = &request[new_path_start..len as usize];
+    match unsafe { fs::rename_root_file_for_process(current_process_id(), old_path, new_path) } {
         Ok(()) => Ok(()),
         Err(error) => Err(fs_error_to_status(error)),
     }
