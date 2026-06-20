@@ -57,12 +57,16 @@ fn mv_args(argc: u32, argv: *const process::Arg) -> Result<(), MoveError> {
 }
 
 fn move_file(source: &'static str, destination: &'static str) -> Result<(), MoveError> {
-    match fs::metadata(source) {
+    let source_ref = path::PathRef::try_from_str(source)
+        .map_err(|_| MoveError::Source(source, fs::Error::InvalidArgument))?;
+    let destination_ref = path::PathRef::try_from_str(destination)
+        .map_err(|_| MoveError::Destination(destination, fs::Error::InvalidArgument))?;
+    match fs::metadata_path(source_ref) {
         Ok(metadata) if metadata.file_type == fs::FileType::Regular => {}
         Ok(_) => return Err(MoveError::Source(source, fs::Error::InvalidArgument)),
         Err(error) => return Err(MoveError::Source(source, error)),
     }
-    match fs::metadata(destination) {
+    match fs::metadata_path(destination_ref) {
         Ok(_) => {
             return Err(MoveError::Destination(
                 destination,
@@ -72,7 +76,7 @@ fn move_file(source: &'static str, destination: &'static str) -> Result<(), Move
         Err(fs::Error::Syscall(status)) if is_no_entry_status(status) => {}
         Err(error) => return Err(MoveError::Destination(destination, error)),
     }
-    fs::rename(source, destination).map_err(|error| MoveError::Source(source, error))
+    fs::rename_path(source_ref, destination_ref).map_err(|error| MoveError::Source(source, error))
 }
 
 fn write_error(error: MoveError) -> Result<(), io::Error> {

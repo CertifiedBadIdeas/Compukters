@@ -25,10 +25,11 @@ fn write_arg(argc: u32, argv: *const process::Arg) -> Result<(), ()> {
         return Err(());
     };
     let path = core::str::from_utf8(path).map_err(|_| ())?;
+    let path_ref = path::PathRef::try_from_str(path).map_err(|_| ())?;
     let file = if append {
-        fs::append(path).map_err(|_| ())?
+        fs::append_path(path_ref).map_err(|_| ())?
     } else {
-        fs::create(path).map_err(|_| ())?
+        fs::create_path(path_ref).map_err(|_| ())?
     };
     file.write_all(payload).map_err(|_| ())?;
     file.close().map_err(|_| ())?;

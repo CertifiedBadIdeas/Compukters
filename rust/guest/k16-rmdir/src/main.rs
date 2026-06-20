@@ -20,7 +20,14 @@ fn rmdir_args(argc: u32, argv: *const process::Arg) -> Result<(), ()> {
 
 fn remove_path(path: &str) -> Result<(), ()> {
     let stdout = io::stdout();
-    match fs::remove_dir(path) {
+    let path_ref = match path::PathRef::try_from_str(path) {
+        Ok(path_ref) => path_ref,
+        Err(_) => {
+            write_rmdir_error(stdout, b"INVAL", path)?;
+            return Err(());
+        }
+    };
+    match fs::remove_dir_path(path_ref) {
         Ok(()) => {
             stdout.write_all(b"REMOVED ").map_err(|_| ())?;
             stdout.write_all(path.as_bytes()).map_err(|_| ())?;

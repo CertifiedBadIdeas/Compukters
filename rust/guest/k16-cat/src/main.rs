@@ -20,7 +20,18 @@ fn print_first_arg(argc: u32, argv: *const process::Arg) -> Result<(), ()> {
 
 fn print_file(path: &str) -> Result<(), ()> {
     let stdout = io::stdout();
-    let file = match fs::open(path) {
+    let path_ref = match path::PathRef::try_from_str(path) {
+        Ok(path_ref) => path_ref,
+        Err(_) => {
+            write_cat_error(
+                stdout,
+                status::fs_error_name_or(fs::Error::InvalidArgument, b"IO"),
+                path,
+            )?;
+            return Err(());
+        }
+    };
+    let file = match fs::open_path(path_ref) {
         Ok(file) => file,
         Err(error) => {
             write_cat_error(stdout, status::fs_error_name_or(error, b"IO"), path)?;

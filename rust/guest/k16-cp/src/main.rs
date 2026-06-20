@@ -60,8 +60,13 @@ fn cp_args(argc: u32, argv: *const process::Arg) -> Result<(), CopyError> {
 }
 
 fn copy_file(source_path: &'static str, destination_path: &'static str) -> Result<(), CopyError> {
-    let source = fs::open(source_path).map_err(|error| CopyError::Source(source_path, error))?;
-    let destination = match fs::create(destination_path) {
+    let source_path_ref = path::PathRef::try_from_str(source_path)
+        .map_err(|_| CopyError::Source(source_path, fs::Error::InvalidArgument))?;
+    let destination_path_ref = path::PathRef::try_from_str(destination_path)
+        .map_err(|_| CopyError::Destination(destination_path, fs::Error::InvalidArgument))?;
+    let source =
+        fs::open_path(source_path_ref).map_err(|error| CopyError::Source(source_path, error))?;
+    let destination = match fs::create_path(destination_path_ref) {
         Ok(file) => file,
         Err(error) => {
             let _ = source.close();

@@ -51,3 +51,15 @@ fn sbrk_allocator_returns_null_on_negative_syscall_status() {
 
     assert!(ptr.is_null());
 }
+
+#[test]
+fn sbrk_allocator_returns_null_when_aligned_size_overflows() {
+    k16_rt::host_test::reset_syscalls();
+    k16_rt::host_test::set_syscall_return(0x0001_1003);
+    let layout = Layout::from_size_align(u32::MAX as usize, 2).expect("layout is valid");
+
+    let ptr = unsafe { SbrkAllocator.alloc(layout) };
+
+    assert!(ptr.is_null());
+    assert_eq!(k16_rt::host_test::syscall_number(), 0);
+}
