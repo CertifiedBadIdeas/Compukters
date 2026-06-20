@@ -223,24 +223,6 @@ fn has_path_separator(bytes: &[u8]) -> bool {
     false
 }
 
-pub fn should_resolve_exec_arg(name: &[u8], args: &[&[u8]], index: usize) -> bool {
-    match name {
-        b"ls" | b"cat" | b"cp" | b"mv" | b"stat" | b"rm" | b"mkdir" | b"rmdir" => true,
-        b"write" => write_path_arg_index(args) == Some(index),
-        _ => false,
-    }
-}
-
-fn write_path_arg_index(args: &[&[u8]]) -> Option<usize> {
-    if args.len() == 2 {
-        Some(0)
-    } else if args.len() == 3 && args[0] == b"--append" {
-        Some(1)
-    } else {
-        None
-    }
-}
-
 #[derive(Debug, Eq, PartialEq)]
 pub enum Command<'a> {
     Empty,
@@ -729,23 +711,5 @@ mod tests {
         super::resolve_executable_path(&cwd, b"./uname.kx", &mut path).unwrap();
 
         assert_eq!(path.as_bytes(), b"/bin/uname.kx");
-    }
-
-    #[test]
-    fn exec_arg_resolver_resolves_write_path_without_flag_or_payload() {
-        let args = [b"--append".as_slice(), b"workflow.txt".as_slice(), b"-beta".as_slice()];
-
-        assert!(!super::should_resolve_exec_arg(b"write", &args, 0));
-        assert!(super::should_resolve_exec_arg(b"write", &args, 1));
-        assert!(!super::should_resolve_exec_arg(b"write", &args, 2));
-    }
-
-    #[test]
-    fn exec_arg_resolver_resolves_filesystem_utility_paths() {
-        let args = [b"workflow.moved".as_slice(), b"workflow.txt".as_slice()];
-
-        assert!(super::should_resolve_exec_arg(b"rm", &args, 0));
-        assert!(super::should_resolve_exec_arg(b"rm", &args, 1));
-        assert!(super::should_resolve_exec_arg(b"stat", &args[..1], 0));
     }
 }
