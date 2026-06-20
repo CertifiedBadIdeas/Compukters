@@ -4,7 +4,12 @@ const FIRST_FILE_FD: u32 = 3;
 const FILE_DESCRIPTOR_CAPACITY: usize = 4;
 #[cfg(any(not(test), feature = "host-test"))]
 const ROOT_PARTITION: &[u8; 4] = b"ROOT";
-pub const OPEN_READ_ONLY: u32 = 0;
+pub const OPEN_READ_ONLY: u32 = k16_abi::syscall::OPEN_READ_ONLY;
+pub const OPEN_WRITE_ONLY: u32 = k16_abi::syscall::OPEN_WRITE_ONLY;
+pub const OPEN_CREATE: u32 = k16_abi::syscall::OPEN_CREATE;
+pub const OPEN_TRUNCATE: u32 = k16_abi::syscall::OPEN_TRUNCATE;
+#[cfg(any(not(test), feature = "host-test"))]
+const OPEN_ALLOWED_FLAGS: u32 = OPEN_WRITE_ONLY | OPEN_CREATE | OPEN_TRUNCATE;
 pub const MAX_OPEN_PATH_BYTES: u32 =
     1 + (MAX_PATH_COMPONENTS as u32 * MAX_NAME_BYTES as u32) + (MAX_PATH_COMPONENTS as u32 - 1);
 pub const MAX_READ_DIR_PATH_BYTES: u32 = MAX_OPEN_PATH_BYTES;
@@ -184,6 +189,7 @@ impl<'a> RootFilePathComponents<'a> {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct FileMetadata {
+    pub inode_id: u32,
     pub size_bytes: u32,
     pub extent_count: u32,
     pub extent_start_blocks: [u32; 4],
@@ -199,6 +205,7 @@ pub struct PathMetadata {
 impl FileMetadata {
     pub const fn empty() -> Self {
         Self {
+            inode_id: 0,
             size_bytes: 0,
             extent_count: 0,
             extent_start_blocks: [0; 4],
@@ -210,6 +217,7 @@ impl FileMetadata {
 impl From<k16_storage::FileMetadata> for FileMetadata {
     fn from(metadata: k16_storage::FileMetadata) -> Self {
         Self {
+            inode_id: metadata.inode_id,
             size_bytes: metadata.size_bytes,
             extent_count: metadata.extent_count,
             extent_start_blocks: metadata.extent_start_blocks,
@@ -221,6 +229,7 @@ impl From<k16_storage::FileMetadata> for FileMetadata {
 impl From<FileMetadata> for k16_storage::FileMetadata {
     fn from(metadata: FileMetadata) -> Self {
         Self {
+            inode_id: metadata.inode_id,
             size_bytes: metadata.size_bytes,
             extent_count: metadata.extent_count,
             extent_start_blocks: metadata.extent_start_blocks,
@@ -234,6 +243,7 @@ struct FileDescriptor {
     owner_pid: u32,
     metadata: FileMetadata,
     offset: u32,
+    flags: u32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -249,13 +259,14 @@ impl FileDescriptorTable {
     }
 
     pub fn open(&mut self, metadata: FileMetadata) -> Result<u32, FsError> {
-        self.open_for_process(0, metadata)
+        self.open_for_process(0, metadata, OPEN_READ_ONLY)
     }
 
     pub fn open_for_process(
         &mut self,
         owner_pid: u32,
         metadata: FileMetadata,
+        flags: u32,
     ) -> Result<u32, FsError> {
         let mut index = 0;
         while index < self.slots.len() {
@@ -264,6 +275,7 @@ impl FileDescriptorTable {
                     owner_pid,
                     metadata,
                     offset: 0,
+                    flags,
                 });
                 return Ok(FIRST_FILE_FD + index as u32);
             }
@@ -283,6 +295,9 @@ impl FileDescriptorTable {
         len: u32,
     ) -> Result<(u32, u32), FsError> {
         let descriptor = self.descriptor_for_process(owner_pid, fd)?;
+        if descriptor.flags != OPEN_READ_ONLY {
+            return Err(FsError::BadFd);
+        }
         let remaining = descriptor
             .metadata
             .size_bytes
@@ -309,6 +324,34 @@ impl FileDescriptorTable {
             return Err(FsError::Storage);
         }
         descriptor.offset += len;
+        Ok(())
+    }
+
+    pub fn writable_metadata_for_process(
+        &self,
+        owner_pid: u32,
+        fd: u32,
+    ) -> Result<(FileMetadata, u32), FsError> {
+        let descriptor = self.descriptor_for_process(owner_pid, fd)?;
+        if descriptor.flags & OPEN_WRITE_ONLY == 0 {
+            return Err(FsError::BadFd);
+        }
+        Ok((descriptor.metadata, descriptor.offset))
+    }
+
+    pub fn finish_write_for_process(
+        &mut self,
+        owner_pid: u32,
+        fd: u32,
+        metadata: FileMetadata,
+        len: u32,
+    ) -> Result<(), FsError> {
+        let descriptor = self.descriptor_mut_for_process(owner_pid, fd)?;
+        if descriptor.flags & OPEN_WRITE_ONLY == 0 {
+            return Err(FsError::BadFd);
+        }
+        descriptor.metadata = metadata;
+        descriptor.offset = descriptor.offset.checked_add(len).ok_or(FsError::Storage)?;
         Ok(())
     }
 
@@ -380,20 +423,32 @@ pub unsafe fn open_root_file_for_process(
     path: &[u8],
     flags: u32,
 ) -> Result<u32, FsError> {
-    if flags != OPEN_READ_ONLY {
+    if flags != OPEN_READ_ONLY && flags != OPEN_ALLOWED_FLAGS {
         return Err(FsError::InvalidFlags);
     }
     let path = RootFilePath::parse(path)?;
     let components = path.components();
-    let metadata = unsafe {
-        k16_storage::open_file_from_storage0(ROOT_PARTITION, components.as_slice())
-            .map_err(storage_error_to_fs_error)?;
-        k16_storage::selected_file_metadata()
+    let metadata = if flags == OPEN_READ_ONLY {
+        unsafe {
+            k16_storage::open_file_from_storage0(ROOT_PARTITION, components.as_slice())
+                .map_err(storage_error_to_fs_error)?;
+            k16_storage::selected_file_metadata()
+        }
+    } else {
+        unsafe {
+            k16_storage::open_file_for_write_from_storage0(
+                ROOT_PARTITION,
+                components.as_slice(),
+                true,
+                true,
+            )
+            .map_err(storage_error_to_fs_error)?
+        }
     };
     unsafe {
         RUNTIME_FD_TABLE
             .get()
-            .open_for_process(owner_pid, FileMetadata::from(metadata))
+            .open_for_process(owner_pid, FileMetadata::from(metadata), flags)
     }
 }
 
@@ -449,6 +504,36 @@ pub unsafe fn advance_file_fd_for_process(
             .get()
             .advance_for_process(owner_pid, fd, len)
     }
+}
+
+#[cfg(any(not(test), feature = "host-test"))]
+pub unsafe fn copy_ram_to_file_fd_range_for_process(
+    owner_pid: u32,
+    fd: u32,
+    ptr: u32,
+    len: u32,
+) -> Result<u32, FsError> {
+    if len == 0 {
+        return Ok(0);
+    }
+    let (metadata, offset) = unsafe {
+        RUNTIME_FD_TABLE
+            .get()
+            .writable_metadata_for_process(owner_pid, fd)?
+    };
+    let updated = unsafe {
+        k16_storage::copy_ram_to_file_range(metadata.into(), offset, ptr, len)
+            .map_err(storage_error_to_fs_error)?
+    };
+    unsafe {
+        RUNTIME_FD_TABLE.get().finish_write_for_process(
+            owner_pid,
+            fd,
+            FileMetadata::from(updated),
+            len,
+        )?
+    };
+    Ok(len)
 }
 
 #[cfg(any(not(test), feature = "host-test"))]
@@ -651,6 +736,7 @@ mod tests {
         let mut table = FileDescriptorTable::new();
         let fd = table
             .open(FileMetadata {
+                inode_id: 2,
                 size_bytes: 7,
                 extent_count: 1,
                 extent_start_blocks: [5, 0, 0, 0],
@@ -707,10 +793,10 @@ mod tests {
         let parent_pid = 1;
         let child_pid = 2;
         let parent_fd = table
-            .open_for_process(parent_pid, FileMetadata::empty())
+            .open_for_process(parent_pid, FileMetadata::empty(), OPEN_READ_ONLY)
             .expect("parent fd allocates");
         let child_fd = table
-            .open_for_process(child_pid, FileMetadata::empty())
+            .open_for_process(child_pid, FileMetadata::empty(), OPEN_READ_ONLY)
             .expect("child fd allocates");
 
         table.close_all_for_process(child_pid);
@@ -728,7 +814,7 @@ mod tests {
             Err(FsError::BadFd)
         );
         assert_eq!(
-            table.open_for_process(child_pid, FileMetadata::empty()),
+            table.open_for_process(child_pid, FileMetadata::empty(), OPEN_READ_ONLY),
             Ok(child_fd)
         );
     }

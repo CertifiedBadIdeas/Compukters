@@ -20,6 +20,7 @@ const K16FS_MAX_INLINE_EXTENTS: usize = 4;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct FileMetadata {
+    pub inode_id: u32,
     pub size_bytes: u32,
     pub extent_count: u32,
     pub extent_start_blocks: [u32; K16FS_MAX_INLINE_EXTENTS],
@@ -108,6 +109,12 @@ const STATE_INODE_SIZE_BYTES: u32 = 0x0000_021c;
 const STATE_INODE_EXTENT_COUNT: u32 = 0x0000_0220;
 const STATE_INODE_EXTENT_START_BLOCKS: u32 = 0x0000_0224;
 const STATE_INODE_EXTENT_BLOCK_COUNTS: u32 = 0x0000_0234;
+const STATE_SUPERBLOCK_BITMAP_START_BLOCK: u32 = 0x0000_0244;
+const STATE_SUPERBLOCK_BITMAP_BLOCK_COUNT: u32 = 0x0000_0248;
+const STATE_SELECTED_INODE_ID: u32 = 0x0000_024c;
+const STATE_DIRECTORY_SLOT_BLOCK: u32 = 0x0000_0250;
+const STATE_DIRECTORY_SLOT_OFFSET: u32 = 0x0000_0254;
+const STATE_DIRECTORY_SLOT_DIRECTORY_OFFSET: u32 = 0x0000_0258;
 
 pub unsafe fn open_file_from_storage0(
     partition_type: &[u8; 4],
@@ -150,6 +157,95 @@ pub unsafe fn stat_path_from_storage0(
     unsafe { selected_path_metadata() }
 }
 
+pub unsafe fn open_file_for_write_from_storage0(
+    partition_type: &[u8; 4],
+    path: &[&[u8]],
+    create: bool,
+    truncate: bool,
+) -> Result<FileMetadata, StorageError> {
+    if path.is_empty() {
+        return Err(StorageError::PATH_NOT_FOUND);
+    }
+    unsafe { read_partition(partition_type)? };
+    unsafe { read_superblock()? };
+    match unsafe { find_file_inode(path) } {
+        Ok(()) => {
+            if truncate {
+                unsafe { truncate_selected_file()? };
+            }
+            Ok(unsafe { selected_file_metadata() })
+        }
+        Err(error) if error == StorageError::PATH_NOT_FOUND && create => unsafe {
+            create_empty_file(path)
+        },
+        Err(error) => Err(error),
+    }
+}
+
+pub unsafe fn copy_ram_to_file_range(
+    metadata: FileMetadata,
+    file_offset: u32,
+    src_addr: u32,
+    len: u32,
+) -> Result<FileMetadata, StorageError> {
+    let range_end = match file_offset.checked_add(len) {
+        Some(value) => value,
+        None => return Err(StorageError::INVALID_FILESYSTEM),
+    };
+    if range_end > file_capacity_bytes(metadata)? {
+        return Err(StorageError::OUTPUT_BUFFER_TOO_SMALL);
+    }
+
+    let mut copied = 0;
+    let mut extent_file_start: u32 = 0;
+    let mut extent_index = 0;
+    while extent_index < metadata.extent_count as usize && copied < len {
+        let extent_start_block = metadata.extent_start_blocks[extent_index];
+        let extent_block_count = metadata.extent_block_counts[extent_index];
+        let extent_bytes = match extent_block_count.checked_mul(BLOCK_SIZE) {
+            Some(value) => value,
+            None => return Err(StorageError::INVALID_FILESYSTEM),
+        };
+        let extent_file_end = match extent_file_start.checked_add(extent_bytes) {
+            Some(value) => value,
+            None => return Err(StorageError::INVALID_FILESYSTEM),
+        };
+
+        if range_end > extent_file_start && file_offset < extent_file_end {
+            let copy_start = max_u32(file_offset, extent_file_start);
+            let copy_end = min_u32(range_end, extent_file_end);
+            let mut cursor = copy_start;
+            while cursor < copy_end {
+                let within_extent = cursor - extent_file_start;
+                let block_delta = within_extent / BLOCK_SIZE;
+                let block_offset = within_extent % BLOCK_SIZE;
+                let available = min_u32(BLOCK_SIZE - block_offset, copy_end - cursor);
+                unsafe { read_fs_block(extent_start_block + block_delta)? };
+                unsafe {
+                    copy_ram_to_ram(src_addr + copied, SCRATCH_ADDR + block_offset, available)
+                };
+                unsafe { write_fs_block(extent_start_block + block_delta)? };
+                copied += available;
+                cursor += available;
+            }
+        }
+
+        extent_file_start = extent_file_end;
+        extent_index += 1;
+    }
+
+    if copied != len {
+        return Err(StorageError::INVALID_FILESYSTEM);
+    }
+
+    let mut updated = metadata;
+    if range_end > updated.size_bytes {
+        updated.size_bytes = range_end;
+        unsafe { encode_file_inode(updated)? };
+    }
+    Ok(updated)
+}
+
 pub unsafe fn selected_file_size() -> u32 {
     unsafe { read_u32(STATE_INODE_SIZE_BYTES) }
 }
@@ -179,6 +275,7 @@ pub unsafe fn selected_file_metadata() -> FileMetadata {
         index += 1;
     }
     FileMetadata {
+        inode_id: unsafe { read_u32(STATE_SELECTED_INODE_ID) },
         size_bytes: unsafe { selected_file_size() },
         extent_count,
         extent_start_blocks,
@@ -245,11 +342,15 @@ unsafe fn read_superblock() -> Result<(), StorageError> {
         return Err(StorageError::INVALID_FILESYSTEM);
     }
 
+    let bitmap_start_block = unsafe { read_u32(SCRATCH_ADDR + 0x10) };
+    let bitmap_block_count = unsafe { read_u32(SCRATCH_ADDR + 0x14) };
     let inode_table_start_block = unsafe { read_u32(SCRATCH_ADDR + 0x18) };
     let inode_table_block_count = unsafe { read_u32(SCRATCH_ADDR + 0x1c) };
     let root_inode_id = unsafe { read_u32(SCRATCH_ADDR + 0x20) };
     unsafe {
         write_u32(STATE_SUPERBLOCK_TOTAL_BLOCKS, total_blocks);
+        write_u32(STATE_SUPERBLOCK_BITMAP_START_BLOCK, bitmap_start_block);
+        write_u32(STATE_SUPERBLOCK_BITMAP_BLOCK_COUNT, bitmap_block_count);
         write_u32(
             STATE_SUPERBLOCK_INODE_TABLE_START_BLOCK,
             inode_table_start_block,
@@ -265,6 +366,56 @@ unsafe fn read_superblock() -> Result<(), StorageError> {
         return Err(StorageError::INVALID_FILESYSTEM);
     }
     Ok(())
+}
+
+unsafe fn create_empty_file(path: &[&[u8]]) -> Result<FileMetadata, StorageError> {
+    let parent_len = path.len() - 1;
+    let name = path[parent_len];
+    unsafe { find_directory_inode(&path[..parent_len])? };
+    match unsafe { find_directory_entry(name) } {
+        Ok(_) => return Err(StorageError::INVALID_FILESYSTEM),
+        Err(error) if error == StorageError::PATH_NOT_FOUND => {}
+        Err(error) => return Err(error),
+    }
+    unsafe { find_selected_directory_free_slot()? };
+    let parent_inode_id = unsafe { read_u32(STATE_SELECTED_INODE_ID) };
+    let slot_block = unsafe { read_u32(STATE_DIRECTORY_SLOT_BLOCK) };
+    let slot_offset = unsafe { read_u32(STATE_DIRECTORY_SLOT_OFFSET) };
+    let slot_directory_offset = unsafe { read_u32(STATE_DIRECTORY_SLOT_DIRECTORY_OFFSET) };
+    let inode_id = unsafe { allocate_inode()? };
+    let start_block = unsafe { allocate_contiguous_blocks(1)? };
+    unsafe { clear_scratch_block() };
+    unsafe { write_fs_block(start_block)? };
+    let mut extent_start_blocks = [0; K16FS_MAX_INLINE_EXTENTS];
+    let mut extent_block_counts = [0; K16FS_MAX_INLINE_EXTENTS];
+    extent_start_blocks[0] = start_block;
+    extent_block_counts[0] = 1;
+    let metadata = FileMetadata {
+        inode_id,
+        size_bytes: 0,
+        extent_count: 1,
+        extent_start_blocks,
+        extent_block_counts,
+    };
+    unsafe { encode_file_inode(metadata)? };
+    unsafe { encode_directory_entry_at(slot_block, slot_offset, inode_id, name)? };
+    unsafe { read_inode(parent_inode_id)? };
+    let new_size = max_u32(
+        unsafe { read_u32(STATE_INODE_SIZE_BYTES) },
+        slot_directory_offset + K16FS_DIRECTORY_ENTRY_SIZE,
+    );
+    unsafe { encode_selected_inode_size(parent_inode_id, new_size)? };
+    unsafe { read_inode(inode_id)? };
+    Ok(unsafe { selected_file_metadata() })
+}
+
+unsafe fn truncate_selected_file() -> Result<(), StorageError> {
+    let mut metadata = unsafe { selected_file_metadata() };
+    if metadata.extent_count == 0 {
+        return Err(StorageError::INVALID_FILESYSTEM);
+    }
+    metadata.size_bytes = 0;
+    unsafe { encode_file_inode(metadata) }
 }
 
 unsafe fn find_file_inode(path: &[&[u8]]) -> Result<(), StorageError> {
@@ -382,6 +533,47 @@ unsafe fn find_directory_entry(name: &[u8]) -> Result<u32, StorageError> {
         return Err(StorageError::INVALID_FILESYSTEM);
     }
     Err(StorageError::PATH_NOT_FOUND)
+}
+
+unsafe fn find_selected_directory_free_slot() -> Result<(), StorageError> {
+    if unsafe { read_u32(STATE_INODE_STATE) as u8 } != 2 {
+        return Err(StorageError::INVALID_FILESYSTEM);
+    }
+    let mut directory_offset = 0;
+    let mut extent_index = 0;
+    while extent_index < unsafe { read_u32(STATE_INODE_EXTENT_COUNT) as usize } {
+        let extent_start_block =
+            unsafe { read_u32(STATE_INODE_EXTENT_START_BLOCKS + extent_index as u32 * 4) };
+        let extent_block_count =
+            unsafe { read_u32(STATE_INODE_EXTENT_BLOCK_COUNTS + extent_index as u32 * 4) };
+        validate_extent(extent_start_block, extent_block_count, unsafe {
+            read_u32(STATE_SUPERBLOCK_TOTAL_BLOCKS)
+        })?;
+        let mut block_index = 0;
+        while block_index < extent_block_count {
+            unsafe { read_fs_block(extent_start_block + block_index)? };
+            let mut offset = 0;
+            while offset < BLOCK_SIZE {
+                match scratch_u8(offset) {
+                    0 | 2 => {
+                        unsafe {
+                            write_u32(STATE_DIRECTORY_SLOT_BLOCK, extent_start_block + block_index);
+                            write_u32(STATE_DIRECTORY_SLOT_OFFSET, offset);
+                            write_u32(STATE_DIRECTORY_SLOT_DIRECTORY_OFFSET, directory_offset);
+                        }
+                        return Ok(());
+                    }
+                    1 => {}
+                    _ => return Err(StorageError::INVALID_FILESYSTEM),
+                }
+                offset += K16FS_DIRECTORY_ENTRY_SIZE;
+                directory_offset += K16FS_DIRECTORY_ENTRY_SIZE;
+            }
+            block_index += 1;
+        }
+        extent_index += 1;
+    }
+    Err(StorageError::OUTPUT_BUFFER_TOO_SMALL)
 }
 
 pub unsafe fn copy_selected_directory_listing_to_ram(
@@ -591,6 +783,7 @@ unsafe fn read_inode(inode_id: u32) -> Result<(), StorageError> {
     }
 
     unsafe {
+        write_u32(STATE_SELECTED_INODE_ID, inode_id);
         write_u32(STATE_INODE_STATE, scratch_u8(inode_offset) as u32);
         write_u32(STATE_INODE_SIZE_BYTES, scratch_u32(inode_offset + 0x08));
         write_u32(STATE_INODE_EXTENT_COUNT, extent_count as u32);
@@ -617,6 +810,224 @@ unsafe fn read_inode(inode_id: u32) -> Result<(), StorageError> {
     }
 
     Ok(())
+}
+
+unsafe fn encode_file_inode(metadata: FileMetadata) -> Result<(), StorageError> {
+    unsafe {
+        encode_inode(
+            metadata.inode_id,
+            1,
+            metadata.size_bytes,
+            metadata.extent_count,
+            &metadata.extent_start_blocks,
+            &metadata.extent_block_counts,
+        )
+    }
+}
+
+unsafe fn encode_selected_inode_size(inode_id: u32, size_bytes: u32) -> Result<(), StorageError> {
+    let mut extent_start_blocks = [0; K16FS_MAX_INLINE_EXTENTS];
+    let mut extent_block_counts = [0; K16FS_MAX_INLINE_EXTENTS];
+    let extent_count = unsafe { read_u32(STATE_INODE_EXTENT_COUNT) };
+    let mut index = 0;
+    while index < K16FS_MAX_INLINE_EXTENTS {
+        extent_start_blocks[index] =
+            unsafe { read_u32(STATE_INODE_EXTENT_START_BLOCKS + index as u32 * 4) };
+        extent_block_counts[index] =
+            unsafe { read_u32(STATE_INODE_EXTENT_BLOCK_COUNTS + index as u32 * 4) };
+        index += 1;
+    }
+    unsafe {
+        encode_inode(
+            inode_id,
+            read_u32(STATE_INODE_STATE) as u8,
+            size_bytes,
+            extent_count,
+            &extent_start_blocks,
+            &extent_block_counts,
+        )
+    }
+}
+
+unsafe fn encode_inode(
+    inode_id: u32,
+    state: u8,
+    size_bytes: u32,
+    extent_count: u32,
+    extent_start_blocks: &[u32; K16FS_MAX_INLINE_EXTENTS],
+    extent_block_counts: &[u32; K16FS_MAX_INLINE_EXTENTS],
+) -> Result<(), StorageError> {
+    if extent_count as usize > K16FS_MAX_INLINE_EXTENTS {
+        return Err(StorageError::INVALID_FILESYSTEM);
+    }
+    let inodes_per_block = BLOCK_SIZE / K16FS_INODE_SIZE;
+    let inode_capacity = match unsafe { read_u32(STATE_SUPERBLOCK_INODE_TABLE_BLOCK_COUNT) }
+        .checked_mul(inodes_per_block)
+    {
+        Some(value) => value,
+        None => return Err(StorageError::INVALID_FILESYSTEM),
+    };
+    if inode_id >= inode_capacity {
+        return Err(StorageError::INVALID_FILESYSTEM);
+    }
+    let inode_block =
+        unsafe { read_u32(STATE_SUPERBLOCK_INODE_TABLE_START_BLOCK) } + inode_id / inodes_per_block;
+    let inode_offset = (inode_id % inodes_per_block) * K16FS_INODE_SIZE;
+    unsafe { read_fs_block(inode_block)? };
+    let mut offset = 0;
+    while offset < K16FS_INODE_SIZE {
+        unsafe { write_u8(SCRATCH_ADDR + inode_offset + offset, 0) };
+        offset += 1;
+    }
+    unsafe {
+        write_u8(SCRATCH_ADDR + inode_offset, state);
+        write_u32(SCRATCH_ADDR + inode_offset + 0x08, size_bytes);
+        write_u32(SCRATCH_ADDR + inode_offset + 0x0c, 0);
+        write_u8(SCRATCH_ADDR + inode_offset + 0x10, extent_count as u8);
+    }
+    let mut index = 0;
+    while index < extent_count as usize {
+        let offset = SCRATCH_ADDR + inode_offset + 0x20 + index as u32 * 8;
+        unsafe {
+            write_u32(offset, extent_start_blocks[index]);
+            write_u32(offset + 4, extent_block_counts[index]);
+        }
+        index += 1;
+    }
+    unsafe { write_fs_block(inode_block) }
+}
+
+unsafe fn allocate_inode() -> Result<u32, StorageError> {
+    let inodes_per_block = BLOCK_SIZE / K16FS_INODE_SIZE;
+    let inode_capacity = match unsafe { read_u32(STATE_SUPERBLOCK_INODE_TABLE_BLOCK_COUNT) }
+        .checked_mul(inodes_per_block)
+    {
+        Some(value) => value,
+        None => return Err(StorageError::INVALID_FILESYSTEM),
+    };
+    let mut inode_id = 1;
+    while inode_id < inode_capacity {
+        unsafe { read_inode(inode_id)? };
+        match unsafe { read_u32(STATE_INODE_STATE) as u8 } {
+            0 | 3 => return Ok(inode_id),
+            1 | 2 => {}
+            _ => return Err(StorageError::INVALID_FILESYSTEM),
+        }
+        inode_id += 1;
+    }
+    Err(StorageError::OUTPUT_BUFFER_TOO_SMALL)
+}
+
+unsafe fn allocate_contiguous_blocks(count: u32) -> Result<u32, StorageError> {
+    if count == 0 {
+        return Err(StorageError::INVALID_FILESYSTEM);
+    }
+    let total_blocks = unsafe { read_u32(STATE_SUPERBLOCK_TOTAL_BLOCKS) };
+    let mut run_start = 0;
+    let mut run_count = 0;
+    let mut block = 1;
+    while block < total_blocks {
+        if unsafe { is_block_allocated(block)? } {
+            run_start = 0;
+            run_count = 0;
+        } else {
+            if run_count == 0 {
+                run_start = block;
+            }
+            run_count += 1;
+            if run_count == count {
+                let mut allocated = run_start;
+                while allocated < run_start + count {
+                    unsafe { mark_block_allocated(allocated)? };
+                    allocated += 1;
+                }
+                return Ok(run_start);
+            }
+        }
+        block += 1;
+    }
+    Err(StorageError::OUTPUT_BUFFER_TOO_SMALL)
+}
+
+unsafe fn is_block_allocated(block: u32) -> Result<bool, StorageError> {
+    if block >= unsafe { read_u32(STATE_SUPERBLOCK_TOTAL_BLOCKS) } {
+        return Err(StorageError::INVALID_FILESYSTEM);
+    }
+    let bits_per_block = BLOCK_SIZE * 8;
+    let bitmap_block_index = block / bits_per_block;
+    if bitmap_block_index >= unsafe { read_u32(STATE_SUPERBLOCK_BITMAP_BLOCK_COUNT) } {
+        return Err(StorageError::INVALID_FILESYSTEM);
+    }
+    let bitmap_block =
+        unsafe { read_u32(STATE_SUPERBLOCK_BITMAP_START_BLOCK) } + bitmap_block_index;
+    let byte_offset = (block / 8) % BLOCK_SIZE;
+    let bit = (block % 8) as u8;
+    unsafe { read_fs_block(bitmap_block)? };
+    Ok((scratch_u8(byte_offset) & (1_u8 << bit)) != 0)
+}
+
+unsafe fn mark_block_allocated(block: u32) -> Result<(), StorageError> {
+    if block >= unsafe { read_u32(STATE_SUPERBLOCK_TOTAL_BLOCKS) } {
+        return Err(StorageError::INVALID_FILESYSTEM);
+    }
+    let bits_per_block = BLOCK_SIZE * 8;
+    let bitmap_block_index = block / bits_per_block;
+    if bitmap_block_index >= unsafe { read_u32(STATE_SUPERBLOCK_BITMAP_BLOCK_COUNT) } {
+        return Err(StorageError::INVALID_FILESYSTEM);
+    }
+    let bitmap_block =
+        unsafe { read_u32(STATE_SUPERBLOCK_BITMAP_START_BLOCK) } + bitmap_block_index;
+    let byte_offset = (block / 8) % BLOCK_SIZE;
+    let bit = (block % 8) as u8;
+    unsafe { read_fs_block(bitmap_block)? };
+    let value = scratch_u8(byte_offset) | (1_u8 << bit);
+    unsafe { write_u8(SCRATCH_ADDR + byte_offset, value) };
+    unsafe { write_fs_block(bitmap_block) }
+}
+
+unsafe fn encode_directory_entry_at(
+    block: u32,
+    offset: u32,
+    inode_id: u32,
+    name: &[u8],
+) -> Result<(), StorageError> {
+    if name.is_empty() || name.len() > K16FS_MAX_NAME_BYTES {
+        return Err(StorageError::INVALID_FILESYSTEM);
+    }
+    unsafe { read_fs_block(block)? };
+    let mut cursor = 0;
+    while cursor < K16FS_DIRECTORY_ENTRY_SIZE {
+        unsafe { write_u8(SCRATCH_ADDR + offset + cursor, 0) };
+        cursor += 1;
+    }
+    unsafe {
+        write_u8(SCRATCH_ADDR + offset, 1);
+        write_u8(SCRATCH_ADDR + offset + 1, name.len() as u8);
+        write_u32(SCRATCH_ADDR + offset + 4, inode_id);
+    }
+    let mut index = 0;
+    while index < name.len() {
+        unsafe { write_u8(SCRATCH_ADDR + offset + 8 + index as u32, name[index]) };
+        index += 1;
+    }
+    unsafe { write_fs_block(block) }
+}
+
+fn file_capacity_bytes(metadata: FileMetadata) -> Result<u32, StorageError> {
+    let mut capacity: u32 = 0;
+    let mut index = 0;
+    while index < metadata.extent_count as usize {
+        let bytes = match metadata.extent_block_counts[index].checked_mul(BLOCK_SIZE) {
+            Some(value) => value,
+            None => return Err(StorageError::INVALID_FILESYSTEM),
+        };
+        capacity = match capacity.checked_add(bytes) {
+            Some(value) => value,
+            None => return Err(StorageError::INVALID_FILESYSTEM),
+        };
+        index += 1;
+    }
+    Ok(capacity)
 }
 
 #[inline(always)]
@@ -648,6 +1059,18 @@ unsafe fn read_fs_block(block: u32) -> Result<(), StorageError> {
 }
 
 #[inline(always)]
+unsafe fn write_fs_block(block: u32) -> Result<(), StorageError> {
+    if block >= unsafe { read_u32(STATE_PARTITION_BLOCK_COUNT) } {
+        return Err(StorageError::INVALID_FILESYSTEM);
+    }
+    let lba = match unsafe { read_u32(STATE_PARTITION_START_LBA) }.checked_add(block) {
+        Some(value) => value,
+        None => return Err(StorageError::INVALID_FILESYSTEM),
+    };
+    unsafe { write_storage_block(lba) }
+}
+
+#[inline(always)]
 unsafe fn read_storage_block(lba: u32) -> Result<(), StorageError> {
     let version = unsafe { read_i32(storage0::VERSION) };
     if version != storage0::STORAGE_VERSION {
@@ -675,6 +1098,44 @@ unsafe fn read_storage_block(lba: u32) -> Result<(), StorageError> {
         return Err(StorageError::STORAGE_TRANSFER);
     }
     Ok(())
+}
+
+#[inline(always)]
+unsafe fn write_storage_block(lba: u32) -> Result<(), StorageError> {
+    let version = unsafe { read_i32(storage0::VERSION) };
+    if version != storage0::STORAGE_VERSION {
+        return Err(StorageError::STORAGE_VERSION);
+    }
+    let block_size = unsafe { read_i32(storage0::BLOCK_SIZE) };
+    if block_size != BLOCK_SIZE as i32 {
+        return Err(StorageError::STORAGE_BLOCK_SIZE);
+    }
+    let media = unsafe { read_i32(storage0::MEDIA_STATUS) };
+    if media != storage0::MEDIA_PRESENT {
+        return Err(StorageError::STORAGE_MEDIA);
+    }
+    unsafe {
+        write_u32(storage0::LBA_LOW, lba);
+        write_u32(storage0::LBA_HIGH, 0);
+        write_u32(storage0::BLOCK_COUNT, 1);
+        write_u32(storage0::BUFFER_ADDR, SCRATCH_ADDR);
+        write_i32(storage0::COMMAND, storage0::COMMAND_WRITE_BLOCKS);
+    }
+    if unsafe { read_i32(storage0::STATUS) } != storage0::STATUS_DONE
+        || unsafe { read_i32(storage0::ERROR) } != storage0::ERROR_NONE
+        || unsafe { read_u32(storage0::BYTES_DONE) } != BLOCK_SIZE
+    {
+        return Err(StorageError::STORAGE_TRANSFER);
+    }
+    Ok(())
+}
+
+unsafe fn clear_scratch_block() {
+    let mut offset = 0;
+    while offset < BLOCK_SIZE {
+        unsafe { write_u8(SCRATCH_ADDR + offset, 0) };
+        offset += 1;
+    }
 }
 
 fn scratch_eq(offset: u32, expected: &[u8]) -> bool {

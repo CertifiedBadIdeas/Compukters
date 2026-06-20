@@ -530,10 +530,10 @@ K16 syscall ABI v0 names the current Rust-kernel proof services in
 | `YIELD` | `4` | `k16_rt::yield_syscall()` | Kernel yields once to the host and then returns `STATUS_OK`. |
 | `SLEEP_TICKS` | `5` | `k16_rt::sleep_ticks_syscall(ticks)` | Kernel waits until `timer0.game_ticks` advances by `ticks`, then returns `STATUS_OK`. |
 | `EXIT` | `6` | `k16_rt::exit_syscall(status)` | Terminates the current process. If the process has a blocked parent, the status is returned to that parent; if init exits, the kernel halts the VM with the supplied status. |
-| `WRITE` | `7` | `k16_rt::write_syscall(fd, ptr, len)` | Writes bytes from guest memory to fd `1` or `2`; returns byte count or a negative K16 error. |
+| `WRITE` | `7` | `k16_rt::write_syscall(fd, ptr, len)` | Writes bytes from guest memory to fd `1`, fd `2`, or a write-only regular file fd; regular files advance their descriptor offset and update K16FS inode size. Returns byte count or a negative K16 error. |
 | `READ` | `8` | `k16_rt::read_syscall(fd, ptr, len)` | Reads bytes from fd `0` or an open regular file fd into guest memory; stdin blocks by waiting until input is available, regular files advance their descriptor offset, and the syscall returns byte count or a negative K16 error. |
 | `RUN` | `9` | `k16_rt::run_syscall(path, len)`, `k16_rt::run_argv_syscall(request, len)` | Synchronously loads a dynamic `/bin/*.kx` user program from `ROOT`/K16FS on `storage0`, blocks the current foreground process while the child runs, and returns the child exit status or a negative K16 error. `trap_arg2 = 0` means `trap_arg0/trap_arg1` are a raw path pointer/length. `trap_arg2 = 1` means they are a bounded argv request block beginning with `RUN_ARGV_MAGIC`. |
-| `OPEN` | `10` | `k16_rt::open_syscall(path, len, flags)` | Opens an absolute read-only ROOT/K16FS regular file path from `storage0`; `flags` must be `0`, and success returns a regular file fd starting at `3`. |
+| `OPEN` | `10` | `k16_rt::open_syscall(path, len, flags)` | Opens an absolute ROOT/K16FS regular file path from `storage0`. `flags = OPEN_READ_ONLY` opens an existing file for read. `flags = OPEN_WRITE_ONLY | OPEN_CREATE | OPEN_TRUNCATE` creates or truncates a regular file for write. Success returns a regular file fd starting at `3`. |
 | `CLOSE` | `11` | `k16_rt::close_syscall(fd)` | Closes a regular file fd owned by the current foreground process. Standard descriptors `0..=2` are not closeable. |
 | `BRK` | `12` | `k16_rt::brk_syscall(addr)` | Sets the current foreground process program break to `addr` and returns the resulting break, or a negative K16 error. The break must stay inside the kernel-selected heap arena for that process. For translated processes, growing the break commits any newly crossed heap VM pages through the kernel page allocator. |
 | `SBRK` | `13` | `k16_rt::sbrk_syscall(delta)` | Grows the current foreground process program break by `delta` bytes and returns the previous break, or a negative K16 error. For translated processes, newly committed heap pages are mapped user-writable and non-executable. |
@@ -544,6 +544,10 @@ K16 syscall ABI v0 names the current Rust-kernel proof services in
 | `STATUS_OK` | `0` | n/a | Successful proof-service status. |
 | `FILE_TYPE_REGULAR` | `1` | n/a | `STAT` response kind for a regular file. |
 | `FILE_TYPE_DIRECTORY` | `2` | n/a | `STAT` response kind for a directory. |
+| `OPEN_READ_ONLY` | `0` | n/a | `OPEN` flags value for existing read-only regular files. |
+| `OPEN_WRITE_ONLY` | `1` | n/a | `OPEN` flag bit for write-only regular file descriptors. |
+| `OPEN_CREATE` | `2` | n/a | `OPEN` flag bit that creates the file when missing in the supported write-create-truncate mode. |
+| `OPEN_TRUNCATE` | `4` | n/a | `OPEN` flag bit that truncates the file in the supported write-create-truncate mode. |
 | `FD_STDIN` | `0` | n/a | Standard input descriptor accepted by `READ`. |
 | `FD_STDOUT` | `1` | n/a | Standard output descriptor accepted by `WRITE`. |
 | `FD_STDERR` | `2` | n/a | Standard error descriptor accepted by `WRITE`. |

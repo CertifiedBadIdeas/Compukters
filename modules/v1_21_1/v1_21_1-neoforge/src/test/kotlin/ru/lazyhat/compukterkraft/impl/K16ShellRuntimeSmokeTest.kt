@@ -248,6 +248,44 @@ class K16ShellRuntimeSmokeTest {
     }
 
     @Test
+    fun runtimeDeviceWritesRegularFileThroughUserlandShell() {
+        val device = createDevice(deviceId = 233)
+
+        try {
+            device.turnOn()
+            waitForTerminalText(device, "K16> ")
+
+            dispatchText(device, "write /etc/user.txt hello\n")
+            waitForTerminal(device, "write output and returned prompt") { terminal ->
+                val commandIndex = terminal.indexOf("K16> write /etc/user.txt hello")
+                val outputIndex =
+                    terminal.indexOf("WROTE 5 /etc/user.txt", startIndex = commandIndex + "K16> write /etc/user.txt hello".length)
+                val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex)
+                commandIndex >= 0 && outputIndex > commandIndex && returnedPromptIndex > outputIndex
+            }
+
+            dispatchText(device, "cat /etc/user.txt\n")
+            waitForTerminal(device, "cat output for written file and returned prompt") { terminal ->
+                val commandIndex = terminal.indexOf("K16> cat /etc/user.txt")
+                val outputIndex = terminal.indexOf("hello", startIndex = commandIndex + "K16> cat /etc/user.txt".length)
+                val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex)
+                commandIndex >= 0 && outputIndex > commandIndex && returnedPromptIndex > outputIndex
+            }
+
+            dispatchText(device, "stat /etc/user.txt\n")
+            waitForTerminal(device, "stat output for written file and returned prompt") { terminal ->
+                val commandIndex = terminal.indexOf("K16> stat /etc/user.txt")
+                val outputIndex =
+                    terminal.indexOf("FILE 5 /etc/user.txt", startIndex = commandIndex + "K16> stat /etc/user.txt".length)
+                val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex)
+                commandIndex >= 0 && outputIndex > commandIndex && returnedPromptIndex > outputIndex
+            }
+        } finally {
+            device.close()
+        }
+    }
+
+    @Test
     fun runtimeDeviceRunsExplicitExecutablePathsThroughUserlandShell() {
         val device = createDevice(deviceId = 228)
 

@@ -157,6 +157,17 @@ pub mod fs {
             Ok(returned as usize)
         }
 
+        pub fn write_all(self, bytes: &[u8]) -> Result<(), Error> {
+            let returned = k16_rt::write_syscall(self.0, bytes.as_ptr(), bytes.len());
+            if is_error_status(returned) {
+                return Err(Error::Syscall(returned));
+            }
+            if returned != bytes.len() as u32 {
+                return Err(Error::Syscall(k16_abi::syscall::ERROR_NO_MEMORY));
+            }
+            Ok(())
+        }
+
         pub fn close(self) -> Result<(), Error> {
             let returned = k16_rt::close_syscall(self.0);
             if is_error_status(returned) {
@@ -167,7 +178,22 @@ pub mod fs {
     }
 
     pub fn open(path: &str) -> Result<File, Error> {
-        let returned = k16_rt::open_syscall(path.as_ptr(), path.len(), 0);
+        let returned =
+            k16_rt::open_syscall(path.as_ptr(), path.len(), k16_abi::syscall::OPEN_READ_ONLY);
+        if is_error_status(returned) {
+            return Err(Error::Syscall(returned));
+        }
+        Ok(File(returned))
+    }
+
+    pub fn create(path: &str) -> Result<File, Error> {
+        let returned = k16_rt::open_syscall(
+            path.as_ptr(),
+            path.len(),
+            k16_abi::syscall::OPEN_WRITE_ONLY
+                | k16_abi::syscall::OPEN_CREATE
+                | k16_abi::syscall::OPEN_TRUNCATE,
+        );
         if is_error_status(returned) {
             return Err(Error::Syscall(returned));
         }
