@@ -4,7 +4,8 @@
 use core::panic::PanicInfo;
 
 use k16_shell::{
-    resolve_executable_path, Command, CommandArgs, InputLine, PathBuffer, WorkingDirectory,
+    resolve_executable_path, should_resolve_exec_arg, Command, CommandArgs, InputLine, PathBuffer,
+    WorkingDirectory,
 };
 use kraft_std::prelude::*;
 
@@ -245,36 +246,34 @@ fn run_exec(
 
     let raw_args = args.as_slice();
     let mut argv = [""; k16_abi::syscall::MAX_RUN_ARGS];
-    if should_resolve_path_arg(name) {
-        let mut index = 0;
-        while index < raw_args.len() {
-            let raw_arg = raw_args[index];
+    let mut index = 0;
+    while index < raw_args.len() {
+        let raw_arg = raw_args[index];
+        if should_resolve_exec_arg(name, raw_args, index) {
             if cwd.resolve_into(raw_arg, &mut arg_paths[index]).is_err() {
                 must_write(stdout, b"ERR INVAL\n");
                 return k16_abi::syscall::ERROR_INVALID;
             }
-            index += 1;
         }
-        let mut index = 0;
-        while index < raw_args.len() {
+        index += 1;
+    }
+    let mut index = 0;
+    while index < raw_args.len() {
+        let raw_arg = raw_args[index];
+        if should_resolve_exec_arg(name, raw_args, index) {
             let Ok(arg) = arg_paths[index].as_str() else {
                 must_write(stdout, b"ERR INVAL\n");
                 return k16_abi::syscall::ERROR_INVALID;
             };
             argv[index] = arg;
-            index += 1;
-        }
-    } else {
-        let mut index = 0;
-        while index < raw_args.len() {
-            let raw_arg = raw_args[index];
+        } else {
             let Ok(arg) = core::str::from_utf8(raw_arg) else {
                 must_write(stdout, b"ERR INVAL\n");
                 return k16_abi::syscall::ERROR_INVALID;
             };
             argv[index] = arg;
-            index += 1;
         }
+        index += 1;
     }
     match process::run_with_args(program_path, &argv[..raw_args.len()]) {
         Ok(status) => {
@@ -283,10 +282,6 @@ fn run_exec(
         }
         Err(error) => write_run_error(stdout, error),
     }
-}
-
-fn should_resolve_path_arg(name: &[u8]) -> bool {
-    matches!(name, b"ls" | b"cat" | b"cp" | b"mv")
 }
 
 fn command_name_has_separator(name: &[u8]) -> bool {

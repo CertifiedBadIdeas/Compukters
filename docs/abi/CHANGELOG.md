@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- The bundled K16 shell now resolves relative filesystem path arguments for the
+  write-side workflow consistently with read/list/remove utilities. `write`
+  resolves only its path argument, preserving `--append` and payload arguments
+  verbatim, while `stat`, `rm`, `mkdir`, and `rmdir` now also receive
+  cwd-resolved paths from the shell.
 - Bundled multi-path filesystem utilities now use a consistent aggregate
   failure policy. `cat`, `stat`, and `ls` continue processing later path
   arguments after a per-path error, print per-path diagnostics, and exit with

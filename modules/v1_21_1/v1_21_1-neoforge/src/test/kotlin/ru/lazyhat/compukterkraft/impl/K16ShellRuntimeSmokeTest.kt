@@ -625,6 +625,91 @@ class K16ShellRuntimeSmokeTest {
     }
 
     @Test
+    fun runtimeDeviceRunsWriteSideFilesystemWorkflow() {
+        val device = createDevice(deviceId = 244)
+
+        try {
+            device.turnOn()
+            waitForTerminalText(device, "K16> ")
+
+            var cursor = 0
+            cursor = runShellCommandAndWait(device, cursor, "cd etc", "cd into etc returns prompt")
+            cursor =
+                runShellCommandAndWait(
+                    device,
+                    cursor,
+                    "write workflow.txt alpha",
+                    "relative write creates file in cwd",
+                    "WROTE 5 /etc/workflow.txt",
+                )
+            cursor = runShellCommandAndWait(device, cursor, "status", "write success is remembered", "STATUS 0")
+            cursor =
+                runShellCommandAndWait(
+                    device,
+                    cursor,
+                    "write --append workflow.txt -beta",
+                    "relative append writes to file in cwd",
+                    "WROTE 5 /etc/workflow.txt",
+                )
+            cursor =
+                runShellCommandAndWait(
+                    device,
+                    cursor,
+                    "cat workflow.txt",
+                    "relative cat reads appended file",
+                    "alpha-beta",
+                )
+            cursor =
+                runShellCommandAndWait(
+                    device,
+                    cursor,
+                    "cp workflow.txt workflow.copy",
+                    "relative cp copies written file",
+                    "COPIED /etc/workflow.txt /etc/workflow.copy",
+                )
+            cursor = runShellCommandAndWait(device, cursor, "status", "cp success is remembered", "STATUS 0")
+            cursor =
+                runShellCommandAndWait(
+                    device,
+                    cursor,
+                    "mv workflow.copy workflow.moved",
+                    "relative mv moves copied file",
+                    "MOVED /etc/workflow.copy /etc/workflow.moved",
+                )
+            cursor =
+                runShellCommandAndWait(
+                    device,
+                    cursor,
+                    "cat workflow.moved",
+                    "relative cat reads moved file",
+                    "alpha-beta",
+                )
+            cursor =
+                runShellCommandAndWait(
+                    device,
+                    cursor,
+                    "stat workflow.copy",
+                    "relative stat reports moved source missing",
+                    "ERR NOENT /etc/workflow.copy",
+                    "ERR EXIT 1",
+                )
+            cursor = runShellCommandAndWait(device, cursor, "status", "stat child failure is remembered", "STATUS 1")
+            cursor =
+                runShellCommandAndWait(
+                    device,
+                    cursor,
+                    "rm workflow.moved workflow.txt",
+                    "relative rm removes workflow files",
+                    "REMOVED /etc/workflow.moved",
+                    "REMOVED /etc/workflow.txt",
+                )
+            runShellCommandAndWait(device, cursor, "status", "rm success resets status", "STATUS 0")
+        } finally {
+            device.close()
+        }
+    }
+
+    @Test
     fun runtimeDeviceKeepsShellAliveAfterUserlandFault() {
         val userFaultArtifact = Path.of("build/generated/k16-firmware-artifacts/user-fault-test.kx")
         assertTrue(Files.isRegularFile(userFaultArtifact), "user fault fixture should be built at $userFaultArtifact")
