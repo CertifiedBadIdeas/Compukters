@@ -405,6 +405,46 @@ class K16ShellRuntimeSmokeTest {
     }
 
     @Test
+    fun runtimeDeviceGrowsUserDirectoryThroughUserlandShell() {
+        val device = createDevice(deviceId = 236)
+
+        try {
+            device.turnOn()
+            waitForTerminalText(device, "K16> ")
+
+            dispatchText(device, "mkdir /etc/grow\n")
+            waitForTerminal(device, "mkdir grow output and returned prompt") { terminal ->
+                val commandIndex = terminal.lastIndexOf("K16> mkdir /etc/grow")
+                val outputIndex = terminal.indexOf("CREATED /etc/grow", startIndex = commandIndex + "K16> mkdir /etc/grow".length)
+                val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex)
+                commandIndex >= 0 && outputIndex > commandIndex && returnedPromptIndex > outputIndex
+            }
+
+            repeat(9) { index ->
+                val path = "/etc/grow/f$index"
+                dispatchText(device, "write $path x\n")
+                waitForTerminal(device, "write output for $path and returned prompt") { terminal ->
+                    val commandIndex = terminal.lastIndexOf("K16> write $path x")
+                    val outputIndex = terminal.indexOf("WROTE 1 $path", startIndex = commandIndex + "K16> write $path x".length)
+                    val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex)
+                    commandIndex >= 0 && outputIndex > commandIndex && returnedPromptIndex > outputIndex
+                }
+            }
+
+            dispatchText(device, "ls /etc/grow\n")
+            waitForTerminal(device, "ls output includes first and ninth grown directory entries") { terminal ->
+                val commandIndex = terminal.lastIndexOf("K16> ls /etc/grow")
+                val firstIndex = terminal.indexOf("f0", startIndex = commandIndex + "K16> ls /etc/grow".length)
+                val ninthIndex = terminal.indexOf("f8", startIndex = firstIndex)
+                val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = ninthIndex)
+                commandIndex >= 0 && firstIndex > commandIndex && ninthIndex > firstIndex && returnedPromptIndex > ninthIndex
+            }
+        } finally {
+            device.close()
+        }
+    }
+
+    @Test
     fun runtimeDeviceRunsExplicitExecutablePathsThroughUserlandShell() {
         val device = createDevice(deviceId = 228)
 

@@ -718,7 +718,59 @@ unsafe fn find_selected_directory_free_slot() -> Result<(), StorageError> {
         }
         extent_index += 1;
     }
-    Err(StorageError::OUTPUT_BUFFER_TOO_SMALL)
+    let slot_block = unsafe { grow_selected_directory_capacity()? };
+    unsafe {
+        write_u32(STATE_DIRECTORY_SLOT_BLOCK, slot_block);
+        write_u32(STATE_DIRECTORY_SLOT_OFFSET, 0);
+        write_u32(STATE_DIRECTORY_SLOT_DIRECTORY_OFFSET, directory_offset);
+    }
+    Ok(())
+}
+
+unsafe fn grow_selected_directory_capacity() -> Result<u32, StorageError> {
+    if unsafe { read_u32(STATE_INODE_STATE) as u8 } != 2 {
+        return Err(StorageError::INVALID_FILESYSTEM);
+    }
+    let mut metadata = unsafe { selected_file_metadata() };
+    if metadata.extent_count == 0 || metadata.extent_count as usize > K16FS_MAX_INLINE_EXTENTS {
+        return Err(StorageError::INVALID_FILESYSTEM);
+    }
+    let last_extent_index = metadata.extent_count as usize - 1;
+    let last_start = metadata.extent_start_blocks[last_extent_index];
+    let last_count = metadata.extent_block_counts[last_extent_index];
+    let grow_block = match last_start.checked_add(last_count) {
+        Some(value) => value,
+        None => return Err(StorageError::INVALID_FILESYSTEM),
+    };
+    if grow_block < unsafe { read_u32(STATE_SUPERBLOCK_TOTAL_BLOCKS) }
+        && !unsafe { is_block_allocated(grow_block)? }
+    {
+        unsafe { mark_block_allocated(grow_block)? };
+        unsafe { clear_scratch_block() };
+        unsafe { write_fs_block(grow_block)? };
+        metadata.extent_block_counts[last_extent_index] = match last_count.checked_add(1) {
+            Some(value) => value,
+            None => return Err(StorageError::INVALID_FILESYSTEM),
+        };
+        unsafe { encode_directory_inode(metadata)? };
+        return Ok(grow_block);
+    }
+
+    let new_extent_index = metadata.extent_count as usize;
+    if new_extent_index >= K16FS_MAX_INLINE_EXTENTS {
+        return Err(StorageError::OUTPUT_BUFFER_TOO_SMALL);
+    }
+    let new_extent_block = unsafe { allocate_contiguous_blocks(1)? };
+    unsafe { clear_scratch_block() };
+    unsafe { write_fs_block(new_extent_block)? };
+    metadata.extent_start_blocks[new_extent_index] = new_extent_block;
+    metadata.extent_block_counts[new_extent_index] = 1;
+    metadata.extent_count = match metadata.extent_count.checked_add(1) {
+        Some(value) => value,
+        None => return Err(StorageError::INVALID_FILESYSTEM),
+    };
+    unsafe { encode_directory_inode(metadata)? };
+    Ok(new_extent_block)
 }
 
 pub unsafe fn copy_selected_directory_listing_to_ram(
