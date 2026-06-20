@@ -15,31 +15,19 @@ pub extern "C" fn main(argc: u32, argv: *const process::Arg) -> ! {
 
 fn stat_args(argc: u32, argv: *const process::Arg) -> Result<(), ()> {
     let argv = unsafe { process::Argv::from_raw(argc, argv) };
-    if argv.len() == 0 {
-        return Err(());
-    }
-    let mut index = 0;
-    let mut ok = true;
-    while index < argv.len() {
-        let Some(path) = argv.get(index) else {
-            return Err(());
-        };
-        let path = core::str::from_utf8(path).map_err(|_| ())?;
-        if stat_path(path).is_err() {
-            ok = false;
-        }
-        index += 1;
-    }
-    if ok {
-        Ok(())
-    } else {
-        Err(())
-    }
+    coreutils::for_each_path_arg(argv.len(), |index| argv.get(index), stat_path)
 }
 
 fn stat_path(path: &str) -> Result<(), ()> {
     let stdout = io::stdout();
-    match fs::metadata(path) {
+    let path_ref = match path::PathRef::try_from_str(path) {
+        Ok(path_ref) => path_ref,
+        Err(_) => {
+            write_stat_error(stdout, b"INVAL", path)?;
+            return Err(());
+        }
+    };
+    match fs::metadata_path(path_ref) {
         Ok(metadata) => {
             match metadata.file_type {
                 fs::FileType::Regular => stdout.write_all(b"FILE ").map_err(|_| ())?,

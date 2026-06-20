@@ -4,27 +4,10 @@ pub const DEFAULT_PATH: &str = "/bin";
 
 pub fn for_each_path_arg_or_default<'a>(
     arg_count: usize,
-    mut arg_at: impl FnMut(usize) -> Option<&'a [u8]>,
-    mut visit: impl FnMut(&str) -> Result<(), ()>,
+    arg_at: impl FnMut(usize) -> Option<&'a [u8]>,
+    visit: impl FnMut(&str) -> Result<(), ()>,
 ) -> Result<(), ()> {
-    if arg_count == 0 {
-        return visit(DEFAULT_PATH);
-    }
-    let mut index = 0;
-    let mut failed = false;
-    while index < arg_count {
-        let path = arg_at(index).ok_or(())?;
-        let path = core::str::from_utf8(path).map_err(|_| ())?;
-        if visit(path).is_err() {
-            failed = true;
-        }
-        index += 1;
-    }
-    if failed {
-        Err(())
-    } else {
-        Ok(())
-    }
+    kraft_std::coreutils::for_each_path_arg_or_default(arg_count, arg_at, DEFAULT_PATH, visit)
 }
 
 #[cfg(test)]

@@ -14,3 +14,6 @@ required-features = ["k16-target"]
 
 [dependencies]
 kraft-std = { path = "../kraft-std" }
+
+[dev-dependencies]
+kraft-std = { path = "../kraft-std", features = ["host-test"] }

@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- `kraft-std` now exposes shared bundled-coreutils multi-path helpers and a
+  bounded `path::PathRef` wrapper. Bundled `cat`, `ls`, `stat`, `rm`,
+  `mkdir`, and `rmdir` reuse the shared helpers, while the shell now delegates
+  `RUN` argv path preparation to focused helper functions without changing
+  command output.
 - `kraft-std` now exposes `path::PathBuffer` and
   `path::WorkingDirectory` for bounded K16 userland path normalization. The
   K16 shell now consumes that shared path API instead of owning its own cwd
