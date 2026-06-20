@@ -352,6 +352,30 @@ pub mod fs {
         pub size_bytes: u32,
     }
 
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub struct DirEntry<'a> {
+        name: &'a str,
+        file_type: FileType,
+    }
+
+    impl<'a> DirEntry<'a> {
+        #[inline(always)]
+        pub const fn name(self) -> &'a str {
+            self.name
+        }
+
+        #[inline(always)]
+        pub const fn file_type(self) -> FileType {
+            self.file_type
+        }
+    }
+
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub enum ReadDirEntryError<E> {
+        Fs(Error),
+        Visit(E),
+    }
+
     impl File {
         #[inline(always)]
         pub const fn from_raw(fd: u32) -> Self {
@@ -460,6 +484,90 @@ pub mod fs {
     pub fn read_dir_path(path: PathRef<'_>, out: &mut [u8]) -> Result<usize, Error> {
         let request = ReadDirRequest::new(path.as_str(), out)?;
         read_dir_raw(request)
+    }
+
+    pub fn read_dir_entries<E>(
+        path: &str,
+        out: &mut [u8],
+        visit: impl FnMut(DirEntry<'_>) -> Result<(), E>,
+    ) -> Result<(), ReadDirEntryError<E>> {
+        let path = PathRef::try_from_str(path)
+            .map_err(|_| ReadDirEntryError::Fs(Error::InvalidArgument))?;
+        read_dir_entries_path(path, out, visit)
+    }
+
+    pub fn read_dir_entries_path<E>(
+        path: PathRef<'_>,
+        out: &mut [u8],
+        visit: impl FnMut(DirEntry<'_>) -> Result<(), E>,
+    ) -> Result<(), ReadDirEntryError<E>> {
+        let read = read_dir_path(path, out).map_err(ReadDirEntryError::Fs)?;
+        if read > out.len() {
+            return Err(ReadDirEntryError::Fs(Error::InvalidArgument));
+        }
+        read_dir_entries_from_listing(path, &out[..read], metadata_path, visit)
+    }
+
+    fn read_dir_entries_from_listing<E>(
+        path: PathRef<'_>,
+        listing: &[u8],
+        mut metadata_for: impl FnMut(PathRef<'_>) -> Result<Metadata, Error>,
+        mut visit: impl FnMut(DirEntry<'_>) -> Result<(), E>,
+    ) -> Result<(), ReadDirEntryError<E>> {
+        let mut child_path = [0u8; k16_abi::syscall::MAX_STAT_PATH_BYTES];
+        let mut cursor = 0;
+        while cursor < listing.len() {
+            let start = cursor;
+            while cursor < listing.len() && listing[cursor] != b'\n' {
+                cursor += 1;
+            }
+            let name = &listing[start..cursor];
+            if name.is_empty() {
+                return Err(ReadDirEntryError::Fs(Error::InvalidArgument));
+            }
+            let name = core::str::from_utf8(name)
+                .map_err(|_| ReadDirEntryError::Fs(Error::InvalidArgument))?;
+            let child_path_len =
+                write_child_path(path.as_str().as_bytes(), name.as_bytes(), &mut child_path)
+                    .map_err(ReadDirEntryError::Fs)?;
+            let child_path = core::str::from_utf8(&child_path[..child_path_len])
+                .map_err(|_| ReadDirEntryError::Fs(Error::InvalidArgument))?;
+            let child_path = PathRef::try_from_str(child_path)
+                .map_err(|_| ReadDirEntryError::Fs(Error::InvalidArgument))?;
+            let metadata = metadata_for(child_path).map_err(ReadDirEntryError::Fs)?;
+            visit(DirEntry {
+                name,
+                file_type: metadata.file_type,
+            })
+            .map_err(ReadDirEntryError::Visit)?;
+            if cursor < listing.len() {
+                cursor += 1;
+            }
+        }
+        Ok(())
+    }
+
+    fn write_child_path(base: &[u8], name: &[u8], out: &mut [u8]) -> Result<usize, Error> {
+        if base.is_empty() || name.is_empty() {
+            return Err(Error::InvalidArgument);
+        }
+        let separator_len = if base == b"/" { 0 } else { 1 };
+        let len = base
+            .len()
+            .checked_add(separator_len)
+            .and_then(|value| value.checked_add(name.len()))
+            .ok_or(Error::InvalidArgument)?;
+        if len > out.len() {
+            return Err(Error::InvalidArgument);
+        }
+        out[..base.len()].copy_from_slice(base);
+        let mut cursor = base.len();
+        if separator_len == 1 {
+            out[cursor] = b'/';
+            cursor += 1;
+        }
+        out[cursor..cursor + name.len()].copy_from_slice(name);
+        Ok(len)
     }
 
     fn read_dir_raw(request: ReadDirRequest) -> Result<usize, Error> {
@@ -688,6 +796,20 @@ pub mod fs {
             return Err(Error::Syscall(returned));
         }
         Ok(returned)
+    }
+
+    #[cfg(feature = "host-test")]
+    pub mod host_test {
+        use super::*;
+
+        pub fn read_dir_entries_from_listing<E>(
+            path: PathRef<'_>,
+            listing: &[u8],
+            metadata_for: impl FnMut(PathRef<'_>) -> Result<Metadata, Error>,
+            visit: impl FnMut(DirEntry<'_>) -> Result<(), E>,
+        ) -> Result<(), ReadDirEntryError<E>> {
+            super::read_dir_entries_from_listing(path, listing, metadata_for, visit)
+        }
     }
 }
 

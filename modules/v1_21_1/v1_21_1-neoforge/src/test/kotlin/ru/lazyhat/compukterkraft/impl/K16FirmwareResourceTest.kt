@@ -962,11 +962,11 @@ class K16FirmwareResourceTest {
 
         assertTrue(lsSource.contains("process::Argv::from_raw(argc, argv)"))
         assertTrue(lsSource.contains("k16_ls::for_each_path_arg_or_default(argv.len(), |index| argv.get(index), list_dir)"))
-        assertTrue(lsSource.contains("static mut CHILD_PATH"), "ls should keep child path scratch space off the stack")
         assertTrue(lsLibSource.contains("pub const DEFAULT_PATH: &str = \"/bin\""))
-        assertTrue(lsLibSource.contains("while index < arg_count"), "ls should visit every argv path")
-        assertTrue(lsSource.contains("fs::read_dir(path, &mut buffer)"))
-        assertTrue(lsSource.contains("fs::metadata(child_path)"))
+        assertTrue(lsLibSource.contains("kraft_std::coreutils::for_each_path_arg_or_default"), "ls should delegate argv path walking to kraft-std")
+        assertTrue(lsSource.contains("fs::read_dir_entries_path(path_ref, &mut buffer"), "ls should use the typed kraft-std directory API")
+        assertFalse(lsSource.contains("static mut CHILD_PATH"), "ls should not own child path scratch storage")
+        assertFalse(lsSource.contains("fs::metadata_path(child_path_ref)"), "typed read_dir should own child metadata lookups")
         assertTrue(lsSource.contains("io::stdout()"))
     }
 

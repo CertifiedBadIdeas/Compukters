@@ -393,6 +393,67 @@ fn fs_read_dir_rejects_too_long_path_before_syscall() {
 }
 
 #[test]
+fn fs_read_dir_entries_from_listing_visits_names_and_file_types() {
+    let path = path::PathRef::try_from_str("/").unwrap();
+    let listing = b"bin\nmotd\n";
+    let mut index = 0;
+    let expected = [
+        ("bin", fs::FileType::Directory),
+        ("motd", fs::FileType::Regular),
+    ];
+
+    let result = fs::host_test::read_dir_entries_from_listing(
+        path,
+        listing,
+        |path| match path.as_str() {
+            "/bin" => Ok(fs::Metadata {
+                file_type: fs::FileType::Directory,
+                size_bytes: 64,
+            }),
+            "/motd" => Ok(fs::Metadata {
+                file_type: fs::FileType::Regular,
+                size_bytes: 12,
+            }),
+            _ => Err(fs::Error::InvalidArgument),
+        },
+        |entry| {
+            assert_eq!((entry.name(), entry.file_type()), expected[index]);
+            index += 1;
+            Ok::<(), ()>(())
+        },
+    );
+
+    assert_eq!(result, Ok(()));
+    assert_eq!(index, expected.len());
+}
+
+#[test]
+fn fs_read_dir_entries_from_listing_returns_visit_error() {
+    let path = path::PathRef::try_from_str("/bin").unwrap();
+    let listing = b"cat.kx\nls.kx\n";
+
+    let result = fs::host_test::read_dir_entries_from_listing(
+        path,
+        listing,
+        |_| {
+            Ok(fs::Metadata {
+                file_type: fs::FileType::Regular,
+                size_bytes: 1,
+            })
+        },
+        |entry| {
+            if entry.name() == "ls.kx" {
+                Err(7)
+            } else {
+                Ok(())
+            }
+        },
+    );
+
+    assert_eq!(result, Err(fs::ReadDirEntryError::Visit(7)));
+}
+
+#[test]
 fn fs_metadata_delegates_to_stat_syscall_and_reports_negative_status() {
     k16_rt::host_test::reset_syscalls();
     k16_rt::host_test::set_syscall_return(k16_rt::host_test::ERROR_NO_ENTRY);
