@@ -1214,8 +1214,8 @@ impl K16Cpu {
         self.trap_cause = cause;
         self.trap_pc = fault_pc;
         self.trap_value = value;
-        self.trap_arg0 = 0;
-        self.trap_arg1 = 0;
+        self.trap_arg0 = encode_trap_address_mode(self.address_mode);
+        self.trap_arg1 = encode_trap_privilege_mode(self.privilege_mode);
         self.trap_arg2 = 0;
         self.trap_stack_pointer = self.registers[usize::from(K16_STACK_POINTER_REGISTER)];
         self.trap_interrupt_enable = self.interrupt_enable;
@@ -1435,6 +1435,95 @@ fn relative_branch_target(next_pc: u32, offset_nibble: usize) -> Result<u32, K16
         ));
     }
     Ok(target as u32)
+}
+
+fn encode_trap_address_mode(mode: K16AddressMode) -> u32 {
+    match mode {
+        K16AddressMode::Physical => 0,
+        K16AddressMode::Translated { .. } => 1,
+    }
+}
+
+fn encode_trap_privilege_mode(mode: K16PrivilegeMode) -> u32 {
+    match mode {
+        K16PrivilegeMode::Kernel => 0,
+        K16PrivilegeMode::User => 1,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::low_machine::MachineMemory;
+    use crate::mmu::MmuAddressSpaces;
+
+    struct SingleInstructionDecoder {
+        instruction: DecodedInstruction,
+        next_pc: u32,
+    }
+
+    impl InstructionDecoder for SingleInstructionDecoder {
+        fn decode(&mut self, _bus: &mut dyn MemoryBus, _pc: u32) -> Result<DecodeResult, K16Trap> {
+            Ok(DecodeResult {
+                instruction: self.instruction.clone(),
+                next_pc: self.next_pc,
+            })
+        }
+    }
+
+    #[test]
+    fn translated_user_fault_records_interrupted_modes_in_trap_args() {
+        let mut memory = MachineMemory::zeroed(0x8000).expect("memory initializes");
+        let mut address_spaces = MmuAddressSpaces::new();
+        let address_space = address_spaces
+            .create(0x8000)
+            .expect("address space creates");
+        let mut cpu = K16Cpu::new(0x1000);
+        cpu.set_address_mode(K16AddressMode::Translated { address_space });
+        cpu.set_privilege_mode(K16PrivilegeMode::User);
+        cpu.trap_vector = 0x2000;
+        cpu.registers[1] = 0x4000;
+        let mut decoder = SingleInstructionDecoder {
+            instruction: DecodedInstruction::Load32 { dst: 2, addr: 1 },
+            next_pc: 0x1002,
+        };
+
+        cpu.step_with_decoder_and_mmu(&mut memory, &mut decoder, Some(&address_spaces))
+            .expect("fault enters trap vector");
+
+        assert_eq!(cpu.trap_cause, K16_TRAP_CAUSE_LOAD_FAULT);
+        assert_eq!(
+            cpu.trap_arg0, 1,
+            "trap_arg0 records translated address mode"
+        );
+        assert_eq!(cpu.trap_arg1, 1, "trap_arg1 records user privilege mode");
+        assert_eq!(cpu.trap_arg2, 0);
+        assert_eq!(cpu.pc(), 0x2000);
+    }
+
+    #[test]
+    fn syscall_still_records_syscall_arguments_in_trap_args() {
+        let mut memory = MachineMemory::zeroed(0x8000).expect("memory initializes");
+        let mut cpu = K16Cpu::new(0x1000);
+        cpu.trap_vector = 0x2000;
+        cpu.registers[1] = 21;
+        cpu.registers[2] = 0x1111;
+        cpu.registers[3] = 0x2222;
+        cpu.registers[4] = 0x3333;
+        let mut decoder = SingleInstructionDecoder {
+            instruction: DecodedInstruction::Syscall { number: 1 },
+            next_pc: 0x1002,
+        };
+
+        cpu.step_with_decoder(&mut memory, &mut decoder)
+            .expect("syscall enters trap vector");
+
+        assert_eq!(cpu.trap_cause, K16_TRAP_CAUSE_EXPLICIT_TRAP);
+        assert_eq!(cpu.trap_value, 21);
+        assert_eq!(cpu.trap_arg0, 0x1111);
+        assert_eq!(cpu.trap_arg1, 0x2222);
+        assert_eq!(cpu.trap_arg2, 0x3333);
+    }
 }
 
 fn sign_extend_nibble(value: usize) -> i32 {

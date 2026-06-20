@@ -1,6 +1,6 @@
 use k16_rt::cpu;
 
-use crate::{control, debug, syscall, timer};
+use crate::{control, debug, fs, process, syscall, timer, trap_policy};
 
 pub fn initialize() {
     timer::register_driver();
@@ -35,7 +35,16 @@ fn dispatch_synchronous_trap(cause: u32) -> ! {
         syscall::dispatch(k16_rt::trap_value());
     }
 
-    unknown_synchronous_trap(cause);
+    match trap_policy::classify_synchronous_trap(
+        cause,
+        k16_rt::syscall_arg0(),
+        k16_rt::syscall_arg1(),
+    ) {
+        trap_policy::SynchronousTrapAction::ExitCurrentChild(status) => {
+            exit_current_child_after_user_fault(status)
+        }
+        trap_policy::SynchronousTrapAction::KernelTrap => unknown_synchronous_trap(cause),
+    }
 }
 
 fn unknown_interrupt(_source: u32) -> ! {
@@ -48,6 +57,23 @@ fn unknown_synchronous_trap(_cause: u32) -> ! {
 
 pub fn unknown_syscall(_number: u32) -> ! {
     enter_kernel_trap()
+}
+
+fn exit_current_child_after_user_fault(status: u32) -> ! {
+    let exiting_pid = unsafe { process::current_process_slot() };
+    unsafe { fs::close_file_fds_for_process(exiting_pid) };
+    let mut resume = process::ParentResume::empty();
+    if unsafe { process::finish_child_for_exit_into(status, &mut resume) }.is_ok() {
+        if unsafe { process::destroy_exited_address_space(&resume) }.is_err() {
+            control::set_panic();
+            control::set_panic_code(k16_abi::syscall::ERROR_FAULT as i32);
+            control::wait_forever()
+        }
+        unsafe { process::resume_parent_context(&resume) }
+    }
+    control::set_exit_code(status);
+    control::set_halted();
+    control::wait_forever()
 }
 
 fn enter_kernel_trap() -> ! {

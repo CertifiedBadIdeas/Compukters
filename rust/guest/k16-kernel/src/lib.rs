@@ -5,4 +5,5 @@ pub mod memory_layout;
 pub mod mmio;
 pub mod page_alloc;
 pub mod process;
+pub mod trap_policy;
 pub mod user_buffer;
