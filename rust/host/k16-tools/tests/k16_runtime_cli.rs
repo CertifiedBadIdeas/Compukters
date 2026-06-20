@@ -1226,12 +1226,14 @@ fn main() {
 
     write_runtime_object_for_target("k16-startup", "program", &work_dir.join("startup.o"));
     write_k16_debug_write_syscall_stub(&work_dir);
+    write_k16_sbrk_syscall_stub(&work_dir);
 
     let rustflags = format!(
-        "-C linker={} -C link-arg={} -C link-arg={} -C link-arg={} -C link-arg=--k16-target=program -Cpasses=lower-atomic -Copt-level=z -Cjump-tables=no -Cdebuginfo=0 -Cdebug-assertions=off -Coverflow-checks=off -Zub-checks=no",
+        "-C linker={} -C link-arg={} -C link-arg={} -C link-arg={} -C link-arg={} -C link-arg=--k16-target=program -Cpasses=lower-atomic -Copt-level=z -Cjump-tables=no -Cdebuginfo=0 -Cdebug-assertions=off -Coverflow-checks=off -Zub-checks=no",
         k16_ld_binary(),
         work_dir.join("startup.o").display(),
         work_dir.join("write-stub.o").display(),
+        work_dir.join("sbrk-stub.o").display(),
         work_dir.join("abort.o").display(),
     );
     let cargo_output = Command::new(k16_cargo())
@@ -1283,9 +1285,122 @@ fn main() {
         "stderr: {}",
         String::from_utf8_lossy(&run_output.stderr)
     );
-    assert_eq!(
-        String::from_utf8_lossy(&run_output.stdout),
-        "signal=halt exit_status=0 debug_bytes=686f73746564207374642068656c6c6f0a\n"
+    let stdout = String::from_utf8_lossy(&run_output.stdout);
+    assert!(
+        stdout.starts_with("signal=halt exit_status=0 debug_bytes="),
+        "stdout: {stdout}"
+    );
+    assert!(
+        stdout.ends_with("686f73746564207374642068656c6c6f0a\n"),
+        "stdout: {stdout}"
+    );
+}
+
+#[test]
+fn k16_rust_hosted_std_heap_uses_sbrk_syscall() {
+    let work_dir = temp_dir("hosted-std-sbrk-heap");
+    let src_dir = work_dir.join("src");
+    fs::create_dir_all(&src_dir).expect("source directory creates");
+    fs::write(
+        work_dir.join("Cargo.toml"),
+        r#"[package]
+name = "k16-hosted-std-sbrk-heap"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "k16-hosted-std-sbrk-heap"
+path = "src/main.rs"
+test = false
+"#,
+    )
+    .expect("Cargo.toml writes");
+    fs::write(
+        src_dir.join("main.rs"),
+        r#"use std::io::Write;
+
+fn main() {
+    let mut values = Vec::new();
+    for value in 0..5 {
+        values.push(value * 2);
+    }
+    let message = format!("sbrk heap {} {}\n", values.len(), values.iter().sum::<i32>());
+    print!("{message}");
+    std::io::stdout().flush().unwrap();
+}
+"#,
+    )
+    .expect("main.rs writes");
+
+    write_runtime_object_for_target("k16-startup", "program", &work_dir.join("startup.o"));
+    write_k16_debug_write_syscall_stub(&work_dir);
+    write_k16_sbrk_syscall_stub(&work_dir);
+
+    let rustflags = format!(
+        "-C linker={} -C link-arg={} -C link-arg={} -C link-arg={} -C link-arg={} -C link-arg=--k16-target=program -Cpasses=lower-atomic -Copt-level=z -Cjump-tables=no -Cdebuginfo=0 -Cdebug-assertions=off -Coverflow-checks=off -Zub-checks=no",
+        k16_ld_binary(),
+        work_dir.join("startup.o").display(),
+        work_dir.join("write-stub.o").display(),
+        work_dir.join("sbrk-stub.o").display(),
+        work_dir.join("abort.o").display(),
+    );
+    let cargo_output = Command::new(k16_cargo())
+        .args([
+            "rustc",
+            "-Z",
+            "build-std=std,panic_abort",
+            "-Z",
+            "build-std-features=compiler-builtins-mem",
+            "-Z",
+            "json-target-spec",
+            "--manifest-path",
+            work_dir.join("Cargo.toml").to_str().unwrap(),
+            "--target",
+            k16_target_spec().to_str().unwrap(),
+            "--target-dir",
+            work_dir.join("target").to_str().unwrap(),
+            "--bin",
+            "k16-hosted-std-sbrk-heap",
+            "--",
+            "-C",
+            "panic=abort",
+            "-C",
+            "relocation-model=static",
+            "-Cjump-tables=no",
+            "-Cdebuginfo=0",
+            "-Cdebug-assertions=off",
+            "-Coverflow-checks=off",
+            "-Zub-checks=no",
+        ])
+        .env("RUSTC", k16_rustc())
+        .env("RUSTC_BOOTSTRAP", "1")
+        .env("RUSTFLAGS", rustflags)
+        .output()
+        .expect("cargo rustc runs");
+    assert!(
+        cargo_output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&cargo_output.stderr)
+    );
+
+    let linked_program = find_linked_rust_bin(&work_dir);
+    let run_output = Command::new(k16_binary())
+        .args(["run", linked_program.to_str().unwrap()])
+        .output()
+        .expect("k16 run runs");
+    assert!(
+        run_output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&run_output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&run_output.stdout);
+    assert!(
+        stdout.starts_with("signal=halt exit_status=0 debug_bytes=53"),
+        "stdout: {stdout}"
+    );
+    assert!(
+        stdout.ends_with("7362726b206865617020352032300a\n"),
+        "stdout: {stdout}"
     );
 }
 
@@ -1368,6 +1483,92 @@ pub extern "C" fn __k16_write_syscall(fd: u32, ptr: *const u8, len: u32) -> u32 
         )
         .output()
         .expect("write stub cargo rustc runs");
+    assert!(
+        cargo_output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&cargo_output.stderr)
+    );
+}
+
+fn write_k16_sbrk_syscall_stub(work_dir: &Path) {
+    let stub_dir = work_dir.join("sbrk-stub");
+    let src_dir = stub_dir.join("src");
+    fs::create_dir_all(&src_dir).expect("sbrk stub source directory creates");
+    fs::write(
+        stub_dir.join("Cargo.toml"),
+        r#"[package]
+name = "k16-sbrk-syscall-stub"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "k16_sbrk_syscall_stub"
+path = "src/lib.rs"
+test = false
+"#,
+    )
+    .expect("sbrk stub Cargo.toml writes");
+    fs::write(
+        src_dir.join("lib.rs"),
+        r#"#![no_std]
+
+const DEBUG_WRITE: *mut u8 = 0x1000_0100 as *mut u8;
+const HEAP_SIZE: usize = 64 * 1024;
+
+static mut HEAP: [u8; HEAP_SIZE] = [0; HEAP_SIZE];
+static mut NEXT: u32 = 0;
+
+#[no_mangle]
+pub extern "C" fn __k16_sbrk_syscall(delta: u32) -> u32 {
+    unsafe {
+        core::ptr::write_volatile(DEBUG_WRITE, b'S');
+        let old = NEXT;
+        let Some(next) = old.checked_add(delta) else {
+            return 0xffff_fffe;
+        };
+        if next as usize > HEAP_SIZE {
+            return 0xffff_fffe;
+        }
+        NEXT = next;
+        HEAP.as_mut_ptr().add(old as usize) as u32
+    }
+}
+
+"#,
+    )
+    .expect("sbrk stub lib.rs writes");
+    let cargo_output = Command::new(k16_cargo())
+        .args([
+            "rustc",
+            "-Z",
+            "build-std=core",
+            "-Z",
+            "json-target-spec",
+            "--manifest-path",
+            stub_dir.join("Cargo.toml").to_str().unwrap(),
+            "--target",
+            k16_target_spec().to_str().unwrap(),
+            "--target-dir",
+            stub_dir.join("target").to_str().unwrap(),
+            "--lib",
+            "--",
+            "-C",
+            "panic=abort",
+            "-Copt-level=z",
+            "-C",
+            "relocation-model=static",
+            "-Cjump-tables=no",
+            "-Cdebuginfo=0",
+            &format!("--emit=obj={}", work_dir.join("sbrk-stub.o").display()),
+        ])
+        .env("RUSTC", k16_rustc())
+        .env("RUSTC_BOOTSTRAP", "1")
+        .env(
+            "RUSTFLAGS",
+            "-Cpasses=lower-atomic -Copt-level=z -Cjump-tables=no -Cdebuginfo=0",
+        )
+        .output()
+        .expect("sbrk stub cargo rustc runs");
     assert!(
         cargo_output.status.success(),
         "stderr: {}",

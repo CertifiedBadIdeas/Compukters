@@ -59,12 +59,13 @@ under Rust `std`, libc, libc++, and KraftOS-specific extensions. In that model,
 future extension crate for K16/KraftOS APIs that do not belong in language
 standard libraries.
 
-The first hosted Rust stage is a narrow proof, not a replacement for
+The first hosted Rust stages are narrow proofs, not a replacement for
 `kraft-std`. `rust/guest/k16-hosted-hello` uses ordinary Rust `std`, ordinary
-`fn main()`, stdout, and panic-abort, and is built by the
-`:v1_21_1-neoforge:compileK16HostedHello` Gradle task. Broader hosted `std`
-coverage remains gated on explicit OS-backed APIs rather than silent no-op
-platform behavior.
+`fn main()`, stdout, panic-abort, and heap-backed `Vec`/`String` formatting, and
+is built by the `:v1_21_1-neoforge:compileK16HostedHello` Gradle task. Hosted
+Rust heap allocation goes through the KraftOS `SBRK` syscall ABI and remains
+monotonic for now. Broader hosted `std` coverage remains gated on explicit
+OS-backed APIs rather than silent no-op platform behavior.
 
 The current filesystem surface is a small ROOT/K16FS proof for absolute paths:
 read-only opens, create/truncate write-only opens, whole-slice writes within
