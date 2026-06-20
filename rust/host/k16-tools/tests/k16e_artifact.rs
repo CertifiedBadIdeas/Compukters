@@ -8,10 +8,7 @@ fn k16e_program_dynamic_target_has_no_fixed_physical_base() {
         Ok(K16ArtifactTarget::ProgramDynamic)
     );
     assert_eq!(K16ArtifactTarget::ProgramDynamic.base_address(), 0);
-    assert_eq!(
-        K16ArtifactTarget::ProgramDynamic.payload_end_limit(),
-        Some(K16ArtifactTarget::PROGRAM_STACK_TOP)
-    );
+    assert_eq!(K16ArtifactTarget::ProgramDynamic.payload_end_limit(), None);
     assert_eq!(
         K16ArtifactTarget::ProgramDynamic.fixed_image_abi_kind(),
         None
@@ -26,10 +23,7 @@ fn k16e_boot_and_kernel_targets_do_not_cap_payloads_at_neighboring_windows() {
         K16ArtifactTarget::Program.payload_end_limit(),
         Some(K16ArtifactTarget::PROGRAM_STACK_TOP)
     );
-    assert_eq!(
-        K16ArtifactTarget::ProgramDynamic.payload_end_limit(),
-        Some(K16ArtifactTarget::PROGRAM_STACK_TOP)
-    );
+    assert_eq!(K16ArtifactTarget::ProgramDynamic.payload_end_limit(), None);
 }
 
 #[test]
