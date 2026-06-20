@@ -1,6 +1,6 @@
 #![cfg(feature = "host-test")]
 
-use kraft_std::fs;
+use kraft_std::{fs, path};
 
 #[test]
 fn fs_open_delegates_to_open_syscall_read_only() {
@@ -14,6 +14,24 @@ fn fs_open_delegates_to_open_syscall_read_only() {
     assert_eq!(
         k16_rt::host_test::syscall_arg0(),
         "/etc/motd".as_ptr() as usize as u32
+    );
+    assert_eq!(k16_rt::host_test::syscall_arg1(), 9);
+    assert_eq!(k16_rt::host_test::syscall_arg2(), 0);
+}
+
+#[test]
+fn fs_open_path_delegates_to_open_syscall_read_only() {
+    let path = path::PathRef::try_from_str("/etc/motd").unwrap();
+    k16_rt::host_test::reset_syscalls();
+    k16_rt::host_test::set_syscall_return(3);
+
+    let file = fs::open_path(path);
+
+    assert_eq!(file.map(|file| file.raw()), Ok(3));
+    assert_eq!(k16_rt::host_test::syscall_number(), k16_rt::host_test::OPEN);
+    assert_eq!(
+        k16_rt::host_test::syscall_arg0(),
+        path.as_str().as_ptr() as usize as u32
     );
     assert_eq!(k16_rt::host_test::syscall_arg1(), 9);
     assert_eq!(k16_rt::host_test::syscall_arg2(), 0);
@@ -42,6 +60,29 @@ fn fs_create_delegates_to_open_syscall_write_create_truncate() {
 }
 
 #[test]
+fn fs_create_path_delegates_to_open_syscall_write_create_truncate() {
+    let path = path::PathRef::try_from_str("/etc/user.txt").unwrap();
+    k16_rt::host_test::reset_syscalls();
+    k16_rt::host_test::set_syscall_return(3);
+
+    let file = fs::create_path(path);
+
+    assert_eq!(file.map(|file| file.raw()), Ok(3));
+    assert_eq!(k16_rt::host_test::syscall_number(), k16_rt::host_test::OPEN);
+    assert_eq!(
+        k16_rt::host_test::syscall_arg0(),
+        path.as_str().as_ptr() as usize as u32
+    );
+    assert_eq!(k16_rt::host_test::syscall_arg1(), 13);
+    assert_eq!(
+        k16_rt::host_test::syscall_arg2(),
+        k16_abi::syscall::OPEN_WRITE_ONLY
+            | k16_abi::syscall::OPEN_CREATE
+            | k16_abi::syscall::OPEN_TRUNCATE,
+    );
+}
+
+#[test]
 fn fs_append_delegates_to_open_syscall_write_create_append() {
     k16_rt::host_test::reset_syscalls();
     k16_rt::host_test::set_syscall_return(3);
@@ -53,6 +94,29 @@ fn fs_append_delegates_to_open_syscall_write_create_append() {
     assert_eq!(
         k16_rt::host_test::syscall_arg0(),
         "/etc/user.txt".as_ptr() as usize as u32
+    );
+    assert_eq!(k16_rt::host_test::syscall_arg1(), 13);
+    assert_eq!(
+        k16_rt::host_test::syscall_arg2(),
+        k16_abi::syscall::OPEN_WRITE_ONLY
+            | k16_abi::syscall::OPEN_CREATE
+            | k16_abi::syscall::OPEN_APPEND,
+    );
+}
+
+#[test]
+fn fs_append_path_delegates_to_open_syscall_write_create_append() {
+    let path = path::PathRef::try_from_str("/etc/user.txt").unwrap();
+    k16_rt::host_test::reset_syscalls();
+    k16_rt::host_test::set_syscall_return(3);
+
+    let file = fs::append_path(path);
+
+    assert_eq!(file.map(|file| file.raw()), Ok(3));
+    assert_eq!(k16_rt::host_test::syscall_number(), k16_rt::host_test::OPEN);
+    assert_eq!(
+        k16_rt::host_test::syscall_arg0(),
+        path.as_str().as_ptr() as usize as u32
     );
     assert_eq!(k16_rt::host_test::syscall_arg1(), 13);
     assert_eq!(
@@ -161,6 +225,27 @@ fn fs_remove_file_delegates_to_unlink_syscall() {
 }
 
 #[test]
+fn fs_remove_file_path_delegates_to_unlink_syscall() {
+    let path = path::PathRef::try_from_str("/etc/user.txt").unwrap();
+    k16_rt::host_test::reset_syscalls();
+    k16_rt::host_test::set_syscall_return(k16_rt::host_test::STATUS_OK);
+
+    let removed = fs::remove_file_path(path);
+
+    assert_eq!(removed, Ok(()));
+    assert_eq!(
+        k16_rt::host_test::syscall_number(),
+        k16_rt::host_test::UNLINK
+    );
+    assert_eq!(
+        k16_rt::host_test::syscall_arg0(),
+        path.as_str().as_ptr() as usize as u32
+    );
+    assert_eq!(k16_rt::host_test::syscall_arg1(), 13);
+    assert_eq!(k16_rt::host_test::syscall_arg2(), 0);
+}
+
+#[test]
 fn fs_create_dir_delegates_to_mkdir_syscall() {
     k16_rt::host_test::reset_syscalls();
     k16_rt::host_test::set_syscall_return(k16_rt::host_test::STATUS_OK);
@@ -181,6 +266,27 @@ fn fs_create_dir_delegates_to_mkdir_syscall() {
 }
 
 #[test]
+fn fs_create_dir_path_delegates_to_mkdir_syscall() {
+    let path = path::PathRef::try_from_str("/etc/user").unwrap();
+    k16_rt::host_test::reset_syscalls();
+    k16_rt::host_test::set_syscall_return(k16_rt::host_test::STATUS_OK);
+
+    let created = fs::create_dir_path(path);
+
+    assert_eq!(created, Ok(()));
+    assert_eq!(
+        k16_rt::host_test::syscall_number(),
+        k16_rt::host_test::MKDIR
+    );
+    assert_eq!(
+        k16_rt::host_test::syscall_arg0(),
+        path.as_str().as_ptr() as usize as u32
+    );
+    assert_eq!(k16_rt::host_test::syscall_arg1(), 9);
+    assert_eq!(k16_rt::host_test::syscall_arg2(), 0);
+}
+
+#[test]
 fn fs_remove_dir_delegates_to_rmdir_syscall() {
     k16_rt::host_test::reset_syscalls();
     k16_rt::host_test::set_syscall_return(k16_rt::host_test::STATUS_OK);
@@ -195,6 +301,27 @@ fn fs_remove_dir_delegates_to_rmdir_syscall() {
     assert_eq!(
         k16_rt::host_test::syscall_arg0(),
         "/etc/user".as_ptr() as usize as u32
+    );
+    assert_eq!(k16_rt::host_test::syscall_arg1(), 9);
+    assert_eq!(k16_rt::host_test::syscall_arg2(), 0);
+}
+
+#[test]
+fn fs_remove_dir_path_delegates_to_rmdir_syscall() {
+    let path = path::PathRef::try_from_str("/etc/user").unwrap();
+    k16_rt::host_test::reset_syscalls();
+    k16_rt::host_test::set_syscall_return(k16_rt::host_test::STATUS_OK);
+
+    let removed = fs::remove_dir_path(path);
+
+    assert_eq!(removed, Ok(()));
+    assert_eq!(
+        k16_rt::host_test::syscall_number(),
+        k16_rt::host_test::RMDIR
+    );
+    assert_eq!(
+        k16_rt::host_test::syscall_arg0(),
+        path.as_str().as_ptr() as usize as u32
     );
     assert_eq!(k16_rt::host_test::syscall_arg1(), 9);
     assert_eq!(k16_rt::host_test::syscall_arg2(), 0);
@@ -223,6 +350,25 @@ fn fs_read_dir_delegates_to_read_dir_syscall() {
     let mut bytes = [0u8; 128];
 
     let read = fs::read_dir("/bin", &mut bytes);
+
+    assert_eq!(read, Ok(24));
+    assert_eq!(
+        k16_rt::host_test::syscall_number(),
+        k16_rt::host_test::READ_DIR
+    );
+    assert_ne!(k16_rt::host_test::syscall_arg0(), 0);
+    assert_eq!(k16_rt::host_test::syscall_arg1(), 20);
+    assert_eq!(k16_rt::host_test::syscall_arg2(), 0);
+}
+
+#[test]
+fn fs_read_dir_path_delegates_to_read_dir_syscall() {
+    let path = path::PathRef::try_from_str("/bin").unwrap();
+    k16_rt::host_test::reset_syscalls();
+    k16_rt::host_test::set_syscall_return(24);
+    let mut bytes = [0u8; 128];
+
+    let read = fs::read_dir_path(path, &mut bytes);
 
     assert_eq!(read, Ok(24));
     assert_eq!(
@@ -288,4 +434,22 @@ fn fs_reports_negative_syscall_status_as_error() {
         file,
         Err(fs::Error::Syscall(k16_rt::host_test::ERROR_NO_ENTRY))
     );
+}
+
+#[test]
+fn fs_rename_path_delegates_to_rename_syscall() {
+    let old_path = path::PathRef::try_from_str("/etc/old.txt").unwrap();
+    let new_path = path::PathRef::try_from_str("/etc/new.txt").unwrap();
+    k16_rt::host_test::reset_syscalls();
+    k16_rt::host_test::set_syscall_return(k16_rt::host_test::STATUS_OK);
+
+    let renamed = fs::rename_path(old_path, new_path);
+
+    assert_eq!(renamed, Ok(()));
+    assert_eq!(
+        k16_rt::host_test::syscall_number(),
+        k16_rt::host_test::RENAME
+    );
+    assert_ne!(k16_rt::host_test::syscall_arg0(), 0);
+    assert_eq!(k16_rt::host_test::syscall_arg1(), 36);
 }

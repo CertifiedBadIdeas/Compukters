@@ -400,8 +400,15 @@ pub mod fs {
     }
 
     pub fn open(path: &str) -> Result<File, Error> {
-        let returned =
-            k16_rt::open_syscall(path.as_ptr(), path.len(), k16_abi::syscall::OPEN_READ_ONLY);
+        open_raw(path, k16_abi::syscall::OPEN_READ_ONLY)
+    }
+
+    pub fn open_path(path: PathRef<'_>) -> Result<File, Error> {
+        open_raw(path.as_str(), k16_abi::syscall::OPEN_READ_ONLY)
+    }
+
+    fn open_raw(path: &str, flags: u32) -> Result<File, Error> {
+        let returned = k16_rt::open_syscall(path.as_ptr(), path.len(), flags);
         if is_error_status(returned) {
             return Err(Error::Syscall(returned));
         }
@@ -409,35 +416,53 @@ pub mod fs {
     }
 
     pub fn create(path: &str) -> Result<File, Error> {
-        let returned = k16_rt::open_syscall(
-            path.as_ptr(),
-            path.len(),
+        let returned = open_raw(
+            path,
             k16_abi::syscall::OPEN_WRITE_ONLY
                 | k16_abi::syscall::OPEN_CREATE
                 | k16_abi::syscall::OPEN_TRUNCATE,
-        );
-        if is_error_status(returned) {
-            return Err(Error::Syscall(returned));
-        }
-        Ok(File(returned))
+        )?;
+        Ok(returned)
+    }
+
+    pub fn create_path(path: PathRef<'_>) -> Result<File, Error> {
+        open_raw(
+            path.as_str(),
+            k16_abi::syscall::OPEN_WRITE_ONLY
+                | k16_abi::syscall::OPEN_CREATE
+                | k16_abi::syscall::OPEN_TRUNCATE,
+        )
     }
 
     pub fn append(path: &str) -> Result<File, Error> {
-        let returned = k16_rt::open_syscall(
-            path.as_ptr(),
-            path.len(),
+        open_raw(
+            path,
             k16_abi::syscall::OPEN_WRITE_ONLY
                 | k16_abi::syscall::OPEN_CREATE
                 | k16_abi::syscall::OPEN_APPEND,
-        );
-        if is_error_status(returned) {
-            return Err(Error::Syscall(returned));
-        }
-        Ok(File(returned))
+        )
+    }
+
+    pub fn append_path(path: PathRef<'_>) -> Result<File, Error> {
+        open_raw(
+            path.as_str(),
+            k16_abi::syscall::OPEN_WRITE_ONLY
+                | k16_abi::syscall::OPEN_CREATE
+                | k16_abi::syscall::OPEN_APPEND,
+        )
     }
 
     pub fn read_dir(path: &str, out: &mut [u8]) -> Result<usize, Error> {
         let request = ReadDirRequest::new(path, out)?;
+        read_dir_raw(request)
+    }
+
+    pub fn read_dir_path(path: PathRef<'_>, out: &mut [u8]) -> Result<usize, Error> {
+        let request = ReadDirRequest::new(path.as_str(), out)?;
+        read_dir_raw(request)
+    }
+
+    fn read_dir_raw(request: ReadDirRequest) -> Result<usize, Error> {
         let returned = k16_rt::read_dir_syscall(request.bytes.as_ptr(), request.len);
         if is_error_status(returned) {
             return Err(Error::Syscall(returned));
@@ -469,6 +494,14 @@ pub mod fs {
         if path.len() > k16_abi::syscall::MAX_STAT_PATH_BYTES {
             return Err(Error::InvalidArgument);
         }
+        remove_file_raw(path)
+    }
+
+    pub fn remove_file_path(path: PathRef<'_>) -> Result<(), Error> {
+        remove_file_raw(path.as_str())
+    }
+
+    fn remove_file_raw(path: &str) -> Result<(), Error> {
         let returned = k16_rt::unlink_syscall(path.as_ptr(), path.len());
         if is_error_status(returned) {
             return Err(Error::Syscall(returned));
@@ -480,6 +513,14 @@ pub mod fs {
         if path.len() > k16_abi::syscall::MAX_STAT_PATH_BYTES {
             return Err(Error::InvalidArgument);
         }
+        create_dir_raw(path)
+    }
+
+    pub fn create_dir_path(path: PathRef<'_>) -> Result<(), Error> {
+        create_dir_raw(path.as_str())
+    }
+
+    fn create_dir_raw(path: &str) -> Result<(), Error> {
         let returned = k16_rt::mkdir_syscall(path.as_ptr(), path.len());
         if is_error_status(returned) {
             return Err(Error::Syscall(returned));
@@ -491,6 +532,14 @@ pub mod fs {
         if path.len() > k16_abi::syscall::MAX_STAT_PATH_BYTES {
             return Err(Error::InvalidArgument);
         }
+        remove_dir_raw(path)
+    }
+
+    pub fn remove_dir_path(path: PathRef<'_>) -> Result<(), Error> {
+        remove_dir_raw(path.as_str())
+    }
+
+    fn remove_dir_raw(path: &str) -> Result<(), Error> {
         let returned = k16_rt::rmdir_syscall(path.as_ptr(), path.len());
         if is_error_status(returned) {
             return Err(Error::Syscall(returned));
@@ -500,6 +549,15 @@ pub mod fs {
 
     pub fn rename(old_path: &str, new_path: &str) -> Result<(), Error> {
         let (request, len) = unsafe { rename_request(old_path, new_path)? };
+        rename_raw(request, len)
+    }
+
+    pub fn rename_path(old_path: PathRef<'_>, new_path: PathRef<'_>) -> Result<(), Error> {
+        let (request, len) = unsafe { rename_request(old_path.as_str(), new_path.as_str())? };
+        rename_raw(request, len)
+    }
+
+    fn rename_raw(request: *const u8, len: usize) -> Result<(), Error> {
         let returned = k16_rt::rename_syscall(request, len);
         if is_error_status(returned) {
             return Err(Error::Syscall(returned));

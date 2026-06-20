@@ -23,9 +23,20 @@ fn list_first_arg_or_default(argc: u32, argv: *const process::Arg) -> Result<(),
 
 fn list_dir(path: &str) -> Result<(), ()> {
     let stdout = io::stdout();
+    let path_ref = match path::PathRef::try_from_str(path) {
+        Ok(path_ref) => path_ref,
+        Err(_) => {
+            write_ls_error(
+                stdout,
+                status::fs_error_name_or(fs::Error::InvalidArgument, b"READDIR"),
+                path,
+            )?;
+            return Err(());
+        }
+    };
     let mut buffer = [0u8; 256];
     let child_path = child_path_buffer();
-    let read = match fs::read_dir(path, &mut buffer) {
+    let read = match fs::read_dir_path(path_ref, &mut buffer) {
         Ok(read) => read,
         Err(error) => {
             write_ls_error(stdout, status::fs_error_name_or(error, b"READDIR"), path)?;
@@ -41,7 +52,18 @@ fn list_dir(path: &str) -> Result<(), ()> {
         let name = &buffer[start..cursor];
         let child_path_len = join_child_path(path.as_bytes(), name, child_path)?;
         let child_path = core::str::from_utf8(&child_path[..child_path_len]).map_err(|_| ())?;
-        let metadata = match fs::metadata(child_path) {
+        let child_path_ref = match path::PathRef::try_from_str(child_path) {
+            Ok(path_ref) => path_ref,
+            Err(_) => {
+                write_ls_error(
+                    stdout,
+                    status::fs_error_name_or(fs::Error::InvalidArgument, b"READDIR"),
+                    child_path,
+                )?;
+                return Err(());
+            }
+        };
+        let metadata = match fs::metadata_path(child_path_ref) {
             Ok(metadata) => metadata,
             Err(error) => {
                 write_ls_error(

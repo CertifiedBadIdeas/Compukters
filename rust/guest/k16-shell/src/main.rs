@@ -165,7 +165,11 @@ fn run_cd(
         must_write(stdout, b"ERR INVAL\n");
         return k16_abi::syscall::ERROR_INVALID;
     };
-    match fs::metadata(path) {
+    let Ok(path_ref) = path::PathRef::try_from_str(path) else {
+        must_write(stdout, b"ERR INVAL\n");
+        return k16_abi::syscall::ERROR_INVALID;
+    };
+    match fs::metadata_path(path_ref) {
         Ok(metadata) if metadata.file_type == fs::FileType::Directory => {
             if cwd.set_from_resolved(path_buffer).is_err() {
                 must_write(stdout, b"ERR INVAL\n");

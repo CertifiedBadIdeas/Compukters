@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- `kraft-std::fs` now exposes typed `path::PathRef` variants for existing
+  path-taking filesystem helpers (`open`, `create`, `append`, `read_dir`,
+  `metadata`, `remove_file`, `create_dir`, `remove_dir`, and `rename`) while
+  preserving the existing `&str` call surface. Bundled filesystem utilities now
+  use the typed calls for validated paths, and `kraft-std` has host-side
+  allocator regression coverage for overflowing allocation-size calculations.
 - `kraft-std` now exposes shared bundled-coreutils multi-path helpers and a
   bounded `path::PathRef` wrapper. Bundled `cat`, `ls`, `stat`, `rm`,
   `mkdir`, and `rmdir` reuse the shared helpers, while the shell now delegates
