@@ -64,10 +64,15 @@ kernel/user ABI has a deliberate syscall or capability surface.
 
 ### Hosted `std`
 
-Hosted `std` is not near-term. It requires a much larger OS contract:
-filesystem, process, environment, time, synchronization, allocation, panics,
-and I/O. The current Rux OS direction is not ready for this, and trying to add
-`std` early would force hidden host behavior or VM shortcuts.
+Hosted `std` is now tracked as a strict partial hosted-ABI milestone rather
+than a hidden host shortcut. See
+[K16 Hosted ABI V0](../superpowers/specs/2026-06-21/issue-332-k16-hosted-abi-v0.md).
+
+The old caution still applies to no-op or fallback implementations: K16 should
+not claim hosted support for APIs that silently do nothing or delegate to host
+state. The accepted direction is a shared K16 hosted ABI consumed by Rust
+`std`, libc, libc++, and KraftOS-specific extensions. Supported operations must
+perform real guest work, while unsupported operations must fail explicitly.
 
 ## Required Pieces
 
