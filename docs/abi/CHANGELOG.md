@@ -2,12 +2,19 @@
 
 ## Unreleased
 
+- `WAIT(pid_or_zero, out_status_ptr)` now reports `ERROR_FAULT` to the
+  waiting parent when the final exit-status write faults, instead of turning
+  the fault into a kernel panic. The bundled syscall fault fixture now covers a
+  spawned child plus a bad translated status pointer.
 - The bounded K16 foreground process table now provides three child slots
   after init, allowing the production `init -> shell -> utility -> utility`
   shape used by shell-launched tools that spawn another program. The bundled
   `/bin/proc-test.kx` utility exercises `SPAWN` plus `WAIT` by spawning
   `/bin/cat.kx /etc/motd`, waiting for the exact PID, and reporting success
   only after the child exits with status `0`.
+- Runtime init now clears every foreground process slot, trap frame, and wait
+  pointer after the bounded foreground table grows beyond the first two child
+  slots.
 - Added guest-visible K16 `SPAWN` (`22`) and `WAIT` (`23`) syscalls plus
   `kraft-std::process::spawn_with_args`, `wait`, and `wait_any`.
   `SPAWN(request, len)` accepts the bounded argv request format with

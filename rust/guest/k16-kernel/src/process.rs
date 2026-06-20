@@ -776,6 +776,21 @@ struct RuntimeForegroundSlotState {
 }
 
 impl RuntimeForegroundSlotState {
+    const fn empty() -> Self {
+        Self {
+            pid: ProcessId::from_raw(NO_PROCESS_PID),
+            parent_pid: None,
+            parent_slot: NO_PARENT_SLOT,
+            blocked_child_slot: NO_CHILD_SLOT,
+            memory: None,
+            heap: None,
+            address_space: None,
+            kernel_stack_top: None,
+            backing_pages: None,
+            heap_backing_pages: None,
+        }
+    }
+
     const fn from_process_resources(
         pid: ProcessId,
         parent_pid: Option<ProcessId>,
@@ -806,18 +821,7 @@ impl RuntimeForegroundSlotState {
     }
 
     const fn cleared_after_exit(self) -> Self {
-        Self {
-            pid: ProcessId::from_raw(NO_PROCESS_PID),
-            parent_pid: None,
-            parent_slot: NO_PARENT_SLOT,
-            blocked_child_slot: NO_CHILD_SLOT,
-            memory: None,
-            heap: None,
-            address_space: None,
-            kernel_stack_top: None,
-            backing_pages: None,
-            heap_backing_pages: None,
-        }
+        Self::empty()
     }
 }
 
@@ -1483,15 +1487,10 @@ pub unsafe fn initialize_init_process(
                 FIRST_CHILD_PROCESS_PID,
             );
             write_runtime_process_identity(INIT_PROCESS_SLOT, ProcessId::INIT, None);
-            write_runtime_process_identity(1, ProcessId::from_raw(NO_PROCESS_PID), None);
-            write_runtime_process_identity(2, ProcessId::from_raw(NO_PROCESS_PID), None);
             write_runtime_process_linkage(INIT_PROCESS_SLOT, NO_PARENT_SLOT, NO_CHILD_SLOT);
-            write_runtime_process_linkage(1, NO_PARENT_SLOT, NO_CHILD_SLOT);
-            write_runtime_process_linkage(2, NO_PARENT_SLOT, NO_CHILD_SLOT);
             write_runtime_wait_status_ptr(INIT_PROCESS_SLOT, 0);
-            write_runtime_wait_status_ptr(1, 0);
-            write_runtime_wait_status_ptr(2, 0);
             write_runtime_process_resources(INIT_PROCESS_SLOT, descriptor.resources);
+            clear_runtime_foreground_slots();
             *runtime_slot_frame(INIT_PROCESS_SLOT).get() =
                 k16_rt::TrapFrame::from(descriptor.frame);
         }
@@ -1553,15 +1552,10 @@ pub unsafe fn begin_translated_init_from_storage0(
             FIRST_CHILD_PROCESS_PID,
         );
         write_runtime_process_identity(INIT_PROCESS_SLOT, ProcessId::INIT, None);
-        write_runtime_process_identity(1, ProcessId::from_raw(NO_PROCESS_PID), None);
-        write_runtime_process_identity(2, ProcessId::from_raw(NO_PROCESS_PID), None);
         write_runtime_process_linkage(INIT_PROCESS_SLOT, NO_PARENT_SLOT, NO_CHILD_SLOT);
-        write_runtime_process_linkage(1, NO_PARENT_SLOT, NO_CHILD_SLOT);
-        write_runtime_process_linkage(2, NO_PARENT_SLOT, NO_CHILD_SLOT);
         write_runtime_wait_status_ptr(INIT_PROCESS_SLOT, 0);
-        write_runtime_wait_status_ptr(1, 0);
-        write_runtime_wait_status_ptr(2, 0);
         write_runtime_process_resources(INIT_PROCESS_SLOT, descriptor.resources);
+        clear_runtime_foreground_slots();
         *runtime_slot_frame(INIT_PROCESS_SLOT).get() = k16_rt::TrapFrame::from(descriptor.frame);
         *RUNTIME_PAGE_ALLOCATOR.get() = Some(allocator);
     }
@@ -2367,6 +2361,19 @@ unsafe fn write_runtime_foreground_slot_state(slot: usize, state: RuntimeForegro
         );
         write_runtime_backing_pages(slot, state.backing_pages);
         write_runtime_heap_backing_pages(slot, state.heap_backing_pages);
+    }
+}
+
+#[cfg(not(test))]
+unsafe fn clear_runtime_foreground_slots() {
+    let mut slot = 1;
+    while slot < MAX_PROCESS_SLOTS {
+        unsafe {
+            write_runtime_foreground_slot_state(slot, RuntimeForegroundSlotState::empty());
+            write_runtime_wait_status_ptr(slot, 0);
+            *runtime_slot_frame(slot).get() = k16_rt::TrapFrame::zeroed();
+        }
+        slot += 1;
     }
 }
 
