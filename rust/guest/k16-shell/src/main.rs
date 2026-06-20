@@ -159,9 +159,12 @@ fn run_cd(
 
 fn run_ticks(stdout: io::Fd) {
     must_write(stdout, b"TICKS ");
-    match time::game_ticks_parts() {
-        Ok(parts) => {
-            write_decimal_parts(stdout, parts);
+    let mut bytes = [0u8; k16_abi::syscall::GAME_TICKS_BYTES];
+    match time::game_ticks_bytes(&mut bytes) {
+        Ok(()) => {
+            let low = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+            let high = u32::from_le_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]);
+            write_decimal_words(stdout, high, low);
             must_write(stdout, NEWLINE);
         }
         Err(time::Error::Syscall(status)) => {
@@ -287,11 +290,11 @@ fn run_error_name(status: u32) -> &'static [u8] {
     }
 }
 
-fn write_decimal_parts(stdout: io::Fd, parts: time::U64Parts) {
+fn write_decimal_words(stdout: io::Fd, high: u32, low: u32) {
     let mut digits = [0u8; 20];
     let mut start = digits.len() - 1;
-    write_decimal_bits(&mut digits, &mut start, parts.high, 32);
-    write_decimal_bits(&mut digits, &mut start, parts.low, 32);
+    write_decimal_bits(&mut digits, &mut start, high, 32);
+    write_decimal_bits(&mut digits, &mut start, low, 32);
     let mut index = start;
     while index < digits.len() {
         digits[index] += b'0';

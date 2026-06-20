@@ -46,6 +46,26 @@ pub fn timer0_game_ticks_parts() -> U64Parts {
     read_split_u64_parts(TIMER0_GAME_TICKS_LOW, TIMER0_GAME_TICKS_HIGH)
 }
 
+#[cfg(not(any(test, feature = "host-test")))]
+pub fn timer0_game_ticks_low() -> u32 {
+    read_mmio_u32(TIMER0_GAME_TICKS_LOW)
+}
+
+#[cfg(any(test, feature = "host-test"))]
+pub fn timer0_game_ticks_low() -> u32 {
+    TEST_TIMER0_GAME_TICKS.load(Ordering::Relaxed) as u32
+}
+
+#[cfg(not(any(test, feature = "host-test")))]
+pub fn timer0_game_ticks_high() -> u32 {
+    read_mmio_u32(TIMER0_GAME_TICKS_HIGH)
+}
+
+#[cfg(any(test, feature = "host-test"))]
+pub fn timer0_game_ticks_high() -> u32 {
+    (TEST_TIMER0_GAME_TICKS.load(Ordering::Relaxed) >> 32) as u32
+}
+
 #[cfg(any(test, feature = "host-test"))]
 pub fn timer0_game_ticks_parts() -> U64Parts {
     split_u64(TEST_TIMER0_GAME_TICKS.load(Ordering::Relaxed))

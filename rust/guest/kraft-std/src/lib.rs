@@ -41,14 +41,21 @@ pub mod time {
 
     pub fn game_ticks_parts() -> Result<U64Parts, Error> {
         let mut bytes = [0u8; k16_abi::syscall::GAME_TICKS_BYTES];
-        let returned = k16_rt::game_ticks_syscall(bytes.as_mut_ptr());
-        if returned != k16_abi::syscall::STATUS_OK {
-            return Err(Error::Syscall(returned));
-        }
+        game_ticks_bytes(&mut bytes)?;
         Ok(U64Parts {
             low: u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]),
             high: u32::from_le_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]),
         })
+    }
+
+    pub fn game_ticks_bytes(
+        bytes: &mut [u8; k16_abi::syscall::GAME_TICKS_BYTES],
+    ) -> Result<(), Error> {
+        let returned = k16_rt::game_ticks_syscall(bytes.as_mut_ptr());
+        if returned != k16_abi::syscall::STATUS_OK {
+            return Err(Error::Syscall(returned));
+        }
+        Ok(())
     }
 }
 

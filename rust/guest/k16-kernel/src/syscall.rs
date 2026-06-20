@@ -206,10 +206,12 @@ fn game_ticks(out_ptr: u32) -> Result<(), u32> {
     if !valid_guest_buffer(out_ptr, abi_syscall::GAME_TICKS_BYTES as u32) {
         return Err(abi_syscall::ERROR_FAULT);
     }
-    let ticks = timer::game_ticks();
+    let mut low = 0;
+    let mut high = 0;
+    timer::read_game_ticks_words(&mut low, &mut high);
     let mut bytes = [0_u8; abi_syscall::GAME_TICKS_BYTES];
-    write_u32_le(&mut bytes, 0, ticks.low);
-    write_u32_le(&mut bytes, 4, ticks.high);
+    write_u32_le(&mut bytes, 0, low);
+    write_u32_le(&mut bytes, 4, high);
     user_buffer::copy_to_user(out_ptr, &bytes)?;
     Ok(())
 }
