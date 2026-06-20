@@ -158,6 +158,9 @@ The current compiler crate provides:
 - guest-side directory creation and empty-directory removal through the kernel
   syscall ABI, using deleted inode and directory-entry states and freeing the
   removed directory's data blocks;
+- guest-side directory growth through the kernel syscall ABI, reusing
+  free/deleted entries first and then growing within the bounded inline extent
+  model;
 - guest-side contiguous growth of the last inline extent when a write crosses
   the current file capacity.
 
@@ -216,5 +219,5 @@ must stay in `k16 fs <filesystem>` subcommands. The current `put-boot` and
 `put-kernel` commands are boot-chain installation helpers that write the
 standard system files into the active K16FS-backed volume layout.
 
-Directory growth, sparse files, and arbitrary multi-extent guest-side file
-growth remain next-step work under the same K16FS v1 contract.
+Sparse files and arbitrary multi-extent guest-side regular-file growth remain
+next-step work under the same K16FS v1 contract.

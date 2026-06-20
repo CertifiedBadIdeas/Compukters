@@ -5,7 +5,9 @@
 - Added K16 `MKDIR` (`19`) and `RMDIR` (`20`) plus bundled `/bin/mkdir.kx`
   and `/bin/rmdir.kx` for userland directory mutation. `RMDIR` removes only
   empty directories and reports `ERROR_NOT_EMPTY` for directories with live
-  entries.
+  entries. Guest-side K16FS directory mutation now reuses free/deleted entries
+  and grows directories by extending the last inline extent when possible or by
+  adding another bounded inline extent when the adjacent block is already used.
 - Added K16 `UNLINK` (`18`) and bundled `/bin/rm.kx` for removing regular
   ROOT/K16FS files from userland. The kernel rejects directories and files that
   still have an open kernel fd, and guest K16FS marks deleted directory
