@@ -21,6 +21,7 @@ mod terminal;
 mod terminal_render;
 mod timer;
 mod trap;
+mod trap_policy;
 mod user_buffer;
 
 use core::panic::PanicInfo;

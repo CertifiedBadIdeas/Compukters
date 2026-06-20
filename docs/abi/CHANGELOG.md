@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- K16 synchronous exceptions now expose interrupted execution mode metadata in
+  existing trap argument CSRs: for non-syscall exceptions, `trap_arg0` is
+  `0 = physical` or `1 = translated`, and `trap_arg1` is `0 = kernel` or
+  `1 = user`. The explicit `syscall` path still uses `trap_arg0..trap_arg2`
+  for captured syscall arguments. The kernel uses this metadata to treat
+  translated user instruction-fetch/load/store faults as `ERROR_FAULT` child
+  exits instead of kernel panics.
 - K16 translated user launches now reserve two 4 KiB user stack pages and keep
   a 4 KiB heap guard below them. Launch-time mappings cover the loaded image
   pages plus the committed user stack pages, and `BRK`/`SBRK` heap limits now

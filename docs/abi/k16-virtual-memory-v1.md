@@ -223,14 +223,15 @@ instruction fetch or store that needs stronger permission.
 Failed translation or permission checks raise a synchronous page fault. The
 faulting instruction does not retire.
 
-Planned trap fields for the MMU ABI slice:
+Current trap fields for VM-backed instruction-fetch/load/store faults:
 
 ```text
-trap_cause  page fault cause value assigned by the CPU ABI revision
+trap_cause  instruction fetch fault, load fault, or store fault
 trap_pc     faulting instruction PC
 trap_value  faulting virtual address
-trap_arg0   access kind: 1 = fetch, 2 = load, 3 = store
-trap_arg1   fault reason: 1 = not present, 2 = permission, 3 = invalid mapping
+trap_arg0   interrupted address mode: 0 = physical, 1 = translated
+trap_arg1   interrupted privilege mode: 0 = kernel, 1 = user
+trap_arg2   0
 ```
 
 If no trap vector is installed, the VM reports a hard CPU trap to the host, as
@@ -254,9 +255,9 @@ For syscall arguments that are guest pointers:
 3. The kernel translates and copies user buffers through `mmu0` copy commands.
 4. Invalid user pointers return existing negative K16 `ERROR_FAULT` where the
    current syscall ABI expects recoverable pointer errors.
-5. CPU instruction-fetch/load/store faults in user code enter the trap vector
-   as page faults and may terminate the current process in the first kernel
-   implementation.
+5. CPU instruction-fetch/load/store faults in translated user code enter the
+   trap vector and terminate the current foreground child with `ERROR_FAULT`;
+   the waiting parent resumes through the normal child-exit path.
 
 This replaces the current physical `memory_start..memory_end` pointer check for
 VM-enabled user processes. Physical process ranges may remain as an internal

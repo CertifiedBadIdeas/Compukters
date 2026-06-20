@@ -73,6 +73,13 @@ pub mod cpu {
         }
     }
 
+    pub mod trap_mode {
+        pub const ADDRESS_PHYSICAL: u32 = 0;
+        pub const ADDRESS_TRANSLATED: u32 = 1;
+        pub const PRIVILEGE_KERNEL: u32 = 0;
+        pub const PRIVILEGE_USER: u32 = 1;
+    }
+
     pub mod interrupt_source {
         pub const TIMER0: u32 = 0x0000_0001;
         pub const KEYBOARD0: u32 = 0x0000_0002;
@@ -606,6 +613,10 @@ mod tests {
             cpu::trap_cause::interrupt_source(cpu::trap_cause::KEYBOARD0_INTERRUPT),
             cpu::interrupt_source::KEYBOARD0
         );
+        assert_eq!(cpu::trap_mode::ADDRESS_PHYSICAL, 0);
+        assert_eq!(cpu::trap_mode::ADDRESS_TRANSLATED, 1);
+        assert_eq!(cpu::trap_mode::PRIVILEGE_KERNEL, 0);
+        assert_eq!(cpu::trap_mode::PRIVILEGE_USER, 1);
     }
 
     #[test]

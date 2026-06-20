@@ -461,8 +461,8 @@ csr  access  name               semantics
 5    R/W     interrupt_enable   0 disables async interrupt delivery, non-zero enables it
 6    R/W     interrupt_mask     enabled interrupt source bitmask
 7    R       interrupt_pending  pending interrupt source bitmask
-8    R       trap_arg0          first captured syscall argument, or 0 otherwise
-9    R       trap_arg1          second captured syscall argument, or 0 otherwise
+8    R       trap_arg0          first captured syscall argument, or exception address mode
+9    R       trap_arg1          second captured syscall argument, or exception privilege mode
 10   R       trap_arg2          third captured syscall argument, or 0 otherwise
 11   R/W     trap_frame_index   selected saved trap register index, 0..15
 12   R/W     trap_frame_register selected saved trap register value
@@ -478,12 +478,15 @@ Synchronous exceptions are delivered immediately when the faulting instruction
 is decoded or executed. If `trap_vector = 0`, the VM reports a hard CPU trap to
 the host. Otherwise the CPU records `trap_cause`, `trap_pc`, and `trap_value`,
 then saves the interrupted register frame, stack pointer, interrupt state,
-address mode, and privilege mode. Trap entry then switches execution to
-physical/kernel mode and sets `pc = trap_vector`, so a translated user program
-enters a physical-mode kernel handler. If the trap interrupted translated user
-execution, the live stack pointer is also switched to the kernel stack pointer
-captured when that user address space was activated; `trap_stack_pointer`
-continues to hold the interrupted user stack pointer for `iret`.
+address mode, and privilege mode. For non-syscall exceptions, `trap_arg0`
+records the interrupted address mode (`0 = physical`, `1 = translated`) and
+`trap_arg1` records the interrupted privilege mode (`0 = kernel`, `1 = user`);
+`trap_arg2` is zero. Trap entry then switches execution to physical/kernel mode
+and sets `pc = trap_vector`, so a translated user program enters a physical-mode
+kernel handler. If the trap interrupted translated user execution, the live
+stack pointer is also switched to the kernel stack pointer captured when that
+user address space was activated; `trap_stack_pointer` continues to hold the
+interrupted user stack pointer for `iret`.
 
 The `syscall rA` instruction is the returning explicit-trap entry for guest
 OS services. It records `trap_cause = 0x00000005`,
@@ -686,6 +689,12 @@ Current trap and interrupt causes:
 0x80000001  timer0 interrupt
 0x80000002  keyboard0 interrupt
 ```
+
+The first K16 kernel handles translated user instruction-fetch, load, and store
+faults by exiting the current foreground child with `ERROR_FAULT` and resuming
+the waiting parent through the normal `EXIT` cleanup path. Kernel-mode unknown
+synchronous traps remain kernel panics. Illegal instructions are not yet a
+user-recoverable status.
 
 Current interrupt source bits:
 
