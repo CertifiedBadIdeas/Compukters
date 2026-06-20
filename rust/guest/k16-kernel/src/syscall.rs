@@ -390,14 +390,6 @@ fn grow_program_break(delta: u32) -> Result<u32, u32> {
 
 fn prepare_run(ptr: u32, len: u32, format: u32) -> Result<process::ChildLaunch, u32> {
     match format {
-        abi_syscall::RUN_FORMAT_PATH => {
-            if len == 0 || len > process::MAX_RUN_PATH_BYTES as u32 {
-                return Err(abi_syscall::ERROR_INVALID);
-            }
-            let mut bytes = [0_u8; process::MAX_RUN_PATH_BYTES];
-            let bytes = user_buffer::copy_from_user_into(ptr, len, &mut bytes)?;
-            unsafe { process::begin_loaded_child_from_path(bytes) }
-        }
         abi_syscall::RUN_FORMAT_ARGV => {
             if len == 0 || len > k16_abi::syscall::MAX_RUN_ARGV_REQUEST_BYTES as u32 {
                 return Err(abi_syscall::ERROR_INVALID);

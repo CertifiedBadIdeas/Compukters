@@ -978,15 +978,6 @@ pub mod process {
         k16_rt::exit_syscall(status)
     }
 
-    #[inline(always)]
-    pub fn run(path: &str) -> Result<ExitStatus, Error> {
-        let returned = k16_rt::run_syscall(path.as_ptr(), path.len());
-        if returned & 0x8000_0000 != 0 {
-            return Err(Error::Syscall(returned));
-        }
-        Ok(ExitStatus::new(returned))
-    }
-
     pub fn run_with_args(path: &str, args: &[&str]) -> Result<ExitStatus, Error> {
         let request = RunArgvRequest::new(k16_abi::syscall::RUN_ARGV_MAGIC, path, args)?;
         let returned = k16_rt::run_argv_syscall(request.bytes.as_ptr(), request.len);
@@ -1037,7 +1028,7 @@ pub mod process {
     impl RunArgvRequest {
         #[inline(always)]
         fn new(magic: u32, path: &str, args: &[&str]) -> Result<Self, Error> {
-            if args.is_empty() || args.len() > k16_abi::syscall::MAX_RUN_ARGS {
+            if args.len() > k16_abi::syscall::MAX_RUN_ARGS {
                 return Err(Error::InvalidArgument);
             }
             if path.len() > k16_abi::syscall::MAX_RUN_PATH_BYTES {

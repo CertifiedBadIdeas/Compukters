@@ -56,7 +56,7 @@ fn run() -> Result<(), u32> {
     expect_fault(k16_rt::unlink_syscall(bad_const, 1))?;
     expect_fault(k16_rt::mkdir_syscall(bad_const, 1))?;
     expect_fault(k16_rt::rmdir_syscall(bad_const, 1))?;
-    expect_fault(k16_rt::run_syscall(bad_const, 1))?;
+    expect_fault(k16_rt::run_argv_syscall(bad_const, 1))?;
     expect_fault(k16_rt::spawn_argv_syscall(bad_const, 1))?;
     let child = process::spawn_with_args("/bin/cat.kx", &["/etc/motd"]).map_err(|_| 1u32)?;
     expect_fault(k16_rt::wait_syscall(child.raw(), bad_mut as *mut u32))?;

@@ -6,23 +6,6 @@ fn process_exit_has_never_returning_signature() {
 }
 
 #[test]
-fn process_run_delegates_to_runtime_run_syscall() {
-    k16_rt::host_test::reset_syscalls();
-    k16_rt::host_test::set_syscall_return(23);
-
-    let status = kraft_std::process::run("/bin/hello.kx").expect("run returns child status");
-
-    assert_eq!(status.code(), 23);
-    assert!(!status.success());
-    assert_eq!(k16_rt::host_test::syscall_number(), k16_rt::host_test::RUN);
-    assert_eq!(
-        k16_rt::host_test::syscall_arg0(),
-        "/bin/hello.kx".as_ptr() as usize as u32
-    );
-    assert_eq!(k16_rt::host_test::syscall_arg1(), 13);
-}
-
-#[test]
 fn process_run_with_args_encodes_argv_request_for_runtime_run_syscall() {
     k16_rt::host_test::reset_syscalls();
     k16_rt::host_test::set_syscall_return(0);
@@ -41,6 +24,18 @@ fn process_run_with_args_encodes_argv_request_for_runtime_run_syscall() {
         k16_rt::host_test::syscall_arg2(),
         k16_rt::host_test::RUN_FORMAT_ARGV
     );
+}
+
+#[test]
+fn process_run_with_args_encodes_empty_argv_request() {
+    let request = kraft_std::process::host_test::encode_run_argv_request("/bin/uname.kx", &[])
+        .expect("empty argv request encodes");
+    let bytes = &request.bytes[..request.len];
+
+    assert_eq!(read_u32(bytes, 0), k16_abi::syscall::RUN_ARGV_MAGIC);
+    assert_eq!(read_u32(bytes, 4), 13);
+    assert_eq!(read_u32(bytes, 8), 0);
+    assert_eq!(&bytes[12..25], b"/bin/uname.kx");
 }
 
 #[test]
@@ -110,14 +105,12 @@ fn process_wait_any_uses_zero_pid() {
 }
 
 #[test]
-fn process_run_with_args_requires_at_least_one_and_at_most_max_arguments() {
+fn process_run_with_args_rejects_more_than_max_arguments() {
     k16_rt::host_test::reset_syscalls();
 
-    let missing = kraft_std::process::run_with_args("/bin/cat.kx", &[]);
     let extra =
         kraft_std::process::run_with_args("/bin/cat.kx", &["one", "two", "three", "four", "five"]);
 
-    assert_eq!(missing, Err(kraft_std::process::Error::InvalidArgument));
     assert_eq!(extra, Err(kraft_std::process::Error::InvalidArgument));
     assert_eq!(k16_rt::host_test::syscall_number(), 0);
 }
@@ -146,19 +139,4 @@ fn argv_reader_returns_child_argument_bytes_from_raw_table() {
     assert_eq!(args.get(0), Some(first.as_slice()));
     assert_eq!(args.get(1), Some(second.as_slice()));
     assert_eq!(args.get(2), None);
-}
-
-#[test]
-fn process_run_reports_negative_syscall_status_as_error() {
-    k16_rt::host_test::reset_syscalls();
-    k16_rt::host_test::set_syscall_return(k16_rt::host_test::ERROR_NO_ENTRY);
-
-    let status = kraft_std::process::run("/bin/missing.kx");
-
-    assert_eq!(
-        status,
-        Err(kraft_std::process::Error::Syscall(
-            k16_rt::host_test::ERROR_NO_ENTRY
-        ))
-    );
 }

@@ -535,7 +535,7 @@ K16 syscall ABI v0 names the current Rust-kernel proof services in
 | `EXIT` | `6` | `k16_rt::exit_syscall(status)` | Terminates the current process. If the process has a blocked parent, the status is returned to that parent; if init exits, the kernel halts the VM with the supplied status. |
 | `WRITE` | `7` | `k16_rt::write_syscall(fd, ptr, len)` | Writes bytes from guest memory to fd `1`, fd `2`, or a write-only regular file fd; regular files advance their descriptor offset and update K16FS inode size. Returns byte count or a negative K16 error. |
 | `READ` | `8` | `k16_rt::read_syscall(fd, ptr, len)` | Reads bytes from fd `0` or an open regular file fd into guest memory; stdin blocks by waiting until input is available, regular files advance their descriptor offset, and the syscall returns byte count or a negative K16 error. |
-| `RUN` | `9` | `k16_rt::run_syscall(path, len)`, `k16_rt::run_argv_syscall(request, len)` | Synchronously loads a dynamic `/bin/*.kx` user program from `ROOT`/K16FS on `storage0`, blocks the current foreground process while the child runs, and returns either a non-negative child exit status or a negative K16 error. Child status `0` is success; non-zero child statuses are successful launches whose child process reported failure. Negative values are launch/runtime errors such as missing executable, invalid executable, no memory, busy child slot, or translated user fault. `trap_arg2 = 0` means `trap_arg0/trap_arg1` are a raw path pointer/length. `trap_arg2 = 1` means they are a bounded argv request block beginning with `RUN_ARGV_MAGIC`. |
+| `RUN` | `9` | `k16_rt::run_argv_syscall(request, len)` | Synchronously loads a dynamic `/bin/*.kx` user program from `ROOT`/K16FS on `storage0`, blocks the current foreground process while the child runs, and returns either a non-negative child exit status or a negative K16 error. Child status `0` is success; non-zero child statuses are successful launches whose child process reported failure. Negative values are launch/runtime errors such as missing executable, invalid executable, no memory, busy child slot, or translated user fault. `trap_arg2 = 1` means `trap_arg0/trap_arg1` point to a bounded argv request block beginning with `RUN_ARGV_MAGIC`; `argc = 0` is valid for zero-argument launches. Other `trap_arg2` formats are invalid. |
 | `OPEN` | `10` | `k16_rt::open_syscall(path, len, flags)` | Opens an absolute ROOT/K16FS regular file path from `storage0`. `flags = OPEN_READ_ONLY` opens an existing file for read. `flags = OPEN_WRITE_ONLY | OPEN_CREATE | OPEN_TRUNCATE` creates or truncates a regular file for write. `flags = OPEN_WRITE_ONLY | OPEN_CREATE | OPEN_APPEND` creates a missing regular file or opens an existing regular file with its descriptor offset at EOF. Success returns a regular file fd starting at `3`. |
 | `CLOSE` | `11` | `k16_rt::close_syscall(fd)` | Closes a regular file fd owned by the current foreground process. Standard descriptors `0..=2` are not closeable. |
 | `BRK` | `12` | `k16_rt::brk_syscall(addr)` | Sets the current foreground process program break to `addr` and returns the resulting break, or a negative K16 error. The break must stay inside the kernel-selected heap arena for that process. For translated processes, growing the break commits any newly crossed heap VM pages through the kernel page allocator. |
@@ -596,7 +596,7 @@ reserved for future process APIs such as `SPAWN`/`WAIT`.
 The internal process-table model also reserves an exited-child reap state for
 future `WAIT`: an exited child can retain its PID, parent PID, and exit status
 until its parent reaps either that exact PID or `0 = any direct child`. This is
-not a guest-visible syscall in v1. The current `RUN` compatibility path still
+not a guest-visible syscall in v1. The current synchronous `RUN` path still
 auto-reaps the child before returning the child status to the caller.
 
 Each foreground process records an explicit guest-physical memory range
@@ -608,8 +608,8 @@ against the current foreground process range rather than a global hard-coded
 user window.
 
 This is now a translated user-process model with a remaining physical pointer
-compatibility path for kernel tests and legacy launch code. If the current
-process has no address-space id, the kernel treats syscall pointers as
+path for kernel tests and physical processes. If the current process has no
+address-space id, the kernel treats syscall pointers as
 guest-physical addresses, validates them against that process range, and copies
 bytes directly from or to physical RAM. If the current process has an
 address-space id, the kernel treats syscall pointers as user virtual addresses
