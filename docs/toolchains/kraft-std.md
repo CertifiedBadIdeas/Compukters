@@ -66,6 +66,8 @@ is built by the `:v1_21_1-neoforge:compileK16HostedHello` Gradle task. Hosted
 Rust heap allocation goes through the KraftOS `SBRK` syscall ABI and remains
 monotonic for now. Broader hosted `std` coverage remains gated on explicit
 OS-backed APIs rather than silent no-op platform behavior.
+KraftOS-backed Rust `std` hooks live in named `sys/*/kraftos.rs` modules rather
+than generic `unsupported.rs` stubs when the API is actually OS-backed.
 
 The current filesystem surface is a small ROOT/K16FS proof for absolute paths:
 read-only opens, create/truncate write-only opens, whole-slice writes within
