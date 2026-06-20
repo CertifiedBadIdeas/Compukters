@@ -90,6 +90,7 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("rust/guest/k16-mkdir"))
         assertTrue(source.contains("rust/guest/k16-rmdir"))
         assertTrue(source.contains("rust/guest/k16-alloc-test"))
+        assertTrue(source.contains("rust/guest/k16-proc-test"))
         assertTrue(source.contains("k16InitManifest"))
         assertTrue(source.contains("k16InitSource"))
         assertTrue(source.contains("k16ShellManifest"))
@@ -112,6 +113,8 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("k16RmdirSource"))
         assertTrue(source.contains("k16AllocTestManifest"))
         assertTrue(source.contains("k16AllocTestSource"))
+        assertTrue(source.contains("k16ProcTestManifest"))
+        assertTrue(source.contains("k16ProcTestSource"))
         assertTrue(source.contains("generatedK16ShellTarget"))
         assertTrue(source.contains("generatedK16LsTarget"))
         assertTrue(source.contains("generatedK16CatTarget"))
@@ -122,6 +125,7 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("generatedK16MkdirTarget"))
         assertTrue(source.contains("generatedK16RmdirTarget"))
         assertTrue(source.contains("generatedK16AllocTestTarget"))
+        assertTrue(source.contains("generatedK16ProcTestTarget"))
         assertTrue(source.contains("k16InitArtifact"))
         assertTrue(source.contains("k16ShellArtifact"))
         assertTrue(source.contains("k16LsArtifact"))
@@ -133,6 +137,7 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("k16MkdirArtifact"))
         assertTrue(source.contains("k16RmdirArtifact"))
         assertTrue(source.contains("k16AllocTestArtifact"))
+        assertTrue(source.contains("k16ProcTestArtifact"))
         assertTrue(source.contains("compileK16SystemInit"))
         assertTrue(source.contains("compileK16SystemShell"))
         assertTrue(source.contains("compileK16SystemLs"))
@@ -144,6 +149,7 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("compileK16SystemMkdir"))
         assertTrue(source.contains("compileK16SystemRmdir"))
         assertTrue(source.contains("compileK16SystemAllocTest"))
+        assertTrue(source.contains("compileK16SystemProcTest"))
         assertTrue(source.contains("putK16SystemStorage0Init"))
         assertTrue(source.contains("binName = \"k16-init\""))
         assertTrue(
@@ -160,6 +166,7 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("binName = \"k16-mkdir\""))
         assertTrue(source.contains("binName = \"k16-rmdir\""))
         assertTrue(source.contains("binName = \"k16-alloc-test\""))
+        assertTrue(source.contains("binName = \"k16-proc-test\""))
         assertTrue(
             source.contains("output = k16ShellArtifact.get().asFile,\n                buildStd = \"core,alloc\""),
             "shell uses alloc-backed input and should build core+alloc",
@@ -177,6 +184,7 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("\"/bin/mkdir.kx\""))
         assertTrue(source.contains("\"/bin/rmdir.kx\""))
         assertTrue(source.contains("\"/bin/alloc-test.kx\""))
+        assertTrue(source.contains("\"/bin/proc-test.kx\""))
         assertTrue(source.contains("\"/etc/motd\""))
         assertTrue(source.contains("\"extract-partition\""))
         assertTrue(source.contains("\"replace-partition\""))

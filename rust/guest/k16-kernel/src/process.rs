@@ -21,7 +21,7 @@ const DEFAULT_INIT_MEMORY_END: u32 = 0x0002_5000;
 // Keep relocation records outside k16_storage::SCRATCH_ADDR: storage reads use
 // that block as staging, and records may straddle a storage block boundary.
 const RELOCATION_RECORD_ADDR: u32 = 0x0000_0500;
-const MAX_PROCESS_SLOTS: usize = 3;
+const MAX_PROCESS_SLOTS: usize = 4;
 const FOREGROUND_PROCESS_SLOTS: usize = MAX_PROCESS_SLOTS - 1;
 const INIT_PROCESS_SLOT: usize = 0;
 const INIT_PROCESS_PID: u32 = 1;
@@ -46,6 +46,9 @@ static RUNTIME_SLOT1_FRAME: KernelCell<k16_rt::TrapFrame> =
 static RUNTIME_SLOT2_FRAME: KernelCell<k16_rt::TrapFrame> =
     KernelCell::new(k16_rt::TrapFrame::zeroed());
 #[cfg(not(test))]
+static RUNTIME_SLOT3_FRAME: KernelCell<k16_rt::TrapFrame> =
+    KernelCell::new(k16_rt::TrapFrame::zeroed());
+#[cfg(not(test))]
 static mut RUNTIME_CURRENT_SLOT: u32 = 0;
 #[cfg(not(test))]
 static mut RUNTIME_NEXT_PID: u32 = FIRST_CHILD_PROCESS_PID;
@@ -56,15 +59,21 @@ static mut RUNTIME_SLOT1_PID: u32 = NO_PROCESS_PID;
 #[cfg(not(test))]
 static mut RUNTIME_SLOT2_PID: u32 = NO_PROCESS_PID;
 #[cfg(not(test))]
+static mut RUNTIME_SLOT3_PID: u32 = NO_PROCESS_PID;
+#[cfg(not(test))]
 static mut RUNTIME_SLOT0_PARENT_PID: u32 = NO_PROCESS_PID;
 #[cfg(not(test))]
 static mut RUNTIME_SLOT1_PARENT_PID: u32 = NO_PROCESS_PID;
 #[cfg(not(test))]
 static mut RUNTIME_SLOT2_PARENT_PID: u32 = NO_PROCESS_PID;
 #[cfg(not(test))]
+static mut RUNTIME_SLOT3_PARENT_PID: u32 = NO_PROCESS_PID;
+#[cfg(not(test))]
 static mut RUNTIME_SLOT1_PARENT: u32 = NO_PARENT_SLOT;
 #[cfg(not(test))]
 static mut RUNTIME_SLOT2_PARENT: u32 = NO_PARENT_SLOT;
+#[cfg(not(test))]
+static mut RUNTIME_SLOT3_PARENT: u32 = NO_PARENT_SLOT;
 #[cfg(not(test))]
 static mut RUNTIME_SLOT0_BLOCKED_CHILD: u32 = NO_CHILD_SLOT;
 #[cfg(not(test))]
@@ -72,11 +81,15 @@ static mut RUNTIME_SLOT1_BLOCKED_CHILD: u32 = NO_CHILD_SLOT;
 #[cfg(not(test))]
 static mut RUNTIME_SLOT2_BLOCKED_CHILD: u32 = NO_CHILD_SLOT;
 #[cfg(not(test))]
+static mut RUNTIME_SLOT3_BLOCKED_CHILD: u32 = NO_CHILD_SLOT;
+#[cfg(not(test))]
 static mut RUNTIME_SLOT0_WAIT_STATUS_PTR: u32 = 0;
 #[cfg(not(test))]
 static mut RUNTIME_SLOT1_WAIT_STATUS_PTR: u32 = 0;
 #[cfg(not(test))]
 static mut RUNTIME_SLOT2_WAIT_STATUS_PTR: u32 = 0;
+#[cfg(not(test))]
+static mut RUNTIME_SLOT3_WAIT_STATUS_PTR: u32 = 0;
 #[cfg(not(test))]
 static mut RUNTIME_SLOT0_HEAP_START: u32 = 0;
 #[cfg(not(test))]
@@ -84,11 +97,15 @@ static mut RUNTIME_SLOT1_HEAP_START: u32 = 0;
 #[cfg(not(test))]
 static mut RUNTIME_SLOT2_HEAP_START: u32 = 0;
 #[cfg(not(test))]
+static mut RUNTIME_SLOT3_HEAP_START: u32 = 0;
+#[cfg(not(test))]
 static mut RUNTIME_SLOT0_PROGRAM_BREAK: u32 = 0;
 #[cfg(not(test))]
 static mut RUNTIME_SLOT1_PROGRAM_BREAK: u32 = 0;
 #[cfg(not(test))]
 static mut RUNTIME_SLOT2_PROGRAM_BREAK: u32 = 0;
+#[cfg(not(test))]
+static mut RUNTIME_SLOT3_PROGRAM_BREAK: u32 = 0;
 #[cfg(not(test))]
 static mut RUNTIME_SLOT0_HEAP_LIMIT: u32 = 0;
 #[cfg(not(test))]
@@ -96,11 +113,15 @@ static mut RUNTIME_SLOT1_HEAP_LIMIT: u32 = 0;
 #[cfg(not(test))]
 static mut RUNTIME_SLOT2_HEAP_LIMIT: u32 = 0;
 #[cfg(not(test))]
+static mut RUNTIME_SLOT3_HEAP_LIMIT: u32 = 0;
+#[cfg(not(test))]
 static mut RUNTIME_SLOT0_MEMORY_START: u32 = 0;
 #[cfg(not(test))]
 static mut RUNTIME_SLOT1_MEMORY_START: u32 = 0;
 #[cfg(not(test))]
 static mut RUNTIME_SLOT2_MEMORY_START: u32 = 0;
+#[cfg(not(test))]
+static mut RUNTIME_SLOT3_MEMORY_START: u32 = 0;
 #[cfg(not(test))]
 static mut RUNTIME_SLOT0_MEMORY_END: u32 = 0;
 #[cfg(not(test))]
@@ -108,11 +129,15 @@ static mut RUNTIME_SLOT1_MEMORY_END: u32 = 0;
 #[cfg(not(test))]
 static mut RUNTIME_SLOT2_MEMORY_END: u32 = 0;
 #[cfg(not(test))]
+static mut RUNTIME_SLOT3_MEMORY_END: u32 = 0;
+#[cfg(not(test))]
 static mut RUNTIME_SLOT0_ADDRESS_SPACE: u32 = 0;
 #[cfg(not(test))]
 static mut RUNTIME_SLOT1_ADDRESS_SPACE: u32 = 0;
 #[cfg(not(test))]
 static mut RUNTIME_SLOT2_ADDRESS_SPACE: u32 = 0;
+#[cfg(not(test))]
+static mut RUNTIME_SLOT3_ADDRESS_SPACE: u32 = 0;
 #[cfg(not(test))]
 static mut RUNTIME_SLOT0_KERNEL_STACK_TOP: u32 = 0;
 #[cfg(not(test))]
@@ -120,11 +145,15 @@ static mut RUNTIME_SLOT1_KERNEL_STACK_TOP: u32 = 0;
 #[cfg(not(test))]
 static mut RUNTIME_SLOT2_KERNEL_STACK_TOP: u32 = 0;
 #[cfg(not(test))]
+static mut RUNTIME_SLOT3_KERNEL_STACK_TOP: u32 = 0;
+#[cfg(not(test))]
 static mut RUNTIME_SLOT0_BACKING_START: u32 = 0;
 #[cfg(not(test))]
 static mut RUNTIME_SLOT1_BACKING_START: u32 = 0;
 #[cfg(not(test))]
 static mut RUNTIME_SLOT2_BACKING_START: u32 = 0;
+#[cfg(not(test))]
+static mut RUNTIME_SLOT3_BACKING_START: u32 = 0;
 #[cfg(not(test))]
 static mut RUNTIME_SLOT0_BACKING_FRAME_COUNT: u32 = 0;
 #[cfg(not(test))]
@@ -132,17 +161,23 @@ static mut RUNTIME_SLOT1_BACKING_FRAME_COUNT: u32 = 0;
 #[cfg(not(test))]
 static mut RUNTIME_SLOT2_BACKING_FRAME_COUNT: u32 = 0;
 #[cfg(not(test))]
+static mut RUNTIME_SLOT3_BACKING_FRAME_COUNT: u32 = 0;
+#[cfg(not(test))]
 static mut RUNTIME_SLOT0_HEAP_BACKING_START: u32 = 0;
 #[cfg(not(test))]
 static mut RUNTIME_SLOT1_HEAP_BACKING_START: u32 = 0;
 #[cfg(not(test))]
 static mut RUNTIME_SLOT2_HEAP_BACKING_START: u32 = 0;
 #[cfg(not(test))]
+static mut RUNTIME_SLOT3_HEAP_BACKING_START: u32 = 0;
+#[cfg(not(test))]
 static mut RUNTIME_SLOT0_HEAP_BACKING_FRAME_COUNT: u32 = 0;
 #[cfg(not(test))]
 static mut RUNTIME_SLOT1_HEAP_BACKING_FRAME_COUNT: u32 = 0;
 #[cfg(not(test))]
 static mut RUNTIME_SLOT2_HEAP_BACKING_FRAME_COUNT: u32 = 0;
+#[cfg(not(test))]
+static mut RUNTIME_SLOT3_HEAP_BACKING_FRAME_COUNT: u32 = 0;
 #[cfg(not(test))]
 static RUNTIME_PAGE_ALLOCATOR: KernelCell<Option<crate::page_alloc::PageFrameAllocator>> =
     KernelCell::new(None);
@@ -944,6 +979,7 @@ impl ProcessTable {
         Self {
             slots: [
                 ProcessSlot::init(init_context),
+                ProcessSlot::empty(),
                 ProcessSlot::empty(),
                 ProcessSlot::empty(),
             ],
@@ -2011,7 +2047,8 @@ fn runtime_slot_pid_ptr(slot: usize) -> *mut u32 {
     match slot {
         INIT_PROCESS_SLOT => core::ptr::addr_of_mut!(RUNTIME_SLOT0_PID),
         1 => core::ptr::addr_of_mut!(RUNTIME_SLOT1_PID),
-        _ => core::ptr::addr_of_mut!(RUNTIME_SLOT2_PID),
+        2 => core::ptr::addr_of_mut!(RUNTIME_SLOT2_PID),
+        _ => core::ptr::addr_of_mut!(RUNTIME_SLOT3_PID),
     }
 }
 
@@ -2020,7 +2057,8 @@ fn runtime_slot_parent_pid_ptr(slot: usize) -> *mut u32 {
     match slot {
         INIT_PROCESS_SLOT => core::ptr::addr_of_mut!(RUNTIME_SLOT0_PARENT_PID),
         1 => core::ptr::addr_of_mut!(RUNTIME_SLOT1_PARENT_PID),
-        _ => core::ptr::addr_of_mut!(RUNTIME_SLOT2_PARENT_PID),
+        2 => core::ptr::addr_of_mut!(RUNTIME_SLOT2_PARENT_PID),
+        _ => core::ptr::addr_of_mut!(RUNTIME_SLOT3_PARENT_PID),
     }
 }
 
@@ -2029,6 +2067,7 @@ fn runtime_slot_parent_ptr(slot: usize) -> *mut u32 {
     match slot {
         1 => core::ptr::addr_of_mut!(RUNTIME_SLOT1_PARENT),
         2 => core::ptr::addr_of_mut!(RUNTIME_SLOT2_PARENT),
+        3 => core::ptr::addr_of_mut!(RUNTIME_SLOT3_PARENT),
         _ => core::ptr::addr_of_mut!(RUNTIME_SLOT1_PARENT),
     }
 }
@@ -2038,7 +2077,8 @@ fn runtime_slot_blocked_child_ptr(slot: usize) -> *mut u32 {
     match slot {
         INIT_PROCESS_SLOT => core::ptr::addr_of_mut!(RUNTIME_SLOT0_BLOCKED_CHILD),
         1 => core::ptr::addr_of_mut!(RUNTIME_SLOT1_BLOCKED_CHILD),
-        _ => core::ptr::addr_of_mut!(RUNTIME_SLOT2_BLOCKED_CHILD),
+        2 => core::ptr::addr_of_mut!(RUNTIME_SLOT2_BLOCKED_CHILD),
+        _ => core::ptr::addr_of_mut!(RUNTIME_SLOT3_BLOCKED_CHILD),
     }
 }
 
@@ -2047,7 +2087,8 @@ fn runtime_slot_wait_status_ptr(slot: usize) -> *mut u32 {
     match slot {
         INIT_PROCESS_SLOT => core::ptr::addr_of_mut!(RUNTIME_SLOT0_WAIT_STATUS_PTR),
         1 => core::ptr::addr_of_mut!(RUNTIME_SLOT1_WAIT_STATUS_PTR),
-        _ => core::ptr::addr_of_mut!(RUNTIME_SLOT2_WAIT_STATUS_PTR),
+        2 => core::ptr::addr_of_mut!(RUNTIME_SLOT2_WAIT_STATUS_PTR),
+        _ => core::ptr::addr_of_mut!(RUNTIME_SLOT3_WAIT_STATUS_PTR),
     }
 }
 
@@ -2056,7 +2097,8 @@ fn runtime_slot_frame(slot: usize) -> &'static KernelCell<k16_rt::TrapFrame> {
     match slot {
         INIT_PROCESS_SLOT => &RUNTIME_SLOT0_FRAME,
         1 => &RUNTIME_SLOT1_FRAME,
-        _ => &RUNTIME_SLOT2_FRAME,
+        2 => &RUNTIME_SLOT2_FRAME,
+        _ => &RUNTIME_SLOT3_FRAME,
     }
 }
 
@@ -2065,7 +2107,8 @@ fn runtime_slot_heap_start_ptr(slot: usize) -> *mut u32 {
     match slot {
         INIT_PROCESS_SLOT => core::ptr::addr_of_mut!(RUNTIME_SLOT0_HEAP_START),
         1 => core::ptr::addr_of_mut!(RUNTIME_SLOT1_HEAP_START),
-        _ => core::ptr::addr_of_mut!(RUNTIME_SLOT2_HEAP_START),
+        2 => core::ptr::addr_of_mut!(RUNTIME_SLOT2_HEAP_START),
+        _ => core::ptr::addr_of_mut!(RUNTIME_SLOT3_HEAP_START),
     }
 }
 
@@ -2074,7 +2117,8 @@ fn runtime_slot_program_break_ptr(slot: usize) -> *mut u32 {
     match slot {
         INIT_PROCESS_SLOT => core::ptr::addr_of_mut!(RUNTIME_SLOT0_PROGRAM_BREAK),
         1 => core::ptr::addr_of_mut!(RUNTIME_SLOT1_PROGRAM_BREAK),
-        _ => core::ptr::addr_of_mut!(RUNTIME_SLOT2_PROGRAM_BREAK),
+        2 => core::ptr::addr_of_mut!(RUNTIME_SLOT2_PROGRAM_BREAK),
+        _ => core::ptr::addr_of_mut!(RUNTIME_SLOT3_PROGRAM_BREAK),
     }
 }
 
@@ -2083,7 +2127,8 @@ fn runtime_slot_heap_limit_ptr(slot: usize) -> *mut u32 {
     match slot {
         INIT_PROCESS_SLOT => core::ptr::addr_of_mut!(RUNTIME_SLOT0_HEAP_LIMIT),
         1 => core::ptr::addr_of_mut!(RUNTIME_SLOT1_HEAP_LIMIT),
-        _ => core::ptr::addr_of_mut!(RUNTIME_SLOT2_HEAP_LIMIT),
+        2 => core::ptr::addr_of_mut!(RUNTIME_SLOT2_HEAP_LIMIT),
+        _ => core::ptr::addr_of_mut!(RUNTIME_SLOT3_HEAP_LIMIT),
     }
 }
 
@@ -2092,7 +2137,8 @@ fn runtime_slot_memory_start_ptr(slot: usize) -> *mut u32 {
     match slot {
         INIT_PROCESS_SLOT => core::ptr::addr_of_mut!(RUNTIME_SLOT0_MEMORY_START),
         1 => core::ptr::addr_of_mut!(RUNTIME_SLOT1_MEMORY_START),
-        _ => core::ptr::addr_of_mut!(RUNTIME_SLOT2_MEMORY_START),
+        2 => core::ptr::addr_of_mut!(RUNTIME_SLOT2_MEMORY_START),
+        _ => core::ptr::addr_of_mut!(RUNTIME_SLOT3_MEMORY_START),
     }
 }
 
@@ -2101,7 +2147,8 @@ fn runtime_slot_memory_end_ptr(slot: usize) -> *mut u32 {
     match slot {
         INIT_PROCESS_SLOT => core::ptr::addr_of_mut!(RUNTIME_SLOT0_MEMORY_END),
         1 => core::ptr::addr_of_mut!(RUNTIME_SLOT1_MEMORY_END),
-        _ => core::ptr::addr_of_mut!(RUNTIME_SLOT2_MEMORY_END),
+        2 => core::ptr::addr_of_mut!(RUNTIME_SLOT2_MEMORY_END),
+        _ => core::ptr::addr_of_mut!(RUNTIME_SLOT3_MEMORY_END),
     }
 }
 
@@ -2110,7 +2157,8 @@ fn runtime_slot_address_space_ptr(slot: usize) -> *mut u32 {
     match slot {
         INIT_PROCESS_SLOT => core::ptr::addr_of_mut!(RUNTIME_SLOT0_ADDRESS_SPACE),
         1 => core::ptr::addr_of_mut!(RUNTIME_SLOT1_ADDRESS_SPACE),
-        _ => core::ptr::addr_of_mut!(RUNTIME_SLOT2_ADDRESS_SPACE),
+        2 => core::ptr::addr_of_mut!(RUNTIME_SLOT2_ADDRESS_SPACE),
+        _ => core::ptr::addr_of_mut!(RUNTIME_SLOT3_ADDRESS_SPACE),
     }
 }
 
@@ -2119,7 +2167,8 @@ fn runtime_slot_kernel_stack_top_ptr(slot: usize) -> *mut u32 {
     match slot {
         INIT_PROCESS_SLOT => core::ptr::addr_of_mut!(RUNTIME_SLOT0_KERNEL_STACK_TOP),
         1 => core::ptr::addr_of_mut!(RUNTIME_SLOT1_KERNEL_STACK_TOP),
-        _ => core::ptr::addr_of_mut!(RUNTIME_SLOT2_KERNEL_STACK_TOP),
+        2 => core::ptr::addr_of_mut!(RUNTIME_SLOT2_KERNEL_STACK_TOP),
+        _ => core::ptr::addr_of_mut!(RUNTIME_SLOT3_KERNEL_STACK_TOP),
     }
 }
 
@@ -2128,7 +2177,8 @@ fn runtime_slot_backing_start_ptr(slot: usize) -> *mut u32 {
     match slot {
         INIT_PROCESS_SLOT => core::ptr::addr_of_mut!(RUNTIME_SLOT0_BACKING_START),
         1 => core::ptr::addr_of_mut!(RUNTIME_SLOT1_BACKING_START),
-        _ => core::ptr::addr_of_mut!(RUNTIME_SLOT2_BACKING_START),
+        2 => core::ptr::addr_of_mut!(RUNTIME_SLOT2_BACKING_START),
+        _ => core::ptr::addr_of_mut!(RUNTIME_SLOT3_BACKING_START),
     }
 }
 
@@ -2137,7 +2187,8 @@ fn runtime_slot_backing_frame_count_ptr(slot: usize) -> *mut u32 {
     match slot {
         INIT_PROCESS_SLOT => core::ptr::addr_of_mut!(RUNTIME_SLOT0_BACKING_FRAME_COUNT),
         1 => core::ptr::addr_of_mut!(RUNTIME_SLOT1_BACKING_FRAME_COUNT),
-        _ => core::ptr::addr_of_mut!(RUNTIME_SLOT2_BACKING_FRAME_COUNT),
+        2 => core::ptr::addr_of_mut!(RUNTIME_SLOT2_BACKING_FRAME_COUNT),
+        _ => core::ptr::addr_of_mut!(RUNTIME_SLOT3_BACKING_FRAME_COUNT),
     }
 }
 
@@ -2146,7 +2197,8 @@ fn runtime_slot_heap_backing_start_ptr(slot: usize) -> *mut u32 {
     match slot {
         INIT_PROCESS_SLOT => core::ptr::addr_of_mut!(RUNTIME_SLOT0_HEAP_BACKING_START),
         1 => core::ptr::addr_of_mut!(RUNTIME_SLOT1_HEAP_BACKING_START),
-        _ => core::ptr::addr_of_mut!(RUNTIME_SLOT2_HEAP_BACKING_START),
+        2 => core::ptr::addr_of_mut!(RUNTIME_SLOT2_HEAP_BACKING_START),
+        _ => core::ptr::addr_of_mut!(RUNTIME_SLOT3_HEAP_BACKING_START),
     }
 }
 
@@ -2155,7 +2207,8 @@ fn runtime_slot_heap_backing_frame_count_ptr(slot: usize) -> *mut u32 {
     match slot {
         INIT_PROCESS_SLOT => core::ptr::addr_of_mut!(RUNTIME_SLOT0_HEAP_BACKING_FRAME_COUNT),
         1 => core::ptr::addr_of_mut!(RUNTIME_SLOT1_HEAP_BACKING_FRAME_COUNT),
-        _ => core::ptr::addr_of_mut!(RUNTIME_SLOT2_HEAP_BACKING_FRAME_COUNT),
+        2 => core::ptr::addr_of_mut!(RUNTIME_SLOT2_HEAP_BACKING_FRAME_COUNT),
+        _ => core::ptr::addr_of_mut!(RUNTIME_SLOT3_HEAP_BACKING_FRAME_COUNT),
     }
 }
 
@@ -5711,26 +5764,28 @@ mod tests {
         assert!(should_translate_runtime_child_path(b"/bin/cat.kx"));
         assert!(runtime_child_slot_for_parent(0, None).is_ok());
         assert!(runtime_child_slot_for_parent(1, Some(7)).is_ok());
+        assert!(runtime_child_slot_for_parent(2, Some(9)).is_ok());
         assert_eq!(
-            runtime_child_slot_for_parent(2, Some(9)),
+            runtime_child_slot_for_parent(3, Some(11)),
             Err(ProcessSwitchError::ChildAlreadyRunning)
         );
     }
 
     #[test]
     fn runtime_slot_policy_reuses_first_empty_foreground_slot() {
-        assert_eq!(child_slot_from_occupancy(0, [false, true]), Ok(1));
-        assert_eq!(child_slot_from_occupancy(1, [true, false]), Ok(2));
+        assert_eq!(child_slot_from_occupancy(0, [false, true, true]), Ok(1));
+        assert_eq!(child_slot_from_occupancy(1, [true, false, true]), Ok(2));
+        assert_eq!(child_slot_from_occupancy(2, [true, true, false]), Ok(3));
     }
 
     #[test]
     fn runtime_slot_policy_reports_busy_when_no_foreground_slot_is_free() {
         assert_eq!(
-            child_slot_from_occupancy(1, [true, true]),
+            child_slot_from_occupancy(1, [true, true, true]),
             Err(ProcessSwitchError::ChildAlreadyRunning)
         );
         assert_eq!(
-            child_slot_from_occupancy(MAX_PROCESS_SLOTS, [false, false]),
+            child_slot_from_occupancy(MAX_PROCESS_SLOTS, [false, false, false]),
             Err(ProcessSwitchError::ChildAlreadyRunning)
         );
     }
@@ -6186,6 +6241,16 @@ mod tests {
             zero_fill_addr: 0x0000_b010,
             zero_fill_len: 16,
         };
+        let utility_child_plan = DynamicUserLoadPlan {
+            load_base: 0x0000_c000,
+            load_end: 0x0000_c020,
+            entry_pc: 0x0000_c004,
+            stack_top: 0x0001_1000,
+            payload_dst: 0x0000_c000,
+            payload_len: 16,
+            zero_fill_addr: 0x0000_c010,
+            zero_fill_len: 16,
+        };
         let init_frame = TrapFrame {
             resume_pc: 0x0000_8100,
             stack_pointer: 0x0000_ff00,
@@ -6196,6 +6261,11 @@ mod tests {
             stack_pointer: 0x0000_ef00,
             ..TrapFrame::zeroed()
         };
+        let utility_frame = TrapFrame {
+            resume_pc: 0x0000_b100,
+            stack_pointer: 0x0001_0f00,
+            ..TrapFrame::zeroed()
+        };
 
         let shell = table
             .begin_child_run_from_frame(shell_plan, init_frame)
@@ -6203,8 +6273,18 @@ mod tests {
         let utility = table
             .begin_child_run_from_frame(utility_plan, shell_frame)
             .expect("utility starts from shell");
+        let utility_child = table
+            .begin_child_run_from_frame(utility_child_plan, utility_frame)
+            .expect("utility child starts");
 
         assert_ne!(utility.id, shell.id);
+        assert_ne!(utility_child.id, shell.id);
+        assert_ne!(utility_child.id, utility.id);
+
+        let resumed_utility = table.finish_child(3).expect("utility resumes");
+        assert_eq!(resumed_utility.id, utility.id);
+        assert_eq!(resumed_utility.child_exit_status, 3);
+        assert_eq!(resumed_utility.frame, utility_frame);
 
         let resumed_shell = table.finish_child(5).expect("shell resumes");
         assert_eq!(resumed_shell.id, shell.id);

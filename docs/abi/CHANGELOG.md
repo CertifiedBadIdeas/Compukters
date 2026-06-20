@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- The bounded K16 foreground process table now provides three child slots
+  after init, allowing the production `init -> shell -> utility -> utility`
+  shape used by shell-launched tools that spawn another program. The bundled
+  `/bin/proc-test.kx` utility exercises `SPAWN` plus `WAIT` by spawning
+  `/bin/cat.kx /etc/motd`, waiting for the exact PID, and reporting success
+  only after the child exits with status `0`.
 - Added guest-visible K16 `SPAWN` (`22`) and `WAIT` (`23`) syscalls plus
   `kraft-std::process::spawn_with_args`, `wait`, and `wait_any`.
   `SPAWN(request, len)` accepts the bounded argv request format with
