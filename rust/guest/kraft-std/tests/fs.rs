@@ -42,6 +42,28 @@ fn fs_create_delegates_to_open_syscall_write_create_truncate() {
 }
 
 #[test]
+fn fs_append_delegates_to_open_syscall_write_create_append() {
+    k16_rt::host_test::reset_syscalls();
+    k16_rt::host_test::set_syscall_return(3);
+
+    let file = fs::append("/etc/user.txt");
+
+    assert_eq!(file.map(|file| file.raw()), Ok(3));
+    assert_eq!(k16_rt::host_test::syscall_number(), k16_rt::host_test::OPEN);
+    assert_eq!(
+        k16_rt::host_test::syscall_arg0(),
+        "/etc/user.txt".as_ptr() as usize as u32
+    );
+    assert_eq!(k16_rt::host_test::syscall_arg1(), 13);
+    assert_eq!(
+        k16_rt::host_test::syscall_arg2(),
+        k16_abi::syscall::OPEN_WRITE_ONLY
+            | k16_abi::syscall::OPEN_CREATE
+            | k16_abi::syscall::OPEN_APPEND,
+    );
+}
+
+#[test]
 fn file_read_delegates_to_read_syscall() {
     k16_rt::host_test::reset_syscalls();
     k16_rt::host_test::set_syscall_return(4);
@@ -80,6 +102,42 @@ fn file_write_all_delegates_to_write_syscall() {
         bytes.as_ptr() as usize as u32
     );
     assert_eq!(k16_rt::host_test::syscall_arg2(), 5);
+}
+
+#[test]
+fn file_seek_start_delegates_to_seek_syscall() {
+    k16_rt::host_test::reset_syscalls();
+    k16_rt::host_test::set_syscall_return(2);
+    let file = fs::File::from_raw(3);
+
+    let offset = file.seek_start(2);
+
+    assert_eq!(offset, Ok(2));
+    assert_eq!(k16_rt::host_test::syscall_number(), k16_rt::host_test::SEEK);
+    assert_eq!(k16_rt::host_test::syscall_arg0(), 3);
+    assert_eq!(k16_rt::host_test::syscall_arg1(), 2);
+    assert_eq!(
+        k16_rt::host_test::syscall_arg2(),
+        k16_abi::syscall::SEEK_SET
+    );
+}
+
+#[test]
+fn file_seek_end_delegates_to_seek_syscall() {
+    k16_rt::host_test::reset_syscalls();
+    k16_rt::host_test::set_syscall_return(11);
+    let file = fs::File::from_raw(3);
+
+    let offset = file.seek_end();
+
+    assert_eq!(offset, Ok(11));
+    assert_eq!(k16_rt::host_test::syscall_number(), k16_rt::host_test::SEEK);
+    assert_eq!(k16_rt::host_test::syscall_arg0(), 3);
+    assert_eq!(k16_rt::host_test::syscall_arg1(), 0);
+    assert_eq!(
+        k16_rt::host_test::syscall_arg2(),
+        k16_abi::syscall::SEEK_END
+    );
 }
 
 #[test]

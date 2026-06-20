@@ -15,17 +15,21 @@ pub extern "C" fn main(argc: u32, argv: *const process::Arg) -> ! {
 
 fn write_arg(argc: u32, argv: *const process::Arg) -> Result<(), ()> {
     let argv = unsafe { process::Argv::from_raw(argc, argv) };
-    if argv.len() != 2 {
-        return Err(());
-    }
-    let Some(path) = argv.get(0) else {
-        return Err(());
+    let (append, path, payload) = match argv.len() {
+        2 => (false, argv.get(0), argv.get(1)),
+        3 if argv.get(0) == Some(b"--append".as_slice()) => (true, argv.get(1), argv.get(2)),
+        _ => return Err(()),
     };
-    let Some(payload) = argv.get(1) else {
+    let Some(path) = path else { return Err(()) };
+    let Some(payload) = payload else {
         return Err(());
     };
     let path = core::str::from_utf8(path).map_err(|_| ())?;
-    let file = fs::create(path).map_err(|_| ())?;
+    let file = if append {
+        fs::append(path).map_err(|_| ())?
+    } else {
+        fs::create(path).map_err(|_| ())?
+    };
     file.write_all(payload).map_err(|_| ())?;
     file.close().map_err(|_| ())?;
 

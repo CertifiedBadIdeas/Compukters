@@ -335,6 +335,11 @@ pub fn open_syscall(path: *const u8, len: usize, flags: u32) -> u32 {
 }
 
 #[inline(always)]
+pub fn seek_syscall(fd: u32, offset: u32, whence: u32) -> u32 {
+    syscall3(k16_abi::syscall::SEEK, fd, offset, whence)
+}
+
+#[inline(always)]
 pub fn read_dir_syscall(request: *const u8, len: usize) -> u32 {
     syscall3(
         k16_abi::syscall::READ_DIR,

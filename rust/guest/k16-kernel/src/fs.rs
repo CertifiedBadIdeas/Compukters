@@ -8,8 +8,11 @@ pub const OPEN_READ_ONLY: u32 = k16_abi::syscall::OPEN_READ_ONLY;
 pub const OPEN_WRITE_ONLY: u32 = k16_abi::syscall::OPEN_WRITE_ONLY;
 pub const OPEN_CREATE: u32 = k16_abi::syscall::OPEN_CREATE;
 pub const OPEN_TRUNCATE: u32 = k16_abi::syscall::OPEN_TRUNCATE;
+pub const OPEN_APPEND: u32 = k16_abi::syscall::OPEN_APPEND;
 #[cfg(any(not(test), feature = "host-test"))]
-const OPEN_ALLOWED_FLAGS: u32 = OPEN_WRITE_ONLY | OPEN_CREATE | OPEN_TRUNCATE;
+const OPEN_CREATE_TRUNCATE_FLAGS: u32 = OPEN_WRITE_ONLY | OPEN_CREATE | OPEN_TRUNCATE;
+#[cfg(any(not(test), feature = "host-test"))]
+const OPEN_CREATE_APPEND_FLAGS: u32 = OPEN_WRITE_ONLY | OPEN_CREATE | OPEN_APPEND;
 pub const MAX_OPEN_PATH_BYTES: u32 =
     1 + (MAX_PATH_COMPONENTS as u32 * MAX_NAME_BYTES as u32) + (MAX_PATH_COMPONENTS as u32 - 1);
 pub const MAX_READ_DIR_PATH_BYTES: u32 = MAX_OPEN_PATH_BYTES;
@@ -274,7 +277,7 @@ impl FileDescriptorTable {
                 self.slots[index] = Some(FileDescriptor {
                     owner_pid,
                     metadata,
-                    offset: 0,
+                    offset: initial_offset(metadata, flags)?,
                     flags,
                 });
                 return Ok(FIRST_FILE_FD + index as u32);
@@ -355,6 +358,27 @@ impl FileDescriptorTable {
         Ok(())
     }
 
+    pub fn seek_for_process(
+        &mut self,
+        owner_pid: u32,
+        fd: u32,
+        offset: u32,
+        whence: u32,
+    ) -> Result<u32, FsError> {
+        let descriptor = self.descriptor_mut_for_process(owner_pid, fd)?;
+        let new_offset = match whence {
+            k16_abi::syscall::SEEK_SET => offset,
+            k16_abi::syscall::SEEK_END if offset == 0 => descriptor.metadata.size_bytes,
+            k16_abi::syscall::SEEK_END => return Err(FsError::InvalidFlags),
+            _ => return Err(FsError::InvalidFlags),
+        };
+        if new_offset > descriptor.metadata.size_bytes {
+            return Err(FsError::InvalidFlags);
+        }
+        descriptor.offset = new_offset;
+        Ok(new_offset)
+    }
+
     pub fn metadata(&self, fd: u32) -> Result<FileMetadata, FsError> {
         self.metadata_for_process(0, fd)
     }
@@ -423,7 +447,10 @@ pub unsafe fn open_root_file_for_process(
     path: &[u8],
     flags: u32,
 ) -> Result<u32, FsError> {
-    if flags != OPEN_READ_ONLY && flags != OPEN_ALLOWED_FLAGS {
+    if flags != OPEN_READ_ONLY
+        && flags != OPEN_CREATE_TRUNCATE_FLAGS
+        && flags != OPEN_CREATE_APPEND_FLAGS
+    {
         return Err(FsError::InvalidFlags);
     }
     let path = RootFilePath::parse(path)?;
@@ -435,12 +462,13 @@ pub unsafe fn open_root_file_for_process(
             k16_storage::selected_file_metadata()
         }
     } else {
+        let truncate = flags == OPEN_CREATE_TRUNCATE_FLAGS;
         unsafe {
             k16_storage::open_file_for_write_from_storage0(
                 ROOT_PARTITION,
                 components.as_slice(),
                 true,
-                true,
+                truncate,
             )
             .map_err(storage_error_to_fs_error)?
         }
@@ -449,6 +477,20 @@ pub unsafe fn open_root_file_for_process(
         RUNTIME_FD_TABLE
             .get()
             .open_for_process(owner_pid, FileMetadata::from(metadata), flags)
+    }
+}
+
+#[cfg(any(not(test), feature = "host-test"))]
+pub unsafe fn seek_file_fd_for_process(
+    owner_pid: u32,
+    fd: u32,
+    offset: u32,
+    whence: u32,
+) -> Result<u32, FsError> {
+    unsafe {
+        RUNTIME_FD_TABLE
+            .get()
+            .seek_for_process(owner_pid, fd, offset, whence)
     }
 }
 
@@ -670,6 +712,17 @@ fn fd_index(fd: u32) -> Result<usize, FsError> {
     Ok(index)
 }
 
+fn initial_offset(metadata: FileMetadata, flags: u32) -> Result<u32, FsError> {
+    if flags & OPEN_APPEND != 0 {
+        if flags & OPEN_WRITE_ONLY == 0 {
+            return Err(FsError::InvalidFlags);
+        }
+        Ok(metadata.size_bytes)
+    } else {
+        Ok(0)
+    }
+}
+
 fn min_u32(left: u32, right: u32) -> u32 {
     if left < right {
         left
@@ -816,6 +869,46 @@ mod tests {
         assert_eq!(
             table.open_for_process(child_pid, FileMetadata::empty(), OPEN_READ_ONLY),
             Ok(child_fd)
+        );
+    }
+
+    #[test]
+    fn file_descriptor_table_opens_append_at_end_and_seeks_within_file() {
+        let mut table = FileDescriptorTable::new();
+        let metadata = FileMetadata {
+            inode_id: 2,
+            size_bytes: 11,
+            extent_count: 1,
+            extent_start_blocks: [5, 0, 0, 0],
+            extent_block_counts: [1, 0, 0, 0],
+        };
+        let fd = table
+            .open_for_process(1, metadata, OPEN_WRITE_ONLY | OPEN_CREATE | OPEN_APPEND)
+            .expect("append fd allocates");
+
+        assert_eq!(
+            table
+                .writable_metadata_for_process(1, fd)
+                .expect("fd writable"),
+            (metadata, 11)
+        );
+        assert_eq!(
+            table.seek_for_process(1, fd, 0, k16_abi::syscall::SEEK_SET),
+            Ok(0)
+        );
+        assert_eq!(
+            table
+                .writable_metadata_for_process(1, fd)
+                .expect("fd writable"),
+            (metadata, 0)
+        );
+        assert_eq!(
+            table.seek_for_process(1, fd, 0, k16_abi::syscall::SEEK_END),
+            Ok(11)
+        );
+        assert_eq!(
+            table.seek_for_process(1, fd, 12, k16_abi::syscall::SEEK_SET),
+            Err(FsError::InvalidFlags)
         );
     }
 }

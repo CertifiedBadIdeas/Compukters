@@ -192,16 +192,17 @@ pub unsafe fn copy_ram_to_file_range(
         Some(value) => value,
         None => return Err(StorageError::INVALID_FILESYSTEM),
     };
-    if range_end > file_capacity_bytes(metadata)? {
-        return Err(StorageError::OUTPUT_BUFFER_TOO_SMALL);
+    let mut updated = metadata;
+    if range_end > file_capacity_bytes(updated)? {
+        updated = unsafe { grow_file_capacity(updated, range_end)? };
     }
 
     let mut copied = 0;
     let mut extent_file_start: u32 = 0;
     let mut extent_index = 0;
-    while extent_index < metadata.extent_count as usize && copied < len {
-        let extent_start_block = metadata.extent_start_blocks[extent_index];
-        let extent_block_count = metadata.extent_block_counts[extent_index];
+    while extent_index < updated.extent_count as usize && copied < len {
+        let extent_start_block = updated.extent_start_blocks[extent_index];
+        let extent_block_count = updated.extent_block_counts[extent_index];
         let extent_bytes = match extent_block_count.checked_mul(BLOCK_SIZE) {
             Some(value) => value,
             None => return Err(StorageError::INVALID_FILESYSTEM),
@@ -238,11 +239,10 @@ pub unsafe fn copy_ram_to_file_range(
         return Err(StorageError::INVALID_FILESYSTEM);
     }
 
-    let mut updated = metadata;
     if range_end > updated.size_bytes {
         updated.size_bytes = range_end;
-        unsafe { encode_file_inode(updated)? };
     }
+    unsafe { encode_file_inode(updated)? };
     Ok(updated)
 }
 
@@ -1028,6 +1028,69 @@ fn file_capacity_bytes(metadata: FileMetadata) -> Result<u32, StorageError> {
         index += 1;
     }
     Ok(capacity)
+}
+
+unsafe fn grow_file_capacity(
+    mut metadata: FileMetadata,
+    required_size: u32,
+) -> Result<FileMetadata, StorageError> {
+    if metadata.extent_count == 0
+        || metadata.extent_count as usize > K16FS_MAX_INLINE_EXTENTS
+        || required_size <= file_capacity_bytes(metadata)?
+    {
+        return Err(StorageError::INVALID_FILESYSTEM);
+    }
+    let last_extent_index = metadata.extent_count as usize - 1;
+    let last_start = metadata.extent_start_blocks[last_extent_index];
+    let last_count = metadata.extent_block_counts[last_extent_index];
+    let current_capacity = file_capacity_bytes(metadata)?;
+    let additional_bytes = required_size - current_capacity;
+    let additional_blocks = div_ceil_u32(additional_bytes, BLOCK_SIZE)?;
+    let grow_start = match last_start.checked_add(last_count) {
+        Some(value) => value,
+        None => return Err(StorageError::INVALID_FILESYSTEM),
+    };
+    let grow_end = match grow_start.checked_add(additional_blocks) {
+        Some(value) => value,
+        None => return Err(StorageError::INVALID_FILESYSTEM),
+    };
+    if grow_end > unsafe { read_u32(STATE_SUPERBLOCK_TOTAL_BLOCKS) } {
+        return Err(StorageError::OUTPUT_BUFFER_TOO_SMALL);
+    }
+
+    let mut block = grow_start;
+    while block < grow_end {
+        if unsafe { is_block_allocated(block)? } {
+            return Err(StorageError::OUTPUT_BUFFER_TOO_SMALL);
+        }
+        block += 1;
+    }
+
+    block = grow_start;
+    while block < grow_end {
+        unsafe { mark_block_allocated(block)? };
+        unsafe { clear_scratch_block() };
+        unsafe { write_fs_block(block)? };
+        block += 1;
+    }
+
+    metadata.extent_block_counts[last_extent_index] =
+        match last_count.checked_add(additional_blocks) {
+            Some(value) => value,
+            None => return Err(StorageError::INVALID_FILESYSTEM),
+        };
+    Ok(metadata)
+}
+
+fn div_ceil_u32(value: u32, divisor: u32) -> Result<u32, StorageError> {
+    if divisor == 0 {
+        return Err(StorageError::INVALID_FILESYSTEM);
+    }
+    let adjusted = match value.checked_add(divisor - 1) {
+        Some(value) => value,
+        None => return Err(StorageError::INVALID_FILESYSTEM),
+    };
+    Ok(adjusted / divisor)
 }
 
 #[inline(always)]

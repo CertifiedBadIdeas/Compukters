@@ -280,6 +280,48 @@ class K16ShellRuntimeSmokeTest {
                 val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex)
                 commandIndex >= 0 && outputIndex > commandIndex && returnedPromptIndex > outputIndex
             }
+
+            dispatchText(device, "write --append /etc/user.txt -world\n")
+            waitForTerminal(device, "append write output and returned prompt") { terminal ->
+                val commandIndex = terminal.indexOf("K16> write --append /etc/user.txt -world")
+                val outputIndex =
+                    terminal.indexOf(
+                        "WROTE 6 /etc/user.txt",
+                        startIndex = commandIndex + "K16> write --append /etc/user.txt -world".length,
+                    )
+                val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex)
+                commandIndex >= 0 && outputIndex > commandIndex && returnedPromptIndex > outputIndex
+            }
+
+            dispatchText(device, "cat /etc/user.txt\n")
+            waitForTerminal(device, "cat output for appended file and returned prompt") { terminal ->
+                val commandIndex = terminal.lastIndexOf("K16> cat /etc/user.txt")
+                val outputIndex = terminal.indexOf("hello-world", startIndex = commandIndex + "K16> cat /etc/user.txt".length)
+                val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex)
+                commandIndex >= 0 && outputIndex > commandIndex && returnedPromptIndex > outputIndex
+            }
+
+            dispatchText(device, "stat /etc/user.txt\n")
+            waitForTerminal(device, "stat output for appended file and returned prompt") { terminal ->
+                val commandIndex = terminal.lastIndexOf("K16> stat /etc/user.txt")
+                val outputIndex =
+                    terminal.indexOf("FILE 11 /etc/user.txt", startIndex = commandIndex + "K16> stat /etc/user.txt".length)
+                val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex)
+                commandIndex >= 0 && outputIndex > commandIndex && returnedPromptIndex > outputIndex
+            }
+
+            val growPayload = "x".repeat(120)
+            repeat(5) {
+                dispatchText(device, "write --append /etc/user.txt $growPayload\n")
+            }
+            dispatchText(device, "stat /etc/user.txt\n")
+            waitForTerminal(device, "stat output for grown appended file and returned prompt") { terminal ->
+                val commandIndex = terminal.lastIndexOf("K16> stat /etc/user.txt")
+                val outputIndex =
+                    terminal.indexOf("FILE 611 /etc/user.txt", startIndex = commandIndex + "K16> stat /etc/user.txt".length)
+                val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex)
+                commandIndex >= 0 && outputIndex > commandIndex && returnedPromptIndex > outputIndex
+            }
         } finally {
             device.close()
         }

@@ -95,6 +95,7 @@ pub mod syscall {
     pub const READ_DIR: u32 = 14;
     pub const STAT: u32 = 15;
     pub const GAME_TICKS: u32 = 16;
+    pub const SEEK: u32 = 17;
     pub const RUN_FORMAT_PATH: u32 = 0;
     pub const RUN_FORMAT_ARGV: u32 = 1;
     pub const RUN_ARGV_MAGIC: u32 = u32::from_le_bytes(*b"RARG");
@@ -115,6 +116,9 @@ pub mod syscall {
     pub const OPEN_WRITE_ONLY: u32 = 1;
     pub const OPEN_CREATE: u32 = 1 << 1;
     pub const OPEN_TRUNCATE: u32 = 1 << 2;
+    pub const OPEN_APPEND: u32 = 1 << 3;
+    pub const SEEK_SET: u32 = 0;
+    pub const SEEK_END: u32 = 2;
     pub const FD_STDIN: u32 = 0;
     pub const FD_STDOUT: u32 = 1;
     pub const FD_STDERR: u32 = 2;
@@ -613,10 +617,14 @@ mod tests {
         assert_eq!(syscall::READ_DIR, 14);
         assert_eq!(syscall::STAT, 15);
         assert_eq!(syscall::GAME_TICKS, 16);
+        assert_eq!(syscall::SEEK, 17);
         assert_eq!(syscall::OPEN_READ_ONLY, 0);
         assert_eq!(syscall::OPEN_WRITE_ONLY, 1);
         assert_eq!(syscall::OPEN_CREATE, 2);
         assert_eq!(syscall::OPEN_TRUNCATE, 4);
+        assert_eq!(syscall::OPEN_APPEND, 8);
+        assert_eq!(syscall::SEEK_SET, 0);
+        assert_eq!(syscall::SEEK_END, 2);
         assert_eq!(syscall::RUN_ARGV_MAGIC, 0x4752_4152);
         assert_eq!(syscall::MAX_RUN_ARGS, 4);
         assert_eq!(syscall::MAX_RUN_PATH_BYTES, 61);

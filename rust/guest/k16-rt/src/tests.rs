@@ -385,6 +385,20 @@ fn open_syscall_uses_path_pointer_length_and_flags_arguments() {
 }
 
 #[test]
+fn seek_syscall_uses_fd_offset_and_whence_arguments() {
+    crate::trap::reset_test_interrupts();
+    crate::trap::set_test_syscall_return(11);
+
+    let returned = seek_syscall(3, 0, k16_abi::syscall::SEEK_END);
+
+    assert_eq!(crate::trap::test_syscall_number(), k16_abi::syscall::SEEK);
+    assert_eq!(crate::trap::test_syscall_arg0(), 3);
+    assert_eq!(crate::trap::test_syscall_arg1(), 0);
+    assert_eq!(crate::trap::test_syscall_arg2(), k16_abi::syscall::SEEK_END);
+    assert_eq!(returned, 11);
+}
+
+#[test]
 fn read_dir_syscall_uses_request_pointer_length_and_reserved_argument() {
     crate::trap::reset_test_interrupts();
     crate::trap::set_test_syscall_return(24);

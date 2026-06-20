@@ -533,13 +533,14 @@ K16 syscall ABI v0 names the current Rust-kernel proof services in
 | `WRITE` | `7` | `k16_rt::write_syscall(fd, ptr, len)` | Writes bytes from guest memory to fd `1`, fd `2`, or a write-only regular file fd; regular files advance their descriptor offset and update K16FS inode size. Returns byte count or a negative K16 error. |
 | `READ` | `8` | `k16_rt::read_syscall(fd, ptr, len)` | Reads bytes from fd `0` or an open regular file fd into guest memory; stdin blocks by waiting until input is available, regular files advance their descriptor offset, and the syscall returns byte count or a negative K16 error. |
 | `RUN` | `9` | `k16_rt::run_syscall(path, len)`, `k16_rt::run_argv_syscall(request, len)` | Synchronously loads a dynamic `/bin/*.kx` user program from `ROOT`/K16FS on `storage0`, blocks the current foreground process while the child runs, and returns the child exit status or a negative K16 error. `trap_arg2 = 0` means `trap_arg0/trap_arg1` are a raw path pointer/length. `trap_arg2 = 1` means they are a bounded argv request block beginning with `RUN_ARGV_MAGIC`. |
-| `OPEN` | `10` | `k16_rt::open_syscall(path, len, flags)` | Opens an absolute ROOT/K16FS regular file path from `storage0`. `flags = OPEN_READ_ONLY` opens an existing file for read. `flags = OPEN_WRITE_ONLY | OPEN_CREATE | OPEN_TRUNCATE` creates or truncates a regular file for write. Success returns a regular file fd starting at `3`. |
+| `OPEN` | `10` | `k16_rt::open_syscall(path, len, flags)` | Opens an absolute ROOT/K16FS regular file path from `storage0`. `flags = OPEN_READ_ONLY` opens an existing file for read. `flags = OPEN_WRITE_ONLY | OPEN_CREATE | OPEN_TRUNCATE` creates or truncates a regular file for write. `flags = OPEN_WRITE_ONLY | OPEN_CREATE | OPEN_APPEND` creates a missing regular file or opens an existing regular file with its descriptor offset at EOF. Success returns a regular file fd starting at `3`. |
 | `CLOSE` | `11` | `k16_rt::close_syscall(fd)` | Closes a regular file fd owned by the current foreground process. Standard descriptors `0..=2` are not closeable. |
 | `BRK` | `12` | `k16_rt::brk_syscall(addr)` | Sets the current foreground process program break to `addr` and returns the resulting break, or a negative K16 error. The break must stay inside the kernel-selected heap arena for that process. For translated processes, growing the break commits any newly crossed heap VM pages through the kernel page allocator. |
 | `SBRK` | `13` | `k16_rt::sbrk_syscall(delta)` | Grows the current foreground process program break by `delta` bytes and returns the previous break, or a negative K16 error. For translated processes, newly committed heap pages are mapped user-writable and non-executable. |
 | `READ_DIR` | `14` | `k16_rt::read_dir_syscall(request, len)` | Reads a ROOT/K16FS directory listing from `storage0` into a caller-provided buffer. The request is `u32 magic`, `u32 path_len`, `u32 out_ptr`, `u32 out_len`, followed by path bytes. |
 | `STAT` | `15` | `k16_rt::stat_syscall(path, len, metadata)` | Reads ROOT/K16FS path metadata from `storage0` into a 16-byte response buffer. Word 0 is `FILE_TYPE_REGULAR` or `FILE_TYPE_DIRECTORY`; word 1 is `size_bytes`; words 2 and 3 are reserved zero. |
 | `GAME_TICKS` | `16` | `k16_rt::game_ticks_syscall(out)` | Copies the current `timer0.game_ticks` value into an 8-byte user buffer as little-endian `{ low, high }` words and returns `STATUS_OK`, or returns a negative K16 error. |
+| `SEEK` | `17` | `k16_rt::seek_syscall(fd, offset, whence)` | Sets a regular file descriptor offset and returns the new offset. `SEEK_SET` accepts offsets inside the current file size. `SEEK_END` currently accepts only offset `0` and returns EOF. Standard descriptors are not seekable. |
 | `DEBUG_MARKER_RETURN` | `0x53` | n/a | Proof return value for `DEBUG_MARKER`. |
 | `STATUS_OK` | `0` | n/a | Successful proof-service status. |
 | `FILE_TYPE_REGULAR` | `1` | n/a | `STAT` response kind for a regular file. |
@@ -548,6 +549,9 @@ K16 syscall ABI v0 names the current Rust-kernel proof services in
 | `OPEN_WRITE_ONLY` | `1` | n/a | `OPEN` flag bit for write-only regular file descriptors. |
 | `OPEN_CREATE` | `2` | n/a | `OPEN` flag bit that creates the file when missing in the supported write-create-truncate mode. |
 | `OPEN_TRUNCATE` | `4` | n/a | `OPEN` flag bit that truncates the file in the supported write-create-truncate mode. |
+| `OPEN_APPEND` | `8` | n/a | `OPEN` flag bit for the supported write-create-append mode; the opened descriptor starts at EOF. |
+| `SEEK_SET` | `0` | n/a | `SEEK` mode for an absolute file offset. |
+| `SEEK_END` | `2` | n/a | `SEEK` mode for EOF-relative seek; K16 currently supports only `offset = 0`. |
 | `FD_STDIN` | `0` | n/a | Standard input descriptor accepted by `READ`. |
 | `FD_STDOUT` | `1` | n/a | Standard output descriptor accepted by `WRITE`. |
 | `FD_STDERR` | `2` | n/a | Standard error descriptor accepted by `WRITE`. |
