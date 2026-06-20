@@ -428,9 +428,16 @@ class K16ShellRuntimeSmokeTest {
                 commandIndex >= 0 && outputIndex > commandIndex && returnedPromptIndex > outputIndex
             }
 
-            val growPayload = "x".repeat(120)
-            repeat(5) {
+            repeat(20) {
+                val growPayload = "${it % 10}" + "x".repeat(29)
                 dispatchText(device, "write --append /etc/user.txt $growPayload\n")
+                waitForTerminal(device, "append write ${it + 1} output and returned prompt", attempts = 400) { terminal ->
+                    val commandIndex = terminal.lastIndexOf("K16> write --append /etc/user.txt $growPayload")
+                    val outputIndex =
+                        terminal.indexOf("WROTE 30 /etc/user.txt", startIndex = commandIndex + "K16> write --append /etc/user.txt $growPayload".length)
+                    val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex)
+                    commandIndex >= 0 && outputIndex > commandIndex && returnedPromptIndex > outputIndex
+                }
             }
             dispatchText(device, "stat /etc/user.txt\n")
             waitForTerminal(device, "stat output for grown appended file and returned prompt") { terminal ->
@@ -631,6 +638,116 @@ class K16ShellRuntimeSmokeTest {
                 val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = unameOutputIndex)
                 unameCommandIndex >= 0 && unameOutputIndex > unameCommandIndex && returnedPromptIndex > unameOutputIndex
             }
+        } finally {
+            device.close()
+        }
+    }
+
+    @Test
+    fun runtimeDeviceCleansUpRepeatedChildrenAfterFaultsAndBusyShell() {
+        val userFaultArtifact = Path.of("build/generated/k16-firmware-artifacts/user-fault-test.kx")
+        val syscallFaultArtifact = Path.of("build/generated/k16-firmware-artifacts/syscall-fault-test.kx")
+        assertTrue(Files.isRegularFile(userFaultArtifact), "user fault fixture should be built at $userFaultArtifact")
+        assertTrue(Files.isRegularFile(syscallFaultArtifact), "syscall fault fixture should be built at $syscallFaultArtifact")
+        val device =
+            createDevice(deviceId = 240) { storage0Path ->
+                val root = storage0Path.parent.resolve("root.kfs")
+                runK16Tool(
+                    "volume",
+                    "extract-partition",
+                    storage0Path.toString(),
+                    "ROOT",
+                    root.toString(),
+                )
+                runK16Tool(
+                    "fs",
+                    "kfs",
+                    "put",
+                    root.toString(),
+                    "/bin/fault.kx",
+                    userFaultArtifact.toString(),
+                )
+                runK16Tool(
+                    "fs",
+                    "kfs",
+                    "put",
+                    root.toString(),
+                    "/bin/sysfault.kx",
+                    syscallFaultArtifact.toString(),
+                )
+                runK16Tool(
+                    "volume",
+                    "replace-partition",
+                    storage0Path.toString(),
+                    "ROOT",
+                    root.toString(),
+                )
+            }
+
+        try {
+            device.turnOn()
+            waitForTerminalText(device, "K16> ")
+
+            var cursor = 0
+            cursor =
+                runShellCommandAndWait(
+                    device,
+                    cursor,
+                    "sysfault",
+                    "first syscall pointer fault returns prompt",
+                    "SYSCALL FAULTS OK",
+                    "ERR FAULT",
+                )
+            cursor = runShellCommandAndWait(device, cursor, "fault", "first user fault returns prompt", "ERR FAULT")
+            cursor = runShellCommandAndWait(device, cursor, "write /etc/stress.txt alpha", "write returns prompt", "WROTE 5 /etc/stress.txt")
+            cursor = runShellCommandAndWait(device, cursor, "cat /etc/stress.txt", "cat after first faults returns prompt", "alpha")
+            cursor =
+                runShellCommandAndWait(
+                    device,
+                    cursor,
+                    "sysfault",
+                    "second syscall pointer fault returns prompt after earlier child exits",
+                    "SYSCALL FAULTS OK",
+                    "ERR FAULT",
+                )
+            cursor = runShellCommandAndWait(device, cursor, "fault", "second user fault returns prompt after earlier child exits", "ERR FAULT")
+            cursor = runShellCommandAndWait(device, cursor, "cat /etc/stress.txt", "cat after repeated faults returns prompt", "alpha")
+            cursor =
+                runShellCommandAndWait(
+                    device,
+                    cursor,
+                    "mv /etc/stress.txt /etc/stress-moved.txt",
+                    "mv returns prompt after repeated faults",
+                    "MOVED /etc/stress.txt /etc/stress-moved.txt",
+                )
+            cursor =
+                runShellCommandAndWait(
+                    device,
+                    cursor,
+                    "stat /etc/stress.txt",
+                    "moved source reports no entry after repeated faults",
+                    "ERR NOENT /etc/stress.txt",
+                )
+            cursor =
+                runShellCommandAndWait(
+                    device,
+                    cursor,
+                    "cat /etc/stress-moved.txt",
+                    "moved file remains readable after repeated faults",
+                    "alpha",
+                )
+            cursor =
+                runShellCommandAndWait(
+                    device,
+                    cursor,
+                    "rm /etc/stress-moved.txt",
+                    "rm returns prompt after repeated faults",
+                    "REMOVED /etc/stress-moved.txt",
+                )
+            cursor = runShellCommandAndWait(device, cursor, "uname", "final uname returns prompt after cleanup stress", "K16")
+            cursor = runShellCommandAndWait(device, cursor, "shell", "nested shell returns prompt", "K16 SHELL")
+            cursor = runShellCommandAndWait(device, cursor, "shell", "nested shell busy returns prompt", "ERR BUSY")
+            runShellCommandAndWait(device, cursor, "echo nested-ok", "nested shell remains interactive after busy child", "nested-ok")
         } finally {
             device.close()
         }
@@ -974,9 +1091,10 @@ class K16ShellRuntimeSmokeTest {
     private fun waitForTerminal(
         device: K16RuntimeDevice,
         description: String,
+        attempts: Int = 400,
         predicate: (String) -> Boolean,
     ) {
-        repeat(80) {
+        repeat(attempts) {
             tickAndSync(device)
             val snapshot = device.snapshotRuntimeState()
             if (snapshot != null && predicate(terminalText(snapshot))) return
@@ -984,7 +1102,8 @@ class K16ShellRuntimeSmokeTest {
         }
         val snapshot = device.snapshotRuntimeState()
         val terminal = snapshot?.let(::terminalText) ?: "<no snapshot>"
-        error("K16 shell runtime smoke did not observe $description; terminal: $terminal")
+        val cpu = snapshot?.let(::snapshotCpuText) ?: "<no snapshot>"
+        error("K16 shell runtime smoke did not observe $description; cpu: $cpu; terminal: $terminal")
     }
 
     private fun assertOrderedFragments(
@@ -999,6 +1118,35 @@ class K16ShellRuntimeSmokeTest {
         }
     }
 
+    private fun runShellCommandAndWait(
+        device: K16RuntimeDevice,
+        cursor: Int,
+        command: String,
+        description: String,
+        vararg fragments: String,
+    ): Int {
+        dispatchText(device, "$command\n")
+        var observedCursor = cursor
+        waitForTerminal(device, description, attempts = 400) { terminal ->
+            val commandFragment = "K16> $command"
+            val searchCursor = if (cursor >= terminal.length) 0 else cursor
+            var nextCursor = terminal.indexOf(commandFragment, startIndex = searchCursor)
+            if (nextCursor < 0 && searchCursor > 0) nextCursor = terminal.indexOf(commandFragment)
+            if (nextCursor < 0) return@waitForTerminal false
+            nextCursor += commandFragment.length
+            for (fragment in fragments) {
+                val index = terminal.indexOf(fragment, startIndex = nextCursor)
+                if (index < 0) return@waitForTerminal false
+                nextCursor = index + fragment.length
+            }
+            val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = nextCursor)
+            if (returnedPromptIndex < 0) return@waitForTerminal false
+            observedCursor = returnedPromptIndex
+            true
+        }
+        return observedCursor
+    }
+
     private fun tickAndSync(device: K16RuntimeDevice) {
         device.serverTick()
         device.snapshotRuntimeState()
@@ -1008,6 +1156,36 @@ class K16ShellRuntimeSmokeTest {
         snapshotRamBytes(snapshot, start = K16_TERMINAL_CELLS_ADDR, size = K16_TERMINAL_ROWS * K16_TERMINAL_COLUMNS)
             .map { byte -> if (byte in 0x20..0x7e) byte.toInt().toChar() else ' ' }
             .joinToString(separator = "")
+
+    private fun snapshotCpuText(snapshot: ByteArray): String {
+        val buffer = ByteBuffer.wrap(snapshot).order(ByteOrder.LITTLE_ENDIAN)
+        require(snapshot.copyOfRange(0, 8).contentEquals("K16SNAP\u0000".encodeToByteArray()))
+        val ramSize = buffer.getLong(0x10).toInt()
+        val cpuOffset = 40 + ramSize
+        val kind = buffer.getInt(cpuOffset)
+        if (kind != 1) return "kind=$kind"
+        val state = buffer.getInt(cpuOffset + 4)
+        val pc = buffer.getInt(cpuOffset + 16)
+        val trapCause = buffer.getInt(cpuOffset + 24)
+        val trapPc = buffer.getInt(cpuOffset + 28)
+        val trapValue = buffer.getInt(cpuOffset + 32)
+        val trapStackPointer = buffer.getInt(cpuOffset + 52)
+        val registersOffset = cpuOffset + 56
+        val r0 = buffer.getInt(registersOffset)
+        val r1 = buffer.getInt(registersOffset + 4)
+        val r2 = buffer.getInt(registersOffset + 8)
+        val r3 = buffer.getInt(registersOffset + 12)
+        val sp = buffer.getInt(registersOffset + 14 * 4)
+        val trapArg0 = buffer.getInt(cpuOffset + 128)
+        val trapArg1 = buffer.getInt(cpuOffset + 132)
+        val trapArg2 = buffer.getInt(cpuOffset + 136)
+        return "state=$state pc=${pc.hex32()} trapCause=${trapCause.hex32()} trapPc=${trapPc.hex32()} " +
+            "trapValue=${trapValue.hex32()} trapArgs=${trapArg0.hex32()},${trapArg1.hex32()},${trapArg2.hex32()} " +
+            "r0=${r0.hex32()} r1=${r1.hex32()} r2=${r2.hex32()} r3=${r3.hex32()} " +
+            "sp=${sp.hex32()} trapSp=${trapStackPointer.hex32()}"
+    }
+
+    private fun Int.hex32(): String = "0x" + toUInt().toString(16).padStart(8, '0')
 
     private fun snapshotRamBytes(
         snapshot: ByteArray,
