@@ -236,8 +236,8 @@ fn run_exec(
     if args.is_empty() {
         return match process::run(program_path) {
             Ok(status) => {
-                write_child_exit_status(stdout, status);
-                status
+                write_child_exit_status(stdout, status.code());
+                status.code()
             }
             Err(error) => write_run_error(stdout, error),
         };
@@ -278,8 +278,8 @@ fn run_exec(
     }
     match process::run_with_args(program_path, &argv[..raw_args.len()]) {
         Ok(status) => {
-            write_child_exit_status(stdout, status);
-            status
+            write_child_exit_status(stdout, status.code());
+            status.code()
         }
         Err(error) => write_run_error(stdout, error),
     }

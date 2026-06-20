@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- `kraft-std::process::run` and `run_with_args` now return
+  `Result<process::ExitStatus, process::Error>` instead of exposing successful
+  child exit statuses as raw `u32` values. `ExitStatus::code()` returns the
+  child status word and `ExitStatus::success()` is true only for `0`; negative
+  K16 launch/runtime statuses still return `Err(process::Error::Syscall(...))`.
 - The bundled K16 shell now reports non-zero child process exit statuses as
   `ERR EXIT <status>` and tracks the last command status through a new
   `status` builtin. `status` prints `STATUS <decimal>` for non-negative child

@@ -10,9 +10,10 @@ fn process_run_delegates_to_runtime_run_syscall() {
     k16_rt::host_test::reset_syscalls();
     k16_rt::host_test::set_syscall_return(23);
 
-    let status = kraft_std::process::run("/bin/hello.kx");
+    let status = kraft_std::process::run("/bin/hello.kx").expect("run returns child status");
 
-    assert_eq!(status, Ok(23));
+    assert_eq!(status.code(), 23);
+    assert!(!status.success());
     assert_eq!(k16_rt::host_test::syscall_number(), k16_rt::host_test::RUN);
     assert_eq!(
         k16_rt::host_test::syscall_arg0(),
@@ -24,11 +25,13 @@ fn process_run_delegates_to_runtime_run_syscall() {
 #[test]
 fn process_run_with_args_encodes_argv_request_for_runtime_run_syscall() {
     k16_rt::host_test::reset_syscalls();
-    k16_rt::host_test::set_syscall_return(17);
+    k16_rt::host_test::set_syscall_return(0);
 
-    let status = kraft_std::process::run_with_args("/bin/cat.kx", &["/etc/motd", "--verbose"]);
+    let status = kraft_std::process::run_with_args("/bin/cat.kx", &["/etc/motd", "--verbose"])
+        .expect("run_with_args returns child status");
 
-    assert_eq!(status, Ok(17));
+    assert_eq!(status.code(), 0);
+    assert!(status.success());
     assert_eq!(k16_rt::host_test::syscall_number(), k16_rt::host_test::RUN);
     let request_ptr = k16_rt::host_test::syscall_arg0();
     let request_len = k16_rt::host_test::syscall_arg1();

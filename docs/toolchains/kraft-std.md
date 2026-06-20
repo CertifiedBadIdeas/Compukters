@@ -36,8 +36,9 @@ The initial `kraft-std` surface is deliberately small:
 | `kraft_std::heap::sbrk(delta)` | `k16_rt::sbrk_syscall(delta)` | Grows the current foreground process program break and returns the previous break. |
 | `kraft_std::heap::SbrkAllocator` | `BRK`/`SBRK` syscall ABI | Guest global allocator used by `alloc` collections. Allocation is monotonic; deallocation is currently a no-op. |
 | `kraft_std::process::exit(status)` | `k16_rt::exit_syscall(status)` | Terminates the current foreground process through the kernel. |
-| `kraft_std::process::run(path)` | `k16_rt::run_syscall(path, len)` | Runs a dynamic `/bin/*.kx` foreground child program with no arguments. |
-| `kraft_std::process::run_with_args(path, args)` | `k16_rt::run_argv_syscall(request, len)` | Runs a dynamic foreground child program with `1..=4` bounded argv byte strings. |
+| `kraft_std::process::run(path)` | `k16_rt::run_syscall(path, len)` | Runs a dynamic `/bin/*.kx` foreground child program with no arguments and returns `process::ExitStatus` on successful launch. |
+| `kraft_std::process::run_with_args(path, args)` | `k16_rt::run_argv_syscall(request, len)` | Runs a dynamic foreground child program with `1..=4` bounded argv byte strings and returns `process::ExitStatus` on successful launch. |
+| `kraft_std::process::ExitStatus` | K16 `RUN` non-negative return | Wraps a child exit code. `code()` returns the raw child status and `success()` is true only for `0`. |
 | `kraft_std::process::Argv::from_raw(argc, argv)` | K16 child-entry `r1`/`r2` argv ABI | Reads the argv table installed by the kernel for argv-aware child programs. |
 | `kraft_std::thread::yield_now()` | `k16_rt::yield_syscall()` | Requests one OS-level yield through the kernel syscall path. |
 | `kraft_std::thread::sleep_ticks(ticks)` | `k16_rt::sleep_ticks_syscall(ticks)` | Requests a timer0 game-tick sleep through the kernel syscall path. |
