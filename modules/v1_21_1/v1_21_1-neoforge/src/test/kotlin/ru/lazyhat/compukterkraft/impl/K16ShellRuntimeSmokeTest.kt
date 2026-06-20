@@ -445,6 +445,79 @@ class K16ShellRuntimeSmokeTest {
     }
 
     @Test
+    fun runtimeDeviceGrowsRegularFileThroughUserlandShell() {
+        val device = createDevice(deviceId = 237)
+        val chunkA = "a".repeat(128)
+        val chunkB = "b".repeat(128)
+        val chunkC = "c".repeat(128)
+        val chunkD = "d".repeat(128)
+
+        try {
+            device.turnOn()
+            waitForTerminalText(device, "K16> ")
+
+            dispatchPasteText(device, "write /etc/grow-file $chunkA\n")
+            waitForTerminal(device, "initial grow-file write output and returned prompt") { terminal ->
+                val commandIndex = terminal.lastIndexOf("K16> write /etc/grow-file $chunkA")
+                val outputIndex =
+                    terminal.indexOf("WROTE 128 /etc/grow-file", startIndex = commandIndex + "K16> write /etc/grow-file $chunkA".length)
+                val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex)
+                commandIndex >= 0 && outputIndex > commandIndex && returnedPromptIndex > outputIndex
+            }
+
+            listOf(chunkB, chunkC, chunkD).forEach { chunk ->
+                dispatchPasteText(device, "write --append /etc/grow-file $chunk\n")
+                waitForTerminal(device, "append grow-file chunk output and returned prompt") { terminal ->
+                    val commandIndex = terminal.lastIndexOf("K16> write --append /etc/grow-file $chunk")
+                    val outputIndex =
+                        terminal.indexOf(
+                            "WROTE 128 /etc/grow-file",
+                            startIndex = commandIndex + "K16> write --append /etc/grow-file $chunk".length,
+                        )
+                    val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex)
+                    commandIndex >= 0 && outputIndex > commandIndex && returnedPromptIndex > outputIndex
+                }
+            }
+
+            dispatchText(device, "write /etc/grow-blocker x\n")
+            waitForTerminal(device, "blocker write output and returned prompt") { terminal ->
+                val commandIndex = terminal.lastIndexOf("K16> write /etc/grow-blocker x")
+                val outputIndex =
+                    terminal.indexOf("WROTE 1 /etc/grow-blocker", startIndex = commandIndex + "K16> write /etc/grow-blocker x".length)
+                val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex)
+                commandIndex >= 0 && outputIndex > commandIndex && returnedPromptIndex > outputIndex
+            }
+
+            dispatchText(device, "write --append /etc/grow-file z\n")
+            waitForTerminal(device, "append grow-file past blocked adjacent block and returned prompt") { terminal ->
+                val commandIndex = terminal.lastIndexOf("K16> write --append /etc/grow-file z")
+                val outputIndex =
+                    terminal.indexOf("WROTE 1 /etc/grow-file", startIndex = commandIndex + "K16> write --append /etc/grow-file z".length)
+                val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex)
+                commandIndex >= 0 && outputIndex > commandIndex && returnedPromptIndex > outputIndex
+            }
+
+            dispatchText(device, "stat /etc/grow-file\n")
+            waitForTerminal(device, "stat output for multi-extent grown file and returned prompt") { terminal ->
+                val commandIndex = terminal.lastIndexOf("K16> stat /etc/grow-file")
+                val outputIndex = terminal.indexOf("FILE 513 /etc/grow-file", startIndex = commandIndex + "K16> stat /etc/grow-file".length)
+                val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex)
+                commandIndex >= 0 && outputIndex > commandIndex && returnedPromptIndex > outputIndex
+            }
+
+            dispatchText(device, "cat /etc/grow-file\n")
+            waitForTerminal(device, "cat output includes bytes across the new inline extent") { terminal ->
+                val commandIndex = terminal.lastIndexOf("K16> cat /etc/grow-file")
+                val outputIndex = terminal.indexOf("dz", startIndex = commandIndex + "K16> cat /etc/grow-file".length)
+                val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex)
+                commandIndex >= 0 && outputIndex > commandIndex && returnedPromptIndex > outputIndex
+            }
+        } finally {
+            device.close()
+        }
+    }
+
+    @Test
     fun runtimeDeviceRunsExplicitExecutablePathsThroughUserlandShell() {
         val device = createDevice(deviceId = 228)
 
