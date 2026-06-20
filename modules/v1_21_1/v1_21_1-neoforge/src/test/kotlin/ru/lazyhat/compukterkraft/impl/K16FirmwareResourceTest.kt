@@ -1092,25 +1092,47 @@ class K16FirmwareResourceTest {
     }
 
     @Test
-    fun k16KernelExitPathKeepsParentResumeInCallerOwnedStorage() {
+    fun k16KernelChildExitCompletionUsesSharedHelper() {
+        val mainSource = Path.of("../../../rust/guest/k16-kernel/src/main.rs").readText()
         val syscallSource = Path.of("../../../rust/guest/k16-kernel/src/syscall.rs").readText()
+        val trapSource = Path.of("../../../rust/guest/k16-kernel/src/trap.rs").readText()
+        val childExitPath = Path.of("../../../rust/guest/k16-kernel/src/child_exit.rs")
+        assertTrue(Files.exists(childExitPath), "kernel should keep child-exit completion in a shared helper module")
+        val childExitSource = childExitPath.readText()
         val processSource = Path.of("../../../rust/guest/k16-kernel/src/process.rs").readText()
 
+        assertTrue(mainSource.contains("mod child_exit;"), "kernel should register the shared child-exit helper")
         assertTrue(
-            syscallSource.contains("let mut resume = process::ParentResume::empty();"),
-            "EXIT should allocate ParentResume in caller-owned storage",
+            syscallSource.contains("child_exit::complete_child_exit(status)"),
+            "explicit EXIT should delegate child completion to the shared helper",
         )
         assertTrue(
-            syscallSource.contains("process::finish_child_for_exit_into(status, &mut resume)"),
-            "EXIT should fill ParentResume through an output reference instead of returning it by value",
+            trapSource.contains("child_exit::complete_child_exit(status)"),
+            "translated user fault exits should delegate child completion to the shared helper",
         )
         assertTrue(
-            syscallSource.contains("process::destroy_exited_address_space(&resume)"),
-            "EXIT should pass ParentResume by reference for cleanup",
+            childExitSource.contains("let mut resume = process::ParentResume::empty();"),
+            "child completion should allocate ParentResume in caller-owned storage",
         )
         assertTrue(
-            syscallSource.contains("process::resume_parent_context(&resume)"),
-            "EXIT should pass ParentResume by reference for parent resume",
+            childExitSource.contains("process::finish_child_for_exit_into(status, &mut resume)"),
+            "child completion should fill ParentResume through an output reference instead of returning it by value",
+        )
+        assertTrue(
+            childExitSource.contains("process::destroy_exited_address_space(&resume)"),
+            "child completion should pass ParentResume by reference for cleanup",
+        )
+        assertTrue(
+            childExitSource.contains("process::resume_parent_context(&resume)"),
+            "child completion should pass ParentResume by reference for parent resume",
+        )
+        assertFalse(
+            syscallSource.contains("process::finish_child_for_exit_into("),
+            "explicit EXIT should not duplicate child completion internals",
+        )
+        assertFalse(
+            trapSource.contains("process::finish_child_for_exit_into("),
+            "translated user fault exits should not duplicate child completion internals",
         )
         assertTrue(
             processSource.contains("pub const fn empty() -> Self"),
