@@ -542,6 +542,43 @@ class K16FirmwareResourceTest {
     }
 
     @Test
+    fun bundledK16ShellTicksCommandPrintsTimer0GameTicks() {
+        val workspace = createTempDirectory("k16-shell-ticks-command-test-")
+        val biosFlashPath = workspace.resolve("bios.kflash")
+        val storage0Path = workspace.resolve("storage0.kv")
+        biosFlashPath.writeBytes(K16BiosFlashWorkspace.loadBiosFlashResource(classLoader = javaClass.classLoader))
+        storage0Path.writeBytes(K16SystemVolumeWorkspace.loadStorage0VolumeResource(classLoader = javaClass.classLoader))
+
+        K16ComputerRuntimeFactory
+            .createFromBiosFlash(
+                biosFlashPath = biosFlashPath,
+                storage0Path = storage0Path,
+            ).use { runtime ->
+                val readyControl = runUntilTerminalText(runtime, "K16> ")
+                assertEquals(NativeK16ComputerControl.STATUS_READY, readyControl.status)
+                runShellCommand(runtime, "clear", expectVisiblePixels = false)
+
+                val ticksBeforeCommand = snapshotTimer0GameTicks(runtime.machineSnapshot())
+                runShellCommand(runtime, "ticks", expectVisiblePixels = true)
+                val expectedTicks = ticksBeforeCommand + 1
+                val terminal = terminalText(runtime.machineSnapshot())
+                val actualTicks =
+                    Regex("""TICKS ([0-9]+)""")
+                        .find(terminal)
+                        ?.groupValues
+                        ?.get(1)
+                        ?.toLong()
+                        ?: error("ticks command should print decimal timer0 ticks; terminal: $terminal")
+
+                assertEquals(
+                    expectedTicks,
+                    actualTicks,
+                    "ticks command should print timer0 game ticks from K16SNAP; terminal: $terminal",
+                )
+            }
+    }
+
+    @Test
     fun bundledK16KernelLaunchesInitProgram() {
         val workspace = createTempDirectory("k16-init-launch-test-")
         val biosFlashPath = workspace.resolve("bios.kflash")
@@ -862,9 +899,9 @@ class K16FirmwareResourceTest {
         val stdSource = Path.of("../../../rust/guest/kraft-std/src/lib.rs").readText()
         val timerSource = Path.of("../../../rust/guest/k16-kernel/src/timer.rs").readText()
 
-        assertTrue(shellSource.contains("time::game_ticks_parts()"), "shell ticks should read time through kraft-std")
+        assertTrue(shellSource.contains("time::game_ticks_bytes(&mut bytes)"), "shell ticks should read time through caller-owned bytes")
         assertTrue(shellSource.contains("b\"TICKS \""), "ticks should print a stable decimal prefix")
-        assertTrue(shellSource.contains("fn write_decimal_parts("), "shell should format full-width timer parts")
+        assertTrue(shellSource.contains("fn write_decimal_words("), "shell should format scalar full-width timer words")
         assertTrue(
             shellSource.contains("double_decimal_digits_and_add_bit"),
             "shell should format decimal without relying on 64-bit division",
@@ -873,6 +910,10 @@ class K16FirmwareResourceTest {
         assertTrue(
             stdSource.contains("pub fn game_ticks_parts() -> Result<U64Parts, Error>"),
             "kraft-std should expose fallible timer0 parts",
+        )
+        assertTrue(
+            stdSource.contains("pub fn game_ticks_bytes("),
+            "kraft-std should expose caller-buffer timer0 bytes for K16 live code",
         )
         assertTrue(timerSource.contains("pub type U64Parts = k16_rt::U64Parts"), "timer module should expose explicit low/high timer parts")
         assertTrue(timerSource.contains("pub struct TickInstant"), "timer module should expose a named tick instant")
@@ -939,8 +980,8 @@ class K16FirmwareResourceTest {
         val runtimeLibSource = Path.of("../../../rust/guest/k16-rt/src/lib.rs").readText()
 
         assertTrue(
-            timerSource.contains("k16_rt::timer0_game_ticks_parts()"),
-            "kernel sleep_ticks should use the runtime full-width timer0 helper",
+            timerSource.contains("read_game_ticks_words(&mut low, &mut high)"),
+            "kernel sleep_ticks should use scalar full-width timer0 reads",
         )
         assertTrue(
             timerSource.contains("TickInstant::now()"),
@@ -967,7 +1008,9 @@ class K16FirmwareResourceTest {
             "runtime should read full-width monotonic nanos from timer0 MMIO",
         )
         assertTrue(
-            runtimeLibSource.contains("timer0_game_ticks_parts") &&
+            runtimeLibSource.contains("timer0_game_ticks_low") &&
+                runtimeLibSource.contains("timer0_game_ticks_high") &&
+                runtimeLibSource.contains("timer0_game_ticks_parts") &&
                 runtimeLibSource.contains("timer0_monotonic_nanos_parts") &&
                 runtimeLibSource.contains("U64Parts"),
             "runtime should export the reusable low/high timer API",

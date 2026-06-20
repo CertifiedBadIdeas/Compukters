@@ -18,8 +18,11 @@ pub struct TickDuration {
 
 impl TickInstant {
     pub fn now() -> Self {
+        let mut low = 0;
+        let mut high = 0;
+        read_game_ticks_words(&mut low, &mut high);
         Self {
-            parts: k16_rt::timer0_game_ticks_parts(),
+            parts: U64Parts { high, low },
         }
     }
 
@@ -88,7 +91,23 @@ pub fn now_ticks() -> TickInstant {
 }
 
 pub fn game_ticks() -> U64Parts {
-    k16_rt::timer0_game_ticks_parts()
+    let mut low = 0;
+    let mut high = 0;
+    read_game_ticks_words(&mut low, &mut high);
+    U64Parts { high, low }
+}
+
+pub fn read_game_ticks_words(low: &mut u32, high: &mut u32) {
+    loop {
+        let high_before = k16_rt::timer0_game_ticks_high();
+        let current_low = k16_rt::timer0_game_ticks_low();
+        let high_after = k16_rt::timer0_game_ticks_high();
+        if high_before == high_after {
+            *low = current_low;
+            *high = high_after;
+            return;
+        }
+    }
 }
 
 pub fn monotonic_nanos() -> U64Parts {

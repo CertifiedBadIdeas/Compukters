@@ -84,8 +84,9 @@ pub use int64::{k16_div64, k16_mod64, k16_udiv64, k16_umod64};
 pub use k16_abi::cpu;
 pub use memory::{k16_memcmp, k16_memcpy, k16_memmove, k16_memset};
 pub use time::{
-    sleep_ticks, timer0_game_ticks, timer0_game_ticks_parts, timer0_monotonic_nanos,
-    timer0_monotonic_nanos_parts, yield_frames, U64Parts,
+    sleep_ticks, timer0_game_ticks, timer0_game_ticks_high, timer0_game_ticks_low,
+    timer0_game_ticks_parts, timer0_monotonic_nanos, timer0_monotonic_nanos_parts, yield_frames,
+    U64Parts,
 };
 pub use trap::{
     brk_syscall, close_syscall, debug_marker, debug_write_byte, disable_interrupts,
