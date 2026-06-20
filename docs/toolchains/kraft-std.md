@@ -52,10 +52,17 @@ The initial `kraft-std` surface is deliberately small:
 kernel fd syscall ABI, not debug MMIO.
 
 `kraft-std` is `#![no_std]`. It is not Rust's hosted `std`, a POSIX layer, or a
-complete OS API. The current filesystem surface is a small ROOT/K16FS proof for
-absolute paths: read-only opens, create/truncate write-only opens, whole-slice
-writes within preallocated file extents, directory creation/removal, directory
-listing, and metadata.
+complete OS API. The accepted long-term direction is a shared
+[K16 hosted ABI v0](../superpowers/specs/2026-06-21/issue-332-k16-hosted-abi-v0.md)
+under Rust `std`, libc, libc++, and KraftOS-specific extensions. In that model,
+`kraft-std` remains the current incubator for userland API decisions and the
+future extension crate for K16/KraftOS APIs that do not belong in language
+standard libraries.
+
+The current filesystem surface is a small ROOT/K16FS proof for absolute paths:
+read-only opens, create/truncate write-only opens, whole-slice writes within
+preallocated file extents, directory creation/removal, directory listing, and
+metadata.
 Regular file descriptors are process-owned and are not inherited across
 `process::run`. The current allocator surface is a monotonic `SBRK`-backed
 guest allocator for foreground userland programs. Append, seek, multi-extent
