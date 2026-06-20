@@ -122,6 +122,36 @@ fn kraft_std_layering_rule_is_documented_and_enforced() {
 }
 
 #[test]
+fn kraftos_rust_std_sys_hooks_live_in_named_modules() {
+    let root = repo_root();
+    let std_sys = root.join("toolchains/Compukter-Kraft-rust/library/std/src/sys");
+
+    let alloc_mod = fs::read_to_string(std_sys.join("alloc/mod.rs")).expect("alloc sys mod exists");
+    assert!(alloc_mod.contains("target_os = \"kraftos\""));
+    assert!(alloc_mod.contains("mod kraftos;"));
+    assert!(!alloc_mod.contains("target_os = \"kraftos\" => {\n        mod unsupported;"));
+
+    let stdio_mod = fs::read_to_string(std_sys.join("stdio/mod.rs")).expect("stdio sys mod exists");
+    assert!(stdio_mod.contains("target_os = \"kraftos\""));
+    assert!(stdio_mod.contains("mod kraftos;"));
+    assert!(stdio_mod.contains("pub use kraftos::*;"));
+
+    let unsupported_stdio =
+        fs::read_to_string(std_sys.join("stdio/unsupported.rs")).expect("unsupported stdio exists");
+    assert!(!unsupported_stdio.contains("target_os = \"kraftos\""));
+    assert!(!unsupported_stdio.contains("__k16_write_syscall"));
+
+    let kraftos_stdio =
+        fs::read_to_string(std_sys.join("stdio/kraftos.rs")).expect("KraftOS stdio exists");
+    assert!(kraftos_stdio.contains("__k16_write_syscall"));
+    assert!(kraftos_stdio.contains("FD_STDOUT"));
+
+    let kraftos_alloc =
+        fs::read_to_string(std_sys.join("alloc/kraftos.rs")).expect("KraftOS alloc exists");
+    assert!(kraftos_alloc.contains("__k16_sbrk_syscall"));
+}
+
+#[test]
 fn rust_nocore_smoke_artifacts_are_documented_and_strict() {
     let root = repo_root();
     let target_spec = root.join("tools/k16-unknown-kraftos.json");
