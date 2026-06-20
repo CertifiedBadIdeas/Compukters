@@ -198,7 +198,7 @@ fn run_exec(
     };
     if args.is_empty() {
         match process::run(program_path) {
-            Ok(_) => {}
+            Ok(status) => write_child_exit_status(stdout, status),
             Err(error) => write_run_error(stdout, error),
         }
         return;
@@ -238,7 +238,7 @@ fn run_exec(
         }
     }
     match process::run_with_args(program_path, &argv[..raw_args.len()]) {
-        Ok(_) => {}
+        Ok(status) => write_child_exit_status(stdout, status),
         Err(error) => write_run_error(stdout, error),
     }
 }
@@ -276,6 +276,15 @@ fn write_run_error(stdout: io::Fd, error: process::Error) {
             must_write(stdout, NEWLINE);
         }
     }
+}
+
+fn write_child_exit_status(stdout: io::Fd, status: u32) {
+    if status == 0 {
+        return;
+    }
+    must_write(stdout, b"ERR EXIT ");
+    write_decimal_words(stdout, 0, status);
+    must_write(stdout, NEWLINE);
 }
 
 fn run_error_name(status: u32) -> &'static [u8] {
