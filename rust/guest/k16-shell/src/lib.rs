@@ -232,6 +232,7 @@ pub enum Command<'a> {
     Pwd,
     Cd(Option<&'a [u8]>),
     Ticks,
+    Status,
     Echo(&'a [u8]),
     Exec {
         name: &'a [u8],
@@ -339,6 +340,8 @@ pub fn classify_line(input: &[u8], line_len: usize) -> Command<'_> {
         Command::Cd(Some(&input[3..line_len]))
     } else if matches_command(input, b"ticks") {
         Command::Ticks
+    } else if matches_command(input, b"status") {
+        Command::Status
     } else if is_echo_command(input, line_len) {
         let start = if line_len > 4 { 5 } else { 4 };
         Command::Echo(&input[start..line_len])
@@ -478,6 +481,16 @@ mod tests {
         }
 
         assert_eq!(line.command(), Command::Pwd);
+    }
+
+    #[test]
+    fn status_command_is_recognized_as_shell_builtin() {
+        let mut line = InputLine::new();
+        for byte in b"status" {
+            assert!(line.push_printable(*byte));
+        }
+
+        assert_eq!(line.command(), Command::Status);
     }
 
     #[test]

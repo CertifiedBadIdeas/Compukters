@@ -263,6 +263,34 @@ class K16ShellRuntimeSmokeTest {
     }
 
     @Test
+    fun runtimeDeviceTracksLastCommandStatusThroughUserlandShell() {
+        val device = createDevice(deviceId = 242)
+
+        try {
+            device.turnOn()
+            waitForTerminalText(device, "K16> ")
+
+            var cursor = 0
+            cursor = runShellCommandAndWait(device, cursor, "status", "initial status is zero", "STATUS 0")
+            cursor =
+                runShellCommandAndWait(
+                    device,
+                    cursor,
+                    "cat /etc/missing",
+                    "missing cat reports child exit status",
+                    "ERR EXIT 1",
+                )
+            cursor = runShellCommandAndWait(device, cursor, "status", "child exit status is remembered", "STATUS 1")
+            cursor = runShellCommandAndWait(device, cursor, "echo ok", "successful builtin resets status", "ok")
+            cursor = runShellCommandAndWait(device, cursor, "status", "status resets after successful builtin", "STATUS 0")
+            cursor = runShellCommandAndWait(device, cursor, "nosuch", "missing executable reports no entry", "ERR NOENT")
+            runShellCommandAndWait(device, cursor, "status", "launch error status is remembered by name", "STATUS NOENT")
+        } finally {
+            device.close()
+        }
+    }
+
+    @Test
     fun runtimeDeviceAcceptsLongHeapBackedEchoInputThroughUserlandShell() {
         val device = createDevice(deviceId = 227)
         val payload = "x".repeat(180)

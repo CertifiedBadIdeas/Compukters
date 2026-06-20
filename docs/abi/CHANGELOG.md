@@ -3,9 +3,12 @@
 ## Unreleased
 
 - The bundled K16 shell now reports non-zero child process exit statuses as
-  `ERR EXIT <status>`. `RUN` remains synchronous: a non-negative return is the
-  child exit status, while negative values remain K16 launch/runtime errors
-  such as `ERROR_NO_ENTRY`, `ERROR_BUSY`, and `ERROR_FAULT`.
+  `ERR EXIT <status>` and tracks the last command status through a new
+  `status` builtin. `status` prints `STATUS <decimal>` for non-negative child
+  statuses and `STATUS <error-name>` for known negative K16 errors. `RUN`
+  remains synchronous: a non-negative return is the child exit status, while
+  negative values remain K16 launch/runtime errors such as `ERROR_NO_ENTRY`,
+  `ERROR_BUSY`, and `ERROR_FAULT`.
 - K16 synchronous exceptions now expose interrupted execution mode metadata in
   existing trap argument CSRs: for non-syscall exceptions, `trap_arg0` is
   `0 = physical` or `1 = translated`, and `trap_arg1` is `0 = kernel` or

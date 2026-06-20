@@ -207,8 +207,11 @@ command to a `/bin/*.kx` path, the kernel opens that file from ROOT/K16FS on
 process. `RUN` returns a non-negative child exit status after a successful
 launch, or a negative K16 error when launch/fault handling fails before normal
 child completion. The bundled shell prints non-zero child statuses as
-`ERR EXIT <status>`. There is no bundled-program fallback when the file is
-missing.
+`ERR EXIT <status>` and keeps the latest command status in memory for the
+`status` builtin. `status` prints `STATUS <decimal>` for non-negative child or
+builtin statuses and `STATUS <error-name>` for known negative K16 errors such
+as `NOENT`, `BUSY`, and `FAULT`. There is no bundled-program fallback when the
+file is missing.
 
 The public CLI namespace is filesystem-specific:
 
