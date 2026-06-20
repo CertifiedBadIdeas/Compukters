@@ -3,7 +3,10 @@ use core::cell::UnsafeCell;
 const LOAD_ALIGNMENT: u32 = 2;
 const STACK_ALIGNMENT: u32 = 4;
 const HEAP_ALIGNMENT: u32 = 4;
-const STACK_GUARD_BYTES: u32 = 0x100;
+const VM_PAGE_SIZE: u32 = 4096;
+const TRANSLATED_USER_STACK_BYTES: u32 = VM_PAGE_SIZE * 2;
+const TRANSLATED_USER_STACK_PAGES: u32 = TRANSLATED_USER_STACK_BYTES / VM_PAGE_SIZE;
+const STACK_GUARD_BYTES: u32 = VM_PAGE_SIZE;
 const ROOT_PARTITION: &[u8; 4] = b"ROOT";
 const BIN_COMPONENT: &[u8] = b"bin";
 const BIN_PREFIX: &[u8] = b"/bin/";
@@ -11,7 +14,6 @@ const KX_SUFFIX: &[u8] = b".kx";
 const K16FS_MAX_NAME_BYTES: usize = 56;
 pub const MAX_RUN_PATH_BYTES: usize = BIN_PREFIX.len() + K16FS_MAX_NAME_BYTES;
 const CHILD_ARG_ENTRY_BYTES: u32 = 8;
-const VM_PAGE_SIZE: u32 = 4096;
 const TRANSLATED_TRAP_STACK_BYTES: u32 = VM_PAGE_SIZE;
 const INITIAL_USER_LOADER_SCRATCH_END: u32 = k16_storage::SCRATCH_ADDR + k16_storage::BLOCK_SIZE;
 #[cfg(any(test, feature = "host-test"))]
@@ -2353,7 +2355,7 @@ impl MappedDynamicUserLoadPlan {
         backing_start: u32,
     ) -> Result<Self, ProcessLoadError> {
         if image_page_count == 0
-            || stack_page_count > 1
+            || stack_page_count > TRANSLATED_USER_STACK_PAGES
             || image_map_start % VM_PAGE_SIZE != 0
             || stack_map_start % VM_PAGE_SIZE != 0
             || backing_start % VM_PAGE_SIZE != 0
@@ -2375,7 +2377,11 @@ impl MappedDynamicUserLoadPlan {
         }
         if stack_page_count > 0 {
             let stack_mapped_end = stack_map_start
-                .checked_add(VM_PAGE_SIZE)
+                .checked_add(
+                    stack_page_count
+                        .checked_mul(VM_PAGE_SIZE)
+                        .ok_or(ProcessLoadError::AddressOverflow)?,
+                )
                 .ok_or(ProcessLoadError::AddressOverflow)?;
             if virtual_plan.stack_top <= stack_map_start
                 || virtual_plan.stack_top > stack_mapped_end
@@ -2462,7 +2468,11 @@ impl MappedDynamicUserLoadPlan {
         if self.stack_page_count > 0 {
             let stack_mapped_end = self
                 .stack_map_start
-                .checked_add(VM_PAGE_SIZE)
+                .checked_add(
+                    self.stack_page_count
+                        .checked_mul(VM_PAGE_SIZE)
+                        .ok_or(ProcessLoadError::AddressOverflow)?,
+                )
                 .ok_or(ProcessLoadError::AddressOverflow)?;
             if virtual_address >= self.stack_map_start && virtual_address < stack_mapped_end {
                 let stack_backing_start = self
@@ -2495,11 +2505,19 @@ fn allocate_mapped_dynamic_user_load_plan(
         return Err(ProcessLoadError::InvalidArena);
     }
     let image_page_count = (image_map_end - image_map_start) / VM_PAGE_SIZE;
-    let stack_map_start = page_align_down(plan.stack_top - 1);
-    let stack_page_count = if stack_map_start < image_map_end {
+    let stack_map_end = page_align_up(plan.stack_top)?;
+    let desired_stack_map_start = stack_map_end
+        .checked_sub(TRANSLATED_USER_STACK_BYTES)
+        .ok_or(ProcessLoadError::InvalidArena)?;
+    let stack_map_start = if desired_stack_map_start < image_map_end {
+        image_map_end
+    } else {
+        desired_stack_map_start
+    };
+    let stack_page_count = if stack_map_start >= stack_map_end {
         0
     } else {
-        1
+        (stack_map_end - stack_map_start) / VM_PAGE_SIZE
     };
     let page_count = image_page_count
         .checked_add(stack_page_count)
@@ -3461,6 +3479,8 @@ fn coalesce_heap_backing_range(
 
 fn heap_limit_from_stack_top(stack_top: u32) -> Result<u32, HeapError> {
     let guarded = stack_top
+        .checked_sub(TRANSLATED_USER_STACK_BYTES)
+        .ok_or(HeapError::OutOfMemory)?
         .checked_sub(STACK_GUARD_BYTES)
         .ok_or(HeapError::OutOfMemory)?;
     Ok(align_down(guarded, STACK_ALIGNMENT))
@@ -3655,17 +3675,46 @@ mod tests {
         assert_eq!(mapped.map_start(), 0x0001_5000);
         assert_eq!(mapped.backing_start(), 0x0000_9000);
         assert_eq!(mapped.image_page_count(), 2);
-        assert_eq!(mapped.stack_map_start(), 0x0001_b000);
-        assert_eq!(mapped.stack_page_count(), 1);
-        assert_eq!(mapped.page_count(), 3);
+        assert_eq!(mapped.stack_map_start(), 0x0001_a000);
+        assert_eq!(mapped.stack_page_count(), 2);
+        assert_eq!(mapped.page_count(), 4);
         assert_eq!(
             allocator
                 .allocate_contiguous(1)
                 .expect("next frame allocates"),
             crate::page_alloc::FrameRange {
-                start: 0x0000_c000,
+                start: 0x0000_d000,
                 frame_count: 1,
             }
+        );
+    }
+
+    #[test]
+    fn mapped_dynamic_user_load_plan_commits_two_stack_pages() {
+        let plan = DynamicUserLoadPlan {
+            load_base: 0x0001_5020,
+            load_end: 0x0001_6020,
+            entry_pc: 0x0001_5024,
+            stack_top: 0x0001_c000,
+            payload_dst: 0x0001_5020,
+            payload_len: 16,
+            zero_fill_addr: 0x0001_5030,
+            zero_fill_len: 16,
+        };
+        let mut allocator =
+            crate::page_alloc::PageFrameAllocator::new(0x0003_0000).expect("allocator initializes");
+        allocator
+            .reserve_range(0, 0x0000_9000)
+            .expect("kernel frames reserve");
+
+        let mapped = allocate_mapped_dynamic_user_load_plan(plan, &mut allocator)
+            .expect("mapped load plan allocates");
+
+        assert_eq!(mapped.translate_address(0x0001_a000), Ok(0x0000_b000));
+        assert_eq!(mapped.translate_address(0x0001_bffc), Ok(0x0000_cffc));
+        assert_eq!(
+            mapped.translate_address(0x0001_9ffc),
+            Err(ProcessLoadError::InvalidArena)
         );
     }
 
@@ -3695,9 +3744,9 @@ mod tests {
 
         assert_eq!(mapped.map_start(), 0x0001_6000);
         assert_eq!(mapped.image_page_count(), 1);
-        assert_eq!(mapped.stack_map_start(), 0x0002_e000);
-        assert_eq!(mapped.stack_page_count(), 1);
-        assert_eq!(mapped.page_count(), 2);
+        assert_eq!(mapped.stack_map_start(), 0x0002_d000);
+        assert_eq!(mapped.stack_page_count(), 2);
+        assert_eq!(mapped.page_count(), 3);
         assert!(
             allocator.free_frames() >= 20,
             "uncommitted arena pages should remain available for shell child"
@@ -3728,11 +3777,11 @@ mod tests {
 
         assert_eq!(
             allocator
-                .allocate_contiguous(3)
+                .allocate_contiguous(4)
                 .expect("released frames allocate"),
             crate::page_alloc::FrameRange {
                 start: 0x0000_9000,
-                frame_count: 3,
+                frame_count: 4,
             }
         );
     }
@@ -4020,7 +4069,7 @@ mod tests {
         table.begin_child_run(child_plan).expect("child starts");
 
         assert_eq!(table.program_break(), Ok(0x0000_a024));
-        assert_eq!(table.heap_limit(), Ok(0x0000_ff00));
+        assert_eq!(table.heap_limit(), Ok(0x0000_d000));
     }
 
     #[test]
@@ -4107,7 +4156,7 @@ mod tests {
                 heap: RuntimeHeapState {
                     start: 0x0000_a038,
                     program_break: 0x0000_a038,
-                    limit: 0x0000_ff00,
+                    limit: 0x0000_d000,
                 },
                 address_space: Some(7),
                 kernel_stack_top: Some(0x0001_1000),
@@ -4131,7 +4180,7 @@ mod tests {
             heap: RuntimeHeapState {
                 start: 0x0000_a020,
                 program_break: 0x0000_a040,
-                limit: 0x0000_ff00,
+                limit: 0x0000_d000,
             },
             address_space: Some(11),
             kernel_stack_top: Some(0x0001_1000),
@@ -4221,7 +4270,7 @@ mod tests {
             heap: RuntimeHeapState {
                 start: 0x0000_a020,
                 program_break: 0x0000_a040,
-                limit: 0x0000_ff00,
+                limit: 0x0000_d000,
             },
             address_space: Some(11),
             kernel_stack_top: Some(0x0001_1000),
@@ -4328,7 +4377,7 @@ mod tests {
             .expect("init image initializes");
 
         assert_eq!(table.program_break(), Ok(0x0000_9024));
-        assert_eq!(table.heap_limit(), Ok(0x0002_4f00));
+        assert_eq!(table.heap_limit(), Ok(0x0002_2000));
         assert_eq!(table.grow_program_break(0x20), Ok(0x0000_9024));
         assert_eq!(table.program_break(), Ok(0x0000_9044));
     }
@@ -4359,7 +4408,7 @@ mod tests {
             })
         );
         assert_eq!(table.program_break(), Ok(0x0001_4024));
-        assert_eq!(table.heap_limit(), Ok(0x0001_8f00));
+        assert_eq!(table.heap_limit(), Ok(0x0001_6000));
         assert_eq!(
             table.slots[INIT_PROCESS_SLOT].context.stack_top,
             0x0001_9000
@@ -4397,7 +4446,7 @@ mod tests {
                 heap: RuntimeHeapState {
                     start: 0x0001_4024,
                     program_break: 0x0001_4024,
-                    limit: 0x0001_8f00,
+                    limit: 0x0001_6000,
                 },
                 address_space: None,
                 kernel_stack_top: None,
@@ -4457,7 +4506,7 @@ mod tests {
                 heap: RuntimeHeapState {
                     start: 0x0001_6024,
                     program_break: 0x0001_6024,
-                    limit: 0x0002_ef00,
+                    limit: 0x0002_c000,
                 },
                 address_space: Some(9),
                 kernel_stack_top: Some(0x0003_0000),
@@ -4934,7 +4983,7 @@ mod tests {
                 kernel_stack_top: 0x0001_d000,
                 backing_pages: Some(crate::page_alloc::FrameRange {
                     start: 0x0000_9000,
-                    frame_count: 3,
+                    frame_count: 4,
                 }),
             }
         );
@@ -4954,7 +5003,7 @@ mod tests {
                 .allocate_contiguous(1)
                 .expect("next frame allocates"),
             crate::page_alloc::FrameRange {
-                start: 0x0000_c000,
+                start: 0x0000_d000,
                 frame_count: 1,
             }
         );
@@ -5421,7 +5470,7 @@ mod tests {
             Ok(RuntimeHeapState {
                 start: 0x0001_2000,
                 program_break: 0x0001_2000,
-                limit: 0x0001_ef00,
+                limit: 0x0001_c000,
             })
         );
         let state = RuntimeForegroundSlotState {
@@ -5710,7 +5759,7 @@ mod tests {
             .initialize_init_image(image)
             .expect("init image records");
         let mut init_frame = TrapFrame::zeroed();
-        init_frame.stack_pointer = 0x0001_2000;
+        init_frame.stack_pointer = 0x0001_4000;
 
         let arena = table
             .child_arena_for_init_frame(init_frame)
@@ -5726,7 +5775,7 @@ mod tests {
         .expect("small child fits between loaded init and init stack top");
 
         assert_eq!(plan.load_base, 0x0001_0a20);
-        assert_eq!(plan.stack_top, 0x0001_2000);
+        assert_eq!(plan.stack_top, 0x0001_4000);
     }
 
     #[test]

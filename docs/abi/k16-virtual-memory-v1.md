@@ -284,7 +284,7 @@ The VM-enabled production user launch does this for `/bin/init.kx`,
    kernel image end, and kernel terminal state. For children, start after the
    current process break.
 5. Create a host MMU address space and map the loaded image pages plus the
-   selected user stack page into it.
+   selected committed user stack pages into it.
 6. Restore the entry register frame, including argv registers for child runs.
 7. Enter user-translated mode at the dynamic image entry PC.
 8. Set user `sp` to the selected process stack top and the trap stack to the
@@ -292,12 +292,13 @@ The VM-enabled production user launch does this for `/bin/init.kx`,
 
 The production mapping is not a fixed physical window: user virtual addresses
 come from the process arena, while physical backing pages come from the kernel
-page-frame allocator. At launch, only the loaded image pages and selected user
-stack page are committed. Heap pages are committed later by `BRK`/`SBRK` when
-the break crosses a previously unmapped 4 KiB VM page boundary; those pages are
-mapped user-writable and non-executable. This gives the host VM a real
-address-space id, permission checks, trap-mode separation, and `mmu0`
-copy-helper boundary without guest-visible page tables.
+page-frame allocator. At launch, only the loaded image pages and two 4 KiB user
+stack pages below the selected stack top are committed. The heap limit remains
+below a 4 KiB guard under that stack range. Heap pages are committed later by
+`BRK`/`SBRK` when the break crosses a previously unmapped 4 KiB VM page
+boundary; those pages are mapped user-writable and non-executable. This gives
+the host VM a real address-space id, permission checks, trap-mode separation,
+and `mmu0` copy-helper boundary without guest-visible page tables.
 
 ## Implementation Sequence
 
