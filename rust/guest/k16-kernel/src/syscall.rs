@@ -26,9 +26,8 @@ pub fn dispatch(number: u32) -> ! {
                 if resume.wait_status_ptr != 0
                     && write_wait_status(resume.wait_status_ptr, status).is_err()
                 {
-                    control::set_panic();
-                    control::set_panic_code(abi_syscall::ERROR_FAULT as i32);
-                    control::wait_forever()
+                    resume.wait_status_ptr = 0;
+                    resume.child_exit_status = abi_syscall::ERROR_FAULT;
                 }
                 if unsafe { process::destroy_exited_address_space(&resume) }.is_err() {
                     control::set_panic();
