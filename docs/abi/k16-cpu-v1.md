@@ -541,6 +541,7 @@ K16 syscall ABI v0 names the current Rust-kernel proof services in
 | `STAT` | `15` | `k16_rt::stat_syscall(path, len, metadata)` | Reads ROOT/K16FS path metadata from `storage0` into a 16-byte response buffer. Word 0 is `FILE_TYPE_REGULAR` or `FILE_TYPE_DIRECTORY`; word 1 is `size_bytes`; words 2 and 3 are reserved zero. |
 | `GAME_TICKS` | `16` | `k16_rt::game_ticks_syscall(out)` | Copies the current `timer0.game_ticks` value into an 8-byte user buffer as little-endian `{ low, high }` words and returns `STATUS_OK`, or returns a negative K16 error. |
 | `SEEK` | `17` | `k16_rt::seek_syscall(fd, offset, whence)` | Sets a regular file descriptor offset and returns the new offset. `SEEK_SET` accepts offsets inside the current file size. `SEEK_END` currently accepts only offset `0` and returns EOF. Standard descriptors are not seekable. |
+| `UNLINK` | `18` | `k16_rt::unlink_syscall(path, len)` | Removes an absolute ROOT/K16FS regular file path from `storage0`. Directories are rejected, and files with an open kernel fd are rejected with `ERROR_BUSY`. Returns `STATUS_OK` or a negative K16 error. |
 | `DEBUG_MARKER_RETURN` | `0x53` | n/a | Proof return value for `DEBUG_MARKER`. |
 | `STATUS_OK` | `0` | n/a | Successful proof-service status. |
 | `FILE_TYPE_REGULAR` | `1` | n/a | `STAT` response kind for a regular file. |

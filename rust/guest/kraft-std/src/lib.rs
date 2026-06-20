@@ -243,6 +243,17 @@ pub mod fs {
         Metadata::from_bytes(&bytes)
     }
 
+    pub fn remove_file(path: &str) -> Result<(), Error> {
+        if path.len() > k16_abi::syscall::MAX_STAT_PATH_BYTES {
+            return Err(Error::InvalidArgument);
+        }
+        let returned = k16_rt::unlink_syscall(path.as_ptr(), path.len());
+        if is_error_status(returned) {
+            return Err(Error::Syscall(returned));
+        }
+        Ok(())
+    }
+
     struct ReadDirRequest {
         bytes: [u8; k16_abi::syscall::MAX_READ_DIR_REQUEST_BYTES],
         len: usize,

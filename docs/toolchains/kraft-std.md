@@ -1,6 +1,6 @@
 # kraft-std Guest Library
 
-Issue: [#192](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/192), [#194](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/194), [#195](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/195), [#230](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/230), [#232](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/232), [#247](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/247), [#248](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/248), [#249](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/249), [#295](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/295)
+Issue: [#192](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/192), [#194](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/194), [#195](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/195), [#230](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/230), [#232](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/232), [#247](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/247), [#248](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/248), [#249](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/249), [#295](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/295), [#296](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/296)
 
 `rust/guest/kraft-std` is the experimental KraftOS userland library boundary for
 guest Rust programs. It is intentionally separate from the lower-level K16
@@ -29,6 +29,7 @@ The initial `kraft-std` surface is deliberately small:
 | `kraft_std::fs::File::seek_start(offset)` | `k16_rt::seek_syscall(fd, offset, SEEK_SET)` | Sets a regular file descriptor offset inside the current file size and returns the new offset. |
 | `kraft_std::fs::File::seek_end()` | `k16_rt::seek_syscall(fd, 0, SEEK_END)` | Sets a regular file descriptor offset to EOF and returns the file size. |
 | `kraft_std::fs::File::close()` | `k16_rt::close_syscall(fd)` | Releases an open regular file descriptor owned by the current foreground process. |
+| `kraft_std::fs::remove_file(path)` | `k16_rt::unlink_syscall(path, len)` | Removes an absolute ROOT/K16FS regular file path. Directories and files with open kernel fds are rejected by the kernel. |
 | `kraft_std::heap::brk(address)` | `k16_rt::brk_syscall(address)` | Sets the current foreground process program break and returns the resulting break. |
 | `kraft_std::heap::sbrk(delta)` | `k16_rt::sbrk_syscall(delta)` | Grows the current foreground process program break and returns the previous break. |
 | `kraft_std::heap::SbrkAllocator` | `BRK`/`SBRK` syscall ABI | Guest global allocator used by `alloc` collections. Allocation is monotonic; deallocation is currently a no-op. |

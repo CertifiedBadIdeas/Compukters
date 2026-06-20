@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Added K16 `UNLINK` (`18`) and bundled `/bin/rm.kx` for removing regular
+  ROOT/K16FS files from userland. The kernel rejects directories and files that
+  still have an open kernel fd, and guest K16FS marks deleted directory
+  entries/inodes while freeing the file data blocks.
 - Added K16 writable regular file fd modes for ROOT/K16FS. `OPEN` now accepts
   `OPEN_WRITE_ONLY | OPEN_CREATE | OPEN_TRUNCATE` and
   `OPEN_WRITE_ONLY | OPEN_CREATE | OPEN_APPEND`; `WRITE` can write to returned

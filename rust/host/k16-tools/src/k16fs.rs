@@ -8,6 +8,7 @@ pub const K16FS_DEFAULT_INODE_COUNT: u32 = 64;
 pub const K16FS_MAX_INLINE_EXTENTS: usize = 4;
 pub const K16FS_DIRECTORY_ENTRY_SIZE: usize = 64;
 pub const K16FS_MAX_NAME_BYTES: usize = 56;
+const K16FS_NEW_DIRECTORY_BLOCKS: u32 = 2;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct K16FsSuperblock {
@@ -128,14 +129,17 @@ pub fn create_directory(image: &mut [u8], path: &str) -> Result<(), String> {
     ensure_missing_entry(image, &superblock, parent_inode_id, parsed.name)?;
     ensure_directory_has_free_slot(image, &superblock, parent_inode_id)?;
     let inode_id = allocate_inode(image, &superblock)?;
-    let directory_block = allocate_contiguous_blocks(image, &superblock, 1)?;
+    let directory_block =
+        allocate_contiguous_blocks(image, &superblock, K16FS_NEW_DIRECTORY_BLOCKS)?;
+    let directory_range = block_range(directory_block, K16FS_NEW_DIRECTORY_BLOCKS)?;
+    image[directory_range].fill(0);
     let inode = K16FsInode {
         state: InodeState::Directory,
         flags: 0,
         size_bytes: 0,
         extents: vec![K16FsExtent {
             start_block: directory_block,
-            block_count: 1,
+            block_count: K16FS_NEW_DIRECTORY_BLOCKS,
         }],
     };
     encode_inode(image, &superblock, inode_id, &inode)?;

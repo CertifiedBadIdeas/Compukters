@@ -85,6 +85,7 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("rust/guest/k16-cat"))
         assertTrue(source.contains("rust/guest/k16-stat"))
         assertTrue(source.contains("rust/guest/k16-write"))
+        assertTrue(source.contains("rust/guest/k16-rm"))
         assertTrue(source.contains("rust/guest/k16-alloc-test"))
         assertTrue(source.contains("k16InitManifest"))
         assertTrue(source.contains("k16InitSource"))
@@ -98,6 +99,8 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("k16StatSource"))
         assertTrue(source.contains("k16WriteManifest"))
         assertTrue(source.contains("k16WriteSource"))
+        assertTrue(source.contains("k16RmManifest"))
+        assertTrue(source.contains("k16RmSource"))
         assertTrue(source.contains("k16AllocTestManifest"))
         assertTrue(source.contains("k16AllocTestSource"))
         assertTrue(source.contains("generatedK16ShellTarget"))
@@ -105,6 +108,7 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("generatedK16CatTarget"))
         assertTrue(source.contains("generatedK16StatTarget"))
         assertTrue(source.contains("generatedK16WriteTarget"))
+        assertTrue(source.contains("generatedK16RmTarget"))
         assertTrue(source.contains("generatedK16AllocTestTarget"))
         assertTrue(source.contains("k16InitArtifact"))
         assertTrue(source.contains("k16ShellArtifact"))
@@ -112,6 +116,7 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("k16CatArtifact"))
         assertTrue(source.contains("k16StatArtifact"))
         assertTrue(source.contains("k16WriteArtifact"))
+        assertTrue(source.contains("k16RmArtifact"))
         assertTrue(source.contains("k16AllocTestArtifact"))
         assertTrue(source.contains("compileK16SystemInit"))
         assertTrue(source.contains("compileK16SystemShell"))
@@ -119,6 +124,7 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("compileK16SystemCat"))
         assertTrue(source.contains("compileK16SystemStat"))
         assertTrue(source.contains("compileK16SystemWrite"))
+        assertTrue(source.contains("compileK16SystemRm"))
         assertTrue(source.contains("compileK16SystemAllocTest"))
         assertTrue(source.contains("putK16SystemStorage0Init"))
         assertTrue(source.contains("binName = \"k16-init\""))
@@ -131,6 +137,7 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("binName = \"k16-cat\""))
         assertTrue(source.contains("binName = \"k16-stat\""))
         assertTrue(source.contains("binName = \"k16-write\""))
+        assertTrue(source.contains("binName = \"k16-rm\""))
         assertTrue(source.contains("binName = \"k16-alloc-test\""))
         assertTrue(
             source.contains("output = k16ShellArtifact.get().asFile,\n                buildStd = \"core,alloc\""),
@@ -144,6 +151,7 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("\"/bin/cat.kx\""))
         assertTrue(source.contains("\"/bin/stat.kx\""))
         assertTrue(source.contains("\"/bin/write.kx\""))
+        assertTrue(source.contains("\"/bin/rm.kx\""))
         assertTrue(source.contains("\"/bin/alloc-test.kx\""))
         assertTrue(source.contains("\"/etc/motd\""))
         assertTrue(source.contains("\"extract-partition\""))
@@ -879,7 +887,7 @@ class K16FirmwareResourceTest {
         assertFalse(shellLibSource.contains("Command::Cat(&"), "shell should not carry a cat command variant")
         assertFalse(shellLibSource.contains("Command::AllocTest"), "shell should not carry an alloc command variant")
         assertTrue(
-            shellSource.contains("HELP\\nCLEAR\\nPWD\\nCD [PATH]\\nECHO\\nTICKS\\nUNAME\\nLS [PATH...]\\nCAT <PATH...>\\nSTAT <PATH...>\\nWRITE [--append] <PATH> <TEXT>\\nALLOC\\n"),
+            shellSource.contains("HELP\\nCLEAR\\nPWD\\nCD [PATH]\\nECHO\\nTICKS\\nUNAME\\nLS [PATH...]\\nCAT <PATH...>\\nSTAT <PATH...>\\nWRITE [--append] <PATH> <TEXT>\\nRM <PATH...>\\nALLOC\\n"),
             "help should print a readable command list",
         )
         assertTrue(shellSource.contains("fs::metadata(path)"), "cd should validate paths through stat metadata")
@@ -938,6 +946,19 @@ class K16FirmwareResourceTest {
         assertTrue(stdSource.contains("pub fn create(path: &str) -> Result<File, Error>"))
         assertTrue(stdSource.contains("pub fn append(path: &str) -> Result<File, Error>"))
         assertTrue(stdSource.contains("pub fn write_all(self, bytes: &[u8]) -> Result<(), Error>"))
+    }
+
+    @Test
+    fun k16RmUtilityRemovesRegularFileThroughKraftStdFs() {
+        val rmSource = Path.of("../../../rust/guest/k16-rm/src/main.rs").readText()
+        val stdSource = Path.of("../../../rust/guest/kraft-std/src/lib.rs").readText()
+
+        assertTrue(rmSource.contains("process::Argv::from_raw(argc, argv)"))
+        assertTrue(rmSource.contains("fs::remove_file(path)"))
+        assertTrue(rmSource.contains("b\"REMOVED \""))
+        assertTrue(rmSource.contains("b\"NOENT\""))
+        assertTrue(rmSource.contains("b\"BUSY\""))
+        assertTrue(stdSource.contains("pub fn remove_file(path: &str) -> Result<(), Error>"))
     }
 
     @Test

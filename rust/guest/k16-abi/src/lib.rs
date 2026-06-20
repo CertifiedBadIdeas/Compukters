@@ -96,6 +96,7 @@ pub mod syscall {
     pub const STAT: u32 = 15;
     pub const GAME_TICKS: u32 = 16;
     pub const SEEK: u32 = 17;
+    pub const UNLINK: u32 = 18;
     pub const RUN_FORMAT_PATH: u32 = 0;
     pub const RUN_FORMAT_ARGV: u32 = 1;
     pub const RUN_ARGV_MAGIC: u32 = u32::from_le_bytes(*b"RARG");
@@ -618,6 +619,7 @@ mod tests {
         assert_eq!(syscall::STAT, 15);
         assert_eq!(syscall::GAME_TICKS, 16);
         assert_eq!(syscall::SEEK, 17);
+        assert_eq!(syscall::UNLINK, 18);
         assert_eq!(syscall::OPEN_READ_ONLY, 0);
         assert_eq!(syscall::OPEN_WRITE_ONLY, 1);
         assert_eq!(syscall::OPEN_CREATE, 2);

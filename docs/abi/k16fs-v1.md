@@ -153,6 +153,8 @@ The current compiler crate provides:
 - directory listing;
 - guest-side create/truncate/write for regular files through the kernel fd ABI,
   plus append and bounded seek through the same fd ABI;
+- guest-side regular-file unlink through the kernel fd ABI, using deleted
+  inode and directory-entry states and freeing the file's data blocks;
 - guest-side contiguous growth of the last inline extent when a write crosses
   the current file capacity.
 
@@ -211,5 +213,6 @@ must stay in `k16 fs <filesystem>` subcommands. The current `put-boot` and
 `put-kernel` commands are boot-chain installation helpers that write the
 standard system files into the active K16FS-backed volume layout.
 
-Directory growth, sparse files, and arbitrary multi-extent guest-side file
-growth remain next-step work under the same K16FS v1 contract.
+Guest-side directory removal, directory growth, sparse files, and arbitrary
+multi-extent guest-side file growth remain next-step work under the same K16FS
+v1 contract.

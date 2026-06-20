@@ -11,7 +11,7 @@ use kraft_std::prelude::*;
 const PROMPT: &[u8] = b"K16> ";
 const NEWLINE: &[u8] = b"\n";
 const HELP: &[u8] =
-    b"HELP\nCLEAR\nPWD\nCD [PATH]\nECHO\nTICKS\nUNAME\nLS [PATH...]\nCAT <PATH...>\nSTAT <PATH...>\nWRITE [--append] <PATH> <TEXT>\nALLOC\n";
+    b"HELP\nCLEAR\nPWD\nCD [PATH]\nECHO\nTICKS\nUNAME\nLS [PATH...]\nCAT <PATH...>\nSTAT <PATH...>\nWRITE [--append] <PATH> <TEXT>\nRM <PATH...>\nALLOC\n";
 const BIN_PREFIX: &[u8] = b"/bin/";
 const PROGRAM_SUFFIX: &[u8] = b".kx";
 const ALLOC_ALIAS: &[u8] = b"alloc";
