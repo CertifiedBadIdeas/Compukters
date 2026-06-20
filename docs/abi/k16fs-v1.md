@@ -151,6 +151,8 @@ The current compiler crate provides:
 - absolute-path file creation and full-file reads;
 - absolute-path file deletion;
 - directory listing;
+- host-side directory and file creation through `k16 fs kfs`, using the same
+  bounded inline extent growth model as guest-side mutation;
 - guest-side create/truncate/write for regular files through the kernel fd ABI,
   plus append and bounded seek through the same fd ABI;
 - guest-side regular-file unlink through the kernel fd ABI, using deleted

@@ -127,7 +127,6 @@ pub fn create_directory(image: &mut [u8], path: &str) -> Result<(), String> {
     validate_filesystem(image)?;
     let parent_inode_id = find_directory_inode(image, &superblock, &parsed.parent_components)?;
     ensure_missing_entry(image, &superblock, parent_inode_id, parsed.name)?;
-    ensure_directory_has_free_slot(image, &superblock, parent_inode_id)?;
     let inode_id = allocate_inode(image, &superblock)?;
     let directory_block =
         allocate_contiguous_blocks(image, &superblock, K16FS_NEW_DIRECTORY_BLOCKS)?;
@@ -153,21 +152,23 @@ pub fn write_file(image: &mut [u8], path: &str, contents: &[u8]) -> Result<(), S
     validate_filesystem(image)?;
     let parent_inode_id = find_directory_inode(image, &superblock, &parsed.parent_components)?;
     ensure_missing_entry(image, &superblock, parent_inode_id, parsed.name)?;
-    ensure_directory_has_free_slot(image, &superblock, parent_inode_id)?;
     let block_count = blocks_for_len(contents.len())?;
     let inode_id = allocate_inode(image, &superblock)?;
-    let start_block = allocate_contiguous_blocks(image, &superblock, block_count)?;
-    let file_range = block_range(start_block, block_count)?;
-    image[file_range.clone()].fill(0);
-    image[file_range.start..file_range.start + contents.len()].copy_from_slice(contents);
+    let extents = allocate_file_extents(image, &superblock, block_count)?;
+    let mut copied = 0;
+    for extent in &extents {
+        let file_range = block_range(extent.start_block, extent.block_count)?;
+        image[file_range.clone()].fill(0);
+        let available = file_range.len().min(contents.len().saturating_sub(copied));
+        image[file_range.start..file_range.start + available]
+            .copy_from_slice(&contents[copied..copied + available]);
+        copied += available;
+    }
     let inode = K16FsInode {
         state: InodeState::File,
         flags: 0,
         size_bytes: contents.len() as u64,
-        extents: vec![K16FsExtent {
-            start_block,
-            block_count,
-        }],
+        extents,
     };
     encode_inode(image, &superblock, inode_id, &inode)?;
     append_directory_entry(image, &superblock, parent_inode_id, inode_id, parsed.name)?;
@@ -603,15 +604,6 @@ fn ensure_missing_entry(
     Ok(())
 }
 
-fn ensure_directory_has_free_slot(
-    image: &[u8],
-    superblock: &K16FsSuperblock,
-    directory_inode_id: u32,
-) -> Result<(), String> {
-    let directory = decode_inode(image, superblock, directory_inode_id)?;
-    find_free_directory_slot(image, &directory).map(|_| ())
-}
-
 fn append_directory_entry(
     image: &mut [u8],
     superblock: &K16FsSuperblock,
@@ -624,7 +616,8 @@ fn append_directory_entry(
     if directory.state != InodeState::Directory {
         return Err("K16FS parent inode is not a directory".to_string());
     }
-    let slot = find_free_directory_slot(image, &directory)?;
+    let slot =
+        find_or_grow_free_directory_slot(image, superblock, directory_inode_id, &mut directory)?;
     encode_directory_entry(image, slot.image_offset, target_inode_id, name)?;
     directory.size_bytes = directory
         .size_bytes
@@ -635,6 +628,26 @@ fn append_directory_entry(
 struct DirectorySlot {
     image_offset: usize,
     directory_offset: usize,
+}
+
+fn find_or_grow_free_directory_slot(
+    image: &mut [u8],
+    superblock: &K16FsSuperblock,
+    directory_inode_id: u32,
+    directory: &mut K16FsInode,
+) -> Result<DirectorySlot, String> {
+    match find_free_directory_slot(image, directory) {
+        Ok(slot) => Ok(slot),
+        Err(error) if error == "K16FS directory has no free entries" => {
+            let directory_offset = directory_extent_capacity(directory)?;
+            let block = grow_directory_capacity(image, superblock, directory_inode_id, directory)?;
+            Ok(DirectorySlot {
+                image_offset: block as usize * K16FS_BLOCK_SIZE,
+                directory_offset,
+            })
+        }
+        Err(error) => Err(error),
+    }
 }
 
 fn find_free_directory_slot(image: &[u8], directory: &K16FsInode) -> Result<DirectorySlot, String> {
@@ -658,6 +671,45 @@ fn find_free_directory_slot(image: &[u8], directory: &K16FsInode) -> Result<Dire
         }
     }
     Err("K16FS directory has no free entries".to_string())
+}
+
+fn grow_directory_capacity(
+    image: &mut [u8],
+    superblock: &K16FsSuperblock,
+    directory_inode_id: u32,
+    directory: &mut K16FsInode,
+) -> Result<u32, String> {
+    let Some(last_extent) = directory.extents.last_mut() else {
+        return Err("K16FS directory inode has no extents".to_string());
+    };
+    let grow_block = last_extent
+        .start_block
+        .checked_add(last_extent.block_count)
+        .ok_or_else(|| "K16FS directory extent range overflows".to_string())?;
+    if grow_block < superblock.total_blocks && !is_block_allocated(image, superblock, grow_block)? {
+        mark_allocated(image, superblock, grow_block)?;
+        zero_blocks(image, grow_block, 1)?;
+        last_extent.block_count = last_extent
+            .block_count
+            .checked_add(1)
+            .ok_or_else(|| "K16FS directory extent range overflows".to_string())?;
+        encode_inode(image, superblock, directory_inode_id, directory)?;
+        return Ok(grow_block);
+    }
+
+    if directory.extents.len() >= K16FS_MAX_INLINE_EXTENTS {
+        return Err(format!(
+            "K16FS supports at most {K16FS_MAX_INLINE_EXTENTS} inline extents"
+        ));
+    }
+    let new_block = allocate_contiguous_blocks(image, superblock, 1)?;
+    zero_blocks(image, new_block, 1)?;
+    directory.extents.push(K16FsExtent {
+        start_block: new_block,
+        block_count: 1,
+    });
+    encode_inode(image, superblock, directory_inode_id, directory)?;
+    Ok(new_block)
 }
 
 fn read_directory_entries(
@@ -797,6 +849,101 @@ fn allocate_contiguous_blocks(
     Err(format!("K16FS cannot allocate {count} contiguous blocks"))
 }
 
+fn allocate_file_extents(
+    image: &mut [u8],
+    superblock: &K16FsSuperblock,
+    block_count: u32,
+) -> Result<Vec<K16FsExtent>, String> {
+    let extents = plan_file_extents(image, superblock, block_count)?;
+    for extent in &extents {
+        for block in extent.start_block..extent.start_block + extent.block_count {
+            mark_allocated(image, superblock, block)?;
+        }
+    }
+    Ok(extents)
+}
+
+fn plan_file_extents(
+    image: &[u8],
+    superblock: &K16FsSuperblock,
+    block_count: u32,
+) -> Result<Vec<K16FsExtent>, String> {
+    if block_count == 0 {
+        return Err("K16FS allocation range is empty".to_string());
+    }
+    if let Some(run) = find_free_run_at_least(image, superblock, block_count)? {
+        return Ok(vec![run]);
+    }
+
+    let mut extents = Vec::new();
+    let mut remaining = block_count;
+    for run in find_free_runs(image, superblock)? {
+        if remaining == 0 {
+            break;
+        }
+        if extents.len() == K16FS_MAX_INLINE_EXTENTS {
+            return Err(format!(
+                "K16FS cannot allocate {block_count} blocks within {K16FS_MAX_INLINE_EXTENTS} inline extents"
+            ));
+        }
+        let allocated = run.block_count.min(remaining);
+        extents.push(K16FsExtent {
+            start_block: run.start_block,
+            block_count: allocated,
+        });
+        remaining -= allocated;
+    }
+
+    if remaining != 0 {
+        return Err(format!("K16FS cannot allocate {block_count} blocks"));
+    }
+    Ok(extents)
+}
+
+fn find_free_run_at_least(
+    image: &[u8],
+    superblock: &K16FsSuperblock,
+    block_count: u32,
+) -> Result<Option<K16FsExtent>, String> {
+    Ok(find_free_runs(image, superblock)?
+        .into_iter()
+        .find(|run| run.block_count >= block_count)
+        .map(|run| K16FsExtent {
+            start_block: run.start_block,
+            block_count,
+        }))
+}
+
+fn find_free_runs(image: &[u8], superblock: &K16FsSuperblock) -> Result<Vec<K16FsExtent>, String> {
+    let mut runs = Vec::new();
+    let mut run_start = None;
+    let mut run_count = 0;
+    for block in 1..superblock.total_blocks {
+        if is_block_allocated(image, superblock, block)? {
+            if let Some(start_block) = run_start {
+                runs.push(K16FsExtent {
+                    start_block,
+                    block_count: run_count,
+                });
+            }
+            run_start = None;
+            run_count = 0;
+            continue;
+        }
+        if run_start.is_none() {
+            run_start = Some(block);
+        }
+        run_count += 1;
+    }
+    if let Some(start_block) = run_start {
+        runs.push(K16FsExtent {
+            start_block,
+            block_count: run_count,
+        });
+    }
+    Ok(runs)
+}
+
 fn is_block_allocated(
     image: &[u8],
     superblock: &K16FsSuperblock,
@@ -812,6 +959,12 @@ fn is_block_allocated(
         .get(byte_offset)
         .ok_or_else(|| "K16FS bitmap is outside filesystem".to_string())?;
     Ok((byte & (1_u8 << bit)) != 0)
+}
+
+fn zero_blocks(image: &mut [u8], start_block: u32, block_count: u32) -> Result<(), String> {
+    let range = block_range(start_block, block_count)?;
+    image[range].fill(0);
+    Ok(())
 }
 
 fn blocks_for_len(len: usize) -> Result<u32, String> {
@@ -848,6 +1001,11 @@ fn inode_extent_capacity(inode: &K16FsInode) -> Result<u64, String> {
             .ok_or_else(|| "K16FS inode extent capacity overflows".to_string())?;
     }
     Ok(capacity)
+}
+
+fn directory_extent_capacity(directory: &K16FsInode) -> Result<usize, String> {
+    usize::try_from(inode_extent_capacity(directory)?)
+        .map_err(|_| "K16FS directory extent capacity overflows".to_string())
 }
 
 fn block_range(start_block: u32, block_count: u32) -> Result<Range<usize>, String> {

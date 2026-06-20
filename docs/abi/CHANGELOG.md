@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Host-side K16FS tooling now matches the guest bounded inline extent mutation
+  model: `k16 fs kfs mkdir` can grow full directories, and `k16 fs kfs put`
+  can store files across multiple inline extents when the free space is
+  fragmented.
 - Added K16 `MKDIR` (`19`) and `RMDIR` (`20`) plus bundled `/bin/mkdir.kx`
   and `/bin/rmdir.kx` for userland directory mutation. `RMDIR` removes only
   empty directories and reports `ERROR_NOT_EMPTY` for directories with live

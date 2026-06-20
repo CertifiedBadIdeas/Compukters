@@ -42,6 +42,43 @@ fn k16fs_creates_directory_and_writes_nested_file() {
 }
 
 #[test]
+fn k16fs_grows_host_directory_when_initial_slots_are_full() {
+    let mut image = format_empty_filesystem(128).expect("filesystem formats");
+
+    for index in 0..8 {
+        create_directory(&mut image, &format!("/d{index}")).expect("initial directory creates");
+    }
+
+    create_directory(&mut image, "/d8").expect("directory grows for ninth entry");
+
+    let entries = list_directory(&image, "/").expect("root lists");
+    assert!(entries.contains(&"d0".to_string()), "entries: {entries:?}");
+    assert!(entries.contains(&"d8".to_string()), "entries: {entries:?}");
+    validate_filesystem(&image).expect("filesystem validates");
+}
+
+#[test]
+fn k16fs_writes_host_file_across_fragmented_inline_extents() {
+    let mut image = format_empty_filesystem(19).expect("filesystem formats");
+
+    for index in 0..8 {
+        write_file(&mut image, &format!("/f{index}"), b"x").expect("fragment seed writes");
+    }
+    for index in [1, 3, 5, 7] {
+        delete_file(&mut image, &format!("/f{index}")).expect("fragment seed deletes");
+    }
+
+    let payload = vec![b'z'; 2 * 512];
+    write_file(&mut image, "/big", &payload).expect("fragmented file writes");
+
+    assert_eq!(
+        read_file(&image, "/big").expect("fragmented file reads"),
+        payload
+    );
+    validate_filesystem(&image).expect("filesystem validates");
+}
+
+#[test]
 fn k16fs_rejects_invalid_paths_duplicate_directories_and_missing_files() {
     let mut image = format_empty_filesystem(128).expect("filesystem formats");
 
