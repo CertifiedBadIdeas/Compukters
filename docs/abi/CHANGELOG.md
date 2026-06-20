@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- K16 kernel process table entries are now internally PID-aware. Init has
+  PID 1, child launches allocate stable non-slot PIDs starting at 2, and each
+  child records parent PID metadata. The guest-visible `RUN`/`EXIT` ABI remains
+  synchronous and unchanged: `RUN` still returns child exit status or a negative
+  K16 error, not a PID.
 - `kraft-std::fs` now exposes typed `path::PathRef` variants for existing
   path-taking filesystem helpers (`open`, `create`, `append`, `read_dir`,
   `metadata`, `remove_file`, `create_dir`, `remove_dir`, and `rename`) while
