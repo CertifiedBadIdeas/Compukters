@@ -42,15 +42,21 @@ fn cp_args(argc: u32, argv: *const process::Arg) -> Result<(), CopyError> {
 
     copy_file(source, destination)?;
     let stdout = io::stdout();
-    stdout.write_all(b"COPIED ").map_err(|_| CopyError::InvalidArgument)?;
+    stdout
+        .write_all(b"COPIED ")
+        .map_err(|_| CopyError::InvalidArgument)?;
     stdout
         .write_all(source.as_bytes())
         .map_err(|_| CopyError::InvalidArgument)?;
-    stdout.write_all(b" ").map_err(|_| CopyError::InvalidArgument)?;
+    stdout
+        .write_all(b" ")
+        .map_err(|_| CopyError::InvalidArgument)?;
     stdout
         .write_all(destination.as_bytes())
         .map_err(|_| CopyError::InvalidArgument)?;
-    stdout.write_all(b"\n").map_err(|_| CopyError::InvalidArgument)
+    stdout
+        .write_all(b"\n")
+        .map_err(|_| CopyError::InvalidArgument)
 }
 
 fn copy_file(source_path: &'static str, destination_path: &'static str) -> Result<(), CopyError> {
@@ -95,11 +101,21 @@ fn write_error(error: CopyError) -> Result<(), io::Error> {
     let stdout = io::stdout();
     match error {
         CopyError::InvalidArgument => stdout.write_all(b"ERR INVAL\n"),
-        CopyError::Source(path, error) => write_path_error(stdout, fs_error_name(error), path),
-        CopyError::Destination(path, error) => write_path_error(stdout, fs_error_name(error), path),
-        CopyError::Read(path, error) => write_path_error(stdout, fs_error_name(error), path),
-        CopyError::Write(path, error) => write_path_error(stdout, fs_error_name(error), path),
-        CopyError::Close(path, error) => write_path_error(stdout, fs_error_name(error), path),
+        CopyError::Source(path, error) => {
+            write_path_error(stdout, status::fs_error_name_or(error, b"IO"), path)
+        }
+        CopyError::Destination(path, error) => {
+            write_path_error(stdout, status::fs_error_name_or(error, b"IO"), path)
+        }
+        CopyError::Read(path, error) => {
+            write_path_error(stdout, status::fs_error_name_or(error, b"IO"), path)
+        }
+        CopyError::Write(path, error) => {
+            write_path_error(stdout, status::fs_error_name_or(error, b"IO"), path)
+        }
+        CopyError::Close(path, error) => {
+            write_path_error(stdout, status::fs_error_name_or(error, b"IO"), path)
+        }
     }
 }
 
@@ -109,24 +125,6 @@ fn write_path_error(stdout: io::Fd, name: &[u8], path: &str) -> Result<(), io::E
     stdout.write_all(b" ")?;
     stdout.write_all(path.as_bytes())?;
     stdout.write_all(b"\n")
-}
-
-fn fs_error_name(error: fs::Error) -> &'static [u8] {
-    match error {
-        fs::Error::InvalidArgument => b"INVAL",
-        fs::Error::Syscall(status) => status_name(status),
-    }
-}
-
-fn status_name(status: u32) -> &'static [u8] {
-    match status {
-        0xffff_fffe => b"NOENT",
-        0xffff_ffea => b"INVAL",
-        0xffff_fff4 => b"NOMEM",
-        0xffff_fff2 => b"FAULT",
-        0xffff_fff0 => b"BUSY",
-        _ => b"IO",
-    }
 }
 
 #[panic_handler]

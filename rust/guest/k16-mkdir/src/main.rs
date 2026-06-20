@@ -50,7 +50,11 @@ fn create_path(path: &str) -> Result<(), ()> {
             Err(())
         }
         Err(fs::Error::Syscall(status)) => {
-            write_mkdir_error(stdout, status_name(status), path)?;
+            write_mkdir_error(
+                stdout,
+                status::syscall_status_name_or(status, b"MKDIR"),
+                path,
+            )?;
             Err(())
         }
     }
@@ -62,16 +66,6 @@ fn write_mkdir_error(stdout: io::Fd, name: &[u8], path: &str) -> Result<(), ()> 
     stdout.write_all(b" ").map_err(|_| ())?;
     stdout.write_all(path.as_bytes()).map_err(|_| ())?;
     stdout.write_all(b"\n").map_err(|_| ())
-}
-
-fn status_name(status: u32) -> &'static [u8] {
-    match status {
-        0xffff_fffe => b"NOENT",
-        0xffff_ffea => b"INVAL",
-        0xffff_fff4 => b"NOMEM",
-        0xffff_fff2 => b"FAULT",
-        _ => b"MKDIR",
-    }
 }
 
 #[panic_handler]

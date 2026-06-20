@@ -477,6 +477,45 @@ pub mod heap {
 #[global_allocator]
 static GLOBAL_ALLOCATOR: heap::SbrkAllocator = heap::SbrkAllocator;
 
+pub mod status {
+    #[inline(always)]
+    pub const fn syscall_status_name(status: u32) -> &'static [u8] {
+        syscall_status_name_or(status, b"STATUS")
+    }
+
+    #[inline(always)]
+    pub const fn syscall_status_name_or(status: u32, fallback: &'static [u8]) -> &'static [u8] {
+        match status {
+            k16_abi::syscall::ERROR_NO_ENTRY => b"NOENT",
+            k16_abi::syscall::ERROR_EXEC_FORMAT => b"NOEXEC",
+            k16_abi::syscall::ERROR_BAD_FD => b"BADFD",
+            k16_abi::syscall::ERROR_NO_FD => b"NOFD",
+            k16_abi::syscall::ERROR_NOT_EMPTY => b"NOTEMPTY",
+            k16_abi::syscall::ERROR_INVALID => b"INVAL",
+            k16_abi::syscall::ERROR_NO_MEMORY => b"NOMEM",
+            k16_abi::syscall::ERROR_FAULT => b"FAULT",
+            k16_abi::syscall::ERROR_BUSY => b"BUSY",
+            _ => fallback,
+        }
+    }
+
+    #[inline(always)]
+    pub const fn fs_error_name(error: crate::fs::Error) -> &'static [u8] {
+        fs_error_name_or(error, b"IO")
+    }
+
+    #[inline(always)]
+    pub const fn fs_error_name_or(
+        error: crate::fs::Error,
+        fallback: &'static [u8],
+    ) -> &'static [u8] {
+        match error {
+            crate::fs::Error::InvalidArgument => b"INVAL",
+            crate::fs::Error::Syscall(status) => syscall_status_name_or(status, fallback),
+        }
+    }
+}
+
 pub mod process {
     use core::{ptr, slice};
 
@@ -646,5 +685,5 @@ pub mod process {
 }
 
 pub mod prelude {
-    pub use crate::{debug, fs, heap, io, process, thread, time};
+    pub use crate::{debug, fs, heap, io, process, status, thread, time};
 }
