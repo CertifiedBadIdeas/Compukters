@@ -3,6 +3,7 @@
 
 extern crate k16_rt;
 
+mod child_exit;
 mod console;
 mod control;
 mod debug;
