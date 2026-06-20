@@ -11,7 +11,7 @@ use kraft_std::prelude::*;
 const PROMPT: &[u8] = b"K16> ";
 const NEWLINE: &[u8] = b"\n";
 const HELP: &[u8] =
-    b"HELP\nCLEAR\nPWD\nCD [PATH]\nECHO\nTICKS\nUNAME\nLS [PATH...]\nCAT <PATH...>\nCP <SRC> <DST>\nMV <SRC> <DST>\nSTAT <PATH...>\nWRITE [--append] <PATH> <TEXT>\nRM <PATH...>\nMKDIR <PATH...>\nRMDIR <PATH...>\nALLOC\n";
+    b"HELP\nCLEAR\nPWD\nCD [PATH]\nECHO\nTICKS\nSTATUS\nUNAME\nLS [PATH...]\nCAT <PATH...>\nCP <SRC> <DST>\nMV <SRC> <DST>\nSTAT <PATH...>\nWRITE [--append] <PATH> <TEXT>\nRM <PATH...>\nMKDIR <PATH...>\nRMDIR <PATH...>\nALLOC\n";
 const BIN_PREFIX: &[u8] = b"/bin/";
 const PROGRAM_SUFFIX: &[u8] = b".kx";
 const ALLOC_ALIAS: &[u8] = b"alloc";
@@ -23,6 +23,7 @@ pub extern "C" fn main() -> ! {
     let stdout = io::stdout();
     let mut input = InputLine::new();
     let mut cwd = WorkingDirectory::new();
+    let mut last_status = k16_abi::syscall::STATUS_OK;
     let mut read_buffer = [0u8; 1];
     let mut path_buffer = PathBuffer::new();
     let mut program_path = PathBuffer::new();
@@ -41,6 +42,7 @@ pub extern "C" fn main() -> ! {
             stdout,
             &mut input,
             &mut cwd,
+            &mut last_status,
             &mut path_buffer,
             &mut program_path,
             &mut arg_paths,
@@ -54,6 +56,7 @@ fn read_and_dispatch_line(
     stdout: io::Fd,
     input: &mut InputLine,
     cwd: &mut WorkingDirectory,
+    last_status: &mut u32,
     path_buffer: &mut PathBuffer,
     program_path: &mut PathBuffer,
     arg_paths: &mut [PathBuffer; k16_abi::syscall::MAX_RUN_ARGS],
@@ -73,6 +76,7 @@ fn read_and_dispatch_line(
                     dispatch_command(
                         stdout,
                         cwd,
+                        last_status,
                         path_buffer,
                         program_path,
                         arg_paths,
@@ -100,6 +104,7 @@ fn read_and_dispatch_line(
 fn dispatch_command(
     stdout: io::Fd,
     cwd: &mut WorkingDirectory,
+    last_status: &mut u32,
     path_buffer: &mut PathBuffer,
     program_path: &mut PathBuffer,
     arg_paths: &mut [PathBuffer; k16_abi::syscall::MAX_RUN_ARGS],
@@ -107,17 +112,37 @@ fn dispatch_command(
 ) {
     match command {
         Command::Empty => {}
-        Command::Invalid => must_write(stdout, b"ERR INVAL\n"),
-        Command::Help => must_write(stdout, HELP),
-        Command::Clear => must_write(stdout, b"\x0c"),
-        Command::Pwd => run_pwd(stdout, cwd),
-        Command::Cd(path) => run_cd(stdout, cwd, path_buffer, path),
-        Command::Ticks => run_ticks(stdout),
+        Command::Invalid => {
+            must_write(stdout, b"ERR INVAL\n");
+            *last_status = k16_abi::syscall::ERROR_INVALID;
+        }
+        Command::Help => {
+            must_write(stdout, HELP);
+            *last_status = k16_abi::syscall::STATUS_OK;
+        }
+        Command::Clear => {
+            must_write(stdout, b"\x0c");
+            *last_status = k16_abi::syscall::STATUS_OK;
+        }
+        Command::Pwd => {
+            run_pwd(stdout, cwd);
+            *last_status = k16_abi::syscall::STATUS_OK;
+        }
+        Command::Cd(path) => {
+            *last_status = run_cd(stdout, cwd, path_buffer, path);
+        }
+        Command::Ticks => {
+            *last_status = run_ticks(stdout);
+        }
+        Command::Status => write_status(stdout, *last_status),
         Command::Echo(bytes) => {
             must_write(stdout, bytes);
             must_write(stdout, NEWLINE);
+            *last_status = k16_abi::syscall::STATUS_OK;
         }
-        Command::Exec { name, args } => run_exec(stdout, cwd, arg_paths, program_path, name, args),
+        Command::Exec { name, args } => {
+            *last_status = run_exec(stdout, cwd, arg_paths, program_path, name, args);
+        }
     }
 }
 
@@ -131,33 +156,43 @@ fn run_cd(
     cwd: &mut WorkingDirectory,
     path_buffer: &mut PathBuffer,
     path: Option<&[u8]>,
-) {
+) -> u32 {
     let path = path.unwrap_or(b"/");
     if cwd.resolve_into(path, path_buffer).is_err() {
         must_write(stdout, b"ERR INVAL\n");
-        return;
+        return k16_abi::syscall::ERROR_INVALID;
     }
     let Ok(path) = path_buffer.as_str() else {
         must_write(stdout, b"ERR INVAL\n");
-        return;
+        return k16_abi::syscall::ERROR_INVALID;
     };
     match fs::metadata(path) {
         Ok(metadata) if metadata.file_type == fs::FileType::Directory => {
             if cwd.set_from_resolved(path_buffer).is_err() {
                 must_write(stdout, b"ERR INVAL\n");
+                k16_abi::syscall::ERROR_INVALID
+            } else {
+                k16_abi::syscall::STATUS_OK
             }
         }
-        Ok(_) => must_write(stdout, b"ERR INVAL\n"),
-        Err(fs::Error::InvalidArgument) => must_write(stdout, b"ERR INVAL\n"),
+        Ok(_) => {
+            must_write(stdout, b"ERR INVAL\n");
+            k16_abi::syscall::ERROR_INVALID
+        }
+        Err(fs::Error::InvalidArgument) => {
+            must_write(stdout, b"ERR INVAL\n");
+            k16_abi::syscall::ERROR_INVALID
+        }
         Err(fs::Error::Syscall(status)) => {
             must_write(stdout, b"ERR ");
             must_write(stdout, run_error_name(status));
             must_write(stdout, NEWLINE);
+            status
         }
     }
 }
 
-fn run_ticks(stdout: io::Fd) {
+fn run_ticks(stdout: io::Fd) -> u32 {
     must_write(stdout, b"TICKS ");
     let mut bytes = [0u8; k16_abi::syscall::GAME_TICKS_BYTES];
     match time::game_ticks_bytes(&mut bytes) {
@@ -166,11 +201,13 @@ fn run_ticks(stdout: io::Fd) {
             let high = u32::from_le_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]);
             write_decimal_words(stdout, high, low);
             must_write(stdout, NEWLINE);
+            k16_abi::syscall::STATUS_OK
         }
         Err(time::Error::Syscall(status)) => {
             must_write(stdout, b"ERR ");
             must_write(stdout, run_error_name(status));
             must_write(stdout, NEWLINE);
+            status
         }
     }
 }
@@ -182,26 +219,28 @@ fn run_exec(
     program_path: &mut PathBuffer,
     name: &[u8],
     args: CommandArgs<'_>,
-) {
+) -> u32 {
     if command_name_has_separator(name) {
         if resolve_executable_path(cwd, name, program_path).is_err() {
             must_write(stdout, b"ERR INVAL\n");
-            return;
+            return k16_abi::syscall::ERROR_INVALID;
         }
     } else if build_program_path(name, program_path).is_err() {
         must_write(stdout, b"ERR INVAL\n");
-        return;
+        return k16_abi::syscall::ERROR_INVALID;
     }
     let Ok(program_path) = program_path.as_str() else {
         must_write(stdout, b"ERR INVAL\n");
-        return;
+        return k16_abi::syscall::ERROR_INVALID;
     };
     if args.is_empty() {
-        match process::run(program_path) {
-            Ok(status) => write_child_exit_status(stdout, status),
+        return match process::run(program_path) {
+            Ok(status) => {
+                write_child_exit_status(stdout, status);
+                status
+            }
             Err(error) => write_run_error(stdout, error),
-        }
-        return;
+        };
     }
 
     let raw_args = args.as_slice();
@@ -212,7 +251,7 @@ fn run_exec(
             let raw_arg = raw_args[index];
             if cwd.resolve_into(raw_arg, &mut arg_paths[index]).is_err() {
                 must_write(stdout, b"ERR INVAL\n");
-                return;
+                return k16_abi::syscall::ERROR_INVALID;
             }
             index += 1;
         }
@@ -220,7 +259,7 @@ fn run_exec(
         while index < raw_args.len() {
             let Ok(arg) = arg_paths[index].as_str() else {
                 must_write(stdout, b"ERR INVAL\n");
-                return;
+                return k16_abi::syscall::ERROR_INVALID;
             };
             argv[index] = arg;
             index += 1;
@@ -231,14 +270,17 @@ fn run_exec(
             let raw_arg = raw_args[index];
             let Ok(arg) = core::str::from_utf8(raw_arg) else {
                 must_write(stdout, b"ERR INVAL\n");
-                return;
+                return k16_abi::syscall::ERROR_INVALID;
             };
             argv[index] = arg;
             index += 1;
         }
     }
     match process::run_with_args(program_path, &argv[..raw_args.len()]) {
-        Ok(status) => write_child_exit_status(stdout, status),
+        Ok(status) => {
+            write_child_exit_status(stdout, status);
+            status
+        }
         Err(error) => write_run_error(stdout, error),
     }
 }
@@ -267,15 +309,29 @@ fn build_program_path(name: &[u8], out: &mut PathBuffer) -> Result<(), k16_shell
     out.replace_with_parts(BIN_PREFIX, name, PROGRAM_SUFFIX)
 }
 
-fn write_run_error(stdout: io::Fd, error: process::Error) {
+fn write_run_error(stdout: io::Fd, error: process::Error) -> u32 {
     match error {
-        process::Error::InvalidArgument => must_write(stdout, b"ERR INVAL\n"),
+        process::Error::InvalidArgument => {
+            must_write(stdout, b"ERR INVAL\n");
+            k16_abi::syscall::ERROR_INVALID
+        }
         process::Error::Syscall(status) => {
             must_write(stdout, b"ERR ");
             must_write(stdout, run_error_name(status));
             must_write(stdout, NEWLINE);
+            status
         }
     }
+}
+
+fn write_status(stdout: io::Fd, status: u32) {
+    must_write(stdout, b"STATUS ");
+    if status & 0x8000_0000 != 0 {
+        must_write(stdout, run_error_name(status));
+    } else {
+        write_decimal_words(stdout, 0, status);
+    }
+    must_write(stdout, NEWLINE);
 }
 
 fn write_child_exit_status(stdout: io::Fd, status: u32) {
