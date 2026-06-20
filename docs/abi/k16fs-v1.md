@@ -213,6 +213,13 @@ builtin statuses and `STATUS <error-name>` for known negative K16 errors such
 as `NOENT`, `BUSY`, and `FAULT`. There is no bundled-program fallback when the
 file is missing.
 
+For bundled filesystem utilities, the shell resolves relative path arguments
+against its current working directory before calling `RUN_ARGV`. This includes
+`ls`, `cat`, `cp`, `mv`, `stat`, `write`, `rm`, `mkdir`, and `rmdir`. `write`
+resolves only the path argument: `write <path> <payload>` resolves `<path>`,
+and `write --append <path> <payload>` preserves `--append` and `<payload>`
+verbatim while resolving `<path>`.
+
 Bundled multi-path filesystem utilities use aggregate command status: each path
 argument is processed independently where the utility can continue, per-path
 success or error output is printed, and the child exits with status `1` if any
