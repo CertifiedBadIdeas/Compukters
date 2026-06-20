@@ -1389,31 +1389,55 @@ unsafe fn grow_file_capacity(
         Some(value) => value,
         None => return Err(StorageError::INVALID_FILESYSTEM),
     };
-    if grow_end > unsafe { read_u32(STATE_SUPERBLOCK_TOTAL_BLOCKS) } {
+    let mut can_extend_last_extent = grow_end <= unsafe { read_u32(STATE_SUPERBLOCK_TOTAL_BLOCKS) };
+    let mut block = grow_start;
+    while can_extend_last_extent && block < grow_end {
+        if unsafe { is_block_allocated(block)? } {
+            can_extend_last_extent = false;
+        } else {
+            block += 1;
+        }
+    }
+
+    if can_extend_last_extent {
+        block = grow_start;
+        while block < grow_end {
+            unsafe { mark_block_allocated(block)? };
+            unsafe { clear_scratch_block() };
+            unsafe { write_fs_block(block)? };
+            block += 1;
+        }
+
+        metadata.extent_block_counts[last_extent_index] =
+            match last_count.checked_add(additional_blocks) {
+                Some(value) => value,
+                None => return Err(StorageError::INVALID_FILESYSTEM),
+            };
+        return Ok(metadata);
+    }
+
+    let new_extent_index = metadata.extent_count as usize;
+    if new_extent_index >= K16FS_MAX_INLINE_EXTENTS {
         return Err(StorageError::OUTPUT_BUFFER_TOO_SMALL);
     }
-
-    let mut block = grow_start;
-    while block < grow_end {
-        if unsafe { is_block_allocated(block)? } {
-            return Err(StorageError::OUTPUT_BUFFER_TOO_SMALL);
-        }
-        block += 1;
-    }
-
-    block = grow_start;
-    while block < grow_end {
-        unsafe { mark_block_allocated(block)? };
+    let new_extent_start = unsafe { allocate_contiguous_blocks(additional_blocks)? };
+    block = new_extent_start;
+    let new_extent_end = match new_extent_start.checked_add(additional_blocks) {
+        Some(value) => value,
+        None => return Err(StorageError::INVALID_FILESYSTEM),
+    };
+    while block < new_extent_end {
         unsafe { clear_scratch_block() };
         unsafe { write_fs_block(block)? };
         block += 1;
     }
 
-    metadata.extent_block_counts[last_extent_index] =
-        match last_count.checked_add(additional_blocks) {
-            Some(value) => value,
-            None => return Err(StorageError::INVALID_FILESYSTEM),
-        };
+    metadata.extent_start_blocks[new_extent_index] = new_extent_start;
+    metadata.extent_block_counts[new_extent_index] = additional_blocks;
+    metadata.extent_count = match metadata.extent_count.checked_add(1) {
+        Some(value) => value,
+        None => return Err(StorageError::INVALID_FILESYSTEM),
+    };
     Ok(metadata)
 }
 
