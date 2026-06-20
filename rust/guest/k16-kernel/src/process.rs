@@ -1025,7 +1025,24 @@ impl ProcessTable {
         init_frame: TrapFrame,
         argv: ChildArgv,
     ) -> Result<ChildLaunch, ProcessSwitchError> {
-        self.begin_child_run_from_frame_argv_and_translation(child_plan, init_frame, argv, None)
+        self.run_child_from_frame_argv_and_translation(child_plan, init_frame, argv, None)
+    }
+
+    pub fn run_child_from_frame(
+        &mut self,
+        child_plan: DynamicUserLoadPlan,
+        run_frame: TrapFrame,
+    ) -> Result<ChildLaunch, ProcessSwitchError> {
+        self.run_child_from_frame_and_argv(child_plan, run_frame, ChildArgv::empty())
+    }
+
+    pub fn run_child_from_frame_and_argv(
+        &mut self,
+        child_plan: DynamicUserLoadPlan,
+        run_frame: TrapFrame,
+        argv: ChildArgv,
+    ) -> Result<ChildLaunch, ProcessSwitchError> {
+        self.run_child_from_frame_argv_and_translation(child_plan, run_frame, argv, None)
     }
 
     pub fn spawn_child(
@@ -1104,41 +1121,16 @@ impl ProcessTable {
         })
     }
 
-    fn begin_child_run_from_frame_argv_and_translation(
+    fn run_child_from_frame_argv_and_translation(
         &mut self,
         child_plan: DynamicUserLoadPlan,
         init_frame: TrapFrame,
         argv: ChildArgv,
         translated: Option<TranslatedUserLaunch>,
     ) -> Result<ChildLaunch, ProcessSwitchError> {
-        let parent_lifecycle = self.slots[self.current_slot]
-            .lifecycle()
-            .require_running()?;
-        let child_slot = self
-            .next_empty_child_slot()
-            .ok_or(ProcessSwitchError::ChildAlreadyRunning)?;
-        let parent_slot = self.current_slot;
-        if parent_slot == child_slot {
-            return Err(ProcessSwitchError::ChildAlreadyRunning);
-        }
-        let descriptor = ProcessDescriptor::for_child_plan(child_plan, argv, translated)?;
-        let child_pid = self.allocate_pid()?;
-        let parent_pid = self.slots[parent_slot].pid;
-        let parent_lifecycle = parent_lifecycle.block_on_child(child_slot)?;
-        let parent = &mut self.slots[parent_slot];
-        parent.set_lifecycle(parent_lifecycle);
-        parent.context = ProcessContext {
-            entry_pc: init_frame.resume_pc,
-            stack_top: init_frame.stack_pointer,
-        };
-        parent.frame = init_frame;
-        let child = &mut self.slots[child_slot];
-        child.set_lifecycle(ProcessSlotLifecycle::running_child(parent_slot));
-        child.initialize_identity(child_pid, Some(parent_pid));
-        child.initialize_from_descriptor(descriptor);
-        child.exit_status = 0;
-        self.current_slot = child_slot;
-        Ok(descriptor.launch(child_pid))
+        let child_pid =
+            self.spawn_child_from_plan_argv_and_translation(child_plan, argv, translated)?;
+        self.wait_for_child(child_pid, init_frame, 0)
     }
 
     pub fn begin_translated_child_run(
@@ -1155,7 +1147,7 @@ impl ProcessTable {
         argv: ChildArgv,
         translated: TranslatedUserLaunch,
     ) -> Result<ChildLaunch, ProcessSwitchError> {
-        self.begin_child_run_from_frame_argv_and_translation(
+        self.run_child_from_frame_argv_and_translation(
             child_plan,
             TrapFrame::zeroed(),
             argv,
@@ -1638,43 +1630,17 @@ pub unsafe fn wait_for_child_from_syscall(
 
 #[cfg(not(test))]
 unsafe fn begin_loaded_child_runtime(path: &[u8], args: &[&[u8]]) -> Result<ChildLaunch, u32> {
-    match unsafe { load_runtime_child(path, args, RuntimeChildStart::Enter)? } {
-        RuntimeChildLoadResult::Launch(launch) => Ok(launch),
-        RuntimeChildLoadResult::Pid(_) => Err(run_status_from_switch_error(
-            ProcessSwitchError::NoRunningChild,
-        )),
-    }
+    let pid = unsafe { spawn_loaded_child_runtime(path, args)? };
+    unsafe { wait_for_runtime_child(pid, 0) }.map_err(run_status_from_switch_error)
 }
 
 #[cfg(not(test))]
 unsafe fn spawn_loaded_child_runtime(path: &[u8], args: &[&[u8]]) -> Result<ProcessId, u32> {
-    match unsafe { load_runtime_child(path, args, RuntimeChildStart::Ready)? } {
-        RuntimeChildLoadResult::Pid(pid) => Ok(pid),
-        RuntimeChildLoadResult::Launch(_) => Err(run_status_from_switch_error(
-            ProcessSwitchError::NoRunningChild,
-        )),
-    }
+    unsafe { load_runtime_child(path, args) }
 }
 
 #[cfg(not(test))]
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum RuntimeChildStart {
-    Enter,
-    Ready,
-}
-
-#[cfg(not(test))]
-enum RuntimeChildLoadResult {
-    Launch(ChildLaunch),
-    Pid(ProcessId),
-}
-
-#[cfg(not(test))]
-unsafe fn load_runtime_child(
-    path: &[u8],
-    args: &[&[u8]],
-    start: RuntimeChildStart,
-) -> Result<RuntimeChildLoadResult, u32> {
+unsafe fn load_runtime_child(path: &[u8], args: &[&[u8]]) -> Result<ProcessId, u32> {
     let current_slot = unsafe { runtime_current_slot() };
     let current_address_space = unsafe { read_runtime_address_space(current_slot) };
     let _child_slot = runtime_child_slot_for_parent(current_slot, current_address_space)
@@ -1724,9 +1690,9 @@ unsafe fn load_runtime_child(
             }
         };
         return match unsafe {
-            start_runtime_child_plan_with_argv(child_plan, argv, Some(translated), start)
+            spawn_loaded_child_plan_runtime_with_argv(child_plan, argv, Some(translated))
         } {
-            Ok(result) => Ok(result),
+            Ok(pid) => Ok(pid),
             Err(error) => {
                 let _ = unsafe { mmu0_destroy_address_space(translated.address_space) };
                 let _ = free_mapped_dynamic_user_load_plan(mapped_child_plan, allocator);
@@ -1738,67 +1704,8 @@ unsafe fn load_runtime_child(
         .map_err(run_status_from_load_error)?;
     let argv =
         unsafe { install_child_argv(child_plan, args) }.map_err(run_status_from_load_error)?;
-    unsafe { start_runtime_child_plan_with_argv(child_plan, argv, None, start) }
+    unsafe { spawn_loaded_child_plan_runtime_with_argv(child_plan, argv, None) }
         .map_err(run_status_from_switch_error)
-}
-
-#[cfg(not(test))]
-unsafe fn begin_loaded_child_plan_runtime_with_argv(
-    child_plan: DynamicUserLoadPlan,
-    argv: ChildArgv,
-    translated: Option<TranslatedUserLaunch>,
-) -> Result<ChildLaunch, ProcessSwitchError> {
-    let parent_slot = unsafe { runtime_current_slot() };
-    let child_slot = runtime_child_slot_for_parent(parent_slot, unsafe {
-        read_runtime_address_space(parent_slot)
-    })?;
-    if unsafe { read_runtime_blocked_child_slot(parent_slot) } != NO_CHILD_SLOT {
-        return Err(ProcessSwitchError::NoRunningChild);
-    }
-    let parent_parent_slot = unsafe { read_runtime_parent_slot(parent_slot) };
-    let descriptor = ProcessDescriptor::for_child_plan(child_plan, argv, translated)?;
-    let child_pid = unsafe { allocate_runtime_pid()? };
-    let parent_pid = unsafe { read_runtime_pid(parent_slot) };
-    let child_state = RuntimeForegroundSlotState::from_process_resources(
-        child_pid,
-        Some(parent_pid),
-        parent_slot as u32,
-        descriptor.resources,
-    );
-    unsafe {
-        write_runtime_process_linkage(parent_slot, parent_parent_slot, child_slot as u32);
-        write_runtime_foreground_slot_state(child_slot, child_state);
-        write_runtime_word(
-            core::ptr::addr_of_mut!(RUNTIME_CURRENT_SLOT),
-            child_slot as u32,
-        );
-    }
-    Ok(ChildLaunch {
-        id: child_state.pid,
-        context: descriptor.context,
-        frame: descriptor.frame,
-        address_space: descriptor.resources.address_space,
-        kernel_stack_top: descriptor.resources.kernel_stack_top,
-    })
-}
-
-#[cfg(not(test))]
-unsafe fn start_runtime_child_plan_with_argv(
-    child_plan: DynamicUserLoadPlan,
-    argv: ChildArgv,
-    translated: Option<TranslatedUserLaunch>,
-    start: RuntimeChildStart,
-) -> Result<RuntimeChildLoadResult, ProcessSwitchError> {
-    match start {
-        RuntimeChildStart::Enter => unsafe {
-            begin_loaded_child_plan_runtime_with_argv(child_plan, argv, translated)
-                .map(RuntimeChildLoadResult::Launch)
-        },
-        RuntimeChildStart::Ready => unsafe {
-            spawn_loaded_child_plan_runtime_with_argv(child_plan, argv, translated)
-                .map(RuntimeChildLoadResult::Pid)
-        },
-    }
 }
 
 #[cfg(not(test))]
@@ -4541,6 +4448,46 @@ mod tests {
             table.slots[1].lifecycle(),
             ProcessSlotLifecycle::ready_child(INIT_PROCESS_SLOT)
         );
+    }
+
+    #[test]
+    fn process_table_run_child_uses_spawn_then_wait_return_contract() {
+        let mut table = ProcessTable::new(ProcessContext {
+            entry_pc: 0x0000_8000,
+            stack_top: 0x0001_0000,
+        });
+        let child_plan = DynamicUserLoadPlan {
+            load_base: 0x0000_a000,
+            load_end: 0x0000_a020,
+            entry_pc: 0x0000_a004,
+            stack_top: 0x0001_0000,
+            payload_dst: 0x0000_a000,
+            payload_len: 16,
+            zero_fill_addr: 0x0000_a010,
+            zero_fill_len: 16,
+        };
+        let run_frame = TrapFrame {
+            resume_pc: 0x0000_8120,
+            stack_pointer: 0x0000_ff20,
+            ..TrapFrame::zeroed()
+        };
+
+        let launch = table
+            .run_child_from_frame(child_plan, run_frame)
+            .expect("run child starts");
+
+        assert_eq!(launch.id, ProcessId::from_raw(2));
+        assert_eq!(table.current_pid(), launch.id);
+        assert_eq!(table.init_state(), PROCESS_STATE_BLOCKED_ON_CHILD);
+        assert_eq!(table.child_state(), PROCESS_STATE_RUNNING);
+        assert_eq!(table.slots[INIT_PROCESS_SLOT].frame, run_frame);
+
+        let resumed = table.finish_child(23).expect("parent resumes");
+
+        assert_eq!(resumed.child_id, launch.id);
+        assert_eq!(resumed.child_exit_status, 23);
+        assert_eq!(resumed.wait_status_ptr, 0);
+        assert_eq!(resumed.return_value(), 23);
     }
 
     #[test]
