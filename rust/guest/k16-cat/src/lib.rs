@@ -9,13 +9,20 @@ pub fn for_each_path_arg<'a>(
         return Err(());
     }
     let mut index = 0;
+    let mut failed = false;
     while index < arg_count {
         let path = arg_at(index).ok_or(())?;
         let path = core::str::from_utf8(path).map_err(|_| ())?;
-        visit(path)?;
+        if visit(path).is_err() {
+            failed = true;
+        }
         index += 1;
     }
-    Ok(())
+    if failed {
+        Err(())
+    } else {
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -59,5 +66,27 @@ mod tests {
 
         assert_eq!(result, Err(()));
         assert!(seen.is_empty());
+    }
+
+    #[test]
+    fn for_each_path_arg_visits_later_paths_after_error() {
+        let raw = [b"/etc/missing".as_slice(), b"/etc/motd".as_slice()];
+        let mut seen = Vec::new();
+
+        let result = super::for_each_path_arg(
+            raw.len(),
+            |index| raw.get(index).copied(),
+            |path| {
+                seen.push(path.to_owned());
+                if path == "/etc/missing" {
+                    Err(())
+                } else {
+                    Ok(())
+                }
+            },
+        );
+
+        assert_eq!(result, Err(()));
+        assert_eq!(seen, ["/etc/missing", "/etc/motd"]);
     }
 }

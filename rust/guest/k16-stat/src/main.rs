@@ -19,15 +19,22 @@ fn stat_args(argc: u32, argv: *const process::Arg) -> Result<(), ()> {
         return Err(());
     }
     let mut index = 0;
+    let mut ok = true;
     while index < argv.len() {
         let Some(path) = argv.get(index) else {
             return Err(());
         };
         let path = core::str::from_utf8(path).map_err(|_| ())?;
-        stat_path(path)?;
+        if stat_path(path).is_err() {
+            ok = false;
+        }
         index += 1;
     }
-    Ok(())
+    if ok {
+        Ok(())
+    } else {
+        Err(())
+    }
 }
 
 fn stat_path(path: &str) -> Result<(), ()> {
@@ -44,8 +51,14 @@ fn stat_path(path: &str) -> Result<(), ()> {
             stdout.write_all(b"\n").map_err(|_| ())?;
             Ok(())
         }
-        Err(fs::Error::InvalidArgument) => write_stat_error(stdout, b"INVAL", path),
-        Err(fs::Error::Syscall(status)) => write_stat_error(stdout, status_name(status), path),
+        Err(fs::Error::InvalidArgument) => {
+            write_stat_error(stdout, b"INVAL", path)?;
+            Err(())
+        }
+        Err(fs::Error::Syscall(status)) => {
+            write_stat_error(stdout, status_name(status), path)?;
+            Err(())
+        }
     }
 }
 

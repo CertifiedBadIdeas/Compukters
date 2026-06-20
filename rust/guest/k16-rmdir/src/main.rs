@@ -45,8 +45,14 @@ fn remove_path(path: &str) -> Result<(), ()> {
             stdout.write_all(path.as_bytes()).map_err(|_| ())?;
             stdout.write_all(b"\n").map_err(|_| ())
         }
-        Err(fs::Error::InvalidArgument) => write_rmdir_error(stdout, b"INVAL", path),
-        Err(fs::Error::Syscall(status)) => write_rmdir_error(stdout, status_name(status), path),
+        Err(fs::Error::InvalidArgument) => {
+            write_rmdir_error(stdout, b"INVAL", path)?;
+            Err(())
+        }
+        Err(fs::Error::Syscall(status)) => {
+            write_rmdir_error(stdout, status_name(status), path)?;
+            Err(())
+        }
     }
 }
 

@@ -213,6 +213,13 @@ builtin statuses and `STATUS <error-name>` for known negative K16 errors such
 as `NOENT`, `BUSY`, and `FAULT`. There is no bundled-program fallback when the
 file is missing.
 
+Bundled multi-path filesystem utilities use aggregate command status: each path
+argument is processed independently where the utility can continue, per-path
+success or error output is printed, and the child exits with status `1` if any
+path failed. `cat`, `stat`, `ls`, `rm`, `mkdir`, and `rmdir` follow this policy.
+Single-operation utilities such as `cp` and `mv` still stop after their one
+source/destination operation.
+
 The public CLI namespace is filesystem-specific:
 
 ```text

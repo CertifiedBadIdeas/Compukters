@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Bundled multi-path filesystem utilities now use a consistent aggregate
+  failure policy. `cat`, `stat`, and `ls` continue processing later path
+  arguments after a per-path error, print per-path diagnostics, and exit with
+  status `1` if any path failed. `rm`, `mkdir`, and `rmdir` now also preserve
+  their existing per-path diagnostics while returning a failing child status
+  when any path operation failed.
 - `kraft-std::process::run` and `run_with_args` now return
   `Result<process::ExitStatus, process::Error>` instead of exposing successful
   child exit statuses as raw `u32` values. `ExitStatus::code()` returns the
