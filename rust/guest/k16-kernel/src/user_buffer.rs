@@ -8,6 +8,8 @@ const TEST_PHYSICAL_CAPACITY: usize = 64;
 static mut TEST_PHYSICAL_BASE: u32 = 0;
 #[cfg(test)]
 static mut TEST_PHYSICAL_BYTES: [u8; TEST_PHYSICAL_CAPACITY] = [0; TEST_PHYSICAL_CAPACITY];
+#[cfg(test)]
+static TEST_MMU0_YIELD_COUNT: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(0);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct UserBytes<const MAX: usize> {
@@ -117,6 +119,7 @@ fn run_mmu0_copy(
         );
         mmio::write_i32(k16_abi::computer::mmu0::BYTE_COUNT, byte_count as i32);
         mmio::write_i32(k16_abi::computer::mmu0::COMMAND, command);
+        yield_for_mmu0_command();
         if mmio::read_i32(k16_abi::computer::mmu0::STATUS) != k16_abi::computer::mmu0::STATUS_DONE {
             return Err(abi_syscall::ERROR_FAULT);
         }
@@ -125,6 +128,16 @@ fn run_mmu0_copy(
         }
     }
     Ok(())
+}
+
+#[cfg(not(test))]
+fn yield_for_mmu0_command() {
+    k16_rt::yield_once();
+}
+
+#[cfg(test)]
+fn yield_for_mmu0_command() {
+    TEST_MMU0_YIELD_COUNT.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
 }
 
 #[cfg(not(test))]
@@ -246,5 +259,22 @@ mod tests {
         let error = copy_to_user(0x8000, b"abc").unwrap_err();
 
         assert_eq!(error, abi_syscall::ERROR_FAULT);
+    }
+
+    #[test]
+    fn copy_from_user_yields_for_host_mmu0_command_before_reading_status() {
+        let _guard = test_guard();
+        process::set_current_process_address_space_for_tests(Some(9));
+        TEST_MMU0_YIELD_COUNT.store(0, Ordering::Relaxed);
+        mmio::set_test_mmu0_result(
+            0,
+            k16_abi::computer::mmu0::STATUS_ERROR,
+            k16_abi::computer::mmu0::ERROR_TRANSLATION_FAULT,
+        );
+
+        let error = copy_from_user::<8>(0xffff_f000, 1).unwrap_err();
+
+        assert_eq!(error, abi_syscall::ERROR_FAULT);
+        assert_eq!(TEST_MMU0_YIELD_COUNT.load(Ordering::Relaxed), 1);
     }
 }
