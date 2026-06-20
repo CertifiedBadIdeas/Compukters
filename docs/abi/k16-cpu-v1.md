@@ -593,6 +593,12 @@ not exposed by the current syscall ABI: `RUN` remains synchronous and returns
 child exit status or a negative K16 error, not a PID. The PID metadata is
 reserved for future process APIs such as `SPAWN`/`WAIT`.
 
+The internal process-table model also reserves an exited-child reap state for
+future `WAIT`: an exited child can retain its PID, parent PID, and exit status
+until its parent reaps either that exact PID or `0 = any direct child`. This is
+not a guest-visible syscall in v1. The current `RUN` compatibility path still
+auto-reaps the child before returning the child status to the caller.
+
 Each foreground process records an explicit guest-physical memory range
 `memory_start..memory_end`. The init process range is derived from the loaded
 init image and the profile v2 `BootInfo.ram_size` value preserved by the boot

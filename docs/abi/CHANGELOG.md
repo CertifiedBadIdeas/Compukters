@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- The K16 kernel process-table model now has an internal exited-child reap
+  path: a child can retain PID, parent PID, and exit status metadata until its
+  parent reaps it by PID or by `0 = any child`. The existing guest-visible
+  `RUN`/`EXIT` path still auto-reaps before returning the child status, and no
+  guest-visible `WAIT`/`SPAWN` syscall is exposed yet.
 - K16 kernel process table entries are now internally PID-aware. Init has
   PID 1, child launches allocate stable non-slot PIDs starting at 2, and each
   child records parent PID metadata. The guest-visible `RUN`/`EXIT` ABI remains

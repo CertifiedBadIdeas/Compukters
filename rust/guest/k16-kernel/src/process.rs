@@ -235,6 +235,8 @@ pub const PROCESS_STATE_EMPTY: ProcessState = 0;
 pub const PROCESS_STATE_RUNNING: ProcessState = 1;
 #[cfg(any(test, feature = "host-test"))]
 pub const PROCESS_STATE_BLOCKED_ON_CHILD: ProcessState = 2;
+#[cfg(any(test, feature = "host-test"))]
+pub const PROCESS_STATE_EXITED: ProcessState = 3;
 
 #[cfg(any(test, feature = "host-test"))]
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -265,6 +267,14 @@ impl ProcessSlotLifecycle {
     const fn running_child(parent_slot: usize) -> Self {
         Self {
             state: PROCESS_STATE_RUNNING,
+            parent_slot: parent_slot as u32,
+            blocked_child_slot: NO_CHILD_SLOT,
+        }
+    }
+
+    const fn exited_child(parent_slot: usize) -> Self {
+        Self {
+            state: PROCESS_STATE_EXITED,
             parent_slot: parent_slot as u32,
             blocked_child_slot: NO_CHILD_SLOT,
         }
@@ -304,6 +314,17 @@ impl ProcessSlotLifecycle {
 
     fn running_parent_slot(self) -> Result<usize, ProcessSwitchError> {
         if self.state != PROCESS_STATE_RUNNING || self.blocked_child_slot != NO_CHILD_SLOT {
+            return Err(ProcessSwitchError::NoRunningChild);
+        }
+        let parent_slot = self.parent_slot as usize;
+        if parent_slot >= MAX_PROCESS_SLOTS {
+            return Err(ProcessSwitchError::NoRunningChild);
+        }
+        Ok(parent_slot)
+    }
+
+    fn exited_parent_slot(self) -> Result<usize, ProcessSwitchError> {
+        if self.state != PROCESS_STATE_EXITED || self.blocked_child_slot != NO_CHILD_SLOT {
             return Err(ProcessSwitchError::NoRunningChild);
         }
         let parent_slot = self.parent_slot as usize;
@@ -463,6 +484,13 @@ pub struct ParentResume {
     pub exited_address_space: Option<u32>,
     pub exited_backing_pages: Option<crate::page_alloc::FrameRange>,
     pub exited_heap_pages: Option<crate::page_alloc::FrameRange>,
+}
+
+#[cfg(any(test, feature = "host-test"))]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct ProcessReap {
+    pub pid: ProcessId,
+    pub status: u32,
 }
 
 impl ParentResume {
@@ -849,6 +877,19 @@ impl ProcessSlot {
         self.parent_pid = parent_pid;
     }
 
+    fn mark_exited(&mut self, status: u32) -> ProcessOwnedResources {
+        let resources = self.owned_resources();
+        let pid = self.pid;
+        let parent_pid = self.parent_pid;
+        let parent_slot = self.parent_slot as usize;
+        *self = Self::empty();
+        self.pid = pid;
+        self.parent_pid = parent_pid;
+        self.exit_status = status;
+        self.set_lifecycle(ProcessSlotLifecycle::exited_child(parent_slot));
+        resources
+    }
+
     const fn owned_resources(self) -> ProcessOwnedResources {
         ProcessOwnedResources {
             address_space: self.address_space,
@@ -1016,6 +1057,15 @@ impl ProcessTable {
     }
 
     pub fn finish_child(&mut self, status: u32) -> Result<ParentResume, ProcessSwitchError> {
+        let resume = self.finish_child_and_record_exit(status)?;
+        self.reap_exited_child(ProcessId::from_raw(NO_PROCESS_PID))?;
+        Ok(resume)
+    }
+
+    pub fn finish_child_and_record_exit(
+        &mut self,
+        status: u32,
+    ) -> Result<ParentResume, ProcessSwitchError> {
         if self.current_slot == INIT_PROCESS_SLOT {
             return Err(ProcessSwitchError::NoRunningChild);
         }
@@ -1025,10 +1075,7 @@ impl ProcessTable {
         let parent_lifecycle = self.slots[parent_slot]
             .lifecycle()
             .resume_after_child(child_slot)?;
-        let exited_resources = self.slots[child_slot].owned_resources();
-        self.slots[child_slot].set_lifecycle(ProcessSlotLifecycle::empty());
-        self.slots[child_slot].exit_status = status;
-        self.slots[child_slot].clear();
+        let exited_resources = self.slots[child_slot].mark_exited(status);
         self.slots[parent_slot].exit_status = status;
         self.slots[parent_slot].set_lifecycle(parent_lifecycle);
         self.current_slot = parent_slot;
@@ -1044,6 +1091,27 @@ impl ProcessTable {
             exited_backing_pages: exited_resources.backing_pages,
             exited_heap_pages: exited_resources.heap_pages,
         })
+    }
+
+    pub fn reap_exited_child(&mut self, pid: ProcessId) -> Result<ProcessReap, ProcessSwitchError> {
+        let parent_pid = self.slots[self.current_slot].pid;
+        let mut slot = 1;
+        while slot < MAX_PROCESS_SLOTS {
+            let child = self.slots[slot];
+            if child.lifecycle().exited_parent_slot().is_ok()
+                && child.parent_pid == Some(parent_pid)
+                && (pid.raw() == NO_PROCESS_PID || child.pid == pid)
+            {
+                let reap = ProcessReap {
+                    pid: child.pid,
+                    status: child.exit_status,
+                };
+                self.slots[slot].clear();
+                return Ok(reap);
+            }
+            slot += 1;
+        }
+        Err(ProcessSwitchError::NoRunningChild)
     }
 
     pub const fn init_state(&self) -> ProcessState {
@@ -4162,6 +4230,134 @@ mod tests {
         assert_eq!(first.id, ProcessId::from_raw(2));
         assert_eq!(second.id, ProcessId::from_raw(3));
         assert_ne!(first.id, second.id);
+    }
+
+    #[test]
+    fn process_table_records_exited_child_until_reap() {
+        let mut table = ProcessTable::new(ProcessContext {
+            entry_pc: 0x0000_8000,
+            stack_top: 0x0001_0000,
+        });
+        let child_plan = DynamicUserLoadPlan {
+            load_base: 0x0000_a000,
+            load_end: 0x0000_a020,
+            entry_pc: 0x0000_a004,
+            stack_top: 0x0001_0000,
+            payload_dst: 0x0000_a000,
+            payload_len: 16,
+            zero_fill_addr: 0x0000_a010,
+            zero_fill_len: 16,
+        };
+        let child = table.begin_child_run(child_plan).expect("child starts");
+
+        let resumed = table
+            .finish_child_and_record_exit(7)
+            .expect("parent resumes");
+
+        assert_eq!(resumed.id, ProcessId::INIT);
+        assert_eq!(resumed.child_exit_status, 7);
+        assert_eq!(table.current_pid(), ProcessId::INIT);
+        assert_eq!(table.child_state(), PROCESS_STATE_EXITED);
+        assert_eq!(table.slots[1].pid, child.id);
+        assert_eq!(table.slots[1].parent_pid, Some(ProcessId::INIT));
+        assert_eq!(table.slots[1].exit_status, 7);
+    }
+
+    #[test]
+    fn process_table_reaps_exited_child_by_pid() {
+        let mut table = ProcessTable::new(ProcessContext {
+            entry_pc: 0x0000_8000,
+            stack_top: 0x0001_0000,
+        });
+        let child_plan = DynamicUserLoadPlan {
+            load_base: 0x0000_a000,
+            load_end: 0x0000_a020,
+            entry_pc: 0x0000_a004,
+            stack_top: 0x0001_0000,
+            payload_dst: 0x0000_a000,
+            payload_len: 16,
+            zero_fill_addr: 0x0000_a010,
+            zero_fill_len: 16,
+        };
+        let child = table.begin_child_run(child_plan).expect("child starts");
+        table
+            .finish_child_and_record_exit(9)
+            .expect("parent resumes");
+
+        assert_eq!(
+            table.reap_exited_child(child.id),
+            Ok(ProcessReap {
+                pid: child.id,
+                status: 9,
+            })
+        );
+        assert_eq!(table.child_state(), PROCESS_STATE_EMPTY);
+    }
+
+    #[test]
+    fn process_table_reaps_any_exited_child_with_zero_pid() {
+        let mut table = ProcessTable::new(ProcessContext {
+            entry_pc: 0x0000_8000,
+            stack_top: 0x0001_0000,
+        });
+        let child_plan = DynamicUserLoadPlan {
+            load_base: 0x0000_a000,
+            load_end: 0x0000_a020,
+            entry_pc: 0x0000_a004,
+            stack_top: 0x0001_0000,
+            payload_dst: 0x0000_a000,
+            payload_len: 16,
+            zero_fill_addr: 0x0000_a010,
+            zero_fill_len: 16,
+        };
+        let child = table.begin_child_run(child_plan).expect("child starts");
+        table
+            .finish_child_and_record_exit(11)
+            .expect("parent resumes");
+
+        assert_eq!(
+            table.reap_exited_child(ProcessId::from_raw(0)),
+            Ok(ProcessReap {
+                pid: child.id,
+                status: 11,
+            })
+        );
+        assert_eq!(table.child_state(), PROCESS_STATE_EMPTY);
+    }
+
+    #[test]
+    fn process_table_rejects_reap_for_non_child_pid_without_clearing_exit() {
+        let mut table = ProcessTable::new(ProcessContext {
+            entry_pc: 0x0000_8000,
+            stack_top: 0x0001_0000,
+        });
+        let child_plan = DynamicUserLoadPlan {
+            load_base: 0x0000_a000,
+            load_end: 0x0000_a020,
+            entry_pc: 0x0000_a004,
+            stack_top: 0x0001_0000,
+            payload_dst: 0x0000_a000,
+            payload_len: 16,
+            zero_fill_addr: 0x0000_a010,
+            zero_fill_len: 16,
+        };
+        let child = table.begin_child_run(child_plan).expect("child starts");
+        table
+            .finish_child_and_record_exit(13)
+            .expect("parent resumes");
+
+        assert_eq!(
+            table.reap_exited_child(ProcessId::from_raw(999)),
+            Err(ProcessSwitchError::NoRunningChild)
+        );
+        assert_eq!(table.child_state(), PROCESS_STATE_EXITED);
+        assert_eq!(
+            table.reap_exited_child(child.id),
+            Ok(ProcessReap {
+                pid: child.id,
+                status: 13,
+            })
+        );
     }
 
     #[test]
