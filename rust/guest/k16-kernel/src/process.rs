@@ -72,6 +72,12 @@ static mut RUNTIME_SLOT1_BLOCKED_CHILD: u32 = NO_CHILD_SLOT;
 #[cfg(not(test))]
 static mut RUNTIME_SLOT2_BLOCKED_CHILD: u32 = NO_CHILD_SLOT;
 #[cfg(not(test))]
+static mut RUNTIME_SLOT0_WAIT_STATUS_PTR: u32 = 0;
+#[cfg(not(test))]
+static mut RUNTIME_SLOT1_WAIT_STATUS_PTR: u32 = 0;
+#[cfg(not(test))]
+static mut RUNTIME_SLOT2_WAIT_STATUS_PTR: u32 = 0;
+#[cfg(not(test))]
 static mut RUNTIME_SLOT0_HEAP_START: u32 = 0;
 #[cfg(not(test))]
 static mut RUNTIME_SLOT1_HEAP_START: u32 = 0;
@@ -237,6 +243,8 @@ pub const PROCESS_STATE_RUNNING: ProcessState = 1;
 pub const PROCESS_STATE_BLOCKED_ON_CHILD: ProcessState = 2;
 #[cfg(any(test, feature = "host-test"))]
 pub const PROCESS_STATE_EXITED: ProcessState = 3;
+#[cfg(any(test, feature = "host-test"))]
+pub const PROCESS_STATE_READY: ProcessState = 4;
 
 #[cfg(any(test, feature = "host-test"))]
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -267,6 +275,14 @@ impl ProcessSlotLifecycle {
     const fn running_child(parent_slot: usize) -> Self {
         Self {
             state: PROCESS_STATE_RUNNING,
+            parent_slot: parent_slot as u32,
+            blocked_child_slot: NO_CHILD_SLOT,
+        }
+    }
+
+    const fn ready_child(parent_slot: usize) -> Self {
+        Self {
+            state: PROCESS_STATE_READY,
             parent_slot: parent_slot as u32,
             blocked_child_slot: NO_CHILD_SLOT,
         }
@@ -476,9 +492,11 @@ pub struct TranslatedUserLaunch {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct ParentResume {
     pub id: ProcessId,
+    pub child_id: ProcessId,
     pub context: ProcessContext,
     pub frame: TrapFrame,
     pub child_exit_status: u32,
+    pub wait_status_ptr: u32,
     pub address_space: Option<u32>,
     pub kernel_stack_top: Option<u32>,
     pub exited_address_space: Option<u32>,
@@ -497,17 +515,27 @@ impl ParentResume {
     pub const fn empty() -> Self {
         Self {
             id: ProcessId::INIT,
+            child_id: ProcessId::from_raw(NO_PROCESS_PID),
             context: ProcessContext {
                 entry_pc: 0,
                 stack_top: 0,
             },
             frame: TrapFrame::zeroed(),
             child_exit_status: 0,
+            wait_status_ptr: 0,
             address_space: None,
             kernel_stack_top: None,
             exited_address_space: None,
             exited_backing_pages: None,
             exited_heap_pages: None,
+        }
+    }
+
+    pub const fn return_value(self) -> u32 {
+        if self.wait_status_ptr == 0 {
+            self.child_exit_status
+        } else {
+            self.child_id.raw()
         }
     }
 }
@@ -775,6 +803,7 @@ struct ProcessSlot {
     state: ProcessState,
     parent_slot: u32,
     blocked_child_slot: u32,
+    wait_status_ptr: u32,
     context: ProcessContext,
     frame: TrapFrame,
     exit_status: u32,
@@ -799,6 +828,7 @@ impl ProcessSlot {
             state: lifecycle.state,
             parent_slot: lifecycle.parent_slot,
             blocked_child_slot: lifecycle.blocked_child_slot,
+            wait_status_ptr: 0,
             context: ProcessContext {
                 entry_pc: 0,
                 stack_top: 0,
@@ -825,6 +855,7 @@ impl ProcessSlot {
             state: lifecycle.state,
             parent_slot: lifecycle.parent_slot,
             blocked_child_slot: lifecycle.blocked_child_slot,
+            wait_status_ptr: 0,
             context,
             frame: TrapFrame::zeroed(),
             exit_status: 0,
@@ -997,6 +1028,82 @@ impl ProcessTable {
         self.begin_child_run_from_frame_argv_and_translation(child_plan, init_frame, argv, None)
     }
 
+    pub fn spawn_child(
+        &mut self,
+        child_plan: DynamicUserLoadPlan,
+    ) -> Result<ProcessId, ProcessSwitchError> {
+        self.spawn_child_with_argv(child_plan, ChildArgv::empty())
+    }
+
+    pub fn spawn_child_with_argv(
+        &mut self,
+        child_plan: DynamicUserLoadPlan,
+        argv: ChildArgv,
+    ) -> Result<ProcessId, ProcessSwitchError> {
+        self.spawn_child_from_plan_argv_and_translation(child_plan, argv, None)
+    }
+
+    fn spawn_child_from_plan_argv_and_translation(
+        &mut self,
+        child_plan: DynamicUserLoadPlan,
+        argv: ChildArgv,
+        translated: Option<TranslatedUserLaunch>,
+    ) -> Result<ProcessId, ProcessSwitchError> {
+        self.slots[self.current_slot]
+            .lifecycle()
+            .require_running()?;
+        let child_slot = self
+            .next_empty_child_slot()
+            .ok_or(ProcessSwitchError::ChildAlreadyRunning)?;
+        let parent_slot = self.current_slot;
+        if parent_slot == child_slot {
+            return Err(ProcessSwitchError::ChildAlreadyRunning);
+        }
+        let descriptor = ProcessDescriptor::for_child_plan(child_plan, argv, translated)?;
+        let child_pid = self.allocate_pid()?;
+        let parent_pid = self.slots[parent_slot].pid;
+        let child = &mut self.slots[child_slot];
+        child.set_lifecycle(ProcessSlotLifecycle::ready_child(parent_slot));
+        child.initialize_identity(child_pid, Some(parent_pid));
+        child.initialize_from_descriptor(descriptor);
+        child.exit_status = 0;
+        Ok(child_pid)
+    }
+
+    pub fn wait_for_child(
+        &mut self,
+        pid: ProcessId,
+        wait_frame: TrapFrame,
+        wait_status_ptr: u32,
+    ) -> Result<ChildLaunch, ProcessSwitchError> {
+        let parent_lifecycle = self.slots[self.current_slot]
+            .lifecycle()
+            .require_running()?;
+        let parent_slot = self.current_slot;
+        let child_slot = self
+            .ready_child_slot(pid)
+            .ok_or(ProcessSwitchError::NoRunningChild)?;
+        let parent_lifecycle = parent_lifecycle.block_on_child(child_slot)?;
+        let parent = &mut self.slots[parent_slot];
+        parent.set_lifecycle(parent_lifecycle);
+        parent.context = ProcessContext {
+            entry_pc: wait_frame.resume_pc,
+            stack_top: wait_frame.stack_pointer,
+        };
+        parent.frame = wait_frame;
+        parent.wait_status_ptr = wait_status_ptr;
+        let child = &mut self.slots[child_slot];
+        child.set_lifecycle(ProcessSlotLifecycle::running_child(parent_slot));
+        self.current_slot = child_slot;
+        Ok(ChildLaunch {
+            id: child.pid,
+            context: child.context,
+            frame: child.frame,
+            address_space: child.address_space,
+            kernel_stack_top: child.kernel_stack_top,
+        })
+    }
+
     fn begin_child_run_from_frame_argv_and_translation(
         &mut self,
         child_plan: DynamicUserLoadPlan,
@@ -1075,16 +1182,21 @@ impl ProcessTable {
         let parent_lifecycle = self.slots[parent_slot]
             .lifecycle()
             .resume_after_child(child_slot)?;
+        let child_pid = self.slots[child_slot].pid;
+        let wait_status_ptr = self.slots[parent_slot].wait_status_ptr;
         let exited_resources = self.slots[child_slot].mark_exited(status);
         self.slots[parent_slot].exit_status = status;
+        self.slots[parent_slot].wait_status_ptr = 0;
         self.slots[parent_slot].set_lifecycle(parent_lifecycle);
         self.current_slot = parent_slot;
         let parent = self.slots[parent_slot];
         Ok(ParentResume {
             id: parent.pid,
+            child_id: child_pid,
             context: parent.context,
             frame: parent.frame,
             child_exit_status: status,
+            wait_status_ptr,
             address_space: parent.address_space,
             kernel_stack_top: parent.kernel_stack_top,
             exited_address_space: exited_resources.address_space,
@@ -1196,6 +1308,22 @@ impl ProcessTable {
         let mut slot = 1;
         while slot < MAX_PROCESS_SLOTS {
             if self.slots[slot].lifecycle().is_empty() {
+                return Some(slot);
+            }
+            slot += 1;
+        }
+        None
+    }
+
+    fn ready_child_slot(&self, pid: ProcessId) -> Option<usize> {
+        let parent_pid = self.slots[self.current_slot].pid;
+        let mut slot = 1;
+        while slot < MAX_PROCESS_SLOTS {
+            let child = self.slots[slot];
+            if child.state == PROCESS_STATE_READY
+                && child.parent_pid == Some(parent_pid)
+                && (pid.raw() == NO_PROCESS_PID || child.pid == pid)
+            {
                 return Some(slot);
             }
             slot += 1;
@@ -1332,6 +1460,9 @@ pub unsafe fn initialize_init_process(
             write_runtime_process_linkage(INIT_PROCESS_SLOT, NO_PARENT_SLOT, NO_CHILD_SLOT);
             write_runtime_process_linkage(1, NO_PARENT_SLOT, NO_CHILD_SLOT);
             write_runtime_process_linkage(2, NO_PARENT_SLOT, NO_CHILD_SLOT);
+            write_runtime_wait_status_ptr(INIT_PROCESS_SLOT, 0);
+            write_runtime_wait_status_ptr(1, 0);
+            write_runtime_wait_status_ptr(2, 0);
             write_runtime_process_resources(INIT_PROCESS_SLOT, descriptor.resources);
             *runtime_slot_frame(INIT_PROCESS_SLOT).get() =
                 k16_rt::TrapFrame::from(descriptor.frame);
@@ -1399,6 +1530,9 @@ pub unsafe fn begin_translated_init_from_storage0(
         write_runtime_process_linkage(INIT_PROCESS_SLOT, NO_PARENT_SLOT, NO_CHILD_SLOT);
         write_runtime_process_linkage(1, NO_PARENT_SLOT, NO_CHILD_SLOT);
         write_runtime_process_linkage(2, NO_PARENT_SLOT, NO_CHILD_SLOT);
+        write_runtime_wait_status_ptr(INIT_PROCESS_SLOT, 0);
+        write_runtime_wait_status_ptr(1, 0);
+        write_runtime_wait_status_ptr(2, 0);
         write_runtime_process_resources(INIT_PROCESS_SLOT, descriptor.resources);
         *runtime_slot_frame(INIT_PROCESS_SLOT).get() = k16_rt::TrapFrame::from(descriptor.frame);
         *RUNTIME_PAGE_ALLOCATOR.get() = Some(allocator);
@@ -1455,8 +1589,92 @@ pub unsafe fn begin_loaded_child_from_argv_request(request: &[u8]) -> Result<Chi
     }
 }
 
+#[cfg(any(not(test), feature = "host-test"))]
+pub unsafe fn spawn_loaded_child_from_argv_request(request: &[u8]) -> Result<ProcessId, u32> {
+    let request = RunArgvRequest::parse_with_magic(request, k16_abi::syscall::SPAWN_ARGV_MAGIC)
+        .map_err(run_status_from_load_error)?;
+    #[cfg(not(test))]
+    {
+        return unsafe { spawn_loaded_child_runtime(request.path, request.args()) };
+    }
+    #[cfg(test)]
+    {
+        let mut caller_frame = k16_rt::TrapFrame::zeroed();
+        k16_rt::save_trap_frame(&mut caller_frame);
+        let caller_frame = TrapFrame::from(caller_frame);
+        let table = unsafe { PROCESS_TABLE.get() };
+        let arena = table
+            .child_arena_for_init_frame(caller_frame)
+            .map_err(run_status_from_load_error)?;
+        let child_plan = unsafe { load_dynamic_user_program_from_storage0(request.path, arena) }
+            .map_err(run_status_from_load_error)?;
+        let argv = unsafe { install_child_argv(child_plan, request.args()) }
+            .map_err(run_status_from_load_error)?;
+        table
+            .spawn_child_with_argv(child_plan, argv)
+            .map_err(run_status_from_switch_error)
+    }
+}
+
+#[cfg(any(not(test), feature = "host-test"))]
+pub unsafe fn wait_for_child_from_syscall(
+    pid: ProcessId,
+    wait_status_ptr: u32,
+) -> Result<ChildLaunch, u32> {
+    #[cfg(not(test))]
+    {
+        return unsafe { wait_for_runtime_child(pid, wait_status_ptr) }
+            .map_err(run_status_from_switch_error);
+    }
+    #[cfg(test)]
+    {
+        let mut wait_frame = k16_rt::TrapFrame::zeroed();
+        k16_rt::save_trap_frame(&mut wait_frame);
+        unsafe { PROCESS_TABLE.get() }
+            .wait_for_child(pid, TrapFrame::from(wait_frame), wait_status_ptr)
+            .map_err(run_status_from_switch_error)
+    }
+}
+
 #[cfg(not(test))]
 unsafe fn begin_loaded_child_runtime(path: &[u8], args: &[&[u8]]) -> Result<ChildLaunch, u32> {
+    match unsafe { load_runtime_child(path, args, RuntimeChildStart::Enter)? } {
+        RuntimeChildLoadResult::Launch(launch) => Ok(launch),
+        RuntimeChildLoadResult::Pid(_) => Err(run_status_from_switch_error(
+            ProcessSwitchError::NoRunningChild,
+        )),
+    }
+}
+
+#[cfg(not(test))]
+unsafe fn spawn_loaded_child_runtime(path: &[u8], args: &[&[u8]]) -> Result<ProcessId, u32> {
+    match unsafe { load_runtime_child(path, args, RuntimeChildStart::Ready)? } {
+        RuntimeChildLoadResult::Pid(pid) => Ok(pid),
+        RuntimeChildLoadResult::Launch(_) => Err(run_status_from_switch_error(
+            ProcessSwitchError::NoRunningChild,
+        )),
+    }
+}
+
+#[cfg(not(test))]
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum RuntimeChildStart {
+    Enter,
+    Ready,
+}
+
+#[cfg(not(test))]
+enum RuntimeChildLoadResult {
+    Launch(ChildLaunch),
+    Pid(ProcessId),
+}
+
+#[cfg(not(test))]
+unsafe fn load_runtime_child(
+    path: &[u8],
+    args: &[&[u8]],
+    start: RuntimeChildStart,
+) -> Result<RuntimeChildLoadResult, u32> {
     let current_slot = unsafe { runtime_current_slot() };
     let current_address_space = unsafe { read_runtime_address_space(current_slot) };
     let _child_slot = runtime_child_slot_for_parent(current_slot, current_address_space)
@@ -1471,20 +1689,17 @@ unsafe fn begin_loaded_child_runtime(path: &[u8], args: &[&[u8]]) -> Result<Chil
     }
     let translated_child = should_translate_runtime_child_path(path);
     let parent_stack_limit = caller_frame.stack_pointer.min(caller_memory.end);
-    let (arena_end, kernel_stack_top) = if translated_child {
-        translated_child_arena_end(parent_stack_limit)
-            .map_err(|_| run_status_from_load_error(ProcessLoadError::ProgramTooLarge))?
+    let (arena, kernel_stack_top) = if translated_child {
+        let kernel_stack_top = translated_child_kernel_stack_top(parent_stack_limit)
+            .map_err(|_| run_status_from_load_error(ProcessLoadError::ProgramTooLarge))?;
+        let arena = translated_child_user_arena(caller_memory)
+            .map_err(|_| run_status_from_load_error(ProcessLoadError::ProgramTooLarge))?;
+        (arena, kernel_stack_top)
     } else {
-        (parent_stack_limit, 0)
+        let arena = UserArena::new(caller_program_break, parent_stack_limit)
+            .map_err(|_| run_status_from_load_error(ProcessLoadError::ProgramTooLarge))?;
+        (arena, 0)
     };
-    let arena_start = if translated_child {
-        translated_child_arena_start(caller_program_break)
-            .map_err(|_| run_status_from_load_error(ProcessLoadError::ProgramTooLarge))?
-    } else {
-        caller_program_break
-    };
-    let arena = UserArena::new(arena_start, arena_end)
-        .map_err(|_| run_status_from_load_error(ProcessLoadError::ProgramTooLarge))?;
     if translated_child {
         let allocator = unsafe { (*RUNTIME_PAGE_ALLOCATOR.get()).as_mut() }
             .ok_or_else(|| run_status_from_load_error(ProcessLoadError::Storage))?;
@@ -1509,9 +1724,9 @@ unsafe fn begin_loaded_child_runtime(path: &[u8], args: &[&[u8]]) -> Result<Chil
             }
         };
         return match unsafe {
-            begin_loaded_child_plan_runtime_with_argv(child_plan, argv, Some(translated))
+            start_runtime_child_plan_with_argv(child_plan, argv, Some(translated), start)
         } {
-            Ok(launch) => Ok(launch),
+            Ok(result) => Ok(result),
             Err(error) => {
                 let _ = unsafe { mmu0_destroy_address_space(translated.address_space) };
                 let _ = free_mapped_dynamic_user_load_plan(mapped_child_plan, allocator);
@@ -1523,7 +1738,7 @@ unsafe fn begin_loaded_child_runtime(path: &[u8], args: &[&[u8]]) -> Result<Chil
         .map_err(run_status_from_load_error)?;
     let argv =
         unsafe { install_child_argv(child_plan, args) }.map_err(run_status_from_load_error)?;
-    unsafe { begin_loaded_child_plan_runtime_with_argv(child_plan, argv, None) }
+    unsafe { start_runtime_child_plan_with_argv(child_plan, argv, None, start) }
         .map_err(run_status_from_switch_error)
 }
 
@@ -1565,6 +1780,108 @@ unsafe fn begin_loaded_child_plan_runtime_with_argv(
         address_space: descriptor.resources.address_space,
         kernel_stack_top: descriptor.resources.kernel_stack_top,
     })
+}
+
+#[cfg(not(test))]
+unsafe fn start_runtime_child_plan_with_argv(
+    child_plan: DynamicUserLoadPlan,
+    argv: ChildArgv,
+    translated: Option<TranslatedUserLaunch>,
+    start: RuntimeChildStart,
+) -> Result<RuntimeChildLoadResult, ProcessSwitchError> {
+    match start {
+        RuntimeChildStart::Enter => unsafe {
+            begin_loaded_child_plan_runtime_with_argv(child_plan, argv, translated)
+                .map(RuntimeChildLoadResult::Launch)
+        },
+        RuntimeChildStart::Ready => unsafe {
+            spawn_loaded_child_plan_runtime_with_argv(child_plan, argv, translated)
+                .map(RuntimeChildLoadResult::Pid)
+        },
+    }
+}
+
+#[cfg(not(test))]
+unsafe fn spawn_loaded_child_plan_runtime_with_argv(
+    child_plan: DynamicUserLoadPlan,
+    argv: ChildArgv,
+    translated: Option<TranslatedUserLaunch>,
+) -> Result<ProcessId, ProcessSwitchError> {
+    let parent_slot = unsafe { runtime_current_slot() };
+    let child_slot = runtime_child_slot_for_parent(parent_slot, unsafe {
+        read_runtime_address_space(parent_slot)
+    })?;
+    if unsafe { read_runtime_blocked_child_slot(parent_slot) } != NO_CHILD_SLOT {
+        return Err(ProcessSwitchError::NoRunningChild);
+    }
+    let parent_parent_slot = unsafe { read_runtime_parent_slot(parent_slot) };
+    let descriptor = ProcessDescriptor::for_child_plan(child_plan, argv, translated)?;
+    let child_pid = unsafe { allocate_runtime_pid()? };
+    let parent_pid = unsafe { read_runtime_pid(parent_slot) };
+    let child_state = RuntimeForegroundSlotState::from_process_resources(
+        child_pid,
+        Some(parent_pid),
+        parent_slot as u32,
+        descriptor.resources,
+    );
+    unsafe {
+        write_runtime_process_linkage(parent_slot, parent_parent_slot, NO_CHILD_SLOT);
+        write_runtime_foreground_slot_state(child_slot, child_state);
+        *runtime_slot_frame(child_slot).get() = k16_rt::TrapFrame::from(descriptor.frame);
+    }
+    Ok(child_pid)
+}
+
+#[cfg(not(test))]
+unsafe fn wait_for_runtime_child(
+    pid: ProcessId,
+    wait_status_ptr: u32,
+) -> Result<ChildLaunch, ProcessSwitchError> {
+    let parent_slot = unsafe { runtime_current_slot() };
+    if unsafe { read_runtime_blocked_child_slot(parent_slot) } != NO_CHILD_SLOT {
+        return Err(ProcessSwitchError::NoRunningChild);
+    }
+    let child_slot = unsafe { ready_runtime_child_slot(parent_slot, pid) }
+        .ok_or(ProcessSwitchError::NoRunningChild)?;
+    let parent_parent_slot = unsafe { read_runtime_parent_slot(parent_slot) };
+    let caller_frame = unsafe { save_runtime_process_frame(parent_slot) };
+    let child_state = unsafe { read_runtime_foreground_slot_state(child_slot) };
+    let child_frame = TrapFrame::from(*unsafe { runtime_slot_frame(child_slot).get() });
+    unsafe {
+        write_runtime_process_linkage(parent_slot, parent_parent_slot, child_slot as u32);
+        write_runtime_wait_status_ptr(parent_slot, wait_status_ptr);
+        write_runtime_word(
+            core::ptr::addr_of_mut!(RUNTIME_CURRENT_SLOT),
+            child_slot as u32,
+        );
+        *runtime_slot_frame(parent_slot).get() = k16_rt::TrapFrame::from(caller_frame);
+    }
+    Ok(ChildLaunch {
+        id: child_state.pid,
+        context: ProcessContext {
+            entry_pc: child_frame.resume_pc,
+            stack_top: child_frame.stack_pointer,
+        },
+        frame: child_frame,
+        address_space: child_state.address_space,
+        kernel_stack_top: child_state.kernel_stack_top,
+    })
+}
+
+#[cfg(not(test))]
+unsafe fn ready_runtime_child_slot(parent_slot: usize, pid: ProcessId) -> Option<usize> {
+    let mut slot = 1;
+    while slot < MAX_PROCESS_SLOTS {
+        if slot != parent_slot
+            && unsafe { read_runtime_parent_slot(slot) } as usize == parent_slot
+            && unsafe { read_runtime_blocked_child_slot(slot) } == NO_CHILD_SLOT
+            && (pid.raw() == NO_PROCESS_PID || unsafe { read_runtime_pid(slot) } == pid)
+        {
+            return Some(slot);
+        }
+        slot += 1;
+    }
+    None
 }
 
 #[cfg(any(not(test), feature = "host-test"))]
@@ -1646,11 +1963,14 @@ unsafe fn finish_child_runtime_into(
         return Err(ProcessSwitchError::NoRunningChild);
     }
     let frame = TrapFrame::from(unsafe { *runtime_slot_frame(parent_slot).get() });
+    let child_pid = unsafe { read_runtime_pid(current_slot) };
+    let wait_status_ptr = unsafe { read_runtime_wait_status_ptr(parent_slot) };
     let exited_state = unsafe { read_runtime_foreground_slot_state(current_slot) };
     let exited_resources = exited_state.owned_resources();
     unsafe {
         write_runtime_foreground_slot_state(current_slot, exited_state.cleared_after_exit());
         write_runtime_word(runtime_slot_blocked_child_ptr(parent_slot), NO_CHILD_SLOT);
+        write_runtime_wait_status_ptr(parent_slot, 0);
         write_runtime_word(
             core::ptr::addr_of_mut!(RUNTIME_CURRENT_SLOT),
             parent_slot as u32,
@@ -1658,12 +1978,14 @@ unsafe fn finish_child_runtime_into(
     }
     *out = ParentResume {
         id: unsafe { read_runtime_pid(parent_slot) },
+        child_id: child_pid,
         context: ProcessContext {
             entry_pc: frame.resume_pc,
             stack_top: frame.stack_pointer,
         },
         frame,
         child_exit_status: status,
+        wait_status_ptr,
         address_space: unsafe { read_runtime_address_space(parent_slot) },
         kernel_stack_top: unsafe { read_runtime_kernel_stack_top(parent_slot) },
         exited_address_space: exited_resources.address_space,
@@ -1810,6 +2132,15 @@ fn runtime_slot_blocked_child_ptr(slot: usize) -> *mut u32 {
         INIT_PROCESS_SLOT => core::ptr::addr_of_mut!(RUNTIME_SLOT0_BLOCKED_CHILD),
         1 => core::ptr::addr_of_mut!(RUNTIME_SLOT1_BLOCKED_CHILD),
         _ => core::ptr::addr_of_mut!(RUNTIME_SLOT2_BLOCKED_CHILD),
+    }
+}
+
+#[cfg(not(test))]
+fn runtime_slot_wait_status_ptr(slot: usize) -> *mut u32 {
+    match slot {
+        INIT_PROCESS_SLOT => core::ptr::addr_of_mut!(RUNTIME_SLOT0_WAIT_STATUS_PTR),
+        1 => core::ptr::addr_of_mut!(RUNTIME_SLOT1_WAIT_STATUS_PTR),
+        _ => core::ptr::addr_of_mut!(RUNTIME_SLOT2_WAIT_STATUS_PTR),
     }
 }
 
@@ -2014,6 +2345,16 @@ unsafe fn write_runtime_process_linkage(slot: usize, parent_slot: u32, blocked_c
 }
 
 #[cfg(not(test))]
+unsafe fn read_runtime_wait_status_ptr(slot: usize) -> u32 {
+    unsafe { read_runtime_word(runtime_slot_wait_status_ptr(slot)) }
+}
+
+#[cfg(not(test))]
+unsafe fn write_runtime_wait_status_ptr(slot: usize, wait_status_ptr: u32) {
+    unsafe { write_runtime_word(runtime_slot_wait_status_ptr(slot), wait_status_ptr) };
+}
+
+#[cfg(not(test))]
 unsafe fn read_runtime_foreground_slot_state(slot: usize) -> RuntimeForegroundSlotState {
     let heap_start = unsafe { read_runtime_word(runtime_slot_heap_start_ptr(slot)) };
     let program_break = unsafe { read_runtime_word(runtime_slot_program_break_ptr(slot)) };
@@ -2215,13 +2556,13 @@ pub unsafe fn resume_parent_context(resume: &ParentResume) -> ! {
         if override_result.is_err() {
             halt_runtime_with_panic_code(k16_abi::syscall::ERROR_FAULT as i32);
         }
-        unsafe { k16_rt::iret_with_r0(resume.child_exit_status) }
+        unsafe { k16_rt::iret_with_r0(resume.return_value()) }
     }
     #[cfg(test)]
     {
         let frame = k16_rt::TrapFrame::from(resume.frame);
         let _saved_r0 = unsafe { k16_rt::restore_trap_frame(&frame) };
-        unsafe { k16_rt::iret_with_r0(resume.child_exit_status) }
+        unsafe { k16_rt::iret_with_r0(resume.return_value()) }
     }
 }
 
@@ -2419,23 +2760,26 @@ impl UserArena {
     }
 }
 
-fn translated_child_arena_end(parent_stack_limit: u32) -> Result<(u32, u32), ProcessLoadError> {
+fn translated_child_kernel_stack_top(parent_stack_limit: u32) -> Result<u32, ProcessLoadError> {
     let kernel_stack_top = align_down(parent_stack_limit, STACK_ALIGNMENT);
-    let child_arena_end = kernel_stack_top
+    kernel_stack_top
         .checked_sub(TRANSLATED_TRAP_STACK_BYTES)
         .ok_or(ProcessLoadError::ProgramTooLarge)?;
-    Ok((
-        align_down(child_arena_end, STACK_ALIGNMENT),
-        kernel_stack_top,
-    ))
+    Ok(kernel_stack_top)
 }
 
-fn translated_child_arena_start(program_break: u32) -> Result<u32, ProcessLoadError> {
-    align_up(program_break, VM_PAGE_SIZE)
+fn translated_child_user_arena(
+    caller_memory: ProcessMemory,
+) -> Result<UserArena, ProcessLoadError> {
+    UserArena::new(caller_memory.start, caller_memory.end)
 }
 
 fn translated_init_arena_end(memory_end: u32) -> Result<(u32, u32), ProcessLoadError> {
-    translated_child_arena_end(memory_end)
+    let kernel_stack_top = translated_child_kernel_stack_top(memory_end)?;
+    let arena_end = kernel_stack_top
+        .checked_sub(TRANSLATED_TRAP_STACK_BYTES)
+        .ok_or(ProcessLoadError::ProgramTooLarge)?;
+    Ok((align_down(arena_end, STACK_ALIGNMENT), kernel_stack_top))
 }
 
 fn translated_init_user_arena(
@@ -2775,10 +3119,14 @@ impl<'a> RunArgvRequest<'a> {
     }
 
     pub fn parse(bytes: &'a [u8]) -> Result<Self, ProcessLoadError> {
+        Self::parse_with_magic(bytes, k16_abi::syscall::RUN_ARGV_MAGIC)
+    }
+
+    pub fn parse_with_magic(bytes: &'a [u8], magic: u32) -> Result<Self, ProcessLoadError> {
         if bytes.len() < 12 {
             return Err(ProcessLoadError::InvalidPath);
         }
-        if read_request_u32(bytes, 0)? != k16_abi::syscall::RUN_ARGV_MAGIC {
+        if read_request_u32(bytes, 0)? != magic {
             return Err(ProcessLoadError::InvalidPath);
         }
         let path_len = read_request_u32(bytes, 4)? as usize;
@@ -4167,6 +4515,161 @@ mod tests {
     }
 
     #[test]
+    fn process_table_spawn_keeps_parent_running_and_child_ready() {
+        let mut table = ProcessTable::new(ProcessContext {
+            entry_pc: 0x0000_8000,
+            stack_top: 0x0001_0000,
+        });
+        let child_plan = DynamicUserLoadPlan {
+            load_base: 0x0000_a000,
+            load_end: 0x0000_a020,
+            entry_pc: 0x0000_a004,
+            stack_top: 0x0001_0000,
+            payload_dst: 0x0000_a000,
+            payload_len: 16,
+            zero_fill_addr: 0x0000_a010,
+            zero_fill_len: 16,
+        };
+
+        let child = table.spawn_child(child_plan).expect("child spawns");
+
+        assert_eq!(child, ProcessId::from_raw(2));
+        assert_eq!(table.current_pid(), ProcessId::INIT);
+        assert_eq!(table.init_state(), PROCESS_STATE_RUNNING);
+        assert_eq!(table.child_state(), PROCESS_STATE_READY);
+        assert_eq!(
+            table.slots[1].lifecycle(),
+            ProcessSlotLifecycle::ready_child(INIT_PROCESS_SLOT)
+        );
+    }
+
+    #[test]
+    fn process_table_wait_for_ready_child_blocks_parent_and_enters_child() {
+        let mut table = ProcessTable::new(ProcessContext {
+            entry_pc: 0x0000_8000,
+            stack_top: 0x0001_0000,
+        });
+        let child_plan = DynamicUserLoadPlan {
+            load_base: 0x0000_a000,
+            load_end: 0x0000_a020,
+            entry_pc: 0x0000_a004,
+            stack_top: 0x0001_0000,
+            payload_dst: 0x0000_a000,
+            payload_len: 16,
+            zero_fill_addr: 0x0000_a010,
+            zero_fill_len: 16,
+        };
+        let wait_frame = TrapFrame {
+            resume_pc: 0x0000_8100,
+            stack_pointer: 0x0000_ff00,
+            ..TrapFrame::zeroed()
+        };
+        let child = table.spawn_child(child_plan).expect("child spawns");
+
+        let launch = table
+            .wait_for_child(child, wait_frame, 0x0000_e000)
+            .expect("ready child starts");
+
+        assert_eq!(launch.id, child);
+        assert_eq!(
+            launch.context,
+            ProcessContext {
+                entry_pc: 0x0000_a004,
+                stack_top: 0x0001_0000,
+            }
+        );
+        assert_eq!(table.current_pid(), child);
+        assert_eq!(table.init_state(), PROCESS_STATE_BLOCKED_ON_CHILD);
+        assert_eq!(table.child_state(), PROCESS_STATE_RUNNING);
+        assert_eq!(table.slots[INIT_PROCESS_SLOT].frame, wait_frame);
+    }
+
+    #[test]
+    fn process_table_wait_for_any_ready_child_uses_zero_pid() {
+        let mut table = ProcessTable::new(ProcessContext {
+            entry_pc: 0x0000_8000,
+            stack_top: 0x0001_0000,
+        });
+        let child_plan = DynamicUserLoadPlan {
+            load_base: 0x0000_a000,
+            load_end: 0x0000_a020,
+            entry_pc: 0x0000_a004,
+            stack_top: 0x0001_0000,
+            payload_dst: 0x0000_a000,
+            payload_len: 16,
+            zero_fill_addr: 0x0000_a010,
+            zero_fill_len: 16,
+        };
+        let child = table.spawn_child(child_plan).expect("child spawns");
+
+        let launch = table
+            .wait_for_child(
+                ProcessId::from_raw(NO_PROCESS_PID),
+                TrapFrame::zeroed(),
+                0x0000_e000,
+            )
+            .expect("any ready child starts");
+
+        assert_eq!(launch.id, child);
+        assert_eq!(table.current_pid(), child);
+    }
+
+    #[test]
+    fn process_table_wait_for_missing_child_leaves_ready_child_untouched() {
+        let mut table = ProcessTable::new(ProcessContext {
+            entry_pc: 0x0000_8000,
+            stack_top: 0x0001_0000,
+        });
+        let child_plan = DynamicUserLoadPlan {
+            load_base: 0x0000_a000,
+            load_end: 0x0000_a020,
+            entry_pc: 0x0000_a004,
+            stack_top: 0x0001_0000,
+            payload_dst: 0x0000_a000,
+            payload_len: 16,
+            zero_fill_addr: 0x0000_a010,
+            zero_fill_len: 16,
+        };
+        table.spawn_child(child_plan).expect("child spawns");
+
+        assert_eq!(
+            table.wait_for_child(ProcessId::from_raw(999), TrapFrame::zeroed(), 0x0000_e000),
+            Err(ProcessSwitchError::NoRunningChild)
+        );
+        assert_eq!(table.current_pid(), ProcessId::INIT);
+        assert_eq!(table.child_state(), PROCESS_STATE_READY);
+    }
+
+    #[test]
+    fn process_table_waited_child_exit_returns_pid_and_preserves_status_pointer() {
+        let mut table = ProcessTable::new(ProcessContext {
+            entry_pc: 0x0000_8000,
+            stack_top: 0x0001_0000,
+        });
+        let child_plan = DynamicUserLoadPlan {
+            load_base: 0x0000_a000,
+            load_end: 0x0000_a020,
+            entry_pc: 0x0000_a004,
+            stack_top: 0x0001_0000,
+            payload_dst: 0x0000_a000,
+            payload_len: 16,
+            zero_fill_addr: 0x0000_a010,
+            zero_fill_len: 16,
+        };
+        let child = table.spawn_child(child_plan).expect("child spawns");
+        table
+            .wait_for_child(child, TrapFrame::zeroed(), 0x0000_e000)
+            .expect("child starts");
+
+        let resumed = table.finish_child(17).expect("parent resumes");
+
+        assert_eq!(resumed.child_id, child);
+        assert_eq!(resumed.child_exit_status, 17);
+        assert_eq!(resumed.wait_status_ptr, 0x0000_e000);
+        assert_eq!(resumed.return_value(), child.raw());
+    }
+
+    #[test]
     fn process_table_initializes_init_with_pid_one() {
         let table = ProcessTable::new(ProcessContext {
             entry_pc: 0x0000_8000,
@@ -4763,6 +5266,24 @@ mod tests {
     }
 
     #[test]
+    fn spawn_argv_request_uses_spawn_magic_without_accepting_run_magic() {
+        let bytes = [
+            b'S', b'P', b'A', b'W', 12, 0, 0, 0, 1, 0, 0, 0, 3, 0, 0, 0, b'/', b'b', b'i', b'n',
+            b'/', b'e', b'c', b'h', b'o', b'.', b'k', b'x', b'h', b'i', b'!',
+        ];
+
+        let request =
+            RunArgvRequest::parse_with_magic(&bytes, k16_abi::syscall::SPAWN_ARGV_MAGIC).unwrap();
+
+        assert_eq!(request.path, b"/bin/echo.kx");
+        assert_eq!(request.args(), &[b"hi!".as_slice()]);
+        assert_eq!(
+            RunArgvRequest::parse(&bytes),
+            Err(ProcessLoadError::InvalidPath)
+        );
+    }
+
+    #[test]
     fn run_argv_request_rejects_trailing_bytes_after_declared_arguments() {
         let bytes = [
             b'R', b'A', b'R', b'G', 11, 0, 0, 0, 1, 0, 0, 0, 9, 0, 0, 0, b'/', b'b', b'i', b'n',
@@ -5148,21 +5669,29 @@ mod tests {
     }
 
     #[test]
-    fn translated_child_arena_reserves_kernel_trap_stack_below_parent_stack() {
+    fn translated_child_kernel_stack_reserves_physical_page_below_parent_stack() {
         assert_eq!(
-            translated_child_arena_end(0x0002_0000),
-            Ok((0x0001_f000, 0x0002_0000))
+            translated_child_kernel_stack_top(0x0002_0000),
+            Ok(0x0002_0000)
         );
         assert_eq!(
-            translated_child_arena_end(0x0002_0003),
-            Ok((0x0001_f000, 0x0002_0000))
+            translated_child_kernel_stack_top(0x0002_0003),
+            Ok(0x0002_0000)
         );
     }
 
     #[test]
-    fn translated_child_arena_start_rounds_parent_break_to_page_boundary() {
-        assert_eq!(translated_child_arena_start(0x0001_6614), Ok(0x0001_7000));
-        assert_eq!(translated_child_arena_start(0x0001_7000), Ok(0x0001_7000));
+    fn translated_child_user_arena_reuses_parent_virtual_bounds() {
+        assert_eq!(
+            translated_child_user_arena(ProcessMemory {
+                start: 0x0000_4000,
+                end: 0x0002_f000,
+            }),
+            Ok(UserArena {
+                start: 0x0000_4000,
+                end: 0x0002_f000,
+            })
+        );
     }
 
     #[test]
@@ -5263,6 +5792,7 @@ mod tests {
     fn translated_parent_resume_requires_trap_return_address_space_override() {
         let resume = ParentResume {
             id: ProcessId::from_raw(2),
+            child_id: ProcessId::from_raw(NO_PROCESS_PID),
             context: ProcessContext {
                 entry_pc: 0x0001_5004,
                 stack_top: 0x0001_f000,
@@ -5274,6 +5804,7 @@ mod tests {
                 ..TrapFrame::zeroed()
             },
             child_exit_status: 0,
+            wait_status_ptr: 0,
             address_space: Some(7),
             kernel_stack_top: Some(0x0001_d000),
             exited_address_space: None,
@@ -5517,12 +6048,14 @@ mod tests {
         crate::mmio::set_test_mmu0_result(0, k16_abi::computer::mmu0::STATUS_DONE, 0);
         let resume = ParentResume {
             id: ProcessId::INIT,
+            child_id: ProcessId::from_raw(NO_PROCESS_PID),
             context: ProcessContext {
                 entry_pc: 0,
                 stack_top: 0,
             },
             frame: TrapFrame::zeroed(),
             child_exit_status: 0,
+            wait_status_ptr: 0,
             address_space: None,
             kernel_stack_top: None,
             exited_address_space: Some(11),

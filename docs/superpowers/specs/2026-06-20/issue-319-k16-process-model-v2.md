@@ -42,6 +42,11 @@ The current kernel has a fixed process table and explicit lifecycle states:
 empty, running, and blocked-on-child. That is enough for
 init -> shell -> utility, but it is not a general process model.
 
+Translated child address spaces should not inherit the old physical child
+window policy. The physical kernel trap stack may still be reserved below the
+saved parent stack, but user virtual image/heap/stack bounds belong to the
+child address space and may reuse the caller's virtual arena range.
+
 ## Approaches Considered
 
 ### A. Keep Extending Synchronous RUN

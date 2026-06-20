@@ -23,6 +23,13 @@ pub fn dispatch(number: u32) -> ! {
             unsafe { fs::close_file_fds_for_process(exiting_pid) };
             let mut resume = process::ParentResume::empty();
             if unsafe { process::finish_child_for_exit_into(status, &mut resume) }.is_ok() {
+                if resume.wait_status_ptr != 0
+                    && write_wait_status(resume.wait_status_ptr, status).is_err()
+                {
+                    control::set_panic();
+                    control::set_panic_code(abi_syscall::ERROR_FAULT as i32);
+                    control::wait_forever()
+                }
                 if unsafe { process::destroy_exited_address_space(&resume) }.is_err() {
                     control::set_panic();
                     control::set_panic_code(abi_syscall::ERROR_FAULT as i32);
@@ -152,6 +159,22 @@ pub fn dispatch(number: u32) -> ! {
             let len = k16_rt::syscall_arg1();
             let format = k16_rt::syscall_arg2();
             match prepare_run(ptr, len, format) {
+                Ok(launch) => unsafe { process::enter_child_context(launch) },
+                Err(error) => unsafe { k16_rt::iret_with_r0(error) },
+            }
+        }
+        abi_syscall::SPAWN => {
+            let ptr = k16_rt::syscall_arg0();
+            let len = k16_rt::syscall_arg1();
+            match spawn_argv(ptr, len) {
+                Ok(pid) => unsafe { k16_rt::iret_with_r0(pid.raw()) },
+                Err(error) => unsafe { k16_rt::iret_with_r0(error) },
+            }
+        }
+        abi_syscall::WAIT => {
+            let pid = k16_rt::syscall_arg0();
+            let out_status = k16_rt::syscall_arg1();
+            match wait_for_child(pid, out_status) {
                 Ok(launch) => unsafe { process::enter_child_context(launch) },
                 Err(error) => unsafe { k16_rt::iret_with_r0(error) },
             }
@@ -405,6 +428,26 @@ fn prepare_run(ptr: u32, len: u32, format: u32) -> Result<process::ChildLaunch, 
         }
         _ => Err(abi_syscall::ERROR_INVALID),
     }
+}
+
+fn spawn_argv(ptr: u32, len: u32) -> Result<process::ProcessId, u32> {
+    if len == 0 || len > k16_abi::syscall::MAX_SPAWN_ARGV_REQUEST_BYTES as u32 {
+        return Err(abi_syscall::ERROR_INVALID);
+    }
+    let mut bytes = [0_u8; k16_abi::syscall::MAX_SPAWN_ARGV_REQUEST_BYTES];
+    let bytes = user_buffer::copy_from_user_into(ptr, len, &mut bytes)?;
+    unsafe { process::spawn_loaded_child_from_argv_request(bytes) }
+}
+
+fn wait_for_child(pid: u32, out_status: u32) -> Result<process::ChildLaunch, u32> {
+    if !valid_guest_buffer(out_status, 4) {
+        return Err(abi_syscall::ERROR_FAULT);
+    }
+    unsafe { process::wait_for_child_from_syscall(process::ProcessId::from_raw(pid), out_status) }
+}
+
+fn write_wait_status(out_status: u32, status: u32) -> Result<(), u32> {
+    user_buffer::copy_to_user(out_status, &status.to_le_bytes()).map(|_| ())
 }
 
 fn write_guest_bytes(ptr: u32, len: u32) -> Result<u32, u32> {

@@ -318,6 +318,21 @@ pub fn run_argv_syscall(request: *const u8, len: usize) -> u32 {
 }
 
 #[inline(always)]
+pub fn spawn_argv_syscall(request: *const u8, len: usize) -> u32 {
+    syscall3(
+        k16_abi::syscall::SPAWN,
+        request as usize as u32,
+        len as u32,
+        0,
+    )
+}
+
+#[inline(always)]
+pub fn wait_syscall(pid: u32, status: *mut u32) -> u32 {
+    syscall3(k16_abi::syscall::WAIT, pid, status as usize as u32, 0)
+}
+
+#[inline(always)]
 #[cfg(not(any(test, feature = "host-test")))]
 pub fn open_syscall(path: *const u8, len: usize, flags: u32) -> u32 {
     unsafe { __k16_open_syscall(path as usize as u32, len as u32, flags) }

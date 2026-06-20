@@ -2,11 +2,20 @@
 
 ## Unreleased
 
-- The K16 kernel process-table model now has an internal exited-child reap
-  path: a child can retain PID, parent PID, and exit status metadata until its
-  parent reaps it by PID or by `0 = any child`. The existing guest-visible
-  `RUN`/`EXIT` path still auto-reaps before returning the child status, and no
-  guest-visible `WAIT`/`SPAWN` syscall is exposed yet.
+- Added guest-visible K16 `SPAWN` (`22`) and `WAIT` (`23`) syscalls plus
+  `kraft-std::process::spawn_with_args`, `wait`, and `wait_any`.
+  `SPAWN(request, len)` accepts the bounded argv request format with
+  `SPAWN_ARGV_MAGIC`, creates a direct child, and returns its PID without
+  immediately entering it. `WAIT(pid_or_zero, out_status_ptr)` starts a ready
+  direct child, writes its exit status to `out_status_ptr` when it exits, and
+  returns the reaped PID. `RUN` remains the synchronous compatibility path and
+  still returns child exit status directly.
+- The direct K16 runtime factory default RAM size is now 1 MiB while the boot
+  floor remains 256 KiB, matching the production config headroom needed for
+  nested translated shell smoke coverage.
+- The K16 kernel process-table model now has an exited-child reap path: a child
+  can retain PID, parent PID, and exit status metadata until its parent reaps it
+  by PID or by `0 = any child`.
 - K16 kernel process table entries are now internally PID-aware. Init has
   PID 1, child launches allocate stable non-slot PIDs starting at 2, and each
   child records parent PID metadata. The guest-visible `RUN`/`EXIT` ABI remains

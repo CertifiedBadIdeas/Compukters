@@ -69,13 +69,13 @@ class K16ComputerRuntimeFactoryTest {
 
     @Test
     fun defaultMemorySizeLeavesRoomForNestedTranslatedShells() {
-        assertEquals(256 * 1024, K16ComputerRuntimeFactory.DEFAULT_MEMORY_SIZE)
+        assertEquals(1024 * 1024, K16ComputerRuntimeFactory.DEFAULT_MEMORY_SIZE)
     }
 
     @Test
     fun minimumBootMemorySizeDocumentsProductionBootFloor() {
         assertEquals(256 * 1024, K16ComputerRuntimeFactory.MINIMUM_BOOT_MEMORY_SIZE)
-        assertEquals(K16ComputerRuntimeFactory.DEFAULT_MEMORY_SIZE, K16ComputerRuntimeFactory.MINIMUM_BOOT_MEMORY_SIZE)
+        assertTrue(K16ComputerRuntimeFactory.DEFAULT_MEMORY_SIZE > K16ComputerRuntimeFactory.MINIMUM_BOOT_MEMORY_SIZE)
     }
 
     @Test
