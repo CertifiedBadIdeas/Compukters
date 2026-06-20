@@ -453,6 +453,24 @@ fn rmdir_syscall_uses_path_pointer_length_and_reserved_argument() {
 }
 
 #[test]
+fn rename_syscall_uses_request_pointer_length_and_reserved_argument() {
+    crate::trap::reset_test_interrupts();
+    crate::trap::set_test_syscall_return(k16_abi::syscall::STATUS_OK);
+    let request = [0u8; 16];
+
+    let returned = rename_syscall(request.as_ptr(), request.len());
+
+    assert_eq!(crate::trap::test_syscall_number(), k16_abi::syscall::RENAME);
+    assert_eq!(
+        crate::trap::test_syscall_arg0(),
+        request.as_ptr() as usize as u32
+    );
+    assert_eq!(crate::trap::test_syscall_arg1(), request.len() as u32);
+    assert_eq!(crate::trap::test_syscall_arg2(), 0);
+    assert_eq!(returned, k16_abi::syscall::STATUS_OK);
+}
+
+#[test]
 fn read_dir_syscall_uses_request_pointer_length_and_reserved_argument() {
     crate::trap::reset_test_interrupts();
     crate::trap::set_test_syscall_return(24);

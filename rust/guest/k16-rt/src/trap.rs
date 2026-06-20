@@ -360,6 +360,16 @@ pub fn rmdir_syscall(path: *const u8, len: usize) -> u32 {
 }
 
 #[inline(always)]
+pub fn rename_syscall(request: *const u8, len: usize) -> u32 {
+    syscall3(
+        k16_abi::syscall::RENAME,
+        request as usize as u32,
+        len as u32,
+        0,
+    )
+}
+
+#[inline(always)]
 pub fn read_dir_syscall(request: *const u8, len: usize) -> u32 {
     syscall3(
         k16_abi::syscall::READ_DIR,

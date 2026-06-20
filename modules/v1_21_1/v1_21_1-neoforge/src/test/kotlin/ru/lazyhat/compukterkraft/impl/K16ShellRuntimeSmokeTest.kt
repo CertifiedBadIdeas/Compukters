@@ -377,6 +377,59 @@ class K16ShellRuntimeSmokeTest {
                 commandIndex >= 0 && outputIndex > commandIndex && returnedPromptIndex > outputIndex
             }
 
+            dispatchText(device, "mv /etc/user-copy.txt /etc/user-moved.txt\n")
+            waitForTerminal(device, "mv output and returned prompt") { terminal ->
+                val commandIndex = terminal.lastIndexOf("K16> mv /etc/user-copy.txt /etc/user-moved.txt")
+                val outputIndex =
+                    terminal.indexOf(
+                        "MOVED /etc/user-copy.txt /etc/user-moved.txt",
+                        startIndex = commandIndex + "K16> mv /etc/user-copy.txt /etc/user-moved.txt".length,
+                    )
+                val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex)
+                commandIndex >= 0 && outputIndex > commandIndex && returnedPromptIndex > outputIndex
+            }
+
+            dispatchText(device, "stat /etc/user-copy.txt\n")
+            waitForTerminal(device, "stat output after moved source and returned prompt") { terminal ->
+                val commandIndex = terminal.lastIndexOf("K16> stat /etc/user-copy.txt")
+                val outputIndex =
+                    terminal.indexOf("ERR NOENT /etc/user-copy.txt", startIndex = commandIndex + "K16> stat /etc/user-copy.txt".length)
+                val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex)
+                commandIndex >= 0 && outputIndex > commandIndex && returnedPromptIndex > outputIndex
+            }
+
+            dispatchText(device, "cat /etc/user-moved.txt\n")
+            waitForTerminal(device, "cat output for moved file and returned prompt") { terminal ->
+                val commandIndex = terminal.lastIndexOf("K16> cat /etc/user-moved.txt")
+                val outputIndex = terminal.indexOf("hello-world", startIndex = commandIndex + "K16> cat /etc/user-moved.txt".length)
+                val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex)
+                commandIndex >= 0 && outputIndex > commandIndex && returnedPromptIndex > outputIndex
+            }
+
+            dispatchText(device, "mv /etc/user.txt /etc/user-moved.txt\n")
+            waitForTerminal(device, "mv existing destination error and returned prompt") { terminal ->
+                val commandIndex = terminal.lastIndexOf("K16> mv /etc/user.txt /etc/user-moved.txt")
+                val outputIndex =
+                    terminal.indexOf(
+                        "ERR INVAL /etc/user-moved.txt",
+                        startIndex = commandIndex + "K16> mv /etc/user.txt /etc/user-moved.txt".length,
+                    )
+                val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex)
+                commandIndex >= 0 && outputIndex > commandIndex && returnedPromptIndex > outputIndex
+            }
+
+            dispatchText(device, "mv /etc/missing.txt /etc/missing-moved.txt\n")
+            waitForTerminal(device, "mv missing source error and returned prompt") { terminal ->
+                val commandIndex = terminal.lastIndexOf("K16> mv /etc/missing.txt /etc/missing-moved.txt")
+                val outputIndex =
+                    terminal.indexOf(
+                        "ERR NOENT /etc/missing.txt",
+                        startIndex = commandIndex + "K16> mv /etc/missing.txt /etc/missing-moved.txt".length,
+                    )
+                val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex)
+                commandIndex >= 0 && outputIndex > commandIndex && returnedPromptIndex > outputIndex
+            }
+
             val growPayload = "x".repeat(120)
             repeat(5) {
                 dispatchText(device, "write --append /etc/user.txt $growPayload\n")

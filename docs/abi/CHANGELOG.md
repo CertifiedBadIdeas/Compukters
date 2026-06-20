@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Added K16 `RENAME` (`21`) plus bundled `/bin/mv.kx` for regular-file
+  metadata moves inside ROOT/K16FS. The kernel rejects open source files with
+  `ERROR_BUSY`, rejects existing destinations with `ERROR_INVALID`, and does
+  not overwrite destination paths.
 - Host-side K16FS tooling now matches the guest bounded inline extent mutation
   model: `k16 fs kfs mkdir` can grow full directories, and `k16 fs kfs put`
   can store files across multiple inline extents when the free space is

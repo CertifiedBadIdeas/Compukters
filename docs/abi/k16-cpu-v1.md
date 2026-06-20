@@ -544,6 +544,7 @@ K16 syscall ABI v0 names the current Rust-kernel proof services in
 | `UNLINK` | `18` | `k16_rt::unlink_syscall(path, len)` | Removes an absolute ROOT/K16FS regular file path from `storage0`. Directories are rejected, and files with an open kernel fd are rejected with `ERROR_BUSY`. Returns `STATUS_OK` or a negative K16 error. |
 | `MKDIR` | `19` | `k16_rt::mkdir_syscall(path, len)` | Creates an absolute ROOT/K16FS directory path on `storage0`. Parent directories must already exist. Returns `STATUS_OK` or a negative K16 error. |
 | `RMDIR` | `20` | `k16_rt::rmdir_syscall(path, len)` | Removes an empty absolute ROOT/K16FS directory path from `storage0`. Regular files are rejected, and non-empty directories return `ERROR_NOT_EMPTY`. Returns `STATUS_OK` or a negative K16 error. |
+| `RENAME` | `21` | `k16_rt::rename_syscall(request, len)` | Renames an absolute ROOT/K16FS regular file path on `storage0` without changing its inode or contents. The request is `u32 magic`, `u32 old_path_len`, `u32 new_path_len`, followed by old path bytes and new path bytes. Directories are rejected, existing destination paths return `ERROR_INVALID`, and source files with an open kernel fd return `ERROR_BUSY`. |
 | `DEBUG_MARKER_RETURN` | `0x53` | n/a | Proof return value for `DEBUG_MARKER`. |
 | `STATUS_OK` | `0` | n/a | Successful proof-service status. |
 | `FILE_TYPE_REGULAR` | `1` | n/a | `STAT` response kind for a regular file. |
@@ -555,6 +556,9 @@ K16 syscall ABI v0 names the current Rust-kernel proof services in
 | `OPEN_APPEND` | `8` | n/a | `OPEN` flag bit for the supported write-create-append mode; the opened descriptor starts at EOF. |
 | `SEEK_SET` | `0` | n/a | `SEEK` mode for an absolute file offset. |
 | `SEEK_END` | `2` | n/a | `SEEK` mode for EOF-relative seek; K16 currently supports only `offset = 0`. |
+| `RENAME_REQUEST_MAGIC` | `0x4d41_4e52` | n/a | Little-endian `RNAM` marker for `RENAME` request buffers. |
+| `MAX_RENAME_PATH_BYTES` | `228` | n/a | Maximum old or new path byte length accepted by `RENAME`. |
+| `MAX_RENAME_REQUEST_BYTES` | `468` | n/a | Maximum bounded `RENAME` request size: 12-byte header plus two maximum paths. |
 | `FD_STDIN` | `0` | n/a | Standard input descriptor accepted by `READ`. |
 | `FD_STDOUT` | `1` | n/a | Standard output descriptor accepted by `WRITE`. |
 | `FD_STDERR` | `2` | n/a | Standard error descriptor accepted by `WRITE`. |

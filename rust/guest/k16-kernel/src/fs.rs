@@ -539,6 +539,34 @@ pub unsafe fn remove_root_file_for_process(path: &[u8]) -> Result<(), FsError> {
 }
 
 #[cfg(any(not(test), feature = "host-test"))]
+pub unsafe fn rename_root_file_for_process(
+    _owner_pid: u32,
+    old_path: &[u8],
+    new_path: &[u8],
+) -> Result<(), FsError> {
+    let old_path = RootFilePath::parse(old_path)?;
+    let old_components = old_path.components();
+    let new_path = RootFilePath::parse(new_path)?;
+    let new_components = new_path.components();
+    unsafe {
+        k16_storage::open_file_from_storage0(ROOT_PARTITION, old_components.as_slice())
+            .map_err(storage_error_to_fs_error)?;
+    }
+    let metadata = unsafe { k16_storage::selected_file_metadata() };
+    if unsafe { RUNTIME_FD_TABLE.get().has_open_inode(metadata.inode_id) } {
+        return Err(FsError::Busy);
+    }
+    unsafe {
+        k16_storage::rename_file_from_storage0(
+            ROOT_PARTITION,
+            old_components.as_slice(),
+            new_components.as_slice(),
+        )
+        .map_err(storage_error_to_fs_error)
+    }
+}
+
+#[cfg(any(not(test), feature = "host-test"))]
 pub unsafe fn create_root_directory(path: &[u8]) -> Result<(), FsError> {
     let path = RootFilePath::parse(path)?;
     let components = path.components();
@@ -688,6 +716,8 @@ fn storage_error_to_fs_error(error: k16_storage::StorageError) -> FsError {
         FsError::Fault
     } else if error == k16_storage::StorageError::PATH_NOT_EMPTY {
         FsError::NotEmpty
+    } else if error == k16_storage::StorageError::PATH_EXISTS {
+        FsError::InvalidPath
     } else {
         FsError::Storage
     }

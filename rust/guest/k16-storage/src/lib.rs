@@ -57,6 +57,7 @@ impl StorageError {
     pub const OUTPUT_BUFFER_TOO_SMALL: Self = Self { code: 19 };
     pub const OUTPUT_TRANSFER: Self = Self { code: 20 };
     pub const PATH_NOT_EMPTY: Self = Self { code: 21 };
+    pub const PATH_EXISTS: Self = Self { code: 22 };
 
     pub const fn code(self) -> i32 {
         self.code
@@ -226,6 +227,50 @@ pub unsafe fn remove_file_from_storage0(
     };
     unsafe { encode_deleted_file_inode(deleted)? };
     unsafe { encode_deleted_directory_entry_at(slot_block, slot_offset) }
+}
+
+pub unsafe fn rename_file_from_storage0(
+    partition_type: &[u8; 4],
+    old_path: &[&[u8]],
+    new_path: &[&[u8]],
+) -> Result<(), StorageError> {
+    if old_path.is_empty() || new_path.is_empty() {
+        return Err(StorageError::PATH_NOT_FOUND);
+    }
+    unsafe { read_partition(partition_type)? };
+    unsafe { read_superblock()? };
+
+    let old_parent_len = old_path.len() - 1;
+    unsafe { find_directory_inode(&old_path[..old_parent_len])? };
+    let (inode_id, old_slot_block, old_slot_offset) =
+        unsafe { find_directory_entry_slot(old_path[old_parent_len])? };
+    unsafe { read_inode(inode_id)? };
+    if unsafe { read_u32(STATE_INODE_STATE) as u8 } != 1 {
+        return Err(StorageError::PATH_NOT_FOUND);
+    }
+
+    let new_parent_len = new_path.len() - 1;
+    let new_name = new_path[new_parent_len];
+    unsafe { find_directory_inode(&new_path[..new_parent_len])? };
+    match unsafe { find_directory_entry(new_name) } {
+        Ok(_) => return Err(StorageError::PATH_EXISTS),
+        Err(error) if error == StorageError::PATH_NOT_FOUND => {}
+        Err(error) => return Err(error),
+    }
+    unsafe { find_selected_directory_free_slot()? };
+    let new_parent_inode_id = unsafe { read_u32(STATE_SELECTED_INODE_ID) };
+    let new_slot_block = unsafe { read_u32(STATE_DIRECTORY_SLOT_BLOCK) };
+    let new_slot_offset = unsafe { read_u32(STATE_DIRECTORY_SLOT_OFFSET) };
+    let new_slot_directory_offset = unsafe { read_u32(STATE_DIRECTORY_SLOT_DIRECTORY_OFFSET) };
+
+    unsafe { encode_directory_entry_at(new_slot_block, new_slot_offset, inode_id, new_name)? };
+    unsafe { read_inode(new_parent_inode_id)? };
+    let new_size = max_u32(
+        unsafe { read_u32(STATE_INODE_SIZE_BYTES) },
+        new_slot_directory_offset + K16FS_DIRECTORY_ENTRY_SIZE,
+    );
+    unsafe { encode_selected_inode_size(new_parent_inode_id, new_size)? };
+    unsafe { encode_deleted_directory_entry_at(old_slot_block, old_slot_offset) }
 }
 
 pub unsafe fn create_directory_from_storage0(
@@ -1640,6 +1685,7 @@ mod tests {
     fn storage_error_code_is_public_for_boot_chain_mapping() {
         assert_eq!(StorageError::STORAGE_VERSION.code(), 10);
         assert_eq!(StorageError::OUTPUT_BUFFER_TOO_SMALL.code(), 19);
+        assert_eq!(StorageError::PATH_EXISTS.code(), 22);
     }
 
     #[test]

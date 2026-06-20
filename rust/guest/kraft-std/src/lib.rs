@@ -276,6 +276,15 @@ pub mod fs {
         Ok(())
     }
 
+    pub fn rename(old_path: &str, new_path: &str) -> Result<(), Error> {
+        let (request, len) = unsafe { rename_request(old_path, new_path)? };
+        let returned = k16_rt::rename_syscall(request, len);
+        if is_error_status(returned) {
+            return Err(Error::Syscall(returned));
+        }
+        Ok(())
+    }
+
     struct ReadDirRequest {
         bytes: [u8; k16_abi::syscall::MAX_READ_DIR_REQUEST_BYTES],
         len: usize,
@@ -313,6 +322,53 @@ pub mod fs {
                 return Err(Error::InvalidArgument);
             }
             self.bytes[self.len..end].copy_from_slice(bytes);
+            self.len = end;
+            Ok(())
+        }
+    }
+
+    static mut RENAME_REQUEST_BYTES: [u8; k16_abi::syscall::MAX_RENAME_REQUEST_BYTES] =
+        [0; k16_abi::syscall::MAX_RENAME_REQUEST_BYTES];
+
+    unsafe fn rename_request(old_path: &str, new_path: &str) -> Result<(*const u8, usize), Error> {
+        if old_path.is_empty()
+            || new_path.is_empty()
+            || old_path.len() > k16_abi::syscall::MAX_RENAME_PATH_BYTES
+            || new_path.len() > k16_abi::syscall::MAX_RENAME_PATH_BYTES
+        {
+            return Err(Error::InvalidArgument);
+        }
+        let ptr = core::ptr::addr_of_mut!(RENAME_REQUEST_BYTES).cast::<u8>();
+        let mut writer = RenameRequestWriter { ptr, len: 0 };
+        unsafe { writer.push_u32(k16_abi::syscall::RENAME_REQUEST_MAGIC)? };
+        unsafe { writer.push_u32(old_path.len() as u32)? };
+        unsafe { writer.push_u32(new_path.len() as u32)? };
+        unsafe { writer.push_bytes(old_path.as_bytes())? };
+        unsafe { writer.push_bytes(new_path.as_bytes())? };
+        Ok((ptr.cast_const(), writer.len))
+    }
+
+    struct RenameRequestWriter {
+        ptr: *mut u8,
+        len: usize,
+    }
+
+    impl RenameRequestWriter {
+        unsafe fn push_u32(&mut self, value: u32) -> Result<(), Error> {
+            unsafe { self.push_bytes(&value.to_le_bytes()) }
+        }
+
+        unsafe fn push_bytes(&mut self, bytes: &[u8]) -> Result<(), Error> {
+            let end = self
+                .len
+                .checked_add(bytes.len())
+                .ok_or(Error::InvalidArgument)?;
+            if end > k16_abi::syscall::MAX_RENAME_REQUEST_BYTES {
+                return Err(Error::InvalidArgument);
+            }
+            unsafe {
+                core::ptr::copy_nonoverlapping(bytes.as_ptr(), self.ptr.add(self.len), bytes.len())
+            };
             self.len = end;
             Ok(())
         }
