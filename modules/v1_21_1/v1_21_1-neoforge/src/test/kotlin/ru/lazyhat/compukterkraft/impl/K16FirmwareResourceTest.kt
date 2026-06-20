@@ -961,6 +961,38 @@ class K16FirmwareResourceTest {
     }
 
     @Test
+    fun k16KernelExitPathKeepsParentResumeInCallerOwnedStorage() {
+        val syscallSource = Path.of("../../../rust/guest/k16-kernel/src/syscall.rs").readText()
+        val processSource = Path.of("../../../rust/guest/k16-kernel/src/process.rs").readText()
+
+        assertTrue(
+            syscallSource.contains("let mut resume = process::ParentResume::empty();"),
+            "EXIT should allocate ParentResume in caller-owned storage",
+        )
+        assertTrue(
+            syscallSource.contains("process::finish_child_for_exit_into(status, &mut resume)"),
+            "EXIT should fill ParentResume through an output reference instead of returning it by value",
+        )
+        assertTrue(
+            syscallSource.contains("process::destroy_exited_address_space(&resume)"),
+            "EXIT should pass ParentResume by reference for cleanup",
+        )
+        assertTrue(
+            syscallSource.contains("process::resume_parent_context(&resume)"),
+            "EXIT should pass ParentResume by reference for parent resume",
+        )
+        assertTrue(
+            processSource.contains("pub const fn empty() -> Self"),
+            "ParentResume should provide explicit zeroed caller-owned storage",
+        )
+        assertTrue(
+            processSource.contains("pub unsafe fn finish_child_for_exit_into(") &&
+                processSource.contains("out: &mut ParentResume,"),
+            "process should expose a caller-owned ParentResume fill API",
+        )
+    }
+
+    @Test
     fun k16KernelFontCoversWorkingShellText() {
         val fontSource = Path.of("../../../rust/guest/k16-kernel/src/font.rs").readText()
         val shellSource = Path.of("../../../rust/guest/k16-shell/src/main.rs").readText()

@@ -449,6 +449,25 @@ pub struct ParentResume {
     pub exited_heap_pages: Option<crate::page_alloc::FrameRange>,
 }
 
+impl ParentResume {
+    pub const fn empty() -> Self {
+        Self {
+            id: ProcessId::Init,
+            context: ProcessContext {
+                entry_pc: 0,
+                stack_top: 0,
+            },
+            frame: TrapFrame::zeroed(),
+            child_exit_status: 0,
+            address_space: None,
+            kernel_stack_top: None,
+            exited_address_space: None,
+            exited_backing_pages: None,
+            exited_heap_pages: None,
+        }
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 struct RuntimeHeapState {
     start: u32,
@@ -1423,13 +1442,24 @@ pub unsafe fn enter_child_context(launch: ChildLaunch) -> ! {
 
 #[cfg(any(not(test), feature = "host-test"))]
 pub unsafe fn finish_child_for_exit(status: u32) -> Result<ParentResume, ProcessSwitchError> {
+    let mut resume = ParentResume::empty();
+    unsafe { finish_child_for_exit_into(status, &mut resume)? };
+    Ok(resume)
+}
+
+#[cfg(any(not(test), feature = "host-test"))]
+pub unsafe fn finish_child_for_exit_into(
+    status: u32,
+    out: &mut ParentResume,
+) -> Result<(), ProcessSwitchError> {
     #[cfg(not(test))]
     {
-        return unsafe { finish_child_runtime(status) };
+        return unsafe { finish_child_runtime_into(status, out) };
     }
     #[cfg(test)]
     {
-        unsafe { PROCESS_TABLE.get().finish_child(status) }
+        *out = unsafe { PROCESS_TABLE.get().finish_child(status)? };
+        Ok(())
     }
 }
 
@@ -1446,7 +1476,10 @@ pub unsafe fn current_process_slot() -> u32 {
 }
 
 #[cfg(not(test))]
-unsafe fn finish_child_runtime(status: u32) -> Result<ParentResume, ProcessSwitchError> {
+unsafe fn finish_child_runtime_into(
+    status: u32,
+    out: &mut ParentResume,
+) -> Result<(), ProcessSwitchError> {
     let current_slot = unsafe { runtime_current_slot() };
     if current_slot == INIT_PROCESS_SLOT {
         return Err(ProcessSwitchError::NoRunningChild);
@@ -1469,7 +1502,7 @@ unsafe fn finish_child_runtime(status: u32) -> Result<ParentResume, ProcessSwitc
             parent_slot as u32,
         );
     }
-    Ok(ParentResume {
+    *out = ParentResume {
         id: ProcessId::from_slot(parent_slot),
         context: ProcessContext {
             entry_pc: frame.resume_pc,
@@ -1482,7 +1515,8 @@ unsafe fn finish_child_runtime(status: u32) -> Result<ParentResume, ProcessSwitc
         exited_address_space: exited_resources.address_space,
         exited_backing_pages: exited_resources.backing_pages,
         exited_heap_pages: exited_resources.heap_pages,
-    })
+    };
+    Ok(())
 }
 
 #[cfg(any(not(test), feature = "host-test"))]
@@ -1948,7 +1982,7 @@ unsafe fn write_runtime_word(address: *mut u32, value: u32) {
 }
 
 #[cfg(any(not(test), feature = "host-test"))]
-pub unsafe fn resume_parent_context(resume: ParentResume) -> ! {
+pub unsafe fn resume_parent_context(resume: &ParentResume) -> ! {
     #[cfg(not(test))]
     {
         let frame = k16_rt::TrapFrame::from(resume.frame);
@@ -2034,7 +2068,7 @@ unsafe fn runtime_foreground_slot_occupancy() -> [bool; FOREGROUND_PROCESS_SLOTS
 }
 
 fn trap_return_override_for_resume(
-    resume: ParentResume,
+    resume: &ParentResume,
 ) -> Result<TrapReturnOverride, ProcessSwitchError> {
     match resume.address_space {
         Some(address_space) => {
@@ -2839,7 +2873,7 @@ unsafe fn mmu0_set_trap_return_address_space(
     }
 }
 
-pub unsafe fn destroy_exited_address_space(resume: ParentResume) -> Result<(), ProcessLoadError> {
+pub unsafe fn destroy_exited_address_space(resume: &ParentResume) -> Result<(), ProcessLoadError> {
     if let Some(address_space) = resume.exited_address_space {
         unsafe { mmu0_destroy_address_space(address_space)? };
     }
@@ -4784,7 +4818,7 @@ mod tests {
         };
 
         assert_eq!(
-            trap_return_override_for_resume(resume),
+            trap_return_override_for_resume(&resume),
             Ok(TrapReturnOverride::Translated {
                 address_space: 7,
                 kernel_stack_top: 0x0001_d000,
@@ -4792,7 +4826,7 @@ mod tests {
         );
 
         assert_eq!(
-            trap_return_override_for_resume(ParentResume {
+            trap_return_override_for_resume(&ParentResume {
                 kernel_stack_top: None,
                 ..resume
             }),
@@ -5032,7 +5066,7 @@ mod tests {
             exited_heap_pages: None,
         };
 
-        unsafe { destroy_exited_address_space(resume) }.expect("destroy succeeds");
+        unsafe { destroy_exited_address_space(&resume) }.expect("destroy succeeds");
 
         let writes = crate::mmio::take_test_writes();
         assert_eq!(
