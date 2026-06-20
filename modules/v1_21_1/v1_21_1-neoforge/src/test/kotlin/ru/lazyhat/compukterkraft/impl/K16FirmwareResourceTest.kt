@@ -884,7 +884,10 @@ class K16FirmwareResourceTest {
         assertFalse(mainSource.contains("mod shell;"), "main.rs should not register the legacy shell module")
         assertFalse(mainSource.contains("shell::init();"), "kernel startup should not initialize the legacy shell module")
         assertTrue(Files.exists(Path.of("../../../rust/guest/k16-init/Cargo.toml")), "init should be a real launcher crate")
-        assertTrue(initSource.contains("process::run(\"/bin/shell.kx\")"), "init should hand off to the userland shell")
+        assertFalse(initSource.contains("process::run("), "init should not hide shell lifecycle behind synchronous run")
+        assertTrue(initSource.contains("process::spawn_with_args("), "init should spawn the userland shell")
+        assertTrue(initSource.contains("process::wait("), "init should wait for the userland shell")
+        assertTrue(initSource.contains("status.success()"), "init should distinguish clean shell exits from faults")
         assertFalse(initSource.contains("fn dispatch_command("), "interactive shell dispatch should not live in init")
         assertTrue(shellSource.contains("fn dispatch_command("), "userland shell should own command dispatch")
     }

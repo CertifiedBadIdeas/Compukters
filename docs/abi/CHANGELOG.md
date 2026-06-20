@@ -240,8 +240,9 @@
   waiting parent frame with the child status in `r0`. This remains cooperative:
   there is no scheduler, fork, pipe, or virtual-memory isolation.
 - Split bundled init from the interactive shell. `/bin/init.kx` is now a small
-  launcher program that calls `process::run("/bin/shell.kx")`; the interactive
-  shell is packaged separately as `/bin/shell.kx`.
+  supervisor that spawns `/bin/shell.kx`, waits for it, restarts clean shell
+  exits, and propagates non-zero shell status or launch/wait failures; the
+  interactive shell is packaged separately as `/bin/shell.kx`.
 - Added bounded-argv K16 child process launches. `RUN` keeps the existing
   `RUN(path, len, 0)` no-argument form and adds `RUN(request, len, 1)` for a
   bounded request block containing up to four argv byte strings. The kernel
