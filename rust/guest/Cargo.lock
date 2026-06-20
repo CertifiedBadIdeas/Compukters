@@ -151,6 +151,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "k16-user-fault-test"
+version = "0.1.0"
+dependencies = [
+ "kraft-std",
+]
+
+[[package]]
 name = "k16-write"
 version = "0.1.0"
 dependencies = [
