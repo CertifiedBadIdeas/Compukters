@@ -109,7 +109,6 @@ pub mod syscall {
     pub const RENAME: u32 = 21;
     pub const SPAWN: u32 = 22;
     pub const WAIT: u32 = 23;
-    pub const RUN_FORMAT_PATH: u32 = 0;
     pub const RUN_FORMAT_ARGV: u32 = 1;
     pub const RUN_ARGV_MAGIC: u32 = u32::from_le_bytes(*b"RARG");
     pub const SPAWN_ARGV_MAGIC: u32 = u32::from_le_bytes(*b"SPAW");

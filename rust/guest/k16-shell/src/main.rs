@@ -236,15 +236,6 @@ fn run_exec(
         must_write(stdout, b"ERR INVAL\n");
         return k16_abi::syscall::ERROR_INVALID;
     };
-    if args.is_empty() {
-        return match process::run(program_path) {
-            Ok(status) => {
-                write_child_exit_status(stdout, status.code());
-                status.code()
-            }
-            Err(error) => write_run_error(stdout, error),
-        };
-    }
 
     let raw_args = args.as_slice();
     let mut argv = [""; k16_abi::syscall::MAX_RUN_ARGS];

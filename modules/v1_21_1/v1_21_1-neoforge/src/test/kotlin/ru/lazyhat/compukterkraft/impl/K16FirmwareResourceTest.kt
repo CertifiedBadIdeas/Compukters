@@ -875,6 +875,7 @@ class K16FirmwareResourceTest {
     fun k16KernelLegacyShellPathIsRemovedFromCurrentSource() {
         val kernelSourceDir = Path.of("../../../rust/guest/k16-kernel/src")
         val mainSource = kernelSourceDir.resolve("main.rs").readText()
+        val syscallSource = kernelSourceDir.resolve("syscall.rs").readText()
         val initSource = Path.of("../../../rust/guest/k16-init/src/main.rs").readText()
         val shellSource = Path.of("../../../rust/guest/k16-shell/src/main.rs").readText()
 
@@ -888,6 +889,8 @@ class K16FirmwareResourceTest {
         assertTrue(initSource.contains("process::spawn_with_args("), "init should spawn the userland shell")
         assertTrue(initSource.contains("process::wait("), "init should wait for the userland shell")
         assertTrue(initSource.contains("status.success()"), "init should distinguish clean shell exits from faults")
+        assertFalse(shellSource.contains("process::run("), "shell should launch utilities through argv requests")
+        assertFalse(syscallSource.contains("abi_syscall::RUN_FORMAT_PATH"), "kernel should reject legacy path RUN format")
         assertFalse(initSource.contains("fn dispatch_command("), "interactive shell dispatch should not live in init")
         assertTrue(shellSource.contains("fn dispatch_command("), "userland shell should own command dispatch")
     }

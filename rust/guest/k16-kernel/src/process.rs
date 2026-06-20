@@ -3101,7 +3101,7 @@ impl<'a> RunArgvRequest<'a> {
             return Err(ProcessLoadError::InvalidPath);
         }
         let argc = read_request_u32(bytes, 8)? as usize;
-        if argc == 0 || argc > k16_abi::syscall::MAX_RUN_ARGS {
+        if argc > k16_abi::syscall::MAX_RUN_ARGS {
             return Err(ProcessLoadError::InvalidPath);
         }
         let mut arg_lengths = [0_usize; k16_abi::syscall::MAX_RUN_ARGS];
@@ -5270,6 +5270,19 @@ mod tests {
 
         assert_eq!(request.path, b"/bin/cat.kx");
         assert_eq!(request.args(), &[b"/etc/motd".as_slice(), b"-n".as_slice()]);
+    }
+
+    #[test]
+    fn run_argv_request_accepts_empty_argument_list() {
+        let bytes = [
+            b'R', b'A', b'R', b'G', 13, 0, 0, 0, 0, 0, 0, 0, b'/', b'b', b'i', b'n', b'/', b'u',
+            b'n', b'a', b'm', b'e', b'.', b'k', b'x',
+        ];
+
+        let request = RunArgvRequest::parse(&bytes).unwrap();
+
+        assert_eq!(request.path, b"/bin/uname.kx");
+        assert_eq!(request.args(), &[] as &[&[u8]]);
     }
 
     #[test]

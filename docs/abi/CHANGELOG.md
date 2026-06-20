@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- `RUN` now accepts only the structured argv request format
+  (`RUN_ARGV_MAGIC`) and `kraft-std` exposes only `process::run_with_args`.
+  The legacy raw-path `RUN(path, len, 0)` / `process::run(path)` launch path
+  was removed; zero-argument launches use the same argv request format with
+  `argc = 0`.
 - `WAIT(pid_or_zero, out_status_ptr)` now reports `ERROR_FAULT` to the
   waiting parent when the final exit-status write faults, instead of turning
   the fault into a kernel panic. The bundled syscall fault fixture now covers a
@@ -24,8 +29,8 @@
   `SPAWN_ARGV_MAGIC`, creates a direct child, and returns its PID without
   immediately entering it. `WAIT(pid_or_zero, out_status_ptr)` starts a ready
   direct child, writes its exit status to `out_status_ptr` when it exits, and
-  returns the reaped PID. `RUN` remains the synchronous compatibility path and
-  still returns child exit status directly.
+  returns the reaped PID. `RUN` remains the synchronous launch path and still
+  returns child exit status directly.
 - The K16 kernel now implements `RUN` through the same internal child
   creation and wait lifecycle as `SPAWN` plus `WAIT`. This preserves the
   guest-visible synchronous `RUN` ABI while keeping process setup on one kernel
@@ -73,7 +78,7 @@
   status `1` if any path failed. `rm`, `mkdir`, and `rmdir` now also preserve
   their existing per-path diagnostics while returning a failing child status
   when any path operation failed.
-- `kraft-std::process::run` and `run_with_args` now return
+- `kraft-std::process::run_with_args` returns
   `Result<process::ExitStatus, process::Error>` instead of exposing successful
   child exit statuses as raw `u32` values. `ExitStatus::code()` returns the
   child status word and `ExitStatus::success()` is true only for `0`; negative
@@ -243,9 +248,8 @@
   supervisor that spawns `/bin/shell.kx`, waits for it, restarts clean shell
   exits, and propagates non-zero shell status or launch/wait failures; the
   interactive shell is packaged separately as `/bin/shell.kx`.
-- Added bounded-argv K16 child process launches. `RUN` keeps the existing
-  `RUN(path, len, 0)` no-argument form and adds `RUN(request, len, 1)` for a
-  bounded request block containing up to four argv byte strings. The kernel
+- Added bounded-argv K16 child process launches. `RUN(request, len, 1)` accepts
+  a bounded request block containing up to four argv byte strings. The kernel
   copies argv entries into the child arena before the heap, enters the child
   with `argc` in `r1` and the argv table pointer in `r2`, and `kraft-std`
   exposes `process::run_with_args` plus a small `process::Argv` reader.
