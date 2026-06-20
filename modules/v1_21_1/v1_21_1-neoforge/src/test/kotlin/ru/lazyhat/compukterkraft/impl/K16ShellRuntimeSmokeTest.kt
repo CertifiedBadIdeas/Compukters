@@ -94,6 +94,26 @@ class K16ShellRuntimeSmokeTest {
                 catCommandIndex >= 0 && catOutputIndex > catCommandIndex && returnedPromptIndex > catOutputIndex
             }
 
+            dispatchText(device, "cp motd motd.copy\n")
+            waitForTerminal(device, "relative cp output and returned prompt") { terminal ->
+                val commandIndex = terminal.indexOf("K16> cp motd motd.copy")
+                val outputIndex =
+                    terminal.indexOf(
+                        "COPIED /etc/motd /etc/motd.copy",
+                        startIndex = commandIndex + "K16> cp motd motd.copy".length,
+                    )
+                val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex)
+                commandIndex >= 0 && outputIndex > commandIndex && returnedPromptIndex > outputIndex
+            }
+
+            dispatchText(device, "cat motd.copy\n")
+            waitForTerminal(device, "relative cat output for copied file and returned prompt") { terminal ->
+                val commandIndex = terminal.indexOf("K16> cat motd.copy")
+                val outputIndex = terminal.indexOf("K16 FS OK", startIndex = commandIndex + "K16> cat motd.copy".length)
+                val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex)
+                commandIndex >= 0 && outputIndex > commandIndex && returnedPromptIndex > outputIndex
+            }
+
             dispatchText(device, "cat motd motd\n")
             waitForTerminal(device, "multi-argv relative cat output and returned prompt") { terminal ->
                 val catCommandIndex = terminal.indexOf("K16> cat motd motd")
@@ -145,9 +165,7 @@ class K16ShellRuntimeSmokeTest {
 
             dispatchText(device, "pwd\n")
             waitForTerminal(device, "failed cd keeps pwd and returned prompt") { terminal ->
-                val secondPwdPromptIndex = terminal.indexOf("K16> pwd")
-                val thirdPwdPromptIndex = terminal.indexOf("K16> pwd", startIndex = secondPwdPromptIndex + "K16> pwd".length)
-                val pwdCommandIndex = terminal.indexOf("K16> pwd", startIndex = thirdPwdPromptIndex + "K16> pwd".length)
+                val pwdCommandIndex = terminal.lastIndexOf("K16> pwd")
                 val pwdOutputIndex = terminal.indexOf("/etc", startIndex = pwdCommandIndex + "K16> pwd".length)
                 val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = pwdOutputIndex)
                 pwdCommandIndex >= 0 && pwdOutputIndex > pwdCommandIndex && returnedPromptIndex > pwdOutputIndex
@@ -306,6 +324,55 @@ class K16ShellRuntimeSmokeTest {
                 val commandIndex = terminal.lastIndexOf("K16> stat /etc/user.txt")
                 val outputIndex =
                     terminal.indexOf("FILE 11 /etc/user.txt", startIndex = commandIndex + "K16> stat /etc/user.txt".length)
+                val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex)
+                commandIndex >= 0 && outputIndex > commandIndex && returnedPromptIndex > outputIndex
+            }
+
+            dispatchText(device, "cp /etc/user.txt /etc/user-copy.txt\n")
+            waitForTerminal(device, "cp output and returned prompt") { terminal ->
+                val commandIndex = terminal.lastIndexOf("K16> cp /etc/user.txt /etc/user-copy.txt")
+                val outputIndex =
+                    terminal.indexOf(
+                        "COPIED /etc/user.txt /etc/user-copy.txt",
+                        startIndex = commandIndex + "K16> cp /etc/user.txt /etc/user-copy.txt".length,
+                    )
+                val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex)
+                commandIndex >= 0 && outputIndex > commandIndex && returnedPromptIndex > outputIndex
+            }
+
+            dispatchText(device, "cat /etc/user-copy.txt\n")
+            waitForTerminal(device, "cat output for copied file and returned prompt") { terminal ->
+                val commandIndex = terminal.lastIndexOf("K16> cat /etc/user-copy.txt")
+                val outputIndex = terminal.indexOf("hello-world", startIndex = commandIndex + "K16> cat /etc/user-copy.txt".length)
+                val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex)
+                commandIndex >= 0 && outputIndex > commandIndex && returnedPromptIndex > outputIndex
+            }
+
+            dispatchText(device, "stat /etc/user-copy.txt\n")
+            waitForTerminal(device, "stat output for copied file and returned prompt") { terminal ->
+                val commandIndex = terminal.lastIndexOf("K16> stat /etc/user-copy.txt")
+                val outputIndex =
+                    terminal.indexOf("FILE 11 /etc/user-copy.txt", startIndex = commandIndex + "K16> stat /etc/user-copy.txt".length)
+                val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex)
+                commandIndex >= 0 && outputIndex > commandIndex && returnedPromptIndex > outputIndex
+            }
+
+            dispatchText(device, "cp /etc/user.txt\n")
+            waitForTerminal(device, "cp invalid usage error and returned prompt") { terminal ->
+                val commandIndex = terminal.lastIndexOf("K16> cp /etc/user.txt")
+                val outputIndex = terminal.indexOf("ERR INVAL", startIndex = commandIndex + "K16> cp /etc/user.txt".length)
+                val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex)
+                commandIndex >= 0 && outputIndex > commandIndex && returnedPromptIndex > outputIndex
+            }
+
+            dispatchText(device, "cp /etc/missing.txt /etc/missing-copy.txt\n")
+            waitForTerminal(device, "cp missing source error and returned prompt") { terminal ->
+                val commandIndex = terminal.lastIndexOf("K16> cp /etc/missing.txt /etc/missing-copy.txt")
+                val outputIndex =
+                    terminal.indexOf(
+                        "ERR NOENT /etc/missing.txt",
+                        startIndex = commandIndex + "K16> cp /etc/missing.txt /etc/missing-copy.txt".length,
+                    )
                 val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex)
                 commandIndex >= 0 && outputIndex > commandIndex && returnedPromptIndex > outputIndex
             }
