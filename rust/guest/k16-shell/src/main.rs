@@ -4,8 +4,7 @@
 use core::panic::PanicInfo;
 
 use k16_shell::{
-    resolve_executable_path, should_resolve_exec_arg, Command, CommandArgs, InputLine, PathBuffer,
-    WorkingDirectory,
+    resolve_executable_path, Command, CommandArgs, InputLine, PathBuffer, WorkingDirectory,
 };
 use kraft_std::prelude::*;
 
@@ -249,7 +248,7 @@ fn run_exec(
     let mut index = 0;
     while index < raw_args.len() {
         let raw_arg = raw_args[index];
-        if should_resolve_exec_arg(name, raw_args, index) {
+        if coreutils::should_resolve_path_arg(name, raw_args, index) {
             if cwd.resolve_into(raw_arg, &mut arg_paths[index]).is_err() {
                 must_write(stdout, b"ERR INVAL\n");
                 return k16_abi::syscall::ERROR_INVALID;
@@ -260,7 +259,7 @@ fn run_exec(
     let mut index = 0;
     while index < raw_args.len() {
         let raw_arg = raw_args[index];
-        if should_resolve_exec_arg(name, raw_args, index) {
+        if coreutils::should_resolve_path_arg(name, raw_args, index) {
             let Ok(arg) = arg_paths[index].as_str() else {
                 must_write(stdout, b"ERR INVAL\n");
                 return k16_abi::syscall::ERROR_INVALID;

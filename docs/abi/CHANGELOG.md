@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- `kraft-std` now exposes the bundled coreutils path-argument resolution policy
+  used by the K16 shell when preparing `RUN` argv paths. The shell no longer
+  owns the per-command filesystem argument table directly.
 - `kraft-std` now exposes shared K16 syscall/fs status-name helpers. Bundled
   filesystem utilities and the shell use the shared names for diagnostics while
   preserving each command's existing generic fallback label for unknown errors.

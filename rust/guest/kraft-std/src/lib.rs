@@ -516,6 +516,27 @@ pub mod status {
     }
 }
 
+pub mod coreutils {
+    #[inline(always)]
+    pub fn should_resolve_path_arg(command: &[u8], args: &[&[u8]], index: usize) -> bool {
+        match command {
+            b"ls" | b"cat" | b"cp" | b"mv" | b"stat" | b"rm" | b"mkdir" | b"rmdir" => true,
+            b"write" => write_path_arg_index(args) == Some(index),
+            _ => false,
+        }
+    }
+
+    fn write_path_arg_index(args: &[&[u8]]) -> Option<usize> {
+        if args.len() == 2 {
+            Some(0)
+        } else if args.len() == 3 && args[0] == b"--append" {
+            Some(1)
+        } else {
+            None
+        }
+    }
+}
+
 pub mod process {
     use core::{ptr, slice};
 
@@ -685,5 +706,5 @@ pub mod process {
 }
 
 pub mod prelude {
-    pub use crate::{debug, fs, heap, io, process, status, thread, time};
+    pub use crate::{coreutils, debug, fs, heap, io, process, status, thread, time};
 }
