@@ -18,6 +18,7 @@ const RETURN_REGISTER: u8 = 0;
 const ARG0_REGISTER: u8 = 1;
 const ARG1_REGISTER: u8 = 2;
 const ARG2_REGISTER: u8 = 3;
+const ALIGNMENT_PAD_REGISTER: u8 = 4;
 const SYSCALL_ARG2_REGISTER: u8 = 4;
 
 const TRAP_FRAME_RESUME_PC_OFFSET: u32 = 16 * 4;
@@ -47,11 +48,27 @@ pub fn k16_startup_object_for_target(target: K16ArtifactTarget) -> Result<Vec<u8
     }
     let main_relocation_offset =
         text.len()
-            .checked_add(8)
+            .checked_add(14)
             .ok_or_else(|| "K16 startup relocation offset overflows".to_string())? as u32;
     emit_const32(&mut text, ARG2_REGISTER, 0);
+    emit_word(&mut text, const4(ALIGNMENT_PAD_REGISTER, 4));
+    let reserve_alignment_pad = sub(
+        STACK_POINTER_REGISTER,
+        STACK_POINTER_REGISTER,
+        ALIGNMENT_PAD_REGISTER,
+    );
+    emit_word(&mut text, reserve_alignment_pad[0]);
+    emit_word(&mut text, reserve_alignment_pad[1]);
     emit_const32(&mut text, SCRATCH_REGISTER, 0);
     emit_word(&mut text, call(SCRATCH_REGISTER));
+    emit_word(&mut text, const4(ALIGNMENT_PAD_REGISTER, 4));
+    let release_alignment_pad = add(
+        STACK_POINTER_REGISTER,
+        STACK_POINTER_REGISTER,
+        ALIGNMENT_PAD_REGISTER,
+    );
+    emit_word(&mut text, release_alignment_pad[0]);
+    emit_word(&mut text, release_alignment_pad[1]);
     emit_const32(&mut text, ARG0_REGISTER, k16_abi::syscall::EXIT);
     emit_const32(&mut text, SCRATCH_REGISTER, 0);
     let copy_return_to_syscall_arg0 = add(2, RETURN_REGISTER, SCRATCH_REGISTER);
@@ -672,6 +689,10 @@ fn const4(dst: u8, value: u8) -> u16 {
 
 fn add(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
     alu_rrr(dst, 0x0, lhs, rhs)
+}
+
+fn sub(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
+    alu_rrr(dst, 0x1, lhs, rhs)
 }
 
 fn alu_rrr(dst: u8, subop: u8, lhs: u8, rhs: u8) -> [u16; 2] {

@@ -80,7 +80,7 @@ fn boot_handoff_k16_from_ram_inner(
 }
 
 fn validate_stack_top(stack_top: u32, ram_len: usize) -> Result<(), BootHandoffError> {
-    if stack_top % 4 != 0 {
+    if stack_top % 8 != 0 {
         return Err(BootHandoffError::StackTopMisaligned { stack_top });
     }
     let stack_top = usize::try_from(stack_top)

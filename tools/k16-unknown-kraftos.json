@@ -7,7 +7,7 @@
   "target-endian": "little",
   "target-pointer-width": 32,
   "target-c-int-width": 32,
-  "data-layout": "e-p:32:32-i32:32-n32",
+  "data-layout": "e-p:32:32-i32:32-i64:64-n32-S64",
   "panic-strategy": "abort",
   "relocation-model": "static",
   "code-model": "small",

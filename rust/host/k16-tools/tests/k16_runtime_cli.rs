@@ -205,6 +205,64 @@ fn k16_run_reports_startup_exit_status_for_standalone_program() {
 }
 
 #[test]
+fn k16_runtime_startup_enters_main_with_eight_byte_aligned_stack() {
+    let startup_path = temp_file("run-startup-aligned.o");
+    let main_path = temp_file("run-main-stack-alignment.o");
+    let output_path = temp_file("run-program-stack-alignment.k16e");
+    fs::write(&main_path, k16_main_returning_stack_alignment_object()).expect("main object writes");
+
+    let runtime_output = Command::new(k16_binary())
+        .args([
+            "runtime",
+            "k16-startup",
+            "-o",
+            startup_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("k16 runtime runs");
+    assert!(
+        runtime_output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&runtime_output.stderr)
+    );
+
+    let link_output = Command::new(k16_binary())
+        .args([
+            "link",
+            "--target",
+            "program",
+            startup_path.to_str().unwrap(),
+            main_path.to_str().unwrap(),
+            "-o",
+            output_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("k16 link runs");
+    assert!(
+        link_output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&link_output.stderr)
+    );
+
+    let run_output = Command::new(k16_binary())
+        .args(["run", output_path.to_str().unwrap()])
+        .output()
+        .expect("k16 run runs");
+
+    assert!(
+        run_output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&run_output.stderr)
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&run_output.stdout),
+        "signal=halt exit_status=0 debug_bytes=\n"
+    );
+    let stderr = String::from_utf8_lossy(&run_output.stderr);
+    assert!(stderr.is_empty(), "stderr: {stderr}");
+}
+
+#[test]
 fn k16_runtime_startup_does_not_hide_missing_helper_symbols() {
     let startup_path = temp_file("startup-helper-missing.o");
     let main_path = temp_file("main-needs-helper.o");
@@ -2595,6 +2653,14 @@ fn k16_main_returning_42_object() -> Vec<u8> {
     k16_object("main", &[0x01, 0xe0, 42, 0, 0, 0, 0x00, 0x90], None)
 }
 
+fn k16_main_returning_stack_alignment_object() -> Vec<u8> {
+    let mut words = Vec::new();
+    words.push(const4(1, 7));
+    words.extend(and(0, 15, 1));
+    words.push(ret());
+    k16_object("main", &words_to_bytes(&words), None)
+}
+
 fn k16_main_calling_undefined_helper(helper: &str) -> Vec<u8> {
     k16_object(
         "main",
@@ -2655,9 +2721,13 @@ fn k16_startup_with_argv_object(args: &[&str]) -> Vec<u8> {
     let argv_table_relocation_offset = words.len() as u32 * 2 + 2;
     words.extend(const32(2, 0));
     words.extend(const32(3, 0));
+    words.push(const4(4, 4));
+    words.extend(sub(15, 15, 4));
     let main_relocation_offset = words.len() as u32 * 2 + 2;
     words.extend(const32(14, 0));
     words.push(call(14));
+    words.push(const4(4, 4));
+    words.extend(add(15, 15, 4));
     words.extend(const32(1, k16_abi::syscall::EXIT));
     words.extend(const32(14, 0));
     words.extend(add(2, 0, 14));
@@ -3129,6 +3199,20 @@ fn pop_scratch_register() -> Vec<u16> {
 fn add(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
     [
         0x2000 | (u16::from(dst) << 8),
+        (u16::from(lhs) << 4) | u16::from(rhs),
+    ]
+}
+
+fn sub(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
+    [
+        0x2001 | (u16::from(dst) << 8),
+        (u16::from(lhs) << 4) | u16::from(rhs),
+    ]
+}
+
+fn and(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
+    [
+        0x2002 | (u16::from(dst) << 8),
         (u16::from(lhs) << 4) | u16::from(rhs),
     ]
 }

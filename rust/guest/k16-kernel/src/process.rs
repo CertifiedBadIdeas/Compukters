@@ -1,7 +1,7 @@
 use core::cell::UnsafeCell;
 
 const LOAD_ALIGNMENT: u32 = 2;
-const STACK_ALIGNMENT: u32 = 4;
+const STACK_ALIGNMENT: u32 = 8;
 const HEAP_ALIGNMENT: u32 = 4;
 const VM_PAGE_SIZE: u32 = 4096;
 const TRANSLATED_USER_STACK_BYTES: u32 = VM_PAGE_SIZE * 2;

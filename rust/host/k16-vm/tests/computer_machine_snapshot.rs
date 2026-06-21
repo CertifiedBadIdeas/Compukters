@@ -554,7 +554,10 @@ fn computer_machine_snapshot_v1_restores_timer0_game_ticks() {
     machine.advance_game_tick();
     machine.advance_game_tick();
 
-    let snapshot = machine.snapshot_v1().expect("snapshot encodes");
+    let snapshot = snapshot_with_timer0_game_ticks(
+        &machine.snapshot_v1().expect("snapshot encodes"),
+        0x0000_0001_0000_002a,
+    );
     let mut restored =
         ComputerMachine::restore_snapshot_v1(ComputerMachineProfile::computer_v1(1024), &snapshot)
             .expect("snapshot restores");
@@ -563,7 +566,13 @@ fn computer_machine_snapshot_v1_restores_timer0_game_ticks() {
         restored
             .bus_load_i32(ComputerMachine::TIMER0_GAME_TICKS_LOW)
             .unwrap(),
-        2
+        42
+    );
+    assert_eq!(
+        restored
+            .bus_load_i32(ComputerMachine::TIMER0_GAME_TICKS_HIGH)
+            .unwrap(),
+        1
     );
 
     restored.advance_game_tick();
@@ -572,7 +581,13 @@ fn computer_machine_snapshot_v1_restores_timer0_game_ticks() {
         restored
             .bus_load_i32(ComputerMachine::TIMER0_GAME_TICKS_LOW)
             .unwrap(),
-        3
+        43
+    );
+    assert_eq!(
+        restored
+            .bus_load_i32(ComputerMachine::TIMER0_GAME_TICKS_HIGH)
+            .unwrap(),
+        1
     );
 }
 
@@ -749,4 +764,33 @@ fn syscall(register: u16) -> u16 {
 
 fn iret() -> u16 {
     0x0004
+}
+
+fn snapshot_with_timer0_game_ticks(snapshot: &[u8], game_ticks: u64) -> Vec<u8> {
+    const TIMER0_DEVICE_KIND: u32 = 6;
+    const DEVICE_HEADER_SIZE: usize = 8;
+    const TIMER0_PAYLOAD_SIZE: usize = 8;
+
+    let mut edited = snapshot.to_vec();
+    assert_eq!(&edited[0..8], COMPUTER_SNAPSHOT_V1_MAGIC);
+    let header_size = u16::from_le_bytes([edited[0x0a], edited[0x0b]]) as usize;
+    assert_eq!(header_size, COMPUTER_SNAPSHOT_V1_HEADER_SIZE);
+    let ram_size = u64::from_le_bytes(edited[0x10..0x18].try_into().unwrap()) as usize;
+    let cpu_count = u32::from_le_bytes(edited[0x18..0x1c].try_into().unwrap()) as usize;
+    let device_count = u32::from_le_bytes(edited[0x20..0x24].try_into().unwrap()) as usize;
+    let mut offset = header_size + ram_size + cpu_count * COMPUTER_SNAPSHOT_V1_K16_CPU_RECORD_SIZE;
+    for _ in 0..device_count {
+        let device_kind = u32::from_le_bytes(edited[offset..offset + 4].try_into().unwrap());
+        let payload_size =
+            u32::from_le_bytes(edited[offset + 4..offset + 8].try_into().unwrap()) as usize;
+        let payload_offset = offset + DEVICE_HEADER_SIZE;
+        if device_kind == TIMER0_DEVICE_KIND {
+            assert_eq!(payload_size, TIMER0_PAYLOAD_SIZE);
+            edited[payload_offset..payload_offset + TIMER0_PAYLOAD_SIZE]
+                .copy_from_slice(&game_ticks.to_le_bytes());
+            return edited;
+        }
+        offset = payload_offset + payload_size;
+    }
+    panic!("K16SNAP did not contain a timer0 device record");
 }
