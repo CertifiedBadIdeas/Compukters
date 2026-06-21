@@ -234,6 +234,21 @@ class K16FirmwareResourceTest {
     }
 
     @Test
+    fun bundledK16UserlandSizeReportTaskUsesProductionMaps() {
+        val source = Path.of("build.gradle.kts").readText()
+
+        assertTrue(source.contains("tasks.register(\"reportK16UserlandSize\")"))
+        assertTrue(source.contains("description = \"Reports duplicated retained-section size across bundled K16 userland maps.\""))
+        assertTrue(source.contains("args.add(\"size-report\")"))
+        assertTrue(source.contains("dependsOn(compileK16SystemInit, compileK16SystemShell, compileK16SystemUname, compileK16SystemLs, compileK16SystemCat, compileK16SystemCp, compileK16SystemMv, compileK16SystemStat, compileK16SystemWrite, compileK16SystemRm, compileK16SystemMkdir, compileK16SystemRmdir)"))
+        assertTrue(source.contains("k16UserlandMapArtifacts.forEach { mapArtifact ->"))
+        assertTrue(source.contains("val stdout = process.inputStream.bufferedReader().readText()"))
+        assertTrue(source.contains("print(stdout)"))
+        assertFalse(source.contains("k16AllocTestMapArtifact.get().absolutePath"), "production report should exclude dev-only test maps")
+        assertFalse(source.contains("k16HostedCatMapArtifact.get().absolutePath"), "production report should exclude hosted proof maps")
+    }
+
+    @Test
     fun bundledK16BiosFlashResourceExists() {
         val bytes =
             K16BiosFlashWorkspace.loadBiosFlashResource(

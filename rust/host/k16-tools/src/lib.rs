@@ -9,4 +9,5 @@ pub mod k16fs;
 pub mod k16fs_volume;
 pub mod object_link;
 pub mod partition;
+pub mod size_report;
 pub mod volume;

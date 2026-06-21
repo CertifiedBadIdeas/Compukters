@@ -1,5 +1,5 @@
 use crate::artifact::K16ArtifactTarget;
-use crate::{inspect, k16_disasm, k16_runtime, k16fs, object_link, volume};
+use crate::{inspect, k16_disasm, k16_runtime, k16fs, object_link, size_report, volume};
 use k16_vm::computer_machine::{decode_snapshot_v1, ComputerCpuSnapshotRecord};
 use k16_vm::k16::K16Signal;
 use k16_vm::k16_computer::K16ComputerHandle;
@@ -20,6 +20,7 @@ pub fn run_k16_cli(args: Vec<String>) -> Result<(), String> {
         "run-bios" => run_bios(&args[1..]),
         "disasm" | "disassemble" => run_disasm(&args[1..]),
         "inspect" => run_inspect(&args[1..]),
+        "size-report" => run_size_report(&args[1..]),
         "fs" => run_fs(&args[1..]),
         "volume" => run_volume(&args[1..]),
         _ => usage_error(),
@@ -27,7 +28,7 @@ pub fn run_k16_cli(args: Vec<String>) -> Result<(), String> {
 }
 
 fn usage_error() -> Result<(), String> {
-    Err("usage: k16 link [--target <boot|kernel|program|program-dynamic>] <input.ko>... -o <output.kx>\n       k16 runtime <k16-startup|k16-memory-helpers|k16-cpu-helpers> [--target <program|program-dynamic>] -o <output.ko>\n       k16 run <program.kx>\n       k16 run-bios <bios.kflash>\n       k16 disasm --target <bios|boot|kernel|program|program-dynamic> [--start <pc>] [--count <instructions>] <input>\n       k16 inspect <blob>\n       k16 volume <create|init|put-boot|put-kernel> ...\n       k16 fs <filesystem> ...".to_string())
+    Err("usage: k16 link [--target <boot|kernel|program|program-dynamic>] <input.ko>... -o <output.kx>\n       k16 runtime <k16-startup|k16-memory-helpers|k16-cpu-helpers> [--target <program|program-dynamic>] -o <output.ko>\n       k16 run <program.kx>\n       k16 run-bios <bios.kflash>\n       k16 disasm --target <bios|boot|kernel|program|program-dynamic> [--start <pc>] [--count <instructions>] <input>\n       k16 inspect <blob>\n       k16 size-report <map>...\n       k16 volume <create|init|put-boot|put-kernel> ...\n       k16 fs <filesystem> ...".to_string())
 }
 
 fn run_program(args: &[String]) -> Result<(), String> {
@@ -114,6 +115,25 @@ fn run_inspect(args: &[String]) -> Result<(), String> {
     let bytes =
         fs::read(&args[0]).map_err(|error| format!("failed to read {}: {error}", args[0]))?;
     print!("{}", inspect::inspect_blob(&bytes)?);
+    Ok(())
+}
+
+fn run_size_report(args: &[String]) -> Result<(), String> {
+    if args.is_empty() {
+        return size_report_usage_error();
+    }
+    let mut maps = Vec::new();
+    for path in args {
+        let text =
+            fs::read_to_string(path).map_err(|error| format!("failed to read {path}: {error}"))?;
+        let program = Path::new(path)
+            .file_stem()
+            .and_then(|name| name.to_str())
+            .ok_or_else(|| format!("failed to derive program name from {path}"))?;
+        maps.push(size_report::parse_link_map(program, &text)?);
+    }
+    let report = size_report::build_size_report(maps);
+    print!("{}", size_report::format_size_report(&report));
     Ok(())
 }
 
@@ -737,6 +757,10 @@ fn disasm_usage_message() -> String {
 
 fn inspect_usage_error() -> Result<(), String> {
     Err("usage: k16 inspect <blob>".to_string())
+}
+
+fn size_report_usage_error() -> Result<(), String> {
+    Err("usage: k16 size-report <map>...".to_string())
 }
 
 fn volume_usage_error() -> Result<(), String> {

@@ -221,6 +221,21 @@ val k16SyscallFaultTestMapArtifact =
     k16SyscallFaultTestArtifact.map { it.asFile.resolveSibling("${it.asFile.nameWithoutExtension}.map") }
 val k16UserFaultTestMapArtifact =
     k16UserFaultTestArtifact.map { it.asFile.resolveSibling("${it.asFile.nameWithoutExtension}.map") }
+val k16UserlandMapArtifacts =
+    listOf(
+        k16InitMapArtifact,
+        k16ShellMapArtifact,
+        k16UnameMapArtifact,
+        k16LsMapArtifact,
+        k16CatMapArtifact,
+        k16CpMapArtifact,
+        k16MvMapArtifact,
+        k16StatMapArtifact,
+        k16WriteMapArtifact,
+        k16RmMapArtifact,
+        k16MkdirMapArtifact,
+        k16RmdirMapArtifact,
+    )
 val k16SystemStorage0Resource = generatedK16FirmwareResources.map { it.file("firmware/k16-system-storage0.kv") }
 val k16DevelopmentStorage0Resource =
     generatedK16FirmwareTestResources.map { it.file("firmware/k16-system-storage0-dev.kv") }
@@ -922,6 +937,36 @@ val compileK16SystemRmdir =
                 output = k16RmdirArtifact.get().asFile,
                 mapOutput = k16RmdirMapArtifact.get(),
             )
+        }
+    }
+
+val reportK16UserlandSize =
+    tasks.register("reportK16UserlandSize") {
+        description = "Reports duplicated retained-section size across bundled K16 userland maps."
+        group = "k16"
+        inputs.files(k16UserlandMapArtifacts)
+        dependsOn(compileK16SystemInit, compileK16SystemShell, compileK16SystemUname, compileK16SystemLs, compileK16SystemCat, compileK16SystemCp, compileK16SystemMv, compileK16SystemStat, compileK16SystemWrite, compileK16SystemRm, compileK16SystemMkdir, compileK16SystemRmdir)
+        dependsOn(rootProject.tasks.named("prepareK16Toolchain"))
+
+        doLast {
+            val toolchain = resolveK16Toolchain()
+            val args = mutableListOf(toolchain.cli.absolutePath)
+            args.add("size-report")
+            k16UserlandMapArtifacts.forEach { mapArtifact ->
+                args.add(mapArtifact.get().absolutePath)
+            }
+            val processBuilder =
+                ProcessBuilder(args)
+                    .directory(projectDir)
+            val process = processBuilder.start()
+            val stdout = process.inputStream.bufferedReader().readText()
+            val stderr = process.errorStream.bufferedReader().readText()
+            val exitCode = process.waitFor()
+            print(stdout)
+            print(stderr)
+            check(exitCode == 0) {
+                "K16 userland size report failed with exit code $exitCode"
+            }
         }
     }
 
