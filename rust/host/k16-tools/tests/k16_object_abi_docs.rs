@@ -212,6 +212,50 @@ fn k16_object_abi_docs_define_shared_cpu_helper_format_boundary() {
 }
 
 #[test]
+fn k16e_docs_define_shared_object_v0_boundary() {
+    let docs = normalized_doc("docs/abi/k16e-v1.md");
+
+    for required in [
+        "K16E v4 shared objects are the first shared-library ABI container",
+        "abi_kind 4 (shared-object)",
+        "section_count 3",
+        "section 2 kind 5 (exports)",
+        "Each export record is 8 bytes",
+        "name_offset",
+        "K16E shared object v0 does not define imports",
+        "The kernel loader must map executable/read-only shared pages separately from per-process writable data",
+        "The old K16E v3 CPU helper runtime requirement remains a narrow experiment and is superseded as the main implementation path by this shared object ABI",
+    ] {
+        assert!(
+            docs.contains(required),
+            "K16E shared object docs must contain `{required}`"
+        );
+    }
+}
+
+#[test]
+fn k16e_docs_define_imported_dynamic_program_v0_boundary() {
+    let docs = normalized_doc("docs/abi/k16e-v1.md");
+
+    for required in [
+        "K16E v5 imported dynamic programs extend v2 with shared-library dependency metadata",
+        "section 2 kind 6 (needed libraries)",
+        "section 3 kind 7 (import relocations)",
+        "Each import relocation record is 16 bytes",
+        "library_index",
+        "symbol_name_offset",
+        "Needed library names are UTF-8 and NUL-terminated",
+        "K16E v5 does not define the shared object search path",
+        "A loader must reject missing needed libraries, missing exported symbols, unsupported import relocation kinds, out-of-range library indexes, and malformed import string tables",
+    ] {
+        assert!(
+            docs.contains(required),
+            "K16E imported dynamic program docs must contain `{required}`"
+        );
+    }
+}
+
+#[test]
 fn active_abi_docs_use_k16_for_machine_tooling_commands() {
     let docs = [
         normalized_doc("docs/abi/CHANGELOG.md"),

@@ -68,9 +68,10 @@ fn inspect_k16fs(bytes: &[u8]) -> Result<String, String> {
 fn inspect_k16e(bytes: &[u8]) -> Result<String, String> {
     match k16e_version(bytes)? {
         k16e::K16E_VERSION => inspect_fixed_k16e(bytes),
-        k16e::K16E_DYNAMIC_VERSION | k16e::K16E_DYNAMIC_RUNTIME_VERSION => {
-            inspect_dynamic_k16e(bytes)
-        }
+        k16e::K16E_DYNAMIC_VERSION
+        | k16e::K16E_DYNAMIC_RUNTIME_VERSION
+        | k16e::K16E_DYNAMIC_IMPORTS_VERSION => inspect_dynamic_k16e(bytes),
+        k16e::K16E_SHARED_OBJECT_VERSION => inspect_shared_object_k16e(bytes),
         version => Err(format!("unsupported K16E version {version}")),
     }
 }
@@ -94,6 +95,34 @@ fn inspect_dynamic_k16e(bytes: &[u8]) -> Result<String, String> {
         .checked_mul(k16e::K16E_RELOCATION_RECORD_SIZE as usize)
         .ok_or_else(|| "K16E relocation byte count overflows".to_string())?;
     let Some(cpu_helper_runtime) = program.cpu_helper_runtime else {
+        if !program.needed_libraries.is_empty() || !program.import_relocations.is_empty() {
+            let import_bytes = program
+                .import_relocations
+                .iter()
+                .try_fold(0usize, |total, relocation| {
+                    total
+                        .checked_add(k16e::K16E_IMPORT_RELOCATION_RECORD_SIZE as usize)
+                        .and_then(|value| value.checked_add(relocation.symbol.len()))
+                        .and_then(|value| value.checked_add(1))
+                })
+                .ok_or_else(|| "K16E import relocation byte count overflows".to_string())?;
+            let import_bytes = if import_bytes % 2 == 0 {
+                import_bytes
+            } else {
+                import_bytes + 1
+            };
+            return Ok(format!(
+                "kind=K16E\nK16E abi=program dynamic=true entry_offset={:#010x} payload_bytes={} memory_bytes={} relocations={} relocation_bytes={} needed={} imports={} import_bytes={}\n",
+                program.entry_offset,
+                program.payload.len(),
+                program.memory_size,
+                program.relocations.len(),
+                relocation_bytes,
+                program.needed_libraries.len(),
+                program.import_relocations.len(),
+                import_bytes
+            ));
+        }
         return Ok(format!(
             "kind=K16E\nK16E abi=program dynamic=true entry_offset={:#010x} payload_bytes={} memory_bytes={} relocations={} relocation_bytes={}\n",
             program.entry_offset,
@@ -122,11 +151,38 @@ fn inspect_dynamic_k16e(bytes: &[u8]) -> Result<String, String> {
     ))
 }
 
+fn inspect_shared_object_k16e(bytes: &[u8]) -> Result<String, String> {
+    let shared = k16e::decode_k16_shared_object(bytes)?;
+    let export_bytes = shared
+        .exports
+        .iter()
+        .try_fold(0usize, |total, export| {
+            total
+                .checked_add(k16e::K16E_SHARED_EXPORT_RECORD_SIZE as usize)
+                .and_then(|value| value.checked_add(export.name.len()))
+                .and_then(|value| value.checked_add(1))
+        })
+        .ok_or_else(|| "K16E shared export byte count overflows".to_string())?;
+    let export_bytes = if export_bytes % 2 == 0 {
+        export_bytes
+    } else {
+        export_bytes + 1
+    };
+    Ok(format!(
+        "kind=K16E\nK16E abi=shared-object dynamic=true payload_bytes={} memory_bytes={} exports={} export_bytes={}\n",
+        shared.payload.len(),
+        shared.memory_size,
+        shared.exports.len(),
+        export_bytes
+    ))
+}
+
 fn k16e_abi_name(abi_kind: k16e::K16eAbiKind) -> &'static str {
     match abi_kind {
         k16e::K16eAbiKind::Bootloader => "bootloader",
         k16e::K16eAbiKind::Kernel => "kernel",
         k16e::K16eAbiKind::Program => "program",
+        k16e::K16eAbiKind::SharedObject => "shared-object",
     }
 }
 

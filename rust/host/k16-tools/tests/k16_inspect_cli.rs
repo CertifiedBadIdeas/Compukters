@@ -197,6 +197,77 @@ fn k16_inspect_identifies_dynamic_k16e_shared_cpu_helper_metadata() {
 }
 
 #[test]
+fn k16_inspect_identifies_shared_object_exports() {
+    let path = temp_file("libk16rt.kso");
+    fs::write(
+        &path,
+        k16e::encode_k16_shared_object(
+            &[0x01, 0x00, 0x02, 0x00],
+            8,
+            &[k16e::K16eSharedExport {
+                name: "k16rt.syscall0".to_string(),
+                offset: 0,
+            }],
+        )
+        .expect("shared object K16E encodes"),
+    )
+    .expect("shared object K16E writes");
+
+    let output = Command::new(k16_binary())
+        .args(["inspect", path.to_str().unwrap()])
+        .output()
+        .expect("k16 inspect shared object K16E runs");
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        String::from_utf8(output.stdout).expect("shared object K16E stdout is UTF-8"),
+        "kind=K16E\nK16E abi=shared-object dynamic=true payload_bytes=4 memory_bytes=8 exports=1 export_bytes=24\n"
+    );
+}
+
+#[test]
+fn k16_inspect_identifies_dynamic_k16e_import_metadata() {
+    let path = temp_file("dynamic-imports.kx");
+    fs::write(
+        &path,
+        k16e::encode_dynamic_k16_program_with_imports(
+            &[0x01, 0x00, 0x02, 0x00],
+            8,
+            0,
+            &[],
+            &["libk16rt.so".to_string()],
+            &[k16e::K16eImportRelocation {
+                offset: 0,
+                kind: k16e::K16eRelocationKind::Call32,
+                library_index: 0,
+                symbol: "k16rt.syscall0".to_string(),
+            }],
+        )
+        .expect("dynamic imported K16E encodes"),
+    )
+    .expect("dynamic imported K16E writes");
+
+    let output = Command::new(k16_binary())
+        .args(["inspect", path.to_str().unwrap()])
+        .output()
+        .expect("k16 inspect dynamic imported K16E runs");
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        String::from_utf8(output.stdout).expect("dynamic imported K16E stdout is UTF-8"),
+        "kind=K16E\nK16E abi=program dynamic=true entry_offset=0x00000000 payload_bytes=4 memory_bytes=8 relocations=0 relocation_bytes=0 needed=1 imports=1 import_bytes=32\n",
+    );
+}
+
+#[test]
 fn k16_inspect_rejects_unknown_blob_without_fallback() {
     let path = temp_file("unknown.bin");
     fs::write(&path, b"not a k16 blob").expect("unknown blob writes");
