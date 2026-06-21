@@ -9,8 +9,6 @@ use kraft_std::prelude::*;
 
 const PROMPT: &[u8] = b"K16> ";
 const NEWLINE: &[u8] = b"\n";
-const HELP: &[u8] =
-    b"HELP\nCLEAR\nPWD\nCD [PATH]\nECHO\nTICKS\nSTATUS\nEXIT [CODE]\nUNAME\nLS [PATH...]\nCAT <PATH...>\nCP <SRC> <DST>\nMV <SRC> <DST>\nSTAT <PATH...>\nWRITE [--append] <PATH> <TEXT>\nRM <PATH...>\nMKDIR <PATH...>\nRMDIR <PATH...>\nALLOC\n";
 const BIN_PREFIX: &[u8] = b"/bin/";
 const PROGRAM_SUFFIX: &[u8] = b".kx";
 const ALLOC_ALIAS: &[u8] = b"alloc";
@@ -114,10 +112,6 @@ fn dispatch_command(
         Command::Invalid => {
             must_write(stdout, b"ERR INVAL\n");
             *last_status = k16_abi::syscall::ERROR_INVALID;
-        }
-        Command::Help => {
-            must_write(stdout, HELP);
-            *last_status = k16_abi::syscall::STATUS_OK;
         }
         Command::Clear => {
             must_write(stdout, b"\x0c");

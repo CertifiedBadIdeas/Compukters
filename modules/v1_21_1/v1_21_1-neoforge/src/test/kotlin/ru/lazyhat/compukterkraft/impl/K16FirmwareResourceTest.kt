@@ -695,9 +695,8 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("dispatch_command("))
         assertTrue(source.contains("arg_paths"))
         assertTrue(source.contains("const PROMPT: &[u8] = b\"K16> \""))
-        assertTrue(source.contains("const HELP: &[u8]"), "shell should define help text")
-        assertTrue(source.contains("PWD\\nCD [PATH]"), "help should list cwd builtins")
-        assertTrue(source.contains("LS [PATH...]\\nCAT <PATH...>\\nSTAT <PATH...>"), "help should list filesystem utilities")
+        assertFalse(source.contains("const HELP: &[u8]"), "shell should not carry built-in help text")
+        assertFalse(source.contains("Command::Help"), "help should resolve through generic executable dispatch")
         assertTrue(source.contains("run_pwd(stdout, cwd)"))
         assertTrue(source.contains("run_cd(stdout, cwd, path_buffer, path)"))
         assertTrue(source.contains("run_ticks(stdout)"))
@@ -1039,14 +1038,12 @@ class K16FirmwareResourceTest {
         assertTrue(shellLibSource.contains("Command::Cd("), "shell should classify cd with an optional path argument")
         assertTrue(shellLibSource.contains("Command::Exit("), "shell should classify exit with an optional status code")
         assertTrue(shellLibSource.contains("Command::Exec"), "shell should classify non-builtins as generic exec")
+        assertFalse(shellLibSource.contains("Command::Help"), "help should not be a shell builtin")
         assertFalse(shellLibSource.contains("Command::Uname"), "shell should not carry a uname command variant")
         assertFalse(shellLibSource.contains("Command::Ls("), "shell should not carry an ls command variant")
         assertFalse(shellLibSource.contains("Command::Cat(&"), "shell should not carry a cat command variant")
         assertFalse(shellLibSource.contains("Command::AllocTest"), "shell should not carry an alloc command variant")
-        assertTrue(
-            shellSource.contains("HELP\\nCLEAR\\nPWD\\nCD [PATH]\\nECHO\\nTICKS\\nSTATUS\\nEXIT [CODE]\\nUNAME\\nLS [PATH...]\\nCAT <PATH...>\\nCP <SRC> <DST>\\nMV <SRC> <DST>\\nSTAT <PATH...>\\nWRITE [--append] <PATH> <TEXT>\\nRM <PATH...>\\nMKDIR <PATH...>\\nRMDIR <PATH...>\\nALLOC\\n"),
-            "help should print a readable command list",
-        )
+        assertFalse(shellSource.contains("HELP\\n"), "shell should not embed a built-in help command list")
         assertTrue(shellSource.contains("fs::metadata_path(path_ref)"), "cd should validate paths through stat metadata")
         assertTrue(shellLibSource.contains("pub fn resolve_executable_path("), "executable path resolution should be tested in the shell library")
         assertTrue(shellSource.contains("resolve_executable_path(cwd, name, program_path)"), "shell should resolve executable paths through cwd")

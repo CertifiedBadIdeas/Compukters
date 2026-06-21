@@ -6,6 +6,10 @@
   `firmware/k16-system-storage0.kv` excludes test binaries, while test resources
   provide `firmware/k16-system-storage0-dev.kv` with `/bin/alloc-test.kx` and
   `/bin/proc-test.kx`.
+- The bundled K16 shell no longer carries a built-in `help` command or embedded
+  command list. `help` now follows normal executable resolution as
+  `/bin/help.kx` and reports the standard launch error when no such program is
+  installed.
 - `k16 link` now accepts `--map <output.map>` and writes a deterministic
   retained-section report with target, load address, payload/memory size, and
   per-section class, offset, object, file bytes, and memory bytes.
