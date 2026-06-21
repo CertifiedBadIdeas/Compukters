@@ -35,7 +35,7 @@ does not implement. Unsupported relocations are link-time errors.
 The current tool entry point is:
 
 ```text
-k16 link --target <bios|boot|kernel|program|program-dynamic> <input.ko>... -o <output>
+k16 link --target <bios|boot|kernel|program|program-dynamic> [--map <output.map>] <input.ko>... -o <output>
 ```
 
 The command accepts K16 ELF32 `ET_REL` inputs, resolves static symbols,
@@ -45,6 +45,8 @@ target emits a K16E v2 dynamic user program with base-relative payload
 addresses and loader-applied relocation metadata. The `bios` target emits raw
 BIOS flash bytes and prefixes them with a reset-address trampoline that
 initializes `sp` to the current fixed 192 KiB stack top and jumps to `_start`.
+When `--map` is present, the linker writes a deterministic retained-section
+report beside the linked output without changing the emitted executable bytes.
 
 Rust `bin` crates use the linker-driver entry point:
 
@@ -310,6 +312,12 @@ The v1 linker is static only:
 7. Emit a single-load-section `K16E` image for the selected ABI kind. The
    emitted `file_size` covers initialized payload bytes, while `memory_size`
    covers initialized bytes plus any trailing `.bss` zero-fill tail.
+
+The optional link map reports only retained allocated sections after step 3.
+Each section row includes output offset, section class, initialized file bytes,
+runtime memory bytes, source object/member name, and section name. Unreachable
+allocated sections are omitted from the map for the same reason they are
+omitted from the executable payload.
 
 For `K16E` output, `.bss` must not be serialized as object-file bytes when it
 is only trailing zero-filled memory. The linker represents it by increasing the

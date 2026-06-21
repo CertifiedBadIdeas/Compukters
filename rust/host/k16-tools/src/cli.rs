@@ -132,9 +132,14 @@ fn run_link(args: &[String]) -> Result<(), String> {
         .iter()
         .map(|(path, bytes)| object_link::K16LinkInput { name: path, bytes })
         .collect::<Vec<_>>();
-    let bytes = object_link::link_k16_objects_to_k16e(&inputs, config.target)?;
-    fs::write(&config.output_path, bytes)
-        .map_err(|error| format!("failed to write {}: {error}", config.output_path))
+    let output = object_link::link_k16_objects(&inputs, config.target)?;
+    fs::write(&config.output_path, output.bytes)
+        .map_err(|error| format!("failed to write {}: {error}", config.output_path))?;
+    if let Some(map_path) = config.map_path {
+        fs::write(&map_path, output.map.to_text())
+            .map_err(|error| format!("failed to write {map_path}: {error}"))?;
+    }
+    Ok(())
 }
 
 fn run_runtime(args: &[String]) -> Result<(), String> {
@@ -413,12 +418,14 @@ struct LinkConfig {
     target: K16ArtifactTarget,
     input_paths: Vec<String>,
     output_path: String,
+    map_path: Option<String>,
 }
 
 fn parse_link_args(args: &[String]) -> Result<LinkConfig, String> {
     let mut target = K16ArtifactTarget::Program;
     let mut input_paths = Vec::new();
     let mut output_path = None;
+    let mut map_path = None;
     let mut index = 0;
     while index < args.len() {
         match args[index].as_str() {
@@ -436,6 +443,13 @@ fn parse_link_args(args: &[String]) -> Result<LinkConfig, String> {
                 output_path = Some(value.clone());
                 index += 2;
             }
+            "--map" => {
+                let Some(value) = args.get(index + 1) else {
+                    return link_usage_error();
+                };
+                map_path = Some(value.clone());
+                index += 2;
+            }
             value if value.starts_with('-') => return link_usage_error(),
             value => {
                 input_paths.push(value.to_string());
@@ -450,6 +464,7 @@ fn parse_link_args(args: &[String]) -> Result<LinkConfig, String> {
         target,
         input_paths,
         output_path: output_path.ok_or_else(link_usage_message)?,
+        map_path,
     })
 }
 
@@ -692,7 +707,7 @@ fn link_usage_error() -> Result<LinkConfig, String> {
 }
 
 fn link_usage_message() -> String {
-    "usage: k16 link [--target <boot|kernel|program|program-dynamic>] <input.ko>... -o <output.kx>"
+    "usage: k16 link [--target <boot|kernel|program|program-dynamic>] [--map <output.map>] <input.ko>... -o <output.kx>"
         .to_string()
 }
 

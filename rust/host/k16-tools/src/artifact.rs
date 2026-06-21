@@ -40,6 +40,16 @@ impl K16ArtifactTarget {
         }
     }
 
+    pub fn tag(self) -> &'static str {
+        match self {
+            Self::Bios => "bios",
+            Self::Boot => "boot",
+            Self::Kernel => "kernel",
+            Self::Program => "program",
+            Self::ProgramDynamic => "program-dynamic",
+        }
+    }
+
     pub fn payload_end_limit(self) -> Option<u32> {
         match self {
             Self::Program => Some(Self::PROGRAM_STACK_TOP),
