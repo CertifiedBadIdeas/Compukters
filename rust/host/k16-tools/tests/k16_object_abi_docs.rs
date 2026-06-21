@@ -189,6 +189,29 @@ fn k16_object_abi_docs_define_freestanding_runtime_boundary() {
 }
 
 #[test]
+fn k16_object_abi_docs_define_shared_cpu_helper_format_boundary() {
+    let docs = normalized_doc("docs/abi/k16-object-v1.md");
+
+    for required in [
+        "K16E v3",
+        "runtime requirement metadata",
+        "`--shared-cpu-helpers`",
+        "CPU helper runtime ABI version",
+        "helper table version",
+        "CPU helper relocation records",
+        "not a shared-library ABI",
+        "not enable dynamic symbol lookup",
+        "not load or map the helper runtime artifact",
+        "Static-helper programs remain valid",
+    ] {
+        assert!(
+            docs.contains(required),
+            "K16 object ABI shared CPU helper format docs must contain `{required}`"
+        );
+    }
+}
+
+#[test]
 fn active_abi_docs_use_k16_for_machine_tooling_commands() {
     let docs = [
         normalized_doc("docs/abi/CHANGELOG.md"),
@@ -234,6 +257,31 @@ fn active_abi_docs_define_dynamic_user_program_loading_contract() {
         assert!(
             docs.contains(required),
             "K16E ABI docs must contain `{required}`"
+        );
+    }
+}
+
+#[test]
+fn active_abi_docs_define_cpu_helper_runtime_requirement_extension() {
+    let docs = normalized_doc("docs/abi/k16e-v1.md");
+
+    for required in [
+        "K16E v3 dynamic user programs",
+        "runtime requirement metadata",
+        "`k16 link --target program-dynamic --shared-cpu-helpers`",
+        "section_count 4",
+        "section 2 kind 3 (CPU helper requirement)",
+        "section 3 kind 4 (CPU helper relocations)",
+        "CPU helper runtime ABI version",
+        "helper table version",
+        "Each CPU helper relocation record is 12 bytes",
+        "not a dynamic linker",
+        "not a shared-library ABI",
+        "must not fall back to embedded `k16-cpu-helpers.o` text",
+    ] {
+        assert!(
+            docs.contains(required),
+            "K16E CPU helper runtime requirement docs must contain `{required}`"
         );
     }
 }

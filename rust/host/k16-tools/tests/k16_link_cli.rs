@@ -45,6 +45,118 @@ fn k16_link_emits_dynamic_program_with_relocation_records() {
 }
 
 #[test]
+fn k16_link_shared_cpu_helpers_emits_runtime_requirement_metadata() {
+    let object_path = temp_file("shared-syscall0.o");
+    let output_path = temp_file("shared-syscall0.k16e");
+    fs::write(
+        &object_path,
+        k16_object_with_text_relocation_to_symbol(2, "__k16_syscall0"),
+    )
+    .expect("object writes");
+
+    let output = Command::new(k16_binary())
+        .args([
+            "link",
+            "--target",
+            "program-dynamic",
+            "--shared-cpu-helpers",
+            object_path.to_str().unwrap(),
+            "-o",
+            output_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("k16 link runs");
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let bytes = fs::read(output_path).expect("K16E output reads");
+    let executable = k16e::decode_dynamic_k16_program(&bytes).expect("linked dynamic K16E decodes");
+
+    assert_eq!(
+        executable.cpu_helper_runtime,
+        Some(k16e::K16eCpuHelperRuntimeRequirement {
+            abi_version: 1,
+            helper_table_version: 1,
+        })
+    );
+    assert_eq!(executable.relocations, Vec::new());
+    assert_eq!(
+        executable.cpu_helper_relocations,
+        vec![k16e::K16eCpuHelperRelocation {
+            offset: 2,
+            kind: k16e::K16eCpuHelperRelocationKind::Call32,
+            helper: k16e::K16eCpuHelper::Syscall0,
+        }]
+    );
+}
+
+#[test]
+fn k16_link_shared_cpu_helpers_stays_explicit_for_static_dynamic_programs() {
+    let object_path = temp_file("static-syscall0.o");
+    let output_path = temp_file("static-syscall0.k16e");
+    fs::write(
+        &object_path,
+        k16_object_with_text_relocation_to_symbol(2, "__k16_syscall0"),
+    )
+    .expect("object writes");
+
+    let output = Command::new(k16_binary())
+        .args([
+            "link",
+            "--target",
+            "program-dynamic",
+            object_path.to_str().unwrap(),
+            "-o",
+            output_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("k16 link runs");
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("unresolved K16 symbol `__k16_syscall0`"),
+        "stderr: {stderr}"
+    );
+    assert!(!output_path.exists());
+}
+
+#[test]
+fn k16_link_shared_cpu_helpers_rejects_fixed_program_targets() {
+    let object_path = temp_file("fixed-shared-syscall0.o");
+    let output_path = temp_file("fixed-shared-syscall0.k16e");
+    fs::write(
+        &object_path,
+        k16_object_with_text_relocation_to_symbol(2, "__k16_syscall0"),
+    )
+    .expect("object writes");
+
+    let output = Command::new(k16_binary())
+        .args([
+            "link",
+            "--target",
+            "program",
+            "--shared-cpu-helpers",
+            object_path.to_str().unwrap(),
+            "-o",
+            output_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("k16 link runs");
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("--shared-cpu-helpers requires --target program-dynamic"),
+        "stderr: {stderr}"
+    );
+    assert!(!output_path.exists());
+}
+
+#[test]
 fn k16_link_converts_k16_object_with_abs32_relocation_to_program_k16e() {
     let object_path = temp_file("abs32.o");
     let output_path = temp_file("abs32.k16e");

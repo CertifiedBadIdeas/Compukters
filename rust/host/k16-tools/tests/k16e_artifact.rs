@@ -62,6 +62,51 @@ fn k16e_dynamic_program_encodes_relocation_records_without_fixed_load_base() {
 }
 
 #[test]
+fn k16e_dynamic_program_v3_encodes_shared_cpu_helper_metadata() {
+    let bytes = k16e::encode_dynamic_k16_program_with_cpu_helpers(
+        &[0x01, 0xe1, 0x00, 0x00, 0x00, 0x00, 0x00, 0x90],
+        12,
+        0,
+        &[],
+        k16e::K16eCpuHelperRuntimeRequirement {
+            abi_version: 1,
+            helper_table_version: 1,
+        },
+        &[k16e::K16eCpuHelperRelocation {
+            offset: 2,
+            kind: k16e::K16eCpuHelperRelocationKind::Call32,
+            helper: k16e::K16eCpuHelper::Syscall0,
+        }],
+    )
+    .expect("dynamic shared-helper K16E encodes");
+
+    assert_eq!(&bytes[0..4], b"K16E");
+    assert_eq!(u16_at(&bytes, 4), 3);
+    assert_eq!(u32_at(&bytes, 20), 4);
+
+    let executable =
+        k16e::decode_dynamic_k16_program(&bytes).expect("dynamic shared-helper K16E decodes");
+
+    assert_eq!(executable.entry_offset, 0);
+    assert_eq!(executable.memory_size, 12);
+    assert_eq!(
+        executable.cpu_helper_runtime,
+        Some(k16e::K16eCpuHelperRuntimeRequirement {
+            abi_version: 1,
+            helper_table_version: 1,
+        })
+    );
+    assert_eq!(
+        executable.cpu_helper_relocations,
+        vec![k16e::K16eCpuHelperRelocation {
+            offset: 2,
+            kind: k16e::K16eCpuHelperRelocationKind::Call32,
+            helper: k16e::K16eCpuHelper::Syscall0,
+        }]
+    );
+}
+
+#[test]
 fn k16e_encodes_single_k16_load_segment() {
     let bytes =
         k16e::encode_k16_executable(&[0x01, 0x00], k16e::K16eAbiKind::Bootloader, 0x800, 0x800)

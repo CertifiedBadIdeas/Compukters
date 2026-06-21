@@ -157,6 +157,46 @@ fn k16_inspect_identifies_dynamic_k16e_program_size() {
 }
 
 #[test]
+fn k16_inspect_identifies_dynamic_k16e_shared_cpu_helper_metadata() {
+    let path = temp_file("dynamic-shared-cpu-helper.kx");
+    fs::write(
+        &path,
+        k16e::encode_dynamic_k16_program_with_cpu_helpers(
+            &[0x01, 0x00, 0x02, 0x00],
+            8,
+            0,
+            &[],
+            k16e::K16eCpuHelperRuntimeRequirement {
+                abi_version: 1,
+                helper_table_version: 1,
+            },
+            &[k16e::K16eCpuHelperRelocation {
+                offset: 0,
+                kind: k16e::K16eCpuHelperRelocationKind::Call32,
+                helper: k16e::K16eCpuHelper::Syscall0,
+            }],
+        )
+        .expect("dynamic shared-helper K16E encodes"),
+    )
+    .expect("dynamic shared-helper K16E writes");
+
+    let output = Command::new(k16_binary())
+        .args(["inspect", path.to_str().unwrap()])
+        .output()
+        .expect("k16 inspect dynamic shared-helper K16E runs");
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        String::from_utf8(output.stdout).expect("dynamic K16E stdout is UTF-8"),
+        "kind=K16E\nK16E abi=program dynamic=true entry_offset=0x00000000 payload_bytes=4 memory_bytes=8 relocations=0 relocation_bytes=0 cpu_helper_runtime_abi=1 cpu_helper_table=1 cpu_helper_relocations=1 cpu_helper_relocation_bytes=12\n",
+    );
+}
+
+#[test]
 fn k16_inspect_rejects_unknown_blob_without_fallback() {
     let path = temp_file("unknown.bin");
     fs::write(&path, b"not a k16 blob").expect("unknown blob writes");

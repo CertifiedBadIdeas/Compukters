@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- `k16 link --target program-dynamic --shared-cpu-helpers` now emits K16E v3
+  dynamic user programs with CPU helper runtime requirement metadata and CPU
+  helper relocation records. Static dynamic programs still require explicit
+  `k16-cpu-helpers.o` symbols, and the new metadata is not a shared-library
+  ABI or dynamic linker.
 - Bundled K16 storage is now split into production and development layouts:
   `firmware/k16-system-storage0.kv` excludes test binaries, while test resources
   provide `firmware/k16-system-storage0-dev.kv` with `/bin/alloc-test.kx` and

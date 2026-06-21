@@ -152,7 +152,16 @@ fn run_link(args: &[String]) -> Result<(), String> {
         .iter()
         .map(|(path, bytes)| object_link::K16LinkInput { name: path, bytes })
         .collect::<Vec<_>>();
-    let output = object_link::link_k16_objects(&inputs, config.target)?;
+    if config.shared_cpu_helpers && config.target != K16ArtifactTarget::ProgramDynamic {
+        return Err("--shared-cpu-helpers requires --target program-dynamic".to_string());
+    }
+    let output = object_link::link_k16_objects_with_options(
+        &inputs,
+        config.target,
+        object_link::K16LinkOptions {
+            shared_cpu_helpers: config.shared_cpu_helpers,
+        },
+    )?;
     fs::write(&config.output_path, output.bytes)
         .map_err(|error| format!("failed to write {}: {error}", config.output_path))?;
     if let Some(map_path) = config.map_path {
@@ -439,6 +448,7 @@ struct LinkConfig {
     input_paths: Vec<String>,
     output_path: String,
     map_path: Option<String>,
+    shared_cpu_helpers: bool,
 }
 
 fn parse_link_args(args: &[String]) -> Result<LinkConfig, String> {
@@ -446,6 +456,7 @@ fn parse_link_args(args: &[String]) -> Result<LinkConfig, String> {
     let mut input_paths = Vec::new();
     let mut output_path = None;
     let mut map_path = None;
+    let mut shared_cpu_helpers = false;
     let mut index = 0;
     while index < args.len() {
         match args[index].as_str() {
@@ -470,6 +481,10 @@ fn parse_link_args(args: &[String]) -> Result<LinkConfig, String> {
                 map_path = Some(value.clone());
                 index += 2;
             }
+            "--shared-cpu-helpers" => {
+                shared_cpu_helpers = true;
+                index += 1;
+            }
             value if value.starts_with('-') => return link_usage_error(),
             value => {
                 input_paths.push(value.to_string());
@@ -485,6 +500,7 @@ fn parse_link_args(args: &[String]) -> Result<LinkConfig, String> {
         input_paths,
         output_path: output_path.ok_or_else(link_usage_message)?,
         map_path,
+        shared_cpu_helpers,
     })
 }
 
@@ -727,7 +743,7 @@ fn link_usage_error() -> Result<LinkConfig, String> {
 }
 
 fn link_usage_message() -> String {
-    "usage: k16 link [--target <boot|kernel|program|program-dynamic>] [--map <output.map>] <input.ko>... -o <output.kx>"
+    "usage: k16 link [--target <boot|kernel|program|program-dynamic>] [--shared-cpu-helpers] [--map <output.map>] <input.ko>... -o <output.kx>"
         .to_string()
 }
 

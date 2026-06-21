@@ -68,7 +68,9 @@ fn inspect_k16fs(bytes: &[u8]) -> Result<String, String> {
 fn inspect_k16e(bytes: &[u8]) -> Result<String, String> {
     match k16e_version(bytes)? {
         k16e::K16E_VERSION => inspect_fixed_k16e(bytes),
-        k16e::K16E_DYNAMIC_VERSION => inspect_dynamic_k16e(bytes),
+        k16e::K16E_DYNAMIC_VERSION | k16e::K16E_DYNAMIC_RUNTIME_VERSION => {
+            inspect_dynamic_k16e(bytes)
+        }
         version => Err(format!("unsupported K16E version {version}")),
     }
 }
@@ -91,13 +93,32 @@ fn inspect_dynamic_k16e(bytes: &[u8]) -> Result<String, String> {
         .len()
         .checked_mul(k16e::K16E_RELOCATION_RECORD_SIZE as usize)
         .ok_or_else(|| "K16E relocation byte count overflows".to_string())?;
+    let Some(cpu_helper_runtime) = program.cpu_helper_runtime else {
+        return Ok(format!(
+            "kind=K16E\nK16E abi=program dynamic=true entry_offset={:#010x} payload_bytes={} memory_bytes={} relocations={} relocation_bytes={}\n",
+            program.entry_offset,
+            program.payload.len(),
+            program.memory_size,
+            program.relocations.len(),
+            relocation_bytes
+        ));
+    };
+    let cpu_helper_relocation_bytes = program
+        .cpu_helper_relocations
+        .len()
+        .checked_mul(k16e::K16E_CPU_HELPER_RELOCATION_RECORD_SIZE as usize)
+        .ok_or_else(|| "K16E CPU helper relocation byte count overflows".to_string())?;
     Ok(format!(
-        "kind=K16E\nK16E abi=program dynamic=true entry_offset={:#010x} payload_bytes={} memory_bytes={} relocations={} relocation_bytes={}\n",
+        "kind=K16E\nK16E abi=program dynamic=true entry_offset={:#010x} payload_bytes={} memory_bytes={} relocations={} relocation_bytes={} cpu_helper_runtime_abi={} cpu_helper_table={} cpu_helper_relocations={} cpu_helper_relocation_bytes={}\n",
         program.entry_offset,
         program.payload.len(),
         program.memory_size,
         program.relocations.len(),
-        relocation_bytes
+        relocation_bytes,
+        cpu_helper_runtime.abi_version,
+        cpu_helper_runtime.helper_table_version,
+        program.cpu_helper_relocations.len(),
+        cpu_helper_relocation_bytes
     ))
 }
 

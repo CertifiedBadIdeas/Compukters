@@ -1,19 +1,27 @@
 pub const K16E_MAGIC: &[u8; 4] = b"K16E";
 pub const K16E_VERSION: u16 = 1;
 pub const K16E_DYNAMIC_VERSION: u16 = 2;
+pub const K16E_DYNAMIC_RUNTIME_VERSION: u16 = 3;
 pub const K16E_HEADER_SIZE: u16 = 32;
 pub const K16E_SECTION_RECORD_SIZE: u32 = 20;
 pub const K16E_ISA_K16: u16 = 1;
 pub const K16E_SECTION_KIND_LOAD: u32 = 1;
 pub const K16E_SECTION_KIND_RELOCATIONS: u32 = 2;
+pub const K16E_SECTION_KIND_CPU_HELPER_REQUIREMENT: u32 = 3;
+pub const K16E_SECTION_KIND_CPU_HELPER_RELOCATIONS: u32 = 4;
 pub const K16E_SECTION_TABLE_OFFSET: u32 = K16E_HEADER_SIZE as u32;
 pub const K16E_SECTION_COUNT_SINGLE_LOAD: u32 = 1;
 pub const K16E_SECTION_COUNT_DYNAMIC_PROGRAM: u32 = 2;
+pub const K16E_SECTION_COUNT_DYNAMIC_PROGRAM_WITH_CPU_HELPERS: u32 = 4;
 pub const K16E_PAYLOAD_OFFSET_SINGLE_LOAD: u32 =
     K16E_SECTION_TABLE_OFFSET + K16E_SECTION_RECORD_SIZE;
 pub const K16E_PAYLOAD_OFFSET_DYNAMIC_PROGRAM: u32 =
     K16E_SECTION_TABLE_OFFSET + K16E_SECTION_RECORD_SIZE * K16E_SECTION_COUNT_DYNAMIC_PROGRAM;
+pub const K16E_PAYLOAD_OFFSET_DYNAMIC_PROGRAM_WITH_CPU_HELPERS: u32 = K16E_SECTION_TABLE_OFFSET
+    + K16E_SECTION_RECORD_SIZE * K16E_SECTION_COUNT_DYNAMIC_PROGRAM_WITH_CPU_HELPERS;
 pub const K16E_RELOCATION_RECORD_SIZE: u32 = 8;
+pub const K16E_CPU_HELPER_REQUIREMENT_SIZE: u32 = 8;
+pub const K16E_CPU_HELPER_RELOCATION_RECORD_SIZE: u32 = 12;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum K16eAbiKind {
@@ -79,12 +87,150 @@ pub struct K16eRelocation {
     pub kind: K16eRelocationKind,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct K16eCpuHelperRuntimeRequirement {
+    pub abi_version: u32,
+    pub helper_table_version: u32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum K16eCpuHelperRelocationKind {
+    Abs32,
+    Call32,
+}
+
+impl K16eCpuHelperRelocationKind {
+    pub fn code(self) -> u32 {
+        match self {
+            Self::Abs32 => 1,
+            Self::Call32 => 2,
+        }
+    }
+
+    fn decode(code: u32) -> Result<Self, String> {
+        match code {
+            1 => Ok(Self::Abs32),
+            2 => Ok(Self::Call32),
+            _ => Err(format!(
+                "unsupported K16E CPU helper relocation kind {code}"
+            )),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum K16eCpuHelper {
+    HaltOnce,
+    WaitOnce,
+    YieldOnce,
+    IretOnce,
+    SaveTrapFrame,
+    RestoreTrapFrame,
+    WriteTrapVector,
+    ReadTrapCause,
+    ReadTrapPc,
+    ReadTrapValue,
+    ReadTrapArg0,
+    ReadTrapArg1,
+    ReadTrapArg2,
+    SyscallOnce,
+    Syscall0,
+    Syscall1,
+    Syscall3,
+    IretWithR0,
+    WriteInterruptEnable,
+    WriteInterruptMask,
+    ReadInterruptPending,
+    WriteSyscall,
+    ReadSyscall,
+    OpenSyscall,
+    CloseSyscall,
+    BrkSyscall,
+    SbrkSyscall,
+}
+
+impl K16eCpuHelper {
+    pub fn code(self) -> u32 {
+        match self {
+            Self::HaltOnce => 1,
+            Self::WaitOnce => 2,
+            Self::YieldOnce => 3,
+            Self::IretOnce => 4,
+            Self::SaveTrapFrame => 5,
+            Self::RestoreTrapFrame => 6,
+            Self::WriteTrapVector => 7,
+            Self::ReadTrapCause => 8,
+            Self::ReadTrapPc => 9,
+            Self::ReadTrapValue => 10,
+            Self::ReadTrapArg0 => 11,
+            Self::ReadTrapArg1 => 12,
+            Self::ReadTrapArg2 => 13,
+            Self::SyscallOnce => 14,
+            Self::Syscall0 => 15,
+            Self::Syscall1 => 16,
+            Self::Syscall3 => 17,
+            Self::IretWithR0 => 18,
+            Self::WriteInterruptEnable => 19,
+            Self::WriteInterruptMask => 20,
+            Self::ReadInterruptPending => 21,
+            Self::WriteSyscall => 22,
+            Self::ReadSyscall => 23,
+            Self::OpenSyscall => 24,
+            Self::CloseSyscall => 25,
+            Self::BrkSyscall => 26,
+            Self::SbrkSyscall => 27,
+        }
+    }
+
+    fn decode(code: u32) -> Result<Self, String> {
+        match code {
+            1 => Ok(Self::HaltOnce),
+            2 => Ok(Self::WaitOnce),
+            3 => Ok(Self::YieldOnce),
+            4 => Ok(Self::IretOnce),
+            5 => Ok(Self::SaveTrapFrame),
+            6 => Ok(Self::RestoreTrapFrame),
+            7 => Ok(Self::WriteTrapVector),
+            8 => Ok(Self::ReadTrapCause),
+            9 => Ok(Self::ReadTrapPc),
+            10 => Ok(Self::ReadTrapValue),
+            11 => Ok(Self::ReadTrapArg0),
+            12 => Ok(Self::ReadTrapArg1),
+            13 => Ok(Self::ReadTrapArg2),
+            14 => Ok(Self::SyscallOnce),
+            15 => Ok(Self::Syscall0),
+            16 => Ok(Self::Syscall1),
+            17 => Ok(Self::Syscall3),
+            18 => Ok(Self::IretWithR0),
+            19 => Ok(Self::WriteInterruptEnable),
+            20 => Ok(Self::WriteInterruptMask),
+            21 => Ok(Self::ReadInterruptPending),
+            22 => Ok(Self::WriteSyscall),
+            23 => Ok(Self::ReadSyscall),
+            24 => Ok(Self::OpenSyscall),
+            25 => Ok(Self::CloseSyscall),
+            26 => Ok(Self::BrkSyscall),
+            27 => Ok(Self::SbrkSyscall),
+            _ => Err(format!("unsupported K16E CPU helper id {code}")),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct K16eCpuHelperRelocation {
+    pub offset: u32,
+    pub kind: K16eCpuHelperRelocationKind,
+    pub helper: K16eCpuHelper,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DynamicK16Program {
     pub entry_offset: u32,
     pub memory_size: u32,
     pub payload: Vec<u8>,
     pub relocations: Vec<K16eRelocation>,
+    pub cpu_helper_runtime: Option<K16eCpuHelperRuntimeRequirement>,
+    pub cpu_helper_relocations: Vec<K16eCpuHelperRelocation>,
 }
 
 pub fn encode_k16_executable(
@@ -306,6 +452,112 @@ pub fn encode_dynamic_k16_program(
     Ok(bytes)
 }
 
+pub fn encode_dynamic_k16_program_with_cpu_helpers(
+    payload: &[u8],
+    memory_size: u32,
+    entry_offset: u32,
+    relocations: &[K16eRelocation],
+    cpu_helper_runtime: K16eCpuHelperRuntimeRequirement,
+    cpu_helper_relocations: &[K16eCpuHelperRelocation],
+) -> Result<Vec<u8>, String> {
+    if payload.is_empty() {
+        return Err("K16E payload is empty".to_string());
+    }
+    if payload.len() % 2 != 0 {
+        return Err("K16E K16 payload length must be even".to_string());
+    }
+    let payload_size =
+        u32::try_from(payload.len()).map_err(|_| "K16E payload is too large".to_string())?;
+    if memory_size < payload_size {
+        return Err("K16E memory size is smaller than payload size".to_string());
+    }
+    if memory_size % 2 != 0 {
+        return Err("K16E K16 memory size must be even".to_string());
+    }
+    validate_entry_offset_inside_payload(entry_offset, memory_size)?;
+    validate_dynamic_relocations(memory_size, relocations)?;
+    validate_cpu_helper_relocations(memory_size, cpu_helper_relocations)?;
+
+    let relocation_table_size = u32::try_from(relocations.len())
+        .map_err(|_| "K16E relocation table is too large".to_string())?
+        .checked_mul(K16E_RELOCATION_RECORD_SIZE)
+        .ok_or_else(|| "K16E relocation table size overflows".to_string())?;
+    let cpu_helper_relocation_table_size = u32::try_from(cpu_helper_relocations.len())
+        .map_err(|_| "K16E CPU helper relocation table is too large".to_string())?
+        .checked_mul(K16E_CPU_HELPER_RELOCATION_RECORD_SIZE)
+        .ok_or_else(|| "K16E CPU helper relocation table size overflows".to_string())?;
+    let relocation_table_offset = K16E_PAYLOAD_OFFSET_DYNAMIC_PROGRAM_WITH_CPU_HELPERS
+        .checked_add(payload_size)
+        .ok_or_else(|| "K16E relocation table offset overflows".to_string())?;
+    let cpu_helper_requirement_offset = relocation_table_offset
+        .checked_add(relocation_table_size)
+        .ok_or_else(|| "K16E CPU helper requirement offset overflows".to_string())?;
+    let cpu_helper_relocation_table_offset = cpu_helper_requirement_offset
+        .checked_add(K16E_CPU_HELPER_REQUIREMENT_SIZE)
+        .ok_or_else(|| "K16E CPU helper relocation table offset overflows".to_string())?;
+    let file_size = cpu_helper_relocation_table_offset
+        .checked_add(cpu_helper_relocation_table_size)
+        .ok_or_else(|| "K16E file size overflows".to_string())?;
+    let capacity =
+        usize::try_from(file_size).map_err(|_| "K16E file size does not fit usize".to_string())?;
+
+    let mut bytes = Vec::with_capacity(capacity);
+    bytes.extend_from_slice(K16E_MAGIC);
+    write_u16(&mut bytes, K16E_DYNAMIC_RUNTIME_VERSION);
+    write_u16(&mut bytes, K16E_HEADER_SIZE);
+    write_u16(&mut bytes, K16E_ISA_K16);
+    write_u16(&mut bytes, 0);
+    write_u32(&mut bytes, entry_offset);
+    write_u32(&mut bytes, K16E_SECTION_TABLE_OFFSET);
+    write_u32(
+        &mut bytes,
+        K16E_SECTION_COUNT_DYNAMIC_PROGRAM_WITH_CPU_HELPERS,
+    );
+    write_u32(&mut bytes, K16eAbiKind::Program.code());
+    write_u32(&mut bytes, 0);
+
+    write_u32(&mut bytes, K16E_SECTION_KIND_LOAD);
+    write_u32(&mut bytes, 0);
+    write_u32(
+        &mut bytes,
+        K16E_PAYLOAD_OFFSET_DYNAMIC_PROGRAM_WITH_CPU_HELPERS,
+    );
+    write_u32(&mut bytes, payload_size);
+    write_u32(&mut bytes, memory_size);
+
+    write_u32(&mut bytes, K16E_SECTION_KIND_RELOCATIONS);
+    write_u32(&mut bytes, 0);
+    write_u32(&mut bytes, relocation_table_offset);
+    write_u32(&mut bytes, relocation_table_size);
+    write_u32(&mut bytes, relocations.len() as u32);
+
+    write_u32(&mut bytes, K16E_SECTION_KIND_CPU_HELPER_REQUIREMENT);
+    write_u32(&mut bytes, 0);
+    write_u32(&mut bytes, cpu_helper_requirement_offset);
+    write_u32(&mut bytes, K16E_CPU_HELPER_REQUIREMENT_SIZE);
+    write_u32(&mut bytes, 1);
+
+    write_u32(&mut bytes, K16E_SECTION_KIND_CPU_HELPER_RELOCATIONS);
+    write_u32(&mut bytes, 0);
+    write_u32(&mut bytes, cpu_helper_relocation_table_offset);
+    write_u32(&mut bytes, cpu_helper_relocation_table_size);
+    write_u32(&mut bytes, cpu_helper_relocations.len() as u32);
+
+    bytes.extend_from_slice(payload);
+    for relocation in relocations {
+        write_u32(&mut bytes, relocation.offset);
+        write_u32(&mut bytes, relocation.kind.code());
+    }
+    write_u32(&mut bytes, cpu_helper_runtime.abi_version);
+    write_u32(&mut bytes, cpu_helper_runtime.helper_table_version);
+    for relocation in cpu_helper_relocations {
+        write_u32(&mut bytes, relocation.offset);
+        write_u32(&mut bytes, relocation.kind.code());
+        write_u32(&mut bytes, relocation.helper.code());
+    }
+    Ok(bytes)
+}
+
 pub fn decode_dynamic_k16_program(bytes: &[u8]) -> Result<DynamicK16Program, String> {
     let magic = bytes
         .get(0..4)
@@ -317,8 +569,21 @@ pub fn decode_dynamic_k16_program(bytes: &[u8]) -> Result<DynamicK16Program, Str
         return Err("K16E file is smaller than the dynamic header".to_string());
     }
     let version = read_u16(bytes, 4)?;
-    if version != K16E_DYNAMIC_VERSION {
+    if version != K16E_DYNAMIC_VERSION && version != K16E_DYNAMIC_RUNTIME_VERSION {
         return Err(format!("unsupported dynamic K16E version {version}"));
+    }
+    let expected_section_count = if version == K16E_DYNAMIC_RUNTIME_VERSION {
+        K16E_SECTION_COUNT_DYNAMIC_PROGRAM_WITH_CPU_HELPERS
+    } else {
+        K16E_SECTION_COUNT_DYNAMIC_PROGRAM
+    };
+    let expected_payload_offset = if version == K16E_DYNAMIC_RUNTIME_VERSION {
+        K16E_PAYLOAD_OFFSET_DYNAMIC_PROGRAM_WITH_CPU_HELPERS
+    } else {
+        K16E_PAYLOAD_OFFSET_DYNAMIC_PROGRAM
+    };
+    if bytes.len() < expected_payload_offset as usize {
+        return Err("K16E file is smaller than the dynamic header".to_string());
     }
     let header_size = read_u16(bytes, 6)?;
     if header_size != K16E_HEADER_SIZE {
@@ -340,7 +605,7 @@ pub fn decode_dynamic_k16_program(bytes: &[u8]) -> Result<DynamicK16Program, Str
         ));
     }
     let section_count = read_u32(bytes, 20)?;
-    if section_count != K16E_SECTION_COUNT_DYNAMIC_PROGRAM {
+    if section_count != expected_section_count {
         return Err(format!(
             "unsupported dynamic K16E section count {section_count}"
         ));
@@ -367,7 +632,7 @@ pub fn decode_dynamic_k16_program(bytes: &[u8]) -> Result<DynamicK16Program, Str
         ));
     }
     let payload_offset = read_u32(bytes, 40)?;
-    if payload_offset != K16E_PAYLOAD_OFFSET_DYNAMIC_PROGRAM {
+    if payload_offset != expected_payload_offset {
         return Err(format!(
             "unsupported dynamic K16E payload offset {payload_offset}"
         ));
@@ -435,11 +700,109 @@ pub fn decode_dynamic_k16_program(bytes: &[u8]) -> Result<DynamicK16Program, Str
     }
     validate_dynamic_relocations(memory_size, &relocations)?;
 
+    let (cpu_helper_runtime, cpu_helper_relocations) = if version == K16E_DYNAMIC_RUNTIME_VERSION {
+        let requirement_kind = read_u32(bytes, 72)?;
+        if requirement_kind != K16E_SECTION_KIND_CPU_HELPER_REQUIREMENT {
+            return Err(format!("unsupported K16E section kind {requirement_kind}"));
+        }
+        if read_u32(bytes, 76)? != 0 {
+            return Err(
+                "dynamic K16E CPU helper requirement section address must be zero".to_string(),
+            );
+        }
+        let requirement_offset = read_u32(bytes, 80)?;
+        let requirement_size = read_u32(bytes, 84)?;
+        let requirement_count = read_u32(bytes, 88)?;
+        if requirement_size != K16E_CPU_HELPER_REQUIREMENT_SIZE || requirement_count != 1 {
+            return Err("K16E CPU helper requirement section must contain one record".to_string());
+        }
+        if requirement_offset
+            != relocation_table_offset
+                .checked_add(relocation_table_size)
+                .ok_or_else(|| "K16E CPU helper requirement offset overflows".to_string())?
+        {
+            return Err(format!(
+                "unsupported dynamic K16E CPU helper requirement offset {requirement_offset}"
+            ));
+        }
+
+        let helper_relocation_kind = read_u32(bytes, 92)?;
+        if helper_relocation_kind != K16E_SECTION_KIND_CPU_HELPER_RELOCATIONS {
+            return Err(format!(
+                "unsupported K16E section kind {helper_relocation_kind}"
+            ));
+        }
+        if read_u32(bytes, 96)? != 0 {
+            return Err(
+                "dynamic K16E CPU helper relocation section address must be zero".to_string(),
+            );
+        }
+        let helper_relocation_table_offset = read_u32(bytes, 100)?;
+        let helper_relocation_table_size = read_u32(bytes, 104)?;
+        let helper_relocation_count = read_u32(bytes, 108)?;
+        let expected_helper_relocation_table_size = helper_relocation_count
+            .checked_mul(K16E_CPU_HELPER_RELOCATION_RECORD_SIZE)
+            .ok_or_else(|| "K16E CPU helper relocation table size overflows".to_string())?;
+        if helper_relocation_table_size != expected_helper_relocation_table_size {
+            return Err(
+                "K16E CPU helper relocation table size does not match relocation count".to_string(),
+            );
+        }
+        if helper_relocation_table_offset
+            != requirement_offset
+                .checked_add(requirement_size)
+                .ok_or_else(|| "K16E CPU helper relocation table offset overflows".to_string())?
+        {
+            return Err(format!(
+                "unsupported dynamic K16E CPU helper relocation table offset {helper_relocation_table_offset}"
+            ));
+        }
+
+        let requirement = bytes_slice(
+            bytes,
+            requirement_offset,
+            requirement_size,
+            "CPU helper requirement",
+        )?;
+        let requirement = K16eCpuHelperRuntimeRequirement {
+            abi_version: read_u32(requirement, 0)?,
+            helper_table_version: read_u32(requirement, 4)?,
+        };
+        let helper_relocation_table = bytes_slice(
+            bytes,
+            helper_relocation_table_offset,
+            helper_relocation_table_size,
+            "CPU helper relocation table",
+        )?;
+        let mut helper_relocations = Vec::with_capacity(
+            usize::try_from(helper_relocation_count)
+                .map_err(|_| "K16E CPU helper relocation count does not fit usize".to_string())?,
+        );
+        for index in 0..helper_relocation_count {
+            let offset = usize::try_from(index * K16E_CPU_HELPER_RELOCATION_RECORD_SIZE)
+                .map_err(|_| "K16E CPU helper relocation offset does not fit usize".to_string())?;
+            helper_relocations.push(K16eCpuHelperRelocation {
+                offset: read_u32(helper_relocation_table, offset)?,
+                kind: K16eCpuHelperRelocationKind::decode(read_u32(
+                    helper_relocation_table,
+                    offset + 4,
+                )?)?,
+                helper: K16eCpuHelper::decode(read_u32(helper_relocation_table, offset + 8)?)?,
+            });
+        }
+        validate_cpu_helper_relocations(memory_size, &helper_relocations)?;
+        (Some(requirement), helper_relocations)
+    } else {
+        (None, Vec::new())
+    };
+
     Ok(DynamicK16Program {
         entry_offset,
         memory_size,
         payload,
         relocations,
+        cpu_helper_runtime,
+        cpu_helper_relocations,
     })
 }
 
@@ -495,6 +858,34 @@ fn validate_dynamic_relocations(
         if relocation_end > memory_size {
             return Err(format!(
                 "K16E relocation range {:#010x}..{:#010x} exceeds dynamic memory size {memory_size:#010x}",
+                relocation.offset, relocation_end,
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_cpu_helper_relocations(
+    memory_size: u32,
+    relocations: &[K16eCpuHelperRelocation],
+) -> Result<(), String> {
+    for relocation in relocations {
+        if relocation.offset % 2 != 0 {
+            return Err(format!(
+                "K16E CPU helper relocation offset {:#010x} must be 2-byte aligned",
+                relocation.offset
+            ));
+        }
+        let relocation_width = match relocation.kind {
+            K16eCpuHelperRelocationKind::Abs32 | K16eCpuHelperRelocationKind::Call32 => 4,
+        };
+        let relocation_end = relocation
+            .offset
+            .checked_add(relocation_width)
+            .ok_or_else(|| "K16E CPU helper relocation range overflows".to_string())?;
+        if relocation_end > memory_size {
+            return Err(format!(
+                "K16E CPU helper relocation range {:#010x}..{:#010x} exceeds dynamic memory size {memory_size:#010x}",
                 relocation.offset, relocation_end,
             ));
         }
