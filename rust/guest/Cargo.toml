@@ -17,6 +17,7 @@ members = [
     "k16-mkdir",
     "k16-rmdir",
     "k16-alloc-test",
+    "k16-hosted-cat",
     "k16-hosted-hello",
     "k16-proc-test",
     "k16-syscall-fault-test",
