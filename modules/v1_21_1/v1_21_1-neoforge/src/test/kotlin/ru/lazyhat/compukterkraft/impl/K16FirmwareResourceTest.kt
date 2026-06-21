@@ -2202,23 +2202,48 @@ class K16FirmwareResourceTest {
         command: String,
         expectVisiblePixels: Boolean,
     ) {
+        NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
         for (byte in "$command\n".encodeToByteArray()) {
             runtime.pushKeyboardChar(byte)
         }
-        val control = runRuntimeServerTick(runtime, maxTurns = 256)
-        val frames = NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
+        runtime.advanceGameTicks(1)
+        var control = runtime.tick(maxTurns = 256)
+        val frames = mutableListOf<DisplayFrameDelta>()
+        frames += NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
+        var snapshot = runtime.machineSnapshot()
+        var turns = 1
+        while (
+            turns < 32 &&
+            (snapshotKeyboard0EventCount(snapshot) != 0 || !frames.hasExpectedShellCommandFrame(expectVisiblePixels))
+        ) {
+            control = runtime.tick(maxTurns = 256)
+            frames += NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
+            snapshot = runtime.machineSnapshot()
+            turns += 1
+        }
+        repeat(4) {
+            control = runtime.tick(maxTurns = 256)
+            frames += NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
+            snapshot = runtime.machineSnapshot()
+        }
+        val terminal = terminalText(snapshot)
 
         assertEquals(NativeK16ComputerControl.STATUS_READY, control.status, "command: $command")
         assertEquals(0, control.panicCode, "command: $command")
         assertTrue(
             frames.any { it.pixelFormat == DisplayPixelFormat.RGB565 },
-            "shell command should produce gpu0 frames; command: $command",
+            "shell command should produce gpu0 frames; command: $command; frames: ${frames.size}; " +
+                "keyboard0Events: ${snapshotKeyboard0EventCount(snapshot)}; terminal: $terminal",
         )
         assertTrue(
             !expectVisiblePixels || frames.any { it.pixelFormat == DisplayPixelFormat.RGB565 && it.hasVisiblePixels() },
             "shell command should produce visible gpu0 frames; command: $command",
         )
     }
+
+    private fun List<DisplayFrameDelta>.hasExpectedShellCommandFrame(expectVisiblePixels: Boolean): Boolean =
+        any { it.pixelFormat == DisplayPixelFormat.RGB565 } &&
+            (!expectVisiblePixels || any { it.pixelFormat == DisplayPixelFormat.RGB565 && it.hasVisiblePixels() })
 
     private fun snapshotTimer0GameTicks(snapshot: ByteArray): Long {
         val buffer = ByteBuffer.wrap(snapshot).order(ByteOrder.LITTLE_ENDIAN)
