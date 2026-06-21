@@ -7,6 +7,7 @@ pub enum K16ArtifactTarget {
     Kernel,
     Program,
     ProgramDynamic,
+    SharedObject,
 }
 
 impl K16ArtifactTarget {
@@ -24,8 +25,9 @@ impl K16ArtifactTarget {
             "kernel" => Ok(Self::Kernel),
             "program" => Ok(Self::Program),
             "program-dynamic" => Ok(Self::ProgramDynamic),
+            "shared-object" => Ok(Self::SharedObject),
             _ => Err(format!(
-                "unknown artifact target `{value}`; expected bios, boot, kernel, program, or program-dynamic"
+                "unknown artifact target `{value}`; expected bios, boot, kernel, program, program-dynamic, or shared-object"
             )),
         }
     }
@@ -36,7 +38,7 @@ impl K16ArtifactTarget {
             Self::Boot => Self::BOOT_LOAD_BASE,
             Self::Kernel => Self::KERNEL_LOAD_BASE,
             Self::Program => Self::PROGRAM_LOAD_BASE,
-            Self::ProgramDynamic => 0,
+            Self::ProgramDynamic | Self::SharedObject => 0,
         }
     }
 
@@ -47,13 +49,14 @@ impl K16ArtifactTarget {
             Self::Kernel => "kernel",
             Self::Program => "program",
             Self::ProgramDynamic => "program-dynamic",
+            Self::SharedObject => "shared-object",
         }
     }
 
     pub fn payload_end_limit(self) -> Option<u32> {
         match self {
             Self::Program => Some(Self::PROGRAM_STACK_TOP),
-            Self::ProgramDynamic => None,
+            Self::ProgramDynamic | Self::SharedObject => None,
             Self::Bios | Self::Boot | Self::Kernel => None,
         }
     }
@@ -63,7 +66,7 @@ impl K16ArtifactTarget {
             Self::Boot => Some(k16e::K16eAbiKind::Bootloader),
             Self::Kernel => Some(k16e::K16eAbiKind::Kernel),
             Self::Program => Some(k16e::K16eAbiKind::Program),
-            Self::ProgramDynamic => None,
+            Self::ProgramDynamic | Self::SharedObject => None,
             Self::Bios => None,
         }
     }

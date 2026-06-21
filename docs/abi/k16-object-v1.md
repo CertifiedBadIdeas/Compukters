@@ -35,7 +35,7 @@ does not implement. Unsupported relocations are link-time errors.
 The current tool entry point is:
 
 ```text
-k16 link --target <bios|boot|kernel|program|program-dynamic> [--shared-cpu-helpers] [--map <output.map>] <input.ko>... -o <output>
+k16 link --target <bios|boot|kernel|program|program-dynamic|shared-object> [--shared-cpu-helpers] [--import <library>:<symbol>] [--map <output.map>] <input.ko>... -o <output>
 ```
 
 The command accepts K16 ELF32 `ET_REL` inputs, resolves static symbols,
@@ -44,16 +44,22 @@ bootloader, kernel, and standalone program targets. The `program-dynamic`
 target emits a K16E v2 dynamic user program with base-relative payload
 addresses and loader-applied relocation metadata. With `--shared-cpu-helpers`,
 `program-dynamic` emits a K16E v3 dynamic user program with CPU helper runtime
-requirement metadata and CPU helper relocation records. The `bios` target emits
-raw BIOS flash bytes and prefixes them with a reset-address trampoline that
-initializes `sp` to the current fixed 192 KiB stack top and jumps to `_start`.
-When `--map` is present, the linker writes a deterministic retained-section
-report beside the linked output without changing the emitted executable bytes.
+requirement metadata and CPU helper relocation records. With one or more
+`--import <library>:<symbol>` records, `program-dynamic` emits a K16E v5
+dynamic user program with `NEEDED` library metadata and import relocation
+records for those symbols. Other unresolved symbols remain link-time errors.
+The `shared-object` target emits a K16E v4 shared object, does not require
+`_start`, and exports retained global definitions as base-relative shared
+object offsets. The `bios` target emits raw BIOS flash bytes and prefixes them
+with a reset-address trampoline that initializes `sp` to the current fixed 192
+KiB stack top and jumps to `_start`. When `--map` is present, the linker writes
+a deterministic retained-section report beside the linked output without
+changing the emitted executable bytes.
 
 Rust `bin` crates use the linker-driver entry point:
 
 ```text
-k16-ld <rustc linker args> --k16-target <bios|boot|kernel|program> [--map <output.map>] -o <output>
+k16-ld <rustc linker args> --k16-target <bios|boot|kernel|program|program-dynamic|shared-object> [--k16-import <library>:<symbol>] [--map <output.map>] -o <output>
 ```
 
 The driver consumes rustc-style object and archive arguments, extracts K16 ELF
@@ -62,9 +68,14 @@ symbols, and then delegates to the same object linker. The target is explicit;
 missing `--k16-target` is a hard error. When `--map` is present, the driver
 writes the same retained-section report as `k16 link --map`.
 
+`--k16-import <library>:<symbol>` is the linker-driver spelling for the same
+import metadata emitted by `k16 link --import`.
+
 The archive selection model follows the usual static-linker shape: object files
 on the command line are included directly, while archive members are selected in
-link order only when they resolve currently undefined global symbols. If two
+link order only when they resolve currently undefined global symbols. Symbols
+declared with `--import` or `--k16-import` are not archive-selection roots; they
+remain external imports in the K16E v5 output. If two
 archives can define the same helper, the first selected provider satisfies the
 symbol and later duplicate providers are not pulled.
 

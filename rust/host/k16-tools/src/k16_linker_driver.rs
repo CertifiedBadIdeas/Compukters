@@ -1,5 +1,7 @@
 use crate::artifact::K16ArtifactTarget;
-use crate::object_link::{link_k16_objects, K16LinkInput};
+use crate::object_link::{
+    link_k16_objects_with_options, K16LinkImport, K16LinkInput, K16LinkOptions,
+};
 use std::fs;
 
 pub fn run_k16_linker_driver(args: Vec<String>) -> Result<(), String> {
@@ -17,7 +19,14 @@ pub fn run_k16_linker_driver(args: Vec<String>) -> Result<(), String> {
         .iter()
         .map(|(path, bytes)| K16LinkInput { name: path, bytes })
         .collect::<Vec<_>>();
-    let output = link_k16_objects(&inputs, config.target)?;
+    let output = link_k16_objects_with_options(
+        &inputs,
+        config.target,
+        K16LinkOptions {
+            shared_cpu_helpers: false,
+            imports: config.imports,
+        },
+    )?;
     fs::write(&config.output_path, output.bytes).map_err(|error| {
         format!(
             "failed to write linker output {}: {error}",
@@ -53,6 +62,7 @@ struct LinkerDriverConfig {
     target: K16ArtifactTarget,
     output_path: String,
     map_path: Option<String>,
+    imports: Vec<K16LinkImport>,
     input_paths: Vec<String>,
 }
 
@@ -60,6 +70,7 @@ fn parse_linker_args(args: &[String]) -> Result<LinkerDriverConfig, String> {
     let mut target = None;
     let mut output_path = None;
     let mut map_path = None;
+    let mut imports = Vec::new();
     let mut input_paths = Vec::new();
     let mut index = 0;
 
@@ -86,6 +97,13 @@ fn parse_linker_args(args: &[String]) -> Result<LinkerDriverConfig, String> {
                     return Err("k16-ld requires a value after --map".to_string());
                 };
                 map_path = Some(value.clone());
+            }
+            "--k16-import" => {
+                index += 1;
+                let Some(value) = args.get(index) else {
+                    return Err("k16-ld requires a value after --k16-import".to_string());
+                };
+                imports.push(parse_k16_import(value)?);
             }
             "-flavor" | "-z" | "-L" | "-l" | "-m" | "-O" => {
                 index += 1;
@@ -124,7 +142,25 @@ fn parse_linker_args(args: &[String]) -> Result<LinkerDriverConfig, String> {
         target,
         output_path,
         map_path,
+        imports,
         input_paths,
+    })
+}
+
+fn parse_k16_import(value: &str) -> Result<K16LinkImport, String> {
+    let Some((library, symbol)) = value.split_once(':') else {
+        return Err(format!(
+            "invalid K16 import `{value}`; expected <library>:<symbol>"
+        ));
+    };
+    if library.is_empty() || symbol.is_empty() || symbol.contains(':') {
+        return Err(format!(
+            "invalid K16 import `{value}`; expected <library>:<symbol>"
+        ));
+    }
+    Ok(K16LinkImport {
+        library: library.to_string(),
+        symbol: symbol.to_string(),
     })
 }
 

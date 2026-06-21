@@ -168,6 +168,60 @@ fn k16_ld_selects_first_archive_member_that_resolves_a_symbol() {
 }
 
 #[test]
+fn k16_ld_emits_dynamic_import_metadata_from_rustc_style_args() {
+    let object_path = temp_file("import-main.o");
+    let archive_path = temp_file("libfoo.rlib");
+    let output_path = temp_file("import-main.kx");
+    fs::write(
+        &object_path,
+        k16_object_with_undefined_text_relocation("foo"),
+    )
+    .expect("object writes");
+    fs::write(
+        &archive_path,
+        ar_archive_with_k16_object(
+            "foo.o",
+            &k16_object_with_text_relocation_and_symbol(1, "foo"),
+        ),
+    )
+    .expect("archive writes");
+
+    let output = Command::new(k16_ld_binary())
+        .args([
+            "-flavor",
+            "gnu",
+            object_path.to_str().unwrap(),
+            archive_path.to_str().unwrap(),
+            "--k16-target=program-dynamic",
+            "--k16-import",
+            "libfoo.k16so:foo",
+            "-o",
+            output_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("k16-ld runs");
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_linker_output_is_executable(&output_path);
+    let bytes = fs::read(output_path).expect("program output reads");
+    let executable = k16e::decode_dynamic_k16_program(&bytes).expect("K16E decodes");
+    assert_eq!(executable.needed_libraries, vec!["libfoo.k16so"]);
+    assert_eq!(
+        executable.import_relocations,
+        vec![k16e::K16eImportRelocation {
+            offset: 2,
+            kind: k16e::K16eRelocationKind::Abs32,
+            library_index: 0,
+            symbol: "foo".to_string(),
+        }]
+    );
+}
+
+#[test]
 fn k16_ld_rejects_missing_target_without_host_linker_fallback() {
     let object_path = temp_file("missing-target.o");
     let output_path = temp_file("missing-target.kx");
