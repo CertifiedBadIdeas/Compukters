@@ -218,6 +218,23 @@ class K16FirmwareResourceTest {
     }
 
     @Test
+    fun k16SourceBuiltDevToolchainSmokeTaskUsesStagedToolchain() {
+        val rootBuildScript = Path.of("../../../build.gradle.kts").readText()
+
+        assertTrue(rootBuildScript.contains("tasks.register<Exec>(\"testK16SourceBuiltDevToolchain\")"))
+        assertTrue(rootBuildScript.contains("dependsOn(stageK16SourceBuiltDevToolchain)"))
+        assertTrue(rootBuildScript.contains("workingDir(rootProject.file(\"rust/host/k16-tools\"))"))
+        assertTrue(rootBuildScript.contains("k16SourceBuiltDevToolchainInstallRoot.resolve(\"bin/cargo\").absolutePath"))
+        assertTrue(rootBuildScript.contains("\"test\",\n            \"-j\",\n            k16HostToolsBuildJobs"))
+        assertTrue(rootBuildScript.contains("environment(\"K16_CARGO\", k16SourceBuiltDevToolchainInstallRoot.resolve(\"bin/cargo\").absolutePath)"))
+        assertTrue(rootBuildScript.contains("environment(\"K16_RUSTC\", k16SourceBuiltDevToolchainInstallRoot.resolve(\"bin/rustc\").absolutePath)"))
+        assertTrue(rootBuildScript.contains("environment(\n            \"CARGO_TARGET_DIR\""))
+        assertTrue(rootBuildScript.contains("k16HostToolsTargetRoot.resolve(\"source-built-dev-tests\").absolutePath"))
+        assertFalse(rootBuildScript.contains("providers.environmentVariable(\"K16_CARGO\")"))
+        assertFalse(rootBuildScript.contains("providers.environmentVariable(\"K16_RUSTC\")"))
+    }
+
+    @Test
     fun bundledK16HostedCatMapArtifactIsGenerated() {
         val source = Path.of("build.gradle.kts").readText()
 

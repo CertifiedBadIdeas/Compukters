@@ -720,6 +720,53 @@ val stageK16SourceBuiltDevToolchain =
         }
     }
 
+val testK16SourceBuiltDevToolchain =
+    tasks.register<Exec>("testK16SourceBuiltDevToolchain") {
+        description = "Runs K16 host tool smoke tests against the staged source-built development toolchain."
+        group = "verification"
+        dependsOn(stageK16SourceBuiltDevToolchain)
+        workingDir(rootProject.file("rust/host/k16-tools"))
+        inputs.dir(rootProject.file("rust/host/k16-tools/src"))
+        inputs.file(rootProject.file("rust/host/k16-tools/Cargo.toml"))
+        inputs.file(rootProject.file("rust/host/k16-tools/Cargo.lock"))
+        inputs.dir(rootProject.file("rust/host/k16-vm/src"))
+        inputs.file(rootProject.file("rust/host/k16-vm/Cargo.toml"))
+        inputs.dir(rootProject.file("rust/guest/k16-abi/src"))
+        inputs.file(rootProject.file("rust/guest/k16-abi/Cargo.toml"))
+        inputs.dir(k16SourceBuiltDevToolchainInstallRoot)
+        inputs.property("k16HostToolsBuildJobs", k16HostToolsBuildJobs)
+        commandLine(
+            k16SourceBuiltDevToolchainInstallRoot.resolve("bin/cargo").absolutePath,
+            "test",
+            "-j",
+            k16HostToolsBuildJobs,
+        )
+        environment("K16_CARGO", k16SourceBuiltDevToolchainInstallRoot.resolve("bin/cargo").absolutePath)
+        environment("K16_RUSTC", k16SourceBuiltDevToolchainInstallRoot.resolve("bin/rustc").absolutePath)
+        environment(
+            "CARGO_TARGET_DIR",
+            k16HostToolsTargetRoot.resolve("source-built-dev-tests").absolutePath,
+        )
+
+        doFirst {
+            check(k16ToolchainModeName() == "source-built-dev") {
+                "testK16SourceBuiltDevToolchain requires -Pk16ToolchainMode=source-built-dev (use ./gradlew-sandbox-dev)"
+            }
+            requireBuiltFile(
+                k16SourceBuiltDevToolchainInstallRoot.resolve("bin/cargo"),
+                "cargo",
+                "stageK16SourceBuiltDevToolchain",
+                executable = true,
+            )
+            requireBuiltFile(
+                k16SourceBuiltDevToolchainInstallRoot.resolve("bin/rustc"),
+                "rustc",
+                "stageK16SourceBuiltDevToolchain",
+                executable = true,
+            )
+        }
+    }
+
 val prepareK16Toolchain =
     tasks.register("prepareK16Toolchain") {
         description = "Prepares the selected K16 toolchain mode and validates the resolved install layout."
