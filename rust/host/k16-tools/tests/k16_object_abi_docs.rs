@@ -60,6 +60,35 @@ fn active_abi_index_lists_k16_object_contract() {
 }
 
 #[test]
+fn shared_cpu_helper_runtime_spec_defines_narrow_runtime_contract() {
+    let docs = normalized_doc(
+        "docs/superpowers/specs/2026-06-21/issue-346-k16-shared-cpu-helper-runtime.md",
+    );
+
+    for required in [
+        "K16 Shared CPU Helper Runtime",
+        "Issue: [#346](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/346)",
+        "`k16-cpu-helpers.o .text.k16`: 16,632 retained bytes across 12 bundled production userland programs",
+        "This is not a dynamic linker",
+        "no arbitrary shared objects",
+        "no shared writable data",
+        "must not silently fall back at runtime",
+        "mapped by the kernel into translated user address spaces",
+        "user-readable and executable, but not user-writable",
+        "The mapping address should be kernel-selected, not hard-coded into user programs",
+        "The preferred path is a K16E v3 extension",
+        "missing runtime artifact: launch fails",
+        "Static-helper user programs remain valid",
+        "`./gradlew-sandbox-dev :v1_21_1-neoforge:reportK16UserlandSize`",
+    ] {
+        assert!(
+            docs.contains(required),
+            "shared CPU helper runtime spec must contain `{required}`"
+        );
+    }
+}
+
+#[test]
 fn k16_abi_conformance_matrix_docs_list_supported_backend_contracts() {
     let matrix = normalized_doc("docs/abi/k16-abi-conformance-matrix.md");
     let index = normalized_doc("docs/abi/README.md");
