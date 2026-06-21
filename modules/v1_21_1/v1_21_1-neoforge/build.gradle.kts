@@ -105,6 +105,8 @@ val generatedK16WriteTarget = generatedK16GuestTarget.map { it.dir("write") }
 val generatedK16RmTarget = generatedK16GuestTarget.map { it.dir("rm") }
 val generatedK16MkdirTarget = generatedK16GuestTarget.map { it.dir("mkdir") }
 val generatedK16RmdirTarget = generatedK16GuestTarget.map { it.dir("rmdir") }
+val generatedK16SharedSmokeRuntimeTarget = generatedK16GuestTarget.map { it.dir("shared-smoke-runtime") }
+val generatedK16SharedRuntimeTestTarget = generatedK16GuestTarget.map { it.dir("shared-runtime-test") }
 val generatedK16HostedHelloTarget = generatedK16GuestTarget.map { it.dir("hosted-hello") }
 val generatedK16HostedCatTarget = generatedK16GuestTarget.map { it.dir("hosted-cat") }
 val generatedK16AllocTestTarget = generatedK16GuestTarget.map { it.dir("alloc-test") }
@@ -146,6 +148,14 @@ val k16MkdirManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-
 val k16MkdirSource = rootProject.layout.projectDirectory.file("rust/guest/k16-mkdir/src/main.rs")
 val k16RmdirManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-rmdir/Cargo.toml")
 val k16RmdirSource = rootProject.layout.projectDirectory.file("rust/guest/k16-rmdir/src/main.rs")
+val k16SharedSmokeRuntimeManifest =
+    rootProject.layout.projectDirectory.file("rust/guest/k16-shared-smoke-runtime/Cargo.toml")
+val k16SharedSmokeRuntimeSource =
+    rootProject.layout.projectDirectory.file("rust/guest/k16-shared-smoke-runtime/src/main.rs")
+val k16SharedRuntimeTestManifest =
+    rootProject.layout.projectDirectory.file("rust/guest/k16-shared-runtime-test/Cargo.toml")
+val k16SharedRuntimeTestSource =
+    rootProject.layout.projectDirectory.file("rust/guest/k16-shared-runtime-test/src/main.rs")
 val k16HostedHelloManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-hosted-hello/Cargo.toml")
 val k16HostedHelloSource = rootProject.layout.projectDirectory.file("rust/guest/k16-hosted-hello/src/main.rs")
 val k16HostedCatManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-hosted-cat/Cargo.toml")
@@ -190,6 +200,8 @@ val k16WriteArtifact = generatedK16FirmwareArtifacts.map { it.file("write.kx") }
 val k16RmArtifact = generatedK16FirmwareArtifacts.map { it.file("rm.kx") }
 val k16MkdirArtifact = generatedK16FirmwareArtifacts.map { it.file("mkdir.kx") }
 val k16RmdirArtifact = generatedK16FirmwareArtifacts.map { it.file("rmdir.kx") }
+val k16SharedSmokeRuntimeArtifact = generatedK16FirmwareArtifacts.map { it.file("k16-shared-smoke.k16so") }
+val k16SharedRuntimeTestArtifact = generatedK16FirmwareArtifacts.map { it.file("shared-runtime-test.kx") }
 val k16HostedHelloArtifact = generatedK16FirmwareArtifacts.map { it.file("hosted-hello.kx") }
 val k16HostedCatArtifact = generatedK16FirmwareArtifacts.map { it.file("hosted-cat.kx") }
 val k16AllocTestArtifact = generatedK16FirmwareArtifacts.map { it.file("alloc-test.kx") }
@@ -210,6 +222,10 @@ val k16WriteMapArtifact = k16WriteArtifact.map { it.asFile.resolveSibling("${it.
 val k16RmMapArtifact = k16RmArtifact.map { it.asFile.resolveSibling("${it.asFile.nameWithoutExtension}.map") }
 val k16MkdirMapArtifact = k16MkdirArtifact.map { it.asFile.resolveSibling("${it.asFile.nameWithoutExtension}.map") }
 val k16RmdirMapArtifact = k16RmdirArtifact.map { it.asFile.resolveSibling("${it.asFile.nameWithoutExtension}.map") }
+val k16SharedSmokeRuntimeMapArtifact =
+    k16SharedSmokeRuntimeArtifact.map { it.asFile.resolveSibling("${it.asFile.nameWithoutExtension}.map") }
+val k16SharedRuntimeTestMapArtifact =
+    k16SharedRuntimeTestArtifact.map { it.asFile.resolveSibling("${it.asFile.nameWithoutExtension}.map") }
 val k16HostedHelloMapArtifact =
     k16HostedHelloArtifact.map { it.asFile.resolveSibling("${it.asFile.nameWithoutExtension}.map") }
 val k16HostedCatMapArtifact =
@@ -371,6 +387,7 @@ fun Project.compileK16GuestRustBin(
     mapOutput: File? = null,
     buildStd: String = "core",
     buildStdFeatures: String? = null,
+    extraRuntimeLinkArgs: List<String> = emptyList(),
 ) {
     val toolchain = resolveK16Toolchain()
     val profile = k16FirmwareProfileName()
@@ -419,7 +436,10 @@ fun Project.compileK16GuestRustBin(
             "K16 runtime object build for $runtimeObject failed with exit code $helperExitCode"
         }
     }
-    buildRuntimeObject("k16-cpu-helpers", cpuHelpers)
+    val needsCpuHelpers = k16Target != "shared-object"
+    if (needsCpuHelpers) {
+        buildRuntimeObject("k16-cpu-helpers", cpuHelpers)
+    }
     val needsStartup = k16Target == "program" || k16Target == "program-dynamic"
     if (needsStartup) {
         buildRuntimeObject("k16-startup", startup, target = k16Target)
@@ -429,11 +449,14 @@ fun Project.compileK16GuestRustBin(
             if (needsStartup) {
                 add("-C link-arg=${startup.absolutePath}")
             }
-            add("-C link-arg=${cpuHelpers.absolutePath}")
+            if (needsCpuHelpers) {
+                add("-C link-arg=${cpuHelpers.absolutePath}")
+            }
             if (mapOutput != null) {
                 add("-C link-arg=--map")
                 add("-C link-arg=${mapOutput.absolutePath}")
             }
+            addAll(extraRuntimeLinkArgs)
         }.joinToString(" ")
     val command =
         listOf(toolchain.cargo.absolutePath, "rustc") +
@@ -940,6 +963,68 @@ val compileK16SystemRmdir =
         }
     }
 
+val compileK16SharedSmokeRuntime =
+    tasks.register("compileK16SharedSmokeRuntime") {
+        description = "Compiles and links the bundled K16 shared runtime smoke object into a K16E shared object."
+        group = "k16"
+        inputs.file(k16GuestManifest)
+        inputs.file(k16SharedSmokeRuntimeManifest)
+        inputs.file(k16SharedSmokeRuntimeSource)
+        inputs.file(k16HostToolsManifest)
+        inputs.dir(k16HostToolsSource)
+        inputs.file(k16RustTargetSpec)
+        inputs.file(k16ToolchainConfig)
+        inputs.property("k16FirmwareProfile", k16FirmwareProfile)
+        outputs.file(k16SharedSmokeRuntimeArtifact)
+        outputs.file(k16SharedSmokeRuntimeMapArtifact)
+        dependsOn(rootProject.tasks.named("prepareK16Toolchain"))
+
+        doLast {
+            project.compileK16GuestRustBin(
+                manifest = k16SharedSmokeRuntimeManifest.asFile,
+                targetDir = generatedK16SharedSmokeRuntimeTarget.get().asFile,
+                binName = "k16-shared-smoke-runtime",
+                k16Target = "shared-object",
+                output = k16SharedSmokeRuntimeArtifact.get().asFile,
+                mapOutput = k16SharedSmokeRuntimeMapArtifact.get(),
+            )
+        }
+    }
+
+val compileK16SharedRuntimeTest =
+    tasks.register("compileK16SharedRuntimeTest") {
+        description = "Compiles and links the bundled K16 shared runtime import smoke into a dynamic K16E program artifact."
+        group = "k16"
+        inputs.file(k16GuestManifest)
+        inputs.file(k16SharedRuntimeTestManifest)
+        inputs.file(k16SharedRuntimeTestSource)
+        inputsK16RuntimeCrates()
+        inputs.file(k16HostToolsManifest)
+        inputs.dir(k16HostToolsSource)
+        inputs.file(k16RustTargetSpec)
+        inputs.file(k16ToolchainConfig)
+        inputs.property("k16FirmwareProfile", k16FirmwareProfile)
+        outputs.file(k16SharedRuntimeTestArtifact)
+        outputs.file(k16SharedRuntimeTestMapArtifact)
+        dependsOn(rootProject.tasks.named("prepareK16Toolchain"))
+
+        doLast {
+            project.compileK16GuestRustBin(
+                manifest = k16SharedRuntimeTestManifest.asFile,
+                targetDir = generatedK16SharedRuntimeTestTarget.get().asFile,
+                binName = "k16-shared-runtime-test",
+                k16Target = "program-dynamic",
+                output = k16SharedRuntimeTestArtifact.get().asFile,
+                mapOutput = k16SharedRuntimeTestMapArtifact.get(),
+                extraRuntimeLinkArgs =
+                    listOf(
+                        "-C link-arg=--k16-import",
+                        "-C link-arg=k16-shared-smoke.k16so:k16_shared_smoke_value",
+                    ),
+            )
+        }
+    }
+
 val reportK16UserlandSize =
     tasks.register("reportK16UserlandSize") {
         description = "Reports duplicated retained-section size across bundled K16 userland maps."
@@ -1221,7 +1306,7 @@ val putK16SystemStorage0Init =
     tasks.register("putK16SystemStorage0Init") {
         description = "Writes the bundled K16 userland layout into ROOT K16FS /bin, /lib, and /etc."
         group = "k16"
-        dependsOn(compileK16SystemStorage0, compileK16SystemInit, compileK16SystemShell, compileK16SystemUname, compileK16SystemLs, compileK16SystemCat, compileK16SystemCp, compileK16SystemMv, compileK16SystemStat, compileK16SystemWrite, compileK16SystemRm, compileK16SystemMkdir, compileK16SystemRmdir, compileK16HostedCat)
+        dependsOn(compileK16SystemStorage0, compileK16SystemInit, compileK16SystemShell, compileK16SystemUname, compileK16SystemLs, compileK16SystemCat, compileK16SystemCp, compileK16SystemMv, compileK16SystemStat, compileK16SystemWrite, compileK16SystemRm, compileK16SystemMkdir, compileK16SystemRmdir, compileK16SharedSmokeRuntime, compileK16HostedCat)
         dependsOn(rootProject.tasks.named("prepareK16Toolchain"))
         inputs.file(k16ToolchainConfig)
         inputs.file(k16InitArtifact)
@@ -1236,6 +1321,7 @@ val putK16SystemStorage0Init =
         inputs.file(k16RmArtifact)
         inputs.file(k16MkdirArtifact)
         inputs.file(k16RmdirArtifact)
+        inputs.file(k16SharedSmokeRuntimeArtifact)
         inputs.file(k16HostedCatArtifact)
         inputs.file(k16MotdSource)
         outputs.file(k16SystemStorage0Resource)
@@ -1384,6 +1470,14 @@ val putK16SystemStorage0Init =
                 "kfs",
                 "put",
                 rootPartition.absolutePath,
+                "/lib/k16-shared-smoke.k16so",
+                k16SharedSmokeRuntimeArtifact.get().asFile.absolutePath,
+            )
+            runK16Command(
+                "fs",
+                "kfs",
+                "put",
+                rootPartition.absolutePath,
                 "/bin/hosted-cat.kx",
                 k16HostedCatArtifact.get().asFile.absolutePath,
             )
@@ -1417,12 +1511,13 @@ val putK16DevelopmentStorage0TestPrograms =
     tasks.register("putK16DevelopmentStorage0TestPrograms") {
         description = "Creates the development K16 storage0 image with test programs in ROOT K16FS /bin."
         group = "k16"
-        dependsOn(putK16SystemStorage0Init, compileK16SystemAllocTest, compileK16SystemProcTest)
+        dependsOn(putK16SystemStorage0Init, compileK16SystemAllocTest, compileK16SystemProcTest, compileK16SharedRuntimeTest)
         dependsOn(rootProject.tasks.named("prepareK16Toolchain"))
         inputs.file(k16ToolchainConfig)
         inputs.file(k16SystemStorage0Resource)
         inputs.file(k16AllocTestArtifact)
         inputs.file(k16ProcTestArtifact)
+        inputs.file(k16SharedRuntimeTestArtifact)
         outputs.file(k16DevelopmentStorage0Resource)
 
         doLast {
@@ -1458,6 +1553,14 @@ val putK16DevelopmentStorage0TestPrograms =
                 rootPartition.absolutePath,
                 "/bin/alloc-test.kx",
                 k16AllocTestArtifact.get().asFile.absolutePath,
+            )
+            runK16Command(
+                "fs",
+                "kfs",
+                "put",
+                rootPartition.absolutePath,
+                "/bin/shared-runtime-test.kx",
+                k16SharedRuntimeTestArtifact.get().asFile.absolutePath,
             )
             runK16Command(
                 "fs",
