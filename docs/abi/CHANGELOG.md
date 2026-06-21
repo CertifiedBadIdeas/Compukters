@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- `k16 inspect` now supports dynamic K16E v2 program images and reports
+  entry offset, payload size, memory size, relocation count, and relocation
+  table byte size. Fixed K16E v1 inspect output remains unchanged.
 - The bundled K16 shell now includes an `exit [code]` builtin. `exit` ends the
   shell with status `0`, causing supervised init to restart it; `exit <code>`
   exits with the parsed decimal status, while invalid arguments print

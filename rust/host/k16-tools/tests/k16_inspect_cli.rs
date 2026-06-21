@@ -117,6 +117,46 @@ fn k16_inspect_identifies_standalone_k16fs_and_k16e() {
 }
 
 #[test]
+fn k16_inspect_identifies_dynamic_k16e_program_size() {
+    let path = temp_file("dynamic-init.kx");
+    fs::write(
+        &path,
+        k16e::encode_dynamic_k16_program(
+            &[0x01, 0x00, 0x02, 0x00],
+            8,
+            0,
+            &[
+                k16e::K16eRelocation {
+                    offset: 0,
+                    kind: k16e::K16eRelocationKind::Abs32,
+                },
+                k16e::K16eRelocation {
+                    offset: 4,
+                    kind: k16e::K16eRelocationKind::Call32,
+                },
+            ],
+        )
+        .expect("dynamic K16E encodes"),
+    )
+    .expect("dynamic K16E writes");
+
+    let output = Command::new(k16_binary())
+        .args(["inspect", path.to_str().unwrap()])
+        .output()
+        .expect("k16 inspect dynamic K16E runs");
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        String::from_utf8(output.stdout).expect("dynamic K16E stdout is UTF-8"),
+        "kind=K16E\nK16E abi=program dynamic=true entry_offset=0x00000000 payload_bytes=4 memory_bytes=8 relocations=2 relocation_bytes=16\n",
+    );
+}
+
+#[test]
 fn k16_inspect_rejects_unknown_blob_without_fallback() {
     let path = temp_file("unknown.bin");
     fs::write(&path, b"not a k16 blob").expect("unknown blob writes");
