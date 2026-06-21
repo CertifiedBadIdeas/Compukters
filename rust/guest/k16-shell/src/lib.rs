@@ -44,7 +44,6 @@ fn has_path_separator(bytes: &[u8]) -> bool {
 pub enum Command<'a> {
     Empty,
     Invalid,
-    Help,
     Clear,
     Pwd,
     Cd(Option<&'a [u8]>),
@@ -146,9 +145,7 @@ pub fn classify_line(input: &[u8], line_len: usize) -> Command<'_> {
     if line_len == 0 {
         return Command::Empty;
     }
-    if matches_command(input, b"help") {
-        Command::Help
-    } else if matches_command(input, b"clear") {
+    if matches_command(input, b"clear") {
         Command::Clear
     } else if matches_command(input, b"pwd") {
         Command::Pwd
@@ -276,7 +273,13 @@ mod tests {
         for byte in b"help" {
             assert!(line.push_printable(*byte));
         }
-        assert_eq!(line.command(), Command::Help);
+        assert_eq!(
+            line.command(),
+            Command::Exec {
+                name: b"help",
+                args: CommandArgs::empty()
+            }
+        );
     }
 
     #[test]
@@ -311,7 +314,13 @@ mod tests {
             assert!(line.push_printable(*byte));
         }
 
-        assert_eq!(line.command(), Command::Help);
+        assert_eq!(
+            line.command(),
+            Command::Exec {
+                name: b"help",
+                args: CommandArgs::empty()
+            }
+        );
     }
 
     #[test]
