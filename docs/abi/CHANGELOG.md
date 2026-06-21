@@ -10,6 +10,10 @@
   command list. `help` now follows normal executable resolution as
   `/bin/help.kx` and reports the standard launch error when no such program is
   installed.
+- Added `k16 size-report <map>...` plus Gradle
+  `:v1_21_1-neoforge:reportK16UserlandSize` developer tooling to summarize
+  per-program K16 userland map sizes and repeated retained-section
+  contributors before shared-runtime work.
 - `k16 link` now accepts `--map <output.map>` and writes a deterministic
   retained-section report with target, load address, payload/memory size, and
   per-section class, offset, object, file bytes, and memory bytes.
