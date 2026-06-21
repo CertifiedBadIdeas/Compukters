@@ -177,9 +177,11 @@ The lower-level source build task builds:
   stage1 compiler and host `library/std`;
 - K16 host tools in `.toolchain/build/cargo/k16-tools`.
 
-`buildK16Llvm` builds LLVM in parallel by default using the available CPU count.
-Override it with `-Pk16LlvmBuildJobs=<jobs>` when a machine needs a tighter CPU or
-memory limit.
+Source toolchain builds run in parallel by default using the available CPU
+count. Override all K16 source build jobs with `-Pk16BuildJobs=<jobs>`, or tune
+individual phases with `-Pk16LlvmBuildJobs=<jobs>`,
+`-Pk16RustBuildJobs=<jobs>`, and `-Pk16HostToolsBuildJobs=<jobs>` when a machine
+needs a tighter CPU or memory limit.
 
 The source checkouts are:
 

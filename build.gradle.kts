@@ -55,9 +55,21 @@ val k16LlvmHostTarget =
         "aarch64" -> "AArch64"
         else -> error("Unsupported K16 LLVM host target for Rust bootstrap host: $k16BootstrapHost")
     }
+val k16BuildJobs =
+    providers.gradleProperty("k16BuildJobs")
+        .orElse(Runtime.getRuntime().availableProcessors().toString())
+        .get()
 val k16LlvmBuildJobs =
     providers.gradleProperty("k16LlvmBuildJobs")
-        .orElse(Runtime.getRuntime().availableProcessors().toString())
+        .orElse(k16BuildJobs)
+        .get()
+val k16RustBuildJobs =
+    providers.gradleProperty("k16RustBuildJobs")
+        .orElse(k16BuildJobs)
+        .get()
+val k16HostToolsBuildJobs =
+    providers.gradleProperty("k16HostToolsBuildJobs")
+        .orElse(k16BuildJobs)
         .get()
 val k16LlvmBuildRoot = rootProject.file(providers.gradleProperty("k16LlvmBuildDir").orElse(".toolchain/build/llvm/k16-min").get())
 val k16LlvmConfig = k16LlvmBuildRoot.resolve("bin/llvm-config")
@@ -291,6 +303,7 @@ val buildK16Rustc =
         inputs.dir(k16RustSourceRoot)
         inputs.file(k16RustBootstrapConfig)
         inputs.property("k16RustBuildTargets", listOf("compiler/rustc", "library/std"))
+        inputs.property("k16RustBuildJobs", k16RustBuildJobs)
         outputs.file(k16BuiltRustc)
         outputs.dir(k16RustcHostLibRoot)
         outputs.upToDateWhen {
@@ -301,6 +314,10 @@ val buildK16Rustc =
         commandLine(
             k16RustSourceRoot.resolve("x.py").absolutePath,
             "build",
+            "-j",
+            k16RustBuildJobs,
+            "--warnings",
+            "warn",
             "--config",
             k16RustBootstrapConfig.absolutePath,
             "compiler/rustc",
@@ -328,9 +345,10 @@ val buildK16HostTools =
         inputs.file(rootProject.file("rust/host/k16-vm/Cargo.toml"))
         inputs.dir(rootProject.file("rust/guest/k16-abi/src"))
         inputs.file(rootProject.file("rust/guest/k16-abi/Cargo.toml"))
+        inputs.property("k16HostToolsBuildJobs", k16HostToolsBuildJobs)
         outputs.file(k16BuiltLd)
         outputs.file(k16BuiltCli)
-        commandLine("cargo", "build", "--release", "--bins")
+        commandLine("cargo", "build", "--release", "--bins", "-j", k16HostToolsBuildJobs)
         environment("CARGO_TARGET_DIR", k16HostToolsTargetRoot.absolutePath)
     }
 
