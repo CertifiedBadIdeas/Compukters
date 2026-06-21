@@ -10,18 +10,19 @@
   symbols are not archive-selection roots, so provider code is not retained in
   the importing executable payload.
 - K16E v4 now defines the first shared-object container proof: ABI kind
-  `shared-object`, base-relative payload bytes, an empty reserved relocation
-  section, and a fixed export table. `k16 inspect` reports shared-object
-  payload, memory, export count, and export byte size. The previous K16E v3
-  shared CPU helper path is documented as superseded for the main
-  shared-library direction.
+  `shared-object`, base-relative payload bytes, base-relative relocation
+  records, and a fixed export table. `k16 inspect` reports shared-object
+  payload, memory, relocation count/bytes, export count, and export byte size.
+  The previous K16E v3 shared CPU helper path is documented as superseded for
+  the main shared-library direction.
 - K16E v5 now defines the matching imported dynamic-program metadata proof:
   `NEEDED` shared-library names plus import relocation records keyed by library
   index and symbol name. `k16 inspect` reports needed/import counts for these
   artifacts.
 - The K16 kernel dynamic loader now resolves K16E v5 needed libraries from
   `ROOT` K16FS `/lib/<needed-library>`, loads K16E v4 shared-object payloads
-  into the child process image, and patches import relocations to exported
+  into the child process image, applies shared-object relocations, and patches
+  import relocations to exported
   symbol addresses. Production K16 storage now creates `/lib` alongside `/bin`
   and `/etc`.
 - `k16 link --target program-dynamic --shared-cpu-helpers` now emits K16E v3

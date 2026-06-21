@@ -651,8 +651,8 @@ class K16FirmwareResourceTest {
         assertEquals(4, bytes.u16Le(offset = 4), "bundled shared runtime must use K16E v4")
         assertEquals(4, bytes.u32Le(offset = 24), "bundled shared runtime must use K16E abi kind shared-object")
         assertTrue(
-            bytes.decodeToString().contains("k16_shared_smoke_value"),
-            "bundled shared runtime should export k16_shared_smoke_value",
+            bytes.decodeToString().contains("k16_shared_memcmp"),
+            "bundled shared runtime should export k16_shared_memcmp",
         )
     }
 
@@ -738,8 +738,8 @@ class K16FirmwareResourceTest {
             "shared runtime smoke should declare k16-shared-smoke.k16so as a needed library",
         )
         assertTrue(
-            sharedRuntimeMetadata.contains("k16_shared_smoke_value"),
-            "shared runtime smoke should import k16_shared_smoke_value",
+            sharedRuntimeMetadata.contains("k16_shared_memcmp"),
+            "shared runtime smoke should import k16_shared_memcmp",
         )
     }
 
@@ -776,7 +776,7 @@ class K16FirmwareResourceTest {
 
                 assertTrue(
                     terminal.contains("ERR EXIT 42"),
-                    "shared runtime smoke should call imported k16_shared_smoke_value through the kernel loader; terminal: $terminal",
+                    "shared runtime smoke should call imported k16_shared_memcmp through the kernel loader; terminal: $terminal",
                 )
                 assertFalse(
                     terminal.contains("ERR RUN"),

@@ -1019,7 +1019,7 @@ val compileK16SharedRuntimeTest =
                 extraRuntimeLinkArgs =
                     listOf(
                         "-C link-arg=--k16-import",
-                        "-C link-arg=k16-shared-smoke.k16so:k16_shared_smoke_value",
+                        "-C link-arg=k16-shared-smoke.k16so:k16_shared_memcmp",
                     ),
             )
         }

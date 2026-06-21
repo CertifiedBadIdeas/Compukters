@@ -153,6 +153,11 @@ fn inspect_dynamic_k16e(bytes: &[u8]) -> Result<String, String> {
 
 fn inspect_shared_object_k16e(bytes: &[u8]) -> Result<String, String> {
     let shared = k16e::decode_k16_shared_object(bytes)?;
+    let relocation_bytes = shared
+        .relocations
+        .len()
+        .checked_mul(k16e::K16E_RELOCATION_RECORD_SIZE as usize)
+        .ok_or_else(|| "K16E relocation byte count overflows".to_string())?;
     let export_bytes = shared
         .exports
         .iter()
@@ -169,9 +174,11 @@ fn inspect_shared_object_k16e(bytes: &[u8]) -> Result<String, String> {
         export_bytes + 1
     };
     Ok(format!(
-        "kind=K16E\nK16E abi=shared-object dynamic=true payload_bytes={} memory_bytes={} exports={} export_bytes={}\n",
+        "kind=K16E\nK16E abi=shared-object dynamic=true payload_bytes={} memory_bytes={} relocations={} relocation_bytes={} exports={} export_bytes={}\n",
         shared.payload.len(),
         shared.memory_size,
+        shared.relocations.len(),
+        relocation_bytes,
         shared.exports.len(),
         export_bytes
     ))

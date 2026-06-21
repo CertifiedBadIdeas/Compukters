@@ -261,6 +261,7 @@ pub struct K16eSharedExport {
 pub struct K16eSharedObject {
     pub memory_size: u32,
     pub payload: Vec<u8>,
+    pub relocations: Vec<K16eRelocation>,
     pub exports: Vec<K16eSharedExport>,
 }
 
@@ -830,18 +831,7 @@ pub fn decode_dynamic_k16_program(bytes: &[u8]) -> Result<DynamicK16Program, Str
         relocation_table_size,
         "relocation table",
     )?;
-    let mut relocations = Vec::with_capacity(
-        usize::try_from(relocation_count)
-            .map_err(|_| "K16E relocation count does not fit usize".to_string())?,
-    );
-    for index in 0..relocation_count {
-        let offset = usize::try_from(index * K16E_RELOCATION_RECORD_SIZE)
-            .map_err(|_| "K16E relocation offset does not fit usize".to_string())?;
-        relocations.push(K16eRelocation {
-            offset: read_u32(relocation_table, offset)?,
-            kind: K16eRelocationKind::decode(read_u32(relocation_table, offset + 4)?)?,
-        });
-    }
+    let relocations = decode_relocation_table(relocation_table, relocation_count)?;
     validate_dynamic_relocations(memory_size, &relocations)?;
 
     let (cpu_helper_runtime, cpu_helper_relocations, needed_libraries, import_relocations) =
@@ -1031,6 +1021,7 @@ pub fn decode_dynamic_k16_program(bytes: &[u8]) -> Result<DynamicK16Program, Str
 pub fn encode_k16_shared_object(
     payload: &[u8],
     memory_size: u32,
+    relocations: &[K16eRelocation],
     exports: &[K16eSharedExport],
 ) -> Result<Vec<u8>, String> {
     if payload.is_empty() {
@@ -1048,14 +1039,21 @@ pub fn encode_k16_shared_object(
         return Err("K16E K16 memory size must be even".to_string());
     }
     validate_shared_exports(memory_size, exports)?;
+    validate_dynamic_relocations(memory_size, relocations)?;
 
+    let relocation_table_size = u32::try_from(relocations.len())
+        .map_err(|_| "K16E relocation table is too large".to_string())?
+        .checked_mul(K16E_RELOCATION_RECORD_SIZE)
+        .ok_or_else(|| "K16E relocation table size overflows".to_string())?;
     let export_section = encode_shared_export_section(exports)?;
     let export_section_size = u32::try_from(export_section.len())
         .map_err(|_| "K16E export section is too large".to_string())?;
     let relocation_table_offset = K16E_PAYLOAD_OFFSET_SHARED_OBJECT
         .checked_add(payload_size)
         .ok_or_else(|| "K16E relocation table offset overflows".to_string())?;
-    let export_section_offset = relocation_table_offset;
+    let export_section_offset = relocation_table_offset
+        .checked_add(relocation_table_size)
+        .ok_or_else(|| "K16E export section offset overflows".to_string())?;
     let file_size = export_section_offset
         .checked_add(export_section_size)
         .ok_or_else(|| "K16E file size overflows".to_string())?;
@@ -1083,8 +1081,8 @@ pub fn encode_k16_shared_object(
     write_u32(&mut bytes, K16E_SECTION_KIND_RELOCATIONS);
     write_u32(&mut bytes, 0);
     write_u32(&mut bytes, relocation_table_offset);
-    write_u32(&mut bytes, 0);
-    write_u32(&mut bytes, 0);
+    write_u32(&mut bytes, relocation_table_size);
+    write_u32(&mut bytes, relocations.len() as u32);
 
     write_u32(&mut bytes, K16E_SECTION_KIND_EXPORTS);
     write_u32(&mut bytes, 0);
@@ -1093,6 +1091,10 @@ pub fn encode_k16_shared_object(
     write_u32(&mut bytes, exports.len() as u32);
 
     bytes.extend_from_slice(payload);
+    for relocation in relocations {
+        write_u32(&mut bytes, relocation.offset);
+        write_u32(&mut bytes, relocation.kind.code());
+    }
     bytes.extend_from_slice(&export_section);
     Ok(bytes)
 }
@@ -1191,8 +1193,11 @@ pub fn decode_k16_shared_object(bytes: &[u8]) -> Result<K16eSharedObject, String
     let relocation_table_offset = read_u32(bytes, 60)?;
     let relocation_table_size = read_u32(bytes, 64)?;
     let relocation_count = read_u32(bytes, 68)?;
-    if relocation_table_size != 0 || relocation_count != 0 {
-        return Err("shared object K16E v0 does not support relocations yet".to_string());
+    let expected_relocation_table_size = relocation_count
+        .checked_mul(K16E_RELOCATION_RECORD_SIZE)
+        .ok_or_else(|| "K16E relocation table size overflows".to_string())?;
+    if relocation_table_size != expected_relocation_table_size {
+        return Err("K16E relocation table size does not match relocation count".to_string());
     }
     if relocation_table_offset
         != payload_offset
@@ -1214,13 +1219,25 @@ pub fn decode_k16_shared_object(bytes: &[u8]) -> Result<K16eSharedObject, String
     let export_section_offset = read_u32(bytes, 80)?;
     let export_section_size = read_u32(bytes, 84)?;
     let export_count = read_u32(bytes, 88)?;
-    if export_section_offset != relocation_table_offset {
+    if export_section_offset
+        != relocation_table_offset
+            .checked_add(relocation_table_size)
+            .ok_or_else(|| "K16E export section offset overflows".to_string())?
+    {
         return Err(format!(
             "unsupported shared object K16E export section offset {export_section_offset}"
         ));
     }
 
     let payload = bytes_slice(bytes, payload_offset, payload_size, "payload")?.to_vec();
+    let relocation_table = bytes_slice(
+        bytes,
+        relocation_table_offset,
+        relocation_table_size,
+        "relocation table",
+    )?;
+    let relocations = decode_relocation_table(relocation_table, relocation_count)?;
+    validate_dynamic_relocations(memory_size, &relocations)?;
     let export_section = bytes_slice(
         bytes,
         export_section_offset,
@@ -1233,6 +1250,7 @@ pub fn decode_k16_shared_object(bytes: &[u8]) -> Result<K16eSharedObject, String
     Ok(K16eSharedObject {
         memory_size,
         payload,
+        relocations,
         exports,
     })
 }
@@ -1352,6 +1370,25 @@ fn validate_shared_exports(memory_size: u32, exports: &[K16eSharedExport]) -> Re
         }
     }
     Ok(())
+}
+
+fn decode_relocation_table(
+    relocation_table: &[u8],
+    relocation_count: u32,
+) -> Result<Vec<K16eRelocation>, String> {
+    let mut relocations = Vec::with_capacity(
+        usize::try_from(relocation_count)
+            .map_err(|_| "K16E relocation count does not fit usize".to_string())?,
+    );
+    for index in 0..relocation_count {
+        let offset = usize::try_from(index * K16E_RELOCATION_RECORD_SIZE)
+            .map_err(|_| "K16E relocation offset does not fit usize".to_string())?;
+        relocations.push(K16eRelocation {
+            offset: read_u32(relocation_table, offset)?,
+            kind: K16eRelocationKind::decode(read_u32(relocation_table, offset + 4)?)?,
+        });
+    }
+    Ok(relocations)
 }
 
 fn validate_needed_libraries(needed_libraries: &[String]) -> Result<(), String> {

@@ -101,7 +101,10 @@ pub struct SharedK16ImageHeader<'a> {
     pub payload_offset: u32,
     pub file_size: u32,
     pub memory_size: u32,
+    pub relocation_table_offset: u32,
+    pub relocation_count: u32,
     pub export_count: u32,
+    relocation_table: &'a [u8],
     export_section: &'a [u8],
 }
 
@@ -155,6 +158,10 @@ impl<'a> DynamicK16ImportedImageHeader<'a> {
 }
 
 impl<'a> SharedK16ImageHeader<'a> {
+    pub fn relocation(&self, index: u32) -> Option<K16eRelocation> {
+        relocation_from_table(self.relocation_table, self.relocation_count, index)
+    }
+
     pub fn export(&self, index: u32) -> Option<K16eSharedExport<'a>> {
         if index >= self.export_count {
             return None;
@@ -378,15 +385,21 @@ pub fn parse_shared_k16e_v4(image: &[u8]) -> Result<SharedK16ImageHeader<'_>, K1
     let relocation_table_size = read_u32_le(image, 64)?;
     let relocation_count = read_u32_le(image, 68)?;
     let payload_end = checked_add(SHARED_K16E_V4_PAYLOAD_OFFSET, file_size)?;
-    if relocation_table_offset != payload_end || relocation_table_size != 0 || relocation_count != 0
-    {
+    if relocation_table_offset != payload_end {
+        return Err(K16ImageError::InvalidExecutable);
+    }
+    let expected_relocation_table_size =
+        checked_mul(relocation_count, K16E_RELOCATION_RECORD_SIZE)?;
+    if relocation_table_size != expected_relocation_table_size {
         return Err(K16ImageError::InvalidExecutable);
     }
 
     let export_section_offset = read_u32_le(image, 80)?;
     let export_section_size = read_u32_le(image, 84)?;
     let export_count = read_u32_le(image, 88)?;
-    if export_count == 0 || export_section_offset != relocation_table_offset {
+    if export_count == 0
+        || export_section_offset != checked_add(relocation_table_offset, relocation_table_size)?
+    {
         return Err(K16ImageError::InvalidExecutable);
     }
     let export_section_end = checked_add(export_section_offset, export_section_size)?;
@@ -398,12 +411,17 @@ pub fn parse_shared_k16e_v4(image: &[u8]) -> Result<SharedK16ImageHeader<'_>, K1
         return Err(K16ImageError::InvalidExecutable);
     }
 
+    let relocation_table = image_slice(image, relocation_table_offset, relocation_table_size)?;
+    validate_dynamic_relocations(memory_size, relocation_table, relocation_count)?;
     let export_section = image_slice(image, export_section_offset, export_section_size)?;
     validate_shared_exports(memory_size, export_section, export_count)?;
     Ok(SharedK16ImageHeader {
         payload_offset: SHARED_K16E_V4_PAYLOAD_OFFSET,
         file_size,
         memory_size,
+        relocation_table_offset,
+        relocation_count,
+        relocation_table,
         export_count,
         export_section,
     })
@@ -1046,6 +1064,9 @@ mod tests {
         assert_eq!(shared.payload_offset, 92);
         assert_eq!(shared.file_size, 8);
         assert_eq!(shared.memory_size, 12);
+        assert_eq!(shared.relocation_table_offset, 100);
+        assert_eq!(shared.relocation_count, 0);
+        assert_eq!(shared.relocation(0), None);
         assert_eq!(
             shared.export(0),
             Some(K16eSharedExport {

@@ -98,7 +98,7 @@ pub fn link_k16_objects_with_options(
         &objects,
         load_addr,
         bios_prefix_len,
-        target == K16ArtifactTarget::ProgramDynamic,
+        target == K16ArtifactTarget::ProgramDynamic || target == K16ArtifactTarget::SharedObject,
         options.shared_cpu_helpers,
         target == K16ArtifactTarget::SharedObject,
         &imports.imported_symbols,
@@ -112,7 +112,12 @@ pub fn link_k16_objects_with_options(
         retained_sections: linked.retained_sections.clone(),
     };
     let bytes = if target == K16ArtifactTarget::SharedObject {
-        k16e::encode_k16_shared_object(&linked.payload, linked.memory_size, &linked.shared_exports)?
+        k16e::encode_k16_shared_object(
+            &linked.payload,
+            linked.memory_size,
+            &linked.relocations,
+            &linked.shared_exports,
+        )?
     } else if target == K16ArtifactTarget::ProgramDynamic {
         if options.shared_cpu_helpers {
             k16e::encode_dynamic_k16_program_with_cpu_helpers(

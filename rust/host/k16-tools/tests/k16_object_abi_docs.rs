@@ -223,10 +223,13 @@ fn k16e_docs_define_shared_object_v0_boundary() {
         "K16E v4 shared objects are the first shared-library ABI container",
         "abi_kind 4 (shared-object)",
         "section_count 3",
+        "section 1 file_size relocation_count * 8",
         "section 2 kind 5 (exports)",
+        "Shared-object relocation records use the same 8-byte record shape",
         "Each export record is 8 bytes",
         "name_offset",
         "K16E shared object v0 does not define imports",
+        "applies the shared object's own relocation records",
         "The kernel loader must map executable/read-only shared pages separately from per-process writable data",
         "The old K16E v3 CPU helper runtime requirement remains a narrow experiment and is superseded as the main implementation path by this shared object ABI",
     ] {
