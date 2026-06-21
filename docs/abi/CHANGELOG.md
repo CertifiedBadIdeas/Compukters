@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- `k16 link --target shared-object` now emits K16E v4 shared objects from
+  retained global definitions, without requiring `_start`. `k16 link --target
+  program-dynamic --import <library>:<symbol>` and `k16-ld --k16-import
+  <library>:<symbol>` now emit K16E v5 import metadata for explicitly imported
+  symbols while leaving other unresolved symbols as link-time errors. Imported
+  symbols are not archive-selection roots, so provider code is not retained in
+  the importing executable payload.
 - K16E v4 now defines the first shared-object container proof: ABI kind
   `shared-object`, base-relative payload bytes, an empty reserved relocation
   section, and a fixed export table. `k16 inspect` reports shared-object

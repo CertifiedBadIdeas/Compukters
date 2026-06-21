@@ -29,6 +29,10 @@ pub fn disassemble_artifact(
             let executable = k16e::decode_dynamic_k16_program(bytes)?;
             (executable.payload, 0)
         }
+        K16ArtifactTarget::SharedObject => {
+            let shared = k16e::decode_k16_shared_object(bytes)?;
+            (shared.payload, 0)
+        }
         K16ArtifactTarget::Bios => (bytes.to_vec(), target.base_address()),
     };
     if bytes.len() % 2 != 0 {

@@ -157,6 +157,141 @@ fn k16_link_shared_cpu_helpers_rejects_fixed_program_targets() {
 }
 
 #[test]
+fn k16_link_emits_shared_object_exports_from_global_symbols() {
+    let object_path = temp_file("shared-provider.o");
+    let output_path = temp_file("shared-provider.k16so");
+    fs::write(
+        &object_path,
+        k16_object_with_text_symbol("foo", &[0x02, 0x00]),
+    )
+    .expect("object writes");
+
+    let output = Command::new(k16_binary())
+        .args([
+            "link",
+            "--target",
+            "shared-object",
+            object_path.to_str().unwrap(),
+            "-o",
+            output_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("k16 link runs");
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let bytes = fs::read(output_path).expect("K16E output reads");
+    let shared = k16e::decode_k16_shared_object(&bytes).expect("shared object decodes");
+
+    assert_eq!(shared.payload, vec![0x02, 0x00]);
+    assert_eq!(
+        shared.exports,
+        vec![k16e::K16eSharedExport {
+            name: "foo".to_string(),
+            offset: 0,
+        }]
+    );
+}
+
+#[test]
+fn k16_link_emits_dynamic_imports_without_retaining_provider_code() {
+    let consumer_path = temp_file("shared-consumer.o");
+    let provider_path = temp_file("shared-provider-input.o");
+    let output_path = temp_file("shared-consumer.k16e");
+    fs::write(
+        &consumer_path,
+        k16_object_with_text_relocation_to_symbol(2, "foo"),
+    )
+    .expect("consumer object writes");
+    fs::write(
+        &provider_path,
+        k16_object_with_text_symbol("foo", &[0x55, 0xaa]),
+    )
+    .expect("provider object writes");
+
+    let output = Command::new(k16_binary())
+        .args([
+            "link",
+            "--target",
+            "program-dynamic",
+            "--import",
+            "libfoo.k16so:foo",
+            consumer_path.to_str().unwrap(),
+            provider_path.to_str().unwrap(),
+            "-o",
+            output_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("k16 link runs");
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let bytes = fs::read(output_path).expect("K16E output reads");
+    let executable = k16e::decode_dynamic_k16_program(&bytes).expect("dynamic K16E decodes");
+
+    assert_eq!(executable.needed_libraries, vec!["libfoo.k16so"]);
+    assert_eq!(
+        executable.import_relocations,
+        vec![k16e::K16eImportRelocation {
+            offset: 2,
+            kind: k16e::K16eRelocationKind::Call32,
+            library_index: 0,
+            symbol: "foo".to_string(),
+        }]
+    );
+    assert_eq!(
+        executable.payload,
+        vec![0x01, 0xe4, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00]
+    );
+    assert!(
+        !executable
+            .payload
+            .windows([0x55, 0xaa].len())
+            .any(|window| window == [0x55, 0xaa]),
+        "consumer payload retained provider code"
+    );
+}
+
+#[test]
+fn k16_link_imports_keep_unlisted_unresolved_symbols_as_errors() {
+    let object_path = temp_file("unlisted-import.o");
+    let output_path = temp_file("unlisted-import.k16e");
+    fs::write(
+        &object_path,
+        k16_object_with_text_relocation_to_symbol(2, "bar"),
+    )
+    .expect("object writes");
+
+    let output = Command::new(k16_binary())
+        .args([
+            "link",
+            "--target",
+            "program-dynamic",
+            "--import",
+            "libfoo.k16so:foo",
+            object_path.to_str().unwrap(),
+            "-o",
+            output_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("k16 link runs");
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("unresolved K16 symbol `bar`"),
+        "stderr: {stderr}"
+    );
+    assert!(!output_path.exists());
+}
+
+#[test]
 fn k16_link_converts_k16_object_with_abs32_relocation_to_program_k16e() {
     let object_path = temp_file("abs32.o");
     let output_path = temp_file("abs32.k16e");
@@ -507,6 +642,104 @@ fn k16_object_with_absolute_file_symbol() -> Vec<u8> {
 
 fn k16_object_with_image_end_relocation() -> Vec<u8> {
     k16_object_with_text_relocation_to_symbol(1, "__k16_image_end")
+}
+
+fn k16_object_with_text_symbol(symbol: &str, text: &[u8]) -> Vec<u8> {
+    let shstrtab = b"\0.text.k16\0.symtab\0.strtab\0.shstrtab\0";
+    let mut strtab = Vec::from([0]);
+    let symbol_name = push_string(&mut strtab, symbol);
+    let mut symtab = Vec::new();
+    symtab.extend([0u8; 16]);
+    write_symbol(&mut symtab, symbol_name, 0, text.len() as u32, 0x12, 1);
+
+    let text_offset = 52u32;
+    let symtab_offset = align(text_offset + text.len() as u32, 4);
+    let strtab_offset = align(symtab_offset + symtab.len() as u32, 4);
+    let shstrtab_offset = align(strtab_offset + strtab.len() as u32, 4);
+    let shoff = align(shstrtab_offset + shstrtab.len() as u32, 4);
+
+    let mut bytes = Vec::new();
+    bytes.extend([0x7f, b'E', b'L', b'F', 1, 1, 1, 0]);
+    bytes.extend([0u8; 8]);
+    write_u16(&mut bytes, 1);
+    write_u16(&mut bytes, 0x5258);
+    write_u32(&mut bytes, 1);
+    write_u32(&mut bytes, 0);
+    write_u32(&mut bytes, 0);
+    write_u32(&mut bytes, shoff);
+    write_u32(&mut bytes, 0);
+    write_u16(&mut bytes, 52);
+    write_u16(&mut bytes, 0);
+    write_u16(&mut bytes, 0);
+    write_u16(&mut bytes, 40);
+    write_u16(&mut bytes, 5);
+    write_u16(&mut bytes, 4);
+
+    pad_to(&mut bytes, text_offset);
+    bytes.extend(text);
+    pad_to(&mut bytes, symtab_offset);
+    bytes.extend_from_slice(&symtab);
+    pad_to(&mut bytes, strtab_offset);
+    bytes.extend_from_slice(&strtab);
+    pad_to(&mut bytes, shstrtab_offset);
+    bytes.extend(shstrtab);
+    pad_to(&mut bytes, shoff);
+
+    bytes.extend([0u8; 40]);
+    section(
+        &mut bytes,
+        1,
+        1,
+        0x6,
+        0,
+        text_offset,
+        text.len() as u32,
+        0,
+        0,
+        2,
+        0,
+    );
+    section(
+        &mut bytes,
+        11,
+        2,
+        0,
+        0,
+        symtab_offset,
+        symtab.len() as u32,
+        3,
+        1,
+        4,
+        16,
+    );
+    section(
+        &mut bytes,
+        19,
+        3,
+        0,
+        0,
+        strtab_offset,
+        strtab.len() as u32,
+        0,
+        0,
+        1,
+        0,
+    );
+    section(
+        &mut bytes,
+        27,
+        3,
+        0,
+        0,
+        shstrtab_offset,
+        shstrtab.len() as u32,
+        0,
+        0,
+        1,
+        0,
+    );
+
+    bytes
 }
 
 fn k16_object_with_text_relocation_config(

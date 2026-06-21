@@ -28,7 +28,7 @@ pub fn run_k16_cli(args: Vec<String>) -> Result<(), String> {
 }
 
 fn usage_error() -> Result<(), String> {
-    Err("usage: k16 link [--target <boot|kernel|program|program-dynamic>] <input.ko>... -o <output.kx>\n       k16 runtime <k16-startup|k16-memory-helpers|k16-cpu-helpers> [--target <program|program-dynamic>] -o <output.ko>\n       k16 run <program.kx>\n       k16 run-bios <bios.kflash>\n       k16 disasm --target <bios|boot|kernel|program|program-dynamic> [--start <pc>] [--count <instructions>] <input>\n       k16 inspect <blob>\n       k16 size-report <map>...\n       k16 volume <create|init|put-boot|put-kernel> ...\n       k16 fs <filesystem> ...".to_string())
+    Err("usage: k16 link [--target <boot|kernel|program|program-dynamic|shared-object>] <input.ko>... -o <output.kx>\n       k16 runtime <k16-startup|k16-memory-helpers|k16-cpu-helpers> [--target <program|program-dynamic>] -o <output.ko>\n       k16 run <program.kx>\n       k16 run-bios <bios.kflash>\n       k16 disasm --target <bios|boot|kernel|program|program-dynamic|shared-object> [--start <pc>] [--count <instructions>] <input>\n       k16 inspect <blob>\n       k16 size-report <map>...\n       k16 volume <create|init|put-boot|put-kernel> ...\n       k16 fs <filesystem> ...".to_string())
 }
 
 fn run_program(args: &[String]) -> Result<(), String> {
@@ -160,6 +160,7 @@ fn run_link(args: &[String]) -> Result<(), String> {
         config.target,
         object_link::K16LinkOptions {
             shared_cpu_helpers: config.shared_cpu_helpers,
+            imports: config.imports,
         },
     )?;
     fs::write(&config.output_path, output.bytes)
@@ -449,6 +450,7 @@ struct LinkConfig {
     output_path: String,
     map_path: Option<String>,
     shared_cpu_helpers: bool,
+    imports: Vec<object_link::K16LinkImport>,
 }
 
 fn parse_link_args(args: &[String]) -> Result<LinkConfig, String> {
@@ -457,6 +459,7 @@ fn parse_link_args(args: &[String]) -> Result<LinkConfig, String> {
     let mut output_path = None;
     let mut map_path = None;
     let mut shared_cpu_helpers = false;
+    let mut imports = Vec::new();
     let mut index = 0;
     while index < args.len() {
         match args[index].as_str() {
@@ -485,6 +488,13 @@ fn parse_link_args(args: &[String]) -> Result<LinkConfig, String> {
                 shared_cpu_helpers = true;
                 index += 1;
             }
+            "--import" => {
+                let Some(value) = args.get(index + 1) else {
+                    return link_usage_error();
+                };
+                imports.push(parse_link_import(value)?);
+                index += 2;
+            }
             value if value.starts_with('-') => return link_usage_error(),
             value => {
                 input_paths.push(value.to_string());
@@ -501,6 +511,24 @@ fn parse_link_args(args: &[String]) -> Result<LinkConfig, String> {
         output_path: output_path.ok_or_else(link_usage_message)?,
         map_path,
         shared_cpu_helpers,
+        imports,
+    })
+}
+
+fn parse_link_import(value: &str) -> Result<object_link::K16LinkImport, String> {
+    let Some((library, symbol)) = value.split_once(':') else {
+        return Err(format!(
+            "invalid K16 import `{value}`; expected <library>:<symbol>"
+        ));
+    };
+    if library.is_empty() || symbol.is_empty() || symbol.contains(':') {
+        return Err(format!(
+            "invalid K16 import `{value}`; expected <library>:<symbol>"
+        ));
+    }
+    Ok(object_link::K16LinkImport {
+        library: library.to_string(),
+        symbol: symbol.to_string(),
     })
 }
 
@@ -743,7 +771,7 @@ fn link_usage_error() -> Result<LinkConfig, String> {
 }
 
 fn link_usage_message() -> String {
-    "usage: k16 link [--target <boot|kernel|program|program-dynamic>] [--shared-cpu-helpers] [--map <output.map>] <input.ko>... -o <output.kx>"
+    "usage: k16 link [--target <boot|kernel|program|program-dynamic|shared-object>] [--shared-cpu-helpers] [--import <library>:<symbol>] [--map <output.map>] <input.ko>... -o <output.kx>"
         .to_string()
 }
 
@@ -768,7 +796,7 @@ fn disasm_usage_error() -> Result<DisasmConfig, String> {
 }
 
 fn disasm_usage_message() -> String {
-    "usage: k16 disasm --target <bios|boot|kernel|program|program-dynamic> [--start <pc>] [--count <instructions>] <input>".to_string()
+    "usage: k16 disasm --target <bios|boot|kernel|program|program-dynamic|shared-object> [--start <pc>] [--count <instructions>] <input>".to_string()
 }
 
 fn inspect_usage_error() -> Result<(), String> {

@@ -42,9 +42,16 @@ pub struct K16LinkInput<'a> {
     pub bytes: &'a [u8],
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct K16LinkOptions {
     pub shared_cpu_helpers: bool,
+    pub imports: Vec<K16LinkImport>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct K16LinkImport {
+    pub library: String,
+    pub symbol: String,
 }
 
 pub fn link_k16_objects_to_k16e(
@@ -72,8 +79,15 @@ pub fn link_k16_objects_with_options(
     if options.shared_cpu_helpers && target != K16ArtifactTarget::ProgramDynamic {
         return Err("--shared-cpu-helpers requires --target program-dynamic".to_string());
     }
+    if !options.imports.is_empty() && target != K16ArtifactTarget::ProgramDynamic {
+        return Err("--import requires --target program-dynamic".to_string());
+    }
+    if options.shared_cpu_helpers && !options.imports.is_empty() {
+        return Err("--shared-cpu-helpers cannot be combined with --import".to_string());
+    }
+    let imports = normalize_imports(&options.imports)?;
 
-    let objects = parse_link_inputs(inputs)?;
+    let objects = parse_link_inputs(inputs, &imports.imported_symbols)?;
     let load_addr = target.base_address();
     let bios_prefix_len = if target == K16ArtifactTarget::Bios {
         BIOS_ENTRY_TRAMPOLINE_LEN
@@ -86,6 +100,8 @@ pub fn link_k16_objects_with_options(
         bios_prefix_len,
         target == K16ArtifactTarget::ProgramDynamic,
         options.shared_cpu_helpers,
+        target == K16ArtifactTarget::SharedObject,
+        &imports.imported_symbols,
     )?;
     validate_payload_range(target, linked.memory_size)?;
     let map = K16LinkMap {
@@ -95,7 +111,9 @@ pub fn link_k16_objects_with_options(
         memory_bytes: linked.memory_size,
         retained_sections: linked.retained_sections.clone(),
     };
-    let bytes = if target == K16ArtifactTarget::ProgramDynamic {
+    let bytes = if target == K16ArtifactTarget::SharedObject {
+        k16e::encode_k16_shared_object(&linked.payload, linked.memory_size, &linked.shared_exports)?
+    } else if target == K16ArtifactTarget::ProgramDynamic {
         if options.shared_cpu_helpers {
             k16e::encode_dynamic_k16_program_with_cpu_helpers(
                 &linked.payload,
@@ -107,6 +125,15 @@ pub fn link_k16_objects_with_options(
                     helper_table_version: 1,
                 },
                 &linked.cpu_helper_relocations,
+            )?
+        } else if !options.imports.is_empty() {
+            k16e::encode_dynamic_k16_program_with_imports(
+                &linked.payload,
+                linked.memory_size,
+                linked.entry_pc,
+                &linked.relocations,
+                &imports.needed_libraries,
+                &linked.import_relocations,
             )?
         } else {
             k16e::encode_dynamic_k16_program(
@@ -160,7 +187,49 @@ struct LinkedImage {
     entry_pc: u32,
     relocations: Vec<k16e::K16eRelocation>,
     cpu_helper_relocations: Vec<k16e::K16eCpuHelperRelocation>,
+    import_relocations: Vec<k16e::K16eImportRelocation>,
+    shared_exports: Vec<k16e::K16eSharedExport>,
     retained_sections: Vec<K16LinkMapSection>,
+}
+
+struct NormalizedImports {
+    needed_libraries: Vec<String>,
+    imported_symbols: HashMap<String, u32>,
+}
+
+fn normalize_imports(imports: &[K16LinkImport]) -> Result<NormalizedImports, String> {
+    let mut needed_libraries = Vec::new();
+    let mut library_indexes = HashMap::new();
+    let mut imported_symbols = HashMap::new();
+
+    for import in imports {
+        if import.library.is_empty() {
+            return Err("K16 import library name must not be empty".to_string());
+        }
+        if import.symbol.is_empty() {
+            return Err("K16 import symbol name must not be empty".to_string());
+        }
+        let library_index = if let Some(index) = library_indexes.get(&import.library) {
+            *index
+        } else {
+            let index = u32::try_from(needed_libraries.len())
+                .map_err(|_| "too many K16 needed libraries".to_string())?;
+            needed_libraries.push(import.library.clone());
+            library_indexes.insert(import.library.clone(), index);
+            index
+        };
+        if let Some(previous) = imported_symbols.insert(import.symbol.clone(), library_index) {
+            return Err(format!(
+                "duplicate K16 import symbol `{}` in library indexes {} and {}",
+                import.symbol, previous, library_index
+            ));
+        }
+    }
+
+    Ok(NormalizedImports {
+        needed_libraries,
+        imported_symbols,
+    })
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -231,14 +300,21 @@ fn link_objects(
     prefix_len: usize,
     emit_dynamic_relocations: bool,
     shared_cpu_helpers: bool,
+    shared_object: bool,
+    imported_symbols: &HashMap<String, u32>,
 ) -> Result<LinkedImage, String> {
-    let retained_sections = reachable_alloc_sections(objects, shared_cpu_helpers)?;
+    let retained_sections = if shared_object {
+        all_alloc_sections(objects)
+    } else {
+        reachable_alloc_sections(objects, shared_cpu_helpers, imported_symbols)?
+    };
     let mut payload = vec![0; prefix_len];
     let mut memory_size =
         u32::try_from(prefix_len).map_err(|_| "linked K16 payload is too large".to_string())?;
     let mut section_offsets: Vec<Vec<Option<u32>>> = Vec::new();
     let mut dynamic_relocations = Vec::new();
     let mut cpu_helper_relocations = Vec::new();
+    let mut import_relocations = Vec::new();
     let mut retained_section_map = Vec::new();
 
     for (object_index, object) in objects.iter().enumerate() {
@@ -396,6 +472,18 @@ fn link_objects(
                     continue;
                 }
             }
+            if symbol.section_index == SHN_UNDEF {
+                if let Some(library_index) = imported_symbols.get(&symbol.name).copied() {
+                    let kind = import_relocation_kind(relocation.kind)?;
+                    import_relocations.push(k16e::K16eImportRelocation {
+                        offset: output_offset,
+                        kind,
+                        library_index,
+                        symbol: symbol.name.clone(),
+                    });
+                    continue;
+                }
+            }
             let symbol_address = resolve_symbol(
                 object,
                 object_index,
@@ -424,15 +512,26 @@ fn link_objects(
         }
     }
 
-    let entry_pc = *defined_symbols
-        .get("_start")
-        .ok_or_else(|| "K16 link requires defined entry symbol `_start`".to_string())?;
+    let shared_exports = if shared_object {
+        shared_exports(objects, &retained_sections, &section_offsets)?
+    } else {
+        Vec::new()
+    };
+    let entry_pc = if shared_object {
+        0
+    } else {
+        *defined_symbols
+            .get("_start")
+            .ok_or_else(|| "K16 link requires defined entry symbol `_start`".to_string())?
+    };
     Ok(LinkedImage {
         payload,
         memory_size,
         entry_pc,
         relocations: dynamic_relocations,
         cpu_helper_relocations,
+        import_relocations,
+        shared_exports,
         retained_sections: retained_section_map,
     })
 }
@@ -440,6 +539,7 @@ fn link_objects(
 fn reachable_alloc_sections(
     objects: &[ParsedObject],
     shared_cpu_helpers: bool,
+    imported_symbols: &HashMap<String, u32>,
 ) -> Result<Vec<Vec<bool>>, String> {
     let mut retained = objects
         .iter()
@@ -466,8 +566,13 @@ fn reachable_alloc_sections(
                     object.name, relocation.symbol_index
                 )
             })?;
-            let Some((target_object, target_section)) =
-                relocated_symbol_section(objects, object_index, symbol, shared_cpu_helpers)?
+            let Some((target_object, target_section)) = relocated_symbol_section(
+                objects,
+                object_index,
+                symbol,
+                shared_cpu_helpers,
+                imported_symbols,
+            )?
             else {
                 continue;
             };
@@ -484,6 +589,19 @@ fn reachable_alloc_sections(
     }
 
     Ok(retained)
+}
+
+fn all_alloc_sections(objects: &[ParsedObject]) -> Vec<Vec<bool>> {
+    objects
+        .iter()
+        .map(|object| {
+            object
+                .sections
+                .iter()
+                .map(|section| section.flags & SHF_ALLOC != 0)
+                .collect()
+        })
+        .collect()
 }
 
 fn unique_global_definition(
@@ -527,12 +645,16 @@ fn relocated_symbol_section(
     object_index: usize,
     symbol: &Symbol,
     shared_cpu_helpers: bool,
+    imported_symbols: &HashMap<String, u32>,
 ) -> Result<Option<(usize, usize)>, String> {
     if symbol.section_index == SHN_UNDEF {
         if is_synthetic_symbol(&symbol.name) {
             return Ok(None);
         }
         if shared_cpu_helpers && cpu_helper_symbol(&symbol.name).is_some() {
+            return Ok(None);
+        }
+        if imported_symbols.contains_key(&symbol.name) {
             return Ok(None);
         }
         return unique_global_definition(objects, &symbol.name)?
@@ -768,6 +890,64 @@ fn cpu_helper_relocation_kind(kind: u32) -> Result<k16e::K16eCpuHelperRelocation
     }
 }
 
+fn import_relocation_kind(kind: u32) -> Result<k16e::K16eRelocationKind, String> {
+    match dynamic_relocation_kind(kind)? {
+        Some(kind) => Ok(kind),
+        None => Err("K16 import relocation requires R_K16_ABS32 or R_K16_CALL32".to_string()),
+    }
+}
+
+fn shared_exports(
+    objects: &[ParsedObject],
+    retained_sections: &[Vec<bool>],
+    section_offsets: &[Vec<Option<u32>>],
+) -> Result<Vec<k16e::K16eSharedExport>, String> {
+    let mut exports = Vec::new();
+    for (object_index, object) in objects.iter().enumerate() {
+        for symbol in &object.symbols {
+            if symbol.binding == STB_LOCAL
+                || symbol.name.is_empty()
+                || symbol.section_index == SHN_UNDEF
+                || symbol.section_index == SHN_ABS
+            {
+                continue;
+            }
+            let section_index = usize::from(symbol.section_index);
+            if !retained_sections
+                .get(object_index)
+                .and_then(|sections| sections.get(section_index))
+                .copied()
+                .unwrap_or(false)
+            {
+                continue;
+            }
+            let Some(Some(section_offset)) = section_offsets
+                .get(object_index)
+                .and_then(|offsets| offsets.get(section_index))
+            else {
+                return Err(format!(
+                    "{}: shared export `{}` points at non-allocated section {}",
+                    object.name, symbol.name, symbol.section_index
+                ));
+            };
+            let offset = section_offset.checked_add(symbol.value).ok_or_else(|| {
+                format!(
+                    "{}: shared export `{}` offset overflows",
+                    object.name, symbol.name
+                )
+            })?;
+            exports.push(k16e::K16eSharedExport {
+                name: symbol.name.clone(),
+                offset,
+            });
+        }
+    }
+    if exports.is_empty() {
+        return Err("K16 shared object requires at least one exported symbol".to_string());
+    }
+    Ok(exports)
+}
+
 fn cpu_helper_symbol(name: &str) -> Option<k16e::K16eCpuHelper> {
     match name {
         "__k16_halt_once" => Some(k16e::K16eCpuHelper::HaltOnce),
@@ -825,7 +1005,10 @@ struct ParsedObject {
     relocations: Vec<Relocation>,
 }
 
-fn parse_link_inputs(inputs: &[K16LinkInput<'_>]) -> Result<Vec<ParsedObject>, String> {
+fn parse_link_inputs(
+    inputs: &[K16LinkInput<'_>],
+    imported_symbols: &HashMap<String, u32>,
+) -> Result<Vec<ParsedObject>, String> {
     let mut objects = Vec::new();
     let mut archives = Vec::new();
     for input in inputs {
@@ -837,18 +1020,22 @@ fn parse_link_inputs(inputs: &[K16LinkInput<'_>]) -> Result<Vec<ParsedObject>, S
             return Err(format!("{}: invalid ELF or archive magic", input.name));
         }
     }
-    select_archive_members(&mut objects, archives);
+    select_archive_members(&mut objects, archives, imported_symbols);
     Ok(objects)
 }
 
-fn select_archive_members(objects: &mut Vec<ParsedObject>, archives: Vec<Vec<ParsedObject>>) {
+fn select_archive_members(
+    objects: &mut Vec<ParsedObject>,
+    archives: Vec<Vec<ParsedObject>>,
+    imported_symbols: &HashMap<String, u32>,
+) {
     let mut selected = archives
         .into_iter()
         .map(|archive| archive.into_iter().map(Some).collect::<Vec<_>>())
         .collect::<Vec<_>>();
 
     loop {
-        let unresolved = unresolved_global_symbols(objects);
+        let unresolved = unresolved_global_symbols(objects, imported_symbols);
         if unresolved.is_empty() {
             break;
         }
@@ -876,7 +1063,10 @@ fn select_archive_members(objects: &mut Vec<ParsedObject>, archives: Vec<Vec<Par
     }
 }
 
-fn unresolved_global_symbols(objects: &[ParsedObject]) -> Vec<String> {
+fn unresolved_global_symbols(
+    objects: &[ParsedObject],
+    imported_symbols: &HashMap<String, u32>,
+) -> Vec<String> {
     let mut defined = Vec::new();
     let mut unresolved = Vec::new();
 
@@ -891,6 +1081,7 @@ fn unresolved_global_symbols(objects: &[ParsedObject]) -> Vec<String> {
     for object in objects {
         for symbol in &object.symbols {
             if symbol.is_global_undefined()
+                && !imported_symbols.contains_key(&symbol.name)
                 && !defined.iter().any(|defined| defined == &symbol.name)
                 && !unresolved
                     .iter()
