@@ -51,13 +51,14 @@ report beside the linked output without changing the emitted executable bytes.
 Rust `bin` crates use the linker-driver entry point:
 
 ```text
-k16-ld <rustc linker args> --k16-target <bios|boot|kernel|program> -o <output>
+k16-ld <rustc linker args> --k16-target <bios|boot|kernel|program> [--map <output.map>] -o <output>
 ```
 
 The driver consumes rustc-style object and archive arguments, extracts K16 ELF
 members from `.rlib` archives only when they resolve currently undefined global
 symbols, and then delegates to the same object linker. The target is explicit;
-missing `--k16-target` is a hard error.
+missing `--k16-target` is a hard error. When `--map` is present, the driver
+writes the same retained-section report as `k16 link --map`.
 
 The archive selection model follows the usual static-linker shape: object files
 on the command line are included directly, while archive members are selected in

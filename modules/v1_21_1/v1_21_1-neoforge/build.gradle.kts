@@ -195,6 +195,31 @@ val k16AllocTestArtifact = generatedK16FirmwareArtifacts.map { it.file("alloc-te
 val k16ProcTestArtifact = generatedK16FirmwareArtifacts.map { it.file("proc-test.kx") }
 val k16SyscallFaultTestArtifact = generatedK16FirmwareArtifacts.map { it.file("syscall-fault-test.kx") }
 val k16UserFaultTestArtifact = generatedK16FirmwareArtifacts.map { it.file("user-fault-test.kx") }
+val k16BootMapArtifact = k16BootArtifact.map { it.asFile.resolveSibling("${it.asFile.nameWithoutExtension}.map") }
+val k16KernelMapArtifact = k16KernelArtifact.map { it.asFile.resolveSibling("${it.asFile.nameWithoutExtension}.map") }
+val k16InitMapArtifact = k16InitArtifact.map { it.asFile.resolveSibling("${it.asFile.nameWithoutExtension}.map") }
+val k16ShellMapArtifact = k16ShellArtifact.map { it.asFile.resolveSibling("${it.asFile.nameWithoutExtension}.map") }
+val k16UnameMapArtifact = k16UnameArtifact.map { it.asFile.resolveSibling("${it.asFile.nameWithoutExtension}.map") }
+val k16LsMapArtifact = k16LsArtifact.map { it.asFile.resolveSibling("${it.asFile.nameWithoutExtension}.map") }
+val k16CatMapArtifact = k16CatArtifact.map { it.asFile.resolveSibling("${it.asFile.nameWithoutExtension}.map") }
+val k16CpMapArtifact = k16CpArtifact.map { it.asFile.resolveSibling("${it.asFile.nameWithoutExtension}.map") }
+val k16MvMapArtifact = k16MvArtifact.map { it.asFile.resolveSibling("${it.asFile.nameWithoutExtension}.map") }
+val k16StatMapArtifact = k16StatArtifact.map { it.asFile.resolveSibling("${it.asFile.nameWithoutExtension}.map") }
+val k16WriteMapArtifact = k16WriteArtifact.map { it.asFile.resolveSibling("${it.asFile.nameWithoutExtension}.map") }
+val k16RmMapArtifact = k16RmArtifact.map { it.asFile.resolveSibling("${it.asFile.nameWithoutExtension}.map") }
+val k16MkdirMapArtifact = k16MkdirArtifact.map { it.asFile.resolveSibling("${it.asFile.nameWithoutExtension}.map") }
+val k16RmdirMapArtifact = k16RmdirArtifact.map { it.asFile.resolveSibling("${it.asFile.nameWithoutExtension}.map") }
+val k16HostedHelloMapArtifact =
+    k16HostedHelloArtifact.map { it.asFile.resolveSibling("${it.asFile.nameWithoutExtension}.map") }
+val k16HostedCatMapArtifact =
+    k16HostedCatArtifact.map { it.asFile.resolveSibling("${it.asFile.nameWithoutExtension}.map") }
+val k16AllocTestMapArtifact =
+    k16AllocTestArtifact.map { it.asFile.resolveSibling("${it.asFile.nameWithoutExtension}.map") }
+val k16ProcTestMapArtifact = k16ProcTestArtifact.map { it.asFile.resolveSibling("${it.asFile.nameWithoutExtension}.map") }
+val k16SyscallFaultTestMapArtifact =
+    k16SyscallFaultTestArtifact.map { it.asFile.resolveSibling("${it.asFile.nameWithoutExtension}.map") }
+val k16UserFaultTestMapArtifact =
+    k16UserFaultTestArtifact.map { it.asFile.resolveSibling("${it.asFile.nameWithoutExtension}.map") }
 val k16SystemStorage0Resource = generatedK16FirmwareResources.map { it.file("firmware/k16-system-storage0.kv") }
 
 fun deleteK16RustBinOutputs(
@@ -325,6 +350,7 @@ fun Project.compileK16GuestRustBin(
     binName: String,
     k16Target: String,
     output: File,
+    mapOutput: File? = null,
     buildStd: String = "core",
     buildStdFeatures: String? = null,
 ) {
@@ -333,6 +359,10 @@ fun Project.compileK16GuestRustBin(
     val cpuHelpers = targetDir.resolve("k16-cpu-helpers.o")
     val startup = targetDir.resolve("k16-startup.o")
     output.parentFile.mkdirs()
+    if (mapOutput != null) {
+        mapOutput.parentFile.mkdirs()
+        mapOutput.delete()
+    }
     cpuHelpers.parentFile.mkdirs()
     deleteK16RustBinOutputs(targetDir, binName, profile)
     fun buildRuntimeObject(
@@ -382,6 +412,10 @@ fun Project.compileK16GuestRustBin(
                 add("-C link-arg=${startup.absolutePath}")
             }
             add("-C link-arg=${cpuHelpers.absolutePath}")
+            if (mapOutput != null) {
+                add("-C link-arg=--map")
+                add("-C link-arg=${mapOutput.absolutePath}")
+            }
         }.joinToString(" ")
     val command =
         listOf(toolchain.cargo.absolutePath, "rustc") +
@@ -482,6 +516,7 @@ val compileK16SystemBoot =
         inputs.file(k16ToolchainConfig)
         inputs.property("k16FirmwareProfile", k16FirmwareProfile)
         outputs.file(k16BootArtifact)
+        outputs.file(k16BootMapArtifact)
         dependsOn(rootProject.tasks.named("prepareK16Toolchain"))
 
         doLast {
@@ -491,6 +526,7 @@ val compileK16SystemBoot =
                 binName = "k16-boot",
                 k16Target = "boot",
                 output = k16BootArtifact.get().asFile,
+                mapOutput = k16BootMapArtifact.get(),
             )
         }
     }
@@ -510,6 +546,7 @@ val compileK16SystemKernel =
         inputs.file(k16ToolchainConfig)
         inputs.property("k16FirmwareProfile", k16FirmwareProfile)
         outputs.file(k16KernelArtifact)
+        outputs.file(k16KernelMapArtifact)
         dependsOn(rootProject.tasks.named("prepareK16Toolchain"))
 
         doLast {
@@ -519,6 +556,7 @@ val compileK16SystemKernel =
                 binName = "k16-kernel",
                 k16Target = "kernel",
                 output = k16KernelArtifact.get().asFile,
+                mapOutput = k16KernelMapArtifact.get(),
             )
         }
     }
@@ -538,6 +576,7 @@ val compileK16SystemInit =
         inputs.file(k16ToolchainConfig)
         inputs.property("k16FirmwareProfile", k16FirmwareProfile)
         outputs.file(k16InitArtifact)
+        outputs.file(k16InitMapArtifact)
         dependsOn(rootProject.tasks.named("prepareK16Toolchain"))
 
         doLast {
@@ -547,6 +586,7 @@ val compileK16SystemInit =
                 binName = "k16-init",
                 k16Target = "program-dynamic",
                 output = k16InitArtifact.get().asFile,
+                mapOutput = k16InitMapArtifact.get(),
             )
         }
     }
@@ -566,6 +606,7 @@ val compileK16SystemShell =
         inputs.file(k16ToolchainConfig)
         inputs.property("k16FirmwareProfile", k16FirmwareProfile)
         outputs.file(k16ShellArtifact)
+        outputs.file(k16ShellMapArtifact)
         dependsOn(rootProject.tasks.named("prepareK16Toolchain"))
 
         doLast {
@@ -575,6 +616,7 @@ val compileK16SystemShell =
                 binName = "k16-shell",
                 k16Target = "program-dynamic",
                 output = k16ShellArtifact.get().asFile,
+                mapOutput = k16ShellMapArtifact.get(),
                 buildStd = "core,alloc",
             )
         }
@@ -595,6 +637,7 @@ val compileK16SystemUname =
         inputs.file(k16ToolchainConfig)
         inputs.property("k16FirmwareProfile", k16FirmwareProfile)
         outputs.file(k16UnameArtifact)
+        outputs.file(k16UnameMapArtifact)
         dependsOn(rootProject.tasks.named("prepareK16Toolchain"))
 
         doLast {
@@ -604,6 +647,7 @@ val compileK16SystemUname =
                 binName = "k16-uname",
                 k16Target = "program-dynamic",
                 output = k16UnameArtifact.get().asFile,
+                mapOutput = k16UnameMapArtifact.get(),
             )
         }
     }
@@ -623,6 +667,7 @@ val compileK16SystemLs =
         inputs.file(k16ToolchainConfig)
         inputs.property("k16FirmwareProfile", k16FirmwareProfile)
         outputs.file(k16LsArtifact)
+        outputs.file(k16LsMapArtifact)
         dependsOn(rootProject.tasks.named("prepareK16Toolchain"))
 
         doLast {
@@ -632,6 +677,7 @@ val compileK16SystemLs =
                 binName = "k16-ls",
                 k16Target = "program-dynamic",
                 output = k16LsArtifact.get().asFile,
+                mapOutput = k16LsMapArtifact.get(),
             )
         }
     }
@@ -651,6 +697,7 @@ val compileK16SystemCat =
         inputs.file(k16ToolchainConfig)
         inputs.property("k16FirmwareProfile", k16FirmwareProfile)
         outputs.file(k16CatArtifact)
+        outputs.file(k16CatMapArtifact)
         dependsOn(rootProject.tasks.named("prepareK16Toolchain"))
 
         doLast {
@@ -660,6 +707,7 @@ val compileK16SystemCat =
                 binName = "k16-cat",
                 k16Target = "program-dynamic",
                 output = k16CatArtifact.get().asFile,
+                mapOutput = k16CatMapArtifact.get(),
             )
         }
     }
@@ -679,6 +727,7 @@ val compileK16SystemCp =
         inputs.file(k16ToolchainConfig)
         inputs.property("k16FirmwareProfile", k16FirmwareProfile)
         outputs.file(k16CpArtifact)
+        outputs.file(k16CpMapArtifact)
         dependsOn(rootProject.tasks.named("prepareK16Toolchain"))
 
         doLast {
@@ -688,6 +737,7 @@ val compileK16SystemCp =
                 binName = "k16-cp",
                 k16Target = "program-dynamic",
                 output = k16CpArtifact.get().asFile,
+                mapOutput = k16CpMapArtifact.get(),
             )
         }
     }
@@ -707,6 +757,7 @@ val compileK16SystemMv =
         inputs.file(k16ToolchainConfig)
         inputs.property("k16FirmwareProfile", k16FirmwareProfile)
         outputs.file(k16MvArtifact)
+        outputs.file(k16MvMapArtifact)
         dependsOn(rootProject.tasks.named("prepareK16Toolchain"))
 
         doLast {
@@ -716,6 +767,7 @@ val compileK16SystemMv =
                 binName = "k16-mv",
                 k16Target = "program-dynamic",
                 output = k16MvArtifact.get().asFile,
+                mapOutput = k16MvMapArtifact.get(),
             )
         }
     }
@@ -735,6 +787,7 @@ val compileK16SystemStat =
         inputs.file(k16ToolchainConfig)
         inputs.property("k16FirmwareProfile", k16FirmwareProfile)
         outputs.file(k16StatArtifact)
+        outputs.file(k16StatMapArtifact)
         dependsOn(rootProject.tasks.named("prepareK16Toolchain"))
 
         doLast {
@@ -744,6 +797,7 @@ val compileK16SystemStat =
                 binName = "k16-stat",
                 k16Target = "program-dynamic",
                 output = k16StatArtifact.get().asFile,
+                mapOutput = k16StatMapArtifact.get(),
             )
         }
     }
@@ -763,6 +817,7 @@ val compileK16SystemWrite =
         inputs.file(k16ToolchainConfig)
         inputs.property("k16FirmwareProfile", k16FirmwareProfile)
         outputs.file(k16WriteArtifact)
+        outputs.file(k16WriteMapArtifact)
         dependsOn(rootProject.tasks.named("prepareK16Toolchain"))
 
         doLast {
@@ -772,6 +827,7 @@ val compileK16SystemWrite =
                 binName = "k16-write",
                 k16Target = "program-dynamic",
                 output = k16WriteArtifact.get().asFile,
+                mapOutput = k16WriteMapArtifact.get(),
             )
         }
     }
@@ -791,6 +847,7 @@ val compileK16SystemRm =
         inputs.file(k16ToolchainConfig)
         inputs.property("k16FirmwareProfile", k16FirmwareProfile)
         outputs.file(k16RmArtifact)
+        outputs.file(k16RmMapArtifact)
         dependsOn(rootProject.tasks.named("prepareK16Toolchain"))
 
         doLast {
@@ -800,6 +857,7 @@ val compileK16SystemRm =
                 binName = "k16-rm",
                 k16Target = "program-dynamic",
                 output = k16RmArtifact.get().asFile,
+                mapOutput = k16RmMapArtifact.get(),
             )
         }
     }
@@ -819,6 +877,7 @@ val compileK16SystemMkdir =
         inputs.file(k16ToolchainConfig)
         inputs.property("k16FirmwareProfile", k16FirmwareProfile)
         outputs.file(k16MkdirArtifact)
+        outputs.file(k16MkdirMapArtifact)
         dependsOn(rootProject.tasks.named("prepareK16Toolchain"))
 
         doLast {
@@ -828,6 +887,7 @@ val compileK16SystemMkdir =
                 binName = "k16-mkdir",
                 k16Target = "program-dynamic",
                 output = k16MkdirArtifact.get().asFile,
+                mapOutput = k16MkdirMapArtifact.get(),
             )
         }
     }
@@ -847,6 +907,7 @@ val compileK16SystemRmdir =
         inputs.file(k16ToolchainConfig)
         inputs.property("k16FirmwareProfile", k16FirmwareProfile)
         outputs.file(k16RmdirArtifact)
+        outputs.file(k16RmdirMapArtifact)
         dependsOn(rootProject.tasks.named("prepareK16Toolchain"))
 
         doLast {
@@ -856,6 +917,7 @@ val compileK16SystemRmdir =
                 binName = "k16-rmdir",
                 k16Target = "program-dynamic",
                 output = k16RmdirArtifact.get().asFile,
+                mapOutput = k16RmdirMapArtifact.get(),
             )
         }
     }
@@ -875,6 +937,7 @@ val compileK16SystemAllocTest =
         inputs.file(k16ToolchainConfig)
         inputs.property("k16FirmwareProfile", k16FirmwareProfile)
         outputs.file(k16AllocTestArtifact)
+        outputs.file(k16AllocTestMapArtifact)
         dependsOn(rootProject.tasks.named("prepareK16Toolchain"))
 
         doLast {
@@ -884,6 +947,7 @@ val compileK16SystemAllocTest =
                 binName = "k16-alloc-test",
                 k16Target = "program-dynamic",
                 output = k16AllocTestArtifact.get().asFile,
+                mapOutput = k16AllocTestMapArtifact.get(),
                 buildStd = "core,alloc",
             )
         }
@@ -902,6 +966,7 @@ val compileK16HostedHello =
         inputs.file(k16ToolchainConfig)
         inputs.property("k16FirmwareProfile", k16FirmwareProfile)
         outputs.file(k16HostedHelloArtifact)
+        outputs.file(k16HostedHelloMapArtifact)
         dependsOn(rootProject.tasks.named("prepareK16Toolchain"))
 
         doLast {
@@ -911,6 +976,7 @@ val compileK16HostedHello =
                 binName = "k16-hosted-hello",
                 k16Target = "program-dynamic",
                 output = k16HostedHelloArtifact.get().asFile,
+                mapOutput = k16HostedHelloMapArtifact.get(),
                 buildStd = "std,panic_abort",
                 buildStdFeatures = "compiler-builtins-mem",
             )
@@ -930,6 +996,7 @@ val compileK16HostedCat =
         inputs.file(k16ToolchainConfig)
         inputs.property("k16FirmwareProfile", k16FirmwareProfile)
         outputs.file(k16HostedCatArtifact)
+        outputs.file(k16HostedCatMapArtifact)
         dependsOn(rootProject.tasks.named("prepareK16Toolchain"))
 
         doLast {
@@ -939,6 +1006,7 @@ val compileK16HostedCat =
                 binName = "k16-hosted-cat",
                 k16Target = "program-dynamic",
                 output = k16HostedCatArtifact.get().asFile,
+                mapOutput = k16HostedCatMapArtifact.get(),
                 buildStd = "std,panic_abort",
                 buildStdFeatures = "compiler-builtins-mem",
             )
@@ -960,6 +1028,7 @@ val compileK16SystemProcTest =
         inputs.file(k16ToolchainConfig)
         inputs.property("k16FirmwareProfile", k16FirmwareProfile)
         outputs.file(k16ProcTestArtifact)
+        outputs.file(k16ProcTestMapArtifact)
         dependsOn(rootProject.tasks.named("prepareK16Toolchain"))
 
         doLast {
@@ -969,6 +1038,7 @@ val compileK16SystemProcTest =
                 binName = "k16-proc-test",
                 k16Target = "program-dynamic",
                 output = k16ProcTestArtifact.get().asFile,
+                mapOutput = k16ProcTestMapArtifact.get(),
             )
         }
     }
@@ -988,6 +1058,7 @@ val compileK16UserFaultTest =
         inputs.file(k16ToolchainConfig)
         inputs.property("k16FirmwareProfile", k16FirmwareProfile)
         outputs.file(k16UserFaultTestArtifact)
+        outputs.file(k16UserFaultTestMapArtifact)
         dependsOn(rootProject.tasks.named("prepareK16Toolchain"))
 
         doLast {
@@ -997,6 +1068,7 @@ val compileK16UserFaultTest =
                 binName = "k16-user-fault-test",
                 k16Target = "program-dynamic",
                 output = k16UserFaultTestArtifact.get().asFile,
+                mapOutput = k16UserFaultTestMapArtifact.get(),
             )
         }
     }
@@ -1016,6 +1088,7 @@ val compileK16SyscallFaultTest =
         inputs.file(k16ToolchainConfig)
         inputs.property("k16FirmwareProfile", k16FirmwareProfile)
         outputs.file(k16SyscallFaultTestArtifact)
+        outputs.file(k16SyscallFaultTestMapArtifact)
         dependsOn(rootProject.tasks.named("prepareK16Toolchain"))
 
         doLast {
@@ -1025,6 +1098,7 @@ val compileK16SyscallFaultTest =
                 binName = "k16-syscall-fault-test",
                 k16Target = "program-dynamic",
                 output = k16SyscallFaultTestArtifact.get().asFile,
+                mapOutput = k16SyscallFaultTestMapArtifact.get(),
             )
         }
     }
