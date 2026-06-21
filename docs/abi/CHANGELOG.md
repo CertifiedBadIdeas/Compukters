@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- K16E v4 now defines the first shared-object container proof: ABI kind
+  `shared-object`, base-relative payload bytes, an empty reserved relocation
+  section, and a fixed export table. `k16 inspect` reports shared-object
+  payload, memory, export count, and export byte size. The previous K16E v3
+  shared CPU helper path is documented as superseded for the main
+  shared-library direction.
+- K16E v5 now defines the matching imported dynamic-program metadata proof:
+  `NEEDED` shared-library names plus import relocation records keyed by library
+  index and symbol name. `k16 inspect` reports needed/import counts for these
+  artifacts.
 - `k16 link --target program-dynamic --shared-cpu-helpers` now emits K16E v3
   dynamic user programs with CPU helper runtime requirement metadata and CPU
   helper relocation records. Static dynamic programs still require explicit
