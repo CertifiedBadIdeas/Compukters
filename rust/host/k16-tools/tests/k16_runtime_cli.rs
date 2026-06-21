@@ -47,6 +47,42 @@ fn k16_runtime_startup_accepts_dynamic_program_target_without_fixed_stack_top() 
 }
 
 #[test]
+fn k16_runtime_startup_preserves_program_argv_registers_for_lang_start() {
+    let startup_path = temp_file("startup-preserve-argv.o");
+
+    let runtime_output = Command::new(k16_binary())
+        .args([
+            "runtime",
+            "k16-startup",
+            "--target",
+            "program-dynamic",
+            "-o",
+            startup_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("k16 runtime runs");
+    assert!(
+        runtime_output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&runtime_output.stderr)
+    );
+
+    let startup_object = fs::read(startup_path).expect("startup object reads");
+    assert!(
+        !startup_object
+            .windows(words_to_bytes(&const32(1, 0)).len())
+            .any(|window| window == words_to_bytes(&const32(1, 0)).as_slice()),
+        "program startup must preserve r1 argc for Rust lang_start"
+    );
+    assert!(
+        !startup_object
+            .windows(words_to_bytes(&const32(2, 0)).len())
+            .any(|window| window == words_to_bytes(&const32(2, 0)).as_slice()),
+        "program startup must preserve r2 argv table for Rust lang_start"
+    );
+}
+
+#[test]
 fn k16_runtime_startup_links_returning_main_and_requires_exit_syscall_handler() {
     let startup_path = temp_file("startup.o");
     let main_path = temp_file("main.o");
@@ -1514,6 +1550,113 @@ fn main() {
     );
 }
 
+#[test]
+fn k16_rust_hosted_std_env_args_reads_k16_argv_table() {
+    let work_dir = temp_dir("hosted-std-env-args");
+    let src_dir = work_dir.join("src");
+    fs::create_dir_all(&src_dir).expect("source directory creates");
+    fs::write(
+        work_dir.join("Cargo.toml"),
+        r#"[package]
+name = "k16-hosted-std-env-args"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "k16-hosted-std-env-args"
+path = "src/main.rs"
+test = false
+"#,
+    )
+    .expect("Cargo.toml writes");
+    fs::write(
+        src_dir.join("main.rs"),
+        r#"fn main() {
+    for arg in std::env::args() {
+        print!("[{arg}]");
+    }
+    println!();
+}
+"#,
+    )
+    .expect("main.rs writes");
+
+    fs::write(
+        work_dir.join("startup.o"),
+        k16_startup_with_argv_object(&["alpha", "beta"]),
+    )
+    .expect("argv startup object writes");
+    write_k16_debug_write_syscall_stub(&work_dir);
+    write_k16_sbrk_syscall_stub(&work_dir);
+
+    let rustflags = format!(
+        "-C linker={} -C link-arg={} -C link-arg={} -C link-arg={} -C link-arg={} -C link-arg=--k16-target=program -Cpasses=lower-atomic -Copt-level=z -Cjump-tables=no -Cdebuginfo=0 -Cdebug-assertions=off -Coverflow-checks=off -Zub-checks=no",
+        k16_ld_binary(),
+        work_dir.join("startup.o").display(),
+        work_dir.join("write-stub.o").display(),
+        work_dir.join("sbrk-stub.o").display(),
+        work_dir.join("abort.o").display(),
+    );
+    let cargo_output = Command::new(k16_cargo())
+        .args([
+            "rustc",
+            "-Z",
+            "build-std=std,panic_abort",
+            "-Z",
+            "build-std-features=compiler-builtins-mem",
+            "-Z",
+            "json-target-spec",
+            "--manifest-path",
+            work_dir.join("Cargo.toml").to_str().unwrap(),
+            "--target",
+            k16_target_spec().to_str().unwrap(),
+            "--target-dir",
+            work_dir.join("target").to_str().unwrap(),
+            "--bin",
+            "k16-hosted-std-env-args",
+            "--",
+            "-C",
+            "panic=abort",
+            "-C",
+            "relocation-model=static",
+            "-Cjump-tables=no",
+            "-Cdebuginfo=0",
+            "-Cdebug-assertions=off",
+            "-Coverflow-checks=off",
+            "-Zub-checks=no",
+        ])
+        .env("RUSTC", k16_rustc())
+        .env("RUSTC_BOOTSTRAP", "1")
+        .env("RUSTFLAGS", rustflags)
+        .output()
+        .expect("cargo rustc runs");
+    assert!(
+        cargo_output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&cargo_output.stderr)
+    );
+
+    let linked_program = find_linked_rust_bin(&work_dir);
+    let run_output = Command::new(k16_binary())
+        .args(["run", linked_program.to_str().unwrap()])
+        .output()
+        .expect("k16 run runs");
+    assert!(
+        run_output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&run_output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&run_output.stdout);
+    assert!(
+        stdout.starts_with("signal=halt exit_status=0 debug_bytes="),
+        "stdout: {stdout}"
+    );
+    assert!(
+        stdout.ends_with("5b616c7068615d5b626574615d0a\n"),
+        "stdout: {stdout}"
+    );
+}
+
 fn write_k16_debug_write_syscall_stub(work_dir: &Path) {
     let stub_dir = work_dir.join("write-stub");
     let src_dir = stub_dir.join("src");
@@ -1866,6 +2009,76 @@ fn k16_read_syscall_stub_object() -> Vec<u8> {
     k16_object("__k16_read_syscall", &words_to_bytes(&words), None)
 }
 
+fn k16_startup_with_argv_object(args: &[&str]) -> Vec<u8> {
+    let mut words = Vec::new();
+    words.extend(const32(
+        15,
+        K16ArtifactTarget::PROGRAM_INITIAL_STACK_POINTER,
+    ));
+
+    words.extend(const32(1, args.len() as u32));
+    let argv_table_relocation_offset = words.len() as u32 * 2 + 2;
+    words.extend(const32(2, 0));
+    words.extend(const32(3, 0));
+    let main_relocation_offset = words.len() as u32 * 2 + 2;
+    words.extend(const32(14, 0));
+    words.push(call(14));
+    words.extend(const32(1, k16_abi::syscall::EXIT));
+    words.extend(const32(14, 0));
+    words.extend(add(2, 0, 14));
+    words.push(syscall(1));
+    words.push(halt());
+
+    let mut text = words_to_bytes(&words);
+    let argv_table_offset = text.len() as u32;
+    let mut argv_data_offsets = Vec::new();
+    for arg in args {
+        write_u32(&mut text, 0);
+        write_u32(&mut text, arg.len() as u32);
+    }
+    for arg in args {
+        argv_data_offsets.push(text.len() as u32);
+        text.extend_from_slice(arg.as_bytes());
+    }
+    if text.len() % 2 != 0 {
+        text.push(0);
+    }
+
+    let mut symbols = vec![
+        ("_start".to_string(), 0, words.len() as u32 * 2, 0x12, 1),
+        (
+            "__k16_test_argv_table".to_string(),
+            argv_table_offset,
+            args.len() as u32 * 8,
+            0x11,
+            1,
+        ),
+    ];
+    for (index, (arg, offset)) in args.iter().zip(argv_data_offsets.iter()).enumerate() {
+        symbols.push((
+            format!("__k16_test_argv_data_{index}"),
+            *offset,
+            arg.len() as u32,
+            0x11,
+            1,
+        ));
+    }
+    symbols.push(("main".to_string(), 0, 0, 0x12, 0));
+
+    let main_symbol_index = symbols.len() as u32;
+    let argv_table_symbol_index = 2;
+    let mut relocations = vec![
+        (argv_table_relocation_offset, 1, argv_table_symbol_index),
+        (main_relocation_offset, 2, main_symbol_index),
+    ];
+    for index in 0..args.len() {
+        let data_symbol_index = 3 + index as u32;
+        relocations.push((argv_table_offset + index as u32 * 8, 1, data_symbol_index));
+    }
+
+    k16_text_object_with_symbols(&text, &symbols, &relocations)
+}
+
 fn k16_fs_read_syscall_stub_object() -> Vec<u8> {
     let mut words = Vec::new();
     words.extend(const32(5, 0x1000_0100));
@@ -1915,6 +2128,34 @@ fn k16_object(defined_symbol: &str, text: &[u8], relocation: Option<(u32, u32, &
     if let Some((offset, relocation_type, _)) = relocation {
         write_u32(&mut rela, offset);
         write_u32(&mut rela, (2 << 8) | relocation_type);
+        write_u32(&mut rela, 0);
+    }
+
+    elf_object(text, &rela, &symtab, &strtab, shstrtab)
+}
+
+fn k16_text_object_with_symbols(
+    text: &[u8],
+    symbols: &[(String, u32, u32, u8, u16)],
+    relocations: &[(u32, u32, u32)],
+) -> Vec<u8> {
+    let shstrtab = b"\0.text.k16\0.rela.text.k16\0.symtab\0.strtab\0.shstrtab\0";
+    let mut strtab = Vec::from([0]);
+    let symbol_names = symbols
+        .iter()
+        .map(|(name, _, _, _, _)| push_string(&mut strtab, name))
+        .collect::<Vec<_>>();
+
+    let mut symtab = Vec::new();
+    symtab.extend([0u8; 16]);
+    for ((_, value, size, info, section), name) in symbols.iter().zip(symbol_names) {
+        write_symbol(&mut symtab, name, *value, *size, *info, *section);
+    }
+
+    let mut rela = Vec::new();
+    for (offset, relocation_type, symbol_index) in relocations {
+        write_u32(&mut rela, *offset);
+        write_u32(&mut rela, (*symbol_index << 8) | *relocation_type);
         write_u32(&mut rela, 0);
     }
 
@@ -2034,6 +2275,13 @@ fn write_symbol(bytes: &mut Vec<u8>, name: u32, value: u32, size: u32, info: u8,
     bytes.push(info);
     bytes.push(0);
     write_u16(bytes, section);
+}
+
+fn push_string(bytes: &mut Vec<u8>, value: &str) -> u32 {
+    let offset = bytes.len() as u32;
+    bytes.extend_from_slice(value.as_bytes());
+    bytes.push(0);
+    offset
 }
 
 #[allow(clippy::too_many_arguments)]
