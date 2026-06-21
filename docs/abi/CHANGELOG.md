@@ -19,6 +19,11 @@
   `NEEDED` shared-library names plus import relocation records keyed by library
   index and symbol name. `k16 inspect` reports needed/import counts for these
   artifacts.
+- The K16 kernel dynamic loader now resolves K16E v5 needed libraries from
+  `ROOT` K16FS `/lib/<needed-library>`, loads K16E v4 shared-object payloads
+  into the child process image, and patches import relocations to exported
+  symbol addresses. Production K16 storage now creates `/lib` alongside `/bin`
+  and `/etc`.
 - `k16 link --target program-dynamic --shared-cpu-helpers` now emits K16E v3
   dynamic user programs with CPU helper runtime requirement metadata and CPU
   helper relocation records. Static dynamic programs still require explicit

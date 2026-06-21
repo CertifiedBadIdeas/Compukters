@@ -1219,7 +1219,7 @@ val compileK16SystemStorage0 =
 
 val putK16SystemStorage0Init =
     tasks.register("putK16SystemStorage0Init") {
-        description = "Writes the bundled K16 user programs into ROOT K16FS /bin."
+        description = "Writes the bundled K16 userland layout into ROOT K16FS /bin, /lib, and /etc."
         group = "k16"
         dependsOn(compileK16SystemStorage0, compileK16SystemInit, compileK16SystemShell, compileK16SystemUname, compileK16SystemLs, compileK16SystemCat, compileK16SystemCp, compileK16SystemMv, compileK16SystemStat, compileK16SystemWrite, compileK16SystemRm, compileK16SystemMkdir, compileK16SystemRmdir, compileK16HostedCat)
         dependsOn(rootProject.tasks.named("prepareK16Toolchain"))
@@ -1268,6 +1268,13 @@ val putK16SystemStorage0Init =
                 "mkdir",
                 rootPartition.absolutePath,
                 "/bin",
+            )
+            runK16Command(
+                "fs",
+                "kfs",
+                "mkdir",
+                rootPartition.absolutePath,
+                "/lib",
             )
             runK16Command(
                 "fs",

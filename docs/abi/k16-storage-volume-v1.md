@@ -162,8 +162,9 @@ The current boot chain is:
 5. Bootloader validates the kernel `K16E`, copies its payload to `load_addr`,
    and jumps to `entry_pc`.
 6. Kernel reads `/bin/init.kx` from the `ROOT` K16FS partition.
-7. Kernel validates the program `K16E`, copies its payload to `load_addr`, and
-   jumps to `entry_pc`.
+7. Kernel validates the program `K16E`, resolves any declared K16E v5 shared
+   object imports from `ROOT` K16FS `/lib/<needed-library>`, copies the program
+   and shared object payloads into the child process, and jumps to `entry_pc`.
 8. The bundled init program supervises `/bin/shell.kx` through the K16
    `SPAWN` and `WAIT` syscalls.
 9. The shell launches foreground utilities by resolving command names to

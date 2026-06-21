@@ -9,8 +9,10 @@ const TRANSLATED_USER_STACK_PAGES: u32 = TRANSLATED_USER_STACK_BYTES / VM_PAGE_S
 const STACK_GUARD_BYTES: u32 = VM_PAGE_SIZE;
 const ROOT_PARTITION: &[u8; 4] = b"ROOT";
 const BIN_COMPONENT: &[u8] = b"bin";
+const LIB_COMPONENT: &[u8] = b"lib";
 const BIN_PREFIX: &[u8] = b"/bin/";
 const KX_SUFFIX: &[u8] = b".kx";
+const K16SO_SUFFIX: &[u8] = b".k16so";
 const K16FS_MAX_NAME_BYTES: usize = 56;
 pub const MAX_RUN_PATH_BYTES: usize = BIN_PREFIX.len() + K16FS_MAX_NAME_BYTES;
 const CHILD_ARG_ENTRY_BYTES: u32 = 8;
@@ -2687,6 +2689,11 @@ pub struct UserProgramPath<'a> {
     components: [&'a [u8]; 2],
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct SharedLibraryPath<'a> {
+    components: [&'a [u8]; 2],
+}
+
 impl<'a> UserProgramPath<'a> {
     pub fn parse(path: &'a [u8]) -> Result<Self, ProcessLoadError> {
         if !path.starts_with(BIN_PREFIX) {
@@ -2705,6 +2712,28 @@ impl<'a> UserProgramPath<'a> {
         }
         Ok(Self {
             components: [BIN_COMPONENT, name],
+        })
+    }
+
+    pub const fn components(&self) -> &[&'a [u8]; 2] {
+        &self.components
+    }
+}
+
+impl<'a> SharedLibraryPath<'a> {
+    pub fn parse(name: &'a [u8]) -> Result<Self, ProcessLoadError> {
+        if name.is_empty()
+            || name.len() > K16FS_MAX_NAME_BYTES
+            || !name.ends_with(K16SO_SUFFIX)
+            || name.contains(&b'/')
+            || name == K16SO_SUFFIX
+            || name == b".."
+            || name.starts_with(b".")
+        {
+            return Err(ProcessLoadError::InvalidPath);
+        }
+        Ok(Self {
+            components: [LIB_COMPONENT, name],
         })
     }
 
@@ -2798,6 +2827,40 @@ pub struct DynamicUserImage {
     pub entry_offset: u32,
     pub file_size: u32,
     pub memory_size: u32,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+struct DynamicUserImportImage {
+    entry_offset: u32,
+    payload_offset: u32,
+    file_size: u32,
+    memory_size: u32,
+    relocation_table_offset: u32,
+    relocation_count: u32,
+    needed_section_offset: u32,
+    needed_section_size: u32,
+    needed_library_count: u32,
+    import_section_offset: u32,
+    import_section_size: u32,
+    import_relocation_count: u32,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+struct SharedLibraryImage {
+    payload_offset: u32,
+    file_size: u32,
+    memory_size: u32,
+    export_section_offset: u32,
+    export_section_size: u32,
+    export_count: u32,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+struct ImportRelocationRecord<'a> {
+    offset: u32,
+    kind: u32,
+    library_index: u32,
+    symbol: &'a [u8],
 }
 
 impl DynamicUserImage {
@@ -3513,7 +3576,12 @@ pub unsafe fn load_dynamic_user_program_from_storage0(
         k16_storage::open_file_from_storage0(ROOT_PARTITION, path.components())
             .map_err(|_| ProcessLoadError::Storage)?;
     }
-    unsafe { load_selected_dynamic_user_program(arena) }
+    let version = unsafe { selected_k16e_version()? };
+    if version == 5 {
+        unsafe { load_selected_dynamic_user_program_with_imports(arena, path.components()) }
+    } else {
+        unsafe { load_selected_dynamic_user_program(arena) }
+    }
 }
 
 pub unsafe fn load_dynamic_user_program_from_storage0_mapped(
@@ -3526,7 +3594,18 @@ pub unsafe fn load_dynamic_user_program_from_storage0_mapped(
         k16_storage::open_file_from_storage0(ROOT_PARTITION, path.components())
             .map_err(|_| ProcessLoadError::Storage)?;
     }
-    unsafe { load_selected_dynamic_user_program_mapped(arena, allocator) }
+    let version = unsafe { selected_k16e_version()? };
+    if version == 5 {
+        unsafe {
+            load_selected_dynamic_user_program_with_imports_mapped(
+                arena,
+                allocator,
+                path.components(),
+            )
+        }
+    } else {
+        unsafe { load_selected_dynamic_user_program_mapped(arena, allocator) }
+    }
 }
 
 pub unsafe fn load_selected_dynamic_user_program(
@@ -3578,6 +3657,41 @@ pub unsafe fn load_selected_dynamic_user_program(
             memory_size,
             plan,
         )?;
+    }
+    Ok(plan)
+}
+
+unsafe fn load_selected_dynamic_user_program_with_imports(
+    arena: UserArena,
+    main_components: &[&[u8]; 2],
+) -> Result<DynamicUserLoadPlan, ProcessLoadError> {
+    let image = unsafe { read_selected_dynamic_import_image()? };
+    let total_memory_size = unsafe { dynamic_import_total_memory_size(image, main_components)? };
+    let plan = plan_dynamic_user_load(
+        arena,
+        DynamicUserImage {
+            entry_offset: image.entry_offset,
+            file_size: image.file_size,
+            memory_size: total_memory_size,
+        },
+    )?;
+
+    unsafe {
+        k16_storage::copy_selected_file_range_to_ram(
+            image.payload_offset,
+            plan.payload_dst,
+            image.file_size,
+        )
+        .map_err(|_| ProcessLoadError::Storage)?;
+        zero_fill_ram(plan.zero_fill_addr, plan.zero_fill_len);
+        apply_selected_file_relocations(
+            image.relocation_table_offset,
+            image.relocation_count,
+            image.memory_size,
+            plan,
+        )?;
+        load_dynamic_import_libraries(image, plan, main_components)?;
+        apply_dynamic_import_relocations(image, plan, main_components)?;
     }
     Ok(plan)
 }
@@ -3643,6 +3757,616 @@ pub unsafe fn load_selected_dynamic_user_program_mapped(
         return Err(error);
     }
     Ok(mapped)
+}
+
+unsafe fn load_selected_dynamic_user_program_with_imports_mapped(
+    arena: UserArena,
+    allocator: &mut crate::page_alloc::PageFrameAllocator,
+    main_components: &[&[u8]; 2],
+) -> Result<MappedDynamicUserLoadPlan, ProcessLoadError> {
+    let image = unsafe { read_selected_dynamic_import_image()? };
+    let total_memory_size = unsafe { dynamic_import_total_memory_size(image, main_components)? };
+    let plan = plan_dynamic_user_load(
+        arena,
+        DynamicUserImage {
+            entry_offset: image.entry_offset,
+            file_size: image.file_size,
+            memory_size: total_memory_size,
+        },
+    )?;
+    let mapped = allocate_mapped_dynamic_user_load_plan(plan, allocator)?;
+
+    if let Err(error) = unsafe {
+        k16_storage::copy_selected_file_range_to_ram(
+            image.payload_offset,
+            mapped.payload_dst(),
+            image.file_size,
+        )
+        .map_err(|_| ProcessLoadError::Storage)
+    } {
+        let _ = free_mapped_dynamic_user_load_plan(mapped, allocator);
+        return Err(error);
+    }
+    unsafe {
+        zero_fill_ram(mapped.zero_fill_addr(), plan.zero_fill_len);
+    }
+    if let Err(error) = unsafe {
+        apply_selected_file_relocations_mapped(
+            image.relocation_table_offset,
+            image.relocation_count,
+            image.memory_size,
+            mapped,
+        )
+    } {
+        let _ = free_mapped_dynamic_user_load_plan(mapped, allocator);
+        return Err(error);
+    }
+    if let Err(error) =
+        unsafe { load_dynamic_import_libraries_mapped(image, mapped, main_components) }
+    {
+        let _ = free_mapped_dynamic_user_load_plan(mapped, allocator);
+        return Err(error);
+    }
+    if let Err(error) =
+        unsafe { apply_dynamic_import_relocations_mapped(image, mapped, main_components) }
+    {
+        let _ = free_mapped_dynamic_user_load_plan(mapped, allocator);
+        return Err(error);
+    }
+    Ok(mapped)
+}
+
+unsafe fn selected_k16e_version() -> Result<u16, ProcessLoadError> {
+    unsafe {
+        k16_storage::copy_selected_file_range_to_ram(0, RELOCATION_RECORD_ADDR, 6)
+            .map_err(|_| ProcessLoadError::Storage)?;
+    }
+    let magic = [
+        unsafe { read_u8(RELOCATION_RECORD_ADDR) },
+        unsafe { read_u8(RELOCATION_RECORD_ADDR + 1) },
+        unsafe { read_u8(RELOCATION_RECORD_ADDR + 2) },
+        unsafe { read_u8(RELOCATION_RECORD_ADDR + 3) },
+    ];
+    if magic != *b"K16E" {
+        return Err(ProcessLoadError::InvalidImage);
+    }
+    Ok(u16::from_le_bytes([
+        unsafe { read_u8(RELOCATION_RECORD_ADDR + 4) },
+        unsafe { read_u8(RELOCATION_RECORD_ADDR + 5) },
+    ]))
+}
+
+unsafe fn read_selected_dynamic_import_image() -> Result<DynamicUserImportImage, ProcessLoadError> {
+    unsafe {
+        k16_storage::copy_selected_file_range_to_ram(
+            0,
+            k16_storage::SCRATCH_ADDR,
+            k16_image::DYNAMIC_K16E_V5_HEADER_SIZE,
+        )
+        .map_err(|_| ProcessLoadError::Storage)?;
+    }
+    let header = unsafe {
+        core::slice::from_raw_parts(
+            k16_storage::SCRATCH_ADDR as usize as *const u8,
+            k16_image::DYNAMIC_K16E_V5_HEADER_SIZE as usize,
+        )
+    };
+    validate_dynamic_header_bytes(header, unsafe { k16_storage::selected_file_size() })?;
+    Ok(DynamicUserImportImage {
+        entry_offset: header_u32(header, 12),
+        payload_offset: header_u32(header, 40),
+        file_size: header_u32(header, 44),
+        memory_size: header_u32(header, 48),
+        relocation_table_offset: header_u32(header, 60),
+        relocation_count: header_u32(header, 68),
+        needed_section_offset: header_u32(header, 80),
+        needed_section_size: header_u32(header, 84),
+        needed_library_count: header_u32(header, 88),
+        import_section_offset: header_u32(header, 100),
+        import_section_size: header_u32(header, 104),
+        import_relocation_count: header_u32(header, 108),
+    })
+}
+
+unsafe fn dynamic_import_total_memory_size(
+    image: DynamicUserImportImage,
+    main_components: &[&[u8]; 2],
+) -> Result<u32, ProcessLoadError> {
+    let mut total = image.memory_size;
+    let mut index = 0;
+    while index < image.needed_library_count {
+        unsafe { reopen_main_program(main_components)? };
+        let mut name = [0u8; K16FS_MAX_NAME_BYTES];
+        let library_name = unsafe { read_needed_library_name(image, index, &mut name)? };
+        let library = unsafe { open_and_read_shared_library(library_name)? };
+        total = extend_dynamic_memory_for_shared_object(total, library.memory_size)?;
+        index += 1;
+    }
+    unsafe { reopen_main_program(main_components)? };
+    Ok(total)
+}
+
+fn extend_dynamic_memory_for_shared_object(
+    current_memory_size: u32,
+    shared_memory_size: u32,
+) -> Result<u32, ProcessLoadError> {
+    let library_start = align_up(current_memory_size, LOAD_ALIGNMENT)?;
+    library_start
+        .checked_add(shared_memory_size)
+        .ok_or(ProcessLoadError::AddressOverflow)
+}
+
+unsafe fn load_dynamic_import_libraries(
+    image: DynamicUserImportImage,
+    plan: DynamicUserLoadPlan,
+    main_components: &[&[u8]; 2],
+) -> Result<(), ProcessLoadError> {
+    let mut relative_base = image.memory_size;
+    let mut index = 0;
+    while index < image.needed_library_count {
+        unsafe { reopen_main_program(main_components)? };
+        let mut name = [0u8; K16FS_MAX_NAME_BYTES];
+        let library_name = unsafe { read_needed_library_name(image, index, &mut name)? };
+        let library = unsafe { open_and_read_shared_library(library_name)? };
+        relative_base = align_up(relative_base, LOAD_ALIGNMENT)?;
+        let library_base = plan
+            .load_base
+            .checked_add(relative_base)
+            .ok_or(ProcessLoadError::AddressOverflow)?;
+        unsafe {
+            k16_storage::copy_selected_file_range_to_ram(
+                library.payload_offset,
+                library_base,
+                library.file_size,
+            )
+            .map_err(|_| ProcessLoadError::Storage)?;
+            zero_fill_ram(
+                library_base + library.file_size,
+                library.memory_size - library.file_size,
+            );
+        }
+        relative_base = relative_base
+            .checked_add(library.memory_size)
+            .ok_or(ProcessLoadError::AddressOverflow)?;
+        index += 1;
+    }
+    unsafe { reopen_main_program(main_components)? };
+    Ok(())
+}
+
+unsafe fn load_dynamic_import_libraries_mapped(
+    image: DynamicUserImportImage,
+    plan: MappedDynamicUserLoadPlan,
+    main_components: &[&[u8]; 2],
+) -> Result<(), ProcessLoadError> {
+    let mut relative_base = image.memory_size;
+    let mut index = 0;
+    while index < image.needed_library_count {
+        unsafe { reopen_main_program(main_components)? };
+        let mut name = [0u8; K16FS_MAX_NAME_BYTES];
+        let library_name = unsafe { read_needed_library_name(image, index, &mut name)? };
+        let library = unsafe { open_and_read_shared_library(library_name)? };
+        relative_base = align_up(relative_base, LOAD_ALIGNMENT)?;
+        let library_base = plan
+            .virtual_plan()
+            .load_base
+            .checked_add(relative_base)
+            .ok_or(ProcessLoadError::AddressOverflow)?;
+        let physical_base = plan.translate_address(library_base)?;
+        unsafe {
+            k16_storage::copy_selected_file_range_to_ram(
+                library.payload_offset,
+                physical_base,
+                library.file_size,
+            )
+            .map_err(|_| ProcessLoadError::Storage)?;
+            zero_fill_ram(
+                physical_base + library.file_size,
+                library.memory_size - library.file_size,
+            );
+        }
+        relative_base = relative_base
+            .checked_add(library.memory_size)
+            .ok_or(ProcessLoadError::AddressOverflow)?;
+        index += 1;
+    }
+    unsafe { reopen_main_program(main_components)? };
+    Ok(())
+}
+
+unsafe fn apply_dynamic_import_relocations(
+    image: DynamicUserImportImage,
+    plan: DynamicUserLoadPlan,
+    main_components: &[&[u8]; 2],
+) -> Result<(), ProcessLoadError> {
+    let mut index = 0;
+    while index < image.import_relocation_count {
+        unsafe { reopen_main_program(main_components)? };
+        let mut symbol = [0u8; K16FS_MAX_NAME_BYTES];
+        let relocation = unsafe { read_import_relocation_record(image, index, &mut symbol)? };
+        validate_dynamic_relocation_record(relocation.offset, relocation.kind, image.memory_size)?;
+        let library_base = unsafe {
+            dynamic_import_library_base(
+                image,
+                plan.load_base,
+                relocation.library_index,
+                main_components,
+            )?
+        };
+        let export_offset = unsafe {
+            resolve_dynamic_import_export(
+                image,
+                relocation.library_index,
+                relocation.symbol,
+                main_components,
+            )?
+        };
+        let resolved_address = library_base
+            .checked_add(export_offset)
+            .ok_or(ProcessLoadError::AddressOverflow)?;
+        unsafe { apply_import_relocation_to_ram(plan, relocation.offset, resolved_address)? };
+        index += 1;
+    }
+    unsafe { reopen_main_program(main_components)? };
+    Ok(())
+}
+
+unsafe fn apply_dynamic_import_relocations_mapped(
+    image: DynamicUserImportImage,
+    plan: MappedDynamicUserLoadPlan,
+    main_components: &[&[u8]; 2],
+) -> Result<(), ProcessLoadError> {
+    let mut index = 0;
+    while index < image.import_relocation_count {
+        unsafe { reopen_main_program(main_components)? };
+        let mut symbol = [0u8; K16FS_MAX_NAME_BYTES];
+        let relocation = unsafe { read_import_relocation_record(image, index, &mut symbol)? };
+        validate_dynamic_relocation_record(relocation.offset, relocation.kind, image.memory_size)?;
+        let library_base = unsafe {
+            dynamic_import_library_base(
+                image,
+                plan.virtual_plan().load_base,
+                relocation.library_index,
+                main_components,
+            )?
+        };
+        let export_offset = unsafe {
+            resolve_dynamic_import_export(
+                image,
+                relocation.library_index,
+                relocation.symbol,
+                main_components,
+            )?
+        };
+        let resolved_address = library_base
+            .checked_add(export_offset)
+            .ok_or(ProcessLoadError::AddressOverflow)?;
+        unsafe {
+            apply_import_relocation_to_mapped_ram(plan, relocation.offset, resolved_address)?
+        };
+        index += 1;
+    }
+    unsafe { reopen_main_program(main_components)? };
+    Ok(())
+}
+
+unsafe fn dynamic_import_library_base(
+    image: DynamicUserImportImage,
+    program_load_base: u32,
+    library_index: u32,
+    main_components: &[&[u8]; 2],
+) -> Result<u32, ProcessLoadError> {
+    if library_index >= image.needed_library_count {
+        return Err(ProcessLoadError::InvalidImage);
+    }
+    let mut relative_base = image.memory_size;
+    let mut index = 0;
+    while index <= library_index {
+        unsafe { reopen_main_program(main_components)? };
+        let mut name = [0u8; K16FS_MAX_NAME_BYTES];
+        let library_name = unsafe { read_needed_library_name(image, index, &mut name)? };
+        let library = unsafe { open_and_read_shared_library(library_name)? };
+        relative_base = align_up(relative_base, LOAD_ALIGNMENT)?;
+        if index == library_index {
+            return program_load_base
+                .checked_add(relative_base)
+                .ok_or(ProcessLoadError::AddressOverflow);
+        }
+        relative_base = relative_base
+            .checked_add(library.memory_size)
+            .ok_or(ProcessLoadError::AddressOverflow)?;
+        index += 1;
+    }
+    Err(ProcessLoadError::InvalidImage)
+}
+
+unsafe fn resolve_dynamic_import_export(
+    image: DynamicUserImportImage,
+    library_index: u32,
+    symbol: &[u8],
+    main_components: &[&[u8]; 2],
+) -> Result<u32, ProcessLoadError> {
+    if library_index >= image.needed_library_count {
+        return Err(ProcessLoadError::InvalidImage);
+    }
+    unsafe { reopen_main_program(main_components)? };
+    let mut name = [0u8; K16FS_MAX_NAME_BYTES];
+    let library_name = unsafe { read_needed_library_name(image, library_index, &mut name)? };
+    let library = unsafe { open_and_read_shared_library(library_name)? };
+    unsafe { resolve_selected_shared_export(library, symbol) }
+}
+
+unsafe fn reopen_main_program(main_components: &[&[u8]; 2]) -> Result<(), ProcessLoadError> {
+    unsafe {
+        k16_storage::open_file_from_storage0(ROOT_PARTITION, main_components)
+            .map_err(|_| ProcessLoadError::Storage)
+    }
+}
+
+unsafe fn open_and_read_shared_library(
+    name: &[u8],
+) -> Result<SharedLibraryImage, ProcessLoadError> {
+    let path = SharedLibraryPath::parse(name)?;
+    unsafe {
+        k16_storage::open_file_from_storage0(ROOT_PARTITION, path.components())
+            .map_err(|_| ProcessLoadError::Storage)?;
+    }
+    unsafe { read_selected_shared_library_image() }
+}
+
+unsafe fn read_needed_library_name<'a>(
+    image: DynamicUserImportImage,
+    index: u32,
+    out: &'a mut [u8; K16FS_MAX_NAME_BYTES],
+) -> Result<&'a [u8], ProcessLoadError> {
+    if index >= image.needed_library_count {
+        return Err(ProcessLoadError::InvalidImage);
+    }
+    unsafe {
+        read_counted_string_from_selected_file(
+            image.needed_section_offset,
+            image.needed_section_size,
+            index,
+            out,
+        )
+    }
+}
+
+unsafe fn read_import_relocation_record<'a>(
+    image: DynamicUserImportImage,
+    index: u32,
+    symbol_out: &'a mut [u8; K16FS_MAX_NAME_BYTES],
+) -> Result<ImportRelocationRecord<'a>, ProcessLoadError> {
+    if index >= image.import_relocation_count {
+        return Err(ProcessLoadError::InvalidImage);
+    }
+    let record_table_size = image
+        .import_relocation_count
+        .checked_mul(k16_image::K16E_IMPORT_RELOCATION_RECORD_SIZE)
+        .ok_or(ProcessLoadError::InvalidImage)?;
+    if image.import_section_size < record_table_size {
+        return Err(ProcessLoadError::InvalidImage);
+    }
+    let record_offset = image
+        .import_section_offset
+        .checked_add(
+            index
+                .checked_mul(k16_image::K16E_IMPORT_RELOCATION_RECORD_SIZE)
+                .ok_or(ProcessLoadError::InvalidImage)?,
+        )
+        .ok_or(ProcessLoadError::InvalidImage)?;
+    unsafe {
+        k16_storage::copy_selected_file_range_to_ram(
+            record_offset,
+            RELOCATION_RECORD_ADDR,
+            k16_image::K16E_IMPORT_RELOCATION_RECORD_SIZE,
+        )
+        .map_err(|_| ProcessLoadError::Storage)?;
+    }
+    let relocation_offset = unsafe { read_u32_le(RELOCATION_RECORD_ADDR) };
+    let relocation_kind = unsafe { read_u32_le(RELOCATION_RECORD_ADDR + 4) };
+    let library_index = unsafe { read_u32_le(RELOCATION_RECORD_ADDR + 8) };
+    let symbol_offset = unsafe { read_u32_le(RELOCATION_RECORD_ADDR + 12) };
+    let string_table_size = image.import_section_size - record_table_size;
+    if symbol_offset >= string_table_size {
+        return Err(ProcessLoadError::InvalidImage);
+    }
+    let symbol_file_offset = image
+        .import_section_offset
+        .checked_add(record_table_size)
+        .and_then(|value| value.checked_add(symbol_offset))
+        .ok_or(ProcessLoadError::InvalidImage)?;
+    let symbol = unsafe {
+        read_nul_terminated_string_from_selected_file(
+            symbol_file_offset,
+            string_table_size - symbol_offset,
+            symbol_out,
+        )?
+    };
+    Ok(ImportRelocationRecord {
+        offset: relocation_offset,
+        kind: relocation_kind,
+        library_index,
+        symbol,
+    })
+}
+
+unsafe fn read_counted_string_from_selected_file<'a>(
+    section_offset: u32,
+    section_size: u32,
+    index: u32,
+    out: &'a mut [u8; K16FS_MAX_NAME_BYTES],
+) -> Result<&'a [u8], ProcessLoadError> {
+    let mut cursor = 0;
+    let mut current = 0;
+    while cursor < section_size {
+        let string_file_offset = section_offset
+            .checked_add(cursor)
+            .ok_or(ProcessLoadError::InvalidImage)?;
+        if current == index {
+            return unsafe {
+                read_nul_terminated_string_from_selected_file(
+                    string_file_offset,
+                    section_size - cursor,
+                    out,
+                )
+            };
+        }
+        let string_len = unsafe {
+            selected_nul_terminated_string_len(string_file_offset, section_size - cursor)?
+        };
+        cursor = cursor
+            .checked_add(string_len)
+            .and_then(|value| value.checked_add(1))
+            .ok_or(ProcessLoadError::InvalidImage)?;
+        current += 1;
+    }
+    Err(ProcessLoadError::InvalidImage)
+}
+
+unsafe fn selected_nul_terminated_string_len(
+    file_offset: u32,
+    max_len: u32,
+) -> Result<u32, ProcessLoadError> {
+    let mut len = 0;
+    while len < max_len {
+        unsafe {
+            k16_storage::copy_selected_file_range_to_ram(
+                file_offset
+                    .checked_add(len)
+                    .ok_or(ProcessLoadError::InvalidImage)?,
+                RELOCATION_RECORD_ADDR,
+                1,
+            )
+            .map_err(|_| ProcessLoadError::Storage)?;
+        }
+        if unsafe { read_u8(RELOCATION_RECORD_ADDR) } == 0 {
+            if len == 0 {
+                return Err(ProcessLoadError::InvalidImage);
+            }
+            return Ok(len);
+        }
+        len += 1;
+    }
+    Err(ProcessLoadError::InvalidImage)
+}
+
+unsafe fn read_nul_terminated_string_from_selected_file<'a>(
+    file_offset: u32,
+    max_len: u32,
+    out: &'a mut [u8; K16FS_MAX_NAME_BYTES],
+) -> Result<&'a [u8], ProcessLoadError> {
+    let mut len = 0;
+    while len < max_len {
+        if len as usize >= out.len() {
+            return Err(ProcessLoadError::InvalidImage);
+        }
+        unsafe {
+            k16_storage::copy_selected_file_range_to_ram(
+                file_offset
+                    .checked_add(len)
+                    .ok_or(ProcessLoadError::InvalidImage)?,
+                RELOCATION_RECORD_ADDR,
+                1,
+            )
+            .map_err(|_| ProcessLoadError::Storage)?;
+        }
+        let byte = unsafe { read_u8(RELOCATION_RECORD_ADDR) };
+        if byte == 0 {
+            if len == 0 {
+                return Err(ProcessLoadError::InvalidImage);
+            }
+            return Ok(&out[..len as usize]);
+        }
+        out[len as usize] = byte;
+        len += 1;
+    }
+    Err(ProcessLoadError::InvalidImage)
+}
+
+unsafe fn read_selected_shared_library_image() -> Result<SharedLibraryImage, ProcessLoadError> {
+    unsafe {
+        k16_storage::copy_selected_file_range_to_ram(
+            0,
+            k16_storage::SCRATCH_ADDR,
+            k16_image::SHARED_K16E_V4_HEADER_SIZE,
+        )
+        .map_err(|_| ProcessLoadError::Storage)?;
+    }
+    let header = unsafe {
+        core::slice::from_raw_parts(
+            k16_storage::SCRATCH_ADDR as usize as *const u8,
+            k16_image::SHARED_K16E_V4_HEADER_SIZE as usize,
+        )
+    };
+    validate_shared_library_header_bytes(header, unsafe { k16_storage::selected_file_size() })?;
+    Ok(SharedLibraryImage {
+        payload_offset: header_u32(header, 40),
+        file_size: header_u32(header, 44),
+        memory_size: header_u32(header, 48),
+        export_section_offset: header_u32(header, 80),
+        export_section_size: header_u32(header, 84),
+        export_count: header_u32(header, 88),
+    })
+}
+
+unsafe fn resolve_selected_shared_export(
+    library: SharedLibraryImage,
+    symbol: &[u8],
+) -> Result<u32, ProcessLoadError> {
+    let record_table_size = library
+        .export_count
+        .checked_mul(k16_image::K16E_SHARED_EXPORT_RECORD_SIZE)
+        .ok_or(ProcessLoadError::InvalidImage)?;
+    if library.export_section_size < record_table_size {
+        return Err(ProcessLoadError::InvalidImage);
+    }
+    let mut index = 0;
+    while index < library.export_count {
+        let record_offset = library
+            .export_section_offset
+            .checked_add(
+                index
+                    .checked_mul(k16_image::K16E_SHARED_EXPORT_RECORD_SIZE)
+                    .ok_or(ProcessLoadError::InvalidImage)?,
+            )
+            .ok_or(ProcessLoadError::InvalidImage)?;
+        unsafe {
+            k16_storage::copy_selected_file_range_to_ram(
+                record_offset,
+                RELOCATION_RECORD_ADDR,
+                k16_image::K16E_SHARED_EXPORT_RECORD_SIZE,
+            )
+            .map_err(|_| ProcessLoadError::Storage)?;
+        }
+        let name_offset = unsafe { read_u32_le(RELOCATION_RECORD_ADDR) };
+        let export_offset = unsafe { read_u32_le(RELOCATION_RECORD_ADDR + 4) };
+        if export_offset % 2 != 0 || export_offset >= library.memory_size {
+            return Err(ProcessLoadError::InvalidImage);
+        }
+        let string_table_size = library.export_section_size - record_table_size;
+        if name_offset >= string_table_size {
+            return Err(ProcessLoadError::InvalidImage);
+        }
+        let name_file_offset = library
+            .export_section_offset
+            .checked_add(record_table_size)
+            .and_then(|value| value.checked_add(name_offset))
+            .ok_or(ProcessLoadError::InvalidImage)?;
+        let mut name = [0u8; K16FS_MAX_NAME_BYTES];
+        let export_name = unsafe {
+            read_nul_terminated_string_from_selected_file(
+                name_file_offset,
+                string_table_size - name_offset,
+                &mut name,
+            )?
+        };
+        if export_name == symbol {
+            return Ok(export_offset);
+        }
+        index += 1;
+    }
+    Err(ProcessLoadError::InvalidImage)
 }
 
 fn validate_dynamic_image(image: DynamicUserImage) -> Result<(), ProcessLoadError> {
@@ -3723,6 +4447,14 @@ unsafe fn apply_selected_file_relocations_mapped(
 }
 
 fn validate_dynamic_header_bytes(header: &[u8], inode_size: u32) -> Result<(), ProcessLoadError> {
+    if header.len() < 6 {
+        return Err(ProcessLoadError::InvalidImage);
+    }
+    let version = header_u16(header, 4);
+    if version == 5 {
+        return validate_dynamic_import_header_bytes(header, inode_size);
+    }
+
     if header.len() < k16_image::DYNAMIC_K16E_V2_HEADER_SIZE as usize
         || header.get(0..4) != Some(b"K16E")
         || header_u16(header, 4) != 2
@@ -3771,6 +4503,154 @@ fn validate_dynamic_header_bytes(header: &[u8], inode_size: u32) -> Result<(), P
         .checked_add(relocation_table_size)
         .ok_or(ProcessLoadError::InvalidImage)?;
     if file_end > inode_size {
+        return Err(ProcessLoadError::InvalidImage);
+    }
+    Ok(())
+}
+
+fn validate_dynamic_import_header_bytes(
+    header: &[u8],
+    inode_size: u32,
+) -> Result<(), ProcessLoadError> {
+    if header.len() < k16_image::DYNAMIC_K16E_V5_HEADER_SIZE as usize
+        || header.get(0..4) != Some(b"K16E")
+        || header_u16(header, 4) != 5
+        || header_u16(header, 6) != 32
+        || header_u16(header, 8) != 1
+        || header_u16(header, 10) != 0
+        || header_u32(header, 16) != 32
+        || header_u32(header, 20) != 4
+        || header_u32(header, 24) != k16_image::K16eAbiKind::Program as u32
+        || header_u32(header, 28) != 0
+        || header_u32(header, 32) != 1
+        || header_u32(header, 36) != 0
+        || header_u32(header, 40) != k16_image::DYNAMIC_K16E_V5_PAYLOAD_OFFSET
+        || header_u32(header, 52) != 2
+        || header_u32(header, 56) != 0
+        || header_u32(header, 72) != 6
+        || header_u32(header, 76) != 0
+        || header_u32(header, 92) != 7
+        || header_u32(header, 96) != 0
+    {
+        return Err(ProcessLoadError::InvalidImage);
+    }
+
+    let entry_offset = header_u32(header, 12);
+    let file_size = header_u32(header, 44);
+    let memory_size = header_u32(header, 48);
+    if file_size == 0 || memory_size < file_size || file_size % 2 != 0 || memory_size % 2 != 0 {
+        return Err(ProcessLoadError::InvalidImage);
+    }
+    if entry_offset >= memory_size || entry_offset % 2 != 0 {
+        return Err(ProcessLoadError::InvalidImage);
+    }
+
+    let relocation_table_offset = header_u32(header, 60);
+    let relocation_table_size = header_u32(header, 64);
+    let relocation_count = header_u32(header, 68);
+    let needed_section_offset = header_u32(header, 80);
+    let needed_section_size = header_u32(header, 84);
+    let needed_library_count = header_u32(header, 88);
+    let import_section_offset = header_u32(header, 100);
+    let import_section_size = header_u32(header, 104);
+    let import_relocation_count = header_u32(header, 108);
+
+    let payload_end = k16_image::DYNAMIC_K16E_V5_PAYLOAD_OFFSET
+        .checked_add(file_size)
+        .ok_or(ProcessLoadError::InvalidImage)?;
+    if relocation_table_offset != payload_end {
+        return Err(ProcessLoadError::InvalidImage);
+    }
+    let expected_relocation_table_size = relocation_count
+        .checked_mul(k16_image::K16E_RELOCATION_RECORD_SIZE)
+        .ok_or(ProcessLoadError::InvalidImage)?;
+    if relocation_table_size != expected_relocation_table_size {
+        return Err(ProcessLoadError::InvalidImage);
+    }
+    let relocation_table_end = relocation_table_offset
+        .checked_add(relocation_table_size)
+        .ok_or(ProcessLoadError::InvalidImage)?;
+    if needed_section_offset != relocation_table_end || needed_library_count == 0 {
+        return Err(ProcessLoadError::InvalidImage);
+    }
+    let needed_section_end = needed_section_offset
+        .checked_add(needed_section_size)
+        .ok_or(ProcessLoadError::InvalidImage)?;
+    if import_section_offset != needed_section_end || import_relocation_count == 0 {
+        return Err(ProcessLoadError::InvalidImage);
+    }
+    let expected_import_record_size = import_relocation_count
+        .checked_mul(k16_image::K16E_IMPORT_RELOCATION_RECORD_SIZE)
+        .ok_or(ProcessLoadError::InvalidImage)?;
+    if import_section_size < expected_import_record_size {
+        return Err(ProcessLoadError::InvalidImage);
+    }
+    let import_section_end = import_section_offset
+        .checked_add(import_section_size)
+        .ok_or(ProcessLoadError::InvalidImage)?;
+    if import_section_end > inode_size {
+        return Err(ProcessLoadError::InvalidImage);
+    }
+    Ok(())
+}
+
+fn validate_shared_library_header_bytes(
+    header: &[u8],
+    inode_size: u32,
+) -> Result<(), ProcessLoadError> {
+    if header.len() < k16_image::SHARED_K16E_V4_HEADER_SIZE as usize
+        || header.get(0..4) != Some(b"K16E")
+        || header_u16(header, 4) != 4
+        || header_u16(header, 6) != 32
+        || header_u16(header, 8) != 1
+        || header_u16(header, 10) != 0
+        || header_u32(header, 12) != 0
+        || header_u32(header, 16) != 32
+        || header_u32(header, 20) != 3
+        || header_u32(header, 24) != k16_image::K16eAbiKind::SharedObject as u32
+        || header_u32(header, 28) != 0
+        || header_u32(header, 32) != 1
+        || header_u32(header, 36) != 0
+        || header_u32(header, 40) != k16_image::SHARED_K16E_V4_PAYLOAD_OFFSET
+        || header_u32(header, 52) != 2
+        || header_u32(header, 56) != 0
+        || header_u32(header, 72) != 5
+        || header_u32(header, 76) != 0
+    {
+        return Err(ProcessLoadError::InvalidImage);
+    }
+
+    let file_size = header_u32(header, 44);
+    let memory_size = header_u32(header, 48);
+    if file_size == 0 || memory_size < file_size || file_size % 2 != 0 || memory_size % 2 != 0 {
+        return Err(ProcessLoadError::InvalidImage);
+    }
+    let relocation_table_offset = header_u32(header, 60);
+    let relocation_table_size = header_u32(header, 64);
+    let relocation_count = header_u32(header, 68);
+    let payload_end = k16_image::SHARED_K16E_V4_PAYLOAD_OFFSET
+        .checked_add(file_size)
+        .ok_or(ProcessLoadError::InvalidImage)?;
+    if relocation_table_offset != payload_end || relocation_table_size != 0 || relocation_count != 0
+    {
+        return Err(ProcessLoadError::InvalidImage);
+    }
+    let export_section_offset = header_u32(header, 80);
+    let export_section_size = header_u32(header, 84);
+    let export_count = header_u32(header, 88);
+    if export_count == 0 || export_section_offset != relocation_table_offset {
+        return Err(ProcessLoadError::InvalidImage);
+    }
+    let expected_record_size = export_count
+        .checked_mul(k16_image::K16E_SHARED_EXPORT_RECORD_SIZE)
+        .ok_or(ProcessLoadError::InvalidImage)?;
+    if export_section_size < expected_record_size {
+        return Err(ProcessLoadError::InvalidImage);
+    }
+    let export_section_end = export_section_offset
+        .checked_add(export_section_size)
+        .ok_or(ProcessLoadError::InvalidImage)?;
+    if export_section_end > inode_size {
         return Err(ProcessLoadError::InvalidImage);
     }
     Ok(())
@@ -3838,6 +4718,29 @@ unsafe fn apply_dynamic_relocation_to_mapped_ram(
     Ok(())
 }
 
+unsafe fn apply_import_relocation_to_ram(
+    plan: DynamicUserLoadPlan,
+    relocation_offset: u32,
+    resolved_address: u32,
+) -> Result<(), ProcessLoadError> {
+    let field_addr = plan
+        .load_base
+        .checked_add(relocation_offset)
+        .ok_or(ProcessLoadError::AddressOverflow)?;
+    unsafe { write_u32_le(field_addr, resolved_address) };
+    Ok(())
+}
+
+unsafe fn apply_import_relocation_to_mapped_ram(
+    plan: MappedDynamicUserLoadPlan,
+    relocation_offset: u32,
+    resolved_address: u32,
+) -> Result<(), ProcessLoadError> {
+    let field_addr = plan.relocation_field_addr(relocation_offset)?;
+    unsafe { write_u32_le(field_addr, resolved_address) };
+    Ok(())
+}
+
 #[cfg(test)]
 fn apply_dynamic_relocation_to_slice(
     memory: &mut [u8],
@@ -3862,6 +4765,30 @@ fn apply_dynamic_relocation_to_slice(
         .checked_add(plan.load_base)
         .ok_or(ProcessLoadError::AddressOverflow)?;
     field.copy_from_slice(&relocated.to_le_bytes());
+    Ok(())
+}
+
+#[cfg(test)]
+fn apply_import_relocation_to_slice(
+    memory: &mut [u8],
+    memory_base: u32,
+    plan: DynamicUserLoadPlan,
+    relocation_offset: u32,
+    resolved_address: u32,
+) -> Result<(), ProcessLoadError> {
+    let field_addr = plan
+        .load_base
+        .checked_add(relocation_offset)
+        .ok_or(ProcessLoadError::AddressOverflow)?;
+    let field_offset = field_addr
+        .checked_sub(memory_base)
+        .ok_or(ProcessLoadError::AddressOverflow)?;
+    let field_offset =
+        usize::try_from(field_offset).map_err(|_| ProcessLoadError::AddressOverflow)?;
+    let field = memory
+        .get_mut(field_offset..field_offset + 4)
+        .ok_or(ProcessLoadError::AddressOverflow)?;
+    field.copy_from_slice(&resolved_address.to_le_bytes());
     Ok(())
 }
 
@@ -4054,6 +4981,48 @@ mod tests {
         bytes
     }
 
+    fn dynamic_import_program_image() -> [u8; 154] {
+        let mut bytes = [0u8; 154];
+        bytes[0..4].copy_from_slice(b"K16E");
+        write_u16_le(&mut bytes, 4, 5);
+        write_u16_le(&mut bytes, 6, 32);
+        write_u16_le(&mut bytes, 8, 1);
+        write_u16_le(&mut bytes, 10, 0);
+        write_u32_le(&mut bytes, 12, 2);
+        write_u32_le(&mut bytes, 16, 32);
+        write_u32_le(&mut bytes, 20, 4);
+        write_u32_le(&mut bytes, 24, 3);
+        write_u32_le(&mut bytes, 28, 0);
+        write_u32_le(&mut bytes, 32, 1);
+        write_u32_le(&mut bytes, 36, 0);
+        write_u32_le(&mut bytes, 40, 112);
+        write_u32_le(&mut bytes, 44, 8);
+        write_u32_le(&mut bytes, 48, 12);
+        write_u32_le(&mut bytes, 52, 2);
+        write_u32_le(&mut bytes, 56, 0);
+        write_u32_le(&mut bytes, 60, 120);
+        write_u32_le(&mut bytes, 64, 0);
+        write_u32_le(&mut bytes, 68, 0);
+        write_u32_le(&mut bytes, 72, 6);
+        write_u32_le(&mut bytes, 76, 0);
+        write_u32_le(&mut bytes, 80, 120);
+        write_u32_le(&mut bytes, 84, 14);
+        write_u32_le(&mut bytes, 88, 1);
+        write_u32_le(&mut bytes, 92, 7);
+        write_u32_le(&mut bytes, 96, 0);
+        write_u32_le(&mut bytes, 100, 134);
+        write_u32_le(&mut bytes, 104, 20);
+        write_u32_le(&mut bytes, 108, 1);
+        bytes[112..120].copy_from_slice(&[0x01, 0xe1, 0, 0, 0, 0, 0, 0x90]);
+        bytes[120..133].copy_from_slice(b"libfoo.k16so\0");
+        write_u32_le(&mut bytes, 134, 4);
+        write_u32_le(&mut bytes, 138, 2);
+        write_u32_le(&mut bytes, 142, 0);
+        write_u32_le(&mut bytes, 146, 0);
+        bytes[150..154].copy_from_slice(b"foo\0");
+        bytes
+    }
+
     #[test]
     fn dynamic_user_image_uses_guest_k16e_metadata() {
         let image = dynamic_program_image();
@@ -4070,12 +5039,41 @@ mod tests {
     }
 
     #[test]
+    fn dynamic_user_image_accepts_imported_k16e_metadata() {
+        let image = dynamic_import_program_image();
+
+        validate_dynamic_header_bytes(
+            &image[..k16_image::DYNAMIC_K16E_V5_HEADER_SIZE as usize],
+            image.len() as u32,
+        )
+        .expect("v5 import dynamic image validates");
+    }
+
+    #[test]
     fn user_program_path_accepts_absolute_bin_kx_path() {
         let path = UserProgramPath::parse(b"/bin/hello.kx").expect("path parses");
 
         assert_eq!(
             path.components(),
             &[b"bin".as_slice(), b"hello.kx".as_slice()]
+        );
+    }
+
+    #[test]
+    fn shared_library_path_resolves_single_lib_component() {
+        let path = SharedLibraryPath::parse(b"libfoo.k16so").expect("library path parses");
+
+        assert_eq!(
+            path.components(),
+            &[b"lib".as_slice(), b"libfoo.k16so".as_slice()]
+        );
+        assert_eq!(
+            SharedLibraryPath::parse(b"nested/libfoo.k16so"),
+            Err(ProcessLoadError::InvalidPath)
+        );
+        assert_eq!(
+            SharedLibraryPath::parse(b"libfoo.kx"),
+            Err(ProcessLoadError::InvalidPath)
         );
     }
 
@@ -4447,6 +5445,30 @@ mod tests {
         assert_eq!(
             u32::from_le_bytes([memory[4], memory[5], memory[6], memory[7]]),
             0x0000_9006
+        );
+    }
+
+    #[test]
+    fn dynamic_user_import_relocation_writes_resolved_export_address() {
+        let plan = DynamicUserLoadPlan {
+            load_base: 0x0000_9000,
+            load_end: 0x0000_900c,
+            entry_pc: 0x0000_9000,
+            stack_top: 0x0001_0000,
+            payload_dst: 0x0000_9000,
+            payload_len: 8,
+            zero_fill_addr: 0x0000_9008,
+            zero_fill_len: 4,
+        };
+        let mut memory = [0u8; 16];
+        write_u32_le(&mut memory, 4, 0xffff_ffff);
+
+        apply_import_relocation_to_slice(&mut memory, 0x0000_9000, plan, 4, 0x0001_2002)
+            .expect("import relocation applies");
+
+        assert_eq!(
+            u32::from_le_bytes([memory[4], memory[5], memory[6], memory[7]]),
+            0x0001_2002
         );
     }
 
