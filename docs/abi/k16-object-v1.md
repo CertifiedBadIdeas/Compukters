@@ -35,15 +35,17 @@ does not implement. Unsupported relocations are link-time errors.
 The current tool entry point is:
 
 ```text
-k16 link --target <bios|boot|kernel|program|program-dynamic> [--map <output.map>] <input.ko>... -o <output>
+k16 link --target <bios|boot|kernel|program|program-dynamic> [--shared-cpu-helpers] [--map <output.map>] <input.ko>... -o <output>
 ```
 
 The command accepts K16 ELF32 `ET_REL` inputs, resolves static symbols,
 applies supported relocations, and emits a validated fixed-image `K16E` for
 bootloader, kernel, and standalone program targets. The `program-dynamic`
 target emits a K16E v2 dynamic user program with base-relative payload
-addresses and loader-applied relocation metadata. The `bios` target emits raw
-BIOS flash bytes and prefixes them with a reset-address trampoline that
+addresses and loader-applied relocation metadata. With `--shared-cpu-helpers`,
+`program-dynamic` emits a K16E v3 dynamic user program with CPU helper runtime
+requirement metadata and CPU helper relocation records. The `bios` target emits
+raw BIOS flash bytes and prefixes them with a reset-address trampoline that
 initializes `sp` to the current fixed 192 KiB stack top and jumps to `_start`.
 When `--map` is present, the linker writes a deterministic retained-section
 report beside the linked output without changing the emitted executable bytes.
@@ -175,6 +177,24 @@ helper bodies, fall back to VM hooks, or ask the VM to resolve runtime helpers.
 Callers link helper support by passing the Rust-built helper object as an
 ordinary `k16 link` input beside startup and application objects. The helper
 object is not implicit.
+
+## Shared CPU Helper Format Boundary
+
+K16E v3 is the first executable format extension for kernel-known runtime
+requirements. It is enabled only by `k16 link --target program-dynamic
+--shared-cpu-helpers`.
+
+This metadata declares a dependency on the K16 CPU helper runtime ABI version
+and helper table version. Relocations against known `k16-cpu-helpers` symbols
+become CPU helper relocation records keyed by fixed helper ids. Other unresolved
+symbols remain link-time errors.
+
+This is runtime requirement metadata, not a shared-library ABI. It does not
+enable dynamic symbol lookup, arbitrary imports or exports, GOT/PLT, TLS,
+constructors, destructors, shared writable data, or user-defined shared
+objects. It also does not load or map the helper runtime artifact; that remains
+kernel-loader behavior for a later ABI slice. Static-helper programs remain
+valid and continue linking `k16-cpu-helpers.o` as an explicit object.
 
 ## ELF Identification
 

@@ -42,6 +42,11 @@ pub struct K16LinkInput<'a> {
     pub bytes: &'a [u8],
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct K16LinkOptions {
+    pub shared_cpu_helpers: bool,
+}
+
 pub fn link_k16_objects_to_k16e(
     inputs: &[K16LinkInput<'_>],
     target: K16ArtifactTarget,
@@ -53,8 +58,19 @@ pub fn link_k16_objects(
     inputs: &[K16LinkInput<'_>],
     target: K16ArtifactTarget,
 ) -> Result<K16LinkedOutput, String> {
+    link_k16_objects_with_options(inputs, target, K16LinkOptions::default())
+}
+
+pub fn link_k16_objects_with_options(
+    inputs: &[K16LinkInput<'_>],
+    target: K16ArtifactTarget,
+    options: K16LinkOptions,
+) -> Result<K16LinkedOutput, String> {
     if inputs.is_empty() {
         return Err("k16 link requires at least one input object".to_string());
+    }
+    if options.shared_cpu_helpers && target != K16ArtifactTarget::ProgramDynamic {
+        return Err("--shared-cpu-helpers requires --target program-dynamic".to_string());
     }
 
     let objects = parse_link_inputs(inputs)?;
@@ -69,6 +85,7 @@ pub fn link_k16_objects(
         load_addr,
         bios_prefix_len,
         target == K16ArtifactTarget::ProgramDynamic,
+        options.shared_cpu_helpers,
     )?;
     validate_payload_range(target, linked.memory_size)?;
     let map = K16LinkMap {
@@ -79,12 +96,26 @@ pub fn link_k16_objects(
         retained_sections: linked.retained_sections.clone(),
     };
     let bytes = if target == K16ArtifactTarget::ProgramDynamic {
-        k16e::encode_dynamic_k16_program(
-            &linked.payload,
-            linked.memory_size,
-            linked.entry_pc,
-            &linked.relocations,
-        )?
+        if options.shared_cpu_helpers {
+            k16e::encode_dynamic_k16_program_with_cpu_helpers(
+                &linked.payload,
+                linked.memory_size,
+                linked.entry_pc,
+                &linked.relocations,
+                k16e::K16eCpuHelperRuntimeRequirement {
+                    abi_version: 1,
+                    helper_table_version: 1,
+                },
+                &linked.cpu_helper_relocations,
+            )?
+        } else {
+            k16e::encode_dynamic_k16_program(
+                &linked.payload,
+                linked.memory_size,
+                linked.entry_pc,
+                &linked.relocations,
+            )?
+        }
     } else {
         match target.fixed_image_abi_kind() {
             Some(abi_kind) => k16e::encode_k16_executable_with_memory_size(
@@ -128,6 +159,7 @@ struct LinkedImage {
     memory_size: u32,
     entry_pc: u32,
     relocations: Vec<k16e::K16eRelocation>,
+    cpu_helper_relocations: Vec<k16e::K16eCpuHelperRelocation>,
     retained_sections: Vec<K16LinkMapSection>,
 }
 
@@ -198,13 +230,15 @@ fn link_objects(
     load_addr: u32,
     prefix_len: usize,
     emit_dynamic_relocations: bool,
+    shared_cpu_helpers: bool,
 ) -> Result<LinkedImage, String> {
-    let retained_sections = reachable_alloc_sections(objects)?;
+    let retained_sections = reachable_alloc_sections(objects, shared_cpu_helpers)?;
     let mut payload = vec![0; prefix_len];
     let mut memory_size =
         u32::try_from(prefix_len).map_err(|_| "linked K16 payload is too large".to_string())?;
     let mut section_offsets: Vec<Vec<Option<u32>>> = Vec::new();
     let mut dynamic_relocations = Vec::new();
+    let mut cpu_helper_relocations = Vec::new();
     let mut retained_section_map = Vec::new();
 
     for (object_index, object) in objects.iter().enumerate() {
@@ -351,6 +385,17 @@ fn link_objects(
                     object.name, relocation.symbol_index
                 )
             })?;
+            if shared_cpu_helpers && symbol.section_index == SHN_UNDEF {
+                if let Some(helper) = cpu_helper_symbol(&symbol.name) {
+                    let kind = cpu_helper_relocation_kind(relocation.kind)?;
+                    cpu_helper_relocations.push(k16e::K16eCpuHelperRelocation {
+                        offset: output_offset,
+                        kind,
+                        helper,
+                    });
+                    continue;
+                }
+            }
             let symbol_address = resolve_symbol(
                 object,
                 object_index,
@@ -387,11 +432,15 @@ fn link_objects(
         memory_size,
         entry_pc,
         relocations: dynamic_relocations,
+        cpu_helper_relocations,
         retained_sections: retained_section_map,
     })
 }
 
-fn reachable_alloc_sections(objects: &[ParsedObject]) -> Result<Vec<Vec<bool>>, String> {
+fn reachable_alloc_sections(
+    objects: &[ParsedObject],
+    shared_cpu_helpers: bool,
+) -> Result<Vec<Vec<bool>>, String> {
     let mut retained = objects
         .iter()
         .map(|object| vec![false; object.sections.len()])
@@ -418,7 +467,7 @@ fn reachable_alloc_sections(objects: &[ParsedObject]) -> Result<Vec<Vec<bool>>, 
                 )
             })?;
             let Some((target_object, target_section)) =
-                relocated_symbol_section(objects, object_index, symbol)?
+                relocated_symbol_section(objects, object_index, symbol, shared_cpu_helpers)?
             else {
                 continue;
             };
@@ -477,9 +526,13 @@ fn relocated_symbol_section(
     objects: &[ParsedObject],
     object_index: usize,
     symbol: &Symbol,
+    shared_cpu_helpers: bool,
 ) -> Result<Option<(usize, usize)>, String> {
     if symbol.section_index == SHN_UNDEF {
         if is_synthetic_symbol(&symbol.name) {
+            return Ok(None);
+        }
+        if shared_cpu_helpers && cpu_helper_symbol(&symbol.name).is_some() {
             return Ok(None);
         }
         return unique_global_definition(objects, &symbol.name)?
@@ -702,6 +755,49 @@ fn dynamic_relocation_kind(kind: u32) -> Result<Option<k16e::K16eRelocationKind>
         R_K16_CALL32 => Ok(Some(k16e::K16eRelocationKind::Call32)),
         R_K16_BRANCH4 => Ok(None),
         other => Err(format!("unsupported K16 relocation {other}")),
+    }
+}
+
+fn cpu_helper_relocation_kind(kind: u32) -> Result<k16e::K16eCpuHelperRelocationKind, String> {
+    match kind {
+        R_K16_ABS32 => Ok(k16e::K16eCpuHelperRelocationKind::Abs32),
+        R_K16_CALL32 => Ok(k16e::K16eCpuHelperRelocationKind::Call32),
+        other => Err(format!(
+            "unsupported K16 CPU helper relocation {other}; expected R_K16_ABS32 or R_K16_CALL32"
+        )),
+    }
+}
+
+fn cpu_helper_symbol(name: &str) -> Option<k16e::K16eCpuHelper> {
+    match name {
+        "__k16_halt_once" => Some(k16e::K16eCpuHelper::HaltOnce),
+        "__k16_wait_once" => Some(k16e::K16eCpuHelper::WaitOnce),
+        "__k16_yield_once" => Some(k16e::K16eCpuHelper::YieldOnce),
+        "__k16_iret_once" => Some(k16e::K16eCpuHelper::IretOnce),
+        "__k16_save_trap_frame" => Some(k16e::K16eCpuHelper::SaveTrapFrame),
+        "__k16_restore_trap_frame" => Some(k16e::K16eCpuHelper::RestoreTrapFrame),
+        "__k16_write_trap_vector" => Some(k16e::K16eCpuHelper::WriteTrapVector),
+        "__k16_read_trap_cause" => Some(k16e::K16eCpuHelper::ReadTrapCause),
+        "__k16_read_trap_pc" => Some(k16e::K16eCpuHelper::ReadTrapPc),
+        "__k16_read_trap_value" => Some(k16e::K16eCpuHelper::ReadTrapValue),
+        "__k16_read_trap_arg0" => Some(k16e::K16eCpuHelper::ReadTrapArg0),
+        "__k16_read_trap_arg1" => Some(k16e::K16eCpuHelper::ReadTrapArg1),
+        "__k16_read_trap_arg2" => Some(k16e::K16eCpuHelper::ReadTrapArg2),
+        "__k16_syscall_once" => Some(k16e::K16eCpuHelper::SyscallOnce),
+        "__k16_syscall0" => Some(k16e::K16eCpuHelper::Syscall0),
+        "__k16_syscall1" => Some(k16e::K16eCpuHelper::Syscall1),
+        "__k16_syscall3" => Some(k16e::K16eCpuHelper::Syscall3),
+        "__k16_iret_with_r0" => Some(k16e::K16eCpuHelper::IretWithR0),
+        "__k16_write_interrupt_enable" => Some(k16e::K16eCpuHelper::WriteInterruptEnable),
+        "__k16_write_interrupt_mask" => Some(k16e::K16eCpuHelper::WriteInterruptMask),
+        "__k16_read_interrupt_pending" => Some(k16e::K16eCpuHelper::ReadInterruptPending),
+        "__k16_write_syscall" => Some(k16e::K16eCpuHelper::WriteSyscall),
+        "__k16_read_syscall" => Some(k16e::K16eCpuHelper::ReadSyscall),
+        "__k16_open_syscall" => Some(k16e::K16eCpuHelper::OpenSyscall),
+        "__k16_close_syscall" => Some(k16e::K16eCpuHelper::CloseSyscall),
+        "__k16_brk_syscall" => Some(k16e::K16eCpuHelper::BrkSyscall),
+        "__k16_sbrk_syscall" => Some(k16e::K16eCpuHelper::SbrkSyscall),
+        _ => None,
     }
 }
 
