@@ -86,6 +86,21 @@ fn k16_bios_splash_uses_sleep_boundary() {
 }
 
 #[test]
+fn k16_hosted_cat_streams_file_bytes_without_read_to_string() {
+    let root = repo_root();
+    let hosted_cat_source = root.join("rust/guest/k16-hosted-cat/src/main.rs");
+
+    let source = fs::read_to_string(&hosted_cat_source).expect("hosted cat source exists");
+    assert!(source.contains("std::fs::File::open"));
+    assert!(source.contains("read(&mut buffer)"));
+    assert!(source.contains("write_all(&buffer[..bytes_read])"));
+    assert!(
+        !source.contains("read_to_string"),
+        "hosted-cat must stream bytes instead of retaining std read_to_string/text decoding paths"
+    );
+}
+
+#[test]
 fn kraft_std_layering_rule_is_documented_and_enforced() {
     let root = repo_root();
     let docs = root.join("docs/toolchains/kraft-std.md");

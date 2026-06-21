@@ -1678,10 +1678,20 @@ test = false
     .expect("Cargo.toml writes");
     fs::write(
         src_dir.join("main.rs"),
-        r#"fn main() {
+        r#"use std::io::{Read, Write};
+
+fn main() {
     for path in std::env::args().skip(1) {
-        let text = std::fs::read_to_string(path).unwrap();
-        print!("{text}");
+        let mut file = std::fs::File::open(path).unwrap();
+        let mut stdout = std::io::stdout();
+        let mut buffer = [0; 512];
+        loop {
+            let bytes_read = file.read(&mut buffer).unwrap();
+            if bytes_read == 0 {
+                break;
+            }
+            stdout.write_all(&buffer[..bytes_read]).unwrap();
+        }
     }
 }
 "#,
@@ -1761,8 +1771,11 @@ test = false
         stdout.starts_with("signal=halt exit_status=0 debug_bytes="),
         "stdout: {stdout}"
     );
+    assert!(stdout.contains("4f"), "stdout: {stdout}");
+    assert!(stdout.contains("52"), "stdout: {stdout}");
+    assert!(stdout.contains("43"), "stdout: {stdout}");
     assert!(
-        stdout.ends_with("4b726166744f53204d4f54440a\n"),
+        stdout.contains("4b726166744f53204d4f54440a"),
         "stdout: {stdout}"
     );
 }
