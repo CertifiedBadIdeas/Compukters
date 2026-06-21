@@ -181,6 +181,7 @@ class K16FirmwareResourceTest {
             "shell uses alloc-backed input and should build core+alloc",
         )
         assertTrue(source.contains("\"/bin\""))
+        assertTrue(source.contains("\"/lib\""))
         assertTrue(source.contains("\"/etc\""))
         assertTrue(source.contains("\"/bin/init.kx\""))
         assertTrue(source.contains("\"/bin/shell.kx\""))

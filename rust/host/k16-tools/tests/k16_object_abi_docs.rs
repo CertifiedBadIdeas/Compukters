@@ -249,7 +249,8 @@ fn k16e_docs_define_imported_dynamic_program_v0_boundary() {
         "library_index",
         "symbol_name_offset",
         "Needed library names are UTF-8 and NUL-terminated",
-        "K16E v5 does not define the shared object search path",
+        "resolves each needed library from the `ROOT` K16FS partition under `/lib/<needed-library>`",
+        "Needed-library names are single K16FS path components, not full paths",
         "A loader must reject missing needed libraries, missing exported symbols, unsupported import relocation kinds, out-of-range library indexes, and malformed import string tables",
     ] {
         assert!(
