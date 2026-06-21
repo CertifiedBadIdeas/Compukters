@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- `k16 link` now accepts `--map <output.map>` and writes a deterministic
+  retained-section report with target, load address, payload/memory size, and
+  per-section class, offset, object, file bytes, and memory bytes.
 - `k16 inspect` now supports dynamic K16E v2 program images and reports
   entry offset, payload size, memory size, relocation count, and relocation
   table byte size. Fixed K16E v1 inspect output remains unchanged.

@@ -142,7 +142,7 @@ fn k16_link_converts_k16_object_to_raw_bios_flash() {
     assert_eq!(
         bytes,
         [
-            0x01, 0xef, 0x00, 0x00, 0x03, 0x00, 0x01, 0xee, 0x0e, 0x00, 0xf0, 0xff, 0x00, 0x7e,
+            0x01, 0xef, 0x00, 0x00, 0x08, 0x00, 0x01, 0xee, 0x0e, 0x00, 0xf0, 0xff, 0x00, 0x7e,
             0x01, 0xe4, 0x0e, 0x00, 0xf0, 0xff, 0x01, 0x00,
         ],
         "BIOS flash output should be raw K16 bytes with an entry trampoline, not K16E"
@@ -175,7 +175,7 @@ fn k16_link_accepts_rust_rodata_alloc_sections() {
     let bytes = fs::read(output_path).expect("BIOS flash output reads");
     assert_eq!(
         &bytes[..14],
-        &[0x01, 0xef, 0x00, 0x00, 0x03, 0x00, 0x01, 0xee, 0x0e, 0x00, 0xf0, 0xff, 0x00, 0x7e,]
+        &[0x01, 0xef, 0x00, 0x00, 0x08, 0x00, 0x01, 0xee, 0x0e, 0x00, 0xf0, 0xff, 0x00, 0x7e,]
     );
     assert_eq!(
         &bytes[14..22],
@@ -210,7 +210,7 @@ fn k16_link_discards_unreferenced_alloc_rodata_sections() {
     let bytes = fs::read(output_path).expect("BIOS flash output reads");
     assert_eq!(
         &bytes[..14],
-        &[0x01, 0xef, 0x00, 0x00, 0x03, 0x00, 0x01, 0xee, 0x0e, 0x00, 0xf0, 0xff, 0x00, 0x7e,]
+        &[0x01, 0xef, 0x00, 0x00, 0x08, 0x00, 0x01, 0xee, 0x0e, 0x00, 0xf0, 0xff, 0x00, 0x7e,]
     );
     assert_eq!(&bytes[14..], &[0x01, 0x00]);
     assert!(
@@ -218,6 +218,47 @@ fn k16_link_discards_unreferenced_alloc_rodata_sections() {
             .windows(b"K16 UNUSED".len())
             .any(|window| window == b"K16 UNUSED"),
         "unreferenced rodata must not be loaded into the VM payload"
+    );
+}
+
+#[test]
+fn k16_link_writes_retained_section_map() {
+    let object_path = temp_file("map-unused-rodata.o");
+    let output_path = temp_file("map-unused-rodata.kx");
+    let map_path = temp_file("map-unused-rodata.map");
+    fs::write(&object_path, k16_object_with_unreferenced_rodata_section()).expect("object writes");
+
+    let output = Command::new(k16_binary())
+        .args([
+            "link",
+            "--target",
+            "program",
+            "--map",
+            map_path.to_str().unwrap(),
+            object_path.to_str().unwrap(),
+            "-o",
+            output_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("k16 link runs");
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let bytes = fs::read(output_path).expect("K16E output reads");
+    let executable = k16e::decode_k16_executable(&bytes).expect("linked K16E decodes");
+    assert_eq!(executable.memory_size, 2);
+
+    let map = fs::read_to_string(map_path).expect("link map reads");
+    assert_eq!(
+        map,
+        format!(
+            "K16 link map target=program load_addr=0x00015000 payload_bytes=2 memory_bytes=2 retained_sections=1\n\
+section offset=0x00000000 class=text file_bytes=2 memory_bytes=2 object={} name=.text.k16\n",
+            object_path.display()
+        )
     );
 }
 

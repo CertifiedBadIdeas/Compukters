@@ -46,6 +46,13 @@ pub fn link_k16_objects_to_k16e(
     inputs: &[K16LinkInput<'_>],
     target: K16ArtifactTarget,
 ) -> Result<Vec<u8>, String> {
+    Ok(link_k16_objects(inputs, target)?.bytes)
+}
+
+pub fn link_k16_objects(
+    inputs: &[K16LinkInput<'_>],
+    target: K16ArtifactTarget,
+) -> Result<K16LinkedOutput, String> {
     if inputs.is_empty() {
         return Err("k16 link requires at least one input object".to_string());
     }
@@ -64,28 +71,37 @@ pub fn link_k16_objects_to_k16e(
         target == K16ArtifactTarget::ProgramDynamic,
     )?;
     validate_payload_range(target, linked.memory_size)?;
-    if target == K16ArtifactTarget::ProgramDynamic {
-        return k16e::encode_dynamic_k16_program(
+    let map = K16LinkMap {
+        target,
+        load_addr,
+        payload_bytes: linked.payload.len(),
+        memory_bytes: linked.memory_size,
+        retained_sections: linked.retained_sections.clone(),
+    };
+    let bytes = if target == K16ArtifactTarget::ProgramDynamic {
+        k16e::encode_dynamic_k16_program(
             &linked.payload,
             linked.memory_size,
             linked.entry_pc,
             &linked.relocations,
-        );
-    }
-    match target.fixed_image_abi_kind() {
-        Some(abi_kind) => k16e::encode_k16_executable_with_memory_size(
-            &linked.payload,
-            linked.memory_size,
-            abi_kind,
-            linked.entry_pc,
-            load_addr,
-        ),
-        None => {
-            linked.materialize_memory_payload()?;
-            write_bios_entry_trampoline(&mut linked.payload, linked.entry_pc)?;
-            Ok(linked.payload)
+        )?
+    } else {
+        match target.fixed_image_abi_kind() {
+            Some(abi_kind) => k16e::encode_k16_executable_with_memory_size(
+                &linked.payload,
+                linked.memory_size,
+                abi_kind,
+                linked.entry_pc,
+                load_addr,
+            )?,
+            None => {
+                linked.materialize_memory_payload()?;
+                write_bios_entry_trampoline(&mut linked.payload, linked.entry_pc)?;
+                linked.payload
+            }
         }
-    }
+    };
+    Ok(K16LinkedOutput { bytes, map })
 }
 
 fn validate_payload_range(target: K16ArtifactTarget, memory_size: u32) -> Result<(), String> {
@@ -112,6 +128,57 @@ struct LinkedImage {
     memory_size: u32,
     entry_pc: u32,
     relocations: Vec<k16e::K16eRelocation>,
+    retained_sections: Vec<K16LinkMapSection>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct K16LinkedOutput {
+    pub bytes: Vec<u8>,
+    pub map: K16LinkMap,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct K16LinkMap {
+    pub target: K16ArtifactTarget,
+    pub load_addr: u32,
+    pub payload_bytes: usize,
+    pub memory_bytes: u32,
+    pub retained_sections: Vec<K16LinkMapSection>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct K16LinkMapSection {
+    pub output_offset: u32,
+    pub class: &'static str,
+    pub file_bytes: u32,
+    pub memory_bytes: u32,
+    pub object: String,
+    pub name: String,
+}
+
+impl K16LinkMap {
+    pub fn to_text(&self) -> String {
+        let mut output = format!(
+            "K16 link map target={} load_addr={:#010x} payload_bytes={} memory_bytes={} retained_sections={}\n",
+            self.target.tag(),
+            self.load_addr,
+            self.payload_bytes,
+            self.memory_bytes,
+            self.retained_sections.len()
+        );
+        for section in &self.retained_sections {
+            output.push_str(&format!(
+                "section offset={:#010x} class={} file_bytes={} memory_bytes={} object={} name={}\n",
+                section.output_offset,
+                section.class,
+                section.file_bytes,
+                section.memory_bytes,
+                section.object,
+                section.name
+            ));
+        }
+        output
+    }
 }
 
 impl LinkedImage {
@@ -138,6 +205,7 @@ fn link_objects(
         u32::try_from(prefix_len).map_err(|_| "linked K16 payload is too large".to_string())?;
     let mut section_offsets: Vec<Vec<Option<u32>>> = Vec::new();
     let mut dynamic_relocations = Vec::new();
+    let mut retained_section_map = Vec::new();
 
     for (object_index, object) in objects.iter().enumerate() {
         let mut object_offsets = vec![None; object.sections.len()];
@@ -154,6 +222,14 @@ fn link_objects(
             memory_size = align_memory_size(memory_size, section.alignment)?;
             let output_offset = memory_size;
             object_offsets[section.index] = Some(output_offset);
+            retained_section_map.push(K16LinkMapSection {
+                output_offset,
+                class: section_class(section)?,
+                file_bytes: section_file_size(section)?,
+                memory_bytes: section.size,
+                object: object.name.clone(),
+                name: section.name.clone(),
+            });
             match section.kind {
                 SHT_PROGBITS => {
                     ensure_payload_len(&mut payload, memory_size)?;
@@ -311,6 +387,7 @@ fn link_objects(
         memory_size,
         entry_pc,
         relocations: dynamic_relocations,
+        retained_sections: retained_section_map,
     })
 }
 
@@ -513,6 +590,24 @@ fn validate_rodata(section: &Section) -> Result<(), String> {
         return Err("unsupported .rodata section attributes".to_string());
     }
     Ok(())
+}
+
+fn section_class(section: &Section) -> Result<&'static str, String> {
+    match section.name.as_str() {
+        name if name == ".text.k16" || name.starts_with(".text.k16.") => Ok("text"),
+        name if name == ".rodata" || name.starts_with(".rodata.") => Ok("rodata"),
+        name if name == ".data" || name.starts_with(".data.") => Ok("data"),
+        name if name == ".bss" || name.starts_with(".bss.") => Ok("bss"),
+        other => Err(format!("unsupported alloc section `{other}`")),
+    }
+}
+
+fn section_file_size(section: &Section) -> Result<u32, String> {
+    match section.kind {
+        SHT_PROGBITS => Ok(section.size),
+        SHT_NOBITS => Ok(0),
+        other => Err(format!("unsupported alloc section type {other}")),
+    }
 }
 
 fn resolve_symbol(
