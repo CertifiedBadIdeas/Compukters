@@ -138,7 +138,7 @@ dependencies = [
 name = "k16-shared-runtime-test"
 version = "0.1.0"
 dependencies = [
- "k16-rt",
+ "k16-abi",
 ]
 
 [[package]]

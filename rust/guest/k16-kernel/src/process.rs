@@ -2850,6 +2850,8 @@ struct SharedLibraryImage {
     payload_offset: u32,
     file_size: u32,
     memory_size: u32,
+    relocation_table_offset: u32,
+    relocation_count: u32,
     export_section_offset: u32,
     export_section_size: u32,
     export_count: u32,
@@ -3924,6 +3926,13 @@ unsafe fn load_dynamic_import_libraries(
                 library_base + library.file_size,
                 library.memory_size - library.file_size,
             );
+            apply_selected_shared_library_relocations(
+                library.relocation_table_offset,
+                library.relocation_count,
+                library.memory_size,
+                library_base,
+                library_base,
+            )?;
         }
         relative_base = relative_base
             .checked_add(library.memory_size)
@@ -3964,6 +3973,13 @@ unsafe fn load_dynamic_import_libraries_mapped(
                 physical_base + library.file_size,
                 library.memory_size - library.file_size,
             );
+            apply_selected_shared_library_relocations(
+                library.relocation_table_offset,
+                library.relocation_count,
+                library.memory_size,
+                physical_base,
+                library_base,
+            )?;
         }
         relative_base = relative_base
             .checked_add(library.memory_size)
@@ -4304,6 +4320,8 @@ unsafe fn read_selected_shared_library_image() -> Result<SharedLibraryImage, Pro
         payload_offset: header_u32(header, 40),
         file_size: header_u32(header, 44),
         memory_size: header_u32(header, 48),
+        relocation_table_offset: header_u32(header, 60),
+        relocation_count: header_u32(header, 68),
         export_section_offset: header_u32(header, 80),
         export_section_size: header_u32(header, 84),
         export_count: header_u32(header, 88),
@@ -4631,14 +4649,24 @@ fn validate_shared_library_header_bytes(
     let payload_end = k16_image::SHARED_K16E_V4_PAYLOAD_OFFSET
         .checked_add(file_size)
         .ok_or(ProcessLoadError::InvalidImage)?;
-    if relocation_table_offset != payload_end || relocation_table_size != 0 || relocation_count != 0
-    {
+    if relocation_table_offset != payload_end {
+        return Err(ProcessLoadError::InvalidImage);
+    }
+    let expected_relocation_table_size = relocation_count
+        .checked_mul(k16_image::K16E_RELOCATION_RECORD_SIZE)
+        .ok_or(ProcessLoadError::InvalidImage)?;
+    if relocation_table_size != expected_relocation_table_size {
         return Err(ProcessLoadError::InvalidImage);
     }
     let export_section_offset = header_u32(header, 80);
     let export_section_size = header_u32(header, 84);
     let export_count = header_u32(header, 88);
-    if export_count == 0 || export_section_offset != relocation_table_offset {
+    if export_count == 0
+        || export_section_offset
+            != relocation_table_offset
+                .checked_add(relocation_table_size)
+                .ok_or(ProcessLoadError::InvalidImage)?
+    {
         return Err(ProcessLoadError::InvalidImage);
     }
     let expected_record_size = export_count
@@ -4652,6 +4680,46 @@ fn validate_shared_library_header_bytes(
         .ok_or(ProcessLoadError::InvalidImage)?;
     if export_section_end > inode_size {
         return Err(ProcessLoadError::InvalidImage);
+    }
+    Ok(())
+}
+
+unsafe fn apply_selected_shared_library_relocations(
+    relocation_table_offset: u32,
+    relocation_count: u32,
+    memory_size: u32,
+    physical_base: u32,
+    virtual_base: u32,
+) -> Result<(), ProcessLoadError> {
+    let mut index = 0;
+    while index < relocation_count {
+        let relocation_offset = relocation_table_offset
+            .checked_add(
+                index
+                    .checked_mul(k16_image::K16E_RELOCATION_RECORD_SIZE)
+                    .ok_or(ProcessLoadError::AddressOverflow)?,
+            )
+            .ok_or(ProcessLoadError::AddressOverflow)?;
+        unsafe {
+            k16_storage::copy_selected_file_range_to_ram(
+                relocation_offset,
+                RELOCATION_RECORD_ADDR,
+                k16_image::K16E_RELOCATION_RECORD_SIZE,
+            )
+            .map_err(|_| ProcessLoadError::Storage)?;
+        }
+        let relocation_offset = unsafe { read_u32_le(RELOCATION_RECORD_ADDR) };
+        let relocation_kind = unsafe { read_u32_le(RELOCATION_RECORD_ADDR + 4) };
+        validate_dynamic_relocation_record(relocation_offset, relocation_kind, memory_size)?;
+        let field_addr = physical_base
+            .checked_add(relocation_offset)
+            .ok_or(ProcessLoadError::AddressOverflow)?;
+        let value = unsafe { read_u32_le(field_addr) };
+        let relocated = value
+            .checked_add(virtual_base)
+            .ok_or(ProcessLoadError::AddressOverflow)?;
+        unsafe { write_u32_le(field_addr, relocated) };
+        index += 1;
     }
     Ok(())
 }

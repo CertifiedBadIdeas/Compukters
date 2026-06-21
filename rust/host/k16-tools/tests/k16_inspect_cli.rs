@@ -204,6 +204,7 @@ fn k16_inspect_identifies_shared_object_exports() {
         k16e::encode_k16_shared_object(
             &[0x01, 0x00, 0x02, 0x00],
             8,
+            &[],
             &[k16e::K16eSharedExport {
                 name: "k16rt.syscall0".to_string(),
                 offset: 0,
@@ -225,7 +226,7 @@ fn k16_inspect_identifies_shared_object_exports() {
     );
     assert_eq!(
         String::from_utf8(output.stdout).expect("shared object K16E stdout is UTF-8"),
-        "kind=K16E\nK16E abi=shared-object dynamic=true payload_bytes=4 memory_bytes=8 exports=1 export_bytes=24\n"
+        "kind=K16E\nK16E abi=shared-object dynamic=true payload_bytes=4 memory_bytes=8 relocations=0 relocation_bytes=0 exports=1 export_bytes=24\n"
     );
 }
 

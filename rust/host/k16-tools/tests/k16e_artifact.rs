@@ -111,6 +111,10 @@ fn k16e_shared_object_encodes_exports_without_entrypoint() {
     let bytes = k16e::encode_k16_shared_object(
         &[0x01, 0xe1, 0x00, 0x00],
         8,
+        &[k16e::K16eRelocation {
+            offset: 2,
+            kind: k16e::K16eRelocationKind::Abs32,
+        }],
         &[k16e::K16eSharedExport {
             name: "k16rt.syscall0".to_string(),
             offset: 2,
@@ -128,6 +132,13 @@ fn k16e_shared_object_encodes_exports_without_entrypoint() {
 
     assert_eq!(shared.payload, vec![0x01, 0xe1, 0x00, 0x00]);
     assert_eq!(shared.memory_size, 8);
+    assert_eq!(
+        shared.relocations,
+        vec![k16e::K16eRelocation {
+            offset: 2,
+            kind: k16e::K16eRelocationKind::Abs32,
+        }]
+    );
     assert_eq!(
         shared.exports,
         vec![k16e::K16eSharedExport {

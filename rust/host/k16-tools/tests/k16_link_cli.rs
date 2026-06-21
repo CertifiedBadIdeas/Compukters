@@ -187,11 +187,51 @@ fn k16_link_emits_shared_object_exports_from_global_symbols() {
     let shared = k16e::decode_k16_shared_object(&bytes).expect("shared object decodes");
 
     assert_eq!(shared.payload, vec![0x02, 0x00]);
+    assert_eq!(shared.relocations, Vec::new());
     assert_eq!(
         shared.exports,
         vec![k16e::K16eSharedExport {
             name: "foo".to_string(),
             offset: 0,
+        }]
+    );
+}
+
+#[test]
+fn k16_link_emits_shared_object_relocations_for_internal_absolute_addresses() {
+    let object_path = temp_file("shared-provider-reloc.o");
+    let output_path = temp_file("shared-provider-reloc.k16so");
+    fs::write(
+        &object_path,
+        k16_object_with_text_relocation_to_symbol(1, "_start"),
+    )
+    .expect("object writes");
+
+    let output = Command::new(k16_binary())
+        .args([
+            "link",
+            "--target",
+            "shared-object",
+            object_path.to_str().unwrap(),
+            "-o",
+            output_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("k16 link runs");
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let bytes = fs::read(output_path).expect("K16E output reads");
+    let shared = k16e::decode_k16_shared_object(&bytes).expect("shared object decodes");
+
+    assert_eq!(
+        shared.relocations,
+        vec![k16e::K16eRelocation {
+            offset: 2,
+            kind: k16e::K16eRelocationKind::Abs32,
         }]
     );
 }
