@@ -28,7 +28,7 @@ val k16ToolchainPin = readK16ToolchainPin()
 val downloadedK16ToolchainArchives = layout.buildDirectory.dir("k16-toolchain-archives")
 val packagedK16ToolchainArchives = layout.buildDirectory.dir("k16-toolchain-packages")
 val k16ToolchainInstallRoot = defaultK16ToolchainRoot(k16ToolchainPin)
-val k16SourceHostToolsToolchainInstallRoot = sourceK16HostToolsToolchainRoot(k16ToolchainPin)
+val k16SourceBuiltDevToolchainInstallRoot = sourceBuiltDevK16ToolchainRoot(k16ToolchainPin)
 val k16ToolchainArchive = downloadedK16ToolchainArchives.map { it.file(k16ToolchainPin.archive) }
 val k16ToolchainArchiveUrl =
     providers
@@ -108,8 +108,8 @@ val k16LlvmBuildTargets =
 
 fun k16ToolchainUsesPrebuiltBase(): Boolean =
     when (k16ToolchainModeName()) {
-        "prebuilt", "source-host-tools" -> true
-        "local" -> false
+        "prebuilt" -> true
+        "source-built-dev", "local" -> false
         else -> error("unreachable")
     }
 
@@ -648,18 +648,25 @@ val stageK16Toolchain =
         }
     }
 
-val stageK16SourceHostTools =
-    tasks.register<Sync>("stageK16SourceHostTools") {
-        description = "Stages a prebuilt-backed K16 toolchain with source-built host tools."
+val stageK16SourceBuiltDevToolchain =
+    tasks.register<Sync>("stageK16SourceBuiltDevToolchain") {
+        description = "Stages a source-built K16 development toolchain without updating the pinned prebuilt workspace."
         group = "k16"
-        dependsOn(installK16Toolchain)
+        dependsOn(buildK16Rustc)
         dependsOn(buildK16HostTools)
-        into(k16SourceHostToolsToolchainInstallRoot)
+        into(k16SourceBuiltDevToolchainInstallRoot)
         onlyIf {
-            k16ToolchainModeName() == "source-host-tools"
+            k16ToolchainModeName() == "source-built-dev"
         }
-        from(k16ToolchainInstallRoot) {
-            exclude("bin/k16-ld", "bin/k16")
+        from(k16BuiltCargo) {
+            into("bin")
+            rename { "cargo" }
+            filePermissions { unix("rwxr-xr-x") }
+        }
+        from(k16BuiltRustc) {
+            into("bin")
+            rename { "rustc" }
+            filePermissions { unix("rwxr-xr-x") }
         }
         from(k16BuiltLd) {
             into("bin")
@@ -671,35 +678,43 @@ val stageK16SourceHostTools =
             rename { "k16" }
             filePermissions { unix("rwxr-xr-x") }
         }
+        from(k16RustcDriverLibRoot) {
+            into("lib")
+            include("librustc_driver*.so")
+            include("rustlib/src/rust/library/**")
+        }
+        from(k16RustcHostLibRoot) {
+            into("lib/rustlib/$k16BootstrapHost/lib")
+        }
 
         doFirst {
             check(explicitK16ToolchainRoot() == null) {
-                "k16ToolchainMode=source-host-tools stages into a dedicated .toolchain workspace and does not accept k16ToolchainDir"
+                "k16ToolchainMode=source-built-dev stages into a dedicated .toolchain workspace and does not accept k16ToolchainDir"
             }
-            validateK16ToolchainPath(
-                root = k16ToolchainInstallRoot,
-                origin = "source-host-tools prebuilt base",
-                requiredExecutables = k16ToolchainPin.requiredExecutables,
-            )
+            requireBuiltFile(k16BuiltCargo, "cargo", "buildK16Rustc", executable = true)
+            requireBuiltFile(k16BuiltRustc, "rustc", "buildK16Rustc", executable = true)
             requireBuiltFile(k16BuiltLd, "k16-ld", "buildK16HostTools", executable = true)
             requireBuiltFile(k16BuiltCli, "k16", "buildK16HostTools", executable = true)
+            requireDirectory(k16RustcDriverLibRoot, "source-built rustc runtime library directory")
+            requireDirectory(k16RustcHostLibRoot, "source-built rustc host runtime library directory")
+            requireBuiltFileMatching(k16RustcHostLibRoot, "libstd-*.rlib", "host libstd", "buildK16Rustc")
         }
 
         doLast {
-            k16SourceHostToolsToolchainInstallRoot.resolve("manifest.json").writeText(
+            k16SourceBuiltDevToolchainInstallRoot.resolve("manifest.json").writeText(
                 """
                 {
                   "schemaVersion": 1,
                   "pin": "${k16ToolchainPin.pin}",
                   "host": "${k16VmNativePlatform.id}",
                   "archive": "${k16ToolchainPin.archive}",
-                  "source": "source-prebuilt-host-tools"
+                  "source": "source-built-dev-gradle-stage"
                 }
                 """.trimIndent() + "\n",
             )
             validateK16ToolchainPath(
-                root = k16SourceHostToolsToolchainInstallRoot,
-                origin = "stageK16SourceHostTools",
+                root = k16SourceBuiltDevToolchainInstallRoot,
+                origin = "stageK16SourceBuiltDevToolchain",
                 requiredExecutables = k16ToolchainPin.requiredExecutables,
             )
         }
@@ -711,8 +726,8 @@ val prepareK16Toolchain =
         group = "k16"
         dependsOn(installK16Toolchain)
         dependsOn(stageK16Toolchain)
-        if (k16ToolchainModeName() == "source-host-tools") {
-            dependsOn(stageK16SourceHostTools)
+        if (k16ToolchainModeName() == "source-built-dev") {
+            dependsOn(stageK16SourceBuiltDevToolchain)
         }
         inputs.property("k16ToolchainMode", providers.gradleProperty("k16ToolchainMode").orElse("prebuilt"))
 
