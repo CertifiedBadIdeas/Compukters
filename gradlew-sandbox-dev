@@ -5,4 +5,4 @@ set -eu
 APP_HOME=$(CDPATH= cd -P "$(dirname "$0")" >/dev/null && pwd) || exit 1
 
 cd "$APP_HOME"
-exec ./gradlew-sandbox "$@" -Pk16ToolchainMode=source-host-tools
+exec ./gradlew-sandbox "$@" -Pk16ToolchainMode=source-built-dev

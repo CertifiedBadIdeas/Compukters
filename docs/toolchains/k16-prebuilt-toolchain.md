@@ -91,9 +91,9 @@ For manual shell usage, Gradle can print the selected toolchain paths:
 ./gradlew-sandbox :printK16ToolchainEnv
 ```
 
-## Development Host Tools
+## Development Source Toolchain
 
-When only `rust/host/k16-tools` or its local Rust dependencies changed, use the
+For ordinary development against local K16 toolchain sources, use the
 development sandbox wrapper:
 
 ```bash
@@ -101,25 +101,30 @@ development sandbox wrapper:
 ```
 
 It is equivalent to running `./gradlew-sandbox` with
-`-Pk16ToolchainMode=source-host-tools` appended after the user-provided
-arguments. This mode prepares the normal pinned prebuilt toolchain first, then
-rebuilds the checked-out K16 host tools and overlays only:
+`-Pk16ToolchainMode=source-built-dev` appended after the user-provided
+arguments. This mode rebuilds and stages the checked-out K16 toolchain pieces
+needed by development builds:
 
 ```text
+bin/cargo
+bin/rustc
 bin/k16-ld
 bin/k16
+lib/librustc_driver*.so
+lib/rustlib/<host>/lib/
+lib/rustlib/src/rust/library/
 ```
 
-The pinned `cargo`, `rustc`, sysroot, and host runtime libraries remain from the
-prebuilt toolchain. This keeps normal builds reproducible while letting local
-firmware builds pick up fresh linker and volume-tool changes without publishing
-a new prebuilt archive.
+This lets local LLVM, Rust target, linker, and volume-tool changes feed normal
+development firmware builds without publishing a new prebuilt archive. It does
+not update `config/k16-toolchain.json` and does not change the production
+prebuilt pin.
 
-The source-host-tools install layout is separate from the pinned prebuilt
+The source-built-dev install layout is separate from the pinned prebuilt
 layout:
 
 ```text
-.toolchain/k16/<pin>-source-host-tools/<host>/
+.toolchain/k16/<pin>-source-built-dev/<host>/
 ```
 
 Regular `prebuilt` builds continue to resolve `.toolchain/k16/<pin>/<host>/`.
@@ -128,11 +133,11 @@ The explicit form is:
 
 ```bash
 ./gradlew-sandbox :v1_21_1-neoforge:processResources \
-  -Pk16ToolchainMode=source-host-tools
+  -Pk16ToolchainMode=source-built-dev
 ```
 
-`source-host-tools` does not accept `k16ToolchainDir`; it always stages a
-dedicated dev layout from the pinned `.toolchain/k16/<pin>/<host>/` workspace.
+`source-built-dev` does not accept `k16ToolchainDir`; it always stages a
+dedicated dev layout from local source-built outputs under `.toolchain/build`.
 
 ## Explicit Local Toolchain
 
