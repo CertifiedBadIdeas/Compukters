@@ -31,9 +31,10 @@
   `k16-cpu-helpers.o` symbols, and the new metadata is not a shared-library
   ABI or dynamic linker.
 - Bundled K16 storage is now split into production and development layouts:
-  `firmware/k16-system-storage0.kv` excludes test binaries, while test resources
-  provide `firmware/k16-system-storage0-dev.kv` with `/bin/alloc-test.kx` and
-  `/bin/proc-test.kx`.
+  `firmware/k16-system-storage0.kv` excludes test and hosted-stdlib proof
+  binaries, while test resources provide `firmware/k16-system-storage0-dev.kv`
+  with `/bin/alloc-test.kx`, `/bin/proc-test.kx`,
+  `/bin/shared-runtime-test.kx`, and `/bin/hosted-cat.kx`.
 - The bundled K16 shell no longer carries a built-in `help` command or embedded
   command list. `help` now follows normal executable resolution as
   `/bin/help.kx` and reports the standard launch error when no such program is

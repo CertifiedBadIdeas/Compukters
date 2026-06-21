@@ -151,6 +151,9 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("k16AllocTestArtifact"))
         assertTrue(source.contains("k16HostedCatArtifact"))
         assertTrue(source.contains("k16ProcTestArtifact"))
+        assertTrue(source.contains("val k16ProductionStorageEntries ="))
+        assertTrue(source.contains("val k16DevelopmentOnlyStorageEntries ="))
+        assertTrue(source.contains("val k16SharedRuntimeStorageEntries ="))
         assertTrue(source.contains("compileK16SystemInit"))
         assertTrue(source.contains("compileK16SystemShell"))
         assertTrue(source.contains("compileK16SystemLs"))
@@ -210,6 +213,26 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("\"/bin/alloc-test.kx\""))
         assertTrue(source.contains("\"/bin/hosted-cat.kx\""))
         assertTrue(source.contains("\"/bin/proc-test.kx\""))
+        val productionEntriesIndex = source.indexOf("val k16ProductionStorageEntries =")
+        val developmentOnlyEntriesIndex = source.indexOf("val k16DevelopmentOnlyStorageEntries =")
+        val sharedRuntimeEntriesIndex = source.indexOf("val k16SharedRuntimeStorageEntries =")
+        val storageTaskIndex = source.indexOf("val putK16SystemStorage0Init =")
+        assertTrue(productionEntriesIndex >= 0, "production storage entries should be declared explicitly")
+        assertTrue(developmentOnlyEntriesIndex > productionEntriesIndex, "dev-only entries should follow production entries")
+        assertTrue(sharedRuntimeEntriesIndex > productionEntriesIndex, "shared runtime entries should be declared separately")
+        assertTrue(storageTaskIndex > developmentOnlyEntriesIndex, "storage tasks should consume declared entry groups")
+        assertTrue(
+            source.substring(productionEntriesIndex, developmentOnlyEntriesIndex).contains("\"/bin/cat.kx\""),
+            "normal cat should be a production utility",
+        )
+        assertFalse(
+            source.substring(productionEntriesIndex, developmentOnlyEntriesIndex).contains("\"/bin/hosted-cat.kx\""),
+            "hosted-cat should not be a production utility",
+        )
+        assertTrue(
+            source.substring(developmentOnlyEntriesIndex, sharedRuntimeEntriesIndex).contains("\"/bin/hosted-cat.kx\""),
+            "hosted-cat should be declared as dev-only",
+        )
         assertTrue(source.contains("\"/etc/motd\""))
         assertTrue(source.contains("\"extract-partition\""))
         assertTrue(source.contains("\"replace-partition\""))
@@ -432,12 +455,17 @@ class K16FirmwareResourceTest {
     }
 
     @Test
-    fun bundledK16SystemStorage0ContainsHostedCatProgram() {
+    fun bundledK16DevelopmentStorage0ContainsHostedCatProgram() {
         val workspace = createTempDirectory("k16-hosted-cat-storage-test-")
-        val storage0 = workspace.resolve("storage0.kv")
+        val storage0 = workspace.resolve("storage0-dev.kv")
         val root = workspace.resolve("root.kfs")
         val cat = workspace.resolve("hosted-cat.kx")
-        storage0.writeBytes(K16SystemVolumeWorkspace.loadStorage0VolumeResource(classLoader = javaClass.classLoader))
+        storage0.writeBytes(
+            K16SystemVolumeWorkspace.loadStorage0VolumeResource(
+                resourcePath = "firmware/k16-system-storage0-dev.kv",
+                classLoader = javaClass.classLoader,
+            ),
+        )
 
         runK16Tool(
             "volume",
@@ -456,15 +484,15 @@ class K16FirmwareResourceTest {
         )
 
         val bytes = cat.readBytes()
-        assertTrue(bytes.size > 72, "bundled /bin/hosted-cat.kx should be a non-empty dynamic K16E program")
+        assertTrue(bytes.size > 72, "bundled dev /bin/hosted-cat.kx should be a non-empty dynamic K16E program")
         assertContentEquals(
             byteArrayOf('K'.code.toByte(), '1'.code.toByte(), '6'.code.toByte(), 'E'.code.toByte()),
             bytes.copyOfRange(0, 4),
         )
         val version = ByteBuffer.wrap(bytes, 0x04, 2).order(ByteOrder.LITTLE_ENDIAN).short.toInt()
         val abiKind = ByteBuffer.wrap(bytes, 0x18, 4).order(ByteOrder.LITTLE_ENDIAN).int
-        assertEquals(2, version, "bundled /bin/hosted-cat.kx must use dynamic K16E v2")
-        assertEquals(3, abiKind, "bundled /bin/hosted-cat.kx must use K16E abi kind program")
+        assertEquals(2, version, "bundled dev /bin/hosted-cat.kx must use dynamic K16E v2")
+        assertEquals(3, abiKind, "bundled dev /bin/hosted-cat.kx must use K16E abi kind program")
     }
 
     @Test
@@ -583,6 +611,7 @@ class K16FirmwareResourceTest {
         val allocTest = workspace.resolve("alloc-test.kx")
         val procTest = workspace.resolve("proc-test.kx")
         val sharedRuntimeTest = workspace.resolve("shared-runtime-test.kx")
+        val hostedCat = workspace.resolve("hosted-cat.kx")
         storage0.writeBytes(K16SystemVolumeWorkspace.loadStorage0VolumeResource(classLoader = javaClass.classLoader))
 
         runK16Tool(
@@ -615,6 +644,14 @@ class K16FirmwareResourceTest {
             root.toString(),
             "/bin/shared-runtime-test.kx",
             sharedRuntimeTest.toString(),
+        )
+        runK16ToolExpectFailure(
+            "fs",
+            "kfs",
+            "get",
+            root.toString(),
+            "/bin/hosted-cat.kx",
+            hostedCat.toString(),
         )
     }
 
@@ -664,6 +701,7 @@ class K16FirmwareResourceTest {
         val allocTest = workspace.resolve("alloc-test.kx")
         val procTest = workspace.resolve("proc-test.kx")
         val sharedRuntimeTest = workspace.resolve("shared-runtime-test.kx")
+        val hostedCat = workspace.resolve("hosted-cat.kx")
         storage0.writeBytes(
             K16SystemVolumeWorkspace.loadStorage0VolumeResource(
                 resourcePath = "firmware/k16-system-storage0-dev.kv",
@@ -701,6 +739,14 @@ class K16FirmwareResourceTest {
             root.toString(),
             "/bin/shared-runtime-test.kx",
             sharedRuntimeTest.toString(),
+        )
+        runK16Tool(
+            "fs",
+            "kfs",
+            "get",
+            root.toString(),
+            "/bin/hosted-cat.kx",
+            hostedCat.toString(),
         )
 
         val allocBytes = allocTest.readBytes()
@@ -741,6 +787,15 @@ class K16FirmwareResourceTest {
             sharedRuntimeMetadata.contains("k16_shared_memcmp"),
             "shared runtime smoke should import k16_shared_memcmp",
         )
+
+        val hostedCatBytes = hostedCat.readBytes()
+        assertTrue(hostedCatBytes.size > 72, "bundled dev /bin/hosted-cat.kx should be a non-empty dynamic K16E program")
+        assertContentEquals(
+            byteArrayOf('K'.code.toByte(), '1'.code.toByte(), '6'.code.toByte(), 'E'.code.toByte()),
+            hostedCatBytes.copyOfRange(0, 4),
+        )
+        assertEquals(2, hostedCatBytes.u16Le(offset = 4), "bundled dev /bin/hosted-cat.kx must use dynamic K16E v2")
+        assertEquals(3, hostedCatBytes.u32Le(offset = 24), "bundled dev /bin/hosted-cat.kx must use K16E abi kind program")
     }
 
     @Test

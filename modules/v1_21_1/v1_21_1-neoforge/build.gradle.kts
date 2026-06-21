@@ -19,6 +19,8 @@
 
 @file:Suppress("PropertyName")
 
+import org.gradle.api.file.RegularFile
+import org.gradle.api.provider.Provider
 import java.time.OffsetDateTime
 import java.time.format.DateTimeFormatter
 
@@ -255,6 +257,42 @@ val k16UserlandMapArtifacts =
 val k16SystemStorage0Resource = generatedK16FirmwareResources.map { it.file("firmware/k16-system-storage0.kv") }
 val k16DevelopmentStorage0Resource =
     generatedK16FirmwareTestResources.map { it.file("firmware/k16-system-storage0-dev.kv") }
+
+val k16ProductionStorageEntries =
+    listOf(
+        "/bin/init.kx" to k16InitArtifact,
+        "/bin/shell.kx" to k16ShellArtifact,
+        "/bin/uname.kx" to k16UnameArtifact,
+        "/bin/ls.kx" to k16LsArtifact,
+        "/bin/cat.kx" to k16CatArtifact,
+        "/bin/cp.kx" to k16CpArtifact,
+        "/bin/mv.kx" to k16MvArtifact,
+        "/bin/stat.kx" to k16StatArtifact,
+        "/bin/write.kx" to k16WriteArtifact,
+        "/bin/rm.kx" to k16RmArtifact,
+        "/bin/mkdir.kx" to k16MkdirArtifact,
+        "/bin/rmdir.kx" to k16RmdirArtifact,
+        "/etc/motd" to k16MotdSource,
+    )
+val k16DevelopmentOnlyStorageEntries =
+    listOf(
+        "/bin/alloc-test.kx" to k16AllocTestArtifact,
+        "/bin/shared-runtime-test.kx" to k16SharedRuntimeTestArtifact,
+        "/bin/hosted-cat.kx" to k16HostedCatArtifact,
+        "/bin/proc-test.kx" to k16ProcTestArtifact,
+    )
+val k16SharedRuntimeStorageEntries =
+    listOf(
+        "/lib/k16-shared-smoke.k16so" to k16SharedSmokeRuntimeArtifact,
+    )
+
+fun artifactFile(artifact: Any): File =
+    when (artifact) {
+        is File -> artifact
+        is RegularFile -> artifact.asFile
+        is Provider<*> -> (artifact.get() as RegularFile).asFile
+        else -> error("Unsupported K16 storage artifact type: ${artifact::class.qualifiedName}")
+    }
 
 fun deleteK16RustBinOutputs(
     targetDir: File,
@@ -1306,24 +1344,12 @@ val putK16SystemStorage0Init =
     tasks.register("putK16SystemStorage0Init") {
         description = "Writes the bundled K16 userland layout into ROOT K16FS /bin, /lib, and /etc."
         group = "k16"
-        dependsOn(compileK16SystemStorage0, compileK16SystemInit, compileK16SystemShell, compileK16SystemUname, compileK16SystemLs, compileK16SystemCat, compileK16SystemCp, compileK16SystemMv, compileK16SystemStat, compileK16SystemWrite, compileK16SystemRm, compileK16SystemMkdir, compileK16SystemRmdir, compileK16SharedSmokeRuntime, compileK16HostedCat)
+        dependsOn(compileK16SystemStorage0, compileK16SystemInit, compileK16SystemShell, compileK16SystemUname, compileK16SystemLs, compileK16SystemCat, compileK16SystemCp, compileK16SystemMv, compileK16SystemStat, compileK16SystemWrite, compileK16SystemRm, compileK16SystemMkdir, compileK16SystemRmdir, compileK16SharedSmokeRuntime)
         dependsOn(rootProject.tasks.named("prepareK16Toolchain"))
         inputs.file(k16ToolchainConfig)
-        inputs.file(k16InitArtifact)
-        inputs.file(k16ShellArtifact)
-        inputs.file(k16UnameArtifact)
-        inputs.file(k16LsArtifact)
-        inputs.file(k16CatArtifact)
-        inputs.file(k16CpArtifact)
-        inputs.file(k16MvArtifact)
-        inputs.file(k16StatArtifact)
-        inputs.file(k16WriteArtifact)
-        inputs.file(k16RmArtifact)
-        inputs.file(k16MkdirArtifact)
-        inputs.file(k16RmdirArtifact)
-        inputs.file(k16SharedSmokeRuntimeArtifact)
-        inputs.file(k16HostedCatArtifact)
-        inputs.file(k16MotdSource)
+        (k16ProductionStorageEntries + k16SharedRuntimeStorageEntries).forEach { (_, artifact) ->
+            inputs.file(artifact)
+        }
         outputs.file(k16SystemStorage0Resource)
 
         doLast {
@@ -1340,6 +1366,19 @@ val putK16SystemStorage0Init =
                 check(exitCode == 0) {
                     "K16 init storage command failed with exit code $exitCode: ${command.joinToString(" ")}"
                 }
+            }
+            fun putStorageEntry(
+                guestPath: String,
+                artifact: Any,
+            ) {
+                runK16Command(
+                    "fs",
+                    "kfs",
+                    "put",
+                    rootPartition.absolutePath,
+                    guestPath,
+                    artifactFile(artifact).absolutePath,
+                )
             }
             runK16Command(
                 "volume",
@@ -1369,126 +1408,9 @@ val putK16SystemStorage0Init =
                 rootPartition.absolutePath,
                 "/etc",
             )
-            runK16Command(
-                "fs",
-                "kfs",
-                "put",
-                rootPartition.absolutePath,
-                "/bin/init.kx",
-                k16InitArtifact.get().asFile.absolutePath,
-            )
-            runK16Command(
-                "fs",
-                "kfs",
-                "put",
-                rootPartition.absolutePath,
-                "/bin/shell.kx",
-                k16ShellArtifact.get().asFile.absolutePath,
-            )
-            runK16Command(
-                "fs",
-                "kfs",
-                "put",
-                rootPartition.absolutePath,
-                "/bin/uname.kx",
-                k16UnameArtifact.get().asFile.absolutePath,
-            )
-            runK16Command(
-                "fs",
-                "kfs",
-                "put",
-                rootPartition.absolutePath,
-                "/bin/ls.kx",
-                k16LsArtifact.get().asFile.absolutePath,
-            )
-            runK16Command(
-                "fs",
-                "kfs",
-                "put",
-                rootPartition.absolutePath,
-                "/bin/cat.kx",
-                k16CatArtifact.get().asFile.absolutePath,
-            )
-            runK16Command(
-                "fs",
-                "kfs",
-                "put",
-                rootPartition.absolutePath,
-                "/bin/cp.kx",
-                k16CpArtifact.get().asFile.absolutePath,
-            )
-            runK16Command(
-                "fs",
-                "kfs",
-                "put",
-                rootPartition.absolutePath,
-                "/bin/mv.kx",
-                k16MvArtifact.get().asFile.absolutePath,
-            )
-            runK16Command(
-                "fs",
-                "kfs",
-                "put",
-                rootPartition.absolutePath,
-                "/bin/stat.kx",
-                k16StatArtifact.get().asFile.absolutePath,
-            )
-            runK16Command(
-                "fs",
-                "kfs",
-                "put",
-                rootPartition.absolutePath,
-                "/bin/write.kx",
-                k16WriteArtifact.get().asFile.absolutePath,
-            )
-            runK16Command(
-                "fs",
-                "kfs",
-                "put",
-                rootPartition.absolutePath,
-                "/bin/rm.kx",
-                k16RmArtifact.get().asFile.absolutePath,
-            )
-            runK16Command(
-                "fs",
-                "kfs",
-                "put",
-                rootPartition.absolutePath,
-                "/bin/mkdir.kx",
-                k16MkdirArtifact.get().asFile.absolutePath,
-            )
-            runK16Command(
-                "fs",
-                "kfs",
-                "put",
-                rootPartition.absolutePath,
-                "/bin/rmdir.kx",
-                k16RmdirArtifact.get().asFile.absolutePath,
-            )
-            runK16Command(
-                "fs",
-                "kfs",
-                "put",
-                rootPartition.absolutePath,
-                "/lib/k16-shared-smoke.k16so",
-                k16SharedSmokeRuntimeArtifact.get().asFile.absolutePath,
-            )
-            runK16Command(
-                "fs",
-                "kfs",
-                "put",
-                rootPartition.absolutePath,
-                "/bin/hosted-cat.kx",
-                k16HostedCatArtifact.get().asFile.absolutePath,
-            )
-            runK16Command(
-                "fs",
-                "kfs",
-                "put",
-                rootPartition.absolutePath,
-                "/etc/motd",
-                k16MotdSource.asFile.absolutePath,
-            )
+            (k16ProductionStorageEntries + k16SharedRuntimeStorageEntries).forEach { (guestPath, artifact) ->
+                putStorageEntry(guestPath, artifact)
+            }
             runK16Command(
                 "volume",
                 "replace-partition",
@@ -1511,13 +1433,13 @@ val putK16DevelopmentStorage0TestPrograms =
     tasks.register("putK16DevelopmentStorage0TestPrograms") {
         description = "Creates the development K16 storage0 image with test programs in ROOT K16FS /bin."
         group = "k16"
-        dependsOn(putK16SystemStorage0Init, compileK16SystemAllocTest, compileK16SystemProcTest, compileK16SharedRuntimeTest)
+        dependsOn(putK16SystemStorage0Init, compileK16SystemAllocTest, compileK16SystemProcTest, compileK16SharedRuntimeTest, compileK16HostedCat)
         dependsOn(rootProject.tasks.named("prepareK16Toolchain"))
         inputs.file(k16ToolchainConfig)
         inputs.file(k16SystemStorage0Resource)
-        inputs.file(k16AllocTestArtifact)
-        inputs.file(k16ProcTestArtifact)
-        inputs.file(k16SharedRuntimeTestArtifact)
+        k16DevelopmentOnlyStorageEntries.forEach { (_, artifact) ->
+            inputs.file(artifact)
+        }
         outputs.file(k16DevelopmentStorage0Resource)
 
         doLast {
@@ -1536,6 +1458,19 @@ val putK16DevelopmentStorage0TestPrograms =
                     "K16 dev storage command failed with exit code $exitCode: ${command.joinToString(" ")}"
                 }
             }
+            fun putStorageEntry(
+                guestPath: String,
+                artifact: Any,
+            ) {
+                runK16Command(
+                    "fs",
+                    "kfs",
+                    "put",
+                    rootPartition.absolutePath,
+                    guestPath,
+                    artifactFile(artifact).absolutePath,
+                )
+            }
 
             devStorage.parentFile.mkdirs()
             k16SystemStorage0Resource.get().asFile.copyTo(devStorage, overwrite = true)
@@ -1546,30 +1481,9 @@ val putK16DevelopmentStorage0TestPrograms =
                 "ROOT",
                 rootPartition.absolutePath,
             )
-            runK16Command(
-                "fs",
-                "kfs",
-                "put",
-                rootPartition.absolutePath,
-                "/bin/alloc-test.kx",
-                k16AllocTestArtifact.get().asFile.absolutePath,
-            )
-            runK16Command(
-                "fs",
-                "kfs",
-                "put",
-                rootPartition.absolutePath,
-                "/bin/shared-runtime-test.kx",
-                k16SharedRuntimeTestArtifact.get().asFile.absolutePath,
-            )
-            runK16Command(
-                "fs",
-                "kfs",
-                "put",
-                rootPartition.absolutePath,
-                "/bin/proc-test.kx",
-                k16ProcTestArtifact.get().asFile.absolutePath,
-            )
+            k16DevelopmentOnlyStorageEntries.forEach { (guestPath, artifact) ->
+                putStorageEntry(guestPath, artifact)
+            }
             runK16Command(
                 "volume",
                 "replace-partition",
