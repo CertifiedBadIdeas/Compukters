@@ -66,6 +66,14 @@ fn inspect_k16fs(bytes: &[u8]) -> Result<String, String> {
 }
 
 fn inspect_k16e(bytes: &[u8]) -> Result<String, String> {
+    match k16e_version(bytes)? {
+        k16e::K16E_VERSION => inspect_fixed_k16e(bytes),
+        k16e::K16E_DYNAMIC_VERSION => inspect_dynamic_k16e(bytes),
+        version => Err(format!("unsupported K16E version {version}")),
+    }
+}
+
+fn inspect_fixed_k16e(bytes: &[u8]) -> Result<String, String> {
     let executable = k16e::decode_k16_executable(bytes)?;
     Ok(format!(
         "kind=K16E\nK16E abi={} entry_pc={:#010x} load_addr={:#010x} payload_bytes={}\n",
@@ -73,6 +81,23 @@ fn inspect_k16e(bytes: &[u8]) -> Result<String, String> {
         executable.entry_pc,
         executable.load_addr,
         executable.payload.len()
+    ))
+}
+
+fn inspect_dynamic_k16e(bytes: &[u8]) -> Result<String, String> {
+    let program = k16e::decode_dynamic_k16_program(bytes)?;
+    let relocation_bytes = program
+        .relocations
+        .len()
+        .checked_mul(k16e::K16E_RELOCATION_RECORD_SIZE as usize)
+        .ok_or_else(|| "K16E relocation byte count overflows".to_string())?;
+    Ok(format!(
+        "kind=K16E\nK16E abi=program dynamic=true entry_offset={:#010x} payload_bytes={} memory_bytes={} relocations={} relocation_bytes={}\n",
+        program.entry_offset,
+        program.payload.len(),
+        program.memory_size,
+        program.relocations.len(),
+        relocation_bytes
     ))
 }
 
@@ -102,4 +127,11 @@ fn first_bytes_hex(bytes: &[u8]) -> String {
     } else {
         preview.join(" ")
     }
+}
+
+fn k16e_version(bytes: &[u8]) -> Result<u16, String> {
+    let version = bytes
+        .get(4..6)
+        .ok_or_else(|| "K16E version field is truncated".to_string())?;
+    Ok(u16::from_le_bytes(version.try_into().unwrap()))
 }

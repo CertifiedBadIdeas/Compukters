@@ -73,8 +73,10 @@ k16 inspect <blob>
 ```
 
 It identifies `K16VOL`, standalone `K16PT` media bytes, standalone `K16FS`
-filesystem images, and `K16E` executables. Snapshot blobs are intentionally not
-reported here until the native ComputerMachine snapshot format is defined.
+filesystem images, and `K16E` executables. Dynamic K16E v2 program images also
+report their entry offset, memory size, relocation count, and relocation table
+byte size. Snapshot blobs are intentionally not reported here until the native
+ComputerMachine snapshot format is defined.
 
 `<partition>` matches either the partition type tag, for example `BOOT` or
 `ROOT`, or the partition name, for example `boot` or `root`. Replacement input
