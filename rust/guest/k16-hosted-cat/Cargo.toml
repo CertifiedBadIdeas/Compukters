@@ -1,0 +1,13 @@
+[package]
+name = "k16-hosted-cat"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+k16-target = []
+
+[[bin]]
+name = "k16-hosted-cat"
+path = "src/main.rs"
+test = false
+required-features = ["k16-target"]

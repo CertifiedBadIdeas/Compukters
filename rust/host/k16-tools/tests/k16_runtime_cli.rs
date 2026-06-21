@@ -1657,6 +1657,116 @@ test = false
     );
 }
 
+#[test]
+fn k16_rust_hosted_std_cat_reads_argv_file() {
+    let work_dir = temp_dir("hosted-std-cat");
+    let src_dir = work_dir.join("src");
+    fs::create_dir_all(&src_dir).expect("source directory creates");
+    fs::write(
+        work_dir.join("Cargo.toml"),
+        r#"[package]
+name = "k16-hosted-std-cat"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "k16-hosted-std-cat"
+path = "src/main.rs"
+test = false
+"#,
+    )
+    .expect("Cargo.toml writes");
+    fs::write(
+        src_dir.join("main.rs"),
+        r#"fn main() {
+    for path in std::env::args().skip(1) {
+        let text = std::fs::read_to_string(path).unwrap();
+        print!("{text}");
+    }
+}
+"#,
+    )
+    .expect("main.rs writes");
+
+    fs::write(
+        work_dir.join("startup.o"),
+        k16_startup_with_argv_object(&["hosted-cat", "/etc/motd"]),
+    )
+    .expect("argv startup object writes");
+    write_k16_debug_write_syscall_stub(&work_dir);
+    write_k16_sbrk_syscall_stub(&work_dir);
+    write_k16_fs_read_syscall_stub(&work_dir);
+
+    let rustflags = format!(
+        "-C linker={} -C link-arg={} -C link-arg={} -C link-arg={} -C link-arg={} -C link-arg={} -C link-arg={} -C link-arg=--k16-target=program -Cpasses=lower-atomic -Copt-level=z -Cjump-tables=no -Cdebuginfo=0 -Cdebug-assertions=off -Coverflow-checks=off -Zub-checks=no",
+        k16_ld_binary(),
+        work_dir.join("startup.o").display(),
+        work_dir.join("write-stub.o").display(),
+        work_dir.join("sbrk-stub.o").display(),
+        work_dir.join("fs-open-close-stub.o").display(),
+        work_dir.join("fs-read-stub.o").display(),
+        work_dir.join("abort.o").display(),
+    );
+    let cargo_output = Command::new(k16_cargo())
+        .args([
+            "rustc",
+            "-Z",
+            "build-std=std,panic_abort",
+            "-Z",
+            "build-std-features=compiler-builtins-mem",
+            "-Z",
+            "json-target-spec",
+            "--manifest-path",
+            work_dir.join("Cargo.toml").to_str().unwrap(),
+            "--target",
+            k16_target_spec().to_str().unwrap(),
+            "--target-dir",
+            work_dir.join("target").to_str().unwrap(),
+            "--bin",
+            "k16-hosted-std-cat",
+            "--",
+            "-C",
+            "panic=abort",
+            "-C",
+            "relocation-model=static",
+            "-Cjump-tables=no",
+            "-Cdebuginfo=0",
+            "-Cdebug-assertions=off",
+            "-Coverflow-checks=off",
+            "-Zub-checks=no",
+        ])
+        .env("RUSTC", k16_rustc())
+        .env("RUSTC_BOOTSTRAP", "1")
+        .env("RUSTFLAGS", rustflags)
+        .output()
+        .expect("cargo rustc runs");
+    assert!(
+        cargo_output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&cargo_output.stderr)
+    );
+
+    let linked_program = find_linked_rust_bin(&work_dir);
+    let run_output = Command::new(k16_binary())
+        .args(["run", linked_program.to_str().unwrap()])
+        .output()
+        .expect("k16 run runs");
+    assert!(
+        run_output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&run_output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&run_output.stdout);
+    assert!(
+        stdout.starts_with("signal=halt exit_status=0 debug_bytes="),
+        "stdout: {stdout}"
+    );
+    assert!(
+        stdout.ends_with("4b726166744f53204d4f54440a\n"),
+        "stdout: {stdout}"
+    );
+}
+
 fn write_k16_debug_write_syscall_stub(work_dir: &Path) {
     let stub_dir = work_dir.join("write-stub");
     let src_dir = stub_dir.join("src");
