@@ -89,6 +89,8 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("rust/guest/k16-rm"))
         assertTrue(source.contains("rust/guest/k16-mkdir"))
         assertTrue(source.contains("rust/guest/k16-rmdir"))
+        assertTrue(source.contains("rust/guest/k16-shared-smoke-runtime"))
+        assertTrue(source.contains("rust/guest/k16-shared-runtime-test"))
         assertTrue(source.contains("rust/guest/k16-alloc-test"))
         assertTrue(source.contains("rust/guest/k16-hosted-cat"))
         assertTrue(source.contains("rust/guest/k16-proc-test"))
@@ -112,6 +114,8 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("k16MkdirSource"))
         assertTrue(source.contains("k16RmdirManifest"))
         assertTrue(source.contains("k16RmdirSource"))
+        assertTrue(source.contains("k16SharedSmokeRuntimeManifest"))
+        assertTrue(source.contains("k16SharedRuntimeTestManifest"))
         assertTrue(source.contains("k16AllocTestManifest"))
         assertTrue(source.contains("k16AllocTestSource"))
         assertTrue(source.contains("k16HostedCatManifest"))
@@ -127,6 +131,8 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("generatedK16RmTarget"))
         assertTrue(source.contains("generatedK16MkdirTarget"))
         assertTrue(source.contains("generatedK16RmdirTarget"))
+        assertTrue(source.contains("generatedK16SharedSmokeRuntimeTarget"))
+        assertTrue(source.contains("generatedK16SharedRuntimeTestTarget"))
         assertTrue(source.contains("generatedK16AllocTestTarget"))
         assertTrue(source.contains("generatedK16HostedCatTarget"))
         assertTrue(source.contains("generatedK16ProcTestTarget"))
@@ -140,6 +146,8 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("k16RmArtifact"))
         assertTrue(source.contains("k16MkdirArtifact"))
         assertTrue(source.contains("k16RmdirArtifact"))
+        assertTrue(source.contains("k16SharedSmokeRuntimeArtifact"))
+        assertTrue(source.contains("k16SharedRuntimeTestArtifact"))
         assertTrue(source.contains("k16AllocTestArtifact"))
         assertTrue(source.contains("k16HostedCatArtifact"))
         assertTrue(source.contains("k16ProcTestArtifact"))
@@ -153,6 +161,8 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("compileK16SystemRm"))
         assertTrue(source.contains("compileK16SystemMkdir"))
         assertTrue(source.contains("compileK16SystemRmdir"))
+        assertTrue(source.contains("compileK16SharedSmokeRuntime"))
+        assertTrue(source.contains("compileK16SharedRuntimeTest"))
         assertTrue(source.contains("compileK16SystemAllocTest"))
         assertTrue(source.contains("compileK16HostedCat"))
         assertTrue(source.contains("compileK16SystemProcTest"))
@@ -171,6 +181,8 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("binName = \"k16-rm\""))
         assertTrue(source.contains("binName = \"k16-mkdir\""))
         assertTrue(source.contains("binName = \"k16-rmdir\""))
+        assertTrue(source.contains("binName = \"k16-shared-smoke-runtime\""))
+        assertTrue(source.contains("binName = \"k16-shared-runtime-test\""))
         assertTrue(source.contains("binName = \"k16-alloc-test\""))
         assertTrue(source.contains("binName = \"k16-hosted-cat\""))
         assertTrue(source.contains("binName = \"k16-proc-test\""))
@@ -193,6 +205,8 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("\"/bin/rm.kx\""))
         assertTrue(source.contains("\"/bin/mkdir.kx\""))
         assertTrue(source.contains("\"/bin/rmdir.kx\""))
+        assertTrue(source.contains("\"/lib/k16-shared-smoke.k16so\""))
+        assertTrue(source.contains("\"/bin/shared-runtime-test.kx\""))
         assertTrue(source.contains("\"/bin/alloc-test.kx\""))
         assertTrue(source.contains("\"/bin/hosted-cat.kx\""))
         assertTrue(source.contains("\"/bin/proc-test.kx\""))
@@ -568,6 +582,7 @@ class K16FirmwareResourceTest {
         val root = workspace.resolve("root.kfs")
         val allocTest = workspace.resolve("alloc-test.kx")
         val procTest = workspace.resolve("proc-test.kx")
+        val sharedRuntimeTest = workspace.resolve("shared-runtime-test.kx")
         storage0.writeBytes(K16SystemVolumeWorkspace.loadStorage0VolumeResource(classLoader = javaClass.classLoader))
 
         runK16Tool(
@@ -593,6 +608,52 @@ class K16FirmwareResourceTest {
             "/bin/proc-test.kx",
             procTest.toString(),
         )
+        runK16ToolExpectFailure(
+            "fs",
+            "kfs",
+            "get",
+            root.toString(),
+            "/bin/shared-runtime-test.kx",
+            sharedRuntimeTest.toString(),
+        )
+    }
+
+    @Test
+    fun bundledK16SystemStorage0ContainsSharedRuntimeObject() {
+        val workspace = createTempDirectory("k16-shared-runtime-storage-test-")
+        val storage0 = workspace.resolve("storage0.kv")
+        val root = workspace.resolve("root.kfs")
+        val runtime = workspace.resolve("k16-shared-smoke.k16so")
+        storage0.writeBytes(K16SystemVolumeWorkspace.loadStorage0VolumeResource(classLoader = javaClass.classLoader))
+
+        runK16Tool(
+            "volume",
+            "extract-partition",
+            storage0.toString(),
+            "ROOT",
+            root.toString(),
+        )
+        runK16Tool(
+            "fs",
+            "kfs",
+            "get",
+            root.toString(),
+            "/lib/k16-shared-smoke.k16so",
+            runtime.toString(),
+        )
+
+        val bytes = runtime.readBytes()
+        assertTrue(bytes.size > 112, "bundled /lib/k16-shared-smoke.k16so should be a non-empty K16E shared object")
+        assertContentEquals(
+            byteArrayOf('K'.code.toByte(), '1'.code.toByte(), '6'.code.toByte(), 'E'.code.toByte()),
+            bytes.copyOfRange(0, 4),
+        )
+        assertEquals(4, bytes.u16Le(offset = 4), "bundled shared runtime must use K16E v4")
+        assertEquals(4, bytes.u32Le(offset = 24), "bundled shared runtime must use K16E abi kind shared-object")
+        assertTrue(
+            bytes.decodeToString().contains("k16_shared_smoke_value"),
+            "bundled shared runtime should export k16_shared_smoke_value",
+        )
     }
 
     @Test
@@ -602,6 +663,7 @@ class K16FirmwareResourceTest {
         val root = workspace.resolve("root.kfs")
         val allocTest = workspace.resolve("alloc-test.kx")
         val procTest = workspace.resolve("proc-test.kx")
+        val sharedRuntimeTest = workspace.resolve("shared-runtime-test.kx")
         storage0.writeBytes(
             K16SystemVolumeWorkspace.loadStorage0VolumeResource(
                 resourcePath = "firmware/k16-system-storage0-dev.kv",
@@ -632,6 +694,14 @@ class K16FirmwareResourceTest {
             "/bin/proc-test.kx",
             procTest.toString(),
         )
+        runK16Tool(
+            "fs",
+            "kfs",
+            "get",
+            root.toString(),
+            "/bin/shared-runtime-test.kx",
+            sharedRuntimeTest.toString(),
+        )
 
         val allocBytes = allocTest.readBytes()
         assertTrue(allocBytes.size > 72, "bundled dev /bin/alloc-test.kx should be a non-empty dynamic K16E program")
@@ -650,6 +720,69 @@ class K16FirmwareResourceTest {
             byteArrayOf('K'.code.toByte(), '1'.code.toByte(), '6'.code.toByte(), 'E'.code.toByte()),
             procBytes.copyOfRange(0, 4),
         )
+
+        val sharedRuntimeBytes = sharedRuntimeTest.readBytes()
+        assertTrue(
+            sharedRuntimeBytes.size > 112,
+            "bundled dev /bin/shared-runtime-test.kx should be a non-empty imported dynamic K16E program",
+        )
+        assertContentEquals(
+            byteArrayOf('K'.code.toByte(), '1'.code.toByte(), '6'.code.toByte(), 'E'.code.toByte()),
+            sharedRuntimeBytes.copyOfRange(0, 4),
+        )
+        assertEquals(5, sharedRuntimeBytes.u16Le(offset = 4), "shared runtime smoke must use K16E v5")
+        assertEquals(3, sharedRuntimeBytes.u32Le(offset = 24), "shared runtime smoke must use K16E abi kind program")
+        val sharedRuntimeMetadata = sharedRuntimeBytes.decodeToString()
+        assertTrue(
+            sharedRuntimeMetadata.contains("k16-shared-smoke.k16so"),
+            "shared runtime smoke should declare k16-shared-smoke.k16so as a needed library",
+        )
+        assertTrue(
+            sharedRuntimeMetadata.contains("k16_shared_smoke_value"),
+            "shared runtime smoke should import k16_shared_smoke_value",
+        )
+    }
+
+    @Test
+    fun bundledK16SharedRuntimeSmokeRunsThroughKernelLoader() {
+        val workspace = createTempDirectory("k16-shared-runtime-smoke-test-")
+        val biosFlashPath = workspace.resolve("bios.kflash")
+        val storage0Path = workspace.resolve("storage0-dev.kv")
+        biosFlashPath.writeBytes(K16BiosFlashWorkspace.loadBiosFlashResource(classLoader = javaClass.classLoader))
+        storage0Path.writeBytes(
+            K16SystemVolumeWorkspace.loadStorage0VolumeResource(
+                resourcePath = "firmware/k16-system-storage0-dev.kv",
+                classLoader = javaClass.classLoader,
+            ),
+        )
+
+        K16ComputerRuntimeFactory
+            .createFromBiosFlash(
+                biosFlashPath = biosFlashPath,
+                storage0Path = storage0Path,
+            ).use { runtime ->
+                val readyControl = runUntilTerminalText(runtime, "K16> ")
+                assertEquals(NativeK16ComputerControl.STATUS_READY, readyControl.status)
+
+                runShellCommand(runtime, "shared-runtime-test", expectVisiblePixels = true)
+                var terminal = terminalText(runtime.machineSnapshot())
+                var waitTurns = 0
+                while (!terminal.contains("ERR EXIT 42") && waitTurns < 64) {
+                    val control = runRuntimeServerTick(runtime, maxTurns = 1_000_000)
+                    assertEquals(NativeK16ComputerControl.STATUS_READY, control.status)
+                    terminal = terminalText(runtime.machineSnapshot())
+                    waitTurns += 1
+                }
+
+                assertTrue(
+                    terminal.contains("ERR EXIT 42"),
+                    "shared runtime smoke should call imported k16_shared_smoke_value through the kernel loader; terminal: $terminal",
+                )
+                assertFalse(
+                    terminal.contains("ERR RUN"),
+                    "shared runtime smoke should not fail during loader/import resolution; terminal: $terminal",
+                )
+            }
     }
 
     @Test
