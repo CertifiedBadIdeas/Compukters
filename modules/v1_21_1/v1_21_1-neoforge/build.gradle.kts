@@ -239,7 +239,7 @@ val k16SyscallFaultTestMapArtifact =
     k16SyscallFaultTestArtifact.map { it.asFile.resolveSibling("${it.asFile.nameWithoutExtension}.map") }
 val k16UserFaultTestMapArtifact =
     k16UserFaultTestArtifact.map { it.asFile.resolveSibling("${it.asFile.nameWithoutExtension}.map") }
-val k16UserlandMapArtifacts =
+val k16ProductionUserlandMapArtifacts =
     listOf(
         k16InitMapArtifact,
         k16ShellMapArtifact,
@@ -253,6 +253,17 @@ val k16UserlandMapArtifacts =
         k16RmMapArtifact,
         k16MkdirMapArtifact,
         k16RmdirMapArtifact,
+    )
+val k16SharedRuntimeMapArtifacts =
+    listOf(
+        k16SharedSmokeRuntimeMapArtifact,
+    )
+val k16DevelopmentOnlyMapArtifacts =
+    listOf(
+        k16AllocTestMapArtifact,
+        k16SharedRuntimeTestMapArtifact,
+        k16HostedCatMapArtifact,
+        k16ProcTestMapArtifact,
     )
 val k16SystemStorage0Resource = generatedK16FirmwareResources.map { it.file("firmware/k16-system-storage0.kv") }
 val k16DevelopmentStorage0Resource =
@@ -1063,36 +1074,6 @@ val compileK16SharedRuntimeTest =
         }
     }
 
-val reportK16UserlandSize =
-    tasks.register("reportK16UserlandSize") {
-        description = "Reports duplicated retained-section size across bundled K16 userland maps."
-        group = "k16"
-        inputs.files(k16UserlandMapArtifacts)
-        dependsOn(compileK16SystemInit, compileK16SystemShell, compileK16SystemUname, compileK16SystemLs, compileK16SystemCat, compileK16SystemCp, compileK16SystemMv, compileK16SystemStat, compileK16SystemWrite, compileK16SystemRm, compileK16SystemMkdir, compileK16SystemRmdir)
-        dependsOn(rootProject.tasks.named("prepareK16Toolchain"))
-
-        doLast {
-            val toolchain = resolveK16Toolchain()
-            val args = mutableListOf(toolchain.cli.absolutePath)
-            args.add("size-report")
-            k16UserlandMapArtifacts.forEach { mapArtifact ->
-                args.add(mapArtifact.get().absolutePath)
-            }
-            val processBuilder =
-                ProcessBuilder(args)
-                    .directory(projectDir)
-            val process = processBuilder.start()
-            val stdout = process.inputStream.bufferedReader().readText()
-            val stderr = process.errorStream.bufferedReader().readText()
-            val exitCode = process.waitFor()
-            print(stdout)
-            print(stderr)
-            check(exitCode == 0) {
-                "K16 userland size report failed with exit code $exitCode"
-            }
-        }
-    }
-
 val compileK16SystemAllocTest =
     tasks.register("compileK16SystemAllocTest") {
         description = "Compiles and links the bundled Rust K16 alloc test utility into a dynamic K16E program artifact."
@@ -1491,6 +1472,71 @@ val putK16DevelopmentStorage0TestPrograms =
                 "ROOT",
                 rootPartition.absolutePath,
             )
+        }
+    }
+
+val reportK16UserlandSize =
+    tasks.register("reportK16UserlandSize") {
+        description = "Reports K16 production and development storage and userland sizes."
+        group = "k16"
+        inputs.files(k16ProductionUserlandMapArtifacts)
+        inputs.files(k16SharedRuntimeMapArtifacts)
+        inputs.files(k16DevelopmentOnlyMapArtifacts)
+        inputs.file(k16SystemStorage0Resource)
+        inputs.file(k16DevelopmentStorage0Resource)
+        dependsOn(putK16SystemStorage0Init, putK16DevelopmentStorage0TestPrograms)
+        dependsOn(rootProject.tasks.named("prepareK16Toolchain"))
+
+        doLast {
+            val toolchain = resolveK16Toolchain()
+            val productionStorage = k16SystemStorage0Resource.get().asFile
+            val developmentStorage = k16DevelopmentStorage0Resource.get().asFile
+            val productionStorageBytes = productionStorage.length()
+            val developmentStorageBytes = developmentStorage.length()
+            println("storage_image name=production bytes=$productionStorageBytes path=${productionStorage.absolutePath}")
+            println("storage_image name=development bytes=$developmentStorageBytes path=${developmentStorage.absolutePath}")
+            println("storage_image_delta name=development_minus_production bytes=${developmentStorageBytes - productionStorageBytes}")
+
+            fun storageEntriesBytes(entries: List<Pair<String, Any>>): Long =
+                entries.sumOf { (_, artifact) -> artifactFile(artifact).length() }
+
+            val productionEntryBytes = storageEntriesBytes(k16ProductionStorageEntries)
+            val sharedRuntimeEntryBytes = storageEntriesBytes(k16SharedRuntimeStorageEntries)
+            val developmentOnlyEntryBytes = storageEntriesBytes(k16DevelopmentOnlyStorageEntries)
+            println("storage_entries group=production files=${k16ProductionStorageEntries.size} bytes=$productionEntryBytes")
+            println("storage_entries group=shared_runtime files=${k16SharedRuntimeStorageEntries.size} bytes=$sharedRuntimeEntryBytes")
+            println("storage_entries group=development_only files=${k16DevelopmentOnlyStorageEntries.size} bytes=$developmentOnlyEntryBytes")
+            println(
+                "storage_entries group=development_total files=${k16ProductionStorageEntries.size + k16SharedRuntimeStorageEntries.size + k16DevelopmentOnlyStorageEntries.size} " +
+                    "bytes=${productionEntryBytes + sharedRuntimeEntryBytes + developmentOnlyEntryBytes}",
+            )
+
+            fun runK16SizeReport(mapArtifacts: List<Provider<File>>) {
+                val args = mutableListOf(toolchain.cli.absolutePath)
+                args.add("size-report")
+                mapArtifacts.forEach { mapArtifact ->
+                    args.add(mapArtifact.get().absolutePath)
+                }
+                val processBuilder =
+                    ProcessBuilder(args)
+                        .directory(projectDir)
+                val process = processBuilder.start()
+                val stdout = process.inputStream.bufferedReader().readText()
+                val stderr = process.errorStream.bufferedReader().readText()
+                val exitCode = process.waitFor()
+                print(stdout)
+                print(stderr)
+                check(exitCode == 0) {
+                    "K16 userland size report failed with exit code $exitCode"
+                }
+            }
+
+            println("map_section name=production_userland")
+            runK16SizeReport(k16ProductionUserlandMapArtifacts)
+            println("map_section name=shared_runtime")
+            runK16SizeReport(k16SharedRuntimeMapArtifacts)
+            println("map_section name=development_only")
+            runK16SizeReport(k16DevelopmentOnlyMapArtifacts)
         }
     }
 

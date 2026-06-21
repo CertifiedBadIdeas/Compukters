@@ -35,6 +35,10 @@
   binaries, while test resources provide `firmware/k16-system-storage0-dev.kv`
   with `/bin/alloc-test.kx`, `/bin/proc-test.kx`,
   `/bin/shared-runtime-test.kx`, and `/bin/hosted-cat.kx`.
+- `:v1_21_1-neoforge:reportK16UserlandSize` now reports production and
+  development storage image sizes, installed-entry byte totals, and separate
+  retained-section map sections for production userland, shared runtime objects,
+  and development-only programs.
 - The bundled K16 shell no longer carries a built-in `help` command or embedded
   command list. `help` now follows normal executable resolution as
   `/bin/help.kx` and reports the standard launch error when no such program is
