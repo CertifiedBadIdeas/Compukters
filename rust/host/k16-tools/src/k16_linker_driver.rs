@@ -1,5 +1,5 @@
 use crate::artifact::K16ArtifactTarget;
-use crate::object_link::{link_k16_objects_to_k16e, K16LinkInput};
+use crate::object_link::{link_k16_objects, K16LinkInput};
 use std::fs;
 
 pub fn run_k16_linker_driver(args: Vec<String>) -> Result<(), String> {
@@ -17,13 +17,17 @@ pub fn run_k16_linker_driver(args: Vec<String>) -> Result<(), String> {
         .iter()
         .map(|(path, bytes)| K16LinkInput { name: path, bytes })
         .collect::<Vec<_>>();
-    let output = link_k16_objects_to_k16e(&inputs, config.target)?;
-    fs::write(&config.output_path, output).map_err(|error| {
+    let output = link_k16_objects(&inputs, config.target)?;
+    fs::write(&config.output_path, output.bytes).map_err(|error| {
         format!(
             "failed to write linker output {}: {error}",
             config.output_path
         )
     })?;
+    if let Some(map_path) = config.map_path {
+        fs::write(&map_path, output.map.to_text())
+            .map_err(|error| format!("failed to write linker map {map_path}: {error}"))?;
+    }
     mark_linker_output_executable(&config.output_path)
 }
 
@@ -48,12 +52,14 @@ fn mark_linker_output_executable(_path: &str) -> Result<(), String> {
 struct LinkerDriverConfig {
     target: K16ArtifactTarget,
     output_path: String,
+    map_path: Option<String>,
     input_paths: Vec<String>,
 }
 
 fn parse_linker_args(args: &[String]) -> Result<LinkerDriverConfig, String> {
     let mut target = None;
     let mut output_path = None;
+    let mut map_path = None;
     let mut input_paths = Vec::new();
     let mut index = 0;
 
@@ -73,6 +79,13 @@ fn parse_linker_args(args: &[String]) -> Result<LinkerDriverConfig, String> {
                     return Err("k16-ld requires a value after -o".to_string());
                 };
                 output_path = Some(value.clone());
+            }
+            "--map" => {
+                index += 1;
+                let Some(value) = args.get(index) else {
+                    return Err("k16-ld requires a value after --map".to_string());
+                };
+                map_path = Some(value.clone());
             }
             "-flavor" | "-z" | "-L" | "-l" | "-m" | "-O" => {
                 index += 1;
@@ -110,6 +123,7 @@ fn parse_linker_args(args: &[String]) -> Result<LinkerDriverConfig, String> {
     Ok(LinkerDriverConfig {
         target,
         output_path,
+        map_path,
         input_paths,
     })
 }

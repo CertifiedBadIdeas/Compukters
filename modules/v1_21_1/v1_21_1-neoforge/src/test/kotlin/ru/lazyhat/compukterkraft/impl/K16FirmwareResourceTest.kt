@@ -175,7 +175,9 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("binName = \"k16-hosted-cat\""))
         assertTrue(source.contains("binName = \"k16-proc-test\""))
         assertTrue(
-            source.contains("output = k16ShellArtifact.get().asFile,\n                buildStd = \"core,alloc\""),
+            source.contains(
+                "output = k16ShellArtifact.get().asFile,\n                mapOutput = k16ShellMapArtifact.get(),\n                buildStd = \"core,alloc\"",
+            ),
             "shell uses alloc-backed input and should build core+alloc",
         )
         assertTrue(source.contains("\"/bin\""))
@@ -212,6 +214,23 @@ class K16FirmwareResourceTest {
         assertTrue(toolchainConfig.contains("\"linux-x86_64\""))
         assertTrue(toolchainConfig.contains("\"bin/k16-ld\""))
         assertTrue(toolchainConfig.contains("\"bin/k16\""))
+    }
+
+    @Test
+    fun bundledK16HostedCatMapArtifactIsGenerated() {
+        val source = Path.of("build.gradle.kts").readText()
+
+        assertTrue(source.contains("val k16HostedCatMapArtifact ="))
+        assertTrue(source.contains("outputs.file(k16HostedCatMapArtifact)"))
+        assertTrue(source.contains("mapOutput: File"))
+        assertTrue(source.contains("-C link-arg=--map"))
+        assertTrue(source.contains("-C link-arg=\${mapOutput.absolutePath}"))
+        assertTrue(
+            source.contains(
+                "output = k16HostedCatArtifact.get().asFile,\n                mapOutput = k16HostedCatMapArtifact.get(),",
+            ),
+            "hosted-cat must emit a retained-section map next to the linked K16E artifact",
+        )
     }
 
     @Test

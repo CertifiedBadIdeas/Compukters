@@ -78,6 +78,49 @@ fn k16_ld_links_program_k16e_from_rustc_style_args() {
 }
 
 #[test]
+fn k16_ld_writes_retained_section_map_from_rustc_style_args() {
+    let object_path = temp_file("program-map.o");
+    let output_path = temp_file("program-map.kx");
+    let map_path = temp_file("program-map.map");
+    fs::write(&object_path, k16_object_with_text_relocation(1)).expect("object writes");
+
+    let output = Command::new(k16_ld_binary())
+        .args([
+            "-flavor",
+            "gnu",
+            object_path.to_str().unwrap(),
+            "--k16-target",
+            "program",
+            "--map",
+            map_path.to_str().unwrap(),
+            "-o",
+            output_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("k16-ld runs");
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_linker_output_is_executable(&output_path);
+    let bytes = fs::read(output_path).expect("program output reads");
+    let executable = k16e::decode_k16_executable(&bytes).expect("K16E decodes");
+    assert_eq!(executable.abi_kind, k16e::K16eAbiKind::Program);
+
+    let map = fs::read_to_string(map_path).expect("link map reads");
+    assert_eq!(
+        map,
+        format!(
+            "K16 link map target=program load_addr=0x00015000 payload_bytes=8 memory_bytes=8 retained_sections=1\n\
+section offset=0x00000000 class=text file_bytes=8 memory_bytes=8 object={} name=.text.k16\n",
+            object_path.display()
+        )
+    );
+}
+
+#[test]
 fn k16_ld_selects_first_archive_member_that_resolves_a_symbol() {
     let object_path = temp_file("archive-selection-main.o");
     let first_archive_path = temp_file("libk16_rt.rlib");
