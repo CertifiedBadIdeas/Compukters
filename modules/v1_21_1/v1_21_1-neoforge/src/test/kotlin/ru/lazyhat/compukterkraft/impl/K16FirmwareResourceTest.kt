@@ -291,16 +291,37 @@ class K16FirmwareResourceTest {
     @Test
     fun bundledK16UserlandSizeReportTaskUsesProductionMaps() {
         val source = Path.of("build.gradle.kts").readText()
+        val docs = Path.of("../../../docs/toolchains/k16-userland-size-report.md").readText()
 
         assertTrue(source.contains("tasks.register(\"reportK16UserlandSize\")"))
-        assertTrue(source.contains("description = \"Reports duplicated retained-section size across bundled K16 userland maps.\""))
+        assertTrue(source.contains("description = \"Reports K16 production and development storage and userland sizes.\""))
+        assertTrue(source.contains("val k16ProductionUserlandMapArtifacts ="))
+        assertTrue(source.contains("val k16DevelopmentOnlyMapArtifacts ="))
+        assertTrue(source.contains("val k16SharedRuntimeMapArtifacts ="))
+        assertTrue(source.contains("dependsOn(putK16SystemStorage0Init, putK16DevelopmentStorage0TestPrograms)"))
+        assertTrue(source.contains("println(\"storage_image name=production"))
+        assertTrue(source.contains("println(\"storage_image name=development"))
+        assertTrue(source.contains("println(\"storage_image_delta name=development_minus_production"))
+        assertTrue(source.contains("storage_entries group=production"))
+        assertTrue(source.contains("storage_entries group=shared_runtime"))
+        assertTrue(source.contains("storage_entries group=development_only"))
+        assertTrue(source.contains("storage_entries group=development_total"))
+        assertTrue(source.contains("println(\"map_section name=production_userland\")"))
+        assertTrue(source.contains("println(\"map_section name=shared_runtime\")"))
+        assertTrue(source.contains("println(\"map_section name=development_only\")"))
         assertTrue(source.contains("args.add(\"size-report\")"))
-        assertTrue(source.contains("dependsOn(compileK16SystemInit, compileK16SystemShell, compileK16SystemUname, compileK16SystemLs, compileK16SystemCat, compileK16SystemCp, compileK16SystemMv, compileK16SystemStat, compileK16SystemWrite, compileK16SystemRm, compileK16SystemMkdir, compileK16SystemRmdir)"))
-        assertTrue(source.contains("k16UserlandMapArtifacts.forEach { mapArtifact ->"))
+        assertTrue(source.contains("runK16SizeReport(k16ProductionUserlandMapArtifacts)"))
+        assertTrue(source.contains("runK16SizeReport(k16SharedRuntimeMapArtifacts)"))
+        assertTrue(source.contains("runK16SizeReport(k16DevelopmentOnlyMapArtifacts)"))
         assertTrue(source.contains("val stdout = process.inputStream.bufferedReader().readText()"))
         assertTrue(source.contains("print(stdout)"))
-        assertFalse(source.contains("k16AllocTestMapArtifact.get().absolutePath"), "production report should exclude dev-only test maps")
-        assertFalse(source.contains("k16HostedCatMapArtifact.get().absolutePath"), "production report should exclude hosted proof maps")
+        assertTrue(
+            docs.contains("storage_image name=production") &&
+                docs.contains("storage_image_delta name=development_minus_production") &&
+                docs.contains("storage_entries group=development_only") &&
+                docs.contains("map_section name=development_only"),
+            "size-report docs should describe storage and dev-only sections",
+        )
     }
 
     @Test
