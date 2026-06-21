@@ -4,10 +4,11 @@
 
 - Bundled K16 shared-runtime adoption now uses a real provider artifact:
   `/lib/libk16rt.k16so` from `rust/guest/k16-shared-runtime`. The development
-  importer `/bin/runtime-import-test.kx` imports `k16rt_memcmp` through K16E v5
-  metadata. This replaces the previous smoke/example naming while staying
-  scoped to a small runtime provider rather than dynamic Rust `std`, libc, or
-  libc++.
+  importer `/bin/runtime-import-test.kx` imports `k16rt_memcpy`,
+  `k16rt_memset`, `k16rt_memmove`, and `k16rt_memcmp` through K16E v5
+  metadata. The provider reuses the same `k16-memory` implementation as
+  `k16-rt` while staying scoped to a small runtime provider rather than
+  dynamic Rust `std`, libc, or libc++.
 - `k16 link --target shared-object` now emits K16E v4 shared objects from
   retained global definitions, without requiring `_start`. `k16 link --target
   program-dynamic --import <library>:<symbol>` and `k16-ld --k16-import

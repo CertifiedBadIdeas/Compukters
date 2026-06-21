@@ -710,10 +710,13 @@ class K16FirmwareResourceTest {
         )
         assertEquals(4, bytes.u16Le(offset = 4), "bundled shared runtime must use K16E v4")
         assertEquals(4, bytes.u32Le(offset = 24), "bundled shared runtime must use K16E abi kind shared-object")
-        assertTrue(
-            bytes.decodeToString().contains("k16rt_memcmp"),
-            "bundled shared runtime should export k16rt_memcmp",
-        )
+        val runtimeMetadata = bytes.decodeToString()
+        listOf("k16rt_memcpy", "k16rt_memset", "k16rt_memmove", "k16rt_memcmp").forEach { symbol ->
+            assertTrue(
+                runtimeMetadata.contains(symbol),
+                "bundled shared runtime should export $symbol",
+            )
+        }
     }
 
     @Test
@@ -806,10 +809,12 @@ class K16FirmwareResourceTest {
             sharedRuntimeMetadata.contains("libk16rt.k16so"),
             "runtime import test should declare libk16rt.k16so as a needed library",
         )
-        assertTrue(
-            sharedRuntimeMetadata.contains("k16rt_memcmp"),
-            "runtime import test should import k16rt_memcmp",
-        )
+        listOf("k16rt_memcpy", "k16rt_memset", "k16rt_memmove", "k16rt_memcmp").forEach { symbol ->
+            assertTrue(
+                sharedRuntimeMetadata.contains(symbol),
+                "runtime import test should import $symbol",
+            )
+        }
 
         val hostedCatBytes = hostedCat.readBytes()
         assertTrue(hostedCatBytes.size > 72, "bundled dev /bin/hosted-cat.kx should be a non-empty dynamic K16E program")
@@ -854,7 +859,7 @@ class K16FirmwareResourceTest {
 
                 assertTrue(
                     terminal.contains("ERR EXIT 42"),
-                    "runtime import test should call imported k16rt_memcmp through the kernel loader; terminal: $terminal",
+                    "runtime import test should call imported libk16rt memory helpers through the kernel loader; terminal: $terminal",
                 )
                 assertFalse(
                     terminal.contains("ERR RUN"),

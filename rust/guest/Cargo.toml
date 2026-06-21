@@ -25,6 +25,7 @@ members = [
     "k16-syscall-fault-test",
     "k16-user-fault-test",
     "k16-kernel",
+    "k16-memory",
     "k16-rt",
     "k16-storage",
     "k16-uname",

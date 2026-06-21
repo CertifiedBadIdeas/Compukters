@@ -13,3 +13,4 @@ test = false
 required-features = ["k16-target"]
 
 [dependencies]
+k16-memory = { path = "../k16-memory" }

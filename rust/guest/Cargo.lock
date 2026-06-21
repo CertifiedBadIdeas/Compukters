@@ -93,6 +93,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "k16-memory"
+version = "0.1.0"
+
+[[package]]
 name = "k16-mkdir"
 version = "0.1.0"
 dependencies = [
@@ -132,6 +136,7 @@ name = "k16-rt"
 version = "0.1.0"
 dependencies = [
  "k16-abi",
+ "k16-memory",
 ]
 
 [[package]]
@@ -144,6 +149,9 @@ dependencies = [
 [[package]]
 name = "k16-shared-runtime"
 version = "0.1.0"
+dependencies = [
+ "k16-memory",
+]
 
 [[package]]
 name = "k16-shell"

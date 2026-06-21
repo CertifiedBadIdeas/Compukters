@@ -4,17 +4,23 @@
 use core::panic::PanicInfo;
 
 #[no_mangle]
+pub unsafe extern "C" fn k16rt_memcpy(dst: *mut u8, src: *const u8, n: usize) -> *mut u8 {
+    unsafe { k16_memory::k16_memcpy(dst, src, n) }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn k16rt_memset(dst: *mut u8, value: i32, n: usize) -> *mut u8 {
+    unsafe { k16_memory::k16_memset(dst, value, n) }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn k16rt_memmove(dst: *mut u8, src: *const u8, n: usize) -> *mut u8 {
+    unsafe { k16_memory::k16_memmove(dst, src, n) }
+}
+
+#[no_mangle]
 pub unsafe extern "C" fn k16rt_memcmp(lhs: *const u8, rhs: *const u8, n: usize) -> i32 {
-    let mut index = 0;
-    while index < n {
-        let lhs_byte = unsafe { *lhs.add(index) };
-        let rhs_byte = unsafe { *rhs.add(index) };
-        if lhs_byte != rhs_byte {
-            return i32::from(lhs_byte) - i32::from(rhs_byte);
-        }
-        index += 1;
-    }
-    0
+    unsafe { k16_memory::k16_memcmp(lhs, rhs, n) }
 }
 
 #[panic_handler]
