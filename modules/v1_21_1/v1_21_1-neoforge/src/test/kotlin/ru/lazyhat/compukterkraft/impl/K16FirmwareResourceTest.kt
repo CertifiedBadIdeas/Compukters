@@ -529,12 +529,52 @@ class K16FirmwareResourceTest {
     }
 
     @Test
-    fun bundledK16SystemStorage0ContainsAllocTestProgram() {
-        val workspace = createTempDirectory("k16-alloc-test-storage-test-")
+    fun bundledK16SystemStorage0ExcludesDevelopmentTestPrograms() {
+        val workspace = createTempDirectory("k16-prod-storage-layout-test-")
         val storage0 = workspace.resolve("storage0.kv")
         val root = workspace.resolve("root.kfs")
         val allocTest = workspace.resolve("alloc-test.kx")
+        val procTest = workspace.resolve("proc-test.kx")
         storage0.writeBytes(K16SystemVolumeWorkspace.loadStorage0VolumeResource(classLoader = javaClass.classLoader))
+
+        runK16Tool(
+            "volume",
+            "extract-partition",
+            storage0.toString(),
+            "ROOT",
+            root.toString(),
+        )
+        runK16ToolExpectFailure(
+            "fs",
+            "kfs",
+            "get",
+            root.toString(),
+            "/bin/alloc-test.kx",
+            allocTest.toString(),
+        )
+        runK16ToolExpectFailure(
+            "fs",
+            "kfs",
+            "get",
+            root.toString(),
+            "/bin/proc-test.kx",
+            procTest.toString(),
+        )
+    }
+
+    @Test
+    fun bundledK16DevelopmentStorage0ContainsTestPrograms() {
+        val workspace = createTempDirectory("k16-dev-storage-layout-test-")
+        val storage0 = workspace.resolve("storage0-dev.kv")
+        val root = workspace.resolve("root.kfs")
+        val allocTest = workspace.resolve("alloc-test.kx")
+        val procTest = workspace.resolve("proc-test.kx")
+        storage0.writeBytes(
+            K16SystemVolumeWorkspace.loadStorage0VolumeResource(
+                resourcePath = "firmware/k16-system-storage0-dev.kv",
+                classLoader = javaClass.classLoader,
+            ),
+        )
 
         runK16Tool(
             "volume",
@@ -551,17 +591,32 @@ class K16FirmwareResourceTest {
             "/bin/alloc-test.kx",
             allocTest.toString(),
         )
+        runK16Tool(
+            "fs",
+            "kfs",
+            "get",
+            root.toString(),
+            "/bin/proc-test.kx",
+            procTest.toString(),
+        )
 
-        val bytes = allocTest.readBytes()
-        assertTrue(bytes.size > 72, "bundled /bin/alloc-test.kx should be a non-empty dynamic K16E program")
+        val allocBytes = allocTest.readBytes()
+        assertTrue(allocBytes.size > 72, "bundled dev /bin/alloc-test.kx should be a non-empty dynamic K16E program")
         assertContentEquals(
             byteArrayOf('K'.code.toByte(), '1'.code.toByte(), '6'.code.toByte(), 'E'.code.toByte()),
-            bytes.copyOfRange(0, 4),
+            allocBytes.copyOfRange(0, 4),
         )
-        val version = ByteBuffer.wrap(bytes, 0x04, 2).order(ByteOrder.LITTLE_ENDIAN).short.toInt()
-        val abiKind = ByteBuffer.wrap(bytes, 0x18, 4).order(ByteOrder.LITTLE_ENDIAN).int
+        val version = ByteBuffer.wrap(allocBytes, 0x04, 2).order(ByteOrder.LITTLE_ENDIAN).short.toInt()
+        val abiKind = ByteBuffer.wrap(allocBytes, 0x18, 4).order(ByteOrder.LITTLE_ENDIAN).int
         assertEquals(2, version, "bundled /bin/alloc-test.kx must use dynamic K16E v2")
         assertEquals(3, abiKind, "bundled /bin/alloc-test.kx must use K16E abi kind program")
+
+        val procBytes = procTest.readBytes()
+        assertTrue(procBytes.size > 72, "bundled dev /bin/proc-test.kx should be a non-empty dynamic K16E program")
+        assertContentEquals(
+            byteArrayOf('K'.code.toByte(), '1'.code.toByte(), '6'.code.toByte(), 'E'.code.toByte()),
+            procBytes.copyOfRange(0, 4),
+        )
     }
 
     @Test
@@ -2257,6 +2312,16 @@ class K16FirmwareResourceTest {
             .joinToString(separator = "")
 
     private fun runK16Tool(vararg args: String) {
+        val (exitCode, output) = runK16ToolProcess(*args)
+        assertEquals(0, exitCode, "k16 ${args.joinToString(" ")} failed:\n$output")
+    }
+
+    private fun runK16ToolExpectFailure(vararg args: String) {
+        val (exitCode, output) = runK16ToolProcess(*args)
+        assertTrue(exitCode != 0, "k16 ${args.joinToString(" ")} should fail:\n$output")
+    }
+
+    private fun runK16ToolProcess(vararg args: String): Pair<Int, String> {
         val executable = k16ToolExecutable()
         assertTrue(Files.isExecutable(executable), "K16 tool should be executable at $executable")
         val process =
@@ -2265,7 +2330,7 @@ class K16FirmwareResourceTest {
                 .start()
         val output = process.inputStream.use { it.readBytes().decodeToString() }
         val exitCode = process.waitFor()
-        assertEquals(0, exitCode, "k16 ${args.joinToString(" ")} failed:\n$output")
+        return exitCode to output
     }
 
     private fun k16ToolExecutable(): Path {

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Bundled K16 storage is now split into production and development layouts:
+  `firmware/k16-system-storage0.kv` excludes test binaries, while test resources
+  provide `firmware/k16-system-storage0-dev.kv` with `/bin/alloc-test.kx` and
+  `/bin/proc-test.kx`.
 - `k16 link` now accepts `--map <output.map>` and writes a deterministic
   retained-section report with target, load address, payload/memory size, and
   per-section class, offset, object, file bytes, and memory bytes.

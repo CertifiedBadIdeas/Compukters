@@ -88,6 +88,7 @@ val k16VmNativePlatform = currentK16VmNativePlatform()
 val k16VmNativeLibrary =
     rootProject.layout.projectDirectory.file(".toolchain/build/cargo/k16-vm/debug/${k16VmNativePlatform.libraryName}")
 val generatedK16FirmwareResources = layout.buildDirectory.dir("generated/k16-firmware-resources")
+val generatedK16FirmwareTestResources = layout.buildDirectory.dir("generated/k16-firmware-test-resources")
 val generatedK16FirmwareArtifacts = layout.buildDirectory.dir("generated/k16-firmware-artifacts")
 val generatedK16GuestTarget = layout.buildDirectory.dir("generated/k16-guest-target")
 val generatedK16BiosTarget = generatedK16GuestTarget.map { it.dir("bios") }
@@ -221,6 +222,8 @@ val k16SyscallFaultTestMapArtifact =
 val k16UserFaultTestMapArtifact =
     k16UserFaultTestArtifact.map { it.asFile.resolveSibling("${it.asFile.nameWithoutExtension}.map") }
 val k16SystemStorage0Resource = generatedK16FirmwareResources.map { it.file("firmware/k16-system-storage0.kv") }
+val k16DevelopmentStorage0Resource =
+    generatedK16FirmwareTestResources.map { it.file("firmware/k16-system-storage0-dev.kv") }
 
 fun deleteK16RustBinOutputs(
     targetDir: File,
@@ -1173,7 +1176,7 @@ val putK16SystemStorage0Init =
     tasks.register("putK16SystemStorage0Init") {
         description = "Writes the bundled K16 user programs into ROOT K16FS /bin."
         group = "k16"
-        dependsOn(compileK16SystemStorage0, compileK16SystemInit, compileK16SystemShell, compileK16SystemUname, compileK16SystemLs, compileK16SystemCat, compileK16SystemCp, compileK16SystemMv, compileK16SystemStat, compileK16SystemWrite, compileK16SystemRm, compileK16SystemMkdir, compileK16SystemRmdir, compileK16SystemAllocTest, compileK16HostedCat, compileK16SystemProcTest)
+        dependsOn(compileK16SystemStorage0, compileK16SystemInit, compileK16SystemShell, compileK16SystemUname, compileK16SystemLs, compileK16SystemCat, compileK16SystemCp, compileK16SystemMv, compileK16SystemStat, compileK16SystemWrite, compileK16SystemRm, compileK16SystemMkdir, compileK16SystemRmdir, compileK16HostedCat)
         dependsOn(rootProject.tasks.named("prepareK16Toolchain"))
         inputs.file(k16ToolchainConfig)
         inputs.file(k16InitArtifact)
@@ -1188,9 +1191,7 @@ val putK16SystemStorage0Init =
         inputs.file(k16RmArtifact)
         inputs.file(k16MkdirArtifact)
         inputs.file(k16RmdirArtifact)
-        inputs.file(k16AllocTestArtifact)
         inputs.file(k16HostedCatArtifact)
-        inputs.file(k16ProcTestArtifact)
         inputs.file(k16MotdSource)
         outputs.file(k16SystemStorage0Resource)
 
@@ -1331,24 +1332,8 @@ val putK16SystemStorage0Init =
                 "kfs",
                 "put",
                 rootPartition.absolutePath,
-                "/bin/alloc-test.kx",
-                k16AllocTestArtifact.get().asFile.absolutePath,
-            )
-            runK16Command(
-                "fs",
-                "kfs",
-                "put",
-                rootPartition.absolutePath,
                 "/bin/hosted-cat.kx",
                 k16HostedCatArtifact.get().asFile.absolutePath,
-            )
-            runK16Command(
-                "fs",
-                "kfs",
-                "put",
-                rootPartition.absolutePath,
-                "/bin/proc-test.kx",
-                k16ProcTestArtifact.get().asFile.absolutePath,
             )
             runK16Command(
                 "fs",
@@ -1372,9 +1357,81 @@ sourceSets.main {
     resources.srcDir(generatedK16FirmwareResources)
 }
 
+sourceSets.test {
+    resources.srcDir(generatedK16FirmwareTestResources)
+}
+
+val putK16DevelopmentStorage0TestPrograms =
+    tasks.register("putK16DevelopmentStorage0TestPrograms") {
+        description = "Creates the development K16 storage0 image with test programs in ROOT K16FS /bin."
+        group = "k16"
+        dependsOn(putK16SystemStorage0Init, compileK16SystemAllocTest, compileK16SystemProcTest)
+        dependsOn(rootProject.tasks.named("prepareK16Toolchain"))
+        inputs.file(k16ToolchainConfig)
+        inputs.file(k16SystemStorage0Resource)
+        inputs.file(k16AllocTestArtifact)
+        inputs.file(k16ProcTestArtifact)
+        outputs.file(k16DevelopmentStorage0Resource)
+
+        doLast {
+            val toolchain = resolveK16Toolchain()
+            val devStorage = k16DevelopmentStorage0Resource.get().asFile
+            val rootPartition = temporaryDir.resolve("root.kfs")
+            fun runK16Command(vararg args: String) {
+                val command = listOf(toolchain.cli.absolutePath) + args.toList()
+                val exitCode =
+                    ProcessBuilder(command)
+                        .directory(projectDir)
+                        .inheritIO()
+                        .start()
+                        .waitFor()
+                check(exitCode == 0) {
+                    "K16 dev storage command failed with exit code $exitCode: ${command.joinToString(" ")}"
+                }
+            }
+
+            devStorage.parentFile.mkdirs()
+            k16SystemStorage0Resource.get().asFile.copyTo(devStorage, overwrite = true)
+            runK16Command(
+                "volume",
+                "extract-partition",
+                devStorage.absolutePath,
+                "ROOT",
+                rootPartition.absolutePath,
+            )
+            runK16Command(
+                "fs",
+                "kfs",
+                "put",
+                rootPartition.absolutePath,
+                "/bin/alloc-test.kx",
+                k16AllocTestArtifact.get().asFile.absolutePath,
+            )
+            runK16Command(
+                "fs",
+                "kfs",
+                "put",
+                rootPartition.absolutePath,
+                "/bin/proc-test.kx",
+                k16ProcTestArtifact.get().asFile.absolutePath,
+            )
+            runK16Command(
+                "volume",
+                "replace-partition",
+                devStorage.absolutePath,
+                "ROOT",
+                rootPartition.absolutePath,
+            )
+        }
+    }
+
 tasks.named("processResources") {
     dependsOn(linkK16BiosFlash)
     dependsOn(putK16SystemStorage0Init)
+}
+
+tasks.named("processTestResources") {
+    dependsOn(putK16DevelopmentStorage0TestPrograms)
 }
 
 tasks.named<Test>("test") {
