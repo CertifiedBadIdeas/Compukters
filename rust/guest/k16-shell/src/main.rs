@@ -225,7 +225,8 @@ fn run_ticks(stdout: io::Fd) -> u32 {
     match time::game_ticks_bytes(&mut bytes) {
         Ok(()) => {
             let low = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
-            write_decimal_u32(stdout, low);
+            let high = u32::from_le_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]);
+            write_decimal_words(stdout, high, low);
             must_write(stdout, NEWLINE);
             k16_abi::syscall::STATUS_OK
         }
@@ -401,6 +402,57 @@ fn write_decimal_u32(stdout: io::Fd, bits: u32) {
         index += 1;
     }
     must_write(stdout, &digits[start..]);
+}
+
+fn write_decimal_words(stdout: io::Fd, high: u32, low: u32) {
+    let mut digits = [0u8; 20];
+    let mut start = digits.len() - 1;
+    write_decimal_bits(&mut digits, &mut start, high, 32);
+    write_decimal_bits(&mut digits, &mut start, low, 32);
+    let mut index = start;
+    while index < digits.len() {
+        digits[index] += b'0';
+        index += 1;
+    }
+    must_write(stdout, &digits[start..]);
+}
+
+fn write_decimal_bits(
+    digits: &mut [u8; 20],
+    start: &mut usize,
+    bits: u32,
+    count: u32,
+) {
+    let mut remaining = count;
+    while remaining > 0 {
+        remaining -= 1;
+        let bit = ((bits >> remaining) & 1) as u8;
+        double_decimal_digits_and_add_bit(digits, start, bit);
+    }
+}
+
+fn double_decimal_digits_and_add_bit(
+    digits: &mut [u8; 20],
+    start: &mut usize,
+    bit: u8,
+) {
+    let mut carry = bit;
+    let mut index = digits.len();
+    while index > *start {
+        index -= 1;
+        let value = digits[index] * 2 + carry;
+        if value >= 10 {
+            digits[index] = value - 10;
+            carry = 1;
+        } else {
+            digits[index] = value;
+            carry = 0;
+        }
+    }
+    if carry != 0 && *start > 0 {
+        *start -= 1;
+        digits[*start] = carry;
+    }
 }
 
 fn must_write(fd: io::Fd, bytes: &[u8]) {

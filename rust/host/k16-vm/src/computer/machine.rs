@@ -69,7 +69,7 @@ impl Display for BootHandoffError {
             Self::EmptyImage => formatter.write_str("boot handoff image is empty"),
             Self::StackTopMisaligned { stack_top } => write!(
                 formatter,
-                "boot handoff stack top {stack_top:#010x} is not 4-byte aligned",
+                "boot handoff stack top {stack_top:#010x} is not 8-byte aligned",
             ),
             Self::StackTopOutOfBounds { stack_top, ram_len } => write!(
                 formatter,

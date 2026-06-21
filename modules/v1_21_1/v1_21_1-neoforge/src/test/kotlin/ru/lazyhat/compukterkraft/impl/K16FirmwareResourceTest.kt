@@ -778,6 +778,11 @@ class K16FirmwareResourceTest {
                 val ticksBeforeCommand = snapshotTimer0GameTicks(runtime.machineSnapshot())
                 runShellCommand(runtime, "ticks", expectVisiblePixels = true)
                 val expectedTicks = ticksBeforeCommand + 1
+                assertEquals(
+                    expectedTicks,
+                    snapshotTimer0GameTicks(runtime.machineSnapshot()),
+                    "timer0 game ticks should only advance by the command server tick",
+                )
                 val terminal = terminalText(runtime.machineSnapshot())
                 val actualTicks =
                     Regex("""TICKS ([0-9]+)""")
@@ -791,6 +796,56 @@ class K16FirmwareResourceTest {
                     expectedTicks,
                     actualTicks,
                     "ticks command should print timer0 game ticks from K16SNAP; terminal: $terminal",
+                )
+            }
+    }
+
+    @Test
+    fun bundledK16ShellTicksCommandPrintsFullWidthTimer0GameTicks() {
+        val workspace = createTempDirectory("k16-shell-ticks-u64-command-test-")
+        val biosFlashPath = workspace.resolve("bios.kflash")
+        val storage0Path = workspace.resolve("storage0.kv")
+        biosFlashPath.writeBytes(K16BiosFlashWorkspace.loadBiosFlashResource(classLoader = javaClass.classLoader))
+        storage0Path.writeBytes(K16SystemVolumeWorkspace.loadStorage0VolumeResource(classLoader = javaClass.classLoader))
+
+        val bootedSnapshot =
+            K16ComputerRuntimeFactory
+                .createFromBiosFlash(
+                    biosFlashPath = biosFlashPath,
+                    storage0Path = storage0Path,
+                ).use { runtime ->
+                    val readyControl = runUntilTerminalText(runtime, "K16> ")
+                    assertEquals(NativeK16ComputerControl.STATUS_READY, readyControl.status)
+                    runtime.machineSnapshot()
+                }
+        val restoredGameTicks = 0x0000_0001_0000_002aL
+        val highTimerSnapshot = snapshotWithTimer0GameTicks(bootedSnapshot, restoredGameTicks)
+
+        K16ComputerRuntimeFactory
+            .restoreFromBiosFlashSnapshot(
+                biosFlashPath = biosFlashPath,
+                storage0Path = storage0Path,
+                snapshot = highTimerSnapshot,
+            ).use { runtime ->
+                NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
+                runShellCommand(runtime, "clear", expectVisiblePixels = false)
+
+                val ticksBeforeCommand = snapshotTimer0GameTicks(runtime.machineSnapshot())
+                runShellCommand(runtime, "ticks", expectVisiblePixels = true)
+                val expectedTicks = ticksBeforeCommand + 1
+                val terminal = terminalText(runtime.machineSnapshot())
+                val actualTicks =
+                    Regex("""TICKS ([0-9]+)""")
+                        .find(terminal)
+                        ?.groupValues
+                        ?.get(1)
+                        ?.toLong()
+                        ?: error("ticks command should print decimal timer0 ticks; terminal: $terminal")
+
+                assertEquals(
+                    expectedTicks,
+                    actualTicks,
+                    "ticks command should print full-width timer0 game ticks from K16SNAP; terminal: $terminal",
                 )
             }
     }

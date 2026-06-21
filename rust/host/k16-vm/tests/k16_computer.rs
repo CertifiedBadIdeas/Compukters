@@ -1,4 +1,7 @@
-use k16_vm::computer_machine::ComputerMachine;
+use k16_vm::computer_machine::{
+    BootHandoffError, ComputerMachine, COMPUTER_SNAPSHOT_V1_HEADER_SIZE,
+    COMPUTER_SNAPSHOT_V1_K16_CPU_RECORD_SIZE, COMPUTER_SNAPSHOT_V1_MAGIC,
+};
 use k16_vm::k16::{
     K16Signal, K16_CSR_INTERRUPT_ENABLE, K16_CSR_INTERRUPT_MASK, K16_CSR_TRAP_CAUSE,
     K16_CSR_TRAP_VALUE, K16_CSR_TRAP_VECTOR, K16_INTERRUPT_SOURCE_KEYBOARD0,
@@ -158,6 +161,67 @@ fn k16_computer_handle_guest_reads_timer0_game_ticks_after_host_advance() {
 }
 
 #[test]
+fn k16_computer_handle_guest_reads_timer0_game_ticks_high_word_after_restore() {
+    let mut words = Vec::new();
+    words.extend(k16_const32(0, ComputerMachine::TIMER0_GAME_TICKS_LOW));
+    words.push(k16_load32(1, 0));
+    words.extend(k16_const32(0, ComputerMachine::CONTROL_PANIC_CODE));
+    words.push(k16_store32(0, 1));
+    words.extend(k16_const32(0, ComputerMachine::TIMER0_GAME_TICKS_HIGH));
+    words.push(k16_load32(1, 0));
+    words.extend(k16_const32(0, 0x100));
+    words.push(k16_store32(0, 1));
+    words.push(k16_halt());
+    let bios = k16_words(&words);
+    let storage_path = temp_volume_path("timer0-high-word-restore");
+    write_k16_volume(&storage_path, &[0; 1024]);
+    let handle = K16ComputerHandle::create_k16_bios_flash_with_storage0_path(
+        &bios,
+        64 * 1024,
+        128,
+        &storage_path,
+    )
+    .expect("K16 BIOS flash computer creates");
+    let snapshot = snapshot_with_timer0_game_ticks(
+        &handle.snapshot_v1().expect("snapshot encodes"),
+        0x0000_0001_0000_002a,
+    );
+    let mut restored = K16ComputerHandle::restore_k16_bios_flash_snapshot_with_storage0_path(
+        &bios,
+        64 * 1024,
+        &storage_path,
+        &snapshot,
+    )
+    .expect("snapshot restores");
+
+    assert_eq!(
+        snapshot_timer0_game_ticks(&restored.snapshot_v1().expect("snapshot encodes")),
+        0x0000_0001_0000_002a,
+    );
+
+    assert_eq!(restored.run_k16_until_signal().unwrap(), K16Signal::Halt);
+    assert_eq!(
+        restored.control(),
+        K16ComputerControl {
+            status: ComputerMachine::STATUS_HALTED,
+            exit_code: 0,
+            panic_code: 42,
+        },
+    );
+    assert_eq!(
+        i32::from_le_bytes(
+            restored
+                .read_guest_ram_bytes(0x100, 4)
+                .expect("reads RAM proof")[..]
+                .try_into()
+                .unwrap(),
+        ),
+        1,
+    );
+    fs::remove_file(storage_path).unwrap();
+}
+
+#[test]
 fn k16_computer_handle_advance_game_tick_requests_timer0_interrupt() {
     let mut words = Vec::new();
     words.extend(k16_const32(1, ComputerMachine::K16_BIOS_FLASH_BASE + 30));
@@ -309,6 +373,32 @@ fn k16_computer_handle_boot_handoff_can_install_kernel_stack_top() {
     assert_eq!(cpu_id, 0);
     assert_eq!(handle.run_k16_until_signal().unwrap(), K16Signal::Halt);
     assert_eq!(handle.control().panic_code, 42);
+}
+
+#[test]
+fn k16_computer_handle_boot_handoff_rejects_four_byte_only_stack_top() {
+    let bios = k16_words(&[k16_halt()]);
+    let entry_pc = 4096;
+    let program = k16_words(&[k16_halt()]);
+    let mut handle = K16ComputerHandle::create_k16_bios_flash(&bios, 64 * 1024, 128)
+        .expect("K16 BIOS flash computer creates");
+    handle.write_guest_ram_bytes(entry_pc, &program).unwrap();
+
+    let error = handle
+        .boot_handoff_k16_from_guest_ram_with_stack(
+            entry_pc,
+            program.len() as u32,
+            128,
+            0x0001_0004,
+        )
+        .expect_err("boot handoff rejects stack top without 8-byte alignment");
+
+    assert_eq!(
+        error,
+        BootHandoffError::StackTopMisaligned {
+            stack_top: 0x0001_0004,
+        }
+    );
 }
 
 #[test]
@@ -565,6 +655,65 @@ fn temp_volume_path(name: &str) -> std::path::PathBuf {
         "k16-computer-{name}-{}-{nanos}.kv",
         std::process::id()
     ))
+}
+
+fn snapshot_with_timer0_game_ticks(snapshot: &[u8], game_ticks: u64) -> Vec<u8> {
+    const TIMER0_DEVICE_KIND: u32 = 6;
+    const DEVICE_HEADER_SIZE: usize = 8;
+    const TIMER0_PAYLOAD_SIZE: usize = 8;
+
+    let mut edited = snapshot.to_vec();
+    assert_eq!(&edited[0..8], COMPUTER_SNAPSHOT_V1_MAGIC);
+    let header_size = u16::from_le_bytes([edited[0x0a], edited[0x0b]]) as usize;
+    assert_eq!(header_size, COMPUTER_SNAPSHOT_V1_HEADER_SIZE);
+    let ram_size = u64::from_le_bytes(edited[0x10..0x18].try_into().unwrap()) as usize;
+    let cpu_count = u32::from_le_bytes(edited[0x18..0x1c].try_into().unwrap()) as usize;
+    let device_count = u32::from_le_bytes(edited[0x20..0x24].try_into().unwrap()) as usize;
+    let mut offset = header_size + ram_size + cpu_count * COMPUTER_SNAPSHOT_V1_K16_CPU_RECORD_SIZE;
+    for _ in 0..device_count {
+        let device_kind = u32::from_le_bytes(edited[offset..offset + 4].try_into().unwrap());
+        let payload_size =
+            u32::from_le_bytes(edited[offset + 4..offset + 8].try_into().unwrap()) as usize;
+        let payload_offset = offset + DEVICE_HEADER_SIZE;
+        if device_kind == TIMER0_DEVICE_KIND {
+            assert_eq!(payload_size, TIMER0_PAYLOAD_SIZE);
+            edited[payload_offset..payload_offset + TIMER0_PAYLOAD_SIZE]
+                .copy_from_slice(&game_ticks.to_le_bytes());
+            return edited;
+        }
+        offset = payload_offset + payload_size;
+    }
+    panic!("K16SNAP did not contain a timer0 device record");
+}
+
+fn snapshot_timer0_game_ticks(snapshot: &[u8]) -> u64 {
+    const TIMER0_DEVICE_KIND: u32 = 6;
+    const DEVICE_HEADER_SIZE: usize = 8;
+    const TIMER0_PAYLOAD_SIZE: usize = 8;
+
+    assert_eq!(&snapshot[0..8], COMPUTER_SNAPSHOT_V1_MAGIC);
+    let header_size = u16::from_le_bytes([snapshot[0x0a], snapshot[0x0b]]) as usize;
+    assert_eq!(header_size, COMPUTER_SNAPSHOT_V1_HEADER_SIZE);
+    let ram_size = u64::from_le_bytes(snapshot[0x10..0x18].try_into().unwrap()) as usize;
+    let cpu_count = u32::from_le_bytes(snapshot[0x18..0x1c].try_into().unwrap()) as usize;
+    let device_count = u32::from_le_bytes(snapshot[0x20..0x24].try_into().unwrap()) as usize;
+    let mut offset = header_size + ram_size + cpu_count * COMPUTER_SNAPSHOT_V1_K16_CPU_RECORD_SIZE;
+    for _ in 0..device_count {
+        let device_kind = u32::from_le_bytes(snapshot[offset..offset + 4].try_into().unwrap());
+        let payload_size =
+            u32::from_le_bytes(snapshot[offset + 4..offset + 8].try_into().unwrap()) as usize;
+        let payload_offset = offset + DEVICE_HEADER_SIZE;
+        if device_kind == TIMER0_DEVICE_KIND {
+            assert_eq!(payload_size, TIMER0_PAYLOAD_SIZE);
+            return u64::from_le_bytes(
+                snapshot[payload_offset..payload_offset + TIMER0_PAYLOAD_SIZE]
+                    .try_into()
+                    .unwrap(),
+            );
+        }
+        offset = payload_offset + payload_size;
+    }
+    panic!("K16SNAP did not contain a timer0 device record");
 }
 
 fn read_u32(memory: &k16_vm::low_machine::MachineMemory, address: u32) -> u32 {

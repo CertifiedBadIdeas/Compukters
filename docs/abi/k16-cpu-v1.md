@@ -149,6 +149,13 @@ arguments relative to `sp` before installing a frame pointer. The `ret`
 instruction pops only the return PC; the caller removes the outgoing
 stack-argument area when its call frame is released.
 
+The LLVM-facing ABI requires `sp` to be 8-byte aligned on function entry.
+Because K16 `call` pushes a 4-byte return PC, code that calls another function
+must present `sp % 8 == 4` immediately before `call`. The LLVM backend keeps
+this true with a fixed 4-byte body pad in non-leaf functions, leaving local
+frame indexes stable. Hand-written entry stubs, including `k16-startup`, must
+reserve the same 4-byte pad around their direct `call main`.
+
 ### LLVM-Facing Frame Layout
 
 When a callee uses `r12` as a frame pointer, it saves the caller frame pointer
