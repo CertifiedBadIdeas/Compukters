@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Bundled K16 shared-runtime adoption now uses a real provider artifact:
+  `/lib/libk16rt.k16so` from `rust/guest/k16-shared-runtime`. The development
+  importer `/bin/runtime-import-test.kx` imports `k16rt_memcmp` through K16E v5
+  metadata. This replaces the previous smoke/example naming while staying
+  scoped to a small runtime provider rather than dynamic Rust `std`, libc, or
+  libc++.
 - `k16 link --target shared-object` now emits K16E v4 shared objects from
   retained global definitions, without requiring `_start`. `k16 link --target
   program-dynamic --import <library>:<symbol>` and `k16-ld --k16-import
@@ -34,7 +40,7 @@
   `firmware/k16-system-storage0.kv` excludes test and hosted-stdlib proof
   binaries, while test resources provide `firmware/k16-system-storage0-dev.kv`
   with `/bin/alloc-test.kx`, `/bin/proc-test.kx`,
-  `/bin/shared-runtime-test.kx`, and `/bin/hosted-cat.kx`.
+  `/bin/runtime-import-test.kx`, and `/bin/hosted-cat.kx`.
 - `:v1_21_1-neoforge:reportK16UserlandSize` now reports production and
   development storage image sizes, installed-entry byte totals, and separate
   retained-section map sections for production userland, shared runtime objects,

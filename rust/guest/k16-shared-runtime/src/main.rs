@@ -4,7 +4,7 @@
 use core::panic::PanicInfo;
 
 #[no_mangle]
-pub unsafe extern "C" fn k16_shared_memcmp(lhs: *const u8, rhs: *const u8, n: usize) -> i32 {
+pub unsafe extern "C" fn k16rt_memcmp(lhs: *const u8, rhs: *const u8, n: usize) -> i32 {
     let mut index = 0;
     while index < n {
         let lhs_byte = unsafe { *lhs.add(index) };
