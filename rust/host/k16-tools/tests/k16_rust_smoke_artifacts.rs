@@ -141,6 +141,16 @@ fn kraftos_rust_std_sys_hooks_live_in_named_modules() {
     assert!(fs_mod.contains("mod kraftos;"));
     assert!(fs_mod.contains("use kraftos as imp;"));
 
+    let args_mod = fs::read_to_string(std_sys.join("args/mod.rs")).expect("args sys mod exists");
+    assert!(args_mod.contains("target_os = \"kraftos\""));
+    assert!(args_mod.contains("mod kraftos;"));
+    assert!(args_mod.contains("pub use kraftos::*;"));
+
+    let pal_mod = fs::read_to_string(std_sys.join("pal/mod.rs")).expect("PAL sys mod exists");
+    assert!(pal_mod.contains("target_os = \"kraftos\""));
+    assert!(pal_mod.contains("mod kraftos;"));
+    assert!(pal_mod.contains("pub use self::kraftos::*;"));
+
     let unsupported_stdio =
         fs::read_to_string(std_sys.join("stdio/unsupported.rs")).expect("unsupported stdio exists");
     assert!(!unsupported_stdio.contains("target_os = \"kraftos\""));
@@ -151,6 +161,11 @@ fn kraftos_rust_std_sys_hooks_live_in_named_modules() {
     assert!(!unsupported_fs.contains("__k16_open_syscall"));
     assert!(!unsupported_fs.contains("__k16_read_syscall"));
     assert!(!unsupported_fs.contains("__k16_close_syscall"));
+
+    let unsupported_args =
+        fs::read_to_string(std_sys.join("args/unsupported.rs")).expect("unsupported args exists");
+    assert!(!unsupported_args.contains("target_os = \"kraftos\""));
+    assert!(!unsupported_args.contains("ARG_ENTRY_BYTES"));
 
     let kraftos_stdio =
         fs::read_to_string(std_sys.join("stdio/kraftos.rs")).expect("KraftOS stdio exists");
@@ -166,6 +181,15 @@ fn kraftos_rust_std_sys_hooks_live_in_named_modules() {
     assert!(kraftos_fs.contains("__k16_read_syscall"));
     assert!(kraftos_fs.contains("__k16_close_syscall"));
     assert!(kraftos_fs.contains("OPEN_READ_ONLY"));
+
+    let kraftos_args =
+        fs::read_to_string(std_sys.join("args/kraftos.rs")).expect("KraftOS args exists");
+    assert!(kraftos_args.contains("ARG_ENTRY_BYTES"));
+    assert!(kraftos_args.contains("OsString::from_encoded_bytes_unchecked"));
+
+    let kraftos_pal =
+        fs::read_to_string(std_sys.join("pal/kraftos/mod.rs")).expect("KraftOS PAL exists");
+    assert!(kraftos_pal.contains("crate::sys::args::init"));
 }
 
 #[test]

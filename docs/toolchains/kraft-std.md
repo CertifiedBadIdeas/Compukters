@@ -1,6 +1,6 @@
 # kraft-std Guest Library
 
-Issue: [#192](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/192), [#194](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/194), [#195](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/195), [#230](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/230), [#232](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/232), [#247](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/247), [#248](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/248), [#249](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/249), [#295](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/295), [#296](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/296), [#297](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/297), [#333](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/333), [#336](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/336)
+Issue: [#192](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/192), [#194](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/194), [#195](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/195), [#230](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/230), [#232](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/232), [#247](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/247), [#248](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/248), [#249](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/249), [#295](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/295), [#296](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/296), [#297](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/297), [#333](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/333), [#336](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/336), [#337](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/337)
 
 `rust/guest/kraft-std` is the experimental KraftOS userland library boundary for
 guest Rust programs. It is intentionally separate from the lower-level K16
@@ -64,13 +64,17 @@ The first hosted Rust stages are narrow proofs, not a replacement for
 `fn main()`, stdout, panic-abort, and heap-backed `Vec`/`String` formatting, and
 is built by the `:v1_21_1-neoforge:compileK16HostedHello` Gradle task. Hosted
 Rust heap allocation goes through the KraftOS `SBRK` syscall ABI and remains
-monotonic for now. Hosted Rust `std::fs` has a first read-only stage backed by
-KraftOS `OPEN`, `READ`, and `CLOSE`: `File::open`, `File::read`, close-on-drop,
-and `std::fs::read_to_string` work for regular ROOT/K16FS file reads. Metadata,
+monotonic for now. Hosted Rust `std::env::args()` reads the existing K16 child
+entry ABI: startup preserves `r1 = argc` and `r2 = argv_table`, and each argv
+table entry is a `(ptr, len)` pair of little-endian `u32` words. Invalid argv
+ABI state is a runtime error, not a silent empty-args fallback. Hosted Rust
+`std::fs` has a first read-only stage backed by KraftOS `OPEN`, `READ`, and
+`CLOSE`: `File::open`, `File::read`, close-on-drop, and
+`std::fs::read_to_string` work for regular ROOT/K16FS file reads. Metadata,
 directories, create/write/truncate/append, seek, remove/rename, permissions,
-symlinks, canonicalize, and cwd remain explicit unsupported operations in hosted
-`std`. Broader hosted `std` coverage remains gated on explicit OS-backed APIs
-rather than silent no-op platform behavior.
+symlinks, canonicalize, and cwd remain explicit unsupported operations in
+hosted `std`. Broader hosted `std` coverage remains gated on explicit OS-backed
+APIs rather than silent no-op platform behavior.
 KraftOS-backed Rust `std` hooks live in named `sys/*/kraftos.rs` modules rather
 than generic `unsupported.rs` stubs when the API is actually OS-backed.
 

@@ -47,10 +47,8 @@ pub fn k16_startup_object_for_target(target: K16ArtifactTarget) -> Result<Vec<u8
     }
     let main_relocation_offset =
         text.len()
-            .checked_add(20)
+            .checked_add(8)
             .ok_or_else(|| "K16 startup relocation offset overflows".to_string())? as u32;
-    emit_const32(&mut text, ARG0_REGISTER, 0);
-    emit_const32(&mut text, ARG1_REGISTER, 0);
     emit_const32(&mut text, ARG2_REGISTER, 0);
     emit_const32(&mut text, SCRATCH_REGISTER, 0);
     emit_word(&mut text, call(SCRATCH_REGISTER));
