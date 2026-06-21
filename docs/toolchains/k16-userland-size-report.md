@@ -40,10 +40,15 @@ explicit artifact groups:
 
 - `map_section name=production_userland`: bundled init, shell, and production
   core utility maps.
-- `map_section name=shared_runtime`: shared runtime object maps under `/lib`.
-- `map_section name=development_only`: development-only smoke/proof program
-  maps such as `alloc-test`, `proc-test`, `shared-runtime-test`, and
-  `hosted-cat`.
+- `map_section name=shared_runtime`: shared runtime object maps under `/lib`,
+  currently including the real provider artifact `libk16rt.k16so`.
+- `map_section name=development_only`: development-only proof program maps such
+  as `alloc-test`, `proc-test`, `runtime-import-test`, and `hosted-cat`.
+
+`runtime-import-test` is intentionally still a development-only importer. It
+proves that bundled programs can call provider code from `libk16rt.k16so`
+through K16E import metadata without moving Rust `core`, `compiler_builtins`,
+Rust `std`, libc, or libc++ into shared libraries yet.
 
 Each map section has two `k16 size-report` subsections:
 
