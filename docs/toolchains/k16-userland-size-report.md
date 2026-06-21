@@ -46,7 +46,8 @@ explicit artifact groups:
   as `alloc-test`, `proc-test`, `runtime-import-test`, and `hosted-cat`.
 
 `runtime-import-test` is intentionally still a development-only importer. It
-proves that bundled programs can call provider code from `libk16rt.k16so`
+proves that bundled programs can call the `k16rt_memcpy`, `k16rt_memset`,
+`k16rt_memmove`, and `k16rt_memcmp` provider exports from `libk16rt.k16so`
 through K16E import metadata without moving Rust `core`, `compiler_builtins`,
 Rust `std`, libc, or libc++ into shared libraries yet.
 

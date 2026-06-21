@@ -175,6 +175,8 @@ val k16AbiManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-ab
 val k16AbiSource = rootProject.layout.projectDirectory.dir("rust/guest/k16-abi/src")
 val k16RtManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-rt/Cargo.toml")
 val k16RtSource = rootProject.layout.projectDirectory.dir("rust/guest/k16-rt/src")
+val k16MemoryManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-memory/Cargo.toml")
+val k16MemorySource = rootProject.layout.projectDirectory.dir("rust/guest/k16-memory/src")
 val k16ImageManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-image/Cargo.toml")
 val k16ImageSource = rootProject.layout.projectDirectory.dir("rust/guest/k16-image/src")
 val k16StorageManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-storage/Cargo.toml")
@@ -406,6 +408,8 @@ fun org.gradle.api.Task.inputsK16RuntimeCrates() {
     inputs.dir(k16AbiSource)
     inputs.file(k16RtManifest)
     inputs.dir(k16RtSource)
+    inputs.file(k16MemoryManifest)
+    inputs.dir(k16MemorySource)
 }
 
 fun org.gradle.api.Task.inputsKraftStdCrate() {
@@ -1019,6 +1023,7 @@ val compileK16SharedRuntime =
         inputs.file(k16GuestManifest)
         inputs.file(k16SharedRuntimeManifest)
         inputs.file(k16SharedRuntimeSource)
+        inputsK16RuntimeCrates()
         inputs.file(k16HostToolsManifest)
         inputs.dir(k16HostToolsSource)
         inputs.file(k16RustTargetSpec)
@@ -1067,6 +1072,12 @@ val compileK16RuntimeImportTest =
                 mapOutput = k16RuntimeImportTestMapArtifact.get(),
                 extraRuntimeLinkArgs =
                     listOf(
+                        "-C link-arg=--k16-import",
+                        "-C link-arg=libk16rt.k16so:k16rt_memcpy",
+                        "-C link-arg=--k16-import",
+                        "-C link-arg=libk16rt.k16so:k16rt_memset",
+                        "-C link-arg=--k16-import",
+                        "-C link-arg=libk16rt.k16so:k16rt_memmove",
                         "-C link-arg=--k16-import",
                         "-C link-arg=libk16rt.k16so:k16rt_memcmp",
                     ),
