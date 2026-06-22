@@ -41,9 +41,15 @@ explicit artifact groups:
 - `map_section name=production_userland`: bundled init, shell, and production
   core utility maps.
 - `map_section name=shared_runtime`: shared runtime object maps under `/lib`,
-  currently including the real provider artifact `libk16rt.k16so`.
+  currently including the real provider artifacts `libk16rt.k16so` and
+  `libkraft.k16so`.
 - `map_section name=development_only`: development-only proof program maps such
   as `alloc-test`, `proc-test`, `runtime-import-test`, and `hosted-cat`.
+
+`libkraft.k16so` is the first project-owned userland shared library boundary.
+The initial bundled importer is `/bin/uname.kx`, which imports
+`kraft_write_all` and `kraft_exit` through K16E import metadata instead of
+retaining those `kraft-std` calls in its own payload.
 
 `runtime-import-test` is intentionally still a development-only importer. It
 proves that bundled programs can call the `k16rt_memcpy`, `k16rt_memset`,

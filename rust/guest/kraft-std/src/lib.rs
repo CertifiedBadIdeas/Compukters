@@ -76,7 +76,7 @@ pub mod io {
         }
 
         pub fn write_all(self, bytes: &[u8]) -> Result<(), Error> {
-            let returned = k16_rt::write_syscall(self.0, bytes.as_ptr(), bytes.len());
+            let returned = write_all_raw(self.0, bytes.as_ptr(), bytes.len());
             if is_error_status(returned) {
                 return Err(Error::Syscall(returned));
             }
@@ -98,6 +98,23 @@ pub mod io {
     #[inline(always)]
     fn is_error_status(status: u32) -> bool {
         status & 0x8000_0000 != 0
+    }
+
+    #[cfg(feature = "shared-library-imports")]
+    extern "C" {
+        fn kraft_write_all(fd: u32, ptr: *const u8, len: usize) -> u32;
+    }
+
+    #[cfg(feature = "shared-library-imports")]
+    #[inline(always)]
+    fn write_all_raw(fd: u32, ptr: *const u8, len: usize) -> u32 {
+        unsafe { kraft_write_all(fd, ptr, len) }
+    }
+
+    #[cfg(not(feature = "shared-library-imports"))]
+    #[inline(always)]
+    fn write_all_raw(fd: u32, ptr: *const u8, len: usize) -> u32 {
+        k16_rt::write_syscall(fd, ptr, len)
     }
 
     #[inline(always)]
@@ -1097,6 +1114,23 @@ pub mod process {
     }
 
     pub fn exit(status: u32) -> ! {
+        exit_raw(status)
+    }
+
+    #[cfg(feature = "shared-library-imports")]
+    extern "C" {
+        fn kraft_exit(status: u32) -> !;
+    }
+
+    #[cfg(feature = "shared-library-imports")]
+    #[inline(always)]
+    fn exit_raw(status: u32) -> ! {
+        unsafe { kraft_exit(status) }
+    }
+
+    #[cfg(not(feature = "shared-library-imports"))]
+    #[inline(always)]
+    fn exit_raw(status: u32) -> ! {
         k16_rt::exit_syscall(status)
     }
 

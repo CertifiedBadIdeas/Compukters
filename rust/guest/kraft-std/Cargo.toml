@@ -5,6 +5,7 @@ edition = "2021"
 
 [features]
 host-test = ["k16-rt/host-test"]
+shared-library-imports = []
 
 [lib]
 path = "src/lib.rs"

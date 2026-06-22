@@ -13,4 +13,4 @@ test = false
 required-features = ["k16-target"]
 
 [dependencies]
-kraft-std = { path = "../kraft-std" }
+kraft-std = { path = "../kraft-std", features = ["shared-library-imports"] }

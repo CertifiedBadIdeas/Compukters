@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Bundled K16 storage now includes the first project-owned userland shared
+  library provider: `/lib/libkraft.k16so` from
+  `rust/guest/k16-shared-kraft`. The bundled `/bin/uname.kx` utility now uses
+  K16E v5 import metadata for `libkraft.k16so:kraft_write_all` and
+  `libkraft.k16so:kraft_exit`, proving that a production utility can call a
+  shared `kraft-std` ABI surface through the kernel loader. This remains
+  narrower than dynamic Rust `core`, Rust `std`, libc, or libc++ sharing.
 - Bundled K16 shared-runtime adoption now uses a real provider artifact:
   `/lib/libk16rt.k16so` from `rust/guest/k16-shared-runtime`. The development
   importer `/bin/runtime-import-test.kx` imports `k16rt_memcpy`,

@@ -16,6 +16,7 @@ members = [
     "k16-rm",
     "k16-mkdir",
     "k16-rmdir",
+    "k16-shared-kraft",
     "k16-runtime-import-test",
     "k16-shared-runtime",
     "k16-alloc-test",
