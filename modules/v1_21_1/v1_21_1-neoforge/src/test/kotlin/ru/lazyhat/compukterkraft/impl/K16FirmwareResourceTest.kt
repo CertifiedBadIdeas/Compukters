@@ -149,6 +149,7 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("k16MkdirArtifact"))
         assertTrue(source.contains("k16RmdirArtifact"))
         assertTrue(source.contains("k16SharedRuntimeArtifact"))
+        assertTrue(source.contains("k16SharedKraftArtifact"))
         assertTrue(source.contains("k16RuntimeImportTestArtifact"))
         assertTrue(source.contains("k16AllocTestArtifact"))
         assertTrue(source.contains("k16HostedCatArtifact"))
@@ -167,6 +168,7 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("compileK16SystemMkdir"))
         assertTrue(source.contains("compileK16SystemRmdir"))
         assertTrue(source.contains("compileK16SharedRuntime"))
+        assertTrue(source.contains("compileK16SharedKraft"))
         assertTrue(source.contains("compileK16RuntimeImportTest"))
         assertTrue(source.contains("compileK16SystemAllocTest"))
         assertTrue(source.contains("compileK16HostedCat"))
@@ -187,6 +189,7 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("binName = \"k16-mkdir\""))
         assertTrue(source.contains("binName = \"k16-rmdir\""))
         assertTrue(source.contains("binName = \"k16-shared-runtime\""))
+        assertTrue(source.contains("binName = \"k16-shared-kraft\""))
         assertTrue(source.contains("binName = \"k16-runtime-import-test\""))
         assertTrue(source.contains("binName = \"k16-alloc-test\""))
         assertTrue(source.contains("binName = \"k16-hosted-cat\""))
@@ -211,6 +214,7 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("\"/bin/mkdir.kx\""))
         assertTrue(source.contains("\"/bin/rmdir.kx\""))
         assertTrue(source.contains("\"/lib/libk16rt.k16so\""))
+        assertTrue(source.contains("\"/lib/libkraft.k16so\""))
         assertTrue(source.contains("\"/bin/runtime-import-test.kx\""))
         assertTrue(source.contains("\"/bin/alloc-test.kx\""))
         assertTrue(source.contains("\"/bin/hosted-cat.kx\""))
@@ -226,6 +230,10 @@ class K16FirmwareResourceTest {
         assertTrue(
             source.substring(productionEntriesIndex, developmentOnlyEntriesIndex).contains("\"/bin/cat.kx\""),
             "normal cat should be a production utility",
+        )
+        assertTrue(
+            source.substring(sharedRuntimeEntriesIndex, storageTaskIndex).contains("\"/lib/libkraft.k16so\""),
+            "shared runtime entries should include the first kraft shared library",
         )
         assertFalse(
             source.substring(productionEntriesIndex, developmentOnlyEntriesIndex).contains("\"/bin/hosted-cat.kx\""),
@@ -427,8 +435,13 @@ class K16FirmwareResourceTest {
         )
         val version = ByteBuffer.wrap(bytes, 0x04, 2).order(ByteOrder.LITTLE_ENDIAN).short.toInt()
         val abiKind = ByteBuffer.wrap(bytes, 0x18, 4).order(ByteOrder.LITTLE_ENDIAN).int
-        assertEquals(2, version, "bundled /bin/uname.kx must use dynamic K16E v2")
+        assertEquals(5, version, "bundled /bin/uname.kx must use imported dynamic K16E v5")
         assertEquals(3, abiKind, "bundled /bin/uname.kx must use K16E abi kind program")
+        val metadata = bytes.decodeToString()
+        assertTrue(
+            metadata.contains("libkraft.k16so"),
+            "bundled /bin/uname.kx should declare libkraft.k16so as a needed library",
+        )
     }
 
     @Test
@@ -683,7 +696,9 @@ class K16FirmwareResourceTest {
         val workspace = createTempDirectory("k16-shared-runtime-storage-test-")
         val storage0 = workspace.resolve("storage0.kv")
         val root = workspace.resolve("root.kfs")
-        val runtime = workspace.resolve("libk16rt.k16so")
+        val k16Runtime = workspace.resolve("libk16rt.k16so")
+        val kraftRuntime = workspace.resolve("libkraft.k16so")
+        val uname = workspace.resolve("uname.kx")
         storage0.writeBytes(K16SystemVolumeWorkspace.loadStorage0VolumeResource(classLoader = javaClass.classLoader))
 
         runK16Tool(
@@ -699,22 +714,68 @@ class K16FirmwareResourceTest {
             "get",
             root.toString(),
             "/lib/libk16rt.k16so",
-            runtime.toString(),
+            k16Runtime.toString(),
+        )
+        runK16Tool(
+            "fs",
+            "kfs",
+            "get",
+            root.toString(),
+            "/lib/libkraft.k16so",
+            kraftRuntime.toString(),
+        )
+        runK16Tool(
+            "fs",
+            "kfs",
+            "get",
+            root.toString(),
+            "/bin/uname.kx",
+            uname.toString(),
         )
 
-        val bytes = runtime.readBytes()
-        assertTrue(bytes.size > 112, "bundled /lib/libk16rt.k16so should be a non-empty K16E shared object")
+        val k16RuntimeBytes = k16Runtime.readBytes()
+        assertTrue(k16RuntimeBytes.size > 112, "bundled /lib/libk16rt.k16so should be a non-empty K16E shared object")
         assertContentEquals(
             byteArrayOf('K'.code.toByte(), '1'.code.toByte(), '6'.code.toByte(), 'E'.code.toByte()),
-            bytes.copyOfRange(0, 4),
+            k16RuntimeBytes.copyOfRange(0, 4),
         )
-        assertEquals(4, bytes.u16Le(offset = 4), "bundled shared runtime must use K16E v4")
-        assertEquals(4, bytes.u32Le(offset = 24), "bundled shared runtime must use K16E abi kind shared-object")
-        val runtimeMetadata = bytes.decodeToString()
+        assertEquals(4, k16RuntimeBytes.u16Le(offset = 4), "bundled shared runtime must use K16E v4")
+        assertEquals(4, k16RuntimeBytes.u32Le(offset = 24), "bundled shared runtime must use K16E abi kind shared-object")
+        val runtimeMetadata = k16RuntimeBytes.decodeToString()
         listOf("k16rt_memcpy", "k16rt_memset", "k16rt_memmove", "k16rt_memcmp").forEach { symbol ->
             assertTrue(
                 runtimeMetadata.contains(symbol),
                 "bundled shared runtime should export $symbol",
+            )
+        }
+
+        val kraftBytes = kraftRuntime.readBytes()
+        assertTrue(kraftBytes.size > 112, "bundled /lib/libkraft.k16so should be a non-empty K16E shared object")
+        assertContentEquals(
+            byteArrayOf('K'.code.toByte(), '1'.code.toByte(), '6'.code.toByte(), 'E'.code.toByte()),
+            kraftBytes.copyOfRange(0, 4),
+        )
+        assertEquals(4, kraftBytes.u16Le(offset = 4), "bundled libkraft must use K16E v4")
+        assertEquals(4, kraftBytes.u32Le(offset = 24), "bundled libkraft must use K16E abi kind shared-object")
+        val kraftMetadata = kraftBytes.decodeToString()
+        listOf("kraft_write_all", "kraft_exit").forEach { symbol ->
+            assertTrue(
+                kraftMetadata.contains(symbol),
+                "bundled libkraft should export $symbol",
+            )
+        }
+
+        val unameBytes = uname.readBytes()
+        assertEquals(5, unameBytes.u16Le(offset = 4), "bundled /bin/uname.kx should use imported dynamic K16E v5")
+        val unameMetadata = unameBytes.decodeToString()
+        assertTrue(
+            unameMetadata.contains("libkraft.k16so"),
+            "uname should declare libkraft.k16so as a needed library",
+        )
+        listOf("kraft_write_all", "kraft_exit").forEach { symbol ->
+            assertTrue(
+                unameMetadata.contains(symbol),
+                "uname should import $symbol from libkraft",
             )
         }
     }
@@ -864,6 +925,36 @@ class K16FirmwareResourceTest {
                 assertFalse(
                     terminal.contains("ERR RUN"),
                     "runtime import test should not fail during loader/import resolution; terminal: $terminal",
+                )
+            }
+    }
+
+    @Test
+    fun bundledK16SharedKraftUnameRunsThroughKernelLoader() {
+        val workspace = createTempDirectory("k16-shared-kraft-uname-test-")
+        val biosFlashPath = workspace.resolve("bios.kflash")
+        val storage0Path = workspace.resolve("storage0.kv")
+        biosFlashPath.writeBytes(K16BiosFlashWorkspace.loadBiosFlashResource(classLoader = javaClass.classLoader))
+        storage0Path.writeBytes(K16SystemVolumeWorkspace.loadStorage0VolumeResource(classLoader = javaClass.classLoader))
+
+        K16ComputerRuntimeFactory
+            .createFromBiosFlash(
+                biosFlashPath = biosFlashPath,
+                storage0Path = storage0Path,
+            ).use { runtime ->
+                val readyControl = runUntilTerminalText(runtime, "K16> ")
+                assertEquals(NativeK16ComputerControl.STATUS_READY, readyControl.status)
+
+                runShellCommand(runtime, "uname", expectVisiblePixels = true)
+                val terminal = terminalText(runtime.machineSnapshot())
+
+                assertTrue(
+                    terminal.contains("uname") && terminal.contains("K16"),
+                    "uname should run through libkraft imports and print K16; terminal: $terminal",
+                )
+                assertFalse(
+                    terminal.contains("ERR RUN"),
+                    "uname should not fail during libkraft import resolution; terminal: $terminal",
                 )
             }
     }
