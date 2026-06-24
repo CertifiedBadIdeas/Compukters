@@ -299,6 +299,83 @@ fn k16_link_emits_dynamic_imports_without_retaining_provider_code() {
 }
 
 #[test]
+fn k16_link_auto_imports_symbols_from_linked_shared_object() {
+    let consumer_path = temp_file("auto-import-consumer.o");
+    let provider_object_path = temp_file("auto-import-provider.o");
+    let provider_path = temp_file("libauto-import-provider.k16so");
+    let output_path = temp_file("auto-import-consumer.k16e");
+    fs::write(
+        &consumer_path,
+        k16_object_with_text_relocation_to_symbol(2, "foo"),
+    )
+    .expect("consumer object writes");
+    fs::write(
+        &provider_object_path,
+        k16_object_with_text_symbol("foo", &[0x55, 0xaa]),
+    )
+    .expect("provider object writes");
+
+    let provider_output = Command::new(k16_binary())
+        .args([
+            "link",
+            "--target",
+            "shared-object",
+            provider_object_path.to_str().unwrap(),
+            "-o",
+            provider_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("k16 link provider runs");
+    assert!(
+        provider_output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&provider_output.stderr)
+    );
+
+    let output = Command::new(k16_binary())
+        .args([
+            "link",
+            "--target",
+            "program-dynamic",
+            "--dylib",
+            provider_path.to_str().unwrap(),
+            consumer_path.to_str().unwrap(),
+            "-o",
+            output_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("k16 link consumer runs");
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let bytes = fs::read(output_path).expect("K16E output reads");
+    let executable = k16e::decode_dynamic_k16_program(&bytes).expect("dynamic K16E decodes");
+    let library_name = provider_path
+        .file_name()
+        .expect("provider has file name")
+        .to_string_lossy()
+        .to_string();
+
+    assert_eq!(executable.needed_libraries, vec![library_name]);
+    assert_eq!(
+        executable.import_relocations,
+        vec![k16e::K16eImportRelocation {
+            offset: 2,
+            kind: k16e::K16eRelocationKind::Call32,
+            library_index: 0,
+            symbol: "foo".to_string(),
+        }]
+    );
+    assert_eq!(
+        executable.payload,
+        vec![0x01, 0xe4, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00]
+    );
+}
+
+#[test]
 fn k16_link_imports_keep_unlisted_unresolved_symbols_as_errors() {
     let object_path = temp_file("unlisted-import.o");
     let output_path = temp_file("unlisted-import.k16e");

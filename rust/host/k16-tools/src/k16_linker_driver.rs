@@ -1,8 +1,9 @@
 use crate::artifact::K16ArtifactTarget;
 use crate::object_link::{
-    link_k16_objects_with_options, K16LinkImport, K16LinkInput, K16LinkOptions,
+    link_k16_objects_with_options, K16LinkDylib, K16LinkImport, K16LinkInput, K16LinkOptions,
 };
 use std::fs;
+use std::path::Path;
 
 pub fn run_k16_linker_driver(args: Vec<String>) -> Result<(), String> {
     let config = parse_linker_args(&args)?;
@@ -19,12 +20,14 @@ pub fn run_k16_linker_driver(args: Vec<String>) -> Result<(), String> {
         .iter()
         .map(|(path, bytes)| K16LinkInput { name: path, bytes })
         .collect::<Vec<_>>();
+    let dylibs = read_dylibs(&config.dylib_paths)?;
     let output = link_k16_objects_with_options(
         &inputs,
         config.target,
         K16LinkOptions {
             shared_cpu_helpers: false,
             imports: config.imports,
+            dylibs,
         },
     )?;
     fs::write(&config.output_path, output.bytes).map_err(|error| {
@@ -63,6 +66,7 @@ struct LinkerDriverConfig {
     output_path: String,
     map_path: Option<String>,
     imports: Vec<K16LinkImport>,
+    dylib_paths: Vec<String>,
     input_paths: Vec<String>,
 }
 
@@ -71,6 +75,7 @@ fn parse_linker_args(args: &[String]) -> Result<LinkerDriverConfig, String> {
     let mut output_path = None;
     let mut map_path = None;
     let mut imports = Vec::new();
+    let mut dylib_paths = Vec::new();
     let mut input_paths = Vec::new();
     let mut index = 0;
 
@@ -98,12 +103,19 @@ fn parse_linker_args(args: &[String]) -> Result<LinkerDriverConfig, String> {
                 };
                 map_path = Some(value.clone());
             }
-            "--k16-import" => {
+            "--import" => {
                 index += 1;
                 let Some(value) = args.get(index) else {
-                    return Err("k16-ld requires a value after --k16-import".to_string());
+                    return Err("k16-ld requires a value after --import".to_string());
                 };
                 imports.push(parse_k16_import(value)?);
+            }
+            "--dylib" => {
+                index += 1;
+                let Some(value) = args.get(index) else {
+                    return Err("k16-ld requires a value after --dylib".to_string());
+                };
+                dylib_paths.push(value.clone());
             }
             "-flavor" | "-z" | "-L" | "-l" | "-m" | "-O" => {
                 index += 1;
@@ -143,8 +155,30 @@ fn parse_linker_args(args: &[String]) -> Result<LinkerDriverConfig, String> {
         output_path,
         map_path,
         imports,
+        dylib_paths,
         input_paths,
     })
+}
+
+fn read_dylibs(paths: &[String]) -> Result<Vec<K16LinkDylib>, String> {
+    paths
+        .iter()
+        .map(|path| {
+            let bytes = fs::read(path)
+                .map_err(|error| format!("failed to read K16 dylib {path}: {error}"))?;
+            let library = dylib_library_name(path)?;
+            Ok(K16LinkDylib { library, bytes })
+        })
+        .collect()
+}
+
+fn dylib_library_name(path: &str) -> Result<String, String> {
+    Path::new(path)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .filter(|name| !name.is_empty())
+        .map(ToString::to_string)
+        .ok_or_else(|| format!("K16 dylib path `{path}` has no valid UTF-8 file name"))
 }
 
 fn parse_k16_import(value: &str) -> Result<K16LinkImport, String> {

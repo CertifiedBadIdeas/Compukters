@@ -5,10 +5,11 @@
 - Bundled K16 storage now includes the first project-owned userland shared
   library provider: `/lib/libkraft.k16so` from
   `rust/guest/k16-shared-kraft`. The bundled `/bin/uname.kx` utility now uses
-  K16E v5 import metadata for `libkraft.k16so:kraft_write_all` and
-  `libkraft.k16so:kraft_exit`, proving that a production utility can call a
-  shared `kraft-std` ABI surface through the kernel loader. This remains
-  narrower than dynamic Rust `core`, Rust `std`, libc, or libc++ sharing.
+  linker auto-imports from the provider's K16E v4 export table and records K16E
+  v5 imports for `libkraft.k16so`, proving that a production utility can call a
+  shared `kraft-std` ABI surface through the kernel loader without listing each
+  imported symbol by hand. This remains narrower than dynamic Rust `core`, Rust
+  `std`, libc, or libc++ sharing.
 - Bundled K16 shared-runtime adoption now uses a real provider artifact:
   `/lib/libk16rt.k16so` from `rust/guest/k16-shared-runtime`. The development
   importer `/bin/runtime-import-test.kx` imports `k16rt_memcpy`,
@@ -18,11 +19,16 @@
   dynamic Rust `std`, libc, or libc++.
 - `k16 link --target shared-object` now emits K16E v4 shared objects from
   retained global definitions, without requiring `_start`. `k16 link --target
-  program-dynamic --import <library>:<symbol>` and `k16-ld --k16-import
+  program-dynamic --import <library>:<symbol>` and `k16-ld --import
   <library>:<symbol>` now emit K16E v5 import metadata for explicitly imported
   symbols while leaving other unresolved symbols as link-time errors. Imported
   symbols are not archive-selection roots, so provider code is not retained in
   the importing executable payload.
+- `k16 link --target program-dynamic --dylib <library.k16so>` and
+  `k16-ld --dylib <library.k16so>` now decode K16E v4 shared objects and use
+  their export tables as the importable symbol set. This keeps the final K16E
+  v5 `NEEDED`/import relocation metadata explicit while avoiding hand-written
+  per-symbol import lists in consumers.
 - K16E v4 now defines the first shared-object container proof: ABI kind
   `shared-object`, base-relative payload bytes, base-relative relocation
   records, and a fixed export table. `k16 inspect` reports shared-object

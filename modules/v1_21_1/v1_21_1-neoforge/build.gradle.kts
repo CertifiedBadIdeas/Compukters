@@ -736,6 +736,7 @@ val compileK16SystemUname =
         inputs.file(k16UnameSource)
         inputsK16RuntimeCrates()
         inputsKraftStdCrate()
+        inputs.file(k16SharedKraftArtifact)
         inputs.file(k16HostToolsManifest)
         inputs.dir(k16HostToolsSource)
         inputs.file(k16RustTargetSpec)
@@ -744,6 +745,7 @@ val compileK16SystemUname =
         outputs.file(k16UnameArtifact)
         outputs.file(k16UnameMapArtifact)
         dependsOn(rootProject.tasks.named("prepareK16Toolchain"))
+        dependsOn("compileK16SharedKraft")
 
         doLast {
             project.compileK16GuestRustBin(
@@ -755,10 +757,8 @@ val compileK16SystemUname =
                 mapOutput = k16UnameMapArtifact.get(),
                 extraRuntimeLinkArgs =
                     listOf(
-                        "-C link-arg=--k16-import",
-                        "-C link-arg=libkraft.k16so:kraft_write_all",
-                        "-C link-arg=--k16-import",
-                        "-C link-arg=libkraft.k16so:kraft_exit",
+                        "-C link-arg=--dylib",
+                        "-C link-arg=${k16SharedKraftArtifact.get().asFile.absolutePath}",
                     ),
             )
         }
@@ -1101,6 +1101,7 @@ val compileK16RuntimeImportTest =
         inputs.file(k16RuntimeImportTestManifest)
         inputs.file(k16RuntimeImportTestSource)
         inputsK16RuntimeCrates()
+        inputs.file(k16SharedRuntimeArtifact)
         inputs.file(k16HostToolsManifest)
         inputs.dir(k16HostToolsSource)
         inputs.file(k16RustTargetSpec)
@@ -1109,6 +1110,7 @@ val compileK16RuntimeImportTest =
         outputs.file(k16RuntimeImportTestArtifact)
         outputs.file(k16RuntimeImportTestMapArtifact)
         dependsOn(rootProject.tasks.named("prepareK16Toolchain"))
+        dependsOn("compileK16SharedRuntime")
 
         doLast {
             project.compileK16GuestRustBin(
@@ -1120,14 +1122,8 @@ val compileK16RuntimeImportTest =
                 mapOutput = k16RuntimeImportTestMapArtifact.get(),
                 extraRuntimeLinkArgs =
                     listOf(
-                        "-C link-arg=--k16-import",
-                        "-C link-arg=libk16rt.k16so:k16rt_memcpy",
-                        "-C link-arg=--k16-import",
-                        "-C link-arg=libk16rt.k16so:k16rt_memset",
-                        "-C link-arg=--k16-import",
-                        "-C link-arg=libk16rt.k16so:k16rt_memmove",
-                        "-C link-arg=--k16-import",
-                        "-C link-arg=libk16rt.k16so:k16rt_memcmp",
+                        "-C link-arg=--dylib",
+                        "-C link-arg=${k16SharedRuntimeArtifact.get().asFile.absolutePath}",
                     ),
             )
         }

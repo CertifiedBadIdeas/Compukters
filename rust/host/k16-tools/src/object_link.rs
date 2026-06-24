@@ -46,12 +46,19 @@ pub struct K16LinkInput<'a> {
 pub struct K16LinkOptions {
     pub shared_cpu_helpers: bool,
     pub imports: Vec<K16LinkImport>,
+    pub dylibs: Vec<K16LinkDylib>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct K16LinkImport {
     pub library: String,
     pub symbol: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct K16LinkDylib {
+    pub library: String,
+    pub bytes: Vec<u8>,
 }
 
 pub fn link_k16_objects_to_k16e(
@@ -79,13 +86,15 @@ pub fn link_k16_objects_with_options(
     if options.shared_cpu_helpers && target != K16ArtifactTarget::ProgramDynamic {
         return Err("--shared-cpu-helpers requires --target program-dynamic".to_string());
     }
-    if !options.imports.is_empty() && target != K16ArtifactTarget::ProgramDynamic {
-        return Err("--import requires --target program-dynamic".to_string());
+    if (!options.imports.is_empty() || !options.dylibs.is_empty())
+        && target != K16ArtifactTarget::ProgramDynamic
+    {
+        return Err("--import and --dylib require --target program-dynamic".to_string());
     }
-    if options.shared_cpu_helpers && !options.imports.is_empty() {
-        return Err("--shared-cpu-helpers cannot be combined with --import".to_string());
+    if options.shared_cpu_helpers && (!options.imports.is_empty() || !options.dylibs.is_empty()) {
+        return Err("--shared-cpu-helpers cannot be combined with dynamic imports".to_string());
     }
-    let imports = normalize_imports(&options.imports)?;
+    let imports = normalize_imports(&options.imports, &options.dylibs)?;
 
     let objects = parse_link_inputs(inputs, &imports.imported_symbols)?;
     let load_addr = target.base_address();
@@ -131,7 +140,7 @@ pub fn link_k16_objects_with_options(
                 },
                 &linked.cpu_helper_relocations,
             )?
-        } else if !options.imports.is_empty() {
+        } else if !imports.needed_libraries.is_empty() {
             k16e::encode_dynamic_k16_program_with_imports(
                 &linked.payload,
                 linked.memory_size,
@@ -202,7 +211,10 @@ struct NormalizedImports {
     imported_symbols: HashMap<String, u32>,
 }
 
-fn normalize_imports(imports: &[K16LinkImport]) -> Result<NormalizedImports, String> {
+fn normalize_imports(
+    imports: &[K16LinkImport],
+    dylibs: &[K16LinkDylib],
+) -> Result<NormalizedImports, String> {
     let mut needed_libraries = Vec::new();
     let mut library_indexes = HashMap::new();
     let mut imported_symbols = HashMap::new();
@@ -228,6 +240,31 @@ fn normalize_imports(imports: &[K16LinkImport]) -> Result<NormalizedImports, Str
                 "duplicate K16 import symbol `{}` in library indexes {} and {}",
                 import.symbol, previous, library_index
             ));
+        }
+    }
+
+    for dylib in dylibs {
+        if dylib.library.is_empty() {
+            return Err("K16 dylib library name must not be empty".to_string());
+        }
+        let library_index = if let Some(index) = library_indexes.get(&dylib.library) {
+            *index
+        } else {
+            let index = u32::try_from(needed_libraries.len())
+                .map_err(|_| "too many K16 needed libraries".to_string())?;
+            needed_libraries.push(dylib.library.clone());
+            library_indexes.insert(dylib.library.clone(), index);
+            index
+        };
+        let shared = k16e::decode_k16_shared_object(&dylib.bytes)
+            .map_err(|error| format!("failed to decode K16 dylib `{}`: {error}", dylib.library))?;
+        for export in shared.exports {
+            if let Some(previous) = imported_symbols.insert(export.name.clone(), library_index) {
+                return Err(format!(
+                    "duplicate K16 import symbol `{}` in library indexes {} and {}",
+                    export.name, previous, library_index
+                ));
+            }
         }
     }
 

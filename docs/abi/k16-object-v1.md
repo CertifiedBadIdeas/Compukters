@@ -35,7 +35,7 @@ does not implement. Unsupported relocations are link-time errors.
 The current tool entry point is:
 
 ```text
-k16 link --target <bios|boot|kernel|program|program-dynamic|shared-object> [--shared-cpu-helpers] [--import <library>:<symbol>] [--map <output.map>] <input.ko>... -o <output>
+k16 link --target <bios|boot|kernel|program|program-dynamic|shared-object> [--shared-cpu-helpers] [--import <library>:<symbol>] [--dylib <library.k16so>] [--map <output.map>] <input.ko>... -o <output>
 ```
 
 The command accepts K16 ELF32 `ET_REL` inputs, resolves static symbols,
@@ -45,9 +45,11 @@ target emits a K16E v2 dynamic user program with base-relative payload
 addresses and loader-applied relocation metadata. With `--shared-cpu-helpers`,
 `program-dynamic` emits a K16E v3 dynamic user program with CPU helper runtime
 requirement metadata and CPU helper relocation records. With one or more
-`--import <library>:<symbol>` records, `program-dynamic` emits a K16E v5
-dynamic user program with `NEEDED` library metadata and import relocation
-records for those symbols. Other unresolved symbols remain link-time errors.
+`--import <library>:<symbol>` records or `--dylib <library.k16so>` inputs,
+`program-dynamic` emits a K16E v5 dynamic user program with `NEEDED` library
+metadata and import relocation records for those symbols. `--dylib` decodes a
+K16E v4 shared object and treats its export table as the importable symbol set
+for that library name. Other unresolved symbols remain link-time errors.
 The `shared-object` target emits a K16E v4 shared object, does not require
 `_start`, and exports retained global definitions as base-relative shared
 object offsets. It also preserves base-relative relocation records so the
@@ -61,7 +63,7 @@ changing the emitted executable bytes.
 Rust `bin` crates use the linker-driver entry point:
 
 ```text
-k16-ld <rustc linker args> --k16-target <bios|boot|kernel|program|program-dynamic|shared-object> [--k16-import <library>:<symbol>] [--map <output.map>] -o <output>
+k16-ld <rustc linker args> --k16-target <bios|boot|kernel|program|program-dynamic|shared-object> [--import <library>:<symbol>] [--dylib <library.k16so>] [--map <output.map>] -o <output>
 ```
 
 The driver consumes rustc-style object and archive arguments, extracts K16 ELF
@@ -70,13 +72,15 @@ symbols, and then delegates to the same object linker. The target is explicit;
 missing `--k16-target` is a hard error. When `--map` is present, the driver
 writes the same retained-section report as `k16 link --map`.
 
-`--k16-import <library>:<symbol>` is the linker-driver spelling for the same
-import metadata emitted by `k16 link --import`.
+`--import <library>:<symbol>` has the same explicit import metadata meaning in
+both entry points. `--dylib` also has the same meaning in both entry points and
+is the normal path for linking against a K16E shared object without listing
+every imported export by hand.
 
 The archive selection model follows the usual static-linker shape: object files
 on the command line are included directly, while archive members are selected in
 link order only when they resolve currently undefined global symbols. Symbols
-declared with `--import` or `--k16-import` are not archive-selection roots; they
+declared with `--import` or `--dylib` are not archive-selection roots; they
 remain external imports in the K16E v5 output. If two
 archives can define the same helper, the first selected provider satisfies the
 symbol and later duplicate providers are not pulled.
