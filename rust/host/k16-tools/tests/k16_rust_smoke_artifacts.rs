@@ -101,6 +101,40 @@ fn k16_hosted_cat_streams_file_bytes_without_read_to_string() {
 }
 
 #[test]
+fn k16_c_hosted_cat_has_minimal_libkraft_abi_sources() {
+    let root = repo_root();
+    let header = root.join("rust/guest/c/kraft/include/kraft/syscalls.h");
+    let startup = root.join("rust/guest/c/kraft/crt0.c");
+    let cat = root.join("rust/guest/c/coreutils/cat.c");
+
+    let header = fs::read_to_string(&header).expect("C libkraft syscall header exists");
+    assert!(header.contains("extern int __kraft_sys_open(const char *path, unsigned int len,"));
+    assert!(header.contains("__asm__(\"open\")"));
+    assert!(header.contains("static inline int kraft_open(const char *path, unsigned int flags)"));
+    assert!(header.contains("#define open(path, flags) kraft_open((path), (flags))"));
+    assert!(header.contains("int read(int fd, void *buffer, unsigned int count);"));
+    assert!(header.contains("int write(int fd, const void *buffer, unsigned int count);"));
+    assert!(header.contains("int close(int fd);"));
+    assert!(header.contains("void *sbrk(int increment);"));
+    assert!(header.contains("void _exit(int status);"));
+    assert!(header.contains("#define KRAFT_FD_STDOUT 1"));
+    assert!(header.contains("#define KRAFT_OPEN_READ_ONLY 0"));
+
+    let startup = fs::read_to_string(&startup).expect("C hosted startup source exists");
+    assert!(startup.contains("int kraft_main(int argc, char **argv);"));
+    assert!(startup.contains("int main(unsigned int raw_argc, const struct kraft_raw_arg *raw_argv)"));
+    assert!(startup.contains("return kraft_main((int)argc, argv);"));
+
+    let cat = fs::read_to_string(&cat).expect("C hosted cat source exists");
+    assert!(cat.contains("#include <kraft/syscalls.h>"));
+    assert!(cat.contains("open(path, KRAFT_OPEN_READ_ONLY)"));
+    assert!(cat.contains("read(fd, buffer, sizeof(buffer))"));
+    assert!(cat.contains("write_all(KRAFT_FD_STDOUT"));
+    assert!(cat.contains("close(fd)"));
+    assert!(!cat.contains("stdio.h"), "C hosted baseline must not depend on stdio");
+}
+
+#[test]
 fn kraft_std_layering_rule_is_documented_and_enforced() {
     let root = repo_root();
     let docs = root.join("docs/toolchains/kraft-std.md");

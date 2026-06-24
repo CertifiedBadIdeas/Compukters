@@ -89,6 +89,7 @@ val k16LlvmBuildTargets =
     listOf(
         "FileCheck",
         "LLVMLTO",
+        "clang",
         "llvm-config",
         "llvm-ar",
         "llvm-as",
@@ -204,6 +205,7 @@ val configureK16Llvm =
         description = "Configures the source-built K16 LLVM tree in .toolchain/build."
         group = "k16"
         inputs.dir(k16LlvmSourceRoot.resolve("llvm"))
+        inputs.dir(k16LlvmSourceRoot.resolve("clang"))
         inputs.property("k16LlvmHostTarget", k16LlvmHostTarget)
         outputs.file(k16LlvmBuildRoot.resolve("CMakeCache.txt"))
         commandLine(
@@ -212,6 +214,7 @@ val configureK16Llvm =
             k16LlvmSourceRoot.resolve("llvm").absolutePath,
             "-B",
             k16LlvmBuildRoot.absolutePath,
+            "-DLLVM_ENABLE_PROJECTS=clang",
             "-DLLVM_TARGETS_TO_BUILD=$k16LlvmHostTarget",
             "-DLLVM_EXPERIMENTAL_TARGETS_TO_BUILD=K16",
         )
@@ -227,10 +230,12 @@ val buildK16Llvm =
         group = "k16"
         dependsOn(configureK16Llvm)
         inputs.dir(k16LlvmSourceRoot.resolve("llvm"))
+        inputs.dir(k16LlvmSourceRoot.resolve("clang"))
         inputs.property("k16LlvmHostTarget", k16LlvmHostTarget)
         inputs.property("k16LlvmBuildJobs", k16LlvmBuildJobs)
         inputs.property("k16LlvmBuildTargets", k16LlvmBuildTargets)
         outputs.file(k16LlvmConfig)
+        outputs.file(k16LlvmBuildRoot.resolve("bin/clang"))
         outputs.file(k16LlvmBuildRoot.resolve("bin/FileCheck"))
         outputs.file(k16LlvmBuildRoot.resolve("lib/libLLVMLTO.a"))
         commandLine(

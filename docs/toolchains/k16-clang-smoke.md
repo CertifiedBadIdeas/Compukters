@@ -16,6 +16,19 @@
   ABI; unsupported C shapes such as `long long` return and varargs still fail
   explicitly.
 
+The bundled source-built-dev Gradle path also uses Clang now. `buildK16Llvm`
+enables the LLVM `clang` project, tracks both `llvm/` and `clang/` source
+inputs, and the NeoForge firmware build compiles dev-only `/bin/c-cat.kx` from
+`rust/guest/c/coreutils/cat.c`. That hosted C path uses `k16-startup.o` for the
+real K16 entry ABI and a small `crt0.c` adapter for ordinary
+`main(int argc, char **argv)`.
+
+The Clang K16 target data layout must match the backend/Rust target layout:
+
+```text
+e-p:32:32-i32:32-i64:64-n32-S64
+```
+
 The smoke expects a Clang-capable K16 LLVM build at:
 
 ```sh
