@@ -59,6 +59,96 @@ pub mod time {
     }
 }
 
+mod os_abi {
+    #[cfg(feature = "shared-library-imports")]
+    extern "C" {
+        #[link_name = "_exit"]
+        fn shared_exit(status: u32) -> !;
+        #[link_name = "close"]
+        fn shared_close(fd: u32) -> u32;
+        #[link_name = "open"]
+        fn shared_open(path: *const u8, len: usize, flags: u32) -> u32;
+        #[link_name = "read"]
+        fn shared_read(fd: u32, ptr: *mut u8, len: usize) -> u32;
+        #[link_name = "sbrk"]
+        fn shared_sbrk(delta: u32) -> u32;
+        #[link_name = "write"]
+        fn shared_write(fd: u32, ptr: *const u8, len: usize) -> u32;
+    }
+
+    #[inline(always)]
+    pub fn open(path: *const u8, len: usize, flags: u32) -> u32 {
+        #[cfg(feature = "shared-library-imports")]
+        unsafe {
+            return shared_open(path, len, flags);
+        }
+        #[cfg(not(feature = "shared-library-imports"))]
+        {
+            k16_rt::open_syscall(path, len, flags)
+        }
+    }
+
+    #[inline(always)]
+    pub fn read(fd: u32, ptr: *mut u8, len: usize) -> u32 {
+        #[cfg(feature = "shared-library-imports")]
+        unsafe {
+            return shared_read(fd, ptr, len);
+        }
+        #[cfg(not(feature = "shared-library-imports"))]
+        {
+            k16_rt::read_syscall(fd, ptr, len)
+        }
+    }
+
+    #[inline(always)]
+    pub fn write(fd: u32, ptr: *const u8, len: usize) -> u32 {
+        #[cfg(feature = "shared-library-imports")]
+        unsafe {
+            return shared_write(fd, ptr, len);
+        }
+        #[cfg(not(feature = "shared-library-imports"))]
+        {
+            k16_rt::write_syscall(fd, ptr, len)
+        }
+    }
+
+    #[inline(always)]
+    pub fn close(fd: u32) -> u32 {
+        #[cfg(feature = "shared-library-imports")]
+        unsafe {
+            return shared_close(fd);
+        }
+        #[cfg(not(feature = "shared-library-imports"))]
+        {
+            k16_rt::close_syscall(fd)
+        }
+    }
+
+    #[inline(always)]
+    pub fn sbrk(delta: u32) -> u32 {
+        #[cfg(feature = "shared-library-imports")]
+        unsafe {
+            return shared_sbrk(delta);
+        }
+        #[cfg(not(feature = "shared-library-imports"))]
+        {
+            k16_rt::sbrk_syscall(delta)
+        }
+    }
+
+    #[inline(always)]
+    pub fn exit(status: u32) -> ! {
+        #[cfg(feature = "shared-library-imports")]
+        unsafe {
+            shared_exit(status)
+        }
+        #[cfg(not(feature = "shared-library-imports"))]
+        {
+            k16_rt::exit_syscall(status)
+        }
+    }
+}
+
 pub mod io {
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     pub enum Error {
@@ -87,7 +177,7 @@ pub mod io {
         }
 
         pub fn read(self, bytes: &mut [u8]) -> Result<usize, Error> {
-            let returned = k16_rt::read_syscall(self.0, bytes.as_mut_ptr(), bytes.len());
+            let returned = crate::os_abi::read(self.0, bytes.as_mut_ptr(), bytes.len());
             if is_error_status(returned) {
                 return Err(Error::Syscall(returned));
             }
@@ -100,21 +190,9 @@ pub mod io {
         status & 0x8000_0000 != 0
     }
 
-    #[cfg(feature = "shared-library-imports")]
-    extern "C" {
-        fn kraft_write_all(fd: u32, ptr: *const u8, len: usize) -> u32;
-    }
-
-    #[cfg(feature = "shared-library-imports")]
     #[inline(always)]
     fn write_all_raw(fd: u32, ptr: *const u8, len: usize) -> u32 {
-        unsafe { kraft_write_all(fd, ptr, len) }
-    }
-
-    #[cfg(not(feature = "shared-library-imports"))]
-    #[inline(always)]
-    fn write_all_raw(fd: u32, ptr: *const u8, len: usize) -> u32 {
-        k16_rt::write_syscall(fd, ptr, len)
+        crate::os_abi::write(fd, ptr, len)
     }
 
     #[inline(always)]
@@ -405,7 +483,7 @@ pub mod fs {
         }
 
         pub fn read(self, bytes: &mut [u8]) -> Result<usize, Error> {
-            let returned = k16_rt::read_syscall(self.0, bytes.as_mut_ptr(), bytes.len());
+            let returned = crate::os_abi::read(self.0, bytes.as_mut_ptr(), bytes.len());
             if is_error_status(returned) {
                 return Err(Error::Syscall(returned));
             }
@@ -413,7 +491,7 @@ pub mod fs {
         }
 
         pub fn write_all(self, bytes: &[u8]) -> Result<(), Error> {
-            let returned = k16_rt::write_syscall(self.0, bytes.as_ptr(), bytes.len());
+            let returned = crate::os_abi::write(self.0, bytes.as_ptr(), bytes.len());
             if is_error_status(returned) {
                 return Err(Error::Syscall(returned));
             }
@@ -432,7 +510,7 @@ pub mod fs {
         }
 
         pub fn close(self) -> Result<(), Error> {
-            let returned = k16_rt::close_syscall(self.0);
+            let returned = crate::os_abi::close(self.0);
             if is_error_status(returned) {
                 return Err(Error::Syscall(returned));
             }
@@ -449,7 +527,7 @@ pub mod fs {
     }
 
     fn open_raw(path: &str, flags: u32) -> Result<File, Error> {
-        let returned = k16_rt::open_syscall(path.as_ptr(), path.len(), flags);
+        let returned = crate::os_abi::open(path.as_ptr(), path.len(), flags);
         if is_error_status(returned) {
             return Err(Error::Syscall(returned));
         }
@@ -868,7 +946,7 @@ pub mod heap {
     }
 
     pub fn sbrk(delta: u32) -> Result<u32, Error> {
-        let returned = k16_rt::sbrk_syscall(delta);
+        let returned = crate::os_abi::sbrk(delta);
         if is_error_status(returned) {
             return Err(Error::Syscall(returned));
         }
@@ -1114,24 +1192,7 @@ pub mod process {
     }
 
     pub fn exit(status: u32) -> ! {
-        exit_raw(status)
-    }
-
-    #[cfg(feature = "shared-library-imports")]
-    extern "C" {
-        fn kraft_exit(status: u32) -> !;
-    }
-
-    #[cfg(feature = "shared-library-imports")]
-    #[inline(always)]
-    fn exit_raw(status: u32) -> ! {
-        unsafe { kraft_exit(status) }
-    }
-
-    #[cfg(not(feature = "shared-library-imports"))]
-    #[inline(always)]
-    fn exit_raw(status: u32) -> ! {
-        k16_rt::exit_syscall(status)
+        crate::os_abi::exit(status)
     }
 
     pub fn run_with_args(path: &str, args: &[&str]) -> Result<ExitStatus, Error> {
