@@ -1,12 +1,6 @@
-#include <kraft/syscalls.h>
-
-static unsigned int c_strlen(const char *text) {
-  unsigned int len = 0;
-  while (text[len] != 0) {
-    len += 1;
-  }
-  return len;
-}
+#include <fcntl.h>
+#include <string.h>
+#include <unistd.h>
 
 static void write_all(int fd, const char *buffer, unsigned int len) {
   unsigned int written = 0;
@@ -20,18 +14,18 @@ static void write_all(int fd, const char *buffer, unsigned int len) {
 }
 
 static void write_text(int fd, const char *text) {
-  write_all(fd, text, c_strlen(text));
+  write_all(fd, text, strlen(text));
 }
 
 static int copy_file(const char *path) {
   char buffer[256];
-  int fd = open(path, KRAFT_OPEN_READ_ONLY);
+  int fd = open(path, O_RDONLY);
   int exit_status = 0;
 
   if (fd < 0) {
-    write_text(KRAFT_FD_STDERR, "cat: open failed: ");
-    write_text(KRAFT_FD_STDERR, path);
-    write_text(KRAFT_FD_STDERR, "\n");
+    write_text(STDERR_FILENO, "cat: open failed: ");
+    write_text(STDERR_FILENO, path);
+    write_text(STDERR_FILENO, "\n");
     return 1;
   }
 
@@ -41,13 +35,13 @@ static int copy_file(const char *path) {
       break;
     }
     if (bytes_read < 0) {
-      write_text(KRAFT_FD_STDERR, "cat: read failed: ");
-      write_text(KRAFT_FD_STDERR, path);
-      write_text(KRAFT_FD_STDERR, "\n");
+      write_text(STDERR_FILENO, "cat: read failed: ");
+      write_text(STDERR_FILENO, path);
+      write_text(STDERR_FILENO, "\n");
       exit_status = 1;
       break;
     }
-    write_all(KRAFT_FD_STDOUT, buffer, (unsigned int)bytes_read);
+    write_all(STDOUT_FILENO, buffer, (unsigned int)bytes_read);
   }
 
   if (close(fd) < 0) {
@@ -61,7 +55,7 @@ int main(int argc, char **argv) {
   int exit_status = 0;
 
   if (argc <= 1) {
-    write_text(KRAFT_FD_STDERR, "cat: missing operand\n");
+    write_text(STDERR_FILENO, "cat: missing operand\n");
     return 1;
   }
 

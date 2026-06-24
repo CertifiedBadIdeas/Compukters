@@ -104,14 +104,17 @@ fn k16_hosted_cat_streams_file_bytes_without_read_to_string() {
 fn k16_c_libc_cat_has_minimal_libkraft_abi_sources() {
     let root = repo_root();
     let header = root.join("rust/guest/c/libc/include/kraft/syscalls.h");
+    let unistd = root.join("rust/guest/c/libc/include/unistd.h");
+    let fcntl = root.join("rust/guest/c/libc/include/fcntl.h");
+    let string = root.join("rust/guest/c/libc/include/string.h");
     let startup = root.join("rust/guest/c/libc/crt0.c");
     let cat = root.join("rust/guest/c/coreutils/cat.c");
+    let write = root.join("rust/guest/c/coreutils/write.c");
 
     let header = fs::read_to_string(&header).expect("C libkraft syscall header exists");
     assert!(header.contains("extern int __kraft_sys_open(const char *path, unsigned int len,"));
     assert!(header.contains("__asm__(\"open\")"));
-    assert!(header.contains("static inline int kraft_open(const char *path, unsigned int flags)"));
-    assert!(header.contains("#define open(path, flags) kraft_open((path), (flags))"));
+    assert!(header.contains("int kraft_open(const char *path, unsigned int flags);"));
     assert!(header.contains("int read(int fd, void *buffer, unsigned int count);"));
     assert!(header.contains("int write(int fd, const void *buffer, unsigned int count);"));
     assert!(header.contains("int close(int fd);"));
@@ -119,6 +122,23 @@ fn k16_c_libc_cat_has_minimal_libkraft_abi_sources() {
     assert!(header.contains("void _exit(int status);"));
     assert!(header.contains("#define KRAFT_FD_STDOUT 1"));
     assert!(header.contains("#define KRAFT_OPEN_READ_ONLY 0"));
+    assert!(header.contains("#define KRAFT_OPEN_WRITE_ONLY 1"));
+    assert!(header.contains("#define KRAFT_OPEN_APPEND 8"));
+
+    let unistd = fs::read_to_string(&unistd).expect("C libc-lite unistd header exists");
+    assert!(unistd.contains("int open(const char *path, int flags);"));
+    assert!(unistd.contains("int read(int fd, void *buffer, unsigned int count);"));
+    assert!(unistd.contains("int write(int fd, const void *buffer, unsigned int count);"));
+    assert!(unistd.contains("#define STDOUT_FILENO KRAFT_FD_STDOUT"));
+
+    let fcntl = fs::read_to_string(&fcntl).expect("C libc-lite fcntl header exists");
+    assert!(fcntl.contains("#define O_RDONLY KRAFT_OPEN_READ_ONLY"));
+    assert!(fcntl.contains("#define O_WRONLY KRAFT_OPEN_WRITE_ONLY"));
+    assert!(fcntl.contains("#define O_TRUNC KRAFT_OPEN_TRUNCATE"));
+
+    let string = fs::read_to_string(&string).expect("C libc-lite string header exists");
+    assert!(string.contains("unsigned int strlen(const char *text)"));
+    assert!(string.contains("int strcmp(const char *left, const char *right)"));
 
     let startup = fs::read_to_string(&startup).expect("C hosted startup source exists");
     assert!(startup.contains("int kraft_main(int argc, char **argv);"));
@@ -126,12 +146,22 @@ fn k16_c_libc_cat_has_minimal_libkraft_abi_sources() {
     assert!(startup.contains("return kraft_main((int)argc, argv);"));
 
     let cat = fs::read_to_string(&cat).expect("C hosted cat source exists");
-    assert!(cat.contains("#include <kraft/syscalls.h>"));
-    assert!(cat.contains("open(path, KRAFT_OPEN_READ_ONLY)"));
+    assert!(cat.contains("#include <fcntl.h>"));
+    assert!(cat.contains("#include <unistd.h>"));
+    assert!(cat.contains("open(path, O_RDONLY)"));
     assert!(cat.contains("read(fd, buffer, sizeof(buffer))"));
-    assert!(cat.contains("write_all(KRAFT_FD_STDOUT"));
+    assert!(cat.contains("write_all(STDOUT_FILENO"));
     assert!(cat.contains("close(fd)"));
     assert!(!cat.contains("stdio.h"), "C hosted baseline must not depend on stdio");
+
+    let write = fs::read_to_string(&write).expect("C hosted write source exists");
+    assert!(write.contains("#include <fcntl.h>"));
+    assert!(write.contains("#include <string.h>"));
+    assert!(write.contains("#include <unistd.h>"));
+    assert!(write.contains("O_WRONLY | O_CREAT | O_TRUNC"));
+    assert!(write.contains("O_WRONLY | O_CREAT | O_APPEND"));
+    assert!(write.contains("unsigned int len = strlen(payload)"));
+    assert!(write.contains("write_all(fd, payload, len)"));
 }
 
 #[test]

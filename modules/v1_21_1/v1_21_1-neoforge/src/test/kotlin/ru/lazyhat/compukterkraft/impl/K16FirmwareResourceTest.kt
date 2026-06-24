@@ -109,8 +109,9 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("k16MvSource"))
         assertTrue(source.contains("k16StatManifest"))
         assertTrue(source.contains("k16StatSource"))
-        assertTrue(source.contains("k16WriteManifest"))
-        assertTrue(source.contains("k16WriteSource"))
+        assertFalse(source.contains("k16WriteManifest"))
+        assertFalse(source.contains("k16WriteSource"))
+        assertTrue(source.contains("k16CSystemWriteSource"))
         assertTrue(source.contains("k16RmManifest"))
         assertTrue(source.contains("k16RmSource"))
         assertTrue(source.contains("k16MkdirManifest"))
@@ -131,7 +132,8 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("generatedK16CSystemCatTarget"))
         assertTrue(source.contains("generatedK16MvTarget"))
         assertTrue(source.contains("generatedK16StatTarget"))
-        assertTrue(source.contains("generatedK16WriteTarget"))
+        assertFalse(source.contains("generatedK16WriteTarget"))
+        assertTrue(source.contains("generatedK16CSystemWriteTarget"))
         assertTrue(source.contains("generatedK16RmTarget"))
         assertTrue(source.contains("generatedK16MkdirTarget"))
         assertTrue(source.contains("generatedK16RmdirTarget"))
@@ -159,9 +161,12 @@ class K16FirmwareResourceTest {
         assertFalse(source.contains("k16CHostedCatArtifact"))
         assertTrue(source.contains("k16CLibcIncludeSource"))
         assertTrue(source.contains("k16CLibcStartupSource"))
+        assertTrue(source.contains("k16CLibcSyscallSource"))
         assertTrue(source.contains("rust/guest/c/libc/crt0.c"))
+        assertTrue(source.contains("rust/guest/c/libc/syscalls.c"))
         assertTrue(source.contains("rust/guest/c/libc/include"))
         assertTrue(source.contains("rust/guest/c/coreutils/cat.c"))
+        assertTrue(source.contains("rust/guest/c/coreutils/write.c"))
         assertTrue(source.contains("fun Project.compileK16GuestCProgram("))
         assertTrue(source.contains("--target=k16"))
         assertFalse(source.contains("\"compileK16CHostedCat\""))
@@ -201,12 +206,23 @@ class K16FirmwareResourceTest {
             "production cat should write the production /bin/cat.kx artifact",
         )
         assertTrue(
-            source.contains("sources = listOf(k16CSystemCatSource.asFile)"),
+            source.contains("sources = listOf(k16CLibcSyscallSource.asFile, k16CSystemCatSource.asFile)"),
             "production cat should build from the C coreutils source",
         )
         assertTrue(source.contains("binName = \"k16-mv\""))
         assertTrue(source.contains("binName = \"k16-stat\""))
-        assertTrue(source.contains("binName = \"k16-write\""))
+        assertFalse(source.contains("binName = \"k16-write\""))
+        assertTrue(source.contains("description = \"Compiles and links the bundled C K16 write utility"))
+        assertTrue(
+            source.contains(
+                "output = k16WriteArtifact.get().asFile,\n                mapOutput = k16WriteMapArtifact.get(),",
+            ),
+            "production write should write the production /bin/write.kx artifact",
+        )
+        assertTrue(
+            source.contains("sources = listOf(k16CLibcSyscallSource.asFile, k16CSystemWriteSource.asFile)"),
+            "production write should build from the C coreutils source",
+        )
         assertTrue(source.contains("binName = \"k16-rm\""))
         assertTrue(source.contains("binName = \"k16-mkdir\""))
         assertTrue(source.contains("binName = \"k16-rmdir\""))
@@ -672,15 +688,26 @@ class K16FirmwareResourceTest {
         )
 
         val bytes = write.readBytes()
-        assertTrue(bytes.size > 72, "bundled /bin/write.kx should be a non-empty dynamic K16E program")
+        assertTrue(bytes.size > 72, "bundled /bin/write.kx should be a non-empty imported dynamic K16E program")
         assertContentEquals(
             byteArrayOf('K'.code.toByte(), '1'.code.toByte(), '6'.code.toByte(), 'E'.code.toByte()),
             bytes.copyOfRange(0, 4),
         )
         val version = ByteBuffer.wrap(bytes, 0x04, 2).order(ByteOrder.LITTLE_ENDIAN).short.toInt()
         val abiKind = ByteBuffer.wrap(bytes, 0x18, 4).order(ByteOrder.LITTLE_ENDIAN).int
-        assertEquals(2, version, "bundled /bin/write.kx must use dynamic K16E v2")
+        assertEquals(5, version, "bundled /bin/write.kx must use imported dynamic K16E v5")
         assertEquals(3, abiKind, "bundled /bin/write.kx must use K16E abi kind program")
+        val metadata = bytes.decodeToString()
+        assertTrue(
+            metadata.contains("libkraft.k16so"),
+            "bundled /bin/write.kx should declare libkraft.k16so as a needed library",
+        )
+        listOf("open", "write", "close").forEach { symbol ->
+            assertTrue(
+                metadata.contains(symbol),
+                "bundled /bin/write.kx should import $symbol from libkraft",
+            )
+        }
     }
 
     @Test
@@ -1054,6 +1081,52 @@ class K16FirmwareResourceTest {
                 assertFalse(
                     terminal.contains("ERR RUN"),
                     "production C cat should not fail during libkraft import resolution; terminal: $terminal",
+                )
+            }
+    }
+
+    @Test
+    fun bundledK16SystemWriteRunsThroughKernelLoader() {
+        val workspace = createTempDirectory("k16-c-system-write-test-")
+        val biosFlashPath = workspace.resolve("bios.kflash")
+        val storage0Path = workspace.resolve("storage0-dev.kv")
+        biosFlashPath.writeBytes(K16BiosFlashWorkspace.loadBiosFlashResource(classLoader = javaClass.classLoader))
+        storage0Path.writeBytes(
+            K16SystemVolumeWorkspace.loadStorage0VolumeResource(
+                resourcePath = "firmware/k16-system-storage0-dev.kv",
+                classLoader = javaClass.classLoader,
+            ),
+        )
+
+        K16ComputerRuntimeFactory
+            .createFromBiosFlash(
+                biosFlashPath = biosFlashPath,
+                storage0Path = storage0Path,
+            ).use { runtime ->
+                val readyControl = runUntilTerminalText(runtime, "K16> ")
+                assertEquals(NativeK16ComputerControl.STATUS_READY, readyControl.status)
+
+                runShellCommand(runtime, "write /tmp.txt hi", expectVisiblePixels = true)
+                runShellCommand(runtime, "write --append /tmp.txt there", expectVisiblePixels = true)
+                runShellCommand(runtime, "cat /tmp.txt", expectVisiblePixels = true)
+                var terminal = terminalText(runtime.machineSnapshot())
+                var waitTurns = 0
+                while (!terminal.contains("hithere") && !terminal.contains("ERR") && waitTurns < 64) {
+                    val control = runRuntimeServerTick(runtime, maxTurns = 1_000_000)
+                    assertEquals(NativeK16ComputerControl.STATUS_READY, control.status)
+                    terminal = terminalText(runtime.machineSnapshot())
+                    waitTurns += 1
+                }
+
+                assertTrue(
+                    terminal.contains("WROTE 2 /tmp.txt") &&
+                        terminal.contains("WROTE 5 /tmp.txt") &&
+                        terminal.contains("hithere"),
+                    "production C write should create and append through libkraft open/write/close; terminal: $terminal",
+                )
+                assertFalse(
+                    terminal.contains("ERR RUN"),
+                    "production C write should not fail during libkraft import resolution; terminal: $terminal",
                 )
             }
     }
@@ -1553,14 +1626,16 @@ class K16FirmwareResourceTest {
         val startupSource = Path.of("../../../rust/guest/c/libc/crt0.c").readText()
         val syscallHeader = Path.of("../../../rust/guest/c/libc/include/kraft/syscalls.h").readText()
 
-        assertTrue(catSource.contains("#include <kraft/syscalls.h>"))
+        assertTrue(catSource.contains("#include <fcntl.h>"))
+        assertTrue(catSource.contains("#include <string.h>"))
+        assertTrue(catSource.contains("#include <unistd.h>"))
         assertTrue(catSource.contains("for (int index = 1; index < argc; index += 1)"), "cat should visit every argv path")
-        assertTrue(catSource.contains("open(path, KRAFT_OPEN_READ_ONLY)"))
+        assertTrue(catSource.contains("open(path, O_RDONLY)"))
         assertTrue(catSource.contains("read(fd, buffer, sizeof(buffer))"))
-        assertTrue(catSource.contains("write_all(KRAFT_FD_STDOUT"))
+        assertTrue(catSource.contains("write_all(STDOUT_FILENO"))
         assertTrue(catSource.contains("close(fd)"))
         assertTrue(startupSource.contains("return kraft_main((int)argc, argv);"))
-        assertTrue(syscallHeader.contains("#define open(path, flags) kraft_open((path), (flags))"))
+        assertTrue(syscallHeader.contains("int kraft_open(const char *path, unsigned int flags);"))
     }
 
     @Test
@@ -1579,20 +1654,28 @@ class K16FirmwareResourceTest {
     }
 
     @Test
-    fun k16WriteUtilityCreatesRegularFileThroughKraftStdFs() {
-        val writeSource = Path.of("../../../rust/guest/k16-write/src/main.rs").readText()
-        val stdSource = Path.of("../../../rust/guest/kraft-std/src/lib.rs").readText()
+    fun k16WriteUtilityCreatesRegularFileThroughCLibc() {
+        val writeSource = Path.of("../../../rust/guest/c/coreutils/write.c").readText()
+        val unistdHeader = Path.of("../../../rust/guest/c/libc/include/unistd.h").readText()
+        val fcntlHeader = Path.of("../../../rust/guest/c/libc/include/fcntl.h").readText()
+        val stringHeader = Path.of("../../../rust/guest/c/libc/include/string.h").readText()
 
-        assertTrue(writeSource.contains("process::Argv::from_raw(argc, argv)"))
-        assertTrue(writeSource.contains("3 if argv.get(0) == Some(b\"--append\".as_slice())"))
-        assertTrue(writeSource.contains("fs::create(path)"))
-        assertTrue(writeSource.contains("fs::append(path)"))
-        assertTrue(writeSource.contains("file.write_all(payload)"))
-        assertTrue(writeSource.contains("file.close()"))
-        assertTrue(writeSource.contains("b\"WROTE \""))
-        assertTrue(stdSource.contains("pub fn create(path: &str) -> Result<File, Error>"))
-        assertTrue(stdSource.contains("pub fn append(path: &str) -> Result<File, Error>"))
-        assertTrue(stdSource.contains("pub fn write_all(self, bytes: &[u8]) -> Result<(), Error>"))
+        assertTrue(writeSource.contains("#include <fcntl.h>"))
+        assertTrue(writeSource.contains("#include <string.h>"))
+        assertTrue(writeSource.contains("#include <unistd.h>"))
+        assertTrue(writeSource.contains("argc == 4 && strcmp(argv[1], \"--append\") == 0"))
+        assertTrue(writeSource.contains("O_WRONLY | O_CREAT | O_TRUNC"))
+        assertTrue(writeSource.contains("O_WRONLY | O_CREAT | O_APPEND"))
+        assertTrue(writeSource.contains("unsigned int len = strlen(payload)"))
+        assertTrue(writeSource.contains("write_all(fd, payload, len)"))
+        assertTrue(writeSource.contains("write_text(STDOUT_FILENO, \"WROTE \")"))
+        assertTrue(unistdHeader.contains("int open(const char *path, int flags);"))
+        assertTrue(unistdHeader.contains("int write(int fd, const void *buffer, unsigned int count);"))
+        assertTrue(unistdHeader.contains("int close(int fd);"))
+        assertTrue(fcntlHeader.contains("#define O_CREAT KRAFT_OPEN_CREATE"))
+        assertTrue(fcntlHeader.contains("#define O_APPEND KRAFT_OPEN_APPEND"))
+        assertTrue(stringHeader.contains("unsigned int strlen(const char *text)"))
+        assertTrue(stringHeader.contains("int strcmp(const char *left, const char *right)"))
     }
 
     @Test

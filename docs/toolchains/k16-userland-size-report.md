@@ -53,11 +53,14 @@ above that boundary. The initial bundled importer is `/bin/uname.kx`, which
 imports `write` and `_exit` through K16E import metadata instead of retaining
 those syscall-boundary calls in its own payload.
 
-Production `/bin/cat.kx` is built from C with the source-built-dev K16
-`clang`, uses the small libc-lite startup/header layer under
-`rust/guest/c/libc`, and calls the same `libkraft.k16so` shared OS ABI as the
-Rust import proofs. This proves the dynamic ABI can host C userland without
-making `libkraft` a Rust stdlib replacement or pulling in a full libc.
+Production `/bin/cat.kx` and `/bin/write.kx` are built from C with the
+source-built-dev K16 `clang`, use the small libc-lite startup/header layer under
+`rust/guest/c/libc`, and call the same `libkraft.k16so` shared OS ABI as the
+Rust import proofs. The public libc-lite surface now includes minimal
+`unistd.h`, `fcntl.h`, `stddef.h`, and `string.h` headers, while
+`kraft/syscalls.h` remains the low-level K16 ABI header. This proves the
+dynamic ABI can host C userland without making `libkraft` a Rust stdlib
+replacement or pulling in a full libc.
 
 `runtime-import-test` is intentionally still a development-only importer. It
 proves that bundled programs can call the `k16rt_memcpy`, `k16rt_memset`,
