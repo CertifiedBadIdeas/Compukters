@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Added the first standard-shaped libc-lite C headers under
+  `rust/guest/c/libc/include`: `unistd.h`, `fcntl.h`, `stddef.h`, and
+  `string.h`. `kraft/syscalls.h` remains the low-level K16 ABI header, while C
+  userland can now include common headers for `open`, `read`, `write`, `close`,
+  `O_*` flags, and simple string helpers. Production `/bin/write.kx` now builds
+  from `rust/guest/c/coreutils/write.c` and imports `open`, `write`, and
+  `close` from `/lib/libkraft.k16so`, covering both
+  `write <path> <payload>` and `write --append <path> <payload>`. The decimal
+  status printer avoids compiler-rt division helpers for now, keeping this
+  slice inside the existing libc-lite/runtime surface.
 - Promoted the first bundled C hosted userland baseline into production
   `/bin/cat.kx`. The source-built-dev Gradle toolchain builds a K16-capable
   `clang`, compiles `rust/guest/c/coreutils/cat.c`, and links it against the

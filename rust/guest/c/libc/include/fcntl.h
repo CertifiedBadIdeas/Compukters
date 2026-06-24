@@ -1,0 +1,12 @@
+#ifndef KRAFT_FCNTL_H
+#define KRAFT_FCNTL_H
+
+#include <kraft/syscalls.h>
+
+#define O_RDONLY KRAFT_OPEN_READ_ONLY
+#define O_WRONLY KRAFT_OPEN_WRITE_ONLY
+#define O_CREAT KRAFT_OPEN_CREATE
+#define O_TRUNC KRAFT_OPEN_TRUNCATE
+#define O_APPEND KRAFT_OPEN_APPEND
+
+#endif
