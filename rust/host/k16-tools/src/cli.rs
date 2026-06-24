@@ -152,6 +152,7 @@ fn run_link(args: &[String]) -> Result<(), String> {
         .iter()
         .map(|(path, bytes)| object_link::K16LinkInput { name: path, bytes })
         .collect::<Vec<_>>();
+    let dylibs = read_link_dylibs(&config.dylib_paths)?;
     if config.shared_cpu_helpers && config.target != K16ArtifactTarget::ProgramDynamic {
         return Err("--shared-cpu-helpers requires --target program-dynamic".to_string());
     }
@@ -161,6 +162,7 @@ fn run_link(args: &[String]) -> Result<(), String> {
         object_link::K16LinkOptions {
             shared_cpu_helpers: config.shared_cpu_helpers,
             imports: config.imports,
+            dylibs,
         },
     )?;
     fs::write(&config.output_path, output.bytes)
@@ -170,6 +172,27 @@ fn run_link(args: &[String]) -> Result<(), String> {
             .map_err(|error| format!("failed to write {map_path}: {error}"))?;
     }
     Ok(())
+}
+
+fn read_link_dylibs(paths: &[String]) -> Result<Vec<object_link::K16LinkDylib>, String> {
+    paths
+        .iter()
+        .map(|path| {
+            let bytes =
+                fs::read(path).map_err(|error| format!("failed to read {path}: {error}"))?;
+            let library = dylib_library_name(path)?;
+            Ok(object_link::K16LinkDylib { library, bytes })
+        })
+        .collect()
+}
+
+fn dylib_library_name(path: &str) -> Result<String, String> {
+    Path::new(path)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .filter(|name| !name.is_empty())
+        .map(ToString::to_string)
+        .ok_or_else(|| format!("K16 dylib path `{path}` has no valid UTF-8 file name"))
 }
 
 fn run_runtime(args: &[String]) -> Result<(), String> {
@@ -451,6 +474,7 @@ struct LinkConfig {
     map_path: Option<String>,
     shared_cpu_helpers: bool,
     imports: Vec<object_link::K16LinkImport>,
+    dylib_paths: Vec<String>,
 }
 
 fn parse_link_args(args: &[String]) -> Result<LinkConfig, String> {
@@ -460,6 +484,7 @@ fn parse_link_args(args: &[String]) -> Result<LinkConfig, String> {
     let mut map_path = None;
     let mut shared_cpu_helpers = false;
     let mut imports = Vec::new();
+    let mut dylib_paths = Vec::new();
     let mut index = 0;
     while index < args.len() {
         match args[index].as_str() {
@@ -495,6 +520,13 @@ fn parse_link_args(args: &[String]) -> Result<LinkConfig, String> {
                 imports.push(parse_link_import(value)?);
                 index += 2;
             }
+            "--dylib" => {
+                let Some(value) = args.get(index + 1) else {
+                    return link_usage_error();
+                };
+                dylib_paths.push(value.clone());
+                index += 2;
+            }
             value if value.starts_with('-') => return link_usage_error(),
             value => {
                 input_paths.push(value.to_string());
@@ -512,6 +544,7 @@ fn parse_link_args(args: &[String]) -> Result<LinkConfig, String> {
         map_path,
         shared_cpu_helpers,
         imports,
+        dylib_paths,
     })
 }
 
@@ -771,7 +804,7 @@ fn link_usage_error() -> Result<LinkConfig, String> {
 }
 
 fn link_usage_message() -> String {
-    "usage: k16 link [--target <boot|kernel|program|program-dynamic|shared-object>] [--shared-cpu-helpers] [--import <library>:<symbol>] [--map <output.map>] <input.ko>... -o <output.kx>"
+    "usage: k16 link [--target <boot|kernel|program|program-dynamic|shared-object>] [--shared-cpu-helpers] [--import <library>:<symbol>] [--dylib <library.k16so>] [--map <output.map>] <input.ko>... -o <output.kx>"
         .to_string()
 }
 
