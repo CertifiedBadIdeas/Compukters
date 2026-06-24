@@ -78,11 +78,12 @@ APIs rather than silent no-op platform behavior.
 KraftOS-backed Rust `std` hooks live in named `sys/*/kraftos.rs` modules rather
 than generic `unsupported.rs` stubs when the API is actually OS-backed.
 
-The first C hosted utility is deliberately separate from Rust `std`.
-`rust/guest/c/coreutils/cat.c` is compiled by K16 Clang and linked as dev-only
-`/bin/c-cat.kx` against `libkraft.k16so`. Its C startup layer adapts the K16
-bounded argv table into ordinary C `main(int argc, char **argv)` and keeps
-kernel/runtime code on the existing Rust `no_std` path.
+The first production C hosted utility is deliberately separate from Rust
+`std`. `rust/guest/c/coreutils/cat.c` is compiled by K16 Clang and linked as
+`/bin/cat.kx` against `libkraft.k16so`. Its libc-lite startup layer under
+`rust/guest/c/libc` adapts the K16 bounded argv table into ordinary C
+`main(int argc, char **argv)` and keeps kernel/runtime code on the existing
+Rust `no_std` path.
 
 The current filesystem surface is a small ROOT/K16FS proof for absolute paths:
 read-only opens, create/truncate write-only opens, whole-slice writes within

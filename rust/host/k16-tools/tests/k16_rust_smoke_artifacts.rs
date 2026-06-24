@@ -101,10 +101,10 @@ fn k16_hosted_cat_streams_file_bytes_without_read_to_string() {
 }
 
 #[test]
-fn k16_c_hosted_cat_has_minimal_libkraft_abi_sources() {
+fn k16_c_libc_cat_has_minimal_libkraft_abi_sources() {
     let root = repo_root();
-    let header = root.join("rust/guest/c/kraft/include/kraft/syscalls.h");
-    let startup = root.join("rust/guest/c/kraft/crt0.c");
+    let header = root.join("rust/guest/c/libc/include/kraft/syscalls.h");
+    let startup = root.join("rust/guest/c/libc/crt0.c");
     let cat = root.join("rust/guest/c/coreutils/cat.c");
 
     let header = fs::read_to_string(&header).expect("C libkraft syscall header exists");
