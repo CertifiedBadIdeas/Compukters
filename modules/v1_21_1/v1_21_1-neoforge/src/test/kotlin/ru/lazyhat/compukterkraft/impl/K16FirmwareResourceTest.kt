@@ -765,10 +765,16 @@ class K16FirmwareResourceTest {
         assertEquals(4, kraftBytes.u16Le(offset = 4), "bundled libkraft must use K16E v4")
         assertEquals(4, kraftBytes.u32Le(offset = 24), "bundled libkraft must use K16E abi kind shared-object")
         val kraftMetadata = kraftBytes.decodeToString()
-        listOf("kraft_write_all", "kraft_exit").forEach { symbol ->
+        listOf("open", "read", "write", "close", "sbrk", "_exit").forEach { symbol ->
             assertTrue(
                 kraftMetadata.contains(symbol),
                 "bundled libkraft should export $symbol",
+            )
+        }
+        listOf("kraft_write_all", "kraft_exit").forEach { symbol ->
+            assertFalse(
+                kraftMetadata.contains(symbol),
+                "bundled libkraft should not export prefixed symbol $symbol",
             )
         }
 
@@ -779,10 +785,16 @@ class K16FirmwareResourceTest {
             unameMetadata.contains("libkraft.k16so"),
             "uname should declare libkraft.k16so as a needed library",
         )
-        listOf("kraft_write_all", "kraft_exit").forEach { symbol ->
+        listOf("write", "_exit").forEach { symbol ->
             assertTrue(
                 unameMetadata.contains(symbol),
                 "uname should import $symbol from libkraft",
+            )
+        }
+        listOf("kraft_write_all", "kraft_exit").forEach { symbol ->
+            assertFalse(
+                unameMetadata.contains(symbol),
+                "uname should not import prefixed symbol $symbol",
             )
         }
     }

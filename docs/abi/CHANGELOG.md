@@ -7,9 +7,11 @@
   `rust/guest/k16-shared-kraft`. The bundled `/bin/uname.kx` utility now uses
   linker auto-imports from the provider's K16E v4 export table and records K16E
   v5 imports for `libkraft.k16so`, proving that a production utility can call a
-  shared `kraft-std` ABI surface through the kernel loader without listing each
-  imported symbol by hand. This remains narrower than dynamic Rust `core`, Rust
-  `std`, libc, or libc++ sharing.
+  plain shared OS ABI surface through the kernel loader without listing each
+  imported symbol by hand. `libkraft.k16so` intentionally exports syscall-shaped
+  symbols such as `open`, `read`, `write`, `close`, `sbrk`, and `_exit`; it is
+  not a Rust stdlib replacement. This remains narrower than dynamic Rust
+  `core`, Rust `std`, libc, or libc++ sharing.
 - Bundled K16 shared-runtime adoption now uses a real provider artifact:
   `/lib/libk16rt.k16so` from `rust/guest/k16-shared-runtime`. The development
   importer `/bin/runtime-import-test.kx` imports `k16rt_memcpy`,

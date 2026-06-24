@@ -6,16 +6,40 @@ use core::panic::PanicInfo;
 extern "C" {
     fn __k16_halt_once();
     fn __k16_syscall1(number: u32, arg0: u32) -> u32;
+    fn __k16_close_syscall(fd: u32) -> u32;
+    fn __k16_open_syscall(ptr: u32, len: u32, flags: u32) -> u32;
+    fn __k16_read_syscall(fd: u32, ptr: u32, len: u32) -> u32;
+    fn __k16_sbrk_syscall(delta: u32) -> u32;
     fn __k16_write_syscall(fd: u32, ptr: u32, len: u32) -> u32;
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn kraft_write_all(fd: u32, ptr: *const u8, len: usize) -> u32 {
+pub unsafe extern "C" fn open(path: *const u8, len: usize, flags: u32) -> u32 {
+    unsafe { __k16_open_syscall(path as usize as u32, len as u32, flags) }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn read(fd: u32, ptr: *mut u8, len: usize) -> u32 {
+    unsafe { __k16_read_syscall(fd, ptr as usize as u32, len as u32) }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn write(fd: u32, ptr: *const u8, len: usize) -> u32 {
     unsafe { __k16_write_syscall(fd, ptr as usize as u32, len as u32) }
 }
 
 #[no_mangle]
-pub extern "C" fn kraft_exit(status: u32) -> ! {
+pub extern "C" fn close(fd: u32) -> u32 {
+    unsafe { __k16_close_syscall(fd) }
+}
+
+#[no_mangle]
+pub extern "C" fn sbrk(delta: u32) -> u32 {
+    unsafe { __k16_sbrk_syscall(delta) }
+}
+
+#[no_mangle]
+pub extern "C" fn _exit(status: u32) -> ! {
     unsafe {
         let _ = __k16_syscall1(k16_abi::syscall::EXIT, status);
     }
