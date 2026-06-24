@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Added the first bundled C hosted userland baseline. The source-built-dev
+  Gradle toolchain now builds a K16-capable `clang`, compiles
+  `rust/guest/c/coreutils/cat.c`, links it as dev-only `/bin/c-cat.kx`, and
+  imports `open`, `read`, `write`, and `close` from
+  `/lib/libkraft.k16so`. The C startup object reuses the existing K16
+  `k16-startup` entry shim, adapts the kernel `r1/r2` bounded argv table into
+  ordinary `main(int argc, char **argv)`, and synthesizes an empty `argv[0]`
+  because the current K16 shell passes command arguments without a program-name
+  entry. The Clang K16 target data layout is now aligned with the K16 backend
+  and Rust target spec: `e-p:32:32-i32:32-i64:64-n32-S64`.
 - Bundled K16 storage now includes the first project-owned userland shared
   library provider: `/lib/libkraft.k16so` from
   `rust/guest/k16-shared-kraft`. The bundled `/bin/uname.kx` utility now uses

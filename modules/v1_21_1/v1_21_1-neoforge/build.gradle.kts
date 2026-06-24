@@ -89,6 +89,11 @@ dependencies {
 val k16VmNativePlatform = currentK16VmNativePlatform()
 val k16VmNativeLibrary =
     rootProject.layout.projectDirectory.file(".toolchain/build/cargo/k16-vm/debug/${k16VmNativePlatform.libraryName}")
+val k16LlvmBuildRoot =
+    rootProject.layout.projectDirectory.dir(
+        providers.gradleProperty("k16LlvmBuildDir").orElse(".toolchain/build/llvm/k16-min").get(),
+    )
+val k16ClangExecutable = k16LlvmBuildRoot.file("bin/clang")
 val generatedK16FirmwareResources = layout.buildDirectory.dir("generated/k16-firmware-resources")
 val generatedK16FirmwareTestResources = layout.buildDirectory.dir("generated/k16-firmware-test-resources")
 val generatedK16FirmwareArtifacts = layout.buildDirectory.dir("generated/k16-firmware-artifacts")
@@ -112,6 +117,7 @@ val generatedK16SharedKraftTarget = generatedK16GuestTarget.map { it.dir("shared
 val generatedK16RuntimeImportTestTarget = generatedK16GuestTarget.map { it.dir("runtime-import-test") }
 val generatedK16HostedHelloTarget = generatedK16GuestTarget.map { it.dir("hosted-hello") }
 val generatedK16HostedCatTarget = generatedK16GuestTarget.map { it.dir("hosted-cat") }
+val generatedK16CHostedCatTarget = generatedK16GuestTarget.map { it.dir("c-hosted-cat") }
 val generatedK16AllocTestTarget = generatedK16GuestTarget.map { it.dir("alloc-test") }
 val generatedK16ProcTestTarget = generatedK16GuestTarget.map { it.dir("proc-test") }
 val generatedK16SyscallFaultTestTarget = generatedK16GuestTarget.map { it.dir("syscall-fault-test") }
@@ -167,6 +173,9 @@ val k16HostedHelloManifest = rootProject.layout.projectDirectory.file("rust/gues
 val k16HostedHelloSource = rootProject.layout.projectDirectory.file("rust/guest/k16-hosted-hello/src/main.rs")
 val k16HostedCatManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-hosted-cat/Cargo.toml")
 val k16HostedCatSource = rootProject.layout.projectDirectory.file("rust/guest/k16-hosted-cat/src/main.rs")
+val k16CHostedIncludeSource = rootProject.layout.projectDirectory.dir("rust/guest/c/kraft/include")
+val k16CHostedStartupSource = rootProject.layout.projectDirectory.file("rust/guest/c/kraft/crt0.c")
+val k16CHostedCatSource = rootProject.layout.projectDirectory.file("rust/guest/c/coreutils/cat.c")
 val k16MotdSource = rootProject.layout.projectDirectory.file("rust/guest/k16-cat/motd.txt")
 val k16AllocTestManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-alloc-test/Cargo.toml")
 val k16AllocTestSource = rootProject.layout.projectDirectory.file("rust/guest/k16-alloc-test/src/main.rs")
@@ -214,6 +223,7 @@ val k16SharedKraftArtifact = generatedK16FirmwareArtifacts.map { it.file("libkra
 val k16RuntimeImportTestArtifact = generatedK16FirmwareArtifacts.map { it.file("runtime-import-test.kx") }
 val k16HostedHelloArtifact = generatedK16FirmwareArtifacts.map { it.file("hosted-hello.kx") }
 val k16HostedCatArtifact = generatedK16FirmwareArtifacts.map { it.file("hosted-cat.kx") }
+val k16CHostedCatArtifact = generatedK16FirmwareArtifacts.map { it.file("c-cat.kx") }
 val k16AllocTestArtifact = generatedK16FirmwareArtifacts.map { it.file("alloc-test.kx") }
 val k16ProcTestArtifact = generatedK16FirmwareArtifacts.map { it.file("proc-test.kx") }
 val k16SyscallFaultTestArtifact = generatedK16FirmwareArtifacts.map { it.file("syscall-fault-test.kx") }
@@ -242,6 +252,8 @@ val k16HostedHelloMapArtifact =
     k16HostedHelloArtifact.map { it.asFile.resolveSibling("${it.asFile.nameWithoutExtension}.map") }
 val k16HostedCatMapArtifact =
     k16HostedCatArtifact.map { it.asFile.resolveSibling("${it.asFile.nameWithoutExtension}.map") }
+val k16CHostedCatMapArtifact =
+    k16CHostedCatArtifact.map { it.asFile.resolveSibling("${it.asFile.nameWithoutExtension}.map") }
 val k16AllocTestMapArtifact =
     k16AllocTestArtifact.map { it.asFile.resolveSibling("${it.asFile.nameWithoutExtension}.map") }
 val k16ProcTestMapArtifact = k16ProcTestArtifact.map { it.asFile.resolveSibling("${it.asFile.nameWithoutExtension}.map") }
@@ -274,6 +286,7 @@ val k16DevelopmentOnlyMapArtifacts =
         k16AllocTestMapArtifact,
         k16RuntimeImportTestMapArtifact,
         k16HostedCatMapArtifact,
+        k16CHostedCatMapArtifact,
         k16ProcTestMapArtifact,
     )
 val k16SystemStorage0Resource = generatedK16FirmwareResources.map { it.file("firmware/k16-system-storage0.kv") }
@@ -301,6 +314,7 @@ val k16DevelopmentOnlyStorageEntries =
         "/bin/alloc-test.kx" to k16AllocTestArtifact,
         "/bin/runtime-import-test.kx" to k16RuntimeImportTestArtifact,
         "/bin/hosted-cat.kx" to k16HostedCatArtifact,
+        "/bin/c-cat.kx" to k16CHostedCatArtifact,
         "/bin/proc-test.kx" to k16ProcTestArtifact,
     )
 val k16SharedRuntimeStorageEntries =
@@ -576,6 +590,115 @@ fun Project.compileK16GuestRustBin(
         output = output,
         profile = profile,
     )
+}
+
+fun Project.compileK16GuestCProgram(
+    targetDir: File,
+    output: File,
+    mapOutput: File,
+    includeDir: File,
+    startupSource: File,
+    sources: List<File>,
+    dylibs: List<File>,
+) {
+    val toolchain = resolveK16Toolchain()
+    val clang = k16ClangExecutable.asFile
+    check(clang.isFile && clang.canExecute()) {
+        "K16 clang is missing or not executable at $clang; run buildK16Llvm through ./gradlew-sandbox-dev"
+    }
+
+    targetDir.mkdirs()
+    output.parentFile.mkdirs()
+    mapOutput.parentFile.mkdirs()
+    output.delete()
+    mapOutput.delete()
+
+    val startupObject = targetDir.resolve("k16-startup.o")
+    val startupCommand =
+        listOf(
+            toolchain.cli.absolutePath,
+            "runtime",
+            "k16-startup",
+            "--target",
+            "program-dynamic",
+            "-o",
+            startupObject.absolutePath,
+        )
+    val startupExitCode =
+        ProcessBuilder(startupCommand)
+            .directory(projectDir)
+            .inheritIO()
+            .start()
+            .waitFor()
+    check(startupExitCode == 0) {
+        "K16 C startup object build failed with exit code $startupExitCode: ${startupCommand.joinToString(" ")}"
+    }
+
+    val objectFiles =
+        (listOf(startupSource) + sources).map { source ->
+            val objectFile = targetDir.resolve("${source.nameWithoutExtension}.o")
+            objectFile.delete()
+            val command =
+                listOf(
+                    clang.absolutePath,
+                    "--target=k16",
+                    "-ffreestanding",
+                    "-fno-builtin",
+                    "-fno-stack-protector",
+                    "-nostdlib",
+                    "-Oz",
+                    "-I",
+                    includeDir.absolutePath,
+                ) +
+                    buildList {
+                        if (source != startupSource) {
+                            add("-Dmain=kraft_main")
+                        }
+                        add("-c")
+                        add(source.absolutePath)
+                        add("-o")
+                        add(objectFile.absolutePath)
+                    }
+            val exitCode =
+                ProcessBuilder(command)
+                    .directory(projectDir)
+                    .inheritIO()
+                    .start()
+                    .waitFor()
+            check(exitCode == 0) {
+                "K16 C compile failed with exit code $exitCode: ${command.joinToString(" ")}"
+            }
+            objectFile
+        }
+
+    val linkCommand =
+        buildList {
+            add(toolchain.cli.absolutePath)
+            add("link")
+            add("--target")
+            add("program-dynamic")
+            add("--map")
+            add(mapOutput.absolutePath)
+            dylibs.forEach { dylib ->
+                add("--dylib")
+                add(dylib.absolutePath)
+            }
+            add(startupObject.absolutePath)
+            objectFiles.forEach { objectFile ->
+                add(objectFile.absolutePath)
+            }
+            add("-o")
+            add(output.absolutePath)
+        }
+    val linkExitCode =
+        ProcessBuilder(linkCommand)
+            .directory(projectDir)
+            .inheritIO()
+            .start()
+            .waitFor()
+    check(linkExitCode == 0) {
+        "K16 C link failed with exit code $linkExitCode: ${linkCommand.joinToString(" ")}"
+    }
 }
 
 val linkK16BiosFlash =
@@ -1220,6 +1343,38 @@ val compileK16HostedCat =
         }
     }
 
+val compileK16CHostedCat =
+    tasks.register("compileK16CHostedCat") {
+        description = "Compiles and links the C hosted cat proof utility into an imported dynamic K16E program artifact."
+        group = "k16"
+        inputs.dir(k16CHostedIncludeSource)
+        inputs.file(k16CHostedStartupSource)
+        inputs.file(k16CHostedCatSource)
+        inputs.file(k16SharedKraftArtifact)
+        inputs.file(k16ClangExecutable)
+        inputs.file(k16HostToolsManifest)
+        inputs.dir(k16HostToolsSource)
+        inputs.file(k16ToolchainConfig)
+        inputs.property("k16FirmwareProfile", k16FirmwareProfile)
+        outputs.file(k16CHostedCatArtifact)
+        outputs.file(k16CHostedCatMapArtifact)
+        dependsOn(rootProject.tasks.named("buildK16Llvm"))
+        dependsOn(rootProject.tasks.named("prepareK16Toolchain"))
+        dependsOn("compileK16SharedKraft")
+
+        doLast {
+            project.compileK16GuestCProgram(
+                targetDir = generatedK16CHostedCatTarget.get().asFile,
+                output = k16CHostedCatArtifact.get().asFile,
+                mapOutput = k16CHostedCatMapArtifact.get(),
+                includeDir = k16CHostedIncludeSource.asFile,
+                startupSource = k16CHostedStartupSource.asFile,
+                sources = listOf(k16CHostedCatSource.asFile),
+                dylibs = listOf(k16SharedKraftArtifact.get().asFile),
+            )
+        }
+    }
+
 val compileK16SystemProcTest =
     tasks.register("compileK16SystemProcTest") {
         description = "Compiles and links the bundled Rust K16 process test utility into a dynamic K16E program artifact."
@@ -1469,7 +1624,7 @@ val putK16DevelopmentStorage0TestPrograms =
     tasks.register("putK16DevelopmentStorage0TestPrograms") {
         description = "Creates the development K16 storage0 image with test programs in ROOT K16FS /bin."
         group = "k16"
-        dependsOn(putK16SystemStorage0Init, compileK16SystemAllocTest, compileK16SystemProcTest, compileK16RuntimeImportTest, compileK16HostedCat)
+        dependsOn(putK16SystemStorage0Init, compileK16SystemAllocTest, compileK16SystemProcTest, compileK16RuntimeImportTest, compileK16HostedCat, compileK16CHostedCat)
         dependsOn(rootProject.tasks.named("prepareK16Toolchain"))
         inputs.file(k16ToolchainConfig)
         inputs.file(k16SystemStorage0Resource)

@@ -153,7 +153,13 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("k16RuntimeImportTestArtifact"))
         assertTrue(source.contains("k16AllocTestArtifact"))
         assertTrue(source.contains("k16HostedCatArtifact"))
+        assertTrue(source.contains("k16CHostedCatArtifact"))
         assertTrue(source.contains("k16ProcTestArtifact"))
+        assertTrue(source.contains("rust/guest/c/kraft/crt0.c"))
+        assertTrue(source.contains("rust/guest/c/coreutils/cat.c"))
+        assertTrue(source.contains("fun Project.compileK16GuestCProgram("))
+        assertTrue(source.contains("--target=k16"))
+        assertTrue(source.contains("\"compileK16CHostedCat\""))
         assertTrue(source.contains("val k16ProductionStorageEntries ="))
         assertTrue(source.contains("val k16DevelopmentOnlyStorageEntries ="))
         assertTrue(source.contains("val k16SharedRuntimeStorageEntries ="))
@@ -249,6 +255,14 @@ class K16FirmwareResourceTest {
         assertTrue(
             source.substring(developmentOnlyEntriesIndex, sharedRuntimeEntriesIndex).contains("\"/bin/hosted-cat.kx\""),
             "hosted-cat should be declared as dev-only",
+        )
+        assertFalse(
+            source.substring(productionEntriesIndex, developmentOnlyEntriesIndex).contains("\"/bin/c-cat.kx\""),
+            "C cat should not be a production utility yet",
+        )
+        assertTrue(
+            source.substring(developmentOnlyEntriesIndex, sharedRuntimeEntriesIndex).contains("\"/bin/c-cat.kx\""),
+            "C cat should be declared as dev-only",
         )
         assertTrue(source.contains("\"/etc/motd\""))
         assertTrue(source.contains("\"extract-partition\""))
@@ -655,6 +669,7 @@ class K16FirmwareResourceTest {
         val procTest = workspace.resolve("proc-test.kx")
         val sharedRuntimeTest = workspace.resolve("runtime-import-test.kx")
         val hostedCat = workspace.resolve("hosted-cat.kx")
+        val cCat = workspace.resolve("c-cat.kx")
         storage0.writeBytes(K16SystemVolumeWorkspace.loadStorage0VolumeResource(classLoader = javaClass.classLoader))
 
         runK16Tool(
@@ -695,6 +710,14 @@ class K16FirmwareResourceTest {
             root.toString(),
             "/bin/hosted-cat.kx",
             hostedCat.toString(),
+        )
+        runK16ToolExpectFailure(
+            "fs",
+            "kfs",
+            "get",
+            root.toString(),
+            "/bin/c-cat.kx",
+            cCat.toString(),
         )
     }
 
@@ -808,6 +831,7 @@ class K16FirmwareResourceTest {
         val procTest = workspace.resolve("proc-test.kx")
         val sharedRuntimeTest = workspace.resolve("runtime-import-test.kx")
         val hostedCat = workspace.resolve("hosted-cat.kx")
+        val cCat = workspace.resolve("c-cat.kx")
         storage0.writeBytes(
             K16SystemVolumeWorkspace.loadStorage0VolumeResource(
                 resourcePath = "firmware/k16-system-storage0-dev.kv",
@@ -853,6 +877,14 @@ class K16FirmwareResourceTest {
             root.toString(),
             "/bin/hosted-cat.kx",
             hostedCat.toString(),
+        )
+        runK16Tool(
+            "fs",
+            "kfs",
+            "get",
+            root.toString(),
+            "/bin/c-cat.kx",
+            cCat.toString(),
         )
 
         val allocBytes = allocTest.readBytes()
@@ -904,6 +936,26 @@ class K16FirmwareResourceTest {
         )
         assertEquals(2, hostedCatBytes.u16Le(offset = 4), "bundled dev /bin/hosted-cat.kx must use dynamic K16E v2")
         assertEquals(3, hostedCatBytes.u32Le(offset = 24), "bundled dev /bin/hosted-cat.kx must use K16E abi kind program")
+
+        val cCatBytes = cCat.readBytes()
+        assertTrue(cCatBytes.size > 72, "bundled dev /bin/c-cat.kx should be a non-empty imported dynamic K16E program")
+        assertContentEquals(
+            byteArrayOf('K'.code.toByte(), '1'.code.toByte(), '6'.code.toByte(), 'E'.code.toByte()),
+            cCatBytes.copyOfRange(0, 4),
+        )
+        assertEquals(5, cCatBytes.u16Le(offset = 4), "bundled dev /bin/c-cat.kx must use imported dynamic K16E v5")
+        assertEquals(3, cCatBytes.u32Le(offset = 24), "bundled dev /bin/c-cat.kx must use K16E abi kind program")
+        val cCatMetadata = cCatBytes.decodeToString()
+        assertTrue(
+            cCatMetadata.contains("libkraft.k16so"),
+            "C cat should declare libkraft.k16so as a needed library",
+        )
+        listOf("open", "read", "write", "close").forEach { symbol ->
+            assertTrue(
+                cCatMetadata.contains(symbol),
+                "C cat should import $symbol from libkraft",
+            )
+        }
     }
 
     @Test
@@ -974,6 +1026,48 @@ class K16FirmwareResourceTest {
                 assertFalse(
                     terminal.contains("ERR RUN"),
                     "uname should not fail during libkraft import resolution; terminal: $terminal",
+                )
+            }
+    }
+
+    @Test
+    fun bundledK16CHostedCatRunsThroughKernelLoader() {
+        val workspace = createTempDirectory("k16-c-hosted-cat-test-")
+        val biosFlashPath = workspace.resolve("bios.kflash")
+        val storage0Path = workspace.resolve("storage0-dev.kv")
+        biosFlashPath.writeBytes(K16BiosFlashWorkspace.loadBiosFlashResource(classLoader = javaClass.classLoader))
+        storage0Path.writeBytes(
+            K16SystemVolumeWorkspace.loadStorage0VolumeResource(
+                resourcePath = "firmware/k16-system-storage0-dev.kv",
+                classLoader = javaClass.classLoader,
+            ),
+        )
+
+        K16ComputerRuntimeFactory
+            .createFromBiosFlash(
+                biosFlashPath = biosFlashPath,
+                storage0Path = storage0Path,
+            ).use { runtime ->
+                val readyControl = runUntilTerminalText(runtime, "K16> ")
+                assertEquals(NativeK16ComputerControl.STATUS_READY, readyControl.status)
+
+                runShellCommand(runtime, "c-cat /etc/motd", expectVisiblePixels = true)
+                var terminal = terminalText(runtime.machineSnapshot())
+                var waitTurns = 0
+                while (!terminal.contains("K16 FS OK") && !terminal.contains("ERR") && waitTurns < 64) {
+                    val control = runRuntimeServerTick(runtime, maxTurns = 1_000_000)
+                    assertEquals(NativeK16ComputerControl.STATUS_READY, control.status)
+                    terminal = terminalText(runtime.machineSnapshot())
+                    waitTurns += 1
+                }
+
+                assertTrue(
+                    terminal.contains("c-cat /etc/motd") && terminal.contains("K16 FS OK"),
+                    "C cat should read /etc/motd through libkraft open/read/write; terminal: $terminal",
+                )
+                assertFalse(
+                    terminal.contains("ERR RUN"),
+                    "C cat should not fail during libkraft import resolution; terminal: $terminal",
                 )
             }
     }
