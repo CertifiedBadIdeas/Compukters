@@ -104,7 +104,6 @@ val generatedK16KernelTarget = generatedK16GuestTarget.map { it.dir("kernel") }
 val generatedK16ShellTarget = generatedK16GuestTarget.map { it.dir("shell") }
 val generatedK16UnameTarget = generatedK16GuestTarget.map { it.dir("uname") }
 val generatedK16LsTarget = generatedK16GuestTarget.map { it.dir("ls") }
-val generatedK16CatTarget = generatedK16GuestTarget.map { it.dir("cat") }
 val generatedK16CpTarget = generatedK16GuestTarget.map { it.dir("cp") }
 val generatedK16MvTarget = generatedK16GuestTarget.map { it.dir("mv") }
 val generatedK16StatTarget = generatedK16GuestTarget.map { it.dir("stat") }
@@ -117,7 +116,7 @@ val generatedK16SharedKraftTarget = generatedK16GuestTarget.map { it.dir("shared
 val generatedK16RuntimeImportTestTarget = generatedK16GuestTarget.map { it.dir("runtime-import-test") }
 val generatedK16HostedHelloTarget = generatedK16GuestTarget.map { it.dir("hosted-hello") }
 val generatedK16HostedCatTarget = generatedK16GuestTarget.map { it.dir("hosted-cat") }
-val generatedK16CHostedCatTarget = generatedK16GuestTarget.map { it.dir("c-hosted-cat") }
+val generatedK16CSystemCatTarget = generatedK16GuestTarget.map { it.dir("c-system-cat") }
 val generatedK16AllocTestTarget = generatedK16GuestTarget.map { it.dir("alloc-test") }
 val generatedK16ProcTestTarget = generatedK16GuestTarget.map { it.dir("proc-test") }
 val generatedK16SyscallFaultTestTarget = generatedK16GuestTarget.map { it.dir("syscall-fault-test") }
@@ -141,8 +140,6 @@ val k16UnameManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-
 val k16UnameSource = rootProject.layout.projectDirectory.file("rust/guest/k16-uname/src/main.rs")
 val k16LsManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-ls/Cargo.toml")
 val k16LsSource = rootProject.layout.projectDirectory.file("rust/guest/k16-ls/src/main.rs")
-val k16CatManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-cat/Cargo.toml")
-val k16CatSource = rootProject.layout.projectDirectory.file("rust/guest/k16-cat/src/main.rs")
 val k16CpManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-cp/Cargo.toml")
 val k16CpSource = rootProject.layout.projectDirectory.file("rust/guest/k16-cp/src/main.rs")
 val k16MvManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-mv/Cargo.toml")
@@ -173,9 +170,9 @@ val k16HostedHelloManifest = rootProject.layout.projectDirectory.file("rust/gues
 val k16HostedHelloSource = rootProject.layout.projectDirectory.file("rust/guest/k16-hosted-hello/src/main.rs")
 val k16HostedCatManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-hosted-cat/Cargo.toml")
 val k16HostedCatSource = rootProject.layout.projectDirectory.file("rust/guest/k16-hosted-cat/src/main.rs")
-val k16CHostedIncludeSource = rootProject.layout.projectDirectory.dir("rust/guest/c/kraft/include")
-val k16CHostedStartupSource = rootProject.layout.projectDirectory.file("rust/guest/c/kraft/crt0.c")
-val k16CHostedCatSource = rootProject.layout.projectDirectory.file("rust/guest/c/coreutils/cat.c")
+val k16CLibcIncludeSource = rootProject.layout.projectDirectory.dir("rust/guest/c/libc/include")
+val k16CLibcStartupSource = rootProject.layout.projectDirectory.file("rust/guest/c/libc/crt0.c")
+val k16CSystemCatSource = rootProject.layout.projectDirectory.file("rust/guest/c/coreutils/cat.c")
 val k16MotdSource = rootProject.layout.projectDirectory.file("rust/guest/k16-cat/motd.txt")
 val k16AllocTestManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-alloc-test/Cargo.toml")
 val k16AllocTestSource = rootProject.layout.projectDirectory.file("rust/guest/k16-alloc-test/src/main.rs")
@@ -223,7 +220,6 @@ val k16SharedKraftArtifact = generatedK16FirmwareArtifacts.map { it.file("libkra
 val k16RuntimeImportTestArtifact = generatedK16FirmwareArtifacts.map { it.file("runtime-import-test.kx") }
 val k16HostedHelloArtifact = generatedK16FirmwareArtifacts.map { it.file("hosted-hello.kx") }
 val k16HostedCatArtifact = generatedK16FirmwareArtifacts.map { it.file("hosted-cat.kx") }
-val k16CHostedCatArtifact = generatedK16FirmwareArtifacts.map { it.file("c-cat.kx") }
 val k16AllocTestArtifact = generatedK16FirmwareArtifacts.map { it.file("alloc-test.kx") }
 val k16ProcTestArtifact = generatedK16FirmwareArtifacts.map { it.file("proc-test.kx") }
 val k16SyscallFaultTestArtifact = generatedK16FirmwareArtifacts.map { it.file("syscall-fault-test.kx") }
@@ -252,8 +248,6 @@ val k16HostedHelloMapArtifact =
     k16HostedHelloArtifact.map { it.asFile.resolveSibling("${it.asFile.nameWithoutExtension}.map") }
 val k16HostedCatMapArtifact =
     k16HostedCatArtifact.map { it.asFile.resolveSibling("${it.asFile.nameWithoutExtension}.map") }
-val k16CHostedCatMapArtifact =
-    k16CHostedCatArtifact.map { it.asFile.resolveSibling("${it.asFile.nameWithoutExtension}.map") }
 val k16AllocTestMapArtifact =
     k16AllocTestArtifact.map { it.asFile.resolveSibling("${it.asFile.nameWithoutExtension}.map") }
 val k16ProcTestMapArtifact = k16ProcTestArtifact.map { it.asFile.resolveSibling("${it.asFile.nameWithoutExtension}.map") }
@@ -286,7 +280,6 @@ val k16DevelopmentOnlyMapArtifacts =
         k16AllocTestMapArtifact,
         k16RuntimeImportTestMapArtifact,
         k16HostedCatMapArtifact,
-        k16CHostedCatMapArtifact,
         k16ProcTestMapArtifact,
     )
 val k16SystemStorage0Resource = generatedK16FirmwareResources.map { it.file("firmware/k16-system-storage0.kv") }
@@ -314,7 +307,6 @@ val k16DevelopmentOnlyStorageEntries =
         "/bin/alloc-test.kx" to k16AllocTestArtifact,
         "/bin/runtime-import-test.kx" to k16RuntimeImportTestArtifact,
         "/bin/hosted-cat.kx" to k16HostedCatArtifact,
-        "/bin/c-cat.kx" to k16CHostedCatArtifact,
         "/bin/proc-test.kx" to k16ProcTestArtifact,
     )
 val k16SharedRuntimeStorageEntries =
@@ -919,30 +911,32 @@ val compileK16SystemLs =
 
 val compileK16SystemCat =
     tasks.register("compileK16SystemCat") {
-        description = "Compiles and links the bundled Rust K16 cat utility into a dynamic K16E program artifact."
+        description = "Compiles and links the bundled C K16 cat utility into an imported dynamic K16E program artifact."
         group = "k16"
-        inputs.file(k16GuestManifest)
-        inputs.file(k16CatManifest)
-        inputs.file(k16CatSource)
-        inputsK16RuntimeCrates()
-        inputsKraftStdCrate()
+        inputs.dir(k16CLibcIncludeSource)
+        inputs.file(k16CLibcStartupSource)
+        inputs.file(k16CSystemCatSource)
+        inputs.file(k16SharedKraftArtifact)
+        inputs.file(k16ClangExecutable)
         inputs.file(k16HostToolsManifest)
         inputs.dir(k16HostToolsSource)
-        inputs.file(k16RustTargetSpec)
         inputs.file(k16ToolchainConfig)
         inputs.property("k16FirmwareProfile", k16FirmwareProfile)
         outputs.file(k16CatArtifact)
         outputs.file(k16CatMapArtifact)
+        dependsOn(rootProject.tasks.named("buildK16Llvm"))
         dependsOn(rootProject.tasks.named("prepareK16Toolchain"))
+        dependsOn("compileK16SharedKraft")
 
         doLast {
-            project.compileK16GuestRustBin(
-                manifest = k16CatManifest.asFile,
-                targetDir = generatedK16CatTarget.get().asFile,
-                binName = "k16-cat",
-                k16Target = "program-dynamic",
+            project.compileK16GuestCProgram(
+                targetDir = generatedK16CSystemCatTarget.get().asFile,
                 output = k16CatArtifact.get().asFile,
                 mapOutput = k16CatMapArtifact.get(),
+                includeDir = k16CLibcIncludeSource.asFile,
+                startupSource = k16CLibcStartupSource.asFile,
+                sources = listOf(k16CSystemCatSource.asFile),
+                dylibs = listOf(k16SharedKraftArtifact.get().asFile),
             )
         }
     }
@@ -1343,38 +1337,6 @@ val compileK16HostedCat =
         }
     }
 
-val compileK16CHostedCat =
-    tasks.register("compileK16CHostedCat") {
-        description = "Compiles and links the C hosted cat proof utility into an imported dynamic K16E program artifact."
-        group = "k16"
-        inputs.dir(k16CHostedIncludeSource)
-        inputs.file(k16CHostedStartupSource)
-        inputs.file(k16CHostedCatSource)
-        inputs.file(k16SharedKraftArtifact)
-        inputs.file(k16ClangExecutable)
-        inputs.file(k16HostToolsManifest)
-        inputs.dir(k16HostToolsSource)
-        inputs.file(k16ToolchainConfig)
-        inputs.property("k16FirmwareProfile", k16FirmwareProfile)
-        outputs.file(k16CHostedCatArtifact)
-        outputs.file(k16CHostedCatMapArtifact)
-        dependsOn(rootProject.tasks.named("buildK16Llvm"))
-        dependsOn(rootProject.tasks.named("prepareK16Toolchain"))
-        dependsOn("compileK16SharedKraft")
-
-        doLast {
-            project.compileK16GuestCProgram(
-                targetDir = generatedK16CHostedCatTarget.get().asFile,
-                output = k16CHostedCatArtifact.get().asFile,
-                mapOutput = k16CHostedCatMapArtifact.get(),
-                includeDir = k16CHostedIncludeSource.asFile,
-                startupSource = k16CHostedStartupSource.asFile,
-                sources = listOf(k16CHostedCatSource.asFile),
-                dylibs = listOf(k16SharedKraftArtifact.get().asFile),
-            )
-        }
-    }
-
 val compileK16SystemProcTest =
     tasks.register("compileK16SystemProcTest") {
         description = "Compiles and links the bundled Rust K16 process test utility into a dynamic K16E program artifact."
@@ -1624,7 +1586,7 @@ val putK16DevelopmentStorage0TestPrograms =
     tasks.register("putK16DevelopmentStorage0TestPrograms") {
         description = "Creates the development K16 storage0 image with test programs in ROOT K16FS /bin."
         group = "k16"
-        dependsOn(putK16SystemStorage0Init, compileK16SystemAllocTest, compileK16SystemProcTest, compileK16RuntimeImportTest, compileK16HostedCat, compileK16CHostedCat)
+        dependsOn(putK16SystemStorage0Init, compileK16SystemAllocTest, compileK16SystemProcTest, compileK16RuntimeImportTest, compileK16HostedCat)
         dependsOn(rootProject.tasks.named("prepareK16Toolchain"))
         inputs.file(k16ToolchainConfig)
         inputs.file(k16SystemStorage0Resource)

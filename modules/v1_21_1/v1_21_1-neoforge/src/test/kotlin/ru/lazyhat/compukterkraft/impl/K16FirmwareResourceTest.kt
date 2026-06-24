@@ -102,8 +102,9 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("k16ShellSource"))
         assertTrue(source.contains("k16LsManifest"))
         assertTrue(source.contains("k16LsSource"))
-        assertTrue(source.contains("k16CatManifest"))
-        assertTrue(source.contains("k16CatSource"))
+        assertFalse(source.contains("k16CatManifest"))
+        assertFalse(source.contains("k16CatSource"))
+        assertTrue(source.contains("k16CSystemCatSource"))
         assertTrue(source.contains("k16MvManifest"))
         assertTrue(source.contains("k16MvSource"))
         assertTrue(source.contains("k16StatManifest"))
@@ -126,7 +127,8 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("k16ProcTestSource"))
         assertTrue(source.contains("generatedK16ShellTarget"))
         assertTrue(source.contains("generatedK16LsTarget"))
-        assertTrue(source.contains("generatedK16CatTarget"))
+        assertFalse(source.contains("generatedK16CatTarget"))
+        assertTrue(source.contains("generatedK16CSystemCatTarget"))
         assertTrue(source.contains("generatedK16MvTarget"))
         assertTrue(source.contains("generatedK16StatTarget"))
         assertTrue(source.contains("generatedK16WriteTarget"))
@@ -153,13 +155,16 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("k16RuntimeImportTestArtifact"))
         assertTrue(source.contains("k16AllocTestArtifact"))
         assertTrue(source.contains("k16HostedCatArtifact"))
-        assertTrue(source.contains("k16CHostedCatArtifact"))
         assertTrue(source.contains("k16ProcTestArtifact"))
-        assertTrue(source.contains("rust/guest/c/kraft/crt0.c"))
+        assertFalse(source.contains("k16CHostedCatArtifact"))
+        assertTrue(source.contains("k16CLibcIncludeSource"))
+        assertTrue(source.contains("k16CLibcStartupSource"))
+        assertTrue(source.contains("rust/guest/c/libc/crt0.c"))
+        assertTrue(source.contains("rust/guest/c/libc/include"))
         assertTrue(source.contains("rust/guest/c/coreutils/cat.c"))
         assertTrue(source.contains("fun Project.compileK16GuestCProgram("))
         assertTrue(source.contains("--target=k16"))
-        assertTrue(source.contains("\"compileK16CHostedCat\""))
+        assertFalse(source.contains("\"compileK16CHostedCat\""))
         assertTrue(source.contains("val k16ProductionStorageEntries ="))
         assertTrue(source.contains("val k16DevelopmentOnlyStorageEntries ="))
         assertTrue(source.contains("val k16SharedRuntimeStorageEntries ="))
@@ -187,7 +192,18 @@ class K16FirmwareResourceTest {
         )
         assertTrue(source.contains("binName = \"k16-shell\""))
         assertTrue(source.contains("binName = \"k16-ls\""))
-        assertTrue(source.contains("binName = \"k16-cat\""))
+        assertFalse(source.contains("binName = \"k16-cat\""))
+        assertTrue(source.contains("description = \"Compiles and links the bundled C K16 cat utility"))
+        assertTrue(
+            source.contains(
+                "output = k16CatArtifact.get().asFile,\n                mapOutput = k16CatMapArtifact.get(),",
+            ),
+            "production cat should write the production /bin/cat.kx artifact",
+        )
+        assertTrue(
+            source.contains("sources = listOf(k16CSystemCatSource.asFile)"),
+            "production cat should build from the C coreutils source",
+        )
         assertTrue(source.contains("binName = \"k16-mv\""))
         assertTrue(source.contains("binName = \"k16-stat\""))
         assertTrue(source.contains("binName = \"k16-write\""))
@@ -257,12 +273,8 @@ class K16FirmwareResourceTest {
             "hosted-cat should be declared as dev-only",
         )
         assertFalse(
-            source.substring(productionEntriesIndex, developmentOnlyEntriesIndex).contains("\"/bin/c-cat.kx\""),
-            "C cat should not be a production utility yet",
-        )
-        assertTrue(
-            source.substring(developmentOnlyEntriesIndex, sharedRuntimeEntriesIndex).contains("\"/bin/c-cat.kx\""),
-            "C cat should be declared as dev-only",
+            source.contains("\"/bin/c-cat.kx\""),
+            "C cat proof should be removed once production /bin/cat.kx is C-built",
         )
         assertTrue(source.contains("\"/etc/motd\""))
         assertTrue(source.contains("\"extract-partition\""))
@@ -506,8 +518,19 @@ class K16FirmwareResourceTest {
         )
         val version = ByteBuffer.wrap(bytes, 0x04, 2).order(ByteOrder.LITTLE_ENDIAN).short.toInt()
         val abiKind = ByteBuffer.wrap(bytes, 0x18, 4).order(ByteOrder.LITTLE_ENDIAN).int
-        assertEquals(2, version, "bundled /bin/cat.kx must use dynamic K16E v2")
+        assertEquals(5, version, "bundled /bin/cat.kx must use imported dynamic K16E v5")
         assertEquals(3, abiKind, "bundled /bin/cat.kx must use K16E abi kind program")
+        val metadata = bytes.decodeToString()
+        assertTrue(
+            metadata.contains("libkraft.k16so"),
+            "bundled /bin/cat.kx should declare libkraft.k16so as a needed library",
+        )
+        listOf("open", "read", "write", "close").forEach { symbol ->
+            assertTrue(
+                metadata.contains(symbol),
+                "bundled /bin/cat.kx should import $symbol from libkraft",
+            )
+        }
         assertEquals("K16 FS OK\n", motd.readText())
     }
 
@@ -669,7 +692,6 @@ class K16FirmwareResourceTest {
         val procTest = workspace.resolve("proc-test.kx")
         val sharedRuntimeTest = workspace.resolve("runtime-import-test.kx")
         val hostedCat = workspace.resolve("hosted-cat.kx")
-        val cCat = workspace.resolve("c-cat.kx")
         storage0.writeBytes(K16SystemVolumeWorkspace.loadStorage0VolumeResource(classLoader = javaClass.classLoader))
 
         runK16Tool(
@@ -710,14 +732,6 @@ class K16FirmwareResourceTest {
             root.toString(),
             "/bin/hosted-cat.kx",
             hostedCat.toString(),
-        )
-        runK16ToolExpectFailure(
-            "fs",
-            "kfs",
-            "get",
-            root.toString(),
-            "/bin/c-cat.kx",
-            cCat.toString(),
         )
     }
 
@@ -831,7 +845,6 @@ class K16FirmwareResourceTest {
         val procTest = workspace.resolve("proc-test.kx")
         val sharedRuntimeTest = workspace.resolve("runtime-import-test.kx")
         val hostedCat = workspace.resolve("hosted-cat.kx")
-        val cCat = workspace.resolve("c-cat.kx")
         storage0.writeBytes(
             K16SystemVolumeWorkspace.loadStorage0VolumeResource(
                 resourcePath = "firmware/k16-system-storage0-dev.kv",
@@ -877,14 +890,6 @@ class K16FirmwareResourceTest {
             root.toString(),
             "/bin/hosted-cat.kx",
             hostedCat.toString(),
-        )
-        runK16Tool(
-            "fs",
-            "kfs",
-            "get",
-            root.toString(),
-            "/bin/c-cat.kx",
-            cCat.toString(),
         )
 
         val allocBytes = allocTest.readBytes()
@@ -937,25 +942,6 @@ class K16FirmwareResourceTest {
         assertEquals(2, hostedCatBytes.u16Le(offset = 4), "bundled dev /bin/hosted-cat.kx must use dynamic K16E v2")
         assertEquals(3, hostedCatBytes.u32Le(offset = 24), "bundled dev /bin/hosted-cat.kx must use K16E abi kind program")
 
-        val cCatBytes = cCat.readBytes()
-        assertTrue(cCatBytes.size > 72, "bundled dev /bin/c-cat.kx should be a non-empty imported dynamic K16E program")
-        assertContentEquals(
-            byteArrayOf('K'.code.toByte(), '1'.code.toByte(), '6'.code.toByte(), 'E'.code.toByte()),
-            cCatBytes.copyOfRange(0, 4),
-        )
-        assertEquals(5, cCatBytes.u16Le(offset = 4), "bundled dev /bin/c-cat.kx must use imported dynamic K16E v5")
-        assertEquals(3, cCatBytes.u32Le(offset = 24), "bundled dev /bin/c-cat.kx must use K16E abi kind program")
-        val cCatMetadata = cCatBytes.decodeToString()
-        assertTrue(
-            cCatMetadata.contains("libkraft.k16so"),
-            "C cat should declare libkraft.k16so as a needed library",
-        )
-        listOf("open", "read", "write", "close").forEach { symbol ->
-            assertTrue(
-                cCatMetadata.contains(symbol),
-                "C cat should import $symbol from libkraft",
-            )
-        }
     }
 
     @Test
@@ -1031,8 +1017,8 @@ class K16FirmwareResourceTest {
     }
 
     @Test
-    fun bundledK16CHostedCatRunsThroughKernelLoader() {
-        val workspace = createTempDirectory("k16-c-hosted-cat-test-")
+    fun bundledK16SystemCatRunsThroughKernelLoader() {
+        val workspace = createTempDirectory("k16-c-system-cat-test-")
         val biosFlashPath = workspace.resolve("bios.kflash")
         val storage0Path = workspace.resolve("storage0-dev.kv")
         biosFlashPath.writeBytes(K16BiosFlashWorkspace.loadBiosFlashResource(classLoader = javaClass.classLoader))
@@ -1051,7 +1037,7 @@ class K16FirmwareResourceTest {
                 val readyControl = runUntilTerminalText(runtime, "K16> ")
                 assertEquals(NativeK16ComputerControl.STATUS_READY, readyControl.status)
 
-                runShellCommand(runtime, "c-cat /etc/motd", expectVisiblePixels = true)
+                runShellCommand(runtime, "cat /etc/motd", expectVisiblePixels = true)
                 var terminal = terminalText(runtime.machineSnapshot())
                 var waitTurns = 0
                 while (!terminal.contains("K16 FS OK") && !terminal.contains("ERR") && waitTurns < 64) {
@@ -1062,12 +1048,12 @@ class K16FirmwareResourceTest {
                 }
 
                 assertTrue(
-                    terminal.contains("c-cat /etc/motd") && terminal.contains("K16 FS OK"),
-                    "C cat should read /etc/motd through libkraft open/read/write; terminal: $terminal",
+                    terminal.contains("cat /etc/motd") && terminal.contains("K16 FS OK"),
+                    "production C cat should read /etc/motd through libkraft open/read/write; terminal: $terminal",
                 )
                 assertFalse(
                     terminal.contains("ERR RUN"),
-                    "C cat should not fail during libkraft import resolution; terminal: $terminal",
+                    "production C cat should not fail during libkraft import resolution; terminal: $terminal",
                 )
             }
     }
@@ -1562,20 +1548,19 @@ class K16FirmwareResourceTest {
     }
 
     @Test
-    fun k16CatUtilityReadsMotdThroughKraftStdFs() {
-        val catSource = Path.of("../../../rust/guest/k16-cat/src/main.rs").readText()
-        val catLibSource = Path.of("../../../rust/guest/k16-cat/src/lib.rs").readText()
-        val stdSource = Path.of("../../../rust/guest/kraft-std/src/lib.rs").readText()
+    fun k16CatUtilityReadsMotdThroughCLibc() {
+        val catSource = Path.of("../../../rust/guest/c/coreutils/cat.c").readText()
+        val startupSource = Path.of("../../../rust/guest/c/libc/crt0.c").readText()
+        val syscallHeader = Path.of("../../../rust/guest/c/libc/include/kraft/syscalls.h").readText()
 
-        assertTrue(catSource.contains("process::Argv::from_raw(argc, argv)"))
-        assertTrue(catSource.contains("k16_cat::for_each_path_arg(argv.len(), |index| argv.get(index), print_file)"))
-        assertTrue(catLibSource.contains("while index < arg_count"), "cat should visit every argv path")
-        assertTrue(catSource.contains("fs::open(path)"))
-        assertTrue(catSource.contains(".read("))
-        assertTrue(catSource.contains(".close()"))
-        assertTrue(catSource.contains("io::stdout()"))
-        assertTrue(stdSource.contains("pub mod fs"), "kraft-std should expose a filesystem module")
-        assertTrue(stdSource.contains("pub fn open(path: &str) -> Result<File, Error>"))
+        assertTrue(catSource.contains("#include <kraft/syscalls.h>"))
+        assertTrue(catSource.contains("for (int index = 1; index < argc; index += 1)"), "cat should visit every argv path")
+        assertTrue(catSource.contains("open(path, KRAFT_OPEN_READ_ONLY)"))
+        assertTrue(catSource.contains("read(fd, buffer, sizeof(buffer))"))
+        assertTrue(catSource.contains("write_all(KRAFT_FD_STDOUT"))
+        assertTrue(catSource.contains("close(fd)"))
+        assertTrue(startupSource.contains("return kraft_main((int)argc, argv);"))
+        assertTrue(syscallHeader.contains("#define open(path, flags) kraft_open((path), (flags))"))
     }
 
     @Test
