@@ -2,20 +2,24 @@
 
 ## Unreleased
 
+- Moved the first-class C guest userland sources out of the Rust guest
+  workspace: libc-lite now lives under `guest/c/libc`, and bundled C coreutils
+  live under `guest/c/coreutils`. Existing Rust guest crates, including the
+  Rust K16 kernel, remain under `rust/guest` for now.
 - Added the first standard-shaped libc-lite C headers under
-  `rust/guest/c/libc/include`: `unistd.h`, `fcntl.h`, `stddef.h`, and
+  `guest/c/libc/include`: `unistd.h`, `fcntl.h`, `stddef.h`, and
   `string.h`. `kraft/syscalls.h` remains the low-level K16 ABI header, while C
   userland can now include common headers for `open`, `read`, `write`, `close`,
   `O_*` flags, and simple string helpers. Production `/bin/write.kx` now builds
-  from `rust/guest/c/coreutils/write.c` and imports `open`, `write`, and
+  from `guest/c/coreutils/write.c` and imports `open`, `write`, and
   `close` from `/lib/libkraft.k16so`, covering both
   `write <path> <payload>` and `write --append <path> <payload>`. The decimal
   status printer avoids compiler-rt division helpers for now, keeping this
   slice inside the existing libc-lite/runtime surface.
 - Promoted the first bundled C hosted userland baseline into production
   `/bin/cat.kx`. The source-built-dev Gradle toolchain builds a K16-capable
-  `clang`, compiles `rust/guest/c/coreutils/cat.c`, and links it against the
-  reusable libc-lite startup/header layer under `rust/guest/c/libc`. The
+  `clang`, compiles `guest/c/coreutils/cat.c`, and links it against the
+  reusable libc-lite startup/header layer under `guest/c/libc`. The
   resulting K16E v5 program imports `open`, `read`, `write`, and `close` from
   `/lib/libkraft.k16so`. The C startup object reuses the existing K16
   `k16-startup` entry shim, adapts the kernel `r1/r2` bounded argv table into

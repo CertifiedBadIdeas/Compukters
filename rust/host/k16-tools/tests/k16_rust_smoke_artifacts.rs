@@ -103,13 +103,13 @@ fn k16_hosted_cat_streams_file_bytes_without_read_to_string() {
 #[test]
 fn k16_c_libc_cat_has_minimal_libkraft_abi_sources() {
     let root = repo_root();
-    let header = root.join("rust/guest/c/libc/include/kraft/syscalls.h");
-    let unistd = root.join("rust/guest/c/libc/include/unistd.h");
-    let fcntl = root.join("rust/guest/c/libc/include/fcntl.h");
-    let string = root.join("rust/guest/c/libc/include/string.h");
-    let startup = root.join("rust/guest/c/libc/crt0.c");
-    let cat = root.join("rust/guest/c/coreutils/cat.c");
-    let write = root.join("rust/guest/c/coreutils/write.c");
+    let header = root.join("guest/c/libc/include/kraft/syscalls.h");
+    let unistd = root.join("guest/c/libc/include/unistd.h");
+    let fcntl = root.join("guest/c/libc/include/fcntl.h");
+    let string = root.join("guest/c/libc/include/string.h");
+    let startup = root.join("guest/c/libc/crt0.c");
+    let cat = root.join("guest/c/coreutils/cat.c");
+    let write = root.join("guest/c/coreutils/write.c");
 
     let header = fs::read_to_string(&header).expect("C libkraft syscall header exists");
     assert!(header.contains("extern int __kraft_sys_open(const char *path, unsigned int len,"));

@@ -162,11 +162,11 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("k16CLibcIncludeSource"))
         assertTrue(source.contains("k16CLibcStartupSource"))
         assertTrue(source.contains("k16CLibcSyscallSource"))
-        assertTrue(source.contains("rust/guest/c/libc/crt0.c"))
-        assertTrue(source.contains("rust/guest/c/libc/syscalls.c"))
-        assertTrue(source.contains("rust/guest/c/libc/include"))
-        assertTrue(source.contains("rust/guest/c/coreutils/cat.c"))
-        assertTrue(source.contains("rust/guest/c/coreutils/write.c"))
+        assertTrue(source.contains("guest/c/libc/crt0.c"))
+        assertTrue(source.contains("guest/c/libc/syscalls.c"))
+        assertTrue(source.contains("guest/c/libc/include"))
+        assertTrue(source.contains("guest/c/coreutils/cat.c"))
+        assertTrue(source.contains("guest/c/coreutils/write.c"))
         assertTrue(source.contains("fun Project.compileK16GuestCProgram("))
         assertTrue(source.contains("--target=k16"))
         assertFalse(source.contains("\"compileK16CHostedCat\""))
@@ -1622,9 +1622,9 @@ class K16FirmwareResourceTest {
 
     @Test
     fun k16CatUtilityReadsMotdThroughCLibc() {
-        val catSource = Path.of("../../../rust/guest/c/coreutils/cat.c").readText()
-        val startupSource = Path.of("../../../rust/guest/c/libc/crt0.c").readText()
-        val syscallHeader = Path.of("../../../rust/guest/c/libc/include/kraft/syscalls.h").readText()
+        val catSource = Path.of("../../../guest/c/coreutils/cat.c").readText()
+        val startupSource = Path.of("../../../guest/c/libc/crt0.c").readText()
+        val syscallHeader = Path.of("../../../guest/c/libc/include/kraft/syscalls.h").readText()
 
         assertTrue(catSource.contains("#include <fcntl.h>"))
         assertTrue(catSource.contains("#include <string.h>"))
@@ -1655,10 +1655,10 @@ class K16FirmwareResourceTest {
 
     @Test
     fun k16WriteUtilityCreatesRegularFileThroughCLibc() {
-        val writeSource = Path.of("../../../rust/guest/c/coreutils/write.c").readText()
-        val unistdHeader = Path.of("../../../rust/guest/c/libc/include/unistd.h").readText()
-        val fcntlHeader = Path.of("../../../rust/guest/c/libc/include/fcntl.h").readText()
-        val stringHeader = Path.of("../../../rust/guest/c/libc/include/string.h").readText()
+        val writeSource = Path.of("../../../guest/c/coreutils/write.c").readText()
+        val unistdHeader = Path.of("../../../guest/c/libc/include/unistd.h").readText()
+        val fcntlHeader = Path.of("../../../guest/c/libc/include/fcntl.h").readText()
+        val stringHeader = Path.of("../../../guest/c/libc/include/string.h").readText()
 
         assertTrue(writeSource.contains("#include <fcntl.h>"))
         assertTrue(writeSource.contains("#include <string.h>"))
