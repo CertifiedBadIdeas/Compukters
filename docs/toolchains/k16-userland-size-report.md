@@ -55,7 +55,7 @@ those syscall-boundary calls in its own payload.
 
 Production `/bin/cat.kx` and `/bin/write.kx` are built from C with the
 source-built-dev K16 `clang`, use the small libc-lite startup/header layer under
-`rust/guest/c/libc`, and call the same `libkraft.k16so` shared OS ABI as the
+`guest/c/libc`, and call the same `libkraft.k16so` shared OS ABI as the
 Rust import proofs. The public libc-lite surface now includes minimal
 `unistd.h`, `fcntl.h`, `stddef.h`, and `string.h` headers, while
 `kraft/syscalls.h` remains the low-level K16 ABI header. This proves the
