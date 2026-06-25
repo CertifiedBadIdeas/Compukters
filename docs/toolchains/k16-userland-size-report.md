@@ -44,7 +44,7 @@ explicit artifact groups:
   currently including the real provider artifacts `libk16rt.k16so` and
   `libkraft.k16so`.
 - `map_section name=development_only`: development-only proof program maps such
-  as `alloc-test`, `proc-test`, `runtime-import-test`, and `hosted-cat`.
+  as `alloc-test`, `proc-test`, and `runtime-import-test`.
 
 `libkraft.k16so` is the first project-owned userland shared OS ABI boundary.
 It exports plain syscall-shaped symbols such as `open`, `read`, `write`,

@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Removed the legacy Rust guest crates for production coreutils after the C
+  migration: `k16-uname`, `k16-cat`, `k16-write`, `k16-rm`, `k16-mkdir`,
+  `k16-rmdir`, `k16-stat`, `k16-ls`, `k16-cp`, and `k16-mv`. The bundled
+  `/etc/motd` data file now lives at `guest/data/etc/motd` instead of inside
+  the old Rust `k16-cat` crate. The hosted Rust proof crates `k16-hosted-cat`
+  and `k16-hosted-hello` were also removed from the guest workspace; hosted
+  Rust std behavior remains covered by host-tool tests that build temporary
+  source snippets rather than bundled guest proof programs.
 - Production `/bin/cp.kx` and `/bin/mv.kx` now build from
   `guest/c/coreutils` through the source-built-dev K16 Clang path and
   libc-lite startup layer. `/bin/cp.kx` imports `open`, `read`, `write`, and
@@ -120,7 +128,7 @@
   `firmware/k16-system-storage0.kv` excludes test and hosted-stdlib proof
   binaries, while test resources provide `firmware/k16-system-storage0-dev.kv`
   with `/bin/alloc-test.kx`, `/bin/proc-test.kx`,
-  `/bin/runtime-import-test.kx`, and `/bin/hosted-cat.kx`.
+  and `/bin/runtime-import-test.kx`.
 - `:v1_21_1-neoforge:reportK16UserlandSize` now reports production and
   development storage image sizes, installed-entry byte totals, and separate
   retained-section map sections for production userland, shared runtime objects,

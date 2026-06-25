@@ -82,7 +82,7 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("rust/guest/k16-init"))
         assertTrue(source.contains("rust/guest/k16-shell"))
         assertFalse(source.contains("rust/guest/k16-ls"))
-        assertTrue(source.contains("rust/guest/k16-cat"))
+        assertFalse(source.contains("rust/guest/k16-cat"))
         assertFalse(source.contains("rust/guest/k16-uname"))
         assertFalse(source.contains("rust/guest/k16-cp"))
         assertFalse(source.contains("rust/guest/k16-mv"))
@@ -96,7 +96,8 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("rust/guest/k16-runtime-import-test"))
         assertFalse(source.contains("rust/guest/k16-shared-runtime-test"))
         assertTrue(source.contains("rust/guest/k16-alloc-test"))
-        assertTrue(source.contains("rust/guest/k16-hosted-cat"))
+        assertFalse(source.contains("rust/guest/k16-hosted-cat"))
+        assertFalse(source.contains("rust/guest/k16-hosted-hello"))
         assertTrue(source.contains("rust/guest/k16-proc-test"))
         assertTrue(source.contains("k16InitManifest"))
         assertTrue(source.contains("k16InitSource"))
@@ -136,8 +137,10 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("k16RuntimeImportTestManifest"))
         assertTrue(source.contains("k16AllocTestManifest"))
         assertTrue(source.contains("k16AllocTestSource"))
-        assertTrue(source.contains("k16HostedCatManifest"))
-        assertTrue(source.contains("k16HostedCatSource"))
+        assertFalse(source.contains("k16HostedCatManifest"))
+        assertFalse(source.contains("k16HostedCatSource"))
+        assertFalse(source.contains("k16HostedHelloManifest"))
+        assertFalse(source.contains("k16HostedHelloSource"))
         assertTrue(source.contains("k16ProcTestManifest"))
         assertTrue(source.contains("k16ProcTestSource"))
         assertTrue(source.contains("generatedK16ShellTarget"))
@@ -164,7 +167,8 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("generatedK16SharedRuntimeTarget"))
         assertTrue(source.contains("generatedK16RuntimeImportTestTarget"))
         assertTrue(source.contains("generatedK16AllocTestTarget"))
-        assertTrue(source.contains("generatedK16HostedCatTarget"))
+        assertFalse(source.contains("generatedK16HostedCatTarget"))
+        assertFalse(source.contains("generatedK16HostedHelloTarget"))
         assertTrue(source.contains("generatedK16ProcTestTarget"))
         assertTrue(source.contains("k16InitArtifact"))
         assertTrue(source.contains("k16ShellArtifact"))
@@ -180,7 +184,8 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("k16SharedKraftArtifact"))
         assertTrue(source.contains("k16RuntimeImportTestArtifact"))
         assertTrue(source.contains("k16AllocTestArtifact"))
-        assertTrue(source.contains("k16HostedCatArtifact"))
+        assertFalse(source.contains("k16HostedCatArtifact"))
+        assertFalse(source.contains("k16HostedHelloArtifact"))
         assertTrue(source.contains("k16ProcTestArtifact"))
         assertFalse(source.contains("k16CHostedCatArtifact"))
         assertTrue(source.contains("k16CLibcIncludeSource"))
@@ -199,6 +204,8 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("guest/c/coreutils/rm.c"))
         assertTrue(source.contains("guest/c/coreutils/mkdir.c"))
         assertTrue(source.contains("guest/c/coreutils/rmdir.c"))
+        assertTrue(source.contains("guest/data/etc/motd"))
+        assertFalse(source.contains("rust/guest/k16-cat/motd.txt"))
         assertTrue(source.contains("fun Project.compileK16GuestCProgram("))
         assertTrue(source.contains("--target=k16"))
         assertFalse(source.contains("\"compileK16CHostedCat\""))
@@ -219,7 +226,8 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("compileK16SharedKraft"))
         assertTrue(source.contains("compileK16RuntimeImportTest"))
         assertTrue(source.contains("compileK16SystemAllocTest"))
-        assertTrue(source.contains("compileK16HostedCat"))
+        assertFalse(source.contains("compileK16HostedCat"))
+        assertFalse(source.contains("compileK16HostedHello"))
         assertTrue(source.contains("compileK16SystemProcTest"))
         assertTrue(source.contains("putK16SystemStorage0Init"))
         assertTrue(source.contains("binName = \"k16-init\""))
@@ -317,7 +325,8 @@ class K16FirmwareResourceTest {
         assertFalse(source.contains("libk16rt.k16so:k16rt_memcmp"))
         assertTrue(source.contains("binName = \"k16-runtime-import-test\""))
         assertTrue(source.contains("binName = \"k16-alloc-test\""))
-        assertTrue(source.contains("binName = \"k16-hosted-cat\""))
+        assertFalse(source.contains("binName = \"k16-hosted-cat\""))
+        assertFalse(source.contains("binName = \"k16-hosted-hello\""))
         assertTrue(source.contains("binName = \"k16-proc-test\""))
         assertTrue(
             source.contains(
@@ -343,7 +352,8 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("\"/lib/libkraft.k16so\""))
         assertTrue(source.contains("\"/bin/runtime-import-test.kx\""))
         assertTrue(source.contains("\"/bin/alloc-test.kx\""))
-        assertTrue(source.contains("\"/bin/hosted-cat.kx\""))
+        assertFalse(source.contains("\"/bin/hosted-cat.kx\""))
+        assertFalse(source.contains("\"/bin/hosted-hello.kx\""))
         assertTrue(source.contains("\"/bin/proc-test.kx\""))
         val productionEntriesIndex = source.indexOf("val k16ProductionStorageEntries =")
         val developmentOnlyEntriesIndex = source.indexOf("val k16DevelopmentOnlyStorageEntries =")
@@ -361,14 +371,8 @@ class K16FirmwareResourceTest {
             source.substring(sharedRuntimeEntriesIndex, storageTaskIndex).contains("\"/lib/libkraft.k16so\""),
             "shared runtime entries should include the first kraft shared library",
         )
-        assertFalse(
-            source.substring(productionEntriesIndex, developmentOnlyEntriesIndex).contains("\"/bin/hosted-cat.kx\""),
-            "hosted-cat should not be a production utility",
-        )
-        assertTrue(
-            source.substring(developmentOnlyEntriesIndex, sharedRuntimeEntriesIndex).contains("\"/bin/hosted-cat.kx\""),
-            "hosted-cat should be declared as dev-only",
-        )
+        assertFalse(source.contains("\"/bin/hosted-cat.kx\""), "hosted-cat should not be bundled")
+        assertFalse(source.contains("\"/bin/hosted-hello.kx\""), "hosted-hello should not be bundled")
         assertFalse(
             source.contains("\"/bin/c-cat.kx\""),
             "C cat proof should be removed once production /bin/cat.kx is C-built",
@@ -412,20 +416,18 @@ class K16FirmwareResourceTest {
     }
 
     @Test
-    fun bundledK16HostedCatMapArtifactIsGenerated() {
+    fun bundledK16UserlandMapArtifactsAreGeneratedWithoutHostedRustProofs() {
         val source = Path.of("build.gradle.kts").readText()
 
-        assertTrue(source.contains("val k16HostedCatMapArtifact ="))
-        assertTrue(source.contains("outputs.file(k16HostedCatMapArtifact)"))
+        assertFalse(source.contains("val k16HostedCatMapArtifact ="))
+        assertFalse(source.contains("val k16HostedHelloMapArtifact ="))
+        assertFalse(source.contains("outputs.file(k16HostedCatMapArtifact)"))
+        assertFalse(source.contains("outputs.file(k16HostedHelloMapArtifact)"))
+        assertFalse(source.contains("k16HostedCatArtifact"))
+        assertFalse(source.contains("k16HostedHelloArtifact"))
         assertTrue(source.contains("mapOutput: File"))
         assertTrue(source.contains("-C link-arg=--map"))
         assertTrue(source.contains("-C link-arg=\${mapOutput.absolutePath}"))
-        assertTrue(
-            source.contains(
-                "output = k16HostedCatArtifact.get().asFile,\n                mapOutput = k16HostedCatMapArtifact.get(),",
-            ),
-            "hosted-cat must emit a retained-section map next to the linked K16E artifact",
-        )
     }
 
     @Test
@@ -632,7 +634,7 @@ class K16FirmwareResourceTest {
     }
 
     @Test
-    fun bundledK16DevelopmentStorage0ContainsHostedCatProgram() {
+    fun bundledK16DevelopmentStorage0ExcludesHostedCatProgram() {
         val workspace = createTempDirectory("k16-hosted-cat-storage-test-")
         val storage0 = workspace.resolve("storage0-dev.kv")
         val root = workspace.resolve("root.kfs")
@@ -651,7 +653,7 @@ class K16FirmwareResourceTest {
             "ROOT",
             root.toString(),
         )
-        runK16Tool(
+        runK16ToolExpectFailure(
             "fs",
             "kfs",
             "get",
@@ -659,17 +661,6 @@ class K16FirmwareResourceTest {
             "/bin/hosted-cat.kx",
             cat.toString(),
         )
-
-        val bytes = cat.readBytes()
-        assertTrue(bytes.size > 72, "bundled dev /bin/hosted-cat.kx should be a non-empty dynamic K16E program")
-        assertContentEquals(
-            byteArrayOf('K'.code.toByte(), '1'.code.toByte(), '6'.code.toByte(), 'E'.code.toByte()),
-            bytes.copyOfRange(0, 4),
-        )
-        val version = ByteBuffer.wrap(bytes, 0x04, 2).order(ByteOrder.LITTLE_ENDIAN).short.toInt()
-        val abiKind = ByteBuffer.wrap(bytes, 0x18, 4).order(ByteOrder.LITTLE_ENDIAN).int
-        assertEquals(2, version, "bundled dev /bin/hosted-cat.kx must use dynamic K16E v2")
-        assertEquals(3, abiKind, "bundled dev /bin/hosted-cat.kx must use K16E abi kind program")
     }
 
     @Test
@@ -892,6 +883,7 @@ class K16FirmwareResourceTest {
         val procTest = workspace.resolve("proc-test.kx")
         val sharedRuntimeTest = workspace.resolve("runtime-import-test.kx")
         val hostedCat = workspace.resolve("hosted-cat.kx")
+        val hostedHello = workspace.resolve("hosted-hello.kx")
         storage0.writeBytes(K16SystemVolumeWorkspace.loadStorage0VolumeResource(classLoader = javaClass.classLoader))
 
         runK16Tool(
@@ -932,6 +924,14 @@ class K16FirmwareResourceTest {
             root.toString(),
             "/bin/hosted-cat.kx",
             hostedCat.toString(),
+        )
+        runK16ToolExpectFailure(
+            "fs",
+            "kfs",
+            "get",
+            root.toString(),
+            "/bin/hosted-hello.kx",
+            hostedHello.toString(),
         )
     }
 
@@ -1058,6 +1058,7 @@ class K16FirmwareResourceTest {
         val procTest = workspace.resolve("proc-test.kx")
         val sharedRuntimeTest = workspace.resolve("runtime-import-test.kx")
         val hostedCat = workspace.resolve("hosted-cat.kx")
+        val hostedHello = workspace.resolve("hosted-hello.kx")
         storage0.writeBytes(
             K16SystemVolumeWorkspace.loadStorage0VolumeResource(
                 resourcePath = "firmware/k16-system-storage0-dev.kv",
@@ -1096,13 +1097,21 @@ class K16FirmwareResourceTest {
             "/bin/runtime-import-test.kx",
             sharedRuntimeTest.toString(),
         )
-        runK16Tool(
+        runK16ToolExpectFailure(
             "fs",
             "kfs",
             "get",
             root.toString(),
             "/bin/hosted-cat.kx",
             hostedCat.toString(),
+        )
+        runK16ToolExpectFailure(
+            "fs",
+            "kfs",
+            "get",
+            root.toString(),
+            "/bin/hosted-hello.kx",
+            hostedHello.toString(),
         )
 
         val allocBytes = allocTest.readBytes()
@@ -1145,16 +1154,6 @@ class K16FirmwareResourceTest {
                 "runtime import test should import $symbol",
             )
         }
-
-        val hostedCatBytes = hostedCat.readBytes()
-        assertTrue(hostedCatBytes.size > 72, "bundled dev /bin/hosted-cat.kx should be a non-empty dynamic K16E program")
-        assertContentEquals(
-            byteArrayOf('K'.code.toByte(), '1'.code.toByte(), '6'.code.toByte(), 'E'.code.toByte()),
-            hostedCatBytes.copyOfRange(0, 4),
-        )
-        assertEquals(2, hostedCatBytes.u16Le(offset = 4), "bundled dev /bin/hosted-cat.kx must use dynamic K16E v2")
-        assertEquals(3, hostedCatBytes.u32Le(offset = 24), "bundled dev /bin/hosted-cat.kx must use K16E abi kind program")
-
     }
 
     @Test

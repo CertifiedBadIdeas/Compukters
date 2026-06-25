@@ -59,22 +59,22 @@ under Rust `std`, libc, libc++, and KraftOS-specific extensions. In that model,
 future extension crate for K16/KraftOS APIs that do not belong in language
 standard libraries.
 
-The first hosted Rust stages are narrow proofs, not a replacement for
-`kraft-std`. `rust/guest/k16-hosted-hello` uses ordinary Rust `std`, ordinary
-`fn main()`, stdout, panic-abort, and heap-backed `Vec`/`String` formatting, and
-is built by the `:v1_21_1-neoforge:compileK16HostedHello` Gradle task. Hosted
-Rust heap allocation goes through the KraftOS `SBRK` syscall ABI and remains
-monotonic for now. Hosted Rust `std::env::args()` reads the existing K16 child
-entry ABI: startup preserves `r1 = argc` and `r2 = argv_table`, and each argv
-table entry is a `(ptr, len)` pair of little-endian `u32` words. Invalid argv
-ABI state is a runtime error, not a silent empty-args fallback. Hosted Rust
-`std::fs` has a first read-only stage backed by KraftOS `OPEN`, `READ`, and
-`CLOSE`: `File::open`, `File::read`, close-on-drop, and
-`std::fs::read_to_string` work for regular ROOT/K16FS file reads. Metadata,
-directories, create/write/truncate/append, seek, remove/rename, permissions,
-symlinks, canonicalize, and cwd remain explicit unsupported operations in
-hosted `std`. Broader hosted `std` coverage remains gated on explicit OS-backed
-APIs rather than silent no-op platform behavior.
+The first hosted Rust stages are narrow host-tool proofs, not a replacement for
+`kraft-std` and not bundled userland crates. The host-tool tests build temporary
+K16 hosted Rust programs with ordinary Rust `std`, ordinary `fn main()`,
+stdout, panic-abort, and heap-backed `Vec`/`String` formatting. Hosted Rust heap
+allocation goes through the KraftOS `SBRK` syscall ABI and remains monotonic for
+now. Hosted Rust `std::env::args()` reads the existing K16 child entry ABI:
+startup preserves `r1 = argc` and `r2 = argv_table`, and each argv table entry
+is a `(ptr, len)` pair of little-endian `u32` words. Invalid argv ABI state is a
+runtime error, not a silent empty-args fallback. Hosted Rust `std::fs` has a
+first read-only stage backed by KraftOS `OPEN`, `READ`, and `CLOSE`:
+`File::open`, `File::read`, close-on-drop, and `std::fs::read_to_string` work
+for regular ROOT/K16FS file reads. Metadata, directories,
+create/write/truncate/append, seek, remove/rename, permissions, symlinks,
+canonicalize, and cwd remain explicit unsupported operations in hosted `std`.
+Broader hosted `std` coverage remains gated on explicit OS-backed APIs rather
+than silent no-op platform behavior.
 KraftOS-backed Rust `std` hooks live in named `sys/*/kraftos.rs` modules rather
 than generic `unsupported.rs` stubs when the API is actually OS-backed.
 
