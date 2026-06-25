@@ -19,12 +19,14 @@
 The bundled source-built-dev Gradle path also uses Clang now. `buildK16Llvm`
 enables the LLVM `clang` project, tracks both `llvm/` and `clang/` source
 inputs, and the NeoForge firmware build compiles production `/bin/cat.kx` and
-`/bin/write.kx` from `guest/c/coreutils`. Production `/bin/uname.kx` also uses
-the same C hosted path. That hosted C path uses
+`/bin/write.kx` from `guest/c/coreutils`. Production `/bin/uname.kx`,
+`/bin/rm.kx`, `/bin/mkdir.kx`, and `/bin/rmdir.kx` also use the same C hosted
+path. That hosted C path uses
 `k16-startup.o` for the real K16 entry ABI, the libc-lite
 `guest/c/libc/crt0.c` adapter for ordinary
 `main(int argc, char **argv)`, `guest/c/libc/syscalls.c` for ABI wrappers
-such as `open(path, flags)`, and minimal standard-shaped libc-lite headers.
+such as `open(path, flags)`, `mkdir(path)`, `rmdir(path)`, and `unlink(path)`,
+and minimal standard-shaped libc-lite headers.
 
 The Clang K16 target data layout must match the backend/Rust target layout:
 

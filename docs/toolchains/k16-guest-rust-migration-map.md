@@ -44,11 +44,11 @@ production build or focused test needs them.
 | `rust/guest/k16-kernel` | Rust K16 kernel and OS internals. | Keep Rust. Kernel rewrite is explicitly out of scope for #367. |
 | `rust/guest/k16-ls` | Production Rust `ls`. | Migrate to C after libc-lite exposes directory/listing or metadata wrappers. |
 | `rust/guest/k16-memory` | Guest memory/MMU helper library. | Keep Rust while kernel/runtime memory management remains Rust. |
-| `rust/guest/k16-mkdir` | Production Rust `mkdir`. | Migrate to C after libc-lite exposes a `mkdir` wrapper and status mapping. |
+| `rust/guest/k16-mkdir` | Former Rust production `mkdir`. | Legacy/removable after no focused tests or docs depend on the Rust version. Production `/bin/mkdir.kx` now builds from `guest/c/coreutils/mkdir.c`. |
 | `rust/guest/k16-mv` | Production Rust `mv`. | Migrate to C after rename/link/unlink semantics are stable in libc-lite. |
 | `rust/guest/k16-proc-test` | Development process-model smoke utility. | Development/test-only; keep until process coverage moves elsewhere. |
-| `rust/guest/k16-rm` | Production Rust `rm`. | Migrate to C after libc-lite exposes an `unlink` wrapper and error policy. |
-| `rust/guest/k16-rmdir` | Production Rust `rmdir`. | Migrate to C after libc-lite exposes an `rmdir` wrapper and error policy. |
+| `rust/guest/k16-rm` | Former Rust production `rm`. | Legacy/removable after no focused tests or docs depend on the Rust version. Production `/bin/rm.kx` now builds from `guest/c/coreutils/rm.c`. |
+| `rust/guest/k16-rmdir` | Former Rust production `rmdir`. | Legacy/removable after no focused tests or docs depend on the Rust version. Production `/bin/rmdir.kx` now builds from `guest/c/coreutils/rmdir.c`. |
 | `rust/guest/k16-rt` | Low-level Rust guest runtime/syscall/trap helper crate. | Keep Rust for Rust kernel/boot/runtime consumers; do not expand as userland std. |
 | `rust/guest/k16-runtime-import-test` | Development dynamic-import smoke program. | Development/test-only; keep while it covers loader/import behavior. |
 | `rust/guest/k16-shared-kraft` | Rust provider for the shared OS ABI library `libkraft.k16so`. | Keep Rust temporarily; revisit after C userland/coreutils migration proves the ABI surface. |
@@ -64,13 +64,11 @@ production build or focused test needs them.
 
 ## Next Production C Candidates
 
-1. `rust/guest/k16-mkdir`, `rust/guest/k16-rmdir`, and `rust/guest/k16-rm`:
-   small filesystem mutators once libc-lite has wrappers for their syscalls.
-2. `rust/guest/k16-stat` and `rust/guest/k16-ls`: metadata/listing commands
+1. `rust/guest/k16-stat` and `rust/guest/k16-ls`: metadata/listing commands
    after the metadata ABI is documented for C.
-3. `rust/guest/k16-cp` and `rust/guest/k16-mv`: larger file operations after
+2. `rust/guest/k16-cp` and `rust/guest/k16-mv`: larger file operations after
    path and file-copy helper policy is settled.
-4. `rust/guest/k16-shell` and `rust/guest/k16-init`: move after enough
+3. `rust/guest/k16-shell` and `rust/guest/k16-init`: move after enough
    process/path helpers exist to avoid embedding policy in each program.
 
 ## Development/test-only

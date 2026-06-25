@@ -2,11 +2,19 @@
 
 ## Unreleased
 
+- Production `/bin/rm.kx`, `/bin/mkdir.kx`, and `/bin/rmdir.kx` now build
+  from `guest/c/coreutils` through the source-built-dev K16 Clang path and
+  libc-lite startup layer. libc-lite now exposes standard-shaped
+  `unlink(path)`, `mkdir(path)`, and `rmdir(path)` wrappers over the existing
+  K16 path-length syscalls, and `/lib/libkraft.k16so` exports the matching
+  plain shared OS ABI symbols so the C utilities import the mutator calls
+  dynamically. Shell-visible output remains the existing KraftOS policy:
+  `CREATED <path>`, `REMOVED <path>`, or `ERR <STATUS> <path>`.
 - Production `/bin/uname.kx` now builds from
   `guest/c/coreutils/uname.c` through the source-built-dev K16 Clang path and
   libc-lite startup layer. It remains the smallest shared OS ABI importer,
-  resolving `write` and `_exit` from `/lib/libkraft.k16so` instead of retaining
-  the syscall-boundary calls in its own payload.
+  resolving `write` from `/lib/libkraft.k16so` instead of retaining the
+  syscall-boundary call in its own payload.
 - Moved the first-class C guest userland sources out of the Rust guest
   workspace: libc-lite now lives under `guest/c/libc`, and bundled C coreutils
   live under `guest/c/coreutils`. Existing Rust guest crates, including the
@@ -40,8 +48,9 @@
   v5 imports for `libkraft.k16so`, proving that a production utility can call a
   plain shared OS ABI surface through the kernel loader without listing each
   imported symbol by hand. `libkraft.k16so` intentionally exports syscall-shaped
-  symbols such as `open`, `read`, `write`, `close`, `sbrk`, and `_exit`; it is
-  not a Rust stdlib replacement. This remains narrower than dynamic Rust
+  symbols such as `open`, `read`, `write`, `close`, `mkdir`, `rmdir`,
+  `unlink`, `sbrk`, and `_exit`; it is not a Rust stdlib replacement. This
+  remains narrower than dynamic Rust
   `core`, Rust `std`, libc, or libc++ sharing.
 - Bundled K16 shared-runtime adoption now uses a real provider artifact:
   `/lib/libk16rt.k16so` from `rust/guest/k16-shared-runtime`. The development
