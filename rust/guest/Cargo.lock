@@ -41,28 +41,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "k16-cat"
-version = "0.1.0"
-dependencies = [
- "kraft-std",
-]
-
-[[package]]
-name = "k16-cp"
-version = "0.1.0"
-dependencies = [
- "kraft-std",
-]
-
-[[package]]
-name = "k16-hosted-cat"
-version = "0.1.0"
-
-[[package]]
-name = "k16-hosted-hello"
-version = "0.1.0"
-
-[[package]]
 name = "k16-image"
 version = "0.1.0"
 
@@ -85,47 +63,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "k16-ls"
-version = "0.1.0"
-dependencies = [
- "k16-abi",
- "kraft-std",
-]
-
-[[package]]
 name = "k16-memory"
 version = "0.1.0"
 
 [[package]]
-name = "k16-mkdir"
-version = "0.1.0"
-dependencies = [
- "kraft-std",
-]
-
-[[package]]
-name = "k16-mv"
-version = "0.1.0"
-dependencies = [
- "kraft-std",
-]
-
-[[package]]
 name = "k16-proc-test"
-version = "0.1.0"
-dependencies = [
- "kraft-std",
-]
-
-[[package]]
-name = "k16-rm"
-version = "0.1.0"
-dependencies = [
- "kraft-std",
-]
-
-[[package]]
-name = "k16-rmdir"
 version = "0.1.0"
 dependencies = [
  "kraft-std",
@@ -170,14 +112,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "k16-stat"
-version = "0.1.0"
-dependencies = [
- "k16-abi",
- "kraft-std",
-]
-
-[[package]]
 name = "k16-storage"
 version = "0.1.0"
 dependencies = [
@@ -194,21 +128,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "k16-uname"
-version = "0.1.0"
-dependencies = [
- "kraft-std",
-]
-
-[[package]]
 name = "k16-user-fault-test"
-version = "0.1.0"
-dependencies = [
- "kraft-std",
-]
-
-[[package]]
-name = "k16-write"
 version = "0.1.0"
 dependencies = [
  "kraft-std",
