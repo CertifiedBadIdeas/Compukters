@@ -109,6 +109,7 @@ fn k16_c_libc_cat_has_minimal_libkraft_abi_sources() {
     let string = root.join("guest/c/libc/include/string.h");
     let startup = root.join("guest/c/libc/crt0.c");
     let cat = root.join("guest/c/coreutils/cat.c");
+    let uname = root.join("guest/c/coreutils/uname.c");
     let write = root.join("guest/c/coreutils/write.c");
 
     let header = fs::read_to_string(&header).expect("C libkraft syscall header exists");
@@ -153,6 +154,12 @@ fn k16_c_libc_cat_has_minimal_libkraft_abi_sources() {
     assert!(cat.contains("write_all(STDOUT_FILENO"));
     assert!(cat.contains("close(fd)"));
     assert!(!cat.contains("stdio.h"), "C hosted baseline must not depend on stdio");
+
+    let uname = fs::read_to_string(&uname).expect("C hosted uname source exists");
+    assert!(uname.contains("#include <unistd.h>"));
+    assert!(uname.contains("write_all(STDOUT_FILENO"));
+    assert!(uname.contains("\"K16\\n\""));
+    assert!(!uname.contains("stdio.h"), "C hosted baseline must not depend on stdio");
 
     let write = fs::read_to_string(&write).expect("C hosted write source exists");
     assert!(write.contains("#include <fcntl.h>"));

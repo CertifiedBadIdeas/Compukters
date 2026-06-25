@@ -83,6 +83,7 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("rust/guest/k16-shell"))
         assertTrue(source.contains("rust/guest/k16-ls"))
         assertTrue(source.contains("rust/guest/k16-cat"))
+        assertFalse(source.contains("rust/guest/k16-uname"))
         assertTrue(source.contains("rust/guest/k16-mv"))
         assertTrue(source.contains("rust/guest/k16-stat"))
         assertTrue(source.contains("rust/guest/k16-write"))
@@ -102,6 +103,9 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("k16ShellSource"))
         assertTrue(source.contains("k16LsManifest"))
         assertTrue(source.contains("k16LsSource"))
+        assertFalse(source.contains("k16UnameManifest"))
+        assertFalse(source.contains("k16UnameSource"))
+        assertTrue(source.contains("k16CSystemUnameSource"))
         assertFalse(source.contains("k16CatManifest"))
         assertFalse(source.contains("k16CatSource"))
         assertTrue(source.contains("k16CSystemCatSource"))
@@ -128,6 +132,8 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("k16ProcTestSource"))
         assertTrue(source.contains("generatedK16ShellTarget"))
         assertTrue(source.contains("generatedK16LsTarget"))
+        assertFalse(source.contains("generatedK16UnameTarget"))
+        assertTrue(source.contains("generatedK16CSystemUnameTarget"))
         assertFalse(source.contains("generatedK16CatTarget"))
         assertTrue(source.contains("generatedK16CSystemCatTarget"))
         assertTrue(source.contains("generatedK16MvTarget"))
@@ -165,6 +171,7 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("guest/c/libc/crt0.c"))
         assertTrue(source.contains("guest/c/libc/syscalls.c"))
         assertTrue(source.contains("guest/c/libc/include"))
+        assertTrue(source.contains("guest/c/coreutils/uname.c"))
         assertTrue(source.contains("guest/c/coreutils/cat.c"))
         assertTrue(source.contains("guest/c/coreutils/write.c"))
         assertTrue(source.contains("fun Project.compileK16GuestCProgram("))
@@ -197,6 +204,18 @@ class K16FirmwareResourceTest {
         )
         assertTrue(source.contains("binName = \"k16-shell\""))
         assertTrue(source.contains("binName = \"k16-ls\""))
+        assertFalse(source.contains("binName = \"k16-uname\""))
+        assertTrue(source.contains("description = \"Compiles and links the bundled C K16 uname utility"))
+        assertTrue(
+            source.contains(
+                "output = k16UnameArtifact.get().asFile,\n                mapOutput = k16UnameMapArtifact.get(),",
+            ),
+            "production uname should write the production /bin/uname.kx artifact",
+        )
+        assertTrue(
+            source.contains("sources = listOf(k16CLibcSyscallSource.asFile, k16CSystemUnameSource.asFile)"),
+            "production uname should build from the C coreutils source",
+        )
         assertFalse(source.contains("binName = \"k16-cat\""))
         assertTrue(source.contains("description = \"Compiles and links the bundled C K16 cat utility"))
         assertTrue(
@@ -1636,6 +1655,17 @@ class K16FirmwareResourceTest {
         assertTrue(catSource.contains("close(fd)"))
         assertTrue(startupSource.contains("return kraft_main((int)argc, argv);"))
         assertTrue(syscallHeader.contains("int kraft_open(const char *path, unsigned int flags);"))
+    }
+
+    @Test
+    fun k16UnameUtilityPrintsMachineNameThroughCLibc() {
+        val unameSource = Path.of("../../../guest/c/coreutils/uname.c").readText()
+
+        assertTrue(unameSource.contains("#include <unistd.h>"))
+        assertTrue(unameSource.contains("write_all(STDOUT_FILENO"))
+        assertTrue(unameSource.contains("\"K16\\n\""))
+        assertTrue(unameSource.contains("return 1"))
+        assertFalse(unameSource.contains("stdio.h"), "C uname must not depend on stdio")
     }
 
     @Test
