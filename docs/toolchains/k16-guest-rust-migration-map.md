@@ -57,22 +57,20 @@ production build or focused test needs them.
 | `rust/guest/k16-stat` | Production Rust `stat`. | Migrate to C after libc-lite exposes a stable metadata wrapper and struct layout. |
 | `rust/guest/k16-storage` | Guest storage/filesystem support library. | Keep Rust while kernel/storage internals remain Rust. |
 | `rust/guest/k16-syscall-fault-test` | Development syscall fault smoke utility. | Development/test-only; keep while it covers fault policy. |
-| `rust/guest/k16-uname` | Production Rust `uname`. | Next production C candidate; small command and good shared-ABI smoke. |
+| `rust/guest/k16-uname` | Former Rust production `uname`. | Legacy/removable after no focused tests or docs depend on the Rust version. Production `/bin/uname.kx` now builds from `guest/c/coreutils/uname.c`. |
 | `rust/guest/k16-user-fault-test` | Development user fault smoke utility. | Development/test-only; keep while it covers user fault policy. |
 | `rust/guest/k16-write` | Former Rust production `write`. | Legacy/removable after no focused tests or docs depend on the Rust version. |
 | `rust/guest/kraft-std` | Project Rust userland convenience layer over K16 syscalls. | Freeze for production direction; keep for tests/legacy until C libc-lite replaces required userland APIs. |
 
 ## Next Production C Candidates
 
-1. `rust/guest/k16-uname`: smallest remaining production command and a good
-   check that `guest/c` can host more than file-oriented utilities.
-2. `rust/guest/k16-mkdir`, `rust/guest/k16-rmdir`, and `rust/guest/k16-rm`:
+1. `rust/guest/k16-mkdir`, `rust/guest/k16-rmdir`, and `rust/guest/k16-rm`:
    small filesystem mutators once libc-lite has wrappers for their syscalls.
-3. `rust/guest/k16-stat` and `rust/guest/k16-ls`: metadata/listing commands
+2. `rust/guest/k16-stat` and `rust/guest/k16-ls`: metadata/listing commands
    after the metadata ABI is documented for C.
-4. `rust/guest/k16-cp` and `rust/guest/k16-mv`: larger file operations after
+3. `rust/guest/k16-cp` and `rust/guest/k16-mv`: larger file operations after
    path and file-copy helper policy is settled.
-5. `rust/guest/k16-shell` and `rust/guest/k16-init`: move after enough
+4. `rust/guest/k16-shell` and `rust/guest/k16-init`: move after enough
    process/path helpers exist to avoid embedding policy in each program.
 
 ## Development/test-only

@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Production `/bin/uname.kx` now builds from
+  `guest/c/coreutils/uname.c` through the source-built-dev K16 Clang path and
+  libc-lite startup layer. It remains the smallest shared OS ABI importer,
+  resolving `write` and `_exit` from `/lib/libkraft.k16so` instead of retaining
+  the syscall-boundary calls in its own payload.
 - Moved the first-class C guest userland sources out of the Rust guest
   workspace: libc-lite now lives under `guest/c/libc`, and bundled C coreutils
   live under `guest/c/coreutils`. Existing Rust guest crates, including the
