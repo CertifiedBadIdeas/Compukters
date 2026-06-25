@@ -40,6 +40,34 @@ int kraft_stat(const char *path, struct kraft_stat *metadata) {
   return __kraft_sys_stat(path, path_len, metadata);
 }
 
+int kraft_rename(const char *old_path, const char *new_path) {
+  char request[KRAFT_MAX_RENAME_REQUEST_BYTES];
+  unsigned int old_len = strlen(old_path);
+  unsigned int new_len = strlen(new_path);
+  unsigned int cursor = 12u;
+  unsigned int request_len = 12u + old_len + new_len;
+
+  if (old_len == 0 || new_len == 0 ||
+      old_len > KRAFT_MAX_RENAME_PATH_BYTES ||
+      new_len > KRAFT_MAX_RENAME_PATH_BYTES) {
+    return (int)0xffffffeau;
+  }
+
+  put_u32_le(request + 0, KRAFT_RENAME_REQUEST_MAGIC);
+  put_u32_le(request + 4, old_len);
+  put_u32_le(request + 8, new_len);
+  for (unsigned int index = 0; index < old_len; index += 1) {
+    request[cursor] = old_path[index];
+    cursor += 1;
+  }
+  for (unsigned int index = 0; index < new_len; index += 1) {
+    request[cursor] = new_path[index];
+    cursor += 1;
+  }
+
+  return __kraft_sys_rename(request, request_len);
+}
+
 int kraft_mkdir(const char *path) {
   return __kraft_sys_mkdir(path, strlen(path));
 }

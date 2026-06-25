@@ -104,8 +104,8 @@ val generatedK16KernelTarget = generatedK16GuestTarget.map { it.dir("kernel") }
 val generatedK16ShellTarget = generatedK16GuestTarget.map { it.dir("shell") }
 val generatedK16CSystemUnameTarget = generatedK16GuestTarget.map { it.dir("c-system-uname") }
 val generatedK16CSystemLsTarget = generatedK16GuestTarget.map { it.dir("c-system-ls") }
-val generatedK16CpTarget = generatedK16GuestTarget.map { it.dir("cp") }
-val generatedK16MvTarget = generatedK16GuestTarget.map { it.dir("mv") }
+val generatedK16CSystemCpTarget = generatedK16GuestTarget.map { it.dir("c-system-cp") }
+val generatedK16CSystemMvTarget = generatedK16GuestTarget.map { it.dir("c-system-mv") }
 val generatedK16CSystemStatTarget = generatedK16GuestTarget.map { it.dir("c-system-stat") }
 val generatedK16CSystemWriteTarget = generatedK16GuestTarget.map { it.dir("c-system-write") }
 val generatedK16CSystemRmTarget = generatedK16GuestTarget.map { it.dir("c-system-rm") }
@@ -136,10 +136,6 @@ val k16InitManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-i
 val k16InitSource = rootProject.layout.projectDirectory.file("rust/guest/k16-init/src/main.rs")
 val k16ShellManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-shell/Cargo.toml")
 val k16ShellSource = rootProject.layout.projectDirectory.dir("rust/guest/k16-shell/src")
-val k16CpManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-cp/Cargo.toml")
-val k16CpSource = rootProject.layout.projectDirectory.file("rust/guest/k16-cp/src/main.rs")
-val k16MvManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-mv/Cargo.toml")
-val k16MvSource = rootProject.layout.projectDirectory.file("rust/guest/k16-mv/src/main.rs")
 val k16SharedRuntimeManifest =
     rootProject.layout.projectDirectory.file("rust/guest/k16-shared-runtime/Cargo.toml")
 val k16SharedRuntimeSource =
@@ -162,6 +158,8 @@ val k16CLibcSyscallSource = rootProject.layout.projectDirectory.file("guest/c/li
 val k16CSystemUnameSource = rootProject.layout.projectDirectory.file("guest/c/coreutils/uname.c")
 val k16CSystemLsSource = rootProject.layout.projectDirectory.file("guest/c/coreutils/ls.c")
 val k16CSystemCatSource = rootProject.layout.projectDirectory.file("guest/c/coreutils/cat.c")
+val k16CSystemCpSource = rootProject.layout.projectDirectory.file("guest/c/coreutils/cp.c")
+val k16CSystemMvSource = rootProject.layout.projectDirectory.file("guest/c/coreutils/mv.c")
 val k16CSystemStatSource = rootProject.layout.projectDirectory.file("guest/c/coreutils/stat.c")
 val k16CSystemWriteSource = rootProject.layout.projectDirectory.file("guest/c/coreutils/write.c")
 val k16CSystemRmSource = rootProject.layout.projectDirectory.file("guest/c/coreutils/rm.c")
@@ -937,60 +935,66 @@ val compileK16SystemCat =
 
 val compileK16SystemCp =
     tasks.register("compileK16SystemCp") {
-        description = "Compiles and links the bundled Rust K16 cp utility into a dynamic K16E program artifact."
+        description = "Compiles and links the bundled C K16 cp utility into an imported dynamic K16E program artifact."
         group = "k16"
-        inputs.file(k16GuestManifest)
-        inputs.file(k16CpManifest)
-        inputs.file(k16CpSource)
-        inputsK16RuntimeCrates()
-        inputsKraftStdCrate()
+        inputs.dir(k16CLibcIncludeSource)
+        inputs.file(k16CLibcStartupSource)
+        inputs.file(k16CLibcSyscallSource)
+        inputs.file(k16CSystemCpSource)
+        inputs.file(k16SharedKraftArtifact)
+        inputs.file(k16ClangExecutable)
         inputs.file(k16HostToolsManifest)
         inputs.dir(k16HostToolsSource)
-        inputs.file(k16RustTargetSpec)
         inputs.file(k16ToolchainConfig)
         inputs.property("k16FirmwareProfile", k16FirmwareProfile)
         outputs.file(k16CpArtifact)
         outputs.file(k16CpMapArtifact)
+        dependsOn(rootProject.tasks.named("buildK16Llvm"))
         dependsOn(rootProject.tasks.named("prepareK16Toolchain"))
+        dependsOn("compileK16SharedKraft")
 
         doLast {
-            project.compileK16GuestRustBin(
-                manifest = k16CpManifest.asFile,
-                targetDir = generatedK16CpTarget.get().asFile,
-                binName = "k16-cp",
-                k16Target = "program-dynamic",
+            project.compileK16GuestCProgram(
+                targetDir = generatedK16CSystemCpTarget.get().asFile,
                 output = k16CpArtifact.get().asFile,
                 mapOutput = k16CpMapArtifact.get(),
+                includeDir = k16CLibcIncludeSource.asFile,
+                startupSource = k16CLibcStartupSource.asFile,
+                sources = listOf(k16CLibcSyscallSource.asFile, k16CSystemCpSource.asFile),
+                dylibs = listOf(k16SharedKraftArtifact.get().asFile),
             )
         }
     }
 
 val compileK16SystemMv =
     tasks.register("compileK16SystemMv") {
-        description = "Compiles and links the bundled Rust K16 mv utility into a dynamic K16E program artifact."
+        description = "Compiles and links the bundled C K16 mv utility into an imported dynamic K16E program artifact."
         group = "k16"
-        inputs.file(k16GuestManifest)
-        inputs.file(k16MvManifest)
-        inputs.file(k16MvSource)
-        inputsK16RuntimeCrates()
-        inputsKraftStdCrate()
+        inputs.dir(k16CLibcIncludeSource)
+        inputs.file(k16CLibcStartupSource)
+        inputs.file(k16CLibcSyscallSource)
+        inputs.file(k16CSystemMvSource)
+        inputs.file(k16SharedKraftArtifact)
+        inputs.file(k16ClangExecutable)
         inputs.file(k16HostToolsManifest)
         inputs.dir(k16HostToolsSource)
-        inputs.file(k16RustTargetSpec)
         inputs.file(k16ToolchainConfig)
         inputs.property("k16FirmwareProfile", k16FirmwareProfile)
         outputs.file(k16MvArtifact)
         outputs.file(k16MvMapArtifact)
+        dependsOn(rootProject.tasks.named("buildK16Llvm"))
         dependsOn(rootProject.tasks.named("prepareK16Toolchain"))
+        dependsOn("compileK16SharedKraft")
 
         doLast {
-            project.compileK16GuestRustBin(
-                manifest = k16MvManifest.asFile,
-                targetDir = generatedK16MvTarget.get().asFile,
-                binName = "k16-mv",
-                k16Target = "program-dynamic",
+            project.compileK16GuestCProgram(
+                targetDir = generatedK16CSystemMvTarget.get().asFile,
                 output = k16MvArtifact.get().asFile,
                 mapOutput = k16MvMapArtifact.get(),
+                includeDir = k16CLibcIncludeSource.asFile,
+                startupSource = k16CLibcStartupSource.asFile,
+                sources = listOf(k16CLibcSyscallSource.asFile, k16CSystemMvSource.asFile),
+                dylibs = listOf(k16SharedKraftArtifact.get().asFile),
             )
         }
     }
