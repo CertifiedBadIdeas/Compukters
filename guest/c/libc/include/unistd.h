@@ -11,6 +11,9 @@ int open(const char *path, int flags);
 int read(int fd, void *buffer, unsigned int count);
 int write(int fd, const void *buffer, unsigned int count);
 int close(int fd);
+int mkdir(const char *path);
+int rmdir(const char *path);
+int unlink(const char *path);
 void *sbrk(int increment);
 void _exit(int status);
 

@@ -48,16 +48,17 @@ explicit artifact groups:
 
 `libkraft.k16so` is the first project-owned userland shared OS ABI boundary.
 It exports plain syscall-shaped symbols such as `open`, `read`, `write`,
-`close`, `sbrk`, and `_exit`; `kraft-std` remains the Rust convenience layer
-above that boundary.
+`close`, `mkdir`, `rmdir`, `unlink`, `sbrk`, and `_exit`; `kraft-std` remains
+the Rust convenience layer above that boundary.
 
-Production `/bin/uname.kx`, `/bin/cat.kx`, and `/bin/write.kx` are built from C
-with the source-built-dev K16 `clang`, use the small libc-lite startup/header
-layer under `guest/c/libc`, and call the same `libkraft.k16so` shared OS ABI as
-the Rust import proofs. `/bin/uname.kx` remains the smallest bundled importer:
-it imports `write` and `_exit` through K16E import metadata instead of retaining
-those syscall-boundary calls in its own payload. The public libc-lite surface
-now includes minimal `unistd.h`, `fcntl.h`, `stddef.h`, and `string.h` headers,
+Production `/bin/uname.kx`, `/bin/cat.kx`, `/bin/write.kx`, `/bin/rm.kx`,
+`/bin/mkdir.kx`, and `/bin/rmdir.kx` are built from C with the source-built-dev
+K16 `clang`, use the small libc-lite startup/header layer under `guest/c/libc`,
+and call the same `libkraft.k16so` shared OS ABI as the Rust import proofs.
+`/bin/uname.kx` remains the smallest bundled importer: it imports `write`
+through K16E import metadata instead of retaining that syscall-boundary call in
+its own payload. The public libc-lite surface now
+includes minimal `unistd.h`, `fcntl.h`, `stddef.h`, and `string.h` headers,
 while `kraft/syscalls.h` remains the low-level K16 ABI header. This proves the
 dynamic ABI can host C userland without making `libkraft` a Rust stdlib
 replacement or pulling in a full libc.

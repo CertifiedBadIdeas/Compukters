@@ -104,11 +104,15 @@ fn k16_hosted_cat_streams_file_bytes_without_read_to_string() {
 fn k16_c_libc_cat_has_minimal_libkraft_abi_sources() {
     let root = repo_root();
     let header = root.join("guest/c/libc/include/kraft/syscalls.h");
+    let syscalls = root.join("guest/c/libc/syscalls.c");
     let unistd = root.join("guest/c/libc/include/unistd.h");
     let fcntl = root.join("guest/c/libc/include/fcntl.h");
     let string = root.join("guest/c/libc/include/string.h");
     let startup = root.join("guest/c/libc/crt0.c");
     let cat = root.join("guest/c/coreutils/cat.c");
+    let mkdir = root.join("guest/c/coreutils/mkdir.c");
+    let rm = root.join("guest/c/coreutils/rm.c");
+    let rmdir = root.join("guest/c/coreutils/rmdir.c");
     let uname = root.join("guest/c/coreutils/uname.c");
     let write = root.join("guest/c/coreutils/write.c");
 
@@ -116,6 +120,12 @@ fn k16_c_libc_cat_has_minimal_libkraft_abi_sources() {
     assert!(header.contains("extern int __kraft_sys_open(const char *path, unsigned int len,"));
     assert!(header.contains("__asm__(\"open\")"));
     assert!(header.contains("int kraft_open(const char *path, unsigned int flags);"));
+    assert!(header.contains("extern int __kraft_sys_mkdir"));
+    assert!(header.contains("__asm__(\"mkdir\")"));
+    assert!(header.contains("extern int __kraft_sys_rmdir"));
+    assert!(header.contains("__asm__(\"rmdir\")"));
+    assert!(header.contains("extern int __kraft_sys_unlink"));
+    assert!(header.contains("__asm__(\"unlink\")"));
     assert!(header.contains("int read(int fd, void *buffer, unsigned int count);"));
     assert!(header.contains("int write(int fd, const void *buffer, unsigned int count);"));
     assert!(header.contains("int close(int fd);"));
@@ -126,11 +136,26 @@ fn k16_c_libc_cat_has_minimal_libkraft_abi_sources() {
     assert!(header.contains("#define KRAFT_OPEN_WRITE_ONLY 1"));
     assert!(header.contains("#define KRAFT_OPEN_APPEND 8"));
 
+    let syscalls = fs::read_to_string(&syscalls).expect("C libkraft syscall source exists");
+    assert!(syscalls.contains("#include <kraft/syscalls.h>"));
+    assert!(syscalls.contains("#include <string.h>"));
+    assert!(syscalls.contains("int kraft_open(const char *path, unsigned int flags)"));
+    assert!(syscalls.contains("__kraft_sys_open(path, strlen(path), flags)"));
+    assert!(syscalls.contains("int mkdir(const char *path)"));
+    assert!(syscalls.contains("__kraft_sys_mkdir(path, strlen(path))"));
+    assert!(syscalls.contains("int rmdir(const char *path)"));
+    assert!(syscalls.contains("__kraft_sys_rmdir(path, strlen(path))"));
+    assert!(syscalls.contains("int unlink(const char *path)"));
+    assert!(syscalls.contains("__kraft_sys_unlink(path, strlen(path))"));
+
     let unistd = fs::read_to_string(&unistd).expect("C libc-lite unistd header exists");
     assert!(unistd.contains("int open(const char *path, int flags);"));
     assert!(unistd.contains("int read(int fd, void *buffer, unsigned int count);"));
     assert!(unistd.contains("int write(int fd, const void *buffer, unsigned int count);"));
     assert!(unistd.contains("#define STDOUT_FILENO KRAFT_FD_STDOUT"));
+    assert!(unistd.contains("int mkdir(const char *path);"));
+    assert!(unistd.contains("int rmdir(const char *path);"));
+    assert!(unistd.contains("int unlink(const char *path);"));
 
     let fcntl = fs::read_to_string(&fcntl).expect("C libc-lite fcntl header exists");
     assert!(fcntl.contains("#define O_RDONLY KRAFT_OPEN_READ_ONLY"));
@@ -154,6 +179,27 @@ fn k16_c_libc_cat_has_minimal_libkraft_abi_sources() {
     assert!(cat.contains("write_all(STDOUT_FILENO"));
     assert!(cat.contains("close(fd)"));
     assert!(!cat.contains("stdio.h"), "C hosted baseline must not depend on stdio");
+
+    let mkdir = fs::read_to_string(&mkdir).expect("C hosted mkdir source exists");
+    assert!(mkdir.contains("#include <unistd.h>"));
+    assert!(mkdir.contains("mkdir(path)"));
+    assert!(mkdir.contains("write_text(STDOUT_FILENO, \"CREATED \")"));
+    assert!(mkdir.contains("status_name(status, \"MKDIR\")"));
+    assert!(!mkdir.contains("stdio.h"), "C hosted baseline must not depend on stdio");
+
+    let rm = fs::read_to_string(&rm).expect("C hosted rm source exists");
+    assert!(rm.contains("#include <unistd.h>"));
+    assert!(rm.contains("unlink(path)"));
+    assert!(rm.contains("write_text(STDOUT_FILENO, \"REMOVED \")"));
+    assert!(rm.contains("status_name(status, \"UNLINK\")"));
+    assert!(!rm.contains("stdio.h"), "C hosted baseline must not depend on stdio");
+
+    let rmdir = fs::read_to_string(&rmdir).expect("C hosted rmdir source exists");
+    assert!(rmdir.contains("#include <unistd.h>"));
+    assert!(rmdir.contains("rmdir(path)"));
+    assert!(rmdir.contains("write_text(STDOUT_FILENO, \"REMOVED \")"));
+    assert!(rmdir.contains("status_name(status, \"RMDIR\")"));
+    assert!(!rmdir.contains("stdio.h"), "C hosted baseline must not depend on stdio");
 
     let uname = fs::read_to_string(&uname).expect("C hosted uname source exists");
     assert!(uname.contains("#include <unistd.h>"));

@@ -86,10 +86,10 @@ class K16FirmwareResourceTest {
         assertFalse(source.contains("rust/guest/k16-uname"))
         assertTrue(source.contains("rust/guest/k16-mv"))
         assertTrue(source.contains("rust/guest/k16-stat"))
-        assertTrue(source.contains("rust/guest/k16-write"))
-        assertTrue(source.contains("rust/guest/k16-rm"))
-        assertTrue(source.contains("rust/guest/k16-mkdir"))
-        assertTrue(source.contains("rust/guest/k16-rmdir"))
+        assertFalse(source.contains("rust/guest/k16-write"))
+        assertFalse(source.contains("rust/guest/k16-rm"))
+        assertFalse(source.contains("rust/guest/k16-mkdir"))
+        assertFalse(source.contains("rust/guest/k16-rmdir"))
         assertTrue(source.contains("rust/guest/k16-shared-runtime"))
         assertFalse(source.contains("rust/guest/k16-shared-smoke-runtime"))
         assertTrue(source.contains("rust/guest/k16-runtime-import-test"))
@@ -116,12 +116,15 @@ class K16FirmwareResourceTest {
         assertFalse(source.contains("k16WriteManifest"))
         assertFalse(source.contains("k16WriteSource"))
         assertTrue(source.contains("k16CSystemWriteSource"))
-        assertTrue(source.contains("k16RmManifest"))
-        assertTrue(source.contains("k16RmSource"))
-        assertTrue(source.contains("k16MkdirManifest"))
-        assertTrue(source.contains("k16MkdirSource"))
-        assertTrue(source.contains("k16RmdirManifest"))
-        assertTrue(source.contains("k16RmdirSource"))
+        assertFalse(source.contains("k16RmManifest"))
+        assertFalse(source.contains("k16RmSource"))
+        assertTrue(source.contains("k16CSystemRmSource"))
+        assertFalse(source.contains("k16MkdirManifest"))
+        assertFalse(source.contains("k16MkdirSource"))
+        assertTrue(source.contains("k16CSystemMkdirSource"))
+        assertFalse(source.contains("k16RmdirManifest"))
+        assertFalse(source.contains("k16RmdirSource"))
+        assertTrue(source.contains("k16CSystemRmdirSource"))
         assertTrue(source.contains("k16SharedRuntimeManifest"))
         assertTrue(source.contains("k16RuntimeImportTestManifest"))
         assertTrue(source.contains("k16AllocTestManifest"))
@@ -140,9 +143,12 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("generatedK16StatTarget"))
         assertFalse(source.contains("generatedK16WriteTarget"))
         assertTrue(source.contains("generatedK16CSystemWriteTarget"))
-        assertTrue(source.contains("generatedK16RmTarget"))
-        assertTrue(source.contains("generatedK16MkdirTarget"))
-        assertTrue(source.contains("generatedK16RmdirTarget"))
+        assertFalse(source.contains("generatedK16RmTarget"))
+        assertTrue(source.contains("generatedK16CSystemRmTarget"))
+        assertFalse(source.contains("generatedK16MkdirTarget"))
+        assertTrue(source.contains("generatedK16CSystemMkdirTarget"))
+        assertFalse(source.contains("generatedK16RmdirTarget"))
+        assertTrue(source.contains("generatedK16CSystemRmdirTarget"))
         assertTrue(source.contains("generatedK16SharedRuntimeTarget"))
         assertTrue(source.contains("generatedK16RuntimeImportTestTarget"))
         assertTrue(source.contains("generatedK16AllocTestTarget"))
@@ -174,6 +180,9 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("guest/c/coreutils/uname.c"))
         assertTrue(source.contains("guest/c/coreutils/cat.c"))
         assertTrue(source.contains("guest/c/coreutils/write.c"))
+        assertTrue(source.contains("guest/c/coreutils/rm.c"))
+        assertTrue(source.contains("guest/c/coreutils/mkdir.c"))
+        assertTrue(source.contains("guest/c/coreutils/rmdir.c"))
         assertTrue(source.contains("fun Project.compileK16GuestCProgram("))
         assertTrue(source.contains("--target=k16"))
         assertFalse(source.contains("\"compileK16CHostedCat\""))
@@ -242,9 +251,24 @@ class K16FirmwareResourceTest {
             source.contains("sources = listOf(k16CLibcSyscallSource.asFile, k16CSystemWriteSource.asFile)"),
             "production write should build from the C coreutils source",
         )
-        assertTrue(source.contains("binName = \"k16-rm\""))
-        assertTrue(source.contains("binName = \"k16-mkdir\""))
-        assertTrue(source.contains("binName = \"k16-rmdir\""))
+        assertFalse(source.contains("binName = \"k16-rm\""))
+        assertTrue(source.contains("description = \"Compiles and links the bundled C K16 rm utility"))
+        assertTrue(
+            source.contains("sources = listOf(k16CLibcSyscallSource.asFile, k16CSystemRmSource.asFile)"),
+            "production rm should build from the C coreutils source",
+        )
+        assertFalse(source.contains("binName = \"k16-mkdir\""))
+        assertTrue(source.contains("description = \"Compiles and links the bundled C K16 mkdir utility"))
+        assertTrue(
+            source.contains("sources = listOf(k16CLibcSyscallSource.asFile, k16CSystemMkdirSource.asFile)"),
+            "production mkdir should build from the C coreutils source",
+        )
+        assertFalse(source.contains("binName = \"k16-rmdir\""))
+        assertTrue(source.contains("description = \"Compiles and links the bundled C K16 rmdir utility"))
+        assertTrue(
+            source.contains("sources = listOf(k16CLibcSyscallSource.asFile, k16CSystemRmdirSource.asFile)"),
+            "production rmdir should build from the C coreutils source",
+        )
         assertTrue(source.contains("binName = \"k16-shared-runtime\""))
         assertTrue(source.contains("binName = \"k16-shared-kraft\""))
         assertTrue(source.contains("-C link-arg=--dylib"))
@@ -848,7 +872,7 @@ class K16FirmwareResourceTest {
         assertEquals(4, kraftBytes.u16Le(offset = 4), "bundled libkraft must use K16E v4")
         assertEquals(4, kraftBytes.u32Le(offset = 24), "bundled libkraft must use K16E abi kind shared-object")
         val kraftMetadata = kraftBytes.decodeToString()
-        listOf("open", "read", "write", "close", "sbrk", "_exit").forEach { symbol ->
+        listOf("open", "read", "write", "close", "mkdir", "rmdir", "unlink", "sbrk", "_exit").forEach { symbol ->
             assertTrue(
                 kraftMetadata.contains(symbol),
                 "bundled libkraft should export $symbol",
@@ -868,7 +892,7 @@ class K16FirmwareResourceTest {
             unameMetadata.contains("libkraft.k16so"),
             "uname should declare libkraft.k16so as a needed library",
         )
-        listOf("write", "_exit").forEach { symbol ->
+        listOf("write").forEach { symbol ->
             assertTrue(
                 unameMetadata.contains(symbol),
                 "uname should import $symbol from libkraft",
@@ -1709,33 +1733,41 @@ class K16FirmwareResourceTest {
     }
 
     @Test
-    fun k16RmUtilityRemovesRegularFileThroughKraftStdFs() {
-        val rmSource = Path.of("../../../rust/guest/k16-rm/src/main.rs").readText()
-        val stdSource = Path.of("../../../rust/guest/kraft-std/src/lib.rs").readText()
+    fun k16RmUtilityRemovesRegularFileThroughCLibc() {
+        val rmSource = Path.of("../../../guest/c/coreutils/rm.c").readText()
+        val unistdHeader = Path.of("../../../guest/c/libc/include/unistd.h").readText()
+        val syscallSource = Path.of("../../../guest/c/libc/syscalls.c").readText()
 
-        assertTrue(rmSource.contains("process::Argv::from_raw(argc, argv)"))
-        assertTrue(rmSource.contains("fs::remove_file(path)"))
-        assertTrue(rmSource.contains("b\"REMOVED \""))
-        assertTrue(rmSource.contains("b\"NOENT\""))
-        assertTrue(rmSource.contains("b\"BUSY\""))
-        assertTrue(stdSource.contains("pub fn remove_file(path: &str) -> Result<(), Error>"))
+        assertTrue(rmSource.contains("#include <unistd.h>"))
+        assertTrue(rmSource.contains("unlink(path)"))
+        assertTrue(rmSource.contains("write_text(STDOUT_FILENO, \"REMOVED \")"))
+        assertTrue(rmSource.contains("status_name(status, \"UNLINK\")"))
+        assertFalse(rmSource.contains("stdio.h"), "C rm must not depend on stdio")
+        assertTrue(unistdHeader.contains("int unlink(const char *path);"))
+        assertTrue(syscallSource.contains("int unlink(const char *path)"))
     }
 
     @Test
-    fun k16MkdirAndRmdirUtilitiesMutateDirectoriesThroughKraftStdFs() {
-        val mkdirSource = Path.of("../../../rust/guest/k16-mkdir/src/main.rs").readText()
-        val rmdirSource = Path.of("../../../rust/guest/k16-rmdir/src/main.rs").readText()
-        val stdSource = Path.of("../../../rust/guest/kraft-std/src/lib.rs").readText()
+    fun k16MkdirAndRmdirUtilitiesMutateDirectoriesThroughCLibc() {
+        val mkdirSource = Path.of("../../../guest/c/coreutils/mkdir.c").readText()
+        val rmdirSource = Path.of("../../../guest/c/coreutils/rmdir.c").readText()
+        val unistdHeader = Path.of("../../../guest/c/libc/include/unistd.h").readText()
+        val syscallSource = Path.of("../../../guest/c/libc/syscalls.c").readText()
 
-        assertTrue(mkdirSource.contains("process::Argv::from_raw(argc, argv)"))
-        assertTrue(mkdirSource.contains("fs::create_dir(path)"))
-        assertTrue(mkdirSource.contains("b\"CREATED \""))
-        assertTrue(rmdirSource.contains("process::Argv::from_raw(argc, argv)"))
-        assertTrue(rmdirSource.contains("fs::remove_dir(path)"))
-        assertTrue(rmdirSource.contains("b\"REMOVED \""))
-        assertTrue(rmdirSource.contains("b\"NOTEMPTY\""))
-        assertTrue(stdSource.contains("pub fn create_dir(path: &str) -> Result<(), Error>"))
-        assertTrue(stdSource.contains("pub fn remove_dir(path: &str) -> Result<(), Error>"))
+        assertTrue(mkdirSource.contains("#include <unistd.h>"))
+        assertTrue(mkdirSource.contains("mkdir(path)"))
+        assertTrue(mkdirSource.contains("write_text(STDOUT_FILENO, \"CREATED \")"))
+        assertTrue(mkdirSource.contains("status_name(status, \"MKDIR\")"))
+        assertFalse(mkdirSource.contains("stdio.h"), "C mkdir must not depend on stdio")
+        assertTrue(rmdirSource.contains("#include <unistd.h>"))
+        assertTrue(rmdirSource.contains("rmdir(path)"))
+        assertTrue(rmdirSource.contains("write_text(STDOUT_FILENO, \"REMOVED \")"))
+        assertTrue(rmdirSource.contains("status_name(status, \"RMDIR\")"))
+        assertFalse(rmdirSource.contains("stdio.h"), "C rmdir must not depend on stdio")
+        assertTrue(unistdHeader.contains("int mkdir(const char *path);"))
+        assertTrue(unistdHeader.contains("int rmdir(const char *path);"))
+        assertTrue(syscallSource.contains("int mkdir(const char *path)"))
+        assertTrue(syscallSource.contains("int rmdir(const char *path)"))
     }
 
     @Test
