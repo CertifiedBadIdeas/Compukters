@@ -216,9 +216,9 @@ class K16ShellRuntimeSmokeTest {
             }
 
             dispatchText(device, "alloc\n")
-            waitForTerminal(device, "alloc output and returned prompt") { terminal ->
+            waitForTerminal(device, "production image reports missing dev-only alloc program and returned prompt") { terminal ->
                 val allocCommandIndex = terminal.indexOf("K16> alloc")
-                val allocOutputIndex = terminal.indexOf("ALLOC", startIndex = allocCommandIndex + "K16> alloc".length)
+                val allocOutputIndex = terminal.indexOf("ERR NOENT", startIndex = allocCommandIndex + "K16> alloc".length)
                 val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = allocOutputIndex)
                 allocCommandIndex >= 0 && allocOutputIndex > allocCommandIndex && returnedPromptIndex > allocOutputIndex
             }
@@ -233,7 +233,7 @@ class K16ShellRuntimeSmokeTest {
                     "K16> nosuch",
                     "ERR NOENT",
                     "K16> alloc",
-                    "ALLOC",
+                    "ERR NOENT",
                     "K16> ",
                 ),
             )
@@ -344,7 +344,7 @@ class K16ShellRuntimeSmokeTest {
                     cursor,
                     "cat /etc/missing /etc/motd",
                     "cat reports missing path and still prints later existing file",
-                    "ERR NOENT /etc/missing",
+                    "cat: open failed: /etc/missing",
                     "K16 FS OK",
                     "ERR EXIT 1",
                 )

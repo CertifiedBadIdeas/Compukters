@@ -1,6 +1,8 @@
 #ifndef KRAFT_SYSCALLS_H
 #define KRAFT_SYSCALLS_H
 
+#include <kraft/fs.h>
+
 #define KRAFT_FD_STDIN 0
 #define KRAFT_FD_STDOUT 1
 #define KRAFT_FD_STDERR 2
@@ -19,13 +21,19 @@ extern int __kraft_sys_rmdir(const char *path, unsigned int len)
     __asm__("rmdir");
 extern int __kraft_sys_unlink(const char *path, unsigned int len)
     __asm__("unlink");
+extern int __kraft_sys_read_dir(const void *request, unsigned int len)
+    __asm__("read_dir");
+extern int __kraft_sys_stat(const char *path, unsigned int len,
+                            struct kraft_stat *metadata) __asm__("stat");
 int kraft_open(const char *path, unsigned int flags);
+int kraft_read_dir(const char *path, char *out, unsigned int out_len);
+int kraft_stat(const char *path, struct kraft_stat *metadata);
+int kraft_mkdir(const char *path);
+int kraft_rmdir(const char *path);
+int kraft_unlink(const char *path);
 int read(int fd, void *buffer, unsigned int count);
 int write(int fd, const void *buffer, unsigned int count);
 int close(int fd);
-int mkdir(const char *path);
-int rmdir(const char *path);
-int unlink(const char *path);
 void *sbrk(int increment);
 void _exit(int status);
 

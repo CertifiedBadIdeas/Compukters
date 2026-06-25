@@ -1,0 +1,26 @@
+#ifndef KRAFT_FS_H
+#define KRAFT_FS_H
+
+#define KRAFT_FILE_TYPE_REGULAR 1
+#define KRAFT_FILE_TYPE_DIRECTORY 2
+
+#define KRAFT_READ_DIR_REQUEST_MAGIC 0x52494452u
+#define KRAFT_MAX_READ_DIR_PATH_BYTES 228
+#define KRAFT_MAX_READ_DIR_REQUEST_BYTES 244
+#define KRAFT_MAX_STAT_PATH_BYTES 228
+#define KRAFT_STAT_METADATA_BYTES 16
+
+struct kraft_stat {
+  unsigned int file_type;
+  unsigned int size_bytes;
+  unsigned int reserved0;
+  unsigned int reserved1;
+};
+
+int kraft_read_dir(const char *path, char *out, unsigned int out_len);
+int kraft_stat(const char *path, struct kraft_stat *metadata);
+
+#define read_dir(path, out, out_len) kraft_read_dir((path), (out), (out_len))
+#define stat(path, metadata) kraft_stat((path), (metadata))
+
+#endif

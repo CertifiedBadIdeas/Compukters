@@ -11,12 +11,15 @@ int open(const char *path, int flags);
 int read(int fd, void *buffer, unsigned int count);
 int write(int fd, const void *buffer, unsigned int count);
 int close(int fd);
-int mkdir(const char *path);
-int rmdir(const char *path);
-int unlink(const char *path);
+int kraft_mkdir(const char *path);
+int kraft_rmdir(const char *path);
+int kraft_unlink(const char *path);
 void *sbrk(int increment);
 void _exit(int status);
 
 #define open(path, flags) kraft_open((path), (unsigned int)(flags))
+#define mkdir(path) kraft_mkdir(path)
+#define rmdir(path) kraft_rmdir(path)
+#define unlink(path) kraft_unlink(path)
 
 #endif
