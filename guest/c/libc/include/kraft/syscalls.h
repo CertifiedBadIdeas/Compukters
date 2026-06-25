@@ -25,9 +25,12 @@ extern int __kraft_sys_read_dir(const void *request, unsigned int len)
     __asm__("read_dir");
 extern int __kraft_sys_stat(const char *path, unsigned int len,
                             struct kraft_stat *metadata) __asm__("stat");
+extern int __kraft_sys_rename(const void *request, unsigned int len)
+    __asm__("rename");
 int kraft_open(const char *path, unsigned int flags);
 int kraft_read_dir(const char *path, char *out, unsigned int out_len);
 int kraft_stat(const char *path, struct kraft_stat *metadata);
+int kraft_rename(const char *old_path, const char *new_path);
 int kraft_mkdir(const char *path);
 int kraft_rmdir(const char *path);
 int kraft_unlink(const char *path);

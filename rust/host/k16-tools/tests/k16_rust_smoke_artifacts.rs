@@ -111,8 +111,10 @@ fn k16_c_libc_cat_has_minimal_libkraft_abi_sources() {
     let string = root.join("guest/c/libc/include/string.h");
     let startup = root.join("guest/c/libc/crt0.c");
     let cat = root.join("guest/c/coreutils/cat.c");
+    let cp = root.join("guest/c/coreutils/cp.c");
     let ls = root.join("guest/c/coreutils/ls.c");
     let mkdir = root.join("guest/c/coreutils/mkdir.c");
+    let mv = root.join("guest/c/coreutils/mv.c");
     let rm = root.join("guest/c/coreutils/rm.c");
     let rmdir = root.join("guest/c/coreutils/rmdir.c");
     let stat = root.join("guest/c/coreutils/stat.c");
@@ -133,8 +135,11 @@ fn k16_c_libc_cat_has_minimal_libkraft_abi_sources() {
     assert!(header.contains("__asm__(\"read_dir\")"));
     assert!(header.contains("extern int __kraft_sys_stat"));
     assert!(header.contains("__asm__(\"stat\")"));
+    assert!(header.contains("extern int __kraft_sys_rename"));
+    assert!(header.contains("__asm__(\"rename\")"));
     assert!(header.contains("int kraft_read_dir(const char *path, char *out, unsigned int out_len);"));
     assert!(header.contains("int kraft_stat(const char *path, struct kraft_stat *metadata);"));
+    assert!(header.contains("int kraft_rename(const char *old_path, const char *new_path);"));
     assert!(header.contains("int kraft_mkdir(const char *path);"));
     assert!(header.contains("int kraft_rmdir(const char *path);"));
     assert!(header.contains("int kraft_unlink(const char *path);"));
@@ -150,15 +155,20 @@ fn k16_c_libc_cat_has_minimal_libkraft_abi_sources() {
 
     let fs_header = fs::read_to_string(&fs_header).expect("C libkraft fs header exists");
     assert!(fs_header.contains("#define KRAFT_READ_DIR_REQUEST_MAGIC 0x52494452u"));
+    assert!(fs_header.contains("#define KRAFT_RENAME_REQUEST_MAGIC 0x4d414e52u"));
     assert!(fs_header.contains("#define KRAFT_MAX_READ_DIR_PATH_BYTES 228"));
+    assert!(fs_header.contains("#define KRAFT_MAX_RENAME_PATH_BYTES 228"));
+    assert!(fs_header.contains("#define KRAFT_MAX_RENAME_REQUEST_BYTES 468"));
     assert!(fs_header.contains("#define KRAFT_STAT_METADATA_BYTES 16"));
     assert!(fs_header.contains("struct kraft_stat"));
     assert!(fs_header.contains("unsigned int file_type;"));
     assert!(fs_header.contains("unsigned int size_bytes;"));
     assert!(fs_header.contains("int kraft_read_dir(const char *path, char *out, unsigned int out_len);"));
     assert!(fs_header.contains("int kraft_stat(const char *path, struct kraft_stat *metadata);"));
+    assert!(fs_header.contains("int kraft_rename(const char *old_path, const char *new_path);"));
     assert!(fs_header.contains("#define read_dir(path, out, out_len) kraft_read_dir((path), (out), (out_len))"));
     assert!(fs_header.contains("#define stat(path, metadata) kraft_stat((path), (metadata))"));
+    assert!(fs_header.contains("#define rename(old_path, new_path) kraft_rename((old_path), (new_path))"));
 
     let syscalls = fs::read_to_string(&syscalls).expect("C libkraft syscall source exists");
     assert!(syscalls.contains("#include <kraft/syscalls.h>"));
@@ -176,6 +186,9 @@ fn k16_c_libc_cat_has_minimal_libkraft_abi_sources() {
     assert!(syscalls.contains("__kraft_sys_read_dir(request, request_len)"));
     assert!(syscalls.contains("int kraft_stat(const char *path, struct kraft_stat *metadata)"));
     assert!(syscalls.contains("__kraft_sys_stat(path, path_len, metadata)"));
+    assert!(syscalls.contains("int kraft_rename(const char *old_path, const char *new_path)"));
+    assert!(syscalls.contains("put_u32_le(request + 0, KRAFT_RENAME_REQUEST_MAGIC)"));
+    assert!(syscalls.contains("__kraft_sys_rename(request, request_len)"));
 
     let unistd = fs::read_to_string(&unistd).expect("C libc-lite unistd header exists");
     assert!(unistd.contains("int open(const char *path, int flags);"));
@@ -212,6 +225,19 @@ fn k16_c_libc_cat_has_minimal_libkraft_abi_sources() {
     assert!(cat.contains("close(fd)"));
     assert!(!cat.contains("stdio.h"), "C hosted baseline must not depend on stdio");
 
+    let cp = fs::read_to_string(&cp).expect("C hosted cp source exists");
+    assert!(cp.contains("#include <fcntl.h>"));
+    assert!(cp.contains("#include <string.h>"));
+    assert!(cp.contains("#include <unistd.h>"));
+    assert!(cp.contains("argc != 3"));
+    assert!(cp.contains("open(source_path, O_RDONLY)"));
+    assert!(cp.contains("open(destination_path, O_WRONLY | O_CREAT | O_TRUNC)"));
+    assert!(cp.contains("read(source, buffer, sizeof(buffer))"));
+    assert!(cp.contains("write_all(destination"));
+    assert!(cp.contains("write_text(STDOUT_FILENO, \"COPIED \")"));
+    assert!(cp.contains("status_name(status, \"IO\")"));
+    assert!(!cp.contains("stdio.h"), "C hosted baseline must not depend on stdio");
+
     let ls = fs::read_to_string(&ls).expect("C hosted ls source exists");
     assert!(ls.contains("#include <kraft/fs.h>"));
     assert!(ls.contains("#include <unistd.h>"));
@@ -228,6 +254,18 @@ fn k16_c_libc_cat_has_minimal_libkraft_abi_sources() {
     assert!(mkdir.contains("write_text(STDOUT_FILENO, \"CREATED \")"));
     assert!(mkdir.contains("status_name(status, \"MKDIR\")"));
     assert!(!mkdir.contains("stdio.h"), "C hosted baseline must not depend on stdio");
+
+    let mv = fs::read_to_string(&mv).expect("C hosted mv source exists");
+    assert!(mv.contains("#include <kraft/fs.h>"));
+    assert!(mv.contains("#include <unistd.h>"));
+    assert!(mv.contains("argc != 3"));
+    assert!(mv.contains("stat(source_path, &metadata)"));
+    assert!(mv.contains("metadata.file_type != KRAFT_FILE_TYPE_REGULAR"));
+    assert!(mv.contains("stat(destination_path, &metadata) == 0"));
+    assert!(mv.contains("rename(source_path, destination_path)"));
+    assert!(mv.contains("write_text(STDOUT_FILENO, \"MOVED \")"));
+    assert!(mv.contains("status_name(status, \"RENAME\")"));
+    assert!(!mv.contains("stdio.h"), "C hosted baseline must not depend on stdio");
 
     let rm = fs::read_to_string(&rm).expect("C hosted rm source exists");
     assert!(rm.contains("#include <unistd.h>"));

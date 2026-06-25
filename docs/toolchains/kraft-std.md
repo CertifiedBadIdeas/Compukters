@@ -82,10 +82,12 @@ The first production C hosted utilities are deliberately separate from Rust
 `std`. `guest/c/coreutils/uname.c`, `guest/c/coreutils/cat.c`,
 `guest/c/coreutils/write.c`, `guest/c/coreutils/rm.c`,
 `guest/c/coreutils/mkdir.c`, `guest/c/coreutils/rmdir.c`,
-`guest/c/coreutils/stat.c`, and `guest/c/coreutils/ls.c` are compiled by K16
+`guest/c/coreutils/stat.c`, `guest/c/coreutils/ls.c`,
+`guest/c/coreutils/cp.c`, and `guest/c/coreutils/mv.c` are compiled by K16
 Clang and linked as `/bin/uname.kx`, `/bin/cat.kx`, `/bin/write.kx`,
-`/bin/rm.kx`, `/bin/mkdir.kx`, `/bin/rmdir.kx`, `/bin/stat.kx`, and
-`/bin/ls.kx` against `libkraft.k16so`. Their libc-lite startup layer under
+`/bin/rm.kx`, `/bin/mkdir.kx`, `/bin/rmdir.kx`, `/bin/stat.kx`,
+`/bin/ls.kx`, `/bin/cp.kx`, and `/bin/mv.kx` against `libkraft.k16so`.
+Their libc-lite startup layer under
 `guest/c/libc` adapts the K16 bounded argv table into ordinary C
 `main(int argc, char **argv)`, while minimal `unistd.h`, `fcntl.h`,
 `stddef.h`, `string.h`, and `kraft/fs.h` headers expose the small C userland

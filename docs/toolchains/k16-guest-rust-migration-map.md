@@ -36,7 +36,7 @@ production build or focused test needs them.
 | `rust/guest/k16-boot` | System boot program. | Keep Rust for now; boot flow is outside this userland slice. |
 | `rust/guest/k16-boot-chain` | Shared boot-chain support library. | Keep Rust for now; boot support is outside this userland slice. |
 | `rust/guest/k16-cat` | Former Rust production `cat` plus `/etc/motd` source data. | Legacy/removable after the `motd.txt` data dependency is moved out or retired. |
-| `rust/guest/k16-cp` | Production Rust `cp`. | Migrate to C after libc-lite has enough file-copy helpers. |
+| `rust/guest/k16-cp` | Former Rust production `cp`. | Legacy/removable after no focused tests or docs depend on the Rust version. Production `/bin/cp.kx` now builds from `guest/c/coreutils/cp.c`. |
 | `rust/guest/k16-hosted-cat` | Hosted Rust std proof program. | Development/toolchain proof only; not a production userland direction. |
 | `rust/guest/k16-hosted-hello` | Hosted Rust std proof program. | Development/toolchain proof only; not a production userland direction. |
 | `rust/guest/k16-image` | Guest-side image/storage support used by Rust guest code. | Keep Rust while Rust boot/kernel/storage support remains Rust. |
@@ -45,7 +45,7 @@ production build or focused test needs them.
 | `rust/guest/k16-ls` | Former Rust production `ls`. | Legacy/removable after no focused tests or docs depend on the Rust version. Production `/bin/ls.kx` now builds from `guest/c/coreutils/ls.c`. |
 | `rust/guest/k16-memory` | Guest memory/MMU helper library. | Keep Rust while kernel/runtime memory management remains Rust. |
 | `rust/guest/k16-mkdir` | Former Rust production `mkdir`. | Legacy/removable after no focused tests or docs depend on the Rust version. Production `/bin/mkdir.kx` now builds from `guest/c/coreutils/mkdir.c`. |
-| `rust/guest/k16-mv` | Production Rust `mv`. | Migrate to C after rename/link/unlink semantics are stable in libc-lite. |
+| `rust/guest/k16-mv` | Former Rust production `mv`. | Legacy/removable after no focused tests or docs depend on the Rust version. Production `/bin/mv.kx` now builds from `guest/c/coreutils/mv.c`. |
 | `rust/guest/k16-proc-test` | Development process-model smoke utility. | Development/test-only; keep until process coverage moves elsewhere. |
 | `rust/guest/k16-rm` | Former Rust production `rm`. | Legacy/removable after no focused tests or docs depend on the Rust version. Production `/bin/rm.kx` now builds from `guest/c/coreutils/rm.c`. |
 | `rust/guest/k16-rmdir` | Former Rust production `rmdir`. | Legacy/removable after no focused tests or docs depend on the Rust version. Production `/bin/rmdir.kx` now builds from `guest/c/coreutils/rmdir.c`. |
@@ -64,9 +64,7 @@ production build or focused test needs them.
 
 ## Next Production C Candidates
 
-1. `rust/guest/k16-cp` and `rust/guest/k16-mv`: larger file operations after
-   path and file-copy helper policy is settled.
-2. `rust/guest/k16-shell` and `rust/guest/k16-init`: move after enough
+1. `rust/guest/k16-shell` and `rust/guest/k16-init`: move after enough
    process/path helpers exist to avoid embedding policy in each program.
 
 ## Development/test-only

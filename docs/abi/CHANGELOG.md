@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Production `/bin/cp.kx` and `/bin/mv.kx` now build from
+  `guest/c/coreutils` through the source-built-dev K16 Clang path and
+  libc-lite startup layer. `/bin/cp.kx` imports `open`, `read`, `write`, and
+  `close` from `/lib/libkraft.k16so`; `/bin/mv.kx` imports `stat`, `rename`,
+  and `write`. libc-lite now exposes standard-shaped `rename(old, new)` via a
+  `kraft_rename` wrapper over the existing structured K16 `RENAME` request,
+  while `/lib/libkraft.k16so` exports the syscall-shaped `rename(request, len)`
+  boundary.
 - Production `/bin/stat.kx` and `/bin/ls.kx` now build from
   `guest/c/coreutils` through the source-built-dev K16 Clang path and
   libc-lite startup layer. libc-lite now exposes `struct kraft_stat`,
@@ -64,7 +72,7 @@
   v5 imports for `libkraft.k16so`, proving that a production utility can call a
   plain shared OS ABI surface through the kernel loader without listing each
   imported symbol by hand. `libkraft.k16so` intentionally exports syscall-shaped
-  symbols such as `open`, `read`, `write`, `close`, `mkdir`, `rmdir`,
+  symbols such as `open`, `read`, `write`, `close`, `rename`, `mkdir`, `rmdir`,
   `unlink`, `sbrk`, and `_exit`; it is not a Rust stdlib replacement. This
   remains narrower than dynamic Rust
   `core`, Rust `std`, libc, or libc++ sharing.
