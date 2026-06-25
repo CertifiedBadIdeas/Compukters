@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- Production `/bin/stat.kx` and `/bin/ls.kx` now build from
+  `guest/c/coreutils` through the source-built-dev K16 Clang path and
+  libc-lite startup layer. libc-lite now exposes `struct kraft_stat`,
+  `stat(path, metadata)`, and `read_dir(path, out, out_len)` through
+  `guest/c/libc/include/kraft/fs.h`; those public C calls macro-dispatch to
+  `kraft_stat` and `kraft_read_dir` wrappers so they can safely call the
+  syscall-shaped `stat(path, len, metadata)` and
+  `read_dir(request, len)` exports from `/lib/libkraft.k16so` without ABI
+  collisions. Shell-visible `stat`/`ls` output remains compatible with the
+  previous Rust utilities.
+- libc-lite path mutator wrappers now use the same explicit wrapper boundary as
+  `open`: public C `mkdir(path)`, `rmdir(path)`, and `unlink(path)` calls
+  macro-dispatch to `kraft_mkdir`, `kraft_rmdir`, and `kraft_unlink`, which in
+  turn import the syscall-shaped `libkraft` symbols carrying explicit path
+  lengths. This prevents auto-imports from bypassing libc-lite argument
+  adaptation.
 - Production `/bin/rm.kx`, `/bin/mkdir.kx`, and `/bin/rmdir.kx` now build
   from `guest/c/coreutils` through the source-built-dev K16 Clang path and
   libc-lite startup layer. libc-lite now exposes standard-shaped

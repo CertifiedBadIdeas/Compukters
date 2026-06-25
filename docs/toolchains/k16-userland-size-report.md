@@ -48,19 +48,23 @@ explicit artifact groups:
 
 `libkraft.k16so` is the first project-owned userland shared OS ABI boundary.
 It exports plain syscall-shaped symbols such as `open`, `read`, `write`,
-`close`, `mkdir`, `rmdir`, `unlink`, `sbrk`, and `_exit`; `kraft-std` remains
-the Rust convenience layer above that boundary.
+`close`, `read_dir`, `stat`, `mkdir`, `rmdir`, `unlink`, `sbrk`, and `_exit`;
+`kraft-std` remains the Rust convenience layer above that boundary.
 
 Production `/bin/uname.kx`, `/bin/cat.kx`, `/bin/write.kx`, `/bin/rm.kx`,
-`/bin/mkdir.kx`, and `/bin/rmdir.kx` are built from C with the source-built-dev
-K16 `clang`, use the small libc-lite startup/header layer under `guest/c/libc`,
-and call the same `libkraft.k16so` shared OS ABI as the Rust import proofs.
+`/bin/mkdir.kx`, `/bin/rmdir.kx`, `/bin/stat.kx`, and `/bin/ls.kx` are built
+from C with the source-built-dev K16 `clang`, use the small libc-lite
+startup/header layer under `guest/c/libc`, and call the same
+`libkraft.k16so` shared OS ABI as the Rust import proofs.
 `/bin/uname.kx` remains the smallest bundled importer: it imports `write`
 through K16E import metadata instead of retaining that syscall-boundary call in
-its own payload. The public libc-lite surface now
-includes minimal `unistd.h`, `fcntl.h`, `stddef.h`, and `string.h` headers,
-while `kraft/syscalls.h` remains the low-level K16 ABI header. This proves the
-dynamic ABI can host C userland without making `libkraft` a Rust stdlib
+its own payload. The public libc-lite surface now includes minimal `unistd.h`,
+`fcntl.h`, `stddef.h`, `string.h`, and `kraft/fs.h` headers, while
+`kraft/syscalls.h` remains the low-level K16 ABI header. Public C calls whose
+arguments differ from the syscall-shaped shared exports use `kraft_*` wrappers
+and macros, so source can call `stat(path, &metadata)` while the dynamic import
+still resolves to `libkraft`'s `stat(path, len, metadata)` export. This proves
+the dynamic ABI can host C userland without making `libkraft` a Rust stdlib
 replacement or pulling in a full libc.
 
 `runtime-import-test` is intentionally still a development-only importer. It

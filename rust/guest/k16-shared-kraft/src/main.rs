@@ -35,6 +35,30 @@ pub extern "C" fn close(fd: u32) -> u32 {
 }
 
 #[no_mangle]
+pub unsafe extern "C" fn read_dir(request: *const u8, len: usize) -> u32 {
+    unsafe {
+        __k16_syscall3(
+            k16_abi::syscall::READ_DIR,
+            request as usize as u32,
+            len as u32,
+            0,
+        )
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn stat(path: *const u8, len: usize, metadata: *mut u8) -> u32 {
+    unsafe {
+        __k16_syscall3(
+            k16_abi::syscall::STAT,
+            path as usize as u32,
+            len as u32,
+            metadata as usize as u32,
+        )
+    }
+}
+
+#[no_mangle]
 pub unsafe extern "C" fn mkdir(path: *const u8, len: usize) -> u32 {
     unsafe { __k16_syscall3(k16_abi::syscall::MKDIR, path as usize as u32, len as u32, 0) }
 }
