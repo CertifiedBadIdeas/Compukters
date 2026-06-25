@@ -3,6 +3,12 @@
 > Issue: [#135](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/135)
 >
 > Previous decision: [#134](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/134)
+>
+> Update: [#367](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/367)
+> supersedes the user-space part of this older Rust-first direction. KraftOS
+> now follows a C-first userland/coreutils policy while the Rust K16 kernel and
+> OS internals remain Rust for now. The current crate-by-crate map lives in
+> [K16 Guest Rust Migration Map](k16-guest-rust-migration-map.md).
 
 ## Decision
 

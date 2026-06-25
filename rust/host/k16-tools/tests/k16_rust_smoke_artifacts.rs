@@ -165,6 +165,30 @@ fn k16_c_libc_cat_has_minimal_libkraft_abi_sources() {
 }
 
 #[test]
+fn k16_guest_rust_migration_map_covers_workspace_crates() {
+    let root = repo_root();
+    let workspace_manifest = root.join("rust/guest/Cargo.toml");
+    let migration_map = root.join("docs/toolchains/k16-guest-rust-migration-map.md");
+
+    let workspace_manifest =
+        fs::read_to_string(&workspace_manifest).expect("K16 guest workspace manifest exists");
+    let migration_map = fs::read_to_string(&migration_map).expect("K16 guest migration map exists");
+
+    for member in rust_guest_workspace_members(&workspace_manifest) {
+        let path = format!("`rust/guest/{member}`");
+        assert!(
+            migration_map.contains(&path),
+            "K16 guest Rust migration map must classify {path}"
+        );
+    }
+
+    assert!(migration_map.contains("C-first userland/coreutils policy"));
+    assert!(migration_map.contains("Rust kernel remains Rust for now"));
+    assert!(migration_map.contains("Next Production C Candidates"));
+    assert!(migration_map.contains("Development/test-only"));
+}
+
+#[test]
 fn kraft_std_layering_rule_is_documented_and_enforced() {
     let root = repo_root();
     let docs = root.join("docs/toolchains/kraft-std.md");
@@ -626,4 +650,16 @@ fn repo_root() -> &'static Path {
         .and_then(Path::parent)
         .and_then(Path::parent)
         .expect("rust/host/k16-tools has repo root great-grandparent")
+}
+
+fn rust_guest_workspace_members(manifest: &str) -> Vec<&str> {
+    manifest
+        .lines()
+        .map(str::trim)
+        .filter_map(|line| {
+            line.strip_prefix('"')
+                .and_then(|line| line.split_once('"'))
+                .map(|(member, _)| member)
+        })
+        .collect()
 }
