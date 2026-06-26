@@ -21,6 +21,9 @@ package ru.lazyhat.compukterkraft.core.device.runtime
 
 import ru.lazyhat.compukterkraft.lang.runtime.VmInstructionKind
 import ru.lazyhat.compukterkraft.lang.runtime.VmSignalKind
+import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16BusTraffic
+import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16ComputerStatsSnapshot
+import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16MmioDeviceStats
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -142,6 +145,21 @@ class RuntimeProfilingTest {
         collector.recordK16RunSlice(K16RuntimeSignal.HALT, nanos = 75)
         collector.recordK16OutputRefresh(serialOutputBytes = 4, gpuFrameBytes = 64, gpuFrameCount = 2, nanos = 100)
         collector.recordK16OutputRefresh(serialOutputBytes = 8, gpuFrameBytes = 0, gpuFrameCount = 0, nanos = 50)
+        collector.recordK16StatsSnapshot(
+            NativeK16ComputerStatsSnapshot(
+                ram = NativeK16BusTraffic(loads = 10, stores = 11, bytesRead = 12, bytesWritten = 13),
+                mmio = NativeK16BusTraffic(loads = 20, stores = 21, bytesRead = 22, bytesWritten = 23),
+                devices =
+                    listOf(
+                        NativeK16MmioDeviceStats(
+                            deviceId = 3,
+                            base = 0x2000,
+                            size = 64,
+                            traffic = NativeK16BusTraffic(loads = 4, stores = 5, bytesRead = 6, bytesWritten = 7),
+                        ),
+                    ),
+            ),
+        )
         collector.recordK16WaitEnter()
         collector.recordK16WaitEnter()
         collector.recordK16WaitTimerWakeup()
@@ -204,6 +222,13 @@ class RuntimeProfilingTest {
         assertEquals(1, snapshot.vm.k16GpuFrameBatches)
         assertEquals(64, snapshot.vm.k16GpuFrameBytes)
         assertEquals(2, snapshot.vm.k16GpuFramesDecoded)
+        assertEquals(RuntimeK16BusTrafficMetrics(loads = 10, stores = 11, bytesRead = 12, bytesWritten = 13), snapshot.k16.ram)
+        assertEquals(RuntimeK16BusTrafficMetrics(loads = 20, stores = 21, bytesRead = 22, bytesWritten = 23), snapshot.k16.mmio)
+        assertEquals(1, snapshot.k16.devices.size)
+        assertEquals(3, snapshot.k16.devices.single().deviceId)
+        assertEquals(0x2000, snapshot.k16.devices.single().base)
+        assertEquals(64, snapshot.k16.devices.single().size)
+        assertEquals(RuntimeK16BusTrafficMetrics(loads = 4, stores = 5, bytesRead = 6, bytesWritten = 7), snapshot.k16.devices.single().traffic)
         assertEquals(2, snapshot.vm.k16WaitEntries)
         assertEquals(1, snapshot.vm.k16WaitTimerWakeups)
         assertEquals(1, snapshot.vm.k16WaitInputWakeups)
@@ -247,6 +272,18 @@ class RuntimeProfilingTest {
             summary,
         )
         assertTrue(
+            summary.contains("    k16Bus: ramLoads=10, ramStores=11, ramBytesRead=12, ramBytesWritten=13, mmioLoads=20, mmioStores=21, mmioBytesRead=22, mmioBytesWritten=23"),
+            summary,
+        )
+        assertTrue(
+            summary.contains("    k16Devices: mapped=1, loads=4, stores=5, bytesRead=6, bytesWritten=7"),
+            summary,
+        )
+        assertTrue(
+            summary.contains("      device[3]: base=8192, size=64, loads=4, stores=5, bytesRead=6, bytesWritten=7"),
+            summary,
+        )
+        assertTrue(
             summary.contains("    k16Wait: entries=2, timerWakeups=1, inputWakeups=1, idleSkips=3"),
             summary,
         )
@@ -277,6 +314,9 @@ class RuntimeProfilingTest {
         collector.recordNativeDaemonTick(activeNanos = 100, turns = 2, halted = 1, hostRequests = 3, idle = false)
         collector.recordK16RunSlice(K16RuntimeSignal.WAIT, nanos = 100)
         collector.recordK16OutputRefresh(serialOutputBytes = 4, gpuFrameBytes = 8, gpuFrameCount = 1, nanos = 10)
+        collector.recordK16StatsSnapshot(
+            NativeK16ComputerStatsSnapshot(ram = NativeK16BusTraffic(loads = 1), devices = emptyList()),
+        )
         collector.recordK16WaitEnter()
         collector.recordK16WaitTimerWakeup()
         collector.recordK16WaitInputWakeup()

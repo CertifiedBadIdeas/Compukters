@@ -28,9 +28,11 @@ import ru.lazyhat.compukterkraft.core.device.runtime.ports.DisplayNetworkBridge
 import ru.lazyhat.compukterkraft.core.input.KeyCodes
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16ComputerEndpoint
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16ComputerTickResult
+import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16BusTraffic
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16ComputerControl
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16ComputerSignal
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16ComputerStatsSnapshot
+import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16MmioDeviceStats
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayPixelFormat
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayTile
@@ -560,6 +562,66 @@ class K16RuntimeDeviceTest {
     }
 
     @Test
+    fun recordsK16StatsSnapshotDuringOutputRefresh() {
+        val endpoint = RecordingK16Endpoint()
+        endpoint.statsSnapshot =
+            NativeK16ComputerStatsSnapshot(
+                ram = NativeK16BusTraffic(loads = 10, stores = 11, bytesRead = 12, bytesWritten = 13),
+                mmio = NativeK16BusTraffic(loads = 20, stores = 21, bytesRead = 22, bytesWritten = 23),
+                devices =
+                    listOf(
+                        NativeK16MmioDeviceStats(
+                            deviceId = 3,
+                            base = 0x2000,
+                            size = 64,
+                            traffic = NativeK16BusTraffic(loads = 4, stores = 5, bytesRead = 6, bytesWritten = 7),
+                        ),
+                    ),
+            )
+        val metrics = RecordingRuntimeMetricsCollector()
+        val device =
+            K16RuntimeDevice(
+                deviceId = 27,
+                properties = DeviceProperties(DeviceFamily.NORMAL, label = null),
+                endpointFactory = { endpoint },
+                stateSink = {},
+                metricsCollector = metrics,
+            )
+
+        device.turnOn()
+        waitUntil { metrics.snapshot().k16.ram.loads == 10L }
+
+        val snapshot = metrics.snapshot()
+        assertEquals(RuntimeK16BusTrafficMetrics(loads = 10, stores = 11, bytesRead = 12, bytesWritten = 13), snapshot.k16.ram)
+        assertEquals(RuntimeK16BusTrafficMetrics(loads = 20, stores = 21, bytesRead = 22, bytesWritten = 23), snapshot.k16.mmio)
+        assertEquals(1, snapshot.k16.devices.size)
+        assertEquals(3, snapshot.k16.devices.single().deviceId)
+        assertEquals(0x2000, snapshot.k16.devices.single().base)
+        assertEquals(64, snapshot.k16.devices.single().size)
+        assertEquals(RuntimeK16BusTrafficMetrics(loads = 4, stores = 5, bytesRead = 6, bytesWritten = 7), snapshot.k16.devices.single().traffic)
+        device.shutdown()
+    }
+
+    @Test
+    fun skipsK16StatsSnapshotWhenCollectorIsNoOp() {
+        val endpoint = RecordingK16Endpoint()
+        val device =
+            K16RuntimeDevice(
+                deviceId = 28,
+                properties = DeviceProperties(DeviceFamily.NORMAL, label = null),
+                endpointFactory = { endpoint },
+                stateSink = {},
+            )
+
+        device.turnOn()
+        device.serverTick()
+        waitUntil { endpoint.tickCalls == 1 }
+
+        assertEquals(0, endpoint.statsSnapshotCalls)
+        device.shutdown()
+    }
+
+    @Test
     fun keepsFramebufferFramesUntilDisplaySessionAttaches() {
         val endpoint = RecordingK16Endpoint()
         val displayNetwork = RecordingDisplayNetworkBridge()
@@ -813,9 +875,13 @@ class K16RuntimeDeviceTest {
         @Volatile
         var closeCalls = 0
             private set
+        @Volatile
+        var statsSnapshotCalls = 0
+            private set
         var runtimeSnapshot: ByteArray = ByteArray(0)
         var snapshotFailure: RuntimeException? = null
         var control: NativeK16ComputerControl = NativeK16ComputerControl(status = K16RuntimeDevice.STATUS_READY, exitCode = 0, panicCode = 0)
+        var statsSnapshot: NativeK16ComputerStatsSnapshot = NativeK16ComputerStatsSnapshot()
         private val injectedOutput = StringBuilder()
         private val gpuFrameBatches = ArrayDeque<ByteArray>()
 
@@ -894,7 +960,10 @@ class K16RuntimeDeviceTest {
             return runtimeSnapshot.copyOf()
         }
 
-        override fun statsSnapshot(): NativeK16ComputerStatsSnapshot = NativeK16ComputerStatsSnapshot()
+        override fun statsSnapshot(): NativeK16ComputerStatsSnapshot {
+            statsSnapshotCalls += 1
+            return statsSnapshot
+        }
 
         override fun close() {
             closeCalls += 1

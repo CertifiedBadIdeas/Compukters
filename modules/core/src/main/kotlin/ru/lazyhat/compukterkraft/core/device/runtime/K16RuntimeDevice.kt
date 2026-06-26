@@ -543,6 +543,9 @@ class K16RuntimeDevice(
                 gpuFrameCount = frames.size,
                 nanos = System.nanoTime() - startedAt,
             )
+            if (metricsCollector.recordsK16StatsSnapshots) {
+                metricsCollector.recordK16StatsSnapshot(endpoint.statsSnapshot())
+            }
         }
 
         private sealed interface Command {
