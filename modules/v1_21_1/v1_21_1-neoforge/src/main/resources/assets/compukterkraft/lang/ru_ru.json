@@ -7,6 +7,7 @@
   "commands.compukterkraft.generic.yes": "Д",
   "gui.compukterkraft.control.reboot": "Перезагрузить",
   "gui.compukterkraft.control.shutdown": "Выключить",
+  "gui.compukterkraft.control.terminate": "Завершить",
   "gui.compukterkraft.control.turn_on": "Включить",
   "gui.compukterkraft.computer_control.status_off": "Состояние: выкл",
   "gui.compukterkraft.computer_control.status_on": "Состояние: вкл",

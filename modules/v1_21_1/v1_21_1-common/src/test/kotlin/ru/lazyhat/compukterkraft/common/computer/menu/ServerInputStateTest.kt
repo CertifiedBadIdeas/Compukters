@@ -72,6 +72,22 @@ class ServerInputStateTest {
         assertEquals(emptyList(), device.events)
     }
 
+    @Test
+    fun controlTerminateQueuesTerminateRuntimeEvent() {
+        SharedConstants.tryDetectVersion()
+        Bootstrap.bootStrap()
+
+        val device = RecordingRuntimeDevice()
+        val menu = TestComputerMenu(device)
+
+        menu.serverSide.input.accept(ControlInputEvent(ComputerControlAction.TERMINATE))
+
+        assertEquals(listOf(QueuedEvent("terminate", emptyList())), device.events)
+        assertEquals(0, device.rebootCalls)
+        assertEquals(0, device.turnOnCalls)
+        assertEquals(0, device.shutdownCalls)
+    }
+
     private data class QueuedEvent(
         val name: String,
         val arguments: List<Any>,
