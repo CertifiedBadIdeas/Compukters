@@ -17,6 +17,25 @@ player-facing computer item — **Notebook** — that starts a native
 the Kraft16 guest CPU, can inspect storage0 boot media, and exposes devices
 through memory-mapped peripherals.
 
+## K16 BIOS Flash Workflow
+
+Each K16 computer workspace stores its firmware in `bios.kflash`. On first
+boot, `K16BiosFlashWorkspace.prepareBiosFlash` seeds that file from the bundled
+`firmware/k16-bios.kflash` resource. On later boots, the existing file is used
+as the flashed BIOS image after basic raw K16 validation.
+
+The developer-facing flash operation is
+`K16BiosFlashWorkspace.flashBiosFlash(workspace, source)`: it reads an explicit
+`.kflash` source path, validates that the image is present, non-empty, and made
+of whole 16-bit instruction bytes, then replaces the workspace `bios.kflash`.
+Invalid or missing source images fail before the current flashed BIOS is
+overwritten.
+
+Recovery is explicit through `K16BiosFlashWorkspace.restoreBundledBiosFlash`.
+It overwrites the per-computer flash with the bundled BIOS resource, giving the
+development path a non-bricking re-flash story even when a custom BIOS image is
+bad.
+
 ## Modules (Gradle)
 
 | Module                  | Purpose                                                                          |

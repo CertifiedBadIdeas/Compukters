@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- K16 BIOS flash now has an explicit workspace workflow. Per-computer
+  `bios.kflash` files are validated before reuse, replacement images are
+  flashed from an explicit source path without overwriting the current BIOS on
+  missing or malformed input, and
+  `K16BiosFlashWorkspace.restoreBundledBiosFlash` provides the recovery path
+  back to the bundled `firmware/k16-bios.kflash` resource.
 - `/lib/libkraft.kso` now uses explicit raw OS ABI export names with a
   `kraft_sys_*` prefix, such as `kraft_sys_open`, `kraft_sys_write`,
   `kraft_sys_stat`, and `kraft_sys_run`. libc-lite keeps the user-facing C
