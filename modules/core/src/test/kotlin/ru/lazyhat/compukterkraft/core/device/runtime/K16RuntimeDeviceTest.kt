@@ -30,6 +30,7 @@ import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16ComputerEndpoint
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16ComputerTickResult
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16ComputerControl
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16ComputerSignal
+import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16ComputerStatsSnapshot
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayPixelFormat
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayTile
@@ -892,6 +893,8 @@ class K16RuntimeDeviceTest {
             snapshotFailure?.let { throw it }
             return runtimeSnapshot.copyOf()
         }
+
+        override fun statsSnapshot(): NativeK16ComputerStatsSnapshot = NativeK16ComputerStatsSnapshot()
 
         override fun close() {
             closeCalls += 1

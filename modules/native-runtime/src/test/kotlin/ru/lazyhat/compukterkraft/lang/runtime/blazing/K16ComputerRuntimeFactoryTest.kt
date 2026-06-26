@@ -141,6 +141,7 @@ class K16ComputerRuntimeFactoryTest {
                 "drainK16ComputerDebugOutputNative",
                 "k16ComputerStorage0MediaSnapshotNative",
                 "k16ComputerMachineSnapshotNative",
+                "k16ComputerStatsSnapshotNative",
                 "pushK16ComputerSerialInputNative",
                 "freeK16ComputerNative",
             )
@@ -160,12 +161,22 @@ class K16ComputerRuntimeFactoryTest {
                 "ruxComputerDisplay0SnapshotNative",
                 "ruxComputerStorage0MediaSnapshotNative",
                 "ruxComputerMachineSnapshotNative",
+                "ruxComputerStatsSnapshotNative",
                 "pushRuxComputerSerialInputNative",
                 "freeRuxComputerNative",
             )
         ) {
             assertFalse(bindingsSource.contains(legacyName), "NativeVmBindings.kt should not expose $legacyName")
         }
+
+        val rustJniSource =
+            root
+                .resolve(Path.of("rust", "host", "k16-vm", "src", "jni.rs"))
+                .readText()
+        assertTrue(
+            rustJniSource.contains("NativeVmBindings_k16ComputerStatsSnapshotNative"),
+            "jni.rs should export k16ComputerStatsSnapshotNative",
+        )
     }
 
     @Test
