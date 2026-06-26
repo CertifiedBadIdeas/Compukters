@@ -105,11 +105,11 @@ class K16ComputerRuntimeTest {
         val snapshot =
             NativeK16ComputerStatsSnapshot.from(
                 longArrayOf(
-                    1,
+                    2,
                     2, 3, 4, 5,
                     6, 7, 8, 9,
                     1,
-                    11, 0x1000, 64, 12, 13, 14, 15,
+                    11, 0x1000, 64, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21,
                 ),
             )
 
@@ -122,6 +122,15 @@ class K16ComputerRuntimeTest {
                     base = 0x1000,
                     size = 64,
                     traffic = NativeK16BusTraffic(loads = 12, stores = 13, bytesRead = 14, bytesWritten = 15),
+                    storage =
+                        NativeK16StorageStats(
+                            readCommands = 16,
+                            writeCommands = 17,
+                            flushCommands = 18,
+                            bytesRead = 19,
+                            bytesWritten = 20,
+                            failedCommands = 21,
+                        ),
                 ),
             ),
             snapshot.devices,

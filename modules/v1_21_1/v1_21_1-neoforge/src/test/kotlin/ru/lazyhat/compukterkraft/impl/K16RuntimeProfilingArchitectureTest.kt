@@ -39,6 +39,7 @@ class K16RuntimeProfilingArchitectureTest {
         assertTrue(docs.contains("./gradlew-sandbox-dev --parallel profileK16RuntimeWait -Pk16BuildJobs=\$(nproc)"))
         assertTrue(docs.contains("k16Bus: ramLoads="))
         assertTrue(docs.contains("k16Devices: mapped="))
+        assertTrue(docs.contains("k16Storage0: reads="))
         assertTrue(docs.contains("k16Wait: entries="))
         assertFalse(docs.contains("profileRuntimeVmImage"))
     }

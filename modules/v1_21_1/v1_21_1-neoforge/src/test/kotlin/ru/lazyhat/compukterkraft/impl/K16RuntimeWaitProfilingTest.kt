@@ -83,6 +83,7 @@ class K16RuntimeWaitProfilingTest {
             assertTrue(summary.contains("k16Output: refreshes="))
             assertTrue(summary.contains("k16Bus: ramLoads="))
             assertTrue(summary.contains("k16Devices: mapped="))
+            assertTrue(summary.contains("k16Storage0: reads="))
             assertTrue(summary.contains("k16Wait: entries="))
             assertTrue(summary.contains("timerWakeups="))
             assertTrue(summary.contains("inputWakeups="))

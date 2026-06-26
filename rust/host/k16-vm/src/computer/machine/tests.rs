@@ -1590,6 +1590,68 @@ fn storage0_write_blocks_copies_guest_ram_into_media() {
 }
 
 #[test]
+fn storage0_stats_snapshot_counts_block_commands_flush_and_failures() {
+    let profile = ComputerMachineProfile::new(2048).with_hardware(
+        ComputerHardwareConfig::storage_port_with_media(
+            computer_abi::COMPUTER_HARDWARE_ID_STORAGE0,
+            computer_abi::STORAGE0_BASE,
+            vec![0; 1024],
+            false,
+        ),
+    );
+    let mut machine = ComputerMachine::from_profile(profile).unwrap();
+    machine.memory_mut().store_u8(512, 0xA5).unwrap();
+    machine
+        .bus_store_i32(computer_abi::STORAGE0_BLOCK_COUNT, 1)
+        .unwrap();
+    machine
+        .bus_store_i32(computer_abi::STORAGE0_BUFFER_ADDR, 512)
+        .unwrap();
+
+    machine
+        .bus_store_i32(
+            computer_abi::STORAGE0_COMMAND,
+            computer_abi::STORAGE_COMMAND_READ_BLOCKS,
+        )
+        .unwrap();
+    machine.memory_mut().store_u8(512, 0x5A).unwrap();
+    machine
+        .bus_store_i32(
+            computer_abi::STORAGE0_COMMAND,
+            computer_abi::STORAGE_COMMAND_WRITE_BLOCKS,
+        )
+        .unwrap();
+    machine
+        .bus_store_i32(
+            computer_abi::STORAGE0_COMMAND,
+            computer_abi::STORAGE_COMMAND_FLUSH,
+        )
+        .unwrap();
+    machine
+        .bus_store_i32(computer_abi::STORAGE0_BLOCK_COUNT, 3)
+        .unwrap();
+    machine
+        .bus_store_i32(
+            computer_abi::STORAGE0_COMMAND,
+            computer_abi::STORAGE_COMMAND_READ_BLOCKS,
+        )
+        .unwrap();
+
+    let snapshot = machine.stats_snapshot();
+    let storage0 = snapshot
+        .devices
+        .iter()
+        .find(|device| device.name == "storage0")
+        .expect("storage0 stats are present");
+    assert_eq!(storage0.storage.read_commands, 1);
+    assert_eq!(storage0.storage.write_commands, 1);
+    assert_eq!(storage0.storage.flush_commands, 1);
+    assert_eq!(storage0.storage.bytes_read, 512);
+    assert_eq!(storage0.storage.bytes_written, 512);
+    assert_eq!(storage0.storage.failed_commands, 1);
+}
+
+#[test]
 fn storage0_file_media_write_blocks_flushes_payload_file() {
     let path = temp_volume_path("machine-storage0-file");
     write_k16_volume(&path, &[0; 512]);

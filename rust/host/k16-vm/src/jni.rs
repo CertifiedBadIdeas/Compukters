@@ -4,6 +4,7 @@ use jni::objects::{JByteArray, JClass, JString};
 use jni::sys::{jboolean, jbyte, jbyteArray, jint, jlong, jlongArray};
 use jni::JNIEnv;
 
+use crate::computer::stats::K16ComputerStorageStatsSnapshot;
 use crate::display::{DisplayFrameDelta, PixelFormat};
 use crate::k16::K16Signal;
 use crate::k16_computer::{K16ComputerHandle, K16ComputerStatsSnapshot};
@@ -387,8 +388,8 @@ fn k16_signal_values(signal: K16Signal) -> [jlong; 2] {
 }
 
 fn k16_computer_stats_snapshot_values(snapshot: &K16ComputerStatsSnapshot) -> Vec<jlong> {
-    let mut values = Vec::with_capacity(10 + snapshot.devices.len() * 7);
-    values.push(1);
+    let mut values = Vec::with_capacity(10 + snapshot.devices.len() * 13);
+    values.push(2);
     push_traffic_values(&mut values, snapshot.bus.ram);
     push_traffic_values(&mut values, snapshot.bus.mmio);
     values.push(snapshot.devices.len() as jlong);
@@ -397,6 +398,7 @@ fn k16_computer_stats_snapshot_values(snapshot: &K16ComputerStatsSnapshot) -> Ve
         values.push(i64::from(device.base));
         values.push(i64::from(device.size));
         push_traffic_values(&mut values, device.traffic);
+        push_storage_values(&mut values, device.storage);
     }
     values
 }
@@ -406,6 +408,15 @@ fn push_traffic_values(values: &mut Vec<jlong>, traffic: MachineBusTrafficSnapsh
     values.push(traffic.stores as jlong);
     values.push(traffic.bytes_read as jlong);
     values.push(traffic.bytes_written as jlong);
+}
+
+fn push_storage_values(values: &mut Vec<jlong>, storage: K16ComputerStorageStatsSnapshot) {
+    values.push(storage.read_commands as jlong);
+    values.push(storage.write_commands as jlong);
+    values.push(storage.flush_commands as jlong);
+    values.push(storage.bytes_read as jlong);
+    values.push(storage.bytes_written as jlong);
+    values.push(storage.failed_commands as jlong);
 }
 
 fn push_i64(out: &mut Vec<u8>, value: i64) {
@@ -480,7 +491,9 @@ fn long_array_or_throw(env: &mut JNIEnv<'_>, values: &[jlong]) -> jlongArray {
 #[cfg(test)]
 mod tests {
     use super::k16_computer_stats_snapshot_values;
-    use crate::computer::stats::{K16ComputerDeviceStats, K16ComputerStatsSnapshot};
+    use crate::computer::stats::{
+        K16ComputerDeviceStats, K16ComputerStatsSnapshot, K16ComputerStorageStatsSnapshot,
+    };
     use crate::low_bus::{MachineBusStatsSnapshot, MachineBusTrafficSnapshot};
 
     #[test]
@@ -512,12 +525,13 @@ mod tests {
                     bytes_read: 14,
                     bytes_written: 15,
                 },
+                storage: K16ComputerStorageStatsSnapshot::default(),
             }],
         };
 
         assert_eq!(
             k16_computer_stats_snapshot_values(&snapshot),
-            vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 1, 11, 0x1000, 64, 12, 13, 14, 15],
+            vec![2, 2, 3, 4, 5, 6, 7, 8, 9, 1, 11, 0x1000, 64, 12, 13, 14, 15, 0, 0, 0, 0, 0, 0,],
         );
     }
 }
