@@ -287,29 +287,35 @@ static void write_decimal_bits(unsigned char *digits, unsigned int len,
 
 static void write_decimal_u32(unsigned int bits) {
   unsigned char digits[10];
+  char output[10];
   unsigned int start = 9;
+  unsigned int output_len = 0;
   for (unsigned int index = 0; index < sizeof(digits); index += 1) {
     digits[index] = 0;
   }
   write_decimal_bits(digits, sizeof(digits), &start, bits, 32);
   for (unsigned int index = start; index < sizeof(digits); index += 1) {
-    char byte = (char)(digits[index] + '0');
-    write_all(STDOUT_FILENO, &byte, 1);
+    output[output_len] = (char)(digits[index] + '0');
+    output_len += 1;
   }
+  write_all(STDOUT_FILENO, output, output_len);
 }
 
 static void write_decimal_words(unsigned int high, unsigned int low) {
   unsigned char digits[20];
+  char output[20];
   unsigned int start = 19;
+  unsigned int output_len = 0;
   for (unsigned int index = 0; index < sizeof(digits); index += 1) {
     digits[index] = 0;
   }
   write_decimal_bits(digits, sizeof(digits), &start, high, 32);
   write_decimal_bits(digits, sizeof(digits), &start, low, 32);
   for (unsigned int index = start; index < sizeof(digits); index += 1) {
-    char byte = (char)(digits[index] + '0');
-    write_all(STDOUT_FILENO, &byte, 1);
+    output[output_len] = (char)(digits[index] + '0');
+    output_len += 1;
   }
+  write_all(STDOUT_FILENO, output, output_len);
 }
 
 static unsigned int read_u32_le(const unsigned char *bytes) {
