@@ -1,3 +1,4 @@
+use crate::computer::stats::K16ComputerStorageStatsSnapshot;
 use crate::computer_abi;
 use crate::low_bus::MmioDevice;
 use crate::low_machine::{MachineMemory, MemoryFault};
@@ -14,6 +15,7 @@ pub(crate) struct StoragePortDevice {
     buffer_addr: u32,
     bytes_done: u32,
     sequence: u64,
+    stats: K16ComputerStorageStatsSnapshot,
     media: Option<Box<dyn StorageMedia>>,
 }
 
@@ -242,6 +244,7 @@ impl StoragePortDevice {
             buffer_addr: 0,
             bytes_done: 0,
             sequence: 0,
+            stats: K16ComputerStorageStatsSnapshot::default(),
             media: None,
         }
     }
@@ -266,6 +269,10 @@ impl StoragePortDevice {
 
     pub(crate) fn media_bytes(&self) -> Option<Vec<u8>> {
         self.media.as_ref().and_then(|media| media.snapshot_bytes())
+    }
+
+    pub(crate) fn stats_snapshot(&self) -> K16ComputerStorageStatsSnapshot {
+        self.stats
     }
 
     pub(crate) fn controller_snapshot(&self) -> StoragePortControllerSnapshot {
@@ -303,6 +310,7 @@ impl StoragePortDevice {
             computer_abi::STORAGE_COMMAND_FLUSH => match self.media.as_mut() {
                 Some(media) => match media.flush() {
                     Ok(()) => {
+                        self.stats.flush_commands = self.stats.flush_commands.wrapping_add(1);
                         self.status = computer_abi::STORAGE_STATUS_DONE;
                         self.error = computer_abi::STORAGE_ERROR_NONE;
                     }
@@ -313,8 +321,7 @@ impl StoragePortDevice {
             computer_abi::STORAGE_COMMAND_READ_BLOCKS
             | computer_abi::STORAGE_COMMAND_WRITE_BLOCKS => self.execute_transfer(command, memory),
             _ => {
-                self.status = computer_abi::STORAGE_STATUS_ERROR;
-                self.error = computer_abi::STORAGE_ERROR_INVALID_COMMAND;
+                self.fail(computer_abi::STORAGE_ERROR_INVALID_COMMAND);
             }
         }
     }
@@ -406,9 +413,22 @@ impl StoragePortDevice {
         self.status = computer_abi::STORAGE_STATUS_DONE;
         self.error = computer_abi::STORAGE_ERROR_NONE;
         self.bytes_done = byte_count;
+        match command {
+            computer_abi::STORAGE_COMMAND_READ_BLOCKS => {
+                self.stats.read_commands = self.stats.read_commands.wrapping_add(1);
+                self.stats.bytes_read = self.stats.bytes_read.wrapping_add(u64::from(byte_count));
+            }
+            computer_abi::STORAGE_COMMAND_WRITE_BLOCKS => {
+                self.stats.write_commands = self.stats.write_commands.wrapping_add(1);
+                self.stats.bytes_written =
+                    self.stats.bytes_written.wrapping_add(u64::from(byte_count));
+            }
+            _ => unreachable!("transfer command is validated by caller"),
+        }
     }
 
     fn fail(&mut self, error: i32) {
+        self.stats.failed_commands = self.stats.failed_commands.wrapping_add(1);
         self.status = computer_abi::STORAGE_STATUS_ERROR;
         self.error = error;
         self.bytes_done = 0;

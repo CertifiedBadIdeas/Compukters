@@ -24,6 +24,7 @@ import ru.lazyhat.compukterkraft.lang.runtime.VmSignalKind
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16BusTraffic
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16ComputerStatsSnapshot
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16MmioDeviceStats
+import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16StorageStats
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -156,6 +157,15 @@ class RuntimeProfilingTest {
                             base = 0x2000,
                             size = 64,
                             traffic = NativeK16BusTraffic(loads = 4, stores = 5, bytesRead = 6, bytesWritten = 7),
+                            storage =
+                                NativeK16StorageStats(
+                                    readCommands = 8,
+                                    writeCommands = 9,
+                                    flushCommands = 10,
+                                    bytesRead = 11,
+                                    bytesWritten = 12,
+                                    failedCommands = 13,
+                                ),
                         ),
                     ),
             ),
@@ -277,6 +287,10 @@ class RuntimeProfilingTest {
         )
         assertTrue(
             summary.contains("    k16Devices: mapped=1, loads=4, stores=5, bytesRead=6, bytesWritten=7"),
+            summary,
+        )
+        assertTrue(
+            summary.contains("    k16Storage0: reads=8, writes=9, flushes=10, bytesRead=11, bytesWritten=12, failed=13"),
             summary,
         )
         assertTrue(

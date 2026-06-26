@@ -24,6 +24,7 @@ import ru.lazyhat.compukterkraft.lang.runtime.VmSignalKind
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16BusTraffic
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16ComputerStatsSnapshot
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16MmioDeviceStats
+import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16StorageStats
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
@@ -215,6 +216,16 @@ data class RuntimeK16MmioDeviceMetrics(
     val base: Long,
     val size: Long,
     val traffic: RuntimeK16BusTrafficMetrics,
+    val storage: RuntimeK16StorageMetrics = RuntimeK16StorageMetrics(),
+)
+
+data class RuntimeK16StorageMetrics(
+    val readCommands: Long = 0,
+    val writeCommands: Long = 0,
+    val flushCommands: Long = 0,
+    val bytesRead: Long = 0,
+    val bytesWritten: Long = 0,
+    val failedCommands: Long = 0,
 )
 
 data class RuntimeK16StatsMetrics(
@@ -228,6 +239,15 @@ data class RuntimeK16StatsMetrics(
             stores = devices.sumOf { it.traffic.stores },
             bytesRead = devices.sumOf { it.traffic.bytesRead },
             bytesWritten = devices.sumOf { it.traffic.bytesWritten },
+        )
+    val storage0: RuntimeK16StorageMetrics =
+        RuntimeK16StorageMetrics(
+            readCommands = devices.sumOf { it.storage.readCommands },
+            writeCommands = devices.sumOf { it.storage.writeCommands },
+            flushCommands = devices.sumOf { it.storage.flushCommands },
+            bytesRead = devices.sumOf { it.storage.bytesRead },
+            bytesWritten = devices.sumOf { it.storage.bytesWritten },
+            failedCommands = devices.sumOf { it.storage.failedCommands },
         )
 }
 
@@ -291,6 +311,9 @@ data class RuntimeProfilingSnapshot(
             )
             appendLine(
                 "    k16Devices: mapped=${k16.devices.size}, loads=${k16.deviceTraffic.loads}, stores=${k16.deviceTraffic.stores}, bytesRead=${k16.deviceTraffic.bytesRead}, bytesWritten=${k16.deviceTraffic.bytesWritten}",
+            )
+            appendLine(
+                "    k16Storage0: reads=${k16.storage0.readCommands}, writes=${k16.storage0.writeCommands}, flushes=${k16.storage0.flushCommands}, bytesRead=${k16.storage0.bytesRead}, bytesWritten=${k16.storage0.bytesWritten}, failed=${k16.storage0.failedCommands}",
             )
             appendK16DeviceSummary()
             appendLine(
@@ -811,4 +834,15 @@ private fun NativeK16MmioDeviceStats.toRuntimeMetrics(): RuntimeK16MmioDeviceMet
         base = base,
         size = size,
         traffic = traffic.toRuntimeMetrics(),
+        storage = storage.toRuntimeMetrics(),
+    )
+
+private fun NativeK16StorageStats.toRuntimeMetrics(): RuntimeK16StorageMetrics =
+    RuntimeK16StorageMetrics(
+        readCommands = readCommands,
+        writeCommands = writeCommands,
+        flushCommands = flushCommands,
+        bytesRead = bytesRead,
+        bytesWritten = bytesWritten,
+        failedCommands = failedCommands,
     )

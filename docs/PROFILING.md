@@ -99,11 +99,14 @@ during the worker cache refresh path:
 ```text
 k16Bus: ramLoads=..., ramStores=..., ramBytesRead=..., ramBytesWritten=..., mmioLoads=..., mmioStores=..., mmioBytesRead=..., mmioBytesWritten=...
 k16Devices: mapped=..., loads=..., stores=..., bytesRead=..., bytesWritten=...
+k16Storage0: reads=..., writes=..., flushes=..., bytesRead=..., bytesWritten=..., failed=...
   device[...]: base=..., size=..., loads=..., stores=..., bytesRead=..., bytesWritten=...
 ```
 
 - `k16Bus` separates regular RAM traffic from MMIO traffic.
 - `k16Devices` aggregates mapped MMIO device traffic and then lists per-device counters by hardware device id.
+- `k16Storage0` counts successful storage0 block read, block write, and flush commands, successful transfer bytes, and
+  commands that reached the controller but completed with an error status.
 - These counters are cumulative inside the Rust VM; the Kotlin profiling collector stores the latest snapshot instead of
   summing repeated snapshots.
 

@@ -51,11 +51,21 @@ data class NativeK16BusTraffic(
     val bytesWritten: Long = 0,
 )
 
+data class NativeK16StorageStats(
+    val readCommands: Long = 0,
+    val writeCommands: Long = 0,
+    val flushCommands: Long = 0,
+    val bytesRead: Long = 0,
+    val bytesWritten: Long = 0,
+    val failedCommands: Long = 0,
+)
+
 data class NativeK16MmioDeviceStats(
     val deviceId: Long,
     val base: Long,
     val size: Long,
     val traffic: NativeK16BusTraffic,
+    val storage: NativeK16StorageStats = NativeK16StorageStats(),
 )
 
 data class NativeK16ComputerStatsSnapshot(
@@ -64,9 +74,9 @@ data class NativeK16ComputerStatsSnapshot(
     val devices: List<NativeK16MmioDeviceStats> = emptyList(),
 ) {
     companion object {
-        private const val VERSION: Long = 1
+        private const val VERSION: Long = 2
         private const val HEADER_LONGS: Int = 10
-        private const val DEVICE_LONGS: Int = 7
+        private const val DEVICE_LONGS: Int = 13
 
         fun from(values: LongArray): NativeK16ComputerStatsSnapshot {
             require(values.size >= HEADER_LONGS) {
@@ -93,6 +103,15 @@ data class NativeK16ComputerStatsSnapshot(
                                 stores = values[offset + 4],
                                 bytesRead = values[offset + 5],
                                 bytesWritten = values[offset + 6],
+                            ),
+                        storage =
+                            NativeK16StorageStats(
+                                readCommands = values[offset + 7],
+                                writeCommands = values[offset + 8],
+                                flushCommands = values[offset + 9],
+                                bytesRead = values[offset + 10],
+                                bytesWritten = values[offset + 11],
+                                failedCommands = values[offset + 12],
                             ),
                     )
                 }
