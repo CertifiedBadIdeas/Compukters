@@ -146,26 +146,26 @@ fn k16_c_libc_cat_has_minimal_libkraft_abi_sources() {
 
     let header = fs::read_to_string(&header).expect("C libkraft syscall header exists");
     assert!(header.contains("extern int __kraft_sys_open(const char *path, unsigned int len,"));
-    assert!(header.contains("__asm__(\"open\")"));
+    assert!(header.contains("__asm__(\"kraft_sys_open\")"));
     assert!(header.contains("int kraft_open(const char *path, unsigned int flags);"));
     assert!(header.contains("extern int __kraft_sys_mkdir"));
-    assert!(header.contains("__asm__(\"mkdir\")"));
+    assert!(header.contains("__asm__(\"kraft_sys_mkdir\")"));
     assert!(header.contains("extern int __kraft_sys_rmdir"));
-    assert!(header.contains("__asm__(\"rmdir\")"));
+    assert!(header.contains("__asm__(\"kraft_sys_rmdir\")"));
     assert!(header.contains("extern int __kraft_sys_unlink"));
-    assert!(header.contains("__asm__(\"unlink\")"));
+    assert!(header.contains("__asm__(\"kraft_sys_unlink\")"));
     assert!(header.contains("extern int __kraft_sys_read_dir"));
-    assert!(header.contains("__asm__(\"read_dir\")"));
+    assert!(header.contains("__asm__(\"kraft_sys_read_dir\")"));
     assert!(header.contains("extern int __kraft_sys_stat"));
-    assert!(header.contains("__asm__(\"stat\")"));
+    assert!(header.contains("__asm__(\"kraft_sys_stat\")"));
     assert!(header.contains("extern int __kraft_sys_rename"));
-    assert!(header.contains("__asm__(\"rename\")"));
+    assert!(header.contains("__asm__(\"kraft_sys_rename\")"));
     assert!(header.contains("extern int __kraft_sys_spawn(const void *request, unsigned int len)"));
-    assert!(header.contains("__asm__(\"spawn\")"));
+    assert!(header.contains("__asm__(\"kraft_sys_spawn\")"));
     assert!(header.contains("extern int __kraft_sys_wait(unsigned int pid, int *status)"));
-    assert!(header.contains("__asm__(\"wait\")"));
+    assert!(header.contains("__asm__(\"kraft_sys_wait\")"));
     assert!(header.contains("extern int __kraft_sys_run(const void *request, unsigned int len)"));
-    assert!(header.contains("__asm__(\"run\")"));
+    assert!(header.contains("__asm__(\"kraft_sys_run\")"));
     assert!(
         header.contains("int kraft_read_dir(const char *path, char *out, unsigned int out_len);")
     );
@@ -180,11 +180,13 @@ fn k16_c_libc_cat_has_minimal_libkraft_abi_sources() {
     assert!(header
         .contains("int kraft_run_with_args(const char *path, int argc, const char *const *argv);"));
     assert!(header.contains("int kraft_wait(int pid, int *status);"));
-    assert!(header.contains("int read(int fd, void *buffer, unsigned int count);"));
-    assert!(header.contains("int write(int fd, const void *buffer, unsigned int count);"));
-    assert!(header.contains("int close(int fd);"));
-    assert!(header.contains("void *sbrk(int increment);"));
-    assert!(header.contains("void _exit(int status);"));
+    assert!(header.contains("int read(int fd, void *buffer, unsigned int count)"));
+    assert!(header.contains("__asm__(\"kraft_sys_read\")"));
+    assert!(header.contains("int write(int fd, const void *buffer, unsigned int count)"));
+    assert!(header.contains("__asm__(\"kraft_sys_write\")"));
+    assert!(header.contains("int close(int fd) __asm__(\"kraft_sys_close\");"));
+    assert!(header.contains("void *sbrk(int increment) __asm__(\"kraft_sys_sbrk\");"));
+    assert!(header.contains("void _exit(int status) __asm__(\"kraft_sys_exit\");"));
     assert!(header.contains("#define KRAFT_FD_STDOUT 1"));
     assert!(header.contains("#define KRAFT_OPEN_READ_ONLY 0"));
     assert!(header.contains("#define KRAFT_OPEN_WRITE_ONLY 1"));
@@ -264,14 +266,14 @@ fn k16_c_libc_cat_has_minimal_libkraft_abi_sources() {
 
     let libkraft = fs::read_to_string(&libkraft).expect("C libkraft shared provider exists");
     for symbol in [
-        "int open(const char *path, unsigned int len, unsigned int flags)",
-        "int read(unsigned int fd, void *buffer, unsigned int len)",
-        "int write(unsigned int fd, const void *buffer, unsigned int len)",
-        "int close(unsigned int fd)",
-        "int spawn(const void *request, unsigned int len)",
-        "int run(const void *request, unsigned int len)",
-        "int wait(unsigned int pid, int *status)",
-        "void _exit(int status)",
+        "int kraft_sys_open(const char *path, unsigned int len, unsigned int flags)",
+        "int kraft_sys_read(unsigned int fd, void *buffer, unsigned int len)",
+        "int kraft_sys_write(unsigned int fd, const void *buffer, unsigned int len)",
+        "int kraft_sys_close(unsigned int fd)",
+        "int kraft_sys_spawn(const void *request, unsigned int len)",
+        "int kraft_sys_run(const void *request, unsigned int len)",
+        "int kraft_sys_wait(unsigned int pid, int *status)",
+        "void kraft_sys_exit(int status)",
     ] {
         assert!(
             libkraft.contains(symbol),
@@ -284,8 +286,11 @@ fn k16_c_libc_cat_has_minimal_libkraft_abi_sources() {
 
     let unistd = fs::read_to_string(&unistd).expect("C libc-lite unistd header exists");
     assert!(unistd.contains("int open(const char *path, int flags);"));
-    assert!(unistd.contains("int read(int fd, void *buffer, unsigned int count);"));
-    assert!(unistd.contains("int write(int fd, const void *buffer, unsigned int count);"));
+    assert!(unistd.contains("int read(int fd, void *buffer, unsigned int count)"));
+    assert!(unistd.contains("__asm__(\"kraft_sys_read\")"));
+    assert!(unistd.contains("int write(int fd, const void *buffer, unsigned int count)"));
+    assert!(unistd.contains("__asm__(\"kraft_sys_write\")"));
+    assert!(unistd.contains("int close(int fd) __asm__(\"kraft_sys_close\");"));
     assert!(unistd.contains("#define STDOUT_FILENO KRAFT_FD_STDOUT"));
     assert!(unistd.contains("int kraft_mkdir(const char *path);"));
     assert!(unistd.contains("int kraft_rmdir(const char *path);"));

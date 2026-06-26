@@ -656,7 +656,7 @@ class K16FirmwareResourceTest {
             metadata.contains("libkraft.kso"),
             "bundled /bin/cat.kx should declare libkraft.kso as a needed library",
         )
-        listOf("open", "read", "write", "close").forEach { symbol ->
+        listOf("kraft_sys_open", "kraft_sys_read", "kraft_sys_write", "kraft_sys_close").forEach { symbol ->
             assertTrue(
                 metadata.contains(symbol),
                 "bundled /bin/cat.kx should import $symbol from libkraft",
@@ -731,7 +731,7 @@ class K16FirmwareResourceTest {
         assertEquals(3, abiKind, "bundled /bin/cp.kx must use K16E abi kind program")
         val metadata = bytes.decodeToString()
         assertTrue(metadata.contains("libkraft.kso"), "bundled /bin/cp.kx should declare libkraft.kso")
-        listOf("open", "read", "write", "close").forEach { symbol ->
+        listOf("kraft_sys_open", "kraft_sys_read", "kraft_sys_write", "kraft_sys_close").forEach { symbol ->
             assertTrue(metadata.contains(symbol), "bundled /bin/cp.kx should import $symbol from libkraft")
         }
     }
@@ -772,7 +772,7 @@ class K16FirmwareResourceTest {
         assertEquals(3, abiKind, "bundled /bin/mv.kx must use K16E abi kind program")
         val metadata = bytes.decodeToString()
         assertTrue(metadata.contains("libkraft.kso"), "bundled /bin/mv.kx should declare libkraft.kso")
-        listOf("stat", "rename", "write").forEach { symbol ->
+        listOf("kraft_sys_stat", "kraft_sys_rename", "kraft_sys_write").forEach { symbol ->
             assertTrue(metadata.contains(symbol), "bundled /bin/mv.kx should import $symbol from libkraft")
         }
     }
@@ -813,7 +813,7 @@ class K16FirmwareResourceTest {
         assertEquals(3, abiKind, "bundled /bin/ls.kx must use K16E abi kind program")
         val metadata = bytes.decodeToString()
         assertTrue(metadata.contains("libkraft.kso"), "bundled /bin/ls.kx should declare libkraft.kso")
-        listOf("read_dir", "stat", "write").forEach { symbol ->
+        listOf("kraft_sys_read_dir", "kraft_sys_stat", "kraft_sys_write").forEach { symbol ->
             assertTrue(metadata.contains(symbol), "bundled /bin/ls.kx should import $symbol from libkraft")
         }
     }
@@ -854,7 +854,7 @@ class K16FirmwareResourceTest {
         assertEquals(3, abiKind, "bundled /bin/stat.kx must use K16E abi kind program")
         val metadata = bytes.decodeToString()
         assertTrue(metadata.contains("libkraft.kso"), "bundled /bin/stat.kx should declare libkraft.kso")
-        listOf("stat", "write").forEach { symbol ->
+        listOf("kraft_sys_stat", "kraft_sys_write").forEach { symbol ->
             assertTrue(metadata.contains(symbol), "bundled /bin/stat.kx should import $symbol from libkraft")
         }
     }
@@ -898,7 +898,7 @@ class K16FirmwareResourceTest {
             metadata.contains("libkraft.kso"),
             "bundled /bin/write.kx should declare libkraft.kso as a needed library",
         )
-        listOf("open", "write", "close").forEach { symbol ->
+        listOf("kraft_sys_open", "kraft_sys_write", "kraft_sys_close").forEach { symbol ->
             assertTrue(
                 metadata.contains(symbol),
                 "bundled /bin/write.kx should import $symbol from libkraft",
@@ -1035,18 +1035,18 @@ class K16FirmwareResourceTest {
         assertEquals(4, kraftBytes.u32Le(offset = 24), "bundled libkraft must use K16E abi kind shared-object")
         val kraftMetadata = kraftBytes.decodeToString()
         listOf(
-            "open",
-            "read",
-            "write",
-            "close",
-            "read_dir",
-            "stat",
-            "rename",
-            "mkdir",
-            "rmdir",
-            "unlink",
-            "sbrk",
-            "_exit",
+            "kraft_sys_open",
+            "kraft_sys_read",
+            "kraft_sys_write",
+            "kraft_sys_close",
+            "kraft_sys_read_dir",
+            "kraft_sys_stat",
+            "kraft_sys_rename",
+            "kraft_sys_mkdir",
+            "kraft_sys_rmdir",
+            "kraft_sys_unlink",
+            "kraft_sys_sbrk",
+            "kraft_sys_exit",
         ).forEach { symbol ->
             assertTrue(
                 kraftMetadata.contains(symbol),
@@ -1067,7 +1067,7 @@ class K16FirmwareResourceTest {
             unameMetadata.contains("libkraft.kso"),
             "uname should declare libkraft.kso as a needed library",
         )
-        listOf("write").forEach { symbol ->
+        listOf("kraft_sys_write").forEach { symbol ->
             assertTrue(
                 unameMetadata.contains(symbol),
                 "uname should import $symbol from libkraft",
@@ -1800,19 +1800,19 @@ class K16FirmwareResourceTest {
         assertTrue(processHeader.contains("int kraft_spawn_with_args(const char *path, int argc, const char *const *argv);"))
         assertTrue(processHeader.contains("int kraft_wait(int pid, int *status);"))
         assertTrue(syscallHeader.contains("extern int __kraft_sys_spawn(const void *request, unsigned int len)"))
-        assertTrue(syscallHeader.contains("__asm__(\"spawn\")"))
+        assertTrue(syscallHeader.contains("__asm__(\"kraft_sys_spawn\")"))
         assertTrue(syscallHeader.contains("extern int __kraft_sys_wait(unsigned int pid, int *status)"))
-        assertTrue(syscallHeader.contains("__asm__(\"wait\")"))
+        assertTrue(syscallHeader.contains("__asm__(\"kraft_sys_wait\")"))
         assertTrue(syscallHeader.contains("extern int __kraft_sys_run(const void *request, unsigned int len)"))
-        assertTrue(syscallHeader.contains("__asm__(\"run\")"))
+        assertTrue(syscallHeader.contains("__asm__(\"kraft_sys_run\")"))
         assertTrue(cSyscallSource.contains("kraft_process_with_args(KRAFT_SPAWN_ARGV_REQUEST_MAGIC"))
         assertTrue(cSyscallSource.contains("__kraft_sys_spawn"))
         assertTrue(cSyscallSource.contains("__kraft_sys_wait((unsigned int)pid, status)"))
         assertTrue(cSyscallSource.contains("kraft_process_with_args(KRAFT_RUN_ARGV_REQUEST_MAGIC"))
         assertTrue(cSyscallSource.contains("__kraft_sys_run"))
-        assertTrue(sharedKraftSource.contains("int spawn(const void *request, unsigned int len)"))
-        assertTrue(sharedKraftSource.contains("int wait(unsigned int pid, int *status)"))
-        assertTrue(sharedKraftSource.contains("int run(const void *request, unsigned int len)"))
+        assertTrue(sharedKraftSource.contains("int kraft_sys_spawn(const void *request, unsigned int len)"))
+        assertTrue(sharedKraftSource.contains("int kraft_sys_wait(unsigned int pid, int *status)"))
+        assertTrue(sharedKraftSource.contains("int kraft_sys_run(const void *request, unsigned int len)"))
         assertTrue(shellSource.contains("kraft_run_with_args(program_path, argc, argv)"), "shell should launch utilities through argv requests")
         assertFalse(kernelSyscallSource.contains("abi_syscall::RUN_FORMAT_PATH"), "kernel should reject legacy path RUN format")
         assertFalse(initSource.contains("fn dispatch_command("), "interactive shell dispatch should not live in init")
@@ -1965,7 +1965,7 @@ class K16FirmwareResourceTest {
         assertTrue(fsHeader.contains("int kraft_rename(const char *old_path, const char *new_path);"))
         assertTrue(fsHeader.contains("#define rename(old_path, new_path) kraft_rename((old_path), (new_path))"))
         assertTrue(syscallHeader.contains("extern int __kraft_sys_rename"))
-        assertTrue(syscallHeader.contains("__asm__(\"rename\")"))
+        assertTrue(syscallHeader.contains("__asm__(\"kraft_sys_rename\")"))
         assertTrue(syscallSource.contains("int kraft_rename(const char *old_path, const char *new_path)"))
         assertTrue(syscallSource.contains("put_u32_le(request + 0, KRAFT_RENAME_REQUEST_MAGIC)"))
         assertTrue(syscallSource.contains("__kraft_sys_rename(request, request_len)"))
@@ -1988,8 +1988,9 @@ class K16FirmwareResourceTest {
         assertTrue(writeSource.contains("write_all(fd, payload, len)"))
         assertTrue(writeSource.contains("write_text(STDOUT_FILENO, \"WROTE \")"))
         assertTrue(unistdHeader.contains("int open(const char *path, int flags);"))
-        assertTrue(unistdHeader.contains("int write(int fd, const void *buffer, unsigned int count);"))
-        assertTrue(unistdHeader.contains("int close(int fd);"))
+        assertTrue(unistdHeader.contains("int write(int fd, const void *buffer, unsigned int count)"))
+        assertTrue(unistdHeader.contains("__asm__(\"kraft_sys_write\")"))
+        assertTrue(unistdHeader.contains("int close(int fd) __asm__(\"kraft_sys_close\");"))
         assertTrue(fcntlHeader.contains("#define O_CREAT KRAFT_OPEN_CREATE"))
         assertTrue(fcntlHeader.contains("#define O_APPEND KRAFT_OPEN_APPEND"))
         assertTrue(stringHeader.contains("unsigned int strlen(const char *text)"))

@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- `/lib/libkraft.kso` now uses explicit raw OS ABI export names with a
+  `kraft_sys_*` prefix, such as `kraft_sys_open`, `kraft_sys_write`,
+  `kraft_sys_stat`, and `kraft_sys_run`. libc-lite keeps the user-facing C
+  calls and wrappers (`open(path, flags)`, `write`, `stat(path, metadata)`,
+  `kraft_run_with_args`) while importing those prefixed dynamic symbols through
+  `__asm__` aliases. This keeps `libkraft.kso` as the syscall-shaped OS ABI
+  provider and reserves unprefixed libc-style names for a future libc layer.
 - Production C userland now builds its K16 arch helper object from checked-in
   source at `guest/c/arch/k16/cpu-helpers.kasm` through `k16 asm <input.kasm>
   -o <output.ko>`. The bundled `/bin/*.kx` C programs and `/lib/libkraft.kso`
@@ -20,22 +27,22 @@
   the source-built-dev K16 Clang path and libc-lite startup layer. libc-lite
   exposes `kraft_run_with_args(path, argc, argv)` over the existing structured
   K16 `RUN` argv request, and `/lib/libkraft.kso` exports the syscall-shaped
-  `run(request, len)` ABI symbol. The C shell's `ticks` builtin reads the
-  `timer0` MMIO low/high words directly as a diagnostic hardware-facing command.
-  The fixed-number syscall helpers are stack-neutral, so caller-owned stack
-  buffers are not overlapped by helper save slots. The shell preserves the shipped prompt, fd-backed
-  stdin/stdout behavior, builtins, cwd-aware utility argument resolution, and
-  foreground `shell -> utility` execution model while dropping the Rust
-  `core,alloc` production shell build.
+  `kraft_sys_run(request, len)` ABI symbol. The C shell's `ticks` builtin reads
+  the `timer0` MMIO low/high words directly as a diagnostic hardware-facing
+  command. The fixed-number syscall helpers are stack-neutral, so caller-owned
+  stack buffers are not overlapped by helper save slots. The shell preserves the
+  shipped prompt, fd-backed stdin/stdout behavior, builtins, cwd-aware utility
+  argument resolution, and foreground `shell -> utility` execution model while
+  dropping the Rust `core,alloc` production shell build.
 - Production `/bin/init.kx` now builds from `guest/c/init/init.c` through the
   source-built-dev K16 Clang path and libc-lite startup layer. libc-lite exposes
   `kraft_spawn_with_args(path, argc, argv)` and `kraft_wait(pid, status)` over
   the existing structured K16 `SPAWN` argv request and `WAIT` syscall, while
-  `/lib/libkraft.kso` exports the syscall-shaped `spawn(request, len)` and
-  `wait(pid, status)` ABI symbols. The C init preserves the previous lifecycle:
-  spawn `/bin/shell.kx` with `argv[0]` set to the shell path, wait for it,
-  restart on status 0, propagate non-zero shell status, and exit 1 on
-  spawn/wait failure.
+  `/lib/libkraft.kso` exports the syscall-shaped
+  `kraft_sys_spawn(request, len)` and `kraft_sys_wait(pid, status)` ABI symbols.
+  The C init preserves the previous lifecycle: spawn `/bin/shell.kx` with
+  `argv[0]` set to the shell path, wait for it, restart on status 0, propagate
+  non-zero shell status, and exit 1 on spawn/wait failure.
 - Removed the legacy Rust guest crates for production coreutils after the C
   migration: `k16-uname`, `k16-cat`, `k16-write`, `k16-rm`, `k16-mkdir`,
   `k16-rmdir`, `k16-stat`, `k16-ls`, `k16-cp`, and `k16-mv`. The bundled
@@ -46,40 +53,43 @@
   source snippets rather than bundled guest proof programs.
 - Production `/bin/cp.kx` and `/bin/mv.kx` now build from
   `guest/c/coreutils` through the source-built-dev K16 Clang path and
-  libc-lite startup layer. `/bin/cp.kx` imports `open`, `read`, `write`, and
-  `close` from `/lib/libkraft.kso`; `/bin/mv.kx` imports `stat`, `rename`,
-  and `write`. libc-lite now exposes standard-shaped `rename(old, new)` via a
+  libc-lite startup layer. `/bin/cp.kx` imports `kraft_sys_open`,
+  `kraft_sys_read`, `kraft_sys_write`, and `kraft_sys_close` from
+  `/lib/libkraft.kso`; `/bin/mv.kx` imports `kraft_sys_stat`,
+  `kraft_sys_rename`, and `kraft_sys_write`. libc-lite now exposes
+  standard-shaped `rename(old, new)` via a
   `kraft_rename` wrapper over the existing structured K16 `RENAME` request,
-  while `/lib/libkraft.kso` exports the syscall-shaped `rename(request, len)`
-  boundary.
+  while `/lib/libkraft.kso` exports the syscall-shaped
+  `kraft_sys_rename(request, len)` boundary.
 - Production `/bin/stat.kx` and `/bin/ls.kx` now build from
   `guest/c/coreutils` through the source-built-dev K16 Clang path and
   libc-lite startup layer. libc-lite now exposes `struct kraft_stat`,
   `stat(path, metadata)`, and `read_dir(path, out, out_len)` through
   `guest/c/libc/include/kraft/fs.h`; those public C calls macro-dispatch to
   `kraft_stat` and `kraft_read_dir` wrappers so they can safely call the
-  syscall-shaped `stat(path, len, metadata)` and
-  `read_dir(request, len)` exports from `/lib/libkraft.kso` without ABI
-  collisions. Shell-visible `stat`/`ls` output remains compatible with the
+  syscall-shaped `kraft_sys_stat(path, len, metadata)` and
+  `kraft_sys_read_dir(request, len)` exports from `/lib/libkraft.kso` without
+  ABI collisions. Shell-visible `stat`/`ls` output remains compatible with the
   previous Rust utilities.
 - libc-lite path mutator wrappers now use the same explicit wrapper boundary as
   `open`: public C `mkdir(path)`, `rmdir(path)`, and `unlink(path)` calls
   macro-dispatch to `kraft_mkdir`, `kraft_rmdir`, and `kraft_unlink`, which in
-  turn import the syscall-shaped `libkraft` symbols carrying explicit path
-  lengths. This prevents auto-imports from bypassing libc-lite argument
+  turn import the syscall-shaped `kraft_sys_mkdir`, `kraft_sys_rmdir`, and
+  `kraft_sys_unlink` symbols carrying explicit path lengths. This prevents
+  auto-imports from bypassing libc-lite argument
   adaptation.
 - Production `/bin/rm.kx`, `/bin/mkdir.kx`, and `/bin/rmdir.kx` now build
   from `guest/c/coreutils` through the source-built-dev K16 Clang path and
   libc-lite startup layer. libc-lite now exposes standard-shaped
   `unlink(path)`, `mkdir(path)`, and `rmdir(path)` wrappers over the existing
   K16 path-length syscalls, and `/lib/libkraft.kso` exports the matching
-  plain shared OS ABI symbols so the C utilities import the mutator calls
+  prefixed shared OS ABI symbols so the C utilities import the mutator calls
   dynamically. Shell-visible output remains the existing KraftOS policy:
   `CREATED <path>`, `REMOVED <path>`, or `ERR <STATUS> <path>`.
 - Production `/bin/uname.kx` now builds from
   `guest/c/coreutils/uname.c` through the source-built-dev K16 Clang path and
   libc-lite startup layer. It remains the smallest shared OS ABI importer,
-  resolving `write` from `/lib/libkraft.kso` instead of retaining the
+  resolving `kraft_sys_write` from `/lib/libkraft.kso` instead of retaining the
   syscall-boundary call in its own payload.
 - Moved the first-class C guest userland sources out of the Rust guest
   workspace: libc-lite now lives under `guest/c/libc`, and bundled C coreutils
@@ -90,16 +100,17 @@
   `string.h`. `kraft/syscalls.h` remains the low-level K16 ABI header, while C
   userland can now include common headers for `open`, `read`, `write`, `close`,
   `O_*` flags, and simple string helpers. Production `/bin/write.kx` now builds
-  from `guest/c/coreutils/write.c` and imports `open`, `write`, and
-  `close` from `/lib/libkraft.kso`, covering both
-  `write <path> <payload>` and `write --append <path> <payload>`. The decimal
-  status printer avoids compiler-rt division helpers for now, keeping this
-  slice inside the existing libc-lite/runtime surface.
+  from `guest/c/coreutils/write.c` and imports `kraft_sys_open`,
+  `kraft_sys_write`, and `kraft_sys_close` from `/lib/libkraft.kso`, covering
+  both `write <path> <payload>` and `write --append <path> <payload>`. The
+  decimal status printer avoids compiler-rt division helpers for now, keeping
+  this slice inside the existing libc-lite/runtime surface.
 - Promoted the first bundled C hosted userland baseline into production
   `/bin/cat.kx`. The source-built-dev Gradle toolchain builds a K16-capable
   `clang`, compiles `guest/c/coreutils/cat.c`, and links it against the
   reusable libc-lite startup/header layer under `guest/c/libc`. The
-  resulting K16E v5 program imports `open`, `read`, `write`, and `close` from
+  resulting K16E v5 program imports `kraft_sys_open`, `kraft_sys_read`,
+  `kraft_sys_write`, and `kraft_sys_close` from
   `/lib/libkraft.kso`. The C startup object reuses the existing K16
   `k16-startup` entry shim, adapts the kernel `r1/r2` bounded argv table into
   ordinary `main(int argc, char **argv)`, and synthesizes an empty `argv[0]`
@@ -113,8 +124,10 @@
   v5 imports for `libkraft.kso`, proving that a production utility can call a
   plain shared OS ABI surface through the kernel loader without listing each
   imported symbol by hand. `libkraft.kso` intentionally exports syscall-shaped
-  symbols such as `open`, `read`, `write`, `close`, `rename`, `mkdir`, `rmdir`,
-  `unlink`, `sbrk`, and `_exit`; it is not a Rust stdlib replacement. This
+  symbols such as `kraft_sys_open`, `kraft_sys_read`, `kraft_sys_write`,
+  `kraft_sys_close`, `kraft_sys_rename`, `kraft_sys_mkdir`,
+  `kraft_sys_rmdir`, `kraft_sys_unlink`, `kraft_sys_sbrk`, and
+  `kraft_sys_exit`; it is not a Rust stdlib replacement. This
   remains narrower than dynamic Rust `core`, Rust `std`, libc, or libc++
   sharing.
 - Bundled K16 shared-runtime adoption now uses a real provider artifact:
