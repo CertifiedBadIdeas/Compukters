@@ -3,13 +3,14 @@ use crate::computer::devices::{
     MmuControlDevice, SerialInputDevice, StoragePortDevice, TimerDevice,
 };
 use crate::computer::profile::ComputerMachineProfile;
+use crate::computer::stats::{K16ComputerDeviceStats, K16ComputerStatsSnapshot};
 use crate::computer_abi;
 use crate::display::DisplayFrameDelta;
 use crate::k16::{
     K16AddressMode, K16Cpu, K16PrivilegeMode, K16Signal, K16_INTERRUPT_SOURCE_KEYBOARD0,
     K16_INTERRUPT_SOURCE_TIMER0,
 };
-use crate::low_bus::{MachineBus, MmioDeviceId};
+use crate::low_bus::{MachineBus, MachineBusStatsSnapshot, MmioDeviceId};
 use crate::low_machine::{MachineMemory, MemoryFault};
 use crate::mmu::{MmuAddressSpaceId, MmuAddressSpaces, MmuFault, MmuMapFlags};
 use std::fmt::{Display, Formatter};
@@ -335,6 +336,26 @@ impl ComputerMachine {
         snapshot_flow::snapshot_v1(self)
     }
 
+    pub fn stats_snapshot(&self) -> K16ComputerStatsSnapshot {
+        let bus = self.bus.stats_snapshot();
+        let mut devices = Vec::new();
+        self.push_stats_device(&bus, &mut devices, self.control_device_id, "control");
+        self.push_stats_device(&bus, &mut devices, self.debug_device_id, "debug");
+        self.push_stats_device(
+            &bus,
+            &mut devices,
+            self.serial_input_device_id,
+            "serial-input",
+        );
+        self.push_stats_device(&bus, &mut devices, self.gpu0_device_id, "gpu0");
+        self.push_stats_device(&bus, &mut devices, self.storage0_device_id, "storage0");
+        self.push_stats_device(&bus, &mut devices, self.timer0_device_id, "timer0");
+        self.push_stats_device(&bus, &mut devices, self.keyboard0_device_id, "keyboard0");
+        self.push_stats_device(&bus, &mut devices, self.mmu0_device_id, "mmu0");
+        self.push_stats_device(&bus, &mut devices, self.bios_flash_device_id, "bios-flash");
+        K16ComputerStatsSnapshot { bus, devices }
+    }
+
     pub fn restore_ram_snapshot_v1(
         profile: ComputerMachineProfile,
         snapshot_bytes: &[u8],
@@ -656,6 +677,32 @@ impl ComputerMachine {
             size,
             readable,
             writable,
+        });
+    }
+
+    fn push_stats_device(
+        &self,
+        bus: &MachineBusStatsSnapshot,
+        devices: &mut Vec<K16ComputerDeviceStats>,
+        device_id: Option<MmioDeviceId>,
+        name: &'static str,
+    ) {
+        let Some(device_id) = device_id else {
+            return;
+        };
+        let Some(device) = bus
+            .mmio_devices
+            .iter()
+            .find(|device| device.device_id == device_id)
+        else {
+            return;
+        };
+        devices.push(K16ComputerDeviceStats {
+            name,
+            device_id,
+            base: device.base,
+            size: device.size,
+            traffic: device.traffic,
         });
     }
 

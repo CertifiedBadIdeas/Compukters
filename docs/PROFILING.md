@@ -107,6 +107,15 @@ k16Wait: entries=..., timerWakeups=..., inputWakeups=..., idleSkips=...
 These numbers are local diagnostics, not historical benchmark artifacts. Git remains the history for committed benchmark
 snapshots such as `docs/benchmarks/k16-vm-current.txt`.
 
+## K16 VM Stats API
+
+The Rust VM owns low-level traffic counters. `MachineBus::stats_snapshot()` reports RAM and MMIO loads/stores plus byte
+counts, and `K16ComputerHandle::stats_snapshot()` wraps those counters with named computer devices such as `debug`,
+`control`, `gpu0`, and `storage0`.
+
+This is the stable in-process observability boundary. JNI should remain a thin transport that fetches one aggregated
+snapshot when a report needs it; hot RAM/MMIO/device operations must not call into Kotlin.
+
 ## JFR
 
 JFR is available with the JDK and is the first external profiler to try.

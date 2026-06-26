@@ -57,6 +57,7 @@ fn k16_computer_handle_source_does_not_expose_low_image_startup_or_handoff() {
     assert!(computer_mod_source.contains("K16ComputerHandle"));
     assert!(!computer_mod_source.contains("RuxComputerHandle"));
     assert!(handle_source.contains("pub struct K16ComputerHandle"));
+    assert!(handle_source.contains("pub fn stats_snapshot(&self) -> K16ComputerStatsSnapshot"));
     assert!(!handle_source.contains("pub struct RuxComputerHandle"));
     assert!(!handle_source.contains("pub fn create("));
     assert!(!handle_source.contains("create_with_storage0_media"));

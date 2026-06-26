@@ -1,4 +1,6 @@
-use crate::computer::{BootHandoffError, ComputerMachine, ComputerMachineProfile, CpuId};
+use crate::computer::{
+    BootHandoffError, ComputerMachine, ComputerMachineProfile, CpuId, K16ComputerStatsSnapshot,
+};
 use crate::display::DisplayFrameDelta;
 use crate::k16::K16Signal;
 use crate::k16e;
@@ -172,6 +174,10 @@ impl K16ComputerHandle {
 
     pub fn snapshot_v1(&self) -> Result<Vec<u8>, String> {
         self.machine.snapshot_v1()
+    }
+
+    pub fn stats_snapshot(&self) -> K16ComputerStatsSnapshot {
+        self.machine.stats_snapshot()
     }
 
     pub fn write_guest_ram_bytes(&mut self, address: u32, bytes: &[u8]) -> Result<(), String> {
