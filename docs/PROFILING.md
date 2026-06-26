@@ -113,6 +113,17 @@ The Rust VM owns low-level traffic counters. `MachineBus::stats_snapshot()` repo
 counts, and `K16ComputerHandle::stats_snapshot()` wraps those counters with named computer devices such as `debug`,
 `control`, `gpu0`, and `storage0`.
 
+Use the Rust-only VM stats report when the question is about VM work rather than host integration overhead:
+
+```bash
+cd rust/host/k16-vm
+cargo run --release --example vm_stats_report -- 100000
+```
+
+The report runs the existing K16 benchmark workloads and prints deterministic counters such as CPU steps, RAM traffic,
+MMIO traffic, and mapped MMIO device count. It intentionally does not include JNI, Kotlin runtime scheduling, display
+cache refresh, or Minecraft-side timing.
+
 This is the stable in-process observability boundary. JNI should remain a thin transport that fetches one aggregated
 snapshot when a report needs it; hot RAM/MMIO/device operations must not call into Kotlin.
 
