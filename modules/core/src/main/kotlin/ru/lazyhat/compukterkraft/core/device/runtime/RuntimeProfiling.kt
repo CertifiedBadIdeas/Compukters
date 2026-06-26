@@ -86,6 +86,11 @@ interface RuntimeMetricsCollector {
         idle: Boolean,
     )
 
+    fun recordK16RunSlice(
+        signal: K16RuntimeSignal,
+        nanos: Long,
+    )
+
     fun recordK16WaitEnter()
 
     fun recordK16WaitTimerWakeup()
@@ -95,6 +100,13 @@ interface RuntimeMetricsCollector {
     fun recordK16WaitIdleSkip()
 
     fun snapshot(): RuntimeProfilingSnapshot
+}
+
+enum class K16RuntimeSignal {
+    HALT,
+    WAIT,
+    YIELD,
+    PAUSE,
 }
 
 data class RuntimeTickMetrics(
@@ -155,6 +167,12 @@ data class RuntimeVmMetrics(
     val nativeDaemonTurns: Long = 0,
     val nativeDaemonHaltedProcesses: Long = 0,
     val nativeDaemonHostRequests: Long = 0,
+    val k16RunSlices: Long = 0,
+    val k16RunNanos: Long = 0,
+    val k16RunHaltSignals: Long = 0,
+    val k16RunWaitSignals: Long = 0,
+    val k16RunYieldSignals: Long = 0,
+    val k16RunPauseSignals: Long = 0,
     val k16WaitEntries: Long = 0,
     val k16WaitTimerWakeups: Long = 0,
     val k16WaitInputWakeups: Long = 0,
@@ -210,6 +228,9 @@ data class RuntimeProfilingSnapshot(
             )
             appendLine(
                 "    nativeDaemon: ticks=${vm.nativeDaemonTicks}, active=${vm.nativeDaemonActiveNanos.nanos()}, idle=${vm.nativeDaemonIdleTicks}, turns=${vm.nativeDaemonTurns}, halted=${vm.nativeDaemonHaltedProcesses}, hostRequests=${vm.nativeDaemonHostRequests}",
+            )
+            appendLine(
+                "    k16Execution: slices=${vm.k16RunSlices}, time=${vm.k16RunNanos.nanos()}, haltSignals=${vm.k16RunHaltSignals}, waitSignals=${vm.k16RunWaitSignals}, yieldSignals=${vm.k16RunYieldSignals}, pauseSignals=${vm.k16RunPauseSignals}",
             )
             appendLine(
                 "    k16Wait: entries=${vm.k16WaitEntries}, timerWakeups=${vm.k16WaitTimerWakeups}, inputWakeups=${vm.k16WaitInputWakeups}, idleSkips=${vm.k16WaitIdleSkips}",
@@ -331,6 +352,11 @@ object NoOpRuntimeMetricsCollector : RuntimeMetricsCollector {
         idle: Boolean,
     ) = Unit
 
+    override fun recordK16RunSlice(
+        signal: K16RuntimeSignal,
+        nanos: Long,
+    ) = Unit
+
     override fun recordK16WaitEnter() = Unit
 
     override fun recordK16WaitTimerWakeup() = Unit
@@ -397,6 +423,12 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
     private val nativeDaemonTurns = AtomicLong()
     private val nativeDaemonHaltedProcesses = AtomicLong()
     private val nativeDaemonHostRequests = AtomicLong()
+    private val k16RunSlices = AtomicLong()
+    private val k16RunNanos = AtomicLong()
+    private val k16RunHaltSignals = AtomicLong()
+    private val k16RunWaitSignals = AtomicLong()
+    private val k16RunYieldSignals = AtomicLong()
+    private val k16RunPauseSignals = AtomicLong()
     private val k16WaitEntries = AtomicLong()
     private val k16WaitTimerWakeups = AtomicLong()
     private val k16WaitInputWakeups = AtomicLong()
@@ -528,6 +560,20 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
         if (idle) nativeDaemonIdleTicks.incrementAndGet()
     }
 
+    override fun recordK16RunSlice(
+        signal: K16RuntimeSignal,
+        nanos: Long,
+    ) {
+        k16RunSlices.incrementAndGet()
+        k16RunNanos.addAndGet(nanos.coerceAtLeast(0))
+        when (signal) {
+            K16RuntimeSignal.HALT -> k16RunHaltSignals.incrementAndGet()
+            K16RuntimeSignal.WAIT -> k16RunWaitSignals.incrementAndGet()
+            K16RuntimeSignal.YIELD -> k16RunYieldSignals.incrementAndGet()
+            K16RuntimeSignal.PAUSE -> k16RunPauseSignals.incrementAndGet()
+        }
+    }
+
     override fun recordK16WaitEnter() {
         k16WaitEntries.incrementAndGet()
     }
@@ -589,6 +635,12 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
                     nativeDaemonTurns = nativeDaemonTurns.get(),
                     nativeDaemonHaltedProcesses = nativeDaemonHaltedProcesses.get(),
                     nativeDaemonHostRequests = nativeDaemonHostRequests.get(),
+                    k16RunSlices = k16RunSlices.get(),
+                    k16RunNanos = k16RunNanos.get(),
+                    k16RunHaltSignals = k16RunHaltSignals.get(),
+                    k16RunWaitSignals = k16RunWaitSignals.get(),
+                    k16RunYieldSignals = k16RunYieldSignals.get(),
+                    k16RunPauseSignals = k16RunPauseSignals.get(),
                     k16WaitEntries = k16WaitEntries.get(),
                     k16WaitTimerWakeups = k16WaitTimerWakeups.get(),
                     k16WaitInputWakeups = k16WaitInputWakeups.get(),

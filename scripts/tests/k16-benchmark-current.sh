@@ -40,7 +40,7 @@ EOF
 
 create_temp_repo() {
     repo="$1"
-    mkdir -p "$repo/rust/host/k16-vm" "$repo/docs/benchmarks" "$repo/scripts/git-hooks"
+    mkdir -p "$repo/rust/host/k16-vm" "$repo/docs/benchmarks"
     git -C "$repo" init -q
     git -C "$repo" config user.email "test@example.invalid"
     git -C "$repo" config user.name "Benchmark Test"
@@ -68,54 +68,17 @@ test_recorder_writes_plaintext_snapshot() {
     assert_file_contains "$cargo_log" "run --release --example vm_microbenchmarks -- 10 2"
 }
 
-test_pre_commit_hook_stages_snapshot() {
-    repo="$TMPDIR/hook-repo"
-    fake_bin="$TMPDIR/hook-bin"
-    cargo_log="$TMPDIR/hook-cargo.log"
-    create_temp_repo "$repo"
-    create_fake_cargo "$fake_bin" "$cargo_log"
-    cp "$ROOT/scripts/record-k16-vm-benchmark-current.sh" "$repo/scripts/record-k16-vm-benchmark-current.sh"
-    cp "$ROOT/scripts/git-hooks/pre-commit" "$repo/scripts/git-hooks/pre-commit"
-    chmod +x "$repo/scripts/record-k16-vm-benchmark-current.sh" "$repo/scripts/git-hooks/pre-commit"
-    git -C "$repo" add scripts/record-k16-vm-benchmark-current.sh scripts/git-hooks/pre-commit
-
-    (
-        cd "$repo"
-        FAKE_CARGO_LOG="$cargo_log" PATH="$fake_bin:$PATH" \
-            scripts/git-hooks/pre-commit
-    )
-
-    git -C "$repo" diff --cached --name-only | grep -F "docs/benchmarks/k16-vm-current.txt" >/dev/null ||
-        fail "pre-commit hook did not stage current snapshot"
-}
-
-test_pre_commit_hook_rejects_unstaged_changes() {
-    repo="$TMPDIR/dirty-repo"
-    fake_bin="$TMPDIR/dirty-bin"
-    cargo_log="$TMPDIR/dirty-cargo.log"
-    create_temp_repo "$repo"
-    create_fake_cargo "$fake_bin" "$cargo_log"
-    cp "$ROOT/scripts/record-k16-vm-benchmark-current.sh" "$repo/scripts/record-k16-vm-benchmark-current.sh"
-    cp "$ROOT/scripts/git-hooks/pre-commit" "$repo/scripts/git-hooks/pre-commit"
-    chmod +x "$repo/scripts/record-k16-vm-benchmark-current.sh" "$repo/scripts/git-hooks/pre-commit"
-    printf 'clean\n' >"$repo/tracked.txt"
-    git -C "$repo" add tracked.txt scripts/record-k16-vm-benchmark-current.sh scripts/git-hooks/pre-commit
-    git -C "$repo" commit -q --no-verify -m "seed"
-    printf 'dirty\n' >"$repo/tracked.txt"
-
-    if (
-        cd "$repo"
-        FAKE_CARGO_LOG="$cargo_log" PATH="$fake_bin:$PATH" \
-            scripts/git-hooks/pre-commit >"$TMPDIR/dirty-hook.out" 2>&1
-    ); then
-        fail "pre-commit hook accepted unrelated unstaged changes"
+test_benchmark_snapshot_is_not_a_commit_hook() {
+    if [ -e "$ROOT/scripts/git-hooks/pre-commit" ]; then
+        fail "benchmark snapshot pre-commit hook is still shipped"
     fi
 
-    assert_file_contains "$TMPDIR/dirty-hook.out" "unstaged changes"
+    if [ -e "$ROOT/scripts/install-git-hooks.sh" ]; then
+        fail "benchmark snapshot hook installer is still shipped"
+    fi
 }
 
 test_recorder_writes_plaintext_snapshot
-test_pre_commit_hook_stages_snapshot
-test_pre_commit_hook_rejects_unstaged_changes
+test_benchmark_snapshot_is_not_a_commit_hook
 
 echo "k16 benchmark current snapshot tests passed"
