@@ -7,6 +7,7 @@
   "commands.compukterkraft.generic.yes": "Y",
   "gui.compukterkraft.control.reboot": "Reboot",
   "gui.compukterkraft.control.shutdown": "Shutdown",
+  "gui.compukterkraft.control.terminate": "Terminate",
   "gui.compukterkraft.control.turn_on": "Turn on",
   "gui.compukterkraft.computer_control.status_off": "State: OFF",
   "gui.compukterkraft.computer_control.status_on": "State: ON",

@@ -35,5 +35,6 @@ class ComputerControlScreenArchitectureTest {
         assertTrue(source.contains("ComputerActionServerMessage.Action.TURN_ON"))
         assertTrue(source.contains("ComputerActionServerMessage.Action.SHUTDOWN"))
         assertTrue(source.contains("ComputerActionServerMessage.Action.REBOOT"))
+        assertTrue(source.contains("ComputerActionServerMessage.Action.TERMINATE"))
     }
 }

@@ -81,34 +81,7 @@ class ComputerControlScreen(
             TEXT,
             false,
         )
-        val primary =
-            if (menu.isComputerOn) {
-                ControlButton(
-                    x = leftPos + 10,
-                    y = topPos + 54,
-                    label = Component.translatable("gui.compukterkraft.control.shutdown"),
-                    action = ComputerActionServerMessage.Action.SHUTDOWN,
-                )
-            } else {
-                ControlButton(
-                    x = leftPos + 10,
-                    y = topPos + 54,
-                    label = Component.translatable("gui.compukterkraft.control.turn_on"),
-                    action = ComputerActionServerMessage.Action.TURN_ON,
-                )
-            }
-        drawButton(guiGraphics, primary)
-        if (menu.isComputerOn) {
-            drawButton(
-                guiGraphics,
-                ControlButton(
-                    x = leftPos + 110,
-                    y = topPos + 54,
-                    label = Component.translatable("gui.compukterkraft.control.reboot"),
-                    action = ComputerActionServerMessage.Action.REBOOT,
-                ),
-            )
-        }
+        controlButtons().forEach { drawButton(guiGraphics, it) }
     }
 
     override fun mouseClicked(
@@ -128,39 +101,49 @@ class ComputerControlScreen(
     private fun buttonAt(
         mouseX: Int,
         mouseY: Int,
-    ): ControlButton? {
-        val buttons =
-            buildList {
-                add(
-                    if (menu.isComputerOn) {
-                        ControlButton(
-                            leftPos + 10,
-                            topPos + 54,
-                            Component.translatable("gui.compukterkraft.control.shutdown"),
-                            ComputerActionServerMessage.Action.SHUTDOWN,
-                        )
-                    } else {
-                        ControlButton(
-                            leftPos + 10,
-                            topPos + 54,
-                            Component.translatable("gui.compukterkraft.control.turn_on"),
-                            ComputerActionServerMessage.Action.TURN_ON,
-                        )
-                    },
-                )
+    ): ControlButton? =
+        controlButtons().firstOrNull {
+            mouseX >= it.x && mouseX < it.x + BUTTON_WIDTH && mouseY >= it.y && mouseY < it.y + BUTTON_HEIGHT
+        }
+
+    private fun controlButtons(): List<ControlButton> =
+        buildList {
+            add(
                 if (menu.isComputerOn) {
-                    add(
-                        ControlButton(
-                            leftPos + 110,
-                            topPos + 54,
-                            Component.translatable("gui.compukterkraft.control.reboot"),
-                            ComputerActionServerMessage.Action.REBOOT,
-                        ),
+                    ControlButton(
+                        leftPos + 10,
+                        topPos + 54,
+                        Component.translatable("gui.compukterkraft.control.shutdown"),
+                        ComputerActionServerMessage.Action.SHUTDOWN,
                     )
-                }
+                } else {
+                    ControlButton(
+                        leftPos + 10,
+                        topPos + 54,
+                        Component.translatable("gui.compukterkraft.control.turn_on"),
+                        ComputerActionServerMessage.Action.TURN_ON,
+                    )
+                },
+            )
+            if (menu.isComputerOn) {
+                add(
+                    ControlButton(
+                        leftPos + 110,
+                        topPos + 54,
+                        Component.translatable("gui.compukterkraft.control.reboot"),
+                        ComputerActionServerMessage.Action.REBOOT,
+                    ),
+                )
+                add(
+                    ControlButton(
+                        leftPos + 10,
+                        topPos + 84,
+                        Component.translatable("gui.compukterkraft.control.terminate"),
+                        ComputerActionServerMessage.Action.TERMINATE,
+                    ),
+                )
             }
-        return buttons.firstOrNull { mouseX >= it.x && mouseX < it.x + BUTTON_WIDTH && mouseY >= it.y && mouseY < it.y + BUTTON_HEIGHT }
-    }
+        }
 
     private fun drawButton(
         guiGraphics: GuiGraphics,
@@ -179,7 +162,7 @@ class ComputerControlScreen(
 
     companion object {
         private const val WIDTH = 220
-        private const val HEIGHT = 98
+        private const val HEIGHT = 128
         private const val BUTTON_WIDTH = 92
         private const val BUTTON_HEIGHT = 22
         private const val BACKGROUND = 0xFF151922.toInt()
