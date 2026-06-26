@@ -22,6 +22,8 @@ static void write_decimal(int fd, unsigned int value) {
       1000000000u, 100000000u, 10000000u, 1000000u, 100000u,
       10000u,      1000u,      100u,      10u,      1u,
   };
+  char output[10];
+  unsigned int output_len = 0;
   int started = 0;
 
   for (unsigned int index = 0; index < sizeof(divisors) / sizeof(divisors[0]);
@@ -32,11 +34,12 @@ static void write_decimal(int fd, unsigned int value) {
       digit += 1;
     }
     if (digit != 0 || started || divisors[index] == 1u) {
-      char ch = (char)('0' + digit);
-      write_all(fd, &ch, 1);
+      output[output_len] = (char)('0' + digit);
+      output_len += 1;
       started = 1;
     }
   }
+  write_all(fd, output, output_len);
 }
 
 static int write_payload(const char *path, const char *payload, int flags) {
