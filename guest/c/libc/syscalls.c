@@ -68,6 +68,49 @@ int kraft_rename(const char *old_path, const char *new_path) {
   return __kraft_sys_rename(request, request_len);
 }
 
+int kraft_spawn_with_args(const char *path, int argc,
+                          const char *const *argv) {
+  char request[KRAFT_MAX_SPAWN_ARGV_REQUEST_BYTES];
+  unsigned int path_len = strlen(path);
+  unsigned int cursor = 12u;
+
+  if (argc < 0 || argc > KRAFT_MAX_PROCESS_ARGS ||
+      path_len > KRAFT_MAX_PROCESS_PATH_BYTES) {
+    return (int)0xffffffeau;
+  }
+
+  put_u32_le(request + 0, KRAFT_SPAWN_ARGV_REQUEST_MAGIC);
+  put_u32_le(request + 4, path_len);
+  put_u32_le(request + 8, (unsigned int)argc);
+  for (int index = 0; index < argc; index += 1) {
+    unsigned int arg_len = strlen(argv[index]);
+    if (arg_len > KRAFT_MAX_PROCESS_ARG_BYTES) {
+      return (int)0xffffffeau;
+    }
+    put_u32_le(request + cursor, arg_len);
+    cursor += 4u;
+  }
+
+  for (unsigned int index = 0; index < path_len; index += 1) {
+    request[cursor] = path[index];
+    cursor += 1u;
+  }
+  for (int arg_index = 0; arg_index < argc; arg_index += 1) {
+    unsigned int arg_len = strlen(argv[arg_index]);
+    for (unsigned int index = 0; index < arg_len; index += 1) {
+      request[cursor] = argv[arg_index][index];
+      cursor += 1u;
+    }
+  }
+
+  unsigned int request_len = cursor;
+  return __kraft_sys_spawn(request, request_len);
+}
+
+int kraft_wait(int pid, int *status) {
+  return __kraft_sys_wait((unsigned int)pid, status);
+}
+
 int kraft_mkdir(const char *path) {
   return __kraft_sys_mkdir(path, strlen(path));
 }

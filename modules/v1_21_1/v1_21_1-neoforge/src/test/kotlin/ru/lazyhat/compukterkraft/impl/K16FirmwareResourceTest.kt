@@ -79,7 +79,7 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("rust/guest/k16-bios"))
         assertTrue(source.contains("rust/guest/k16-boot"))
         assertTrue(source.contains("rust/guest/k16-kernel"))
-        assertTrue(source.contains("rust/guest/k16-init"))
+        assertFalse(source.contains("rust/guest/k16-init"))
         assertTrue(source.contains("rust/guest/k16-shell"))
         assertFalse(source.contains("rust/guest/k16-ls"))
         assertFalse(source.contains("rust/guest/k16-cat"))
@@ -99,8 +99,9 @@ class K16FirmwareResourceTest {
         assertFalse(source.contains("rust/guest/k16-hosted-cat"))
         assertFalse(source.contains("rust/guest/k16-hosted-hello"))
         assertTrue(source.contains("rust/guest/k16-proc-test"))
-        assertTrue(source.contains("k16InitManifest"))
-        assertTrue(source.contains("k16InitSource"))
+        assertFalse(source.contains("k16InitManifest"))
+        assertFalse(source.contains("k16InitSource"))
+        assertTrue(source.contains("k16CSystemInitSource"))
         assertTrue(source.contains("k16ShellManifest"))
         assertTrue(source.contains("k16ShellSource"))
         assertFalse(source.contains("k16LsManifest"))
@@ -143,6 +144,7 @@ class K16FirmwareResourceTest {
         assertFalse(source.contains("k16HostedHelloSource"))
         assertTrue(source.contains("k16ProcTestManifest"))
         assertTrue(source.contains("k16ProcTestSource"))
+        assertTrue(source.contains("generatedK16CSystemInitTarget"))
         assertTrue(source.contains("generatedK16ShellTarget"))
         assertFalse(source.contains("generatedK16LsTarget"))
         assertTrue(source.contains("generatedK16CSystemLsTarget"))
@@ -194,6 +196,7 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("guest/c/libc/crt0.c"))
         assertTrue(source.contains("guest/c/libc/syscalls.c"))
         assertTrue(source.contains("guest/c/libc/include"))
+        assertTrue(source.contains("guest/c/init/init.c"))
         assertTrue(source.contains("guest/c/coreutils/uname.c"))
         assertTrue(source.contains("guest/c/coreutils/ls.c"))
         assertTrue(source.contains("guest/c/coreutils/cat.c"))
@@ -230,10 +233,19 @@ class K16FirmwareResourceTest {
         assertFalse(source.contains("compileK16HostedHello"))
         assertTrue(source.contains("compileK16SystemProcTest"))
         assertTrue(source.contains("putK16SystemStorage0Init"))
-        assertTrue(source.contains("binName = \"k16-init\""))
+        assertFalse(source.contains("binName = \"k16-init\""))
+        assertTrue(source.contains("description = \"Compiles and links the bundled C K16 init launcher"))
         assertTrue(
-            source.contains("binName = \"k16-init\",\n                k16Target = \"program-dynamic\""),
-            "init must use dynamic program startup so the kernel-provided translated stack pointer is preserved",
+            source.contains("targetDir = generatedK16CSystemInitTarget.get().asFile"),
+            "production init should build from the C init source",
+        )
+        assertTrue(
+            source.contains("sources = listOf(k16CLibcSyscallSource.asFile, k16CSystemInitSource.asFile)"),
+            "production init should build from libc-lite and the C init source",
+        )
+        assertTrue(
+            source.contains("dylibs = listOf(k16SharedKraftArtifact.get().asFile)"),
+            "production init should import process calls from libkraft",
         )
         assertTrue(source.contains("binName = \"k16-shell\""))
         assertFalse(source.contains("binName = \"k16-ls\""))
@@ -531,8 +543,12 @@ class K16FirmwareResourceTest {
             byteArrayOf('K'.code.toByte(), '1'.code.toByte(), '6'.code.toByte(), 'E'.code.toByte()),
             bytes.copyOfRange(0, 4),
         )
+        val version = ByteBuffer.wrap(bytes, 4, 2).order(ByteOrder.LITTLE_ENDIAN).short.toInt()
         val abiKind = ByteBuffer.wrap(bytes, 0x18, 4).order(ByteOrder.LITTLE_ENDIAN).int
+        val metadata = bytes.decodeToString()
+        assertEquals(5, version, "bundled /bin/init.kx must use imported dynamic K16E v5")
         assertEquals(3, abiKind, "bundled /bin/init.kx must use K16E abi kind program")
+        assertTrue(metadata.contains("libkraft.k16so"), "bundled /bin/init.kx should declare libkraft.k16so")
     }
 
     @Test
@@ -1744,8 +1760,12 @@ class K16FirmwareResourceTest {
     fun k16KernelLegacyShellPathIsRemovedFromCurrentSource() {
         val kernelSourceDir = Path.of("../../../rust/guest/k16-kernel/src")
         val mainSource = kernelSourceDir.resolve("main.rs").readText()
-        val syscallSource = kernelSourceDir.resolve("syscall.rs").readText()
-        val initSource = Path.of("../../../rust/guest/k16-init/src/main.rs").readText()
+        val kernelSyscallSource = kernelSourceDir.resolve("syscall.rs").readText()
+        val initSource = Path.of("../../../guest/c/init/init.c").readText()
+        val processHeader = Path.of("../../../guest/c/libc/include/kraft/process.h").readText()
+        val syscallHeader = Path.of("../../../guest/c/libc/include/kraft/syscalls.h").readText()
+        val cSyscallSource = Path.of("../../../guest/c/libc/syscalls.c").readText()
+        val sharedKraftSource = Path.of("../../../rust/guest/k16-shared-kraft/src/main.rs").readText()
         val shellSource = Path.of("../../../rust/guest/k16-shell/src/main.rs").readText()
 
         assertFalse(Files.exists(kernelSourceDir.resolve("shell.rs")), "kernel shell dispatcher should be removed")
@@ -1753,13 +1773,27 @@ class K16FirmwareResourceTest {
         assertFalse(Files.exists(kernelSourceDir.resolve("keyboard.rs")), "kernel keyboard line path should be removed")
         assertFalse(mainSource.contains("mod shell;"), "main.rs should not register the legacy shell module")
         assertFalse(mainSource.contains("shell::init();"), "kernel startup should not initialize the legacy shell module")
-        assertTrue(Files.exists(Path.of("../../../rust/guest/k16-init/Cargo.toml")), "init should be a real launcher crate")
+        assertTrue(Files.exists(Path.of("../../../guest/c/init/init.c")), "init should be a real C launcher source")
         assertFalse(initSource.contains("process::run("), "init should not hide shell lifecycle behind synchronous run")
-        assertTrue(initSource.contains("process::spawn_with_args("), "init should spawn the userland shell")
-        assertTrue(initSource.contains("process::wait("), "init should wait for the userland shell")
-        assertTrue(initSource.contains("status.success()"), "init should distinguish clean shell exits from faults")
+        assertTrue(initSource.contains("#include <kraft/process.h>"), "init should use libc-lite process wrappers")
+        assertTrue(initSource.contains("#define SHELL_PATH \"/bin/shell.kx\""), "init should launch the bundled shell path")
+        assertTrue(initSource.contains("kraft_spawn_with_args(SHELL_PATH, 1, shell_args)"), "init should spawn the userland shell")
+        assertTrue(initSource.contains("kraft_wait(pid, &status)"), "init should wait for the userland shell")
+        assertTrue(initSource.contains("if (status == 0)"), "init should distinguish clean shell exits from faults")
+        assertTrue(initSource.contains("_exit(status)"), "init should propagate shell faults")
+        assertTrue(processHeader.contains("int kraft_spawn_with_args(const char *path, int argc, const char *const *argv);"))
+        assertTrue(processHeader.contains("int kraft_wait(int pid, int *status);"))
+        assertTrue(syscallHeader.contains("extern int __kraft_sys_spawn(const void *request, unsigned int len)"))
+        assertTrue(syscallHeader.contains("__asm__(\"spawn\")"))
+        assertTrue(syscallHeader.contains("extern int __kraft_sys_wait(unsigned int pid, int *status)"))
+        assertTrue(syscallHeader.contains("__asm__(\"wait\")"))
+        assertTrue(cSyscallSource.contains("put_u32_le(request + 0, KRAFT_SPAWN_ARGV_REQUEST_MAGIC)"))
+        assertTrue(cSyscallSource.contains("__kraft_sys_spawn(request, request_len)"))
+        assertTrue(cSyscallSource.contains("__kraft_sys_wait((unsigned int)pid, status)"))
+        assertTrue(sharedKraftSource.contains("pub unsafe extern \"C\" fn spawn("))
+        assertTrue(sharedKraftSource.contains("pub unsafe extern \"C\" fn wait("))
         assertFalse(shellSource.contains("process::run("), "shell should launch utilities through argv requests")
-        assertFalse(syscallSource.contains("abi_syscall::RUN_FORMAT_PATH"), "kernel should reject legacy path RUN format")
+        assertFalse(kernelSyscallSource.contains("abi_syscall::RUN_FORMAT_PATH"), "kernel should reject legacy path RUN format")
         assertFalse(initSource.contains("fn dispatch_command("), "interactive shell dispatch should not live in init")
         assertTrue(shellSource.contains("fn dispatch_command("), "userland shell should own command dispatch")
     }

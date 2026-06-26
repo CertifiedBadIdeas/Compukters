@@ -71,6 +71,23 @@ pub unsafe extern "C" fn rename(request: *const u8, len: usize) -> u32 {
 }
 
 #[no_mangle]
+pub unsafe extern "C" fn spawn(request: *const u8, len: usize) -> u32 {
+    unsafe {
+        __k16_syscall3(
+            k16_abi::syscall::SPAWN,
+            request as usize as u32,
+            len as u32,
+            0,
+        )
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn wait(pid: u32, status: *mut u32) -> u32 {
+    unsafe { __k16_syscall3(k16_abi::syscall::WAIT, pid, status as usize as u32, 0) }
+}
+
+#[no_mangle]
 pub unsafe extern "C" fn mkdir(path: *const u8, len: usize) -> u32 {
     unsafe { __k16_syscall3(k16_abi::syscall::MKDIR, path as usize as u32, len as u32, 0) }
 }

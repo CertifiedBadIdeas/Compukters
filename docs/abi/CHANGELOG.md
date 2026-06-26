@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Production `/bin/init.kx` now builds from `guest/c/init/init.c` through the
+  source-built-dev K16 Clang path and libc-lite startup layer. libc-lite exposes
+  `kraft_spawn_with_args(path, argc, argv)` and `kraft_wait(pid, status)` over
+  the existing structured K16 `SPAWN` argv request and `WAIT` syscall, while
+  `/lib/libkraft.k16so` exports the syscall-shaped `spawn(request, len)` and
+  `wait(pid, status)` ABI symbols. The C init preserves the previous lifecycle:
+  spawn `/bin/shell.kx` with `argv[0]` set to the shell path, wait for it,
+  restart on status 0, propagate non-zero shell status, and exit 1 on
+  spawn/wait failure.
 - Removed the legacy Rust guest crates for production coreutils after the C
   migration: `k16-uname`, `k16-cat`, `k16-write`, `k16-rm`, `k16-mkdir`,
   `k16-rmdir`, `k16-stat`, `k16-ls`, `k16-cp`, and `k16-mv`. The bundled

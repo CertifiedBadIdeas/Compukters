@@ -24,6 +24,7 @@ production build or focused test needs them.
 
 - `guest/c/libc` contains libc-lite startup, syscall wrappers, and public
   standard-shaped headers.
+- `guest/c/init` contains the production C init launcher.
 - `guest/c/coreutils` contains production C coreutils.
 
 ## Migration Roles
@@ -36,7 +37,7 @@ production build or focused test needs them.
 | `rust/guest/k16-boot` | System boot program. | Keep Rust for now; boot flow is outside this userland slice. |
 | `rust/guest/k16-boot-chain` | Shared boot-chain support library. | Keep Rust for now; boot support is outside this userland slice. |
 | `rust/guest/k16-image` | Guest-side image/storage support used by Rust guest code. | Keep Rust while Rust boot/kernel/storage support remains Rust. |
-| `rust/guest/k16-init` | Production init process. | Migrate to C after shell/exec expectations are stable enough for a tiny init proxy. |
+| `rust/guest/k16-init` | Former Rust production init process. | Legacy/removable after no focused tests/docs need the old Rust launcher; production `/bin/init.kx` now builds from `guest/c/init/init.c`. |
 | `rust/guest/k16-kernel` | Rust K16 kernel and OS internals. | Keep Rust. Kernel rewrite is explicitly out of scope for #367. |
 | `rust/guest/k16-memory` | Guest memory/MMU helper library. | Keep Rust while kernel/runtime memory management remains Rust. |
 | `rust/guest/k16-proc-test` | Development process-model smoke utility. | Development/test-only; keep until process coverage moves elsewhere. |
@@ -52,6 +53,10 @@ production build or focused test needs them.
 
 ## Removed Rust Userland Crates
 
+The former Rust production init launcher `k16-init` has been replaced in the
+production image by `guest/c/init/init.c`. The old Rust crate remains in the
+workspace until the deletion rule below is satisfied.
+
 The former Rust production coreutils `k16-uname`, `k16-cat`, `k16-write`,
 `k16-rm`, `k16-mkdir`, `k16-rmdir`, `k16-stat`, `k16-ls`, `k16-cp`, and
 `k16-mv` have been removed from the guest workspace after their production
@@ -65,8 +70,8 @@ bundled guest proof crates.
 
 ## Next Production C Candidates
 
-1. `rust/guest/k16-shell` and `rust/guest/k16-init`: move after enough
-   process/path helpers exist to avoid embedding policy in each program.
+1. `rust/guest/k16-shell`: move after enough process/path helpers exist to
+   avoid embedding policy in each program.
 
 ## Development/test-only
 
