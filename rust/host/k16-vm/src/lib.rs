@@ -22,6 +22,7 @@ pub mod mmu;
 pub mod k16_computer {
     pub use crate::computer::handle::{K16ComputerControl, K16ComputerHandle};
     pub use crate::computer::machine::BootHandoffError;
+    pub use crate::computer::stats::{K16ComputerDeviceStats, K16ComputerStatsSnapshot};
 }
 pub mod storage_image;
 pub mod vm_microbenchmarks;

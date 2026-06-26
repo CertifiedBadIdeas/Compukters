@@ -427,6 +427,35 @@ fn k16_computer_handle_k16_firmware_writes_debug_and_control_mmio() {
 }
 
 #[test]
+fn k16_computer_handle_exposes_standalone_stats_snapshot() {
+    let bios = k16_words(&[k16_halt()]);
+    let entry_pc = 4096;
+    let program = k16_words(&k16_mmio_firmware_words());
+    let mut handle = K16ComputerHandle::create_k16_bios_flash(&bios, 64 * 1024, 128)
+        .expect("K16 BIOS flash computer creates");
+    handle.write_guest_ram_bytes(entry_pc, &program).unwrap();
+    handle
+        .boot_handoff_k16_from_guest_ram(entry_pc, program.len() as u32, 128)
+        .expect("boot handoff accepts in-RAM K16 firmware");
+
+    assert_eq!(handle.stats_snapshot().bus.ram.loads, 0);
+
+    assert_eq!(handle.run_k16_until_signal().unwrap(), K16Signal::Halt);
+
+    let stats = handle.stats_snapshot();
+    assert!(stats.bus.ram.loads > 0, "{stats:?}");
+    assert!(stats.bus.mmio.stores > 0, "{stats:?}");
+    assert!(stats
+        .devices
+        .iter()
+        .any(|device| device.name == "debug" && device.traffic.stores > 0));
+    assert!(stats
+        .devices
+        .iter()
+        .any(|device| device.name == "control" && device.traffic.stores > 0));
+}
+
+#[test]
 fn k16_computer_handle_boots_k16_directly_from_bios_flash() {
     let bios = k16_words(&k16_mmio_firmware_words());
     let mut handle = K16ComputerHandle::create_k16_bios_flash(&bios, 64 * 1024, 128)

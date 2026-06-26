@@ -1,7 +1,62 @@
 use crate::low_machine::{MachineMemory, MemoryBus, MemoryFault};
 use std::any::Any;
+use std::cell::Cell;
 
 pub type MmioDeviceId = usize;
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct MachineBusTrafficSnapshot {
+    pub loads: u64,
+    pub stores: u64,
+    pub bytes_read: u64,
+    pub bytes_written: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MmioDeviceTrafficSnapshot {
+    pub device_id: MmioDeviceId,
+    pub base: u32,
+    pub size: u32,
+    pub traffic: MachineBusTrafficSnapshot,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct MachineBusStatsSnapshot {
+    pub ram: MachineBusTrafficSnapshot,
+    pub mmio: MachineBusTrafficSnapshot,
+    pub mmio_devices: Vec<MmioDeviceTrafficSnapshot>,
+}
+
+#[derive(Default)]
+struct MachineBusTrafficCounters {
+    loads: Cell<u64>,
+    stores: Cell<u64>,
+    bytes_read: Cell<u64>,
+    bytes_written: Cell<u64>,
+}
+
+impl MachineBusTrafficCounters {
+    fn record_load(&self, bytes: u64) {
+        self.loads.set(self.loads.get().saturating_add(1));
+        self.bytes_read
+            .set(self.bytes_read.get().saturating_add(bytes));
+    }
+
+    fn record_store(&self, bytes: u64) {
+        self.stores.set(self.stores.get().saturating_add(1));
+        self.bytes_written
+            .set(self.bytes_written.get().saturating_add(bytes));
+    }
+
+    fn snapshot(&self) -> MachineBusTrafficSnapshot {
+        MachineBusTrafficSnapshot {
+            loads: self.loads.get(),
+            stores: self.stores.get(),
+            bytes_read: self.bytes_read.get(),
+            bytes_written: self.bytes_written.get(),
+        }
+    }
+}
 
 pub trait MmioDevice: Any {
     fn size(&self) -> u32;
@@ -36,6 +91,7 @@ struct MmioRegion {
     base: u32,
     size: u32,
     device: Box<dyn MmioDevice>,
+    traffic: MachineBusTrafficCounters,
 }
 
 impl MmioRegion {
@@ -76,11 +132,23 @@ impl MmioRegion {
             None
         }
     }
+
+    fn offset_for_u64(&self, address: u32) -> Option<u32> {
+        let end = self.end().ok()?;
+        let access_end = address.checked_add(8)?;
+        if address >= self.base && access_end <= end {
+            Some(address - self.base)
+        } else {
+            None
+        }
+    }
 }
 
 pub struct MachineBus {
     memory: MachineMemory,
     regions: Vec<MmioRegion>,
+    ram_traffic: MachineBusTrafficCounters,
+    mmio_traffic: MachineBusTrafficCounters,
 }
 
 impl MachineBus {
@@ -88,6 +156,8 @@ impl MachineBus {
         Ok(Self {
             memory: MachineMemory::zeroed(memory_size)?,
             regions: Vec::new(),
+            ram_traffic: MachineBusTrafficCounters::default(),
+            mmio_traffic: MachineBusTrafficCounters::default(),
         })
     }
 
@@ -110,7 +180,12 @@ impl MachineBus {
                 "mmio device size must be positive".to_string(),
             ));
         }
-        let region = MmioRegion { base, size, device };
+        let region = MmioRegion {
+            base,
+            size,
+            device,
+            traffic: MachineBusTrafficCounters::default(),
+        };
         let region_end = region.end()?;
         for existing in &self.regions {
             let existing_end = existing.end()?;
@@ -175,6 +250,24 @@ impl MachineBus {
     pub fn store_u64(&mut self, address: u32, value: u64) -> Result<(), MemoryFault> {
         <Self as MemoryBus>::store_u64(self, address, value)
     }
+
+    pub fn stats_snapshot(&self) -> MachineBusStatsSnapshot {
+        MachineBusStatsSnapshot {
+            ram: self.ram_traffic.snapshot(),
+            mmio: self.mmio_traffic.snapshot(),
+            mmio_devices: self
+                .regions
+                .iter()
+                .enumerate()
+                .map(|(device_id, region)| MmioDeviceTrafficSnapshot {
+                    device_id,
+                    base: region.base,
+                    size: region.size,
+                    traffic: region.traffic.snapshot(),
+                })
+                .collect(),
+        }
+    }
 }
 
 impl MemoryBus for MachineBus {
@@ -191,51 +284,76 @@ impl MemoryBus for MachineBus {
     fn load_i32(&self, address: u32) -> Result<i32, MemoryFault> {
         for region in &self.regions {
             if let Some(offset) = region.offset_for_i32(address) {
-                return region.device.load_i32(offset);
+                let value = region.device.load_i32(offset)?;
+                region.traffic.record_load(4);
+                self.mmio_traffic.record_load(4);
+                return Ok(value);
             }
         }
-        self.memory.load_i32(address)
+        let value = self.memory.load_i32(address)?;
+        self.ram_traffic.record_load(4);
+        Ok(value)
     }
 
     fn store_i32(&mut self, address: u32, value: i32) -> Result<(), MemoryFault> {
         for region in &mut self.regions {
             if let Some(offset) = region.offset_for_i32(address) {
-                return region
+                region
                     .device
-                    .store_i32_with_memory(offset, value, &mut self.memory);
+                    .store_i32_with_memory(offset, value, &mut self.memory)?;
+                region.traffic.record_store(4);
+                self.mmio_traffic.record_store(4);
+                return Ok(());
             }
         }
-        self.memory.store_i32(address, value)
+        self.memory.store_i32(address, value)?;
+        self.ram_traffic.record_store(4);
+        Ok(())
     }
 
     fn load_u8(&self, address: u32) -> Result<u8, MemoryFault> {
         for region in &self.regions {
             if let Some(offset) = region.offset_for_u8(address) {
-                return region.device.load_u8(offset);
+                let value = region.device.load_u8(offset)?;
+                region.traffic.record_load(1);
+                self.mmio_traffic.record_load(1);
+                return Ok(value);
             }
         }
-        self.memory.load_u8(address)
+        let value = self.memory.load_u8(address)?;
+        self.ram_traffic.record_load(1);
+        Ok(value)
     }
 
     fn store_u8(&mut self, address: u32, value: u8) -> Result<(), MemoryFault> {
         for region in &mut self.regions {
             if let Some(offset) = region.offset_for_u8(address) {
-                return region.device.store_u8(offset, value);
+                region.device.store_u8(offset, value)?;
+                region.traffic.record_store(1);
+                self.mmio_traffic.record_store(1);
+                return Ok(());
             }
         }
-        self.memory.store_u8(address, value)
+        self.memory.store_u8(address, value)?;
+        self.ram_traffic.record_store(1);
+        Ok(())
     }
 
     fn load_u16(&self, address: u32) -> Result<u16, MemoryFault> {
         for region in &self.regions {
             if let Some(offset) = region.offset_for_u16(address) {
-                return Ok(u16::from_le_bytes([
+                let value = u16::from_le_bytes([
                     region.device.load_u8(offset)?,
                     region.device.load_u8(offset + 1)?,
-                ]));
+                ]);
+                region.traffic.record_load(2);
+                self.mmio_traffic.record_load(2);
+                return Ok(value);
             }
         }
-        self.memory.load_u16(address)
+        let value = self.memory.load_u16(address)?;
+        self.ram_traffic.record_load(2);
+        Ok(value)
     }
 
     fn store_u16(&mut self, address: u32, value: u16) -> Result<(), MemoryFault> {
@@ -243,10 +361,48 @@ impl MemoryBus for MachineBus {
             if let Some(offset) = region.offset_for_u16(address) {
                 let [lo, hi] = value.to_le_bytes();
                 region.device.store_u8(offset, lo)?;
-                return region.device.store_u8(offset + 1, hi);
+                region.device.store_u8(offset + 1, hi)?;
+                region.traffic.record_store(2);
+                self.mmio_traffic.record_store(2);
+                return Ok(());
             }
         }
-        self.memory.store_u16(address, value)
+        self.memory.store_u16(address, value)?;
+        self.ram_traffic.record_store(2);
+        Ok(())
+    }
+
+    fn load_u64(&self, address: u32) -> Result<u64, MemoryFault> {
+        for region in &self.regions {
+            if let Some(offset) = region.offset_for_u64(address) {
+                let mut bytes = [0_u8; 8];
+                for (index, byte) in bytes.iter_mut().enumerate() {
+                    *byte = region.device.load_u8(offset + index as u32)?;
+                }
+                region.traffic.record_load(8);
+                self.mmio_traffic.record_load(8);
+                return Ok(u64::from_le_bytes(bytes));
+            }
+        }
+        let value = self.memory.load_u64(address)?;
+        self.ram_traffic.record_load(8);
+        Ok(value)
+    }
+
+    fn store_u64(&mut self, address: u32, value: u64) -> Result<(), MemoryFault> {
+        for region in &mut self.regions {
+            if let Some(offset) = region.offset_for_u64(address) {
+                for (index, byte) in value.to_le_bytes().into_iter().enumerate() {
+                    region.device.store_u8(offset + index as u32, byte)?;
+                }
+                region.traffic.record_store(8);
+                self.mmio_traffic.record_store(8);
+                return Ok(());
+            }
+        }
+        self.memory.store_u64(address, value)?;
+        self.ram_traffic.record_store(8);
+        Ok(())
     }
 }
 
@@ -283,7 +439,7 @@ mod tests {
     }
 
     struct ByteWindowDevice {
-        bytes: [u8; 4],
+        bytes: Vec<u8>,
     }
 
     impl MmioDevice for ByteWindowDevice {
@@ -339,6 +495,8 @@ mod tests {
 
         assert!(impl_source.contains("fn load_u16("));
         assert!(impl_source.contains("fn store_u16("));
+        assert!(impl_source.contains("fn load_u64("));
+        assert!(impl_source.contains("fn store_u64("));
     }
 
     #[test]
@@ -389,13 +547,77 @@ mod tests {
     }
 
     #[test]
+    fn machine_bus_stats_snapshot_counts_ram_and_mmio_traffic() {
+        let mut bus = MachineBus::new(16).unwrap();
+        let device_id = bus
+            .map_mmio(
+                8,
+                Box::new(RegisterDevice {
+                    value: 7,
+                    read_only: false,
+                }),
+            )
+            .unwrap();
+
+        bus.store_u8(0, 1).unwrap();
+        assert_eq!(bus.load_u16(0).unwrap(), 1);
+        bus.store_i32(8, 11).unwrap();
+        assert_eq!(bus.load_i32(8).unwrap(), 11);
+
+        let stats = bus.stats_snapshot();
+
+        assert_eq!(stats.ram.loads, 1);
+        assert_eq!(stats.ram.stores, 1);
+        assert_eq!(stats.ram.bytes_read, 2);
+        assert_eq!(stats.ram.bytes_written, 1);
+        assert_eq!(stats.mmio.loads, 1);
+        assert_eq!(stats.mmio.stores, 1);
+        assert_eq!(stats.mmio.bytes_read, 4);
+        assert_eq!(stats.mmio.bytes_written, 4);
+        assert_eq!(stats.mmio_devices.len(), 1);
+        assert_eq!(stats.mmio_devices[0].device_id, device_id);
+        assert_eq!(stats.mmio_devices[0].base, 8);
+        assert_eq!(stats.mmio_devices[0].size, 4);
+        assert_eq!(stats.mmio_devices[0].traffic, stats.mmio);
+    }
+
+    #[test]
+    fn machine_bus_stats_snapshot_counts_u64_as_single_bus_access() {
+        let mut bus = MachineBus::new(32).unwrap();
+        bus.map_mmio(
+            16,
+            Box::new(ByteWindowDevice {
+                bytes: vec![0_u8; 8],
+            }),
+        )
+        .unwrap();
+
+        bus.store_u64(0, 0x0102_0304_0506_0708).unwrap();
+        assert_eq!(bus.load_u64(0).unwrap(), 0x0102_0304_0506_0708);
+        bus.store_u64(16, 0x1112_1314_1516_1718).unwrap();
+        assert_eq!(bus.load_u64(16).unwrap(), 0x1112_1314_1516_1718);
+
+        let stats = bus.stats_snapshot();
+
+        assert_eq!(stats.ram.loads, 1);
+        assert_eq!(stats.ram.stores, 1);
+        assert_eq!(stats.ram.bytes_read, 8);
+        assert_eq!(stats.ram.bytes_written, 8);
+        assert_eq!(stats.mmio.loads, 1);
+        assert_eq!(stats.mmio.stores, 1);
+        assert_eq!(stats.mmio.bytes_read, 8);
+        assert_eq!(stats.mmio.bytes_written, 8);
+        assert_eq!(stats.mmio_devices[0].traffic, stats.mmio);
+    }
+
+    #[test]
     fn machine_bus_routes_word_load_to_overlapping_mmio_before_ram() {
         let mut bus = MachineBus::new(16).unwrap();
         bus.memory_mut().store_u16(0, 0x1122).unwrap();
         bus.map_mmio(
             0,
             Box::new(ByteWindowDevice {
-                bytes: [0x78, 0x56, 0x34, 0x12],
+                bytes: vec![0x78, 0x56, 0x34, 0x12],
             }),
         )
         .unwrap();
@@ -411,7 +633,7 @@ mod tests {
             .map_mmio(
                 0,
                 Box::new(ByteWindowDevice {
-                    bytes: [0x78, 0x56, 0x34, 0x12],
+                    bytes: vec![0x78, 0x56, 0x34, 0x12],
                 }),
             )
             .unwrap();
@@ -420,7 +642,7 @@ mod tests {
 
         assert_eq!(bus.memory().load_u16(0).unwrap(), 0x1122);
         let device = bus.device::<ByteWindowDevice>(device_id).unwrap();
-        assert_eq!(device.bytes, [0xb2, 0xa1, 0x34, 0x12]);
+        assert_eq!(device.bytes, vec![0xb2, 0xa1, 0x34, 0x12]);
     }
 
     #[test]
