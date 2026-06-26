@@ -53,7 +53,7 @@ class K16BiosFlashWorkspaceTest {
     fun preservesExistingPerComputerBiosFlash() {
         val workspace = createTempDirectory("k16-bios-workspace-")
         val existing = workspace.resolve("bios.kflash")
-        existing.writeBytes(byteArrayOf(7, 8, 9))
+        existing.writeBytes(byteArrayOf(7, 8, 9, 10))
         val loader = resourceClassLoader("firmware/test-bios.kflash", byteArrayOf(1, 2, 3))
 
         val path =
@@ -64,7 +64,104 @@ class K16BiosFlashWorkspaceTest {
             )
 
         assertEquals(existing, path)
-        assertContentEquals(byteArrayOf(7, 8, 9), path.readBytes())
+        assertContentEquals(byteArrayOf(7, 8, 9, 10), path.readBytes())
+    }
+
+    @Test
+    fun rejectsMalformedExistingPerComputerBiosFlash() {
+        val workspace = createTempDirectory("k16-bios-workspace-")
+        workspace.resolve("bios.kflash").writeBytes(byteArrayOf(7, 8, 9))
+
+        val error =
+            assertFailsWith<IllegalStateException> {
+                K16BiosFlashWorkspace.prepareBiosFlash(workspace = workspace)
+            }
+
+        assertTrue(error.message.orEmpty().contains("must contain 16-bit instruction bytes"))
+    }
+
+    @Test
+    fun flashesReplacementBiosFromExplicitSourcePath() {
+        val workspace = createTempDirectory("k16-bios-workspace-")
+        val source = workspace.resolve("replacement.kflash")
+        source.writeBytes(byteArrayOf(1, 2, 3, 4))
+
+        val path = K16BiosFlashWorkspace.flashBiosFlash(workspace = workspace, source = source)
+
+        assertEquals(workspace.resolve("bios.kflash"), path)
+        assertContentEquals(byteArrayOf(1, 2, 3, 4), path.readBytes())
+    }
+
+    @Test
+    fun preparesPreviouslyFlashedBiosOnSubsequentBoots() {
+        val workspace = createTempDirectory("k16-bios-workspace-")
+        val source = workspace.resolve("replacement.kflash")
+        source.writeBytes(byteArrayOf(1, 2, 3, 4))
+        K16BiosFlashWorkspace.flashBiosFlash(workspace = workspace, source = source)
+        val loader = resourceClassLoader("firmware/test-bios.kflash", byteArrayOf(7, 8, 9, 10))
+
+        val path =
+            K16BiosFlashWorkspace.prepareBiosFlash(
+                workspace = workspace,
+                resourcePath = "firmware/test-bios.kflash",
+                classLoader = loader,
+            )
+
+        assertEquals(workspace.resolve("bios.kflash"), path)
+        assertContentEquals(byteArrayOf(1, 2, 3, 4), path.readBytes())
+    }
+
+    @Test
+    fun rejectsMissingReplacementBiosWithoutChangingExistingFlash() {
+        val workspace = createTempDirectory("k16-bios-workspace-")
+        val existing = workspace.resolve("bios.kflash")
+        existing.writeBytes(byteArrayOf(7, 8, 9, 10))
+
+        val error =
+            assertFailsWith<IllegalStateException> {
+                K16BiosFlashWorkspace.flashBiosFlash(
+                    workspace = workspace,
+                    source = workspace.resolve("missing.kflash"),
+                )
+            }
+
+        assertTrue(error.message.orEmpty().contains("K16 BIOS flash source not found"))
+        assertContentEquals(byteArrayOf(7, 8, 9, 10), existing.readBytes())
+    }
+
+    @Test
+    fun rejectsMalformedReplacementBiosWithoutChangingExistingFlash() {
+        val workspace = createTempDirectory("k16-bios-workspace-")
+        val existing = workspace.resolve("bios.kflash")
+        val source = workspace.resolve("replacement.kflash")
+        existing.writeBytes(byteArrayOf(7, 8, 9, 10))
+        source.writeBytes(byteArrayOf(1, 2, 3))
+
+        val error =
+            assertFailsWith<IllegalStateException> {
+                K16BiosFlashWorkspace.flashBiosFlash(workspace = workspace, source = source)
+            }
+
+        assertTrue(error.message.orEmpty().contains("must contain 16-bit instruction bytes"))
+        assertContentEquals(byteArrayOf(7, 8, 9, 10), existing.readBytes())
+    }
+
+    @Test
+    fun restoresBundledBiosFlashForRecovery() {
+        val workspace = createTempDirectory("k16-bios-workspace-")
+        val existing = workspace.resolve("bios.kflash")
+        existing.writeBytes(byteArrayOf(7, 8, 9, 10))
+        val loader = resourceClassLoader("firmware/test-bios.kflash", byteArrayOf(1, 2, 3, 4))
+
+        val path =
+            K16BiosFlashWorkspace.restoreBundledBiosFlash(
+                workspace = workspace,
+                resourcePath = "firmware/test-bios.kflash",
+                classLoader = loader,
+            )
+
+        assertEquals(existing, path)
+        assertContentEquals(byteArrayOf(1, 2, 3, 4), path.readBytes())
     }
 
     @Test
