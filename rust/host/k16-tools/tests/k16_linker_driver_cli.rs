@@ -194,7 +194,7 @@ fn k16_ld_emits_dynamic_import_metadata_from_rustc_style_args() {
             archive_path.to_str().unwrap(),
             "--k16-target=program-dynamic",
             "--import",
-            "libfoo.k16so:foo",
+            "libfoo.kso:foo",
             "-o",
             output_path.to_str().unwrap(),
         ])
@@ -209,7 +209,7 @@ fn k16_ld_emits_dynamic_import_metadata_from_rustc_style_args() {
     assert_linker_output_is_executable(&output_path);
     let bytes = fs::read(output_path).expect("program output reads");
     let executable = k16e::decode_dynamic_k16_program(&bytes).expect("K16E decodes");
-    assert_eq!(executable.needed_libraries, vec!["libfoo.k16so"]);
+    assert_eq!(executable.needed_libraries, vec!["libfoo.kso"]);
     assert_eq!(
         executable.import_relocations,
         vec![k16e::K16eImportRelocation {
@@ -225,7 +225,7 @@ fn k16_ld_emits_dynamic_import_metadata_from_rustc_style_args() {
 fn k16_ld_auto_imports_symbols_from_linked_shared_object() {
     let object_path = temp_file("auto-import-main.o");
     let provider_object_path = temp_file("auto-import-provider.o");
-    let provider_path = temp_file("libauto-import-driver.k16so");
+    let provider_path = temp_file("libauto-import-driver.kso");
     let output_path = temp_file("auto-import-main.kx");
     fs::write(
         &object_path,

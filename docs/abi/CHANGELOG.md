@@ -2,19 +2,24 @@
 
 ## Unreleased
 
-- `/lib/libkraft.k16so` now builds from `guest/c/libkraft/libkraft.c` through
+- Production C userland now builds its K16 arch helper object from checked-in
+  source at `guest/c/arch/k16/cpu-helpers.kasm` through `k16 asm <input.kasm>
+  -o <output.ko>`. The bundled `/bin/*.kx` C programs and `/lib/libkraft.kso`
+  no longer depend on the host-generated `k16 runtime k16-cpu-helpers` object;
+  that generated object remains available for Rust kernel, trap, development,
+  and low-level fixture paths that still need the wider CPU helper surface.
+- `/lib/libkraft.kso` now builds from `guest/c/libkraft/libkraft.c` through
   the source-built-dev K16 Clang path instead of the Rust
   `k16-shared-kraft` guest crate. It remains a syscall-shaped shared OS ABI
   provider, not libc or Rust `std`: C libc-lite still owns standard-shaped
   wrappers such as `kraft_open`, `kraft_stat`, and `kraft_run_with_args`, while
-  `libkraft.k16so` exports the dynamic boundary symbols consumed by production
-  C userland. The C provider still links the generated `k16-cpu-helpers.o`
-  object for this slice; replacing those helpers with source-based arch
-  runtime objects is tracked separately.
+  `libkraft.kso` exports the dynamic boundary symbols consumed by production
+  C userland. The C provider links the same checked-in source arch runtime as
+  production C programs.
 - Production `/bin/shell.kx` now builds from `guest/c/shell/shell.c` through
   the source-built-dev K16 Clang path and libc-lite startup layer. libc-lite
   exposes `kraft_run_with_args(path, argc, argv)` over the existing structured
-  K16 `RUN` argv request, and `/lib/libkraft.k16so` exports the syscall-shaped
+  K16 `RUN` argv request, and `/lib/libkraft.kso` exports the syscall-shaped
   `run(request, len)` ABI symbol. The C shell's `ticks` builtin reads the
   `timer0` MMIO low/high words directly as a diagnostic hardware-facing command.
   The fixed-number syscall helpers are stack-neutral, so caller-owned stack
@@ -26,7 +31,7 @@
   source-built-dev K16 Clang path and libc-lite startup layer. libc-lite exposes
   `kraft_spawn_with_args(path, argc, argv)` and `kraft_wait(pid, status)` over
   the existing structured K16 `SPAWN` argv request and `WAIT` syscall, while
-  `/lib/libkraft.k16so` exports the syscall-shaped `spawn(request, len)` and
+  `/lib/libkraft.kso` exports the syscall-shaped `spawn(request, len)` and
   `wait(pid, status)` ABI symbols. The C init preserves the previous lifecycle:
   spawn `/bin/shell.kx` with `argv[0]` set to the shell path, wait for it,
   restart on status 0, propagate non-zero shell status, and exit 1 on
@@ -42,10 +47,10 @@
 - Production `/bin/cp.kx` and `/bin/mv.kx` now build from
   `guest/c/coreutils` through the source-built-dev K16 Clang path and
   libc-lite startup layer. `/bin/cp.kx` imports `open`, `read`, `write`, and
-  `close` from `/lib/libkraft.k16so`; `/bin/mv.kx` imports `stat`, `rename`,
+  `close` from `/lib/libkraft.kso`; `/bin/mv.kx` imports `stat`, `rename`,
   and `write`. libc-lite now exposes standard-shaped `rename(old, new)` via a
   `kraft_rename` wrapper over the existing structured K16 `RENAME` request,
-  while `/lib/libkraft.k16so` exports the syscall-shaped `rename(request, len)`
+  while `/lib/libkraft.kso` exports the syscall-shaped `rename(request, len)`
   boundary.
 - Production `/bin/stat.kx` and `/bin/ls.kx` now build from
   `guest/c/coreutils` through the source-built-dev K16 Clang path and
@@ -54,7 +59,7 @@
   `guest/c/libc/include/kraft/fs.h`; those public C calls macro-dispatch to
   `kraft_stat` and `kraft_read_dir` wrappers so they can safely call the
   syscall-shaped `stat(path, len, metadata)` and
-  `read_dir(request, len)` exports from `/lib/libkraft.k16so` without ABI
+  `read_dir(request, len)` exports from `/lib/libkraft.kso` without ABI
   collisions. Shell-visible `stat`/`ls` output remains compatible with the
   previous Rust utilities.
 - libc-lite path mutator wrappers now use the same explicit wrapper boundary as
@@ -67,14 +72,14 @@
   from `guest/c/coreutils` through the source-built-dev K16 Clang path and
   libc-lite startup layer. libc-lite now exposes standard-shaped
   `unlink(path)`, `mkdir(path)`, and `rmdir(path)` wrappers over the existing
-  K16 path-length syscalls, and `/lib/libkraft.k16so` exports the matching
+  K16 path-length syscalls, and `/lib/libkraft.kso` exports the matching
   plain shared OS ABI symbols so the C utilities import the mutator calls
   dynamically. Shell-visible output remains the existing KraftOS policy:
   `CREATED <path>`, `REMOVED <path>`, or `ERR <STATUS> <path>`.
 - Production `/bin/uname.kx` now builds from
   `guest/c/coreutils/uname.c` through the source-built-dev K16 Clang path and
   libc-lite startup layer. It remains the smallest shared OS ABI importer,
-  resolving `write` from `/lib/libkraft.k16so` instead of retaining the
+  resolving `write` from `/lib/libkraft.kso` instead of retaining the
   syscall-boundary call in its own payload.
 - Moved the first-class C guest userland sources out of the Rust guest
   workspace: libc-lite now lives under `guest/c/libc`, and bundled C coreutils
@@ -86,7 +91,7 @@
   userland can now include common headers for `open`, `read`, `write`, `close`,
   `O_*` flags, and simple string helpers. Production `/bin/write.kx` now builds
   from `guest/c/coreutils/write.c` and imports `open`, `write`, and
-  `close` from `/lib/libkraft.k16so`, covering both
+  `close` from `/lib/libkraft.kso`, covering both
   `write <path> <payload>` and `write --append <path> <payload>`. The decimal
   status printer avoids compiler-rt division helpers for now, keeping this
   slice inside the existing libc-lite/runtime surface.
@@ -95,7 +100,7 @@
   `clang`, compiles `guest/c/coreutils/cat.c`, and links it against the
   reusable libc-lite startup/header layer under `guest/c/libc`. The
   resulting K16E v5 program imports `open`, `read`, `write`, and `close` from
-  `/lib/libkraft.k16so`. The C startup object reuses the existing K16
+  `/lib/libkraft.kso`. The C startup object reuses the existing K16
   `k16-startup` entry shim, adapts the kernel `r1/r2` bounded argv table into
   ordinary `main(int argc, char **argv)`, and synthesizes an empty `argv[0]`
   because the current K16 shell passes command arguments without a program-name
@@ -103,17 +108,17 @@
   port. The Clang K16 target data layout is aligned with the K16 backend and
   Rust target spec: `e-p:32:32-i32:32-i64:64-n32-S64`.
 - Bundled K16 storage added the first project-owned userland shared library
-  provider: `/lib/libkraft.k16so`. The bundled `/bin/uname.kx` utility uses
+  provider: `/lib/libkraft.kso`. The bundled `/bin/uname.kx` utility uses
   linker auto-imports from the provider's K16E v4 export table and records K16E
-  v5 imports for `libkraft.k16so`, proving that a production utility can call a
+  v5 imports for `libkraft.kso`, proving that a production utility can call a
   plain shared OS ABI surface through the kernel loader without listing each
-  imported symbol by hand. `libkraft.k16so` intentionally exports syscall-shaped
+  imported symbol by hand. `libkraft.kso` intentionally exports syscall-shaped
   symbols such as `open`, `read`, `write`, `close`, `rename`, `mkdir`, `rmdir`,
   `unlink`, `sbrk`, and `_exit`; it is not a Rust stdlib replacement. This
   remains narrower than dynamic Rust `core`, Rust `std`, libc, or libc++
   sharing.
 - Bundled K16 shared-runtime adoption now uses a real provider artifact:
-  `/lib/libk16rt.k16so` from `rust/guest/k16-shared-runtime`. The development
+  `/lib/libk16rt.kso` from `rust/guest/k16-shared-runtime`. The development
   importer `/bin/runtime-import-test.kx` imports `k16rt_memcpy`,
   `k16rt_memset`, `k16rt_memmove`, and `k16rt_memcmp` through K16E v5
   metadata. The provider reuses the same `k16-memory` implementation as
@@ -126,8 +131,8 @@
   symbols while leaving other unresolved symbols as link-time errors. Imported
   symbols are not archive-selection roots, so provider code is not retained in
   the importing executable payload.
-- `k16 link --target program-dynamic --dylib <library.k16so>` and
-  `k16-ld --dylib <library.k16so>` now decode K16E v4 shared objects and use
+- `k16 link --target program-dynamic --dylib <library.kso>` and
+  `k16-ld --dylib <library.kso>` now decode K16E v4 shared objects and use
   their export tables as the importable symbol set. This keeps the final K16E
   v5 `NEEDED`/import relocation metadata explicit while avoiding hand-written
   per-symbol import lists in consumers.

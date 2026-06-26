@@ -129,6 +129,7 @@ fn k16_c_libc_cat_has_minimal_libkraft_abi_sources() {
     let fcntl = root.join("guest/c/libc/include/fcntl.h");
     let string = root.join("guest/c/libc/include/string.h");
     let startup = root.join("guest/c/libc/crt0.c");
+    let arch_runtime = root.join("guest/c/arch/k16/cpu-helpers.kasm");
     let cat = root.join("guest/c/coreutils/cat.c");
     let init = root.join("guest/c/init/init.c");
     let shell = root.join("guest/c/shell/shell.c");
@@ -188,6 +189,13 @@ fn k16_c_libc_cat_has_minimal_libkraft_abi_sources() {
     assert!(header.contains("#define KRAFT_OPEN_READ_ONLY 0"));
     assert!(header.contains("#define KRAFT_OPEN_WRITE_ONLY 1"));
     assert!(header.contains("#define KRAFT_OPEN_APPEND 8"));
+
+    let arch_runtime = fs::read_to_string(&arch_runtime).expect("source K16 arch runtime exists");
+    assert!(arch_runtime.contains(".function __k16_syscall1"));
+    assert!(arch_runtime.contains(".function __k16_syscall3"));
+    assert!(arch_runtime.contains(".function __k16_halt_once"));
+    assert!(arch_runtime.contains(".function __k16_open_syscall"));
+    assert!(arch_runtime.contains("syscall r1"));
 
     let fs_header = fs::read_to_string(&fs_header).expect("C libkraft fs header exists");
     assert!(fs_header.contains("#define KRAFT_READ_DIR_REQUEST_MAGIC 0x52494452u"));
@@ -265,7 +273,10 @@ fn k16_c_libc_cat_has_minimal_libkraft_abi_sources() {
         "int wait(unsigned int pid, int *status)",
         "void _exit(int status)",
     ] {
-        assert!(libkraft.contains(symbol), "C libkraft provider should define {symbol}");
+        assert!(
+            libkraft.contains(symbol),
+            "C libkraft provider should define {symbol}"
+        );
     }
     assert!(libkraft.contains("__k16_open_syscall("));
     assert!(libkraft.contains("__k16_syscall3(K16_SYSCALL_RUN"));
@@ -340,7 +351,10 @@ fn k16_c_libc_cat_has_minimal_libkraft_abi_sources() {
     assert!(shell.contains("should_resolve_path_arg(name, raw_args, index)"));
     assert!(shell.contains("#define ALLOC_ALIAS \"alloc\""));
     assert!(shell.contains("#define ALLOC_PROGRAM \"alloc-test\""));
-    assert!(!shell.contains("stdio.h"), "C shell must not depend on stdio");
+    assert!(
+        !shell.contains("stdio.h"),
+        "C shell must not depend on stdio"
+    );
 
     let cp = fs::read_to_string(&cp).expect("C hosted cp source exists");
     assert!(cp.contains("#include <fcntl.h>"));
@@ -904,7 +918,6 @@ fn active_k16_tools_do_not_ship_rux_compiler_surface() {
         "rust/host/k16-tools/src/bin/rux.rs",
         "rust/host/k16-tools/src/advice.rs",
         "rust/host/k16-tools/src/frontend",
-        "rust/host/k16-tools/src/k16_asm.rs",
         "rust/host/k16-tools/src/runtime",
         "rust/host/k16-tools/stdlib",
         "rust/host/k16-tools/examples",

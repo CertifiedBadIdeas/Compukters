@@ -86,7 +86,7 @@ The first production C hosted utilities are deliberately separate from Rust
 `guest/c/coreutils/cp.c`, and `guest/c/coreutils/mv.c` are compiled by K16
 Clang and linked as `/bin/uname.kx`, `/bin/cat.kx`, `/bin/write.kx`,
 `/bin/rm.kx`, `/bin/mkdir.kx`, `/bin/rmdir.kx`, `/bin/stat.kx`,
-`/bin/ls.kx`, `/bin/cp.kx`, and `/bin/mv.kx` against `libkraft.k16so`.
+`/bin/ls.kx`, `/bin/cp.kx`, and `/bin/mv.kx` against `libkraft.kso`.
 That shared OS ABI provider is now built from `guest/c/libkraft/libkraft.c`,
 not from a Rust userland crate. Their libc-lite startup layer under
 `guest/c/libc` adapts the K16 bounded argv table into ordinary C

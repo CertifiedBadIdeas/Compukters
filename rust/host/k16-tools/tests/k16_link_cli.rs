@@ -159,7 +159,7 @@ fn k16_link_shared_cpu_helpers_rejects_fixed_program_targets() {
 #[test]
 fn k16_link_emits_shared_object_exports_from_global_symbols() {
     let object_path = temp_file("shared-provider.o");
-    let output_path = temp_file("shared-provider.k16so");
+    let output_path = temp_file("shared-provider.kso");
     fs::write(
         &object_path,
         k16_object_with_text_symbol("foo", &[0x02, 0x00]),
@@ -201,7 +201,7 @@ fn k16_link_emits_shared_object_exports_from_global_symbols() {
 fn k16_link_shared_object_does_not_export_cpu_helper_internals() {
     let helper_path = temp_file("shared-provider-cpu-helpers.o");
     let object_path = temp_file("shared-provider-public.o");
-    let output_path = temp_file("shared-provider-public.k16so");
+    let output_path = temp_file("shared-provider-public.kso");
 
     let helper_output = Command::new(k16_binary())
         .args([
@@ -259,7 +259,7 @@ fn k16_link_shared_object_does_not_export_cpu_helper_internals() {
 #[test]
 fn k16_link_emits_shared_object_relocations_for_internal_absolute_addresses() {
     let object_path = temp_file("shared-provider-reloc.o");
-    let output_path = temp_file("shared-provider-reloc.k16so");
+    let output_path = temp_file("shared-provider-reloc.kso");
     fs::write(
         &object_path,
         k16_object_with_text_relocation_to_symbol(1, "_start"),
@@ -317,7 +317,7 @@ fn k16_link_emits_dynamic_imports_without_retaining_provider_code() {
             "--target",
             "program-dynamic",
             "--import",
-            "libfoo.k16so:foo",
+            "libfoo.kso:foo",
             consumer_path.to_str().unwrap(),
             provider_path.to_str().unwrap(),
             "-o",
@@ -334,7 +334,7 @@ fn k16_link_emits_dynamic_imports_without_retaining_provider_code() {
     let bytes = fs::read(output_path).expect("K16E output reads");
     let executable = k16e::decode_dynamic_k16_program(&bytes).expect("dynamic K16E decodes");
 
-    assert_eq!(executable.needed_libraries, vec!["libfoo.k16so"]);
+    assert_eq!(executable.needed_libraries, vec!["libfoo.kso"]);
     assert_eq!(
         executable.import_relocations,
         vec![k16e::K16eImportRelocation {
@@ -361,7 +361,7 @@ fn k16_link_emits_dynamic_imports_without_retaining_provider_code() {
 fn k16_link_auto_imports_symbols_from_linked_shared_object() {
     let consumer_path = temp_file("auto-import-consumer.o");
     let provider_object_path = temp_file("auto-import-provider.o");
-    let provider_path = temp_file("libauto-import-provider.k16so");
+    let provider_path = temp_file("libauto-import-provider.kso");
     let output_path = temp_file("auto-import-consumer.k16e");
     fs::write(
         &consumer_path,
@@ -450,7 +450,7 @@ fn k16_link_imports_keep_unlisted_unresolved_symbols_as_errors() {
             "--target",
             "program-dynamic",
             "--import",
-            "libfoo.k16so:foo",
+            "libfoo.kso:foo",
             object_path.to_str().unwrap(),
             "-o",
             output_path.to_str().unwrap(),

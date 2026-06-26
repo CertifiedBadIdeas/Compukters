@@ -364,6 +364,154 @@ pub fn k16_cpu_helpers_object() -> Vec<u8> {
     elf_object(&text, &[], &symtab, &strtab)
 }
 
+pub fn assemble_k16_object_source(source: &str) -> Result<Vec<u8>, String> {
+    let mut functions = Vec::<(String, Vec<u16>)>::new();
+    let mut current_name: Option<String> = None;
+    let mut current_words = Vec::<u16>::new();
+
+    for (line_index, raw_line) in source.lines().enumerate() {
+        let line_number = line_index + 1;
+        let line = raw_line
+            .split_once('#')
+            .map(|(before, _)| before)
+            .unwrap_or(raw_line)
+            .trim();
+        if line.is_empty() {
+            continue;
+        }
+        if let Some(name) = line.strip_prefix(".function ") {
+            finish_assembled_function(&mut functions, &mut current_name, &mut current_words)?;
+            let name = name.trim();
+            if name.is_empty() {
+                return Err(format!("line {line_number}: missing function name"));
+            }
+            current_name = Some(name.to_string());
+            continue;
+        }
+        if current_name.is_none() {
+            return Err(format!("line {line_number}: instruction outside .function"));
+        }
+        current_words.extend(
+            assemble_instruction(line).map_err(|error| format!("line {line_number}: {error}"))?,
+        );
+    }
+    finish_assembled_function(&mut functions, &mut current_name, &mut current_words)?;
+    if functions.is_empty() {
+        return Err("K16 asm source does not define any functions".to_string());
+    }
+
+    let mut text = Vec::new();
+    let mut strtab = Vec::from([0]);
+    let mut symtab = Vec::new();
+    symtab.extend([0u8; 16]);
+    for (name, words) in functions {
+        emit_symbol_function(&mut text, &mut strtab, &mut symtab, &name, &words);
+    }
+    Ok(elf_object(&text, &[], &symtab, &strtab))
+}
+
+fn finish_assembled_function(
+    functions: &mut Vec<(String, Vec<u16>)>,
+    current_name: &mut Option<String>,
+    current_words: &mut Vec<u16>,
+) -> Result<(), String> {
+    let Some(name) = current_name.take() else {
+        return Ok(());
+    };
+    if current_words.is_empty() {
+        return Err(format!("function {name} has no instructions"));
+    }
+    functions.push((name, core::mem::take(current_words)));
+    Ok(())
+}
+
+fn assemble_instruction(line: &str) -> Result<Vec<u16>, String> {
+    let tokens = line
+        .replace(',', " ")
+        .replace('[', " ")
+        .replace(']', " ")
+        .split_whitespace()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>();
+    let Some(opcode) = tokens.first().map(String::as_str) else {
+        return Ok(Vec::new());
+    };
+    match opcode {
+        "halt" if tokens.len() == 1 => Ok(vec![halt()]),
+        "wait" if tokens.len() == 1 => Ok(vec![wait()]),
+        "iret" if tokens.len() == 1 => Ok(vec![iret()]),
+        "ret" if tokens.len() == 1 => Ok(vec![ret()]),
+        "syscall" if tokens.len() == 2 => Ok(vec![syscall(parse_register(&tokens[1])?)]),
+        "const4" if tokens.len() == 3 => Ok(vec![const4(
+            parse_register(&tokens[1])?,
+            parse_u8_immediate(&tokens[2], 0x0f)?,
+        )]),
+        "const32" if tokens.len() == 3 => Ok(const32_words(
+            parse_register(&tokens[1])?,
+            parse_u32_immediate(&tokens[2])?,
+        )
+        .to_vec()),
+        "add" if tokens.len() == 4 => Ok(add(
+            parse_register(&tokens[1])?,
+            parse_register(&tokens[2])?,
+            parse_register(&tokens[3])?,
+        )
+        .to_vec()),
+        "sub" if tokens.len() == 4 => Ok(sub(
+            parse_register(&tokens[1])?,
+            parse_register(&tokens[2])?,
+            parse_register(&tokens[3])?,
+        )
+        .to_vec()),
+        "load32" if tokens.len() == 3 => Ok(vec![load32(
+            parse_register(&tokens[1])?,
+            parse_register(&tokens[2])?,
+        )]),
+        "store32" if tokens.len() == 3 => Ok(vec![store32(
+            parse_register(&tokens[1])?,
+            parse_register(&tokens[2])?,
+        )]),
+        "read_csr" if tokens.len() == 3 => Ok(vec![read_csr(
+            parse_register(&tokens[1])?,
+            parse_u32_immediate(&tokens[2])?,
+        )]),
+        "write_csr" if tokens.len() == 3 => Ok(vec![write_csr(
+            parse_u32_immediate(&tokens[1])?,
+            parse_register(&tokens[2])?,
+        )]),
+        _ => Err(format!("unsupported K16 asm instruction `{line}`")),
+    }
+}
+
+fn parse_register(value: &str) -> Result<u8, String> {
+    let register = value
+        .strip_prefix('r')
+        .ok_or_else(|| format!("expected register, got `{value}`"))?
+        .parse::<u8>()
+        .map_err(|error| format!("invalid register `{value}`: {error}"))?;
+    if register > 15 {
+        return Err(format!("register `{value}` is outside r0..r15"));
+    }
+    Ok(register)
+}
+
+fn parse_u8_immediate(value: &str, max: u8) -> Result<u8, String> {
+    let immediate = parse_u32_immediate(value)?;
+    if immediate > u32::from(max) {
+        return Err(format!("immediate `{value}` is larger than {max}"));
+    }
+    Ok(immediate as u8)
+}
+
+fn parse_u32_immediate(value: &str) -> Result<u32, String> {
+    if let Some(hex) = value.strip_prefix("0x") {
+        u32::from_str_radix(hex, 16)
+    } else {
+        value.parse::<u32>()
+    }
+    .map_err(|error| format!("invalid immediate `{value}`: {error}"))
+}
+
 fn save_trap_frame_words() -> Vec<u16> {
     let mut words = Vec::new();
     for register in 0..16 {
