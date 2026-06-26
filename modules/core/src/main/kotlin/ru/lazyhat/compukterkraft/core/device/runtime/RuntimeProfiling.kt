@@ -91,6 +91,13 @@ interface RuntimeMetricsCollector {
         nanos: Long,
     )
 
+    fun recordK16OutputRefresh(
+        serialOutputBytes: Int,
+        gpuFrameBytes: Int,
+        gpuFrameCount: Int,
+        nanos: Long,
+    )
+
     fun recordK16WaitEnter()
 
     fun recordK16WaitTimerWakeup()
@@ -173,6 +180,12 @@ data class RuntimeVmMetrics(
     val k16RunWaitSignals: Long = 0,
     val k16RunYieldSignals: Long = 0,
     val k16RunPauseSignals: Long = 0,
+    val k16OutputRefreshes: Long = 0,
+    val k16OutputRefreshNanos: Long = 0,
+    val k16SerialOutputSnapshotBytes: Long = 0,
+    val k16GpuFrameBatches: Long = 0,
+    val k16GpuFrameBytes: Long = 0,
+    val k16GpuFramesDecoded: Long = 0,
     val k16WaitEntries: Long = 0,
     val k16WaitTimerWakeups: Long = 0,
     val k16WaitInputWakeups: Long = 0,
@@ -231,6 +244,9 @@ data class RuntimeProfilingSnapshot(
             )
             appendLine(
                 "    k16Execution: slices=${vm.k16RunSlices}, time=${vm.k16RunNanos.nanos()}, haltSignals=${vm.k16RunHaltSignals}, waitSignals=${vm.k16RunWaitSignals}, yieldSignals=${vm.k16RunYieldSignals}, pauseSignals=${vm.k16RunPauseSignals}",
+            )
+            appendLine(
+                "    k16Output: refreshes=${vm.k16OutputRefreshes}, time=${vm.k16OutputRefreshNanos.nanos()}, serialSnapshotBytes=${vm.k16SerialOutputSnapshotBytes}, gpuBatches=${vm.k16GpuFrameBatches}, gpuBytes=${vm.k16GpuFrameBytes}, gpuFrames=${vm.k16GpuFramesDecoded}",
             )
             appendLine(
                 "    k16Wait: entries=${vm.k16WaitEntries}, timerWakeups=${vm.k16WaitTimerWakeups}, inputWakeups=${vm.k16WaitInputWakeups}, idleSkips=${vm.k16WaitIdleSkips}",
@@ -357,6 +373,13 @@ object NoOpRuntimeMetricsCollector : RuntimeMetricsCollector {
         nanos: Long,
     ) = Unit
 
+    override fun recordK16OutputRefresh(
+        serialOutputBytes: Int,
+        gpuFrameBytes: Int,
+        gpuFrameCount: Int,
+        nanos: Long,
+    ) = Unit
+
     override fun recordK16WaitEnter() = Unit
 
     override fun recordK16WaitTimerWakeup() = Unit
@@ -429,6 +452,12 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
     private val k16RunWaitSignals = AtomicLong()
     private val k16RunYieldSignals = AtomicLong()
     private val k16RunPauseSignals = AtomicLong()
+    private val k16OutputRefreshes = AtomicLong()
+    private val k16OutputRefreshNanos = AtomicLong()
+    private val k16SerialOutputSnapshotBytes = AtomicLong()
+    private val k16GpuFrameBatches = AtomicLong()
+    private val k16GpuFrameBytes = AtomicLong()
+    private val k16GpuFramesDecoded = AtomicLong()
     private val k16WaitEntries = AtomicLong()
     private val k16WaitTimerWakeups = AtomicLong()
     private val k16WaitInputWakeups = AtomicLong()
@@ -574,6 +603,24 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
         }
     }
 
+    override fun recordK16OutputRefresh(
+        serialOutputBytes: Int,
+        gpuFrameBytes: Int,
+        gpuFrameCount: Int,
+        nanos: Long,
+    ) {
+        k16OutputRefreshes.incrementAndGet()
+        k16OutputRefreshNanos.addAndGet(nanos.coerceAtLeast(0))
+        k16SerialOutputSnapshotBytes.addAndGet(serialOutputBytes.coerceAtLeast(0).toLong())
+        val sanitizedGpuFrameBytes = gpuFrameBytes.coerceAtLeast(0)
+        val sanitizedGpuFrameCount = gpuFrameCount.coerceAtLeast(0)
+        if (sanitizedGpuFrameBytes > 0 || sanitizedGpuFrameCount > 0) {
+            k16GpuFrameBatches.incrementAndGet()
+        }
+        k16GpuFrameBytes.addAndGet(sanitizedGpuFrameBytes.toLong())
+        k16GpuFramesDecoded.addAndGet(sanitizedGpuFrameCount.toLong())
+    }
+
     override fun recordK16WaitEnter() {
         k16WaitEntries.incrementAndGet()
     }
@@ -641,6 +688,12 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
                     k16RunWaitSignals = k16RunWaitSignals.get(),
                     k16RunYieldSignals = k16RunYieldSignals.get(),
                     k16RunPauseSignals = k16RunPauseSignals.get(),
+                    k16OutputRefreshes = k16OutputRefreshes.get(),
+                    k16OutputRefreshNanos = k16OutputRefreshNanos.get(),
+                    k16SerialOutputSnapshotBytes = k16SerialOutputSnapshotBytes.get(),
+                    k16GpuFrameBatches = k16GpuFrameBatches.get(),
+                    k16GpuFrameBytes = k16GpuFrameBytes.get(),
+                    k16GpuFramesDecoded = k16GpuFramesDecoded.get(),
                     k16WaitEntries = k16WaitEntries.get(),
                     k16WaitTimerWakeups = k16WaitTimerWakeups.get(),
                     k16WaitInputWakeups = k16WaitInputWakeups.get(),

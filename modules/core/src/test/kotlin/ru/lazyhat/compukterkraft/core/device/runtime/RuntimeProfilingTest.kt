@@ -140,6 +140,8 @@ class RuntimeProfilingTest {
         collector.recordK16RunSlice(K16RuntimeSignal.YIELD, nanos = 250)
         collector.recordK16RunSlice(K16RuntimeSignal.PAUSE, nanos = 125)
         collector.recordK16RunSlice(K16RuntimeSignal.HALT, nanos = 75)
+        collector.recordK16OutputRefresh(serialOutputBytes = 4, gpuFrameBytes = 64, gpuFrameCount = 2, nanos = 100)
+        collector.recordK16OutputRefresh(serialOutputBytes = 8, gpuFrameBytes = 0, gpuFrameCount = 0, nanos = 50)
         collector.recordK16WaitEnter()
         collector.recordK16WaitEnter()
         collector.recordK16WaitTimerWakeup()
@@ -196,6 +198,12 @@ class RuntimeProfilingTest {
         assertEquals(2, snapshot.vm.k16RunWaitSignals)
         assertEquals(1, snapshot.vm.k16RunYieldSignals)
         assertEquals(1, snapshot.vm.k16RunPauseSignals)
+        assertEquals(2, snapshot.vm.k16OutputRefreshes)
+        assertEquals(150, snapshot.vm.k16OutputRefreshNanos)
+        assertEquals(12, snapshot.vm.k16SerialOutputSnapshotBytes)
+        assertEquals(1, snapshot.vm.k16GpuFrameBatches)
+        assertEquals(64, snapshot.vm.k16GpuFrameBytes)
+        assertEquals(2, snapshot.vm.k16GpuFramesDecoded)
         assertEquals(2, snapshot.vm.k16WaitEntries)
         assertEquals(1, snapshot.vm.k16WaitTimerWakeups)
         assertEquals(1, snapshot.vm.k16WaitInputWakeups)
@@ -235,6 +243,10 @@ class RuntimeProfilingTest {
             summary,
         )
         assertTrue(
+            summary.contains("    k16Output: refreshes=2, time=150 ns, serialSnapshotBytes=12, gpuBatches=1, gpuBytes=64, gpuFrames=2"),
+            summary,
+        )
+        assertTrue(
             summary.contains("    k16Wait: entries=2, timerWakeups=1, inputWakeups=1, idleSkips=3"),
             summary,
         )
@@ -264,6 +276,7 @@ class RuntimeProfilingTest {
         collector.recordNativeDisplayFrameBytes(bytes = 128)
         collector.recordNativeDaemonTick(activeNanos = 100, turns = 2, halted = 1, hostRequests = 3, idle = false)
         collector.recordK16RunSlice(K16RuntimeSignal.WAIT, nanos = 100)
+        collector.recordK16OutputRefresh(serialOutputBytes = 4, gpuFrameBytes = 8, gpuFrameCount = 1, nanos = 10)
         collector.recordK16WaitEnter()
         collector.recordK16WaitTimerWakeup()
         collector.recordK16WaitInputWakeup()

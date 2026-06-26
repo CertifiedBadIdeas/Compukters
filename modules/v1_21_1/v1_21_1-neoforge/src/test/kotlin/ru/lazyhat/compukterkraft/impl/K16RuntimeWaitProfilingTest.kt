@@ -74,8 +74,10 @@ class K16RuntimeWaitProfilingTest {
             println(summary)
 
             assertTrue(snapshot.vm.k16RunSlices > 0)
+            assertTrue(snapshot.vm.k16OutputRefreshes > 0)
             assertTrue(snapshot.vm.k16WaitEntries > 0)
             assertTrue(summary.contains("k16Execution: slices="))
+            assertTrue(summary.contains("k16Output: refreshes="))
             assertTrue(summary.contains("k16Wait: entries="))
             assertTrue(summary.contains("timerWakeups="))
             assertTrue(summary.contains("inputWakeups="))

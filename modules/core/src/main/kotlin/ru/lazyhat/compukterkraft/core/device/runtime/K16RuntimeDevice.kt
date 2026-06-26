@@ -524,11 +524,25 @@ class K16RuntimeDevice(
         }
 
         private fun refreshCaches(endpoint: K16ComputerEndpoint) {
-            outputCache = endpoint.outputSnapshot()
+            val startedAt = System.nanoTime()
+            val outputBytes = endpoint.outputSnapshot()
             val frameBytes = endpoint.drainGpu0Frames()
-            if (frameBytes.isNotEmpty()) {
-                displayFrameCache.addAll(NativeDisplayFrameCodec.decodeFrames(frameBytes))
+            val frames =
+                if (frameBytes.isEmpty()) {
+                    emptyList()
+                } else {
+                    NativeDisplayFrameCodec.decodeFrames(frameBytes)
+                }
+            outputCache = outputBytes
+            if (frames.isNotEmpty()) {
+                displayFrameCache.addAll(frames)
             }
+            metricsCollector.recordK16OutputRefresh(
+                serialOutputBytes = outputBytes.size,
+                gpuFrameBytes = frameBytes.size,
+                gpuFrameCount = frames.size,
+                nanos = System.nanoTime() - startedAt,
+            )
         }
 
         private sealed interface Command {
