@@ -884,8 +884,8 @@ mod tests {
         bytes
     }
 
-    fn dynamic_import_program_image() -> [u8; 154] {
-        let mut bytes = [0u8; 154];
+    fn dynamic_import_program_image() -> [u8; 152] {
+        let mut bytes = [0u8; 152];
         bytes[0..4].copy_from_slice(b"K16E");
         write_u16_le(&mut bytes, 4, 5);
         write_u16_le(&mut bytes, 6, 32);
@@ -909,20 +909,20 @@ mod tests {
         write_u32_le(&mut bytes, 72, 6);
         write_u32_le(&mut bytes, 76, 0);
         write_u32_le(&mut bytes, 80, 120);
-        write_u32_le(&mut bytes, 84, 14);
+        write_u32_le(&mut bytes, 84, 12);
         write_u32_le(&mut bytes, 88, 1);
         write_u32_le(&mut bytes, 92, 7);
         write_u32_le(&mut bytes, 96, 0);
-        write_u32_le(&mut bytes, 100, 134);
+        write_u32_le(&mut bytes, 100, 132);
         write_u32_le(&mut bytes, 104, 20);
         write_u32_le(&mut bytes, 108, 1);
         bytes[112..120].copy_from_slice(&[0x01, 0xe1, 0, 0, 0, 0, 0, 0x90]);
-        bytes[120..133].copy_from_slice(b"libfoo.k16so\0");
-        write_u32_le(&mut bytes, 134, 4);
-        write_u32_le(&mut bytes, 138, 2);
-        write_u32_le(&mut bytes, 142, 0);
-        write_u32_le(&mut bytes, 146, 0);
-        bytes[150..154].copy_from_slice(b"foo\0");
+        bytes[120..131].copy_from_slice(b"libfoo.kso\0");
+        write_u32_le(&mut bytes, 132, 4);
+        write_u32_le(&mut bytes, 136, 2);
+        write_u32_le(&mut bytes, 140, 0);
+        write_u32_le(&mut bytes, 144, 0);
+        bytes[148..152].copy_from_slice(b"foo\0");
         bytes
     }
 
@@ -1041,7 +1041,7 @@ mod tests {
         assert_eq!(header.memory_size, 12);
         assert_eq!(header.relocation_table_offset, 120);
         assert_eq!(header.relocation_count, 0);
-        assert_eq!(header.needed_library(0), Some(b"libfoo.k16so".as_slice()));
+        assert_eq!(header.needed_library(0), Some(b"libfoo.kso".as_slice()));
         assert_eq!(header.needed_library(1), None);
         assert_eq!(
             header.import_relocation(0),

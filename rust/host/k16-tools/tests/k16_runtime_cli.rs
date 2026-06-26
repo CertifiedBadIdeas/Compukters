@@ -311,6 +311,76 @@ fn k16_runtime_startup_does_not_hide_missing_helper_symbols() {
 }
 
 #[test]
+fn kasm_builds_checked_in_cpu_helper_source() {
+    let workspace = temp_dir("k16-asm-cpu-helpers");
+    fs::create_dir_all(&workspace).expect("workspace created");
+    let startup_path = workspace.join("startup.o");
+    let main_path = workspace.join("main.o");
+    let output_path = workspace.join("cpu-helpers.o");
+    let source_path = repo_root().join("guest/c/arch/k16/cpu-helpers.kasm");
+
+    let output = Command::new(k16_binary())
+        .args([
+            "asm",
+            source_path.to_str().unwrap(),
+            "-o",
+            output_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("k16 asm runs");
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let helper_object = fs::read(&output_path).expect("helper object written");
+    assert!(
+        helper_object.starts_with(&[0x7f, b'E', b'L', b'F']),
+        "assembled helper should be an ELF relocatable object"
+    );
+    fs::write(
+        &main_path,
+        k16_main_calling_undefined_helper("__k16_halt_once"),
+    )
+    .expect("main object writes");
+    let startup_output = Command::new(k16_binary())
+        .args([
+            "runtime",
+            "k16-startup",
+            "-o",
+            startup_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("k16 runtime startup runs");
+    assert!(
+        startup_output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&startup_output.stderr)
+    );
+
+    let linked_path = workspace.join("helper-program.kx");
+    let link_output = Command::new(k16_binary())
+        .args([
+            "link",
+            "--target",
+            "program",
+            startup_path.to_str().unwrap(),
+            main_path.to_str().unwrap(),
+            output_path.to_str().unwrap(),
+            "-o",
+            linked_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("k16 link runs");
+    assert!(
+        link_output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&link_output.stderr)
+    );
+}
+
+#[test]
 fn k16_runtime_cpu_helpers_resolve_k16_cpu_symbols() {
     let startup_path = temp_file("cpu-helper-startup.o");
     let helper_path = temp_file("cpu-helpers.o");

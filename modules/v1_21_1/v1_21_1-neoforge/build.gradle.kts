@@ -142,6 +142,7 @@ val k16RuntimeImportTestSource =
 val k16CLibcIncludeSource = rootProject.layout.projectDirectory.dir("guest/c/libc/include")
 val k16CLibcStartupSource = rootProject.layout.projectDirectory.file("guest/c/libc/crt0.c")
 val k16CLibcSyscallSource = rootProject.layout.projectDirectory.file("guest/c/libc/syscalls.c")
+val k16CArchRuntimeSource = rootProject.layout.projectDirectory.file("guest/c/arch/k16/cpu-helpers.kasm")
 val k16CLibkraftSource = rootProject.layout.projectDirectory.file("guest/c/libkraft/libkraft.c")
 val k16CSystemInitSource = rootProject.layout.projectDirectory.file("guest/c/init/init.c")
 val k16CSystemShellSource = rootProject.layout.projectDirectory.file("guest/c/shell/shell.c")
@@ -197,8 +198,8 @@ val k16WriteArtifact = generatedK16FirmwareArtifacts.map { it.file("write.kx") }
 val k16RmArtifact = generatedK16FirmwareArtifacts.map { it.file("rm.kx") }
 val k16MkdirArtifact = generatedK16FirmwareArtifacts.map { it.file("mkdir.kx") }
 val k16RmdirArtifact = generatedK16FirmwareArtifacts.map { it.file("rmdir.kx") }
-val k16SharedRuntimeArtifact = generatedK16FirmwareArtifacts.map { it.file("libk16rt.k16so") }
-val k16SharedKraftArtifact = generatedK16FirmwareArtifacts.map { it.file("libkraft.k16so") }
+val k16SharedRuntimeArtifact = generatedK16FirmwareArtifacts.map { it.file("libk16rt.kso") }
+val k16SharedKraftArtifact = generatedK16FirmwareArtifacts.map { it.file("libkraft.kso") }
 val k16RuntimeImportTestArtifact = generatedK16FirmwareArtifacts.map { it.file("runtime-import-test.kx") }
 val k16AllocTestArtifact = generatedK16FirmwareArtifacts.map { it.file("alloc-test.kx") }
 val k16ProcTestArtifact = generatedK16FirmwareArtifacts.map { it.file("proc-test.kx") }
@@ -285,8 +286,8 @@ val k16DevelopmentOnlyStorageEntries =
     )
 val k16SharedRuntimeStorageEntries =
     listOf(
-        "/lib/libk16rt.k16so" to k16SharedRuntimeArtifact,
-        "/lib/libkraft.k16so" to k16SharedKraftArtifact,
+        "/lib/libk16rt.kso" to k16SharedRuntimeArtifact,
+        "/lib/libkraft.kso" to k16SharedKraftArtifact,
     )
 
 fun artifactFile(artifact: Any): File =
@@ -558,6 +559,34 @@ fun Project.compileK16GuestRustBin(
     )
 }
 
+fun Project.compileK16ArchRuntimeObject(
+    targetDir: File,
+    source: File,
+): File {
+    val toolchain = resolveK16Toolchain()
+    targetDir.mkdirs()
+    val output = targetDir.resolve("${source.nameWithoutExtension}.o")
+    output.delete()
+    val command =
+        listOf(
+            toolchain.cli.absolutePath,
+            "asm",
+            source.absolutePath,
+            "-o",
+            output.absolutePath,
+        )
+    val exitCode =
+        ProcessBuilder(command)
+            .directory(projectDir)
+            .inheritIO()
+            .start()
+            .waitFor()
+    check(exitCode == 0) {
+        "K16 arch runtime source build failed with exit code $exitCode: ${command.joinToString(" ")}"
+    }
+    return output
+}
+
 fun Project.compileK16GuestCProgram(
     targetDir: File,
     output: File,
@@ -566,7 +595,7 @@ fun Project.compileK16GuestCProgram(
     startupSource: File,
     sources: List<File>,
     dylibs: List<File>,
-    includeCpuHelpers: Boolean = false,
+    archRuntimeSource: File? = null,
 ) {
     val toolchain = resolveK16Toolchain()
     val clang = k16ClangExecutable.asFile
@@ -581,7 +610,8 @@ fun Project.compileK16GuestCProgram(
     mapOutput.delete()
 
     val startupObject = targetDir.resolve("k16-startup.o")
-    val cpuHelpersObject = targetDir.resolve("k16-cpu-helpers.o")
+    val archRuntimeObject =
+        archRuntimeSource?.let { source -> compileK16ArchRuntimeObject(targetDir, source) }
     val startupCommand =
         listOf(
             toolchain.cli.absolutePath,
@@ -600,25 +630,6 @@ fun Project.compileK16GuestCProgram(
             .waitFor()
     check(startupExitCode == 0) {
         "K16 C startup object build failed with exit code $startupExitCode: ${startupCommand.joinToString(" ")}"
-    }
-    if (includeCpuHelpers) {
-        val cpuHelpersCommand =
-            listOf(
-                toolchain.cli.absolutePath,
-                "runtime",
-                "k16-cpu-helpers",
-                "-o",
-                cpuHelpersObject.absolutePath,
-            )
-        val cpuHelpersExitCode =
-            ProcessBuilder(cpuHelpersCommand)
-                .directory(projectDir)
-                .inheritIO()
-                .start()
-                .waitFor()
-        check(cpuHelpersExitCode == 0) {
-            "K16 C CPU helper object build failed with exit code $cpuHelpersExitCode: ${cpuHelpersCommand.joinToString(" ")}"
-        }
     }
 
     val objectFiles =
@@ -671,8 +682,8 @@ fun Project.compileK16GuestCProgram(
                 add(dylib.absolutePath)
             }
             add(startupObject.absolutePath)
-            if (includeCpuHelpers) {
-                add(cpuHelpersObject.absolutePath)
+            if (archRuntimeObject != null) {
+                add(archRuntimeObject.absolutePath)
             }
             objectFiles.forEach { objectFile ->
                 add(objectFile.absolutePath)
@@ -696,6 +707,7 @@ fun Project.compileK16GuestCSharedObject(
     output: File,
     mapOutput: File,
     includeDir: File,
+    archRuntimeSource: File,
     source: File,
 ) {
     val toolchain = resolveK16Toolchain()
@@ -710,25 +722,8 @@ fun Project.compileK16GuestCSharedObject(
     output.delete()
     mapOutput.delete()
 
-    val cpuHelpersObject = targetDir.resolve("k16-cpu-helpers.o")
+    val archRuntimeObject = compileK16ArchRuntimeObject(targetDir, archRuntimeSource)
     val providerObject = targetDir.resolve("${source.nameWithoutExtension}.o")
-    val cpuHelpersCommand =
-        listOf(
-            toolchain.cli.absolutePath,
-            "runtime",
-            "k16-cpu-helpers",
-            "-o",
-            cpuHelpersObject.absolutePath,
-        )
-    val cpuHelpersExitCode =
-        ProcessBuilder(cpuHelpersCommand)
-            .directory(projectDir)
-            .inheritIO()
-            .start()
-            .waitFor()
-    check(cpuHelpersExitCode == 0) {
-        "K16 C shared CPU helper object build failed with exit code $cpuHelpersExitCode: ${cpuHelpersCommand.joinToString(" ")}"
-    }
 
     providerObject.delete()
     val compileCommand =
@@ -765,7 +760,7 @@ fun Project.compileK16GuestCSharedObject(
             "shared-object",
             "--map",
             mapOutput.absolutePath,
-            cpuHelpersObject.absolutePath,
+            archRuntimeObject.absolutePath,
             providerObject.absolutePath,
             "-o",
             output.absolutePath,
@@ -910,6 +905,7 @@ val compileK16SystemShell =
         inputs.file(k16CLibcStartupSource)
         inputs.file(k16CLibcSyscallSource)
         inputs.file(k16CSystemShellSource)
+        inputs.file(k16CArchRuntimeSource)
         inputs.file(k16SharedKraftArtifact)
         inputs.file(k16ClangExecutable)
         inputs.file(k16HostToolsManifest)
@@ -931,7 +927,7 @@ val compileK16SystemShell =
                 startupSource = k16CLibcStartupSource.asFile,
                 sources = listOf(k16CLibcSyscallSource.asFile, k16CSystemShellSource.asFile),
                 dylibs = listOf(k16SharedKraftArtifact.get().asFile),
-                includeCpuHelpers = true,
+                archRuntimeSource = k16CArchRuntimeSource.asFile,
             )
         }
     }
@@ -1300,6 +1296,7 @@ val compileK16SharedKraft =
         description = "Compiles and links the bundled Kraft shared userland library into a K16E shared object."
         group = "k16"
         inputs.file(k16CLibkraftSource)
+        inputs.file(k16CArchRuntimeSource)
         inputs.dir(k16CLibcIncludeSource)
         inputs.file(k16HostToolsManifest)
         inputs.dir(k16HostToolsSource)
@@ -1316,6 +1313,7 @@ val compileK16SharedKraft =
                 output = k16SharedKraftArtifact.get().asFile,
                 mapOutput = k16SharedKraftMapArtifact.get(),
                 includeDir = k16CLibcIncludeSource.asFile,
+                archRuntimeSource = k16CArchRuntimeSource.asFile,
                 source = k16CLibkraftSource.asFile,
             )
         }

@@ -14,6 +14,7 @@ pub fn run_k16_cli(args: Vec<String>) -> Result<(), String> {
         return usage_error();
     };
     match command.as_str() {
+        "asm" | "assemble" => run_asm(&args[1..]),
         "link" => run_link(&args[1..]),
         "runtime" => run_runtime(&args[1..]),
         "run" => run_program(&args[1..]),
@@ -28,7 +29,17 @@ pub fn run_k16_cli(args: Vec<String>) -> Result<(), String> {
 }
 
 fn usage_error() -> Result<(), String> {
-    Err("usage: k16 link [--target <boot|kernel|program|program-dynamic|shared-object>] <input.ko>... -o <output.kx>\n       k16 runtime <k16-startup|k16-memory-helpers|k16-cpu-helpers> [--target <program|program-dynamic>] -o <output.ko>\n       k16 run <program.kx>\n       k16 run-bios <bios.kflash>\n       k16 disasm --target <bios|boot|kernel|program|program-dynamic|shared-object> [--start <pc>] [--count <instructions>] <input>\n       k16 inspect <blob>\n       k16 size-report <map>...\n       k16 volume <create|init|put-boot|put-kernel> ...\n       k16 fs <filesystem> ...".to_string())
+    Err("usage: k16 asm <input.kasm> -o <output.ko>\n       k16 link [--target <boot|kernel|program|program-dynamic|shared-object>] <input.ko>... -o <output.kx>\n       k16 runtime <k16-startup|k16-memory-helpers|k16-cpu-helpers> [--target <program|program-dynamic>] -o <output.ko>\n       k16 run <program.kx>\n       k16 run-bios <bios.kflash>\n       k16 disasm --target <bios|boot|kernel|program|program-dynamic|shared-object> [--start <pc>] [--count <instructions>] <input>\n       k16 inspect <blob>\n       k16 size-report <map>...\n       k16 volume <create|init|put-boot|put-kernel> ...\n       k16 fs <filesystem> ...".to_string())
+}
+
+fn run_asm(args: &[String]) -> Result<(), String> {
+    if args.len() != 3 || args[1] != "-o" {
+        return asm_usage_error();
+    }
+    let source = fs::read_to_string(&args[0])
+        .map_err(|error| format!("failed to read {}: {error}", args[0]))?;
+    let object = k16_runtime::assemble_k16_object_source(&source)?;
+    fs::write(&args[2], object).map_err(|error| format!("failed to write {}: {error}", args[2]))
 }
 
 fn run_program(args: &[String]) -> Result<(), String> {
@@ -804,12 +815,16 @@ fn link_usage_error() -> Result<LinkConfig, String> {
 }
 
 fn link_usage_message() -> String {
-    "usage: k16 link [--target <boot|kernel|program|program-dynamic|shared-object>] [--shared-cpu-helpers] [--import <library>:<symbol>] [--dylib <library.k16so>] [--map <output.map>] <input.ko>... -o <output.kx>"
+    "usage: k16 link [--target <boot|kernel|program|program-dynamic|shared-object>] [--shared-cpu-helpers] [--import <library>:<symbol>] [--dylib <library.kso>] [--map <output.map>] <input.ko>... -o <output.kx>"
         .to_string()
 }
 
 fn runtime_usage_error() -> Result<(), String> {
     Err(runtime_usage_message())
+}
+
+fn asm_usage_error() -> Result<(), String> {
+    Err("usage: k16 asm <input.kasm> -o <output.ko>".to_string())
 }
 
 fn runtime_usage_message() -> String {

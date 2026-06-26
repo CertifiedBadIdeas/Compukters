@@ -44,7 +44,7 @@ production build or focused test needs them.
 | `rust/guest/k16-proc-test` | Development process-model smoke utility. | Development/test-only; keep until process coverage moves elsewhere. |
 | `rust/guest/k16-rt` | Low-level Rust guest runtime/syscall/trap helper crate. | Keep Rust for Rust kernel/boot/runtime consumers; do not expand as userland std. |
 | `rust/guest/k16-runtime-import-test` | Development dynamic-import smoke program. | Development/test-only; keep while it covers loader/import behavior. |
-| `rust/guest/k16-shared-kraft` | Former Rust provider for the shared OS ABI library `libkraft.k16so`. | Removed; `/lib/libkraft.k16so` now builds from `guest/c/libkraft/libkraft.c`. |
+| `rust/guest/k16-shared-kraft` | Former Rust provider for the shared OS ABI library `libkraft.kso`. | Removed; `/lib/libkraft.kso` now builds from `guest/c/libkraft/libkraft.c`. |
 | `rust/guest/k16-shared-runtime` | Rust provider for shared runtime helpers. | Keep Rust temporarily; runtime helper sharing is separate from coreutils migration. |
 | `rust/guest/k16-shell` | Former Rust production shell. | Legacy/removable after no focused tests/docs need the old Rust shell; production `/bin/shell.kx` now builds from `guest/c/shell/shell.c`. |
 | `rust/guest/k16-storage` | Guest storage/filesystem support library. | Keep Rust while kernel/storage internals remain Rust. |
@@ -76,7 +76,7 @@ host-tool tests that build temporary source snippets instead of shipping
 bundled guest proof crates.
 
 The former Rust shared OS ABI provider `k16-shared-kraft` was removed from the
-guest workspace after `/lib/libkraft.k16so` moved to
+guest workspace after `/lib/libkraft.kso` moved to
 `guest/c/libkraft/libkraft.c`.
 
 ## Next Production C Candidates
