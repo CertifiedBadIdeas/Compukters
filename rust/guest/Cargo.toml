@@ -7,7 +7,6 @@ members = [
     "k16-image",
     "k16-init",
     "k16-shell",
-    "k16-shared-kraft",
     "k16-runtime-import-test",
     "k16-shared-runtime",
     "k16-alloc-test",

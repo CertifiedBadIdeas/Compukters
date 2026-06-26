@@ -87,7 +87,8 @@ The first production C hosted utilities are deliberately separate from Rust
 Clang and linked as `/bin/uname.kx`, `/bin/cat.kx`, `/bin/write.kx`,
 `/bin/rm.kx`, `/bin/mkdir.kx`, `/bin/rmdir.kx`, `/bin/stat.kx`,
 `/bin/ls.kx`, `/bin/cp.kx`, and `/bin/mv.kx` against `libkraft.k16so`.
-Their libc-lite startup layer under
+That shared OS ABI provider is now built from `guest/c/libkraft/libkraft.c`,
+not from a Rust userland crate. Their libc-lite startup layer under
 `guest/c/libc` adapts the K16 bounded argv table into ordinary C
 `main(int argc, char **argv)`, while minimal `unistd.h`, `fcntl.h`,
 `stddef.h`, `string.h`, and `kraft/fs.h` headers expose the small C userland
@@ -103,9 +104,9 @@ guest allocator for foreground userland programs. Append, seek, multi-extent
 growth, background process/task management, allocator reuse, and full POSIX
 compatibility are separate future slices.
 
-The bundled init shell uses this allocator for its editable input line. When
-allocation is exhausted, printable input that cannot be stored is not echoed and
-is not included in the command buffer.
+The bundled C shell keeps an explicit bounded editable input line and does not
+depend on the Rust `alloc` shell path. The `SBRK` allocator remains available
+to foreground userland programs that need heap storage.
 
 ## Layering Rule
 

@@ -68,8 +68,10 @@ int kraft_rename(const char *old_path, const char *new_path) {
   return __kraft_sys_rename(request, request_len);
 }
 
-int kraft_spawn_with_args(const char *path, int argc,
-                          const char *const *argv) {
+static int kraft_process_with_args(unsigned int magic, const char *path,
+                                   int argc, const char *const *argv,
+                                   int (*syscall)(const void *,
+                                                  unsigned int)) {
   char request[KRAFT_MAX_SPAWN_ARGV_REQUEST_BYTES];
   unsigned int path_len = strlen(path);
   unsigned int cursor = 12u;
@@ -79,7 +81,7 @@ int kraft_spawn_with_args(const char *path, int argc,
     return (int)0xffffffeau;
   }
 
-  put_u32_le(request + 0, KRAFT_SPAWN_ARGV_REQUEST_MAGIC);
+  put_u32_le(request + 0, magic);
   put_u32_le(request + 4, path_len);
   put_u32_le(request + 8, (unsigned int)argc);
   for (int index = 0; index < argc; index += 1) {
@@ -104,7 +106,18 @@ int kraft_spawn_with_args(const char *path, int argc,
   }
 
   unsigned int request_len = cursor;
-  return __kraft_sys_spawn(request, request_len);
+  return syscall(request, request_len);
+}
+
+int kraft_spawn_with_args(const char *path, int argc,
+                          const char *const *argv) {
+  return kraft_process_with_args(KRAFT_SPAWN_ARGV_REQUEST_MAGIC, path, argc,
+                                 argv, __kraft_sys_spawn);
+}
+
+int kraft_run_with_args(const char *path, int argc, const char *const *argv) {
+  return kraft_process_with_args(KRAFT_RUN_ARGV_REQUEST_MAGIC, path, argc, argv,
+                                 __kraft_sys_run);
 }
 
 int kraft_wait(int pid, int *status) {

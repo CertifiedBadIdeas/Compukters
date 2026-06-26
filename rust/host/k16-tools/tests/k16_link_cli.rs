@@ -198,6 +198,65 @@ fn k16_link_emits_shared_object_exports_from_global_symbols() {
 }
 
 #[test]
+fn k16_link_shared_object_does_not_export_cpu_helper_internals() {
+    let helper_path = temp_file("shared-provider-cpu-helpers.o");
+    let object_path = temp_file("shared-provider-public.o");
+    let output_path = temp_file("shared-provider-public.k16so");
+
+    let helper_output = Command::new(k16_binary())
+        .args([
+            "runtime",
+            "k16-cpu-helpers",
+            "-o",
+            helper_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("k16 runtime runs");
+    assert!(
+        helper_output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&helper_output.stderr)
+    );
+    fs::write(
+        &object_path,
+        k16_object_with_text_symbol("public_api", &[0x02, 0x00]),
+    )
+    .expect("object writes");
+
+    let output = Command::new(k16_binary())
+        .args([
+            "link",
+            "--target",
+            "shared-object",
+            helper_path.to_str().unwrap(),
+            object_path.to_str().unwrap(),
+            "-o",
+            output_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("k16 link runs");
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let bytes = fs::read(output_path).expect("K16E output reads");
+    let shared = k16e::decode_k16_shared_object(&bytes).expect("shared object decodes");
+    let export_names = shared
+        .exports
+        .iter()
+        .map(|export| export.name.as_str())
+        .collect::<Vec<_>>();
+
+    assert!(export_names.contains(&"public_api"));
+    assert!(
+        !export_names.iter().any(|name| name.starts_with("__k16_")),
+        "shared object exported CPU helper internals: {export_names:?}"
+    );
+}
+
+#[test]
 fn k16_link_emits_shared_object_relocations_for_internal_absolute_addresses() {
     let object_path = temp_file("shared-provider-reloc.o");
     let output_path = temp_file("shared-provider-reloc.k16so");

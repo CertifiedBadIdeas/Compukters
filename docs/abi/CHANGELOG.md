@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+- `/lib/libkraft.k16so` now builds from `guest/c/libkraft/libkraft.c` through
+  the source-built-dev K16 Clang path instead of the Rust
+  `k16-shared-kraft` guest crate. It remains a syscall-shaped shared OS ABI
+  provider, not libc or Rust `std`: C libc-lite still owns standard-shaped
+  wrappers such as `kraft_open`, `kraft_stat`, and `kraft_run_with_args`, while
+  `libkraft.k16so` exports the dynamic boundary symbols consumed by production
+  C userland. The C provider still links the generated `k16-cpu-helpers.o`
+  object for this slice; replacing those helpers with source-based arch
+  runtime objects is tracked separately.
+- Production `/bin/shell.kx` now builds from `guest/c/shell/shell.c` through
+  the source-built-dev K16 Clang path and libc-lite startup layer. libc-lite
+  exposes `kraft_run_with_args(path, argc, argv)` over the existing structured
+  K16 `RUN` argv request, and `/lib/libkraft.k16so` exports the syscall-shaped
+  `run(request, len)` ABI symbol. The C shell's `ticks` builtin reads the
+  `timer0` MMIO low/high words directly as a diagnostic hardware-facing command.
+  The fixed-number syscall helpers are stack-neutral, so caller-owned stack
+  buffers are not overlapped by helper save slots. The shell preserves the shipped prompt, fd-backed
+  stdin/stdout behavior, builtins, cwd-aware utility argument resolution, and
+  foreground `shell -> utility` execution model while dropping the Rust
+  `core,alloc` production shell build.
 - Production `/bin/init.kx` now builds from `guest/c/init/init.c` through the
   source-built-dev K16 Clang path and libc-lite startup layer. libc-lite exposes
   `kraft_spawn_with_args(path, argc, argv)` and `kraft_wait(pid, status)` over
@@ -82,17 +102,16 @@
   entry. This is a small libc-lite foundation, not a full libc/newlib/glibc
   port. The Clang K16 target data layout is aligned with the K16 backend and
   Rust target spec: `e-p:32:32-i32:32-i64:64-n32-S64`.
-- Bundled K16 storage now includes the first project-owned userland shared
-  library provider: `/lib/libkraft.k16so` from
-  `rust/guest/k16-shared-kraft`. The bundled `/bin/uname.kx` utility now uses
+- Bundled K16 storage added the first project-owned userland shared library
+  provider: `/lib/libkraft.k16so`. The bundled `/bin/uname.kx` utility uses
   linker auto-imports from the provider's K16E v4 export table and records K16E
   v5 imports for `libkraft.k16so`, proving that a production utility can call a
   plain shared OS ABI surface through the kernel loader without listing each
   imported symbol by hand. `libkraft.k16so` intentionally exports syscall-shaped
   symbols such as `open`, `read`, `write`, `close`, `rename`, `mkdir`, `rmdir`,
   `unlink`, `sbrk`, and `_exit`; it is not a Rust stdlib replacement. This
-  remains narrower than dynamic Rust
-  `core`, Rust `std`, libc, or libc++ sharing.
+  remains narrower than dynamic Rust `core`, Rust `std`, libc, or libc++
+  sharing.
 - Bundled K16 shared-runtime adoption now uses a real provider artifact:
   `/lib/libk16rt.k16so` from `rust/guest/k16-shared-runtime`. The development
   importer `/bin/runtime-import-test.kx` imports `k16rt_memcpy`,
