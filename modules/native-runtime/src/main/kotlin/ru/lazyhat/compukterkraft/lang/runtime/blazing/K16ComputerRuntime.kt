@@ -65,6 +65,8 @@ interface K16ComputerRuntimeBindings {
 
     fun machineSnapshot(handle: Long): ByteArray
 
+    fun statsSnapshot(handle: Long): NativeK16ComputerStatsSnapshot
+
     fun free(handle: Long)
 }
 
@@ -110,6 +112,8 @@ object NativeK16ComputerRuntimeBindings : K16ComputerRuntimeBindings {
     override fun storage0MediaSnapshot(handle: Long): ByteArray? = NativeVmBindings.k16ComputerStorage0MediaSnapshot(handle)
 
     override fun machineSnapshot(handle: Long): ByteArray = NativeVmBindings.k16ComputerMachineSnapshot(handle)
+
+    override fun statsSnapshot(handle: Long): NativeK16ComputerStatsSnapshot = NativeVmBindings.k16ComputerStatsSnapshot(handle)
 
     override fun free(handle: Long) = NativeVmBindings.freeK16Computer(handle)
 }
@@ -189,6 +193,8 @@ interface K16ComputerEndpoint : AutoCloseable {
     fun clearOutput()
 
     fun machineSnapshot(): ByteArray
+
+    fun statsSnapshot(): NativeK16ComputerStatsSnapshot
 }
 
 data class K16ComputerTickResult(
@@ -314,6 +320,11 @@ class K16ComputerRuntime(
     override fun machineSnapshot(): ByteArray {
         ensureOpen()
         return bindings.machineSnapshot(handle)
+    }
+
+    override fun statsSnapshot(): NativeK16ComputerStatsSnapshot {
+        ensureOpen()
+        return bindings.statsSnapshot(handle)
     }
 
     override fun close() {

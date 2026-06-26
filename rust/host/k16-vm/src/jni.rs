@@ -6,7 +6,8 @@ use jni::JNIEnv;
 
 use crate::display::{DisplayFrameDelta, PixelFormat};
 use crate::k16::K16Signal;
-use crate::k16_computer::K16ComputerHandle;
+use crate::k16_computer::{K16ComputerHandle, K16ComputerStatsSnapshot};
+use crate::low_bus::MachineBusTrafficSnapshot;
 
 #[no_mangle]
 pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_createK16ComputerFromBiosFlashNative(
@@ -233,6 +234,22 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
 }
 
 #[no_mangle]
+pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_k16ComputerStatsSnapshotNative(
+    mut env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    handle: jlong,
+) -> jlongArray {
+    let handle = match k16_computer_handle_mut(&mut env, handle) {
+        Some(handle) => handle,
+        None => return null_mut(),
+    };
+    long_array_or_throw(
+        &mut env,
+        &k16_computer_stats_snapshot_values(&handle.stats_snapshot()),
+    )
+}
+
+#[no_mangle]
 pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_pushK16ComputerSerialInputNative(
     mut env: JNIEnv<'_>,
     _class: JClass<'_>,
@@ -369,6 +386,28 @@ fn k16_signal_values(signal: K16Signal) -> [jlong; 2] {
     }
 }
 
+fn k16_computer_stats_snapshot_values(snapshot: &K16ComputerStatsSnapshot) -> Vec<jlong> {
+    let mut values = Vec::with_capacity(10 + snapshot.devices.len() * 7);
+    values.push(1);
+    push_traffic_values(&mut values, snapshot.bus.ram);
+    push_traffic_values(&mut values, snapshot.bus.mmio);
+    values.push(snapshot.devices.len() as jlong);
+    for device in &snapshot.devices {
+        values.push(device.device_id as jlong);
+        values.push(i64::from(device.base));
+        values.push(i64::from(device.size));
+        push_traffic_values(&mut values, device.traffic);
+    }
+    values
+}
+
+fn push_traffic_values(values: &mut Vec<jlong>, traffic: MachineBusTrafficSnapshot) {
+    values.push(traffic.loads as jlong);
+    values.push(traffic.stores as jlong);
+    values.push(traffic.bytes_read as jlong);
+    values.push(traffic.bytes_written as jlong);
+}
+
 fn push_i64(out: &mut Vec<u8>, value: i64) {
     out.extend_from_slice(&value.to_le_bytes());
 }
@@ -436,4 +475,49 @@ fn long_array_or_throw(env: &mut JNIEnv<'_>, values: &[jlong]) -> jlongArray {
         return null_mut();
     }
     array.into_raw()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::k16_computer_stats_snapshot_values;
+    use crate::computer::stats::{K16ComputerDeviceStats, K16ComputerStatsSnapshot};
+    use crate::low_bus::{MachineBusStatsSnapshot, MachineBusTrafficSnapshot};
+
+    #[test]
+    fn k16_computer_stats_snapshot_values_encode_versioned_long_array() {
+        let snapshot = K16ComputerStatsSnapshot {
+            bus: MachineBusStatsSnapshot {
+                ram: MachineBusTrafficSnapshot {
+                    loads: 2,
+                    stores: 3,
+                    bytes_read: 4,
+                    bytes_written: 5,
+                },
+                mmio: MachineBusTrafficSnapshot {
+                    loads: 6,
+                    stores: 7,
+                    bytes_read: 8,
+                    bytes_written: 9,
+                },
+                mmio_devices: Vec::new(),
+            },
+            devices: vec![K16ComputerDeviceStats {
+                name: "debug",
+                device_id: 11,
+                base: 0x1000,
+                size: 64,
+                traffic: MachineBusTrafficSnapshot {
+                    loads: 12,
+                    stores: 13,
+                    bytes_read: 14,
+                    bytes_written: 15,
+                },
+            }],
+        };
+
+        assert_eq!(
+            k16_computer_stats_snapshot_values(&snapshot),
+            vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 1, 11, 0x1000, 64, 12, 13, 14, 15],
+        );
+    }
 }

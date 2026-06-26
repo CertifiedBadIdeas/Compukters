@@ -101,6 +101,49 @@ class K16ComputerRuntimeTest {
     }
 
     @Test
+    fun decodesNativeStatsSnapshotLongArray() {
+        val snapshot =
+            NativeK16ComputerStatsSnapshot.from(
+                longArrayOf(
+                    1,
+                    2, 3, 4, 5,
+                    6, 7, 8, 9,
+                    1,
+                    11, 0x1000, 64, 12, 13, 14, 15,
+                ),
+            )
+
+        assertEquals(NativeK16BusTraffic(loads = 2, stores = 3, bytesRead = 4, bytesWritten = 5), snapshot.ram)
+        assertEquals(NativeK16BusTraffic(loads = 6, stores = 7, bytesRead = 8, bytesWritten = 9), snapshot.mmio)
+        assertEquals(
+            listOf(
+                NativeK16MmioDeviceStats(
+                    deviceId = 11,
+                    base = 0x1000,
+                    size = 64,
+                    traffic = NativeK16BusTraffic(loads = 12, stores = 13, bytesRead = 14, bytesWritten = 15),
+                ),
+            ),
+            snapshot.devices,
+        )
+    }
+
+    @Test
+    fun exposesNativeStatsSnapshotThroughRuntimeBindings() {
+        val bindings = EchoBindings()
+        bindings.statsSnapshot =
+            NativeK16ComputerStatsSnapshot(
+                ram = NativeK16BusTraffic(loads = 1, stores = 2, bytesRead = 3, bytesWritten = 4),
+                mmio = NativeK16BusTraffic(loads = 5, stores = 6, bytesRead = 7, bytesWritten = 8),
+                devices = emptyList(),
+            )
+        val runtime = K16ComputerRuntime(handle = 17L, bindings = bindings)
+
+        assertEquals(bindings.statsSnapshot, runtime.statsSnapshot())
+        assertEquals(listOf(17L), bindings.statsSnapshotHandles)
+    }
+
+    @Test
     fun skipsNativeExecutionAfterHaltSignal() {
         val bindings = EchoBindings()
         bindings.control = NativeK16ComputerControl(status = 3, exitCode = 0, panicCode = 2)
@@ -224,11 +267,13 @@ class K16ComputerRuntimeTest {
         val keyboardPasteBytes = mutableListOf<KeyboardPasteBytes>()
         val freedHandles = mutableListOf<Long>()
         val machineSnapshotHandles = mutableListOf<Long>()
+        val statsSnapshotHandles = mutableListOf<Long>()
         val advanceGameTickHandles = mutableListOf<Long>()
         val callOrder = mutableListOf<String>()
         var gpuFrames: ByteArray = ByteArray(0)
         var storage0Media: ByteArray? = null
         var machineSnapshot: ByteArray = ByteArray(0)
+        var statsSnapshot: NativeK16ComputerStatsSnapshot = NativeK16ComputerStatsSnapshot()
         var control: NativeK16ComputerControl = NativeK16ComputerControl(status = 1, exitCode = 0, panicCode = 0)
         var signal: NativeK16ComputerSignal = NativeK16ComputerSignal.Pause
         val signals = ArrayDeque<NativeK16ComputerSignal>()
@@ -306,6 +351,11 @@ class K16ComputerRuntimeTest {
         override fun machineSnapshot(handle: Long): ByteArray {
             machineSnapshotHandles += handle
             return machineSnapshot.copyOf()
+        }
+
+        override fun statsSnapshot(handle: Long): NativeK16ComputerStatsSnapshot {
+            statsSnapshotHandles += handle
+            return statsSnapshot
         }
 
         override fun free(handle: Long) {

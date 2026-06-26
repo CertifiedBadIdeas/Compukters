@@ -124,8 +124,9 @@ The report runs the existing K16 benchmark workloads and prints deterministic co
 MMIO traffic, and mapped MMIO device count. It intentionally does not include JNI, Kotlin runtime scheduling, display
 cache refresh, or Minecraft-side timing.
 
-This is the stable in-process observability boundary. JNI should remain a thin transport that fetches one aggregated
-snapshot when a report needs it; hot RAM/MMIO/device operations must not call into Kotlin.
+This is the stable in-process observability boundary. JNI exposes the same low-level Rust VM counters as a single
+aggregated `K16ComputerEndpoint.statsSnapshot()` call for Kotlin/Minecraft-side reports. Hot RAM/MMIO/device operations
+must not call into Kotlin.
 
 ## JFR
 

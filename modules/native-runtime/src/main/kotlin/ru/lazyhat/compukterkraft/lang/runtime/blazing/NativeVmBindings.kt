@@ -44,6 +44,79 @@ data class NativeK16ComputerControl(
     }
 }
 
+data class NativeK16BusTraffic(
+    val loads: Long = 0,
+    val stores: Long = 0,
+    val bytesRead: Long = 0,
+    val bytesWritten: Long = 0,
+)
+
+data class NativeK16MmioDeviceStats(
+    val deviceId: Long,
+    val base: Long,
+    val size: Long,
+    val traffic: NativeK16BusTraffic,
+)
+
+data class NativeK16ComputerStatsSnapshot(
+    val ram: NativeK16BusTraffic = NativeK16BusTraffic(),
+    val mmio: NativeK16BusTraffic = NativeK16BusTraffic(),
+    val devices: List<NativeK16MmioDeviceStats> = emptyList(),
+) {
+    companion object {
+        private const val VERSION: Long = 1
+        private const val HEADER_LONGS: Int = 10
+        private const val DEVICE_LONGS: Int = 7
+
+        fun from(values: LongArray): NativeK16ComputerStatsSnapshot {
+            require(values.size >= HEADER_LONGS) {
+                "Native K16 stats snapshot is too short: ${values.size} longs"
+            }
+            val version = values[0]
+            require(version == VERSION) { "Unsupported native K16 stats snapshot version: $version" }
+            val deviceCount = values[9].toInt()
+            require(deviceCount >= 0) { "Native K16 stats snapshot device count is negative: $deviceCount" }
+            val expectedSize = HEADER_LONGS + deviceCount * DEVICE_LONGS
+            require(values.size == expectedSize) {
+                "Native K16 stats snapshot has ${values.size} longs but expected $expectedSize"
+            }
+            val devices =
+                (0 until deviceCount).map { index ->
+                    val offset = HEADER_LONGS + index * DEVICE_LONGS
+                    NativeK16MmioDeviceStats(
+                        deviceId = values[offset],
+                        base = values[offset + 1],
+                        size = values[offset + 2],
+                        traffic =
+                            NativeK16BusTraffic(
+                                loads = values[offset + 3],
+                                stores = values[offset + 4],
+                                bytesRead = values[offset + 5],
+                                bytesWritten = values[offset + 6],
+                            ),
+                    )
+                }
+            return NativeK16ComputerStatsSnapshot(
+                ram =
+                    NativeK16BusTraffic(
+                        loads = values[1],
+                        stores = values[2],
+                        bytesRead = values[3],
+                        bytesWritten = values[4],
+                    ),
+                mmio =
+                    NativeK16BusTraffic(
+                        loads = values[5],
+                        stores = values[6],
+                        bytesRead = values[7],
+                        bytesWritten = values[8],
+                    ),
+                devices = devices,
+            )
+        }
+    }
+}
+
 sealed interface NativeK16ComputerSignal {
     data object Halt : NativeK16ComputerSignal
 
@@ -148,6 +221,11 @@ object NativeVmBindings {
         return k16ComputerMachineSnapshotNative(handle)
     }
 
+    fun k16ComputerStatsSnapshot(handle: Long): NativeK16ComputerStatsSnapshot {
+        require(handle != 0L) { "Native K16 computer handle is zero" }
+        return NativeK16ComputerStatsSnapshot.from(k16ComputerStatsSnapshotNative(handle))
+    }
+
     fun pushK16ComputerSerialInput(
         handle: Long,
         bytes: ByteArray,
@@ -250,6 +328,9 @@ object NativeVmBindings {
 
     @JvmStatic
     private external fun k16ComputerMachineSnapshotNative(handle: Long): ByteArray
+
+    @JvmStatic
+    private external fun k16ComputerStatsSnapshotNative(handle: Long): LongArray
 
     @JvmStatic
     private external fun pushK16ComputerSerialInputNative(
