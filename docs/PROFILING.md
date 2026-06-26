@@ -82,6 +82,17 @@ k16Execution: slices=..., time=..., haltSignals=..., waitSignals=..., yieldSigna
 - `haltSignals`, `waitSignals`, `yieldSignals`, and `pauseSignals` classify the signal that returned control to the
   worker.
 
+The K16 output line shows host-side output cache refresh work:
+
+```text
+k16Output: refreshes=..., time=..., serialSnapshotBytes=..., gpuBatches=..., gpuBytes=..., gpuFrames=...
+```
+
+- `refreshes` counts worker-side cache syncs after startup, runtime slices, and explicit output clears.
+- `serialSnapshotBytes` sums the serial output snapshot sizes observed during those refreshes.
+- `gpuBatches`, `gpuBytes`, and `gpuFrames` count non-empty GPU frame drain batches, raw frame payload bytes, and decoded
+  display frames.
+
 The K16 wait line is the main scheduling signal:
 
 ```text

@@ -508,6 +508,57 @@ class K16RuntimeDeviceTest {
     }
 
     @Test
+    fun recordsK16OutputRefreshSerialAndGpuFrameCounters() {
+        val endpoint = RecordingK16Endpoint()
+        val metrics = RecordingRuntimeMetricsCollector()
+        val frame =
+            DisplayFrameDelta(
+                displayId = 1,
+                sequence = 11,
+                width = 320,
+                height = 200,
+                pixelFormat = DisplayPixelFormat.RGB565,
+                fullRefresh = false,
+                tiles =
+                    listOf(
+                        DisplayTile(
+                            tileX = 0,
+                            tileY = 0,
+                            x = 0,
+                            y = 0,
+                            width = 1,
+                            height = 1,
+                            payload = byteArrayOf(0xF8.toByte(), 0x00),
+                        ),
+                    ),
+            )
+        val encodedFrame = encodeDisplayFrames(listOf(frame))
+        val device =
+            K16RuntimeDevice(
+                deviceId = 26,
+                properties = DeviceProperties(DeviceFamily.NORMAL, label = null),
+                endpointFactory = { endpoint },
+                stateSink = {},
+                metricsCollector = metrics,
+            )
+
+        device.turnOn()
+        endpoint.injectOutput("K16!")
+        endpoint.enqueueFramebufferFrames(encodedFrame)
+        device.serverTick()
+        waitUntil { metrics.snapshot().vm.k16GpuFrameBatches == 1L }
+
+        val snapshot = metrics.snapshot()
+        assertTrue(snapshot.vm.k16OutputRefreshes >= 2)
+        assertTrue(snapshot.vm.k16OutputRefreshNanos >= 0)
+        assertTrue(snapshot.vm.k16SerialOutputSnapshotBytes >= 4)
+        assertEquals(1, snapshot.vm.k16GpuFrameBatches)
+        assertEquals(encodedFrame.size.toLong(), snapshot.vm.k16GpuFrameBytes)
+        assertEquals(1, snapshot.vm.k16GpuFramesDecoded)
+        device.shutdown()
+    }
+
+    @Test
     fun keepsFramebufferFramesUntilDisplaySessionAttaches() {
         val endpoint = RecordingK16Endpoint()
         val displayNetwork = RecordingDisplayNetworkBridge()
