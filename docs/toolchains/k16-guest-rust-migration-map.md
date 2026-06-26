@@ -25,6 +25,7 @@ production build or focused test needs them.
 - `guest/c/libc` contains libc-lite startup, syscall wrappers, and public
   standard-shaped headers.
 - `guest/c/init` contains the production C init launcher.
+- `guest/c/shell` contains the production C shell.
 - `guest/c/coreutils` contains production C coreutils.
 
 ## Migration Roles
@@ -43,9 +44,9 @@ production build or focused test needs them.
 | `rust/guest/k16-proc-test` | Development process-model smoke utility. | Development/test-only; keep until process coverage moves elsewhere. |
 | `rust/guest/k16-rt` | Low-level Rust guest runtime/syscall/trap helper crate. | Keep Rust for Rust kernel/boot/runtime consumers; do not expand as userland std. |
 | `rust/guest/k16-runtime-import-test` | Development dynamic-import smoke program. | Development/test-only; keep while it covers loader/import behavior. |
-| `rust/guest/k16-shared-kraft` | Rust provider for the shared OS ABI library `libkraft.k16so`. | Keep Rust temporarily; revisit after C userland/coreutils migration proves the ABI surface. |
+| `rust/guest/k16-shared-kraft` | Former Rust provider for the shared OS ABI library `libkraft.k16so`. | Removed; `/lib/libkraft.k16so` now builds from `guest/c/libkraft/libkraft.c`. |
 | `rust/guest/k16-shared-runtime` | Rust provider for shared runtime helpers. | Keep Rust temporarily; runtime helper sharing is separate from coreutils migration. |
-| `rust/guest/k16-shell` | Production shell. | Migrate to C after enough libc-lite process/path helpers exist. |
+| `rust/guest/k16-shell` | Former Rust production shell. | Legacy/removable after no focused tests/docs need the old Rust shell; production `/bin/shell.kx` now builds from `guest/c/shell/shell.c`. |
 | `rust/guest/k16-storage` | Guest storage/filesystem support library. | Keep Rust while kernel/storage internals remain Rust. |
 | `rust/guest/k16-syscall-fault-test` | Development syscall fault smoke utility. | Development/test-only; keep while it covers fault policy. |
 | `rust/guest/k16-user-fault-test` | Development user fault smoke utility. | Development/test-only; keep while it covers user fault policy. |
@@ -56,6 +57,12 @@ production build or focused test needs them.
 The former Rust production init launcher `k16-init` has been replaced in the
 production image by `guest/c/init/init.c`. The old Rust crate remains in the
 workspace until the deletion rule below is satisfied.
+
+The former Rust production shell `k16-shell` has been replaced in the
+production image by `guest/c/shell/shell.c`. The C shell preserves the shipped
+prompt, builtins, cwd-aware path handling, `RUN` argv dispatch, and fd-backed
+stdin/stdout behavior while removing the production Rust `core,alloc` shell
+build.
 
 The former Rust production coreutils `k16-uname`, `k16-cat`, `k16-write`,
 `k16-rm`, `k16-mkdir`, `k16-rmdir`, `k16-stat`, `k16-ls`, `k16-cp`, and
@@ -68,10 +75,15 @@ removed from the guest workspace. Hosted Rust std coverage remains exercised by
 host-tool tests that build temporary source snippets instead of shipping
 bundled guest proof crates.
 
+The former Rust shared OS ABI provider `k16-shared-kraft` was removed from the
+guest workspace after `/lib/libkraft.k16so` moved to
+`guest/c/libkraft/libkraft.c`.
+
 ## Next Production C Candidates
 
-1. `rust/guest/k16-shell`: move after enough process/path helpers exist to
-   avoid embedding policy in each program.
+No production Rust coreutils/shell crate remains in the bundled image. Further
+C-first cleanup should follow the deletion rule for replaced Rust crates or
+move shared ABI providers after the current production surface is stable.
 
 ## Development/test-only
 

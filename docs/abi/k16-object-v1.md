@@ -181,6 +181,12 @@ Runtime helper symbol names:
 `__k16_write_interrupt_enable` provided by k16-cpu-helpers
 `__k16_write_interrupt_mask`   provided by k16-cpu-helpers
 `__k16_read_interrupt_pending` provided by k16-cpu-helpers
+`__k16_write_syscall`          provided by k16-cpu-helpers
+`__k16_read_syscall`           provided by k16-cpu-helpers
+`__k16_open_syscall`           provided by k16-cpu-helpers
+`__k16_close_syscall`          provided by k16-cpu-helpers
+`__k16_brk_syscall`            provided by k16-cpu-helpers
+`__k16_sbrk_syscall`           provided by k16-cpu-helpers
 ```
 
 `__k16_save_trap_frame` writes the current saved CPU trap frame into the

@@ -951,6 +951,7 @@ fn shared_exports(
                 || symbol.name.is_empty()
                 || symbol.section_index == SHN_UNDEF
                 || symbol.section_index == SHN_ABS
+                || cpu_helper_symbol(&symbol.name).is_some()
             {
                 continue;
             }

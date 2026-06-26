@@ -80,7 +80,7 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("rust/guest/k16-boot"))
         assertTrue(source.contains("rust/guest/k16-kernel"))
         assertFalse(source.contains("rust/guest/k16-init"))
-        assertTrue(source.contains("rust/guest/k16-shell"))
+        assertFalse(source.contains("rust/guest/k16-shell"))
         assertFalse(source.contains("rust/guest/k16-ls"))
         assertFalse(source.contains("rust/guest/k16-cat"))
         assertFalse(source.contains("rust/guest/k16-uname"))
@@ -102,8 +102,9 @@ class K16FirmwareResourceTest {
         assertFalse(source.contains("k16InitManifest"))
         assertFalse(source.contains("k16InitSource"))
         assertTrue(source.contains("k16CSystemInitSource"))
-        assertTrue(source.contains("k16ShellManifest"))
-        assertTrue(source.contains("k16ShellSource"))
+        assertFalse(source.contains("k16ShellManifest"))
+        assertFalse(source.contains("k16ShellSource"))
+        assertTrue(source.contains("k16CSystemShellSource"))
         assertFalse(source.contains("k16LsManifest"))
         assertFalse(source.contains("k16LsSource"))
         assertTrue(source.contains("k16CSystemLsSource"))
@@ -145,7 +146,7 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("k16ProcTestManifest"))
         assertTrue(source.contains("k16ProcTestSource"))
         assertTrue(source.contains("generatedK16CSystemInitTarget"))
-        assertTrue(source.contains("generatedK16ShellTarget"))
+        assertTrue(source.contains("generatedK16CSystemShellTarget"))
         assertFalse(source.contains("generatedK16LsTarget"))
         assertTrue(source.contains("generatedK16CSystemLsTarget"))
         assertFalse(source.contains("generatedK16UnameTarget"))
@@ -197,6 +198,7 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("guest/c/libc/syscalls.c"))
         assertTrue(source.contains("guest/c/libc/include"))
         assertTrue(source.contains("guest/c/init/init.c"))
+        assertTrue(source.contains("guest/c/shell/shell.c"))
         assertTrue(source.contains("guest/c/coreutils/uname.c"))
         assertTrue(source.contains("guest/c/coreutils/ls.c"))
         assertTrue(source.contains("guest/c/coreutils/cat.c"))
@@ -247,7 +249,16 @@ class K16FirmwareResourceTest {
             source.contains("dylibs = listOf(k16SharedKraftArtifact.get().asFile)"),
             "production init should import process calls from libkraft",
         )
-        assertTrue(source.contains("binName = \"k16-shell\""))
+        assertFalse(source.contains("binName = \"k16-shell\""))
+        assertTrue(source.contains("description = \"Compiles and links the bundled C K16 shell"))
+        assertTrue(
+            source.contains("targetDir = generatedK16CSystemShellTarget.get().asFile"),
+            "production shell should build from the C shell source",
+        )
+        assertTrue(
+            source.contains("sources = listOf(k16CLibcSyscallSource.asFile, k16CSystemShellSource.asFile)"),
+            "production shell should build from libc-lite and the C shell source",
+        )
         assertFalse(source.contains("binName = \"k16-ls\""))
         assertTrue(source.contains("description = \"Compiles and links the bundled C K16 ls utility"))
         assertTrue(
@@ -327,7 +338,10 @@ class K16FirmwareResourceTest {
             "production rmdir should build from the C coreutils source",
         )
         assertTrue(source.contains("binName = \"k16-shared-runtime\""))
-        assertTrue(source.contains("binName = \"k16-shared-kraft\""))
+        assertTrue(source.contains("val k16CLibkraftSource = rootProject.layout.projectDirectory.file(\"guest/c/libkraft/libkraft.c\")"))
+        assertTrue(source.contains("compileK16GuestCSharedObject("))
+        assertFalse(source.contains("binName = \"k16-shared-kraft\""))
+        assertTrue(source.contains("extraRuntimeLinkArgs = listOf(\"-C link-arg=${'$'}{gameTicksObject.absolutePath}\")"))
         assertTrue(source.contains("-C link-arg=--dylib"))
         assertFalse(source.contains("libkraft.k16so:kraft_write_all"))
         assertFalse(source.contains("libkraft.k16so:kraft_exit"))
@@ -340,11 +354,11 @@ class K16FirmwareResourceTest {
         assertFalse(source.contains("binName = \"k16-hosted-cat\""))
         assertFalse(source.contains("binName = \"k16-hosted-hello\""))
         assertTrue(source.contains("binName = \"k16-proc-test\""))
-        assertTrue(
+        assertFalse(
             source.contains(
                 "output = k16ShellArtifact.get().asFile,\n                mapOutput = k16ShellMapArtifact.get(),\n                buildStd = \"core,alloc\"",
             ),
-            "shell uses alloc-backed input and should build core+alloc",
+            "production shell should not require Rust alloc once C-built",
         )
         assertTrue(source.contains("\"/bin\""))
         assertTrue(source.contains("\"/lib\""))
@@ -393,9 +407,9 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("\"extract-partition\""))
         assertTrue(source.contains("\"replace-partition\""))
         assertTrue(source.contains("dir(\"rust/guest/k16-kernel/src\")"))
-        assertTrue(source.contains("dir(\"rust/guest/k16-shell/src\")"))
+        assertFalse(source.contains("dir(\"rust/guest/k16-shell/src\")"))
         assertTrue(source.contains("inputs.dir(k16KernelSource)"))
-        assertTrue(source.contains("inputs.dir(k16ShellSource)"))
+        assertFalse(source.contains("inputs.dir(k16ShellSource)"))
         assertTrue(source.contains("toolchain.cli.absolutePath"))
         assertFalse(source.contains(".toolchain/build/cargo/k16-tools"))
         assertFalse(source.contains("environment(\"CARGO_TARGET_DIR\""))
@@ -1037,10 +1051,10 @@ class K16FirmwareResourceTest {
                 "bundled libkraft should export $symbol",
             )
         }
-        listOf("kraft_write_all", "kraft_exit").forEach { symbol ->
+        listOf("kraft_write_all", "kraft_exit", "__k16_syscall1", "__k16_syscall3", "game_ticks").forEach { symbol ->
             assertFalse(
                 kraftMetadata.contains(symbol),
-                "bundled libkraft should not export prefixed symbol $symbol",
+                "bundled libkraft should not export implementation symbol $symbol",
             )
         }
 
@@ -1398,26 +1412,26 @@ class K16FirmwareResourceTest {
 
     @Test
     fun bundledK16ShellUsesFdStdinAndStdoutInsteadOfDebugOutput() {
-        val source = Path.of("../../../rust/guest/k16-shell/src/main.rs").readText()
+        val source = Path.of("../../../guest/c/shell/shell.c").readText()
 
-        assertTrue(source.contains("io::stdout()"))
-        assertTrue(source.contains("io::stdin()"))
-        assertTrue(source.contains("let mut input = InputLine::new()"))
-        assertTrue(source.contains("let mut cwd = WorkingDirectory::new()"))
-        assertTrue(source.contains("stdin.read(read_buffer)"))
+        assertTrue(source.contains("STDOUT_FILENO"))
+        assertTrue(source.contains("STDIN_FILENO"))
+        assertTrue(source.contains("struct shell_state"))
+        assertTrue(source.contains("char input[KRAFT_SHELL_INPUT_CAPACITY]"))
+        assertTrue(source.contains("char cwd[KRAFT_MAX_SHELL_PATH_BYTES + 1]"))
+        assertTrue(source.contains("read(STDIN_FILENO, read_buffer, sizeof(read_buffer))"))
         assertTrue(source.contains("dispatch_command("))
         assertTrue(source.contains("arg_paths"))
-        assertTrue(source.contains("const PROMPT: &[u8] = b\"K16> \""))
+        assertTrue(source.contains("#define PROMPT \"K16> \""))
         assertFalse(source.contains("const HELP: &[u8]"), "shell should not carry built-in help text")
-        assertFalse(source.contains("Command::Help"), "help should resolve through generic executable dispatch")
-        assertTrue(source.contains("run_pwd(stdout, cwd)"))
-        assertTrue(source.contains("run_cd(stdout, cwd, path_buffer, path)"))
-        assertTrue(source.contains("run_ticks(stdout)"))
-        assertTrue(source.contains("run_exec(stdout, cwd, arg_paths, program_path, name, args)"))
-        val shellLibSource = Path.of("../../../rust/guest/k16-shell/src/lib.rs").readText()
-        assertTrue(shellLibSource.contains("const BIN_PREFIX: &[u8] = b\"/bin/\""))
-        assertTrue(shellLibSource.contains("const PROGRAM_SUFFIX: &[u8] = b\".kx\""))
-        assertFalse(source.contains("process::exit(0)"))
+        assertFalse(source.contains("COMMAND_HELP"), "help should resolve through generic executable dispatch")
+        assertTrue(source.contains("run_pwd(state)"))
+        assertTrue(source.contains("run_cd(state, command->args"))
+        assertTrue(source.contains("run_ticks()"))
+        assertTrue(source.contains("run_exec(state, command->name, command->args, command->argc)"))
+        assertTrue(source.contains("#define BIN_PREFIX \"/bin/\""))
+        assertTrue(source.contains("#define PROGRAM_SUFFIX \".kx\""))
+        assertFalse(source.contains("_exit(0)"))
         assertFalse(source.contains("debug::write_byte"))
     }
 
@@ -1765,8 +1779,8 @@ class K16FirmwareResourceTest {
         val processHeader = Path.of("../../../guest/c/libc/include/kraft/process.h").readText()
         val syscallHeader = Path.of("../../../guest/c/libc/include/kraft/syscalls.h").readText()
         val cSyscallSource = Path.of("../../../guest/c/libc/syscalls.c").readText()
-        val sharedKraftSource = Path.of("../../../rust/guest/k16-shared-kraft/src/main.rs").readText()
-        val shellSource = Path.of("../../../rust/guest/k16-shell/src/main.rs").readText()
+        val sharedKraftSource = Path.of("../../../guest/c/libkraft/libkraft.c").readText()
+        val shellSource = Path.of("../../../guest/c/shell/shell.c").readText()
 
         assertFalse(Files.exists(kernelSourceDir.resolve("shell.rs")), "kernel shell dispatcher should be removed")
         assertFalse(Files.exists(kernelSourceDir.resolve("line.rs")), "kernel line discipline should be removed")
@@ -1787,56 +1801,57 @@ class K16FirmwareResourceTest {
         assertTrue(syscallHeader.contains("__asm__(\"spawn\")"))
         assertTrue(syscallHeader.contains("extern int __kraft_sys_wait(unsigned int pid, int *status)"))
         assertTrue(syscallHeader.contains("__asm__(\"wait\")"))
-        assertTrue(cSyscallSource.contains("put_u32_le(request + 0, KRAFT_SPAWN_ARGV_REQUEST_MAGIC)"))
-        assertTrue(cSyscallSource.contains("__kraft_sys_spawn(request, request_len)"))
+        assertTrue(syscallHeader.contains("extern int __kraft_sys_run(const void *request, unsigned int len)"))
+        assertTrue(syscallHeader.contains("__asm__(\"run\")"))
+        assertTrue(cSyscallSource.contains("kraft_process_with_args(KRAFT_SPAWN_ARGV_REQUEST_MAGIC"))
+        assertTrue(cSyscallSource.contains("__kraft_sys_spawn"))
         assertTrue(cSyscallSource.contains("__kraft_sys_wait((unsigned int)pid, status)"))
-        assertTrue(sharedKraftSource.contains("pub unsafe extern \"C\" fn spawn("))
-        assertTrue(sharedKraftSource.contains("pub unsafe extern \"C\" fn wait("))
-        assertFalse(shellSource.contains("process::run("), "shell should launch utilities through argv requests")
+        assertTrue(cSyscallSource.contains("kraft_process_with_args(KRAFT_RUN_ARGV_REQUEST_MAGIC"))
+        assertTrue(cSyscallSource.contains("__kraft_sys_run"))
+        assertTrue(sharedKraftSource.contains("int spawn(const void *request, unsigned int len)"))
+        assertTrue(sharedKraftSource.contains("int wait(unsigned int pid, int *status)"))
+        assertTrue(sharedKraftSource.contains("int run(const void *request, unsigned int len)"))
+        assertTrue(shellSource.contains("kraft_run_with_args(program_path, argc, argv)"), "shell should launch utilities through argv requests")
         assertFalse(kernelSyscallSource.contains("abi_syscall::RUN_FORMAT_PATH"), "kernel should reject legacy path RUN format")
         assertFalse(initSource.contains("fn dispatch_command("), "interactive shell dispatch should not live in init")
-        assertTrue(shellSource.contains("fn dispatch_command("), "userland shell should own command dispatch")
+        assertTrue(shellSource.contains("static void dispatch_command("), "userland shell should own command dispatch")
     }
 
     @Test
     fun k16UserlandShellDefinesPromptAndBuiltins() {
-        val shellSource = Path.of("../../../rust/guest/k16-shell/src/main.rs").readText()
-        val shellLibSource = Path.of("../../../rust/guest/k16-shell/src/lib.rs").readText()
+        val shellSource = Path.of("../../../guest/c/shell/shell.c").readText()
 
-        assertTrue(shellSource.contains("const PROMPT: &[u8] = b\"K16> \""))
-        assertTrue(shellSource.contains("fn dispatch_command("), "shell should name the dispatch boundary")
-        assertTrue(shellLibSource.contains("use alloc::vec::Vec;"), "shell input should be backed by heap allocation")
-        assertTrue(shellLibSource.contains("bytes: Vec<u8>"), "shell input should not use a fixed byte array")
-        assertTrue(shellLibSource.contains("try_reserve(1)"), "input allocation failure should be deterministic")
-        assertFalse(shellLibSource.contains("INPUT_CAPACITY"), "shell input should not carry the old fixed line cap")
-        assertTrue(shellLibSource.contains("fn matches_command("), "shell should share command matching")
-        assertTrue(shellLibSource.contains("fn is_echo_command("), "shell should name echo command matching")
-        assertTrue(shellSource.contains("Command::Echo(bytes)"), "shell should handle the echo command")
-        assertTrue(shellSource.contains("fn run_pwd("), "shell should name the pwd command")
-        assertTrue(shellSource.contains("fn run_cd("), "shell should name the cd command")
-        assertTrue(shellSource.contains("fn run_ticks("), "shell should name the ticks command")
-        assertTrue(shellSource.contains("fn run_exec("), "shell should use generic exec dispatch")
+        assertTrue(shellSource.contains("#define PROMPT \"K16> \""))
+        assertTrue(shellSource.contains("static void dispatch_command("), "shell should name the dispatch boundary")
+        assertTrue(shellSource.contains("char input[KRAFT_SHELL_INPUT_CAPACITY]"), "shell input should be explicit and bounded")
+        assertTrue(shellSource.contains("static int matches_command("), "shell should share command matching")
+        assertTrue(shellSource.contains("static int is_echo_command("), "shell should name echo command matching")
+        assertTrue(shellSource.contains("run_echo("), "shell should handle the echo command")
+        assertTrue(shellSource.contains("static void run_pwd("), "shell should name the pwd command")
+        assertTrue(shellSource.contains("static unsigned int run_cd("), "shell should name the cd command")
+        assertTrue(shellSource.contains("static unsigned int run_ticks("), "shell should name the ticks command")
+        assertTrue(shellSource.contains("static unsigned int run_exec("), "shell should use generic exec dispatch")
         assertFalse(shellSource.contains("fn run_uname("), "uname should not need a hardcoded dispatch branch")
         assertFalse(shellSource.contains("fn run_ls("), "ls should not need a hardcoded dispatch branch")
         assertFalse(shellSource.contains("fn run_cat("), "cat should not need a hardcoded dispatch branch")
         assertFalse(shellSource.contains("fn run_alloc_test("), "alloc should not need a hardcoded dispatch branch")
-        assertTrue(shellLibSource.contains("Command::Pwd"), "shell should classify the pwd command")
-        assertTrue(shellLibSource.contains("Command::Cd("), "shell should classify cd with an optional path argument")
-        assertTrue(shellLibSource.contains("Command::Exit("), "shell should classify exit with an optional status code")
-        assertTrue(shellLibSource.contains("Command::Exec"), "shell should classify non-builtins as generic exec")
-        assertFalse(shellLibSource.contains("Command::Help"), "help should not be a shell builtin")
-        assertFalse(shellLibSource.contains("Command::Uname"), "shell should not carry a uname command variant")
-        assertFalse(shellLibSource.contains("Command::Ls("), "shell should not carry an ls command variant")
-        assertFalse(shellLibSource.contains("Command::Cat(&"), "shell should not carry a cat command variant")
-        assertFalse(shellLibSource.contains("Command::AllocTest"), "shell should not carry an alloc command variant")
+        assertTrue(shellSource.contains("COMMAND_PWD"), "shell should classify the pwd command")
+        assertTrue(shellSource.contains("COMMAND_CD"), "shell should classify cd with an optional path argument")
+        assertTrue(shellSource.contains("COMMAND_EXIT"), "shell should classify exit with an optional status code")
+        assertTrue(shellSource.contains("COMMAND_EXEC"), "shell should classify non-builtins as generic exec")
+        assertFalse(shellSource.contains("COMMAND_HELP"), "help should not be a shell builtin")
+        assertFalse(shellSource.contains("COMMAND_UNAME"), "shell should not carry a uname command variant")
+        assertFalse(shellSource.contains("COMMAND_LS"), "shell should not carry an ls command variant")
+        assertFalse(shellSource.contains("COMMAND_CAT"), "shell should not carry a cat command variant")
+        assertFalse(shellSource.contains("COMMAND_ALLOC_TEST"), "shell should not carry an alloc command variant")
         assertFalse(shellSource.contains("HELP\\n"), "shell should not embed a built-in help command list")
-        assertTrue(shellSource.contains("fs::metadata_path(path_ref)"), "cd should validate paths through stat metadata")
-        assertTrue(shellLibSource.contains("pub fn resolve_executable_path("), "executable path resolution should be tested in the shell library")
-        assertTrue(shellSource.contains("resolve_executable_path(cwd, name, program_path)"), "shell should resolve executable paths through cwd")
+        assertTrue(shellSource.contains("stat(path_buffer, &metadata)"), "cd should validate paths through stat metadata")
+        assertTrue(shellSource.contains("static int resolve_executable_path("), "executable path resolution should be named")
+        assertTrue(shellSource.contains("resolve_executable_path(state->cwd, name, program_path)"), "shell should resolve executable paths through cwd")
         assertTrue(shellSource.contains("should_resolve_path_arg(name, raw_args, index)"), "filesystem utilities should keep cwd-aware path args")
-        assertTrue(shellLibSource.contains("const ALLOC_ALIAS: &[u8] = b\"alloc\""), "alloc should remain a shell alias")
-        assertTrue(shellLibSource.contains("const ALLOC_PROGRAM: &[u8] = b\"alloc-test\""), "alloc should target alloc-test.kx")
-        assertTrue(shellSource.contains("write_run_error(stdout, error)"), "missing programs should report run errors")
+        assertTrue(shellSource.contains("#define ALLOC_ALIAS \"alloc\""), "alloc should remain a shell alias")
+        assertTrue(shellSource.contains("#define ALLOC_PROGRAM \"alloc-test\""), "alloc should target alloc-test.kx")
+        assertTrue(shellSource.contains("write_run_error((unsigned int)status)"), "missing programs should report run errors")
     }
 
     @Test
@@ -2036,13 +2051,15 @@ class K16FirmwareResourceTest {
 
     @Test
     fun k16UserlandTicksUsesKraftStdTimeApi() {
-        val shellSource = Path.of("../../../rust/guest/k16-shell/src/main.rs").readText()
+        val shellSource = Path.of("../../../guest/c/shell/shell.c").readText()
         val stdSource = Path.of("../../../rust/guest/kraft-std/src/lib.rs").readText()
         val timerSource = Path.of("../../../rust/guest/k16-kernel/src/timer.rs").readText()
 
-        assertTrue(shellSource.contains("time::game_ticks_bytes(&mut bytes)"), "shell ticks should read time through caller-owned bytes")
-        assertTrue(shellSource.contains("b\"TICKS \""), "ticks should print a stable decimal prefix")
-        assertTrue(shellSource.contains("fn write_decimal_words("), "shell should format scalar full-width timer words")
+        assertTrue(shellSource.contains("static unsigned char ticks_bytes[8];"), "shell ticks should use a stable caller-owned syscall buffer")
+        assertTrue(shellSource.contains("__k16_syscall1("), "shell ticks should use the raw GAME_TICKS syscall helper")
+        assertTrue(shellSource.contains("KRAFT_SYSCALL_GAME_TICKS"), "shell should name the timer0 syscall number")
+        assertTrue(shellSource.contains("\"TICKS \""), "ticks should print a stable decimal prefix")
+        assertTrue(shellSource.contains("write_decimal_words("), "shell should format scalar full-width timer words")
         assertTrue(
             shellSource.contains("double_decimal_digits_and_add_bit"),
             "shell should format decimal without relying on 64-bit division",
@@ -2069,21 +2086,21 @@ class K16FirmwareResourceTest {
 
     @Test
     fun k16UserlandShellDefinesReadableLineEditingSemantics() {
-        val shellSource = Path.of("../../../rust/guest/k16-shell/src/main.rs").readText()
+        val shellSource = Path.of("../../../guest/c/shell/shell.c").readText()
 
         assertTrue(
-            shellSource.contains("0x20..=0x7e"),
+            shellSource.contains("byte >= 0x20 && byte <= 0x7e"),
             "printable input bytes should flow through a named printable branch",
         )
         assertTrue(
-            shellSource.contains("b'\\x08' | 0x7f"),
+            shellSource.contains("byte == '\\b' || byte == 0x7f"),
             "backspace and delete should erase editable userland input",
         )
         assertTrue(
-            shellSource.contains("b'\\n' | b'\\r'"),
+            shellSource.contains("byte == '\\n' || byte == '\\r'"),
             "newline and carriage return should complete the current userland line",
         )
-        assertTrue(shellSource.contains("input.clear()"), "shell should clear stale line bytes before each prompt")
+        assertTrue(shellSource.contains("state.input_len = 0"), "shell should clear stale line bytes before each prompt")
     }
 
     @Test
@@ -2158,14 +2175,14 @@ class K16FirmwareResourceTest {
     @Test
     fun k16KernelFontCoversWorkingShellText() {
         val fontSource = Path.of("../../../rust/guest/k16-kernel/src/font.rs").readText()
-        val shellSource = Path.of("../../../rust/guest/k16-shell/src/main.rs").readText()
+        val shellSource = Path.of("../../../guest/c/shell/shell.c").readText()
 
         assertTrue(fontSource.contains("font_mono5x7::MONO5X7_ROWS"))
         assertTrue(fontSource.contains("font_mono5x7::FALLBACK_ROWS"))
         assertTrue(fontSource.contains("MONO5X7_ROWS[byte as usize]"))
         assertFalse(fontSource.contains("byte -"), "kernel font lookup should not use range-offset indexing")
         assertFalse(fontSource.contains("match byte"), "kernel font lookup should stay table-driven")
-        assertFalse(shellSource.contains("fn display_byte("), "userland shell echo should not force uppercase display")
+        assertFalse(shellSource.contains("display_byte("), "userland shell echo should not force uppercase display")
     }
 
     @Test

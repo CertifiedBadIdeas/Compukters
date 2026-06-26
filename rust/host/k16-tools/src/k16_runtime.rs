@@ -458,20 +458,12 @@ fn syscall3_fixed_number_words(number: u32) -> Vec<u16> {
     let copy_arg1_to_syscall_arg1 = add(ARG2_REGISTER, ARG1_REGISTER, SCRATCH_REGISTER);
     let copy_arg0_to_syscall_arg0 = add(ARG1_REGISTER, ARG0_REGISTER, SCRATCH_REGISTER);
     let mut words = Vec::new();
-    for register in ARG0_REGISTER..=SYSCALL_ARG2_REGISTER {
-        words.extend(push_register(register));
-    }
-    words.extend(push_scratch_register());
     words.extend(const32_words(SCRATCH_REGISTER, 0));
     words.extend(copy_arg2_to_syscall_arg2);
     words.extend(copy_arg1_to_syscall_arg1);
     words.extend(copy_arg0_to_syscall_arg0);
     words.extend(const32_words(ARG0_REGISTER, number));
     words.push(syscall(ARG0_REGISTER));
-    words.extend(pop_scratch_register());
-    for register in (ARG0_REGISTER..=SYSCALL_ARG2_REGISTER).rev() {
-        words.extend(pop_register(register));
-    }
     words.push(ret());
     words
 }
@@ -479,65 +471,11 @@ fn syscall3_fixed_number_words(number: u32) -> Vec<u16> {
 fn syscall1_fixed_number_words(number: u32) -> Vec<u16> {
     let copy_arg0_to_syscall_arg0 = add(ARG1_REGISTER, ARG0_REGISTER, SCRATCH_REGISTER);
     let mut words = Vec::new();
-    words.extend(push_register(ARG0_REGISTER));
-    words.extend(push_register(ARG1_REGISTER));
-    words.extend(push_scratch_register());
     words.extend(const32_words(SCRATCH_REGISTER, 0));
     words.extend(copy_arg0_to_syscall_arg0);
     words.extend(const32_words(ARG0_REGISTER, number));
     words.push(syscall(ARG0_REGISTER));
-    words.extend(pop_scratch_register());
-    words.extend(pop_register(ARG1_REGISTER));
-    words.extend(pop_register(ARG0_REGISTER));
     words.push(ret());
-    words
-}
-
-fn push_register(register: u8) -> Vec<u16> {
-    let mut words = Vec::new();
-    words.extend(const32_words(SCRATCH_REGISTER, 0xffff_fffc));
-    words.extend(add(
-        STACK_POINTER_REGISTER,
-        STACK_POINTER_REGISTER,
-        SCRATCH_REGISTER,
-    ));
-    words.push(store32(STACK_POINTER_REGISTER, register));
-    words
-}
-
-fn pop_register(register: u8) -> Vec<u16> {
-    let mut words = Vec::new();
-    words.push(load32(register, STACK_POINTER_REGISTER));
-    words.push(const4(SCRATCH_REGISTER, 4));
-    words.extend(add(
-        STACK_POINTER_REGISTER,
-        STACK_POINTER_REGISTER,
-        SCRATCH_REGISTER,
-    ));
-    words
-}
-
-fn push_scratch_register() -> Vec<u16> {
-    let mut words = Vec::new();
-    words.extend(const32_words(SYSCALL_ARG2_REGISTER, 0xffff_fffc));
-    words.extend(add(
-        STACK_POINTER_REGISTER,
-        STACK_POINTER_REGISTER,
-        SYSCALL_ARG2_REGISTER,
-    ));
-    words.push(store32(STACK_POINTER_REGISTER, SCRATCH_REGISTER));
-    words
-}
-
-fn pop_scratch_register() -> Vec<u16> {
-    let mut words = Vec::new();
-    words.push(load32(SCRATCH_REGISTER, STACK_POINTER_REGISTER));
-    words.push(const4(SYSCALL_ARG2_REGISTER, 4));
-    words.extend(add(
-        STACK_POINTER_REGISTER,
-        STACK_POINTER_REGISTER,
-        SYSCALL_ARG2_REGISTER,
-    ));
     words
 }
 

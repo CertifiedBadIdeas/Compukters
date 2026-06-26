@@ -561,22 +561,12 @@ fn k16_runtime_fd_syscall_helpers_do_not_require_stack_arguments() {
 
     for (number, name) in [(7_u32, "write"), (8_u32, "read"), (10_u32, "open")] {
         let mut expected_words = Vec::new();
-        expected_words.extend(push_register(1));
-        expected_words.extend(push_register(2));
-        expected_words.extend(push_register(3));
-        expected_words.extend(push_register(4));
-        expected_words.extend(push_scratch_register());
         expected_words.extend(const32(14, 0));
         expected_words.extend(add(4, 3, 14));
         expected_words.extend(add(3, 2, 14));
         expected_words.extend(add(2, 1, 14));
         expected_words.extend(const32(1, number));
         expected_words.push(syscall(1));
-        expected_words.extend(pop_scratch_register());
-        expected_words.extend(pop_register(4));
-        expected_words.extend(pop_register(3));
-        expected_words.extend(pop_register(2));
-        expected_words.extend(pop_register(1));
         expected_words.push(ret());
         let expected_bytes = words_to_bytes(&expected_words);
 
@@ -606,16 +596,10 @@ fn k16_runtime_heap_syscall_helpers_use_fixed_numbers_and_single_argument() {
 
 fn assert_fixed_syscall1_helper(helper_object: &[u8], number: u32, name: &str) {
     let mut expected_words = Vec::new();
-    expected_words.extend(push_register(1));
-    expected_words.extend(push_register(2));
-    expected_words.extend(push_scratch_register());
     expected_words.extend(const32(14, 0));
     expected_words.extend(add(2, 1, 14));
     expected_words.extend(const32(1, number));
     expected_words.push(syscall(1));
-    expected_words.extend(pop_scratch_register());
-    expected_words.extend(pop_register(2));
-    expected_words.extend(pop_register(1));
     expected_words.push(ret());
     let expected_bytes = words_to_bytes(&expected_words);
 
@@ -3162,38 +3146,6 @@ fn const32(register: u8, value: u32) -> [u16; 3] {
 
 fn const4(dst: u8, value: u8) -> u16 {
     0x1000 | (u16::from(dst) << 8) | u16::from(value & 0x0f)
-}
-
-fn push_register(register: u8) -> Vec<u16> {
-    let mut words = Vec::new();
-    words.extend(const32(14, 0xffff_fffc));
-    words.extend(add(15, 15, 14));
-    words.push(store32(15, register));
-    words
-}
-
-fn pop_register(register: u8) -> Vec<u16> {
-    let mut words = Vec::new();
-    words.push(load32(register, 15));
-    words.push(const4(14, 4));
-    words.extend(add(15, 15, 14));
-    words
-}
-
-fn push_scratch_register() -> Vec<u16> {
-    let mut words = Vec::new();
-    words.extend(const32(4, 0xffff_fffc));
-    words.extend(add(15, 15, 4));
-    words.push(store32(15, 14));
-    words
-}
-
-fn pop_scratch_register() -> Vec<u16> {
-    let mut words = Vec::new();
-    words.push(load32(14, 15));
-    words.push(const4(4, 4));
-    words.extend(add(15, 15, 4));
-    words
 }
 
 fn add(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {

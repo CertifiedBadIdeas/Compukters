@@ -89,13 +89,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "k16-shared-kraft"
-version = "0.1.0"
-dependencies = [
- "k16-abi",
-]
-
-[[package]]
 name = "k16-shared-runtime"
 version = "0.1.0"
 dependencies = [

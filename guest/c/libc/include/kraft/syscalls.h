@@ -31,6 +31,8 @@ extern int __kraft_sys_rename(const void *request, unsigned int len)
 extern int __kraft_sys_spawn(const void *request, unsigned int len)
     __asm__("spawn");
 extern int __kraft_sys_wait(unsigned int pid, int *status) __asm__("wait");
+extern int __kraft_sys_run(const void *request, unsigned int len)
+    __asm__("run");
 int kraft_open(const char *path, unsigned int flags);
 int kraft_read_dir(const char *path, char *out, unsigned int out_len);
 int kraft_stat(const char *path, struct kraft_stat *metadata);
@@ -39,6 +41,7 @@ int kraft_mkdir(const char *path);
 int kraft_rmdir(const char *path);
 int kraft_unlink(const char *path);
 int kraft_spawn_with_args(const char *path, int argc, const char *const *argv);
+int kraft_run_with_args(const char *path, int argc, const char *const *argv);
 int kraft_wait(int pid, int *status);
 int read(int fd, void *buffer, unsigned int count);
 int write(int fd, const void *buffer, unsigned int count);

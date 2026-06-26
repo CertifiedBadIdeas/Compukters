@@ -244,7 +244,10 @@ class K16ShellRuntimeSmokeTest {
 
     @Test
     fun runtimeDeviceRunsSpawnWaitProcTestThroughUserlandShell() {
-        val device = createDevice(deviceId = 247)
+        val device = createDevice(
+            deviceId = 247,
+            storageResourcePath = "firmware/k16-system-storage0-dev.kv",
+        )
 
         try {
             device.turnOn()
@@ -1345,13 +1348,19 @@ class K16ShellRuntimeSmokeTest {
     private fun createDevice(
         deviceId: Int,
         snapshot: ByteArray? = null,
+        storageResourcePath: String = "firmware/k16-system-storage0.kv",
         configureStorage0: (Path) -> Unit = {},
     ): K16RuntimeDevice {
         val workspace = createTempDirectory("k16-shell-runtime-smoke-")
         val biosFlashPath = workspace.resolve("bios.kflash")
         val storage0Path = workspace.resolve("storage0.kv")
         biosFlashPath.writeBytes(K16BiosFlashWorkspace.loadBiosFlashResource(classLoader = javaClass.classLoader))
-        storage0Path.writeBytes(K16SystemVolumeWorkspace.loadStorage0VolumeResource(classLoader = javaClass.classLoader))
+        storage0Path.writeBytes(
+            K16SystemVolumeWorkspace.loadStorage0VolumeResource(
+                resourcePath = storageResourcePath,
+                classLoader = javaClass.classLoader,
+            ),
+        )
         configureStorage0(storage0Path)
 
         return createDeviceWithExistingStorage(
