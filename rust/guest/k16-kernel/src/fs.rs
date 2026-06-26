@@ -477,7 +477,7 @@ pub unsafe fn open_root_file_for_process(
         }
     } else {
         let truncate = flags == OPEN_CREATE_TRUNCATE_FLAGS;
-        unsafe {
+        let metadata = unsafe {
             k16_storage::open_file_for_write_from_storage0(
                 ROOT_PARTITION,
                 components.as_slice(),
@@ -485,7 +485,9 @@ pub unsafe fn open_root_file_for_process(
                 truncate,
             )
             .map_err(storage_error_to_fs_error)?
-        }
+        };
+        unsafe { flush_root_storage()? };
+        metadata
     };
     unsafe {
         RUNTIME_FD_TABLE
@@ -534,8 +536,10 @@ pub unsafe fn remove_root_file_for_process(path: &[u8]) -> Result<(), FsError> {
     }
     unsafe {
         k16_storage::remove_file_from_storage0(ROOT_PARTITION, components.as_slice())
-            .map_err(storage_error_to_fs_error)
+            .map_err(storage_error_to_fs_error)?;
+        flush_root_storage()?;
     }
+    Ok(())
 }
 
 #[cfg(any(not(test), feature = "host-test"))]
@@ -562,8 +566,10 @@ pub unsafe fn rename_root_file_for_process(
             old_components.as_slice(),
             new_components.as_slice(),
         )
-        .map_err(storage_error_to_fs_error)
+        .map_err(storage_error_to_fs_error)?;
+        flush_root_storage()?;
     }
+    Ok(())
 }
 
 #[cfg(any(not(test), feature = "host-test"))]
@@ -572,8 +578,10 @@ pub unsafe fn create_root_directory(path: &[u8]) -> Result<(), FsError> {
     let components = path.components();
     unsafe {
         k16_storage::create_directory_from_storage0(ROOT_PARTITION, components.as_slice())
-            .map_err(storage_error_to_fs_error)
+            .map_err(storage_error_to_fs_error)?;
+        flush_root_storage()?;
     }
+    Ok(())
 }
 
 #[cfg(any(not(test), feature = "host-test"))]
@@ -582,8 +590,10 @@ pub unsafe fn remove_root_directory(path: &[u8]) -> Result<(), FsError> {
     let components = path.components();
     unsafe {
         k16_storage::remove_directory_from_storage0(ROOT_PARTITION, components.as_slice())
-            .map_err(storage_error_to_fs_error)
+            .map_err(storage_error_to_fs_error)?;
+        flush_root_storage()?;
     }
+    Ok(())
 }
 
 #[cfg(any(not(test), feature = "host-test"))]
@@ -655,6 +665,7 @@ pub unsafe fn copy_ram_to_file_fd_range_for_process(
             len,
         )?
     };
+    unsafe { flush_root_storage()? };
     Ok(len)
 }
 
@@ -721,6 +732,11 @@ fn storage_error_to_fs_error(error: k16_storage::StorageError) -> FsError {
     } else {
         FsError::Storage
     }
+}
+
+#[cfg(any(not(test), feature = "host-test"))]
+unsafe fn flush_root_storage() -> Result<(), FsError> {
+    unsafe { k16_storage::flush_storage0().map_err(storage_error_to_fs_error) }
 }
 
 #[cfg(any(not(test), feature = "host-test"))]

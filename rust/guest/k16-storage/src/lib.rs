@@ -1486,6 +1486,26 @@ unsafe fn grow_file_capacity(
     Ok(metadata)
 }
 
+pub unsafe fn flush_storage0() -> Result<(), StorageError> {
+    let version = unsafe { read_i32(storage0::VERSION) };
+    if version != storage0::STORAGE_VERSION {
+        return Err(StorageError::STORAGE_VERSION);
+    }
+    let media = unsafe { read_i32(storage0::MEDIA_STATUS) };
+    if media != storage0::MEDIA_PRESENT && media != storage0::MEDIA_READ_ONLY {
+        return Err(StorageError::STORAGE_MEDIA);
+    }
+    unsafe {
+        write_i32(storage0::COMMAND, storage0::COMMAND_FLUSH);
+    }
+    if unsafe { read_i32(storage0::STATUS) } != storage0::STATUS_DONE
+        || unsafe { read_i32(storage0::ERROR) } != storage0::ERROR_NONE
+    {
+        return Err(StorageError::STORAGE_TRANSFER);
+    }
+    Ok(())
+}
+
 fn div_ceil_u32(value: u32, divisor: u32) -> Result<u32, StorageError> {
     if divisor == 0 {
         return Err(StorageError::INVALID_FILESYSTEM);

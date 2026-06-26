@@ -582,6 +582,12 @@ K16 syscall ABI v0 names the current Rust-kernel proof services in
 | `ERROR_NO_MEMORY` | `0xffff_fff4` | n/a | Negative K16 error value corresponding to POSIX-aware `ENOMEM` semantics. |
 | `ERROR_NOT_EMPTY` | `0xffff_ffef` | n/a | Negative K16 error value used when `RMDIR` rejects a directory with live entries. |
 
+ROOT/K16FS mutating syscalls (`OPEN` create/truncate, file `WRITE`,
+`UNLINK`, `MKDIR`, `RMDIR`, and `RENAME`) use write-through persistence:
+after the filesystem blocks are updated, the kernel issues `storage0 flush`
+before returning success. A flush failure is reported as a negative storage
+error; already-written filesystem blocks are not rolled back.
+
 These names describe the current ABI proof surface. They are not a complete OS
 service table, scheduler API, filesystem API, or process model.
 

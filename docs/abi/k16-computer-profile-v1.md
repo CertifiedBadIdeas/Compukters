@@ -564,6 +564,9 @@ Commands:
 3  flush
 ```
 
+`flush` asks the storage media backend to make previously accepted writes
+durable. It does not transfer guest memory and leaves `bytes_done = 0`.
+
 Media status values:
 
 ```text

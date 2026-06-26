@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- ROOT/K16FS mutating kernel syscalls now use write-through durability:
+  successful create/truncate/write/unlink/mkdir/rmdir/rename paths issue a
+  `storage0` `flush` command before reporting success to userland. Flush
+  failures are surfaced as storage errors; this is a persistence boundary, not
+  a transactional rollback mechanism.
 - K16 BIOS flash now has an explicit workspace workflow. Per-computer
   `bios.kflash` files are validated before reuse, replacement images are
   flashed from an explicit source path without overwriting the current BIOS on
