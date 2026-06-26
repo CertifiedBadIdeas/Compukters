@@ -47,9 +47,12 @@ explicit artifact groups:
   as `alloc-test`, `proc-test`, and `runtime-import-test`.
 
 `libkraft.kso` is the first project-owned userland shared OS ABI boundary.
-It exports plain syscall-shaped symbols such as `open`, `read`, `write`,
-`close`, `read_dir`, `stat`, `rename`, `mkdir`, `rmdir`, `unlink`, `sbrk`, and
-`_exit`; `kraft-std` remains the Rust convenience layer above that boundary.
+It exports explicitly prefixed syscall-shaped symbols such as `kraft_sys_open`,
+`kraft_sys_read`, `kraft_sys_write`, `kraft_sys_close`,
+`kraft_sys_read_dir`, `kraft_sys_stat`, `kraft_sys_rename`,
+`kraft_sys_mkdir`, `kraft_sys_rmdir`, `kraft_sys_unlink`,
+`kraft_sys_sbrk`, and `kraft_sys_exit`; `kraft-std` remains the Rust
+convenience layer above that boundary.
 
 Production `/bin/uname.kx`, `/bin/cat.kx`, `/bin/write.kx`, `/bin/rm.kx`,
 `/bin/mkdir.kx`, `/bin/rmdir.kx`, `/bin/stat.kx`, `/bin/ls.kx`, `/bin/cp.kx`,
@@ -66,11 +69,11 @@ its own payload. The public libc-lite surface now includes minimal `unistd.h`,
 `kraft/syscalls.h` remains the low-level K16 ABI header. Public C calls whose
 arguments differ from the syscall-shaped shared exports use `kraft_*` wrappers
 and macros, so source can call `stat(path, &metadata)` while the dynamic import
-still resolves to `libkraft`'s `stat(path, len, metadata)` export. The same
-pattern lets C source call `rename(old_path, new_path)` while importing the
-structured `rename(request, len)` shared export. This proves the dynamic ABI can
-host C userland without making `libkraft` a Rust stdlib replacement or pulling
-in a full libc.
+still resolves to `libkraft`'s `kraft_sys_stat(path, len, metadata)` export.
+The same pattern lets C source call `rename(old_path, new_path)` while importing
+the structured `kraft_sys_rename(request, len)` shared export. This proves the
+dynamic ABI can host C userland without making `libkraft` a Rust stdlib
+replacement or pulling in a full libc.
 
 `runtime-import-test` is intentionally still a development-only importer. It
 proves that bundled programs can call the `k16rt_memcpy`, `k16rt_memset`,
