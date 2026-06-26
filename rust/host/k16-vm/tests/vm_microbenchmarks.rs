@@ -18,7 +18,8 @@
  */
 
 use k16_vm::vm_microbenchmarks::{
-    benchmark_output_header, format_benchmark_sample, run_k16_workload, run_native_rust_workload,
+    benchmark_output_header, format_benchmark_sample, format_vm_stats_report_sample,
+    run_k16_workload, run_k16_workload_stats, run_native_rust_workload, vm_stats_report_header,
     VmBenchmarkSample, VmBenchmarkWorkload,
 };
 use std::fs;
@@ -52,6 +53,24 @@ fn mmio_loop_runs_on_k16() {
         run_k16_workload(VmBenchmarkWorkload::MmioLoop, iterations).unwrap(),
         iterations,
     );
+}
+
+#[test]
+fn k16_workload_stats_report_counts_cpu_ram_and_mmio_work() {
+    let iterations = 7;
+
+    let sample = run_k16_workload_stats(VmBenchmarkWorkload::MmioLoop, iterations).unwrap();
+
+    assert_eq!(sample.workload, VmBenchmarkWorkload::MmioLoop);
+    assert_eq!(sample.iterations, iterations);
+    assert_eq!(sample.checksum, iterations);
+    assert!(sample.cpu_steps > 0, "{sample:?}");
+    assert!(sample.bus.ram.loads > 0, "{sample:?}");
+    assert!(sample.bus.ram.bytes_read > 0, "{sample:?}");
+    assert_eq!(sample.bus.mmio.loads, u64::from(iterations) + 1);
+    assert_eq!(sample.bus.mmio.stores, u64::from(iterations));
+    assert_eq!(sample.bus.mmio_devices.len(), 1);
+    assert_eq!(sample.bus.mmio_devices[0].traffic, sample.bus.mmio);
 }
 
 #[test]
@@ -142,6 +161,20 @@ fn benchmark_output_rows_show_multiplier_and_percent_against_native() {
 }
 
 #[test]
+fn vm_stats_report_output_shows_cpu_ram_and_mmio_columns() {
+    let sample = run_k16_workload_stats(VmBenchmarkWorkload::MmioLoop, 3).unwrap();
+    let header = vm_stats_report_header();
+    let row = format_vm_stats_report_sample(&sample);
+
+    assert!(header.contains("cpu_steps"));
+    assert!(header.contains("ram_loads"));
+    assert!(header.contains("mmio_stores"));
+    assert!(header.contains("mmio_bytes_written"));
+    assert!(row.contains("mmio-loop"));
+    assert!(row.contains("3"));
+}
+
+#[test]
 fn memory_loop_budget_covers_larger_benchmark_runs() {
     let iterations = 1_000;
 
@@ -156,9 +189,14 @@ fn vm_microbenchmarks_source_does_not_expose_low_image_path() {
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
     let source = fs::read_to_string(manifest_dir.join("src/vm_microbenchmarks.rs")).unwrap();
     let example = fs::read_to_string(manifest_dir.join("examples/vm_microbenchmarks.rs")).unwrap();
+    let stats_example =
+        fs::read_to_string(manifest_dir.join("examples/vm_stats_report.rs")).unwrap();
 
     assert!(source.contains("pub fn run_k16_workload("));
+    assert!(source.contains("pub fn run_k16_workload_stats("));
     assert!(example.contains("run_k16_workload"));
+    assert!(stats_example.contains("run_k16_workload_stats"));
+    assert!(stats_example.contains("vm_stats_report_header"));
     assert!(example.contains("collect_sample(*workload, \"k16\""));
     assert!(!source.contains("low_image"));
     assert!(!source.contains("LowImage"));

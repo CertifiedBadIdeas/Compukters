@@ -18,7 +18,7 @@
  */
 
 use crate::k16::{K16Cpu, K16Signal};
-use crate::low_bus::{MachineBus, MmioDevice};
+use crate::low_bus::{MachineBus, MachineBusStatsSnapshot, MmioDevice};
 use crate::low_machine::MemoryFault;
 use std::hint::black_box;
 
@@ -91,6 +91,15 @@ impl VmBenchmarkSample {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VmStatsReportSample {
+    pub workload: VmBenchmarkWorkload,
+    pub iterations: u32,
+    pub checksum: u32,
+    pub cpu_steps: u64,
+    pub bus: MachineBusStatsSnapshot,
+}
+
 pub fn benchmark_output_header() -> String {
     format_benchmark_columns(
         "workload",
@@ -101,6 +110,42 @@ pub fn benchmark_output_header() -> String {
         "nanos/iter",
         "vs_native",
         "native_pct",
+    )
+}
+
+pub fn vm_stats_report_header() -> String {
+    format_vm_stats_report_columns(
+        "workload",
+        "iterations",
+        "checksum",
+        "cpu_steps",
+        "ram_loads",
+        "ram_stores",
+        "ram_bytes_read",
+        "ram_bytes_written",
+        "mmio_loads",
+        "mmio_stores",
+        "mmio_bytes_read",
+        "mmio_bytes_written",
+        "mmio_devices",
+    )
+}
+
+pub fn format_vm_stats_report_sample(sample: &VmStatsReportSample) -> String {
+    format_vm_stats_report_columns(
+        sample.workload.name(),
+        &sample.iterations.to_string(),
+        &sample.checksum.to_string(),
+        &sample.cpu_steps.to_string(),
+        &sample.bus.ram.loads.to_string(),
+        &sample.bus.ram.stores.to_string(),
+        &sample.bus.ram.bytes_read.to_string(),
+        &sample.bus.ram.bytes_written.to_string(),
+        &sample.bus.mmio.loads.to_string(),
+        &sample.bus.mmio.stores.to_string(),
+        &sample.bus.mmio.bytes_read.to_string(),
+        &sample.bus.mmio.bytes_written.to_string(),
+        &sample.bus.mmio_devices.len().to_string(),
     )
 }
 
@@ -139,7 +184,34 @@ fn format_benchmark_columns(
     )
 }
 
+fn format_vm_stats_report_columns(
+    workload: &str,
+    iterations: &str,
+    checksum: &str,
+    cpu_steps: &str,
+    ram_loads: &str,
+    ram_stores: &str,
+    ram_bytes_read: &str,
+    ram_bytes_written: &str,
+    mmio_loads: &str,
+    mmio_stores: &str,
+    mmio_bytes_read: &str,
+    mmio_bytes_written: &str,
+    mmio_devices: &str,
+) -> String {
+    format!(
+        "{workload:<14} {iterations:>10} {checksum:>10} {cpu_steps:>10} {ram_loads:>10} {ram_stores:>10} {ram_bytes_read:>14} {ram_bytes_written:>17} {mmio_loads:>11} {mmio_stores:>11} {mmio_bytes_read:>15} {mmio_bytes_written:>18} {mmio_devices:>12}",
+    )
+}
+
 pub fn run_k16_workload(workload: VmBenchmarkWorkload, iterations: u32) -> Result<u32, String> {
+    Ok(run_k16_workload_stats(workload, iterations)?.checksum)
+}
+
+pub fn run_k16_workload_stats(
+    workload: VmBenchmarkWorkload,
+    iterations: u32,
+) -> Result<VmStatsReportSample, String> {
     let mut bus = MachineBus::new(MEMORY_SIZE).map_err(|error| error.to_string())?;
     if workload == VmBenchmarkWorkload::MmioLoop {
         bus.map_mmio(MMIO_ADDR, Box::new(BenchmarkRegisterDevice { value: 0 }))
@@ -152,7 +224,13 @@ pub fn run_k16_workload(workload: VmBenchmarkWorkload, iterations: u32) -> Resul
         .run_until_signal(&mut bus, k16_max_steps(workload, iterations))
         .map_err(|error| error.to_string())?
     {
-        K16Signal::Halt => Ok(cpu.register(result_register)),
+        K16Signal::Halt => Ok(VmStatsReportSample {
+            workload,
+            iterations,
+            checksum: cpu.register(result_register),
+            cpu_steps: cpu.snapshot().metrics_steps,
+            bus: bus.stats_snapshot(),
+        }),
         signal => Err(format!("unexpected K16 signal: {signal:?}")),
     }
 }
