@@ -21,10 +21,17 @@ package ru.lazyhat.compukterkraft.core.device.runtime
 
 import ru.lazyhat.compukterkraft.lang.runtime.VmInstructionKind
 import ru.lazyhat.compukterkraft.lang.runtime.VmSignalKind
+import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16BusTraffic
+import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16ComputerStatsSnapshot
+import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16MmioDeviceStats
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicReference
 
 interface RuntimeMetricsCollector {
+    val recordsK16StatsSnapshots: Boolean
+        get() = false
+
     fun recordServerTick(nanos: Long)
 
     fun recordRequestSlice(nanos: Long)
@@ -97,6 +104,8 @@ interface RuntimeMetricsCollector {
         gpuFrameCount: Int,
         nanos: Long,
     )
+
+    fun recordK16StatsSnapshot(snapshot: NativeK16ComputerStatsSnapshot)
 
     fun recordK16WaitEnter()
 
@@ -194,6 +203,34 @@ data class RuntimeVmMetrics(
     val nativeWaitSignals: Long get() = waitPollSignals
 }
 
+data class RuntimeK16BusTrafficMetrics(
+    val loads: Long = 0,
+    val stores: Long = 0,
+    val bytesRead: Long = 0,
+    val bytesWritten: Long = 0,
+)
+
+data class RuntimeK16MmioDeviceMetrics(
+    val deviceId: Long,
+    val base: Long,
+    val size: Long,
+    val traffic: RuntimeK16BusTrafficMetrics,
+)
+
+data class RuntimeK16StatsMetrics(
+    val ram: RuntimeK16BusTrafficMetrics = RuntimeK16BusTrafficMetrics(),
+    val mmio: RuntimeK16BusTrafficMetrics = RuntimeK16BusTrafficMetrics(),
+    val devices: List<RuntimeK16MmioDeviceMetrics> = emptyList(),
+) {
+    val deviceTraffic: RuntimeK16BusTrafficMetrics =
+        RuntimeK16BusTrafficMetrics(
+            loads = devices.sumOf { it.traffic.loads },
+            stores = devices.sumOf { it.traffic.stores },
+            bytesRead = devices.sumOf { it.traffic.bytesRead },
+            bytesWritten = devices.sumOf { it.traffic.bytesWritten },
+        )
+}
+
 data class RuntimeHostCallMetrics(
     val moduleName: String,
     val functionName: String,
@@ -217,6 +254,7 @@ data class RuntimeInstructionMetrics(
 data class RuntimeProfilingSnapshot(
     val tick: RuntimeTickMetrics = RuntimeTickMetrics(),
     val vm: RuntimeVmMetrics = RuntimeVmMetrics(),
+    val k16: RuntimeK16StatsMetrics = RuntimeK16StatsMetrics(),
     val hostCalls: List<RuntimeHostCallMetrics> = emptyList(),
     val instructions: List<RuntimeInstructionMetrics> = emptyList(),
 ) {
@@ -249,6 +287,13 @@ data class RuntimeProfilingSnapshot(
                 "    k16Output: refreshes=${vm.k16OutputRefreshes}, time=${vm.k16OutputRefreshNanos.nanos()}, serialSnapshotBytes=${vm.k16SerialOutputSnapshotBytes}, gpuBatches=${vm.k16GpuFrameBatches}, gpuBytes=${vm.k16GpuFrameBytes}, gpuFrames=${vm.k16GpuFramesDecoded}",
             )
             appendLine(
+                "    k16Bus: ramLoads=${k16.ram.loads}, ramStores=${k16.ram.stores}, ramBytesRead=${k16.ram.bytesRead}, ramBytesWritten=${k16.ram.bytesWritten}, mmioLoads=${k16.mmio.loads}, mmioStores=${k16.mmio.stores}, mmioBytesRead=${k16.mmio.bytesRead}, mmioBytesWritten=${k16.mmio.bytesWritten}",
+            )
+            appendLine(
+                "    k16Devices: mapped=${k16.devices.size}, loads=${k16.deviceTraffic.loads}, stores=${k16.deviceTraffic.stores}, bytesRead=${k16.deviceTraffic.bytesRead}, bytesWritten=${k16.deviceTraffic.bytesWritten}",
+            )
+            appendK16DeviceSummary()
+            appendLine(
                 "    k16Wait: entries=${vm.k16WaitEntries}, timerWakeups=${vm.k16WaitTimerWakeups}, inputWakeups=${vm.k16WaitInputWakeups}, idleSkips=${vm.k16WaitIdleSkips}",
             )
             appendLine(
@@ -260,6 +305,14 @@ data class RuntimeProfilingSnapshot(
             appendHostCallSummary()
             appendInstructionSummary()
         }
+
+    private fun StringBuilder.appendK16DeviceSummary() {
+        k16.devices.sortedBy { it.deviceId }.forEach { device ->
+            appendLine(
+                "      device[${device.deviceId}]: base=${device.base}, size=${device.size}, loads=${device.traffic.loads}, stores=${device.traffic.stores}, bytesRead=${device.traffic.bytesRead}, bytesWritten=${device.traffic.bytesWritten}",
+            )
+        }
+    }
 
     private fun StringBuilder.appendHostCallSummary() {
         if (hostCalls.isEmpty()) {
@@ -380,6 +433,8 @@ object NoOpRuntimeMetricsCollector : RuntimeMetricsCollector {
         nanos: Long,
     ) = Unit
 
+    override fun recordK16StatsSnapshot(snapshot: NativeK16ComputerStatsSnapshot) = Unit
+
     override fun recordK16WaitEnter() = Unit
 
     override fun recordK16WaitTimerWakeup() = Unit
@@ -408,6 +463,8 @@ private class RuntimeCounter {
 }
 
 class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
+    override val recordsK16StatsSnapshots: Boolean = true
+
     private val serverTickCalls = AtomicLong()
     private val serverTickNanos = AtomicLong()
     private val requestSliceCalls = AtomicLong()
@@ -458,6 +515,7 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
     private val k16GpuFrameBatches = AtomicLong()
     private val k16GpuFrameBytes = AtomicLong()
     private val k16GpuFramesDecoded = AtomicLong()
+    private val k16Stats = AtomicReference(RuntimeK16StatsMetrics())
     private val k16WaitEntries = AtomicLong()
     private val k16WaitTimerWakeups = AtomicLong()
     private val k16WaitInputWakeups = AtomicLong()
@@ -621,6 +679,10 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
         k16GpuFramesDecoded.addAndGet(sanitizedGpuFrameCount.toLong())
     }
 
+    override fun recordK16StatsSnapshot(snapshot: NativeK16ComputerStatsSnapshot) {
+        k16Stats.set(snapshot.toRuntimeMetrics())
+    }
+
     override fun recordK16WaitEnter() {
         k16WaitEntries.incrementAndGet()
     }
@@ -699,6 +761,7 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
                     k16WaitInputWakeups = k16WaitInputWakeups.get(),
                     k16WaitIdleSkips = k16WaitIdleSkips.get(),
                 ),
+            k16 = k16Stats.get(),
             hostCalls =
                 hostCalls
                     .map { (key, counter) ->
@@ -726,3 +789,26 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
                     }.sortedWith(compareByDescending<RuntimeInstructionMetrics> { it.nanos }.thenBy { it.kind.name }),
         )
 }
+
+private fun NativeK16ComputerStatsSnapshot.toRuntimeMetrics(): RuntimeK16StatsMetrics =
+    RuntimeK16StatsMetrics(
+        ram = ram.toRuntimeMetrics(),
+        mmio = mmio.toRuntimeMetrics(),
+        devices = devices.map { it.toRuntimeMetrics() },
+    )
+
+private fun NativeK16BusTraffic.toRuntimeMetrics(): RuntimeK16BusTrafficMetrics =
+    RuntimeK16BusTrafficMetrics(
+        loads = loads,
+        stores = stores,
+        bytesRead = bytesRead,
+        bytesWritten = bytesWritten,
+    )
+
+private fun NativeK16MmioDeviceStats.toRuntimeMetrics(): RuntimeK16MmioDeviceMetrics =
+    RuntimeK16MmioDeviceMetrics(
+        deviceId = deviceId,
+        base = base,
+        size = size,
+        traffic = traffic.toRuntimeMetrics(),
+    )

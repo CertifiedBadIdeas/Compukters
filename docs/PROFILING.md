@@ -93,6 +93,20 @@ k16Output: refreshes=..., time=..., serialSnapshotBytes=..., gpuBatches=..., gpu
 - `gpuBatches`, `gpuBytes`, and `gpuFrames` count non-empty GPU frame drain batches, raw frame payload bytes, and decoded
   display frames.
 
+The K16 bus and device lines show the latest cumulative low-level Rust VM counters fetched through one JNI snapshot
+during the worker cache refresh path:
+
+```text
+k16Bus: ramLoads=..., ramStores=..., ramBytesRead=..., ramBytesWritten=..., mmioLoads=..., mmioStores=..., mmioBytesRead=..., mmioBytesWritten=...
+k16Devices: mapped=..., loads=..., stores=..., bytesRead=..., bytesWritten=...
+  device[...]: base=..., size=..., loads=..., stores=..., bytesRead=..., bytesWritten=...
+```
+
+- `k16Bus` separates regular RAM traffic from MMIO traffic.
+- `k16Devices` aggregates mapped MMIO device traffic and then lists per-device counters by hardware device id.
+- These counters are cumulative inside the Rust VM; the Kotlin profiling collector stores the latest snapshot instead of
+  summing repeated snapshots.
+
 The K16 wait line is the main scheduling signal:
 
 ```text

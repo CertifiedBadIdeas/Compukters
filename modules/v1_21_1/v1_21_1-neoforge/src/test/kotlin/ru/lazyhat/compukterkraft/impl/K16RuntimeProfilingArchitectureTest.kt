@@ -37,6 +37,8 @@ class K16RuntimeProfilingArchitectureTest {
         assertTrue(neoforgeBuildScript.contains("showStandardStreams = true"))
         assertTrue(rootBuildScript.contains("profileK16RuntimeWait"))
         assertTrue(docs.contains("./gradlew-sandbox-dev --parallel profileK16RuntimeWait -Pk16BuildJobs=\$(nproc)"))
+        assertTrue(docs.contains("k16Bus: ramLoads="))
+        assertTrue(docs.contains("k16Devices: mapped="))
         assertTrue(docs.contains("k16Wait: entries="))
         assertFalse(docs.contains("profileRuntimeVmImage"))
     }
