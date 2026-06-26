@@ -123,12 +123,14 @@ fn k16_c_libc_cat_has_minimal_libkraft_abi_sources() {
     let root = repo_root();
     let header = root.join("guest/c/libc/include/kraft/syscalls.h");
     let fs_header = root.join("guest/c/libc/include/kraft/fs.h");
+    let process_header = root.join("guest/c/libc/include/kraft/process.h");
     let syscalls = root.join("guest/c/libc/syscalls.c");
     let unistd = root.join("guest/c/libc/include/unistd.h");
     let fcntl = root.join("guest/c/libc/include/fcntl.h");
     let string = root.join("guest/c/libc/include/string.h");
     let startup = root.join("guest/c/libc/crt0.c");
     let cat = root.join("guest/c/coreutils/cat.c");
+    let init = root.join("guest/c/init/init.c");
     let cp = root.join("guest/c/coreutils/cp.c");
     let ls = root.join("guest/c/coreutils/ls.c");
     let mkdir = root.join("guest/c/coreutils/mkdir.c");
@@ -155,6 +157,10 @@ fn k16_c_libc_cat_has_minimal_libkraft_abi_sources() {
     assert!(header.contains("__asm__(\"stat\")"));
     assert!(header.contains("extern int __kraft_sys_rename"));
     assert!(header.contains("__asm__(\"rename\")"));
+    assert!(header.contains("extern int __kraft_sys_spawn(const void *request, unsigned int len)"));
+    assert!(header.contains("__asm__(\"spawn\")"));
+    assert!(header.contains("extern int __kraft_sys_wait(unsigned int pid, int *status)"));
+    assert!(header.contains("__asm__(\"wait\")"));
     assert!(
         header.contains("int kraft_read_dir(const char *path, char *out, unsigned int out_len);")
     );
@@ -163,6 +169,10 @@ fn k16_c_libc_cat_has_minimal_libkraft_abi_sources() {
     assert!(header.contains("int kraft_mkdir(const char *path);"));
     assert!(header.contains("int kraft_rmdir(const char *path);"));
     assert!(header.contains("int kraft_unlink(const char *path);"));
+    assert!(header.contains(
+        "int kraft_spawn_with_args(const char *path, int argc, const char *const *argv);"
+    ));
+    assert!(header.contains("int kraft_wait(int pid, int *status);"));
     assert!(header.contains("int read(int fd, void *buffer, unsigned int count);"));
     assert!(header.contains("int write(int fd, const void *buffer, unsigned int count);"));
     assert!(header.contains("int close(int fd);"));
@@ -193,6 +203,18 @@ fn k16_c_libc_cat_has_minimal_libkraft_abi_sources() {
     assert!(fs_header
         .contains("#define rename(old_path, new_path) kraft_rename((old_path), (new_path))"));
 
+    let process_header =
+        fs::read_to_string(&process_header).expect("C libkraft process header exists");
+    assert!(process_header.contains("#define KRAFT_SPAWN_ARGV_REQUEST_MAGIC 0x57415053u"));
+    assert!(process_header.contains("#define KRAFT_MAX_PROCESS_ARGS 4"));
+    assert!(process_header.contains("#define KRAFT_MAX_PROCESS_PATH_BYTES 61"));
+    assert!(process_header.contains("#define KRAFT_MAX_PROCESS_ARG_BYTES 128"));
+    assert!(process_header.contains("#define KRAFT_MAX_SPAWN_ARGV_REQUEST_BYTES 601"));
+    assert!(process_header.contains(
+        "int kraft_spawn_with_args(const char *path, int argc, const char *const *argv);"
+    ));
+    assert!(process_header.contains("int kraft_wait(int pid, int *status);"));
+
     let syscalls = fs::read_to_string(&syscalls).expect("C libkraft syscall source exists");
     assert!(syscalls.contains("#include <kraft/syscalls.h>"));
     assert!(syscalls.contains("#include <string.h>"));
@@ -214,6 +236,11 @@ fn k16_c_libc_cat_has_minimal_libkraft_abi_sources() {
     assert!(syscalls.contains("int kraft_rename(const char *old_path, const char *new_path)"));
     assert!(syscalls.contains("put_u32_le(request + 0, KRAFT_RENAME_REQUEST_MAGIC)"));
     assert!(syscalls.contains("__kraft_sys_rename(request, request_len)"));
+    assert!(syscalls.contains("int kraft_spawn_with_args(const char *path, int argc,"));
+    assert!(syscalls.contains("put_u32_le(request + 0, KRAFT_SPAWN_ARGV_REQUEST_MAGIC)"));
+    assert!(syscalls.contains("__kraft_sys_spawn(request, request_len)"));
+    assert!(syscalls.contains("int kraft_wait(int pid, int *status)"));
+    assert!(syscalls.contains("__kraft_sys_wait((unsigned int)pid, status)"));
 
     let unistd = fs::read_to_string(&unistd).expect("C libc-lite unistd header exists");
     assert!(unistd.contains("int open(const char *path, int flags);"));
@@ -254,6 +281,17 @@ fn k16_c_libc_cat_has_minimal_libkraft_abi_sources() {
         !cat.contains("stdio.h"),
         "C hosted baseline must not depend on stdio"
     );
+
+    let init = fs::read_to_string(&init).expect("C init source exists");
+    assert!(init.contains("#include <kraft/process.h>"));
+    assert!(init.contains("#include <unistd.h>"));
+    assert!(init.contains("#define SHELL_PATH \"/bin/shell.kx\""));
+    assert!(init.contains("const char *shell_args[] = {SHELL_PATH};"));
+    assert!(init.contains("kraft_spawn_with_args(SHELL_PATH, 1, shell_args)"));
+    assert!(init.contains("kraft_wait(pid, &status)"));
+    assert!(init.contains("if (status == 0)"));
+    assert!(init.contains("_exit(status)"));
+    assert!(!init.contains("stdio.h"), "C init must not depend on stdio");
 
     let cp = fs::read_to_string(&cp).expect("C hosted cp source exists");
     assert!(cp.contains("#include <fcntl.h>"));
