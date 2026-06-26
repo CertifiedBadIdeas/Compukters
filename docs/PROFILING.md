@@ -47,16 +47,9 @@ Optional arguments override the default `100000 5` benchmark size:
 scripts/record-k16-vm-benchmark-current.sh 1000 3
 ```
 
-Install the repository pre-commit hook to refresh and stage the current snapshot
-automatically before each commit:
-
-```bash
-scripts/install-git-hooks.sh
-```
-
-The hook refuses unrelated unstaged or untracked files so the snapshot reflects
-the tree being committed. `docs/benchmarks/k16-vm-current.txt` is the only path
-the hook may rewrite while committing.
+There is no commit hook for this file. Benchmark snapshots are machine-local
+diagnostics and should be refreshed only when the commit is intentionally about
+benchmark state.
 
 There is no separate append-only benchmark history file. Git is the history:
 
@@ -71,13 +64,25 @@ Use `profileK16RuntimeWait` to build the local debug K16 JNI library, boot the b
 `K16RuntimeDevice`, drive a small timer/input wait workload, and print the runtime profiling summary to the terminal:
 
 ```bash
-./gradlew-sandbox profileK16RuntimeWait
+./gradlew-sandbox-dev --parallel profileK16RuntimeWait -Pk16BuildJobs=$(nproc)
 ```
 
 The task runs only `K16RuntimeWaitProfilingTest` and keeps normal gameplay on the default no-op collector. The profiling
 path injects `RecordingRuntimeMetricsCollector` only for the report test.
 
-The output is grouped into the existing multi-line runtime summary. The K16 wait line is the main scheduling signal:
+The output is grouped into the existing multi-line runtime summary. The K16 execution line shows how many native
+`tickUntilSignal` slices actually ran and which signal ended those slices:
+
+```text
+k16Execution: slices=..., time=..., haltSignals=..., waitSignals=..., yieldSignals=..., pauseSignals=...
+```
+
+- `slices` counts host calls into the K16 runtime loop.
+- `time` is wall-clock time spent inside `tickUntilSignal`.
+- `haltSignals`, `waitSignals`, `yieldSignals`, and `pauseSignals` classify the signal that returned control to the
+  worker.
+
+The K16 wait line is the main scheduling signal:
 
 ```text
 k16Wait: entries=..., timerWakeups=..., inputWakeups=..., idleSkips=...
@@ -96,7 +101,8 @@ snapshots such as `docs/benchmarks/k16-vm-current.txt`.
 JFR is available with the JDK and is the first external profiler to try.
 
 ```bash
-./gradlew-sandbox \
+./gradlew-sandbox-dev --parallel \
+  -Pk16BuildJobs=$(nproc) \
   -Dorg.gradle.jvmargs="-XX:StartFlightRecording=filename=build/reports/profiling/runtime-display.jfr,settings=profile,dumponexit=true" \
   profileK16RuntimeWait
 ```
@@ -155,13 +161,14 @@ cd rust/host/k16-vm && cargo test
 Build the local JNI library:
 
 ```bash
-./gradlew-sandbox :v1_21_1-neoforge:buildK16VmNativeLibrary
+./gradlew-sandbox-dev --parallel :v1_21_1-neoforge:buildK16VmNativeLibrary -Pk16BuildJobs=$(nproc)
 ```
 
 Run native-runtime JNI boundary tests:
 
 ```bash
-./gradlew-sandbox :native-runtime:test \
+./gradlew-sandbox-dev --parallel :native-runtime:test \
+  -Pk16BuildJobs=$(nproc) \
   -Dk16.vm.native.library=$PWD/.toolchain/build/cargo/k16-vm/debug/libk16_vm.so
 ```
 

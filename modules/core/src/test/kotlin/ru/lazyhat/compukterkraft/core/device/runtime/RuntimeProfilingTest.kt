@@ -135,6 +135,11 @@ class RuntimeProfilingTest {
         collector.recordNativeDisplayFrameBytes(bytes = 128)
         collector.recordNativeDaemonTick(activeNanos = 100, turns = 2, halted = 1, hostRequests = 3, idle = false)
         collector.recordNativeDaemonTick(activeNanos = 50, turns = 0, halted = 0, hostRequests = 0, idle = true)
+        collector.recordK16RunSlice(K16RuntimeSignal.WAIT, nanos = 1000)
+        collector.recordK16RunSlice(K16RuntimeSignal.WAIT, nanos = 500)
+        collector.recordK16RunSlice(K16RuntimeSignal.YIELD, nanos = 250)
+        collector.recordK16RunSlice(K16RuntimeSignal.PAUSE, nanos = 125)
+        collector.recordK16RunSlice(K16RuntimeSignal.HALT, nanos = 75)
         collector.recordK16WaitEnter()
         collector.recordK16WaitEnter()
         collector.recordK16WaitTimerWakeup()
@@ -185,6 +190,12 @@ class RuntimeProfilingTest {
         assertEquals(2, snapshot.vm.nativeDaemonTurns)
         assertEquals(1, snapshot.vm.nativeDaemonHaltedProcesses)
         assertEquals(3, snapshot.vm.nativeDaemonHostRequests)
+        assertEquals(5, snapshot.vm.k16RunSlices)
+        assertEquals(1950, snapshot.vm.k16RunNanos)
+        assertEquals(1, snapshot.vm.k16RunHaltSignals)
+        assertEquals(2, snapshot.vm.k16RunWaitSignals)
+        assertEquals(1, snapshot.vm.k16RunYieldSignals)
+        assertEquals(1, snapshot.vm.k16RunPauseSignals)
         assertEquals(2, snapshot.vm.k16WaitEntries)
         assertEquals(1, snapshot.vm.k16WaitTimerWakeups)
         assertEquals(1, snapshot.vm.k16WaitInputWakeups)
@@ -220,6 +231,10 @@ class RuntimeProfilingTest {
             summary,
         )
         assertTrue(
+            summary.contains("    k16Execution: slices=5, time=1950 ns, haltSignals=1, waitSignals=2, yieldSignals=1, pauseSignals=1"),
+            summary,
+        )
+        assertTrue(
             summary.contains("    k16Wait: entries=2, timerWakeups=1, inputWakeups=1, idleSkips=3"),
             summary,
         )
@@ -248,6 +263,7 @@ class RuntimeProfilingTest {
         collector.recordNativeDisplayPumpWait(nanos = 100)
         collector.recordNativeDisplayFrameBytes(bytes = 128)
         collector.recordNativeDaemonTick(activeNanos = 100, turns = 2, halted = 1, hostRequests = 3, idle = false)
+        collector.recordK16RunSlice(K16RuntimeSignal.WAIT, nanos = 100)
         collector.recordK16WaitEnter()
         collector.recordK16WaitTimerWakeup()
         collector.recordK16WaitInputWakeup()

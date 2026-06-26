@@ -402,6 +402,11 @@ class K16RuntimeDeviceTest {
         waitUntil { endpoint.tickCalls == 3 && endpoint.keyboardChars.isNotEmpty() }
 
         val snapshot = metrics.snapshot()
+        assertEquals(3, snapshot.vm.k16RunSlices)
+        assertEquals(2, snapshot.vm.k16RunWaitSignals)
+        assertEquals(1, snapshot.vm.k16RunYieldSignals)
+        assertEquals(0, snapshot.vm.k16RunHaltSignals)
+        assertEquals(0, snapshot.vm.k16RunPauseSignals)
         assertEquals(2, snapshot.vm.k16WaitEntries)
         assertEquals(1, snapshot.vm.k16WaitTimerWakeups)
         assertEquals(1, snapshot.vm.k16WaitInputWakeups)
