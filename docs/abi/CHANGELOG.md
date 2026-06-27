@@ -65,6 +65,10 @@
   `kraft_run_with_args`) while importing those prefixed dynamic symbols through
   `__asm__` aliases. This keeps `libkraft.kso` as the syscall-shaped OS ABI
   provider and reserves unprefixed libc-style names for a future libc layer.
+- `READ_DIR` now returns packed metadata-bearing records instead of
+  newline-separated names. Each record is `u32 file_type`, `u32 name_len`, raw
+  name bytes, then `u32 size_bytes`, allowing `/bin/ls` to avoid a separate
+  `STAT` path walk for every child entry.
 - The Rust shared-runtime proof was removed from bundled userland. Production
   and development K16 storage no longer include `/lib/libk16rt.kso` or
   `/bin/runtime-import-test.kx`; `/lib/libkraft.kso` remains the shared C

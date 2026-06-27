@@ -121,6 +121,12 @@ pub mod syscall {
     pub const READ_DIR_REQUEST_MAGIC: u32 = u32::from_le_bytes(*b"RDIR");
     pub const MAX_READ_DIR_PATH_BYTES: usize = 228;
     pub const MAX_READ_DIR_REQUEST_BYTES: usize = 16 + MAX_READ_DIR_PATH_BYTES;
+    pub const READ_DIR_ENTRY_FILE_TYPE_OFFSET: usize = 0;
+    pub const READ_DIR_ENTRY_NAME_LEN_OFFSET: usize = 4;
+    pub const READ_DIR_ENTRY_NAME_OFFSET: usize = 8;
+    pub const READ_DIR_ENTRY_SIZE_BYTES: usize = 4;
+    pub const READ_DIR_ENTRY_FIXED_BYTES: usize =
+        READ_DIR_ENTRY_NAME_OFFSET + READ_DIR_ENTRY_SIZE_BYTES;
     pub const MAX_STAT_PATH_BYTES: usize = MAX_READ_DIR_PATH_BYTES;
     pub const RENAME_REQUEST_MAGIC: u32 = u32::from_le_bytes(*b"RNAM");
     pub const MAX_RENAME_PATH_BYTES: usize = MAX_READ_DIR_PATH_BYTES;
@@ -671,6 +677,11 @@ mod tests {
         assert_eq!(syscall::READ_DIR_REQUEST_MAGIC, 0x5249_4452);
         assert_eq!(syscall::MAX_READ_DIR_PATH_BYTES, 228);
         assert_eq!(syscall::MAX_READ_DIR_REQUEST_BYTES, 244);
+        assert_eq!(syscall::READ_DIR_ENTRY_FILE_TYPE_OFFSET, 0);
+        assert_eq!(syscall::READ_DIR_ENTRY_NAME_LEN_OFFSET, 4);
+        assert_eq!(syscall::READ_DIR_ENTRY_NAME_OFFSET, 8);
+        assert_eq!(syscall::READ_DIR_ENTRY_SIZE_BYTES, 4);
+        assert_eq!(syscall::READ_DIR_ENTRY_FIXED_BYTES, 12);
         assert_eq!(syscall::RENAME_REQUEST_MAGIC, 0x4d41_4e52);
         assert_eq!(syscall::MAX_RENAME_PATH_BYTES, 228);
         assert_eq!(syscall::MAX_RENAME_REQUEST_BYTES, 468);
