@@ -65,14 +65,19 @@ impl StorageBlockCacheSlot {
 }
 
 struct StorageBlockCache {
-    slots: [StorageBlockCacheSlot; 16],
+    slots: [StorageBlockCacheSlot; StorageBlockCache::SLOT_COUNT],
     clock: u64,
 }
 
 impl StorageBlockCache {
+    // 32 slots keep the dynamic loader's observed /bin command working set
+    // without re-reading backend blocks. Payload cache cost: 16 KiB per
+    // storage device, plus slot metadata.
+    const SLOT_COUNT: usize = 32;
+
     const fn new() -> Self {
         Self {
-            slots: [StorageBlockCacheSlot::empty(); 16],
+            slots: [StorageBlockCacheSlot::empty(); Self::SLOT_COUNT],
             clock: 0,
         }
     }
@@ -789,6 +794,20 @@ mod tests {
         assert_eq!(read_count.get(), 1);
         assert_eq!(memory.load_u8(512).unwrap(), 0xA5);
         assert_eq!(memory.load_u8(1023).unwrap(), 0x5A);
+    }
+
+    #[test]
+    fn storage_block_cache_retains_dynamic_loader_working_set() {
+        let mut cache = StorageBlockCache::new();
+        let mut out = [0_u8; StoragePortDevice::BLOCK_SIZE as usize];
+
+        for lba in 0..32 {
+            let block = [lba as u8; StoragePortDevice::BLOCK_SIZE as usize];
+            cache.store(lba, &block);
+        }
+
+        assert!(cache.copy_to(0, &mut out));
+        assert_eq!(out[0], 0);
     }
 
     #[test]
