@@ -34,7 +34,7 @@ production build or focused test needs them.
 | --- | --- | --- |
 | `rust/guest/k16-abi` | Shared K16 guest ABI definitions used by Rust guest code. | Keep Rust while Rust kernel/runtime crates exist. |
 | `rust/guest/k16-alloc-test` | Former development heap/syscall smoke utility. | Removed with the Rust userland proof layer. |
-| `rust/guest/k16-bios` | BIOS firmware. | Keep Rust for now; not part of userland/coreutils migration. |
+| `rust/guest/k16-bios` | Former Rust BIOS firmware. | Removed; bundled BIOS now builds from `guest/c/bios/bios.c`. |
 | `rust/guest/k16-boot` | System boot program. | Keep Rust for now; boot flow is outside this userland slice. |
 | `rust/guest/k16-boot-chain` | Shared boot-chain support library. | Keep Rust for now; boot support is outside this userland slice. |
 | `rust/guest/k16-image` | Guest-side image/storage support used by Rust guest code. | Keep Rust while Rust boot/kernel/storage support remains Rust. |

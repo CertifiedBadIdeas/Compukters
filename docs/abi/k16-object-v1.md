@@ -85,19 +85,20 @@ remain external imports in the K16E v5 output. If two
 archives can define the same helper, the first selected provider satisfies the
 symbol and later duplicate providers are not pulled.
 
-Bundled Rust guest artifacts use this driver directly:
+Bundled K16 guest artifacts use this driver directly:
 
 ```text
-rust/guest/k16-bios   -> k16-ld --k16-target=bios   -> firmware/k16-bios.kflash
+guest/c/bios/bios.c   -> k16 link --target bios      -> firmware/k16-bios.kflash
 rust/guest/k16-boot   -> k16-ld --k16-target=boot   -> kernel-loader.kb
 rust/guest/k16-kernel -> k16-ld --k16-target=kernel -> display-ok.kx
 ```
 
-These builds are freestanding Rust `bin` crates. Gradle resolves a prepared K16
-toolchain through `prepareK16Toolchain`, then invokes Cargo with `RUSTC` and
-K16 linker flags pointed at that prepared install. Missing toolchain state is a
-hard configuration error. There is no fallback to host rustc, host linker
-behavior, or retired Rux source generation.
+The BIOS is a freestanding C firmware source compiled with the source-built K16
+Clang and linked as raw flash. The bootloader and kernel remain freestanding
+Rust `bin` crates. Gradle resolves a prepared K16 toolchain through
+`prepareK16Toolchain`; missing toolchain state is a hard configuration error.
+There is no fallback to host compilers, host linker behavior, or retired Rux
+source generation.
 
 Source-built prepared toolchains must include the stage1 K16 rustc, `k16-ld`,
 Rust source for `-Zbuild-std=core`, and the matching host `library/std` sysroot

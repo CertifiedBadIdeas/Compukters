@@ -139,7 +139,10 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("-C link-arg=--k16-target=\$k16Target"))
         assertTrue(source.contains("\"opt-level=z\""))
         assertTrue(source.contains("-Copt-level=z"))
-        assertTrue(source.contains("k16Target = \"bios\""))
+        assertTrue(source.contains("guest/c/bios/bios.c"))
+        assertTrue(source.contains("fun Project.compileK16GuestCFirmware("))
+        assertTrue(source.contains("compileK16GuestCFirmware("))
+        assertTrue(source.contains("description = \"Compiles and links the bundled C K16 BIOS"))
         assertTrue(source.contains("k16Target = \"boot\""))
         assertTrue(source.contains("k16Target = \"kernel\""))
         assertFalse(source.contains("k16Target = \"program-dynamic\""))
@@ -150,7 +153,7 @@ class K16FirmwareResourceTest {
         assertFalse(source.contains("--emit=obj"))
         assertTrue(source.contains("tasks.register<Exec>(\"compileK16SystemStorage0\")"))
         assertTrue(source.contains("rust/guest/k16-boot-chain"))
-        assertTrue(source.contains("rust/guest/k16-bios"))
+        assertFalse(source.contains("rust/guest/k16-bios"))
         assertTrue(source.contains("rust/guest/k16-boot"))
         assertTrue(source.contains("rust/guest/k16-kernel"))
         assertFalse(source.contains("rust/guest/k16-init"))
@@ -1641,10 +1644,11 @@ class K16FirmwareResourceTest {
 
     @Test
     fun k16BiosDoesNotUseDisplay0() {
-        val biosSource = Path.of("../../../rust/guest/k16-bios/src/main.rs").readText()
+        val biosSource = Path.of("../../../guest/c/bios/bios.c").readText()
 
         assertFalse(biosSource.contains("display0"), "K16 BIOS must render through gpu0 only")
-        assertTrue(biosSource.contains("gpu0"), "K16 BIOS should use the gpu0 display path")
+        assertTrue(biosSource.contains("GPU_COMMAND"), "K16 BIOS should use the gpu0 display path")
+        assertTrue(biosSource.contains("load_k16e_from_storage0"), "K16 BIOS should keep the storage boot path")
     }
 
     @Test

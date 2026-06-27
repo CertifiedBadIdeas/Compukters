@@ -47,21 +47,22 @@ class K16ToolingRenameTest {
     }
 
     @Test
-    fun rustBiosLivesAsGuestCrate() {
+    fun cBiosLivesOutsideRustGuestWorkspace() {
         val workspaceManifest = root.resolve("rust/guest/Cargo.toml").readText()
         val biosManifest = root.resolve("rust/guest/k16-bios/Cargo.toml")
-        val biosSource = root.resolve("rust/guest/k16-bios/src/main.rs")
+        val rustBiosSource = root.resolve("rust/guest/k16-bios/src/main.rs")
+        val cBiosSource = root.resolve("guest/c/bios/bios.c")
 
-        assertTrue(workspaceManifest.contains("\"k16-bios\""))
-        assertTrue(biosManifest.exists())
-        assertTrue(biosSource.exists())
+        assertFalse(workspaceManifest.contains("\"k16-bios\""))
+        assertFalse(biosManifest.exists())
+        assertFalse(rustBiosSource.exists())
+        assertTrue(cBiosSource.exists())
 
-        val source = biosSource.readText()
-        assertTrue(source.contains("#![no_std]"))
-        assertTrue(source.contains("#![no_main]"))
-        assertTrue(source.contains("extern \"C\" fn _start() -> !"))
+        val source = cBiosSource.readText()
+        assertTrue(source.contains("void _start(void)"))
         assertTrue(source.contains("print_bios_banner"))
         assertTrue(source.contains("print_no_bootable_device"))
+        assertTrue(source.contains("load_k16e_from_storage0"))
     }
 
     @Test
@@ -91,7 +92,8 @@ class K16ToolingRenameTest {
     fun neoforgeFirmwareBuildDoesNotUseRuxCompilerOrDeletedGuestExamples() {
         val buildScript = root.resolve("modules/v1_21_1/v1_21_1-neoforge/build.gradle.kts").readText()
 
-        assertTrue(buildScript.contains("rust/guest/k16-bios"))
+        assertTrue(buildScript.contains("guest/c/bios/bios.c"))
+        assertFalse(buildScript.contains("rust/guest/k16-bios"))
         assertTrue(buildScript.contains("rust/guest/k16-boot"))
         assertTrue(buildScript.contains("rust/guest/k16-kernel"))
         assertFalse(buildScript.contains("tracked in #141"))
@@ -130,12 +132,13 @@ class K16ToolingRenameTest {
 
         assertTrue(buildScript.contains("buildStd: String = \"core\""))
         assertTrue(buildScript.contains("-Zbuild-std=\$buildStd"))
-        assertTrue(buildScript.contains("buildStd = \"core,alloc\""))
         assertTrue(buildScript.contains("-Zjson-target-spec"))
         assertTrue(buildScript.contains("\"RUSTFLAGS\""))
         assertTrue(buildScript.contains("-C linker=\${toolchain.linker.absolutePath}"))
         assertTrue(buildScript.contains("-Cjump-tables=no"))
         assertFalse(buildScript.contains("build-std=std"))
+        assertTrue(buildScript.contains("fun Project.compileK16GuestCFirmware("))
+        assertTrue(buildScript.contains("compileK16GuestCFirmware("))
     }
 
     @Test

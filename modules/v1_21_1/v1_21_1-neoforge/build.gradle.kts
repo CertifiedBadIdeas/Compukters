@@ -119,8 +119,7 @@ val k16FirmwareProfile =
         .gradleProperty("k16FirmwareProfile")
         .orElse("release")
 val k16GuestManifest = rootProject.layout.projectDirectory.file("rust/guest/Cargo.toml")
-val k16BiosManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-bios/Cargo.toml")
-val k16BiosSource = rootProject.layout.projectDirectory.file("rust/guest/k16-bios/src/main.rs")
+val k16BiosSource = rootProject.layout.projectDirectory.file("guest/c/bios/bios.c")
 val k16BootManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-boot/Cargo.toml")
 val k16BootSource = rootProject.layout.projectDirectory.file("rust/guest/k16-boot/src/main.rs")
 val k16KernelManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-kernel/Cargo.toml")
@@ -646,6 +645,71 @@ fun Project.compileK16GuestCProgram(
     }
 }
 
+fun Project.compileK16GuestCFirmware(
+    targetDir: File,
+    output: File,
+    source: File,
+    archRuntimeSource: File,
+) {
+    val toolchain = resolveK16Toolchain()
+    val clang = k16ClangExecutable.asFile
+    check(clang.isFile && clang.canExecute()) {
+        "K16 clang is missing or not executable at $clang; run buildK16Llvm through ./gradlew-sandbox-dev"
+    }
+
+    targetDir.mkdirs()
+    output.parentFile.mkdirs()
+    output.delete()
+
+    val archRuntimeObject = compileK16ArchRuntimeObject(targetDir, archRuntimeSource)
+    val objectFile = targetDir.resolve("${source.nameWithoutExtension}.o")
+    objectFile.delete()
+    val compileCommand =
+        listOf(
+            clang.absolutePath,
+            "--target=k16",
+            "-ffreestanding",
+            "-fno-builtin",
+            "-fno-stack-protector",
+            "-nostdlib",
+            "-Oz",
+            "-c",
+            source.absolutePath,
+            "-o",
+            objectFile.absolutePath,
+        )
+    val compileExitCode =
+        ProcessBuilder(compileCommand)
+            .directory(projectDir)
+            .inheritIO()
+            .start()
+            .waitFor()
+    check(compileExitCode == 0) {
+        "K16 C firmware compile failed with exit code $compileExitCode: ${compileCommand.joinToString(" ")}"
+    }
+
+    val linkCommand =
+        listOf(
+            toolchain.cli.absolutePath,
+            "link",
+            "--target",
+            "bios",
+            archRuntimeObject.absolutePath,
+            objectFile.absolutePath,
+            "-o",
+            output.absolutePath,
+        )
+    val linkExitCode =
+        ProcessBuilder(linkCommand)
+            .directory(projectDir)
+            .inheritIO()
+            .start()
+            .waitFor()
+    check(linkExitCode == 0) {
+        "K16 C firmware link failed with exit code $linkExitCode: ${linkCommand.joinToString(" ")}"
+    }
+}
+
 fun Project.compileK16GuestCSharedObject(
     targetDir: File,
     output: File,
@@ -722,28 +786,22 @@ fun Project.compileK16GuestCSharedObject(
 
 val linkK16BiosFlash =
     tasks.register("linkK16BiosFlash") {
-        description = "Compiles and links the bundled Rust K16 BIOS bin crate into a raw BIOS flash resource."
+        description = "Compiles and links the bundled C K16 BIOS into a raw BIOS flash resource."
         group = "k16"
-        inputs.file(k16GuestManifest)
-        inputs.file(k16BiosManifest)
         inputs.file(k16BiosSource)
-        inputs.file(k16BootChainManifest)
-        inputs.dir(k16BootChainSource)
+        inputs.file(k16CArchRuntimeSource)
         inputs.file(k16HostToolsManifest)
         inputs.dir(k16HostToolsSource)
-        inputs.file(k16RustTargetSpec)
         inputs.file(k16ToolchainConfig)
-        inputs.property("k16FirmwareProfile", k16FirmwareProfile)
         outputs.file(k16BiosFlashResource)
         dependsOn(rootProject.tasks.named("prepareK16Toolchain"))
 
         doLast {
-            project.compileK16GuestRustBin(
-                manifest = k16BiosManifest.asFile,
+            project.compileK16GuestCFirmware(
                 targetDir = generatedK16BiosTarget.get().asFile,
-                binName = "k16-bios",
-                k16Target = "bios",
                 output = k16BiosFlashResource.get().asFile,
+                source = k16BiosSource.asFile,
+                archRuntimeSource = k16CArchRuntimeSource.asFile,
             )
         }
     }
