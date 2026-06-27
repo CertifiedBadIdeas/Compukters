@@ -1,7 +1,0 @@
-[package]
-name = "k16-storage"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-k16-abi = { path = "../k16-abi" }

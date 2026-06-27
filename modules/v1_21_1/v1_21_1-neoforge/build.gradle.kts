@@ -149,8 +149,6 @@ val k16RtManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-rt/
 val k16RtSource = rootProject.layout.projectDirectory.dir("rust/guest/k16-rt/src")
 val k16MemoryManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-memory/Cargo.toml")
 val k16MemorySource = rootProject.layout.projectDirectory.dir("rust/guest/k16-memory/src")
-val k16StorageManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-storage/Cargo.toml")
-val k16StorageSource = rootProject.layout.projectDirectory.dir("rust/guest/k16-storage/src")
 val k16HostToolsManifest = rootProject.layout.projectDirectory.file("rust/host/k16-tools/Cargo.toml")
 val k16HostToolsSource = rootProject.layout.projectDirectory.dir("rust/host/k16-tools/src")
 val k16RustTargetSpec = rootProject.layout.projectDirectory.file("tools/k16-unknown-kraftos.json")
@@ -346,11 +344,6 @@ fun org.gradle.api.Task.inputsK16RuntimeCrates() {
     inputs.dir(k16RtSource)
     inputs.file(k16MemoryManifest)
     inputs.dir(k16MemorySource)
-}
-
-fun org.gradle.api.Task.inputsK16KernelCrates() {
-    inputs.file(k16StorageManifest)
-    inputs.dir(k16StorageSource)
 }
 
 fun k16RustBinProfileDir(
@@ -915,7 +908,6 @@ val compileK16SystemKernel =
         inputs.file(k16KernelManifest)
         inputs.dir(k16KernelSource)
         inputsK16RuntimeCrates()
-        inputsK16KernelCrates()
         inputs.file(k16RustTargetSpec)
         inputs.file(k16HostToolsManifest)
         inputs.dir(k16HostToolsSource)

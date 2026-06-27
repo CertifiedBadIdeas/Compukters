@@ -1,6 +1,6 @@
 use k16_abi::computer::profile;
 
-pub const SCRATCH_ADDR: u32 = k16_storage::SCRATCH_ADDR;
+pub const SCRATCH_ADDR: u32 = crate::storage::SCRATCH_ADDR;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum K16eAbiKind {
@@ -30,7 +30,7 @@ impl LoadError {
         self.code
     }
 
-    const fn from_storage(error: k16_storage::StorageError) -> Self {
+    const fn from_storage(error: crate::storage::StorageError) -> Self {
         Self { code: error.code() }
     }
 
@@ -52,7 +52,7 @@ pub unsafe fn load_k16e_from_storage0(
     expected_abi_kind: K16eAbiKind,
 ) -> Result<LoadedImage, LoadError> {
     unsafe {
-        k16_storage::open_file_from_storage0(partition_type, path)
+        crate::storage::open_file_from_storage0(partition_type, path)
             .map_err(LoadError::from_storage)?
     };
     unsafe { load_k16e_file(expected_abi_kind) }
@@ -84,7 +84,7 @@ pub unsafe fn user_memory_end_from_current_boot_info(image: LoadedImage) -> Resu
 
 unsafe fn load_k16e_file(expected_abi_kind: K16eAbiKind) -> Result<LoadedImage, LoadError> {
     unsafe {
-        k16_storage::copy_selected_file_range_to_ram(
+        crate::storage::copy_selected_file_range_to_ram(
             0,
             SCRATCH_ADDR,
             crate::image::FIXED_K16E_V1_HEADER_SIZE,
@@ -100,12 +100,12 @@ unsafe fn load_k16e_file(expected_abi_kind: K16eAbiKind) -> Result<LoadedImage, 
     };
     let plan =
         crate::image::parse_fixed_k16e_v1(header, expected_abi_kind.into_image_kind(), unsafe {
-            k16_storage::selected_file_size()
+            crate::storage::selected_file_size()
         })
         .map_err(LoadError::from_image)?;
 
     unsafe {
-        k16_storage::copy_selected_file_range_to_ram(
+        crate::storage::copy_selected_file_range_to_ram(
             crate::image::FIXED_K16E_V1_PAYLOAD_OFFSET,
             plan.load_addr,
             plan.file_size,
