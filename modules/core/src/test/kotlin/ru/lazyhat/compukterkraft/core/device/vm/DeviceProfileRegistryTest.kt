@@ -23,6 +23,7 @@ import ru.lazyhat.compukterkraft.core.block.DeviceFamily
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceCapability
 import kotlin.test.Test
 import kotlin.test.assertContains
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 
 class DeviceProfileRegistryTest {
@@ -43,5 +44,21 @@ class DeviceProfileRegistryTest {
 
             assertContains(profile.allowedCapabilities, DeviceCapability.IPC, "$family must allow IPC for terminal.ck")
         }
+    }
+
+    @Test
+    fun allComputerFamiliesExposeK16TurnBudget() {
+        DeviceFamily.entries.forEach { family ->
+            val profile = DeviceProfileRegistry.forFamily(family)
+
+            assertEquals(32, profile.resources.cpu.maxTurnsPerTick, "$family K16 turn budget should avoid one-pause-per-game-tick command latency")
+        }
+    }
+
+    @Test
+    fun computerFamiliesExposeK16StepBudgetsForBundledOsWorkloads() {
+        assertEquals(1_000_000, DeviceProfileRegistry.forFamily(DeviceFamily.NORMAL).resources.cpu.maxStepsPerSlice)
+        assertEquals(2_000_000, DeviceProfileRegistry.forFamily(DeviceFamily.ADVANCED).resources.cpu.maxStepsPerSlice)
+        assertEquals(4_000_000, DeviceProfileRegistry.forFamily(DeviceFamily.COMMAND).resources.cpu.maxStepsPerSlice)
     }
 }

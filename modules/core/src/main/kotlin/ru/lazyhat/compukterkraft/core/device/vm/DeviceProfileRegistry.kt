@@ -36,12 +36,13 @@ object DeviceProfileRegistry {
                 DeviceProfile(
                     id = "normal",
                     displayName = "Normal Computer",
-                    maxStepsPerSlice = 10_000,
+                    maxStepsPerSlice = 1_000_000,
                     maxEventQueueSize = 32,
                     allowedCapabilities = defaultCapabilities(),
                     resources =
                         defaultResources(
-                            maxStepsPerSlice = 10_000,
+                            maxStepsPerSlice = 1_000_000,
+                            maxTurnsPerTick = 32,
                             eventQueueSlots = 32,
                             vmRamBytes = Config.computerRamLimit.toLong(),
                             diskBytes = Config.computerSpaceLimit.toLong(),
@@ -53,12 +54,13 @@ object DeviceProfileRegistry {
                 DeviceProfile(
                     id = "advanced",
                     displayName = "Advanced Computer",
-                    maxStepsPerSlice = 100_000,
+                    maxStepsPerSlice = 2_000_000,
                     maxEventQueueSize = 64,
                     allowedCapabilities = defaultCapabilities(),
                     resources =
                         defaultResources(
-                            maxStepsPerSlice = 100_000,
+                            maxStepsPerSlice = 2_000_000,
+                            maxTurnsPerTick = 32,
                             eventQueueSlots = 32,
                             vmRamBytes = Config.computerRamLimit.toLong(),
                             diskBytes = Config.computerSpaceLimit.toLong(),
@@ -76,6 +78,7 @@ object DeviceProfileRegistry {
                     resources =
                         defaultResources(
                             maxStepsPerSlice = 4_000_000,
+                            maxTurnsPerTick = 32,
                             eventQueueSlots = 256,
                             vmRamBytes = Config.computerRamLimit.toLong(),
                             diskBytes = Config.computerSpaceLimit.toLong(),
@@ -86,6 +89,7 @@ object DeviceProfileRegistry {
 
     private fun defaultResources(
         maxStepsPerSlice: Long,
+        maxTurnsPerTick: Int,
         eventQueueSlots: Int,
         vmRamBytes: Long,
         diskBytes: Long,
@@ -94,6 +98,7 @@ object DeviceProfileRegistry {
             cpu =
                 DeviceCpuResources(
                     maxStepsPerSlice = maxStepsPerSlice,
+                    maxTurnsPerTick = maxTurnsPerTick,
                 ),
             memory = DeviceMemoryResources(vmRamBytes = vmRamBytes),
             storage = DeviceStorageResources(diskBytes = diskBytes),

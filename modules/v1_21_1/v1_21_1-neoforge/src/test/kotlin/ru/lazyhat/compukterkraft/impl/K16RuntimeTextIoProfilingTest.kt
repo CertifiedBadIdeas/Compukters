@@ -27,6 +27,7 @@ import ru.lazyhat.compukterkraft.core.device.input.PasteInputEvent
 import ru.lazyhat.compukterkraft.core.device.runtime.K16RuntimeDevice
 import ru.lazyhat.compukterkraft.core.device.runtime.RecordingRuntimeMetricsCollector
 import ru.lazyhat.compukterkraft.core.device.runtime.ports.DisplayNetworkBridge
+import ru.lazyhat.compukterkraft.core.device.vm.DeviceProfileRegistry
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16BiosFlashWorkspace
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16ComputerRuntimeFactory
 import ru.lazyhat.compukterkraft.lang.runtime.storage.K16SystemVolumeWorkspace
@@ -48,6 +49,7 @@ class K16RuntimeTextIoProfilingTest {
         val storage0Path = workspace.resolve("storage0.kv")
         biosFlashPath.writeBytes(K16BiosFlashWorkspace.loadBiosFlashResource(classLoader = javaClass.classLoader))
         storage0Path.writeBytes(K16SystemVolumeWorkspace.loadStorage0VolumeResource(classLoader = javaClass.classLoader))
+        val profile = DeviceProfileRegistry.forFamily(DeviceFamily.NORMAL)
         val metrics = RecordingRuntimeMetricsCollector()
         val device =
             K16RuntimeDevice(
@@ -57,6 +59,8 @@ class K16RuntimeTextIoProfilingTest {
                     K16ComputerRuntimeFactory.createFromBiosFlash(
                         biosFlashPath = biosFlashPath,
                         storage0Path = storage0Path,
+                        maxSteps = profile.resources.cpu.maxStepsPerSlice,
+                        maxTurnsPerTick = profile.resources.cpu.maxTurnsPerTick,
                     )
                 },
                 stateSink = {},
@@ -103,6 +107,7 @@ class K16RuntimeTextIoProfilingTest {
         val storage0Path = workspace.resolve("storage0.kv")
         biosFlashPath.writeBytes(K16BiosFlashWorkspace.loadBiosFlashResource(classLoader = javaClass.classLoader))
         storage0Path.writeBytes(K16SystemVolumeWorkspace.loadStorage0VolumeResource(classLoader = javaClass.classLoader))
+        val profile = DeviceProfileRegistry.forFamily(DeviceFamily.NORMAL)
         val metrics = RecordingRuntimeMetricsCollector()
         val displayNetwork = CapturingDisplayNetworkBridge()
         val playerUuid = UUID.fromString("00000000-0000-0000-0000-000000000226")
@@ -115,6 +120,8 @@ class K16RuntimeTextIoProfilingTest {
                     K16ComputerRuntimeFactory.createFromBiosFlash(
                         biosFlashPath = biosFlashPath,
                         storage0Path = storage0Path,
+                        maxSteps = profile.resources.cpu.maxStepsPerSlice,
+                        maxTurnsPerTick = profile.resources.cpu.maxTurnsPerTick,
                     )
                 },
                 stateSink = {},
@@ -187,6 +194,104 @@ class K16RuntimeTextIoProfilingTest {
             assertTrue(visibleNanos != null, "Burst did not become visible in terminal snapshot")
             assertTrue(framesSentNanos != null, "Burst did not produce a sent display frame")
             assertTrue(sentFrames.isNotEmpty())
+        } finally {
+            device.close()
+        }
+    }
+
+    @Test
+    fun printsK16LsCommandRuntimeLatency() {
+        val workspace = createTempDirectory("k16-runtime-ls-profile-")
+        val biosFlashPath = workspace.resolve("bios.kflash")
+        val storage0Path = workspace.resolve("storage0.kv")
+        biosFlashPath.writeBytes(K16BiosFlashWorkspace.loadBiosFlashResource(classLoader = javaClass.classLoader))
+        storage0Path.writeBytes(K16SystemVolumeWorkspace.loadStorage0VolumeResource(classLoader = javaClass.classLoader))
+        val profile = DeviceProfileRegistry.forFamily(DeviceFamily.NORMAL)
+        val metrics = RecordingRuntimeMetricsCollector()
+        val device =
+            K16RuntimeDevice(
+                deviceId = 226,
+                properties = DeviceProperties(DeviceFamily.NORMAL, label = "ls-profiling"),
+                endpointFactory = {
+                    K16ComputerRuntimeFactory.createFromBiosFlash(
+                        biosFlashPath = biosFlashPath,
+                        storage0Path = storage0Path,
+                        maxSteps = profile.resources.cpu.maxStepsPerSlice,
+                        maxTurnsPerTick = profile.resources.cpu.maxTurnsPerTick,
+                    )
+                },
+                stateSink = {},
+                metricsCollector = metrics,
+            )
+
+        try {
+            device.turnOn()
+            waitForTerminal(device, "initial shell prompt") { terminal -> terminal.contains("K16> ") }
+            val before = metrics.snapshot()
+            val command = "ls /bin\n"
+            val startedAt = System.nanoTime()
+            DeviceEvents.dispatch(device, PasteInputEvent(ByteBuffer.wrap(command.encodeToByteArray())))
+            val inputQueuedNanos = System.nanoTime() - startedAt
+            var ticks = 0
+            var visibleNanos: Long? = null
+
+            while (ticks < 200 && visibleNanos == null) {
+                ticks += 1
+                tickAndSync(device)
+                val elapsed = System.nanoTime() - startedAt
+                val terminal = device.snapshotRuntimeState()?.let(::terminalText) ?: ""
+                val commandIndex = terminal.indexOf("K16> ls /bin")
+                val outputIndex =
+                    if (commandIndex >= 0) {
+                        terminal.indexOf("ls.kx", startIndex = commandIndex + "K16> ls /bin".length)
+                    } else {
+                        -1
+                    }
+                val returnedPromptIndex =
+                    if (outputIndex >= 0) {
+                        terminal.indexOf("K16> ", startIndex = outputIndex + "ls.kx".length)
+                    } else {
+                        -1
+                    }
+                if (returnedPromptIndex > outputIndex) {
+                    visibleNanos = elapsed
+                }
+                Thread.sleep(1)
+            }
+
+            val after = metrics.snapshot()
+            val gpuBefore = before.k16.gpu
+            val gpuAfter = after.k16.gpu
+            val storageBefore = before.k16.storage0
+            val storageAfter = after.k16.storage0
+            println(
+                "k16LsCommand: command=ls /bin, inputQueued=${inputQueuedNanos} ns, " +
+                    "visible=${visibleNanos ?: -1} ns, ticks=$ticks",
+            )
+            println(
+                "k16LsCommandVm: slices=${after.vm.k16RunSlices - before.vm.k16RunSlices}, " +
+                    "runTime=${after.vm.k16RunNanos - before.vm.k16RunNanos} ns, " +
+                    "yieldSignals=${after.vm.k16RunYieldSignals - before.vm.k16RunYieldSignals}, " +
+                    "waitSignals=${after.vm.k16RunWaitSignals - before.vm.k16RunWaitSignals}, " +
+                    "pauseSignals=${after.vm.k16RunPauseSignals - before.vm.k16RunPauseSignals}, " +
+                    "inputWakeups=${after.vm.k16WaitInputWakeups - before.vm.k16WaitInputWakeups}",
+            )
+            println(
+                "k16LsCommandStorage: reads=${storageAfter.readCommands - storageBefore.readCommands}, " +
+                    "writes=${storageAfter.writeCommands - storageBefore.writeCommands}, " +
+                    "flushes=${storageAfter.flushCommands - storageBefore.flushCommands}, " +
+                    "bytesRead=${storageAfter.bytesRead - storageBefore.bytesRead}, " +
+                    "bytesWritten=${storageAfter.bytesWritten - storageBefore.bytesWritten}",
+            )
+            println(
+                "k16LsCommandGpu: blits=${gpuAfter.blitBufferCommands - gpuBefore.blitBufferCommands}, " +
+                    "presents=${gpuAfter.presentCommands - gpuBefore.presentCommands}, " +
+                    "frames=${gpuAfter.frames - gpuBefore.frames}, " +
+                    "tiles=${gpuAfter.frameTiles - gpuBefore.frameTiles}, " +
+                    "frameBytes=${gpuAfter.framePayloadBytes - gpuBefore.framePayloadBytes}",
+            )
+
+            assertTrue(visibleNanos != null, "ls /bin did not finish and return to the prompt")
         } finally {
             device.close()
         }

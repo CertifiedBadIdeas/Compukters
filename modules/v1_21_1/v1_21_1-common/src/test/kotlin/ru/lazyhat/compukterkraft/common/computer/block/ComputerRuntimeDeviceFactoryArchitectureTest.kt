@@ -66,7 +66,8 @@ class ComputerRuntimeDeviceFactoryArchitectureTest {
                 .readText()
 
         val consumeIndex = source.indexOf("tile.consumePendingRuntimeSnapshot()")
-        val endpointIndex = source.indexOf("createK16ComputerEndpoint(biosFlashPath, storage0, snapshot, memorySize, maxSteps)")
+        val endpointIndex =
+            source.indexOf("createK16ComputerEndpoint(biosFlashPath, storage0, snapshot, memorySize, maxSteps, maxTurnsPerTick)")
         val restoreIndex = source.indexOf("K16ComputerRuntimeFactory.restoreFromBiosFlashSnapshot")
         val freshBootIndex = source.indexOf("K16ComputerRuntimeFactory.createFromBiosFlash")
 
@@ -87,7 +88,8 @@ class ComputerRuntimeDeviceFactoryArchitectureTest {
 
         val profileIndex = source.indexOf("DeviceProfileRegistry.forFamily(tile.family)")
         val ramIndex = source.indexOf("profile.resources.memory.vmRamBytes")
-        val endpointIndex = source.indexOf("createK16ComputerEndpoint(biosFlashPath, storage0, snapshot, memorySize, maxSteps)")
+        val endpointIndex =
+            source.indexOf("createK16ComputerEndpoint(biosFlashPath, storage0, snapshot, memorySize, maxSteps, maxTurnsPerTick)")
         val freshBootMemoryIndex =
             source.indexOf("memorySize = memorySize", source.indexOf("K16ComputerRuntimeFactory.createFromBiosFlash"))
         val restoreMemoryIndex =
@@ -129,7 +131,8 @@ class ComputerRuntimeDeviceFactoryArchitectureTest {
 
         val profileIndex = source.indexOf("DeviceProfileRegistry.forFamily(tile.family)")
         val budgetIndex = source.indexOf("profile.resources.cpu.maxStepsPerSlice")
-        val endpointIndex = source.indexOf("createK16ComputerEndpoint(biosFlashPath, storage0, snapshot, memorySize, maxSteps)")
+        val endpointIndex =
+            source.indexOf("createK16ComputerEndpoint(biosFlashPath, storage0, snapshot, memorySize, maxSteps, maxTurnsPerTick)")
         val freshBootBudgetIndex =
             source.indexOf("maxSteps = maxSteps", source.indexOf("K16ComputerRuntimeFactory.createFromBiosFlash"))
 
@@ -137,6 +140,29 @@ class ComputerRuntimeDeviceFactoryArchitectureTest {
         assertTrue(budgetIndex > profileIndex, "factory should derive K16 CPU budget from profile CPU resources")
         assertTrue(endpointIndex > budgetIndex, "factory should pass profile CPU budget into endpoint creation")
         assertTrue(freshBootBudgetIndex > endpointIndex, "fresh K16 boot should use profile CPU budget")
+    }
+
+    @Test
+    fun inGameK16ComputerUsesDeviceProfileCpuTurnBudgetForFreshBootAndRestore() {
+        val source =
+            Path
+                .of("src/main/kotlin/ru/lazyhat/compukterkraft/common/computer/block/ComputerRuntimeDeviceFactory.kt")
+                .readText()
+
+        val profileIndex = source.indexOf("DeviceProfileRegistry.forFamily(tile.family)")
+        val turnBudgetIndex = source.indexOf("profile.resources.cpu.maxTurnsPerTick")
+        val endpointIndex =
+            source.indexOf("createK16ComputerEndpoint(biosFlashPath, storage0, snapshot, memorySize, maxSteps, maxTurnsPerTick)")
+        val freshBootTurnBudgetIndex =
+            source.indexOf("maxTurnsPerTick = maxTurnsPerTick", source.indexOf("K16ComputerRuntimeFactory.createFromBiosFlash"))
+        val restoreTurnBudgetIndex =
+            source.indexOf("maxTurnsPerTick = maxTurnsPerTick", source.indexOf("K16ComputerRuntimeFactory.restoreFromBiosFlashSnapshot"))
+
+        assertTrue(profileIndex >= 0, "factory should resolve the active device profile from the block family")
+        assertTrue(turnBudgetIndex > profileIndex, "factory should derive K16 turn budget from profile CPU resources")
+        assertTrue(endpointIndex > turnBudgetIndex, "factory should pass profile CPU turn budget into endpoint creation")
+        assertTrue(freshBootTurnBudgetIndex > endpointIndex, "fresh K16 boot should use profile CPU turn budget")
+        assertTrue(restoreTurnBudgetIndex > freshBootTurnBudgetIndex, "K16 restore should use the same profile CPU turn budget")
     }
 
     @Test
@@ -149,7 +175,8 @@ class ComputerRuntimeDeviceFactoryArchitectureTest {
         val storeIndex = source.indexOf("K16RuntimeSnapshotStore(worldRoot)")
         val consumeIndex = source.indexOf("tile.consumePendingRuntimeSnapshot()")
         val durableReadIndex = source.indexOf("snapshotStore.readComputerSnapshotOrNull(deviceId)")
-        val endpointIndex = source.indexOf("createK16ComputerEndpoint(biosFlashPath, storage0, snapshot, memorySize, maxSteps)")
+        val endpointIndex =
+            source.indexOf("createK16ComputerEndpoint(biosFlashPath, storage0, snapshot, memorySize, maxSteps, maxTurnsPerTick)")
 
         assertTrue(storeIndex >= 0, "factory should create a runtime snapshot store from the world root")
         assertTrue(consumeIndex >= 0, "factory should still prefer pending NBT snapshots first")

@@ -56,13 +56,14 @@ object ComputerRuntimeDeviceFactory {
                         minimumBootMemorySize = K16ComputerRuntimeFactory.MINIMUM_BOOT_MEMORY_SIZE,
                     )
                 val maxSteps = k16MaxSteps(profile.resources.cpu.maxStepsPerSlice)
+                val maxTurnsPerTick = k16MaxTurnsPerTick(profile.resources.cpu.maxTurnsPerTick)
                 K16SystemVolumeWorkspace.prepareStorage0Volume(workspace)
                 val storage0 = volumeStore.openOrCreateComputerVolume(deviceId, "storage0")
                 val biosFlashPath = K16BiosFlashWorkspace.prepareBiosFlash(workspace)
                 val snapshot =
                     tile.consumePendingRuntimeSnapshot()
                         ?: snapshotStore.readComputerSnapshotOrNull(deviceId)
-                createK16ComputerEndpoint(biosFlashPath, storage0, snapshot, memorySize, maxSteps)
+                createK16ComputerEndpoint(biosFlashPath, storage0, snapshot, memorySize, maxSteps, maxTurnsPerTick)
             },
             stateSink = host.stateSink,
             displayNetwork = host.displayNetwork,
@@ -89,12 +90,20 @@ object ComputerRuntimeDeviceFactory {
         return maxStepsPerSlice
     }
 
+    private fun k16MaxTurnsPerTick(maxTurnsPerTick: Int): Int {
+        require(maxTurnsPerTick > 0) {
+            "K16 VM max turns per tick must be positive: $maxTurnsPerTick"
+        }
+        return maxTurnsPerTick
+    }
+
     private fun createK16ComputerEndpoint(
         biosFlashPath: Path,
         storage0: K16VolumeBlob,
         snapshot: ByteArray?,
         memorySize: Int,
         maxSteps: Long,
+        maxTurnsPerTick: Int,
     ) =
         try {
             val storage0Path = storage0.path
@@ -105,6 +114,7 @@ object ComputerRuntimeDeviceFactory {
                     storage0Path = storage0Path,
                     memorySize = memorySize,
                     maxSteps = maxSteps,
+                    maxTurnsPerTick = maxTurnsPerTick,
                 )
             } else {
                 K16ComputerRuntimeFactory.restoreFromBiosFlashSnapshot(
@@ -112,6 +122,7 @@ object ComputerRuntimeDeviceFactory {
                     storage0Path = storage0Path,
                     snapshot = snapshot,
                     memorySize = memorySize,
+                    maxTurnsPerTick = maxTurnsPerTick,
                 )
             }
         } catch (error: Throwable) {
