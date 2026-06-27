@@ -386,7 +386,7 @@ class K16RuntimeTextIoProfilingTest {
             )
 
             assertTrue(visibleNanos != null, "ls /bin did not finish and return to the prompt")
-            assertTrue(storageReads < 250, "ls /bin should not stat every child directory entry")
+            assertTrue(storageReads < 60, "ls /bin should reuse cached storage0 backend blocks")
             assertTrue(inputPhase.contains("name=ls:/bin.input"))
             assertTrue(visiblePhase.contains("storageReads="))
             assertTrue(idlePhase.contains("name=ls:/bin.idle"))
@@ -494,7 +494,7 @@ class K16RuntimeTextIoProfilingTest {
                 scrollFrameBytes < 100_000,
                 "scroll-positioned ls /bin should use display ops instead of serializing full-screen tile payloads",
             )
-            assertTrue(storageReads < 250, "scroll-positioned ls /bin should not stat every child directory entry")
+            assertTrue(storageReads < 60, "scroll-positioned ls /bin should reuse cached storage0 backend blocks")
             assertTrue(inputPhase.contains("name=ls:/bin:scroll.input"))
             assertTrue(visiblePhase.contains("storageReads="))
             assertTrue(idlePhase.contains("name=ls:/bin:scroll.idle"))

@@ -17,6 +17,7 @@ pub(crate) struct StoragePortDevice {
     sequence: u64,
     stats: K16ComputerStorageStatsSnapshot,
     media: Option<Box<dyn StorageMedia>>,
+    cache: StorageBlockCache,
 }
 
 pub(crate) struct StoragePortControllerSnapshot {
@@ -42,6 +43,85 @@ pub(crate) trait StorageMedia {
     fn flush(&mut self) -> Result<(), MemoryFault>;
 
     fn snapshot_bytes(&self) -> Option<Vec<u8>>;
+}
+
+#[derive(Clone, Copy)]
+struct StorageBlockCacheSlot {
+    valid: bool,
+    lba: u64,
+    last_used: u64,
+    bytes: [u8; StoragePortDevice::BLOCK_SIZE as usize],
+}
+
+impl StorageBlockCacheSlot {
+    const fn empty() -> Self {
+        Self {
+            valid: false,
+            lba: 0,
+            last_used: 0,
+            bytes: [0; StoragePortDevice::BLOCK_SIZE as usize],
+        }
+    }
+}
+
+struct StorageBlockCache {
+    slots: [StorageBlockCacheSlot; 16],
+    clock: u64,
+}
+
+impl StorageBlockCache {
+    const fn new() -> Self {
+        Self {
+            slots: [StorageBlockCacheSlot::empty(); 16],
+            clock: 0,
+        }
+    }
+
+    fn copy_to(
+        &mut self,
+        lba: u64,
+        out: &mut [u8; StoragePortDevice::BLOCK_SIZE as usize],
+    ) -> bool {
+        for slot in &mut self.slots {
+            if slot.valid && slot.lba == lba {
+                self.clock = self.clock.wrapping_add(1);
+                slot.last_used = self.clock;
+                *out = slot.bytes;
+                return true;
+            }
+        }
+        false
+    }
+
+    fn store(&mut self, lba: u64, bytes: &[u8; StoragePortDevice::BLOCK_SIZE as usize]) {
+        let slot_index = self.slot_for(lba);
+        self.clock = self.clock.wrapping_add(1);
+        self.slots[slot_index] = StorageBlockCacheSlot {
+            valid: true,
+            lba,
+            last_used: self.clock,
+            bytes: *bytes,
+        };
+    }
+
+    fn slot_for(&self, lba: u64) -> usize {
+        let mut first_invalid = None;
+        let mut oldest_index = 0;
+        let mut oldest_age = u64::MAX;
+        for (index, slot) in self.slots.iter().enumerate() {
+            if slot.valid && slot.lba == lba {
+                return index;
+            }
+            if !slot.valid && first_invalid.is_none() {
+                first_invalid = Some(index);
+            }
+            if slot.valid && slot.last_used < oldest_age {
+                oldest_index = index;
+                oldest_age = slot.last_used;
+            }
+        }
+        first_invalid.unwrap_or(oldest_index)
+    }
 }
 
 #[derive(Debug)]
@@ -246,6 +326,7 @@ impl StoragePortDevice {
             sequence: 0,
             stats: K16ComputerStorageStatsSnapshot::default(),
             media: None,
+            cache: StorageBlockCache::new(),
         }
     }
 
@@ -367,44 +448,34 @@ impl StoragePortDevice {
             self.fail(computer_abi::STORAGE_ERROR_BUFFER_OUT_OF_BOUNDS);
             return;
         }
-        let media_start = match lba.checked_mul(u64::from(Self::BLOCK_SIZE)) {
-            Some(value) => value as usize,
-            None => {
-                self.fail(computer_abi::STORAGE_ERROR_LBA_OUT_OF_BOUNDS);
-                return;
-            }
-        };
-        let byte_count_usize = byte_count as usize;
         match command {
-            computer_abi::STORAGE_COMMAND_READ_BLOCKS => {
-                let mut bytes = vec![0; byte_count_usize];
-                if media.read_at(media_start as u64, &mut bytes).is_err() {
-                    self.fail(computer_abi::STORAGE_ERROR_IO_ERROR);
+            computer_abi::STORAGE_COMMAND_READ_BLOCKS => match Self::execute_read_blocks(
+                &mut self.cache,
+                media.as_mut(),
+                memory,
+                self.block_count,
+                self.buffer_addr,
+                lba,
+            ) {
+                Ok((read_commands, bytes_read)) => {
+                    self.stats.read_commands = self.stats.read_commands.wrapping_add(read_commands);
+                    self.stats.bytes_read = self.stats.bytes_read.wrapping_add(bytes_read);
+                }
+                Err(error) => {
+                    self.fail(error);
                     return;
                 }
-                for (offset, byte) in bytes.into_iter().enumerate() {
-                    if memory
-                        .store_u8(self.buffer_addr + offset as u32, byte)
-                        .is_err()
-                    {
-                        self.fail(computer_abi::STORAGE_ERROR_BUFFER_OUT_OF_BOUNDS);
-                        return;
-                    }
-                }
-            }
+            },
             computer_abi::STORAGE_COMMAND_WRITE_BLOCKS => {
-                let mut bytes = vec![0; byte_count_usize];
-                for offset in 0..byte_count_usize {
-                    bytes[offset] = match memory.load_u8(self.buffer_addr + offset as u32) {
-                        Ok(byte) => byte,
-                        Err(_) => {
-                            self.fail(computer_abi::STORAGE_ERROR_BUFFER_OUT_OF_BOUNDS);
-                            return;
-                        }
-                    };
-                }
-                if media.write_at(media_start as u64, &bytes).is_err() {
-                    self.fail(computer_abi::STORAGE_ERROR_IO_ERROR);
+                if let Err(error) = Self::execute_write_blocks(
+                    &mut self.cache,
+                    media.as_mut(),
+                    memory,
+                    self.block_count,
+                    self.buffer_addr,
+                    lba,
+                ) {
+                    self.fail(error);
                     return;
                 }
             }
@@ -414,10 +485,7 @@ impl StoragePortDevice {
         self.error = computer_abi::STORAGE_ERROR_NONE;
         self.bytes_done = byte_count;
         match command {
-            computer_abi::STORAGE_COMMAND_READ_BLOCKS => {
-                self.stats.read_commands = self.stats.read_commands.wrapping_add(1);
-                self.stats.bytes_read = self.stats.bytes_read.wrapping_add(u64::from(byte_count));
-            }
+            computer_abi::STORAGE_COMMAND_READ_BLOCKS => {}
             computer_abi::STORAGE_COMMAND_WRITE_BLOCKS => {
                 self.stats.write_commands = self.stats.write_commands.wrapping_add(1);
                 self.stats.bytes_written =
@@ -425,6 +493,71 @@ impl StoragePortDevice {
             }
             _ => unreachable!("transfer command is validated by caller"),
         }
+    }
+
+    fn execute_read_blocks(
+        cache: &mut StorageBlockCache,
+        media: &mut dyn StorageMedia,
+        memory: &mut MachineMemory,
+        block_count: u32,
+        buffer_addr: u32,
+        lba: u64,
+    ) -> Result<(u64, u64), i32> {
+        let mut media_read_commands = 0_u64;
+        let mut media_bytes_read = 0_u64;
+        for block_index in 0..block_count {
+            let block_lba = lba + u64::from(block_index);
+            let mut block = [0_u8; Self::BLOCK_SIZE as usize];
+            if !cache.copy_to(block_lba, &mut block) {
+                let media_offset = match block_lba.checked_mul(u64::from(Self::BLOCK_SIZE)) {
+                    Some(value) => value,
+                    None => return Err(computer_abi::STORAGE_ERROR_LBA_OUT_OF_BOUNDS),
+                };
+                if media.read_at(media_offset, &mut block).is_err() {
+                    return Err(computer_abi::STORAGE_ERROR_IO_ERROR);
+                }
+                cache.store(block_lba, &block);
+                media_read_commands = media_read_commands.wrapping_add(1);
+                media_bytes_read = media_bytes_read.wrapping_add(u64::from(Self::BLOCK_SIZE));
+            }
+            let memory_base = buffer_addr + block_index * Self::BLOCK_SIZE;
+            for (offset, byte) in block.into_iter().enumerate() {
+                if memory.store_u8(memory_base + offset as u32, byte).is_err() {
+                    return Err(computer_abi::STORAGE_ERROR_BUFFER_OUT_OF_BOUNDS);
+                }
+            }
+        }
+        Ok((media_read_commands, media_bytes_read))
+    }
+
+    fn execute_write_blocks(
+        cache: &mut StorageBlockCache,
+        media: &mut dyn StorageMedia,
+        memory: &MachineMemory,
+        block_count: u32,
+        buffer_addr: u32,
+        lba: u64,
+    ) -> Result<(), i32> {
+        for block_index in 0..block_count {
+            let block_lba = lba + u64::from(block_index);
+            let mut block = [0_u8; Self::BLOCK_SIZE as usize];
+            let memory_base = buffer_addr + block_index * Self::BLOCK_SIZE;
+            for (offset, byte) in block.iter_mut().enumerate() {
+                *byte = match memory.load_u8(memory_base + offset as u32) {
+                    Ok(byte) => byte,
+                    Err(_) => return Err(computer_abi::STORAGE_ERROR_BUFFER_OUT_OF_BOUNDS),
+                };
+            }
+            let media_offset = match block_lba.checked_mul(u64::from(Self::BLOCK_SIZE)) {
+                Some(value) => value,
+                None => return Err(computer_abi::STORAGE_ERROR_LBA_OUT_OF_BOUNDS),
+            };
+            if media.write_at(media_offset, &block).is_err() {
+                return Err(computer_abi::STORAGE_ERROR_IO_ERROR);
+            }
+            cache.store(block_lba, &block);
+        }
+        Ok(())
     }
 
     fn fail(&mut self, error: i32) {
@@ -540,6 +673,11 @@ mod tests {
         flush_count: Rc<Cell<u32>>,
     }
 
+    struct CountingReadMedia {
+        bytes: Vec<u8>,
+        read_count: Rc<Cell<u32>>,
+    }
+
     impl StorageMedia for CountingFlushMedia {
         fn len(&self) -> u64 {
             self.bytes.len() as u64
@@ -571,6 +709,37 @@ mod tests {
         }
     }
 
+    impl StorageMedia for CountingReadMedia {
+        fn len(&self) -> u64 {
+            self.bytes.len() as u64
+        }
+
+        fn is_read_only(&self) -> bool {
+            false
+        }
+
+        fn read_at(&mut self, offset: u64, dst: &mut [u8]) -> Result<(), MemoryFault> {
+            self.read_count.set(self.read_count.get() + 1);
+            let offset = offset as usize;
+            dst.copy_from_slice(&self.bytes[offset..offset + dst.len()]);
+            Ok(())
+        }
+
+        fn write_at(&mut self, offset: u64, src: &[u8]) -> Result<(), MemoryFault> {
+            let offset = offset as usize;
+            self.bytes[offset..offset + src.len()].copy_from_slice(src);
+            Ok(())
+        }
+
+        fn flush(&mut self) -> Result<(), MemoryFault> {
+            Ok(())
+        }
+
+        fn snapshot_bytes(&self) -> Option<Vec<u8>> {
+            Some(self.bytes.clone())
+        }
+    }
+
     #[test]
     fn storage_port_flush_delegates_to_media_backend() {
         let flush_count = Rc::new(Cell::new(0));
@@ -589,6 +758,70 @@ mod tests {
             device.load_i32(4).unwrap(),
             computer_abi::STORAGE_STATUS_DONE,
         );
+    }
+
+    #[test]
+    fn storage_port_read_blocks_reuses_cached_backend_block() {
+        let read_count = Rc::new(Cell::new(0));
+        let mut media_bytes = vec![0_u8; 512];
+        media_bytes[0] = 0xA5;
+        media_bytes[511] = 0x5A;
+        let media = CountingReadMedia {
+            bytes: media_bytes,
+            read_count: read_count.clone(),
+        };
+        let mut device = StoragePortDevice::with_media_backend(Box::new(media)).unwrap();
+        let mut memory = MachineMemory::zeroed(2048).unwrap();
+        device.store_i32(28, 0).unwrap();
+        device.store_i32(32, 0).unwrap();
+        device.store_i32(36, 1).unwrap();
+        device.store_i32(40, 512).unwrap();
+
+        device
+            .store_i32_with_memory(12, computer_abi::STORAGE_COMMAND_READ_BLOCKS, &mut memory)
+            .unwrap();
+        memory.store_u8(512, 0).unwrap();
+        memory.store_u8(1023, 0).unwrap();
+        device
+            .store_i32_with_memory(12, computer_abi::STORAGE_COMMAND_READ_BLOCKS, &mut memory)
+            .unwrap();
+
+        assert_eq!(read_count.get(), 1);
+        assert_eq!(memory.load_u8(512).unwrap(), 0xA5);
+        assert_eq!(memory.load_u8(1023).unwrap(), 0x5A);
+    }
+
+    #[test]
+    fn storage_port_write_blocks_updates_cached_backend_block() {
+        let read_count = Rc::new(Cell::new(0));
+        let media = CountingReadMedia {
+            bytes: vec![0_u8; 512],
+            read_count: read_count.clone(),
+        };
+        let mut device = StoragePortDevice::with_media_backend(Box::new(media)).unwrap();
+        let mut memory = MachineMemory::zeroed(2048).unwrap();
+        device.store_i32(28, 0).unwrap();
+        device.store_i32(32, 0).unwrap();
+        device.store_i32(36, 1).unwrap();
+        device.store_i32(40, 512).unwrap();
+
+        device
+            .store_i32_with_memory(12, computer_abi::STORAGE_COMMAND_READ_BLOCKS, &mut memory)
+            .unwrap();
+        memory.store_u8(512, 0xC3).unwrap();
+        memory.store_u8(1023, 0x3C).unwrap();
+        device
+            .store_i32_with_memory(12, computer_abi::STORAGE_COMMAND_WRITE_BLOCKS, &mut memory)
+            .unwrap();
+        memory.store_u8(512, 0).unwrap();
+        memory.store_u8(1023, 0).unwrap();
+        device
+            .store_i32_with_memory(12, computer_abi::STORAGE_COMMAND_READ_BLOCKS, &mut memory)
+            .unwrap();
+
+        assert_eq!(read_count.get(), 1);
+        assert_eq!(memory.load_u8(512).unwrap(), 0xC3);
+        assert_eq!(memory.load_u8(1023).unwrap(), 0x3C);
     }
 
     #[test]
