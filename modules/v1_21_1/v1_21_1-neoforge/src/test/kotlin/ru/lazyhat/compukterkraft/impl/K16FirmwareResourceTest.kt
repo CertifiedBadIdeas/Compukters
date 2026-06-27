@@ -1,9 +1,11 @@
 package ru.lazyhat.compukterkraft.impl
 
 import org.junit.jupiter.api.Disabled
+import ru.lazyhat.compukterkraft.common.computer.client.ClientDisplayBuffer
 import ru.lazyhat.compukterkraft.core.block.DeviceFamily
 import ru.lazyhat.compukterkraft.core.device.DeviceProperties
 import ru.lazyhat.compukterkraft.core.device.runtime.K16RuntimeDevice
+import ru.lazyhat.compukterkraft.core.device.runtime.ports.DisplayNetworkBridge
 import ru.lazyhat.compukterkraft.core.device.vm.display.NativeDisplayFrameCodec
 import ru.lazyhat.compukterkraft.core.input.KeyCodes
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16BiosFlashWorkspace
@@ -18,6 +20,8 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.file.Files
 import java.nio.file.Path
+import java.util.UUID
+import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.io.path.createTempDirectory
 import kotlin.io.path.readBytes
 import kotlin.io.path.readText
@@ -2892,6 +2896,67 @@ class K16FirmwareResourceTest {
     }
 
     @Test
+    fun runtimeDeviceDisplaySessionReplacesBiosSplashWithShellFrames() {
+        val workspace = createTempDirectory("k16-runtime-device-splash-display-test-")
+        val biosFlashPath = workspace.resolve("bios.kflash")
+        val storage0Path = workspace.resolve("storage0.kv")
+        biosFlashPath.writeBytes(K16BiosFlashWorkspace.loadBiosFlashResource(classLoader = javaClass.classLoader))
+        storage0Path.writeBytes(K16SystemVolumeWorkspace.loadStorage0VolumeResource(classLoader = javaClass.classLoader))
+        val displayNetwork = FirmwareCapturingDisplayNetworkBridge()
+        val device =
+            K16RuntimeDevice(
+                deviceId = 219,
+                properties = DeviceProperties(DeviceFamily.NORMAL, label = null),
+                endpointFactory = {
+                    K16ComputerRuntimeFactory.createFromBiosFlash(
+                        biosFlashPath = biosFlashPath,
+                        storage0Path = storage0Path,
+                    )
+                },
+                stateSink = {},
+                displayNetwork = displayNetwork,
+            )
+
+        try {
+            device.turnOn()
+            device.attachDisplaySession(
+                playerUuid = UUID.fromString("00000000-0000-0000-0000-000000000219"),
+                containerId = 219,
+                displayId = 1,
+                width = 320,
+                height = 200,
+            )
+            repeat(80) {
+                device.serverTick()
+                val snapshot = device.snapshotRuntimeState()
+                if (snapshot != null && terminalText(snapshot).contains("K16> ")) {
+                    device.serverTick()
+                    val frames = displayNetwork.sentFrames()
+                    val buffer = ClientDisplayBuffer(displayId = 1, width = 320, height = 200)
+                    for (frame in frames) {
+                        assertTrue(
+                            buffer.apply(frame),
+                            "client display buffer should accept shell display frame; ${frames.describeDisplayFrames()}",
+                        )
+                    }
+                    buffer.swapIfDirty()
+                    val framebuffer = buffer.frontArgb()
+                    assertContentEquals(
+                        intArrayOf(0, 0, 0, 0, 0, 0, 0),
+                        framebuffer.biosGreenRowsAt(x = 8, y = 8),
+                        "client display buffer should replace the old green BIOS banner once the shell prompt is visible; ${frames.describeDisplayFrames()}",
+                    )
+                    return
+                }
+            }
+            val snapshot = device.snapshotRuntimeState()
+            error("K16 runtime device did not reach shell prompt; terminal: ${snapshot?.let(::terminalText)}")
+        } finally {
+            device.close()
+        }
+    }
+
+    @Test
     fun bundledK16BiosSplashRendersDistinctBannerGlyphs() {
         val workspace = createTempDirectory("k16-firmware-splash-glyph-test-")
         val biosFlashPath = workspace.resolve("bios.kflash")
@@ -2967,6 +3032,12 @@ class K16FirmwareResourceTest {
             tile.payload.asSequence().any { it != 0.toByte() }
         }
 
+    private fun List<DisplayFrameDelta>.describeDisplayFrames(): String =
+        joinToString(prefix = "frames=[", postfix = "]") { frame ->
+            val hasTopLeftTile = frame.tiles.any { it.tileX == 0 && it.tileY == 0 }
+            "seq=${frame.sequence},full=${frame.fullRefresh},tiles=${frame.tiles.size},topLeft=$hasTopLeftTile"
+        }
+
     private fun ByteArray.u16Le(offset: Int): Int =
         (this[offset].toInt() and 0xFF) or
             ((this[offset + 1].toInt() and 0xFF) shl 8)
@@ -3016,6 +3087,27 @@ class K16FirmwareResourceTest {
             var column = 0
             while (column < 5) {
                 if (this[(y + row) * 320 + x + column] != 0) {
+                    bits = bits or (1 shl (4 - column))
+                }
+                column += 1
+            }
+            rows[row] = bits
+            row += 1
+        }
+        return rows
+    }
+
+    private fun IntArray.biosGreenRowsAt(
+        x: Int,
+        y: Int,
+    ): IntArray {
+        val rows = IntArray(7)
+        var row = 0
+        while (row < rows.size) {
+            var bits = 0
+            var column = 0
+            while (column < 5) {
+                if (this[(y + row) * 320 + x + column] == 0xFF00FF00.toInt()) {
                     bits = bits or (1 shl (4 - column))
                 }
                 column += 1
@@ -3312,6 +3404,27 @@ class K16FirmwareResourceTest {
             }
         return "$os-$cpu"
     }
+}
+
+private class FirmwareCapturingDisplayNetworkBridge : DisplayNetworkBridge {
+    private val frames = CopyOnWriteArrayList<DisplayFrameDelta>()
+
+    override fun isDisplaySessionStillBound(
+        playerUuid: UUID,
+        containerId: Int,
+        deviceId: Int,
+        displayId: Int,
+    ): Boolean = true
+
+    override fun sendDisplayFrame(
+        playerUuid: UUID,
+        containerId: Int,
+        frame: DisplayFrameDelta,
+    ) {
+        frames += frame
+    }
+
+    fun sentFrames(): List<DisplayFrameDelta> = frames.toList()
 }
 
 private const val K16_SNAPSHOT_CPU_RECORD_SIZE = 208
