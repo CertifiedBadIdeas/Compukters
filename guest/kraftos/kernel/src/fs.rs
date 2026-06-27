@@ -463,6 +463,7 @@ pub unsafe fn open_root_file_for_process(
     path: &[u8],
     flags: u32,
 ) -> Result<u32, FsError> {
+    crate::os_stats::record_file_open();
     if flags != OPEN_READ_ONLY
         && flags != OPEN_CREATE_TRUNCATE_FLAGS
         && flags != OPEN_CREATE_APPEND_FLAGS
@@ -605,6 +606,7 @@ pub unsafe fn copy_file_fd_range_to_ram_for_process(
     ptr: u32,
     len: u32,
 ) -> Result<u32, FsError> {
+    crate::os_stats::record_file_read();
     let descriptor = unsafe {
         RUNTIME_FD_TABLE
             .get()
@@ -697,6 +699,7 @@ pub unsafe fn read_root_directory_into<S: DirectoryByteSink>(
 
 #[cfg(any(not(test), feature = "host-test"))]
 pub unsafe fn stat_root_path(path: &[u8]) -> Result<PathMetadata, FsError> {
+    crate::os_stats::record_stat_call();
     let path = RootMetadataPath::parse(path)?;
     let components = path.components();
     let metadata = unsafe {

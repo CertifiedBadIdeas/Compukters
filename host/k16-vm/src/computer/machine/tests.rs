@@ -1793,6 +1793,36 @@ fn storage0_stats_snapshot_counts_block_commands_flush_and_failures() {
 }
 
 #[test]
+fn stats_snapshot_reads_registered_os_stats_from_guest_ram() {
+    let profile = ComputerMachineProfile::new(2048).with_hardware(ComputerHardwareConfig::control(
+        computer_abi::COMPUTER_HARDWARE_ID_CONTROL,
+        computer_abi::CONTROL_BASE,
+    ));
+    let mut machine = ComputerMachine::from_profile(profile).unwrap();
+    machine.memory_mut().store_u64(512, 11).unwrap();
+    machine.memory_mut().store_u64(520, 12).unwrap();
+    machine.memory_mut().store_u64(528, 13).unwrap();
+    machine.memory_mut().store_u64(536, 14).unwrap();
+    machine.memory_mut().store_u64(544, 15).unwrap();
+    machine.memory_mut().store_u64(552, 16).unwrap();
+    machine
+        .bus_store_i32(computer_abi::CONTROL_OS_STATS_ADDR, 512)
+        .unwrap();
+    machine
+        .bus_store_i32(computer_abi::CONTROL_OS_STATS_SIZE, 48)
+        .unwrap();
+
+    let snapshot = machine.stats_snapshot();
+
+    assert_eq!(snapshot.os.path_lookups, 11);
+    assert_eq!(snapshot.os.inode_loads, 12);
+    assert_eq!(snapshot.os.dir_entry_scans, 13);
+    assert_eq!(snapshot.os.file_opens, 14);
+    assert_eq!(snapshot.os.file_reads, 15);
+    assert_eq!(snapshot.os.stat_calls, 16);
+}
+
+#[test]
 fn storage0_file_media_write_blocks_flushes_payload_file() {
     let path = temp_volume_path("machine-storage0-file");
     write_k16_volume(&path, &[0; 512]);
@@ -2235,6 +2265,14 @@ fn computer_machine_constants_match_profile_v2_abi() {
         computer_abi::CONTROL_EXIT_CODE,
     );
     assert_eq!(ComputerMachine::CONTROL_YIELD, computer_abi::CONTROL_YIELD);
+    assert_eq!(
+        ComputerMachine::CONTROL_OS_STATS_ADDR,
+        computer_abi::CONTROL_OS_STATS_ADDR,
+    );
+    assert_eq!(
+        ComputerMachine::CONTROL_OS_STATS_SIZE,
+        computer_abi::CONTROL_OS_STATS_SIZE,
+    );
     assert_eq!(ComputerMachine::CONTROL_SIZE, computer_abi::CONTROL_SIZE);
     assert_eq!(ComputerMachine::DEBUG_BASE, computer_abi::DEBUG_BASE);
     assert_eq!(ComputerMachine::DEBUG_WRITE, computer_abi::DEBUG_WRITE);

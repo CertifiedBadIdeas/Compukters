@@ -3,6 +3,7 @@ use crate::low_bus::{MachineBusStatsSnapshot, MachineBusTrafficSnapshot, MmioDev
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct K16ComputerStatsSnapshot {
     pub bus: MachineBusStatsSnapshot,
+    pub os: K16ComputerOsStatsSnapshot,
     pub devices: Vec<K16ComputerDeviceStats>,
 }
 
@@ -25,6 +26,16 @@ pub struct K16ComputerStorageStatsSnapshot {
     pub bytes_read: u64,
     pub bytes_written: u64,
     pub failed_commands: u64,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct K16ComputerOsStatsSnapshot {
+    pub path_lookups: u64,
+    pub inode_loads: u64,
+    pub dir_entry_scans: u64,
+    pub file_opens: u64,
+    pub file_reads: u64,
+    pub stat_calls: u64,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]

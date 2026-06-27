@@ -9,7 +9,7 @@ use k16_vm::k16::{
 };
 use k16_vm::mmu::MmuMapFlags;
 
-const CONTROL_DEVICE_RECORD_SIZE: usize = 20;
+const CONTROL_DEVICE_RECORD_SIZE: usize = 28;
 const EMPTY_DEBUG_DEVICE_RECORD_SIZE: usize = 8;
 const EMPTY_SERIAL_INPUT_DEVICE_RECORD_SIZE: usize = 8;
 const STORAGE0_DEVICE_RECORD_SIZE: usize = 44;
@@ -703,7 +703,7 @@ fn computer_machine_snapshot_v1_rejects_invalid_device_record_fields() {
         .copy_from_slice(&11_u32.to_le_bytes());
     assert_eq!(
         decode_snapshot_v1(&bad_control_payload_size).unwrap_err(),
-        "ComputerMachine snapshot control device payload has 11 bytes but expected 12"
+        "ComputerMachine snapshot control device payload has 11 bytes but expected 20 or 12"
     );
 
     let mut bad_storage0_payload_size = snapshot.clone();

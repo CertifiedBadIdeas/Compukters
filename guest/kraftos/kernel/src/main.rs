@@ -16,6 +16,7 @@ mod image;
 mod init;
 mod memory_layout;
 mod mmio;
+mod os_stats;
 mod page_alloc;
 mod process;
 mod stdin;
@@ -33,6 +34,7 @@ use core::panic::PanicInfo;
 #[no_mangle]
 pub extern "C" fn _start() -> ! {
     console::init();
+    os_stats::register();
     debug::print_kernel_ok();
     trap::initialize();
     control::set_ready();
