@@ -26,6 +26,13 @@ import ru.lazyhat.compukterkraft.core.device.input.KeyInputEvent
 import ru.lazyhat.compukterkraft.core.device.input.PasteInputEvent
 import ru.lazyhat.compukterkraft.core.device.runtime.K16RuntimeDevice
 import ru.lazyhat.compukterkraft.core.device.runtime.RecordingRuntimeMetricsCollector
+import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeK16BusTrafficMetrics
+import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeK16GpuMetrics
+import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeK16MmioDeviceMetrics
+import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeK16StatsMetrics
+import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeK16StorageMetrics
+import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeProfilingSnapshot
+import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeVmMetrics
 import ru.lazyhat.compukterkraft.core.device.runtime.ports.DisplayNetworkBridge
 import ru.lazyhat.compukterkraft.core.device.vm.DeviceProfileRegistry
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16BiosFlashWorkspace
@@ -42,6 +49,73 @@ import kotlin.test.Test
 import kotlin.test.assertTrue
 
 class K16RuntimeTextIoProfilingTest {
+    @Test
+    fun formatsK16RuntimePhaseBreakdownWithStorageAndDisplayDeltas() {
+        val before =
+            RuntimeProfilingSnapshot(
+                vm =
+                    RuntimeVmMetrics(
+                        k16RunSlices = 1,
+                        k16RunNanos = 10,
+                        k16RunWaitSignals = 1,
+                        k16GpuFrameBytes = 100,
+                        k16TextInputBytes = 2,
+                    ),
+                k16 =
+                    RuntimeK16StatsMetrics(
+                        devices =
+                            listOf(
+                                RuntimeK16MmioDeviceMetrics(
+                                    deviceId = 1,
+                                    base = 0,
+                                    size = 1,
+                                    traffic = RuntimeK16BusTrafficMetrics(),
+                                    storage = RuntimeK16StorageMetrics(readCommands = 3, bytesRead = 1024),
+                                    gpu = RuntimeK16GpuMetrics(frames = 4, framePayloadBytes = 128),
+                                ),
+                            ),
+                    ),
+            )
+        val after =
+            RuntimeProfilingSnapshot(
+                vm =
+                    RuntimeVmMetrics(
+                        k16RunSlices = 6,
+                        k16RunNanos = 60,
+                        k16RunWaitSignals = 2,
+                        k16GpuFrameBytes = 180,
+                        k16TextInputBytes = 7,
+                    ),
+                k16 =
+                    RuntimeK16StatsMetrics(
+                        devices =
+                            listOf(
+                                RuntimeK16MmioDeviceMetrics(
+                                    deviceId = 1,
+                                    base = 0,
+                                    size = 1,
+                                    traffic = RuntimeK16BusTrafficMetrics(),
+                                    storage = RuntimeK16StorageMetrics(readCommands = 5, bytesRead = 2048),
+                                    gpu = RuntimeK16GpuMetrics(frames = 9, framePayloadBytes = 384),
+                                ),
+                            ),
+                    ),
+            )
+
+        val line = formatK16RuntimePhase("ls:/bin.visible", elapsedNanos = 123, before = before, after = after)
+
+        assertTrue(line.startsWith("k16Phase: name=ls:/bin.visible, elapsed=123 ns"))
+        assertTrue(line.contains("slices=5"))
+        assertTrue(line.contains("runTime=50 ns"))
+        assertTrue(line.contains("waitSignals=1"))
+        assertTrue(line.contains("inputBytes=5"))
+        assertTrue(line.contains("gpuFrameBytes=80"))
+        assertTrue(line.contains("displayFrames=5"))
+        assertTrue(line.contains("displayBytes=256"))
+        assertTrue(line.contains("storageReads=2"))
+        assertTrue(line.contains("storageBytesRead=1024"))
+    }
+
     @Test
     fun printsK16TextIoRuntimeSummary() {
         val workspace = createTempDirectory("k16-runtime-text-io-profile-")
@@ -69,13 +143,21 @@ class K16RuntimeTextIoProfilingTest {
 
         try {
             device.turnOn()
+            val phases = K16RuntimePhaseProfiler(metrics)
             waitForTerminal(device, "initial shell prompt") { terminal -> terminal.contains("K16> ") }
+            val bootPhase = phases.mark("boot.prompt")
             val typedCommand = "ticks\n"
             dispatchText(device, typedCommand)
+            val typedInputPhase = phases.mark("ticks.input")
             waitForTerminal(device, "typed ticks output") { terminal -> terminal.contains("TICKS ") }
+            val typedVisiblePhase = phases.mark("ticks.visible")
+            repeat(2) { tickAndSync(device) }
+            val typedIdlePhase = phases.mark("ticks.idle")
             val pastedCommand = "echo text-io-profile\n"
             dispatchPasteText(device, pastedCommand)
+            val pastedInputPhase = phases.mark("echo:text-io-profile.input")
             waitForTerminal(device, "pasted echo output") { terminal -> terminal.contains("text-io-profile") }
+            val pastedVisiblePhase = phases.mark("echo:text-io-profile.visible")
 
             val snapshot = metrics.snapshot()
             val summary = snapshot.summary()
@@ -95,6 +177,12 @@ class K16RuntimeTextIoProfilingTest {
             assertTrue(summary.contains("k16TextOutput: snapshots="))
             assertTrue(summary.contains("k16Gpu: blits="))
             assertTrue(summary.contains("k16TextInput: events="))
+            assertTrue(bootPhase.contains("name=boot.prompt"))
+            assertTrue(typedInputPhase.contains("name=ticks.input"))
+            assertTrue(typedVisiblePhase.contains("name=ticks.visible"))
+            assertTrue(typedIdlePhase.contains("name=ticks.idle"))
+            assertTrue(pastedInputPhase.contains("name=echo:text-io-profile.input"))
+            assertTrue(pastedVisiblePhase.contains("name=echo:text-io-profile.visible"))
         } finally {
             device.close()
         }
@@ -227,11 +315,13 @@ class K16RuntimeTextIoProfilingTest {
         try {
             device.turnOn()
             waitForTerminal(device, "initial shell prompt") { terminal -> terminal.contains("K16> ") }
+            val phases = K16RuntimePhaseProfiler(metrics)
             val before = metrics.snapshot()
             val command = "ls /bin\n"
             val startedAt = System.nanoTime()
             DeviceEvents.dispatch(device, PasteInputEvent(ByteBuffer.wrap(command.encodeToByteArray())))
             val inputQueuedNanos = System.nanoTime() - startedAt
+            val inputPhase = phases.mark("ls:/bin.input")
             var ticks = 0
             var visibleNanos: Long? = null
 
@@ -259,6 +349,9 @@ class K16RuntimeTextIoProfilingTest {
                 Thread.sleep(1)
             }
 
+            val visiblePhase = phases.mark("ls:/bin.visible")
+            repeat(2) { tickAndSync(device) }
+            val idlePhase = phases.mark("ls:/bin.idle")
             val after = metrics.snapshot()
             val gpuBefore = before.k16.gpu
             val gpuAfter = after.k16.gpu
@@ -292,6 +385,9 @@ class K16RuntimeTextIoProfilingTest {
             )
 
             assertTrue(visibleNanos != null, "ls /bin did not finish and return to the prompt")
+            assertTrue(inputPhase.contains("name=ls:/bin.input"))
+            assertTrue(visiblePhase.contains("storageReads="))
+            assertTrue(idlePhase.contains("name=ls:/bin.idle"))
         } finally {
             device.close()
         }
@@ -326,11 +422,13 @@ class K16RuntimeTextIoProfilingTest {
             device.turnOn()
             waitForTerminal(device, "initial shell prompt") { terminal -> terminal.contains("K16> ") }
             fillTerminalUntilPromptIsNearBottom(device)
+            val phases = K16RuntimePhaseProfiler(metrics)
             val before = metrics.snapshot()
             val command = "ls /bin\n"
             val startedAt = System.nanoTime()
             DeviceEvents.dispatch(device, PasteInputEvent(ByteBuffer.wrap(command.encodeToByteArray())))
             val inputQueuedNanos = System.nanoTime() - startedAt
+            val inputPhase = phases.mark("ls:/bin:scroll.input")
             var ticks = 0
             var visibleNanos: Long? = null
 
@@ -352,6 +450,9 @@ class K16RuntimeTextIoProfilingTest {
                 Thread.sleep(1)
             }
 
+            val visiblePhase = phases.mark("ls:/bin:scroll.visible")
+            repeat(2) { tickAndSync(device) }
+            val idlePhase = phases.mark("ls:/bin:scroll.idle")
             val after = metrics.snapshot()
             val gpuBefore = before.k16.gpu
             val gpuAfter = after.k16.gpu
@@ -390,6 +491,9 @@ class K16RuntimeTextIoProfilingTest {
                 scrollFrameBytes < 100_000,
                 "scroll-positioned ls /bin should use display ops instead of serializing full-screen tile payloads",
             )
+            assertTrue(inputPhase.contains("name=ls:/bin:scroll.input"))
+            assertTrue(visiblePhase.contains("storageReads="))
+            assertTrue(idlePhase.contains("name=ls:/bin:scroll.idle"))
         } finally {
             device.close()
         }
@@ -472,6 +576,55 @@ private data class TimedDisplayFrame(
     val nanos: Long,
     val frame: DisplayFrameDelta,
 )
+
+private class K16RuntimePhaseProfiler(
+    private val metrics: RecordingRuntimeMetricsCollector,
+) {
+    private var phaseStartedAt = System.nanoTime()
+    private var snapshot = metrics.snapshot()
+
+    fun mark(name: String): String {
+        val now = System.nanoTime()
+        val after = metrics.snapshot()
+        val line = formatK16RuntimePhase(name, now - phaseStartedAt, snapshot, after)
+        println(line)
+        phaseStartedAt = now
+        snapshot = after
+        return line
+    }
+}
+
+private fun formatK16RuntimePhase(
+    name: String,
+    elapsedNanos: Long,
+    before: RuntimeProfilingSnapshot,
+    after: RuntimeProfilingSnapshot,
+): String {
+    val vmBefore = before.vm
+    val vmAfter = after.vm
+    val storageBefore = before.k16.storage0
+    val storageAfter = after.k16.storage0
+    val gpuBefore = before.k16.gpu
+    val gpuAfter = after.k16.gpu
+    return "k16Phase: name=$name, elapsed=$elapsedNanos ns, " +
+        "slices=${vmAfter.k16RunSlices - vmBefore.k16RunSlices}, " +
+        "runTime=${vmAfter.k16RunNanos - vmBefore.k16RunNanos} ns, " +
+        "yieldSignals=${vmAfter.k16RunYieldSignals - vmBefore.k16RunYieldSignals}, " +
+        "waitSignals=${vmAfter.k16RunWaitSignals - vmBefore.k16RunWaitSignals}, " +
+        "pauseSignals=${vmAfter.k16RunPauseSignals - vmBefore.k16RunPauseSignals}, " +
+        "inputWakeups=${vmAfter.k16WaitInputWakeups - vmBefore.k16WaitInputWakeups}, " +
+        "inputBytes=${vmAfter.k16TextInputBytes - vmBefore.k16TextInputBytes}, " +
+        "gpuFrameBatches=${vmAfter.k16GpuFrameBatches - vmBefore.k16GpuFrameBatches}, " +
+        "gpuFrameBytes=${vmAfter.k16GpuFrameBytes - vmBefore.k16GpuFrameBytes}, " +
+        "displayFrames=${gpuAfter.frames - gpuBefore.frames}, " +
+        "displayTiles=${gpuAfter.frameTiles - gpuBefore.frameTiles}, " +
+        "displayBytes=${gpuAfter.framePayloadBytes - gpuBefore.framePayloadBytes}, " +
+        "storageReads=${storageAfter.readCommands - storageBefore.readCommands}, " +
+        "storageWrites=${storageAfter.writeCommands - storageBefore.writeCommands}, " +
+        "storageFlushes=${storageAfter.flushCommands - storageBefore.flushCommands}, " +
+        "storageBytesRead=${storageAfter.bytesRead - storageBefore.bytesRead}, " +
+        "storageBytesWritten=${storageAfter.bytesWritten - storageBefore.bytesWritten}"
+}
 
 private class CapturingDisplayNetworkBridge : DisplayNetworkBridge {
     private val sentFrames = CopyOnWriteArrayList<TimedDisplayFrame>()
