@@ -8,6 +8,7 @@ pub mod fs;
 pub mod image;
 pub mod memory_layout;
 pub mod mmio;
+pub mod os_stats;
 pub mod page_alloc;
 pub mod process;
 pub mod storage;

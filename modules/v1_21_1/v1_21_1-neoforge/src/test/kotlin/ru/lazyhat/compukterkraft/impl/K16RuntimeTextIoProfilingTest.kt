@@ -29,6 +29,7 @@ import ru.lazyhat.compukterkraft.core.device.runtime.RecordingRuntimeMetricsColl
 import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeK16BusTrafficMetrics
 import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeK16GpuMetrics
 import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeK16MmioDeviceMetrics
+import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeK16OsMetrics
 import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeK16StatsMetrics
 import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeK16StorageMetrics
 import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeProfilingSnapshot
@@ -63,6 +64,15 @@ class K16RuntimeTextIoProfilingTest {
                     ),
                 k16 =
                     RuntimeK16StatsMetrics(
+                        os =
+                            RuntimeK16OsMetrics(
+                                pathLookups = 10,
+                                inodeLoads = 11,
+                                dirEntryScans = 12,
+                                fileOpens = 13,
+                                fileReads = 14,
+                                statCalls = 15,
+                            ),
                         devices =
                             listOf(
                                 RuntimeK16MmioDeviceMetrics(
@@ -88,6 +98,15 @@ class K16RuntimeTextIoProfilingTest {
                     ),
                 k16 =
                     RuntimeK16StatsMetrics(
+                        os =
+                            RuntimeK16OsMetrics(
+                                pathLookups = 17,
+                                inodeLoads = 19,
+                                dirEntryScans = 23,
+                                fileOpens = 29,
+                                fileReads = 31,
+                                statCalls = 37,
+                            ),
                         devices =
                             listOf(
                                 RuntimeK16MmioDeviceMetrics(
@@ -114,6 +133,12 @@ class K16RuntimeTextIoProfilingTest {
         assertTrue(line.contains("displayBytes=256"))
         assertTrue(line.contains("storageReads=2"))
         assertTrue(line.contains("storageBytesRead=1024"))
+        assertTrue(line.contains("pathLookups=7"))
+        assertTrue(line.contains("inodeLoads=8"))
+        assertTrue(line.contains("dirEntryScans=11"))
+        assertTrue(line.contains("fileOpens=16"))
+        assertTrue(line.contains("fileReads=17"))
+        assertTrue(line.contains("statCalls=22"))
     }
 
     @Test
@@ -389,6 +414,9 @@ class K16RuntimeTextIoProfilingTest {
             assertTrue(storageReads < 60, "ls /bin should reuse cached storage0 backend blocks")
             assertTrue(inputPhase.contains("name=ls:/bin.input"))
             assertTrue(visiblePhase.contains("storageReads="))
+            assertTrue(visiblePhase.contains("pathLookups="))
+            assertTrue(visiblePhase.contains("dirEntryScans="))
+            assertTrue(visiblePhase.contains("statCalls="))
             assertTrue(idlePhase.contains("name=ls:/bin.idle"))
         } finally {
             device.close()
@@ -497,6 +525,9 @@ class K16RuntimeTextIoProfilingTest {
             assertTrue(storageReads < 60, "scroll-positioned ls /bin should reuse cached storage0 backend blocks")
             assertTrue(inputPhase.contains("name=ls:/bin:scroll.input"))
             assertTrue(visiblePhase.contains("storageReads="))
+            assertTrue(visiblePhase.contains("pathLookups="))
+            assertTrue(visiblePhase.contains("dirEntryScans="))
+            assertTrue(visiblePhase.contains("statCalls="))
             assertTrue(idlePhase.contains("name=ls:/bin:scroll.idle"))
         } finally {
             device.close()
@@ -610,6 +641,8 @@ private fun formatK16RuntimePhase(
     val storageAfter = after.k16.storage0
     val gpuBefore = before.k16.gpu
     val gpuAfter = after.k16.gpu
+    val osBefore = before.k16.os
+    val osAfter = after.k16.os
     return "k16Phase: name=$name, elapsed=$elapsedNanos ns, " +
         "slices=${vmAfter.k16RunSlices - vmBefore.k16RunSlices}, " +
         "runTime=${vmAfter.k16RunNanos - vmBefore.k16RunNanos} ns, " +
@@ -627,7 +660,13 @@ private fun formatK16RuntimePhase(
         "storageWrites=${storageAfter.writeCommands - storageBefore.writeCommands}, " +
         "storageFlushes=${storageAfter.flushCommands - storageBefore.flushCommands}, " +
         "storageBytesRead=${storageAfter.bytesRead - storageBefore.bytesRead}, " +
-        "storageBytesWritten=${storageAfter.bytesWritten - storageBefore.bytesWritten}"
+        "storageBytesWritten=${storageAfter.bytesWritten - storageBefore.bytesWritten}, " +
+        "pathLookups=${osAfter.pathLookups - osBefore.pathLookups}, " +
+        "inodeLoads=${osAfter.inodeLoads - osBefore.inodeLoads}, " +
+        "dirEntryScans=${osAfter.dirEntryScans - osBefore.dirEntryScans}, " +
+        "fileOpens=${osAfter.fileOpens - osBefore.fileOpens}, " +
+        "fileReads=${osAfter.fileReads - osBefore.fileReads}, " +
+        "statCalls=${osAfter.statCalls - osBefore.statCalls}"
 }
 
 private class CapturingDisplayNetworkBridge : DisplayNetworkBridge {

@@ -25,6 +25,7 @@ import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16BusTraffic
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16ComputerStatsSnapshot
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16GpuStats
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16MmioDeviceStats
+import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16OsStats
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16StorageStats
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
@@ -250,9 +251,19 @@ data class RuntimeK16GpuMetrics(
     val framePayloadBytes: Long = 0,
 )
 
+data class RuntimeK16OsMetrics(
+    val pathLookups: Long = 0,
+    val inodeLoads: Long = 0,
+    val dirEntryScans: Long = 0,
+    val fileOpens: Long = 0,
+    val fileReads: Long = 0,
+    val statCalls: Long = 0,
+)
+
 data class RuntimeK16StatsMetrics(
     val ram: RuntimeK16BusTrafficMetrics = RuntimeK16BusTrafficMetrics(),
     val mmio: RuntimeK16BusTrafficMetrics = RuntimeK16BusTrafficMetrics(),
+    val os: RuntimeK16OsMetrics = RuntimeK16OsMetrics(),
     val devices: List<RuntimeK16MmioDeviceMetrics> = emptyList(),
 ) {
     val deviceTraffic: RuntimeK16BusTrafficMetrics =
@@ -361,6 +372,9 @@ data class RuntimeProfilingSnapshot(
             )
             appendLine(
                 "    k16Storage0: reads=${k16.storage0.readCommands}, writes=${k16.storage0.writeCommands}, flushes=${k16.storage0.flushCommands}, bytesRead=${k16.storage0.bytesRead}, bytesWritten=${k16.storage0.bytesWritten}, failed=${k16.storage0.failedCommands}",
+            )
+            appendLine(
+                "    k16Os: pathLookups=${k16.os.pathLookups}, inodeLoads=${k16.os.inodeLoads}, dirEntryScans=${k16.os.dirEntryScans}, fileOpens=${k16.os.fileOpens}, fileReads=${k16.os.fileReads}, statCalls=${k16.os.statCalls}",
             )
             appendK16DeviceSummary()
             appendLine(
@@ -896,6 +910,7 @@ private fun NativeK16ComputerStatsSnapshot.toRuntimeMetrics(): RuntimeK16StatsMe
     RuntimeK16StatsMetrics(
         ram = ram.toRuntimeMetrics(),
         mmio = mmio.toRuntimeMetrics(),
+        os = os.toRuntimeMetrics(),
         devices = devices.map { it.toRuntimeMetrics() },
     )
 
@@ -936,4 +951,14 @@ private fun NativeK16GpuStats.toRuntimeMetrics(): RuntimeK16GpuMetrics =
         frames = frames,
         frameTiles = frameTiles,
         framePayloadBytes = framePayloadBytes,
+    )
+
+private fun NativeK16OsStats.toRuntimeMetrics(): RuntimeK16OsMetrics =
+    RuntimeK16OsMetrics(
+        pathLookups = pathLookups,
+        inodeLoads = inodeLoads,
+        dirEntryScans = dirEntryScans,
+        fileOpens = fileOpens,
+        fileReads = fileReads,
+        statCalls = statCalls,
     )

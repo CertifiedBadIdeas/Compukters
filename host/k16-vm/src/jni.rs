@@ -388,10 +388,16 @@ fn k16_signal_values(signal: K16Signal) -> [jlong; 2] {
 }
 
 fn k16_computer_stats_snapshot_values(snapshot: &K16ComputerStatsSnapshot) -> Vec<jlong> {
-    let mut values = Vec::with_capacity(10 + snapshot.devices.len() * 20);
-    values.push(3);
+    let mut values = Vec::with_capacity(16 + snapshot.devices.len() * 20);
+    values.push(4);
     push_traffic_values(&mut values, snapshot.bus.ram);
     push_traffic_values(&mut values, snapshot.bus.mmio);
+    values.push(snapshot.os.path_lookups as jlong);
+    values.push(snapshot.os.inode_loads as jlong);
+    values.push(snapshot.os.dir_entry_scans as jlong);
+    values.push(snapshot.os.file_opens as jlong);
+    values.push(snapshot.os.file_reads as jlong);
+    values.push(snapshot.os.stat_calls as jlong);
     values.push(snapshot.devices.len() as jlong);
     for device in &snapshot.devices {
         values.push(device.device_id as jlong);
@@ -538,8 +544,8 @@ fn long_array_or_throw(env: &mut JNIEnv<'_>, values: &[jlong]) -> jlongArray {
 mod tests {
     use super::k16_computer_stats_snapshot_values;
     use crate::computer::stats::{
-        K16ComputerDeviceStats, K16ComputerGpuStatsSnapshot, K16ComputerStatsSnapshot,
-        K16ComputerStorageStatsSnapshot,
+        K16ComputerDeviceStats, K16ComputerGpuStatsSnapshot, K16ComputerOsStatsSnapshot,
+        K16ComputerStatsSnapshot, K16ComputerStorageStatsSnapshot,
     };
     use crate::low_bus::{MachineBusStatsSnapshot, MachineBusTrafficSnapshot};
 
@@ -560,6 +566,14 @@ mod tests {
                     bytes_written: 9,
                 },
                 mmio_devices: Vec::new(),
+            },
+            os: K16ComputerOsStatsSnapshot {
+                path_lookups: 23,
+                inode_loads: 24,
+                dir_entry_scans: 25,
+                file_opens: 26,
+                file_reads: 27,
+                stat_calls: 28,
             },
             devices: vec![K16ComputerDeviceStats {
                 name: "debug",
@@ -588,8 +602,8 @@ mod tests {
         assert_eq!(
             k16_computer_stats_snapshot_values(&snapshot),
             vec![
-                3, 2, 3, 4, 5, 6, 7, 8, 9, 1, 11, 0x1000, 64, 12, 13, 14, 15, 0, 0, 0, 0, 0, 0, 16,
-                17, 18, 19, 20, 21, 22,
+                4, 2, 3, 4, 5, 6, 7, 8, 9, 23, 24, 25, 26, 27, 28, 1, 11, 0x1000, 64, 12, 13, 14,
+                15, 0, 0, 0, 0, 0, 0, 16, 17, 18, 19, 20, 21, 22,
             ],
         );
     }

@@ -105,9 +105,10 @@ class K16ComputerRuntimeTest {
         val snapshot =
             NativeK16ComputerStatsSnapshot.from(
                 longArrayOf(
-                    3,
+                    4,
                     2, 3, 4, 5,
                     6, 7, 8, 9,
+                    31, 32, 33, 34, 35, 36,
                     1,
                     11, 0x1000, 64,
                     12, 13, 14, 15,
@@ -118,6 +119,17 @@ class K16ComputerRuntimeTest {
 
         assertEquals(NativeK16BusTraffic(loads = 2, stores = 3, bytesRead = 4, bytesWritten = 5), snapshot.ram)
         assertEquals(NativeK16BusTraffic(loads = 6, stores = 7, bytesRead = 8, bytesWritten = 9), snapshot.mmio)
+        assertEquals(
+            NativeK16OsStats(
+                pathLookups = 31,
+                inodeLoads = 32,
+                dirEntryScans = 33,
+                fileOpens = 34,
+                fileReads = 35,
+                statCalls = 36,
+            ),
+            snapshot.os,
+        )
         assertEquals(
             listOf(
                 NativeK16MmioDeviceStats(

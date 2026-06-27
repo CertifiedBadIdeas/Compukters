@@ -73,6 +73,14 @@ fn device_snapshot_records(machine: &ComputerMachine) -> Vec<ComputerDeviceSnaps
             status: control.status,
             panic_code: control.panic_code,
             exit_code: control.exit_code,
+            os_stats_addr: control
+                .os_stats_region()
+                .map(|(addr, _)| addr)
+                .unwrap_or_default(),
+            os_stats_size: control
+                .os_stats_region()
+                .map(|(_, size)| size)
+                .unwrap_or_default(),
         });
     }
     if let Some(debug) = machine.debug_device() {
@@ -139,6 +147,8 @@ fn restore_device_snapshot_record(
             status,
             panic_code,
             exit_code,
+            os_stats_addr,
+            os_stats_size,
         } => {
             let control = machine.control_device_mut().ok_or_else(|| {
                 "ComputerMachine snapshot contains control device state but profile has no control device"
@@ -147,6 +157,7 @@ fn restore_device_snapshot_record(
             control.status = status;
             control.panic_code = panic_code;
             control.exit_code = exit_code;
+            control.restore_os_stats_region(os_stats_addr, os_stats_size);
         }
         ComputerDeviceSnapshotRecord::DebugSerial { bytes } => {
             let debug = machine.debug_device_mut().ok_or_else(|| {

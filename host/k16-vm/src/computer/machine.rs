@@ -4,8 +4,8 @@ use crate::computer::devices::{
 };
 use crate::computer::profile::ComputerMachineProfile;
 use crate::computer::stats::{
-    K16ComputerDeviceStats, K16ComputerGpuStatsSnapshot, K16ComputerStatsSnapshot,
-    K16ComputerStorageStatsSnapshot,
+    K16ComputerDeviceStats, K16ComputerGpuStatsSnapshot, K16ComputerOsStatsSnapshot,
+    K16ComputerStatsSnapshot, K16ComputerStorageStatsSnapshot,
 };
 use crate::computer_abi;
 use crate::display::DisplayFrameDelta;
@@ -145,6 +145,8 @@ impl ComputerMachine {
     pub const CONTROL_PANIC_CODE: u32 = computer_abi::CONTROL_PANIC_CODE;
     pub const CONTROL_EXIT_CODE: u32 = computer_abi::CONTROL_EXIT_CODE;
     pub const CONTROL_YIELD: u32 = computer_abi::CONTROL_YIELD;
+    pub const CONTROL_OS_STATS_ADDR: u32 = computer_abi::CONTROL_OS_STATS_ADDR;
+    pub const CONTROL_OS_STATS_SIZE: u32 = computer_abi::CONTROL_OS_STATS_SIZE;
     pub const CONTROL_SIZE: u32 = computer_abi::CONTROL_SIZE;
     pub const DEBUG_BASE: u32 = computer_abi::DEBUG_BASE;
     pub const DEBUG_WRITE: u32 = computer_abi::DEBUG_WRITE;
@@ -345,6 +347,7 @@ impl ComputerMachine {
 
     pub fn stats_snapshot(&self) -> K16ComputerStatsSnapshot {
         let bus = self.bus.stats_snapshot();
+        let os = self.os_stats_snapshot();
         let mut devices = Vec::new();
         self.push_stats_device(
             &bus,
@@ -422,7 +425,33 @@ impl ComputerMachine {
             K16ComputerStorageStatsSnapshot::default(),
             K16ComputerGpuStatsSnapshot::default(),
         );
-        K16ComputerStatsSnapshot { bus, devices }
+        K16ComputerStatsSnapshot { bus, os, devices }
+    }
+
+    fn os_stats_snapshot(&self) -> K16ComputerOsStatsSnapshot {
+        let Some((addr, size)) = self
+            .control_device()
+            .and_then(ComputerControlDevice::os_stats_region)
+        else {
+            return K16ComputerOsStatsSnapshot::default();
+        };
+        if size < 48 {
+            return K16ComputerOsStatsSnapshot::default();
+        }
+        let memory = self.bus.memory();
+        let read = |offset: u32| {
+            addr.checked_add(offset)
+                .and_then(|address| memory.load_u64(address).ok())
+                .unwrap_or_default()
+        };
+        K16ComputerOsStatsSnapshot {
+            path_lookups: read(0),
+            inode_loads: read(8),
+            dir_entry_scans: read(16),
+            file_opens: read(24),
+            file_reads: read(32),
+            stat_calls: read(40),
+        }
     }
 
     pub fn restore_ram_snapshot_v1(

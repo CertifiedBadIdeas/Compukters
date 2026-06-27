@@ -70,6 +70,15 @@ data class NativeK16GpuStats(
     val framePayloadBytes: Long = 0,
 )
 
+data class NativeK16OsStats(
+    val pathLookups: Long = 0,
+    val inodeLoads: Long = 0,
+    val dirEntryScans: Long = 0,
+    val fileOpens: Long = 0,
+    val fileReads: Long = 0,
+    val statCalls: Long = 0,
+)
+
 data class NativeK16MmioDeviceStats(
     val deviceId: Long,
     val base: Long,
@@ -82,33 +91,37 @@ data class NativeK16MmioDeviceStats(
 data class NativeK16ComputerStatsSnapshot(
     val ram: NativeK16BusTraffic = NativeK16BusTraffic(),
     val mmio: NativeK16BusTraffic = NativeK16BusTraffic(),
+    val os: NativeK16OsStats = NativeK16OsStats(),
     val devices: List<NativeK16MmioDeviceStats> = emptyList(),
 ) {
     companion object {
         private const val VERSION_V2: Long = 2
         private const val VERSION_V3: Long = 3
-        private const val HEADER_LONGS: Int = 10
+        private const val VERSION_V4: Long = 4
+        private const val HEADER_LONGS_V2: Int = 10
+        private const val HEADER_LONGS_V4: Int = 16
         private const val DEVICE_LONGS_V2: Int = 13
         private const val DEVICE_LONGS_V3: Int = 20
 
         fun from(values: LongArray): NativeK16ComputerStatsSnapshot {
-            require(values.size >= HEADER_LONGS) {
+            require(values.size >= HEADER_LONGS_V2) {
                 "Native K16 stats snapshot is too short: ${values.size} longs"
             }
             val version = values[0]
-            require(version == VERSION_V2 || version == VERSION_V3) {
+            require(version == VERSION_V2 || version == VERSION_V3 || version == VERSION_V4) {
                 "Unsupported native K16 stats snapshot version: $version"
             }
-            val deviceCount = values[9].toInt()
+            val headerLongs = if (version == VERSION_V4) HEADER_LONGS_V4 else HEADER_LONGS_V2
+            val deviceCount = values[headerLongs - 1].toInt()
             require(deviceCount >= 0) { "Native K16 stats snapshot device count is negative: $deviceCount" }
             val deviceLongs = if (version == VERSION_V2) DEVICE_LONGS_V2 else DEVICE_LONGS_V3
-            val expectedSize = HEADER_LONGS + deviceCount * deviceLongs
+            val expectedSize = headerLongs + deviceCount * deviceLongs
             require(values.size == expectedSize) {
                 "Native K16 stats snapshot has ${values.size} longs but expected $expectedSize"
             }
             val devices =
                 (0 until deviceCount).map { index ->
-                    val offset = HEADER_LONGS + index * deviceLongs
+                    val offset = headerLongs + index * deviceLongs
                     NativeK16MmioDeviceStats(
                         deviceId = values[offset],
                         base = values[offset + 1],
@@ -130,7 +143,7 @@ data class NativeK16ComputerStatsSnapshot(
                                 failedCommands = values[offset + 12],
                             ),
                         gpu =
-                            if (version == VERSION_V3) {
+                            if (version != VERSION_V2) {
                                 NativeK16GpuStats(
                                     blitBufferCommands = values[offset + 13],
                                     blitPixels = values[offset + 14],
@@ -160,6 +173,19 @@ data class NativeK16ComputerStatsSnapshot(
                         bytesRead = values[7],
                         bytesWritten = values[8],
                     ),
+                os =
+                    if (version == VERSION_V4) {
+                        NativeK16OsStats(
+                            pathLookups = values[9],
+                            inodeLoads = values[10],
+                            dirEntryScans = values[11],
+                            fileOpens = values[12],
+                            fileReads = values[13],
+                            statCalls = values[14],
+                        )
+                    } else {
+                        NativeK16OsStats()
+                    },
                 devices = devices,
             )
         }

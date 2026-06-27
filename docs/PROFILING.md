@@ -79,12 +79,12 @@ The `k16Phase` lines split selected text-I/O scenarios into named checkpoints su
 `*.visible`, and `*.idle`. Each line reports elapsed wall time and deltas between two runtime metric snapshots:
 
 ```text
-k16Phase: name=ls:/bin.visible, elapsed=..., slices=..., runTime=..., inputBytes=..., gpuFrameBytes=..., displayFrames=..., displayBytes=..., storageReads=..., storageBytesRead=...
+k16Phase: name=ls:/bin.visible, elapsed=..., slices=..., runTime=..., inputBytes=..., gpuFrameBytes=..., displayFrames=..., displayBytes=..., storageReads=..., storageBytesRead=..., pathLookups=..., inodeLoads=..., dirEntryScans=..., fileOpens=..., fileReads=..., statCalls=...
 ```
 
 Use these phase lines when deciding whether a slowdown is in command dispatch, command execution/storage reads, display
-frame production, or post-command idle work. The older `k16LsCommand*` aggregate lines remain available for comparison
-with previous profiling runs.
+frame production, guest filesystem/path/stat work, or post-command idle work. The older `k16LsCommand*` aggregate lines
+remain available for comparison with previous profiling runs.
 
 Use `profileK16ManyVmServerBudget` for a server-focused workload that boots several K16 runtime devices, measures idle
 tick cost after all shells are waiting, then runs one active command while the other VMs stay idle. The printed lines
@@ -143,6 +143,7 @@ during the worker cache refresh path:
 k16Bus: ramLoads=..., ramStores=..., ramBytesRead=..., ramBytesWritten=..., mmioLoads=..., mmioStores=..., mmioBytesRead=..., mmioBytesWritten=...
 k16Devices: mapped=..., loads=..., stores=..., bytesRead=..., bytesWritten=...
 k16Storage0: reads=..., writes=..., flushes=..., bytesRead=..., bytesWritten=..., failed=...
+k16Os: pathLookups=..., inodeLoads=..., dirEntryScans=..., fileOpens=..., fileReads=..., statCalls=...
   device[...]: base=..., size=..., loads=..., stores=..., bytesRead=..., bytesWritten=...
 ```
 
@@ -151,6 +152,10 @@ k16Storage0: reads=..., writes=..., flushes=..., bytesRead=..., bytesWritten=...
 - `k16Storage0` counts successful storage0 backend media reads, block write commands, flush commands, successful backend
   transfer bytes, and commands that reached the controller but completed with an error status. Read cache hits still
   complete the guest `READ_BLOCKS` command but do not increase `reads` or `bytesRead`.
+- `k16Os` is exported by KraftOS through a registered RAM counter block. `pathLookups` counts K16FS path resolver calls,
+  `inodeLoads` counts inode table loads, `dirEntryScans` counts directory-entry slots scanned by lookup/listing,
+  `fileOpens` counts kernel open attempts, `fileReads` counts kernel file read attempts, and `statCalls` counts kernel
+  stat attempts.
 - These counters are cumulative inside the Rust VM; the Kotlin profiling collector stores the latest snapshot instead of
   summing repeated snapshots.
 

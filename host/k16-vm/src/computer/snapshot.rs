@@ -24,7 +24,8 @@ const NO_BOOT_CPU: u32 = u32::MAX;
 const K16_CPU_STATE_RUNNING: u32 = 1;
 const K16_CPU_STATE_HALTED: u32 = 2;
 const K16_CPU_STATE_TRAPPED: u32 = 3;
-const CONTROL_DEVICE_PAYLOAD_SIZE: usize = 12;
+const CONTROL_DEVICE_PAYLOAD_SIZE_V1: usize = 12;
+const CONTROL_DEVICE_PAYLOAD_SIZE: usize = 20;
 const STORAGE0_DEVICE_PAYLOAD_SIZE: usize = 36;
 const TIMER0_DEVICE_PAYLOAD_SIZE: usize = 8;
 const KEYBOARD0_DEVICE_PAYLOAD_HEADER_SIZE: usize = 16;
@@ -64,6 +65,8 @@ pub enum ComputerDeviceSnapshotRecord {
         status: i32,
         panic_code: i32,
         exit_code: i32,
+        os_stats_addr: u32,
+        os_stats_size: u32,
     },
     DebugSerial {
         bytes: Vec<u8>,
@@ -351,12 +354,16 @@ fn encode_device_record(
             status,
             panic_code,
             exit_code,
+            os_stats_addr,
+            os_stats_size,
         } => {
             write_u32(bytes, COMPUTER_SNAPSHOT_V1_CONTROL_DEVICE_KIND);
             write_u32(bytes, CONTROL_DEVICE_PAYLOAD_SIZE as u32);
             write_i32(bytes, *status);
             write_i32(bytes, *panic_code);
             write_i32(bytes, *exit_code);
+            write_u32(bytes, *os_stats_addr);
+            write_u32(bytes, *os_stats_size);
         }
         ComputerDeviceSnapshotRecord::DebugSerial { bytes: debug_bytes } => {
             let payload_size = u32::try_from(debug_bytes.len())
@@ -537,9 +544,11 @@ fn decode_device_record(
     let payload = &bytes[payload_start..payload_end];
     let record = match kind {
         COMPUTER_SNAPSHOT_V1_CONTROL_DEVICE_KIND => {
-            if payload.len() != CONTROL_DEVICE_PAYLOAD_SIZE {
+            if payload.len() != CONTROL_DEVICE_PAYLOAD_SIZE
+                && payload.len() != CONTROL_DEVICE_PAYLOAD_SIZE_V1
+            {
                 return Err(format!(
-                    "ComputerMachine snapshot control device payload has {} bytes but expected {CONTROL_DEVICE_PAYLOAD_SIZE}",
+                    "ComputerMachine snapshot control device payload has {} bytes but expected {CONTROL_DEVICE_PAYLOAD_SIZE} or {CONTROL_DEVICE_PAYLOAD_SIZE_V1}",
                     payload.len()
                 ));
             }
@@ -547,6 +556,16 @@ fn decode_device_record(
                 status: read_i32(payload, 0)?,
                 panic_code: read_i32(payload, 4)?,
                 exit_code: read_i32(payload, 8)?,
+                os_stats_addr: if payload.len() >= CONTROL_DEVICE_PAYLOAD_SIZE {
+                    read_u32(payload, 12)?
+                } else {
+                    0
+                },
+                os_stats_size: if payload.len() >= CONTROL_DEVICE_PAYLOAD_SIZE {
+                    read_u32(payload, 16)?
+                } else {
+                    0
+                },
             }
         }
         COMPUTER_SNAPSHOT_V1_DEBUG_DEVICE_KIND => ComputerDeviceSnapshotRecord::DebugSerial {

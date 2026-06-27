@@ -25,6 +25,7 @@ import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16BusTraffic
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16ComputerStatsSnapshot
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16GpuStats
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16MmioDeviceStats
+import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16OsStats
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16StorageStats
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -153,6 +154,15 @@ class RuntimeProfilingTest {
             NativeK16ComputerStatsSnapshot(
                 ram = NativeK16BusTraffic(loads = 10, stores = 11, bytesRead = 12, bytesWritten = 13),
                 mmio = NativeK16BusTraffic(loads = 20, stores = 21, bytesRead = 22, bytesWritten = 23),
+                os =
+                    NativeK16OsStats(
+                        pathLookups = 31,
+                        inodeLoads = 32,
+                        dirEntryScans = 33,
+                        fileOpens = 34,
+                        fileReads = 35,
+                        statCalls = 36,
+                    ),
                 devices =
                     listOf(
                         NativeK16MmioDeviceStats(
@@ -248,6 +258,12 @@ class RuntimeProfilingTest {
         assertEquals(2, snapshot.vm.k16GpuFramesDecoded)
         assertEquals(2, snapshot.vm.k16TextInputEvents)
         assertEquals(4, snapshot.vm.k16TextInputBytes)
+        assertEquals(31, snapshot.k16.os.pathLookups)
+        assertEquals(32, snapshot.k16.os.inodeLoads)
+        assertEquals(33, snapshot.k16.os.dirEntryScans)
+        assertEquals(34, snapshot.k16.os.fileOpens)
+        assertEquals(35, snapshot.k16.os.fileReads)
+        assertEquals(36, snapshot.k16.os.statCalls)
         assertEquals(18, snapshot.vm.k16TextInputNanos)
         assertEquals(RuntimeK16BusTrafficMetrics(loads = 10, stores = 11, bytesRead = 12, bytesWritten = 13), snapshot.k16.ram)
         assertEquals(RuntimeK16BusTrafficMetrics(loads = 20, stores = 21, bytesRead = 22, bytesWritten = 23), snapshot.k16.mmio)

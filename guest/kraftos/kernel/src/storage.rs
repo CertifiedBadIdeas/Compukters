@@ -598,6 +598,7 @@ unsafe fn truncate_selected_file() -> Result<(), StorageError> {
 }
 
 unsafe fn find_file_inode(path: &[&[u8]]) -> Result<(), StorageError> {
+    crate::os_stats::record_path_lookup();
     if path.is_empty() {
         return Err(StorageError::PATH_NOT_FOUND);
     }
@@ -622,6 +623,7 @@ unsafe fn find_file_inode(path: &[&[u8]]) -> Result<(), StorageError> {
 }
 
 unsafe fn find_directory_inode(path: &[&[u8]]) -> Result<(), StorageError> {
+    crate::os_stats::record_path_lookup();
     let mut inode_id = unsafe { read_u32(STATE_SUPERBLOCK_ROOT_INODE_ID) };
     let mut index = 0;
     while index < path.len() {
@@ -641,6 +643,7 @@ unsafe fn find_directory_inode(path: &[&[u8]]) -> Result<(), StorageError> {
 }
 
 unsafe fn find_path_inode(path: &[&[u8]]) -> Result<(), StorageError> {
+    crate::os_stats::record_path_lookup();
     let mut inode_id = unsafe { read_u32(STATE_SUPERBLOCK_ROOT_INODE_ID) };
     if path.is_empty() {
         unsafe { read_inode(inode_id)? };
@@ -688,6 +691,7 @@ unsafe fn find_directory_entry_slot(name: &[u8]) -> Result<(u32, u32, u32), Stor
             unsafe { read_fs_block(extent_start_block + block_index)? };
             let mut offset = 0;
             while offset < BLOCK_SIZE && remaining > 0 {
+                crate::os_stats::record_dir_entry_scan();
                 match scratch_u8(offset) {
                     0 | 2 => {}
                     1 => {
@@ -856,6 +860,7 @@ pub unsafe fn copy_selected_directory_listing_into<S: DirectoryListingSink>(
                     unsafe { read_fs_block(fs_block)? };
                     block_loaded = true;
                 }
+                crate::os_stats::record_dir_entry_scan();
                 match scratch_u8(offset) {
                     0 | 2 => {}
                     1 => {
@@ -1088,6 +1093,7 @@ pub unsafe fn copy_file_range_to_ram(
 
 #[inline(always)]
 unsafe fn read_inode(inode_id: u32) -> Result<(), StorageError> {
+    crate::os_stats::record_inode_load();
     let inodes_per_block = BLOCK_SIZE / K16FS_INODE_SIZE;
     let inode_capacity = match unsafe { read_u32(STATE_SUPERBLOCK_INODE_TABLE_BLOCK_COUNT) }
         .checked_mul(inodes_per_block)
