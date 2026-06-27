@@ -26,11 +26,15 @@ import ru.lazyhat.compukterkraft.core.device.input.KeyInputEvent
 import ru.lazyhat.compukterkraft.core.device.input.PasteInputEvent
 import ru.lazyhat.compukterkraft.core.device.runtime.K16RuntimeDevice
 import ru.lazyhat.compukterkraft.core.device.runtime.RecordingRuntimeMetricsCollector
+import ru.lazyhat.compukterkraft.core.device.runtime.ports.DisplayNetworkBridge
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16BiosFlashWorkspace
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16ComputerRuntimeFactory
 import ru.lazyhat.compukterkraft.lang.runtime.storage.K16SystemVolumeWorkspace
+import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.util.UUID
+import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.io.path.createTempDirectory
 import kotlin.io.path.writeBytes
 import kotlin.test.Test
@@ -87,6 +91,102 @@ class K16RuntimeTextIoProfilingTest {
             assertTrue(summary.contains("k16TextOutput: snapshots="))
             assertTrue(summary.contains("k16Gpu: blits="))
             assertTrue(summary.contains("k16TextInput: events="))
+        } finally {
+            device.close()
+        }
+    }
+
+    @Test
+    fun printsK16KeyBurstRenderLatency() {
+        val workspace = createTempDirectory("k16-runtime-key-burst-profile-")
+        val biosFlashPath = workspace.resolve("bios.kflash")
+        val storage0Path = workspace.resolve("storage0.kv")
+        biosFlashPath.writeBytes(K16BiosFlashWorkspace.loadBiosFlashResource(classLoader = javaClass.classLoader))
+        storage0Path.writeBytes(K16SystemVolumeWorkspace.loadStorage0VolumeResource(classLoader = javaClass.classLoader))
+        val metrics = RecordingRuntimeMetricsCollector()
+        val displayNetwork = CapturingDisplayNetworkBridge()
+        val playerUuid = UUID.fromString("00000000-0000-0000-0000-000000000226")
+        val containerId = 226
+        val device =
+            K16RuntimeDevice(
+                deviceId = 226,
+                properties = DeviceProperties(DeviceFamily.NORMAL, label = "key-burst-profiling"),
+                endpointFactory = {
+                    K16ComputerRuntimeFactory.createFromBiosFlash(
+                        biosFlashPath = biosFlashPath,
+                        storage0Path = storage0Path,
+                    )
+                },
+                stateSink = {},
+                displayNetwork = displayNetwork,
+                metricsCollector = metrics,
+            )
+
+        try {
+            device.turnOn()
+            waitForTerminal(device, "initial shell prompt") { terminal -> terminal.contains("K16> ") }
+            device.attachDisplaySession(
+                playerUuid = playerUuid,
+                containerId = containerId,
+                displayId = K16_DISPLAY_ID,
+                width = K16_DISPLAY_WIDTH,
+                height = K16_DISPLAY_HEIGHT,
+            )
+            tickAndSync(device)
+            displayNetwork.clear()
+            val before = metrics.snapshot()
+            val burst = "abcdef"
+            val startedAt = System.nanoTime()
+            for (byte in burst.encodeToByteArray()) {
+                DeviceEvents.dispatch(device, KeyInputEvent.Character(byte))
+            }
+            val inputQueuedNanos = System.nanoTime() - startedAt
+            var ticks = 0
+            var visibleNanos: Long? = null
+            var framesSentNanos: Long? = null
+
+            while (ticks < 80 && (visibleNanos == null || framesSentNanos == null)) {
+                ticks += 1
+                tickAndSync(device)
+                val elapsed = System.nanoTime() - startedAt
+                val terminal = device.snapshotRuntimeState()?.let(::terminalText) ?: ""
+                if (visibleNanos == null && terminal.contains("K16> $burst")) {
+                    visibleNanos = elapsed
+                }
+                if (framesSentNanos == null && displayNetwork.sentFrames().isNotEmpty()) {
+                    framesSentNanos = elapsed
+                }
+                Thread.sleep(1)
+            }
+
+            val after = metrics.snapshot()
+            val sentFrames = displayNetwork.sentFrames()
+            val gpuBefore = before.k16.gpu
+            val gpuAfter = after.k16.gpu
+            println(
+                "k16KeyBurst: chars=${burst.length}, inputQueued=${inputQueuedNanos} ns, " +
+                    "visible=${visibleNanos ?: -1} ns, framesSent=${framesSentNanos ?: -1} ns, ticks=$ticks",
+            )
+            println(
+                "k16KeyBurstVm: slices=${after.vm.k16RunSlices - before.vm.k16RunSlices}, " +
+                    "runTime=${after.vm.k16RunNanos - before.vm.k16RunNanos} ns, " +
+                    "yieldSignals=${after.vm.k16RunYieldSignals - before.vm.k16RunYieldSignals}, " +
+                    "waitSignals=${after.vm.k16RunWaitSignals - before.vm.k16RunWaitSignals}, " +
+                    "inputWakeups=${after.vm.k16WaitInputWakeups - before.vm.k16WaitInputWakeups}",
+            )
+            println(
+                "k16KeyBurstGpu: blits=${gpuAfter.blitBufferCommands - gpuBefore.blitBufferCommands}, " +
+                    "presents=${gpuAfter.presentCommands - gpuBefore.presentCommands}, " +
+                    "frames=${gpuAfter.frames - gpuBefore.frames}, " +
+                    "tiles=${gpuAfter.frameTiles - gpuBefore.frameTiles}, " +
+                    "frameBytes=${gpuAfter.framePayloadBytes - gpuBefore.framePayloadBytes}, " +
+                    "sentFrames=${sentFrames.size}, sentTiles=${sentFrames.sumOf { it.frame.tiles.size }}, " +
+                    "sentPayloadBytes=${sentFrames.sumOf { frame -> frame.frame.tiles.sumOf { it.payload.size } }}",
+            )
+
+            assertTrue(visibleNanos != null, "Burst did not become visible in terminal snapshot")
+            assertTrue(framesSentNanos != null, "Burst did not produce a sent display frame")
+            assertTrue(sentFrames.isNotEmpty())
         } finally {
             device.close()
         }
@@ -153,3 +253,36 @@ class K16RuntimeTextIoProfilingTest {
 private const val K16_TERMINAL_CELLS_ADDR = 0x3000
 private const val K16_TERMINAL_COLUMNS = 53
 private const val K16_TERMINAL_ROWS = 25
+private const val K16_DISPLAY_ID = 1
+private const val K16_DISPLAY_WIDTH = 320
+private const val K16_DISPLAY_HEIGHT = 200
+
+private data class TimedDisplayFrame(
+    val nanos: Long,
+    val frame: DisplayFrameDelta,
+)
+
+private class CapturingDisplayNetworkBridge : DisplayNetworkBridge {
+    private val sentFrames = CopyOnWriteArrayList<TimedDisplayFrame>()
+
+    override fun isDisplaySessionStillBound(
+        playerUuid: UUID,
+        containerId: Int,
+        deviceId: Int,
+        displayId: Int,
+    ): Boolean = true
+
+    override fun sendDisplayFrame(
+        playerUuid: UUID,
+        containerId: Int,
+        frame: DisplayFrameDelta,
+    ) {
+        sentFrames += TimedDisplayFrame(System.nanoTime(), frame)
+    }
+
+    fun clear() {
+        sentFrames.clear()
+    }
+
+    fun sentFrames(): List<TimedDisplayFrame> = sentFrames.toList()
+}
