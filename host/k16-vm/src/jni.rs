@@ -5,7 +5,7 @@ use jni::sys::{jboolean, jbyte, jbyteArray, jint, jlong, jlongArray};
 use jni::JNIEnv;
 
 use crate::computer::stats::{K16ComputerGpuStatsSnapshot, K16ComputerStorageStatsSnapshot};
-use crate::display::{DisplayFrameDelta, PixelFormat};
+use crate::display::{DisplayFrameDelta, DisplayFrameOperation, PixelFormat};
 use crate::k16::K16Signal;
 use crate::k16_computer::{K16ComputerHandle, K16ComputerStatsSnapshot};
 use crate::low_bus::MachineBusTrafficSnapshot;
@@ -460,6 +460,41 @@ fn encode_display_frame_deltas(frames: &[DisplayFrameDelta]) -> Vec<u8> {
             push_i32(&mut out, tile.height);
             push_i32(&mut out, tile.payload.len() as i32);
             out.extend_from_slice(&tile.payload);
+        }
+        push_i32(&mut out, frame.operations.len() as i32);
+        for operation in &frame.operations {
+            match operation {
+                DisplayFrameOperation::FillRect {
+                    x,
+                    y,
+                    width,
+                    height,
+                    rgb565,
+                } => {
+                    out.push(1);
+                    push_i32(&mut out, *x);
+                    push_i32(&mut out, *y);
+                    push_i32(&mut out, *width);
+                    push_i32(&mut out, *height);
+                    push_i32(&mut out, i32::from(*rgb565));
+                }
+                DisplayFrameOperation::CopyRect {
+                    src_x,
+                    src_y,
+                    width,
+                    height,
+                    dst_x,
+                    dst_y,
+                } => {
+                    out.push(2);
+                    push_i32(&mut out, *src_x);
+                    push_i32(&mut out, *src_y);
+                    push_i32(&mut out, *width);
+                    push_i32(&mut out, *height);
+                    push_i32(&mut out, *dst_x);
+                    push_i32(&mut out, *dst_y);
+                }
+            }
         }
     }
     out

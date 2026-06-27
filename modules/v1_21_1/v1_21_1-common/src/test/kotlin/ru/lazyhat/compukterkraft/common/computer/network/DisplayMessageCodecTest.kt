@@ -25,6 +25,7 @@ import ru.lazyhat.compukterkraft.common.computer.network.client.FrameDeltaClient
 import ru.lazyhat.compukterkraft.common.network.MessageTypeImpl
 import ru.lazyhat.compukterkraft.common.network.NetworkMessages
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
+import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameOperation
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayPixelFormat
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayTile
 import kotlin.test.Test
@@ -80,5 +81,31 @@ class DisplayMessageCodecTest {
                 .payload
                 .contentEquals(byteArrayOf(1, 2, 3, 4)),
         )
+    }
+
+    @Test
+    fun frameDeltaClientMessageRoundTripsOperations() {
+        val frame =
+            DisplayFrameDelta(
+                displayId = 9,
+                sequence = 13L,
+                width = 32,
+                height = 16,
+                pixelFormat = DisplayPixelFormat.RGB565,
+                fullRefresh = false,
+                tiles = emptyList(),
+                operations =
+                    listOf(
+                        DisplayFrameOperation.FillRect(x = 0, y = 8, width = 32, height = 8, rgb565 = 0x07E0),
+                        DisplayFrameOperation.CopyRect(srcX = 0, srcY = 8, width = 32, height = 8, dstX = 0, dstY = 0),
+                    ),
+            )
+        val message = FrameDeltaClientMessage(containerId = 4, frame = frame)
+        val buf = freshBuf()
+
+        message.write(buf)
+        val restored = FrameDeltaClientMessage(buf)
+
+        assertEquals(frame.operations, restored.frame.operations)
     }
 }

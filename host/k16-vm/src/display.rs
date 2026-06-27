@@ -21,6 +21,25 @@ pub struct DisplayTile {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DisplayFrameOperation {
+    FillRect {
+        x: i32,
+        y: i32,
+        width: i32,
+        height: i32,
+        rgb565: u16,
+    },
+    CopyRect {
+        src_x: i32,
+        src_y: i32,
+        width: i32,
+        height: i32,
+        dst_x: i32,
+        dst_y: i32,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DisplayFrameDelta {
     pub display_id: i32,
     pub sequence: i64,
@@ -29,6 +48,7 @@ pub struct DisplayFrameDelta {
     pub pixel_format: PixelFormat,
     pub full_refresh: bool,
     pub tiles: Vec<DisplayTile>,
+    pub operations: Vec<DisplayFrameOperation>,
 }
 
 pub struct DisplayEngine {
@@ -38,6 +58,7 @@ pub struct DisplayEngine {
     pixel_format: PixelFormat,
     pixels: Vec<u16>,
     dirty_tiles: BTreeSet<(i32, i32)>,
+    pending_operations: Vec<DisplayFrameOperation>,
     sequence: i64,
 }
 
@@ -65,12 +86,14 @@ impl DisplayEngine {
             pixel_format,
             pixels: vec![0; len],
             dirty_tiles: BTreeSet::new(),
+            pending_operations: Vec::new(),
             sequence: 0,
         })
     }
 
     pub fn clear(&mut self, rgb565: u16) {
         self.pixels.fill(rgb565);
+        self.pending_operations.clear();
         self.mark_all_dirty();
     }
 
@@ -93,7 +116,18 @@ impl DisplayEngine {
                 self.pixels[index] = rgb565;
             }
         }
-        self.mark_rect_dirty(x, y, width, height);
+        if self.dirty_tiles.is_empty() {
+            self.pending_operations
+                .push(DisplayFrameOperation::FillRect {
+                    x,
+                    y,
+                    width,
+                    height,
+                    rgb565,
+                });
+        } else {
+            self.mark_rect_dirty(x, y, width, height);
+        }
     }
 
     pub fn copy_rect(
@@ -130,7 +164,19 @@ impl DisplayEngine {
                 }
             }
         }
-        self.mark_rect_dirty(dst_x, dst_y, width, height);
+        if self.dirty_tiles.is_empty() {
+            self.pending_operations
+                .push(DisplayFrameOperation::CopyRect {
+                    src_x,
+                    src_y,
+                    width,
+                    height,
+                    dst_x,
+                    dst_y,
+                });
+        } else {
+            self.mark_rect_dirty(dst_x, dst_y, width, height);
+        }
     }
 
     pub fn blit_mono(
@@ -221,11 +267,12 @@ impl DisplayEngine {
     }
 
     pub fn present(&mut self) -> Option<DisplayFrameDelta> {
-        if self.dirty_tiles.is_empty() {
+        if self.dirty_tiles.is_empty() && self.pending_operations.is_empty() {
             return None;
         }
         self.sequence += 1;
         let tiles = self.build_tiles();
+        let operations = std::mem::take(&mut self.pending_operations);
         self.dirty_tiles.clear();
         Some(DisplayFrameDelta {
             display_id: self.display_id,
@@ -235,10 +282,12 @@ impl DisplayEngine {
             pixel_format: self.pixel_format,
             full_refresh: false,
             tiles,
+            operations,
         })
     }
 
     pub fn full_refresh(&mut self) -> Option<DisplayFrameDelta> {
+        self.pending_operations.clear();
         self.mark_all_dirty();
         let mut frame = self.present()?;
         frame.full_refresh = true;

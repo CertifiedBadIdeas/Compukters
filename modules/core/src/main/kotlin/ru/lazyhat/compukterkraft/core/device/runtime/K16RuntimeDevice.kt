@@ -308,7 +308,9 @@ class K16RuntimeDevice(
         displayId == next.displayId &&
             width == next.width &&
             height == next.height &&
-            pixelFormat == next.pixelFormat
+            pixelFormat == next.pixelFormat &&
+            operations.isEmpty() &&
+            next.operations.isEmpty()
 
     private fun coalesceCompatibleDisplayFrames(frames: List<DisplayFrameDelta>): DisplayFrameDelta {
         if (frames.size == 1) return frames.single()

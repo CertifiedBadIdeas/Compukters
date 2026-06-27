@@ -20,6 +20,7 @@
 package ru.lazyhat.compukterkraft.common.computer.client
 
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
+import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameOperation
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayPixelFormat
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayTile
 import kotlin.test.Test
@@ -133,6 +134,65 @@ class ClientDisplayBufferTest {
         buffer.swapIfDirty()
 
         assertEquals(listOf(0xFFFF0000.toInt(), 0xFF00FF00.toInt()), buffer.frontArgb().toList())
+    }
+
+    @Test
+    fun appliesDisplayOperationsBeforeTilePayloads() {
+        val buffer = ClientDisplayBuffer(displayId = 1, width = 4, height = 2)
+        val red565 = byteArrayOf(0xF8.toByte(), 0x00)
+        val green565 = byteArrayOf(0x07, 0xE0.toByte())
+        val fullFrame =
+            DisplayFrameDelta(
+                displayId = 1,
+                sequence = 1,
+                width = 4,
+                height = 2,
+                pixelFormat = DisplayPixelFormat.RGB565,
+                fullRefresh = true,
+                tiles = listOf(DisplayTile(0, 0, 0, 0, 4, 2, ByteArray(4 * 2 * 2))),
+            )
+        val operationFrame =
+            DisplayFrameDelta(
+                displayId = 1,
+                sequence = 2,
+                width = 4,
+                height = 2,
+                pixelFormat = DisplayPixelFormat.RGB565,
+                fullRefresh = false,
+                tiles = listOf(DisplayTile(0, 0, 1, 0, 1, 1, green565)),
+                operations =
+                    listOf(
+                        DisplayFrameOperation.FillRect(x = 0, y = 0, width = 2, height = 1, rgb565 = 0xF800),
+                        DisplayFrameOperation.CopyRect(srcX = 0, srcY = 0, width = 2, height = 1, dstX = 2, dstY = 1),
+                    ),
+            )
+
+        assertTrue(buffer.apply(fullFrame))
+        assertTrue(buffer.swapIfDirty())
+        assertTrue(buffer.apply(operationFrame))
+        assertTrue(buffer.swapIfDirty())
+
+        assertEquals(
+            listOf(
+                0xFFFF0000.toInt(),
+                0xFF00FF00.toInt(),
+                0xFF000000.toInt(),
+                0xFF000000.toInt(),
+                0xFF000000.toInt(),
+                0xFF000000.toInt(),
+                0xFFFF0000.toInt(),
+                0xFFFF0000.toInt(),
+            ),
+            buffer.frontArgb().toList(),
+        )
+        assertEquals(
+            listOf(
+                ClientDisplayBuffer.Region(0, 0, 2, 1),
+                ClientDisplayBuffer.Region(2, 1, 2, 1),
+                ClientDisplayBuffer.Region(1, 0, 1, 1),
+            ),
+            buffer.frontDirtyRegions(),
+        )
     }
 
     @Test

@@ -5,6 +5,7 @@ use crate::computer::devices::{
 };
 use crate::computer::profile::{ComputerHardwareConfig, ComputerMachineProfile};
 use crate::computer_abi;
+use crate::display::DisplayFrameOperation;
 use crate::k16::{
     K16AddressMode, K16PrivilegeMode, K16Signal, K16_CSR_TRAP_FRAME_INDEX,
     K16_CSR_TRAP_FRAME_REGISTER, K16_CSR_TRAP_RESUME_PC, K16_CSR_TRAP_VECTOR,
@@ -1280,7 +1281,10 @@ fn computer_gpu0_blits_guest_ram_to_frame_delta() {
 fn computer_gpu0_fills_and_copies_rectangles() {
     let mut machine = ComputerMachine::new(1024).unwrap();
 
-    machine.bus.store_i32(ComputerMachine::GPU0_COLOR, 0x07e0).unwrap();
+    machine
+        .bus
+        .store_i32(ComputerMachine::GPU0_COLOR, 0x07e0)
+        .unwrap();
     machine.bus.store_i32(ComputerMachine::GPU0_X, 2).unwrap();
     machine.bus.store_i32(ComputerMachine::GPU0_Y, 3).unwrap();
     machine
@@ -1307,8 +1311,14 @@ fn computer_gpu0_fills_and_copies_rectangles() {
         .unwrap();
     machine.drain_gpu0_frames();
 
-    machine.bus.store_i32(ComputerMachine::GPU0_SRC_X, 2).unwrap();
-    machine.bus.store_i32(ComputerMachine::GPU0_SRC_Y, 3).unwrap();
+    machine
+        .bus
+        .store_i32(ComputerMachine::GPU0_SRC_X, 2)
+        .unwrap();
+    machine
+        .bus
+        .store_i32(ComputerMachine::GPU0_SRC_Y, 3)
+        .unwrap();
     machine.bus.store_i32(ComputerMachine::GPU0_X, 6).unwrap();
     machine.bus.store_i32(ComputerMachine::GPU0_Y, 1).unwrap();
     machine
@@ -1337,9 +1347,18 @@ fn computer_gpu0_fills_and_copies_rectangles() {
     let frames = machine.drain_gpu0_frames();
 
     assert_eq!(frames.len(), 1);
-    let tile = &frames[0].tiles[0];
-    assert_eq!(rgb565_at(tile, 6, 1), 0x07e0);
-    assert_eq!(rgb565_at(tile, 7, 2), 0x07e0);
+    assert!(frames[0].tiles.is_empty());
+    assert_eq!(
+        frames[0].operations,
+        vec![DisplayFrameOperation::CopyRect {
+            src_x: 2,
+            src_y: 3,
+            width: 2,
+            height: 2,
+            dst_x: 6,
+            dst_y: 1,
+        }],
+    );
 }
 
 #[test]
@@ -2357,13 +2376,6 @@ fn computer_machine_constants_match_profile_v2_abi() {
         ComputerMachine::MMU0_COMMAND_DESTROY_ADDRESS_SPACE,
         computer_abi::MMU0_COMMAND_DESTROY_ADDRESS_SPACE,
     );
-}
-
-fn rgb565_at(tile: &crate::display::DisplayTile, x: i32, y: i32) -> u16 {
-    let column = x - tile.x;
-    let row = y - tile.y;
-    let offset = ((row * tile.width + column) * 2) as usize;
-    u16::from_be_bytes([tile.payload[offset], tile.payload[offset + 1]])
 }
 
 #[test]

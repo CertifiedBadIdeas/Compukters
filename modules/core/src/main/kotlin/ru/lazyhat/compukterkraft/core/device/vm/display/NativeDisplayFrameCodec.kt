@@ -20,6 +20,7 @@
 package ru.lazyhat.compukterkraft.core.device.vm.display
 
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
+import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameOperation
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayPixelFormat
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayTile
 import java.nio.ByteBuffer
@@ -54,7 +55,30 @@ object NativeDisplayFrameCodec {
                     input.get(payload)
                     DisplayTile(tileX, tileY, x, y, tileWidth, tileHeight, payload)
                 }
-            DisplayFrameDelta(displayId, sequence, width, height, pixelFormat, fullRefresh, tiles)
+            val operations =
+                List(input.int) {
+                    when (val operation = input.get().toInt()) {
+                        1 ->
+                            DisplayFrameOperation.FillRect(
+                                x = input.int,
+                                y = input.int,
+                                width = input.int,
+                                height = input.int,
+                                rgb565 = input.int,
+                            )
+                        2 ->
+                            DisplayFrameOperation.CopyRect(
+                                srcX = input.int,
+                                srcY = input.int,
+                                width = input.int,
+                                height = input.int,
+                                dstX = input.int,
+                                dstY = input.int,
+                            )
+                        else -> error("Unknown native display operation $operation")
+                    }
+                }
+            DisplayFrameDelta(displayId, sequence, width, height, pixelFormat, fullRefresh, tiles, operations)
         }
     }
 }

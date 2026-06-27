@@ -357,6 +357,7 @@ class K16RuntimeTextIoProfilingTest {
             val gpuAfter = after.k16.gpu
             val storageBefore = before.k16.storage0
             val storageAfter = after.k16.storage0
+            val scrollFrameBytes = gpuAfter.framePayloadBytes - gpuBefore.framePayloadBytes
             println(
                 "k16LsScrollCommand: command=ls /bin, inputQueued=${inputQueuedNanos} ns, " +
                     "visible=${visibleNanos ?: -1} ns, ticks=$ticks",
@@ -381,10 +382,14 @@ class K16RuntimeTextIoProfilingTest {
                     "presents=${gpuAfter.presentCommands - gpuBefore.presentCommands}, " +
                     "frames=${gpuAfter.frames - gpuBefore.frames}, " +
                     "tiles=${gpuAfter.frameTiles - gpuBefore.frameTiles}, " +
-                    "frameBytes=${gpuAfter.framePayloadBytes - gpuBefore.framePayloadBytes}",
+                    "frameBytes=$scrollFrameBytes",
             )
 
             assertTrue(visibleNanos != null, "scroll-positioned ls /bin did not finish and return to the prompt")
+            assertTrue(
+                scrollFrameBytes < 100_000,
+                "scroll-positioned ls /bin should use display ops instead of serializing full-screen tile payloads",
+            )
         } finally {
             device.close()
         }

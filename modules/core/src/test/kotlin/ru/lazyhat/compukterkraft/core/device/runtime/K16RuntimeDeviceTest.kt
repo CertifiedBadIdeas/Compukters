@@ -34,6 +34,7 @@ import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16ComputerSignal
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16ComputerStatsSnapshot
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16MmioDeviceStats
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
+import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameOperation
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayPixelFormat
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayTile
 import java.nio.ByteBuffer
@@ -1110,7 +1111,18 @@ class K16RuntimeDeviceTest {
 
     private fun encodeDisplayFrames(frames: List<DisplayFrameDelta>): ByteArray {
         val payloadBytes = frames.sumOf { frame -> frame.tiles.sumOf { it.payload.size } }
-        val buffer = ByteBuffer.allocate(4 + frames.size * 31 + frames.sumOf { it.tiles.size * 28 } + payloadBytes)
+        val operationBytes =
+            frames.sumOf { frame ->
+                frame.operations.sumOf { operation ->
+                    when (operation) {
+                        is DisplayFrameOperation.FillRect -> 1 + 5 * 4
+                        is DisplayFrameOperation.CopyRect -> 1 + 6 * 4
+                    }
+                }
+            }
+        val buffer =
+            ByteBuffer
+                .allocate(4 + frames.size * 35 + frames.sumOf { it.tiles.size * 28 } + payloadBytes + operationBytes)
             .order(ByteOrder.LITTLE_ENDIAN)
         buffer.putInt(frames.size)
         for (frame in frames) {
@@ -1134,6 +1146,28 @@ class K16RuntimeDeviceTest {
                 buffer.putInt(tile.height)
                 buffer.putInt(tile.payload.size)
                 buffer.put(tile.payload)
+            }
+            buffer.putInt(frame.operations.size)
+            for (operation in frame.operations) {
+                when (operation) {
+                    is DisplayFrameOperation.FillRect -> {
+                        buffer.put(1)
+                        buffer.putInt(operation.x)
+                        buffer.putInt(operation.y)
+                        buffer.putInt(operation.width)
+                        buffer.putInt(operation.height)
+                        buffer.putInt(operation.rgb565)
+                    }
+                    is DisplayFrameOperation.CopyRect -> {
+                        buffer.put(2)
+                        buffer.putInt(operation.srcX)
+                        buffer.putInt(operation.srcY)
+                        buffer.putInt(operation.width)
+                        buffer.putInt(operation.height)
+                        buffer.putInt(operation.dstX)
+                        buffer.putInt(operation.dstY)
+                    }
+                }
             }
         }
         return buffer.array()

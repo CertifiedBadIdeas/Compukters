@@ -160,8 +160,13 @@ impl GpuDevice {
                     self.set_error(computer_abi::GPU0_ERROR_INVALID_RECT);
                     return Ok(());
                 }
-                self.display
-                    .fill_rect(self.x, self.y, self.rect_width, self.rect_height, self.color);
+                self.display.fill_rect(
+                    self.x,
+                    self.y,
+                    self.rect_width,
+                    self.rect_height,
+                    self.color,
+                );
                 self.status = computer_abi::GPU0_STATUS_DONE;
                 Ok(())
             }
