@@ -3,13 +3,15 @@
 > Issue: [#154](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/154)
 > Optimized K16 core codegen: [#158](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/158)
 
-Bundled K16 firmware can be built through either a debug or release Cargo
-profile. Resource builds use the release profile by default because BIOS,
-bootloader, and kernel images are fixed-range firmware artifacts; debug images
-can exceed those ranges and must fail at link time instead of booting a
-corrupted chain. Maintainers can still request a profile explicitly. The
-toolchain can be a local staged install from `prepareBuiltK16Toolchain`; this
-does not require publishing a GitHub release artifact:
+Bundled K16 bootloader and kernel firmware can be built through either a debug
+or release Cargo profile. Resource builds use the release profile by default
+because bootloader and kernel images are fixed-range firmware artifacts; debug
+images can exceed those ranges and must fail at link time instead of booting a
+corrupted chain. The BIOS is built from freestanding C with the staged K16
+Clang path and links directly to raw `.kflash`. Maintainers can still request a
+profile explicitly for Rust firmware. The toolchain can be a local staged
+install from `prepareBuiltK16Toolchain`; this does not require publishing a
+GitHub release artifact:
 
 ```bash
 ./gradlew-sandbox :v1_21_1-neoforge:processResources \
@@ -18,16 +20,17 @@ does not require publishing a GitHub release artifact:
   -Pk16FirmwareProfile=release
 ```
 
-The selected profile controls both Cargo invocation and artifact lookup:
+The selected profile controls Rust Cargo invocation and Rust artifact lookup:
 
 ```text
-build/generated/k16-guest-target/bios/k16-unknown-kraftos/release/k16-bios
 build/generated/k16-guest-target/boot/k16-unknown-kraftos/release/k16-boot
 build/generated/k16-guest-target/kernel/k16-unknown-kraftos/release/k16-kernel
 ```
 
 There is no debug artifact fallback. If the selected profile does not produce
-the expected BIOS, bootloader, or kernel output, the Gradle task fails.
+the expected bootloader or kernel output, the Gradle task fails. The C BIOS
+task writes `build/generated/k16-firmware-resources/firmware/k16-bios.kflash`
+directly from the linked raw flash output.
 
 Release firmware uses Cargo's release profile and no longer overrides
 `opt-level` back to zero. The firmware tasks still pass explicit K16-safe flags

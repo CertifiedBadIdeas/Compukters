@@ -78,11 +78,13 @@ fn k16_kernel_timer_smoke_artifacts_are_documented() {
 #[test]
 fn k16_bios_splash_uses_sleep_boundary() {
     let root = repo_root();
-    let bios_source = root.join("rust/guest/k16-bios/src/main.rs");
+    let bios_source = root.join("guest/c/bios/bios.c");
 
     let source = fs::read_to_string(&bios_source).expect("K16 BIOS source exists");
-    assert!(source.contains("k16_rt::sleep_ticks(20);"));
-    assert!(!source.contains("k16_rt::yield_once();"));
+    assert!(source.contains("sleep_ticks(20);"));
+    assert!(source.contains("CONTROL_YIELD"));
+    assert!(!source.contains("k16_rt::sleep_ticks"));
+    assert!(!source.contains("k16_rt::yield_once"));
 }
 
 #[test]
@@ -104,6 +106,7 @@ fn legacy_rust_userland_crates_are_removed_after_c_migration() {
         "k16-mv",
         "k16-hosted-cat",
         "k16-hosted-hello",
+        "k16-bios",
     ];
 
     for member in removed_members {

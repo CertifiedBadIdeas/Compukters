@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Bundled K16 BIOS generation now builds `guest/c/bios/bios.c` through the
+  source-built-dev K16 Clang path and links it directly with
+  `k16 link --target bios` into `firmware/k16-bios.kflash`. The old
+  `rust/guest/k16-bios` crate was removed from the guest workspace; bootloader
+  and kernel artifacts remain Rust guest crates.
 - `k16-rt` no longer exports Rust userland syscall convenience wrappers such
   as `write_syscall`, `open_syscall`, `brk_syscall`, or `sleep_ticks_syscall`,
   and no longer exposes raw Rust syscall call helpers such as `syscall0`,
