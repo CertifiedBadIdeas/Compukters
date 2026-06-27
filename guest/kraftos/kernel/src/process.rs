@@ -15,6 +15,10 @@ const KX_SUFFIX: &[u8] = b".kx";
 const KSO_SUFFIX: &[u8] = b".kso";
 const K16FS_MAX_NAME_BYTES: usize = 56;
 pub const MAX_RUN_PATH_BYTES: usize = BIN_PREFIX.len() + K16FS_MAX_NAME_BYTES;
+const MAX_DYNAMIC_IMPORT_LIBRARIES: usize = 4;
+const DYNAMIC_LOADER_NEEDED_SECTION_BYTES: usize = 256;
+const DYNAMIC_LOADER_IMPORT_SECTION_BYTES: usize = 2048;
+const DYNAMIC_LOADER_EXPORT_SECTION_BYTES: usize = 2048;
 const CHILD_ARG_ENTRY_BYTES: u32 = 8;
 const TRANSLATED_TRAP_STACK_BYTES: u32 = VM_PAGE_SIZE;
 const INITIAL_USER_LOADER_SCRATCH_END: u32 =
@@ -184,6 +188,13 @@ static mut RUNTIME_SLOT3_HEAP_BACKING_FRAME_COUNT: u32 = 0;
 #[cfg(not(test))]
 static RUNTIME_PAGE_ALLOCATOR: KernelCell<Option<crate::page_alloc::PageFrameAllocator>> =
     KernelCell::new(None);
+static mut LOADER_NEEDED_SECTION: [u8; DYNAMIC_LOADER_NEEDED_SECTION_BYTES] =
+    [0; DYNAMIC_LOADER_NEEDED_SECTION_BYTES];
+static mut LOADER_IMPORT_SECTION: [u8; DYNAMIC_LOADER_IMPORT_SECTION_BYTES] =
+    [0; DYNAMIC_LOADER_IMPORT_SECTION_BYTES];
+static mut LOADER_EXPORT_SECTIONS: [[u8; DYNAMIC_LOADER_EXPORT_SECTION_BYTES];
+    MAX_DYNAMIC_IMPORT_LIBRARIES] =
+    [[0; DYNAMIC_LOADER_EXPORT_SECTION_BYTES]; MAX_DYNAMIC_IMPORT_LIBRARIES];
 #[cfg(not(test))]
 unsafe extern "C" {
     static __k16_image_end: u8;
@@ -2858,12 +2869,74 @@ struct SharedLibraryImage {
     export_count: u32,
 }
 
+impl SharedLibraryImage {
+    const fn empty() -> Self {
+        Self {
+            payload_offset: 0,
+            file_size: 0,
+            memory_size: 0,
+            relocation_table_offset: 0,
+            relocation_count: 0,
+            export_section_offset: 0,
+            export_section_size: 0,
+            export_count: 0,
+        }
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 struct ImportRelocationRecord<'a> {
     offset: u32,
     kind: u32,
     library_index: u32,
     symbol: &'a [u8],
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+struct DynamicImportLibrary {
+    name: [u8; K16FS_MAX_NAME_BYTES],
+    name_len: u32,
+    image: SharedLibraryImage,
+    relative_base: u32,
+}
+
+impl DynamicImportLibrary {
+    const fn empty() -> Self {
+        Self {
+            name: [0; K16FS_MAX_NAME_BYTES],
+            name_len: 0,
+            image: SharedLibraryImage::empty(),
+            relative_base: 0,
+        }
+    }
+
+    fn name(&self) -> Result<&[u8], ProcessLoadError> {
+        let len = usize::try_from(self.name_len).map_err(|_| ProcessLoadError::InvalidImage)?;
+        self.name.get(0..len).ok_or(ProcessLoadError::InvalidImage)
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+struct DynamicImportLoadState<'a> {
+    image: DynamicUserImportImage,
+    needed_libraries: &'a [u8],
+    import_relocations: &'a [u8],
+    libraries: [DynamicImportLibrary; MAX_DYNAMIC_IMPORT_LIBRARIES],
+    library_count: u32,
+    total_memory_size: u32,
+}
+
+impl<'a> DynamicImportLoadState<'a> {
+    fn library(self, index: u32) -> Result<DynamicImportLibrary, ProcessLoadError> {
+        if index >= self.library_count {
+            return Err(ProcessLoadError::InvalidImage);
+        }
+        let index = usize::try_from(index).map_err(|_| ProcessLoadError::InvalidImage)?;
+        self.libraries
+            .get(index)
+            .copied()
+            .ok_or(ProcessLoadError::InvalidImage)
+    }
 }
 
 impl DynamicUserImage {
@@ -3668,14 +3741,14 @@ unsafe fn load_selected_dynamic_user_program_with_imports(
     arena: UserArena,
     main_components: &[&[u8]; 2],
 ) -> Result<DynamicUserLoadPlan, ProcessLoadError> {
-    let image = unsafe { read_selected_dynamic_import_image()? };
-    let total_memory_size = unsafe { dynamic_import_total_memory_size(image, main_components)? };
+    let state = unsafe { read_selected_dynamic_import_state(main_components)? };
+    let image = state.image;
     let plan = plan_dynamic_user_load(
         arena,
         DynamicUserImage {
             entry_offset: image.entry_offset,
             file_size: image.file_size,
-            memory_size: total_memory_size,
+            memory_size: state.total_memory_size,
         },
     )?;
 
@@ -3693,8 +3766,8 @@ unsafe fn load_selected_dynamic_user_program_with_imports(
             image.memory_size,
             plan,
         )?;
-        load_dynamic_import_libraries(image, plan, main_components)?;
-        apply_dynamic_import_relocations(image, plan, main_components)?;
+        load_dynamic_import_libraries(state, plan)?;
+        apply_dynamic_import_relocations(state, plan)?;
     }
     Ok(plan)
 }
@@ -3767,14 +3840,14 @@ unsafe fn load_selected_dynamic_user_program_with_imports_mapped(
     allocator: &mut crate::page_alloc::PageFrameAllocator,
     main_components: &[&[u8]; 2],
 ) -> Result<MappedDynamicUserLoadPlan, ProcessLoadError> {
-    let image = unsafe { read_selected_dynamic_import_image()? };
-    let total_memory_size = unsafe { dynamic_import_total_memory_size(image, main_components)? };
+    let state = unsafe { read_selected_dynamic_import_state(main_components)? };
+    let image = state.image;
     let plan = plan_dynamic_user_load(
         arena,
         DynamicUserImage {
             entry_offset: image.entry_offset,
             file_size: image.file_size,
-            memory_size: total_memory_size,
+            memory_size: state.total_memory_size,
         },
     )?;
     let mapped = allocate_mapped_dynamic_user_load_plan(plan, allocator)?;
@@ -3804,15 +3877,11 @@ unsafe fn load_selected_dynamic_user_program_with_imports_mapped(
         let _ = free_mapped_dynamic_user_load_plan(mapped, allocator);
         return Err(error);
     }
-    if let Err(error) =
-        unsafe { load_dynamic_import_libraries_mapped(image, mapped, main_components) }
-    {
+    if let Err(error) = unsafe { load_dynamic_import_libraries_mapped(state, mapped) } {
         let _ = free_mapped_dynamic_user_load_plan(mapped, allocator);
         return Err(error);
     }
-    if let Err(error) =
-        unsafe { apply_dynamic_import_relocations_mapped(image, mapped, main_components) }
-    {
+    if let Err(error) = unsafe { apply_dynamic_import_relocations_mapped(state, mapped) } {
         let _ = free_mapped_dynamic_user_load_plan(mapped, allocator);
         return Err(error);
     }
@@ -3871,50 +3940,74 @@ unsafe fn read_selected_dynamic_import_image() -> Result<DynamicUserImportImage,
     })
 }
 
-unsafe fn dynamic_import_total_memory_size(
-    image: DynamicUserImportImage,
+unsafe fn read_selected_dynamic_import_state(
     main_components: &[&[u8]; 2],
-) -> Result<u32, ProcessLoadError> {
+) -> Result<DynamicImportLoadState<'static>, ProcessLoadError> {
+    let image = unsafe { read_selected_dynamic_import_image()? };
+    let needed_libraries = unsafe {
+        copy_selected_section_to_loader_needed_buffer(
+            image.needed_section_offset,
+            image.needed_section_size,
+        )?
+    };
+    let import_relocations = unsafe {
+        copy_selected_section_to_loader_import_buffer(
+            image.import_section_offset,
+            image.import_section_size,
+        )?
+    };
+    let library_count =
+        usize::try_from(image.needed_library_count).map_err(|_| ProcessLoadError::InvalidImage)?;
+    if library_count > MAX_DYNAMIC_IMPORT_LIBRARIES {
+        return Err(ProcessLoadError::InvalidImage);
+    }
+
+    let mut libraries = [DynamicImportLibrary::empty(); MAX_DYNAMIC_IMPORT_LIBRARIES];
     let mut total = image.memory_size;
     let mut index = 0;
     while index < image.needed_library_count {
-        unsafe { reopen_main_program(main_components)? };
         let mut name = [0u8; K16FS_MAX_NAME_BYTES];
-        let library_name = unsafe { read_needed_library_name(image, index, &mut name)? };
+        let library_name = read_needed_library_name(image, needed_libraries, index, &mut name)?;
+        let name_len =
+            u32::try_from(library_name.len()).map_err(|_| ProcessLoadError::InvalidImage)?;
         let library = unsafe { open_and_read_shared_library(library_name)? };
-        total = extend_dynamic_memory_for_shared_object(total, library.memory_size)?;
+        let relative_base = align_up(total, LOAD_ALIGNMENT)?;
+        unsafe { copy_selected_shared_export_section_to_loader_buffer(index, library)? };
+        let slot = usize::try_from(index).map_err(|_| ProcessLoadError::InvalidImage)?;
+        libraries[slot] = DynamicImportLibrary {
+            name,
+            name_len,
+            image: library,
+            relative_base,
+        };
+        total = relative_base
+            .checked_add(library.memory_size)
+            .ok_or(ProcessLoadError::AddressOverflow)?;
         index += 1;
     }
     unsafe { reopen_main_program(main_components)? };
-    Ok(total)
-}
-
-fn extend_dynamic_memory_for_shared_object(
-    current_memory_size: u32,
-    shared_memory_size: u32,
-) -> Result<u32, ProcessLoadError> {
-    let library_start = align_up(current_memory_size, LOAD_ALIGNMENT)?;
-    library_start
-        .checked_add(shared_memory_size)
-        .ok_or(ProcessLoadError::AddressOverflow)
+    Ok(DynamicImportLoadState {
+        image,
+        needed_libraries,
+        import_relocations,
+        libraries,
+        library_count: image.needed_library_count,
+        total_memory_size: total,
+    })
 }
 
 unsafe fn load_dynamic_import_libraries(
-    image: DynamicUserImportImage,
+    state: DynamicImportLoadState<'_>,
     plan: DynamicUserLoadPlan,
-    main_components: &[&[u8]; 2],
 ) -> Result<(), ProcessLoadError> {
-    let mut relative_base = image.memory_size;
     let mut index = 0;
-    while index < image.needed_library_count {
-        unsafe { reopen_main_program(main_components)? };
-        let mut name = [0u8; K16FS_MAX_NAME_BYTES];
-        let library_name = unsafe { read_needed_library_name(image, index, &mut name)? };
-        let library = unsafe { open_and_read_shared_library(library_name)? };
-        relative_base = align_up(relative_base, LOAD_ALIGNMENT)?;
+    while index < state.library_count {
+        let entry = state.library(index)?;
+        let library = entry.image;
+        unsafe { open_shared_library(entry.name()?)? };
         let library_base = plan
             .load_base
-            .checked_add(relative_base)
+            .checked_add(entry.relative_base)
             .ok_or(ProcessLoadError::AddressOverflow)?;
         unsafe {
             crate::storage::copy_selected_file_range_to_ram(
@@ -3935,32 +4028,24 @@ unsafe fn load_dynamic_import_libraries(
                 library_base,
             )?;
         }
-        relative_base = relative_base
-            .checked_add(library.memory_size)
-            .ok_or(ProcessLoadError::AddressOverflow)?;
         index += 1;
     }
-    unsafe { reopen_main_program(main_components)? };
     Ok(())
 }
 
 unsafe fn load_dynamic_import_libraries_mapped(
-    image: DynamicUserImportImage,
+    state: DynamicImportLoadState<'_>,
     plan: MappedDynamicUserLoadPlan,
-    main_components: &[&[u8]; 2],
 ) -> Result<(), ProcessLoadError> {
-    let mut relative_base = image.memory_size;
     let mut index = 0;
-    while index < image.needed_library_count {
-        unsafe { reopen_main_program(main_components)? };
-        let mut name = [0u8; K16FS_MAX_NAME_BYTES];
-        let library_name = unsafe { read_needed_library_name(image, index, &mut name)? };
-        let library = unsafe { open_and_read_shared_library(library_name)? };
-        relative_base = align_up(relative_base, LOAD_ALIGNMENT)?;
+    while index < state.library_count {
+        let entry = state.library(index)?;
+        let library = entry.image;
+        unsafe { open_shared_library(entry.name()?)? };
         let library_base = plan
             .virtual_plan()
             .load_base
-            .checked_add(relative_base)
+            .checked_add(entry.relative_base)
             .ok_or(ProcessLoadError::AddressOverflow)?;
         let physical_base = plan.translate_address(library_base)?;
         unsafe {
@@ -3982,41 +4067,26 @@ unsafe fn load_dynamic_import_libraries_mapped(
                 library_base,
             )?;
         }
-        relative_base = relative_base
-            .checked_add(library.memory_size)
-            .ok_or(ProcessLoadError::AddressOverflow)?;
         index += 1;
     }
-    unsafe { reopen_main_program(main_components)? };
     Ok(())
 }
 
 unsafe fn apply_dynamic_import_relocations(
-    image: DynamicUserImportImage,
+    state: DynamicImportLoadState<'_>,
     plan: DynamicUserLoadPlan,
-    main_components: &[&[u8]; 2],
 ) -> Result<(), ProcessLoadError> {
+    let image = state.image;
     let mut index = 0;
     while index < image.import_relocation_count {
-        unsafe { reopen_main_program(main_components)? };
         let mut symbol = [0u8; K16FS_MAX_NAME_BYTES];
-        let relocation = unsafe { read_import_relocation_record(image, index, &mut symbol)? };
+        let relocation =
+            read_import_relocation_record(image, state.import_relocations, index, &mut symbol)?;
         validate_dynamic_relocation_record(relocation.offset, relocation.kind, image.memory_size)?;
-        let library_base = unsafe {
-            dynamic_import_library_base(
-                image,
-                plan.load_base,
-                relocation.library_index,
-                main_components,
-            )?
-        };
+        let library_base =
+            dynamic_import_library_base(state, plan.load_base, relocation.library_index)?;
         let export_offset = unsafe {
-            resolve_dynamic_import_export(
-                image,
-                relocation.library_index,
-                relocation.symbol,
-                main_components,
-            )?
+            resolve_dynamic_import_export(state, relocation.library_index, relocation.symbol)?
         };
         let resolved_address = library_base
             .checked_add(export_offset)
@@ -4024,36 +4094,27 @@ unsafe fn apply_dynamic_import_relocations(
         unsafe { apply_import_relocation_to_ram(plan, relocation.offset, resolved_address)? };
         index += 1;
     }
-    unsafe { reopen_main_program(main_components)? };
     Ok(())
 }
 
 unsafe fn apply_dynamic_import_relocations_mapped(
-    image: DynamicUserImportImage,
+    state: DynamicImportLoadState<'_>,
     plan: MappedDynamicUserLoadPlan,
-    main_components: &[&[u8]; 2],
 ) -> Result<(), ProcessLoadError> {
+    let image = state.image;
     let mut index = 0;
     while index < image.import_relocation_count {
-        unsafe { reopen_main_program(main_components)? };
         let mut symbol = [0u8; K16FS_MAX_NAME_BYTES];
-        let relocation = unsafe { read_import_relocation_record(image, index, &mut symbol)? };
+        let relocation =
+            read_import_relocation_record(image, state.import_relocations, index, &mut symbol)?;
         validate_dynamic_relocation_record(relocation.offset, relocation.kind, image.memory_size)?;
-        let library_base = unsafe {
-            dynamic_import_library_base(
-                image,
-                plan.virtual_plan().load_base,
-                relocation.library_index,
-                main_components,
-            )?
-        };
+        let library_base = dynamic_import_library_base(
+            state,
+            plan.virtual_plan().load_base,
+            relocation.library_index,
+        )?;
         let export_offset = unsafe {
-            resolve_dynamic_import_export(
-                image,
-                relocation.library_index,
-                relocation.symbol,
-                main_components,
-            )?
+            resolve_dynamic_import_export(state, relocation.library_index, relocation.symbol)?
         };
         let resolved_address = library_base
             .checked_add(export_offset)
@@ -4063,54 +4124,29 @@ unsafe fn apply_dynamic_import_relocations_mapped(
         };
         index += 1;
     }
-    unsafe { reopen_main_program(main_components)? };
     Ok(())
 }
 
-unsafe fn dynamic_import_library_base(
-    image: DynamicUserImportImage,
+fn dynamic_import_library_base(
+    state: DynamicImportLoadState<'_>,
     program_load_base: u32,
     library_index: u32,
-    main_components: &[&[u8]; 2],
 ) -> Result<u32, ProcessLoadError> {
-    if library_index >= image.needed_library_count {
-        return Err(ProcessLoadError::InvalidImage);
-    }
-    let mut relative_base = image.memory_size;
-    let mut index = 0;
-    while index <= library_index {
-        unsafe { reopen_main_program(main_components)? };
-        let mut name = [0u8; K16FS_MAX_NAME_BYTES];
-        let library_name = unsafe { read_needed_library_name(image, index, &mut name)? };
-        let library = unsafe { open_and_read_shared_library(library_name)? };
-        relative_base = align_up(relative_base, LOAD_ALIGNMENT)?;
-        if index == library_index {
-            return program_load_base
-                .checked_add(relative_base)
-                .ok_or(ProcessLoadError::AddressOverflow);
-        }
-        relative_base = relative_base
-            .checked_add(library.memory_size)
-            .ok_or(ProcessLoadError::AddressOverflow)?;
-        index += 1;
-    }
-    Err(ProcessLoadError::InvalidImage)
+    let library = state.library(library_index)?;
+    program_load_base
+        .checked_add(library.relative_base)
+        .ok_or(ProcessLoadError::AddressOverflow)
 }
 
 unsafe fn resolve_dynamic_import_export(
-    image: DynamicUserImportImage,
+    state: DynamicImportLoadState<'_>,
     library_index: u32,
     symbol: &[u8],
-    main_components: &[&[u8]; 2],
 ) -> Result<u32, ProcessLoadError> {
-    if library_index >= image.needed_library_count {
-        return Err(ProcessLoadError::InvalidImage);
-    }
-    unsafe { reopen_main_program(main_components)? };
-    let mut name = [0u8; K16FS_MAX_NAME_BYTES];
-    let library_name = unsafe { read_needed_library_name(image, library_index, &mut name)? };
-    let library = unsafe { open_and_read_shared_library(library_name)? };
-    unsafe { resolve_selected_shared_export(library, symbol) }
+    let library = state.library(library_index)?;
+    let exports =
+        unsafe { loader_export_section(library_index, library.image.export_section_size)? };
+    resolve_shared_export(library.image, exports, symbol)
 }
 
 unsafe fn reopen_main_program(main_components: &[&[u8]; 2]) -> Result<(), ProcessLoadError> {
@@ -4123,34 +4159,36 @@ unsafe fn reopen_main_program(main_components: &[&[u8]; 2]) -> Result<(), Proces
 unsafe fn open_and_read_shared_library(
     name: &[u8],
 ) -> Result<SharedLibraryImage, ProcessLoadError> {
-    let path = SharedLibraryPath::parse(name)?;
-    unsafe {
-        crate::storage::open_file_from_storage0(ROOT_PARTITION, path.components())
-            .map_err(|_| ProcessLoadError::Storage)?;
-    }
+    unsafe { open_shared_library(name)? };
     unsafe { read_selected_shared_library_image() }
 }
 
-unsafe fn read_needed_library_name<'a>(
+unsafe fn open_shared_library(name: &[u8]) -> Result<(), ProcessLoadError> {
+    let path = SharedLibraryPath::parse(name)?;
+    unsafe {
+        crate::storage::open_file_from_storage0(ROOT_PARTITION, path.components())
+            .map_err(|_| ProcessLoadError::Storage)
+    }
+}
+
+fn read_needed_library_name<'a>(
     image: DynamicUserImportImage,
+    section: &[u8],
     index: u32,
     out: &'a mut [u8; K16FS_MAX_NAME_BYTES],
 ) -> Result<&'a [u8], ProcessLoadError> {
     if index >= image.needed_library_count {
         return Err(ProcessLoadError::InvalidImage);
     }
-    unsafe {
-        read_counted_string_from_selected_file(
-            image.needed_section_offset,
-            image.needed_section_size,
-            index,
-            out,
-        )
+    if section.len() != image.needed_section_size as usize {
+        return Err(ProcessLoadError::InvalidImage);
     }
+    read_counted_string_from_section(section, index, out)
 }
 
-unsafe fn read_import_relocation_record<'a>(
+fn read_import_relocation_record<'a>(
     image: DynamicUserImportImage,
+    section: &[u8],
     index: u32,
     symbol_out: &'a mut [u8; K16FS_MAX_NAME_BYTES],
 ) -> Result<ImportRelocationRecord<'a>, ProcessLoadError> {
@@ -4164,42 +4202,32 @@ unsafe fn read_import_relocation_record<'a>(
     if image.import_section_size < record_table_size {
         return Err(ProcessLoadError::InvalidImage);
     }
-    let record_offset = image
-        .import_section_offset
-        .checked_add(
-            index
-                .checked_mul(crate::image::K16E_IMPORT_RELOCATION_RECORD_SIZE)
-                .ok_or(ProcessLoadError::InvalidImage)?,
-        )
-        .ok_or(ProcessLoadError::InvalidImage)?;
-    unsafe {
-        crate::storage::copy_selected_file_range_to_ram(
-            record_offset,
-            RELOCATION_RECORD_ADDR,
-            crate::image::K16E_IMPORT_RELOCATION_RECORD_SIZE,
-        )
-        .map_err(|_| ProcessLoadError::Storage)?;
+    if section.len() != image.import_section_size as usize {
+        return Err(ProcessLoadError::InvalidImage);
     }
-    let relocation_offset = unsafe { read_u32_le(RELOCATION_RECORD_ADDR) };
-    let relocation_kind = unsafe { read_u32_le(RELOCATION_RECORD_ADDR + 4) };
-    let library_index = unsafe { read_u32_le(RELOCATION_RECORD_ADDR + 8) };
-    let symbol_offset = unsafe { read_u32_le(RELOCATION_RECORD_ADDR + 12) };
+    let record_offset = usize::try_from(
+        index
+            .checked_mul(crate::image::K16E_IMPORT_RELOCATION_RECORD_SIZE)
+            .ok_or(ProcessLoadError::InvalidImage)?,
+    )
+    .map_err(|_| ProcessLoadError::InvalidImage)?;
+    let relocation_offset = section_u32(section, record_offset)?;
+    let relocation_kind = section_u32(section, record_offset + 4)?;
+    let library_index = section_u32(section, record_offset + 8)?;
+    let symbol_offset = section_u32(section, record_offset + 12)?;
     let string_table_size = image.import_section_size - record_table_size;
     if symbol_offset >= string_table_size {
         return Err(ProcessLoadError::InvalidImage);
     }
-    let symbol_file_offset = image
-        .import_section_offset
-        .checked_add(record_table_size)
-        .and_then(|value| value.checked_add(symbol_offset))
-        .ok_or(ProcessLoadError::InvalidImage)?;
-    let symbol = unsafe {
-        read_nul_terminated_string_from_selected_file(
-            symbol_file_offset,
-            string_table_size - symbol_offset,
-            symbol_out,
-        )?
-    };
+    let string_table_start =
+        usize::try_from(record_table_size).map_err(|_| ProcessLoadError::InvalidImage)?;
+    let symbol_offset_usize =
+        usize::try_from(symbol_offset).map_err(|_| ProcessLoadError::InvalidImage)?;
+    let symbol = read_nul_terminated_string_from_section(
+        &section[string_table_start..],
+        symbol_offset_usize,
+        symbol_out,
+    )?;
     Ok(ImportRelocationRecord {
         offset: relocation_offset,
         kind: relocation_kind,
@@ -4208,30 +4236,18 @@ unsafe fn read_import_relocation_record<'a>(
     })
 }
 
-unsafe fn read_counted_string_from_selected_file<'a>(
-    section_offset: u32,
-    section_size: u32,
+fn read_counted_string_from_section<'a>(
+    section: &[u8],
     index: u32,
     out: &'a mut [u8; K16FS_MAX_NAME_BYTES],
 ) -> Result<&'a [u8], ProcessLoadError> {
-    let mut cursor = 0;
+    let mut cursor = 0usize;
     let mut current = 0;
-    while cursor < section_size {
-        let string_file_offset = section_offset
-            .checked_add(cursor)
-            .ok_or(ProcessLoadError::InvalidImage)?;
+    while cursor < section.len() {
         if current == index {
-            return unsafe {
-                read_nul_terminated_string_from_selected_file(
-                    string_file_offset,
-                    section_size - cursor,
-                    out,
-                )
-            };
+            return read_nul_terminated_string_from_section(section, cursor, out);
         }
-        let string_len = unsafe {
-            selected_nul_terminated_string_len(string_file_offset, section_size - cursor)?
-        };
+        let string_len = nul_terminated_string_len_in_section(section, cursor)?;
         cursor = cursor
             .checked_add(string_len)
             .and_then(|value| value.checked_add(1))
@@ -4241,23 +4257,13 @@ unsafe fn read_counted_string_from_selected_file<'a>(
     Err(ProcessLoadError::InvalidImage)
 }
 
-unsafe fn selected_nul_terminated_string_len(
-    file_offset: u32,
-    max_len: u32,
-) -> Result<u32, ProcessLoadError> {
-    let mut len = 0;
-    while len < max_len {
-        unsafe {
-            crate::storage::copy_selected_file_range_to_ram(
-                file_offset
-                    .checked_add(len)
-                    .ok_or(ProcessLoadError::InvalidImage)?,
-                RELOCATION_RECORD_ADDR,
-                1,
-            )
-            .map_err(|_| ProcessLoadError::Storage)?;
-        }
-        if unsafe { read_u8(RELOCATION_RECORD_ADDR) } == 0 {
+fn nul_terminated_string_len_in_section(
+    section: &[u8],
+    offset: usize,
+) -> Result<usize, ProcessLoadError> {
+    let mut len = 0usize;
+    while offset + len < section.len() {
+        if section[offset + len] == 0 {
             if len == 0 {
                 return Err(ProcessLoadError::InvalidImage);
             }
@@ -4268,37 +4274,118 @@ unsafe fn selected_nul_terminated_string_len(
     Err(ProcessLoadError::InvalidImage)
 }
 
-unsafe fn read_nul_terminated_string_from_selected_file<'a>(
-    file_offset: u32,
-    max_len: u32,
+fn read_nul_terminated_string_from_section<'a>(
+    section: &[u8],
+    offset: usize,
     out: &'a mut [u8; K16FS_MAX_NAME_BYTES],
 ) -> Result<&'a [u8], ProcessLoadError> {
-    let mut len = 0;
-    while len < max_len {
+    let mut len = 0usize;
+    while offset + len < section.len() {
         if len as usize >= out.len() {
             return Err(ProcessLoadError::InvalidImage);
         }
-        unsafe {
-            crate::storage::copy_selected_file_range_to_ram(
-                file_offset
-                    .checked_add(len)
-                    .ok_or(ProcessLoadError::InvalidImage)?,
-                RELOCATION_RECORD_ADDR,
-                1,
-            )
-            .map_err(|_| ProcessLoadError::Storage)?;
-        }
-        let byte = unsafe { read_u8(RELOCATION_RECORD_ADDR) };
+        let byte = section[offset + len];
         if byte == 0 {
             if len == 0 {
                 return Err(ProcessLoadError::InvalidImage);
             }
-            return Ok(&out[..len as usize]);
+            return Ok(&out[..len]);
         }
-        out[len as usize] = byte;
+        out[len] = byte;
         len += 1;
     }
     Err(ProcessLoadError::InvalidImage)
+}
+
+fn section_u32(section: &[u8], offset: usize) -> Result<u32, ProcessLoadError> {
+    let bytes = section
+        .get(offset..offset + 4)
+        .ok_or(ProcessLoadError::InvalidImage)?;
+    Ok(u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
+}
+
+unsafe fn copy_selected_section_to_loader_needed_buffer(
+    offset: u32,
+    size: u32,
+) -> Result<&'static [u8], ProcessLoadError> {
+    unsafe {
+        copy_selected_section_to_loader_buffer(
+            offset,
+            size,
+            core::ptr::addr_of_mut!(LOADER_NEEDED_SECTION) as *mut u8,
+            DYNAMIC_LOADER_NEEDED_SECTION_BYTES,
+        )
+    }
+}
+
+unsafe fn copy_selected_section_to_loader_import_buffer(
+    offset: u32,
+    size: u32,
+) -> Result<&'static [u8], ProcessLoadError> {
+    unsafe {
+        copy_selected_section_to_loader_buffer(
+            offset,
+            size,
+            core::ptr::addr_of_mut!(LOADER_IMPORT_SECTION) as *mut u8,
+            DYNAMIC_LOADER_IMPORT_SECTION_BYTES,
+        )
+    }
+}
+
+unsafe fn copy_selected_shared_export_section_to_loader_buffer(
+    index: u32,
+    library: SharedLibraryImage,
+) -> Result<(), ProcessLoadError> {
+    let slot = usize::try_from(index).map_err(|_| ProcessLoadError::InvalidImage)?;
+    if slot >= MAX_DYNAMIC_IMPORT_LIBRARIES {
+        return Err(ProcessLoadError::InvalidImage);
+    }
+    let size =
+        usize::try_from(library.export_section_size).map_err(|_| ProcessLoadError::InvalidImage)?;
+    if size > DYNAMIC_LOADER_EXPORT_SECTION_BYTES {
+        return Err(ProcessLoadError::InvalidImage);
+    }
+    let base = core::ptr::addr_of_mut!(LOADER_EXPORT_SECTIONS) as *mut u8;
+    let dst = unsafe { base.add(slot * DYNAMIC_LOADER_EXPORT_SECTION_BYTES) };
+    unsafe {
+        crate::storage::copy_selected_file_range_to_ram(
+            library.export_section_offset,
+            dst as usize as u32,
+            library.export_section_size,
+        )
+        .map_err(|_| ProcessLoadError::Storage)
+    }
+}
+
+unsafe fn loader_export_section(index: u32, size: u32) -> Result<&'static [u8], ProcessLoadError> {
+    let slot = usize::try_from(index).map_err(|_| ProcessLoadError::InvalidImage)?;
+    if slot >= MAX_DYNAMIC_IMPORT_LIBRARIES {
+        return Err(ProcessLoadError::InvalidImage);
+    }
+    let len = usize::try_from(size).map_err(|_| ProcessLoadError::InvalidImage)?;
+    if len > DYNAMIC_LOADER_EXPORT_SECTION_BYTES {
+        return Err(ProcessLoadError::InvalidImage);
+    }
+    let base = core::ptr::addr_of!(LOADER_EXPORT_SECTIONS) as *const u8;
+    let ptr = unsafe { base.add(slot * DYNAMIC_LOADER_EXPORT_SECTION_BYTES) };
+    Ok(unsafe { core::slice::from_raw_parts(ptr, len) })
+}
+
+unsafe fn copy_selected_section_to_loader_buffer(
+    offset: u32,
+    size: u32,
+    dst: *mut u8,
+    capacity: usize,
+) -> Result<&'static [u8], ProcessLoadError> {
+    let len = usize::try_from(size).map_err(|_| ProcessLoadError::InvalidImage)?;
+    if len > capacity {
+        return Err(ProcessLoadError::InvalidImage);
+    }
+    unsafe {
+        crate::storage::copy_selected_file_range_to_ram(offset, dst as usize as u32, size)
+            .map_err(|_| ProcessLoadError::Storage)?;
+    }
+    Ok(unsafe { core::slice::from_raw_parts(dst as *const u8, len) })
 }
 
 unsafe fn read_selected_shared_library_image() -> Result<SharedLibraryImage, ProcessLoadError> {
@@ -4329,8 +4416,9 @@ unsafe fn read_selected_shared_library_image() -> Result<SharedLibraryImage, Pro
     })
 }
 
-unsafe fn resolve_selected_shared_export(
+fn resolve_shared_export(
     library: SharedLibraryImage,
+    section: &[u8],
     symbol: &[u8],
 ) -> Result<u32, ProcessLoadError> {
     let record_table_size = library
@@ -4340,26 +4428,21 @@ unsafe fn resolve_selected_shared_export(
     if library.export_section_size < record_table_size {
         return Err(ProcessLoadError::InvalidImage);
     }
+    if section.len() != library.export_section_size as usize {
+        return Err(ProcessLoadError::InvalidImage);
+    }
+    let record_table_size_usize =
+        usize::try_from(record_table_size).map_err(|_| ProcessLoadError::InvalidImage)?;
     let mut index = 0;
     while index < library.export_count {
-        let record_offset = library
-            .export_section_offset
-            .checked_add(
-                index
-                    .checked_mul(crate::image::K16E_SHARED_EXPORT_RECORD_SIZE)
-                    .ok_or(ProcessLoadError::InvalidImage)?,
-            )
-            .ok_or(ProcessLoadError::InvalidImage)?;
-        unsafe {
-            crate::storage::copy_selected_file_range_to_ram(
-                record_offset,
-                RELOCATION_RECORD_ADDR,
-                crate::image::K16E_SHARED_EXPORT_RECORD_SIZE,
-            )
-            .map_err(|_| ProcessLoadError::Storage)?;
-        }
-        let name_offset = unsafe { read_u32_le(RELOCATION_RECORD_ADDR) };
-        let export_offset = unsafe { read_u32_le(RELOCATION_RECORD_ADDR + 4) };
+        let record_offset = usize::try_from(
+            index
+                .checked_mul(crate::image::K16E_SHARED_EXPORT_RECORD_SIZE)
+                .ok_or(ProcessLoadError::InvalidImage)?,
+        )
+        .map_err(|_| ProcessLoadError::InvalidImage)?;
+        let name_offset = section_u32(section, record_offset)?;
+        let export_offset = section_u32(section, record_offset + 4)?;
         if export_offset % 2 != 0 || export_offset >= library.memory_size {
             return Err(ProcessLoadError::InvalidImage);
         }
@@ -4367,19 +4450,14 @@ unsafe fn resolve_selected_shared_export(
         if name_offset >= string_table_size {
             return Err(ProcessLoadError::InvalidImage);
         }
-        let name_file_offset = library
-            .export_section_offset
-            .checked_add(record_table_size)
-            .and_then(|value| value.checked_add(name_offset))
-            .ok_or(ProcessLoadError::InvalidImage)?;
+        let name_offset =
+            usize::try_from(name_offset).map_err(|_| ProcessLoadError::InvalidImage)?;
         let mut name = [0u8; K16FS_MAX_NAME_BYTES];
-        let export_name = unsafe {
-            read_nul_terminated_string_from_selected_file(
-                name_file_offset,
-                string_table_size - name_offset,
-                &mut name,
-            )?
-        };
+        let export_name = read_nul_terminated_string_from_section(
+            &section[record_table_size_usize..],
+            name_offset,
+            &mut name,
+        )?;
         if export_name == symbol {
             return Ok(export_offset);
         }
