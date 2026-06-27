@@ -57,55 +57,21 @@ static void write_ls_error(int status, const char *path) {
   write_text(STDOUT_FILENO, "\n");
 }
 
-static int write_child_path(const char *base, const char *name,
-                            unsigned int name_len, char *out,
-                            unsigned int out_len) {
-  unsigned int base_len = strlen(base);
-  unsigned int separator_len = 1;
-  unsigned int cursor = 0;
-
-  if (base_len == 0 || name_len == 0) {
-    return -1;
-  }
-  if (base_len == 1 && base[0] == '/') {
-    separator_len = 0;
-  }
-  if (base_len + separator_len + name_len + 1 > out_len) {
-    return -1;
-  }
-
-  for (unsigned int index = 0; index < base_len; index += 1) {
-    out[cursor] = base[index];
-    cursor += 1;
-  }
-  if (separator_len == 1) {
-    out[cursor] = '/';
-    cursor += 1;
-  }
-  for (unsigned int index = 0; index < name_len; index += 1) {
-    out[cursor] = name[index];
-    cursor += 1;
-  }
-  out[cursor] = '\0';
-  return 0;
+static unsigned int read_u32_le(const char *bytes) {
+  return ((unsigned int)(unsigned char)bytes[0]) |
+         ((unsigned int)(unsigned char)bytes[1] << 8) |
+         ((unsigned int)(unsigned char)bytes[2] << 16) |
+         ((unsigned int)(unsigned char)bytes[3] << 24);
 }
 
-static int write_dir_entry(const char *path, const char *name,
+static int write_dir_entry(unsigned int file_type, const char *name,
                            unsigned int name_len) {
-  char child_path[KRAFT_MAX_STAT_PATH_BYTES + 1];
-  struct kraft_stat metadata;
-
-  if (write_child_path(path, name, name_len, child_path, sizeof(child_path)) !=
-      0) {
-    return -1;
-  }
-
-  if (stat(child_path, &metadata) < 0) {
+  if (name_len == 0) {
     return -1;
   }
 
   write_all(STDOUT_FILENO, name, name_len);
-  if (metadata.file_type == KRAFT_FILE_TYPE_DIRECTORY) {
+  if (file_type == KRAFT_FILE_TYPE_DIRECTORY) {
     write_text(STDOUT_FILENO, "/");
   }
   write_text(STDOUT_FILENO, "\n");
@@ -123,21 +89,34 @@ static int list_dir(const char *path) {
   }
 
   while (cursor < (unsigned int)status) {
-    unsigned int start = cursor;
-    while (cursor < (unsigned int)status && buffer[cursor] != '\n') {
-      cursor += 1;
-    }
-    if (cursor == start) {
+    unsigned int remaining = (unsigned int)status - cursor;
+    if (remaining < KRAFT_READ_DIR_ENTRY_FIXED_BYTES) {
       write_ls_error((int)0xffffffeau, path);
       return 1;
     }
-    if (write_dir_entry(path, buffer + start, cursor - start) != 0) {
+
+    unsigned int file_type = read_u32_le(buffer + cursor);
+    unsigned int name_len =
+        read_u32_le(buffer + cursor + KRAFT_READ_DIR_ENTRY_NAME_LEN_OFFSET);
+    if ((file_type != KRAFT_FILE_TYPE_REGULAR &&
+         file_type != KRAFT_FILE_TYPE_DIRECTORY) ||
+        name_len == 0 || name_len > remaining - KRAFT_READ_DIR_ENTRY_FIXED_BYTES) {
       write_ls_error((int)0xffffffeau, path);
       return 1;
     }
-    if (cursor < (unsigned int)status) {
-      cursor += 1;
+    unsigned int entry_len = KRAFT_READ_DIR_ENTRY_FIXED_BYTES + name_len;
+    unsigned int size_bytes =
+        read_u32_le(buffer + cursor + KRAFT_READ_DIR_ENTRY_NAME_OFFSET +
+                    name_len);
+    (void)size_bytes;
+
+    if (write_dir_entry(
+            file_type, buffer + cursor + KRAFT_READ_DIR_ENTRY_NAME_OFFSET,
+            name_len) != 0) {
+      write_ls_error((int)0xffffffeau, path);
+      return 1;
     }
+    cursor += entry_len;
   }
 
   return 0;

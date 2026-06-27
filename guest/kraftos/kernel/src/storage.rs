@@ -833,21 +833,29 @@ pub unsafe fn copy_selected_directory_listing_into<S: DirectoryListingSink>(
         return Err(StorageError::INVALID_FILESYSTEM);
     }
 
-    let mut remaining = unsafe { read_u32(STATE_INODE_SIZE_BYTES) };
+    let directory = unsafe { selected_file_metadata() };
+    if directory.extent_count as usize > K16FS_MAX_INLINE_EXTENTS {
+        return Err(StorageError::INVALID_FILESYSTEM);
+    }
+
+    let mut remaining = directory.size_bytes;
     let mut extent_index = 0;
-    while extent_index < unsafe { read_u32(STATE_INODE_EXTENT_COUNT) as usize } {
-        let extent_start_block =
-            unsafe { read_u32(STATE_INODE_EXTENT_START_BLOCKS + extent_index as u32 * 4) };
-        let extent_block_count =
-            unsafe { read_u32(STATE_INODE_EXTENT_BLOCK_COUNTS + extent_index as u32 * 4) };
+    while extent_index < directory.extent_count as usize {
+        let extent_start_block = directory.extent_start_blocks[extent_index];
+        let extent_block_count = directory.extent_block_counts[extent_index];
         validate_extent(extent_start_block, extent_block_count, unsafe {
             read_u32(STATE_SUPERBLOCK_TOTAL_BLOCKS)
         })?;
         let mut block_index = 0;
         while block_index < extent_block_count {
-            unsafe { read_fs_block(extent_start_block + block_index)? };
+            let fs_block = extent_start_block + block_index;
+            let mut block_loaded = false;
             let mut offset = 0;
             while offset < BLOCK_SIZE && remaining > 0 {
+                if !block_loaded {
+                    unsafe { read_fs_block(fs_block)? };
+                    block_loaded = true;
+                }
                 match scratch_u8(offset) {
                     0 | 2 => {}
                     1 => {
@@ -859,14 +867,24 @@ pub unsafe fn copy_selected_directory_listing_into<S: DirectoryListingSink>(
                         {
                             return Err(StorageError::INVALID_FILESYSTEM);
                         }
+                        let inode_id = scratch_u32(offset + 4);
+                        let mut name = [0_u8; K16FS_MAX_NAME_BYTES];
                         let mut name_offset = 0;
                         while name_offset < name_len {
-                            unsafe {
-                                sink.push_byte(scratch_u8(offset + 8 + name_offset))?;
-                            }
+                            name[name_offset as usize] = scratch_u8(offset + 8 + name_offset);
                             name_offset += 1;
                         }
-                        unsafe { sink.push_byte(b'\n')? };
+                        unsafe { read_inode(inode_id)? };
+                        let child = unsafe { selected_path_metadata()? };
+                        unsafe {
+                            push_directory_entry(
+                                sink,
+                                child.kind as u32,
+                                &name[..name_len as usize],
+                                child.size_bytes,
+                            )?;
+                        }
+                        block_loaded = false;
                     }
                     _ => return Err(StorageError::INVALID_FILESYSTEM),
                 }
@@ -882,6 +900,34 @@ pub unsafe fn copy_selected_directory_listing_into<S: DirectoryListingSink>(
         return Err(StorageError::INVALID_FILESYSTEM);
     }
     Ok(sink.written())
+}
+
+unsafe fn push_directory_entry<S: DirectoryListingSink>(
+    sink: &mut S,
+    file_type: u32,
+    name: &[u8],
+    size_bytes: u32,
+) -> Result<(), StorageError> {
+    unsafe {
+        push_u32_le(sink, file_type)?;
+        push_u32_le(sink, name.len() as u32)?;
+    }
+    for byte in name {
+        unsafe { sink.push_byte(*byte)? };
+    }
+    unsafe { push_u32_le(sink, size_bytes) }
+}
+
+unsafe fn push_u32_le<S: DirectoryListingSink>(
+    sink: &mut S,
+    value: u32,
+) -> Result<(), StorageError> {
+    unsafe {
+        sink.push_byte((value & 0xff) as u8)?;
+        sink.push_byte(((value >> 8) & 0xff) as u8)?;
+        sink.push_byte(((value >> 16) & 0xff) as u8)?;
+        sink.push_byte(((value >> 24) & 0xff) as u8)
+    }
 }
 
 unsafe fn ensure_selected_directory_is_empty() -> Result<(), StorageError> {

@@ -357,6 +357,7 @@ class K16RuntimeTextIoProfilingTest {
             val gpuAfter = after.k16.gpu
             val storageBefore = before.k16.storage0
             val storageAfter = after.k16.storage0
+            val storageReads = storageAfter.readCommands - storageBefore.readCommands
             println(
                 "k16LsCommand: command=ls /bin, inputQueued=${inputQueuedNanos} ns, " +
                     "visible=${visibleNanos ?: -1} ns, ticks=$ticks",
@@ -370,7 +371,7 @@ class K16RuntimeTextIoProfilingTest {
                     "inputWakeups=${after.vm.k16WaitInputWakeups - before.vm.k16WaitInputWakeups}",
             )
             println(
-                "k16LsCommandStorage: reads=${storageAfter.readCommands - storageBefore.readCommands}, " +
+                "k16LsCommandStorage: reads=$storageReads, " +
                     "writes=${storageAfter.writeCommands - storageBefore.writeCommands}, " +
                     "flushes=${storageAfter.flushCommands - storageBefore.flushCommands}, " +
                     "bytesRead=${storageAfter.bytesRead - storageBefore.bytesRead}, " +
@@ -385,6 +386,7 @@ class K16RuntimeTextIoProfilingTest {
             )
 
             assertTrue(visibleNanos != null, "ls /bin did not finish and return to the prompt")
+            assertTrue(storageReads < 250, "ls /bin should not stat every child directory entry")
             assertTrue(inputPhase.contains("name=ls:/bin.input"))
             assertTrue(visiblePhase.contains("storageReads="))
             assertTrue(idlePhase.contains("name=ls:/bin.idle"))
@@ -458,6 +460,7 @@ class K16RuntimeTextIoProfilingTest {
             val gpuAfter = after.k16.gpu
             val storageBefore = before.k16.storage0
             val storageAfter = after.k16.storage0
+            val storageReads = storageAfter.readCommands - storageBefore.readCommands
             val scrollFrameBytes = gpuAfter.framePayloadBytes - gpuBefore.framePayloadBytes
             println(
                 "k16LsScrollCommand: command=ls /bin, inputQueued=${inputQueuedNanos} ns, " +
@@ -472,7 +475,7 @@ class K16RuntimeTextIoProfilingTest {
                     "inputWakeups=${after.vm.k16WaitInputWakeups - before.vm.k16WaitInputWakeups}",
             )
             println(
-                "k16LsScrollCommandStorage: reads=${storageAfter.readCommands - storageBefore.readCommands}, " +
+                "k16LsScrollCommandStorage: reads=$storageReads, " +
                     "writes=${storageAfter.writeCommands - storageBefore.writeCommands}, " +
                     "flushes=${storageAfter.flushCommands - storageBefore.flushCommands}, " +
                     "bytesRead=${storageAfter.bytesRead - storageBefore.bytesRead}, " +
@@ -491,6 +494,7 @@ class K16RuntimeTextIoProfilingTest {
                 scrollFrameBytes < 100_000,
                 "scroll-positioned ls /bin should use display ops instead of serializing full-screen tile payloads",
             )
+            assertTrue(storageReads < 250, "scroll-positioned ls /bin should not stat every child directory entry")
             assertTrue(inputPhase.contains("name=ls:/bin:scroll.input"))
             assertTrue(visiblePhase.contains("storageReads="))
             assertTrue(idlePhase.contains("name=ls:/bin:scroll.idle"))
