@@ -562,7 +562,11 @@ class K16RuntimeDevice(
         private fun runEndpointSlice(endpoint: K16ComputerEndpoint): Boolean {
             val startedAt = System.nanoTime()
             val result = endpoint.tickUntilSignal()
-            metricsCollector.recordK16RunSlice(result.signal.toRuntimeSignal(), System.nanoTime() - startedAt)
+            metricsCollector.recordK16RunSlice(
+                result.signal.toRuntimeSignal(),
+                System.nanoTime() - startedAt,
+                yieldSignals = result.yieldSignals,
+            )
             terminalControlReached =
                 result.control.isTerminal() || result.signal == NativeK16ComputerSignal.Halt
             refreshCaches(endpoint)

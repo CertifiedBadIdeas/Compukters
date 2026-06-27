@@ -98,6 +98,7 @@ interface RuntimeMetricsCollector {
     fun recordK16RunSlice(
         signal: K16RuntimeSignal,
         nanos: Long,
+        yieldSignals: Long = 0,
     )
 
     fun recordK16OutputRefresh(
@@ -493,6 +494,7 @@ object NoOpRuntimeMetricsCollector : RuntimeMetricsCollector {
     override fun recordK16RunSlice(
         signal: K16RuntimeSignal,
         nanos: Long,
+        yieldSignals: Long,
     ) = Unit
 
     override fun recordK16OutputRefresh(
@@ -728,9 +730,11 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
     override fun recordK16RunSlice(
         signal: K16RuntimeSignal,
         nanos: Long,
+        yieldSignals: Long,
     ) {
         k16RunSlices.incrementAndGet()
         k16RunNanos.addAndGet(nanos.coerceAtLeast(0))
+        k16RunYieldSignals.addAndGet(yieldSignals.coerceAtLeast(0))
         when (signal) {
             K16RuntimeSignal.HALT -> k16RunHaltSignals.incrementAndGet()
             K16RuntimeSignal.WAIT -> k16RunWaitSignals.incrementAndGet()

@@ -122,12 +122,14 @@ object K16ComputerRuntimeFactory {
     const val MINIMUM_BOOT_MEMORY_SIZE: Int = 256 * 1024
     const val DEFAULT_MEMORY_SIZE: Int = 1024 * 1024
     const val DEFAULT_SLICE_BUDGET_NANOS: Long = 1_000_000
+    const val DEFAULT_MAX_TURNS_PER_TICK: Int = 8
 
     fun createFromBiosFlash(
         biosFlashPath: Path,
         storage0Path: Path,
         memorySize: Int = DEFAULT_MEMORY_SIZE,
         maxSteps: Long = DEFAULT_SLICE_BUDGET_NANOS,
+        maxTurnsPerTick: Int = DEFAULT_MAX_TURNS_PER_TICK,
     ): K16ComputerRuntime {
         val handle =
             NativeVmBindings.createK16ComputerFromBiosFlash(
@@ -137,7 +139,11 @@ object K16ComputerRuntimeFactory {
                 maxSteps = maxSteps,
                 storage0Path = storage0Path,
             )
-        return K16ComputerRuntime(handle, bindings = NativeK16ComputerRuntimeBindings)
+        return K16ComputerRuntime(
+            handle,
+            bindings = NativeK16ComputerRuntimeBindings,
+            defaultMaxTurnsPerTick = maxTurnsPerTick,
+        )
     }
 
     fun restoreFromBiosFlashSnapshot(
@@ -145,6 +151,7 @@ object K16ComputerRuntimeFactory {
         storage0Path: Path,
         snapshot: ByteArray,
         memorySize: Int = DEFAULT_MEMORY_SIZE,
+        maxTurnsPerTick: Int = DEFAULT_MAX_TURNS_PER_TICK,
     ): K16ComputerRuntime {
         val handle =
             NativeVmBindings.restoreK16ComputerFromBiosFlashSnapshot(
@@ -154,7 +161,11 @@ object K16ComputerRuntimeFactory {
                 storage0Path = storage0Path,
                 snapshot = snapshot,
             )
-        return K16ComputerRuntime(handle, bindings = NativeK16ComputerRuntimeBindings)
+        return K16ComputerRuntime(
+            handle,
+            bindings = NativeK16ComputerRuntimeBindings,
+            defaultMaxTurnsPerTick = maxTurnsPerTick,
+        )
     }
 }
 
@@ -178,9 +189,15 @@ interface K16ComputerEndpoint : AutoCloseable {
 
     fun advanceGameTicks(ticks: Long)
 
-    fun tick(maxTurns: Int = 8): NativeK16ComputerControl
+    fun tick(): NativeK16ComputerControl =
+        tick(K16ComputerRuntimeFactory.DEFAULT_MAX_TURNS_PER_TICK)
 
-    fun tickUntilSignal(maxTurns: Int = 8): K16ComputerTickResult =
+    fun tick(maxTurns: Int): NativeK16ComputerControl
+
+    fun tickUntilSignal(): K16ComputerTickResult =
+        tickUntilSignal(K16ComputerRuntimeFactory.DEFAULT_MAX_TURNS_PER_TICK)
+
+    fun tickUntilSignal(maxTurns: Int): K16ComputerTickResult =
         K16ComputerTickResult(
             signal = NativeK16ComputerSignal.Pause,
             control = tick(maxTurns),
@@ -200,12 +217,13 @@ interface K16ComputerEndpoint : AutoCloseable {
 data class K16ComputerTickResult(
     val signal: NativeK16ComputerSignal,
     val control: NativeK16ComputerControl,
+    val yieldSignals: Long = 0,
 )
 
 class K16ComputerRuntime(
     private val handle: Long,
     private val bindings: K16ComputerRuntimeBindings = NativeK16ComputerRuntimeBindings,
-    private val defaultMaxTurnsPerTick: Int = 8,
+    private val defaultMaxTurnsPerTick: Int = K16ComputerRuntimeFactory.DEFAULT_MAX_TURNS_PER_TICK,
     private val storage0Sink: ((ByteArray) -> Unit)? = null,
 ) : K16ComputerEndpoint {
     private val terminalOutput = ByteArrayOutputStream()
@@ -266,9 +284,9 @@ class K16ComputerRuntime(
         }
     }
 
-    fun tick(): NativeK16ComputerControl = tick(defaultMaxTurnsPerTick)
+    override fun tick(): NativeK16ComputerControl = tick(defaultMaxTurnsPerTick)
 
-    fun tickUntilSignal(): K16ComputerTickResult = tickUntilSignal(defaultMaxTurnsPerTick)
+    override fun tickUntilSignal(): K16ComputerTickResult = tickUntilSignal(defaultMaxTurnsPerTick)
 
     override fun tick(maxTurns: Int): NativeK16ComputerControl {
         return tickUntilSignal(maxTurns).control
@@ -280,20 +298,31 @@ class K16ComputerRuntime(
         terminalControl?.let {
             return K16ComputerTickResult(signal = NativeK16ComputerSignal.Halt, control = it)
         }
+        var yieldSignals = 0L
         repeat(maxTurns) {
             val signal = bindings.runUntilSignal(handle)
             appendNativeOutput()
             val control = bindings.control(handle)
-            if (signal != NativeK16ComputerSignal.Pause) {
-                if (signal == NativeK16ComputerSignal.Halt) {
-                    terminalControl = control
+            when (signal) {
+                NativeK16ComputerSignal.Yield -> {
+                    yieldSignals += 1
                 }
-                return K16ComputerTickResult(signal = signal, control = control)
+
+                NativeK16ComputerSignal.Halt -> {
+                    terminalControl = control
+                    return K16ComputerTickResult(signal = signal, control = control, yieldSignals = yieldSignals)
+                }
+
+                NativeK16ComputerSignal.Wait ->
+                    return K16ComputerTickResult(signal = signal, control = control, yieldSignals = yieldSignals)
+
+                NativeK16ComputerSignal.Pause -> Unit
             }
         }
         return K16ComputerTickResult(
             signal = NativeK16ComputerSignal.Pause,
             control = bindings.control(handle),
+            yieldSignals = yieldSignals,
         )
     }
 

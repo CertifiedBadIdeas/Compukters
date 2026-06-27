@@ -34,7 +34,8 @@ class DeviceVmModelsArchitectureTest {
                 .readText()
 
         assertTrue(source.contains("val maxStepsPerSlice: Long"))
-        assertTrue(source.contains("DeviceCpuResources(maxStepsPerSlice = maxStepsPerSlice)"))
+        assertTrue(source.contains("val maxTurnsPerTick: Int"))
+        assertTrue(source.contains("DeviceCpuResources(maxStepsPerSlice = maxStepsPerSlice, maxTurnsPerTick = 8)"))
         assertFalse(source.contains("wallTimeGuardNanosPerSlice"))
         assertFalse(source.contains("cpuBudgetNanosPerSlice"))
     }

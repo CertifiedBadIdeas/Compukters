@@ -79,6 +79,11 @@ class K16ComputerRuntimeFactoryTest {
     }
 
     @Test
+    fun defaultMaxTurnsPerTickDocumentsStandaloneRuntimeBudget() {
+        assertEquals(8, K16ComputerRuntimeFactory.DEFAULT_MAX_TURNS_PER_TICK)
+    }
+
+    @Test
     fun runtimeUsesK16KotlinBindingSurface() {
         val runtimeSource =
             root
@@ -171,7 +176,7 @@ class K16ComputerRuntimeFactoryTest {
 
         val rustJniSource =
             root
-                .resolve(Path.of("rust", "host", "k16-vm", "src", "jni.rs"))
+                .resolve(Path.of("host", "k16-vm", "src", "jni.rs"))
                 .readText()
         assertTrue(
             rustJniSource.contains("NativeVmBindings_k16ComputerStatsSnapshotNative"),

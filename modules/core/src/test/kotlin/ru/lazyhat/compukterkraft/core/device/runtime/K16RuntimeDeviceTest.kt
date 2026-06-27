@@ -349,22 +349,29 @@ class K16RuntimeDeviceTest {
         val endpoint = RecordingK16Endpoint()
         endpoint.tickResults +=
             K16ComputerTickResult(
-                signal = NativeK16ComputerSignal.Yield,
+                signal = NativeK16ComputerSignal.Wait,
                 control = NativeK16ComputerControl(status = K16RuntimeDevice.STATUS_READY, exitCode = 0, panicCode = 0),
+                yieldSignals = 3,
             )
+        val metrics = RecordingRuntimeMetricsCollector()
         val device =
             K16RuntimeDevice(
                 deviceId = 24,
                 properties = DeviceProperties(DeviceFamily.NORMAL, label = null),
                 endpointFactory = { endpoint },
                 stateSink = {},
+                metricsCollector = metrics,
             )
 
         device.turnOn()
         device.serverTick()
-        waitUntil { endpoint.tickCalls == 1 }
+        waitUntil { endpoint.tickCalls == 1 && metrics.snapshot().vm.k16RunSlices == 1L }
 
+        val snapshot = metrics.snapshot()
         assertEquals(1, endpoint.tickUntilSignalCalls)
+        assertEquals(1, snapshot.vm.k16RunSlices)
+        assertEquals(1, snapshot.vm.k16RunWaitSignals)
+        assertEquals(3, snapshot.vm.k16RunYieldSignals)
         device.shutdown()
     }
 
