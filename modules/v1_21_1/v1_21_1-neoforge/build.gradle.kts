@@ -1682,3 +1682,22 @@ tasks.register<Test>("profileK16RuntimeTextIo") {
         showStandardStreams = true
     }
 }
+
+tasks.register<Test>("profileK16ManyVmServerBudget") {
+    description = "Runs the bundled K16 many-VM server budget profiling workload and prints runtime metrics."
+    group = "verification"
+    dependsOn(tasks.named("buildK16VmNativeLibrary"))
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    useJUnitPlatform()
+    filter {
+        includeTestsMatching("ru.lazyhat.compukterkraft.impl.K16ManyVmServerBudgetProfilingTest")
+    }
+    systemProperty("k16.vm.native.library", k16VmNativeLibrary.asFile.absolutePath)
+    systemProperty("k16.profile.manyVmCount", providers.gradleProperty("k16ManyVmCount").orElse("16").get())
+    systemProperty("k16.profile.manyVmIdleTicks", providers.gradleProperty("k16ManyVmIdleTicks").orElse("80").get())
+    systemProperty("k16.profile.manyVmBootTickLimit", providers.gradleProperty("k16ManyVmBootTickLimit").orElse("120").get())
+    testLogging {
+        showStandardStreams = true
+    }
+}

@@ -297,6 +297,99 @@ class K16RuntimeTextIoProfilingTest {
         }
     }
 
+    @Test
+    fun printsK16LsCommandRuntimeLatencyNearTerminalScroll() {
+        val workspace = createTempDirectory("k16-runtime-ls-scroll-profile-")
+        val biosFlashPath = workspace.resolve("bios.kflash")
+        val storage0Path = workspace.resolve("storage0.kv")
+        biosFlashPath.writeBytes(K16BiosFlashWorkspace.loadBiosFlashResource(classLoader = javaClass.classLoader))
+        storage0Path.writeBytes(K16SystemVolumeWorkspace.loadStorage0VolumeResource(classLoader = javaClass.classLoader))
+        val profile = DeviceProfileRegistry.forFamily(DeviceFamily.NORMAL)
+        val metrics = RecordingRuntimeMetricsCollector()
+        val device =
+            K16RuntimeDevice(
+                deviceId = 227,
+                properties = DeviceProperties(DeviceFamily.NORMAL, label = "ls-scroll-profiling"),
+                endpointFactory = {
+                    K16ComputerRuntimeFactory.createFromBiosFlash(
+                        biosFlashPath = biosFlashPath,
+                        storage0Path = storage0Path,
+                        maxSteps = profile.resources.cpu.maxStepsPerSlice,
+                        maxTurnsPerTick = profile.resources.cpu.maxTurnsPerTick,
+                    )
+                },
+                stateSink = {},
+                metricsCollector = metrics,
+            )
+
+        try {
+            device.turnOn()
+            waitForTerminal(device, "initial shell prompt") { terminal -> terminal.contains("K16> ") }
+            fillTerminalUntilPromptIsNearBottom(device)
+            val before = metrics.snapshot()
+            val command = "ls /bin\n"
+            val startedAt = System.nanoTime()
+            DeviceEvents.dispatch(device, PasteInputEvent(ByteBuffer.wrap(command.encodeToByteArray())))
+            val inputQueuedNanos = System.nanoTime() - startedAt
+            var ticks = 0
+            var visibleNanos: Long? = null
+
+            while (ticks < 200 && visibleNanos == null) {
+                ticks += 1
+                tickAndSync(device)
+                val elapsed = System.nanoTime() - startedAt
+                val terminal = device.snapshotRuntimeState()?.let(::terminalText) ?: ""
+                val outputIndex = terminal.indexOf("ls.kx")
+                val returnedPromptIndex =
+                    if (outputIndex >= 0) {
+                        terminal.indexOf("K16> ", startIndex = outputIndex + "ls.kx".length)
+                    } else {
+                        -1
+                    }
+                if (returnedPromptIndex > outputIndex) {
+                    visibleNanos = elapsed
+                }
+                Thread.sleep(1)
+            }
+
+            val after = metrics.snapshot()
+            val gpuBefore = before.k16.gpu
+            val gpuAfter = after.k16.gpu
+            val storageBefore = before.k16.storage0
+            val storageAfter = after.k16.storage0
+            println(
+                "k16LsScrollCommand: command=ls /bin, inputQueued=${inputQueuedNanos} ns, " +
+                    "visible=${visibleNanos ?: -1} ns, ticks=$ticks",
+            )
+            println(
+                "k16LsScrollCommandVm: slices=${after.vm.k16RunSlices - before.vm.k16RunSlices}, " +
+                    "runTime=${after.vm.k16RunNanos - before.vm.k16RunNanos} ns, " +
+                    "yieldSignals=${after.vm.k16RunYieldSignals - before.vm.k16RunYieldSignals}, " +
+                    "waitSignals=${after.vm.k16RunWaitSignals - before.vm.k16RunWaitSignals}, " +
+                    "pauseSignals=${after.vm.k16RunPauseSignals - before.vm.k16RunPauseSignals}, " +
+                    "inputWakeups=${after.vm.k16WaitInputWakeups - before.vm.k16WaitInputWakeups}",
+            )
+            println(
+                "k16LsScrollCommandStorage: reads=${storageAfter.readCommands - storageBefore.readCommands}, " +
+                    "writes=${storageAfter.writeCommands - storageBefore.writeCommands}, " +
+                    "flushes=${storageAfter.flushCommands - storageBefore.flushCommands}, " +
+                    "bytesRead=${storageAfter.bytesRead - storageBefore.bytesRead}, " +
+                    "bytesWritten=${storageAfter.bytesWritten - storageBefore.bytesWritten}",
+            )
+            println(
+                "k16LsScrollCommandGpu: blits=${gpuAfter.blitBufferCommands - gpuBefore.blitBufferCommands}, " +
+                    "presents=${gpuAfter.presentCommands - gpuBefore.presentCommands}, " +
+                    "frames=${gpuAfter.frames - gpuBefore.frames}, " +
+                    "tiles=${gpuAfter.frameTiles - gpuBefore.frameTiles}, " +
+                    "frameBytes=${gpuAfter.framePayloadBytes - gpuBefore.framePayloadBytes}",
+            )
+
+            assertTrue(visibleNanos != null, "scroll-positioned ls /bin did not finish and return to the prompt")
+        } finally {
+            device.close()
+        }
+    }
+
     private fun dispatchText(
         device: K16RuntimeDevice,
         text: String,
@@ -313,6 +406,14 @@ class K16RuntimeTextIoProfilingTest {
     ) {
         DeviceEvents.dispatch(device, PasteInputEvent(ByteBuffer.wrap(text.encodeToByteArray())))
         tickAndSync(device)
+    }
+
+    private fun fillTerminalUntilPromptIsNearBottom(device: K16RuntimeDevice) {
+        repeat(K16_TERMINAL_ROWS + 3) { index ->
+            val line = index.toString().padStart(2, '0')
+            dispatchPasteText(device, "echo scroll-line-$line\n")
+            waitForTerminal(device, "scroll filler line $line") { terminal -> terminal.contains("scroll-line-$line") }
+        }
     }
 
     private fun waitForTerminal(
