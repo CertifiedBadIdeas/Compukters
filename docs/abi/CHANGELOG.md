@@ -2,12 +2,14 @@
 
 ## Unreleased
 
+- `k16 runtime k16-memory-helpers` now builds its Rust `#![no_core]` helper
+  source from `guest/runtime/k16-memory-helpers.rs` instead of keeping that
+  host-generated helper source inside `rust/guest/k16-rt`. The `k16-rt` crate
+  remains the Rust kernel runtime API boundary.
 - The standalone Rust `rust/guest/k16-memory` crate was removed. The Rust
   `k16_memcpy`, `k16_memmove`, `k16_memset`, and `k16_memcmp` implementations
-  now live directly in `rust/guest/k16-rt/src/memory.rs`; `k16 runtime
-  k16-memory-helpers` still builds its no-core object from
-  `rust/guest/k16-rt/src/no_core_helpers.rs`. `k16-abi` and `k16-rt` remain
-  separate Rust crates.
+  now live directly in `rust/guest/k16-rt/src/memory.rs`. `k16-abi` and
+  `k16-rt` remain separate Rust crates.
 - The standalone Rust `rust/guest/k16-storage` crate was removed. The
   K16PT/K16FS storage helper now lives inside
   `rust/guest/k16-kernel/src/storage.rs` as kernel-owned code used by

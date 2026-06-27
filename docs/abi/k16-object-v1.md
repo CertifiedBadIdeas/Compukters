@@ -126,7 +126,7 @@ has already installed the selected process stack top in `r15` before entering
 `_start`; it must not bake a fixed physical stack top into the artifact.
 
 The memory and integer helper object is built from the guest Rust `#![no_core]`
-runtime source at `rust/guest/k16-rt/src/no_core_helpers.rs`. Building it requires
+runtime source at `guest/runtime/k16-memory-helpers.rs`. Building it requires
 `K16_RUSTC` to point at the custom rustc that contains the K16 LLVM target and
 `K16_LLVM_BIN_DIR` to point at the K16 LLVM tools used to lower the generated
 LLVM IR into an ELF object. `K16_RUST_TARGET_JSON` can override the target spec;

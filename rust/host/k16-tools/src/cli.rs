@@ -301,7 +301,7 @@ fn build_k16_memory_helpers(output_path: &Path) -> Result<(), String> {
         ));
     }
 
-    let source = k16_rt_no_core_helpers_path();
+    let source = k16_memory_helpers_source_path();
     if !source.is_file() {
         return Err(format!(
             "K16 runtime helper source is missing: {}",
@@ -391,8 +391,8 @@ fn build_k16_memory_helpers(output_path: &Path) -> Result<(), String> {
     Ok(())
 }
 
-fn k16_rt_no_core_helpers_path() -> PathBuf {
-    repo_root().join("rust/guest/k16-rt/src/no_core_helpers.rs")
+fn k16_memory_helpers_source_path() -> PathBuf {
+    repo_root().join("guest/runtime/k16-memory-helpers.rs")
 }
 
 fn repo_root() -> PathBuf {

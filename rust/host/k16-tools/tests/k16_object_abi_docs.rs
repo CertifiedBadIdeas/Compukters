@@ -179,7 +179,7 @@ fn k16_object_abi_docs_define_freestanding_runtime_boundary() {
         "`__k16_read_trap_arg2`",
         "`__k16_syscall3`",
         "`__k16_iret_with_r0`",
-        "rust/guest/k16-rt/src/no_core_helpers.rs",
+        "guest/runtime/k16-memory-helpers.rs",
         "requires `K16_RUSTC`",
         "`K16_LLVM_BIN_DIR`",
         "`guest/c/arch/k16/cpu-helpers.kasm`",
