@@ -45,10 +45,16 @@ object ComputerRuntimeDeviceFactory {
         val volumeStore = FileK16VolumeStore(worldRoot)
         val snapshotStore = K16RuntimeSnapshotStore(worldRoot)
         val workspace = worldRoot.resolve("compukterkraft").resolve("computers").resolve(deviceId.toString())
+        val startupSnapshot =
+            tile.consumePendingRuntimeSnapshot()
+                ?: snapshotStore.readComputerSnapshotOrNull(deviceId)
+        var pendingStartupSnapshot = startupSnapshot
         return K16RuntimeDevice(
             deviceId = deviceId,
             properties = DeviceProperties(tile.family, tile.label),
             endpointFactory = {
+                val snapshot = pendingStartupSnapshot
+                pendingStartupSnapshot = null
                 val profile = DeviceProfileRegistry.forFamily(tile.family)
                 val memorySize =
                     k16MemorySizeBytes(
@@ -60,9 +66,6 @@ object ComputerRuntimeDeviceFactory {
                 K16SystemVolumeWorkspace.prepareStorage0Volume(workspace)
                 val storage0 = volumeStore.openOrCreateComputerVolume(deviceId, "storage0")
                 val biosFlashPath = K16BiosFlashWorkspace.prepareBiosFlash(workspace)
-                val snapshot =
-                    tile.consumePendingRuntimeSnapshot()
-                        ?: snapshotStore.readComputerSnapshotOrNull(deviceId)
                 createK16ComputerEndpoint(biosFlashPath, storage0, snapshot, memorySize, maxSteps, maxTurnsPerTick)
             },
             stateSink = host.stateSink,
