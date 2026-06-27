@@ -113,6 +113,34 @@ fn k16_bootloader_is_c_built_and_loads_kernel() {
 }
 
 #[test]
+fn kernel_boot_chain_is_kernel_owned() {
+    let root = repo_root();
+    let workspace_manifest = root.join("rust/guest/Cargo.toml");
+    let kernel_manifest = root.join("rust/guest/k16-kernel/Cargo.toml");
+    let kernel_boot_chain = root.join("rust/guest/k16-kernel/src/boot_chain.rs");
+
+    let workspace_manifest =
+        fs::read_to_string(&workspace_manifest).expect("K16 guest workspace manifest exists");
+    let kernel_manifest =
+        fs::read_to_string(&kernel_manifest).expect("K16 kernel manifest exists");
+    let kernel_boot_chain =
+        fs::read_to_string(&kernel_boot_chain).expect("kernel-owned boot-chain source exists");
+
+    assert!(
+        !rust_guest_workspace_members(&workspace_manifest).contains(&"k16-boot-chain"),
+        "Rust boot-chain support should be kernel-owned, not a standalone workspace member"
+    );
+    assert!(
+        !root.join("rust/guest/k16-boot-chain").exists(),
+        "standalone Rust boot-chain crate should be removed after C BIOS/bootloader migration"
+    );
+    assert!(!kernel_manifest.contains("k16-boot-chain"));
+    assert!(kernel_boot_chain.contains("pub struct LoadedImage"));
+    assert!(kernel_boot_chain.contains("pub struct LoadError"));
+    assert!(kernel_boot_chain.contains("user_memory_end_from_boot_info"));
+}
+
+#[test]
 fn legacy_rust_userland_crates_are_removed_after_c_migration() {
     let root = repo_root();
     let workspace_manifest = root.join("rust/guest/Cargo.toml");

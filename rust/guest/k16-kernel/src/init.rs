@@ -1,4 +1,4 @@
-use k16_boot_chain::LoadError;
+use crate::boot_chain::LoadError;
 
 use crate::{control, debug, process};
 

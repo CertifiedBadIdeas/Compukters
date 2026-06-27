@@ -1,5 +1,6 @@
 #![no_std]
 
+pub mod boot_chain;
 pub mod fs;
 pub mod memory_layout;
 pub mod mmio;

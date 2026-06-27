@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- The standalone Rust `rust/guest/k16-boot-chain` crate was removed after the
+  BIOS and bootloader moved to C. Its remaining Rust helper surface now lives
+  inside `rust/guest/k16-kernel/src/boot_chain.rs` as kernel-owned code for
+  init/process image loading and boot-info validation. The C firmware
+  `guest/c/boot-chain` helper remains the BIOS/bootloader storage loader.
 - Bundled K16 bootloader generation now builds `guest/c/boot/boot.c` plus the
   shared C boot-chain helper under `guest/c/boot-chain` through the
   source-built-dev K16 Clang path and links it with `k16 link --target boot`

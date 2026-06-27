@@ -465,7 +465,7 @@ impl ProcessMemory {
     }
 
     pub fn for_loaded_image(
-        image: k16_boot_chain::LoadedImage,
+        image: crate::boot_chain::LoadedImage,
         memory_end: u32,
     ) -> Result<Self, ProcessLoadError> {
         if image.load_addr >= image.load_end || image.load_end > memory_end {
@@ -623,7 +623,7 @@ impl ProcessResources {
     }
 
     fn for_loaded_init_image(
-        image: k16_boot_chain::LoadedImage,
+        image: crate::boot_chain::LoadedImage,
         memory_end: u32,
     ) -> Result<Self, ProcessLoadError> {
         let memory = ProcessMemory::for_loaded_image(image, memory_end)?;
@@ -696,7 +696,7 @@ struct ProcessDescriptor {
 
 impl ProcessDescriptor {
     fn for_loaded_init_image(
-        image: k16_boot_chain::LoadedImage,
+        image: crate::boot_chain::LoadedImage,
         memory_end: u32,
     ) -> Result<Self, ProcessLoadError> {
         let resources = ProcessResources::for_loaded_init_image(image, memory_end)?;
@@ -996,14 +996,14 @@ impl ProcessTable {
 
     pub fn initialize_init_image(
         &mut self,
-        image: k16_boot_chain::LoadedImage,
+        image: crate::boot_chain::LoadedImage,
     ) -> Result<(), ProcessLoadError> {
         self.initialize_init_image_in_memory(image, DEFAULT_INIT_MEMORY_END)
     }
 
     pub fn initialize_init_image_in_memory(
         &mut self,
-        image: k16_boot_chain::LoadedImage,
+        image: crate::boot_chain::LoadedImage,
         memory_end: u32,
     ) -> Result<(), ProcessLoadError> {
         let descriptor = ProcessDescriptor::for_loaded_init_image(image, memory_end)?;
@@ -1473,7 +1473,7 @@ impl ChildArgvLayout {
 
 #[cfg(any(not(test), feature = "host-test"))]
 pub unsafe fn initialize_init_process(
-    image: k16_boot_chain::LoadedImage,
+    image: crate::boot_chain::LoadedImage,
     memory_end: u32,
 ) -> Result<(), ProcessLoadError> {
     #[cfg(not(test))]
@@ -6415,7 +6415,7 @@ mod tests {
         });
 
         table
-            .initialize_init_image(k16_boot_chain::LoadedImage {
+            .initialize_init_image(crate::boot_chain::LoadedImage {
                 load_addr: 0x0000_8000,
                 load_end: 0x0000_9022,
                 entry_pc: 0x0000_8004,
@@ -6437,7 +6437,7 @@ mod tests {
 
         table
             .initialize_init_image_in_memory(
-                k16_boot_chain::LoadedImage {
+                crate::boot_chain::LoadedImage {
                     load_addr: 0x0001_3000,
                     load_end: 0x0001_4022,
                     entry_pc: 0x0001_3004,
@@ -6463,7 +6463,7 @@ mod tests {
 
     #[test]
     fn process_descriptor_builds_loaded_init_context_frame_and_resources() {
-        let image = k16_boot_chain::LoadedImage {
+        let image = crate::boot_chain::LoadedImage {
             load_addr: 0x0001_3000,
             load_end: 0x0001_4022,
             entry_pc: 0x0001_3004,
@@ -6573,7 +6573,7 @@ mod tests {
         });
         table
             .initialize_init_image_in_memory(
-                k16_boot_chain::LoadedImage {
+                crate::boot_chain::LoadedImage {
                     load_addr: 0x0001_3000,
                     load_end: 0x0001_4020,
                     entry_pc: 0x0001_3004,
@@ -6596,7 +6596,7 @@ mod tests {
             stack_top: 0,
         });
         table
-            .initialize_init_image(k16_boot_chain::LoadedImage {
+            .initialize_init_image(crate::boot_chain::LoadedImage {
                 load_addr: 0x0000_8000,
                 load_end: 0x0000_9000,
                 entry_pc: 0x0000_8004,
@@ -6625,7 +6625,7 @@ mod tests {
         });
         table
             .initialize_init_image_in_memory(
-                k16_boot_chain::LoadedImage {
+                crate::boot_chain::LoadedImage {
                     load_addr: 0x0001_3000,
                     load_end: 0x0001_4000,
                     entry_pc: 0x0001_3004,
@@ -6653,7 +6653,7 @@ mod tests {
         });
         table
             .initialize_init_image_in_memory(
-                k16_boot_chain::LoadedImage {
+                crate::boot_chain::LoadedImage {
                     load_addr: 0x0001_3000,
                     load_end: 0x0001_4000,
                     entry_pc: 0x0001_3004,
@@ -6696,7 +6696,7 @@ mod tests {
         });
         table
             .initialize_init_image_in_memory(
-                k16_boot_chain::LoadedImage {
+                crate::boot_chain::LoadedImage {
                     load_addr: 0x0001_3000,
                     load_end: 0x0001_4000,
                     entry_pc: 0x0001_3004,
@@ -7727,7 +7727,7 @@ mod tests {
 
     #[test]
     fn init_loaded_image_defines_child_arena_after_init_image() {
-        let image = k16_boot_chain::LoadedImage {
+        let image = crate::boot_chain::LoadedImage {
             entry_pc: 0x0001_0000,
             load_addr: 0x0001_0000,
             load_end: 0x0001_0a20,
@@ -7804,7 +7804,7 @@ mod tests {
 
     #[test]
     fn child_arena_rejects_program_that_would_overlap_live_init_stack() {
-        let image = k16_boot_chain::LoadedImage {
+        let image = crate::boot_chain::LoadedImage {
             entry_pc: 0x0001_0000,
             load_addr: 0x0001_0000,
             load_end: 0x0001_0a20,
@@ -7837,7 +7837,7 @@ mod tests {
 
     #[test]
     fn child_arena_uses_live_init_stack_as_child_stack_top() {
-        let image = k16_boot_chain::LoadedImage {
+        let image = crate::boot_chain::LoadedImage {
             entry_pc: 0x0001_0000,
             load_addr: 0x0001_0000,
             load_end: 0x0001_0a20,
