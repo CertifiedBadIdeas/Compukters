@@ -68,10 +68,25 @@ Use `profileK16RuntimeWait` to build the local debug K16 JNI library, boot the b
 ```
 
 Use `profileK16RuntimeTextIo` for a terminal-focused workload that waits for the bundled shell, sends one command as
-individual character input, sends another command as paste input, and prints the same runtime profiling summary:
+individual character input, sends another command as paste input, compares a normal `ls /bin` with a scroll-provoking
+`ls /bin`, and prints the same runtime profiling summary:
 
 ```bash
 ./gradlew-sandbox-dev --parallel profileK16RuntimeTextIo -Pk16BuildJobs=$(nproc)
+```
+
+Use `profileK16ManyVmServerBudget` for a server-focused workload that boots several K16 runtime devices, measures idle
+tick cost after all shells are waiting, then runs one active command while the other VMs stay idle. The printed lines
+include both server-tick wall time and a `sync` time that waits for worker snapshots after the timed tick loop:
+
+```bash
+./gradlew-sandbox-dev --parallel profileK16ManyVmServerBudget -Pk16BuildJobs=$(nproc)
+```
+
+Scale the workload with Gradle properties:
+
+```bash
+./gradlew-sandbox-dev --parallel profileK16ManyVmServerBudget -Pk16BuildJobs=$(nproc) -Pk16ManyVmCount=100 -Pk16ManyVmIdleTicks=200
 ```
 
 The tasks run only their dedicated profiling tests and keep normal gameplay on the default no-op collector. The profiling
