@@ -63,7 +63,8 @@ class ClientDisplayBuffer(
             metricsCollector.recordApply(frame, accepted = false, nanos = System.nanoTime() - started)
             return false
         }
-        if (!frame.fullRefresh && frame.sequence != expectedSequence) {
+        // Server-side frame coalescing can advance directly to a later sequence while carrying the merged delta.
+        if (!frame.fullRefresh && frame.sequence < expectedSequence) {
             metricsCollector.recordApply(frame, accepted = false, nanos = System.nanoTime() - started)
             return false
         }

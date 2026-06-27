@@ -103,6 +103,39 @@ class ClientDisplayBufferTest {
     }
 
     @Test
+    fun acceptsServerCoalescedPartialFrameThatAdvancesSequence() {
+        val buffer = ClientDisplayBuffer(displayId = 1, width = 2, height = 1)
+        val red565 = byteArrayOf(0xF8.toByte(), 0x00)
+        val green565 = byteArrayOf(0x07, 0xE0.toByte())
+        val initialFrame =
+            DisplayFrameDelta(
+                displayId = 1,
+                sequence = 1,
+                width = 2,
+                height = 1,
+                pixelFormat = DisplayPixelFormat.RGB565,
+                fullRefresh = true,
+                tiles = listOf(DisplayTile(0, 0, 0, 0, 2, 1, red565 + red565)),
+            )
+        val coalescedFrame =
+            DisplayFrameDelta(
+                displayId = 1,
+                sequence = 3,
+                width = 2,
+                height = 1,
+                pixelFormat = DisplayPixelFormat.RGB565,
+                fullRefresh = false,
+                tiles = listOf(DisplayTile(0, 0, 1, 0, 1, 1, green565)),
+            )
+
+        assertTrue(buffer.apply(initialFrame))
+        assertTrue(buffer.apply(coalescedFrame))
+        buffer.swapIfDirty()
+
+        assertEquals(listOf(0xFFFF0000.toInt(), 0xFF00FF00.toInt()), buffer.frontArgb().toList())
+    }
+
+    @Test
     fun cacheReusesReceivedBufferForSameComputerDisplayGeometry() {
         val cache = ClientDisplayBufferCache()
         val firstBuffer = cache.getOrCreate(computerId = 42, displayId = 1, width = 2, height = 1)
