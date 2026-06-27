@@ -146,6 +146,8 @@ class RuntimeProfilingTest {
         collector.recordK16RunSlice(K16RuntimeSignal.HALT, nanos = 75)
         collector.recordK16OutputRefresh(serialOutputBytes = 4, gpuFrameBytes = 64, gpuFrameCount = 2, nanos = 100)
         collector.recordK16OutputRefresh(serialOutputBytes = 8, gpuFrameBytes = 0, gpuFrameCount = 0, nanos = 50)
+        collector.recordK16TextInput(byteCount = 1, nanos = 7)
+        collector.recordK16TextInput(byteCount = 3, nanos = 11)
         collector.recordK16StatsSnapshot(
             NativeK16ComputerStatsSnapshot(
                 ram = NativeK16BusTraffic(loads = 10, stores = 11, bytesRead = 12, bytesWritten = 13),
@@ -233,6 +235,9 @@ class RuntimeProfilingTest {
         assertEquals(1, snapshot.vm.k16GpuFrameBatches)
         assertEquals(64, snapshot.vm.k16GpuFrameBytes)
         assertEquals(2, snapshot.vm.k16GpuFramesDecoded)
+        assertEquals(2, snapshot.vm.k16TextInputEvents)
+        assertEquals(4, snapshot.vm.k16TextInputBytes)
+        assertEquals(18, snapshot.vm.k16TextInputNanos)
         assertEquals(RuntimeK16BusTrafficMetrics(loads = 10, stores = 11, bytesRead = 12, bytesWritten = 13), snapshot.k16.ram)
         assertEquals(RuntimeK16BusTrafficMetrics(loads = 20, stores = 21, bytesRead = 22, bytesWritten = 23), snapshot.k16.mmio)
         assertEquals(1, snapshot.k16.devices.size)
@@ -288,6 +293,10 @@ class RuntimeProfilingTest {
         )
         assertTrue(
             summary.contains("    k16DisplayFrames: batches=1, bytes=64, frames=2"),
+            summary,
+        )
+        assertTrue(
+            summary.contains("    k16TextInput: events=2, bytes=4, time=18 ns"),
             summary,
         )
         assertTrue(

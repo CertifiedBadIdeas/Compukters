@@ -106,6 +106,11 @@ interface RuntimeMetricsCollector {
         nanos: Long,
     )
 
+    fun recordK16TextInput(
+        byteCount: Int,
+        nanos: Long,
+    )
+
     fun recordK16StatsSnapshot(snapshot: NativeK16ComputerStatsSnapshot)
 
     fun recordK16WaitEnter()
@@ -197,6 +202,9 @@ data class RuntimeVmMetrics(
     val k16GpuFrameBatches: Long = 0,
     val k16GpuFrameBytes: Long = 0,
     val k16GpuFramesDecoded: Long = 0,
+    val k16TextInputEvents: Long = 0,
+    val k16TextInputBytes: Long = 0,
+    val k16TextInputNanos: Long = 0,
     val k16WaitEntries: Long = 0,
     val k16WaitTimerWakeups: Long = 0,
     val k16WaitInputWakeups: Long = 0,
@@ -312,6 +320,9 @@ data class RuntimeProfilingSnapshot(
             )
             appendLine(
                 "    k16DisplayFrames: batches=${vm.k16GpuFrameBatches}, bytes=${vm.k16GpuFrameBytes}, frames=${vm.k16GpuFramesDecoded}",
+            )
+            appendLine(
+                "    k16TextInput: events=${vm.k16TextInputEvents}, bytes=${vm.k16TextInputBytes}, time=${vm.k16TextInputNanos.nanos()}",
             )
             appendLine(
                 "    k16Bus: ramLoads=${k16.ram.loads}, ramStores=${k16.ram.stores}, ramBytesRead=${k16.ram.bytesRead}, ramBytesWritten=${k16.ram.bytesWritten}, mmioLoads=${k16.mmio.loads}, mmioStores=${k16.mmio.stores}, mmioBytesRead=${k16.mmio.bytesRead}, mmioBytesWritten=${k16.mmio.bytesWritten}",
@@ -463,6 +474,11 @@ object NoOpRuntimeMetricsCollector : RuntimeMetricsCollector {
         nanos: Long,
     ) = Unit
 
+    override fun recordK16TextInput(
+        byteCount: Int,
+        nanos: Long,
+    ) = Unit
+
     override fun recordK16StatsSnapshot(snapshot: NativeK16ComputerStatsSnapshot) = Unit
 
     override fun recordK16WaitEnter() = Unit
@@ -546,6 +562,9 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
     private val k16GpuFrameBatches = AtomicLong()
     private val k16GpuFrameBytes = AtomicLong()
     private val k16GpuFramesDecoded = AtomicLong()
+    private val k16TextInputEvents = AtomicLong()
+    private val k16TextInputBytes = AtomicLong()
+    private val k16TextInputNanos = AtomicLong()
     private val k16Stats = AtomicReference(RuntimeK16StatsMetrics())
     private val k16WaitEntries = AtomicLong()
     private val k16WaitTimerWakeups = AtomicLong()
@@ -714,6 +733,18 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
         k16GpuFramesDecoded.addAndGet(sanitizedGpuFrameCount.toLong())
     }
 
+    override fun recordK16TextInput(
+        byteCount: Int,
+        nanos: Long,
+    ) {
+        val sanitizedByteCount = byteCount.coerceAtLeast(0)
+        if (sanitizedByteCount > 0) {
+            k16TextInputEvents.incrementAndGet()
+            k16TextInputBytes.addAndGet(sanitizedByteCount.toLong())
+        }
+        k16TextInputNanos.addAndGet(nanos.coerceAtLeast(0))
+    }
+
     override fun recordK16StatsSnapshot(snapshot: NativeK16ComputerStatsSnapshot) {
         k16Stats.set(snapshot.toRuntimeMetrics())
     }
@@ -792,6 +823,9 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
                     k16GpuFrameBatches = k16GpuFrameBatches.get(),
                     k16GpuFrameBytes = k16GpuFrameBytes.get(),
                     k16GpuFramesDecoded = k16GpuFramesDecoded.get(),
+                    k16TextInputEvents = k16TextInputEvents.get(),
+                    k16TextInputBytes = k16TextInputBytes.get(),
+                    k16TextInputNanos = k16TextInputNanos.get(),
                     k16WaitEntries = k16WaitEntries.get(),
                     k16WaitTimerWakeups = k16WaitTimerWakeups.get(),
                     k16WaitInputWakeups = k16WaitInputWakeups.get(),

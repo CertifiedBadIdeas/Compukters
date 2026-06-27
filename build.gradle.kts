@@ -200,6 +200,12 @@ tasks.register("profileK16RuntimeWait") {
     dependsOn(":v1_21_1-neoforge:profileK16RuntimeWait")
 }
 
+tasks.register("profileK16RuntimeTextIo") {
+    description = "Runs the bundled K16 runtime terminal text IO profiling workload."
+    group = "verification"
+    dependsOn(":v1_21_1-neoforge:profileK16RuntimeTextIo")
+}
+
 val configureK16Llvm =
     tasks.register<Exec>("configureK16Llvm") {
         description = "Configures the source-built K16 LLVM tree in .toolchain/build."

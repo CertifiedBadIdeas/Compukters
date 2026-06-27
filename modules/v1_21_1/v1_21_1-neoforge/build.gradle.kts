@@ -1790,3 +1790,19 @@ tasks.register<Test>("profileK16RuntimeWait") {
         showStandardStreams = true
     }
 }
+
+tasks.register<Test>("profileK16RuntimeTextIo") {
+    description = "Runs the bundled K16 runtime terminal text IO profiling workload and prints runtime metrics."
+    group = "verification"
+    dependsOn(tasks.named("buildK16VmNativeLibrary"))
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    useJUnitPlatform()
+    filter {
+        includeTestsMatching("ru.lazyhat.compukterkraft.impl.K16RuntimeTextIoProfilingTest")
+    }
+    systemProperty("k16.vm.native.library", k16VmNativeLibrary.asFile.absolutePath)
+    testLogging {
+        showStandardStreams = true
+    }
+}
