@@ -40,9 +40,18 @@ class K16ToolingRenameTest {
 
     @Test
     fun guestRustCratesLiveUnderRustGuest() {
+        val workspaceManifest = root.resolve("rust/guest/Cargo.toml").readText()
+        val rustMemoryManifest = root.resolve("rust/guest/k16-memory/Cargo.toml")
+        val rustMemorySource = root.resolve("rust/guest/k16-memory/src/lib.rs")
+        val rtManifest = root.resolve("rust/guest/k16-rt/Cargo.toml").readText()
+
         assertTrue(root.resolve("rust/guest/Cargo.toml").exists())
         assertTrue(root.resolve("rust/guest/k16-abi/Cargo.toml").exists())
         assertTrue(root.resolve("rust/guest/k16-rt/Cargo.toml").exists())
+        assertFalse(workspaceManifest.contains("\"k16-memory\""))
+        assertFalse(rustMemoryManifest.exists())
+        assertFalse(rustMemorySource.exists())
+        assertFalse(rtManifest.contains("k16-memory"))
         assertFalse(root.resolve("guest/Cargo.toml").exists())
     }
 

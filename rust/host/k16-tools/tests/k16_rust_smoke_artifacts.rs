@@ -121,8 +121,7 @@ fn kernel_boot_chain_is_kernel_owned() {
 
     let workspace_manifest =
         fs::read_to_string(&workspace_manifest).expect("K16 guest workspace manifest exists");
-    let kernel_manifest =
-        fs::read_to_string(&kernel_manifest).expect("K16 kernel manifest exists");
+    let kernel_manifest = fs::read_to_string(&kernel_manifest).expect("K16 kernel manifest exists");
     let kernel_boot_chain =
         fs::read_to_string(&kernel_boot_chain).expect("kernel-owned boot-chain source exists");
 
@@ -149,8 +148,7 @@ fn kernel_image_parser_is_kernel_owned() {
 
     let workspace_manifest =
         fs::read_to_string(&workspace_manifest).expect("K16 guest workspace manifest exists");
-    let kernel_manifest =
-        fs::read_to_string(&kernel_manifest).expect("K16 kernel manifest exists");
+    let kernel_manifest = fs::read_to_string(&kernel_manifest).expect("K16 kernel manifest exists");
     let kernel_image =
         fs::read_to_string(&kernel_image).expect("kernel-owned image parser source exists");
 
@@ -177,8 +175,7 @@ fn kernel_storage_helper_is_kernel_owned() {
 
     let workspace_manifest =
         fs::read_to_string(&workspace_manifest).expect("K16 guest workspace manifest exists");
-    let kernel_manifest =
-        fs::read_to_string(&kernel_manifest).expect("K16 kernel manifest exists");
+    let kernel_manifest = fs::read_to_string(&kernel_manifest).expect("K16 kernel manifest exists");
     let kernel_storage =
         fs::read_to_string(&kernel_storage).expect("kernel-owned storage helper source exists");
 
@@ -194,6 +191,37 @@ fn kernel_storage_helper_is_kernel_owned() {
     assert!(kernel_storage.contains("pub struct StorageError"));
     assert!(kernel_storage.contains("pub trait DirectoryListingSink"));
     assert!(kernel_storage.contains("flush_storage0"));
+}
+
+#[test]
+fn k16_memory_helpers_are_runtime_owned() {
+    let root = repo_root();
+    let workspace_manifest = fs::read_to_string(root.join("rust/guest/Cargo.toml"))
+        .expect("K16 guest workspace manifest exists");
+    let rt_manifest = fs::read_to_string(root.join("rust/guest/k16-rt/Cargo.toml"))
+        .expect("k16-rt manifest exists");
+    let rt_memory = fs::read_to_string(root.join("rust/guest/k16-rt/src/memory.rs"))
+        .expect("k16-rt memory source exists");
+    let no_core_helpers = fs::read_to_string(root.join("rust/guest/k16-rt/src/no_core_helpers.rs"))
+        .expect("k16-rt no-core helper source exists");
+    let host_cli = fs::read_to_string(root.join("rust/host/k16-tools/src/cli.rs"))
+        .expect("k16 host tools cli exists");
+
+    assert!(
+        !rust_guest_workspace_members(&workspace_manifest).contains(&"k16-memory"),
+        "Rust memory helpers should be runtime-owned, not a standalone workspace member"
+    );
+    assert!(
+        !root.join("rust/guest/k16-memory").exists(),
+        "standalone Rust memory helper crate should be removed"
+    );
+    assert!(!rt_manifest.contains("k16-memory"));
+    assert!(rt_memory.contains("pub unsafe fn k16_memcpy"));
+    assert!(rt_memory.contains("pub unsafe fn k16_memmove"));
+    assert!(rt_memory.contains("pub unsafe fn k16_memset"));
+    assert!(rt_memory.contains("pub unsafe fn k16_memcmp"));
+    assert!(no_core_helpers.contains("pub unsafe extern \"C\" fn __k16_memcpy"));
+    assert!(host_cli.contains("rust/guest/k16-rt/src/no_core_helpers.rs"));
 }
 
 #[test]
