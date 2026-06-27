@@ -556,18 +556,11 @@ pub unsafe fn rename_root_file_for_process(
     let new_path = RootFilePath::parse(new_path)?;
     let new_components = new_path.components();
     unsafe {
-        crate::storage::open_file_from_storage0(ROOT_PARTITION, old_components.as_slice())
-            .map_err(storage_error_to_fs_error)?;
-    }
-    let metadata = unsafe { crate::storage::selected_file_metadata() };
-    if unsafe { RUNTIME_FD_TABLE.get().has_open_inode(metadata.inode_id) } {
-        return Err(FsError::Busy);
-    }
-    unsafe {
         crate::storage::rename_file_from_storage0(
             ROOT_PARTITION,
             old_components.as_slice(),
             new_components.as_slice(),
+            |inode_id| RUNTIME_FD_TABLE.get().has_open_inode(inode_id),
         )
         .map_err(storage_error_to_fs_error)?;
         flush_root_storage()?;
@@ -735,6 +728,10 @@ fn storage_error_to_fs_error(error: crate::storage::StorageError) -> FsError {
         FsError::NotEmpty
     } else if error == crate::storage::StorageError::PATH_EXISTS {
         FsError::InvalidPath
+    } else if error == crate::storage::StorageError::PATH_NOT_REGULAR {
+        FsError::InvalidPath
+    } else if error == crate::storage::StorageError::PATH_BUSY {
+        FsError::Busy
     } else {
         FsError::Storage
     }
