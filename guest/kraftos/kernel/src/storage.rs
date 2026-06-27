@@ -56,6 +56,8 @@ impl StorageError {
     pub const OUTPUT_TRANSFER: Self = Self { code: 20 };
     pub const PATH_NOT_EMPTY: Self = Self { code: 21 };
     pub const PATH_EXISTS: Self = Self { code: 22 };
+    pub const PATH_NOT_REGULAR: Self = Self { code: 23 };
+    pub const PATH_BUSY: Self = Self { code: 24 };
 
     pub const fn code(self) -> i32 {
         self.code
@@ -231,6 +233,7 @@ pub unsafe fn rename_file_from_storage0(
     partition_type: &[u8; 4],
     old_path: &[&[u8]],
     new_path: &[&[u8]],
+    source_inode_is_busy: impl FnOnce(u32) -> bool,
 ) -> Result<(), StorageError> {
     if old_path.is_empty() || new_path.is_empty() {
         return Err(StorageError::PATH_NOT_FOUND);
@@ -244,7 +247,10 @@ pub unsafe fn rename_file_from_storage0(
         unsafe { find_directory_entry_slot(old_path[old_parent_len])? };
     unsafe { read_inode(inode_id)? };
     if unsafe { read_u32(STATE_INODE_STATE) as u8 } != 1 {
-        return Err(StorageError::PATH_NOT_FOUND);
+        return Err(StorageError::PATH_NOT_REGULAR);
+    }
+    if source_inode_is_busy(inode_id) {
+        return Err(StorageError::PATH_BUSY);
     }
 
     let new_parent_len = new_path.len() - 1;
@@ -1767,6 +1773,8 @@ mod tests {
         assert_eq!(StorageError::STORAGE_VERSION.code(), 10);
         assert_eq!(StorageError::OUTPUT_BUFFER_TOO_SMALL.code(), 19);
         assert_eq!(StorageError::PATH_EXISTS.code(), 22);
+        assert_eq!(StorageError::PATH_NOT_REGULAR.code(), 23);
+        assert_eq!(StorageError::PATH_BUSY.code(), 24);
     }
 
     #[test]

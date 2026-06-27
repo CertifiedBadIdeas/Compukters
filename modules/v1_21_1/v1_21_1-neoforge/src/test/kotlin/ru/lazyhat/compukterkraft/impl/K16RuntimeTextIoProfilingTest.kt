@@ -684,6 +684,7 @@ class K16RuntimeTextIoProfilingTest {
 
             assertTrue(lines.any { it.contains("name=ls") && it.contains("readDirCalls=1") })
             assertTrue(lines.any { it.contains("name=stat") && it.contains("statCalls=1") })
+            assertTrue(lines.any { it.contains("name=mv") && it.contains("statCalls=1") })
             assertTrue(lines.any { it.contains("name=cat") && it.contains("fileReads=") })
             assertTrue(lines.all { it.contains("processSpawns=1") })
             assertTrue(lines.all { it.contains("programLoads=1") })

@@ -541,6 +541,34 @@ class K16ShellRuntimeSmokeTest {
                 commandIndex >= 0 && outputIndex > commandIndex && returnedPromptIndex > outputIndex
             }
 
+            dispatchText(device, "mkdir /etc/mv-dir\n")
+            waitForTerminal(device, "mkdir output for mv directory source and returned prompt") { terminal ->
+                val commandIndex = terminal.lastIndexOf("K16> mkdir /etc/mv-dir")
+                val outputIndex = terminal.indexOf("CREATED /etc/mv-dir", startIndex = commandIndex + "K16> mkdir /etc/mv-dir".length)
+                val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex)
+                commandIndex >= 0 && outputIndex > commandIndex && returnedPromptIndex > outputIndex
+            }
+
+            dispatchText(device, "mv /etc/mv-dir /etc/mv-dir2\n")
+            waitForTerminal(device, "mv directory source error and returned prompt") { terminal ->
+                val commandIndex = terminal.lastIndexOf("K16> mv /etc/mv-dir /etc/mv-dir2")
+                val outputIndex =
+                    terminal.indexOf(
+                        "ERR INVAL /etc/mv-dir",
+                        startIndex = commandIndex + "K16> mv /etc/mv-dir /etc/mv-dir2".length,
+                    )
+                val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex)
+                commandIndex >= 0 && outputIndex > commandIndex && returnedPromptIndex > outputIndex
+            }
+
+            dispatchText(device, "rmdir /etc/mv-dir\n")
+            waitForTerminal(device, "rmdir cleanup for mv directory source and returned prompt") { terminal ->
+                val commandIndex = terminal.lastIndexOf("K16> rmdir /etc/mv-dir")
+                val outputIndex = terminal.indexOf("REMOVED /etc/mv-dir", startIndex = commandIndex + "K16> rmdir /etc/mv-dir".length)
+                val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex)
+                commandIndex >= 0 && outputIndex > commandIndex && returnedPromptIndex > outputIndex
+            }
+
             repeat(20) {
                 val growPayload = "${it % 10}" + "x".repeat(29)
                 dispatchText(device, "write --append /etc/user.txt $growPayload\n")

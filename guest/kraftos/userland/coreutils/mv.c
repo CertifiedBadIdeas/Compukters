@@ -68,23 +68,12 @@ static int is_noent(int status) { return (unsigned int)status == 0xfffffffeu; }
 
 static int move_file(const char *source_path, const char *destination_path) {
   struct kraft_stat metadata;
-  int status = stat(source_path, &metadata);
-
-  if (status < 0) {
-    write_path_error(status, source_path);
-    return 1;
-  }
-  if (metadata.file_type != KRAFT_FILE_TYPE_REGULAR) {
-    write_path_error((int)0xffffffeau, source_path);
-    return 1;
-  }
-
-  if (stat(destination_path, &metadata) == 0) {
+  int status = stat(destination_path, &metadata);
+  if (status == 0) {
     write_path_error((int)0xffffffeau, destination_path);
     return 1;
   }
-  status = stat(destination_path, &metadata);
-  if (status < 0 && !is_noent(status)) {
+  if (!is_noent(status)) {
     write_path_error(status, destination_path);
     return 1;
   }
