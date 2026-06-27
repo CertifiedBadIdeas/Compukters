@@ -1014,12 +1014,6 @@ fn cpu_helper_symbol(name: &str) -> Option<k16e::K16eCpuHelper> {
         "__k16_write_interrupt_enable" => Some(k16e::K16eCpuHelper::WriteInterruptEnable),
         "__k16_write_interrupt_mask" => Some(k16e::K16eCpuHelper::WriteInterruptMask),
         "__k16_read_interrupt_pending" => Some(k16e::K16eCpuHelper::ReadInterruptPending),
-        "__k16_write_syscall" => Some(k16e::K16eCpuHelper::WriteSyscall),
-        "__k16_read_syscall" => Some(k16e::K16eCpuHelper::ReadSyscall),
-        "__k16_open_syscall" => Some(k16e::K16eCpuHelper::OpenSyscall),
-        "__k16_close_syscall" => Some(k16e::K16eCpuHelper::CloseSyscall),
-        "__k16_brk_syscall" => Some(k16e::K16eCpuHelper::BrkSyscall),
-        "__k16_sbrk_syscall" => Some(k16e::K16eCpuHelper::SbrkSyscall),
         _ => None,
     }
 }

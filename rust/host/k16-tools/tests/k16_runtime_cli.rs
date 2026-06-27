@@ -626,59 +626,29 @@ fn k16_runtime_syscall3_helper_captures_stack_argument_at_runtime() {
 }
 
 #[test]
-fn k16_runtime_fd_syscall_helpers_do_not_require_stack_arguments() {
+fn k16_runtime_cpu_helpers_do_not_export_userland_syscall_shims() {
     let helper_object = k16_runtime::k16_cpu_helpers_object();
+    let helper_text = String::from_utf8_lossy(&helper_object);
 
-    for (number, name) in [(7_u32, "write"), (8_u32, "read"), (10_u32, "open")] {
-        let mut expected_words = Vec::new();
-        expected_words.extend(const32(14, 0));
-        expected_words.extend(add(4, 3, 14));
-        expected_words.extend(add(3, 2, 14));
-        expected_words.extend(add(2, 1, 14));
-        expected_words.extend(const32(1, number));
-        expected_words.push(syscall(1));
-        expected_words.push(ret());
-        let expected_bytes = words_to_bytes(&expected_words);
-
+    for symbol in [
+        "__k16_write_syscall",
+        "__k16_read_syscall",
+        "__k16_open_syscall",
+        "__k16_close_syscall",
+        "__k16_brk_syscall",
+        "__k16_sbrk_syscall",
+    ] {
         assert!(
-            helper_object
-                .windows(expected_bytes.len())
-                .any(|window| window == expected_bytes.as_slice()),
-            "{name} syscall helper must pass fd/ptr/len without a stack-passed fourth argument",
+            !helper_text.contains(symbol),
+            "host-generated K16 CPU helpers must not export removed Rust userland shim {symbol}",
         );
     }
-}
-
-#[test]
-fn k16_runtime_close_syscall_helper_uses_fixed_number_and_fd_argument() {
-    let helper_object = k16_runtime::k16_cpu_helpers_object();
-
-    assert_fixed_syscall1_helper(&helper_object, 11, "close");
-}
-
-#[test]
-fn k16_runtime_heap_syscall_helpers_use_fixed_numbers_and_single_argument() {
-    let helper_object = k16_runtime::k16_cpu_helpers_object();
-
-    assert_fixed_syscall1_helper(&helper_object, 12, "brk");
-    assert_fixed_syscall1_helper(&helper_object, 13, "sbrk");
-}
-
-fn assert_fixed_syscall1_helper(helper_object: &[u8], number: u32, name: &str) {
-    let mut expected_words = Vec::new();
-    expected_words.extend(const32(14, 0));
-    expected_words.extend(add(2, 1, 14));
-    expected_words.extend(const32(1, number));
-    expected_words.push(syscall(1));
-    expected_words.push(ret());
-    let expected_bytes = words_to_bytes(&expected_words);
-
-    assert!(
-        helper_object
-            .windows(expected_bytes.len())
-            .any(|window| window == expected_bytes.as_slice()),
-        "{name} syscall helper must pass one argument with its fixed syscall number",
-    );
+    for symbol in ["__k16_syscall0", "__k16_syscall1", "__k16_syscall3"] {
+        assert!(
+            helper_text.contains(symbol),
+            "host-generated K16 CPU helpers must keep generic syscall helper {symbol}",
+        );
+    }
 }
 
 #[test]

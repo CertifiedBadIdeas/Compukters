@@ -157,12 +157,6 @@ pub enum K16eCpuHelper {
     WriteInterruptEnable,
     WriteInterruptMask,
     ReadInterruptPending,
-    WriteSyscall,
-    ReadSyscall,
-    OpenSyscall,
-    CloseSyscall,
-    BrkSyscall,
-    SbrkSyscall,
 }
 
 impl K16eCpuHelper {
@@ -189,12 +183,6 @@ impl K16eCpuHelper {
             Self::WriteInterruptEnable => 19,
             Self::WriteInterruptMask => 20,
             Self::ReadInterruptPending => 21,
-            Self::WriteSyscall => 22,
-            Self::ReadSyscall => 23,
-            Self::OpenSyscall => 24,
-            Self::CloseSyscall => 25,
-            Self::BrkSyscall => 26,
-            Self::SbrkSyscall => 27,
         }
     }
 
@@ -221,12 +209,6 @@ impl K16eCpuHelper {
             19 => Ok(Self::WriteInterruptEnable),
             20 => Ok(Self::WriteInterruptMask),
             21 => Ok(Self::ReadInterruptPending),
-            22 => Ok(Self::WriteSyscall),
-            23 => Ok(Self::ReadSyscall),
-            24 => Ok(Self::OpenSyscall),
-            25 => Ok(Self::CloseSyscall),
-            26 => Ok(Self::BrkSyscall),
-            27 => Ok(Self::SbrkSyscall),
             _ => Err(format!("unsupported K16E CPU helper id {code}")),
         }
     }

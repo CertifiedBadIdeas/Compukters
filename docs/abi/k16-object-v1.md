@@ -189,12 +189,6 @@ Runtime helper symbol names:
 `__k16_write_interrupt_enable` provided by k16-cpu-helpers
 `__k16_write_interrupt_mask`   provided by k16-cpu-helpers
 `__k16_read_interrupt_pending` provided by k16-cpu-helpers
-`__k16_write_syscall`          provided by k16-cpu-helpers
-`__k16_read_syscall`           provided by k16-cpu-helpers
-`__k16_open_syscall`           provided by k16-cpu-helpers
-`__k16_close_syscall`          provided by k16-cpu-helpers
-`__k16_brk_syscall`            provided by k16-cpu-helpers
-`__k16_sbrk_syscall`           provided by k16-cpu-helpers
 ```
 
 `__k16_save_trap_frame` writes the current saved CPU trap frame into the
@@ -202,6 +196,12 @@ Runtime helper symbol names:
 `interrupt_enable`. `__k16_restore_trap_frame` restores `r1..r15` plus the
 resume fields and returns the saved `r0`; kernel code passes that return value
 to `__k16_iret_with_r0` when entering the restored context.
+
+`k16-cpu-helpers` intentionally exposes generic `__k16_syscall0`,
+`__k16_syscall1`, and `__k16_syscall3` CPU helpers, not fixed-number userland
+syscall wrappers. C userland syscall-shaped helpers such as
+`__k16_open_syscall` live in the checked-in C arch runtime source and are
+assembled explicitly when linking C programs or `/lib/libkraft.kso`.
 
 Missing helper symbols are link-time errors. The linker must not synthesize
 helper bodies, fall back to VM hooks, or ask the VM to resolve runtime helpers.

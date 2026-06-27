@@ -499,7 +499,8 @@ fn removed_kraft_std_layer_no_longer_exists() {
     let removed_doc = root.join("docs/toolchains/kraft-std.md");
     let removed_source = root.join("rust/guest/kraft-std/src/lib.rs");
 
-    let workspace_manifest = fs::read_to_string(&workspace_manifest).expect("guest workspace manifest exists");
+    let workspace_manifest =
+        fs::read_to_string(&workspace_manifest).expect("guest workspace manifest exists");
     let k16_rt_manifest = fs::read_to_string(&k16_rt_manifest).expect("k16-rt manifest exists");
     assert!(
         !workspace_manifest.contains("kraft-std"),
@@ -509,8 +510,70 @@ fn removed_kraft_std_layer_no_longer_exists() {
         !k16_rt_manifest.contains("kraft-std"),
         "k16-rt must not depend on removed kraft-std"
     );
-    assert!(!removed_doc.exists(), "removed kraft-std docs should not remain current documentation");
-    assert!(!removed_source.exists(), "removed kraft-std source should not remain in the guest tree");
+    assert!(
+        !removed_doc.exists(),
+        "removed kraft-std docs should not remain current documentation"
+    );
+    assert!(
+        !removed_source.exists(),
+        "removed kraft-std source should not remain in the guest tree"
+    );
+}
+
+#[test]
+fn k16_rt_no_longer_exports_userland_syscall_wrappers() {
+    let root = repo_root();
+    let runtime_lib =
+        fs::read_to_string(root.join("rust/guest/k16-rt/src/lib.rs")).expect("k16-rt lib exists");
+    let runtime_trap =
+        fs::read_to_string(root.join("rust/guest/k16-rt/src/trap.rs")).expect("k16-rt trap exists");
+
+    for symbol in [
+        "write_syscall",
+        "read_syscall",
+        "open_syscall",
+        "close_syscall",
+        "brk_syscall",
+        "sbrk_syscall",
+        "run_argv_syscall",
+        "spawn_argv_syscall",
+        "wait_syscall",
+        "seek_syscall",
+        "unlink_syscall",
+        "mkdir_syscall",
+        "rmdir_syscall",
+        "rename_syscall",
+        "read_dir_syscall",
+        "stat_syscall",
+        "game_ticks_syscall",
+        "debug_marker",
+        "debug_write_byte",
+        "yield_syscall",
+        "sleep_ticks_syscall",
+        "exit_syscall",
+    ] {
+        assert!(
+            !runtime_lib.contains(symbol),
+            "k16-rt must not re-export removed Rust userland wrapper {symbol}",
+        );
+        assert!(
+            !runtime_trap.contains(&format!("pub fn {symbol}")),
+            "k16-rt trap module must not define removed Rust userland wrapper {symbol}",
+        );
+    }
+
+    for symbol in [
+        "syscall0",
+        "syscall1",
+        "syscall3",
+        "iret_with_r0",
+        "save_trap_frame",
+    ] {
+        assert!(
+            runtime_lib.contains(symbol),
+            "k16-rt must keep kernel/runtime primitive {symbol}",
+        );
+    }
 }
 
 #[test]
