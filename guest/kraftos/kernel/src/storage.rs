@@ -16,7 +16,7 @@ const K16FS_DIRECTORY_ENTRY_SIZE: u32 = 64;
 const K16FS_MAX_NAME_BYTES: usize = 56;
 const K16FS_MAX_INLINE_EXTENTS: usize = 4;
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct FileMetadata {
     pub inode_id: u32,
     pub size_bytes: u32,
@@ -423,6 +423,17 @@ pub unsafe fn selected_file_metadata() -> FileMetadata {
     }
 }
 
+pub unsafe fn select_file_metadata(metadata: FileMetadata) -> Result<(), StorageError> {
+    unsafe { read_inode(metadata.inode_id)? };
+    if unsafe { read_u32(STATE_INODE_STATE) as u8 } != 1 {
+        return Err(StorageError::PATH_NOT_FOUND);
+    }
+    if unsafe { selected_file_metadata() } != metadata {
+        return Err(StorageError::INVALID_FILESYSTEM);
+    }
+    Ok(())
+}
+
 unsafe fn read_partition(partition_type: &[u8; 4]) -> Result<(), StorageError> {
     unsafe { read_storage_block(0)? };
     if !scratch_eq(0, K16PT_MAGIC) || scratch_u8(5) != K16PT_VERSION || scratch_u8(7) != 0 {
@@ -687,7 +698,7 @@ unsafe fn find_directory_entry_slot(name: &[u8]) -> Result<(u32, u32, u32), Stor
             read_u32(STATE_SUPERBLOCK_TOTAL_BLOCKS)
         })?;
         let mut block_index = 0;
-        while block_index < extent_block_count {
+        while block_index < extent_block_count && remaining > 0 {
             unsafe { read_fs_block(extent_start_block + block_index)? };
             let mut offset = 0;
             while offset < BLOCK_SIZE && remaining > 0 {
@@ -851,7 +862,7 @@ pub unsafe fn copy_selected_directory_listing_into<S: DirectoryListingSink>(
             read_u32(STATE_SUPERBLOCK_TOTAL_BLOCKS)
         })?;
         let mut block_index = 0;
-        while block_index < extent_block_count {
+        while block_index < extent_block_count && remaining > 0 {
             let fs_block = extent_start_block + block_index;
             let mut block_loaded = false;
             let mut offset = 0;
@@ -1777,4 +1788,5 @@ mod tests {
         assert_eq!(metadata.kind, PathKind::Regular);
         assert_eq!(metadata.size_bytes, 42);
     }
+
 }

@@ -2896,6 +2896,7 @@ struct ImportRelocationRecord<'a> {
 struct DynamicImportLibrary {
     name: [u8; K16FS_MAX_NAME_BYTES],
     name_len: u32,
+    file: crate::storage::FileMetadata,
     image: SharedLibraryImage,
     relative_base: u32,
 }
@@ -2905,14 +2906,24 @@ impl DynamicImportLibrary {
         Self {
             name: [0; K16FS_MAX_NAME_BYTES],
             name_len: 0,
+            file: empty_file_metadata(),
             image: SharedLibraryImage::empty(),
             relative_base: 0,
         }
     }
 
-    fn name(&self) -> Result<&[u8], ProcessLoadError> {
-        let len = usize::try_from(self.name_len).map_err(|_| ProcessLoadError::InvalidImage)?;
-        self.name.get(0..len).ok_or(ProcessLoadError::InvalidImage)
+    fn file_metadata(&self) -> crate::storage::FileMetadata {
+        self.file
+    }
+}
+
+const fn empty_file_metadata() -> crate::storage::FileMetadata {
+    crate::storage::FileMetadata {
+        inode_id: 0,
+        size_bytes: 0,
+        extent_count: 0,
+        extent_start_blocks: [0; 4],
+        extent_block_counts: [0; 4],
     }
 }
 
@@ -3970,13 +3981,14 @@ unsafe fn read_selected_dynamic_import_state(
         let library_name = read_needed_library_name(image, needed_libraries, index, &mut name)?;
         let name_len =
             u32::try_from(library_name.len()).map_err(|_| ProcessLoadError::InvalidImage)?;
-        let library = unsafe { open_and_read_shared_library(library_name)? };
+        let (file, library) = unsafe { open_and_read_shared_library(library_name)? };
         let relative_base = align_up(total, LOAD_ALIGNMENT)?;
         unsafe { copy_selected_shared_export_section_to_loader_buffer(index, library)? };
         let slot = usize::try_from(index).map_err(|_| ProcessLoadError::InvalidImage)?;
         libraries[slot] = DynamicImportLibrary {
             name,
             name_len,
+            file,
             image: library,
             relative_base,
         };
@@ -4004,12 +4016,13 @@ unsafe fn load_dynamic_import_libraries(
     while index < state.library_count {
         let entry = state.library(index)?;
         let library = entry.image;
-        unsafe { open_shared_library(entry.name()?)? };
         let library_base = plan
             .load_base
             .checked_add(entry.relative_base)
             .ok_or(ProcessLoadError::AddressOverflow)?;
         unsafe {
+            crate::storage::select_file_metadata(entry.file_metadata())
+                .map_err(|_| ProcessLoadError::Storage)?;
             crate::storage::copy_selected_file_range_to_ram(
                 library.payload_offset,
                 library_base,
@@ -4041,7 +4054,6 @@ unsafe fn load_dynamic_import_libraries_mapped(
     while index < state.library_count {
         let entry = state.library(index)?;
         let library = entry.image;
-        unsafe { open_shared_library(entry.name()?)? };
         let library_base = plan
             .virtual_plan()
             .load_base
@@ -4049,6 +4061,8 @@ unsafe fn load_dynamic_import_libraries_mapped(
             .ok_or(ProcessLoadError::AddressOverflow)?;
         let physical_base = plan.translate_address(library_base)?;
         unsafe {
+            crate::storage::select_file_metadata(entry.file_metadata())
+                .map_err(|_| ProcessLoadError::Storage)?;
             crate::storage::copy_selected_file_range_to_ram(
                 library.payload_offset,
                 physical_base,
@@ -4158,9 +4172,11 @@ unsafe fn reopen_main_program(main_components: &[&[u8]; 2]) -> Result<(), Proces
 
 unsafe fn open_and_read_shared_library(
     name: &[u8],
-) -> Result<SharedLibraryImage, ProcessLoadError> {
+) -> Result<(crate::storage::FileMetadata, SharedLibraryImage), ProcessLoadError> {
     unsafe { open_shared_library(name)? };
-    unsafe { read_selected_shared_library_image() }
+    let file = unsafe { crate::storage::selected_file_metadata() };
+    let image = unsafe { read_selected_shared_library_image()? };
+    Ok((file, image))
 }
 
 unsafe fn open_shared_library(name: &[u8]) -> Result<(), ProcessLoadError> {
@@ -5222,6 +5238,26 @@ mod tests {
             SharedLibraryPath::parse(b"libfoo.kx"),
             Err(ProcessLoadError::InvalidPath)
         );
+    }
+
+    #[test]
+    fn dynamic_import_library_keeps_opened_file_metadata() {
+        let metadata = crate::storage::FileMetadata {
+            inode_id: 7,
+            size_bytes: 4096,
+            extent_count: 1,
+            extent_start_blocks: [32, 0, 0, 0],
+            extent_block_counts: [8, 0, 0, 0],
+        };
+        let library = DynamicImportLibrary {
+            name: [0; K16FS_MAX_NAME_BYTES],
+            name_len: 0,
+            file: metadata,
+            image: SharedLibraryImage::empty(),
+            relative_base: 0,
+        };
+
+        assert_eq!(library.file_metadata(), metadata);
     }
 
     #[test]
