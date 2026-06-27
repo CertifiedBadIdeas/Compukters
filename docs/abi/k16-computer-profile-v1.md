@@ -177,6 +177,8 @@ offset  size  access  name
 0x34    4     R/W     color
 0x38    4     R       sequence_low
 0x3C    4     R       sequence_high
+0x40    4     R/W     src_x
+0x44    4     R/W     src_y
 ```
 
 Pixel format values:
@@ -210,6 +212,8 @@ Commands:
 1  clear
 2  blit_buffer
 3  present
+4  fill_rect
+5  copy_rect
 ```
 
 `clear` fills the gpu0 pixel surface with `color`. `color` uses the low 16 bits
@@ -220,6 +224,13 @@ Firmware writes `x`, `y`, `rect_width`, `rect_height`, `buffer_addr`, and
 `buffer_stride_bytes`, then writes `command = blit_buffer`. The source buffer
 must contain at least `rect_height` rows, each with `buffer_stride_bytes`
 bytes. `buffer_stride_bytes` must be at least `rect_width * 2`.
+
+`fill_rect` fills the rectangle described by `x`, `y`, `rect_width`, and
+`rect_height` with `color`. `color` uses the low 16 bits as an RGB565 value.
+
+`copy_rect` copies a rectangle inside the gpu0 pixel surface from `src_x`,
+`src_y`, `rect_width`, and `rect_height` to destination `x`, `y`. Overlapping
+source and destination rectangles are supported.
 
 `present` emits dirty gpu0 tiles to the host display-frame path and increments
 the gpu0 sequence if a frame is emitted. Dirty pixels are not

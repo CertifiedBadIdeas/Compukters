@@ -123,8 +123,7 @@ unsafe fn clear_cells() {
 unsafe fn scroll_up() {
     copy_scrolled_cells();
     clear_last_row();
-    terminal_render::clear_screen();
-    repaint_all_cells();
+    terminal_render::scroll_up();
 }
 
 unsafe fn copy_scrolled_cells() {
@@ -145,18 +144,6 @@ unsafe fn clear_last_row() {
     while column < COLUMNS {
         write_cell(cell_index(column, ROWS - 1), b' ');
         column += 1;
-    }
-}
-
-fn repaint_all_cells() {
-    let mut row = 0;
-    while row < ROWS {
-        let mut column = 0;
-        while column < COLUMNS {
-            repaint_cell(column, row);
-            column += 1;
-        }
-        row += 1;
     }
 }
 

@@ -1738,8 +1738,12 @@ class K16FirmwareResourceTest {
             "bottom overflow should preserve true scroll contents in guest cell state",
         )
         assertTrue(
+            terminalSource.contains("terminal_render::scroll_up();"),
+            "bottom overflow should scroll visible gpu0 pixels without repainting every terminal cell",
+        )
+        assertFalse(
             terminalSource.contains("repaint_all_cells();"),
-            "bottom overflow should repaint the scrolled guest cell grid through gpu0",
+            "bottom overflow must not repaint the whole terminal on every scroll",
         )
         assertFalse(
             terminalSource.contains("else {\n            CURSOR_Y = 0;\n        }"),
@@ -1752,6 +1756,18 @@ class K16FirmwareResourceTest {
         assertTrue(
             terminalRenderSource.contains("gpu::blit_buffer("),
             "terminal renderer should keep visible output on gpu0",
+        )
+        assertTrue(
+            terminalRenderSource.contains("pub fn scroll_up()"),
+            "terminal renderer should expose a gpu-backed scroll primitive",
+        )
+        assertTrue(
+            terminalRenderSource.contains("gpu::copy_rect("),
+            "terminal renderer should scroll existing pixels through gpu0 copy_rect",
+        )
+        assertTrue(
+            terminalRenderSource.contains("gpu::fill_rect("),
+            "terminal renderer should clear the exposed bottom row through gpu0 fill_rect",
         )
     }
 
