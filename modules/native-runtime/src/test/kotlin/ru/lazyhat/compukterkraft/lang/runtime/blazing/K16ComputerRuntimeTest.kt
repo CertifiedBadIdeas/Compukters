@@ -249,6 +249,32 @@ class K16ComputerRuntimeTest {
     }
 
     @Test
+    fun tickUntilSignalPreservesBootYieldAsTimerBoundary() {
+        val bindings = EchoBindings()
+        bindings.signal = NativeK16ComputerSignal.Yield
+        bindings.control = NativeK16ComputerControl(
+            status = NativeK16ComputerControl.STATUS_BOOTING,
+            exitCode = 0,
+            panicCode = 0,
+        )
+        val runtime = K16ComputerRuntime(handle = 27L, bindings = bindings, defaultMaxTurnsPerTick = 8)
+
+        assertEquals(
+            K16ComputerTickResult(
+                signal = NativeK16ComputerSignal.Yield,
+                control = NativeK16ComputerControl(
+                    status = NativeK16ComputerControl.STATUS_BOOTING,
+                    exitCode = 0,
+                    panicCode = 0,
+                ),
+            ),
+            runtime.tickUntilSignal(),
+        )
+
+        assertEquals(1, bindings.runUntilSignalCalls)
+    }
+
+    @Test
     fun advancesGameTicksWithoutRunningNativeTurns() {
         val bindings = EchoBindings()
         val runtime = K16ComputerRuntime(handle = 29L, bindings = bindings, defaultMaxTurnsPerTick = 3)
@@ -287,16 +313,22 @@ class K16ComputerRuntimeTest {
         val bindings = EchoBindings()
         bindings.signals += NativeK16ComputerSignal.Yield
         bindings.signals += NativeK16ComputerSignal.Halt
-        bindings.control = NativeK16ComputerControl(status = 1, exitCode = 0, panicCode = 0)
+        bindings.control = NativeK16ComputerControl(status = NativeK16ComputerControl.STATUS_READY, exitCode = 0, panicCode = 0)
         val runtime = K16ComputerRuntime(handle = 25L, bindings = bindings, defaultMaxTurnsPerTick = 8)
 
-        assertEquals(NativeK16ComputerControl(status = 1, exitCode = 0, panicCode = 0), runtime.tick())
+        assertEquals(
+            NativeK16ComputerControl(status = NativeK16ComputerControl.STATUS_READY, exitCode = 0, panicCode = 0),
+            runtime.tick(),
+        )
         assertEquals(2, bindings.runUntilSignalCalls)
         assertEquals(emptyList(), bindings.advanceGameTickHandles)
 
         bindings.control = NativeK16ComputerControl(status = 3, exitCode = 0, panicCode = 0)
 
-        assertEquals(NativeK16ComputerControl(status = 1, exitCode = 0, panicCode = 0), runtime.tick())
+        assertEquals(
+            NativeK16ComputerControl(status = NativeK16ComputerControl.STATUS_READY, exitCode = 0, panicCode = 0),
+            runtime.tick(),
+        )
         assertEquals(2, bindings.runUntilSignalCalls)
         assertEquals(emptyList(), bindings.advanceGameTickHandles)
     }
