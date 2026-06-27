@@ -444,6 +444,17 @@ class K16FirmwareResourceTest {
     }
 
     @Test
+    fun replacedRustUserlandCratesAreRemovedFromGuestWorkspace() {
+        val guestRoot = Path.of("../../../rust/guest")
+        val workspace = guestRoot.resolve("Cargo.toml").readText()
+
+        assertFalse(workspace.contains("\"k16-init\""), "C init should not leave a Rust init workspace member")
+        assertFalse(workspace.contains("\"k16-shell\""), "C shell should not leave a Rust shell workspace member")
+        assertFalse(Files.exists(guestRoot.resolve("k16-init")), "C init should replace the legacy Rust init crate")
+        assertFalse(Files.exists(guestRoot.resolve("k16-shell")), "C shell should replace the legacy Rust shell crate")
+    }
+
+    @Test
     fun bundledK16UserlandMapArtifactsAreGeneratedWithoutHostedRustProofs() {
         val source = Path.of("build.gradle.kts").readText()
 
