@@ -67,8 +67,15 @@ Use `profileK16RuntimeWait` to build the local debug K16 JNI library, boot the b
 ./gradlew-sandbox-dev --parallel profileK16RuntimeWait -Pk16BuildJobs=$(nproc)
 ```
 
-The task runs only `K16RuntimeWaitProfilingTest` and keeps normal gameplay on the default no-op collector. The profiling
-path injects `RecordingRuntimeMetricsCollector` only for the report test.
+Use `profileK16RuntimeTextIo` for a terminal-focused workload that waits for the bundled shell, sends one command as
+individual character input, sends another command as paste input, and prints the same runtime profiling summary:
+
+```bash
+./gradlew-sandbox-dev --parallel profileK16RuntimeTextIo -Pk16BuildJobs=$(nproc)
+```
+
+The tasks run only their dedicated profiling tests and keep normal gameplay on the default no-op collector. The profiling
+path injects `RecordingRuntimeMetricsCollector` only for the report tests.
 
 The output is grouped into the existing multi-line runtime summary. The K16 execution line shows how many native
 `tickUntilSignal` slices actually ran and which signal ended those slices:
@@ -88,6 +95,7 @@ The K16 output lines show host-side output cache refresh work and split text out
 k16Output: refreshes=..., time=...
 k16TextOutput: snapshots=..., snapshotBytes=...
 k16DisplayFrames: batches=..., bytes=..., frames=...
+k16TextInput: events=..., bytes=..., time=...
 ```
 
 - `refreshes` counts worker-side cache syncs after startup, runtime slices, and explicit output clears.
@@ -96,6 +104,11 @@ k16DisplayFrames: batches=..., bytes=..., frames=...
 - `k16TextOutput.snapshotBytes` sums the serial/stdout snapshot sizes observed during refreshes.
 - `k16DisplayFrames.batches`, `bytes`, and `frames` count non-empty GPU frame drain batches, raw frame payload bytes, and
   decoded display frames.
+- `k16TextInput.events` counts accepted text input enqueue operations: character input, paste input, and legacy raw
+  serial input.
+- `k16TextInput.bytes` counts the text input bytes delivered by those operations.
+- `k16TextInput.time` is wall-clock time spent pushing those bytes into the native K16 endpoint, excluding later guest
+  execution after an input wakeup.
 
 The K16 bus and device lines show the latest cumulative low-level Rust VM counters fetched through one JNI snapshot
 during the worker cache refresh path:

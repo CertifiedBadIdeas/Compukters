@@ -447,7 +447,9 @@ class K16RuntimeDevice(
                         }
 
                         is Command.PushInput -> {
-                            endpoint.pushInput(command.bytes)
+                            recordTextInput(command.bytes.size) {
+                                endpoint.pushInput(command.bytes)
+                            }
                             if (waitingForEvent) {
                                 metricsCollector.recordK16WaitInputWakeup()
                                 waitingForEvent = runEndpointSlice(endpoint)
@@ -471,7 +473,9 @@ class K16RuntimeDevice(
                         }
 
                         is Command.PushKeyboardChar -> {
-                            endpoint.pushKeyboardChar(command.value)
+                            recordTextInput(byteCount = 1) {
+                                endpoint.pushKeyboardChar(command.value)
+                            }
                             if (waitingForEvent) {
                                 metricsCollector.recordK16WaitInputWakeup()
                                 waitingForEvent = runEndpointSlice(endpoint)
@@ -479,7 +483,9 @@ class K16RuntimeDevice(
                         }
 
                         is Command.PushKeyboardPasteBytes -> {
-                            endpoint.pushKeyboardPasteBytes(command.bytes)
+                            recordTextInput(command.bytes.size) {
+                                endpoint.pushKeyboardPasteBytes(command.bytes)
+                            }
                             if (waitingForEvent) {
                                 metricsCollector.recordK16WaitInputWakeup()
                                 waitingForEvent = runEndpointSlice(endpoint)
@@ -521,6 +527,15 @@ class K16RuntimeDevice(
                 metricsCollector.recordK16WaitEnter()
             }
             return waitingForEvent
+        }
+
+        private inline fun recordTextInput(
+            byteCount: Int,
+            push: () -> Unit,
+        ) {
+            val startedAt = System.nanoTime()
+            push()
+            metricsCollector.recordK16TextInput(byteCount, System.nanoTime() - startedAt)
         }
 
         private fun refreshCaches(endpoint: K16ComputerEndpoint) {

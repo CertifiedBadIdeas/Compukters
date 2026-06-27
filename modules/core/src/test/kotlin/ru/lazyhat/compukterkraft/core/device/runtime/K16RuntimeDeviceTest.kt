@@ -739,6 +739,34 @@ class K16RuntimeDeviceTest {
     }
 
     @Test
+    fun recordsK16TextInputCountersForCharactersAndPaste() {
+        val endpoint = RecordingK16Endpoint()
+        val metrics = RecordingRuntimeMetricsCollector()
+        val device =
+            K16RuntimeDevice(
+                deviceId = 31,
+                properties = DeviceProperties(DeviceFamily.NORMAL, label = null),
+                endpointFactory = { endpoint },
+                stateSink = {},
+                metricsCollector = metrics,
+            )
+
+        device.turnOn()
+        DeviceEvents.dispatch(device, KeyInputEvent.Character('R'.code.toByte()))
+        DeviceEvents.dispatch(device, PasteInputEvent(ByteBuffer.wrap("ux".encodeToByteArray())))
+        waitUntil {
+            endpoint.keyboardChars.size == 1 &&
+                endpoint.keyboardPasteBytes.size == 1
+        }
+
+        val snapshot = metrics.snapshot()
+        assertEquals(2, snapshot.vm.k16TextInputEvents)
+        assertEquals(3, snapshot.vm.k16TextInputBytes)
+        assertTrue(snapshot.vm.k16TextInputNanos >= 0)
+        device.shutdown()
+    }
+
+    @Test
     fun dispatchesKeyDownThroughKeyboard0Endpoint() {
         val endpoint = RecordingK16Endpoint()
         val device =
