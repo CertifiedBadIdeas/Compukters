@@ -47,7 +47,7 @@ production build or focused test needs them.
 | `rust/guest/k16-shared-kraft` | Former Rust provider for the shared OS ABI library `libkraft.kso`. | Removed; `/lib/libkraft.kso` now builds from `guest/c/libkraft/libkraft.c`. |
 | `rust/guest/k16-shared-runtime` | Former Rust provider for `libk16rt.kso` memory helpers. | Removed; production userland now ships only the C `libkraft.kso` shared library. |
 | `rust/guest/k16-shell` | Former Rust production shell. | Legacy/removable after no focused tests/docs need the old Rust shell; production `/bin/shell.kx` now builds from `guest/c/shell/shell.c`. |
-| `rust/guest/k16-storage` | Guest storage/filesystem support library. | Keep Rust while kernel/storage internals remain Rust. |
+| `rust/guest/k16-storage` | Former guest storage/filesystem support library. | Removed; remaining Rust K16PT/K16FS storage helper code now lives inside `rust/guest/k16-kernel/src/storage.rs` as kernel-owned code. |
 | `rust/guest/k16-syscall-fault-test` | Former development syscall fault smoke utility. | Removed with the Rust userland proof layer. |
 | `rust/guest/k16-user-fault-test` | Former development user fault smoke utility. | Removed with the Rust userland proof layer. |
 | `rust/guest/kraft-std` | Former Rust userland convenience layer over K16 syscalls. | Removed; C libc-lite is the active userland API layer. |

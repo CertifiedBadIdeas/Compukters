@@ -4,6 +4,5 @@ members = [
     "k16-kernel",
     "k16-memory",
     "k16-rt",
-    "k16-storage",
 ]
 resolver = "2"

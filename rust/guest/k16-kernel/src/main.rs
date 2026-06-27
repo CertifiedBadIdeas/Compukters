@@ -19,6 +19,7 @@ mod mmio;
 mod page_alloc;
 mod process;
 mod stdin;
+mod storage;
 mod syscall;
 mod terminal;
 mod terminal_render;

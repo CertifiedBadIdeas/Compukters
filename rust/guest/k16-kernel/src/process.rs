@@ -17,10 +17,11 @@ const K16FS_MAX_NAME_BYTES: usize = 56;
 pub const MAX_RUN_PATH_BYTES: usize = BIN_PREFIX.len() + K16FS_MAX_NAME_BYTES;
 const CHILD_ARG_ENTRY_BYTES: u32 = 8;
 const TRANSLATED_TRAP_STACK_BYTES: u32 = VM_PAGE_SIZE;
-const INITIAL_USER_LOADER_SCRATCH_END: u32 = k16_storage::SCRATCH_ADDR + k16_storage::BLOCK_SIZE;
+const INITIAL_USER_LOADER_SCRATCH_END: u32 =
+    crate::storage::SCRATCH_ADDR + crate::storage::BLOCK_SIZE;
 #[cfg(any(test, feature = "host-test"))]
 const DEFAULT_INIT_MEMORY_END: u32 = 0x0002_5000;
-// Keep relocation records outside k16_storage::SCRATCH_ADDR: storage reads use
+// Keep relocation records outside crate::storage::SCRATCH_ADDR: storage reads use
 // that block as staging, and records may straddle a storage block boundary.
 const RELOCATION_RECORD_ADDR: u32 = 0x0000_0500;
 const MAX_PROCESS_SLOTS: usize = 4;
@@ -3575,7 +3576,7 @@ pub unsafe fn load_dynamic_user_program_from_storage0(
 ) -> Result<DynamicUserLoadPlan, ProcessLoadError> {
     let path = UserProgramPath::parse(path)?;
     unsafe {
-        k16_storage::open_file_from_storage0(ROOT_PARTITION, path.components())
+        crate::storage::open_file_from_storage0(ROOT_PARTITION, path.components())
             .map_err(|_| ProcessLoadError::Storage)?;
     }
     let version = unsafe { selected_k16e_version()? };
@@ -3593,7 +3594,7 @@ pub unsafe fn load_dynamic_user_program_from_storage0_mapped(
 ) -> Result<MappedDynamicUserLoadPlan, ProcessLoadError> {
     let path = UserProgramPath::parse(path)?;
     unsafe {
-        k16_storage::open_file_from_storage0(ROOT_PARTITION, path.components())
+        crate::storage::open_file_from_storage0(ROOT_PARTITION, path.components())
             .map_err(|_| ProcessLoadError::Storage)?;
     }
     let version = unsafe { selected_k16e_version()? };
@@ -3614,20 +3615,20 @@ pub unsafe fn load_selected_dynamic_user_program(
     arena: UserArena,
 ) -> Result<DynamicUserLoadPlan, ProcessLoadError> {
     unsafe {
-        k16_storage::copy_selected_file_range_to_ram(
+        crate::storage::copy_selected_file_range_to_ram(
             0,
-            k16_storage::SCRATCH_ADDR,
+            crate::storage::SCRATCH_ADDR,
             crate::image::DYNAMIC_K16E_V2_HEADER_SIZE,
         )
         .map_err(|_| ProcessLoadError::Storage)?;
     }
     let header = unsafe {
         core::slice::from_raw_parts(
-            k16_storage::SCRATCH_ADDR as usize as *const u8,
+            crate::storage::SCRATCH_ADDR as usize as *const u8,
             crate::image::DYNAMIC_K16E_V2_HEADER_SIZE as usize,
         )
     };
-    validate_dynamic_header_bytes(header, unsafe { k16_storage::selected_file_size() })?;
+    validate_dynamic_header_bytes(header, unsafe { crate::storage::selected_file_size() })?;
     let entry_offset = header_u32(header, 12);
     let payload_offset = header_u32(header, 40);
     let file_size = header_u32(header, 44);
@@ -3644,7 +3645,7 @@ pub unsafe fn load_selected_dynamic_user_program(
     )?;
 
     unsafe {
-        k16_storage::copy_selected_file_range_to_ram(
+        crate::storage::copy_selected_file_range_to_ram(
             payload_offset,
             plan.payload_dst,
             plan.payload_len,
@@ -3679,7 +3680,7 @@ unsafe fn load_selected_dynamic_user_program_with_imports(
     )?;
 
     unsafe {
-        k16_storage::copy_selected_file_range_to_ram(
+        crate::storage::copy_selected_file_range_to_ram(
             image.payload_offset,
             plan.payload_dst,
             image.file_size,
@@ -3703,20 +3704,20 @@ pub unsafe fn load_selected_dynamic_user_program_mapped(
     allocator: &mut crate::page_alloc::PageFrameAllocator,
 ) -> Result<MappedDynamicUserLoadPlan, ProcessLoadError> {
     unsafe {
-        k16_storage::copy_selected_file_range_to_ram(
+        crate::storage::copy_selected_file_range_to_ram(
             0,
-            k16_storage::SCRATCH_ADDR,
+            crate::storage::SCRATCH_ADDR,
             crate::image::DYNAMIC_K16E_V2_HEADER_SIZE,
         )
         .map_err(|_| ProcessLoadError::Storage)?;
     }
     let header = unsafe {
         core::slice::from_raw_parts(
-            k16_storage::SCRATCH_ADDR as usize as *const u8,
+            crate::storage::SCRATCH_ADDR as usize as *const u8,
             crate::image::DYNAMIC_K16E_V2_HEADER_SIZE as usize,
         )
     };
-    validate_dynamic_header_bytes(header, unsafe { k16_storage::selected_file_size() })?;
+    validate_dynamic_header_bytes(header, unsafe { crate::storage::selected_file_size() })?;
     let entry_offset = header_u32(header, 12);
     let payload_offset = header_u32(header, 40);
     let file_size = header_u32(header, 44);
@@ -3734,7 +3735,7 @@ pub unsafe fn load_selected_dynamic_user_program_mapped(
     let mapped = allocate_mapped_dynamic_user_load_plan(plan, allocator)?;
 
     if let Err(error) = unsafe {
-        k16_storage::copy_selected_file_range_to_ram(
+        crate::storage::copy_selected_file_range_to_ram(
             payload_offset,
             mapped.payload_dst(),
             plan.payload_len,
@@ -3779,7 +3780,7 @@ unsafe fn load_selected_dynamic_user_program_with_imports_mapped(
     let mapped = allocate_mapped_dynamic_user_load_plan(plan, allocator)?;
 
     if let Err(error) = unsafe {
-        k16_storage::copy_selected_file_range_to_ram(
+        crate::storage::copy_selected_file_range_to_ram(
             image.payload_offset,
             mapped.payload_dst(),
             image.file_size,
@@ -3820,7 +3821,7 @@ unsafe fn load_selected_dynamic_user_program_with_imports_mapped(
 
 unsafe fn selected_k16e_version() -> Result<u16, ProcessLoadError> {
     unsafe {
-        k16_storage::copy_selected_file_range_to_ram(0, RELOCATION_RECORD_ADDR, 6)
+        crate::storage::copy_selected_file_range_to_ram(0, RELOCATION_RECORD_ADDR, 6)
             .map_err(|_| ProcessLoadError::Storage)?;
     }
     let magic = [
@@ -3840,20 +3841,20 @@ unsafe fn selected_k16e_version() -> Result<u16, ProcessLoadError> {
 
 unsafe fn read_selected_dynamic_import_image() -> Result<DynamicUserImportImage, ProcessLoadError> {
     unsafe {
-        k16_storage::copy_selected_file_range_to_ram(
+        crate::storage::copy_selected_file_range_to_ram(
             0,
-            k16_storage::SCRATCH_ADDR,
+            crate::storage::SCRATCH_ADDR,
             crate::image::DYNAMIC_K16E_V5_HEADER_SIZE,
         )
         .map_err(|_| ProcessLoadError::Storage)?;
     }
     let header = unsafe {
         core::slice::from_raw_parts(
-            k16_storage::SCRATCH_ADDR as usize as *const u8,
+            crate::storage::SCRATCH_ADDR as usize as *const u8,
             crate::image::DYNAMIC_K16E_V5_HEADER_SIZE as usize,
         )
     };
-    validate_dynamic_header_bytes(header, unsafe { k16_storage::selected_file_size() })?;
+    validate_dynamic_header_bytes(header, unsafe { crate::storage::selected_file_size() })?;
     Ok(DynamicUserImportImage {
         entry_offset: header_u32(header, 12),
         payload_offset: header_u32(header, 40),
@@ -3916,7 +3917,7 @@ unsafe fn load_dynamic_import_libraries(
             .checked_add(relative_base)
             .ok_or(ProcessLoadError::AddressOverflow)?;
         unsafe {
-            k16_storage::copy_selected_file_range_to_ram(
+            crate::storage::copy_selected_file_range_to_ram(
                 library.payload_offset,
                 library_base,
                 library.file_size,
@@ -3963,7 +3964,7 @@ unsafe fn load_dynamic_import_libraries_mapped(
             .ok_or(ProcessLoadError::AddressOverflow)?;
         let physical_base = plan.translate_address(library_base)?;
         unsafe {
-            k16_storage::copy_selected_file_range_to_ram(
+            crate::storage::copy_selected_file_range_to_ram(
                 library.payload_offset,
                 physical_base,
                 library.file_size,
@@ -4114,7 +4115,7 @@ unsafe fn resolve_dynamic_import_export(
 
 unsafe fn reopen_main_program(main_components: &[&[u8]; 2]) -> Result<(), ProcessLoadError> {
     unsafe {
-        k16_storage::open_file_from_storage0(ROOT_PARTITION, main_components)
+        crate::storage::open_file_from_storage0(ROOT_PARTITION, main_components)
             .map_err(|_| ProcessLoadError::Storage)
     }
 }
@@ -4124,7 +4125,7 @@ unsafe fn open_and_read_shared_library(
 ) -> Result<SharedLibraryImage, ProcessLoadError> {
     let path = SharedLibraryPath::parse(name)?;
     unsafe {
-        k16_storage::open_file_from_storage0(ROOT_PARTITION, path.components())
+        crate::storage::open_file_from_storage0(ROOT_PARTITION, path.components())
             .map_err(|_| ProcessLoadError::Storage)?;
     }
     unsafe { read_selected_shared_library_image() }
@@ -4172,7 +4173,7 @@ unsafe fn read_import_relocation_record<'a>(
         )
         .ok_or(ProcessLoadError::InvalidImage)?;
     unsafe {
-        k16_storage::copy_selected_file_range_to_ram(
+        crate::storage::copy_selected_file_range_to_ram(
             record_offset,
             RELOCATION_RECORD_ADDR,
             crate::image::K16E_IMPORT_RELOCATION_RECORD_SIZE,
@@ -4247,7 +4248,7 @@ unsafe fn selected_nul_terminated_string_len(
     let mut len = 0;
     while len < max_len {
         unsafe {
-            k16_storage::copy_selected_file_range_to_ram(
+            crate::storage::copy_selected_file_range_to_ram(
                 file_offset
                     .checked_add(len)
                     .ok_or(ProcessLoadError::InvalidImage)?,
@@ -4278,7 +4279,7 @@ unsafe fn read_nul_terminated_string_from_selected_file<'a>(
             return Err(ProcessLoadError::InvalidImage);
         }
         unsafe {
-            k16_storage::copy_selected_file_range_to_ram(
+            crate::storage::copy_selected_file_range_to_ram(
                 file_offset
                     .checked_add(len)
                     .ok_or(ProcessLoadError::InvalidImage)?,
@@ -4302,20 +4303,20 @@ unsafe fn read_nul_terminated_string_from_selected_file<'a>(
 
 unsafe fn read_selected_shared_library_image() -> Result<SharedLibraryImage, ProcessLoadError> {
     unsafe {
-        k16_storage::copy_selected_file_range_to_ram(
+        crate::storage::copy_selected_file_range_to_ram(
             0,
-            k16_storage::SCRATCH_ADDR,
+            crate::storage::SCRATCH_ADDR,
             crate::image::SHARED_K16E_V4_HEADER_SIZE,
         )
         .map_err(|_| ProcessLoadError::Storage)?;
     }
     let header = unsafe {
         core::slice::from_raw_parts(
-            k16_storage::SCRATCH_ADDR as usize as *const u8,
+            crate::storage::SCRATCH_ADDR as usize as *const u8,
             crate::image::SHARED_K16E_V4_HEADER_SIZE as usize,
         )
     };
-    validate_shared_library_header_bytes(header, unsafe { k16_storage::selected_file_size() })?;
+    validate_shared_library_header_bytes(header, unsafe { crate::storage::selected_file_size() })?;
     Ok(SharedLibraryImage {
         payload_offset: header_u32(header, 40),
         file_size: header_u32(header, 44),
@@ -4350,7 +4351,7 @@ unsafe fn resolve_selected_shared_export(
             )
             .ok_or(ProcessLoadError::InvalidImage)?;
         unsafe {
-            k16_storage::copy_selected_file_range_to_ram(
+            crate::storage::copy_selected_file_range_to_ram(
                 record_offset,
                 RELOCATION_RECORD_ADDR,
                 crate::image::K16E_SHARED_EXPORT_RECORD_SIZE,
@@ -4416,7 +4417,7 @@ unsafe fn apply_selected_file_relocations(
             )
             .ok_or(ProcessLoadError::AddressOverflow)?;
         unsafe {
-            k16_storage::copy_selected_file_range_to_ram(
+            crate::storage::copy_selected_file_range_to_ram(
                 relocation_offset,
                 RELOCATION_RECORD_ADDR,
                 crate::image::K16E_RELOCATION_RECORD_SIZE,
@@ -4448,7 +4449,7 @@ unsafe fn apply_selected_file_relocations_mapped(
             )
             .ok_or(ProcessLoadError::AddressOverflow)?;
         unsafe {
-            k16_storage::copy_selected_file_range_to_ram(
+            crate::storage::copy_selected_file_range_to_ram(
                 relocation_offset,
                 RELOCATION_RECORD_ADDR,
                 crate::image::K16E_RELOCATION_RECORD_SIZE,
@@ -4701,7 +4702,7 @@ unsafe fn apply_selected_shared_library_relocations(
             )
             .ok_or(ProcessLoadError::AddressOverflow)?;
         unsafe {
-            k16_storage::copy_selected_file_range_to_ram(
+            crate::storage::copy_selected_file_range_to_ram(
                 relocation_offset,
                 RELOCATION_RECORD_ADDR,
                 crate::image::K16E_RELOCATION_RECORD_SIZE,

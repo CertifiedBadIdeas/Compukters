@@ -74,8 +74,10 @@ struct StorageDirectoryByteSink<'a, S: DirectoryByteSink> {
 }
 
 #[cfg(any(not(test), feature = "host-test"))]
-impl<S: DirectoryByteSink> k16_storage::DirectoryListingSink for StorageDirectoryByteSink<'_, S> {
-    unsafe fn push_byte(&mut self, byte: u8) -> Result<(), k16_storage::StorageError> {
+impl<S: DirectoryByteSink> crate::storage::DirectoryListingSink
+    for StorageDirectoryByteSink<'_, S>
+{
+    unsafe fn push_byte(&mut self, byte: u8) -> Result<(), crate::storage::StorageError> {
         self.sink
             .push_byte(byte)
             .map_err(fs_error_to_storage_output_error)
@@ -219,8 +221,8 @@ impl FileMetadata {
     }
 }
 
-impl From<k16_storage::FileMetadata> for FileMetadata {
-    fn from(metadata: k16_storage::FileMetadata) -> Self {
+impl From<crate::storage::FileMetadata> for FileMetadata {
+    fn from(metadata: crate::storage::FileMetadata) -> Self {
         Self {
             inode_id: metadata.inode_id,
             size_bytes: metadata.size_bytes,
@@ -231,7 +233,7 @@ impl From<k16_storage::FileMetadata> for FileMetadata {
     }
 }
 
-impl From<FileMetadata> for k16_storage::FileMetadata {
+impl From<FileMetadata> for crate::storage::FileMetadata {
     fn from(metadata: FileMetadata) -> Self {
         Self {
             inode_id: metadata.inode_id,
@@ -471,14 +473,14 @@ pub unsafe fn open_root_file_for_process(
     let components = path.components();
     let metadata = if flags == OPEN_READ_ONLY {
         unsafe {
-            k16_storage::open_file_from_storage0(ROOT_PARTITION, components.as_slice())
+            crate::storage::open_file_from_storage0(ROOT_PARTITION, components.as_slice())
                 .map_err(storage_error_to_fs_error)?;
-            k16_storage::selected_file_metadata()
+            crate::storage::selected_file_metadata()
         }
     } else {
         let truncate = flags == OPEN_CREATE_TRUNCATE_FLAGS;
         let metadata = unsafe {
-            k16_storage::open_file_for_write_from_storage0(
+            crate::storage::open_file_for_write_from_storage0(
                 ROOT_PARTITION,
                 components.as_slice(),
                 true,
@@ -527,15 +529,15 @@ pub unsafe fn remove_root_file_for_process(path: &[u8]) -> Result<(), FsError> {
     let path = RootFilePath::parse(path)?;
     let components = path.components();
     unsafe {
-        k16_storage::open_file_from_storage0(ROOT_PARTITION, components.as_slice())
+        crate::storage::open_file_from_storage0(ROOT_PARTITION, components.as_slice())
             .map_err(storage_error_to_fs_error)?;
     }
-    let metadata = unsafe { k16_storage::selected_file_metadata() };
+    let metadata = unsafe { crate::storage::selected_file_metadata() };
     if unsafe { RUNTIME_FD_TABLE.get().has_open_inode(metadata.inode_id) } {
         return Err(FsError::Busy);
     }
     unsafe {
-        k16_storage::remove_file_from_storage0(ROOT_PARTITION, components.as_slice())
+        crate::storage::remove_file_from_storage0(ROOT_PARTITION, components.as_slice())
             .map_err(storage_error_to_fs_error)?;
         flush_root_storage()?;
     }
@@ -553,15 +555,15 @@ pub unsafe fn rename_root_file_for_process(
     let new_path = RootFilePath::parse(new_path)?;
     let new_components = new_path.components();
     unsafe {
-        k16_storage::open_file_from_storage0(ROOT_PARTITION, old_components.as_slice())
+        crate::storage::open_file_from_storage0(ROOT_PARTITION, old_components.as_slice())
             .map_err(storage_error_to_fs_error)?;
     }
-    let metadata = unsafe { k16_storage::selected_file_metadata() };
+    let metadata = unsafe { crate::storage::selected_file_metadata() };
     if unsafe { RUNTIME_FD_TABLE.get().has_open_inode(metadata.inode_id) } {
         return Err(FsError::Busy);
     }
     unsafe {
-        k16_storage::rename_file_from_storage0(
+        crate::storage::rename_file_from_storage0(
             ROOT_PARTITION,
             old_components.as_slice(),
             new_components.as_slice(),
@@ -577,7 +579,7 @@ pub unsafe fn create_root_directory(path: &[u8]) -> Result<(), FsError> {
     let path = RootFilePath::parse(path)?;
     let components = path.components();
     unsafe {
-        k16_storage::create_directory_from_storage0(ROOT_PARTITION, components.as_slice())
+        crate::storage::create_directory_from_storage0(ROOT_PARTITION, components.as_slice())
             .map_err(storage_error_to_fs_error)?;
         flush_root_storage()?;
     }
@@ -589,7 +591,7 @@ pub unsafe fn remove_root_directory(path: &[u8]) -> Result<(), FsError> {
     let path = RootFilePath::parse(path)?;
     let components = path.components();
     unsafe {
-        k16_storage::remove_directory_from_storage0(ROOT_PARTITION, components.as_slice())
+        crate::storage::remove_directory_from_storage0(ROOT_PARTITION, components.as_slice())
             .map_err(storage_error_to_fs_error)?;
         flush_root_storage()?;
     }
@@ -619,7 +621,7 @@ pub unsafe fn copy_file_fd_range_to_ram_for_process(
     }
     let metadata = descriptor.metadata;
     unsafe {
-        k16_storage::copy_file_range_to_ram(metadata.into(), file_offset, ptr, read_len)
+        crate::storage::copy_file_range_to_ram(metadata.into(), file_offset, ptr, read_len)
             .map_err(storage_error_to_fs_error)?;
     }
     Ok(read_len)
@@ -654,7 +656,7 @@ pub unsafe fn copy_ram_to_file_fd_range_for_process(
             .writable_metadata_for_process(owner_pid, fd)?
     };
     let updated = unsafe {
-        k16_storage::copy_ram_to_file_range(metadata.into(), offset, ptr, len)
+        crate::storage::copy_ram_to_file_range(metadata.into(), offset, ptr, len)
             .map_err(storage_error_to_fs_error)?
     };
     unsafe {
@@ -684,7 +686,7 @@ pub unsafe fn read_root_directory_into<S: DirectoryByteSink>(
     let components = path.components();
     let mut storage_sink = StorageDirectoryByteSink { sink };
     unsafe {
-        k16_storage::read_directory_from_storage0_into(
+        crate::storage::read_directory_from_storage0_into(
             ROOT_PARTITION,
             components.as_slice(),
             &mut storage_sink,
@@ -698,7 +700,7 @@ pub unsafe fn stat_root_path(path: &[u8]) -> Result<PathMetadata, FsError> {
     let path = RootMetadataPath::parse(path)?;
     let components = path.components();
     let metadata = unsafe {
-        k16_storage::stat_path_from_storage0(ROOT_PARTITION, components.as_slice())
+        crate::storage::stat_path_from_storage0(ROOT_PARTITION, components.as_slice())
             .map_err(storage_error_to_fs_error)?
     };
     Ok(PathMetadata {
@@ -718,16 +720,16 @@ pub unsafe fn close_file_fds_for_process(owner_pid: u32) {
 }
 
 #[cfg(any(not(test), feature = "host-test"))]
-fn storage_error_to_fs_error(error: k16_storage::StorageError) -> FsError {
-    if error == k16_storage::StorageError::PATH_NOT_FOUND {
+fn storage_error_to_fs_error(error: crate::storage::StorageError) -> FsError {
+    if error == crate::storage::StorageError::PATH_NOT_FOUND {
         FsError::NoEntry
-    } else if error == k16_storage::StorageError::OUTPUT_BUFFER_TOO_SMALL {
+    } else if error == crate::storage::StorageError::OUTPUT_BUFFER_TOO_SMALL {
         FsError::NoMemory
-    } else if error == k16_storage::StorageError::OUTPUT_TRANSFER {
+    } else if error == crate::storage::StorageError::OUTPUT_TRANSFER {
         FsError::Fault
-    } else if error == k16_storage::StorageError::PATH_NOT_EMPTY {
+    } else if error == crate::storage::StorageError::PATH_NOT_EMPTY {
         FsError::NotEmpty
-    } else if error == k16_storage::StorageError::PATH_EXISTS {
+    } else if error == crate::storage::StorageError::PATH_EXISTS {
         FsError::InvalidPath
     } else {
         FsError::Storage
@@ -736,17 +738,17 @@ fn storage_error_to_fs_error(error: k16_storage::StorageError) -> FsError {
 
 #[cfg(any(not(test), feature = "host-test"))]
 unsafe fn flush_root_storage() -> Result<(), FsError> {
-    unsafe { k16_storage::flush_storage0().map_err(storage_error_to_fs_error) }
+    unsafe { crate::storage::flush_storage0().map_err(storage_error_to_fs_error) }
 }
 
 #[cfg(any(not(test), feature = "host-test"))]
-fn fs_error_to_storage_output_error(error: FsError) -> k16_storage::StorageError {
+fn fs_error_to_storage_output_error(error: FsError) -> crate::storage::StorageError {
     if error == FsError::NoMemory {
-        k16_storage::StorageError::OUTPUT_BUFFER_TOO_SMALL
+        crate::storage::StorageError::OUTPUT_BUFFER_TOO_SMALL
     } else if error == FsError::Fault {
-        k16_storage::StorageError::OUTPUT_TRANSFER
+        crate::storage::StorageError::OUTPUT_TRANSFER
     } else {
-        k16_storage::StorageError::INVALID_FILESYSTEM
+        crate::storage::StorageError::INVALID_FILESYSTEM
     }
 }
 

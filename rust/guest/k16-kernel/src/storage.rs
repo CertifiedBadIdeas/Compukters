@@ -1,5 +1,3 @@
-#![no_std]
-
 use k16_abi::computer::storage0;
 
 pub const SCRATCH_ADDR: u32 = 0x0000_0600;

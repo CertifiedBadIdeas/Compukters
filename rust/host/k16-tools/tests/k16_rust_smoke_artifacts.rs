@@ -169,6 +169,34 @@ fn kernel_image_parser_is_kernel_owned() {
 }
 
 #[test]
+fn kernel_storage_helper_is_kernel_owned() {
+    let root = repo_root();
+    let workspace_manifest = root.join("rust/guest/Cargo.toml");
+    let kernel_manifest = root.join("rust/guest/k16-kernel/Cargo.toml");
+    let kernel_storage = root.join("rust/guest/k16-kernel/src/storage.rs");
+
+    let workspace_manifest =
+        fs::read_to_string(&workspace_manifest).expect("K16 guest workspace manifest exists");
+    let kernel_manifest =
+        fs::read_to_string(&kernel_manifest).expect("K16 kernel manifest exists");
+    let kernel_storage =
+        fs::read_to_string(&kernel_storage).expect("kernel-owned storage helper source exists");
+
+    assert!(
+        !rust_guest_workspace_members(&workspace_manifest).contains(&"k16-storage"),
+        "Rust storage helper should be kernel-owned, not a standalone workspace member"
+    );
+    assert!(
+        !root.join("rust/guest/k16-storage").exists(),
+        "standalone Rust storage helper crate should be removed"
+    );
+    assert!(!kernel_manifest.contains("k16-storage"));
+    assert!(kernel_storage.contains("pub struct StorageError"));
+    assert!(kernel_storage.contains("pub trait DirectoryListingSink"));
+    assert!(kernel_storage.contains("flush_storage0"));
+}
+
+#[test]
 fn legacy_rust_userland_crates_are_removed_after_c_migration() {
     let root = repo_root();
     let workspace_manifest = root.join("rust/guest/Cargo.toml");

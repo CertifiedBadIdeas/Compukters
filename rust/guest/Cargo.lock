@@ -12,7 +12,6 @@ version = "0.1.0"
 dependencies = [
  "k16-abi",
  "k16-rt",
- "k16-storage",
 ]
 
 [[package]]
@@ -25,11 +24,4 @@ version = "0.1.0"
 dependencies = [
  "k16-abi",
  "k16-memory",
-]
-
-[[package]]
-name = "k16-storage"
-version = "0.1.0"
-dependencies = [
- "k16-abi",
 ]

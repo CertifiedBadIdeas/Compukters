@@ -27,7 +27,7 @@ import kotlin.test.assertTrue
 class K16StorageDurabilityArchitectureTest {
     @Test
     fun guestStorageExposesStorage0FlushCommand() {
-        val source = Path.of("../../../rust/guest/k16-storage/src/lib.rs").readText()
+        val source = Path.of("../../../rust/guest/k16-kernel/src/storage.rs").readText()
 
         assertTrue(source.contains("pub unsafe fn flush_storage0()"))
         assertTrue(source.contains("storage0::COMMAND_FLUSH"))
