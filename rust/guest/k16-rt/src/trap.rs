@@ -36,10 +36,6 @@ extern "C" {
     fn __k16_read_trap_arg0() -> u32;
     fn __k16_read_trap_arg1() -> u32;
     fn __k16_read_trap_arg2() -> u32;
-    fn __k16_syscall_once(number: u32);
-    fn __k16_syscall0(number: u32) -> u32;
-    fn __k16_syscall1(number: u32, arg0: u32) -> u32;
-    fn __k16_syscall3(number: u32, arg0: u32, arg1: u32, arg2: u32) -> u32;
     fn __k16_iret_with_r0(value: u32) -> !;
     fn __k16_write_interrupt_enable(value: u32);
     fn __k16_write_interrupt_mask(value: u32);
@@ -56,11 +52,9 @@ std::thread_local! {
     static TEST_TRAP_CAUSE: Cell<u32> = const { Cell::new(0) };
     static TEST_TRAP_PC: Cell<u32> = const { Cell::new(0) };
     static TEST_TRAP_VALUE: Cell<u32> = const { Cell::new(0) };
-    static TEST_SYSCALL_NUMBER: Cell<u32> = const { Cell::new(0) };
     static TEST_SYSCALL_ARG0: Cell<u32> = const { Cell::new(0) };
     static TEST_SYSCALL_ARG1: Cell<u32> = const { Cell::new(0) };
     static TEST_SYSCALL_ARG2: Cell<u32> = const { Cell::new(0) };
-    static TEST_SYSCALL_RETURN: Cell<u32> = const { Cell::new(0) };
     static TEST_INTERRUPT_ENABLE: Cell<u32> = const { Cell::new(0) };
     static TEST_INTERRUPT_MASK: Cell<u32> = const { Cell::new(0) };
     static TEST_INTERRUPT_PENDING: Cell<u32> = const { Cell::new(0) };
@@ -190,59 +184,6 @@ pub fn syscall_arg2() -> u32 {
 
 #[cfg(not(any(test, feature = "host-test")))]
 #[inline(always)]
-pub fn syscall_once(number: u32) {
-    unsafe {
-        __k16_syscall_once(number);
-    }
-}
-
-#[cfg(any(test, feature = "host-test"))]
-pub fn syscall_once(number: u32) {
-    test_state_store!(TEST_SYSCALL_NUMBER, number);
-}
-
-#[cfg(not(any(test, feature = "host-test")))]
-#[inline(always)]
-pub fn syscall0(number: u32) -> u32 {
-    unsafe { __k16_syscall0(number) }
-}
-
-#[cfg(any(test, feature = "host-test"))]
-pub fn syscall0(number: u32) -> u32 {
-    test_state_store!(TEST_SYSCALL_NUMBER, number);
-    test_state_load!(TEST_SYSCALL_RETURN)
-}
-
-#[cfg(not(any(test, feature = "host-test")))]
-#[inline(always)]
-pub fn syscall1(number: u32, arg0: u32) -> u32 {
-    unsafe { __k16_syscall1(number, arg0) }
-}
-
-#[cfg(any(test, feature = "host-test"))]
-pub fn syscall1(number: u32, arg0: u32) -> u32 {
-    test_state_store!(TEST_SYSCALL_NUMBER, number);
-    test_state_store!(TEST_SYSCALL_ARG0, arg0);
-    test_state_load!(TEST_SYSCALL_RETURN)
-}
-
-#[cfg(not(any(test, feature = "host-test")))]
-#[inline(always)]
-pub fn syscall3(number: u32, arg0: u32, arg1: u32, arg2: u32) -> u32 {
-    unsafe { __k16_syscall3(number, arg0, arg1, arg2) }
-}
-
-#[cfg(any(test, feature = "host-test"))]
-pub fn syscall3(number: u32, arg0: u32, arg1: u32, arg2: u32) -> u32 {
-    test_state_store!(TEST_SYSCALL_NUMBER, number);
-    test_state_store!(TEST_SYSCALL_ARG0, arg0);
-    test_state_store!(TEST_SYSCALL_ARG1, arg1);
-    test_state_store!(TEST_SYSCALL_ARG2, arg2);
-    test_state_load!(TEST_SYSCALL_RETURN)
-}
-
-#[cfg(not(any(test, feature = "host-test")))]
-#[inline(always)]
 pub unsafe fn set_interrupt_mask(mask: u32) {
     unsafe {
         __k16_write_interrupt_mask(mask);
@@ -322,11 +263,9 @@ pub(crate) fn reset_test_interrupts() {
     test_state_store!(TEST_TRAP_CAUSE, 0);
     test_state_store!(TEST_TRAP_PC, 0);
     test_state_store!(TEST_TRAP_VALUE, 0);
-    test_state_store!(TEST_SYSCALL_NUMBER, 0);
     test_state_store!(TEST_SYSCALL_ARG0, 0);
     test_state_store!(TEST_SYSCALL_ARG1, 0);
     test_state_store!(TEST_SYSCALL_ARG2, 0);
-    test_state_store!(TEST_SYSCALL_RETURN, 0);
     test_state_store!(TEST_INTERRUPT_ENABLE, 0);
     test_state_store!(TEST_INTERRUPT_MASK, 0);
     test_state_store!(TEST_INTERRUPT_PENDING, 0);
@@ -341,18 +280,15 @@ pub(crate) fn set_test_trap_state(cause: u32, pc: u32, value: u32) {
 }
 
 #[cfg(any(test, feature = "host-test"))]
-pub(crate) fn set_test_syscall_return(value: u32) {
-    test_state_store!(TEST_SYSCALL_RETURN, value);
+pub(crate) fn set_test_syscall_args(arg0: u32, arg1: u32, arg2: u32) {
+    test_state_store!(TEST_SYSCALL_ARG0, arg0);
+    test_state_store!(TEST_SYSCALL_ARG1, arg1);
+    test_state_store!(TEST_SYSCALL_ARG2, arg2);
 }
 
 #[cfg(any(test, feature = "host-test"))]
 pub(crate) fn test_trap_vector() -> u32 {
     test_state_load!(TEST_TRAP_VECTOR)
-}
-
-#[cfg(any(test, feature = "host-test"))]
-pub(crate) fn test_syscall_number() -> u32 {
-    test_state_load!(TEST_SYSCALL_NUMBER)
 }
 
 #[cfg(any(test, feature = "host-test"))]

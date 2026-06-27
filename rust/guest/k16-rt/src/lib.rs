@@ -26,14 +26,6 @@ pub mod host_test {
         crate::trap::reset_test_interrupts();
     }
 
-    pub fn set_syscall_return(value: u32) {
-        crate::trap::set_test_syscall_return(value);
-    }
-
-    pub fn syscall_number() -> u32 {
-        crate::trap::test_syscall_number()
-    }
-
     pub fn syscall_arg0() -> u32 {
         crate::trap::test_syscall_arg0()
     }
@@ -91,7 +83,6 @@ pub use time::{
 };
 pub use trap::{
     disable_interrupts, enable_interrupts, install_trap_vector, interrupt_pending, iret_once,
-    iret_with_r0, restore_trap_frame, save_trap_frame, set_interrupt_mask, syscall0, syscall1,
-    syscall3, syscall_arg0, syscall_arg1, syscall_arg2, syscall_once, trap_cause, trap_pc,
-    trap_value, TrapFrame,
+    iret_with_r0, restore_trap_frame, save_trap_frame, set_interrupt_mask, syscall_arg0,
+    syscall_arg1, syscall_arg2, trap_cause, trap_pc, trap_value, TrapFrame,
 };

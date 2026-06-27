@@ -3,12 +3,14 @@
 ## Unreleased
 
 - `k16-rt` no longer exports Rust userland syscall convenience wrappers such
-  as `write_syscall`, `open_syscall`, `brk_syscall`, or `sleep_ticks_syscall`.
-  Rust code that still needs raw trap/syscall access uses the generic
-  `syscall0`, `syscall1`, and `syscall3` primitives. The host-generated
-  `k16 runtime k16-cpu-helpers` object likewise no longer exports fixed-number
-  userland syscall shims such as `__k16_open_syscall`; those names belong to
-  the checked-in C arch runtime used by C userland and `/lib/libkraft.kso`.
+  as `write_syscall`, `open_syscall`, `brk_syscall`, or `sleep_ticks_syscall`,
+  and no longer exposes raw Rust syscall call helpers such as `syscall0`,
+  `syscall1`, `syscall3`, or `syscall_once`. The host-generated
+  `k16 runtime k16-cpu-helpers` object still provides generic
+  `__k16_syscall0`, `__k16_syscall1`, and `__k16_syscall3` helper symbols, but
+  it no longer exports fixed-number userland syscall shims such as
+  `__k16_open_syscall`; those names belong to the checked-in C arch runtime
+  used by C userland and `/lib/libkraft.kso`.
 - ROOT/K16FS mutating kernel syscalls now use write-through durability:
   successful create/truncate/write/unlink/mkdir/rmdir/rename paths issue a
   `storage0` `flush` command before reporting success to userland. Flush

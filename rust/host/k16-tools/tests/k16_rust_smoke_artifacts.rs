@@ -551,6 +551,10 @@ fn k16_rt_no_longer_exports_userland_syscall_wrappers() {
         "yield_syscall",
         "sleep_ticks_syscall",
         "exit_syscall",
+        "syscall_once",
+        "syscall0",
+        "syscall1",
+        "syscall3",
     ] {
         assert!(
             !runtime_lib.contains(symbol),
@@ -563,11 +567,10 @@ fn k16_rt_no_longer_exports_userland_syscall_wrappers() {
     }
 
     for symbol in [
-        "syscall0",
-        "syscall1",
-        "syscall3",
         "iret_with_r0",
         "save_trap_frame",
+        "syscall_arg0",
+        "syscall_arg2",
     ] {
         assert!(
             runtime_lib.contains(symbol),

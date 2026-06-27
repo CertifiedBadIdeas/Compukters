@@ -199,60 +199,7 @@ fn trap_frame_helpers_copy_saved_resume_state() {
 }
 
 #[test]
-fn syscall_helper_records_test_syscall_number() {
-    crate::trap::reset_test_interrupts();
-
-    syscall_once(k16_abi::cpu::csr::TRAP_CAUSE);
-
-    assert_eq!(
-        crate::trap::test_syscall_number(),
-        k16_abi::cpu::csr::TRAP_CAUSE
-    );
-}
-
-#[test]
-fn syscall0_returns_test_syscall_value() {
-    crate::trap::reset_test_interrupts();
-    crate::trap::set_test_syscall_return(0x53);
-
-    let returned = syscall0(0x20);
-
-    assert_eq!(crate::trap::test_syscall_number(), 0x20);
-    assert_eq!(returned, 0x53);
-}
-
-#[test]
-fn syscall1_records_argument_and_returns_test_syscall_value() {
-    crate::trap::reset_test_interrupts();
-    crate::trap::set_test_syscall_return(0);
-
-    let returned = syscall1(0x30, 0x21);
-
-    assert_eq!(crate::trap::test_syscall_number(), 0x30);
-    assert_eq!(crate::trap::test_syscall_arg0(), 0x21);
-    assert_eq!(syscall_arg0(), 0x21);
-    assert_eq!(returned, 0);
-}
-
-#[test]
-fn syscall3_records_arguments_and_returns_test_syscall_value() {
-    crate::trap::reset_test_interrupts();
-    crate::trap::set_test_syscall_return(7);
-
-    let returned = syscall3(0x40, 0x11, 0x22, 0x33);
-
-    assert_eq!(crate::trap::test_syscall_number(), 0x40);
-    assert_eq!(crate::trap::test_syscall_arg0(), 0x11);
-    assert_eq!(crate::trap::test_syscall_arg1(), 0x22);
-    assert_eq!(crate::trap::test_syscall_arg2(), 0x33);
-    assert_eq!(syscall_arg0(), 0x11);
-    assert_eq!(syscall_arg1(), 0x22);
-    assert_eq!(syscall_arg2(), 0x33);
-    assert_eq!(returned, 7);
-}
-
-#[test]
-fn host_test_syscall_state_is_isolated_between_threads() {
+fn host_test_syscall_arg_state_is_isolated_between_threads() {
     let ready = Arc::new(Barrier::new(2));
     let overwritten = Arc::new(Barrier::new(2));
 
@@ -260,14 +207,12 @@ fn host_test_syscall_state_is_isolated_between_threads() {
     let left_overwritten = Arc::clone(&overwritten);
     let left = thread::spawn(move || {
         crate::trap::reset_test_interrupts();
-        syscall1(0x30, 0x21);
+        crate::trap::set_test_trap_state(0, 0, 0);
+        crate::trap::set_test_syscall_args(0x21, 0, 0);
         left_ready.wait();
         left_overwritten.wait();
 
-        (
-            crate::trap::test_syscall_number(),
-            crate::trap::test_syscall_arg0(),
-        )
+        (syscall_arg0(), syscall_arg1())
     });
 
     let right_ready = Arc::clone(&ready);
@@ -275,15 +220,12 @@ fn host_test_syscall_state_is_isolated_between_threads() {
     let right = thread::spawn(move || {
         right_ready.wait();
         crate::trap::reset_test_interrupts();
-        syscall3(0x40, 0x11, 0x22, 0x33);
+        crate::trap::set_test_syscall_args(0x11, 0x22, 0x33);
         right_overwritten.wait();
 
-        (
-            crate::trap::test_syscall_number(),
-            crate::trap::test_syscall_arg0(),
-        )
+        (syscall_arg0(), syscall_arg1())
     });
 
-    assert_eq!(left.join().expect("left thread returns"), (0x30, 0x21));
-    assert_eq!(right.join().expect("right thread returns"), (0x40, 0x11));
+    assert_eq!(left.join().expect("left thread returns"), (0x21, 0));
+    assert_eq!(right.join().expect("right thread returns"), (0x11, 0x22));
 }

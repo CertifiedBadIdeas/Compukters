@@ -505,15 +505,16 @@ stack rather than the interrupted user stack. A kernel handler can complete the
 service and use `iret` to resume the caller after the `syscall` instruction.
 
 The initial K16 syscall ABI v0 is a guest/runtime convention layered on this
-CPU instruction. The CPU does not decode syscall tables. `k16-rt`
-`syscall0(number)` receives `number` in the Rust arg0 register (`r1`), executes
-`syscall r1`, and returns the kernel result from `r0`. `syscall1(number, arg0)`
-receives `number` in `r1` and `arg0` in `r2`. `syscall3(number, arg0, arg1,
-arg2)` receives `number` in `r1` and the three syscall arguments in `r2`, `r3`,
-and `r4`. At the `syscall r1` boundary the CPU captures `r2`, `r3`, and `r4`
-into `trap_arg0`, `trap_arg1`, and `trap_arg2` before entering the kernel. The
-kernel interprets `trap_value` as the syscall number, reads the captured
-`trap_arg*` CSRs for arguments, may freely use registers while running in the
+CPU instruction. The CPU does not decode syscall tables. Runtime helper code
+places the syscall number in `r1`, arguments in `r2`, `r3`, and `r4`, executes
+`syscall r1`, and receives the kernel result from `r0` after `iret`. The
+host-generated `__k16_syscall0`, `__k16_syscall1`, and `__k16_syscall3` helper
+symbols implement those generic call shapes for low-level runtime objects, but
+`k16-rt` no longer exposes them as public Rust APIs. At the `syscall r1`
+boundary the CPU captures `r2`, `r3`, and `r4` into `trap_arg0`, `trap_arg1`,
+and `trap_arg2` before entering the kernel. The kernel interprets `trap_value`
+as the syscall number, reads the captured `trap_arg*` CSRs for arguments, may
+freely use registers while running in the
 trap vector, and returns a `u32` result by placing it in `r0` before `iret`.
 `iret` restores the interrupted user register frame for `r1..r15`; the current
 handler `r0` becomes the caller-visible return value. `iret` also restores the
