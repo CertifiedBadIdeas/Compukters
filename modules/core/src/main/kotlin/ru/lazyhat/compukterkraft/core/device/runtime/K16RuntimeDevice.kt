@@ -30,6 +30,7 @@ import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16ComputerEndpoint
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16ComputerControl
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16ComputerSignal
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
+import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayTile
 import java.nio.ByteBuffer
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
@@ -273,7 +274,7 @@ class K16RuntimeDevice(
 
     private fun flushPendingDisplayFrames(): Boolean {
         if (pendingDisplayFrames.isEmpty()) return false
-        val frames = pendingDisplayFrames.toList()
+        val frames = coalesceDisplayFrames(pendingDisplayFrames)
         pendingDisplayFrames.clear()
         var sentAny = false
         for (frame in frames) {
@@ -286,9 +287,52 @@ class K16RuntimeDevice(
         return sentAny
     }
 
+    private fun coalesceDisplayFrames(frames: List<DisplayFrameDelta>): List<DisplayFrameDelta> {
+        if (frames.size < 2) return frames.toList()
+        val coalesced = mutableListOf<DisplayFrameDelta>()
+        var group = mutableListOf<DisplayFrameDelta>()
+        for (frame in frames) {
+            if (group.isNotEmpty() && !group.last().canCoalesceWith(frame)) {
+                coalesced += coalesceCompatibleDisplayFrames(group)
+                group = mutableListOf()
+            }
+            group += frame
+        }
+        if (group.isNotEmpty()) {
+            coalesced += coalesceCompatibleDisplayFrames(group)
+        }
+        return coalesced
+    }
+
+    private fun DisplayFrameDelta.canCoalesceWith(next: DisplayFrameDelta): Boolean =
+        displayId == next.displayId &&
+            width == next.width &&
+            height == next.height &&
+            pixelFormat == next.pixelFormat
+
+    private fun coalesceCompatibleDisplayFrames(frames: List<DisplayFrameDelta>): DisplayFrameDelta {
+        if (frames.size == 1) return frames.single()
+        val tilesByCoordinate = linkedMapOf<Pair<Int, Int>, DisplayTile>()
+        for (frame in frames) {
+            for (tile in frame.tiles) {
+                tilesByCoordinate[tile.tileX to tile.tileY] = tile
+            }
+        }
+        val last = frames.last()
+        return DisplayFrameDelta(
+            displayId = last.displayId,
+            sequence = last.sequence,
+            width = last.width,
+            height = last.height,
+            pixelFormat = last.pixelFormat,
+            fullRefresh = frames.any { it.fullRefresh },
+            tiles = tilesByCoordinate.values.toList(),
+        )
+    }
+
     private fun sendFrame(
         displayId: Int,
-        frame: ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta,
+        frame: DisplayFrameDelta,
     ): Boolean {
         val toDetach = mutableListOf<Pair<UUID, Int>>()
         var sent = false
