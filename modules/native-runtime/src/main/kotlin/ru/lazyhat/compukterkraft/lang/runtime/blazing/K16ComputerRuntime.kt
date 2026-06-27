@@ -305,6 +305,9 @@ class K16ComputerRuntime(
             val control = bindings.control(handle)
             when (signal) {
                 NativeK16ComputerSignal.Yield -> {
+                    if (control.status != NativeK16ComputerControl.STATUS_READY) {
+                        return K16ComputerTickResult(signal = signal, control = control, yieldSignals = yieldSignals)
+                    }
                     yieldSignals += 1
                 }
 
