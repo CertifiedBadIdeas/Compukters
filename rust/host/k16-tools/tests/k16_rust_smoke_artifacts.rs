@@ -202,8 +202,8 @@ fn k16_memory_helpers_are_runtime_owned() {
         .expect("k16-rt manifest exists");
     let rt_memory = fs::read_to_string(root.join("rust/guest/k16-rt/src/memory.rs"))
         .expect("k16-rt memory source exists");
-    let no_core_helpers = fs::read_to_string(root.join("rust/guest/k16-rt/src/no_core_helpers.rs"))
-        .expect("k16-rt no-core helper source exists");
+    let runtime_helpers = fs::read_to_string(root.join("guest/runtime/k16-memory-helpers.rs"))
+        .expect("K16 memory helper runtime source exists");
     let host_cli = fs::read_to_string(root.join("rust/host/k16-tools/src/cli.rs"))
         .expect("k16 host tools cli exists");
 
@@ -220,8 +220,15 @@ fn k16_memory_helpers_are_runtime_owned() {
     assert!(rt_memory.contains("pub unsafe fn k16_memmove"));
     assert!(rt_memory.contains("pub unsafe fn k16_memset"));
     assert!(rt_memory.contains("pub unsafe fn k16_memcmp"));
-    assert!(no_core_helpers.contains("pub unsafe extern \"C\" fn __k16_memcpy"));
-    assert!(host_cli.contains("rust/guest/k16-rt/src/no_core_helpers.rs"));
+    assert!(
+        !root
+            .join("rust/guest/k16-rt/src/no_core_helpers.rs")
+            .exists(),
+        "k16-rt should not own the host-generated memory helper source"
+    );
+    assert!(runtime_helpers.contains("pub unsafe extern \"C\" fn __k16_memcpy"));
+    assert!(host_cli.contains("guest/runtime/k16-memory-helpers.rs"));
+    assert!(!host_cli.contains("rust/guest/k16-rt/src/no_core_helpers.rs"));
 }
 
 #[test]
@@ -800,7 +807,8 @@ fn rust_nocore_smoke_artifacts_are_documented_and_strict() {
     let smoke_script = root.join("tools/k16-rust-nocore-smoke.sh");
     let core_smoke_script = root.join("tools/k16-rust-core-smoke.sh");
     let bootstrap_probe = root.join("tools/k16-rustc-bootstrap-probe.sh");
-    let runtime_helpers = root.join("rust/guest/k16-rt/src/no_core_helpers.rs");
+    let runtime_helpers = root.join("guest/runtime/k16-memory-helpers.rs");
+    let retired_k16_rt_helpers = root.join("rust/guest/k16-rt/src/no_core_helpers.rs");
     let retired_host_runtime = root.join("rust/host/k16-tools/runtime");
     let llvm_docs = root.join("docs/toolchains/k16-llvm-smoke.md");
     let clang_docs = root.join("docs/toolchains/k16-clang-smoke.md");
@@ -931,6 +939,10 @@ fn rust_nocore_smoke_artifacts_are_documented_and_strict() {
     assert!(
         !retired_host_runtime.exists(),
         "K16 host tools must not own guest runtime helper source"
+    );
+    assert!(
+        !retired_k16_rt_helpers.exists(),
+        "k16-rt must not own the host-generated memory helper source"
     );
     let helpers =
         fs::read_to_string(&runtime_helpers).expect("K16 guest runtime helper source exists");

@@ -12,8 +12,8 @@ K16. It compiles a tiny `#![no_core]` Rust program with an unmangled
 `k16-memory-helpers` runtime object, executes the resulting KX program,
 and expects `debug_bytes=2a`.
 
-`k16-memory-helpers` is also Rust-owned: `k16 runtime k16-memory-helpers`
-builds `rust/guest/k16-rt/src/no_core_helpers.rs` with the same custom K16
+`k16-memory-helpers` is also guest-runtime-owned: `k16 runtime k16-memory-helpers`
+builds `guest/runtime/k16-memory-helpers.rs` with the same custom K16
 rustc, then inspects and links the generated K16 object with tools from
 `K16_LLVM_BIN_DIR`. The tool does not keep a host-owned guest runtime source
 or a host-generated helper object path.
