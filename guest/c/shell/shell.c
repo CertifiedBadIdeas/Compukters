@@ -7,8 +7,6 @@
 #define PROMPT "K16> "
 #define BIN_PREFIX "/bin/"
 #define PROGRAM_SUFFIX ".kx"
-#define ALLOC_ALIAS "alloc"
-#define ALLOC_PROGRAM "alloc-test"
 
 #define KRAFT_SHELL_INPUT_CAPACITY 256
 #define KRAFT_MAX_SHELL_PATH_BYTES KRAFT_MAX_STAT_PATH_BYTES
@@ -202,10 +200,9 @@ static int resolve_path(const char *cwd, const char *path, char *out,
 static int build_program_path(const char *name, char *out,
                               unsigned int out_len) {
   unsigned int cursor = 0;
-  const char *program = text_equals(name, ALLOC_ALIAS) ? ALLOC_PROGRAM : name;
   out[0] = '\0';
   return append_text(out, out_len, &cursor, BIN_PREFIX) == 0 &&
-                 append_text(out, out_len, &cursor, program) == 0 &&
+                 append_text(out, out_len, &cursor, name) == 0 &&
                  append_text(out, out_len, &cursor, PROGRAM_SUFFIX) == 0
              ? 0
              : -1;

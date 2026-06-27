@@ -5,14 +5,9 @@ members = [
     "k16-boot",
     "k16-boot-chain",
     "k16-image",
-    "k16-alloc-test",
-    "k16-proc-test",
-    "k16-syscall-fault-test",
-    "k16-user-fault-test",
     "k16-kernel",
     "k16-memory",
     "k16-rt",
     "k16-storage",
-    "kraft-std",
 ]
 resolver = "2"

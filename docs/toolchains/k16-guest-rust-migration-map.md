@@ -33,7 +33,7 @@ production build or focused test needs them.
 | Crate | Current role | C-first disposition |
 | --- | --- | --- |
 | `rust/guest/k16-abi` | Shared K16 guest ABI definitions used by Rust guest code. | Keep Rust while Rust kernel/runtime crates exist. |
-| `rust/guest/k16-alloc-test` | Development heap/syscall smoke utility. | Development/test-only; keep until equivalent coverage moves elsewhere. |
+| `rust/guest/k16-alloc-test` | Former development heap/syscall smoke utility. | Removed with the Rust userland proof layer. |
 | `rust/guest/k16-bios` | BIOS firmware. | Keep Rust for now; not part of userland/coreutils migration. |
 | `rust/guest/k16-boot` | System boot program. | Keep Rust for now; boot flow is outside this userland slice. |
 | `rust/guest/k16-boot-chain` | Shared boot-chain support library. | Keep Rust for now; boot support is outside this userland slice. |
@@ -41,16 +41,16 @@ production build or focused test needs them.
 | `rust/guest/k16-init` | Former Rust production init process. | Legacy/removable after no focused tests/docs need the old Rust launcher; production `/bin/init.kx` now builds from `guest/c/init/init.c`. |
 | `rust/guest/k16-kernel` | Rust K16 kernel and OS internals. | Keep Rust. Kernel rewrite is explicitly out of scope for #367. |
 | `rust/guest/k16-memory` | Guest memory/MMU helper library. | Keep Rust while kernel/runtime memory management remains Rust. |
-| `rust/guest/k16-proc-test` | Development process-model smoke utility. | Development/test-only; keep until process coverage moves elsewhere. |
+| `rust/guest/k16-proc-test` | Former development process-model smoke utility. | Removed with the Rust userland proof layer. |
 | `rust/guest/k16-rt` | Low-level Rust guest runtime/syscall/trap helper crate. | Keep Rust for Rust kernel/boot/runtime consumers; do not expand as userland std. |
 | `rust/guest/k16-runtime-import-test` | Former development dynamic-import smoke program for `libk16rt.kso`. | Removed with the Rust shared-runtime proof. |
 | `rust/guest/k16-shared-kraft` | Former Rust provider for the shared OS ABI library `libkraft.kso`. | Removed; `/lib/libkraft.kso` now builds from `guest/c/libkraft/libkraft.c`. |
 | `rust/guest/k16-shared-runtime` | Former Rust provider for `libk16rt.kso` memory helpers. | Removed; production userland now ships only the C `libkraft.kso` shared library. |
 | `rust/guest/k16-shell` | Former Rust production shell. | Legacy/removable after no focused tests/docs need the old Rust shell; production `/bin/shell.kx` now builds from `guest/c/shell/shell.c`. |
 | `rust/guest/k16-storage` | Guest storage/filesystem support library. | Keep Rust while kernel/storage internals remain Rust. |
-| `rust/guest/k16-syscall-fault-test` | Development syscall fault smoke utility. | Development/test-only; keep while it covers fault policy. |
-| `rust/guest/k16-user-fault-test` | Development user fault smoke utility. | Development/test-only; keep while it covers user fault policy. |
-| `rust/guest/kraft-std` | Project Rust userland convenience layer over K16 syscalls. | Freeze for production direction; keep for tests/legacy until C libc-lite replaces required userland APIs. |
+| `rust/guest/k16-syscall-fault-test` | Former development syscall fault smoke utility. | Removed with the Rust userland proof layer. |
+| `rust/guest/k16-user-fault-test` | Former development user fault smoke utility. | Removed with the Rust userland proof layer. |
+| `rust/guest/kraft-std` | Former Rust userland convenience layer over K16 syscalls. | Removed; C libc-lite is the active userland API layer. |
 
 ## Removed Rust Userland Crates
 
@@ -71,9 +71,8 @@ artifacts moved to `guest/c/coreutils`. The bundled MOTD data now lives at
 `guest/data/etc/motd`, outside any Rust utility crate.
 
 The hosted Rust proof crates `k16-hosted-cat` and `k16-hosted-hello` were also
-removed from the guest workspace. Hosted Rust std coverage remains exercised by
-host-tool tests that build temporary source snippets instead of shipping
-bundled guest proof crates.
+removed from the guest workspace. Hosted Rust std is no longer an active
+userland proof path.
 
 The former Rust shared OS ABI provider `k16-shared-kraft` was removed from the
 guest workspace after `/lib/libkraft.kso` moved to
@@ -85,6 +84,11 @@ and development storage layouts no longer ship `/lib/libk16rt.kso` or
 `/bin/runtime-import-test.kx`; shared userland code is represented by the C
 `libkraft.kso` provider.
 
+The remaining Rust userland proof crates `k16-alloc-test`, `k16-proc-test`,
+`k16-syscall-fault-test`, `k16-user-fault-test`, and `kraft-std` were removed
+from the guest workspace. The development storage resource remains available
+for tests but no longer installs Rust userland proof binaries.
+
 ## Next Production C Candidates
 
 No production Rust coreutils/shell crate remains in the bundled image. Further
@@ -93,13 +97,8 @@ move shared ABI providers after the current production surface is stable.
 
 ## Development/test-only
 
-These crates are not production userland targets. They remain useful while they
-cover behavior that the production image or host tools do not yet verify:
-
-- `rust/guest/k16-alloc-test`
-- `rust/guest/k16-proc-test`
-- `rust/guest/k16-syscall-fault-test`
-- `rust/guest/k16-user-fault-test`
+There are currently no Rust development/test-only userland crates in the guest
+workspace.
 
 ## Deletion Rule
 
