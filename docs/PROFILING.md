@@ -69,11 +69,22 @@ Use `profileK16RuntimeWait` to build the local debug K16 JNI library, boot the b
 
 Use `profileK16RuntimeTextIo` for a terminal-focused workload that waits for the bundled shell, sends one command as
 individual character input, sends another command as paste input, compares a normal `ls /bin` with a scroll-provoking
-`ls /bin`, and prints the same runtime profiling summary:
+`ls /bin`, and prints the same runtime profiling summary plus per-phase `k16Phase` delta lines:
 
 ```bash
 ./gradlew-sandbox-dev --parallel profileK16RuntimeTextIo -Pk16BuildJobs=$(nproc)
 ```
+
+The `k16Phase` lines split selected text-I/O scenarios into named checkpoints such as `boot.prompt`, `*.input`,
+`*.visible`, and `*.idle`. Each line reports elapsed wall time and deltas between two runtime metric snapshots:
+
+```text
+k16Phase: name=ls:/bin.visible, elapsed=..., slices=..., runTime=..., inputBytes=..., gpuFrameBytes=..., displayFrames=..., displayBytes=..., storageReads=..., storageBytesRead=...
+```
+
+Use these phase lines when deciding whether a slowdown is in command dispatch, command execution/storage reads, display
+frame production, or post-command idle work. The older `k16LsCommand*` aggregate lines remain available for comparison
+with previous profiling runs.
 
 Use `profileK16ManyVmServerBudget` for a server-focused workload that boots several K16 runtime devices, measures idle
 tick cost after all shells are waiting, then runs one active command while the other VMs stay idle. The printed lines
