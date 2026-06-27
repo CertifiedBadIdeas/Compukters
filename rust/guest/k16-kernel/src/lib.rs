@@ -1,5 +1,8 @@
 #![no_std]
 
+#[cfg(test)]
+extern crate std;
+
 pub mod boot_chain;
 pub mod fs;
 pub mod image;
