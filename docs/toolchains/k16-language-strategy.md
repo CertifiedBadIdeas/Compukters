@@ -133,10 +133,10 @@ The active sequence is:
 
 ```text
 rust/guest/k16-rt
-  -> Rust BIOS
-  -> Rust bootloader
+  -> C BIOS
+  -> C bootloader
   -> Rust kernel
-  -> Rust user-space programs
+  -> C user-space programs
 ```
 
 ## Roadmap Impact
@@ -156,5 +156,5 @@ rust/guest/k16-rt
   records the stronger goal: existing Rux language/compiler/source code should
   be retired, not only frozen for new work.
 - [#148](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/148)
-  tracks the K16 Rust `core` sysroot milestone. BIOS and bootloader should stay
-  on `core` only, without `alloc` or `std`.
+  tracks the K16 Rust `core` sysroot milestone for the Rust kernel/toolchain
+  path. BIOS, bootloader, and current production userland are C-owned.

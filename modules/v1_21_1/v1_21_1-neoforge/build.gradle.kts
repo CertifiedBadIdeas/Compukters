@@ -120,8 +120,9 @@ val k16FirmwareProfile =
         .orElse("release")
 val k16GuestManifest = rootProject.layout.projectDirectory.file("rust/guest/Cargo.toml")
 val k16BiosSource = rootProject.layout.projectDirectory.file("guest/c/bios/bios.c")
-val k16BootManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-boot/Cargo.toml")
-val k16BootSource = rootProject.layout.projectDirectory.file("rust/guest/k16-boot/src/main.rs")
+val k16CBootSource = rootProject.layout.projectDirectory.file("guest/c/boot/boot.c")
+val k16CBootChainHeader = rootProject.layout.projectDirectory.file("guest/c/boot-chain/boot_chain.h")
+val k16CBootChainSource = rootProject.layout.projectDirectory.file("guest/c/boot-chain/boot_chain.c")
 val k16KernelManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-kernel/Cargo.toml")
 val k16KernelSource = rootProject.layout.projectDirectory.dir("rust/guest/k16-kernel/src")
 val k16CLibcIncludeSource = rootProject.layout.projectDirectory.dir("guest/c/libc/include")
@@ -648,7 +649,7 @@ fun Project.compileK16GuestCProgram(
 fun Project.compileK16GuestCFirmware(
     targetDir: File,
     output: File,
-    source: File,
+    sources: List<File>,
     archRuntimeSource: File,
 ) {
     val toolchain = resolveK16Toolchain()
@@ -662,43 +663,47 @@ fun Project.compileK16GuestCFirmware(
     output.delete()
 
     val archRuntimeObject = compileK16ArchRuntimeObject(targetDir, archRuntimeSource)
-    val objectFile = targetDir.resolve("${source.nameWithoutExtension}.o")
-    objectFile.delete()
-    val compileCommand =
-        listOf(
-            clang.absolutePath,
-            "--target=k16",
-            "-ffreestanding",
-            "-fno-builtin",
-            "-fno-stack-protector",
-            "-nostdlib",
-            "-Oz",
-            "-c",
-            source.absolutePath,
-            "-o",
-            objectFile.absolutePath,
-        )
-    val compileExitCode =
-        ProcessBuilder(compileCommand)
-            .directory(projectDir)
-            .inheritIO()
-            .start()
-            .waitFor()
-    check(compileExitCode == 0) {
-        "K16 C firmware compile failed with exit code $compileExitCode: ${compileCommand.joinToString(" ")}"
-    }
+    val objectFiles =
+        sources.map { source ->
+            val objectFile = targetDir.resolve("${source.parentFile.name}-${source.nameWithoutExtension}.o")
+            objectFile.delete()
+            val compileCommand =
+                listOf(
+                    clang.absolutePath,
+                    "--target=k16",
+                    "-ffreestanding",
+                    "-fno-builtin",
+                    "-fno-stack-protector",
+                    "-nostdlib",
+                    "-Oz",
+                    "-c",
+                    source.absolutePath,
+                    "-o",
+                    objectFile.absolutePath,
+                )
+            val compileExitCode =
+                ProcessBuilder(compileCommand)
+                    .directory(projectDir)
+                    .inheritIO()
+                    .start()
+                    .waitFor()
+            check(compileExitCode == 0) {
+                "K16 C firmware compile failed with exit code $compileExitCode: ${compileCommand.joinToString(" ")}"
+            }
+            objectFile
+        }
 
     val linkCommand =
-        listOf(
-            toolchain.cli.absolutePath,
-            "link",
-            "--target",
-            "bios",
-            archRuntimeObject.absolutePath,
-            objectFile.absolutePath,
-            "-o",
-            output.absolutePath,
-        )
+        buildList {
+            add(toolchain.cli.absolutePath)
+            add("link")
+            add("--target")
+            add("bios")
+            add(archRuntimeObject.absolutePath)
+            objectFiles.forEach { objectFile -> add(objectFile.absolutePath) }
+            add("-o")
+            add(output.absolutePath)
+        }
     val linkExitCode =
         ProcessBuilder(linkCommand)
             .directory(projectDir)
@@ -707,6 +712,81 @@ fun Project.compileK16GuestCFirmware(
             .waitFor()
     check(linkExitCode == 0) {
         "K16 C firmware link failed with exit code $linkExitCode: ${linkCommand.joinToString(" ")}"
+    }
+}
+
+fun Project.compileK16GuestCFixedImage(
+    targetDir: File,
+    output: File,
+    mapOutput: File,
+    k16Target: String,
+    sources: List<File>,
+    archRuntimeSource: File,
+) {
+    val toolchain = resolveK16Toolchain()
+    val clang = k16ClangExecutable.asFile
+    check(clang.isFile && clang.canExecute()) {
+        "K16 clang is missing or not executable at $clang; run buildK16Llvm through ./gradlew-sandbox-dev"
+    }
+
+    targetDir.mkdirs()
+    output.parentFile.mkdirs()
+    mapOutput.parentFile.mkdirs()
+    output.delete()
+    mapOutput.delete()
+
+    val archRuntimeObject = compileK16ArchRuntimeObject(targetDir, archRuntimeSource)
+    val objectFiles =
+        sources.map { source ->
+            val objectFile = targetDir.resolve("${source.parentFile.name}-${source.nameWithoutExtension}.o")
+            objectFile.delete()
+            val compileCommand =
+                listOf(
+                    clang.absolutePath,
+                    "--target=k16",
+                    "-ffreestanding",
+                    "-fno-builtin",
+                    "-fno-stack-protector",
+                    "-nostdlib",
+                    "-Oz",
+                    "-c",
+                    source.absolutePath,
+                    "-o",
+                    objectFile.absolutePath,
+                )
+            val compileExitCode =
+                ProcessBuilder(compileCommand)
+                    .directory(projectDir)
+                    .inheritIO()
+                    .start()
+                    .waitFor()
+            check(compileExitCode == 0) {
+                "K16 C fixed image compile failed with exit code $compileExitCode: ${compileCommand.joinToString(" ")}"
+            }
+            objectFile
+        }
+
+    val linkCommand =
+        buildList {
+            add(toolchain.cli.absolutePath)
+            add("link")
+            add("--target")
+            add(k16Target)
+            add("--map")
+            add(mapOutput.absolutePath)
+            add(archRuntimeObject.absolutePath)
+            objectFiles.forEach { objectFile -> add(objectFile.absolutePath) }
+            add("-o")
+            add(output.absolutePath)
+        }
+    val linkExitCode =
+        ProcessBuilder(linkCommand)
+            .directory(projectDir)
+            .inheritIO()
+            .start()
+            .waitFor()
+    check(linkExitCode == 0) {
+        "K16 C fixed image link failed with exit code $linkExitCode: ${linkCommand.joinToString(" ")}"
     }
 }
 
@@ -789,6 +869,8 @@ val linkK16BiosFlash =
         description = "Compiles and links the bundled C K16 BIOS into a raw BIOS flash resource."
         group = "k16"
         inputs.file(k16BiosSource)
+        inputs.file(k16CBootChainHeader)
+        inputs.file(k16CBootChainSource)
         inputs.file(k16CArchRuntimeSource)
         inputs.file(k16HostToolsManifest)
         inputs.dir(k16HostToolsSource)
@@ -800,7 +882,7 @@ val linkK16BiosFlash =
             project.compileK16GuestCFirmware(
                 targetDir = generatedK16BiosTarget.get().asFile,
                 output = k16BiosFlashResource.get().asFile,
-                source = k16BiosSource.asFile,
+                sources = listOf(k16CBootChainSource.asFile, k16BiosSource.asFile),
                 archRuntimeSource = k16CArchRuntimeSource.asFile,
             )
         }
@@ -808,30 +890,27 @@ val linkK16BiosFlash =
 
 val compileK16SystemBoot =
     tasks.register("compileK16SystemBoot") {
-        description = "Compiles and links the bundled Rust K16 bootloader bin crate into a K16E boot artifact."
+        description = "Compiles and links the bundled C K16 bootloader into a K16E boot artifact."
         group = "k16"
-        inputs.file(k16GuestManifest)
-        inputs.file(k16BootManifest)
-        inputs.file(k16BootSource)
-        inputs.file(k16BootChainManifest)
-        inputs.dir(k16BootChainSource)
+        inputs.file(k16CBootSource)
+        inputs.file(k16CBootChainHeader)
+        inputs.file(k16CBootChainSource)
+        inputs.file(k16CArchRuntimeSource)
         inputs.file(k16HostToolsManifest)
         inputs.dir(k16HostToolsSource)
-        inputs.file(k16RustTargetSpec)
         inputs.file(k16ToolchainConfig)
-        inputs.property("k16FirmwareProfile", k16FirmwareProfile)
         outputs.file(k16BootArtifact)
         outputs.file(k16BootMapArtifact)
         dependsOn(rootProject.tasks.named("prepareK16Toolchain"))
 
         doLast {
-            project.compileK16GuestRustBin(
-                manifest = k16BootManifest.asFile,
+            project.compileK16GuestCFixedImage(
                 targetDir = generatedK16BootTarget.get().asFile,
-                binName = "k16-boot",
                 k16Target = "boot",
                 output = k16BootArtifact.get().asFile,
                 mapOutput = k16BootMapArtifact.get(),
+                sources = listOf(k16CBootChainSource.asFile, k16CBootSource.asFile),
+                archRuntimeSource = k16CArchRuntimeSource.asFile,
             )
         }
     }

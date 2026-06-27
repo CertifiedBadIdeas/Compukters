@@ -88,17 +88,17 @@ symbol and later duplicate providers are not pulled.
 Bundled K16 guest artifacts use this driver directly:
 
 ```text
-guest/c/bios/bios.c   -> k16 link --target bios      -> firmware/k16-bios.kflash
-rust/guest/k16-boot   -> k16-ld --k16-target=boot   -> kernel-loader.kb
-rust/guest/k16-kernel -> k16-ld --k16-target=kernel -> display-ok.kx
+guest/c/bios/bios.c                -> k16 link --target bios   -> firmware/k16-bios.kflash
+guest/c/boot/boot.c + boot-chain   -> k16 link --target boot   -> kernel-loader.kb
+rust/guest/k16-kernel              -> k16-ld --k16-target=kernel -> display-ok.kx
 ```
 
-The BIOS is a freestanding C firmware source compiled with the source-built K16
-Clang and linked as raw flash. The bootloader and kernel remain freestanding
-Rust `bin` crates. Gradle resolves a prepared K16 toolchain through
-`prepareK16Toolchain`; missing toolchain state is a hard configuration error.
-There is no fallback to host compilers, host linker behavior, or retired Rux
-source generation.
+The BIOS and bootloader are freestanding C firmware sources compiled with the
+source-built K16 Clang path; BIOS links as raw flash, while bootloader links as
+a fixed K16E boot image. The kernel remains a freestanding Rust `bin` crate.
+Gradle resolves a prepared K16 toolchain through `prepareK16Toolchain`; missing
+toolchain state is a hard configuration error. There is no fallback to host
+compilers, host linker behavior, or retired Rux source generation.
 
 Source-built prepared toolchains must include the stage1 K16 rustc, `k16-ld`,
 Rust source for `-Zbuild-std=core`, and the matching host `library/std` sysroot
