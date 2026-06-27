@@ -20,6 +20,7 @@
 package ru.lazyhat.compukterkraft.common.computer.client
 
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
+import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameOperation
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayPixelFormat
 
 class ClientDisplayBuffer(
@@ -72,6 +73,9 @@ class ClientDisplayBuffer(
             staging.fill(OPAQUE_BLACK)
             pendingDirtyRegions.clear()
             pendingDirtyRegions.add(Region(0, 0, width, height))
+        }
+        for (operation in frame.operations) {
+            applyOperation(operation)
         }
         for (tile in frame.tiles) {
             var offset = 0
@@ -170,6 +174,78 @@ class ClientDisplayBuffer(
             source.copyInto(destination, row * width + region.x, row * width + region.x, row * width + region.x + region.width)
             row = row + 1
         }
+    }
+
+    private fun applyOperation(operation: DisplayFrameOperation) {
+        when (operation) {
+            is DisplayFrameOperation.FillRect -> applyFillRect(operation)
+            is DisplayFrameOperation.CopyRect -> applyCopyRect(operation)
+        }
+    }
+
+    private fun applyFillRect(operation: DisplayFrameOperation.FillRect) {
+        val region = clippedRegion(operation.x, operation.y, operation.width, operation.height) ?: return
+        val argb = rgb565ToArgb(operation.rgb565)
+        var row = region.y
+        while (row < region.y + region.height) {
+            var col = region.x
+            while (col < region.x + region.width) {
+                staging[row * width + col] = argb
+                col += 1
+            }
+            row += 1
+        }
+        pendingDirtyRegions.add(region)
+    }
+
+    private fun applyCopyRect(operation: DisplayFrameOperation.CopyRect) {
+        val region = clippedRegion(operation.dstX, operation.dstY, operation.width, operation.height) ?: return
+        val copied = IntArray(region.width * region.height)
+        var copiedOffset = 0
+        var row = region.y
+        while (row < region.y + region.height) {
+            var col = region.x
+            while (col < region.x + region.width) {
+                val srcX = operation.srcX + (col - operation.dstX)
+                val srcY = operation.srcY + (row - operation.dstY)
+                copied[copiedOffset] =
+                    if (srcX in 0 until width && srcY in 0 until height) {
+                        staging[srcY * width + srcX]
+                    } else {
+                        OPAQUE_BLACK
+                    }
+                copiedOffset += 1
+                col += 1
+            }
+            row += 1
+        }
+        copiedOffset = 0
+        row = region.y
+        while (row < region.y + region.height) {
+            var col = region.x
+            while (col < region.x + region.width) {
+                staging[row * width + col] = copied[copiedOffset]
+                copiedOffset += 1
+                col += 1
+            }
+            row += 1
+        }
+        pendingDirtyRegions.add(region)
+    }
+
+    private fun clippedRegion(
+        x: Int,
+        y: Int,
+        width: Int,
+        height: Int,
+    ): Region? {
+        if (width <= 0 || height <= 0) return null
+        val minX = x.coerceAtLeast(0)
+        val minY = y.coerceAtLeast(0)
+        val maxX = (x + width).coerceAtMost(this.width)
+        val maxY = (y + height).coerceAtMost(this.height)
+        if (minX >= maxX || minY >= maxY) return null
+        return Region(minX, minY, maxX - minX, maxY - minY)
     }
 
     private fun rgb565ToArgb(value: Int): Int {

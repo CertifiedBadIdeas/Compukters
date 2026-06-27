@@ -25,6 +25,7 @@ import ru.lazyhat.compukterkraft.common.network.MessageType
 import ru.lazyhat.compukterkraft.common.network.NetworkMessage
 import ru.lazyhat.compukterkraft.common.network.NetworkMessages
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
+import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameOperation
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayPixelFormat
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayTile
 
@@ -57,7 +58,30 @@ class FrameDeltaClientMessage : NetworkMessage<ClientNetworkContext> {
                     payload = buf.readByteArray(),
                 )
             }
-        frame = DisplayFrameDelta(displayId, sequence, width, height, format, fullRefresh, tiles)
+        val operations =
+            List(buf.readVarInt()) {
+                when (val operation = buf.readVarInt()) {
+                    1 ->
+                        DisplayFrameOperation.FillRect(
+                            x = buf.readVarInt(),
+                            y = buf.readVarInt(),
+                            width = buf.readVarInt(),
+                            height = buf.readVarInt(),
+                            rgb565 = buf.readVarInt(),
+                        )
+                    2 ->
+                        DisplayFrameOperation.CopyRect(
+                            srcX = buf.readVarInt(),
+                            srcY = buf.readVarInt(),
+                            width = buf.readVarInt(),
+                            height = buf.readVarInt(),
+                            dstX = buf.readVarInt(),
+                            dstY = buf.readVarInt(),
+                        )
+                    else -> error("Unknown display frame operation $operation")
+                }
+            }
+        frame = DisplayFrameDelta(displayId, sequence, width, height, format, fullRefresh, tiles, operations)
     }
 
     override fun write(buf: FriendlyByteBuf) {
@@ -77,6 +101,28 @@ class FrameDeltaClientMessage : NetworkMessage<ClientNetworkContext> {
             buf.writeVarInt(tile.width)
             buf.writeVarInt(tile.height)
             buf.writeByteArray(tile.payload)
+        }
+        buf.writeVarInt(frame.operations.size)
+        for (operation in frame.operations) {
+            when (operation) {
+                is DisplayFrameOperation.FillRect -> {
+                    buf.writeVarInt(1)
+                    buf.writeVarInt(operation.x)
+                    buf.writeVarInt(operation.y)
+                    buf.writeVarInt(operation.width)
+                    buf.writeVarInt(operation.height)
+                    buf.writeVarInt(operation.rgb565)
+                }
+                is DisplayFrameOperation.CopyRect -> {
+                    buf.writeVarInt(2)
+                    buf.writeVarInt(operation.srcX)
+                    buf.writeVarInt(operation.srcY)
+                    buf.writeVarInt(operation.width)
+                    buf.writeVarInt(operation.height)
+                    buf.writeVarInt(operation.dstX)
+                    buf.writeVarInt(operation.dstY)
+                }
+            }
         }
     }
 

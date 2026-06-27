@@ -1,4 +1,4 @@
-use k16_vm::display::{DeviceDisplayRegistry, DisplayEngine, PixelFormat};
+use k16_vm::display::{DeviceDisplayRegistry, DisplayEngine, DisplayFrameOperation, PixelFormat};
 use k16_vm::generated::font_mono5x7::{has_mono5x7_glyph, mono5x7_glyph};
 
 fn payload_contains_rgb565(payload: &[u8], rgb565: u16) -> bool {
@@ -11,7 +11,7 @@ fn payload_contains_rgb565(payload: &[u8], rgb565: u16) -> bool {
 fn present_returns_dirty_tiles_and_increments_sequence() {
     let mut display = DisplayEngine::new(7, 20, 10, PixelFormat::Rgb565).unwrap();
 
-    display.fill_rect(1, 2, 3, 4, 0xF800);
+    display.set_pixel(1, 2, 0xF800);
     let first = display.present().expect("dirty frame");
 
     assert_eq!(first.display_id, 7);
@@ -21,6 +21,7 @@ fn present_returns_dirty_tiles_and_increments_sequence() {
     assert_eq!(first.pixel_format, PixelFormat::Rgb565);
     assert!(!first.full_refresh);
     assert!(!first.tiles.is_empty());
+    assert!(first.operations.is_empty());
     assert!(display.present().is_none());
 }
 
@@ -36,12 +37,9 @@ fn full_refresh_marks_whole_display() {
 }
 
 #[test]
-fn copy_rect_copies_pixels_and_marks_destination_dirty() {
+fn copy_rect_falls_back_to_dirty_tiles_when_source_depends_on_pending_tiles() {
     let mut display = DisplayEngine::new(2, 8, 4, PixelFormat::Rgb565).unwrap();
-    display.fill_rect(0, 0, 8, 4, 0x0000);
-    display.fill_rect(0, 0, 2, 2, 0xF800);
-    let _ = display.present();
-
+    display.set_pixel(0, 0, 0xF800);
     display.copy_rect(0, 0, 2, 2, 3, 1);
     let frame = display.present().expect("copy frame");
     let payload = frame
@@ -52,6 +50,39 @@ fn copy_rect_copies_pixels_and_marks_destination_dirty() {
         .collect::<Vec<_>>();
 
     assert!(payload_contains_rgb565(&payload, 0xF800));
+    assert!(frame.operations.is_empty());
+    assert!(!frame.full_refresh);
+}
+
+#[test]
+fn fill_and_copy_rect_emit_operations_without_pixel_tiles() {
+    let mut display = DisplayEngine::new(8, 20, 10, PixelFormat::Rgb565).unwrap();
+
+    display.fill_rect(1, 2, 3, 4, 0x07E0);
+    display.copy_rect(1, 2, 3, 4, 8, 1);
+    let frame = display.present().expect("operation frame");
+
+    assert_eq!(
+        frame.operations,
+        vec![
+            DisplayFrameOperation::FillRect {
+                x: 1,
+                y: 2,
+                width: 3,
+                height: 4,
+                rgb565: 0x07E0,
+            },
+            DisplayFrameOperation::CopyRect {
+                src_x: 1,
+                src_y: 2,
+                width: 3,
+                height: 4,
+                dst_x: 8,
+                dst_y: 1,
+            },
+        ],
+    );
+    assert!(frame.tiles.is_empty());
     assert!(!frame.full_refresh);
 }
 

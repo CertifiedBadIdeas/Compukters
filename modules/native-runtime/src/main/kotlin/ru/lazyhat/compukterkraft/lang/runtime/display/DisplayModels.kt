@@ -61,6 +61,25 @@ data class DisplayTile(
     }
 }
 
+sealed interface DisplayFrameOperation {
+    data class FillRect(
+        val x: Int,
+        val y: Int,
+        val width: Int,
+        val height: Int,
+        val rgb565: Int,
+    ) : DisplayFrameOperation
+
+    data class CopyRect(
+        val srcX: Int,
+        val srcY: Int,
+        val width: Int,
+        val height: Int,
+        val dstX: Int,
+        val dstY: Int,
+    ) : DisplayFrameOperation
+}
+
 data class DisplayFrameDelta(
     val displayId: Int,
     val sequence: Long,
@@ -69,4 +88,5 @@ data class DisplayFrameDelta(
     val pixelFormat: DisplayPixelFormat,
     val fullRefresh: Boolean,
     val tiles: List<DisplayTile>,
+    val operations: List<DisplayFrameOperation> = emptyList(),
 )
