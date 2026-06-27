@@ -511,6 +511,94 @@ class K16RuntimeDeviceTest {
     }
 
     @Test
+    fun coalescesFramebufferFramesBeforeSendingToAttachedDisplaySessions() {
+        val endpoint = RecordingK16Endpoint()
+        val displayNetwork = RecordingDisplayNetworkBridge()
+        val device =
+            K16RuntimeDevice(
+                deviceId = 22,
+                properties = DeviceProperties(DeviceFamily.NORMAL, label = null),
+                endpointFactory = { endpoint },
+                stateSink = {},
+                displayNetwork = displayNetwork,
+            )
+        val playerUuid = UUID.randomUUID()
+        val oldTile =
+            DisplayTile(
+                tileX = 0,
+                tileY = 0,
+                x = 0,
+                y = 0,
+                width = 1,
+                height = 1,
+                payload = byteArrayOf(0xF8.toByte(), 0x00),
+            )
+        val replacementTile =
+            DisplayTile(
+                tileX = 0,
+                tileY = 0,
+                x = 0,
+                y = 0,
+                width = 1,
+                height = 1,
+                payload = byteArrayOf(0x07, 0xE0.toByte()),
+            )
+        val secondTile =
+            DisplayTile(
+                tileX = 1,
+                tileY = 0,
+                x = 16,
+                y = 0,
+                width = 1,
+                height = 1,
+                payload = byteArrayOf(0x00, 0x1F),
+            )
+        val firstFrame =
+            DisplayFrameDelta(
+                displayId = 1,
+                sequence = 7,
+                width = 320,
+                height = 200,
+                pixelFormat = DisplayPixelFormat.RGB565,
+                fullRefresh = false,
+                tiles = listOf(oldTile),
+            )
+        val secondFrame =
+            DisplayFrameDelta(
+                displayId = 1,
+                sequence = 8,
+                width = 320,
+                height = 200,
+                pixelFormat = DisplayPixelFormat.RGB565,
+                fullRefresh = false,
+                tiles = listOf(replacementTile, secondTile),
+            )
+
+        device.attachDisplaySession(playerUuid, containerId = 23, displayId = 1, width = 320, height = 200)
+        device.turnOn()
+        endpoint.enqueueFramebufferFrames(encodeDisplayFrames(listOf(firstFrame, secondFrame)))
+        device.serverTick()
+        waitUntil {
+            device.serverTick()
+            displayNetwork.sentFrames.isNotEmpty()
+        }
+
+        assertEquals(1, displayNetwork.sentFrames.size)
+        assertEquals(
+            DisplayFrameDelta(
+                displayId = 1,
+                sequence = 8,
+                width = 320,
+                height = 200,
+                pixelFormat = DisplayPixelFormat.RGB565,
+                fullRefresh = false,
+                tiles = listOf(replacementTile, secondTile),
+            ),
+            displayNetwork.sentFrames.single().frame,
+        )
+    }
+
+    @Test
     fun recordsK16OutputRefreshSerialAndGpuFrameCounters() {
         val endpoint = RecordingK16Endpoint()
         val metrics = RecordingRuntimeMetricsCollector()
