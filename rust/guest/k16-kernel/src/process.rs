@@ -2866,7 +2866,7 @@ struct ImportRelocationRecord<'a> {
 }
 
 impl DynamicUserImage {
-    pub const fn from_k16e(header: k16_image::DynamicK16ImageHeader<'_>) -> Self {
+    pub const fn from_k16e(header: crate::image::DynamicK16ImageHeader<'_>) -> Self {
         Self {
             entry_offset: header.entry_offset,
             file_size: header.file_size,
@@ -2874,7 +2874,7 @@ impl DynamicUserImage {
         }
     }
 
-    pub const fn from_k16e_metadata(metadata: k16_image::DynamicK16ImageMetadata) -> Self {
+    pub const fn from_k16e_metadata(metadata: crate::image::DynamicK16ImageMetadata) -> Self {
         Self {
             entry_offset: metadata.entry_offset,
             file_size: metadata.file_size,
@@ -3617,14 +3617,14 @@ pub unsafe fn load_selected_dynamic_user_program(
         k16_storage::copy_selected_file_range_to_ram(
             0,
             k16_storage::SCRATCH_ADDR,
-            k16_image::DYNAMIC_K16E_V2_HEADER_SIZE,
+            crate::image::DYNAMIC_K16E_V2_HEADER_SIZE,
         )
         .map_err(|_| ProcessLoadError::Storage)?;
     }
     let header = unsafe {
         core::slice::from_raw_parts(
             k16_storage::SCRATCH_ADDR as usize as *const u8,
-            k16_image::DYNAMIC_K16E_V2_HEADER_SIZE as usize,
+            crate::image::DYNAMIC_K16E_V2_HEADER_SIZE as usize,
         )
     };
     validate_dynamic_header_bytes(header, unsafe { k16_storage::selected_file_size() })?;
@@ -3706,14 +3706,14 @@ pub unsafe fn load_selected_dynamic_user_program_mapped(
         k16_storage::copy_selected_file_range_to_ram(
             0,
             k16_storage::SCRATCH_ADDR,
-            k16_image::DYNAMIC_K16E_V2_HEADER_SIZE,
+            crate::image::DYNAMIC_K16E_V2_HEADER_SIZE,
         )
         .map_err(|_| ProcessLoadError::Storage)?;
     }
     let header = unsafe {
         core::slice::from_raw_parts(
             k16_storage::SCRATCH_ADDR as usize as *const u8,
-            k16_image::DYNAMIC_K16E_V2_HEADER_SIZE as usize,
+            crate::image::DYNAMIC_K16E_V2_HEADER_SIZE as usize,
         )
     };
     validate_dynamic_header_bytes(header, unsafe { k16_storage::selected_file_size() })?;
@@ -3843,14 +3843,14 @@ unsafe fn read_selected_dynamic_import_image() -> Result<DynamicUserImportImage,
         k16_storage::copy_selected_file_range_to_ram(
             0,
             k16_storage::SCRATCH_ADDR,
-            k16_image::DYNAMIC_K16E_V5_HEADER_SIZE,
+            crate::image::DYNAMIC_K16E_V5_HEADER_SIZE,
         )
         .map_err(|_| ProcessLoadError::Storage)?;
     }
     let header = unsafe {
         core::slice::from_raw_parts(
             k16_storage::SCRATCH_ADDR as usize as *const u8,
-            k16_image::DYNAMIC_K16E_V5_HEADER_SIZE as usize,
+            crate::image::DYNAMIC_K16E_V5_HEADER_SIZE as usize,
         )
     };
     validate_dynamic_header_bytes(header, unsafe { k16_storage::selected_file_size() })?;
@@ -4158,7 +4158,7 @@ unsafe fn read_import_relocation_record<'a>(
     }
     let record_table_size = image
         .import_relocation_count
-        .checked_mul(k16_image::K16E_IMPORT_RELOCATION_RECORD_SIZE)
+        .checked_mul(crate::image::K16E_IMPORT_RELOCATION_RECORD_SIZE)
         .ok_or(ProcessLoadError::InvalidImage)?;
     if image.import_section_size < record_table_size {
         return Err(ProcessLoadError::InvalidImage);
@@ -4167,7 +4167,7 @@ unsafe fn read_import_relocation_record<'a>(
         .import_section_offset
         .checked_add(
             index
-                .checked_mul(k16_image::K16E_IMPORT_RELOCATION_RECORD_SIZE)
+                .checked_mul(crate::image::K16E_IMPORT_RELOCATION_RECORD_SIZE)
                 .ok_or(ProcessLoadError::InvalidImage)?,
         )
         .ok_or(ProcessLoadError::InvalidImage)?;
@@ -4175,7 +4175,7 @@ unsafe fn read_import_relocation_record<'a>(
         k16_storage::copy_selected_file_range_to_ram(
             record_offset,
             RELOCATION_RECORD_ADDR,
-            k16_image::K16E_IMPORT_RELOCATION_RECORD_SIZE,
+            crate::image::K16E_IMPORT_RELOCATION_RECORD_SIZE,
         )
         .map_err(|_| ProcessLoadError::Storage)?;
     }
@@ -4305,14 +4305,14 @@ unsafe fn read_selected_shared_library_image() -> Result<SharedLibraryImage, Pro
         k16_storage::copy_selected_file_range_to_ram(
             0,
             k16_storage::SCRATCH_ADDR,
-            k16_image::SHARED_K16E_V4_HEADER_SIZE,
+            crate::image::SHARED_K16E_V4_HEADER_SIZE,
         )
         .map_err(|_| ProcessLoadError::Storage)?;
     }
     let header = unsafe {
         core::slice::from_raw_parts(
             k16_storage::SCRATCH_ADDR as usize as *const u8,
-            k16_image::SHARED_K16E_V4_HEADER_SIZE as usize,
+            crate::image::SHARED_K16E_V4_HEADER_SIZE as usize,
         )
     };
     validate_shared_library_header_bytes(header, unsafe { k16_storage::selected_file_size() })?;
@@ -4334,7 +4334,7 @@ unsafe fn resolve_selected_shared_export(
 ) -> Result<u32, ProcessLoadError> {
     let record_table_size = library
         .export_count
-        .checked_mul(k16_image::K16E_SHARED_EXPORT_RECORD_SIZE)
+        .checked_mul(crate::image::K16E_SHARED_EXPORT_RECORD_SIZE)
         .ok_or(ProcessLoadError::InvalidImage)?;
     if library.export_section_size < record_table_size {
         return Err(ProcessLoadError::InvalidImage);
@@ -4345,7 +4345,7 @@ unsafe fn resolve_selected_shared_export(
             .export_section_offset
             .checked_add(
                 index
-                    .checked_mul(k16_image::K16E_SHARED_EXPORT_RECORD_SIZE)
+                    .checked_mul(crate::image::K16E_SHARED_EXPORT_RECORD_SIZE)
                     .ok_or(ProcessLoadError::InvalidImage)?,
             )
             .ok_or(ProcessLoadError::InvalidImage)?;
@@ -4353,7 +4353,7 @@ unsafe fn resolve_selected_shared_export(
             k16_storage::copy_selected_file_range_to_ram(
                 record_offset,
                 RELOCATION_RECORD_ADDR,
-                k16_image::K16E_SHARED_EXPORT_RECORD_SIZE,
+                crate::image::K16E_SHARED_EXPORT_RECORD_SIZE,
             )
             .map_err(|_| ProcessLoadError::Storage)?;
         }
@@ -4411,7 +4411,7 @@ unsafe fn apply_selected_file_relocations(
         let relocation_offset = relocation_table_offset
             .checked_add(
                 index
-                    .checked_mul(k16_image::K16E_RELOCATION_RECORD_SIZE)
+                    .checked_mul(crate::image::K16E_RELOCATION_RECORD_SIZE)
                     .ok_or(ProcessLoadError::AddressOverflow)?,
             )
             .ok_or(ProcessLoadError::AddressOverflow)?;
@@ -4419,7 +4419,7 @@ unsafe fn apply_selected_file_relocations(
             k16_storage::copy_selected_file_range_to_ram(
                 relocation_offset,
                 RELOCATION_RECORD_ADDR,
-                k16_image::K16E_RELOCATION_RECORD_SIZE,
+                crate::image::K16E_RELOCATION_RECORD_SIZE,
             )
             .map_err(|_| ProcessLoadError::Storage)?;
         }
@@ -4443,7 +4443,7 @@ unsafe fn apply_selected_file_relocations_mapped(
         let relocation_offset = relocation_table_offset
             .checked_add(
                 index
-                    .checked_mul(k16_image::K16E_RELOCATION_RECORD_SIZE)
+                    .checked_mul(crate::image::K16E_RELOCATION_RECORD_SIZE)
                     .ok_or(ProcessLoadError::AddressOverflow)?,
             )
             .ok_or(ProcessLoadError::AddressOverflow)?;
@@ -4451,7 +4451,7 @@ unsafe fn apply_selected_file_relocations_mapped(
             k16_storage::copy_selected_file_range_to_ram(
                 relocation_offset,
                 RELOCATION_RECORD_ADDR,
-                k16_image::K16E_RELOCATION_RECORD_SIZE,
+                crate::image::K16E_RELOCATION_RECORD_SIZE,
             )
             .map_err(|_| ProcessLoadError::Storage)?;
         }
@@ -4473,7 +4473,7 @@ fn validate_dynamic_header_bytes(header: &[u8], inode_size: u32) -> Result<(), P
         return validate_dynamic_import_header_bytes(header, inode_size);
     }
 
-    if header.len() < k16_image::DYNAMIC_K16E_V2_HEADER_SIZE as usize
+    if header.len() < crate::image::DYNAMIC_K16E_V2_HEADER_SIZE as usize
         || header.get(0..4) != Some(b"K16E")
         || header_u16(header, 4) != 2
         || header_u16(header, 6) != 32
@@ -4481,11 +4481,11 @@ fn validate_dynamic_header_bytes(header: &[u8], inode_size: u32) -> Result<(), P
         || header_u16(header, 10) != 0
         || header_u32(header, 16) != 32
         || header_u32(header, 20) != 2
-        || header_u32(header, 24) != k16_image::K16eAbiKind::Program as u32
+        || header_u32(header, 24) != crate::image::K16eAbiKind::Program as u32
         || header_u32(header, 28) != 0
         || header_u32(header, 32) != 1
         || header_u32(header, 36) != 0
-        || header_u32(header, 40) != k16_image::DYNAMIC_K16E_V2_PAYLOAD_OFFSET
+        || header_u32(header, 40) != crate::image::DYNAMIC_K16E_V2_PAYLOAD_OFFSET
         || header_u32(header, 52) != 2
         || header_u32(header, 56) != 0
     {
@@ -4505,14 +4505,14 @@ fn validate_dynamic_header_bytes(header: &[u8], inode_size: u32) -> Result<(), P
     let relocation_table_offset = header_u32(header, 60);
     let relocation_table_size = header_u32(header, 64);
     let relocation_count = header_u32(header, 68);
-    let payload_end = k16_image::DYNAMIC_K16E_V2_PAYLOAD_OFFSET
+    let payload_end = crate::image::DYNAMIC_K16E_V2_PAYLOAD_OFFSET
         .checked_add(file_size)
         .ok_or(ProcessLoadError::InvalidImage)?;
     if relocation_table_offset != payload_end {
         return Err(ProcessLoadError::InvalidImage);
     }
     let expected_relocation_table_size = relocation_count
-        .checked_mul(k16_image::K16E_RELOCATION_RECORD_SIZE)
+        .checked_mul(crate::image::K16E_RELOCATION_RECORD_SIZE)
         .ok_or(ProcessLoadError::InvalidImage)?;
     if relocation_table_size != expected_relocation_table_size {
         return Err(ProcessLoadError::InvalidImage);
@@ -4530,7 +4530,7 @@ fn validate_dynamic_import_header_bytes(
     header: &[u8],
     inode_size: u32,
 ) -> Result<(), ProcessLoadError> {
-    if header.len() < k16_image::DYNAMIC_K16E_V5_HEADER_SIZE as usize
+    if header.len() < crate::image::DYNAMIC_K16E_V5_HEADER_SIZE as usize
         || header.get(0..4) != Some(b"K16E")
         || header_u16(header, 4) != 5
         || header_u16(header, 6) != 32
@@ -4538,11 +4538,11 @@ fn validate_dynamic_import_header_bytes(
         || header_u16(header, 10) != 0
         || header_u32(header, 16) != 32
         || header_u32(header, 20) != 4
-        || header_u32(header, 24) != k16_image::K16eAbiKind::Program as u32
+        || header_u32(header, 24) != crate::image::K16eAbiKind::Program as u32
         || header_u32(header, 28) != 0
         || header_u32(header, 32) != 1
         || header_u32(header, 36) != 0
-        || header_u32(header, 40) != k16_image::DYNAMIC_K16E_V5_PAYLOAD_OFFSET
+        || header_u32(header, 40) != crate::image::DYNAMIC_K16E_V5_PAYLOAD_OFFSET
         || header_u32(header, 52) != 2
         || header_u32(header, 56) != 0
         || header_u32(header, 72) != 6
@@ -4573,14 +4573,14 @@ fn validate_dynamic_import_header_bytes(
     let import_section_size = header_u32(header, 104);
     let import_relocation_count = header_u32(header, 108);
 
-    let payload_end = k16_image::DYNAMIC_K16E_V5_PAYLOAD_OFFSET
+    let payload_end = crate::image::DYNAMIC_K16E_V5_PAYLOAD_OFFSET
         .checked_add(file_size)
         .ok_or(ProcessLoadError::InvalidImage)?;
     if relocation_table_offset != payload_end {
         return Err(ProcessLoadError::InvalidImage);
     }
     let expected_relocation_table_size = relocation_count
-        .checked_mul(k16_image::K16E_RELOCATION_RECORD_SIZE)
+        .checked_mul(crate::image::K16E_RELOCATION_RECORD_SIZE)
         .ok_or(ProcessLoadError::InvalidImage)?;
     if relocation_table_size != expected_relocation_table_size {
         return Err(ProcessLoadError::InvalidImage);
@@ -4598,7 +4598,7 @@ fn validate_dynamic_import_header_bytes(
         return Err(ProcessLoadError::InvalidImage);
     }
     let expected_import_record_size = import_relocation_count
-        .checked_mul(k16_image::K16E_IMPORT_RELOCATION_RECORD_SIZE)
+        .checked_mul(crate::image::K16E_IMPORT_RELOCATION_RECORD_SIZE)
         .ok_or(ProcessLoadError::InvalidImage)?;
     if import_section_size < expected_import_record_size {
         return Err(ProcessLoadError::InvalidImage);
@@ -4616,7 +4616,7 @@ fn validate_shared_library_header_bytes(
     header: &[u8],
     inode_size: u32,
 ) -> Result<(), ProcessLoadError> {
-    if header.len() < k16_image::SHARED_K16E_V4_HEADER_SIZE as usize
+    if header.len() < crate::image::SHARED_K16E_V4_HEADER_SIZE as usize
         || header.get(0..4) != Some(b"K16E")
         || header_u16(header, 4) != 4
         || header_u16(header, 6) != 32
@@ -4625,11 +4625,11 @@ fn validate_shared_library_header_bytes(
         || header_u32(header, 12) != 0
         || header_u32(header, 16) != 32
         || header_u32(header, 20) != 3
-        || header_u32(header, 24) != k16_image::K16eAbiKind::SharedObject as u32
+        || header_u32(header, 24) != crate::image::K16eAbiKind::SharedObject as u32
         || header_u32(header, 28) != 0
         || header_u32(header, 32) != 1
         || header_u32(header, 36) != 0
-        || header_u32(header, 40) != k16_image::SHARED_K16E_V4_PAYLOAD_OFFSET
+        || header_u32(header, 40) != crate::image::SHARED_K16E_V4_PAYLOAD_OFFSET
         || header_u32(header, 52) != 2
         || header_u32(header, 56) != 0
         || header_u32(header, 72) != 5
@@ -4646,14 +4646,14 @@ fn validate_shared_library_header_bytes(
     let relocation_table_offset = header_u32(header, 60);
     let relocation_table_size = header_u32(header, 64);
     let relocation_count = header_u32(header, 68);
-    let payload_end = k16_image::SHARED_K16E_V4_PAYLOAD_OFFSET
+    let payload_end = crate::image::SHARED_K16E_V4_PAYLOAD_OFFSET
         .checked_add(file_size)
         .ok_or(ProcessLoadError::InvalidImage)?;
     if relocation_table_offset != payload_end {
         return Err(ProcessLoadError::InvalidImage);
     }
     let expected_relocation_table_size = relocation_count
-        .checked_mul(k16_image::K16E_RELOCATION_RECORD_SIZE)
+        .checked_mul(crate::image::K16E_RELOCATION_RECORD_SIZE)
         .ok_or(ProcessLoadError::InvalidImage)?;
     if relocation_table_size != expected_relocation_table_size {
         return Err(ProcessLoadError::InvalidImage);
@@ -4670,7 +4670,7 @@ fn validate_shared_library_header_bytes(
         return Err(ProcessLoadError::InvalidImage);
     }
     let expected_record_size = export_count
-        .checked_mul(k16_image::K16E_SHARED_EXPORT_RECORD_SIZE)
+        .checked_mul(crate::image::K16E_SHARED_EXPORT_RECORD_SIZE)
         .ok_or(ProcessLoadError::InvalidImage)?;
     if export_section_size < expected_record_size {
         return Err(ProcessLoadError::InvalidImage);
@@ -4696,7 +4696,7 @@ unsafe fn apply_selected_shared_library_relocations(
         let relocation_offset = relocation_table_offset
             .checked_add(
                 index
-                    .checked_mul(k16_image::K16E_RELOCATION_RECORD_SIZE)
+                    .checked_mul(crate::image::K16E_RELOCATION_RECORD_SIZE)
                     .ok_or(ProcessLoadError::AddressOverflow)?,
             )
             .ok_or(ProcessLoadError::AddressOverflow)?;
@@ -4704,7 +4704,7 @@ unsafe fn apply_selected_shared_library_relocations(
             k16_storage::copy_selected_file_range_to_ram(
                 relocation_offset,
                 RELOCATION_RECORD_ADDR,
-                k16_image::K16E_RELOCATION_RECORD_SIZE,
+                crate::image::K16E_RELOCATION_RECORD_SIZE,
             )
             .map_err(|_| ProcessLoadError::Storage)?;
         }
@@ -5094,7 +5094,7 @@ mod tests {
     #[test]
     fn dynamic_user_image_uses_guest_k16e_metadata() {
         let image = dynamic_program_image();
-        let header = k16_image::parse_dynamic_k16e_v2(&image).expect("dynamic header parses");
+        let header = crate::image::parse_dynamic_k16e_v2(&image).expect("dynamic header parses");
 
         assert_eq!(
             DynamicUserImage::from_k16e(header),
@@ -5111,7 +5111,7 @@ mod tests {
         let image = dynamic_import_program_image();
 
         validate_dynamic_header_bytes(
-            &image[..k16_image::DYNAMIC_K16E_V5_HEADER_SIZE as usize],
+            &image[..crate::image::DYNAMIC_K16E_V5_HEADER_SIZE as usize],
             image.len() as u32,
         )
         .expect("v5 import dynamic image validates");

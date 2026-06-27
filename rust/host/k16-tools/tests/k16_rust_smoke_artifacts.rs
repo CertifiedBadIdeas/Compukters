@@ -141,6 +141,34 @@ fn kernel_boot_chain_is_kernel_owned() {
 }
 
 #[test]
+fn kernel_image_parser_is_kernel_owned() {
+    let root = repo_root();
+    let workspace_manifest = root.join("rust/guest/Cargo.toml");
+    let kernel_manifest = root.join("rust/guest/k16-kernel/Cargo.toml");
+    let kernel_image = root.join("rust/guest/k16-kernel/src/image.rs");
+
+    let workspace_manifest =
+        fs::read_to_string(&workspace_manifest).expect("K16 guest workspace manifest exists");
+    let kernel_manifest =
+        fs::read_to_string(&kernel_manifest).expect("K16 kernel manifest exists");
+    let kernel_image =
+        fs::read_to_string(&kernel_image).expect("kernel-owned image parser source exists");
+
+    assert!(
+        !rust_guest_workspace_members(&workspace_manifest).contains(&"k16-image"),
+        "Rust image parser should be kernel-owned, not a standalone workspace member"
+    );
+    assert!(
+        !root.join("rust/guest/k16-image").exists(),
+        "standalone Rust image parser crate should be removed"
+    );
+    assert!(!kernel_manifest.contains("k16-image"));
+    assert!(kernel_image.contains("pub enum K16eAbiKind"));
+    assert!(kernel_image.contains("parse_dynamic_k16e_v5"));
+    assert!(kernel_image.contains("SHARED_K16E_V4_HEADER_SIZE"));
+}
+
+#[test]
 fn legacy_rust_userland_crates_are_removed_after_c_migration() {
     let root = repo_root();
     let workspace_manifest = root.join("rust/guest/Cargo.toml");

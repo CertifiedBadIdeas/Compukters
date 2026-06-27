@@ -1,7 +1,6 @@
 [workspace]
 members = [
     "k16-abi",
-    "k16-image",
     "k16-kernel",
     "k16-memory",
     "k16-rt",

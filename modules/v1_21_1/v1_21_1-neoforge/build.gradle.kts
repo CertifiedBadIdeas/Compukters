@@ -149,8 +149,6 @@ val k16RtManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-rt/
 val k16RtSource = rootProject.layout.projectDirectory.dir("rust/guest/k16-rt/src")
 val k16MemoryManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-memory/Cargo.toml")
 val k16MemorySource = rootProject.layout.projectDirectory.dir("rust/guest/k16-memory/src")
-val k16ImageManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-image/Cargo.toml")
-val k16ImageSource = rootProject.layout.projectDirectory.dir("rust/guest/k16-image/src")
 val k16StorageManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-storage/Cargo.toml")
 val k16StorageSource = rootProject.layout.projectDirectory.dir("rust/guest/k16-storage/src")
 val k16HostToolsManifest = rootProject.layout.projectDirectory.file("rust/host/k16-tools/Cargo.toml")
@@ -351,8 +349,6 @@ fun org.gradle.api.Task.inputsK16RuntimeCrates() {
 }
 
 fun org.gradle.api.Task.inputsK16KernelCrates() {
-    inputs.file(k16ImageManifest)
-    inputs.dir(k16ImageSource)
     inputs.file(k16StorageManifest)
     inputs.dir(k16StorageSource)
 }
