@@ -1685,6 +1685,7 @@ unsafe fn spawn_loaded_child_runtime(path: &[u8], args: &[&[u8]]) -> Result<Proc
 
 #[cfg(not(test))]
 unsafe fn load_runtime_child(path: &[u8], args: &[&[u8]]) -> Result<ProcessId, u32> {
+    crate::os_stats::record_process_spawn();
     let current_slot = unsafe { runtime_current_slot() };
     let current_address_space = unsafe { read_runtime_address_space(current_slot) };
     let _child_slot = runtime_child_slot_for_parent(current_slot, current_address_space)
@@ -3658,6 +3659,7 @@ pub unsafe fn load_dynamic_user_program_from_storage0(
     path: &[u8],
     arena: UserArena,
 ) -> Result<DynamicUserLoadPlan, ProcessLoadError> {
+    crate::os_stats::record_program_load();
     let path = UserProgramPath::parse(path)?;
     unsafe {
         crate::storage::open_file_from_storage0(ROOT_PARTITION, path.components())
@@ -3676,6 +3678,7 @@ pub unsafe fn load_dynamic_user_program_from_storage0_mapped(
     arena: UserArena,
     allocator: &mut crate::page_alloc::PageFrameAllocator,
 ) -> Result<MappedDynamicUserLoadPlan, ProcessLoadError> {
+    crate::os_stats::record_program_load();
     let path = UserProgramPath::parse(path)?;
     unsafe {
         crate::storage::open_file_from_storage0(ROOT_PARTITION, path.components())
@@ -3954,6 +3957,7 @@ unsafe fn read_selected_dynamic_import_image() -> Result<DynamicUserImportImage,
 unsafe fn read_selected_dynamic_import_state(
     main_components: &[&[u8]; 2],
 ) -> Result<DynamicImportLoadState<'static>, ProcessLoadError> {
+    crate::os_stats::record_dynamic_import_load();
     let image = unsafe { read_selected_dynamic_import_image()? };
     let needed_libraries = unsafe {
         copy_selected_section_to_loader_needed_buffer(
@@ -4014,6 +4018,7 @@ unsafe fn load_dynamic_import_libraries(
 ) -> Result<(), ProcessLoadError> {
     let mut index = 0;
     while index < state.library_count {
+        crate::os_stats::record_library_load();
         let entry = state.library(index)?;
         let library = entry.image;
         let library_base = plan
@@ -4052,6 +4057,7 @@ unsafe fn load_dynamic_import_libraries_mapped(
 ) -> Result<(), ProcessLoadError> {
     let mut index = 0;
     while index < state.library_count {
+        crate::os_stats::record_library_load();
         let entry = state.library(index)?;
         let library = entry.image;
         let library_base = plan

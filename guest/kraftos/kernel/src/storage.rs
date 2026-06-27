@@ -1788,5 +1788,4 @@ mod tests {
         assert_eq!(metadata.kind, PathKind::Regular);
         assert_eq!(metadata.size_bytes, 42);
     }
-
 }

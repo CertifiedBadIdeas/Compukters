@@ -684,6 +684,7 @@ pub unsafe fn read_root_directory_into<S: DirectoryByteSink>(
     path: &[u8],
     sink: &mut S,
 ) -> Result<u32, FsError> {
+    crate::os_stats::record_read_dir_call();
     let path = RootDirectoryPath::parse(path)?;
     let components = path.components();
     let mut storage_sink = StorageDirectoryByteSink { sink };

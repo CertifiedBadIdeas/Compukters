@@ -72,6 +72,11 @@ class K16RuntimeTextIoProfilingTest {
                                 fileOpens = 13,
                                 fileReads = 14,
                                 statCalls = 15,
+                                processSpawns = 16,
+                                programLoads = 17,
+                                dynamicImportLoads = 18,
+                                libraryLoads = 19,
+                                readDirCalls = 20,
                             ),
                         devices =
                             listOf(
@@ -106,6 +111,11 @@ class K16RuntimeTextIoProfilingTest {
                                 fileOpens = 29,
                                 fileReads = 31,
                                 statCalls = 37,
+                                processSpawns = 41,
+                                programLoads = 43,
+                                dynamicImportLoads = 47,
+                                libraryLoads = 53,
+                                readDirCalls = 59,
                             ),
                         devices =
                             listOf(
@@ -139,6 +149,97 @@ class K16RuntimeTextIoProfilingTest {
         assertTrue(line.contains("fileOpens=16"))
         assertTrue(line.contains("fileReads=17"))
         assertTrue(line.contains("statCalls=22"))
+        assertTrue(line.contains("processSpawns=25"))
+        assertTrue(line.contains("programLoads=26"))
+        assertTrue(line.contains("dynamicImportLoads=29"))
+        assertTrue(line.contains("libraryLoads=34"))
+        assertTrue(line.contains("readDirCalls=39"))
+    }
+
+    @Test
+    fun formatsK16CoreutilsCommandProfileWithPathPhaseDeltas() {
+        val before =
+            RuntimeProfilingSnapshot(
+                k16 =
+                    RuntimeK16StatsMetrics(
+                        os =
+                            RuntimeK16OsMetrics(
+                                pathLookups = 1,
+                                inodeLoads = 2,
+                                dirEntryScans = 3,
+                                fileOpens = 4,
+                                fileReads = 5,
+                                statCalls = 6,
+                                processSpawns = 7,
+                                programLoads = 8,
+                                dynamicImportLoads = 9,
+                                libraryLoads = 10,
+                                readDirCalls = 11,
+                            ),
+                        devices =
+                            listOf(
+                                RuntimeK16MmioDeviceMetrics(
+                                    deviceId = 1,
+                                    base = 0,
+                                    size = 1,
+                                    traffic = RuntimeK16BusTrafficMetrics(),
+                                    storage = RuntimeK16StorageMetrics(readCommands = 12, bytesRead = 6144),
+                                    gpu = RuntimeK16GpuMetrics(),
+                                ),
+                            ),
+                    ),
+            )
+        val after =
+            RuntimeProfilingSnapshot(
+                vm = RuntimeVmMetrics(k16RunSlices = 13, k16RunNanos = 1400),
+                k16 =
+                    RuntimeK16StatsMetrics(
+                        os =
+                            RuntimeK16OsMetrics(
+                                pathLookups = 3,
+                                inodeLoads = 5,
+                                dirEntryScans = 7,
+                                fileOpens = 11,
+                                fileReads = 13,
+                                statCalls = 17,
+                                processSpawns = 19,
+                                programLoads = 23,
+                                dynamicImportLoads = 29,
+                                libraryLoads = 31,
+                                readDirCalls = 37,
+                            ),
+                        devices =
+                            listOf(
+                                RuntimeK16MmioDeviceMetrics(
+                                    deviceId = 1,
+                                    base = 0,
+                                    size = 1,
+                                    traffic = RuntimeK16BusTrafficMetrics(),
+                                    storage = RuntimeK16StorageMetrics(readCommands = 41, bytesRead = 20992),
+                                    gpu = RuntimeK16GpuMetrics(),
+                                ),
+                            ),
+                    ),
+            )
+
+        val line = formatK16CoreutilsCommandProfile("ls", "ls /bin", ticks = 4, before = before, after = after)
+
+        assertTrue(line.startsWith("k16CoreutilsCommand: name=ls, command=ls /bin, ticks=4"))
+        assertTrue(line.contains("slices=13"))
+        assertTrue(line.contains("runTime=1400 ns"))
+        assertTrue(line.contains("storageReads=29"))
+        assertTrue(line.contains("storageBytesRead=14848"))
+        assertTrue(line.contains("pathLookups=2"))
+        assertTrue(line.contains("inodeLoads=3"))
+        assertTrue(line.contains("dirEntryScans=4"))
+        assertTrue(line.contains("fileOpens=7"))
+        assertTrue(line.contains("fileReads=8"))
+        assertTrue(line.contains("statCalls=11"))
+        assertTrue(line.contains("processSpawns=12"))
+        assertTrue(line.contains("programLoads=15"))
+        assertTrue(line.contains("dynamicImportLoads=20"))
+        assertTrue(line.contains("libraryLoads=21"))
+        assertTrue(line.contains("readDirCalls=26"))
     }
 
     @Test
@@ -534,6 +635,63 @@ class K16RuntimeTextIoProfilingTest {
         }
     }
 
+    @Test
+    fun printsK16CoreutilsCommandRuntimeProfile() {
+        val workspace = createTempDirectory("k16-runtime-coreutils-profile-")
+        val biosFlashPath = workspace.resolve("bios.kflash")
+        val storage0Path = workspace.resolve("storage0.kv")
+        biosFlashPath.writeBytes(K16BiosFlashWorkspace.loadBiosFlashResource(classLoader = javaClass.classLoader))
+        storage0Path.writeBytes(K16SystemVolumeWorkspace.loadStorage0VolumeResource(classLoader = javaClass.classLoader))
+        val profile = DeviceProfileRegistry.forFamily(DeviceFamily.NORMAL)
+        val metrics = RecordingRuntimeMetricsCollector()
+        val device =
+            K16RuntimeDevice(
+                deviceId = 228,
+                properties = DeviceProperties(DeviceFamily.NORMAL, label = "coreutils-profiling"),
+                endpointFactory = {
+                    K16ComputerRuntimeFactory.createFromBiosFlash(
+                        biosFlashPath = biosFlashPath,
+                        storage0Path = storage0Path,
+                        maxSteps = profile.resources.cpu.maxStepsPerSlice,
+                        maxTurnsPerTick = profile.resources.cpu.maxTurnsPerTick,
+                    )
+                },
+                stateSink = {},
+                metricsCollector = metrics,
+            )
+
+        val commands =
+            listOf(
+                ProfiledCoreutilsCommand("uname", "uname", "K16"),
+                ProfiledCoreutilsCommand("stat", "stat /bin/ls.kx", "FILE "),
+                ProfiledCoreutilsCommand("ls", "ls /bin", "ls.kx"),
+                ProfiledCoreutilsCommand("write", "write /profile.txt hello", "WROTE 5 /profile.txt"),
+                ProfiledCoreutilsCommand("cat", "cat /profile.txt", "hello"),
+                ProfiledCoreutilsCommand("cp", "cp /profile.txt /profile-copy.txt", "COPIED /profile.txt /profile-copy.txt"),
+                ProfiledCoreutilsCommand("mv", "mv /profile-copy.txt /profile-moved.txt", "MOVED /profile-copy.txt /profile-moved.txt"),
+                ProfiledCoreutilsCommand("mkdir", "mkdir /profile-dir", "CREATED /profile-dir"),
+                ProfiledCoreutilsCommand("rmdir", "rmdir /profile-dir", "REMOVED /profile-dir"),
+                ProfiledCoreutilsCommand("rm", "rm /profile-moved.txt", "REMOVED /profile-moved.txt"),
+            )
+
+        try {
+            device.turnOn()
+            waitForTerminal(device, "initial shell prompt") { terminal -> terminal.contains("K16> ") }
+            val lines =
+                commands.map { command ->
+                    runProfiledCoreutilsCommand(device, metrics, command)
+                }
+
+            assertTrue(lines.any { it.contains("name=ls") && it.contains("readDirCalls=1") })
+            assertTrue(lines.any { it.contains("name=stat") && it.contains("statCalls=1") })
+            assertTrue(lines.any { it.contains("name=cat") && it.contains("fileReads=") })
+            assertTrue(lines.all { it.contains("processSpawns=1") })
+            assertTrue(lines.all { it.contains("programLoads=1") })
+        } finally {
+            device.close()
+        }
+    }
+
     private fun dispatchText(
         device: K16RuntimeDevice,
         text: String,
@@ -576,6 +734,47 @@ class K16RuntimeTextIoProfilingTest {
         error("K16 text IO profiling did not observe $description; terminal: $terminal")
     }
 
+    private fun runProfiledCoreutilsCommand(
+        device: K16RuntimeDevice,
+        metrics: RecordingRuntimeMetricsCollector,
+        command: ProfiledCoreutilsCommand,
+    ): String {
+        val before = metrics.snapshot()
+        val startedAt = System.nanoTime()
+        DeviceEvents.dispatch(device, PasteInputEvent(ByteBuffer.wrap("${command.command}\n".encodeToByteArray())))
+        var ticks = 0
+        var visible = false
+        while (ticks < 240 && !visible) {
+            ticks += 1
+            tickAndSync(device)
+            val terminal = device.snapshotRuntimeState()?.let(::terminalText) ?: ""
+            visible = terminalContainsCommandResult(terminal, command.command, command.expectedText)
+            Thread.sleep(1)
+        }
+        assertTrue(visible, "coreutils command did not finish: ${command.command}")
+        val after = metrics.snapshot()
+        val line = formatK16CoreutilsCommandProfile(command.name, command.command, ticks, before, after)
+        println(line)
+        return line
+    }
+
+    private fun terminalContainsCommandResult(
+        terminal: String,
+        command: String,
+        expectedText: String,
+    ): Boolean {
+        val commandIndex = terminal.lastIndexOf("K16> $command")
+        if (commandIndex < 0) {
+            return false
+        }
+        val outputIndex = terminal.indexOf(expectedText, startIndex = commandIndex + command.length)
+        if (outputIndex < 0) {
+            return false
+        }
+        val promptIndex = terminal.indexOf("K16> ", startIndex = outputIndex + expectedText.length)
+        return promptIndex > outputIndex
+    }
+
     private fun tickAndSync(device: K16RuntimeDevice) {
         device.serverTick()
         device.snapshotRuntimeState()
@@ -610,6 +809,12 @@ private const val K16_DISPLAY_HEIGHT = 200
 private data class TimedDisplayFrame(
     val nanos: Long,
     val frame: DisplayFrameDelta,
+)
+
+private data class ProfiledCoreutilsCommand(
+    val name: String,
+    val command: String,
+    val expectedText: String,
 )
 
 private class K16RuntimePhaseProfiler(
@@ -666,7 +871,43 @@ private fun formatK16RuntimePhase(
         "dirEntryScans=${osAfter.dirEntryScans - osBefore.dirEntryScans}, " +
         "fileOpens=${osAfter.fileOpens - osBefore.fileOpens}, " +
         "fileReads=${osAfter.fileReads - osBefore.fileReads}, " +
-        "statCalls=${osAfter.statCalls - osBefore.statCalls}"
+        "statCalls=${osAfter.statCalls - osBefore.statCalls}, " +
+        "processSpawns=${osAfter.processSpawns - osBefore.processSpawns}, " +
+        "programLoads=${osAfter.programLoads - osBefore.programLoads}, " +
+        "dynamicImportLoads=${osAfter.dynamicImportLoads - osBefore.dynamicImportLoads}, " +
+        "libraryLoads=${osAfter.libraryLoads - osBefore.libraryLoads}, " +
+        "readDirCalls=${osAfter.readDirCalls - osBefore.readDirCalls}"
+}
+
+private fun formatK16CoreutilsCommandProfile(
+    name: String,
+    command: String,
+    ticks: Int,
+    before: RuntimeProfilingSnapshot,
+    after: RuntimeProfilingSnapshot,
+): String {
+    val vmBefore = before.vm
+    val vmAfter = after.vm
+    val storageBefore = before.k16.storage0
+    val storageAfter = after.k16.storage0
+    val osBefore = before.k16.os
+    val osAfter = after.k16.os
+    return "k16CoreutilsCommand: name=$name, command=$command, ticks=$ticks, " +
+        "slices=${vmAfter.k16RunSlices - vmBefore.k16RunSlices}, " +
+        "runTime=${vmAfter.k16RunNanos - vmBefore.k16RunNanos} ns, " +
+        "storageReads=${storageAfter.readCommands - storageBefore.readCommands}, " +
+        "storageBytesRead=${storageAfter.bytesRead - storageBefore.bytesRead}, " +
+        "pathLookups=${osAfter.pathLookups - osBefore.pathLookups}, " +
+        "inodeLoads=${osAfter.inodeLoads - osBefore.inodeLoads}, " +
+        "dirEntryScans=${osAfter.dirEntryScans - osBefore.dirEntryScans}, " +
+        "fileOpens=${osAfter.fileOpens - osBefore.fileOpens}, " +
+        "fileReads=${osAfter.fileReads - osBefore.fileReads}, " +
+        "statCalls=${osAfter.statCalls - osBefore.statCalls}, " +
+        "processSpawns=${osAfter.processSpawns - osBefore.processSpawns}, " +
+        "programLoads=${osAfter.programLoads - osBefore.programLoads}, " +
+        "dynamicImportLoads=${osAfter.dynamicImportLoads - osBefore.dynamicImportLoads}, " +
+        "libraryLoads=${osAfter.libraryLoads - osBefore.libraryLoads}, " +
+        "readDirCalls=${osAfter.readDirCalls - osBefore.readDirCalls}"
 }
 
 private class CapturingDisplayNetworkBridge : DisplayNetworkBridge {

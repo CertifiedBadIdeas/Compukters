@@ -162,6 +162,11 @@ class RuntimeProfilingTest {
                         fileOpens = 34,
                         fileReads = 35,
                         statCalls = 36,
+                        processSpawns = 37,
+                        programLoads = 38,
+                        dynamicImportLoads = 39,
+                        libraryLoads = 40,
+                        readDirCalls = 41,
                     ),
                 devices =
                     listOf(
@@ -264,6 +269,11 @@ class RuntimeProfilingTest {
         assertEquals(34, snapshot.k16.os.fileOpens)
         assertEquals(35, snapshot.k16.os.fileReads)
         assertEquals(36, snapshot.k16.os.statCalls)
+        assertEquals(37, snapshot.k16.os.processSpawns)
+        assertEquals(38, snapshot.k16.os.programLoads)
+        assertEquals(39, snapshot.k16.os.dynamicImportLoads)
+        assertEquals(40, snapshot.k16.os.libraryLoads)
+        assertEquals(41, snapshot.k16.os.readDirCalls)
         assertEquals(18, snapshot.vm.k16TextInputNanos)
         assertEquals(RuntimeK16BusTrafficMetrics(loads = 10, stores = 11, bytesRead = 12, bytesWritten = 13), snapshot.k16.ram)
         assertEquals(RuntimeK16BusTrafficMetrics(loads = 20, stores = 21, bytesRead = 22, bytesWritten = 23), snapshot.k16.mmio)
