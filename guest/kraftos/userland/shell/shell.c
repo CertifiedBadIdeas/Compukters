@@ -9,6 +9,7 @@
 #define PROGRAM_SUFFIX ".kx"
 
 #define KRAFT_SHELL_INPUT_CAPACITY 256
+#define KRAFT_SHELL_READ_BUFFER_BYTES 64
 #define KRAFT_MAX_SHELL_PATH_BYTES KRAFT_MAX_STAT_PATH_BYTES
 #define KRAFT_STATUS_OK 0u
 #define KRAFT_ERROR_INVALID 0xffffffeau
@@ -56,6 +57,14 @@ static void write_all(int fd, const char *buffer, unsigned int len) {
 
 static void write_text(int fd, const char *text) {
   write_all(fd, text, strlen(text));
+}
+
+static void flush_echo_run(char *buffer, unsigned int *len) {
+  if (*len == 0) {
+    return;
+  }
+  write_all(STDOUT_FILENO, buffer, *len);
+  *len = 0;
 }
 
 static int text_equals_len(const char *left, const char *right,
@@ -635,7 +644,9 @@ static void dispatch_command(struct shell_state *state,
 
 int main(int argc, char **argv) {
   struct shell_state state;
-  char read_buffer[1];
+  char read_buffer[KRAFT_SHELL_READ_BUFFER_BYTES];
+  char echo_buffer[KRAFT_SHELL_READ_BUFFER_BYTES];
+  unsigned int echo_len;
 
   (void)argc;
   (void)argv;
@@ -650,6 +661,7 @@ int main(int argc, char **argv) {
     write_text(STDOUT_FILENO, PROMPT);
     state.input_len = 0;
     state.input[0] = '\0';
+    echo_len = 0;
     for (;;) {
       int count = read(STDIN_FILENO, read_buffer, sizeof(read_buffer));
       if (count < 0) {
@@ -659,6 +671,7 @@ int main(int argc, char **argv) {
         char byte = read_buffer[index];
         if (byte == '\n' || byte == '\r') {
           struct command command;
+          flush_echo_run(echo_buffer, &echo_len);
           write_text(STDOUT_FILENO, "\n");
           state.input[state.input_len] = '\0';
           classify_line(state.input, &command);
@@ -667,6 +680,7 @@ int main(int argc, char **argv) {
         }
         if (byte == '\b' || byte == 0x7f) {
           if (state.input_len > 0) {
+            flush_echo_run(echo_buffer, &echo_len);
             state.input_len -= 1;
             state.input[state.input_len] = '\0';
             write_text(STDOUT_FILENO, "\b");
@@ -676,10 +690,15 @@ int main(int argc, char **argv) {
             state.input[state.input_len] = byte;
             state.input_len += 1;
             state.input[state.input_len] = '\0';
-            write_all(STDOUT_FILENO, &byte, 1);
+            echo_buffer[echo_len] = byte;
+            echo_len += 1;
+            if (echo_len == sizeof(echo_buffer)) {
+              flush_echo_run(echo_buffer, &echo_len);
+            }
           }
         }
       }
+      flush_echo_run(echo_buffer, &echo_len);
     }
   next_prompt:;
   }

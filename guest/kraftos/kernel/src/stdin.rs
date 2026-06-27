@@ -2,6 +2,8 @@ use k16_abi::{computer::keyboard0, syscall as abi_syscall};
 
 use crate::{mmio, user_buffer};
 
+const STDIN_READ_CHUNK_BYTES: usize = 64;
+
 pub fn read(ptr: u32, len: u32) -> Result<u32, u32> {
     if len == 0 {
         return Ok(0);
@@ -21,18 +23,30 @@ pub fn read(ptr: u32, len: u32) -> Result<u32, u32> {
 }
 
 fn drain_available_bytes(ptr: u32, len: u32) -> Result<u32, u32> {
-    let mut copied = 0;
-    while copied < len && status() != keyboard0::STATUS_EMPTY {
+    let mut bytes = [0_u8; STDIN_READ_CHUNK_BYTES];
+    let max_copied = min_u32(len, STDIN_READ_CHUNK_BYTES as u32);
+    let mut copied = 0_u32;
+    while copied < max_copied && status() != keyboard0::STATUS_EMPTY {
         let event_kind = unsafe { mmio::read_i32(keyboard0::EVENT_KIND) };
         let code = unsafe { mmio::read_i32(keyboard0::CODE) };
         if let Some(byte) = event_byte(event_kind, code) {
-            let bytes = [byte];
-            user_buffer::copy_to_user(ptr + copied, &bytes)?;
+            bytes[copied as usize] = byte;
             copied += 1;
         }
         consume();
     }
+    if copied > 0 {
+        user_buffer::copy_to_user(ptr, &bytes[..copied as usize])?;
+    }
     Ok(copied)
+}
+
+fn min_u32(left: u32, right: u32) -> u32 {
+    if left < right {
+        left
+    } else {
+        right
+    }
 }
 
 fn event_byte(event_kind: i32, code: i32) -> Option<u8> {
