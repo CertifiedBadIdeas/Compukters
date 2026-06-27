@@ -105,11 +105,14 @@ class K16ComputerRuntimeTest {
         val snapshot =
             NativeK16ComputerStatsSnapshot.from(
                 longArrayOf(
-                    2,
+                    3,
                     2, 3, 4, 5,
                     6, 7, 8, 9,
                     1,
-                    11, 0x1000, 64, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21,
+                    11, 0x1000, 64,
+                    12, 13, 14, 15,
+                    16, 17, 18, 19, 20, 21,
+                    22, 23, 24, 25, 26, 27, 28,
                 ),
             )
 
@@ -131,10 +134,36 @@ class K16ComputerRuntimeTest {
                             bytesWritten = 20,
                             failedCommands = 21,
                         ),
+                    gpu =
+                        NativeK16GpuStats(
+                            blitBufferCommands = 22,
+                            blitPixels = 23,
+                            blitSourceBytes = 24,
+                            presentCommands = 25,
+                            frames = 26,
+                            frameTiles = 27,
+                            framePayloadBytes = 28,
+                        ),
                 ),
             ),
             snapshot.devices,
         )
+    }
+
+    @Test
+    fun decodesLegacyNativeStatsSnapshotLongArrayWithoutGpuStats() {
+        val snapshot =
+            NativeK16ComputerStatsSnapshot.from(
+                longArrayOf(
+                    2,
+                    2, 3, 4, 5,
+                    6, 7, 8, 9,
+                    1,
+                    11, 0x1000, 64, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21,
+                ),
+            )
+
+        assertEquals(NativeK16GpuStats(), snapshot.devices.single().gpu)
     }
 
     @Test

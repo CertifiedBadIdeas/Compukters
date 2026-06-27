@@ -79,7 +79,13 @@ class K16RuntimeTextIoProfilingTest {
             assertTrue(snapshot.vm.k16TextInputNanos >= 0)
             assertTrue(snapshot.vm.k16SerialOutputSnapshots > 0)
             assertTrue(snapshot.vm.k16SerialOutputSnapshotBytes > 0)
+            assertTrue(snapshot.k16.gpu.blitBufferCommands > 0)
+            assertTrue(snapshot.k16.gpu.blitSourceBytes > 0)
+            assertTrue(snapshot.k16.gpu.presentCommands > 0)
+            assertTrue(snapshot.k16.gpu.frames > 0)
+            assertTrue(snapshot.k16.gpu.framePayloadBytes > 0)
             assertTrue(summary.contains("k16TextOutput: snapshots="))
+            assertTrue(summary.contains("k16Gpu: blits="))
             assertTrue(summary.contains("k16TextInput: events="))
         } finally {
             device.close()

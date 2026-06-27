@@ -1277,6 +1277,62 @@ fn computer_gpu0_blits_guest_ram_to_frame_delta() {
 }
 
 #[test]
+fn computer_gpu0_stats_snapshot_counts_blit_and_present_traffic() {
+    let mut machine = ComputerMachine::new(1024).unwrap();
+    machine
+        .write_guest_ram_bytes(0x0100, &[0x00, 0xF8, 0xE0, 0x07, 0x1F, 0x00, 0xFF, 0xFF])
+        .unwrap();
+
+    machine.bus.store_i32(ComputerMachine::GPU0_X, 0).unwrap();
+    machine.bus.store_i32(ComputerMachine::GPU0_Y, 0).unwrap();
+    machine
+        .bus
+        .store_i32(ComputerMachine::GPU0_RECT_WIDTH, 2)
+        .unwrap();
+    machine
+        .bus
+        .store_i32(ComputerMachine::GPU0_RECT_HEIGHT, 2)
+        .unwrap();
+    machine
+        .bus
+        .store_i32(ComputerMachine::GPU0_BUFFER_ADDR, 0x0100)
+        .unwrap();
+    machine
+        .bus
+        .store_i32(ComputerMachine::GPU0_BUFFER_STRIDE_BYTES, 4)
+        .unwrap();
+    machine
+        .bus
+        .store_i32(
+            ComputerMachine::GPU0_COMMAND,
+            ComputerMachine::GPU0_COMMAND_BLIT_BUFFER,
+        )
+        .unwrap();
+    machine
+        .bus
+        .store_i32(
+            ComputerMachine::GPU0_COMMAND,
+            ComputerMachine::GPU0_COMMAND_PRESENT,
+        )
+        .unwrap();
+
+    let snapshot = machine.stats_snapshot();
+    let gpu = snapshot
+        .devices
+        .iter()
+        .find(|device| device.name == "gpu0")
+        .unwrap();
+
+    assert_eq!(gpu.gpu.blit_buffer_commands, 1);
+    assert_eq!(gpu.gpu.blit_pixels, 4);
+    assert_eq!(gpu.gpu.blit_source_bytes, 8);
+    assert_eq!(gpu.gpu.present_commands, 1);
+    assert_eq!(gpu.gpu.frames, 1);
+    assert_eq!(gpu.gpu.frame_tiles, 1);
+    assert_eq!(gpu.gpu.frame_payload_bytes, 512);
+}
+
+#[test]
 fn computer_debug_serial_output_can_be_drained_incrementally() {
     let mut machine = ComputerMachine::new(1024).unwrap();
 

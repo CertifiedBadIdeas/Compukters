@@ -60,12 +60,23 @@ data class NativeK16StorageStats(
     val failedCommands: Long = 0,
 )
 
+data class NativeK16GpuStats(
+    val blitBufferCommands: Long = 0,
+    val blitPixels: Long = 0,
+    val blitSourceBytes: Long = 0,
+    val presentCommands: Long = 0,
+    val frames: Long = 0,
+    val frameTiles: Long = 0,
+    val framePayloadBytes: Long = 0,
+)
+
 data class NativeK16MmioDeviceStats(
     val deviceId: Long,
     val base: Long,
     val size: Long,
     val traffic: NativeK16BusTraffic,
     val storage: NativeK16StorageStats = NativeK16StorageStats(),
+    val gpu: NativeK16GpuStats = NativeK16GpuStats(),
 )
 
 data class NativeK16ComputerStatsSnapshot(
@@ -74,25 +85,30 @@ data class NativeK16ComputerStatsSnapshot(
     val devices: List<NativeK16MmioDeviceStats> = emptyList(),
 ) {
     companion object {
-        private const val VERSION: Long = 2
+        private const val VERSION_V2: Long = 2
+        private const val VERSION_V3: Long = 3
         private const val HEADER_LONGS: Int = 10
-        private const val DEVICE_LONGS: Int = 13
+        private const val DEVICE_LONGS_V2: Int = 13
+        private const val DEVICE_LONGS_V3: Int = 20
 
         fun from(values: LongArray): NativeK16ComputerStatsSnapshot {
             require(values.size >= HEADER_LONGS) {
                 "Native K16 stats snapshot is too short: ${values.size} longs"
             }
             val version = values[0]
-            require(version == VERSION) { "Unsupported native K16 stats snapshot version: $version" }
+            require(version == VERSION_V2 || version == VERSION_V3) {
+                "Unsupported native K16 stats snapshot version: $version"
+            }
             val deviceCount = values[9].toInt()
             require(deviceCount >= 0) { "Native K16 stats snapshot device count is negative: $deviceCount" }
-            val expectedSize = HEADER_LONGS + deviceCount * DEVICE_LONGS
+            val deviceLongs = if (version == VERSION_V2) DEVICE_LONGS_V2 else DEVICE_LONGS_V3
+            val expectedSize = HEADER_LONGS + deviceCount * deviceLongs
             require(values.size == expectedSize) {
                 "Native K16 stats snapshot has ${values.size} longs but expected $expectedSize"
             }
             val devices =
                 (0 until deviceCount).map { index ->
-                    val offset = HEADER_LONGS + index * DEVICE_LONGS
+                    val offset = HEADER_LONGS + index * deviceLongs
                     NativeK16MmioDeviceStats(
                         deviceId = values[offset],
                         base = values[offset + 1],
@@ -113,6 +129,20 @@ data class NativeK16ComputerStatsSnapshot(
                                 bytesWritten = values[offset + 11],
                                 failedCommands = values[offset + 12],
                             ),
+                        gpu =
+                            if (version == VERSION_V3) {
+                                NativeK16GpuStats(
+                                    blitBufferCommands = values[offset + 13],
+                                    blitPixels = values[offset + 14],
+                                    blitSourceBytes = values[offset + 15],
+                                    presentCommands = values[offset + 16],
+                                    frames = values[offset + 17],
+                                    frameTiles = values[offset + 18],
+                                    framePayloadBytes = values[offset + 19],
+                                )
+                            } else {
+                                NativeK16GpuStats()
+                            },
                     )
                 }
             return NativeK16ComputerStatsSnapshot(

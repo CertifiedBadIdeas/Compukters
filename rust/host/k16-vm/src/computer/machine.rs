@@ -4,7 +4,8 @@ use crate::computer::devices::{
 };
 use crate::computer::profile::ComputerMachineProfile;
 use crate::computer::stats::{
-    K16ComputerDeviceStats, K16ComputerStatsSnapshot, K16ComputerStorageStatsSnapshot,
+    K16ComputerDeviceStats, K16ComputerGpuStatsSnapshot, K16ComputerStatsSnapshot,
+    K16ComputerStorageStatsSnapshot,
 };
 use crate::computer_abi;
 use crate::display::DisplayFrameDelta;
@@ -347,6 +348,7 @@ impl ComputerMachine {
             self.control_device_id,
             "control",
             K16ComputerStorageStatsSnapshot::default(),
+            K16ComputerGpuStatsSnapshot::default(),
         );
         self.push_stats_device(
             &bus,
@@ -354,6 +356,7 @@ impl ComputerMachine {
             self.debug_device_id,
             "debug",
             K16ComputerStorageStatsSnapshot::default(),
+            K16ComputerGpuStatsSnapshot::default(),
         );
         self.push_stats_device(
             &bus,
@@ -361,6 +364,7 @@ impl ComputerMachine {
             self.serial_input_device_id,
             "serial-input",
             K16ComputerStorageStatsSnapshot::default(),
+            K16ComputerGpuStatsSnapshot::default(),
         );
         self.push_stats_device(
             &bus,
@@ -368,6 +372,9 @@ impl ComputerMachine {
             self.gpu0_device_id,
             "gpu0",
             K16ComputerStorageStatsSnapshot::default(),
+            self.gpu0_device()
+                .map(GpuDevice::stats_snapshot)
+                .unwrap_or_default(),
         );
         self.push_stats_device(
             &bus,
@@ -377,6 +384,7 @@ impl ComputerMachine {
             self.storage0_device()
                 .map(StoragePortDevice::stats_snapshot)
                 .unwrap_or_default(),
+            K16ComputerGpuStatsSnapshot::default(),
         );
         self.push_stats_device(
             &bus,
@@ -384,6 +392,7 @@ impl ComputerMachine {
             self.timer0_device_id,
             "timer0",
             K16ComputerStorageStatsSnapshot::default(),
+            K16ComputerGpuStatsSnapshot::default(),
         );
         self.push_stats_device(
             &bus,
@@ -391,6 +400,7 @@ impl ComputerMachine {
             self.keyboard0_device_id,
             "keyboard0",
             K16ComputerStorageStatsSnapshot::default(),
+            K16ComputerGpuStatsSnapshot::default(),
         );
         self.push_stats_device(
             &bus,
@@ -398,6 +408,7 @@ impl ComputerMachine {
             self.mmu0_device_id,
             "mmu0",
             K16ComputerStorageStatsSnapshot::default(),
+            K16ComputerGpuStatsSnapshot::default(),
         );
         self.push_stats_device(
             &bus,
@@ -405,6 +416,7 @@ impl ComputerMachine {
             self.bios_flash_device_id,
             "bios-flash",
             K16ComputerStorageStatsSnapshot::default(),
+            K16ComputerGpuStatsSnapshot::default(),
         );
         K16ComputerStatsSnapshot { bus, devices }
     }
@@ -740,6 +752,7 @@ impl ComputerMachine {
         device_id: Option<MmioDeviceId>,
         name: &'static str,
         storage: K16ComputerStorageStatsSnapshot,
+        gpu: K16ComputerGpuStatsSnapshot,
     ) {
         let Some(device_id) = device_id else {
             return;
@@ -758,6 +771,7 @@ impl ComputerMachine {
             size: device.size,
             traffic: device.traffic,
             storage,
+            gpu,
         });
     }
 
@@ -793,6 +807,11 @@ impl ComputerMachine {
     fn gpu0_device_mut(&mut self) -> Option<&mut GpuDevice> {
         self.gpu0_device_id
             .and_then(|id| self.bus.device_mut::<GpuDevice>(id))
+    }
+
+    fn gpu0_device(&self) -> Option<&GpuDevice> {
+        self.gpu0_device_id
+            .and_then(|id| self.bus.device::<GpuDevice>(id))
     }
 
     fn mmu0_device_mut(&mut self) -> Option<&mut MmuControlDevice> {

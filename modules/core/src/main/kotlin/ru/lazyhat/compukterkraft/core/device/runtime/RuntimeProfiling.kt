@@ -23,6 +23,7 @@ import ru.lazyhat.compukterkraft.lang.runtime.VmInstructionKind
 import ru.lazyhat.compukterkraft.lang.runtime.VmSignalKind
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16BusTraffic
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16ComputerStatsSnapshot
+import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16GpuStats
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16MmioDeviceStats
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16StorageStats
 import java.util.concurrent.ConcurrentHashMap
@@ -226,6 +227,7 @@ data class RuntimeK16MmioDeviceMetrics(
     val size: Long,
     val traffic: RuntimeK16BusTrafficMetrics,
     val storage: RuntimeK16StorageMetrics = RuntimeK16StorageMetrics(),
+    val gpu: RuntimeK16GpuMetrics = RuntimeK16GpuMetrics(),
 )
 
 data class RuntimeK16StorageMetrics(
@@ -235,6 +237,16 @@ data class RuntimeK16StorageMetrics(
     val bytesRead: Long = 0,
     val bytesWritten: Long = 0,
     val failedCommands: Long = 0,
+)
+
+data class RuntimeK16GpuMetrics(
+    val blitBufferCommands: Long = 0,
+    val blitPixels: Long = 0,
+    val blitSourceBytes: Long = 0,
+    val presentCommands: Long = 0,
+    val frames: Long = 0,
+    val frameTiles: Long = 0,
+    val framePayloadBytes: Long = 0,
 )
 
 data class RuntimeK16StatsMetrics(
@@ -257,6 +269,16 @@ data class RuntimeK16StatsMetrics(
             bytesRead = devices.sumOf { it.storage.bytesRead },
             bytesWritten = devices.sumOf { it.storage.bytesWritten },
             failedCommands = devices.sumOf { it.storage.failedCommands },
+        )
+    val gpu: RuntimeK16GpuMetrics =
+        RuntimeK16GpuMetrics(
+            blitBufferCommands = devices.sumOf { it.gpu.blitBufferCommands },
+            blitPixels = devices.sumOf { it.gpu.blitPixels },
+            blitSourceBytes = devices.sumOf { it.gpu.blitSourceBytes },
+            presentCommands = devices.sumOf { it.gpu.presentCommands },
+            frames = devices.sumOf { it.gpu.frames },
+            frameTiles = devices.sumOf { it.gpu.frameTiles },
+            framePayloadBytes = devices.sumOf { it.gpu.framePayloadBytes },
         )
 }
 
@@ -320,6 +342,12 @@ data class RuntimeProfilingSnapshot(
             )
             appendLine(
                 "    k16DisplayFrames: batches=${vm.k16GpuFrameBatches}, bytes=${vm.k16GpuFrameBytes}, frames=${vm.k16GpuFramesDecoded}",
+            )
+            appendLine(
+                "    k16Gpu: blits=${k16.gpu.blitBufferCommands}, blitPixels=${k16.gpu.blitPixels}, " +
+                    "blitBytes=${k16.gpu.blitSourceBytes}, presents=${k16.gpu.presentCommands}, " +
+                    "frames=${k16.gpu.frames}, tiles=${k16.gpu.frameTiles}, " +
+                    "frameBytes=${k16.gpu.framePayloadBytes}",
             )
             appendLine(
                 "    k16TextInput: events=${vm.k16TextInputEvents}, bytes=${vm.k16TextInputBytes}, time=${vm.k16TextInputNanos.nanos()}",
@@ -882,6 +910,7 @@ private fun NativeK16MmioDeviceStats.toRuntimeMetrics(): RuntimeK16MmioDeviceMet
         size = size,
         traffic = traffic.toRuntimeMetrics(),
         storage = storage.toRuntimeMetrics(),
+        gpu = gpu.toRuntimeMetrics(),
     )
 
 private fun NativeK16StorageStats.toRuntimeMetrics(): RuntimeK16StorageMetrics =
@@ -892,4 +921,15 @@ private fun NativeK16StorageStats.toRuntimeMetrics(): RuntimeK16StorageMetrics =
         bytesRead = bytesRead,
         bytesWritten = bytesWritten,
         failedCommands = failedCommands,
+    )
+
+private fun NativeK16GpuStats.toRuntimeMetrics(): RuntimeK16GpuMetrics =
+    RuntimeK16GpuMetrics(
+        blitBufferCommands = blitBufferCommands,
+        blitPixels = blitPixels,
+        blitSourceBytes = blitSourceBytes,
+        presentCommands = presentCommands,
+        frames = frames,
+        frameTiles = frameTiles,
+        framePayloadBytes = framePayloadBytes,
     )
