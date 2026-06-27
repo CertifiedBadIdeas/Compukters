@@ -149,6 +149,37 @@ fn wait_once_is_a_runtime_control_boundary() {
 }
 
 #[test]
+fn host_test_yield_and_timer_state_is_isolated_between_threads() {
+    let ready = Arc::new(Barrier::new(2));
+    let overwritten = Arc::new(Barrier::new(2));
+
+    let left_ready = Arc::clone(&ready);
+    let left_overwritten = Arc::clone(&overwritten);
+    let left = thread::spawn(move || {
+        crate::time::reset_test_timer0();
+        yield_frames(2);
+        left_ready.wait();
+        left_overwritten.wait();
+
+        (crate::control::test_yield_count(), timer0_game_ticks())
+    });
+
+    let right_ready = Arc::clone(&ready);
+    let right_overwritten = Arc::clone(&overwritten);
+    let right = thread::spawn(move || {
+        right_ready.wait();
+        crate::time::reset_test_timer0();
+        sleep_ticks(3);
+        right_overwritten.wait();
+
+        (crate::control::test_yield_count(), timer0_game_ticks())
+    });
+
+    assert_eq!(left.join().expect("left thread returns"), (2, 2));
+    assert_eq!(right.join().expect("right thread returns"), (3, 3));
+}
+
+#[test]
 fn interrupt_helpers_update_test_csr_state() {
     crate::trap::reset_test_interrupts();
 

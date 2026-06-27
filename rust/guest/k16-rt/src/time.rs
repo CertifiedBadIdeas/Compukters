@@ -8,12 +8,13 @@ const TIMER0_MONOTONIC_NANOS_LOW: u32 = 0x1000_060c;
 const TIMER0_MONOTONIC_NANOS_HIGH: u32 = 0x1000_0610;
 
 #[cfg(any(test, feature = "host-test"))]
-use core::sync::atomic::{AtomicU64, Ordering};
+use std::cell::Cell;
 
 #[cfg(any(test, feature = "host-test"))]
-static TEST_TIMER0_GAME_TICKS: AtomicU64 = AtomicU64::new(0);
-#[cfg(any(test, feature = "host-test"))]
-static TEST_TIMER0_MONOTONIC_NANOS: AtomicU64 = AtomicU64::new(0);
+std::thread_local! {
+    static TEST_TIMER0_GAME_TICKS: Cell<u64> = const { Cell::new(0) };
+    static TEST_TIMER0_MONOTONIC_NANOS: Cell<u64> = const { Cell::new(0) };
+}
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct U64Parts {
@@ -28,7 +29,7 @@ pub fn timer0_game_ticks() -> u64 {
 
 #[cfg(any(test, feature = "host-test"))]
 pub fn timer0_game_ticks() -> u64 {
-    TEST_TIMER0_GAME_TICKS.load(Ordering::Relaxed)
+    TEST_TIMER0_GAME_TICKS.with(|cell| cell.get())
 }
 
 #[cfg(not(any(test, feature = "host-test")))]
@@ -38,7 +39,7 @@ pub fn timer0_monotonic_nanos() -> u64 {
 
 #[cfg(any(test, feature = "host-test"))]
 pub fn timer0_monotonic_nanos() -> u64 {
-    TEST_TIMER0_MONOTONIC_NANOS.load(Ordering::Relaxed)
+    TEST_TIMER0_MONOTONIC_NANOS.with(|cell| cell.get())
 }
 
 #[cfg(not(any(test, feature = "host-test")))]
@@ -53,7 +54,7 @@ pub fn timer0_game_ticks_low() -> u32 {
 
 #[cfg(any(test, feature = "host-test"))]
 pub fn timer0_game_ticks_low() -> u32 {
-    TEST_TIMER0_GAME_TICKS.load(Ordering::Relaxed) as u32
+    TEST_TIMER0_GAME_TICKS.with(|cell| cell.get() as u32)
 }
 
 #[cfg(not(any(test, feature = "host-test")))]
@@ -63,12 +64,12 @@ pub fn timer0_game_ticks_high() -> u32 {
 
 #[cfg(any(test, feature = "host-test"))]
 pub fn timer0_game_ticks_high() -> u32 {
-    (TEST_TIMER0_GAME_TICKS.load(Ordering::Relaxed) >> 32) as u32
+    TEST_TIMER0_GAME_TICKS.with(|cell| (cell.get() >> 32) as u32)
 }
 
 #[cfg(any(test, feature = "host-test"))]
 pub fn timer0_game_ticks_parts() -> U64Parts {
-    split_u64(TEST_TIMER0_GAME_TICKS.load(Ordering::Relaxed))
+    split_u64(TEST_TIMER0_GAME_TICKS.with(|cell| cell.get()))
 }
 
 #[cfg(not(any(test, feature = "host-test")))]
@@ -78,7 +79,7 @@ pub fn timer0_monotonic_nanos_parts() -> U64Parts {
 
 #[cfg(any(test, feature = "host-test"))]
 pub fn timer0_monotonic_nanos_parts() -> U64Parts {
-    split_u64(TEST_TIMER0_MONOTONIC_NANOS.load(Ordering::Relaxed))
+    split_u64(TEST_TIMER0_MONOTONIC_NANOS.with(|cell| cell.get()))
 }
 
 pub fn yield_frames(frames: u64) {
@@ -132,22 +133,22 @@ fn read_mmio_u32(address: u32) -> u32 {
 
 #[cfg(any(test, feature = "host-test"))]
 pub(crate) fn reset_test_timer0() {
-    TEST_TIMER0_GAME_TICKS.store(0, Ordering::Relaxed);
-    TEST_TIMER0_MONOTONIC_NANOS.store(0, Ordering::Relaxed);
+    TEST_TIMER0_GAME_TICKS.with(|cell| cell.set(0));
+    TEST_TIMER0_MONOTONIC_NANOS.with(|cell| cell.set(0));
     crate::control::reset_test_yield_count();
 }
 
 #[cfg(any(test, feature = "host-test"))]
 pub(crate) fn set_test_timer0_game_ticks(value: u64) {
-    TEST_TIMER0_GAME_TICKS.store(value, Ordering::Relaxed);
+    TEST_TIMER0_GAME_TICKS.with(|cell| cell.set(value));
 }
 
 #[cfg(any(test, feature = "host-test"))]
 pub(crate) fn set_test_timer0_monotonic_nanos(value: u64) {
-    TEST_TIMER0_MONOTONIC_NANOS.store(value, Ordering::Relaxed);
+    TEST_TIMER0_MONOTONIC_NANOS.with(|cell| cell.set(value));
 }
 
 #[cfg(any(test, feature = "host-test"))]
 pub(crate) fn increment_test_timer0_game_ticks() {
-    TEST_TIMER0_GAME_TICKS.fetch_add(1, Ordering::Relaxed);
+    TEST_TIMER0_GAME_TICKS.with(|cell| cell.set(cell.get() + 1));
 }
