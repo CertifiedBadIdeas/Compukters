@@ -82,16 +82,20 @@ k16Execution: slices=..., time=..., haltSignals=..., waitSignals=..., yieldSigna
 - `haltSignals`, `waitSignals`, `yieldSignals`, and `pauseSignals` classify the signal that returned control to the
   worker.
 
-The K16 output line shows host-side output cache refresh work:
+The K16 output lines show host-side output cache refresh work and split text output from display frame payloads:
 
 ```text
-k16Output: refreshes=..., time=..., serialSnapshotBytes=..., gpuBatches=..., gpuBytes=..., gpuFrames=...
+k16Output: refreshes=..., time=...
+k16TextOutput: snapshots=..., snapshotBytes=...
+k16DisplayFrames: batches=..., bytes=..., frames=...
 ```
 
 - `refreshes` counts worker-side cache syncs after startup, runtime slices, and explicit output clears.
-- `serialSnapshotBytes` sums the serial output snapshot sizes observed during those refreshes.
-- `gpuBatches`, `gpuBytes`, and `gpuFrames` count non-empty GPU frame drain batches, raw frame payload bytes, and decoded
-  display frames.
+- `time` is wall-clock time spent refreshing the host-side output caches.
+- `k16TextOutput.snapshots` counts refreshes that observed a non-empty serial/stdout snapshot.
+- `k16TextOutput.snapshotBytes` sums the serial/stdout snapshot sizes observed during refreshes.
+- `k16DisplayFrames.batches`, `bytes`, and `frames` count non-empty GPU frame drain batches, raw frame payload bytes, and
+  decoded display frames.
 
 The K16 bus and device lines show the latest cumulative low-level Rust VM counters fetched through one JNI snapshot
 during the worker cache refresh path:

@@ -192,6 +192,7 @@ data class RuntimeVmMetrics(
     val k16RunPauseSignals: Long = 0,
     val k16OutputRefreshes: Long = 0,
     val k16OutputRefreshNanos: Long = 0,
+    val k16SerialOutputSnapshots: Long = 0,
     val k16SerialOutputSnapshotBytes: Long = 0,
     val k16GpuFrameBatches: Long = 0,
     val k16GpuFrameBytes: Long = 0,
@@ -304,7 +305,13 @@ data class RuntimeProfilingSnapshot(
                 "    k16Execution: slices=${vm.k16RunSlices}, time=${vm.k16RunNanos.nanos()}, haltSignals=${vm.k16RunHaltSignals}, waitSignals=${vm.k16RunWaitSignals}, yieldSignals=${vm.k16RunYieldSignals}, pauseSignals=${vm.k16RunPauseSignals}",
             )
             appendLine(
-                "    k16Output: refreshes=${vm.k16OutputRefreshes}, time=${vm.k16OutputRefreshNanos.nanos()}, serialSnapshotBytes=${vm.k16SerialOutputSnapshotBytes}, gpuBatches=${vm.k16GpuFrameBatches}, gpuBytes=${vm.k16GpuFrameBytes}, gpuFrames=${vm.k16GpuFramesDecoded}",
+                "    k16Output: refreshes=${vm.k16OutputRefreshes}, time=${vm.k16OutputRefreshNanos.nanos()}",
+            )
+            appendLine(
+                "    k16TextOutput: snapshots=${vm.k16SerialOutputSnapshots}, snapshotBytes=${vm.k16SerialOutputSnapshotBytes}",
+            )
+            appendLine(
+                "    k16DisplayFrames: batches=${vm.k16GpuFrameBatches}, bytes=${vm.k16GpuFrameBytes}, frames=${vm.k16GpuFramesDecoded}",
             )
             appendLine(
                 "    k16Bus: ramLoads=${k16.ram.loads}, ramStores=${k16.ram.stores}, ramBytesRead=${k16.ram.bytesRead}, ramBytesWritten=${k16.ram.bytesWritten}, mmioLoads=${k16.mmio.loads}, mmioStores=${k16.mmio.stores}, mmioBytesRead=${k16.mmio.bytesRead}, mmioBytesWritten=${k16.mmio.bytesWritten}",
@@ -534,6 +541,7 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
     private val k16RunPauseSignals = AtomicLong()
     private val k16OutputRefreshes = AtomicLong()
     private val k16OutputRefreshNanos = AtomicLong()
+    private val k16SerialOutputSnapshots = AtomicLong()
     private val k16SerialOutputSnapshotBytes = AtomicLong()
     private val k16GpuFrameBatches = AtomicLong()
     private val k16GpuFrameBytes = AtomicLong()
@@ -692,7 +700,11 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
     ) {
         k16OutputRefreshes.incrementAndGet()
         k16OutputRefreshNanos.addAndGet(nanos.coerceAtLeast(0))
-        k16SerialOutputSnapshotBytes.addAndGet(serialOutputBytes.coerceAtLeast(0).toLong())
+        val sanitizedSerialOutputBytes = serialOutputBytes.coerceAtLeast(0)
+        if (sanitizedSerialOutputBytes > 0) {
+            k16SerialOutputSnapshots.incrementAndGet()
+        }
+        k16SerialOutputSnapshotBytes.addAndGet(sanitizedSerialOutputBytes.toLong())
         val sanitizedGpuFrameBytes = gpuFrameBytes.coerceAtLeast(0)
         val sanitizedGpuFrameCount = gpuFrameCount.coerceAtLeast(0)
         if (sanitizedGpuFrameBytes > 0 || sanitizedGpuFrameCount > 0) {
@@ -775,6 +787,7 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
                     k16RunPauseSignals = k16RunPauseSignals.get(),
                     k16OutputRefreshes = k16OutputRefreshes.get(),
                     k16OutputRefreshNanos = k16OutputRefreshNanos.get(),
+                    k16SerialOutputSnapshots = k16SerialOutputSnapshots.get(),
                     k16SerialOutputSnapshotBytes = k16SerialOutputSnapshotBytes.get(),
                     k16GpuFrameBatches = k16GpuFrameBatches.get(),
                     k16GpuFrameBytes = k16GpuFrameBytes.get(),
