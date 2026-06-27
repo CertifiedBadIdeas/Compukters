@@ -24,6 +24,10 @@
   and development K16 storage no longer include `/lib/libk16rt.kso` or
   `/bin/runtime-import-test.kx`; `/lib/libkraft.kso` remains the shared C
   userland OS ABI provider.
+- The remaining Rust userland proof layer was removed. `kraft-std`,
+  `k16-alloc-test`, `k16-proc-test`, `k16-syscall-fault-test`, and
+  `k16-user-fault-test` are no longer guest workspace members, and development
+  storage no longer installs Rust userland proof binaries.
 - Production C userland now builds its K16 arch helper object from checked-in
   source at `guest/c/arch/k16/cpu-helpers.kasm` through `k16 asm <input.kasm>
   -o <output.ko>`. The bundled `/bin/*.kx` C programs and `/lib/libkraft.kso`
@@ -64,8 +68,7 @@
   `/etc/motd` data file now lives at `guest/data/etc/motd` instead of inside
   the old Rust `k16-cat` crate. The hosted Rust proof crates `k16-hosted-cat`
   and `k16-hosted-hello` were also removed from the guest workspace; hosted
-  Rust std behavior remains covered by host-tool tests that build temporary
-  source snippets rather than bundled guest proof programs.
+  Rust std is no longer an active userland proof path.
 - Production `/bin/cp.kx` and `/bin/mv.kx` now build from
   `guest/c/coreutils` through the source-built-dev K16 Clang path and
   libc-lite startup layer. `/bin/cp.kx` imports `kraft_sys_open`,

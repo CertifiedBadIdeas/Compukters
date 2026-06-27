@@ -66,6 +66,51 @@ class K16FirmwareResourceTest {
     }
 
     @Test
+    fun removedRustUserlandProofCratesAreNotBundled() {
+        val source = Path.of("build.gradle.kts").readText()
+        val guestWorkspace = Path.of("../../../rust/guest/Cargo.toml").readText()
+        val guestLockfile = Path.of("../../../rust/guest/Cargo.lock").readText()
+        val shellSource = Path.of("../../../guest/c/shell/shell.c").readText()
+
+        listOf(
+            "rust/guest/k16-alloc-test",
+            "rust/guest/k16-proc-test",
+            "rust/guest/k16-syscall-fault-test",
+            "rust/guest/k16-user-fault-test",
+            "rust/guest/kraft-std",
+            "k16AllocTest",
+            "k16ProcTest",
+            "k16SyscallFaultTest",
+            "k16UserFaultTest",
+            "kraftStd",
+            "compileK16SystemAllocTest",
+            "compileK16SystemProcTest",
+            "compileK16SyscallFaultTest",
+            "compileK16UserFaultTest",
+            "alloc-test.kx",
+            "proc-test.kx",
+            "syscall-fault-test.kx",
+            "user-fault-test.kx",
+        ).forEach { removed ->
+            assertFalse(source.contains(removed), "K16 firmware build should not reference removed $removed")
+        }
+
+        listOf(
+            "k16-alloc-test",
+            "k16-proc-test",
+            "k16-syscall-fault-test",
+            "k16-user-fault-test",
+            "kraft-std",
+        ).forEach { removed ->
+            assertFalse(guestWorkspace.contains(removed), "guest workspace should not include removed $removed")
+            assertFalse(guestLockfile.contains("name = \"$removed\""), "guest lockfile should not include removed $removed")
+        }
+
+        assertFalse(shellSource.contains("ALLOC_PROGRAM"), "C shell should not expose a removed Rust alloc-test launcher")
+        assertFalse(shellSource.contains("alloc-test"), "C shell should not dispatch to a removed Rust alloc-test launcher")
+    }
+
+    @Test
     fun bundledK16FirmwareBuildUsesK16GradleSurface() {
         val source = Path.of("build.gradle.kts").readText()
         val rootBuildScript = Path.of("../../../build.gradle.kts").readText()
@@ -97,7 +142,7 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("k16Target = \"bios\""))
         assertTrue(source.contains("k16Target = \"boot\""))
         assertTrue(source.contains("k16Target = \"kernel\""))
-        assertTrue(source.contains("k16Target = \"program-dynamic\""))
+        assertFalse(source.contains("k16Target = \"program-dynamic\""))
         assertFalse(source.contains("k16Target = \"program\""))
         assertFalse(source.contains("tasks.register<Exec>(\"compileK16BiosObject\")"))
         assertFalse(source.contains("tasks.register<Exec>(\"compileK16SystemBootObject\")"))
@@ -124,10 +169,10 @@ class K16FirmwareResourceTest {
         assertFalse(source.contains("rust/guest/k16-shared-smoke-runtime"))
         assertFalse(source.contains("rust/guest/k16-runtime-import-test"))
         assertFalse(source.contains("rust/guest/k16-shared-runtime-test"))
-        assertTrue(source.contains("rust/guest/k16-alloc-test"))
+        assertFalse(source.contains("rust/guest/k16-alloc-test"))
         assertFalse(source.contains("rust/guest/k16-hosted-cat"))
         assertFalse(source.contains("rust/guest/k16-hosted-hello"))
-        assertTrue(source.contains("rust/guest/k16-proc-test"))
+        assertFalse(source.contains("rust/guest/k16-proc-test"))
         assertFalse(source.contains("k16InitManifest"))
         assertFalse(source.contains("k16InitSource"))
         assertTrue(source.contains("k16CSystemInitSource"))
@@ -166,14 +211,14 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("k16CSystemRmdirSource"))
         assertFalse(source.contains("k16SharedRuntimeManifest"))
         assertFalse(source.contains("k16RuntimeImportTestManifest"))
-        assertTrue(source.contains("k16AllocTestManifest"))
-        assertTrue(source.contains("k16AllocTestSource"))
+        assertFalse(source.contains("k16AllocTestManifest"))
+        assertFalse(source.contains("k16AllocTestSource"))
         assertFalse(source.contains("k16HostedCatManifest"))
         assertFalse(source.contains("k16HostedCatSource"))
         assertFalse(source.contains("k16HostedHelloManifest"))
         assertFalse(source.contains("k16HostedHelloSource"))
-        assertTrue(source.contains("k16ProcTestManifest"))
-        assertTrue(source.contains("k16ProcTestSource"))
+        assertFalse(source.contains("k16ProcTestManifest"))
+        assertFalse(source.contains("k16ProcTestSource"))
         assertTrue(source.contains("generatedK16CSystemInitTarget"))
         assertTrue(source.contains("generatedK16CSystemShellTarget"))
         assertFalse(source.contains("generatedK16LsTarget"))
@@ -198,10 +243,10 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("generatedK16CSystemRmdirTarget"))
         assertFalse(source.contains("generatedK16SharedRuntimeTarget"))
         assertFalse(source.contains("generatedK16RuntimeImportTestTarget"))
-        assertTrue(source.contains("generatedK16AllocTestTarget"))
+        assertFalse(source.contains("generatedK16AllocTestTarget"))
         assertFalse(source.contains("generatedK16HostedCatTarget"))
         assertFalse(source.contains("generatedK16HostedHelloTarget"))
-        assertTrue(source.contains("generatedK16ProcTestTarget"))
+        assertFalse(source.contains("generatedK16ProcTestTarget"))
         assertTrue(source.contains("k16InitArtifact"))
         assertTrue(source.contains("k16ShellArtifact"))
         assertTrue(source.contains("k16LsArtifact"))
@@ -215,10 +260,10 @@ class K16FirmwareResourceTest {
         assertFalse(source.contains("k16SharedRuntimeArtifact"))
         assertTrue(source.contains("k16SharedKraftArtifact"))
         assertFalse(source.contains("k16RuntimeImportTestArtifact"))
-        assertTrue(source.contains("k16AllocTestArtifact"))
+        assertFalse(source.contains("k16AllocTestArtifact"))
         assertFalse(source.contains("k16HostedCatArtifact"))
         assertFalse(source.contains("k16HostedHelloArtifact"))
-        assertTrue(source.contains("k16ProcTestArtifact"))
+        assertFalse(source.contains("k16ProcTestArtifact"))
         assertFalse(source.contains("k16CHostedCatArtifact"))
         assertTrue(source.contains("k16CLibcIncludeSource"))
         assertTrue(source.contains("k16CLibcStartupSource"))
@@ -259,10 +304,10 @@ class K16FirmwareResourceTest {
         assertFalse(source.contains("compileK16SharedRuntime"))
         assertTrue(source.contains("compileK16SharedKraft"))
         assertFalse(source.contains("compileK16RuntimeImportTest"))
-        assertTrue(source.contains("compileK16SystemAllocTest"))
+        assertFalse(source.contains("compileK16SystemAllocTest"))
         assertFalse(source.contains("compileK16HostedCat"))
         assertFalse(source.contains("compileK16HostedHello"))
-        assertTrue(source.contains("compileK16SystemProcTest"))
+        assertFalse(source.contains("compileK16SystemProcTest"))
         assertTrue(source.contains("putK16SystemStorage0Init"))
         assertFalse(source.contains("binName = \"k16-init\""))
         assertTrue(source.contains("description = \"Compiles and links the bundled C K16 init launcher"))
@@ -381,10 +426,10 @@ class K16FirmwareResourceTest {
         assertFalse(source.contains("libk16rt.kso:k16rt_memmove"))
         assertFalse(source.contains("libk16rt.kso:k16rt_memcmp"))
         assertFalse(source.contains("binName = \"k16-runtime-import-test\""))
-        assertTrue(source.contains("binName = \"k16-alloc-test\""))
+        assertFalse(source.contains("binName = \"k16-alloc-test\""))
         assertFalse(source.contains("binName = \"k16-hosted-cat\""))
         assertFalse(source.contains("binName = \"k16-hosted-hello\""))
-        assertTrue(source.contains("binName = \"k16-proc-test\""))
+        assertFalse(source.contains("binName = \"k16-proc-test\""))
         assertFalse(
             source.contains(
                 "output = k16ShellArtifact.get().asFile,\n                mapOutput = k16ShellMapArtifact.get(),\n                buildStd = \"core,alloc\"",
@@ -408,10 +453,10 @@ class K16FirmwareResourceTest {
         assertFalse(source.contains("\"/lib/libk16rt.kso\""))
         assertTrue(source.contains("\"/lib/libkraft.kso\""))
         assertFalse(source.contains("\"/bin/runtime-import-test.kx\""))
-        assertTrue(source.contains("\"/bin/alloc-test.kx\""))
+        assertFalse(source.contains("\"/bin/alloc-test.kx\""))
         assertFalse(source.contains("\"/bin/hosted-cat.kx\""))
         assertFalse(source.contains("\"/bin/hosted-hello.kx\""))
-        assertTrue(source.contains("\"/bin/proc-test.kx\""))
+        assertFalse(source.contains("\"/bin/proc-test.kx\""))
         val productionEntriesIndex = source.indexOf("val k16ProductionStorageEntries =")
         val developmentOnlyEntriesIndex = source.indexOf("val k16DevelopmentOnlyStorageEntries =")
         val sharedLibraryEntriesIndex = source.indexOf("val k16SharedLibraryStorageEntries =")
@@ -1106,7 +1151,7 @@ class K16FirmwareResourceTest {
     }
 
     @Test
-    fun bundledK16DevelopmentStorage0ContainsTestPrograms() {
+    fun bundledK16DevelopmentStorage0ExcludesRustUserlandProofPrograms() {
         val workspace = createTempDirectory("k16-dev-storage-layout-test-")
         val storage0 = workspace.resolve("storage0-dev.kv")
         val root = workspace.resolve("root.kfs")
@@ -1129,7 +1174,7 @@ class K16FirmwareResourceTest {
             "ROOT",
             root.toString(),
         )
-        runK16Tool(
+        runK16ToolExpectFailure(
             "fs",
             "kfs",
             "get",
@@ -1137,7 +1182,7 @@ class K16FirmwareResourceTest {
             "/bin/alloc-test.kx",
             allocTest.toString(),
         )
-        runK16Tool(
+        runK16ToolExpectFailure(
             "fs",
             "kfs",
             "get",
@@ -1168,24 +1213,6 @@ class K16FirmwareResourceTest {
             root.toString(),
             "/bin/hosted-hello.kx",
             hostedHello.toString(),
-        )
-
-        val allocBytes = allocTest.readBytes()
-        assertTrue(allocBytes.size > 72, "bundled dev /bin/alloc-test.kx should be a non-empty dynamic K16E program")
-        assertContentEquals(
-            byteArrayOf('K'.code.toByte(), '1'.code.toByte(), '6'.code.toByte(), 'E'.code.toByte()),
-            allocBytes.copyOfRange(0, 4),
-        )
-        val version = ByteBuffer.wrap(allocBytes, 0x04, 2).order(ByteOrder.LITTLE_ENDIAN).short.toInt()
-        val abiKind = ByteBuffer.wrap(allocBytes, 0x18, 4).order(ByteOrder.LITTLE_ENDIAN).int
-        assertEquals(2, version, "bundled /bin/alloc-test.kx must use dynamic K16E v2")
-        assertEquals(3, abiKind, "bundled /bin/alloc-test.kx must use K16E abi kind program")
-
-        val procBytes = procTest.readBytes()
-        assertTrue(procBytes.size > 72, "bundled dev /bin/proc-test.kx should be a non-empty dynamic K16E program")
-        assertContentEquals(
-            byteArrayOf('K'.code.toByte(), '1'.code.toByte(), '6'.code.toByte(), 'E'.code.toByte()),
-            procBytes.copyOfRange(0, 4),
         )
     }
 
@@ -1810,8 +1837,8 @@ class K16FirmwareResourceTest {
         assertTrue(shellSource.contains("static int resolve_executable_path("), "executable path resolution should be named")
         assertTrue(shellSource.contains("resolve_executable_path(state->cwd, name, program_path)"), "shell should resolve executable paths through cwd")
         assertTrue(shellSource.contains("should_resolve_path_arg(name, raw_args, index)"), "filesystem utilities should keep cwd-aware path args")
-        assertTrue(shellSource.contains("#define ALLOC_ALIAS \"alloc\""), "alloc should remain a shell alias")
-        assertTrue(shellSource.contains("#define ALLOC_PROGRAM \"alloc-test\""), "alloc should target alloc-test.kx")
+        assertFalse(shellSource.contains("ALLOC_ALIAS"), "alloc should not be a shell alias")
+        assertFalse(shellSource.contains("ALLOC_PROGRAM"), "alloc should not target removed alloc-test.kx")
         assertTrue(shellSource.contains("write_run_error((unsigned int)status)"), "missing programs should report run errors")
     }
 
@@ -2004,23 +2031,8 @@ class K16FirmwareResourceTest {
     }
 
     @Test
-    fun k16AllocTestUtilityUsesKraftStdAllocator() {
-        val allocSource = Path.of("../../../rust/guest/k16-alloc-test/src/main.rs").readText()
-        val stdSource = Path.of("../../../rust/guest/kraft-std/src/lib.rs").readText()
-
-        assertTrue(allocSource.contains("extern crate alloc"))
-        assertTrue(allocSource.contains("Vec::new()"))
-        assertTrue(allocSource.contains(".push("))
-        assertTrue(allocSource.contains("io::stdout()"))
-        assertTrue(stdSource.contains("pub mod heap"), "kraft-std should expose heap helpers")
-        assertTrue(stdSource.contains("#[global_allocator]"), "kraft-std should install the guest allocator")
-        assertTrue(stdSource.contains("pub struct SbrkAllocator"), "kraft-std should name the sbrk allocator")
-    }
-
-    @Test
-    fun k16UserlandTicksUsesKraftStdTimeApi() {
+    fun k16UserlandTicksUsesCShellAndKernelTimerApi() {
         val shellSource = Path.of("../../../guest/c/shell/shell.c").readText()
-        val stdSource = Path.of("../../../rust/guest/kraft-std/src/lib.rs").readText()
         val timerSource = Path.of("../../../rust/guest/k16-kernel/src/timer.rs").readText()
 
         assertTrue(shellSource.contains("static unsigned char ticks_bytes[8];"), "shell ticks should use a stable caller-owned syscall buffer")
@@ -2031,15 +2043,6 @@ class K16FirmwareResourceTest {
         assertTrue(
             shellSource.contains("double_decimal_digits_and_add_bit"),
             "shell should format decimal without relying on 64-bit division",
-        )
-        assertTrue(stdSource.contains("pub mod time"), "kraft-std should expose a time module")
-        assertTrue(
-            stdSource.contains("pub fn game_ticks_parts() -> Result<U64Parts, Error>"),
-            "kraft-std should expose fallible timer0 parts",
-        )
-        assertTrue(
-            stdSource.contains("pub fn game_ticks_bytes("),
-            "kraft-std should expose caller-buffer timer0 bytes for K16 live code",
         )
         assertTrue(timerSource.contains("pub type U64Parts = k16_rt::U64Parts"), "timer module should expose explicit low/high timer parts")
         assertTrue(timerSource.contains("pub struct TickInstant"), "timer module should expose a named tick instant")

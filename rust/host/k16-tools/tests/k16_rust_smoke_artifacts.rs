@@ -354,8 +354,8 @@ fn k16_c_libc_cat_has_minimal_libkraft_abi_sources() {
     assert!(shell.contains("KRAFT_SYSCALL_GAME_TICKS"));
     assert!(shell.contains("kraft_run_with_args(program_path, argc, argv)"));
     assert!(shell.contains("should_resolve_path_arg(name, raw_args, index)"));
-    assert!(shell.contains("#define ALLOC_ALIAS \"alloc\""));
-    assert!(shell.contains("#define ALLOC_PROGRAM \"alloc-test\""));
+    assert!(!shell.contains("ALLOC_ALIAS"));
+    assert!(!shell.contains("ALLOC_PROGRAM"));
     assert!(
         !shell.contains("stdio.h"),
         "C shell must not depend on stdio"
@@ -492,39 +492,25 @@ fn k16_guest_rust_migration_map_covers_workspace_crates() {
 }
 
 #[test]
-fn kraft_std_layering_rule_is_documented_and_enforced() {
+fn removed_kraft_std_layer_no_longer_exists() {
     let root = repo_root();
-    let docs = root.join("docs/toolchains/kraft-std.md");
+    let workspace_manifest = root.join("rust/guest/Cargo.toml");
     let k16_rt_manifest = root.join("rust/guest/k16-rt/Cargo.toml");
-    let kraft_std_source = root.join("rust/guest/kraft-std/src/lib.rs");
+    let removed_doc = root.join("docs/toolchains/kraft-std.md");
+    let removed_source = root.join("rust/guest/kraft-std/src/lib.rs");
 
-    let docs = fs::read_to_string(&docs).expect("kraft-std docs exist");
-    assert!(docs.contains("## Layering Rule"));
-    assert!(docs.contains("`kraft-std` may depend on `k16-rt`"));
-    assert!(docs.contains("`k16-rt` must not depend on `kraft-std`"));
-    assert!(docs.contains("must not expose `pub use k16_rt::*`"));
-
+    let workspace_manifest = fs::read_to_string(&workspace_manifest).expect("guest workspace manifest exists");
     let k16_rt_manifest = fs::read_to_string(&k16_rt_manifest).expect("k16-rt manifest exists");
     assert!(
+        !workspace_manifest.contains("kraft-std"),
+        "guest workspace must not include removed kraft-std"
+    );
+    assert!(
         !k16_rt_manifest.contains("kraft-std"),
-        "k16-rt must stay below kraft-std and must not depend on it"
+        "k16-rt must not depend on removed kraft-std"
     );
-
-    let kraft_std_source = fs::read_to_string(&kraft_std_source).expect("kraft-std source exists");
-    assert!(
-        !kraft_std_source.contains("pub use k16_rt::*"),
-        "kraft-std must expose userland APIs instead of re-exporting all runtime internals"
-    );
-    assert!(
-        !kraft_std_source.contains("#[inline(always)]\n        pub fn read("),
-        "kraft-std fd read must be a normal cross-crate method; ABI coverage lives in the runtime smoke"
-    );
-    assert!(
-        !kraft_std_source.contains("#[inline(always)]\n        pub fn write_all("),
-        "kraft-std fd write_all must be a normal cross-crate method; ABI coverage lives in the runtime smoke"
-    );
-    assert!(docs.contains("normal cross-crate methods"));
-    assert!(docs.contains("Result-return smoke"));
+    assert!(!removed_doc.exists(), "removed kraft-std docs should not remain current documentation");
+    assert!(!removed_source.exists(), "removed kraft-std source should not remain in the guest tree");
 }
 
 #[test]

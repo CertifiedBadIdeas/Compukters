@@ -42,22 +42,22 @@ explicit artifact groups:
   core utility maps.
 - `map_section name=shared_libraries`: shared userland library maps under
   `/lib`, currently including `libkraft.kso`.
-- `map_section name=development_only`: development-only proof program maps such
-  as `alloc-test` and `proc-test`.
+- `map_section name=development_only`: currently empty; the development storage
+  image is still generated as a resource but no longer installs Rust userland
+  proof programs.
 
 `libkraft.kso` is the first project-owned userland shared OS ABI boundary.
 It exports explicitly prefixed syscall-shaped symbols such as `kraft_sys_open`,
 `kraft_sys_read`, `kraft_sys_write`, `kraft_sys_close`,
 `kraft_sys_read_dir`, `kraft_sys_stat`, `kraft_sys_rename`,
 `kraft_sys_mkdir`, `kraft_sys_rmdir`, `kraft_sys_unlink`,
-`kraft_sys_sbrk`, and `kraft_sys_exit`; `kraft-std` remains the Rust
-convenience layer above that boundary.
+`kraft_sys_sbrk`, and `kraft_sys_exit`.
 
 Production `/bin/uname.kx`, `/bin/cat.kx`, `/bin/write.kx`, `/bin/rm.kx`,
 `/bin/mkdir.kx`, `/bin/rmdir.kx`, `/bin/stat.kx`, `/bin/ls.kx`, `/bin/cp.kx`,
 and `/bin/mv.kx` are built from C with the source-built-dev K16 `clang`, use
-the small libc-lite startup/header layer under `guest/c/libc`, and call the same
-`libkraft.kso` shared OS ABI as the Rust import proofs.
+the small libc-lite startup/header layer under `guest/c/libc`, and call the
+`libkraft.kso` shared OS ABI.
 Their K16 CPU/syscall helper surface comes from the checked-in
 `guest/c/arch/k16/cpu-helpers.kasm` source runtime assembled by `k16 asm`, not
 from host-generated helper text.
@@ -82,5 +82,5 @@ Each map section has two `k16 size-report` subsections:
   two programs, sorted by duplicated file bytes. These rows are the first input
   for deciding what belongs in a future shared runtime or shared library.
 
-Fault fixtures and hosted examples that are not installed into either bundled
-storage image are intentionally excluded from this report.
+Hosted examples that are not installed into either bundled storage image are
+intentionally excluded from this report.

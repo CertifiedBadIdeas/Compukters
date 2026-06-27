@@ -7,13 +7,6 @@ name = "k16-abi"
 version = "0.1.0"
 
 [[package]]
-name = "k16-alloc-test"
-version = "0.1.0"
-dependencies = [
- "kraft-std",
-]
-
-[[package]]
 name = "k16-bios"
 version = "0.1.0"
 dependencies = [
@@ -60,13 +53,6 @@ name = "k16-memory"
 version = "0.1.0"
 
 [[package]]
-name = "k16-proc-test"
-version = "0.1.0"
-dependencies = [
- "kraft-std",
-]
-
-[[package]]
 name = "k16-rt"
 version = "0.1.0"
 dependencies = [
@@ -79,28 +65,4 @@ name = "k16-storage"
 version = "0.1.0"
 dependencies = [
  "k16-abi",
-]
-
-[[package]]
-name = "k16-syscall-fault-test"
-version = "0.1.0"
-dependencies = [
- "k16-abi",
- "k16-rt",
- "kraft-std",
-]
-
-[[package]]
-name = "k16-user-fault-test"
-version = "0.1.0"
-dependencies = [
- "kraft-std",
-]
-
-[[package]]
-name = "kraft-std"
-version = "0.1.0"
-dependencies = [
- "k16-abi",
- "k16-rt",
 ]
