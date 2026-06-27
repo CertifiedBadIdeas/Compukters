@@ -43,9 +43,9 @@ production build or focused test needs them.
 | `rust/guest/k16-memory` | Guest memory/MMU helper library. | Keep Rust while kernel/runtime memory management remains Rust. |
 | `rust/guest/k16-proc-test` | Development process-model smoke utility. | Development/test-only; keep until process coverage moves elsewhere. |
 | `rust/guest/k16-rt` | Low-level Rust guest runtime/syscall/trap helper crate. | Keep Rust for Rust kernel/boot/runtime consumers; do not expand as userland std. |
-| `rust/guest/k16-runtime-import-test` | Development dynamic-import smoke program. | Development/test-only; keep while it covers loader/import behavior. |
+| `rust/guest/k16-runtime-import-test` | Former development dynamic-import smoke program for `libk16rt.kso`. | Removed with the Rust shared-runtime proof. |
 | `rust/guest/k16-shared-kraft` | Former Rust provider for the shared OS ABI library `libkraft.kso`. | Removed; `/lib/libkraft.kso` now builds from `guest/c/libkraft/libkraft.c`. |
-| `rust/guest/k16-shared-runtime` | Rust provider for shared runtime helpers. | Keep Rust temporarily; runtime helper sharing is separate from coreutils migration. |
+| `rust/guest/k16-shared-runtime` | Former Rust provider for `libk16rt.kso` memory helpers. | Removed; production userland now ships only the C `libkraft.kso` shared library. |
 | `rust/guest/k16-shell` | Former Rust production shell. | Legacy/removable after no focused tests/docs need the old Rust shell; production `/bin/shell.kx` now builds from `guest/c/shell/shell.c`. |
 | `rust/guest/k16-storage` | Guest storage/filesystem support library. | Keep Rust while kernel/storage internals remain Rust. |
 | `rust/guest/k16-syscall-fault-test` | Development syscall fault smoke utility. | Development/test-only; keep while it covers fault policy. |
@@ -79,6 +79,12 @@ The former Rust shared OS ABI provider `k16-shared-kraft` was removed from the
 guest workspace after `/lib/libkraft.kso` moved to
 `guest/c/libkraft/libkraft.c`.
 
+The Rust shared-runtime proof crates `k16-shared-runtime` and
+`k16-runtime-import-test` were removed from the guest workspace. The production
+and development storage layouts no longer ship `/lib/libk16rt.kso` or
+`/bin/runtime-import-test.kx`; shared userland code is represented by the C
+`libkraft.kso` provider.
+
 ## Next Production C Candidates
 
 No production Rust coreutils/shell crate remains in the bundled image. Further
@@ -92,7 +98,6 @@ cover behavior that the production image or host tools do not yet verify:
 
 - `rust/guest/k16-alloc-test`
 - `rust/guest/k16-proc-test`
-- `rust/guest/k16-runtime-import-test`
 - `rust/guest/k16-syscall-fault-test`
 - `rust/guest/k16-user-fault-test`
 
