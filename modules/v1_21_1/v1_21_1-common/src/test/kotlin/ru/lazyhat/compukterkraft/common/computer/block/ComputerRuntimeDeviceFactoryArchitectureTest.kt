@@ -166,22 +166,32 @@ class ComputerRuntimeDeviceFactoryArchitectureTest {
     }
 
     @Test
-    fun inGameK16ComputerFallsBackToDurableRuntimeSnapshotBeforeFreshBoot() {
+    fun inGameK16ComputerConsumesStartupRuntimeSnapshotOnlyOnce() {
         val source =
             Path
                 .of("src/main/kotlin/ru/lazyhat/compukterkraft/common/computer/block/ComputerRuntimeDeviceFactory.kt")
                 .readText()
 
         val storeIndex = source.indexOf("K16RuntimeSnapshotStore(worldRoot)")
-        val consumeIndex = source.indexOf("tile.consumePendingRuntimeSnapshot()")
-        val durableReadIndex = source.indexOf("snapshotStore.readComputerSnapshotOrNull(deviceId)")
+        val startupSnapshotIndex = source.indexOf("val startupSnapshot =")
+        val consumeIndex = source.indexOf("tile.consumePendingRuntimeSnapshot()", startupSnapshotIndex)
+        val durableReadIndex = source.indexOf("snapshotStore.readComputerSnapshotOrNull(deviceId)", startupSnapshotIndex)
+        val pendingSnapshotIndex = source.indexOf("var pendingStartupSnapshot = startupSnapshot")
+        val endpointFactoryIndex = source.indexOf("endpointFactory = {")
+        val snapshotIndex = source.indexOf("val snapshot = pendingStartupSnapshot", endpointFactoryIndex)
+        val clearIndex = source.indexOf("pendingStartupSnapshot = null", snapshotIndex)
         val endpointIndex =
             source.indexOf("createK16ComputerEndpoint(biosFlashPath, storage0, snapshot, memorySize, maxSteps, maxTurnsPerTick)")
 
         assertTrue(storeIndex >= 0, "factory should create a runtime snapshot store from the world root")
-        assertTrue(consumeIndex >= 0, "factory should still prefer pending NBT snapshots first")
+        assertTrue(startupSnapshotIndex >= 0, "factory should resolve a startup snapshot before constructing the runtime device")
+        assertTrue(consumeIndex > startupSnapshotIndex, "factory should still prefer pending NBT snapshots first")
         assertTrue(durableReadIndex > consumeIndex, "factory should read durable snapshot only after pending NBT is absent")
-        assertTrue(endpointIndex > durableReadIndex, "factory should pass the resolved snapshot into endpoint creation")
+        assertTrue(durableReadIndex < endpointFactoryIndex, "durable snapshot reads must not run on every endpoint creation")
+        assertTrue(pendingSnapshotIndex > durableReadIndex, "startup snapshot should be kept as one-shot runtime device state")
+        assertTrue(snapshotIndex > endpointFactoryIndex, "endpoint creation should take the one-shot startup snapshot")
+        assertTrue(clearIndex > snapshotIndex, "endpoint creation should consume the startup snapshot")
+        assertTrue(endpointIndex > clearIndex, "factory should pass the consumed snapshot into endpoint creation")
     }
 
     @Test
