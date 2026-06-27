@@ -153,8 +153,6 @@ val k16ImageManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-
 val k16ImageSource = rootProject.layout.projectDirectory.dir("rust/guest/k16-image/src")
 val k16StorageManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-storage/Cargo.toml")
 val k16StorageSource = rootProject.layout.projectDirectory.dir("rust/guest/k16-storage/src")
-val k16BootChainManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-boot-chain/Cargo.toml")
-val k16BootChainSource = rootProject.layout.projectDirectory.dir("rust/guest/k16-boot-chain/src")
 val k16HostToolsManifest = rootProject.layout.projectDirectory.file("rust/host/k16-tools/Cargo.toml")
 val k16HostToolsSource = rootProject.layout.projectDirectory.dir("rust/host/k16-tools/src")
 val k16RustTargetSpec = rootProject.layout.projectDirectory.file("tools/k16-unknown-kraftos.json")
@@ -357,8 +355,6 @@ fun org.gradle.api.Task.inputsK16KernelCrates() {
     inputs.dir(k16ImageSource)
     inputs.file(k16StorageManifest)
     inputs.dir(k16StorageSource)
-    inputs.file(k16BootChainManifest)
-    inputs.dir(k16BootChainSource)
 }
 
 fun k16RustBinProfileDir(

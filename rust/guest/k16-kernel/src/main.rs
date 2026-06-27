@@ -3,6 +3,7 @@
 
 extern crate k16_rt;
 
+mod boot_chain;
 mod child_exit;
 mod console;
 mod control;

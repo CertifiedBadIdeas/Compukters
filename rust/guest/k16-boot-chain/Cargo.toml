@@ -1,9 +1,0 @@
-[package]
-name = "k16-boot-chain"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-k16-abi = { path = "../k16-abi" }
-k16-image = { path = "../k16-image" }
-k16-storage = { path = "../k16-storage" }

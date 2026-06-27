@@ -1,5 +1,3 @@
-#![no_std]
-
 use k16_abi::computer::profile;
 
 pub const SCRATCH_ADDR: u32 = k16_storage::SCRATCH_ADDR;
