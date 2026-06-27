@@ -22,10 +22,47 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.nio.file.Path
 import kotlin.io.path.exists
+import kotlin.io.path.isDirectory
 import kotlin.io.path.readText
 
 class K16ToolingRenameTest {
     private val root = Path.of("..").toAbsolutePath().normalize()
+
+    @Test
+    fun k16SourceLayoutUsesRoleBasedRootsWithoutLanguageBasedSourceRoots() {
+        val requiredSourceRoots =
+            listOf(
+                "guest/firmware",
+                "guest/platform/k16",
+                "guest/kraftos",
+                "guest/kraftos/abi",
+                "guest/kraftos/kernel",
+                "guest/kraftos/runtime",
+                "guest/kraftos/libc",
+                "guest/kraftos/lib/libkraft",
+                "guest/kraftos/userland",
+                "host/k16-tools",
+                "host/k16-vm",
+            )
+
+        for (path in requiredSourceRoots) {
+            assertTrue(root.resolve(path).isDirectory(), "K16 source root should exist: $path")
+        }
+
+        val retiredSourceRoots =
+            listOf(
+                "rust/guest",
+                "rust/host",
+                "guest/c",
+                "guest/rust",
+                "guest/runtime",
+                "host/rust",
+            )
+
+        for (path in retiredSourceRoots) {
+            assertFalse(root.resolve(path).exists(), "Retired K16 source root should not exist: $path")
+        }
+    }
 
     @Test
     fun hostMachineToolingLivesUnderRustHostK16Tools() {
