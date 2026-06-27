@@ -40,9 +40,9 @@ production build or focused test needs them.
 | `rust/guest/k16-image` | Former guest-side K16E image parser library. | Removed; remaining Rust image parser code now lives inside `rust/guest/k16-kernel/src/image.rs` as kernel-owned code. |
 | `rust/guest/k16-init` | Former Rust production init process. | Legacy/removable after no focused tests/docs need the old Rust launcher; production `/bin/init.kx` now builds from `guest/c/init/init.c`. |
 | `rust/guest/k16-kernel` | Rust K16 kernel and OS internals. | Keep Rust. Kernel rewrite is explicitly out of scope for #367. |
-| `rust/guest/k16-memory` | Guest memory/MMU helper library. | Keep Rust while kernel/runtime memory management remains Rust. |
+| `rust/guest/k16-memory` | Former standalone Rust memory helper library. | Removed; remaining Rust memory helpers now live inside `rust/guest/k16-rt/src/memory.rs` as runtime-owned code. |
 | `rust/guest/k16-proc-test` | Former development process-model smoke utility. | Removed with the Rust userland proof layer. |
-| `rust/guest/k16-rt` | Low-level Rust guest runtime/syscall/trap helper crate. | Keep Rust for Rust kernel/boot/runtime consumers; do not expand as userland std. |
+| `rust/guest/k16-rt` | Low-level Rust guest runtime/syscall/trap/memory helper crate. | Keep Rust for Rust kernel/runtime consumers; do not expand as userland std. |
 | `rust/guest/k16-runtime-import-test` | Former development dynamic-import smoke program for `libk16rt.kso`. | Removed with the Rust shared-runtime proof. |
 | `rust/guest/k16-shared-kraft` | Former Rust provider for the shared OS ABI library `libkraft.kso`. | Removed; `/lib/libkraft.kso` now builds from `guest/c/libkraft/libkraft.c`. |
 | `rust/guest/k16-shared-runtime` | Former Rust provider for `libk16rt.kso` memory helpers. | Removed; production userland now ships only the C `libkraft.kso` shared library. |

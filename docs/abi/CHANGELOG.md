@@ -2,11 +2,16 @@
 
 ## Unreleased
 
+- The standalone Rust `rust/guest/k16-memory` crate was removed. The Rust
+  `k16_memcpy`, `k16_memmove`, `k16_memset`, and `k16_memcmp` implementations
+  now live directly in `rust/guest/k16-rt/src/memory.rs`; `k16 runtime
+  k16-memory-helpers` still builds its no-core object from
+  `rust/guest/k16-rt/src/no_core_helpers.rs`. `k16-abi` and `k16-rt` remain
+  separate Rust crates.
 - The standalone Rust `rust/guest/k16-storage` crate was removed. The
   K16PT/K16FS storage helper now lives inside
   `rust/guest/k16-kernel/src/storage.rs` as kernel-owned code used by
-  boot-chain, process loading, and kernel filesystem syscalls. `k16-abi`,
-  `k16-rt`, and `k16-memory` remain separate Rust crates.
+  boot-chain, process loading, and kernel filesystem syscalls.
 - The standalone Rust `rust/guest/k16-image` crate was removed. The K16E
   parser and image metadata helpers now live inside
   `rust/guest/k16-kernel/src/image.rs` as kernel-owned code used by process and
