@@ -23,6 +23,7 @@ import ru.lazyhat.compukterkraft.lang.runtime.VmInstructionKind
 import ru.lazyhat.compukterkraft.lang.runtime.VmSignalKind
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16BusTraffic
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16ComputerStatsSnapshot
+import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16GpuStats
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16MmioDeviceStats
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16StorageStats
 import kotlin.test.Test
@@ -168,6 +169,16 @@ class RuntimeProfilingTest {
                                     bytesWritten = 12,
                                     failedCommands = 13,
                                 ),
+                            gpu =
+                                NativeK16GpuStats(
+                                    blitBufferCommands = 14,
+                                    blitPixels = 15,
+                                    blitSourceBytes = 16,
+                                    presentCommands = 17,
+                                    frames = 18,
+                                    frameTiles = 19,
+                                    framePayloadBytes = 20,
+                                ),
                         ),
                     ),
             ),
@@ -245,6 +256,18 @@ class RuntimeProfilingTest {
         assertEquals(0x2000, snapshot.k16.devices.single().base)
         assertEquals(64, snapshot.k16.devices.single().size)
         assertEquals(RuntimeK16BusTrafficMetrics(loads = 4, stores = 5, bytesRead = 6, bytesWritten = 7), snapshot.k16.devices.single().traffic)
+        assertEquals(
+            RuntimeK16GpuMetrics(
+                blitBufferCommands = 14,
+                blitPixels = 15,
+                blitSourceBytes = 16,
+                presentCommands = 17,
+                frames = 18,
+                frameTiles = 19,
+                framePayloadBytes = 20,
+            ),
+            snapshot.k16.gpu,
+        )
         assertEquals(2, snapshot.vm.k16WaitEntries)
         assertEquals(1, snapshot.vm.k16WaitTimerWakeups)
         assertEquals(1, snapshot.vm.k16WaitInputWakeups)
@@ -293,6 +316,12 @@ class RuntimeProfilingTest {
         )
         assertTrue(
             summary.contains("    k16DisplayFrames: batches=1, bytes=64, frames=2"),
+            summary,
+        )
+        assertTrue(
+            summary.contains(
+                "    k16Gpu: blits=14, blitPixels=15, blitBytes=16, presents=17, frames=18, tiles=19, frameBytes=20",
+            ),
             summary,
         )
         assertTrue(

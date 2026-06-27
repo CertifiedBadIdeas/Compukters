@@ -4,7 +4,7 @@ use jni::objects::{JByteArray, JClass, JString};
 use jni::sys::{jboolean, jbyte, jbyteArray, jint, jlong, jlongArray};
 use jni::JNIEnv;
 
-use crate::computer::stats::K16ComputerStorageStatsSnapshot;
+use crate::computer::stats::{K16ComputerGpuStatsSnapshot, K16ComputerStorageStatsSnapshot};
 use crate::display::{DisplayFrameDelta, PixelFormat};
 use crate::k16::K16Signal;
 use crate::k16_computer::{K16ComputerHandle, K16ComputerStatsSnapshot};
@@ -388,8 +388,8 @@ fn k16_signal_values(signal: K16Signal) -> [jlong; 2] {
 }
 
 fn k16_computer_stats_snapshot_values(snapshot: &K16ComputerStatsSnapshot) -> Vec<jlong> {
-    let mut values = Vec::with_capacity(10 + snapshot.devices.len() * 13);
-    values.push(2);
+    let mut values = Vec::with_capacity(10 + snapshot.devices.len() * 20);
+    values.push(3);
     push_traffic_values(&mut values, snapshot.bus.ram);
     push_traffic_values(&mut values, snapshot.bus.mmio);
     values.push(snapshot.devices.len() as jlong);
@@ -399,6 +399,7 @@ fn k16_computer_stats_snapshot_values(snapshot: &K16ComputerStatsSnapshot) -> Ve
         values.push(i64::from(device.size));
         push_traffic_values(&mut values, device.traffic);
         push_storage_values(&mut values, device.storage);
+        push_gpu_values(&mut values, device.gpu);
     }
     values
 }
@@ -417,6 +418,16 @@ fn push_storage_values(values: &mut Vec<jlong>, storage: K16ComputerStorageStats
     values.push(storage.bytes_read as jlong);
     values.push(storage.bytes_written as jlong);
     values.push(storage.failed_commands as jlong);
+}
+
+fn push_gpu_values(values: &mut Vec<jlong>, gpu: K16ComputerGpuStatsSnapshot) {
+    values.push(gpu.blit_buffer_commands as jlong);
+    values.push(gpu.blit_pixels as jlong);
+    values.push(gpu.blit_source_bytes as jlong);
+    values.push(gpu.present_commands as jlong);
+    values.push(gpu.frames as jlong);
+    values.push(gpu.frame_tiles as jlong);
+    values.push(gpu.frame_payload_bytes as jlong);
 }
 
 fn push_i64(out: &mut Vec<u8>, value: i64) {
@@ -492,7 +503,8 @@ fn long_array_or_throw(env: &mut JNIEnv<'_>, values: &[jlong]) -> jlongArray {
 mod tests {
     use super::k16_computer_stats_snapshot_values;
     use crate::computer::stats::{
-        K16ComputerDeviceStats, K16ComputerStatsSnapshot, K16ComputerStorageStatsSnapshot,
+        K16ComputerDeviceStats, K16ComputerGpuStatsSnapshot, K16ComputerStatsSnapshot,
+        K16ComputerStorageStatsSnapshot,
     };
     use crate::low_bus::{MachineBusStatsSnapshot, MachineBusTrafficSnapshot};
 
@@ -526,12 +538,24 @@ mod tests {
                     bytes_written: 15,
                 },
                 storage: K16ComputerStorageStatsSnapshot::default(),
+                gpu: K16ComputerGpuStatsSnapshot {
+                    blit_buffer_commands: 16,
+                    blit_pixels: 17,
+                    blit_source_bytes: 18,
+                    present_commands: 19,
+                    frames: 20,
+                    frame_tiles: 21,
+                    frame_payload_bytes: 22,
+                },
             }],
         };
 
         assert_eq!(
             k16_computer_stats_snapshot_values(&snapshot),
-            vec![2, 2, 3, 4, 5, 6, 7, 8, 9, 1, 11, 0x1000, 64, 12, 13, 14, 15, 0, 0, 0, 0, 0, 0,],
+            vec![
+                3, 2, 3, 4, 5, 6, 7, 8, 9, 1, 11, 0x1000, 64, 12, 13, 14, 15, 0, 0, 0, 0, 0, 0, 16,
+                17, 18, 19, 20, 21, 22,
+            ],
         );
     }
 }

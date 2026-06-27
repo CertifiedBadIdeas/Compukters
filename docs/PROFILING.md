@@ -162,6 +162,19 @@ This is the stable in-process observability boundary. JNI exposes the same low-l
 aggregated `K16ComputerEndpoint.statsSnapshot()` call for Kotlin/Minecraft-side reports. Hot RAM/MMIO/device operations
 must not call into Kotlin.
 
+Runtime profiling also folds selected device counters into the human-readable summary:
+
+```text
+k16Gpu: blits=..., blitPixels=..., blitBytes=..., presents=..., frames=..., tiles=..., frameBytes=...
+```
+
+- `blits`, `blitPixels`, and `blitBytes` count guest `gpu0` `BLIT_BUFFER` commands and their source payload.
+- `presents` counts guest `PRESENT` commands.
+- `frames`, `tiles`, and `frameBytes` count the dirty-tile display frames produced by VM-side `PRESENT` handling.
+
+For terminal workloads, compare `k16TextOutput.snapshotBytes`, `k16Gpu.blitBytes`, and `k16Gpu.frameBytes` to estimate
+how much text output expands into guest-side render traffic and host display payload.
+
 ## JFR
 
 JFR is available with the JDK and is the first external profiler to try.

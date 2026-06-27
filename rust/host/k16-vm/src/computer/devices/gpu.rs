@@ -1,3 +1,4 @@
+use crate::computer::stats::K16ComputerGpuStatsSnapshot;
 use crate::computer_abi;
 use crate::display::{DisplayEngine, DisplayFrameDelta, PixelFormat};
 use crate::low_bus::MmioDevice;
@@ -16,6 +17,7 @@ pub(crate) struct GpuDevice {
     buffer_stride_bytes: u32,
     color: u16,
     sequence: u64,
+    stats: K16ComputerGpuStatsSnapshot,
 }
 
 impl GpuDevice {
@@ -45,11 +47,16 @@ impl GpuDevice {
             buffer_stride_bytes: (Self::WIDTH as u32) * Self::BYTES_PER_PIXEL,
             color: 0,
             sequence: 0,
+            stats: K16ComputerGpuStatsSnapshot::default(),
         }
     }
 
     pub(crate) fn drain_frames(&mut self) -> Vec<DisplayFrameDelta> {
         std::mem::take(&mut self.pending_frames)
+    }
+
+    pub(crate) fn stats_snapshot(&self) -> K16ComputerGpuStatsSnapshot {
+        self.stats
     }
 
     fn load_register(&self, offset: u32) -> Result<i32, MemoryFault> {
@@ -135,8 +142,16 @@ impl GpuDevice {
                 Ok(())
             }
             computer_abi::GPU0_COMMAND_PRESENT => {
+                self.stats.present_commands += 1;
                 if let Some(frame) = self.display.present() {
                     self.sequence = frame.sequence as u64;
+                    self.stats.frames += 1;
+                    self.stats.frame_tiles += frame.tiles.len() as u64;
+                    self.stats.frame_payload_bytes += frame
+                        .tiles
+                        .iter()
+                        .map(|tile| tile.payload.len() as u64)
+                        .sum::<u64>();
                     self.pending_frames.push(frame);
                 }
                 self.status = computer_abi::GPU0_STATUS_DONE;
@@ -190,6 +205,9 @@ impl GpuDevice {
             self.set_error(computer_abi::GPU0_ERROR_BUFFER_OUT_OF_BOUNDS);
             return;
         }
+        self.stats.blit_buffer_commands += 1;
+        self.stats.blit_pixels += (self.rect_width as u64) * (self.rect_height as u64);
+        self.stats.blit_source_bytes += u64::from(byte_len);
         for row in 0..self.rect_height {
             let row_offset = row as u32 * self.buffer_stride_bytes;
             for col in 0..self.rect_width {
