@@ -21,7 +21,7 @@ formats until each compatibility-affecting ABI migration lands.
 
 ## Retired Rux-Language Inputs
 
-The active `rust/host/k16-tools` tree no longer owns tracked `.rx` guest source.
+The active `host/k16-tools` tree no longer owns tracked `.rx` guest source.
 The retired source groups were:
 
 - `examples/firmware/*.rx`: BIOS and old firmware demos, including
@@ -41,19 +41,19 @@ These groups are no longer part of the active host-tool source tree.
 
 The retired Rux-language implementation lived in:
 
-- `rust/host/k16-tools/src/frontend/*`: AST, lexer, parser, resolver, and
+- `host/k16-tools/src/frontend/*`: AST, lexer, parser, resolver, and
   diagnostics.
-- `rust/host/k16-tools/src/runtime/stdlib.rs`: embedded `.rx` stdlib module
+- `host/k16-tools/src/runtime/stdlib.rs`: embedded `.rx` stdlib module
   registry.
-- `rust/host/k16-tools/src/bin/rux.rs`: public CLI surface, including
+- `host/k16-tools/src/bin/rux.rs`: public CLI surface, including
   `rux compile` and related source-driven commands.
-- `rust/host/k16-tools/src/advice.rs`: source-level improvement checks for Rux
+- `host/k16-tools/src/advice.rs`: source-level improvement checks for Rux
   listings.
 
-The surviving parts of `rust/host/k16-tools` are host-side machine/tooling
+The surviving parts of `host/k16-tools` are host-side machine/tooling
 pieces: K16 disassembly, object linking, K16E encoding, volume/filesystem
 tooling, inspect/run helpers, and Rust-target smoke support. Guest runtime
-source belongs under `rust/guest/k16-rt`.
+source belongs under `guest/kraftos/runtime`.
 
 ## Retired Build Integration
 
@@ -65,14 +65,14 @@ storage images from:
 - `display_ok.rx` -> `display-ok.kx`.
 
 Those source inputs are retired from the active bundled firmware path. BIOS and
-bootloader firmware are C-owned under `guest/c`; the kernel remains Rust-owned
-under `rust/guest`.
+bootloader firmware are C-owned under `guest/kraftos`; the kernel remains Rust-owned
+under `guest/kraftos`.
 
 The active NeoForge resource generation path now builds:
 
-- `guest/c/bios/bios.c` -> `firmware/k16-bios.kflash`;
-- `guest/c/boot/boot.c` plus `guest/c/boot-chain` -> `kernel-loader.kb`;
-- `rust/guest/k16-kernel` -> `display-ok.kx`.
+- `guest/firmware/bios/bios.c` -> `firmware/k16-bios.kflash`;
+- `guest/firmware/boot/boot.c` plus `guest/firmware/boot-chain` -> `kernel-loader.kb`;
+- `guest/kraftos/kernel` -> `display-ok.kx`.
 
 These builds resolve a prepared K16 toolchain through Gradle
 `prepareK16Toolchain`. C firmware links through `k16 link`; the Rust kernel
@@ -84,8 +84,8 @@ is no fallback to the retired Rux source inputs.
 The highest-impact Rux-language test dependencies have been split into
 historical retirement records and active K16 artifact coverage:
 
-- Active boot-chain tests live in `rust/host/k16-tools/tests/k16_volume_cli.rs`
-  and `rust/host/k16-tools/tests/k16_storage_workflow_cli.rs`. They build and
+- Active boot-chain tests live in `host/k16-tools/tests/k16_volume_cli.rs`
+  and `host/k16-tools/tests/k16_storage_workflow_cli.rs`. They build and
   inspect K16PT, K16FS, and K16E machine artifacts directly.
 - Active bundled firmware coverage lives in
   `modules/v1_21_1/v1_21_1-neoforge/src/test/kotlin/.../K16FirmwareResourceTest.kt`.
@@ -121,7 +121,7 @@ artifact commands live under `k16`.
 2. The public `rux compile` and `rux check` CLI surface is removed from active
    tooling.
 3. The Rux frontend is removed from active host tooling.
-4. Guest-owned Rust work continues under `rust/guest`.
+4. Guest-owned Rust work continues under `guest/kraftos`.
 
 This is a retirement record, not a replacement plan.
 
@@ -138,4 +138,4 @@ This is a retirement record, not a replacement plan.
   Rux stdlib and source advice have been removed from active tooling.
 - [#144](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/144):
   Retire Rux compiler/frontend and move guest software ownership to
-  `rust/guest`.
+  `guest/kraftos`.

@@ -2,7 +2,7 @@
 
 Issue: [#185](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/185), [#186](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/186), [#187](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/187), [#188](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/188), [#189](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/189), [#190](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/190), [#191](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/191), [#194](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/194), [#195](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/195)
 
-`tools/k16-kernel-timer-smoke.sh` verifies that the real Rust kernel in `rust/guest/k16-kernel` owns the single-core `timer0` heartbeat path.
+`tools/k16-kernel-timer-smoke.sh` verifies that the real Rust kernel in `guest/kraftos/kernel` owns the single-core `timer0` heartbeat path.
 
 Run:
 

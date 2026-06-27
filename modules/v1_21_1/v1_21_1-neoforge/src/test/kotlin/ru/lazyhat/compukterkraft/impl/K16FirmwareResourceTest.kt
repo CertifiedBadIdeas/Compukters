@@ -39,12 +39,12 @@ class K16FirmwareResourceTest {
     @Test
     fun removedRustSharedRuntimeProofIsNotBundled() {
         val source = Path.of("build.gradle.kts").readText()
-        val guestWorkspace = Path.of("../../../rust/guest/Cargo.toml").readText()
-        val guestLockfile = Path.of("../../../rust/guest/Cargo.lock").readText()
+        val guestWorkspace = Path.of("../../../guest/kraftos/Cargo.toml").readText()
+        val guestLockfile = Path.of("../../../guest/kraftos/Cargo.lock").readText()
 
         listOf(
-            "rust/guest/k16-shared-runtime",
-            "rust/guest/k16-runtime-import-test",
+            "guest/kraftos/k16-shared-runtime",
+            "guest/kraftos/k16-runtime-import-test",
             "k16SharedRuntime",
             "k16RuntimeImportTest",
             "compileK16SharedRuntime",
@@ -68,16 +68,16 @@ class K16FirmwareResourceTest {
     @Test
     fun removedRustUserlandProofCratesAreNotBundled() {
         val source = Path.of("build.gradle.kts").readText()
-        val guestWorkspace = Path.of("../../../rust/guest/Cargo.toml").readText()
-        val guestLockfile = Path.of("../../../rust/guest/Cargo.lock").readText()
-        val shellSource = Path.of("../../../guest/c/shell/shell.c").readText()
+        val guestWorkspace = Path.of("../../../guest/kraftos/Cargo.toml").readText()
+        val guestLockfile = Path.of("../../../guest/kraftos/Cargo.lock").readText()
+        val shellSource = Path.of("../../../guest/kraftos/userland/shell/shell.c").readText()
 
         listOf(
-            "rust/guest/k16-alloc-test",
-            "rust/guest/k16-proc-test",
-            "rust/guest/k16-syscall-fault-test",
-            "rust/guest/k16-user-fault-test",
-            "rust/guest/kraft-std",
+            "guest/kraftos/k16-alloc-test",
+            "guest/kraftos/k16-proc-test",
+            "guest/kraftos/k16-syscall-fault-test",
+            "guest/kraftos/k16-user-fault-test",
+            "guest/kraftos/kraft-std",
             "k16AllocTest",
             "k16ProcTest",
             "k16SyscallFaultTest",
@@ -123,7 +123,7 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("fun Project.compileK16GuestRustBin("))
         assertTrue(source.contains("ProcessBuilder(command)"))
         assertTrue(source.contains("k16-cpu-helpers"))
-        assertTrue(source.contains("rust/host/k16-tools/Cargo.toml"))
+        assertTrue(source.contains("host/k16-tools/Cargo.toml"))
         assertTrue(source.contains("rootProject.tasks.named(\"prepareK16Toolchain\")"))
         assertTrue(source.contains("resolveK16Toolchain()"))
         assertTrue(rootBuildScript.contains("prepareK16Toolchain"))
@@ -139,10 +139,10 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("-C link-arg=--k16-target=\$k16Target"))
         assertTrue(source.contains("\"opt-level=z\""))
         assertTrue(source.contains("-Copt-level=z"))
-        assertTrue(source.contains("guest/c/bios/bios.c"))
-        assertTrue(source.contains("guest/c/boot/boot.c"))
-        assertTrue(source.contains("guest/c/boot-chain/boot_chain.c"))
-        assertTrue(source.contains("guest/c/boot-chain/boot_chain.h"))
+        assertTrue(source.contains("guest/firmware/bios/bios.c"))
+        assertTrue(source.contains("guest/firmware/boot/boot.c"))
+        assertTrue(source.contains("guest/firmware/boot-chain/boot_chain.c"))
+        assertTrue(source.contains("guest/firmware/boot-chain/boot_chain.h"))
         assertTrue(source.contains("fun Project.compileK16GuestCFirmware("))
         assertTrue(source.contains("fun Project.compileK16GuestCFixedImage("))
         assertTrue(source.contains("compileK16GuestCFirmware("))
@@ -158,37 +158,37 @@ class K16FirmwareResourceTest {
         assertFalse(source.contains("tasks.register<Exec>(\"compileK16SystemKernelObject\")"))
         assertFalse(source.contains("--emit=obj"))
         assertTrue(source.contains("tasks.register<Exec>(\"compileK16SystemStorage0\")"))
-        assertFalse(source.contains("rust/guest/k16-boot-chain"))
-        assertFalse(source.contains("rust/guest/k16-image"))
-        assertFalse(source.contains("rust/guest/k16-storage"))
-        assertFalse(source.contains("rust/guest/k16-bios"))
-        assertFalse(source.contains("rust/guest/k16-boot/Cargo.toml"))
-        assertFalse(source.contains("rust/guest/k16-boot/src"))
-        assertTrue(source.contains("rust/guest/k16-kernel"))
-        assertFalse(source.contains("rust/guest/k16-init"))
-        assertFalse(source.contains("rust/guest/k16-shell"))
-        assertFalse(source.contains("rust/guest/k16-ls"))
-        assertFalse(source.contains("rust/guest/k16-cat"))
-        assertFalse(source.contains("rust/guest/k16-uname"))
-        assertFalse(source.contains("rust/guest/k16-cp"))
-        assertFalse(source.contains("rust/guest/k16-mv"))
-        assertFalse(source.contains("rust/guest/k16-stat"))
-        assertFalse(source.contains("rust/guest/k16-write"))
-        assertFalse(source.contains("rust/guest/k16-rm"))
-        assertFalse(source.contains("rust/guest/k16-mkdir"))
-        assertFalse(source.contains("rust/guest/k16-rmdir"))
-        assertFalse(source.contains("rust/guest/k16-shared-runtime"))
-        assertFalse(source.contains("rust/guest/k16-shared-smoke-runtime"))
-        assertFalse(source.contains("rust/guest/k16-runtime-import-test"))
-        assertFalse(source.contains("rust/guest/k16-shared-runtime-test"))
-        assertFalse(source.contains("rust/guest/k16-alloc-test"))
-        assertFalse(source.contains("rust/guest/k16-memory"))
-        assertFalse(source.contains("rust/guest/k16-rt/src/no_core_helpers.rs"))
-        assertTrue(source.contains("guest/runtime/k16-memory-helpers.rs"))
+        assertFalse(source.contains("guest/kraftos/k16-boot-chain"))
+        assertFalse(source.contains("guest/kraftos/k16-image"))
+        assertFalse(source.contains("guest/kraftos/k16-storage"))
+        assertFalse(source.contains("guest/kraftos/k16-bios"))
+        assertFalse(source.contains("guest/kraftos/k16-boot/Cargo.toml"))
+        assertFalse(source.contains("guest/kraftos/k16-boot/src"))
+        assertTrue(source.contains("guest/kraftos/kernel"))
+        assertFalse(source.contains("guest/kraftos/k16-init"))
+        assertFalse(source.contains("guest/kraftos/k16-shell"))
+        assertFalse(source.contains("guest/kraftos/k16-ls"))
+        assertFalse(source.contains("guest/kraftos/k16-cat"))
+        assertFalse(source.contains("guest/kraftos/k16-uname"))
+        assertFalse(source.contains("guest/kraftos/k16-cp"))
+        assertFalse(source.contains("guest/kraftos/k16-mv"))
+        assertFalse(source.contains("guest/kraftos/k16-stat"))
+        assertFalse(source.contains("guest/kraftos/k16-write"))
+        assertFalse(source.contains("guest/kraftos/k16-rm"))
+        assertFalse(source.contains("guest/kraftos/k16-mkdir"))
+        assertFalse(source.contains("guest/kraftos/k16-rmdir"))
+        assertFalse(source.contains("guest/kraftos/k16-shared-runtime"))
+        assertFalse(source.contains("guest/kraftos/k16-shared-smoke-runtime"))
+        assertFalse(source.contains("guest/kraftos/k16-runtime-import-test"))
+        assertFalse(source.contains("guest/kraftos/k16-shared-runtime-test"))
+        assertFalse(source.contains("guest/kraftos/k16-alloc-test"))
+        assertFalse(source.contains("guest/kraftos/k16-memory"))
+        assertFalse(source.contains("guest/kraftos/runtime/src/no_core_helpers.rs"))
+        assertTrue(source.contains("guest/platform/k16/memory-helpers.rs"))
         assertTrue(source.contains("k16MemoryHelpersRuntimeSource"))
-        assertFalse(source.contains("rust/guest/k16-hosted-cat"))
-        assertFalse(source.contains("rust/guest/k16-hosted-hello"))
-        assertFalse(source.contains("rust/guest/k16-proc-test"))
+        assertFalse(source.contains("guest/kraftos/k16-hosted-cat"))
+        assertFalse(source.contains("guest/kraftos/k16-hosted-hello"))
+        assertFalse(source.contains("guest/kraftos/k16-proc-test"))
         assertFalse(source.contains("k16InitManifest"))
         assertFalse(source.contains("k16InitSource"))
         assertTrue(source.contains("k16CSystemInitSource"))
@@ -286,23 +286,23 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("k16CLibcIncludeSource"))
         assertTrue(source.contains("k16CLibcStartupSource"))
         assertTrue(source.contains("k16CLibcSyscallSource"))
-        assertTrue(source.contains("guest/c/libc/crt0.c"))
-        assertTrue(source.contains("guest/c/libc/syscalls.c"))
-        assertTrue(source.contains("guest/c/libc/include"))
-        assertTrue(source.contains("guest/c/init/init.c"))
-        assertTrue(source.contains("guest/c/shell/shell.c"))
-        assertTrue(source.contains("guest/c/coreutils/uname.c"))
-        assertTrue(source.contains("guest/c/coreutils/ls.c"))
-        assertTrue(source.contains("guest/c/coreutils/cat.c"))
-        assertTrue(source.contains("guest/c/coreutils/cp.c"))
-        assertTrue(source.contains("guest/c/coreutils/mv.c"))
-        assertTrue(source.contains("guest/c/coreutils/stat.c"))
-        assertTrue(source.contains("guest/c/coreutils/write.c"))
-        assertTrue(source.contains("guest/c/coreutils/rm.c"))
-        assertTrue(source.contains("guest/c/coreutils/mkdir.c"))
-        assertTrue(source.contains("guest/c/coreutils/rmdir.c"))
-        assertTrue(source.contains("guest/data/etc/motd"))
-        assertFalse(source.contains("rust/guest/k16-cat/motd.txt"))
+        assertTrue(source.contains("guest/kraftos/libc/crt0.c"))
+        assertTrue(source.contains("guest/kraftos/libc/syscalls.c"))
+        assertTrue(source.contains("guest/kraftos/libc/include"))
+        assertTrue(source.contains("guest/kraftos/userland/init/init.c"))
+        assertTrue(source.contains("guest/kraftos/userland/shell/shell.c"))
+        assertTrue(source.contains("guest/kraftos/userland/coreutils/uname.c"))
+        assertTrue(source.contains("guest/kraftos/userland/coreutils/ls.c"))
+        assertTrue(source.contains("guest/kraftos/userland/coreutils/cat.c"))
+        assertTrue(source.contains("guest/kraftos/userland/coreutils/cp.c"))
+        assertTrue(source.contains("guest/kraftos/userland/coreutils/mv.c"))
+        assertTrue(source.contains("guest/kraftos/userland/coreutils/stat.c"))
+        assertTrue(source.contains("guest/kraftos/userland/coreutils/write.c"))
+        assertTrue(source.contains("guest/kraftos/userland/coreutils/rm.c"))
+        assertTrue(source.contains("guest/kraftos/userland/coreutils/mkdir.c"))
+        assertTrue(source.contains("guest/kraftos/userland/coreutils/rmdir.c"))
+        assertTrue(source.contains("guest/kraftos/data/etc/motd"))
+        assertFalse(source.contains("guest/kraftos/k16-cat/motd.txt"))
         assertTrue(source.contains("fun Project.compileK16GuestCProgram("))
         assertTrue(source.contains("--target=k16"))
         assertFalse(source.contains("\"compileK16CHostedCat\""))
@@ -430,9 +430,9 @@ class K16FirmwareResourceTest {
             "production rmdir should build from the C coreutils source",
         )
         assertFalse(source.contains("binName = \"k16-shared-runtime\""))
-        assertTrue(source.contains("val k16CArchRuntimeSource = rootProject.layout.projectDirectory.file(\"guest/c/arch/k16/cpu-helpers.kasm\")"))
+        assertTrue(source.contains("val k16CArchRuntimeSource = rootProject.layout.projectDirectory.file(\"guest/platform/k16/cpu-helpers.kasm\")"))
         assertTrue(source.contains("compileK16ArchRuntimeObject("))
-        assertTrue(source.contains("val k16CLibkraftSource = rootProject.layout.projectDirectory.file(\"guest/c/libkraft/libkraft.c\")"))
+        assertTrue(source.contains("val k16CLibkraftSource = rootProject.layout.projectDirectory.file(\"guest/kraftos/lib/libkraft/libkraft.c\")"))
         assertTrue(source.contains("compileK16GuestCSharedObject("))
         assertFalse(source.contains("includeCpuHelpers = true"))
         assertFalse(source.contains("binName = \"k16-shared-kraft\""))
@@ -500,8 +500,8 @@ class K16FirmwareResourceTest {
         assertTrue(source.contains("\"/etc/motd\""))
         assertTrue(source.contains("\"extract-partition\""))
         assertTrue(source.contains("\"replace-partition\""))
-        assertTrue(source.contains("dir(\"rust/guest/k16-kernel/src\")"))
-        assertFalse(source.contains("dir(\"rust/guest/k16-shell/src\")"))
+        assertTrue(source.contains("dir(\"guest/kraftos/kernel/src\")"))
+        assertFalse(source.contains("dir(\"guest/kraftos/k16-shell/src\")"))
         assertTrue(source.contains("inputs.dir(k16KernelSource)"))
         assertFalse(source.contains("inputs.dir(k16ShellSource)"))
         assertTrue(source.contains("toolchain.cli.absolutePath"))
@@ -524,7 +524,7 @@ class K16FirmwareResourceTest {
 
         assertTrue(rootBuildScript.contains("tasks.register<Exec>(\"testK16SourceBuiltDevToolchain\")"))
         assertTrue(rootBuildScript.contains("dependsOn(stageK16SourceBuiltDevToolchain)"))
-        assertTrue(rootBuildScript.contains("workingDir(rootProject.file(\"rust/host/k16-tools\"))"))
+        assertTrue(rootBuildScript.contains("workingDir(rootProject.file(\"host/k16-tools\"))"))
         assertTrue(rootBuildScript.contains("k16SourceBuiltDevToolchainInstallRoot.resolve(\"bin/cargo\").absolutePath"))
         assertTrue(rootBuildScript.contains("\"test\",\n            \"-j\",\n            k16HostToolsBuildJobs"))
         assertTrue(rootBuildScript.contains("environment(\"K16_CARGO\", k16SourceBuiltDevToolchainInstallRoot.resolve(\"bin/cargo\").absolutePath)"))
@@ -537,7 +537,7 @@ class K16FirmwareResourceTest {
 
     @Test
     fun replacedRustUserlandCratesAreRemovedFromGuestWorkspace() {
-        val guestRoot = Path.of("../../../rust/guest")
+        val guestRoot = Path.of("../../../guest/kraftos")
         val workspace = guestRoot.resolve("Cargo.toml").readText()
 
         assertFalse(workspace.contains("\"k16-init\""), "C init should not leave a Rust init workspace member")
@@ -1418,7 +1418,7 @@ class K16FirmwareResourceTest {
 
     @Test
     fun bundledK16ShellUsesFdStdinAndStdoutInsteadOfDebugOutput() {
-        val source = Path.of("../../../guest/c/shell/shell.c").readText()
+        val source = Path.of("../../../guest/kraftos/userland/shell/shell.c").readText()
 
         assertTrue(source.contains("STDOUT_FILENO"))
         assertTrue(source.contains("STDIN_FILENO"))
@@ -1636,7 +1636,7 @@ class K16FirmwareResourceTest {
 
     @Test
     fun k16KernelConsoleDoesNotUseDisplay0() {
-        val kernelSourceDir = Path.of("../../../rust/guest/k16-kernel/src")
+        val kernelSourceDir = Path.of("../../../guest/kraftos/kernel/src")
         val checkedFiles =
             listOf(
                 "main.rs",
@@ -1659,7 +1659,7 @@ class K16FirmwareResourceTest {
 
     @Test
     fun k16BiosDoesNotUseDisplay0() {
-        val biosSource = Path.of("../../../guest/c/bios/bios.c").readText()
+        val biosSource = Path.of("../../../guest/firmware/bios/bios.c").readText()
 
         assertFalse(biosSource.contains("display0"), "K16 BIOS must render through gpu0 only")
         assertTrue(biosSource.contains("GPU_COMMAND"), "K16 BIOS should use the gpu0 display path")
@@ -1668,7 +1668,7 @@ class K16FirmwareResourceTest {
 
     @Test
     fun k16KernelConsoleKeepsCellGridAndScrollsOnOverflow() {
-        val kernelSourceDir = Path.of("../../../rust/guest/k16-kernel/src")
+        val kernelSourceDir = Path.of("../../../guest/kraftos/kernel/src")
         val consoleSource = kernelSourceDir.resolve("console.rs").readText()
         val memoryLayoutSource = kernelSourceDir.resolve("memory_layout.rs").readText()
         val terminalSource = kernelSourceDir.resolve("terminal.rs").readText()
@@ -1722,7 +1722,7 @@ class K16FirmwareResourceTest {
 
     @Test
     fun k16KernelTerminalDefinesReadableByteSemantics() {
-        val terminalSource = Path.of("../../../rust/guest/k16-kernel/src/terminal.rs").readText()
+        val terminalSource = Path.of("../../../guest/kraftos/kernel/src/terminal.rs").readText()
 
         assertTrue(
             terminalSource.contains("pub fn clear() {\n    clear_terminal();\n}"),
@@ -1756,7 +1756,7 @@ class K16FirmwareResourceTest {
 
     @Test
     fun k16KernelReadSyscallUsesKeyboardInputPath() {
-        val kernelSourceDir = Path.of("../../../rust/guest/k16-kernel/src")
+        val kernelSourceDir = Path.of("../../../guest/kraftos/kernel/src")
         val syscallSource = kernelSourceDir.resolve("syscall.rs").readText()
         val stdinSource = kernelSourceDir.resolve("stdin.rs").readText()
         val mainSource = kernelSourceDir.resolve("main.rs").readText()
@@ -1779,22 +1779,22 @@ class K16FirmwareResourceTest {
 
     @Test
     fun k16KernelLegacyShellPathIsRemovedFromCurrentSource() {
-        val kernelSourceDir = Path.of("../../../rust/guest/k16-kernel/src")
+        val kernelSourceDir = Path.of("../../../guest/kraftos/kernel/src")
         val mainSource = kernelSourceDir.resolve("main.rs").readText()
         val kernelSyscallSource = kernelSourceDir.resolve("syscall.rs").readText()
-        val initSource = Path.of("../../../guest/c/init/init.c").readText()
-        val processHeader = Path.of("../../../guest/c/libc/include/kraft/process.h").readText()
-        val syscallHeader = Path.of("../../../guest/c/libc/include/kraft/syscalls.h").readText()
-        val cSyscallSource = Path.of("../../../guest/c/libc/syscalls.c").readText()
-        val sharedKraftSource = Path.of("../../../guest/c/libkraft/libkraft.c").readText()
-        val shellSource = Path.of("../../../guest/c/shell/shell.c").readText()
+        val initSource = Path.of("../../../guest/kraftos/userland/init/init.c").readText()
+        val processHeader = Path.of("../../../guest/kraftos/libc/include/kraft/process.h").readText()
+        val syscallHeader = Path.of("../../../guest/kraftos/libc/include/kraft/syscalls.h").readText()
+        val cSyscallSource = Path.of("../../../guest/kraftos/libc/syscalls.c").readText()
+        val sharedKraftSource = Path.of("../../../guest/kraftos/lib/libkraft/libkraft.c").readText()
+        val shellSource = Path.of("../../../guest/kraftos/userland/shell/shell.c").readText()
 
         assertFalse(Files.exists(kernelSourceDir.resolve("shell.rs")), "kernel shell dispatcher should be removed")
         assertFalse(Files.exists(kernelSourceDir.resolve("line.rs")), "kernel line discipline should be removed")
         assertFalse(Files.exists(kernelSourceDir.resolve("keyboard.rs")), "kernel keyboard line path should be removed")
         assertFalse(mainSource.contains("mod shell;"), "main.rs should not register the legacy shell module")
         assertFalse(mainSource.contains("shell::init();"), "kernel startup should not initialize the legacy shell module")
-        assertTrue(Files.exists(Path.of("../../../guest/c/init/init.c")), "init should be a real C launcher source")
+        assertTrue(Files.exists(Path.of("../../../guest/kraftos/userland/init/init.c")), "init should be a real C launcher source")
         assertFalse(initSource.contains("process::run("), "init should not hide shell lifecycle behind synchronous run")
         assertTrue(initSource.contains("#include <kraft/process.h>"), "init should use libc-lite process wrappers")
         assertTrue(initSource.contains("#define SHELL_PATH \"/bin/shell.kx\""), "init should launch the bundled shell path")
@@ -1826,7 +1826,7 @@ class K16FirmwareResourceTest {
 
     @Test
     fun k16UserlandShellDefinesPromptAndBuiltins() {
-        val shellSource = Path.of("../../../guest/c/shell/shell.c").readText()
+        val shellSource = Path.of("../../../guest/kraftos/userland/shell/shell.c").readText()
 
         assertTrue(shellSource.contains("#define PROMPT \"K16> \""))
         assertTrue(shellSource.contains("static void dispatch_command("), "shell should name the dispatch boundary")
@@ -1863,9 +1863,9 @@ class K16FirmwareResourceTest {
 
     @Test
     fun k16CatUtilityReadsMotdThroughCLibc() {
-        val catSource = Path.of("../../../guest/c/coreutils/cat.c").readText()
-        val startupSource = Path.of("../../../guest/c/libc/crt0.c").readText()
-        val syscallHeader = Path.of("../../../guest/c/libc/include/kraft/syscalls.h").readText()
+        val catSource = Path.of("../../../guest/kraftos/userland/coreutils/cat.c").readText()
+        val startupSource = Path.of("../../../guest/kraftos/libc/crt0.c").readText()
+        val syscallHeader = Path.of("../../../guest/kraftos/libc/include/kraft/syscalls.h").readText()
 
         assertTrue(catSource.contains("#include <fcntl.h>"))
         assertTrue(catSource.contains("#include <string.h>"))
@@ -1881,7 +1881,7 @@ class K16FirmwareResourceTest {
 
     @Test
     fun k16UnameUtilityPrintsMachineNameThroughCLibc() {
-        val unameSource = Path.of("../../../guest/c/coreutils/uname.c").readText()
+        val unameSource = Path.of("../../../guest/kraftos/userland/coreutils/uname.c").readText()
 
         assertTrue(unameSource.contains("#include <unistd.h>"))
         assertTrue(unameSource.contains("write_all(STDOUT_FILENO"))
@@ -1892,9 +1892,9 @@ class K16FirmwareResourceTest {
 
     @Test
     fun k16LsUtilityListsEveryArgvPathThroughCLibcFs() {
-        val lsSource = Path.of("../../../guest/c/coreutils/ls.c").readText()
-        val fsHeader = Path.of("../../../guest/c/libc/include/kraft/fs.h").readText()
-        val syscallSource = Path.of("../../../guest/c/libc/syscalls.c").readText()
+        val lsSource = Path.of("../../../guest/kraftos/userland/coreutils/ls.c").readText()
+        val fsHeader = Path.of("../../../guest/kraftos/libc/include/kraft/fs.h").readText()
+        val syscallSource = Path.of("../../../guest/kraftos/libc/syscalls.c").readText()
 
         assertTrue(lsSource.contains("#include <kraft/fs.h>"))
         assertTrue(lsSource.contains("#include <string.h>"))
@@ -1915,9 +1915,9 @@ class K16FirmwareResourceTest {
 
     @Test
     fun k16StatUtilityReadsMetadataThroughCLibcFs() {
-        val statSource = Path.of("../../../guest/c/coreutils/stat.c").readText()
-        val fsHeader = Path.of("../../../guest/c/libc/include/kraft/fs.h").readText()
-        val syscallSource = Path.of("../../../guest/c/libc/syscalls.c").readText()
+        val statSource = Path.of("../../../guest/kraftos/userland/coreutils/stat.c").readText()
+        val fsHeader = Path.of("../../../guest/kraftos/libc/include/kraft/fs.h").readText()
+        val syscallSource = Path.of("../../../guest/kraftos/libc/syscalls.c").readText()
 
         assertTrue(statSource.contains("#include <kraft/fs.h>"))
         assertTrue(statSource.contains("#include <unistd.h>"))
@@ -1936,7 +1936,7 @@ class K16FirmwareResourceTest {
 
     @Test
     fun k16CpUtilityCopiesRegularFilesThroughCLibc() {
-        val cpSource = Path.of("../../../guest/c/coreutils/cp.c").readText()
+        val cpSource = Path.of("../../../guest/kraftos/userland/coreutils/cp.c").readText()
 
         assertTrue(cpSource.contains("#include <fcntl.h>"))
         assertTrue(cpSource.contains("#include <string.h>"))
@@ -1953,10 +1953,10 @@ class K16FirmwareResourceTest {
 
     @Test
     fun k16MvUtilityRenamesRegularFilesThroughCLibcFs() {
-        val mvSource = Path.of("../../../guest/c/coreutils/mv.c").readText()
-        val fsHeader = Path.of("../../../guest/c/libc/include/kraft/fs.h").readText()
-        val syscallHeader = Path.of("../../../guest/c/libc/include/kraft/syscalls.h").readText()
-        val syscallSource = Path.of("../../../guest/c/libc/syscalls.c").readText()
+        val mvSource = Path.of("../../../guest/kraftos/userland/coreutils/mv.c").readText()
+        val fsHeader = Path.of("../../../guest/kraftos/libc/include/kraft/fs.h").readText()
+        val syscallHeader = Path.of("../../../guest/kraftos/libc/include/kraft/syscalls.h").readText()
+        val syscallSource = Path.of("../../../guest/kraftos/libc/syscalls.c").readText()
 
         assertTrue(mvSource.contains("#include <kraft/fs.h>"))
         assertTrue(mvSource.contains("#include <unistd.h>"))
@@ -1981,10 +1981,10 @@ class K16FirmwareResourceTest {
 
     @Test
     fun k16WriteUtilityCreatesRegularFileThroughCLibc() {
-        val writeSource = Path.of("../../../guest/c/coreutils/write.c").readText()
-        val unistdHeader = Path.of("../../../guest/c/libc/include/unistd.h").readText()
-        val fcntlHeader = Path.of("../../../guest/c/libc/include/fcntl.h").readText()
-        val stringHeader = Path.of("../../../guest/c/libc/include/string.h").readText()
+        val writeSource = Path.of("../../../guest/kraftos/userland/coreutils/write.c").readText()
+        val unistdHeader = Path.of("../../../guest/kraftos/libc/include/unistd.h").readText()
+        val fcntlHeader = Path.of("../../../guest/kraftos/libc/include/fcntl.h").readText()
+        val stringHeader = Path.of("../../../guest/kraftos/libc/include/string.h").readText()
 
         assertTrue(writeSource.contains("#include <fcntl.h>"))
         assertTrue(writeSource.contains("#include <string.h>"))
@@ -2010,9 +2010,9 @@ class K16FirmwareResourceTest {
 
     @Test
     fun k16RmUtilityRemovesRegularFileThroughCLibc() {
-        val rmSource = Path.of("../../../guest/c/coreutils/rm.c").readText()
-        val unistdHeader = Path.of("../../../guest/c/libc/include/unistd.h").readText()
-        val syscallSource = Path.of("../../../guest/c/libc/syscalls.c").readText()
+        val rmSource = Path.of("../../../guest/kraftos/userland/coreutils/rm.c").readText()
+        val unistdHeader = Path.of("../../../guest/kraftos/libc/include/unistd.h").readText()
+        val syscallSource = Path.of("../../../guest/kraftos/libc/syscalls.c").readText()
 
         assertTrue(rmSource.contains("#include <unistd.h>"))
         assertTrue(rmSource.contains("unlink(path)"))
@@ -2026,10 +2026,10 @@ class K16FirmwareResourceTest {
 
     @Test
     fun k16MkdirAndRmdirUtilitiesMutateDirectoriesThroughCLibc() {
-        val mkdirSource = Path.of("../../../guest/c/coreutils/mkdir.c").readText()
-        val rmdirSource = Path.of("../../../guest/c/coreutils/rmdir.c").readText()
-        val unistdHeader = Path.of("../../../guest/c/libc/include/unistd.h").readText()
-        val syscallSource = Path.of("../../../guest/c/libc/syscalls.c").readText()
+        val mkdirSource = Path.of("../../../guest/kraftos/userland/coreutils/mkdir.c").readText()
+        val rmdirSource = Path.of("../../../guest/kraftos/userland/coreutils/rmdir.c").readText()
+        val unistdHeader = Path.of("../../../guest/kraftos/libc/include/unistd.h").readText()
+        val syscallSource = Path.of("../../../guest/kraftos/libc/syscalls.c").readText()
 
         assertTrue(mkdirSource.contains("#include <unistd.h>"))
         assertTrue(mkdirSource.contains("mkdir(path)"))
@@ -2051,8 +2051,8 @@ class K16FirmwareResourceTest {
 
     @Test
     fun k16UserlandTicksUsesCShellAndKernelTimerApi() {
-        val shellSource = Path.of("../../../guest/c/shell/shell.c").readText()
-        val timerSource = Path.of("../../../rust/guest/k16-kernel/src/timer.rs").readText()
+        val shellSource = Path.of("../../../guest/kraftos/userland/shell/shell.c").readText()
+        val timerSource = Path.of("../../../guest/kraftos/kernel/src/timer.rs").readText()
 
         assertTrue(shellSource.contains("static unsigned char ticks_bytes[8];"), "shell ticks should use a stable caller-owned syscall buffer")
         assertTrue(shellSource.contains("__k16_syscall1("), "shell ticks should use the raw GAME_TICKS syscall helper")
@@ -2076,7 +2076,7 @@ class K16FirmwareResourceTest {
 
     @Test
     fun k16UserlandShellDefinesReadableLineEditingSemantics() {
-        val shellSource = Path.of("../../../guest/c/shell/shell.c").readText()
+        val shellSource = Path.of("../../../guest/kraftos/userland/shell/shell.c").readText()
 
         assertTrue(
             shellSource.contains("byte >= 0x20 && byte <= 0x7e"),
@@ -2095,7 +2095,7 @@ class K16FirmwareResourceTest {
 
     @Test
     fun k16KernelEntrypointLaunchesInitProgram() {
-        val mainSource = Path.of("../../../rust/guest/k16-kernel/src/main.rs").readText()
+        val mainSource = Path.of("../../../guest/kraftos/kernel/src/main.rs").readText()
 
         assertTrue(mainSource.contains("mod console;"), "kernel should register console for fd stdout")
         assertTrue(mainSource.contains("mod init;"), "kernel should register the init launcher module")
@@ -2110,13 +2110,13 @@ class K16FirmwareResourceTest {
 
     @Test
     fun k16KernelChildExitCompletionUsesSharedHelper() {
-        val mainSource = Path.of("../../../rust/guest/k16-kernel/src/main.rs").readText()
-        val syscallSource = Path.of("../../../rust/guest/k16-kernel/src/syscall.rs").readText()
-        val trapSource = Path.of("../../../rust/guest/k16-kernel/src/trap.rs").readText()
-        val childExitPath = Path.of("../../../rust/guest/k16-kernel/src/child_exit.rs")
+        val mainSource = Path.of("../../../guest/kraftos/kernel/src/main.rs").readText()
+        val syscallSource = Path.of("../../../guest/kraftos/kernel/src/syscall.rs").readText()
+        val trapSource = Path.of("../../../guest/kraftos/kernel/src/trap.rs").readText()
+        val childExitPath = Path.of("../../../guest/kraftos/kernel/src/child_exit.rs")
         assertTrue(Files.exists(childExitPath), "kernel should keep child-exit completion in a shared helper module")
         val childExitSource = childExitPath.readText()
-        val processSource = Path.of("../../../rust/guest/k16-kernel/src/process.rs").readText()
+        val processSource = Path.of("../../../guest/kraftos/kernel/src/process.rs").readText()
 
         assertTrue(mainSource.contains("mod child_exit;"), "kernel should register the shared child-exit helper")
         assertTrue(
@@ -2164,8 +2164,8 @@ class K16FirmwareResourceTest {
 
     @Test
     fun k16KernelFontCoversWorkingShellText() {
-        val fontSource = Path.of("../../../rust/guest/k16-kernel/src/font.rs").readText()
-        val shellSource = Path.of("../../../guest/c/shell/shell.c").readText()
+        val fontSource = Path.of("../../../guest/kraftos/kernel/src/font.rs").readText()
+        val shellSource = Path.of("../../../guest/kraftos/userland/shell/shell.c").readText()
 
         assertTrue(fontSource.contains("font_mono5x7::MONO5X7_ROWS"))
         assertTrue(fontSource.contains("font_mono5x7::FALLBACK_ROWS"))
@@ -2177,9 +2177,9 @@ class K16FirmwareResourceTest {
 
     @Test
     fun k16KernelSleepTicksUsesTimer0MmioParts() {
-        val timerSource = Path.of("../../../rust/guest/k16-kernel/src/timer.rs").readText()
-        val runtimeSource = Path.of("../../../rust/guest/k16-rt/src/time.rs").readText()
-        val runtimeLibSource = Path.of("../../../rust/guest/k16-rt/src/lib.rs").readText()
+        val timerSource = Path.of("../../../guest/kraftos/kernel/src/timer.rs").readText()
+        val runtimeSource = Path.of("../../../guest/kraftos/runtime/src/time.rs").readText()
+        val runtimeLibSource = Path.of("../../../guest/kraftos/runtime/src/lib.rs").readText()
 
         assertTrue(
             timerSource.contains("read_game_ticks_words(&mut low, &mut high)"),

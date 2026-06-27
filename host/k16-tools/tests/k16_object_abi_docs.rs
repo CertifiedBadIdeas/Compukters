@@ -5,8 +5,7 @@ fn repo_root() -> &'static Path {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .and_then(Path::parent)
-        .and_then(Path::parent)
-        .expect("compiler crate lives under rust/host/k16-tools")
+        .expect("compiler crate lives under host/k16-tools")
 }
 
 fn normalized_doc(path: &str) -> String {
@@ -179,10 +178,10 @@ fn k16_object_abi_docs_define_freestanding_runtime_boundary() {
         "`__k16_read_trap_arg2`",
         "`__k16_syscall3`",
         "`__k16_iret_with_r0`",
-        "guest/runtime/k16-memory-helpers.rs",
+        "guest/platform/k16/memory-helpers.rs",
         "requires `K16_RUSTC`",
         "`K16_LLVM_BIN_DIR`",
-        "`guest/c/arch/k16/cpu-helpers.kasm`",
+        "`guest/platform/k16/cpu-helpers.kasm`",
         "assembled with `k16 asm`",
         "Rust-built helper object",
         "Missing helper symbols are link-time errors",

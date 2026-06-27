@@ -27,7 +27,7 @@ import kotlin.test.assertTrue
 class K16StorageDurabilityArchitectureTest {
     @Test
     fun guestStorageExposesStorage0FlushCommand() {
-        val source = Path.of("../../../rust/guest/k16-kernel/src/storage.rs").readText()
+        val source = Path.of("../../../guest/kraftos/kernel/src/storage.rs").readText()
 
         assertTrue(source.contains("pub unsafe fn flush_storage0()"))
         assertTrue(source.contains("storage0::COMMAND_FLUSH"))
@@ -37,7 +37,7 @@ class K16StorageDurabilityArchitectureTest {
 
     @Test
     fun kernelFlushesRootStorageAfterSuccessfulMutations() {
-        val source = Path.of("../../../rust/guest/k16-kernel/src/fs.rs").readText()
+        val source = Path.of("../../../guest/kraftos/kernel/src/fs.rs").readText()
 
         assertTrue(source.contains("unsafe fn flush_root_storage()"))
         for (functionName in MUTATING_ROOT_FS_FUNCTIONS) {

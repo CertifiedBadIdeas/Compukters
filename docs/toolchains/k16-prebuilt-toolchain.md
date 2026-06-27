@@ -223,7 +223,7 @@ changes should pass the K16 lit suite and the host-tool smoke tests:
 ```
 
 ```bash
-cd rust/host/k16-tools
+cd host/k16-tools
 cargo test --test k16_runtime_cli
 cargo test --test k16_rust_smoke_artifacts
 ```

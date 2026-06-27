@@ -6,7 +6,7 @@ LLVM_BIN_DIR="${K16_LLVM_BIN_DIR:-$ROOT/.toolchain/build/llvm/k16-min/bin}"
 LLC="$LLVM_BIN_DIR/llc"
 LLVM_READOBJ="$LLVM_BIN_DIR/llvm-readobj"
 LLVM_NOT="$LLVM_BIN_DIR/not"
-K16_CARGO_MANIFEST="$ROOT/rust/host/k16-tools/Cargo.toml"
+K16_CARGO_MANIFEST="$ROOT/host/k16-tools/Cargo.toml"
 K16_HOST_CARGO_TARGET_DIR="${K16_HOST_CARGO_TARGET_DIR:-${CARGO_TARGET_DIR:-$ROOT/.toolchain/build/cargo/k16-tools}}"
 export CARGO_TARGET_DIR="$K16_HOST_CARGO_TARGET_DIR"
 

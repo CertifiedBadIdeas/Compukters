@@ -504,7 +504,7 @@ records the current stack pointer as `trap_stack_pointer` and enters
 stack rather than the interrupted user stack. A kernel handler can complete the
 service and use `iret` to resume the caller after the `syscall` instruction.
 
-The initial K16 syscall ABI v0 is a guest/runtime convention layered on this
+The initial K16 syscall ABI v0 is a guest runtime convention layered on this
 CPU instruction. The CPU does not decode syscall tables. Runtime helper code
 places the syscall number in `r1`, arguments in `r2`, `r3`, and `r4`, executes
 `syscall r1`, and receives the kernel result from `r0` after `iret`. The

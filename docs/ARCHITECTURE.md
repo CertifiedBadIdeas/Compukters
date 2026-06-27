@@ -11,7 +11,7 @@
 ## Overview
 
 Compukter Kraft is a Minecraft mod that adds programmable computers backed
-by a Rust virtual machine (`rust/host/k16-vm`). The mod ships a single
+by a Rust virtual machine (`host/k16-vm`). The mod ships a single
 player-facing computer item — **Notebook** — that starts a native
 `K16Computer` from a per-computer `bios.kflash` file. The BIOS executes on
 the Kraft16 guest CPU, can inspect storage0 boot media, and exposes devices
@@ -50,8 +50,8 @@ bad.
 
 | Crate            | Purpose                                                                  |
 |------------------|--------------------------------------------------------------------------|
-| `rust/host/k16-vm`  | Rust virtual machine: Kraft16 CPU, memory-mapped devices, `K16Computer` handle, JNI exports |
-| `rust/host/k16-tools` | Legacy Rux source checks plus K16 artifact tooling via `k16` for disassembly, volume, and filesystem commands |
+| `host/k16-vm`  | Rust virtual machine: Kraft16 CPU, memory-mapped devices, `K16Computer` handle, JNI exports |
+| `host/k16-tools` | Legacy Rux source checks plus K16 artifact tooling via `k16` for disassembly, volume, and filesystem commands |
 
 For a code-level map of the active Rust VM path, see
 [`k16-vm-code-flow.md`](k16-vm-code-flow.md).

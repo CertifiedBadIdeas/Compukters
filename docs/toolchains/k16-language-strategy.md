@@ -29,7 +29,7 @@ K16 CPU/ABI
 
 The existing Rux language/compiler/source layer is retired as an active path.
 Guest-owned BIOS, bootloader, kernel, runtime, and user-space source code
-should live under `rust/guest` and target Rust.
+should live under `guest/kraftos` and target Rust.
 
 ## Rationale
 
@@ -58,7 +58,7 @@ Deprecating Rux does not mean deleting existing files immediately. It means:
 - no Rux standard-library expansion as a strategic direction;
 - no new long-term application APIs designed primarily for Rux;
 - no new BIOS, bootloader, kernel, or user-space examples in Rux;
-- remaining guest software should be organized under `rust/guest`.
+- remaining guest software should be organized under `guest/kraftos`.
 
 Before the custom K16 Rust target is ready, new work should focus on the
 toolchain boundary rather than adding more Rux source. Acceptable temporary
@@ -84,7 +84,7 @@ The retirement target is the Rux language stack:
 - CLI behavior whose purpose is compiling Rux source.
 
 These pieces are not part of the active guest software structure. New guest
-work belongs under `rust/guest`.
+work belongs under `guest/kraftos`.
 
 The Rux language name remains Rux while the language exists. `.rx`, the Rux
 frontend, Rux stdlib modules, and Rux-language commands are not renamed by the
@@ -125,14 +125,14 @@ paths or VM shortcuts.
 
 ## Migration Rule
 
-Do not extend Rux. Build new guest slices under `rust/guest`; keep host tools
-under `rust/host/k16-tools` limited to artifact, linker, volume, filesystem,
+Do not extend Rux. Build new guest slices under `guest/kraftos`; keep host tools
+under `host/k16-tools` limited to artifact, linker, volume, filesystem,
 inspect, disassembly, runtime-object build, and run helpers.
 
 The active sequence is:
 
 ```text
-rust/guest/k16-rt
+guest/kraftos/runtime
   -> C BIOS
   -> C bootloader
   -> Rust kernel

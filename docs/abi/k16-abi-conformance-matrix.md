@@ -54,21 +54,21 @@ commands that match the changed layer:
 ```
 
 ```bash
-cd rust/host/k16-tools
+cd host/k16-tools
 K16_CARGO="$PWD/../../../.toolchain/k16/k16-dev-2026-06-13/linux-x86_64/bin/cargo" \
 K16_RUSTC="$PWD/../../../.toolchain/k16/k16-dev-2026-06-13/linux-x86_64/bin/rustc" \
 cargo test --test k16_runtime_cli
 ```
 
 ```bash
-cd rust/host/k16-tools
+cd host/k16-tools
 cargo test --test k16_rust_smoke_artifacts
 ```
 
 For documentation-only changes, also run:
 
 ```bash
-cd rust/host/k16-tools
+cd host/k16-tools
 cargo test --test k16_object_abi_docs
 ```
 

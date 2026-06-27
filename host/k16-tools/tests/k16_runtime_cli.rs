@@ -317,7 +317,7 @@ fn kasm_builds_checked_in_cpu_helper_source() {
     let startup_path = workspace.join("startup.o");
     let main_path = workspace.join("main.o");
     let output_path = workspace.join("cpu-helpers.o");
-    let source_path = repo_root().join("guest/c/arch/k16/cpu-helpers.kasm");
+    let source_path = repo_root().join("guest/platform/k16/cpu-helpers.kasm");
 
     let output = Command::new(k16_binary())
         .args([
@@ -1430,8 +1430,6 @@ fn repo_root() -> PathBuf {
         .expect("k16-tools parent exists")
         .parent()
         .expect("host parent exists")
-        .parent()
-        .expect("rust parent exists")
         .to_path_buf()
 }
 

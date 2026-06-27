@@ -76,8 +76,8 @@ class K16VmNativePackagingConventionTest {
         val rootBuild = rootBuildSource().readText()
         val loomConvention = loomRunsConventionSource().readText()
 
-        assertTrue(rootBuild.contains("rust/host/k16-vm/src/generated/font_mono5x7.rs"))
-        assertTrue(loomConvention.contains("dir(\"rust/host/k16-vm\")"))
+        assertTrue(rootBuild.contains("host/k16-vm/src/generated/font_mono5x7.rs"))
+        assertTrue(loomConvention.contains("dir(\"host/k16-vm\")"))
         assertTrue(loomConvention.contains(".toolchain/build/cargo/k16-vm"))
         assertTrue(loomConvention.contains("environment(\"CARGO_TARGET_DIR\""))
         assertFalse(rootBuild.contains("native/k16-vm"))

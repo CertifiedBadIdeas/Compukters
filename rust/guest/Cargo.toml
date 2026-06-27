@@ -1,7 +1,0 @@
-[workspace]
-members = [
-    "k16-abi",
-    "k16-kernel",
-    "k16-rt",
-]
-resolver = "2"

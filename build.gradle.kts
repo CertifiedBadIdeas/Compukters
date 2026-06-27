@@ -348,14 +348,14 @@ val buildK16HostTools =
     tasks.register<Exec>("buildK16HostTools") {
         description = "Builds K16 host tools such as k16-ld into .toolchain/build."
         group = "k16"
-        workingDir(rootProject.file("rust/host/k16-tools"))
-        inputs.dir(rootProject.file("rust/host/k16-tools/src"))
-        inputs.file(rootProject.file("rust/host/k16-tools/Cargo.toml"))
-        inputs.file(rootProject.file("rust/host/k16-tools/Cargo.lock"))
-        inputs.dir(rootProject.file("rust/host/k16-vm/src"))
-        inputs.file(rootProject.file("rust/host/k16-vm/Cargo.toml"))
-        inputs.dir(rootProject.file("rust/guest/k16-abi/src"))
-        inputs.file(rootProject.file("rust/guest/k16-abi/Cargo.toml"))
+        workingDir(rootProject.file("host/k16-tools"))
+        inputs.dir(rootProject.file("host/k16-tools/src"))
+        inputs.file(rootProject.file("host/k16-tools/Cargo.toml"))
+        inputs.file(rootProject.file("host/k16-tools/Cargo.lock"))
+        inputs.dir(rootProject.file("host/k16-vm/src"))
+        inputs.file(rootProject.file("host/k16-vm/Cargo.toml"))
+        inputs.dir(rootProject.file("guest/kraftos/abi/src"))
+        inputs.file(rootProject.file("guest/kraftos/abi/Cargo.toml"))
         inputs.property("k16HostToolsBuildJobs", k16HostToolsBuildJobs)
         outputs.file(k16BuiltLd)
         outputs.file(k16BuiltCli)
@@ -487,8 +487,8 @@ tasks.register<GenerateK16FontTablesTask>("generateK16FontTables") {
     description = "Generates Rust terminal font tables from the K16 bitmap font source."
     group = "k16"
     fontFile.set(layout.projectDirectory.file("assets/k16/fonts/k16-mono-5x7.font"))
-    rustOutput.set(layout.projectDirectory.file("rust/host/k16-vm/src/generated/font_mono5x7.rs"))
-    guestRustOutput.set(layout.projectDirectory.file("rust/guest/k16-kernel/src/generated/font_mono5x7.rs"))
+    rustOutput.set(layout.projectDirectory.file("host/k16-vm/src/generated/font_mono5x7.rs"))
+    guestRustOutput.set(layout.projectDirectory.file("guest/kraftos/kernel/src/generated/font_mono5x7.rs"))
 }
 
 tasks.register<GenerateK16FontSpecimenTask>("generateK16FontSpecimen") {
@@ -736,14 +736,14 @@ val testK16SourceBuiltDevToolchain =
         description = "Runs K16 host tool smoke tests against the staged source-built development toolchain."
         group = "verification"
         dependsOn(stageK16SourceBuiltDevToolchain)
-        workingDir(rootProject.file("rust/host/k16-tools"))
-        inputs.dir(rootProject.file("rust/host/k16-tools/src"))
-        inputs.file(rootProject.file("rust/host/k16-tools/Cargo.toml"))
-        inputs.file(rootProject.file("rust/host/k16-tools/Cargo.lock"))
-        inputs.dir(rootProject.file("rust/host/k16-vm/src"))
-        inputs.file(rootProject.file("rust/host/k16-vm/Cargo.toml"))
-        inputs.dir(rootProject.file("rust/guest/k16-abi/src"))
-        inputs.file(rootProject.file("rust/guest/k16-abi/Cargo.toml"))
+        workingDir(rootProject.file("host/k16-tools"))
+        inputs.dir(rootProject.file("host/k16-tools/src"))
+        inputs.file(rootProject.file("host/k16-tools/Cargo.toml"))
+        inputs.file(rootProject.file("host/k16-tools/Cargo.lock"))
+        inputs.dir(rootProject.file("host/k16-vm/src"))
+        inputs.file(rootProject.file("host/k16-vm/Cargo.toml"))
+        inputs.dir(rootProject.file("guest/kraftos/abi/src"))
+        inputs.file(rootProject.file("guest/kraftos/abi/Cargo.toml"))
         inputs.dir(k16SourceBuiltDevToolchainInstallRoot)
         inputs.property("k16HostToolsBuildJobs", k16HostToolsBuildJobs)
         commandLine(

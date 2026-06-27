@@ -114,8 +114,8 @@ path = "src/main.rs"
 test = false
 
 [dependencies]
-k16-abi = { path = "$ROOT/rust/guest/k16-abi" }
-k16-rt = { path = "$ROOT/rust/guest/k16-rt" }
+k16-abi = { path = "$ROOT/guest/kraftos/abi" }
+k16-rt = { path = "$ROOT/guest/kraftos/runtime" }
 TOML
 
 cat > "$WORK_DIR/guest/src/main.rs" <<'RS'
@@ -231,7 +231,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-k16-vm = { path = "$ROOT/rust/host/k16-vm" }
+k16-vm = { path = "$ROOT/host/k16-vm" }
 TOML
 
 cat > "$WORK_DIR/runner/src/main.rs" <<'RS'
