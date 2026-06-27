@@ -1442,6 +1442,37 @@ class K16FirmwareResourceTest {
     }
 
     @Test
+    fun bundledK16ShellBatchesInteractiveInputAndEchoOutput() {
+        val source = Path.of("../../../guest/kraftos/userland/shell/shell.c").readText()
+
+        assertTrue(source.contains("#define KRAFT_SHELL_READ_BUFFER_BYTES 64"))
+        assertTrue(source.contains("char read_buffer[KRAFT_SHELL_READ_BUFFER_BYTES]"))
+        assertTrue(source.contains("char echo_buffer[KRAFT_SHELL_READ_BUFFER_BYTES]"))
+        assertTrue(source.contains("flush_echo_run(echo_buffer, &echo_len)"))
+        assertFalse(
+            source.contains("write_all(STDOUT_FILENO, &byte, 1)"),
+            "shell printable echo should batch adjacent bytes instead of forcing one syscall per character",
+        )
+        assertFalse(
+            source.contains("char read_buffer[1]"),
+            "shell should let stdin drain more than one queued keyboard byte per syscall",
+        )
+    }
+
+    @Test
+    fun k16KernelStdinCopiesQueuedKeyboardBytesToUserInBatches() {
+        val source = Path.of("../../../guest/kraftos/kernel/src/stdin.rs").readText()
+
+        assertTrue(source.contains("const STDIN_READ_CHUNK_BYTES: usize = 64;"))
+        assertTrue(source.contains("let mut bytes = [0_u8; STDIN_READ_CHUNK_BYTES];"))
+        assertTrue(source.contains("user_buffer::copy_to_user(ptr, &bytes[..copied as usize])?;"))
+        assertFalse(
+            source.contains("user_buffer::copy_to_user(ptr + copied, &bytes)?;"),
+            "stdin should avoid one MMU0 copy/yield per queued keyboard byte",
+        )
+    }
+
+    @Test
     fun bundledK16ShellReadsKeyboardInputThroughFdStdin() {
         val workspace = createTempDirectory("k16-init-stdin-test-")
         val biosFlashPath = workspace.resolve("bios.kflash")
