@@ -554,6 +554,7 @@ class K16RuntimeDeviceTest {
         val snapshot = metrics.snapshot()
         assertTrue(snapshot.vm.k16OutputRefreshes >= 2)
         assertTrue(snapshot.vm.k16OutputRefreshNanos >= 0)
+        assertTrue(snapshot.vm.k16SerialOutputSnapshots >= 1)
         assertTrue(snapshot.vm.k16SerialOutputSnapshotBytes >= 4)
         assertEquals(1, snapshot.vm.k16GpuFrameBatches)
         assertEquals(encodedFrame.size.toLong(), snapshot.vm.k16GpuFrameBytes)

@@ -228,6 +228,7 @@ class RuntimeProfilingTest {
         assertEquals(1, snapshot.vm.k16RunPauseSignals)
         assertEquals(2, snapshot.vm.k16OutputRefreshes)
         assertEquals(150, snapshot.vm.k16OutputRefreshNanos)
+        assertEquals(2, snapshot.vm.k16SerialOutputSnapshots)
         assertEquals(12, snapshot.vm.k16SerialOutputSnapshotBytes)
         assertEquals(1, snapshot.vm.k16GpuFrameBatches)
         assertEquals(64, snapshot.vm.k16GpuFrameBytes)
@@ -278,7 +279,15 @@ class RuntimeProfilingTest {
             summary,
         )
         assertTrue(
-            summary.contains("    k16Output: refreshes=2, time=150 ns, serialSnapshotBytes=12, gpuBatches=1, gpuBytes=64, gpuFrames=2"),
+            summary.contains("    k16Output: refreshes=2, time=150 ns"),
+            summary,
+        )
+        assertTrue(
+            summary.contains("    k16TextOutput: snapshots=2, snapshotBytes=12"),
+            summary,
+        )
+        assertTrue(
+            summary.contains("    k16DisplayFrames: batches=1, bytes=64, frames=2"),
             summary,
         )
         assertTrue(
