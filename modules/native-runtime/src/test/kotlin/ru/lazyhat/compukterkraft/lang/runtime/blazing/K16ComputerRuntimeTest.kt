@@ -105,10 +105,10 @@ class K16ComputerRuntimeTest {
         val snapshot =
             NativeK16ComputerStatsSnapshot.from(
                 longArrayOf(
-                    4,
+                    5,
                     2, 3, 4, 5,
                     6, 7, 8, 9,
-                    31, 32, 33, 34, 35, 36,
+                    31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41,
                     1,
                     11, 0x1000, 64,
                     12, 13, 14, 15,
@@ -127,6 +127,11 @@ class K16ComputerRuntimeTest {
                 fileOpens = 34,
                 fileReads = 35,
                 statCalls = 36,
+                processSpawns = 37,
+                programLoads = 38,
+                dynamicImportLoads = 39,
+                libraryLoads = 40,
+                readDirCalls = 41,
             ),
             snapshot.os,
         )

@@ -440,6 +440,9 @@ impl ComputerMachine {
         }
         let memory = self.bus.memory();
         let read = |offset: u32| {
+            if offset.checked_add(8).is_none_or(|end| end > size) {
+                return 0;
+            }
             addr.checked_add(offset)
                 .and_then(|address| memory.load_u64(address).ok())
                 .unwrap_or_default()
@@ -451,6 +454,11 @@ impl ComputerMachine {
             file_opens: read(24),
             file_reads: read(32),
             stat_calls: read(40),
+            process_spawns: read(48),
+            program_loads: read(56),
+            dynamic_import_loads: read(64),
+            library_loads: read(72),
+            read_dir_calls: read(80),
         }
     }
 

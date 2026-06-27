@@ -388,8 +388,8 @@ fn k16_signal_values(signal: K16Signal) -> [jlong; 2] {
 }
 
 fn k16_computer_stats_snapshot_values(snapshot: &K16ComputerStatsSnapshot) -> Vec<jlong> {
-    let mut values = Vec::with_capacity(16 + snapshot.devices.len() * 20);
-    values.push(4);
+    let mut values = Vec::with_capacity(21 + snapshot.devices.len() * 20);
+    values.push(5);
     push_traffic_values(&mut values, snapshot.bus.ram);
     push_traffic_values(&mut values, snapshot.bus.mmio);
     values.push(snapshot.os.path_lookups as jlong);
@@ -398,6 +398,11 @@ fn k16_computer_stats_snapshot_values(snapshot: &K16ComputerStatsSnapshot) -> Ve
     values.push(snapshot.os.file_opens as jlong);
     values.push(snapshot.os.file_reads as jlong);
     values.push(snapshot.os.stat_calls as jlong);
+    values.push(snapshot.os.process_spawns as jlong);
+    values.push(snapshot.os.program_loads as jlong);
+    values.push(snapshot.os.dynamic_import_loads as jlong);
+    values.push(snapshot.os.library_loads as jlong);
+    values.push(snapshot.os.read_dir_calls as jlong);
     values.push(snapshot.devices.len() as jlong);
     for device in &snapshot.devices {
         values.push(device.device_id as jlong);
@@ -574,6 +579,11 @@ mod tests {
                 file_opens: 26,
                 file_reads: 27,
                 stat_calls: 28,
+                process_spawns: 29,
+                program_loads: 30,
+                dynamic_import_loads: 31,
+                library_loads: 32,
+                read_dir_calls: 33,
             },
             devices: vec![K16ComputerDeviceStats {
                 name: "debug",
@@ -602,8 +612,8 @@ mod tests {
         assert_eq!(
             k16_computer_stats_snapshot_values(&snapshot),
             vec![
-                4, 2, 3, 4, 5, 6, 7, 8, 9, 23, 24, 25, 26, 27, 28, 1, 11, 0x1000, 64, 12, 13, 14,
-                15, 0, 0, 0, 0, 0, 0, 16, 17, 18, 19, 20, 21, 22,
+                5, 2, 3, 4, 5, 6, 7, 8, 9, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 1, 11,
+                0x1000, 64, 12, 13, 14, 15, 0, 0, 0, 0, 0, 0, 16, 17, 18, 19, 20, 21, 22,
             ],
         );
     }

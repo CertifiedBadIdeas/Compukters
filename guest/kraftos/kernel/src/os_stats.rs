@@ -10,6 +10,11 @@ pub struct OsStats {
     file_opens: u64,
     file_reads: u64,
     stat_calls: u64,
+    process_spawns: u64,
+    program_loads: u64,
+    dynamic_import_loads: u64,
+    library_loads: u64,
+    read_dir_calls: u64,
 }
 
 const OS_STATS_SIZE: u32 = core::mem::size_of::<OsStats>() as u32;
@@ -21,6 +26,11 @@ static mut OS_STATS: OsStats = OsStats {
     file_opens: 0,
     file_reads: 0,
     stat_calls: 0,
+    process_spawns: 0,
+    program_loads: 0,
+    dynamic_import_loads: 0,
+    library_loads: 0,
+    read_dir_calls: 0,
 };
 
 pub fn register() {
@@ -53,6 +63,26 @@ pub fn record_file_read() {
 
 pub fn record_stat_call() {
     unsafe { increment(core::ptr::addr_of_mut!(OS_STATS.stat_calls)) }
+}
+
+pub fn record_process_spawn() {
+    unsafe { increment(core::ptr::addr_of_mut!(OS_STATS.process_spawns)) }
+}
+
+pub fn record_program_load() {
+    unsafe { increment(core::ptr::addr_of_mut!(OS_STATS.program_loads)) }
+}
+
+pub fn record_dynamic_import_load() {
+    unsafe { increment(core::ptr::addr_of_mut!(OS_STATS.dynamic_import_loads)) }
+}
+
+pub fn record_library_load() {
+    unsafe { increment(core::ptr::addr_of_mut!(OS_STATS.library_loads)) }
+}
+
+pub fn record_read_dir_call() {
+    unsafe { increment(core::ptr::addr_of_mut!(OS_STATS.read_dir_calls)) }
 }
 
 unsafe fn increment(counter: *mut u64) {
