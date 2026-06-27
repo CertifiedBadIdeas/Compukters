@@ -148,8 +148,9 @@ k16Storage0: reads=..., writes=..., flushes=..., bytesRead=..., bytesWritten=...
 
 - `k16Bus` separates regular RAM traffic from MMIO traffic.
 - `k16Devices` aggregates mapped MMIO device traffic and then lists per-device counters by hardware device id.
-- `k16Storage0` counts successful storage0 block read, block write, and flush commands, successful transfer bytes, and
-  commands that reached the controller but completed with an error status.
+- `k16Storage0` counts successful storage0 backend media reads, block write commands, flush commands, successful backend
+  transfer bytes, and commands that reached the controller but completed with an error status. Read cache hits still
+  complete the guest `READ_BLOCKS` command but do not increase `reads` or `bytesRead`.
 - These counters are cumulative inside the Rust VM; the Kotlin profiling collector stores the latest snapshot instead of
   summing repeated snapshots.
 
