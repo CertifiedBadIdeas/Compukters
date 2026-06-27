@@ -112,9 +112,7 @@ val generatedK16CSystemWriteTarget = generatedK16GuestTarget.map { it.dir("c-sys
 val generatedK16CSystemRmTarget = generatedK16GuestTarget.map { it.dir("c-system-rm") }
 val generatedK16CSystemMkdirTarget = generatedK16GuestTarget.map { it.dir("c-system-mkdir") }
 val generatedK16CSystemRmdirTarget = generatedK16GuestTarget.map { it.dir("c-system-rmdir") }
-val generatedK16SharedRuntimeTarget = generatedK16GuestTarget.map { it.dir("shared-runtime") }
 val generatedK16SharedKraftTarget = generatedK16GuestTarget.map { it.dir("shared-kraft") }
-val generatedK16RuntimeImportTestTarget = generatedK16GuestTarget.map { it.dir("runtime-import-test") }
 val generatedK16CSystemCatTarget = generatedK16GuestTarget.map { it.dir("c-system-cat") }
 val generatedK16AllocTestTarget = generatedK16GuestTarget.map { it.dir("alloc-test") }
 val generatedK16ProcTestTarget = generatedK16GuestTarget.map { it.dir("proc-test") }
@@ -131,14 +129,6 @@ val k16BootManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-b
 val k16BootSource = rootProject.layout.projectDirectory.file("rust/guest/k16-boot/src/main.rs")
 val k16KernelManifest = rootProject.layout.projectDirectory.file("rust/guest/k16-kernel/Cargo.toml")
 val k16KernelSource = rootProject.layout.projectDirectory.dir("rust/guest/k16-kernel/src")
-val k16SharedRuntimeManifest =
-    rootProject.layout.projectDirectory.file("rust/guest/k16-shared-runtime/Cargo.toml")
-val k16SharedRuntimeSource =
-    rootProject.layout.projectDirectory.file("rust/guest/k16-shared-runtime/src/main.rs")
-val k16RuntimeImportTestManifest =
-    rootProject.layout.projectDirectory.file("rust/guest/k16-runtime-import-test/Cargo.toml")
-val k16RuntimeImportTestSource =
-    rootProject.layout.projectDirectory.file("rust/guest/k16-runtime-import-test/src/main.rs")
 val k16CLibcIncludeSource = rootProject.layout.projectDirectory.dir("guest/c/libc/include")
 val k16CLibcStartupSource = rootProject.layout.projectDirectory.file("guest/c/libc/crt0.c")
 val k16CLibcSyscallSource = rootProject.layout.projectDirectory.file("guest/c/libc/syscalls.c")
@@ -198,9 +188,7 @@ val k16WriteArtifact = generatedK16FirmwareArtifacts.map { it.file("write.kx") }
 val k16RmArtifact = generatedK16FirmwareArtifacts.map { it.file("rm.kx") }
 val k16MkdirArtifact = generatedK16FirmwareArtifacts.map { it.file("mkdir.kx") }
 val k16RmdirArtifact = generatedK16FirmwareArtifacts.map { it.file("rmdir.kx") }
-val k16SharedRuntimeArtifact = generatedK16FirmwareArtifacts.map { it.file("libk16rt.kso") }
 val k16SharedKraftArtifact = generatedK16FirmwareArtifacts.map { it.file("libkraft.kso") }
-val k16RuntimeImportTestArtifact = generatedK16FirmwareArtifacts.map { it.file("runtime-import-test.kx") }
 val k16AllocTestArtifact = generatedK16FirmwareArtifacts.map { it.file("alloc-test.kx") }
 val k16ProcTestArtifact = generatedK16FirmwareArtifacts.map { it.file("proc-test.kx") }
 val k16SyscallFaultTestArtifact = generatedK16FirmwareArtifacts.map { it.file("syscall-fault-test.kx") }
@@ -219,12 +207,8 @@ val k16WriteMapArtifact = k16WriteArtifact.map { it.asFile.resolveSibling("${it.
 val k16RmMapArtifact = k16RmArtifact.map { it.asFile.resolveSibling("${it.asFile.nameWithoutExtension}.map") }
 val k16MkdirMapArtifact = k16MkdirArtifact.map { it.asFile.resolveSibling("${it.asFile.nameWithoutExtension}.map") }
 val k16RmdirMapArtifact = k16RmdirArtifact.map { it.asFile.resolveSibling("${it.asFile.nameWithoutExtension}.map") }
-val k16SharedRuntimeMapArtifact =
-    k16SharedRuntimeArtifact.map { it.asFile.resolveSibling("${it.asFile.nameWithoutExtension}.map") }
 val k16SharedKraftMapArtifact =
     k16SharedKraftArtifact.map { it.asFile.resolveSibling("${it.asFile.nameWithoutExtension}.map") }
-val k16RuntimeImportTestMapArtifact =
-    k16RuntimeImportTestArtifact.map { it.asFile.resolveSibling("${it.asFile.nameWithoutExtension}.map") }
 val k16AllocTestMapArtifact =
     k16AllocTestArtifact.map { it.asFile.resolveSibling("${it.asFile.nameWithoutExtension}.map") }
 val k16ProcTestMapArtifact = k16ProcTestArtifact.map { it.asFile.resolveSibling("${it.asFile.nameWithoutExtension}.map") }
@@ -247,15 +231,13 @@ val k16ProductionUserlandMapArtifacts =
         k16MkdirMapArtifact,
         k16RmdirMapArtifact,
     )
-val k16SharedRuntimeMapArtifacts =
+val k16SharedLibraryMapArtifacts =
     listOf(
-        k16SharedRuntimeMapArtifact,
         k16SharedKraftMapArtifact,
     )
 val k16DevelopmentOnlyMapArtifacts =
     listOf(
         k16AllocTestMapArtifact,
-        k16RuntimeImportTestMapArtifact,
         k16ProcTestMapArtifact,
     )
 val k16SystemStorage0Resource = generatedK16FirmwareResources.map { it.file("firmware/k16-system-storage0.kv") }
@@ -281,12 +263,10 @@ val k16ProductionStorageEntries =
 val k16DevelopmentOnlyStorageEntries =
     listOf(
         "/bin/alloc-test.kx" to k16AllocTestArtifact,
-        "/bin/runtime-import-test.kx" to k16RuntimeImportTestArtifact,
         "/bin/proc-test.kx" to k16ProcTestArtifact,
     )
-val k16SharedRuntimeStorageEntries =
+val k16SharedLibraryStorageEntries =
     listOf(
-        "/lib/libk16rt.kso" to k16SharedRuntimeArtifact,
         "/lib/libkraft.kso" to k16SharedKraftArtifact,
     )
 
@@ -1262,35 +1242,6 @@ val compileK16SystemRmdir =
         }
     }
 
-val compileK16SharedRuntime =
-    tasks.register("compileK16SharedRuntime") {
-        description = "Compiles and links the bundled K16 shared runtime provider into a K16E shared object."
-        group = "k16"
-        inputs.file(k16GuestManifest)
-        inputs.file(k16SharedRuntimeManifest)
-        inputs.file(k16SharedRuntimeSource)
-        inputsK16RuntimeCrates()
-        inputs.file(k16HostToolsManifest)
-        inputs.dir(k16HostToolsSource)
-        inputs.file(k16RustTargetSpec)
-        inputs.file(k16ToolchainConfig)
-        inputs.property("k16FirmwareProfile", k16FirmwareProfile)
-        outputs.file(k16SharedRuntimeArtifact)
-        outputs.file(k16SharedRuntimeMapArtifact)
-        dependsOn(rootProject.tasks.named("prepareK16Toolchain"))
-
-        doLast {
-            project.compileK16GuestRustBin(
-                manifest = k16SharedRuntimeManifest.asFile,
-                targetDir = generatedK16SharedRuntimeTarget.get().asFile,
-                binName = "k16-shared-runtime",
-                k16Target = "shared-object",
-                output = k16SharedRuntimeArtifact.get().asFile,
-                mapOutput = k16SharedRuntimeMapArtifact.get(),
-            )
-        }
-    }
-
 val compileK16SharedKraft =
     tasks.register("compileK16SharedKraft") {
         description = "Compiles and links the bundled Kraft shared userland library into a K16E shared object."
@@ -1315,42 +1266,6 @@ val compileK16SharedKraft =
                 includeDir = k16CLibcIncludeSource.asFile,
                 archRuntimeSource = k16CArchRuntimeSource.asFile,
                 source = k16CLibkraftSource.asFile,
-            )
-        }
-    }
-
-val compileK16RuntimeImportTest =
-    tasks.register("compileK16RuntimeImportTest") {
-        description = "Compiles and links the bundled K16 runtime import test into a dynamic K16E program artifact."
-        group = "k16"
-        inputs.file(k16GuestManifest)
-        inputs.file(k16RuntimeImportTestManifest)
-        inputs.file(k16RuntimeImportTestSource)
-        inputsK16RuntimeCrates()
-        inputs.file(k16SharedRuntimeArtifact)
-        inputs.file(k16HostToolsManifest)
-        inputs.dir(k16HostToolsSource)
-        inputs.file(k16RustTargetSpec)
-        inputs.file(k16ToolchainConfig)
-        inputs.property("k16FirmwareProfile", k16FirmwareProfile)
-        outputs.file(k16RuntimeImportTestArtifact)
-        outputs.file(k16RuntimeImportTestMapArtifact)
-        dependsOn(rootProject.tasks.named("prepareK16Toolchain"))
-        dependsOn("compileK16SharedRuntime")
-
-        doLast {
-            project.compileK16GuestRustBin(
-                manifest = k16RuntimeImportTestManifest.asFile,
-                targetDir = generatedK16RuntimeImportTestTarget.get().asFile,
-                binName = "k16-runtime-import-test",
-                k16Target = "program-dynamic",
-                output = k16RuntimeImportTestArtifact.get().asFile,
-                mapOutput = k16RuntimeImportTestMapArtifact.get(),
-                extraRuntimeLinkArgs =
-                    listOf(
-                        "-C link-arg=--dylib",
-                        "-C link-arg=${k16SharedRuntimeArtifact.get().asFile.absolutePath}",
-                    ),
             )
         }
     }
@@ -1546,10 +1461,10 @@ val putK16SystemStorage0Init =
     tasks.register("putK16SystemStorage0Init") {
         description = "Writes the bundled K16 userland layout into ROOT K16FS /bin, /lib, and /etc."
         group = "k16"
-        dependsOn(compileK16SystemStorage0, compileK16SystemInit, compileK16SystemShell, compileK16SystemUname, compileK16SystemLs, compileK16SystemCat, compileK16SystemCp, compileK16SystemMv, compileK16SystemStat, compileK16SystemWrite, compileK16SystemRm, compileK16SystemMkdir, compileK16SystemRmdir, compileK16SharedRuntime, compileK16SharedKraft)
+        dependsOn(compileK16SystemStorage0, compileK16SystemInit, compileK16SystemShell, compileK16SystemUname, compileK16SystemLs, compileK16SystemCat, compileK16SystemCp, compileK16SystemMv, compileK16SystemStat, compileK16SystemWrite, compileK16SystemRm, compileK16SystemMkdir, compileK16SystemRmdir, compileK16SharedKraft)
         dependsOn(rootProject.tasks.named("prepareK16Toolchain"))
         inputs.file(k16ToolchainConfig)
-        (k16ProductionStorageEntries + k16SharedRuntimeStorageEntries).forEach { (_, artifact) ->
+        (k16ProductionStorageEntries + k16SharedLibraryStorageEntries).forEach { (_, artifact) ->
             inputs.file(artifact)
         }
         outputs.file(k16SystemStorage0Resource)
@@ -1610,7 +1525,7 @@ val putK16SystemStorage0Init =
                 rootPartition.absolutePath,
                 "/etc",
             )
-            (k16ProductionStorageEntries + k16SharedRuntimeStorageEntries).forEach { (guestPath, artifact) ->
+            (k16ProductionStorageEntries + k16SharedLibraryStorageEntries).forEach { (guestPath, artifact) ->
                 putStorageEntry(guestPath, artifact)
             }
             runK16Command(
@@ -1635,7 +1550,7 @@ val putK16DevelopmentStorage0TestPrograms =
     tasks.register("putK16DevelopmentStorage0TestPrograms") {
         description = "Creates the development K16 storage0 image with test programs in ROOT K16FS /bin."
         group = "k16"
-        dependsOn(putK16SystemStorage0Init, compileK16SystemAllocTest, compileK16SystemProcTest, compileK16RuntimeImportTest)
+        dependsOn(putK16SystemStorage0Init, compileK16SystemAllocTest, compileK16SystemProcTest)
         dependsOn(rootProject.tasks.named("prepareK16Toolchain"))
         inputs.file(k16ToolchainConfig)
         inputs.file(k16SystemStorage0Resource)
@@ -1701,7 +1616,7 @@ val reportK16UserlandSize =
         description = "Reports K16 production and development storage and userland sizes."
         group = "k16"
         inputs.files(k16ProductionUserlandMapArtifacts)
-        inputs.files(k16SharedRuntimeMapArtifacts)
+        inputs.files(k16SharedLibraryMapArtifacts)
         inputs.files(k16DevelopmentOnlyMapArtifacts)
         inputs.file(k16SystemStorage0Resource)
         inputs.file(k16DevelopmentStorage0Resource)
@@ -1722,14 +1637,14 @@ val reportK16UserlandSize =
                 entries.sumOf { (_, artifact) -> artifactFile(artifact).length() }
 
             val productionEntryBytes = storageEntriesBytes(k16ProductionStorageEntries)
-            val sharedRuntimeEntryBytes = storageEntriesBytes(k16SharedRuntimeStorageEntries)
+            val sharedLibraryEntryBytes = storageEntriesBytes(k16SharedLibraryStorageEntries)
             val developmentOnlyEntryBytes = storageEntriesBytes(k16DevelopmentOnlyStorageEntries)
             println("storage_entries group=production files=${k16ProductionStorageEntries.size} bytes=$productionEntryBytes")
-            println("storage_entries group=shared_runtime files=${k16SharedRuntimeStorageEntries.size} bytes=$sharedRuntimeEntryBytes")
+            println("storage_entries group=shared_libraries files=${k16SharedLibraryStorageEntries.size} bytes=$sharedLibraryEntryBytes")
             println("storage_entries group=development_only files=${k16DevelopmentOnlyStorageEntries.size} bytes=$developmentOnlyEntryBytes")
             println(
-                "storage_entries group=development_total files=${k16ProductionStorageEntries.size + k16SharedRuntimeStorageEntries.size + k16DevelopmentOnlyStorageEntries.size} " +
-                    "bytes=${productionEntryBytes + sharedRuntimeEntryBytes + developmentOnlyEntryBytes}",
+                "storage_entries group=development_total files=${k16ProductionStorageEntries.size + k16SharedLibraryStorageEntries.size + k16DevelopmentOnlyStorageEntries.size} " +
+                    "bytes=${productionEntryBytes + sharedLibraryEntryBytes + developmentOnlyEntryBytes}",
             )
 
             fun runK16SizeReport(mapArtifacts: List<Provider<File>>) {
@@ -1754,8 +1669,8 @@ val reportK16UserlandSize =
 
             println("map_section name=production_userland")
             runK16SizeReport(k16ProductionUserlandMapArtifacts)
-            println("map_section name=shared_runtime")
-            runK16SizeReport(k16SharedRuntimeMapArtifacts)
+            println("map_section name=shared_libraries")
+            runK16SizeReport(k16SharedLibraryMapArtifacts)
             println("map_section name=development_only")
             runK16SizeReport(k16DevelopmentOnlyMapArtifacts)
         }

@@ -5,8 +5,6 @@ members = [
     "k16-boot",
     "k16-boot-chain",
     "k16-image",
-    "k16-runtime-import-test",
-    "k16-shared-runtime",
     "k16-alloc-test",
     "k16-proc-test",
     "k16-syscall-fault-test",

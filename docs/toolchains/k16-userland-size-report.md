@@ -30,7 +30,7 @@ host artifact bytes that are written into the K16FS ROOT partition:
 
 ```text
 storage_entries group=production files=<count> bytes=<bytes>
-storage_entries group=shared_runtime files=<count> bytes=<bytes>
+storage_entries group=shared_libraries files=<count> bytes=<bytes>
 storage_entries group=development_only files=<count> bytes=<bytes>
 storage_entries group=development_total files=<count> bytes=<bytes>
 ```
@@ -40,11 +40,10 @@ explicit artifact groups:
 
 - `map_section name=production_userland`: bundled init, shell, and production
   core utility maps.
-- `map_section name=shared_runtime`: shared runtime object maps under `/lib`,
-  currently including the real provider artifacts `libk16rt.kso` and
-  `libkraft.kso`.
+- `map_section name=shared_libraries`: shared userland library maps under
+  `/lib`, currently including `libkraft.kso`.
 - `map_section name=development_only`: development-only proof program maps such
-  as `alloc-test`, `proc-test`, and `runtime-import-test`.
+  as `alloc-test` and `proc-test`.
 
 `libkraft.kso` is the first project-owned userland shared OS ABI boundary.
 It exports explicitly prefixed syscall-shaped symbols such as `kraft_sys_open`,
@@ -74,12 +73,6 @@ The same pattern lets C source call `rename(old_path, new_path)` while importing
 the structured `kraft_sys_rename(request, len)` shared export. This proves the
 dynamic ABI can host C userland without making `libkraft` a Rust stdlib
 replacement or pulling in a full libc.
-
-`runtime-import-test` is intentionally still a development-only importer. It
-proves that bundled programs can call the `k16rt_memcpy`, `k16rt_memset`,
-`k16rt_memmove`, and `k16rt_memcmp` provider exports from `libk16rt.kso`
-through K16E import metadata without moving Rust `core`, `compiler_builtins`,
-Rust `std`, libc, or libc++ into shared libraries yet.
 
 Each map section has two `k16 size-report` subsections:
 

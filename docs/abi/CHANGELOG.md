@@ -20,6 +20,10 @@
   `kraft_run_with_args`) while importing those prefixed dynamic symbols through
   `__asm__` aliases. This keeps `libkraft.kso` as the syscall-shaped OS ABI
   provider and reserves unprefixed libc-style names for a future libc layer.
+- The Rust shared-runtime proof was removed from bundled userland. Production
+  and development K16 storage no longer include `/lib/libk16rt.kso` or
+  `/bin/runtime-import-test.kx`; `/lib/libkraft.kso` remains the shared C
+  userland OS ABI provider.
 - Production C userland now builds its K16 arch helper object from checked-in
   source at `guest/c/arch/k16/cpu-helpers.kasm` through `k16 asm <input.kasm>
   -o <output.ko>`. The bundled `/bin/*.kx` C programs and `/lib/libkraft.kso`
@@ -141,13 +145,6 @@
   `kraft_sys_exit`; it is not a Rust stdlib replacement. This
   remains narrower than dynamic Rust `core`, Rust `std`, libc, or libc++
   sharing.
-- Bundled K16 shared-runtime adoption now uses a real provider artifact:
-  `/lib/libk16rt.kso` from `rust/guest/k16-shared-runtime`. The development
-  importer `/bin/runtime-import-test.kx` imports `k16rt_memcpy`,
-  `k16rt_memset`, `k16rt_memmove`, and `k16rt_memcmp` through K16E v5
-  metadata. The provider reuses the same `k16-memory` implementation as
-  `k16-rt` while staying scoped to a small runtime provider rather than
-  dynamic Rust `std`, libc, or libc++.
 - `k16 link --target shared-object` now emits K16E v4 shared objects from
   retained global definitions, without requiring `_start`. `k16 link --target
   program-dynamic --import <library>:<symbol>` and `k16-ld --import
@@ -184,11 +181,10 @@
 - Bundled K16 storage is now split into production and development layouts:
   `firmware/k16-system-storage0.kv` excludes test and hosted-stdlib proof
   binaries, while test resources provide `firmware/k16-system-storage0-dev.kv`
-  with `/bin/alloc-test.kx`, `/bin/proc-test.kx`,
-  and `/bin/runtime-import-test.kx`.
+  with `/bin/alloc-test.kx` and `/bin/proc-test.kx`.
 - `:v1_21_1-neoforge:reportK16UserlandSize` now reports production and
   development storage image sizes, installed-entry byte totals, and separate
-  retained-section map sections for production userland, shared runtime objects,
+  retained-section map sections for production userland, shared libraries,
   and development-only programs.
 - The bundled K16 shell no longer carries a built-in `help` command or embedded
   command list. `help` now follows normal executable resolution as
