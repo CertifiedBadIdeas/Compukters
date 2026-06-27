@@ -21,6 +21,29 @@ pub fn blit_buffer(x: i32, y: i32, width: i32, height: i32, buffer_addr: u32, st
     }
 }
 
+pub fn fill_rect(x: i32, y: i32, width: i32, height: i32, color: u16) {
+    unsafe {
+        mmio::write_i32(gpu0::X, x);
+        mmio::write_i32(gpu0::Y, y);
+        mmio::write_i32(gpu0::RECT_WIDTH, width);
+        mmio::write_i32(gpu0::RECT_HEIGHT, height);
+        mmio::write_i32(gpu0::COLOR, color as i32);
+        mmio::write_i32(gpu0::COMMAND, gpu0::COMMAND_FILL_RECT);
+    }
+}
+
+pub fn copy_rect(src_x: i32, src_y: i32, width: i32, height: i32, dst_x: i32, dst_y: i32) {
+    unsafe {
+        mmio::write_i32(gpu0::SRC_X, src_x);
+        mmio::write_i32(gpu0::SRC_Y, src_y);
+        mmio::write_i32(gpu0::X, dst_x);
+        mmio::write_i32(gpu0::Y, dst_y);
+        mmio::write_i32(gpu0::RECT_WIDTH, width);
+        mmio::write_i32(gpu0::RECT_HEIGHT, height);
+        mmio::write_i32(gpu0::COMMAND, gpu0::COMMAND_COPY_RECT);
+    }
+}
+
 pub fn present() {
     unsafe {
         mmio::write_i32(gpu0::COMMAND, gpu0::COMMAND_PRESENT);

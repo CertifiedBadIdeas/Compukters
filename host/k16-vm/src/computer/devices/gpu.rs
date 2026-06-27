@@ -11,6 +11,8 @@ pub(crate) struct GpuDevice {
     error: i32,
     x: i32,
     y: i32,
+    src_x: i32,
+    src_y: i32,
     rect_width: i32,
     rect_height: i32,
     buffer_addr: u32,
@@ -41,6 +43,8 @@ impl GpuDevice {
             error: computer_abi::GPU0_ERROR_NONE,
             x: 0,
             y: 0,
+            src_x: 0,
+            src_y: 0,
             rect_width: Self::WIDTH,
             rect_height: Self::HEIGHT,
             buffer_addr: 0,
@@ -76,6 +80,8 @@ impl GpuDevice {
             52 => Ok(i32::from(self.color)),
             56 => Ok((self.sequence as u32) as i32),
             60 => Ok((self.sequence >> 32) as u32 as i32),
+            64 => Ok(self.src_x),
+            68 => Ok(self.src_y),
             _ => Err(MemoryFault::new(format!(
                 "computer gpu0 offset {offset} is not readable",
             ))),
@@ -113,6 +119,14 @@ impl GpuDevice {
                 self.color = u16::from_le_bytes([value.to_le_bytes()[0], value.to_le_bytes()[1]]);
                 Ok(())
             }
+            64 => {
+                self.src_x = value;
+                Ok(())
+            }
+            68 => {
+                self.src_y = value;
+                Ok(())
+            }
             _ => Err(MemoryFault::new(format!(
                 "computer gpu0 offset {offset} is not writable",
             ))),
@@ -139,6 +153,32 @@ impl GpuDevice {
                     return Ok(());
                 };
                 self.blit_buffer(memory);
+                Ok(())
+            }
+            computer_abi::GPU0_COMMAND_FILL_RECT => {
+                if self.rect_width <= 0 || self.rect_height <= 0 {
+                    self.set_error(computer_abi::GPU0_ERROR_INVALID_RECT);
+                    return Ok(());
+                }
+                self.display
+                    .fill_rect(self.x, self.y, self.rect_width, self.rect_height, self.color);
+                self.status = computer_abi::GPU0_STATUS_DONE;
+                Ok(())
+            }
+            computer_abi::GPU0_COMMAND_COPY_RECT => {
+                if self.rect_width <= 0 || self.rect_height <= 0 {
+                    self.set_error(computer_abi::GPU0_ERROR_INVALID_RECT);
+                    return Ok(());
+                }
+                self.display.copy_rect(
+                    self.src_x,
+                    self.src_y,
+                    self.rect_width,
+                    self.rect_height,
+                    self.x,
+                    self.y,
+                );
+                self.status = computer_abi::GPU0_STATUS_DONE;
                 Ok(())
             }
             computer_abi::GPU0_COMMAND_PRESENT => {

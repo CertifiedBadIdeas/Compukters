@@ -1277,6 +1277,72 @@ fn computer_gpu0_blits_guest_ram_to_frame_delta() {
 }
 
 #[test]
+fn computer_gpu0_fills_and_copies_rectangles() {
+    let mut machine = ComputerMachine::new(1024).unwrap();
+
+    machine.bus.store_i32(ComputerMachine::GPU0_COLOR, 0x07e0).unwrap();
+    machine.bus.store_i32(ComputerMachine::GPU0_X, 2).unwrap();
+    machine.bus.store_i32(ComputerMachine::GPU0_Y, 3).unwrap();
+    machine
+        .bus
+        .store_i32(ComputerMachine::GPU0_RECT_WIDTH, 2)
+        .unwrap();
+    machine
+        .bus
+        .store_i32(ComputerMachine::GPU0_RECT_HEIGHT, 2)
+        .unwrap();
+    machine
+        .bus
+        .store_i32(
+            ComputerMachine::GPU0_COMMAND,
+            ComputerMachine::GPU0_COMMAND_FILL_RECT,
+        )
+        .unwrap();
+    machine
+        .bus
+        .store_i32(
+            ComputerMachine::GPU0_COMMAND,
+            ComputerMachine::GPU0_COMMAND_PRESENT,
+        )
+        .unwrap();
+    machine.drain_gpu0_frames();
+
+    machine.bus.store_i32(ComputerMachine::GPU0_SRC_X, 2).unwrap();
+    machine.bus.store_i32(ComputerMachine::GPU0_SRC_Y, 3).unwrap();
+    machine.bus.store_i32(ComputerMachine::GPU0_X, 6).unwrap();
+    machine.bus.store_i32(ComputerMachine::GPU0_Y, 1).unwrap();
+    machine
+        .bus
+        .store_i32(ComputerMachine::GPU0_RECT_WIDTH, 2)
+        .unwrap();
+    machine
+        .bus
+        .store_i32(ComputerMachine::GPU0_RECT_HEIGHT, 2)
+        .unwrap();
+    machine
+        .bus
+        .store_i32(
+            ComputerMachine::GPU0_COMMAND,
+            ComputerMachine::GPU0_COMMAND_COPY_RECT,
+        )
+        .unwrap();
+    machine
+        .bus
+        .store_i32(
+            ComputerMachine::GPU0_COMMAND,
+            ComputerMachine::GPU0_COMMAND_PRESENT,
+        )
+        .unwrap();
+
+    let frames = machine.drain_gpu0_frames();
+
+    assert_eq!(frames.len(), 1);
+    let tile = &frames[0].tiles[0];
+    assert_eq!(rgb565_at(tile, 6, 1), 0x07e0);
+    assert_eq!(rgb565_at(tile, 7, 2), 0x07e0);
+}
+
+#[test]
 fn computer_gpu0_stats_snapshot_counts_blit_and_present_traffic() {
     let mut machine = ComputerMachine::new(1024).unwrap();
     machine
@@ -2172,6 +2238,8 @@ fn computer_machine_constants_match_profile_v2_abi() {
     );
     assert_eq!(ComputerMachine::GPU0_BASE, computer_abi::GPU0_BASE,);
     assert_eq!(ComputerMachine::GPU0_COMMAND, computer_abi::GPU0_COMMAND,);
+    assert_eq!(ComputerMachine::GPU0_SRC_X, computer_abi::GPU0_SRC_X,);
+    assert_eq!(ComputerMachine::GPU0_SRC_Y, computer_abi::GPU0_SRC_Y,);
     assert_eq!(
         ComputerMachine::GPU0_COMMAND_BLIT_BUFFER,
         computer_abi::GPU0_COMMAND_BLIT_BUFFER,
@@ -2179,6 +2247,14 @@ fn computer_machine_constants_match_profile_v2_abi() {
     assert_eq!(
         ComputerMachine::GPU0_COMMAND_PRESENT,
         computer_abi::GPU0_COMMAND_PRESENT,
+    );
+    assert_eq!(
+        ComputerMachine::GPU0_COMMAND_FILL_RECT,
+        computer_abi::GPU0_COMMAND_FILL_RECT,
+    );
+    assert_eq!(
+        ComputerMachine::GPU0_COMMAND_COPY_RECT,
+        computer_abi::GPU0_COMMAND_COPY_RECT,
     );
     assert_eq!(ComputerMachine::STATUS_RESET, computer_abi::STATUS_RESET);
     assert_eq!(
@@ -2281,6 +2357,13 @@ fn computer_machine_constants_match_profile_v2_abi() {
         ComputerMachine::MMU0_COMMAND_DESTROY_ADDRESS_SPACE,
         computer_abi::MMU0_COMMAND_DESTROY_ADDRESS_SPACE,
     );
+}
+
+fn rgb565_at(tile: &crate::display::DisplayTile, x: i32, y: i32) -> u16 {
+    let column = x - tile.x;
+    let row = y - tile.y;
+    let offset = ((row * tile.width + column) * 2) as usize;
+    u16::from_be_bytes([tile.payload[offset], tile.payload[offset + 1]])
 }
 
 #[test]

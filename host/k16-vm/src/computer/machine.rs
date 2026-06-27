@@ -170,6 +170,8 @@ impl ComputerMachine {
     pub const GPU0_COLOR: u32 = computer_abi::GPU0_COLOR;
     pub const GPU0_SEQUENCE_LOW: u32 = computer_abi::GPU0_SEQUENCE_LOW;
     pub const GPU0_SEQUENCE_HIGH: u32 = computer_abi::GPU0_SEQUENCE_HIGH;
+    pub const GPU0_SRC_X: u32 = computer_abi::GPU0_SRC_X;
+    pub const GPU0_SRC_Y: u32 = computer_abi::GPU0_SRC_Y;
     pub const GPU0_SIZE: u32 = computer_abi::GPU0_SIZE;
     pub const GPU0_PIXEL_FORMAT_RGB565: i32 = computer_abi::GPU0_PIXEL_FORMAT_RGB565;
     pub const GPU0_STATUS_READY: i32 = computer_abi::GPU0_STATUS_READY;
@@ -184,6 +186,8 @@ impl ComputerMachine {
     pub const GPU0_COMMAND_CLEAR: i32 = computer_abi::GPU0_COMMAND_CLEAR;
     pub const GPU0_COMMAND_BLIT_BUFFER: i32 = computer_abi::GPU0_COMMAND_BLIT_BUFFER;
     pub const GPU0_COMMAND_PRESENT: i32 = computer_abi::GPU0_COMMAND_PRESENT;
+    pub const GPU0_COMMAND_FILL_RECT: i32 = computer_abi::GPU0_COMMAND_FILL_RECT;
+    pub const GPU0_COMMAND_COPY_RECT: i32 = computer_abi::GPU0_COMMAND_COPY_RECT;
     pub const STORAGE0_BASE: u32 = computer_abi::STORAGE0_BASE;
     pub const STORAGE0_VERSION: u32 = computer_abi::STORAGE0_VERSION;
     pub const STORAGE0_STATUS: u32 = computer_abi::STORAGE0_STATUS;

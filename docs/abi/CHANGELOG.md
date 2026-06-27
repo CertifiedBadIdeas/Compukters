@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- `gpu0` now exposes `fill_rect` and `copy_rect` commands plus `src_x`/`src_y`
+  registers. Guest terminal scrolling can move existing pixels inside the gpu0
+  surface and clear only the final row instead of repainting every visible text
+  cell.
 - `k16 runtime k16-memory-helpers` now builds its Rust `#![no_core]` helper
   source from `guest/platform/k16/memory-helpers.rs` instead of keeping that
   host-generated helper source inside `guest/kraftos/runtime`. The `k16-rt` crate

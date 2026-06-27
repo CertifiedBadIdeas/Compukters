@@ -5,6 +5,11 @@ pub const CELL_HEIGHT: usize = font::CELL_HEIGHT;
 
 const FOREGROUND: u16 = 0xffff;
 const BACKGROUND: u16 = 0x0000;
+const COLUMNS: usize = crate::memory_layout::TERMINAL_COLUMNS as usize;
+const ROWS: usize = crate::memory_layout::TERMINAL_ROWS as usize;
+const TERMINAL_WIDTH: usize = CELL_WIDTH * COLUMNS;
+const SCROLL_HEIGHT: usize = CELL_HEIGHT * (ROWS - 1);
+const LAST_ROW_Y: usize = CELL_HEIGHT * (ROWS - 1);
 const GLYPH_PIXELS: usize = font::GLYPH_WIDTH * font::GLYPH_HEIGHT;
 const GLYPH_STRIDE_BYTES: u32 = (font::GLYPH_WIDTH * 2) as u32;
 
@@ -12,6 +17,24 @@ static mut GLYPH_BUFFER: [u16; GLYPH_PIXELS] = [0; GLYPH_PIXELS];
 
 pub fn clear_screen() {
     gpu::clear(BACKGROUND);
+}
+
+pub fn scroll_up() {
+    gpu::copy_rect(
+        0,
+        CELL_HEIGHT as i32,
+        TERMINAL_WIDTH as i32,
+        SCROLL_HEIGHT as i32,
+        0,
+        0,
+    );
+    gpu::fill_rect(
+        0,
+        LAST_ROW_Y as i32,
+        TERMINAL_WIDTH as i32,
+        CELL_HEIGHT as i32,
+        BACKGROUND,
+    );
 }
 
 pub fn repaint_cell(column: usize, row: usize, byte: u8) {

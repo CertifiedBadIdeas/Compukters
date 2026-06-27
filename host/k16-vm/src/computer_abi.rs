@@ -94,6 +94,8 @@ pub const GPU0_BUFFER_STRIDE_BYTES: u32 = GPU0_BASE + 48;
 pub const GPU0_COLOR: u32 = GPU0_BASE + 52;
 pub const GPU0_SEQUENCE_LOW: u32 = GPU0_BASE + 56;
 pub const GPU0_SEQUENCE_HIGH: u32 = GPU0_BASE + 60;
+pub const GPU0_SRC_X: u32 = GPU0_BASE + 64;
+pub const GPU0_SRC_Y: u32 = GPU0_BASE + 68;
 pub const GPU0_SIZE: u32 = PROFILE_V2_PAGE_SIZE;
 
 pub const GPU0_PIXEL_FORMAT_RGB565: i32 = 1;
@@ -112,6 +114,8 @@ pub const GPU0_COMMAND_NOP: i32 = 0;
 pub const GPU0_COMMAND_CLEAR: i32 = 1;
 pub const GPU0_COMMAND_BLIT_BUFFER: i32 = 2;
 pub const GPU0_COMMAND_PRESENT: i32 = 3;
+pub const GPU0_COMMAND_FILL_RECT: i32 = 4;
+pub const GPU0_COMMAND_COPY_RECT: i32 = 5;
 
 pub const TIMER0_BASE: u32 = 0x1000_0600;
 pub const TIMER0_VERSION: u32 = TIMER0_BASE;
