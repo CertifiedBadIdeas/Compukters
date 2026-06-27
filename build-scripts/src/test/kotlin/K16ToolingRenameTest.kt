@@ -66,19 +66,30 @@ class K16ToolingRenameTest {
     }
 
     @Test
-    fun rustBootloaderAndKernelLiveAsGuestCrates() {
+    fun cBootloaderAndRustKernelUseSeparateSourcePaths() {
         val workspaceManifest = root.resolve("rust/guest/Cargo.toml").readText()
         val bootManifest = root.resolve("rust/guest/k16-boot/Cargo.toml")
-        val bootSource = root.resolve("rust/guest/k16-boot/src/main.rs")
+        val rustBootSource = root.resolve("rust/guest/k16-boot/src/main.rs")
+        val cBootSource = root.resolve("guest/c/boot/boot.c")
+        val cBootChainSource = root.resolve("guest/c/boot-chain/boot_chain.c")
+        val cBootChainHeader = root.resolve("guest/c/boot-chain/boot_chain.h")
         val kernelManifest = root.resolve("rust/guest/k16-kernel/Cargo.toml")
         val kernelSource = root.resolve("rust/guest/k16-kernel/src/main.rs")
 
-        assertTrue(workspaceManifest.contains("\"k16-boot\""))
+        assertFalse(workspaceManifest.contains("\"k16-boot\""))
         assertTrue(workspaceManifest.contains("\"k16-kernel\""))
-        assertTrue(bootManifest.exists())
-        assertTrue(bootSource.exists())
+        assertFalse(bootManifest.exists())
+        assertFalse(rustBootSource.exists())
+        assertTrue(cBootSource.exists())
+        assertTrue(cBootChainSource.exists())
+        assertTrue(cBootChainHeader.exists())
         assertTrue(kernelManifest.exists())
         assertTrue(kernelSource.exists())
+
+        val boot = cBootSource.readText()
+        assertTrue(boot.contains("K16 BOOT"))
+        assertTrue(boot.contains("load_k16e_from_storage0"))
+        assertTrue(boot.contains("K16E_ABI_KIND_KERNEL"))
 
         val kernel = kernelSource.readText()
         assertTrue(kernel.contains("#![no_std]"))
@@ -94,7 +105,10 @@ class K16ToolingRenameTest {
 
         assertTrue(buildScript.contains("guest/c/bios/bios.c"))
         assertFalse(buildScript.contains("rust/guest/k16-bios"))
-        assertTrue(buildScript.contains("rust/guest/k16-boot"))
+        assertTrue(buildScript.contains("guest/c/boot/boot.c"))
+        assertTrue(buildScript.contains("guest/c/boot-chain/boot_chain.c"))
+        assertFalse(buildScript.contains("rust/guest/k16-boot/Cargo.toml"))
+        assertFalse(buildScript.contains("rust/guest/k16-boot/src"))
         assertTrue(buildScript.contains("rust/guest/k16-kernel"))
         assertFalse(buildScript.contains("tracked in #141"))
         assertFalse(buildScript.contains("--bin\",\\n            \"rux\""))

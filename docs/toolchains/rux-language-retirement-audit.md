@@ -64,18 +64,20 @@ storage images from:
 - `kernel_loader.rx` -> `kernel-loader.kb`;
 - `display_ok.rx` -> `display-ok.kx`.
 
-Those source inputs are retired from the active bundled firmware path. BIOS,
-bootloader, kernel, runtime, and program work is Rust-owned under `rust/guest`.
+Those source inputs are retired from the active bundled firmware path. BIOS and
+bootloader firmware are C-owned under `guest/c`; the kernel remains Rust-owned
+under `rust/guest`.
 
 The active NeoForge resource generation path now builds:
 
-- `rust/guest/k16-bios` -> `firmware/k16-bios.kflash`;
-- `rust/guest/k16-boot` -> `kernel-loader.kb`;
+- `guest/c/bios/bios.c` -> `firmware/k16-bios.kflash`;
+- `guest/c/boot/boot.c` plus `guest/c/boot-chain` -> `kernel-loader.kb`;
 - `rust/guest/k16-kernel` -> `display-ok.kx`.
 
-These builds resolve a prepared K16 Rust toolchain through Gradle
-`prepareK16Toolchain` and link through `k16-ld`. Missing prepared toolchain
-state is a hard error; there is no fallback to the retired Rux source inputs.
+These builds resolve a prepared K16 toolchain through Gradle
+`prepareK16Toolchain`. C firmware links through `k16 link`; the Rust kernel
+links through `k16-ld`. Missing prepared toolchain state is a hard error; there
+is no fallback to the retired Rux source inputs.
 
 ## Test Migration State
 

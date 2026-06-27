@@ -79,12 +79,37 @@ fn k16_kernel_timer_smoke_artifacts_are_documented() {
 fn k16_bios_splash_uses_sleep_boundary() {
     let root = repo_root();
     let bios_source = root.join("guest/c/bios/bios.c");
+    let boot_chain_source = root.join("guest/c/boot-chain/boot_chain.c");
+    let boot_chain_header = root.join("guest/c/boot-chain/boot_chain.h");
 
     let source = fs::read_to_string(&bios_source).expect("K16 BIOS source exists");
+    let boot_chain = fs::read_to_string(&boot_chain_source).expect("C boot-chain source exists");
+    let boot_chain_header =
+        fs::read_to_string(&boot_chain_header).expect("C boot-chain header exists");
     assert!(source.contains("sleep_ticks(20);"));
     assert!(source.contains("CONTROL_YIELD"));
+    assert!(source.contains("K16E_ABI_KIND_BOOTLOADER"));
+    assert!(source.contains("load_k16e_from_storage0"));
+    assert!(boot_chain.contains("K16PT"));
+    assert!(boot_chain.contains("K16FS"));
+    assert!(boot_chain_header.contains("struct k16_loaded_image"));
     assert!(!source.contains("k16_rt::sleep_ticks"));
     assert!(!source.contains("k16_rt::yield_once"));
+}
+
+#[test]
+fn k16_bootloader_is_c_built_and_loads_kernel() {
+    let root = repo_root();
+    let boot_source = root.join("guest/c/boot/boot.c");
+
+    let source = fs::read_to_string(&boot_source).expect("K16 bootloader source exists");
+    assert!(source.contains("K16 BOOT\\n"));
+    assert!(source.contains("load_k16e_from_storage0"));
+    assert!(source.contains("\"ROOT\""));
+    assert!(source.contains("\"boot\""));
+    assert!(source.contains("\"kernel.kx\""));
+    assert!(source.contains("K16E_ABI_KIND_KERNEL"));
+    assert!(!source.contains("k16_rt::halt_forever"));
 }
 
 #[test]
@@ -107,6 +132,7 @@ fn legacy_rust_userland_crates_are_removed_after_c_migration() {
         "k16-hosted-cat",
         "k16-hosted-hello",
         "k16-bios",
+        "k16-boot",
     ];
 
     for member in removed_members {
