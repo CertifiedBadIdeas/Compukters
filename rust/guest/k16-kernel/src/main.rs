@@ -12,6 +12,7 @@ mod font;
 mod fs;
 mod generated;
 mod gpu;
+mod image;
 mod init;
 mod memory_layout;
 mod mmio;

@@ -1,5 +1,3 @@
-#![no_std]
-
 pub const FIXED_K16E_V1_HEADER_SIZE: u32 = 52;
 pub const FIXED_K16E_V1_PAYLOAD_OFFSET: u32 = 52;
 pub const DYNAMIC_K16E_V2_HEADER_SIZE: u32 = 72;

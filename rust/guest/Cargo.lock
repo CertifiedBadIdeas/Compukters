@@ -7,15 +7,10 @@ name = "k16-abi"
 version = "0.1.0"
 
 [[package]]
-name = "k16-image"
-version = "0.1.0"
-
-[[package]]
 name = "k16-kernel"
 version = "0.1.0"
 dependencies = [
  "k16-abi",
- "k16-image",
  "k16-rt",
  "k16-storage",
 ]

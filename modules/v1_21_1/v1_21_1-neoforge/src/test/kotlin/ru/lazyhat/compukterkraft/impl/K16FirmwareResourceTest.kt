@@ -159,6 +159,7 @@ class K16FirmwareResourceTest {
         assertFalse(source.contains("--emit=obj"))
         assertTrue(source.contains("tasks.register<Exec>(\"compileK16SystemStorage0\")"))
         assertFalse(source.contains("rust/guest/k16-boot-chain"))
+        assertFalse(source.contains("rust/guest/k16-image"))
         assertFalse(source.contains("rust/guest/k16-bios"))
         assertFalse(source.contains("rust/guest/k16-boot/Cargo.toml"))
         assertFalse(source.contains("rust/guest/k16-boot/src"))

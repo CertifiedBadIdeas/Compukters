@@ -34,7 +34,7 @@ impl LoadError {
         Self { code: error.code() }
     }
 
-    const fn from_image(_error: k16_image::K16ImageError) -> Self {
+    const fn from_image(_error: crate::image::K16ImageError) -> Self {
         Self::INVALID_EXECUTABLE
     }
 }
@@ -87,7 +87,7 @@ unsafe fn load_k16e_file(expected_abi_kind: K16eAbiKind) -> Result<LoadedImage, 
         k16_storage::copy_selected_file_range_to_ram(
             0,
             SCRATCH_ADDR,
-            k16_image::FIXED_K16E_V1_HEADER_SIZE,
+            crate::image::FIXED_K16E_V1_HEADER_SIZE,
         )
         .map_err(LoadError::from_storage)?
     };
@@ -95,18 +95,18 @@ unsafe fn load_k16e_file(expected_abi_kind: K16eAbiKind) -> Result<LoadedImage, 
     let header = unsafe {
         core::slice::from_raw_parts(
             SCRATCH_ADDR as usize as *const u8,
-            k16_image::FIXED_K16E_V1_HEADER_SIZE as usize,
+            crate::image::FIXED_K16E_V1_HEADER_SIZE as usize,
         )
     };
     let plan =
-        k16_image::parse_fixed_k16e_v1(header, expected_abi_kind.into_image_kind(), unsafe {
+        crate::image::parse_fixed_k16e_v1(header, expected_abi_kind.into_image_kind(), unsafe {
             k16_storage::selected_file_size()
         })
         .map_err(LoadError::from_image)?;
 
     unsafe {
         k16_storage::copy_selected_file_range_to_ram(
-            k16_image::FIXED_K16E_V1_PAYLOAD_OFFSET,
+            crate::image::FIXED_K16E_V1_PAYLOAD_OFFSET,
             plan.load_addr,
             plan.file_size,
         )
@@ -121,11 +121,11 @@ unsafe fn load_k16e_file(expected_abi_kind: K16eAbiKind) -> Result<LoadedImage, 
 }
 
 impl K16eAbiKind {
-    const fn into_image_kind(self) -> k16_image::K16eAbiKind {
+    const fn into_image_kind(self) -> crate::image::K16eAbiKind {
         match self {
-            Self::Bootloader => k16_image::K16eAbiKind::Bootloader,
-            Self::Kernel => k16_image::K16eAbiKind::Kernel,
-            Self::Program => k16_image::K16eAbiKind::Program,
+            Self::Bootloader => crate::image::K16eAbiKind::Bootloader,
+            Self::Kernel => crate::image::K16eAbiKind::Kernel,
+            Self::Program => crate::image::K16eAbiKind::Program,
         }
     }
 }

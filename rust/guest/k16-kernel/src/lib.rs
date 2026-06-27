@@ -2,6 +2,7 @@
 
 pub mod boot_chain;
 pub mod fs;
+pub mod image;
 pub mod memory_layout;
 pub mod mmio;
 pub mod page_alloc;

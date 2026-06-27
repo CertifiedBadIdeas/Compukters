@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- The standalone Rust `rust/guest/k16-image` crate was removed. The K16E
+  parser and image metadata helpers now live inside
+  `rust/guest/k16-kernel/src/image.rs` as kernel-owned code used by process and
+  boot-chain loading; `k16-storage`, `k16-rt`, `k16-memory`, and `k16-abi`
+  remain separate Rust crates.
 - The standalone Rust `rust/guest/k16-boot-chain` crate was removed after the
   BIOS and bootloader moved to C. Its remaining Rust helper surface now lives
   inside `rust/guest/k16-kernel/src/boot_chain.rs` as kernel-owned code for
