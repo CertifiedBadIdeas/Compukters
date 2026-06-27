@@ -252,54 +252,6 @@ pub fn k16_cpu_helpers_object() -> Vec<u8> {
         "__k16_syscall1",
         &[syscall(ARG0_REGISTER), ret()],
     );
-    let write_syscall_words = syscall3_fixed_number_words(k16_abi::syscall::WRITE);
-    emit_symbol_function(
-        &mut text,
-        &mut strtab,
-        &mut symtab,
-        "__k16_write_syscall",
-        &write_syscall_words,
-    );
-    let read_syscall_words = syscall3_fixed_number_words(k16_abi::syscall::READ);
-    emit_symbol_function(
-        &mut text,
-        &mut strtab,
-        &mut symtab,
-        "__k16_read_syscall",
-        &read_syscall_words,
-    );
-    let open_syscall_words = syscall3_fixed_number_words(k16_abi::syscall::OPEN);
-    emit_symbol_function(
-        &mut text,
-        &mut strtab,
-        &mut symtab,
-        "__k16_open_syscall",
-        &open_syscall_words,
-    );
-    let close_syscall_words = syscall1_fixed_number_words(k16_abi::syscall::CLOSE);
-    emit_symbol_function(
-        &mut text,
-        &mut strtab,
-        &mut symtab,
-        "__k16_close_syscall",
-        &close_syscall_words,
-    );
-    let brk_syscall_words = syscall1_fixed_number_words(k16_abi::syscall::BRK);
-    emit_symbol_function(
-        &mut text,
-        &mut strtab,
-        &mut symtab,
-        "__k16_brk_syscall",
-        &brk_syscall_words,
-    );
-    let sbrk_syscall_words = syscall1_fixed_number_words(k16_abi::syscall::SBRK);
-    emit_symbol_function(
-        &mut text,
-        &mut strtab,
-        &mut symtab,
-        "__k16_sbrk_syscall",
-        &sbrk_syscall_words,
-    );
     let stack_arg0_addr = add(SCRATCH_REGISTER, STACK_POINTER_REGISTER, SCRATCH_REGISTER);
     let syscall3_words = [
         const4(SCRATCH_REGISTER, 4),
@@ -598,32 +550,6 @@ fn load_return_from_arg0_offset(offset: u32) -> Vec<u16> {
     words.extend(const32_words(SCRATCH_REGISTER, offset));
     words.extend(add(SCRATCH_REGISTER, ARG0_REGISTER, SCRATCH_REGISTER));
     words.push(load32(RETURN_REGISTER, SCRATCH_REGISTER));
-    words
-}
-
-fn syscall3_fixed_number_words(number: u32) -> Vec<u16> {
-    let copy_arg2_to_syscall_arg2 = add(SYSCALL_ARG2_REGISTER, ARG2_REGISTER, SCRATCH_REGISTER);
-    let copy_arg1_to_syscall_arg1 = add(ARG2_REGISTER, ARG1_REGISTER, SCRATCH_REGISTER);
-    let copy_arg0_to_syscall_arg0 = add(ARG1_REGISTER, ARG0_REGISTER, SCRATCH_REGISTER);
-    let mut words = Vec::new();
-    words.extend(const32_words(SCRATCH_REGISTER, 0));
-    words.extend(copy_arg2_to_syscall_arg2);
-    words.extend(copy_arg1_to_syscall_arg1);
-    words.extend(copy_arg0_to_syscall_arg0);
-    words.extend(const32_words(ARG0_REGISTER, number));
-    words.push(syscall(ARG0_REGISTER));
-    words.push(ret());
-    words
-}
-
-fn syscall1_fixed_number_words(number: u32) -> Vec<u16> {
-    let copy_arg0_to_syscall_arg0 = add(ARG1_REGISTER, ARG0_REGISTER, SCRATCH_REGISTER);
-    let mut words = Vec::new();
-    words.extend(const32_words(SCRATCH_REGISTER, 0));
-    words.extend(copy_arg0_to_syscall_arg0);
-    words.extend(const32_words(ARG0_REGISTER, number));
-    words.push(syscall(ARG0_REGISTER));
-    words.push(ret());
     words
 }
 
