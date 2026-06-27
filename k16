@@ -21,7 +21,7 @@
 set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-MANIFEST="$ROOT/rust/host/k16-tools/Cargo.toml"
+MANIFEST="$ROOT/host/k16-tools/Cargo.toml"
 
 usage() {
     cat >&2 <<'EOF'

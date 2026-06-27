@@ -40,7 +40,7 @@ EOF
 
 create_temp_repo() {
     repo="$1"
-    mkdir -p "$repo/rust/host/k16-vm" "$repo/docs/benchmarks"
+    mkdir -p "$repo/host/k16-vm" "$repo/docs/benchmarks"
     git -C "$repo" init -q
     git -C "$repo" config user.email "test@example.invalid"
     git -C "$repo" config user.name "Benchmark Test"

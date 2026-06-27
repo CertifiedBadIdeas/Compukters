@@ -57,8 +57,7 @@ fn normalized_doc(path: &str) -> String {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .and_then(Path::parent)
-        .and_then(Path::parent)
-        .expect("rust/host/k16-tools has repo root great-grandparent");
+        .expect("host/k16-tools has repo root grandparent");
     fs::read_to_string(root.join(path))
         .expect("doc reads")
         .split_whitespace()

@@ -14,5 +14,5 @@ test = false
 required-features = ["k16-target"]
 
 [dependencies]
-k16-abi = { path = "../k16-abi" }
-k16-rt = { path = "../k16-rt" }
+k16-abi = { path = "../abi" }
+k16-rt = { path = "../runtime" }

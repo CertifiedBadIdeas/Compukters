@@ -44,7 +44,7 @@ if [ -r /proc/cpuinfo ]; then
 fi
 
 benchmark_output="$(
-    cd "$ROOT/rust/host/k16-vm"
+    cd "$ROOT/host/k16-vm"
     cargo run --release --example vm_microbenchmarks -- "$ITERATIONS" "$SAMPLES"
 )"
 

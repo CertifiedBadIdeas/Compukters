@@ -392,15 +392,14 @@ fn build_k16_memory_helpers(output_path: &Path) -> Result<(), String> {
 }
 
 fn k16_memory_helpers_source_path() -> PathBuf {
-    repo_root().join("guest/runtime/k16-memory-helpers.rs")
+    repo_root().join("guest/platform/k16/memory-helpers.rs")
 }
 
 fn repo_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .and_then(Path::parent)
-        .and_then(Path::parent)
-        .expect("rust/host/k16-tools has repo root great-grandparent")
+        .expect("host/k16-tools has repo root grandparent")
         .to_path_buf()
 }
 

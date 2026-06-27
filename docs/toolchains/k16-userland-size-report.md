@@ -56,10 +56,10 @@ It exports explicitly prefixed syscall-shaped symbols such as `kraft_sys_open`,
 Production `/bin/uname.kx`, `/bin/cat.kx`, `/bin/write.kx`, `/bin/rm.kx`,
 `/bin/mkdir.kx`, `/bin/rmdir.kx`, `/bin/stat.kx`, `/bin/ls.kx`, `/bin/cp.kx`,
 and `/bin/mv.kx` are built from C with the source-built-dev K16 `clang`, use
-the small libc-lite startup/header layer under `guest/c/libc`, and call the
+the small libc-lite startup/header layer under `guest/kraftos/libc`, and call the
 `libkraft.kso` shared OS ABI.
 Their K16 CPU/syscall helper surface comes from the checked-in
-`guest/c/arch/k16/cpu-helpers.kasm` source runtime assembled by `k16 asm`, not
+`guest/platform/k16/cpu-helpers.kasm` source runtime assembled by `k16 asm`, not
 from host-generated helper text.
 `/bin/uname.kx` remains the smallest bundled importer: it imports `write`
 through K16E import metadata instead of retaining that syscall-boundary call in

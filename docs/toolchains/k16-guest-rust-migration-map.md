@@ -7,8 +7,9 @@
 ## Policy
 
 The active direction is a C-first userland/coreutils policy. New production
-KraftOS userland programs should prefer `guest/c` and the libc-lite surface
-unless a slice explicitly needs Rust to validate the compiler/toolchain path.
+KraftOS userland programs should prefer `guest/kraftos/userland` and the
+libc-lite surface unless a slice explicitly needs Rust to validate the
+compiler/toolchain path.
 
 Rust kernel remains Rust for now. The C-first policy does not rewrite the K16
 kernel, boot chain, low-level runtime crates, host VM, host tools, LLVM backend,
@@ -22,44 +23,44 @@ production build or focused test needs them.
 
 ## Current C Guest Root
 
-- `guest/c/libc` contains libc-lite startup, syscall wrappers, and public
+- `guest/kraftos/libc` contains libc-lite startup, syscall wrappers, and public
   standard-shaped headers.
-- `guest/c/init` contains the production C init launcher.
-- `guest/c/shell` contains the production C shell.
-- `guest/c/coreutils` contains production C coreutils.
+- `guest/kraftos/userland/init` contains the production C init launcher.
+- `guest/kraftos/userland/shell` contains the production C shell.
+- `guest/kraftos/userland/coreutils` contains production C coreutils.
 
 ## Migration Roles
 
 | Crate | Current role | C-first disposition |
 | --- | --- | --- |
-| `rust/guest/k16-abi` | Shared K16 guest ABI definitions used by Rust guest code. | Keep Rust while Rust kernel/runtime crates exist. |
-| `rust/guest/k16-alloc-test` | Former development heap/syscall smoke utility. | Removed with the Rust userland proof layer. |
-| `rust/guest/k16-bios` | Former Rust BIOS firmware. | Removed; bundled BIOS now builds from `guest/c/bios/bios.c`. |
-| `rust/guest/k16-boot` | Former Rust system boot program. | Removed; bundled bootloader now builds from `guest/c/boot/boot.c` and `guest/c/boot-chain`. |
-| `rust/guest/k16-boot-chain` | Former Rust boot-chain support library. | Removed; remaining Rust helper code now lives inside `rust/guest/k16-kernel/src/boot_chain.rs`, while C firmware uses the separate `guest/c/boot-chain` helper. |
-| `rust/guest/k16-image` | Former guest-side K16E image parser library. | Removed; remaining Rust image parser code now lives inside `rust/guest/k16-kernel/src/image.rs` as kernel-owned code. |
-| `rust/guest/k16-init` | Former Rust production init process. | Legacy/removable after no focused tests/docs need the old Rust launcher; production `/bin/init.kx` now builds from `guest/c/init/init.c`. |
-| `rust/guest/k16-kernel` | Rust K16 kernel and OS internals. | Keep Rust. Kernel rewrite is explicitly out of scope for #367. |
-| `rust/guest/k16-memory` | Former standalone Rust memory helper library. | Removed; remaining Rust memory helpers now live inside `rust/guest/k16-rt/src/memory.rs` as runtime-owned code. |
-| `rust/guest/k16-proc-test` | Former development process-model smoke utility. | Removed with the Rust userland proof layer. |
-| `rust/guest/k16-rt` | Low-level Rust guest runtime/syscall/trap/memory helper crate. | Keep Rust for Rust kernel/runtime consumers; do not expand as userland std. Host-generated memory helper object source now lives outside this crate under `guest/runtime`. |
-| `rust/guest/k16-runtime-import-test` | Former development dynamic-import smoke program for `libk16rt.kso`. | Removed with the Rust shared-runtime proof. |
-| `rust/guest/k16-shared-kraft` | Former Rust provider for the shared OS ABI library `libkraft.kso`. | Removed; `/lib/libkraft.kso` now builds from `guest/c/libkraft/libkraft.c`. |
-| `rust/guest/k16-shared-runtime` | Former Rust provider for `libk16rt.kso` memory helpers. | Removed; production userland now ships only the C `libkraft.kso` shared library. |
-| `rust/guest/k16-shell` | Former Rust production shell. | Legacy/removable after no focused tests/docs need the old Rust shell; production `/bin/shell.kx` now builds from `guest/c/shell/shell.c`. |
-| `rust/guest/k16-storage` | Former guest storage/filesystem support library. | Removed; remaining Rust K16PT/K16FS storage helper code now lives inside `rust/guest/k16-kernel/src/storage.rs` as kernel-owned code. |
-| `rust/guest/k16-syscall-fault-test` | Former development syscall fault smoke utility. | Removed with the Rust userland proof layer. |
-| `rust/guest/k16-user-fault-test` | Former development user fault smoke utility. | Removed with the Rust userland proof layer. |
-| `rust/guest/kraft-std` | Former Rust userland convenience layer over K16 syscalls. | Removed; C libc-lite is the active userland API layer. |
+| `guest/kraftos/abi` | Shared K16 guest ABI definitions used by Rust guest code. | Keep Rust while Rust kernel/runtime crates exist. |
+| `guest/kraftos/k16-alloc-test` | Former development heap/syscall smoke utility. | Removed with the Rust userland proof layer. |
+| `guest/kraftos/k16-bios` | Former Rust BIOS firmware. | Removed; bundled BIOS now builds from `guest/firmware/bios/bios.c`. |
+| `guest/kraftos/k16-boot` | Former Rust system boot program. | Removed; bundled bootloader now builds from `guest/firmware/boot/boot.c` and `guest/firmware/boot-chain`. |
+| `guest/kraftos/k16-boot-chain` | Former Rust boot-chain support library. | Removed; remaining Rust helper code now lives inside `guest/kraftos/kernel/src/boot_chain.rs`, while C firmware uses the separate `guest/firmware/boot-chain` helper. |
+| `guest/kraftos/k16-image` | Former guest-side K16E image parser library. | Removed; remaining Rust image parser code now lives inside `guest/kraftos/kernel/src/image.rs` as kernel-owned code. |
+| `guest/kraftos/k16-init` | Former Rust production init process. | Legacy/removable after no focused tests/docs need the old Rust launcher; production `/bin/init.kx` now builds from `guest/kraftos/userland/init/init.c`. |
+| `guest/kraftos/kernel` | Rust K16 kernel and OS internals. | Keep Rust. Kernel rewrite is explicitly out of scope for #367. |
+| `guest/kraftos/k16-memory` | Former standalone Rust memory helper library. | Removed; remaining Rust memory helpers now live inside `guest/kraftos/runtime/src/memory.rs` as runtime-owned code. |
+| `guest/kraftos/k16-proc-test` | Former development process-model smoke utility. | Removed with the Rust userland proof layer. |
+| `guest/kraftos/runtime` | Low-level Rust guest runtime/syscall/trap/memory helper crate. | Keep Rust for Rust kernel/runtime consumers; do not expand as userland std. Host-generated memory helper object source now lives outside this crate under `guest/platform/k16`. |
+| `guest/kraftos/k16-runtime-import-test` | Former development dynamic-import smoke program for `libk16rt.kso`. | Removed with the Rust shared-runtime proof. |
+| `guest/kraftos/k16-shared-kraft` | Former Rust provider for the shared OS ABI library `libkraft.kso`. | Removed; `/lib/libkraft.kso` now builds from `guest/kraftos/lib/libkraft/libkraft.c`. |
+| `guest/kraftos/k16-shared-runtime` | Former Rust provider for `libk16rt.kso` memory helpers. | Removed; production userland now ships only the C `libkraft.kso` shared library. |
+| `guest/kraftos/k16-shell` | Former Rust production shell. | Legacy/removable after no focused tests/docs need the old Rust shell; production `/bin/shell.kx` now builds from `guest/kraftos/userland/shell/shell.c`. |
+| `guest/kraftos/k16-storage` | Former guest storage/filesystem support library. | Removed; remaining Rust K16PT/K16FS storage helper code now lives inside `guest/kraftos/kernel/src/storage.rs` as kernel-owned code. |
+| `guest/kraftos/k16-syscall-fault-test` | Former development syscall fault smoke utility. | Removed with the Rust userland proof layer. |
+| `guest/kraftos/k16-user-fault-test` | Former development user fault smoke utility. | Removed with the Rust userland proof layer. |
+| `guest/kraftos/kraft-std` | Former Rust userland convenience layer over K16 syscalls. | Removed; C libc-lite is the active userland API layer. |
 
 ## Removed Rust Userland Crates
 
 The former Rust production init launcher `k16-init` has been replaced in the
-production image by `guest/c/init/init.c`. The old Rust crate remains in the
+production image by `guest/kraftos/userland/init/init.c`. The old Rust crate remains in the
 workspace until the deletion rule below is satisfied.
 
 The former Rust production shell `k16-shell` has been replaced in the
-production image by `guest/c/shell/shell.c`. The C shell preserves the shipped
+production image by `guest/kraftos/userland/shell/shell.c`. The C shell preserves the shipped
 prompt, builtins, cwd-aware path handling, `RUN` argv dispatch, and fd-backed
 stdin/stdout behavior while removing the production Rust `core,alloc` shell
 build.
@@ -67,8 +68,8 @@ build.
 The former Rust production coreutils `k16-uname`, `k16-cat`, `k16-write`,
 `k16-rm`, `k16-mkdir`, `k16-rmdir`, `k16-stat`, `k16-ls`, `k16-cp`, and
 `k16-mv` have been removed from the guest workspace after their production
-artifacts moved to `guest/c/coreutils`. The bundled MOTD data now lives at
-`guest/data/etc/motd`, outside any Rust utility crate.
+artifacts moved to `guest/kraftos/userland/coreutils`. The bundled MOTD data now lives at
+`guest/kraftos/data/etc/motd`, outside any Rust utility crate.
 
 The hosted Rust proof crates `k16-hosted-cat` and `k16-hosted-hello` were also
 removed from the guest workspace. Hosted Rust std is no longer an active
@@ -76,7 +77,7 @@ userland proof path.
 
 The former Rust shared OS ABI provider `k16-shared-kraft` was removed from the
 guest workspace after `/lib/libkraft.kso` moved to
-`guest/c/libkraft/libkraft.c`.
+`guest/kraftos/lib/libkraft/libkraft.c`.
 
 The Rust shared-runtime proof crates `k16-shared-runtime` and
 `k16-runtime-import-test` were removed from the guest workspace. The production

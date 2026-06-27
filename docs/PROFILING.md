@@ -13,7 +13,7 @@ The native Kraft16 VM has a dependency-free microbenchmark example for local
 before/after comparisons:
 
 ```bash
-cd rust/host/k16-vm
+cd host/k16-vm
 cargo run --release --example vm_microbenchmarks -- 100000 5
 ```
 
@@ -150,7 +150,7 @@ counts, and `K16ComputerHandle::stats_snapshot()` wraps those counters with name
 Use the Rust-only VM stats report when the question is about VM work rather than host integration overhead:
 
 ```bash
-cd rust/host/k16-vm
+cd host/k16-vm
 cargo run --release --example vm_stats_report -- 100000
 ```
 
@@ -234,7 +234,7 @@ For a code-level map of the Rust VM execution path, see
 Run Rust crate tests:
 
 ```bash
-cd rust/host/k16-vm && cargo test
+cd host/k16-vm && cargo test
 ```
 
 Build the local JNI library:

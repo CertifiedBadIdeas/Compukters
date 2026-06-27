@@ -3,37 +3,37 @@
 ## Unreleased
 
 - `k16 runtime k16-memory-helpers` now builds its Rust `#![no_core]` helper
-  source from `guest/runtime/k16-memory-helpers.rs` instead of keeping that
-  host-generated helper source inside `rust/guest/k16-rt`. The `k16-rt` crate
+  source from `guest/platform/k16/memory-helpers.rs` instead of keeping that
+  host-generated helper source inside `guest/kraftos/runtime`. The `k16-rt` crate
   remains the Rust kernel runtime API boundary.
-- The standalone Rust `rust/guest/k16-memory` crate was removed. The Rust
+- The standalone Rust `guest/kraftos/k16-memory` crate was removed. The Rust
   `k16_memcpy`, `k16_memmove`, `k16_memset`, and `k16_memcmp` implementations
-  now live directly in `rust/guest/k16-rt/src/memory.rs`. `k16-abi` and
+  now live directly in `guest/kraftos/runtime/src/memory.rs`. `k16-abi` and
   `k16-rt` remain separate Rust crates.
-- The standalone Rust `rust/guest/k16-storage` crate was removed. The
+- The standalone Rust `guest/kraftos/k16-storage` crate was removed. The
   K16PT/K16FS storage helper now lives inside
-  `rust/guest/k16-kernel/src/storage.rs` as kernel-owned code used by
+  `guest/kraftos/kernel/src/storage.rs` as kernel-owned code used by
   boot-chain, process loading, and kernel filesystem syscalls.
-- The standalone Rust `rust/guest/k16-image` crate was removed. The K16E
+- The standalone Rust `guest/kraftos/k16-image` crate was removed. The K16E
   parser and image metadata helpers now live inside
-  `rust/guest/k16-kernel/src/image.rs` as kernel-owned code used by process and
+  `guest/kraftos/kernel/src/image.rs` as kernel-owned code used by process and
   boot-chain loading.
-- The standalone Rust `rust/guest/k16-boot-chain` crate was removed after the
+- The standalone Rust `guest/kraftos/k16-boot-chain` crate was removed after the
   BIOS and bootloader moved to C. Its remaining Rust helper surface now lives
-  inside `rust/guest/k16-kernel/src/boot_chain.rs` as kernel-owned code for
+  inside `guest/kraftos/kernel/src/boot_chain.rs` as kernel-owned code for
   init/process image loading and boot-info validation. The C firmware
-  `guest/c/boot-chain` helper remains the BIOS/bootloader storage loader.
-- Bundled K16 bootloader generation now builds `guest/c/boot/boot.c` plus the
-  shared C boot-chain helper under `guest/c/boot-chain` through the
+  `guest/firmware/boot-chain` helper remains the BIOS/bootloader storage loader.
+- Bundled K16 bootloader generation now builds `guest/firmware/boot/boot.c` plus the
+  shared C boot-chain helper under `guest/firmware/boot-chain` through the
   source-built-dev K16 Clang path and links it with `k16 link --target boot`
   into `kernel-loader.kb`. BIOS and bootloader firmware now share the C
-  read-only K16PT/K16FS/K16E loading path; the old `rust/guest/k16-boot` crate
+  read-only K16PT/K16FS/K16E loading path; the old `guest/kraftos/k16-boot` crate
   was removed from the guest workspace. The K16 kernel remains the Rust-owned
   OS implementation artifact.
-- Bundled K16 BIOS generation now builds `guest/c/bios/bios.c` through the
+- Bundled K16 BIOS generation now builds `guest/firmware/bios/bios.c` through the
   source-built-dev K16 Clang path and links it directly with
   `k16 link --target bios` into `firmware/k16-bios.kflash`. The old
-  `rust/guest/k16-bios` crate was removed from the guest workspace.
+  `guest/kraftos/k16-bios` crate was removed from the guest workspace.
 - `k16-rt` no longer exports Rust userland syscall convenience wrappers such
   as `write_syscall`, `open_syscall`, `brk_syscall`, or `sleep_ticks_syscall`,
   and no longer exposes raw Rust syscall call helpers such as `syscall0`,
@@ -70,12 +70,12 @@
   `k16-user-fault-test` are no longer guest workspace members, and development
   storage no longer installs Rust userland proof binaries.
 - Production C userland now builds its K16 arch helper object from checked-in
-  source at `guest/c/arch/k16/cpu-helpers.kasm` through `k16 asm <input.kasm>
+  source at `guest/platform/k16/cpu-helpers.kasm` through `k16 asm <input.kasm>
   -o <output.ko>`. The bundled `/bin/*.kx` C programs and `/lib/libkraft.kso`
   no longer depend on the host-generated `k16 runtime k16-cpu-helpers` object;
   that generated object remains available for Rust kernel, trap, development,
   and low-level fixture paths that still need the wider CPU helper surface.
-- `/lib/libkraft.kso` now builds from `guest/c/libkraft/libkraft.c` through
+- `/lib/libkraft.kso` now builds from `guest/kraftos/lib/libkraft/libkraft.c` through
   the source-built-dev K16 Clang path instead of the Rust
   `k16-shared-kraft` guest crate. It remains a syscall-shaped shared OS ABI
   provider, not libc or Rust `std`: C libc-lite still owns standard-shaped
@@ -83,7 +83,7 @@
   `libkraft.kso` exports the dynamic boundary symbols consumed by production
   C userland. The C provider links the same checked-in source arch runtime as
   production C programs.
-- Production `/bin/shell.kx` now builds from `guest/c/shell/shell.c` through
+- Production `/bin/shell.kx` now builds from `guest/kraftos/userland/shell/shell.c` through
   the source-built-dev K16 Clang path and libc-lite startup layer. libc-lite
   exposes `kraft_run_with_args(path, argc, argv)` over the existing structured
   K16 `RUN` argv request, and `/lib/libkraft.kso` exports the syscall-shaped
@@ -94,7 +94,7 @@
   shipped prompt, fd-backed stdin/stdout behavior, builtins, cwd-aware utility
   argument resolution, and foreground `shell -> utility` execution model while
   dropping the Rust `core,alloc` production shell build.
-- Production `/bin/init.kx` now builds from `guest/c/init/init.c` through the
+- Production `/bin/init.kx` now builds from `guest/kraftos/userland/init/init.c` through the
   source-built-dev K16 Clang path and libc-lite startup layer. libc-lite exposes
   `kraft_spawn_with_args(path, argc, argv)` and `kraft_wait(pid, status)` over
   the existing structured K16 `SPAWN` argv request and `WAIT` syscall, while
@@ -106,12 +106,12 @@
 - Removed the legacy Rust guest crates for production coreutils after the C
   migration: `k16-uname`, `k16-cat`, `k16-write`, `k16-rm`, `k16-mkdir`,
   `k16-rmdir`, `k16-stat`, `k16-ls`, `k16-cp`, and `k16-mv`. The bundled
-  `/etc/motd` data file now lives at `guest/data/etc/motd` instead of inside
+  `/etc/motd` data file now lives at `guest/kraftos/data/etc/motd` instead of inside
   the old Rust `k16-cat` crate. The hosted Rust proof crates `k16-hosted-cat`
   and `k16-hosted-hello` were also removed from the guest workspace; hosted
   Rust std is no longer an active userland proof path.
 - Production `/bin/cp.kx` and `/bin/mv.kx` now build from
-  `guest/c/coreutils` through the source-built-dev K16 Clang path and
+  `guest/kraftos/userland/coreutils` through the source-built-dev K16 Clang path and
   libc-lite startup layer. `/bin/cp.kx` imports `kraft_sys_open`,
   `kraft_sys_read`, `kraft_sys_write`, and `kraft_sys_close` from
   `/lib/libkraft.kso`; `/bin/mv.kx` imports `kraft_sys_stat`,
@@ -121,10 +121,10 @@
   while `/lib/libkraft.kso` exports the syscall-shaped
   `kraft_sys_rename(request, len)` boundary.
 - Production `/bin/stat.kx` and `/bin/ls.kx` now build from
-  `guest/c/coreutils` through the source-built-dev K16 Clang path and
+  `guest/kraftos/userland/coreutils` through the source-built-dev K16 Clang path and
   libc-lite startup layer. libc-lite now exposes `struct kraft_stat`,
   `stat(path, metadata)`, and `read_dir(path, out, out_len)` through
-  `guest/c/libc/include/kraft/fs.h`; those public C calls macro-dispatch to
+  `guest/kraftos/libc/include/kraft/fs.h`; those public C calls macro-dispatch to
   `kraft_stat` and `kraft_read_dir` wrappers so they can safely call the
   syscall-shaped `kraft_sys_stat(path, len, metadata)` and
   `kraft_sys_read_dir(request, len)` exports from `/lib/libkraft.kso` without
@@ -138,7 +138,7 @@
   auto-imports from bypassing libc-lite argument
   adaptation.
 - Production `/bin/rm.kx`, `/bin/mkdir.kx`, and `/bin/rmdir.kx` now build
-  from `guest/c/coreutils` through the source-built-dev K16 Clang path and
+  from `guest/kraftos/userland/coreutils` through the source-built-dev K16 Clang path and
   libc-lite startup layer. libc-lite now exposes standard-shaped
   `unlink(path)`, `mkdir(path)`, and `rmdir(path)` wrappers over the existing
   K16 path-length syscalls, and `/lib/libkraft.kso` exports the matching
@@ -146,28 +146,28 @@
   dynamically. Shell-visible output remains the existing KraftOS policy:
   `CREATED <path>`, `REMOVED <path>`, or `ERR <STATUS> <path>`.
 - Production `/bin/uname.kx` now builds from
-  `guest/c/coreutils/uname.c` through the source-built-dev K16 Clang path and
+  `guest/kraftos/userland/coreutils/uname.c` through the source-built-dev K16 Clang path and
   libc-lite startup layer. It remains the smallest shared OS ABI importer,
   resolving `kraft_sys_write` from `/lib/libkraft.kso` instead of retaining the
   syscall-boundary call in its own payload.
 - Moved the first-class C guest userland sources out of the Rust guest
-  workspace: libc-lite now lives under `guest/c/libc`, and bundled C coreutils
-  live under `guest/c/coreutils`. Existing Rust guest crates, including the
-  Rust K16 kernel, remain under `rust/guest` for now.
+  workspace: libc-lite now lives under `guest/kraftos/libc`, and bundled C coreutils
+  live under `guest/kraftos/userland/coreutils`. Existing Rust guest crates, including the
+  Rust K16 kernel, remain under `guest/kraftos` for now.
 - Added the first standard-shaped libc-lite C headers under
-  `guest/c/libc/include`: `unistd.h`, `fcntl.h`, `stddef.h`, and
+  `guest/kraftos/libc/include`: `unistd.h`, `fcntl.h`, `stddef.h`, and
   `string.h`. `kraft/syscalls.h` remains the low-level K16 ABI header, while C
   userland can now include common headers for `open`, `read`, `write`, `close`,
   `O_*` flags, and simple string helpers. Production `/bin/write.kx` now builds
-  from `guest/c/coreutils/write.c` and imports `kraft_sys_open`,
+  from `guest/kraftos/userland/coreutils/write.c` and imports `kraft_sys_open`,
   `kraft_sys_write`, and `kraft_sys_close` from `/lib/libkraft.kso`, covering
   both `write <path> <payload>` and `write --append <path> <payload>`. The
   decimal status printer avoids compiler-rt division helpers for now, keeping
   this slice inside the existing libc-lite/runtime surface.
 - Promoted the first bundled C hosted userland baseline into production
   `/bin/cat.kx`. The source-built-dev Gradle toolchain builds a K16-capable
-  `clang`, compiles `guest/c/coreutils/cat.c`, and links it against the
-  reusable libc-lite startup/header layer under `guest/c/libc`. The
+  `clang`, compiles `guest/kraftos/userland/coreutils/cat.c`, and links it against the
+  reusable libc-lite startup/header layer under `guest/kraftos/libc`. The
   resulting K16E v5 program imports `kraft_sys_open`, `kraft_sys_read`,
   `kraft_sys_write`, and `kraft_sys_close` from
   `/lib/libkraft.kso`. The C startup object reuses the existing K16
@@ -656,11 +656,11 @@
   `--k16-target`, expands K16 ELF members from `.rlib` archives on demand, and
   rejects missing targets or unsupported linker flags without falling back to
   host linker behavior.
-- NeoForge bundled BIOS generation now builds `rust/guest/k16-bios` as a Rust
+- NeoForge bundled BIOS generation now builds `guest/kraftos/k16-bios` as a Rust
   `bin` crate through `k16-ld`, so the `.kflash` is the linker output rather
   than an object-only Cargo emission followed by a separate Gradle link step.
 - NeoForge bundled bootloader and kernel generation now build
-  `rust/guest/k16-boot` and `rust/guest/k16-kernel` as Rust `bin` crates
+  `guest/kraftos/k16-boot` and `guest/kraftos/kernel` as Rust `bin` crates
   through `k16-ld --k16-target=boot|kernel`. The bundled guest firmware path no
   longer emits intermediate objects through Gradle for BIOS, bootloader, or
   kernel artifacts.
@@ -676,18 +676,18 @@
   object inputs with a reset-address trampoline that initializes `sp` and jumps
   to `_start`, so Rust-authored BIOS firmware has a host-tool path to `.kflash`
   without the retired Rux compiler.
-- NeoForge bundled BIOS generation now points at `rust/guest/k16-bios`; missing
+- NeoForge bundled BIOS generation now points at `guest/kraftos/k16-bios`; missing
   prepared Rust BIOS toolchain state is a hard build error, not a fallback to
   deleted `.rx` sources.
 - Added guest-owned Rust bootloader and kernel crate scaffolds under
-  `rust/guest/k16-boot` and `rust/guest/k16-kernel`. NeoForge boot/kernel
+  `guest/kraftos/k16-boot` and `guest/kraftos/kernel`. NeoForge boot/kernel
   artifact generation now uses the same prepared K16 Rust toolchain path, with
   missing toolchain state reported as a hard guest Rust build error.
 - The public `rux` CLI surface and active Rux compiler/frontend sources are
   retired. K16 artifact work stays under `k16`, and guest-owned source belongs
-  under `rust/guest`.
+  under `guest/kraftos`.
 - `k16 runtime k16-memory-helpers` now compiles its helper source from
-  `rust/guest/k16-rt`, so host tooling no longer owns guest runtime code.
+  `guest/kraftos/runtime`, so host tooling no longer owns guest runtime code.
 - `k16 runtime k16-cpu-helpers` now provides explicit K16 CPU helper symbols
   for halt, yield, CSR access, and interrupt return used by `k16-rt`.
 - `k16 runtime k16-memory-helpers` now owns the first integer compiler-rt

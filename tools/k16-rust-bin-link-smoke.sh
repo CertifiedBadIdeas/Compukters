@@ -5,8 +5,8 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CARGO="${K16_CARGO:-cargo}"
 RUSTC="${K16_RUSTC:-rustc}"
 TARGET_SPEC="${K16_RUST_TARGET_JSON:-$ROOT/tools/k16-unknown-kraftos.json}"
-K16_LD="${K16_LD:-$ROOT/rust/host/k16-tools/target/debug/k16-ld}"
-K16_MANIFEST="$ROOT/rust/host/k16-tools/Cargo.toml"
+K16_LD="${K16_LD:-$ROOT/host/k16-tools/target/debug/k16-ld}"
+K16_MANIFEST="$ROOT/host/k16-tools/Cargo.toml"
 
 require_file() {
     local path="$1"

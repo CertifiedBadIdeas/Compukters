@@ -40,7 +40,7 @@ fn k16_kernel_timer_smoke_artifacts_are_documented() {
     let docs = root.join("docs/toolchains/k16-kernel-timer-smoke.md");
 
     let script = fs::read_to_string(&smoke_script).expect("kernel timer smoke script exists");
-    assert!(script.contains("rust/guest/k16-kernel/Cargo.toml"));
+    assert!(script.contains("guest/kraftos/kernel/Cargo.toml"));
     assert!(script.contains("--k16-target=kernel"));
     assert!(script.contains("k16-cpu-helpers"));
     assert!(script.contains("decode_k16_executable"));
@@ -60,7 +60,7 @@ fn k16_kernel_timer_smoke_artifacts_are_documented() {
 
     let docs = fs::read_to_string(&docs).expect("kernel timer smoke docs exist");
     assert!(docs.contains("tools/k16-kernel-timer-smoke.sh"));
-    assert!(docs.contains("rust/guest/k16-kernel"));
+    assert!(docs.contains("guest/kraftos/kernel"));
     assert!(docs.contains("k16-cpu-helpers"));
     assert!(docs.contains("timer0"));
     assert!(docs.contains("syscall"));
@@ -78,9 +78,9 @@ fn k16_kernel_timer_smoke_artifacts_are_documented() {
 #[test]
 fn k16_bios_splash_uses_sleep_boundary() {
     let root = repo_root();
-    let bios_source = root.join("guest/c/bios/bios.c");
-    let boot_chain_source = root.join("guest/c/boot-chain/boot_chain.c");
-    let boot_chain_header = root.join("guest/c/boot-chain/boot_chain.h");
+    let bios_source = root.join("guest/firmware/bios/bios.c");
+    let boot_chain_source = root.join("guest/firmware/boot-chain/boot_chain.c");
+    let boot_chain_header = root.join("guest/firmware/boot-chain/boot_chain.h");
 
     let source = fs::read_to_string(&bios_source).expect("K16 BIOS source exists");
     let boot_chain = fs::read_to_string(&boot_chain_source).expect("C boot-chain source exists");
@@ -100,7 +100,7 @@ fn k16_bios_splash_uses_sleep_boundary() {
 #[test]
 fn k16_bootloader_is_c_built_and_loads_kernel() {
     let root = repo_root();
-    let boot_source = root.join("guest/c/boot/boot.c");
+    let boot_source = root.join("guest/firmware/boot/boot.c");
 
     let source = fs::read_to_string(&boot_source).expect("K16 bootloader source exists");
     assert!(source.contains("K16 BOOT\\n"));
@@ -115,9 +115,9 @@ fn k16_bootloader_is_c_built_and_loads_kernel() {
 #[test]
 fn kernel_boot_chain_is_kernel_owned() {
     let root = repo_root();
-    let workspace_manifest = root.join("rust/guest/Cargo.toml");
-    let kernel_manifest = root.join("rust/guest/k16-kernel/Cargo.toml");
-    let kernel_boot_chain = root.join("rust/guest/k16-kernel/src/boot_chain.rs");
+    let workspace_manifest = root.join("guest/kraftos/Cargo.toml");
+    let kernel_manifest = root.join("guest/kraftos/kernel/Cargo.toml");
+    let kernel_boot_chain = root.join("guest/kraftos/kernel/src/boot_chain.rs");
 
     let workspace_manifest =
         fs::read_to_string(&workspace_manifest).expect("K16 guest workspace manifest exists");
@@ -130,7 +130,7 @@ fn kernel_boot_chain_is_kernel_owned() {
         "Rust boot-chain support should be kernel-owned, not a standalone workspace member"
     );
     assert!(
-        !root.join("rust/guest/k16-boot-chain").exists(),
+        !root.join("guest/kraftos/k16-boot-chain").exists(),
         "standalone Rust boot-chain crate should be removed after C BIOS/bootloader migration"
     );
     assert!(!kernel_manifest.contains("k16-boot-chain"));
@@ -142,9 +142,9 @@ fn kernel_boot_chain_is_kernel_owned() {
 #[test]
 fn kernel_image_parser_is_kernel_owned() {
     let root = repo_root();
-    let workspace_manifest = root.join("rust/guest/Cargo.toml");
-    let kernel_manifest = root.join("rust/guest/k16-kernel/Cargo.toml");
-    let kernel_image = root.join("rust/guest/k16-kernel/src/image.rs");
+    let workspace_manifest = root.join("guest/kraftos/Cargo.toml");
+    let kernel_manifest = root.join("guest/kraftos/kernel/Cargo.toml");
+    let kernel_image = root.join("guest/kraftos/kernel/src/image.rs");
 
     let workspace_manifest =
         fs::read_to_string(&workspace_manifest).expect("K16 guest workspace manifest exists");
@@ -157,7 +157,7 @@ fn kernel_image_parser_is_kernel_owned() {
         "Rust image parser should be kernel-owned, not a standalone workspace member"
     );
     assert!(
-        !root.join("rust/guest/k16-image").exists(),
+        !root.join("guest/kraftos/k16-image").exists(),
         "standalone Rust image parser crate should be removed"
     );
     assert!(!kernel_manifest.contains("k16-image"));
@@ -169,9 +169,9 @@ fn kernel_image_parser_is_kernel_owned() {
 #[test]
 fn kernel_storage_helper_is_kernel_owned() {
     let root = repo_root();
-    let workspace_manifest = root.join("rust/guest/Cargo.toml");
-    let kernel_manifest = root.join("rust/guest/k16-kernel/Cargo.toml");
-    let kernel_storage = root.join("rust/guest/k16-kernel/src/storage.rs");
+    let workspace_manifest = root.join("guest/kraftos/Cargo.toml");
+    let kernel_manifest = root.join("guest/kraftos/kernel/Cargo.toml");
+    let kernel_storage = root.join("guest/kraftos/kernel/src/storage.rs");
 
     let workspace_manifest =
         fs::read_to_string(&workspace_manifest).expect("K16 guest workspace manifest exists");
@@ -184,7 +184,7 @@ fn kernel_storage_helper_is_kernel_owned() {
         "Rust storage helper should be kernel-owned, not a standalone workspace member"
     );
     assert!(
-        !root.join("rust/guest/k16-storage").exists(),
+        !root.join("guest/kraftos/k16-storage").exists(),
         "standalone Rust storage helper crate should be removed"
     );
     assert!(!kernel_manifest.contains("k16-storage"));
@@ -196,15 +196,15 @@ fn kernel_storage_helper_is_kernel_owned() {
 #[test]
 fn k16_memory_helpers_are_runtime_owned() {
     let root = repo_root();
-    let workspace_manifest = fs::read_to_string(root.join("rust/guest/Cargo.toml"))
+    let workspace_manifest = fs::read_to_string(root.join("guest/kraftos/Cargo.toml"))
         .expect("K16 guest workspace manifest exists");
-    let rt_manifest = fs::read_to_string(root.join("rust/guest/k16-rt/Cargo.toml"))
+    let rt_manifest = fs::read_to_string(root.join("guest/kraftos/runtime/Cargo.toml"))
         .expect("k16-rt manifest exists");
-    let rt_memory = fs::read_to_string(root.join("rust/guest/k16-rt/src/memory.rs"))
+    let rt_memory = fs::read_to_string(root.join("guest/kraftos/runtime/src/memory.rs"))
         .expect("k16-rt memory source exists");
-    let runtime_helpers = fs::read_to_string(root.join("guest/runtime/k16-memory-helpers.rs"))
+    let runtime_helpers = fs::read_to_string(root.join("guest/platform/k16/memory-helpers.rs"))
         .expect("K16 memory helper runtime source exists");
-    let host_cli = fs::read_to_string(root.join("rust/host/k16-tools/src/cli.rs"))
+    let host_cli = fs::read_to_string(root.join("host/k16-tools/src/cli.rs"))
         .expect("k16 host tools cli exists");
 
     assert!(
@@ -212,7 +212,7 @@ fn k16_memory_helpers_are_runtime_owned() {
         "Rust memory helpers should be runtime-owned, not a standalone workspace member"
     );
     assert!(
-        !root.join("rust/guest/k16-memory").exists(),
+        !root.join("guest/kraftos/k16-memory").exists(),
         "standalone Rust memory helper crate should be removed"
     );
     assert!(!rt_manifest.contains("k16-memory"));
@@ -222,19 +222,19 @@ fn k16_memory_helpers_are_runtime_owned() {
     assert!(rt_memory.contains("pub unsafe fn k16_memcmp"));
     assert!(
         !root
-            .join("rust/guest/k16-rt/src/no_core_helpers.rs")
+            .join("guest/kraftos/runtime/src/no_core_helpers.rs")
             .exists(),
         "k16-rt should not own the host-generated memory helper source"
     );
     assert!(runtime_helpers.contains("pub unsafe extern \"C\" fn __k16_memcpy"));
-    assert!(host_cli.contains("guest/runtime/k16-memory-helpers.rs"));
-    assert!(!host_cli.contains("rust/guest/k16-rt/src/no_core_helpers.rs"));
+    assert!(host_cli.contains("guest/platform/k16/memory-helpers.rs"));
+    assert!(!host_cli.contains("guest/kraftos/runtime/src/no_core_helpers.rs"));
 }
 
 #[test]
 fn legacy_rust_userland_crates_are_removed_after_c_migration() {
     let root = repo_root();
-    let workspace_manifest = root.join("rust/guest/Cargo.toml");
+    let workspace_manifest = root.join("guest/kraftos/Cargo.toml");
     let workspace_manifest =
         fs::read_to_string(&workspace_manifest).expect("K16 guest workspace manifest exists");
     let removed_members = [
@@ -257,11 +257,11 @@ fn legacy_rust_userland_crates_are_removed_after_c_migration() {
     for member in removed_members {
         assert!(
             !rust_guest_workspace_members(&workspace_manifest).contains(&member),
-            "legacy Rust userland member {member} should not remain in rust/guest/Cargo.toml"
+            "legacy Rust userland member {member} should not remain in guest/kraftos/Cargo.toml"
         );
         assert!(
-            !root.join("rust/guest").join(member).exists(),
-            "legacy Rust userland directory rust/guest/{member} should be removed"
+            !root.join("guest/kraftos").join(member).exists(),
+            "legacy Rust userland directory guest/kraftos/{member} should be removed"
         );
     }
 }
@@ -269,28 +269,28 @@ fn legacy_rust_userland_crates_are_removed_after_c_migration() {
 #[test]
 fn k16_c_libc_cat_has_minimal_libkraft_abi_sources() {
     let root = repo_root();
-    let header = root.join("guest/c/libc/include/kraft/syscalls.h");
-    let fs_header = root.join("guest/c/libc/include/kraft/fs.h");
-    let process_header = root.join("guest/c/libc/include/kraft/process.h");
-    let syscalls = root.join("guest/c/libc/syscalls.c");
-    let unistd = root.join("guest/c/libc/include/unistd.h");
-    let fcntl = root.join("guest/c/libc/include/fcntl.h");
-    let string = root.join("guest/c/libc/include/string.h");
-    let startup = root.join("guest/c/libc/crt0.c");
-    let arch_runtime = root.join("guest/c/arch/k16/cpu-helpers.kasm");
-    let cat = root.join("guest/c/coreutils/cat.c");
-    let init = root.join("guest/c/init/init.c");
-    let shell = root.join("guest/c/shell/shell.c");
-    let libkraft = root.join("guest/c/libkraft/libkraft.c");
-    let cp = root.join("guest/c/coreutils/cp.c");
-    let ls = root.join("guest/c/coreutils/ls.c");
-    let mkdir = root.join("guest/c/coreutils/mkdir.c");
-    let mv = root.join("guest/c/coreutils/mv.c");
-    let rm = root.join("guest/c/coreutils/rm.c");
-    let rmdir = root.join("guest/c/coreutils/rmdir.c");
-    let stat = root.join("guest/c/coreutils/stat.c");
-    let uname = root.join("guest/c/coreutils/uname.c");
-    let write = root.join("guest/c/coreutils/write.c");
+    let header = root.join("guest/kraftos/libc/include/kraft/syscalls.h");
+    let fs_header = root.join("guest/kraftos/libc/include/kraft/fs.h");
+    let process_header = root.join("guest/kraftos/libc/include/kraft/process.h");
+    let syscalls = root.join("guest/kraftos/libc/syscalls.c");
+    let unistd = root.join("guest/kraftos/libc/include/unistd.h");
+    let fcntl = root.join("guest/kraftos/libc/include/fcntl.h");
+    let string = root.join("guest/kraftos/libc/include/string.h");
+    let startup = root.join("guest/kraftos/libc/crt0.c");
+    let arch_runtime = root.join("guest/platform/k16/cpu-helpers.kasm");
+    let cat = root.join("guest/kraftos/userland/coreutils/cat.c");
+    let init = root.join("guest/kraftos/userland/init/init.c");
+    let shell = root.join("guest/kraftos/userland/shell/shell.c");
+    let libkraft = root.join("guest/kraftos/lib/libkraft/libkraft.c");
+    let cp = root.join("guest/kraftos/userland/coreutils/cp.c");
+    let ls = root.join("guest/kraftos/userland/coreutils/ls.c");
+    let mkdir = root.join("guest/kraftos/userland/coreutils/mkdir.c");
+    let mv = root.join("guest/kraftos/userland/coreutils/mv.c");
+    let rm = root.join("guest/kraftos/userland/coreutils/rm.c");
+    let rmdir = root.join("guest/kraftos/userland/coreutils/rmdir.c");
+    let stat = root.join("guest/kraftos/userland/coreutils/stat.c");
+    let uname = root.join("guest/kraftos/userland/coreutils/uname.c");
+    let write = root.join("guest/kraftos/userland/coreutils/write.c");
 
     let header = fs::read_to_string(&header).expect("C libkraft syscall header exists");
     assert!(header.contains("extern int __kraft_sys_open(const char *path, unsigned int len,"));
@@ -618,7 +618,7 @@ fn k16_c_libc_cat_has_minimal_libkraft_abi_sources() {
 #[test]
 fn k16_guest_rust_migration_map_covers_workspace_crates() {
     let root = repo_root();
-    let workspace_manifest = root.join("rust/guest/Cargo.toml");
+    let workspace_manifest = root.join("guest/kraftos/Cargo.toml");
     let migration_map = root.join("docs/toolchains/k16-guest-rust-migration-map.md");
 
     let workspace_manifest =
@@ -626,7 +626,7 @@ fn k16_guest_rust_migration_map_covers_workspace_crates() {
     let migration_map = fs::read_to_string(&migration_map).expect("K16 guest migration map exists");
 
     for member in rust_guest_workspace_members(&workspace_manifest) {
-        let path = format!("`rust/guest/{member}`");
+        let path = format!("`guest/kraftos/{member}`");
         assert!(
             migration_map.contains(&path),
             "K16 guest Rust migration map must classify {path}"
@@ -642,10 +642,10 @@ fn k16_guest_rust_migration_map_covers_workspace_crates() {
 #[test]
 fn removed_kraft_std_layer_no_longer_exists() {
     let root = repo_root();
-    let workspace_manifest = root.join("rust/guest/Cargo.toml");
-    let k16_rt_manifest = root.join("rust/guest/k16-rt/Cargo.toml");
+    let workspace_manifest = root.join("guest/kraftos/Cargo.toml");
+    let k16_rt_manifest = root.join("guest/kraftos/runtime/Cargo.toml");
     let removed_doc = root.join("docs/toolchains/kraft-std.md");
-    let removed_source = root.join("rust/guest/kraft-std/src/lib.rs");
+    let removed_source = root.join("guest/kraftos/kraft-std/src/lib.rs");
 
     let workspace_manifest =
         fs::read_to_string(&workspace_manifest).expect("guest workspace manifest exists");
@@ -672,9 +672,9 @@ fn removed_kraft_std_layer_no_longer_exists() {
 fn k16_rt_no_longer_exports_userland_syscall_wrappers() {
     let root = repo_root();
     let runtime_lib =
-        fs::read_to_string(root.join("rust/guest/k16-rt/src/lib.rs")).expect("k16-rt lib exists");
+        fs::read_to_string(root.join("guest/kraftos/runtime/src/lib.rs")).expect("k16-rt lib exists");
     let runtime_trap =
-        fs::read_to_string(root.join("rust/guest/k16-rt/src/trap.rs")).expect("k16-rt trap exists");
+        fs::read_to_string(root.join("guest/kraftos/runtime/src/trap.rs")).expect("k16-rt trap exists");
 
     for symbol in [
         "write_syscall",
@@ -807,9 +807,9 @@ fn rust_nocore_smoke_artifacts_are_documented_and_strict() {
     let smoke_script = root.join("tools/k16-rust-nocore-smoke.sh");
     let core_smoke_script = root.join("tools/k16-rust-core-smoke.sh");
     let bootstrap_probe = root.join("tools/k16-rustc-bootstrap-probe.sh");
-    let runtime_helpers = root.join("guest/runtime/k16-memory-helpers.rs");
-    let retired_k16_rt_helpers = root.join("rust/guest/k16-rt/src/no_core_helpers.rs");
-    let retired_host_runtime = root.join("rust/host/k16-tools/runtime");
+    let runtime_helpers = root.join("guest/platform/k16/memory-helpers.rs");
+    let retired_k16_rt_helpers = root.join("guest/kraftos/runtime/src/no_core_helpers.rs");
+    let retired_host_runtime = root.join("host/k16-tools/runtime");
     let llvm_docs = root.join("docs/toolchains/k16-llvm-smoke.md");
     let clang_docs = root.join("docs/toolchains/k16-clang-smoke.md");
     let docs = root.join("docs/toolchains/k16-rust-nocore-smoke.md");
@@ -1125,17 +1125,17 @@ fn active_k16_tools_do_not_ship_rux_compiler_surface() {
 
     for path in [
         "rux",
-        "rust/host/k16-tools/src/bin/rux.rs",
-        "rust/host/k16-tools/src/advice.rs",
-        "rust/host/k16-tools/src/frontend",
-        "rust/host/k16-tools/src/runtime",
-        "rust/host/k16-tools/stdlib",
-        "rust/host/k16-tools/examples",
-        "rust/host/k16-tools/tests/k16_artifact_backend.rs",
-        "rust/host/k16-tools/tests/rux_check_cli.rs",
-        "rust/host/k16-tools/tests/rux_compile_cli.rs",
-        "rust/host/k16-tools/tests/rux_compiler_runtime_surface.rs",
-        "rust/host/k16-tools/tests/rux_public_cli_surface.rs",
+        "host/k16-tools/src/bin/rux.rs",
+        "host/k16-tools/src/advice.rs",
+        "host/k16-tools/src/frontend",
+        "host/k16-tools/src/runtime",
+        "host/k16-tools/stdlib",
+        "host/k16-tools/examples",
+        "host/k16-tools/tests/k16_artifact_backend.rs",
+        "host/k16-tools/tests/rux_check_cli.rs",
+        "host/k16-tools/tests/rux_compile_cli.rs",
+        "host/k16-tools/tests/rux_compiler_runtime_surface.rs",
+        "host/k16-tools/tests/rux_public_cli_surface.rs",
     ] {
         assert!(
             !root.join(path).exists(),
@@ -1155,8 +1155,7 @@ fn repo_root() -> &'static Path {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .and_then(Path::parent)
-        .and_then(Path::parent)
-        .expect("rust/host/k16-tools has repo root great-grandparent")
+        .expect("host/k16-tools has repo root grandparent")
 }
 
 fn rust_guest_workspace_members(manifest: &str) -> Vec<&str> {

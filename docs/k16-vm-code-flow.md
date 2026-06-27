@@ -7,14 +7,14 @@ does not define guest ABI. Guest-visible contracts live under `docs/abi/`.
 
 | File | Responsibility |
 | --- | --- |
-| `rust/host/k16-vm/src/computer/handle.rs` | Public host-facing K16 computer handle used by JNI and tests. |
-| `rust/host/k16-vm/src/computer/machine.rs` | Owns a complete computer: RAM, MMIO bus, devices, CPU table, boot CPU, snapshots, and high-level control methods. |
-| `rust/host/k16-vm/src/low_bus.rs` | Routes memory accesses either to flat RAM or to mapped MMIO devices. |
-| `rust/host/k16-vm/src/low_machine.rs` | Flat little-endian guest RAM and the `MemoryBus` trait used by CPUs. |
-| `rust/host/k16-vm/src/k16.rs` | Kraft16 CPU state, instruction decoder, execution loop, traps, CSR handling, and call stack semantics. |
-| `rust/host/k16-vm/src/computer/devices.rs` | Host implementations of K16 MMIO devices: control, debug serial, serial input, gpu0, storage0, keyboard0, timer0, and BIOS flash. |
-| `rust/host/k16-vm/src/computer/profile.rs` | Declarative hardware profiles and hardware-table validation. |
-| `rust/host/k16-vm/src/computer/snapshot.rs` | Host-side `ComputerMachine` snapshot encoding and decoding. |
+| `host/k16-vm/src/computer/handle.rs` | Public host-facing K16 computer handle used by JNI and tests. |
+| `host/k16-vm/src/computer/machine.rs` | Owns a complete computer: RAM, MMIO bus, devices, CPU table, boot CPU, snapshots, and high-level control methods. |
+| `host/k16-vm/src/low_bus.rs` | Routes memory accesses either to flat RAM or to mapped MMIO devices. |
+| `host/k16-vm/src/low_machine.rs` | Flat little-endian guest RAM and the `MemoryBus` trait used by CPUs. |
+| `host/k16-vm/src/k16.rs` | Kraft16 CPU state, instruction decoder, execution loop, traps, CSR handling, and call stack semantics. |
+| `host/k16-vm/src/computer/devices.rs` | Host implementations of K16 MMIO devices: control, debug serial, serial input, gpu0, storage0, keyboard0, timer0, and BIOS flash. |
+| `host/k16-vm/src/computer/profile.rs` | Declarative hardware profiles and hardware-table validation. |
+| `host/k16-vm/src/computer/snapshot.rs` | Host-side `ComputerMachine` snapshot encoding and decoding. |
 
 ## Host-To-CPU Flow
 

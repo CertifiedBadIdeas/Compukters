@@ -10,4 +10,4 @@ host-test = []
 path = "src/lib.rs"
 
 [dependencies]
-k16-abi = { path = "../k16-abi" }
+k16-abi = { path = "../abi" }

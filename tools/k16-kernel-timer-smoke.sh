@@ -94,7 +94,7 @@ run_k16_tool() {
     if [[ -n "$K16_TOOL" ]]; then
         "$K16_TOOL" "$@"
     else
-        "$HOST_CARGO" run --quiet --offline --manifest-path "$ROOT/rust/host/k16-tools/Cargo.toml" --bin k16 -- "$@"
+        "$HOST_CARGO" run --quiet --offline --manifest-path "$ROOT/host/k16-tools/Cargo.toml" --bin k16 -- "$@"
     fi
 }
 
@@ -118,7 +118,7 @@ RUSTFLAGS="-C linker=$K16_LINKER -C link-arg=$WORK_DIR/cpu-helpers.o -C link-arg
     --release \
     -Z build-std=core \
     -Z json-target-spec \
-    --manifest-path "$ROOT/rust/guest/k16-kernel/Cargo.toml" \
+    --manifest-path "$ROOT/guest/kraftos/kernel/Cargo.toml" \
     --features k16-target \
     --bin k16-kernel \
     --target "$TARGET_SPEC" \
@@ -160,8 +160,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-k16-abi = { path = "$ROOT/rust/guest/k16-abi" }
-k16-vm = { path = "$ROOT/rust/host/k16-vm" }
+k16-abi = { path = "$ROOT/guest/kraftos/abi" }
+k16-vm = { path = "$ROOT/host/k16-vm" }
 TOML
 
 cat > "$WORK_DIR/runner/src/main.rs" <<'RS'

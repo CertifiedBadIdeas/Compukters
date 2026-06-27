@@ -88,9 +88,9 @@ symbol and later duplicate providers are not pulled.
 Bundled K16 guest artifacts use this driver directly:
 
 ```text
-guest/c/bios/bios.c                -> k16 link --target bios   -> firmware/k16-bios.kflash
-guest/c/boot/boot.c + boot-chain   -> k16 link --target boot   -> kernel-loader.kb
-rust/guest/k16-kernel              -> k16-ld --k16-target=kernel -> display-ok.kx
+guest/firmware/bios/bios.c                -> k16 link --target bios   -> firmware/k16-bios.kflash
+guest/firmware/boot/boot.c + boot-chain   -> k16 link --target boot   -> kernel-loader.kb
+guest/kraftos/kernel              -> k16-ld --k16-target=kernel -> display-ok.kx
 ```
 
 The BIOS and bootloader are freestanding C firmware sources compiled with the
@@ -126,7 +126,7 @@ has already installed the selected process stack top in `r15` before entering
 `_start`; it must not bake a fixed physical stack top into the artifact.
 
 The memory and integer helper object is built from the guest Rust `#![no_core]`
-runtime source at `guest/runtime/k16-memory-helpers.rs`. Building it requires
+runtime source at `guest/platform/k16/memory-helpers.rs`. Building it requires
 `K16_RUSTC` to point at the custom rustc that contains the K16 LLVM target and
 `K16_LLVM_BIN_DIR` to point at the K16 LLVM tools used to lower the generated
 LLVM IR into an ELF object. `K16_RUST_TARGET_JSON` can override the target spec;
@@ -138,7 +138,7 @@ return. These helpers are explicit link inputs; the VM and linker do not
 synthesize them.
 
 Production C userland uses the checked-in source arch runtime at
-`guest/c/arch/k16/cpu-helpers.kasm`, assembled with `k16 asm`, instead of the
+`guest/platform/k16/cpu-helpers.kasm`, assembled with `k16 asm`, instead of the
 generated `k16 runtime k16-cpu-helpers` object. That source runtime intentionally
 covers the smaller helper surface needed by libc-lite and `libkraft.kso`.
 Kernel, trap, Rust, and low-level fixture paths can still link the generated

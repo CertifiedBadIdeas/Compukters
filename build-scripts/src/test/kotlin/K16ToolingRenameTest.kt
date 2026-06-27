@@ -29,25 +29,25 @@ class K16ToolingRenameTest {
 
     @Test
     fun hostMachineToolingLivesUnderRustHostK16Tools() {
-        assertTrue(root.resolve("rust/host/k16-tools/Cargo.toml").exists())
+        assertTrue(root.resolve("host/k16-tools/Cargo.toml").exists())
         assertFalse(root.resolve("native/k16-tools/Cargo.toml").exists())
         assertFalse(root.resolve("native/rux-compiler/Cargo.toml").exists())
 
-        val manifest = root.resolve("rust/host/k16-tools/Cargo.toml").readText()
+        val manifest = root.resolve("host/k16-tools/Cargo.toml").readText()
         assertTrue(manifest.contains("name = \"k16-tools\""))
         assertFalse(manifest.contains("name = \"rux-compiler\""))
     }
 
     @Test
-    fun guestRustCratesLiveUnderRustGuest() {
-        val workspaceManifest = root.resolve("rust/guest/Cargo.toml").readText()
-        val rustMemoryManifest = root.resolve("rust/guest/k16-memory/Cargo.toml")
-        val rustMemorySource = root.resolve("rust/guest/k16-memory/src/lib.rs")
-        val rtManifest = root.resolve("rust/guest/k16-rt/Cargo.toml").readText()
+    fun guestRustCratesLiveUnderKraftOsTree() {
+        val workspaceManifest = root.resolve("guest/kraftos/Cargo.toml").readText()
+        val rustMemoryManifest = root.resolve("guest/kraftos/k16-memory/Cargo.toml")
+        val rustMemorySource = root.resolve("guest/kraftos/k16-memory/src/lib.rs")
+        val rtManifest = root.resolve("guest/kraftos/runtime/Cargo.toml").readText()
 
-        assertTrue(root.resolve("rust/guest/Cargo.toml").exists())
-        assertTrue(root.resolve("rust/guest/k16-abi/Cargo.toml").exists())
-        assertTrue(root.resolve("rust/guest/k16-rt/Cargo.toml").exists())
+        assertTrue(root.resolve("guest/kraftos/Cargo.toml").exists())
+        assertTrue(root.resolve("guest/kraftos/abi/Cargo.toml").exists())
+        assertTrue(root.resolve("guest/kraftos/runtime/Cargo.toml").exists())
         assertFalse(workspaceManifest.contains("\"k16-memory\""))
         assertFalse(rustMemoryManifest.exists())
         assertFalse(rustMemorySource.exists())
@@ -57,10 +57,10 @@ class K16ToolingRenameTest {
 
     @Test
     fun cBiosLivesOutsideRustGuestWorkspace() {
-        val workspaceManifest = root.resolve("rust/guest/Cargo.toml").readText()
-        val biosManifest = root.resolve("rust/guest/k16-bios/Cargo.toml")
-        val rustBiosSource = root.resolve("rust/guest/k16-bios/src/main.rs")
-        val cBiosSource = root.resolve("guest/c/bios/bios.c")
+        val workspaceManifest = root.resolve("guest/kraftos/Cargo.toml").readText()
+        val biosManifest = root.resolve("guest/kraftos/k16-bios/Cargo.toml")
+        val rustBiosSource = root.resolve("guest/kraftos/k16-bios/src/main.rs")
+        val cBiosSource = root.resolve("guest/firmware/bios/bios.c")
 
         assertFalse(workspaceManifest.contains("\"k16-bios\""))
         assertFalse(biosManifest.exists())
@@ -76,29 +76,29 @@ class K16ToolingRenameTest {
 
     @Test
     fun cBootloaderAndRustKernelUseSeparateSourcePaths() {
-        val workspaceManifest = root.resolve("rust/guest/Cargo.toml").readText()
-        val bootManifest = root.resolve("rust/guest/k16-boot/Cargo.toml")
-        val rustBootSource = root.resolve("rust/guest/k16-boot/src/main.rs")
-        val rustBootChainManifest = root.resolve("rust/guest/k16-boot-chain/Cargo.toml")
-        val rustBootChainSource = root.resolve("rust/guest/k16-boot-chain/src/lib.rs")
-        val rustImageManifest = root.resolve("rust/guest/k16-image/Cargo.toml")
-        val rustImageSource = root.resolve("rust/guest/k16-image/src/lib.rs")
-        val rustStorageManifest = root.resolve("rust/guest/k16-storage/Cargo.toml")
-        val rustStorageSource = root.resolve("rust/guest/k16-storage/src/lib.rs")
-        val cBootSource = root.resolve("guest/c/boot/boot.c")
-        val cBootChainSource = root.resolve("guest/c/boot-chain/boot_chain.c")
-        val cBootChainHeader = root.resolve("guest/c/boot-chain/boot_chain.h")
-        val kernelManifest = root.resolve("rust/guest/k16-kernel/Cargo.toml")
-        val kernelSource = root.resolve("rust/guest/k16-kernel/src/main.rs")
-        val kernelBootChainSource = root.resolve("rust/guest/k16-kernel/src/boot_chain.rs")
-        val kernelImageSource = root.resolve("rust/guest/k16-kernel/src/image.rs")
-        val kernelStorageSource = root.resolve("rust/guest/k16-kernel/src/storage.rs")
+        val workspaceManifest = root.resolve("guest/kraftos/Cargo.toml").readText()
+        val bootManifest = root.resolve("guest/kraftos/k16-boot/Cargo.toml")
+        val rustBootSource = root.resolve("guest/kraftos/k16-boot/src/main.rs")
+        val rustBootChainManifest = root.resolve("guest/kraftos/k16-boot-chain/Cargo.toml")
+        val rustBootChainSource = root.resolve("guest/kraftos/k16-boot-chain/src/lib.rs")
+        val rustImageManifest = root.resolve("guest/kraftos/k16-image/Cargo.toml")
+        val rustImageSource = root.resolve("guest/kraftos/k16-image/src/lib.rs")
+        val rustStorageManifest = root.resolve("guest/kraftos/k16-storage/Cargo.toml")
+        val rustStorageSource = root.resolve("guest/kraftos/k16-storage/src/lib.rs")
+        val cBootSource = root.resolve("guest/firmware/boot/boot.c")
+        val cBootChainSource = root.resolve("guest/firmware/boot-chain/boot_chain.c")
+        val cBootChainHeader = root.resolve("guest/firmware/boot-chain/boot_chain.h")
+        val kernelManifest = root.resolve("guest/kraftos/kernel/Cargo.toml")
+        val kernelSource = root.resolve("guest/kraftos/kernel/src/main.rs")
+        val kernelBootChainSource = root.resolve("guest/kraftos/kernel/src/boot_chain.rs")
+        val kernelImageSource = root.resolve("guest/kraftos/kernel/src/image.rs")
+        val kernelStorageSource = root.resolve("guest/kraftos/kernel/src/storage.rs")
 
         assertFalse(workspaceManifest.contains("\"k16-boot\""))
         assertFalse(workspaceManifest.contains("\"k16-boot-chain\""))
         assertFalse(workspaceManifest.contains("\"k16-image\""))
         assertFalse(workspaceManifest.contains("\"k16-storage\""))
-        assertTrue(workspaceManifest.contains("\"k16-kernel\""))
+        assertTrue(workspaceManifest.contains("\"kernel\""))
         assertFalse(bootManifest.exists())
         assertFalse(rustBootSource.exists())
         assertFalse(rustBootChainManifest.exists())
@@ -136,31 +136,31 @@ class K16ToolingRenameTest {
     fun neoforgeFirmwareBuildDoesNotUseRuxCompilerOrDeletedGuestExamples() {
         val buildScript = root.resolve("modules/v1_21_1/v1_21_1-neoforge/build.gradle.kts").readText()
 
-        assertTrue(buildScript.contains("guest/c/bios/bios.c"))
-        assertFalse(buildScript.contains("rust/guest/k16-bios"))
-        assertTrue(buildScript.contains("guest/c/boot/boot.c"))
-        assertTrue(buildScript.contains("guest/c/boot-chain/boot_chain.c"))
-        assertFalse(buildScript.contains("rust/guest/k16-boot-chain"))
-        assertFalse(buildScript.contains("rust/guest/k16-image"))
-        assertFalse(buildScript.contains("rust/guest/k16-storage"))
-        assertFalse(buildScript.contains("rust/guest/k16-boot/Cargo.toml"))
-        assertFalse(buildScript.contains("rust/guest/k16-boot/src"))
-        assertTrue(buildScript.contains("rust/guest/k16-kernel"))
+        assertTrue(buildScript.contains("guest/firmware/bios/bios.c"))
+        assertFalse(buildScript.contains("guest/kraftos/k16-bios"))
+        assertTrue(buildScript.contains("guest/firmware/boot/boot.c"))
+        assertTrue(buildScript.contains("guest/firmware/boot-chain/boot_chain.c"))
+        assertFalse(buildScript.contains("guest/kraftos/k16-boot-chain"))
+        assertFalse(buildScript.contains("guest/kraftos/k16-image"))
+        assertFalse(buildScript.contains("guest/kraftos/k16-storage"))
+        assertFalse(buildScript.contains("guest/kraftos/k16-boot/Cargo.toml"))
+        assertFalse(buildScript.contains("guest/kraftos/k16-boot/src"))
+        assertTrue(buildScript.contains("guest/kraftos/kernel"))
         assertFalse(buildScript.contains("tracked in #141"))
         assertFalse(buildScript.contains("--bin\",\\n            \"rux\""))
         assertFalse(buildScript.contains("ruxCompilerManifest"))
         assertFalse(buildScript.contains("k16_bios.rx"))
         assertFalse(buildScript.contains("kernel_loader.rx"))
         assertFalse(buildScript.contains("display_ok.rx"))
-        assertFalse(buildScript.contains("rust/host/k16-tools/examples"))
+        assertFalse(buildScript.contains("host/k16-tools/examples"))
     }
 
     @Test
     fun activeBootChainTestsUseK16ArtifactsWithoutRuxSourceFixtures() {
         val testPaths =
             listOf(
-                "rust/host/k16-tools/tests/k16_volume_cli.rs",
-                "rust/host/k16-tools/tests/k16_storage_workflow_cli.rs",
+                "host/k16-tools/tests/k16_volume_cli.rs",
+                "host/k16-tools/tests/k16_storage_workflow_cli.rs",
             )
 
         for (path in testPaths) {
