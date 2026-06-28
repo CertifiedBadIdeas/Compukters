@@ -149,6 +149,27 @@ pub unsafe fn read_directory_from_storage0_into<S: DirectoryListingSink>(
     unsafe { copy_selected_directory_listing_into(sink) }
 }
 
+pub unsafe fn read_root_partition_superblock(
+    partition_type: &[u8; 4],
+) -> Result<(), StorageError> {
+    unsafe { read_partition(partition_type)? };
+    unsafe { read_superblock() }
+}
+
+pub unsafe fn select_directory_inode(path: &[&[u8]]) -> Result<u32, StorageError> {
+    unsafe { find_directory_inode(path)? };
+    Ok(unsafe { read_u32(STATE_SELECTED_INODE_ID) })
+}
+
+pub unsafe fn selected_metadata_for_cache(
+) -> Result<crate::k16fs_cache::CachedPathMetadata, StorageError> {
+    let metadata = unsafe { selected_path_metadata()? };
+    Ok(crate::k16fs_cache::CachedPathMetadata {
+        file_type: metadata.kind as u32,
+        size_bytes: metadata.size_bytes,
+    })
+}
+
 pub unsafe fn stat_path_from_storage0(
     partition_type: &[u8; 4],
     path: &[&[u8]],
