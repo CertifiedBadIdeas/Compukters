@@ -215,10 +215,24 @@ fn instruction_profile_report_output_shows_phase_and_family_columns() {
 
     assert!(header.contains("fetch_decode_ns"));
     assert!(header.contains("execute_ns"));
+    assert!(header.contains("fetch_words"));
+    assert!(header.contains("fetch_bytes"));
     assert!(header.contains("load_store_ops"));
     assert!(header.contains("control_ops"));
+    assert!(header.contains("data_ram_loads"));
+    assert!(header.contains("data_ram_stores"));
     assert!(row.contains("memory-loop"));
     assert!(row.contains("2"));
+}
+
+#[test]
+fn instruction_profile_separates_instruction_fetch_from_data_ram_accesses() {
+    let sample = run_k16_workload_instruction_profile(VmBenchmarkWorkload::MemoryLoop, 3).unwrap();
+
+    assert_eq!(sample.profile.fetch_bytes, sample.profile.fetch_words * 2);
+    assert!(sample.profile.fetch_words > sample.profile.instructions);
+    assert_eq!(sample.data_ram_loads(), 4);
+    assert_eq!(sample.data_ram_stores(), 3);
 }
 
 #[test]

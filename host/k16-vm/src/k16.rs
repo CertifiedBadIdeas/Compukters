@@ -53,14 +53,18 @@ pub struct K16Metrics {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct K16InstructionProfile {
     pub instructions: u64,
+    pub fetch_words: u64,
+    pub fetch_bytes: u64,
     pub fetch_decode_nanos: u128,
     pub execute_nanos: u128,
     pub families: K16InstructionFamilyProfile,
 }
 
 impl K16InstructionProfile {
-    fn record_instruction(&mut self, instruction: &DecodedInstruction) {
+    fn record_instruction(&mut self, instruction: &DecodedInstruction, fetch_bytes: u32) {
         self.instructions += 1;
+        self.fetch_bytes = self.fetch_bytes.saturating_add(u64::from(fetch_bytes));
+        self.fetch_words = self.fetch_words.saturating_add(u64::from(fetch_bytes / 2));
         match instruction.family() {
             K16InstructionFamily::Immediate => self.families.immediate += 1,
             K16InstructionFamily::Alu => self.families.alu += 1,
@@ -840,7 +844,7 @@ impl K16Cpu {
         };
         self.metrics.steps += 1;
         if let Some(profile) = profile.as_deref_mut() {
-            profile.record_instruction(&decode.instruction);
+            profile.record_instruction(&decode.instruction, decode.next_pc.wrapping_sub(fault_pc));
         }
         self.pc = decode.next_pc;
 
