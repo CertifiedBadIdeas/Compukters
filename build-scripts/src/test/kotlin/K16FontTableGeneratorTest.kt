@@ -32,10 +32,10 @@ class K16FontTableGeneratorTest {
 
         val generated = K16FontTableGenerator().generate(source)
 
-        assertTrue(generated.rustSource.contains("pub const GLYPH_WIDTH: i32 = 6;"))
+        assertTrue(generated.rustSource.contains("pub const GLYPH_WIDTH: i32 = 5;"))
         assertTrue(generated.rustSource.contains("pub const GLYPH_HEIGHT: i32 = 8;"))
-        assertTrue(generated.rustSource.contains("pub const CELL_WIDTH: i32 = 6;"))
-        assertTrue(generated.rustSource.contains("pub const CELL_HEIGHT: i32 = 9;"))
+        assertTrue(generated.rustSource.contains("pub const CELL_WIDTH: i32 = 5;"))
+        assertTrue(generated.rustSource.contains("pub const CELL_HEIGHT: i32 = 8;"))
         assertTrue(generated.rustSource.contains("pub const GLYPH_X: i32 = 0;"))
         assertTrue(generated.rustSource.contains("pub const GLYPH_Y: i32 = 0;"))
         assertTrue(generated.rustSource.contains("pub fn terminal_font_glyph(ch: char) -> u64"))
@@ -68,11 +68,11 @@ class K16FontTableGeneratorTest {
         val generated = K16FontTableGenerator().generate(source)
 
         assertTrue(generated.markdownSpecimen.contains("# K16 Terminal Font Specimen"))
-        assertTrue(generated.markdownSpecimen.contains("- Glyph size: 6x8"))
-        assertTrue(generated.markdownSpecimen.contains("- Cell size: 6x9"))
+        assertTrue(generated.markdownSpecimen.contains("- Glyph size: 5x8"))
+        assertTrue(generated.markdownSpecimen.contains("- Cell size: 5x8"))
         assertTrue(generated.markdownSpecimen.contains("- Glyph origin: 0,0"))
         assertTrue(generated.markdownSpecimen.contains("## U+0041 A"))
-        assertTrue(generated.markdownSpecimen.contains("```text\n.###..\n#...#."))
+        assertTrue(generated.markdownSpecimen.contains("```text\n.....\n.##..\n#..#.\n#..#.\n####.\n#..#.\n#..#.\n....."))
         assertTrue(generated.markdownSpecimen.contains("## U+2500 ─"))
     }
 
@@ -91,13 +91,39 @@ class K16FontTableGeneratorTest {
     }
 
     @Test
+    fun fontSourceDocumentsSpleenReferenceAndLicense() {
+        val source = fontSource()
+        val license = Path.of("..", "assets", "k16", "fonts", "Spleen-LICENSE.txt").readText()
+        val bundledLicense =
+            Path.of(
+                "..",
+                "modules",
+                "v1_21_1",
+                "v1_21_1-neoforge",
+                "src",
+                "main",
+                "resources",
+                "META-INF",
+                "licenses",
+                "Spleen-LICENSE.txt",
+            ).readText()
+
+        assertTrue(source.contains("Spleen 5x8"))
+        assertTrue(source.contains("SPDX-License-Identifier: BSD-2-Clause"))
+        assertTrue(source.contains("https://github.com/fcambus/spleen"))
+        assertTrue(license.contains("Copyright (c) 2018-2026, Frederic Cambus"))
+        assertTrue(license.contains("Redistribution and use in source and binary forms"))
+        assertEquals(license, bundledLicense)
+    }
+
+    @Test
     fun lowercaseGlyphsReserveBottomRowForDescenders() {
         val source = fontSource()
         K16FontTableGenerator().generate(source)
 
         for (ch in "abcdehimnorsuvwxz") {
             assertEquals(
-                "......",
+                ".....",
                 glyphRows(source, ch).last(),
                 "lowercase `$ch` should not use the descender row",
             )
@@ -131,14 +157,14 @@ class K16FontTableGeneratorTest {
                 K16FontTableGenerator().generate(source)
             }
 
-        assertTrue((error.message ?: "").contains("must be 6 cells"))
+        assertTrue((error.message ?: "").contains("must be 5 cells"))
     }
 
     @Test
     fun rejectsGlyphPlacementOutsideCell() {
         val source =
             fontSource()
-                .replaceFirst("glyph_y 0", "glyph_y 2")
+                .replaceFirst("glyph_y 0", "glyph_y 1")
 
         val error =
             assertThrows(IllegalArgumentException::class.java) {

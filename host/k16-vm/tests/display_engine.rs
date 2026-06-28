@@ -123,13 +123,26 @@ fn blit_terminal_text_draws_glyph_run() {
 }
 
 #[test]
-fn generated_terminal_font_places_glyph_inside_taller_cell() {
-    assert_eq!(GLYPH_WIDTH, 6);
+fn generated_terminal_font_uses_spleen_5x8_cell() {
+    assert_eq!(GLYPH_WIDTH, 5);
     assert_eq!(GLYPH_HEIGHT, 8);
-    assert_eq!(CELL_WIDTH, 6);
-    assert_eq!(CELL_HEIGHT, 9);
+    assert_eq!(CELL_WIDTH, 5);
+    assert_eq!(CELL_HEIGHT, 8);
     assert_eq!(GLYPH_X, 0);
     assert_eq!(GLYPH_Y, 0);
+}
+
+#[test]
+fn generated_terminal_font_matches_spleen_reference_glyphs() {
+    assert_eq!(
+        terminal_font_glyph('A'),
+        0b00000_01100_10010_10010_11110_10010_10010_00000,
+    );
+    assert_eq!(
+        terminal_font_glyph('g'),
+        0b00000_00000_01110_10010_10010_01100_00010_11100,
+    );
+    assert_eq!(terminal_font_glyph('─'), 0b00000_00000_00000_11111_00000_00000_00000_00000);
 }
 
 #[test]
