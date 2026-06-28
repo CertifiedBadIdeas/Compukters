@@ -510,7 +510,7 @@ tasks.register<Zip>("packageBuiltK16Toolchain") {
 tasks.register<GenerateK16FontTablesTask>("generateK16FontTables") {
     description = "Generates Rust terminal font tables from the K16 bitmap font source."
     group = "k16"
-    fontFile.set(layout.projectDirectory.file("assets/k16/fonts/k16-terminal-6x8.font"))
+    fontFile.set(layout.projectDirectory.file("assets/k16/fonts/k16-terminal.font"))
     rustOutput.set(layout.projectDirectory.file("host/k16-vm/src/generated/terminal_font.rs"))
     guestRustOutput.set(layout.projectDirectory.file("guest/kraftos/kernel/src/generated/terminal_font.rs"))
 }
@@ -518,8 +518,8 @@ tasks.register<GenerateK16FontTablesTask>("generateK16FontTables") {
 tasks.register<GenerateK16FontSpecimenTask>("generateK16FontSpecimen") {
     description = "Generates a Markdown specimen report for the K16 bitmap font source."
     group = "k16"
-    fontFile.set(layout.projectDirectory.file("assets/k16/fonts/k16-terminal-6x8.font"))
-    output.set(layout.buildDirectory.file("reports/k16-font/k16-terminal-6x8-specimen.md"))
+    fontFile.set(layout.projectDirectory.file("assets/k16/fonts/k16-terminal.font"))
+    output.set(layout.buildDirectory.file("reports/k16-font/k16-terminal-specimen.md"))
 }
 
 val downloadK16ToolchainArchive =

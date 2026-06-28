@@ -10,10 +10,10 @@ const ROWS: usize = crate::memory_layout::TERMINAL_ROWS as usize;
 const TERMINAL_WIDTH: usize = CELL_WIDTH * COLUMNS;
 const SCROLL_HEIGHT: usize = CELL_HEIGHT * (ROWS - 1);
 const LAST_ROW_Y: usize = CELL_HEIGHT * (ROWS - 1);
-const GLYPH_PIXELS: usize = font::GLYPH_WIDTH * font::GLYPH_HEIGHT;
-const GLYPH_STRIDE_BYTES: u32 = (font::GLYPH_WIDTH * 2) as u32;
+const CELL_PIXELS: usize = font::CELL_WIDTH * font::CELL_HEIGHT;
+const CELL_STRIDE_BYTES: u32 = (font::CELL_WIDTH * 2) as u32;
 
-static mut GLYPH_BUFFER: [u16; GLYPH_PIXELS] = [0; GLYPH_PIXELS];
+static mut CELL_BUFFER: [u16; CELL_PIXELS] = [0; CELL_PIXELS];
 
 pub fn clear_screen() {
     gpu::clear(BACKGROUND);
@@ -49,14 +49,16 @@ pub fn flush() {
 fn render_glyph(byte: u8) {
     let glyph = font::glyph(byte);
     unsafe {
-        GLYPH_BUFFER = [BACKGROUND; GLYPH_PIXELS];
+        CELL_BUFFER = [BACKGROUND; CELL_PIXELS];
         for row in 0..font::GLYPH_HEIGHT {
             let bits = glyph[row];
             for col in 0..font::GLYPH_WIDTH {
                 if bits & (1 << (font::GLYPH_WIDTH - 1 - col)) == 0 {
                     continue;
                 }
-                GLYPH_BUFFER[row * font::GLYPH_WIDTH + col] = FOREGROUND;
+                let target_row = font::GLYPH_Y + row;
+                let target_col = font::GLYPH_X + col;
+                CELL_BUFFER[target_row * font::CELL_WIDTH + target_col] = FOREGROUND;
             }
         }
     }
@@ -65,13 +67,13 @@ fn render_glyph(byte: u8) {
 fn blit_glyph(column: usize, row: usize) {
     let x = column * font::CELL_WIDTH;
     let y = row * font::CELL_HEIGHT;
-    let buffer_addr = core::ptr::addr_of!(GLYPH_BUFFER) as u32;
+    let buffer_addr = core::ptr::addr_of!(CELL_BUFFER) as u32;
     gpu::blit_buffer(
         x as i32,
         y as i32,
-        font::GLYPH_WIDTH as i32,
-        font::GLYPH_HEIGHT as i32,
+        font::CELL_WIDTH as i32,
+        font::CELL_HEIGHT as i32,
         buffer_addr,
-        GLYPH_STRIDE_BYTES,
+        CELL_STRIDE_BYTES,
     );
 }

@@ -1349,4 +1349,4 @@ class K16ShellRuntimeSmokeTest {
 
 private const val K16_TERMINAL_CELLS_ADDR = 0x3000
 private const val K16_TERMINAL_COLUMNS = 53
-private const val K16_TERMINAL_ROWS = 25
+private const val K16_TERMINAL_ROWS = 22
