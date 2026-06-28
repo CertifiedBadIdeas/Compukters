@@ -3,7 +3,7 @@ use crate::computer::devices::BiosFlashDevice;
 use crate::computer::devices::MmuControlCommand;
 use crate::computer::profile::ComputerMachineProfile;
 use crate::computer_abi;
-use crate::k16::{K16AddressMode, K16Cpu, K16PrivilegeMode, K16Signal};
+use crate::k16::{K16AddressMode, K16CachedDecoder, K16Cpu, K16PrivilegeMode, K16Signal};
 use crate::mmu::{MmuAccess, MmuAddressSpace, MmuAddressSpaceId, MmuMapFlags, MmuPrivilege};
 
 pub(super) fn from_k16_bios_flash(
@@ -74,6 +74,7 @@ fn boot_handoff_k16_from_ram_inner(
             Some(stack_top) => K16Cpu::new_with_stack(entry_pc, stack_top),
             None => K16Cpu::new(entry_pc),
         },
+        decoder: K16CachedDecoder::new(),
         max_steps: max_steps.max(1),
     };
     Ok(boot_cpu)
@@ -111,9 +112,14 @@ pub(super) fn run_boot_k16_until_signal(
                 .get_mut(cpu_id)
                 .ok_or_else(|| format!("CPU {cpu_id} is not present"))?;
             match cpu {
-                ComputerCpuContext::K16 { cpu, max_steps } => cpu
-                    .run_until_signal_with_mmu(
+                ComputerCpuContext::K16 {
+                    cpu,
+                    decoder,
+                    max_steps,
+                } => cpu
+                    .run_until_signal_with_decoder_and_mmu(
                         &mut machine.bus,
+                        decoder,
                         &machine.address_spaces,
                         *max_steps,
                     )
@@ -148,6 +154,9 @@ fn apply_pending_mmu0_command(
     let result = match apply_mmu0_command(machine, cpu_id, command) {
         Ok(result) => {
             machine.finish_mmu0_success(result);
+            if mmu0_command_invalidates_decode_cache(command.command) {
+                machine.clear_k16_decode_cache(cpu_id)?;
+            }
             Ok(())
         }
         Err(error) => {
@@ -156,6 +165,18 @@ fn apply_pending_mmu0_command(
         }
     };
     result.map(|()| true)
+}
+
+fn mmu0_command_invalidates_decode_cache(command: i32) -> bool {
+    matches!(
+        command,
+        computer_abi::MMU0_COMMAND_MAP_PAGES
+            | computer_abi::MMU0_COMMAND_PROTECT_PAGES
+            | computer_abi::MMU0_COMMAND_ACTIVATE_USER_ADDRESS_SPACE
+            | computer_abi::MMU0_COMMAND_SET_TRAP_RETURN_PHYSICAL
+            | computer_abi::MMU0_COMMAND_SET_TRAP_RETURN_ADDRESS_SPACE
+            | computer_abi::MMU0_COMMAND_DESTROY_ADDRESS_SPACE
+    )
 }
 
 fn apply_mmu0_command(
@@ -432,6 +453,7 @@ fn spawn_k16_boot_cpu(
     let cpu_id = machine.cpus.len();
     machine.cpus.push(ComputerCpuContext::K16 {
         cpu: K16Cpu::new(entry_pc),
+        decoder: K16CachedDecoder::new(),
         max_steps: max_steps.max(1),
     });
     machine.boot_cpu = Some(cpu_id);

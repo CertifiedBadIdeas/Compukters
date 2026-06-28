@@ -39,6 +39,110 @@ fn computer_machine_mmu_defaults_to_physical_kernel_boot_execution() {
 }
 
 #[test]
+fn computer_machine_boot_runtime_reuses_cached_decoder() {
+    let program = k16_words(&[
+        k16_const4(1, 3),
+        k16_const32(2, u32::MAX)[0],
+        k16_const32(2, u32::MAX)[1],
+        k16_const32(2, u32::MAX)[2],
+        k16_add(1, 1, 2)[0],
+        k16_add(1, 1, 2)[1],
+        k16_branch_if_nonzero(1, -3),
+        k16_halt(),
+    ]);
+    let (mut machine, boot_cpu) = ComputerMachine::from_k16_bios_flash(&program, 1024, 64).unwrap();
+
+    assert_eq!(
+        machine.run_boot_k16_until_signal(boot_cpu).unwrap(),
+        K16Signal::Halt,
+    );
+    let stats = machine.k16_decode_cache_stats_for_tests(boot_cpu).unwrap();
+    assert!(stats.hits > 0, "{stats:?}");
+    assert!(stats.entries > 0, "{stats:?}");
+}
+
+#[test]
+fn computer_machine_boot_handoff_resets_cached_decoder() {
+    let program = k16_words(&[
+        k16_const4(1, 3),
+        k16_const32(2, u32::MAX)[0],
+        k16_const32(2, u32::MAX)[1],
+        k16_const32(2, u32::MAX)[2],
+        k16_add(1, 1, 2)[0],
+        k16_add(1, 1, 2)[1],
+        k16_branch_if_nonzero(1, -3),
+        k16_halt(),
+    ]);
+    let (mut machine, boot_cpu) = ComputerMachine::from_k16_bios_flash(&program, 1024, 64).unwrap();
+    machine.run_boot_k16_until_signal(boot_cpu).unwrap();
+    assert!(
+        machine
+            .k16_decode_cache_stats_for_tests(boot_cpu)
+            .unwrap()
+            .entries
+            > 0
+    );
+
+    let replacement = k16_words(&[k16_halt()]);
+    machine.write_guest_ram_bytes(0x80, &replacement).unwrap();
+    let boot_cpu = machine
+        .boot_handoff_k16_from_ram(0x80, replacement.len() as u32, 8)
+        .unwrap();
+
+    let stats = machine.k16_decode_cache_stats_for_tests(boot_cpu).unwrap();
+    assert_eq!(stats.entries, 0);
+    assert_eq!(stats.hits, 0);
+    assert_eq!(stats.misses, 0);
+}
+
+#[test]
+fn computer_machine_mmu0_mapping_command_clears_cached_decoder() {
+    let mut machine = ComputerMachine::new(0x3000).unwrap();
+    let address_space = machine.create_mmu_address_space().unwrap();
+    let mut words = vec![
+        k16_const4(1, 3),
+        k16_const32(2, u32::MAX)[0],
+        k16_const32(2, u32::MAX)[1],
+        k16_const32(2, u32::MAX)[2],
+        k16_add(1, 1, 2)[0],
+        k16_add(1, 1, 2)[1],
+        k16_branch_if_nonzero(1, -3),
+    ];
+    append_k16_store_const32(
+        &mut words,
+        ComputerMachine::MMU0_ADDRESS_SPACE,
+        address_space.raw(),
+    );
+    append_k16_store_const32(&mut words, ComputerMachine::MMU0_VIRTUAL_START, 0x4000);
+    append_k16_store_const32(&mut words, ComputerMachine::MMU0_PHYSICAL_START, 0);
+    append_k16_store_const32(&mut words, ComputerMachine::MMU0_PAGE_COUNT, 1);
+    append_k16_store_const32(
+        &mut words,
+        ComputerMachine::MMU0_FLAGS,
+        computer_abi::MMU0_FLAG_EXECUTABLE as u32,
+    );
+    append_k16_store_const32(
+        &mut words,
+        ComputerMachine::MMU0_COMMAND,
+        computer_abi::MMU0_COMMAND_MAP_PAGES as u32,
+    );
+    words.push(k16_halt());
+    machine
+        .write_guest_ram_bytes(0, &k16_words(&words))
+        .unwrap();
+    let boot_cpu = machine.install_k16_boot_cpu_for_tests(0, 256);
+
+    assert_eq!(
+        machine.run_boot_k16_until_signal(boot_cpu).unwrap(),
+        K16Signal::Halt,
+    );
+    let stats = machine.k16_decode_cache_stats_for_tests(boot_cpu).unwrap();
+    assert_eq!(stats.entries, 1, "{stats:?}");
+    assert_eq!(stats.hits, 0, "{stats:?}");
+    assert_eq!(stats.misses, 1, "{stats:?}");
+}
+
+#[test]
 fn computer_machine_mmu_runs_boot_cpu_through_virtual_pc_and_data_mapping() {
     const RAM_SIZE: usize = 0x3000;
     let mut machine = ComputerMachine::new(RAM_SIZE).unwrap();
@@ -2685,6 +2789,21 @@ fn k16_load32(dst: u8, addr: u8) -> u16 {
 
 fn k16_store32(addr: u8, src: u8) -> u16 {
     0x5002 | (u16::from(addr) << 8) | (u16::from(src) << 4)
+}
+
+fn k16_branch_if_nonzero(register: u8, offset_words: i8) -> u16 {
+    0x6000 | (u16::from(register) << 8) | 0x0010 | encode_signed_nibble(offset_words)
+}
+
+fn append_k16_store_const32(words: &mut Vec<u16>, address: u32, value: u32) {
+    words.extend(k16_const32(4, address));
+    words.extend(k16_const32(5, value));
+    words.push(k16_store32(4, 5));
+}
+
+fn encode_signed_nibble(value: i8) -> u16 {
+    assert!((-8..=7).contains(&value));
+    u16::from((value as i16 as u16 & 0x000f) as u8)
 }
 
 fn k16_write_csr(csr: u32, src: u8) -> u16 {
