@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- User-accessible MMU mappings are now W^X. `map_pages` and `protect_pages`
+  reject mappings that combine `user_accessible`, `writable`, and `executable`;
+  KraftOS maps loaded user images executable/read-only and stack/heap/writable
+  ranges writable/non-executable.
 - `gpu0` now exposes `fill_rect` and `copy_rect` commands plus `src_x`/`src_y`
   registers. Guest terminal scrolling can move existing pixels inside the gpu0
   surface and clear only the final row instead of repainting every visible text

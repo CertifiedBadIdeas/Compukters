@@ -3012,12 +3012,18 @@ impl MappedDynamicUserLoadPlan {
         if virtual_plan.load_base < map_start || virtual_plan.stack_top > mapped_end {
             return Err(ProcessLoadError::InvalidArena);
         }
+        let image_map_end = page_align_up(virtual_plan.load_end)?;
+        if image_map_end <= map_start || image_map_end > mapped_end {
+            return Err(ProcessLoadError::InvalidArena);
+        }
+        let image_page_count = (image_map_end - map_start) / VM_PAGE_SIZE;
+        let stack_page_count = (mapped_end - image_map_end) / VM_PAGE_SIZE;
         Ok(Self {
             virtual_plan,
             image_map_start: map_start,
-            image_page_count: page_count,
-            stack_map_start: 0,
-            stack_page_count: 0,
+            image_page_count,
+            stack_map_start: image_map_end,
+            stack_page_count,
             backing_start,
             page_count,
         })
@@ -3367,22 +3373,40 @@ unsafe fn create_translated_user_launch(
     if map_start >= map_end {
         return Err(ProcessLoadError::InvalidArena);
     }
-    let page_count = (map_end - map_start) / VM_PAGE_SIZE;
+    let image_map_end = page_align_up(plan.load_end)?;
+    if image_map_end <= map_start || image_map_end > map_end {
+        return Err(ProcessLoadError::InvalidArena);
+    }
+    let image_page_count = (image_map_end - map_start) / VM_PAGE_SIZE;
     let address_space = unsafe { mmu0_create_address_space()? };
     let map_result = unsafe {
         mmu0_map_pages(
             address_space,
             map_start,
             map_start,
-            page_count,
-            k16_abi::computer::mmu0::FLAG_USER_ACCESSIBLE
-                | k16_abi::computer::mmu0::FLAG_WRITABLE
-                | k16_abi::computer::mmu0::FLAG_EXECUTABLE,
+            image_page_count,
+            user_executable_mmu_flags(),
         )
     };
     if let Err(error) = map_result {
         let _ = unsafe { mmu0_destroy_address_space(address_space) };
         return Err(error);
+    }
+    if image_map_end < map_end {
+        let writable_page_count = (map_end - image_map_end) / VM_PAGE_SIZE;
+        let map_result = unsafe {
+            mmu0_map_pages(
+                address_space,
+                image_map_end,
+                image_map_end,
+                writable_page_count,
+                user_writable_mmu_flags(),
+            )
+        };
+        if let Err(error) = map_result {
+            let _ = unsafe { mmu0_destroy_address_space(address_space) };
+            return Err(error);
+        }
     }
     Ok(TranslatedUserLaunch {
         address_space,
@@ -3423,9 +3447,7 @@ unsafe fn create_translated_user_launch_from_mapped(
             mapped.map_start(),
             mapped.backing_start(),
             mapped.image_page_count(),
-            k16_abi::computer::mmu0::FLAG_USER_ACCESSIBLE
-                | k16_abi::computer::mmu0::FLAG_WRITABLE
-                | k16_abi::computer::mmu0::FLAG_EXECUTABLE,
+            user_executable_mmu_flags(),
         )
     };
     if let Err(error) = map_result {
@@ -3448,8 +3470,7 @@ unsafe fn create_translated_user_launch_from_mapped(
                 mapped.stack_map_start(),
                 stack_backing_start,
                 mapped.stack_page_count(),
-                k16_abi::computer::mmu0::FLAG_USER_ACCESSIBLE
-                    | k16_abi::computer::mmu0::FLAG_WRITABLE,
+                user_writable_mmu_flags(),
             )
         };
         if let Err(error) = stack_map_result {
@@ -3510,6 +3531,14 @@ unsafe fn mmu0_map_pages(
     }
 }
 
+fn user_executable_mmu_flags() -> i32 {
+    k16_abi::computer::mmu0::FLAG_USER_ACCESSIBLE | k16_abi::computer::mmu0::FLAG_EXECUTABLE
+}
+
+fn user_writable_mmu_flags() -> i32 {
+    k16_abi::computer::mmu0::FLAG_USER_ACCESSIBLE | k16_abi::computer::mmu0::FLAG_WRITABLE
+}
+
 unsafe fn map_translated_heap_pages(
     address_space: u32,
     virtual_start: u32,
@@ -3522,7 +3551,7 @@ unsafe fn map_translated_heap_pages(
             virtual_start,
             physical_start,
             page_count,
-            k16_abi::computer::mmu0::FLAG_USER_ACCESSIBLE | k16_abi::computer::mmu0::FLAG_WRITABLE,
+            user_writable_mmu_flags(),
         )
     }
 }
@@ -7154,7 +7183,7 @@ mod tests {
         );
         let writes = crate::mmio::take_test_writes();
         let writes = writes.as_slice();
-        assert_eq!(writes.len(), 7);
+        assert_eq!(writes.len(), 13);
         assert_eq!(
             writes[0],
             (
@@ -7171,18 +7200,42 @@ mod tests {
             writes[3],
             (k16_abi::computer::mmu0::PHYSICAL_START, 0x0001_5000)
         );
-        assert_eq!(writes[4], (k16_abi::computer::mmu0::PAGE_COUNT, 7));
+        assert_eq!(writes[4], (k16_abi::computer::mmu0::PAGE_COUNT, 2));
         assert_eq!(
             writes[5],
             (
                 k16_abi::computer::mmu0::FLAGS,
                 (k16_abi::computer::mmu0::FLAG_USER_ACCESSIBLE
-                    | k16_abi::computer::mmu0::FLAG_WRITABLE
                     | k16_abi::computer::mmu0::FLAG_EXECUTABLE) as u32,
             )
         );
         assert_eq!(
             writes[6],
+            (
+                k16_abi::computer::mmu0::COMMAND,
+                k16_abi::computer::mmu0::COMMAND_MAP_PAGES as u32,
+            )
+        );
+        assert_eq!(writes[7], (k16_abi::computer::mmu0::ADDRESS_SPACE, 7));
+        assert_eq!(
+            writes[8],
+            (k16_abi::computer::mmu0::VIRTUAL_START, 0x0001_7000)
+        );
+        assert_eq!(
+            writes[9],
+            (k16_abi::computer::mmu0::PHYSICAL_START, 0x0001_7000)
+        );
+        assert_eq!(writes[10], (k16_abi::computer::mmu0::PAGE_COUNT, 5));
+        assert_eq!(
+            writes[11],
+            (
+                k16_abi::computer::mmu0::FLAGS,
+                (k16_abi::computer::mmu0::FLAG_USER_ACCESSIBLE
+                    | k16_abi::computer::mmu0::FLAG_WRITABLE) as u32,
+            )
+        );
+        assert_eq!(
+            writes[12],
             (
                 k16_abi::computer::mmu0::COMMAND,
                 k16_abi::computer::mmu0::COMMAND_MAP_PAGES as u32,
@@ -7293,7 +7346,24 @@ mod tests {
             writes[3],
             (k16_abi::computer::mmu0::PHYSICAL_START, 0x0000_9000)
         );
-        assert_eq!(writes[4], (k16_abi::computer::mmu0::PAGE_COUNT, 7));
+        assert_eq!(writes[4], (k16_abi::computer::mmu0::PAGE_COUNT, 2));
+        assert_eq!(
+            writes[5],
+            (
+                k16_abi::computer::mmu0::FLAGS,
+                (k16_abi::computer::mmu0::FLAG_USER_ACCESSIBLE
+                    | k16_abi::computer::mmu0::FLAG_EXECUTABLE) as u32,
+            )
+        );
+        assert_eq!(
+            writes[8],
+            (k16_abi::computer::mmu0::VIRTUAL_START, 0x0001_7000)
+        );
+        assert_eq!(
+            writes[9],
+            (k16_abi::computer::mmu0::PHYSICAL_START, 0x0000_b000)
+        );
+        assert_eq!(writes[10], (k16_abi::computer::mmu0::PAGE_COUNT, 5));
     }
 
     #[test]

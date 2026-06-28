@@ -12,8 +12,16 @@ fn mmu_maps_contiguous_virtual_pages_to_physical_pages() {
         .map_pages(
             0x0001_0000,
             0x0000_4000,
-            2,
-            MmuMapFlags::USER_ACCESSIBLE | MmuMapFlags::WRITABLE | MmuMapFlags::EXECUTABLE,
+            1,
+            MmuMapFlags::USER_ACCESSIBLE | MmuMapFlags::EXECUTABLE,
+        )
+        .unwrap();
+    space
+        .map_pages(
+            0x0001_1000,
+            0x0000_5000,
+            1,
+            MmuMapFlags::USER_ACCESSIBLE | MmuMapFlags::WRITABLE,
         )
         .unwrap();
 
@@ -106,6 +114,25 @@ fn mmu_rejects_invalid_mappings() {
 
     space.map_pages(0x0001_0000, 0x0000_4000, 2, flags).unwrap();
     assert_invalid_mapping(space.map_pages(0x0001_1000, 0x0000_8000, 1, flags));
+}
+
+#[test]
+fn mmu_rejects_user_accessible_writable_executable_mappings() {
+    let mut space = MmuAddressSpace::new(148 * 1024);
+    let flags = MmuMapFlags::USER_ACCESSIBLE | MmuMapFlags::WRITABLE | MmuMapFlags::EXECUTABLE;
+
+    assert_invalid_mapping(space.map_pages(0x0001_0000, 0x0000_4000, 1, flags));
+}
+
+#[test]
+fn mmu_rejects_protecting_user_mapping_to_writable_executable() {
+    let mut space = MmuAddressSpace::new(148 * 1024);
+    space
+        .map_pages(0x0001_0000, 0x0000_4000, 1, MmuMapFlags::USER_ACCESSIBLE)
+        .unwrap();
+    let flags = MmuMapFlags::USER_ACCESSIBLE | MmuMapFlags::WRITABLE | MmuMapFlags::EXECUTABLE;
+
+    assert_invalid_mapping(space.protect_pages(0x0001_0000, 1, flags));
 }
 
 fn assert_invalid_mapping(result: Result<(), MmuFault>) {
