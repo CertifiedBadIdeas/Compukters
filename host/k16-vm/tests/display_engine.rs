@@ -123,13 +123,13 @@ fn blit_terminal_text_draws_glyph_run() {
 }
 
 #[test]
-fn generated_terminal_font_places_smaller_glyph_inside_cell() {
-    assert_eq!(GLYPH_WIDTH, 5);
-    assert_eq!(GLYPH_HEIGHT, 7);
+fn generated_terminal_font_places_glyph_inside_taller_cell() {
+    assert_eq!(GLYPH_WIDTH, 6);
+    assert_eq!(GLYPH_HEIGHT, 8);
     assert_eq!(CELL_WIDTH, 6);
     assert_eq!(CELL_HEIGHT, 9);
     assert_eq!(GLYPH_X, 0);
-    assert_eq!(GLYPH_Y, 1);
+    assert_eq!(GLYPH_Y, 0);
 }
 
 #[test]
