@@ -2224,9 +2224,9 @@ class K16FirmwareResourceTest {
         val fontSource = Path.of("../../../guest/kraftos/kernel/src/font.rs").readText()
         val shellSource = Path.of("../../../guest/kraftos/userland/shell/shell.c").readText()
 
-        assertTrue(fontSource.contains("font_mono5x7::MONO5X7_ROWS"))
-        assertTrue(fontSource.contains("font_mono5x7::FALLBACK_ROWS"))
-        assertTrue(fontSource.contains("MONO5X7_ROWS[byte as usize]"))
+        assertTrue(fontSource.contains("terminal_font::TERMINAL_FONT_ROWS"))
+        assertTrue(fontSource.contains("terminal_font::FALLBACK_ROWS"))
+        assertTrue(fontSource.contains("TERMINAL_FONT_ROWS[byte as usize]"))
         assertFalse(fontSource.contains("byte -"), "kernel font lookup should not use range-offset indexing")
         assertFalse(fontSource.contains("match byte"), "kernel font lookup should stay table-driven")
         assertFalse(shellSource.contains("display_byte("), "userland shell echo should not force uppercase display")
