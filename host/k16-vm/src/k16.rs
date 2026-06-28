@@ -3,6 +3,7 @@ use crate::mmu::{
     MmuAccess, MmuAddressSpace, MmuAddressSpaceId, MmuAddressSpaces, MmuFault, MmuPrivilege,
 };
 use std::fmt::{Display, Formatter};
+use std::time::Instant;
 
 pub const K16_CSR_TRAP_VECTOR: u32 = 1;
 pub const K16_CSR_TRAP_CAUSE: u32 = 2;
@@ -46,6 +47,48 @@ pub enum K16Signal {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct K16Metrics {
     pub steps: u64,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct K16InstructionProfile {
+    pub instructions: u64,
+    pub fetch_decode_nanos: u128,
+    pub execute_nanos: u128,
+    pub families: K16InstructionFamilyProfile,
+}
+
+impl K16InstructionProfile {
+    fn record_instruction(&mut self, instruction: &DecodedInstruction) {
+        self.instructions += 1;
+        match instruction.family() {
+            K16InstructionFamily::Immediate => self.families.immediate += 1,
+            K16InstructionFamily::Alu => self.families.alu += 1,
+            K16InstructionFamily::LoadStore => self.families.load_store += 1,
+            K16InstructionFamily::Branch => self.families.branch += 1,
+            K16InstructionFamily::Control => self.families.control += 1,
+            K16InstructionFamily::System => self.families.system += 1,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct K16InstructionFamilyProfile {
+    pub immediate: u64,
+    pub alu: u64,
+    pub load_store: u64,
+    pub branch: u64,
+    pub control: u64,
+    pub system: u64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum K16InstructionFamily {
+    Immediate,
+    Alu,
+    LoadStore,
+    Branch,
+    Control,
+    System,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -198,6 +241,49 @@ pub enum DecodedInstruction {
     Syscall { number: usize },
     ReadCsr { dst: usize, csr: u32 },
     WriteCsr { csr: u32, src: usize },
+}
+
+impl DecodedInstruction {
+    fn family(&self) -> K16InstructionFamily {
+        match self {
+            Self::Const4 { .. } | Self::Const32 { .. } => K16InstructionFamily::Immediate,
+            Self::Add { .. }
+            | Self::Sub { .. }
+            | Self::Mul { .. }
+            | Self::MulHU { .. }
+            | Self::MulHS { .. }
+            | Self::And { .. }
+            | Self::Or { .. }
+            | Self::Xor { .. }
+            | Self::Shl { .. }
+            | Self::Shr { .. }
+            | Self::Sar { .. }
+            | Self::Eq { .. }
+            | Self::Ne { .. }
+            | Self::Ltu { .. }
+            | Self::LtS { .. }
+            | Self::TestBits { .. } => K16InstructionFamily::Alu,
+            Self::Load8 { .. }
+            | Self::Load16 { .. }
+            | Self::Load32 { .. }
+            | Self::Store8 { .. }
+            | Self::Store16 { .. }
+            | Self::Store32 { .. } => K16InstructionFamily::LoadStore,
+            Self::BranchIfZero { .. } | Self::BranchIfNonZero { .. } => {
+                K16InstructionFamily::Branch
+            }
+            Self::Nop
+            | Self::Halt
+            | Self::Wait
+            | Self::Jump { .. }
+            | Self::Call { .. }
+            | Self::Ret
+            | Self::Iret => K16InstructionFamily::Control,
+            Self::Syscall { .. } | Self::ReadCsr { .. } | Self::WriteCsr { .. } => {
+                K16InstructionFamily::System
+            }
+        }
+    }
 }
 
 pub trait InstructionDecoder {
@@ -665,6 +751,16 @@ impl K16Cpu {
         decoder: &mut dyn InstructionDecoder,
         address_spaces: Option<&MmuAddressSpaces>,
     ) -> Result<Option<K16Signal>, K16Trap> {
+        self.step_with_decoder_and_mmu_profiled(bus, decoder, address_spaces, None)
+    }
+
+    fn step_with_decoder_and_mmu_profiled(
+        &mut self,
+        bus: &mut dyn MemoryBus,
+        decoder: &mut dyn InstructionDecoder,
+        address_spaces: Option<&MmuAddressSpaces>,
+        mut profile: Option<&mut K16InstructionProfile>,
+    ) -> Result<Option<K16Signal>, K16Trap> {
         match &self.state {
             K16State::Running => {}
             K16State::Halted => return Ok(Some(K16Signal::Halt)),
@@ -685,10 +781,14 @@ impl K16Cpu {
         // count the instruction, advance to the decoder-provided next PC, then
         // let control flow instructions override PC during execution.
         let fault_pc = self.pc;
+        let decode_started = profile.as_ref().map(|_| Instant::now());
         let decode = {
             let mut fetch_bus = self.cpu_bus(bus, address_spaces, MmuAccess::Fetch)?;
             decoder.decode(&mut fetch_bus, self.pc)
         };
+        if let (Some(profile), Some(started)) = (profile.as_deref_mut(), decode_started) {
+            profile.fetch_decode_nanos += started.elapsed().as_nanos();
+        }
         let decode = match decode {
             Ok(decode) => decode,
             Err(error) => {
@@ -696,9 +796,13 @@ impl K16Cpu {
             }
         };
         self.metrics.steps += 1;
+        if let Some(profile) = profile.as_deref_mut() {
+            profile.record_instruction(&decode.instruction);
+        }
         self.pc = decode.next_pc;
 
         let mut data_bus = self.cpu_bus(bus, address_spaces, MmuAccess::Load)?;
+        let execute_started = profile.as_ref().map(|_| Instant::now());
         let signal = match decode.instruction {
             DecodedInstruction::Nop => Ok(None),
             DecodedInstruction::Halt => {
@@ -854,6 +958,9 @@ impl K16Cpu {
                 Ok(None)
             }
         }?;
+        if let (Some(profile), Some(started)) = (profile.as_deref_mut(), execute_started) {
+            profile.execute_nanos += started.elapsed().as_nanos();
+        }
         drop(data_bus);
         if signal.is_none() && bus.take_yield_signal() {
             return Ok(Some(K16Signal::Yield));
@@ -1252,6 +1359,23 @@ impl K16Cpu {
     ) -> Result<K16Signal, K16Trap> {
         for _ in 0..max_steps {
             if let Some(signal) = self.step_with_mmu(bus, address_spaces)? {
+                return Ok(signal);
+            }
+        }
+        Ok(K16Signal::StepLimitExceeded)
+    }
+
+    pub fn run_until_signal_with_instruction_profile(
+        &mut self,
+        bus: &mut dyn MemoryBus,
+        max_steps: u64,
+        profile: &mut K16InstructionProfile,
+    ) -> Result<K16Signal, K16Trap> {
+        let mut decoder = K16Decoder::new();
+        for _ in 0..max_steps {
+            if let Some(signal) =
+                self.step_with_decoder_and_mmu_profiled(bus, &mut decoder, None, Some(profile))?
+            {
                 return Ok(signal);
             }
         }
