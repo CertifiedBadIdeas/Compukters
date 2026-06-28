@@ -18,7 +18,10 @@
  */
 
 use crate::k16::{K16CachedDecoder, K16Cpu, K16InstructionProfile, K16Signal};
-use crate::low_bus::{MachineBus, MachineBusStatsSnapshot, MmioDevice};
+use crate::low_bus::{
+    MachineBus, MachineBusStatsSnapshot, MachineBusTrafficSnapshot, MmioDevice,
+    MmioDeviceTrafficSnapshot,
+};
 use crate::low_machine::MemoryFault;
 use std::hint::black_box;
 
@@ -110,6 +113,23 @@ pub struct VmInstructionProfileReportSample {
     pub profile: K16InstructionProfile,
 }
 
+impl VmInstructionProfileReportSample {
+    pub fn data_ram_loads(&self) -> u64 {
+        self.bus.ram.loads.saturating_sub(self.profile.fetch_words)
+    }
+
+    pub fn data_ram_bytes_read(&self) -> u64 {
+        self.bus
+            .ram
+            .bytes_read
+            .saturating_sub(self.profile.fetch_bytes)
+    }
+
+    pub fn data_ram_stores(&self) -> u64 {
+        self.bus.ram.stores
+    }
+}
+
 pub fn benchmark_output_header() -> String {
     format_benchmark_columns(
         "workload",
@@ -149,12 +169,17 @@ pub fn instruction_profile_report_header() -> String {
         "cpu_steps",
         "fetch_decode_ns",
         "execute_ns",
+        "fetch_words",
+        "fetch_bytes",
         "immediate_ops",
         "alu_ops",
         "load_store_ops",
         "branch_ops",
         "control_ops",
         "system_ops",
+        "data_ram_loads",
+        "data_ram_stores",
+        "data_ram_bytes_read",
         "ram_loads",
         "ram_stores",
         "mmio_loads",
@@ -190,12 +215,17 @@ pub fn format_instruction_profile_report_sample(
         &sample.cpu_steps.to_string(),
         &sample.profile.fetch_decode_nanos.to_string(),
         &sample.profile.execute_nanos.to_string(),
+        &sample.profile.fetch_words.to_string(),
+        &sample.profile.fetch_bytes.to_string(),
         &sample.profile.families.immediate.to_string(),
         &sample.profile.families.alu.to_string(),
         &sample.profile.families.load_store.to_string(),
         &sample.profile.families.branch.to_string(),
         &sample.profile.families.control.to_string(),
         &sample.profile.families.system.to_string(),
+        &sample.data_ram_loads().to_string(),
+        &sample.data_ram_stores().to_string(),
+        &sample.data_ram_bytes_read().to_string(),
         &sample.bus.ram.loads.to_string(),
         &sample.bus.ram.stores.to_string(),
         &sample.bus.mmio.loads.to_string(),
@@ -265,19 +295,24 @@ fn format_instruction_profile_report_columns(
     cpu_steps: &str,
     fetch_decode_nanos: &str,
     execute_nanos: &str,
+    fetch_words: &str,
+    fetch_bytes: &str,
     immediate_ops: &str,
     alu_ops: &str,
     load_store_ops: &str,
     branch_ops: &str,
     control_ops: &str,
     system_ops: &str,
+    data_ram_loads: &str,
+    data_ram_stores: &str,
+    data_ram_bytes_read: &str,
     ram_loads: &str,
     ram_stores: &str,
     mmio_loads: &str,
     mmio_stores: &str,
 ) -> String {
     format!(
-        "{workload:<14} {iterations:>10} {checksum:>10} {cpu_steps:>10} {fetch_decode_nanos:>15} {execute_nanos:>12} {immediate_ops:>13} {alu_ops:>8} {load_store_ops:>14} {branch_ops:>10} {control_ops:>11} {system_ops:>10} {ram_loads:>10} {ram_stores:>10} {mmio_loads:>11} {mmio_stores:>11}",
+        "{workload:<14} {iterations:>10} {checksum:>10} {cpu_steps:>10} {fetch_decode_nanos:>15} {execute_nanos:>12} {fetch_words:>11} {fetch_bytes:>11} {immediate_ops:>13} {alu_ops:>8} {load_store_ops:>14} {branch_ops:>10} {control_ops:>11} {system_ops:>10} {data_ram_loads:>14} {data_ram_stores:>15} {data_ram_bytes_read:>19} {ram_loads:>10} {ram_stores:>10} {mmio_loads:>11} {mmio_stores:>11}",
     )
 }
 
@@ -345,6 +380,7 @@ pub fn run_k16_workload_instruction_profile(
     }
     let (words, result_register) = k16_workload(workload, iterations);
     write_words(&mut bus, 0, &words)?;
+    let bus_stats_before_run = bus.stats_snapshot();
     let mut cpu = K16Cpu::new(0);
     let mut profile = K16InstructionProfile::default();
     match cpu
@@ -360,10 +396,50 @@ pub fn run_k16_workload_instruction_profile(
             iterations,
             checksum: cpu.register(result_register),
             cpu_steps: cpu.snapshot().metrics_steps,
-            bus: bus.stats_snapshot(),
+            bus: subtract_bus_stats(&bus.stats_snapshot(), &bus_stats_before_run),
             profile,
         }),
         signal => Err(format!("unexpected K16 signal: {signal:?}")),
+    }
+}
+
+fn subtract_bus_stats(
+    after: &MachineBusStatsSnapshot,
+    before: &MachineBusStatsSnapshot,
+) -> MachineBusStatsSnapshot {
+    MachineBusStatsSnapshot {
+        ram: subtract_bus_traffic(after.ram, before.ram),
+        mmio: subtract_bus_traffic(after.mmio, before.mmio),
+        mmio_devices: after
+            .mmio_devices
+            .iter()
+            .map(|after_device| {
+                let before_traffic = before
+                    .mmio_devices
+                    .iter()
+                    .find(|before_device| before_device.device_id == after_device.device_id)
+                    .map(|before_device| before_device.traffic)
+                    .unwrap_or_default();
+                MmioDeviceTrafficSnapshot {
+                    device_id: after_device.device_id,
+                    base: after_device.base,
+                    size: after_device.size,
+                    traffic: subtract_bus_traffic(after_device.traffic, before_traffic),
+                }
+            })
+            .collect(),
+    }
+}
+
+fn subtract_bus_traffic(
+    after: MachineBusTrafficSnapshot,
+    before: MachineBusTrafficSnapshot,
+) -> MachineBusTrafficSnapshot {
+    MachineBusTrafficSnapshot {
+        loads: after.loads.saturating_sub(before.loads),
+        stores: after.stores.saturating_sub(before.stores),
+        bytes_read: after.bytes_read.saturating_sub(before.bytes_read),
+        bytes_written: after.bytes_written.saturating_sub(before.bytes_written),
     }
 }
 
