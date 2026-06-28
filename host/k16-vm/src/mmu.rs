@@ -48,6 +48,12 @@ impl MmuMapFlags {
     fn contains(self, other: Self) -> bool {
         self.0 & other.0 == other.0
     }
+
+    fn is_user_writable_executable(self) -> bool {
+        self.contains(Self::USER_ACCESSIBLE)
+            && self.contains(Self::WRITABLE)
+            && self.contains(Self::EXECUTABLE)
+    }
 }
 
 impl std::ops::BitOr for MmuMapFlags {
@@ -328,6 +334,9 @@ impl MmuAddressSpace {
         replacement_flags: Option<MmuMapFlags>,
     ) -> Result<(), MmuFault> {
         let range = PageRange::new(virtual_start, page_count)?;
+        if replacement_flags.is_some_and(MmuMapFlags::is_user_writable_executable) {
+            return Err(invalid_mapping_fault(virtual_start));
+        }
         let index = self.containing_mapping_index(range)?;
         let mapping = self.mappings.remove(index);
         if mapping.virtual_start < range.start {
@@ -382,6 +391,9 @@ impl MmuAddressSpace {
         flags: MmuMapFlags,
     ) -> Result<Mapping, MmuFault> {
         let fault = invalid_mapping_fault(virtual_start);
+        if flags.is_user_writable_executable() {
+            return Err(fault);
+        }
         if page_count == 0 || !is_page_aligned(virtual_start) || !is_page_aligned(physical_start) {
             return Err(fault);
         }

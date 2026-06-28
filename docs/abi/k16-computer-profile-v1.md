@@ -467,6 +467,11 @@ bit 1  writable
 bit 2  executable
 ```
 
+For user-accessible mappings, `writable` and `executable` are mutually
+exclusive. `map_pages` and `protect_pages` report `invalid_argument` if both
+bits are set together with `user_accessible`. Supervisor-only mappings are not
+constrained by this user W^X rule in v1.
+
 `create_address_space` returns the new address-space id in `result`.
 `map_pages` and `protect_pages` use `address_space`, `virtual_start`,
 `physical_start`, `page_count`, and `flags`. `activate_user_address_space`

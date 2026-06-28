@@ -266,8 +266,8 @@ fn computer_machine_snapshot_v1_restores_translated_address_spaces() {
     const KERNEL_PC: u32 = 0x0100;
     const USER_VIRTUAL_PC: u32 = 0x4000;
     const USER_CODE_PHYSICAL: u32 = 0x1000;
-    const PROOF_VIRTUAL: u32 = 0x4100;
-    const PROOF_PHYSICAL: u32 = 0x1100;
+    const PROOF_VIRTUAL: u32 = 0x5000;
+    const PROOF_PHYSICAL: u32 = 0x2000;
     const KERNEL_STACK_TOP: u32 = 0x3800;
     const USER_STACK_TOP: u32 = 0x9000;
 
@@ -325,7 +325,16 @@ fn computer_machine_snapshot_v1_restores_translated_address_spaces() {
             USER_VIRTUAL_PC,
             USER_CODE_PHYSICAL,
             1,
-            MmuMapFlags::USER_ACCESSIBLE | MmuMapFlags::WRITABLE | MmuMapFlags::EXECUTABLE,
+            MmuMapFlags::USER_ACCESSIBLE | MmuMapFlags::EXECUTABLE,
+        )
+        .unwrap();
+    machine
+        .map_mmu_pages(
+            address_space,
+            PROOF_VIRTUAL,
+            PROOF_PHYSICAL,
+            1,
+            MmuMapFlags::USER_ACCESSIBLE | MmuMapFlags::WRITABLE,
         )
         .unwrap();
     let boot_cpu = machine

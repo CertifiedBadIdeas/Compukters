@@ -343,8 +343,8 @@ fn computer_machine_mmu0_can_override_trap_return_to_translated_parent_context()
     const CHILD_VIRTUAL_PC: u32 = 0x5000;
     const PARENT_PHYSICAL_PC: u32 = 0x3000;
     const PARENT_VIRTUAL_PC: u32 = 0x7000;
-    const PARENT_PROOF_PHYSICAL: u32 = 0x3100;
-    const PARENT_PROOF_VIRTUAL: u32 = 0x7100;
+    const PARENT_PROOF_PHYSICAL: u32 = 0x2000;
+    const PARENT_PROOF_VIRTUAL: u32 = 0x8000;
     const KERNEL_STACK_TOP: u32 = 0x4800;
     const PARENT_KERNEL_STACK_TOP: u32 = 0x4400;
     const CHILD_STACK_TOP: u32 = 0x9000;
@@ -412,7 +412,16 @@ fn computer_machine_mmu0_can_override_trap_return_to_translated_parent_context()
             PARENT_VIRTUAL_PC,
             PARENT_PHYSICAL_PC,
             1,
-            MmuMapFlags::USER_ACCESSIBLE | MmuMapFlags::WRITABLE | MmuMapFlags::EXECUTABLE,
+            MmuMapFlags::USER_ACCESSIBLE | MmuMapFlags::EXECUTABLE,
+        )
+        .unwrap();
+    machine
+        .map_mmu_pages(
+            parent_address_space,
+            PARENT_PROOF_VIRTUAL,
+            PARENT_PROOF_PHYSICAL,
+            1,
+            MmuMapFlags::USER_ACCESSIBLE | MmuMapFlags::WRITABLE,
         )
         .unwrap();
     let child_address_space = machine.create_mmu_address_space().unwrap();

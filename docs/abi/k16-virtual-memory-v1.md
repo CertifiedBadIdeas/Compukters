@@ -150,6 +150,11 @@ zero `page_count`, point outside guest RAM, or point at MMIO. Physical bases
 and virtual bases must be 4096-byte aligned. v1 does not support aliasing the
 same virtual page to multiple physical pages.
 
+User-accessible mappings are W^X: a mapping with both `writable` and
+`executable` set is invalid. Loaders must map user code as executable and
+read-only, and map user stack/heap/writable data as writable and non-executable.
+Supervisor-only mappings are not constrained by this user W^X rule in v1.
+
 The first implementation does not need ASIDs or a guest-visible TLB. If the VM
 adds an internal TLB later, changing the active address-space map or any
 mapping entry must make subsequent translated accesses observe the new mapping
@@ -217,6 +222,9 @@ check the interrupted process address-space map and requested access type.
 Executable pages are not special for ordinary loads. v1 does not define a
 separate readable bit; a mapped user page is readable unless the access is an
 instruction fetch or store that needs stronger permission.
+
+`map_pages` and `protect_pages` reject user-accessible writable+executable
+flags as invalid mapping arguments before the mapping table changes.
 
 ## Faults
 
