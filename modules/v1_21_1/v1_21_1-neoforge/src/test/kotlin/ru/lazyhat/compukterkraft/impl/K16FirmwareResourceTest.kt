@@ -2574,7 +2574,7 @@ class K16FirmwareResourceTest {
                     "printable ASCII input should render space as a blank glyph",
                 )
                 assertContentEquals(
-                    intArrayOf(0b00000, 0b00000, 0b01110, 0b00001, 0b01111, 0b10001, 0b01111),
+                    intArrayOf(0b00000, 0b01110, 0b00001, 0b01111, 0b10001, 0b01111, 0b00000),
                     framebuffer.glyphRowsAt(x = 10 * 6, y = 9),
                     "printable ASCII input should render lowercase a through the guest kernel font",
                 )

@@ -18,6 +18,7 @@
  */
 
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -79,6 +80,26 @@ class K16FontTableGeneratorTest {
     }
 
     @Test
+    fun lowercaseGlyphsReserveBottomRowForDescenders() {
+        val source = Path.of("..", "assets", "k16", "fonts", "k16-mono-5x7.font").readText()
+        K16FontTableGenerator().generate(source)
+
+        for (ch in "abcdehimnorsuvwxz") {
+            assertEquals(
+                ".....",
+                glyphRows(source, ch).last(),
+                "lowercase `$ch` should not use the descender row",
+            )
+        }
+        for (ch in "gjpqy") {
+            assertTrue(
+                glyphRows(source, ch).last().contains('#'),
+                "lowercase `$ch` should use the descender row",
+            )
+        }
+    }
+
+    @Test
     fun fontTableGenerationDoesNotEmitHostKotlinGlyphTables() {
         val generatorSource = Path.of("src", "main", "kotlin", "K16FontTableGenerator.kt").readText()
         val taskSource = Path.of("src", "main", "kotlin", "GenerateK16FontTablesTask.kt").readText()
@@ -101,5 +122,16 @@ class K16FontTableGeneratorTest {
             }
 
         assertTrue((error.message ?: "").contains("must be 5 cells"))
+    }
+
+    private fun glyphRows(
+        source: String,
+        ch: Char,
+    ): List<String> {
+        val header = "glyph U+${ch.code.toString(radix = 16).uppercase().padStart(4, '0')}"
+        val lines = source.lines()
+        val index = lines.indexOfFirst { it.startsWith(header) }
+        require(index >= 0) { "missing glyph header for `$ch`" }
+        return lines.drop(index + 1).take(7)
     }
 }
