@@ -485,6 +485,12 @@ impl K16CachedDecoder {
         Self::default()
     }
 
+    pub fn clear(&mut self) {
+        self.cache.clear();
+        self.hits = 0;
+        self.misses = 0;
+    }
+
     pub fn stats(&self) -> K16DecodeCacheStats {
         K16DecodeCacheStats {
             entries: self.cache.len(),
@@ -1404,8 +1410,25 @@ impl K16Cpu {
         address_spaces: &MmuAddressSpaces,
         max_steps: u64,
     ) -> Result<K16Signal, K16Trap> {
+        self.run_until_signal_with_decoder_and_mmu(
+            bus,
+            &mut K16Decoder::new(),
+            address_spaces,
+            max_steps,
+        )
+    }
+
+    pub fn run_until_signal_with_decoder_and_mmu(
+        &mut self,
+        bus: &mut dyn MemoryBus,
+        decoder: &mut dyn InstructionDecoder,
+        address_spaces: &MmuAddressSpaces,
+        max_steps: u64,
+    ) -> Result<K16Signal, K16Trap> {
         for _ in 0..max_steps {
-            if let Some(signal) = self.step_with_mmu(bus, address_spaces)? {
+            if let Some(signal) =
+                self.step_with_decoder_and_mmu(bus, decoder, Some(address_spaces))?
+            {
                 return Ok(signal);
             }
         }

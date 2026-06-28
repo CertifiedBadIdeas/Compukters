@@ -10,8 +10,8 @@ use crate::computer::stats::{
 use crate::computer_abi;
 use crate::display::DisplayFrameDelta;
 use crate::k16::{
-    K16AddressMode, K16Cpu, K16PrivilegeMode, K16Signal, K16_INTERRUPT_SOURCE_KEYBOARD0,
-    K16_INTERRUPT_SOURCE_TIMER0,
+    K16AddressMode, K16CachedDecoder, K16Cpu, K16PrivilegeMode, K16Signal,
+    K16_INTERRUPT_SOURCE_KEYBOARD0, K16_INTERRUPT_SOURCE_TIMER0,
 };
 use crate::low_bus::{MachineBus, MachineBusStatsSnapshot, MmioDeviceId};
 use crate::low_machine::{MachineMemory, MemoryFault};
@@ -41,7 +41,11 @@ pub struct ComputerMachine {
 }
 
 enum ComputerCpuContext {
-    K16 { cpu: K16Cpu, max_steps: u64 },
+    K16 {
+        cpu: K16Cpu,
+        decoder: K16CachedDecoder,
+        max_steps: u64,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -918,6 +922,17 @@ impl ComputerMachine {
         }
     }
 
+    pub(super) fn clear_k16_decode_cache(&mut self, cpu_id: CpuId) -> Result<(), String> {
+        let cpu = self
+            .cpus
+            .get_mut(cpu_id)
+            .ok_or_else(|| format!("CPU {cpu_id} is not present"))?;
+        match cpu {
+            ComputerCpuContext::K16 { decoder, .. } => decoder.clear(),
+        }
+        Ok(())
+    }
+
     fn control_device_mut(&mut self) -> Option<&mut ComputerControlDevice> {
         self.control_device_id
             .and_then(|id| self.bus.device_mut::<ComputerControlDevice>(id))
@@ -932,10 +947,25 @@ impl ComputerMachine {
         let cpu_id = self.cpus.len();
         self.cpus.push(ComputerCpuContext::K16 {
             cpu: K16Cpu::new(entry_pc),
+            decoder: K16CachedDecoder::new(),
             max_steps: max_steps.max(1),
         });
         self.boot_cpu = Some(cpu_id);
         cpu_id
+    }
+
+    #[cfg(test)]
+    pub(crate) fn k16_decode_cache_stats_for_tests(
+        &self,
+        cpu_id: CpuId,
+    ) -> Result<crate::k16::K16DecodeCacheStats, String> {
+        let cpu = self
+            .cpus
+            .get(cpu_id)
+            .ok_or_else(|| format!("CPU {cpu_id} is not present"))?;
+        match cpu {
+            ComputerCpuContext::K16 { decoder, .. } => Ok(decoder.stats()),
+        }
     }
 }
 

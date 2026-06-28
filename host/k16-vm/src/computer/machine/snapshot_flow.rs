@@ -5,7 +5,7 @@ use crate::computer::snapshot;
 use crate::computer::snapshot::{
     ComputerCpuSnapshotRecord, ComputerDeviceSnapshotRecord, K16CpuModeSnapshotRecord,
 };
-use crate::k16::{K16AddressMode, K16Cpu, K16CpuModeSnapshot, K16PrivilegeMode};
+use crate::k16::{K16AddressMode, K16CachedDecoder, K16Cpu, K16CpuModeSnapshot, K16PrivilegeMode};
 use crate::mmu::MmuAddressSpaces;
 
 pub(super) fn snapshot_v1(machine: &ComputerMachine) -> Result<Vec<u8>, String> {
@@ -276,7 +276,7 @@ fn default_cpu_mode_snapshot() -> K16CpuModeSnapshot {
 impl ComputerCpuContext {
     fn snapshot_record(&self) -> ComputerCpuSnapshotRecord {
         match self {
-            ComputerCpuContext::K16 { cpu, max_steps } => ComputerCpuSnapshotRecord::K16 {
+            ComputerCpuContext::K16 { cpu, max_steps, .. } => ComputerCpuSnapshotRecord::K16 {
                 cpu: cpu.snapshot(),
                 max_steps: *max_steps,
             },
@@ -293,6 +293,7 @@ impl ComputerCpuContext {
                 }
                 Ok(ComputerCpuContext::K16 {
                     cpu: K16Cpu::from_snapshot(cpu),
+                    decoder: K16CachedDecoder::new(),
                     max_steps,
                 })
             }
