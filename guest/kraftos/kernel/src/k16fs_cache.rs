@@ -276,4 +276,40 @@ mod tests {
         cache.invalidate_directory_parent(2);
         assert_eq!(cache.lookup_directory(2, b"ls.kx"), None);
     }
+
+    #[test]
+    fn inode_invalidation_removes_inode_and_directory_lookup() {
+        let mut cache = K16FsCache::new();
+        let name = CachedName::from_bytes(b"cat.kx").expect("valid name");
+        let metadata = CachedPathMetadata {
+            file_type: k16_abi::syscall::FILE_TYPE_REGULAR,
+            size_bytes: 128,
+        };
+
+        cache.store_inode(11, metadata);
+        cache.store_directory_lookup(2, name, 11, metadata);
+
+        cache.invalidate_inode(11);
+
+        assert_eq!(cache.lookup_inode(11), None);
+        assert_eq!(cache.lookup_directory(2, b"cat.kx"), None);
+    }
+
+    #[test]
+    fn full_invalidation_removes_all_cached_metadata() {
+        let mut cache = K16FsCache::new();
+        let name = CachedName::from_bytes(b"bin").expect("valid name");
+        let metadata = CachedPathMetadata {
+            file_type: k16_abi::syscall::FILE_TYPE_DIRECTORY,
+            size_bytes: 64,
+        };
+
+        cache.store_inode(1, metadata);
+        cache.store_directory_lookup(0, name, 1, metadata);
+
+        cache.invalidate_all();
+
+        assert_eq!(cache.lookup_inode(1), None);
+        assert_eq!(cache.lookup_directory(0, b"bin"), None);
+    }
 }
