@@ -205,6 +205,9 @@ val k16SharedLibraryMapArtifacts =
     )
 val k16DevelopmentOnlyMapArtifacts =
     emptyList<Provider<File>>()
+val k16EmptyStorage0Artifact = generatedK16FirmwareArtifacts.map { it.file("storage0-empty.kv") }
+val k16BootStorage0Artifact = generatedK16FirmwareArtifacts.map { it.file("storage0-boot.kv") }
+val k16KernelStorage0Artifact = generatedK16FirmwareArtifacts.map { it.file("storage0-kernel.kv") }
 val k16SystemStorage0Resource = generatedK16FirmwareResources.map { it.file("firmware/k16-system-storage0.kv") }
 val k16DevelopmentStorage0Resource =
     generatedK16FirmwareTestResources.map { it.file("firmware/k16-system-storage0-dev.kv") }
@@ -1359,16 +1362,17 @@ val createK16SystemStorage0 =
         group = "k16"
         dependsOn(rootProject.tasks.named("prepareK16Toolchain"))
         inputs.file(k16ToolchainConfig)
-        outputs.file(k16SystemStorage0Resource)
+        outputs.file(k16EmptyStorage0Artifact)
 
         doFirst {
             val toolchain = resolveK16Toolchain()
-            k16SystemStorage0Resource.get().asFile.parentFile.mkdirs()
+            val output = k16EmptyStorage0Artifact.get().asFile
+            output.parentFile.mkdirs()
             commandLine(
                 toolchain.cli.absolutePath,
                 "volume",
                 "init",
-                k16SystemStorage0Resource.get().asFile.absolutePath,
+                output.absolutePath,
                 "--size",
                 "1048576",
             )
@@ -1382,15 +1386,20 @@ val putK16SystemStorage0Boot =
         dependsOn(createK16SystemStorage0, compileK16SystemBoot)
         dependsOn(rootProject.tasks.named("prepareK16Toolchain"))
         inputs.file(k16ToolchainConfig)
+        inputs.file(k16EmptyStorage0Artifact)
         inputs.file(k16BootArtifact)
+        outputs.file(k16BootStorage0Artifact)
 
         doFirst {
             val toolchain = resolveK16Toolchain()
+            val output = k16BootStorage0Artifact.get().asFile
+            output.parentFile.mkdirs()
+            k16EmptyStorage0Artifact.get().asFile.copyTo(output, overwrite = true)
             commandLine(
                 toolchain.cli.absolutePath,
                 "volume",
                 "put-boot",
-                k16SystemStorage0Resource.get().asFile.absolutePath,
+                output.absolutePath,
                 k16BootArtifact.get().asFile.absolutePath,
             )
         }
@@ -1403,17 +1412,20 @@ val compileK16SystemStorage0 =
         dependsOn(putK16SystemStorage0Boot, compileK16SystemKernel)
         dependsOn(rootProject.tasks.named("prepareK16Toolchain"))
         inputs.file(k16ToolchainConfig)
-        inputs.file(k16BootArtifact)
+        inputs.file(k16BootStorage0Artifact)
         inputs.file(k16KernelArtifact)
-        outputs.file(k16SystemStorage0Resource)
+        outputs.file(k16KernelStorage0Artifact)
 
         doFirst {
             val toolchain = resolveK16Toolchain()
+            val output = k16KernelStorage0Artifact.get().asFile
+            output.parentFile.mkdirs()
+            k16BootStorage0Artifact.get().asFile.copyTo(output, overwrite = true)
             commandLine(
                 toolchain.cli.absolutePath,
                 "volume",
                 "put-kernel",
-                k16SystemStorage0Resource.get().asFile.absolutePath,
+                output.absolutePath,
                 k16KernelArtifact.get().asFile.absolutePath,
             )
         }
@@ -1426,6 +1438,7 @@ val putK16SystemStorage0Init =
         dependsOn(compileK16SystemStorage0, compileK16SystemInit, compileK16SystemShell, compileK16SystemUname, compileK16SystemLs, compileK16SystemCat, compileK16SystemCp, compileK16SystemMv, compileK16SystemStat, compileK16SystemWrite, compileK16SystemRm, compileK16SystemMkdir, compileK16SystemRmdir, compileK16SharedKraft)
         dependsOn(rootProject.tasks.named("prepareK16Toolchain"))
         inputs.file(k16ToolchainConfig)
+        inputs.file(k16KernelStorage0Artifact)
         (k16ProductionStorageEntries + k16SharedLibraryStorageEntries).forEach { (_, artifact) ->
             inputs.file(artifact)
         }
@@ -1433,6 +1446,9 @@ val putK16SystemStorage0Init =
 
         doLast {
             val toolchain = resolveK16Toolchain()
+            val storage0 = k16SystemStorage0Resource.get().asFile
+            storage0.parentFile.mkdirs()
+            k16KernelStorage0Artifact.get().asFile.copyTo(storage0, overwrite = true)
             val rootPartition = temporaryDir.resolve("root.kfs")
             fun runK16Command(vararg args: String) {
                 val command = listOf(toolchain.cli.absolutePath) + args.toList()
@@ -1462,7 +1478,7 @@ val putK16SystemStorage0Init =
             runK16Command(
                 "volume",
                 "extract-partition",
-                k16SystemStorage0Resource.get().asFile.absolutePath,
+                storage0.absolutePath,
                 "ROOT",
                 rootPartition.absolutePath,
             )
@@ -1493,7 +1509,7 @@ val putK16SystemStorage0Init =
             runK16Command(
                 "volume",
                 "replace-partition",
-                k16SystemStorage0Resource.get().asFile.absolutePath,
+                storage0.absolutePath,
                 "ROOT",
                 rootPartition.absolutePath,
             )
