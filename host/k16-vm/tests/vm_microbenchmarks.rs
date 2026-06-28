@@ -18,9 +18,10 @@
  */
 
 use k16_vm::vm_microbenchmarks::{
-    benchmark_output_header, format_benchmark_sample, format_vm_stats_report_sample,
-    run_k16_workload, run_k16_workload_stats, run_native_rust_workload, vm_stats_report_header,
-    VmBenchmarkSample, VmBenchmarkWorkload,
+    benchmark_output_header, format_benchmark_sample, format_instruction_profile_report_sample,
+    format_vm_stats_report_sample, instruction_profile_report_header, run_k16_workload,
+    run_k16_workload_instruction_profile, run_k16_workload_stats, run_native_rust_workload,
+    vm_stats_report_header, VmBenchmarkSample, VmBenchmarkWorkload,
 };
 use std::fs;
 use std::path::Path;
@@ -172,6 +173,38 @@ fn vm_stats_report_output_shows_cpu_ram_and_mmio_columns() {
     assert!(header.contains("mmio_bytes_written"));
     assert!(row.contains("mmio-loop"));
     assert!(row.contains("3"));
+}
+
+#[test]
+fn instruction_profile_counts_phases_and_opcode_families() {
+    let sample = run_k16_workload_instruction_profile(VmBenchmarkWorkload::BranchMix, 3).unwrap();
+
+    assert_eq!(sample.workload, VmBenchmarkWorkload::BranchMix);
+    assert_eq!(sample.iterations, 3);
+    assert_eq!(
+        sample.checksum,
+        run_native_rust_workload(VmBenchmarkWorkload::BranchMix, 3).unwrap()
+    );
+    assert_eq!(sample.profile.instructions, sample.cpu_steps);
+    assert!(sample.profile.fetch_decode_nanos > 0, "{sample:?}");
+    assert!(sample.profile.execute_nanos > 0, "{sample:?}");
+    assert!(sample.profile.families.alu > 0, "{sample:?}");
+    assert!(sample.profile.families.branch > 0, "{sample:?}");
+    assert!(sample.profile.families.control > 0, "{sample:?}");
+}
+
+#[test]
+fn instruction_profile_report_output_shows_phase_and_family_columns() {
+    let sample = run_k16_workload_instruction_profile(VmBenchmarkWorkload::MemoryLoop, 2).unwrap();
+    let header = instruction_profile_report_header();
+    let row = format_instruction_profile_report_sample(&sample);
+
+    assert!(header.contains("fetch_decode_ns"));
+    assert!(header.contains("execute_ns"));
+    assert!(header.contains("load_store_ops"));
+    assert!(header.contains("control_ops"));
+    assert!(row.contains("memory-loop"));
+    assert!(row.contains("2"));
 }
 
 #[test]

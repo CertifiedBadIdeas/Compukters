@@ -17,7 +17,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use crate::k16::{K16Cpu, K16Signal};
+use crate::k16::{K16Cpu, K16InstructionProfile, K16Signal};
 use crate::low_bus::{MachineBus, MachineBusStatsSnapshot, MmioDevice};
 use crate::low_machine::MemoryFault;
 use std::hint::black_box;
@@ -100,6 +100,16 @@ pub struct VmStatsReportSample {
     pub bus: MachineBusStatsSnapshot,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VmInstructionProfileReportSample {
+    pub workload: VmBenchmarkWorkload,
+    pub iterations: u32,
+    pub checksum: u32,
+    pub cpu_steps: u64,
+    pub bus: MachineBusStatsSnapshot,
+    pub profile: K16InstructionProfile,
+}
+
 pub fn benchmark_output_header() -> String {
     format_benchmark_columns(
         "workload",
@@ -131,6 +141,27 @@ pub fn vm_stats_report_header() -> String {
     )
 }
 
+pub fn instruction_profile_report_header() -> String {
+    format_instruction_profile_report_columns(
+        "workload",
+        "iterations",
+        "checksum",
+        "cpu_steps",
+        "fetch_decode_ns",
+        "execute_ns",
+        "immediate_ops",
+        "alu_ops",
+        "load_store_ops",
+        "branch_ops",
+        "control_ops",
+        "system_ops",
+        "ram_loads",
+        "ram_stores",
+        "mmio_loads",
+        "mmio_stores",
+    )
+}
+
 pub fn format_vm_stats_report_sample(sample: &VmStatsReportSample) -> String {
     format_vm_stats_report_columns(
         sample.workload.name(),
@@ -146,6 +177,29 @@ pub fn format_vm_stats_report_sample(sample: &VmStatsReportSample) -> String {
         &sample.bus.mmio.bytes_read.to_string(),
         &sample.bus.mmio.bytes_written.to_string(),
         &sample.bus.mmio_devices.len().to_string(),
+    )
+}
+
+pub fn format_instruction_profile_report_sample(
+    sample: &VmInstructionProfileReportSample,
+) -> String {
+    format_instruction_profile_report_columns(
+        sample.workload.name(),
+        &sample.iterations.to_string(),
+        &sample.checksum.to_string(),
+        &sample.cpu_steps.to_string(),
+        &sample.profile.fetch_decode_nanos.to_string(),
+        &sample.profile.execute_nanos.to_string(),
+        &sample.profile.families.immediate.to_string(),
+        &sample.profile.families.alu.to_string(),
+        &sample.profile.families.load_store.to_string(),
+        &sample.profile.families.branch.to_string(),
+        &sample.profile.families.control.to_string(),
+        &sample.profile.families.system.to_string(),
+        &sample.bus.ram.loads.to_string(),
+        &sample.bus.ram.stores.to_string(),
+        &sample.bus.mmio.loads.to_string(),
+        &sample.bus.mmio.stores.to_string(),
     )
 }
 
@@ -204,6 +258,29 @@ fn format_vm_stats_report_columns(
     )
 }
 
+fn format_instruction_profile_report_columns(
+    workload: &str,
+    iterations: &str,
+    checksum: &str,
+    cpu_steps: &str,
+    fetch_decode_nanos: &str,
+    execute_nanos: &str,
+    immediate_ops: &str,
+    alu_ops: &str,
+    load_store_ops: &str,
+    branch_ops: &str,
+    control_ops: &str,
+    system_ops: &str,
+    ram_loads: &str,
+    ram_stores: &str,
+    mmio_loads: &str,
+    mmio_stores: &str,
+) -> String {
+    format!(
+        "{workload:<14} {iterations:>10} {checksum:>10} {cpu_steps:>10} {fetch_decode_nanos:>15} {execute_nanos:>12} {immediate_ops:>13} {alu_ops:>8} {load_store_ops:>14} {branch_ops:>10} {control_ops:>11} {system_ops:>10} {ram_loads:>10} {ram_stores:>10} {mmio_loads:>11} {mmio_stores:>11}",
+    )
+}
+
 pub fn run_k16_workload(workload: VmBenchmarkWorkload, iterations: u32) -> Result<u32, String> {
     Ok(run_k16_workload_stats(workload, iterations)?.checksum)
 }
@@ -230,6 +307,39 @@ pub fn run_k16_workload_stats(
             checksum: cpu.register(result_register),
             cpu_steps: cpu.snapshot().metrics_steps,
             bus: bus.stats_snapshot(),
+        }),
+        signal => Err(format!("unexpected K16 signal: {signal:?}")),
+    }
+}
+
+pub fn run_k16_workload_instruction_profile(
+    workload: VmBenchmarkWorkload,
+    iterations: u32,
+) -> Result<VmInstructionProfileReportSample, String> {
+    let mut bus = MachineBus::new(MEMORY_SIZE).map_err(|error| error.to_string())?;
+    if workload == VmBenchmarkWorkload::MmioLoop {
+        bus.map_mmio(MMIO_ADDR, Box::new(BenchmarkRegisterDevice { value: 0 }))
+            .map_err(|error| error.to_string())?;
+    }
+    let (words, result_register) = k16_workload(workload, iterations);
+    write_words(&mut bus, 0, &words)?;
+    let mut cpu = K16Cpu::new(0);
+    let mut profile = K16InstructionProfile::default();
+    match cpu
+        .run_until_signal_with_instruction_profile(
+            &mut bus,
+            k16_max_steps(workload, iterations),
+            &mut profile,
+        )
+        .map_err(|error| error.to_string())?
+    {
+        K16Signal::Halt => Ok(VmInstructionProfileReportSample {
+            workload,
+            iterations,
+            checksum: cpu.register(result_register),
+            cpu_steps: cpu.snapshot().metrics_steps,
+            bus: bus.stats_snapshot(),
+            profile,
         }),
         signal => Err(format!("unexpected K16 signal: {signal:?}")),
     }
