@@ -14,6 +14,8 @@ mod generated;
 mod gpu;
 mod image;
 mod init;
+mod k16fs_cache;
+mod k16fs_root;
 mod memory_layout;
 mod mmio;
 mod os_stats;
