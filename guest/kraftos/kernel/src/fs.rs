@@ -24,6 +24,8 @@ use core::cell::UnsafeCell;
 #[cfg(any(not(test), feature = "host-test"))]
 static RUNTIME_FD_TABLE: KernelFileDescriptorTable =
     KernelFileDescriptorTable::new(FileDescriptorTable::new());
+#[cfg(any(not(test), feature = "host-test"))]
+static ROOT_FS: KernelRootFs = KernelRootFs::new(crate::k16fs_root::K16RootFs::new());
 
 #[cfg(any(not(test), feature = "host-test"))]
 struct KernelFileDescriptorTable {
@@ -32,6 +34,14 @@ struct KernelFileDescriptorTable {
 
 #[cfg(any(not(test), feature = "host-test"))]
 unsafe impl Sync for KernelFileDescriptorTable {}
+
+#[cfg(any(not(test), feature = "host-test"))]
+struct KernelRootFs {
+    fs: UnsafeCell<crate::k16fs_root::K16RootFs>,
+}
+
+#[cfg(any(not(test), feature = "host-test"))]
+unsafe impl Sync for KernelRootFs {}
 
 #[cfg(any(not(test), feature = "host-test"))]
 impl KernelFileDescriptorTable {
@@ -43,6 +53,19 @@ impl KernelFileDescriptorTable {
 
     unsafe fn get(&self) -> &mut FileDescriptorTable {
         unsafe { &mut *self.table.get() }
+    }
+}
+
+#[cfg(any(not(test), feature = "host-test"))]
+impl KernelRootFs {
+    const fn new(fs: crate::k16fs_root::K16RootFs) -> Self {
+        Self {
+            fs: UnsafeCell::new(fs),
+        }
+    }
+
+    unsafe fn get(&self) -> &mut crate::k16fs_root::K16RootFs {
+        unsafe { &mut *self.fs.get() }
     }
 }
 
@@ -682,12 +705,10 @@ pub unsafe fn read_root_directory_into<S: DirectoryByteSink>(
     let components = path.components();
     let mut storage_sink = StorageDirectoryByteSink { sink };
     unsafe {
-        crate::storage::read_directory_from_storage0_into(
-            ROOT_PARTITION,
-            components.as_slice(),
-            &mut storage_sink,
-        )
-        .map_err(storage_error_to_fs_error)
+        ROOT_FS
+            .get()
+            .read_directory_into(ROOT_PARTITION, components.as_slice(), &mut storage_sink)
+            .map_err(storage_error_to_fs_error)
     }
 }
 
@@ -697,11 +718,13 @@ pub unsafe fn stat_root_path(path: &[u8]) -> Result<PathMetadata, FsError> {
     let path = RootMetadataPath::parse(path)?;
     let components = path.components();
     let metadata = unsafe {
-        crate::storage::stat_path_from_storage0(ROOT_PARTITION, components.as_slice())
+        ROOT_FS
+            .get()
+            .stat_path(ROOT_PARTITION, components.as_slice())
             .map_err(storage_error_to_fs_error)?
     };
     Ok(PathMetadata {
-        file_type: metadata.kind as u32,
+        file_type: metadata.file_type,
         size_bytes: metadata.size_bytes,
     })
 }

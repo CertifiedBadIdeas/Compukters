@@ -682,7 +682,12 @@ class K16RuntimeTextIoProfilingTest {
                     runProfiledCoreutilsCommand(device, metrics, command)
                 }
 
-            assertTrue(lines.any { it.contains("name=ls") && it.contains("readDirCalls=1") })
+            val lsLine = lines.single { it.contains("name=ls") }
+            assertTrue(lsLine.contains("readDirCalls=1"))
+            assertTrue(
+                metricValue(lsLine, "inodeLoads") <= 22,
+                "ls /bin should reuse cached inode metadata while listing directory entries: $lsLine",
+            )
             assertTrue(lines.any { it.contains("name=stat") && it.contains("statCalls=1") })
             assertTrue(lines.any { it.contains("name=mv") && it.contains("statCalls=1") })
             assertTrue(lines.any { it.contains("name=cat") && it.contains("fileReads=") })
@@ -909,6 +914,12 @@ private fun formatK16CoreutilsCommandProfile(
         "dynamicImportLoads=${osAfter.dynamicImportLoads - osBefore.dynamicImportLoads}, " +
         "libraryLoads=${osAfter.libraryLoads - osBefore.libraryLoads}, " +
         "readDirCalls=${osAfter.readDirCalls - osBefore.readDirCalls}"
+}
+
+private fun metricValue(line: String, name: String): Long {
+    val match = Regex("""(?:^|, )$name=(\d+)""").find(line)
+    require(match != null) { "missing metric `$name` in line: $line" }
+    return match.groupValues[1].toLong()
 }
 
 private class CapturingDisplayNetworkBridge : DisplayNetworkBridge {
