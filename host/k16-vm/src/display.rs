@@ -1,4 +1,4 @@
-use crate::generated::font_mono5x7::mono5x7_glyph;
+use crate::generated::terminal_font::{terminal_font_glyph, CELL_WIDTH, GLYPH_HEIGHT, GLYPH_WIDTH};
 use std::collections::{BTreeMap, BTreeSet};
 
 const TILE_SIZE: i32 = 16;
@@ -214,7 +214,7 @@ impl DisplayEngine {
         self.mark_rect_dirty(x, y, width, height);
     }
 
-    pub fn blit_mono5x7_text(
+    pub fn blit_terminal_text(
         &mut self,
         x: i32,
         y: i32,
@@ -226,19 +226,19 @@ impl DisplayEngine {
             return;
         }
         for (index, ch) in text.chars().enumerate() {
-            self.blit_mono5x7_packed(
-                x + index as i32 * 6,
+            self.blit_terminal_packed(
+                x + index as i32 * CELL_WIDTH,
                 y,
-                mono5x7_glyph(ch),
+                terminal_font_glyph(ch),
                 foreground,
                 background,
             );
         }
-        let dirty_width = (text.chars().count() as i32 - 1) * 6 + 5;
-        self.mark_rect_dirty(x, y, dirty_width, 7);
+        let dirty_width = (text.chars().count() as i32 - 1) * CELL_WIDTH + GLYPH_WIDTH;
+        self.mark_rect_dirty(x, y, dirty_width, GLYPH_HEIGHT);
     }
 
-    pub fn blit_mono5x7_packed(
+    pub fn blit_terminal_packed(
         &mut self,
         x: i32,
         y: i32,
@@ -246,15 +246,16 @@ impl DisplayEngine {
         foreground: u16,
         background: Option<u16>,
     ) {
-        for row in 0..7 {
-            let bits = ((glyph >> ((6 - row) * 5)) & 0b11111) as i32;
-            for col in 0..5 {
+        let row_mask = (1_u64 << GLYPH_WIDTH) - 1;
+        for row in 0..GLYPH_HEIGHT {
+            let bits = ((glyph >> ((GLYPH_HEIGHT - 1 - row) * GLYPH_WIDTH)) & row_mask) as i32;
+            for col in 0..GLYPH_WIDTH {
                 let target_x = x + col;
                 let target_y = y + row;
                 if !self.in_bounds(target_x, target_y) {
                     continue;
                 }
-                if bits & (1 << (4 - col)) != 0 {
+                if bits & (1 << (GLYPH_WIDTH - 1 - col)) != 0 {
                     let index = self.index(target_x, target_y);
                     self.pixels[index] = foreground;
                 } else if let Some(background) = background {
@@ -263,7 +264,7 @@ impl DisplayEngine {
                 }
             }
         }
-        self.mark_rect_dirty(x, y, 5, 7);
+        self.mark_rect_dirty(x, y, GLYPH_WIDTH, GLYPH_HEIGHT);
     }
 
     pub fn present(&mut self) -> Option<DisplayFrameDelta> {
@@ -447,7 +448,7 @@ impl DeviceDisplayRegistry {
         }
     }
 
-    pub fn blit_mono5x7_text(
+    pub fn blit_terminal_text(
         &mut self,
         display_id: i32,
         x: i32,
@@ -457,7 +458,7 @@ impl DeviceDisplayRegistry {
         background: Option<u16>,
     ) {
         if let Some(display) = self.displays.get_mut(&display_id) {
-            display.blit_mono5x7_text(x, y, text, foreground, background);
+            display.blit_terminal_text(x, y, text, foreground, background);
         }
     }
 
@@ -477,7 +478,7 @@ impl DeviceDisplayRegistry {
         }
     }
 
-    pub fn blit_mono5x7_packed(
+    pub fn blit_terminal_packed(
         &mut self,
         display_id: i32,
         x: i32,
@@ -487,7 +488,7 @@ impl DeviceDisplayRegistry {
         background: Option<u16>,
     ) {
         if let Some(display) = self.displays.get_mut(&display_id) {
-            display.blit_mono5x7_packed(x, y, glyph, foreground, background);
+            display.blit_terminal_packed(x, y, glyph, foreground, background);
         }
     }
 

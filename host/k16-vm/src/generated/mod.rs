@@ -1,1 +1,1 @@
-pub mod font_mono5x7;
+pub mod terminal_font;

@@ -17,13 +17,26 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-private const val GLYPH_WIDTH = 5
-private const val GLYPH_HEIGHT = 7
-private const val FALLBACK_CODEPOINT = 0xFFFD
-
-private val requiredCodepoints =
+private val terminalRequiredCodepoints =
     (0x20..0x7E).toSet() +
-        setOf(0x2500, 0x2502, 0x250C, 0x2510, 0x2514, 0x2518, 0x253C, FALLBACK_CODEPOINT)
+        setOf(0x2500, 0x2502, 0x250C, 0x2510, 0x2514, 0x2518, 0x253C)
+
+private data class K16FontMetadata(
+    val name: String,
+    val sourcePath: String,
+    val version: Int,
+    val glyphWidth: Int,
+    val glyphHeight: Int,
+    val cellWidth: Int,
+    val cellHeight: Int,
+    val baseline: Int,
+    val fallbackCodepoint: Int,
+)
+
+private data class ParsedK16Font(
+    val metadata: K16FontMetadata,
+    val glyphs: Map<Int, List<String>>,
+)
 
 data class GeneratedK16FontTables(
     val rustSource: String,
@@ -33,17 +46,18 @@ data class GeneratedK16FontTables(
 
 class K16FontTableGenerator {
     fun generate(source: String): GeneratedK16FontTables {
-        val glyphs = parse(source)
-        validate(glyphs)
-        val packed = glyphs.mapValues { (_, rows) -> pack(rows) }.toSortedMap()
+        val font = parse(source)
+        validate(font)
+        val packed = font.glyphs.mapValues { (_, rows) -> pack(rows, font.metadata) }.toSortedMap()
         return GeneratedK16FontTables(
-            rustSource = renderRust(packed),
-            guestRustSource = renderGuestRust(glyphs),
-            markdownSpecimen = renderMarkdownSpecimen(glyphs.toSortedMap()),
+            rustSource = renderRust(font.metadata, packed),
+            guestRustSource = renderGuestRust(font.metadata, font.glyphs),
+            markdownSpecimen = renderMarkdownSpecimen(font.metadata, font.glyphs.toSortedMap()),
         )
     }
 
-    private fun parse(source: String): Map<Int, List<String>> {
+    private fun parse(source: String): ParsedK16Font {
+        val header = linkedMapOf<String, String>()
         val glyphs = linkedMapOf<Int, List<String>>()
         val lines = source.lines()
         var index = 0
@@ -51,46 +65,95 @@ class K16FontTableGenerator {
             val line = lines[index].trim()
             index += 1
             if (line.isEmpty() || line.startsWith("#")) continue
-            require(line.startsWith("glyph ")) { "Expected `glyph U+XXXX`, got `$line` at line $index" }
+            if (!line.startsWith("glyph ")) {
+                val parts = line.split(Regex("\\s+"), limit = 2)
+                require(parts.size == 2) { "Expected `key value` or `glyph U+XXXX`, got `$line` at line $index" }
+                require(parts[0] !in header) { "Duplicate font header `${parts[0]}` at line $index" }
+                header[parts[0]] = parts[1]
+                continue
+            }
+            val metadata = parseMetadata(header)
             val parts = line.split(Regex("\\s+"))
             require(parts.size >= 2) { "Glyph header must include a codepoint at line $index" }
-            val codepoint = parts[1].removePrefix("U+").toInt(radix = 16)
+            val codepoint = parseCodepoint(parts[1])
             val rows =
-                (0 until GLYPH_HEIGHT).map { row ->
+                (0 until metadata.glyphHeight).map { row ->
                     require(index < lines.size) { "Incomplete glyph U+${codepoint.hex()} at line $index" }
                     val glyphRow = lines[index].trim()
                     index += 1
-                    require(glyphRow.length == GLYPH_WIDTH && glyphRow.all { it == '.' || it == '#' }) {
-                        "Glyph U+${codepoint.hex()} row ${row + 1} must be $GLYPH_WIDTH cells of `.` or `#`"
+                    require(glyphRow.length == metadata.glyphWidth && glyphRow.all { it == '.' || it == '#' }) {
+                        "Glyph U+${codepoint.hex()} row ${row + 1} must be ${metadata.glyphWidth} cells of `.` or `#`"
                     }
                     glyphRow
                 }
             glyphs[codepoint] = rows
         }
-        return glyphs
+        return ParsedK16Font(parseMetadata(header), glyphs)
     }
 
-    private fun validate(glyphs: Map<Int, List<String>>) {
-        val missing = requiredCodepoints.filterNot(glyphs::containsKey)
+    private fun parseMetadata(header: Map<String, String>): K16FontMetadata {
+        val missing =
+            listOf(
+                "font",
+                "source",
+                "version",
+                "glyph_width",
+                "glyph_height",
+                "cell_width",
+                "cell_height",
+                "baseline",
+                "fallback",
+            ).filterNot(header::containsKey)
+        require(missing.isEmpty()) { "Missing font header fields: ${missing.joinToString()}" }
+        val metadata =
+            K16FontMetadata(
+                name = header.getValue("font"),
+                sourcePath = header.getValue("source"),
+                version = header.getValue("version").toInt(),
+                glyphWidth = header.getValue("glyph_width").toInt(),
+                glyphHeight = header.getValue("glyph_height").toInt(),
+                cellWidth = header.getValue("cell_width").toInt(),
+                cellHeight = header.getValue("cell_height").toInt(),
+                baseline = header.getValue("baseline").toInt(),
+                fallbackCodepoint = parseCodepoint(header.getValue("fallback")),
+            )
+        require(metadata.version == 1) { "Unsupported font source version ${metadata.version}" }
+        require(metadata.glyphWidth in 1..8) { "glyph_width must be between 1 and 8" }
+        require(metadata.glyphHeight in 1..8) { "glyph_height must be between 1 and 8" }
+        require(metadata.cellWidth >= metadata.glyphWidth) { "cell_width must be >= glyph_width" }
+        require(metadata.cellHeight >= metadata.glyphHeight) { "cell_height must be >= glyph_height" }
+        require(metadata.baseline in 0..metadata.cellHeight) { "baseline must fit inside cell_height" }
+        return metadata
+    }
+
+    private fun validate(font: ParsedK16Font) {
+        val requiredCodepoints = terminalRequiredCodepoints + font.metadata.fallbackCodepoint
+        val missing = requiredCodepoints.filterNot(font.glyphs::containsKey)
         require(missing.isEmpty()) {
             "Missing required glyphs: ${missing.joinToString { "U+${it.hex()}" }}"
         }
     }
 
-    private fun pack(rows: List<String>): Long =
+    private fun pack(
+        rows: List<String>,
+        metadata: K16FontMetadata,
+    ): Long =
         rows.fold(0L) { value, row ->
             val bits =
                 row.fold(0L) { rowBits, ch ->
                     (rowBits shl 1) or if (ch == '#') 1L else 0L
                 }
-            (value shl GLYPH_WIDTH) or bits
+            (value shl metadata.glyphWidth) or bits
         }
 
-    private fun renderRust(packed: Map<Int, Long>): String {
-        val fallback = packed.getValue(FALLBACK_CODEPOINT)
+    private fun renderRust(
+        metadata: K16FontMetadata,
+        packed: Map<Int, Long>,
+    ): String {
+        val fallback = packed.getValue(metadata.fallbackCodepoint)
         val cases =
             packed.entries.joinToString(separator = "\n") { (codepoint, glyph) ->
-                "        ${rustChar(codepoint)} => 0b${glyph.bits35()},"
+                "        ${rustChar(codepoint)} => 0b${glyph.bits(metadata)},"
             }
         val knownCases =
             packed.keys.joinToString(separator = "\n") { codepoint ->
@@ -99,18 +162,20 @@ class K16FontTableGenerator {
         return """
             |// Generated by ./gradlew generateK16FontTables. Do not edit by hand.
             |
-            |pub const GLYPH_WIDTH: i32 = $GLYPH_WIDTH;
-            |pub const GLYPH_HEIGHT: i32 = $GLYPH_HEIGHT;
-            |pub const FALLBACK_GLYPH: u64 = 0b${fallback.bits35()};
+            |pub const GLYPH_WIDTH: i32 = ${metadata.glyphWidth};
+            |pub const GLYPH_HEIGHT: i32 = ${metadata.glyphHeight};
+            |pub const CELL_WIDTH: i32 = ${metadata.cellWidth};
+            |pub const CELL_HEIGHT: i32 = ${metadata.cellHeight};
+            |pub const FALLBACK_GLYPH: u64 = 0b${fallback.bits(metadata)};
             |
-            |pub fn has_mono5x7_glyph(ch: char) -> bool {
+            |pub fn has_terminal_font_glyph(ch: char) -> bool {
             |    match ch {
             |$knownCases
             |        _ => false,
             |    }
             |}
             |
-            |pub fn mono5x7_glyph(ch: char) -> u64 {
+            |pub fn terminal_font_glyph(ch: char) -> u64 {
             |    match ch {
             |$cases
             |        _ => FALLBACK_GLYPH,
@@ -120,35 +185,42 @@ class K16FontTableGenerator {
         """.trimMargin()
     }
 
-    private fun renderGuestRust(glyphs: Map<Int, List<String>>): String {
+    private fun renderGuestRust(
+        metadata: K16FontMetadata,
+        glyphs: Map<Int, List<String>>,
+    ): String {
         val rows =
             (0x00..0x7F).joinToString(separator = "\n") { codepoint ->
-                "    ${glyphRows(glyphs[codepoint] ?: glyphs.getValue(FALLBACK_CODEPOINT))},"
+                "    ${glyphRows(glyphs[codepoint] ?: glyphs.getValue(metadata.fallbackCodepoint), metadata)},"
             }
         return """
             |// Generated by ./gradlew generateK16FontTables. Do not edit by hand.
             |
-            |pub const GLYPH_WIDTH: usize = $GLYPH_WIDTH;
-            |pub const GLYPH_HEIGHT: usize = $GLYPH_HEIGHT;
-            |pub const CELL_WIDTH: usize = 6;
-            |pub const CELL_HEIGHT: usize = 8;
-            |pub const MONO5X7_LAST: u8 = 0x7e;
+            |pub const GLYPH_WIDTH: usize = ${metadata.glyphWidth};
+            |pub const GLYPH_HEIGHT: usize = ${metadata.glyphHeight};
+            |pub const CELL_WIDTH: usize = ${metadata.cellWidth};
+            |pub const CELL_HEIGHT: usize = ${metadata.cellHeight};
+            |pub const BASELINE: usize = ${metadata.baseline};
+            |pub const TERMINAL_FONT_LAST: u8 = 0x7e;
             |#[rustfmt::skip]
-            |pub const FALLBACK_ROWS: [u8; GLYPH_HEIGHT] = ${glyphRows(glyphs.getValue(FALLBACK_CODEPOINT))};
+            |pub const FALLBACK_ROWS: [u8; GLYPH_HEIGHT] = ${glyphRows(glyphs.getValue(metadata.fallbackCodepoint), metadata)};
             |
             |#[rustfmt::skip]
-            |pub const MONO5X7_ROWS: [[u8; GLYPH_HEIGHT]; 128] = [
+            |pub const TERMINAL_FONT_ROWS: [[u8; GLYPH_HEIGHT]; 128] = [
             |$rows
             |];
             |
         """.trimMargin()
     }
 
-    private fun renderMarkdownSpecimen(glyphs: Map<Int, List<String>>): String {
+    private fun renderMarkdownSpecimen(
+        metadata: K16FontMetadata,
+        glyphs: Map<Int, List<String>>,
+    ): String {
         val glyphSections =
             glyphs.entries.joinToString(separator = "\n\n") { (codepoint, rows) ->
                 """
-                    |## U+${codepoint.hex()} ${codepoint.displayName()}
+                    |## U+${codepoint.hex()} ${displayName(codepoint, metadata)}
                     |
                     |```text
                     |${rows.joinToString(separator = "\n")}
@@ -156,34 +228,45 @@ class K16FontTableGenerator {
                 """.trimMargin()
             }
         return """
-            |# K16 Mono 5x7 Font Specimen
+            |# ${metadata.name} Font Specimen
             |
-            |- Glyph size: ${GLYPH_WIDTH}x${GLYPH_HEIGHT}
+            |- Glyph size: ${metadata.glyphWidth}x${metadata.glyphHeight}
+            |- Cell size: ${metadata.cellWidth}x${metadata.cellHeight}
+            |- Baseline: ${metadata.baseline}
             |- Glyph count: ${glyphs.size}
-            |- Source: assets/k16/fonts/k16-mono-5x7.font
+            |- Source: ${metadata.sourcePath}
             |
             |$glyphSections
             |
         """.trimMargin()
     }
 
+    private fun parseCodepoint(value: String): Int = value.removePrefix("U+").toInt(radix = 16)
+
     private fun rustChar(codepoint: Int): String = "'\\u{${codepoint.toString(radix = 16)}}'"
 
-    private fun glyphRows(rows: List<String>): String =
+    private fun glyphRows(
+        rows: List<String>,
+        metadata: K16FontMetadata,
+    ): String =
         rows.joinToString(prefix = "[", postfix = "]") { row ->
             "0b" + row.fold(0) { bits, ch -> (bits shl 1) or if (ch == '#') 1 else 0 }
                 .toString(radix = 2)
-                .padStart(GLYPH_WIDTH, '0')
+                .padStart(metadata.glyphWidth, '0')
         }
 
     private fun Int.hex(): String = toString(radix = 16).uppercase().padStart(4, '0')
 
-    private fun Int.displayName(): String =
-        when (this) {
+    private fun displayName(
+        codepoint: Int,
+        metadata: K16FontMetadata,
+    ): String =
+        when (codepoint) {
             0x20 -> "SPACE"
-            FALLBACK_CODEPOINT -> "FALLBACK"
-            else -> String(Character.toChars(this))
+            metadata.fallbackCodepoint -> "FALLBACK"
+            else -> String(Character.toChars(codepoint))
         }
 
-    private fun Long.bits35(): String = toString(radix = 2).padStart(GLYPH_WIDTH * GLYPH_HEIGHT, '0')
+    private fun Long.bits(metadata: K16FontMetadata): String =
+        toString(radix = 2).padStart(metadata.glyphWidth * metadata.glyphHeight, '0')
 }

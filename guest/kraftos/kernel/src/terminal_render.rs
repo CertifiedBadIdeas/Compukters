@@ -64,7 +64,7 @@ fn render_glyph(byte: u8) {
 
 fn blit_glyph(column: usize, row: usize) {
     let x = column * font::CELL_WIDTH;
-    let y = row * font::CELL_HEIGHT + 1;
+    let y = row * font::CELL_HEIGHT;
     let buffer_addr = core::ptr::addr_of!(GLYPH_BUFFER) as u32;
     gpu::blit_buffer(
         x as i32,
