@@ -29,6 +29,8 @@ private data class K16FontMetadata(
     val glyphHeight: Int,
     val cellWidth: Int,
     val cellHeight: Int,
+    val glyphX: Int,
+    val glyphY: Int,
     val baseline: Int,
     val fallbackCodepoint: Int,
 )
@@ -101,6 +103,8 @@ class K16FontTableGenerator {
                 "glyph_height",
                 "cell_width",
                 "cell_height",
+                "glyph_x",
+                "glyph_y",
                 "baseline",
                 "fallback",
             ).filterNot(header::containsKey)
@@ -114,6 +118,8 @@ class K16FontTableGenerator {
                 glyphHeight = header.getValue("glyph_height").toInt(),
                 cellWidth = header.getValue("cell_width").toInt(),
                 cellHeight = header.getValue("cell_height").toInt(),
+                glyphX = header.getValue("glyph_x").toInt(),
+                glyphY = header.getValue("glyph_y").toInt(),
                 baseline = header.getValue("baseline").toInt(),
                 fallbackCodepoint = parseCodepoint(header.getValue("fallback")),
             )
@@ -122,6 +128,13 @@ class K16FontTableGenerator {
         require(metadata.glyphHeight in 1..8) { "glyph_height must be between 1 and 8" }
         require(metadata.cellWidth >= metadata.glyphWidth) { "cell_width must be >= glyph_width" }
         require(metadata.cellHeight >= metadata.glyphHeight) { "cell_height must be >= glyph_height" }
+        require(metadata.glyphX >= 0 && metadata.glyphY >= 0) { "glyph placement must be non-negative" }
+        require(
+            metadata.glyphX + metadata.glyphWidth <= metadata.cellWidth &&
+                metadata.glyphY + metadata.glyphHeight <= metadata.cellHeight,
+        ) {
+            "glyph placement must fit inside cell"
+        }
         require(metadata.baseline in 0..metadata.cellHeight) { "baseline must fit inside cell_height" }
         return metadata
     }
@@ -166,6 +179,8 @@ class K16FontTableGenerator {
             |pub const GLYPH_HEIGHT: i32 = ${metadata.glyphHeight};
             |pub const CELL_WIDTH: i32 = ${metadata.cellWidth};
             |pub const CELL_HEIGHT: i32 = ${metadata.cellHeight};
+            |pub const GLYPH_X: i32 = ${metadata.glyphX};
+            |pub const GLYPH_Y: i32 = ${metadata.glyphY};
             |pub const FALLBACK_GLYPH: u64 = 0b${fallback.bits(metadata)};
             |
             |pub fn has_terminal_font_glyph(ch: char) -> bool {
@@ -200,6 +215,8 @@ class K16FontTableGenerator {
             |pub const GLYPH_HEIGHT: usize = ${metadata.glyphHeight};
             |pub const CELL_WIDTH: usize = ${metadata.cellWidth};
             |pub const CELL_HEIGHT: usize = ${metadata.cellHeight};
+            |pub const GLYPH_X: usize = ${metadata.glyphX};
+            |pub const GLYPH_Y: usize = ${metadata.glyphY};
             |pub const BASELINE: usize = ${metadata.baseline};
             |pub const TERMINAL_FONT_LAST: u8 = 0x7e;
             |#[rustfmt::skip]
@@ -232,6 +249,7 @@ class K16FontTableGenerator {
             |
             |- Glyph size: ${metadata.glyphWidth}x${metadata.glyphHeight}
             |- Cell size: ${metadata.cellWidth}x${metadata.cellHeight}
+            |- Glyph origin: ${metadata.glyphX},${metadata.glyphY}
             |- Baseline: ${metadata.baseline}
             |- Glyph count: ${glyphs.size}
             |- Source: ${metadata.sourcePath}

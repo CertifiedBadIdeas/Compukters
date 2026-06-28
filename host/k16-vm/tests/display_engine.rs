@@ -1,5 +1,8 @@
 use k16_vm::display::{DeviceDisplayRegistry, DisplayEngine, DisplayFrameOperation, PixelFormat};
-use k16_vm::generated::terminal_font::{has_terminal_font_glyph, terminal_font_glyph};
+use k16_vm::generated::terminal_font::{
+    has_terminal_font_glyph, terminal_font_glyph, CELL_HEIGHT, CELL_WIDTH, GLYPH_HEIGHT,
+    GLYPH_WIDTH, GLYPH_X, GLYPH_Y,
+};
 
 fn payload_contains_rgb565(payload: &[u8], rgb565: u16) -> bool {
     let hi = (rgb565 >> 8) as u8;
@@ -105,7 +108,7 @@ fn blit_mono_draws_foreground_and_background() {
 
 #[test]
 fn blit_terminal_text_draws_glyph_run() {
-    let mut display = DisplayEngine::new(4, 18, 9, PixelFormat::Rgb565).unwrap();
+    let mut display = DisplayEngine::new(4, 18, 12, PixelFormat::Rgb565).unwrap();
 
     display.blit_terminal_text(0, 1, "AB", 0x07E0, None);
     let frame = display.present().expect("text frame");
@@ -120,9 +123,19 @@ fn blit_terminal_text_draws_glyph_run() {
 }
 
 #[test]
+fn generated_terminal_font_places_smaller_glyph_inside_cell() {
+    assert_eq!(GLYPH_WIDTH, 5);
+    assert_eq!(GLYPH_HEIGHT, 7);
+    assert_eq!(CELL_WIDTH, 6);
+    assert_eq!(CELL_HEIGHT, 9);
+    assert_eq!(GLYPH_X, 0);
+    assert_eq!(GLYPH_Y, 1);
+}
+
+#[test]
 fn text_run_supports_digits_lowercase_and_punctuation() {
     fn single_text_payload(text: &str) -> Vec<u8> {
-        let mut display = DisplayEngine::new(6, 18, 9, PixelFormat::Rgb565).unwrap();
+        let mut display = DisplayEngine::new(6, 18, 12, PixelFormat::Rgb565).unwrap();
         display.blit_terminal_text(0, 1, text, 0x07E0, Some(0x0000));
         display
             .present()

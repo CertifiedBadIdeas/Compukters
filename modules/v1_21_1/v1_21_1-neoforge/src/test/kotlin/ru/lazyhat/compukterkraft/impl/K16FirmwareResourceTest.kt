@@ -35,7 +35,7 @@ import kotlin.test.assertTrue
 private const val K16_KERNEL_LOAD_ADDR = 0x0000_4000
 private const val K16_TERMINAL_CELLS_ADDR = 0x0000_3000
 private const val K16_TERMINAL_COLUMNS = 53
-private const val K16_TERMINAL_ROWS = 25
+private const val K16_TERMINAL_ROWS = 22
 private const val LEGACY_KERNEL_SHELL_DISABLED =
     "Legacy kernel shell runtime path is no longer active; shell behavior is owned by a userland shell program."
 
@@ -1750,7 +1750,7 @@ class K16FirmwareResourceTest {
             "bottom overflow must not wrap to row zero",
         )
 
-        assertTrue(terminalRenderSource.contains("static mut GLYPH_BUFFER:"), "terminal renderer should own glyph buffers")
+        assertTrue(terminalRenderSource.contains("static mut CELL_BUFFER:"), "terminal renderer should own cell buffers")
         assertTrue(terminalRenderSource.contains("fn render_glyph("), "terminal renderer should rasterize glyphs")
         assertTrue(terminalRenderSource.contains("fn blit_glyph("), "terminal renderer should blit glyphs")
         assertTrue(

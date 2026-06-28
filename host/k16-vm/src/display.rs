@@ -1,4 +1,6 @@
-use crate::generated::terminal_font::{terminal_font_glyph, CELL_WIDTH, GLYPH_HEIGHT, GLYPH_WIDTH};
+use crate::generated::terminal_font::{
+    terminal_font_glyph, CELL_HEIGHT, CELL_WIDTH, GLYPH_HEIGHT, GLYPH_WIDTH, GLYPH_X, GLYPH_Y,
+};
 use std::collections::{BTreeMap, BTreeSet};
 
 const TILE_SIZE: i32 = 16;
@@ -234,8 +236,8 @@ impl DisplayEngine {
                 background,
             );
         }
-        let dirty_width = (text.chars().count() as i32 - 1) * CELL_WIDTH + GLYPH_WIDTH;
-        self.mark_rect_dirty(x, y, dirty_width, GLYPH_HEIGHT);
+        let dirty_width = text.chars().count() as i32 * CELL_WIDTH;
+        self.mark_rect_dirty(x, y, dirty_width, CELL_HEIGHT);
     }
 
     pub fn blit_terminal_packed(
@@ -247,15 +249,23 @@ impl DisplayEngine {
         background: Option<u16>,
     ) {
         let row_mask = (1_u64 << GLYPH_WIDTH) - 1;
-        for row in 0..GLYPH_HEIGHT {
-            let bits = ((glyph >> ((GLYPH_HEIGHT - 1 - row) * GLYPH_WIDTH)) & row_mask) as i32;
-            for col in 0..GLYPH_WIDTH {
+        for row in 0..CELL_HEIGHT {
+            let glyph_row = row - GLYPH_Y;
+            let bits = if (GLYPH_Y..GLYPH_Y + GLYPH_HEIGHT).contains(&row) {
+                ((glyph >> ((GLYPH_HEIGHT - 1 - glyph_row) * GLYPH_WIDTH)) & row_mask) as i32
+            } else {
+                0
+            };
+            for col in 0..CELL_WIDTH {
+                let glyph_col = col - GLYPH_X;
                 let target_x = x + col;
                 let target_y = y + row;
                 if !self.in_bounds(target_x, target_y) {
                     continue;
                 }
-                if bits & (1 << (GLYPH_WIDTH - 1 - col)) != 0 {
+                if (GLYPH_X..GLYPH_X + GLYPH_WIDTH).contains(&col)
+                    && bits & (1 << (GLYPH_WIDTH - 1 - glyph_col)) != 0
+                {
                     let index = self.index(target_x, target_y);
                     self.pixels[index] = foreground;
                 } else if let Some(background) = background {
@@ -264,7 +274,7 @@ impl DisplayEngine {
                 }
             }
         }
-        self.mark_rect_dirty(x, y, GLYPH_WIDTH, GLYPH_HEIGHT);
+        self.mark_rect_dirty(x, y, CELL_WIDTH, CELL_HEIGHT);
     }
 
     pub fn present(&mut self) -> Option<DisplayFrameDelta> {
