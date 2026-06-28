@@ -23,6 +23,7 @@ import ru.lazyhat.compukterkraft.lang.runtime.VmInstructionKind
 import ru.lazyhat.compukterkraft.lang.runtime.VmSignalKind
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16BusTraffic
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16ComputerStatsSnapshot
+import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16DecodeCacheStats
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16GpuStats
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16MmioDeviceStats
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16OsStats
@@ -154,6 +155,7 @@ class RuntimeProfilingTest {
             NativeK16ComputerStatsSnapshot(
                 ram = NativeK16BusTraffic(loads = 10, stores = 11, bytesRead = 12, bytesWritten = 13),
                 mmio = NativeK16BusTraffic(loads = 20, stores = 21, bytesRead = 22, bytesWritten = 23),
+                decodeCache = NativeK16DecodeCacheStats(entries = 42, hits = 43, misses = 44),
                 os =
                     NativeK16OsStats(
                         pathLookups = 31,
@@ -356,6 +358,10 @@ class RuntimeProfilingTest {
         )
         assertTrue(
             summary.contains("    k16Bus: ramLoads=10, ramStores=11, ramBytesRead=12, ramBytesWritten=13, mmioLoads=20, mmioStores=21, mmioBytesRead=22, mmioBytesWritten=23"),
+            summary,
+        )
+        assertTrue(
+            summary.contains("    k16DecodeCache: entries=42, hits=43, misses=44"),
             summary,
         )
         assertTrue(

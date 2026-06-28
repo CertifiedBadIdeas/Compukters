@@ -105,10 +105,11 @@ class K16ComputerRuntimeTest {
         val snapshot =
             NativeK16ComputerStatsSnapshot.from(
                 longArrayOf(
-                    5,
+                    6,
                     2, 3, 4, 5,
                     6, 7, 8, 9,
                     31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41,
+                    42, 43, 44,
                     1,
                     11, 0x1000, 64,
                     12, 13, 14, 15,
@@ -135,6 +136,7 @@ class K16ComputerRuntimeTest {
             ),
             snapshot.os,
         )
+        assertEquals(NativeK16DecodeCacheStats(entries = 42, hits = 43, misses = 44), snapshot.decodeCache)
         assertEquals(
             listOf(
                 NativeK16MmioDeviceStats(
@@ -181,6 +183,7 @@ class K16ComputerRuntimeTest {
             )
 
         assertEquals(NativeK16GpuStats(), snapshot.devices.single().gpu)
+        assertEquals(NativeK16DecodeCacheStats(), snapshot.decodeCache)
     }
 
     @Test
