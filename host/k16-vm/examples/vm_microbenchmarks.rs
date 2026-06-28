@@ -19,8 +19,9 @@
 
 use k16_vm::vm_microbenchmarks::{
     benchmark_output_header, format_benchmark_sample, format_instruction_profile_report_sample,
-    instruction_profile_report_header, run_k16_workload, run_k16_workload_instruction_profile,
-    run_native_rust_workload, VmBenchmarkSample, VmBenchmarkWorkload,
+    instruction_profile_report_header, run_k16_workload, run_k16_workload_cached_decode,
+    run_k16_workload_instruction_profile, run_native_rust_workload, VmBenchmarkSample,
+    VmBenchmarkWorkload,
 };
 use std::env;
 use std::hint::black_box;
@@ -34,6 +35,13 @@ fn main() {
     println!("{}", benchmark_output_header());
     for workload in VmBenchmarkWorkload::all() {
         let k16 = collect_sample(*workload, "k16", iterations, samples, run_k16_workload);
+        let k16_cached = collect_sample(
+            *workload,
+            "k16-cached",
+            iterations,
+            samples,
+            run_k16_workload_cached_decode,
+        );
         let native = collect_sample(
             *workload,
             "native-rust",
@@ -42,6 +50,10 @@ fn main() {
             run_native_rust_workload,
         );
         println!("{}", format_benchmark_sample(&k16, native.best_nanos));
+        println!(
+            "{}",
+            format_benchmark_sample(&k16_cached, native.best_nanos)
+        );
         println!("{}", format_benchmark_sample(&native, native.best_nanos));
     }
 

@@ -1,9 +1,9 @@
 use k16_vm::k16::{
-    K16AddressMode, K16Cpu, K16PrivilegeMode, K16Signal, K16_CSR_INTERRUPT_ENABLE,
-    K16_CSR_INTERRUPT_MASK, K16_CSR_INTERRUPT_PENDING, K16_CSR_TRAP_ARG0, K16_CSR_TRAP_ARG1,
-    K16_CSR_TRAP_ARG2, K16_CSR_TRAP_CAUSE, K16_CSR_TRAP_FRAME_INDEX, K16_CSR_TRAP_FRAME_REGISTER,
-    K16_CSR_TRAP_INTERRUPT_ENABLE, K16_CSR_TRAP_PC, K16_CSR_TRAP_RESUME_PC,
-    K16_CSR_TRAP_STACK_POINTER, K16_CSR_TRAP_VALUE, K16_CSR_TRAP_VECTOR,
+    K16AddressMode, K16CachedDecoder, K16Cpu, K16PrivilegeMode, K16Signal,
+    K16_CSR_INTERRUPT_ENABLE, K16_CSR_INTERRUPT_MASK, K16_CSR_INTERRUPT_PENDING, K16_CSR_TRAP_ARG0,
+    K16_CSR_TRAP_ARG1, K16_CSR_TRAP_ARG2, K16_CSR_TRAP_CAUSE, K16_CSR_TRAP_FRAME_INDEX,
+    K16_CSR_TRAP_FRAME_REGISTER, K16_CSR_TRAP_INTERRUPT_ENABLE, K16_CSR_TRAP_PC,
+    K16_CSR_TRAP_RESUME_PC, K16_CSR_TRAP_STACK_POINTER, K16_CSR_TRAP_VALUE, K16_CSR_TRAP_VECTOR,
     K16_INTERRUPT_SOURCE_TIMER0, K16_STACK_POINTER_REGISTER, K16_TRAP_CAUSE_EXPLICIT_TRAP,
     K16_TRAP_CAUSE_ILLEGAL_INSTRUCTION, K16_TRAP_CAUSE_INSTRUCTION_FETCH_FAULT,
     K16_TRAP_CAUSE_STORE_FAULT, K16_TRAP_CAUSE_TIMER0_INTERRUPT,
@@ -24,6 +24,30 @@ fn k16_fetches_decodes_and_executes_words_from_guest_memory() {
     assert_eq!(cpu.run_until_signal(&mut bus, 16).unwrap(), K16Signal::Halt,);
     assert_eq!(cpu.register(3), 7);
     assert_eq!(cpu.pc(), 10);
+}
+
+#[test]
+fn k16_cached_decoder_reuses_loop_instruction_decodes() {
+    let mut bus = MachineBus::new(64).unwrap();
+    let mut program = vec![const4(0, 3), const4(1, 0), const4(2, 1)];
+    program.extend(eq(3, 1, 0));
+    program.extend([branch_if_zero(3, 1), halt()]);
+    program.extend(add(1, 1, 2));
+    program.push(branch_if_nonzero(2, -7));
+    write_words(&mut bus, 0, &program);
+    let mut cpu = K16Cpu::new(0);
+    let mut decoder = K16CachedDecoder::new();
+
+    assert_eq!(
+        cpu.run_until_signal_with_decoder(&mut bus, &mut decoder, 32)
+            .unwrap(),
+        K16Signal::Halt,
+    );
+    assert_eq!(cpu.register(1), 3);
+    let stats = decoder.stats();
+    assert!(stats.entries > 0, "{stats:?}");
+    assert!(stats.hits > 0, "{stats:?}");
+    assert!(stats.misses < cpu.metrics().steps, "{stats:?}");
 }
 
 #[test]
