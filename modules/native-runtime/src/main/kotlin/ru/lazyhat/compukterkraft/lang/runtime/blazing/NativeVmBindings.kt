@@ -93,10 +93,17 @@ data class NativeK16MmioDeviceStats(
     val gpu: NativeK16GpuStats = NativeK16GpuStats(),
 )
 
+data class NativeK16DecodeCacheStats(
+    val entries: Long = 0,
+    val hits: Long = 0,
+    val misses: Long = 0,
+)
+
 data class NativeK16ComputerStatsSnapshot(
     val ram: NativeK16BusTraffic = NativeK16BusTraffic(),
     val mmio: NativeK16BusTraffic = NativeK16BusTraffic(),
     val os: NativeK16OsStats = NativeK16OsStats(),
+    val decodeCache: NativeK16DecodeCacheStats = NativeK16DecodeCacheStats(),
     val devices: List<NativeK16MmioDeviceStats> = emptyList(),
 ) {
     companion object {
@@ -104,9 +111,11 @@ data class NativeK16ComputerStatsSnapshot(
         private const val VERSION_V3: Long = 3
         private const val VERSION_V4: Long = 4
         private const val VERSION_V5: Long = 5
+        private const val VERSION_V6: Long = 6
         private const val HEADER_LONGS_V2: Int = 10
         private const val HEADER_LONGS_V4: Int = 16
         private const val HEADER_LONGS_V5: Int = 21
+        private const val HEADER_LONGS_V6: Int = 24
         private const val DEVICE_LONGS_V2: Int = 13
         private const val DEVICE_LONGS_V3: Int = 20
 
@@ -115,11 +124,18 @@ data class NativeK16ComputerStatsSnapshot(
                 "Native K16 stats snapshot is too short: ${values.size} longs"
             }
             val version = values[0]
-            require(version == VERSION_V2 || version == VERSION_V3 || version == VERSION_V4 || version == VERSION_V5) {
+            require(
+                version == VERSION_V2 ||
+                    version == VERSION_V3 ||
+                    version == VERSION_V4 ||
+                    version == VERSION_V5 ||
+                    version == VERSION_V6,
+            ) {
                 "Unsupported native K16 stats snapshot version: $version"
             }
             val headerLongs =
                 when (version) {
+                    VERSION_V6 -> HEADER_LONGS_V6
                     VERSION_V5 -> HEADER_LONGS_V5
                     VERSION_V4 -> HEADER_LONGS_V4
                     else -> HEADER_LONGS_V2
@@ -186,7 +202,7 @@ data class NativeK16ComputerStatsSnapshot(
                         bytesWritten = values[8],
                     ),
                 os =
-                    if (version == VERSION_V4 || version == VERSION_V5) {
+                    if (version == VERSION_V4 || version == VERSION_V5 || version == VERSION_V6) {
                         NativeK16OsStats(
                             pathLookups = values[9],
                             inodeLoads = values[10],
@@ -194,14 +210,24 @@ data class NativeK16ComputerStatsSnapshot(
                             fileOpens = values[12],
                             fileReads = values[13],
                             statCalls = values[14],
-                            processSpawns = if (version == VERSION_V5) values[15] else 0,
-                            programLoads = if (version == VERSION_V5) values[16] else 0,
-                            dynamicImportLoads = if (version == VERSION_V5) values[17] else 0,
-                            libraryLoads = if (version == VERSION_V5) values[18] else 0,
-                            readDirCalls = if (version == VERSION_V5) values[19] else 0,
+                            processSpawns = if (version == VERSION_V5 || version == VERSION_V6) values[15] else 0,
+                            programLoads = if (version == VERSION_V5 || version == VERSION_V6) values[16] else 0,
+                            dynamicImportLoads = if (version == VERSION_V5 || version == VERSION_V6) values[17] else 0,
+                            libraryLoads = if (version == VERSION_V5 || version == VERSION_V6) values[18] else 0,
+                            readDirCalls = if (version == VERSION_V5 || version == VERSION_V6) values[19] else 0,
                         )
                     } else {
                         NativeK16OsStats()
+                    },
+                decodeCache =
+                    if (version == VERSION_V6) {
+                        NativeK16DecodeCacheStats(
+                            entries = values[20],
+                            hits = values[21],
+                            misses = values[22],
+                        )
+                    } else {
+                        NativeK16DecodeCacheStats()
                     },
                 devices = devices,
             )

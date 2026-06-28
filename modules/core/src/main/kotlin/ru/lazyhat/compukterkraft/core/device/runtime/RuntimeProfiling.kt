@@ -23,6 +23,7 @@ import ru.lazyhat.compukterkraft.lang.runtime.VmInstructionKind
 import ru.lazyhat.compukterkraft.lang.runtime.VmSignalKind
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16BusTraffic
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16ComputerStatsSnapshot
+import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16DecodeCacheStats
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16GpuStats
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16MmioDeviceStats
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16OsStats
@@ -265,10 +266,17 @@ data class RuntimeK16OsMetrics(
     val readDirCalls: Long = 0,
 )
 
+data class RuntimeK16DecodeCacheMetrics(
+    val entries: Long = 0,
+    val hits: Long = 0,
+    val misses: Long = 0,
+)
+
 data class RuntimeK16StatsMetrics(
     val ram: RuntimeK16BusTrafficMetrics = RuntimeK16BusTrafficMetrics(),
     val mmio: RuntimeK16BusTrafficMetrics = RuntimeK16BusTrafficMetrics(),
     val os: RuntimeK16OsMetrics = RuntimeK16OsMetrics(),
+    val decodeCache: RuntimeK16DecodeCacheMetrics = RuntimeK16DecodeCacheMetrics(),
     val devices: List<RuntimeK16MmioDeviceMetrics> = emptyList(),
 ) {
     val deviceTraffic: RuntimeK16BusTrafficMetrics =
@@ -371,6 +379,9 @@ data class RuntimeProfilingSnapshot(
             )
             appendLine(
                 "    k16Bus: ramLoads=${k16.ram.loads}, ramStores=${k16.ram.stores}, ramBytesRead=${k16.ram.bytesRead}, ramBytesWritten=${k16.ram.bytesWritten}, mmioLoads=${k16.mmio.loads}, mmioStores=${k16.mmio.stores}, mmioBytesRead=${k16.mmio.bytesRead}, mmioBytesWritten=${k16.mmio.bytesWritten}",
+            )
+            appendLine(
+                "    k16DecodeCache: entries=${k16.decodeCache.entries}, hits=${k16.decodeCache.hits}, misses=${k16.decodeCache.misses}",
             )
             appendLine(
                 "    k16Devices: mapped=${k16.devices.size}, loads=${k16.deviceTraffic.loads}, stores=${k16.deviceTraffic.stores}, bytesRead=${k16.deviceTraffic.bytesRead}, bytesWritten=${k16.deviceTraffic.bytesWritten}",
@@ -916,7 +927,15 @@ private fun NativeK16ComputerStatsSnapshot.toRuntimeMetrics(): RuntimeK16StatsMe
         ram = ram.toRuntimeMetrics(),
         mmio = mmio.toRuntimeMetrics(),
         os = os.toRuntimeMetrics(),
+        decodeCache = decodeCache.toRuntimeMetrics(),
         devices = devices.map { it.toRuntimeMetrics() },
+    )
+
+private fun NativeK16DecodeCacheStats.toRuntimeMetrics(): RuntimeK16DecodeCacheMetrics =
+    RuntimeK16DecodeCacheMetrics(
+        entries = entries,
+        hits = hits,
+        misses = misses,
     )
 
 private fun NativeK16BusTraffic.toRuntimeMetrics(): RuntimeK16BusTrafficMetrics =

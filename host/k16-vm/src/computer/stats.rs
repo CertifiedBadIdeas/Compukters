@@ -4,7 +4,15 @@ use crate::low_bus::{MachineBusStatsSnapshot, MachineBusTrafficSnapshot, MmioDev
 pub struct K16ComputerStatsSnapshot {
     pub bus: MachineBusStatsSnapshot,
     pub os: K16ComputerOsStatsSnapshot,
+    pub decode_cache: K16ComputerDecodeCacheStatsSnapshot,
     pub devices: Vec<K16ComputerDeviceStats>,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct K16ComputerDecodeCacheStatsSnapshot {
+    pub entries: u64,
+    pub hits: u64,
+    pub misses: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

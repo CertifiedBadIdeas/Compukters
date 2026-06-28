@@ -59,6 +59,10 @@ fn computer_machine_boot_runtime_reuses_cached_decoder() {
     let stats = machine.k16_decode_cache_stats_for_tests(boot_cpu).unwrap();
     assert!(stats.hits > 0, "{stats:?}");
     assert!(stats.entries > 0, "{stats:?}");
+    let snapshot_stats = machine.stats_snapshot().decode_cache;
+    assert_eq!(snapshot_stats.entries, stats.entries as u64);
+    assert_eq!(snapshot_stats.hits, stats.hits);
+    assert_eq!(snapshot_stats.misses, stats.misses);
 }
 
 #[test]

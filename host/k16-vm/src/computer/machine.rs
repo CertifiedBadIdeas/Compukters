@@ -4,8 +4,8 @@ use crate::computer::devices::{
 };
 use crate::computer::profile::ComputerMachineProfile;
 use crate::computer::stats::{
-    K16ComputerDeviceStats, K16ComputerGpuStatsSnapshot, K16ComputerOsStatsSnapshot,
-    K16ComputerStatsSnapshot, K16ComputerStorageStatsSnapshot,
+    K16ComputerDecodeCacheStatsSnapshot, K16ComputerDeviceStats, K16ComputerGpuStatsSnapshot,
+    K16ComputerOsStatsSnapshot, K16ComputerStatsSnapshot, K16ComputerStorageStatsSnapshot,
 };
 use crate::computer_abi;
 use crate::display::DisplayFrameDelta;
@@ -352,6 +352,7 @@ impl ComputerMachine {
     pub fn stats_snapshot(&self) -> K16ComputerStatsSnapshot {
         let bus = self.bus.stats_snapshot();
         let os = self.os_stats_snapshot();
+        let decode_cache = self.decode_cache_stats_snapshot();
         let mut devices = Vec::new();
         self.push_stats_device(
             &bus,
@@ -429,7 +430,29 @@ impl ComputerMachine {
             K16ComputerStorageStatsSnapshot::default(),
             K16ComputerGpuStatsSnapshot::default(),
         );
-        K16ComputerStatsSnapshot { bus, os, devices }
+        K16ComputerStatsSnapshot {
+            bus,
+            os,
+            decode_cache,
+            devices,
+        }
+    }
+
+    fn decode_cache_stats_snapshot(&self) -> K16ComputerDecodeCacheStatsSnapshot {
+        self.cpus
+            .iter()
+            .map(|cpu| match cpu {
+                ComputerCpuContext::K16 { decoder, .. } => decoder.stats(),
+            })
+            .fold(
+                K16ComputerDecodeCacheStatsSnapshot::default(),
+                |mut total, stats| {
+                    total.entries = total.entries.saturating_add(stats.entries as u64);
+                    total.hits = total.hits.saturating_add(stats.hits);
+                    total.misses = total.misses.saturating_add(stats.misses);
+                    total
+                },
+            )
     }
 
     fn os_stats_snapshot(&self) -> K16ComputerOsStatsSnapshot {
