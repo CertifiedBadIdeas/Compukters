@@ -513,6 +513,7 @@ pub unsafe fn open_root_file_for_process(
             .map_err(storage_error_to_fs_error)?
         };
         unsafe { flush_root_storage()? };
+        unsafe { invalidate_root_fs_cache() };
         metadata
     };
     unsafe {
@@ -564,6 +565,7 @@ pub unsafe fn remove_root_file_for_process(path: &[u8]) -> Result<(), FsError> {
         crate::storage::remove_file_from_storage0(ROOT_PARTITION, components.as_slice())
             .map_err(storage_error_to_fs_error)?;
         flush_root_storage()?;
+        invalidate_root_fs_cache();
     }
     Ok(())
 }
@@ -587,6 +589,7 @@ pub unsafe fn rename_root_file_for_process(
         )
         .map_err(storage_error_to_fs_error)?;
         flush_root_storage()?;
+        invalidate_root_fs_cache();
     }
     Ok(())
 }
@@ -599,6 +602,7 @@ pub unsafe fn create_root_directory(path: &[u8]) -> Result<(), FsError> {
         crate::storage::create_directory_from_storage0(ROOT_PARTITION, components.as_slice())
             .map_err(storage_error_to_fs_error)?;
         flush_root_storage()?;
+        invalidate_root_fs_cache();
     }
     Ok(())
 }
@@ -611,6 +615,7 @@ pub unsafe fn remove_root_directory(path: &[u8]) -> Result<(), FsError> {
         crate::storage::remove_directory_from_storage0(ROOT_PARTITION, components.as_slice())
             .map_err(storage_error_to_fs_error)?;
         flush_root_storage()?;
+        invalidate_root_fs_cache();
     }
     Ok(())
 }
@@ -686,6 +691,7 @@ pub unsafe fn copy_ram_to_file_fd_range_for_process(
         )?
     };
     unsafe { flush_root_storage()? };
+    unsafe { invalidate_root_fs_cache() };
     Ok(len)
 }
 
@@ -763,6 +769,11 @@ fn storage_error_to_fs_error(error: crate::storage::StorageError) -> FsError {
 #[cfg(any(not(test), feature = "host-test"))]
 unsafe fn flush_root_storage() -> Result<(), FsError> {
     unsafe { crate::storage::flush_storage0().map_err(storage_error_to_fs_error) }
+}
+
+#[cfg(any(not(test), feature = "host-test"))]
+unsafe fn invalidate_root_fs_cache() {
+    unsafe { ROOT_FS.get().invalidate_all() };
 }
 
 #[cfg(any(not(test), feature = "host-test"))]
