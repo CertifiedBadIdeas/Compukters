@@ -40,4 +40,37 @@ class K16FirmwareVolumeBuildScriptTest {
         assertFalse(buildScript.contains("createRuxSystemStorage0"))
         assertFalse(buildScript.contains("putRuxSystemStorage0Boot"))
     }
+
+    @Test
+    fun systemStorage0StagesUseDistinctGradleOutputs() {
+        val buildScript =
+            Path.of("..", "modules", "v1_21_1", "v1_21_1-neoforge", "build.gradle.kts")
+                .normalize()
+                .readText()
+        val createTask =
+            buildScript.substringAfter("val createK16SystemStorage0 =")
+                .substringBefore("val putK16SystemStorage0Boot =")
+        val putBootTask =
+            buildScript.substringAfter("val putK16SystemStorage0Boot =")
+                .substringBefore("val compileK16SystemStorage0 =")
+        val putKernelTask =
+            buildScript.substringAfter("val compileK16SystemStorage0 =")
+                .substringBefore("val putK16SystemStorage0Init =")
+        val putInitTask =
+            buildScript.substringAfter("val putK16SystemStorage0Init =")
+                .substringBefore("sourceSets.main")
+
+        assertTrue(buildScript.contains("val k16EmptyStorage0Artifact"))
+        assertTrue(buildScript.contains("val k16BootStorage0Artifact"))
+        assertTrue(buildScript.contains("val k16KernelStorage0Artifact"))
+        assertTrue(createTask.contains("outputs.file(k16EmptyStorage0Artifact)"))
+        assertTrue(putBootTask.contains("inputs.file(k16EmptyStorage0Artifact)"))
+        assertTrue(putBootTask.contains("outputs.file(k16BootStorage0Artifact)"))
+        assertTrue(putKernelTask.contains("inputs.file(k16BootStorage0Artifact)"))
+        assertTrue(putKernelTask.contains("outputs.file(k16KernelStorage0Artifact)"))
+        assertTrue(putInitTask.contains("inputs.file(k16KernelStorage0Artifact)"))
+        assertTrue(putInitTask.contains("outputs.file(k16SystemStorage0Resource)"))
+        assertFalse(createTask.contains("outputs.file(k16SystemStorage0Resource)"))
+        assertFalse(putKernelTask.contains("outputs.file(k16SystemStorage0Resource)"))
+    }
 }
