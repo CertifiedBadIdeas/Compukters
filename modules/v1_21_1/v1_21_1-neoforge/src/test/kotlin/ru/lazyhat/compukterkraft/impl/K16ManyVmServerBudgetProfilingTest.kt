@@ -315,7 +315,7 @@ private data class ManyVmSnapshot(
 }
 
 private const val K16_TERMINAL_CELLS_ADDR = 0x3000
-private const val K16_TERMINAL_COLUMNS = 53
-private const val K16_TERMINAL_ROWS = 22
+private const val K16_TERMINAL_COLUMNS = 64
+private const val K16_TERMINAL_ROWS = 25
 private const val K16_BIOS_SPLASH_TICKS = 20
 private const val K16_BIOS_SPLASH_WAIT_PROFILE_TICKS = K16_BIOS_SPLASH_TICKS - 1
