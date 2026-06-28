@@ -6,6 +6,7 @@ extern crate std;
 pub mod boot_chain;
 pub mod fs;
 pub mod image;
+pub mod k16fs_cache;
 pub mod memory_layout;
 pub mod mmio;
 pub mod os_stats;
