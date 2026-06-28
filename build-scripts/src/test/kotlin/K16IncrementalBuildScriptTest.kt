@@ -78,4 +78,19 @@ class K16IncrementalBuildScriptTest {
         assertTrue(probeTask.contains("outputs.file(k16RustBootstrapProbeMarker)"))
         assertTrue(probeTask.contains("k16RustBootstrapProbeMarker.writeText"))
     }
+
+    @Test
+    fun prepareK16ToolchainDeclaresOutputMarkerForIncrementalBuilds() {
+        val buildScript = root.resolve("build.gradle.kts").readText()
+        val prepareTask =
+            buildScript.substringAfter("val prepareK16Toolchain =")
+                .substringBefore("tasks.register(\"printK16ToolchainEnv\")")
+
+        assertTrue(buildScript.contains("val k16PrepareToolchainMarker"))
+        assertTrue(prepareTask.contains("inputs.file(k16ToolchainConfigFile())"))
+        assertTrue(prepareTask.contains("inputs.property(\"k16ToolchainDir\""))
+        assertTrue(prepareTask.contains("inputs.property(\"k16ToolPath\""))
+        assertTrue(prepareTask.contains("outputs.file(k16PrepareToolchainMarker)"))
+        assertTrue(prepareTask.contains("k16PrepareToolchainMarker.writeText"))
+    }
 }

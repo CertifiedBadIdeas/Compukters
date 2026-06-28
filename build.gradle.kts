@@ -49,6 +49,7 @@ val k16HostToolsTargetRoot =
     rootProject.file(providers.gradleProperty("k16HostToolsTargetDir").orElse(".toolchain/build/cargo/k16-tools").get())
 val k16RustBootstrapConfig = k16RustBuildRoot.resolve("bootstrap.toml")
 val k16RustBootstrapProbeMarker = k16RustBuildRoot.resolve("bootstrap-probe.ok")
+val k16PrepareToolchainMarker = rootProject.file(".toolchain/build/k16-prepare/${k16ToolchainModeName()}.ok")
 val k16BootstrapHost = k16RustHostTargetTriple()
 val k16LlvmHostTarget =
     when (k16BootstrapHost.substringBefore("-")) {
@@ -811,9 +812,23 @@ val prepareK16Toolchain =
             dependsOn(stageK16SourceBuiltDevToolchain)
         }
         inputs.property("k16ToolchainMode", providers.gradleProperty("k16ToolchainMode").orElse("prebuilt"))
+        inputs.file(k16ToolchainConfigFile())
+        inputs.property("k16ToolchainDir", providers.gradleProperty("k16ToolchainDir").orElse(""))
+        inputs.property("k16ToolPath", providers.gradleProperty("k16ToolPath").orElse(""))
+        outputs.file(k16PrepareToolchainMarker)
 
         doLast {
-            resolveK16Toolchain()
+            val toolchain = resolveK16Toolchain()
+            k16PrepareToolchainMarker.parentFile.mkdirs()
+            k16PrepareToolchainMarker.writeText(
+                """
+                mode=${k16ToolchainModeName()}
+                cargo=${toolchain.cargo.absolutePath}
+                rustc=${toolchain.rustc.absolutePath}
+                linker=${toolchain.linker.absolutePath}
+                cli=${toolchain.cli.absolutePath}
+                """.trimIndent() + "\n",
+            )
         }
     }
 
