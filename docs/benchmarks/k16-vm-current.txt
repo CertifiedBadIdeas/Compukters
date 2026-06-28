@@ -1,8 +1,8 @@
 K16 VM benchmark current snapshot
 
-Recorded at: 2026-06-26T17:48:31Z
+Recorded at: 2026-06-28T19:28:17Z
 Command: cargo run --release --example vm_microbenchmarks -- 100000 5
-Host: Linux 7.0.12-zen1-1-zen x86_64 GNU/Linux
+Host: Linux 7.0.14-zen1-1-zen x86_64 GNU/Linux
 CPU: AMD Ryzen 9 9950X3D 16-Core Processor
 Rust: rustc 1.94.1 (e408947bf 2026-03-25)
 Cargo: cargo 1.94.1 (29ea6fb6a 2026-03-24)
@@ -11,13 +11,25 @@ This file is the current repo-tracked benchmark snapshot. Git history is
 the benchmark history; use git diff or git show <commit>:docs/benchmarks/k16-vm-current.txt.
 
 workload       vm           iterations   checksum   best_nanos   nanos/iter  vs_native  native_pct
-compute-loop   k16              100000     100000      6133014       61.330   340.723x    34072.3%
-compute-loop   native-rust      100000     100000        18000        0.180     1.000x      100.0%
-memory-loop    k16              100000     100000     11996968      119.970   578.167x    57816.7%
-memory-loop    native-rust      100000     100000        20750        0.207     1.000x      100.0%
-mmio-loop      k16              100000     100000     11213127      112.131    77.956x     7795.6%
-mmio-loop      native-rust      100000     100000       143840        1.438     1.000x      100.0%
-branch-mix     k16              100000     200000     12385277      123.853   341.192x    34119.2%
-branch-mix     native-rust      100000     200000        36300        0.363     1.000x      100.0%
-call-loop      k16              100000     100000     12046248      120.462   165.607x    16560.7%
-call-loop      native-rust      100000     100000        72740        0.727     1.000x      100.0%
+compute-loop   k16              100000     100000      6065840       60.658   342.897x    34289.7%
+compute-loop   k16-cached       100000     100000      4445946       44.459   251.325x    25132.5%
+compute-loop   native-rust      100000     100000        17690        0.177     1.000x      100.0%
+memory-loop    k16              100000     100000     12283419      122.834   596.282x    59628.2%
+memory-loop    k16-cached       100000     100000      9085251       90.853   441.032x    44103.2%
+memory-loop    native-rust      100000     100000        20600        0.206     1.000x      100.0%
+mmio-loop      k16              100000     100000     11413133      114.131    78.700x     7870.0%
+mmio-loop      k16-cached       100000     100000      8631412       86.314    59.519x     5951.9%
+mmio-loop      native-rust      100000     100000       145020        1.450     1.000x      100.0%
+branch-mix     k16              100000     200000     12117520      121.175   338.006x    33800.6%
+branch-mix     k16-cached       100000     200000      8776362       87.764   244.808x    24480.8%
+branch-mix     native-rust      100000     200000        35850        0.358     1.000x      100.0%
+call-loop      k16              100000     100000     12501159      125.012   173.149x    17314.9%
+call-loop      k16-cached       100000     100000      8917861       89.179   123.518x    12351.8%
+call-loop      native-rust      100000     100000        72199        0.722     1.000x      100.0%
+
+workload       iterations   checksum  cpu_steps fetch_decode_ns   execute_ns immediate_ops  alu_ops load_store_ops branch_ops control_ops system_ops  ram_loads ram_stores  mmio_loads mmio_stores
+compute-loop       100000     100000     400006        10431746      6506285             3   200001              0     200001           1          0     600009         12           0           0
+memory-loop        100000     100000     700009        18516221     12295478             5   300001         200001     100001      100001          0    1100017     100023           0           0
+mmio-loop          100000     100000     600009        15366215     10887854             5   200001         200001     100001      100001          0     800016         21      100001      100000
+branch-mix         100000     200000     750009        20586608     12101098             6   400001              0     250001      100001          0    1150014         25           0           0
+call-loop          100000     100000     700010        18426878     12361500             7   300001              0     100001      300001          0    1100019     100026           0           0
