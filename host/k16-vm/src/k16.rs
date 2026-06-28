@@ -2,6 +2,7 @@ use crate::low_machine::{MemoryBus, MemoryFault};
 use crate::mmu::{
     MmuAccess, MmuAddressSpace, MmuAddressSpaceId, MmuAddressSpaces, MmuFault, MmuPrivilege,
 };
+use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::time::Instant;
 
@@ -79,6 +80,13 @@ pub struct K16InstructionFamilyProfile {
     pub branch: u64,
     pub control: u64,
     pub system: u64,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct K16DecodeCacheStats {
+    pub entries: usize,
+    pub hits: u64,
+    pub misses: u64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -457,6 +465,41 @@ impl InstructionDecoder for K16Decoder {
             instruction,
             next_pc,
         })
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct K16CachedDecoder {
+    inner: K16Decoder,
+    cache: HashMap<u32, DecodeResult>,
+    hits: u64,
+    misses: u64,
+}
+
+impl K16CachedDecoder {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn stats(&self) -> K16DecodeCacheStats {
+        K16DecodeCacheStats {
+            entries: self.cache.len(),
+            hits: self.hits,
+            misses: self.misses,
+        }
+    }
+}
+
+impl InstructionDecoder for K16CachedDecoder {
+    fn decode(&mut self, bus: &mut dyn MemoryBus, pc: u32) -> Result<DecodeResult, K16Trap> {
+        if let Some(result) = self.cache.get(&pc) {
+            self.hits += 1;
+            return Ok(result.clone());
+        }
+        self.misses += 1;
+        let result = self.inner.decode(bus, pc)?;
+        self.cache.insert(pc, result.clone());
+        Ok(result)
     }
 }
 

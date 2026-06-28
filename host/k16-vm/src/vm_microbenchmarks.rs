@@ -17,7 +17,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use crate::k16::{K16Cpu, K16InstructionProfile, K16Signal};
+use crate::k16::{K16CachedDecoder, K16Cpu, K16InstructionProfile, K16Signal};
 use crate::low_bus::{MachineBus, MachineBusStatsSnapshot, MmioDevice};
 use crate::low_machine::MemoryFault;
 use std::hint::black_box;
@@ -283,6 +283,28 @@ fn format_instruction_profile_report_columns(
 
 pub fn run_k16_workload(workload: VmBenchmarkWorkload, iterations: u32) -> Result<u32, String> {
     Ok(run_k16_workload_stats(workload, iterations)?.checksum)
+}
+
+pub fn run_k16_workload_cached_decode(
+    workload: VmBenchmarkWorkload,
+    iterations: u32,
+) -> Result<u32, String> {
+    let mut bus = MachineBus::new(MEMORY_SIZE).map_err(|error| error.to_string())?;
+    if workload == VmBenchmarkWorkload::MmioLoop {
+        bus.map_mmio(MMIO_ADDR, Box::new(BenchmarkRegisterDevice { value: 0 }))
+            .map_err(|error| error.to_string())?;
+    }
+    let (words, result_register) = k16_workload(workload, iterations);
+    write_words(&mut bus, 0, &words)?;
+    let mut cpu = K16Cpu::new(0);
+    let mut decoder = K16CachedDecoder::new();
+    match cpu
+        .run_until_signal_with_decoder(&mut bus, &mut decoder, k16_max_steps(workload, iterations))
+        .map_err(|error| error.to_string())?
+    {
+        K16Signal::Halt => Ok(cpu.register(result_register)),
+        signal => Err(format!("unexpected K16 signal: {signal:?}")),
+    }
 }
 
 pub fn run_k16_workload_stats(

@@ -20,8 +20,8 @@
 use k16_vm::vm_microbenchmarks::{
     benchmark_output_header, format_benchmark_sample, format_instruction_profile_report_sample,
     format_vm_stats_report_sample, instruction_profile_report_header, run_k16_workload,
-    run_k16_workload_instruction_profile, run_k16_workload_stats, run_native_rust_workload,
-    vm_stats_report_header, VmBenchmarkSample, VmBenchmarkWorkload,
+    run_k16_workload_cached_decode, run_k16_workload_instruction_profile, run_k16_workload_stats,
+    run_native_rust_workload, vm_stats_report_header, VmBenchmarkSample, VmBenchmarkWorkload,
 };
 use std::fs;
 use std::path::Path;
@@ -128,6 +128,20 @@ fn native_rust_workloads_match_k16_checksums() {
 }
 
 #[test]
+fn cached_decode_k16_workloads_match_normal_k16_checksums() {
+    let iterations = 11;
+
+    for workload in VmBenchmarkWorkload::all() {
+        assert_eq!(
+            run_k16_workload(*workload, iterations).unwrap(),
+            run_k16_workload_cached_decode(*workload, iterations).unwrap(),
+            "{} cached decode checksum mismatch",
+            workload.name(),
+        );
+    }
+}
+
+#[test]
 fn benchmark_output_header_includes_native_ratio_columns() {
     let header = benchmark_output_header();
 
@@ -228,6 +242,8 @@ fn vm_microbenchmarks_source_does_not_expose_low_image_path() {
     assert!(source.contains("pub fn run_k16_workload("));
     assert!(source.contains("pub fn run_k16_workload_stats("));
     assert!(example.contains("run_k16_workload"));
+    assert!(example.contains("run_k16_workload_cached_decode"));
+    assert!(example.contains("\"k16-cached\""));
     assert!(stats_example.contains("run_k16_workload_stats"));
     assert!(stats_example.contains("vm_stats_report_header"));
     assert!(example.contains("collect_sample(*workload, \"k16\""));
