@@ -32,12 +32,12 @@ class K16FontTableGeneratorTest {
 
         val generated = K16FontTableGenerator().generate(source)
 
-        assertTrue(generated.rustSource.contains("pub const GLYPH_WIDTH: i32 = 5;"))
-        assertTrue(generated.rustSource.contains("pub const GLYPH_HEIGHT: i32 = 7;"))
+        assertTrue(generated.rustSource.contains("pub const GLYPH_WIDTH: i32 = 6;"))
+        assertTrue(generated.rustSource.contains("pub const GLYPH_HEIGHT: i32 = 8;"))
         assertTrue(generated.rustSource.contains("pub const CELL_WIDTH: i32 = 6;"))
         assertTrue(generated.rustSource.contains("pub const CELL_HEIGHT: i32 = 9;"))
         assertTrue(generated.rustSource.contains("pub const GLYPH_X: i32 = 0;"))
-        assertTrue(generated.rustSource.contains("pub const GLYPH_Y: i32 = 1;"))
+        assertTrue(generated.rustSource.contains("pub const GLYPH_Y: i32 = 0;"))
         assertTrue(generated.rustSource.contains("pub fn terminal_font_glyph(ch: char) -> u64"))
         assertTrue(generated.rustSource.contains("'\\u{41}' =>"))
         assertTrue(generated.rustSource.contains("'\\u{2500}' =>"))
@@ -68,11 +68,11 @@ class K16FontTableGeneratorTest {
         val generated = K16FontTableGenerator().generate(source)
 
         assertTrue(generated.markdownSpecimen.contains("# K16 Terminal Font Specimen"))
-        assertTrue(generated.markdownSpecimen.contains("- Glyph size: 5x7"))
+        assertTrue(generated.markdownSpecimen.contains("- Glyph size: 6x8"))
         assertTrue(generated.markdownSpecimen.contains("- Cell size: 6x9"))
-        assertTrue(generated.markdownSpecimen.contains("- Glyph origin: 0,1"))
+        assertTrue(generated.markdownSpecimen.contains("- Glyph origin: 0,0"))
         assertTrue(generated.markdownSpecimen.contains("## U+0041 A"))
-        assertTrue(generated.markdownSpecimen.contains("```text\n.###.\n#...#"))
+        assertTrue(generated.markdownSpecimen.contains("```text\n.###..\n#...#."))
         assertTrue(generated.markdownSpecimen.contains("## U+2500 ─"))
     }
 
@@ -97,7 +97,7 @@ class K16FontTableGeneratorTest {
 
         for (ch in "abcdehimnorsuvwxz") {
             assertEquals(
-                ".....",
+                "......",
                 glyphRows(source, ch).last(),
                 "lowercase `$ch` should not use the descender row",
             )
@@ -131,14 +131,14 @@ class K16FontTableGeneratorTest {
                 K16FontTableGenerator().generate(source)
             }
 
-        assertTrue((error.message ?: "").contains("must be 5 cells"))
+        assertTrue((error.message ?: "").contains("must be 6 cells"))
     }
 
     @Test
     fun rejectsGlyphPlacementOutsideCell() {
         val source =
             fontSource()
-                .replaceFirst("glyph_y 1", "glyph_y 3")
+                .replaceFirst("glyph_y 0", "glyph_y 2")
 
         val error =
             assertThrows(IllegalArgumentException::class.java) {
@@ -158,6 +158,6 @@ class K16FontTableGeneratorTest {
         val lines = source.lines()
         val index = lines.indexOfFirst { it.startsWith(header) }
         require(index >= 0) { "missing glyph header for `$ch`" }
-        return lines.drop(index + 1).take(7)
+        return lines.drop(index + 1).take(8)
     }
 }
