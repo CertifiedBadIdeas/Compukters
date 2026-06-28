@@ -48,6 +48,7 @@ val k16RustBuildRoot = rootProject.file(providers.gradleProperty("k16RustBuildDi
 val k16HostToolsTargetRoot =
     rootProject.file(providers.gradleProperty("k16HostToolsTargetDir").orElse(".toolchain/build/cargo/k16-tools").get())
 val k16RustBootstrapConfig = k16RustBuildRoot.resolve("bootstrap.toml")
+val k16RustBootstrapProbeMarker = k16RustBuildRoot.resolve("bootstrap-probe.ok")
 val k16BootstrapHost = k16RustHostTargetTriple()
 val k16LlvmHostTarget =
     when (k16BootstrapHost.substringBefore("-")) {
@@ -296,6 +297,10 @@ val probeK16RustBootstrap =
         dependsOn(buildK16Llvm)
         inputs.dir(k16RustSourceRoot)
         inputs.file(k16LlvmConfig)
+        inputs.property("k16LlvmHostTarget", k16LlvmHostTarget)
+        inputs.property("k16RustBuildRoot", k16RustBuildRoot.absolutePath)
+        inputs.property("k16BootstrapHost", k16BootstrapHost)
+        outputs.file(k16RustBootstrapProbeMarker)
         commandLine(rootProject.file("tools/k16-rustc-bootstrap-probe.sh").absolutePath)
         environment("K16_RUST_SRC", k16RustSourceRoot.absolutePath)
         environment("K16_LLVM_CONFIG", k16LlvmConfig.absolutePath)
@@ -307,6 +312,18 @@ val probeK16RustBootstrap =
             requireDirectory(k16RustSourceRoot, "K16 Rust source directory")
             requireBuiltFile(k16RustSourceRoot.resolve("x.py"), "x.py", "K16 Rust source checkout")
             requireBuiltFile(k16LlvmConfig, "llvm-config", "buildK16Llvm")
+        }
+        doLast {
+            k16RustBootstrapProbeMarker.parentFile.mkdirs()
+            k16RustBootstrapProbeMarker.writeText(
+                """
+                rustSource=${k16RustSourceRoot.absolutePath}
+                llvmConfig=${k16LlvmConfig.absolutePath}
+                llvmHostTarget=$k16LlvmHostTarget
+                rustBuildRoot=${k16RustBuildRoot.absolutePath}
+                rustHost=$k16BootstrapHost
+                """.trimIndent() + "\n",
+            )
         }
     }
 
