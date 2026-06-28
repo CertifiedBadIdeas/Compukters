@@ -74,15 +74,66 @@ class K16ManyVmServerBudgetProfilingTest {
         try {
             val bootStartedAt = System.nanoTime()
             runtimes.forEach { it.device.turnOn() }
-            val bootTicks = tickUntilAllShells(runtimes, bootTickLimit)
+            val splashBefore = aggregateSnapshots(runtimes)
+            val splashNanos = timeTicks(runtimes, 1)
+            val splashSyncNanos = timeSyncAll(runtimes)
+            val splashAfter = aggregateSnapshots(runtimes)
+            printManyVmDeltaLine(
+                "k16ManyVmSplash",
+                vmCount,
+                ticks = 1,
+                nanos = splashNanos,
+                before = splashBefore,
+                after = splashAfter,
+                syncNanos = splashSyncNanos,
+            )
+
+            val splashWaitBefore = splashAfter
+            val splashWaitNanos = timeTicks(runtimes, K16_BIOS_SPLASH_WAIT_PROFILE_TICKS)
+            val splashWaitSyncNanos = timeSyncAll(runtimes)
+            val splashWaitAfter = aggregateSnapshots(runtimes)
+            printManyVmDeltaLine(
+                "k16ManyVmSplashWait",
+                vmCount,
+                ticks = K16_BIOS_SPLASH_WAIT_PROFILE_TICKS,
+                nanos = splashWaitNanos,
+                before = splashWaitBefore,
+                after = splashWaitAfter,
+                syncNanos = splashWaitSyncNanos,
+            )
+
+            val bootAfterSplashStartedAt = System.nanoTime()
+            val bootAfterSplashTicks = tickUntilAllShells(runtimes, bootTickLimit)
+            val bootAfterSplashNanos = System.nanoTime() - bootAfterSplashStartedAt
+            val bootAfterSplashSyncNanos = timeSyncAll(runtimes)
+            val bootAfterSplashSnapshot = aggregateSnapshots(runtimes)
+            printManyVmDeltaLine(
+                "k16ManyVmBootAfterSplash",
+                vmCount,
+                ticks = bootAfterSplashTicks,
+                nanos = bootAfterSplashNanos,
+                before = splashWaitAfter,
+                after = bootAfterSplashSnapshot,
+                syncNanos = bootAfterSplashSyncNanos,
+            )
+
             val bootNanos = System.nanoTime() - bootStartedAt
-            printManyVmLine("k16ManyVmBoot", vmCount, bootTicks, bootNanos, aggregateSnapshots(runtimes))
+            val bootTicks = 1 + K16_BIOS_SPLASH_WAIT_PROFILE_TICKS + bootAfterSplashTicks
+            printManyVmLine("k16ManyVmBoot", vmCount, bootTicks, bootNanos, bootAfterSplashSnapshot)
 
             val idleBefore = aggregateSnapshots(runtimes)
             val idleNanos = timeTicks(runtimes, idleTicks)
             val idleSyncNanos = timeSyncAll(runtimes)
             val idleAfter = aggregateSnapshots(runtimes)
-            printManyVmDeltaLine("k16ManyVmIdle", vmCount, idleTicks, idleNanos, idleSyncNanos, idleBefore, idleAfter)
+            printManyVmDeltaLine(
+                "k16ManyVmIdle",
+                vmCount,
+                ticks = idleTicks,
+                nanos = idleNanos,
+                before = idleBefore,
+                after = idleAfter,
+                syncNanos = idleSyncNanos,
+            )
 
             val activeBefore = aggregateSnapshots(runtimes)
             val activeStartedAt = System.nanoTime()
@@ -94,9 +145,17 @@ class K16ManyVmServerBudgetProfilingTest {
             val activeNanos = System.nanoTime() - activeStartedAt
             val activeSyncNanos = timeSyncAll(runtimes)
             val activeAfter = aggregateSnapshots(runtimes)
-            printManyVmDeltaLine("k16ManyVmOneActive", vmCount, activeTicks, activeNanos, activeSyncNanos, activeBefore, activeAfter)
+            printManyVmDeltaLine(
+                "k16ManyVmOneActive",
+                vmCount,
+                ticks = activeTicks,
+                nanos = activeNanos,
+                before = activeBefore,
+                after = activeAfter,
+                syncNanos = activeSyncNanos,
+            )
 
-            assertTrue(bootTicks < bootTickLimit, "many-VM profiling did not boot all VMs to shell")
+            assertTrue(bootAfterSplashTicks < bootTickLimit, "many-VM profiling did not boot all VMs to shell after BIOS splash")
             assertTrue(activeTicks < 80, "many-VM profiling did not finish one active command")
         } finally {
             runtimes.forEach { it.device.close() }
@@ -178,9 +237,9 @@ class K16ManyVmServerBudgetProfilingTest {
         vmCount: Int,
         ticks: Int,
         nanos: Long,
-        syncNanos: Long,
         before: ManyVmSnapshot,
         after: ManyVmSnapshot,
+        syncNanos: Long? = null,
     ) {
         printManyVmLine(label, vmCount, ticks, nanos, after - before, syncNanos = syncNanos)
     }
@@ -258,3 +317,5 @@ private data class ManyVmSnapshot(
 private const val K16_TERMINAL_CELLS_ADDR = 0x3000
 private const val K16_TERMINAL_COLUMNS = 53
 private const val K16_TERMINAL_ROWS = 25
+private const val K16_BIOS_SPLASH_TICKS = 20
+private const val K16_BIOS_SPLASH_WAIT_PROFILE_TICKS = K16_BIOS_SPLASH_TICKS - 1

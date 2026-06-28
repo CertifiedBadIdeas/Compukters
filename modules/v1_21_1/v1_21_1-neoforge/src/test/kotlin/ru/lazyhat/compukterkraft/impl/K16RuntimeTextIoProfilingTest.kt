@@ -270,8 +270,12 @@ class K16RuntimeTextIoProfilingTest {
         try {
             device.turnOn()
             val phases = K16RuntimePhaseProfiler(metrics)
+            tickAndSync(device)
+            val splashVisiblePhase = phases.mark("bios.splash.visible")
+            repeat(K16_BIOS_SPLASH_WAIT_PROFILE_TICKS) { tickAndSync(device) }
+            val splashWaitPhase = phases.mark("bios.splash.wait")
             waitForTerminal(device, "initial shell prompt") { terminal -> terminal.contains("K16> ") }
-            val bootPhase = phases.mark("boot.prompt")
+            val promptAfterSplashPhase = phases.mark("shell.prompt.after_splash")
             val typedCommand = "ticks\n"
             dispatchText(device, typedCommand)
             val typedInputPhase = phases.mark("ticks.input")
@@ -303,7 +307,9 @@ class K16RuntimeTextIoProfilingTest {
             assertTrue(summary.contains("k16TextOutput: snapshots="))
             assertTrue(summary.contains("k16Gpu: blits="))
             assertTrue(summary.contains("k16TextInput: events="))
-            assertTrue(bootPhase.contains("name=boot.prompt"))
+            assertTrue(splashVisiblePhase.contains("name=bios.splash.visible"))
+            assertTrue(splashWaitPhase.contains("name=bios.splash.wait"))
+            assertTrue(promptAfterSplashPhase.contains("name=shell.prompt.after_splash"))
             assertTrue(typedInputPhase.contains("name=ticks.input"))
             assertTrue(typedVisiblePhase.contains("name=ticks.visible"))
             assertTrue(typedIdlePhase.contains("name=ticks.idle"))
@@ -808,6 +814,8 @@ class K16RuntimeTextIoProfilingTest {
 private const val K16_TERMINAL_CELLS_ADDR = 0x3000
 private const val K16_TERMINAL_COLUMNS = 53
 private const val K16_TERMINAL_ROWS = 25
+private const val K16_BIOS_SPLASH_TICKS = 20
+private const val K16_BIOS_SPLASH_WAIT_PROFILE_TICKS = K16_BIOS_SPLASH_TICKS - 1
 private const val K16_DISPLAY_ID = 1
 private const val K16_DISPLAY_WIDTH = 320
 private const val K16_DISPLAY_HEIGHT = 200

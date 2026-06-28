@@ -31,6 +31,8 @@ class K16RuntimeProfilingArchitectureTest {
         val rootBuildScript = Path.of("../../../build.gradle.kts").readText()
         val neoforgeBuildScript = Path.of("build.gradle.kts").readText()
         val docs = Path.of("../../../docs/PROFILING.md").readText()
+        val textIoProfilingSource = Path.of("src/test/kotlin/ru/lazyhat/compukterkraft/impl/K16RuntimeTextIoProfilingTest.kt").readText()
+        val manyVmProfilingSource = Path.of("src/test/kotlin/ru/lazyhat/compukterkraft/impl/K16ManyVmServerBudgetProfilingTest.kt").readText()
 
         assertTrue(neoforgeBuildScript.contains("profileK16RuntimeWait"))
         assertTrue(neoforgeBuildScript.contains("K16RuntimeWaitProfilingTest"))
@@ -50,6 +52,13 @@ class K16RuntimeProfilingArchitectureTest {
         assertTrue(docs.contains("k16Devices: mapped="))
         assertTrue(docs.contains("k16Storage0: reads="))
         assertTrue(docs.contains("k16Wait: entries="))
+        assertTrue(textIoProfilingSource.contains("bios.splash.visible"))
+        assertTrue(textIoProfilingSource.contains("bios.splash.wait"))
+        assertTrue(textIoProfilingSource.contains("shell.prompt.after_splash"))
+        assertTrue(manyVmProfilingSource.contains("k16ManyVmSplash"))
+        assertTrue(manyVmProfilingSource.contains("k16ManyVmBootAfterSplash"))
+        assertTrue(docs.contains("bios.splash.wait"))
+        assertTrue(docs.contains("k16ManyVmBootAfterSplash"))
         assertFalse(docs.contains("profileRuntimeVmImage"))
     }
 

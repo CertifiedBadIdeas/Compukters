@@ -75,8 +75,9 @@ individual character input, sends another command as paste input, compares a nor
 ./gradlew-sandbox-dev --parallel profileK16RuntimeTextIo -Pk16BuildJobs=$(nproc)
 ```
 
-The `k16Phase` lines split selected text-I/O scenarios into named checkpoints such as `boot.prompt`, `*.input`,
-`*.visible`, and `*.idle`. Each line reports elapsed wall time and deltas between two runtime metric snapshots:
+The `k16Phase` lines split selected text-I/O scenarios into named checkpoints such as `bios.splash.visible`,
+`bios.splash.wait`, `shell.prompt.after_splash`, `*.input`, `*.visible`, and `*.idle`. Each line reports elapsed wall time
+and deltas between two runtime metric snapshots:
 
 ```text
 k16Phase: name=ls:/bin.visible, elapsed=..., slices=..., runTime=..., inputBytes=..., gpuFrameBytes=..., displayFrames=..., displayBytes=..., storageReads=..., storageBytesRead=..., pathLookups=..., inodeLoads=..., dirEntryScans=..., fileOpens=..., fileReads=..., statCalls=...
@@ -85,6 +86,12 @@ k16Phase: name=ls:/bin.visible, elapsed=..., slices=..., runTime=..., inputBytes
 Use these phase lines when deciding whether a slowdown is in command dispatch, command execution/storage reads, display
 frame production, guest filesystem/path/stat work, or post-command idle work. The older `k16LsCommand*` aggregate lines
 remain available for comparison with previous profiling runs.
+
+The bundled BIOS intentionally shows a splash frame and waits for 20 game ticks before loading the bootloader.
+`bios.splash.wait` isolates the pure wait portion before the release tick; bootloader/kernel/shell work after the splash
+deadline is counted under `shell.prompt.after_splash`. Treat the splash wait as intentional startup latency, not as
+bootloader/kernel/shell execution cost. Use `shell.prompt.after_splash` and later command-specific phases when comparing
+real post-splash responsiveness.
 
 Use `profileK16ManyVmServerBudget` for a server-focused workload that boots several K16 runtime devices, measures idle
 tick cost after all shells are waiting, then runs one active command while the other VMs stay idle. The printed lines
@@ -102,6 +109,18 @@ Scale the workload with Gradle properties:
 
 The tasks run only their dedicated profiling tests and keep normal gameplay on the default no-op collector. The profiling
 path injects `RecordingRuntimeMetricsCollector` only for the report tests.
+
+The many-VM boot report is split so the intentional BIOS splash does not hide the remaining boot work:
+
+```text
+k16ManyVmSplash: ...
+k16ManyVmSplashWait: ...
+k16ManyVmBootAfterSplash: ...
+k16ManyVmBoot: ...
+```
+
+Use `k16ManyVmBootAfterSplash` for bootloader/kernel/shell startup cost after the 20-tick BIOS splash boundary. The
+aggregate `k16ManyVmBoot` line remains useful for player-visible power-on latency.
 
 The output is grouped into the existing multi-line runtime summary. The K16 execution line shows how many native
 `tickUntilSignal` slices actually ran and which signal ended those slices:
