@@ -126,6 +126,10 @@ pub unsafe fn open_file_from_storage0(
 ) -> Result<(), StorageError> {
     unsafe { read_partition(partition_type)? };
     unsafe { read_superblock()? };
+    unsafe { open_file_from_selected_filesystem(path) }
+}
+
+unsafe fn open_file_from_selected_filesystem(path: &[&[u8]]) -> Result<(), StorageError> {
     unsafe { find_file_inode(path)? };
     Ok(())
 }

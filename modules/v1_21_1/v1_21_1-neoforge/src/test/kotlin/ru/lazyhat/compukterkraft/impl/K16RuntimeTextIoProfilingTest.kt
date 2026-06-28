@@ -688,6 +688,11 @@ class K16RuntimeTextIoProfilingTest {
                     runProfiledCoreutilsCommand(device, metrics, command)
                 }
 
+            val unameLine = lines.single { it.contains("name=uname") }
+            assertTrue(
+                metricValue(unameLine, "storageReads") <= 9,
+                "uname should not reopen the dynamic executable after reading imports: $unameLine",
+            )
             val lsLine = lines.single { it.contains("name=ls") }
             assertTrue(lsLine.contains("readDirCalls=1"))
             assertTrue(

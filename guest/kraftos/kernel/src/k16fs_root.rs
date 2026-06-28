@@ -1,5 +1,5 @@
 use crate::k16fs_cache::{CachedName, CachedPathMetadata, K16FsCache};
-use crate::storage::{DirectoryListingSink, StorageError};
+use crate::storage::{DirectoryListingSink, FileMetadata, StorageError};
 
 pub struct K16RootFs {
     cache: K16FsCache,
@@ -47,6 +47,25 @@ impl K16RootFs {
         unsafe {
             crate::storage::copy_selected_directory_listing_into_cached(sink, &mut self.cache)
         }
+    }
+
+    pub unsafe fn open_file(
+        &mut self,
+        partition_type: &[u8; 4],
+        path: &[&[u8]],
+    ) -> Result<FileMetadata, StorageError> {
+        unsafe { crate::storage::read_root_partition_superblock(partition_type)? };
+        let (inode_id, metadata) = unsafe { self.resolve_path(path)? };
+        if metadata.file_type != k16_abi::syscall::FILE_TYPE_REGULAR {
+            return Err(StorageError::PATH_NOT_FOUND);
+        }
+        let selected_metadata =
+            unsafe { crate::storage::select_inode_metadata_for_cache(inode_id)? };
+        if selected_metadata.file_type != k16_abi::syscall::FILE_TYPE_REGULAR {
+            return Err(StorageError::PATH_NOT_FOUND);
+        }
+        self.cache.store_inode(inode_id, selected_metadata);
+        Ok(unsafe { crate::storage::selected_file_metadata() })
     }
 
     unsafe fn resolve_path(

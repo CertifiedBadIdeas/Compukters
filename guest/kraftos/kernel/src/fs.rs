@@ -719,6 +719,29 @@ pub unsafe fn read_root_directory_into<S: DirectoryByteSink>(
 }
 
 #[cfg(any(not(test), feature = "host-test"))]
+pub unsafe fn open_root_file_cached_components(
+    components: &[&[u8]],
+) -> Result<crate::storage::FileMetadata, FsError> {
+    unsafe {
+        ROOT_FS
+            .get()
+            .open_file(ROOT_PARTITION, components)
+            .map_err(storage_error_to_fs_error)
+    }
+}
+
+#[cfg(all(test, not(feature = "host-test")))]
+pub unsafe fn open_root_file_cached_components(
+    components: &[&[u8]],
+) -> Result<crate::storage::FileMetadata, FsError> {
+    unsafe {
+        crate::storage::open_file_from_storage0(b"ROOT", components)
+            .map_err(storage_error_to_fs_error)?;
+        Ok(crate::storage::selected_file_metadata())
+    }
+}
+
+#[cfg(any(not(test), feature = "host-test"))]
 pub unsafe fn stat_root_path(path: &[u8]) -> Result<PathMetadata, FsError> {
     crate::os_stats::record_stat_call();
     let path = RootMetadataPath::parse(path)?;
@@ -745,7 +768,6 @@ pub unsafe fn close_file_fds_for_process(owner_pid: u32) {
     unsafe { RUNTIME_FD_TABLE.get().close_all_for_process(owner_pid) }
 }
 
-#[cfg(any(not(test), feature = "host-test"))]
 fn storage_error_to_fs_error(error: crate::storage::StorageError) -> FsError {
     if error == crate::storage::StorageError::PATH_NOT_FOUND {
         FsError::NoEntry
