@@ -108,6 +108,7 @@ pub fn link_k16_objects_with_options(
         load_addr,
         bios_prefix_len,
         target == K16ArtifactTarget::ProgramDynamic || target == K16ArtifactTarget::SharedObject,
+        target == K16ArtifactTarget::ProgramDynamic,
         options.shared_cpu_helpers,
         target == K16ArtifactTarget::SharedObject,
         &imports.imported_symbols,
@@ -116,7 +117,7 @@ pub fn link_k16_objects_with_options(
     let map = K16LinkMap {
         target,
         load_addr,
-        payload_bytes: linked.payload.len(),
+        payload_bytes: linked.file_payload_size(),
         memory_bytes: linked.memory_size,
         retained_sections: linked.retained_sections.clone(),
     };
@@ -128,6 +129,11 @@ pub fn link_k16_objects_with_options(
             &linked.shared_exports,
         )?
     } else if target == K16ArtifactTarget::ProgramDynamic {
+        if options.shared_cpu_helpers && linked.writable_segment.is_some() {
+            return Err(
+                "--shared-cpu-helpers does not support writable dynamic segments".to_string(),
+            );
+        }
         if options.shared_cpu_helpers {
             k16e::encode_dynamic_k16_program_with_cpu_helpers(
                 &linked.payload,
@@ -140,6 +146,26 @@ pub fn link_k16_objects_with_options(
                 },
                 &linked.cpu_helper_relocations,
             )?
+        } else if let Some(writable_segment) = linked.writable_segment {
+            if !imports.needed_libraries.is_empty() {
+                k16e::encode_dynamic_k16_program_with_imports_and_writable_segment(
+                    &linked.payload,
+                    linked.memory_size,
+                    linked.entry_pc,
+                    &linked.relocations,
+                    &imports.needed_libraries,
+                    &linked.import_relocations,
+                    writable_segment,
+                )?
+            } else {
+                k16e::encode_dynamic_k16_program_with_writable_segment(
+                    &linked.payload,
+                    linked.memory_size,
+                    linked.entry_pc,
+                    &linked.relocations,
+                    writable_segment,
+                )?
+            }
         } else if !imports.needed_libraries.is_empty() {
             k16e::encode_dynamic_k16_program_with_imports(
                 &linked.payload,
@@ -199,6 +225,7 @@ struct LinkedImage {
     payload: Vec<u8>,
     memory_size: u32,
     entry_pc: u32,
+    writable_segment: Option<k16e::K16eWritableSegment>,
     relocations: Vec<k16e::K16eRelocation>,
     cpu_helper_relocations: Vec<k16e::K16eCpuHelperRelocation>,
     import_relocations: Vec<k16e::K16eImportRelocation>,
@@ -325,6 +352,16 @@ impl K16LinkMap {
 }
 
 impl LinkedImage {
+    fn file_payload_size(&self) -> usize {
+        let Some(segment) = self.writable_segment else {
+            return self.payload.len();
+        };
+        let readonly_file_size = u32::try_from(self.payload.len())
+            .unwrap_or(u32::MAX)
+            .min(segment.offset);
+        usize::try_from(readonly_file_size.saturating_add(segment.file_size)).unwrap_or(usize::MAX)
+    }
+
     fn materialize_memory_payload(&mut self) -> Result<(), String> {
         let memory_size = usize::try_from(self.memory_size)
             .map_err(|_| "linked K16 payload is too large".to_string())?;
@@ -341,6 +378,7 @@ fn link_objects(
     load_addr: u32,
     prefix_len: usize,
     emit_dynamic_relocations: bool,
+    split_writable_sections: bool,
     shared_cpu_helpers: bool,
     shared_object: bool,
     imported_symbols: &HashMap<String, u32>,
@@ -361,8 +399,11 @@ fn link_objects(
     let mut cpu_helper_relocations = Vec::new();
     let mut import_relocations = Vec::new();
     let mut retained_section_map = Vec::new();
+    let mut writable_start = None;
+    let mut writable_file_end = None;
 
-    for nobits_pass in [false, true] {
+    let layout_pass_count = if split_writable_sections { 3 } else { 2 };
+    for layout_pass in 0..layout_pass_count {
         for (object_index, object) in objects.iter().enumerate() {
             for section in &object.sections {
                 if !retained_sections
@@ -374,8 +415,16 @@ fn link_objects(
                     continue;
                 }
                 validate_alloc_section(section)?;
-                if (section.kind == SHT_NOBITS) != nobits_pass {
+                if !section_matches_layout_pass(section, split_writable_sections, layout_pass)? {
                     continue;
+                }
+                if split_writable_sections
+                    && is_writable_alloc_section(section)?
+                    && writable_start.is_none()
+                {
+                    memory_size = align_memory_size(memory_size, 4096)?;
+                    writable_start = Some(memory_size);
+                    writable_file_end = Some(memory_size);
                 }
                 memory_size = align_memory_size(memory_size, section.alignment)?;
                 let output_offset = memory_size;
@@ -401,6 +450,9 @@ fn link_objects(
                         memory_size = memory_size
                             .checked_add(section.size)
                             .ok_or_else(|| "linked K16 payload is too large".to_string())?;
+                        if split_writable_sections && is_writable_alloc_section(section)? {
+                            writable_file_end = Some(memory_size);
+                        }
                     }
                     SHT_NOBITS => {
                         memory_size = memory_size
@@ -412,6 +464,21 @@ fn link_objects(
             }
         }
     }
+    let writable_segment = if let Some(offset) = writable_start {
+        let file_end = writable_file_end.unwrap_or(offset);
+        memory_size = align_memory_size(memory_size, 4096)?;
+        Some(k16e::K16eWritableSegment {
+            offset,
+            file_size: file_end
+                .checked_sub(offset)
+                .ok_or_else(|| "linked K16 writable segment file size underflows".to_string())?,
+            memory_size: memory_size
+                .checked_sub(offset)
+                .ok_or_else(|| "linked K16 writable segment memory size underflows".to_string())?,
+        })
+    } else {
+        None
+    };
 
     if memory_size
         == u32::try_from(prefix_len).map_err(|_| "linked K16 payload is too large".to_string())?
@@ -582,6 +649,7 @@ fn link_objects(
         payload,
         memory_size,
         entry_pc,
+        writable_segment,
         relocations: dynamic_relocations,
         cpu_helper_relocations,
         import_relocations,
@@ -808,6 +876,32 @@ fn validate_alloc_section(section: &Section) -> Result<(), String> {
         other => return Err(format!("unsupported alloc section `{other}`")),
     }
     Ok(())
+}
+
+fn is_writable_alloc_section(section: &Section) -> Result<bool, String> {
+    validate_alloc_section(section)?;
+    Ok(section.flags & SHF_WRITE != 0)
+}
+
+fn section_matches_layout_pass(
+    section: &Section,
+    split_writable_sections: bool,
+    layout_pass: usize,
+) -> Result<bool, String> {
+    if split_writable_sections {
+        let writable = is_writable_alloc_section(section)?;
+        return Ok(match layout_pass {
+            0 => !writable && section.kind == SHT_PROGBITS,
+            1 => writable && section.kind == SHT_PROGBITS,
+            2 => writable && section.kind == SHT_NOBITS,
+            _ => false,
+        });
+    }
+    Ok(match layout_pass {
+        0 => section.kind == SHT_PROGBITS,
+        1 => section.kind == SHT_NOBITS,
+        _ => false,
+    })
 }
 
 fn validate_rodata(section: &Section) -> Result<(), String> {

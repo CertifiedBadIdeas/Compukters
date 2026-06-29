@@ -4,6 +4,7 @@ pub const K16E_DYNAMIC_VERSION: u16 = 2;
 pub const K16E_DYNAMIC_RUNTIME_VERSION: u16 = 3;
 pub const K16E_SHARED_OBJECT_VERSION: u16 = 4;
 pub const K16E_DYNAMIC_IMPORTS_VERSION: u16 = 5;
+pub const K16E_DYNAMIC_WRITABLE_SEGMENTS_VERSION: u16 = 6;
 pub const K16E_HEADER_SIZE: u16 = 32;
 pub const K16E_SECTION_RECORD_SIZE: u32 = 20;
 pub const K16E_ISA_K16: u16 = 1;
@@ -14,12 +15,15 @@ pub const K16E_SECTION_KIND_CPU_HELPER_RELOCATIONS: u32 = 4;
 pub const K16E_SECTION_KIND_EXPORTS: u32 = 5;
 pub const K16E_SECTION_KIND_NEEDED_LIBRARIES: u32 = 6;
 pub const K16E_SECTION_KIND_IMPORT_RELOCATIONS: u32 = 7;
+pub const K16E_SECTION_KIND_WRITABLE_LOAD: u32 = 8;
 pub const K16E_SECTION_TABLE_OFFSET: u32 = K16E_HEADER_SIZE as u32;
 pub const K16E_SECTION_COUNT_SINGLE_LOAD: u32 = 1;
 pub const K16E_SECTION_COUNT_DYNAMIC_PROGRAM: u32 = 2;
 pub const K16E_SECTION_COUNT_DYNAMIC_PROGRAM_WITH_CPU_HELPERS: u32 = 4;
 pub const K16E_SECTION_COUNT_SHARED_OBJECT: u32 = 3;
 pub const K16E_SECTION_COUNT_DYNAMIC_PROGRAM_WITH_IMPORTS: u32 = 4;
+pub const K16E_SECTION_COUNT_DYNAMIC_PROGRAM_WITH_WRITABLE: u32 = 3;
+pub const K16E_SECTION_COUNT_DYNAMIC_PROGRAM_WITH_WRITABLE_IMPORTS: u32 = 5;
 pub const K16E_PAYLOAD_OFFSET_SINGLE_LOAD: u32 =
     K16E_SECTION_TABLE_OFFSET + K16E_SECTION_RECORD_SIZE;
 pub const K16E_PAYLOAD_OFFSET_DYNAMIC_PROGRAM: u32 =
@@ -30,6 +34,10 @@ pub const K16E_PAYLOAD_OFFSET_SHARED_OBJECT: u32 =
     K16E_SECTION_TABLE_OFFSET + K16E_SECTION_RECORD_SIZE * K16E_SECTION_COUNT_SHARED_OBJECT;
 pub const K16E_PAYLOAD_OFFSET_DYNAMIC_PROGRAM_WITH_IMPORTS: u32 = K16E_SECTION_TABLE_OFFSET
     + K16E_SECTION_RECORD_SIZE * K16E_SECTION_COUNT_DYNAMIC_PROGRAM_WITH_IMPORTS;
+pub const K16E_PAYLOAD_OFFSET_DYNAMIC_PROGRAM_WITH_WRITABLE: u32 = K16E_SECTION_TABLE_OFFSET
+    + K16E_SECTION_RECORD_SIZE * K16E_SECTION_COUNT_DYNAMIC_PROGRAM_WITH_WRITABLE;
+pub const K16E_PAYLOAD_OFFSET_DYNAMIC_PROGRAM_WITH_WRITABLE_IMPORTS: u32 = K16E_SECTION_TABLE_OFFSET
+    + K16E_SECTION_RECORD_SIZE * K16E_SECTION_COUNT_DYNAMIC_PROGRAM_WITH_WRITABLE_IMPORTS;
 pub const K16E_RELOCATION_RECORD_SIZE: u32 = 8;
 pub const K16E_CPU_HELPER_REQUIREMENT_SIZE: u32 = 8;
 pub const K16E_CPU_HELPER_RELOCATION_RECORD_SIZE: u32 = 12;
@@ -101,6 +109,13 @@ impl K16eRelocationKind {
 pub struct K16eRelocation {
     pub offset: u32,
     pub kind: K16eRelocationKind,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct K16eWritableSegment {
+    pub offset: u32,
+    pub file_size: u32,
+    pub memory_size: u32,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -226,6 +241,7 @@ pub struct DynamicK16Program {
     pub entry_offset: u32,
     pub memory_size: u32,
     pub payload: Vec<u8>,
+    pub writable_segment: Option<K16eWritableSegment>,
     pub relocations: Vec<K16eRelocation>,
     pub cpu_helper_runtime: Option<K16eCpuHelperRuntimeRequirement>,
     pub cpu_helper_relocations: Vec<K16eCpuHelperRelocation>,
@@ -682,6 +698,206 @@ pub fn encode_dynamic_k16_program_with_imports(
     Ok(bytes)
 }
 
+pub fn encode_dynamic_k16_program_with_writable_segment(
+    payload: &[u8],
+    memory_size: u32,
+    entry_offset: u32,
+    relocations: &[K16eRelocation],
+    writable_segment: K16eWritableSegment,
+) -> Result<Vec<u8>, String> {
+    encode_dynamic_k16_program_v6(
+        payload,
+        memory_size,
+        entry_offset,
+        relocations,
+        writable_segment,
+        &[],
+        &[],
+    )
+}
+
+pub fn encode_dynamic_k16_program_with_imports_and_writable_segment(
+    payload: &[u8],
+    memory_size: u32,
+    entry_offset: u32,
+    relocations: &[K16eRelocation],
+    needed_libraries: &[String],
+    import_relocations: &[K16eImportRelocation],
+    writable_segment: K16eWritableSegment,
+) -> Result<Vec<u8>, String> {
+    encode_dynamic_k16_program_v6(
+        payload,
+        memory_size,
+        entry_offset,
+        relocations,
+        writable_segment,
+        needed_libraries,
+        import_relocations,
+    )
+}
+
+fn encode_dynamic_k16_program_v6(
+    payload: &[u8],
+    memory_size: u32,
+    entry_offset: u32,
+    relocations: &[K16eRelocation],
+    writable_segment: K16eWritableSegment,
+    needed_libraries: &[String],
+    import_relocations: &[K16eImportRelocation],
+) -> Result<Vec<u8>, String> {
+    if payload.is_empty() {
+        return Err("K16E payload is empty".to_string());
+    }
+    if payload.len() % 2 != 0 {
+        return Err("K16E K16 payload length must be even".to_string());
+    }
+    validate_writable_segment(payload, memory_size, writable_segment)?;
+    validate_entry_offset_inside_payload(entry_offset, memory_size)?;
+    validate_dynamic_relocations(memory_size, relocations)?;
+    if needed_libraries.is_empty() {
+        if !import_relocations.is_empty() {
+            return Err("K16E import relocations require needed libraries".to_string());
+        }
+    } else {
+        validate_needed_libraries(needed_libraries)?;
+        validate_import_relocations(memory_size, needed_libraries.len(), import_relocations)?;
+    }
+
+    let readonly_file_size = writable_segment.offset.min(
+        u32::try_from(payload.len()).map_err(|_| "K16E payload is too large".to_string())?,
+    );
+    if readonly_file_size == 0 {
+        return Err("K16E readonly payload is empty".to_string());
+    }
+    if readonly_file_size % 2 != 0 || writable_segment.file_size % 2 != 0 {
+        return Err("K16E K16 payload length must be even".to_string());
+    }
+    let section_count = if needed_libraries.is_empty() {
+        K16E_SECTION_COUNT_DYNAMIC_PROGRAM_WITH_WRITABLE
+    } else {
+        K16E_SECTION_COUNT_DYNAMIC_PROGRAM_WITH_WRITABLE_IMPORTS
+    };
+    let payload_offset = K16E_SECTION_TABLE_OFFSET
+        .checked_add(
+            K16E_SECTION_RECORD_SIZE
+                .checked_mul(section_count)
+                .ok_or_else(|| "K16E section table size overflows".to_string())?,
+        )
+        .ok_or_else(|| "K16E payload offset overflows".to_string())?;
+    let writable_file_offset = payload_offset
+        .checked_add(readonly_file_size)
+        .ok_or_else(|| "K16E writable payload offset overflows".to_string())?;
+    let relocation_table_offset = writable_file_offset
+        .checked_add(writable_segment.file_size)
+        .ok_or_else(|| "K16E relocation table offset overflows".to_string())?;
+    let relocation_table_size = u32::try_from(relocations.len())
+        .map_err(|_| "K16E relocation table is too large".to_string())?
+        .checked_mul(K16E_RELOCATION_RECORD_SIZE)
+        .ok_or_else(|| "K16E relocation table size overflows".to_string())?;
+    let needed_section = if needed_libraries.is_empty() {
+        Vec::new()
+    } else {
+        encode_string_table(needed_libraries, "needed library")?
+    };
+    let needed_section_size = u32::try_from(needed_section.len())
+        .map_err(|_| "K16E needed library section is too large".to_string())?;
+    let import_section = if needed_libraries.is_empty() {
+        Vec::new()
+    } else {
+        encode_import_relocation_section(import_relocations)?
+    };
+    let import_section_size = u32::try_from(import_section.len())
+        .map_err(|_| "K16E import relocation section is too large".to_string())?;
+    let needed_section_offset = relocation_table_offset
+        .checked_add(relocation_table_size)
+        .ok_or_else(|| "K16E needed library section offset overflows".to_string())?;
+    let import_section_offset = needed_section_offset
+        .checked_add(needed_section_size)
+        .ok_or_else(|| "K16E import relocation section offset overflows".to_string())?;
+    let file_size = if needed_libraries.is_empty() {
+        needed_section_offset
+    } else {
+        import_section_offset
+            .checked_add(import_section_size)
+            .ok_or_else(|| "K16E file size overflows".to_string())?
+    };
+    let capacity =
+        usize::try_from(file_size).map_err(|_| "K16E file size does not fit usize".to_string())?;
+
+    let mut bytes = Vec::with_capacity(capacity);
+    bytes.extend_from_slice(K16E_MAGIC);
+    write_u16(&mut bytes, K16E_DYNAMIC_WRITABLE_SEGMENTS_VERSION);
+    write_u16(&mut bytes, K16E_HEADER_SIZE);
+    write_u16(&mut bytes, K16E_ISA_K16);
+    write_u16(&mut bytes, 0);
+    write_u32(&mut bytes, entry_offset);
+    write_u32(&mut bytes, K16E_SECTION_TABLE_OFFSET);
+    write_u32(&mut bytes, section_count);
+    write_u32(&mut bytes, K16eAbiKind::Program.code());
+    write_u32(&mut bytes, 0);
+
+    write_u32(&mut bytes, K16E_SECTION_KIND_LOAD);
+    write_u32(&mut bytes, 0);
+    write_u32(&mut bytes, payload_offset);
+    write_u32(&mut bytes, readonly_file_size);
+    write_u32(&mut bytes, writable_segment.offset);
+
+    write_u32(&mut bytes, K16E_SECTION_KIND_WRITABLE_LOAD);
+    write_u32(&mut bytes, writable_segment.offset);
+    write_u32(&mut bytes, writable_file_offset);
+    write_u32(&mut bytes, writable_segment.file_size);
+    write_u32(&mut bytes, writable_segment.memory_size);
+
+    write_u32(&mut bytes, K16E_SECTION_KIND_RELOCATIONS);
+    write_u32(&mut bytes, 0);
+    write_u32(&mut bytes, relocation_table_offset);
+    write_u32(&mut bytes, relocation_table_size);
+    write_u32(&mut bytes, relocations.len() as u32);
+
+    if !needed_libraries.is_empty() {
+        write_u32(&mut bytes, K16E_SECTION_KIND_NEEDED_LIBRARIES);
+        write_u32(&mut bytes, 0);
+        write_u32(&mut bytes, needed_section_offset);
+        write_u32(&mut bytes, needed_section_size);
+        write_u32(&mut bytes, needed_libraries.len() as u32);
+
+        write_u32(&mut bytes, K16E_SECTION_KIND_IMPORT_RELOCATIONS);
+        write_u32(&mut bytes, 0);
+        write_u32(&mut bytes, import_section_offset);
+        write_u32(&mut bytes, import_section_size);
+        write_u32(&mut bytes, import_relocations.len() as u32);
+    }
+
+    let readonly_end = usize::try_from(readonly_file_size)
+        .map_err(|_| "K16E readonly payload size does not fit usize".to_string())?;
+    bytes.extend_from_slice(&payload[..readonly_end]);
+    let writable_start = usize::try_from(writable_segment.offset)
+        .map_err(|_| "K16E writable segment offset does not fit usize".to_string())?;
+    let writable_end = usize::try_from(
+        writable_segment
+            .offset
+            .checked_add(writable_segment.file_size)
+            .ok_or_else(|| "K16E writable segment file range overflows".to_string())?,
+    )
+    .map_err(|_| "K16E writable segment end does not fit usize".to_string())?;
+    if writable_segment.file_size > 0 {
+        bytes.extend_from_slice(
+            payload
+                .get(writable_start..writable_end)
+                .ok_or_else(|| "K16E writable segment bytes are out of bounds".to_string())?,
+        );
+    }
+    for relocation in relocations {
+        write_u32(&mut bytes, relocation.offset);
+        write_u32(&mut bytes, relocation.kind.code());
+    }
+    if !needed_libraries.is_empty() {
+        bytes.extend_from_slice(&needed_section);
+        bytes.extend_from_slice(&import_section);
+    }
+    Ok(bytes)
+}
+
 pub fn decode_dynamic_k16_program(bytes: &[u8]) -> Result<DynamicK16Program, String> {
     let magic = bytes
         .get(0..4)
@@ -696,21 +912,9 @@ pub fn decode_dynamic_k16_program(bytes: &[u8]) -> Result<DynamicK16Program, Str
     if version != K16E_DYNAMIC_VERSION
         && version != K16E_DYNAMIC_RUNTIME_VERSION
         && version != K16E_DYNAMIC_IMPORTS_VERSION
+        && version != K16E_DYNAMIC_WRITABLE_SEGMENTS_VERSION
     {
         return Err(format!("unsupported dynamic K16E version {version}"));
-    }
-    let expected_section_count = match version {
-        K16E_DYNAMIC_RUNTIME_VERSION => K16E_SECTION_COUNT_DYNAMIC_PROGRAM_WITH_CPU_HELPERS,
-        K16E_DYNAMIC_IMPORTS_VERSION => K16E_SECTION_COUNT_DYNAMIC_PROGRAM_WITH_IMPORTS,
-        _ => K16E_SECTION_COUNT_DYNAMIC_PROGRAM,
-    };
-    let expected_payload_offset = match version {
-        K16E_DYNAMIC_RUNTIME_VERSION => K16E_PAYLOAD_OFFSET_DYNAMIC_PROGRAM_WITH_CPU_HELPERS,
-        K16E_DYNAMIC_IMPORTS_VERSION => K16E_PAYLOAD_OFFSET_DYNAMIC_PROGRAM_WITH_IMPORTS,
-        _ => K16E_PAYLOAD_OFFSET_DYNAMIC_PROGRAM,
-    };
-    if bytes.len() < expected_payload_offset as usize {
-        return Err("K16E file is smaller than the dynamic header".to_string());
     }
     let header_size = read_u16(bytes, 6)?;
     if header_size != K16E_HEADER_SIZE {
@@ -732,6 +936,36 @@ pub fn decode_dynamic_k16_program(bytes: &[u8]) -> Result<DynamicK16Program, Str
         ));
     }
     let section_count = read_u32(bytes, 20)?;
+    let expected_section_count = match version {
+        K16E_DYNAMIC_RUNTIME_VERSION => K16E_SECTION_COUNT_DYNAMIC_PROGRAM_WITH_CPU_HELPERS,
+        K16E_DYNAMIC_IMPORTS_VERSION => K16E_SECTION_COUNT_DYNAMIC_PROGRAM_WITH_IMPORTS,
+        K16E_DYNAMIC_WRITABLE_SEGMENTS_VERSION => {
+            if section_count != K16E_SECTION_COUNT_DYNAMIC_PROGRAM_WITH_WRITABLE
+                && section_count != K16E_SECTION_COUNT_DYNAMIC_PROGRAM_WITH_WRITABLE_IMPORTS
+            {
+                return Err(format!(
+                    "unsupported dynamic K16E section count {section_count}"
+                ));
+            }
+            section_count
+        }
+        _ => K16E_SECTION_COUNT_DYNAMIC_PROGRAM,
+    };
+    let expected_payload_offset = match version {
+        K16E_DYNAMIC_RUNTIME_VERSION => K16E_PAYLOAD_OFFSET_DYNAMIC_PROGRAM_WITH_CPU_HELPERS,
+        K16E_DYNAMIC_IMPORTS_VERSION => K16E_PAYLOAD_OFFSET_DYNAMIC_PROGRAM_WITH_IMPORTS,
+        K16E_DYNAMIC_WRITABLE_SEGMENTS_VERSION => K16E_SECTION_TABLE_OFFSET
+            .checked_add(
+                K16E_SECTION_RECORD_SIZE
+                    .checked_mul(section_count)
+                    .ok_or_else(|| "K16E section table size overflows".to_string())?,
+            )
+            .ok_or_else(|| "K16E payload offset overflows".to_string())?,
+        _ => K16E_PAYLOAD_OFFSET_DYNAMIC_PROGRAM,
+    };
+    if bytes.len() < expected_payload_offset as usize {
+        return Err("K16E file is smaller than the dynamic header".to_string());
+    }
     if section_count != expected_section_count {
         return Err(format!(
             "unsupported dynamic K16E section count {section_count}"
@@ -746,6 +980,9 @@ pub fn decode_dynamic_k16_program(bytes: &[u8]) -> Result<DynamicK16Program, Str
     }
     if read_u32(bytes, 28)? != 0 {
         return Err("K16E reserved header fields must be zero".to_string());
+    }
+    if version == K16E_DYNAMIC_WRITABLE_SEGMENTS_VERSION {
+        return decode_dynamic_k16_program_v6(bytes, entry_offset, section_count);
     }
 
     let load_kind = read_u32(bytes, 32)?;
@@ -992,9 +1229,212 @@ pub fn decode_dynamic_k16_program(bytes: &[u8]) -> Result<DynamicK16Program, Str
         entry_offset,
         memory_size,
         payload,
+        writable_segment: None,
         relocations,
         cpu_helper_runtime,
         cpu_helper_relocations,
+        needed_libraries,
+        import_relocations,
+    })
+}
+
+fn decode_dynamic_k16_program_v6(
+    bytes: &[u8],
+    entry_offset: u32,
+    section_count: u32,
+) -> Result<DynamicK16Program, String> {
+    let has_imports = section_count == K16E_SECTION_COUNT_DYNAMIC_PROGRAM_WITH_WRITABLE_IMPORTS;
+    let expected_payload_offset = K16E_SECTION_TABLE_OFFSET
+        .checked_add(
+            K16E_SECTION_RECORD_SIZE
+                .checked_mul(section_count)
+                .ok_or_else(|| "K16E section table size overflows".to_string())?,
+        )
+        .ok_or_else(|| "K16E payload offset overflows".to_string())?;
+
+    let load_kind = read_u32(bytes, 32)?;
+    if load_kind != K16E_SECTION_KIND_LOAD {
+        return Err(format!("unsupported K16E section kind {load_kind}"));
+    }
+    if read_u32(bytes, 36)? != 0 {
+        return Err("dynamic K16E readonly load address must be zero".to_string());
+    }
+    let readonly_payload_offset = read_u32(bytes, 40)?;
+    if readonly_payload_offset != expected_payload_offset {
+        return Err(format!(
+            "unsupported dynamic K16E payload offset {readonly_payload_offset}"
+        ));
+    }
+    let readonly_file_size = read_u32(bytes, 44)?;
+    let readonly_memory_size = read_u32(bytes, 48)?;
+    if readonly_file_size == 0 || readonly_file_size % 2 != 0 || readonly_memory_size % 2 != 0 {
+        return Err("invalid dynamic K16E readonly segment size".to_string());
+    }
+
+    let writable_kind = read_u32(bytes, 52)?;
+    if writable_kind != K16E_SECTION_KIND_WRITABLE_LOAD {
+        return Err(format!("unsupported K16E section kind {writable_kind}"));
+    }
+    let writable_offset = read_u32(bytes, 56)?;
+    let writable_file_offset = read_u32(bytes, 60)?;
+    let writable_file_size = read_u32(bytes, 64)?;
+    let writable_memory_size = read_u32(bytes, 68)?;
+    if writable_offset != readonly_memory_size {
+        return Err("dynamic K16E writable segment must follow readonly segment".to_string());
+    }
+    let writable_segment = K16eWritableSegment {
+        offset: writable_offset,
+        file_size: writable_file_size,
+        memory_size: writable_memory_size,
+    };
+    let memory_size = writable_offset
+        .checked_add(writable_memory_size)
+        .ok_or_else(|| "K16E writable segment range overflows".to_string())?;
+    if writable_file_offset
+        != readonly_payload_offset
+            .checked_add(readonly_file_size)
+            .ok_or_else(|| "K16E writable payload offset overflows".to_string())?
+    {
+        return Err(format!(
+            "unsupported dynamic K16E writable payload offset {writable_file_offset}"
+        ));
+    }
+    if writable_file_size > writable_memory_size
+        || writable_file_size % 2 != 0
+        || writable_memory_size == 0
+        || writable_memory_size % 2 != 0
+    {
+        return Err("invalid dynamic K16E writable segment size".to_string());
+    }
+    if writable_offset == 0 || writable_offset % 4096 != 0 {
+        return Err("dynamic K16E writable segment must be page-aligned".to_string());
+    }
+    validate_entry_offset_inside_payload(entry_offset, memory_size)?;
+
+    let relocation_kind = read_u32(bytes, 72)?;
+    if relocation_kind != K16E_SECTION_KIND_RELOCATIONS {
+        return Err(format!("unsupported K16E section kind {relocation_kind}"));
+    }
+    if read_u32(bytes, 76)? != 0 {
+        return Err("dynamic K16E relocation section address must be zero".to_string());
+    }
+    let relocation_table_offset = read_u32(bytes, 80)?;
+    let relocation_table_size = read_u32(bytes, 84)?;
+    let relocation_count = read_u32(bytes, 88)?;
+    let expected_relocation_table_size = relocation_count
+        .checked_mul(K16E_RELOCATION_RECORD_SIZE)
+        .ok_or_else(|| "K16E relocation table size overflows".to_string())?;
+    if relocation_table_size != expected_relocation_table_size {
+        return Err("K16E relocation table size does not match relocation count".to_string());
+    }
+    if relocation_table_offset
+        != writable_file_offset
+            .checked_add(writable_file_size)
+            .ok_or_else(|| "K16E relocation table offset overflows".to_string())?
+    {
+        return Err(format!(
+            "unsupported dynamic K16E relocation table offset {relocation_table_offset}"
+        ));
+    }
+
+    let (needed_libraries, import_relocations) = if has_imports {
+        let needed_kind = read_u32(bytes, 92)?;
+        if needed_kind != K16E_SECTION_KIND_NEEDED_LIBRARIES {
+            return Err(format!("unsupported K16E section kind {needed_kind}"));
+        }
+        if read_u32(bytes, 96)? != 0 {
+            return Err("dynamic K16E needed library section address must be zero".to_string());
+        }
+        let needed_section_offset = read_u32(bytes, 100)?;
+        let needed_section_size = read_u32(bytes, 104)?;
+        let needed_count = read_u32(bytes, 108)?;
+        if needed_section_offset
+            != relocation_table_offset
+                .checked_add(relocation_table_size)
+                .ok_or_else(|| "K16E needed library section offset overflows".to_string())?
+        {
+            return Err(format!(
+                "unsupported dynamic K16E needed library section offset {needed_section_offset}"
+            ));
+        }
+
+        let import_kind = read_u32(bytes, 112)?;
+        if import_kind != K16E_SECTION_KIND_IMPORT_RELOCATIONS {
+            return Err(format!("unsupported K16E section kind {import_kind}"));
+        }
+        if read_u32(bytes, 116)? != 0 {
+            return Err("dynamic K16E import relocation section address must be zero".to_string());
+        }
+        let import_section_offset = read_u32(bytes, 120)?;
+        let import_section_size = read_u32(bytes, 124)?;
+        let import_count = read_u32(bytes, 128)?;
+        if import_section_offset
+            != needed_section_offset
+                .checked_add(needed_section_size)
+                .ok_or_else(|| "K16E import relocation section offset overflows".to_string())?
+        {
+            return Err(format!(
+                "unsupported dynamic K16E import relocation section offset {import_section_offset}"
+            ));
+        }
+
+        let needed_section = bytes_slice(
+            bytes,
+            needed_section_offset,
+            needed_section_size,
+            "needed library section",
+        )?;
+        let needed_libraries =
+            decode_counted_strings(needed_section, needed_count, "needed library")?;
+        validate_needed_libraries(&needed_libraries)?;
+
+        let import_section = bytes_slice(
+            bytes,
+            import_section_offset,
+            import_section_size,
+            "import relocation section",
+        )?;
+        let import_relocations =
+            decode_import_relocation_section(import_section, import_count)?;
+        validate_import_relocations(memory_size, needed_libraries.len(), &import_relocations)?;
+        (needed_libraries, import_relocations)
+    } else {
+        (Vec::new(), Vec::new())
+    };
+
+    let readonly_payload = bytes_slice(
+        bytes,
+        readonly_payload_offset,
+        readonly_file_size,
+        "readonly payload",
+    )?;
+    let writable_payload = bytes_slice(
+        bytes,
+        writable_file_offset,
+        writable_file_size,
+        "writable payload",
+    )?;
+    let relocation_table = bytes_slice(
+        bytes,
+        relocation_table_offset,
+        relocation_table_size,
+        "relocation table",
+    )?;
+    let relocations = decode_relocation_table(relocation_table, relocation_count)?;
+    validate_dynamic_relocations(memory_size, &relocations)?;
+
+    let mut payload = Vec::with_capacity(readonly_payload.len() + writable_payload.len());
+    payload.extend_from_slice(readonly_payload);
+    payload.extend_from_slice(writable_payload);
+
+    Ok(DynamicK16Program {
+        entry_offset,
+        memory_size,
+        payload,
+        writable_segment: Some(writable_segment),
+        relocations,
+        cpu_helper_runtime: None,
+        cpu_helper_relocations: Vec::new(),
         needed_libraries,
         import_relocations,
     })
@@ -1291,6 +1731,44 @@ fn validate_dynamic_relocations(
                 "K16E relocation range {:#010x}..{:#010x} exceeds dynamic memory size {memory_size:#010x}",
                 relocation.offset, relocation_end,
             ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_writable_segment(
+    payload: &[u8],
+    memory_size: u32,
+    segment: K16eWritableSegment,
+) -> Result<(), String> {
+    if memory_size % 2 != 0 {
+        return Err("K16E K16 memory size must be even".to_string());
+    }
+    if segment.offset == 0 || segment.offset % 4096 != 0 {
+        return Err("K16E writable segment offset must be non-zero and page-aligned".to_string());
+    }
+    if segment.file_size % 2 != 0 || segment.memory_size == 0 || segment.memory_size % 2 != 0 {
+        return Err("K16E writable segment sizes must be even and non-empty".to_string());
+    }
+    let segment_end = segment
+        .offset
+        .checked_add(segment.memory_size)
+        .ok_or_else(|| "K16E writable segment range overflows".to_string())?;
+    if segment_end != memory_size {
+        return Err("K16E writable segment must end at K16E memory size".to_string());
+    }
+    if segment.file_size > segment.memory_size {
+        return Err("K16E writable segment file size exceeds memory size".to_string());
+    }
+    let payload_len =
+        u32::try_from(payload.len()).map_err(|_| "K16E payload is too large".to_string())?;
+    if segment.file_size > 0 {
+        let writable_file_end = segment
+            .offset
+            .checked_add(segment.file_size)
+            .ok_or_else(|| "K16E writable segment file range overflows".to_string())?;
+        if writable_file_end > payload_len {
+            return Err("K16E writable segment file bytes exceed payload".to_string());
         }
     }
     Ok(())

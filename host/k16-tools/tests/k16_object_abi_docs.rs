@@ -31,6 +31,8 @@ fn k16_object_abi_docs_define_elf_relocatable_contract() {
         "`--import <library>:<symbol>` records",
         "`--dylib <library.kso>` inputs",
         "The `shared-object` target emits a K16E v4 shared object",
+        "Dynamic program targets may use split executable/read-only and writable load sections",
+        "writable/non-executable under the MMU",
         "`--import <library>:<symbol>` has the same explicit import metadata meaning in both entry points",
         "`--dylib` also has the same meaning in both entry points",
         "Symbols declared with `--import` or `--dylib` are not archive-selection roots",
@@ -250,6 +252,9 @@ fn k16e_docs_define_imported_dynamic_program_v0_boundary() {
 
     for required in [
         "K16E v5 imported dynamic programs extend v2 with shared-library dependency metadata",
+        "K16E v6 dynamic programs split writable program memory",
+        "section 1 kind 8 (writable load)",
+        "The writable offset must be non-zero and 4 KiB page-aligned",
         "section 2 kind 6 (needed libraries)",
         "section 3 kind 7 (import relocations)",
         "Each import relocation record is 16 bytes",

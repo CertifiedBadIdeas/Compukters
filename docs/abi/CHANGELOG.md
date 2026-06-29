@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- K16E dynamic user programs can now emit v6 split writable load metadata.
+  `program-dynamic` images with `.data` or `.bss` place writable memory on a
+  4 KiB boundary, keep initialized writable bytes in a separate file range, and
+  let KraftOS map code/rodata executable-readonly while mapping writable globals
+  writable/non-executable.
 - K16 CPU v1 now defines extended signed-imm16 instruction forms under opcode
   `0x3`: `addi`, base-plus-offset `load8`/`load16`/`load32`, and
   base-plus-offset `store8`/`store16`/`store32`. The VM, assembler,

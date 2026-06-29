@@ -1,5 +1,5 @@
 #[cfg(test)]
-const TEST_WRITES_CAPACITY: usize = 16;
+const TEST_WRITES_CAPACITY: usize = 32;
 #[cfg(test)]
 const TEST_MMU0_STATUS_SCRIPT_CAPACITY: usize = 8;
 #[cfg(test)]
