@@ -105,7 +105,7 @@ class K16ComputerRuntimeTest {
         val snapshot =
             NativeK16ComputerStatsSnapshot.from(
                 longArrayOf(
-                    7,
+                    8,
                     2, 3, 4, 5,
                     6, 7, 8, 9,
                     31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44,
@@ -113,8 +113,8 @@ class K16ComputerRuntimeTest {
                     1,
                     11, 0x1000, 64,
                     12, 13, 14, 15,
-                    16, 17, 18, 19, 20, 21,
-                    22, 23, 24, 25, 26, 27, 28,
+                    16, 17, 18, 19, 20, 21, 22, 23,
+                    24, 25, 26, 27, 28, 29, 30,
                 ),
             )
 
@@ -155,16 +155,18 @@ class K16ComputerRuntimeTest {
                             bytesRead = 19,
                             bytesWritten = 20,
                             failedCommands = 21,
+                            uniqueReadBlocks = 22,
+                            repeatedReadBlocks = 23,
                         ),
                     gpu =
                         NativeK16GpuStats(
-                            blitBufferCommands = 22,
-                            blitPixels = 23,
-                            blitSourceBytes = 24,
-                            presentCommands = 25,
-                            frames = 26,
-                            frameTiles = 27,
-                            framePayloadBytes = 28,
+                            blitBufferCommands = 24,
+                            blitPixels = 25,
+                            blitSourceBytes = 26,
+                            presentCommands = 27,
+                            frames = 28,
+                            frameTiles = 29,
+                            framePayloadBytes = 30,
                         ),
                 ),
             ),
@@ -186,6 +188,8 @@ class K16ComputerRuntimeTest {
             )
 
         assertEquals(NativeK16GpuStats(), snapshot.devices.single().gpu)
+        assertEquals(0, snapshot.devices.single().storage.uniqueReadBlocks)
+        assertEquals(0, snapshot.devices.single().storage.repeatedReadBlocks)
         assertEquals(NativeK16DecodeCacheStats(), snapshot.decodeCache)
     }
 

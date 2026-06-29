@@ -34,6 +34,8 @@ pub struct K16ComputerStorageStatsSnapshot {
     pub bytes_read: u64,
     pub bytes_written: u64,
     pub failed_commands: u64,
+    pub unique_read_blocks: u64,
+    pub repeated_read_blocks: u64,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]

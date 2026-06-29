@@ -82,7 +82,7 @@ The `k16Phase` lines split selected text-I/O scenarios into named checkpoints su
 and deltas between two runtime metric snapshots:
 
 ```text
-k16Phase: name=ls:/bin.visible, elapsed=..., slices=..., runTime=..., inputBytes=..., gpuFrameBytes=..., displayFrames=..., displayBytes=..., storageReads=..., storageBytesRead=..., pathLookups=..., inodeLoads=..., dirEntryScans=..., fileOpens=..., fileReads=..., statCalls=..., programLoadBytes=..., dynamicImportBytes=..., libraryLoadBytes=...
+k16Phase: name=ls:/bin.visible, elapsed=..., slices=..., runTime=..., inputBytes=..., gpuFrameBytes=..., displayFrames=..., displayBytes=..., storageReads=..., storageUniqueReadBlocks=..., storageRepeatedReadBlocks=..., storageBytesRead=..., pathLookups=..., inodeLoads=..., dirEntryScans=..., fileOpens=..., fileReads=..., statCalls=..., programLoadBytes=..., dynamicImportBytes=..., libraryLoadBytes=...
 ```
 
 Use these phase lines when deciding whether a slowdown is in command dispatch, command execution/storage reads, display
@@ -95,7 +95,8 @@ deadline is counted under `shell.prompt.after_splash`. Treat the splash wait as 
 bootloader/kernel/shell execution cost. Use `shell.prompt.after_splash` and later command-specific phases when comparing
 real post-splash responsiveness. In startup phases, compare `programLoadBytes`, `dynamicImportBytes`, and
 `libraryLoadBytes` against `storageBytesRead` to distinguish executable payload reads, dynamic import metadata reads, and
-shared-library payload reads.
+shared-library payload reads. Compare `storageUniqueReadBlocks` and `storageRepeatedReadBlocks` to identify whether
+backend storage cost comes from new LBAs or repeated reads of LBAs that already missed the storage0 block cache earlier.
 
 Use `profileK16ManyVmServerBudget` for a server-focused workload that boots several K16 runtime devices, measures idle
 tick cost after all shells are waiting, then runs one active command while the other VMs stay idle. The printed lines
@@ -165,7 +166,7 @@ during the worker cache refresh path:
 ```text
 k16Bus: ramLoads=..., ramStores=..., ramBytesRead=..., ramBytesWritten=..., mmioLoads=..., mmioStores=..., mmioBytesRead=..., mmioBytesWritten=...
 k16Devices: mapped=..., loads=..., stores=..., bytesRead=..., bytesWritten=...
-k16Storage0: reads=..., writes=..., flushes=..., bytesRead=..., bytesWritten=..., failed=...
+k16Storage0: reads=..., writes=..., flushes=..., bytesRead=..., bytesWritten=..., failed=..., uniqueReadBlocks=..., repeatedReadBlocks=...
 k16Os: pathLookups=..., inodeLoads=..., dirEntryScans=..., fileOpens=..., fileReads=..., statCalls=..., programLoadBytes=..., dynamicImportBytes=..., libraryLoadBytes=...
   device[...]: base=..., size=..., loads=..., stores=..., bytesRead=..., bytesWritten=...
 ```
@@ -173,8 +174,10 @@ k16Os: pathLookups=..., inodeLoads=..., dirEntryScans=..., fileOpens=..., fileRe
 - `k16Bus` separates regular RAM traffic from MMIO traffic.
 - `k16Devices` aggregates mapped MMIO device traffic and then lists per-device counters by hardware device id.
 - `k16Storage0` counts successful storage0 backend media reads, block write commands, flush commands, successful backend
-  transfer bytes, and commands that reached the controller but completed with an error status. Read cache hits still
-  complete the guest `READ_BLOCKS` command but do not increase `reads` or `bytesRead`.
+  transfer bytes, and commands that reached the controller but completed with an error status. `uniqueReadBlocks` counts
+  first-time backend LBA reads, while `repeatedReadBlocks` counts backend LBA reads for LBAs that were already fetched
+  earlier by the same storage device. Read cache hits still complete the guest `READ_BLOCKS` command but do not increase
+  `reads`, `bytesRead`, `uniqueReadBlocks`, or `repeatedReadBlocks`.
 - `k16Os` is exported by KraftOS through a registered RAM counter block. `pathLookups` counts K16FS path resolver calls,
   `inodeLoads` counts inode table loads, `dirEntryScans` counts directory-entry slots scanned by lookup/listing,
   `fileOpens` counts kernel open attempts, `fileReads` counts kernel file read attempts, and `statCalls` counts kernel
