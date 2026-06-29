@@ -388,8 +388,8 @@ fn k16_signal_values(signal: K16Signal) -> [jlong; 2] {
 }
 
 fn k16_computer_stats_snapshot_values(snapshot: &K16ComputerStatsSnapshot) -> Vec<jlong> {
-    let mut values = Vec::with_capacity(27 + snapshot.devices.len() * 22);
-    values.push(8);
+    let mut values = Vec::with_capacity(27 + snapshot.devices.len() * 28);
+    values.push(9);
     push_traffic_values(&mut values, snapshot.bus.ram);
     push_traffic_values(&mut values, snapshot.bus.mmio);
     values.push(snapshot.os.path_lookups as jlong);
@@ -437,6 +437,12 @@ fn push_storage_values(values: &mut Vec<jlong>, storage: K16ComputerStorageStats
     values.push(storage.failed_commands as jlong);
     values.push(storage.unique_read_blocks as jlong);
     values.push(storage.repeated_read_blocks as jlong);
+    values.push(storage.partition_table_read_blocks as jlong);
+    values.push(storage.boot_metadata_read_blocks as jlong);
+    values.push(storage.boot_data_read_blocks as jlong);
+    values.push(storage.root_metadata_read_blocks as jlong);
+    values.push(storage.root_data_read_blocks as jlong);
+    values.push(storage.unknown_read_blocks as jlong);
 }
 
 fn push_gpu_values(values: &mut Vec<jlong>, gpu: K16ComputerGpuStatsSnapshot) {
@@ -621,15 +627,21 @@ mod tests {
                     failed_commands: 21,
                     unique_read_blocks: 22,
                     repeated_read_blocks: 23,
+                    partition_table_read_blocks: 24,
+                    boot_metadata_read_blocks: 25,
+                    boot_data_read_blocks: 26,
+                    root_metadata_read_blocks: 27,
+                    root_data_read_blocks: 28,
+                    unknown_read_blocks: 29,
                 },
                 gpu: K16ComputerGpuStatsSnapshot {
-                    blit_buffer_commands: 24,
-                    blit_pixels: 25,
-                    blit_source_bytes: 26,
-                    present_commands: 27,
-                    frames: 28,
-                    frame_tiles: 29,
-                    frame_payload_bytes: 30,
+                    blit_buffer_commands: 30,
+                    blit_pixels: 31,
+                    blit_source_bytes: 32,
+                    present_commands: 33,
+                    frames: 34,
+                    frame_tiles: 35,
+                    frame_payload_bytes: 36,
                 },
             }],
         };
@@ -637,9 +649,9 @@ mod tests {
         assert_eq!(
             k16_computer_stats_snapshot_values(&snapshot),
             vec![
-                8, 2, 3, 4, 5, 6, 7, 8, 9, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36,
+                9, 2, 3, 4, 5, 6, 7, 8, 9, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36,
                 37, 38, 39, 1, 11, 0x1000, 64, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
-                25, 26, 27, 28, 29, 30,
+                25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36,
             ],
         );
     }

@@ -82,7 +82,7 @@ The `k16Phase` lines split selected text-I/O scenarios into named checkpoints su
 and deltas between two runtime metric snapshots:
 
 ```text
-k16Phase: name=ls:/bin.visible, elapsed=..., slices=..., runTime=..., inputBytes=..., gpuFrameBytes=..., displayFrames=..., displayBytes=..., storageReads=..., storageUniqueReadBlocks=..., storageRepeatedReadBlocks=..., storageBytesRead=..., pathLookups=..., inodeLoads=..., dirEntryScans=..., fileOpens=..., fileReads=..., statCalls=..., programLoadBytes=..., dynamicImportBytes=..., libraryLoadBytes=...
+k16Phase: name=ls:/bin.visible, elapsed=..., slices=..., runTime=..., inputBytes=..., gpuFrameBytes=..., displayFrames=..., displayBytes=..., storageReads=..., storageUniqueReadBlocks=..., storageRepeatedReadBlocks=..., storagePartitionTableReadBlocks=..., storageBootMetadataReadBlocks=..., storageBootDataReadBlocks=..., storageRootMetadataReadBlocks=..., storageRootDataReadBlocks=..., storageUnknownReadBlocks=..., storageBytesRead=..., pathLookups=..., inodeLoads=..., dirEntryScans=..., fileOpens=..., fileReads=..., statCalls=..., programLoadBytes=..., dynamicImportBytes=..., libraryLoadBytes=...
 ```
 
 Use these phase lines when deciding whether a slowdown is in command dispatch, command execution/storage reads, display
@@ -97,6 +97,8 @@ real post-splash responsiveness. In startup phases, compare `programLoadBytes`, 
 `libraryLoadBytes` against `storageBytesRead` to distinguish executable payload reads, dynamic import metadata reads, and
 shared-library payload reads. Compare `storageUniqueReadBlocks` and `storageRepeatedReadBlocks` to identify whether
 backend storage cost comes from new LBAs or repeated reads of LBAs that already missed the storage0 block cache earlier.
+The `storage*ReadBlocks` ownership counters split those backend reads into the K16PT table, BOOT K16FS metadata/data,
+ROOT K16FS metadata/data, and unknown blocks.
 
 Use `profileK16ManyVmServerBudget` for a server-focused workload that boots several K16 runtime devices, measures idle
 tick cost after all shells are waiting, then runs one active command while the other VMs stay idle. The printed lines
@@ -166,7 +168,7 @@ during the worker cache refresh path:
 ```text
 k16Bus: ramLoads=..., ramStores=..., ramBytesRead=..., ramBytesWritten=..., mmioLoads=..., mmioStores=..., mmioBytesRead=..., mmioBytesWritten=...
 k16Devices: mapped=..., loads=..., stores=..., bytesRead=..., bytesWritten=...
-k16Storage0: reads=..., writes=..., flushes=..., bytesRead=..., bytesWritten=..., failed=..., uniqueReadBlocks=..., repeatedReadBlocks=...
+k16Storage0: reads=..., writes=..., flushes=..., bytesRead=..., bytesWritten=..., failed=..., uniqueReadBlocks=..., repeatedReadBlocks=..., partitionTableReadBlocks=..., bootMetadataReadBlocks=..., bootDataReadBlocks=..., rootMetadataReadBlocks=..., rootDataReadBlocks=..., unknownReadBlocks=...
 k16Os: pathLookups=..., inodeLoads=..., dirEntryScans=..., fileOpens=..., fileReads=..., statCalls=..., programLoadBytes=..., dynamicImportBytes=..., libraryLoadBytes=...
   device[...]: base=..., size=..., loads=..., stores=..., bytesRead=..., bytesWritten=...
 ```
@@ -176,8 +178,10 @@ k16Os: pathLookups=..., inodeLoads=..., dirEntryScans=..., fileOpens=..., fileRe
 - `k16Storage0` counts successful storage0 backend media reads, block write commands, flush commands, successful backend
   transfer bytes, and commands that reached the controller but completed with an error status. `uniqueReadBlocks` counts
   first-time backend LBA reads, while `repeatedReadBlocks` counts backend LBA reads for LBAs that were already fetched
-  earlier by the same storage device. Read cache hits still complete the guest `READ_BLOCKS` command but do not increase
-  `reads`, `bytesRead`, `uniqueReadBlocks`, or `repeatedReadBlocks`.
+  earlier by the same storage device. `partitionTableReadBlocks`, `bootMetadataReadBlocks`, `bootDataReadBlocks`,
+  `rootMetadataReadBlocks`, `rootDataReadBlocks`, and `unknownReadBlocks` attribute backend reads by the decoded K16PT
+  and K16FS block ranges observed from already-read blocks. Read cache hits still complete the guest `READ_BLOCKS`
+  command but do not increase `reads`, `bytesRead`, `uniqueReadBlocks`, `repeatedReadBlocks`, or ownership counters.
 - `k16Os` is exported by KraftOS through a registered RAM counter block. `pathLookups` counts K16FS path resolver calls,
   `inodeLoads` counts inode table loads, `dirEntryScans` counts directory-entry slots scanned by lookup/listing,
   `fileOpens` counts kernel open attempts, `fileReads` counts kernel file read attempts, and `statCalls` counts kernel
