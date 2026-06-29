@@ -36,6 +36,12 @@ pub struct K16ComputerStorageStatsSnapshot {
     pub failed_commands: u64,
     pub unique_read_blocks: u64,
     pub repeated_read_blocks: u64,
+    pub partition_table_read_blocks: u64,
+    pub boot_metadata_read_blocks: u64,
+    pub boot_data_read_blocks: u64,
+    pub root_metadata_read_blocks: u64,
+    pub root_data_read_blocks: u64,
+    pub unknown_read_blocks: u64,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]

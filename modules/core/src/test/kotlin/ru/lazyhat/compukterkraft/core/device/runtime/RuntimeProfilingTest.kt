@@ -190,16 +190,22 @@ class RuntimeProfilingTest {
                                     failedCommands = 13,
                                     uniqueReadBlocks = 14,
                                     repeatedReadBlocks = 15,
+                                    partitionTableReadBlocks = 16,
+                                    bootMetadataReadBlocks = 17,
+                                    bootDataReadBlocks = 18,
+                                    rootMetadataReadBlocks = 19,
+                                    rootDataReadBlocks = 20,
+                                    unknownReadBlocks = 21,
                                 ),
                             gpu =
                                 NativeK16GpuStats(
-                                    blitBufferCommands = 14,
-                                    blitPixels = 15,
-                                    blitSourceBytes = 16,
-                                    presentCommands = 17,
-                                    frames = 18,
-                                    frameTiles = 19,
-                                    framePayloadBytes = 20,
+                                    blitBufferCommands = 22,
+                                    blitPixels = 23,
+                                    blitSourceBytes = 24,
+                                    presentCommands = 25,
+                                    frames = 26,
+                                    frameTiles = 27,
+                                    framePayloadBytes = 28,
                                 ),
                         ),
                     ),
@@ -294,13 +300,13 @@ class RuntimeProfilingTest {
         assertEquals(RuntimeK16BusTrafficMetrics(loads = 4, stores = 5, bytesRead = 6, bytesWritten = 7), snapshot.k16.devices.single().traffic)
         assertEquals(
             RuntimeK16GpuMetrics(
-                blitBufferCommands = 14,
-                blitPixels = 15,
-                blitSourceBytes = 16,
-                presentCommands = 17,
-                frames = 18,
-                frameTiles = 19,
-                framePayloadBytes = 20,
+                blitBufferCommands = 22,
+                blitPixels = 23,
+                blitSourceBytes = 24,
+                presentCommands = 25,
+                frames = 26,
+                frameTiles = 27,
+                framePayloadBytes = 28,
             ),
             snapshot.k16.gpu,
         )
@@ -356,7 +362,7 @@ class RuntimeProfilingTest {
         )
         assertTrue(
             summary.contains(
-                "    k16Gpu: blits=14, blitPixels=15, blitBytes=16, presents=17, frames=18, tiles=19, frameBytes=20",
+                "    k16Gpu: blits=22, blitPixels=23, blitBytes=24, presents=25, frames=26, tiles=27, frameBytes=28",
             ),
             summary,
         )
@@ -377,7 +383,7 @@ class RuntimeProfilingTest {
             summary,
         )
         assertTrue(
-            summary.contains("    k16Storage0: reads=8, writes=9, flushes=10, bytesRead=11, bytesWritten=12, failed=13, uniqueReadBlocks=14, repeatedReadBlocks=15"),
+            summary.contains("    k16Storage0: reads=8, writes=9, flushes=10, bytesRead=11, bytesWritten=12, failed=13, uniqueReadBlocks=14, repeatedReadBlocks=15, partitionTableReadBlocks=16, bootMetadataReadBlocks=17, bootDataReadBlocks=18, rootMetadataReadBlocks=19, rootDataReadBlocks=20, unknownReadBlocks=21"),
             summary,
         )
         assertTrue(

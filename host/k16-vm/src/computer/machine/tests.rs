@@ -1963,6 +1963,49 @@ fn storage0_stats_snapshot_counts_unique_and_repeated_backend_read_lbas() {
 }
 
 #[test]
+fn storage0_stats_snapshot_classifies_partition_and_k16fs_backend_read_ownership() {
+    let mut media = vec![0_u8; 8 * 512];
+    write_k16pt_test_table(&mut media, 1, 3, 4, 4);
+    write_k16fs_test_superblock(&mut media[512..1024], 3, 1, 1, 2, 1);
+    write_k16fs_test_superblock(&mut media[2048..2560], 4, 1, 1, 2, 1);
+
+    let profile = ComputerMachineProfile::new(8192).with_hardware(
+        ComputerHardwareConfig::storage_port_with_media(
+            computer_abi::COMPUTER_HARDWARE_ID_STORAGE0,
+            computer_abi::STORAGE0_BASE,
+            media,
+            false,
+        ),
+    );
+    let mut machine = ComputerMachine::from_profile(profile).unwrap();
+    machine
+        .bus_store_i32(computer_abi::STORAGE0_BLOCK_COUNT, 8)
+        .unwrap();
+    machine
+        .bus_store_i32(computer_abi::STORAGE0_BUFFER_ADDR, 0)
+        .unwrap();
+    machine
+        .bus_store_i32(
+            computer_abi::STORAGE0_COMMAND,
+            computer_abi::STORAGE_COMMAND_READ_BLOCKS,
+        )
+        .unwrap();
+
+    let snapshot = machine.stats_snapshot();
+    let storage0 = snapshot
+        .devices
+        .iter()
+        .find(|device| device.name == "storage0")
+        .expect("storage0 stats are present");
+    assert_eq!(storage0.storage.partition_table_read_blocks, 1);
+    assert_eq!(storage0.storage.boot_metadata_read_blocks, 3);
+    assert_eq!(storage0.storage.boot_data_read_blocks, 0);
+    assert_eq!(storage0.storage.root_metadata_read_blocks, 3);
+    assert_eq!(storage0.storage.root_data_read_blocks, 1);
+    assert_eq!(storage0.storage.unknown_read_blocks, 0);
+}
+
+#[test]
 fn stats_snapshot_reads_registered_os_stats_from_guest_ram() {
     let profile = ComputerMachineProfile::new(2048).with_hardware(ComputerHardwareConfig::control(
         computer_abi::COMPUTER_HARDWARE_ID_CONTROL,
@@ -2006,6 +2049,59 @@ fn stats_snapshot_reads_registered_os_stats_from_guest_ram() {
     assert_eq!(snapshot.os.program_load_bytes, 22);
     assert_eq!(snapshot.os.dynamic_import_bytes, 23);
     assert_eq!(snapshot.os.library_load_bytes, 24);
+}
+
+fn write_k16pt_test_table(
+    media: &mut [u8],
+    boot_start_lba: u32,
+    boot_blocks: u32,
+    root_start_lba: u32,
+    root_blocks: u32,
+) {
+    media[0..5].copy_from_slice(b"K16PT");
+    media[5] = 1;
+    media[6] = 2;
+    write_u32_test(media, 8, 0);
+    write_u32_test(media, 12, 1);
+    write_k16pt_test_entry(media, 16, b"BOOT", boot_start_lba, boot_blocks, b"boot");
+    write_k16pt_test_entry(media, 48, b"ROOT", root_start_lba, root_blocks, b"root");
+}
+
+fn write_k16pt_test_entry(
+    media: &mut [u8],
+    offset: usize,
+    tag: &[u8; 4],
+    start_lba: u32,
+    blocks: u32,
+    name: &[u8],
+) {
+    media[offset..offset + 4].copy_from_slice(tag);
+    write_u32_test(media, offset + 8, start_lba);
+    write_u32_test(media, offset + 12, blocks);
+    media[offset + 16..offset + 16 + name.len()].copy_from_slice(name);
+}
+
+fn write_k16fs_test_superblock(
+    block: &mut [u8],
+    total_blocks: u32,
+    bitmap_start_block: u32,
+    bitmap_block_count: u32,
+    inode_table_start_block: u32,
+    inode_table_block_count: u32,
+) {
+    block[0..5].copy_from_slice(b"K16FS");
+    block[5] = 1;
+    write_u32_test(block, 0x08, 512);
+    write_u32_test(block, 0x0c, total_blocks);
+    write_u32_test(block, 0x10, bitmap_start_block);
+    write_u32_test(block, 0x14, bitmap_block_count);
+    write_u32_test(block, 0x18, inode_table_start_block);
+    write_u32_test(block, 0x1c, inode_table_block_count);
+    write_u32_test(block, 0x20, 1);
+}
+
+fn write_u32_test(bytes: &mut [u8], offset: usize, value: u32) {
+    bytes[offset..offset + 4].copy_from_slice(&value.to_le_bytes());
 }
 
 #[test]

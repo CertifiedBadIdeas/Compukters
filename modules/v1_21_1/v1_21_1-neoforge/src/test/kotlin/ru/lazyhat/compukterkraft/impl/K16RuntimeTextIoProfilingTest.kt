@@ -94,6 +94,12 @@ class K16RuntimeTextIoProfilingTest {
                                             bytesRead = 1024,
                                             uniqueReadBlocks = 4,
                                             repeatedReadBlocks = 1,
+                                            partitionTableReadBlocks = 1,
+                                            bootMetadataReadBlocks = 2,
+                                            bootDataReadBlocks = 3,
+                                            rootMetadataReadBlocks = 4,
+                                            rootDataReadBlocks = 5,
+                                            unknownReadBlocks = 6,
                                         ),
                                     gpu = RuntimeK16GpuMetrics(frames = 4, framePayloadBytes = 128),
                                 ),
@@ -142,6 +148,12 @@ class K16RuntimeTextIoProfilingTest {
                                             bytesRead = 2048,
                                             uniqueReadBlocks = 9,
                                             repeatedReadBlocks = 3,
+                                            partitionTableReadBlocks = 2,
+                                            bootMetadataReadBlocks = 4,
+                                            bootDataReadBlocks = 6,
+                                            rootMetadataReadBlocks = 8,
+                                            rootDataReadBlocks = 10,
+                                            unknownReadBlocks = 12,
                                         ),
                                     gpu = RuntimeK16GpuMetrics(frames = 9, framePayloadBytes = 384),
                                 ),
@@ -162,6 +174,12 @@ class K16RuntimeTextIoProfilingTest {
         assertTrue(line.contains("storageReads=2"))
         assertTrue(line.contains("storageUniqueReadBlocks=5"))
         assertTrue(line.contains("storageRepeatedReadBlocks=2"))
+        assertTrue(line.contains("storagePartitionTableReadBlocks=1"))
+        assertTrue(line.contains("storageBootMetadataReadBlocks=2"))
+        assertTrue(line.contains("storageBootDataReadBlocks=3"))
+        assertTrue(line.contains("storageRootMetadataReadBlocks=4"))
+        assertTrue(line.contains("storageRootDataReadBlocks=5"))
+        assertTrue(line.contains("storageUnknownReadBlocks=6"))
         assertTrue(line.contains("storageBytesRead=1024"))
         assertTrue(line.contains("pathLookups=7"))
         assertTrue(line.contains("inodeLoads=8"))
@@ -212,6 +230,12 @@ class K16RuntimeTextIoProfilingTest {
                                             bytesRead = 6144,
                                             uniqueReadBlocks = 10,
                                             repeatedReadBlocks = 2,
+                                            partitionTableReadBlocks = 2,
+                                            bootMetadataReadBlocks = 4,
+                                            bootDataReadBlocks = 6,
+                                            rootMetadataReadBlocks = 8,
+                                            rootDataReadBlocks = 10,
+                                            unknownReadBlocks = 12,
                                         ),
                                     gpu = RuntimeK16GpuMetrics(),
                                 ),
@@ -250,6 +274,12 @@ class K16RuntimeTextIoProfilingTest {
                                             bytesRead = 20992,
                                             uniqueReadBlocks = 34,
                                             repeatedReadBlocks = 7,
+                                            partitionTableReadBlocks = 5,
+                                            bootMetadataReadBlocks = 9,
+                                            bootDataReadBlocks = 13,
+                                            rootMetadataReadBlocks = 17,
+                                            rootDataReadBlocks = 21,
+                                            unknownReadBlocks = 25,
                                         ),
                                     gpu = RuntimeK16GpuMetrics(),
                                 ),
@@ -265,6 +295,12 @@ class K16RuntimeTextIoProfilingTest {
         assertTrue(line.contains("storageReads=29"))
         assertTrue(line.contains("storageUniqueReadBlocks=24"))
         assertTrue(line.contains("storageRepeatedReadBlocks=5"))
+        assertTrue(line.contains("storagePartitionTableReadBlocks=3"))
+        assertTrue(line.contains("storageBootMetadataReadBlocks=5"))
+        assertTrue(line.contains("storageBootDataReadBlocks=7"))
+        assertTrue(line.contains("storageRootMetadataReadBlocks=9"))
+        assertTrue(line.contains("storageRootDataReadBlocks=11"))
+        assertTrue(line.contains("storageUnknownReadBlocks=13"))
         assertTrue(line.contains("storageBytesRead=14848"))
         assertTrue(line.contains("pathLookups=2"))
         assertTrue(line.contains("inodeLoads=3"))
@@ -920,6 +956,12 @@ private fun formatK16RuntimePhase(
         "storageReads=${storageAfter.readCommands - storageBefore.readCommands}, " +
         "storageUniqueReadBlocks=${storageAfter.uniqueReadBlocks - storageBefore.uniqueReadBlocks}, " +
         "storageRepeatedReadBlocks=${storageAfter.repeatedReadBlocks - storageBefore.repeatedReadBlocks}, " +
+        "storagePartitionTableReadBlocks=${storageAfter.partitionTableReadBlocks - storageBefore.partitionTableReadBlocks}, " +
+        "storageBootMetadataReadBlocks=${storageAfter.bootMetadataReadBlocks - storageBefore.bootMetadataReadBlocks}, " +
+        "storageBootDataReadBlocks=${storageAfter.bootDataReadBlocks - storageBefore.bootDataReadBlocks}, " +
+        "storageRootMetadataReadBlocks=${storageAfter.rootMetadataReadBlocks - storageBefore.rootMetadataReadBlocks}, " +
+        "storageRootDataReadBlocks=${storageAfter.rootDataReadBlocks - storageBefore.rootDataReadBlocks}, " +
+        "storageUnknownReadBlocks=${storageAfter.unknownReadBlocks - storageBefore.unknownReadBlocks}, " +
         "storageWrites=${storageAfter.writeCommands - storageBefore.writeCommands}, " +
         "storageFlushes=${storageAfter.flushCommands - storageBefore.flushCommands}, " +
         "storageBytesRead=${storageAfter.bytesRead - storageBefore.bytesRead}, " +
@@ -959,6 +1001,12 @@ private fun formatK16CoreutilsCommandProfile(
         "storageReads=${storageAfter.readCommands - storageBefore.readCommands}, " +
         "storageUniqueReadBlocks=${storageAfter.uniqueReadBlocks - storageBefore.uniqueReadBlocks}, " +
         "storageRepeatedReadBlocks=${storageAfter.repeatedReadBlocks - storageBefore.repeatedReadBlocks}, " +
+        "storagePartitionTableReadBlocks=${storageAfter.partitionTableReadBlocks - storageBefore.partitionTableReadBlocks}, " +
+        "storageBootMetadataReadBlocks=${storageAfter.bootMetadataReadBlocks - storageBefore.bootMetadataReadBlocks}, " +
+        "storageBootDataReadBlocks=${storageAfter.bootDataReadBlocks - storageBefore.bootDataReadBlocks}, " +
+        "storageRootMetadataReadBlocks=${storageAfter.rootMetadataReadBlocks - storageBefore.rootMetadataReadBlocks}, " +
+        "storageRootDataReadBlocks=${storageAfter.rootDataReadBlocks - storageBefore.rootDataReadBlocks}, " +
+        "storageUnknownReadBlocks=${storageAfter.unknownReadBlocks - storageBefore.unknownReadBlocks}, " +
         "storageBytesRead=${storageAfter.bytesRead - storageBefore.bytesRead}, " +
         "pathLookups=${osAfter.pathLookups - osBefore.pathLookups}, " +
         "inodeLoads=${osAfter.inodeLoads - osBefore.inodeLoads}, " +

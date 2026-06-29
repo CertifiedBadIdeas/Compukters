@@ -20,6 +20,7 @@ pub(crate) struct StoragePortDevice {
     media: Option<Box<dyn StorageMedia>>,
     cache: StorageBlockCache,
     read_lba_profile: HashSet<u64>,
+    read_ownership: StorageReadOwnershipTracker,
 }
 
 pub(crate) struct StoragePortControllerSnapshot {
@@ -335,6 +336,7 @@ impl StoragePortDevice {
             media: None,
             cache: StorageBlockCache::new(),
             read_lba_profile: HashSet::new(),
+            read_ownership: StorageReadOwnershipTracker::new(0),
         }
     }
 
@@ -352,6 +354,7 @@ impl StoragePortDevice {
             )));
         }
         let mut device = Self::new_absent();
+        device.read_ownership = StorageReadOwnershipTracker::new(len / u64::from(Self::BLOCK_SIZE));
         device.media = Some(media);
         Ok(device)
     }
@@ -460,6 +463,7 @@ impl StoragePortDevice {
             computer_abi::STORAGE_COMMAND_READ_BLOCKS => match Self::execute_read_blocks(
                 &mut self.cache,
                 &mut self.read_lba_profile,
+                &mut self.read_ownership,
                 media.as_mut(),
                 memory,
                 self.block_count,
@@ -480,6 +484,7 @@ impl StoragePortDevice {
                         .stats
                         .repeated_read_blocks
                         .wrapping_add(read_profile.repeated_blocks);
+                    self.stats.add_read_ownership(read_profile.ownership);
                 }
                 Err(error) => {
                     self.fail(error);
@@ -518,6 +523,7 @@ impl StoragePortDevice {
     fn execute_read_blocks(
         cache: &mut StorageBlockCache,
         read_lba_profile: &mut HashSet<u64>,
+        read_ownership: &mut StorageReadOwnershipTracker,
         media: &mut dyn StorageMedia,
         memory: &mut MachineMemory,
         block_count: u32,
@@ -545,6 +551,9 @@ impl StoragePortDevice {
                     media_read_commands.repeated_blocks =
                         media_read_commands.repeated_blocks.wrapping_add(1);
                 }
+                media_read_commands
+                    .ownership
+                    .add(read_ownership.observe_read_block(block_lba, &block));
                 media_bytes_read = media_bytes_read.wrapping_add(u64::from(Self::BLOCK_SIZE));
             }
             let memory_base = buffer_addr + block_index * Self::BLOCK_SIZE;
@@ -664,12 +673,297 @@ impl StoragePortDevice {
 struct StorageReadProfileDelta {
     unique_blocks: u64,
     repeated_blocks: u64,
+    ownership: StorageReadOwnershipDelta,
 }
 
 impl StorageReadProfileDelta {
     fn total_blocks(&self) -> u64 {
         self.unique_blocks.wrapping_add(self.repeated_blocks)
     }
+}
+
+#[derive(Default)]
+struct StorageReadOwnershipDelta {
+    partition_table_blocks: u64,
+    boot_metadata_blocks: u64,
+    boot_data_blocks: u64,
+    root_metadata_blocks: u64,
+    root_data_blocks: u64,
+    unknown_blocks: u64,
+}
+
+impl StorageReadOwnershipDelta {
+    fn add(&mut self, ownership: StorageReadOwnership) {
+        match ownership {
+            StorageReadOwnership::PartitionTable => {
+                self.partition_table_blocks = self.partition_table_blocks.wrapping_add(1);
+            }
+            StorageReadOwnership::BootMetadata => {
+                self.boot_metadata_blocks = self.boot_metadata_blocks.wrapping_add(1);
+            }
+            StorageReadOwnership::BootData => {
+                self.boot_data_blocks = self.boot_data_blocks.wrapping_add(1);
+            }
+            StorageReadOwnership::RootMetadata => {
+                self.root_metadata_blocks = self.root_metadata_blocks.wrapping_add(1);
+            }
+            StorageReadOwnership::RootData => {
+                self.root_data_blocks = self.root_data_blocks.wrapping_add(1);
+            }
+            StorageReadOwnership::Unknown => {
+                self.unknown_blocks = self.unknown_blocks.wrapping_add(1);
+            }
+        }
+    }
+}
+
+impl K16ComputerStorageStatsSnapshot {
+    fn add_read_ownership(&mut self, delta: StorageReadOwnershipDelta) {
+        self.partition_table_read_blocks = self
+            .partition_table_read_blocks
+            .wrapping_add(delta.partition_table_blocks);
+        self.boot_metadata_read_blocks = self
+            .boot_metadata_read_blocks
+            .wrapping_add(delta.boot_metadata_blocks);
+        self.boot_data_read_blocks = self
+            .boot_data_read_blocks
+            .wrapping_add(delta.boot_data_blocks);
+        self.root_metadata_read_blocks = self
+            .root_metadata_read_blocks
+            .wrapping_add(delta.root_metadata_blocks);
+        self.root_data_read_blocks = self
+            .root_data_read_blocks
+            .wrapping_add(delta.root_data_blocks);
+        self.unknown_read_blocks = self.unknown_read_blocks.wrapping_add(delta.unknown_blocks);
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum StorageReadOwnership {
+    PartitionTable,
+    BootMetadata,
+    BootData,
+    RootMetadata,
+    RootData,
+    Unknown,
+}
+
+#[derive(Default)]
+struct StorageReadOwnershipTracker {
+    total_blocks: u64,
+    boot_partition: Option<StoragePartitionRange>,
+    root_partition: Option<StoragePartitionRange>,
+    boot_fs: Option<K16FsMetadataLayout>,
+    root_fs: Option<K16FsMetadataLayout>,
+}
+
+impl StorageReadOwnershipTracker {
+    const K16PT_HEADER_SIZE: usize = 16;
+    const K16PT_ENTRY_SIZE: usize = 32;
+    const K16PT_MAX_ENTRIES: usize =
+        (StoragePortDevice::BLOCK_SIZE as usize - Self::K16PT_HEADER_SIZE) / Self::K16PT_ENTRY_SIZE;
+
+    fn new(total_blocks: u64) -> Self {
+        Self {
+            total_blocks,
+            boot_partition: None,
+            root_partition: None,
+            boot_fs: None,
+            root_fs: None,
+        }
+    }
+
+    fn observe_read_block(
+        &mut self,
+        lba: u64,
+        block: &[u8; StoragePortDevice::BLOCK_SIZE as usize],
+    ) -> StorageReadOwnership {
+        if lba == 0 {
+            self.observe_partition_table(block);
+        }
+
+        if self.boot_partition.map(|partition| partition.start_lba) == Some(lba) {
+            self.boot_fs = Self::decode_k16fs_metadata_layout(block, self.boot_partition);
+        }
+        if self.root_partition.map(|partition| partition.start_lba) == Some(lba) {
+            self.root_fs = Self::decode_k16fs_metadata_layout(block, self.root_partition);
+        }
+
+        if lba == 0 {
+            return StorageReadOwnership::PartitionTable;
+        }
+        if let Some(partition) = self.boot_partition {
+            if let Some(relative_lba) = partition.relative_lba(lba) {
+                return match self.boot_fs {
+                    Some(layout) if layout.is_metadata_block(relative_lba) => {
+                        StorageReadOwnership::BootMetadata
+                    }
+                    Some(_) => StorageReadOwnership::BootData,
+                    None => StorageReadOwnership::Unknown,
+                };
+            }
+        }
+        if let Some(partition) = self.root_partition {
+            if let Some(relative_lba) = partition.relative_lba(lba) {
+                return match self.root_fs {
+                    Some(layout) if layout.is_metadata_block(relative_lba) => {
+                        StorageReadOwnership::RootMetadata
+                    }
+                    Some(_) => StorageReadOwnership::RootData,
+                    None => StorageReadOwnership::Unknown,
+                };
+            }
+        }
+        StorageReadOwnership::Unknown
+    }
+
+    fn observe_partition_table(&mut self, block: &[u8; StoragePortDevice::BLOCK_SIZE as usize]) {
+        let Some(entry_count) = Self::decode_k16pt_header(block) else {
+            return;
+        };
+        for index in 0..entry_count {
+            let offset = Self::K16PT_HEADER_SIZE + index * Self::K16PT_ENTRY_SIZE;
+            let Some(entry) = StoragePartitionRange::decode(block, offset, self.total_blocks)
+            else {
+                continue;
+            };
+            match &block[offset..offset + 4] {
+                b"BOOT" => self.boot_partition = Some(entry),
+                b"ROOT" => self.root_partition = Some(entry),
+                _ => {}
+            }
+        }
+    }
+
+    fn decode_k16pt_header(block: &[u8; StoragePortDevice::BLOCK_SIZE as usize]) -> Option<usize> {
+        if &block[0..5] != b"K16PT" || block[5] != 1 || block[7] != 0 {
+            return None;
+        }
+        if read_u32_le(block, 8)? != 0 || read_u32_le(block, 12)? != 1 {
+            return None;
+        }
+        let entry_count = block[6] as usize;
+        (entry_count <= Self::K16PT_MAX_ENTRIES).then_some(entry_count)
+    }
+
+    fn decode_k16fs_metadata_layout(
+        block: &[u8; StoragePortDevice::BLOCK_SIZE as usize],
+        partition: Option<StoragePartitionRange>,
+    ) -> Option<K16FsMetadataLayout> {
+        let partition = partition?;
+        if &block[0..5] != b"K16FS" || block[5] != 1 || block[6] != 0 || block[7] != 0 {
+            return None;
+        }
+        let block_size = read_u32_le(block, 0x08)?;
+        if block_size != StoragePortDevice::BLOCK_SIZE {
+            return None;
+        }
+        let total_blocks = read_u32_le(block, 0x0c)?;
+        if total_blocks == 0 || u64::from(total_blocks) > partition.block_count {
+            return None;
+        }
+        let bitmap_start_block = read_u32_le(block, 0x10)?;
+        let bitmap_block_count = read_u32_le(block, 0x14)?;
+        let inode_table_start_block = read_u32_le(block, 0x18)?;
+        let inode_table_block_count = read_u32_le(block, 0x1c)?;
+        let layout = K16FsMetadataLayout {
+            bitmap_start_block,
+            bitmap_block_count,
+            inode_table_start_block,
+            inode_table_block_count,
+        };
+        layout.is_valid(total_blocks).then_some(layout)
+    }
+}
+
+#[derive(Clone, Copy)]
+struct StoragePartitionRange {
+    start_lba: u64,
+    block_count: u64,
+}
+
+impl StoragePartitionRange {
+    fn decode(
+        block: &[u8; StoragePortDevice::BLOCK_SIZE as usize],
+        offset: usize,
+        total_blocks: u64,
+    ) -> Option<Self> {
+        let start_lba = u64::from(read_u32_le(block, offset + 8)?);
+        let block_count = u64::from(read_u32_le(block, offset + 12)?);
+        if start_lba < 1 || block_count == 0 {
+            return None;
+        }
+        let end_lba = start_lba.checked_add(block_count)?;
+        if end_lba > total_blocks {
+            return None;
+        }
+        Some(Self {
+            start_lba,
+            block_count,
+        })
+    }
+
+    fn relative_lba(&self, lba: u64) -> Option<u32> {
+        if lba < self.start_lba || lba >= self.start_lba.checked_add(self.block_count)? {
+            return None;
+        }
+        u32::try_from(lba - self.start_lba).ok()
+    }
+}
+
+#[derive(Clone, Copy)]
+struct K16FsMetadataLayout {
+    bitmap_start_block: u32,
+    bitmap_block_count: u32,
+    inode_table_start_block: u32,
+    inode_table_block_count: u32,
+}
+
+impl K16FsMetadataLayout {
+    fn is_valid(&self, total_blocks: u32) -> bool {
+        self.range_fits(
+            self.bitmap_start_block,
+            self.bitmap_block_count,
+            total_blocks,
+        ) && self.range_fits(
+            self.inode_table_start_block,
+            self.inode_table_block_count,
+            total_blocks,
+        )
+    }
+
+    fn is_metadata_block(&self, relative_lba: u32) -> bool {
+        relative_lba == 0
+            || self.contains(
+                self.bitmap_start_block,
+                self.bitmap_block_count,
+                relative_lba,
+            )
+            || self.contains(
+                self.inode_table_start_block,
+                self.inode_table_block_count,
+                relative_lba,
+            )
+    }
+
+    fn range_fits(&self, start: u32, count: u32, total_blocks: u32) -> bool {
+        count > 0
+            && start
+                .checked_add(count)
+                .is_some_and(|end| end <= total_blocks)
+    }
+
+    fn contains(&self, start: u32, count: u32, block: u32) -> bool {
+        start
+            .checked_add(count)
+            .is_some_and(|end| block >= start && block < end)
+    }
+}
+
+fn read_u32_le(bytes: &[u8], offset: usize) -> Option<u32> {
+    Some(u32::from_le_bytes(
+        bytes.get(offset..offset + 4)?.try_into().ok()?,
+    ))
 }
 
 impl MmioDevice for StoragePortDevice {

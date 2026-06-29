@@ -53,6 +53,8 @@ class K16RuntimeProfilingArchitectureTest {
         assertTrue(docs.contains("k16Storage0: reads="))
         assertTrue(docs.contains("uniqueReadBlocks="))
         assertTrue(docs.contains("storageRepeatedReadBlocks="))
+        assertTrue(docs.contains("storageRootDataReadBlocks="))
+        assertTrue(docs.contains("partitionTableReadBlocks="))
         assertTrue(docs.contains("programLoadBytes="))
         assertTrue(textIoProfilingSource.contains("programLoadBytes="))
         assertTrue(docs.contains("k16Wait: entries="))
