@@ -525,6 +525,76 @@ fn k16_disasm_prints_complete_instruction_surface_multiword_raw_words_and_branch
     assert!(stdout.contains("fff00036: 0001  halt"), "stdout: {stdout}");
 }
 
+#[test]
+fn k16_disasm_prints_extended_immediate_and_offset_instructions() {
+    let artifact_path = temp_file("bios-extended-immediates.flash");
+    fs::write(
+        &artifact_path,
+        words_to_bytes(&[
+            addi(2, 1, -4)[0],
+            addi(2, 1, -4)[1],
+            load8_offset(3, 4, 12)[0],
+            load8_offset(3, 4, 12)[1],
+            load16_offset(5, 6, -8)[0],
+            load16_offset(5, 6, -8)[1],
+            load32_offset(7, 8, 0)[0],
+            load32_offset(7, 8, 0)[1],
+            store8_offset(9, 10, 1)[0],
+            store8_offset(9, 10, 1)[1],
+            store16_offset(11, 12, -2)[0],
+            store16_offset(11, 12, -2)[1],
+            store32_offset(13, 14, 16)[0],
+            store32_offset(13, 14, 16)[1],
+        ]),
+    )
+    .expect("artifact writes");
+
+    let output = Command::new(k16_binary())
+        .args([
+            "disasm",
+            "--target",
+            "bios",
+            artifact_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("k16 disasm runs");
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("fff00000: 3212 fffc  addi r2, r1, -4"),
+        "stdout: {stdout}"
+    );
+    assert!(
+        stdout.contains("fff00004: 3343 000c  load8 r3, [r4 + 12]"),
+        "stdout: {stdout}"
+    );
+    assert!(
+        stdout.contains("fff00008: 3564 fff8  load16 r5, [r6 - 8]"),
+        "stdout: {stdout}"
+    );
+    assert!(
+        stdout.contains("fff0000c: 3785 0000  load32 r7, [r8 + 0]"),
+        "stdout: {stdout}"
+    );
+    assert!(
+        stdout.contains("fff00010: 39a6 0001  store8 [r9 + 1], r10"),
+        "stdout: {stdout}"
+    );
+    assert!(
+        stdout.contains("fff00014: 3bc7 fffe  store16 [r11 - 2], r12"),
+        "stdout: {stdout}"
+    );
+    assert!(
+        stdout.contains("fff00018: 3de8 0010  store32 [r13 + 16], r14"),
+        "stdout: {stdout}"
+    );
+}
+
 fn temp_file(name: &str) -> PathBuf {
     let counter = TEMP_FILE_COUNTER.fetch_add(1, Ordering::Relaxed);
     let path = std::env::temp_dir().join(format!(
@@ -640,6 +710,41 @@ fn alu_rrr(dst: u8, subop: u8, lhs: u8, rhs: u8) -> [u16; 2] {
 
 fn test_bits(dst: u8, src: u8, mask: u16) -> [u16; 2] {
     [0x3001 | (u16::from(dst) << 8) | (u16::from(src) << 4), mask]
+}
+
+fn addi(dst: u8, src: u8, immediate: i16) -> [u16; 2] {
+    extended_imm16(dst, src, 0x2, immediate)
+}
+
+fn load8_offset(dst: u8, base: u8, offset: i16) -> [u16; 2] {
+    extended_imm16(dst, base, 0x3, offset)
+}
+
+fn load16_offset(dst: u8, base: u8, offset: i16) -> [u16; 2] {
+    extended_imm16(dst, base, 0x4, offset)
+}
+
+fn load32_offset(dst: u8, base: u8, offset: i16) -> [u16; 2] {
+    extended_imm16(dst, base, 0x5, offset)
+}
+
+fn store8_offset(base: u8, src: u8, offset: i16) -> [u16; 2] {
+    extended_imm16(base, src, 0x6, offset)
+}
+
+fn store16_offset(base: u8, src: u8, offset: i16) -> [u16; 2] {
+    extended_imm16(base, src, 0x7, offset)
+}
+
+fn store32_offset(base: u8, src: u8, offset: i16) -> [u16; 2] {
+    extended_imm16(base, src, 0x8, offset)
+}
+
+fn extended_imm16(a: u8, b: u8, subop: u8, immediate: i16) -> [u16; 2] {
+    [
+        0x3000 | (u16::from(a) << 8) | (u16::from(b) << 4) | u16::from(subop),
+        immediate as u16,
+    ]
 }
 
 fn load8(dst: u8, addr: u8) -> u16 {

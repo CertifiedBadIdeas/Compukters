@@ -415,14 +415,18 @@ fn assemble_instruction(line: &str) -> Result<Vec<u16>, String> {
             parse_register(&tokens[3])?,
         )
         .to_vec()),
-        "load32" if tokens.len() == 3 => Ok(vec![load32(
+        "addi" if tokens.len() == 4 => Ok(addi(
             parse_register(&tokens[1])?,
             parse_register(&tokens[2])?,
-        )]),
-        "store32" if tokens.len() == 3 => Ok(vec![store32(
-            parse_register(&tokens[1])?,
-            parse_register(&tokens[2])?,
-        )]),
+            parse_i16_immediate(&tokens[3])?,
+        )
+        .to_vec()),
+        "load8" => assemble_load_or_load_offset(&tokens, 0x0, load8, load8_offset),
+        "load16" => assemble_load_or_load_offset(&tokens, 0x1, load16, load16_offset),
+        "load32" => assemble_load_or_load_offset(&tokens, 0x2, load32, load32_offset),
+        "store8" => assemble_store_or_store_offset(&tokens, 0x0, store8, store8_offset),
+        "store16" => assemble_store_or_store_offset(&tokens, 0x1, store16, store16_offset),
+        "store32" => assemble_store_or_store_offset(&tokens, 0x2, store32, store32_offset),
         "read_csr" if tokens.len() == 3 => Ok(vec![read_csr(
             parse_register(&tokens[1])?,
             parse_u32_immediate(&tokens[2])?,
@@ -432,6 +436,54 @@ fn assemble_instruction(line: &str) -> Result<Vec<u16>, String> {
             parse_register(&tokens[2])?,
         )]),
         _ => Err(format!("unsupported K16 asm instruction `{line}`")),
+    }
+}
+
+fn assemble_load_or_load_offset(
+    tokens: &[String],
+    _width: u8,
+    direct: fn(u8, u8) -> u16,
+    offset: fn(u8, u8, i16) -> [u16; 2],
+) -> Result<Vec<u16>, String> {
+    match tokens.len() {
+        3 => Ok(vec![direct(
+            parse_register(&tokens[1])?,
+            parse_register(&tokens[2])?,
+        )]),
+        5 => Ok(offset(
+            parse_register(&tokens[1])?,
+            parse_register(&tokens[2])?,
+            parse_signed_offset(&tokens[3], &tokens[4])?,
+        )
+        .to_vec()),
+        _ => Err(format!(
+            "unsupported K16 asm instruction `{}`",
+            tokens.join(" ")
+        )),
+    }
+}
+
+fn assemble_store_or_store_offset(
+    tokens: &[String],
+    _width: u8,
+    direct: fn(u8, u8) -> u16,
+    offset: fn(u8, u8, i16) -> [u16; 2],
+) -> Result<Vec<u16>, String> {
+    match tokens.len() {
+        3 => Ok(vec![direct(
+            parse_register(&tokens[1])?,
+            parse_register(&tokens[2])?,
+        )]),
+        5 => Ok(offset(
+            parse_register(&tokens[1])?,
+            parse_register(&tokens[4])?,
+            parse_signed_offset(&tokens[2], &tokens[3])?,
+        )
+        .to_vec()),
+        _ => Err(format!(
+            "unsupported K16 asm instruction `{}`",
+            tokens.join(" ")
+        )),
     }
 }
 
@@ -453,6 +505,45 @@ fn parse_u8_immediate(value: &str, max: u8) -> Result<u8, String> {
         return Err(format!("immediate `{value}` is larger than {max}"));
     }
     Ok(immediate as u8)
+}
+
+fn parse_signed_offset(sign: &str, value: &str) -> Result<i16, String> {
+    let magnitude = parse_i16_immediate(value)?;
+    match sign {
+        "+" => Ok(magnitude),
+        "-" => magnitude
+            .checked_neg()
+            .ok_or_else(|| format!("immediate `-{value}` is smaller than {}", i16::MIN)),
+        _ => Err(format!("expected `+` or `-`, got `{sign}`")),
+    }
+}
+
+fn parse_i16_immediate(value: &str) -> Result<i16, String> {
+    let immediate = parse_i32_immediate(value)?;
+    if !(i32::from(i16::MIN)..=i32::from(i16::MAX)).contains(&immediate) {
+        return Err(format!(
+            "immediate `{value}` is outside {}..{}",
+            i16::MIN,
+            i16::MAX
+        ));
+    }
+    Ok(immediate as i16)
+}
+
+fn parse_i32_immediate(value: &str) -> Result<i32, String> {
+    if let Some(hex) = value.strip_prefix("-0x") {
+        i32::from_str_radix(hex, 16)
+            .ok()
+            .and_then(|parsed| parsed.checked_neg())
+            .ok_or_else(|| format!("invalid immediate `{value}`"))
+    } else if let Some(hex) = value.strip_prefix("0x") {
+        i32::from_str_radix(hex, 16)
+            .map_err(|error| format!("invalid immediate `{value}`: {error}"))
+    } else {
+        value
+            .parse::<i32>()
+            .map_err(|error| format!("invalid immediate `{value}`: {error}"))
+    }
 }
 
 fn parse_u32_immediate(value: &str) -> Result<u32, String> {
@@ -707,6 +798,10 @@ fn sub(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
     alu_rrr(dst, 0x1, lhs, rhs)
 }
 
+fn addi(dst: u8, src: u8, immediate: i16) -> [u16; 2] {
+    extended_imm16(dst, src, 0x2, immediate)
+}
+
 fn alu_rrr(dst: u8, subop: u8, lhs: u8, rhs: u8) -> [u16; 2] {
     [
         0x2000 | (u16::from(dst) << 8) | u16::from(subop),
@@ -718,12 +813,59 @@ fn call(register: u8) -> u16 {
     0x8000 | (u16::from(register) << 8)
 }
 
+fn store8(addr: u8, src: u8) -> u16 {
+    0x5000 | (u16::from(addr) << 8) | (u16::from(src) << 4)
+}
+
+fn store16(addr: u8, src: u8) -> u16 {
+    0x5001 | (u16::from(addr) << 8) | (u16::from(src) << 4)
+}
+
 fn store32(addr: u8, src: u8) -> u16 {
     0x5002 | (u16::from(addr) << 8) | (u16::from(src) << 4)
 }
 
+fn store8_offset(base: u8, src: u8, offset: i16) -> [u16; 2] {
+    extended_imm16(base, src, 0x6, offset)
+}
+
+fn store16_offset(base: u8, src: u8, offset: i16) -> [u16; 2] {
+    extended_imm16(base, src, 0x7, offset)
+}
+
+fn store32_offset(base: u8, src: u8, offset: i16) -> [u16; 2] {
+    extended_imm16(base, src, 0x8, offset)
+}
+
+fn load8(dst: u8, addr: u8) -> u16 {
+    0x4000 | (u16::from(dst) << 8) | (u16::from(addr) << 4)
+}
+
+fn load16(dst: u8, addr: u8) -> u16 {
+    0x4001 | (u16::from(dst) << 8) | (u16::from(addr) << 4)
+}
+
 fn load32(dst: u8, addr: u8) -> u16 {
     0x4002 | (u16::from(dst) << 8) | (u16::from(addr) << 4)
+}
+
+fn load8_offset(dst: u8, base: u8, offset: i16) -> [u16; 2] {
+    extended_imm16(dst, base, 0x3, offset)
+}
+
+fn load16_offset(dst: u8, base: u8, offset: i16) -> [u16; 2] {
+    extended_imm16(dst, base, 0x4, offset)
+}
+
+fn load32_offset(dst: u8, base: u8, offset: i16) -> [u16; 2] {
+    extended_imm16(dst, base, 0x5, offset)
+}
+
+fn extended_imm16(a: u8, b: u8, subop: u8, immediate: i16) -> [u16; 2] {
+    [
+        0x3000 | (u16::from(a) << 8) | (u16::from(b) << 4) | u16::from(subop),
+        immediate as u16,
+    ]
 }
 
 fn halt() -> u16 {
@@ -797,6 +939,34 @@ fn section(
     write_u32(bytes, info);
     write_u32(bytes, addralign);
     write_u32(bytes, entsize);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn assembler_encodes_extended_immediate_and_offset_instructions() {
+        assert_eq!(
+            assemble_instruction("addi r2, r1, -4").unwrap(),
+            vec![0x3212, 0xfffc]
+        );
+        assert_eq!(
+            assemble_instruction("load32 r3, [r4 + 12]").unwrap(),
+            vec![0x3345, 0x000c]
+        );
+        assert_eq!(
+            assemble_instruction("store32 [r5 - 8], r6").unwrap(),
+            vec![0x3568, 0xfff8]
+        );
+    }
+
+    #[test]
+    fn assembler_rejects_out_of_range_extended_immediate() {
+        let error = assemble_instruction("addi r2, r1, 32768").unwrap_err();
+
+        assert!(error.contains("outside -32768..32767"), "{error}");
+    }
 }
 
 fn align(value: u32, alignment: u32) -> u32 {

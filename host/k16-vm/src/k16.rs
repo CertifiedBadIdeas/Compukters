@@ -220,39 +220,180 @@ pub enum DecodedInstruction {
     Nop,
     Halt,
     Wait,
-    Const4 { dst: usize, value: u32 },
-    Const32 { dst: usize, value: u32 },
-    Add { dst: usize, lhs: usize, rhs: usize },
-    Sub { dst: usize, lhs: usize, rhs: usize },
-    Mul { dst: usize, lhs: usize, rhs: usize },
-    MulHU { dst: usize, lhs: usize, rhs: usize },
-    MulHS { dst: usize, lhs: usize, rhs: usize },
-    And { dst: usize, lhs: usize, rhs: usize },
-    Or { dst: usize, lhs: usize, rhs: usize },
-    Xor { dst: usize, lhs: usize, rhs: usize },
-    Shl { dst: usize, lhs: usize, rhs: usize },
-    Shr { dst: usize, lhs: usize, rhs: usize },
-    Sar { dst: usize, lhs: usize, rhs: usize },
-    Eq { dst: usize, lhs: usize, rhs: usize },
-    Ne { dst: usize, lhs: usize, rhs: usize },
-    Ltu { dst: usize, lhs: usize, rhs: usize },
-    LtS { dst: usize, lhs: usize, rhs: usize },
-    TestBits { dst: usize, src: usize, mask: u32 },
-    Load8 { dst: usize, addr: usize },
-    Load16 { dst: usize, addr: usize },
-    Load32 { dst: usize, addr: usize },
-    Store8 { addr: usize, src: usize },
-    Store16 { addr: usize, src: usize },
-    Store32 { addr: usize, src: usize },
-    BranchIfZero { src: usize, target_pc: u32 },
-    BranchIfNonZero { src: usize, target_pc: u32 },
-    Jump { target: usize },
-    Call { target: usize },
+    Const4 {
+        dst: usize,
+        value: u32,
+    },
+    Const32 {
+        dst: usize,
+        value: u32,
+    },
+    Add {
+        dst: usize,
+        lhs: usize,
+        rhs: usize,
+    },
+    Sub {
+        dst: usize,
+        lhs: usize,
+        rhs: usize,
+    },
+    Mul {
+        dst: usize,
+        lhs: usize,
+        rhs: usize,
+    },
+    MulHU {
+        dst: usize,
+        lhs: usize,
+        rhs: usize,
+    },
+    MulHS {
+        dst: usize,
+        lhs: usize,
+        rhs: usize,
+    },
+    And {
+        dst: usize,
+        lhs: usize,
+        rhs: usize,
+    },
+    Or {
+        dst: usize,
+        lhs: usize,
+        rhs: usize,
+    },
+    Xor {
+        dst: usize,
+        lhs: usize,
+        rhs: usize,
+    },
+    Shl {
+        dst: usize,
+        lhs: usize,
+        rhs: usize,
+    },
+    Shr {
+        dst: usize,
+        lhs: usize,
+        rhs: usize,
+    },
+    Sar {
+        dst: usize,
+        lhs: usize,
+        rhs: usize,
+    },
+    Eq {
+        dst: usize,
+        lhs: usize,
+        rhs: usize,
+    },
+    Ne {
+        dst: usize,
+        lhs: usize,
+        rhs: usize,
+    },
+    Ltu {
+        dst: usize,
+        lhs: usize,
+        rhs: usize,
+    },
+    LtS {
+        dst: usize,
+        lhs: usize,
+        rhs: usize,
+    },
+    TestBits {
+        dst: usize,
+        src: usize,
+        mask: u32,
+    },
+    AddI {
+        dst: usize,
+        src: usize,
+        immediate: i32,
+    },
+    Load8 {
+        dst: usize,
+        addr: usize,
+    },
+    Load16 {
+        dst: usize,
+        addr: usize,
+    },
+    Load32 {
+        dst: usize,
+        addr: usize,
+    },
+    Load8Offset {
+        dst: usize,
+        base: usize,
+        offset: i32,
+    },
+    Load16Offset {
+        dst: usize,
+        base: usize,
+        offset: i32,
+    },
+    Load32Offset {
+        dst: usize,
+        base: usize,
+        offset: i32,
+    },
+    Store8 {
+        addr: usize,
+        src: usize,
+    },
+    Store16 {
+        addr: usize,
+        src: usize,
+    },
+    Store32 {
+        addr: usize,
+        src: usize,
+    },
+    Store8Offset {
+        base: usize,
+        src: usize,
+        offset: i32,
+    },
+    Store16Offset {
+        base: usize,
+        src: usize,
+        offset: i32,
+    },
+    Store32Offset {
+        base: usize,
+        src: usize,
+        offset: i32,
+    },
+    BranchIfZero {
+        src: usize,
+        target_pc: u32,
+    },
+    BranchIfNonZero {
+        src: usize,
+        target_pc: u32,
+    },
+    Jump {
+        target: usize,
+    },
+    Call {
+        target: usize,
+    },
     Ret,
     Iret,
-    Syscall { number: usize },
-    ReadCsr { dst: usize, csr: u32 },
-    WriteCsr { csr: u32, src: usize },
+    Syscall {
+        number: usize,
+    },
+    ReadCsr {
+        dst: usize,
+        csr: u32,
+    },
+    WriteCsr {
+        csr: u32,
+        src: usize,
+    },
 }
 
 impl DecodedInstruction {
@@ -274,13 +415,20 @@ impl DecodedInstruction {
             | Self::Ne { .. }
             | Self::Ltu { .. }
             | Self::LtS { .. }
+            | Self::AddI { .. }
             | Self::TestBits { .. } => K16InstructionFamily::Alu,
             Self::Load8 { .. }
             | Self::Load16 { .. }
             | Self::Load32 { .. }
+            | Self::Load8Offset { .. }
+            | Self::Load16Offset { .. }
+            | Self::Load32Offset { .. }
             | Self::Store8 { .. }
             | Self::Store16 { .. }
-            | Self::Store32 { .. } => K16InstructionFamily::LoadStore,
+            | Self::Store32 { .. }
+            | Self::Store8Offset { .. }
+            | Self::Store16Offset { .. }
+            | Self::Store32Offset { .. } => K16InstructionFamily::LoadStore,
             Self::BranchIfZero { .. } | Self::BranchIfNonZero { .. } => {
                 K16InstructionFamily::Branch
             }
@@ -395,6 +543,41 @@ impl InstructionDecoder for K16Decoder {
                         dst: a,
                         src: b,
                         mask: u32::from(extension),
+                    },
+                    0x2 => DecodedInstruction::AddI {
+                        dst: a,
+                        src: b,
+                        immediate: sign_extend_u16(extension),
+                    },
+                    0x3 => DecodedInstruction::Load8Offset {
+                        dst: a,
+                        base: b,
+                        offset: sign_extend_u16(extension),
+                    },
+                    0x4 => DecodedInstruction::Load16Offset {
+                        dst: a,
+                        base: b,
+                        offset: sign_extend_u16(extension),
+                    },
+                    0x5 => DecodedInstruction::Load32Offset {
+                        dst: a,
+                        base: b,
+                        offset: sign_extend_u16(extension),
+                    },
+                    0x6 => DecodedInstruction::Store8Offset {
+                        base: a,
+                        src: b,
+                        offset: sign_extend_u16(extension),
+                    },
+                    0x7 => DecodedInstruction::Store16Offset {
+                        base: a,
+                        src: b,
+                        offset: sign_extend_u16(extension),
+                    },
+                    0x8 => DecodedInstruction::Store32Offset {
+                        base: a,
+                        src: b,
+                        offset: sign_extend_u16(extension),
                     },
                     _ => return Err(illegal_instruction(pc, word)),
                 };
@@ -940,6 +1123,14 @@ impl K16Cpu {
                 self.registers[dst] = u32::from((self.registers[src] & mask) != 0);
                 Ok(None)
             }
+            DecodedInstruction::AddI {
+                dst,
+                src,
+                immediate,
+            } => {
+                self.registers[dst] = add_signed_immediate(self.registers[src], immediate);
+                Ok(None)
+            }
             DecodedInstruction::Load8 { dst, addr } => {
                 self.load_u8_into_register(&mut data_bus, fault_pc, dst, addr)?;
                 Ok(None)
@@ -952,6 +1143,18 @@ impl K16Cpu {
                 self.load_i32_into_register(&mut data_bus, fault_pc, dst, addr)?;
                 Ok(None)
             }
+            DecodedInstruction::Load8Offset { dst, base, offset } => {
+                self.load_u8_offset_into_register(&mut data_bus, fault_pc, dst, base, offset)?;
+                Ok(None)
+            }
+            DecodedInstruction::Load16Offset { dst, base, offset } => {
+                self.load_u16_offset_into_register(&mut data_bus, fault_pc, dst, base, offset)?;
+                Ok(None)
+            }
+            DecodedInstruction::Load32Offset { dst, base, offset } => {
+                self.load_i32_offset_into_register(&mut data_bus, fault_pc, dst, base, offset)?;
+                Ok(None)
+            }
             DecodedInstruction::Store8 { addr, src } => {
                 self.store_u8_from_register(&mut data_bus, fault_pc, addr, src)?;
                 Ok(None)
@@ -962,6 +1165,18 @@ impl K16Cpu {
             }
             DecodedInstruction::Store32 { addr, src } => {
                 self.store_i32_from_register(&mut data_bus, fault_pc, addr, src)?;
+                Ok(None)
+            }
+            DecodedInstruction::Store8Offset { base, src, offset } => {
+                self.store_u8_offset_from_register(&mut data_bus, fault_pc, base, src, offset)?;
+                Ok(None)
+            }
+            DecodedInstruction::Store16Offset { base, src, offset } => {
+                self.store_u16_offset_from_register(&mut data_bus, fault_pc, base, src, offset)?;
+                Ok(None)
+            }
+            DecodedInstruction::Store32Offset { base, src, offset } => {
+                self.store_i32_offset_from_register(&mut data_bus, fault_pc, base, src, offset)?;
                 Ok(None)
             }
             DecodedInstruction::BranchIfZero { src, target_pc } => {
@@ -1103,6 +1318,63 @@ impl K16Cpu {
         Ok(())
     }
 
+    fn load_u8_offset_into_register(
+        &mut self,
+        bus: &mut dyn MemoryBus,
+        fault_pc: u32,
+        dst: usize,
+        base: usize,
+        offset: i32,
+    ) -> Result<(), K16Trap> {
+        let address = add_signed_immediate(self.registers[base], offset);
+        let value = match bus.load_u8(address) {
+            Ok(value) => value,
+            Err(error) => {
+                return self.raise_load_fault(fault_pc, address, error);
+            }
+        };
+        self.registers[dst] = u32::from(value);
+        Ok(())
+    }
+
+    fn load_u16_offset_into_register(
+        &mut self,
+        bus: &mut dyn MemoryBus,
+        fault_pc: u32,
+        dst: usize,
+        base: usize,
+        offset: i32,
+    ) -> Result<(), K16Trap> {
+        let address = add_signed_immediate(self.registers[base], offset);
+        let value = match bus.load_u16(address) {
+            Ok(value) => value,
+            Err(error) => {
+                return self.raise_load_fault(fault_pc, address, error);
+            }
+        };
+        self.registers[dst] = u32::from(value);
+        Ok(())
+    }
+
+    fn load_i32_offset_into_register(
+        &mut self,
+        bus: &mut dyn MemoryBus,
+        fault_pc: u32,
+        dst: usize,
+        base: usize,
+        offset: i32,
+    ) -> Result<(), K16Trap> {
+        let address = add_signed_immediate(self.registers[base], offset);
+        let value = match bus.load_i32(address) {
+            Ok(value) => value,
+            Err(error) => {
+                return self.raise_load_fault(fault_pc, address, error);
+            }
+        };
+        self.registers[dst] = value as u32;
+        Ok(())
+    }
+
     fn store_u8_from_register(
         &mut self,
         bus: &mut dyn MemoryBus,
@@ -1139,6 +1411,51 @@ impl K16Cpu {
         src: usize,
     ) -> Result<(), K16Trap> {
         let address = self.registers[addr];
+        if let Err(error) = bus.store_i32(address, self.registers[src] as i32) {
+            return self.raise_store_fault(fault_pc, address, error);
+        }
+        Ok(())
+    }
+
+    fn store_u8_offset_from_register(
+        &mut self,
+        bus: &mut dyn MemoryBus,
+        fault_pc: u32,
+        base: usize,
+        src: usize,
+        offset: i32,
+    ) -> Result<(), K16Trap> {
+        let address = add_signed_immediate(self.registers[base], offset);
+        if let Err(error) = bus.store_u8(address, self.registers[src] as u8) {
+            return self.raise_store_fault(fault_pc, address, error);
+        }
+        Ok(())
+    }
+
+    fn store_u16_offset_from_register(
+        &mut self,
+        bus: &mut dyn MemoryBus,
+        fault_pc: u32,
+        base: usize,
+        src: usize,
+        offset: i32,
+    ) -> Result<(), K16Trap> {
+        let address = add_signed_immediate(self.registers[base], offset);
+        if let Err(error) = bus.store_u16(address, self.registers[src] as u16) {
+            return self.raise_store_fault(fault_pc, address, error);
+        }
+        Ok(())
+    }
+
+    fn store_i32_offset_from_register(
+        &mut self,
+        bus: &mut dyn MemoryBus,
+        fault_pc: u32,
+        base: usize,
+        src: usize,
+        offset: i32,
+    ) -> Result<(), K16Trap> {
+        let address = add_signed_immediate(self.registers[base], offset);
         if let Err(error) = bus.store_i32(address, self.registers[src] as i32) {
             return self.raise_store_fault(fault_pc, address, error);
         }
@@ -1727,4 +2044,12 @@ fn sign_extend_nibble(value: usize) -> i32 {
     } else {
         raw - 16
     }
+}
+
+fn sign_extend_u16(value: u16) -> i32 {
+    i32::from(value as i16)
+}
+
+fn add_signed_immediate(value: u32, immediate: i32) -> u32 {
+    value.wrapping_add(immediate as u32)
 }
