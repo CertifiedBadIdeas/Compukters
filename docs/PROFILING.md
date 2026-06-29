@@ -82,7 +82,7 @@ The `k16Phase` lines split selected text-I/O scenarios into named checkpoints su
 and deltas between two runtime metric snapshots:
 
 ```text
-k16Phase: name=ls:/bin.visible, elapsed=..., slices=..., runTime=..., inputBytes=..., gpuFrameBytes=..., displayFrames=..., displayBytes=..., storageReads=..., storageBytesRead=..., pathLookups=..., inodeLoads=..., dirEntryScans=..., fileOpens=..., fileReads=..., statCalls=...
+k16Phase: name=ls:/bin.visible, elapsed=..., slices=..., runTime=..., inputBytes=..., gpuFrameBytes=..., displayFrames=..., displayBytes=..., storageReads=..., storageBytesRead=..., pathLookups=..., inodeLoads=..., dirEntryScans=..., fileOpens=..., fileReads=..., statCalls=..., programLoadBytes=..., dynamicImportBytes=..., libraryLoadBytes=...
 ```
 
 Use these phase lines when deciding whether a slowdown is in command dispatch, command execution/storage reads, display
@@ -93,7 +93,9 @@ The bundled BIOS intentionally shows a splash frame and waits for 20 game ticks 
 `bios.splash.wait` isolates the pure wait portion before the release tick; bootloader/kernel/shell work after the splash
 deadline is counted under `shell.prompt.after_splash`. Treat the splash wait as intentional startup latency, not as
 bootloader/kernel/shell execution cost. Use `shell.prompt.after_splash` and later command-specific phases when comparing
-real post-splash responsiveness.
+real post-splash responsiveness. In startup phases, compare `programLoadBytes`, `dynamicImportBytes`, and
+`libraryLoadBytes` against `storageBytesRead` to distinguish executable payload reads, dynamic import metadata reads, and
+shared-library payload reads.
 
 Use `profileK16ManyVmServerBudget` for a server-focused workload that boots several K16 runtime devices, measures idle
 tick cost after all shells are waiting, then runs one active command while the other VMs stay idle. The printed lines
@@ -164,7 +166,7 @@ during the worker cache refresh path:
 k16Bus: ramLoads=..., ramStores=..., ramBytesRead=..., ramBytesWritten=..., mmioLoads=..., mmioStores=..., mmioBytesRead=..., mmioBytesWritten=...
 k16Devices: mapped=..., loads=..., stores=..., bytesRead=..., bytesWritten=...
 k16Storage0: reads=..., writes=..., flushes=..., bytesRead=..., bytesWritten=..., failed=...
-k16Os: pathLookups=..., inodeLoads=..., dirEntryScans=..., fileOpens=..., fileReads=..., statCalls=...
+k16Os: pathLookups=..., inodeLoads=..., dirEntryScans=..., fileOpens=..., fileReads=..., statCalls=..., programLoadBytes=..., dynamicImportBytes=..., libraryLoadBytes=...
   device[...]: base=..., size=..., loads=..., stores=..., bytesRead=..., bytesWritten=...
 ```
 
@@ -176,7 +178,9 @@ k16Os: pathLookups=..., inodeLoads=..., dirEntryScans=..., fileOpens=..., fileRe
 - `k16Os` is exported by KraftOS through a registered RAM counter block. `pathLookups` counts K16FS path resolver calls,
   `inodeLoads` counts inode table loads, `dirEntryScans` counts directory-entry slots scanned by lookup/listing,
   `fileOpens` counts kernel open attempts, `fileReads` counts kernel file read attempts, and `statCalls` counts kernel
-  stat attempts.
+  stat attempts. `programLoadBytes` counts loaded executable payload bytes, `dynamicImportBytes` counts loader metadata
+  bytes such as dynamic headers, needed/import sections, shared-library headers, and export sections, and
+  `libraryLoadBytes` counts loaded shared-library payload bytes.
 - These counters are cumulative inside the Rust VM; the Kotlin profiling collector stores the latest snapshot instead of
   summing repeated snapshots.
 

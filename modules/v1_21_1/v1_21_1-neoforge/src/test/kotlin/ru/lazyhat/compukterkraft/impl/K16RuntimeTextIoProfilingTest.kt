@@ -77,6 +77,9 @@ class K16RuntimeTextIoProfilingTest {
                                 dynamicImportLoads = 18,
                                 libraryLoads = 19,
                                 readDirCalls = 20,
+                                programLoadBytes = 21,
+                                dynamicImportBytes = 22,
+                                libraryLoadBytes = 23,
                             ),
                         devices =
                             listOf(
@@ -116,6 +119,9 @@ class K16RuntimeTextIoProfilingTest {
                                 dynamicImportLoads = 47,
                                 libraryLoads = 53,
                                 readDirCalls = 59,
+                                programLoadBytes = 61,
+                                dynamicImportBytes = 67,
+                                libraryLoadBytes = 71,
                             ),
                         devices =
                             listOf(
@@ -154,6 +160,9 @@ class K16RuntimeTextIoProfilingTest {
         assertTrue(line.contains("dynamicImportLoads=29"))
         assertTrue(line.contains("libraryLoads=34"))
         assertTrue(line.contains("readDirCalls=39"))
+        assertTrue(line.contains("programLoadBytes=40"))
+        assertTrue(line.contains("dynamicImportBytes=45"))
+        assertTrue(line.contains("libraryLoadBytes=48"))
     }
 
     @Test
@@ -895,7 +904,10 @@ private fun formatK16RuntimePhase(
         "programLoads=${osAfter.programLoads - osBefore.programLoads}, " +
         "dynamicImportLoads=${osAfter.dynamicImportLoads - osBefore.dynamicImportLoads}, " +
         "libraryLoads=${osAfter.libraryLoads - osBefore.libraryLoads}, " +
-        "readDirCalls=${osAfter.readDirCalls - osBefore.readDirCalls}"
+        "readDirCalls=${osAfter.readDirCalls - osBefore.readDirCalls}, " +
+        "programLoadBytes=${osAfter.programLoadBytes - osBefore.programLoadBytes}, " +
+        "dynamicImportBytes=${osAfter.dynamicImportBytes - osBefore.dynamicImportBytes}, " +
+        "libraryLoadBytes=${osAfter.libraryLoadBytes - osBefore.libraryLoadBytes}"
 }
 
 private fun formatK16CoreutilsCommandProfile(
@@ -926,7 +938,10 @@ private fun formatK16CoreutilsCommandProfile(
         "programLoads=${osAfter.programLoads - osBefore.programLoads}, " +
         "dynamicImportLoads=${osAfter.dynamicImportLoads - osBefore.dynamicImportLoads}, " +
         "libraryLoads=${osAfter.libraryLoads - osBefore.libraryLoads}, " +
-        "readDirCalls=${osAfter.readDirCalls - osBefore.readDirCalls}"
+        "readDirCalls=${osAfter.readDirCalls - osBefore.readDirCalls}, " +
+        "programLoadBytes=${osAfter.programLoadBytes - osBefore.programLoadBytes}, " +
+        "dynamicImportBytes=${osAfter.dynamicImportBytes - osBefore.dynamicImportBytes}, " +
+        "libraryLoadBytes=${osAfter.libraryLoadBytes - osBefore.libraryLoadBytes}"
 }
 
 private fun metricValue(line: String, name: String): Long {

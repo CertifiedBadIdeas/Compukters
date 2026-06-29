@@ -49,6 +49,9 @@ pub struct K16ComputerOsStatsSnapshot {
     pub dynamic_import_loads: u64,
     pub library_loads: u64,
     pub read_dir_calls: u64,
+    pub program_load_bytes: u64,
+    pub dynamic_import_bytes: u64,
+    pub library_load_bytes: u64,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]

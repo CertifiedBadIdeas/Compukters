@@ -3762,6 +3762,7 @@ pub unsafe fn load_selected_dynamic_user_program(
         )
         .map_err(|_| ProcessLoadError::Storage)?;
     }
+    crate::os_stats::record_program_load_bytes(plan.payload_len);
     unsafe {
         zero_fill_ram(plan.zero_fill_addr, plan.zero_fill_len);
         apply_selected_file_relocations(
@@ -3796,6 +3797,7 @@ unsafe fn load_selected_dynamic_user_program_with_imports(
             image.file_size,
         )
         .map_err(|_| ProcessLoadError::Storage)?;
+        crate::os_stats::record_program_load_bytes(image.file_size);
         zero_fill_ram(plan.zero_fill_addr, plan.zero_fill_len);
         apply_file_relocations(
             state.main_file,
@@ -3856,6 +3858,7 @@ pub unsafe fn load_selected_dynamic_user_program_mapped(
         let _ = free_mapped_dynamic_user_load_plan(mapped, allocator);
         return Err(error);
     }
+    crate::os_stats::record_program_load_bytes(plan.payload_len);
     unsafe {
         zero_fill_ram(mapped.zero_fill_addr(), plan.zero_fill_len);
     }
@@ -3901,6 +3904,7 @@ unsafe fn load_selected_dynamic_user_program_with_imports_mapped(
         let _ = free_mapped_dynamic_user_load_plan(mapped, allocator);
         return Err(error);
     }
+    crate::os_stats::record_program_load_bytes(image.file_size);
     unsafe {
         zero_fill_ram(mapped.zero_fill_addr(), plan.zero_fill_len);
     }
@@ -3963,6 +3967,7 @@ unsafe fn read_selected_dynamic_import_image() -> Result<DynamicUserImportImage,
         )
     };
     validate_dynamic_header_bytes(header, unsafe { crate::storage::selected_file_size() })?;
+    crate::os_stats::record_dynamic_import_bytes(crate::image::DYNAMIC_K16E_V5_HEADER_SIZE);
     Ok(DynamicUserImportImage {
         entry_offset: header_u32(header, 12),
         payload_offset: header_u32(header, 40),
@@ -3990,12 +3995,14 @@ unsafe fn read_selected_dynamic_import_state(
             image.needed_section_size,
         )?
     };
+    crate::os_stats::record_dynamic_import_bytes(image.needed_section_size);
     let import_relocations = unsafe {
         copy_selected_section_to_loader_import_buffer(
             image.import_section_offset,
             image.import_section_size,
         )?
     };
+    crate::os_stats::record_dynamic_import_bytes(image.import_section_size);
     let library_count =
         usize::try_from(image.needed_library_count).map_err(|_| ProcessLoadError::InvalidImage)?;
     if library_count > MAX_DYNAMIC_IMPORT_LIBRARIES {
@@ -4058,6 +4065,7 @@ unsafe fn load_dynamic_import_libraries(
                 library.file_size,
             )
             .map_err(|_| ProcessLoadError::Storage)?;
+            crate::os_stats::record_library_load_bytes(library.file_size);
             zero_fill_ram(
                 library_base + library.file_size,
                 library.memory_size - library.file_size,
@@ -4099,6 +4107,7 @@ unsafe fn load_dynamic_import_libraries_mapped(
                 library.file_size,
             )
             .map_err(|_| ProcessLoadError::Storage)?;
+            crate::os_stats::record_library_load_bytes(library.file_size);
             zero_fill_ram(
                 physical_base + library.file_size,
                 library.memory_size - library.file_size,
@@ -4397,7 +4406,9 @@ unsafe fn copy_shared_export_section_to_loader_buffer(
             library.export_section_size,
         )
         .map_err(|_| ProcessLoadError::Storage)
-    }
+    }?;
+    crate::os_stats::record_dynamic_import_bytes(library.export_section_size);
+    Ok(())
 }
 
 unsafe fn loader_export_section(index: u32, size: u32) -> Result<&'static [u8], ProcessLoadError> {
@@ -4447,6 +4458,7 @@ unsafe fn read_selected_shared_library_image() -> Result<SharedLibraryImage, Pro
         )
     };
     validate_shared_library_header_bytes(header, unsafe { crate::storage::selected_file_size() })?;
+    crate::os_stats::record_dynamic_import_bytes(crate::image::SHARED_K16E_V4_HEADER_SIZE);
     Ok(SharedLibraryImage {
         payload_offset: header_u32(header, 40),
         file_size: header_u32(header, 44),
