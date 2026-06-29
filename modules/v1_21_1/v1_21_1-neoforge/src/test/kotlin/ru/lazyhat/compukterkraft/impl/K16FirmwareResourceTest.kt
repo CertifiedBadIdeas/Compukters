@@ -116,11 +116,14 @@ class K16FirmwareResourceTest {
 
     @Test
     fun bundledK16FirmwareBuildUsesK16GradleSurface() {
-        val source = Path.of("build.gradle.kts").readText()
+        val source = Path.of("../../../build-scripts/src/main/kotlin/k16-firmware-convention.gradle.kts").readText()
+        val neoforgeBuildScript = Path.of("build.gradle.kts").readText()
         val rootBuildScript = Path.of("../../../build.gradle.kts").readText()
         val k16ToolchainSupport =
             Path.of("../../../build-scripts/src/main/kotlin/K16ToolchainSupport.kt").readText()
 
+        assertTrue(neoforgeBuildScript.contains("alias(libs.plugins.k16FirmwareConvention)"))
+        assertFalse(neoforgeBuildScript.contains("tasks.register(\"linkK16BiosFlash\")"))
         assertTrue(source.contains("generated/k16-firmware-resources"))
         assertTrue(source.contains("generated/k16-firmware-artifacts"))
         assertTrue(source.contains("tasks.register(\"linkK16BiosFlash\")"))
@@ -552,7 +555,7 @@ class K16FirmwareResourceTest {
 
     @Test
     fun bundledK16UserlandMapArtifactsAreGeneratedWithoutHostedRustProofs() {
-        val source = Path.of("build.gradle.kts").readText()
+        val source = Path.of("../../../build-scripts/src/main/kotlin/k16-firmware-convention.gradle.kts").readText()
 
         assertFalse(source.contains("val k16HostedCatMapArtifact ="))
         assertFalse(source.contains("val k16HostedHelloMapArtifact ="))
@@ -567,7 +570,7 @@ class K16FirmwareResourceTest {
 
     @Test
     fun bundledK16UserlandSizeReportTaskUsesProductionMaps() {
-        val source = Path.of("build.gradle.kts").readText()
+        val source = Path.of("../../../build-scripts/src/main/kotlin/k16-firmware-convention.gradle.kts").readText()
         val docs = Path.of("../../../docs/toolchains/k16-userland-size-report.md").readText()
 
         assertTrue(source.contains("tasks.register(\"reportK16UserlandSize\")"))

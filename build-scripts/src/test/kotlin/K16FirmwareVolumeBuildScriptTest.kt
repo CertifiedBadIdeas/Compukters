@@ -24,12 +24,26 @@ import java.nio.file.Path
 import kotlin.io.path.readText
 
 class K16FirmwareVolumeBuildScriptTest {
+    private val root = Path.of("..").toAbsolutePath().normalize()
+
+    @Test
+    fun k16FirmwareOrchestrationLivesInSharedConvention() {
+        val neoforgeBuildScript = root.resolve("modules/v1_21_1/v1_21_1-neoforge/build.gradle.kts").readText()
+        val conventionScript = root.resolve("build-scripts/src/main/kotlin/k16-firmware-convention.gradle.kts").readText()
+
+        assertTrue(neoforgeBuildScript.contains("alias(libs.plugins.k16FirmwareConvention)"))
+        assertTrue(conventionScript.contains("val compileK16SystemKernel ="))
+        assertTrue(conventionScript.contains("val createK16SystemStorage0 ="))
+        assertTrue(conventionScript.contains("tasks.register<Test>(\"profileK16RuntimeTextIo\")"))
+        assertFalse(neoforgeBuildScript.contains("val compileK16SystemKernel ="))
+        assertFalse(neoforgeBuildScript.contains("val createK16SystemStorage0 ="))
+        assertFalse(neoforgeBuildScript.contains("tasks.register<Test>(\"profileK16RuntimeTextIo\")"))
+    }
+
     @Test
     fun systemStorage0TaskCreatesPartitionedVolumeBeforePutBoot() {
         val buildScript =
-            Path.of("..", "modules", "v1_21_1", "v1_21_1-neoforge", "build.gradle.kts")
-                .normalize()
-                .readText()
+            root.resolve("build-scripts/src/main/kotlin/k16-firmware-convention.gradle.kts").readText()
         val taskBody =
             buildScript.substringAfter("val createK16SystemStorage0 =")
                 .substringBefore("val putK16SystemStorage0Boot =")
@@ -44,9 +58,7 @@ class K16FirmwareVolumeBuildScriptTest {
     @Test
     fun systemStorage0StagesUseDistinctGradleOutputs() {
         val buildScript =
-            Path.of("..", "modules", "v1_21_1", "v1_21_1-neoforge", "build.gradle.kts")
-                .normalize()
-                .readText()
+            root.resolve("build-scripts/src/main/kotlin/k16-firmware-convention.gradle.kts").readText()
         val createTask =
             buildScript.substringAfter("val createK16SystemStorage0 =")
                 .substringBefore("val putK16SystemStorage0Boot =")
