@@ -169,6 +169,9 @@ class RuntimeProfilingTest {
                         dynamicImportLoads = 39,
                         libraryLoads = 40,
                         readDirCalls = 41,
+                        programLoadBytes = 42,
+                        dynamicImportBytes = 43,
+                        libraryLoadBytes = 44,
                     ),
                 devices =
                     listOf(
@@ -276,6 +279,9 @@ class RuntimeProfilingTest {
         assertEquals(39, snapshot.k16.os.dynamicImportLoads)
         assertEquals(40, snapshot.k16.os.libraryLoads)
         assertEquals(41, snapshot.k16.os.readDirCalls)
+        assertEquals(42, snapshot.k16.os.programLoadBytes)
+        assertEquals(43, snapshot.k16.os.dynamicImportBytes)
+        assertEquals(44, snapshot.k16.os.libraryLoadBytes)
         assertEquals(18, snapshot.vm.k16TextInputNanos)
         assertEquals(RuntimeK16BusTrafficMetrics(loads = 10, stores = 11, bytesRead = 12, bytesWritten = 13), snapshot.k16.ram)
         assertEquals(RuntimeK16BusTrafficMetrics(loads = 20, stores = 21, bytesRead = 22, bytesWritten = 23), snapshot.k16.mmio)
@@ -370,6 +376,10 @@ class RuntimeProfilingTest {
         )
         assertTrue(
             summary.contains("    k16Storage0: reads=8, writes=9, flushes=10, bytesRead=11, bytesWritten=12, failed=13"),
+            summary,
+        )
+        assertTrue(
+            summary.contains("    k16Os: pathLookups=31, inodeLoads=32, dirEntryScans=33, fileOpens=34, fileReads=35, statCalls=36, processSpawns=37, programLoads=38, dynamicImportLoads=39, libraryLoads=40, readDirCalls=41, programLoadBytes=42, dynamicImportBytes=43, libraryLoadBytes=44"),
             summary,
         )
         assertTrue(

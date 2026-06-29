@@ -486,6 +486,9 @@ impl ComputerMachine {
             dynamic_import_loads: read(64),
             library_loads: read(72),
             read_dir_calls: read(80),
+            program_load_bytes: read(88),
+            dynamic_import_bytes: read(96),
+            library_load_bytes: read(104),
         }
     }
 

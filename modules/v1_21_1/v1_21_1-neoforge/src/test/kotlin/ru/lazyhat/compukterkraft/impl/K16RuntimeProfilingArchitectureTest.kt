@@ -51,6 +51,8 @@ class K16RuntimeProfilingArchitectureTest {
         assertTrue(docs.contains("k16Bus: ramLoads="))
         assertTrue(docs.contains("k16Devices: mapped="))
         assertTrue(docs.contains("k16Storage0: reads="))
+        assertTrue(docs.contains("programLoadBytes="))
+        assertTrue(textIoProfilingSource.contains("programLoadBytes="))
         assertTrue(docs.contains("k16Wait: entries="))
         assertTrue(textIoProfilingSource.contains("bios.splash.visible"))
         assertTrue(textIoProfilingSource.contains("bios.splash.wait"))

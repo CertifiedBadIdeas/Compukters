@@ -264,6 +264,9 @@ data class RuntimeK16OsMetrics(
     val dynamicImportLoads: Long = 0,
     val libraryLoads: Long = 0,
     val readDirCalls: Long = 0,
+    val programLoadBytes: Long = 0,
+    val dynamicImportBytes: Long = 0,
+    val libraryLoadBytes: Long = 0,
 )
 
 data class RuntimeK16DecodeCacheMetrics(
@@ -390,7 +393,7 @@ data class RuntimeProfilingSnapshot(
                 "    k16Storage0: reads=${k16.storage0.readCommands}, writes=${k16.storage0.writeCommands}, flushes=${k16.storage0.flushCommands}, bytesRead=${k16.storage0.bytesRead}, bytesWritten=${k16.storage0.bytesWritten}, failed=${k16.storage0.failedCommands}",
             )
             appendLine(
-                "    k16Os: pathLookups=${k16.os.pathLookups}, inodeLoads=${k16.os.inodeLoads}, dirEntryScans=${k16.os.dirEntryScans}, fileOpens=${k16.os.fileOpens}, fileReads=${k16.os.fileReads}, statCalls=${k16.os.statCalls}, processSpawns=${k16.os.processSpawns}, programLoads=${k16.os.programLoads}, dynamicImportLoads=${k16.os.dynamicImportLoads}, libraryLoads=${k16.os.libraryLoads}, readDirCalls=${k16.os.readDirCalls}",
+                "    k16Os: pathLookups=${k16.os.pathLookups}, inodeLoads=${k16.os.inodeLoads}, dirEntryScans=${k16.os.dirEntryScans}, fileOpens=${k16.os.fileOpens}, fileReads=${k16.os.fileReads}, statCalls=${k16.os.statCalls}, processSpawns=${k16.os.processSpawns}, programLoads=${k16.os.programLoads}, dynamicImportLoads=${k16.os.dynamicImportLoads}, libraryLoads=${k16.os.libraryLoads}, readDirCalls=${k16.os.readDirCalls}, programLoadBytes=${k16.os.programLoadBytes}, dynamicImportBytes=${k16.os.dynamicImportBytes}, libraryLoadBytes=${k16.os.libraryLoadBytes}",
             )
             appendK16DeviceSummary()
             appendLine(
@@ -990,4 +993,7 @@ private fun NativeK16OsStats.toRuntimeMetrics(): RuntimeK16OsMetrics =
         dynamicImportLoads = dynamicImportLoads,
         libraryLoads = libraryLoads,
         readDirCalls = readDirCalls,
+        programLoadBytes = programLoadBytes,
+        dynamicImportBytes = dynamicImportBytes,
+        libraryLoadBytes = libraryLoadBytes,
     )

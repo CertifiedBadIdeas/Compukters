@@ -105,11 +105,11 @@ class K16ComputerRuntimeTest {
         val snapshot =
             NativeK16ComputerStatsSnapshot.from(
                 longArrayOf(
-                    6,
+                    7,
                     2, 3, 4, 5,
                     6, 7, 8, 9,
-                    31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41,
-                    42, 43, 44,
+                    31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44,
+                    45, 46, 47,
                     1,
                     11, 0x1000, 64,
                     12, 13, 14, 15,
@@ -133,10 +133,13 @@ class K16ComputerRuntimeTest {
                 dynamicImportLoads = 39,
                 libraryLoads = 40,
                 readDirCalls = 41,
+                programLoadBytes = 42,
+                dynamicImportBytes = 43,
+                libraryLoadBytes = 44,
             ),
             snapshot.os,
         )
-        assertEquals(NativeK16DecodeCacheStats(entries = 42, hits = 43, misses = 44), snapshot.decodeCache)
+        assertEquals(NativeK16DecodeCacheStats(entries = 45, hits = 46, misses = 47), snapshot.decodeCache)
         assertEquals(
             listOf(
                 NativeK16MmioDeviceStats(

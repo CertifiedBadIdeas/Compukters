@@ -82,6 +82,9 @@ data class NativeK16OsStats(
     val dynamicImportLoads: Long = 0,
     val libraryLoads: Long = 0,
     val readDirCalls: Long = 0,
+    val programLoadBytes: Long = 0,
+    val dynamicImportBytes: Long = 0,
+    val libraryLoadBytes: Long = 0,
 )
 
 data class NativeK16MmioDeviceStats(
@@ -112,10 +115,12 @@ data class NativeK16ComputerStatsSnapshot(
         private const val VERSION_V4: Long = 4
         private const val VERSION_V5: Long = 5
         private const val VERSION_V6: Long = 6
+        private const val VERSION_V7: Long = 7
         private const val HEADER_LONGS_V2: Int = 10
         private const val HEADER_LONGS_V4: Int = 16
         private const val HEADER_LONGS_V5: Int = 21
         private const val HEADER_LONGS_V6: Int = 24
+        private const val HEADER_LONGS_V7: Int = 27
         private const val DEVICE_LONGS_V2: Int = 13
         private const val DEVICE_LONGS_V3: Int = 20
 
@@ -129,12 +134,14 @@ data class NativeK16ComputerStatsSnapshot(
                     version == VERSION_V3 ||
                     version == VERSION_V4 ||
                     version == VERSION_V5 ||
-                    version == VERSION_V6,
+                    version == VERSION_V6 ||
+                    version == VERSION_V7,
             ) {
                 "Unsupported native K16 stats snapshot version: $version"
             }
             val headerLongs =
                 when (version) {
+                    VERSION_V7 -> HEADER_LONGS_V7
                     VERSION_V6 -> HEADER_LONGS_V6
                     VERSION_V5 -> HEADER_LONGS_V5
                     VERSION_V4 -> HEADER_LONGS_V4
@@ -202,7 +209,7 @@ data class NativeK16ComputerStatsSnapshot(
                         bytesWritten = values[8],
                     ),
                 os =
-                    if (version == VERSION_V4 || version == VERSION_V5 || version == VERSION_V6) {
+                    if (version == VERSION_V4 || version == VERSION_V5 || version == VERSION_V6 || version == VERSION_V7) {
                         NativeK16OsStats(
                             pathLookups = values[9],
                             inodeLoads = values[10],
@@ -210,21 +217,25 @@ data class NativeK16ComputerStatsSnapshot(
                             fileOpens = values[12],
                             fileReads = values[13],
                             statCalls = values[14],
-                            processSpawns = if (version == VERSION_V5 || version == VERSION_V6) values[15] else 0,
-                            programLoads = if (version == VERSION_V5 || version == VERSION_V6) values[16] else 0,
-                            dynamicImportLoads = if (version == VERSION_V5 || version == VERSION_V6) values[17] else 0,
-                            libraryLoads = if (version == VERSION_V5 || version == VERSION_V6) values[18] else 0,
-                            readDirCalls = if (version == VERSION_V5 || version == VERSION_V6) values[19] else 0,
+                            processSpawns = if (version >= VERSION_V5) values[15] else 0,
+                            programLoads = if (version >= VERSION_V5) values[16] else 0,
+                            dynamicImportLoads = if (version >= VERSION_V5) values[17] else 0,
+                            libraryLoads = if (version >= VERSION_V5) values[18] else 0,
+                            readDirCalls = if (version >= VERSION_V5) values[19] else 0,
+                            programLoadBytes = if (version >= VERSION_V7) values[20] else 0,
+                            dynamicImportBytes = if (version >= VERSION_V7) values[21] else 0,
+                            libraryLoadBytes = if (version >= VERSION_V7) values[22] else 0,
                         )
                     } else {
                         NativeK16OsStats()
                     },
                 decodeCache =
-                    if (version == VERSION_V6) {
+                    if (version == VERSION_V6 || version == VERSION_V7) {
+                        val offset = if (version == VERSION_V7) 23 else 20
                         NativeK16DecodeCacheStats(
-                            entries = values[20],
-                            hits = values[21],
-                            misses = values[22],
+                            entries = values[offset],
+                            hits = values[offset + 1],
+                            misses = values[offset + 2],
                         )
                     } else {
                         NativeK16DecodeCacheStats()
