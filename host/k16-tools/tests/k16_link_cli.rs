@@ -755,6 +755,50 @@ fn k16_link_emits_bss_as_k16e_zero_fill_memory_tail() {
 }
 
 #[test]
+fn k16_link_moves_interleaved_bss_to_k16e_zero_fill_memory_tail() {
+    let object_path = temp_file("interleaved-bss.o");
+    let output_path = temp_file("interleaved-bss.k16e");
+    fs::write(
+        &object_path,
+        k16_object_with_interleaved_referenced_bss_section(),
+    )
+    .expect("object writes");
+
+    let output = Command::new(k16_binary())
+        .args([
+            "link",
+            "--target",
+            "program",
+            object_path.to_str().unwrap(),
+            "-o",
+            output_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("k16 link runs");
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let bytes = fs::read(output_path).expect("K16E output reads");
+    let executable = k16e::decode_k16_executable(&bytes).expect("linked K16E decodes");
+
+    assert_eq!(executable.entry_pc, 0x1_5000);
+    assert_eq!(executable.load_addr, 0x1_5000);
+    assert_eq!(executable.memory_size, 24);
+    assert_eq!(u32_at(&bytes, 44), 14);
+    assert_eq!(u32_at(&bytes, 48), 24);
+    assert_eq!(
+        &bytes[52..],
+        &[
+            0x01, 0xe4, 0x10, 0x50, 0x01, 0x00, 0x0a, 0x50, 0x01, 0x00, 0xaa, 0xbb, 0xcc,
+            0xdd,
+        ]
+    );
+}
+
+#[test]
 fn k16_link_rejects_unsupported_relocation_without_raw_fallback() {
     let object_path = temp_file("bad-reloc.o");
     let output_path = temp_file("bad-reloc.k16e");
@@ -1320,6 +1364,171 @@ fn k16_object_with_referenced_bss_section() -> Vec<u8> {
     section(
         &mut bytes,
         47,
+        3,
+        0,
+        0,
+        shstrtab_offset,
+        shstrtab.len() as u32,
+        0,
+        0,
+        1,
+        0,
+    );
+
+    bytes
+}
+
+fn k16_object_with_interleaved_referenced_bss_section() -> Vec<u8> {
+    let text = [0x01, 0xe4, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+    let tail = [0xaa, 0xbb, 0xcc, 0xdd];
+    let mut shstrtab = Vec::from([0]);
+    let text_section_name = push_string(&mut shstrtab, ".text.k16");
+    let rela_section_name = push_string(&mut shstrtab, ".rela.text.k16");
+    let bss_section_name = push_string(&mut shstrtab, ".bss");
+    let tail_section_name = push_string(&mut shstrtab, ".text.k16.tail");
+    let symtab_section_name = push_string(&mut shstrtab, ".symtab");
+    let strtab_section_name = push_string(&mut shstrtab, ".strtab");
+    let shstrtab_section_name = push_string(&mut shstrtab, ".shstrtab");
+    let mut strtab = Vec::from([0]);
+    let bss_name = push_string(&mut strtab, "__bss");
+    let start_name = push_string(&mut strtab, "_start");
+    let tail_name = push_string(&mut strtab, "__tail");
+    let mut symtab = Vec::new();
+    symtab.extend([0u8; 16]);
+    write_symbol(&mut symtab, bss_name, 0, 8, 0x00, 3);
+    write_symbol(&mut symtab, start_name, 0, text.len() as u32, 0x12, 1);
+    write_symbol(&mut symtab, tail_name, 0, tail.len() as u32, 0x12, 4);
+    let local_symbol_count = 2u32;
+
+    let mut rela = Vec::new();
+    write_u32(&mut rela, 2);
+    write_u32(&mut rela, (1 << 8) | 1);
+    write_u32(&mut rela, 0);
+    write_u32(&mut rela, 6);
+    write_u32(&mut rela, (3 << 8) | 1);
+    write_u32(&mut rela, 0);
+
+    let text_offset = 52u32;
+    let tail_offset = align(text_offset + text.len() as u32, 2);
+    let rela_offset = align(tail_offset + tail.len() as u32, 4);
+    let symtab_offset = align(rela_offset + rela.len() as u32, 4);
+    let strtab_offset = align(symtab_offset + symtab.len() as u32, 4);
+    let shstrtab_offset = align(strtab_offset + strtab.len() as u32, 4);
+    let shoff = align(shstrtab_offset + shstrtab.len() as u32, 4);
+
+    let mut bytes = Vec::new();
+    bytes.extend([0x7f, b'E', b'L', b'F', 1, 1, 1, 0]);
+    bytes.extend([0u8; 8]);
+    write_u16(&mut bytes, 1);
+    write_u16(&mut bytes, 0x5258);
+    write_u32(&mut bytes, 1);
+    write_u32(&mut bytes, 0);
+    write_u32(&mut bytes, 0);
+    write_u32(&mut bytes, shoff);
+    write_u32(&mut bytes, 0);
+    write_u16(&mut bytes, 52);
+    write_u16(&mut bytes, 0);
+    write_u16(&mut bytes, 0);
+    write_u16(&mut bytes, 40);
+    write_u16(&mut bytes, 8);
+    write_u16(&mut bytes, 7);
+
+    pad_to(&mut bytes, text_offset);
+    bytes.extend(text);
+    pad_to(&mut bytes, tail_offset);
+    bytes.extend(tail);
+    pad_to(&mut bytes, rela_offset);
+    bytes.extend_from_slice(&rela);
+    pad_to(&mut bytes, symtab_offset);
+    bytes.extend_from_slice(&symtab);
+    pad_to(&mut bytes, strtab_offset);
+    bytes.extend_from_slice(&strtab);
+    pad_to(&mut bytes, shstrtab_offset);
+    bytes.extend_from_slice(&shstrtab);
+    pad_to(&mut bytes, shoff);
+
+    bytes.extend([0u8; 40]);
+    section(
+        &mut bytes,
+        text_section_name,
+        1,
+        0x6,
+        0,
+        text_offset,
+        text.len() as u32,
+        0,
+        0,
+        2,
+        0,
+    );
+    section(
+        &mut bytes,
+        rela_section_name,
+        4,
+        0,
+        0,
+        rela_offset,
+        rela.len() as u32,
+        5,
+        1,
+        4,
+        12,
+    );
+    section(
+        &mut bytes,
+        bss_section_name,
+        8,
+        0x3,
+        0,
+        0,
+        8,
+        0,
+        0,
+        4,
+        0,
+    );
+    section(
+        &mut bytes,
+        tail_section_name,
+        1,
+        0x6,
+        0,
+        tail_offset,
+        tail.len() as u32,
+        0,
+        0,
+        2,
+        0,
+    );
+    section(
+        &mut bytes,
+        symtab_section_name,
+        2,
+        0,
+        0,
+        symtab_offset,
+        symtab.len() as u32,
+        6,
+        local_symbol_count,
+        4,
+        16,
+    );
+    section(
+        &mut bytes,
+        strtab_section_name,
+        3,
+        0,
+        0,
+        strtab_offset,
+        strtab.len() as u32,
+        0,
+        0,
+        1,
+        0,
+    );
+    section(
+        &mut bytes,
+        shstrtab_section_name,
         3,
         0,
         0,

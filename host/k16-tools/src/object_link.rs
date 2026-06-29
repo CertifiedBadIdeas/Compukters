@@ -353,52 +353,64 @@ fn link_objects(
     let mut payload = vec![0; prefix_len];
     let mut memory_size =
         u32::try_from(prefix_len).map_err(|_| "linked K16 payload is too large".to_string())?;
-    let mut section_offsets: Vec<Vec<Option<u32>>> = Vec::new();
+    let mut section_offsets: Vec<Vec<Option<u32>>> = objects
+        .iter()
+        .map(|object| vec![None; object.sections.len()])
+        .collect();
     let mut dynamic_relocations = Vec::new();
     let mut cpu_helper_relocations = Vec::new();
     let mut import_relocations = Vec::new();
     let mut retained_section_map = Vec::new();
 
-    for (object_index, object) in objects.iter().enumerate() {
-        let mut object_offsets = vec![None; object.sections.len()];
-        for section in &object.sections {
-            if !retained_sections
-                .get(object_index)
-                .and_then(|sections| sections.get(section.index))
-                .copied()
-                .unwrap_or(false)
-            {
-                continue;
-            }
-            validate_alloc_section(section)?;
-            memory_size = align_memory_size(memory_size, section.alignment)?;
-            let output_offset = memory_size;
-            object_offsets[section.index] = Some(output_offset);
-            retained_section_map.push(K16LinkMapSection {
-                output_offset,
-                class: section_class(section)?,
-                file_bytes: section_file_size(section)?,
-                memory_bytes: section.size,
-                object: object.name.clone(),
-                name: section.name.clone(),
-            });
-            match section.kind {
-                SHT_PROGBITS => {
-                    ensure_payload_len(&mut payload, memory_size)?;
-                    payload.extend_from_slice(&section.bytes);
-                    memory_size = memory_size
-                        .checked_add(section.size)
-                        .ok_or_else(|| "linked K16 payload is too large".to_string())?;
+    for nobits_pass in [false, true] {
+        for (object_index, object) in objects.iter().enumerate() {
+            for section in &object.sections {
+                if !retained_sections
+                    .get(object_index)
+                    .and_then(|sections| sections.get(section.index))
+                    .copied()
+                    .unwrap_or(false)
+                {
+                    continue;
                 }
-                SHT_NOBITS => {
-                    memory_size = memory_size
-                        .checked_add(section.size)
-                        .ok_or_else(|| "linked K16 payload is too large".to_string())?;
+                validate_alloc_section(section)?;
+                if (section.kind == SHT_NOBITS) != nobits_pass {
+                    continue;
                 }
-                _ => return Err(format!("unsupported alloc section type {}", section.kind)),
+                memory_size = align_memory_size(memory_size, section.alignment)?;
+                let output_offset = memory_size;
+                let object_offsets = section_offsets
+                    .get_mut(object_index)
+                    .and_then(|offsets| offsets.get_mut(section.index))
+                    .ok_or_else(|| {
+                        "internal K16 link section offset index is out of bounds".to_string()
+                    })?;
+                *object_offsets = Some(output_offset);
+                retained_section_map.push(K16LinkMapSection {
+                    output_offset,
+                    class: section_class(section)?,
+                    file_bytes: section_file_size(section)?,
+                    memory_bytes: section.size,
+                    object: object.name.clone(),
+                    name: section.name.clone(),
+                });
+                match section.kind {
+                    SHT_PROGBITS => {
+                        ensure_payload_len(&mut payload, memory_size)?;
+                        payload.extend_from_slice(&section.bytes);
+                        memory_size = memory_size
+                            .checked_add(section.size)
+                            .ok_or_else(|| "linked K16 payload is too large".to_string())?;
+                    }
+                    SHT_NOBITS => {
+                        memory_size = memory_size
+                            .checked_add(section.size)
+                            .ok_or_else(|| "linked K16 payload is too large".to_string())?;
+                    }
+                    _ => return Err(format!("unsupported alloc section type {}", section.kind)),
+                }
             }
         }
-        section_offsets.push(object_offsets);
     }
 
     if memory_size
