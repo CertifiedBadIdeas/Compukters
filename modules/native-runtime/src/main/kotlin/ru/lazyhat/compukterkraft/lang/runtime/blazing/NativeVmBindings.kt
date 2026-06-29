@@ -93,6 +93,16 @@ data class NativeK16OsStats(
     val programLoadBytes: Long = 0,
     val dynamicImportBytes: Long = 0,
     val libraryLoadBytes: Long = 0,
+    val genericFileDataReadBlocks: Long = 0,
+    val genericFileDataReadBytes: Long = 0,
+    val readDirDataReadBlocks: Long = 0,
+    val readDirDataReadBytes: Long = 0,
+    val programDataReadBlocks: Long = 0,
+    val programDataReadBytes: Long = 0,
+    val dynamicImportDataReadBlocks: Long = 0,
+    val dynamicImportDataReadBytes: Long = 0,
+    val libraryDataReadBlocks: Long = 0,
+    val libraryDataReadBytes: Long = 0,
 )
 
 data class NativeK16MmioDeviceStats(
@@ -126,11 +136,13 @@ data class NativeK16ComputerStatsSnapshot(
         private const val VERSION_V7: Long = 7
         private const val VERSION_V8: Long = 8
         private const val VERSION_V9: Long = 9
+        private const val VERSION_V10: Long = 10
         private const val HEADER_LONGS_V2: Int = 10
         private const val HEADER_LONGS_V4: Int = 16
         private const val HEADER_LONGS_V5: Int = 21
         private const val HEADER_LONGS_V6: Int = 24
         private const val HEADER_LONGS_V7: Int = 27
+        private const val HEADER_LONGS_V10: Int = 37
         private const val DEVICE_LONGS_V2: Int = 13
         private const val DEVICE_LONGS_V3: Int = 20
         private const val DEVICE_LONGS_V8: Int = 22
@@ -149,12 +161,14 @@ data class NativeK16ComputerStatsSnapshot(
                     version == VERSION_V6 ||
                     version == VERSION_V7 ||
                     version == VERSION_V8 ||
-                    version == VERSION_V9,
+                    version == VERSION_V9 ||
+                    version == VERSION_V10,
             ) {
                 "Unsupported native K16 stats snapshot version: $version"
             }
             val headerLongs =
                 when (version) {
+                    VERSION_V10 -> HEADER_LONGS_V10
                     VERSION_V9, VERSION_V8, VERSION_V7 -> HEADER_LONGS_V7
                     VERSION_V6 -> HEADER_LONGS_V6
                     VERSION_V5 -> HEADER_LONGS_V5
@@ -166,7 +180,7 @@ data class NativeK16ComputerStatsSnapshot(
             val deviceLongs =
                 when (version) {
                     VERSION_V2 -> DEVICE_LONGS_V2
-                    VERSION_V9 -> DEVICE_LONGS_V9
+                    VERSION_V10, VERSION_V9 -> DEVICE_LONGS_V9
                     VERSION_V8 -> DEVICE_LONGS_V8
                     else -> DEVICE_LONGS_V3
                 }
@@ -248,7 +262,8 @@ data class NativeK16ComputerStatsSnapshot(
                         version == VERSION_V6 ||
                         version == VERSION_V7 ||
                         version == VERSION_V8 ||
-                        version == VERSION_V9
+                        version == VERSION_V9 ||
+                        version == VERSION_V10
                     ) {
                         NativeK16OsStats(
                             pathLookups = values[9],
@@ -265,13 +280,34 @@ data class NativeK16ComputerStatsSnapshot(
                             programLoadBytes = if (version >= VERSION_V7) values[20] else 0,
                             dynamicImportBytes = if (version >= VERSION_V7) values[21] else 0,
                             libraryLoadBytes = if (version >= VERSION_V7) values[22] else 0,
+                            genericFileDataReadBlocks = if (version >= VERSION_V10) values[23] else 0,
+                            genericFileDataReadBytes = if (version >= VERSION_V10) values[24] else 0,
+                            readDirDataReadBlocks = if (version >= VERSION_V10) values[25] else 0,
+                            readDirDataReadBytes = if (version >= VERSION_V10) values[26] else 0,
+                            programDataReadBlocks = if (version >= VERSION_V10) values[27] else 0,
+                            programDataReadBytes = if (version >= VERSION_V10) values[28] else 0,
+                            dynamicImportDataReadBlocks = if (version >= VERSION_V10) values[29] else 0,
+                            dynamicImportDataReadBytes = if (version >= VERSION_V10) values[30] else 0,
+                            libraryDataReadBlocks = if (version >= VERSION_V10) values[31] else 0,
+                            libraryDataReadBytes = if (version >= VERSION_V10) values[32] else 0,
                         )
                     } else {
                         NativeK16OsStats()
                     },
                 decodeCache =
-                    if (version == VERSION_V6 || version == VERSION_V7 || version == VERSION_V8 || version == VERSION_V9) {
-                        val offset = if (version >= VERSION_V7) 23 else 20
+                    if (
+                        version == VERSION_V6 ||
+                        version == VERSION_V7 ||
+                        version == VERSION_V8 ||
+                        version == VERSION_V9 ||
+                        version == VERSION_V10
+                    ) {
+                        val offset =
+                            when {
+                                version >= VERSION_V10 -> 33
+                                version >= VERSION_V7 -> 23
+                                else -> 20
+                            }
                         NativeK16DecodeCacheStats(
                             entries = values[offset],
                             hits = values[offset + 1],

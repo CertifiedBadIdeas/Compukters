@@ -172,6 +172,16 @@ class RuntimeProfilingTest {
                         programLoadBytes = 42,
                         dynamicImportBytes = 43,
                         libraryLoadBytes = 44,
+                        genericFileDataReadBlocks = 45,
+                        genericFileDataReadBytes = 46,
+                        readDirDataReadBlocks = 47,
+                        readDirDataReadBytes = 48,
+                        programDataReadBlocks = 49,
+                        programDataReadBytes = 50,
+                        dynamicImportDataReadBlocks = 51,
+                        dynamicImportDataReadBytes = 52,
+                        libraryDataReadBlocks = 53,
+                        libraryDataReadBytes = 54,
                     ),
                 devices =
                     listOf(
@@ -387,7 +397,7 @@ class RuntimeProfilingTest {
             summary,
         )
         assertTrue(
-            summary.contains("    k16Os: pathLookups=31, inodeLoads=32, dirEntryScans=33, fileOpens=34, fileReads=35, statCalls=36, processSpawns=37, programLoads=38, dynamicImportLoads=39, libraryLoads=40, readDirCalls=41, programLoadBytes=42, dynamicImportBytes=43, libraryLoadBytes=44"),
+            summary.contains("    k16Os: pathLookups=31, inodeLoads=32, dirEntryScans=33, fileOpens=34, fileReads=35, statCalls=36, processSpawns=37, programLoads=38, dynamicImportLoads=39, libraryLoads=40, readDirCalls=41, programLoadBytes=42, dynamicImportBytes=43, libraryLoadBytes=44, genericFileDataReadBlocks=45, genericFileDataReadBytes=46, readDirDataReadBlocks=47, readDirDataReadBytes=48, programDataReadBlocks=49, programDataReadBytes=50, dynamicImportDataReadBlocks=51, dynamicImportDataReadBytes=52, libraryDataReadBlocks=53, libraryDataReadBytes=54"),
             summary,
         )
         assertTrue(

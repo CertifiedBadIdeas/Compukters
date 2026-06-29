@@ -2026,11 +2026,21 @@ fn stats_snapshot_reads_registered_os_stats_from_guest_ram() {
     machine.memory_mut().store_u64(600, 22).unwrap();
     machine.memory_mut().store_u64(608, 23).unwrap();
     machine.memory_mut().store_u64(616, 24).unwrap();
+    machine.memory_mut().store_u64(624, 25).unwrap();
+    machine.memory_mut().store_u64(632, 26).unwrap();
+    machine.memory_mut().store_u64(640, 27).unwrap();
+    machine.memory_mut().store_u64(648, 28).unwrap();
+    machine.memory_mut().store_u64(656, 29).unwrap();
+    machine.memory_mut().store_u64(664, 30).unwrap();
+    machine.memory_mut().store_u64(672, 31).unwrap();
+    machine.memory_mut().store_u64(680, 32).unwrap();
+    machine.memory_mut().store_u64(688, 33).unwrap();
+    machine.memory_mut().store_u64(696, 34).unwrap();
     machine
         .bus_store_i32(computer_abi::CONTROL_OS_STATS_ADDR, 512)
         .unwrap();
     machine
-        .bus_store_i32(computer_abi::CONTROL_OS_STATS_SIZE, 112)
+        .bus_store_i32(computer_abi::CONTROL_OS_STATS_SIZE, 192)
         .unwrap();
 
     let snapshot = machine.stats_snapshot();
@@ -2049,6 +2059,16 @@ fn stats_snapshot_reads_registered_os_stats_from_guest_ram() {
     assert_eq!(snapshot.os.program_load_bytes, 22);
     assert_eq!(snapshot.os.dynamic_import_bytes, 23);
     assert_eq!(snapshot.os.library_load_bytes, 24);
+    assert_eq!(snapshot.os.generic_file_data_read_blocks, 25);
+    assert_eq!(snapshot.os.generic_file_data_read_bytes, 26);
+    assert_eq!(snapshot.os.read_dir_data_read_blocks, 27);
+    assert_eq!(snapshot.os.read_dir_data_read_bytes, 28);
+    assert_eq!(snapshot.os.program_data_read_blocks, 29);
+    assert_eq!(snapshot.os.program_data_read_bytes, 30);
+    assert_eq!(snapshot.os.dynamic_import_data_read_blocks, 31);
+    assert_eq!(snapshot.os.dynamic_import_data_read_bytes, 32);
+    assert_eq!(snapshot.os.library_data_read_blocks, 33);
+    assert_eq!(snapshot.os.library_data_read_bytes, 34);
 }
 
 fn write_k16pt_test_table(
