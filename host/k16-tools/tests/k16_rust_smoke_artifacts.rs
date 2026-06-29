@@ -194,6 +194,22 @@ fn kernel_storage_helper_is_kernel_owned() {
 }
 
 #[test]
+fn kernel_mapped_user_load_translation_errors_are_explicit() {
+    let root = repo_root();
+    let process_source = fs::read_to_string(root.join("guest/kraftos/kernel/src/process.rs"))
+        .expect("kernel process source exists");
+
+    assert!(
+        !process_source.contains(".expect(\"validated payload address translates\")"),
+        "kernel mapped payload translation should return ProcessLoadError instead of retaining expect/debug formatting"
+    );
+    assert!(
+        !process_source.contains(".expect(\"validated zero-fill address translates\")"),
+        "kernel mapped zero-fill translation should return ProcessLoadError instead of retaining expect/debug formatting"
+    );
+}
+
+#[test]
 fn k16_memory_helpers_are_runtime_owned() {
     let root = repo_root();
     let workspace_manifest = fs::read_to_string(root.join("guest/kraftos/Cargo.toml"))

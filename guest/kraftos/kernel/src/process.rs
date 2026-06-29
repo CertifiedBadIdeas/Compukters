@@ -3114,14 +3114,12 @@ impl MappedDynamicUserLoadPlan {
         self.page_count
     }
 
-    pub fn payload_dst(&self) -> u32 {
+    pub fn payload_dst(&self) -> Result<u32, ProcessLoadError> {
         self.translate_address(self.virtual_plan.payload_dst)
-            .expect("validated payload address translates")
     }
 
-    pub fn zero_fill_addr(&self) -> u32 {
+    pub fn zero_fill_addr(&self) -> Result<u32, ProcessLoadError> {
         self.translate_address(self.virtual_plan.zero_fill_addr)
-            .expect("validated zero-fill address translates")
     }
 
     pub fn relocation_field_addr(&self, relocation_offset: u32) -> Result<u32, ProcessLoadError> {
@@ -3853,11 +3851,25 @@ pub unsafe fn load_selected_dynamic_user_program_mapped(
         },
     )?;
     let mapped = allocate_mapped_dynamic_user_load_plan(plan, allocator)?;
+    let payload_dst = match mapped.payload_dst() {
+        Ok(value) => value,
+        Err(error) => {
+            let _ = free_mapped_dynamic_user_load_plan(mapped, allocator);
+            return Err(error);
+        }
+    };
+    let zero_fill_addr = match mapped.zero_fill_addr() {
+        Ok(value) => value,
+        Err(error) => {
+            let _ = free_mapped_dynamic_user_load_plan(mapped, allocator);
+            return Err(error);
+        }
+    };
 
     if let Err(error) = unsafe {
         crate::storage::copy_selected_file_range_to_ram_profiled(
             payload_offset,
-            mapped.payload_dst(),
+            payload_dst,
             plan.payload_len,
             crate::storage::FileReadProfileKind::Program,
         )
@@ -3868,7 +3880,7 @@ pub unsafe fn load_selected_dynamic_user_program_mapped(
     }
     crate::os_stats::record_program_load_bytes(plan.payload_len);
     unsafe {
-        zero_fill_ram(mapped.zero_fill_addr(), plan.zero_fill_len);
+        zero_fill_ram(zero_fill_addr, plan.zero_fill_len);
     }
     if let Err(error) = unsafe {
         apply_selected_file_relocations_mapped(
@@ -3899,12 +3911,26 @@ unsafe fn load_selected_dynamic_user_program_with_imports_mapped(
         },
     )?;
     let mapped = allocate_mapped_dynamic_user_load_plan(plan, allocator)?;
+    let payload_dst = match mapped.payload_dst() {
+        Ok(value) => value,
+        Err(error) => {
+            let _ = free_mapped_dynamic_user_load_plan(mapped, allocator);
+            return Err(error);
+        }
+    };
+    let zero_fill_addr = match mapped.zero_fill_addr() {
+        Ok(value) => value,
+        Err(error) => {
+            let _ = free_mapped_dynamic_user_load_plan(mapped, allocator);
+            return Err(error);
+        }
+    };
 
     if let Err(error) = unsafe {
         crate::storage::copy_file_range_to_ram_profiled(
             state.main_file,
             image.payload_offset,
-            mapped.payload_dst(),
+            payload_dst,
             image.file_size,
             crate::storage::FileReadProfileKind::Program,
         )
@@ -3915,7 +3941,7 @@ unsafe fn load_selected_dynamic_user_program_with_imports_mapped(
     }
     crate::os_stats::record_program_load_bytes(image.file_size);
     unsafe {
-        zero_fill_ram(mapped.zero_fill_addr(), plan.zero_fill_len);
+        zero_fill_ram(zero_fill_addr, plan.zero_fill_len);
     }
     if let Err(error) = unsafe {
         apply_file_relocations_mapped(
@@ -5553,8 +5579,8 @@ mod tests {
 
         assert_eq!(mapped.virtual_plan(), plan);
         assert_eq!(mapped.backing_start(), 0x0000_9000);
-        assert_eq!(mapped.payload_dst(), 0x0000_9020);
-        assert_eq!(mapped.zero_fill_addr(), 0x0000_9030);
+        assert_eq!(mapped.payload_dst(), Ok(0x0000_9020));
+        assert_eq!(mapped.zero_fill_addr(), Ok(0x0000_9030));
         assert_eq!(mapped.relocation_field_addr(4), Ok(0x0000_9024));
         assert_eq!(
             MappedDynamicUserLoadPlan::new(plan, 0x0001_5000, 0x0000_9000, 6),
