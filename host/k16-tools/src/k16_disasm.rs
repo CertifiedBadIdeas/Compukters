@@ -324,6 +324,34 @@ fn disassemble_extended(
         0x1 => {
             DisassembledInstruction::multi(format!("test_bits r{a}, r{b}, 0x{extension:04x}"), 2)
         }
+        0x2 => DisassembledInstruction::multi(
+            format!("addi r{a}, r{b}, {}", sign_extend_u16(extension)),
+            2,
+        ),
+        0x3 => DisassembledInstruction::multi(
+            format!("load8 r{a}, [r{b}{}]", format_signed_offset(extension)),
+            2,
+        ),
+        0x4 => DisassembledInstruction::multi(
+            format!("load16 r{a}, [r{b}{}]", format_signed_offset(extension)),
+            2,
+        ),
+        0x5 => DisassembledInstruction::multi(
+            format!("load32 r{a}, [r{b}{}]", format_signed_offset(extension)),
+            2,
+        ),
+        0x6 => DisassembledInstruction::multi(
+            format!("store8 [r{a}{}], r{b}", format_signed_offset(extension)),
+            2,
+        ),
+        0x7 => DisassembledInstruction::multi(
+            format!("store16 [r{a}{}], r{b}", format_signed_offset(extension)),
+            2,
+        ),
+        0x8 => DisassembledInstruction::multi(
+            format!("store32 [r{a}{}], r{b}", format_signed_offset(extension)),
+            2,
+        ),
         _ => {
             return Err(invalid_instruction(
                 pc,
@@ -380,6 +408,19 @@ fn relative_branch_target(pc: u32, offset_nibble: u8) -> Result<u32, String> {
         ));
     }
     Ok(target as u32)
+}
+
+fn format_signed_offset(value: u16) -> String {
+    let offset = sign_extend_u16(value);
+    if offset < 0 {
+        format!(" - {}", -offset)
+    } else {
+        format!(" + {offset}")
+    }
+}
+
+fn sign_extend_u16(value: u16) -> i32 {
+    i32::from(value as i16)
 }
 
 fn sign_extend_nibble(value: u8) -> i32 {

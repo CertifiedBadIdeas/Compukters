@@ -228,6 +228,8 @@ and compiler tooling cover these instruction families:
 - comparisons: `eq`, `ne`, unsigned relational comparisons, and signed
   relational comparisons;
 - memory: `load8`, `load16`, `load32`, `store8`, `store16`, and `store32`;
+- signed 16-bit immediates for compact stack/frame code: `addi` and
+  base-plus-offset load/store forms;
 - control flow: conditional branches, unconditional jumps, direct calls, and
   returns;
 - trap/syscall boundary: an explicit trap mechanism or ABI path for entering
@@ -277,6 +279,38 @@ s    mnemonic    semantics
 
 There are no compatibility aliases for older experimental encodings. The VM
 recognizes the documented encoding only.
+
+### Extended Immediate Encoding
+
+Extended immediate instructions use a two-word encoding. The low nibble of
+word 0 selects the subopcode, and word 1 carries a signed 16-bit immediate:
+
+```text
+word 0: 0x3abs
+word 1: signed imm16
+
+a  destination register for addi/load, base register for store
+b  source/base register for addi/load, source register for store
+s  extended immediate subopcode
+```
+
+The signed immediate is sign-extended to `i32` and added with wrapping `u32`
+semantics where it participates in address or arithmetic calculation.
+
+```text
+s    mnemonic                 semantics
+0x1  test_bits rA, rB, imm16  rA = (rB & imm16) != 0 ? 1 : 0
+0x2  addi rA, rB, imm16       rA = rB + sign_extend(imm16)
+0x3  load8 rA, [rB + imm16]   rA = zero_extend_u8([rB + sign_extend(imm16)])
+0x4  load16 rA, [rB + imm16]  rA = zero_extend_le_u16([rB + sign_extend(imm16)])
+0x5  load32 rA, [rB + imm16]  rA = le_u32([rB + sign_extend(imm16)])
+0x6  store8 [rA + imm16], rB  [rA + sign_extend(imm16)] = low_u8(rB)
+0x7  store16 [rA + imm16], rB [rA + sign_extend(imm16)] = low_le_u16(rB)
+0x8  store32 [rA + imm16], rB [rA + sign_extend(imm16)] = le_u32(rB)
+```
+
+Subopcodes outside this table are reserved and must decode as illegal
+instructions until an ABI revision assigns them.
 
 ### Integer Memory Width Encoding
 

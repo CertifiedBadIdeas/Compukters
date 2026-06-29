@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- K16 CPU v1 now defines extended signed-imm16 instruction forms under opcode
+  `0x3`: `addi`, base-plus-offset `load8`/`load16`/`load32`, and
+  base-plus-offset `store8`/`store16`/`store32`. The VM, assembler,
+  disassembler, and LLVM backend support these forms so common stack/frame
+  operations no longer need separate `const32` plus register ALU/address
+  sequences when the offset fits in signed 16 bits.
 - User-accessible MMU mappings are now W^X. `map_pages` and `protect_pages`
   reject mappings that combine `user_accessible`, `writable`, and `executable`;
   KraftOS maps loaded user images executable/read-only and stack/heap/writable

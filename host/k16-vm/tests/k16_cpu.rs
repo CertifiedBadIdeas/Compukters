@@ -767,6 +767,44 @@ fn k16_test_bits_builds_condition_register_from_mask() {
 }
 
 #[test]
+fn k16_addi_adds_signed_16_bit_immediate() {
+    let mut bus = MachineBus::new(64).unwrap();
+    let mut program = Vec::new();
+    program.extend(const32(1, 0x1000));
+    program.extend(addi(2, 1, 0x7fff));
+    program.extend(addi(3, 2, -4));
+    program.push(halt());
+    write_words(&mut bus, 0, &program);
+    let mut cpu = K16Cpu::new(0);
+
+    assert_eq!(cpu.run_until_signal(&mut bus, 16).unwrap(), K16Signal::Halt,);
+    assert_eq!(cpu.register(2), 0x8fff);
+    assert_eq!(cpu.register(3), 0x8ffb);
+}
+
+#[test]
+fn k16_load_store_offset_use_signed_16_bit_base_offset() {
+    let mut bus = MachineBus::new(128).unwrap();
+    let mut program = Vec::new();
+    program.extend(const32(1, 64));
+    program.extend(const32(2, 0x1122_3344));
+    program.extend(store32_offset(1, 2, 4));
+    program.extend(load32_offset(3, 1, 4));
+    program.extend(load8_offset(4, 1, 4));
+    program.extend(load16_offset(5, 1, 4));
+    program.extend(load32_offset(6, 1, -4));
+    program.push(halt());
+    write_words(&mut bus, 0, &program);
+    let mut cpu = K16Cpu::new(0);
+
+    assert_eq!(cpu.run_until_signal(&mut bus, 32).unwrap(), K16Signal::Halt,);
+    assert_eq!(cpu.register(3), 0x1122_3344);
+    assert_eq!(cpu.register(4), 0x44);
+    assert_eq!(cpu.register(5), 0x3344);
+    assert_eq!(cpu.register(6), 0);
+}
+
+#[test]
 fn k16_illegal_instruction_enters_configured_exception_vector() {
     let mut bus = MachineBus::new(64).unwrap();
     write_words(
@@ -1256,6 +1294,33 @@ fn alu_rrr(dst: u8, subop: u8, lhs: u8, rhs: u8) -> [u16; 2] {
 
 fn test_bits(dst: u8, src: u8, mask: u16) -> [u16; 2] {
     [0x3001 | (u16::from(dst) << 8) | (u16::from(src) << 4), mask]
+}
+
+fn addi(dst: u8, src: u8, immediate: i16) -> [u16; 2] {
+    extended_imm16(dst, src, 0x2, immediate)
+}
+
+fn load8_offset(dst: u8, base: u8, offset: i16) -> [u16; 2] {
+    extended_imm16(dst, base, 0x3, offset)
+}
+
+fn load16_offset(dst: u8, base: u8, offset: i16) -> [u16; 2] {
+    extended_imm16(dst, base, 0x4, offset)
+}
+
+fn load32_offset(dst: u8, base: u8, offset: i16) -> [u16; 2] {
+    extended_imm16(dst, base, 0x5, offset)
+}
+
+fn store32_offset(base: u8, src: u8, offset: i16) -> [u16; 2] {
+    extended_imm16(base, src, 0x8, offset)
+}
+
+fn extended_imm16(a: u8, b: u8, subop: u8, immediate: i16) -> [u16; 2] {
+    [
+        0x3000 | (u16::from(a) << 8) | (u16::from(b) << 4) | u16::from(subop),
+        immediate as u16,
+    ]
 }
 
 fn load8(dst: u8, addr: u8) -> u16 {

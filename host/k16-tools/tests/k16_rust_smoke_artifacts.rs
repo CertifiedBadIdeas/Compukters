@@ -530,8 +530,9 @@ fn k16_c_libc_cat_has_minimal_libkraft_abi_sources() {
     assert!(ls.contains("#include <unistd.h>"));
     assert!(ls.contains("const char *path = argc > 1 ? argv[index] : \"/bin\""));
     assert!(ls.contains("read_dir(path, buffer, sizeof(buffer))"));
-    assert!(ls.contains("stat(child_path, &metadata)"));
-    assert!(ls.contains("metadata.file_type == KRAFT_FILE_TYPE_DIRECTORY"));
+    assert!(ls.contains("KRAFT_READ_DIR_ENTRY_FIXED_BYTES"));
+    assert!(ls.contains("file_type == KRAFT_FILE_TYPE_DIRECTORY"));
+    assert!(ls.contains("read_u32_le(buffer + cursor + KRAFT_READ_DIR_ENTRY_NAME_OFFSET"));
     assert!(ls.contains("status_name(status, \"READDIR\")"));
     assert!(
         !ls.contains("stdio.h"),
@@ -552,9 +553,9 @@ fn k16_c_libc_cat_has_minimal_libkraft_abi_sources() {
     assert!(mv.contains("#include <kraft/fs.h>"));
     assert!(mv.contains("#include <unistd.h>"));
     assert!(mv.contains("argc != 3"));
-    assert!(mv.contains("stat(source_path, &metadata)"));
-    assert!(mv.contains("metadata.file_type != KRAFT_FILE_TYPE_REGULAR"));
-    assert!(mv.contains("stat(destination_path, &metadata) == 0"));
+    assert!(mv.contains("int status = stat(destination_path, &metadata)"));
+    assert!(mv.contains("if (status == 0)"));
+    assert!(mv.contains("if (!is_noent(status))"));
     assert!(mv.contains("rename(source_path, destination_path)"));
     assert!(mv.contains("write_text(STDOUT_FILENO, \"MOVED \")"));
     assert!(mv.contains("status_name(status, \"RENAME\")"));
@@ -671,10 +672,10 @@ fn removed_kraft_std_layer_no_longer_exists() {
 #[test]
 fn k16_rt_no_longer_exports_userland_syscall_wrappers() {
     let root = repo_root();
-    let runtime_lib =
-        fs::read_to_string(root.join("guest/kraftos/runtime/src/lib.rs")).expect("k16-rt lib exists");
-    let runtime_trap =
-        fs::read_to_string(root.join("guest/kraftos/runtime/src/trap.rs")).expect("k16-rt trap exists");
+    let runtime_lib = fs::read_to_string(root.join("guest/kraftos/runtime/src/lib.rs"))
+        .expect("k16-rt lib exists");
+    let runtime_trap = fs::read_to_string(root.join("guest/kraftos/runtime/src/trap.rs"))
+        .expect("k16-rt trap exists");
 
     for symbol in [
         "write_syscall",
