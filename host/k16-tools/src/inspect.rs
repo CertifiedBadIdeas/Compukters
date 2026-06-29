@@ -70,7 +70,8 @@ fn inspect_k16e(bytes: &[u8]) -> Result<String, String> {
         k16e::K16E_VERSION => inspect_fixed_k16e(bytes),
         k16e::K16E_DYNAMIC_VERSION
         | k16e::K16E_DYNAMIC_RUNTIME_VERSION
-        | k16e::K16E_DYNAMIC_IMPORTS_VERSION => inspect_dynamic_k16e(bytes),
+        | k16e::K16E_DYNAMIC_IMPORTS_VERSION
+        | k16e::K16E_DYNAMIC_WRITABLE_SEGMENTS_VERSION => inspect_dynamic_k16e(bytes),
         k16e::K16E_SHARED_OBJECT_VERSION => inspect_shared_object_k16e(bytes),
         version => Err(format!("unsupported K16E version {version}")),
     }

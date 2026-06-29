@@ -362,9 +362,12 @@ The v1 linker is static only:
 5. Lay out retained `.text.k16*`, `.rodata`, `.data`, and `.bss` sections in
    the selected target profile address space.
 6. Apply supported RELA relocations from retained sections.
-7. Emit a single-load-section `K16E` image for the selected ABI kind. The
-   emitted `file_size` covers initialized payload bytes, while `memory_size`
-   covers initialized bytes plus any trailing `.bss` zero-fill tail.
+7. Emit `K16E` load metadata for the selected ABI kind. Fixed-image targets use
+   a single load section. Dynamic program targets may use split
+   executable/read-only and writable load sections so `.data`/`.bss` can be
+   mapped writable/non-executable under the MMU. The emitted initialized file
+   bytes cover copied payload data, while memory sizes cover initialized bytes
+   plus any `.bss` zero-fill and page padding required by the selected target.
 
 The optional link map reports only retained allocated sections after step 3.
 Each section row includes output offset, section class, initialized file bytes,
@@ -373,9 +376,9 @@ allocated sections are omitted from the map for the same reason they are
 omitted from the executable payload.
 
 For `K16E` output, `.bss` must not be serialized as object-file bytes when it
-is only trailing zero-filled memory. The linker represents it by increasing the
-K16E section `memory_size`; loaders copy `file_size` bytes and zero-fill the
-remaining memory range.
+is only zero-filled memory. The linker represents it by increasing the relevant
+K16E section `memory_size`; loaders copy initialized `file_size` bytes and
+zero-fill the remaining memory range.
 
 ## Unsupported Features
 

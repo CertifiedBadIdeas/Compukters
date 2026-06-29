@@ -755,6 +755,54 @@ fn k16_link_emits_bss_as_k16e_zero_fill_memory_tail() {
 }
 
 #[test]
+fn k16_link_dynamic_program_maps_bss_in_writable_segment() {
+    let object_path = temp_file("dynamic-bss.o");
+    let output_path = temp_file("dynamic-bss.k16e");
+    fs::write(&object_path, k16_object_with_referenced_bss_section()).expect("object writes");
+
+    let output = Command::new(k16_binary())
+        .args([
+            "link",
+            "--target",
+            "program-dynamic",
+            object_path.to_str().unwrap(),
+            "-o",
+            output_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("k16 link runs");
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let bytes = fs::read(output_path).expect("K16E output reads");
+
+    assert_eq!(u16_at(&bytes, 4), 6);
+    assert_eq!(u32_at(&bytes, 20), 3);
+    assert_eq!(u32_at(&bytes, 32), 1);
+    assert_eq!(u32_at(&bytes, 36), 0);
+    assert_eq!(u32_at(&bytes, 40), 92);
+    assert_eq!(u32_at(&bytes, 44), 8);
+    assert_eq!(u32_at(&bytes, 48), 0x1000);
+    assert_eq!(u32_at(&bytes, 52), 8);
+    assert_eq!(u32_at(&bytes, 56), 0x1000);
+    assert_eq!(u32_at(&bytes, 60), 100);
+    assert_eq!(u32_at(&bytes, 64), 0);
+    assert_eq!(u32_at(&bytes, 68), 0x1000);
+    assert_eq!(u32_at(&bytes, 72), 2);
+    assert_eq!(u32_at(&bytes, 76), 0);
+    assert_eq!(u32_at(&bytes, 80), 100);
+    assert_eq!(u32_at(&bytes, 84), 8);
+    assert_eq!(u32_at(&bytes, 88), 1);
+    assert_eq!(
+        &bytes[92..100],
+        &[0x01, 0xe4, 0x00, 0x10, 0x00, 0x00, 0x01, 0x00]
+    );
+}
+
+#[test]
 fn k16_link_moves_interleaved_bss_to_k16e_zero_fill_memory_tail() {
     let object_path = temp_file("interleaved-bss.o");
     let output_path = temp_file("interleaved-bss.k16e");
@@ -1596,6 +1644,10 @@ fn k16_binary() -> String {
 
 fn u32_at(bytes: &[u8], offset: usize) -> u32 {
     u32::from_le_bytes(bytes[offset..offset + 4].try_into().unwrap())
+}
+
+fn u16_at(bytes: &[u8], offset: usize) -> u16 {
+    u16::from_le_bytes(bytes[offset..offset + 2].try_into().unwrap())
 }
 
 fn write_u16(bytes: &mut Vec<u8>, value: u16) {

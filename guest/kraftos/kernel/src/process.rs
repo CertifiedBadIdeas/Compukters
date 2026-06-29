@@ -2842,6 +2842,10 @@ pub struct DynamicUserImage {
     pub entry_offset: u32,
     pub file_size: u32,
     pub memory_size: u32,
+    pub writable_offset: u32,
+    pub writable_file_offset: u32,
+    pub writable_file_size: u32,
+    pub writable_memory_size: u32,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -2858,6 +2862,10 @@ struct DynamicUserImportImage {
     import_section_offset: u32,
     import_section_size: u32,
     import_relocation_count: u32,
+    writable_offset: u32,
+    writable_file_offset: u32,
+    writable_file_size: u32,
+    writable_memory_size: u32,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -2955,20 +2963,28 @@ impl<'a> DynamicImportLoadState<'a> {
 }
 
 impl DynamicUserImage {
-    pub const fn from_k16e(header: crate::image::DynamicK16ImageHeader<'_>) -> Self {
+    pub const fn new(entry_offset: u32, file_size: u32, memory_size: u32) -> Self {
         Self {
-            entry_offset: header.entry_offset,
-            file_size: header.file_size,
-            memory_size: header.memory_size,
+            entry_offset,
+            file_size,
+            memory_size,
+            writable_offset: 0,
+            writable_file_offset: 0,
+            writable_file_size: 0,
+            writable_memory_size: 0,
         }
     }
 
+    pub const fn from_k16e(header: crate::image::DynamicK16ImageHeader<'_>) -> Self {
+        Self::new(header.entry_offset, header.file_size, header.memory_size)
+    }
+
     pub const fn from_k16e_metadata(metadata: crate::image::DynamicK16ImageMetadata) -> Self {
-        Self {
-            entry_offset: metadata.entry_offset,
-            file_size: metadata.file_size,
-            memory_size: metadata.memory_size,
-        }
+        Self::new(
+            metadata.entry_offset,
+            metadata.file_size,
+            metadata.memory_size,
+        )
     }
 }
 
@@ -2989,6 +3005,8 @@ pub struct MappedDynamicUserLoadPlan {
     virtual_plan: DynamicUserLoadPlan,
     image_map_start: u32,
     image_page_count: u32,
+    writable_offset: u32,
+    writable_memory_size: u32,
     stack_map_start: u32,
     stack_page_count: u32,
     backing_start: u32,
@@ -3025,6 +3043,8 @@ impl MappedDynamicUserLoadPlan {
             virtual_plan,
             image_map_start: map_start,
             image_page_count,
+            writable_offset: 0,
+            writable_memory_size: 0,
             stack_map_start: image_map_end,
             stack_page_count,
             backing_start,
@@ -3036,6 +3056,8 @@ impl MappedDynamicUserLoadPlan {
         virtual_plan: DynamicUserLoadPlan,
         image_map_start: u32,
         image_page_count: u32,
+        writable_offset: u32,
+        writable_memory_size: u32,
         stack_map_start: u32,
         stack_page_count: u32,
         backing_start: u32,
@@ -3061,6 +3083,23 @@ impl MappedDynamicUserLoadPlan {
         if virtual_plan.load_base < image_map_start || virtual_plan.load_end > image_mapped_end {
             return Err(ProcessLoadError::InvalidArena);
         }
+        if writable_memory_size > 0 {
+            let writable_start = virtual_plan
+                .load_base
+                .checked_add(writable_offset)
+                .ok_or(ProcessLoadError::AddressOverflow)?;
+            let writable_end = writable_start
+                .checked_add(writable_memory_size)
+                .ok_or(ProcessLoadError::AddressOverflow)?;
+            if writable_offset == 0
+                || writable_start % VM_PAGE_SIZE != 0
+                || writable_memory_size % VM_PAGE_SIZE != 0
+                || writable_end > virtual_plan.load_end
+                || writable_end > image_mapped_end
+            {
+                return Err(ProcessLoadError::InvalidArena);
+            }
+        }
         if stack_page_count > 0 {
             let stack_mapped_end = stack_map_start
                 .checked_add(
@@ -3079,6 +3118,8 @@ impl MappedDynamicUserLoadPlan {
             virtual_plan,
             image_map_start,
             image_page_count,
+            writable_offset,
+            writable_memory_size,
             stack_map_start,
             stack_page_count,
             backing_start,
@@ -3096,6 +3137,14 @@ impl MappedDynamicUserLoadPlan {
 
     pub const fn image_page_count(&self) -> u32 {
         self.image_page_count
+    }
+
+    pub const fn writable_offset(&self) -> u32 {
+        self.writable_offset
+    }
+
+    pub const fn writable_memory_size(&self) -> u32 {
+        self.writable_memory_size
     }
 
     pub const fn stack_map_start(&self) -> u32 {
@@ -3120,6 +3169,15 @@ impl MappedDynamicUserLoadPlan {
 
     pub fn zero_fill_addr(&self) -> Result<u32, ProcessLoadError> {
         self.translate_address(self.virtual_plan.zero_fill_addr)
+    }
+
+    pub fn writable_payload_dst(&self) -> Result<u32, ProcessLoadError> {
+        let virtual_address = self
+            .virtual_plan
+            .load_base
+            .checked_add(self.writable_offset)
+            .ok_or(ProcessLoadError::AddressOverflow)?;
+        self.translate_address(virtual_address)
     }
 
     pub fn relocation_field_addr(&self, relocation_offset: u32) -> Result<u32, ProcessLoadError> {
@@ -3213,6 +3271,52 @@ fn allocate_mapped_dynamic_user_load_plan(
         plan,
         image_map_start,
         image_page_count,
+        0,
+        0,
+        stack_map_start,
+        stack_page_count,
+        backing.start,
+    )
+}
+
+fn allocate_mapped_dynamic_user_load_plan_with_writable(
+    plan: DynamicUserLoadPlan,
+    writable_offset: u32,
+    writable_memory_size: u32,
+    allocator: &mut crate::page_alloc::PageFrameAllocator,
+) -> Result<MappedDynamicUserLoadPlan, ProcessLoadError> {
+    let image_map_start = page_align_down(plan.load_base);
+    let image_map_end = page_align_up(plan.load_end)?;
+    if image_map_start >= image_map_end || plan.stack_top == 0 {
+        return Err(ProcessLoadError::InvalidArena);
+    }
+    let image_page_count = (image_map_end - image_map_start) / VM_PAGE_SIZE;
+    let stack_map_end = page_align_up(plan.stack_top)?;
+    let desired_stack_map_start = stack_map_end
+        .checked_sub(TRANSLATED_USER_STACK_BYTES)
+        .ok_or(ProcessLoadError::InvalidArena)?;
+    let stack_map_start = if desired_stack_map_start < image_map_end {
+        image_map_end
+    } else {
+        desired_stack_map_start
+    };
+    let stack_page_count = if stack_map_start >= stack_map_end {
+        0
+    } else {
+        (stack_map_end - stack_map_start) / VM_PAGE_SIZE
+    };
+    let page_count = image_page_count
+        .checked_add(stack_page_count)
+        .ok_or(ProcessLoadError::AddressOverflow)?;
+    let backing = allocator
+        .allocate_contiguous(page_count)
+        .map_err(page_alloc_error_to_process_load_error)?;
+    MappedDynamicUserLoadPlan::new_committed(
+        plan,
+        image_map_start,
+        image_page_count,
+        writable_offset,
+        writable_memory_size,
         stack_map_start,
         stack_page_count,
         backing.start,
@@ -3442,18 +3546,98 @@ unsafe fn create_translated_user_launch_from_mapped(
     kernel_stack_top: u32,
 ) -> Result<TranslatedUserLaunch, ProcessLoadError> {
     let address_space = unsafe { mmu0_create_address_space()? };
-    let map_result = unsafe {
-        mmu0_map_pages(
-            address_space,
-            mapped.map_start(),
-            mapped.backing_start(),
-            mapped.image_page_count(),
-            user_executable_mmu_flags(),
-        )
-    };
-    if let Err(error) = map_result {
-        let _ = unsafe { mmu0_destroy_address_space(address_space) };
-        return Err(error);
+    let plan = mapped.virtual_plan();
+    if mapped.writable_memory_size() > 0 {
+        let writable_map_start = plan
+            .load_base
+            .checked_add(mapped.writable_offset())
+            .ok_or(ProcessLoadError::AddressOverflow)?;
+        let readonly_page_count = (writable_map_start - mapped.map_start()) / VM_PAGE_SIZE;
+        if readonly_page_count > 0 {
+            let map_result = unsafe {
+                mmu0_map_pages(
+                    address_space,
+                    mapped.map_start(),
+                    mapped.backing_start(),
+                    readonly_page_count,
+                    user_executable_mmu_flags(),
+                )
+            };
+            if let Err(error) = map_result {
+                let _ = unsafe { mmu0_destroy_address_space(address_space) };
+                return Err(error);
+            }
+        }
+        let writable_backing_start = mapped
+            .backing_start()
+            .checked_add(
+                readonly_page_count
+                    .checked_mul(VM_PAGE_SIZE)
+                    .ok_or(ProcessLoadError::AddressOverflow)?,
+            )
+            .ok_or(ProcessLoadError::AddressOverflow)?;
+        let writable_page_count = mapped.writable_memory_size() / VM_PAGE_SIZE;
+        let map_result = unsafe {
+            mmu0_map_pages(
+                address_space,
+                writable_map_start,
+                writable_backing_start,
+                writable_page_count,
+                user_writable_mmu_flags(),
+            )
+        };
+        if let Err(error) = map_result {
+            let _ = unsafe { mmu0_destroy_address_space(address_space) };
+            return Err(error);
+        }
+        let executable_tail_page_count = mapped
+            .image_page_count()
+            .checked_sub(readonly_page_count)
+            .and_then(|count| count.checked_sub(writable_page_count))
+            .ok_or(ProcessLoadError::InvalidArena)?;
+        if executable_tail_page_count > 0 {
+            let executable_tail_map_start = writable_map_start
+                .checked_add(
+                    writable_page_count
+                        .checked_mul(VM_PAGE_SIZE)
+                        .ok_or(ProcessLoadError::AddressOverflow)?,
+                )
+                .ok_or(ProcessLoadError::AddressOverflow)?;
+            let executable_tail_backing_start = writable_backing_start
+                .checked_add(
+                    writable_page_count
+                        .checked_mul(VM_PAGE_SIZE)
+                        .ok_or(ProcessLoadError::AddressOverflow)?,
+                )
+                .ok_or(ProcessLoadError::AddressOverflow)?;
+            let map_result = unsafe {
+                mmu0_map_pages(
+                    address_space,
+                    executable_tail_map_start,
+                    executable_tail_backing_start,
+                    executable_tail_page_count,
+                    user_executable_mmu_flags(),
+                )
+            };
+            if let Err(error) = map_result {
+                let _ = unsafe { mmu0_destroy_address_space(address_space) };
+                return Err(error);
+            }
+        }
+    } else {
+        let map_result = unsafe {
+            mmu0_map_pages(
+                address_space,
+                mapped.map_start(),
+                mapped.backing_start(),
+                mapped.image_page_count(),
+                user_executable_mmu_flags(),
+            )
+        };
+        if let Err(error) = map_result {
+            let _ = unsafe { mmu0_destroy_address_space(address_space) };
+            return Err(error);
+        }
     }
     if mapped.stack_page_count() > 0 {
         let stack_backing_start = mapped
@@ -3479,7 +3663,6 @@ unsafe fn create_translated_user_launch_from_mapped(
             return Err(error);
         }
     }
-    let plan = mapped.virtual_plan();
     Ok(TranslatedUserLaunch {
         address_space,
         entry_pc: plan.entry_pc,
@@ -3696,8 +3879,8 @@ pub unsafe fn load_dynamic_user_program_from_storage0(
             .map_err(|_| ProcessLoadError::Storage)?;
     }
     let version = unsafe { selected_k16e_version()? };
-    if version == 5 {
-        unsafe { load_selected_dynamic_user_program_with_imports(arena) }
+    if version == 5 || version == 6 {
+        unsafe { load_selected_dynamic_user_program_with_imports(arena, version) }
     } else {
         unsafe { load_selected_dynamic_user_program(arena) }
     }
@@ -3715,8 +3898,8 @@ pub unsafe fn load_dynamic_user_program_from_storage0_mapped(
             .map_err(|_| ProcessLoadError::Storage)?;
     }
     let version = unsafe { selected_k16e_version()? };
-    if version == 5 {
-        unsafe { load_selected_dynamic_user_program_with_imports_mapped(arena, allocator) }
+    if version == 5 || version == 6 {
+        unsafe { load_selected_dynamic_user_program_with_imports_mapped(arena, allocator, version) }
     } else {
         unsafe { load_selected_dynamic_user_program_mapped(arena, allocator) }
     }
@@ -3749,11 +3932,7 @@ pub unsafe fn load_selected_dynamic_user_program(
     let relocation_count = header_u32(header, 68);
     let plan = plan_dynamic_user_load(
         arena,
-        DynamicUserImage {
-            entry_offset,
-            file_size,
-            memory_size,
-        },
+        DynamicUserImage::new(entry_offset, file_size, memory_size),
     )?;
 
     unsafe {
@@ -3780,16 +3959,13 @@ pub unsafe fn load_selected_dynamic_user_program(
 
 unsafe fn load_selected_dynamic_user_program_with_imports(
     arena: UserArena,
+    version: u16,
 ) -> Result<DynamicUserLoadPlan, ProcessLoadError> {
-    let state = unsafe { read_selected_dynamic_import_state()? };
+    let state = unsafe { read_selected_dynamic_import_state(version)? };
     let image = state.image;
     let plan = plan_dynamic_user_load(
         arena,
-        DynamicUserImage {
-            entry_offset: image.entry_offset,
-            file_size: image.file_size,
-            memory_size: state.total_memory_size,
-        },
+        DynamicUserImage::new(image.entry_offset, image.file_size, state.total_memory_size),
     )?;
 
     unsafe {
@@ -3803,6 +3979,21 @@ unsafe fn load_selected_dynamic_user_program_with_imports(
         .map_err(|_| ProcessLoadError::Storage)?;
         crate::os_stats::record_program_load_bytes(image.file_size);
         zero_fill_ram(plan.zero_fill_addr, plan.zero_fill_len);
+        if image.writable_file_size > 0 {
+            let writable_dst = plan
+                .load_base
+                .checked_add(image.writable_offset)
+                .ok_or(ProcessLoadError::AddressOverflow)?;
+            crate::storage::copy_file_range_to_ram_profiled(
+                state.main_file,
+                image.writable_file_offset,
+                writable_dst,
+                image.writable_file_size,
+                crate::storage::FileReadProfileKind::Program,
+            )
+            .map_err(|_| ProcessLoadError::Storage)?;
+            crate::os_stats::record_program_load_bytes(image.writable_file_size);
+        }
         apply_file_relocations(
             state.main_file,
             image.relocation_table_offset,
@@ -3844,11 +4035,7 @@ pub unsafe fn load_selected_dynamic_user_program_mapped(
     let relocation_count = header_u32(header, 68);
     let plan = plan_dynamic_user_load(
         arena,
-        DynamicUserImage {
-            entry_offset,
-            file_size,
-            memory_size,
-        },
+        DynamicUserImage::new(entry_offset, file_size, memory_size),
     )?;
     let mapped = allocate_mapped_dynamic_user_load_plan(plan, allocator)?;
     let payload_dst = match mapped.payload_dst() {
@@ -3899,18 +4086,24 @@ pub unsafe fn load_selected_dynamic_user_program_mapped(
 unsafe fn load_selected_dynamic_user_program_with_imports_mapped(
     arena: UserArena,
     allocator: &mut crate::page_alloc::PageFrameAllocator,
+    version: u16,
 ) -> Result<MappedDynamicUserLoadPlan, ProcessLoadError> {
-    let state = unsafe { read_selected_dynamic_import_state()? };
+    let state = unsafe { read_selected_dynamic_import_state(version)? };
     let image = state.image;
     let plan = plan_dynamic_user_load(
         arena,
-        DynamicUserImage {
-            entry_offset: image.entry_offset,
-            file_size: image.file_size,
-            memory_size: state.total_memory_size,
-        },
+        DynamicUserImage::new(image.entry_offset, image.file_size, state.total_memory_size),
     )?;
-    let mapped = allocate_mapped_dynamic_user_load_plan(plan, allocator)?;
+    let mapped = if image.writable_memory_size > 0 {
+        allocate_mapped_dynamic_user_load_plan_with_writable(
+            plan,
+            image.writable_offset,
+            image.writable_memory_size,
+            allocator,
+        )?
+    } else {
+        allocate_mapped_dynamic_user_load_plan(plan, allocator)?
+    };
     let payload_dst = match mapped.payload_dst() {
         Ok(value) => value,
         Err(error) => {
@@ -3942,6 +4135,29 @@ unsafe fn load_selected_dynamic_user_program_with_imports_mapped(
     crate::os_stats::record_program_load_bytes(image.file_size);
     unsafe {
         zero_fill_ram(zero_fill_addr, plan.zero_fill_len);
+    }
+    if image.writable_file_size > 0 {
+        let writable_dst = match mapped.writable_payload_dst() {
+            Ok(value) => value,
+            Err(error) => {
+                let _ = free_mapped_dynamic_user_load_plan(mapped, allocator);
+                return Err(error);
+            }
+        };
+        if let Err(error) = unsafe {
+            crate::storage::copy_file_range_to_ram_profiled(
+                state.main_file,
+                image.writable_file_offset,
+                writable_dst,
+                image.writable_file_size,
+                crate::storage::FileReadProfileKind::Program,
+            )
+            .map_err(|_| ProcessLoadError::Storage)
+        } {
+            let _ = free_mapped_dynamic_user_load_plan(mapped, allocator);
+            return Err(error);
+        }
+        crate::os_stats::record_program_load_bytes(image.writable_file_size);
     }
     if let Err(error) = unsafe {
         apply_file_relocations_mapped(
@@ -3991,24 +4207,79 @@ unsafe fn selected_k16e_version() -> Result<u16, ProcessLoadError> {
     ]))
 }
 
-unsafe fn read_selected_dynamic_import_image() -> Result<DynamicUserImportImage, ProcessLoadError> {
+unsafe fn read_selected_dynamic_import_image(
+    version: u16,
+) -> Result<DynamicUserImportImage, ProcessLoadError> {
+    let mut header_size = if version == 6 {
+        crate::image::DYNAMIC_K16E_V6_PAYLOAD_OFFSET
+    } else {
+        crate::image::DYNAMIC_K16E_V5_HEADER_SIZE
+    };
     unsafe {
         crate::storage::copy_selected_file_range_to_ram_profiled(
             0,
             crate::storage::SCRATCH_ADDR,
-            crate::image::DYNAMIC_K16E_V5_HEADER_SIZE,
+            header_size,
             crate::storage::FileReadProfileKind::DynamicImport,
         )
         .map_err(|_| ProcessLoadError::Storage)?;
     }
+    if version == 6 {
+        let header = unsafe {
+            core::slice::from_raw_parts(
+                crate::storage::SCRATCH_ADDR as usize as *const u8,
+                header_size as usize,
+            )
+        };
+        if header_u32(header, 20) == 5 {
+            header_size = crate::image::DYNAMIC_K16E_V6_HEADER_SIZE;
+            unsafe {
+                crate::storage::copy_selected_file_range_to_ram_profiled(
+                    0,
+                    crate::storage::SCRATCH_ADDR,
+                    header_size,
+                    crate::storage::FileReadProfileKind::DynamicImport,
+                )
+                .map_err(|_| ProcessLoadError::Storage)?;
+            }
+        }
+    }
     let header = unsafe {
         core::slice::from_raw_parts(
             crate::storage::SCRATCH_ADDR as usize as *const u8,
-            crate::image::DYNAMIC_K16E_V5_HEADER_SIZE as usize,
+            header_size as usize,
         )
     };
     validate_dynamic_header_bytes(header, unsafe { crate::storage::selected_file_size() })?;
-    crate::os_stats::record_dynamic_import_bytes(crate::image::DYNAMIC_K16E_V5_HEADER_SIZE);
+    crate::os_stats::record_dynamic_import_bytes(header_size);
+    if version == 6 {
+        let writable_offset = header_u32(header, 56);
+        let writable_file_offset = header_u32(header, 60);
+        let writable_file_size = header_u32(header, 64);
+        let writable_memory_size = header_u32(header, 68);
+        let memory_size = writable_offset
+            .checked_add(writable_memory_size)
+            .ok_or(ProcessLoadError::InvalidImage)?;
+        let has_imports = header_u32(header, 20) == 5;
+        return Ok(DynamicUserImportImage {
+            entry_offset: header_u32(header, 12),
+            payload_offset: header_u32(header, 40),
+            file_size: header_u32(header, 44),
+            memory_size,
+            relocation_table_offset: header_u32(header, 80),
+            relocation_count: header_u32(header, 88),
+            needed_section_offset: if has_imports { header_u32(header, 100) } else { 0 },
+            needed_section_size: if has_imports { header_u32(header, 104) } else { 0 },
+            needed_library_count: if has_imports { header_u32(header, 108) } else { 0 },
+            import_section_offset: if has_imports { header_u32(header, 120) } else { 0 },
+            import_section_size: if has_imports { header_u32(header, 124) } else { 0 },
+            import_relocation_count: if has_imports { header_u32(header, 128) } else { 0 },
+            writable_offset,
+            writable_file_offset,
+            writable_file_size,
+            writable_memory_size,
+        });
+    }
     Ok(DynamicUserImportImage {
         entry_offset: header_u32(header, 12),
         payload_offset: header_u32(header, 40),
@@ -4022,14 +4293,19 @@ unsafe fn read_selected_dynamic_import_image() -> Result<DynamicUserImportImage,
         import_section_offset: header_u32(header, 100),
         import_section_size: header_u32(header, 104),
         import_relocation_count: header_u32(header, 108),
+        writable_offset: 0,
+        writable_file_offset: 0,
+        writable_file_size: 0,
+        writable_memory_size: 0,
     })
 }
 
 unsafe fn read_selected_dynamic_import_state(
+    version: u16,
 ) -> Result<DynamicImportLoadState<'static>, ProcessLoadError> {
     crate::os_stats::record_dynamic_import_load();
     let main_file = unsafe { crate::storage::selected_file_metadata() };
-    let image = unsafe { read_selected_dynamic_import_image()? };
+    let image = unsafe { read_selected_dynamic_import_image(version)? };
     let needed_libraries = unsafe {
         copy_selected_section_to_loader_needed_buffer(
             image.needed_section_offset,
@@ -4684,6 +4960,26 @@ fn validate_dynamic_image(image: DynamicUserImage) -> Result<(), ProcessLoadErro
     {
         return Err(ProcessLoadError::InvalidImage);
     }
+    if image.writable_memory_size != 0 {
+        let writable_end = image
+            .writable_offset
+            .checked_add(image.writable_memory_size)
+            .ok_or(ProcessLoadError::InvalidImage)?;
+        let writable_file_end = image
+            .writable_offset
+            .checked_add(image.writable_file_size)
+            .ok_or(ProcessLoadError::InvalidImage)?;
+        if image.writable_offset == 0
+            || image.writable_offset % VM_PAGE_SIZE != 0
+            || writable_end != image.memory_size
+            || image.writable_memory_size % VM_PAGE_SIZE != 0
+            || image.writable_file_size > image.writable_memory_size
+            || image.writable_file_size % LOAD_ALIGNMENT != 0
+            || writable_file_end > image.memory_size
+        {
+            return Err(ProcessLoadError::InvalidImage);
+        }
+    }
     Ok(())
 }
 
@@ -4811,6 +5107,9 @@ fn validate_dynamic_header_bytes(header: &[u8], inode_size: u32) -> Result<(), P
     if version == 5 {
         return validate_dynamic_import_header_bytes(header, inode_size);
     }
+    if version == 6 {
+        return validate_dynamic_writable_header_bytes(header, inode_size);
+    }
 
     if header.len() < crate::image::DYNAMIC_K16E_V2_HEADER_SIZE as usize
         || header.get(0..4) != Some(b"K16E")
@@ -4859,6 +5158,124 @@ fn validate_dynamic_header_bytes(header: &[u8], inode_size: u32) -> Result<(), P
     let file_end = relocation_table_offset
         .checked_add(relocation_table_size)
         .ok_or(ProcessLoadError::InvalidImage)?;
+    if file_end > inode_size {
+        return Err(ProcessLoadError::InvalidImage);
+    }
+    Ok(())
+}
+
+fn validate_dynamic_writable_header_bytes(
+    header: &[u8],
+    inode_size: u32,
+) -> Result<(), ProcessLoadError> {
+    if header.len() < crate::image::DYNAMIC_K16E_V6_PAYLOAD_OFFSET as usize
+        || header.get(0..4) != Some(b"K16E")
+        || header_u16(header, 4) != 6
+        || header_u16(header, 6) != 32
+        || header_u16(header, 8) != 1
+        || header_u16(header, 10) != 0
+        || header_u32(header, 16) != 32
+        || (header_u32(header, 20) != 3 && header_u32(header, 20) != 5)
+        || header_u32(header, 24) != crate::image::K16eAbiKind::Program as u32
+        || header_u32(header, 28) != 0
+        || header_u32(header, 32) != 1
+        || header_u32(header, 36) != 0
+        || header_u32(header, 40) != crate::image::DYNAMIC_K16E_V6_PAYLOAD_OFFSET
+        || header_u32(header, 52) != crate::image::K16E_SECTION_KIND_WRITABLE_LOAD
+        || header_u32(header, 72) != 2
+        || header_u32(header, 76) != 0
+    {
+        return Err(ProcessLoadError::InvalidImage);
+    }
+
+    let section_count = header_u32(header, 20);
+    if section_count == 5 && header.len() < crate::image::DYNAMIC_K16E_V6_HEADER_SIZE as usize {
+        return Err(ProcessLoadError::InvalidImage);
+    }
+    let entry_offset = header_u32(header, 12);
+    let readonly_file_size = header_u32(header, 44);
+    let readonly_memory_size = header_u32(header, 48);
+    let writable_offset = header_u32(header, 56);
+    let writable_file_offset = header_u32(header, 60);
+    let writable_file_size = header_u32(header, 64);
+    let writable_memory_size = header_u32(header, 68);
+    if readonly_file_size == 0
+        || readonly_file_size % 2 != 0
+        || readonly_memory_size != writable_offset
+        || writable_offset == 0
+        || writable_offset % VM_PAGE_SIZE != 0
+        || writable_file_size % 2 != 0
+        || writable_memory_size == 0
+        || writable_memory_size % VM_PAGE_SIZE != 0
+        || writable_file_size > writable_memory_size
+    {
+        return Err(ProcessLoadError::InvalidImage);
+    }
+    let memory_size = writable_offset
+        .checked_add(writable_memory_size)
+        .ok_or(ProcessLoadError::InvalidImage)?;
+    if entry_offset >= memory_size || entry_offset % 2 != 0 {
+        return Err(ProcessLoadError::InvalidImage);
+    }
+    let payload_end = crate::image::DYNAMIC_K16E_V6_PAYLOAD_OFFSET
+        .checked_add(readonly_file_size)
+        .ok_or(ProcessLoadError::InvalidImage)?;
+    if writable_file_offset != payload_end {
+        return Err(ProcessLoadError::InvalidImage);
+    }
+    let relocation_table_offset = header_u32(header, 80);
+    let relocation_table_size = header_u32(header, 84);
+    let relocation_count = header_u32(header, 88);
+    let writable_file_end = writable_file_offset
+        .checked_add(writable_file_size)
+        .ok_or(ProcessLoadError::InvalidImage)?;
+    if relocation_table_offset != writable_file_end {
+        return Err(ProcessLoadError::InvalidImage);
+    }
+    let expected_relocation_table_size = relocation_count
+        .checked_mul(crate::image::K16E_RELOCATION_RECORD_SIZE)
+        .ok_or(ProcessLoadError::InvalidImage)?;
+    if relocation_table_size != expected_relocation_table_size {
+        return Err(ProcessLoadError::InvalidImage);
+    }
+    let relocation_table_end = relocation_table_offset
+        .checked_add(relocation_table_size)
+        .ok_or(ProcessLoadError::InvalidImage)?;
+    let file_end = if section_count == 5 {
+        if header_u32(header, 92) != 6
+            || header_u32(header, 96) != 0
+            || header_u32(header, 112) != 7
+            || header_u32(header, 116) != 0
+        {
+            return Err(ProcessLoadError::InvalidImage);
+        }
+        let needed_section_offset = header_u32(header, 100);
+        let needed_section_size = header_u32(header, 104);
+        let needed_library_count = header_u32(header, 108);
+        let import_section_offset = header_u32(header, 120);
+        let import_section_size = header_u32(header, 124);
+        let import_relocation_count = header_u32(header, 128);
+        if needed_section_offset != relocation_table_end || needed_library_count == 0 {
+            return Err(ProcessLoadError::InvalidImage);
+        }
+        let needed_section_end = needed_section_offset
+            .checked_add(needed_section_size)
+            .ok_or(ProcessLoadError::InvalidImage)?;
+        if import_section_offset != needed_section_end || import_relocation_count == 0 {
+            return Err(ProcessLoadError::InvalidImage);
+        }
+        let expected_import_record_size = import_relocation_count
+            .checked_mul(crate::image::K16E_IMPORT_RELOCATION_RECORD_SIZE)
+            .ok_or(ProcessLoadError::InvalidImage)?;
+        if import_section_size < expected_import_record_size {
+            return Err(ProcessLoadError::InvalidImage);
+        }
+        import_section_offset
+            .checked_add(import_section_size)
+            .ok_or(ProcessLoadError::InvalidImage)?
+    } else {
+        relocation_table_end
+    };
     if file_end > inode_size {
         return Err(ProcessLoadError::InvalidImage);
     }
@@ -5360,6 +5777,25 @@ mod tests {
         bytes[offset..offset + 4].copy_from_slice(&value.to_le_bytes());
     }
 
+    fn assert_mmu_map(
+        writes: &[(u32, u32)],
+        virtual_start: u32,
+        page_count: u32,
+        flags: u32,
+    ) {
+        let index = writes
+            .iter()
+            .position(|write| {
+                *write == (k16_abi::computer::mmu0::VIRTUAL_START, virtual_start)
+            })
+            .expect("MMU map writes include virtual start");
+        assert_eq!(
+            writes[index + 2],
+            (k16_abi::computer::mmu0::PAGE_COUNT, page_count)
+        );
+        assert_eq!(writes[index + 3], (k16_abi::computer::mmu0::FLAGS, flags));
+    }
+
     fn dynamic_program_image() -> [u8; 80] {
         let mut bytes = [0u8; 80];
         bytes[0..4].copy_from_slice(b"K16E");
@@ -5428,6 +5864,53 @@ mod tests {
         bytes
     }
 
+    fn dynamic_writable_import_program_image() -> [u8; 172] {
+        let mut bytes = [0u8; 172];
+        bytes[0..4].copy_from_slice(b"K16E");
+        write_u16_le(&mut bytes, 4, 6);
+        write_u16_le(&mut bytes, 6, 32);
+        write_u16_le(&mut bytes, 8, 1);
+        write_u16_le(&mut bytes, 10, 0);
+        write_u32_le(&mut bytes, 12, 2);
+        write_u32_le(&mut bytes, 16, 32);
+        write_u32_le(&mut bytes, 20, 5);
+        write_u32_le(&mut bytes, 24, 3);
+        write_u32_le(&mut bytes, 28, 0);
+        write_u32_le(&mut bytes, 32, 1);
+        write_u32_le(&mut bytes, 36, 0);
+        write_u32_le(&mut bytes, 40, 132);
+        write_u32_le(&mut bytes, 44, 8);
+        write_u32_le(&mut bytes, 48, 0x1000);
+        write_u32_le(&mut bytes, 52, crate::image::K16E_SECTION_KIND_WRITABLE_LOAD);
+        write_u32_le(&mut bytes, 56, 0x1000);
+        write_u32_le(&mut bytes, 60, 140);
+        write_u32_le(&mut bytes, 64, 0);
+        write_u32_le(&mut bytes, 68, 0x1000);
+        write_u32_le(&mut bytes, 72, 2);
+        write_u32_le(&mut bytes, 76, 0);
+        write_u32_le(&mut bytes, 80, 140);
+        write_u32_le(&mut bytes, 84, 0);
+        write_u32_le(&mut bytes, 88, 0);
+        write_u32_le(&mut bytes, 92, 6);
+        write_u32_le(&mut bytes, 96, 0);
+        write_u32_le(&mut bytes, 100, 140);
+        write_u32_le(&mut bytes, 104, 12);
+        write_u32_le(&mut bytes, 108, 1);
+        write_u32_le(&mut bytes, 112, 7);
+        write_u32_le(&mut bytes, 116, 0);
+        write_u32_le(&mut bytes, 120, 152);
+        write_u32_le(&mut bytes, 124, 20);
+        write_u32_le(&mut bytes, 128, 1);
+        bytes[132..140].copy_from_slice(&[0x01, 0xe1, 0, 0, 0, 0, 0, 0x90]);
+        bytes[140..151].copy_from_slice(b"libfoo.kso\0");
+        write_u32_le(&mut bytes, 152, 4);
+        write_u32_le(&mut bytes, 156, 2);
+        write_u32_le(&mut bytes, 160, 0);
+        write_u32_le(&mut bytes, 164, 0);
+        bytes[168..172].copy_from_slice(b"foo\0");
+        bytes
+    }
+
     #[test]
     fn dynamic_user_image_uses_guest_k16e_metadata() {
         let image = dynamic_program_image();
@@ -5435,11 +5918,7 @@ mod tests {
 
         assert_eq!(
             DynamicUserImage::from_k16e(header),
-            DynamicUserImage {
-                entry_offset: 2,
-                file_size: 8,
-                memory_size: 12,
-            }
+            DynamicUserImage::new(2, 8, 12)
         );
     }
 
@@ -5452,6 +5931,17 @@ mod tests {
             image.len() as u32,
         )
         .expect("v5 import dynamic image validates");
+    }
+
+    #[test]
+    fn dynamic_user_image_accepts_writable_imported_k16e_metadata() {
+        let image = dynamic_writable_import_program_image();
+
+        validate_dynamic_header_bytes(
+            &image[..crate::image::DYNAMIC_K16E_V6_HEADER_SIZE as usize],
+            image.len() as u32,
+        )
+        .expect("v6 writable import dynamic image validates");
     }
 
     #[test]
@@ -5543,11 +6033,7 @@ mod tests {
 
         let plan = plan_dynamic_user_load(
             arena,
-            DynamicUserImage {
-                entry_offset: 2,
-                file_size: 8,
-                memory_size: 12,
-            },
+            DynamicUserImage::new(2, 8, 12),
         )
         .expect("load plan is valid");
 
@@ -5833,11 +6319,7 @@ mod tests {
         assert_eq!(
             plan_dynamic_user_load(
                 arena,
-                DynamicUserImage {
-                    entry_offset: 0,
-                    file_size: 8,
-                    memory_size: 16,
-                },
+                DynamicUserImage::new(0, 8, 16),
             ),
             Err(ProcessLoadError::ProgramTooLarge)
         );
@@ -5850,11 +6332,7 @@ mod tests {
         assert_eq!(
             plan_dynamic_user_load(
                 arena,
-                DynamicUserImage {
-                    entry_offset: 13,
-                    file_size: 8,
-                    memory_size: 12,
-                },
+                DynamicUserImage::new(13, 8, 12),
             ),
             Err(ProcessLoadError::InvalidImage)
         );
@@ -7523,6 +8001,46 @@ mod tests {
     }
 
     #[test]
+    fn translated_user_launch_maps_writable_segment_without_execute() {
+        crate::mmio::reset_test_state();
+        crate::mmio::set_test_mmu0_result(7, k16_abi::computer::mmu0::STATUS_DONE, 0);
+        let plan = DynamicUserLoadPlan {
+            load_base: 0x0001_0000,
+            load_end: 0x0001_3000,
+            entry_pc: 0x0001_0000,
+            stack_top: 0x0001_5000,
+            payload_dst: 0x0001_0000,
+            payload_len: 16,
+            zero_fill_addr: 0x0001_0010,
+            zero_fill_len: 0x2ff0,
+        };
+        let mapped = MappedDynamicUserLoadPlan::new_committed(
+            plan,
+            0x0001_0000,
+            3,
+            0x1000,
+            0x1000,
+            0x0001_4000,
+            1,
+            0x0000_9000,
+        )
+        .expect("mapped load plan initializes");
+
+        unsafe { create_translated_user_launch_from_mapped(mapped, 0x0001_6000) }
+            .expect("translated launch maps");
+
+        let writes = crate::mmio::take_test_writes();
+        let writes = writes.as_slice();
+        let executable_flags = (k16_abi::computer::mmu0::FLAG_USER_ACCESSIBLE
+            | k16_abi::computer::mmu0::FLAG_EXECUTABLE) as u32;
+        let writable_flags = (k16_abi::computer::mmu0::FLAG_USER_ACCESSIBLE
+            | k16_abi::computer::mmu0::FLAG_WRITABLE) as u32;
+        assert_mmu_map(writes, 0x0001_0000, 1, executable_flags);
+        assert_mmu_map(writes, 0x0001_1000, 1, writable_flags);
+        assert_mmu_map(writes, 0x0001_2000, 1, executable_flags);
+    }
+
+    #[test]
     fn translated_user_launch_destroys_address_space_when_mapping_fails() {
         crate::mmio::reset_test_state();
         crate::mmio::set_test_mmu0_status_script(
@@ -8156,11 +8674,7 @@ mod tests {
             .expect("arena is valid");
         let plan = plan_dynamic_user_load(
             arena,
-            DynamicUserImage {
-                entry_offset: 0,
-                file_size: 8,
-                memory_size: 16,
-            },
+            DynamicUserImage::new(0, 8, 16),
         )
         .expect("child fits after loaded init image");
 
@@ -8234,11 +8748,7 @@ mod tests {
         assert_eq!(
             plan_dynamic_user_load(
                 arena,
-                DynamicUserImage {
-                    entry_offset: 0,
-                    file_size: 0x400,
-                    memory_size: 0x400,
-                },
+                DynamicUserImage::new(0, 0x400, 0x400),
             ),
             Err(ProcessLoadError::ProgramTooLarge)
         );
@@ -8266,11 +8776,7 @@ mod tests {
             .expect("arena uses live init stack boundary");
         let plan = plan_dynamic_user_load(
             arena,
-            DynamicUserImage {
-                entry_offset: 0,
-                file_size: 0x400,
-                memory_size: 0x400,
-            },
+            DynamicUserImage::new(0, 0x400, 0x400),
         )
         .expect("small child fits between loaded init and init stack top");
 
