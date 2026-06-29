@@ -93,4 +93,31 @@ class K16IncrementalBuildScriptTest {
         assertTrue(prepareTask.contains("outputs.file(k16PrepareToolchainMarker)"))
         assertTrue(prepareTask.contains("k16PrepareToolchainMarker.writeText"))
     }
+
+    @Test
+    fun k16ProfilingTasksDeclareFirmwareResourceInputs() {
+        val buildScript = root.resolve("modules/v1_21_1/v1_21_1-neoforge/build.gradle.kts").readText()
+        val helper =
+            buildScript.substringAfter("fun org.gradle.api.tasks.testing.Test.inputsK16RuntimeFirmwareResources()")
+                .substringBefore("tasks.register<Test>(\"profileK16RuntimeWait\")")
+
+        assertTrue(helper.contains("dependsOn(linkK16BiosFlash)"))
+        assertTrue(helper.contains("dependsOn(putK16DevelopmentStorage0TestPrograms)"))
+        assertTrue(helper.contains("inputs.file(k16BiosFlashResource)"))
+        assertTrue(helper.contains("inputs.file(k16DevelopmentStorage0Resource)"))
+
+        listOf(
+            "profileK16RuntimeWait",
+            "profileK16RuntimeTextIo",
+            "profileK16ManyVmServerBudget",
+        ).forEach { taskName ->
+            val taskStart = buildScript.substringAfter("tasks.register<Test>(\"$taskName\")")
+            val task =
+                taskStart.substringBefore(
+                    delimiter = "tasks.register<Test>",
+                    missingDelimiterValue = taskStart,
+                )
+            assertTrue(task.contains("inputsK16RuntimeFirmwareResources()"))
+        }
+    }
 }
