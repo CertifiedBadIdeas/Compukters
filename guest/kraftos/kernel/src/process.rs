@@ -18,6 +18,7 @@ const MAX_DYNAMIC_IMPORT_LIBRARIES: usize = 4;
 const DYNAMIC_LOADER_NEEDED_SECTION_BYTES: usize = 256;
 const DYNAMIC_LOADER_IMPORT_SECTION_BYTES: usize = 2048;
 const DYNAMIC_LOADER_EXPORT_SECTION_BYTES: usize = 2048;
+const DYNAMIC_LOADER_RELOCATION_SECTION_BYTES: usize = 2048;
 const CHILD_ARG_ENTRY_BYTES: u32 = 8;
 const TRANSLATED_TRAP_STACK_BYTES: u32 = VM_PAGE_SIZE;
 const INITIAL_USER_LOADER_SCRATCH_END: u32 =
@@ -194,6 +195,8 @@ static mut LOADER_IMPORT_SECTION: [u8; DYNAMIC_LOADER_IMPORT_SECTION_BYTES] =
 static mut LOADER_EXPORT_SECTIONS: [[u8; DYNAMIC_LOADER_EXPORT_SECTION_BYTES];
     MAX_DYNAMIC_IMPORT_LIBRARIES] =
     [[0; DYNAMIC_LOADER_EXPORT_SECTION_BYTES]; MAX_DYNAMIC_IMPORT_LIBRARIES];
+static mut LOADER_RELOCATION_SECTION: [u8; DYNAMIC_LOADER_RELOCATION_SECTION_BYTES] =
+    [0; DYNAMIC_LOADER_RELOCATION_SECTION_BYTES];
 #[cfg(not(test))]
 unsafe extern "C" {
     static __k16_image_end: u8;
@@ -4492,6 +4495,109 @@ unsafe fn read_selected_shared_library_image() -> Result<SharedLibraryImage, Pro
     })
 }
 
+fn relocation_batch_record_count(remaining_records: u32) -> u32 {
+    let max_records = (DYNAMIC_LOADER_RELOCATION_SECTION_BYTES as u32)
+        / crate::image::K16E_RELOCATION_RECORD_SIZE;
+    min_u32(remaining_records, max_records)
+}
+
+fn min_u32(left: u32, right: u32) -> u32 {
+    if left < right {
+        left
+    } else {
+        right
+    }
+}
+
+unsafe fn copy_selected_relocation_batch_to_loader_buffer(
+    relocation_table_offset: u32,
+    start_index: u32,
+    remaining_records: u32,
+) -> Result<(&'static [u8], u32), ProcessLoadError> {
+    let records = relocation_batch_record_count(remaining_records);
+    if records == 0 {
+        return Ok((&[], 0));
+    }
+    let relative_offset = start_index
+        .checked_mul(crate::image::K16E_RELOCATION_RECORD_SIZE)
+        .ok_or(ProcessLoadError::AddressOverflow)?;
+    let file_offset = relocation_table_offset
+        .checked_add(relative_offset)
+        .ok_or(ProcessLoadError::AddressOverflow)?;
+    let byte_count = records
+        .checked_mul(crate::image::K16E_RELOCATION_RECORD_SIZE)
+        .ok_or(ProcessLoadError::AddressOverflow)?;
+    unsafe {
+        crate::storage::copy_selected_file_range_to_ram_profiled(
+            file_offset,
+            core::ptr::addr_of_mut!(LOADER_RELOCATION_SECTION) as usize as u32,
+            byte_count,
+            crate::storage::FileReadProfileKind::DynamicImport,
+        )
+        .map_err(|_| ProcessLoadError::Storage)?;
+    }
+    let len = usize::try_from(byte_count).map_err(|_| ProcessLoadError::AddressOverflow)?;
+    let section = unsafe {
+        core::slice::from_raw_parts(
+            core::ptr::addr_of!(LOADER_RELOCATION_SECTION) as *const u8,
+            len,
+        )
+    };
+    Ok((section, records))
+}
+
+unsafe fn copy_relocation_batch_to_loader_buffer(
+    metadata: crate::storage::FileMetadata,
+    relocation_table_offset: u32,
+    start_index: u32,
+    remaining_records: u32,
+) -> Result<(&'static [u8], u32), ProcessLoadError> {
+    let records = relocation_batch_record_count(remaining_records);
+    if records == 0 {
+        return Ok((&[], 0));
+    }
+    let relative_offset = start_index
+        .checked_mul(crate::image::K16E_RELOCATION_RECORD_SIZE)
+        .ok_or(ProcessLoadError::AddressOverflow)?;
+    let file_offset = relocation_table_offset
+        .checked_add(relative_offset)
+        .ok_or(ProcessLoadError::AddressOverflow)?;
+    let byte_count = records
+        .checked_mul(crate::image::K16E_RELOCATION_RECORD_SIZE)
+        .ok_or(ProcessLoadError::AddressOverflow)?;
+    unsafe {
+        crate::storage::copy_file_range_to_ram_profiled(
+            metadata,
+            file_offset,
+            core::ptr::addr_of_mut!(LOADER_RELOCATION_SECTION) as usize as u32,
+            byte_count,
+            crate::storage::FileReadProfileKind::DynamicImport,
+        )
+        .map_err(|_| ProcessLoadError::Storage)?;
+    }
+    let len = usize::try_from(byte_count).map_err(|_| ProcessLoadError::AddressOverflow)?;
+    let section = unsafe {
+        core::slice::from_raw_parts(
+            core::ptr::addr_of!(LOADER_RELOCATION_SECTION) as *const u8,
+            len,
+        )
+    };
+    Ok((section, records))
+}
+
+fn relocation_record_from_batch(
+    batch: &[u8],
+    batch_index: u32,
+) -> Result<(u32, u32), ProcessLoadError> {
+    let offset = usize::try_from(
+        batch_index
+            .checked_mul(crate::image::K16E_RELOCATION_RECORD_SIZE)
+            .ok_or(ProcessLoadError::InvalidImage)?,
+    )
+    .map_err(|_| ProcessLoadError::InvalidImage)?;
+    Ok((section_u32(batch, offset)?, section_u32(batch, offset + 4)?))
+}
+
 fn resolve_shared_export(
     library: SharedLibraryImage,
     section: &[u8],
@@ -4563,27 +4669,22 @@ unsafe fn apply_selected_file_relocations(
 ) -> Result<(), ProcessLoadError> {
     let mut index = 0;
     while index < relocation_count {
-        let relocation_offset = relocation_table_offset
-            .checked_add(
-                index
-                    .checked_mul(crate::image::K16E_RELOCATION_RECORD_SIZE)
-                    .ok_or(ProcessLoadError::AddressOverflow)?,
-            )
-            .ok_or(ProcessLoadError::AddressOverflow)?;
-        unsafe {
-            crate::storage::copy_selected_file_range_to_ram_profiled(
-                relocation_offset,
-                RELOCATION_RECORD_ADDR,
-                crate::image::K16E_RELOCATION_RECORD_SIZE,
-                crate::storage::FileReadProfileKind::DynamicImport,
-            )
-            .map_err(|_| ProcessLoadError::Storage)?;
+        let (batch, records) = unsafe {
+            copy_selected_relocation_batch_to_loader_buffer(
+                relocation_table_offset,
+                index,
+                relocation_count - index,
+            )?
+        };
+        let mut batch_index = 0;
+        while batch_index < records {
+            let (relocation_offset, relocation_kind) =
+                relocation_record_from_batch(batch, batch_index)?;
+            validate_dynamic_relocation_record(relocation_offset, relocation_kind, memory_size)?;
+            unsafe { apply_dynamic_relocation_to_ram(plan, relocation_offset)? };
+            batch_index += 1;
         }
-        let relocation_offset = unsafe { read_u32_le(RELOCATION_RECORD_ADDR) };
-        let relocation_kind = unsafe { read_u32_le(RELOCATION_RECORD_ADDR + 4) };
-        validate_dynamic_relocation_record(relocation_offset, relocation_kind, memory_size)?;
-        unsafe { apply_dynamic_relocation_to_ram(plan, relocation_offset)? };
-        index += 1;
+        index += records;
     }
     Ok(())
 }
@@ -4597,28 +4698,23 @@ unsafe fn apply_file_relocations(
 ) -> Result<(), ProcessLoadError> {
     let mut index = 0;
     while index < relocation_count {
-        let relocation_offset = relocation_table_offset
-            .checked_add(
-                index
-                    .checked_mul(crate::image::K16E_RELOCATION_RECORD_SIZE)
-                    .ok_or(ProcessLoadError::AddressOverflow)?,
-            )
-            .ok_or(ProcessLoadError::AddressOverflow)?;
-        unsafe {
-            crate::storage::copy_file_range_to_ram_profiled(
+        let (batch, records) = unsafe {
+            copy_relocation_batch_to_loader_buffer(
                 metadata,
-                relocation_offset,
-                RELOCATION_RECORD_ADDR,
-                crate::image::K16E_RELOCATION_RECORD_SIZE,
-                crate::storage::FileReadProfileKind::DynamicImport,
-            )
-            .map_err(|_| ProcessLoadError::Storage)?;
+                relocation_table_offset,
+                index,
+                relocation_count - index,
+            )?
+        };
+        let mut batch_index = 0;
+        while batch_index < records {
+            let (relocation_offset, relocation_kind) =
+                relocation_record_from_batch(batch, batch_index)?;
+            validate_dynamic_relocation_record(relocation_offset, relocation_kind, memory_size)?;
+            unsafe { apply_dynamic_relocation_to_ram(plan, relocation_offset)? };
+            batch_index += 1;
         }
-        let relocation_offset = unsafe { read_u32_le(RELOCATION_RECORD_ADDR) };
-        let relocation_kind = unsafe { read_u32_le(RELOCATION_RECORD_ADDR + 4) };
-        validate_dynamic_relocation_record(relocation_offset, relocation_kind, memory_size)?;
-        unsafe { apply_dynamic_relocation_to_ram(plan, relocation_offset)? };
-        index += 1;
+        index += records;
     }
     Ok(())
 }
@@ -4631,27 +4727,22 @@ unsafe fn apply_selected_file_relocations_mapped(
 ) -> Result<(), ProcessLoadError> {
     let mut index = 0;
     while index < relocation_count {
-        let relocation_offset = relocation_table_offset
-            .checked_add(
-                index
-                    .checked_mul(crate::image::K16E_RELOCATION_RECORD_SIZE)
-                    .ok_or(ProcessLoadError::AddressOverflow)?,
-            )
-            .ok_or(ProcessLoadError::AddressOverflow)?;
-        unsafe {
-            crate::storage::copy_selected_file_range_to_ram_profiled(
-                relocation_offset,
-                RELOCATION_RECORD_ADDR,
-                crate::image::K16E_RELOCATION_RECORD_SIZE,
-                crate::storage::FileReadProfileKind::DynamicImport,
-            )
-            .map_err(|_| ProcessLoadError::Storage)?;
+        let (batch, records) = unsafe {
+            copy_selected_relocation_batch_to_loader_buffer(
+                relocation_table_offset,
+                index,
+                relocation_count - index,
+            )?
+        };
+        let mut batch_index = 0;
+        while batch_index < records {
+            let (relocation_offset, relocation_kind) =
+                relocation_record_from_batch(batch, batch_index)?;
+            validate_dynamic_relocation_record(relocation_offset, relocation_kind, memory_size)?;
+            unsafe { apply_dynamic_relocation_to_mapped_ram(plan, relocation_offset)? };
+            batch_index += 1;
         }
-        let relocation_offset = unsafe { read_u32_le(RELOCATION_RECORD_ADDR) };
-        let relocation_kind = unsafe { read_u32_le(RELOCATION_RECORD_ADDR + 4) };
-        validate_dynamic_relocation_record(relocation_offset, relocation_kind, memory_size)?;
-        unsafe { apply_dynamic_relocation_to_mapped_ram(plan, relocation_offset)? };
-        index += 1;
+        index += records;
     }
     Ok(())
 }
@@ -4665,28 +4756,23 @@ unsafe fn apply_file_relocations_mapped(
 ) -> Result<(), ProcessLoadError> {
     let mut index = 0;
     while index < relocation_count {
-        let relocation_offset = relocation_table_offset
-            .checked_add(
-                index
-                    .checked_mul(crate::image::K16E_RELOCATION_RECORD_SIZE)
-                    .ok_or(ProcessLoadError::AddressOverflow)?,
-            )
-            .ok_or(ProcessLoadError::AddressOverflow)?;
-        unsafe {
-            crate::storage::copy_file_range_to_ram_profiled(
+        let (batch, records) = unsafe {
+            copy_relocation_batch_to_loader_buffer(
                 metadata,
-                relocation_offset,
-                RELOCATION_RECORD_ADDR,
-                crate::image::K16E_RELOCATION_RECORD_SIZE,
-                crate::storage::FileReadProfileKind::DynamicImport,
-            )
-            .map_err(|_| ProcessLoadError::Storage)?;
+                relocation_table_offset,
+                index,
+                relocation_count - index,
+            )?
+        };
+        let mut batch_index = 0;
+        while batch_index < records {
+            let (relocation_offset, relocation_kind) =
+                relocation_record_from_batch(batch, batch_index)?;
+            validate_dynamic_relocation_record(relocation_offset, relocation_kind, memory_size)?;
+            unsafe { apply_dynamic_relocation_to_mapped_ram(plan, relocation_offset)? };
+            batch_index += 1;
         }
-        let relocation_offset = unsafe { read_u32_le(RELOCATION_RECORD_ADDR) };
-        let relocation_kind = unsafe { read_u32_le(RELOCATION_RECORD_ADDR + 4) };
-        validate_dynamic_relocation_record(relocation_offset, relocation_kind, memory_size)?;
-        unsafe { apply_dynamic_relocation_to_mapped_ram(plan, relocation_offset)? };
-        index += 1;
+        index += records;
     }
     Ok(())
 }
@@ -4921,35 +5007,30 @@ unsafe fn apply_shared_library_relocations(
 ) -> Result<(), ProcessLoadError> {
     let mut index = 0;
     while index < relocation_count {
-        let relocation_offset = relocation_table_offset
-            .checked_add(
-                index
-                    .checked_mul(crate::image::K16E_RELOCATION_RECORD_SIZE)
-                    .ok_or(ProcessLoadError::AddressOverflow)?,
-            )
-            .ok_or(ProcessLoadError::AddressOverflow)?;
-        unsafe {
-            crate::storage::copy_file_range_to_ram_profiled(
+        let (batch, records) = unsafe {
+            copy_relocation_batch_to_loader_buffer(
                 metadata,
-                relocation_offset,
-                RELOCATION_RECORD_ADDR,
-                crate::image::K16E_RELOCATION_RECORD_SIZE,
-                crate::storage::FileReadProfileKind::DynamicImport,
-            )
-            .map_err(|_| ProcessLoadError::Storage)?;
+                relocation_table_offset,
+                index,
+                relocation_count - index,
+            )?
+        };
+        let mut batch_index = 0;
+        while batch_index < records {
+            let (relocation_offset, relocation_kind) =
+                relocation_record_from_batch(batch, batch_index)?;
+            validate_dynamic_relocation_record(relocation_offset, relocation_kind, memory_size)?;
+            let field_addr = physical_base
+                .checked_add(relocation_offset)
+                .ok_or(ProcessLoadError::AddressOverflow)?;
+            let value = unsafe { read_u32_le(field_addr) };
+            let relocated = value
+                .checked_add(virtual_base)
+                .ok_or(ProcessLoadError::AddressOverflow)?;
+            unsafe { write_u32_le(field_addr, relocated) };
+            batch_index += 1;
         }
-        let relocation_offset = unsafe { read_u32_le(RELOCATION_RECORD_ADDR) };
-        let relocation_kind = unsafe { read_u32_le(RELOCATION_RECORD_ADDR + 4) };
-        validate_dynamic_relocation_record(relocation_offset, relocation_kind, memory_size)?;
-        let field_addr = physical_base
-            .checked_add(relocation_offset)
-            .ok_or(ProcessLoadError::AddressOverflow)?;
-        let value = unsafe { read_u32_le(field_addr) };
-        let relocated = value
-            .checked_add(virtual_base)
-            .ok_or(ProcessLoadError::AddressOverflow)?;
-        unsafe { write_u32_le(field_addr, relocated) };
-        index += 1;
+        index += records;
     }
     Ok(())
 }
@@ -5393,6 +5474,17 @@ mod tests {
         };
 
         assert_eq!(library.file_metadata(), metadata);
+    }
+
+    #[test]
+    fn relocation_batch_record_count_is_limited_by_loader_buffer_capacity() {
+        let max_records = (DYNAMIC_LOADER_RELOCATION_SECTION_BYTES as u32)
+            / crate::image::K16E_RELOCATION_RECORD_SIZE;
+
+        assert_eq!(relocation_batch_record_count(0), 0);
+        assert_eq!(relocation_batch_record_count(17), 17);
+        assert_eq!(relocation_batch_record_count(max_records), max_records);
+        assert_eq!(relocation_batch_record_count(max_records + 44), max_records);
     }
 
     #[test]
