@@ -27,6 +27,14 @@ pub struct FileMetadata {
     pub extent_block_counts: [u32; K16FS_MAX_INLINE_EXTENTS],
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FileReadProfileKind {
+    GenericFile,
+    Program,
+    DynamicImport,
+    Library,
+}
+
 #[repr(u32)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PathKind {
@@ -216,6 +224,7 @@ pub unsafe fn copy_selected_directory_listing_into_cached<S: DirectoryListingSin
         while block_index < extent_block_count && remaining > 0 {
             let fs_block = extent_start_block + block_index;
             unsafe { read_fs_block(fs_block)? };
+            crate::os_stats::record_read_dir_data_read(min_u32(BLOCK_SIZE, remaining));
             let mut entry_inode_ids = [0_u32; K16FS_DIRECTORY_ENTRIES_PER_BLOCK];
             let mut entry_name_lengths = [0_u8; K16FS_DIRECTORY_ENTRIES_PER_BLOCK];
             let mut entry_names = [[0_u8; K16FS_MAX_NAME_BYTES]; K16FS_DIRECTORY_ENTRIES_PER_BLOCK];
@@ -1183,6 +1192,22 @@ pub unsafe fn copy_selected_file_range_to_ram(
     dst_addr: u32,
     len: u32,
 ) -> Result<(), StorageError> {
+    unsafe {
+        copy_selected_file_range_to_ram_profiled(
+            file_offset,
+            dst_addr,
+            len,
+            FileReadProfileKind::GenericFile,
+        )
+    }
+}
+
+pub unsafe fn copy_selected_file_range_to_ram_profiled(
+    file_offset: u32,
+    dst_addr: u32,
+    len: u32,
+    profile_kind: FileReadProfileKind,
+) -> Result<(), StorageError> {
     let range_end = match file_offset.checked_add(len) {
         Some(value) => value,
         None => return Err(StorageError::INVALID_FILESYSTEM),
@@ -1218,6 +1243,7 @@ pub unsafe fn copy_selected_file_range_to_ram(
                 let block_offset = within_extent % BLOCK_SIZE;
                 let available = min_u32(BLOCK_SIZE - block_offset, copy_end - cursor);
                 unsafe { read_fs_block(extent_start_block + block_delta)? };
+                record_profiled_file_data_read(profile_kind, available);
                 unsafe {
                     copy_ram_to_ram(SCRATCH_ADDR + block_offset, dst_addr + copied, available);
                 }
@@ -1241,6 +1267,24 @@ pub unsafe fn copy_file_range_to_ram(
     file_offset: u32,
     dst_addr: u32,
     len: u32,
+) -> Result<(), StorageError> {
+    unsafe {
+        copy_file_range_to_ram_profiled(
+            metadata,
+            file_offset,
+            dst_addr,
+            len,
+            FileReadProfileKind::GenericFile,
+        )
+    }
+}
+
+pub unsafe fn copy_file_range_to_ram_profiled(
+    metadata: FileMetadata,
+    file_offset: u32,
+    dst_addr: u32,
+    len: u32,
+    profile_kind: FileReadProfileKind,
 ) -> Result<(), StorageError> {
     let range_end = match file_offset.checked_add(len) {
         Some(value) => value,
@@ -1275,6 +1319,7 @@ pub unsafe fn copy_file_range_to_ram(
                 let block_offset = within_extent % BLOCK_SIZE;
                 let available = min_u32(BLOCK_SIZE - block_offset, copy_end - cursor);
                 unsafe { read_fs_block(extent_start_block + block_delta)? };
+                record_profiled_file_data_read(profile_kind, available);
                 unsafe {
                     copy_ram_to_ram(SCRATCH_ADDR + block_offset, dst_addr + copied, available);
                 }
@@ -1291,6 +1336,17 @@ pub unsafe fn copy_file_range_to_ram(
         return Err(StorageError::INVALID_FILESYSTEM);
     }
     Ok(())
+}
+
+fn record_profiled_file_data_read(kind: FileReadProfileKind, bytes: u32) {
+    match kind {
+        FileReadProfileKind::GenericFile => crate::os_stats::record_generic_file_data_read(bytes),
+        FileReadProfileKind::Program => crate::os_stats::record_program_data_read(bytes),
+        FileReadProfileKind::DynamicImport => {
+            crate::os_stats::record_dynamic_import_data_read(bytes)
+        }
+        FileReadProfileKind::Library => crate::os_stats::record_library_data_read(bytes),
+    }
 }
 
 #[inline(always)]

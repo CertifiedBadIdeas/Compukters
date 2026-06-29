@@ -388,8 +388,8 @@ fn k16_signal_values(signal: K16Signal) -> [jlong; 2] {
 }
 
 fn k16_computer_stats_snapshot_values(snapshot: &K16ComputerStatsSnapshot) -> Vec<jlong> {
-    let mut values = Vec::with_capacity(27 + snapshot.devices.len() * 28);
-    values.push(9);
+    let mut values = Vec::with_capacity(37 + snapshot.devices.len() * 28);
+    values.push(10);
     push_traffic_values(&mut values, snapshot.bus.ram);
     push_traffic_values(&mut values, snapshot.bus.mmio);
     values.push(snapshot.os.path_lookups as jlong);
@@ -406,6 +406,16 @@ fn k16_computer_stats_snapshot_values(snapshot: &K16ComputerStatsSnapshot) -> Ve
     values.push(snapshot.os.program_load_bytes as jlong);
     values.push(snapshot.os.dynamic_import_bytes as jlong);
     values.push(snapshot.os.library_load_bytes as jlong);
+    values.push(snapshot.os.generic_file_data_read_blocks as jlong);
+    values.push(snapshot.os.generic_file_data_read_bytes as jlong);
+    values.push(snapshot.os.read_dir_data_read_blocks as jlong);
+    values.push(snapshot.os.read_dir_data_read_bytes as jlong);
+    values.push(snapshot.os.program_data_read_blocks as jlong);
+    values.push(snapshot.os.program_data_read_bytes as jlong);
+    values.push(snapshot.os.dynamic_import_data_read_blocks as jlong);
+    values.push(snapshot.os.dynamic_import_data_read_bytes as jlong);
+    values.push(snapshot.os.library_data_read_blocks as jlong);
+    values.push(snapshot.os.library_data_read_bytes as jlong);
     values.push(snapshot.decode_cache.entries as jlong);
     values.push(snapshot.decode_cache.hits as jlong);
     values.push(snapshot.decode_cache.misses as jlong);
@@ -601,11 +611,21 @@ mod tests {
                 program_load_bytes: 34,
                 dynamic_import_bytes: 35,
                 library_load_bytes: 36,
+                generic_file_data_read_blocks: 37,
+                generic_file_data_read_bytes: 38,
+                read_dir_data_read_blocks: 39,
+                read_dir_data_read_bytes: 40,
+                program_data_read_blocks: 41,
+                program_data_read_bytes: 42,
+                dynamic_import_data_read_blocks: 43,
+                dynamic_import_data_read_bytes: 44,
+                library_data_read_blocks: 45,
+                library_data_read_bytes: 46,
             },
             decode_cache: K16ComputerDecodeCacheStatsSnapshot {
-                entries: 37,
-                hits: 38,
-                misses: 39,
+                entries: 47,
+                hits: 48,
+                misses: 49,
             },
             devices: vec![K16ComputerDeviceStats {
                 name: "debug",
@@ -649,9 +669,10 @@ mod tests {
         assert_eq!(
             k16_computer_stats_snapshot_values(&snapshot),
             vec![
-                9, 2, 3, 4, 5, 6, 7, 8, 9, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36,
-                37, 38, 39, 1, 11, 0x1000, 64, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
-                25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36,
+                10, 2, 3, 4, 5, 6, 7, 8, 9, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36,
+                37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 1, 11, 0x1000, 64, 12, 13, 14,
+                15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35,
+                36,
             ],
         );
     }

@@ -80,6 +80,16 @@ class K16RuntimeTextIoProfilingTest {
                                 programLoadBytes = 21,
                                 dynamicImportBytes = 22,
                                 libraryLoadBytes = 23,
+                                genericFileDataReadBlocks = 24,
+                                genericFileDataReadBytes = 25,
+                                readDirDataReadBlocks = 26,
+                                readDirDataReadBytes = 27,
+                                programDataReadBlocks = 28,
+                                programDataReadBytes = 29,
+                                dynamicImportDataReadBlocks = 30,
+                                dynamicImportDataReadBytes = 31,
+                                libraryDataReadBlocks = 32,
+                                libraryDataReadBytes = 33,
                             ),
                         devices =
                             listOf(
@@ -134,6 +144,16 @@ class K16RuntimeTextIoProfilingTest {
                                 programLoadBytes = 61,
                                 dynamicImportBytes = 67,
                                 libraryLoadBytes = 71,
+                                genericFileDataReadBlocks = 73,
+                                genericFileDataReadBytes = 79,
+                                readDirDataReadBlocks = 83,
+                                readDirDataReadBytes = 89,
+                                programDataReadBlocks = 97,
+                                programDataReadBytes = 101,
+                                dynamicImportDataReadBlocks = 103,
+                                dynamicImportDataReadBytes = 107,
+                                libraryDataReadBlocks = 109,
+                                libraryDataReadBytes = 113,
                             ),
                         devices =
                             listOf(
@@ -195,6 +215,16 @@ class K16RuntimeTextIoProfilingTest {
         assertTrue(line.contains("programLoadBytes=40"))
         assertTrue(line.contains("dynamicImportBytes=45"))
         assertTrue(line.contains("libraryLoadBytes=48"))
+        assertTrue(line.contains("genericFileDataReadBlocks=49"))
+        assertTrue(line.contains("genericFileDataReadBytes=54"))
+        assertTrue(line.contains("readDirDataReadBlocks=57"))
+        assertTrue(line.contains("readDirDataReadBytes=62"))
+        assertTrue(line.contains("programDataReadBlocks=69"))
+        assertTrue(line.contains("programDataReadBytes=72"))
+        assertTrue(line.contains("dynamicImportDataReadBlocks=73"))
+        assertTrue(line.contains("dynamicImportDataReadBytes=76"))
+        assertTrue(line.contains("libraryDataReadBlocks=77"))
+        assertTrue(line.contains("libraryDataReadBytes=80"))
     }
 
     @Test
@@ -216,6 +246,16 @@ class K16RuntimeTextIoProfilingTest {
                                 dynamicImportLoads = 9,
                                 libraryLoads = 10,
                                 readDirCalls = 11,
+                                genericFileDataReadBlocks = 12,
+                                genericFileDataReadBytes = 13,
+                                readDirDataReadBlocks = 14,
+                                readDirDataReadBytes = 15,
+                                programDataReadBlocks = 16,
+                                programDataReadBytes = 17,
+                                dynamicImportDataReadBlocks = 18,
+                                dynamicImportDataReadBytes = 19,
+                                libraryDataReadBlocks = 20,
+                                libraryDataReadBytes = 21,
                             ),
                         devices =
                             listOf(
@@ -260,6 +300,16 @@ class K16RuntimeTextIoProfilingTest {
                                 dynamicImportLoads = 29,
                                 libraryLoads = 31,
                                 readDirCalls = 37,
+                                genericFileDataReadBlocks = 41,
+                                genericFileDataReadBytes = 43,
+                                readDirDataReadBlocks = 47,
+                                readDirDataReadBytes = 53,
+                                programDataReadBlocks = 59,
+                                programDataReadBytes = 61,
+                                dynamicImportDataReadBlocks = 67,
+                                dynamicImportDataReadBytes = 71,
+                                libraryDataReadBlocks = 73,
+                                libraryDataReadBytes = 79,
                             ),
                         devices =
                             listOf(
@@ -313,6 +363,16 @@ class K16RuntimeTextIoProfilingTest {
         assertTrue(line.contains("dynamicImportLoads=20"))
         assertTrue(line.contains("libraryLoads=21"))
         assertTrue(line.contains("readDirCalls=26"))
+        assertTrue(line.contains("genericFileDataReadBlocks=29"))
+        assertTrue(line.contains("genericFileDataReadBytes=30"))
+        assertTrue(line.contains("readDirDataReadBlocks=33"))
+        assertTrue(line.contains("readDirDataReadBytes=38"))
+        assertTrue(line.contains("programDataReadBlocks=43"))
+        assertTrue(line.contains("programDataReadBytes=44"))
+        assertTrue(line.contains("dynamicImportDataReadBlocks=49"))
+        assertTrue(line.contains("dynamicImportDataReadBytes=52"))
+        assertTrue(line.contains("libraryDataReadBlocks=53"))
+        assertTrue(line.contains("libraryDataReadBytes=58"))
     }
 
     @Test
@@ -979,7 +1039,17 @@ private fun formatK16RuntimePhase(
         "readDirCalls=${osAfter.readDirCalls - osBefore.readDirCalls}, " +
         "programLoadBytes=${osAfter.programLoadBytes - osBefore.programLoadBytes}, " +
         "dynamicImportBytes=${osAfter.dynamicImportBytes - osBefore.dynamicImportBytes}, " +
-        "libraryLoadBytes=${osAfter.libraryLoadBytes - osBefore.libraryLoadBytes}"
+        "libraryLoadBytes=${osAfter.libraryLoadBytes - osBefore.libraryLoadBytes}, " +
+        "genericFileDataReadBlocks=${osAfter.genericFileDataReadBlocks - osBefore.genericFileDataReadBlocks}, " +
+        "genericFileDataReadBytes=${osAfter.genericFileDataReadBytes - osBefore.genericFileDataReadBytes}, " +
+        "readDirDataReadBlocks=${osAfter.readDirDataReadBlocks - osBefore.readDirDataReadBlocks}, " +
+        "readDirDataReadBytes=${osAfter.readDirDataReadBytes - osBefore.readDirDataReadBytes}, " +
+        "programDataReadBlocks=${osAfter.programDataReadBlocks - osBefore.programDataReadBlocks}, " +
+        "programDataReadBytes=${osAfter.programDataReadBytes - osBefore.programDataReadBytes}, " +
+        "dynamicImportDataReadBlocks=${osAfter.dynamicImportDataReadBlocks - osBefore.dynamicImportDataReadBlocks}, " +
+        "dynamicImportDataReadBytes=${osAfter.dynamicImportDataReadBytes - osBefore.dynamicImportDataReadBytes}, " +
+        "libraryDataReadBlocks=${osAfter.libraryDataReadBlocks - osBefore.libraryDataReadBlocks}, " +
+        "libraryDataReadBytes=${osAfter.libraryDataReadBytes - osBefore.libraryDataReadBytes}"
 }
 
 private fun formatK16CoreutilsCommandProfile(
@@ -1021,7 +1091,17 @@ private fun formatK16CoreutilsCommandProfile(
         "readDirCalls=${osAfter.readDirCalls - osBefore.readDirCalls}, " +
         "programLoadBytes=${osAfter.programLoadBytes - osBefore.programLoadBytes}, " +
         "dynamicImportBytes=${osAfter.dynamicImportBytes - osBefore.dynamicImportBytes}, " +
-        "libraryLoadBytes=${osAfter.libraryLoadBytes - osBefore.libraryLoadBytes}"
+        "libraryLoadBytes=${osAfter.libraryLoadBytes - osBefore.libraryLoadBytes}, " +
+        "genericFileDataReadBlocks=${osAfter.genericFileDataReadBlocks - osBefore.genericFileDataReadBlocks}, " +
+        "genericFileDataReadBytes=${osAfter.genericFileDataReadBytes - osBefore.genericFileDataReadBytes}, " +
+        "readDirDataReadBlocks=${osAfter.readDirDataReadBlocks - osBefore.readDirDataReadBlocks}, " +
+        "readDirDataReadBytes=${osAfter.readDirDataReadBytes - osBefore.readDirDataReadBytes}, " +
+        "programDataReadBlocks=${osAfter.programDataReadBlocks - osBefore.programDataReadBlocks}, " +
+        "programDataReadBytes=${osAfter.programDataReadBytes - osBefore.programDataReadBytes}, " +
+        "dynamicImportDataReadBlocks=${osAfter.dynamicImportDataReadBlocks - osBefore.dynamicImportDataReadBlocks}, " +
+        "dynamicImportDataReadBytes=${osAfter.dynamicImportDataReadBytes - osBefore.dynamicImportDataReadBytes}, " +
+        "libraryDataReadBlocks=${osAfter.libraryDataReadBlocks - osBefore.libraryDataReadBlocks}, " +
+        "libraryDataReadBytes=${osAfter.libraryDataReadBytes - osBefore.libraryDataReadBytes}"
 }
 
 private fun metricValue(line: String, name: String): Long {

@@ -18,6 +18,16 @@ pub struct OsStats {
     program_load_bytes: u64,
     dynamic_import_bytes: u64,
     library_load_bytes: u64,
+    generic_file_data_read_blocks: u64,
+    generic_file_data_read_bytes: u64,
+    read_dir_data_read_blocks: u64,
+    read_dir_data_read_bytes: u64,
+    program_data_read_blocks: u64,
+    program_data_read_bytes: u64,
+    dynamic_import_data_read_blocks: u64,
+    dynamic_import_data_read_bytes: u64,
+    library_data_read_blocks: u64,
+    library_data_read_bytes: u64,
 }
 
 const OS_STATS_SIZE: u32 = core::mem::size_of::<OsStats>() as u32;
@@ -37,6 +47,16 @@ static mut OS_STATS: OsStats = OsStats {
     program_load_bytes: 0,
     dynamic_import_bytes: 0,
     library_load_bytes: 0,
+    generic_file_data_read_blocks: 0,
+    generic_file_data_read_bytes: 0,
+    read_dir_data_read_blocks: 0,
+    read_dir_data_read_bytes: 0,
+    program_data_read_blocks: 0,
+    program_data_read_bytes: 0,
+    dynamic_import_data_read_blocks: 0,
+    dynamic_import_data_read_bytes: 0,
+    library_data_read_blocks: 0,
+    library_data_read_bytes: 0,
 };
 
 pub fn register() {
@@ -115,6 +135,60 @@ pub fn record_library_load_bytes(bytes: u32) {
             core::ptr::addr_of_mut!(OS_STATS.library_load_bytes),
             u64::from(bytes),
         )
+    }
+}
+
+pub fn record_generic_file_data_read(bytes: u32) {
+    unsafe {
+        increment(core::ptr::addr_of_mut!(
+            OS_STATS.generic_file_data_read_blocks
+        ));
+        add(
+            core::ptr::addr_of_mut!(OS_STATS.generic_file_data_read_bytes),
+            u64::from(bytes),
+        );
+    }
+}
+
+pub fn record_read_dir_data_read(bytes: u32) {
+    unsafe {
+        increment(core::ptr::addr_of_mut!(OS_STATS.read_dir_data_read_blocks));
+        add(
+            core::ptr::addr_of_mut!(OS_STATS.read_dir_data_read_bytes),
+            u64::from(bytes),
+        );
+    }
+}
+
+pub fn record_program_data_read(bytes: u32) {
+    unsafe {
+        increment(core::ptr::addr_of_mut!(OS_STATS.program_data_read_blocks));
+        add(
+            core::ptr::addr_of_mut!(OS_STATS.program_data_read_bytes),
+            u64::from(bytes),
+        );
+    }
+}
+
+pub fn record_dynamic_import_data_read(bytes: u32) {
+    unsafe {
+        increment(core::ptr::addr_of_mut!(
+            OS_STATS.dynamic_import_data_read_blocks
+        ));
+        add(
+            core::ptr::addr_of_mut!(OS_STATS.dynamic_import_data_read_bytes),
+            u64::from(bytes),
+        );
+    }
+}
+
+pub fn record_library_data_read(bytes: u32) {
+    unsafe {
+        increment(core::ptr::addr_of_mut!(OS_STATS.library_data_read_blocks));
+        add(
+            core::ptr::addr_of_mut!(OS_STATS.library_data_read_bytes),
+            u64::from(bytes),
+        );
     }
 }
 
