@@ -24,10 +24,11 @@ import kotlin.io.path.readText
 
 class K16IncrementalBuildScriptTest {
     private val root = Path.of("..").toAbsolutePath().normalize()
+    private val k16FirmwareConvention = root.resolve("build-scripts/src/main/kotlin/k16-firmware-convention.gradle.kts")
 
     @Test
     fun k16GuestRustKernelDeclaresCargoLockAsIncrementalInput() {
-        val buildScript = root.resolve("modules/v1_21_1/v1_21_1-neoforge/build.gradle.kts").readText()
+        val buildScript = k16FirmwareConvention.readText()
         val kernelTask =
             buildScript.substringAfter("val compileK16SystemKernel =")
                 .substringBefore("val compileK16SystemInit =")
@@ -38,7 +39,7 @@ class K16IncrementalBuildScriptTest {
 
     @Test
     fun k16FirmwareCompileTasksDeclareFullHostToolDependencyInputs() {
-        val buildScript = root.resolve("modules/v1_21_1/v1_21_1-neoforge/build.gradle.kts").readText()
+        val buildScript = k16FirmwareConvention.readText()
         val helper =
             buildScript.substringAfter("fun org.gradle.api.Task.inputsK16HostTools()")
                 .substringBefore("fun Project.compileK16GuestRustBin")
@@ -96,7 +97,7 @@ class K16IncrementalBuildScriptTest {
 
     @Test
     fun k16ProfilingTasksDeclareFirmwareResourceInputs() {
-        val buildScript = root.resolve("modules/v1_21_1/v1_21_1-neoforge/build.gradle.kts").readText()
+        val buildScript = k16FirmwareConvention.readText()
         val helper =
             buildScript.substringAfter("fun org.gradle.api.tasks.testing.Test.inputsK16RuntimeFirmwareResources()")
                 .substringBefore("tasks.register<Test>(\"profileK16RuntimeWait\")")

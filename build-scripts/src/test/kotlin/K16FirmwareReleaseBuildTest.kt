@@ -28,7 +28,7 @@ class K16FirmwareReleaseBuildTest {
 
     @Test
     fun productionBuildUsesReleaseFirmwareProfileWithoutDebugFallback() {
-        val buildScript = root.resolve("modules/v1_21_1/v1_21_1-neoforge/build.gradle.kts").readText()
+        val buildScript = root.resolve("build-scripts/src/main/kotlin/k16-firmware-convention.gradle.kts").readText()
         val docs = root.resolve("docs/toolchains/k16-firmware-release-builds.md").readText()
 
         assertTrue(buildScript.contains("val k16FirmwareProfile"))
