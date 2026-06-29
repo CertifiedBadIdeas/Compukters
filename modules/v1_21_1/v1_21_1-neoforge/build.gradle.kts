@@ -1668,10 +1668,18 @@ tasks.named("processTestResources") {
     dependsOn(putK16DevelopmentStorage0TestPrograms)
 }
 
+fun org.gradle.api.tasks.testing.Test.inputsK16RuntimeFirmwareResources() {
+    dependsOn(linkK16BiosFlash)
+    dependsOn(putK16DevelopmentStorage0TestPrograms)
+    inputs.file(k16BiosFlashResource)
+    inputs.file(k16DevelopmentStorage0Resource)
+}
+
 tasks.register<Test>("profileK16RuntimeWait") {
     description = "Runs the bundled K16 runtime wait profiling workload and prints runtime metrics."
     group = "verification"
     dependsOn(tasks.named("buildK16VmNativeLibrary"))
+    inputsK16RuntimeFirmwareResources()
     testClassesDirs = sourceSets.test.get().output.classesDirs
     classpath = sourceSets.test.get().runtimeClasspath
     useJUnitPlatform()
@@ -1688,6 +1696,7 @@ tasks.register<Test>("profileK16RuntimeTextIo") {
     description = "Runs the bundled K16 runtime terminal text IO profiling workload and prints runtime metrics."
     group = "verification"
     dependsOn(tasks.named("buildK16VmNativeLibrary"))
+    inputsK16RuntimeFirmwareResources()
     testClassesDirs = sourceSets.test.get().output.classesDirs
     classpath = sourceSets.test.get().runtimeClasspath
     useJUnitPlatform()
@@ -1704,6 +1713,7 @@ tasks.register<Test>("profileK16ManyVmServerBudget") {
     description = "Runs the bundled K16 many-VM server budget profiling workload and prints runtime metrics."
     group = "verification"
     dependsOn(tasks.named("buildK16VmNativeLibrary"))
+    inputsK16RuntimeFirmwareResources()
     testClassesDirs = sourceSets.test.get().output.classesDirs
     classpath = sourceSets.test.get().runtimeClasspath
     useJUnitPlatform()
