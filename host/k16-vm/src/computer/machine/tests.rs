@@ -1907,6 +1907,59 @@ fn storage0_stats_snapshot_counts_block_commands_flush_and_failures() {
     assert_eq!(storage0.storage.bytes_read, 512);
     assert_eq!(storage0.storage.bytes_written, 512);
     assert_eq!(storage0.storage.failed_commands, 1);
+    assert_eq!(storage0.storage.unique_read_blocks, 1);
+    assert_eq!(storage0.storage.repeated_read_blocks, 0);
+}
+
+#[test]
+fn storage0_stats_snapshot_counts_unique_and_repeated_backend_read_lbas() {
+    let profile = ComputerMachineProfile::new(2048).with_hardware(
+        ComputerHardwareConfig::storage_port_with_media(
+            computer_abi::COMPUTER_HARDWARE_ID_STORAGE0,
+            computer_abi::STORAGE0_BASE,
+            vec![0; 33 * 512],
+            false,
+        ),
+    );
+    let mut machine = ComputerMachine::from_profile(profile).unwrap();
+    machine
+        .bus_store_i32(computer_abi::STORAGE0_BLOCK_COUNT, 1)
+        .unwrap();
+    machine
+        .bus_store_i32(computer_abi::STORAGE0_BUFFER_ADDR, 512)
+        .unwrap();
+
+    for lba in 0..=32 {
+        machine
+            .bus_store_i32(computer_abi::STORAGE0_LBA_LOW, lba)
+            .unwrap();
+        machine
+            .bus_store_i32(
+                computer_abi::STORAGE0_COMMAND,
+                computer_abi::STORAGE_COMMAND_READ_BLOCKS,
+            )
+            .unwrap();
+    }
+    machine
+        .bus_store_i32(computer_abi::STORAGE0_LBA_LOW, 0)
+        .unwrap();
+    machine
+        .bus_store_i32(
+            computer_abi::STORAGE0_COMMAND,
+            computer_abi::STORAGE_COMMAND_READ_BLOCKS,
+        )
+        .unwrap();
+
+    let snapshot = machine.stats_snapshot();
+    let storage0 = snapshot
+        .devices
+        .iter()
+        .find(|device| device.name == "storage0")
+        .expect("storage0 stats are present");
+    assert_eq!(storage0.storage.read_commands, 34);
+    assert_eq!(storage0.storage.bytes_read, 34 * 512);
+    assert_eq!(storage0.storage.unique_read_blocks, 33);
+    assert_eq!(storage0.storage.repeated_read_blocks, 1);
 }
 
 #[test]

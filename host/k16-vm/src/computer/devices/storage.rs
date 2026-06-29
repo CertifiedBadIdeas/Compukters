@@ -2,6 +2,7 @@ use crate::computer::stats::K16ComputerStorageStatsSnapshot;
 use crate::computer_abi;
 use crate::low_bus::MmioDevice;
 use crate::low_machine::{MachineMemory, MemoryFault};
+use std::collections::HashSet;
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::Path;
@@ -18,6 +19,7 @@ pub(crate) struct StoragePortDevice {
     stats: K16ComputerStorageStatsSnapshot,
     media: Option<Box<dyn StorageMedia>>,
     cache: StorageBlockCache,
+    read_lba_profile: HashSet<u64>,
 }
 
 pub(crate) struct StoragePortControllerSnapshot {
@@ -332,6 +334,7 @@ impl StoragePortDevice {
             stats: K16ComputerStorageStatsSnapshot::default(),
             media: None,
             cache: StorageBlockCache::new(),
+            read_lba_profile: HashSet::new(),
         }
     }
 
@@ -456,15 +459,27 @@ impl StoragePortDevice {
         match command {
             computer_abi::STORAGE_COMMAND_READ_BLOCKS => match Self::execute_read_blocks(
                 &mut self.cache,
+                &mut self.read_lba_profile,
                 media.as_mut(),
                 memory,
                 self.block_count,
                 self.buffer_addr,
                 lba,
             ) {
-                Ok((read_commands, bytes_read)) => {
-                    self.stats.read_commands = self.stats.read_commands.wrapping_add(read_commands);
+                Ok((read_profile, bytes_read)) => {
+                    self.stats.read_commands = self
+                        .stats
+                        .read_commands
+                        .wrapping_add(read_profile.total_blocks());
                     self.stats.bytes_read = self.stats.bytes_read.wrapping_add(bytes_read);
+                    self.stats.unique_read_blocks = self
+                        .stats
+                        .unique_read_blocks
+                        .wrapping_add(read_profile.unique_blocks);
+                    self.stats.repeated_read_blocks = self
+                        .stats
+                        .repeated_read_blocks
+                        .wrapping_add(read_profile.repeated_blocks);
                 }
                 Err(error) => {
                     self.fail(error);
@@ -502,13 +517,14 @@ impl StoragePortDevice {
 
     fn execute_read_blocks(
         cache: &mut StorageBlockCache,
+        read_lba_profile: &mut HashSet<u64>,
         media: &mut dyn StorageMedia,
         memory: &mut MachineMemory,
         block_count: u32,
         buffer_addr: u32,
         lba: u64,
-    ) -> Result<(u64, u64), i32> {
-        let mut media_read_commands = 0_u64;
+    ) -> Result<(StorageReadProfileDelta, u64), i32> {
+        let mut media_read_commands = StorageReadProfileDelta::default();
         let mut media_bytes_read = 0_u64;
         for block_index in 0..block_count {
             let block_lba = lba + u64::from(block_index);
@@ -522,7 +538,13 @@ impl StoragePortDevice {
                     return Err(computer_abi::STORAGE_ERROR_IO_ERROR);
                 }
                 cache.store(block_lba, &block);
-                media_read_commands = media_read_commands.wrapping_add(1);
+                if read_lba_profile.insert(block_lba) {
+                    media_read_commands.unique_blocks =
+                        media_read_commands.unique_blocks.wrapping_add(1);
+                } else {
+                    media_read_commands.repeated_blocks =
+                        media_read_commands.repeated_blocks.wrapping_add(1);
+                }
                 media_bytes_read = media_bytes_read.wrapping_add(u64::from(Self::BLOCK_SIZE));
             }
             let memory_base = buffer_addr + block_index * Self::BLOCK_SIZE;
@@ -635,6 +657,18 @@ impl StoragePortDevice {
                 "computer storage0 offset {offset} is not writable",
             ))),
         }
+    }
+}
+
+#[derive(Default)]
+struct StorageReadProfileDelta {
+    unique_blocks: u64,
+    repeated_blocks: u64,
+}
+
+impl StorageReadProfileDelta {
+    fn total_blocks(&self) -> u64 {
+        self.unique_blocks.wrapping_add(self.repeated_blocks)
     }
 }
 

@@ -188,6 +188,8 @@ class RuntimeProfilingTest {
                                     bytesRead = 11,
                                     bytesWritten = 12,
                                     failedCommands = 13,
+                                    uniqueReadBlocks = 14,
+                                    repeatedReadBlocks = 15,
                                 ),
                             gpu =
                                 NativeK16GpuStats(
@@ -375,7 +377,7 @@ class RuntimeProfilingTest {
             summary,
         )
         assertTrue(
-            summary.contains("    k16Storage0: reads=8, writes=9, flushes=10, bytesRead=11, bytesWritten=12, failed=13"),
+            summary.contains("    k16Storage0: reads=8, writes=9, flushes=10, bytesRead=11, bytesWritten=12, failed=13, uniqueReadBlocks=14, repeatedReadBlocks=15"),
             summary,
         )
         assertTrue(
