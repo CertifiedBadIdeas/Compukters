@@ -817,10 +817,6 @@ impl ComputerMachine {
         self.devices.storage0(&self.bus)
     }
 
-    fn storage0_device_mut(&mut self) -> Option<&mut StoragePortDevice> {
-        self.devices.storage0_mut(&mut self.bus)
-    }
-
     fn timer0_device(&self) -> Option<&TimerDevice> {
         self.devices.timer0(&self.bus)
     }

@@ -1,5 +1,5 @@
 use super::{ComputerCpuContext, ComputerMachine};
-use crate::computer::devices::{snapshot_device_records, StoragePortControllerSnapshot};
+use crate::computer::devices::{restore_regular_device_snapshot_record, snapshot_device_records};
 use crate::computer::profile::ComputerMachineProfile;
 use crate::computer::snapshot;
 use crate::computer::snapshot::{
@@ -95,79 +95,6 @@ fn restore_device_snapshot_record(
     record: ComputerDeviceSnapshotRecord,
 ) -> Result<(), String> {
     match record {
-        ComputerDeviceSnapshotRecord::Control {
-            status,
-            panic_code,
-            exit_code,
-            os_stats_addr,
-            os_stats_size,
-        } => {
-            let control = machine.control_device_mut().ok_or_else(|| {
-                "ComputerMachine snapshot contains control device state but profile has no control device"
-                    .to_string()
-            })?;
-            control.status = status;
-            control.panic_code = panic_code;
-            control.exit_code = exit_code;
-            control.restore_os_stats_region(os_stats_addr, os_stats_size);
-        }
-        ComputerDeviceSnapshotRecord::DebugSerial { bytes } => {
-            let debug = machine.debug_device_mut().ok_or_else(|| {
-                "ComputerMachine snapshot contains debug device state but profile has no debug device"
-                    .to_string()
-            })?;
-            debug.restore_bytes(bytes);
-        }
-        ComputerDeviceSnapshotRecord::SerialInput { bytes } => {
-            let serial_input = machine.serial_input_device_mut().ok_or_else(|| {
-                "ComputerMachine snapshot contains serial input device state but profile has no serial input device"
-                    .to_string()
-            })?;
-            serial_input.restore_bytes(bytes);
-        }
-        ComputerDeviceSnapshotRecord::Storage0 {
-            status,
-            error,
-            lba_low,
-            lba_high,
-            block_count,
-            buffer_addr,
-            bytes_done,
-            sequence,
-        } => {
-            let storage0 = machine.storage0_device_mut().ok_or_else(|| {
-                "ComputerMachine snapshot contains storage0 device state but profile has no storage0 device"
-                    .to_string()
-            })?;
-            storage0.restore_controller_snapshot(StoragePortControllerSnapshot {
-                status,
-                error,
-                lba_low,
-                lba_high,
-                block_count,
-                buffer_addr,
-                bytes_done,
-                sequence,
-            });
-        }
-        ComputerDeviceSnapshotRecord::Timer0 { game_ticks } => {
-            let timer0 = machine.timer0_device_mut().ok_or_else(|| {
-                "ComputerMachine snapshot contains timer0 device state but profile has no timer0 device"
-                    .to_string()
-            })?;
-            timer0.restore_game_ticks(game_ticks);
-        }
-        ComputerDeviceSnapshotRecord::Keyboard0 {
-            events,
-            sequence,
-            dropped_count,
-        } => {
-            let keyboard0 = machine.keyboard0_device_mut().ok_or_else(|| {
-                "ComputerMachine snapshot contains keyboard0 device state but profile has no keyboard0 device"
-                    .to_string()
-            })?;
-            keyboard0.restore_snapshot(events, sequence, dropped_count)?;
-        }
         ComputerDeviceSnapshotRecord::Mmu0 {
             address_spaces,
             cpu_modes,
@@ -186,6 +113,9 @@ fn restore_device_snapshot_record(
                 })?;
                 cpu.restore_mode_snapshot(cpu_mode.mode);
             }
+        }
+        record => {
+            restore_regular_device_snapshot_record(&machine.devices, &mut machine.bus, record)?;
         }
     }
     Ok(())
