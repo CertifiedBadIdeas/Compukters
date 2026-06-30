@@ -418,7 +418,7 @@ pub(super) fn map_k16_bios_flash(
     machine: &mut ComputerMachine,
     bytes: Vec<u8>,
 ) -> Result<(), String> {
-    if machine.bios_flash_device_id.is_some() {
+    if machine.devices.bios_flash.is_some() {
         return Err("K16 BIOS flash is already mapped".to_string());
     }
     let device = BiosFlashDevice::new(bytes).map_err(|error| error.to_string())?;
@@ -426,7 +426,7 @@ pub(super) fn map_k16_bios_flash(
         .bus
         .map_mmio(ComputerMachine::K16_BIOS_FLASH_BASE, Box::new(device))
         .map_err(|error| error.to_string())?;
-    machine.bios_flash_device_id = Some(device_id);
+    machine.devices.bios_flash = Some(device_id);
     Ok(())
 }
 
