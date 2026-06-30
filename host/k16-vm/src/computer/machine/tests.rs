@@ -116,6 +116,38 @@ fn computer_machine_typed_accessors_use_device_id_facade() {
 }
 
 #[test]
+fn computer_device_ids_encapsulates_fields_and_lifecycle_registration() {
+    let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let ids_source = fs::read_to_string(manifest_dir.join("src/computer/devices/ids.rs"))
+        .expect("ids.rs source is readable");
+    let ids_struct_body = ids_source
+        .split("pub(crate) struct ComputerDeviceIds {")
+        .nth(1)
+        .and_then(|tail| tail.split("}\n\nimpl ComputerDeviceIds").next())
+        .expect("ComputerDeviceIds struct body is present");
+    assert!(
+        !ids_struct_body.contains("pub(crate)"),
+        "ComputerDeviceIds fields should be private behind facade methods",
+    );
+
+    let construction_source =
+        fs::read_to_string(manifest_dir.join("src/computer/machine/construction.rs"))
+            .expect("construction.rs source is readable");
+    assert!(
+        !construction_source.contains("impl ComputerDeviceIds"),
+        "ComputerDeviceIds hardware registration should live with the facade, not machine construction",
+    );
+
+    let boot_flow_source =
+        fs::read_to_string(manifest_dir.join("src/computer/machine/boot_flow.rs"))
+            .expect("boot_flow.rs source is readable");
+    assert!(
+        !boot_flow_source.contains("devices.bios_flash"),
+        "boot flow should use ComputerDeviceIds bios-flash lifecycle helpers",
+    );
+}
+
+#[test]
 fn computer_machine_owns_shared_physical_ram() {
     let mut machine = ComputerMachine::new(1024).unwrap();
 

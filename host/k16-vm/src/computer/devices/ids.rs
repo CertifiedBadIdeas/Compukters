@@ -5,6 +5,7 @@ use super::mmu::MmuControlDevice;
 use super::serial::{DebugSerialDevice, SerialInputDevice};
 use super::storage::StoragePortDevice;
 use super::timer::TimerDevice;
+use crate::computer::profile::ComputerHardwareDevice;
 use crate::low_bus::{MachineBus, MmioDeviceId};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -25,18 +26,43 @@ pub(crate) struct ComputerDeviceDescriptor {
 
 #[derive(Debug, Clone, Default)]
 pub(crate) struct ComputerDeviceIds {
-    pub(crate) control: Option<MmioDeviceId>,
-    pub(crate) debug_serial: Option<MmioDeviceId>,
-    pub(crate) serial_input: Option<MmioDeviceId>,
-    pub(crate) gpu0: Option<MmioDeviceId>,
-    pub(crate) storage0: Option<MmioDeviceId>,
-    pub(crate) timer0: Option<MmioDeviceId>,
-    pub(crate) keyboard0: Option<MmioDeviceId>,
-    pub(crate) mmu0: Option<MmioDeviceId>,
-    pub(crate) bios_flash: Option<MmioDeviceId>,
+    control: Option<MmioDeviceId>,
+    debug_serial: Option<MmioDeviceId>,
+    serial_input: Option<MmioDeviceId>,
+    gpu0: Option<MmioDeviceId>,
+    storage0: Option<MmioDeviceId>,
+    timer0: Option<MmioDeviceId>,
+    keyboard0: Option<MmioDeviceId>,
+    mmu0: Option<MmioDeviceId>,
+    bios_flash: Option<MmioDeviceId>,
 }
 
 impl ComputerDeviceIds {
+    pub(crate) fn remember_hardware_device(
+        &mut self,
+        device: &ComputerHardwareDevice,
+        device_id: MmioDeviceId,
+    ) {
+        match device {
+            ComputerHardwareDevice::Control => self.control = Some(device_id),
+            ComputerHardwareDevice::DebugSerial => self.debug_serial = Some(device_id),
+            ComputerHardwareDevice::SerialInput => self.serial_input = Some(device_id),
+            ComputerHardwareDevice::Gpu => self.gpu0 = Some(device_id),
+            ComputerHardwareDevice::StoragePort(_) => self.storage0 = Some(device_id),
+            ComputerHardwareDevice::Timer => self.timer0 = Some(device_id),
+            ComputerHardwareDevice::Keyboard => self.keyboard0 = Some(device_id),
+            ComputerHardwareDevice::Mmu => self.mmu0 = Some(device_id),
+        }
+    }
+
+    pub(crate) fn has_bios_flash(&self) -> bool {
+        self.bios_flash.is_some()
+    }
+
+    pub(crate) fn remember_bios_flash(&mut self, device_id: MmioDeviceId) {
+        self.bios_flash = Some(device_id);
+    }
+
     pub(crate) fn control<'a>(&self, bus: &'a MachineBus) -> Option<&'a ComputerControlDevice> {
         self.control
             .and_then(|id| bus.device::<ComputerControlDevice>(id))

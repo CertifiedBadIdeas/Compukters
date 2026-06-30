@@ -54,7 +54,7 @@ fn map_profile_hardware(
 
     for hardware in &profile.hardware {
         let device_id = map_hardware_device(bus, hardware)?;
-        device_ids.remember(&hardware.device, device_id);
+        device_ids.remember_hardware_device(&hardware.device, device_id);
     }
 
     Ok(device_ids)
@@ -88,21 +88,6 @@ fn storage_port_device(config: &StoragePortConfig) -> Result<StoragePortDevice, 
             StoragePortDevice::with_media_backend(Box::new(K16VolumeFileStorageMedia::open(path)?))
         }
         None => Ok(StoragePortDevice::new_absent()),
-    }
-}
-
-impl ComputerDeviceIds {
-    fn remember(&mut self, device: &ComputerHardwareDevice, device_id: MmioDeviceId) {
-        match device {
-            ComputerHardwareDevice::Control => self.control = Some(device_id),
-            ComputerHardwareDevice::DebugSerial => self.debug_serial = Some(device_id),
-            ComputerHardwareDevice::SerialInput => self.serial_input = Some(device_id),
-            ComputerHardwareDevice::Gpu => self.gpu0 = Some(device_id),
-            ComputerHardwareDevice::StoragePort(_) => self.storage0 = Some(device_id),
-            ComputerHardwareDevice::Timer => self.timer0 = Some(device_id),
-            ComputerHardwareDevice::Keyboard => self.keyboard0 = Some(device_id),
-            ComputerHardwareDevice::Mmu => self.mmu0 = Some(device_id),
-        }
     }
 }
 
