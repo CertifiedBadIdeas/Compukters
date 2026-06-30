@@ -433,9 +433,7 @@ impl ComputerMachine {
     }
 
     pub fn storage0_media_bytes(&self) -> Option<Vec<u8>> {
-        self.devices
-            .storage0
-            .and_then(|id| self.bus.device::<StoragePortDevice>(id))
+        self.storage0_device()
             .and_then(StoragePortDevice::media_bytes)
     }
 
@@ -568,9 +566,7 @@ impl ComputerMachine {
     }
 
     pub(crate) fn take_pending_mmu0_command(&mut self) -> Option<MmuControlCommand> {
-        self.devices
-            .mmu0
-            .and_then(|id| self.bus.device_mut::<MmuControlDevice>(id))
+        self.mmu0_device_mut()
             .and_then(MmuControlDevice::take_pending_command)
     }
 
@@ -786,87 +782,59 @@ impl ComputerMachine {
     }
 
     fn control_device(&self) -> Option<&ComputerControlDevice> {
-        self.devices
-            .control
-            .and_then(|id| self.bus.device::<ComputerControlDevice>(id))
+        self.devices.control(&self.bus)
     }
 
     fn debug_device(&self) -> Option<&DebugSerialDevice> {
-        self.devices
-            .debug_serial
-            .and_then(|id| self.bus.device::<DebugSerialDevice>(id))
+        self.devices.debug_serial(&self.bus)
     }
 
     fn debug_device_mut(&mut self) -> Option<&mut DebugSerialDevice> {
-        self.devices
-            .debug_serial
-            .and_then(|id| self.bus.device_mut::<DebugSerialDevice>(id))
+        self.devices.debug_serial_mut(&mut self.bus)
     }
 
     fn serial_input_device(&self) -> Option<&SerialInputDevice> {
-        self.devices
-            .serial_input
-            .and_then(|id| self.bus.device::<SerialInputDevice>(id))
+        self.devices.serial_input(&self.bus)
     }
 
     fn serial_input_device_mut(&mut self) -> Option<&mut SerialInputDevice> {
-        self.devices
-            .serial_input
-            .and_then(|id| self.bus.device_mut::<SerialInputDevice>(id))
+        self.devices.serial_input_mut(&mut self.bus)
     }
 
     fn gpu0_device_mut(&mut self) -> Option<&mut GpuDevice> {
-        self.devices
-            .gpu0
-            .and_then(|id| self.bus.device_mut::<GpuDevice>(id))
+        self.devices.gpu0_mut(&mut self.bus)
     }
 
     fn gpu0_device(&self) -> Option<&GpuDevice> {
-        self.devices
-            .gpu0
-            .and_then(|id| self.bus.device::<GpuDevice>(id))
+        self.devices.gpu0(&self.bus)
     }
 
     fn mmu0_device_mut(&mut self) -> Option<&mut MmuControlDevice> {
-        self.devices
-            .mmu0
-            .and_then(|id| self.bus.device_mut::<MmuControlDevice>(id))
+        self.devices.mmu0_mut(&mut self.bus)
     }
 
     fn storage0_device(&self) -> Option<&StoragePortDevice> {
-        self.devices
-            .storage0
-            .and_then(|id| self.bus.device::<StoragePortDevice>(id))
+        self.devices.storage0(&self.bus)
     }
 
     fn storage0_device_mut(&mut self) -> Option<&mut StoragePortDevice> {
-        self.devices
-            .storage0
-            .and_then(|id| self.bus.device_mut::<StoragePortDevice>(id))
+        self.devices.storage0_mut(&mut self.bus)
     }
 
     fn timer0_device(&self) -> Option<&TimerDevice> {
-        self.devices
-            .timer0
-            .and_then(|id| self.bus.device::<TimerDevice>(id))
+        self.devices.timer0(&self.bus)
     }
 
     fn timer0_device_mut(&mut self) -> Option<&mut TimerDevice> {
-        self.devices
-            .timer0
-            .and_then(|id| self.bus.device_mut::<TimerDevice>(id))
+        self.devices.timer0_mut(&mut self.bus)
     }
 
     fn keyboard0_device(&self) -> Option<&KeyboardDevice> {
-        self.devices
-            .keyboard0
-            .and_then(|id| self.bus.device::<KeyboardDevice>(id))
+        self.devices.keyboard0(&self.bus)
     }
 
     fn keyboard0_device_mut(&mut self) -> Option<&mut KeyboardDevice> {
-        self.devices
-            .keyboard0
-            .and_then(|id| self.bus.device_mut::<KeyboardDevice>(id))
+        self.devices.keyboard0_mut(&mut self.bus)
     }
 
     fn request_boot_cpu_interrupt(&mut self, source: u32, value: u32) {
@@ -909,9 +877,7 @@ impl ComputerMachine {
     }
 
     fn control_device_mut(&mut self) -> Option<&mut ComputerControlDevice> {
-        self.devices
-            .control
-            .and_then(|id| self.bus.device_mut::<ComputerControlDevice>(id))
+        self.devices.control_mut(&mut self.bus)
     }
 
     #[cfg(test)]

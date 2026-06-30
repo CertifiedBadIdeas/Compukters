@@ -1,4 +1,11 @@
-use crate::low_bus::MmioDeviceId;
+use super::control::ComputerControlDevice;
+use super::gpu::GpuDevice;
+use super::keyboard::KeyboardDevice;
+use super::mmu::MmuControlDevice;
+use super::serial::{DebugSerialDevice, SerialInputDevice};
+use super::storage::StoragePortDevice;
+use super::timer::TimerDevice;
+use crate::low_bus::{MachineBus, MmioDeviceId};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ComputerDeviceStatsKind {
@@ -30,6 +37,92 @@ pub(crate) struct ComputerDeviceIds {
 }
 
 impl ComputerDeviceIds {
+    pub(crate) fn control<'a>(&self, bus: &'a MachineBus) -> Option<&'a ComputerControlDevice> {
+        self.control
+            .and_then(|id| bus.device::<ComputerControlDevice>(id))
+    }
+
+    pub(crate) fn control_mut<'a>(
+        &self,
+        bus: &'a mut MachineBus,
+    ) -> Option<&'a mut ComputerControlDevice> {
+        self.control
+            .and_then(|id| bus.device_mut::<ComputerControlDevice>(id))
+    }
+
+    pub(crate) fn debug_serial<'a>(&self, bus: &'a MachineBus) -> Option<&'a DebugSerialDevice> {
+        self.debug_serial
+            .and_then(|id| bus.device::<DebugSerialDevice>(id))
+    }
+
+    pub(crate) fn debug_serial_mut<'a>(
+        &self,
+        bus: &'a mut MachineBus,
+    ) -> Option<&'a mut DebugSerialDevice> {
+        self.debug_serial
+            .and_then(|id| bus.device_mut::<DebugSerialDevice>(id))
+    }
+
+    pub(crate) fn serial_input<'a>(&self, bus: &'a MachineBus) -> Option<&'a SerialInputDevice> {
+        self.serial_input
+            .and_then(|id| bus.device::<SerialInputDevice>(id))
+    }
+
+    pub(crate) fn serial_input_mut<'a>(
+        &self,
+        bus: &'a mut MachineBus,
+    ) -> Option<&'a mut SerialInputDevice> {
+        self.serial_input
+            .and_then(|id| bus.device_mut::<SerialInputDevice>(id))
+    }
+
+    pub(crate) fn gpu0<'a>(&self, bus: &'a MachineBus) -> Option<&'a GpuDevice> {
+        self.gpu0.and_then(|id| bus.device::<GpuDevice>(id))
+    }
+
+    pub(crate) fn gpu0_mut<'a>(&self, bus: &'a mut MachineBus) -> Option<&'a mut GpuDevice> {
+        self.gpu0.and_then(|id| bus.device_mut::<GpuDevice>(id))
+    }
+
+    pub(crate) fn mmu0_mut<'a>(&self, bus: &'a mut MachineBus) -> Option<&'a mut MmuControlDevice> {
+        self.mmu0
+            .and_then(|id| bus.device_mut::<MmuControlDevice>(id))
+    }
+
+    pub(crate) fn storage0<'a>(&self, bus: &'a MachineBus) -> Option<&'a StoragePortDevice> {
+        self.storage0
+            .and_then(|id| bus.device::<StoragePortDevice>(id))
+    }
+
+    pub(crate) fn storage0_mut<'a>(
+        &self,
+        bus: &'a mut MachineBus,
+    ) -> Option<&'a mut StoragePortDevice> {
+        self.storage0
+            .and_then(|id| bus.device_mut::<StoragePortDevice>(id))
+    }
+
+    pub(crate) fn timer0<'a>(&self, bus: &'a MachineBus) -> Option<&'a TimerDevice> {
+        self.timer0.and_then(|id| bus.device::<TimerDevice>(id))
+    }
+
+    pub(crate) fn timer0_mut<'a>(&self, bus: &'a mut MachineBus) -> Option<&'a mut TimerDevice> {
+        self.timer0.and_then(|id| bus.device_mut::<TimerDevice>(id))
+    }
+
+    pub(crate) fn keyboard0<'a>(&self, bus: &'a MachineBus) -> Option<&'a KeyboardDevice> {
+        self.keyboard0
+            .and_then(|id| bus.device::<KeyboardDevice>(id))
+    }
+
+    pub(crate) fn keyboard0_mut<'a>(
+        &self,
+        bus: &'a mut MachineBus,
+    ) -> Option<&'a mut KeyboardDevice> {
+        self.keyboard0
+            .and_then(|id| bus.device_mut::<KeyboardDevice>(id))
+    }
+
     pub(crate) fn descriptors(&self) -> [ComputerDeviceDescriptor; 9] {
         [
             self.descriptor(

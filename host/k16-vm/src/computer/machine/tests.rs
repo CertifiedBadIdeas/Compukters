@@ -87,6 +87,35 @@ fn computer_machine_memory_map_and_stats_use_device_descriptor_facade() {
 }
 
 #[test]
+fn computer_machine_typed_accessors_use_device_id_facade() {
+    let source = fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/computer/machine.rs"),
+    )
+    .expect("machine.rs source is readable");
+    let compact_source = source
+        .chars()
+        .filter(|ch| !ch.is_whitespace())
+        .collect::<String>();
+
+    for field in [
+        "control",
+        "debug_serial",
+        "serial_input",
+        "gpu0",
+        "storage0",
+        "timer0",
+        "keyboard0",
+        "mmu0",
+    ] {
+        let direct_lookup = format!("self.devices.{field}.and_then");
+        assert!(
+            !compact_source.contains(&direct_lookup),
+            "ComputerMachine typed accessors should use ComputerDeviceIds helpers, not {direct_lookup}",
+        );
+    }
+}
+
+#[test]
 fn computer_machine_owns_shared_physical_ram() {
     let mut machine = ComputerMachine::new(1024).unwrap();
 
