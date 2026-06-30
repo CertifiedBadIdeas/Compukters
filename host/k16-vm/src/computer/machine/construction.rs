@@ -1,7 +1,8 @@
 use super::ComputerMachine;
 use crate::computer::devices::{
-    ComputerControlDevice, DebugSerialDevice, GpuDevice, K16VolumeFileStorageMedia, KeyboardDevice,
-    MmuControlDevice, SerialInputDevice, StoragePortDevice, TimerDevice,
+    ComputerControlDevice, ComputerDeviceIds, DebugSerialDevice, GpuDevice,
+    K16VolumeFileStorageMedia, KeyboardDevice, MmuControlDevice, SerialInputDevice,
+    StoragePortDevice, TimerDevice,
 };
 use crate::computer::profile::{
     validate_profile_v2, ComputerHardwareConfig, ComputerHardwareDevice, ComputerMachineProfile,
@@ -25,31 +26,11 @@ pub(super) fn from_profile(
 
     Ok(ComputerMachine {
         bus,
-        control_device_id: device_ids.control,
-        debug_device_id: device_ids.debug_serial,
-        serial_input_device_id: device_ids.serial_input,
-        gpu0_device_id: device_ids.gpu,
-        storage0_device_id: device_ids.storage_port,
-        timer0_device_id: device_ids.timer,
-        keyboard0_device_id: device_ids.keyboard,
-        mmu0_device_id: device_ids.mmu,
-        bios_flash_device_id: None,
+        devices: device_ids,
         cpus: Vec::new(),
         boot_cpu: None,
         address_spaces: MmuAddressSpaces::new(),
     })
-}
-
-#[derive(Default)]
-struct ConstructionDeviceIds {
-    control: Option<MmioDeviceId>,
-    debug_serial: Option<MmioDeviceId>,
-    serial_input: Option<MmioDeviceId>,
-    gpu: Option<MmioDeviceId>,
-    storage_port: Option<MmioDeviceId>,
-    timer: Option<MmioDeviceId>,
-    keyboard: Option<MmioDeviceId>,
-    mmu: Option<MmioDeviceId>,
 }
 
 fn hardware_table_entries(profile: &ComputerMachineProfile) -> Vec<HardwareTableEntry> {
@@ -68,8 +49,8 @@ fn hardware_table_entries(profile: &ComputerMachineProfile) -> Vec<HardwareTable
 fn map_profile_hardware(
     bus: &mut MachineBus,
     profile: &ComputerMachineProfile,
-) -> Result<ConstructionDeviceIds, MemoryFault> {
-    let mut device_ids = ConstructionDeviceIds::default();
+) -> Result<ComputerDeviceIds, MemoryFault> {
+    let mut device_ids = ComputerDeviceIds::default();
 
     for hardware in &profile.hardware {
         let device_id = map_hardware_device(bus, hardware)?;
@@ -110,17 +91,17 @@ fn storage_port_device(config: &StoragePortConfig) -> Result<StoragePortDevice, 
     }
 }
 
-impl ConstructionDeviceIds {
+impl ComputerDeviceIds {
     fn remember(&mut self, device: &ComputerHardwareDevice, device_id: MmioDeviceId) {
         match device {
             ComputerHardwareDevice::Control => self.control = Some(device_id),
             ComputerHardwareDevice::DebugSerial => self.debug_serial = Some(device_id),
             ComputerHardwareDevice::SerialInput => self.serial_input = Some(device_id),
-            ComputerHardwareDevice::Gpu => self.gpu = Some(device_id),
-            ComputerHardwareDevice::StoragePort(_) => self.storage_port = Some(device_id),
-            ComputerHardwareDevice::Timer => self.timer = Some(device_id),
-            ComputerHardwareDevice::Keyboard => self.keyboard = Some(device_id),
-            ComputerHardwareDevice::Mmu => self.mmu = Some(device_id),
+            ComputerHardwareDevice::Gpu => self.gpu0 = Some(device_id),
+            ComputerHardwareDevice::StoragePort(_) => self.storage0 = Some(device_id),
+            ComputerHardwareDevice::Timer => self.timer0 = Some(device_id),
+            ComputerHardwareDevice::Keyboard => self.keyboard0 = Some(device_id),
+            ComputerHardwareDevice::Mmu => self.mmu0 = Some(device_id),
         }
     }
 }

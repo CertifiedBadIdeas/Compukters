@@ -142,7 +142,10 @@ fn generated_terminal_font_matches_spleen_reference_glyphs() {
         terminal_font_glyph('g'),
         0b00000_00000_01110_10010_10010_01100_00010_11100,
     );
-    assert_eq!(terminal_font_glyph('─'), 0b00000_00000_00000_11111_00000_00000_00000_00000);
+    assert_eq!(
+        terminal_font_glyph('─'),
+        0b00000_00000_00000_11111_00000_00000_00000_00000
+    );
 }
 
 #[test]

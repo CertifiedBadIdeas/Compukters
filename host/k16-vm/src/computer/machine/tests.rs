@@ -17,6 +17,37 @@ use std::fs;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[test]
+fn computer_machine_uses_device_id_facade_instead_of_per_device_id_fields() {
+    let source = fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/computer/machine.rs"),
+    )
+    .expect("machine.rs source is readable");
+    let struct_body = source
+        .split("pub struct ComputerMachine {")
+        .nth(1)
+        .and_then(|tail| tail.split("enum ComputerCpuContext").next())
+        .expect("ComputerMachine struct body is present");
+
+    assert!(struct_body.contains("devices: ComputerDeviceIds"));
+    for field in [
+        "control_device_id",
+        "debug_device_id",
+        "serial_input_device_id",
+        "gpu0_device_id",
+        "storage0_device_id",
+        "timer0_device_id",
+        "keyboard0_device_id",
+        "mmu0_device_id",
+        "bios_flash_device_id",
+    ] {
+        assert!(
+            !struct_body.contains(field),
+            "ComputerMachine should store typed MMIO ids through ComputerDeviceIds, not {field}",
+        );
+    }
+}
+
+#[test]
 fn computer_machine_owns_shared_physical_ram() {
     let mut machine = ComputerMachine::new(1024).unwrap();
 

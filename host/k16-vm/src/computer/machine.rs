@@ -1,6 +1,6 @@
 use crate::computer::devices::{
-    ComputerControlDevice, DebugSerialDevice, GpuDevice, KeyboardDevice, MmuControlCommand,
-    MmuControlDevice, SerialInputDevice, StoragePortDevice, TimerDevice,
+    ComputerControlDevice, ComputerDeviceIds, DebugSerialDevice, GpuDevice, KeyboardDevice,
+    MmuControlCommand, MmuControlDevice, SerialInputDevice, StoragePortDevice, TimerDevice,
 };
 use crate::computer::profile::ComputerMachineProfile;
 use crate::computer::stats::{
@@ -26,15 +26,7 @@ pub type CpuId = usize;
 
 pub struct ComputerMachine {
     bus: MachineBus,
-    control_device_id: Option<MmioDeviceId>,
-    debug_device_id: Option<MmioDeviceId>,
-    serial_input_device_id: Option<MmioDeviceId>,
-    gpu0_device_id: Option<MmioDeviceId>,
-    storage0_device_id: Option<MmioDeviceId>,
-    timer0_device_id: Option<MmioDeviceId>,
-    keyboard0_device_id: Option<MmioDeviceId>,
-    mmu0_device_id: Option<MmioDeviceId>,
-    bios_flash_device_id: Option<MmioDeviceId>,
+    devices: ComputerDeviceIds,
     cpus: Vec<ComputerCpuContext>,
     boot_cpu: Option<CpuId>,
     address_spaces: MmuAddressSpaces,
@@ -327,17 +319,17 @@ impl ComputerMachine {
                 writable: true,
             }],
         };
-        self.push_memory_map_region(&mut map, self.control_device_id, "control");
-        self.push_memory_map_region(&mut map, self.debug_device_id, "debug");
-        self.push_memory_map_region(&mut map, self.serial_input_device_id, "serial-input");
-        self.push_memory_map_region(&mut map, self.gpu0_device_id, "gpu0");
-        self.push_memory_map_region(&mut map, self.storage0_device_id, "storage0");
-        self.push_memory_map_region(&mut map, self.timer0_device_id, "timer0");
-        self.push_memory_map_region(&mut map, self.keyboard0_device_id, "keyboard0");
-        self.push_memory_map_region(&mut map, self.mmu0_device_id, "mmu0");
+        self.push_memory_map_region(&mut map, self.devices.control, "control");
+        self.push_memory_map_region(&mut map, self.devices.debug_serial, "debug");
+        self.push_memory_map_region(&mut map, self.devices.serial_input, "serial-input");
+        self.push_memory_map_region(&mut map, self.devices.gpu0, "gpu0");
+        self.push_memory_map_region(&mut map, self.devices.storage0, "storage0");
+        self.push_memory_map_region(&mut map, self.devices.timer0, "timer0");
+        self.push_memory_map_region(&mut map, self.devices.keyboard0, "keyboard0");
+        self.push_memory_map_region(&mut map, self.devices.mmu0, "mmu0");
         self.push_memory_map_region_with_flags(
             &mut map,
-            self.bios_flash_device_id,
+            self.devices.bios_flash,
             "bios-flash",
             true,
             false,
@@ -357,7 +349,7 @@ impl ComputerMachine {
         self.push_stats_device(
             &bus,
             &mut devices,
-            self.control_device_id,
+            self.devices.control,
             "control",
             K16ComputerStorageStatsSnapshot::default(),
             K16ComputerGpuStatsSnapshot::default(),
@@ -365,7 +357,7 @@ impl ComputerMachine {
         self.push_stats_device(
             &bus,
             &mut devices,
-            self.debug_device_id,
+            self.devices.debug_serial,
             "debug",
             K16ComputerStorageStatsSnapshot::default(),
             K16ComputerGpuStatsSnapshot::default(),
@@ -373,7 +365,7 @@ impl ComputerMachine {
         self.push_stats_device(
             &bus,
             &mut devices,
-            self.serial_input_device_id,
+            self.devices.serial_input,
             "serial-input",
             K16ComputerStorageStatsSnapshot::default(),
             K16ComputerGpuStatsSnapshot::default(),
@@ -381,7 +373,7 @@ impl ComputerMachine {
         self.push_stats_device(
             &bus,
             &mut devices,
-            self.gpu0_device_id,
+            self.devices.gpu0,
             "gpu0",
             K16ComputerStorageStatsSnapshot::default(),
             self.gpu0_device()
@@ -391,7 +383,7 @@ impl ComputerMachine {
         self.push_stats_device(
             &bus,
             &mut devices,
-            self.storage0_device_id,
+            self.devices.storage0,
             "storage0",
             self.storage0_device()
                 .map(StoragePortDevice::stats_snapshot)
@@ -401,7 +393,7 @@ impl ComputerMachine {
         self.push_stats_device(
             &bus,
             &mut devices,
-            self.timer0_device_id,
+            self.devices.timer0,
             "timer0",
             K16ComputerStorageStatsSnapshot::default(),
             K16ComputerGpuStatsSnapshot::default(),
@@ -409,7 +401,7 @@ impl ComputerMachine {
         self.push_stats_device(
             &bus,
             &mut devices,
-            self.keyboard0_device_id,
+            self.devices.keyboard0,
             "keyboard0",
             K16ComputerStorageStatsSnapshot::default(),
             K16ComputerGpuStatsSnapshot::default(),
@@ -417,7 +409,7 @@ impl ComputerMachine {
         self.push_stats_device(
             &bus,
             &mut devices,
-            self.mmu0_device_id,
+            self.devices.mmu0,
             "mmu0",
             K16ComputerStorageStatsSnapshot::default(),
             K16ComputerGpuStatsSnapshot::default(),
@@ -425,7 +417,7 @@ impl ComputerMachine {
         self.push_stats_device(
             &bus,
             &mut devices,
-            self.bios_flash_device_id,
+            self.devices.bios_flash,
             "bios-flash",
             K16ComputerStorageStatsSnapshot::default(),
             K16ComputerGpuStatsSnapshot::default(),
@@ -525,7 +517,8 @@ impl ComputerMachine {
     }
 
     pub fn storage0_media_bytes(&self) -> Option<Vec<u8>> {
-        self.storage0_device_id
+        self.devices
+            .storage0
             .and_then(|id| self.bus.device::<StoragePortDevice>(id))
             .and_then(StoragePortDevice::media_bytes)
     }
@@ -659,7 +652,8 @@ impl ComputerMachine {
     }
 
     pub(crate) fn take_pending_mmu0_command(&mut self) -> Option<MmuControlCommand> {
-        self.mmu0_device_id
+        self.devices
+            .mmu0
             .and_then(|id| self.bus.device_mut::<MmuControlDevice>(id))
             .and_then(MmuControlDevice::take_pending_command)
     }
@@ -861,72 +855,86 @@ impl ComputerMachine {
     }
 
     fn control_device(&self) -> Option<&ComputerControlDevice> {
-        self.control_device_id
+        self.devices
+            .control
             .and_then(|id| self.bus.device::<ComputerControlDevice>(id))
     }
 
     fn debug_device(&self) -> Option<&DebugSerialDevice> {
-        self.debug_device_id
+        self.devices
+            .debug_serial
             .and_then(|id| self.bus.device::<DebugSerialDevice>(id))
     }
 
     fn debug_device_mut(&mut self) -> Option<&mut DebugSerialDevice> {
-        self.debug_device_id
+        self.devices
+            .debug_serial
             .and_then(|id| self.bus.device_mut::<DebugSerialDevice>(id))
     }
 
     fn serial_input_device(&self) -> Option<&SerialInputDevice> {
-        self.serial_input_device_id
+        self.devices
+            .serial_input
             .and_then(|id| self.bus.device::<SerialInputDevice>(id))
     }
 
     fn serial_input_device_mut(&mut self) -> Option<&mut SerialInputDevice> {
-        self.serial_input_device_id
+        self.devices
+            .serial_input
             .and_then(|id| self.bus.device_mut::<SerialInputDevice>(id))
     }
 
     fn gpu0_device_mut(&mut self) -> Option<&mut GpuDevice> {
-        self.gpu0_device_id
+        self.devices
+            .gpu0
             .and_then(|id| self.bus.device_mut::<GpuDevice>(id))
     }
 
     fn gpu0_device(&self) -> Option<&GpuDevice> {
-        self.gpu0_device_id
+        self.devices
+            .gpu0
             .and_then(|id| self.bus.device::<GpuDevice>(id))
     }
 
     fn mmu0_device_mut(&mut self) -> Option<&mut MmuControlDevice> {
-        self.mmu0_device_id
+        self.devices
+            .mmu0
             .and_then(|id| self.bus.device_mut::<MmuControlDevice>(id))
     }
 
     fn storage0_device(&self) -> Option<&StoragePortDevice> {
-        self.storage0_device_id
+        self.devices
+            .storage0
             .and_then(|id| self.bus.device::<StoragePortDevice>(id))
     }
 
     fn storage0_device_mut(&mut self) -> Option<&mut StoragePortDevice> {
-        self.storage0_device_id
+        self.devices
+            .storage0
             .and_then(|id| self.bus.device_mut::<StoragePortDevice>(id))
     }
 
     fn timer0_device(&self) -> Option<&TimerDevice> {
-        self.timer0_device_id
+        self.devices
+            .timer0
             .and_then(|id| self.bus.device::<TimerDevice>(id))
     }
 
     fn timer0_device_mut(&mut self) -> Option<&mut TimerDevice> {
-        self.timer0_device_id
+        self.devices
+            .timer0
             .and_then(|id| self.bus.device_mut::<TimerDevice>(id))
     }
 
     fn keyboard0_device(&self) -> Option<&KeyboardDevice> {
-        self.keyboard0_device_id
+        self.devices
+            .keyboard0
             .and_then(|id| self.bus.device::<KeyboardDevice>(id))
     }
 
     fn keyboard0_device_mut(&mut self) -> Option<&mut KeyboardDevice> {
-        self.keyboard0_device_id
+        self.devices
+            .keyboard0
             .and_then(|id| self.bus.device_mut::<KeyboardDevice>(id))
     }
 
@@ -970,7 +978,8 @@ impl ComputerMachine {
     }
 
     fn control_device_mut(&mut self) -> Option<&mut ComputerControlDevice> {
-        self.control_device_id
+        self.devices
+            .control
             .and_then(|id| self.bus.device_mut::<ComputerControlDevice>(id))
     }
 
