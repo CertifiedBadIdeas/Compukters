@@ -48,6 +48,45 @@ fn computer_machine_uses_device_id_facade_instead_of_per_device_id_fields() {
 }
 
 #[test]
+fn computer_machine_memory_map_and_stats_use_device_descriptor_facade() {
+    let source = fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/computer/machine.rs"),
+    )
+    .expect("machine.rs source is readable");
+    let memory_map_body = source
+        .split("pub fn memory_map(&self) -> ComputerMemoryMap {")
+        .nth(1)
+        .and_then(|tail| tail.split("pub fn snapshot_v1").next())
+        .expect("memory_map body is present");
+    let stats_snapshot_body = source
+        .split("pub fn stats_snapshot(&self) -> K16ComputerStatsSnapshot {")
+        .nth(1)
+        .and_then(|tail| tail.split("fn decode_cache_stats_snapshot").next())
+        .expect("stats_snapshot body is present");
+
+    for field in [
+        "self.devices.control",
+        "self.devices.debug_serial",
+        "self.devices.serial_input",
+        "self.devices.gpu0",
+        "self.devices.storage0",
+        "self.devices.timer0",
+        "self.devices.keyboard0",
+        "self.devices.mmu0",
+        "self.devices.bios_flash",
+    ] {
+        assert!(
+            !memory_map_body.contains(field),
+            "memory_map should use ComputerDeviceIds descriptors, not {field}",
+        );
+        assert!(
+            !stats_snapshot_body.contains(field),
+            "stats_snapshot should use ComputerDeviceIds descriptors, not {field}",
+        );
+    }
+}
+
+#[test]
 fn computer_machine_owns_shared_physical_ram() {
     let mut machine = ComputerMachine::new(1024).unwrap();
 

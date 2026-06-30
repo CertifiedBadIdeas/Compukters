@@ -1,6 +1,7 @@
 use crate::computer::devices::{
-    ComputerControlDevice, ComputerDeviceIds, DebugSerialDevice, GpuDevice, KeyboardDevice,
-    MmuControlCommand, MmuControlDevice, SerialInputDevice, StoragePortDevice, TimerDevice,
+    ComputerControlDevice, ComputerDeviceDescriptor, ComputerDeviceIds, ComputerDeviceStatsKind,
+    DebugSerialDevice, GpuDevice, KeyboardDevice, MmuControlCommand, MmuControlDevice,
+    SerialInputDevice, StoragePortDevice, TimerDevice,
 };
 use crate::computer::profile::ComputerMachineProfile;
 use crate::computer::stats::{
@@ -13,7 +14,7 @@ use crate::k16::{
     K16AddressMode, K16CachedDecoder, K16Cpu, K16PrivilegeMode, K16Signal,
     K16_INTERRUPT_SOURCE_KEYBOARD0, K16_INTERRUPT_SOURCE_TIMER0,
 };
-use crate::low_bus::{MachineBus, MachineBusStatsSnapshot, MmioDeviceId};
+use crate::low_bus::{MachineBus, MachineBusStatsSnapshot};
 use crate::low_machine::{MachineMemory, MemoryFault};
 use crate::mmu::{MmuAddressSpaceId, MmuAddressSpaces, MmuFault, MmuMapFlags};
 use std::fmt::{Display, Formatter};
@@ -319,21 +320,9 @@ impl ComputerMachine {
                 writable: true,
             }],
         };
-        self.push_memory_map_region(&mut map, self.devices.control, "control");
-        self.push_memory_map_region(&mut map, self.devices.debug_serial, "debug");
-        self.push_memory_map_region(&mut map, self.devices.serial_input, "serial-input");
-        self.push_memory_map_region(&mut map, self.devices.gpu0, "gpu0");
-        self.push_memory_map_region(&mut map, self.devices.storage0, "storage0");
-        self.push_memory_map_region(&mut map, self.devices.timer0, "timer0");
-        self.push_memory_map_region(&mut map, self.devices.keyboard0, "keyboard0");
-        self.push_memory_map_region(&mut map, self.devices.mmu0, "mmu0");
-        self.push_memory_map_region_with_flags(
-            &mut map,
-            self.devices.bios_flash,
-            "bios-flash",
-            true,
-            false,
-        );
+        for descriptor in self.devices.descriptors() {
+            self.push_memory_map_region(&mut map, descriptor);
+        }
         map
     }
 
@@ -346,82 +335,9 @@ impl ComputerMachine {
         let os = self.os_stats_snapshot();
         let decode_cache = self.decode_cache_stats_snapshot();
         let mut devices = Vec::new();
-        self.push_stats_device(
-            &bus,
-            &mut devices,
-            self.devices.control,
-            "control",
-            K16ComputerStorageStatsSnapshot::default(),
-            K16ComputerGpuStatsSnapshot::default(),
-        );
-        self.push_stats_device(
-            &bus,
-            &mut devices,
-            self.devices.debug_serial,
-            "debug",
-            K16ComputerStorageStatsSnapshot::default(),
-            K16ComputerGpuStatsSnapshot::default(),
-        );
-        self.push_stats_device(
-            &bus,
-            &mut devices,
-            self.devices.serial_input,
-            "serial-input",
-            K16ComputerStorageStatsSnapshot::default(),
-            K16ComputerGpuStatsSnapshot::default(),
-        );
-        self.push_stats_device(
-            &bus,
-            &mut devices,
-            self.devices.gpu0,
-            "gpu0",
-            K16ComputerStorageStatsSnapshot::default(),
-            self.gpu0_device()
-                .map(GpuDevice::stats_snapshot)
-                .unwrap_or_default(),
-        );
-        self.push_stats_device(
-            &bus,
-            &mut devices,
-            self.devices.storage0,
-            "storage0",
-            self.storage0_device()
-                .map(StoragePortDevice::stats_snapshot)
-                .unwrap_or_default(),
-            K16ComputerGpuStatsSnapshot::default(),
-        );
-        self.push_stats_device(
-            &bus,
-            &mut devices,
-            self.devices.timer0,
-            "timer0",
-            K16ComputerStorageStatsSnapshot::default(),
-            K16ComputerGpuStatsSnapshot::default(),
-        );
-        self.push_stats_device(
-            &bus,
-            &mut devices,
-            self.devices.keyboard0,
-            "keyboard0",
-            K16ComputerStorageStatsSnapshot::default(),
-            K16ComputerGpuStatsSnapshot::default(),
-        );
-        self.push_stats_device(
-            &bus,
-            &mut devices,
-            self.devices.mmu0,
-            "mmu0",
-            K16ComputerStorageStatsSnapshot::default(),
-            K16ComputerGpuStatsSnapshot::default(),
-        );
-        self.push_stats_device(
-            &bus,
-            &mut devices,
-            self.devices.bios_flash,
-            "bios-flash",
-            K16ComputerStorageStatsSnapshot::default(),
-            K16ComputerGpuStatsSnapshot::default(),
-        );
+        for descriptor in self.devices.descriptors() {
+            self.push_stats_device(&bus, &mut devices, descriptor);
+        }
         K16ComputerStatsSnapshot {
             bus,
             os,
@@ -791,32 +707,20 @@ impl ComputerMachine {
     fn push_memory_map_region(
         &self,
         map: &mut ComputerMemoryMap,
-        device_id: Option<MmioDeviceId>,
-        name: &'static str,
+        descriptor: ComputerDeviceDescriptor,
     ) {
-        self.push_memory_map_region_with_flags(map, device_id, name, true, true);
-    }
-
-    fn push_memory_map_region_with_flags(
-        &self,
-        map: &mut ComputerMemoryMap,
-        device_id: Option<MmioDeviceId>,
-        name: &'static str,
-        readable: bool,
-        writable: bool,
-    ) {
-        let Some(device_id) = device_id else {
+        let Some(device_id) = descriptor.id else {
             return;
         };
         let Some((base, size)) = self.bus.mmio_region_bounds(device_id) else {
             return;
         };
         map.regions.push(ComputerMemoryRegion {
-            name,
+            name: descriptor.name,
             base,
             size,
-            readable,
-            writable,
+            readable: descriptor.readable,
+            writable: descriptor.writable,
         });
     }
 
@@ -824,12 +728,9 @@ impl ComputerMachine {
         &self,
         bus: &MachineBusStatsSnapshot,
         devices: &mut Vec<K16ComputerDeviceStats>,
-        device_id: Option<MmioDeviceId>,
-        name: &'static str,
-        storage: K16ComputerStorageStatsSnapshot,
-        gpu: K16ComputerGpuStatsSnapshot,
+        descriptor: ComputerDeviceDescriptor,
     ) {
-        let Some(device_id) = device_id else {
+        let Some(device_id) = descriptor.id else {
             return;
         };
         let Some(device) = bus
@@ -840,14 +741,44 @@ impl ComputerMachine {
             return;
         };
         devices.push(K16ComputerDeviceStats {
-            name,
+            name: descriptor.name,
             device_id,
             base: device.base,
             size: device.size,
             traffic: device.traffic,
-            storage,
-            gpu,
+            storage: self.stats_storage_snapshot(descriptor.stats_kind),
+            gpu: self.stats_gpu_snapshot(descriptor.stats_kind),
         });
+    }
+
+    fn stats_storage_snapshot(
+        &self,
+        stats_kind: ComputerDeviceStatsKind,
+    ) -> K16ComputerStorageStatsSnapshot {
+        match stats_kind {
+            ComputerDeviceStatsKind::Storage => self
+                .storage0_device()
+                .map(StoragePortDevice::stats_snapshot)
+                .unwrap_or_default(),
+            ComputerDeviceStatsKind::Generic | ComputerDeviceStatsKind::Gpu => {
+                K16ComputerStorageStatsSnapshot::default()
+            }
+        }
+    }
+
+    fn stats_gpu_snapshot(
+        &self,
+        stats_kind: ComputerDeviceStatsKind,
+    ) -> K16ComputerGpuStatsSnapshot {
+        match stats_kind {
+            ComputerDeviceStatsKind::Gpu => self
+                .gpu0_device()
+                .map(GpuDevice::stats_snapshot)
+                .unwrap_or_default(),
+            ComputerDeviceStatsKind::Generic | ComputerDeviceStatsKind::Storage => {
+                K16ComputerGpuStatsSnapshot::default()
+            }
+        }
     }
 
     pub(crate) fn map_k16_bios_flash(&mut self, bytes: Vec<u8>) -> Result<(), String> {
