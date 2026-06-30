@@ -13,6 +13,8 @@ crates live in `host/k16-vm` and `host/k16-tools`; guest-side Rust crates live u
 
 - AI agents running Gradle from the sandbox should use `./gradlew-sandbox` instead of `./gradlew`. It keeps
   `GRADLE_USER_HOME` in `.gradle-sandbox`, disables the Gradle daemon, and avoids sharing host Gradle lock files.
+- For normal source-built development runs, prefer `./gradlew-sandbox-dev-parallel <tasks>`. It delegates to
+  `./gradlew-sandbox-dev --parallel <tasks> -Pk16BuildJobs=$(nproc)`.
 - `./gradlew build` builds all Gradle modules and runs standard checks.
 - `./gradlew test` runs JVM unit tests across Kotlin modules.
 - `./gradlew :core:test` or `./gradlew :native-runtime:test` runs focused module tests.

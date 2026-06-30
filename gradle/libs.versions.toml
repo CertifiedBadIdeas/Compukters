@@ -14,8 +14,8 @@ releaseConvention = { id = "release-convention" }
 # external
 kotlin = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 kotlinSerialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
-kotlinter = { id = "org.jmailen.kotlinter", version = "5.4.2" }
-shadow = { id = "com.gradleup.shadow", version = "9.4.0" }
+kotlinter = { id = "org.jmailen.kotlinter", version = "5.5.0" }
+shadow = { id = "com.gradleup.shadow", version = "9.4.3" }
 
 architectury-loom = { id = "dev.architectury.loom", version = "1.14.473" }
 architectury-plugin = { id = "architectury-plugin", version = "3.5.163" }
@@ -28,9 +28,9 @@ v12111 = { id = "1.21.11-convention" }
 # common
 kotlin = "2.3.21"
 coroutines = "1.11.0"
-kotlin-logging = "8.0.01"
+kotlin-logging = "8.0.4"
 slf4j = "2.0.18"
-kotlinx-collections-immutable = "0.4.0"
+kotlinx-collections-immutable = "0.5.0"
 
 # 1.21.1
 minecraft-v1211 = "1.21.1"
