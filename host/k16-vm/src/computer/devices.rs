@@ -18,7 +18,10 @@ pub(crate) use keyboard::KeyboardDevice;
 pub use keyboard::KeyboardEvent;
 pub(crate) use mmu::{MmuControlCommand, MmuControlDevice};
 pub(crate) use serial::{DebugSerialDevice, SerialInputDevice};
-pub(crate) use snapshots::snapshot_device_records;
+pub(crate) use snapshots::{
+    restore_device_snapshot_record as restore_regular_device_snapshot_record,
+    snapshot_device_records,
+};
 pub(crate) use storage::{
     K16VolumeFileStorageMedia, StoragePortControllerSnapshot, StoragePortDevice,
 };

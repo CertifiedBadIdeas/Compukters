@@ -180,6 +180,38 @@ fn snapshot_flow_delegates_regular_device_snapshot_records_to_device_facade() {
 }
 
 #[test]
+fn snapshot_flow_delegates_regular_device_snapshot_restore_to_device_facade() {
+    let snapshot_flow_source = fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src/computer/machine/snapshot_flow.rs"),
+    )
+    .expect("snapshot_flow.rs source is readable");
+    let restore_body = snapshot_flow_source
+        .split("fn restore_device_snapshot_record(\n")
+        .nth(1)
+        .and_then(|tail| tail.split("fn validate_cpu_mode_snapshot").next())
+        .expect("restore_device_snapshot_record body is present");
+
+    assert!(
+        restore_body.contains("restore_regular_device_snapshot_record"),
+        "snapshot_flow should delegate regular device snapshot restore to the device facade",
+    );
+    for accessor in [
+        "control_device_mut",
+        "debug_device_mut",
+        "serial_input_device_mut",
+        "storage0_device_mut",
+        "timer0_device_mut",
+        "keyboard0_device_mut",
+    ] {
+        assert!(
+            !restore_body.contains(accessor),
+            "snapshot_flow restore path should not restore regular devices through machine.{accessor}",
+        );
+    }
+}
+
+#[test]
 fn computer_machine_owns_shared_physical_ram() {
     let mut machine = ComputerMachine::new(1024).unwrap();
 
