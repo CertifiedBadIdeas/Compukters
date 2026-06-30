@@ -29,6 +29,7 @@ class K16FirmwareReleaseBuildTest {
     @Test
     fun productionBuildUsesReleaseFirmwareProfileWithoutDebugFallback() {
         val buildScript = root.resolve("build-scripts/src/main/kotlin/k16-firmware-convention.gradle.kts").readText()
+        val rustBinArtifacts = root.resolve("build-scripts/src/main/kotlin/K16RustBinArtifacts.kt").readText()
         val docs = root.resolve("docs/toolchains/k16-firmware-release-builds.md").readText()
 
         assertTrue(buildScript.contains("val k16FirmwareProfile"))
@@ -37,9 +38,11 @@ class K16FirmwareReleaseBuildTest {
         assertTrue(buildScript.contains("fun k16CargoProfileArgs"))
         assertTrue(buildScript.contains("listOf(\"--release\")"))
         assertFalse(buildScript.contains("-Copt-level=0"))
-        assertTrue(buildScript.contains("k16RustBinProfileDir"))
-        assertTrue(buildScript.contains("targetDir.resolve(\"k16-unknown-kraftos/\$profile\")"))
-        assertTrue(buildScript.contains("findCargoK16RustBinArtifact"))
+        assertTrue(buildScript.contains("K16RustBinArtifacts.deleteOutputs"))
+        assertTrue(buildScript.contains("K16RustBinArtifacts.copy"))
+        assertTrue(rustBinArtifacts.contains("fun profileDir"))
+        assertTrue(rustBinArtifacts.contains("fun find"))
+        assertTrue(rustBinArtifacts.contains("targetDir.resolve(\"k16-unknown-kraftos/\$profile\")"))
         assertTrue(buildScript.contains("inputs.property(\"k16FirmwareProfile\", k16FirmwareProfile)"))
 
         assertFalse(buildScript.contains("val debugDir = targetDir.resolve(\"k16-unknown-kraftos/debug\")"))
