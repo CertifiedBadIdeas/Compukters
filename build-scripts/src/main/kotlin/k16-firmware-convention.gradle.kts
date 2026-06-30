@@ -189,87 +189,6 @@ fun artifactFile(artifact: Any): File =
         else -> error("Unsupported K16 storage artifact type: ${artifact::class.qualifiedName}")
     }
 
-fun deleteK16RustBinOutputs(
-    targetDir: File,
-    binName: String,
-    profile: String,
-) {
-    val profileDir = k16RustBinProfileDir(targetDir, profile)
-    profileDir.resolve(binName).delete()
-    profileDir.resolve("$binName.d").delete()
-    val cargoBinPrefix = cargoK16RustBinArtifactPrefix(binName)
-    fun deleteMatchingEntries(
-        directory: File,
-        matches: (String) -> Boolean,
-    ) {
-        directory
-            .listFiles()
-            ?.filter { matches(it.name) }
-            ?.forEach { file ->
-                if (file.isDirectory) {
-                    file.deleteRecursively()
-                } else {
-                    file.delete()
-                }
-            }
-    }
-    val depsDir = profileDir.resolve("deps")
-    deleteMatchingEntries(depsDir) {
-        it.startsWith("$binName-") ||
-            it.startsWith("$cargoBinPrefix-")
-    }
-    deleteMatchingEntries(profileDir.resolve(".fingerprint")) {
-        it.startsWith("$binName-") ||
-            it.startsWith("$cargoBinPrefix-")
-    }
-    deleteMatchingEntries(profileDir.resolve("incremental")) {
-        it.startsWith("$binName-") ||
-            it.startsWith("$cargoBinPrefix-")
-    }
-}
-
-fun copyK16RustBinOutput(
-    targetDir: File,
-    binName: String,
-    output: File,
-    profile: String,
-) {
-    val artifact = findCargoK16RustBinArtifact(targetDir, binName, profile)
-    output.parentFile.mkdirs()
-    artifact.copyTo(output, overwrite = true)
-}
-
-fun findCargoK16RustBinArtifact(
-    targetDir: File,
-    binName: String,
-    profile: String,
-): File {
-    val cargoBinPrefix = cargoK16RustBinArtifactPrefix(binName)
-    val depsDir = k16RustBinProfileDir(targetDir, profile).resolve("deps")
-    val artifacts =
-        depsDir
-            .listFiles()
-            ?.filter {
-                it.isFile &&
-                    it.name.startsWith("$cargoBinPrefix-") &&
-                    !it.name.endsWith(".d")
-            }
-            ?.sortedBy { it.name }
-            ?: emptyList()
-    check(artifacts.size == 1) {
-        "Expected exactly one linked K16 Rust $profile bin artifact for $binName in $depsDir, found ${artifacts.size}"
-    }
-    val artifact = artifacts.single()
-    check(artifact.isFile) {
-        "Expected linked K16 Rust $profile bin artifact for $binName at $artifact"
-    }
-    return artifact
-}
-
-fun cargoK16RustBinArtifactPrefix(binName: String): String {
-    return binName.replace('-', '_')
-}
-
 fun k16FirmwareProfileName(): String {
     val profile = k16FirmwareProfile.get()
     check(profile == "debug" || profile == "release") {
@@ -304,11 +223,6 @@ fun org.gradle.api.Task.inputsK16HostTools() {
     inputs.dir(k16AbiSource)
 }
 
-fun k16RustBinProfileDir(
-    targetDir: File,
-    profile: String,
-): File = targetDir.resolve("k16-unknown-kraftos/$profile")
-
 fun Project.compileK16GuestRustBin(
     manifest: File,
     targetDir: File,
@@ -331,7 +245,7 @@ fun Project.compileK16GuestRustBin(
         mapOutput.delete()
     }
     cpuHelpers.parentFile.mkdirs()
-    deleteK16RustBinOutputs(targetDir, binName, profile)
+    K16RustBinArtifacts.deleteOutputs(targetDir, binName, profile)
     fun buildRuntimeObject(
         runtimeObject: String,
         output: File,
@@ -438,7 +352,7 @@ fun Project.compileK16GuestRustBin(
     check(exitCode == 0) {
         "K16 Rust firmware build for $binName failed with exit code $exitCode"
     }
-    copyK16RustBinOutput(
+    K16RustBinArtifacts.copy(
         targetDir = targetDir,
         binName = binName,
         output = output,
