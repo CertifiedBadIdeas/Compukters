@@ -66,7 +66,7 @@ kernel/user ABI has a deliberate syscall or capability surface.
 
 Hosted `std` is now tracked as a strict partial hosted-ABI milestone rather
 than a hidden host shortcut. See
-[K16 Hosted ABI V0](../superpowers/specs/2026-06-21/issue-332-k16-hosted-abi-v0.md).
+[K16 Hosted ABI V0](../../.agents/tmp/specs/2026-06-21/issue-332-k16-hosted-abi-v0.md).
 
 The old caution still applies to no-op or fallback implementations: K16 should
 not claim hosted support for APIs that silently do nothing or delegate to host

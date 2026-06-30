@@ -69,7 +69,7 @@ fn active_abi_index_lists_k16_object_contract() {
 #[test]
 fn shared_cpu_helper_runtime_spec_defines_narrow_runtime_contract() {
     let docs = normalized_doc(
-        "docs/superpowers/specs/2026-06-21/issue-346-k16-shared-cpu-helper-runtime.md",
+        ".agents/tmp/specs/2026-06-21/issue-346-k16-shared-cpu-helper-runtime.md",
     );
 
     for required in [
