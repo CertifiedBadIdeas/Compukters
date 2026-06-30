@@ -1,0 +1,8 @@
+#!/bin/sh
+
+set -eu
+
+APP_HOME=$(CDPATH= cd -P "$(dirname "$0")" >/dev/null && pwd) || exit 1
+
+cd "$APP_HOME"
+exec ./gradlew-sandbox-dev --parallel "$@" -Pk16BuildJobs=$(nproc)

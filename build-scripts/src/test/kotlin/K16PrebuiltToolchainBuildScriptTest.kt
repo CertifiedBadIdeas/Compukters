@@ -147,6 +147,17 @@ class K16PrebuiltToolchainBuildScriptTest {
     }
 
     @Test
+    fun rootHasParallelSourceBuiltDevGradleSandboxWrapper() {
+        val gradleSandboxDevParallel = root.resolve("gradlew-sandbox-dev-parallel").readText()
+
+        assertTrue(gradleSandboxDevParallel.startsWith("#!/bin/sh"))
+        assertTrue(gradleSandboxDevParallel.contains("gradlew-sandbox-dev"))
+        assertTrue(gradleSandboxDevParallel.contains("--parallel"))
+        assertTrue(gradleSandboxDevParallel.contains("-Pk16BuildJobs=$(nproc)"))
+        assertTrue(gradleSandboxDevParallel.trimEnd().endsWith("--parallel \"\$@\" -Pk16BuildJobs=$(nproc)"))
+    }
+
+    @Test
     fun rootCleanRemovesRepoBuildAndTargetOutputsButKeepsToolchainWorkspace() {
         val rootBuildScript = root.resolve("build.gradle.kts").readText()
         val docs = root.resolve("docs/toolchains/k16-prebuilt-toolchain.md").readText()

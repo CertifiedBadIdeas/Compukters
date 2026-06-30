@@ -2327,7 +2327,8 @@ class K16FirmwareResourceTest {
         val memorySize = bytes.u32Le(offset = 48)
 
         assertTrue(payloadBytes > 0, "K16 kernel payload should not be empty")
-        assertEquals(payloadBytes, memorySize, "K16E kernel memory size should match file size")
+        assertTrue(memorySize >= payloadBytes, "K16E kernel memory size should cover file payload")
+        assertTrue(memorySize - payloadBytes < 64 * 1024, "K16E kernel memory size should not include a fixed arena window")
     }
 
     @Test

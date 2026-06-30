@@ -66,7 +66,7 @@ Use `profileK16RuntimeWait` to build the local debug K16 JNI library, boot the b
 `K16RuntimeDevice`, drive a small timer/input wait workload, and print the runtime profiling summary to the terminal:
 
 ```bash
-./gradlew-sandbox-dev --parallel profileK16RuntimeWait -Pk16BuildJobs=$(nproc)
+./gradlew-sandbox-dev-parallel profileK16RuntimeWait
 ```
 
 Use `profileK16RuntimeTextIo` for a terminal-focused workload that waits for the bundled shell, sends one command as
@@ -74,7 +74,7 @@ individual character input, sends another command as paste input, compares a nor
 `ls /bin`, and prints the same runtime profiling summary plus per-phase `k16Phase` delta lines:
 
 ```bash
-./gradlew-sandbox-dev --parallel profileK16RuntimeTextIo -Pk16BuildJobs=$(nproc)
+./gradlew-sandbox-dev-parallel profileK16RuntimeTextIo
 ```
 
 The `k16Phase` lines split selected text-I/O scenarios into named checkpoints such as `bios.splash.visible`,
@@ -108,13 +108,13 @@ tick cost after all shells are waiting, then runs one active command while the o
 include both server-tick wall time and a `sync` time that waits for worker snapshots after the timed tick loop:
 
 ```bash
-./gradlew-sandbox-dev --parallel profileK16ManyVmServerBudget -Pk16BuildJobs=$(nproc)
+./gradlew-sandbox-dev-parallel profileK16ManyVmServerBudget
 ```
 
 Scale the workload with Gradle properties:
 
 ```bash
-./gradlew-sandbox-dev --parallel profileK16ManyVmServerBudget -Pk16BuildJobs=$(nproc) -Pk16ManyVmCount=100 -Pk16ManyVmIdleTicks=200
+./gradlew-sandbox-dev-parallel profileK16ManyVmServerBudget -Pk16ManyVmCount=100 -Pk16ManyVmIdleTicks=200
 ```
 
 The tasks run only their dedicated profiling tests and keep normal gameplay on the default no-op collector. The profiling
@@ -310,14 +310,13 @@ cd host/k16-vm && cargo test
 Build the local JNI library:
 
 ```bash
-./gradlew-sandbox-dev --parallel :v1_21_1-neoforge:buildK16VmNativeLibrary -Pk16BuildJobs=$(nproc)
+./gradlew-sandbox-dev-parallel :v1_21_1-neoforge:buildK16VmNativeLibrary
 ```
 
 Run native-runtime JNI boundary tests:
 
 ```bash
-./gradlew-sandbox-dev --parallel :native-runtime:test \
-  -Pk16BuildJobs=$(nproc) \
+./gradlew-sandbox-dev-parallel :native-runtime:test \
   -Dk16.vm.native.library=$PWD/.toolchain/build/cargo/k16-vm/debug/libk16_vm.so
 ```
 
