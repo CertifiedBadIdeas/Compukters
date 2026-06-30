@@ -148,6 +148,38 @@ fn computer_device_ids_encapsulates_fields_and_lifecycle_registration() {
 }
 
 #[test]
+fn snapshot_flow_delegates_regular_device_snapshot_records_to_device_facade() {
+    let snapshot_flow_source = fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src/computer/machine/snapshot_flow.rs"),
+    )
+    .expect("snapshot_flow.rs source is readable");
+    let device_snapshot_body = snapshot_flow_source
+        .split("fn device_snapshot_records(machine: &ComputerMachine) -> Vec<ComputerDeviceSnapshotRecord> {")
+        .nth(1)
+        .and_then(|tail| tail.split("fn restore_device_snapshot_record").next())
+        .expect("device_snapshot_records body is present");
+
+    assert!(
+        device_snapshot_body.contains("snapshot_device_records"),
+        "snapshot_flow should delegate regular device snapshot records to the device facade",
+    );
+    for accessor in [
+        "control_device",
+        "debug_device",
+        "serial_input_device",
+        "storage0_device",
+        "timer0_game_ticks",
+        "keyboard0_device",
+    ] {
+        assert!(
+            !device_snapshot_body.contains(accessor),
+            "snapshot_flow encode path should not enumerate regular devices through machine.{accessor}",
+        );
+    }
+}
+
+#[test]
 fn computer_machine_owns_shared_physical_ram() {
     let mut machine = ComputerMachine::new(1024).unwrap();
 
