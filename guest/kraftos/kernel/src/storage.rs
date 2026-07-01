@@ -1236,20 +1236,17 @@ pub unsafe fn copy_selected_file_range_to_ram_profiled(
         if range_end > extent_file_start && file_offset < extent_file_end {
             let copy_start = max_u32(file_offset, extent_file_start);
             let copy_end = min_u32(range_end, extent_file_end);
-            let mut cursor = copy_start;
-            while cursor < copy_end {
-                let within_extent = cursor - extent_file_start;
-                let block_delta = within_extent / BLOCK_SIZE;
-                let block_offset = within_extent % BLOCK_SIZE;
-                let available = min_u32(BLOCK_SIZE - block_offset, copy_end - cursor);
-                unsafe { read_fs_block(extent_start_block + block_delta)? };
-                record_profiled_file_data_read(profile_kind, available);
-                unsafe {
-                    copy_ram_to_ram(SCRATCH_ADDR + block_offset, dst_addr + copied, available);
-                }
-                copied += available;
-                cursor += available;
-            }
+            unsafe {
+                copy_extent_range_to_ram(
+                    extent_start_block,
+                    extent_file_start,
+                    copy_start,
+                    copy_end,
+                    dst_addr,
+                    &mut copied,
+                    profile_kind,
+                )?
+            };
         }
 
         extent_file_start = extent_file_end;
@@ -1312,20 +1309,17 @@ pub unsafe fn copy_file_range_to_ram_profiled(
         if range_end > extent_file_start && file_offset < extent_file_end {
             let copy_start = max_u32(file_offset, extent_file_start);
             let copy_end = min_u32(range_end, extent_file_end);
-            let mut cursor = copy_start;
-            while cursor < copy_end {
-                let within_extent = cursor - extent_file_start;
-                let block_delta = within_extent / BLOCK_SIZE;
-                let block_offset = within_extent % BLOCK_SIZE;
-                let available = min_u32(BLOCK_SIZE - block_offset, copy_end - cursor);
-                unsafe { read_fs_block(extent_start_block + block_delta)? };
-                record_profiled_file_data_read(profile_kind, available);
-                unsafe {
-                    copy_ram_to_ram(SCRATCH_ADDR + block_offset, dst_addr + copied, available);
-                }
-                copied += available;
-                cursor += available;
-            }
+            unsafe {
+                copy_extent_range_to_ram(
+                    extent_start_block,
+                    extent_file_start,
+                    copy_start,
+                    copy_end,
+                    dst_addr,
+                    &mut copied,
+                    profile_kind,
+                )?
+            };
         }
 
         extent_file_start = extent_file_end;
@@ -1334,6 +1328,69 @@ pub unsafe fn copy_file_range_to_ram_profiled(
 
     if copied != len {
         return Err(StorageError::INVALID_FILESYSTEM);
+    }
+    Ok(())
+}
+
+unsafe fn copy_extent_range_to_ram(
+    extent_start_block: u32,
+    extent_file_start: u32,
+    copy_start: u32,
+    copy_end: u32,
+    dst_addr: u32,
+    copied: &mut u32,
+    profile_kind: FileReadProfileKind,
+) -> Result<(), StorageError> {
+    let mut cursor = copy_start;
+    while cursor < copy_end {
+        let within_extent = cursor - extent_file_start;
+        let block_delta = within_extent / BLOCK_SIZE;
+        let block_offset = within_extent % BLOCK_SIZE;
+        if block_offset == 0 {
+            let full_block_count = (copy_end - cursor) / BLOCK_SIZE;
+            if full_block_count > 0 {
+                let batch_bytes = match full_block_count.checked_mul(BLOCK_SIZE) {
+                    Some(value) => value,
+                    None => return Err(StorageError::INVALID_FILESYSTEM),
+                };
+                let block = match extent_start_block.checked_add(block_delta) {
+                    Some(value) => value,
+                    None => return Err(StorageError::INVALID_FILESYSTEM),
+                };
+                let dst = match dst_addr.checked_add(*copied) {
+                    Some(value) => value,
+                    None => return Err(StorageError::INVALID_FILESYSTEM),
+                };
+                unsafe { read_fs_blocks_to_ram(block, full_block_count, dst)? };
+                record_profiled_file_data_read(profile_kind, batch_bytes);
+                *copied = match (*copied).checked_add(batch_bytes) {
+                    Some(value) => value,
+                    None => return Err(StorageError::INVALID_FILESYSTEM),
+                };
+                cursor += batch_bytes;
+                continue;
+            }
+        }
+
+        let available = min_u32(BLOCK_SIZE - block_offset, copy_end - cursor);
+        let block = match extent_start_block.checked_add(block_delta) {
+            Some(value) => value,
+            None => return Err(StorageError::INVALID_FILESYSTEM),
+        };
+        unsafe { read_fs_block(block)? };
+        record_profiled_file_data_read(profile_kind, available);
+        let dst = match dst_addr.checked_add(*copied) {
+            Some(value) => value,
+            None => return Err(StorageError::INVALID_FILESYSTEM),
+        };
+        unsafe {
+            copy_ram_to_ram(SCRATCH_ADDR + block_offset, dst, available);
+        }
+        *copied = match (*copied).checked_add(available) {
+            Some(value) => value,
+            None => return Err(StorageError::INVALID_FILESYSTEM),
+        };
+        cursor += available;
     }
     Ok(())
 }
@@ -1854,6 +1911,29 @@ unsafe fn read_fs_block(block: u32) -> Result<(), StorageError> {
 }
 
 #[inline(always)]
+unsafe fn read_fs_blocks_to_ram(
+    start_block: u32,
+    block_count: u32,
+    dst_addr: u32,
+) -> Result<(), StorageError> {
+    if block_count == 0 {
+        return Ok(());
+    }
+    let end_block = match start_block.checked_add(block_count) {
+        Some(value) => value,
+        None => return Err(StorageError::INVALID_FILESYSTEM),
+    };
+    if end_block > unsafe { read_u32(STATE_PARTITION_BLOCK_COUNT) } {
+        return Err(StorageError::INVALID_FILESYSTEM);
+    }
+    let lba = match unsafe { read_u32(STATE_PARTITION_START_LBA) }.checked_add(start_block) {
+        Some(value) => value,
+        None => return Err(StorageError::INVALID_FILESYSTEM),
+    };
+    unsafe { read_storage_blocks_to_ram(lba, block_count, dst_addr) }
+}
+
+#[inline(always)]
 unsafe fn write_fs_block(block: u32) -> Result<(), StorageError> {
     if block >= unsafe { read_u32(STATE_PARTITION_BLOCK_COUNT) } {
         return Err(StorageError::INVALID_FILESYSTEM);
@@ -1867,6 +1947,22 @@ unsafe fn write_fs_block(block: u32) -> Result<(), StorageError> {
 
 #[inline(always)]
 unsafe fn read_storage_block(lba: u32) -> Result<(), StorageError> {
+    unsafe { read_storage_blocks_to_ram(lba, 1, SCRATCH_ADDR) }
+}
+
+#[inline(always)]
+unsafe fn read_storage_blocks_to_ram(
+    lba: u32,
+    block_count: u32,
+    dst_addr: u32,
+) -> Result<(), StorageError> {
+    if block_count == 0 {
+        return Err(StorageError::INVALID_FILESYSTEM);
+    }
+    let bytes_done = match block_count.checked_mul(BLOCK_SIZE) {
+        Some(value) => value,
+        None => return Err(StorageError::INVALID_FILESYSTEM),
+    };
     let version = unsafe { read_i32(storage0::VERSION) };
     if version != storage0::STORAGE_VERSION {
         return Err(StorageError::STORAGE_VERSION);
@@ -1882,13 +1978,13 @@ unsafe fn read_storage_block(lba: u32) -> Result<(), StorageError> {
     unsafe {
         write_u32(storage0::LBA_LOW, lba);
         write_u32(storage0::LBA_HIGH, 0);
-        write_u32(storage0::BLOCK_COUNT, 1);
-        write_u32(storage0::BUFFER_ADDR, SCRATCH_ADDR);
+        write_u32(storage0::BLOCK_COUNT, block_count);
+        write_u32(storage0::BUFFER_ADDR, dst_addr);
         write_i32(storage0::COMMAND, storage0::COMMAND_READ_BLOCKS);
     }
     if unsafe { read_i32(storage0::STATUS) } != storage0::STATUS_DONE
         || unsafe { read_i32(storage0::ERROR) } != storage0::ERROR_NONE
-        || unsafe { read_u32(storage0::BYTES_DONE) } != BLOCK_SIZE
+        || unsafe { read_u32(storage0::BYTES_DONE) } != bytes_done
     {
         return Err(StorageError::STORAGE_TRANSFER);
     }

@@ -89,4 +89,15 @@ class K16RuntimeProfilingArchitectureTest {
 
         assertFalse(source.contains("RecordingRuntimeMetricsCollector"))
     }
+
+    @Test
+    fun k16KernelBatchesContiguousFullBlockStorageReads() {
+        val storageSource = Path.of("../../../guest/kraftos/kernel/src/storage.rs").readText()
+
+        assertTrue(storageSource.contains("unsafe fn read_fs_blocks_to_ram("))
+        assertTrue(storageSource.contains("unsafe fn read_storage_blocks_to_ram("))
+        assertTrue(storageSource.contains("write_u32(storage0::BLOCK_COUNT, block_count)"))
+        assertTrue(storageSource.contains("full_block_count"))
+        assertTrue(storageSource.contains("read_fs_blocks_to_ram(block, full_block_count, dst)"))
+    }
 }
