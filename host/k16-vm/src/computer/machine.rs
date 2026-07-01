@@ -407,6 +407,9 @@ impl ComputerMachine {
             dynamic_import_data_read_bytes: read(168),
             library_data_read_blocks: read(176),
             library_data_read_bytes: read(184),
+            block_cache_hits: read(192),
+            block_cache_misses: read(200),
+            block_cache_batch_reads: read(208),
         }
     }
 

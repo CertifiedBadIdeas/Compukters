@@ -82,7 +82,7 @@ The `k16Phase` lines split selected text-I/O scenarios into named checkpoints su
 and deltas between two runtime metric snapshots:
 
 ```text
-k16Phase: name=ls:/bin.visible, elapsed=..., slices=..., runTime=..., inputBytes=..., gpuFrameBytes=..., displayFrames=..., displayBytes=..., storageReadCommands=..., storageWriteCommands=..., storageMediaReadBlocks=..., storageMediaWriteBlocks=..., storageUniqueReadBlocks=..., storageRepeatedReadBlocks=..., storagePartitionTableReadBlocks=..., storageBootMetadataReadBlocks=..., storageBootDataReadBlocks=..., storageRootMetadataReadBlocks=..., storageRootDataReadBlocks=..., storageUnknownReadBlocks=..., storageBytesRead=..., pathLookups=..., inodeLoads=..., dirEntryScans=..., fileOpens=..., fileReads=..., statCalls=..., programLoadBytes=..., dynamicImportBytes=..., libraryLoadBytes=..., genericFileDataReadBlocks=..., genericFileDataReadBytes=..., readDirDataReadBlocks=..., readDirDataReadBytes=..., programDataReadBlocks=..., programDataReadBytes=..., dynamicImportDataReadBlocks=..., dynamicImportDataReadBytes=..., libraryDataReadBlocks=..., libraryDataReadBytes=...
+k16Phase: name=ls:/bin.visible, elapsed=..., slices=..., runTime=..., inputBytes=..., gpuFrameBytes=..., displayFrames=..., displayBytes=..., storageReadCommands=..., storageWriteCommands=..., storageMediaReadBlocks=..., storageMediaWriteBlocks=..., storageUniqueReadBlocks=..., storageRepeatedReadBlocks=..., storagePartitionTableReadBlocks=..., storageBootMetadataReadBlocks=..., storageBootDataReadBlocks=..., storageRootMetadataReadBlocks=..., storageRootDataReadBlocks=..., storageUnknownReadBlocks=..., storageBytesRead=..., pathLookups=..., inodeLoads=..., dirEntryScans=..., fileOpens=..., fileReads=..., statCalls=..., programLoadBytes=..., dynamicImportBytes=..., libraryLoadBytes=..., genericFileDataReadBlocks=..., genericFileDataReadBytes=..., readDirDataReadBlocks=..., readDirDataReadBytes=..., programDataReadBlocks=..., programDataReadBytes=..., dynamicImportDataReadBlocks=..., dynamicImportDataReadBytes=..., libraryDataReadBlocks=..., libraryDataReadBytes=..., blockCacheHits=..., blockCacheMisses=..., blockCacheBatchReads=...
 ```
 
 Use these phase lines when deciding whether a slowdown is in command dispatch, command execution/storage reads, display
@@ -92,7 +92,7 @@ remain available for comparison with previous profiling runs.
 The coreutils profile also prints a sorted KFS hotspot summary:
 
 ```text
-k16FsHotspots: metadataOps=[ls:..., stat:..., ...], dataReadBlocks=[cat:..., ls:..., ...], readCommands=[ls:..., ...], mediaReadBlocks=[cat:..., ...], pathLookups=[...], inodeLoads=[...], dirEntryScans=[...], fileOpens=[...], fileReads=[...], statCalls=[...], readDirCalls=[...], genericFileDataReadBlocks=[...], readDirDataReadBlocks=[...], programDataReadBlocks=[...], dynamicImportDataReadBlocks=[...], libraryDataReadBlocks=[...], storageWriteCommands=[...], mediaWriteBlocks=[...]
+k16FsHotspots: metadataOps=[ls:..., stat:..., ...], dataReadBlocks=[cat:..., ls:..., ...], readCommands=[ls:..., ...], mediaReadBlocks=[cat:..., ...], pathLookups=[...], inodeLoads=[...], dirEntryScans=[...], fileOpens=[...], fileReads=[...], statCalls=[...], readDirCalls=[...], genericFileDataReadBlocks=[...], readDirDataReadBlocks=[...], programDataReadBlocks=[...], dynamicImportDataReadBlocks=[...], libraryDataReadBlocks=[...], storageWriteCommands=[...], mediaWriteBlocks=[...], blockCacheHits=[...], blockCacheMisses=[...], blockCacheBatchReads=[...]
 ```
 
 `metadataOps` is `pathLookups + inodeLoads + dirEntryScans + statCalls`. Use it to rank commands by KFS metadata/path
@@ -117,6 +117,8 @@ KFS metadata/data, and unknown blocks.
 The `*DataReadBlocks` and `*DataReadBytes` OS counters split guest KFS data-block reads by loader/file category:
 generic user file reads, directory listings, executable payload reads, dynamic import metadata reads, and shared-library
 payload reads. These are attribution counters and do not issue extra storage0 media reads.
+`blockCacheHits` and `blockCacheMisses` count guest KFS block-cache lookups. `blockCacheBatchReads` counts contiguous
+miss ranges that reached storage0 as batched reads after the KFS cache check.
 
 Use `profileK16ManyVmServerBudget` for a server-focused workload that boots several K16 runtime devices, measures idle
 tick cost after all shells are waiting, then runs active production-path command scenarios. The printed lines include
@@ -206,7 +208,7 @@ during the worker cache refresh path:
 k16Bus: ramLoads=..., ramStores=..., ramBytesRead=..., ramBytesWritten=..., mmioLoads=..., mmioStores=..., mmioBytesRead=..., mmioBytesWritten=...
 k16Devices: mapped=..., loads=..., stores=..., bytesRead=..., bytesWritten=...
 k16Storage0: readCommands=..., writeCommands=..., flushes=..., bytesRead=..., bytesWritten=..., failed=..., mediaReadBlocks=..., mediaWriteBlocks=..., uniqueReadBlocks=..., repeatedReadBlocks=..., partitionTableReadBlocks=..., bootMetadataReadBlocks=..., bootDataReadBlocks=..., rootMetadataReadBlocks=..., rootDataReadBlocks=..., unknownReadBlocks=...
-k16Os: pathLookups=..., inodeLoads=..., dirEntryScans=..., fileOpens=..., fileReads=..., statCalls=..., programLoadBytes=..., dynamicImportBytes=..., libraryLoadBytes=..., genericFileDataReadBlocks=..., genericFileDataReadBytes=..., readDirDataReadBlocks=..., readDirDataReadBytes=..., programDataReadBlocks=..., programDataReadBytes=..., dynamicImportDataReadBlocks=..., dynamicImportDataReadBytes=..., libraryDataReadBlocks=..., libraryDataReadBytes=...
+k16Os: pathLookups=..., inodeLoads=..., dirEntryScans=..., fileOpens=..., fileReads=..., statCalls=..., programLoadBytes=..., dynamicImportBytes=..., libraryLoadBytes=..., genericFileDataReadBlocks=..., genericFileDataReadBytes=..., readDirDataReadBlocks=..., readDirDataReadBytes=..., programDataReadBlocks=..., programDataReadBytes=..., dynamicImportDataReadBlocks=..., dynamicImportDataReadBytes=..., libraryDataReadBlocks=..., libraryDataReadBytes=..., blockCacheHits=..., blockCacheMisses=..., blockCacheBatchReads=...
   device[...]: base=..., size=..., loads=..., stores=..., bytesRead=..., bytesWritten=...
 ```
 
@@ -227,7 +229,8 @@ k16Os: pathLookups=..., inodeLoads=..., dirEntryScans=..., fileOpens=..., fileRe
   `libraryLoadBytes` counts loaded shared-library payload bytes. `genericFileDataReadBlocks`/`Bytes`,
   `readDirDataReadBlocks`/`Bytes`, `programDataReadBlocks`/`Bytes`, `dynamicImportDataReadBlocks`/`Bytes`, and
   `libraryDataReadBlocks`/`Bytes` attribute guest KFS data-block reads to user file reads, directory listing,
-  executable payload, dynamic import metadata, and shared-library payload categories.
+  executable payload, dynamic import metadata, and shared-library payload categories. `blockCacheHits`,
+  `blockCacheMisses`, and `blockCacheBatchReads` expose guest KFS block-cache effectiveness before storage0 commands.
 - These counters are cumulative inside the Rust VM; the Kotlin profiling collector stores the latest snapshot instead of
   summing repeated snapshots.
 

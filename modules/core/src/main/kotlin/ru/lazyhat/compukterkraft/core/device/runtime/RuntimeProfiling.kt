@@ -287,6 +287,9 @@ data class RuntimeK16OsMetrics(
     val dynamicImportDataReadBytes: Long = 0,
     val libraryDataReadBlocks: Long = 0,
     val libraryDataReadBytes: Long = 0,
+    val blockCacheHits: Long = 0,
+    val blockCacheMisses: Long = 0,
+    val blockCacheBatchReads: Long = 0,
 )
 
 data class RuntimeK16DecodeCacheMetrics(
@@ -423,7 +426,7 @@ data class RuntimeProfilingSnapshot(
                 "    k16Storage0: readCommands=${k16.storage0.readCommands}, writeCommands=${k16.storage0.writeCommands}, flushes=${k16.storage0.flushCommands}, bytesRead=${k16.storage0.bytesRead}, bytesWritten=${k16.storage0.bytesWritten}, failed=${k16.storage0.failedCommands}, mediaReadBlocks=${k16.storage0.mediaReadBlocks}, mediaWriteBlocks=${k16.storage0.mediaWriteBlocks}, uniqueReadBlocks=${k16.storage0.uniqueReadBlocks}, repeatedReadBlocks=${k16.storage0.repeatedReadBlocks}, partitionTableReadBlocks=${k16.storage0.partitionTableReadBlocks}, bootMetadataReadBlocks=${k16.storage0.bootMetadataReadBlocks}, bootDataReadBlocks=${k16.storage0.bootDataReadBlocks}, rootMetadataReadBlocks=${k16.storage0.rootMetadataReadBlocks}, rootDataReadBlocks=${k16.storage0.rootDataReadBlocks}, unknownReadBlocks=${k16.storage0.unknownReadBlocks}",
             )
             appendLine(
-                "    k16Os: pathLookups=${k16.os.pathLookups}, inodeLoads=${k16.os.inodeLoads}, dirEntryScans=${k16.os.dirEntryScans}, fileOpens=${k16.os.fileOpens}, fileReads=${k16.os.fileReads}, statCalls=${k16.os.statCalls}, processSpawns=${k16.os.processSpawns}, programLoads=${k16.os.programLoads}, dynamicImportLoads=${k16.os.dynamicImportLoads}, libraryLoads=${k16.os.libraryLoads}, readDirCalls=${k16.os.readDirCalls}, programLoadBytes=${k16.os.programLoadBytes}, dynamicImportBytes=${k16.os.dynamicImportBytes}, libraryLoadBytes=${k16.os.libraryLoadBytes}, genericFileDataReadBlocks=${k16.os.genericFileDataReadBlocks}, genericFileDataReadBytes=${k16.os.genericFileDataReadBytes}, readDirDataReadBlocks=${k16.os.readDirDataReadBlocks}, readDirDataReadBytes=${k16.os.readDirDataReadBytes}, programDataReadBlocks=${k16.os.programDataReadBlocks}, programDataReadBytes=${k16.os.programDataReadBytes}, dynamicImportDataReadBlocks=${k16.os.dynamicImportDataReadBlocks}, dynamicImportDataReadBytes=${k16.os.dynamicImportDataReadBytes}, libraryDataReadBlocks=${k16.os.libraryDataReadBlocks}, libraryDataReadBytes=${k16.os.libraryDataReadBytes}",
+                "    k16Os: pathLookups=${k16.os.pathLookups}, inodeLoads=${k16.os.inodeLoads}, dirEntryScans=${k16.os.dirEntryScans}, fileOpens=${k16.os.fileOpens}, fileReads=${k16.os.fileReads}, statCalls=${k16.os.statCalls}, processSpawns=${k16.os.processSpawns}, programLoads=${k16.os.programLoads}, dynamicImportLoads=${k16.os.dynamicImportLoads}, libraryLoads=${k16.os.libraryLoads}, readDirCalls=${k16.os.readDirCalls}, programLoadBytes=${k16.os.programLoadBytes}, dynamicImportBytes=${k16.os.dynamicImportBytes}, libraryLoadBytes=${k16.os.libraryLoadBytes}, genericFileDataReadBlocks=${k16.os.genericFileDataReadBlocks}, genericFileDataReadBytes=${k16.os.genericFileDataReadBytes}, readDirDataReadBlocks=${k16.os.readDirDataReadBlocks}, readDirDataReadBytes=${k16.os.readDirDataReadBytes}, programDataReadBlocks=${k16.os.programDataReadBlocks}, programDataReadBytes=${k16.os.programDataReadBytes}, dynamicImportDataReadBlocks=${k16.os.dynamicImportDataReadBlocks}, dynamicImportDataReadBytes=${k16.os.dynamicImportDataReadBytes}, libraryDataReadBlocks=${k16.os.libraryDataReadBlocks}, libraryDataReadBytes=${k16.os.libraryDataReadBytes}, blockCacheHits=${k16.os.blockCacheHits}, blockCacheMisses=${k16.os.blockCacheMisses}, blockCacheBatchReads=${k16.os.blockCacheBatchReads}",
             )
             appendK16DeviceSummary()
             appendLine(
@@ -1046,4 +1049,7 @@ private fun NativeK16OsStats.toRuntimeMetrics(): RuntimeK16OsMetrics =
         dynamicImportDataReadBytes = dynamicImportDataReadBytes,
         libraryDataReadBlocks = libraryDataReadBlocks,
         libraryDataReadBytes = libraryDataReadBytes,
+        blockCacheHits = blockCacheHits,
+        blockCacheMisses = blockCacheMisses,
+        blockCacheBatchReads = blockCacheBatchReads,
     )

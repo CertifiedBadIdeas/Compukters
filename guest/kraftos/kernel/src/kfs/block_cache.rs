@@ -45,6 +45,10 @@ impl<const SLOTS: usize> KfsBlockCache<SLOTS> {
         self.find_valid_slot(lba).map(|slot| self.slots[slot].dirty)
     }
 
+    pub fn contains(&self, lba: u32) -> bool {
+        self.find_valid_slot(lba).is_some()
+    }
+
     pub fn invalidate_all(&mut self) {
         let mut index = 0;
         while index < SLOTS {
@@ -191,6 +195,18 @@ mod tests {
 
         assert_eq!(cache.get(1), Some(&replacement));
         assert_eq!(cache.is_dirty(1), Some(true));
+    }
+
+    #[test]
+    fn block_cache_reports_present_blocks_without_touching_payload() {
+        let mut cache = KfsBlockCache::<2>::new();
+        let block = block_with(0x31);
+
+        assert!(!cache.contains(4));
+        cache.put_clean(4, &block);
+
+        assert!(cache.contains(4));
+        assert!(!cache.contains(5));
     }
 
     #[test]

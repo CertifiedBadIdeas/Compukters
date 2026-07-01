@@ -182,6 +182,9 @@ class RuntimeProfilingTest {
                         dynamicImportDataReadBytes = 52,
                         libraryDataReadBlocks = 53,
                         libraryDataReadBytes = 54,
+                        blockCacheHits = 55,
+                        blockCacheMisses = 56,
+                        blockCacheBatchReads = 57,
                     ),
                 devices =
                     listOf(
@@ -302,6 +305,9 @@ class RuntimeProfilingTest {
         assertEquals(42, snapshot.k16.os.programLoadBytes)
         assertEquals(43, snapshot.k16.os.dynamicImportBytes)
         assertEquals(44, snapshot.k16.os.libraryLoadBytes)
+        assertEquals(55, snapshot.k16.os.blockCacheHits)
+        assertEquals(56, snapshot.k16.os.blockCacheMisses)
+        assertEquals(57, snapshot.k16.os.blockCacheBatchReads)
         assertEquals(18, snapshot.vm.k16TextInputNanos)
         assertEquals(RuntimeK16BusTrafficMetrics(loads = 10, stores = 11, bytesRead = 12, bytesWritten = 13), snapshot.k16.ram)
         assertEquals(RuntimeK16BusTrafficMetrics(loads = 20, stores = 21, bytesRead = 22, bytesWritten = 23), snapshot.k16.mmio)
@@ -399,7 +405,7 @@ class RuntimeProfilingTest {
             summary,
         )
         assertTrue(
-            summary.contains("    k16Os: pathLookups=31, inodeLoads=32, dirEntryScans=33, fileOpens=34, fileReads=35, statCalls=36, processSpawns=37, programLoads=38, dynamicImportLoads=39, libraryLoads=40, readDirCalls=41, programLoadBytes=42, dynamicImportBytes=43, libraryLoadBytes=44, genericFileDataReadBlocks=45, genericFileDataReadBytes=46, readDirDataReadBlocks=47, readDirDataReadBytes=48, programDataReadBlocks=49, programDataReadBytes=50, dynamicImportDataReadBlocks=51, dynamicImportDataReadBytes=52, libraryDataReadBlocks=53, libraryDataReadBytes=54"),
+            summary.contains("    k16Os: pathLookups=31, inodeLoads=32, dirEntryScans=33, fileOpens=34, fileReads=35, statCalls=36, processSpawns=37, programLoads=38, dynamicImportLoads=39, libraryLoads=40, readDirCalls=41, programLoadBytes=42, dynamicImportBytes=43, libraryLoadBytes=44, genericFileDataReadBlocks=45, genericFileDataReadBytes=46, readDirDataReadBlocks=47, readDirDataReadBytes=48, programDataReadBlocks=49, programDataReadBytes=50, dynamicImportDataReadBlocks=51, dynamicImportDataReadBytes=52, libraryDataReadBlocks=53, libraryDataReadBytes=54, blockCacheHits=55, blockCacheMisses=56, blockCacheBatchReads=57"),
             summary,
         )
         assertTrue(

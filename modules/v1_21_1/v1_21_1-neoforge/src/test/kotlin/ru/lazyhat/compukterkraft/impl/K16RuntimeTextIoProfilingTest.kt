@@ -1115,6 +1115,9 @@ private data class KfsHotspotDelta(
     val libraryDataReadBlocks: Long,
     val storageWriteCommands: Long,
     val mediaWriteBlocks: Long,
+    val blockCacheHits: Long,
+    val blockCacheMisses: Long,
+    val blockCacheBatchReads: Long,
 )
 
 private class K16RuntimePhaseProfiler(
@@ -1199,7 +1202,10 @@ private fun formatK16RuntimePhase(
         "dynamicImportDataReadBlocks=${osAfter.dynamicImportDataReadBlocks - osBefore.dynamicImportDataReadBlocks}, " +
         "dynamicImportDataReadBytes=${osAfter.dynamicImportDataReadBytes - osBefore.dynamicImportDataReadBytes}, " +
         "libraryDataReadBlocks=${osAfter.libraryDataReadBlocks - osBefore.libraryDataReadBlocks}, " +
-        "libraryDataReadBytes=${osAfter.libraryDataReadBytes - osBefore.libraryDataReadBytes}"
+        "libraryDataReadBytes=${osAfter.libraryDataReadBytes - osBefore.libraryDataReadBytes}, " +
+        "blockCacheHits=${osAfter.blockCacheHits - osBefore.blockCacheHits}, " +
+        "blockCacheMisses=${osAfter.blockCacheMisses - osBefore.blockCacheMisses}, " +
+        "blockCacheBatchReads=${osAfter.blockCacheBatchReads - osBefore.blockCacheBatchReads}"
 }
 
 private fun formatK16CoreutilsCommandProfile(
@@ -1253,7 +1259,10 @@ private fun formatK16CoreutilsCommandProfile(
         "dynamicImportDataReadBlocks=${osAfter.dynamicImportDataReadBlocks - osBefore.dynamicImportDataReadBlocks}, " +
         "dynamicImportDataReadBytes=${osAfter.dynamicImportDataReadBytes - osBefore.dynamicImportDataReadBytes}, " +
         "libraryDataReadBlocks=${osAfter.libraryDataReadBlocks - osBefore.libraryDataReadBlocks}, " +
-        "libraryDataReadBytes=${osAfter.libraryDataReadBytes - osBefore.libraryDataReadBytes}"
+        "libraryDataReadBytes=${osAfter.libraryDataReadBytes - osBefore.libraryDataReadBytes}, " +
+        "blockCacheHits=${osAfter.blockCacheHits - osBefore.blockCacheHits}, " +
+        "blockCacheMisses=${osAfter.blockCacheMisses - osBefore.blockCacheMisses}, " +
+        "blockCacheBatchReads=${osAfter.blockCacheBatchReads - osBefore.blockCacheBatchReads}"
 }
 
 private fun formatKfsHotspotSummary(samples: List<K16ProfiledCommandSample>): String {
@@ -1294,6 +1303,9 @@ private fun formatKfsHotspotSummary(samples: List<K16ProfiledCommandSample>): St
                 libraryDataReadBlocks = osAfter.libraryDataReadBlocks - osBefore.libraryDataReadBlocks,
                 storageWriteCommands = storageAfter.writeCommands - storageBefore.writeCommands,
                 mediaWriteBlocks = storageAfter.mediaWriteBlocks - storageBefore.mediaWriteBlocks,
+                blockCacheHits = osAfter.blockCacheHits - osBefore.blockCacheHits,
+                blockCacheMisses = osAfter.blockCacheMisses - osBefore.blockCacheMisses,
+                blockCacheBatchReads = osAfter.blockCacheBatchReads - osBefore.blockCacheBatchReads,
             )
         }
 
@@ -1320,7 +1332,10 @@ private fun formatKfsHotspotSummary(samples: List<K16ProfiledCommandSample>): St
         "dynamicImportDataReadBlocks=${ranked { it.dynamicImportDataReadBlocks }}, " +
         "libraryDataReadBlocks=${ranked { it.libraryDataReadBlocks }}, " +
         "storageWriteCommands=${ranked { it.storageWriteCommands }}, " +
-        "mediaWriteBlocks=${ranked { it.mediaWriteBlocks }}"
+        "mediaWriteBlocks=${ranked { it.mediaWriteBlocks }}, " +
+        "blockCacheHits=${ranked { it.blockCacheHits }}, " +
+        "blockCacheMisses=${ranked { it.blockCacheMisses }}, " +
+        "blockCacheBatchReads=${ranked { it.blockCacheBatchReads }}"
 }
 
 private fun metricValue(line: String, name: String): Long {
