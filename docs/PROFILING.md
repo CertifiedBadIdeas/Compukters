@@ -92,12 +92,15 @@ remain available for comparison with previous profiling runs.
 The coreutils profile also prints a sorted K16FS hotspot summary:
 
 ```text
-k16FsHotspots: metadataOps=[ls:..., stat:..., ...], dataReadBlocks=[cat:..., ls:..., ...], readCommands=[ls:..., ...], mediaReadBlocks=[cat:..., ...]
+k16FsHotspots: metadataOps=[ls:..., stat:..., ...], dataReadBlocks=[cat:..., ls:..., ...], readCommands=[ls:..., ...], mediaReadBlocks=[cat:..., ...], pathLookups=[...], inodeLoads=[...], dirEntryScans=[...], fileOpens=[...], fileReads=[...], statCalls=[...], readDirCalls=[...], genericFileDataReadBlocks=[...], readDirDataReadBlocks=[...], programDataReadBlocks=[...], dynamicImportDataReadBlocks=[...], libraryDataReadBlocks=[...], storageWriteCommands=[...], mediaWriteBlocks=[...]
 ```
 
 `metadataOps` is `pathLookups + inodeLoads + dirEntryScans + statCalls`. Use it to rank commands by K16FS metadata/path
 pressure. `dataReadBlocks` ranks guest file/directory/program/library data reads. Compare `readCommands` with
-`mediaReadBlocks` to distinguish guest storage0 transfer overhead from backend media blocks.
+`mediaReadBlocks` to distinguish guest storage0 transfer overhead from backend media blocks. The phase-specific ranked
+lists show which commands contribute to each path, inode, directory, file, program/import/library load, and write-side
+storage bucket. Allocation/free internals are not exposed as their own OS counters yet; use `storageWriteCommands` and
+`mediaWriteBlocks` as the write-side signal until explicit allocation counters exist.
 
 The bundled BIOS intentionally shows a splash frame and waits for 20 game ticks before loading the bootloader.
 `bios.splash.wait` isolates the pure wait portion before the release tick; bootloader/kernel/shell work after the splash
