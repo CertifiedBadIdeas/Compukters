@@ -949,6 +949,12 @@ class K16RuntimeTextIoProfilingTest {
             assertTrue(hotspotSummary.contains("dataReadBlocks=["))
             assertTrue(hotspotSummary.contains("readCommands=["))
             assertTrue(hotspotSummary.contains("mediaReadBlocks=["))
+            assertTrue(hotspotSummary.contains("pathLookups=["))
+            assertTrue(hotspotSummary.contains("dirEntryScans=["))
+            assertTrue(hotspotSummary.contains("fileReads=["))
+            assertTrue(hotspotSummary.contains("readDirDataReadBlocks=["))
+            assertTrue(hotspotSummary.contains("programDataReadBlocks=["))
+            assertTrue(hotspotSummary.contains("storageWriteCommands=["))
         } finally {
             device.close()
         }
@@ -1095,6 +1101,20 @@ private data class K16FsHotspotDelta(
     val dataReadBlocks: Long,
     val readCommands: Long,
     val mediaReadBlocks: Long,
+    val pathLookups: Long,
+    val inodeLoads: Long,
+    val dirEntryScans: Long,
+    val fileOpens: Long,
+    val fileReads: Long,
+    val statCalls: Long,
+    val readDirCalls: Long,
+    val genericFileDataReadBlocks: Long,
+    val readDirDataReadBlocks: Long,
+    val programDataReadBlocks: Long,
+    val dynamicImportDataReadBlocks: Long,
+    val libraryDataReadBlocks: Long,
+    val storageWriteCommands: Long,
+    val mediaWriteBlocks: Long,
 )
 
 private class K16RuntimePhaseProfiler(
@@ -1260,6 +1280,20 @@ private fun formatK16FsHotspotSummary(samples: List<K16ProfiledCommandSample>): 
                 dataReadBlocks = dataReadBlocks,
                 readCommands = storageAfter.readCommands - storageBefore.readCommands,
                 mediaReadBlocks = storageAfter.mediaReadBlocks - storageBefore.mediaReadBlocks,
+                pathLookups = osAfter.pathLookups - osBefore.pathLookups,
+                inodeLoads = osAfter.inodeLoads - osBefore.inodeLoads,
+                dirEntryScans = osAfter.dirEntryScans - osBefore.dirEntryScans,
+                fileOpens = osAfter.fileOpens - osBefore.fileOpens,
+                fileReads = osAfter.fileReads - osBefore.fileReads,
+                statCalls = osAfter.statCalls - osBefore.statCalls,
+                readDirCalls = osAfter.readDirCalls - osBefore.readDirCalls,
+                genericFileDataReadBlocks = osAfter.genericFileDataReadBlocks - osBefore.genericFileDataReadBlocks,
+                readDirDataReadBlocks = osAfter.readDirDataReadBlocks - osBefore.readDirDataReadBlocks,
+                programDataReadBlocks = osAfter.programDataReadBlocks - osBefore.programDataReadBlocks,
+                dynamicImportDataReadBlocks = osAfter.dynamicImportDataReadBlocks - osBefore.dynamicImportDataReadBlocks,
+                libraryDataReadBlocks = osAfter.libraryDataReadBlocks - osBefore.libraryDataReadBlocks,
+                storageWriteCommands = storageAfter.writeCommands - storageBefore.writeCommands,
+                mediaWriteBlocks = storageAfter.mediaWriteBlocks - storageBefore.mediaWriteBlocks,
             )
         }
 
@@ -1272,7 +1306,21 @@ private fun formatK16FsHotspotSummary(samples: List<K16ProfiledCommandSample>): 
         "metadataOps=${ranked { it.metadataOps }}, " +
         "dataReadBlocks=${ranked { it.dataReadBlocks }}, " +
         "readCommands=${ranked { it.readCommands }}, " +
-        "mediaReadBlocks=${ranked { it.mediaReadBlocks }}"
+        "mediaReadBlocks=${ranked { it.mediaReadBlocks }}, " +
+        "pathLookups=${ranked { it.pathLookups }}, " +
+        "inodeLoads=${ranked { it.inodeLoads }}, " +
+        "dirEntryScans=${ranked { it.dirEntryScans }}, " +
+        "fileOpens=${ranked { it.fileOpens }}, " +
+        "fileReads=${ranked { it.fileReads }}, " +
+        "statCalls=${ranked { it.statCalls }}, " +
+        "readDirCalls=${ranked { it.readDirCalls }}, " +
+        "genericFileDataReadBlocks=${ranked { it.genericFileDataReadBlocks }}, " +
+        "readDirDataReadBlocks=${ranked { it.readDirDataReadBlocks }}, " +
+        "programDataReadBlocks=${ranked { it.programDataReadBlocks }}, " +
+        "dynamicImportDataReadBlocks=${ranked { it.dynamicImportDataReadBlocks }}, " +
+        "libraryDataReadBlocks=${ranked { it.libraryDataReadBlocks }}, " +
+        "storageWriteCommands=${ranked { it.storageWriteCommands }}, " +
+        "mediaWriteBlocks=${ranked { it.mediaWriteBlocks }}"
 }
 
 private fun metricValue(line: String, name: String): Long {
