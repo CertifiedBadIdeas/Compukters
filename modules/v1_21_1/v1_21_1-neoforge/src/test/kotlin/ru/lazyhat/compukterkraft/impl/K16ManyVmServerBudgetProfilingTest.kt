@@ -43,6 +43,9 @@ class K16ManyVmServerBudgetProfilingTest {
         val vmCount = intProperty("k16.profile.manyVmCount", 16)
         val idleTicks = intProperty("k16.profile.manyVmIdleTicks", 80)
         val bootTickLimit = intProperty("k16.profile.manyVmBootTickLimit", 120)
+        val cpuHighloadTickLimit = intProperty("k16.profile.manyVmCpuHighloadTickLimit", 80)
+        val textDisplayHighloadTickLimit = intProperty("k16.profile.manyVmTextDisplayHighloadTickLimit", 120)
+        val storageHighloadTickLimit = intProperty("k16.profile.manyVmStorageHighloadTickLimit", 120)
         val workspace = createTempDirectory("k16-many-vm-server-budget-profile-")
         val biosFlashPath = workspace.resolve("bios.kflash")
         val storageTemplate = K16SystemVolumeWorkspace.loadStorage0VolumeResource(classLoader = javaClass.classLoader)
@@ -135,6 +138,45 @@ class K16ManyVmServerBudgetProfilingTest {
                 syncNanos = idleSyncNanos,
             )
 
+            val cpuHighloadTicks =
+                runAllVmCommandScenario(
+                    label = "k16ManyVmCpuHighload",
+                    runtimes = runtimes,
+                    vmCount = vmCount,
+                    command = "ticks\n",
+                    limit = cpuHighloadTickLimit,
+                    done = { terminal ->
+                        val ticksIndex = terminal.lastIndexOf("TICKS ")
+                        ticksIndex >= 0 && terminal.indexOf("K16> ", startIndex = ticksIndex) > ticksIndex
+                    },
+                )
+
+            val textDisplayHighloadTicks =
+                runAllVmCommandScenario(
+                    label = "k16ManyVmTextDisplayHighload",
+                    runtimes = runtimes,
+                    vmCount = vmCount,
+                    command = "ls /bin\n",
+                    limit = textDisplayHighloadTickLimit,
+                    done = { terminal ->
+                        val listingIndex = terminal.lastIndexOf("shell.kx")
+                        listingIndex >= 0 && terminal.indexOf("K16> ", startIndex = listingIndex) > listingIndex
+                    },
+                )
+
+            val storageHighloadTicks =
+                runAllVmCommandScenario(
+                    label = "k16ManyVmStorageHighload",
+                    runtimes = runtimes,
+                    vmCount = vmCount,
+                    command = "cat /etc/motd\n",
+                    limit = storageHighloadTickLimit,
+                    done = { terminal ->
+                        val motdIndex = terminal.lastIndexOf("K16 FS OK")
+                        motdIndex >= 0 && terminal.indexOf("K16> ", startIndex = motdIndex) > motdIndex
+                    },
+                )
+
             val activeBefore = aggregateSnapshots(runtimes)
             val activeStartedAt = System.nanoTime()
             DeviceEvents.dispatch(runtimes.first().device, PasteInputEvent(ByteBuffer.wrap("ticks\n".encodeToByteArray())))
@@ -156,6 +198,12 @@ class K16ManyVmServerBudgetProfilingTest {
             )
 
             assertTrue(bootAfterSplashTicks < bootTickLimit, "many-VM profiling did not boot all VMs to shell after BIOS splash")
+            assertTrue(cpuHighloadTicks < cpuHighloadTickLimit, "many-VM profiling did not finish CPU highload command")
+            assertTrue(
+                textDisplayHighloadTicks < textDisplayHighloadTickLimit,
+                "many-VM profiling did not finish text/display highload command",
+            )
+            assertTrue(storageHighloadTicks < storageHighloadTickLimit, "many-VM profiling did not finish storage highload command")
             assertTrue(activeTicks < 80, "many-VM profiling did not finish one active command")
         } finally {
             runtimes.forEach { it.device.close() }
@@ -169,6 +217,58 @@ class K16ManyVmServerBudgetProfilingTest {
         repeat(limit) { tick ->
             runtimes.forEach { it.device.serverTick() }
             if (runtimes.all { runtime -> runtime.device.snapshotRuntimeState()?.let(::terminalText)?.contains("K16> ") == true }) {
+                return tick + 1
+            }
+            Thread.sleep(1)
+        }
+        return limit
+    }
+
+    private fun runAllVmCommandScenario(
+        label: String,
+        runtimes: List<ProfiledRuntime>,
+        vmCount: Int,
+        command: String,
+        limit: Int,
+        done: (String) -> Boolean,
+    ): Int {
+        val before = aggregateSnapshots(runtimes)
+        val startedAt = System.nanoTime()
+        dispatchCommand(runtimes, command)
+        val ticks = tickUntilAllTerminals(runtimes, limit, done)
+        val nanos = System.nanoTime() - startedAt
+        val syncNanos = timeSyncAll(runtimes)
+        val after = aggregateSnapshots(runtimes)
+        printManyVmDeltaLine(
+            label,
+            vmCount,
+            ticks = ticks,
+            nanos = nanos,
+            before = before,
+            after = after,
+            syncNanos = syncNanos,
+        )
+        return ticks
+    }
+
+    private fun dispatchCommand(
+        runtimes: List<ProfiledRuntime>,
+        command: String,
+    ) {
+        val bytes = command.encodeToByteArray()
+        runtimes.forEach { runtime ->
+            DeviceEvents.dispatch(runtime.device, PasteInputEvent(ByteBuffer.wrap(bytes.copyOf())))
+        }
+    }
+
+    private fun tickUntilAllTerminals(
+        runtimes: List<ProfiledRuntime>,
+        limit: Int,
+        predicate: (String) -> Boolean,
+    ): Int {
+        repeat(limit) { tick ->
+            runtimes.forEach { it.device.serverTick() }
+            if (runtimes.all { runtime -> runtime.device.snapshotRuntimeState()?.let(::terminalText)?.let(predicate) == true }) {
                 return tick + 1
             }
             Thread.sleep(1)

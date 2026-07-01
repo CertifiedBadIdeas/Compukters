@@ -69,8 +69,14 @@ class K16RuntimeProfilingArchitectureTest {
         assertTrue(textIoProfilingSource.contains("shell.prompt.after_splash"))
         assertTrue(manyVmProfilingSource.contains("k16ManyVmSplash"))
         assertTrue(manyVmProfilingSource.contains("k16ManyVmBootAfterSplash"))
+        assertTrue(manyVmProfilingSource.contains("k16ManyVmCpuHighload"))
+        assertTrue(manyVmProfilingSource.contains("k16ManyVmTextDisplayHighload"))
+        assertTrue(manyVmProfilingSource.contains("k16ManyVmStorageHighload"))
         assertTrue(docs.contains("bios.splash.wait"))
         assertTrue(docs.contains("k16ManyVmBootAfterSplash"))
+        assertTrue(docs.contains("k16ManyVmCpuHighload"))
+        assertTrue(docs.contains("k16ManyVmTextDisplayHighload"))
+        assertTrue(docs.contains("k16ManyVmStorageHighload"))
         assertFalse(docs.contains("profileRuntimeVmImage"))
     }
 
