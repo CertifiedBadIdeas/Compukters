@@ -172,12 +172,15 @@ fn kfs_storage_helper_is_kfs_owned() {
     let workspace_manifest = root.join("guest/kraftos/Cargo.toml");
     let kernel_manifest = root.join("guest/kraftos/kernel/Cargo.toml");
     let kernel_storage = root.join("guest/kraftos/kernel/src/kfs/storage.rs");
+    let kernel_device = root.join("guest/kraftos/kernel/src/kfs/device.rs");
 
     let workspace_manifest =
         fs::read_to_string(&workspace_manifest).expect("K16 guest workspace manifest exists");
     let kernel_manifest = fs::read_to_string(&kernel_manifest).expect("K16 kernel manifest exists");
     let kernel_storage =
         fs::read_to_string(&kernel_storage).expect("kernel-owned storage helper source exists");
+    let kernel_device =
+        fs::read_to_string(&kernel_device).expect("kernel-owned storage device source exists");
 
     assert!(
         !rust_guest_workspace_members(&workspace_manifest).contains(&"k16-storage"),
@@ -190,7 +193,12 @@ fn kfs_storage_helper_is_kfs_owned() {
     assert!(!kernel_manifest.contains("k16-storage"));
     assert!(kernel_storage.contains("pub struct StorageError"));
     assert!(kernel_storage.contains("pub trait DirectoryListingSink"));
-    assert!(kernel_storage.contains("flush_storage0"));
+    assert!(kernel_storage.contains("crate::kfs::device::flush_storage0"));
+    assert!(!kernel_storage.contains("use k16_abi::computer::storage0"));
+    assert!(kernel_device.contains("pub unsafe fn flush_storage0"));
+    assert!(kernel_device.contains("storage0::COMMAND_READ_BLOCKS"));
+    assert!(kernel_device.contains("storage0::COMMAND_WRITE_BLOCKS"));
+    assert!(kernel_device.contains("storage0::COMMAND_FLUSH"));
 }
 
 #[test]
