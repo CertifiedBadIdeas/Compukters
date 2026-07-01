@@ -497,9 +497,10 @@ pub unsafe fn open_root_file_for_process(
     let components = path.components();
     let metadata = if flags == OPEN_READ_ONLY {
         unsafe {
-            crate::kfs::storage::open_file_from_storage0(ROOT_PARTITION, components.as_slice())
-                .map_err(storage_error_to_fs_error)?;
-            crate::kfs::storage::selected_file_metadata()
+            ROOT_FS
+                .get()
+                .open_file(ROOT_PARTITION, components.as_slice())
+                .map_err(storage_error_to_fs_error)?
         }
     } else {
         let truncate = flags == OPEN_CREATE_TRUNCATE_FLAGS;

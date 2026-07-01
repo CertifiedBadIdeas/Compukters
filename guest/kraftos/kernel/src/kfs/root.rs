@@ -3,12 +3,16 @@ use crate::kfs::storage::{DirectoryListingSink, FileMetadata, StorageError};
 
 pub struct KfsRootFs {
     cache: KfsCache,
+    mounted_partition_type: Option<[u8; 4]>,
+    mounted: Option<crate::kfs::mount::MountedKfs>,
 }
 
 impl KfsRootFs {
     pub const fn new() -> Self {
         Self {
             cache: KfsCache::new(),
+            mounted_partition_type: None,
+            mounted: None,
         }
     }
 
@@ -21,7 +25,7 @@ impl KfsRootFs {
         partition_type: &[u8; 4],
         path: &[&[u8]],
     ) -> Result<CachedPathMetadata, StorageError> {
-        unsafe { crate::kfs::storage::read_root_partition_superblock(partition_type)? };
+        unsafe { self.ensure_mounted(partition_type)? };
         let (_, metadata) = unsafe { self.resolve_path(path)? };
         Ok(metadata)
     }
@@ -32,7 +36,7 @@ impl KfsRootFs {
         path: &[&[u8]],
         sink: &mut S,
     ) -> Result<u32, StorageError> {
-        unsafe { crate::kfs::storage::read_root_partition_superblock(partition_type)? };
+        unsafe { self.ensure_mounted(partition_type)? };
         let (directory_inode_id, metadata) = unsafe { self.resolve_path(path)? };
         if metadata.file_type != k16_abi::syscall::FILE_TYPE_DIRECTORY {
             return Err(StorageError::PATH_NOT_FOUND);
@@ -54,7 +58,7 @@ impl KfsRootFs {
         partition_type: &[u8; 4],
         path: &[&[u8]],
     ) -> Result<FileMetadata, StorageError> {
-        unsafe { crate::kfs::storage::read_root_partition_superblock(partition_type)? };
+        unsafe { self.ensure_mounted(partition_type)? };
         let (inode_id, metadata) = unsafe { self.resolve_path(path)? };
         if metadata.file_type != k16_abi::syscall::FILE_TYPE_REGULAR {
             return Err(StorageError::PATH_NOT_FOUND);
@@ -66,6 +70,17 @@ impl KfsRootFs {
         }
         self.cache.store_inode(inode_id, selected_metadata);
         Ok(unsafe { crate::kfs::storage::selected_file_metadata() })
+    }
+
+    unsafe fn ensure_mounted(&mut self, partition_type: &[u8; 4]) -> Result<(), StorageError> {
+        if self.mounted.is_some() && self.mounted_partition_type == Some(*partition_type) {
+            return Ok(());
+        }
+        let mounted =
+            unsafe { crate::kfs::storage::mount_root_partition_superblock(partition_type)? };
+        self.mounted_partition_type = Some(*partition_type);
+        self.mounted = Some(mounted);
+        Ok(())
     }
 
     unsafe fn resolve_path(

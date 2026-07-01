@@ -22,6 +22,7 @@ package ru.lazyhat.compukterkraft.impl
 import java.nio.file.Path
 import kotlin.io.path.readText
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -109,5 +110,26 @@ class K16RuntimeProfilingArchitectureTest {
         assertTrue(deviceSource.contains("write_u32(storage0::BLOCK_COUNT, block_count)"))
         assertTrue(storageSource.contains("full_block_count"))
         assertTrue(storageSource.contains("read_fs_blocks_to_ram(block, full_block_count, dst)"))
+    }
+
+    @Test
+    fun k16RootFsReusesMountedRootPartitionForCachedReadPaths() {
+        val rootSource = Path.of("../../../guest/kraftos/kernel/src/kfs/root.rs").readText()
+        val storageSource = Path.of("../../../guest/kraftos/kernel/src/kfs/storage.rs").readText()
+        val fsSource = Path.of("../../../guest/kraftos/kernel/src/fs.rs").readText()
+
+        assertTrue(storageSource.contains("pub unsafe fn mount_root_partition_superblock("))
+        assertTrue(rootSource.contains("mounted: Option<crate::kfs::mount::MountedKfs>"))
+        assertTrue(rootSource.contains("unsafe fn ensure_mounted("))
+        assertTrue(rootSource.contains("crate::kfs::storage::mount_root_partition_superblock(partition_type)"))
+        assertEquals(3, rootSource.split("self.ensure_mounted(partition_type)?").size - 1)
+        assertFalse(rootSource.contains("read_root_partition_superblock"))
+
+        val openRootFileSource =
+            fsSource
+                .substringAfter("pub unsafe fn open_root_file_for_process(")
+                .substringBefore("pub unsafe fn seek_file_fd_for_process(")
+        assertFalse(openRootFileSource.contains("crate::kfs::storage::open_file_from_storage0(ROOT_PARTITION, components.as_slice())"))
+        assertTrue(openRootFileSource.contains(".open_file(ROOT_PARTITION, components.as_slice())"))
     }
 }

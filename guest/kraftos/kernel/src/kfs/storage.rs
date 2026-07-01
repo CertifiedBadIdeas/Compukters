@@ -154,8 +154,15 @@ pub unsafe fn read_directory_from_storage0_into<S: DirectoryListingSink>(
 }
 
 pub unsafe fn read_root_partition_superblock(partition_type: &[u8; 4]) -> Result<(), StorageError> {
-    unsafe { read_partition(partition_type)? };
-    unsafe { read_superblock() }
+    unsafe { mount_root_partition_superblock(partition_type).map(|_| ()) }
+}
+
+pub unsafe fn mount_root_partition_superblock(
+    partition_type: &[u8; 4],
+) -> Result<crate::kfs::mount::MountedKfs, StorageError> {
+    let partition = unsafe { read_partition(partition_type)? };
+    let superblock = unsafe { read_superblock()? };
+    crate::kfs::mount::MountedKfs::new(partition, superblock)
 }
 
 pub unsafe fn root_inode_id() -> u32 {
@@ -576,7 +583,9 @@ pub unsafe fn select_file_metadata(metadata: FileMetadata) -> Result<(), Storage
     Ok(())
 }
 
-unsafe fn read_partition(partition_type: &[u8; 4]) -> Result<(), StorageError> {
+unsafe fn read_partition(
+    partition_type: &[u8; 4],
+) -> Result<crate::kfs::partition::KfsPartition, StorageError> {
     unsafe { read_storage_block(0)? };
     let block = unsafe { scratch_block_bytes() };
     let capacity_low = unsafe { crate::kfs::device::capacity_blocks_u32()? };
@@ -589,10 +598,10 @@ unsafe fn read_partition(partition_type: &[u8; 4]) -> Result<(), StorageError> {
         write_u32(STATE_PARTITION_START_LBA, partition.start_lba);
         write_u32(STATE_PARTITION_BLOCK_COUNT, partition.block_count);
     }
-    Ok(())
+    Ok(partition)
 }
 
-unsafe fn read_superblock() -> Result<(), StorageError> {
+unsafe fn read_superblock() -> Result<crate::kfs::superblock::KfsSuperblock, StorageError> {
     unsafe { read_fs_block(0)? };
     let block = unsafe { scratch_block_bytes() };
     let superblock = crate::kfs::superblock::KfsSuperblock::decode(&block, unsafe {
@@ -622,7 +631,7 @@ unsafe fn read_superblock() -> Result<(), StorageError> {
     if unsafe { read_u32(STATE_INODE_STATE) as u8 } != 2 {
         return Err(StorageError::INVALID_FILESYSTEM);
     }
-    Ok(())
+    Ok(superblock)
 }
 
 unsafe fn create_empty_file(path: &[&[u8]]) -> Result<FileMetadata, StorageError> {
