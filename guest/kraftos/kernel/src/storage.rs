@@ -1610,11 +1610,24 @@ unsafe fn allocate_contiguous_blocks(count: u32) -> Result<u32, StorageError> {
         return Err(StorageError::INVALID_FILESYSTEM);
     }
     let total_blocks = unsafe { read_u32(STATE_SUPERBLOCK_TOTAL_BLOCKS) };
+    let bitmap_start_block = unsafe { read_u32(STATE_SUPERBLOCK_BITMAP_START_BLOCK) };
+    let bitmap_block_count = unsafe { read_u32(STATE_SUPERBLOCK_BITMAP_BLOCK_COUNT) };
+    let bits_per_block = BLOCK_SIZE * 8;
     let mut run_start = 0;
     let mut run_count = 0;
+    let mut loaded_bitmap_block_index = u32::MAX;
     let mut block = 1;
     while block < total_blocks {
-        if unsafe { is_block_allocated(block)? } {
+        let bitmap_block_index = block / bits_per_block;
+        if bitmap_block_index >= bitmap_block_count {
+            return Err(StorageError::INVALID_FILESYSTEM);
+        }
+        if loaded_bitmap_block_index != bitmap_block_index {
+            unsafe { read_fs_block(bitmap_start_block + bitmap_block_index)? };
+            loaded_bitmap_block_index = bitmap_block_index;
+        }
+
+        if bitmap_block_scratch_marks_allocated(block) {
             run_start = 0;
             run_count = 0;
         } else {
@@ -1623,17 +1636,62 @@ unsafe fn allocate_contiguous_blocks(count: u32) -> Result<u32, StorageError> {
             }
             run_count += 1;
             if run_count == count {
-                let mut allocated = run_start;
-                while allocated < run_start + count {
-                    unsafe { mark_block_allocated(allocated)? };
-                    allocated += 1;
-                }
+                unsafe { mark_contiguous_blocks_allocated(run_start, count)? };
                 return Ok(run_start);
             }
         }
         block += 1;
     }
     Err(StorageError::OUTPUT_BUFFER_TOO_SMALL)
+}
+
+fn bitmap_block_scratch_marks_allocated(block: u32) -> bool {
+    let byte_offset = (block / 8) % BLOCK_SIZE;
+    let bit = (block % 8) as u8;
+    (scratch_u8(byte_offset) & (1_u8 << bit)) != 0
+}
+
+unsafe fn mark_contiguous_blocks_allocated(
+    start_block: u32,
+    count: u32,
+) -> Result<(), StorageError> {
+    let end_block = match start_block.checked_add(count) {
+        Some(value) => value,
+        None => return Err(StorageError::INVALID_FILESYSTEM),
+    };
+    if count == 0 || end_block > unsafe { read_u32(STATE_SUPERBLOCK_TOTAL_BLOCKS) } {
+        return Err(StorageError::INVALID_FILESYSTEM);
+    }
+
+    let bitmap_start_block = unsafe { read_u32(STATE_SUPERBLOCK_BITMAP_START_BLOCK) };
+    let bitmap_block_count = unsafe { read_u32(STATE_SUPERBLOCK_BITMAP_BLOCK_COUNT) };
+    let bits_per_block = BLOCK_SIZE * 8;
+    let mut block = start_block;
+    while block < end_block {
+        let bitmap_block_index = block / bits_per_block;
+        if bitmap_block_index >= bitmap_block_count {
+            return Err(StorageError::INVALID_FILESYSTEM);
+        }
+        unsafe { read_fs_block(bitmap_start_block + bitmap_block_index)? };
+
+        let next_bitmap_block_start = match bitmap_block_index.checked_add(1) {
+            Some(value) => match value.checked_mul(bits_per_block) {
+                Some(next_start) => next_start,
+                None => return Err(StorageError::INVALID_FILESYSTEM),
+            },
+            None => return Err(StorageError::INVALID_FILESYSTEM),
+        };
+        let chunk_end = min_u32(end_block, next_bitmap_block_start);
+        while block < chunk_end {
+            let byte_offset = (block / 8) % BLOCK_SIZE;
+            let bit = (block % 8) as u8;
+            let value = scratch_u8(byte_offset) | (1_u8 << bit);
+            unsafe { write_u8(SCRATCH_ADDR + byte_offset, value) };
+            block += 1;
+        }
+        unsafe { write_fs_block(bitmap_start_block + bitmap_block_index)? };
+    }
+    Ok(())
 }
 
 unsafe fn is_block_allocated(block: u32) -> Result<bool, StorageError> {
