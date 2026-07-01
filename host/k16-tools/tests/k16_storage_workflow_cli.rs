@@ -7,7 +7,7 @@ const TEST_VOLUME_SIZE: &str = "1048576";
 const TEST_ROOT_BLOCKS: &str = "1791";
 
 #[test]
-fn k16_cli_builds_partitioned_storage0_with_k16fs_root_kernel_file() {
+fn k16_cli_builds_partitioned_storage0_with_kfs_root_kernel_file() {
     let volume_path = temp_file("storage0.kv");
     let root_path = temp_file("root.kfs");
     let extracted_root_path = temp_file("extracted-root.kfs");
@@ -52,13 +52,13 @@ fn k16_cli_builds_partitioned_storage0_with_k16fs_root_kernel_file() {
                 TEST_ROOT_BLOCKS,
             ])
             .output()
-            .expect("k16fs format runs"),
+            .expect("kfs format runs"),
     );
     assert_success(
         Command::new(k16_binary())
             .args(["fs", "kfs", "mkdir", root_path.to_str().unwrap(), "/boot"])
             .output()
-            .expect("k16fs mkdir runs"),
+            .expect("kfs mkdir runs"),
     );
     assert_success(
         Command::new(k16_binary())
@@ -71,7 +71,7 @@ fn k16_cli_builds_partitioned_storage0_with_k16fs_root_kernel_file() {
                 kernel_path.to_str().unwrap(),
             ])
             .output()
-            .expect("k16fs put runs"),
+            .expect("kfs put runs"),
     );
     assert_success(
         Command::new(k16_binary())
@@ -108,7 +108,7 @@ fn k16_cli_builds_partitioned_storage0_with_k16fs_root_kernel_file() {
                 extracted_kernel_path.to_str().unwrap(),
             ])
             .output()
-            .expect("k16fs get runs"),
+            .expect("kfs get runs"),
     );
 
     assert_eq!(

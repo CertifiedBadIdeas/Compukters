@@ -1,5 +1,5 @@
 use crate::k16e;
-use crate::k16fs;
+use crate::kfs;
 use crate::partition;
 use crate::volume;
 
@@ -10,8 +10,8 @@ pub fn inspect_blob(bytes: &[u8]) -> Result<String, String> {
     if bytes.starts_with(partition::K16PT_MAGIC) {
         return inspect_partitioned_media(bytes);
     }
-    if bytes.starts_with(k16fs::K16FS_MAGIC) {
-        return inspect_k16fs(bytes);
+    if bytes.starts_with(kfs::KFS_MAGIC) {
+        return inspect_kfs(bytes);
     }
     if bytes.starts_with(k16e::K16E_MAGIC) {
         return inspect_k16e(bytes);
@@ -53,11 +53,11 @@ fn inspect_partitioned_media(bytes: &[u8]) -> Result<String, String> {
     Ok(output)
 }
 
-fn inspect_k16fs(bytes: &[u8]) -> Result<String, String> {
-    let superblock = k16fs::decode_superblock(bytes)?;
+fn inspect_kfs(bytes: &[u8]) -> Result<String, String> {
+    let superblock = kfs::decode_superblock(bytes)?;
     Ok(format!(
-        "kind=K16FS\nK16FS v{} blocks={} block_size={} root_inode={} inode_table_blocks={}\n",
-        k16fs::K16FS_VERSION,
+        "kind=KFS\nKFS v{} blocks={} block_size={} root_inode={} inode_table_blocks={}\n",
+        kfs::KFS_VERSION,
         superblock.total_blocks,
         superblock.block_size,
         superblock.root_inode_id,

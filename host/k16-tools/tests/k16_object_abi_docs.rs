@@ -68,9 +68,8 @@ fn active_abi_index_lists_k16_object_contract() {
 
 #[test]
 fn shared_cpu_helper_runtime_spec_defines_narrow_runtime_contract() {
-    let docs = normalized_doc(
-        ".agents/tmp/specs/2026-06-21/issue-346-k16-shared-cpu-helper-runtime.md",
-    );
+    let docs =
+        normalized_doc(".agents/tmp/specs/2026-06-21/issue-346-k16-shared-cpu-helper-runtime.md");
 
     for required in [
         "K16 Shared CPU Helper Runtime",
@@ -261,8 +260,8 @@ fn k16e_docs_define_imported_dynamic_program_v0_boundary() {
         "library_index",
         "symbol_name_offset",
         "Needed library names are UTF-8 and NUL-terminated",
-        "resolves each needed library from the `ROOT` K16FS partition under `/lib/<needed-library>`",
-        "Needed-library names are single K16FS path components, not full paths",
+        "resolves each needed library from the `ROOT` KFS partition under `/lib/<needed-library>`",
+        "Needed-library names are single KFS path components, not full paths",
         "A loader must reject missing needed libraries, missing exported symbols, unsupported import relocation kinds, out-of-range library indexes, and malformed import string tables",
     ] {
         assert!(

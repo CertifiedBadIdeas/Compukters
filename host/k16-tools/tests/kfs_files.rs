@@ -1,10 +1,10 @@
-use k16_tools::k16fs::{
+use k16_tools::kfs::{
     create_directory, delete_file, format_empty_filesystem, list_directory, read_file,
     validate_filesystem, write_file,
 };
 
 #[test]
-fn k16fs_writes_lists_and_reads_root_file() {
+fn kfs_writes_lists_and_reads_root_file() {
     let mut image = format_empty_filesystem(128).expect("filesystem formats");
 
     write_file(&mut image, "/kernel.kx", b"KERNEL").expect("file writes");
@@ -21,7 +21,7 @@ fn k16fs_writes_lists_and_reads_root_file() {
 }
 
 #[test]
-fn k16fs_creates_directory_and_writes_nested_file() {
+fn kfs_creates_directory_and_writes_nested_file() {
     let mut image = format_empty_filesystem(128).expect("filesystem formats");
 
     create_directory(&mut image, "/boot").expect("directory creates");
@@ -42,7 +42,7 @@ fn k16fs_creates_directory_and_writes_nested_file() {
 }
 
 #[test]
-fn k16fs_grows_host_directory_when_initial_slots_are_full() {
+fn kfs_grows_host_directory_when_initial_slots_are_full() {
     let mut image = format_empty_filesystem(128).expect("filesystem formats");
 
     for index in 0..8 {
@@ -58,7 +58,7 @@ fn k16fs_grows_host_directory_when_initial_slots_are_full() {
 }
 
 #[test]
-fn k16fs_writes_host_file_across_fragmented_inline_extents() {
+fn kfs_writes_host_file_across_fragmented_inline_extents() {
     let mut image = format_empty_filesystem(19).expect("filesystem formats");
 
     for index in 0..8 {
@@ -79,7 +79,7 @@ fn k16fs_writes_host_file_across_fragmented_inline_extents() {
 }
 
 #[test]
-fn k16fs_rejects_invalid_paths_duplicate_directories_and_missing_files() {
+fn kfs_rejects_invalid_paths_duplicate_directories_and_missing_files() {
     let mut image = format_empty_filesystem(128).expect("filesystem formats");
 
     assert!(write_file(&mut image, "relative", b"data")
@@ -99,7 +99,7 @@ fn k16fs_rejects_invalid_paths_duplicate_directories_and_missing_files() {
 }
 
 #[test]
-fn k16fs_deletes_file_and_allows_recreating_same_path() {
+fn kfs_deletes_file_and_allows_recreating_same_path() {
     let mut image = format_empty_filesystem(128).expect("filesystem formats");
     create_directory(&mut image, "/boot").expect("directory creates");
     write_file(&mut image, "/boot/loader.kb", b"OLD").expect("file writes");
@@ -123,7 +123,7 @@ fn k16fs_deletes_file_and_allows_recreating_same_path() {
 }
 
 #[test]
-fn k16fs_delete_rejects_missing_paths_and_directories() {
+fn kfs_delete_rejects_missing_paths_and_directories() {
     let mut image = format_empty_filesystem(128).expect("filesystem formats");
     create_directory(&mut image, "/boot").expect("directory creates");
 

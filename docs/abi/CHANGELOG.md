@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- K16FS was hard-renamed to KFS. The active filesystem ABI document is now
+  `kfs-v1.md`, the on-disk superblock magic is `KFS\0\0`, and old `K16FS`
+  images are rejected instead of migrated or accepted through compatibility
+  paths.
 - K16E dynamic user programs can now emit v6 split writable load metadata.
   `program-dynamic` images with `.data` or `.bss` place writable memory on a
   4 KiB boundary, keep initialized writable bytes in a separate file range, and
@@ -30,8 +34,8 @@
   now live directly in `guest/kraftos/runtime/src/memory.rs`. `k16-abi` and
   `k16-rt` remain separate Rust crates.
 - The standalone Rust `guest/kraftos/k16-storage` crate was removed. The
-  K16PT/K16FS storage helper now lives inside
-  `guest/kraftos/kernel/src/storage.rs` as kernel-owned code used by
+  K16PT/KFS storage helper now lives inside
+  `guest/kraftos/kernel/src/kfs/storage.rs` as KFS-owned code used by
   boot-chain, process loading, and kernel filesystem syscalls.
 - The standalone Rust `guest/kraftos/k16-image` crate was removed. The K16E
   parser and image metadata helpers now live inside
@@ -862,5 +866,5 @@
 - `k16-object-v1.md`
 - `k16e-v1.md`
 - `k16-storage-volume-v1.md`
-- `k16fs-v1.md`
+- `kfs-v1.md`
 - `k16-computer-snapshot-v1.md`

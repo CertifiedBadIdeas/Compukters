@@ -27,7 +27,7 @@ instructions directly from that region. The host writes profile v2 boot info and
 the hardware table into RAM before the CPU starts.
 
 Storage boot is firmware policy. The current BIOS reads `K16PT` from storage0,
-loads `BOOT`/K16FS `/boot/loader.kb`, validates the `K16E` bootloader image,
+loads `BOOT`/KFS `/boot/loader.kb`, validates the `K16E` bootloader image,
 copies its payload into RAM, and jumps to the payload entry address. There is
 no host-side executable decode step in this path.
 

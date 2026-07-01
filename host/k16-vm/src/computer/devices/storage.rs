@@ -758,8 +758,8 @@ struct StorageReadOwnershipTracker {
     total_blocks: u64,
     boot_partition: Option<StoragePartitionRange>,
     root_partition: Option<StoragePartitionRange>,
-    boot_fs: Option<K16FsMetadataLayout>,
-    root_fs: Option<K16FsMetadataLayout>,
+    boot_fs: Option<KfsMetadataLayout>,
+    root_fs: Option<KfsMetadataLayout>,
 }
 
 impl StorageReadOwnershipTracker {
@@ -788,10 +788,10 @@ impl StorageReadOwnershipTracker {
         }
 
         if self.boot_partition.map(|partition| partition.start_lba) == Some(lba) {
-            self.boot_fs = Self::decode_k16fs_metadata_layout(block, self.boot_partition);
+            self.boot_fs = Self::decode_kfs_metadata_layout(block, self.boot_partition);
         }
         if self.root_partition.map(|partition| partition.start_lba) == Some(lba) {
-            self.root_fs = Self::decode_k16fs_metadata_layout(block, self.root_partition);
+            self.root_fs = Self::decode_kfs_metadata_layout(block, self.root_partition);
         }
 
         if lba == 0 {
@@ -851,12 +851,12 @@ impl StorageReadOwnershipTracker {
         (entry_count <= Self::K16PT_MAX_ENTRIES).then_some(entry_count)
     }
 
-    fn decode_k16fs_metadata_layout(
+    fn decode_kfs_metadata_layout(
         block: &[u8; StoragePortDevice::BLOCK_SIZE as usize],
         partition: Option<StoragePartitionRange>,
-    ) -> Option<K16FsMetadataLayout> {
+    ) -> Option<KfsMetadataLayout> {
         let partition = partition?;
-        if &block[0..5] != b"K16FS" || block[5] != 1 || block[6] != 0 || block[7] != 0 {
+        if &block[0..5] != b"KFS\0\0" || block[5] != 1 || block[6] != 0 || block[7] != 0 {
             return None;
         }
         let block_size = read_u32_le(block, 0x08)?;
@@ -871,7 +871,7 @@ impl StorageReadOwnershipTracker {
         let bitmap_block_count = read_u32_le(block, 0x14)?;
         let inode_table_start_block = read_u32_le(block, 0x18)?;
         let inode_table_block_count = read_u32_le(block, 0x1c)?;
-        let layout = K16FsMetadataLayout {
+        let layout = KfsMetadataLayout {
             bitmap_start_block,
             bitmap_block_count,
             inode_table_start_block,
@@ -917,14 +917,14 @@ impl StoragePartitionRange {
 }
 
 #[derive(Clone, Copy)]
-struct K16FsMetadataLayout {
+struct KfsMetadataLayout {
     bitmap_start_block: u32,
     bitmap_block_count: u32,
     inode_table_start_block: u32,
     inode_table_block_count: u32,
 }
 
-impl K16FsMetadataLayout {
+impl KfsMetadataLayout {
     fn is_valid(&self, total_blocks: u32) -> bool {
         self.range_fits(
             self.bitmap_start_block,

@@ -1,5 +1,5 @@
 use k16_tools::k16e;
-use k16_tools::k16fs;
+use k16_tools::kfs;
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
@@ -67,14 +67,14 @@ fn k16_inspect_identifies_partitioned_volume() {
 }
 
 #[test]
-fn k16_inspect_identifies_standalone_k16fs_and_k16e() {
+fn k16_inspect_identifies_standalone_kfs_and_k16e() {
     let fs_path = temp_file("root.kfs");
     let k16e_path = temp_file("init.kx");
     fs::write(
         &fs_path,
-        k16fs::format_empty_filesystem(32).expect("K16FS formats"),
+        kfs::format_empty_filesystem(32).expect("KFS formats"),
     )
-    .expect("K16FS writes");
+    .expect("KFS writes");
     fs::write(
         &k16e_path,
         k16e::encode_k16_executable(
@@ -90,15 +90,15 @@ fn k16_inspect_identifies_standalone_k16fs_and_k16e() {
     let fs_output = Command::new(k16_binary())
         .args(["inspect", fs_path.to_str().unwrap()])
         .output()
-        .expect("k16 inspect K16FS runs");
+        .expect("k16 inspect KFS runs");
     assert!(
         fs_output.status.success(),
         "stderr: {}",
         String::from_utf8_lossy(&fs_output.stderr)
     );
     assert_eq!(
-        String::from_utf8(fs_output.stdout).expect("K16FS inspect stdout is UTF-8"),
-        "kind=K16FS\nK16FS v1 blocks=32 block_size=512 root_inode=1 inode_table_blocks=8\n",
+        String::from_utf8(fs_output.stdout).expect("KFS inspect stdout is UTF-8"),
+        "kind=KFS\nKFS v1 blocks=32 block_size=512 root_inode=1 inode_table_blocks=8\n",
     );
 
     let k16e_output = Command::new(k16_binary())

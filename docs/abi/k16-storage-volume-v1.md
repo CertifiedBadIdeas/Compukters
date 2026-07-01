@@ -40,19 +40,19 @@ LBA 257..end ROOT partition
 ```
 
 In the partitioned layout, `k16 volume put-boot` formats the `BOOT` partition
-as K16FS and writes the bootloader `K16E` file to `/boot/loader.kb`.
+as KFS and writes the bootloader `K16E` file to `/boot/loader.kb`.
 `k16 volume put-kernel` writes the kernel `K16E` file to `/boot/kernel.kx`
-inside the `ROOT` K16FS partition. The partitioned layout does not use fixed
+inside the `ROOT` KFS partition. The partitioned layout does not use fixed
 `K16B` or `K16K` records.
 
 `k16 volume create` creates an unpartitioned volume for non-boot data and tests.
 Boot installation commands must reject unpartitioned volumes instead of writing
 fixed boot records.
 
-General filesystem operations are not part of `k16 volume`. Tooling for K16FS
+General filesystem operations are not part of `k16 volume`. Tooling for KFS
 uses `k16 fs kfs ...`; future filesystems should use their own `k16 fs
 <filesystem>` namespace. `put-boot` and `put-kernel` are boot-chain
-installation helpers for the current K16FS-backed system volume layout.
+installation helpers for the current KFS-backed system volume layout.
 
 `k16 volume` may copy partition bytes without interpreting their filesystem:
 
@@ -72,7 +72,7 @@ inspector:
 k16 inspect <blob>
 ```
 
-It identifies `K16VOL`, standalone `K16PT` media bytes, standalone `K16FS`
+It identifies `K16VOL`, standalone `K16PT` media bytes, standalone `KFS`
 filesystem images, and `K16E` executables. Dynamic K16E v2 program images also
 report their entry offset, memory size, relocation count, and relocation table
 byte size. Snapshot blobs are intentionally not reported here until the native
@@ -155,21 +155,21 @@ partitions outside the guest-visible media size, and overlapping partitions.
 The current boot chain is:
 
 1. BIOS reads `K16PT` from LBA 0.
-2. BIOS reads `/boot/loader.kb` from the `BOOT` K16FS partition.
+2. BIOS reads `/boot/loader.kb` from the `BOOT` KFS partition.
 3. BIOS validates the bootloader `K16E`, copies its payload to `load_addr`,
    and jumps to `entry_pc`.
-4. Bootloader reads `/boot/kernel.kx` from the `ROOT` K16FS partition.
+4. Bootloader reads `/boot/kernel.kx` from the `ROOT` KFS partition.
 5. Bootloader validates the kernel `K16E`, copies its payload to `load_addr`,
    and jumps to `entry_pc`.
-6. Kernel reads `/bin/init.kx` from the `ROOT` K16FS partition.
+6. Kernel reads `/bin/init.kx` from the `ROOT` KFS partition.
 7. Kernel validates the program `K16E`, resolves any declared K16E v5 shared
-   object imports from `ROOT` K16FS `/lib/<needed-library>`, copies the program
+   object imports from `ROOT` KFS `/lib/<needed-library>`, copies the program
    and shared object payloads into the child process, and jumps to `entry_pc`.
 8. The bundled init program supervises `/bin/shell.kx` through the K16
    `SPAWN` and `WAIT` syscalls.
 9. The shell launches foreground utilities by resolving command names to
    `/bin/*.kx` and issuing the K16 `RUN` syscall with a structured argv request.
-   The kernel must open the requested program file from the `ROOT` K16FS
+   The kernel must open the requested program file from the `ROOT` KFS
    partition, validate the dynamic `K16E` program image, and start the child
    process. A missing utility file is
    a hard `NOENT`-style launch failure, not a fallback to a bundled program.
@@ -181,5 +181,5 @@ instruction bytes.
 
 Earlier development slices used fixed raw-media records named `K16B` and
 `K16K`. They are retired from the active ABI. Current BIOS and volume tooling
-must reject missing or malformed `K16PT`/K16FS structures instead of booting
+must reject missing or malformed `K16PT`/KFS structures instead of booting
 from fixed LBA records.

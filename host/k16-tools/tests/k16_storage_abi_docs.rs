@@ -19,7 +19,7 @@ fn storage_volume_abi_docs_use_k16_cli_and_kraft16_extensions() {
         );
     }
 
-    for retired in ["rux volume", "rux fs", ".ruxvol", ".k16fs"] {
+    for retired in ["rux volume", "rux fs", ".ruxvol", ".ruxfs"] {
         assert!(
             !docs.contains(retired),
             "storage volume ABI docs must not contain `{retired}`"
@@ -28,8 +28,8 @@ fn storage_volume_abi_docs_use_k16_cli_and_kraft16_extensions() {
 }
 
 #[test]
-fn k16fs_abi_docs_use_k16_cli_and_kfs_extension() {
-    let docs = normalized_doc("docs/abi/k16fs-v1.md");
+fn kfs_abi_docs_use_k16_cli_and_kfs_extension() {
+    let docs = normalized_doc("docs/abi/kfs-v1.md");
 
     for required in [
         "k16 fs kfs format <image.kfs> --blocks <blocks>",
@@ -41,14 +41,14 @@ fn k16fs_abi_docs_use_k16_cli_and_kfs_extension() {
     ] {
         assert!(
             docs.contains(required),
-            "K16FS ABI docs must contain `{required}`"
+            "KFS ABI docs must contain `{required}`"
         );
     }
 
-    for retired in ["rux volume", "rux fs", ".ruxvol", ".k16fs"] {
+    for retired in ["rux volume", "rux fs", ".ruxvol", ".ruxfs"] {
         assert!(
             !docs.contains(retired),
-            "K16FS ABI docs must not contain `{retired}`"
+            "KFS ABI docs must not contain `{retired}`"
         );
     }
 }

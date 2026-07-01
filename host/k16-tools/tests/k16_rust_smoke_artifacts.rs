@@ -91,7 +91,7 @@ fn k16_bios_splash_uses_sleep_boundary() {
     assert!(source.contains("K16E_ABI_KIND_BOOTLOADER"));
     assert!(source.contains("load_k16e_from_storage0"));
     assert!(boot_chain.contains("K16PT"));
-    assert!(boot_chain.contains("K16FS"));
+    assert!(boot_chain.contains("KFS"));
     assert!(boot_chain_header.contains("struct k16_loaded_image"));
     assert!(!source.contains("k16_rt::sleep_ticks"));
     assert!(!source.contains("k16_rt::yield_once"));
@@ -167,11 +167,11 @@ fn kernel_image_parser_is_kernel_owned() {
 }
 
 #[test]
-fn kernel_storage_helper_is_kernel_owned() {
+fn kfs_storage_helper_is_kfs_owned() {
     let root = repo_root();
     let workspace_manifest = root.join("guest/kraftos/Cargo.toml");
     let kernel_manifest = root.join("guest/kraftos/kernel/Cargo.toml");
-    let kernel_storage = root.join("guest/kraftos/kernel/src/storage.rs");
+    let kernel_storage = root.join("guest/kraftos/kernel/src/kfs/storage.rs");
 
     let workspace_manifest =
         fs::read_to_string(&workspace_manifest).expect("K16 guest workspace manifest exists");
@@ -181,7 +181,7 @@ fn kernel_storage_helper_is_kernel_owned() {
 
     assert!(
         !rust_guest_workspace_members(&workspace_manifest).contains(&"k16-storage"),
-        "Rust storage helper should be kernel-owned, not a standalone workspace member"
+        "Rust storage helper should be KFS-owned, not a standalone workspace member"
     );
     assert!(
         !root.join("guest/kraftos/k16-storage").exists(),

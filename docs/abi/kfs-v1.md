@@ -1,10 +1,10 @@
-# K16FS v1
+# KFS v1
 
 ## Status
 
 Status: experimental.
 
-K16FS v1 is the filesystem intended for the `ROOT` partition in the
+KFS v1 is the filesystem intended for the `ROOT` partition in the
 partitioned `K16PT` storage0 layout. It is an extent-based filesystem with a
 fixed 512-byte block size, one superblock, one allocation bitmap, and one inode
 table.
@@ -55,7 +55,7 @@ offset  size  name
 Field values for v1:
 
 ```text
-magic       "K16FS"
+magic       "KFS\0\0"
 version     1
 reserved    0
 block_size  512
@@ -110,7 +110,7 @@ offset  size  name
 0x04    4     block_count
 ```
 
-K16FS v1 currently supports up to 4 inline extents per inode. Extents must be
+KFS v1 currently supports up to 4 inline extents per inode. Extents must be
 non-empty, inside `total_blocks`, and outside the superblock, bitmap, and inode
 table ranges.
 
@@ -170,10 +170,10 @@ The current compiler crate provides:
 The host-side read path used to model future bootloader behavior is:
 
 ```text
-K16VOL -> K16PT ROOT partition -> K16FS superblock -> /boot/kernel.kx
+K16VOL -> K16PT ROOT partition -> KFS superblock -> /boot/kernel.kx
 ```
 
-This reader composes byte-level volume partition extraction with K16FS absolute
+This reader composes byte-level volume partition extraction with KFS absolute
 path lookup. It is not a fallback path and does not make `k16 volume`
 filesystem-aware.
 
@@ -181,7 +181,7 @@ The VM runtime also has a storage image reader/writer for the guest-visible
 media payload:
 
 ```text
-storage0 media bytes -> K16PT ROOT partition -> K16FS superblock -> absolute path
+storage0 media bytes -> K16PT ROOT partition -> KFS superblock -> absolute path
 ```
 
 This runtime path starts at LBA0 of the storage media payload. It does not
@@ -189,20 +189,20 @@ accept a host `.kv` path and does not strip the 16-byte `K16VOL` host file
 header. The storage backend performs that file-to-media translation before the
 guest-visible storage path sees any bytes.
 
-The current guest boot chain uses the same K16FS structure:
+The current guest boot chain uses the same KFS structure:
 
 ```text
-BIOS       -> storage0 BOOT/K16FS /boot/loader.kb -> bootloader
-bootloader -> storage0 ROOT/K16FS /boot/kernel.kx -> kernel
-kernel     -> storage0 ROOT/K16FS /bin/init.kx    -> init launcher
-init       -> storage0 ROOT/K16FS /bin/shell.kx   -> shell
-shell      -> storage0 ROOT/K16FS /bin/*.kx       -> foreground utility
+BIOS       -> storage0 BOOT/KFS /boot/loader.kb -> bootloader
+bootloader -> storage0 ROOT/KFS /boot/kernel.kx -> kernel
+kernel     -> storage0 ROOT/KFS /bin/init.kx    -> init launcher
+init       -> storage0 ROOT/KFS /bin/shell.kx   -> shell
+shell      -> storage0 ROOT/KFS /bin/*.kx       -> foreground utility
 ```
 
 Guest loaders treat missing paths, malformed metadata, or wrong executable ABI
 kinds as hard load failures. Shell-launched foreground utilities use the same
 K16 `RUN` kernel boundary as init-launched shell startup: the shell resolves the
-command to a `/bin/*.kx` path, the kernel opens that file from ROOT/K16FS on
+command to a `/bin/*.kx` path, the kernel opens that file from ROOT/KFS on
 `storage0`, validates the dynamic `K16E` program image, and starts the child
 process. `RUN` returns a non-negative child exit status after a successful
 launch, or a negative K16 error when launch/fault handling fails before normal
@@ -241,7 +241,7 @@ k16 fs kfs ls <image.kfs> <path>
 `k16 volume` remains storage-container tooling. General filesystem operations
 must stay in `k16 fs <filesystem>` subcommands. The current `put-boot` and
 `put-kernel` commands are boot-chain installation helpers that write the
-standard system files into the active K16FS-backed volume layout.
+standard system files into the active KFS-backed volume layout.
 
 Sparse files, unbounded extents, and extent trees remain next-step work under
-the same K16FS v1 contract.
+the same KFS v1 contract.

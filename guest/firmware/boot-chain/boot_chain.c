@@ -43,10 +43,10 @@ extern void __k16_halt_once(void);
 #define K16PT_HEADER_SIZE 16u
 #define K16PT_ENTRY_SIZE 32u
 #define K16PT_MAX_ENTRIES 15u
-#define K16FS_INODE_SIZE 64u
-#define K16FS_DIRECTORY_ENTRY_SIZE 64u
-#define K16FS_MAX_NAME_BYTES 56u
-#define K16FS_MAX_INLINE_EXTENTS 4u
+#define KFS_INODE_SIZE 64u
+#define KFS_DIRECTORY_ENTRY_SIZE 64u
+#define KFS_MAX_NAME_BYTES 56u
+#define KFS_MAX_INLINE_EXTENTS 4u
 #define FIXED_K16E_V1_HEADER_SIZE 52u
 #define FIXED_K16E_V1_PAYLOAD_OFFSET 52u
 
@@ -198,7 +198,7 @@ static int read_partition(const char *partition_type) {
 }
 
 static int read_inode(u32 inode_id) {
-  u32 inodes_per_block = BLOCK_SIZE / K16FS_INODE_SIZE;
+  u32 inodes_per_block = BLOCK_SIZE / KFS_INODE_SIZE;
   u32 inode_capacity =
       read_u32(STATE_SUPERBLOCK_INODE_TABLE_BLOCK_COUNT) * inodes_per_block;
   if (inode_id >= inode_capacity) {
@@ -207,7 +207,7 @@ static int read_inode(u32 inode_id) {
 
   u32 inode_block = read_u32(STATE_SUPERBLOCK_INODE_TABLE_START_BLOCK) +
                     inode_id / inodes_per_block;
-  u32 inode_offset = (inode_id % inodes_per_block) * K16FS_INODE_SIZE;
+  u32 inode_offset = (inode_id % inodes_per_block) * KFS_INODE_SIZE;
   int error = read_fs_block(inode_block);
   if (error != 0) {
     return error;
@@ -215,7 +215,7 @@ static int read_inode(u32 inode_id) {
 
   u8 extent_count = scratch_u8(inode_offset + 0x10u);
   if (scratch_u32(inode_offset + 0x0cu) != 0u ||
-      extent_count > K16FS_MAX_INLINE_EXTENTS) {
+      extent_count > KFS_MAX_INLINE_EXTENTS) {
     return ERR_INVALID_FILESYSTEM;
   }
 
@@ -246,7 +246,7 @@ static int read_superblock(void) {
   if (error != 0) {
     return error;
   }
-  if (!scratch_eq(0, "K16FS", 5) || scratch_u8(5) != 1u ||
+  if (!scratch_eq(0, "KFS\0\0", 5) || scratch_u8(5) != 1u ||
       scratch_u8(6) != 0u || scratch_u8(7) != 0u ||
       read_u32(SCRATCH_ADDR + 0x08u) != BLOCK_SIZE) {
     return ERR_INVALID_FILESYSTEM;
@@ -277,8 +277,8 @@ static int read_superblock(void) {
 
 static int find_directory_entry(const char *name, u32 name_len,
                                 u32 *inode_id) {
-  if (name_len == 0u || name_len > K16FS_MAX_NAME_BYTES ||
-      read_u32(STATE_INODE_SIZE_BYTES) % K16FS_DIRECTORY_ENTRY_SIZE != 0u) {
+  if (name_len == 0u || name_len > KFS_MAX_NAME_BYTES ||
+      read_u32(STATE_INODE_SIZE_BYTES) % KFS_DIRECTORY_ENTRY_SIZE != 0u) {
     return ERR_INVALID_FILESYSTEM;
   }
 
@@ -307,7 +307,7 @@ static int find_directory_entry(const char *name, u32 name_len,
         u8 state = scratch_u8(offset);
         if (state == 1u) {
           u8 entry_name_len = scratch_u8(offset + 1u);
-          if (entry_name_len == 0u || entry_name_len > K16FS_MAX_NAME_BYTES ||
+          if (entry_name_len == 0u || entry_name_len > KFS_MAX_NAME_BYTES ||
               scratch_u8(offset + 2u) != 0u ||
               scratch_u8(offset + 3u) != 0u) {
             return ERR_INVALID_FILESYSTEM;
@@ -320,8 +320,8 @@ static int find_directory_entry(const char *name, u32 name_len,
         } else if (state != 0u && state != 2u) {
           return ERR_INVALID_FILESYSTEM;
         }
-        remaining -= K16FS_DIRECTORY_ENTRY_SIZE;
-        offset += K16FS_DIRECTORY_ENTRY_SIZE;
+        remaining -= KFS_DIRECTORY_ENTRY_SIZE;
+        offset += KFS_DIRECTORY_ENTRY_SIZE;
       }
       block_index++;
     }

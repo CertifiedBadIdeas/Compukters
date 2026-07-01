@@ -1,5 +1,5 @@
 use crate::k16e;
-use crate::k16fs;
+use crate::kfs;
 use crate::partition;
 
 pub const K16VOL_MAGIC: &[u8; 6] = b"K16VOL";
@@ -45,7 +45,7 @@ pub fn create_initialized_volume(size: usize) -> Result<Vec<u8>, String> {
     let root_end = root_start
         .checked_add(root_len)
         .ok_or_else(|| "ROOT partition byte range overflows".to_string())?;
-    let root = k16fs::format_empty_filesystem(root_entry.block_count)?;
+    let root = kfs::format_empty_filesystem(root_entry.block_count)?;
     bytes[root_start..root_end].copy_from_slice(&root);
     Ok(bytes)
 }
@@ -63,9 +63,9 @@ pub fn put_boot(volume: &mut [u8], boot: &[u8]) -> Result<(), String> {
     let boot_range = partition_payload_range(payload, "BOOT")?;
     let boot_blocks = u32::try_from(boot_range.len() / partition::K16PT_BLOCK_SIZE)
         .map_err(|_| "BOOT partition block count does not fit u32".to_string())?;
-    let mut boot_fs = k16fs::format_empty_filesystem(boot_blocks)?;
-    k16fs::create_directory(&mut boot_fs, "/boot")?;
-    k16fs::write_file(&mut boot_fs, "/boot/loader.kb", boot)?;
+    let mut boot_fs = kfs::format_empty_filesystem(boot_blocks)?;
+    kfs::create_directory(&mut boot_fs, "/boot")?;
+    kfs::write_file(&mut boot_fs, "/boot/loader.kb", boot)?;
     payload[boot_range].copy_from_slice(&boot_fs);
     Ok(())
 }
@@ -80,7 +80,7 @@ pub fn put_kernel(volume: &mut [u8], kernel: &[u8]) -> Result<(), String> {
     let root_range = partition_payload_range(payload, "ROOT")?;
     let root = &mut payload[root_range];
     ensure_boot_directory(root)?;
-    k16fs::write_file(root, "/boot/kernel.kx", kernel)
+    kfs::write_file(root, "/boot/kernel.kx", kernel)
 }
 
 pub fn extract_partition(volume: &[u8], selector: &str) -> Result<Vec<u8>, String> {
@@ -145,20 +145,20 @@ pub fn inspect_boot_chain(volume: &[u8]) -> Result<String, String> {
 
     let boot_range = partition_entry_payload_range(payload, boot_entry)?;
     let boot_fs = &payload[boot_range];
-    let bootloader_bytes = k16fs::read_file(boot_fs, "/boot/loader.kb")
-        .map_err(|error| format!("BOOT/K16FS /boot/loader.kb is not readable: {error}"))?;
+    let bootloader_bytes = kfs::read_file(boot_fs, "/boot/loader.kb")
+        .map_err(|error| format!("BOOT/KFS /boot/loader.kb is not readable: {error}"))?;
     let bootloader = k16e::decode_k16_executable(&bootloader_bytes)?;
     if bootloader.abi_kind != k16e::K16eAbiKind::Bootloader {
-        return Err("BOOT/K16FS /boot/loader.kb is not a bootloader K16E".to_string());
+        return Err("BOOT/KFS /boot/loader.kb is not a bootloader K16E".to_string());
     }
 
     let root_range = partition_entry_payload_range(payload, root_entry)?;
     let root = &payload[root_range];
-    let kernel_bytes = k16fs::read_file(root, "/boot/kernel.kx")
-        .map_err(|error| format!("ROOT/K16FS /boot/kernel.kx is not readable: {error}"))?;
+    let kernel_bytes = kfs::read_file(root, "/boot/kernel.kx")
+        .map_err(|error| format!("ROOT/KFS /boot/kernel.kx is not readable: {error}"))?;
     let kernel = k16e::decode_k16_executable(&kernel_bytes)?;
     if kernel.abi_kind != k16e::K16eAbiKind::Kernel {
-        return Err("ROOT/K16FS /boot/kernel.kx is not a kernel K16E".to_string());
+        return Err("ROOT/KFS /boot/kernel.kx is not a kernel K16E".to_string());
     }
 
     let root_bytes = partition_byte_offset(root_entry.block_count)?;
@@ -169,7 +169,7 @@ pub fn inspect_boot_chain(volume: &[u8]) -> Result<String, String> {
         boot_entry.start_lba, boot_entry.block_count, boot_bytes, boot_entry.name
     ));
     output.push_str(&format!(
-        "BOOT K16FS /boot/loader.kb file_bytes={}\n",
+        "BOOT KFS /boot/loader.kb file_bytes={}\n",
         bootloader_bytes.len()
     ));
     output.push_str(&format!(
@@ -183,7 +183,7 @@ pub fn inspect_boot_chain(volume: &[u8]) -> Result<String, String> {
         root_entry.start_lba, root_entry.block_count, root_bytes, root_entry.name
     ));
     output.push_str(&format!(
-        "ROOT K16FS /boot/kernel.kx file_bytes={}\n",
+        "ROOT KFS /boot/kernel.kx file_bytes={}\n",
         kernel_bytes.len()
     ));
     output.push_str(&format!(
@@ -252,10 +252,10 @@ fn partition_entry_by_type(
 }
 
 fn ensure_boot_directory(root: &mut [u8]) -> Result<(), String> {
-    match k16fs::list_directory(root, "/boot") {
+    match kfs::list_directory(root, "/boot") {
         Ok(_) => Ok(()),
         Err(error) if error.contains("directory entry `boot` not found") => {
-            k16fs::create_directory(root, "/boot")
+            kfs::create_directory(root, "/boot")
         }
         Err(error) => Err(error),
     }

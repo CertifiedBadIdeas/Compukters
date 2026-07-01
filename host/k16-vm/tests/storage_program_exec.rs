@@ -44,13 +44,13 @@ fn runtime_exec_zero_fills_program_k16e_memory_tail() {
 }
 
 #[test]
-fn runtime_reader_loads_program_k16e_from_root_k16fs() {
+fn runtime_reader_loads_program_k16e_from_root_kfs() {
     let init = encode_k16e(3, 0x8000, 0x8000, &[0x01, 0x00]);
     let root = rootfs_with_file("/bin/init.kx", &init);
     let storage0 = storage0_media_with_root(root);
 
-    let loaded = storage_image::read_k16fs_file_from_partition(&storage0, "ROOT", "/bin/init.kx")
-        .expect("program reads from ROOT K16FS");
+    let loaded = storage_image::read_kfs_file_from_partition(&storage0, "ROOT", "/bin/init.kx")
+        .expect("program reads from ROOT KFS");
     let executable =
         k16e::decode_program_k16_executable(&loaded).expect("program K16E validates for exec");
 
@@ -75,15 +75,27 @@ fn runtime_reader_reports_missing_partition_or_path_without_fallback() {
     let storage0 = storage0_media_with_root(root);
 
     assert!(
-        storage_image::read_k16fs_file_from_partition(&storage0, "DATA", "/bin/init.kx")
+        storage_image::read_kfs_file_from_partition(&storage0, "DATA", "/bin/init.kx")
             .unwrap_err()
             .contains("K16PT partition `DATA` not found")
     );
     assert!(
-        storage_image::read_k16fs_file_from_partition(&storage0, "ROOT", "/sbin/init.kx")
+        storage_image::read_kfs_file_from_partition(&storage0, "ROOT", "/sbin/init.kx")
             .unwrap_err()
-            .contains("K16FS directory entry `sbin` not found")
+            .contains("KFS directory entry `sbin` not found")
     );
+}
+
+#[test]
+fn runtime_reader_rejects_old_k16fs_magic_without_fallback() {
+    let mut root = rootfs_with_file("/bin/init.kx", &[0x01, 0x00]);
+    root[0..5].copy_from_slice(b"K16FS");
+    let storage0 = storage0_media_with_root(root);
+
+    let error =
+        storage_image::read_kfs_file_from_partition(&storage0, "ROOT", "/bin/init.kx").unwrap_err();
+
+    assert!(error.contains("invalid KFS magic"), "{error}");
 }
 
 fn storage0_media_with_root(root: Vec<u8>) -> Vec<u8> {
@@ -126,7 +138,7 @@ fn rootfs_with_file(path: &str, contents: &[u8]) -> Vec<u8> {
     const BLOCK_SIZE: usize = 512;
     const TOTAL_BLOCKS: usize = 95;
     let mut image = vec![0_u8; TOTAL_BLOCKS * BLOCK_SIZE];
-    encode_k16fs_superblock(&mut image);
+    encode_kfs_superblock(&mut image);
     encode_inode(&mut image, 1, 2, 64, 10, 1);
     encode_inode(&mut image, 2, 2, 64, 11, 1);
     encode_inode(&mut image, 3, 1, contents.len() as u64, 12, 1);
@@ -136,8 +148,8 @@ fn rootfs_with_file(path: &str, contents: &[u8]) -> Vec<u8> {
     image
 }
 
-fn encode_k16fs_superblock(image: &mut [u8]) {
-    image[0..5].copy_from_slice(b"K16FS");
+fn encode_kfs_superblock(image: &mut [u8]) {
+    image[0..5].copy_from_slice(b"KFS\0\0");
     image[5] = 1;
     write_u32(image, 0x08, 512);
     write_u32(image, 0x0c, 95);

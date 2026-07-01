@@ -14,15 +14,14 @@ mod generated;
 mod gpu;
 mod image;
 mod init;
-mod k16fs_cache;
-mod k16fs_root;
+mod kfs;
+
 mod memory_layout;
 mod mmio;
 mod os_stats;
 mod page_alloc;
 mod process;
 mod stdin;
-mod storage;
 mod syscall;
 mod terminal;
 mod terminal_render;

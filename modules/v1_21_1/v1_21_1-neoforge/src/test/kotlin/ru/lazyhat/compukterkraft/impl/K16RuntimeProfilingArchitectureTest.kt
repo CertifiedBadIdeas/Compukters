@@ -69,7 +69,7 @@ class K16RuntimeProfilingArchitectureTest {
         assertTrue(docs.contains("libraryDataReadBlocks="))
         assertTrue(textIoProfilingSource.contains("programLoadBytes="))
         assertTrue(textIoProfilingSource.contains("programDataReadBlocks="))
-        assertTrue(textIoProfilingSource.contains("formatK16FsHotspotSummary"))
+        assertTrue(textIoProfilingSource.contains("formatKfsHotspotSummary"))
         assertTrue(docs.contains("k16Wait: entries="))
         assertTrue(textIoProfilingSource.contains("bios.splash.visible"))
         assertTrue(textIoProfilingSource.contains("bios.splash.wait"))
@@ -99,7 +99,7 @@ class K16RuntimeProfilingArchitectureTest {
 
     @Test
     fun k16KernelBatchesContiguousFullBlockStorageReads() {
-        val storageSource = Path.of("../../../guest/kraftos/kernel/src/storage.rs").readText()
+        val storageSource = Path.of("../../../guest/kraftos/kernel/src/kfs/storage.rs").readText()
 
         assertTrue(storageSource.contains("unsafe fn read_fs_blocks_to_ram("))
         assertTrue(storageSource.contains("unsafe fn read_storage_blocks_to_ram("))

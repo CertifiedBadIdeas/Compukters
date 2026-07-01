@@ -378,7 +378,7 @@ class K16RuntimeTextIoProfilingTest {
     }
 
     @Test
-    fun formatsK16FsHotspotSummarySortedByMetadataDataTransfersAndMediaBlocks() {
+    fun formatsKfsHotspotSummarySortedByMetadataDataTransfersAndMediaBlocks() {
         val baseline = RuntimeProfilingSnapshot()
         val statAfter =
             RuntimeProfilingSnapshot(
@@ -453,7 +453,7 @@ class K16RuntimeTextIoProfilingTest {
             )
 
         val line =
-            formatK16FsHotspotSummary(
+            formatKfsHotspotSummary(
                 listOf(
                     K16ProfiledCommandSample("stat", baseline, statAfter),
                     K16ProfiledCommandSample("ls", baseline, lsAfter),
@@ -920,7 +920,7 @@ class K16RuntimeTextIoProfilingTest {
                 commands.map { command ->
                     runProfiledCoreutilsCommand(device, metrics, command, samples)
                 }
-            val hotspotSummary = formatK16FsHotspotSummary(samples)
+            val hotspotSummary = formatKfsHotspotSummary(samples)
             println(hotspotSummary)
 
             val unameLine = lines.single { it.contains("name=uname") }
@@ -937,7 +937,7 @@ class K16RuntimeTextIoProfilingTest {
             val writeLine = lines.single { it.contains("name=write") }
             assertTrue(
                 metricValue(writeLine, "storageReadCommands") <= 80,
-                "write should not scan K16FS allocation bitmap through hundreds of storage transfers: $writeLine",
+                "write should not scan KFS allocation bitmap through hundreds of storage transfers: $writeLine",
             )
             assertTrue(lines.any { it.contains("name=stat") && it.contains("statCalls=1") })
             assertTrue(lines.any { it.contains("name=mv") && it.contains("statCalls=1") })
@@ -1095,7 +1095,7 @@ private data class K16ProfiledCommandSample(
     val after: RuntimeProfilingSnapshot,
 )
 
-private data class K16FsHotspotDelta(
+private data class KfsHotspotDelta(
     val name: String,
     val metadataOps: Long,
     val dataReadBlocks: Long,
@@ -1256,7 +1256,7 @@ private fun formatK16CoreutilsCommandProfile(
         "libraryDataReadBytes=${osAfter.libraryDataReadBytes - osBefore.libraryDataReadBytes}"
 }
 
-private fun formatK16FsHotspotSummary(samples: List<K16ProfiledCommandSample>): String {
+private fun formatKfsHotspotSummary(samples: List<K16ProfiledCommandSample>): String {
     val deltas =
         samples.map { sample ->
             val osBefore = sample.before.k16.os
@@ -1274,7 +1274,7 @@ private fun formatK16FsHotspotSummary(samples: List<K16ProfiledCommandSample>): 
                     osAfter.programDataReadBlocks - osBefore.programDataReadBlocks +
                     osAfter.dynamicImportDataReadBlocks - osBefore.dynamicImportDataReadBlocks +
                     osAfter.libraryDataReadBlocks - osBefore.libraryDataReadBlocks
-            K16FsHotspotDelta(
+            KfsHotspotDelta(
                 name = sample.name,
                 metadataOps = metadataOps,
                 dataReadBlocks = dataReadBlocks,
@@ -1297,9 +1297,9 @@ private fun formatK16FsHotspotSummary(samples: List<K16ProfiledCommandSample>): 
             )
         }
 
-    fun ranked(selector: (K16FsHotspotDelta) -> Long): String =
+    fun ranked(selector: (KfsHotspotDelta) -> Long): String =
         deltas
-            .sortedWith(compareByDescending<K16FsHotspotDelta> { selector(it) }.thenBy { it.name })
+            .sortedWith(compareByDescending<KfsHotspotDelta> { selector(it) }.thenBy { it.name })
             .joinToString(prefix = "[", postfix = "]") { delta -> "${delta.name}:${selector(delta)}" }
 
     return "k16FsHotspots: " +

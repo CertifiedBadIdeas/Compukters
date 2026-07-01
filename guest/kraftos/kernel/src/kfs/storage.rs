@@ -9,13 +9,13 @@ const K16PT_HEADER_SIZE: u32 = 16;
 const K16PT_ENTRY_SIZE: u32 = 32;
 const K16PT_MAX_ENTRIES: u8 = 15;
 
-const K16FS_MAGIC: &[u8; 5] = b"K16FS";
-const K16FS_VERSION: u8 = 1;
-const K16FS_INODE_SIZE: u32 = 64;
-const K16FS_DIRECTORY_ENTRY_SIZE: u32 = 64;
-const K16FS_MAX_NAME_BYTES: usize = 56;
-const K16FS_MAX_INLINE_EXTENTS: usize = 4;
-const K16FS_DIRECTORY_ENTRIES_PER_BLOCK: usize = (BLOCK_SIZE / K16FS_DIRECTORY_ENTRY_SIZE) as usize;
+const KFS_MAGIC: &[u8; 5] = b"KFS\0\0";
+const KFS_VERSION: u8 = 1;
+const KFS_INODE_SIZE: u32 = 64;
+const KFS_DIRECTORY_ENTRY_SIZE: u32 = 64;
+const KFS_MAX_NAME_BYTES: usize = 56;
+const KFS_MAX_INLINE_EXTENTS: usize = 4;
+const KFS_DIRECTORY_ENTRIES_PER_BLOCK: usize = (BLOCK_SIZE / KFS_DIRECTORY_ENTRY_SIZE) as usize;
 const INVALID_CACHED_INODE_BLOCK: u32 = u32::MAX;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -23,8 +23,8 @@ pub struct FileMetadata {
     pub inode_id: u32,
     pub size_bytes: u32,
     pub extent_count: u32,
-    pub extent_start_blocks: [u32; K16FS_MAX_INLINE_EXTENTS],
-    pub extent_block_counts: [u32; K16FS_MAX_INLINE_EXTENTS],
+    pub extent_start_blocks: [u32; KFS_MAX_INLINE_EXTENTS],
+    pub extent_block_counts: [u32; KFS_MAX_INLINE_EXTENTS],
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -174,7 +174,7 @@ pub unsafe fn root_inode_id() -> u32 {
 
 pub unsafe fn select_inode_metadata_for_cache(
     inode_id: u32,
-) -> Result<crate::k16fs_cache::CachedPathMetadata, StorageError> {
+) -> Result<crate::kfs::cache::CachedPathMetadata, StorageError> {
     unsafe { read_inode(inode_id)? };
     unsafe { selected_metadata_for_cache() }
 }
@@ -189,9 +189,9 @@ pub unsafe fn select_directory_inode(path: &[&[u8]]) -> Result<u32, StorageError
 }
 
 pub unsafe fn selected_metadata_for_cache(
-) -> Result<crate::k16fs_cache::CachedPathMetadata, StorageError> {
+) -> Result<crate::kfs::cache::CachedPathMetadata, StorageError> {
     let metadata = unsafe { selected_path_metadata()? };
-    Ok(crate::k16fs_cache::CachedPathMetadata {
+    Ok(crate::kfs::cache::CachedPathMetadata {
         file_type: metadata.kind as u32,
         size_bytes: metadata.size_bytes,
     })
@@ -199,16 +199,16 @@ pub unsafe fn selected_metadata_for_cache(
 
 pub unsafe fn copy_selected_directory_listing_into_cached<S: DirectoryListingSink>(
     sink: &mut S,
-    cache: &mut crate::k16fs_cache::K16FsCache,
+    cache: &mut crate::kfs::cache::KfsCache,
 ) -> Result<u32, StorageError> {
     if unsafe { read_u32(STATE_INODE_STATE) as u8 } != 2
-        || unsafe { read_u32(STATE_INODE_SIZE_BYTES) } % K16FS_DIRECTORY_ENTRY_SIZE != 0
+        || unsafe { read_u32(STATE_INODE_SIZE_BYTES) } % KFS_DIRECTORY_ENTRY_SIZE != 0
     {
         return Err(StorageError::INVALID_FILESYSTEM);
     }
 
     let directory = unsafe { selected_file_metadata() };
-    if directory.extent_count as usize > K16FS_MAX_INLINE_EXTENTS {
+    if directory.extent_count as usize > KFS_MAX_INLINE_EXTENTS {
         return Err(StorageError::INVALID_FILESYSTEM);
     }
 
@@ -225,9 +225,9 @@ pub unsafe fn copy_selected_directory_listing_into_cached<S: DirectoryListingSin
             let fs_block = extent_start_block + block_index;
             unsafe { read_fs_block(fs_block)? };
             crate::os_stats::record_read_dir_data_read(min_u32(BLOCK_SIZE, remaining));
-            let mut entry_inode_ids = [0_u32; K16FS_DIRECTORY_ENTRIES_PER_BLOCK];
-            let mut entry_name_lengths = [0_u8; K16FS_DIRECTORY_ENTRIES_PER_BLOCK];
-            let mut entry_names = [[0_u8; K16FS_MAX_NAME_BYTES]; K16FS_DIRECTORY_ENTRIES_PER_BLOCK];
+            let mut entry_inode_ids = [0_u32; KFS_DIRECTORY_ENTRIES_PER_BLOCK];
+            let mut entry_name_lengths = [0_u8; KFS_DIRECTORY_ENTRIES_PER_BLOCK];
+            let mut entry_names = [[0_u8; KFS_MAX_NAME_BYTES]; KFS_DIRECTORY_ENTRIES_PER_BLOCK];
             let mut entry_count = 0_usize;
             let mut offset = 0;
             while offset < BLOCK_SIZE && remaining > 0 {
@@ -237,7 +237,7 @@ pub unsafe fn copy_selected_directory_listing_into_cached<S: DirectoryListingSin
                     1 => {
                         let name_len = scratch_u8(offset + 1) as usize;
                         if name_len == 0
-                            || name_len > K16FS_MAX_NAME_BYTES
+                            || name_len > KFS_MAX_NAME_BYTES
                             || scratch_u8(offset + 2) != 0
                             || scratch_u8(offset + 3) != 0
                         {
@@ -255,8 +255,8 @@ pub unsafe fn copy_selected_directory_listing_into_cached<S: DirectoryListingSin
                     }
                     _ => return Err(StorageError::INVALID_FILESYSTEM),
                 }
-                remaining -= K16FS_DIRECTORY_ENTRY_SIZE;
-                offset += K16FS_DIRECTORY_ENTRY_SIZE;
+                remaining -= KFS_DIRECTORY_ENTRY_SIZE;
+                offset += KFS_DIRECTORY_ENTRY_SIZE;
             }
 
             let mut cached_inode_block = INVALID_CACHED_INODE_BLOCK;
@@ -368,8 +368,8 @@ pub unsafe fn remove_file_from_storage0(
         inode_id,
         size_bytes: 0,
         extent_count: 0,
-        extent_start_blocks: [0; K16FS_MAX_INLINE_EXTENTS],
-        extent_block_counts: [0; K16FS_MAX_INLINE_EXTENTS],
+        extent_start_blocks: [0; KFS_MAX_INLINE_EXTENTS],
+        extent_block_counts: [0; KFS_MAX_INLINE_EXTENTS],
     };
     unsafe { encode_deleted_file_inode(deleted)? };
     unsafe { encode_deleted_directory_entry_at(slot_block, slot_offset) }
@@ -417,7 +417,7 @@ pub unsafe fn rename_file_from_storage0(
     unsafe { read_inode(new_parent_inode_id)? };
     let new_size = max_u32(
         unsafe { read_u32(STATE_INODE_SIZE_BYTES) },
-        new_slot_directory_offset + K16FS_DIRECTORY_ENTRY_SIZE,
+        new_slot_directory_offset + KFS_DIRECTORY_ENTRY_SIZE,
     );
     unsafe { encode_selected_inode_size(new_parent_inode_id, new_size)? };
     unsafe { encode_deleted_directory_entry_at(old_slot_block, old_slot_offset) }
@@ -555,11 +555,11 @@ pub unsafe fn selected_path_metadata() -> Result<PathMetadata, StorageError> {
 }
 
 pub unsafe fn selected_file_metadata() -> FileMetadata {
-    let mut extent_start_blocks = [0; K16FS_MAX_INLINE_EXTENTS];
-    let mut extent_block_counts = [0; K16FS_MAX_INLINE_EXTENTS];
+    let mut extent_start_blocks = [0; KFS_MAX_INLINE_EXTENTS];
+    let mut extent_block_counts = [0; KFS_MAX_INLINE_EXTENTS];
     let extent_count = unsafe { read_u32(STATE_INODE_EXTENT_COUNT) };
     let mut index = 0;
-    while index < K16FS_MAX_INLINE_EXTENTS {
+    while index < KFS_MAX_INLINE_EXTENTS {
         extent_start_blocks[index] =
             unsafe { read_u32(STATE_INODE_EXTENT_START_BLOCKS + index as u32 * 4) };
         extent_block_counts[index] =
@@ -631,8 +631,8 @@ unsafe fn read_partition(partition_type: &[u8; 4]) -> Result<(), StorageError> {
 
 unsafe fn read_superblock() -> Result<(), StorageError> {
     unsafe { read_fs_block(0)? };
-    if !scratch_eq(0, K16FS_MAGIC)
-        || scratch_u8(5) != K16FS_VERSION
+    if !scratch_eq(0, KFS_MAGIC)
+        || scratch_u8(5) != KFS_VERSION
         || scratch_u8(6) != 0
         || scratch_u8(7) != 0
         || unsafe { read_u32(SCRATCH_ADDR + 0x08) } != BLOCK_SIZE
@@ -689,8 +689,8 @@ unsafe fn create_empty_file(path: &[&[u8]]) -> Result<FileMetadata, StorageError
     let start_block = unsafe { allocate_contiguous_blocks(1)? };
     unsafe { clear_scratch_block() };
     unsafe { write_fs_block(start_block)? };
-    let mut extent_start_blocks = [0; K16FS_MAX_INLINE_EXTENTS];
-    let mut extent_block_counts = [0; K16FS_MAX_INLINE_EXTENTS];
+    let mut extent_start_blocks = [0; KFS_MAX_INLINE_EXTENTS];
+    let mut extent_block_counts = [0; KFS_MAX_INLINE_EXTENTS];
     extent_start_blocks[0] = start_block;
     extent_block_counts[0] = 1;
     let metadata = FileMetadata {
@@ -705,7 +705,7 @@ unsafe fn create_empty_file(path: &[&[u8]]) -> Result<FileMetadata, StorageError
     unsafe { read_inode(parent_inode_id)? };
     let new_size = max_u32(
         unsafe { read_u32(STATE_INODE_SIZE_BYTES) },
-        slot_directory_offset + K16FS_DIRECTORY_ENTRY_SIZE,
+        slot_directory_offset + KFS_DIRECTORY_ENTRY_SIZE,
     );
     unsafe { encode_selected_inode_size(parent_inode_id, new_size)? };
     unsafe { read_inode(inode_id)? };
@@ -730,8 +730,8 @@ unsafe fn create_empty_directory(path: &[&[u8]]) -> Result<(), StorageError> {
     let start_block = unsafe { allocate_contiguous_blocks(1)? };
     unsafe { clear_scratch_block() };
     unsafe { write_fs_block(start_block)? };
-    let mut extent_start_blocks = [0; K16FS_MAX_INLINE_EXTENTS];
-    let mut extent_block_counts = [0; K16FS_MAX_INLINE_EXTENTS];
+    let mut extent_start_blocks = [0; KFS_MAX_INLINE_EXTENTS];
+    let mut extent_block_counts = [0; KFS_MAX_INLINE_EXTENTS];
     extent_start_blocks[0] = start_block;
     extent_block_counts[0] = 1;
     let metadata = FileMetadata {
@@ -746,7 +746,7 @@ unsafe fn create_empty_directory(path: &[&[u8]]) -> Result<(), StorageError> {
     unsafe { read_inode(parent_inode_id)? };
     let new_size = max_u32(
         unsafe { read_u32(STATE_INODE_SIZE_BYTES) },
-        slot_directory_offset + K16FS_DIRECTORY_ENTRY_SIZE,
+        slot_directory_offset + KFS_DIRECTORY_ENTRY_SIZE,
     );
     unsafe { encode_selected_inode_size(parent_inode_id, new_size) }
 }
@@ -833,8 +833,8 @@ unsafe fn find_directory_entry(name: &[u8]) -> Result<u32, StorageError> {
 
 unsafe fn find_directory_entry_slot(name: &[u8]) -> Result<(u32, u32, u32), StorageError> {
     if name.is_empty()
-        || name.len() > K16FS_MAX_NAME_BYTES
-        || unsafe { read_u32(STATE_INODE_SIZE_BYTES) } % K16FS_DIRECTORY_ENTRY_SIZE != 0
+        || name.len() > KFS_MAX_NAME_BYTES
+        || unsafe { read_u32(STATE_INODE_SIZE_BYTES) } % KFS_DIRECTORY_ENTRY_SIZE != 0
     {
         return Err(StorageError::INVALID_FILESYSTEM);
     }
@@ -860,7 +860,7 @@ unsafe fn find_directory_entry_slot(name: &[u8]) -> Result<(u32, u32, u32), Stor
                     1 => {
                         let name_len = scratch_u8(offset + 1) as usize;
                         if name_len == 0
-                            || name_len > K16FS_MAX_NAME_BYTES
+                            || name_len > KFS_MAX_NAME_BYTES
                             || scratch_u8(offset + 2) != 0
                             || scratch_u8(offset + 3) != 0
                         {
@@ -876,8 +876,8 @@ unsafe fn find_directory_entry_slot(name: &[u8]) -> Result<(u32, u32, u32), Stor
                     }
                     _ => return Err(StorageError::INVALID_FILESYSTEM),
                 }
-                remaining -= K16FS_DIRECTORY_ENTRY_SIZE;
-                offset += K16FS_DIRECTORY_ENTRY_SIZE;
+                remaining -= KFS_DIRECTORY_ENTRY_SIZE;
+                offset += KFS_DIRECTORY_ENTRY_SIZE;
             }
             block_index += 1;
         }
@@ -921,8 +921,8 @@ unsafe fn find_selected_directory_free_slot() -> Result<(), StorageError> {
                     1 => {}
                     _ => return Err(StorageError::INVALID_FILESYSTEM),
                 }
-                offset += K16FS_DIRECTORY_ENTRY_SIZE;
-                directory_offset += K16FS_DIRECTORY_ENTRY_SIZE;
+                offset += KFS_DIRECTORY_ENTRY_SIZE;
+                directory_offset += KFS_DIRECTORY_ENTRY_SIZE;
             }
             block_index += 1;
         }
@@ -942,7 +942,7 @@ unsafe fn grow_selected_directory_capacity() -> Result<u32, StorageError> {
         return Err(StorageError::INVALID_FILESYSTEM);
     }
     let mut metadata = unsafe { selected_file_metadata() };
-    if metadata.extent_count == 0 || metadata.extent_count as usize > K16FS_MAX_INLINE_EXTENTS {
+    if metadata.extent_count == 0 || metadata.extent_count as usize > KFS_MAX_INLINE_EXTENTS {
         return Err(StorageError::INVALID_FILESYSTEM);
     }
     let last_extent_index = metadata.extent_count as usize - 1;
@@ -967,7 +967,7 @@ unsafe fn grow_selected_directory_capacity() -> Result<u32, StorageError> {
     }
 
     let new_extent_index = metadata.extent_count as usize;
-    if new_extent_index >= K16FS_MAX_INLINE_EXTENTS {
+    if new_extent_index >= KFS_MAX_INLINE_EXTENTS {
         return Err(StorageError::OUTPUT_BUFFER_TOO_SMALL);
     }
     let new_extent_block = unsafe { allocate_contiguous_blocks(1)? };
@@ -995,13 +995,13 @@ pub unsafe fn copy_selected_directory_listing_into<S: DirectoryListingSink>(
     sink: &mut S,
 ) -> Result<u32, StorageError> {
     if unsafe { read_u32(STATE_INODE_STATE) as u8 } != 2
-        || unsafe { read_u32(STATE_INODE_SIZE_BYTES) } % K16FS_DIRECTORY_ENTRY_SIZE != 0
+        || unsafe { read_u32(STATE_INODE_SIZE_BYTES) } % KFS_DIRECTORY_ENTRY_SIZE != 0
     {
         return Err(StorageError::INVALID_FILESYSTEM);
     }
 
     let directory = unsafe { selected_file_metadata() };
-    if directory.extent_count as usize > K16FS_MAX_INLINE_EXTENTS {
+    if directory.extent_count as usize > KFS_MAX_INLINE_EXTENTS {
         return Err(StorageError::INVALID_FILESYSTEM);
     }
 
@@ -1029,14 +1029,14 @@ pub unsafe fn copy_selected_directory_listing_into<S: DirectoryListingSink>(
                     1 => {
                         let name_len = scratch_u8(offset + 1) as u32;
                         if name_len == 0
-                            || name_len as usize > K16FS_MAX_NAME_BYTES
+                            || name_len as usize > KFS_MAX_NAME_BYTES
                             || scratch_u8(offset + 2) != 0
                             || scratch_u8(offset + 3) != 0
                         {
                             return Err(StorageError::INVALID_FILESYSTEM);
                         }
                         let inode_id = scratch_u32(offset + 4);
-                        let mut name = [0_u8; K16FS_MAX_NAME_BYTES];
+                        let mut name = [0_u8; KFS_MAX_NAME_BYTES];
                         let mut name_offset = 0;
                         while name_offset < name_len {
                             name[name_offset as usize] = scratch_u8(offset + 8 + name_offset);
@@ -1056,8 +1056,8 @@ pub unsafe fn copy_selected_directory_listing_into<S: DirectoryListingSink>(
                     }
                     _ => return Err(StorageError::INVALID_FILESYSTEM),
                 }
-                remaining -= K16FS_DIRECTORY_ENTRY_SIZE;
-                offset += K16FS_DIRECTORY_ENTRY_SIZE;
+                remaining -= KFS_DIRECTORY_ENTRY_SIZE;
+                offset += KFS_DIRECTORY_ENTRY_SIZE;
             }
             block_index += 1;
         }
@@ -1089,8 +1089,8 @@ unsafe fn push_directory_entry<S: DirectoryListingSink>(
 unsafe fn read_inode_path_metadata_cached(
     inode_id: u32,
     cached_inode_block: &mut u32,
-) -> Result<crate::k16fs_cache::CachedPathMetadata, StorageError> {
-    let inodes_per_block = BLOCK_SIZE / K16FS_INODE_SIZE;
+) -> Result<crate::kfs::cache::CachedPathMetadata, StorageError> {
+    let inodes_per_block = BLOCK_SIZE / KFS_INODE_SIZE;
     let inode_capacity = match unsafe { read_u32(STATE_SUPERBLOCK_INODE_TABLE_BLOCK_COUNT) }
         .checked_mul(inodes_per_block)
     {
@@ -1102,7 +1102,7 @@ unsafe fn read_inode_path_metadata_cached(
     }
     let inode_block =
         unsafe { read_u32(STATE_SUPERBLOCK_INODE_TABLE_START_BLOCK) } + inode_id / inodes_per_block;
-    let inode_offset = (inode_id % inodes_per_block) * K16FS_INODE_SIZE;
+    let inode_offset = (inode_id % inodes_per_block) * KFS_INODE_SIZE;
     if *cached_inode_block != inode_block {
         crate::os_stats::record_inode_load();
         unsafe { read_fs_block(inode_block)? };
@@ -1110,7 +1110,7 @@ unsafe fn read_inode_path_metadata_cached(
     }
     let size_high = scratch_u32(inode_offset + 0x0c);
     let extent_count = scratch_u8(inode_offset + 0x10) as usize;
-    if size_high != 0 || extent_count > K16FS_MAX_INLINE_EXTENTS {
+    if size_high != 0 || extent_count > KFS_MAX_INLINE_EXTENTS {
         return Err(StorageError::INVALID_FILESYSTEM);
     }
     let mut index = 0;
@@ -1128,7 +1128,7 @@ unsafe fn read_inode_path_metadata_cached(
         2 => k16_abi::syscall::FILE_TYPE_DIRECTORY,
         _ => return Err(StorageError::INVALID_FILESYSTEM),
     };
-    Ok(crate::k16fs_cache::CachedPathMetadata {
+    Ok(crate::kfs::cache::CachedPathMetadata {
         file_type,
         size_bytes: scratch_u32(inode_offset + 0x08),
     })
@@ -1148,7 +1148,7 @@ unsafe fn push_u32_le<S: DirectoryListingSink>(
 
 unsafe fn ensure_selected_directory_is_empty() -> Result<(), StorageError> {
     if unsafe { read_u32(STATE_INODE_STATE) as u8 } != 2
-        || unsafe { read_u32(STATE_INODE_SIZE_BYTES) } % K16FS_DIRECTORY_ENTRY_SIZE != 0
+        || unsafe { read_u32(STATE_INODE_SIZE_BYTES) } % KFS_DIRECTORY_ENTRY_SIZE != 0
     {
         return Err(StorageError::INVALID_FILESYSTEM);
     }
@@ -1173,8 +1173,8 @@ unsafe fn ensure_selected_directory_is_empty() -> Result<(), StorageError> {
                     1 => return Err(StorageError::PATH_NOT_EMPTY),
                     _ => return Err(StorageError::INVALID_FILESYSTEM),
                 }
-                remaining -= K16FS_DIRECTORY_ENTRY_SIZE;
-                offset += K16FS_DIRECTORY_ENTRY_SIZE;
+                remaining -= KFS_DIRECTORY_ENTRY_SIZE;
+                offset += KFS_DIRECTORY_ENTRY_SIZE;
             }
             block_index += 1;
         }
@@ -1409,7 +1409,7 @@ fn record_profiled_file_data_read(kind: FileReadProfileKind, bytes: u32) {
 #[inline(always)]
 unsafe fn read_inode(inode_id: u32) -> Result<(), StorageError> {
     crate::os_stats::record_inode_load();
-    let inodes_per_block = BLOCK_SIZE / K16FS_INODE_SIZE;
+    let inodes_per_block = BLOCK_SIZE / KFS_INODE_SIZE;
     let inode_capacity = match unsafe { read_u32(STATE_SUPERBLOCK_INODE_TABLE_BLOCK_COUNT) }
         .checked_mul(inodes_per_block)
     {
@@ -1421,12 +1421,12 @@ unsafe fn read_inode(inode_id: u32) -> Result<(), StorageError> {
     }
     let inode_block =
         unsafe { read_u32(STATE_SUPERBLOCK_INODE_TABLE_START_BLOCK) } + inode_id / inodes_per_block;
-    let inode_offset = (inode_id % inodes_per_block) * K16FS_INODE_SIZE;
+    let inode_offset = (inode_id % inodes_per_block) * KFS_INODE_SIZE;
     unsafe { read_fs_block(inode_block)? };
 
     let size_high = scratch_u32(inode_offset + 0x0c);
     let extent_count = scratch_u8(inode_offset + 0x10) as usize;
-    if size_high != 0 || extent_count > K16FS_MAX_INLINE_EXTENTS {
+    if size_high != 0 || extent_count > KFS_MAX_INLINE_EXTENTS {
         return Err(StorageError::INVALID_FILESYSTEM);
     }
 
@@ -1506,18 +1506,18 @@ unsafe fn encode_deleted_directory_inode(metadata: FileMetadata) -> Result<(), S
             3,
             0,
             0,
-            &[0; K16FS_MAX_INLINE_EXTENTS],
-            &[0; K16FS_MAX_INLINE_EXTENTS],
+            &[0; KFS_MAX_INLINE_EXTENTS],
+            &[0; KFS_MAX_INLINE_EXTENTS],
         )
     }
 }
 
 unsafe fn encode_selected_inode_size(inode_id: u32, size_bytes: u32) -> Result<(), StorageError> {
-    let mut extent_start_blocks = [0; K16FS_MAX_INLINE_EXTENTS];
-    let mut extent_block_counts = [0; K16FS_MAX_INLINE_EXTENTS];
+    let mut extent_start_blocks = [0; KFS_MAX_INLINE_EXTENTS];
+    let mut extent_block_counts = [0; KFS_MAX_INLINE_EXTENTS];
     let extent_count = unsafe { read_u32(STATE_INODE_EXTENT_COUNT) };
     let mut index = 0;
-    while index < K16FS_MAX_INLINE_EXTENTS {
+    while index < KFS_MAX_INLINE_EXTENTS {
         extent_start_blocks[index] =
             unsafe { read_u32(STATE_INODE_EXTENT_START_BLOCKS + index as u32 * 4) };
         extent_block_counts[index] =
@@ -1541,13 +1541,13 @@ unsafe fn encode_inode(
     state: u8,
     size_bytes: u32,
     extent_count: u32,
-    extent_start_blocks: &[u32; K16FS_MAX_INLINE_EXTENTS],
-    extent_block_counts: &[u32; K16FS_MAX_INLINE_EXTENTS],
+    extent_start_blocks: &[u32; KFS_MAX_INLINE_EXTENTS],
+    extent_block_counts: &[u32; KFS_MAX_INLINE_EXTENTS],
 ) -> Result<(), StorageError> {
-    if extent_count as usize > K16FS_MAX_INLINE_EXTENTS {
+    if extent_count as usize > KFS_MAX_INLINE_EXTENTS {
         return Err(StorageError::INVALID_FILESYSTEM);
     }
-    let inodes_per_block = BLOCK_SIZE / K16FS_INODE_SIZE;
+    let inodes_per_block = BLOCK_SIZE / KFS_INODE_SIZE;
     let inode_capacity = match unsafe { read_u32(STATE_SUPERBLOCK_INODE_TABLE_BLOCK_COUNT) }
         .checked_mul(inodes_per_block)
     {
@@ -1559,10 +1559,10 @@ unsafe fn encode_inode(
     }
     let inode_block =
         unsafe { read_u32(STATE_SUPERBLOCK_INODE_TABLE_START_BLOCK) } + inode_id / inodes_per_block;
-    let inode_offset = (inode_id % inodes_per_block) * K16FS_INODE_SIZE;
+    let inode_offset = (inode_id % inodes_per_block) * KFS_INODE_SIZE;
     unsafe { read_fs_block(inode_block)? };
     let mut offset = 0;
-    while offset < K16FS_INODE_SIZE {
+    while offset < KFS_INODE_SIZE {
         unsafe { write_u8(SCRATCH_ADDR + inode_offset + offset, 0) };
         offset += 1;
     }
@@ -1585,7 +1585,7 @@ unsafe fn encode_inode(
 }
 
 unsafe fn allocate_inode() -> Result<u32, StorageError> {
-    let inodes_per_block = BLOCK_SIZE / K16FS_INODE_SIZE;
+    let inodes_per_block = BLOCK_SIZE / KFS_INODE_SIZE;
     let inode_capacity = match unsafe { read_u32(STATE_SUPERBLOCK_INODE_TABLE_BLOCK_COUNT) }
         .checked_mul(inodes_per_block)
     {
@@ -1783,12 +1783,12 @@ unsafe fn encode_directory_entry_at(
     inode_id: u32,
     name: &[u8],
 ) -> Result<(), StorageError> {
-    if name.is_empty() || name.len() > K16FS_MAX_NAME_BYTES {
+    if name.is_empty() || name.len() > KFS_MAX_NAME_BYTES {
         return Err(StorageError::INVALID_FILESYSTEM);
     }
     unsafe { read_fs_block(block)? };
     let mut cursor = 0;
-    while cursor < K16FS_DIRECTORY_ENTRY_SIZE {
+    while cursor < KFS_DIRECTORY_ENTRY_SIZE {
         unsafe { write_u8(SCRATCH_ADDR + offset + cursor, 0) };
         cursor += 1;
     }
@@ -1808,7 +1808,7 @@ unsafe fn encode_directory_entry_at(
 unsafe fn encode_deleted_directory_entry_at(block: u32, offset: u32) -> Result<(), StorageError> {
     unsafe { read_fs_block(block)? };
     let mut cursor = 0;
-    while cursor < K16FS_DIRECTORY_ENTRY_SIZE {
+    while cursor < KFS_DIRECTORY_ENTRY_SIZE {
         unsafe { write_u8(SCRATCH_ADDR + offset + cursor, 0) };
         cursor += 1;
     }
@@ -1838,7 +1838,7 @@ unsafe fn grow_file_capacity(
     required_size: u32,
 ) -> Result<FileMetadata, StorageError> {
     if metadata.extent_count == 0
-        || metadata.extent_count as usize > K16FS_MAX_INLINE_EXTENTS
+        || metadata.extent_count as usize > KFS_MAX_INLINE_EXTENTS
         || required_size <= file_capacity_bytes(metadata)?
     {
         return Err(StorageError::INVALID_FILESYSTEM);
@@ -1885,7 +1885,7 @@ unsafe fn grow_file_capacity(
     }
 
     let new_extent_index = metadata.extent_count as usize;
-    if new_extent_index >= K16FS_MAX_INLINE_EXTENTS {
+    if new_extent_index >= KFS_MAX_INLINE_EXTENTS {
         return Err(StorageError::OUTPUT_BUFFER_TOO_SMALL);
     }
     let new_extent_start = unsafe { allocate_contiguous_blocks(additional_blocks)? };

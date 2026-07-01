@@ -1218,6 +1218,7 @@ val createK16SystemStorage0 =
         group = "k16"
         dependsOn(rootProject.tasks.named("prepareK16Toolchain"))
         inputs.file(k16ToolchainConfig)
+        inputs.property("kfsDiskMagic", "KFS\\0\\0")
         outputs.file(k16EmptyStorage0Artifact)
 
         doFirst {
@@ -1289,7 +1290,7 @@ val compileK16SystemStorage0 =
 
 val putK16SystemStorage0Init =
     tasks.register("putK16SystemStorage0Init") {
-        description = "Writes the bundled K16 userland layout into ROOT K16FS /bin, /lib, and /etc."
+        description = "Writes the bundled K16 userland layout into ROOT KFS /bin, /lib, and /etc."
         group = "k16"
         dependsOn(compileK16SystemStorage0, compileK16SystemInit, compileK16SystemShell, compileK16SystemUname, compileK16SystemLs, compileK16SystemCat, compileK16SystemCp, compileK16SystemMv, compileK16SystemStat, compileK16SystemWrite, compileK16SystemRm, compileK16SystemMkdir, compileK16SystemRmdir, compileK16SharedKraft)
         dependsOn(rootProject.tasks.named("prepareK16Toolchain"))
