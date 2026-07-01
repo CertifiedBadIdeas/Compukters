@@ -934,6 +934,11 @@ class K16RuntimeTextIoProfilingTest {
                 metricValue(lsLine, "inodeLoads") <= 22,
                 "ls /bin should reuse cached inode metadata while listing directory entries: $lsLine",
             )
+            val writeLine = lines.single { it.contains("name=write") }
+            assertTrue(
+                metricValue(writeLine, "storageReadCommands") <= 80,
+                "write should not scan K16FS allocation bitmap through hundreds of storage transfers: $writeLine",
+            )
             assertTrue(lines.any { it.contains("name=stat") && it.contains("statCalls=1") })
             assertTrue(lines.any { it.contains("name=mv") && it.contains("statCalls=1") })
             assertTrue(lines.any { it.contains("name=cat") && it.contains("fileReads=") })
