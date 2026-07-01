@@ -198,14 +198,16 @@ class RuntimeProfilingTest {
                                     bytesRead = 11,
                                     bytesWritten = 12,
                                     failedCommands = 13,
-                                    uniqueReadBlocks = 14,
-                                    repeatedReadBlocks = 15,
-                                    partitionTableReadBlocks = 16,
-                                    bootMetadataReadBlocks = 17,
-                                    bootDataReadBlocks = 18,
-                                    rootMetadataReadBlocks = 19,
-                                    rootDataReadBlocks = 20,
-                                    unknownReadBlocks = 21,
+                                    mediaReadBlocks = 14,
+                                    mediaWriteBlocks = 15,
+                                    uniqueReadBlocks = 16,
+                                    repeatedReadBlocks = 17,
+                                    partitionTableReadBlocks = 18,
+                                    bootMetadataReadBlocks = 19,
+                                    bootDataReadBlocks = 20,
+                                    rootMetadataReadBlocks = 21,
+                                    rootDataReadBlocks = 22,
+                                    unknownReadBlocks = 23,
                                 ),
                             gpu =
                                 NativeK16GpuStats(
@@ -393,7 +395,7 @@ class RuntimeProfilingTest {
             summary,
         )
         assertTrue(
-            summary.contains("    k16Storage0: reads=8, writes=9, flushes=10, bytesRead=11, bytesWritten=12, failed=13, uniqueReadBlocks=14, repeatedReadBlocks=15, partitionTableReadBlocks=16, bootMetadataReadBlocks=17, bootDataReadBlocks=18, rootMetadataReadBlocks=19, rootDataReadBlocks=20, unknownReadBlocks=21"),
+            summary.contains("    k16Storage0: readCommands=8, writeCommands=9, flushes=10, bytesRead=11, bytesWritten=12, failed=13, mediaReadBlocks=14, mediaWriteBlocks=15, uniqueReadBlocks=16, repeatedReadBlocks=17, partitionTableReadBlocks=18, bootMetadataReadBlocks=19, bootDataReadBlocks=20, rootMetadataReadBlocks=21, rootDataReadBlocks=22, unknownReadBlocks=23"),
             summary,
         )
         assertTrue(

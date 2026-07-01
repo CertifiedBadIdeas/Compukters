@@ -34,6 +34,8 @@ pub struct K16ComputerStorageStatsSnapshot {
     pub bytes_read: u64,
     pub bytes_written: u64,
     pub failed_commands: u64,
+    pub media_read_blocks: u64,
+    pub media_write_blocks: u64,
     pub unique_read_blocks: u64,
     pub repeated_read_blocks: u64,
     pub partition_table_read_blocks: u64,

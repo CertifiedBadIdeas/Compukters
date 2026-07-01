@@ -327,8 +327,9 @@ class K16ManyVmServerBudgetProfilingTest {
             "$label: vms=$vmCount, ticks=$ticks, wall=${nanos} ns$syncSuffix, " +
                 "perVmTick=${perVmTick(nanos, vmCount, ticks)} ns, " +
                 "slices=${snapshot.slices}, waits=${snapshot.waitSignals}, yields=${snapshot.yieldSignals}, " +
-                "idleSkips=${snapshot.idleSkips}, storageReads=${snapshot.storageReads}, " +
-                "storageBytes=${snapshot.storageBytes}, gpuFrames=${snapshot.gpuFrames}, gpuFrameBytes=${snapshot.gpuFrameBytes}",
+                "idleSkips=${snapshot.idleSkips}, storageReadCommands=${snapshot.storageReadCommands}, " +
+                "storageMediaReadBlocks=${snapshot.storageMediaReadBlocks}, storageBytes=${snapshot.storageBytes}, " +
+                "gpuFrames=${snapshot.gpuFrames}, gpuFrameBytes=${snapshot.gpuFrameBytes}",
         )
     }
 
@@ -384,7 +385,8 @@ private data class ManyVmSnapshot(
     val waitSignals: Long = 0,
     val yieldSignals: Long = 0,
     val idleSkips: Long = 0,
-    val storageReads: Long = 0,
+    val storageReadCommands: Long = 0,
+    val storageMediaReadBlocks: Long = 0,
     val storageBytes: Long = 0,
     val gpuFrames: Long = 0,
     val gpuFrameBytes: Long = 0,
@@ -395,7 +397,8 @@ private data class ManyVmSnapshot(
             waitSignals = waitSignals + snapshot.vm.k16RunWaitSignals,
             yieldSignals = yieldSignals + snapshot.vm.k16RunYieldSignals,
             idleSkips = idleSkips + snapshot.vm.k16WaitIdleSkips,
-            storageReads = storageReads + snapshot.k16.storage0.readCommands,
+            storageReadCommands = storageReadCommands + snapshot.k16.storage0.readCommands,
+            storageMediaReadBlocks = storageMediaReadBlocks + snapshot.k16.storage0.mediaReadBlocks,
             storageBytes = storageBytes + snapshot.k16.storage0.bytesRead,
             gpuFrames = gpuFrames + snapshot.k16.gpu.frames,
             gpuFrameBytes = gpuFrameBytes + snapshot.k16.gpu.framePayloadBytes,
@@ -407,7 +410,8 @@ private data class ManyVmSnapshot(
             waitSignals = waitSignals - other.waitSignals,
             yieldSignals = yieldSignals - other.yieldSignals,
             idleSkips = idleSkips - other.idleSkips,
-            storageReads = storageReads - other.storageReads,
+            storageReadCommands = storageReadCommands - other.storageReadCommands,
+            storageMediaReadBlocks = storageMediaReadBlocks - other.storageMediaReadBlocks,
             storageBytes = storageBytes - other.storageBytes,
             gpuFrames = gpuFrames - other.gpuFrames,
             gpuFrameBytes = gpuFrameBytes - other.gpuFrameBytes,
