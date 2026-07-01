@@ -240,6 +240,8 @@ data class RuntimeK16StorageMetrics(
     val bytesRead: Long = 0,
     val bytesWritten: Long = 0,
     val failedCommands: Long = 0,
+    val mediaReadBlocks: Long = 0,
+    val mediaWriteBlocks: Long = 0,
     val uniqueReadBlocks: Long = 0,
     val repeatedReadBlocks: Long = 0,
     val partitionTableReadBlocks: Long = 0,
@@ -315,6 +317,8 @@ data class RuntimeK16StatsMetrics(
             bytesRead = devices.sumOf { it.storage.bytesRead },
             bytesWritten = devices.sumOf { it.storage.bytesWritten },
             failedCommands = devices.sumOf { it.storage.failedCommands },
+            mediaReadBlocks = devices.sumOf { it.storage.mediaReadBlocks },
+            mediaWriteBlocks = devices.sumOf { it.storage.mediaWriteBlocks },
             uniqueReadBlocks = devices.sumOf { it.storage.uniqueReadBlocks },
             repeatedReadBlocks = devices.sumOf { it.storage.repeatedReadBlocks },
             partitionTableReadBlocks = devices.sumOf { it.storage.partitionTableReadBlocks },
@@ -416,7 +420,7 @@ data class RuntimeProfilingSnapshot(
                 "    k16Devices: mapped=${k16.devices.size}, loads=${k16.deviceTraffic.loads}, stores=${k16.deviceTraffic.stores}, bytesRead=${k16.deviceTraffic.bytesRead}, bytesWritten=${k16.deviceTraffic.bytesWritten}",
             )
             appendLine(
-                "    k16Storage0: reads=${k16.storage0.readCommands}, writes=${k16.storage0.writeCommands}, flushes=${k16.storage0.flushCommands}, bytesRead=${k16.storage0.bytesRead}, bytesWritten=${k16.storage0.bytesWritten}, failed=${k16.storage0.failedCommands}, uniqueReadBlocks=${k16.storage0.uniqueReadBlocks}, repeatedReadBlocks=${k16.storage0.repeatedReadBlocks}, partitionTableReadBlocks=${k16.storage0.partitionTableReadBlocks}, bootMetadataReadBlocks=${k16.storage0.bootMetadataReadBlocks}, bootDataReadBlocks=${k16.storage0.bootDataReadBlocks}, rootMetadataReadBlocks=${k16.storage0.rootMetadataReadBlocks}, rootDataReadBlocks=${k16.storage0.rootDataReadBlocks}, unknownReadBlocks=${k16.storage0.unknownReadBlocks}",
+                "    k16Storage0: readCommands=${k16.storage0.readCommands}, writeCommands=${k16.storage0.writeCommands}, flushes=${k16.storage0.flushCommands}, bytesRead=${k16.storage0.bytesRead}, bytesWritten=${k16.storage0.bytesWritten}, failed=${k16.storage0.failedCommands}, mediaReadBlocks=${k16.storage0.mediaReadBlocks}, mediaWriteBlocks=${k16.storage0.mediaWriteBlocks}, uniqueReadBlocks=${k16.storage0.uniqueReadBlocks}, repeatedReadBlocks=${k16.storage0.repeatedReadBlocks}, partitionTableReadBlocks=${k16.storage0.partitionTableReadBlocks}, bootMetadataReadBlocks=${k16.storage0.bootMetadataReadBlocks}, bootDataReadBlocks=${k16.storage0.bootDataReadBlocks}, rootMetadataReadBlocks=${k16.storage0.rootMetadataReadBlocks}, rootDataReadBlocks=${k16.storage0.rootDataReadBlocks}, unknownReadBlocks=${k16.storage0.unknownReadBlocks}",
             )
             appendLine(
                 "    k16Os: pathLookups=${k16.os.pathLookups}, inodeLoads=${k16.os.inodeLoads}, dirEntryScans=${k16.os.dirEntryScans}, fileOpens=${k16.os.fileOpens}, fileReads=${k16.os.fileReads}, statCalls=${k16.os.statCalls}, processSpawns=${k16.os.processSpawns}, programLoads=${k16.os.programLoads}, dynamicImportLoads=${k16.os.dynamicImportLoads}, libraryLoads=${k16.os.libraryLoads}, readDirCalls=${k16.os.readDirCalls}, programLoadBytes=${k16.os.programLoadBytes}, dynamicImportBytes=${k16.os.dynamicImportBytes}, libraryLoadBytes=${k16.os.libraryLoadBytes}, genericFileDataReadBlocks=${k16.os.genericFileDataReadBlocks}, genericFileDataReadBytes=${k16.os.genericFileDataReadBytes}, readDirDataReadBlocks=${k16.os.readDirDataReadBlocks}, readDirDataReadBytes=${k16.os.readDirDataReadBytes}, programDataReadBlocks=${k16.os.programDataReadBlocks}, programDataReadBytes=${k16.os.programDataReadBytes}, dynamicImportDataReadBlocks=${k16.os.dynamicImportDataReadBlocks}, dynamicImportDataReadBytes=${k16.os.dynamicImportDataReadBytes}, libraryDataReadBlocks=${k16.os.libraryDataReadBlocks}, libraryDataReadBytes=${k16.os.libraryDataReadBytes}",
@@ -993,6 +997,8 @@ private fun NativeK16StorageStats.toRuntimeMetrics(): RuntimeK16StorageMetrics =
         bytesRead = bytesRead,
         bytesWritten = bytesWritten,
         failedCommands = failedCommands,
+        mediaReadBlocks = mediaReadBlocks,
+        mediaWriteBlocks = mediaWriteBlocks,
         uniqueReadBlocks = uniqueReadBlocks,
         repeatedReadBlocks = repeatedReadBlocks,
         partitionTableReadBlocks = partitionTableReadBlocks,

@@ -471,9 +471,10 @@ impl StoragePortDevice {
                 lba,
             ) {
                 Ok((read_profile, bytes_read)) => {
-                    self.stats.read_commands = self
+                    self.stats.read_commands = self.stats.read_commands.wrapping_add(1);
+                    self.stats.media_read_blocks = self
                         .stats
-                        .read_commands
+                        .media_read_blocks
                         .wrapping_add(read_profile.total_blocks());
                     self.stats.bytes_read = self.stats.bytes_read.wrapping_add(bytes_read);
                     self.stats.unique_read_blocks = self
@@ -513,6 +514,10 @@ impl StoragePortDevice {
             computer_abi::STORAGE_COMMAND_READ_BLOCKS => {}
             computer_abi::STORAGE_COMMAND_WRITE_BLOCKS => {
                 self.stats.write_commands = self.stats.write_commands.wrapping_add(1);
+                self.stats.media_write_blocks = self
+                    .stats
+                    .media_write_blocks
+                    .wrapping_add(u64::from(self.block_count));
                 self.stats.bytes_written =
                     self.stats.bytes_written.wrapping_add(u64::from(byte_count));
             }
@@ -1122,6 +1127,38 @@ mod tests {
         assert_eq!(read_count.get(), 1);
         assert_eq!(memory.load_u8(512).unwrap(), 0xA5);
         assert_eq!(memory.load_u8(1023).unwrap(), 0x5A);
+    }
+
+    #[test]
+    fn storage_port_stats_split_read_transfers_from_backend_blocks() {
+        let read_count = Rc::new(Cell::new(0));
+        let mut media_bytes = vec![0_u8; 512 * 3];
+        media_bytes[0] = 0xA5;
+        media_bytes[512] = 0xB6;
+        media_bytes[1024] = 0xC7;
+        let media = CountingReadMedia {
+            bytes: media_bytes,
+            read_count: read_count.clone(),
+        };
+        let mut device = StoragePortDevice::with_media_backend(Box::new(media)).unwrap();
+        let mut memory = MachineMemory::zeroed(2048).unwrap();
+        device.store_i32(28, 0).unwrap();
+        device.store_i32(32, 0).unwrap();
+        device.store_i32(36, 3).unwrap();
+        device.store_i32(40, 512).unwrap();
+
+        device
+            .store_i32_with_memory(12, computer_abi::STORAGE_COMMAND_READ_BLOCKS, &mut memory)
+            .unwrap();
+        device
+            .store_i32_with_memory(12, computer_abi::STORAGE_COMMAND_READ_BLOCKS, &mut memory)
+            .unwrap();
+
+        let stats = device.stats_snapshot();
+        assert_eq!(read_count.get(), 3);
+        assert_eq!(stats.read_commands, 2);
+        assert_eq!(stats.media_read_blocks, 3);
+        assert_eq!(stats.bytes_read, 1536);
     }
 
     #[test]

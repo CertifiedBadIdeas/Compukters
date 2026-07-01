@@ -191,7 +191,8 @@ class K16RuntimeTextIoProfilingTest {
         assertTrue(line.contains("gpuFrameBytes=80"))
         assertTrue(line.contains("displayFrames=5"))
         assertTrue(line.contains("displayBytes=256"))
-        assertTrue(line.contains("storageReads=2"))
+        assertTrue(line.contains("storageReadCommands=2"))
+        assertTrue(line.contains("storageMediaReadBlocks="))
         assertTrue(line.contains("storageUniqueReadBlocks=5"))
         assertTrue(line.contains("storageRepeatedReadBlocks=2"))
         assertTrue(line.contains("storagePartitionTableReadBlocks=1"))
@@ -342,7 +343,8 @@ class K16RuntimeTextIoProfilingTest {
         assertTrue(line.startsWith("k16CoreutilsCommand: name=ls, command=ls /bin, ticks=4"))
         assertTrue(line.contains("slices=13"))
         assertTrue(line.contains("runTime=1400 ns"))
-        assertTrue(line.contains("storageReads=29"))
+        assertTrue(line.contains("storageReadCommands=29"))
+        assertTrue(line.contains("storageMediaReadBlocks="))
         assertTrue(line.contains("storageUniqueReadBlocks=24"))
         assertTrue(line.contains("storageRepeatedReadBlocks=5"))
         assertTrue(line.contains("storagePartitionTableReadBlocks=3"))
@@ -622,7 +624,7 @@ class K16RuntimeTextIoProfilingTest {
             val gpuAfter = after.k16.gpu
             val storageBefore = before.k16.storage0
             val storageAfter = after.k16.storage0
-            val storageReads = storageAfter.readCommands - storageBefore.readCommands
+            val storageReadCommands = storageAfter.readCommands - storageBefore.readCommands
             println(
                 "k16LsCommand: command=ls /bin, inputQueued=${inputQueuedNanos} ns, " +
                     "visible=${visibleNanos ?: -1} ns, ticks=$ticks",
@@ -636,8 +638,10 @@ class K16RuntimeTextIoProfilingTest {
                     "inputWakeups=${after.vm.k16WaitInputWakeups - before.vm.k16WaitInputWakeups}",
             )
             println(
-                "k16LsCommandStorage: reads=$storageReads, " +
-                    "writes=${storageAfter.writeCommands - storageBefore.writeCommands}, " +
+                "k16LsCommandStorage: readCommands=$storageReadCommands, " +
+                    "writeCommands=${storageAfter.writeCommands - storageBefore.writeCommands}, " +
+                    "mediaReadBlocks=${storageAfter.mediaReadBlocks - storageBefore.mediaReadBlocks}, " +
+                    "mediaWriteBlocks=${storageAfter.mediaWriteBlocks - storageBefore.mediaWriteBlocks}, " +
                     "flushes=${storageAfter.flushCommands - storageBefore.flushCommands}, " +
                     "bytesRead=${storageAfter.bytesRead - storageBefore.bytesRead}, " +
                     "bytesWritten=${storageAfter.bytesWritten - storageBefore.bytesWritten}",
@@ -651,9 +655,10 @@ class K16RuntimeTextIoProfilingTest {
             )
 
             assertTrue(visibleNanos != null, "ls /bin did not finish and return to the prompt")
-            assertTrue(storageReads < 60, "ls /bin should reuse cached storage0 backend blocks")
+            assertTrue(storageReadCommands < 60, "ls /bin should keep storage0 transfer commands bounded")
             assertTrue(inputPhase.contains("name=ls:/bin.input"))
-            assertTrue(visiblePhase.contains("storageReads="))
+            assertTrue(visiblePhase.contains("storageReadCommands="))
+            assertTrue(visiblePhase.contains("storageMediaReadBlocks="))
             assertTrue(visiblePhase.contains("pathLookups="))
             assertTrue(visiblePhase.contains("dirEntryScans="))
             assertTrue(visiblePhase.contains("statCalls="))
@@ -728,7 +733,7 @@ class K16RuntimeTextIoProfilingTest {
             val gpuAfter = after.k16.gpu
             val storageBefore = before.k16.storage0
             val storageAfter = after.k16.storage0
-            val storageReads = storageAfter.readCommands - storageBefore.readCommands
+            val storageReadCommands = storageAfter.readCommands - storageBefore.readCommands
             val scrollFrameBytes = gpuAfter.framePayloadBytes - gpuBefore.framePayloadBytes
             println(
                 "k16LsScrollCommand: command=ls /bin, inputQueued=${inputQueuedNanos} ns, " +
@@ -743,8 +748,10 @@ class K16RuntimeTextIoProfilingTest {
                     "inputWakeups=${after.vm.k16WaitInputWakeups - before.vm.k16WaitInputWakeups}",
             )
             println(
-                "k16LsScrollCommandStorage: reads=$storageReads, " +
-                    "writes=${storageAfter.writeCommands - storageBefore.writeCommands}, " +
+                "k16LsScrollCommandStorage: readCommands=$storageReadCommands, " +
+                    "writeCommands=${storageAfter.writeCommands - storageBefore.writeCommands}, " +
+                    "mediaReadBlocks=${storageAfter.mediaReadBlocks - storageBefore.mediaReadBlocks}, " +
+                    "mediaWriteBlocks=${storageAfter.mediaWriteBlocks - storageBefore.mediaWriteBlocks}, " +
                     "flushes=${storageAfter.flushCommands - storageBefore.flushCommands}, " +
                     "bytesRead=${storageAfter.bytesRead - storageBefore.bytesRead}, " +
                     "bytesWritten=${storageAfter.bytesWritten - storageBefore.bytesWritten}",
@@ -762,9 +769,10 @@ class K16RuntimeTextIoProfilingTest {
                 scrollFrameBytes < 100_000,
                 "scroll-positioned ls /bin should use display ops instead of serializing full-screen tile payloads",
             )
-            assertTrue(storageReads < 60, "scroll-positioned ls /bin should reuse cached storage0 backend blocks")
+            assertTrue(storageReadCommands < 60, "scroll-positioned ls /bin should keep storage0 transfer commands bounded")
             assertTrue(inputPhase.contains("name=ls:/bin:scroll.input"))
-            assertTrue(visiblePhase.contains("storageReads="))
+            assertTrue(visiblePhase.contains("storageReadCommands="))
+            assertTrue(visiblePhase.contains("storageMediaReadBlocks="))
             assertTrue(visiblePhase.contains("pathLookups="))
             assertTrue(visiblePhase.contains("dirEntryScans="))
             assertTrue(visiblePhase.contains("statCalls="))
@@ -823,7 +831,7 @@ class K16RuntimeTextIoProfilingTest {
 
             val unameLine = lines.single { it.contains("name=uname") }
             assertTrue(
-                metricValue(unameLine, "storageReads") <= 9,
+                metricValue(unameLine, "storageMediaReadBlocks") <= 9,
                 "uname should not reopen the dynamic executable after reading imports: $unameLine",
             )
             val lsLine = lines.single { it.contains("name=ls") }
@@ -1013,7 +1021,9 @@ private fun formatK16RuntimePhase(
         "displayFrames=${gpuAfter.frames - gpuBefore.frames}, " +
         "displayTiles=${gpuAfter.frameTiles - gpuBefore.frameTiles}, " +
         "displayBytes=${gpuAfter.framePayloadBytes - gpuBefore.framePayloadBytes}, " +
-        "storageReads=${storageAfter.readCommands - storageBefore.readCommands}, " +
+        "storageReadCommands=${storageAfter.readCommands - storageBefore.readCommands}, " +
+        "storageMediaReadBlocks=${storageAfter.mediaReadBlocks - storageBefore.mediaReadBlocks}, " +
+        "storageMediaWriteBlocks=${storageAfter.mediaWriteBlocks - storageBefore.mediaWriteBlocks}, " +
         "storageUniqueReadBlocks=${storageAfter.uniqueReadBlocks - storageBefore.uniqueReadBlocks}, " +
         "storageRepeatedReadBlocks=${storageAfter.repeatedReadBlocks - storageBefore.repeatedReadBlocks}, " +
         "storagePartitionTableReadBlocks=${storageAfter.partitionTableReadBlocks - storageBefore.partitionTableReadBlocks}, " +
@@ -1022,7 +1032,7 @@ private fun formatK16RuntimePhase(
         "storageRootMetadataReadBlocks=${storageAfter.rootMetadataReadBlocks - storageBefore.rootMetadataReadBlocks}, " +
         "storageRootDataReadBlocks=${storageAfter.rootDataReadBlocks - storageBefore.rootDataReadBlocks}, " +
         "storageUnknownReadBlocks=${storageAfter.unknownReadBlocks - storageBefore.unknownReadBlocks}, " +
-        "storageWrites=${storageAfter.writeCommands - storageBefore.writeCommands}, " +
+        "storageWriteCommands=${storageAfter.writeCommands - storageBefore.writeCommands}, " +
         "storageFlushes=${storageAfter.flushCommands - storageBefore.flushCommands}, " +
         "storageBytesRead=${storageAfter.bytesRead - storageBefore.bytesRead}, " +
         "storageBytesWritten=${storageAfter.bytesWritten - storageBefore.bytesWritten}, " +
@@ -1068,7 +1078,9 @@ private fun formatK16CoreutilsCommandProfile(
     return "k16CoreutilsCommand: name=$name, command=$command, ticks=$ticks, " +
         "slices=${vmAfter.k16RunSlices - vmBefore.k16RunSlices}, " +
         "runTime=${vmAfter.k16RunNanos - vmBefore.k16RunNanos} ns, " +
-        "storageReads=${storageAfter.readCommands - storageBefore.readCommands}, " +
+        "storageReadCommands=${storageAfter.readCommands - storageBefore.readCommands}, " +
+        "storageMediaReadBlocks=${storageAfter.mediaReadBlocks - storageBefore.mediaReadBlocks}, " +
+        "storageMediaWriteBlocks=${storageAfter.mediaWriteBlocks - storageBefore.mediaWriteBlocks}, " +
         "storageUniqueReadBlocks=${storageAfter.uniqueReadBlocks - storageBefore.uniqueReadBlocks}, " +
         "storageRepeatedReadBlocks=${storageAfter.repeatedReadBlocks - storageBefore.repeatedReadBlocks}, " +
         "storagePartitionTableReadBlocks=${storageAfter.partitionTableReadBlocks - storageBefore.partitionTableReadBlocks}, " +
