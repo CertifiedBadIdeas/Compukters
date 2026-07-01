@@ -28,6 +28,9 @@ pub struct OsStats {
     dynamic_import_data_read_bytes: u64,
     library_data_read_blocks: u64,
     library_data_read_bytes: u64,
+    block_cache_hits: u64,
+    block_cache_misses: u64,
+    block_cache_batch_reads: u64,
 }
 
 const OS_STATS_SIZE: u32 = core::mem::size_of::<OsStats>() as u32;
@@ -57,6 +60,9 @@ static mut OS_STATS: OsStats = OsStats {
     dynamic_import_data_read_bytes: 0,
     library_data_read_blocks: 0,
     library_data_read_bytes: 0,
+    block_cache_hits: 0,
+    block_cache_misses: 0,
+    block_cache_batch_reads: 0,
 };
 
 pub fn register() {
@@ -190,6 +196,18 @@ pub fn record_library_data_read(bytes: u32) {
             u64::from(bytes),
         );
     }
+}
+
+pub fn record_block_cache_hit() {
+    unsafe { increment(core::ptr::addr_of_mut!(OS_STATS.block_cache_hits)) }
+}
+
+pub fn record_block_cache_miss() {
+    unsafe { increment(core::ptr::addr_of_mut!(OS_STATS.block_cache_misses)) }
+}
+
+pub fn record_block_cache_batch_read() {
+    unsafe { increment(core::ptr::addr_of_mut!(OS_STATS.block_cache_batch_reads)) }
 }
 
 unsafe fn increment(counter: *mut u64) {

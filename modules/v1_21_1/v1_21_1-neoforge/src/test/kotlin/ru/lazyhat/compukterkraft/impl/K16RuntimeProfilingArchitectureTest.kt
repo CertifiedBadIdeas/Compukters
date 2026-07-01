@@ -63,6 +63,9 @@ class K16RuntimeProfilingArchitectureTest {
         assertTrue(docs.contains("uniqueReadBlocks="))
         assertTrue(docs.contains("storageRepeatedReadBlocks="))
         assertTrue(docs.contains("storageRootDataReadBlocks="))
+        assertTrue(docs.contains("blockCacheHits="))
+        assertTrue(docs.contains("blockCacheMisses="))
+        assertTrue(docs.contains("blockCacheBatchReads="))
         assertTrue(docs.contains("partitionTableReadBlocks="))
         assertTrue(docs.contains("programLoadBytes="))
         assertTrue(docs.contains("programDataReadBlocks="))
@@ -70,6 +73,7 @@ class K16RuntimeProfilingArchitectureTest {
         assertTrue(docs.contains("libraryDataReadBlocks="))
         assertTrue(textIoProfilingSource.contains("programLoadBytes="))
         assertTrue(textIoProfilingSource.contains("programDataReadBlocks="))
+        assertTrue(textIoProfilingSource.contains("blockCacheHits="))
         assertTrue(textIoProfilingSource.contains("formatKfsHotspotSummary"))
         assertTrue(docs.contains("k16Wait: entries="))
         assertTrue(textIoProfilingSource.contains("bios.splash.visible"))
@@ -143,5 +147,28 @@ class K16RuntimeProfilingArchitectureTest {
         assertTrue(storageSource.contains("store_scratch_block_in_cache(block)"))
         assertTrue(storageSource.contains("write_cached_block_to_scratch(bytes)"))
         assertTrue(storageSource.contains("crate::kfs::block_cache::KfsBlockCache"))
+    }
+
+    @Test
+    fun k16StorageProfilesBlockCacheAndUsesItForBulkReads() {
+        val storageSource = Path.of("../../../guest/kraftos/kernel/src/kfs/storage.rs").readText()
+        val osStatsSource = Path.of("../../../guest/kraftos/kernel/src/os_stats.rs").readText()
+        val runtimeProfilingSource =
+            Path
+                .of("../../../modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/runtime/RuntimeProfiling.kt")
+                .readText()
+
+        assertTrue(osStatsSource.contains("block_cache_hits: u64"))
+        assertTrue(osStatsSource.contains("block_cache_misses: u64"))
+        assertTrue(osStatsSource.contains("block_cache_batch_reads: u64"))
+        assertTrue(runtimeProfilingSource.contains("blockCacheHits="))
+        assertTrue(runtimeProfilingSource.contains("blockCacheMisses="))
+        assertTrue(runtimeProfilingSource.contains("blockCacheBatchReads="))
+        assertTrue(storageSource.contains("read_fs_blocks_to_ram_cached"))
+        assertTrue(storageSource.contains("copy_cached_block_to_ram(block, dst_cursor)"))
+        assertTrue(storageSource.contains("store_ram_blocks_in_cache(block, miss_count, dst_cursor)"))
+        assertTrue(storageSource.contains("record_block_cache_hit()"))
+        assertTrue(storageSource.contains("record_block_cache_miss()"))
+        assertTrue(storageSource.contains("record_block_cache_batch_read()"))
     }
 }

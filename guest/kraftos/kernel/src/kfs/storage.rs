@@ -1962,11 +1962,7 @@ unsafe fn read_fs_blocks_to_ram(
     if end_block > unsafe { read_u32(STATE_PARTITION_BLOCK_COUNT) } {
         return Err(StorageError::INVALID_FILESYSTEM);
     }
-    let lba = match unsafe { read_u32(STATE_PARTITION_START_LBA) }.checked_add(start_block) {
-        Some(value) => value,
-        None => return Err(StorageError::INVALID_FILESYSTEM),
-    };
-    unsafe { read_storage_blocks_to_ram(lba, block_count, dst_addr) }
+    unsafe { read_fs_blocks_to_ram_cached(start_block, block_count, dst_addr) }
 }
 
 #[inline(always)]
@@ -2010,13 +2006,61 @@ unsafe fn clear_scratch_block() {
     }
 }
 
+unsafe fn read_fs_blocks_to_ram_cached(
+    start_block: u32,
+    block_count: u32,
+    dst_addr: u32,
+) -> Result<(), StorageError> {
+    let mut cursor = 0;
+    while cursor < block_count {
+        let block = start_block + cursor;
+        let dst_cursor = match cursor
+            .checked_mul(BLOCK_SIZE)
+            .and_then(|offset| dst_addr.checked_add(offset))
+        {
+            Some(value) => value,
+            None => return Err(StorageError::INVALID_FILESYSTEM),
+        };
+        if unsafe { copy_cached_block_to_ram(block, dst_cursor) } {
+            crate::os_stats::record_block_cache_hit();
+            cursor += 1;
+            continue;
+        }
+
+        crate::os_stats::record_block_cache_miss();
+        let mut miss_count = 1;
+        while cursor + miss_count < block_count {
+            let miss_block = start_block + cursor + miss_count;
+            if unsafe { is_fs_block_cached(miss_block) } {
+                break;
+            }
+            crate::os_stats::record_block_cache_miss();
+            miss_count += 1;
+        }
+
+        let lba = match unsafe { read_u32(STATE_PARTITION_START_LBA) }.checked_add(block) {
+            Some(value) => value,
+            None => return Err(StorageError::INVALID_FILESYSTEM),
+        };
+        unsafe { read_storage_blocks_to_ram(lba, miss_count, dst_cursor)? };
+        crate::os_stats::record_block_cache_batch_read();
+        unsafe { store_ram_blocks_in_cache(block, miss_count, dst_cursor)? };
+        cursor += miss_count;
+    }
+    Ok(())
+}
+
 unsafe fn read_fs_block_from_cache(block: u32) -> bool {
     match unsafe { KFS_BLOCK_CACHE.get() }.get(block) {
         Some(bytes) => {
             unsafe { write_cached_block_to_scratch(bytes) };
+            crate::os_stats::record_block_cache_hit();
             true
         }
-        None => false,
+        None => {
+            crate::os_stats::record_block_cache_miss();
+            false
+        }
     }
 }
 
@@ -2025,14 +2069,54 @@ unsafe fn store_scratch_block_in_cache(block: u32) {
     unsafe { KFS_BLOCK_CACHE.get() }.put_clean(block, &bytes);
 }
 
+unsafe fn store_ram_blocks_in_cache(
+    start_block: u32,
+    block_count: u32,
+    start_addr: u32,
+) -> Result<(), StorageError> {
+    let mut cursor = 0;
+    while cursor < block_count {
+        let block = start_block + cursor;
+        let addr = match cursor
+            .checked_mul(BLOCK_SIZE)
+            .and_then(|offset| start_addr.checked_add(offset))
+        {
+            Some(value) => value,
+            None => return Err(StorageError::INVALID_FILESYSTEM),
+        };
+        let bytes = unsafe { ram_block_bytes(addr) };
+        unsafe { KFS_BLOCK_CACHE.get() }.put_clean(block, &bytes);
+        cursor += 1;
+    }
+    Ok(())
+}
+
+unsafe fn is_fs_block_cached(block: u32) -> bool {
+    unsafe { KFS_BLOCK_CACHE.get() }.contains(block)
+}
+
 unsafe fn invalidate_block_cache() {
     unsafe { KFS_BLOCK_CACHE.get() }.invalidate_all();
 }
 
+unsafe fn copy_cached_block_to_ram(block: u32, dst_addr: u32) -> bool {
+    match unsafe { KFS_BLOCK_CACHE.get() }.get(block) {
+        Some(bytes) => {
+            unsafe { write_cached_block_to_ram(bytes, dst_addr) };
+            true
+        }
+        None => false,
+    }
+}
+
 unsafe fn write_cached_block_to_scratch(bytes: &crate::kfs::block_cache::KfsBlockBytes) {
+    unsafe { write_cached_block_to_ram(bytes, SCRATCH_ADDR) };
+}
+
+unsafe fn write_cached_block_to_ram(bytes: &crate::kfs::block_cache::KfsBlockBytes, dst_addr: u32) {
     let mut offset = 0;
     while offset < BLOCK_SIZE {
-        unsafe { write_u8(SCRATCH_ADDR + offset, bytes[offset as usize]) };
+        unsafe { write_u8(dst_addr + offset, bytes[offset as usize]) };
         offset += 1;
     }
 }
@@ -2057,10 +2141,14 @@ fn scratch_u32(offset: u32) -> u32 {
 }
 
 unsafe fn scratch_block_bytes() -> [u8; BLOCK_SIZE as usize] {
+    unsafe { ram_block_bytes(SCRATCH_ADDR) }
+}
+
+unsafe fn ram_block_bytes(addr: u32) -> [u8; BLOCK_SIZE as usize] {
     let mut block = [0_u8; BLOCK_SIZE as usize];
     let mut index = 0;
     while index < BLOCK_SIZE {
-        block[index as usize] = unsafe { read_u8(SCRATCH_ADDR + index) };
+        block[index as usize] = unsafe { read_u8(addr + index) };
         index += 1;
     }
     block

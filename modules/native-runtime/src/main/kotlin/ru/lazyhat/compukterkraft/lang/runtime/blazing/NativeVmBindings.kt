@@ -105,6 +105,9 @@ data class NativeK16OsStats(
     val dynamicImportDataReadBytes: Long = 0,
     val libraryDataReadBlocks: Long = 0,
     val libraryDataReadBytes: Long = 0,
+    val blockCacheHits: Long = 0,
+    val blockCacheMisses: Long = 0,
+    val blockCacheBatchReads: Long = 0,
 )
 
 data class NativeK16MmioDeviceStats(
@@ -140,12 +143,14 @@ data class NativeK16ComputerStatsSnapshot(
         private const val VERSION_V9: Long = 9
         private const val VERSION_V10: Long = 10
         private const val VERSION_V11: Long = 11
+        private const val VERSION_V12: Long = 12
         private const val HEADER_LONGS_V2: Int = 10
         private const val HEADER_LONGS_V4: Int = 16
         private const val HEADER_LONGS_V5: Int = 21
         private const val HEADER_LONGS_V6: Int = 24
         private const val HEADER_LONGS_V7: Int = 27
         private const val HEADER_LONGS_V10: Int = 37
+        private const val HEADER_LONGS_V12: Int = 40
         private const val DEVICE_LONGS_V2: Int = 13
         private const val DEVICE_LONGS_V3: Int = 20
         private const val DEVICE_LONGS_V8: Int = 22
@@ -167,12 +172,14 @@ data class NativeK16ComputerStatsSnapshot(
                     version == VERSION_V8 ||
                     version == VERSION_V9 ||
                     version == VERSION_V10 ||
-                    version == VERSION_V11,
+                    version == VERSION_V11 ||
+                    version == VERSION_V12,
             ) {
                 "Unsupported native K16 stats snapshot version: $version"
             }
             val headerLongs =
                 when (version) {
+                    VERSION_V12 -> HEADER_LONGS_V12
                     VERSION_V11, VERSION_V10 -> HEADER_LONGS_V10
                     VERSION_V9, VERSION_V8, VERSION_V7 -> HEADER_LONGS_V7
                     VERSION_V6 -> HEADER_LONGS_V6
@@ -185,7 +192,7 @@ data class NativeK16ComputerStatsSnapshot(
             val deviceLongs =
                 when (version) {
                     VERSION_V2 -> DEVICE_LONGS_V2
-                    VERSION_V11 -> DEVICE_LONGS_V11
+                    VERSION_V12, VERSION_V11 -> DEVICE_LONGS_V11
                     VERSION_V10, VERSION_V9 -> DEVICE_LONGS_V9
                     VERSION_V8 -> DEVICE_LONGS_V8
                     else -> DEVICE_LONGS_V3
@@ -313,7 +320,8 @@ data class NativeK16ComputerStatsSnapshot(
                         version == VERSION_V8 ||
                         version == VERSION_V9 ||
                         version == VERSION_V10 ||
-                        version == VERSION_V11
+                        version == VERSION_V11 ||
+                        version == VERSION_V12
                     ) {
                         NativeK16OsStats(
                             pathLookups = values[9],
@@ -340,6 +348,9 @@ data class NativeK16ComputerStatsSnapshot(
                             dynamicImportDataReadBytes = if (version >= VERSION_V10) values[30] else 0,
                             libraryDataReadBlocks = if (version >= VERSION_V10) values[31] else 0,
                             libraryDataReadBytes = if (version >= VERSION_V10) values[32] else 0,
+                            blockCacheHits = if (version >= VERSION_V12) values[33] else 0,
+                            blockCacheMisses = if (version >= VERSION_V12) values[34] else 0,
+                            blockCacheBatchReads = if (version >= VERSION_V12) values[35] else 0,
                         )
                     } else {
                         NativeK16OsStats()
@@ -351,10 +362,12 @@ data class NativeK16ComputerStatsSnapshot(
                         version == VERSION_V8 ||
                         version == VERSION_V9 ||
                         version == VERSION_V10 ||
-                        version == VERSION_V11
+                        version == VERSION_V11 ||
+                        version == VERSION_V12
                     ) {
                         val offset =
                             when {
+                                version >= VERSION_V12 -> 36
                                 version >= VERSION_V10 -> 33
                                 version >= VERSION_V7 -> 23
                                 else -> 20
