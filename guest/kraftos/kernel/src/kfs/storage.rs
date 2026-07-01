@@ -1,14 +1,6 @@
 pub const SCRATCH_ADDR: u32 = 0x0000_0600;
 pub const BLOCK_SIZE: u32 = 512;
 
-const K16PT_MAGIC: &[u8; 5] = b"K16PT";
-const K16PT_VERSION: u8 = 1;
-const K16PT_HEADER_SIZE: u32 = 16;
-const K16PT_ENTRY_SIZE: u32 = 32;
-const K16PT_MAX_ENTRIES: u8 = 15;
-
-const KFS_MAGIC: &[u8; 5] = b"KFS\0\0";
-const KFS_VERSION: u8 = 1;
 const KFS_INODE_SIZE: u32 = 64;
 const KFS_DIRECTORY_ENTRY_SIZE: u32 = 64;
 const KFS_MAX_NAME_BYTES: usize = 56;
@@ -586,78 +578,46 @@ pub unsafe fn select_file_metadata(metadata: FileMetadata) -> Result<(), Storage
 
 unsafe fn read_partition(partition_type: &[u8; 4]) -> Result<(), StorageError> {
     unsafe { read_storage_block(0)? };
-    if !scratch_eq(0, K16PT_MAGIC) || scratch_u8(5) != K16PT_VERSION || scratch_u8(7) != 0 {
-        return Err(StorageError::INVALID_PARTITION_TABLE);
-    }
-    let entry_count = scratch_u8(6);
-    if entry_count > K16PT_MAX_ENTRIES || scratch_u32(8) != 0 || scratch_u32(12) != 1 {
-        return Err(StorageError::INVALID_PARTITION_TABLE);
-    }
-
+    let block = unsafe { scratch_block_bytes() };
     let capacity_low = unsafe { crate::kfs::device::capacity_blocks_u32()? };
-
-    let mut index = 0;
-    while index < entry_count as u32 {
-        let offset = K16PT_HEADER_SIZE + index * K16PT_ENTRY_SIZE;
-        let start_lba = scratch_u32(offset + 8);
-        let block_count = scratch_u32(offset + 12);
-        if scratch_u32(offset + 4) != 0 || start_lba < 1 || block_count == 0 {
-            return Err(StorageError::INVALID_PARTITION_TABLE);
-        }
-        let end_lba = match start_lba.checked_add(block_count) {
-            Some(value) => value,
-            None => return Err(StorageError::INVALID_PARTITION_TABLE),
-        };
-        if end_lba > capacity_low {
-            return Err(StorageError::INVALID_PARTITION_TABLE);
-        }
-        if scratch_eq(offset, partition_type) {
-            unsafe {
-                write_u32(STATE_PARTITION_START_LBA, start_lba);
-                write_u32(STATE_PARTITION_BLOCK_COUNT, block_count);
-            }
-            return Ok(());
-        }
-        index += 1;
+    let partition = crate::kfs::partition::KfsPartition::decode_from_k16pt(
+        &block,
+        partition_type,
+        capacity_low,
+    )?;
+    unsafe {
+        write_u32(STATE_PARTITION_START_LBA, partition.start_lba);
+        write_u32(STATE_PARTITION_BLOCK_COUNT, partition.block_count);
     }
-    Err(StorageError::PARTITION_NOT_FOUND)
+    Ok(())
 }
 
 unsafe fn read_superblock() -> Result<(), StorageError> {
     unsafe { read_fs_block(0)? };
-    if !scratch_eq(0, KFS_MAGIC)
-        || scratch_u8(5) != KFS_VERSION
-        || scratch_u8(6) != 0
-        || scratch_u8(7) != 0
-        || unsafe { read_u32(SCRATCH_ADDR + 0x08) } != BLOCK_SIZE
-    {
-        return Err(StorageError::INVALID_FILESYSTEM);
-    }
-
-    let total_blocks = unsafe { read_u32(SCRATCH_ADDR + 0x0c) };
-    if total_blocks == 0 || total_blocks > unsafe { read_u32(STATE_PARTITION_BLOCK_COUNT) } {
-        return Err(StorageError::INVALID_FILESYSTEM);
-    }
-
-    let bitmap_start_block = unsafe { read_u32(SCRATCH_ADDR + 0x10) };
-    let bitmap_block_count = unsafe { read_u32(SCRATCH_ADDR + 0x14) };
-    let inode_table_start_block = unsafe { read_u32(SCRATCH_ADDR + 0x18) };
-    let inode_table_block_count = unsafe { read_u32(SCRATCH_ADDR + 0x1c) };
-    let root_inode_id = unsafe { read_u32(SCRATCH_ADDR + 0x20) };
+    let block = unsafe { scratch_block_bytes() };
+    let superblock = crate::kfs::superblock::KfsSuperblock::decode(&block, unsafe {
+        read_u32(STATE_PARTITION_BLOCK_COUNT)
+    })?;
     unsafe {
-        write_u32(STATE_SUPERBLOCK_TOTAL_BLOCKS, total_blocks);
-        write_u32(STATE_SUPERBLOCK_BITMAP_START_BLOCK, bitmap_start_block);
-        write_u32(STATE_SUPERBLOCK_BITMAP_BLOCK_COUNT, bitmap_block_count);
+        write_u32(STATE_SUPERBLOCK_TOTAL_BLOCKS, superblock.total_blocks);
+        write_u32(
+            STATE_SUPERBLOCK_BITMAP_START_BLOCK,
+            superblock.bitmap_start_block,
+        );
+        write_u32(
+            STATE_SUPERBLOCK_BITMAP_BLOCK_COUNT,
+            superblock.bitmap_block_count,
+        );
         write_u32(
             STATE_SUPERBLOCK_INODE_TABLE_START_BLOCK,
-            inode_table_start_block,
+            superblock.inode_table_start_block,
         );
         write_u32(
             STATE_SUPERBLOCK_INODE_TABLE_BLOCK_COUNT,
-            inode_table_block_count,
+            superblock.inode_table_block_count,
         );
-        write_u32(STATE_SUPERBLOCK_ROOT_INODE_ID, root_inode_id);
-        read_inode(root_inode_id)?;
+        write_u32(STATE_SUPERBLOCK_ROOT_INODE_ID, superblock.root_inode_id);
+        read_inode(superblock.root_inode_id)?;
     }
     if unsafe { read_u32(STATE_INODE_STATE) as u8 } != 2 {
         return Err(StorageError::INVALID_FILESYSTEM);
@@ -2008,10 +1968,6 @@ unsafe fn clear_scratch_block() {
     }
 }
 
-fn scratch_eq(offset: u32, expected: &[u8]) -> bool {
-    scratch_bytes_eq(offset, expected)
-}
-
 fn scratch_bytes_eq(offset: u32, expected: &[u8]) -> bool {
     let mut index = 0;
     while index < expected.len() {
@@ -2029,6 +1985,16 @@ fn scratch_u8(offset: u32) -> u8 {
 
 fn scratch_u32(offset: u32) -> u32 {
     unsafe { read_u32(SCRATCH_ADDR + offset) }
+}
+
+unsafe fn scratch_block_bytes() -> [u8; BLOCK_SIZE as usize] {
+    let mut block = [0_u8; BLOCK_SIZE as usize];
+    let mut index = 0;
+    while index < BLOCK_SIZE {
+        block[index as usize] = unsafe { read_u8(SCRATCH_ADDR + index) };
+        index += 1;
+    }
+    block
 }
 
 unsafe fn copy_ram_to_ram(src_addr: u32, dst_addr: u32, len: u32) {
