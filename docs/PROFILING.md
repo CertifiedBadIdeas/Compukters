@@ -104,8 +104,8 @@ generic user file reads, directory listings, executable payload reads, dynamic i
 payload reads. These are attribution counters and do not issue extra storage0 media reads.
 
 Use `profileK16ManyVmServerBudget` for a server-focused workload that boots several K16 runtime devices, measures idle
-tick cost after all shells are waiting, then runs one active command while the other VMs stay idle. The printed lines
-include both server-tick wall time and a `sync` time that waits for worker snapshots after the timed tick loop:
+tick cost after all shells are waiting, then runs active production-path command scenarios. The printed lines include
+both server-tick wall time and a `sync` time that waits for worker snapshots after the timed tick loop:
 
 ```bash
 ./gradlew-sandbox-dev-parallel profileK16ManyVmServerBudget
@@ -131,6 +131,25 @@ k16ManyVmBoot: ...
 
 Use `k16ManyVmBootAfterSplash` for bootloader/kernel/shell startup cost after the 20-tick BIOS splash boundary. The
 aggregate `k16ManyVmBoot` line remains useful for player-visible power-on latency.
+
+After boot, the report separates idle cost from highload production paths:
+
+```text
+k16ManyVmIdle: ...
+k16ManyVmCpuHighload: ...
+k16ManyVmTextDisplayHighload: ...
+k16ManyVmStorageHighload: ...
+k16ManyVmOneActive: ...
+```
+
+- `k16ManyVmIdle` measures ordinary server ticks while all VMs are waiting at the shell prompt.
+- `k16ManyVmCpuHighload` dispatches `ticks` to every VM and is the first place to look for interpreter, cached decode,
+  and scheduler budget costs under active CPU work.
+- `k16ManyVmTextDisplayHighload` dispatches `ls /bin` to every VM and is the first place to look for terminal text
+  rendering, dirty display payloads, and frame drain costs.
+- `k16ManyVmStorageHighload` dispatches `cat /etc/motd` to every VM and is the first place to look for storage0, K16FS,
+  and host storage media costs.
+- `k16ManyVmOneActive` keeps the older mixed workload where one VM is active while the rest stay idle.
 
 The output is grouped into the existing multi-line runtime summary. The K16 execution line shows how many native
 `tickUntilSignal` slices actually ran and which signal ended those slices:
