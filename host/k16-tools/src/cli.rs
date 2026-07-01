@@ -1,5 +1,5 @@
 use crate::artifact::K16ArtifactTarget;
-use crate::{inspect, k16_disasm, k16_runtime, k16fs, object_link, size_report, volume};
+use crate::{inspect, k16_disasm, k16_runtime, kfs, object_link, size_report, volume};
 use k16_vm::computer_machine::{decode_snapshot_v1, ComputerCpuSnapshotRecord};
 use k16_vm::k16::K16Signal;
 use k16_vm::k16_computer::K16ComputerHandle;
@@ -686,7 +686,7 @@ fn run_kfs(args: &[String]) -> Result<(), String> {
                 return fs_usage_error();
             }
             let total_blocks = parse_blocks(&args[3])?;
-            let bytes = k16fs::format_empty_filesystem(total_blocks)?;
+            let bytes = kfs::format_empty_filesystem(total_blocks)?;
             fs::write(&args[1], bytes)
                 .map_err(|error| format!("failed to write {}: {error}", args[1]))
         }
@@ -696,7 +696,7 @@ fn run_kfs(args: &[String]) -> Result<(), String> {
             }
             let mut image = fs::read(&args[1])
                 .map_err(|error| format!("failed to read {}: {error}", args[1]))?;
-            k16fs::create_directory(&mut image, &args[2])?;
+            kfs::create_directory(&mut image, &args[2])?;
             fs::write(&args[1], image)
                 .map_err(|error| format!("failed to write {}: {error}", args[1]))
         }
@@ -708,7 +708,7 @@ fn run_kfs(args: &[String]) -> Result<(), String> {
                 .map_err(|error| format!("failed to read {}: {error}", args[1]))?;
             let contents = fs::read(&args[3])
                 .map_err(|error| format!("failed to read {}: {error}", args[3]))?;
-            k16fs::write_file(&mut image, &args[2], &contents)?;
+            kfs::write_file(&mut image, &args[2], &contents)?;
             fs::write(&args[1], image)
                 .map_err(|error| format!("failed to write {}: {error}", args[1]))
         }
@@ -718,7 +718,7 @@ fn run_kfs(args: &[String]) -> Result<(), String> {
             }
             let image = fs::read(&args[1])
                 .map_err(|error| format!("failed to read {}: {error}", args[1]))?;
-            let contents = k16fs::read_file(&image, &args[2])?;
+            let contents = kfs::read_file(&image, &args[2])?;
             fs::write(&args[3], contents)
                 .map_err(|error| format!("failed to write {}: {error}", args[3]))
         }
@@ -728,7 +728,7 @@ fn run_kfs(args: &[String]) -> Result<(), String> {
             }
             let mut image = fs::read(&args[1])
                 .map_err(|error| format!("failed to read {}: {error}", args[1]))?;
-            k16fs::delete_file(&mut image, &args[2])?;
+            kfs::delete_file(&mut image, &args[2])?;
             fs::write(&args[1], image)
                 .map_err(|error| format!("failed to write {}: {error}", args[1]))
         }
@@ -738,7 +738,7 @@ fn run_kfs(args: &[String]) -> Result<(), String> {
             }
             let image = fs::read(&args[1])
                 .map_err(|error| format!("failed to read {}: {error}", args[1]))?;
-            for name in k16fs::list_directory(&image, &args[2])? {
+            for name in kfs::list_directory(&image, &args[2])? {
                 println!("{name}");
             }
             Ok(())

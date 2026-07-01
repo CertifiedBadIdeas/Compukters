@@ -129,7 +129,7 @@ class K16ToolingRenameTest {
         val kernelSource = root.resolve("guest/kraftos/kernel/src/main.rs")
         val kernelBootChainSource = root.resolve("guest/kraftos/kernel/src/boot_chain.rs")
         val kernelImageSource = root.resolve("guest/kraftos/kernel/src/image.rs")
-        val kernelStorageSource = root.resolve("guest/kraftos/kernel/src/storage.rs")
+        val kernelStorageSource = root.resolve("guest/kraftos/kernel/src/kfs/storage.rs")
 
         assertFalse(workspaceManifest.contains("\"k16-boot\""))
         assertFalse(workspaceManifest.contains("\"k16-boot-chain\""))
@@ -239,7 +239,7 @@ class K16ToolingRenameTest {
                 "k16-cpu-v1.md",
                 "k16-object-v1.md",
                 "k16e-v1.md",
-                "k16fs-v1.md",
+                "kfs-v1.md",
                 "k16-storage-volume-v1.md",
                 "k16-computer-profile-v1.md",
                 "k16-computer-snapshot-v1.md",

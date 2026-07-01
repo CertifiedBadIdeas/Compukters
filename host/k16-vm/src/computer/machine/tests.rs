@@ -1963,11 +1963,11 @@ fn storage0_stats_snapshot_counts_unique_and_repeated_backend_read_lbas() {
 }
 
 #[test]
-fn storage0_stats_snapshot_classifies_partition_and_k16fs_backend_read_ownership() {
+fn storage0_stats_snapshot_classifies_partition_and_kfs_backend_read_ownership() {
     let mut media = vec![0_u8; 8 * 512];
     write_k16pt_test_table(&mut media, 1, 3, 4, 4);
-    write_k16fs_test_superblock(&mut media[512..1024], 3, 1, 1, 2, 1);
-    write_k16fs_test_superblock(&mut media[2048..2560], 4, 1, 1, 2, 1);
+    write_kfs_test_superblock(&mut media[512..1024], 3, 1, 1, 2, 1);
+    write_kfs_test_superblock(&mut media[2048..2560], 4, 1, 1, 2, 1);
 
     let profile = ComputerMachineProfile::new(8192).with_hardware(
         ComputerHardwareConfig::storage_port_with_media(
@@ -2101,7 +2101,7 @@ fn write_k16pt_test_entry(
     media[offset + 16..offset + 16 + name.len()].copy_from_slice(name);
 }
 
-fn write_k16fs_test_superblock(
+fn write_kfs_test_superblock(
     block: &mut [u8],
     total_blocks: u32,
     bitmap_start_block: u32,
@@ -2109,7 +2109,7 @@ fn write_k16fs_test_superblock(
     inode_table_start_block: u32,
     inode_table_block_count: u32,
 ) {
-    block[0..5].copy_from_slice(b"K16FS");
+    block[0..5].copy_from_slice(b"KFS\0\0");
     block[5] = 1;
     write_u32_test(block, 0x08, 512);
     write_u32_test(block, 0x0c, total_blocks);

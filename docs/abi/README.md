@@ -20,7 +20,7 @@ Current specifications:
   address-space contract for a later CPU/MMU ABI slice.
 - `k16-storage-volume-v1.md`: current storage0 volume and partitioned `K16PT`
   layout.
-- `k16fs-v1.md`: extent-based filesystem targeted for the `ROOT` partition in
+- `kfs-v1.md`: extent-based filesystem targeted for the `ROOT` partition in
   the partitioned storage0 layout.
 - `k16-machine-profile-v2.md`: machine boot info, RAM layout, MMIO allocation,
   and hardware table contract.

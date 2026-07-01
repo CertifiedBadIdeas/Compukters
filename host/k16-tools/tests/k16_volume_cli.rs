@@ -1,5 +1,5 @@
 use k16_tools::k16e;
-use k16_tools::k16fs;
+use k16_tools::kfs;
 use k16_tools::volume;
 use std::fs;
 use std::path::PathBuf;
@@ -226,7 +226,7 @@ fn k16_volume_inspect_boot_prints_boot_chain_metadata() {
             &TEST_ROOT_BLOCKS.to_string(),
         ])
         .status()
-        .expect("k16fs format runs")
+        .expect("kfs format runs")
         .success());
     assert!(Command::new(k16_binary())
         .args([
@@ -263,7 +263,7 @@ fn k16_volume_inspect_boot_prints_boot_chain_metadata() {
     assert_eq!(
         String::from_utf8(output.stdout).expect("inspect-boot stdout is UTF-8"),
         format!(
-            "K16VOL boot-chain\nBOOT partition start_lba=1 blocks={TEST_BOOT_BLOCKS} bytes={TEST_BOOT_BYTES} name=boot\nBOOT K16FS /boot/loader.kb file_bytes=54\nBOOTLOADER K16E abi=bootloader entry_pc=0x00002000 load_addr=0x00002000 payload_bytes=2\nROOT partition start_lba={TEST_ROOT_START_LBA} blocks={TEST_ROOT_BLOCKS} bytes={TEST_ROOT_BYTES} name=root\nROOT K16FS /boot/kernel.kx file_bytes=54\nKERNEL K16E abi=kernel entry_pc=0x00003000 load_addr=0x00003000 payload_bytes=2\n"
+            "K16VOL boot-chain\nBOOT partition start_lba=1 blocks={TEST_BOOT_BLOCKS} bytes={TEST_BOOT_BYTES} name=boot\nBOOT KFS /boot/loader.kb file_bytes=54\nBOOTLOADER K16E abi=bootloader entry_pc=0x00002000 load_addr=0x00002000 payload_bytes=2\nROOT partition start_lba={TEST_ROOT_START_LBA} blocks={TEST_ROOT_BLOCKS} bytes={TEST_ROOT_BYTES} name=root\nROOT KFS /boot/kernel.kx file_bytes=54\nKERNEL K16E abi=kernel entry_pc=0x00003000 load_addr=0x00003000 payload_bytes=2\n"
         )
     );
 }
@@ -309,7 +309,7 @@ fn k16_volume_inspect_boot_rejects_missing_root_kernel() {
             &TEST_ROOT_BLOCKS.to_string(),
         ])
         .status()
-        .expect("k16fs format runs")
+        .expect("kfs format runs")
         .success());
     assert!(Command::new(k16_binary())
         .args([
@@ -330,7 +330,7 @@ fn k16_volume_inspect_boot_rejects_missing_root_kernel() {
 
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr)
-        .contains("ROOT/K16FS /boot/kernel.kx is not readable"));
+        .contains("ROOT/KFS /boot/kernel.kx is not readable"));
 }
 
 #[test]
@@ -420,7 +420,7 @@ fn k16_volume_put_boot_rejects_non_partitioned_volume_without_fixed_record_fallb
 }
 
 #[test]
-fn k16_volume_put_boot_installs_loader_kb_in_boot_k16fs_partition() {
+fn k16_volume_put_boot_installs_loader_kb_in_boot_kfs_partition() {
     let volume_path = temp_file("partitioned-boot-storage0.kv");
     let boot_path = temp_file("partitioned-boot.k16e");
     fs::write(
@@ -466,7 +466,7 @@ fn k16_volume_put_boot_installs_loader_kb_in_boot_k16fs_partition() {
     assert_eq!(&payload[0..5], b"K16PT");
     let boot = volume::extract_partition(&bytes, "BOOT").expect("BOOT extracts");
     assert_eq!(
-        k16fs::read_file(&boot, "/boot/loader.kb").expect("loader reads from BOOT"),
+        kfs::read_file(&boot, "/boot/loader.kb").expect("loader reads from BOOT"),
         k16e::encode_k16_executable(
             &[0x01, 0x02, 0x03, 0x04],
             k16e::K16eAbiKind::Bootloader,
@@ -482,7 +482,7 @@ fn k16_volume_put_boot_installs_loader_kb_in_boot_k16fs_partition() {
 }
 
 #[test]
-fn k16_volume_put_kernel_installs_kernel_kx_in_root_k16fs() {
+fn k16_volume_put_kernel_installs_kernel_kx_in_root_kfs() {
     let volume_path = temp_file("kernel-rootfs-storage0.kv");
     let root_path = temp_file("kernel-rootfs-root.kfs");
     let kernel_path = temp_file("kernel-rootfs-kernel.kx");
@@ -516,7 +516,7 @@ fn k16_volume_put_kernel_installs_kernel_kx_in_root_k16fs() {
             &TEST_ROOT_BLOCKS.to_string(),
         ])
         .status()
-        .expect("k16fs format runs")
+        .expect("kfs format runs")
         .success());
     assert!(Command::new(k16_binary())
         .args([
@@ -547,7 +547,7 @@ fn k16_volume_put_kernel_installs_kernel_kx_in_root_k16fs() {
     let bytes = fs::read(&volume_path).expect("volume reads");
     let root = volume::extract_partition(&bytes, "ROOT").expect("ROOT extracts");
     assert_eq!(
-        k16fs::read_file(&root, "/boot/kernel.kx").expect("kernel reads from ROOT"),
+        kfs::read_file(&root, "/boot/kernel.kx").expect("kernel reads from ROOT"),
         kernel_bytes
     );
     assert!(
@@ -557,7 +557,7 @@ fn k16_volume_put_kernel_installs_kernel_kx_in_root_k16fs() {
 }
 
 #[test]
-fn k16_volume_init_creates_root_k16fs_for_put_kernel() {
+fn k16_volume_init_creates_root_kfs_for_put_kernel() {
     let volume_path = temp_file("init-rootfs-storage0.kv");
     let kernel_path = temp_file("init-rootfs-kernel.kx");
     let kernel_bytes =
@@ -594,7 +594,7 @@ fn k16_volume_init_creates_root_k16fs_for_put_kernel() {
     let bytes = fs::read(&volume_path).expect("volume reads");
     let root = volume::extract_partition(&bytes, "ROOT").expect("ROOT extracts");
     assert_eq!(
-        k16fs::read_file(&root, "/boot/kernel.kx").expect("kernel reads from ROOT"),
+        kfs::read_file(&root, "/boot/kernel.kx").expect("kernel reads from ROOT"),
         kernel_bytes
     );
 }

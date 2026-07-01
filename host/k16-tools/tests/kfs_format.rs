@@ -1,23 +1,23 @@
-use k16_tools::k16fs::{
+use k16_tools::kfs::{
     decode_inode, decode_superblock, format_empty_filesystem, validate_filesystem, InodeState,
-    K16FS_BLOCK_SIZE, K16FS_DEFAULT_INODE_COUNT, K16FS_INODE_SIZE,
+    KFS_BLOCK_SIZE, KFS_DEFAULT_INODE_COUNT, KFS_INODE_SIZE, KFS_MAGIC,
 };
 
 #[test]
-fn k16fs_formats_empty_extent_filesystem_with_root_directory() {
+fn kfs_formats_empty_extent_filesystem_with_root_directory() {
     let image = format_empty_filesystem(128).expect("filesystem formats");
 
-    assert_eq!(image.len(), 128 * K16FS_BLOCK_SIZE);
-    assert_eq!(&image[0..5], b"K16FS");
+    assert_eq!(image.len(), 128 * KFS_BLOCK_SIZE);
+    assert_eq!(&image[0..5], KFS_MAGIC);
     let superblock = decode_superblock(&image).expect("superblock decodes");
     assert_eq!(superblock.total_blocks, 128);
-    assert_eq!(superblock.block_size, K16FS_BLOCK_SIZE as u32);
+    assert_eq!(superblock.block_size, KFS_BLOCK_SIZE as u32);
     assert_eq!(superblock.bitmap_start_block, 1);
     assert_eq!(superblock.bitmap_block_count, 1);
     assert_eq!(superblock.inode_table_start_block, 2);
     assert_eq!(
         superblock.inode_table_block_count,
-        (K16FS_DEFAULT_INODE_COUNT * K16FS_INODE_SIZE).div_ceil(K16FS_BLOCK_SIZE as u32)
+        (KFS_DEFAULT_INODE_COUNT * KFS_INODE_SIZE).div_ceil(KFS_BLOCK_SIZE as u32)
     );
     assert_eq!(superblock.root_inode_id, 1);
 
@@ -32,12 +32,18 @@ fn k16fs_formats_empty_extent_filesystem_with_root_directory() {
 }
 
 #[test]
-fn k16fs_rejects_bad_magic_and_out_of_bounds_metadata() {
+fn kfs_rejects_bad_magic_and_out_of_bounds_metadata() {
     let mut bad_magic = format_empty_filesystem(128).expect("filesystem formats");
     bad_magic[0] = b'X';
     assert!(validate_filesystem(&bad_magic)
         .unwrap_err()
-        .contains("invalid K16FS magic"));
+        .contains("invalid KFS magic"));
+
+    let mut old_k16fs_magic = format_empty_filesystem(128).expect("filesystem formats");
+    old_k16fs_magic[0..5].copy_from_slice(b"K16FS");
+    assert!(validate_filesystem(&old_k16fs_magic)
+        .unwrap_err()
+        .contains("invalid KFS magic"));
 
     let mut out_of_bounds = format_empty_filesystem(128).expect("filesystem formats");
     out_of_bounds[0x18..0x1c].copy_from_slice(&120_u32.to_le_bytes());
@@ -54,11 +60,11 @@ fn k16fs_rejects_bad_magic_and_out_of_bounds_metadata() {
 }
 
 #[test]
-fn k16fs_rejects_invalid_root_inode() {
+fn kfs_rejects_invalid_root_inode() {
     let mut image = format_empty_filesystem(128).expect("filesystem formats");
     let superblock = decode_superblock(&image).expect("superblock decodes");
-    let root_offset = (superblock.inode_table_start_block as usize * K16FS_BLOCK_SIZE)
-        + K16FS_INODE_SIZE as usize;
+    let root_offset =
+        (superblock.inode_table_start_block as usize * KFS_BLOCK_SIZE) + KFS_INODE_SIZE as usize;
     image[root_offset] = InodeState::File as u8;
 
     assert!(validate_filesystem(&image)

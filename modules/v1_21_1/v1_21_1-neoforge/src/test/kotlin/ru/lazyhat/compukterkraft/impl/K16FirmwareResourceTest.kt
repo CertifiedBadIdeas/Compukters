@@ -1820,7 +1820,7 @@ class K16FirmwareResourceTest {
         assertTrue(syscallSource.contains("abi_syscall::STAT"), "syscall dispatch should handle path metadata")
         assertTrue(
             syscallSource.contains("fs::stat_root_path(path)"),
-            "STAT(path, len, out) should delegate to the ROOT/K16FS metadata path",
+            "STAT(path, len, out) should delegate to the ROOT/KFS metadata path",
         )
         assertTrue(
             syscallSource.contains("stdin::read(ptr, len)"),
@@ -1829,6 +1829,25 @@ class K16FirmwareResourceTest {
         assertTrue(stdinSource.contains("keyboard0::EVENT_CHAR"), "stdin should consume keyboard character events")
         assertTrue(stdinSource.contains("keyboard0::EVENT_PASTE_BYTE"), "stdin should consume paste byte events")
         assertTrue(stdinSource.contains("k16_rt::wait_once()"), "blocking stdin reads should wait for host input without nesting syscalls")
+    }
+
+    @Test
+    fun kraftOsFilesystemUsesKfsSourceLayoutAndMagic() {
+        val kernelSourceDir = Path.of("../../../guest/kraftos/kernel/src")
+        val bootChainSource = Path.of("../../../guest/firmware/boot-chain/boot_chain.c").readText()
+        val storageSource = kernelSourceDir.resolve("kfs/storage.rs").readText()
+
+        assertTrue(Files.isDirectory(kernelSourceDir.resolve("kfs")), "kernel filesystem code should live under kfs/")
+        assertTrue(kernelSourceDir.resolve("kfs/cache.rs").toFile().isFile, "KFS cache module should be explicit")
+        assertTrue(kernelSourceDir.resolve("kfs/root.rs").toFile().isFile, "KFS root module should be explicit")
+        assertTrue(kernelSourceDir.resolve("kfs/storage.rs").toFile().isFile, "KFS storage reader should live under kfs/")
+        assertFalse(kernelSourceDir.resolve("storage.rs").toFile().exists(), "top-level storage module should not own KFS code")
+        assertFalse(kernelSourceDir.resolve("k16fs_cache.rs").toFile().exists(), "old k16fs cache module should be removed")
+        assertFalse(kernelSourceDir.resolve("k16fs_root.rs").toFile().exists(), "old k16fs root module should be removed")
+        assertTrue(bootChainSource.contains("\"KFS\\0\\0\""), "boot-chain should require the KFS disk magic")
+        assertFalse(bootChainSource.contains("\"K16FS\""), "boot-chain should not accept the old K16FS magic")
+        assertTrue(storageSource.contains("KFS_MAGIC"), "kernel storage reader should name the new KFS magic")
+        assertFalse(storageSource.contains("K16FS_MAGIC"), "kernel storage reader should not keep the old K16FS magic")
     }
 
     @Test

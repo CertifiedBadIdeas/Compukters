@@ -89,13 +89,13 @@ Use these phase lines when deciding whether a slowdown is in command dispatch, c
 frame production, guest filesystem/path/stat work, or post-command idle work. The older `k16LsCommand*` aggregate lines
 remain available for comparison with previous profiling runs.
 
-The coreutils profile also prints a sorted K16FS hotspot summary:
+The coreutils profile also prints a sorted KFS hotspot summary:
 
 ```text
 k16FsHotspots: metadataOps=[ls:..., stat:..., ...], dataReadBlocks=[cat:..., ls:..., ...], readCommands=[ls:..., ...], mediaReadBlocks=[cat:..., ...], pathLookups=[...], inodeLoads=[...], dirEntryScans=[...], fileOpens=[...], fileReads=[...], statCalls=[...], readDirCalls=[...], genericFileDataReadBlocks=[...], readDirDataReadBlocks=[...], programDataReadBlocks=[...], dynamicImportDataReadBlocks=[...], libraryDataReadBlocks=[...], storageWriteCommands=[...], mediaWriteBlocks=[...]
 ```
 
-`metadataOps` is `pathLookups + inodeLoads + dirEntryScans + statCalls`. Use it to rank commands by K16FS metadata/path
+`metadataOps` is `pathLookups + inodeLoads + dirEntryScans + statCalls`. Use it to rank commands by KFS metadata/path
 pressure. `dataReadBlocks` ranks guest file/directory/program/library data reads. Compare `readCommands` with
 `mediaReadBlocks` to distinguish guest storage0 transfer overhead from backend media blocks. The phase-specific ranked
 lists show which commands contribute to each path, inode, directory, file, program/import/library load, and write-side
@@ -112,9 +112,9 @@ shared-library payload reads. Compare `storageUniqueReadBlocks` and `storageRepe
 backend storage cost comes from new LBAs or repeated reads of LBAs that already missed the storage0 block cache earlier.
 `storageReadCommands` and `storageWriteCommands` count guest-visible storage0 transfer commands. `storageMediaReadBlocks`
 and `storageMediaWriteBlocks` count backend media blocks actually read or written by those commands. The
-`storage*ReadBlocks` ownership counters split backend media reads into the K16PT table, BOOT K16FS metadata/data, ROOT
-K16FS metadata/data, and unknown blocks.
-The `*DataReadBlocks` and `*DataReadBytes` OS counters split guest K16FS data-block reads by loader/file category:
+`storage*ReadBlocks` ownership counters split backend media reads into the K16PT table, BOOT KFS metadata/data, ROOT
+KFS metadata/data, and unknown blocks.
+The `*DataReadBlocks` and `*DataReadBytes` OS counters split guest KFS data-block reads by loader/file category:
 generic user file reads, directory listings, executable payload reads, dynamic import metadata reads, and shared-library
 payload reads. These are attribution counters and do not issue extra storage0 media reads.
 
@@ -162,7 +162,7 @@ k16ManyVmOneActive: ...
   and scheduler budget costs under active CPU work.
 - `k16ManyVmTextDisplayHighload` dispatches `ls /bin` to every VM and is the first place to look for terminal text
   rendering, dirty display payloads, and frame drain costs.
-- `k16ManyVmStorageHighload` dispatches `cat /etc/motd` to every VM and is the first place to look for storage0, K16FS,
+- `k16ManyVmStorageHighload` dispatches `cat /etc/motd` to every VM and is the first place to look for storage0, KFS,
   and host storage media costs.
 - `k16ManyVmOneActive` keeps the older mixed workload where one VM is active while the rest stay idle.
 
@@ -217,16 +217,16 @@ k16Os: pathLookups=..., inodeLoads=..., dirEntryScans=..., fileOpens=..., fileRe
   first-time backend LBA reads, while `repeatedReadBlocks` counts backend LBA reads for LBAs that were already fetched
   earlier by the same storage device. `partitionTableReadBlocks`, `bootMetadataReadBlocks`, `bootDataReadBlocks`,
   `rootMetadataReadBlocks`, `rootDataReadBlocks`, and `unknownReadBlocks` attribute backend reads by the decoded K16PT
-  and K16FS block ranges observed from already-read blocks. Read cache hits still complete the guest `READ_BLOCKS`
+  and KFS block ranges observed from already-read blocks. Read cache hits still complete the guest `READ_BLOCKS`
   command but do not increase `reads`, `bytesRead`, `uniqueReadBlocks`, `repeatedReadBlocks`, or ownership counters.
-- `k16Os` is exported by KraftOS through a registered RAM counter block. `pathLookups` counts K16FS path resolver calls,
+- `k16Os` is exported by KraftOS through a registered RAM counter block. `pathLookups` counts KFS path resolver calls,
   `inodeLoads` counts inode table loads, `dirEntryScans` counts directory-entry slots scanned by lookup/listing,
   `fileOpens` counts kernel open attempts, `fileReads` counts kernel file read attempts, and `statCalls` counts kernel
   stat attempts. `programLoadBytes` counts loaded executable payload bytes, `dynamicImportBytes` counts loader metadata
   bytes such as dynamic headers, needed/import sections, shared-library headers, and export sections, and
   `libraryLoadBytes` counts loaded shared-library payload bytes. `genericFileDataReadBlocks`/`Bytes`,
   `readDirDataReadBlocks`/`Bytes`, `programDataReadBlocks`/`Bytes`, `dynamicImportDataReadBlocks`/`Bytes`, and
-  `libraryDataReadBlocks`/`Bytes` attribute guest K16FS data-block reads to user file reads, directory listing,
+  `libraryDataReadBlocks`/`Bytes` attribute guest KFS data-block reads to user file reads, directory listing,
   executable payload, dynamic import metadata, and shared-library payload categories.
 - These counters are cumulative inside the Rust VM; the Kotlin profiling collector stores the latest snapshot instead of
   summing repeated snapshots.

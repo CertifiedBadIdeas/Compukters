@@ -27,7 +27,7 @@ import kotlin.test.assertTrue
 class K16StorageDurabilityArchitectureTest {
     @Test
     fun guestStorageExposesStorage0FlushCommand() {
-        val source = Path.of("../../../guest/kraftos/kernel/src/storage.rs").readText()
+        val source = Path.of("../../../guest/kraftos/kernel/src/kfs/storage.rs").readText()
 
         assertTrue(source.contains("pub unsafe fn flush_storage0()"))
         assertTrue(source.contains("storage0::COMMAND_FLUSH"))
@@ -44,7 +44,7 @@ class K16StorageDurabilityArchitectureTest {
             val body = functionBody(source, functionName)
             assertTrue(
                 body.contains("flush_root_storage()?"),
-                "$functionName must flush storage0 after successful K16FS mutation.",
+                "$functionName must flush storage0 after successful KFS mutation.",
             )
         }
     }

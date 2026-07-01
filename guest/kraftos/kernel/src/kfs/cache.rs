@@ -1,6 +1,6 @@
 const INODE_CACHE_SLOTS: usize = 32;
 const DIRECTORY_CACHE_SLOTS: usize = 32;
-const K16FS_MAX_NAME_BYTES: usize = 56;
+const KFS_MAX_NAME_BYTES: usize = 56;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct CachedPathMetadata {
@@ -17,15 +17,15 @@ pub struct CachedDirectoryLookup {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct CachedName {
     len: u8,
-    bytes: [u8; K16FS_MAX_NAME_BYTES],
+    bytes: [u8; KFS_MAX_NAME_BYTES],
 }
 
 impl CachedName {
     pub fn from_bytes(name: &[u8]) -> Option<Self> {
-        if name.is_empty() || name.len() > K16FS_MAX_NAME_BYTES {
+        if name.is_empty() || name.len() > KFS_MAX_NAME_BYTES {
             return None;
         }
-        let mut bytes = [0_u8; K16FS_MAX_NAME_BYTES];
+        let mut bytes = [0_u8; KFS_MAX_NAME_BYTES];
         let mut index = 0;
         while index < name.len() {
             bytes[index] = name[index];
@@ -83,7 +83,7 @@ impl DirectoryCacheEntry {
         parent_inode_id: 0,
         name: CachedName {
             len: 0,
-            bytes: [0; K16FS_MAX_NAME_BYTES],
+            bytes: [0; KFS_MAX_NAME_BYTES],
         },
         lookup: CachedDirectoryLookup {
             inode_id: 0,
@@ -96,14 +96,14 @@ impl DirectoryCacheEntry {
     };
 }
 
-pub struct K16FsCache {
+pub struct KfsCache {
     inode_entries: [InodeCacheEntry; INODE_CACHE_SLOTS],
     directory_entries: [DirectoryCacheEntry; DIRECTORY_CACHE_SLOTS],
     next_inode_slot: usize,
     next_directory_slot: usize,
 }
 
-impl K16FsCache {
+impl KfsCache {
     pub const fn new() -> Self {
         Self {
             inode_entries: [InodeCacheEntry::EMPTY; INODE_CACHE_SLOTS],
@@ -244,7 +244,7 @@ mod tests {
 
     #[test]
     fn inode_cache_reuses_metadata_by_inode_id() {
-        let mut cache = K16FsCache::new();
+        let mut cache = KfsCache::new();
         let metadata = CachedPathMetadata {
             file_type: k16_abi::syscall::FILE_TYPE_REGULAR,
             size_bytes: 42,
@@ -257,7 +257,7 @@ mod tests {
 
     #[test]
     fn directory_lookup_cache_invalidates_parent_entries() {
-        let mut cache = K16FsCache::new();
+        let mut cache = KfsCache::new();
         let name = CachedName::from_bytes(b"ls.kx").expect("valid name");
         let metadata = CachedPathMetadata {
             file_type: k16_abi::syscall::FILE_TYPE_REGULAR,
@@ -279,7 +279,7 @@ mod tests {
 
     #[test]
     fn inode_invalidation_removes_inode_and_directory_lookup() {
-        let mut cache = K16FsCache::new();
+        let mut cache = KfsCache::new();
         let name = CachedName::from_bytes(b"cat.kx").expect("valid name");
         let metadata = CachedPathMetadata {
             file_type: k16_abi::syscall::FILE_TYPE_REGULAR,
@@ -297,7 +297,7 @@ mod tests {
 
     #[test]
     fn full_invalidation_removes_all_cached_metadata() {
-        let mut cache = K16FsCache::new();
+        let mut cache = KfsCache::new();
         let name = CachedName::from_bytes(b"bin").expect("valid name");
         let metadata = CachedPathMetadata {
             file_type: k16_abi::syscall::FILE_TYPE_DIRECTORY,

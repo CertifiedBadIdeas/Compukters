@@ -25,7 +25,7 @@ use core::cell::UnsafeCell;
 static RUNTIME_FD_TABLE: KernelFileDescriptorTable =
     KernelFileDescriptorTable::new(FileDescriptorTable::new());
 #[cfg(any(not(test), feature = "host-test"))]
-static ROOT_FS: KernelRootFs = KernelRootFs::new(crate::k16fs_root::K16RootFs::new());
+static ROOT_FS: KernelRootFs = KernelRootFs::new(crate::kfs::root::KfsRootFs::new());
 
 #[cfg(any(not(test), feature = "host-test"))]
 struct KernelFileDescriptorTable {
@@ -37,7 +37,7 @@ unsafe impl Sync for KernelFileDescriptorTable {}
 
 #[cfg(any(not(test), feature = "host-test"))]
 struct KernelRootFs {
-    fs: UnsafeCell<crate::k16fs_root::K16RootFs>,
+    fs: UnsafeCell<crate::kfs::root::KfsRootFs>,
 }
 
 #[cfg(any(not(test), feature = "host-test"))]
@@ -58,13 +58,13 @@ impl KernelFileDescriptorTable {
 
 #[cfg(any(not(test), feature = "host-test"))]
 impl KernelRootFs {
-    const fn new(fs: crate::k16fs_root::K16RootFs) -> Self {
+    const fn new(fs: crate::kfs::root::KfsRootFs) -> Self {
         Self {
             fs: UnsafeCell::new(fs),
         }
     }
 
-    unsafe fn get(&self) -> &mut crate::k16fs_root::K16RootFs {
+    unsafe fn get(&self) -> &mut crate::kfs::root::KfsRootFs {
         unsafe { &mut *self.fs.get() }
     }
 }
@@ -97,10 +97,10 @@ struct StorageDirectoryByteSink<'a, S: DirectoryByteSink> {
 }
 
 #[cfg(any(not(test), feature = "host-test"))]
-impl<S: DirectoryByteSink> crate::storage::DirectoryListingSink
+impl<S: DirectoryByteSink> crate::kfs::storage::DirectoryListingSink
     for StorageDirectoryByteSink<'_, S>
 {
-    unsafe fn push_byte(&mut self, byte: u8) -> Result<(), crate::storage::StorageError> {
+    unsafe fn push_byte(&mut self, byte: u8) -> Result<(), crate::kfs::storage::StorageError> {
         self.sink
             .push_byte(byte)
             .map_err(fs_error_to_storage_output_error)
@@ -244,8 +244,8 @@ impl FileMetadata {
     }
 }
 
-impl From<crate::storage::FileMetadata> for FileMetadata {
-    fn from(metadata: crate::storage::FileMetadata) -> Self {
+impl From<crate::kfs::storage::FileMetadata> for FileMetadata {
+    fn from(metadata: crate::kfs::storage::FileMetadata) -> Self {
         Self {
             inode_id: metadata.inode_id,
             size_bytes: metadata.size_bytes,
@@ -256,7 +256,7 @@ impl From<crate::storage::FileMetadata> for FileMetadata {
     }
 }
 
-impl From<FileMetadata> for crate::storage::FileMetadata {
+impl From<FileMetadata> for crate::kfs::storage::FileMetadata {
     fn from(metadata: FileMetadata) -> Self {
         Self {
             inode_id: metadata.inode_id,
@@ -497,14 +497,14 @@ pub unsafe fn open_root_file_for_process(
     let components = path.components();
     let metadata = if flags == OPEN_READ_ONLY {
         unsafe {
-            crate::storage::open_file_from_storage0(ROOT_PARTITION, components.as_slice())
+            crate::kfs::storage::open_file_from_storage0(ROOT_PARTITION, components.as_slice())
                 .map_err(storage_error_to_fs_error)?;
-            crate::storage::selected_file_metadata()
+            crate::kfs::storage::selected_file_metadata()
         }
     } else {
         let truncate = flags == OPEN_CREATE_TRUNCATE_FLAGS;
         let metadata = unsafe {
-            crate::storage::open_file_for_write_from_storage0(
+            crate::kfs::storage::open_file_for_write_from_storage0(
                 ROOT_PARTITION,
                 components.as_slice(),
                 true,
@@ -554,15 +554,15 @@ pub unsafe fn remove_root_file_for_process(path: &[u8]) -> Result<(), FsError> {
     let path = RootFilePath::parse(path)?;
     let components = path.components();
     unsafe {
-        crate::storage::open_file_from_storage0(ROOT_PARTITION, components.as_slice())
+        crate::kfs::storage::open_file_from_storage0(ROOT_PARTITION, components.as_slice())
             .map_err(storage_error_to_fs_error)?;
     }
-    let metadata = unsafe { crate::storage::selected_file_metadata() };
+    let metadata = unsafe { crate::kfs::storage::selected_file_metadata() };
     if unsafe { RUNTIME_FD_TABLE.get().has_open_inode(metadata.inode_id) } {
         return Err(FsError::Busy);
     }
     unsafe {
-        crate::storage::remove_file_from_storage0(ROOT_PARTITION, components.as_slice())
+        crate::kfs::storage::remove_file_from_storage0(ROOT_PARTITION, components.as_slice())
             .map_err(storage_error_to_fs_error)?;
         flush_root_storage()?;
         invalidate_root_fs_cache();
@@ -581,7 +581,7 @@ pub unsafe fn rename_root_file_for_process(
     let new_path = RootFilePath::parse(new_path)?;
     let new_components = new_path.components();
     unsafe {
-        crate::storage::rename_file_from_storage0(
+        crate::kfs::storage::rename_file_from_storage0(
             ROOT_PARTITION,
             old_components.as_slice(),
             new_components.as_slice(),
@@ -599,7 +599,7 @@ pub unsafe fn create_root_directory(path: &[u8]) -> Result<(), FsError> {
     let path = RootFilePath::parse(path)?;
     let components = path.components();
     unsafe {
-        crate::storage::create_directory_from_storage0(ROOT_PARTITION, components.as_slice())
+        crate::kfs::storage::create_directory_from_storage0(ROOT_PARTITION, components.as_slice())
             .map_err(storage_error_to_fs_error)?;
         flush_root_storage()?;
         invalidate_root_fs_cache();
@@ -612,7 +612,7 @@ pub unsafe fn remove_root_directory(path: &[u8]) -> Result<(), FsError> {
     let path = RootFilePath::parse(path)?;
     let components = path.components();
     unsafe {
-        crate::storage::remove_directory_from_storage0(ROOT_PARTITION, components.as_slice())
+        crate::kfs::storage::remove_directory_from_storage0(ROOT_PARTITION, components.as_slice())
             .map_err(storage_error_to_fs_error)?;
         flush_root_storage()?;
         invalidate_root_fs_cache();
@@ -644,7 +644,7 @@ pub unsafe fn copy_file_fd_range_to_ram_for_process(
     }
     let metadata = descriptor.metadata;
     unsafe {
-        crate::storage::copy_file_range_to_ram(metadata.into(), file_offset, ptr, read_len)
+        crate::kfs::storage::copy_file_range_to_ram(metadata.into(), file_offset, ptr, read_len)
             .map_err(storage_error_to_fs_error)?;
     }
     Ok(read_len)
@@ -679,7 +679,7 @@ pub unsafe fn copy_ram_to_file_fd_range_for_process(
             .writable_metadata_for_process(owner_pid, fd)?
     };
     let updated = unsafe {
-        crate::storage::copy_ram_to_file_range(metadata.into(), offset, ptr, len)
+        crate::kfs::storage::copy_ram_to_file_range(metadata.into(), offset, ptr, len)
             .map_err(storage_error_to_fs_error)?
     };
     unsafe {
@@ -721,7 +721,7 @@ pub unsafe fn read_root_directory_into<S: DirectoryByteSink>(
 #[cfg(any(not(test), feature = "host-test"))]
 pub unsafe fn open_root_file_cached_components(
     components: &[&[u8]],
-) -> Result<crate::storage::FileMetadata, FsError> {
+) -> Result<crate::kfs::storage::FileMetadata, FsError> {
     unsafe {
         ROOT_FS
             .get()
@@ -733,11 +733,11 @@ pub unsafe fn open_root_file_cached_components(
 #[cfg(all(test, not(feature = "host-test")))]
 pub unsafe fn open_root_file_cached_components(
     components: &[&[u8]],
-) -> Result<crate::storage::FileMetadata, FsError> {
+) -> Result<crate::kfs::storage::FileMetadata, FsError> {
     unsafe {
-        crate::storage::open_file_from_storage0(b"ROOT", components)
+        crate::kfs::storage::open_file_from_storage0(b"ROOT", components)
             .map_err(storage_error_to_fs_error)?;
-        Ok(crate::storage::selected_file_metadata())
+        Ok(crate::kfs::storage::selected_file_metadata())
     }
 }
 
@@ -768,20 +768,20 @@ pub unsafe fn close_file_fds_for_process(owner_pid: u32) {
     unsafe { RUNTIME_FD_TABLE.get().close_all_for_process(owner_pid) }
 }
 
-fn storage_error_to_fs_error(error: crate::storage::StorageError) -> FsError {
-    if error == crate::storage::StorageError::PATH_NOT_FOUND {
+fn storage_error_to_fs_error(error: crate::kfs::storage::StorageError) -> FsError {
+    if error == crate::kfs::storage::StorageError::PATH_NOT_FOUND {
         FsError::NoEntry
-    } else if error == crate::storage::StorageError::OUTPUT_BUFFER_TOO_SMALL {
+    } else if error == crate::kfs::storage::StorageError::OUTPUT_BUFFER_TOO_SMALL {
         FsError::NoMemory
-    } else if error == crate::storage::StorageError::OUTPUT_TRANSFER {
+    } else if error == crate::kfs::storage::StorageError::OUTPUT_TRANSFER {
         FsError::Fault
-    } else if error == crate::storage::StorageError::PATH_NOT_EMPTY {
+    } else if error == crate::kfs::storage::StorageError::PATH_NOT_EMPTY {
         FsError::NotEmpty
-    } else if error == crate::storage::StorageError::PATH_EXISTS {
+    } else if error == crate::kfs::storage::StorageError::PATH_EXISTS {
         FsError::InvalidPath
-    } else if error == crate::storage::StorageError::PATH_NOT_REGULAR {
+    } else if error == crate::kfs::storage::StorageError::PATH_NOT_REGULAR {
         FsError::InvalidPath
-    } else if error == crate::storage::StorageError::PATH_BUSY {
+    } else if error == crate::kfs::storage::StorageError::PATH_BUSY {
         FsError::Busy
     } else {
         FsError::Storage
@@ -790,7 +790,7 @@ fn storage_error_to_fs_error(error: crate::storage::StorageError) -> FsError {
 
 #[cfg(any(not(test), feature = "host-test"))]
 unsafe fn flush_root_storage() -> Result<(), FsError> {
-    unsafe { crate::storage::flush_storage0().map_err(storage_error_to_fs_error) }
+    unsafe { crate::kfs::storage::flush_storage0().map_err(storage_error_to_fs_error) }
 }
 
 #[cfg(any(not(test), feature = "host-test"))]
@@ -799,13 +799,13 @@ unsafe fn invalidate_root_fs_cache() {
 }
 
 #[cfg(any(not(test), feature = "host-test"))]
-fn fs_error_to_storage_output_error(error: FsError) -> crate::storage::StorageError {
+fn fs_error_to_storage_output_error(error: FsError) -> crate::kfs::storage::StorageError {
     if error == FsError::NoMemory {
-        crate::storage::StorageError::OUTPUT_BUFFER_TOO_SMALL
+        crate::kfs::storage::StorageError::OUTPUT_BUFFER_TOO_SMALL
     } else if error == FsError::Fault {
-        crate::storage::StorageError::OUTPUT_TRANSFER
+        crate::kfs::storage::StorageError::OUTPUT_TRANSFER
     } else {
-        crate::storage::StorageError::INVALID_FILESYSTEM
+        crate::kfs::storage::StorageError::INVALID_FILESYSTEM
     }
 }
 
@@ -895,7 +895,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn root_file_path_accepts_absolute_k16fs_file_path() {
+    fn root_file_path_accepts_absolute_kfs_file_path() {
         let path = RootFilePath::parse(b"/etc/motd").expect("path parses");
         let components = path.components();
 
