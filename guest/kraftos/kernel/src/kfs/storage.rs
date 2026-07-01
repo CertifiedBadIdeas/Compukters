@@ -1,6 +1,7 @@
 pub const SCRATCH_ADDR: u32 = 0x0000_0600;
 pub const BLOCK_SIZE: u32 = 512;
 
+const KFS_BLOCK_CACHE_SLOTS: usize = 16;
 const KFS_INODE_SIZE: u32 = 64;
 const KFS_DIRECTORY_ENTRY_SIZE: u32 = 64;
 const KFS_MAX_NAME_BYTES: usize = 56;
@@ -117,6 +118,26 @@ const STATE_SELECTED_INODE_ID: u32 = 0x0000_024c;
 const STATE_DIRECTORY_SLOT_BLOCK: u32 = 0x0000_0250;
 const STATE_DIRECTORY_SLOT_OFFSET: u32 = 0x0000_0254;
 const STATE_DIRECTORY_SLOT_DIRECTORY_OFFSET: u32 = 0x0000_0258;
+
+struct KernelKfsBlockCache {
+    cache: core::cell::UnsafeCell<crate::kfs::block_cache::KfsBlockCache<KFS_BLOCK_CACHE_SLOTS>>,
+}
+
+unsafe impl Sync for KernelKfsBlockCache {}
+
+impl KernelKfsBlockCache {
+    const fn new() -> Self {
+        Self {
+            cache: core::cell::UnsafeCell::new(crate::kfs::block_cache::KfsBlockCache::new()),
+        }
+    }
+
+    unsafe fn get(&self) -> &mut crate::kfs::block_cache::KfsBlockCache<KFS_BLOCK_CACHE_SLOTS> {
+        unsafe { &mut *self.cache.get() }
+    }
+}
+
+static KFS_BLOCK_CACHE: KernelKfsBlockCache = KernelKfsBlockCache::new();
 
 pub unsafe fn open_file_from_storage0(
     partition_type: &[u8; 4],
@@ -594,6 +615,11 @@ unsafe fn read_partition(
         partition_type,
         capacity_low,
     )?;
+    let old_start_lba = unsafe { read_u32(STATE_PARTITION_START_LBA) };
+    let old_block_count = unsafe { read_u32(STATE_PARTITION_BLOCK_COUNT) };
+    if old_start_lba != partition.start_lba || old_block_count != partition.block_count {
+        unsafe { invalidate_block_cache() };
+    }
     unsafe {
         write_u32(STATE_PARTITION_START_LBA, partition.start_lba);
         write_u32(STATE_PARTITION_BLOCK_COUNT, partition.block_count);
@@ -1908,11 +1934,16 @@ unsafe fn read_fs_block(block: u32) -> Result<(), StorageError> {
     if block >= unsafe { read_u32(STATE_PARTITION_BLOCK_COUNT) } {
         return Err(StorageError::INVALID_FILESYSTEM);
     }
+    if unsafe { read_fs_block_from_cache(block) } {
+        return Ok(());
+    }
     let lba = match unsafe { read_u32(STATE_PARTITION_START_LBA) }.checked_add(block) {
         Some(value) => value,
         None => return Err(StorageError::INVALID_FILESYSTEM),
     };
-    unsafe { read_storage_block(lba) }
+    unsafe { read_storage_block(lba)? };
+    unsafe { store_scratch_block_in_cache(block) };
+    Ok(())
 }
 
 #[inline(always)]
@@ -1947,7 +1978,9 @@ unsafe fn write_fs_block(block: u32) -> Result<(), StorageError> {
         Some(value) => value,
         None => return Err(StorageError::INVALID_FILESYSTEM),
     };
-    unsafe { write_storage_block(lba) }
+    unsafe { write_storage_block(lba)? };
+    unsafe { store_scratch_block_in_cache(block) };
+    Ok(())
 }
 
 #[inline(always)]
@@ -1973,6 +2006,33 @@ unsafe fn clear_scratch_block() {
     let mut offset = 0;
     while offset < BLOCK_SIZE {
         unsafe { write_u8(SCRATCH_ADDR + offset, 0) };
+        offset += 1;
+    }
+}
+
+unsafe fn read_fs_block_from_cache(block: u32) -> bool {
+    match unsafe { KFS_BLOCK_CACHE.get() }.get(block) {
+        Some(bytes) => {
+            unsafe { write_cached_block_to_scratch(bytes) };
+            true
+        }
+        None => false,
+    }
+}
+
+unsafe fn store_scratch_block_in_cache(block: u32) {
+    let bytes = unsafe { scratch_block_bytes() };
+    unsafe { KFS_BLOCK_CACHE.get() }.put_clean(block, &bytes);
+}
+
+unsafe fn invalidate_block_cache() {
+    unsafe { KFS_BLOCK_CACHE.get() }.invalidate_all();
+}
+
+unsafe fn write_cached_block_to_scratch(bytes: &crate::kfs::block_cache::KfsBlockBytes) {
+    let mut offset = 0;
+    while offset < BLOCK_SIZE {
+        unsafe { write_u8(SCRATCH_ADDR + offset, bytes[offset as usize]) };
         offset += 1;
     }
 }
