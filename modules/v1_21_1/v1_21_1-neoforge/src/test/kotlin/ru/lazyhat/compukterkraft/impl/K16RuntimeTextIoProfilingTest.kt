@@ -378,6 +378,97 @@ class K16RuntimeTextIoProfilingTest {
     }
 
     @Test
+    fun formatsK16FsHotspotSummarySortedByMetadataDataTransfersAndMediaBlocks() {
+        val baseline = RuntimeProfilingSnapshot()
+        val statAfter =
+            RuntimeProfilingSnapshot(
+                k16 =
+                    RuntimeK16StatsMetrics(
+                        os =
+                            RuntimeK16OsMetrics(
+                                pathLookups = 3,
+                                inodeLoads = 5,
+                                dirEntryScans = 8,
+                                statCalls = 2,
+                                genericFileDataReadBlocks = 1,
+                            ),
+                        devices =
+                            listOf(
+                                RuntimeK16MmioDeviceMetrics(
+                                    deviceId = 1,
+                                    base = 0,
+                                    size = 1,
+                                    traffic = RuntimeK16BusTrafficMetrics(),
+                                    storage = RuntimeK16StorageMetrics(readCommands = 9, mediaReadBlocks = 3),
+                                ),
+                            ),
+                    ),
+            )
+        val lsAfter =
+            RuntimeProfilingSnapshot(
+                k16 =
+                    RuntimeK16StatsMetrics(
+                        os =
+                            RuntimeK16OsMetrics(
+                                pathLookups = 6,
+                                inodeLoads = 9,
+                                dirEntryScans = 28,
+                                statCalls = 1,
+                                readDirDataReadBlocks = 7,
+                            ),
+                        devices =
+                            listOf(
+                                RuntimeK16MmioDeviceMetrics(
+                                    deviceId = 1,
+                                    base = 0,
+                                    size = 1,
+                                    traffic = RuntimeK16BusTrafficMetrics(),
+                                    storage = RuntimeK16StorageMetrics(readCommands = 36, mediaReadBlocks = 14),
+                                ),
+                            ),
+                    ),
+            )
+        val catAfter =
+            RuntimeProfilingSnapshot(
+                k16 =
+                    RuntimeK16StatsMetrics(
+                        os =
+                            RuntimeK16OsMetrics(
+                                pathLookups = 2,
+                                inodeLoads = 3,
+                                fileReads = 5,
+                                genericFileDataReadBlocks = 18,
+                            ),
+                        devices =
+                            listOf(
+                                RuntimeK16MmioDeviceMetrics(
+                                    deviceId = 1,
+                                    base = 0,
+                                    size = 1,
+                                    traffic = RuntimeK16BusTrafficMetrics(),
+                                    storage = RuntimeK16StorageMetrics(readCommands = 12, mediaReadBlocks = 20),
+                                ),
+                            ),
+                    ),
+            )
+
+        val line =
+            formatK16FsHotspotSummary(
+                listOf(
+                    K16ProfiledCommandSample("stat", baseline, statAfter),
+                    K16ProfiledCommandSample("ls", baseline, lsAfter),
+                    K16ProfiledCommandSample("cat", baseline, catAfter),
+                ),
+            )
+
+        assertTrue(line.startsWith("k16FsHotspots: "))
+        assertTrue(line.contains("metadataOps=[ls:44, stat:18, cat:5]"), line)
+        assertTrue(line.contains("dataReadBlocks=[cat:18, ls:7, stat:1]"), line)
+        assertTrue(line.contains("readCommands=[ls:36, cat:12, stat:9]"), line)
+        assertTrue(line.contains("mediaReadBlocks=[cat:20, ls:14, stat:3]"), line)
+    }
+
+    @Test
     fun printsK16TextIoRuntimeSummary() {
         val workspace = createTempDirectory("k16-runtime-text-io-profile-")
         val biosFlashPath = workspace.resolve("bios.kflash")
@@ -824,10 +915,13 @@ class K16RuntimeTextIoProfilingTest {
         try {
             device.turnOn()
             waitForTerminal(device, "initial shell prompt") { terminal -> terminal.contains("K16> ") }
+            val samples = mutableListOf<K16ProfiledCommandSample>()
             val lines =
                 commands.map { command ->
-                    runProfiledCoreutilsCommand(device, metrics, command)
+                    runProfiledCoreutilsCommand(device, metrics, command, samples)
                 }
+            val hotspotSummary = formatK16FsHotspotSummary(samples)
+            println(hotspotSummary)
 
             val unameLine = lines.single { it.contains("name=uname") }
             assertTrue(
@@ -845,6 +939,11 @@ class K16RuntimeTextIoProfilingTest {
             assertTrue(lines.any { it.contains("name=cat") && it.contains("fileReads=") })
             assertTrue(lines.all { it.contains("processSpawns=1") })
             assertTrue(lines.all { it.contains("programLoads=1") })
+            assertTrue(hotspotSummary.contains("k16FsHotspots: "))
+            assertTrue(hotspotSummary.contains("metadataOps=["))
+            assertTrue(hotspotSummary.contains("dataReadBlocks=["))
+            assertTrue(hotspotSummary.contains("readCommands=["))
+            assertTrue(hotspotSummary.contains("mediaReadBlocks=["))
         } finally {
             device.close()
         }
@@ -896,6 +995,7 @@ class K16RuntimeTextIoProfilingTest {
         device: K16RuntimeDevice,
         metrics: RecordingRuntimeMetricsCollector,
         command: ProfiledCoreutilsCommand,
+        samples: MutableList<K16ProfiledCommandSample>,
     ): String {
         val before = metrics.snapshot()
         val startedAt = System.nanoTime()
@@ -913,6 +1013,7 @@ class K16RuntimeTextIoProfilingTest {
         val after = metrics.snapshot()
         val line = formatK16CoreutilsCommandProfile(command.name, command.command, ticks, before, after)
         println(line)
+        samples += K16ProfiledCommandSample(command.name, before, after)
         return line
     }
 
@@ -975,6 +1076,20 @@ private data class ProfiledCoreutilsCommand(
     val name: String,
     val command: String,
     val expectedText: String,
+)
+
+private data class K16ProfiledCommandSample(
+    val name: String,
+    val before: RuntimeProfilingSnapshot,
+    val after: RuntimeProfilingSnapshot,
+)
+
+private data class K16FsHotspotDelta(
+    val name: String,
+    val metadataOps: Long,
+    val dataReadBlocks: Long,
+    val readCommands: Long,
+    val mediaReadBlocks: Long,
 )
 
 private class K16RuntimePhaseProfiler(
@@ -1114,6 +1229,45 @@ private fun formatK16CoreutilsCommandProfile(
         "dynamicImportDataReadBytes=${osAfter.dynamicImportDataReadBytes - osBefore.dynamicImportDataReadBytes}, " +
         "libraryDataReadBlocks=${osAfter.libraryDataReadBlocks - osBefore.libraryDataReadBlocks}, " +
         "libraryDataReadBytes=${osAfter.libraryDataReadBytes - osBefore.libraryDataReadBytes}"
+}
+
+private fun formatK16FsHotspotSummary(samples: List<K16ProfiledCommandSample>): String {
+    val deltas =
+        samples.map { sample ->
+            val osBefore = sample.before.k16.os
+            val osAfter = sample.after.k16.os
+            val storageBefore = sample.before.k16.storage0
+            val storageAfter = sample.after.k16.storage0
+            val metadataOps =
+                osAfter.pathLookups - osBefore.pathLookups +
+                    osAfter.inodeLoads - osBefore.inodeLoads +
+                    osAfter.dirEntryScans - osBefore.dirEntryScans +
+                    osAfter.statCalls - osBefore.statCalls
+            val dataReadBlocks =
+                osAfter.genericFileDataReadBlocks - osBefore.genericFileDataReadBlocks +
+                    osAfter.readDirDataReadBlocks - osBefore.readDirDataReadBlocks +
+                    osAfter.programDataReadBlocks - osBefore.programDataReadBlocks +
+                    osAfter.dynamicImportDataReadBlocks - osBefore.dynamicImportDataReadBlocks +
+                    osAfter.libraryDataReadBlocks - osBefore.libraryDataReadBlocks
+            K16FsHotspotDelta(
+                name = sample.name,
+                metadataOps = metadataOps,
+                dataReadBlocks = dataReadBlocks,
+                readCommands = storageAfter.readCommands - storageBefore.readCommands,
+                mediaReadBlocks = storageAfter.mediaReadBlocks - storageBefore.mediaReadBlocks,
+            )
+        }
+
+    fun ranked(selector: (K16FsHotspotDelta) -> Long): String =
+        deltas
+            .sortedWith(compareByDescending<K16FsHotspotDelta> { selector(it) }.thenBy { it.name })
+            .joinToString(prefix = "[", postfix = "]") { delta -> "${delta.name}:${selector(delta)}" }
+
+    return "k16FsHotspots: " +
+        "metadataOps=${ranked { it.metadataOps }}, " +
+        "dataReadBlocks=${ranked { it.dataReadBlocks }}, " +
+        "readCommands=${ranked { it.readCommands }}, " +
+        "mediaReadBlocks=${ranked { it.mediaReadBlocks }}"
 }
 
 private fun metricValue(line: String, name: String): Long {

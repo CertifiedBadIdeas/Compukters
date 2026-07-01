@@ -89,6 +89,16 @@ Use these phase lines when deciding whether a slowdown is in command dispatch, c
 frame production, guest filesystem/path/stat work, or post-command idle work. The older `k16LsCommand*` aggregate lines
 remain available for comparison with previous profiling runs.
 
+The coreutils profile also prints a sorted K16FS hotspot summary:
+
+```text
+k16FsHotspots: metadataOps=[ls:..., stat:..., ...], dataReadBlocks=[cat:..., ls:..., ...], readCommands=[ls:..., ...], mediaReadBlocks=[cat:..., ...]
+```
+
+`metadataOps` is `pathLookups + inodeLoads + dirEntryScans + statCalls`. Use it to rank commands by K16FS metadata/path
+pressure. `dataReadBlocks` ranks guest file/directory/program/library data reads. Compare `readCommands` with
+`mediaReadBlocks` to distinguish guest storage0 transfer overhead from backend media blocks.
+
 The bundled BIOS intentionally shows a splash frame and waits for 20 game ticks before loading the bootloader.
 `bios.splash.wait` isolates the pure wait portion before the release tick; bootloader/kernel/shell work after the splash
 deadline is counted under `shell.prompt.after_splash`. Treat the splash wait as intentional startup latency, not as
