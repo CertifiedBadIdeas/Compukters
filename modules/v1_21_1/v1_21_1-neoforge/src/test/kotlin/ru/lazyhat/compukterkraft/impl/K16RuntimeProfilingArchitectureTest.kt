@@ -132,4 +132,16 @@ class K16RuntimeProfilingArchitectureTest {
         assertFalse(openRootFileSource.contains("crate::kfs::storage::open_file_from_storage0(ROOT_PARTITION, components.as_slice())"))
         assertTrue(openRootFileSource.contains(".open_file(ROOT_PARTITION, components.as_slice())"))
     }
+
+    @Test
+    fun k16StorageUsesBlockCacheForSingleBlockReads() {
+        val storageSource = Path.of("../../../guest/kraftos/kernel/src/kfs/storage.rs").readText()
+
+        assertTrue(storageSource.contains("KFS_BLOCK_CACHE_SLOTS"))
+        assertTrue(storageSource.contains("static KFS_BLOCK_CACHE: KernelKfsBlockCache"))
+        assertTrue(storageSource.contains("read_fs_block_from_cache(block)"))
+        assertTrue(storageSource.contains("store_scratch_block_in_cache(block)"))
+        assertTrue(storageSource.contains("write_cached_block_to_scratch(bytes)"))
+        assertTrue(storageSource.contains("crate::kfs::block_cache::KfsBlockCache"))
+    }
 }
