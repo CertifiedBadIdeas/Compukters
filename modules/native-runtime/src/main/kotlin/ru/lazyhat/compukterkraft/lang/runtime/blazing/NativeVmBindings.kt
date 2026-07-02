@@ -68,6 +68,8 @@ data class NativeK16StorageStats(
     val rootMetadataReadBlocks: Long = 0,
     val rootDataReadBlocks: Long = 0,
     val unknownReadBlocks: Long = 0,
+    val requestedReadBlocks: Long = 0,
+    val requestedReadBytes: Long = 0,
 )
 
 data class NativeK16GpuStats(
@@ -144,6 +146,7 @@ data class NativeK16ComputerStatsSnapshot(
         private const val VERSION_V10: Long = 10
         private const val VERSION_V11: Long = 11
         private const val VERSION_V12: Long = 12
+        private const val VERSION_V13: Long = 13
         private const val HEADER_LONGS_V2: Int = 10
         private const val HEADER_LONGS_V4: Int = 16
         private const val HEADER_LONGS_V5: Int = 21
@@ -156,6 +159,7 @@ data class NativeK16ComputerStatsSnapshot(
         private const val DEVICE_LONGS_V8: Int = 22
         private const val DEVICE_LONGS_V9: Int = 28
         private const val DEVICE_LONGS_V11: Int = 30
+        private const val DEVICE_LONGS_V13: Int = 32
 
         fun from(values: LongArray): NativeK16ComputerStatsSnapshot {
             require(values.size >= HEADER_LONGS_V2) {
@@ -173,13 +177,14 @@ data class NativeK16ComputerStatsSnapshot(
                     version == VERSION_V9 ||
                     version == VERSION_V10 ||
                     version == VERSION_V11 ||
-                    version == VERSION_V12,
+                    version == VERSION_V12 ||
+                    version == VERSION_V13,
             ) {
                 "Unsupported native K16 stats snapshot version: $version"
             }
             val headerLongs =
                 when (version) {
-                    VERSION_V12 -> HEADER_LONGS_V12
+                    VERSION_V13, VERSION_V12 -> HEADER_LONGS_V12
                     VERSION_V11, VERSION_V10 -> HEADER_LONGS_V10
                     VERSION_V9, VERSION_V8, VERSION_V7 -> HEADER_LONGS_V7
                     VERSION_V6 -> HEADER_LONGS_V6
@@ -192,6 +197,7 @@ data class NativeK16ComputerStatsSnapshot(
             val deviceLongs =
                 when (version) {
                     VERSION_V2 -> DEVICE_LONGS_V2
+                    VERSION_V13 -> DEVICE_LONGS_V13
                     VERSION_V12, VERSION_V11 -> DEVICE_LONGS_V11
                     VERSION_V10, VERSION_V9 -> DEVICE_LONGS_V9
                     VERSION_V8 -> DEVICE_LONGS_V8
@@ -273,11 +279,14 @@ data class NativeK16ComputerStatsSnapshot(
                                         version >= VERSION_V9 -> values[offset + 20]
                                         else -> 0
                                     },
+                                requestedReadBlocks = if (version >= VERSION_V13) values[offset + 23] else 0,
+                                requestedReadBytes = if (version >= VERSION_V13) values[offset + 24] else 0,
                             ),
                         gpu =
                             if (version != VERSION_V2) {
                                 val gpuOffset =
                                     when {
+                                        version >= VERSION_V13 -> offset + 25
                                         version >= VERSION_V11 -> offset + 23
                                         version >= VERSION_V9 -> offset + 21
                                         version >= VERSION_V8 -> offset + 15
@@ -321,7 +330,8 @@ data class NativeK16ComputerStatsSnapshot(
                         version == VERSION_V9 ||
                         version == VERSION_V10 ||
                         version == VERSION_V11 ||
-                        version == VERSION_V12
+                        version == VERSION_V12 ||
+                        version == VERSION_V13
                     ) {
                         NativeK16OsStats(
                             pathLookups = values[9],
@@ -363,7 +373,8 @@ data class NativeK16ComputerStatsSnapshot(
                         version == VERSION_V9 ||
                         version == VERSION_V10 ||
                         version == VERSION_V11 ||
-                        version == VERSION_V12
+                        version == VERSION_V12 ||
+                        version == VERSION_V13
                     ) {
                         val offset =
                             when {
