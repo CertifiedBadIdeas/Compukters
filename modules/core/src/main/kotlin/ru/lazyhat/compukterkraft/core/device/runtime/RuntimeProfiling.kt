@@ -292,6 +292,16 @@ data class RuntimeK16OsMetrics(
     val blockCacheHits: Long = 0,
     val blockCacheMisses: Long = 0,
     val blockCacheBatchReads: Long = 0,
+    val initProgramFileDataReadBlocks: Long = 0,
+    val initProgramFileDataReadBytes: Long = 0,
+    val shellProgramFileDataReadBlocks: Long = 0,
+    val shellProgramFileDataReadBytes: Long = 0,
+    val otherProgramFileDataReadBlocks: Long = 0,
+    val otherProgramFileDataReadBytes: Long = 0,
+    val libkraftLibraryFileDataReadBlocks: Long = 0,
+    val libkraftLibraryFileDataReadBytes: Long = 0,
+    val otherLibraryFileDataReadBlocks: Long = 0,
+    val otherLibraryFileDataReadBytes: Long = 0,
 )
 
 data class RuntimeK16DecodeCacheMetrics(
@@ -430,7 +440,7 @@ data class RuntimeProfilingSnapshot(
                 "    k16Storage0: readCommands=${k16.storage0.readCommands}, writeCommands=${k16.storage0.writeCommands}, flushes=${k16.storage0.flushCommands}, bytesRead=${k16.storage0.bytesRead}, bytesWritten=${k16.storage0.bytesWritten}, failed=${k16.storage0.failedCommands}, mediaReadBlocks=${k16.storage0.mediaReadBlocks}, mediaWriteBlocks=${k16.storage0.mediaWriteBlocks}, uniqueReadBlocks=${k16.storage0.uniqueReadBlocks}, repeatedReadBlocks=${k16.storage0.repeatedReadBlocks}, partitionTableReadBlocks=${k16.storage0.partitionTableReadBlocks}, bootMetadataReadBlocks=${k16.storage0.bootMetadataReadBlocks}, bootDataReadBlocks=${k16.storage0.bootDataReadBlocks}, rootMetadataReadBlocks=${k16.storage0.rootMetadataReadBlocks}, rootDataReadBlocks=${k16.storage0.rootDataReadBlocks}, unknownReadBlocks=${k16.storage0.unknownReadBlocks}, requestedReadBlocks=${k16.storage0.requestedReadBlocks}, requestedReadBytes=${k16.storage0.requestedReadBytes}",
             )
             appendLine(
-                "    k16Os: pathLookups=${k16.os.pathLookups}, inodeLoads=${k16.os.inodeLoads}, dirEntryScans=${k16.os.dirEntryScans}, fileOpens=${k16.os.fileOpens}, fileReads=${k16.os.fileReads}, statCalls=${k16.os.statCalls}, processSpawns=${k16.os.processSpawns}, programLoads=${k16.os.programLoads}, dynamicImportLoads=${k16.os.dynamicImportLoads}, libraryLoads=${k16.os.libraryLoads}, readDirCalls=${k16.os.readDirCalls}, programLoadBytes=${k16.os.programLoadBytes}, dynamicImportBytes=${k16.os.dynamicImportBytes}, libraryLoadBytes=${k16.os.libraryLoadBytes}, genericFileDataReadBlocks=${k16.os.genericFileDataReadBlocks}, genericFileDataReadBytes=${k16.os.genericFileDataReadBytes}, readDirDataReadBlocks=${k16.os.readDirDataReadBlocks}, readDirDataReadBytes=${k16.os.readDirDataReadBytes}, programDataReadBlocks=${k16.os.programDataReadBlocks}, programDataReadBytes=${k16.os.programDataReadBytes}, dynamicImportDataReadBlocks=${k16.os.dynamicImportDataReadBlocks}, dynamicImportDataReadBytes=${k16.os.dynamicImportDataReadBytes}, libraryDataReadBlocks=${k16.os.libraryDataReadBlocks}, libraryDataReadBytes=${k16.os.libraryDataReadBytes}, blockCacheHits=${k16.os.blockCacheHits}, blockCacheMisses=${k16.os.blockCacheMisses}, blockCacheBatchReads=${k16.os.blockCacheBatchReads}",
+                "    k16Os: pathLookups=${k16.os.pathLookups}, inodeLoads=${k16.os.inodeLoads}, dirEntryScans=${k16.os.dirEntryScans}, fileOpens=${k16.os.fileOpens}, fileReads=${k16.os.fileReads}, statCalls=${k16.os.statCalls}, processSpawns=${k16.os.processSpawns}, programLoads=${k16.os.programLoads}, dynamicImportLoads=${k16.os.dynamicImportLoads}, libraryLoads=${k16.os.libraryLoads}, readDirCalls=${k16.os.readDirCalls}, programLoadBytes=${k16.os.programLoadBytes}, dynamicImportBytes=${k16.os.dynamicImportBytes}, libraryLoadBytes=${k16.os.libraryLoadBytes}, genericFileDataReadBlocks=${k16.os.genericFileDataReadBlocks}, genericFileDataReadBytes=${k16.os.genericFileDataReadBytes}, readDirDataReadBlocks=${k16.os.readDirDataReadBlocks}, readDirDataReadBytes=${k16.os.readDirDataReadBytes}, programDataReadBlocks=${k16.os.programDataReadBlocks}, programDataReadBytes=${k16.os.programDataReadBytes}, dynamicImportDataReadBlocks=${k16.os.dynamicImportDataReadBlocks}, dynamicImportDataReadBytes=${k16.os.dynamicImportDataReadBytes}, libraryDataReadBlocks=${k16.os.libraryDataReadBlocks}, libraryDataReadBytes=${k16.os.libraryDataReadBytes}, blockCacheHits=${k16.os.blockCacheHits}, blockCacheMisses=${k16.os.blockCacheMisses}, blockCacheBatchReads=${k16.os.blockCacheBatchReads}, initProgramFileDataReadBlocks=${k16.os.initProgramFileDataReadBlocks}, initProgramFileDataReadBytes=${k16.os.initProgramFileDataReadBytes}, shellProgramFileDataReadBlocks=${k16.os.shellProgramFileDataReadBlocks}, shellProgramFileDataReadBytes=${k16.os.shellProgramFileDataReadBytes}, otherProgramFileDataReadBlocks=${k16.os.otherProgramFileDataReadBlocks}, otherProgramFileDataReadBytes=${k16.os.otherProgramFileDataReadBytes}, libkraftLibraryFileDataReadBlocks=${k16.os.libkraftLibraryFileDataReadBlocks}, libkraftLibraryFileDataReadBytes=${k16.os.libkraftLibraryFileDataReadBytes}, otherLibraryFileDataReadBlocks=${k16.os.otherLibraryFileDataReadBlocks}, otherLibraryFileDataReadBytes=${k16.os.otherLibraryFileDataReadBytes}",
             )
             appendK16DeviceSummary()
             appendLine(
@@ -1058,4 +1068,14 @@ private fun NativeK16OsStats.toRuntimeMetrics(): RuntimeK16OsMetrics =
         blockCacheHits = blockCacheHits,
         blockCacheMisses = blockCacheMisses,
         blockCacheBatchReads = blockCacheBatchReads,
+        initProgramFileDataReadBlocks = initProgramFileDataReadBlocks,
+        initProgramFileDataReadBytes = initProgramFileDataReadBytes,
+        shellProgramFileDataReadBlocks = shellProgramFileDataReadBlocks,
+        shellProgramFileDataReadBytes = shellProgramFileDataReadBytes,
+        otherProgramFileDataReadBlocks = otherProgramFileDataReadBlocks,
+        otherProgramFileDataReadBytes = otherProgramFileDataReadBytes,
+        libkraftLibraryFileDataReadBlocks = libkraftLibraryFileDataReadBlocks,
+        libkraftLibraryFileDataReadBytes = libkraftLibraryFileDataReadBytes,
+        otherLibraryFileDataReadBlocks = otherLibraryFileDataReadBlocks,
+        otherLibraryFileDataReadBytes = otherLibraryFileDataReadBytes,
     )

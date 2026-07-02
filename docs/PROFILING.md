@@ -83,7 +83,7 @@ The `k16Phase` lines split selected text-I/O scenarios into named checkpoints su
 snapshots:
 
 ```text
-k16Phase: name=ls:/bin.visible, elapsed=..., slices=..., runTime=..., inputBytes=..., gpuFrameBytes=..., displayFrames=..., displayBytes=..., storageReadCommands=..., storageRequestedReadBlocks=..., storageRequestedReadBytes=..., storageWriteCommands=..., storageMediaReadBlocks=..., storageMediaWriteBlocks=..., storageUniqueReadBlocks=..., storageRepeatedReadBlocks=..., storagePartitionTableReadBlocks=..., storageBootMetadataReadBlocks=..., storageBootDataReadBlocks=..., storageRootMetadataReadBlocks=..., storageRootDataReadBlocks=..., storageUnknownReadBlocks=..., storageBytesRead=..., pathLookups=..., inodeLoads=..., dirEntryScans=..., fileOpens=..., fileReads=..., statCalls=..., programLoadBytes=..., dynamicImportBytes=..., libraryLoadBytes=..., genericFileDataReadBlocks=..., genericFileDataReadBytes=..., readDirDataReadBlocks=..., readDirDataReadBytes=..., programDataReadBlocks=..., programDataReadBytes=..., dynamicImportDataReadBlocks=..., dynamicImportDataReadBytes=..., libraryDataReadBlocks=..., libraryDataReadBytes=..., blockCacheHits=..., blockCacheMisses=..., blockCacheBatchReads=...
+k16Phase: name=ls:/bin.visible, elapsed=..., slices=..., runTime=..., inputBytes=..., gpuFrameBytes=..., displayFrames=..., displayBytes=..., storageReadCommands=..., storageRequestedReadBlocks=..., storageRequestedReadBytes=..., storageWriteCommands=..., storageMediaReadBlocks=..., storageMediaWriteBlocks=..., storageUniqueReadBlocks=..., storageRepeatedReadBlocks=..., storagePartitionTableReadBlocks=..., storageBootMetadataReadBlocks=..., storageBootDataReadBlocks=..., storageRootMetadataReadBlocks=..., storageRootDataReadBlocks=..., storageUnknownReadBlocks=..., storageBytesRead=..., pathLookups=..., inodeLoads=..., dirEntryScans=..., fileOpens=..., fileReads=..., statCalls=..., programLoadBytes=..., dynamicImportBytes=..., libraryLoadBytes=..., genericFileDataReadBlocks=..., genericFileDataReadBytes=..., readDirDataReadBlocks=..., readDirDataReadBytes=..., programDataReadBlocks=..., programDataReadBytes=..., dynamicImportDataReadBlocks=..., dynamicImportDataReadBytes=..., libraryDataReadBlocks=..., libraryDataReadBytes=..., blockCacheHits=..., blockCacheMisses=..., blockCacheBatchReads=..., initProgramFileDataReadBlocks=..., initProgramFileDataReadBytes=..., shellProgramFileDataReadBlocks=..., shellProgramFileDataReadBytes=..., otherProgramFileDataReadBlocks=..., otherProgramFileDataReadBytes=..., libkraftLibraryFileDataReadBlocks=..., libkraftLibraryFileDataReadBytes=..., otherLibraryFileDataReadBlocks=..., otherLibraryFileDataReadBytes=...
 ```
 
 Use these phase lines when deciding whether a slowdown is in command dispatch, command execution/storage reads, display
@@ -123,7 +123,11 @@ The `*DataReadBlocks` and `*DataReadBytes` OS counters split guest KFS data-bloc
 generic user file reads, directory listings, executable payload reads, dynamic import metadata reads, and shared-library
 payload reads. These are attribution counters and do not issue extra storage0 media reads.
 `blockCacheHits` and `blockCacheMisses` count guest KFS block-cache lookups. `blockCacheBatchReads` counts contiguous
-miss ranges that reached storage0 as batched reads after the KFS cache check.
+miss ranges that reached storage0 as batched reads after the KFS cache check. The
+`initProgramFileDataRead*`, `shellProgramFileDataRead*`, `otherProgramFileDataRead*`,
+`libkraftLibraryFileDataRead*`, and `otherLibraryFileDataRead*` counters attribute the same guest KFS file-data reads to
+the loaded executable/shared-object file. They include headers, import metadata, relocations, and payload reads while
+preserving the older semantic `programDataRead*`, `dynamicImportDataRead*`, and `libraryDataRead*` buckets.
 
 Use `profileK16ManyVmServerBudget` for a server-focused workload that boots several K16 runtime devices, measures idle
 tick cost after all shells are waiting, then runs active production-path command scenarios. The printed lines include
@@ -213,7 +217,7 @@ during the worker cache refresh path:
 k16Bus: ramLoads=..., ramStores=..., ramBytesRead=..., ramBytesWritten=..., mmioLoads=..., mmioStores=..., mmioBytesRead=..., mmioBytesWritten=...
 k16Devices: mapped=..., loads=..., stores=..., bytesRead=..., bytesWritten=...
 k16Storage0: readCommands=..., writeCommands=..., flushes=..., bytesRead=..., bytesWritten=..., failed=..., mediaReadBlocks=..., mediaWriteBlocks=..., uniqueReadBlocks=..., repeatedReadBlocks=..., partitionTableReadBlocks=..., bootMetadataReadBlocks=..., bootDataReadBlocks=..., rootMetadataReadBlocks=..., rootDataReadBlocks=..., unknownReadBlocks=..., requestedReadBlocks=..., requestedReadBytes=...
-k16Os: pathLookups=..., inodeLoads=..., dirEntryScans=..., fileOpens=..., fileReads=..., statCalls=..., programLoadBytes=..., dynamicImportBytes=..., libraryLoadBytes=..., genericFileDataReadBlocks=..., genericFileDataReadBytes=..., readDirDataReadBlocks=..., readDirDataReadBytes=..., programDataReadBlocks=..., programDataReadBytes=..., dynamicImportDataReadBlocks=..., dynamicImportDataReadBytes=..., libraryDataReadBlocks=..., libraryDataReadBytes=..., blockCacheHits=..., blockCacheMisses=..., blockCacheBatchReads=...
+k16Os: pathLookups=..., inodeLoads=..., dirEntryScans=..., fileOpens=..., fileReads=..., statCalls=..., programLoadBytes=..., dynamicImportBytes=..., libraryLoadBytes=..., genericFileDataReadBlocks=..., genericFileDataReadBytes=..., readDirDataReadBlocks=..., readDirDataReadBytes=..., programDataReadBlocks=..., programDataReadBytes=..., dynamicImportDataReadBlocks=..., dynamicImportDataReadBytes=..., libraryDataReadBlocks=..., libraryDataReadBytes=..., blockCacheHits=..., blockCacheMisses=..., blockCacheBatchReads=..., initProgramFileDataReadBlocks=..., initProgramFileDataReadBytes=..., shellProgramFileDataReadBlocks=..., shellProgramFileDataReadBytes=..., otherProgramFileDataReadBlocks=..., otherProgramFileDataReadBytes=..., libkraftLibraryFileDataReadBlocks=..., libkraftLibraryFileDataReadBytes=..., otherLibraryFileDataReadBlocks=..., otherLibraryFileDataReadBytes=...
   device[...]: base=..., size=..., loads=..., stores=..., bytesRead=..., bytesWritten=...
 ```
 
@@ -234,8 +238,10 @@ k16Os: pathLookups=..., inodeLoads=..., dirEntryScans=..., fileOpens=..., fileRe
   `libraryLoadBytes` counts loaded shared-library payload bytes. `genericFileDataReadBlocks`/`Bytes`,
   `readDirDataReadBlocks`/`Bytes`, `programDataReadBlocks`/`Bytes`, `dynamicImportDataReadBlocks`/`Bytes`, and
   `libraryDataReadBlocks`/`Bytes` attribute guest KFS data-block reads to user file reads, directory listing,
-  executable payload, dynamic import metadata, and shared-library payload categories. `blockCacheHits`,
-  `blockCacheMisses`, and `blockCacheBatchReads` expose guest KFS block-cache effectiveness before storage0 commands.
+	  executable payload, dynamic import metadata, and shared-library payload categories. `initProgramFileDataRead*`,
+	  `shellProgramFileDataRead*`, `otherProgramFileDataRead*`, `libkraftLibraryFileDataRead*`, and
+	  `otherLibraryFileDataRead*` attribute those same reads by loaded file. `blockCacheHits`, `blockCacheMisses`, and
+	  `blockCacheBatchReads` expose guest KFS block-cache effectiveness before storage0 commands.
 - These counters are cumulative inside the Rust VM; the Kotlin profiling collector stores the latest snapshot instead of
   summing repeated snapshots.
 

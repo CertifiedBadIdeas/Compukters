@@ -410,6 +410,16 @@ impl ComputerMachine {
             block_cache_hits: read(192),
             block_cache_misses: read(200),
             block_cache_batch_reads: read(208),
+            init_program_file_data_read_blocks: read(216),
+            init_program_file_data_read_bytes: read(224),
+            shell_program_file_data_read_blocks: read(232),
+            shell_program_file_data_read_bytes: read(240),
+            other_program_file_data_read_blocks: read(248),
+            other_program_file_data_read_bytes: read(256),
+            libkraft_library_file_data_read_blocks: read(264),
+            libkraft_library_file_data_read_bytes: read(272),
+            other_library_file_data_read_blocks: read(280),
+            other_library_file_data_read_bytes: read(288),
         }
     }
 
