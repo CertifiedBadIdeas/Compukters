@@ -19,6 +19,9 @@ const DYNAMIC_LOADER_NEEDED_SECTION_BYTES: usize = 256;
 const DYNAMIC_LOADER_IMPORT_SECTION_BYTES: usize = 2048;
 const DYNAMIC_LOADER_EXPORT_SECTION_BYTES: usize = 2048;
 const DYNAMIC_LOADER_RELOCATION_SECTION_BYTES: usize = 2048;
+const RESIDENT_SHARED_LIBRARY_CACHE_SLOTS: usize = MAX_DYNAMIC_IMPORT_LIBRARIES;
+const RESIDENT_SHARED_LIBRARY_PAYLOAD_BYTES: usize = 4096;
+const RESIDENT_SHARED_LIBRARY_RELOCATION_BYTES: usize = 4096;
 const CHILD_ARG_ENTRY_BYTES: u32 = 8;
 const TRANSLATED_TRAP_STACK_BYTES: u32 = VM_PAGE_SIZE;
 const INITIAL_USER_LOADER_SCRATCH_END: u32 =
@@ -197,6 +200,8 @@ static mut LOADER_EXPORT_SECTIONS: [[u8; DYNAMIC_LOADER_EXPORT_SECTION_BYTES];
     [[0; DYNAMIC_LOADER_EXPORT_SECTION_BYTES]; MAX_DYNAMIC_IMPORT_LIBRARIES];
 static mut LOADER_RELOCATION_SECTION: [u8; DYNAMIC_LOADER_RELOCATION_SECTION_BYTES] =
     [0; DYNAMIC_LOADER_RELOCATION_SECTION_BYTES];
+static mut RESIDENT_SHARED_LIBRARIES: [ResidentSharedLibrary; RESIDENT_SHARED_LIBRARY_CACHE_SLOTS] =
+    [ResidentSharedLibrary::empty(); RESIDENT_SHARED_LIBRARY_CACHE_SLOTS];
 #[cfg(not(test))]
 unsafe extern "C" {
     static __k16_image_end: u8;
@@ -2914,6 +2919,120 @@ impl SharedLibraryImage {
     }
 }
 
+#[derive(Clone, Copy)]
+struct ResidentSharedLibrary {
+    valid: bool,
+    name: [u8; KFS_MAX_NAME_BYTES],
+    name_len: u32,
+    file: crate::kfs::storage::FileMetadata,
+    image: SharedLibraryImage,
+    payload: [u8; RESIDENT_SHARED_LIBRARY_PAYLOAD_BYTES],
+    relocations: [u8; RESIDENT_SHARED_LIBRARY_RELOCATION_BYTES],
+    exports: [u8; DYNAMIC_LOADER_EXPORT_SECTION_BYTES],
+}
+
+impl ResidentSharedLibrary {
+    const fn empty() -> Self {
+        Self {
+            valid: false,
+            name: [0; KFS_MAX_NAME_BYTES],
+            name_len: 0,
+            file: empty_file_metadata(),
+            image: SharedLibraryImage::empty(),
+            payload: [0; RESIDENT_SHARED_LIBRARY_PAYLOAD_BYTES],
+            relocations: [0; RESIDENT_SHARED_LIBRARY_RELOCATION_BYTES],
+            exports: [0; DYNAMIC_LOADER_EXPORT_SECTION_BYTES],
+        }
+    }
+
+    fn matches(&self, name: &[u8], file: crate::kfs::storage::FileMetadata) -> bool {
+        let Ok(name_len) = usize::try_from(self.name_len) else {
+            return false;
+        };
+        self.valid && self.file == file && self.name.get(..name_len) == Some(name)
+    }
+
+    #[cfg(test)]
+    fn store(
+        &mut self,
+        name: &[u8],
+        file: crate::kfs::storage::FileMetadata,
+        image: SharedLibraryImage,
+        payload: &[u8],
+        relocations: &[u8],
+        exports: &[u8],
+    ) -> Result<(), ProcessLoadError> {
+        if name.len() > KFS_MAX_NAME_BYTES
+            || payload.len() != image.file_size as usize
+            || relocations.len() != shared_library_relocation_table_size(image)? as usize
+            || exports.len() != image.export_section_size as usize
+            || payload.len() > RESIDENT_SHARED_LIBRARY_PAYLOAD_BYTES
+            || relocations.len() > RESIDENT_SHARED_LIBRARY_RELOCATION_BYTES
+            || exports.len() > DYNAMIC_LOADER_EXPORT_SECTION_BYTES
+        {
+            return Err(ProcessLoadError::InvalidImage);
+        }
+
+        self.valid = false;
+        self.name = [0; KFS_MAX_NAME_BYTES];
+        self.name[..name.len()].copy_from_slice(name);
+        self.name_len = u32::try_from(name.len()).map_err(|_| ProcessLoadError::InvalidImage)?;
+        self.file = file;
+        self.image = image;
+        self.payload[..payload.len()].copy_from_slice(payload);
+        self.relocations[..relocations.len()].copy_from_slice(relocations);
+        self.exports[..exports.len()].copy_from_slice(exports);
+        self.valid = true;
+        Ok(())
+    }
+
+    #[cfg(test)]
+    fn copy_payload_to(&self, out: &mut [u8]) -> Result<(), ProcessLoadError> {
+        let size =
+            usize::try_from(self.image.file_size).map_err(|_| ProcessLoadError::InvalidImage)?;
+        if !self.valid || out.len() != size {
+            return Err(ProcessLoadError::InvalidImage);
+        }
+        out.copy_from_slice(&self.payload[..size]);
+        Ok(())
+    }
+
+    fn copy_relocations_to(
+        &self,
+        out: &mut [u8],
+        start_index: u32,
+        records: u32,
+    ) -> Result<(), ProcessLoadError> {
+        let offset = start_index
+            .checked_mul(crate::image::K16E_RELOCATION_RECORD_SIZE)
+            .ok_or(ProcessLoadError::AddressOverflow)?;
+        let size = records
+            .checked_mul(crate::image::K16E_RELOCATION_RECORD_SIZE)
+            .ok_or(ProcessLoadError::AddressOverflow)?;
+        let end = offset
+            .checked_add(size)
+            .ok_or(ProcessLoadError::AddressOverflow)?;
+        let total = shared_library_relocation_table_size(self.image)?;
+        if !self.valid || end > total || out.len() != size as usize {
+            return Err(ProcessLoadError::InvalidImage);
+        }
+        let start = usize::try_from(offset).map_err(|_| ProcessLoadError::InvalidImage)?;
+        let end = usize::try_from(end).map_err(|_| ProcessLoadError::InvalidImage)?;
+        out.copy_from_slice(&self.relocations[start..end]);
+        Ok(())
+    }
+
+    fn copy_exports_to(&self, out: &mut [u8]) -> Result<(), ProcessLoadError> {
+        let size = usize::try_from(self.image.export_section_size)
+            .map_err(|_| ProcessLoadError::InvalidImage)?;
+        if !self.valid || out.len() != size {
+            return Err(ProcessLoadError::InvalidImage);
+        }
+        out.copy_from_slice(&self.exports[..size]);
+        Ok(())
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 struct ImportRelocationRecord<'a> {
     offset: u32,
@@ -2930,6 +3049,7 @@ struct DynamicImportLibrary {
     profile_file: crate::kfs::storage::FileReadProfileFile,
     image: SharedLibraryImage,
     relative_base: u32,
+    cache_slot: u32,
 }
 
 impl DynamicImportLibrary {
@@ -2941,15 +3061,22 @@ impl DynamicImportLibrary {
             profile_file: crate::kfs::storage::FileReadProfileFile::Generic,
             image: SharedLibraryImage::empty(),
             relative_base: 0,
+            cache_slot: 0,
         }
     }
 
+    #[cfg(test)]
     fn file_metadata(&self) -> crate::kfs::storage::FileMetadata {
         self.file
     }
 
+    #[cfg(test)]
     fn profile_file(&self) -> crate::kfs::storage::FileReadProfileFile {
         self.profile_file
+    }
+
+    fn cache_slot(&self) -> u32 {
+        self.cache_slot
     }
 }
 
@@ -4407,12 +4534,13 @@ unsafe fn read_selected_dynamic_import_state(
         let name_len =
             u32::try_from(library_name.len()).map_err(|_| ProcessLoadError::InvalidImage)?;
         let library_profile_file = library_profile_file(library_name);
-        let (file, library) =
-            unsafe { open_and_read_shared_library(library_name, library_profile_file)? };
-        let relative_base = align_up(total, LOAD_ALIGNMENT)?;
-        unsafe {
-            copy_shared_export_section_to_loader_buffer(index, file, library, library_profile_file)?
+        let file = unsafe { open_shared_library(library_name)? };
+        let cache_slot = unsafe {
+            get_or_load_resident_shared_library(index, library_name, file, library_profile_file)?
         };
+        let library = unsafe { resident_shared_library_image(cache_slot)? };
+        let relative_base = align_up(total, LOAD_ALIGNMENT)?;
+        unsafe { copy_resident_shared_export_section_to_loader_buffer(index, cache_slot)? };
         let slot = usize::try_from(index).map_err(|_| ProcessLoadError::InvalidImage)?;
         libraries[slot] = DynamicImportLibrary {
             name,
@@ -4421,6 +4549,7 @@ unsafe fn read_selected_dynamic_import_state(
             profile_file: library_profile_file,
             image: library,
             relative_base,
+            cache_slot,
         };
         total = relative_base
             .checked_add(library.memory_size)
@@ -4452,27 +4581,16 @@ unsafe fn load_dynamic_import_libraries(
             .checked_add(entry.relative_base)
             .ok_or(ProcessLoadError::AddressOverflow)?;
         unsafe {
-            crate::kfs::storage::copy_file_range_to_ram_profiled(
-                entry.file_metadata(),
-                library.payload_offset,
-                library_base,
-                library.file_size,
-                crate::kfs::storage::FileReadProfileKind::Library(entry.profile_file()),
-            )
-            .map_err(|_| ProcessLoadError::Storage)?;
+            copy_resident_shared_library_payload_to_ram(entry.cache_slot(), library_base)?;
             crate::os_stats::record_library_load_bytes(library.file_size);
             zero_fill_ram(
                 library_base + library.file_size,
                 library.memory_size - library.file_size,
             );
-            apply_shared_library_relocations(
-                entry.file_metadata(),
-                library.relocation_table_offset,
-                library.relocation_count,
-                library.memory_size,
+            apply_resident_shared_library_relocations(
+                entry.cache_slot(),
                 library_base,
                 library_base,
-                entry.profile_file(),
             )?;
         }
         index += 1;
@@ -4496,27 +4614,16 @@ unsafe fn load_dynamic_import_libraries_mapped(
             .ok_or(ProcessLoadError::AddressOverflow)?;
         let physical_base = plan.translate_address(library_base)?;
         unsafe {
-            crate::kfs::storage::copy_file_range_to_ram_profiled(
-                entry.file_metadata(),
-                library.payload_offset,
-                physical_base,
-                library.file_size,
-                crate::kfs::storage::FileReadProfileKind::Library(entry.profile_file()),
-            )
-            .map_err(|_| ProcessLoadError::Storage)?;
+            copy_resident_shared_library_payload_to_ram(entry.cache_slot(), physical_base)?;
             crate::os_stats::record_library_load_bytes(library.file_size);
             zero_fill_ram(
                 physical_base + library.file_size,
                 library.memory_size - library.file_size,
             );
-            apply_shared_library_relocations(
-                entry.file_metadata(),
-                library.relocation_table_offset,
-                library.relocation_count,
-                library.memory_size,
+            apply_resident_shared_library_relocations(
+                entry.cache_slot(),
                 physical_base,
                 library_base,
-                entry.profile_file(),
             )?;
         }
         index += 1;
@@ -4601,15 +4708,6 @@ unsafe fn resolve_dynamic_import_export(
     resolve_shared_export(library.image, exports, symbol)
 }
 
-unsafe fn open_and_read_shared_library(
-    name: &[u8],
-    profile_file: crate::kfs::storage::FileReadProfileFile,
-) -> Result<(crate::kfs::storage::FileMetadata, SharedLibraryImage), ProcessLoadError> {
-    let file = unsafe { open_shared_library(name)? };
-    let image = unsafe { read_selected_shared_library_image(profile_file)? };
-    Ok((file, image))
-}
-
 unsafe fn open_shared_library(
     name: &[u8],
 ) -> Result<crate::kfs::storage::FileMetadata, ProcessLoadError> {
@@ -4618,6 +4716,134 @@ unsafe fn open_shared_library(
         crate::fs::open_root_file_cached_components(path.components())
             .map_err(|_| ProcessLoadError::Storage)
     }
+}
+
+unsafe fn get_or_load_resident_shared_library(
+    slot_hint: u32,
+    name: &[u8],
+    file: crate::kfs::storage::FileMetadata,
+    profile_file: crate::kfs::storage::FileReadProfileFile,
+) -> Result<u32, ProcessLoadError> {
+    if let Some(slot) = unsafe { find_resident_shared_library(name, file) } {
+        return Ok(slot);
+    }
+    unsafe { read_resident_shared_library(slot_hint, name, file, profile_file) }
+}
+
+unsafe fn find_resident_shared_library(
+    name: &[u8],
+    file: crate::kfs::storage::FileMetadata,
+) -> Option<u32> {
+    let mut index = 0;
+    while index < RESIDENT_SHARED_LIBRARY_CACHE_SLOTS {
+        let entry = unsafe { resident_shared_library(index as u32).ok()? };
+        if entry.matches(name, file) {
+            return Some(index as u32);
+        }
+        index += 1;
+    }
+    None
+}
+
+unsafe fn read_resident_shared_library(
+    slot: u32,
+    name: &[u8],
+    file: crate::kfs::storage::FileMetadata,
+    profile_file: crate::kfs::storage::FileReadProfileFile,
+) -> Result<u32, ProcessLoadError> {
+    let image = unsafe { read_selected_shared_library_image(profile_file)? };
+    validate_resident_shared_library_capacity(image)?;
+    let entry = unsafe { resident_shared_library_mut(slot)? };
+    entry.valid = false;
+    entry.name = [0; KFS_MAX_NAME_BYTES];
+    if name.len() > KFS_MAX_NAME_BYTES {
+        return Err(ProcessLoadError::InvalidImage);
+    }
+    entry.name[..name.len()].copy_from_slice(name);
+    entry.name_len = u32::try_from(name.len()).map_err(|_| ProcessLoadError::InvalidImage)?;
+    entry.file = file;
+    entry.image = image;
+    unsafe {
+        crate::kfs::storage::copy_file_range_to_ram_profiled(
+            file,
+            image.payload_offset,
+            entry.payload.as_mut_ptr() as usize as u32,
+            image.file_size,
+            crate::kfs::storage::FileReadProfileKind::Library(profile_file),
+        )
+        .map_err(|_| ProcessLoadError::Storage)?;
+        crate::kfs::storage::copy_file_range_to_ram_profiled(
+            file,
+            image.relocation_table_offset,
+            entry.relocations.as_mut_ptr() as usize as u32,
+            shared_library_relocation_table_size(image)?,
+            crate::kfs::storage::FileReadProfileKind::DynamicImport(profile_file),
+        )
+        .map_err(|_| ProcessLoadError::Storage)?;
+        crate::kfs::storage::copy_file_range_to_ram_profiled(
+            file,
+            image.export_section_offset,
+            entry.exports.as_mut_ptr() as usize as u32,
+            image.export_section_size,
+            crate::kfs::storage::FileReadProfileKind::DynamicImport(profile_file),
+        )
+        .map_err(|_| ProcessLoadError::Storage)?;
+    }
+    crate::os_stats::record_dynamic_import_bytes(
+        shared_library_relocation_table_size(image)?
+            .checked_add(image.export_section_size)
+            .ok_or(ProcessLoadError::AddressOverflow)?,
+    );
+    entry.valid = true;
+    Ok(slot)
+}
+
+fn validate_resident_shared_library_capacity(
+    image: SharedLibraryImage,
+) -> Result<(), ProcessLoadError> {
+    let payload_size =
+        usize::try_from(image.file_size).map_err(|_| ProcessLoadError::InvalidImage)?;
+    let relocation_size = usize::try_from(shared_library_relocation_table_size(image)?)
+        .map_err(|_| ProcessLoadError::InvalidImage)?;
+    let export_size =
+        usize::try_from(image.export_section_size).map_err(|_| ProcessLoadError::InvalidImage)?;
+    if payload_size > RESIDENT_SHARED_LIBRARY_PAYLOAD_BYTES
+        || relocation_size > RESIDENT_SHARED_LIBRARY_RELOCATION_BYTES
+        || export_size > DYNAMIC_LOADER_EXPORT_SECTION_BYTES
+    {
+        return Err(ProcessLoadError::InvalidImage);
+    }
+    Ok(())
+}
+
+unsafe fn resident_shared_library(
+    slot: u32,
+) -> Result<&'static ResidentSharedLibrary, ProcessLoadError> {
+    let slot = usize::try_from(slot).map_err(|_| ProcessLoadError::InvalidImage)?;
+    if slot >= RESIDENT_SHARED_LIBRARY_CACHE_SLOTS {
+        return Err(ProcessLoadError::InvalidImage);
+    }
+    let base = core::ptr::addr_of!(RESIDENT_SHARED_LIBRARIES) as *const ResidentSharedLibrary;
+    Ok(unsafe { &*base.add(slot) })
+}
+
+unsafe fn resident_shared_library_mut(
+    slot: u32,
+) -> Result<&'static mut ResidentSharedLibrary, ProcessLoadError> {
+    let slot = usize::try_from(slot).map_err(|_| ProcessLoadError::InvalidImage)?;
+    if slot >= RESIDENT_SHARED_LIBRARY_CACHE_SLOTS {
+        return Err(ProcessLoadError::InvalidImage);
+    }
+    let base = core::ptr::addr_of_mut!(RESIDENT_SHARED_LIBRARIES) as *mut ResidentSharedLibrary;
+    Ok(unsafe { &mut *base.add(slot) })
+}
+
+unsafe fn resident_shared_library_image(slot: u32) -> Result<SharedLibraryImage, ProcessLoadError> {
+    let entry = unsafe { resident_shared_library(slot)? };
+    if !entry.valid {
+        return Err(ProcessLoadError::InvalidImage);
+    }
+    Ok(entry.image)
 }
 
 fn read_needed_library_name<'a>(
@@ -4785,34 +5011,35 @@ unsafe fn copy_selected_section_to_loader_import_buffer(
     }
 }
 
-unsafe fn copy_shared_export_section_to_loader_buffer(
+unsafe fn copy_resident_shared_export_section_to_loader_buffer(
     index: u32,
-    metadata: crate::kfs::storage::FileMetadata,
-    library: SharedLibraryImage,
-    profile_file: crate::kfs::storage::FileReadProfileFile,
+    cache_slot: u32,
 ) -> Result<(), ProcessLoadError> {
     let slot = usize::try_from(index).map_err(|_| ProcessLoadError::InvalidImage)?;
     if slot >= MAX_DYNAMIC_IMPORT_LIBRARIES {
         return Err(ProcessLoadError::InvalidImage);
     }
-    let size =
-        usize::try_from(library.export_section_size).map_err(|_| ProcessLoadError::InvalidImage)?;
+    let entry = unsafe { resident_shared_library(cache_slot)? };
+    let size = usize::try_from(entry.image.export_section_size)
+        .map_err(|_| ProcessLoadError::InvalidImage)?;
     if size > DYNAMIC_LOADER_EXPORT_SECTION_BYTES {
         return Err(ProcessLoadError::InvalidImage);
     }
     let base = core::ptr::addr_of_mut!(LOADER_EXPORT_SECTIONS) as *mut u8;
     let dst = unsafe { base.add(slot * DYNAMIC_LOADER_EXPORT_SECTION_BYTES) };
-    unsafe {
-        crate::kfs::storage::copy_file_range_to_ram_profiled(
-            metadata,
-            library.export_section_offset,
-            dst as usize as u32,
-            library.export_section_size,
-            crate::kfs::storage::FileReadProfileKind::DynamicImport(profile_file),
-        )
-        .map_err(|_| ProcessLoadError::Storage)
-    }?;
-    crate::os_stats::record_dynamic_import_bytes(library.export_section_size);
+    let out = unsafe { core::slice::from_raw_parts_mut(dst, size) };
+    entry.copy_exports_to(out)?;
+    Ok(())
+}
+
+unsafe fn copy_resident_shared_library_payload_to_ram(
+    cache_slot: u32,
+    dst: u32,
+) -> Result<(), ProcessLoadError> {
+    let entry = unsafe { resident_shared_library(cache_slot)? };
+    let size =
+        usize::try_from(entry.image.file_size).map_err(|_| ProcessLoadError::InvalidImage)?;
+    unsafe { copy_bytes_to_ram(&entry.payload[..size], dst) };
     Ok(())
 }
 
@@ -4893,6 +5120,15 @@ fn relocation_batch_record_count(remaining_records: u32) -> u32 {
     min_u32(remaining_records, max_records)
 }
 
+fn shared_library_relocation_table_size(
+    image: SharedLibraryImage,
+) -> Result<u32, ProcessLoadError> {
+    image
+        .relocation_count
+        .checked_mul(crate::image::K16E_RELOCATION_RECORD_SIZE)
+        .ok_or(ProcessLoadError::AddressOverflow)
+}
+
 fn min_u32(left: u32, right: u32) -> u32 {
     if left < right {
         left
@@ -4970,6 +5206,32 @@ unsafe fn copy_relocation_batch_to_loader_buffer(
         .map_err(|_| ProcessLoadError::Storage)?;
     }
     let len = usize::try_from(byte_count).map_err(|_| ProcessLoadError::AddressOverflow)?;
+    let section = unsafe {
+        core::slice::from_raw_parts(
+            core::ptr::addr_of!(LOADER_RELOCATION_SECTION) as *const u8,
+            len,
+        )
+    };
+    Ok((section, records))
+}
+
+unsafe fn copy_resident_relocation_batch_to_loader_buffer(
+    cache_slot: u32,
+    start_index: u32,
+    remaining_records: u32,
+) -> Result<(&'static [u8], u32), ProcessLoadError> {
+    let records = relocation_batch_record_count(remaining_records);
+    if records == 0 {
+        return Ok((&[], 0));
+    }
+    let byte_count = records
+        .checked_mul(crate::image::K16E_RELOCATION_RECORD_SIZE)
+        .ok_or(ProcessLoadError::AddressOverflow)?;
+    let len = usize::try_from(byte_count).map_err(|_| ProcessLoadError::AddressOverflow)?;
+    let dst = core::ptr::addr_of_mut!(LOADER_RELOCATION_SECTION) as *mut u8;
+    let out = unsafe { core::slice::from_raw_parts_mut(dst, len) };
+    let entry = unsafe { resident_shared_library(cache_slot)? };
+    entry.copy_relocations_to(out, start_index, records)?;
     let section = unsafe {
         core::slice::from_raw_parts(
             core::ptr::addr_of!(LOADER_RELOCATION_SECTION) as *const u8,
@@ -5540,31 +5802,30 @@ fn validate_shared_library_header_bytes(
     Ok(())
 }
 
-unsafe fn apply_shared_library_relocations(
-    metadata: crate::kfs::storage::FileMetadata,
-    relocation_table_offset: u32,
-    relocation_count: u32,
-    memory_size: u32,
+unsafe fn apply_resident_shared_library_relocations(
+    cache_slot: u32,
     physical_base: u32,
     virtual_base: u32,
-    profile_file: crate::kfs::storage::FileReadProfileFile,
 ) -> Result<(), ProcessLoadError> {
+    let image = unsafe { resident_shared_library_image(cache_slot)? };
     let mut index = 0;
-    while index < relocation_count {
+    while index < image.relocation_count {
         let (batch, records) = unsafe {
-            copy_relocation_batch_to_loader_buffer(
-                metadata,
-                relocation_table_offset,
+            copy_resident_relocation_batch_to_loader_buffer(
+                cache_slot,
                 index,
-                relocation_count - index,
-                profile_file,
+                image.relocation_count - index,
             )?
         };
         let mut batch_index = 0;
         while batch_index < records {
             let (relocation_offset, relocation_kind) =
                 relocation_record_from_batch(batch, batch_index)?;
-            validate_dynamic_relocation_record(relocation_offset, relocation_kind, memory_size)?;
+            validate_dynamic_relocation_record(
+                relocation_offset,
+                relocation_kind,
+                image.memory_size,
+            )?;
             let field_addr = physical_base
                 .checked_add(relocation_offset)
                 .ok_or(ProcessLoadError::AddressOverflow)?;
@@ -6087,6 +6348,7 @@ mod tests {
             profile_file: crate::kfs::storage::FileReadProfileFile::OtherLibrary,
             image: SharedLibraryImage::empty(),
             relative_base: 0,
+            cache_slot: 0,
         };
 
         assert_eq!(library.file_metadata(), metadata);
@@ -6094,6 +6356,94 @@ mod tests {
             library.profile_file(),
             crate::kfs::storage::FileReadProfileFile::OtherLibrary
         );
+    }
+
+    #[test]
+    fn dynamic_library_cache_entry_matches_name_and_file_metadata() {
+        let metadata = crate::kfs::storage::FileMetadata {
+            inode_id: 7,
+            size_bytes: 4096,
+            extent_count: 1,
+            extent_start_blocks: [32, 0, 0, 0],
+            extent_block_counts: [8, 0, 0, 0],
+        };
+        let changed_metadata = crate::kfs::storage::FileMetadata {
+            size_bytes: 8192,
+            ..metadata
+        };
+        let image = SharedLibraryImage {
+            payload_offset: 92,
+            file_size: 4,
+            memory_size: 4,
+            relocation_table_offset: 96,
+            relocation_count: 1,
+            export_section_offset: 104,
+            export_section_size: 6,
+            export_count: 1,
+        };
+        let mut entry = ResidentSharedLibrary::empty();
+
+        assert!(!entry.matches(b"libkraft.kso", metadata));
+
+        entry
+            .store(
+                b"libkraft.kso",
+                metadata,
+                image,
+                b"code",
+                &[1, 2, 3, 4, 5, 6, 7, 8],
+                b"export",
+            )
+            .expect("cache entry stores library bytes");
+
+        assert!(entry.matches(b"libkraft.kso", metadata));
+        assert!(!entry.matches(b"libother.kso", metadata));
+        assert!(!entry.matches(b"libkraft.kso", changed_metadata));
+    }
+
+    #[test]
+    fn dynamic_library_cache_entry_copies_cached_sections() {
+        let metadata = crate::kfs::storage::FileMetadata {
+            inode_id: 7,
+            size_bytes: 4096,
+            extent_count: 1,
+            extent_start_blocks: [32, 0, 0, 0],
+            extent_block_counts: [8, 0, 0, 0],
+        };
+        let image = SharedLibraryImage {
+            payload_offset: 92,
+            file_size: 4,
+            memory_size: 4,
+            relocation_table_offset: 96,
+            relocation_count: 1,
+            export_section_offset: 104,
+            export_section_size: 6,
+            export_count: 1,
+        };
+        let mut entry = ResidentSharedLibrary::empty();
+        entry
+            .store(
+                b"libkraft.kso",
+                metadata,
+                image,
+                b"code",
+                &[1, 2, 3, 4, 5, 6, 7, 8],
+                b"export",
+            )
+            .expect("cache entry stores library bytes");
+
+        let mut payload = [0u8; 4];
+        let mut relocations = [0u8; 8];
+        let mut exports = [0u8; 6];
+        entry.copy_payload_to(&mut payload).expect("payload copies");
+        entry
+            .copy_relocations_to(&mut relocations, 0, 1)
+            .expect("relocations copy");
+        entry.copy_exports_to(&mut exports).expect("exports copy");
+
+        assert_eq!(&payload, b"code");
+        assert_eq!(relocations, [1, 2, 3, 4, 5, 6, 7, 8]);
+        assert_eq!(&exports, b"export");
     }
 
     #[test]
