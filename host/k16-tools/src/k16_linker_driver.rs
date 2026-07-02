@@ -26,6 +26,7 @@ pub fn run_k16_linker_driver(args: Vec<String>) -> Result<(), String> {
         config.target,
         K16LinkOptions {
             shared_cpu_helpers: false,
+            shareable_shared_object: false,
             imports: config.imports,
             dylibs,
         },

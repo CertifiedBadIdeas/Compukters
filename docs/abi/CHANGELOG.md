@@ -8,6 +8,11 @@
   that patch outside the private writable segment, so text-reloc shared objects
   cannot be mistaken for safely shareable libraries before PIC/base-relative
   code generation lands.
+- `k16 link --target shared-object --shareable` now emits K16E v7 for
+  relocation-free or private-relocation shared objects and fails hard when a
+  relocation would patch executable/read-only shared bytes. The default
+  `shared-object` target still emits legacy K16E v4 for current production
+  libraries until shared-library codegen stops producing text relocations.
 - K16FS was hard-renamed to KFS. The active filesystem ABI document is now
   `kfs-v1.md`, the on-disk superblock magic is `KFS\0\0`, and old `K16FS`
   images are rejected instead of migrated or accepted through compatibility
