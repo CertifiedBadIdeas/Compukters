@@ -1315,35 +1315,7 @@ class K16ShellRuntimeSmokeTest {
     }
 
     private fun k16ToolExecutable(): Path {
-        val toolchainConfig = Path.of("../../../config/k16-toolchain.json").readText()
-        val pin =
-            Regex(""""pin"\s*:\s*"([^"]+)"""")
-                .find(toolchainConfig)
-                ?.groupValues
-                ?.get(1)
-                ?: error("K16 toolchain config should declare pin")
-        val root = Path.of("../../../.toolchain/k16/$pin/${currentK16ToolchainHostId()}")
-        assertTrue(Files.isDirectory(root), "K16 toolchain root should exist at $root")
-        return root.resolve("bin/k16")
-    }
-
-    private fun currentK16ToolchainHostId(): String {
-        val osName = System.getProperty("os.name").lowercase()
-        val arch = System.getProperty("os.arch").lowercase()
-        val os =
-            when {
-                osName.contains("linux") -> "linux"
-                osName.contains("mac") || osName.contains("darwin") -> "macos"
-                osName.contains("windows") -> "windows"
-                else -> error("Unsupported K16 toolchain OS: $osName")
-            }
-        val cpu =
-            when (arch) {
-                "x86_64", "amd64" -> "x86_64"
-                "aarch64", "arm64" -> "aarch64"
-                else -> error("Unsupported K16 toolchain architecture: $arch")
-            }
-        return "$os-$cpu"
+        return Path.of("../../../.toolchain/build/cargo/k16-tools/release/k16")
     }
 }
 

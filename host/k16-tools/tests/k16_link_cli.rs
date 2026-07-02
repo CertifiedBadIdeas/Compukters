@@ -247,7 +247,49 @@ fn k16_link_shareable_shared_object_emits_v7_for_relocation_free_text() {
 }
 
 #[test]
-fn k16_link_shareable_shared_object_rejects_text_relocations() {
+fn k16_link_shareable_shared_object_materializes_internal_calls_as_pc_relative() {
+    let object_path = temp_file("shareable-provider-call-reloc.o");
+    let output_path = temp_file("shareable-provider-call-reloc.kso");
+    fs::write(
+        &object_path,
+        k16_object_with_text_relocation_to_symbol(2, "_start"),
+    )
+    .expect("object writes");
+
+    let output = Command::new(k16_binary())
+        .args([
+            "link",
+            "--target",
+            "shared-object",
+            "--shareable",
+            object_path.to_str().unwrap(),
+            "-o",
+            output_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("k16 link runs");
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let bytes = fs::read(output_path).expect("K16E output reads");
+    assert_eq!(
+        u16_at(&bytes, 4),
+        k16e::K16E_SHAREABLE_SHARED_OBJECT_VERSION
+    );
+    let shared = k16e::decode_k16_shared_object(&bytes).expect("shared object decodes");
+
+    assert_eq!(shared.relocations, Vec::new());
+    assert_eq!(
+        shared.payload,
+        vec![0x02, 0xe4, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00]
+    );
+}
+
+#[test]
+fn k16_link_shareable_shared_object_materializes_internal_absolute_addresses_as_pc_relative() {
     let object_path = temp_file("shareable-provider-reloc.o");
     let output_path = temp_file("shareable-provider-reloc.kso");
     fs::write(
@@ -269,11 +311,22 @@ fn k16_link_shareable_shared_object_rejects_text_relocations() {
         .output()
         .expect("k16 link runs");
 
-    assert!(!output.status.success());
-    let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr.contains("patches read-only shared object segment"),
-        "stderr: {stderr}"
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let bytes = fs::read(output_path).expect("K16E output reads");
+    assert_eq!(
+        u16_at(&bytes, 4),
+        k16e::K16E_SHAREABLE_SHARED_OBJECT_VERSION
+    );
+    let shared = k16e::decode_k16_shared_object(&bytes).expect("shared object decodes");
+
+    assert_eq!(shared.relocations, Vec::new());
+    assert_eq!(
+        shared.payload,
+        vec![0x02, 0xe4, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00]
     );
 }
 

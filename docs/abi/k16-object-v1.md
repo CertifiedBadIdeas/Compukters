@@ -56,9 +56,13 @@ object offsets. It also preserves base-relative relocation records so the
 kernel loader can rebase non-trivial shared object code at its process-local
 load address. With `--shareable`, the `shared-object` target emits K16E v7
 instead: executable/read-only bytes are separated from private writable bytes,
-and relocations must target only the private writable segment. A readonly/text
-relocation is a link-time error in this mode; the linker must not silently emit
-legacy v4 as a fallback. The `bios` target emits raw BIOS flash bytes and
+and remaining relocation records must target only the private writable segment.
+For internal symbols, the linker may rewrite canonical `const32 symbol`
+materialization sites carrying `R_K16_ABS32` or `R_K16_CALL32` into K16
+`pcadd32` instructions and omit those relocation records from the K16E output.
+A readonly/text relocation that cannot be materialized this way is a link-time
+error in this mode; the linker must not silently emit legacy v4 as a fallback.
+The `bios` target emits raw BIOS flash bytes and
 prefixes them with a reset-address trampoline that initializes `sp` to the
 current fixed 192 KiB stack top and jumps to `_start`. When `--map` is present,
 the linker writes a deterministic retained-section report beside the linked
@@ -329,7 +333,9 @@ value  name                field                         calculation
 
 `R_K16_ABS32` is used for absolute data references and for ordinary 32-bit
 address constants. The linker must reject the relocation if `S + A` does not
-fit in `u32`.
+fit in `u32`. In `--shareable` shared-object mode, an internal `R_K16_ABS32`
+against the immediate payload of a canonical `const32` may be rewritten to
+`pcadd32` with a PC-relative addend.
 
 `R_K16_CALL32` applies to the immediate payload of a canonical call
 materialization sequence:
@@ -341,7 +347,10 @@ call scratch
 
 It writes the same 32-bit value as `R_K16_ABS32`, but the distinct relocation
 kind lets the linker diagnose call-specific placement or relaxation rules in a
-future ABI. v1 linkers must not invent a direct-call encoding.
+future ABI. In `--shareable` shared-object mode, an internal `R_K16_CALL32`
+against the immediate payload of a canonical `const32` may be rewritten to
+`pcadd32` with a PC-relative addend. v1 linkers must not invent a direct-call
+encoding.
 
 `R_K16_BRANCH4` patches the low nibble of `branch_if_zero` or
 `branch_if_nonzero`. The computed word offset must be an integer in `-8..=7`;

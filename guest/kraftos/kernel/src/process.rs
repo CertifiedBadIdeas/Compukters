@@ -1441,33 +1441,11 @@ struct ChildArgvLayout {
 impl ChildArgvLayout {
     fn new(plan: DynamicUserLoadPlan, args: &[&[u8]]) -> Result<Self, ProcessLoadError> {
         if args.is_empty() {
-            return Ok(Self {
-                argc: 0,
-                table_ptr: 0,
-                arg_data_ptr: 0,
-                end: 0,
-            });
+            return Ok(Self::empty());
         }
-        if args.len() > k16_abi::syscall::MAX_RUN_ARGS {
-            return Err(ProcessLoadError::InvalidPath);
-        }
+        validate_child_argv_args(args)?;
         let table_ptr = align_up(plan.load_end, STACK_ALIGNMENT)?;
-        let table_bytes = (args.len() as u32)
-            .checked_mul(CHILD_ARG_ENTRY_BYTES)
-            .ok_or(ProcessLoadError::AddressOverflow)?;
-        let arg_data_ptr = table_ptr
-            .checked_add(table_bytes)
-            .ok_or(ProcessLoadError::AddressOverflow)?;
-        let mut cursor = arg_data_ptr;
-        for arg in args {
-            if arg.len() > k16_abi::syscall::MAX_RUN_ARG_BYTES {
-                return Err(ProcessLoadError::InvalidPath);
-            }
-            cursor = cursor
-                .checked_add(arg.len() as u32)
-                .ok_or(ProcessLoadError::AddressOverflow)?;
-        }
-        let end = align_up(cursor, HEAP_ALIGNMENT)?;
+        let (arg_data_ptr, end) = child_argv_extent(table_ptr, args)?;
         let heap_limit = heap_limit_from_stack_top(plan.stack_top)
             .map_err(|_| ProcessLoadError::ProgramTooLarge)?;
         if end > heap_limit {
@@ -1481,6 +1459,47 @@ impl ChildArgvLayout {
         })
     }
 
+    fn new_on_mapped_stack(
+        plan: MappedDynamicUserLoadPlan,
+        args: &[&[u8]],
+    ) -> Result<Self, ProcessLoadError> {
+        if args.is_empty() {
+            return Ok(Self::empty());
+        }
+        validate_child_argv_args(args)?;
+        if plan.stack_page_count() == 0 {
+            return Err(ProcessLoadError::ProgramTooLarge);
+        }
+        let table_ptr = align_up(plan.stack_map_start(), STACK_ALIGNMENT)?;
+        let (arg_data_ptr, storage_end) = child_argv_extent(table_ptr, args)?;
+        let stack_map_end = plan
+            .stack_map_start()
+            .checked_add(
+                plan.stack_page_count()
+                    .checked_mul(VM_PAGE_SIZE)
+                    .ok_or(ProcessLoadError::AddressOverflow)?,
+            )
+            .ok_or(ProcessLoadError::AddressOverflow)?;
+        if storage_end > stack_map_end || storage_end > plan.virtual_plan().stack_top {
+            return Err(ProcessLoadError::ProgramTooLarge);
+        }
+        Ok(Self {
+            argc: args.len() as u32,
+            table_ptr,
+            arg_data_ptr,
+            end: plan.virtual_plan().load_end,
+        })
+    }
+
+    const fn empty() -> Self {
+        Self {
+            argc: 0,
+            table_ptr: 0,
+            arg_data_ptr: 0,
+            end: 0,
+        }
+    }
+
     const fn child_argv(self) -> ChildArgv {
         ChildArgv {
             argc: self.argc,
@@ -1488,6 +1507,34 @@ impl ChildArgvLayout {
             end: self.end,
         }
     }
+}
+
+fn validate_child_argv_args(args: &[&[u8]]) -> Result<(), ProcessLoadError> {
+    if args.len() > k16_abi::syscall::MAX_RUN_ARGS {
+        return Err(ProcessLoadError::InvalidPath);
+    }
+    for arg in args {
+        if arg.len() > k16_abi::syscall::MAX_RUN_ARG_BYTES {
+            return Err(ProcessLoadError::InvalidPath);
+        }
+    }
+    Ok(())
+}
+
+fn child_argv_extent(table_ptr: u32, args: &[&[u8]]) -> Result<(u32, u32), ProcessLoadError> {
+    let table_bytes = (args.len() as u32)
+        .checked_mul(CHILD_ARG_ENTRY_BYTES)
+        .ok_or(ProcessLoadError::AddressOverflow)?;
+    let arg_data_ptr = table_ptr
+        .checked_add(table_bytes)
+        .ok_or(ProcessLoadError::AddressOverflow)?;
+    let mut cursor = arg_data_ptr;
+    for arg in args {
+        cursor = cursor
+            .checked_add(arg.len() as u32)
+            .ok_or(ProcessLoadError::AddressOverflow)?;
+    }
+    Ok((arg_data_ptr, align_up(cursor, HEAP_ALIGNMENT)?))
 }
 
 #[cfg(any(not(test), feature = "host-test"))]
@@ -3595,8 +3642,7 @@ pub unsafe fn install_mapped_child_argv(
     plan: MappedDynamicUserLoadPlan,
     args: &[&[u8]],
 ) -> Result<ChildArgv, ProcessLoadError> {
-    let virtual_plan = plan.virtual_plan();
-    let layout = ChildArgvLayout::new(virtual_plan, args)?;
+    let layout = ChildArgvLayout::new_on_mapped_stack(plan, args)?;
     if args.is_empty() {
         return Ok(layout.child_argv());
     }
@@ -5087,7 +5133,27 @@ unsafe fn read_selected_shared_library_image(
         crate::kfs::storage::copy_selected_file_range_to_ram_profiled(
             0,
             crate::kfs::storage::SCRATCH_ADDR,
-            crate::image::SHARED_K16E_V4_HEADER_SIZE,
+            6,
+            crate::kfs::storage::FileReadProfileKind::DynamicImport(profile_file),
+        )
+        .map_err(|_| ProcessLoadError::Storage)?;
+    }
+    let prefix = unsafe {
+        core::slice::from_raw_parts(crate::kfs::storage::SCRATCH_ADDR as usize as *const u8, 6)
+    };
+    if prefix.get(0..4) != Some(b"K16E") {
+        return Err(ProcessLoadError::InvalidImage);
+    }
+    let header_size = match header_u16(prefix, 4) {
+        4 => crate::image::SHARED_K16E_V4_HEADER_SIZE,
+        7 => crate::image::SHARED_K16E_V7_HEADER_SIZE,
+        _ => return Err(ProcessLoadError::InvalidImage),
+    };
+    unsafe {
+        crate::kfs::storage::copy_selected_file_range_to_ram_profiled(
+            0,
+            crate::kfs::storage::SCRATCH_ADDR,
+            header_size,
             crate::kfs::storage::FileReadProfileKind::DynamicImport(profile_file),
         )
         .map_err(|_| ProcessLoadError::Storage)?;
@@ -5095,13 +5161,32 @@ unsafe fn read_selected_shared_library_image(
     let header = unsafe {
         core::slice::from_raw_parts(
             crate::kfs::storage::SCRATCH_ADDR as usize as *const u8,
-            crate::image::SHARED_K16E_V4_HEADER_SIZE as usize,
+            header_size as usize,
         )
     };
-    validate_shared_library_header_bytes(header, unsafe {
+    let image = shared_library_image_from_header(header, unsafe {
         crate::kfs::storage::selected_file_size()
     })?;
-    crate::os_stats::record_dynamic_import_bytes(crate::image::SHARED_K16E_V4_HEADER_SIZE);
+    crate::os_stats::record_dynamic_import_bytes(header_size);
+    Ok(image)
+}
+
+fn shared_library_image_from_header(
+    header: &[u8],
+    inode_size: u32,
+) -> Result<SharedLibraryImage, ProcessLoadError> {
+    match header_u16(header, 4) {
+        4 => shared_library_image_from_v4_header(header, inode_size),
+        7 => shared_library_image_from_v7_header(header, inode_size),
+        _ => Err(ProcessLoadError::InvalidImage),
+    }
+}
+
+fn shared_library_image_from_v4_header(
+    header: &[u8],
+    inode_size: u32,
+) -> Result<SharedLibraryImage, ProcessLoadError> {
+    validate_shared_library_header_bytes(header, inode_size)?;
     Ok(SharedLibraryImage {
         payload_offset: header_u32(header, 40),
         file_size: header_u32(header, 44),
@@ -5111,6 +5196,30 @@ unsafe fn read_selected_shared_library_image(
         export_section_offset: header_u32(header, 80),
         export_section_size: header_u32(header, 84),
         export_count: header_u32(header, 88),
+    })
+}
+
+fn shared_library_image_from_v7_header(
+    header: &[u8],
+    inode_size: u32,
+) -> Result<SharedLibraryImage, ProcessLoadError> {
+    validate_shareable_shared_library_header_bytes(header, inode_size)?;
+    let readonly_file_size = header_u32(header, 44);
+    let writable_offset = header_u32(header, 56);
+    let writable_file_size = header_u32(header, 64);
+    let writable_memory_size = header_u32(header, 68);
+    if writable_file_size != 0 || writable_memory_size != 0 {
+        return Err(ProcessLoadError::InvalidImage);
+    }
+    Ok(SharedLibraryImage {
+        payload_offset: header_u32(header, 40),
+        file_size: readonly_file_size,
+        memory_size: writable_offset,
+        relocation_table_offset: header_u32(header, 80),
+        relocation_count: header_u32(header, 88),
+        export_section_offset: header_u32(header, 100),
+        export_section_size: header_u32(header, 104),
+        export_count: header_u32(header, 108),
     })
 }
 
@@ -5779,6 +5888,99 @@ fn validate_shared_library_header_bytes(
     let export_section_offset = header_u32(header, 80);
     let export_section_size = header_u32(header, 84);
     let export_count = header_u32(header, 88);
+    if export_count == 0
+        || export_section_offset
+            != relocation_table_offset
+                .checked_add(relocation_table_size)
+                .ok_or(ProcessLoadError::InvalidImage)?
+    {
+        return Err(ProcessLoadError::InvalidImage);
+    }
+    let expected_record_size = export_count
+        .checked_mul(crate::image::K16E_SHARED_EXPORT_RECORD_SIZE)
+        .ok_or(ProcessLoadError::InvalidImage)?;
+    if export_section_size < expected_record_size {
+        return Err(ProcessLoadError::InvalidImage);
+    }
+    let export_section_end = export_section_offset
+        .checked_add(export_section_size)
+        .ok_or(ProcessLoadError::InvalidImage)?;
+    if export_section_end > inode_size {
+        return Err(ProcessLoadError::InvalidImage);
+    }
+    Ok(())
+}
+
+fn validate_shareable_shared_library_header_bytes(
+    header: &[u8],
+    inode_size: u32,
+) -> Result<(), ProcessLoadError> {
+    if header.len() < crate::image::SHARED_K16E_V7_HEADER_SIZE as usize
+        || header.get(0..4) != Some(b"K16E")
+        || header_u16(header, 4) != 7
+        || header_u16(header, 6) != 32
+        || header_u16(header, 8) != 1
+        || header_u16(header, 10) != 0
+        || header_u32(header, 12) != 0
+        || header_u32(header, 16) != 32
+        || header_u32(header, 20) != 4
+        || header_u32(header, 24) != crate::image::K16eAbiKind::SharedObject as u32
+        || header_u32(header, 28) != 0
+        || header_u32(header, 32) != 1
+        || header_u32(header, 36) != 0
+        || header_u32(header, 40) != crate::image::SHARED_K16E_V7_PAYLOAD_OFFSET
+        || header_u32(header, 52) != crate::image::K16E_SECTION_KIND_WRITABLE_LOAD
+        || header_u32(header, 72) != 2
+        || header_u32(header, 76) != 0
+        || header_u32(header, 92) != 5
+        || header_u32(header, 96) != 0
+    {
+        return Err(ProcessLoadError::InvalidImage);
+    }
+
+    let readonly_file_size = header_u32(header, 44);
+    let readonly_memory_size = header_u32(header, 48);
+    if readonly_file_size == 0
+        || readonly_memory_size < readonly_file_size
+        || readonly_file_size % 2 != 0
+        || readonly_memory_size % 2 != 0
+    {
+        return Err(ProcessLoadError::InvalidImage);
+    }
+    let writable_offset = header_u32(header, 56);
+    let writable_file_offset = header_u32(header, 60);
+    let writable_file_size = header_u32(header, 64);
+    let writable_memory_size = header_u32(header, 68);
+    if writable_offset < readonly_memory_size
+        || writable_offset % 2 != 0
+        || writable_file_size % 2 != 0
+        || writable_memory_size % 2 != 0
+        || writable_memory_size < writable_file_size
+        || writable_file_offset
+            != crate::image::SHARED_K16E_V7_PAYLOAD_OFFSET
+                .checked_add(readonly_file_size)
+                .ok_or(ProcessLoadError::InvalidImage)?
+    {
+        return Err(ProcessLoadError::InvalidImage);
+    }
+    let relocation_table_offset = header_u32(header, 80);
+    let relocation_table_size = header_u32(header, 84);
+    let relocation_count = header_u32(header, 88);
+    let writable_file_end = writable_file_offset
+        .checked_add(writable_file_size)
+        .ok_or(ProcessLoadError::InvalidImage)?;
+    if relocation_table_offset != writable_file_end {
+        return Err(ProcessLoadError::InvalidImage);
+    }
+    let expected_relocation_table_size = relocation_count
+        .checked_mul(crate::image::K16E_RELOCATION_RECORD_SIZE)
+        .ok_or(ProcessLoadError::InvalidImage)?;
+    if relocation_table_size != expected_relocation_table_size {
+        return Err(ProcessLoadError::InvalidImage);
+    }
+    let export_section_offset = header_u32(header, 100);
+    let export_section_size = header_u32(header, 104);
+    let export_count = header_u32(header, 108);
     if export_count == 0
         || export_section_offset
             != relocation_table_offset
@@ -7636,6 +7838,49 @@ mod tests {
         assert_eq!(
             mapped.translate_address(layout.arg_data_ptr),
             Ok(0x0000_a030)
+        );
+    }
+
+    #[test]
+    fn mapped_child_argv_layout_uses_stack_when_image_end_is_page_aligned() {
+        let child_plan = DynamicUserLoadPlan {
+            load_base: 0x0001_0000,
+            load_end: 0x0001_4000,
+            entry_pc: 0x0001_0004,
+            stack_top: 0x0001_c000,
+            payload_dst: 0x0001_0000,
+            payload_len: 16,
+            zero_fill_addr: 0x0001_0010,
+            zero_fill_len: 16,
+        };
+        let mapped = MappedDynamicUserLoadPlan::new_committed(
+            child_plan,
+            0x0001_0000,
+            4,
+            0,
+            0,
+            0x0001_a000,
+            2,
+            0x0000_9000,
+        )
+        .expect("mapped load plan initializes");
+        let args = &[b"/bin/shell.kx".as_slice()];
+
+        let layout = ChildArgvLayout::new_on_mapped_stack(mapped, args)
+            .expect("argv layout initializes on mapped stack");
+
+        assert_eq!(
+            layout.child_argv(),
+            ChildArgv {
+                argc: 1,
+                table_ptr: 0x0001_a000,
+                end: 0x0001_4000,
+            }
+        );
+        assert_eq!(mapped.translate_address(layout.table_ptr), Ok(0x0000_d000));
+        assert_eq!(
+            mapped.translate_address(layout.arg_data_ptr),
+            Ok(0x0000_d008)
         );
     }
 

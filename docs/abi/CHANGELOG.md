@@ -6,13 +6,16 @@
   section, a private writable load section, relocation records, and exports.
   The host decoder, inspector, and kernel image parser reject v7 relocations
   that patch outside the private writable segment, so text-reloc shared objects
-  cannot be mistaken for safely shareable libraries before PIC/base-relative
-  code generation lands.
+  cannot be mistaken for safely shareable libraries.
+- K16 CPU v1 now defines `pcadd32`, a wide-immediate instruction that writes
+  `current_instruction_pc + imm32` to a register. The assembler, disassembler,
+  VM, and linker understand it.
 - `k16 link --target shared-object --shareable` now emits K16E v7 for
-  relocation-free or private-relocation shared objects and fails hard when a
-  relocation would patch executable/read-only shared bytes. The default
-  `shared-object` target still emits legacy K16E v4 for current production
-  libraries until shared-library codegen stops producing text relocations.
+  relocation-free or private-relocation shared objects. Internal `const32
+  symbol` sites with `R_K16_ABS32` or `R_K16_CALL32` are materialized as
+  `pcadd32` instead of loader-applied text relocations. The bundled
+  `/lib/libkraft.kso` production library now uses K16E v7 with no relocation
+  records.
 - K16FS was hard-renamed to KFS. The active filesystem ABI document is now
   `kfs-v1.md`, the on-disk superblock magic is `KFS\0\0`, and old `K16FS`
   images are rejected instead of migrated or accepted through compatibility

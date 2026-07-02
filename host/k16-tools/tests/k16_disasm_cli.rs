@@ -573,6 +573,43 @@ fn k16_disasm_prints_complete_instruction_surface_multiword_raw_words_and_branch
 }
 
 #[test]
+fn k16_disasm_prints_pc_relative_wide_immediate_instruction() {
+    let artifact_path = temp_file("bios-pcadd32.flash");
+    fs::write(
+        &artifact_path,
+        words_to_bytes(&[
+            pcadd32(3, 0xffff_fffa)[0],
+            pcadd32(3, 0xffff_fffa)[1],
+            pcadd32(3, 0xffff_fffa)[2],
+            halt(),
+        ]),
+    )
+    .expect("artifact writes");
+
+    let output = Command::new(k16_binary())
+        .args([
+            "disasm",
+            "--target",
+            "bios",
+            artifact_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("k16 disasm runs");
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("fff00000: e302 fffa ffff  pcadd32 r3, 0xfffffffa"),
+        "stdout: {stdout}"
+    );
+    assert!(stdout.contains("fff00006: 0001  halt"), "stdout: {stdout}");
+}
+
+#[test]
 fn k16_disasm_prints_extended_immediate_and_offset_instructions() {
     let artifact_path = temp_file("bios-extended-immediates.flash");
     fs::write(
@@ -821,6 +858,14 @@ fn store16(addr: u8, src: u8) -> u16 {
 fn const32(register: u8, value: u32) -> [u16; 3] {
     [
         0xe001 | (u16::from(register) << 8),
+        (value & 0xffff) as u16,
+        (value >> 16) as u16,
+    ]
+}
+
+fn pcadd32(register: u8, value: u32) -> [u16; 3] {
+    [
+        0xe002 | (u16::from(register) << 8),
         (value & 0xffff) as u16,
         (value >> 16) as u16,
     ]
