@@ -2944,6 +2944,11 @@ struct SharedLibraryImage {
     payload_offset: u32,
     file_size: u32,
     memory_size: u32,
+    readonly_file_size: u32,
+    readonly_memory_size: u32,
+    writable_offset: u32,
+    writable_file_size: u32,
+    writable_memory_size: u32,
     relocation_table_offset: u32,
     relocation_count: u32,
     export_section_offset: u32,
@@ -2957,6 +2962,11 @@ impl SharedLibraryImage {
             payload_offset: 0,
             file_size: 0,
             memory_size: 0,
+            readonly_file_size: 0,
+            readonly_memory_size: 0,
+            writable_offset: 0,
+            writable_file_size: 0,
+            writable_memory_size: 0,
             relocation_table_offset: 0,
             relocation_count: 0,
             export_section_offset: 0,
@@ -4627,12 +4637,8 @@ unsafe fn load_dynamic_import_libraries(
             .checked_add(entry.relative_base)
             .ok_or(ProcessLoadError::AddressOverflow)?;
         unsafe {
-            copy_resident_shared_library_payload_to_ram(entry.cache_slot(), library_base)?;
+            load_resident_shared_library_to_ram(entry.cache_slot(), library_base)?;
             crate::os_stats::record_library_load_bytes(library.file_size);
-            zero_fill_ram(
-                library_base + library.file_size,
-                library.memory_size - library.file_size,
-            );
             apply_resident_shared_library_relocations(
                 entry.cache_slot(),
                 library_base,
@@ -4660,12 +4666,8 @@ unsafe fn load_dynamic_import_libraries_mapped(
             .ok_or(ProcessLoadError::AddressOverflow)?;
         let physical_base = plan.translate_address(library_base)?;
         unsafe {
-            copy_resident_shared_library_payload_to_ram(entry.cache_slot(), physical_base)?;
+            load_resident_shared_library_to_ram(entry.cache_slot(), physical_base)?;
             crate::os_stats::record_library_load_bytes(library.file_size);
-            zero_fill_ram(
-                physical_base + library.file_size,
-                library.memory_size - library.file_size,
-            );
             apply_resident_shared_library_relocations(
                 entry.cache_slot(),
                 physical_base,
@@ -5078,14 +5080,67 @@ unsafe fn copy_resident_shared_export_section_to_loader_buffer(
     Ok(())
 }
 
-unsafe fn copy_resident_shared_library_payload_to_ram(
+unsafe fn load_resident_shared_library_to_ram(
     cache_slot: u32,
     dst: u32,
 ) -> Result<(), ProcessLoadError> {
     let entry = unsafe { resident_shared_library(cache_slot)? };
-    let size =
-        usize::try_from(entry.image.file_size).map_err(|_| ProcessLoadError::InvalidImage)?;
-    unsafe { copy_bytes_to_ram(&entry.payload[..size], dst) };
+    let image = entry.image;
+    let file_size = usize::try_from(image.file_size).map_err(|_| ProcessLoadError::InvalidImage)?;
+    let readonly_file_size =
+        usize::try_from(image.readonly_file_size).map_err(|_| ProcessLoadError::InvalidImage)?;
+    let writable_file_size =
+        usize::try_from(image.writable_file_size).map_err(|_| ProcessLoadError::InvalidImage)?;
+    let writable_payload_start = readonly_file_size;
+    let writable_payload_end = writable_payload_start
+        .checked_add(writable_file_size)
+        .ok_or(ProcessLoadError::InvalidImage)?;
+    let computed_memory_size = image
+        .writable_offset
+        .checked_add(image.writable_memory_size)
+        .ok_or(ProcessLoadError::InvalidImage)?;
+    if !entry.valid
+        || writable_payload_end != file_size
+        || writable_payload_end > RESIDENT_SHARED_LIBRARY_PAYLOAD_BYTES
+        || computed_memory_size != image.memory_size
+        || image.readonly_file_size > image.readonly_memory_size
+        || image.readonly_memory_size > image.writable_offset
+        || image.writable_file_size > image.writable_memory_size
+    {
+        return Err(ProcessLoadError::InvalidImage);
+    }
+
+    unsafe { copy_bytes_to_ram(&entry.payload[..readonly_file_size], dst) };
+    let readonly_zero_start = dst
+        .checked_add(image.readonly_file_size)
+        .ok_or(ProcessLoadError::AddressOverflow)?;
+    unsafe {
+        zero_fill_ram(
+            readonly_zero_start,
+            image.writable_offset - image.readonly_file_size,
+        )
+    };
+
+    if image.writable_memory_size > 0 {
+        let writable_dst = dst
+            .checked_add(image.writable_offset)
+            .ok_or(ProcessLoadError::AddressOverflow)?;
+        unsafe {
+            copy_bytes_to_ram(
+                &entry.payload[writable_payload_start..writable_payload_end],
+                writable_dst,
+            )
+        };
+        let writable_zero_start = writable_dst
+            .checked_add(image.writable_file_size)
+            .ok_or(ProcessLoadError::AddressOverflow)?;
+        unsafe {
+            zero_fill_ram(
+                writable_zero_start,
+                image.writable_memory_size - image.writable_file_size,
+            )
+        };
+    }
     Ok(())
 }
 
@@ -5187,10 +5242,17 @@ fn shared_library_image_from_v4_header(
     inode_size: u32,
 ) -> Result<SharedLibraryImage, ProcessLoadError> {
     validate_shared_library_header_bytes(header, inode_size)?;
+    let file_size = header_u32(header, 44);
+    let memory_size = header_u32(header, 48);
     Ok(SharedLibraryImage {
         payload_offset: header_u32(header, 40),
-        file_size: header_u32(header, 44),
-        memory_size: header_u32(header, 48),
+        file_size,
+        memory_size,
+        readonly_file_size: file_size,
+        readonly_memory_size: memory_size,
+        writable_offset: memory_size,
+        writable_file_size: 0,
+        writable_memory_size: 0,
         relocation_table_offset: header_u32(header, 60),
         relocation_count: header_u32(header, 68),
         export_section_offset: header_u32(header, 80),
@@ -5205,16 +5267,25 @@ fn shared_library_image_from_v7_header(
 ) -> Result<SharedLibraryImage, ProcessLoadError> {
     validate_shareable_shared_library_header_bytes(header, inode_size)?;
     let readonly_file_size = header_u32(header, 44);
+    let readonly_memory_size = header_u32(header, 48);
     let writable_offset = header_u32(header, 56);
     let writable_file_size = header_u32(header, 64);
     let writable_memory_size = header_u32(header, 68);
-    if writable_file_size != 0 || writable_memory_size != 0 {
-        return Err(ProcessLoadError::InvalidImage);
-    }
+    let file_size = readonly_file_size
+        .checked_add(writable_file_size)
+        .ok_or(ProcessLoadError::InvalidImage)?;
+    let memory_size = writable_offset
+        .checked_add(writable_memory_size)
+        .ok_or(ProcessLoadError::InvalidImage)?;
     Ok(SharedLibraryImage {
         payload_offset: header_u32(header, 40),
-        file_size: readonly_file_size,
-        memory_size: writable_offset,
+        file_size,
+        memory_size,
+        readonly_file_size,
+        readonly_memory_size,
+        writable_offset,
+        writable_file_size,
+        writable_memory_size,
         relocation_table_offset: header_u32(header, 80),
         relocation_count: header_u32(header, 88),
         export_section_offset: header_u32(header, 100),
@@ -6473,6 +6544,49 @@ mod tests {
         bytes
     }
 
+    fn shareable_shared_object_with_writable_payload_header() -> [u8; 112] {
+        let mut bytes = [0u8; 112];
+        bytes[0..4].copy_from_slice(b"K16E");
+        write_u16_le(&mut bytes, 4, 7);
+        write_u16_le(&mut bytes, 6, 32);
+        write_u16_le(&mut bytes, 8, 1);
+        write_u16_le(&mut bytes, 10, 0);
+        write_u32_le(&mut bytes, 12, 0);
+        write_u32_le(&mut bytes, 16, 32);
+        write_u32_le(&mut bytes, 20, 4);
+        write_u32_le(
+            &mut bytes,
+            24,
+            crate::image::K16eAbiKind::SharedObject as u32,
+        );
+        write_u32_le(&mut bytes, 28, 0);
+        write_u32_le(&mut bytes, 32, 1);
+        write_u32_le(&mut bytes, 36, 0);
+        write_u32_le(&mut bytes, 40, crate::image::SHARED_K16E_V7_PAYLOAD_OFFSET);
+        write_u32_le(&mut bytes, 44, 4);
+        write_u32_le(&mut bytes, 48, 4);
+        write_u32_le(
+            &mut bytes,
+            52,
+            crate::image::K16E_SECTION_KIND_WRITABLE_LOAD,
+        );
+        write_u32_le(&mut bytes, 56, 4096);
+        write_u32_le(&mut bytes, 60, 116);
+        write_u32_le(&mut bytes, 64, 2);
+        write_u32_le(&mut bytes, 68, 8);
+        write_u32_le(&mut bytes, 72, 2);
+        write_u32_le(&mut bytes, 76, 0);
+        write_u32_le(&mut bytes, 80, 118);
+        write_u32_le(&mut bytes, 84, 8);
+        write_u32_le(&mut bytes, 88, 1);
+        write_u32_le(&mut bytes, 92, 5);
+        write_u32_le(&mut bytes, 96, 0);
+        write_u32_le(&mut bytes, 100, 126);
+        write_u32_le(&mut bytes, 104, 18);
+        write_u32_le(&mut bytes, 108, 1);
+        bytes
+    }
+
     #[test]
     fn dynamic_user_image_uses_guest_k16e_metadata() {
         let image = dynamic_program_image();
@@ -6577,6 +6691,11 @@ mod tests {
             payload_offset: 92,
             file_size: 4,
             memory_size: 4,
+            readonly_file_size: 4,
+            readonly_memory_size: 4,
+            writable_offset: 4,
+            writable_file_size: 0,
+            writable_memory_size: 0,
             relocation_table_offset: 96,
             relocation_count: 1,
             export_section_offset: 104,
@@ -6616,6 +6735,11 @@ mod tests {
             payload_offset: 92,
             file_size: 4,
             memory_size: 4,
+            readonly_file_size: 4,
+            readonly_memory_size: 4,
+            writable_offset: 4,
+            writable_file_size: 0,
+            writable_memory_size: 0,
             relocation_table_offset: 96,
             relocation_count: 1,
             export_section_offset: 104,
@@ -6646,6 +6770,33 @@ mod tests {
         assert_eq!(&payload, b"code");
         assert_eq!(relocations, [1, 2, 3, 4, 5, 6, 7, 8]);
         assert_eq!(&exports, b"export");
+    }
+
+    #[test]
+    fn shared_library_v7_header_accepts_private_writable_payload() {
+        let header = shareable_shared_object_with_writable_payload_header();
+
+        let image = shared_library_image_from_header(&header, 144)
+            .expect("v7 shared library metadata accepts private writable payload");
+
+        assert_eq!(
+            image,
+            SharedLibraryImage {
+                payload_offset: 112,
+                file_size: 6,
+                memory_size: 4104,
+                readonly_file_size: 4,
+                readonly_memory_size: 4,
+                writable_offset: 4096,
+                writable_file_size: 2,
+                writable_memory_size: 8,
+                relocation_table_offset: 118,
+                relocation_count: 1,
+                export_section_offset: 126,
+                export_section_size: 18,
+                export_count: 1,
+            }
+        );
     }
 
     #[test]
