@@ -21,6 +21,7 @@ const DYNAMIC_LOADER_EXPORT_SECTION_BYTES: usize = 2048;
 const DYNAMIC_LOADER_RELOCATION_SECTION_BYTES: usize = 2048;
 const RESIDENT_SHARED_LIBRARY_CACHE_SLOTS: usize = MAX_DYNAMIC_IMPORT_LIBRARIES;
 const MAX_TRANSLATED_EXTRA_MAPPINGS: usize = MAX_DYNAMIC_IMPORT_LIBRARIES * 2;
+const MAX_TRANSLATED_SHARED_RANGES: usize = MAX_TRANSLATED_EXTRA_MAPPINGS;
 const RESIDENT_SHARED_LIBRARY_PAYLOAD_BYTES: usize = 4096;
 const RESIDENT_SHARED_LIBRARY_RELOCATION_BYTES: usize = 4096;
 const CHILD_ARG_ENTRY_BYTES: u32 = 8;
@@ -3235,14 +3236,32 @@ pub struct MappedDynamicUserLoadPlan {
     virtual_plan: DynamicUserLoadPlan,
     image_map_start: u32,
     image_page_count: u32,
+    private_image_page_count: u32,
     writable_offset: u32,
     writable_memory_size: u32,
     stack_map_start: u32,
     stack_page_count: u32,
     backing_start: u32,
     page_count: u32,
+    shared_ranges: [TranslatedSharedRange; MAX_TRANSLATED_SHARED_RANGES],
+    shared_range_count: u32,
     extra_mappings: [TranslatedExtraMapping; MAX_TRANSLATED_EXTRA_MAPPINGS],
     extra_mapping_count: u32,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+struct TranslatedSharedRange {
+    virtual_start: u32,
+    page_count: u32,
+}
+
+impl TranslatedSharedRange {
+    const fn empty() -> Self {
+        Self {
+            virtual_start: 0,
+            page_count: 0,
+        }
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -3294,12 +3313,15 @@ impl MappedDynamicUserLoadPlan {
             virtual_plan,
             image_map_start: map_start,
             image_page_count,
+            private_image_page_count: image_page_count,
             writable_offset: 0,
             writable_memory_size: 0,
             stack_map_start: image_map_end,
             stack_page_count,
             backing_start,
             page_count,
+            shared_ranges: [TranslatedSharedRange::empty(); MAX_TRANSLATED_SHARED_RANGES],
+            shared_range_count: 0,
             extra_mappings: [TranslatedExtraMapping::empty(); MAX_TRANSLATED_EXTRA_MAPPINGS],
             extra_mapping_count: 0,
         })
@@ -3315,6 +3337,30 @@ impl MappedDynamicUserLoadPlan {
         stack_page_count: u32,
         backing_start: u32,
     ) -> Result<Self, ProcessLoadError> {
+        Self::new_committed_with_shared_ranges(
+            virtual_plan,
+            image_map_start,
+            image_page_count,
+            writable_offset,
+            writable_memory_size,
+            stack_map_start,
+            stack_page_count,
+            backing_start,
+            &[],
+        )
+    }
+
+    fn new_committed_with_shared_ranges(
+        virtual_plan: DynamicUserLoadPlan,
+        image_map_start: u32,
+        image_page_count: u32,
+        writable_offset: u32,
+        writable_memory_size: u32,
+        stack_map_start: u32,
+        stack_page_count: u32,
+        backing_start: u32,
+        shared_ranges: &[TranslatedSharedRange],
+    ) -> Result<Self, ProcessLoadError> {
         if image_page_count == 0
             || stack_page_count > TRANSLATED_USER_STACK_PAGES
             || image_map_start % VM_PAGE_SIZE != 0
@@ -3323,9 +3369,6 @@ impl MappedDynamicUserLoadPlan {
         {
             return Err(ProcessLoadError::InvalidArena);
         }
-        let page_count = image_page_count
-            .checked_add(stack_page_count)
-            .ok_or(ProcessLoadError::AddressOverflow)?;
         let image_mapped_end = image_map_start
             .checked_add(
                 image_page_count
@@ -3336,6 +3379,22 @@ impl MappedDynamicUserLoadPlan {
         if virtual_plan.load_base < image_map_start || virtual_plan.load_end > image_mapped_end {
             return Err(ProcessLoadError::InvalidArena);
         }
+        let shared_range_count =
+            u32::try_from(shared_ranges.len()).map_err(|_| ProcessLoadError::ProgramTooLarge)?;
+        if shared_ranges.len() > MAX_TRANSLATED_SHARED_RANGES {
+            return Err(ProcessLoadError::ProgramTooLarge);
+        }
+        let shared_page_count =
+            validate_translated_shared_ranges(shared_ranges, image_map_start, image_mapped_end)?;
+        if shared_page_count >= image_page_count {
+            return Err(ProcessLoadError::InvalidArena);
+        }
+        let private_image_page_count = image_page_count
+            .checked_sub(shared_page_count)
+            .ok_or(ProcessLoadError::InvalidArena)?;
+        let page_count = private_image_page_count
+            .checked_add(stack_page_count)
+            .ok_or(ProcessLoadError::AddressOverflow)?;
         if writable_memory_size > 0 {
             let writable_start = virtual_plan
                 .load_base
@@ -3367,16 +3426,26 @@ impl MappedDynamicUserLoadPlan {
                 return Err(ProcessLoadError::InvalidArena);
             }
         }
+        let mut stored_shared_ranges =
+            [TranslatedSharedRange::empty(); MAX_TRANSLATED_SHARED_RANGES];
+        let mut index = 0;
+        while index < shared_ranges.len() {
+            stored_shared_ranges[index] = shared_ranges[index];
+            index += 1;
+        }
         Ok(Self {
             virtual_plan,
             image_map_start,
             image_page_count,
+            private_image_page_count,
             writable_offset,
             writable_memory_size,
             stack_map_start,
             stack_page_count,
             backing_start,
             page_count,
+            shared_ranges: stored_shared_ranges,
+            shared_range_count,
             extra_mappings: [TranslatedExtraMapping::empty(); MAX_TRANSLATED_EXTRA_MAPPINGS],
             extra_mapping_count: 0,
         })
@@ -3392,6 +3461,10 @@ impl MappedDynamicUserLoadPlan {
 
     pub const fn image_page_count(&self) -> u32 {
         self.image_page_count
+    }
+
+    pub const fn private_image_page_count(&self) -> u32 {
+        self.private_image_page_count
     }
 
     pub const fn writable_offset(&self) -> u32 {
@@ -3482,9 +3555,7 @@ impl MappedDynamicUserLoadPlan {
             )
             .ok_or(ProcessLoadError::AddressOverflow)?;
         if virtual_address >= self.image_map_start && virtual_address < image_mapped_end {
-            let offset = virtual_address
-                .checked_sub(self.image_map_start)
-                .ok_or(ProcessLoadError::InvalidArena)?;
+            let offset = self.private_image_offset(virtual_address)?;
             return self
                 .backing_start
                 .checked_add(offset)
@@ -3503,7 +3574,7 @@ impl MappedDynamicUserLoadPlan {
                 let stack_backing_start = self
                     .backing_start
                     .checked_add(
-                        self.image_page_count
+                        self.private_image_page_count
                             .checked_mul(VM_PAGE_SIZE)
                             .ok_or(ProcessLoadError::AddressOverflow)?,
                     )
@@ -3518,54 +3589,72 @@ impl MappedDynamicUserLoadPlan {
         }
         Err(ProcessLoadError::InvalidArena)
     }
+
+    fn private_image_offset(&self, virtual_address: u32) -> Result<u32, ProcessLoadError> {
+        let page_start = page_align_down(virtual_address);
+        if shared_range_end_containing(*self, page_start)?.is_some() {
+            return Err(ProcessLoadError::InvalidArena);
+        }
+        let virtual_page_index = page_start
+            .checked_sub(self.image_map_start)
+            .ok_or(ProcessLoadError::InvalidArena)?
+            / VM_PAGE_SIZE;
+        let shared_pages_before = self.shared_page_count_before(page_start)?;
+        let private_page_index = virtual_page_index
+            .checked_sub(shared_pages_before)
+            .ok_or(ProcessLoadError::InvalidArena)?;
+        private_page_index
+            .checked_mul(VM_PAGE_SIZE)
+            .and_then(|offset| offset.checked_add(virtual_address - page_start))
+            .ok_or(ProcessLoadError::AddressOverflow)
+    }
+
+    fn shared_page_count_before(&self, virtual_page_start: u32) -> Result<u32, ProcessLoadError> {
+        let count =
+            usize::try_from(self.shared_range_count).map_err(|_| ProcessLoadError::InvalidArena)?;
+        let mut pages = 0u32;
+        let mut index = 0;
+        while index < count {
+            let range = self.shared_ranges[index];
+            if range.virtual_start < virtual_page_start {
+                let range_end = range_end(range.virtual_start, range.page_count)?;
+                let covered_end = range_end.min(virtual_page_start);
+                pages = pages
+                    .checked_add((covered_end - range.virtual_start) / VM_PAGE_SIZE)
+                    .ok_or(ProcessLoadError::AddressOverflow)?;
+            }
+            index += 1;
+        }
+        Ok(pages)
+    }
 }
 
 fn allocate_mapped_dynamic_user_load_plan(
     plan: DynamicUserLoadPlan,
     allocator: &mut crate::page_alloc::PageFrameAllocator,
 ) -> Result<MappedDynamicUserLoadPlan, ProcessLoadError> {
-    let image_map_start = page_align_down(plan.load_base);
-    let image_map_end = page_align_up(plan.load_end)?;
-    if image_map_start >= image_map_end || plan.stack_top == 0 {
-        return Err(ProcessLoadError::InvalidArena);
-    }
-    let image_page_count = (image_map_end - image_map_start) / VM_PAGE_SIZE;
-    let stack_map_end = page_align_up(plan.stack_top)?;
-    let desired_stack_map_start = stack_map_end
-        .checked_sub(TRANSLATED_USER_STACK_BYTES)
-        .ok_or(ProcessLoadError::InvalidArena)?;
-    let stack_map_start = if desired_stack_map_start < image_map_end {
-        image_map_end
-    } else {
-        desired_stack_map_start
-    };
-    let stack_page_count = if stack_map_start >= stack_map_end {
-        0
-    } else {
-        (stack_map_end - stack_map_start) / VM_PAGE_SIZE
-    };
-    let page_count = image_page_count
-        .checked_add(stack_page_count)
-        .ok_or(ProcessLoadError::AddressOverflow)?;
-    let backing = allocator
-        .allocate_contiguous(page_count)
-        .map_err(page_alloc_error_to_process_load_error)?;
-    MappedDynamicUserLoadPlan::new_committed(
+    allocate_mapped_dynamic_user_load_plan_with_shared_ranges(plan, &[], allocator)
+}
+
+fn allocate_mapped_dynamic_user_load_plan_with_shared_ranges(
+    plan: DynamicUserLoadPlan,
+    shared_ranges: &[TranslatedSharedRange],
+    allocator: &mut crate::page_alloc::PageFrameAllocator,
+) -> Result<MappedDynamicUserLoadPlan, ProcessLoadError> {
+    allocate_mapped_dynamic_user_load_plan_with_writable_and_shared_ranges(
         plan,
-        image_map_start,
-        image_page_count,
         0,
         0,
-        stack_map_start,
-        stack_page_count,
-        backing.start,
+        shared_ranges,
+        allocator,
     )
 }
 
-fn allocate_mapped_dynamic_user_load_plan_with_writable(
+fn allocate_mapped_dynamic_user_load_plan_with_writable_and_shared_ranges(
     plan: DynamicUserLoadPlan,
     writable_offset: u32,
     writable_memory_size: u32,
+    shared_ranges: &[TranslatedSharedRange],
     allocator: &mut crate::page_alloc::PageFrameAllocator,
 ) -> Result<MappedDynamicUserLoadPlan, ProcessLoadError> {
     let image_map_start = page_align_down(plan.load_base);
@@ -3574,6 +3663,14 @@ fn allocate_mapped_dynamic_user_load_plan_with_writable(
         return Err(ProcessLoadError::InvalidArena);
     }
     let image_page_count = (image_map_end - image_map_start) / VM_PAGE_SIZE;
+    let shared_page_count =
+        validate_translated_shared_ranges(shared_ranges, image_map_start, image_map_end)?;
+    if shared_page_count >= image_page_count {
+        return Err(ProcessLoadError::InvalidArena);
+    }
+    let private_image_page_count = image_page_count
+        .checked_sub(shared_page_count)
+        .ok_or(ProcessLoadError::InvalidArena)?;
     let stack_map_end = page_align_up(plan.stack_top)?;
     let desired_stack_map_start = stack_map_end
         .checked_sub(TRANSLATED_USER_STACK_BYTES)
@@ -3588,13 +3685,13 @@ fn allocate_mapped_dynamic_user_load_plan_with_writable(
     } else {
         (stack_map_end - stack_map_start) / VM_PAGE_SIZE
     };
-    let page_count = image_page_count
+    let page_count = private_image_page_count
         .checked_add(stack_page_count)
         .ok_or(ProcessLoadError::AddressOverflow)?;
     let backing = allocator
         .allocate_contiguous(page_count)
         .map_err(page_alloc_error_to_process_load_error)?;
-    MappedDynamicUserLoadPlan::new_committed(
+    MappedDynamicUserLoadPlan::new_committed_with_shared_ranges(
         plan,
         image_map_start,
         image_page_count,
@@ -3603,7 +3700,64 @@ fn allocate_mapped_dynamic_user_load_plan_with_writable(
         stack_map_start,
         stack_page_count,
         backing.start,
+        shared_ranges,
     )
+}
+
+fn validate_translated_shared_ranges(
+    shared_ranges: &[TranslatedSharedRange],
+    image_map_start: u32,
+    image_map_end: u32,
+) -> Result<u32, ProcessLoadError> {
+    if shared_ranges.len() > MAX_TRANSLATED_SHARED_RANGES {
+        return Err(ProcessLoadError::ProgramTooLarge);
+    }
+    let mut total_pages = 0u32;
+    let mut index = 0;
+    while index < shared_ranges.len() {
+        let range = shared_ranges[index];
+        if range.page_count == 0
+            || range.virtual_start % VM_PAGE_SIZE != 0
+            || range.virtual_start < image_map_start
+        {
+            return Err(ProcessLoadError::InvalidArena);
+        }
+        let end = range_end(range.virtual_start, range.page_count)?;
+        if end > image_map_end {
+            return Err(ProcessLoadError::InvalidArena);
+        }
+        let mut previous = 0;
+        while previous < index {
+            if ranges_overlap(range, shared_ranges[previous])? {
+                return Err(ProcessLoadError::InvalidArena);
+            }
+            previous += 1;
+        }
+        total_pages = total_pages
+            .checked_add(range.page_count)
+            .ok_or(ProcessLoadError::AddressOverflow)?;
+        index += 1;
+    }
+    Ok(total_pages)
+}
+
+fn ranges_overlap(
+    left: TranslatedSharedRange,
+    right: TranslatedSharedRange,
+) -> Result<bool, ProcessLoadError> {
+    let left_end = range_end(left.virtual_start, left.page_count)?;
+    let right_end = range_end(right.virtual_start, right.page_count)?;
+    Ok(left.virtual_start < right_end && right.virtual_start < left_end)
+}
+
+fn range_end(virtual_start: u32, page_count: u32) -> Result<u32, ProcessLoadError> {
+    virtual_start
+        .checked_add(
+            page_count
+                .checked_mul(VM_PAGE_SIZE)
+                .ok_or(ProcessLoadError::AddressOverflow)?,
+        )
+        .ok_or(ProcessLoadError::AddressOverflow)
 }
 
 fn free_mapped_dynamic_user_load_plan(
@@ -3911,7 +4065,7 @@ unsafe fn create_translated_user_launch_from_mapped(
             .backing_start()
             .checked_add(
                 mapped
-                    .image_page_count()
+                    .private_image_page_count()
                     .checked_mul(VM_PAGE_SIZE)
                     .ok_or(ProcessLoadError::AddressOverflow)?,
             )
@@ -3961,11 +4115,11 @@ unsafe fn map_translated_private_image_range(
         .ok_or(ProcessLoadError::AddressOverflow)?;
     let mut cursor = virtual_start;
     while cursor < range_end {
-        if let Some(skip_end) = extra_mapping_end_containing(mapped, cursor)? {
+        if let Some(skip_end) = shared_range_end_containing(mapped, cursor)? {
             cursor = skip_end.min(range_end);
             continue;
         }
-        let next_skip_start = next_extra_mapping_start(mapped, cursor, range_end)?;
+        let next_skip_start = next_shared_range_start(mapped, cursor, range_end)?;
         let segment_end = next_skip_start.unwrap_or(range_end);
         let segment_page_count = (segment_end - cursor) / VM_PAGE_SIZE;
         unsafe {
@@ -3982,49 +4136,74 @@ unsafe fn map_translated_private_image_range(
     Ok(())
 }
 
-fn extra_mapping_end_containing(
+unsafe fn zero_fill_mapped_private_range(
+    mapped: MappedDynamicUserLoadPlan,
+    virtual_start: u32,
+    len: u32,
+) -> Result<(), ProcessLoadError> {
+    if len == 0 {
+        return Ok(());
+    }
+    let range_end = virtual_start
+        .checked_add(len)
+        .ok_or(ProcessLoadError::AddressOverflow)?;
+    let mut cursor = virtual_start;
+    while cursor < range_end {
+        let cursor_page = page_align_down(cursor);
+        if let Some(skip_end) = shared_range_end_containing(mapped, cursor_page)? {
+            cursor = skip_end.min(range_end);
+            continue;
+        }
+        let next_skip_start = next_shared_range_start(mapped, cursor, range_end)?;
+        let segment_end = next_skip_start.unwrap_or(range_end);
+        unsafe {
+            zero_fill_ram(
+                mapped.translate_address(cursor)?,
+                segment_end
+                    .checked_sub(cursor)
+                    .ok_or(ProcessLoadError::InvalidArena)?,
+            );
+        }
+        cursor = segment_end;
+    }
+    Ok(())
+}
+
+fn shared_range_end_containing(
     mapped: MappedDynamicUserLoadPlan,
     virtual_page_start: u32,
 ) -> Result<Option<u32>, ProcessLoadError> {
     let count =
-        usize::try_from(mapped.extra_mapping_count).map_err(|_| ProcessLoadError::InvalidArena)?;
+        usize::try_from(mapped.shared_range_count).map_err(|_| ProcessLoadError::InvalidArena)?;
     let mut index = 0;
     while index < count {
-        let mapping = mapped.extra_mappings[index];
-        let mapping_end = mapping
-            .virtual_start
-            .checked_add(
-                mapping
-                    .page_count
-                    .checked_mul(VM_PAGE_SIZE)
-                    .ok_or(ProcessLoadError::AddressOverflow)?,
-            )
-            .ok_or(ProcessLoadError::AddressOverflow)?;
-        if virtual_page_start >= mapping.virtual_start && virtual_page_start < mapping_end {
-            return Ok(Some(mapping_end));
+        let range = mapped.shared_ranges[index];
+        let end = range_end(range.virtual_start, range.page_count)?;
+        if virtual_page_start >= range.virtual_start && virtual_page_start < end {
+            return Ok(Some(end));
         }
         index += 1;
     }
     Ok(None)
 }
 
-fn next_extra_mapping_start(
+fn next_shared_range_start(
     mapped: MappedDynamicUserLoadPlan,
     virtual_start: u32,
     virtual_end: u32,
 ) -> Result<Option<u32>, ProcessLoadError> {
     let count =
-        usize::try_from(mapped.extra_mapping_count).map_err(|_| ProcessLoadError::InvalidArena)?;
+        usize::try_from(mapped.shared_range_count).map_err(|_| ProcessLoadError::InvalidArena)?;
     let mut next = virtual_end;
     let mut found = false;
     let mut index = 0;
     while index < count {
-        let mapping = mapped.extra_mappings[index];
-        if mapping.virtual_start > virtual_start
-            && mapping.virtual_start < next
-            && mapping.virtual_start < virtual_end
+        let range = mapped.shared_ranges[index];
+        if range.virtual_start > virtual_start
+            && range.virtual_start < next
+            && range.virtual_start < virtual_end
         {
-            next = mapping.virtual_start;
+            next = range.virtual_start;
             found = true;
         }
         index += 1;
@@ -4443,14 +4622,6 @@ pub unsafe fn load_selected_dynamic_user_program_mapped(
             return Err(error);
         }
     };
-    let zero_fill_addr = match mapped.zero_fill_addr() {
-        Ok(value) => value,
-        Err(error) => {
-            let _ = free_mapped_dynamic_user_load_plan(mapped, allocator);
-            return Err(error);
-        }
-    };
-
     if let Err(error) = unsafe {
         crate::kfs::storage::copy_selected_file_range_to_ram_profiled(
             payload_offset,
@@ -4464,8 +4635,11 @@ pub unsafe fn load_selected_dynamic_user_program_mapped(
         return Err(error);
     }
     crate::os_stats::record_program_load_bytes(plan.payload_len);
-    unsafe {
-        zero_fill_ram(zero_fill_addr, plan.zero_fill_len);
+    if let Err(error) =
+        unsafe { zero_fill_mapped_private_range(mapped, plan.zero_fill_addr, plan.zero_fill_len) }
+    {
+        let _ = free_mapped_dynamic_user_load_plan(mapped, allocator);
+        return Err(error);
     }
     if let Err(error) = unsafe {
         apply_selected_file_relocations_mapped(
@@ -4494,15 +4668,19 @@ unsafe fn load_selected_dynamic_user_program_with_imports_mapped(
         arena,
         DynamicUserImage::new(image.entry_offset, image.file_size, state.total_memory_size),
     )?;
+    let (shared_ranges, shared_range_count) =
+        translated_shared_ranges_for_imports(state, plan.load_base)?;
+    let shared_ranges = &shared_ranges[..shared_range_count];
     let mut mapped = if image.writable_memory_size > 0 {
-        allocate_mapped_dynamic_user_load_plan_with_writable(
+        allocate_mapped_dynamic_user_load_plan_with_writable_and_shared_ranges(
             plan,
             image.writable_offset,
             image.writable_memory_size,
+            shared_ranges,
             allocator,
         )?
     } else {
-        allocate_mapped_dynamic_user_load_plan(plan, allocator)?
+        allocate_mapped_dynamic_user_load_plan_with_shared_ranges(plan, shared_ranges, allocator)?
     };
     let payload_dst = match mapped.payload_dst() {
         Ok(value) => value,
@@ -4511,14 +4689,6 @@ unsafe fn load_selected_dynamic_user_program_with_imports_mapped(
             return Err(error);
         }
     };
-    let zero_fill_addr = match mapped.zero_fill_addr() {
-        Ok(value) => value,
-        Err(error) => {
-            let _ = free_mapped_dynamic_user_load_plan(mapped, allocator);
-            return Err(error);
-        }
-    };
-
     if let Err(error) = unsafe {
         crate::kfs::storage::copy_file_range_to_ram_profiled(
             state.main_file,
@@ -4533,8 +4703,11 @@ unsafe fn load_selected_dynamic_user_program_with_imports_mapped(
         return Err(error);
     }
     crate::os_stats::record_program_load_bytes(image.file_size);
-    unsafe {
-        zero_fill_ram(zero_fill_addr, plan.zero_fill_len);
+    if let Err(error) =
+        unsafe { zero_fill_mapped_private_range(mapped, plan.zero_fill_addr, plan.zero_fill_len) }
+    {
+        let _ = free_mapped_dynamic_user_load_plan(mapped, allocator);
+        return Err(error);
     }
     if image.writable_file_size > 0 {
         let writable_dst = match mapped.writable_payload_dst() {
@@ -4833,6 +5006,33 @@ unsafe fn load_dynamic_import_libraries(
     Ok(())
 }
 
+fn translated_shared_ranges_for_imports(
+    state: DynamicImportLoadState<'_>,
+    load_base: u32,
+) -> Result<([TranslatedSharedRange; MAX_TRANSLATED_SHARED_RANGES], usize), ProcessLoadError> {
+    let mut ranges = [TranslatedSharedRange::empty(); MAX_TRANSLATED_SHARED_RANGES];
+    let mut count = 0usize;
+    let mut index = 0;
+    while index < state.library_count {
+        let entry = state.library(index)?;
+        let page_count = entry.image.shareable_readonly_page_count()?;
+        if page_count != 0 {
+            if count >= MAX_TRANSLATED_SHARED_RANGES {
+                return Err(ProcessLoadError::ProgramTooLarge);
+            }
+            ranges[count] = TranslatedSharedRange {
+                virtual_start: load_base
+                    .checked_add(entry.relative_base)
+                    .ok_or(ProcessLoadError::AddressOverflow)?,
+                page_count,
+            };
+            count += 1;
+        }
+        index += 1;
+    }
+    Ok((ranges, count))
+}
+
 unsafe fn load_dynamic_import_libraries_mapped(
     state: DynamicImportLoadState<'_>,
     mut plan: MappedDynamicUserLoadPlan,
@@ -4848,7 +5048,6 @@ unsafe fn load_dynamic_import_libraries_mapped(
             .load_base
             .checked_add(entry.relative_base)
             .ok_or(ProcessLoadError::AddressOverflow)?;
-        let physical_base = plan.translate_address(library_base)?;
         let shared_readonly = unsafe {
             ensure_resident_shared_library_readonly_backing(entry.cache_slot(), allocator)?
         };
@@ -4860,20 +5059,33 @@ unsafe fn load_dynamic_import_libraries_mapped(
                     readonly_page_count,
                     user_executable_mmu_flags(),
                 )?;
-                load_resident_shared_library_private_segments_to_ram(
+                if library.writable_memory_size > 0 {
+                    let writable_dst = plan.translate_address(
+                        library_base
+                            .checked_add(library.writable_offset)
+                            .ok_or(ProcessLoadError::AddressOverflow)?,
+                    )?;
+                    load_resident_shared_library_private_segments_to_writable_ram(
+                        entry.cache_slot(),
+                        writable_dst,
+                    )?;
+                }
+                apply_resident_shared_library_relocations_mapped(
                     entry.cache_slot(),
-                    physical_base,
+                    plan,
+                    library_base,
                 )?;
                 crate::os_stats::record_library_load_bytes(library.writable_file_size);
             } else {
+                let physical_base = plan.translate_address(library_base)?;
                 load_resident_shared_library_to_ram(entry.cache_slot(), physical_base)?;
                 crate::os_stats::record_library_load_bytes(library.file_size);
+                apply_resident_shared_library_relocations(
+                    entry.cache_slot(),
+                    physical_base,
+                    library_base,
+                )?;
             }
-            apply_resident_shared_library_relocations(
-                entry.cache_slot(),
-                physical_base,
-                library_base,
-            )?;
         }
         index += 1;
     }
@@ -5388,9 +5600,9 @@ unsafe fn load_resident_shared_library_to_ram(
     Ok(())
 }
 
-unsafe fn load_resident_shared_library_private_segments_to_ram(
+unsafe fn load_resident_shared_library_private_segments_to_writable_ram(
     cache_slot: u32,
-    dst: u32,
+    writable_dst: u32,
 ) -> Result<(), ProcessLoadError> {
     let entry = unsafe { resident_shared_library(cache_slot)? };
     if !entry.valid || entry.image.writable_file_size > entry.image.writable_memory_size {
@@ -5411,9 +5623,6 @@ unsafe fn load_resident_shared_library_private_segments_to_ram(
     {
         return Err(ProcessLoadError::InvalidImage);
     }
-    let writable_dst = dst
-        .checked_add(entry.image.writable_offset)
-        .ok_or(ProcessLoadError::AddressOverflow)?;
     unsafe {
         copy_bytes_to_ram(
             &entry.payload[readonly_file_size..writable_payload_end],
@@ -6399,6 +6608,49 @@ unsafe fn apply_resident_shared_library_relocations(
     Ok(())
 }
 
+unsafe fn apply_resident_shared_library_relocations_mapped(
+    cache_slot: u32,
+    plan: MappedDynamicUserLoadPlan,
+    virtual_base: u32,
+) -> Result<(), ProcessLoadError> {
+    let image = unsafe { resident_shared_library_image(cache_slot)? };
+    let relative_base = virtual_base
+        .checked_sub(plan.virtual_plan().load_base)
+        .ok_or(ProcessLoadError::InvalidArena)?;
+    let mut index = 0;
+    while index < image.relocation_count {
+        let (batch, records) = unsafe {
+            copy_resident_relocation_batch_to_loader_buffer(
+                cache_slot,
+                index,
+                image.relocation_count - index,
+            )?
+        };
+        let mut batch_index = 0;
+        while batch_index < records {
+            let (relocation_offset, relocation_kind) =
+                relocation_record_from_batch(batch, batch_index)?;
+            validate_dynamic_relocation_record(
+                relocation_offset,
+                relocation_kind,
+                image.memory_size,
+            )?;
+            let field_offset = relative_base
+                .checked_add(relocation_offset)
+                .ok_or(ProcessLoadError::AddressOverflow)?;
+            let field_addr = plan.relocation_field_addr(field_offset)?;
+            let value = unsafe { read_u32_le(field_addr) };
+            let relocated = value
+                .checked_add(virtual_base)
+                .ok_or(ProcessLoadError::AddressOverflow)?;
+            unsafe { write_u32_le(field_addr, relocated) };
+            batch_index += 1;
+        }
+        index += records;
+    }
+    Ok(())
+}
+
 fn validate_dynamic_relocation_record(
     offset: u32,
     kind: u32,
@@ -7311,6 +7563,55 @@ mod tests {
         assert!(
             allocator.free_frames() >= 20,
             "uncommitted arena pages should remain available for shell child"
+        );
+    }
+
+    #[test]
+    fn shared_readonly_pages_are_not_counted_as_private_backing() {
+        let plan = DynamicUserLoadPlan {
+            load_base: 0x0001_0000,
+            load_end: 0x0001_3000,
+            entry_pc: 0x0001_0000,
+            stack_top: 0x0001_5000,
+            payload_dst: 0x0001_0000,
+            payload_len: 16,
+            zero_fill_addr: 0x0001_0010,
+            zero_fill_len: 0x2ff0,
+        };
+        let mut allocator =
+            crate::page_alloc::PageFrameAllocator::new(0x0003_0000).expect("allocator initializes");
+        allocator
+            .reserve_range(0, 0x0000_9000)
+            .expect("kernel frames reserve");
+        let shared_ranges = [TranslatedSharedRange {
+            virtual_start: 0x0001_1000,
+            page_count: 1,
+        }];
+
+        let mapped = allocate_mapped_dynamic_user_load_plan_with_shared_ranges(
+            plan,
+            &shared_ranges,
+            &mut allocator,
+        )
+        .expect("mapped load plan allocates only private pages");
+
+        assert_eq!(mapped.private_image_page_count(), 2);
+        assert_eq!(mapped.page_count(), 4);
+        assert_eq!(mapped.translate_address(0x0001_0000), Ok(0x0000_9000));
+        assert_eq!(
+            mapped.translate_address(0x0001_1000),
+            Err(ProcessLoadError::InvalidArena)
+        );
+        assert_eq!(mapped.translate_address(0x0001_2000), Ok(0x0000_a000));
+        assert_eq!(mapped.translate_address(0x0001_3000), Ok(0x0000_b000));
+        assert_eq!(
+            allocator
+                .allocate_contiguous(1)
+                .expect("next frame allocates after compact private backing"),
+            crate::page_alloc::FrameRange {
+                start: 0x0000_d000,
+                frame_count: 1,
+            }
         );
     }
 
@@ -9202,7 +9503,11 @@ mod tests {
             zero_fill_addr: 0x0001_0010,
             zero_fill_len: 0x2ff0,
         };
-        let mut mapped = MappedDynamicUserLoadPlan::new_committed(
+        let shared_ranges = [TranslatedSharedRange {
+            virtual_start: 0x0001_1000,
+            page_count: 1,
+        }];
+        let mut mapped = MappedDynamicUserLoadPlan::new_committed_with_shared_ranges(
             plan,
             0x0001_0000,
             3,
@@ -9211,10 +9516,13 @@ mod tests {
             0x0001_4000,
             1,
             0x0000_9000,
+            &shared_ranges,
         )
         .expect("mapped load plan initializes");
         let executable_flags = (k16_abi::computer::mmu0::FLAG_USER_ACCESSIBLE
             | k16_abi::computer::mmu0::FLAG_EXECUTABLE) as u32;
+        let writable_flags = (k16_abi::computer::mmu0::FLAG_USER_ACCESSIBLE
+            | k16_abi::computer::mmu0::FLAG_WRITABLE) as u32;
         mapped
             .add_extra_mapping(0x0001_1000, 0x0000_e000, 1, executable_flags as i32)
             .expect("shared readonly mapping is accepted");
@@ -9226,7 +9534,8 @@ mod tests {
         let writes = writes.as_slice();
         assert_mmu_map_physical(writes, 0x0001_0000, 0x0000_9000, 1, executable_flags);
         assert_mmu_map_physical(writes, 0x0001_1000, 0x0000_e000, 1, executable_flags);
-        assert_mmu_map_physical(writes, 0x0001_2000, 0x0000_b000, 1, executable_flags);
+        assert_mmu_map_physical(writes, 0x0001_2000, 0x0000_a000, 1, executable_flags);
+        assert_mmu_map_physical(writes, 0x0001_4000, 0x0000_b000, 1, writable_flags);
     }
 
     #[test]
