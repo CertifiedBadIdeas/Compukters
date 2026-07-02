@@ -111,6 +111,18 @@ class K16RuntimeProfilingArchitectureTest {
     }
 
     @Test
+    fun k16SharedKraftOwnsCUserlandSyscallWrappers() {
+        val source = Path.of("../../../build-scripts/src/main/kotlin/k16-firmware-convention.gradle.kts").readText()
+
+        assertTrue(source.contains("sources = listOf(k16CLibkraftSource.asFile, k16CLibcSyscallSource.asFile)"))
+        assertFalse(source.contains("k16CLibcSyscallSource.asFile, k16CSystem"))
+        assertFalse(source.contains("sources = listOf(k16CLibcSyscallSource.asFile, k16CSystemInitSource.asFile)"))
+        assertFalse(source.contains("sources = listOf(k16CLibcSyscallSource.asFile, k16CSystemShellSource.asFile)"))
+        assertTrue(source.contains("sources = listOf(k16CSystemInitSource.asFile)"))
+        assertTrue(source.contains("sources = listOf(k16CSystemShellSource.asFile)"))
+    }
+
+    @Test
     fun k16KernelBatchesContiguousFullBlockStorageReads() {
         val storageSource = Path.of("../../../guest/kraftos/kernel/src/kfs/storage.rs").readText()
         val deviceSource = Path.of("../../../guest/kraftos/kernel/src/kfs/device.rs").readText()
@@ -199,7 +211,7 @@ class K16RuntimeProfilingArchitectureTest {
         assertTrue(hostStorageSource.contains("requested_read_blocks"))
         assertTrue(hostStorageSource.contains("u64::from(self.block_count)"))
         assertTrue(hostStorageSource.contains("u64::from(byte_count)"))
-        assertTrue(jniSource.contains("values.push(13)"))
+        assertTrue(jniSource.contains("values.push(14)"))
         assertTrue(jniSource.contains("storage.requested_read_blocks"))
         assertTrue(jniSource.contains("storage.requested_read_bytes"))
         assertTrue(nativeBindingsSource.contains("VERSION_V13"))

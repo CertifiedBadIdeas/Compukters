@@ -653,7 +653,7 @@ fun Project.compileK16GuestCSharedObject(
     mapOutput: File,
     includeDir: File,
     archRuntimeSource: File,
-    source: File,
+    sources: List<File>,
 ) {
     val toolchain = resolveK16Toolchain()
     val clang = k16ClangExecutable.asFile
@@ -668,34 +668,37 @@ fun Project.compileK16GuestCSharedObject(
     mapOutput.delete()
 
     val archRuntimeObject = compileK16ArchRuntimeObject(targetDir, archRuntimeSource)
-    val providerObject = targetDir.resolve("${source.nameWithoutExtension}.o")
-
-    providerObject.delete()
-    val compileCommand =
-        listOf(
-            clang.absolutePath,
-            "--target=k16",
-            "-ffreestanding",
-            "-fno-builtin",
-            "-fno-stack-protector",
-            "-nostdlib",
-            "-Oz",
-            "-I",
-            includeDir.absolutePath,
-            "-c",
-            source.absolutePath,
-            "-o",
-            providerObject.absolutePath,
-        )
-    val compileExitCode =
-        ProcessBuilder(compileCommand)
-            .directory(projectDir)
-            .inheritIO()
-            .start()
-            .waitFor()
-    check(compileExitCode == 0) {
-        "K16 C shared provider compile failed with exit code $compileExitCode: ${compileCommand.joinToString(" ")}"
-    }
+    val providerObjects =
+        sources.map { source ->
+            val providerObject = targetDir.resolve("${source.nameWithoutExtension}.o")
+            providerObject.delete()
+            val compileCommand =
+                listOf(
+                    clang.absolutePath,
+                    "--target=k16",
+                    "-ffreestanding",
+                    "-fno-builtin",
+                    "-fno-stack-protector",
+                    "-nostdlib",
+                    "-Oz",
+                    "-I",
+                    includeDir.absolutePath,
+                    "-c",
+                    source.absolutePath,
+                    "-o",
+                    providerObject.absolutePath,
+                )
+            val compileExitCode =
+                ProcessBuilder(compileCommand)
+                    .directory(projectDir)
+                    .inheritIO()
+                    .start()
+                    .waitFor()
+            check(compileExitCode == 0) {
+                "K16 C shared provider compile failed with exit code $compileExitCode: ${compileCommand.joinToString(" ")}"
+            }
+            providerObject
+        }
 
     val linkCommand =
         listOf(
@@ -706,10 +709,12 @@ fun Project.compileK16GuestCSharedObject(
             "--map",
             mapOutput.absolutePath,
             archRuntimeObject.absolutePath,
-            providerObject.absolutePath,
-            "-o",
-            output.absolutePath,
-        )
+        ) +
+            providerObjects.map { it.absolutePath } +
+            listOf(
+                "-o",
+                output.absolutePath,
+            )
     val linkExitCode =
         ProcessBuilder(linkCommand)
             .directory(projectDir)
@@ -805,7 +810,6 @@ val compileK16SystemInit =
         group = "k16"
         inputs.dir(k16CLibcIncludeSource)
         inputs.file(k16CLibcStartupSource)
-        inputs.file(k16CLibcSyscallSource)
         inputs.file(k16CSystemInitSource)
         inputs.file(k16SharedKraftArtifact)
         inputs.file(k16ClangExecutable)
@@ -825,7 +829,7 @@ val compileK16SystemInit =
                 mapOutput = k16InitMapArtifact.get(),
                 includeDir = k16CLibcIncludeSource.asFile,
                 startupSource = k16CLibcStartupSource.asFile,
-                sources = listOf(k16CLibcSyscallSource.asFile, k16CSystemInitSource.asFile),
+                sources = listOf(k16CSystemInitSource.asFile),
                 dylibs = listOf(k16SharedKraftArtifact.get().asFile),
             )
         }
@@ -837,7 +841,6 @@ val compileK16SystemShell =
         group = "k16"
         inputs.dir(k16CLibcIncludeSource)
         inputs.file(k16CLibcStartupSource)
-        inputs.file(k16CLibcSyscallSource)
         inputs.file(k16CSystemShellSource)
         inputs.file(k16CArchRuntimeSource)
         inputs.file(k16SharedKraftArtifact)
@@ -858,7 +861,7 @@ val compileK16SystemShell =
                 mapOutput = k16ShellMapArtifact.get(),
                 includeDir = k16CLibcIncludeSource.asFile,
                 startupSource = k16CLibcStartupSource.asFile,
-                sources = listOf(k16CLibcSyscallSource.asFile, k16CSystemShellSource.asFile),
+                sources = listOf(k16CSystemShellSource.asFile),
                 dylibs = listOf(k16SharedKraftArtifact.get().asFile),
                 archRuntimeSource = k16CArchRuntimeSource.asFile,
             )
@@ -871,7 +874,6 @@ val compileK16SystemUname =
         group = "k16"
         inputs.dir(k16CLibcIncludeSource)
         inputs.file(k16CLibcStartupSource)
-        inputs.file(k16CLibcSyscallSource)
         inputs.file(k16CSystemUnameSource)
         inputs.file(k16SharedKraftArtifact)
         inputs.file(k16ClangExecutable)
@@ -891,7 +893,7 @@ val compileK16SystemUname =
                 mapOutput = k16UnameMapArtifact.get(),
                 includeDir = k16CLibcIncludeSource.asFile,
                 startupSource = k16CLibcStartupSource.asFile,
-                sources = listOf(k16CLibcSyscallSource.asFile, k16CSystemUnameSource.asFile),
+                sources = listOf(k16CSystemUnameSource.asFile),
                 dylibs = listOf(k16SharedKraftArtifact.get().asFile),
             )
         }
@@ -903,7 +905,6 @@ val compileK16SystemLs =
         group = "k16"
         inputs.dir(k16CLibcIncludeSource)
         inputs.file(k16CLibcStartupSource)
-        inputs.file(k16CLibcSyscallSource)
         inputs.file(k16CSystemLsSource)
         inputs.file(k16SharedKraftArtifact)
         inputs.file(k16ClangExecutable)
@@ -923,7 +924,7 @@ val compileK16SystemLs =
                 mapOutput = k16LsMapArtifact.get(),
                 includeDir = k16CLibcIncludeSource.asFile,
                 startupSource = k16CLibcStartupSource.asFile,
-                sources = listOf(k16CLibcSyscallSource.asFile, k16CSystemLsSource.asFile),
+                sources = listOf(k16CSystemLsSource.asFile),
                 dylibs = listOf(k16SharedKraftArtifact.get().asFile),
             )
         }
@@ -935,7 +936,6 @@ val compileK16SystemCat =
         group = "k16"
         inputs.dir(k16CLibcIncludeSource)
         inputs.file(k16CLibcStartupSource)
-        inputs.file(k16CLibcSyscallSource)
         inputs.file(k16CSystemCatSource)
         inputs.file(k16SharedKraftArtifact)
         inputs.file(k16ClangExecutable)
@@ -955,7 +955,7 @@ val compileK16SystemCat =
                 mapOutput = k16CatMapArtifact.get(),
                 includeDir = k16CLibcIncludeSource.asFile,
                 startupSource = k16CLibcStartupSource.asFile,
-                sources = listOf(k16CLibcSyscallSource.asFile, k16CSystemCatSource.asFile),
+                sources = listOf(k16CSystemCatSource.asFile),
                 dylibs = listOf(k16SharedKraftArtifact.get().asFile),
             )
         }
@@ -967,7 +967,6 @@ val compileK16SystemCp =
         group = "k16"
         inputs.dir(k16CLibcIncludeSource)
         inputs.file(k16CLibcStartupSource)
-        inputs.file(k16CLibcSyscallSource)
         inputs.file(k16CSystemCpSource)
         inputs.file(k16SharedKraftArtifact)
         inputs.file(k16ClangExecutable)
@@ -987,7 +986,7 @@ val compileK16SystemCp =
                 mapOutput = k16CpMapArtifact.get(),
                 includeDir = k16CLibcIncludeSource.asFile,
                 startupSource = k16CLibcStartupSource.asFile,
-                sources = listOf(k16CLibcSyscallSource.asFile, k16CSystemCpSource.asFile),
+                sources = listOf(k16CSystemCpSource.asFile),
                 dylibs = listOf(k16SharedKraftArtifact.get().asFile),
             )
         }
@@ -999,7 +998,6 @@ val compileK16SystemMv =
         group = "k16"
         inputs.dir(k16CLibcIncludeSource)
         inputs.file(k16CLibcStartupSource)
-        inputs.file(k16CLibcSyscallSource)
         inputs.file(k16CSystemMvSource)
         inputs.file(k16SharedKraftArtifact)
         inputs.file(k16ClangExecutable)
@@ -1019,7 +1017,7 @@ val compileK16SystemMv =
                 mapOutput = k16MvMapArtifact.get(),
                 includeDir = k16CLibcIncludeSource.asFile,
                 startupSource = k16CLibcStartupSource.asFile,
-                sources = listOf(k16CLibcSyscallSource.asFile, k16CSystemMvSource.asFile),
+                sources = listOf(k16CSystemMvSource.asFile),
                 dylibs = listOf(k16SharedKraftArtifact.get().asFile),
             )
         }
@@ -1031,7 +1029,6 @@ val compileK16SystemStat =
         group = "k16"
         inputs.dir(k16CLibcIncludeSource)
         inputs.file(k16CLibcStartupSource)
-        inputs.file(k16CLibcSyscallSource)
         inputs.file(k16CSystemStatSource)
         inputs.file(k16SharedKraftArtifact)
         inputs.file(k16ClangExecutable)
@@ -1051,7 +1048,7 @@ val compileK16SystemStat =
                 mapOutput = k16StatMapArtifact.get(),
                 includeDir = k16CLibcIncludeSource.asFile,
                 startupSource = k16CLibcStartupSource.asFile,
-                sources = listOf(k16CLibcSyscallSource.asFile, k16CSystemStatSource.asFile),
+                sources = listOf(k16CSystemStatSource.asFile),
                 dylibs = listOf(k16SharedKraftArtifact.get().asFile),
             )
         }
@@ -1063,7 +1060,6 @@ val compileK16SystemWrite =
         group = "k16"
         inputs.dir(k16CLibcIncludeSource)
         inputs.file(k16CLibcStartupSource)
-        inputs.file(k16CLibcSyscallSource)
         inputs.file(k16CSystemWriteSource)
         inputs.file(k16SharedKraftArtifact)
         inputs.file(k16ClangExecutable)
@@ -1083,7 +1079,7 @@ val compileK16SystemWrite =
                 mapOutput = k16WriteMapArtifact.get(),
                 includeDir = k16CLibcIncludeSource.asFile,
                 startupSource = k16CLibcStartupSource.asFile,
-                sources = listOf(k16CLibcSyscallSource.asFile, k16CSystemWriteSource.asFile),
+                sources = listOf(k16CSystemWriteSource.asFile),
                 dylibs = listOf(k16SharedKraftArtifact.get().asFile),
             )
         }
@@ -1095,7 +1091,6 @@ val compileK16SystemRm =
         group = "k16"
         inputs.dir(k16CLibcIncludeSource)
         inputs.file(k16CLibcStartupSource)
-        inputs.file(k16CLibcSyscallSource)
         inputs.file(k16CSystemRmSource)
         inputs.file(k16SharedKraftArtifact)
         inputs.file(k16ClangExecutable)
@@ -1115,7 +1110,7 @@ val compileK16SystemRm =
                 mapOutput = k16RmMapArtifact.get(),
                 includeDir = k16CLibcIncludeSource.asFile,
                 startupSource = k16CLibcStartupSource.asFile,
-                sources = listOf(k16CLibcSyscallSource.asFile, k16CSystemRmSource.asFile),
+                sources = listOf(k16CSystemRmSource.asFile),
                 dylibs = listOf(k16SharedKraftArtifact.get().asFile),
             )
         }
@@ -1127,7 +1122,6 @@ val compileK16SystemMkdir =
         group = "k16"
         inputs.dir(k16CLibcIncludeSource)
         inputs.file(k16CLibcStartupSource)
-        inputs.file(k16CLibcSyscallSource)
         inputs.file(k16CSystemMkdirSource)
         inputs.file(k16SharedKraftArtifact)
         inputs.file(k16ClangExecutable)
@@ -1147,7 +1141,7 @@ val compileK16SystemMkdir =
                 mapOutput = k16MkdirMapArtifact.get(),
                 includeDir = k16CLibcIncludeSource.asFile,
                 startupSource = k16CLibcStartupSource.asFile,
-                sources = listOf(k16CLibcSyscallSource.asFile, k16CSystemMkdirSource.asFile),
+                sources = listOf(k16CSystemMkdirSource.asFile),
                 dylibs = listOf(k16SharedKraftArtifact.get().asFile),
             )
         }
@@ -1159,7 +1153,6 @@ val compileK16SystemRmdir =
         group = "k16"
         inputs.dir(k16CLibcIncludeSource)
         inputs.file(k16CLibcStartupSource)
-        inputs.file(k16CLibcSyscallSource)
         inputs.file(k16CSystemRmdirSource)
         inputs.file(k16SharedKraftArtifact)
         inputs.file(k16ClangExecutable)
@@ -1179,7 +1172,7 @@ val compileK16SystemRmdir =
                 mapOutput = k16RmdirMapArtifact.get(),
                 includeDir = k16CLibcIncludeSource.asFile,
                 startupSource = k16CLibcStartupSource.asFile,
-                sources = listOf(k16CLibcSyscallSource.asFile, k16CSystemRmdirSource.asFile),
+                sources = listOf(k16CSystemRmdirSource.asFile),
                 dylibs = listOf(k16SharedKraftArtifact.get().asFile),
             )
         }
@@ -1190,6 +1183,7 @@ val compileK16SharedKraft =
         description = "Compiles and links the bundled Kraft shared userland library into a K16E shared object."
         group = "k16"
         inputs.file(k16CLibkraftSource)
+        inputs.file(k16CLibcSyscallSource)
         inputs.file(k16CArchRuntimeSource)
         inputs.dir(k16CLibcIncludeSource)
         inputsK16HostTools()
@@ -1207,7 +1201,7 @@ val compileK16SharedKraft =
                 mapOutput = k16SharedKraftMapArtifact.get(),
                 includeDir = k16CLibcIncludeSource.asFile,
                 archRuntimeSource = k16CArchRuntimeSource.asFile,
-                source = k16CLibkraftSource.asFile,
+                sources = listOf(k16CLibkraftSource.asFile, k16CLibcSyscallSource.asFile),
             )
         }
     }
