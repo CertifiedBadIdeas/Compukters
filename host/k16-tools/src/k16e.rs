@@ -5,6 +5,7 @@ pub const K16E_DYNAMIC_RUNTIME_VERSION: u16 = 3;
 pub const K16E_SHARED_OBJECT_VERSION: u16 = 4;
 pub const K16E_DYNAMIC_IMPORTS_VERSION: u16 = 5;
 pub const K16E_DYNAMIC_WRITABLE_SEGMENTS_VERSION: u16 = 6;
+pub const K16E_SHAREABLE_SHARED_OBJECT_VERSION: u16 = 7;
 pub const K16E_HEADER_SIZE: u16 = 32;
 pub const K16E_SECTION_RECORD_SIZE: u32 = 20;
 pub const K16E_ISA_K16: u16 = 1;
@@ -24,6 +25,7 @@ pub const K16E_SECTION_COUNT_SHARED_OBJECT: u32 = 3;
 pub const K16E_SECTION_COUNT_DYNAMIC_PROGRAM_WITH_IMPORTS: u32 = 4;
 pub const K16E_SECTION_COUNT_DYNAMIC_PROGRAM_WITH_WRITABLE: u32 = 3;
 pub const K16E_SECTION_COUNT_DYNAMIC_PROGRAM_WITH_WRITABLE_IMPORTS: u32 = 5;
+pub const K16E_SECTION_COUNT_SHAREABLE_SHARED_OBJECT: u32 = 4;
 pub const K16E_PAYLOAD_OFFSET_SINGLE_LOAD: u32 =
     K16E_SECTION_TABLE_OFFSET + K16E_SECTION_RECORD_SIZE;
 pub const K16E_PAYLOAD_OFFSET_DYNAMIC_PROGRAM: u32 =
@@ -38,6 +40,8 @@ pub const K16E_PAYLOAD_OFFSET_DYNAMIC_PROGRAM_WITH_WRITABLE: u32 = K16E_SECTION_
     + K16E_SECTION_RECORD_SIZE * K16E_SECTION_COUNT_DYNAMIC_PROGRAM_WITH_WRITABLE;
 pub const K16E_PAYLOAD_OFFSET_DYNAMIC_PROGRAM_WITH_WRITABLE_IMPORTS: u32 = K16E_SECTION_TABLE_OFFSET
     + K16E_SECTION_RECORD_SIZE * K16E_SECTION_COUNT_DYNAMIC_PROGRAM_WITH_WRITABLE_IMPORTS;
+pub const K16E_PAYLOAD_OFFSET_SHAREABLE_SHARED_OBJECT: u32 = K16E_SECTION_TABLE_OFFSET
+    + K16E_SECTION_RECORD_SIZE * K16E_SECTION_COUNT_SHAREABLE_SHARED_OBJECT;
 pub const K16E_RELOCATION_RECORD_SIZE: u32 = 8;
 pub const K16E_CPU_HELPER_REQUIREMENT_SIZE: u32 = 8;
 pub const K16E_CPU_HELPER_RELOCATION_RECORD_SIZE: u32 = 12;
@@ -258,6 +262,9 @@ pub struct K16eSharedExport {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct K16eSharedObject {
     pub memory_size: u32,
+    pub readonly_file_size: u32,
+    pub readonly_memory_size: u32,
+    pub writable_segment: Option<K16eWritableSegment>,
     pub payload: Vec<u8>,
     pub relocations: Vec<K16eRelocation>,
     pub exports: Vec<K16eSharedExport>,
@@ -763,9 +770,9 @@ fn encode_dynamic_k16_program_v6(
         validate_import_relocations(memory_size, needed_libraries.len(), import_relocations)?;
     }
 
-    let readonly_file_size = writable_segment.offset.min(
-        u32::try_from(payload.len()).map_err(|_| "K16E payload is too large".to_string())?,
-    );
+    let readonly_file_size = writable_segment
+        .offset
+        .min(u32::try_from(payload.len()).map_err(|_| "K16E payload is too large".to_string())?);
     if readonly_file_size == 0 {
         return Err("K16E readonly payload is empty".to_string());
     }
@@ -1394,8 +1401,7 @@ fn decode_dynamic_k16_program_v6(
             import_section_size,
             "import relocation section",
         )?;
-        let import_relocations =
-            decode_import_relocation_section(import_section, import_count)?;
+        let import_relocations = decode_import_relocation_section(import_section, import_count)?;
         validate_import_relocations(memory_size, needed_libraries.len(), &import_relocations)?;
         (needed_libraries, import_relocations)
     } else {
@@ -1521,7 +1527,105 @@ pub fn encode_k16_shared_object(
     Ok(bytes)
 }
 
+pub fn encode_shareable_k16_shared_object(
+    readonly_payload: &[u8],
+    readonly_memory_size: u32,
+    writable_payload: &[u8],
+    writable_segment: K16eWritableSegment,
+    relocations: &[K16eRelocation],
+    exports: &[K16eSharedExport],
+) -> Result<Vec<u8>, String> {
+    validate_shareable_shared_object_segments(
+        readonly_payload,
+        readonly_memory_size,
+        writable_payload,
+        writable_segment,
+        relocations,
+        exports,
+    )?;
+
+    let readonly_payload_size = u32::try_from(readonly_payload.len())
+        .map_err(|_| "K16E readonly payload is too large".to_string())?;
+    let writable_payload_size = u32::try_from(writable_payload.len())
+        .map_err(|_| "K16E writable payload is too large".to_string())?;
+    let relocation_table_size = u32::try_from(relocations.len())
+        .map_err(|_| "K16E relocation table is too large".to_string())?
+        .checked_mul(K16E_RELOCATION_RECORD_SIZE)
+        .ok_or_else(|| "K16E relocation table size overflows".to_string())?;
+    let export_section = encode_shared_export_section(exports)?;
+    let export_section_size = u32::try_from(export_section.len())
+        .map_err(|_| "K16E export section is too large".to_string())?;
+    let writable_file_offset = K16E_PAYLOAD_OFFSET_SHAREABLE_SHARED_OBJECT
+        .checked_add(readonly_payload_size)
+        .ok_or_else(|| "K16E writable payload offset overflows".to_string())?;
+    let relocation_table_offset = writable_file_offset
+        .checked_add(writable_payload_size)
+        .ok_or_else(|| "K16E relocation table offset overflows".to_string())?;
+    let export_section_offset = relocation_table_offset
+        .checked_add(relocation_table_size)
+        .ok_or_else(|| "K16E export section offset overflows".to_string())?;
+    let file_size = export_section_offset
+        .checked_add(export_section_size)
+        .ok_or_else(|| "K16E file size overflows".to_string())?;
+    let capacity =
+        usize::try_from(file_size).map_err(|_| "K16E file size does not fit usize".to_string())?;
+
+    let mut bytes = Vec::with_capacity(capacity);
+    bytes.extend_from_slice(K16E_MAGIC);
+    write_u16(&mut bytes, K16E_SHAREABLE_SHARED_OBJECT_VERSION);
+    write_u16(&mut bytes, K16E_HEADER_SIZE);
+    write_u16(&mut bytes, K16E_ISA_K16);
+    write_u16(&mut bytes, 0);
+    write_u32(&mut bytes, 0);
+    write_u32(&mut bytes, K16E_SECTION_TABLE_OFFSET);
+    write_u32(&mut bytes, K16E_SECTION_COUNT_SHAREABLE_SHARED_OBJECT);
+    write_u32(&mut bytes, K16eAbiKind::SharedObject.code());
+    write_u32(&mut bytes, 0);
+
+    write_u32(&mut bytes, K16E_SECTION_KIND_LOAD);
+    write_u32(&mut bytes, 0);
+    write_u32(&mut bytes, K16E_PAYLOAD_OFFSET_SHAREABLE_SHARED_OBJECT);
+    write_u32(&mut bytes, readonly_payload_size);
+    write_u32(&mut bytes, readonly_memory_size);
+
+    write_u32(&mut bytes, K16E_SECTION_KIND_WRITABLE_LOAD);
+    write_u32(&mut bytes, writable_segment.offset);
+    write_u32(&mut bytes, writable_file_offset);
+    write_u32(&mut bytes, writable_segment.file_size);
+    write_u32(&mut bytes, writable_segment.memory_size);
+
+    write_u32(&mut bytes, K16E_SECTION_KIND_RELOCATIONS);
+    write_u32(&mut bytes, 0);
+    write_u32(&mut bytes, relocation_table_offset);
+    write_u32(&mut bytes, relocation_table_size);
+    write_u32(&mut bytes, relocations.len() as u32);
+
+    write_u32(&mut bytes, K16E_SECTION_KIND_EXPORTS);
+    write_u32(&mut bytes, 0);
+    write_u32(&mut bytes, export_section_offset);
+    write_u32(&mut bytes, export_section_size);
+    write_u32(&mut bytes, exports.len() as u32);
+
+    bytes.extend_from_slice(readonly_payload);
+    bytes.extend_from_slice(writable_payload);
+    for relocation in relocations {
+        write_u32(&mut bytes, relocation.offset);
+        write_u32(&mut bytes, relocation.kind.code());
+    }
+    bytes.extend_from_slice(&export_section);
+    Ok(bytes)
+}
+
 pub fn decode_k16_shared_object(bytes: &[u8]) -> Result<K16eSharedObject, String> {
+    let version = read_u16(bytes, 4)?;
+    match version {
+        K16E_SHARED_OBJECT_VERSION => decode_k16_shared_object_v4(bytes),
+        K16E_SHAREABLE_SHARED_OBJECT_VERSION => decode_k16_shared_object_v7(bytes),
+        _ => Err(format!("unsupported shared object K16E version {version}")),
+    }
+}
+
+fn decode_k16_shared_object_v4(bytes: &[u8]) -> Result<K16eSharedObject, String> {
     let magic = bytes
         .get(0..4)
         .ok_or_else(|| "invalid K16E magic".to_string())?;
@@ -1671,6 +1775,146 @@ pub fn decode_k16_shared_object(bytes: &[u8]) -> Result<K16eSharedObject, String
 
     Ok(K16eSharedObject {
         memory_size,
+        readonly_file_size: 0,
+        readonly_memory_size: 0,
+        writable_segment: None,
+        payload,
+        relocations,
+        exports,
+    })
+}
+
+fn decode_k16_shared_object_v7(bytes: &[u8]) -> Result<K16eSharedObject, String> {
+    let magic = bytes
+        .get(0..4)
+        .ok_or_else(|| "invalid K16E magic".to_string())?;
+    if magic != K16E_MAGIC {
+        return Err("invalid K16E magic".to_string());
+    }
+    if bytes.len() < K16E_PAYLOAD_OFFSET_SHAREABLE_SHARED_OBJECT as usize {
+        return Err("K16E file is smaller than the shareable shared object header".to_string());
+    }
+    if read_u16(bytes, 4)? != K16E_SHAREABLE_SHARED_OBJECT_VERSION {
+        return Err("unsupported shareable shared object K16E version".to_string());
+    }
+    let header_size = read_u16(bytes, 6)?;
+    if header_size != K16E_HEADER_SIZE {
+        return Err(format!("unsupported K16E header size {header_size}"));
+    }
+    let isa = read_u16(bytes, 8)?;
+    if isa != K16E_ISA_K16 {
+        return Err(format!("unsupported K16E ISA {isa}"));
+    }
+    let flags = read_u16(bytes, 10)?;
+    if flags != 0 {
+        return Err(format!("unsupported K16E flags {flags:#06x}"));
+    }
+    if read_u32(bytes, 12)? != 0
+        || read_u32(bytes, 16)? != K16E_SECTION_TABLE_OFFSET
+        || read_u32(bytes, 20)? != K16E_SECTION_COUNT_SHAREABLE_SHARED_OBJECT
+        || K16eAbiKind::decode(read_u32(bytes, 24)?)? != K16eAbiKind::SharedObject
+        || read_u32(bytes, 28)? != 0
+    {
+        return Err("invalid shareable shared object K16E header".to_string());
+    }
+    if read_u32(bytes, 32)? != K16E_SECTION_KIND_LOAD
+        || read_u32(bytes, 36)? != 0
+        || read_u32(bytes, 40)? != K16E_PAYLOAD_OFFSET_SHAREABLE_SHARED_OBJECT
+        || read_u32(bytes, 52)? != K16E_SECTION_KIND_WRITABLE_LOAD
+        || read_u32(bytes, 72)? != K16E_SECTION_KIND_RELOCATIONS
+        || read_u32(bytes, 76)? != 0
+        || read_u32(bytes, 92)? != K16E_SECTION_KIND_EXPORTS
+        || read_u32(bytes, 96)? != 0
+    {
+        return Err("invalid shareable shared object K16E section table".to_string());
+    }
+
+    let readonly_payload_offset = read_u32(bytes, 40)?;
+    let readonly_file_size = read_u32(bytes, 44)?;
+    let readonly_memory_size = read_u32(bytes, 48)?;
+    let writable_segment = K16eWritableSegment {
+        offset: read_u32(bytes, 56)?,
+        file_size: read_u32(bytes, 64)?,
+        memory_size: read_u32(bytes, 68)?,
+    };
+    let writable_file_offset = read_u32(bytes, 60)?;
+    let relocation_table_offset = read_u32(bytes, 80)?;
+    let relocation_table_size = read_u32(bytes, 84)?;
+    let relocation_count = read_u32(bytes, 88)?;
+    let export_section_offset = read_u32(bytes, 100)?;
+    let export_section_size = read_u32(bytes, 104)?;
+    let export_count = read_u32(bytes, 108)?;
+
+    if writable_file_offset
+        != readonly_payload_offset
+            .checked_add(readonly_file_size)
+            .ok_or_else(|| "K16E writable payload offset overflows".to_string())?
+        || relocation_table_offset
+            != writable_file_offset
+                .checked_add(writable_segment.file_size)
+                .ok_or_else(|| "K16E relocation table offset overflows".to_string())?
+        || export_section_offset
+            != relocation_table_offset
+                .checked_add(relocation_table_size)
+                .ok_or_else(|| "K16E export section offset overflows".to_string())?
+    {
+        return Err("invalid shareable shared object K16E section offsets".to_string());
+    }
+    let expected_relocation_table_size = relocation_count
+        .checked_mul(K16E_RELOCATION_RECORD_SIZE)
+        .ok_or_else(|| "K16E relocation table size overflows".to_string())?;
+    if relocation_table_size != expected_relocation_table_size {
+        return Err("K16E relocation table size does not match relocation count".to_string());
+    }
+
+    let readonly_payload = bytes_slice(
+        bytes,
+        readonly_payload_offset,
+        readonly_file_size,
+        "readonly payload",
+    )?;
+    let writable_payload = bytes_slice(
+        bytes,
+        writable_file_offset,
+        writable_segment.file_size,
+        "writable payload",
+    )?;
+    let relocation_table = bytes_slice(
+        bytes,
+        relocation_table_offset,
+        relocation_table_size,
+        "relocation table",
+    )?;
+    let relocations = decode_relocation_table(relocation_table, relocation_count)?;
+    let export_section = bytes_slice(
+        bytes,
+        export_section_offset,
+        export_section_size,
+        "export section",
+    )?;
+    let exports = decode_shared_export_section(export_section, export_count)?;
+    validate_shareable_shared_object_segments(
+        readonly_payload,
+        readonly_memory_size,
+        writable_payload,
+        writable_segment,
+        &relocations,
+        &exports,
+    )?;
+
+    let memory_size = writable_segment
+        .offset
+        .checked_add(writable_segment.memory_size)
+        .ok_or_else(|| "K16E shared object memory size overflows".to_string())?;
+    let mut payload = Vec::with_capacity(readonly_payload.len() + writable_payload.len());
+    payload.extend_from_slice(readonly_payload);
+    payload.extend_from_slice(writable_payload);
+
+    Ok(K16eSharedObject {
+        memory_size,
+        readonly_file_size,
+        readonly_memory_size,
+        writable_segment: Some(writable_segment),
         payload,
         relocations,
         exports,
@@ -1730,6 +1974,73 @@ fn validate_dynamic_relocations(
             return Err(format!(
                 "K16E relocation range {:#010x}..{:#010x} exceeds dynamic memory size {memory_size:#010x}",
                 relocation.offset, relocation_end,
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_shareable_shared_object_segments(
+    readonly_payload: &[u8],
+    readonly_memory_size: u32,
+    writable_payload: &[u8],
+    writable_segment: K16eWritableSegment,
+    relocations: &[K16eRelocation],
+    exports: &[K16eSharedExport],
+) -> Result<(), String> {
+    if readonly_payload.is_empty() {
+        return Err("K16E readonly payload is empty".to_string());
+    }
+    if readonly_payload.len() % 2 != 0 {
+        return Err("K16E K16 readonly payload length must be even".to_string());
+    }
+    let readonly_file_size = u32::try_from(readonly_payload.len())
+        .map_err(|_| "K16E readonly payload is too large".to_string())?;
+    if readonly_memory_size < readonly_file_size {
+        return Err("K16E readonly memory size is smaller than readonly payload size".to_string());
+    }
+    if readonly_memory_size % 2 != 0 {
+        return Err("K16E K16 readonly memory size must be even".to_string());
+    }
+    if writable_payload.len() % 2 != 0 {
+        return Err("K16E K16 writable payload length must be even".to_string());
+    }
+    let writable_file_size = u32::try_from(writable_payload.len())
+        .map_err(|_| "K16E writable payload is too large".to_string())?;
+    if writable_segment.file_size != writable_file_size {
+        return Err("K16E writable payload size does not match writable segment".to_string());
+    }
+    if writable_segment.memory_size < writable_segment.file_size {
+        return Err("K16E writable memory size is smaller than writable payload size".to_string());
+    }
+    if writable_segment.offset < readonly_memory_size {
+        return Err("K16E writable segment overlaps read-only shared object segment".to_string());
+    }
+    if writable_segment.offset % 2 != 0
+        || writable_segment.file_size % 2 != 0
+        || writable_segment.memory_size % 2 != 0
+    {
+        return Err("K16E writable segment fields must be 2-byte aligned".to_string());
+    }
+    let memory_size = writable_segment
+        .offset
+        .checked_add(writable_segment.memory_size)
+        .ok_or_else(|| "K16E shared object memory size overflows".to_string())?;
+    validate_shared_exports(memory_size, exports)?;
+    validate_dynamic_relocations(memory_size, relocations)?;
+    let writable_end = writable_segment
+        .offset
+        .checked_add(writable_segment.memory_size)
+        .ok_or_else(|| "K16E writable segment range overflows".to_string())?;
+    for relocation in relocations {
+        let relocation_end = relocation
+            .offset
+            .checked_add(4)
+            .ok_or_else(|| "K16E relocation field range overflows".to_string())?;
+        if relocation.offset < writable_segment.offset || relocation_end > writable_end {
+            return Err(format!(
+                "K16E relocation at {:#010x} patches read-only shared object segment",
+                relocation.offset
             ));
         }
     }

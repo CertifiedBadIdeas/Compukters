@@ -149,6 +149,95 @@ fn k16e_shared_object_encodes_exports_without_entrypoint() {
 }
 
 #[test]
+fn k16e_shareable_shared_object_encodes_readonly_and_private_segments() {
+    let bytes = k16e::encode_shareable_k16_shared_object(
+        &[0x01, 0x00, 0x02, 0x00],
+        4,
+        &[0xaa, 0xbb],
+        k16e::K16eWritableSegment {
+            offset: 4096,
+            file_size: 2,
+            memory_size: 8,
+        },
+        &[k16e::K16eRelocation {
+            offset: 4096,
+            kind: k16e::K16eRelocationKind::Abs32,
+        }],
+        &[k16e::K16eSharedExport {
+            name: "k16rt.syscall0".to_string(),
+            offset: 0,
+        }],
+    )
+    .expect("shareable shared object K16E encodes");
+
+    assert_eq!(&bytes[0..4], b"K16E");
+    assert_eq!(u16_at(&bytes, 4), 7);
+    assert_eq!(u32_at(&bytes, 20), 4);
+    assert_eq!(u32_at(&bytes, 32), k16e::K16E_SECTION_KIND_LOAD);
+    assert_eq!(
+        u32_at(&bytes, 40),
+        k16e::K16E_PAYLOAD_OFFSET_SHAREABLE_SHARED_OBJECT
+    );
+    assert_eq!(u32_at(&bytes, 44), 4);
+    assert_eq!(u32_at(&bytes, 48), 4);
+    assert_eq!(u32_at(&bytes, 52), k16e::K16E_SECTION_KIND_WRITABLE_LOAD);
+    assert_eq!(u32_at(&bytes, 56), 4096);
+    assert_eq!(u32_at(&bytes, 64), 2);
+    assert_eq!(u32_at(&bytes, 68), 8);
+
+    let shared =
+        k16e::decode_k16_shared_object(&bytes).expect("shareable shared object K16E decodes");
+
+    assert_eq!(shared.payload, vec![0x01, 0x00, 0x02, 0x00, 0xaa, 0xbb]);
+    assert_eq!(shared.memory_size, 4104);
+    assert_eq!(shared.readonly_file_size, 4);
+    assert_eq!(shared.readonly_memory_size, 4);
+    assert_eq!(
+        shared.writable_segment,
+        Some(k16e::K16eWritableSegment {
+            offset: 4096,
+            file_size: 2,
+            memory_size: 8,
+        })
+    );
+    assert_eq!(
+        shared.relocations,
+        vec![k16e::K16eRelocation {
+            offset: 4096,
+            kind: k16e::K16eRelocationKind::Abs32,
+        }]
+    );
+}
+
+#[test]
+fn k16e_shareable_shared_object_rejects_readonly_relocations() {
+    let error = k16e::encode_shareable_k16_shared_object(
+        &[0x01, 0x00, 0x02, 0x00],
+        4,
+        &[],
+        k16e::K16eWritableSegment {
+            offset: 8,
+            file_size: 0,
+            memory_size: 4,
+        },
+        &[k16e::K16eRelocation {
+            offset: 2,
+            kind: k16e::K16eRelocationKind::Abs32,
+        }],
+        &[k16e::K16eSharedExport {
+            name: "k16rt.syscall0".to_string(),
+            offset: 0,
+        }],
+    )
+    .expect_err("readonly relocation is rejected");
+
+    assert!(
+        error.contains("read-only shared object segment"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
 fn k16e_dynamic_program_encodes_shared_library_imports() {
     let bytes = k16e::encode_dynamic_k16_program_with_imports(
         &[0x01, 0xe1, 0x00, 0x00],

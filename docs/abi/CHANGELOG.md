@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- K16E v7 now defines shareable shared-object metadata: a read-only shared load
+  section, a private writable load section, relocation records, and exports.
+  The host decoder, inspector, and kernel image parser reject v7 relocations
+  that patch outside the private writable segment, so text-reloc shared objects
+  cannot be mistaken for safely shareable libraries before PIC/base-relative
+  code generation lands.
 - K16FS was hard-renamed to KFS. The active filesystem ABI document is now
   `kfs-v1.md`, the on-disk superblock magic is `KFS\0\0`, and old `K16FS`
   images are rejected instead of migrated or accepted through compatibility

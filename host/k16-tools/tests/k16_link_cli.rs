@@ -839,10 +839,7 @@ fn k16_link_moves_interleaved_bss_to_k16e_zero_fill_memory_tail() {
     assert_eq!(u32_at(&bytes, 48), 24);
     assert_eq!(
         &bytes[52..],
-        &[
-            0x01, 0xe4, 0x10, 0x50, 0x01, 0x00, 0x0a, 0x50, 0x01, 0x00, 0xaa, 0xbb, 0xcc,
-            0xdd,
-        ]
+        &[0x01, 0xe4, 0x10, 0x50, 0x01, 0x00, 0x0a, 0x50, 0x01, 0x00, 0xaa, 0xbb, 0xcc, 0xdd,]
     );
 }
 
@@ -1522,19 +1519,7 @@ fn k16_object_with_interleaved_referenced_bss_section() -> Vec<u8> {
         4,
         12,
     );
-    section(
-        &mut bytes,
-        bss_section_name,
-        8,
-        0x3,
-        0,
-        0,
-        8,
-        0,
-        0,
-        4,
-        0,
-    );
+    section(&mut bytes, bss_section_name, 8, 0x3, 0, 0, 8, 0, 0, 4, 0);
     section(
         &mut bytes,
         tail_section_name,

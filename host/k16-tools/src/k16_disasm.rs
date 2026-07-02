@@ -31,7 +31,12 @@ pub fn disassemble_artifact(
         }
         K16ArtifactTarget::SharedObject => {
             let shared = k16e::decode_k16_shared_object(bytes)?;
-            (shared.payload, 0)
+            let code_bytes = if shared.readonly_file_size == 0 {
+                shared.payload
+            } else {
+                shared.payload[..shared.readonly_file_size as usize].to_vec()
+            };
+            (code_bytes, 0)
         }
         K16ArtifactTarget::Bios => (bytes.to_vec(), target.base_address()),
     };
