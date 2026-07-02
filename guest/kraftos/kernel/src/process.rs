@@ -20,6 +20,7 @@ const DYNAMIC_LOADER_IMPORT_SECTION_BYTES: usize = 2048;
 const DYNAMIC_LOADER_EXPORT_SECTION_BYTES: usize = 2048;
 const DYNAMIC_LOADER_RELOCATION_SECTION_BYTES: usize = 2048;
 const RESIDENT_SHARED_LIBRARY_CACHE_SLOTS: usize = MAX_DYNAMIC_IMPORT_LIBRARIES;
+const MAX_TRANSLATED_EXTRA_MAPPINGS: usize = MAX_DYNAMIC_IMPORT_LIBRARIES * 2;
 const RESIDENT_SHARED_LIBRARY_PAYLOAD_BYTES: usize = 4096;
 const RESIDENT_SHARED_LIBRARY_RELOCATION_BYTES: usize = 4096;
 const CHILD_ARG_ENTRY_BYTES: u32 = 8;
@@ -2974,6 +2975,20 @@ impl SharedLibraryImage {
             export_count: 0,
         }
     }
+
+    fn shareable_readonly_page_count(self) -> Result<u32, ProcessLoadError> {
+        if self.payload_offset != crate::image::SHARED_K16E_V7_PAYLOAD_OFFSET
+            || self.readonly_memory_size == 0
+        {
+            return Ok(0);
+        }
+        if self.readonly_memory_size % VM_PAGE_SIZE != 0
+            || self.readonly_file_size > self.readonly_memory_size
+        {
+            return Err(ProcessLoadError::InvalidImage);
+        }
+        Ok(self.readonly_memory_size / VM_PAGE_SIZE)
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -2983,6 +2998,8 @@ struct ResidentSharedLibrary {
     name_len: u32,
     file: crate::kfs::storage::FileMetadata,
     image: SharedLibraryImage,
+    readonly_backing_start: u32,
+    readonly_backing_page_count: u32,
     payload: [u8; RESIDENT_SHARED_LIBRARY_PAYLOAD_BYTES],
     relocations: [u8; RESIDENT_SHARED_LIBRARY_RELOCATION_BYTES],
     exports: [u8; DYNAMIC_LOADER_EXPORT_SECTION_BYTES],
@@ -2996,6 +3013,8 @@ impl ResidentSharedLibrary {
             name_len: 0,
             file: empty_file_metadata(),
             image: SharedLibraryImage::empty(),
+            readonly_backing_start: 0,
+            readonly_backing_page_count: 0,
             payload: [0; RESIDENT_SHARED_LIBRARY_PAYLOAD_BYTES],
             relocations: [0; RESIDENT_SHARED_LIBRARY_RELOCATION_BYTES],
             exports: [0; DYNAMIC_LOADER_EXPORT_SECTION_BYTES],
@@ -3036,6 +3055,8 @@ impl ResidentSharedLibrary {
         self.name_len = u32::try_from(name.len()).map_err(|_| ProcessLoadError::InvalidImage)?;
         self.file = file;
         self.image = image;
+        self.readonly_backing_start = 0;
+        self.readonly_backing_page_count = 0;
         self.payload[..payload.len()].copy_from_slice(payload);
         self.relocations[..relocations.len()].copy_from_slice(relocations);
         self.exports[..exports.len()].copy_from_slice(exports);
@@ -3220,6 +3241,27 @@ pub struct MappedDynamicUserLoadPlan {
     stack_page_count: u32,
     backing_start: u32,
     page_count: u32,
+    extra_mappings: [TranslatedExtraMapping; MAX_TRANSLATED_EXTRA_MAPPINGS],
+    extra_mapping_count: u32,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+struct TranslatedExtraMapping {
+    virtual_start: u32,
+    physical_start: u32,
+    page_count: u32,
+    flags: i32,
+}
+
+impl TranslatedExtraMapping {
+    const fn empty() -> Self {
+        Self {
+            virtual_start: 0,
+            physical_start: 0,
+            page_count: 0,
+            flags: 0,
+        }
+    }
 }
 
 impl MappedDynamicUserLoadPlan {
@@ -3258,6 +3300,8 @@ impl MappedDynamicUserLoadPlan {
             stack_page_count,
             backing_start,
             page_count,
+            extra_mappings: [TranslatedExtraMapping::empty(); MAX_TRANSLATED_EXTRA_MAPPINGS],
+            extra_mapping_count: 0,
         })
     }
 
@@ -3333,6 +3377,8 @@ impl MappedDynamicUserLoadPlan {
             stack_page_count,
             backing_start,
             page_count,
+            extra_mappings: [TranslatedExtraMapping::empty(); MAX_TRANSLATED_EXTRA_MAPPINGS],
+            extra_mapping_count: 0,
         })
     }
 
@@ -3370,6 +3416,34 @@ impl MappedDynamicUserLoadPlan {
 
     pub const fn page_count(&self) -> u32 {
         self.page_count
+    }
+
+    fn add_extra_mapping(
+        &mut self,
+        virtual_start: u32,
+        physical_start: u32,
+        page_count: u32,
+        flags: i32,
+    ) -> Result<(), ProcessLoadError> {
+        if page_count == 0
+            || virtual_start % VM_PAGE_SIZE != 0
+            || physical_start % VM_PAGE_SIZE != 0
+        {
+            return Err(ProcessLoadError::InvalidArena);
+        }
+        let slot = usize::try_from(self.extra_mapping_count)
+            .map_err(|_| ProcessLoadError::InvalidArena)?;
+        if slot >= MAX_TRANSLATED_EXTRA_MAPPINGS {
+            return Err(ProcessLoadError::ProgramTooLarge);
+        }
+        self.extra_mappings[slot] = TranslatedExtraMapping {
+            virtual_start,
+            physical_start,
+            page_count,
+            flags,
+        };
+        self.extra_mapping_count += 1;
+        Ok(())
     }
 
     pub fn payload_dst(&self) -> Result<u32, ProcessLoadError> {
@@ -3762,39 +3836,29 @@ unsafe fn create_translated_user_launch_from_mapped(
             .ok_or(ProcessLoadError::AddressOverflow)?;
         let readonly_page_count = (writable_map_start - mapped.map_start()) / VM_PAGE_SIZE;
         if readonly_page_count > 0 {
-            let map_result = unsafe {
-                mmu0_map_pages(
+            if let Err(error) = unsafe {
+                map_translated_private_image_range(
                     address_space,
+                    mapped,
                     mapped.map_start(),
-                    mapped.backing_start(),
                     readonly_page_count,
                     user_executable_mmu_flags(),
                 )
-            };
-            if let Err(error) = map_result {
+            } {
                 let _ = unsafe { mmu0_destroy_address_space(address_space) };
                 return Err(error);
             }
         }
-        let writable_backing_start = mapped
-            .backing_start()
-            .checked_add(
-                readonly_page_count
-                    .checked_mul(VM_PAGE_SIZE)
-                    .ok_or(ProcessLoadError::AddressOverflow)?,
-            )
-            .ok_or(ProcessLoadError::AddressOverflow)?;
         let writable_page_count = mapped.writable_memory_size() / VM_PAGE_SIZE;
-        let map_result = unsafe {
-            mmu0_map_pages(
+        if let Err(error) = unsafe {
+            map_translated_private_image_range(
                 address_space,
+                mapped,
                 writable_map_start,
-                writable_backing_start,
                 writable_page_count,
                 user_writable_mmu_flags(),
             )
-        };
-        if let Err(error) = map_result {
+        } {
             let _ = unsafe { mmu0_destroy_address_space(address_space) };
             return Err(error);
         }
@@ -3811,41 +3875,36 @@ unsafe fn create_translated_user_launch_from_mapped(
                         .ok_or(ProcessLoadError::AddressOverflow)?,
                 )
                 .ok_or(ProcessLoadError::AddressOverflow)?;
-            let executable_tail_backing_start = writable_backing_start
-                .checked_add(
-                    writable_page_count
-                        .checked_mul(VM_PAGE_SIZE)
-                        .ok_or(ProcessLoadError::AddressOverflow)?,
-                )
-                .ok_or(ProcessLoadError::AddressOverflow)?;
-            let map_result = unsafe {
-                mmu0_map_pages(
+            if let Err(error) = unsafe {
+                map_translated_private_image_range(
                     address_space,
+                    mapped,
                     executable_tail_map_start,
-                    executable_tail_backing_start,
                     executable_tail_page_count,
                     user_executable_mmu_flags(),
                 )
-            };
-            if let Err(error) = map_result {
+            } {
                 let _ = unsafe { mmu0_destroy_address_space(address_space) };
                 return Err(error);
             }
         }
     } else {
-        let map_result = unsafe {
-            mmu0_map_pages(
+        if let Err(error) = unsafe {
+            map_translated_private_image_range(
                 address_space,
+                mapped,
                 mapped.map_start(),
-                mapped.backing_start(),
                 mapped.image_page_count(),
                 user_executable_mmu_flags(),
             )
-        };
-        if let Err(error) = map_result {
+        } {
             let _ = unsafe { mmu0_destroy_address_space(address_space) };
             return Err(error);
         }
+    }
+    if let Err(error) = unsafe { map_translated_extra_mappings(address_space, mapped) } {
+        let _ = unsafe { mmu0_destroy_address_space(address_space) };
+        return Err(error);
     }
     if mapped.stack_page_count() > 0 {
         let stack_backing_start = mapped
@@ -3881,6 +3940,123 @@ unsafe fn create_translated_user_launch_from_mapped(
             frame_count: mapped.page_count(),
         }),
     })
+}
+
+unsafe fn map_translated_private_image_range(
+    address_space: u32,
+    mapped: MappedDynamicUserLoadPlan,
+    virtual_start: u32,
+    page_count: u32,
+    flags: i32,
+) -> Result<(), ProcessLoadError> {
+    if page_count == 0 || virtual_start % VM_PAGE_SIZE != 0 {
+        return Err(ProcessLoadError::InvalidArena);
+    }
+    let range_end = virtual_start
+        .checked_add(
+            page_count
+                .checked_mul(VM_PAGE_SIZE)
+                .ok_or(ProcessLoadError::AddressOverflow)?,
+        )
+        .ok_or(ProcessLoadError::AddressOverflow)?;
+    let mut cursor = virtual_start;
+    while cursor < range_end {
+        if let Some(skip_end) = extra_mapping_end_containing(mapped, cursor)? {
+            cursor = skip_end.min(range_end);
+            continue;
+        }
+        let next_skip_start = next_extra_mapping_start(mapped, cursor, range_end)?;
+        let segment_end = next_skip_start.unwrap_or(range_end);
+        let segment_page_count = (segment_end - cursor) / VM_PAGE_SIZE;
+        unsafe {
+            mmu0_map_pages(
+                address_space,
+                cursor,
+                mapped.translate_address(cursor)?,
+                segment_page_count,
+                flags,
+            )?
+        };
+        cursor = segment_end;
+    }
+    Ok(())
+}
+
+fn extra_mapping_end_containing(
+    mapped: MappedDynamicUserLoadPlan,
+    virtual_page_start: u32,
+) -> Result<Option<u32>, ProcessLoadError> {
+    let count =
+        usize::try_from(mapped.extra_mapping_count).map_err(|_| ProcessLoadError::InvalidArena)?;
+    let mut index = 0;
+    while index < count {
+        let mapping = mapped.extra_mappings[index];
+        let mapping_end = mapping
+            .virtual_start
+            .checked_add(
+                mapping
+                    .page_count
+                    .checked_mul(VM_PAGE_SIZE)
+                    .ok_or(ProcessLoadError::AddressOverflow)?,
+            )
+            .ok_or(ProcessLoadError::AddressOverflow)?;
+        if virtual_page_start >= mapping.virtual_start && virtual_page_start < mapping_end {
+            return Ok(Some(mapping_end));
+        }
+        index += 1;
+    }
+    Ok(None)
+}
+
+fn next_extra_mapping_start(
+    mapped: MappedDynamicUserLoadPlan,
+    virtual_start: u32,
+    virtual_end: u32,
+) -> Result<Option<u32>, ProcessLoadError> {
+    let count =
+        usize::try_from(mapped.extra_mapping_count).map_err(|_| ProcessLoadError::InvalidArena)?;
+    let mut next = virtual_end;
+    let mut found = false;
+    let mut index = 0;
+    while index < count {
+        let mapping = mapped.extra_mappings[index];
+        if mapping.virtual_start > virtual_start
+            && mapping.virtual_start < next
+            && mapping.virtual_start < virtual_end
+        {
+            next = mapping.virtual_start;
+            found = true;
+        }
+        index += 1;
+    }
+    if found {
+        Ok(Some(next))
+    } else {
+        Ok(None)
+    }
+}
+
+unsafe fn map_translated_extra_mappings(
+    address_space: u32,
+    mapped: MappedDynamicUserLoadPlan,
+) -> Result<(), ProcessLoadError> {
+    let count =
+        usize::try_from(mapped.extra_mapping_count).map_err(|_| ProcessLoadError::InvalidArena)?;
+    let mut index = 0;
+    while index < count {
+        let mapping = mapped.extra_mappings[index];
+        unsafe {
+            mmu0_map_pages(
+                address_space,
+                mapping.virtual_start,
+                mapping.physical_start,
+                mapping.page_count,
+                mapping.flags,
+            )?
+        };
+        index += 1;
+    }
+    Ok(())
 }
 
 fn page_alloc_error_to_process_load_error(
@@ -4318,7 +4494,7 @@ unsafe fn load_selected_dynamic_user_program_with_imports_mapped(
         arena,
         DynamicUserImage::new(image.entry_offset, image.file_size, state.total_memory_size),
     )?;
-    let mapped = if image.writable_memory_size > 0 {
+    let mut mapped = if image.writable_memory_size > 0 {
         allocate_mapped_dynamic_user_load_plan_with_writable(
             plan,
             image.writable_offset,
@@ -4396,10 +4572,13 @@ unsafe fn load_selected_dynamic_user_program_with_imports_mapped(
         let _ = free_mapped_dynamic_user_load_plan(mapped, allocator);
         return Err(error);
     }
-    if let Err(error) = unsafe { load_dynamic_import_libraries_mapped(state, mapped) } {
-        let _ = free_mapped_dynamic_user_load_plan(mapped, allocator);
-        return Err(error);
-    }
+    mapped = match unsafe { load_dynamic_import_libraries_mapped(state, mapped, allocator) } {
+        Ok(mapped) => mapped,
+        Err(error) => {
+            let _ = free_mapped_dynamic_user_load_plan(mapped, allocator);
+            return Err(error);
+        }
+    };
     if let Err(error) = unsafe { apply_dynamic_import_relocations_mapped(state, mapped) } {
         let _ = free_mapped_dynamic_user_load_plan(mapped, allocator);
         return Err(error);
@@ -4595,7 +4774,11 @@ unsafe fn read_selected_dynamic_import_state(
             get_or_load_resident_shared_library(index, library_name, file, library_profile_file)?
         };
         let library = unsafe { resident_shared_library_image(cache_slot)? };
-        let relative_base = align_up(total, LOAD_ALIGNMENT)?;
+        let relative_base = if library.shareable_readonly_page_count()? > 0 {
+            align_up(total, VM_PAGE_SIZE)?
+        } else {
+            align_up(total, LOAD_ALIGNMENT)?
+        };
         unsafe { copy_resident_shared_export_section_to_loader_buffer(index, cache_slot)? };
         let slot = usize::try_from(index).map_err(|_| ProcessLoadError::InvalidImage)?;
         libraries[slot] = DynamicImportLibrary {
@@ -4652,8 +4835,9 @@ unsafe fn load_dynamic_import_libraries(
 
 unsafe fn load_dynamic_import_libraries_mapped(
     state: DynamicImportLoadState<'_>,
-    plan: MappedDynamicUserLoadPlan,
-) -> Result<(), ProcessLoadError> {
+    mut plan: MappedDynamicUserLoadPlan,
+    allocator: &mut crate::page_alloc::PageFrameAllocator,
+) -> Result<MappedDynamicUserLoadPlan, ProcessLoadError> {
     let mut index = 0;
     while index < state.library_count {
         crate::os_stats::record_library_load();
@@ -4665,9 +4849,26 @@ unsafe fn load_dynamic_import_libraries_mapped(
             .checked_add(entry.relative_base)
             .ok_or(ProcessLoadError::AddressOverflow)?;
         let physical_base = plan.translate_address(library_base)?;
+        let shared_readonly = unsafe {
+            ensure_resident_shared_library_readonly_backing(entry.cache_slot(), allocator)?
+        };
         unsafe {
-            load_resident_shared_library_to_ram(entry.cache_slot(), physical_base)?;
-            crate::os_stats::record_library_load_bytes(library.file_size);
+            if let Some((readonly_backing_start, readonly_page_count)) = shared_readonly {
+                plan.add_extra_mapping(
+                    library_base,
+                    readonly_backing_start,
+                    readonly_page_count,
+                    user_executable_mmu_flags(),
+                )?;
+                load_resident_shared_library_private_segments_to_ram(
+                    entry.cache_slot(),
+                    physical_base,
+                )?;
+                crate::os_stats::record_library_load_bytes(library.writable_file_size);
+            } else {
+                load_resident_shared_library_to_ram(entry.cache_slot(), physical_base)?;
+                crate::os_stats::record_library_load_bytes(library.file_size);
+            }
             apply_resident_shared_library_relocations(
                 entry.cache_slot(),
                 physical_base,
@@ -4676,7 +4877,7 @@ unsafe fn load_dynamic_import_libraries_mapped(
         }
         index += 1;
     }
-    Ok(())
+    Ok(plan)
 }
 
 unsafe fn apply_dynamic_import_relocations(
@@ -4802,6 +5003,9 @@ unsafe fn read_resident_shared_library(
     let image = unsafe { read_selected_shared_library_image(profile_file)? };
     validate_resident_shared_library_capacity(image)?;
     let entry = unsafe { resident_shared_library_mut(slot)? };
+    if entry.valid && entry.readonly_backing_page_count != 0 {
+        return Err(ProcessLoadError::ProgramTooLarge);
+    }
     entry.valid = false;
     entry.name = [0; KFS_MAX_NAME_BYTES];
     if name.len() > KFS_MAX_NAME_BYTES {
@@ -4811,6 +5015,8 @@ unsafe fn read_resident_shared_library(
     entry.name_len = u32::try_from(name.len()).map_err(|_| ProcessLoadError::InvalidImage)?;
     entry.file = file;
     entry.image = image;
+    entry.readonly_backing_start = 0;
+    entry.readonly_backing_page_count = 0;
     unsafe {
         crate::kfs::storage::copy_file_range_to_ram_profiled(
             file,
@@ -4844,6 +5050,44 @@ unsafe fn read_resident_shared_library(
     );
     entry.valid = true;
     Ok(slot)
+}
+
+unsafe fn ensure_resident_shared_library_readonly_backing(
+    cache_slot: u32,
+    allocator: &mut crate::page_alloc::PageFrameAllocator,
+) -> Result<Option<(u32, u32)>, ProcessLoadError> {
+    let entry = unsafe { resident_shared_library_mut(cache_slot)? };
+    if !entry.valid {
+        return Err(ProcessLoadError::InvalidImage);
+    }
+    let page_count = entry.image.shareable_readonly_page_count()?;
+    if page_count == 0 {
+        return Ok(None);
+    }
+    if entry.readonly_backing_page_count != 0 {
+        return Ok(Some((
+            entry.readonly_backing_start,
+            entry.readonly_backing_page_count,
+        )));
+    }
+    let backing = allocator
+        .allocate_contiguous(page_count)
+        .map_err(page_alloc_error_to_process_load_error)?;
+    let readonly_file_size = usize::try_from(entry.image.readonly_file_size)
+        .map_err(|_| ProcessLoadError::InvalidImage)?;
+    unsafe {
+        copy_bytes_to_ram(&entry.payload[..readonly_file_size], backing.start);
+        zero_fill_ram(
+            backing
+                .start
+                .checked_add(entry.image.readonly_file_size)
+                .ok_or(ProcessLoadError::AddressOverflow)?,
+            entry.image.readonly_memory_size - entry.image.readonly_file_size,
+        );
+    }
+    entry.readonly_backing_start = backing.start;
+    entry.readonly_backing_page_count = backing.frame_count;
+    Ok(Some((backing.start, backing.frame_count)))
 }
 
 fn validate_resident_shared_library_capacity(
@@ -5140,6 +5384,47 @@ unsafe fn load_resident_shared_library_to_ram(
                 image.writable_memory_size - image.writable_file_size,
             )
         };
+    }
+    Ok(())
+}
+
+unsafe fn load_resident_shared_library_private_segments_to_ram(
+    cache_slot: u32,
+    dst: u32,
+) -> Result<(), ProcessLoadError> {
+    let entry = unsafe { resident_shared_library(cache_slot)? };
+    if !entry.valid || entry.image.writable_file_size > entry.image.writable_memory_size {
+        return Err(ProcessLoadError::InvalidImage);
+    }
+    if entry.image.writable_memory_size == 0 {
+        return Ok(());
+    }
+    let readonly_file_size = usize::try_from(entry.image.readonly_file_size)
+        .map_err(|_| ProcessLoadError::InvalidImage)?;
+    let writable_file_size = usize::try_from(entry.image.writable_file_size)
+        .map_err(|_| ProcessLoadError::InvalidImage)?;
+    let writable_payload_end = readonly_file_size
+        .checked_add(writable_file_size)
+        .ok_or(ProcessLoadError::InvalidImage)?;
+    if writable_payload_end != entry.image.file_size as usize
+        || writable_payload_end > RESIDENT_SHARED_LIBRARY_PAYLOAD_BYTES
+    {
+        return Err(ProcessLoadError::InvalidImage);
+    }
+    let writable_dst = dst
+        .checked_add(entry.image.writable_offset)
+        .ok_or(ProcessLoadError::AddressOverflow)?;
+    unsafe {
+        copy_bytes_to_ram(
+            &entry.payload[readonly_file_size..writable_payload_end],
+            writable_dst,
+        );
+        zero_fill_ram(
+            writable_dst
+                .checked_add(entry.image.writable_file_size)
+                .ok_or(ProcessLoadError::AddressOverflow)?,
+            entry.image.writable_memory_size - entry.image.writable_file_size,
+        );
     }
     Ok(())
 }
@@ -6418,6 +6703,28 @@ mod tests {
             .iter()
             .position(|write| *write == (k16_abi::computer::mmu0::VIRTUAL_START, virtual_start))
             .expect("MMU map writes include virtual start");
+        assert_eq!(
+            writes[index + 2],
+            (k16_abi::computer::mmu0::PAGE_COUNT, page_count)
+        );
+        assert_eq!(writes[index + 3], (k16_abi::computer::mmu0::FLAGS, flags));
+    }
+
+    fn assert_mmu_map_physical(
+        writes: &[(u32, u32)],
+        virtual_start: u32,
+        physical_start: u32,
+        page_count: u32,
+        flags: u32,
+    ) {
+        let index = writes
+            .iter()
+            .position(|write| *write == (k16_abi::computer::mmu0::VIRTUAL_START, virtual_start))
+            .expect("MMU map writes include virtual start");
+        assert_eq!(
+            writes[index + 1],
+            (k16_abi::computer::mmu0::PHYSICAL_START, physical_start)
+        );
         assert_eq!(
             writes[index + 2],
             (k16_abi::computer::mmu0::PAGE_COUNT, page_count)
@@ -8879,6 +9186,47 @@ mod tests {
         assert_mmu_map(writes, 0x0001_0000, 1, executable_flags);
         assert_mmu_map(writes, 0x0001_1000, 1, writable_flags);
         assert_mmu_map(writes, 0x0001_2000, 1, executable_flags);
+    }
+
+    #[test]
+    fn translated_user_launch_maps_extra_shared_readonly_pages() {
+        crate::mmio::reset_test_state();
+        crate::mmio::set_test_mmu0_result(7, k16_abi::computer::mmu0::STATUS_DONE, 0);
+        let plan = DynamicUserLoadPlan {
+            load_base: 0x0001_0000,
+            load_end: 0x0001_3000,
+            entry_pc: 0x0001_0000,
+            stack_top: 0x0001_5000,
+            payload_dst: 0x0001_0000,
+            payload_len: 16,
+            zero_fill_addr: 0x0001_0010,
+            zero_fill_len: 0x2ff0,
+        };
+        let mut mapped = MappedDynamicUserLoadPlan::new_committed(
+            plan,
+            0x0001_0000,
+            3,
+            0,
+            0,
+            0x0001_4000,
+            1,
+            0x0000_9000,
+        )
+        .expect("mapped load plan initializes");
+        let executable_flags = (k16_abi::computer::mmu0::FLAG_USER_ACCESSIBLE
+            | k16_abi::computer::mmu0::FLAG_EXECUTABLE) as u32;
+        mapped
+            .add_extra_mapping(0x0001_1000, 0x0000_e000, 1, executable_flags as i32)
+            .expect("shared readonly mapping is accepted");
+
+        unsafe { create_translated_user_launch_from_mapped(mapped, 0x0001_6000) }
+            .expect("translated launch maps");
+
+        let writes = crate::mmio::take_test_writes();
+        let writes = writes.as_slice();
+        assert_mmu_map_physical(writes, 0x0001_0000, 0x0000_9000, 1, executable_flags);
+        assert_mmu_map_physical(writes, 0x0001_1000, 0x0000_e000, 1, executable_flags);
+        assert_mmu_map_physical(writes, 0x0001_2000, 0x0000_b000, 1, executable_flags);
     }
 
     #[test]
