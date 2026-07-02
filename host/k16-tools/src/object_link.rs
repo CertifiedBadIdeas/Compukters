@@ -45,6 +45,7 @@ pub struct K16LinkInput<'a> {
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct K16LinkOptions {
     pub shared_cpu_helpers: bool,
+    pub shareable_shared_object: bool,
     pub imports: Vec<K16LinkImport>,
     pub dylibs: Vec<K16LinkDylib>,
 }
@@ -86,6 +87,9 @@ pub fn link_k16_objects_with_options(
     if options.shared_cpu_helpers && target != K16ArtifactTarget::ProgramDynamic {
         return Err("--shared-cpu-helpers requires --target program-dynamic".to_string());
     }
+    if options.shareable_shared_object && target != K16ArtifactTarget::SharedObject {
+        return Err("--shareable requires --target shared-object".to_string());
+    }
     if (!options.imports.is_empty() || !options.dylibs.is_empty())
         && target != K16ArtifactTarget::ProgramDynamic
     {
@@ -108,7 +112,7 @@ pub fn link_k16_objects_with_options(
         load_addr,
         bios_prefix_len,
         target == K16ArtifactTarget::ProgramDynamic || target == K16ArtifactTarget::SharedObject,
-        target == K16ArtifactTarget::ProgramDynamic,
+        target == K16ArtifactTarget::ProgramDynamic || options.shareable_shared_object,
         options.shared_cpu_helpers,
         target == K16ArtifactTarget::SharedObject,
         &imports.imported_symbols,
@@ -122,12 +126,54 @@ pub fn link_k16_objects_with_options(
         retained_sections: linked.retained_sections.clone(),
     };
     let bytes = if target == K16ArtifactTarget::SharedObject {
-        k16e::encode_k16_shared_object(
-            &linked.payload,
-            linked.memory_size,
-            &linked.relocations,
-            &linked.shared_exports,
-        )?
+        if options.shareable_shared_object {
+            let writable_segment = shareable_writable_segment(&linked)?;
+            let readonly_end = usize::try_from(writable_segment.offset).map_err(|_| {
+                "K16 shareable shared object readonly size is too large".to_string()
+            })?;
+            let writable_start = usize::try_from(writable_segment.offset).map_err(|_| {
+                "K16 shareable shared object writable offset is too large".to_string()
+            })?;
+            let writable_end = usize::try_from(
+                writable_segment
+                    .offset
+                    .checked_add(writable_segment.file_size)
+                    .ok_or_else(|| {
+                        "K16 shareable shared object writable range overflows".to_string()
+                    })?,
+            )
+            .map_err(|_| "K16 shareable shared object writable range is too large".to_string())?;
+            k16e::encode_shareable_k16_shared_object(
+                linked
+                    .payload
+                    .get(..readonly_end.min(linked.payload.len()))
+                    .ok_or_else(|| {
+                        "K16 shareable shared object readonly bytes are invalid".to_string()
+                    })?,
+                writable_segment.offset,
+                if writable_segment.file_size == 0 {
+                    &[]
+                } else {
+                    linked
+                        .payload
+                        .get(writable_start..writable_end)
+                        .ok_or_else(|| {
+                            "K16 shareable shared object writable bytes are out of bounds"
+                                .to_string()
+                        })?
+                },
+                writable_segment,
+                &linked.relocations,
+                &linked.shared_exports,
+            )?
+        } else {
+            k16e::encode_k16_shared_object(
+                &linked.payload,
+                linked.memory_size,
+                &linked.relocations,
+                &linked.shared_exports,
+            )?
+        }
     } else if target == K16ArtifactTarget::ProgramDynamic {
         if options.shared_cpu_helpers && linked.writable_segment.is_some() {
             return Err(
@@ -219,6 +265,17 @@ fn validate_payload_range(target: K16ArtifactTarget, memory_size: u32) -> Result
         ));
     }
     Ok(())
+}
+
+fn shareable_writable_segment(linked: &LinkedImage) -> Result<k16e::K16eWritableSegment, String> {
+    match linked.writable_segment {
+        Some(segment) => Ok(segment),
+        None => Ok(k16e::K16eWritableSegment {
+            offset: align_memory_size(linked.memory_size, 4096)?,
+            file_size: 0,
+            memory_size: 0,
+        }),
+    }
 }
 
 struct LinkedImage {

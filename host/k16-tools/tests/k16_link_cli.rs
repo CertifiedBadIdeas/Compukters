@@ -198,6 +198,117 @@ fn k16_link_emits_shared_object_exports_from_global_symbols() {
 }
 
 #[test]
+fn k16_link_shareable_shared_object_emits_v7_for_relocation_free_text() {
+    let object_path = temp_file("shareable-provider.o");
+    let output_path = temp_file("shareable-provider.kso");
+    fs::write(
+        &object_path,
+        k16_object_with_text_symbol("foo", &[0x02, 0x00]),
+    )
+    .expect("object writes");
+
+    let output = Command::new(k16_binary())
+        .args([
+            "link",
+            "--target",
+            "shared-object",
+            "--shareable",
+            object_path.to_str().unwrap(),
+            "-o",
+            output_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("k16 link runs");
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let bytes = fs::read(output_path).expect("K16E output reads");
+    assert_eq!(
+        u16_at(&bytes, 4),
+        k16e::K16E_SHAREABLE_SHARED_OBJECT_VERSION
+    );
+    let shared = k16e::decode_k16_shared_object(&bytes).expect("shared object decodes");
+
+    assert_eq!(shared.payload, vec![0x02, 0x00]);
+    assert_eq!(shared.readonly_file_size, 2);
+    assert_eq!(shared.readonly_memory_size, 4096);
+    assert_eq!(
+        shared.writable_segment,
+        Some(k16e::K16eWritableSegment {
+            offset: 4096,
+            file_size: 0,
+            memory_size: 0,
+        })
+    );
+    assert_eq!(shared.relocations, Vec::new());
+}
+
+#[test]
+fn k16_link_shareable_shared_object_rejects_text_relocations() {
+    let object_path = temp_file("shareable-provider-reloc.o");
+    let output_path = temp_file("shareable-provider-reloc.kso");
+    fs::write(
+        &object_path,
+        k16_object_with_text_relocation_to_symbol(1, "_start"),
+    )
+    .expect("object writes");
+
+    let output = Command::new(k16_binary())
+        .args([
+            "link",
+            "--target",
+            "shared-object",
+            "--shareable",
+            object_path.to_str().unwrap(),
+            "-o",
+            output_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("k16 link runs");
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("patches read-only shared object segment"),
+        "stderr: {stderr}"
+    );
+}
+
+#[test]
+fn k16_link_shareable_requires_shared_object_target() {
+    let object_path = temp_file("shareable-program.o");
+    let output_path = temp_file("shareable-program.kx");
+    fs::write(
+        &object_path,
+        k16_object_with_text_symbol("_start", &[0x02, 0x00]),
+    )
+    .expect("object writes");
+
+    let output = Command::new(k16_binary())
+        .args([
+            "link",
+            "--target",
+            "program",
+            "--shareable",
+            object_path.to_str().unwrap(),
+            "-o",
+            output_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("k16 link runs");
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("--shareable requires --target shared-object"),
+        "stderr: {stderr}"
+    );
+}
+
+#[test]
 fn k16_link_shared_object_does_not_export_cpu_helper_internals() {
     let helper_path = temp_file("shared-provider-cpu-helpers.o");
     let object_path = temp_file("shared-provider-public.o");

@@ -35,7 +35,7 @@ does not implement. Unsupported relocations are link-time errors.
 The current tool entry point is:
 
 ```text
-k16 link --target <bios|boot|kernel|program|program-dynamic|shared-object> [--shared-cpu-helpers] [--import <library>:<symbol>] [--dylib <library.kso>] [--map <output.map>] <input.ko>... -o <output>
+k16 link --target <bios|boot|kernel|program|program-dynamic|shared-object> [--shareable] [--shared-cpu-helpers] [--import <library>:<symbol>] [--dylib <library.kso>] [--map <output.map>] <input.ko>... -o <output>
 ```
 
 The command accepts K16 ELF32 `ET_REL` inputs, resolves static symbols,
@@ -54,11 +54,15 @@ The `shared-object` target emits a K16E v4 shared object, does not require
 `_start`, and exports retained global definitions as base-relative shared
 object offsets. It also preserves base-relative relocation records so the
 kernel loader can rebase non-trivial shared object code at its process-local
-load address. The `bios` target emits raw BIOS flash bytes and prefixes them
-with a reset-address trampoline that initializes `sp` to the current fixed 192
-KiB stack top and jumps to `_start`. When `--map` is present, the linker writes
-a deterministic retained-section report beside the linked output without
-changing the emitted executable bytes.
+load address. With `--shareable`, the `shared-object` target emits K16E v7
+instead: executable/read-only bytes are separated from private writable bytes,
+and relocations must target only the private writable segment. A readonly/text
+relocation is a link-time error in this mode; the linker must not silently emit
+legacy v4 as a fallback. The `bios` target emits raw BIOS flash bytes and
+prefixes them with a reset-address trampoline that initializes `sp` to the
+current fixed 192 KiB stack top and jumps to `_start`. When `--map` is present,
+the linker writes a deterministic retained-section report beside the linked
+output without changing the emitted executable bytes.
 
 Rust `bin` crates use the linker-driver entry point:
 
