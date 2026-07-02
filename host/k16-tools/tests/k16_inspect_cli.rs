@@ -226,7 +226,50 @@ fn k16_inspect_identifies_shared_object_exports() {
     );
     assert_eq!(
         String::from_utf8(output.stdout).expect("shared object K16E stdout is UTF-8"),
-        "kind=K16E\nK16E abi=shared-object dynamic=true payload_bytes=4 memory_bytes=8 relocations=0 relocation_bytes=0 exports=1 export_bytes=24\n"
+        "kind=K16E\nK16E abi=shared-object dynamic=true payload_bytes=4 memory_bytes=8 shared_readonly_bytes=0 private_writable_bytes=8 relocations=0 relocation_bytes=0 exports=1 export_bytes=24\n"
+    );
+}
+
+#[test]
+fn k16_inspect_identifies_shareable_shared_object_segments() {
+    let path = temp_file("libk16rt-v7.kso");
+    fs::write(
+        &path,
+        k16e::encode_shareable_k16_shared_object(
+            &[0x01, 0x00, 0x02, 0x00],
+            4,
+            &[0xaa, 0xbb],
+            k16e::K16eWritableSegment {
+                offset: 4096,
+                file_size: 2,
+                memory_size: 8,
+            },
+            &[k16e::K16eRelocation {
+                offset: 4096,
+                kind: k16e::K16eRelocationKind::Abs32,
+            }],
+            &[k16e::K16eSharedExport {
+                name: "k16rt.syscall0".to_string(),
+                offset: 0,
+            }],
+        )
+        .expect("shareable shared object K16E encodes"),
+    )
+    .expect("shareable shared object K16E writes");
+
+    let output = Command::new(k16_binary())
+        .args(["inspect", path.to_str().unwrap()])
+        .output()
+        .expect("k16 inspect shareable shared object K16E runs");
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        String::from_utf8(output.stdout).expect("shareable shared object K16E stdout is UTF-8"),
+        "kind=K16E\nK16E abi=shared-object dynamic=true payload_bytes=6 memory_bytes=4104 shared_readonly_bytes=4 private_writable_bytes=8 relocations=1 relocation_bytes=8 exports=1 export_bytes=24\n"
     );
 }
 

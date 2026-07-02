@@ -72,7 +72,9 @@ fn inspect_k16e(bytes: &[u8]) -> Result<String, String> {
         | k16e::K16E_DYNAMIC_RUNTIME_VERSION
         | k16e::K16E_DYNAMIC_IMPORTS_VERSION
         | k16e::K16E_DYNAMIC_WRITABLE_SEGMENTS_VERSION => inspect_dynamic_k16e(bytes),
-        k16e::K16E_SHARED_OBJECT_VERSION => inspect_shared_object_k16e(bytes),
+        k16e::K16E_SHARED_OBJECT_VERSION | k16e::K16E_SHAREABLE_SHARED_OBJECT_VERSION => {
+            inspect_shared_object_k16e(bytes)
+        }
         version => Err(format!("unsupported K16E version {version}")),
     }
 }
@@ -174,10 +176,16 @@ fn inspect_shared_object_k16e(bytes: &[u8]) -> Result<String, String> {
     } else {
         export_bytes + 1
     };
+    let private_writable_bytes = shared
+        .writable_segment
+        .map(|segment| segment.memory_size)
+        .unwrap_or(shared.memory_size);
     Ok(format!(
-        "kind=K16E\nK16E abi=shared-object dynamic=true payload_bytes={} memory_bytes={} relocations={} relocation_bytes={} exports={} export_bytes={}\n",
+        "kind=K16E\nK16E abi=shared-object dynamic=true payload_bytes={} memory_bytes={} shared_readonly_bytes={} private_writable_bytes={} relocations={} relocation_bytes={} exports={} export_bytes={}\n",
         shared.payload.len(),
         shared.memory_size,
+        shared.readonly_memory_size,
+        private_writable_bytes,
         shared.relocations.len(),
         relocation_bytes,
         shared.exports.len(),

@@ -236,6 +236,11 @@ fn k16e_docs_define_shared_object_v0_boundary() {
         "K16E shared object v0 does not define imports",
         "applies the shared object's own relocation records",
         "The kernel loader must map executable/read-only shared pages separately from per-process writable data",
+        "K16E v7 shareable shared objects split read-only shared payload from private writable data",
+        "without a fixed shared virtual window",
+        "section_count 4",
+        "section 1 kind 8 (writable load, private per-process)",
+        "Relocation records in v7 must target the private writable segment",
         "The old K16E v3 CPU helper runtime requirement remains a narrow experiment and is superseded as the main implementation path by this shared object ABI",
     ] {
         assert!(

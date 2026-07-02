@@ -8,6 +8,8 @@ pub const DYNAMIC_K16E_V5_HEADER_SIZE: u32 = 112;
 pub const DYNAMIC_K16E_V5_PAYLOAD_OFFSET: u32 = 112;
 pub const DYNAMIC_K16E_V6_HEADER_SIZE: u32 = 132;
 pub const DYNAMIC_K16E_V6_PAYLOAD_OFFSET: u32 = 132;
+pub const SHARED_K16E_V7_HEADER_SIZE: u32 = 112;
+pub const SHARED_K16E_V7_PAYLOAD_OFFSET: u32 = 112;
 pub const K16E_RELOCATION_RECORD_SIZE: u32 = 8;
 pub const K16E_SHARED_EXPORT_RECORD_SIZE: u32 = 8;
 pub const K16E_IMPORT_RELOCATION_RECORD_SIZE: u32 = 16;
@@ -102,6 +104,10 @@ pub struct SharedK16ImageHeader<'a> {
     pub payload_offset: u32,
     pub file_size: u32,
     pub memory_size: u32,
+    pub readonly_memory_size: u32,
+    pub writable_file_offset: u32,
+    pub writable_file_size: u32,
+    pub writable_memory_size: u32,
     pub relocation_table_offset: u32,
     pub relocation_count: u32,
     pub export_count: u32,
@@ -420,6 +426,115 @@ pub fn parse_shared_k16e_v4(image: &[u8]) -> Result<SharedK16ImageHeader<'_>, K1
         payload_offset: SHARED_K16E_V4_PAYLOAD_OFFSET,
         file_size,
         memory_size,
+        readonly_memory_size: 0,
+        writable_file_offset: 0,
+        writable_file_size: 0,
+        writable_memory_size: 0,
+        relocation_table_offset,
+        relocation_count,
+        relocation_table,
+        export_count,
+        export_section,
+    })
+}
+
+pub fn parse_shared_k16e_v7(image: &[u8]) -> Result<SharedK16ImageHeader<'_>, K16ImageError> {
+    if image.len() < SHARED_K16E_V7_HEADER_SIZE as usize
+        || header_bytes(image, 0, b"K16E").is_err()
+        || read_u16_le(image, 4)? != 7
+        || read_u16_le(image, 6)? != K16E_HEADER_SIZE
+        || read_u16_le(image, 8)? != K16E_ISA_K16
+        || read_u16_le(image, 10)? != 0
+        || read_u32_le(image, 12)? != 0
+        || read_u32_le(image, 16)? != K16E_SECTION_TABLE_OFFSET
+        || read_u32_le(image, 20)? != 4
+        || read_u32_le(image, 24)? != K16eAbiKind::SharedObject as u32
+        || read_u32_le(image, 28)? != 0
+        || read_u32_le(image, 32)? != K16E_SECTION_KIND_LOAD
+        || read_u32_le(image, 36)? != 0
+        || read_u32_le(image, 40)? != SHARED_K16E_V7_PAYLOAD_OFFSET
+        || read_u32_le(image, 52)? != K16E_SECTION_KIND_WRITABLE_LOAD
+        || read_u32_le(image, 72)? != K16E_SECTION_KIND_RELOCATIONS
+        || read_u32_le(image, 76)? != 0
+        || read_u32_le(image, 92)? != K16E_SECTION_KIND_EXPORTS
+        || read_u32_le(image, 96)? != 0
+    {
+        return Err(K16ImageError::InvalidExecutable);
+    }
+
+    let readonly_file_size = read_u32_le(image, 44)?;
+    let readonly_memory_size = read_u32_le(image, 48)?;
+    if readonly_file_size == 0
+        || readonly_memory_size < readonly_file_size
+        || readonly_file_size % 2 != 0
+        || readonly_memory_size % 2 != 0
+    {
+        return Err(K16ImageError::InvalidExecutable);
+    }
+
+    let writable_offset = read_u32_le(image, 56)?;
+    let writable_file_offset = read_u32_le(image, 60)?;
+    let writable_file_size = read_u32_le(image, 64)?;
+    let writable_memory_size = read_u32_le(image, 68)?;
+    if writable_offset < readonly_memory_size
+        || writable_offset % 2 != 0
+        || writable_file_size % 2 != 0
+        || writable_memory_size % 2 != 0
+        || writable_memory_size < writable_file_size
+        || writable_file_offset != checked_add(SHARED_K16E_V7_PAYLOAD_OFFSET, readonly_file_size)?
+    {
+        return Err(K16ImageError::InvalidExecutable);
+    }
+    let memory_size = checked_add(writable_offset, writable_memory_size)?;
+    let file_size = checked_add(readonly_file_size, writable_file_size)?;
+
+    let relocation_table_offset = read_u32_le(image, 80)?;
+    let relocation_table_size = read_u32_le(image, 84)?;
+    let relocation_count = read_u32_le(image, 88)?;
+    if relocation_table_offset != checked_add(writable_file_offset, writable_file_size)? {
+        return Err(K16ImageError::InvalidExecutable);
+    }
+    let expected_relocation_table_size =
+        checked_mul(relocation_count, K16E_RELOCATION_RECORD_SIZE)?;
+    if relocation_table_size != expected_relocation_table_size {
+        return Err(K16ImageError::InvalidExecutable);
+    }
+
+    let export_section_offset = read_u32_le(image, 100)?;
+    let export_section_size = read_u32_le(image, 104)?;
+    let export_count = read_u32_le(image, 108)?;
+    if export_count == 0
+        || export_section_offset != checked_add(relocation_table_offset, relocation_table_size)?
+    {
+        return Err(K16ImageError::InvalidExecutable);
+    }
+    let export_section_end = checked_add(export_section_offset, export_section_size)?;
+    if export_section_end > image.len() as u32 {
+        return Err(K16ImageError::InvalidExecutable);
+    }
+    let expected_export_record_size = checked_mul(export_count, K16E_SHARED_EXPORT_RECORD_SIZE)?;
+    if export_section_size < expected_export_record_size {
+        return Err(K16ImageError::InvalidExecutable);
+    }
+
+    let relocation_table = image_slice(image, relocation_table_offset, relocation_table_size)?;
+    validate_dynamic_relocations(memory_size, relocation_table, relocation_count)?;
+    validate_private_shared_relocations(
+        writable_offset,
+        writable_memory_size,
+        relocation_table,
+        relocation_count,
+    )?;
+    let export_section = image_slice(image, export_section_offset, export_section_size)?;
+    validate_shared_exports(memory_size, export_section, export_count)?;
+    Ok(SharedK16ImageHeader {
+        payload_offset: SHARED_K16E_V7_PAYLOAD_OFFSET,
+        file_size,
+        memory_size,
+        readonly_memory_size,
+        writable_file_offset,
+        writable_file_size,
+        writable_memory_size,
         relocation_table_offset,
         relocation_count,
         relocation_table,
@@ -573,6 +688,35 @@ fn validate_counted_strings(section: &[u8], count: u32) -> Result<(), K16ImageEr
     while index < count {
         let name = counted_string(section, count, index).ok_or(K16ImageError::InvalidExecutable)?;
         validate_non_empty_name(name)?;
+        index += 1;
+    }
+    Ok(())
+}
+
+fn validate_private_shared_relocations(
+    writable_offset: u32,
+    writable_memory_size: u32,
+    relocation_table: &[u8],
+    relocation_count: u32,
+) -> Result<(), K16ImageError> {
+    let writable_end = checked_add(writable_offset, writable_memory_size)?;
+    let mut index = 0;
+    while index < relocation_count {
+        let table_offset = checked_mul(index, K16E_RELOCATION_RECORD_SIZE)?;
+        let record_end = checked_add(table_offset, K16E_RELOCATION_RECORD_SIZE)?;
+        let table_offset =
+            usize::try_from(table_offset).map_err(|_| K16ImageError::InvalidExecutable)?;
+        let record_end =
+            usize::try_from(record_end).map_err(|_| K16ImageError::InvalidExecutable)?;
+        let record = match relocation_table.get(table_offset..record_end) {
+            Some(record) => record,
+            None => return Err(K16ImageError::InvalidExecutable),
+        };
+        let offset = read_u32_le(record, 0)?;
+        let relocation_end = checked_add(offset, 4)?;
+        if offset < writable_offset || relocation_end > writable_end {
+            return Err(K16ImageError::InvalidExecutable);
+        }
         index += 1;
     }
     Ok(())
@@ -961,6 +1105,48 @@ mod tests {
         bytes
     }
 
+    fn shareable_shared_object_image() -> [u8; 144] {
+        let mut bytes = [0u8; 144];
+        bytes[0..4].copy_from_slice(b"K16E");
+        write_u16_le(&mut bytes, 4, 7);
+        write_u16_le(&mut bytes, 6, 32);
+        write_u16_le(&mut bytes, 8, 1);
+        write_u16_le(&mut bytes, 10, 0);
+        write_u32_le(&mut bytes, 12, 0);
+        write_u32_le(&mut bytes, 16, 32);
+        write_u32_le(&mut bytes, 20, 4);
+        write_u32_le(&mut bytes, 24, 4);
+        write_u32_le(&mut bytes, 28, 0);
+        write_u32_le(&mut bytes, 32, 1);
+        write_u32_le(&mut bytes, 36, 0);
+        write_u32_le(&mut bytes, 40, 112);
+        write_u32_le(&mut bytes, 44, 4);
+        write_u32_le(&mut bytes, 48, 4);
+        write_u32_le(&mut bytes, 52, K16E_SECTION_KIND_WRITABLE_LOAD);
+        write_u32_le(&mut bytes, 56, 4096);
+        write_u32_le(&mut bytes, 60, 116);
+        write_u32_le(&mut bytes, 64, 2);
+        write_u32_le(&mut bytes, 68, 8);
+        write_u32_le(&mut bytes, 72, 2);
+        write_u32_le(&mut bytes, 76, 0);
+        write_u32_le(&mut bytes, 80, 118);
+        write_u32_le(&mut bytes, 84, 8);
+        write_u32_le(&mut bytes, 88, 1);
+        write_u32_le(&mut bytes, 92, 5);
+        write_u32_le(&mut bytes, 96, 0);
+        write_u32_le(&mut bytes, 100, 126);
+        write_u32_le(&mut bytes, 104, 18);
+        write_u32_le(&mut bytes, 108, 1);
+        bytes[112..116].copy_from_slice(&[0x01, 0x00, 0x02, 0x00]);
+        bytes[116..118].copy_from_slice(&[0xaa, 0xbb]);
+        write_u32_le(&mut bytes, 118, 4096);
+        write_u32_le(&mut bytes, 122, 1);
+        write_u32_le(&mut bytes, 126, 0);
+        write_u32_le(&mut bytes, 130, 0);
+        bytes[134..144].copy_from_slice(b"syscall0\0\0");
+        bytes
+    }
+
     #[test]
     fn fixed_k16e_v1_header_parses_boot_chain_fields() {
         let header =
@@ -1076,6 +1262,48 @@ mod tests {
             })
         );
         assert_eq!(shared.export(1), None);
+    }
+
+    #[test]
+    fn shared_k16e_v7_parser_exposes_shareable_and_private_segments() {
+        let image = shareable_shared_object_image();
+
+        let shared = parse_shared_k16e_v7(&image).expect("shareable shared object header parses");
+
+        assert_eq!(shared.payload_offset, 112);
+        assert_eq!(shared.file_size, 6);
+        assert_eq!(shared.memory_size, 4104);
+        assert_eq!(shared.readonly_memory_size, 4);
+        assert_eq!(shared.writable_file_offset, 116);
+        assert_eq!(shared.writable_file_size, 2);
+        assert_eq!(shared.writable_memory_size, 8);
+        assert_eq!(shared.relocation_table_offset, 118);
+        assert_eq!(shared.relocation_count, 1);
+        assert_eq!(
+            shared.relocation(0),
+            Some(K16eRelocation {
+                offset: 4096,
+                kind: K16eRelocationKind::Abs32,
+            })
+        );
+        assert_eq!(
+            shared.export(0),
+            Some(K16eSharedExport {
+                name: b"syscall0".as_slice(),
+                offset: 0,
+            })
+        );
+    }
+
+    #[test]
+    fn shared_k16e_v7_parser_rejects_readonly_relocations() {
+        let mut image = shareable_shared_object_image();
+        write_u32_le(&mut image, 118, 2);
+
+        assert_eq!(
+            parse_shared_k16e_v7(&image),
+            Err(K16ImageError::InvalidExecutable)
+        );
     }
 
     #[test]

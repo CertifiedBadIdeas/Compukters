@@ -102,6 +102,53 @@ fn k16_disasm_prints_program_window_without_decoding_following_data() {
 }
 
 #[test]
+fn k16_disasm_prints_only_shareable_shared_object_readonly_payload() {
+    let artifact_path = temp_file("libk16rt-v7.kso");
+    fs::write(
+        &artifact_path,
+        k16_tools::k16e::encode_shareable_k16_shared_object(
+            &words_to_bytes(&[halt()]),
+            2,
+            &words_to_bytes(&[const4(1, 7)]),
+            k16_tools::k16e::K16eWritableSegment {
+                offset: 4096,
+                file_size: 2,
+                memory_size: 2,
+            },
+            &[],
+            &[k16_tools::k16e::K16eSharedExport {
+                name: "entry".to_string(),
+                offset: 0,
+            }],
+        )
+        .expect("shareable shared object K16E encodes"),
+    )
+    .expect("artifact writes");
+
+    let output = Command::new(k16_binary())
+        .args([
+            "disasm",
+            "--target",
+            "shared-object",
+            artifact_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("k16 disasm runs");
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("00000000: 0001  halt"), "stdout: {stdout}");
+    assert!(
+        !stdout.contains("const4 r1, 7"),
+        "private writable payload must not be decoded as contiguous text: {stdout}"
+    );
+}
+
+#[test]
 fn k16_disasm_prints_boot_artifact_from_boot_load_base() {
     let artifact_path = temp_file("boot.kb");
     fs::write(
