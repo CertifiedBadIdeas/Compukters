@@ -221,7 +221,8 @@ LLVM backend can lower ordinary integer machine operations without introducing
 LLVM-specific behavior inside the VM. The active CPU, assembler, disassembler,
 and compiler tooling cover these instruction families:
 
-- constants: small immediates and full 32-bit constants;
+- constants: small immediates, full 32-bit constants, and PC-relative 32-bit
+  address materialization;
 - arithmetic: `add`, `sub`, `mul`, `mulh_u`, and `mulh_s`;
 - bitwise operations: `and`, `or`, `xor`, and `not` or an equivalent lowering;
 - shifts: logical left, logical right, and arithmetic right;
@@ -240,6 +241,33 @@ Multiplication, division, atomics, floating point, vector operations, hardware
 privilege levels, and virtual memory are allowed to land after the first LLVM
 proof. If a missing operation is routed through a helper call, that helper must
 be named, linked, and tested as part of the freestanding runtime boundary.
+
+### Wide Immediate Encoding
+
+Wide immediate instructions use a three-word encoding. The first word selects
+the destination register and subopcode; the following two words carry a
+little-endian 32-bit immediate:
+
+```text
+word 0: 0xea0s
+word 1: imm32[15:0]
+word 2: imm32[31:16]
+
+a  destination register
+s  wide-immediate subopcode
+```
+
+```text
+s    mnemonic   semantics
+0x1  const32    rA = imm32
+0x2  pcadd32    rA = current_instruction_pc + imm32, wrapping u32
+```
+
+`pcadd32` exists so shared-library code can materialize internal addresses
+relative to its mapped PC instead of embedding an absolute virtual address in
+read-only text. Linkers may rewrite internal `const32 symbol` materialization
+sites to `pcadd32` when emitting shareable code. Subopcodes outside this table
+are reserved and must decode as illegal instructions.
 
 ### Integer ALU Encoding
 

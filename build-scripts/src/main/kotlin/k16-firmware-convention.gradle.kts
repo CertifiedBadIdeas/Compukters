@@ -654,6 +654,7 @@ fun Project.compileK16GuestCSharedObject(
     includeDir: File,
     archRuntimeSource: File,
     sources: List<File>,
+    shareable: Boolean = false,
 ) {
     val toolchain = resolveK16Toolchain()
     val clang = k16ClangExecutable.asFile
@@ -706,10 +707,17 @@ fun Project.compileK16GuestCSharedObject(
             "link",
             "--target",
             "shared-object",
-            "--map",
-            mapOutput.absolutePath,
-            archRuntimeObject.absolutePath,
         ) +
+            buildList {
+                if (shareable) {
+                    add("--shareable")
+                }
+            } +
+            listOf(
+                "--map",
+                mapOutput.absolutePath,
+                archRuntimeObject.absolutePath,
+            ) +
             providerObjects.map { it.absolutePath } +
             listOf(
                 "-o",
@@ -1202,6 +1210,7 @@ val compileK16SharedKraft =
                 includeDir = k16CLibcIncludeSource.asFile,
                 archRuntimeSource = k16CArchRuntimeSource.asFile,
                 sources = listOf(k16CLibkraftSource.asFile, k16CLibcSyscallSource.asFile),
+                shareable = true,
             )
         }
     }

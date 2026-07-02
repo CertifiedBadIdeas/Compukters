@@ -403,6 +403,11 @@ fn assemble_instruction(line: &str) -> Result<Vec<u16>, String> {
             parse_u32_immediate(&tokens[2])?,
         )
         .to_vec()),
+        "pcadd32" if tokens.len() == 3 => Ok(pcadd32_words(
+            parse_register(&tokens[1])?,
+            parse_u32_immediate(&tokens[2])?,
+        )
+        .to_vec()),
         "add" if tokens.len() == 4 => Ok(add(
             parse_register(&tokens[1])?,
             parse_register(&tokens[2])?,
@@ -784,6 +789,18 @@ fn const32_words(register: u8, value: u32) -> [u16; 3] {
 
 fn emit_const32_word(register: u8) -> u16 {
     0xe001 | (u16::from(register) << 8)
+}
+
+fn pcadd32_words(register: u8, value: u32) -> [u16; 3] {
+    [
+        emit_pcadd32_word(register),
+        (value & 0xffff) as u16,
+        (value >> 16) as u16,
+    ]
+}
+
+fn emit_pcadd32_word(register: u8) -> u16 {
+    0xe002 | (u16::from(register) << 8)
 }
 
 fn const4(dst: u8, value: u8) -> u16 {

@@ -115,6 +115,7 @@ pub fn link_k16_objects_with_options(
         target == K16ArtifactTarget::ProgramDynamic || options.shareable_shared_object,
         options.shared_cpu_helpers,
         target == K16ArtifactTarget::SharedObject,
+        options.shareable_shared_object,
         &imports.imported_symbols,
     )?;
     validate_payload_range(target, linked.memory_size)?;
@@ -438,6 +439,7 @@ fn link_objects(
     split_writable_sections: bool,
     shared_cpu_helpers: bool,
     shared_object: bool,
+    shareable_shared_object: bool,
     imported_symbols: &HashMap<String, u32>,
 ) -> Result<LinkedImage, String> {
     let retained_sections = if shared_object {
@@ -671,20 +673,37 @@ fn link_objects(
                 load_addr,
             )?;
             let value = i64::from(symbol_address) + i64::from(relocation.addend);
-            apply_relocation(
-                &mut payload,
-                output_offset,
-                relocation.kind,
-                value,
-                load_addr,
-                &object.name,
-            )?;
+            let materialized_pc_relative = if shareable_shared_object
+                && (relocation.kind == R_K16_ABS32 || relocation.kind == R_K16_CALL32)
+            {
+                materialize_pc_relative_const32(
+                    &mut payload,
+                    output_offset,
+                    value,
+                    load_addr,
+                    &object.name,
+                )?
+            } else {
+                false
+            };
+            if !materialized_pc_relative {
+                apply_relocation(
+                    &mut payload,
+                    output_offset,
+                    relocation.kind,
+                    value,
+                    load_addr,
+                    &object.name,
+                )?;
+            }
             if emit_dynamic_relocations {
-                if let Some(kind) = dynamic_relocation_kind(relocation.kind)? {
-                    dynamic_relocations.push(k16e::K16eRelocation {
-                        offset: output_offset,
-                        kind,
-                    });
+                if !materialized_pc_relative {
+                    if let Some(kind) = dynamic_relocation_kind(relocation.kind)? {
+                        dynamic_relocations.push(k16e::K16eRelocation {
+                            offset: output_offset,
+                            kind,
+                        });
+                    }
                 }
             }
         }
@@ -1023,6 +1042,52 @@ fn resolve_symbol(
                 object.name, symbol.name
             )
         })
+}
+
+fn materialize_pc_relative_const32(
+    payload: &mut [u8],
+    output_offset: u32,
+    value: i64,
+    load_addr: u32,
+    object_name: &str,
+) -> Result<bool, String> {
+    let target = u32::try_from(value)
+        .map_err(|_| format!("{object_name}: K16 relocation value {value} does not fit u32"))?;
+    let instruction_offset = output_offset
+        .checked_sub(2)
+        .ok_or_else(|| format!("{object_name}: K16 relocation has no const32 opcode"))?;
+    let instruction_offset = usize::try_from(instruction_offset)
+        .map_err(|_| format!("{object_name}: relocation instruction offset is too large"))?;
+    let word = {
+        let opcode = payload
+            .get(instruction_offset..instruction_offset + 2)
+            .ok_or_else(|| format!("{object_name}: relocation instruction is out of bounds"))?;
+        u16::from_le_bytes(opcode.try_into().unwrap())
+    };
+    if word & 0xf0ff != 0xe001 {
+        return Ok(false);
+    }
+
+    let pc = load_addr
+        .checked_add(
+            output_offset
+                .checked_sub(2)
+                .ok_or_else(|| format!("{object_name}: K16 relocation has no const32 opcode"))?,
+        )
+        .ok_or_else(|| format!("{object_name}: K16 relocation PC overflows"))?;
+    let offset = target.wrapping_sub(pc);
+    let field_offset = usize::try_from(output_offset)
+        .map_err(|_| format!("{object_name}: relocation offset is too large"))?;
+    let field = payload
+        .get_mut(field_offset..field_offset + 4)
+        .ok_or_else(|| format!("{object_name}: relocation field is out of bounds"))?;
+    field.copy_from_slice(&offset.to_le_bytes());
+    let opcode = payload
+        .get_mut(instruction_offset..instruction_offset + 2)
+        .ok_or_else(|| format!("{object_name}: relocation instruction is out of bounds"))?;
+    let pcadd32_word = (word & 0xff00) | 0x0002;
+    opcode.copy_from_slice(&pcadd32_word.to_le_bytes());
+    Ok(true)
 }
 
 fn apply_relocation(

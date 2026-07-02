@@ -255,7 +255,7 @@ fn disassemble_instruction(
             }
             DisassembledInstruction::single("ret".to_string())
         }
-        0xe => disassemble_const32(words, index, pc, a, b, c, word)?,
+        0xe => disassemble_const32_or_pcadd32(words, index, pc, a, b, c, word)?,
         _ => return Err(invalid_instruction(pc, word, "unknown opcode")),
     };
     Ok(instruction)
@@ -368,7 +368,7 @@ fn disassemble_extended(
     Ok(instruction)
 }
 
-fn disassemble_const32(
+fn disassemble_const32_or_pcadd32(
     words: &[u16],
     index: usize,
     pc: u32,
@@ -377,22 +377,31 @@ fn disassemble_const32(
     subop: u8,
     word: u16,
 ) -> Result<DisassembledInstruction, String> {
-    if reserved != 0 || subop != 1 {
+    if reserved != 0 || (subop != 1 && subop != 2) {
         return Err(invalid_instruction(
             pc,
             word,
-            "const32 reserved bits are set",
+            "const32/pcadd32 reserved bits are set",
         ));
     }
     let Some(lo) = words.get(index + 1).copied() else {
-        return Err(invalid_instruction(pc, word, "truncated const32 low word"));
+        return Err(invalid_instruction(
+            pc,
+            word,
+            "truncated const32/pcadd32 low word",
+        ));
     };
     let Some(hi) = words.get(index + 2).copied() else {
-        return Err(invalid_instruction(pc, word, "truncated const32 high word"));
+        return Err(invalid_instruction(
+            pc,
+            word,
+            "truncated const32/pcadd32 high word",
+        ));
     };
     let value = u32::from(lo) | (u32::from(hi) << 16);
+    let mnemonic = if subop == 1 { "const32" } else { "pcadd32" };
     Ok(DisassembledInstruction::multi(
-        format!("const32 r{register}, 0x{value:08x}"),
+        format!("{mnemonic} r{register}, 0x{value:08x}"),
         3,
     ))
 }

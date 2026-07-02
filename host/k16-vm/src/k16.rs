@@ -228,6 +228,10 @@ pub enum DecodedInstruction {
         dst: usize,
         value: u32,
     },
+    PcAdd32 {
+        dst: usize,
+        offset: u32,
+    },
     Add {
         dst: usize,
         lhs: usize,
@@ -399,7 +403,9 @@ pub enum DecodedInstruction {
 impl DecodedInstruction {
     fn family(&self) -> K16InstructionFamily {
         match self {
-            Self::Const4 { .. } | Self::Const32 { .. } => K16InstructionFamily::Immediate,
+            Self::Const4 { .. } | Self::Const32 { .. } | Self::PcAdd32 { .. } => {
+                K16InstructionFamily::Immediate
+            }
             Self::Add { .. }
             | Self::Sub { .. }
             | Self::Mul { .. }
@@ -625,7 +631,7 @@ impl InstructionDecoder for K16Decoder {
                 DecodedInstruction::Ret
             }
             0xe => {
-                if b != 0 || c != 1 {
+                if b != 0 || (c != 1 && c != 2) {
                     return Err(illegal_instruction(pc, word));
                 }
                 let low_addr = checked_pc_add(pc, 2)?;
@@ -638,11 +644,17 @@ impl InstructionDecoder for K16Decoder {
                     bus.load_u16(high_addr)
                         .map_err(|error| instruction_fetch_fault(high_addr, error))?,
                 );
-                return Ok(DecodeResult {
-                    instruction: DecodedInstruction::Const32 {
+                let value = (high << 16) | low;
+                let instruction = if c == 1 {
+                    DecodedInstruction::Const32 { dst: a, value }
+                } else {
+                    DecodedInstruction::PcAdd32 {
                         dst: a,
-                        value: (high << 16) | low,
-                    },
+                        offset: value,
+                    }
+                };
+                return Ok(DecodeResult {
+                    instruction,
                     next_pc: checked_pc_add(pc, 6)?,
                 });
             }
@@ -1052,6 +1064,10 @@ impl K16Cpu {
             }
             DecodedInstruction::Const32 { dst, value } => {
                 self.registers[dst] = value;
+                Ok(None)
+            }
+            DecodedInstruction::PcAdd32 { dst, offset } => {
+                self.registers[dst] = fault_pc.wrapping_add(offset);
                 Ok(None)
             }
             DecodedInstruction::Add { dst, lhs, rhs } => {
