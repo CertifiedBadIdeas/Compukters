@@ -388,8 +388,8 @@ fn k16_signal_values(signal: K16Signal) -> [jlong; 2] {
 }
 
 fn k16_computer_stats_snapshot_values(snapshot: &K16ComputerStatsSnapshot) -> Vec<jlong> {
-    let mut values = Vec::with_capacity(40 + snapshot.devices.len() * 30);
-    values.push(12);
+    let mut values = Vec::with_capacity(40 + snapshot.devices.len() * 32);
+    values.push(13);
     push_traffic_values(&mut values, snapshot.bus.ram);
     push_traffic_values(&mut values, snapshot.bus.mmio);
     values.push(snapshot.os.path_lookups as jlong);
@@ -458,6 +458,8 @@ fn push_storage_values(values: &mut Vec<jlong>, storage: K16ComputerStorageStats
     values.push(storage.root_metadata_read_blocks as jlong);
     values.push(storage.root_data_read_blocks as jlong);
     values.push(storage.unknown_read_blocks as jlong);
+    values.push(storage.requested_read_blocks as jlong);
+    values.push(storage.requested_read_bytes as jlong);
 }
 
 fn push_gpu_values(values: &mut Vec<jlong>, gpu: K16ComputerGpuStatsSnapshot) {
@@ -663,15 +665,17 @@ mod tests {
                     root_metadata_read_blocks: 29,
                     root_data_read_blocks: 30,
                     unknown_read_blocks: 31,
+                    requested_read_blocks: 32,
+                    requested_read_bytes: 33,
                 },
                 gpu: K16ComputerGpuStatsSnapshot {
-                    blit_buffer_commands: 32,
-                    blit_pixels: 33,
-                    blit_source_bytes: 34,
-                    present_commands: 35,
-                    frames: 36,
-                    frame_tiles: 37,
-                    frame_payload_bytes: 38,
+                    blit_buffer_commands: 34,
+                    blit_pixels: 35,
+                    blit_source_bytes: 36,
+                    present_commands: 37,
+                    frames: 38,
+                    frame_tiles: 39,
+                    frame_payload_bytes: 40,
                 },
             }],
         };
@@ -679,10 +683,10 @@ mod tests {
         assert_eq!(
             k16_computer_stats_snapshot_values(&snapshot),
             vec![
-                12, 2, 3, 4, 5, 6, 7, 8, 9, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36,
+                13, 2, 3, 4, 5, 6, 7, 8, 9, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36,
                 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 1, 11, 0x1000, 64,
                 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32,
-                33, 34, 35, 36, 37, 38,
+                33, 34, 35, 36, 37, 38, 39, 40,
             ],
         );
     }

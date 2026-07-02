@@ -54,6 +54,8 @@ class K16RuntimeProfilingArchitectureTest {
         assertTrue(docs.contains("k16Bus: ramLoads="))
         assertTrue(docs.contains("k16Devices: mapped="))
         assertTrue(docs.contains("k16Storage0: readCommands="))
+        assertTrue(docs.contains("requestedReadBlocks="))
+        assertTrue(docs.contains("requestedReadBytes="))
         assertTrue(docs.contains("k16FsHotspots: metadataOps="))
         assertTrue(docs.contains("pathLookups=["))
         assertTrue(docs.contains("readDirDataReadBlocks=["))
@@ -79,6 +81,8 @@ class K16RuntimeProfilingArchitectureTest {
         assertTrue(textIoProfilingSource.contains("bios.splash.visible"))
         assertTrue(textIoProfilingSource.contains("bios.splash.wait"))
         assertTrue(textIoProfilingSource.contains("shell.prompt.after_splash"))
+        assertTrue(textIoProfilingSource.contains("shell.prompt.after_splash_to_prompt_visible"))
+        assertTrue(textIoProfilingSource.contains("shell.prompt.prompt_visible_to_input_ready"))
         assertTrue(manyVmProfilingSource.contains("k16ManyVmSplash"))
         assertTrue(manyVmProfilingSource.contains("k16ManyVmBootAfterSplash"))
         assertTrue(manyVmProfilingSource.contains("k16ManyVmCpuHighload"))
@@ -170,5 +174,34 @@ class K16RuntimeProfilingArchitectureTest {
         assertTrue(storageSource.contains("record_block_cache_hit()"))
         assertTrue(storageSource.contains("record_block_cache_miss()"))
         assertTrue(storageSource.contains("record_block_cache_batch_read()"))
+    }
+
+    @Test
+    fun k16StorageProfilesRequestedReadBlocksSeparatelyFromMediaReads() {
+        val hostStatsSource = Path.of("../../../host/k16-vm/src/computer/stats.rs").readText()
+        val hostStorageSource = Path.of("../../../host/k16-vm/src/computer/devices/storage.rs").readText()
+        val jniSource = Path.of("../../../host/k16-vm/src/jni.rs").readText()
+        val nativeBindingsSource =
+            Path
+                .of("../../../modules/native-runtime/src/main/kotlin/ru/lazyhat/compukterkraft/lang/runtime/blazing/NativeVmBindings.kt")
+                .readText()
+        val runtimeProfilingSource =
+            Path
+                .of("../../../modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/runtime/RuntimeProfiling.kt")
+                .readText()
+
+        assertTrue(hostStatsSource.contains("requested_read_blocks: u64"))
+        assertTrue(hostStatsSource.contains("requested_read_bytes: u64"))
+        assertTrue(hostStorageSource.contains("requested_read_blocks"))
+        assertTrue(hostStorageSource.contains("u64::from(self.block_count)"))
+        assertTrue(hostStorageSource.contains("u64::from(byte_count)"))
+        assertTrue(jniSource.contains("values.push(13)"))
+        assertTrue(jniSource.contains("storage.requested_read_blocks"))
+        assertTrue(jniSource.contains("storage.requested_read_bytes"))
+        assertTrue(nativeBindingsSource.contains("VERSION_V13"))
+        assertTrue(nativeBindingsSource.contains("requestedReadBlocks"))
+        assertTrue(nativeBindingsSource.contains("requestedReadBytes"))
+        assertTrue(runtimeProfilingSource.contains("requestedReadBlocks="))
+        assertTrue(runtimeProfilingSource.contains("requestedReadBytes="))
     }
 }

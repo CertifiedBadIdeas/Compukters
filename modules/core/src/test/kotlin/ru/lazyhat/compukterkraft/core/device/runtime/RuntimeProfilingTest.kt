@@ -211,6 +211,8 @@ class RuntimeProfilingTest {
                                     rootMetadataReadBlocks = 21,
                                     rootDataReadBlocks = 22,
                                     unknownReadBlocks = 23,
+                                    requestedReadBlocks = 24,
+                                    requestedReadBytes = 12288,
                                 ),
                             gpu =
                                 NativeK16GpuStats(
@@ -316,6 +318,8 @@ class RuntimeProfilingTest {
         assertEquals(0x2000, snapshot.k16.devices.single().base)
         assertEquals(64, snapshot.k16.devices.single().size)
         assertEquals(RuntimeK16BusTrafficMetrics(loads = 4, stores = 5, bytesRead = 6, bytesWritten = 7), snapshot.k16.devices.single().traffic)
+        assertEquals(24, snapshot.k16.storage0.requestedReadBlocks)
+        assertEquals(12288, snapshot.k16.storage0.requestedReadBytes)
         assertEquals(
             RuntimeK16GpuMetrics(
                 blitBufferCommands = 22,
@@ -401,7 +405,7 @@ class RuntimeProfilingTest {
             summary,
         )
         assertTrue(
-            summary.contains("    k16Storage0: readCommands=8, writeCommands=9, flushes=10, bytesRead=11, bytesWritten=12, failed=13, mediaReadBlocks=14, mediaWriteBlocks=15, uniqueReadBlocks=16, repeatedReadBlocks=17, partitionTableReadBlocks=18, bootMetadataReadBlocks=19, bootDataReadBlocks=20, rootMetadataReadBlocks=21, rootDataReadBlocks=22, unknownReadBlocks=23"),
+            summary.contains("    k16Storage0: readCommands=8, writeCommands=9, flushes=10, bytesRead=11, bytesWritten=12, failed=13, mediaReadBlocks=14, mediaWriteBlocks=15, uniqueReadBlocks=16, repeatedReadBlocks=17, partitionTableReadBlocks=18, bootMetadataReadBlocks=19, bootDataReadBlocks=20, rootMetadataReadBlocks=21, rootDataReadBlocks=22, unknownReadBlocks=23, requestedReadBlocks=24, requestedReadBytes=12288"),
             summary,
         )
         assertTrue(

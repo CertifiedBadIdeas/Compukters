@@ -78,11 +78,12 @@ individual character input, sends another command as paste input, compares a nor
 ```
 
 The `k16Phase` lines split selected text-I/O scenarios into named checkpoints such as `bios.splash.visible`,
-`bios.splash.wait`, `shell.prompt.after_splash`, `*.input`, `*.visible`, and `*.idle`. Each line reports elapsed wall time
-and deltas between two runtime metric snapshots:
+`bios.splash.wait`, `shell.prompt.after_splash_to_prompt_visible`, `shell.prompt.prompt_visible_to_input_ready`,
+`*.input`, `*.visible`, and `*.idle`. Each line reports elapsed wall time and deltas between two runtime metric
+snapshots:
 
 ```text
-k16Phase: name=ls:/bin.visible, elapsed=..., slices=..., runTime=..., inputBytes=..., gpuFrameBytes=..., displayFrames=..., displayBytes=..., storageReadCommands=..., storageWriteCommands=..., storageMediaReadBlocks=..., storageMediaWriteBlocks=..., storageUniqueReadBlocks=..., storageRepeatedReadBlocks=..., storagePartitionTableReadBlocks=..., storageBootMetadataReadBlocks=..., storageBootDataReadBlocks=..., storageRootMetadataReadBlocks=..., storageRootDataReadBlocks=..., storageUnknownReadBlocks=..., storageBytesRead=..., pathLookups=..., inodeLoads=..., dirEntryScans=..., fileOpens=..., fileReads=..., statCalls=..., programLoadBytes=..., dynamicImportBytes=..., libraryLoadBytes=..., genericFileDataReadBlocks=..., genericFileDataReadBytes=..., readDirDataReadBlocks=..., readDirDataReadBytes=..., programDataReadBlocks=..., programDataReadBytes=..., dynamicImportDataReadBlocks=..., dynamicImportDataReadBytes=..., libraryDataReadBlocks=..., libraryDataReadBytes=..., blockCacheHits=..., blockCacheMisses=..., blockCacheBatchReads=...
+k16Phase: name=ls:/bin.visible, elapsed=..., slices=..., runTime=..., inputBytes=..., gpuFrameBytes=..., displayFrames=..., displayBytes=..., storageReadCommands=..., storageRequestedReadBlocks=..., storageRequestedReadBytes=..., storageWriteCommands=..., storageMediaReadBlocks=..., storageMediaWriteBlocks=..., storageUniqueReadBlocks=..., storageRepeatedReadBlocks=..., storagePartitionTableReadBlocks=..., storageBootMetadataReadBlocks=..., storageBootDataReadBlocks=..., storageRootMetadataReadBlocks=..., storageRootDataReadBlocks=..., storageUnknownReadBlocks=..., storageBytesRead=..., pathLookups=..., inodeLoads=..., dirEntryScans=..., fileOpens=..., fileReads=..., statCalls=..., programLoadBytes=..., dynamicImportBytes=..., libraryLoadBytes=..., genericFileDataReadBlocks=..., genericFileDataReadBytes=..., readDirDataReadBlocks=..., readDirDataReadBytes=..., programDataReadBlocks=..., programDataReadBytes=..., dynamicImportDataReadBlocks=..., dynamicImportDataReadBytes=..., libraryDataReadBlocks=..., libraryDataReadBytes=..., blockCacheHits=..., blockCacheMisses=..., blockCacheBatchReads=...
 ```
 
 Use these phase lines when deciding whether a slowdown is in command dispatch, command execution/storage reads, display
@@ -104,14 +105,18 @@ storage bucket. Allocation/free internals are not exposed as their own OS counte
 
 The bundled BIOS intentionally shows a splash frame and waits for 20 game ticks before loading the bootloader.
 `bios.splash.wait` isolates the pure wait portion before the release tick; bootloader/kernel/shell work after the splash
-deadline is counted under `shell.prompt.after_splash`. Treat the splash wait as intentional startup latency, not as
-bootloader/kernel/shell execution cost. Use `shell.prompt.after_splash` and later command-specific phases when comparing
-real post-splash responsiveness. In startup phases, compare `programLoadBytes`, `dynamicImportBytes`, and
+deadline is counted under `shell.prompt.after_splash_to_prompt_visible`, followed by a narrow
+`shell.prompt.prompt_visible_to_input_ready` marker before scripted input starts. Treat the splash wait as intentional
+startup latency, not as bootloader/kernel/shell execution cost. Use these post-splash startup phases and later
+command-specific phases when comparing real responsiveness. In startup phases, compare `programLoadBytes`,
+`dynamicImportBytes`, and
 `libraryLoadBytes` against `storageBytesRead` to distinguish executable payload reads, dynamic import metadata reads, and
 shared-library payload reads. Compare `storageUniqueReadBlocks` and `storageRepeatedReadBlocks` to identify whether
 backend storage cost comes from new LBAs or repeated reads of LBAs that already missed the storage0 block cache earlier.
-`storageReadCommands` and `storageWriteCommands` count guest-visible storage0 transfer commands. `storageMediaReadBlocks`
-and `storageMediaWriteBlocks` count backend media blocks actually read or written by those commands. The
+`storageReadCommands` and `storageWriteCommands` count guest-visible storage0 transfer commands.
+`storageRequestedReadBlocks` and `storageRequestedReadBytes` count the successful guest-requested READ_BLOCKS payload
+before storage0 media/cache handling. `storageMediaReadBlocks` and `storageMediaWriteBlocks` count backend media blocks
+actually read or written by those commands. The
 `storage*ReadBlocks` ownership counters split backend media reads into the K16PT table, BOOT KFS metadata/data, ROOT
 KFS metadata/data, and unknown blocks.
 The `*DataReadBlocks` and `*DataReadBytes` OS counters split guest KFS data-block reads by loader/file category:
@@ -207,7 +212,7 @@ during the worker cache refresh path:
 ```text
 k16Bus: ramLoads=..., ramStores=..., ramBytesRead=..., ramBytesWritten=..., mmioLoads=..., mmioStores=..., mmioBytesRead=..., mmioBytesWritten=...
 k16Devices: mapped=..., loads=..., stores=..., bytesRead=..., bytesWritten=...
-k16Storage0: readCommands=..., writeCommands=..., flushes=..., bytesRead=..., bytesWritten=..., failed=..., mediaReadBlocks=..., mediaWriteBlocks=..., uniqueReadBlocks=..., repeatedReadBlocks=..., partitionTableReadBlocks=..., bootMetadataReadBlocks=..., bootDataReadBlocks=..., rootMetadataReadBlocks=..., rootDataReadBlocks=..., unknownReadBlocks=...
+k16Storage0: readCommands=..., writeCommands=..., flushes=..., bytesRead=..., bytesWritten=..., failed=..., mediaReadBlocks=..., mediaWriteBlocks=..., uniqueReadBlocks=..., repeatedReadBlocks=..., partitionTableReadBlocks=..., bootMetadataReadBlocks=..., bootDataReadBlocks=..., rootMetadataReadBlocks=..., rootDataReadBlocks=..., unknownReadBlocks=..., requestedReadBlocks=..., requestedReadBytes=...
 k16Os: pathLookups=..., inodeLoads=..., dirEntryScans=..., fileOpens=..., fileReads=..., statCalls=..., programLoadBytes=..., dynamicImportBytes=..., libraryLoadBytes=..., genericFileDataReadBlocks=..., genericFileDataReadBytes=..., readDirDataReadBlocks=..., readDirDataReadBytes=..., programDataReadBlocks=..., programDataReadBytes=..., dynamicImportDataReadBlocks=..., dynamicImportDataReadBytes=..., libraryDataReadBlocks=..., libraryDataReadBytes=..., blockCacheHits=..., blockCacheMisses=..., blockCacheBatchReads=...
   device[...]: base=..., size=..., loads=..., stores=..., bytesRead=..., bytesWritten=...
 ```

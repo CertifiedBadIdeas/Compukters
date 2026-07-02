@@ -472,6 +472,14 @@ impl StoragePortDevice {
             ) {
                 Ok((read_profile, bytes_read)) => {
                     self.stats.read_commands = self.stats.read_commands.wrapping_add(1);
+                    self.stats.requested_read_blocks = self
+                        .stats
+                        .requested_read_blocks
+                        .wrapping_add(u64::from(self.block_count));
+                    self.stats.requested_read_bytes = self
+                        .stats
+                        .requested_read_bytes
+                        .wrapping_add(u64::from(byte_count));
                     self.stats.media_read_blocks = self
                         .stats
                         .media_read_blocks
@@ -1157,6 +1165,8 @@ mod tests {
         let stats = device.stats_snapshot();
         assert_eq!(read_count.get(), 3);
         assert_eq!(stats.read_commands, 2);
+        assert_eq!(stats.requested_read_blocks, 6);
+        assert_eq!(stats.requested_read_bytes, 3072);
         assert_eq!(stats.media_read_blocks, 3);
         assert_eq!(stats.bytes_read, 1536);
     }

@@ -110,6 +110,8 @@ class K16RuntimeTextIoProfilingTest {
                                             rootMetadataReadBlocks = 4,
                                             rootDataReadBlocks = 5,
                                             unknownReadBlocks = 6,
+                                            requestedReadBlocks = 7,
+                                            requestedReadBytes = 3584,
                                         ),
                                     gpu = RuntimeK16GpuMetrics(frames = 4, framePayloadBytes = 128),
                                 ),
@@ -174,6 +176,8 @@ class K16RuntimeTextIoProfilingTest {
                                             rootMetadataReadBlocks = 8,
                                             rootDataReadBlocks = 10,
                                             unknownReadBlocks = 12,
+                                            requestedReadBlocks = 17,
+                                            requestedReadBytes = 8704,
                                         ),
                                     gpu = RuntimeK16GpuMetrics(frames = 9, framePayloadBytes = 384),
                                 ),
@@ -192,6 +196,8 @@ class K16RuntimeTextIoProfilingTest {
         assertTrue(line.contains("displayFrames=5"))
         assertTrue(line.contains("displayBytes=256"))
         assertTrue(line.contains("storageReadCommands=2"))
+        assertTrue(line.contains("storageRequestedReadBlocks=10"))
+        assertTrue(line.contains("storageRequestedReadBytes=5120"))
         assertTrue(line.contains("storageMediaReadBlocks="))
         assertTrue(line.contains("storageUniqueReadBlocks=5"))
         assertTrue(line.contains("storageRepeatedReadBlocks=2"))
@@ -277,6 +283,8 @@ class K16RuntimeTextIoProfilingTest {
                                             rootMetadataReadBlocks = 8,
                                             rootDataReadBlocks = 10,
                                             unknownReadBlocks = 12,
+                                            requestedReadBlocks = 14,
+                                            requestedReadBytes = 7168,
                                         ),
                                     gpu = RuntimeK16GpuMetrics(),
                                 ),
@@ -331,6 +339,8 @@ class K16RuntimeTextIoProfilingTest {
                                             rootMetadataReadBlocks = 17,
                                             rootDataReadBlocks = 21,
                                             unknownReadBlocks = 25,
+                                            requestedReadBlocks = 45,
+                                            requestedReadBytes = 23040,
                                         ),
                                     gpu = RuntimeK16GpuMetrics(),
                                 ),
@@ -344,6 +354,8 @@ class K16RuntimeTextIoProfilingTest {
         assertTrue(line.contains("slices=13"))
         assertTrue(line.contains("runTime=1400 ns"))
         assertTrue(line.contains("storageReadCommands=29"))
+        assertTrue(line.contains("storageRequestedReadBlocks=31"))
+        assertTrue(line.contains("storageRequestedReadBytes=15872"))
         assertTrue(line.contains("storageMediaReadBlocks="))
         assertTrue(line.contains("storageUniqueReadBlocks=24"))
         assertTrue(line.contains("storageRepeatedReadBlocks=5"))
@@ -501,7 +513,9 @@ class K16RuntimeTextIoProfilingTest {
             repeat(K16_BIOS_SPLASH_WAIT_PROFILE_TICKS) { tickAndSync(device) }
             val splashWaitPhase = phases.mark("bios.splash.wait")
             waitForTerminal(device, "initial shell prompt") { terminal -> terminal.contains("K16> ") }
-            val promptAfterSplashPhase = phases.mark("shell.prompt.after_splash")
+            val promptVisiblePhase = phases.mark("shell.prompt.after_splash_to_prompt_visible")
+            val promptInputReadyPhase = phases.mark("shell.prompt.prompt_visible_to_input_ready")
+            val promptAfterSplashPhase = promptVisiblePhase
             val typedCommand = "ticks\n"
             dispatchText(device, typedCommand)
             val typedInputPhase = phases.mark("ticks.input")
@@ -535,7 +549,8 @@ class K16RuntimeTextIoProfilingTest {
             assertTrue(summary.contains("k16TextInput: events="))
             assertTrue(splashVisiblePhase.contains("name=bios.splash.visible"))
             assertTrue(splashWaitPhase.contains("name=bios.splash.wait"))
-            assertTrue(promptAfterSplashPhase.contains("name=shell.prompt.after_splash"))
+            assertTrue(promptAfterSplashPhase.contains("name=shell.prompt.after_splash_to_prompt_visible"))
+            assertTrue(promptInputReadyPhase.contains("name=shell.prompt.prompt_visible_to_input_ready"))
             assertTrue(typedInputPhase.contains("name=ticks.input"))
             assertTrue(typedVisiblePhase.contains("name=ticks.visible"))
             assertTrue(typedIdlePhase.contains("name=ticks.idle"))
@@ -1165,6 +1180,8 @@ private fun formatK16RuntimePhase(
         "displayTiles=${gpuAfter.frameTiles - gpuBefore.frameTiles}, " +
         "displayBytes=${gpuAfter.framePayloadBytes - gpuBefore.framePayloadBytes}, " +
         "storageReadCommands=${storageAfter.readCommands - storageBefore.readCommands}, " +
+        "storageRequestedReadBlocks=${storageAfter.requestedReadBlocks - storageBefore.requestedReadBlocks}, " +
+        "storageRequestedReadBytes=${storageAfter.requestedReadBytes - storageBefore.requestedReadBytes}, " +
         "storageMediaReadBlocks=${storageAfter.mediaReadBlocks - storageBefore.mediaReadBlocks}, " +
         "storageMediaWriteBlocks=${storageAfter.mediaWriteBlocks - storageBefore.mediaWriteBlocks}, " +
         "storageUniqueReadBlocks=${storageAfter.uniqueReadBlocks - storageBefore.uniqueReadBlocks}, " +
@@ -1225,6 +1242,8 @@ private fun formatK16CoreutilsCommandProfile(
         "slices=${vmAfter.k16RunSlices - vmBefore.k16RunSlices}, " +
         "runTime=${vmAfter.k16RunNanos - vmBefore.k16RunNanos} ns, " +
         "storageReadCommands=${storageAfter.readCommands - storageBefore.readCommands}, " +
+        "storageRequestedReadBlocks=${storageAfter.requestedReadBlocks - storageBefore.requestedReadBlocks}, " +
+        "storageRequestedReadBytes=${storageAfter.requestedReadBytes - storageBefore.requestedReadBytes}, " +
         "storageMediaReadBlocks=${storageAfter.mediaReadBlocks - storageBefore.mediaReadBlocks}, " +
         "storageMediaWriteBlocks=${storageAfter.mediaWriteBlocks - storageBefore.mediaWriteBlocks}, " +
         "storageUniqueReadBlocks=${storageAfter.uniqueReadBlocks - storageBefore.uniqueReadBlocks}, " +
