@@ -90,6 +90,16 @@ class K16RuntimeTextIoProfilingTest {
                                 dynamicImportDataReadBytes = 31,
                                 libraryDataReadBlocks = 32,
                                 libraryDataReadBytes = 33,
+                                initProgramFileDataReadBlocks = 34,
+                                initProgramFileDataReadBytes = 35,
+                                shellProgramFileDataReadBlocks = 36,
+                                shellProgramFileDataReadBytes = 37,
+                                otherProgramFileDataReadBlocks = 38,
+                                otherProgramFileDataReadBytes = 39,
+                                libkraftLibraryFileDataReadBlocks = 40,
+                                libkraftLibraryFileDataReadBytes = 41,
+                                otherLibraryFileDataReadBlocks = 42,
+                                otherLibraryFileDataReadBytes = 43,
                             ),
                         devices =
                             listOf(
@@ -156,6 +166,16 @@ class K16RuntimeTextIoProfilingTest {
                                 dynamicImportDataReadBytes = 107,
                                 libraryDataReadBlocks = 109,
                                 libraryDataReadBytes = 113,
+                                initProgramFileDataReadBlocks = 127,
+                                initProgramFileDataReadBytes = 131,
+                                shellProgramFileDataReadBlocks = 137,
+                                shellProgramFileDataReadBytes = 139,
+                                otherProgramFileDataReadBlocks = 149,
+                                otherProgramFileDataReadBytes = 151,
+                                libkraftLibraryFileDataReadBlocks = 157,
+                                libkraftLibraryFileDataReadBytes = 163,
+                                otherLibraryFileDataReadBlocks = 167,
+                                otherLibraryFileDataReadBytes = 173,
                             ),
                         devices =
                             listOf(
@@ -232,6 +252,16 @@ class K16RuntimeTextIoProfilingTest {
         assertTrue(line.contains("dynamicImportDataReadBytes=76"))
         assertTrue(line.contains("libraryDataReadBlocks=77"))
         assertTrue(line.contains("libraryDataReadBytes=80"))
+        assertTrue(line.contains("initProgramFileDataReadBlocks=93"))
+        assertTrue(line.contains("initProgramFileDataReadBytes=96"))
+        assertTrue(line.contains("shellProgramFileDataReadBlocks=101"))
+        assertTrue(line.contains("shellProgramFileDataReadBytes=102"))
+        assertTrue(line.contains("otherProgramFileDataReadBlocks=111"))
+        assertTrue(line.contains("otherProgramFileDataReadBytes=112"))
+        assertTrue(line.contains("libkraftLibraryFileDataReadBlocks=117"))
+        assertTrue(line.contains("libkraftLibraryFileDataReadBytes=122"))
+        assertTrue(line.contains("otherLibraryFileDataReadBlocks=125"))
+        assertTrue(line.contains("otherLibraryFileDataReadBytes=130"))
     }
 
     @Test
@@ -1222,7 +1252,17 @@ private fun formatK16RuntimePhase(
         "libraryDataReadBytes=${osAfter.libraryDataReadBytes - osBefore.libraryDataReadBytes}, " +
         "blockCacheHits=${osAfter.blockCacheHits - osBefore.blockCacheHits}, " +
         "blockCacheMisses=${osAfter.blockCacheMisses - osBefore.blockCacheMisses}, " +
-        "blockCacheBatchReads=${osAfter.blockCacheBatchReads - osBefore.blockCacheBatchReads}"
+        "blockCacheBatchReads=${osAfter.blockCacheBatchReads - osBefore.blockCacheBatchReads}, " +
+        "initProgramFileDataReadBlocks=${osAfter.initProgramFileDataReadBlocks - osBefore.initProgramFileDataReadBlocks}, " +
+        "initProgramFileDataReadBytes=${osAfter.initProgramFileDataReadBytes - osBefore.initProgramFileDataReadBytes}, " +
+        "shellProgramFileDataReadBlocks=${osAfter.shellProgramFileDataReadBlocks - osBefore.shellProgramFileDataReadBlocks}, " +
+        "shellProgramFileDataReadBytes=${osAfter.shellProgramFileDataReadBytes - osBefore.shellProgramFileDataReadBytes}, " +
+        "otherProgramFileDataReadBlocks=${osAfter.otherProgramFileDataReadBlocks - osBefore.otherProgramFileDataReadBlocks}, " +
+        "otherProgramFileDataReadBytes=${osAfter.otherProgramFileDataReadBytes - osBefore.otherProgramFileDataReadBytes}, " +
+        "libkraftLibraryFileDataReadBlocks=${osAfter.libkraftLibraryFileDataReadBlocks - osBefore.libkraftLibraryFileDataReadBlocks}, " +
+        "libkraftLibraryFileDataReadBytes=${osAfter.libkraftLibraryFileDataReadBytes - osBefore.libkraftLibraryFileDataReadBytes}, " +
+        "otherLibraryFileDataReadBlocks=${osAfter.otherLibraryFileDataReadBlocks - osBefore.otherLibraryFileDataReadBlocks}, " +
+        "otherLibraryFileDataReadBytes=${osAfter.otherLibraryFileDataReadBytes - osBefore.otherLibraryFileDataReadBytes}"
 }
 
 private fun formatK16CoreutilsCommandProfile(
@@ -1281,7 +1321,17 @@ private fun formatK16CoreutilsCommandProfile(
         "libraryDataReadBytes=${osAfter.libraryDataReadBytes - osBefore.libraryDataReadBytes}, " +
         "blockCacheHits=${osAfter.blockCacheHits - osBefore.blockCacheHits}, " +
         "blockCacheMisses=${osAfter.blockCacheMisses - osBefore.blockCacheMisses}, " +
-        "blockCacheBatchReads=${osAfter.blockCacheBatchReads - osBefore.blockCacheBatchReads}"
+        "blockCacheBatchReads=${osAfter.blockCacheBatchReads - osBefore.blockCacheBatchReads}, " +
+        "initProgramFileDataReadBlocks=${osAfter.initProgramFileDataReadBlocks - osBefore.initProgramFileDataReadBlocks}, " +
+        "initProgramFileDataReadBytes=${osAfter.initProgramFileDataReadBytes - osBefore.initProgramFileDataReadBytes}, " +
+        "shellProgramFileDataReadBlocks=${osAfter.shellProgramFileDataReadBlocks - osBefore.shellProgramFileDataReadBlocks}, " +
+        "shellProgramFileDataReadBytes=${osAfter.shellProgramFileDataReadBytes - osBefore.shellProgramFileDataReadBytes}, " +
+        "otherProgramFileDataReadBlocks=${osAfter.otherProgramFileDataReadBlocks - osBefore.otherProgramFileDataReadBlocks}, " +
+        "otherProgramFileDataReadBytes=${osAfter.otherProgramFileDataReadBytes - osBefore.otherProgramFileDataReadBytes}, " +
+        "libkraftLibraryFileDataReadBlocks=${osAfter.libkraftLibraryFileDataReadBlocks - osBefore.libkraftLibraryFileDataReadBlocks}, " +
+        "libkraftLibraryFileDataReadBytes=${osAfter.libkraftLibraryFileDataReadBytes - osBefore.libkraftLibraryFileDataReadBytes}, " +
+        "otherLibraryFileDataReadBlocks=${osAfter.otherLibraryFileDataReadBlocks - osBefore.otherLibraryFileDataReadBlocks}, " +
+        "otherLibraryFileDataReadBytes=${osAfter.otherLibraryFileDataReadBytes - osBefore.otherLibraryFileDataReadBytes}"
 }
 
 private fun formatKfsHotspotSummary(samples: List<K16ProfiledCommandSample>): String {

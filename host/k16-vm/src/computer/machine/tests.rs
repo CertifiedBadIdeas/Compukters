@@ -2036,11 +2036,24 @@ fn stats_snapshot_reads_registered_os_stats_from_guest_ram() {
     machine.memory_mut().store_u64(680, 32).unwrap();
     machine.memory_mut().store_u64(688, 33).unwrap();
     machine.memory_mut().store_u64(696, 34).unwrap();
+    machine.memory_mut().store_u64(704, 35).unwrap();
+    machine.memory_mut().store_u64(712, 36).unwrap();
+    machine.memory_mut().store_u64(720, 37).unwrap();
+    machine.memory_mut().store_u64(728, 38).unwrap();
+    machine.memory_mut().store_u64(736, 39).unwrap();
+    machine.memory_mut().store_u64(744, 40).unwrap();
+    machine.memory_mut().store_u64(752, 41).unwrap();
+    machine.memory_mut().store_u64(760, 42).unwrap();
+    machine.memory_mut().store_u64(768, 43).unwrap();
+    machine.memory_mut().store_u64(776, 44).unwrap();
+    machine.memory_mut().store_u64(784, 45).unwrap();
+    machine.memory_mut().store_u64(792, 46).unwrap();
+    machine.memory_mut().store_u64(800, 47).unwrap();
     machine
         .bus_store_i32(computer_abi::CONTROL_OS_STATS_ADDR, 512)
         .unwrap();
     machine
-        .bus_store_i32(computer_abi::CONTROL_OS_STATS_SIZE, 192)
+        .bus_store_i32(computer_abi::CONTROL_OS_STATS_SIZE, 296)
         .unwrap();
 
     let snapshot = machine.stats_snapshot();
@@ -2069,6 +2082,19 @@ fn stats_snapshot_reads_registered_os_stats_from_guest_ram() {
     assert_eq!(snapshot.os.dynamic_import_data_read_bytes, 32);
     assert_eq!(snapshot.os.library_data_read_blocks, 33);
     assert_eq!(snapshot.os.library_data_read_bytes, 34);
+    assert_eq!(snapshot.os.block_cache_hits, 35);
+    assert_eq!(snapshot.os.block_cache_misses, 36);
+    assert_eq!(snapshot.os.block_cache_batch_reads, 37);
+    assert_eq!(snapshot.os.init_program_file_data_read_blocks, 38);
+    assert_eq!(snapshot.os.init_program_file_data_read_bytes, 39);
+    assert_eq!(snapshot.os.shell_program_file_data_read_blocks, 40);
+    assert_eq!(snapshot.os.shell_program_file_data_read_bytes, 41);
+    assert_eq!(snapshot.os.other_program_file_data_read_blocks, 42);
+    assert_eq!(snapshot.os.other_program_file_data_read_bytes, 43);
+    assert_eq!(snapshot.os.libkraft_library_file_data_read_blocks, 44);
+    assert_eq!(snapshot.os.libkraft_library_file_data_read_bytes, 45);
+    assert_eq!(snapshot.os.other_library_file_data_read_blocks, 46);
+    assert_eq!(snapshot.os.other_library_file_data_read_bytes, 47);
 }
 
 fn write_k16pt_test_table(

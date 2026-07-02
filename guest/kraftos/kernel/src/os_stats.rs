@@ -31,6 +31,16 @@ pub struct OsStats {
     block_cache_hits: u64,
     block_cache_misses: u64,
     block_cache_batch_reads: u64,
+    init_program_file_data_read_blocks: u64,
+    init_program_file_data_read_bytes: u64,
+    shell_program_file_data_read_blocks: u64,
+    shell_program_file_data_read_bytes: u64,
+    other_program_file_data_read_blocks: u64,
+    other_program_file_data_read_bytes: u64,
+    libkraft_library_file_data_read_blocks: u64,
+    libkraft_library_file_data_read_bytes: u64,
+    other_library_file_data_read_blocks: u64,
+    other_library_file_data_read_bytes: u64,
 }
 
 const OS_STATS_SIZE: u32 = core::mem::size_of::<OsStats>() as u32;
@@ -63,6 +73,16 @@ static mut OS_STATS: OsStats = OsStats {
     block_cache_hits: 0,
     block_cache_misses: 0,
     block_cache_batch_reads: 0,
+    init_program_file_data_read_blocks: 0,
+    init_program_file_data_read_bytes: 0,
+    shell_program_file_data_read_blocks: 0,
+    shell_program_file_data_read_bytes: 0,
+    other_program_file_data_read_blocks: 0,
+    other_program_file_data_read_bytes: 0,
+    libkraft_library_file_data_read_blocks: 0,
+    libkraft_library_file_data_read_bytes: 0,
+    other_library_file_data_read_blocks: 0,
+    other_library_file_data_read_bytes: 0,
 };
 
 pub fn register() {
@@ -208,6 +228,66 @@ pub fn record_block_cache_miss() {
 
 pub fn record_block_cache_batch_read() {
     unsafe { increment(core::ptr::addr_of_mut!(OS_STATS.block_cache_batch_reads)) }
+}
+
+pub fn record_init_program_file_data_read(bytes: u32) {
+    unsafe {
+        increment(core::ptr::addr_of_mut!(
+            OS_STATS.init_program_file_data_read_blocks
+        ));
+        add(
+            core::ptr::addr_of_mut!(OS_STATS.init_program_file_data_read_bytes),
+            u64::from(bytes),
+        );
+    }
+}
+
+pub fn record_shell_program_file_data_read(bytes: u32) {
+    unsafe {
+        increment(core::ptr::addr_of_mut!(
+            OS_STATS.shell_program_file_data_read_blocks
+        ));
+        add(
+            core::ptr::addr_of_mut!(OS_STATS.shell_program_file_data_read_bytes),
+            u64::from(bytes),
+        );
+    }
+}
+
+pub fn record_other_program_file_data_read(bytes: u32) {
+    unsafe {
+        increment(core::ptr::addr_of_mut!(
+            OS_STATS.other_program_file_data_read_blocks
+        ));
+        add(
+            core::ptr::addr_of_mut!(OS_STATS.other_program_file_data_read_bytes),
+            u64::from(bytes),
+        );
+    }
+}
+
+pub fn record_libkraft_library_file_data_read(bytes: u32) {
+    unsafe {
+        increment(core::ptr::addr_of_mut!(
+            OS_STATS.libkraft_library_file_data_read_blocks
+        ));
+        add(
+            core::ptr::addr_of_mut!(OS_STATS.libkraft_library_file_data_read_bytes),
+            u64::from(bytes),
+        );
+    }
+}
+
+pub fn record_other_library_file_data_read(bytes: u32) {
+    unsafe {
+        increment(core::ptr::addr_of_mut!(
+            OS_STATS.other_library_file_data_read_blocks
+        ));
+        add(
+            core::ptr::addr_of_mut!(OS_STATS.other_library_file_data_read_bytes),
+            u64::from(bytes),
+        );
+    }
 }
 
 unsafe fn increment(counter: *mut u64) {

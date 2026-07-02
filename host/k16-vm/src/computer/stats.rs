@@ -77,6 +77,16 @@ pub struct K16ComputerOsStatsSnapshot {
     pub block_cache_hits: u64,
     pub block_cache_misses: u64,
     pub block_cache_batch_reads: u64,
+    pub init_program_file_data_read_blocks: u64,
+    pub init_program_file_data_read_bytes: u64,
+    pub shell_program_file_data_read_blocks: u64,
+    pub shell_program_file_data_read_bytes: u64,
+    pub other_program_file_data_read_blocks: u64,
+    pub other_program_file_data_read_bytes: u64,
+    pub libkraft_library_file_data_read_blocks: u64,
+    pub libkraft_library_file_data_read_bytes: u64,
+    pub other_library_file_data_read_blocks: u64,
+    pub other_library_file_data_read_bytes: u64,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]

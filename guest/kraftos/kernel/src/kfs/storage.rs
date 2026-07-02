@@ -21,9 +21,19 @@ pub struct FileMetadata {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FileReadProfileKind {
     GenericFile,
-    Program,
-    DynamicImport,
-    Library,
+    Program(FileReadProfileFile),
+    DynamicImport(FileReadProfileFile),
+    Library(FileReadProfileFile),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FileReadProfileFile {
+    Generic,
+    InitProgram,
+    ShellProgram,
+    OtherProgram,
+    LibkraftLibrary,
+    OtherLibrary,
 }
 
 #[repr(u32)]
@@ -1387,11 +1397,39 @@ unsafe fn copy_extent_range_to_ram(
 fn record_profiled_file_data_read(kind: FileReadProfileKind, bytes: u32) {
     match kind {
         FileReadProfileKind::GenericFile => crate::os_stats::record_generic_file_data_read(bytes),
-        FileReadProfileKind::Program => crate::os_stats::record_program_data_read(bytes),
-        FileReadProfileKind::DynamicImport => {
+        FileReadProfileKind::Program(file) => {
+            crate::os_stats::record_program_data_read(bytes);
+            record_profiled_file_path_data_read(file, bytes);
+        }
+        FileReadProfileKind::DynamicImport(file) => {
+            record_profiled_file_path_data_read(file, bytes);
             crate::os_stats::record_dynamic_import_data_read(bytes)
         }
-        FileReadProfileKind::Library => crate::os_stats::record_library_data_read(bytes),
+        FileReadProfileKind::Library(file) => {
+            crate::os_stats::record_library_data_read(bytes);
+            record_profiled_file_path_data_read(file, bytes);
+        }
+    }
+}
+
+fn record_profiled_file_path_data_read(file: FileReadProfileFile, bytes: u32) {
+    match file {
+        FileReadProfileFile::Generic => {}
+        FileReadProfileFile::InitProgram => {
+            crate::os_stats::record_init_program_file_data_read(bytes)
+        }
+        FileReadProfileFile::ShellProgram => {
+            crate::os_stats::record_shell_program_file_data_read(bytes)
+        }
+        FileReadProfileFile::OtherProgram => {
+            crate::os_stats::record_other_program_file_data_read(bytes)
+        }
+        FileReadProfileFile::LibkraftLibrary => {
+            crate::os_stats::record_libkraft_library_file_data_read(bytes)
+        }
+        FileReadProfileFile::OtherLibrary => {
+            crate::os_stats::record_other_library_file_data_read(bytes)
+        }
     }
 }
 

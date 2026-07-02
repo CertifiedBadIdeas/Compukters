@@ -388,8 +388,8 @@ fn k16_signal_values(signal: K16Signal) -> [jlong; 2] {
 }
 
 fn k16_computer_stats_snapshot_values(snapshot: &K16ComputerStatsSnapshot) -> Vec<jlong> {
-    let mut values = Vec::with_capacity(40 + snapshot.devices.len() * 32);
-    values.push(13);
+    let mut values = Vec::with_capacity(50 + snapshot.devices.len() * 32);
+    values.push(14);
     push_traffic_values(&mut values, snapshot.bus.ram);
     push_traffic_values(&mut values, snapshot.bus.mmio);
     values.push(snapshot.os.path_lookups as jlong);
@@ -419,6 +419,16 @@ fn k16_computer_stats_snapshot_values(snapshot: &K16ComputerStatsSnapshot) -> Ve
     values.push(snapshot.os.block_cache_hits as jlong);
     values.push(snapshot.os.block_cache_misses as jlong);
     values.push(snapshot.os.block_cache_batch_reads as jlong);
+    values.push(snapshot.os.init_program_file_data_read_blocks as jlong);
+    values.push(snapshot.os.init_program_file_data_read_bytes as jlong);
+    values.push(snapshot.os.shell_program_file_data_read_blocks as jlong);
+    values.push(snapshot.os.shell_program_file_data_read_bytes as jlong);
+    values.push(snapshot.os.other_program_file_data_read_blocks as jlong);
+    values.push(snapshot.os.other_program_file_data_read_bytes as jlong);
+    values.push(snapshot.os.libkraft_library_file_data_read_blocks as jlong);
+    values.push(snapshot.os.libkraft_library_file_data_read_bytes as jlong);
+    values.push(snapshot.os.other_library_file_data_read_blocks as jlong);
+    values.push(snapshot.os.other_library_file_data_read_bytes as jlong);
     values.push(snapshot.decode_cache.entries as jlong);
     values.push(snapshot.decode_cache.hits as jlong);
     values.push(snapshot.decode_cache.misses as jlong);
@@ -631,11 +641,21 @@ mod tests {
                 block_cache_hits: 47,
                 block_cache_misses: 48,
                 block_cache_batch_reads: 49,
+                init_program_file_data_read_blocks: 50,
+                init_program_file_data_read_bytes: 51,
+                shell_program_file_data_read_blocks: 52,
+                shell_program_file_data_read_bytes: 53,
+                other_program_file_data_read_blocks: 54,
+                other_program_file_data_read_bytes: 55,
+                libkraft_library_file_data_read_blocks: 56,
+                libkraft_library_file_data_read_bytes: 57,
+                other_library_file_data_read_blocks: 58,
+                other_library_file_data_read_bytes: 59,
             },
             decode_cache: K16ComputerDecodeCacheStatsSnapshot {
-                entries: 50,
-                hits: 51,
-                misses: 52,
+                entries: 60,
+                hits: 61,
+                misses: 62,
             },
             devices: vec![K16ComputerDeviceStats {
                 name: "debug",
@@ -683,10 +703,10 @@ mod tests {
         assert_eq!(
             k16_computer_stats_snapshot_values(&snapshot),
             vec![
-                13, 2, 3, 4, 5, 6, 7, 8, 9, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36,
-                37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 1, 11, 0x1000, 64,
-                12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32,
-                33, 34, 35, 36, 37, 38, 39, 40,
+                14, 2, 3, 4, 5, 6, 7, 8, 9, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36,
+                37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57,
+                58, 59, 60, 61, 62, 1, 11, 0x1000, 64, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22,
+                23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40,
             ],
         );
     }
