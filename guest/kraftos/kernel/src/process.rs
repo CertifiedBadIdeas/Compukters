@@ -4498,7 +4498,9 @@ pub unsafe fn load_selected_dynamic_user_program(
             crate::image::DYNAMIC_K16E_V2_HEADER_SIZE as usize,
         )
     };
-    validate_dynamic_header_bytes(header, unsafe { crate::kfs::storage::selected_file_size() })?;
+    validate_dynamic_header_bytes(header, unsafe {
+        crate::kfs::selected_inode::selected_file_size()
+    })?;
     let entry_offset = header_u32(header, 12);
     let payload_offset = header_u32(header, 40);
     let file_size = header_u32(header, 44);
@@ -4605,7 +4607,9 @@ pub unsafe fn load_selected_dynamic_user_program_mapped(
             crate::image::DYNAMIC_K16E_V2_HEADER_SIZE as usize,
         )
     };
-    validate_dynamic_header_bytes(header, unsafe { crate::kfs::storage::selected_file_size() })?;
+    validate_dynamic_header_bytes(header, unsafe {
+        crate::kfs::selected_inode::selected_file_size()
+    })?;
     let entry_offset = header_u32(header, 12);
     let payload_offset = header_u32(header, 40);
     let file_size = header_u32(header, 44);
@@ -4832,7 +4836,9 @@ unsafe fn read_selected_dynamic_import_image(
             header_size as usize,
         )
     };
-    validate_dynamic_header_bytes(header, unsafe { crate::kfs::storage::selected_file_size() })?;
+    validate_dynamic_header_bytes(header, unsafe {
+        crate::kfs::selected_inode::selected_file_size()
+    })?;
     crate::os_stats::record_dynamic_import_bytes(header_size);
     if version == 6 {
         let writable_offset = header_u32(header, 56);
@@ -4911,7 +4917,7 @@ unsafe fn read_selected_dynamic_import_state(
     profile_file: FileReadProfileFile,
 ) -> Result<DynamicImportLoadState<'static>, ProcessLoadError> {
     crate::os_stats::record_dynamic_import_load();
-    let main_file = unsafe { crate::kfs::storage::selected_file_metadata() };
+    let main_file = unsafe { crate::kfs::selected_inode::selected_file_metadata() };
     let image = unsafe { read_selected_dynamic_import_image(version, profile_file)? };
     let needed_libraries = unsafe {
         copy_selected_section_to_loader_needed_buffer(
@@ -5711,7 +5717,7 @@ unsafe fn read_selected_shared_library_image(
         )
     };
     let image = shared_library_image_from_header(header, unsafe {
-        crate::kfs::storage::selected_file_size()
+        crate::kfs::selected_inode::selected_file_size()
     })?;
     crate::os_stats::record_dynamic_import_bytes(header_size);
     Ok(image)

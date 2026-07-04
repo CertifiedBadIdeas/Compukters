@@ -1910,6 +1910,45 @@ class K16FirmwareResourceTest {
     }
 
     @Test
+    fun kraftOsFilesystemSelectedInodeStateIsNotOwnedByStorageModule() {
+        val kernelDir = Path.of("../../../guest/kraftos/kernel/src")
+        val kernelKfsDir = kernelDir.resolve("kfs")
+        val modSource = kernelKfsDir.resolve("mod.rs").readText()
+        val storageSource = kernelKfsDir.resolve("storage.rs").readText()
+        val fsSource = kernelDir.resolve("fs.rs").readText()
+        val processSource = kernelDir.resolve("process.rs").readText()
+        val rootSource = kernelKfsDir.resolve("root.rs").readText()
+
+        val selectedInodePath = kernelKfsDir.resolve("selected_inode.rs")
+        assertTrue(selectedInodePath.toFile().isFile, "KFS selected inode state should have an explicit module")
+        val selectedInodeSource = selectedInodePath.readText()
+        assertTrue(modSource.contains("pub mod selected_inode;"), "KFS selected inode module should be exported")
+        assertTrue(selectedInodeSource.contains("pub(crate) const INODE_STATE_REGULAR"), "selected_inode.rs should own inode state tags")
+        assertTrue(selectedInodeSource.contains("pub(crate) unsafe fn selected_inode_state("), "selected_inode.rs should own selected inode state reads")
+        assertTrue(selectedInodeSource.contains("pub(crate) unsafe fn selected_inode_extent_start_block("), "selected_inode.rs should own selected inode extent reads")
+        assertTrue(selectedInodeSource.contains("pub unsafe fn selected_path_metadata("), "selected_inode.rs should own selected path metadata")
+        assertTrue(selectedInodeSource.contains("pub unsafe fn selected_file_metadata("), "selected_inode.rs should own selected file metadata")
+        assertTrue(selectedInodeSource.contains("pub unsafe fn selected_metadata_for_cache("), "selected_inode.rs should own cached metadata projection")
+        assertTrue(selectedInodeSource.contains("pub unsafe fn select_file_metadata("), "selected_inode.rs should own metadata-backed inode selection")
+        assertTrue(selectedInodeSource.contains("pub(crate) unsafe fn store_loaded_inode("), "selected_inode.rs should own selected inode state writes")
+        assertFalse(storageSource.contains("pub(crate) const INODE_STATE_REGULAR"), "storage.rs should not own inode state tags")
+        assertFalse(storageSource.contains("pub(crate) unsafe fn selected_inode_state("), "storage.rs should not own selected inode state reads")
+        assertFalse(storageSource.contains("pub(crate) unsafe fn selected_inode_extent_start_block("), "storage.rs should not own selected inode extent reads")
+        assertFalse(storageSource.contains("pub unsafe fn selected_path_metadata("), "storage.rs should not own selected path metadata")
+        assertFalse(storageSource.contains("pub unsafe fn selected_file_metadata("), "storage.rs should not own selected file metadata")
+        assertFalse(storageSource.contains("pub unsafe fn selected_metadata_for_cache("), "storage.rs should not own cached metadata projection")
+        assertFalse(storageSource.contains("pub unsafe fn select_file_metadata("), "storage.rs should not own metadata-backed inode selection")
+        assertTrue(storageSource.contains("crate::kfs::selected_inode::store_loaded_inode("), "storage.rs should use the selected inode owner after inode reads")
+        assertTrue(storageSource.contains("crate::kfs::selected_inode::selected_path_metadata("), "storage.rs should use the selected inode owner for stat")
+        assertFalse(fsSource.contains("crate::kfs::storage::selected_file_metadata("), "fs.rs should not use storage-owned selected file metadata")
+        assertFalse(processSource.contains("crate::kfs::storage::selected_file_metadata("), "process.rs should not use storage-owned selected file metadata")
+        assertFalse(rootSource.contains("crate::kfs::storage::selected_file_metadata("), "root.rs should not use storage-owned selected file metadata")
+        assertTrue(fsSource.contains("crate::kfs::selected_inode::selected_file_metadata("), "fs.rs should use the selected inode owner")
+        assertTrue(processSource.contains("crate::kfs::selected_inode::selected_file_metadata("), "process.rs should use the selected inode owner")
+        assertTrue(rootSource.contains("crate::kfs::selected_inode::selected_file_metadata("), "root.rs should use the selected inode owner")
+    }
+
+    @Test
     fun kraftOsFilesystemInodeLayoutIsNotOwnedByStorageModule() {
         val kernelKfsDir = Path.of("../../../guest/kraftos/kernel/src/kfs")
         val modSource = kernelKfsDir.resolve("mod.rs").readText()

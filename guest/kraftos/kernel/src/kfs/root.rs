@@ -42,8 +42,9 @@ impl KfsRootFs {
         if metadata.file_type != k16_abi::syscall::FILE_TYPE_DIRECTORY {
             return Err(StorageError::PATH_NOT_FOUND);
         }
-        let selected_metadata =
-            unsafe { crate::kfs::storage::select_inode_metadata_for_cache(directory_inode_id)? };
+        let selected_metadata = unsafe {
+            crate::kfs::selected_inode::select_inode_metadata_for_cache(directory_inode_id)?
+        };
         if selected_metadata.file_type != k16_abi::syscall::FILE_TYPE_DIRECTORY {
             return Err(StorageError::PATH_NOT_FOUND);
         }
@@ -68,12 +69,12 @@ impl KfsRootFs {
             return Err(StorageError::PATH_NOT_FOUND);
         }
         let selected_metadata =
-            unsafe { crate::kfs::storage::select_inode_metadata_for_cache(inode_id)? };
+            unsafe { crate::kfs::selected_inode::select_inode_metadata_for_cache(inode_id)? };
         if selected_metadata.file_type != k16_abi::syscall::FILE_TYPE_REGULAR {
             return Err(StorageError::PATH_NOT_FOUND);
         }
         self.cache.store_inode(inode_id, selected_metadata);
-        Ok(unsafe { crate::kfs::storage::selected_file_metadata() })
+        Ok(unsafe { crate::kfs::selected_inode::selected_file_metadata() })
     }
 
     unsafe fn ensure_mounted(&mut self, partition_type: &[u8; 4]) -> Result<(), StorageError> {
@@ -96,8 +97,9 @@ impl KfsRootFs {
         let mut metadata = match self.cache.lookup_inode(inode_id) {
             Some(metadata) => metadata,
             None => {
-                let metadata =
-                    unsafe { crate::kfs::storage::select_inode_metadata_for_cache(inode_id)? };
+                let metadata = unsafe {
+                    crate::kfs::selected_inode::select_inode_metadata_for_cache(inode_id)?
+                };
                 self.cache.store_inode(inode_id, metadata);
                 metadata
             }
@@ -115,11 +117,13 @@ impl KfsRootFs {
                     metadata = lookup.metadata;
                 }
                 None => {
-                    unsafe { crate::kfs::storage::select_inode_metadata_for_cache(inode_id)? };
+                    unsafe {
+                        crate::kfs::selected_inode::select_inode_metadata_for_cache(inode_id)?
+                    };
                     let child_inode_id =
                         unsafe { crate::kfs::storage::selected_directory_entry_inode(component)? };
                     let child_metadata = unsafe {
-                        crate::kfs::storage::select_inode_metadata_for_cache(child_inode_id)?
+                        crate::kfs::selected_inode::select_inode_metadata_for_cache(child_inode_id)?
                     };
                     self.cache.store_inode(child_inode_id, child_metadata);
                     if let Some(name) = CachedName::from_bytes(component) {

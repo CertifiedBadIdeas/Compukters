@@ -1,5 +1,5 @@
 use crate::kfs::error::StorageError;
-use crate::kfs::{block_io, storage};
+use crate::kfs::{block_io, selected_inode, storage};
 
 pub unsafe fn allocate_inode() -> Result<u32, StorageError> {
     let inode_capacity = crate::kfs::inode::inode_capacity(unsafe {
@@ -8,9 +8,9 @@ pub unsafe fn allocate_inode() -> Result<u32, StorageError> {
     let mut inode_id = 1;
     while inode_id < inode_capacity {
         unsafe { storage::read_inode(inode_id)? };
-        match unsafe { storage::selected_inode_state() } {
+        match unsafe { selected_inode::selected_inode_state() } {
             0 | 3 => return Ok(inode_id),
-            storage::INODE_STATE_REGULAR | storage::INODE_STATE_DIRECTORY => {}
+            selected_inode::INODE_STATE_REGULAR | selected_inode::INODE_STATE_DIRECTORY => {}
             _ => return Err(StorageError::INVALID_FILESYSTEM),
         }
         inode_id += 1;

@@ -1,6 +1,6 @@
 use crate::kfs::directory::{KfsDirectoryEntryHeader, KFS_DIRECTORY_ENTRY_SIZE};
 use crate::kfs::error::StorageError;
-use crate::kfs::{block_io, storage};
+use crate::kfs::{block_io, selected_inode, storage};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct KfsDirectoryEntrySlot {
@@ -20,7 +20,9 @@ pub unsafe fn find_file_inode(path: &[&[u8]]) -> Result<(), StorageError> {
     while index < path.len() {
         let component = path[index];
         unsafe { storage::read_inode(inode_id)? };
-        if unsafe { storage::selected_inode_state() } != storage::INODE_STATE_DIRECTORY {
+        if unsafe { selected_inode::selected_inode_state() }
+            != selected_inode::INODE_STATE_DIRECTORY
+        {
             return Err(StorageError::PATH_NOT_FOUND);
         }
         inode_id = unsafe { find_directory_entry(component)? };
@@ -28,7 +30,7 @@ pub unsafe fn find_file_inode(path: &[&[u8]]) -> Result<(), StorageError> {
     }
 
     unsafe { storage::read_inode(inode_id)? };
-    if unsafe { storage::selected_inode_state() } != storage::INODE_STATE_REGULAR {
+    if unsafe { selected_inode::selected_inode_state() } != selected_inode::INODE_STATE_REGULAR {
         return Err(StorageError::PATH_NOT_FOUND);
     }
     Ok(())
@@ -40,7 +42,9 @@ pub unsafe fn find_directory_inode(path: &[&[u8]]) -> Result<(), StorageError> {
     let mut index = 0;
     while index < path.len() {
         unsafe { storage::read_inode(inode_id)? };
-        if unsafe { storage::selected_inode_state() } != storage::INODE_STATE_DIRECTORY {
+        if unsafe { selected_inode::selected_inode_state() }
+            != selected_inode::INODE_STATE_DIRECTORY
+        {
             return Err(StorageError::PATH_NOT_FOUND);
         }
         inode_id = unsafe { find_directory_entry(path[index])? };
@@ -48,7 +52,7 @@ pub unsafe fn find_directory_inode(path: &[&[u8]]) -> Result<(), StorageError> {
     }
 
     unsafe { storage::read_inode(inode_id)? };
-    if unsafe { storage::selected_inode_state() } != storage::INODE_STATE_DIRECTORY {
+    if unsafe { selected_inode::selected_inode_state() } != selected_inode::INODE_STATE_DIRECTORY {
         return Err(StorageError::PATH_NOT_FOUND);
     }
     Ok(())
@@ -65,7 +69,9 @@ pub unsafe fn find_path_inode(path: &[&[u8]]) -> Result<(), StorageError> {
     let mut index = 0;
     while index < path.len() {
         unsafe { storage::read_inode(inode_id)? };
-        if unsafe { storage::selected_inode_state() } != storage::INODE_STATE_DIRECTORY {
+        if unsafe { selected_inode::selected_inode_state() }
+            != selected_inode::INODE_STATE_DIRECTORY
+        {
             return Err(StorageError::PATH_NOT_FOUND);
         }
         inode_id = unsafe { find_directory_entry(path[index])? };
@@ -84,18 +90,19 @@ pub unsafe fn find_directory_entry_slot(
     name: &[u8],
 ) -> Result<KfsDirectoryEntrySlot, StorageError> {
     crate::kfs::directory::validate_name(name)?;
-    if !crate::kfs::directory::directory_size_is_aligned(unsafe { storage::selected_inode_size() })
-    {
+    if !crate::kfs::directory::directory_size_is_aligned(unsafe {
+        selected_inode::selected_inode_size()
+    }) {
         return Err(StorageError::INVALID_FILESYSTEM);
     }
 
-    let mut remaining = unsafe { storage::selected_inode_size() };
+    let mut remaining = unsafe { selected_inode::selected_inode_size() };
     let mut extent_index = 0;
-    while extent_index < unsafe { storage::selected_inode_extent_count() as usize } {
+    while extent_index < unsafe { selected_inode::selected_inode_extent_count() as usize } {
         let extent_start_block =
-            unsafe { storage::selected_inode_extent_start_block(extent_index) };
+            unsafe { selected_inode::selected_inode_extent_start_block(extent_index) };
         let extent_block_count =
-            unsafe { storage::selected_inode_extent_block_count(extent_index) };
+            unsafe { selected_inode::selected_inode_extent_block_count(extent_index) };
         storage::validate_extent(extent_start_block, extent_block_count, unsafe {
             storage::superblock_total_blocks()
         })?;

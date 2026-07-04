@@ -1,5 +1,5 @@
 use crate::kfs::error::StorageError;
-use crate::kfs::types::{FileMetadata, PathKind, PathMetadata, KFS_MAX_INLINE_EXTENTS};
+use crate::kfs::types::{PathMetadata, KFS_MAX_INLINE_EXTENTS};
 
 const STATE_PARTITION_START_LBA: u32 = 0x0000_0200;
 const STATE_PARTITION_BLOCK_COUNT: u32 = 0x0000_0204;
@@ -7,16 +7,8 @@ const STATE_SUPERBLOCK_TOTAL_BLOCKS: u32 = 0x0000_0208;
 const STATE_SUPERBLOCK_INODE_TABLE_START_BLOCK: u32 = 0x0000_020c;
 const STATE_SUPERBLOCK_INODE_TABLE_BLOCK_COUNT: u32 = 0x0000_0210;
 const STATE_SUPERBLOCK_ROOT_INODE_ID: u32 = 0x0000_0214;
-const STATE_INODE_STATE: u32 = 0x0000_0218;
-const STATE_INODE_SIZE_BYTES: u32 = 0x0000_021c;
-const STATE_INODE_EXTENT_COUNT: u32 = 0x0000_0220;
-const STATE_INODE_EXTENT_START_BLOCKS: u32 = 0x0000_0224;
-const STATE_INODE_EXTENT_BLOCK_COUNTS: u32 = 0x0000_0234;
 const STATE_SUPERBLOCK_BITMAP_START_BLOCK: u32 = 0x0000_0244;
 const STATE_SUPERBLOCK_BITMAP_BLOCK_COUNT: u32 = 0x0000_0248;
-const STATE_SELECTED_INODE_ID: u32 = 0x0000_024c;
-pub(crate) const INODE_STATE_REGULAR: u8 = 1;
-pub(crate) const INODE_STATE_DIRECTORY: u8 = 2;
 
 pub unsafe fn open_file_from_storage0(
     partition_type: &[u8; 4],
@@ -76,53 +68,13 @@ pub(crate) unsafe fn superblock_inode_table_block_count() -> u32 {
     unsafe { read_u32(STATE_SUPERBLOCK_INODE_TABLE_BLOCK_COUNT) }
 }
 
-pub(crate) unsafe fn selected_inode_state() -> u8 {
-    unsafe { read_u32(STATE_INODE_STATE) as u8 }
-}
-
-pub(crate) unsafe fn selected_inode_size() -> u32 {
-    unsafe { read_u32(STATE_INODE_SIZE_BYTES) }
-}
-
-pub(crate) unsafe fn selected_inode_extent_count() -> u32 {
-    unsafe { read_u32(STATE_INODE_EXTENT_COUNT) }
-}
-
-pub(crate) unsafe fn selected_inode_extent_start_block(index: usize) -> u32 {
-    unsafe { read_u32(STATE_INODE_EXTENT_START_BLOCKS + index as u32 * 4) }
-}
-
-pub(crate) unsafe fn selected_inode_extent_block_count(index: usize) -> u32 {
-    unsafe { read_u32(STATE_INODE_EXTENT_BLOCK_COUNTS + index as u32 * 4) }
-}
-
-pub(crate) unsafe fn selected_inode_id() -> u32 {
-    unsafe { read_u32(STATE_SELECTED_INODE_ID) }
-}
-
-pub unsafe fn select_inode_metadata_for_cache(
-    inode_id: u32,
-) -> Result<crate::kfs::cache::CachedPathMetadata, StorageError> {
-    unsafe { read_inode(inode_id)? };
-    unsafe { selected_metadata_for_cache() }
-}
-
 pub unsafe fn selected_directory_entry_inode(name: &[u8]) -> Result<u32, StorageError> {
     unsafe { crate::kfs::path::find_directory_entry(name) }
 }
 
 pub unsafe fn select_directory_inode(path: &[&[u8]]) -> Result<u32, StorageError> {
     unsafe { crate::kfs::path::find_directory_inode(path)? };
-    Ok(unsafe { read_u32(STATE_SELECTED_INODE_ID) })
-}
-
-pub unsafe fn selected_metadata_for_cache(
-) -> Result<crate::kfs::cache::CachedPathMetadata, StorageError> {
-    let metadata = unsafe { selected_path_metadata()? };
-    Ok(crate::kfs::cache::CachedPathMetadata {
-        file_type: metadata.kind as u32,
-        size_bytes: metadata.size_bytes,
-    })
+    Ok(unsafe { crate::kfs::selected_inode::selected_inode_id() })
 }
 
 pub unsafe fn stat_path_from_storage0(
@@ -132,55 +84,7 @@ pub unsafe fn stat_path_from_storage0(
     unsafe { read_partition(partition_type)? };
     unsafe { read_superblock()? };
     unsafe { crate::kfs::path::find_path_inode(path)? };
-    unsafe { selected_path_metadata() }
-}
-
-pub unsafe fn selected_file_size() -> u32 {
-    unsafe { read_u32(STATE_INODE_SIZE_BYTES) }
-}
-
-pub unsafe fn selected_path_metadata() -> Result<PathMetadata, StorageError> {
-    let kind = match unsafe { read_u32(STATE_INODE_STATE) as u8 } {
-        1 => PathKind::Regular,
-        2 => PathKind::Directory,
-        _ => return Err(StorageError::INVALID_FILESYSTEM),
-    };
-    Ok(PathMetadata {
-        kind,
-        size_bytes: unsafe { selected_file_size() },
-    })
-}
-
-pub unsafe fn selected_file_metadata() -> FileMetadata {
-    let mut extent_start_blocks = [0; KFS_MAX_INLINE_EXTENTS];
-    let mut extent_block_counts = [0; KFS_MAX_INLINE_EXTENTS];
-    let extent_count = unsafe { read_u32(STATE_INODE_EXTENT_COUNT) };
-    let mut index = 0;
-    while index < KFS_MAX_INLINE_EXTENTS {
-        extent_start_blocks[index] =
-            unsafe { read_u32(STATE_INODE_EXTENT_START_BLOCKS + index as u32 * 4) };
-        extent_block_counts[index] =
-            unsafe { read_u32(STATE_INODE_EXTENT_BLOCK_COUNTS + index as u32 * 4) };
-        index += 1;
-    }
-    FileMetadata {
-        inode_id: unsafe { read_u32(STATE_SELECTED_INODE_ID) },
-        size_bytes: unsafe { selected_file_size() },
-        extent_count,
-        extent_start_blocks,
-        extent_block_counts,
-    }
-}
-
-pub unsafe fn select_file_metadata(metadata: FileMetadata) -> Result<(), StorageError> {
-    unsafe { read_inode(metadata.inode_id)? };
-    if unsafe { read_u32(STATE_INODE_STATE) as u8 } != 1 {
-        return Err(StorageError::PATH_NOT_FOUND);
-    }
-    if unsafe { selected_file_metadata() } != metadata {
-        return Err(StorageError::INVALID_FILESYSTEM);
-    }
-    Ok(())
+    unsafe { crate::kfs::selected_inode::selected_path_metadata() }
 }
 
 pub(crate) unsafe fn read_partition(
@@ -234,7 +138,9 @@ pub(crate) unsafe fn read_superblock() -> Result<crate::kfs::superblock::KfsSupe
         write_u32(STATE_SUPERBLOCK_ROOT_INODE_ID, superblock.root_inode_id);
         read_inode(superblock.root_inode_id)?;
     }
-    if unsafe { read_u32(STATE_INODE_STATE) as u8 } != 2 {
+    if unsafe { crate::kfs::selected_inode::selected_inode_state() }
+        != crate::kfs::selected_inode::INODE_STATE_DIRECTORY
+    {
         return Err(StorageError::INVALID_FILESYSTEM);
     }
     Ok(superblock)
@@ -258,18 +164,10 @@ pub(crate) unsafe fn read_inode(inode_id: u32) -> Result<(), StorageError> {
         return Err(StorageError::INVALID_FILESYSTEM);
     }
 
-    unsafe {
-        write_u32(STATE_SELECTED_INODE_ID, inode_id);
-        write_u32(
-            STATE_INODE_STATE,
-            crate::kfs::block_io::scratch_u8(inode_offset) as u32,
-        );
-        write_u32(
-            STATE_INODE_SIZE_BYTES,
-            crate::kfs::block_io::scratch_u32(inode_offset + 0x08),
-        );
-        write_u32(STATE_INODE_EXTENT_COUNT, extent_count as u32);
-    }
+    let state = crate::kfs::block_io::scratch_u8(inode_offset);
+    let size_bytes = crate::kfs::block_io::scratch_u32(inode_offset + 0x08);
+    let mut extent_start_blocks = [0; KFS_MAX_INLINE_EXTENTS];
+    let mut extent_block_counts = [0; KFS_MAX_INLINE_EXTENTS];
     let mut index = 0;
     while index < extent_count {
         let offset = inode_offset + 0x20 + index as u32 * 8;
@@ -278,18 +176,21 @@ pub(crate) unsafe fn read_inode(inode_id: u32) -> Result<(), StorageError> {
         validate_extent(start_block, block_count, unsafe {
             read_u32(STATE_SUPERBLOCK_TOTAL_BLOCKS)
         })?;
-        unsafe {
-            write_u32(
-                STATE_INODE_EXTENT_START_BLOCKS + index as u32 * 4,
-                start_block,
-            );
-            write_u32(
-                STATE_INODE_EXTENT_BLOCK_COUNTS + index as u32 * 4,
-                block_count,
-            );
-        }
+        extent_start_blocks[index] = start_block;
+        extent_block_counts[index] = block_count;
         index += 1;
     }
+
+    unsafe {
+        crate::kfs::selected_inode::store_loaded_inode(
+            inode_id,
+            state,
+            size_bytes,
+            extent_count,
+            &extent_start_blocks,
+            &extent_block_counts,
+        )
+    };
 
     Ok(())
 }
@@ -325,6 +226,7 @@ unsafe fn write_u32(address: u32, value: u32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::kfs::types::PathKind;
 
     #[test]
     fn storage_error_code_is_public_for_boot_chain_mapping() {

@@ -100,7 +100,7 @@ unsafe fn load_k16e_file(expected_abi_kind: K16eAbiKind) -> Result<LoadedImage, 
     };
     let plan =
         crate::image::parse_fixed_k16e_v1(header, expected_abi_kind.into_image_kind(), unsafe {
-            crate::kfs::storage::selected_file_size()
+            crate::kfs::selected_inode::selected_file_size()
         })
         .map_err(LoadError::from_image)?;
 
