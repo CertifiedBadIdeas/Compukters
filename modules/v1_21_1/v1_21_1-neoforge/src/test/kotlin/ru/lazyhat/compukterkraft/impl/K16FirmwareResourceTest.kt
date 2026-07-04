@@ -1914,6 +1914,7 @@ class K16FirmwareResourceTest {
         val kernelKfsDir = Path.of("../../../guest/kraftos/kernel/src/kfs")
         val modSource = kernelKfsDir.resolve("mod.rs").readText()
         val storageSource = kernelKfsDir.resolve("storage.rs").readText()
+        val allocationSource = kernelKfsDir.resolve("allocation.rs").takeIf { it.toFile().isFile }?.readText().orEmpty()
 
         val bitmapPath = kernelKfsDir.resolve("bitmap.rs")
         assertTrue(bitmapPath.toFile().isFile, "KFS bitmap layout should have an explicit module")
@@ -1926,7 +1927,7 @@ class K16FirmwareResourceTest {
         assertTrue(bitmapSource.contains("pub fn mark_byte_free("), "bitmap.rs should own free-bit mutation")
         assertFalse(storageSource.contains("fn block_in_range("), "storage.rs should not own bitmap range classification")
         assertFalse(storageSource.contains("fn bitmap_block_scratch_marks_allocated("), "storage.rs should not own bitmap bit decoding")
-        assertTrue(storageSource.contains("crate::kfs::bitmap::locate_block("), "storage.rs should use the bitmap owner for addressing")
+        assertTrue(allocationSource.contains("crate::kfs::bitmap::locate_block("), "allocation.rs should use the bitmap owner for addressing")
     }
 
     @Test
@@ -2011,6 +2012,31 @@ class K16FirmwareResourceTest {
         assertFalse(storageSource.contains("unsafe fn grow_selected_directory_capacity("), "storage.rs should not own directory growth")
         assertFalse(storageSource.contains("STATE_DIRECTORY_SLOT_"), "storage.rs should not persist directory slot lookup through scratch state")
         assertTrue(storageSource.contains("crate::kfs::directory_mutation::find_selected_directory_free_slot("), "storage.rs should use the directory mutation owner")
+    }
+
+    @Test
+    fun kraftOsFilesystemAllocationMutationIsNotOwnedByStorageModule() {
+        val kernelKfsDir = Path.of("../../../guest/kraftos/kernel/src/kfs")
+        val modSource = kernelKfsDir.resolve("mod.rs").readText()
+        val storageSource = kernelKfsDir.resolve("storage.rs").readText()
+        val directoryMutationSource = kernelKfsDir.resolve("directory_mutation.rs").readText()
+
+        val allocationPath = kernelKfsDir.resolve("allocation.rs")
+        assertTrue(allocationPath.toFile().isFile, "KFS allocation mutation should have an explicit module")
+        val allocationSource = allocationPath.readText()
+        assertTrue(modSource.contains("pub mod allocation;"), "KFS allocation module should be exported")
+        assertTrue(allocationSource.contains("pub unsafe fn allocate_inode("), "allocation.rs should own inode allocation")
+        assertTrue(allocationSource.contains("pub unsafe fn allocate_contiguous_blocks("), "allocation.rs should own block run allocation")
+        assertTrue(allocationSource.contains("pub unsafe fn mark_block_allocated("), "allocation.rs should own bitmap allocation mutation")
+        assertTrue(allocationSource.contains("pub unsafe fn mark_block_free("), "allocation.rs should own bitmap free mutation")
+        assertTrue(allocationSource.contains("fn selected_bitmap_layout("), "allocation.rs should own bitmap layout selection")
+        assertFalse(storageSource.contains("unsafe fn allocate_inode("), "storage.rs should not own inode allocation")
+        assertFalse(storageSource.contains("unsafe fn allocate_contiguous_blocks("), "storage.rs should not own block run allocation")
+        assertFalse(storageSource.contains("unsafe fn mark_block_allocated("), "storage.rs should not own bitmap allocation mutation")
+        assertFalse(storageSource.contains("unsafe fn mark_block_free("), "storage.rs should not own bitmap free mutation")
+        assertFalse(storageSource.contains("fn selected_bitmap_layout("), "storage.rs should not own bitmap layout selection")
+        assertTrue(storageSource.contains("crate::kfs::allocation::allocate_inode("), "storage.rs should use the allocation owner")
+        assertTrue(directoryMutationSource.contains("crate::kfs::allocation::allocate_contiguous_blocks("), "directory mutation should use the allocation owner")
     }
 
     @Test

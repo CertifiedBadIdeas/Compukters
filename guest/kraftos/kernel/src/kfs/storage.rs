@@ -106,6 +106,22 @@ pub(crate) unsafe fn superblock_total_blocks() -> u32 {
     unsafe { read_u32(STATE_SUPERBLOCK_TOTAL_BLOCKS) }
 }
 
+pub(crate) unsafe fn superblock_bitmap_start_block() -> u32 {
+    unsafe { read_u32(STATE_SUPERBLOCK_BITMAP_START_BLOCK) }
+}
+
+pub(crate) unsafe fn superblock_bitmap_block_count() -> u32 {
+    unsafe { read_u32(STATE_SUPERBLOCK_BITMAP_BLOCK_COUNT) }
+}
+
+pub(crate) unsafe fn superblock_inode_table_start_block() -> u32 {
+    unsafe { read_u32(STATE_SUPERBLOCK_INODE_TABLE_START_BLOCK) }
+}
+
+pub(crate) unsafe fn superblock_inode_table_block_count() -> u32 {
+    unsafe { read_u32(STATE_SUPERBLOCK_INODE_TABLE_BLOCK_COUNT) }
+}
+
 pub(crate) unsafe fn selected_inode_state() -> u8 {
     unsafe { read_u32(STATE_INODE_STATE) as u8 }
 }
@@ -312,7 +328,7 @@ pub unsafe fn remove_file_from_storage0(
         while block < start_block + block_count {
             unsafe { clear_scratch_block() };
             unsafe { write_fs_block(block)? };
-            unsafe { mark_block_free(block)? };
+            unsafe { crate::kfs::allocation::mark_block_free(block)? };
             block += 1;
         }
         extent_index += 1;
@@ -416,7 +432,7 @@ pub unsafe fn remove_directory_from_storage0(
         while block < start_block + block_count {
             unsafe { clear_scratch_block() };
             unsafe { write_fs_block(block)? };
-            unsafe { mark_block_free(block)? };
+            unsafe { crate::kfs::allocation::mark_block_free(block)? };
             block += 1;
         }
         extent_index += 1;
@@ -600,8 +616,8 @@ unsafe fn create_empty_file(path: &[&[u8]]) -> Result<FileMetadata, StorageError
     }
     let slot = unsafe { crate::kfs::directory_mutation::find_selected_directory_free_slot()? };
     let parent_inode_id = unsafe { read_u32(STATE_SELECTED_INODE_ID) };
-    let inode_id = unsafe { allocate_inode()? };
-    let start_block = unsafe { allocate_contiguous_blocks(1)? };
+    let inode_id = unsafe { crate::kfs::allocation::allocate_inode()? };
+    let start_block = unsafe { crate::kfs::allocation::allocate_contiguous_blocks(1)? };
     unsafe { clear_scratch_block() };
     unsafe { write_fs_block(start_block)? };
     let mut extent_start_blocks = [0; KFS_MAX_INLINE_EXTENTS];
@@ -638,8 +654,8 @@ unsafe fn create_empty_directory(path: &[&[u8]]) -> Result<(), StorageError> {
     }
     let slot = unsafe { crate::kfs::directory_mutation::find_selected_directory_free_slot()? };
     let parent_inode_id = unsafe { read_u32(STATE_SELECTED_INODE_ID) };
-    let inode_id = unsafe { allocate_inode()? };
-    let start_block = unsafe { allocate_contiguous_blocks(1)? };
+    let inode_id = unsafe { crate::kfs::allocation::allocate_inode()? };
+    let start_block = unsafe { crate::kfs::allocation::allocate_contiguous_blocks(1)? };
     unsafe { clear_scratch_block() };
     unsafe { write_fs_block(start_block)? };
     let mut extent_start_blocks = [0; KFS_MAX_INLINE_EXTENTS];
@@ -1280,136 +1296,6 @@ unsafe fn encode_inode(
     unsafe { write_fs_block(inode_block) }
 }
 
-unsafe fn allocate_inode() -> Result<u32, StorageError> {
-    let inode_capacity = crate::kfs::inode::inode_capacity(unsafe {
-        read_u32(STATE_SUPERBLOCK_INODE_TABLE_BLOCK_COUNT)
-    })?;
-    let mut inode_id = 1;
-    while inode_id < inode_capacity {
-        unsafe { read_inode(inode_id)? };
-        match unsafe { read_u32(STATE_INODE_STATE) as u8 } {
-            0 | 3 => return Ok(inode_id),
-            1 | 2 => {}
-            _ => return Err(StorageError::INVALID_FILESYSTEM),
-        }
-        inode_id += 1;
-    }
-    Err(StorageError::OUTPUT_BUFFER_TOO_SMALL)
-}
-
-unsafe fn selected_bitmap_layout() -> crate::kfs::bitmap::KfsBitmapLayout {
-    crate::kfs::bitmap::KfsBitmapLayout {
-        total_blocks: unsafe { read_u32(STATE_SUPERBLOCK_TOTAL_BLOCKS) },
-        bitmap_start_block: unsafe { read_u32(STATE_SUPERBLOCK_BITMAP_START_BLOCK) },
-        bitmap_block_count: unsafe { read_u32(STATE_SUPERBLOCK_BITMAP_BLOCK_COUNT) },
-        inode_table_start_block: unsafe { read_u32(STATE_SUPERBLOCK_INODE_TABLE_START_BLOCK) },
-        inode_table_block_count: unsafe { read_u32(STATE_SUPERBLOCK_INODE_TABLE_BLOCK_COUNT) },
-    }
-}
-
-pub(crate) unsafe fn allocate_contiguous_blocks(count: u32) -> Result<u32, StorageError> {
-    if count == 0 {
-        return Err(StorageError::INVALID_FILESYSTEM);
-    }
-    let layout = unsafe { selected_bitmap_layout() };
-    let mut run_start = 0;
-    let mut run_count = 0;
-    let mut loaded_bitmap_block_index = u32::MAX;
-    let mut block = 1;
-    while block < layout.total_blocks {
-        let location = crate::kfs::bitmap::locate_block(block, layout)?;
-        if loaded_bitmap_block_index != location.bitmap_block_index {
-            unsafe { read_fs_block(location.bitmap_block)? };
-            loaded_bitmap_block_index = location.bitmap_block_index;
-        }
-
-        if crate::kfs::bitmap::byte_marks_allocated(scratch_u8(location.byte_offset), location) {
-            run_start = 0;
-            run_count = 0;
-        } else {
-            if run_count == 0 {
-                run_start = block;
-            }
-            run_count += 1;
-            if run_count == count {
-                unsafe { mark_contiguous_blocks_allocated(run_start, count)? };
-                return Ok(run_start);
-            }
-        }
-        block += 1;
-    }
-    Err(StorageError::OUTPUT_BUFFER_TOO_SMALL)
-}
-
-unsafe fn mark_contiguous_blocks_allocated(
-    start_block: u32,
-    count: u32,
-) -> Result<(), StorageError> {
-    let end_block = match start_block.checked_add(count) {
-        Some(value) => value,
-        None => return Err(StorageError::INVALID_FILESYSTEM),
-    };
-    let layout = unsafe { selected_bitmap_layout() };
-    if count == 0 || end_block > layout.total_blocks {
-        return Err(StorageError::INVALID_FILESYSTEM);
-    }
-
-    let mut block = start_block;
-    while block < end_block {
-        let location = crate::kfs::bitmap::locate_block(block, layout)?;
-        unsafe { read_fs_block(location.bitmap_block)? };
-
-        let next_bitmap_block_start = match location.bitmap_block_index.checked_add(1) {
-            Some(value) => match value.checked_mul(crate::kfs::bitmap::bits_per_bitmap_block()) {
-                Some(next_start) => next_start,
-                None => return Err(StorageError::INVALID_FILESYSTEM),
-            },
-            None => return Err(StorageError::INVALID_FILESYSTEM),
-        };
-        let chunk_end = min_u32(end_block, next_bitmap_block_start);
-        while block < chunk_end {
-            let location = crate::kfs::bitmap::locate_block(block, layout)?;
-            let value =
-                crate::kfs::bitmap::mark_byte_allocated(scratch_u8(location.byte_offset), location);
-            unsafe { write_u8(SCRATCH_ADDR + location.byte_offset, value) };
-            block += 1;
-        }
-        unsafe { write_fs_block(location.bitmap_block)? };
-    }
-    Ok(())
-}
-
-pub(crate) unsafe fn is_block_allocated(block: u32) -> Result<bool, StorageError> {
-    let layout = unsafe { selected_bitmap_layout() };
-    let location = crate::kfs::bitmap::locate_block(block, layout)?;
-    unsafe { read_fs_block(location.bitmap_block)? };
-    Ok(crate::kfs::bitmap::byte_marks_allocated(
-        scratch_u8(location.byte_offset),
-        location,
-    ))
-}
-
-pub(crate) unsafe fn mark_block_allocated(block: u32) -> Result<(), StorageError> {
-    let layout = unsafe { selected_bitmap_layout() };
-    let location = crate::kfs::bitmap::locate_block(block, layout)?;
-    unsafe { read_fs_block(location.bitmap_block)? };
-    let value = crate::kfs::bitmap::mark_byte_allocated(scratch_u8(location.byte_offset), location);
-    unsafe { write_u8(SCRATCH_ADDR + location.byte_offset, value) };
-    unsafe { write_fs_block(location.bitmap_block) }
-}
-
-unsafe fn mark_block_free(block: u32) -> Result<(), StorageError> {
-    let layout = unsafe { selected_bitmap_layout() };
-    if crate::kfs::bitmap::block_is_metadata(block, layout)? {
-        return Err(StorageError::INVALID_FILESYSTEM);
-    }
-    let location = crate::kfs::bitmap::locate_block(block, layout)?;
-    unsafe { read_fs_block(location.bitmap_block)? };
-    let value = crate::kfs::bitmap::mark_byte_free(scratch_u8(location.byte_offset), location);
-    unsafe { write_u8(SCRATCH_ADDR + location.byte_offset, value) };
-    unsafe { write_fs_block(location.bitmap_block) }
-}
-
 unsafe fn encode_directory_entry_at(
     block: u32,
     offset: u32,
@@ -1456,7 +1342,7 @@ unsafe fn grow_file_capacity(
         plan.grow_end <= unsafe { read_u32(STATE_SUPERBLOCK_TOTAL_BLOCKS) };
     let mut block = plan.grow_start;
     while can_extend_last_extent && block < plan.grow_end {
-        if unsafe { is_block_allocated(block)? } {
+        if unsafe { crate::kfs::allocation::is_block_allocated(block)? } {
             can_extend_last_extent = false;
         } else {
             block += 1;
@@ -1466,7 +1352,7 @@ unsafe fn grow_file_capacity(
     if can_extend_last_extent {
         block = plan.grow_start;
         while block < plan.grow_end {
-            unsafe { mark_block_allocated(block)? };
+            unsafe { crate::kfs::allocation::mark_block_allocated(block)? };
             unsafe { clear_scratch_block() };
             unsafe { write_fs_block(block)? };
             block += 1;
@@ -1475,7 +1361,8 @@ unsafe fn grow_file_capacity(
         return crate::kfs::file::apply_extended_last_extent(metadata, plan);
     }
 
-    let new_extent_start = unsafe { allocate_contiguous_blocks(plan.additional_blocks)? };
+    let new_extent_start =
+        unsafe { crate::kfs::allocation::allocate_contiguous_blocks(plan.additional_blocks)? };
     block = new_extent_start;
     let new_extent_end = match new_extent_start.checked_add(plan.additional_blocks) {
         Some(value) => value,
@@ -1715,6 +1602,10 @@ pub(crate) fn scratch_bytes_eq(offset: u32, expected: &[u8]) -> bool {
 
 pub(crate) fn scratch_u8(offset: u32) -> u8 {
     unsafe { read_u8(SCRATCH_ADDR + offset) }
+}
+
+pub(crate) unsafe fn write_scratch_u8(offset: u32, value: u8) {
+    unsafe { write_u8(SCRATCH_ADDR + offset, value) }
 }
 
 pub(crate) fn scratch_u32(offset: u32) -> u32 {
