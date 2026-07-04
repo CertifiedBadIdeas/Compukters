@@ -1,6 +1,5 @@
 const INODE_CACHE_SLOTS: usize = 32;
 const DIRECTORY_CACHE_SLOTS: usize = 32;
-const KFS_MAX_NAME_BYTES: usize = 56;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct CachedPathMetadata {
@@ -17,15 +16,15 @@ pub struct CachedDirectoryLookup {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct CachedName {
     len: u8,
-    bytes: [u8; KFS_MAX_NAME_BYTES],
+    bytes: [u8; crate::kfs::directory::KFS_MAX_NAME_BYTES],
 }
 
 impl CachedName {
     pub fn from_bytes(name: &[u8]) -> Option<Self> {
-        if name.is_empty() || name.len() > KFS_MAX_NAME_BYTES {
+        if name.is_empty() || name.len() > crate::kfs::directory::KFS_MAX_NAME_BYTES {
             return None;
         }
-        let mut bytes = [0_u8; KFS_MAX_NAME_BYTES];
+        let mut bytes = [0_u8; crate::kfs::directory::KFS_MAX_NAME_BYTES];
         let mut index = 0;
         while index < name.len() {
             bytes[index] = name[index];
@@ -83,7 +82,7 @@ impl DirectoryCacheEntry {
         parent_inode_id: 0,
         name: CachedName {
             len: 0,
-            bytes: [0; KFS_MAX_NAME_BYTES],
+            bytes: [0; crate::kfs::directory::KFS_MAX_NAME_BYTES],
         },
         lookup: CachedDirectoryLookup {
             inode_id: 0,

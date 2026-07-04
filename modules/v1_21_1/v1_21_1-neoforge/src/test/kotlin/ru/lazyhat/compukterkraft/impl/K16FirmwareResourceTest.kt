@@ -1888,6 +1888,28 @@ class K16FirmwareResourceTest {
     }
 
     @Test
+    fun kraftOsFilesystemDirectoryLayoutIsNotOwnedByStorageModule() {
+        val kernelKfsDir = Path.of("../../../guest/kraftos/kernel/src/kfs")
+        val modSource = kernelKfsDir.resolve("mod.rs").readText()
+        val storageSource = kernelKfsDir.resolve("storage.rs").readText()
+        val cacheSource = kernelKfsDir.resolve("cache.rs").readText()
+
+        val directoryPath = kernelKfsDir.resolve("directory.rs")
+        assertTrue(directoryPath.toFile().isFile, "KFS directory entry layout should have an explicit module")
+        val directorySource = directoryPath.readText()
+        assertTrue(modSource.contains("pub mod directory;"), "KFS directory module should be exported")
+        assertTrue(directorySource.contains("pub const KFS_DIRECTORY_ENTRY_SIZE"), "directory.rs should own directory entry sizing")
+        assertTrue(directorySource.contains("pub const KFS_MAX_NAME_BYTES"), "directory.rs should own directory name limits")
+        assertTrue(directorySource.contains("pub fn decode_entry_header("), "directory.rs should own directory entry decode rules")
+        assertTrue(directorySource.contains("pub fn encode_entry("), "directory.rs should own directory entry encode rules")
+        assertFalse(storageSource.contains("const KFS_DIRECTORY_ENTRY_SIZE"), "storage.rs should not own directory entry sizing")
+        assertFalse(storageSource.contains("const KFS_MAX_NAME_BYTES"), "storage.rs should not own directory name limits")
+        assertFalse(cacheSource.contains("const KFS_MAX_NAME_BYTES"), "cache.rs should not duplicate directory name limits")
+        assertTrue(cacheSource.contains("crate::kfs::directory::KFS_MAX_NAME_BYTES"), "cache.rs should use the directory owner for name limits")
+        assertTrue(storageSource.contains("crate::kfs::directory::decode_entry_header("), "storage.rs should use the directory owner for entry decoding")
+    }
+
+    @Test
     fun k16KernelLegacyShellPathIsRemovedFromCurrentSource() {
         val kernelSourceDir = Path.of("../../../guest/kraftos/kernel/src")
         val mainSource = kernelSourceDir.resolve("main.rs").readText()

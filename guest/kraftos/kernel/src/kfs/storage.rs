@@ -1,6 +1,10 @@
 pub const SCRATCH_ADDR: u32 = 0x0000_0600;
 pub const BLOCK_SIZE: u32 = 512;
 
+use crate::kfs::directory::{
+    KfsDirectoryEntryHeader, KFS_DIRECTORY_ENTRIES_PER_BLOCK, KFS_DIRECTORY_ENTRY_SIZE,
+    KFS_MAX_NAME_BYTES,
+};
 use crate::kfs::error::StorageError;
 use crate::kfs::types::{
     DirectoryListingSink, FileMetadata, FileReadProfileFile, FileReadProfileKind, PathKind,
@@ -8,9 +12,6 @@ use crate::kfs::types::{
 };
 
 const KFS_BLOCK_CACHE_SLOTS: usize = 16;
-const KFS_DIRECTORY_ENTRY_SIZE: u32 = 64;
-const KFS_MAX_NAME_BYTES: usize = 56;
-const KFS_DIRECTORY_ENTRIES_PER_BLOCK: usize = (BLOCK_SIZE / KFS_DIRECTORY_ENTRY_SIZE) as usize;
 const INVALID_CACHED_INODE_BLOCK: u32 = u32::MAX;
 
 const STATE_PARTITION_START_LBA: u32 = 0x0000_0200;
@@ -132,7 +133,9 @@ pub unsafe fn copy_selected_directory_listing_into_cached<S: DirectoryListingSin
     cache: &mut crate::kfs::cache::KfsCache,
 ) -> Result<u32, StorageError> {
     if unsafe { read_u32(STATE_INODE_STATE) as u8 } != 2
-        || unsafe { read_u32(STATE_INODE_SIZE_BYTES) } % KFS_DIRECTORY_ENTRY_SIZE != 0
+        || !crate::kfs::directory::directory_size_is_aligned(unsafe {
+            read_u32(STATE_INODE_SIZE_BYTES)
+        })
     {
         return Err(StorageError::INVALID_FILESYSTEM);
     }
@@ -162,18 +165,16 @@ pub unsafe fn copy_selected_directory_listing_into_cached<S: DirectoryListingSin
             let mut offset = 0;
             while offset < BLOCK_SIZE && remaining > 0 {
                 crate::os_stats::record_dir_entry_scan();
-                match scratch_u8(offset) {
-                    0 | 2 => {}
-                    1 => {
-                        let name_len = scratch_u8(offset + 1) as usize;
-                        if name_len == 0
-                            || name_len > KFS_MAX_NAME_BYTES
-                            || scratch_u8(offset + 2) != 0
-                            || scratch_u8(offset + 3) != 0
-                        {
-                            return Err(StorageError::INVALID_FILESYSTEM);
-                        }
-                        entry_inode_ids[entry_count] = scratch_u32(offset + 4);
+                match crate::kfs::directory::decode_entry_header(
+                    scratch_u8(offset),
+                    scratch_u8(offset + 1),
+                    scratch_u8(offset + 2),
+                    scratch_u8(offset + 3),
+                    scratch_u32(offset + 4),
+                )? {
+                    KfsDirectoryEntryHeader::Free | KfsDirectoryEntryHeader::Deleted => {}
+                    KfsDirectoryEntryHeader::Live { inode_id, name_len } => {
+                        entry_inode_ids[entry_count] = inode_id;
                         entry_name_lengths[entry_count] = name_len as u8;
                         let mut name_offset = 0;
                         while name_offset < name_len {
@@ -183,7 +184,6 @@ pub unsafe fn copy_selected_directory_listing_into_cached<S: DirectoryListingSin
                         }
                         entry_count += 1;
                     }
-                    _ => return Err(StorageError::INVALID_FILESYSTEM),
                 }
                 remaining -= KFS_DIRECTORY_ENTRY_SIZE;
                 offset += KFS_DIRECTORY_ENTRY_SIZE;
@@ -733,10 +733,10 @@ unsafe fn find_directory_entry(name: &[u8]) -> Result<u32, StorageError> {
 }
 
 unsafe fn find_directory_entry_slot(name: &[u8]) -> Result<(u32, u32, u32), StorageError> {
-    if name.is_empty()
-        || name.len() > KFS_MAX_NAME_BYTES
-        || unsafe { read_u32(STATE_INODE_SIZE_BYTES) } % KFS_DIRECTORY_ENTRY_SIZE != 0
-    {
+    crate::kfs::directory::validate_name(name)?;
+    if !crate::kfs::directory::directory_size_is_aligned(unsafe {
+        read_u32(STATE_INODE_SIZE_BYTES)
+    }) {
         return Err(StorageError::INVALID_FILESYSTEM);
     }
 
@@ -756,26 +756,19 @@ unsafe fn find_directory_entry_slot(name: &[u8]) -> Result<(u32, u32, u32), Stor
             let mut offset = 0;
             while offset < BLOCK_SIZE && remaining > 0 {
                 crate::os_stats::record_dir_entry_scan();
-                match scratch_u8(offset) {
-                    0 | 2 => {}
-                    1 => {
-                        let name_len = scratch_u8(offset + 1) as usize;
-                        if name_len == 0
-                            || name_len > KFS_MAX_NAME_BYTES
-                            || scratch_u8(offset + 2) != 0
-                            || scratch_u8(offset + 3) != 0
-                        {
-                            return Err(StorageError::INVALID_FILESYSTEM);
-                        }
+                match crate::kfs::directory::decode_entry_header(
+                    scratch_u8(offset),
+                    scratch_u8(offset + 1),
+                    scratch_u8(offset + 2),
+                    scratch_u8(offset + 3),
+                    scratch_u32(offset + 4),
+                )? {
+                    KfsDirectoryEntryHeader::Free | KfsDirectoryEntryHeader::Deleted => {}
+                    KfsDirectoryEntryHeader::Live { inode_id, name_len } => {
                         if name_len == name.len() && scratch_bytes_eq(offset + 8, name) {
-                            return Ok((
-                                scratch_u32(offset + 4),
-                                extent_start_block + block_index,
-                                offset,
-                            ));
+                            return Ok((inode_id, extent_start_block + block_index, offset));
                         }
                     }
-                    _ => return Err(StorageError::INVALID_FILESYSTEM),
                 }
                 remaining -= KFS_DIRECTORY_ENTRY_SIZE;
                 offset += KFS_DIRECTORY_ENTRY_SIZE;
@@ -810,8 +803,14 @@ unsafe fn find_selected_directory_free_slot() -> Result<(), StorageError> {
             unsafe { read_fs_block(extent_start_block + block_index)? };
             let mut offset = 0;
             while offset < BLOCK_SIZE {
-                match scratch_u8(offset) {
-                    0 | 2 => {
+                match crate::kfs::directory::decode_entry_header(
+                    scratch_u8(offset),
+                    scratch_u8(offset + 1),
+                    scratch_u8(offset + 2),
+                    scratch_u8(offset + 3),
+                    scratch_u32(offset + 4),
+                )? {
+                    KfsDirectoryEntryHeader::Free | KfsDirectoryEntryHeader::Deleted => {
                         unsafe {
                             write_u32(STATE_DIRECTORY_SLOT_BLOCK, extent_start_block + block_index);
                             write_u32(STATE_DIRECTORY_SLOT_OFFSET, offset);
@@ -819,8 +818,7 @@ unsafe fn find_selected_directory_free_slot() -> Result<(), StorageError> {
                         }
                         return Ok(());
                     }
-                    1 => {}
-                    _ => return Err(StorageError::INVALID_FILESYSTEM),
+                    KfsDirectoryEntryHeader::Live { .. } => {}
                 }
                 offset += KFS_DIRECTORY_ENTRY_SIZE;
                 directory_offset += KFS_DIRECTORY_ENTRY_SIZE;
@@ -896,7 +894,9 @@ pub unsafe fn copy_selected_directory_listing_into<S: DirectoryListingSink>(
     sink: &mut S,
 ) -> Result<u32, StorageError> {
     if unsafe { read_u32(STATE_INODE_STATE) as u8 } != 2
-        || unsafe { read_u32(STATE_INODE_SIZE_BYTES) } % KFS_DIRECTORY_ENTRY_SIZE != 0
+        || !crate::kfs::directory::directory_size_is_aligned(unsafe {
+            read_u32(STATE_INODE_SIZE_BYTES)
+        })
     {
         return Err(StorageError::INVALID_FILESYSTEM);
     }
@@ -925,22 +925,19 @@ pub unsafe fn copy_selected_directory_listing_into<S: DirectoryListingSink>(
                     block_loaded = true;
                 }
                 crate::os_stats::record_dir_entry_scan();
-                match scratch_u8(offset) {
-                    0 | 2 => {}
-                    1 => {
-                        let name_len = scratch_u8(offset + 1) as u32;
-                        if name_len == 0
-                            || name_len as usize > KFS_MAX_NAME_BYTES
-                            || scratch_u8(offset + 2) != 0
-                            || scratch_u8(offset + 3) != 0
-                        {
-                            return Err(StorageError::INVALID_FILESYSTEM);
-                        }
-                        let inode_id = scratch_u32(offset + 4);
+                match crate::kfs::directory::decode_entry_header(
+                    scratch_u8(offset),
+                    scratch_u8(offset + 1),
+                    scratch_u8(offset + 2),
+                    scratch_u8(offset + 3),
+                    scratch_u32(offset + 4),
+                )? {
+                    KfsDirectoryEntryHeader::Free | KfsDirectoryEntryHeader::Deleted => {}
+                    KfsDirectoryEntryHeader::Live { inode_id, name_len } => {
                         let mut name = [0_u8; KFS_MAX_NAME_BYTES];
                         let mut name_offset = 0;
                         while name_offset < name_len {
-                            name[name_offset as usize] = scratch_u8(offset + 8 + name_offset);
+                            name[name_offset] = scratch_u8(offset + 8 + name_offset as u32);
                             name_offset += 1;
                         }
                         unsafe { read_inode(inode_id)? };
@@ -949,13 +946,12 @@ pub unsafe fn copy_selected_directory_listing_into<S: DirectoryListingSink>(
                             push_directory_entry(
                                 sink,
                                 child.kind as u32,
-                                &name[..name_len as usize],
+                                &name[..name_len],
                                 child.size_bytes,
                             )?;
                         }
                         block_loaded = false;
                     }
-                    _ => return Err(StorageError::INVALID_FILESYSTEM),
                 }
                 remaining -= KFS_DIRECTORY_ENTRY_SIZE;
                 offset += KFS_DIRECTORY_ENTRY_SIZE;
@@ -1043,7 +1039,9 @@ unsafe fn push_u32_le<S: DirectoryListingSink>(
 
 unsafe fn ensure_selected_directory_is_empty() -> Result<(), StorageError> {
     if unsafe { read_u32(STATE_INODE_STATE) as u8 } != 2
-        || unsafe { read_u32(STATE_INODE_SIZE_BYTES) } % KFS_DIRECTORY_ENTRY_SIZE != 0
+        || !crate::kfs::directory::directory_size_is_aligned(unsafe {
+            read_u32(STATE_INODE_SIZE_BYTES)
+        })
     {
         return Err(StorageError::INVALID_FILESYSTEM);
     }
@@ -1063,10 +1061,17 @@ unsafe fn ensure_selected_directory_is_empty() -> Result<(), StorageError> {
             unsafe { read_fs_block(extent_start_block + block_index)? };
             let mut offset = 0;
             while offset < BLOCK_SIZE && remaining > 0 {
-                match scratch_u8(offset) {
-                    0 | 2 => {}
-                    1 => return Err(StorageError::PATH_NOT_EMPTY),
-                    _ => return Err(StorageError::INVALID_FILESYSTEM),
+                match crate::kfs::directory::decode_entry_header(
+                    scratch_u8(offset),
+                    scratch_u8(offset + 1),
+                    scratch_u8(offset + 2),
+                    scratch_u8(offset + 3),
+                    scratch_u32(offset + 4),
+                )? {
+                    KfsDirectoryEntryHeader::Free | KfsDirectoryEntryHeader::Deleted => {}
+                    KfsDirectoryEntryHeader::Live { .. } => {
+                        return Err(StorageError::PATH_NOT_EMPTY);
+                    }
                 }
                 remaining -= KFS_DIRECTORY_ENTRY_SIZE;
                 offset += KFS_DIRECTORY_ENTRY_SIZE;
@@ -1690,36 +1695,34 @@ unsafe fn encode_directory_entry_at(
     inode_id: u32,
     name: &[u8],
 ) -> Result<(), StorageError> {
-    if name.is_empty() || name.len() > KFS_MAX_NAME_BYTES {
-        return Err(StorageError::INVALID_FILESYSTEM);
-    }
+    let record = crate::kfs::directory::encode_entry(inode_id, name)?;
     unsafe { read_fs_block(block)? };
     let mut cursor = 0;
     while cursor < KFS_DIRECTORY_ENTRY_SIZE {
-        unsafe { write_u8(SCRATCH_ADDR + offset + cursor, 0) };
+        unsafe {
+            write_u8(
+                SCRATCH_ADDR + offset + cursor,
+                record.bytes[cursor as usize],
+            )
+        };
         cursor += 1;
-    }
-    unsafe {
-        write_u8(SCRATCH_ADDR + offset, 1);
-        write_u8(SCRATCH_ADDR + offset + 1, name.len() as u8);
-        write_u32(SCRATCH_ADDR + offset + 4, inode_id);
-    }
-    let mut index = 0;
-    while index < name.len() {
-        unsafe { write_u8(SCRATCH_ADDR + offset + 8 + index as u32, name[index]) };
-        index += 1;
     }
     unsafe { write_fs_block(block) }
 }
 
 unsafe fn encode_deleted_directory_entry_at(block: u32, offset: u32) -> Result<(), StorageError> {
+    let record = crate::kfs::directory::encode_deleted_entry();
     unsafe { read_fs_block(block)? };
     let mut cursor = 0;
     while cursor < KFS_DIRECTORY_ENTRY_SIZE {
-        unsafe { write_u8(SCRATCH_ADDR + offset + cursor, 0) };
+        unsafe {
+            write_u8(
+                SCRATCH_ADDR + offset + cursor,
+                record.bytes[cursor as usize],
+            )
+        };
         cursor += 1;
     }
-    unsafe { write_u8(SCRATCH_ADDR + offset, 2) };
     unsafe { write_fs_block(block) }
 }
 
