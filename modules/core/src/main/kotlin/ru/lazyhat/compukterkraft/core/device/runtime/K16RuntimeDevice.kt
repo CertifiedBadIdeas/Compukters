@@ -276,6 +276,10 @@ class K16RuntimeDevice(
         if (pendingDisplayFrames.isEmpty()) return false
         val frames = coalesceDisplayFrames(pendingDisplayFrames)
         pendingDisplayFrames.clear()
+        if (displaySessions.isEmpty()) {
+            pendingDisplayFrames.addAll(frames)
+            return false
+        }
         var sentAny = false
         for (frame in frames) {
             if (sendFrame(frame.displayId, frame)) {

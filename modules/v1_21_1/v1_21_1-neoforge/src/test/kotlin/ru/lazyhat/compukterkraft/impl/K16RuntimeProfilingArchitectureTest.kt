@@ -120,6 +120,27 @@ class K16RuntimeProfilingArchitectureTest {
     }
 
     @Test
+    fun k16RuntimeSkipsDisplaySendWorkWhenNoDisplaySessionIsAttached() {
+        val source =
+            Path
+                .of("../../../modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/runtime/K16RuntimeDevice.kt")
+                .readText()
+
+        assertTrue(
+            source.contains("if (displaySessions.isEmpty())"),
+            "K16 runtime should keep no-viewer display flushes on a cheap server path",
+        )
+        assertTrue(
+            source.contains("pendingDisplayFrames.addAll(frames)"),
+            "K16 runtime should still keep pending display frames for later session attach",
+        )
+        assertTrue(
+            source.contains("displaySessions.attach("),
+            "K16 runtime should flush pending display frames when a display session attaches",
+        )
+    }
+
+    @Test
     fun k16SharedKraftOwnsCUserlandSyscallWrappers() {
         val source = Path.of("../../../build-scripts/src/main/kotlin/k16-firmware-convention.gradle.kts").readText()
 
