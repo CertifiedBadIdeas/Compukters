@@ -50,7 +50,10 @@ impl KfsRootFs {
         self.cache
             .store_inode(directory_inode_id, selected_metadata);
         unsafe {
-            crate::kfs::storage::copy_selected_directory_listing_into_cached(sink, &mut self.cache)
+            crate::kfs::directory_listing::copy_selected_directory_listing_into_cached(
+                sink,
+                &mut self.cache,
+            )
         }
     }
 

@@ -1919,6 +1919,10 @@ class K16FirmwareResourceTest {
         val modSource = kernelKfsDir.resolve("mod.rs").readText()
         val storageSource = kernelKfsDir.resolve("storage.rs").readText()
         val cacheSource = kernelKfsDir.resolve("cache.rs").readText()
+        val listingSource = kernelKfsDir.resolve("directory_listing.rs")
+            .takeIf { it.toFile().isFile }
+            ?.readText()
+            .orEmpty()
 
         val directoryPath = kernelKfsDir.resolve("directory.rs")
         assertTrue(directoryPath.toFile().isFile, "KFS directory entry layout should have an explicit module")
@@ -1932,7 +1936,7 @@ class K16FirmwareResourceTest {
         assertFalse(storageSource.contains("const KFS_MAX_NAME_BYTES"), "storage.rs should not own directory name limits")
         assertFalse(cacheSource.contains("const KFS_MAX_NAME_BYTES"), "cache.rs should not duplicate directory name limits")
         assertTrue(cacheSource.contains("crate::kfs::directory::KFS_MAX_NAME_BYTES"), "cache.rs should use the directory owner for name limits")
-        assertTrue(storageSource.contains("crate::kfs::directory::decode_entry_header("), "storage.rs should use the directory owner for entry decoding")
+        assertTrue(listingSource.contains("crate::kfs::directory::decode_entry_header("), "directory_listing.rs should use the directory owner for entry decoding")
     }
 
     @Test
@@ -2054,6 +2058,33 @@ class K16FirmwareResourceTest {
         assertFalse(storageSource.contains("unsafe fn encode_deleted_directory_entry_at("), "storage.rs should not own deleted directory entry writes")
         assertTrue(storageSource.contains("crate::kfs::directory_mutation::encode_directory_entry_at("), "storage.rs should use the directory mutation owner for live entries")
         assertTrue(storageSource.contains("crate::kfs::directory_mutation::encode_deleted_directory_entry_at("), "storage.rs should use the directory mutation owner for deleted entries")
+    }
+
+    @Test
+    fun kraftOsFilesystemDirectoryListingReadIsNotOwnedByStorageModule() {
+        val kernelKfsDir = Path.of("../../../guest/kraftos/kernel/src/kfs")
+        val modSource = kernelKfsDir.resolve("mod.rs").readText()
+        val storageSource = kernelKfsDir.resolve("storage.rs").readText()
+        val rootSource = kernelKfsDir.resolve("root.rs").readText()
+
+        val listingPath = kernelKfsDir.resolve("directory_listing.rs")
+        assertTrue(listingPath.toFile().isFile, "KFS directory listing reads should have an explicit module")
+        val listingSource = listingPath.readText()
+        assertTrue(modSource.contains("pub mod directory_listing;"), "KFS directory listing module should be exported")
+        assertTrue(listingSource.contains("pub unsafe fn copy_selected_directory_listing_into_cached"), "directory_listing.rs should own cached listing reads")
+        assertTrue(listingSource.contains("pub unsafe fn copy_selected_directory_listing_into"), "directory_listing.rs should own selected directory listing reads")
+        assertTrue(listingSource.contains("pub unsafe fn ensure_selected_directory_is_empty("), "directory_listing.rs should own directory emptiness scans")
+        assertTrue(listingSource.contains("unsafe fn read_inode_path_metadata_cached("), "directory_listing.rs should own cached inode metadata reads")
+        assertTrue(listingSource.contains("unsafe fn push_directory_entry"), "directory_listing.rs should own listing record formatting")
+        assertTrue(listingSource.contains("unsafe fn push_u32_le"), "directory_listing.rs should own listing integer encoding")
+        assertFalse(storageSource.contains("pub unsafe fn copy_selected_directory_listing_into_cached"), "storage.rs should not own cached listing reads")
+        assertFalse(storageSource.contains("pub unsafe fn copy_selected_directory_listing_into"), "storage.rs should not own selected directory listing reads")
+        assertFalse(storageSource.contains("unsafe fn push_directory_entry"), "storage.rs should not own listing record formatting")
+        assertFalse(storageSource.contains("unsafe fn read_inode_path_metadata_cached("), "storage.rs should not own cached inode metadata reads")
+        assertFalse(storageSource.contains("unsafe fn push_u32_le"), "storage.rs should not own listing integer encoding")
+        assertFalse(storageSource.contains("unsafe fn ensure_selected_directory_is_empty("), "storage.rs should not own directory emptiness scans")
+        assertTrue(storageSource.contains("crate::kfs::directory_listing::ensure_selected_directory_is_empty("), "storage.rs should use the directory listing owner for empty-directory scans")
+        assertTrue(rootSource.contains("crate::kfs::directory_listing::copy_selected_directory_listing_into_cached("), "root.rs should use the directory listing owner")
     }
 
     @Test
