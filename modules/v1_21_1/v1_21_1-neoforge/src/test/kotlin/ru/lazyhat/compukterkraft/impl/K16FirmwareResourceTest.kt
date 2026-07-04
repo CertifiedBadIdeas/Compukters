@@ -1858,6 +1858,10 @@ class K16FirmwareResourceTest {
         val kernelKfsDir = Path.of("../../../guest/kraftos/kernel/src/kfs")
         val modSource = kernelKfsDir.resolve("mod.rs").readText()
         val storageSource = kernelKfsDir.resolve("storage.rs").readText()
+        val namespaceMutationSource = kernelKfsDir.resolve("namespace_mutation.rs")
+            .takeIf { it.toFile().isFile }
+            ?.readText()
+            .orEmpty()
 
         assertTrue(kernelKfsDir.resolve("error.rs").toFile().isFile, "KFS errors should have an explicit module")
         assertTrue(kernelKfsDir.resolve("types.rs").toFile().isFile, "KFS public types should have an explicit module")
@@ -2030,6 +2034,10 @@ class K16FirmwareResourceTest {
         val kernelKfsDir = Path.of("../../../guest/kraftos/kernel/src/kfs")
         val modSource = kernelKfsDir.resolve("mod.rs").readText()
         val storageSource = kernelKfsDir.resolve("storage.rs").readText()
+        val namespaceMutationSource = kernelKfsDir.resolve("namespace_mutation.rs")
+            .takeIf { it.toFile().isFile }
+            ?.readText()
+            .orEmpty()
 
         val mutationPath = kernelKfsDir.resolve("directory_mutation.rs")
         assertTrue(mutationPath.toFile().isFile, "KFS directory mutation should have an explicit module")
@@ -2041,13 +2049,17 @@ class K16FirmwareResourceTest {
         assertFalse(storageSource.contains("unsafe fn find_selected_directory_free_slot("), "storage.rs should not own directory free-slot lookup")
         assertFalse(storageSource.contains("unsafe fn grow_selected_directory_capacity("), "storage.rs should not own directory growth")
         assertFalse(storageSource.contains("STATE_DIRECTORY_SLOT_"), "storage.rs should not persist directory slot lookup through scratch state")
-        assertTrue(storageSource.contains("crate::kfs::directory_mutation::find_selected_directory_free_slot("), "storage.rs should use the directory mutation owner")
+        assertTrue(namespaceMutationSource.contains("crate::kfs::directory_mutation::find_selected_directory_free_slot("), "namespace mutation should use the directory mutation owner")
     }
 
     @Test
     fun kraftOsFilesystemDirectoryEntryMutationIsNotOwnedByStorageModule() {
         val kernelKfsDir = Path.of("../../../guest/kraftos/kernel/src/kfs")
         val storageSource = kernelKfsDir.resolve("storage.rs").readText()
+        val namespaceMutationSource = kernelKfsDir.resolve("namespace_mutation.rs")
+            .takeIf { it.toFile().isFile }
+            ?.readText()
+            .orEmpty()
 
         val mutationSource = kernelKfsDir.resolve("directory_mutation.rs").readText()
         assertTrue(mutationSource.contains("pub unsafe fn encode_directory_entry_at("), "directory_mutation.rs should own live directory entry writes")
@@ -2056,8 +2068,8 @@ class K16FirmwareResourceTest {
         assertTrue(mutationSource.contains("crate::kfs::directory::encode_deleted_entry("), "directory mutation should use the deleted directory record encoder")
         assertFalse(storageSource.contains("unsafe fn encode_directory_entry_at("), "storage.rs should not own live directory entry writes")
         assertFalse(storageSource.contains("unsafe fn encode_deleted_directory_entry_at("), "storage.rs should not own deleted directory entry writes")
-        assertTrue(storageSource.contains("crate::kfs::directory_mutation::encode_directory_entry_at("), "storage.rs should use the directory mutation owner for live entries")
-        assertTrue(storageSource.contains("crate::kfs::directory_mutation::encode_deleted_directory_entry_at("), "storage.rs should use the directory mutation owner for deleted entries")
+        assertTrue(namespaceMutationSource.contains("crate::kfs::directory_mutation::encode_directory_entry_at("), "namespace mutation should use the directory mutation owner for live entries")
+        assertTrue(namespaceMutationSource.contains("crate::kfs::directory_mutation::encode_deleted_directory_entry_at("), "namespace mutation should use the directory mutation owner for deleted entries")
     }
 
     @Test
@@ -2066,6 +2078,10 @@ class K16FirmwareResourceTest {
         val modSource = kernelKfsDir.resolve("mod.rs").readText()
         val storageSource = kernelKfsDir.resolve("storage.rs").readText()
         val rootSource = kernelKfsDir.resolve("root.rs").readText()
+        val namespaceMutationSource = kernelKfsDir.resolve("namespace_mutation.rs")
+            .takeIf { it.toFile().isFile }
+            ?.readText()
+            .orEmpty()
 
         val listingPath = kernelKfsDir.resolve("directory_listing.rs")
         assertTrue(listingPath.toFile().isFile, "KFS directory listing reads should have an explicit module")
@@ -2083,7 +2099,7 @@ class K16FirmwareResourceTest {
         assertFalse(storageSource.contains("unsafe fn read_inode_path_metadata_cached("), "storage.rs should not own cached inode metadata reads")
         assertFalse(storageSource.contains("unsafe fn push_u32_le"), "storage.rs should not own listing integer encoding")
         assertFalse(storageSource.contains("unsafe fn ensure_selected_directory_is_empty("), "storage.rs should not own directory emptiness scans")
-        assertTrue(storageSource.contains("crate::kfs::directory_listing::ensure_selected_directory_is_empty("), "storage.rs should use the directory listing owner for empty-directory scans")
+        assertTrue(namespaceMutationSource.contains("crate::kfs::directory_listing::ensure_selected_directory_is_empty("), "namespace mutation should use the directory listing owner for empty-directory scans")
         assertTrue(rootSource.contains("crate::kfs::directory_listing::copy_selected_directory_listing_into_cached("), "root.rs should use the directory listing owner")
     }
 
@@ -2124,11 +2140,55 @@ class K16FirmwareResourceTest {
     }
 
     @Test
+    fun kraftOsFilesystemNamespaceMutationIsNotOwnedByStorageModule() {
+        val kernelDir = Path.of("../../../guest/kraftos/kernel/src")
+        val kernelKfsDir = kernelDir.resolve("kfs")
+        val modSource = kernelKfsDir.resolve("mod.rs").readText()
+        val storageSource = kernelKfsDir.resolve("storage.rs").readText()
+        val fsSource = kernelDir.resolve("fs.rs").readText()
+
+        val namespaceMutationPath = kernelKfsDir.resolve("namespace_mutation.rs")
+        assertTrue(namespaceMutationPath.toFile().isFile, "KFS namespace mutations should have an explicit module")
+        val namespaceMutationSource = namespaceMutationPath.readText()
+        assertTrue(modSource.contains("pub mod namespace_mutation;"), "KFS namespace mutation module should be exported")
+        assertTrue(namespaceMutationSource.contains("pub unsafe fn open_file_for_write_from_storage0("), "namespace_mutation.rs should own open-for-write namespace flow")
+        assertTrue(namespaceMutationSource.contains("pub unsafe fn remove_file_from_storage0("), "namespace_mutation.rs should own file removal")
+        assertTrue(namespaceMutationSource.contains("pub unsafe fn rename_file_from_storage0"), "namespace_mutation.rs should own file rename")
+        assertTrue(namespaceMutationSource.contains("pub unsafe fn create_directory_from_storage0("), "namespace_mutation.rs should own directory creation")
+        assertTrue(namespaceMutationSource.contains("pub unsafe fn remove_directory_from_storage0("), "namespace_mutation.rs should own directory removal")
+        assertTrue(namespaceMutationSource.contains("unsafe fn create_empty_file("), "namespace_mutation.rs should own empty file creation")
+        assertTrue(namespaceMutationSource.contains("unsafe fn create_empty_directory("), "namespace_mutation.rs should own empty directory creation")
+        assertTrue(namespaceMutationSource.contains("unsafe fn truncate_selected_file("), "namespace_mutation.rs should own selected file truncation")
+        assertFalse(storageSource.contains("pub unsafe fn open_file_for_write_from_storage0("), "storage.rs should not own open-for-write namespace flow")
+        assertFalse(storageSource.contains("pub unsafe fn remove_file_from_storage0("), "storage.rs should not own file removal")
+        assertFalse(storageSource.contains("pub unsafe fn rename_file_from_storage0"), "storage.rs should not own file rename")
+        assertFalse(storageSource.contains("pub unsafe fn create_directory_from_storage0("), "storage.rs should not own directory creation")
+        assertFalse(storageSource.contains("pub unsafe fn remove_directory_from_storage0("), "storage.rs should not own directory removal")
+        assertFalse(storageSource.contains("unsafe fn create_empty_file("), "storage.rs should not own empty file creation")
+        assertFalse(storageSource.contains("unsafe fn create_empty_directory("), "storage.rs should not own empty directory creation")
+        assertFalse(storageSource.contains("unsafe fn truncate_selected_file("), "storage.rs should not own selected file truncation")
+        assertFalse(fsSource.contains("crate::kfs::storage::open_file_for_write_from_storage0("), "fs.rs should not use storage-owned open-for-write namespace flow")
+        assertFalse(fsSource.contains("crate::kfs::storage::remove_file_from_storage0("), "fs.rs should not use storage-owned file removal")
+        assertFalse(fsSource.contains("crate::kfs::storage::rename_file_from_storage0("), "fs.rs should not use storage-owned file rename")
+        assertFalse(fsSource.contains("crate::kfs::storage::create_directory_from_storage0("), "fs.rs should not use storage-owned directory creation")
+        assertFalse(fsSource.contains("crate::kfs::storage::remove_directory_from_storage0("), "fs.rs should not use storage-owned directory removal")
+        assertTrue(fsSource.contains("crate::kfs::namespace_mutation::open_file_for_write_from_storage0("), "fs.rs should use the namespace mutation owner for open-for-write")
+        assertTrue(fsSource.contains("crate::kfs::namespace_mutation::remove_file_from_storage0("), "fs.rs should use the namespace mutation owner for file removal")
+        assertTrue(fsSource.contains("crate::kfs::namespace_mutation::rename_file_from_storage0("), "fs.rs should use the namespace mutation owner for file rename")
+        assertTrue(fsSource.contains("crate::kfs::namespace_mutation::create_directory_from_storage0("), "fs.rs should use the namespace mutation owner for directory creation")
+        assertTrue(fsSource.contains("crate::kfs::namespace_mutation::remove_directory_from_storage0("), "fs.rs should use the namespace mutation owner for directory removal")
+    }
+
+    @Test
     fun kraftOsFilesystemAllocationMutationIsNotOwnedByStorageModule() {
         val kernelKfsDir = Path.of("../../../guest/kraftos/kernel/src/kfs")
         val modSource = kernelKfsDir.resolve("mod.rs").readText()
         val storageSource = kernelKfsDir.resolve("storage.rs").readText()
         val directoryMutationSource = kernelKfsDir.resolve("directory_mutation.rs").readText()
+        val namespaceMutationSource = kernelKfsDir.resolve("namespace_mutation.rs")
+            .takeIf { it.toFile().isFile }
+            ?.readText()
+            .orEmpty()
 
         val allocationPath = kernelKfsDir.resolve("allocation.rs")
         assertTrue(allocationPath.toFile().isFile, "KFS allocation mutation should have an explicit module")
@@ -2144,7 +2204,7 @@ class K16FirmwareResourceTest {
         assertFalse(storageSource.contains("unsafe fn mark_block_allocated("), "storage.rs should not own bitmap allocation mutation")
         assertFalse(storageSource.contains("unsafe fn mark_block_free("), "storage.rs should not own bitmap free mutation")
         assertFalse(storageSource.contains("fn selected_bitmap_layout("), "storage.rs should not own bitmap layout selection")
-        assertTrue(storageSource.contains("crate::kfs::allocation::allocate_inode("), "storage.rs should use the allocation owner")
+        assertTrue(namespaceMutationSource.contains("crate::kfs::allocation::allocate_inode("), "namespace mutation should use the allocation owner")
         assertTrue(directoryMutationSource.contains("crate::kfs::allocation::allocate_contiguous_blocks("), "directory mutation should use the allocation owner")
     }
 

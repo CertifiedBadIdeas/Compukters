@@ -514,7 +514,7 @@ pub unsafe fn open_root_file_for_process(
     } else {
         let truncate = flags == OPEN_CREATE_TRUNCATE_FLAGS;
         let metadata = unsafe {
-            crate::kfs::storage::open_file_for_write_from_storage0(
+            crate::kfs::namespace_mutation::open_file_for_write_from_storage0(
                 ROOT_PARTITION,
                 components.as_slice(),
                 true,
@@ -572,8 +572,11 @@ pub unsafe fn remove_root_file_for_process(path: &[u8]) -> Result<(), FsError> {
         return Err(FsError::Busy);
     }
     unsafe {
-        crate::kfs::storage::remove_file_from_storage0(ROOT_PARTITION, components.as_slice())
-            .map_err(storage_error_to_fs_error)?;
+        crate::kfs::namespace_mutation::remove_file_from_storage0(
+            ROOT_PARTITION,
+            components.as_slice(),
+        )
+        .map_err(storage_error_to_fs_error)?;
         flush_root_storage()?;
         invalidate_root_fs_cache();
     }
@@ -591,7 +594,7 @@ pub unsafe fn rename_root_file_for_process(
     let new_path = RootFilePath::parse(new_path)?;
     let new_components = new_path.components();
     unsafe {
-        crate::kfs::storage::rename_file_from_storage0(
+        crate::kfs::namespace_mutation::rename_file_from_storage0(
             ROOT_PARTITION,
             old_components.as_slice(),
             new_components.as_slice(),
@@ -609,8 +612,11 @@ pub unsafe fn create_root_directory(path: &[u8]) -> Result<(), FsError> {
     let path = RootFilePath::parse(path)?;
     let components = path.components();
     unsafe {
-        crate::kfs::storage::create_directory_from_storage0(ROOT_PARTITION, components.as_slice())
-            .map_err(storage_error_to_fs_error)?;
+        crate::kfs::namespace_mutation::create_directory_from_storage0(
+            ROOT_PARTITION,
+            components.as_slice(),
+        )
+        .map_err(storage_error_to_fs_error)?;
         flush_root_storage()?;
         invalidate_root_fs_cache();
     }
@@ -622,8 +628,11 @@ pub unsafe fn remove_root_directory(path: &[u8]) -> Result<(), FsError> {
     let path = RootFilePath::parse(path)?;
     let components = path.components();
     unsafe {
-        crate::kfs::storage::remove_directory_from_storage0(ROOT_PARTITION, components.as_slice())
-            .map_err(storage_error_to_fs_error)?;
+        crate::kfs::namespace_mutation::remove_directory_from_storage0(
+            ROOT_PARTITION,
+            components.as_slice(),
+        )
+        .map_err(storage_error_to_fs_error)?;
         flush_root_storage()?;
         invalidate_root_fs_cache();
     }
