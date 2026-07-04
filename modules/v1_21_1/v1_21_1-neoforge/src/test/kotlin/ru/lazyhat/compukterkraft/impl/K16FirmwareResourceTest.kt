@@ -1708,6 +1708,9 @@ class K16FirmwareResourceTest {
 
         assertFalse(biosSource.contains("display0"), "K16 BIOS must render through gpu0 only")
         assertTrue(biosSource.contains("GPU_COMMAND"), "K16 BIOS should use the gpu0 display path")
+        assertTrue(biosSource.contains("#define BIOS_BOOT_PARTITION \"BOOT\""), "K16 BIOS should name the BOOT KFS partition")
+        assertTrue(biosSource.contains("#define BIOS_BOOT_DIR \"boot\""), "K16 BIOS should name the boot directory")
+        assertTrue(biosSource.contains("#define BIOS_BOOTLOADER_FILE \"loader.kb\""), "K16 BIOS should name the bootloader K16E file")
         assertTrue(biosSource.contains("load_k16e_from_storage0"), "K16 BIOS should keep the storage boot path")
     }
 
@@ -2764,6 +2767,8 @@ class K16FirmwareResourceTest {
     @Test
     fun k16KernelEntrypointLaunchesInitProgram() {
         val mainSource = Path.of("../../../guest/kraftos/kernel/src/main.rs").readText()
+        val initSource = Path.of("../../../guest/kraftos/kernel/src/init.rs").readText()
+        val processSource = Path.of("../../../guest/kraftos/kernel/src/process.rs").readText()
 
         assertTrue(mainSource.contains("mod console;"), "kernel should register console for fd stdout")
         assertTrue(mainSource.contains("mod init;"), "kernel should register the init launcher module")
@@ -2771,6 +2776,18 @@ class K16FirmwareResourceTest {
         assertTrue(mainSource.contains("trap::initialize();"), "kernel should initialize traps before userland")
         assertTrue(mainSource.contains("control::set_ready();"), "kernel should mark the machine ready before entering init")
         assertTrue(mainSource.contains("init::launch()"), "kernel entrypoint should launch ROOT:/bin/init.kx")
+        assertTrue(
+            initSource.contains("const INIT_PROGRAM_PATH: &[u8] = b\"/bin/init.kx\";"),
+            "init.rs should name the ROOT KFS init K16E path",
+        )
+        assertTrue(
+            initSource.contains("process::begin_translated_init_from_storage0(INIT_PROGRAM_PATH, boot_info)"),
+            "init.rs should launch init through the named ROOT KFS K16E path",
+        )
+        assertTrue(
+            processSource.contains("crate::fs::open_root_file_cached_components(path.components())"),
+            "process loading should open dynamic user K16E files through mounted ROOT KFS",
+        )
         assertFalse(mainSource.contains("mod shell;"), "kernel entrypoint should not register the legacy shell")
         assertFalse(mainSource.contains("shell::init();"), "kernel entrypoint should not start the legacy shell")
         assertFalse(mainSource.contains("fn idle_once()"), "kernel entrypoint should not remain in the legacy idle loop")

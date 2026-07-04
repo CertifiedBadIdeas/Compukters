@@ -2,12 +2,14 @@ use crate::boot_chain::LoadError;
 
 use crate::{control, debug, process};
 
+const INIT_PROGRAM_PATH: &[u8] = b"/bin/init.kx";
+
 pub fn launch() -> ! {
     let boot_info = unsafe { k16_abi::computer::profile::read_boot_info() };
     match boot_info {
         Some(boot_info) => {
             let launch =
-                unsafe { process::begin_translated_init_from_storage0(b"/bin/init.kx", boot_info) };
+                unsafe { process::begin_translated_init_from_storage0(INIT_PROGRAM_PATH, boot_info) };
             match launch {
                 Ok(launch) => unsafe { process::enter_child_context(launch) },
                 Err(error) => fail_process_load(error),
