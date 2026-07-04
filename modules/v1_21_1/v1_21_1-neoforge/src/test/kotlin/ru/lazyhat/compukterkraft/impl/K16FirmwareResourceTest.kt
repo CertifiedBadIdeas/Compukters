@@ -1949,6 +1949,45 @@ class K16FirmwareResourceTest {
     }
 
     @Test
+    fun kraftOsFilesystemMountedStateIsNotOwnedByStorageModule() {
+        val kernelDir = Path.of("../../../guest/kraftos/kernel/src")
+        val kernelKfsDir = kernelDir.resolve("kfs")
+        val modSource = kernelKfsDir.resolve("mod.rs").readText()
+        val storageSource = kernelKfsDir.resolve("storage.rs").readText()
+        val blockIoSource = kernelKfsDir.resolve("block_io.rs").readText()
+        val allocationSource = kernelKfsDir.resolve("allocation.rs").readText()
+        val pathSource = kernelKfsDir.resolve("path.rs").readText()
+        val rootSource = kernelKfsDir.resolve("root.rs").readText()
+
+        val filesystemStatePath = kernelKfsDir.resolve("filesystem_state.rs")
+        assertTrue(filesystemStatePath.toFile().isFile, "KFS mounted filesystem state should have an explicit module")
+        val filesystemStateSource = filesystemStatePath.readText()
+        assertTrue(modSource.contains("pub mod filesystem_state;"), "KFS filesystem state module should be exported")
+        assertTrue(filesystemStateSource.contains("const STATE_PARTITION_START_LBA"), "filesystem_state.rs should own partition state slots")
+        assertTrue(filesystemStateSource.contains("const STATE_SUPERBLOCK_TOTAL_BLOCKS"), "filesystem_state.rs should own superblock state slots")
+        assertTrue(filesystemStateSource.contains("pub(crate) unsafe fn partition_start_lba("), "filesystem_state.rs should own partition start reads")
+        assertTrue(filesystemStateSource.contains("pub(crate) unsafe fn partition_block_count("), "filesystem_state.rs should own partition size reads")
+        assertTrue(filesystemStateSource.contains("pub(crate) unsafe fn superblock_total_blocks("), "filesystem_state.rs should own total block reads")
+        assertTrue(filesystemStateSource.contains("pub(crate) unsafe fn superblock_inode_table_start_block("), "filesystem_state.rs should own inode table reads")
+        assertTrue(filesystemStateSource.contains("pub(crate) unsafe fn root_inode_id("), "filesystem_state.rs should own root inode reads")
+        assertTrue(filesystemStateSource.contains("pub(crate) unsafe fn store_partition("), "filesystem_state.rs should own mounted partition writes")
+        assertTrue(filesystemStateSource.contains("pub(crate) unsafe fn store_superblock("), "filesystem_state.rs should own mounted superblock writes")
+        assertFalse(storageSource.contains("const STATE_PARTITION_START_LBA"), "storage.rs should not own partition state slots")
+        assertFalse(storageSource.contains("const STATE_SUPERBLOCK_TOTAL_BLOCKS"), "storage.rs should not own superblock state slots")
+        assertFalse(storageSource.contains("pub(crate) unsafe fn partition_start_lba("), "storage.rs should not own partition start reads")
+        assertFalse(storageSource.contains("pub(crate) unsafe fn partition_block_count("), "storage.rs should not own partition size reads")
+        assertFalse(storageSource.contains("pub(crate) unsafe fn superblock_total_blocks("), "storage.rs should not own total block reads")
+        assertFalse(storageSource.contains("pub(crate) unsafe fn superblock_inode_table_start_block("), "storage.rs should not own inode table reads")
+        assertFalse(storageSource.contains("pub unsafe fn root_inode_id("), "storage.rs should not own root inode reads")
+        assertTrue(storageSource.contains("crate::kfs::filesystem_state::store_partition("), "storage.rs should use filesystem state owner for mounted partition writes")
+        assertTrue(storageSource.contains("crate::kfs::filesystem_state::store_superblock("), "storage.rs should use filesystem state owner for mounted superblock writes")
+        assertTrue(blockIoSource.contains("crate::kfs::filesystem_state::partition_start_lba("), "block_io.rs should use filesystem state owner")
+        assertTrue(allocationSource.contains("filesystem_state::superblock_total_blocks("), "allocation.rs should use filesystem state owner")
+        assertTrue(pathSource.contains("filesystem_state::root_inode_id("), "path.rs should use filesystem state owner")
+        assertTrue(rootSource.contains("crate::kfs::filesystem_state::root_inode_id("), "root.rs should use filesystem state owner")
+    }
+
+    @Test
     fun kraftOsFilesystemInodeLayoutIsNotOwnedByStorageModule() {
         val kernelKfsDir = Path.of("../../../guest/kraftos/kernel/src/kfs")
         val modSource = kernelKfsDir.resolve("mod.rs").readText()

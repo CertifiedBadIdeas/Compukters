@@ -1,6 +1,6 @@
 use crate::kfs::error::StorageError;
 use crate::kfs::types::{FileMetadata, KFS_MAX_INLINE_EXTENTS};
-use crate::kfs::{block_io, selected_inode, storage};
+use crate::kfs::{block_io, filesystem_state, selected_inode};
 
 pub unsafe fn encode_file_inode(metadata: FileMetadata) -> Result<(), StorageError> {
     unsafe {
@@ -84,8 +84,8 @@ unsafe fn encode_inode(
     }
     let location = crate::kfs::inode::locate_inode(
         inode_id,
-        unsafe { storage::superblock_inode_table_start_block() },
-        unsafe { storage::superblock_inode_table_block_count() },
+        unsafe { filesystem_state::superblock_inode_table_start_block() },
+        unsafe { filesystem_state::superblock_inode_table_block_count() },
     )?;
     let inode_block = location.block;
     let inode_offset = location.offset;

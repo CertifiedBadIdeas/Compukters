@@ -1,9 +1,9 @@
 use crate::kfs::error::StorageError;
-use crate::kfs::{block_io, selected_inode, storage};
+use crate::kfs::{block_io, filesystem_state, selected_inode, storage};
 
 pub unsafe fn allocate_inode() -> Result<u32, StorageError> {
     let inode_capacity = crate::kfs::inode::inode_capacity(unsafe {
-        storage::superblock_inode_table_block_count()
+        filesystem_state::superblock_inode_table_block_count()
     })?;
     let mut inode_id = 1;
     while inode_id < inode_capacity {
@@ -20,11 +20,11 @@ pub unsafe fn allocate_inode() -> Result<u32, StorageError> {
 
 fn selected_bitmap_layout() -> crate::kfs::bitmap::KfsBitmapLayout {
     crate::kfs::bitmap::KfsBitmapLayout {
-        total_blocks: unsafe { storage::superblock_total_blocks() },
-        bitmap_start_block: unsafe { storage::superblock_bitmap_start_block() },
-        bitmap_block_count: unsafe { storage::superblock_bitmap_block_count() },
-        inode_table_start_block: unsafe { storage::superblock_inode_table_start_block() },
-        inode_table_block_count: unsafe { storage::superblock_inode_table_block_count() },
+        total_blocks: unsafe { filesystem_state::superblock_total_blocks() },
+        bitmap_start_block: unsafe { filesystem_state::superblock_bitmap_start_block() },
+        bitmap_block_count: unsafe { filesystem_state::superblock_bitmap_block_count() },
+        inode_table_start_block: unsafe { filesystem_state::superblock_inode_table_start_block() },
+        inode_table_block_count: unsafe { filesystem_state::superblock_inode_table_block_count() },
     }
 }
 

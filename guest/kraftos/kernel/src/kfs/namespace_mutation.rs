@@ -1,7 +1,7 @@
 use crate::kfs::directory::KFS_DIRECTORY_ENTRY_SIZE;
 use crate::kfs::error::StorageError;
 use crate::kfs::types::{FileMetadata, KFS_MAX_INLINE_EXTENTS};
-use crate::kfs::{block_io, selected_inode, storage};
+use crate::kfs::{block_io, filesystem_state, selected_inode, storage};
 
 pub unsafe fn open_file_for_write_from_storage0(
     partition_type: &[u8; 4],
@@ -51,7 +51,7 @@ pub unsafe fn remove_file_from_storage0(
         let start_block = metadata.extent_start_blocks[extent_index];
         let block_count = metadata.extent_block_counts[extent_index];
         storage::validate_extent(start_block, block_count, unsafe {
-            storage::superblock_total_blocks()
+            filesystem_state::superblock_total_blocks()
         })?;
         let mut block = start_block;
         while block < start_block + block_count {
@@ -171,7 +171,7 @@ pub unsafe fn remove_directory_from_storage0(
         let start_block = metadata.extent_start_blocks[extent_index];
         let block_count = metadata.extent_block_counts[extent_index];
         storage::validate_extent(start_block, block_count, unsafe {
-            storage::superblock_total_blocks()
+            filesystem_state::superblock_total_blocks()
         })?;
         let mut block = start_block;
         while block < start_block + block_count {

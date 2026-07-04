@@ -4,7 +4,7 @@ use crate::kfs::directory::{
 };
 use crate::kfs::error::StorageError;
 use crate::kfs::types::{DirectoryListingSink, KFS_MAX_INLINE_EXTENTS};
-use crate::kfs::{block_io, selected_inode, storage};
+use crate::kfs::{block_io, filesystem_state, selected_inode, storage};
 
 const INVALID_CACHED_INODE_BLOCK: u32 = u32::MAX;
 
@@ -31,7 +31,7 @@ pub unsafe fn copy_selected_directory_listing_into_cached<S: DirectoryListingSin
         let extent_start_block = directory.extent_start_blocks[extent_index];
         let extent_block_count = directory.extent_block_counts[extent_index];
         storage::validate_extent(extent_start_block, extent_block_count, unsafe {
-            storage::superblock_total_blocks()
+            filesystem_state::superblock_total_blocks()
         })?;
         let mut block_index = 0;
         while block_index < extent_block_count && remaining > 0 {
@@ -127,7 +127,7 @@ pub unsafe fn copy_selected_directory_listing_into<S: DirectoryListingSink>(
         let extent_start_block = directory.extent_start_blocks[extent_index];
         let extent_block_count = directory.extent_block_counts[extent_index];
         storage::validate_extent(extent_start_block, extent_block_count, unsafe {
-            storage::superblock_total_blocks()
+            filesystem_state::superblock_total_blocks()
         })?;
         let mut block_index = 0;
         while block_index < extent_block_count && remaining > 0 {
@@ -203,7 +203,7 @@ pub unsafe fn ensure_selected_directory_is_empty() -> Result<(), StorageError> {
         let extent_start_block = directory.extent_start_blocks[extent_index];
         let extent_block_count = directory.extent_block_counts[extent_index];
         storage::validate_extent(extent_start_block, extent_block_count, unsafe {
-            storage::superblock_total_blocks()
+            filesystem_state::superblock_total_blocks()
         })?;
         let mut block_index = 0;
         while block_index < extent_block_count {
@@ -258,8 +258,8 @@ unsafe fn read_inode_path_metadata_cached(
 ) -> Result<crate::kfs::cache::CachedPathMetadata, StorageError> {
     let location = crate::kfs::inode::locate_inode(
         inode_id,
-        unsafe { storage::superblock_inode_table_start_block() },
-        unsafe { storage::superblock_inode_table_block_count() },
+        unsafe { filesystem_state::superblock_inode_table_start_block() },
+        unsafe { filesystem_state::superblock_inode_table_block_count() },
     )?;
     let inode_block = location.block;
     let inode_offset = location.offset;
@@ -279,7 +279,7 @@ unsafe fn read_inode_path_metadata_cached(
         let start_block = block_io::scratch_u32(offset);
         let block_count = block_io::scratch_u32(offset + 4);
         storage::validate_extent(start_block, block_count, unsafe {
-            storage::superblock_total_blocks()
+            filesystem_state::superblock_total_blocks()
         })?;
         index += 1;
     }

@@ -27,16 +27,17 @@ static KFS_BLOCK_CACHE: KernelKfsBlockCache = KernelKfsBlockCache::new();
 
 #[inline(always)]
 pub(crate) unsafe fn read_fs_block(block: u32) -> Result<(), StorageError> {
-    if block >= unsafe { crate::kfs::storage::partition_block_count() } {
+    if block >= unsafe { crate::kfs::filesystem_state::partition_block_count() } {
         return Err(StorageError::INVALID_FILESYSTEM);
     }
     if unsafe { read_fs_block_from_cache(block) } {
         return Ok(());
     }
-    let lba = match unsafe { crate::kfs::storage::partition_start_lba() }.checked_add(block) {
-        Some(value) => value,
-        None => return Err(StorageError::INVALID_FILESYSTEM),
-    };
+    let lba =
+        match unsafe { crate::kfs::filesystem_state::partition_start_lba() }.checked_add(block) {
+            Some(value) => value,
+            None => return Err(StorageError::INVALID_FILESYSTEM),
+        };
     unsafe { read_storage_block(lba)? };
     unsafe { store_scratch_block_in_cache(block) };
     Ok(())
@@ -55,7 +56,7 @@ pub(crate) unsafe fn read_fs_blocks_to_ram(
         Some(value) => value,
         None => return Err(StorageError::INVALID_FILESYSTEM),
     };
-    if end_block > unsafe { crate::kfs::storage::partition_block_count() } {
+    if end_block > unsafe { crate::kfs::filesystem_state::partition_block_count() } {
         return Err(StorageError::INVALID_FILESYSTEM);
     }
     unsafe { read_fs_blocks_to_ram_cached(start_block, block_count, dst_addr) }
@@ -63,13 +64,14 @@ pub(crate) unsafe fn read_fs_blocks_to_ram(
 
 #[inline(always)]
 pub(crate) unsafe fn write_fs_block(block: u32) -> Result<(), StorageError> {
-    if block >= unsafe { crate::kfs::storage::partition_block_count() } {
+    if block >= unsafe { crate::kfs::filesystem_state::partition_block_count() } {
         return Err(StorageError::INVALID_FILESYSTEM);
     }
-    let lba = match unsafe { crate::kfs::storage::partition_start_lba() }.checked_add(block) {
-        Some(value) => value,
-        None => return Err(StorageError::INVALID_FILESYSTEM),
-    };
+    let lba =
+        match unsafe { crate::kfs::filesystem_state::partition_start_lba() }.checked_add(block) {
+            Some(value) => value,
+            None => return Err(StorageError::INVALID_FILESYSTEM),
+        };
     unsafe { write_storage_block(lba)? };
     unsafe { store_scratch_block_in_cache(block) };
     Ok(())
@@ -134,7 +136,9 @@ unsafe fn read_fs_blocks_to_ram_cached(
             miss_count += 1;
         }
 
-        let lba = match unsafe { crate::kfs::storage::partition_start_lba() }.checked_add(block) {
+        let lba = match unsafe { crate::kfs::filesystem_state::partition_start_lba() }
+            .checked_add(block)
+        {
             Some(value) => value,
             None => return Err(StorageError::INVALID_FILESYSTEM),
         };
