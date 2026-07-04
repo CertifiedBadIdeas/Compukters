@@ -1,7 +1,7 @@
 use crate::kfs::directory::KFS_DIRECTORY_ENTRY_SIZE;
 use crate::kfs::error::StorageError;
 use crate::kfs::types::{FileMetadata, KFS_MAX_INLINE_EXTENTS};
-use crate::kfs::{block_io, storage};
+use crate::kfs::{block_io, selected_inode, storage};
 
 pub unsafe fn open_file_for_write_from_storage0(
     partition_type: &[u8; 4],
@@ -19,7 +19,7 @@ pub unsafe fn open_file_for_write_from_storage0(
             if truncate {
                 unsafe { truncate_selected_file()? };
             }
-            Ok(unsafe { storage::selected_file_metadata() })
+            Ok(unsafe { selected_inode::selected_file_metadata() })
         }
         Err(error) if error == StorageError::PATH_NOT_FOUND && create => unsafe {
             create_empty_file(path)
@@ -42,10 +42,10 @@ pub unsafe fn remove_file_from_storage0(
     let slot = unsafe { crate::kfs::path::find_directory_entry_slot(path[parent_len])? };
     let inode_id = slot.inode_id;
     unsafe { storage::read_inode(inode_id)? };
-    if unsafe { storage::selected_inode_state() } != storage::INODE_STATE_REGULAR {
+    if unsafe { selected_inode::selected_inode_state() } != selected_inode::INODE_STATE_REGULAR {
         return Err(StorageError::PATH_NOT_FOUND);
     }
-    let metadata = unsafe { storage::selected_file_metadata() };
+    let metadata = unsafe { selected_inode::selected_file_metadata() };
     let mut extent_index = 0;
     while extent_index < metadata.extent_count as usize {
         let start_block = metadata.extent_start_blocks[extent_index];
@@ -93,7 +93,7 @@ pub unsafe fn rename_file_from_storage0(
         unsafe { crate::kfs::path::find_directory_entry_slot(old_path[old_parent_len])? };
     let inode_id = old_slot.inode_id;
     unsafe { storage::read_inode(inode_id)? };
-    if unsafe { storage::selected_inode_state() } != storage::INODE_STATE_REGULAR {
+    if unsafe { selected_inode::selected_inode_state() } != selected_inode::INODE_STATE_REGULAR {
         return Err(StorageError::PATH_NOT_REGULAR);
     }
     if source_inode_is_busy(inode_id) {
@@ -109,7 +109,7 @@ pub unsafe fn rename_file_from_storage0(
         Err(error) => return Err(error),
     }
     let new_slot = unsafe { crate::kfs::directory_mutation::find_selected_directory_free_slot()? };
-    let new_parent_inode_id = unsafe { storage::selected_inode_id() };
+    let new_parent_inode_id = unsafe { selected_inode::selected_inode_id() };
 
     unsafe {
         crate::kfs::directory_mutation::encode_directory_entry_at(
@@ -121,7 +121,7 @@ pub unsafe fn rename_file_from_storage0(
     };
     unsafe { storage::read_inode(new_parent_inode_id)? };
     let new_size = max_u32(
-        unsafe { storage::selected_inode_size() },
+        unsafe { selected_inode::selected_inode_size() },
         new_slot.directory_offset + KFS_DIRECTORY_ENTRY_SIZE,
     );
     unsafe {
@@ -161,11 +161,11 @@ pub unsafe fn remove_directory_from_storage0(
     let slot = unsafe { crate::kfs::path::find_directory_entry_slot(path[parent_len])? };
     let inode_id = slot.inode_id;
     unsafe { storage::read_inode(inode_id)? };
-    if unsafe { storage::selected_inode_state() } != storage::INODE_STATE_DIRECTORY {
+    if unsafe { selected_inode::selected_inode_state() } != selected_inode::INODE_STATE_DIRECTORY {
         return Err(StorageError::PATH_NOT_FOUND);
     }
     unsafe { crate::kfs::directory_listing::ensure_selected_directory_is_empty()? };
-    let metadata = unsafe { storage::selected_file_metadata() };
+    let metadata = unsafe { selected_inode::selected_file_metadata() };
     let mut extent_index = 0;
     while extent_index < metadata.extent_count as usize {
         let start_block = metadata.extent_start_blocks[extent_index];
@@ -198,7 +198,7 @@ unsafe fn create_empty_file(path: &[&[u8]]) -> Result<FileMetadata, StorageError
         Err(error) => return Err(error),
     }
     let slot = unsafe { crate::kfs::directory_mutation::find_selected_directory_free_slot()? };
-    let parent_inode_id = unsafe { storage::selected_inode_id() };
+    let parent_inode_id = unsafe { selected_inode::selected_inode_id() };
     let inode_id = unsafe { crate::kfs::allocation::allocate_inode()? };
     let start_block = unsafe { crate::kfs::allocation::allocate_contiguous_blocks(1)? };
     unsafe { block_io::clear_scratch_block() };
@@ -225,12 +225,12 @@ unsafe fn create_empty_file(path: &[&[u8]]) -> Result<FileMetadata, StorageError
     };
     unsafe { storage::read_inode(parent_inode_id)? };
     let new_size = max_u32(
-        unsafe { storage::selected_inode_size() },
+        unsafe { selected_inode::selected_inode_size() },
         slot.directory_offset + KFS_DIRECTORY_ENTRY_SIZE,
     );
     unsafe { crate::kfs::inode_mutation::encode_selected_inode_size(parent_inode_id, new_size)? };
     unsafe { storage::read_inode(inode_id)? };
-    Ok(unsafe { storage::selected_file_metadata() })
+    Ok(unsafe { selected_inode::selected_file_metadata() })
 }
 
 unsafe fn create_empty_directory(path: &[&[u8]]) -> Result<(), StorageError> {
@@ -243,7 +243,7 @@ unsafe fn create_empty_directory(path: &[&[u8]]) -> Result<(), StorageError> {
         Err(error) => return Err(error),
     }
     let slot = unsafe { crate::kfs::directory_mutation::find_selected_directory_free_slot()? };
-    let parent_inode_id = unsafe { storage::selected_inode_id() };
+    let parent_inode_id = unsafe { selected_inode::selected_inode_id() };
     let inode_id = unsafe { crate::kfs::allocation::allocate_inode()? };
     let start_block = unsafe { crate::kfs::allocation::allocate_contiguous_blocks(1)? };
     unsafe { block_io::clear_scratch_block() };
@@ -270,14 +270,14 @@ unsafe fn create_empty_directory(path: &[&[u8]]) -> Result<(), StorageError> {
     };
     unsafe { storage::read_inode(parent_inode_id)? };
     let new_size = max_u32(
-        unsafe { storage::selected_inode_size() },
+        unsafe { selected_inode::selected_inode_size() },
         slot.directory_offset + KFS_DIRECTORY_ENTRY_SIZE,
     );
     unsafe { crate::kfs::inode_mutation::encode_selected_inode_size(parent_inode_id, new_size) }
 }
 
 unsafe fn truncate_selected_file() -> Result<(), StorageError> {
-    let mut metadata = unsafe { storage::selected_file_metadata() };
+    let mut metadata = unsafe { selected_inode::selected_file_metadata() };
     if metadata.extent_count == 0 {
         return Err(StorageError::INVALID_FILESYSTEM);
     }

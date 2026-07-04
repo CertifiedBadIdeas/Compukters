@@ -1,7 +1,7 @@
 use crate::kfs::directory::{KfsDirectoryEntryHeader, KFS_DIRECTORY_ENTRY_SIZE};
 use crate::kfs::error::StorageError;
 use crate::kfs::types::KFS_MAX_INLINE_EXTENTS;
-use crate::kfs::{block_io, storage};
+use crate::kfs::{block_io, selected_inode, storage};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct KfsDirectoryFreeSlot {
@@ -11,16 +11,16 @@ pub struct KfsDirectoryFreeSlot {
 }
 
 pub unsafe fn find_selected_directory_free_slot() -> Result<KfsDirectoryFreeSlot, StorageError> {
-    if unsafe { storage::selected_inode_state() } != storage::INODE_STATE_DIRECTORY {
+    if unsafe { selected_inode::selected_inode_state() } != selected_inode::INODE_STATE_DIRECTORY {
         return Err(StorageError::INVALID_FILESYSTEM);
     }
     let mut directory_offset = 0;
     let mut extent_index = 0;
-    while extent_index < unsafe { storage::selected_inode_extent_count() as usize } {
+    while extent_index < unsafe { selected_inode::selected_inode_extent_count() as usize } {
         let extent_start_block =
-            unsafe { storage::selected_inode_extent_start_block(extent_index) };
+            unsafe { selected_inode::selected_inode_extent_start_block(extent_index) };
         let extent_block_count =
-            unsafe { storage::selected_inode_extent_block_count(extent_index) };
+            unsafe { selected_inode::selected_inode_extent_block_count(extent_index) };
         storage::validate_extent(extent_start_block, extent_block_count, unsafe {
             storage::superblock_total_blocks()
         })?;
@@ -61,10 +61,10 @@ pub unsafe fn find_selected_directory_free_slot() -> Result<KfsDirectoryFreeSlot
 }
 
 pub unsafe fn grow_selected_directory_capacity() -> Result<u32, StorageError> {
-    if unsafe { storage::selected_inode_state() } != storage::INODE_STATE_DIRECTORY {
+    if unsafe { selected_inode::selected_inode_state() } != selected_inode::INODE_STATE_DIRECTORY {
         return Err(StorageError::INVALID_FILESYSTEM);
     }
-    let mut metadata = unsafe { storage::selected_file_metadata() };
+    let mut metadata = unsafe { selected_inode::selected_file_metadata() };
     if metadata.extent_count == 0 || metadata.extent_count as usize > KFS_MAX_INLINE_EXTENTS {
         return Err(StorageError::INVALID_FILESYSTEM);
     }

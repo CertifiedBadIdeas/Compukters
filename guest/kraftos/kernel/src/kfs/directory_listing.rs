@@ -4,7 +4,7 @@ use crate::kfs::directory::{
 };
 use crate::kfs::error::StorageError;
 use crate::kfs::types::{DirectoryListingSink, KFS_MAX_INLINE_EXTENTS};
-use crate::kfs::{block_io, storage};
+use crate::kfs::{block_io, selected_inode, storage};
 
 const INVALID_CACHED_INODE_BLOCK: u32 = u32::MAX;
 
@@ -12,15 +12,15 @@ pub unsafe fn copy_selected_directory_listing_into_cached<S: DirectoryListingSin
     sink: &mut S,
     cache: &mut crate::kfs::cache::KfsCache,
 ) -> Result<u32, StorageError> {
-    if unsafe { storage::selected_inode_state() } != storage::INODE_STATE_DIRECTORY
+    if unsafe { selected_inode::selected_inode_state() } != selected_inode::INODE_STATE_DIRECTORY
         || !crate::kfs::directory::directory_size_is_aligned(unsafe {
-            storage::selected_inode_size()
+            selected_inode::selected_inode_size()
         })
     {
         return Err(StorageError::INVALID_FILESYSTEM);
     }
 
-    let directory = unsafe { storage::selected_file_metadata() };
+    let directory = unsafe { selected_inode::selected_file_metadata() };
     if directory.extent_count as usize > KFS_MAX_INLINE_EXTENTS {
         return Err(StorageError::INVALID_FILESYSTEM);
     }
@@ -108,15 +108,15 @@ pub unsafe fn copy_selected_directory_listing_into_cached<S: DirectoryListingSin
 pub unsafe fn copy_selected_directory_listing_into<S: DirectoryListingSink>(
     sink: &mut S,
 ) -> Result<u32, StorageError> {
-    if unsafe { storage::selected_inode_state() } != storage::INODE_STATE_DIRECTORY
+    if unsafe { selected_inode::selected_inode_state() } != selected_inode::INODE_STATE_DIRECTORY
         || !crate::kfs::directory::directory_size_is_aligned(unsafe {
-            storage::selected_inode_size()
+            selected_inode::selected_inode_size()
         })
     {
         return Err(StorageError::INVALID_FILESYSTEM);
     }
 
-    let directory = unsafe { storage::selected_file_metadata() };
+    let directory = unsafe { selected_inode::selected_file_metadata() };
     if directory.extent_count as usize > KFS_MAX_INLINE_EXTENTS {
         return Err(StorageError::INVALID_FILESYSTEM);
     }
@@ -157,7 +157,7 @@ pub unsafe fn copy_selected_directory_listing_into<S: DirectoryListingSink>(
                             name_offset += 1;
                         }
                         unsafe { storage::read_inode(inode_id)? };
-                        let child = unsafe { storage::selected_path_metadata()? };
+                        let child = unsafe { selected_inode::selected_path_metadata()? };
                         unsafe {
                             push_directory_entry(
                                 sink,
@@ -184,15 +184,15 @@ pub unsafe fn copy_selected_directory_listing_into<S: DirectoryListingSink>(
 }
 
 pub unsafe fn ensure_selected_directory_is_empty() -> Result<(), StorageError> {
-    if unsafe { storage::selected_inode_state() } != storage::INODE_STATE_DIRECTORY
+    if unsafe { selected_inode::selected_inode_state() } != selected_inode::INODE_STATE_DIRECTORY
         || !crate::kfs::directory::directory_size_is_aligned(unsafe {
-            storage::selected_inode_size()
+            selected_inode::selected_inode_size()
         })
     {
         return Err(StorageError::INVALID_FILESYSTEM);
     }
 
-    let directory = unsafe { storage::selected_file_metadata() };
+    let directory = unsafe { selected_inode::selected_file_metadata() };
     if directory.extent_count as usize > KFS_MAX_INLINE_EXTENTS {
         return Err(StorageError::INVALID_FILESYSTEM);
     }
@@ -284,8 +284,8 @@ unsafe fn read_inode_path_metadata_cached(
         index += 1;
     }
     let file_type = match block_io::scratch_u8(inode_offset) {
-        storage::INODE_STATE_REGULAR => k16_abi::syscall::FILE_TYPE_REGULAR,
-        storage::INODE_STATE_DIRECTORY => k16_abi::syscall::FILE_TYPE_DIRECTORY,
+        selected_inode::INODE_STATE_REGULAR => k16_abi::syscall::FILE_TYPE_REGULAR,
+        selected_inode::INODE_STATE_DIRECTORY => k16_abi::syscall::FILE_TYPE_DIRECTORY,
         _ => return Err(StorageError::INVALID_FILESYSTEM),
     };
     Ok(crate::kfs::cache::CachedPathMetadata {

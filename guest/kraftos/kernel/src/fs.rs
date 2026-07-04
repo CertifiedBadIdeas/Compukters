@@ -567,7 +567,7 @@ pub unsafe fn remove_root_file_for_process(path: &[u8]) -> Result<(), FsError> {
         crate::kfs::storage::open_file_from_storage0(ROOT_PARTITION, components.as_slice())
             .map_err(storage_error_to_fs_error)?;
     }
-    let metadata = unsafe { crate::kfs::storage::selected_file_metadata() };
+    let metadata = unsafe { crate::kfs::selected_inode::selected_file_metadata() };
     if unsafe { RUNTIME_FD_TABLE.get().has_open_inode(metadata.inode_id) } {
         return Err(FsError::Busy);
     }
@@ -750,7 +750,7 @@ pub unsafe fn open_root_file_cached_components(
     unsafe {
         crate::kfs::storage::open_file_from_storage0(b"ROOT", components)
             .map_err(storage_error_to_fs_error)?;
-        Ok(crate::kfs::storage::selected_file_metadata())
+        Ok(crate::kfs::selected_inode::selected_file_metadata())
     }
 }
 

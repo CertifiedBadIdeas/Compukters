@@ -1,6 +1,6 @@
 use crate::kfs::error::StorageError;
 use crate::kfs::types::{FileMetadata, FileReadProfileFile, FileReadProfileKind};
-use crate::kfs::{block_io, storage};
+use crate::kfs::{block_io, selected_inode};
 
 pub unsafe fn copy_selected_file_range_to_ram(
     file_offset: u32,
@@ -24,7 +24,7 @@ pub unsafe fn copy_selected_file_range_to_ram_profiled(
     profile_kind: FileReadProfileKind,
 ) -> Result<(), StorageError> {
     let range = crate::kfs::file::validate_read_range(
-        unsafe { storage::selected_inode_size() },
+        unsafe { selected_inode::selected_inode_size() },
         file_offset,
         len,
     )?;
@@ -33,12 +33,13 @@ pub unsafe fn copy_selected_file_range_to_ram_profiled(
     let mut copied = 0;
     let mut extent_file_start: u32 = 0;
     let mut extent_index = 0;
-    while extent_index < unsafe { storage::selected_inode_extent_count() as usize } && copied < len
+    while extent_index < unsafe { selected_inode::selected_inode_extent_count() as usize }
+        && copied < len
     {
         let extent_start_block =
-            unsafe { storage::selected_inode_extent_start_block(extent_index) };
+            unsafe { selected_inode::selected_inode_extent_start_block(extent_index) };
         let extent_block_count =
-            unsafe { storage::selected_inode_extent_block_count(extent_index) };
+            unsafe { selected_inode::selected_inode_extent_block_count(extent_index) };
         let extent_overlap = crate::kfs::file::extent_overlap(
             file_offset,
             range_end,

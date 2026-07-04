@@ -1,12 +1,12 @@
 use crate::kfs::error::StorageError;
 use crate::kfs::types::{FileMetadata, KFS_MAX_INLINE_EXTENTS};
-use crate::kfs::{block_io, storage};
+use crate::kfs::{block_io, selected_inode, storage};
 
 pub unsafe fn encode_file_inode(metadata: FileMetadata) -> Result<(), StorageError> {
     unsafe {
         encode_inode(
             metadata.inode_id,
-            storage::INODE_STATE_REGULAR,
+            selected_inode::INODE_STATE_REGULAR,
             metadata.size_bytes,
             metadata.extent_count,
             &metadata.extent_start_blocks,
@@ -19,7 +19,7 @@ pub unsafe fn encode_directory_inode(metadata: FileMetadata) -> Result<(), Stora
     unsafe {
         encode_inode(
             metadata.inode_id,
-            storage::INODE_STATE_DIRECTORY,
+            selected_inode::INODE_STATE_DIRECTORY,
             metadata.size_bytes,
             metadata.extent_count,
             &metadata.extent_start_blocks,
@@ -58,11 +58,11 @@ pub unsafe fn encode_selected_inode_size(
     inode_id: u32,
     size_bytes: u32,
 ) -> Result<(), StorageError> {
-    let metadata = unsafe { storage::selected_file_metadata() };
+    let metadata = unsafe { selected_inode::selected_file_metadata() };
     unsafe {
         encode_inode(
             inode_id,
-            storage::selected_inode_state(),
+            selected_inode::selected_inode_state(),
             size_bytes,
             metadata.extent_count,
             &metadata.extent_start_blocks,
