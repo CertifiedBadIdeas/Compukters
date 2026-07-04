@@ -1897,6 +1897,10 @@ class K16FirmwareResourceTest {
         val modSource = kernelKfsDir.resolve("mod.rs").readText()
         val storageSource = kernelKfsDir.resolve("storage.rs").readText()
         val directoryMutationSource = kernelKfsDir.resolve("directory_mutation.rs").readText()
+        val fileWriteSource = kernelKfsDir.resolve("file_write.rs")
+            .takeIf { it.toFile().isFile }
+            ?.readText()
+            .orEmpty()
 
         val mutationPath = kernelKfsDir.resolve("inode_mutation.rs")
         assertTrue(mutationPath.toFile().isFile, "KFS inode mutation should have an explicit module")
@@ -1913,7 +1917,7 @@ class K16FirmwareResourceTest {
         assertFalse(storageSource.contains("unsafe fn encode_deleted_directory_inode("), "storage.rs should not own deleted directory inode encoding")
         assertFalse(storageSource.contains("unsafe fn encode_selected_inode_size("), "storage.rs should not own selected inode size updates")
         assertFalse(storageSource.contains("unsafe fn encode_inode("), "storage.rs should not own inode record writes")
-        assertTrue(storageSource.contains("crate::kfs::inode_mutation::encode_file_inode("), "storage.rs should use the inode mutation owner")
+        assertTrue(fileWriteSource.contains("crate::kfs::inode_mutation::encode_file_inode("), "file_write.rs should use the inode mutation owner")
         assertTrue(directoryMutationSource.contains("crate::kfs::inode_mutation::encode_directory_inode("), "directory mutation should use the inode mutation owner")
     }
 
@@ -1969,6 +1973,10 @@ class K16FirmwareResourceTest {
         val kernelKfsDir = Path.of("../../../guest/kraftos/kernel/src/kfs")
         val modSource = kernelKfsDir.resolve("mod.rs").readText()
         val storageSource = kernelKfsDir.resolve("storage.rs").readText()
+        val fileWriteSource = kernelKfsDir.resolve("file_write.rs")
+            .takeIf { it.toFile().isFile }
+            ?.readText()
+            .orEmpty()
 
         val filePath = kernelKfsDir.resolve("file.rs")
         assertTrue(filePath.toFile().isFile, "KFS file extent planning should have an explicit module")
@@ -1981,7 +1989,7 @@ class K16FirmwareResourceTest {
         assertTrue(fileSource.contains("pub fn plan_file_growth("), "file.rs should own file growth planning")
         assertFalse(storageSource.contains("fn file_capacity_bytes("), "storage.rs should not own file capacity calculation")
         assertFalse(storageSource.contains("fn div_ceil_u32("), "storage.rs should not own file growth rounding")
-        assertTrue(storageSource.contains("crate::kfs::file::extent_overlap("), "storage.rs should use the file owner for range planning")
+        assertTrue(fileWriteSource.contains("crate::kfs::file::extent_overlap("), "file_write.rs should use the file owner for range planning")
     }
 
     @Test
@@ -2137,6 +2145,28 @@ class K16FirmwareResourceTest {
         assertTrue(processSource.contains("crate::kfs::file_io::copy_file_range_to_ram"), "process.rs should use the file I/O owner for metadata file reads")
         assertTrue(fsSource.contains("crate::kfs::file_io::copy_file_range_to_ram("), "fs.rs should use the file I/O owner")
         assertTrue(bootChainSource.contains("crate::kfs::file_io::copy_selected_file_range_to_ram("), "boot_chain.rs should use the file I/O owner")
+    }
+
+    @Test
+    fun kraftOsFilesystemFileDataWriteIsNotOwnedByStorageModule() {
+        val kernelDir = Path.of("../../../guest/kraftos/kernel/src")
+        val kernelKfsDir = kernelDir.resolve("kfs")
+        val modSource = kernelKfsDir.resolve("mod.rs").readText()
+        val storageSource = kernelKfsDir.resolve("storage.rs").readText()
+        val fsSource = kernelDir.resolve("fs.rs").readText()
+
+        val fileWritePath = kernelKfsDir.resolve("file_write.rs")
+        assertTrue(fileWritePath.toFile().isFile, "KFS file data writes should have an explicit module")
+        val fileWriteSource = fileWritePath.readText()
+        assertTrue(modSource.contains("pub mod file_write;"), "KFS file write module should be exported")
+        assertTrue(fileWriteSource.contains("pub unsafe fn copy_ram_to_file_range("), "file_write.rs should own file range writes")
+        assertTrue(fileWriteSource.contains("unsafe fn grow_file_capacity("), "file_write.rs should own file capacity growth")
+        assertTrue(fileWriteSource.contains("fn min_u32("), "file_write.rs should own write chunk clamping")
+        assertFalse(storageSource.contains("pub unsafe fn copy_ram_to_file_range("), "storage.rs should not own file range writes")
+        assertFalse(storageSource.contains("unsafe fn grow_file_capacity("), "storage.rs should not own file capacity growth")
+        assertFalse(storageSource.contains("fn min_u32("), "storage.rs should not own write chunk clamping")
+        assertFalse(fsSource.contains("crate::kfs::storage::copy_ram_to_file_range("), "fs.rs should not use storage-owned file writes")
+        assertTrue(fsSource.contains("crate::kfs::file_write::copy_ram_to_file_range("), "fs.rs should use the file write owner")
     }
 
     @Test
