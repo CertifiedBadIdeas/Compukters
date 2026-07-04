@@ -1995,6 +1995,25 @@ class K16FirmwareResourceTest {
     }
 
     @Test
+    fun kraftOsFilesystemDirectoryMutationIsNotOwnedByStorageModule() {
+        val kernelKfsDir = Path.of("../../../guest/kraftos/kernel/src/kfs")
+        val modSource = kernelKfsDir.resolve("mod.rs").readText()
+        val storageSource = kernelKfsDir.resolve("storage.rs").readText()
+
+        val mutationPath = kernelKfsDir.resolve("directory_mutation.rs")
+        assertTrue(mutationPath.toFile().isFile, "KFS directory mutation should have an explicit module")
+        val mutationSource = mutationPath.readText()
+        assertTrue(modSource.contains("pub mod directory_mutation;"), "KFS directory mutation module should be exported")
+        assertTrue(mutationSource.contains("pub struct KfsDirectoryFreeSlot"), "directory_mutation.rs should own free-slot lookup output")
+        assertTrue(mutationSource.contains("pub unsafe fn find_selected_directory_free_slot("), "directory_mutation.rs should own free-slot lookup")
+        assertTrue(mutationSource.contains("pub unsafe fn grow_selected_directory_capacity("), "directory_mutation.rs should own directory growth")
+        assertFalse(storageSource.contains("unsafe fn find_selected_directory_free_slot("), "storage.rs should not own directory free-slot lookup")
+        assertFalse(storageSource.contains("unsafe fn grow_selected_directory_capacity("), "storage.rs should not own directory growth")
+        assertFalse(storageSource.contains("STATE_DIRECTORY_SLOT_"), "storage.rs should not persist directory slot lookup through scratch state")
+        assertTrue(storageSource.contains("crate::kfs::directory_mutation::find_selected_directory_free_slot("), "storage.rs should use the directory mutation owner")
+    }
+
+    @Test
     fun k16KernelLegacyShellPathIsRemovedFromCurrentSource() {
         val kernelSourceDir = Path.of("../../../guest/kraftos/kernel/src")
         val mainSource = kernelSourceDir.resolve("main.rs").readText()

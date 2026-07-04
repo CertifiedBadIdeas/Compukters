@@ -28,9 +28,6 @@ const STATE_INODE_EXTENT_BLOCK_COUNTS: u32 = 0x0000_0234;
 const STATE_SUPERBLOCK_BITMAP_START_BLOCK: u32 = 0x0000_0244;
 const STATE_SUPERBLOCK_BITMAP_BLOCK_COUNT: u32 = 0x0000_0248;
 const STATE_SELECTED_INODE_ID: u32 = 0x0000_024c;
-const STATE_DIRECTORY_SLOT_BLOCK: u32 = 0x0000_0250;
-const STATE_DIRECTORY_SLOT_OFFSET: u32 = 0x0000_0254;
-const STATE_DIRECTORY_SLOT_DIRECTORY_OFFSET: u32 = 0x0000_0258;
 pub(crate) const INODE_STATE_REGULAR: u8 = 1;
 pub(crate) const INODE_STATE_DIRECTORY: u8 = 2;
 
@@ -364,17 +361,14 @@ pub unsafe fn rename_file_from_storage0(
         Err(error) if error == StorageError::PATH_NOT_FOUND => {}
         Err(error) => return Err(error),
     }
-    unsafe { find_selected_directory_free_slot()? };
+    let new_slot = unsafe { crate::kfs::directory_mutation::find_selected_directory_free_slot()? };
     let new_parent_inode_id = unsafe { read_u32(STATE_SELECTED_INODE_ID) };
-    let new_slot_block = unsafe { read_u32(STATE_DIRECTORY_SLOT_BLOCK) };
-    let new_slot_offset = unsafe { read_u32(STATE_DIRECTORY_SLOT_OFFSET) };
-    let new_slot_directory_offset = unsafe { read_u32(STATE_DIRECTORY_SLOT_DIRECTORY_OFFSET) };
 
-    unsafe { encode_directory_entry_at(new_slot_block, new_slot_offset, inode_id, new_name)? };
+    unsafe { encode_directory_entry_at(new_slot.block, new_slot.offset, inode_id, new_name)? };
     unsafe { read_inode(new_parent_inode_id)? };
     let new_size = max_u32(
         unsafe { read_u32(STATE_INODE_SIZE_BYTES) },
-        new_slot_directory_offset + KFS_DIRECTORY_ENTRY_SIZE,
+        new_slot.directory_offset + KFS_DIRECTORY_ENTRY_SIZE,
     );
     unsafe { encode_selected_inode_size(new_parent_inode_id, new_size)? };
     unsafe { encode_deleted_directory_entry_at(old_slot.block, old_slot.offset) }
@@ -604,11 +598,8 @@ unsafe fn create_empty_file(path: &[&[u8]]) -> Result<FileMetadata, StorageError
         Err(error) if error == StorageError::PATH_NOT_FOUND => {}
         Err(error) => return Err(error),
     }
-    unsafe { find_selected_directory_free_slot()? };
+    let slot = unsafe { crate::kfs::directory_mutation::find_selected_directory_free_slot()? };
     let parent_inode_id = unsafe { read_u32(STATE_SELECTED_INODE_ID) };
-    let slot_block = unsafe { read_u32(STATE_DIRECTORY_SLOT_BLOCK) };
-    let slot_offset = unsafe { read_u32(STATE_DIRECTORY_SLOT_OFFSET) };
-    let slot_directory_offset = unsafe { read_u32(STATE_DIRECTORY_SLOT_DIRECTORY_OFFSET) };
     let inode_id = unsafe { allocate_inode()? };
     let start_block = unsafe { allocate_contiguous_blocks(1)? };
     unsafe { clear_scratch_block() };
@@ -625,11 +616,11 @@ unsafe fn create_empty_file(path: &[&[u8]]) -> Result<FileMetadata, StorageError
         extent_block_counts,
     };
     unsafe { encode_file_inode(metadata)? };
-    unsafe { encode_directory_entry_at(slot_block, slot_offset, inode_id, name)? };
+    unsafe { encode_directory_entry_at(slot.block, slot.offset, inode_id, name)? };
     unsafe { read_inode(parent_inode_id)? };
     let new_size = max_u32(
         unsafe { read_u32(STATE_INODE_SIZE_BYTES) },
-        slot_directory_offset + KFS_DIRECTORY_ENTRY_SIZE,
+        slot.directory_offset + KFS_DIRECTORY_ENTRY_SIZE,
     );
     unsafe { encode_selected_inode_size(parent_inode_id, new_size)? };
     unsafe { read_inode(inode_id)? };
@@ -645,11 +636,8 @@ unsafe fn create_empty_directory(path: &[&[u8]]) -> Result<(), StorageError> {
         Err(error) if error == StorageError::PATH_NOT_FOUND => {}
         Err(error) => return Err(error),
     }
-    unsafe { find_selected_directory_free_slot()? };
+    let slot = unsafe { crate::kfs::directory_mutation::find_selected_directory_free_slot()? };
     let parent_inode_id = unsafe { read_u32(STATE_SELECTED_INODE_ID) };
-    let slot_block = unsafe { read_u32(STATE_DIRECTORY_SLOT_BLOCK) };
-    let slot_offset = unsafe { read_u32(STATE_DIRECTORY_SLOT_OFFSET) };
-    let slot_directory_offset = unsafe { read_u32(STATE_DIRECTORY_SLOT_DIRECTORY_OFFSET) };
     let inode_id = unsafe { allocate_inode()? };
     let start_block = unsafe { allocate_contiguous_blocks(1)? };
     unsafe { clear_scratch_block() };
@@ -666,11 +654,11 @@ unsafe fn create_empty_directory(path: &[&[u8]]) -> Result<(), StorageError> {
         extent_block_counts,
     };
     unsafe { encode_directory_inode(metadata)? };
-    unsafe { encode_directory_entry_at(slot_block, slot_offset, inode_id, name)? };
+    unsafe { encode_directory_entry_at(slot.block, slot.offset, inode_id, name)? };
     unsafe { read_inode(parent_inode_id)? };
     let new_size = max_u32(
         unsafe { read_u32(STATE_INODE_SIZE_BYTES) },
-        slot_directory_offset + KFS_DIRECTORY_ENTRY_SIZE,
+        slot.directory_offset + KFS_DIRECTORY_ENTRY_SIZE,
     );
     unsafe { encode_selected_inode_size(parent_inode_id, new_size) }
 }
@@ -682,104 +670,6 @@ unsafe fn truncate_selected_file() -> Result<(), StorageError> {
     }
     metadata.size_bytes = 0;
     unsafe { encode_file_inode(metadata) }
-}
-
-unsafe fn find_selected_directory_free_slot() -> Result<(), StorageError> {
-    if unsafe { read_u32(STATE_INODE_STATE) as u8 } != 2 {
-        return Err(StorageError::INVALID_FILESYSTEM);
-    }
-    let mut directory_offset = 0;
-    let mut extent_index = 0;
-    while extent_index < unsafe { read_u32(STATE_INODE_EXTENT_COUNT) as usize } {
-        let extent_start_block =
-            unsafe { read_u32(STATE_INODE_EXTENT_START_BLOCKS + extent_index as u32 * 4) };
-        let extent_block_count =
-            unsafe { read_u32(STATE_INODE_EXTENT_BLOCK_COUNTS + extent_index as u32 * 4) };
-        validate_extent(extent_start_block, extent_block_count, unsafe {
-            read_u32(STATE_SUPERBLOCK_TOTAL_BLOCKS)
-        })?;
-        let mut block_index = 0;
-        while block_index < extent_block_count {
-            unsafe { read_fs_block(extent_start_block + block_index)? };
-            let mut offset = 0;
-            while offset < BLOCK_SIZE {
-                match crate::kfs::directory::decode_entry_header(
-                    scratch_u8(offset),
-                    scratch_u8(offset + 1),
-                    scratch_u8(offset + 2),
-                    scratch_u8(offset + 3),
-                    scratch_u32(offset + 4),
-                )? {
-                    KfsDirectoryEntryHeader::Free | KfsDirectoryEntryHeader::Deleted => {
-                        unsafe {
-                            write_u32(STATE_DIRECTORY_SLOT_BLOCK, extent_start_block + block_index);
-                            write_u32(STATE_DIRECTORY_SLOT_OFFSET, offset);
-                            write_u32(STATE_DIRECTORY_SLOT_DIRECTORY_OFFSET, directory_offset);
-                        }
-                        return Ok(());
-                    }
-                    KfsDirectoryEntryHeader::Live { .. } => {}
-                }
-                offset += KFS_DIRECTORY_ENTRY_SIZE;
-                directory_offset += KFS_DIRECTORY_ENTRY_SIZE;
-            }
-            block_index += 1;
-        }
-        extent_index += 1;
-    }
-    let slot_block = unsafe { grow_selected_directory_capacity()? };
-    unsafe {
-        write_u32(STATE_DIRECTORY_SLOT_BLOCK, slot_block);
-        write_u32(STATE_DIRECTORY_SLOT_OFFSET, 0);
-        write_u32(STATE_DIRECTORY_SLOT_DIRECTORY_OFFSET, directory_offset);
-    }
-    Ok(())
-}
-
-unsafe fn grow_selected_directory_capacity() -> Result<u32, StorageError> {
-    if unsafe { read_u32(STATE_INODE_STATE) as u8 } != 2 {
-        return Err(StorageError::INVALID_FILESYSTEM);
-    }
-    let mut metadata = unsafe { selected_file_metadata() };
-    if metadata.extent_count == 0 || metadata.extent_count as usize > KFS_MAX_INLINE_EXTENTS {
-        return Err(StorageError::INVALID_FILESYSTEM);
-    }
-    let last_extent_index = metadata.extent_count as usize - 1;
-    let last_start = metadata.extent_start_blocks[last_extent_index];
-    let last_count = metadata.extent_block_counts[last_extent_index];
-    let grow_block = match last_start.checked_add(last_count) {
-        Some(value) => value,
-        None => return Err(StorageError::INVALID_FILESYSTEM),
-    };
-    if grow_block < unsafe { read_u32(STATE_SUPERBLOCK_TOTAL_BLOCKS) }
-        && !unsafe { is_block_allocated(grow_block)? }
-    {
-        unsafe { mark_block_allocated(grow_block)? };
-        unsafe { clear_scratch_block() };
-        unsafe { write_fs_block(grow_block)? };
-        metadata.extent_block_counts[last_extent_index] = match last_count.checked_add(1) {
-            Some(value) => value,
-            None => return Err(StorageError::INVALID_FILESYSTEM),
-        };
-        unsafe { encode_directory_inode(metadata)? };
-        return Ok(grow_block);
-    }
-
-    let new_extent_index = metadata.extent_count as usize;
-    if new_extent_index >= KFS_MAX_INLINE_EXTENTS {
-        return Err(StorageError::OUTPUT_BUFFER_TOO_SMALL);
-    }
-    let new_extent_block = unsafe { allocate_contiguous_blocks(1)? };
-    unsafe { clear_scratch_block() };
-    unsafe { write_fs_block(new_extent_block)? };
-    metadata.extent_start_blocks[new_extent_index] = new_extent_block;
-    metadata.extent_block_counts[new_extent_index] = 1;
-    metadata.extent_count = match metadata.extent_count.checked_add(1) {
-        Some(value) => value,
-        None => return Err(StorageError::INVALID_FILESYSTEM),
-    };
-    unsafe { encode_directory_inode(metadata)? };
-    Ok(new_extent_block)
 }
 
 pub unsafe fn copy_selected_directory_listing_to_ram(
@@ -1285,7 +1175,7 @@ unsafe fn encode_file_inode(metadata: FileMetadata) -> Result<(), StorageError> 
     }
 }
 
-unsafe fn encode_directory_inode(metadata: FileMetadata) -> Result<(), StorageError> {
+pub(crate) unsafe fn encode_directory_inode(metadata: FileMetadata) -> Result<(), StorageError> {
     unsafe {
         encode_inode(
             metadata.inode_id,
@@ -1417,7 +1307,7 @@ unsafe fn selected_bitmap_layout() -> crate::kfs::bitmap::KfsBitmapLayout {
     }
 }
 
-unsafe fn allocate_contiguous_blocks(count: u32) -> Result<u32, StorageError> {
+pub(crate) unsafe fn allocate_contiguous_blocks(count: u32) -> Result<u32, StorageError> {
     if count == 0 {
         return Err(StorageError::INVALID_FILESYSTEM);
     }
@@ -1489,7 +1379,7 @@ unsafe fn mark_contiguous_blocks_allocated(
     Ok(())
 }
 
-unsafe fn is_block_allocated(block: u32) -> Result<bool, StorageError> {
+pub(crate) unsafe fn is_block_allocated(block: u32) -> Result<bool, StorageError> {
     let layout = unsafe { selected_bitmap_layout() };
     let location = crate::kfs::bitmap::locate_block(block, layout)?;
     unsafe { read_fs_block(location.bitmap_block)? };
@@ -1499,7 +1389,7 @@ unsafe fn is_block_allocated(block: u32) -> Result<bool, StorageError> {
     ))
 }
 
-unsafe fn mark_block_allocated(block: u32) -> Result<(), StorageError> {
+pub(crate) unsafe fn mark_block_allocated(block: u32) -> Result<(), StorageError> {
     let layout = unsafe { selected_bitmap_layout() };
     let location = crate::kfs::bitmap::locate_block(block, layout)?;
     unsafe { read_fs_block(location.bitmap_block)? };
@@ -1657,7 +1547,7 @@ unsafe fn read_fs_blocks_to_ram(
 }
 
 #[inline(always)]
-unsafe fn write_fs_block(block: u32) -> Result<(), StorageError> {
+pub(crate) unsafe fn write_fs_block(block: u32) -> Result<(), StorageError> {
     if block >= unsafe { read_u32(STATE_PARTITION_BLOCK_COUNT) } {
         return Err(StorageError::INVALID_FILESYSTEM);
     }
@@ -1689,7 +1579,7 @@ unsafe fn write_storage_block(lba: u32) -> Result<(), StorageError> {
     unsafe { crate::kfs::device::write_scratch_block_to_storage(lba) }
 }
 
-unsafe fn clear_scratch_block() {
+pub(crate) unsafe fn clear_scratch_block() {
     let mut offset = 0;
     while offset < BLOCK_SIZE {
         unsafe { write_u8(SCRATCH_ADDR + offset, 0) };
