@@ -5,26 +5,14 @@ pub unsafe fn open_file_from_storage0(
     partition_type: &[u8; 4],
     path: &[&[u8]],
 ) -> Result<(), StorageError> {
-    unsafe { read_partition(partition_type)? };
-    unsafe { read_superblock()? };
+    unsafe { crate::kfs::mount::read_partition(partition_type)? };
+    unsafe { crate::kfs::mount::read_superblock()? };
     unsafe { open_file_from_selected_filesystem(path) }
 }
 
 unsafe fn open_file_from_selected_filesystem(path: &[&[u8]]) -> Result<(), StorageError> {
     unsafe { crate::kfs::path::find_file_inode(path)? };
     Ok(())
-}
-
-pub unsafe fn read_root_partition_superblock(partition_type: &[u8; 4]) -> Result<(), StorageError> {
-    unsafe { mount_root_partition_superblock(partition_type).map(|_| ()) }
-}
-
-pub unsafe fn mount_root_partition_superblock(
-    partition_type: &[u8; 4],
-) -> Result<crate::kfs::mount::MountedKfs, StorageError> {
-    let partition = unsafe { read_partition(partition_type)? };
-    let superblock = unsafe { read_superblock()? };
-    crate::kfs::mount::MountedKfs::new(partition, superblock)
 }
 
 pub unsafe fn selected_directory_entry_inode(name: &[u8]) -> Result<u32, StorageError> {
@@ -40,49 +28,10 @@ pub unsafe fn stat_path_from_storage0(
     partition_type: &[u8; 4],
     path: &[&[u8]],
 ) -> Result<PathMetadata, StorageError> {
-    unsafe { read_partition(partition_type)? };
-    unsafe { read_superblock()? };
+    unsafe { crate::kfs::mount::read_partition(partition_type)? };
+    unsafe { crate::kfs::mount::read_superblock()? };
     unsafe { crate::kfs::path::find_path_inode(path)? };
     unsafe { crate::kfs::selected_inode::selected_path_metadata() }
-}
-
-pub(crate) unsafe fn read_partition(
-    partition_type: &[u8; 4],
-) -> Result<crate::kfs::partition::KfsPartition, StorageError> {
-    unsafe { crate::kfs::block_io::read_storage_block(0)? };
-    let block = unsafe { crate::kfs::block_io::scratch_block_bytes() };
-    let capacity_low = unsafe { crate::kfs::device::capacity_blocks_u32()? };
-    let partition = crate::kfs::partition::KfsPartition::decode_from_k16pt(
-        &block,
-        partition_type,
-        capacity_low,
-    )?;
-    let old_start_lba = unsafe { crate::kfs::filesystem_state::partition_start_lba() };
-    let old_block_count = unsafe { crate::kfs::filesystem_state::partition_block_count() };
-    if old_start_lba != partition.start_lba || old_block_count != partition.block_count {
-        unsafe { crate::kfs::block_io::invalidate_block_cache() };
-    }
-    unsafe { crate::kfs::filesystem_state::store_partition(partition) };
-    Ok(partition)
-}
-
-pub(crate) unsafe fn read_superblock() -> Result<crate::kfs::superblock::KfsSuperblock, StorageError>
-{
-    unsafe { crate::kfs::block_io::read_fs_block(0)? };
-    let block = unsafe { crate::kfs::block_io::scratch_block_bytes() };
-    let superblock = crate::kfs::superblock::KfsSuperblock::decode(&block, unsafe {
-        crate::kfs::filesystem_state::partition_block_count()
-    })?;
-    unsafe {
-        crate::kfs::filesystem_state::store_superblock(superblock);
-        crate::kfs::inode::load_inode(superblock.root_inode_id)?;
-    }
-    if unsafe { crate::kfs::selected_inode::selected_inode_state() }
-        != crate::kfs::selected_inode::INODE_STATE_DIRECTORY
-    {
-        return Err(StorageError::INVALID_FILESYSTEM);
-    }
-    Ok(superblock)
 }
 
 pub unsafe fn flush_storage0() -> Result<(), StorageError> {

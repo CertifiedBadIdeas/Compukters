@@ -82,7 +82,7 @@ impl KfsRootFs {
             return Ok(());
         }
         let mounted =
-            unsafe { crate::kfs::storage::mount_root_partition_superblock(partition_type)? };
+            unsafe { crate::kfs::mount::mount_root_partition_superblock(partition_type)? };
         self.mounted_partition_type = Some(*partition_type);
         self.mounted = Some(mounted);
         Ok(())
