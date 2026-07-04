@@ -1,6 +1,6 @@
 use crate::kfs::error::StorageError;
-use crate::kfs::storage;
 use crate::kfs::types::{FileMetadata, FileReadProfileFile, FileReadProfileKind};
+use crate::kfs::{block_io, storage};
 
 pub unsafe fn copy_selected_file_range_to_ram(
     file_offset: u32,
@@ -150,12 +150,12 @@ unsafe fn copy_extent_range_to_ram(
     let mut cursor = copy_start;
     while cursor < copy_end {
         let within_extent = cursor - extent_file_start;
-        let block_delta = within_extent / storage::BLOCK_SIZE;
-        let block_offset = within_extent % storage::BLOCK_SIZE;
+        let block_delta = within_extent / block_io::BLOCK_SIZE;
+        let block_offset = within_extent % block_io::BLOCK_SIZE;
         if block_offset == 0 {
-            let full_block_count = (copy_end - cursor) / storage::BLOCK_SIZE;
+            let full_block_count = (copy_end - cursor) / block_io::BLOCK_SIZE;
             if full_block_count > 0 {
-                let batch_bytes = match full_block_count.checked_mul(storage::BLOCK_SIZE) {
+                let batch_bytes = match full_block_count.checked_mul(block_io::BLOCK_SIZE) {
                     Some(value) => value,
                     None => return Err(StorageError::INVALID_FILESYSTEM),
                 };
@@ -167,7 +167,7 @@ unsafe fn copy_extent_range_to_ram(
                     Some(value) => value,
                     None => return Err(StorageError::INVALID_FILESYSTEM),
                 };
-                unsafe { storage::read_fs_blocks_to_ram(block, full_block_count, dst)? };
+                unsafe { block_io::read_fs_blocks_to_ram(block, full_block_count, dst)? };
                 record_profiled_file_data_read(profile_kind, batch_bytes);
                 *copied = match (*copied).checked_add(batch_bytes) {
                     Some(value) => value,
@@ -178,19 +178,19 @@ unsafe fn copy_extent_range_to_ram(
             }
         }
 
-        let available = min_u32(storage::BLOCK_SIZE - block_offset, copy_end - cursor);
+        let available = min_u32(block_io::BLOCK_SIZE - block_offset, copy_end - cursor);
         let block = match extent_start_block.checked_add(block_delta) {
             Some(value) => value,
             None => return Err(StorageError::INVALID_FILESYSTEM),
         };
-        unsafe { storage::read_fs_block(block)? };
+        unsafe { block_io::read_fs_block(block)? };
         record_profiled_file_data_read(profile_kind, available);
         let dst = match dst_addr.checked_add(*copied) {
             Some(value) => value,
             None => return Err(StorageError::INVALID_FILESYSTEM),
         };
         unsafe {
-            storage::copy_ram_to_ram(storage::SCRATCH_ADDR + block_offset, dst, available);
+            block_io::copy_ram_to_ram(block_io::SCRATCH_ADDR + block_offset, dst, available);
         }
         *copied = match (*copied).checked_add(available) {
             Some(value) => value,

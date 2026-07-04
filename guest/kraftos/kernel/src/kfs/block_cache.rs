@@ -1,4 +1,4 @@
-pub const BLOCK_SIZE_BYTES: usize = crate::kfs::storage::BLOCK_SIZE as usize;
+pub const BLOCK_SIZE_BYTES: usize = crate::kfs::block_io::BLOCK_SIZE as usize;
 
 pub type KfsBlockBytes = [u8; BLOCK_SIZE_BYTES];
 
@@ -139,8 +139,8 @@ impl<const SLOTS: usize> KfsBlockCache<SLOTS> {
 mod tests {
     use super::*;
 
-    fn block_with(byte: u8) -> [u8; crate::kfs::storage::BLOCK_SIZE as usize] {
-        [byte; crate::kfs::storage::BLOCK_SIZE as usize]
+    fn block_with(byte: u8) -> [u8; crate::kfs::block_io::BLOCK_SIZE as usize] {
+        [byte; crate::kfs::block_io::BLOCK_SIZE as usize]
     }
 
     #[test]

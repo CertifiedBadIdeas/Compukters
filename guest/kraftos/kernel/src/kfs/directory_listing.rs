@@ -3,8 +3,8 @@ use crate::kfs::directory::{
     KFS_MAX_NAME_BYTES,
 };
 use crate::kfs::error::StorageError;
-use crate::kfs::storage;
 use crate::kfs::types::{DirectoryListingSink, KFS_MAX_INLINE_EXTENTS};
+use crate::kfs::{block_io, storage};
 
 const INVALID_CACHED_INODE_BLOCK: u32 = u32::MAX;
 
@@ -36,21 +36,21 @@ pub unsafe fn copy_selected_directory_listing_into_cached<S: DirectoryListingSin
         let mut block_index = 0;
         while block_index < extent_block_count && remaining > 0 {
             let fs_block = extent_start_block + block_index;
-            unsafe { storage::read_fs_block(fs_block)? };
-            crate::os_stats::record_read_dir_data_read(min_u32(storage::BLOCK_SIZE, remaining));
+            unsafe { block_io::read_fs_block(fs_block)? };
+            crate::os_stats::record_read_dir_data_read(min_u32(block_io::BLOCK_SIZE, remaining));
             let mut entry_inode_ids = [0_u32; KFS_DIRECTORY_ENTRIES_PER_BLOCK];
             let mut entry_name_lengths = [0_u8; KFS_DIRECTORY_ENTRIES_PER_BLOCK];
             let mut entry_names = [[0_u8; KFS_MAX_NAME_BYTES]; KFS_DIRECTORY_ENTRIES_PER_BLOCK];
             let mut entry_count = 0_usize;
             let mut offset = 0;
-            while offset < storage::BLOCK_SIZE && remaining > 0 {
+            while offset < block_io::BLOCK_SIZE && remaining > 0 {
                 crate::os_stats::record_dir_entry_scan();
                 match crate::kfs::directory::decode_entry_header(
-                    storage::scratch_u8(offset),
-                    storage::scratch_u8(offset + 1),
-                    storage::scratch_u8(offset + 2),
-                    storage::scratch_u8(offset + 3),
-                    storage::scratch_u32(offset + 4),
+                    block_io::scratch_u8(offset),
+                    block_io::scratch_u8(offset + 1),
+                    block_io::scratch_u8(offset + 2),
+                    block_io::scratch_u8(offset + 3),
+                    block_io::scratch_u32(offset + 4),
                 )? {
                     KfsDirectoryEntryHeader::Free | KfsDirectoryEntryHeader::Deleted => {}
                     KfsDirectoryEntryHeader::Live { inode_id, name_len } => {
@@ -59,7 +59,7 @@ pub unsafe fn copy_selected_directory_listing_into_cached<S: DirectoryListingSin
                         let mut name_offset = 0;
                         while name_offset < name_len {
                             entry_names[entry_count][name_offset] =
-                                storage::scratch_u8(offset + 8 + name_offset as u32);
+                                block_io::scratch_u8(offset + 8 + name_offset as u32);
                             name_offset += 1;
                         }
                         entry_count += 1;
@@ -134,18 +134,18 @@ pub unsafe fn copy_selected_directory_listing_into<S: DirectoryListingSink>(
             let fs_block = extent_start_block + block_index;
             let mut block_loaded = false;
             let mut offset = 0;
-            while offset < storage::BLOCK_SIZE && remaining > 0 {
+            while offset < block_io::BLOCK_SIZE && remaining > 0 {
                 if !block_loaded {
-                    unsafe { storage::read_fs_block(fs_block)? };
+                    unsafe { block_io::read_fs_block(fs_block)? };
                     block_loaded = true;
                 }
                 crate::os_stats::record_dir_entry_scan();
                 match crate::kfs::directory::decode_entry_header(
-                    storage::scratch_u8(offset),
-                    storage::scratch_u8(offset + 1),
-                    storage::scratch_u8(offset + 2),
-                    storage::scratch_u8(offset + 3),
-                    storage::scratch_u32(offset + 4),
+                    block_io::scratch_u8(offset),
+                    block_io::scratch_u8(offset + 1),
+                    block_io::scratch_u8(offset + 2),
+                    block_io::scratch_u8(offset + 3),
+                    block_io::scratch_u32(offset + 4),
                 )? {
                     KfsDirectoryEntryHeader::Free | KfsDirectoryEntryHeader::Deleted => {}
                     KfsDirectoryEntryHeader::Live { inode_id, name_len } => {
@@ -153,7 +153,7 @@ pub unsafe fn copy_selected_directory_listing_into<S: DirectoryListingSink>(
                         let mut name_offset = 0;
                         while name_offset < name_len {
                             name[name_offset] =
-                                storage::scratch_u8(offset + 8 + name_offset as u32);
+                                block_io::scratch_u8(offset + 8 + name_offset as u32);
                             name_offset += 1;
                         }
                         unsafe { storage::read_inode(inode_id)? };
@@ -207,15 +207,15 @@ pub unsafe fn ensure_selected_directory_is_empty() -> Result<(), StorageError> {
         })?;
         let mut block_index = 0;
         while block_index < extent_block_count {
-            unsafe { storage::read_fs_block(extent_start_block + block_index)? };
+            unsafe { block_io::read_fs_block(extent_start_block + block_index)? };
             let mut offset = 0;
-            while offset < storage::BLOCK_SIZE && remaining > 0 {
+            while offset < block_io::BLOCK_SIZE && remaining > 0 {
                 match crate::kfs::directory::decode_entry_header(
-                    storage::scratch_u8(offset),
-                    storage::scratch_u8(offset + 1),
-                    storage::scratch_u8(offset + 2),
-                    storage::scratch_u8(offset + 3),
-                    storage::scratch_u32(offset + 4),
+                    block_io::scratch_u8(offset),
+                    block_io::scratch_u8(offset + 1),
+                    block_io::scratch_u8(offset + 2),
+                    block_io::scratch_u8(offset + 3),
+                    block_io::scratch_u32(offset + 4),
                 )? {
                     KfsDirectoryEntryHeader::Free | KfsDirectoryEntryHeader::Deleted => {}
                     KfsDirectoryEntryHeader::Live { .. } => {
@@ -265,32 +265,32 @@ unsafe fn read_inode_path_metadata_cached(
     let inode_offset = location.offset;
     if *cached_inode_block != inode_block {
         crate::os_stats::record_inode_load();
-        unsafe { storage::read_fs_block(inode_block)? };
+        unsafe { block_io::read_fs_block(inode_block)? };
         *cached_inode_block = inode_block;
     }
-    let size_high = storage::scratch_u32(inode_offset + 0x0c);
-    let extent_count = storage::scratch_u8(inode_offset + 0x10) as usize;
+    let size_high = block_io::scratch_u32(inode_offset + 0x0c);
+    let extent_count = block_io::scratch_u8(inode_offset + 0x10) as usize;
     if size_high != 0 || extent_count > KFS_MAX_INLINE_EXTENTS {
         return Err(StorageError::INVALID_FILESYSTEM);
     }
     let mut index = 0;
     while index < extent_count {
         let offset = inode_offset + 0x20 + index as u32 * 8;
-        let start_block = storage::scratch_u32(offset);
-        let block_count = storage::scratch_u32(offset + 4);
+        let start_block = block_io::scratch_u32(offset);
+        let block_count = block_io::scratch_u32(offset + 4);
         storage::validate_extent(start_block, block_count, unsafe {
             storage::superblock_total_blocks()
         })?;
         index += 1;
     }
-    let file_type = match storage::scratch_u8(inode_offset) {
+    let file_type = match block_io::scratch_u8(inode_offset) {
         storage::INODE_STATE_REGULAR => k16_abi::syscall::FILE_TYPE_REGULAR,
         storage::INODE_STATE_DIRECTORY => k16_abi::syscall::FILE_TYPE_DIRECTORY,
         _ => return Err(StorageError::INVALID_FILESYSTEM),
     };
     Ok(crate::kfs::cache::CachedPathMetadata {
         file_type,
-        size_bytes: storage::scratch_u32(inode_offset + 0x08),
+        size_bytes: block_io::scratch_u32(inode_offset + 0x08),
     })
 }
 

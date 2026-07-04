@@ -1,6 +1,6 @@
 use k16_abi::computer::profile;
 
-pub const SCRATCH_ADDR: u32 = crate::kfs::storage::SCRATCH_ADDR;
+pub const SCRATCH_ADDR: u32 = crate::kfs::block_io::SCRATCH_ADDR;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum K16eAbiKind {

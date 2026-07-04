@@ -14,7 +14,7 @@ pub struct KfsPartition {
 
 impl KfsPartition {
     pub fn decode_from_k16pt(
-        block: &[u8; crate::kfs::storage::BLOCK_SIZE as usize],
+        block: &[u8; crate::kfs::block_io::BLOCK_SIZE as usize],
         partition_type: &[u8; 4],
         capacity_blocks: u32,
     ) -> Result<Self, StorageError> {
@@ -54,7 +54,7 @@ impl KfsPartition {
     }
 }
 
-fn read_u32(bytes: &[u8; crate::kfs::storage::BLOCK_SIZE as usize], offset: usize) -> u32 {
+fn read_u32(bytes: &[u8; crate::kfs::block_io::BLOCK_SIZE as usize], offset: usize) -> u32 {
     u32::from_le_bytes([
         bytes[offset],
         bytes[offset + 1],
@@ -82,7 +82,7 @@ mod tests {
     use super::*;
 
     fn write_u32(
-        block: &mut [u8; crate::kfs::storage::BLOCK_SIZE as usize],
+        block: &mut [u8; crate::kfs::block_io::BLOCK_SIZE as usize],
         offset: usize,
         value: u32,
     ) {
@@ -93,8 +93,8 @@ mod tests {
         partition_type: &[u8; 4],
         start_lba: u32,
         block_count: u32,
-    ) -> [u8; crate::kfs::storage::BLOCK_SIZE as usize] {
-        let mut block = [0_u8; crate::kfs::storage::BLOCK_SIZE as usize];
+    ) -> [u8; crate::kfs::block_io::BLOCK_SIZE as usize] {
+        let mut block = [0_u8; crate::kfs::block_io::BLOCK_SIZE as usize];
         block[0..5].copy_from_slice(b"K16PT");
         block[5] = 1;
         block[6] = 1;

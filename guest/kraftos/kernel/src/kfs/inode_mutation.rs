@@ -1,6 +1,6 @@
 use crate::kfs::error::StorageError;
-use crate::kfs::storage;
 use crate::kfs::types::{FileMetadata, KFS_MAX_INLINE_EXTENTS};
+use crate::kfs::{block_io, storage};
 
 pub unsafe fn encode_file_inode(metadata: FileMetadata) -> Result<(), StorageError> {
     unsafe {
@@ -89,26 +89,26 @@ unsafe fn encode_inode(
     )?;
     let inode_block = location.block;
     let inode_offset = location.offset;
-    unsafe { storage::read_fs_block(inode_block)? };
+    unsafe { block_io::read_fs_block(inode_block)? };
     let mut offset = 0;
     while offset < crate::kfs::inode::KFS_INODE_SIZE {
-        unsafe { storage::write_scratch_u8(inode_offset + offset, 0) };
+        unsafe { block_io::write_scratch_u8(inode_offset + offset, 0) };
         offset += 1;
     }
     unsafe {
-        storage::write_scratch_u8(inode_offset, state);
-        storage::write_scratch_u32(inode_offset + 0x08, size_bytes);
-        storage::write_scratch_u32(inode_offset + 0x0c, 0);
-        storage::write_scratch_u8(inode_offset + 0x10, extent_count as u8);
+        block_io::write_scratch_u8(inode_offset, state);
+        block_io::write_scratch_u32(inode_offset + 0x08, size_bytes);
+        block_io::write_scratch_u32(inode_offset + 0x0c, 0);
+        block_io::write_scratch_u8(inode_offset + 0x10, extent_count as u8);
     }
     let mut index = 0;
     while index < extent_count as usize {
         let offset = inode_offset + 0x20 + index as u32 * 8;
         unsafe {
-            storage::write_scratch_u32(offset, extent_start_blocks[index]);
-            storage::write_scratch_u32(offset + 4, extent_block_counts[index]);
+            block_io::write_scratch_u32(offset, extent_start_blocks[index]);
+            block_io::write_scratch_u32(offset + 4, extent_block_counts[index]);
         }
         index += 1;
     }
-    unsafe { storage::write_fs_block(inode_block) }
+    unsafe { block_io::write_fs_block(inode_block) }
 }

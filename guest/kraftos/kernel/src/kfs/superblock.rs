@@ -1,5 +1,5 @@
+use crate::kfs::block_io::BLOCK_SIZE;
 use crate::kfs::error::StorageError;
-use crate::kfs::storage::BLOCK_SIZE;
 
 const KFS_MAGIC: &[u8; 5] = b"KFS\0\0";
 const KFS_VERSION: u8 = 1;
@@ -72,18 +72,18 @@ mod tests {
     use super::*;
 
     fn write_u32(
-        block: &mut [u8; crate::kfs::storage::BLOCK_SIZE as usize],
+        block: &mut [u8; crate::kfs::block_io::BLOCK_SIZE as usize],
         offset: usize,
         value: u32,
     ) {
         block[offset..offset + 4].copy_from_slice(&value.to_le_bytes());
     }
 
-    fn superblock(total_blocks: u32) -> [u8; crate::kfs::storage::BLOCK_SIZE as usize] {
-        let mut block = [0_u8; crate::kfs::storage::BLOCK_SIZE as usize];
+    fn superblock(total_blocks: u32) -> [u8; crate::kfs::block_io::BLOCK_SIZE as usize] {
+        let mut block = [0_u8; crate::kfs::block_io::BLOCK_SIZE as usize];
         block[0..5].copy_from_slice(b"KFS\0\0");
         block[5] = 1;
-        write_u32(&mut block, 0x08, crate::kfs::storage::BLOCK_SIZE);
+        write_u32(&mut block, 0x08, crate::kfs::block_io::BLOCK_SIZE);
         write_u32(&mut block, 0x0c, total_blocks);
         write_u32(&mut block, 0x10, 1);
         write_u32(&mut block, 0x14, 1);

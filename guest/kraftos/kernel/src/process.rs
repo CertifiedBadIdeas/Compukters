@@ -29,10 +29,10 @@ const RESIDENT_SHARED_LIBRARY_RELOCATION_BYTES: usize = 4096;
 const CHILD_ARG_ENTRY_BYTES: u32 = 8;
 const TRANSLATED_TRAP_STACK_BYTES: u32 = VM_PAGE_SIZE;
 const INITIAL_USER_LOADER_SCRATCH_END: u32 =
-    crate::kfs::storage::SCRATCH_ADDR + crate::kfs::storage::BLOCK_SIZE;
+    crate::kfs::block_io::SCRATCH_ADDR + crate::kfs::block_io::BLOCK_SIZE;
 #[cfg(any(test, feature = "host-test"))]
 const DEFAULT_INIT_MEMORY_END: u32 = 0x0002_5000;
-// Keep relocation records outside crate::kfs::storage::SCRATCH_ADDR: storage reads use
+// Keep relocation records outside crate::kfs::block_io::SCRATCH_ADDR: block I/O uses
 // that block as staging, and records may straddle a storage block boundary.
 const RELOCATION_RECORD_ADDR: u32 = 0x0000_0500;
 const MAX_PROCESS_SLOTS: usize = 4;
@@ -4486,7 +4486,7 @@ pub unsafe fn load_selected_dynamic_user_program(
     unsafe {
         crate::kfs::file_io::copy_selected_file_range_to_ram_profiled(
             0,
-            crate::kfs::storage::SCRATCH_ADDR,
+            crate::kfs::block_io::SCRATCH_ADDR,
             crate::image::DYNAMIC_K16E_V2_HEADER_SIZE,
             FileReadProfileKind::DynamicImport(profile_file),
         )
@@ -4494,7 +4494,7 @@ pub unsafe fn load_selected_dynamic_user_program(
     }
     let header = unsafe {
         core::slice::from_raw_parts(
-            crate::kfs::storage::SCRATCH_ADDR as usize as *const u8,
+            crate::kfs::block_io::SCRATCH_ADDR as usize as *const u8,
             crate::image::DYNAMIC_K16E_V2_HEADER_SIZE as usize,
         )
     };
@@ -4593,7 +4593,7 @@ pub unsafe fn load_selected_dynamic_user_program_mapped(
     unsafe {
         crate::kfs::file_io::copy_selected_file_range_to_ram_profiled(
             0,
-            crate::kfs::storage::SCRATCH_ADDR,
+            crate::kfs::block_io::SCRATCH_ADDR,
             crate::image::DYNAMIC_K16E_V2_HEADER_SIZE,
             FileReadProfileKind::DynamicImport(profile_file),
         )
@@ -4601,7 +4601,7 @@ pub unsafe fn load_selected_dynamic_user_program_mapped(
     }
     let header = unsafe {
         core::slice::from_raw_parts(
-            crate::kfs::storage::SCRATCH_ADDR as usize as *const u8,
+            crate::kfs::block_io::SCRATCH_ADDR as usize as *const u8,
             crate::image::DYNAMIC_K16E_V2_HEADER_SIZE as usize,
         )
     };
@@ -4800,7 +4800,7 @@ unsafe fn read_selected_dynamic_import_image(
     unsafe {
         crate::kfs::file_io::copy_selected_file_range_to_ram_profiled(
             0,
-            crate::kfs::storage::SCRATCH_ADDR,
+            crate::kfs::block_io::SCRATCH_ADDR,
             header_size,
             FileReadProfileKind::DynamicImport(profile_file),
         )
@@ -4809,7 +4809,7 @@ unsafe fn read_selected_dynamic_import_image(
     if version == 6 {
         let header = unsafe {
             core::slice::from_raw_parts(
-                crate::kfs::storage::SCRATCH_ADDR as usize as *const u8,
+                crate::kfs::block_io::SCRATCH_ADDR as usize as *const u8,
                 header_size as usize,
             )
         };
@@ -4818,7 +4818,7 @@ unsafe fn read_selected_dynamic_import_image(
             unsafe {
                 crate::kfs::file_io::copy_selected_file_range_to_ram_profiled(
                     0,
-                    crate::kfs::storage::SCRATCH_ADDR,
+                    crate::kfs::block_io::SCRATCH_ADDR,
                     header_size,
                     FileReadProfileKind::DynamicImport(profile_file),
                 )
@@ -4828,7 +4828,7 @@ unsafe fn read_selected_dynamic_import_image(
     }
     let header = unsafe {
         core::slice::from_raw_parts(
-            crate::kfs::storage::SCRATCH_ADDR as usize as *const u8,
+            crate::kfs::block_io::SCRATCH_ADDR as usize as *const u8,
             header_size as usize,
         )
     };
@@ -5678,14 +5678,14 @@ unsafe fn read_selected_shared_library_image(
     unsafe {
         crate::kfs::file_io::copy_selected_file_range_to_ram_profiled(
             0,
-            crate::kfs::storage::SCRATCH_ADDR,
+            crate::kfs::block_io::SCRATCH_ADDR,
             6,
             FileReadProfileKind::DynamicImport(profile_file),
         )
         .map_err(|_| ProcessLoadError::Storage)?;
     }
     let prefix = unsafe {
-        core::slice::from_raw_parts(crate::kfs::storage::SCRATCH_ADDR as usize as *const u8, 6)
+        core::slice::from_raw_parts(crate::kfs::block_io::SCRATCH_ADDR as usize as *const u8, 6)
     };
     if prefix.get(0..4) != Some(b"K16E") {
         return Err(ProcessLoadError::InvalidImage);
@@ -5698,7 +5698,7 @@ unsafe fn read_selected_shared_library_image(
     unsafe {
         crate::kfs::file_io::copy_selected_file_range_to_ram_profiled(
             0,
-            crate::kfs::storage::SCRATCH_ADDR,
+            crate::kfs::block_io::SCRATCH_ADDR,
             header_size,
             FileReadProfileKind::DynamicImport(profile_file),
         )
@@ -5706,7 +5706,7 @@ unsafe fn read_selected_shared_library_image(
     }
     let header = unsafe {
         core::slice::from_raw_parts(
-            crate::kfs::storage::SCRATCH_ADDR as usize as *const u8,
+            crate::kfs::block_io::SCRATCH_ADDR as usize as *const u8,
             header_size as usize,
         )
     };

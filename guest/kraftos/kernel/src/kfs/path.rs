@@ -1,6 +1,6 @@
 use crate::kfs::directory::{KfsDirectoryEntryHeader, KFS_DIRECTORY_ENTRY_SIZE};
 use crate::kfs::error::StorageError;
-use crate::kfs::storage;
+use crate::kfs::{block_io, storage};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct KfsDirectoryEntrySlot {
@@ -101,20 +101,20 @@ pub unsafe fn find_directory_entry_slot(
         })?;
         let mut block_index = 0;
         while block_index < extent_block_count && remaining > 0 {
-            unsafe { storage::read_fs_block(extent_start_block + block_index)? };
+            unsafe { block_io::read_fs_block(extent_start_block + block_index)? };
             let mut offset = 0;
-            while offset < storage::BLOCK_SIZE && remaining > 0 {
+            while offset < block_io::BLOCK_SIZE && remaining > 0 {
                 crate::os_stats::record_dir_entry_scan();
                 match crate::kfs::directory::decode_entry_header(
-                    storage::scratch_u8(offset),
-                    storage::scratch_u8(offset + 1),
-                    storage::scratch_u8(offset + 2),
-                    storage::scratch_u8(offset + 3),
-                    storage::scratch_u32(offset + 4),
+                    block_io::scratch_u8(offset),
+                    block_io::scratch_u8(offset + 1),
+                    block_io::scratch_u8(offset + 2),
+                    block_io::scratch_u8(offset + 3),
+                    block_io::scratch_u32(offset + 4),
                 )? {
                     KfsDirectoryEntryHeader::Free | KfsDirectoryEntryHeader::Deleted => {}
                     KfsDirectoryEntryHeader::Live { inode_id, name_len } => {
-                        if name_len == name.len() && storage::scratch_bytes_eq(offset + 8, name) {
+                        if name_len == name.len() && block_io::scratch_bytes_eq(offset + 8, name) {
                             return Ok(KfsDirectoryEntrySlot {
                                 inode_id,
                                 block: extent_start_block + block_index,

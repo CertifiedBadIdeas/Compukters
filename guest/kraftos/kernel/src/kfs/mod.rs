@@ -1,6 +1,7 @@
 pub mod allocation;
 pub mod bitmap;
 pub mod block_cache;
+pub mod block_io;
 pub mod cache;
 pub mod device;
 pub mod directory;

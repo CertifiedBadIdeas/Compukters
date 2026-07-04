@@ -1,7 +1,7 @@
 use crate::kfs::directory::{KfsDirectoryEntryHeader, KFS_DIRECTORY_ENTRY_SIZE};
 use crate::kfs::error::StorageError;
-use crate::kfs::storage;
 use crate::kfs::types::KFS_MAX_INLINE_EXTENTS;
+use crate::kfs::{block_io, storage};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct KfsDirectoryFreeSlot {
@@ -26,15 +26,15 @@ pub unsafe fn find_selected_directory_free_slot() -> Result<KfsDirectoryFreeSlot
         })?;
         let mut block_index = 0;
         while block_index < extent_block_count {
-            unsafe { storage::read_fs_block(extent_start_block + block_index)? };
+            unsafe { block_io::read_fs_block(extent_start_block + block_index)? };
             let mut offset = 0;
-            while offset < storage::BLOCK_SIZE {
+            while offset < block_io::BLOCK_SIZE {
                 match crate::kfs::directory::decode_entry_header(
-                    storage::scratch_u8(offset),
-                    storage::scratch_u8(offset + 1),
-                    storage::scratch_u8(offset + 2),
-                    storage::scratch_u8(offset + 3),
-                    storage::scratch_u32(offset + 4),
+                    block_io::scratch_u8(offset),
+                    block_io::scratch_u8(offset + 1),
+                    block_io::scratch_u8(offset + 2),
+                    block_io::scratch_u8(offset + 3),
+                    block_io::scratch_u32(offset + 4),
                 )? {
                     KfsDirectoryEntryHeader::Free | KfsDirectoryEntryHeader::Deleted => {
                         return Ok(KfsDirectoryFreeSlot {
@@ -79,8 +79,8 @@ pub unsafe fn grow_selected_directory_capacity() -> Result<u32, StorageError> {
         && !unsafe { crate::kfs::allocation::is_block_allocated(grow_block)? }
     {
         unsafe { crate::kfs::allocation::mark_block_allocated(grow_block)? };
-        unsafe { storage::clear_scratch_block() };
-        unsafe { storage::write_fs_block(grow_block)? };
+        unsafe { block_io::clear_scratch_block() };
+        unsafe { block_io::write_fs_block(grow_block)? };
         metadata.extent_block_counts[last_extent_index] = match last_count.checked_add(1) {
             Some(value) => value,
             None => return Err(StorageError::INVALID_FILESYSTEM),
@@ -94,8 +94,8 @@ pub unsafe fn grow_selected_directory_capacity() -> Result<u32, StorageError> {
         return Err(StorageError::OUTPUT_BUFFER_TOO_SMALL);
     }
     let new_extent_block = unsafe { crate::kfs::allocation::allocate_contiguous_blocks(1)? };
-    unsafe { storage::clear_scratch_block() };
-    unsafe { storage::write_fs_block(new_extent_block)? };
+    unsafe { block_io::clear_scratch_block() };
+    unsafe { block_io::write_fs_block(new_extent_block)? };
     metadata.extent_start_blocks[new_extent_index] = new_extent_block;
     metadata.extent_block_counts[new_extent_index] = 1;
     metadata.extent_count = match metadata.extent_count.checked_add(1) {
@@ -113,13 +113,13 @@ pub unsafe fn encode_directory_entry_at(
     name: &[u8],
 ) -> Result<(), StorageError> {
     let record = crate::kfs::directory::encode_entry(inode_id, name)?;
-    unsafe { storage::read_fs_block(block)? };
+    unsafe { block_io::read_fs_block(block)? };
     let mut cursor = 0;
     while cursor < KFS_DIRECTORY_ENTRY_SIZE {
-        unsafe { storage::write_scratch_u8(offset + cursor, record.bytes[cursor as usize]) };
+        unsafe { block_io::write_scratch_u8(offset + cursor, record.bytes[cursor as usize]) };
         cursor += 1;
     }
-    unsafe { storage::write_fs_block(block) }
+    unsafe { block_io::write_fs_block(block) }
 }
 
 pub unsafe fn encode_deleted_directory_entry_at(
@@ -127,11 +127,11 @@ pub unsafe fn encode_deleted_directory_entry_at(
     offset: u32,
 ) -> Result<(), StorageError> {
     let record = crate::kfs::directory::encode_deleted_entry();
-    unsafe { storage::read_fs_block(block)? };
+    unsafe { block_io::read_fs_block(block)? };
     let mut cursor = 0;
     while cursor < KFS_DIRECTORY_ENTRY_SIZE {
-        unsafe { storage::write_scratch_u8(offset + cursor, record.bytes[cursor as usize]) };
+        unsafe { block_io::write_scratch_u8(offset + cursor, record.bytes[cursor as usize]) };
         cursor += 1;
     }
-    unsafe { storage::write_fs_block(block) }
+    unsafe { block_io::write_fs_block(block) }
 }

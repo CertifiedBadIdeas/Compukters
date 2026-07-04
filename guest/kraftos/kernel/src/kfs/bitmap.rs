@@ -1,5 +1,5 @@
+use crate::kfs::block_io::BLOCK_SIZE;
 use crate::kfs::error::StorageError;
-use crate::kfs::storage::BLOCK_SIZE;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct KfsBitmapLayout {

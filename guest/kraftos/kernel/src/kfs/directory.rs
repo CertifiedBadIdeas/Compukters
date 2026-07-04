@@ -1,5 +1,5 @@
+use crate::kfs::block_io::BLOCK_SIZE;
 use crate::kfs::error::StorageError;
-use crate::kfs::storage::BLOCK_SIZE;
 
 pub const KFS_DIRECTORY_ENTRY_SIZE: u32 = 64;
 pub const KFS_MAX_NAME_BYTES: usize = 56;
