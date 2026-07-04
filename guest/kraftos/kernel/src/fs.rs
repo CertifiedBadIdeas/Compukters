@@ -733,7 +733,7 @@ pub unsafe fn open_root_file_cached_components(
     components: &[&[u8]],
 ) -> Result<crate::kfs::types::FileMetadata, FsError> {
     unsafe {
-        crate::kfs::root::open_file_from_storage0(b"ROOT", components)
+        crate::kfs::root::select_file_from_storage0(b"ROOT", components)
             .map_err(storage_error_to_fs_error)?;
         Ok(crate::kfs::selected_inode::selected_file_metadata())
     }

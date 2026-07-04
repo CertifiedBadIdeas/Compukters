@@ -1,6 +1,6 @@
 use crate::kfs::cache::{CachedName, CachedPathMetadata, KfsCache};
 use crate::kfs::error::StorageError;
-use crate::kfs::types::{DirectoryListingSink, FileMetadata, PathMetadata};
+use crate::kfs::types::{DirectoryListingSink, FileMetadata};
 
 pub struct KfsRootFs {
     cache: KfsCache,
@@ -207,7 +207,7 @@ impl KfsRootFs {
     }
 }
 
-pub unsafe fn open_file_from_storage0(
+pub unsafe fn select_file_from_storage0(
     partition_type: &[u8; 4],
     path: &[&[u8]],
 ) -> Result<(), StorageError> {
@@ -217,21 +217,6 @@ pub unsafe fn open_file_from_storage0(
     Ok(())
 }
 
-pub unsafe fn selected_directory_entry_inode(name: &[u8]) -> Result<u32, StorageError> {
+unsafe fn selected_directory_entry_inode(name: &[u8]) -> Result<u32, StorageError> {
     unsafe { crate::kfs::path::find_directory_entry(name) }
-}
-
-pub unsafe fn select_directory_inode(path: &[&[u8]]) -> Result<u32, StorageError> {
-    unsafe { crate::kfs::path::find_directory_inode(path)? };
-    Ok(unsafe { crate::kfs::selected_inode::selected_inode_id() })
-}
-
-pub unsafe fn stat_path_from_storage0(
-    partition_type: &[u8; 4],
-    path: &[&[u8]],
-) -> Result<PathMetadata, StorageError> {
-    unsafe { crate::kfs::mount::read_partition(partition_type)? };
-    unsafe { crate::kfs::mount::read_superblock()? };
-    unsafe { crate::kfs::path::find_path_inode(path)? };
-    unsafe { crate::kfs::selected_inode::selected_path_metadata() }
 }
