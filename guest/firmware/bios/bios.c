@@ -30,6 +30,12 @@ extern void __k16_halt_once(void);
 #define TIMER_GAME_TICKS_LOW 0x10000604u
 #define TIMER_GAME_TICKS_HIGH 0x10000608u
 
+#define BIOS_BOOT_PARTITION "BOOT"
+#define BIOS_BOOT_DIR "boot"
+#define BIOS_BOOT_DIR_LEN 4u
+#define BIOS_BOOTLOADER_FILE "loader.kb"
+#define BIOS_BOOTLOADER_FILE_LEN 9u
+
 static void write_u8(u32 address, u8 value) {
   *(volatile u8 *)address = value;
 }
@@ -195,7 +201,9 @@ void _start(void) {
   debug_print("K16 BIOS\n");
   sleep_ticks(20);
 
-  error = load_k16e_from_storage0("BOOT", "boot", 4, "loader.kb", 9,
+  error = load_k16e_from_storage0(BIOS_BOOT_PARTITION, BIOS_BOOT_DIR,
+                                  BIOS_BOOT_DIR_LEN, BIOS_BOOTLOADER_FILE,
+                                  BIOS_BOOTLOADER_FILE_LEN,
                                   K16E_ABI_KIND_BOOTLOADER, &image);
   if (error == 0) {
     enter_loaded_image(image);
