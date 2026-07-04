@@ -271,8 +271,7 @@ impl From<FileMetadata> for crate::kfs::types::FileMetadata {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct FileDescriptor {
     owner_pid: u32,
-    metadata: FileMetadata,
-    offset: u32,
+    open_file: crate::kfs::open_file::KfsOpenFile,
     flags: u32,
 }
 
@@ -301,10 +300,13 @@ impl FileDescriptorTable {
         let mut index = 0;
         while index < self.slots.len() {
             if self.slots[index].is_none() {
+                let append = append_requested(flags)?;
                 self.slots[index] = Some(FileDescriptor {
                     owner_pid,
-                    metadata,
-                    offset: initial_offset(metadata, flags)?,
+                    open_file: crate::kfs::open_file::KfsOpenFile::regular_file(
+                        metadata.into(),
+                        append,
+                    ),
                     flags,
                 });
                 return Ok(FIRST_FILE_FD + index as u32);
@@ -328,11 +330,8 @@ impl FileDescriptorTable {
         if descriptor.flags != OPEN_READ_ONLY {
             return Err(FsError::BadFd);
         }
-        let remaining = descriptor
-            .metadata
-            .size_bytes
-            .saturating_sub(descriptor.offset);
-        Ok((descriptor.offset, min_u32(len, remaining)))
+        let plan = descriptor.open_file.read_plan(len);
+        Ok((plan.offset, plan.len))
     }
 
     pub fn advance(&mut self, fd: u32, len: u32) -> Result<(), FsError> {
@@ -346,27 +345,31 @@ impl FileDescriptorTable {
         len: u32,
     ) -> Result<(), FsError> {
         let descriptor = self.descriptor_mut_for_process(owner_pid, fd)?;
-        let remaining = descriptor
-            .metadata
-            .size_bytes
-            .saturating_sub(descriptor.offset);
-        if len > remaining {
-            return Err(FsError::Storage);
-        }
-        descriptor.offset += len;
-        Ok(())
+        descriptor
+            .open_file
+            .finish_read(len)
+            .map_err(|_| FsError::Storage)
     }
 
-    pub fn writable_metadata_for_process(
+    pub fn write_plan_for_process(
         &self,
         owner_pid: u32,
         fd: u32,
-    ) -> Result<(FileMetadata, u32), FsError> {
+        len: u32,
+    ) -> Result<(FileMetadata, u32, u32), FsError> {
         let descriptor = self.descriptor_for_process(owner_pid, fd)?;
         if descriptor.flags & OPEN_WRITE_ONLY == 0 {
             return Err(FsError::BadFd);
         }
-        Ok((descriptor.metadata, descriptor.offset))
+        let plan = descriptor
+            .open_file
+            .write_plan(len)
+            .map_err(|_| FsError::Storage)?;
+        Ok((
+            FileMetadata::from(descriptor.open_file.metadata()),
+            plan.offset,
+            plan.len,
+        ))
     }
 
     pub fn finish_write_for_process(
@@ -380,9 +383,10 @@ impl FileDescriptorTable {
         if descriptor.flags & OPEN_WRITE_ONLY == 0 {
             return Err(FsError::BadFd);
         }
-        descriptor.metadata = metadata;
-        descriptor.offset = descriptor.offset.checked_add(len).ok_or(FsError::Storage)?;
-        Ok(())
+        descriptor
+            .open_file
+            .finish_write(metadata.into(), len)
+            .map_err(|_| FsError::Storage)
     }
 
     pub fn seek_for_process(
@@ -395,15 +399,16 @@ impl FileDescriptorTable {
         let descriptor = self.descriptor_mut_for_process(owner_pid, fd)?;
         let new_offset = match whence {
             k16_abi::syscall::SEEK_SET => offset,
-            k16_abi::syscall::SEEK_END if offset == 0 => descriptor.metadata.size_bytes,
+            k16_abi::syscall::SEEK_END if offset == 0 => {
+                return Ok(descriptor.open_file.seek_end())
+            }
             k16_abi::syscall::SEEK_END => return Err(FsError::InvalidFlags),
             _ => return Err(FsError::InvalidFlags),
         };
-        if new_offset > descriptor.metadata.size_bytes {
-            return Err(FsError::InvalidFlags);
-        }
-        descriptor.offset = new_offset;
-        Ok(new_offset)
+        descriptor
+            .open_file
+            .seek_set(new_offset)
+            .map_err(|_| FsError::InvalidFlags)
     }
 
     pub fn metadata(&self, fd: u32) -> Result<FileMetadata, FsError> {
@@ -411,7 +416,11 @@ impl FileDescriptorTable {
     }
 
     pub fn metadata_for_process(&self, owner_pid: u32, fd: u32) -> Result<FileMetadata, FsError> {
-        Ok(self.descriptor_for_process(owner_pid, fd)?.metadata)
+        Ok(FileMetadata::from(
+            self.descriptor_for_process(owner_pid, fd)?
+                .open_file
+                .metadata(),
+        ))
     }
 
     pub fn close(&mut self, fd: u32) -> Result<(), FsError> {
@@ -450,7 +459,7 @@ impl FileDescriptorTable {
     pub fn has_open_inode(&self, inode_id: u32) -> bool {
         let mut index = 0;
         while index < self.slots.len() {
-            if matches!(self.slots[index], Some(descriptor) if descriptor.metadata.inode_id == inode_id)
+            if matches!(self.slots[index], Some(descriptor) if descriptor.open_file.inode_id() == inode_id)
             {
                 return true;
             }
@@ -629,21 +638,15 @@ pub unsafe fn copy_file_fd_range_to_ram_for_process(
     len: u32,
 ) -> Result<u32, FsError> {
     crate::os_stats::record_file_read();
-    let descriptor = unsafe {
+    let (file_offset, read_len) = unsafe {
         RUNTIME_FD_TABLE
             .get()
-            .descriptor_for_process(owner_pid, fd)?
+            .read_plan_for_process(owner_pid, fd, len)?
     };
-    let remaining = descriptor
-        .metadata
-        .size_bytes
-        .saturating_sub(descriptor.offset);
-    let file_offset = descriptor.offset;
-    let read_len = min_u32(len, remaining);
     if read_len == 0 {
         return Ok(0);
     }
-    let metadata = descriptor.metadata;
+    let metadata = unsafe { RUNTIME_FD_TABLE.get().metadata_for_process(owner_pid, fd)? };
     unsafe {
         crate::kfs::storage::copy_file_range_to_ram(metadata.into(), file_offset, ptr, read_len)
             .map_err(storage_error_to_fs_error)?;
@@ -674,13 +677,13 @@ pub unsafe fn copy_ram_to_file_fd_range_for_process(
     if len == 0 {
         return Ok(0);
     }
-    let (metadata, offset) = unsafe {
+    let (metadata, offset, write_len) = unsafe {
         RUNTIME_FD_TABLE
             .get()
-            .writable_metadata_for_process(owner_pid, fd)?
+            .write_plan_for_process(owner_pid, fd, len)?
     };
     let updated = unsafe {
-        crate::kfs::storage::copy_ram_to_file_range(metadata.into(), offset, ptr, len)
+        crate::kfs::storage::copy_ram_to_file_range(metadata.into(), offset, ptr, write_len)
             .map_err(storage_error_to_fs_error)?
     };
     unsafe {
@@ -688,12 +691,12 @@ pub unsafe fn copy_ram_to_file_fd_range_for_process(
             owner_pid,
             fd,
             FileMetadata::from(updated),
-            len,
+            write_len,
         )?
     };
     unsafe { flush_root_storage()? };
     unsafe { invalidate_root_fs_cache() };
-    Ok(len)
+    Ok(write_len)
 }
 
 #[cfg(any(not(test), feature = "host-test"))]
@@ -872,22 +875,14 @@ fn fd_index(fd: u32) -> Result<usize, FsError> {
     Ok(index)
 }
 
-fn initial_offset(metadata: FileMetadata, flags: u32) -> Result<u32, FsError> {
+fn append_requested(flags: u32) -> Result<bool, FsError> {
     if flags & OPEN_APPEND != 0 {
         if flags & OPEN_WRITE_ONLY == 0 {
             return Err(FsError::InvalidFlags);
         }
-        Ok(metadata.size_bytes)
+        Ok(true)
     } else {
-        Ok(0)
-    }
-}
-
-fn min_u32(left: u32, right: u32) -> u32 {
-    if left < right {
-        left
-    } else {
-        right
+        Ok(false)
     }
 }
 
@@ -1047,20 +1042,16 @@ mod tests {
             .expect("append fd allocates");
 
         assert_eq!(
-            table
-                .writable_metadata_for_process(1, fd)
-                .expect("fd writable"),
-            (metadata, 11)
+            table.write_plan_for_process(1, fd, 0).expect("fd writable"),
+            (metadata, 11, 0)
         );
         assert_eq!(
             table.seek_for_process(1, fd, 0, k16_abi::syscall::SEEK_SET),
             Ok(0)
         );
         assert_eq!(
-            table
-                .writable_metadata_for_process(1, fd)
-                .expect("fd writable"),
-            (metadata, 0)
+            table.write_plan_for_process(1, fd, 0).expect("fd writable"),
+            (metadata, 0, 0)
         );
         assert_eq!(
             table.seek_for_process(1, fd, 0, k16_abi::syscall::SEEK_END),
