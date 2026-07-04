@@ -9,6 +9,7 @@ pub mod inode;
 pub mod mount;
 pub mod open_file;
 pub mod partition;
+pub mod path;
 pub mod root;
 pub mod storage;
 pub mod superblock;

@@ -31,6 +31,8 @@ const STATE_SELECTED_INODE_ID: u32 = 0x0000_024c;
 const STATE_DIRECTORY_SLOT_BLOCK: u32 = 0x0000_0250;
 const STATE_DIRECTORY_SLOT_OFFSET: u32 = 0x0000_0254;
 const STATE_DIRECTORY_SLOT_DIRECTORY_OFFSET: u32 = 0x0000_0258;
+pub(crate) const INODE_STATE_REGULAR: u8 = 1;
+pub(crate) const INODE_STATE_DIRECTORY: u8 = 2;
 
 struct KernelKfsBlockCache {
     cache: core::cell::UnsafeCell<crate::kfs::block_cache::KfsBlockCache<KFS_BLOCK_CACHE_SLOTS>>,
@@ -62,7 +64,7 @@ pub unsafe fn open_file_from_storage0(
 }
 
 unsafe fn open_file_from_selected_filesystem(path: &[&[u8]]) -> Result<(), StorageError> {
-    unsafe { find_file_inode(path)? };
+    unsafe { crate::kfs::path::find_file_inode(path)? };
     Ok(())
 }
 
@@ -83,7 +85,7 @@ pub unsafe fn read_directory_from_storage0_into<S: DirectoryListingSink>(
 ) -> Result<u32, StorageError> {
     unsafe { read_partition(partition_type)? };
     unsafe { read_superblock()? };
-    unsafe { find_directory_inode(path)? };
+    unsafe { crate::kfs::path::find_directory_inode(path)? };
     unsafe { copy_selected_directory_listing_into(sink) }
 }
 
@@ -103,6 +105,30 @@ pub unsafe fn root_inode_id() -> u32 {
     unsafe { read_u32(STATE_SUPERBLOCK_ROOT_INODE_ID) }
 }
 
+pub(crate) unsafe fn superblock_total_blocks() -> u32 {
+    unsafe { read_u32(STATE_SUPERBLOCK_TOTAL_BLOCKS) }
+}
+
+pub(crate) unsafe fn selected_inode_state() -> u8 {
+    unsafe { read_u32(STATE_INODE_STATE) as u8 }
+}
+
+pub(crate) unsafe fn selected_inode_size() -> u32 {
+    unsafe { read_u32(STATE_INODE_SIZE_BYTES) }
+}
+
+pub(crate) unsafe fn selected_inode_extent_count() -> u32 {
+    unsafe { read_u32(STATE_INODE_EXTENT_COUNT) }
+}
+
+pub(crate) unsafe fn selected_inode_extent_start_block(index: usize) -> u32 {
+    unsafe { read_u32(STATE_INODE_EXTENT_START_BLOCKS + index as u32 * 4) }
+}
+
+pub(crate) unsafe fn selected_inode_extent_block_count(index: usize) -> u32 {
+    unsafe { read_u32(STATE_INODE_EXTENT_BLOCK_COUNTS + index as u32 * 4) }
+}
+
 pub unsafe fn select_inode_metadata_for_cache(
     inode_id: u32,
 ) -> Result<crate::kfs::cache::CachedPathMetadata, StorageError> {
@@ -111,11 +137,11 @@ pub unsafe fn select_inode_metadata_for_cache(
 }
 
 pub unsafe fn selected_directory_entry_inode(name: &[u8]) -> Result<u32, StorageError> {
-    unsafe { find_directory_entry(name) }
+    unsafe { crate::kfs::path::find_directory_entry(name) }
 }
 
 pub unsafe fn select_directory_inode(path: &[&[u8]]) -> Result<u32, StorageError> {
-    unsafe { find_directory_inode(path)? };
+    unsafe { crate::kfs::path::find_directory_inode(path)? };
     Ok(unsafe { read_u32(STATE_SELECTED_INODE_ID) })
 }
 
@@ -231,7 +257,7 @@ pub unsafe fn stat_path_from_storage0(
 ) -> Result<PathMetadata, StorageError> {
     unsafe { read_partition(partition_type)? };
     unsafe { read_superblock()? };
-    unsafe { find_path_inode(path)? };
+    unsafe { crate::kfs::path::find_path_inode(path)? };
     unsafe { selected_path_metadata() }
 }
 
@@ -246,7 +272,7 @@ pub unsafe fn open_file_for_write_from_storage0(
     }
     unsafe { read_partition(partition_type)? };
     unsafe { read_superblock()? };
-    match unsafe { find_file_inode(path) } {
+    match unsafe { crate::kfs::path::find_file_inode(path) } {
         Ok(()) => {
             if truncate {
                 unsafe { truncate_selected_file()? };
@@ -270,9 +296,9 @@ pub unsafe fn remove_file_from_storage0(
     unsafe { read_partition(partition_type)? };
     unsafe { read_superblock()? };
     let parent_len = path.len() - 1;
-    unsafe { find_directory_inode(&path[..parent_len])? };
-    let (inode_id, slot_block, slot_offset) =
-        unsafe { find_directory_entry_slot(path[parent_len])? };
+    unsafe { crate::kfs::path::find_directory_inode(&path[..parent_len])? };
+    let slot = unsafe { crate::kfs::path::find_directory_entry_slot(path[parent_len])? };
+    let inode_id = slot.inode_id;
     unsafe { read_inode(inode_id)? };
     if unsafe { read_u32(STATE_INODE_STATE) as u8 } != 1 {
         return Err(StorageError::PATH_NOT_FOUND);
@@ -302,7 +328,7 @@ pub unsafe fn remove_file_from_storage0(
         extent_block_counts: [0; KFS_MAX_INLINE_EXTENTS],
     };
     unsafe { encode_deleted_file_inode(deleted)? };
-    unsafe { encode_deleted_directory_entry_at(slot_block, slot_offset) }
+    unsafe { encode_deleted_directory_entry_at(slot.block, slot.offset) }
 }
 
 pub unsafe fn rename_file_from_storage0(
@@ -318,9 +344,10 @@ pub unsafe fn rename_file_from_storage0(
     unsafe { read_superblock()? };
 
     let old_parent_len = old_path.len() - 1;
-    unsafe { find_directory_inode(&old_path[..old_parent_len])? };
-    let (inode_id, old_slot_block, old_slot_offset) =
-        unsafe { find_directory_entry_slot(old_path[old_parent_len])? };
+    unsafe { crate::kfs::path::find_directory_inode(&old_path[..old_parent_len])? };
+    let old_slot =
+        unsafe { crate::kfs::path::find_directory_entry_slot(old_path[old_parent_len])? };
+    let inode_id = old_slot.inode_id;
     unsafe { read_inode(inode_id)? };
     if unsafe { read_u32(STATE_INODE_STATE) as u8 } != 1 {
         return Err(StorageError::PATH_NOT_REGULAR);
@@ -331,8 +358,8 @@ pub unsafe fn rename_file_from_storage0(
 
     let new_parent_len = new_path.len() - 1;
     let new_name = new_path[new_parent_len];
-    unsafe { find_directory_inode(&new_path[..new_parent_len])? };
-    match unsafe { find_directory_entry(new_name) } {
+    unsafe { crate::kfs::path::find_directory_inode(&new_path[..new_parent_len])? };
+    match unsafe { crate::kfs::path::find_directory_entry(new_name) } {
         Ok(_) => return Err(StorageError::PATH_EXISTS),
         Err(error) if error == StorageError::PATH_NOT_FOUND => {}
         Err(error) => return Err(error),
@@ -350,7 +377,7 @@ pub unsafe fn rename_file_from_storage0(
         new_slot_directory_offset + KFS_DIRECTORY_ENTRY_SIZE,
     );
     unsafe { encode_selected_inode_size(new_parent_inode_id, new_size)? };
-    unsafe { encode_deleted_directory_entry_at(old_slot_block, old_slot_offset) }
+    unsafe { encode_deleted_directory_entry_at(old_slot.block, old_slot.offset) }
 }
 
 pub unsafe fn create_directory_from_storage0(
@@ -375,9 +402,9 @@ pub unsafe fn remove_directory_from_storage0(
     unsafe { read_partition(partition_type)? };
     unsafe { read_superblock()? };
     let parent_len = path.len() - 1;
-    unsafe { find_directory_inode(&path[..parent_len])? };
-    let (inode_id, slot_block, slot_offset) =
-        unsafe { find_directory_entry_slot(path[parent_len])? };
+    unsafe { crate::kfs::path::find_directory_inode(&path[..parent_len])? };
+    let slot = unsafe { crate::kfs::path::find_directory_entry_slot(path[parent_len])? };
+    let inode_id = slot.inode_id;
     unsafe { read_inode(inode_id)? };
     if unsafe { read_u32(STATE_INODE_STATE) as u8 } != 2 {
         return Err(StorageError::PATH_NOT_FOUND);
@@ -401,7 +428,7 @@ pub unsafe fn remove_directory_from_storage0(
         extent_index += 1;
     }
     unsafe { encode_deleted_directory_inode(metadata)? };
-    unsafe { encode_deleted_directory_entry_at(slot_block, slot_offset) }
+    unsafe { encode_deleted_directory_entry_at(slot.block, slot.offset) }
 }
 
 pub unsafe fn copy_ram_to_file_range(
@@ -571,8 +598,8 @@ unsafe fn read_superblock() -> Result<crate::kfs::superblock::KfsSuperblock, Sto
 unsafe fn create_empty_file(path: &[&[u8]]) -> Result<FileMetadata, StorageError> {
     let parent_len = path.len() - 1;
     let name = path[parent_len];
-    unsafe { find_directory_inode(&path[..parent_len])? };
-    match unsafe { find_directory_entry(name) } {
+    unsafe { crate::kfs::path::find_directory_inode(&path[..parent_len])? };
+    match unsafe { crate::kfs::path::find_directory_entry(name) } {
         Ok(_) => return Err(StorageError::INVALID_FILESYSTEM),
         Err(error) if error == StorageError::PATH_NOT_FOUND => {}
         Err(error) => return Err(error),
@@ -612,8 +639,8 @@ unsafe fn create_empty_file(path: &[&[u8]]) -> Result<FileMetadata, StorageError
 unsafe fn create_empty_directory(path: &[&[u8]]) -> Result<(), StorageError> {
     let parent_len = path.len() - 1;
     let name = path[parent_len];
-    unsafe { find_directory_inode(&path[..parent_len])? };
-    match unsafe { find_directory_entry(name) } {
+    unsafe { crate::kfs::path::find_directory_inode(&path[..parent_len])? };
+    match unsafe { crate::kfs::path::find_directory_entry(name) } {
         Ok(_) => return Err(StorageError::INVALID_FILESYSTEM),
         Err(error) if error == StorageError::PATH_NOT_FOUND => {}
         Err(error) => return Err(error),
@@ -655,129 +682,6 @@ unsafe fn truncate_selected_file() -> Result<(), StorageError> {
     }
     metadata.size_bytes = 0;
     unsafe { encode_file_inode(metadata) }
-}
-
-unsafe fn find_file_inode(path: &[&[u8]]) -> Result<(), StorageError> {
-    crate::os_stats::record_path_lookup();
-    if path.is_empty() {
-        return Err(StorageError::PATH_NOT_FOUND);
-    }
-
-    let mut inode_id = unsafe { read_u32(STATE_SUPERBLOCK_ROOT_INODE_ID) };
-    let mut index = 0;
-    while index < path.len() {
-        let component = path[index];
-        unsafe { read_inode(inode_id)? };
-        if unsafe { read_u32(STATE_INODE_STATE) as u8 } != 2 {
-            return Err(StorageError::PATH_NOT_FOUND);
-        }
-        inode_id = unsafe { find_directory_entry(component)? };
-        index += 1;
-    }
-
-    unsafe { read_inode(inode_id)? };
-    if unsafe { read_u32(STATE_INODE_STATE) as u8 } != 1 {
-        return Err(StorageError::PATH_NOT_FOUND);
-    }
-    Ok(())
-}
-
-unsafe fn find_directory_inode(path: &[&[u8]]) -> Result<(), StorageError> {
-    crate::os_stats::record_path_lookup();
-    let mut inode_id = unsafe { read_u32(STATE_SUPERBLOCK_ROOT_INODE_ID) };
-    let mut index = 0;
-    while index < path.len() {
-        unsafe { read_inode(inode_id)? };
-        if unsafe { read_u32(STATE_INODE_STATE) as u8 } != 2 {
-            return Err(StorageError::PATH_NOT_FOUND);
-        }
-        inode_id = unsafe { find_directory_entry(path[index])? };
-        index += 1;
-    }
-
-    unsafe { read_inode(inode_id)? };
-    if unsafe { read_u32(STATE_INODE_STATE) as u8 } != 2 {
-        return Err(StorageError::PATH_NOT_FOUND);
-    }
-    Ok(())
-}
-
-unsafe fn find_path_inode(path: &[&[u8]]) -> Result<(), StorageError> {
-    crate::os_stats::record_path_lookup();
-    let mut inode_id = unsafe { read_u32(STATE_SUPERBLOCK_ROOT_INODE_ID) };
-    if path.is_empty() {
-        unsafe { read_inode(inode_id)? };
-        return Ok(());
-    }
-
-    let mut index = 0;
-    while index < path.len() {
-        unsafe { read_inode(inode_id)? };
-        if unsafe { read_u32(STATE_INODE_STATE) as u8 } != 2 {
-            return Err(StorageError::PATH_NOT_FOUND);
-        }
-        inode_id = unsafe { find_directory_entry(path[index])? };
-        index += 1;
-    }
-
-    unsafe { read_inode(inode_id) }
-}
-
-unsafe fn find_directory_entry(name: &[u8]) -> Result<u32, StorageError> {
-    let (inode_id, _, _) = unsafe { find_directory_entry_slot(name)? };
-    Ok(inode_id)
-}
-
-unsafe fn find_directory_entry_slot(name: &[u8]) -> Result<(u32, u32, u32), StorageError> {
-    crate::kfs::directory::validate_name(name)?;
-    if !crate::kfs::directory::directory_size_is_aligned(unsafe {
-        read_u32(STATE_INODE_SIZE_BYTES)
-    }) {
-        return Err(StorageError::INVALID_FILESYSTEM);
-    }
-
-    let mut remaining = unsafe { read_u32(STATE_INODE_SIZE_BYTES) };
-    let mut extent_index = 0;
-    while extent_index < unsafe { read_u32(STATE_INODE_EXTENT_COUNT) as usize } {
-        let extent_start_block =
-            unsafe { read_u32(STATE_INODE_EXTENT_START_BLOCKS + extent_index as u32 * 4) };
-        let extent_block_count =
-            unsafe { read_u32(STATE_INODE_EXTENT_BLOCK_COUNTS + extent_index as u32 * 4) };
-        validate_extent(extent_start_block, extent_block_count, unsafe {
-            read_u32(STATE_SUPERBLOCK_TOTAL_BLOCKS)
-        })?;
-        let mut block_index = 0;
-        while block_index < extent_block_count && remaining > 0 {
-            unsafe { read_fs_block(extent_start_block + block_index)? };
-            let mut offset = 0;
-            while offset < BLOCK_SIZE && remaining > 0 {
-                crate::os_stats::record_dir_entry_scan();
-                match crate::kfs::directory::decode_entry_header(
-                    scratch_u8(offset),
-                    scratch_u8(offset + 1),
-                    scratch_u8(offset + 2),
-                    scratch_u8(offset + 3),
-                    scratch_u32(offset + 4),
-                )? {
-                    KfsDirectoryEntryHeader::Free | KfsDirectoryEntryHeader::Deleted => {}
-                    KfsDirectoryEntryHeader::Live { inode_id, name_len } => {
-                        if name_len == name.len() && scratch_bytes_eq(offset + 8, name) {
-                            return Ok((inode_id, extent_start_block + block_index, offset));
-                        }
-                    }
-                }
-                remaining -= KFS_DIRECTORY_ENTRY_SIZE;
-                offset += KFS_DIRECTORY_ENTRY_SIZE;
-            }
-            block_index += 1;
-        }
-        extent_index += 1;
-    }
-
-    if remaining != 0 {
-        return Err(StorageError::INVALID_FILESYSTEM);
-    }
-    Err(StorageError::PATH_NOT_FOUND)
 }
 
 unsafe fn find_selected_directory_free_slot() -> Result<(), StorageError> {
@@ -1321,7 +1225,7 @@ fn record_profiled_file_path_data_read(file: FileReadProfileFile, bytes: u32) {
 }
 
 #[inline(always)]
-unsafe fn read_inode(inode_id: u32) -> Result<(), StorageError> {
+pub(crate) unsafe fn read_inode(inode_id: u32) -> Result<(), StorageError> {
     crate::os_stats::record_inode_load();
     let location = crate::kfs::inode::locate_inode(
         inode_id,
@@ -1701,7 +1605,7 @@ pub unsafe fn flush_storage0() -> Result<(), StorageError> {
 }
 
 #[inline(always)]
-fn validate_extent(
+pub(crate) fn validate_extent(
     start_block: u32,
     block_count: u32,
     total_blocks: u32,
@@ -1717,7 +1621,7 @@ fn validate_extent(
 }
 
 #[inline(always)]
-unsafe fn read_fs_block(block: u32) -> Result<(), StorageError> {
+pub(crate) unsafe fn read_fs_block(block: u32) -> Result<(), StorageError> {
     if block >= unsafe { read_u32(STATE_PARTITION_BLOCK_COUNT) } {
         return Err(StorageError::INVALID_FILESYSTEM);
     }
@@ -1908,7 +1812,7 @@ unsafe fn write_cached_block_to_ram(bytes: &crate::kfs::block_cache::KfsBlockByt
     }
 }
 
-fn scratch_bytes_eq(offset: u32, expected: &[u8]) -> bool {
+pub(crate) fn scratch_bytes_eq(offset: u32, expected: &[u8]) -> bool {
     let mut index = 0;
     while index < expected.len() {
         if scratch_u8(offset + index as u32) != expected[index] {
@@ -1919,11 +1823,11 @@ fn scratch_bytes_eq(offset: u32, expected: &[u8]) -> bool {
     true
 }
 
-fn scratch_u8(offset: u32) -> u8 {
+pub(crate) fn scratch_u8(offset: u32) -> u8 {
     unsafe { read_u8(SCRATCH_ADDR + offset) }
 }
 
-fn scratch_u32(offset: u32) -> u32 {
+pub(crate) fn scratch_u32(offset: u32) -> u32 {
     unsafe { read_u32(SCRATCH_ADDR + offset) }
 }
 
