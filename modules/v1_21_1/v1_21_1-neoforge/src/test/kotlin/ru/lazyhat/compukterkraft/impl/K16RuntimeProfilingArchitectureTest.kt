@@ -133,29 +133,31 @@ class K16RuntimeProfilingArchitectureTest {
 
     @Test
     fun k16KernelBatchesContiguousFullBlockStorageReads() {
-        val storageSource = Path.of("../../../guest/kraftos/kernel/src/kfs/storage.rs").readText()
+        val blockIoSource = Path.of("../../../guest/kraftos/kernel/src/kfs/block_io.rs").readText()
+        val fileIoSource = Path.of("../../../guest/kraftos/kernel/src/kfs/file_io.rs").readText()
         val deviceSource = Path.of("../../../guest/kraftos/kernel/src/kfs/device.rs").readText()
 
-        assertTrue(storageSource.contains("unsafe fn read_fs_blocks_to_ram("))
-        assertFalse(storageSource.contains("use k16_abi::computer::storage0"))
-        assertFalse(storageSource.contains("write_i32(storage0::COMMAND"))
+        assertTrue(blockIoSource.contains("pub(crate) unsafe fn read_fs_blocks_to_ram("))
+        assertFalse(blockIoSource.contains("k16_abi::computer::storage0"))
+        assertFalse(blockIoSource.contains("write_i32(storage0::COMMAND"))
         assertTrue(deviceSource.contains("pub unsafe fn read_storage_blocks_to_ram("))
         assertTrue(deviceSource.contains("write_u32(storage0::BLOCK_COUNT, block_count)"))
-        assertTrue(storageSource.contains("full_block_count"))
-        assertTrue(storageSource.contains("read_fs_blocks_to_ram(block, full_block_count, dst)"))
+        assertTrue(fileIoSource.contains("full_block_count"))
+        assertTrue(fileIoSource.contains("block_io::read_fs_blocks_to_ram(block, full_block_count, dst)"))
     }
 
     @Test
     fun k16RootFsReusesMountedRootPartitionForCachedReadPaths() {
         val rootSource = Path.of("../../../guest/kraftos/kernel/src/kfs/root.rs").readText()
-        val storageSource = Path.of("../../../guest/kraftos/kernel/src/kfs/storage.rs").readText()
+        val mountSource = Path.of("../../../guest/kraftos/kernel/src/kfs/mount.rs").readText()
         val fsSource = Path.of("../../../guest/kraftos/kernel/src/fs.rs").readText()
 
-        assertTrue(storageSource.contains("pub unsafe fn mount_root_partition_superblock("))
+        assertTrue(mountSource.contains("pub unsafe fn mount_root_partition_superblock("))
         assertTrue(rootSource.contains("mounted: Option<crate::kfs::mount::MountedKfs>"))
         assertTrue(rootSource.contains("unsafe fn ensure_mounted("))
-        assertTrue(rootSource.contains("crate::kfs::storage::mount_root_partition_superblock(partition_type)"))
-        assertEquals(3, rootSource.split("self.ensure_mounted(partition_type)?").size - 1)
+        assertTrue(rootSource.contains("crate::kfs::mount::mount_root_partition_superblock(partition_type)"))
+        assertEquals(8, rootSource.split("self.ensure_mounted(partition_type)?").size - 1)
+        assertFalse(rootSource.contains("crate::kfs::storage::"))
         assertFalse(rootSource.contains("read_root_partition_superblock"))
 
         val openRootFileSource =
@@ -168,19 +170,19 @@ class K16RuntimeProfilingArchitectureTest {
 
     @Test
     fun k16StorageUsesBlockCacheForSingleBlockReads() {
-        val storageSource = Path.of("../../../guest/kraftos/kernel/src/kfs/storage.rs").readText()
+        val blockIoSource = Path.of("../../../guest/kraftos/kernel/src/kfs/block_io.rs").readText()
 
-        assertTrue(storageSource.contains("KFS_BLOCK_CACHE_SLOTS"))
-        assertTrue(storageSource.contains("static KFS_BLOCK_CACHE: KernelKfsBlockCache"))
-        assertTrue(storageSource.contains("read_fs_block_from_cache(block)"))
-        assertTrue(storageSource.contains("store_scratch_block_in_cache(block)"))
-        assertTrue(storageSource.contains("write_cached_block_to_scratch(bytes)"))
-        assertTrue(storageSource.contains("crate::kfs::block_cache::KfsBlockCache"))
+        assertTrue(blockIoSource.contains("KFS_BLOCK_CACHE_SLOTS"))
+        assertTrue(blockIoSource.contains("static KFS_BLOCK_CACHE: KernelKfsBlockCache"))
+        assertTrue(blockIoSource.contains("read_fs_block_from_cache(block)"))
+        assertTrue(blockIoSource.contains("store_scratch_block_in_cache(block)"))
+        assertTrue(blockIoSource.contains("write_cached_block_to_scratch(bytes)"))
+        assertTrue(blockIoSource.contains("crate::kfs::block_cache::KfsBlockCache"))
     }
 
     @Test
     fun k16StorageProfilesBlockCacheAndUsesItForBulkReads() {
-        val storageSource = Path.of("../../../guest/kraftos/kernel/src/kfs/storage.rs").readText()
+        val blockIoSource = Path.of("../../../guest/kraftos/kernel/src/kfs/block_io.rs").readText()
         val osStatsSource = Path.of("../../../guest/kraftos/kernel/src/os_stats.rs").readText()
         val runtimeProfilingSource =
             Path
@@ -193,12 +195,12 @@ class K16RuntimeProfilingArchitectureTest {
         assertTrue(runtimeProfilingSource.contains("blockCacheHits="))
         assertTrue(runtimeProfilingSource.contains("blockCacheMisses="))
         assertTrue(runtimeProfilingSource.contains("blockCacheBatchReads="))
-        assertTrue(storageSource.contains("read_fs_blocks_to_ram_cached"))
-        assertTrue(storageSource.contains("copy_cached_block_to_ram(block, dst_cursor)"))
-        assertTrue(storageSource.contains("store_ram_blocks_in_cache(block, miss_count, dst_cursor)"))
-        assertTrue(storageSource.contains("record_block_cache_hit()"))
-        assertTrue(storageSource.contains("record_block_cache_miss()"))
-        assertTrue(storageSource.contains("record_block_cache_batch_read()"))
+        assertTrue(blockIoSource.contains("read_fs_blocks_to_ram_cached"))
+        assertTrue(blockIoSource.contains("copy_cached_block_to_ram(block, dst_cursor)"))
+        assertTrue(blockIoSource.contains("store_ram_blocks_in_cache(block, miss_count, dst_cursor)"))
+        assertTrue(blockIoSource.contains("record_block_cache_hit()"))
+        assertTrue(blockIoSource.contains("record_block_cache_miss()"))
+        assertTrue(blockIoSource.contains("record_block_cache_batch_read()"))
     }
 
     @Test
