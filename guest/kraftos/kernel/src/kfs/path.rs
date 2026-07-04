@@ -1,6 +1,6 @@
 use crate::kfs::directory::{KfsDirectoryEntryHeader, KFS_DIRECTORY_ENTRY_SIZE};
 use crate::kfs::error::StorageError;
-use crate::kfs::{block_io, filesystem_state, inode, selected_inode, storage};
+use crate::kfs::{block_io, file, filesystem_state, inode, selected_inode};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct KfsDirectoryEntrySlot {
@@ -103,7 +103,7 @@ pub unsafe fn find_directory_entry_slot(
             unsafe { selected_inode::selected_inode_extent_start_block(extent_index) };
         let extent_block_count =
             unsafe { selected_inode::selected_inode_extent_block_count(extent_index) };
-        storage::validate_extent(extent_start_block, extent_block_count, unsafe {
+        file::validate_extent(extent_start_block, extent_block_count, unsafe {
             filesystem_state::superblock_total_blocks()
         })?;
         let mut block_index = 0;

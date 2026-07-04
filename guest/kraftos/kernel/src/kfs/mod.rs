@@ -21,6 +21,5 @@ pub mod partition;
 pub mod path;
 pub mod root;
 pub mod selected_inode;
-pub mod storage;
 pub mod superblock;
 pub mod types;

@@ -1,7 +1,7 @@
 use crate::kfs::directory::{KfsDirectoryEntryHeader, KFS_DIRECTORY_ENTRY_SIZE};
 use crate::kfs::error::StorageError;
 use crate::kfs::types::KFS_MAX_INLINE_EXTENTS;
-use crate::kfs::{block_io, filesystem_state, selected_inode, storage};
+use crate::kfs::{block_io, file, filesystem_state, selected_inode};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct KfsDirectoryFreeSlot {
@@ -21,7 +21,7 @@ pub unsafe fn find_selected_directory_free_slot() -> Result<KfsDirectoryFreeSlot
             unsafe { selected_inode::selected_inode_extent_start_block(extent_index) };
         let extent_block_count =
             unsafe { selected_inode::selected_inode_extent_block_count(extent_index) };
-        storage::validate_extent(extent_start_block, extent_block_count, unsafe {
+        file::validate_extent(extent_start_block, extent_block_count, unsafe {
             filesystem_state::superblock_total_blocks()
         })?;
         let mut block_index = 0;

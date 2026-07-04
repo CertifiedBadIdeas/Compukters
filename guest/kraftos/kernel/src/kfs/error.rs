@@ -23,3 +23,17 @@ impl StorageError {
         self.code
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn storage_error_code_is_public_for_boot_chain_mapping() {
+        assert_eq!(StorageError::STORAGE_VERSION.code(), 10);
+        assert_eq!(StorageError::OUTPUT_BUFFER_TOO_SMALL.code(), 19);
+        assert_eq!(StorageError::PATH_EXISTS.code(), 22);
+        assert_eq!(StorageError::PATH_NOT_REGULAR.code(), 23);
+        assert_eq!(StorageError::PATH_BUSY.code(), 24);
+    }
+}

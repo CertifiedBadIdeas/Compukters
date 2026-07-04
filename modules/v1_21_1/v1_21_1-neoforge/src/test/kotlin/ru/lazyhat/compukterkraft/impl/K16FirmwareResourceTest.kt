@@ -39,6 +39,11 @@ private const val K16_TERMINAL_ROWS = 25
 private const val LEGACY_KERNEL_SHELL_DISABLED =
     "Legacy kernel shell runtime path is no longer active; shell behavior is owned by a userland shell program."
 
+private fun optionalSource(path: Path): String =
+    path.takeIf { it.toFile().isFile }
+        ?.readText()
+        .orEmpty()
+
 class K16FirmwareResourceTest {
     @Test
     fun removedRustSharedRuntimeProofIsNotBundled() {
@@ -1837,12 +1842,14 @@ class K16FirmwareResourceTest {
     fun kraftOsFilesystemUsesKfsSourceLayoutAndMagic() {
         val kernelSourceDir = Path.of("../../../guest/kraftos/kernel/src")
         val bootChainSource = Path.of("../../../guest/firmware/boot-chain/boot_chain.c").readText()
+        val kfsModSource = kernelSourceDir.resolve("kfs/mod.rs").readText()
         val superblockSource = kernelSourceDir.resolve("kfs/superblock.rs").readText()
 
         assertTrue(Files.isDirectory(kernelSourceDir.resolve("kfs")), "kernel filesystem code should live under kfs/")
         assertTrue(kernelSourceDir.resolve("kfs/cache.rs").toFile().isFile, "KFS cache module should be explicit")
         assertTrue(kernelSourceDir.resolve("kfs/root.rs").toFile().isFile, "KFS root module should be explicit")
-        assertTrue(kernelSourceDir.resolve("kfs/storage.rs").toFile().isFile, "KFS storage reader should live under kfs/")
+        assertFalse(kernelSourceDir.resolve("kfs/storage.rs").toFile().exists(), "KFS storage facade should be removed")
+        assertFalse(kfsModSource.contains("pub mod storage;"), "KFS storage module should not be exported")
         assertTrue(kernelSourceDir.resolve("kfs/superblock.rs").toFile().isFile, "KFS superblock module should own KFS magic")
         assertFalse(kernelSourceDir.resolve("storage.rs").toFile().exists(), "top-level storage module should not own KFS code")
         assertFalse(kernelSourceDir.resolve("k16fs_cache.rs").toFile().exists(), "old k16fs cache module should be removed")
@@ -1857,7 +1864,7 @@ class K16FirmwareResourceTest {
     fun kraftOsFilesystemPublicTypesAreNotOwnedByStorageModule() {
         val kernelKfsDir = Path.of("../../../guest/kraftos/kernel/src/kfs")
         val modSource = kernelKfsDir.resolve("mod.rs").readText()
-        val storageSource = kernelKfsDir.resolve("storage.rs").readText()
+        val storageSource = optionalSource(kernelKfsDir.resolve("storage.rs"))
         val namespaceMutationSource = kernelKfsDir.resolve("namespace_mutation.rs")
             .takeIf { it.toFile().isFile }
             ?.readText()
@@ -1878,7 +1885,7 @@ class K16FirmwareResourceTest {
     fun kraftOsFilesystemBlockIoIsNotOwnedByStorageModule() {
         val kernelKfsDir = Path.of("../../../guest/kraftos/kernel/src/kfs")
         val modSource = kernelKfsDir.resolve("mod.rs").readText()
-        val storageSource = kernelKfsDir.resolve("storage.rs").readText()
+        val storageSource = optionalSource(kernelKfsDir.resolve("storage.rs"))
         val mountSource = kernelKfsDir.resolve("mount.rs").readText()
 
         val blockIoPath = kernelKfsDir.resolve("block_io.rs")
@@ -1918,7 +1925,7 @@ class K16FirmwareResourceTest {
         val kernelDir = Path.of("../../../guest/kraftos/kernel/src")
         val kernelKfsDir = kernelDir.resolve("kfs")
         val modSource = kernelKfsDir.resolve("mod.rs").readText()
-        val storageSource = kernelKfsDir.resolve("storage.rs").readText()
+        val storageSource = optionalSource(kernelKfsDir.resolve("storage.rs"))
         val fsSource = kernelDir.resolve("fs.rs").readText()
         val processSource = kernelDir.resolve("process.rs").readText()
         val rootSource = kernelKfsDir.resolve("root.rs").readText()
@@ -1945,7 +1952,8 @@ class K16FirmwareResourceTest {
         assertFalse(storageSource.contains("pub unsafe fn select_file_metadata("), "storage.rs should not own metadata-backed inode selection")
         assertFalse(storageSource.contains("crate::kfs::selected_inode::store_loaded_inode("), "storage.rs should not load selected inode state directly")
         assertTrue(inodeSource.contains("crate::kfs::selected_inode::store_loaded_inode("), "inode.rs should use the selected inode owner after inode reads")
-        assertTrue(storageSource.contains("crate::kfs::selected_inode::selected_path_metadata("), "storage.rs should use the selected inode owner for stat")
+        assertFalse(storageSource.contains("crate::kfs::selected_inode::selected_path_metadata("), "storage.rs should not own stat metadata projection")
+        assertTrue(rootSource.contains("crate::kfs::selected_inode::selected_path_metadata("), "root.rs should use the selected inode owner for stat metadata")
         assertFalse(fsSource.contains("crate::kfs::storage::selected_file_metadata("), "fs.rs should not use storage-owned selected file metadata")
         assertFalse(processSource.contains("crate::kfs::storage::selected_file_metadata("), "process.rs should not use storage-owned selected file metadata")
         assertFalse(rootSource.contains("crate::kfs::storage::selected_file_metadata("), "root.rs should not use storage-owned selected file metadata")
@@ -1959,7 +1967,7 @@ class K16FirmwareResourceTest {
         val kernelDir = Path.of("../../../guest/kraftos/kernel/src")
         val kernelKfsDir = kernelDir.resolve("kfs")
         val modSource = kernelKfsDir.resolve("mod.rs").readText()
-        val storageSource = kernelKfsDir.resolve("storage.rs").readText()
+        val storageSource = optionalSource(kernelKfsDir.resolve("storage.rs"))
         val blockIoSource = kernelKfsDir.resolve("block_io.rs").readText()
         val allocationSource = kernelKfsDir.resolve("allocation.rs").readText()
         val mountSource = kernelKfsDir.resolve("mount.rs").readText()
@@ -1999,11 +2007,13 @@ class K16FirmwareResourceTest {
         assertFalse(storageSource.contains("pub(crate) unsafe fn read_superblock("), "storage.rs should not own superblock reads")
         assertFalse(storageSource.contains("crate::kfs::filesystem_state::store_partition("), "storage.rs should not write mounted partition state directly")
         assertFalse(storageSource.contains("crate::kfs::filesystem_state::store_superblock("), "storage.rs should not write mounted superblock state directly")
-        assertTrue(storageSource.contains("crate::kfs::mount::read_partition("), "storage.rs should use the mount owner for partition reads")
-        assertTrue(storageSource.contains("crate::kfs::mount::read_superblock("), "storage.rs should use the mount owner for superblock reads")
+        assertFalse(storageSource.contains("crate::kfs::mount::read_partition("), "storage.rs should not own partition read delegation")
+        assertFalse(storageSource.contains("crate::kfs::mount::read_superblock("), "storage.rs should not own superblock read delegation")
         assertTrue(namespaceMutationSource.contains("mount::read_partition("), "namespace mutation should use the mount owner")
         assertFalse(namespaceMutationSource.contains("storage::read_partition("), "namespace mutation should not use storage-owned partition reads")
         assertTrue(rootSource.contains("crate::kfs::mount::mount_root_partition_superblock("), "root.rs should use the mount owner")
+        assertTrue(rootSource.contains("crate::kfs::mount::read_partition("), "root.rs should use the mount owner for direct storage0 opens")
+        assertTrue(rootSource.contains("crate::kfs::mount::read_superblock("), "root.rs should use the mount owner for direct storage0 opens")
         assertTrue(blockIoSource.contains("crate::kfs::filesystem_state::partition_start_lba("), "block_io.rs should use filesystem state owner")
         assertTrue(allocationSource.contains("filesystem_state::superblock_total_blocks("), "allocation.rs should use filesystem state owner")
         assertTrue(pathSource.contains("filesystem_state::root_inode_id("), "path.rs should use filesystem state owner")
@@ -2014,7 +2024,7 @@ class K16FirmwareResourceTest {
     fun kraftOsFilesystemInodeLayoutIsNotOwnedByStorageModule() {
         val kernelKfsDir = Path.of("../../../guest/kraftos/kernel/src/kfs")
         val modSource = kernelKfsDir.resolve("mod.rs").readText()
-        val storageSource = kernelKfsDir.resolve("storage.rs").readText()
+        val storageSource = optionalSource(kernelKfsDir.resolve("storage.rs"))
         val allocationSource = kernelKfsDir.resolve("allocation.rs").readText()
         val directoryListingSource = kernelKfsDir.resolve("directory_listing.rs").readText()
         val namespaceMutationSource = kernelKfsDir.resolve("namespace_mutation.rs").readText()
@@ -2046,7 +2056,7 @@ class K16FirmwareResourceTest {
     fun kraftOsFilesystemInodeMutationIsNotOwnedByStorageModule() {
         val kernelKfsDir = Path.of("../../../guest/kraftos/kernel/src/kfs")
         val modSource = kernelKfsDir.resolve("mod.rs").readText()
-        val storageSource = kernelKfsDir.resolve("storage.rs").readText()
+        val storageSource = optionalSource(kernelKfsDir.resolve("storage.rs"))
         val directoryMutationSource = kernelKfsDir.resolve("directory_mutation.rs").readText()
         val fileWriteSource = kernelKfsDir.resolve("file_write.rs")
             .takeIf { it.toFile().isFile }
@@ -2076,7 +2086,7 @@ class K16FirmwareResourceTest {
     fun kraftOsFilesystemDirectoryLayoutIsNotOwnedByStorageModule() {
         val kernelKfsDir = Path.of("../../../guest/kraftos/kernel/src/kfs")
         val modSource = kernelKfsDir.resolve("mod.rs").readText()
-        val storageSource = kernelKfsDir.resolve("storage.rs").readText()
+        val storageSource = optionalSource(kernelKfsDir.resolve("storage.rs"))
         val cacheSource = kernelKfsDir.resolve("cache.rs").readText()
         val listingSource = kernelKfsDir.resolve("directory_listing.rs")
             .takeIf { it.toFile().isFile }
@@ -2102,7 +2112,7 @@ class K16FirmwareResourceTest {
     fun kraftOsFilesystemBitmapLayoutIsNotOwnedByStorageModule() {
         val kernelKfsDir = Path.of("../../../guest/kraftos/kernel/src/kfs")
         val modSource = kernelKfsDir.resolve("mod.rs").readText()
-        val storageSource = kernelKfsDir.resolve("storage.rs").readText()
+        val storageSource = optionalSource(kernelKfsDir.resolve("storage.rs"))
         val allocationSource = kernelKfsDir.resolve("allocation.rs").takeIf { it.toFile().isFile }?.readText().orEmpty()
 
         val bitmapPath = kernelKfsDir.resolve("bitmap.rs")
@@ -2123,7 +2133,7 @@ class K16FirmwareResourceTest {
     fun kraftOsFilesystemFilePlanningIsNotOwnedByStorageModule() {
         val kernelKfsDir = Path.of("../../../guest/kraftos/kernel/src/kfs")
         val modSource = kernelKfsDir.resolve("mod.rs").readText()
-        val storageSource = kernelKfsDir.resolve("storage.rs").readText()
+        val storageSource = optionalSource(kernelKfsDir.resolve("storage.rs"))
         val fileWriteSource = kernelKfsDir.resolve("file_write.rs")
             .takeIf { it.toFile().isFile }
             ?.readText()
@@ -2136,6 +2146,7 @@ class K16FirmwareResourceTest {
         assertTrue(fileSource.contains("pub fn file_capacity_bytes("), "file.rs should own file capacity calculation")
         assertTrue(fileSource.contains("pub fn validate_read_range("), "file.rs should own read range validation")
         assertTrue(fileSource.contains("pub fn validate_write_range("), "file.rs should own write range validation")
+        assertTrue(fileSource.contains("fn validate_extent("), "file.rs should own extent bounds validation")
         assertTrue(fileSource.contains("pub fn extent_overlap("), "file.rs should own extent overlap planning")
         assertTrue(fileSource.contains("pub fn plan_file_growth("), "file.rs should own file growth planning")
         assertFalse(storageSource.contains("fn file_capacity_bytes("), "storage.rs should not own file capacity calculation")
@@ -2170,7 +2181,8 @@ class K16FirmwareResourceTest {
     fun kraftOsFilesystemPathTraversalIsNotOwnedByStorageModule() {
         val kernelKfsDir = Path.of("../../../guest/kraftos/kernel/src/kfs")
         val modSource = kernelKfsDir.resolve("mod.rs").readText()
-        val storageSource = kernelKfsDir.resolve("storage.rs").readText()
+        val storageSource = optionalSource(kernelKfsDir.resolve("storage.rs"))
+        val rootSource = kernelKfsDir.resolve("root.rs").readText()
 
         val pathPath = kernelKfsDir.resolve("path.rs")
         assertTrue(pathPath.toFile().isFile, "KFS path traversal should have an explicit module")
@@ -2185,14 +2197,15 @@ class K16FirmwareResourceTest {
         assertFalse(storageSource.contains("unsafe fn find_directory_inode("), "storage.rs should not own directory traversal")
         assertFalse(storageSource.contains("unsafe fn find_path_inode("), "storage.rs should not own generic path traversal")
         assertFalse(storageSource.contains("unsafe fn find_directory_entry_slot("), "storage.rs should not own directory entry slot lookup")
-        assertTrue(storageSource.contains("crate::kfs::path::find_file_inode("), "storage.rs should use the path owner")
+        assertFalse(storageSource.contains("crate::kfs::path::find_file_inode("), "storage.rs should not own path traversal delegation")
+        assertTrue(rootSource.contains("crate::kfs::path::find_file_inode("), "root.rs should use the path owner for direct storage0 opens")
     }
 
     @Test
     fun kraftOsFilesystemDirectoryMutationIsNotOwnedByStorageModule() {
         val kernelKfsDir = Path.of("../../../guest/kraftos/kernel/src/kfs")
         val modSource = kernelKfsDir.resolve("mod.rs").readText()
-        val storageSource = kernelKfsDir.resolve("storage.rs").readText()
+        val storageSource = optionalSource(kernelKfsDir.resolve("storage.rs"))
         val namespaceMutationSource = kernelKfsDir.resolve("namespace_mutation.rs")
             .takeIf { it.toFile().isFile }
             ?.readText()
@@ -2214,7 +2227,7 @@ class K16FirmwareResourceTest {
     @Test
     fun kraftOsFilesystemDirectoryEntryMutationIsNotOwnedByStorageModule() {
         val kernelKfsDir = Path.of("../../../guest/kraftos/kernel/src/kfs")
-        val storageSource = kernelKfsDir.resolve("storage.rs").readText()
+        val storageSource = optionalSource(kernelKfsDir.resolve("storage.rs"))
         val namespaceMutationSource = kernelKfsDir.resolve("namespace_mutation.rs")
             .takeIf { it.toFile().isFile }
             ?.readText()
@@ -2235,7 +2248,7 @@ class K16FirmwareResourceTest {
     fun kraftOsFilesystemDirectoryListingReadIsNotOwnedByStorageModule() {
         val kernelKfsDir = Path.of("../../../guest/kraftos/kernel/src/kfs")
         val modSource = kernelKfsDir.resolve("mod.rs").readText()
-        val storageSource = kernelKfsDir.resolve("storage.rs").readText()
+        val storageSource = optionalSource(kernelKfsDir.resolve("storage.rs"))
         val rootSource = kernelKfsDir.resolve("root.rs").readText()
         val namespaceMutationSource = kernelKfsDir.resolve("namespace_mutation.rs")
             .takeIf { it.toFile().isFile }
@@ -2267,7 +2280,7 @@ class K16FirmwareResourceTest {
         val kernelDir = Path.of("../../../guest/kraftos/kernel/src")
         val kernelKfsDir = kernelDir.resolve("kfs")
         val modSource = kernelKfsDir.resolve("mod.rs").readText()
-        val storageSource = kernelKfsDir.resolve("storage.rs").readText()
+        val storageSource = optionalSource(kernelKfsDir.resolve("storage.rs"))
         val processSource = kernelDir.resolve("process.rs").readText()
         val fsSource = kernelDir.resolve("fs.rs").readText()
         val bootChainSource = kernelDir.resolve("boot_chain.rs").readText()
@@ -2303,7 +2316,7 @@ class K16FirmwareResourceTest {
         val kernelDir = Path.of("../../../guest/kraftos/kernel/src")
         val kernelKfsDir = kernelDir.resolve("kfs")
         val modSource = kernelKfsDir.resolve("mod.rs").readText()
-        val storageSource = kernelKfsDir.resolve("storage.rs").readText()
+        val storageSource = optionalSource(kernelKfsDir.resolve("storage.rs"))
         val fsSource = kernelDir.resolve("fs.rs").readText()
 
         val fileWritePath = kernelKfsDir.resolve("file_write.rs")
@@ -2325,7 +2338,7 @@ class K16FirmwareResourceTest {
         val kernelDir = Path.of("../../../guest/kraftos/kernel/src")
         val kernelKfsDir = kernelDir.resolve("kfs")
         val modSource = kernelKfsDir.resolve("mod.rs").readText()
-        val storageSource = kernelKfsDir.resolve("storage.rs").readText()
+        val storageSource = optionalSource(kernelKfsDir.resolve("storage.rs"))
         val fsSource = kernelDir.resolve("fs.rs").readText()
 
         val namespaceMutationPath = kernelKfsDir.resolve("namespace_mutation.rs")
@@ -2364,7 +2377,7 @@ class K16FirmwareResourceTest {
     fun kraftOsFilesystemAllocationMutationIsNotOwnedByStorageModule() {
         val kernelKfsDir = Path.of("../../../guest/kraftos/kernel/src/kfs")
         val modSource = kernelKfsDir.resolve("mod.rs").readText()
-        val storageSource = kernelKfsDir.resolve("storage.rs").readText()
+        val storageSource = optionalSource(kernelKfsDir.resolve("storage.rs"))
         val directoryMutationSource = kernelKfsDir.resolve("directory_mutation.rs").readText()
         val namespaceMutationSource = kernelKfsDir.resolve("namespace_mutation.rs")
             .takeIf { it.toFile().isFile }
