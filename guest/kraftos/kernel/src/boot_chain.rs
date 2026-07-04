@@ -30,7 +30,7 @@ impl LoadError {
         self.code
     }
 
-    const fn from_storage(error: crate::kfs::storage::StorageError) -> Self {
+    const fn from_storage(error: crate::kfs::error::StorageError) -> Self {
         Self { code: error.code() }
     }
 

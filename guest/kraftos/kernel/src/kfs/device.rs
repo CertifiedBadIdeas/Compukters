@@ -1,6 +1,7 @@
 use k16_abi::computer::storage0;
 
-use crate::kfs::storage::{StorageError, BLOCK_SIZE, SCRATCH_ADDR};
+use crate::kfs::error::StorageError;
+use crate::kfs::storage::{BLOCK_SIZE, SCRATCH_ADDR};
 
 pub unsafe fn capacity_blocks_u32() -> Result<u32, StorageError> {
     let capacity_high = unsafe { read_u32(storage0::CAPACITY_BLOCKS_HIGH) };

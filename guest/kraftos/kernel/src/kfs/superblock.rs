@@ -1,4 +1,5 @@
-use crate::kfs::storage::{StorageError, BLOCK_SIZE};
+use crate::kfs::error::StorageError;
+use crate::kfs::storage::BLOCK_SIZE;
 
 const KFS_MAGIC: &[u8; 5] = b"KFS\0\0";
 const KFS_VERSION: u8 = 1;
@@ -116,7 +117,7 @@ mod tests {
 
         assert_eq!(
             KfsSuperblock::decode(&block, 40),
-            Err(crate::kfs::storage::StorageError::INVALID_FILESYSTEM),
+            Err(crate::kfs::error::StorageError::INVALID_FILESYSTEM),
         );
     }
 
@@ -127,7 +128,7 @@ mod tests {
 
         assert_eq!(
             KfsSuperblock::decode(&block, 40),
-            Err(crate::kfs::storage::StorageError::INVALID_FILESYSTEM),
+            Err(crate::kfs::error::StorageError::INVALID_FILESYSTEM),
         );
     }
 }

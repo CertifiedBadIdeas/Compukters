@@ -1837,19 +1837,37 @@ class K16FirmwareResourceTest {
     fun kraftOsFilesystemUsesKfsSourceLayoutAndMagic() {
         val kernelSourceDir = Path.of("../../../guest/kraftos/kernel/src")
         val bootChainSource = Path.of("../../../guest/firmware/boot-chain/boot_chain.c").readText()
-        val storageSource = kernelSourceDir.resolve("kfs/storage.rs").readText()
+        val superblockSource = kernelSourceDir.resolve("kfs/superblock.rs").readText()
 
         assertTrue(Files.isDirectory(kernelSourceDir.resolve("kfs")), "kernel filesystem code should live under kfs/")
         assertTrue(kernelSourceDir.resolve("kfs/cache.rs").toFile().isFile, "KFS cache module should be explicit")
         assertTrue(kernelSourceDir.resolve("kfs/root.rs").toFile().isFile, "KFS root module should be explicit")
         assertTrue(kernelSourceDir.resolve("kfs/storage.rs").toFile().isFile, "KFS storage reader should live under kfs/")
+        assertTrue(kernelSourceDir.resolve("kfs/superblock.rs").toFile().isFile, "KFS superblock module should own KFS magic")
         assertFalse(kernelSourceDir.resolve("storage.rs").toFile().exists(), "top-level storage module should not own KFS code")
         assertFalse(kernelSourceDir.resolve("k16fs_cache.rs").toFile().exists(), "old k16fs cache module should be removed")
         assertFalse(kernelSourceDir.resolve("k16fs_root.rs").toFile().exists(), "old k16fs root module should be removed")
         assertTrue(bootChainSource.contains("\"KFS\\0\\0\""), "boot-chain should require the KFS disk magic")
         assertFalse(bootChainSource.contains("\"K16FS\""), "boot-chain should not accept the old K16FS magic")
-        assertTrue(storageSource.contains("KFS_MAGIC"), "kernel storage reader should name the new KFS magic")
-        assertFalse(storageSource.contains("K16FS_MAGIC"), "kernel storage reader should not keep the old K16FS magic")
+        assertTrue(superblockSource.contains("KFS_MAGIC"), "kernel superblock decoder should name the KFS magic")
+        assertFalse(superblockSource.contains("K16FS_MAGIC"), "kernel superblock decoder should not keep the old K16FS magic")
+    }
+
+    @Test
+    fun kraftOsFilesystemPublicTypesAreNotOwnedByStorageModule() {
+        val kernelKfsDir = Path.of("../../../guest/kraftos/kernel/src/kfs")
+        val modSource = kernelKfsDir.resolve("mod.rs").readText()
+        val storageSource = kernelKfsDir.resolve("storage.rs").readText()
+
+        assertTrue(kernelKfsDir.resolve("error.rs").toFile().isFile, "KFS errors should have an explicit module")
+        assertTrue(kernelKfsDir.resolve("types.rs").toFile().isFile, "KFS public types should have an explicit module")
+        assertTrue(modSource.contains("pub mod error;"), "KFS error module should be exported")
+        assertTrue(modSource.contains("pub mod types;"), "KFS types module should be exported")
+        assertFalse(storageSource.contains("pub struct FileMetadata"), "FileMetadata should not be owned by storage.rs")
+        assertFalse(storageSource.contains("pub enum FileReadProfileKind"), "read profiling types should not be owned by storage.rs")
+        assertFalse(storageSource.contains("pub enum PathKind"), "path metadata types should not be owned by storage.rs")
+        assertFalse(storageSource.contains("pub struct StorageError"), "StorageError should not be owned by storage.rs")
+        assertFalse(storageSource.contains("pub trait DirectoryListingSink"), "directory listing sink types should not be owned by storage.rs")
     }
 
     @Test

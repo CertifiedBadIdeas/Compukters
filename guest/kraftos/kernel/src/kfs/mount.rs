@@ -1,5 +1,5 @@
+use crate::kfs::error::StorageError;
 use crate::kfs::partition::KfsPartition;
-use crate::kfs::storage::StorageError;
 use crate::kfs::superblock::KfsSuperblock;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
