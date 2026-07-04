@@ -1,15 +1,6 @@
 use crate::kfs::error::StorageError;
 use crate::kfs::types::{PathMetadata, KFS_MAX_INLINE_EXTENTS};
 
-const STATE_PARTITION_START_LBA: u32 = 0x0000_0200;
-const STATE_PARTITION_BLOCK_COUNT: u32 = 0x0000_0204;
-const STATE_SUPERBLOCK_TOTAL_BLOCKS: u32 = 0x0000_0208;
-const STATE_SUPERBLOCK_INODE_TABLE_START_BLOCK: u32 = 0x0000_020c;
-const STATE_SUPERBLOCK_INODE_TABLE_BLOCK_COUNT: u32 = 0x0000_0210;
-const STATE_SUPERBLOCK_ROOT_INODE_ID: u32 = 0x0000_0214;
-const STATE_SUPERBLOCK_BITMAP_START_BLOCK: u32 = 0x0000_0244;
-const STATE_SUPERBLOCK_BITMAP_BLOCK_COUNT: u32 = 0x0000_0248;
-
 pub unsafe fn open_file_from_storage0(
     partition_type: &[u8; 4],
     path: &[&[u8]],
@@ -34,38 +25,6 @@ pub unsafe fn mount_root_partition_superblock(
     let partition = unsafe { read_partition(partition_type)? };
     let superblock = unsafe { read_superblock()? };
     crate::kfs::mount::MountedKfs::new(partition, superblock)
-}
-
-pub unsafe fn root_inode_id() -> u32 {
-    unsafe { read_u32(STATE_SUPERBLOCK_ROOT_INODE_ID) }
-}
-
-pub(crate) unsafe fn partition_start_lba() -> u32 {
-    unsafe { read_u32(STATE_PARTITION_START_LBA) }
-}
-
-pub(crate) unsafe fn partition_block_count() -> u32 {
-    unsafe { read_u32(STATE_PARTITION_BLOCK_COUNT) }
-}
-
-pub(crate) unsafe fn superblock_total_blocks() -> u32 {
-    unsafe { read_u32(STATE_SUPERBLOCK_TOTAL_BLOCKS) }
-}
-
-pub(crate) unsafe fn superblock_bitmap_start_block() -> u32 {
-    unsafe { read_u32(STATE_SUPERBLOCK_BITMAP_START_BLOCK) }
-}
-
-pub(crate) unsafe fn superblock_bitmap_block_count() -> u32 {
-    unsafe { read_u32(STATE_SUPERBLOCK_BITMAP_BLOCK_COUNT) }
-}
-
-pub(crate) unsafe fn superblock_inode_table_start_block() -> u32 {
-    unsafe { read_u32(STATE_SUPERBLOCK_INODE_TABLE_START_BLOCK) }
-}
-
-pub(crate) unsafe fn superblock_inode_table_block_count() -> u32 {
-    unsafe { read_u32(STATE_SUPERBLOCK_INODE_TABLE_BLOCK_COUNT) }
 }
 
 pub unsafe fn selected_directory_entry_inode(name: &[u8]) -> Result<u32, StorageError> {
@@ -98,15 +57,12 @@ pub(crate) unsafe fn read_partition(
         partition_type,
         capacity_low,
     )?;
-    let old_start_lba = unsafe { read_u32(STATE_PARTITION_START_LBA) };
-    let old_block_count = unsafe { read_u32(STATE_PARTITION_BLOCK_COUNT) };
+    let old_start_lba = unsafe { crate::kfs::filesystem_state::partition_start_lba() };
+    let old_block_count = unsafe { crate::kfs::filesystem_state::partition_block_count() };
     if old_start_lba != partition.start_lba || old_block_count != partition.block_count {
         unsafe { crate::kfs::block_io::invalidate_block_cache() };
     }
-    unsafe {
-        write_u32(STATE_PARTITION_START_LBA, partition.start_lba);
-        write_u32(STATE_PARTITION_BLOCK_COUNT, partition.block_count);
-    }
+    unsafe { crate::kfs::filesystem_state::store_partition(partition) };
     Ok(partition)
 }
 
@@ -115,27 +71,10 @@ pub(crate) unsafe fn read_superblock() -> Result<crate::kfs::superblock::KfsSupe
     unsafe { crate::kfs::block_io::read_fs_block(0)? };
     let block = unsafe { crate::kfs::block_io::scratch_block_bytes() };
     let superblock = crate::kfs::superblock::KfsSuperblock::decode(&block, unsafe {
-        read_u32(STATE_PARTITION_BLOCK_COUNT)
+        crate::kfs::filesystem_state::partition_block_count()
     })?;
     unsafe {
-        write_u32(STATE_SUPERBLOCK_TOTAL_BLOCKS, superblock.total_blocks);
-        write_u32(
-            STATE_SUPERBLOCK_BITMAP_START_BLOCK,
-            superblock.bitmap_start_block,
-        );
-        write_u32(
-            STATE_SUPERBLOCK_BITMAP_BLOCK_COUNT,
-            superblock.bitmap_block_count,
-        );
-        write_u32(
-            STATE_SUPERBLOCK_INODE_TABLE_START_BLOCK,
-            superblock.inode_table_start_block,
-        );
-        write_u32(
-            STATE_SUPERBLOCK_INODE_TABLE_BLOCK_COUNT,
-            superblock.inode_table_block_count,
-        );
-        write_u32(STATE_SUPERBLOCK_ROOT_INODE_ID, superblock.root_inode_id);
+        crate::kfs::filesystem_state::store_superblock(superblock);
         read_inode(superblock.root_inode_id)?;
     }
     if unsafe { crate::kfs::selected_inode::selected_inode_state() }
@@ -151,8 +90,8 @@ pub(crate) unsafe fn read_inode(inode_id: u32) -> Result<(), StorageError> {
     crate::os_stats::record_inode_load();
     let location = crate::kfs::inode::locate_inode(
         inode_id,
-        unsafe { read_u32(STATE_SUPERBLOCK_INODE_TABLE_START_BLOCK) },
-        unsafe { read_u32(STATE_SUPERBLOCK_INODE_TABLE_BLOCK_COUNT) },
+        unsafe { crate::kfs::filesystem_state::superblock_inode_table_start_block() },
+        unsafe { crate::kfs::filesystem_state::superblock_inode_table_block_count() },
     )?;
     let inode_block = location.block;
     let inode_offset = location.offset;
@@ -174,7 +113,7 @@ pub(crate) unsafe fn read_inode(inode_id: u32) -> Result<(), StorageError> {
         let start_block = crate::kfs::block_io::scratch_u32(offset);
         let block_count = crate::kfs::block_io::scratch_u32(offset + 4);
         validate_extent(start_block, block_count, unsafe {
-            read_u32(STATE_SUPERBLOCK_TOTAL_BLOCKS)
+            crate::kfs::filesystem_state::superblock_total_blocks()
         })?;
         extent_start_blocks[index] = start_block;
         extent_block_counts[index] = block_count;
@@ -213,14 +152,6 @@ pub(crate) fn validate_extent(
         return Err(StorageError::INVALID_FILESYSTEM);
     }
     Ok(())
-}
-
-unsafe fn read_u32(address: u32) -> u32 {
-    unsafe { core::ptr::read_volatile(address as usize as *const u32) }
-}
-
-unsafe fn write_u32(address: u32, value: u32) {
-    unsafe { core::ptr::write_volatile(address as usize as *mut u32, value) }
 }
 
 #[cfg(test)]

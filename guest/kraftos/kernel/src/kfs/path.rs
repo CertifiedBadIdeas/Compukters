@@ -1,6 +1,6 @@
 use crate::kfs::directory::{KfsDirectoryEntryHeader, KFS_DIRECTORY_ENTRY_SIZE};
 use crate::kfs::error::StorageError;
-use crate::kfs::{block_io, selected_inode, storage};
+use crate::kfs::{block_io, filesystem_state, selected_inode, storage};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct KfsDirectoryEntrySlot {
@@ -15,7 +15,7 @@ pub unsafe fn find_file_inode(path: &[&[u8]]) -> Result<(), StorageError> {
         return Err(StorageError::PATH_NOT_FOUND);
     }
 
-    let mut inode_id = unsafe { storage::root_inode_id() };
+    let mut inode_id = unsafe { filesystem_state::root_inode_id() };
     let mut index = 0;
     while index < path.len() {
         let component = path[index];
@@ -38,7 +38,7 @@ pub unsafe fn find_file_inode(path: &[&[u8]]) -> Result<(), StorageError> {
 
 pub unsafe fn find_directory_inode(path: &[&[u8]]) -> Result<(), StorageError> {
     crate::os_stats::record_path_lookup();
-    let mut inode_id = unsafe { storage::root_inode_id() };
+    let mut inode_id = unsafe { filesystem_state::root_inode_id() };
     let mut index = 0;
     while index < path.len() {
         unsafe { storage::read_inode(inode_id)? };
@@ -60,7 +60,7 @@ pub unsafe fn find_directory_inode(path: &[&[u8]]) -> Result<(), StorageError> {
 
 pub unsafe fn find_path_inode(path: &[&[u8]]) -> Result<(), StorageError> {
     crate::os_stats::record_path_lookup();
-    let mut inode_id = unsafe { storage::root_inode_id() };
+    let mut inode_id = unsafe { filesystem_state::root_inode_id() };
     if path.is_empty() {
         unsafe { storage::read_inode(inode_id)? };
         return Ok(());
@@ -104,7 +104,7 @@ pub unsafe fn find_directory_entry_slot(
         let extent_block_count =
             unsafe { selected_inode::selected_inode_extent_block_count(extent_index) };
         storage::validate_extent(extent_start_block, extent_block_count, unsafe {
-            storage::superblock_total_blocks()
+            filesystem_state::superblock_total_blocks()
         })?;
         let mut block_index = 0;
         while block_index < extent_block_count && remaining > 0 {

@@ -11,6 +11,7 @@ pub mod error;
 pub mod file;
 pub mod file_io;
 pub mod file_write;
+pub mod filesystem_state;
 pub mod inode;
 pub mod inode_mutation;
 pub mod mount;

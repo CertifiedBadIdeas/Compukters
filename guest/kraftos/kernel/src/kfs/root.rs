@@ -93,7 +93,7 @@ impl KfsRootFs {
         path: &[&[u8]],
     ) -> Result<(u32, CachedPathMetadata), StorageError> {
         crate::os_stats::record_path_lookup();
-        let mut inode_id = unsafe { crate::kfs::storage::root_inode_id() };
+        let mut inode_id = unsafe { crate::kfs::filesystem_state::root_inode_id() };
         let mut metadata = match self.cache.lookup_inode(inode_id) {
             Some(metadata) => metadata,
             None => {

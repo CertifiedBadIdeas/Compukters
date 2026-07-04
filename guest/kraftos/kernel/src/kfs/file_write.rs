@@ -1,6 +1,6 @@
 use crate::kfs::error::StorageError;
 use crate::kfs::types::FileMetadata;
-use crate::kfs::{block_io, storage};
+use crate::kfs::{block_io, filesystem_state};
 
 pub unsafe fn copy_ram_to_file_range(
     metadata: FileMetadata,
@@ -74,7 +74,8 @@ unsafe fn grow_file_capacity(
     required_size: u32,
 ) -> Result<FileMetadata, StorageError> {
     let plan = crate::kfs::file::plan_file_growth(metadata, required_size)?;
-    let mut can_extend_last_extent = plan.grow_end <= unsafe { storage::superblock_total_blocks() };
+    let mut can_extend_last_extent =
+        plan.grow_end <= unsafe { filesystem_state::superblock_total_blocks() };
     let mut block = plan.grow_start;
     while can_extend_last_extent && block < plan.grow_end {
         if unsafe { crate::kfs::allocation::is_block_allocated(block)? } {
