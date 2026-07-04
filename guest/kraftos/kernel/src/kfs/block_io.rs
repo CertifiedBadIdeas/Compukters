@@ -3,7 +3,7 @@ use crate::kfs::error::StorageError;
 pub const SCRATCH_ADDR: u32 = 0x0000_0600;
 pub const BLOCK_SIZE: u32 = 512;
 
-const KFS_BLOCK_CACHE_SLOTS: usize = 16;
+pub(crate) const KFS_BLOCK_CACHE_SLOTS: usize = 16;
 
 struct KernelKfsBlockCache {
     cache: core::cell::UnsafeCell<crate::kfs::block_cache::KfsBlockCache<KFS_BLOCK_CACHE_SLOTS>>,

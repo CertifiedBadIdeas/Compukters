@@ -1894,6 +1894,10 @@ class K16FirmwareResourceTest {
         assertTrue(modSource.contains("pub mod block_io;"), "KFS block I/O module should be exported")
         assertTrue(blockIoSource.contains("pub const SCRATCH_ADDR"), "block_io.rs should own the scratch block address")
         assertTrue(blockIoSource.contains("pub const BLOCK_SIZE"), "block_io.rs should own the block size")
+        assertTrue(
+            blockIoSource.contains("pub(crate) const KFS_BLOCK_CACHE_SLOTS: usize = 16;"),
+            "block_io.rs should expose the bounded per-VM block cache slot budget",
+        )
         assertTrue(blockIoSource.contains("struct KernelKfsBlockCache"), "block_io.rs should own the block cache state")
         assertTrue(blockIoSource.contains("pub(crate) unsafe fn read_fs_block("), "block_io.rs should own single block reads")
         assertTrue(blockIoSource.contains("pub(crate) unsafe fn read_fs_blocks_to_ram("), "block_io.rs should own batched block reads")
@@ -2108,6 +2112,14 @@ class K16FirmwareResourceTest {
         assertFalse(storageSource.contains("const KFS_MAX_NAME_BYTES"), "storage.rs should not own directory name limits")
         assertFalse(cacheSource.contains("const KFS_MAX_NAME_BYTES"), "cache.rs should not duplicate directory name limits")
         assertTrue(cacheSource.contains("crate::kfs::directory::KFS_MAX_NAME_BYTES"), "cache.rs should use the directory owner for name limits")
+        assertTrue(
+            cacheSource.contains("pub(crate) const INODE_CACHE_SLOTS: usize = 32;"),
+            "cache.rs should expose the bounded per-VM inode cache slot budget",
+        )
+        assertTrue(
+            cacheSource.contains("pub(crate) const DIRECTORY_CACHE_SLOTS: usize = 32;"),
+            "cache.rs should expose the bounded per-VM dentry cache slot budget",
+        )
         assertTrue(listingSource.contains("crate::kfs::directory::decode_entry_header("), "directory_listing.rs should use the directory owner for entry decoding")
     }
 
