@@ -1918,6 +1918,7 @@ class K16FirmwareResourceTest {
         val fsSource = kernelDir.resolve("fs.rs").readText()
         val processSource = kernelDir.resolve("process.rs").readText()
         val rootSource = kernelKfsDir.resolve("root.rs").readText()
+        val inodeSource = kernelKfsDir.resolve("inode.rs").readText()
 
         val selectedInodePath = kernelKfsDir.resolve("selected_inode.rs")
         assertTrue(selectedInodePath.toFile().isFile, "KFS selected inode state should have an explicit module")
@@ -1938,7 +1939,8 @@ class K16FirmwareResourceTest {
         assertFalse(storageSource.contains("pub unsafe fn selected_file_metadata("), "storage.rs should not own selected file metadata")
         assertFalse(storageSource.contains("pub unsafe fn selected_metadata_for_cache("), "storage.rs should not own cached metadata projection")
         assertFalse(storageSource.contains("pub unsafe fn select_file_metadata("), "storage.rs should not own metadata-backed inode selection")
-        assertTrue(storageSource.contains("crate::kfs::selected_inode::store_loaded_inode("), "storage.rs should use the selected inode owner after inode reads")
+        assertFalse(storageSource.contains("crate::kfs::selected_inode::store_loaded_inode("), "storage.rs should not load selected inode state directly")
+        assertTrue(inodeSource.contains("crate::kfs::selected_inode::store_loaded_inode("), "inode.rs should use the selected inode owner after inode reads")
         assertTrue(storageSource.contains("crate::kfs::selected_inode::selected_path_metadata("), "storage.rs should use the selected inode owner for stat")
         assertFalse(fsSource.contains("crate::kfs::storage::selected_file_metadata("), "fs.rs should not use storage-owned selected file metadata")
         assertFalse(processSource.contains("crate::kfs::storage::selected_file_metadata("), "process.rs should not use storage-owned selected file metadata")
@@ -1992,6 +1994,11 @@ class K16FirmwareResourceTest {
         val kernelKfsDir = Path.of("../../../guest/kraftos/kernel/src/kfs")
         val modSource = kernelKfsDir.resolve("mod.rs").readText()
         val storageSource = kernelKfsDir.resolve("storage.rs").readText()
+        val allocationSource = kernelKfsDir.resolve("allocation.rs").readText()
+        val directoryListingSource = kernelKfsDir.resolve("directory_listing.rs").readText()
+        val namespaceMutationSource = kernelKfsDir.resolve("namespace_mutation.rs").readText()
+        val pathSource = kernelKfsDir.resolve("path.rs").readText()
+        val selectedInodeSource = kernelKfsDir.resolve("selected_inode.rs").readText()
 
         val inodePath = kernelKfsDir.resolve("inode.rs")
         assertTrue(inodePath.toFile().isFile, "KFS inode layout should have an explicit module")
@@ -2000,8 +2007,16 @@ class K16FirmwareResourceTest {
         assertTrue(inodeSource.contains("pub const KFS_INODE_SIZE"), "inode.rs should own inode record sizing")
         assertTrue(inodeSource.contains("pub fn locate_inode("), "inode.rs should own inode table addressing")
         assertTrue(inodeSource.contains("pub fn inode_capacity("), "inode.rs should own inode table capacity")
+        assertTrue(inodeSource.contains("pub(crate) unsafe fn load_inode("), "inode.rs should own inode record loading")
         assertFalse(storageSource.contains("const KFS_INODE_SIZE"), "storage.rs should not own inode record sizing")
-        assertTrue(storageSource.contains("crate::kfs::inode::locate_inode("), "storage.rs should use the inode owner for addressing")
+        assertFalse(storageSource.contains("pub(crate) unsafe fn read_inode("), "storage.rs should not own inode record loading")
+        assertFalse(storageSource.contains("crate::kfs::inode::locate_inode("), "storage.rs should not decode inode records directly")
+        assertTrue(storageSource.contains("crate::kfs::inode::load_inode("), "storage.rs should use the inode owner for root inode loading")
+        assertTrue(allocationSource.contains("inode::load_inode("), "allocation.rs should use the inode owner for inode scans")
+        assertTrue(directoryListingSource.contains("inode::load_inode("), "directory listing should use the inode owner for child metadata")
+        assertTrue(namespaceMutationSource.contains("inode::load_inode("), "namespace mutation should use the inode owner")
+        assertTrue(pathSource.contains("inode::load_inode("), "path traversal should use the inode owner")
+        assertTrue(selectedInodeSource.contains("crate::kfs::inode::load_inode("), "selected inode helpers should use the inode owner")
     }
 
     @Test

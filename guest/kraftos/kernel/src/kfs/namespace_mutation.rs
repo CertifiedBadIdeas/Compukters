@@ -1,7 +1,7 @@
 use crate::kfs::directory::KFS_DIRECTORY_ENTRY_SIZE;
 use crate::kfs::error::StorageError;
 use crate::kfs::types::{FileMetadata, KFS_MAX_INLINE_EXTENTS};
-use crate::kfs::{block_io, filesystem_state, selected_inode, storage};
+use crate::kfs::{block_io, filesystem_state, inode, selected_inode, storage};
 
 pub unsafe fn open_file_for_write_from_storage0(
     partition_type: &[u8; 4],
@@ -41,7 +41,7 @@ pub unsafe fn remove_file_from_storage0(
     unsafe { crate::kfs::path::find_directory_inode(&path[..parent_len])? };
     let slot = unsafe { crate::kfs::path::find_directory_entry_slot(path[parent_len])? };
     let inode_id = slot.inode_id;
-    unsafe { storage::read_inode(inode_id)? };
+    unsafe { inode::load_inode(inode_id)? };
     if unsafe { selected_inode::selected_inode_state() } != selected_inode::INODE_STATE_REGULAR {
         return Err(StorageError::PATH_NOT_FOUND);
     }
@@ -92,7 +92,7 @@ pub unsafe fn rename_file_from_storage0(
     let old_slot =
         unsafe { crate::kfs::path::find_directory_entry_slot(old_path[old_parent_len])? };
     let inode_id = old_slot.inode_id;
-    unsafe { storage::read_inode(inode_id)? };
+    unsafe { inode::load_inode(inode_id)? };
     if unsafe { selected_inode::selected_inode_state() } != selected_inode::INODE_STATE_REGULAR {
         return Err(StorageError::PATH_NOT_REGULAR);
     }
@@ -119,7 +119,7 @@ pub unsafe fn rename_file_from_storage0(
             new_name,
         )?
     };
-    unsafe { storage::read_inode(new_parent_inode_id)? };
+    unsafe { inode::load_inode(new_parent_inode_id)? };
     let new_size = max_u32(
         unsafe { selected_inode::selected_inode_size() },
         new_slot.directory_offset + KFS_DIRECTORY_ENTRY_SIZE,
@@ -160,7 +160,7 @@ pub unsafe fn remove_directory_from_storage0(
     unsafe { crate::kfs::path::find_directory_inode(&path[..parent_len])? };
     let slot = unsafe { crate::kfs::path::find_directory_entry_slot(path[parent_len])? };
     let inode_id = slot.inode_id;
-    unsafe { storage::read_inode(inode_id)? };
+    unsafe { inode::load_inode(inode_id)? };
     if unsafe { selected_inode::selected_inode_state() } != selected_inode::INODE_STATE_DIRECTORY {
         return Err(StorageError::PATH_NOT_FOUND);
     }
@@ -223,13 +223,13 @@ unsafe fn create_empty_file(path: &[&[u8]]) -> Result<FileMetadata, StorageError
             name,
         )?
     };
-    unsafe { storage::read_inode(parent_inode_id)? };
+    unsafe { inode::load_inode(parent_inode_id)? };
     let new_size = max_u32(
         unsafe { selected_inode::selected_inode_size() },
         slot.directory_offset + KFS_DIRECTORY_ENTRY_SIZE,
     );
     unsafe { crate::kfs::inode_mutation::encode_selected_inode_size(parent_inode_id, new_size)? };
-    unsafe { storage::read_inode(inode_id)? };
+    unsafe { inode::load_inode(inode_id)? };
     Ok(unsafe { selected_inode::selected_file_metadata() })
 }
 
@@ -268,7 +268,7 @@ unsafe fn create_empty_directory(path: &[&[u8]]) -> Result<(), StorageError> {
             name,
         )?
     };
-    unsafe { storage::read_inode(parent_inode_id)? };
+    unsafe { inode::load_inode(parent_inode_id)? };
     let new_size = max_u32(
         unsafe { selected_inode::selected_inode_size() },
         slot.directory_offset + KFS_DIRECTORY_ENTRY_SIZE,
