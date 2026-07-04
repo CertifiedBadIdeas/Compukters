@@ -8,7 +8,6 @@ use crate::kfs::types::{
 };
 
 const KFS_BLOCK_CACHE_SLOTS: usize = 16;
-const KFS_INODE_SIZE: u32 = 64;
 const KFS_DIRECTORY_ENTRY_SIZE: u32 = 64;
 const KFS_MAX_NAME_BYTES: usize = 56;
 const KFS_DIRECTORY_ENTRIES_PER_BLOCK: usize = (BLOCK_SIZE / KFS_DIRECTORY_ENTRY_SIZE) as usize;
@@ -992,19 +991,13 @@ unsafe fn read_inode_path_metadata_cached(
     inode_id: u32,
     cached_inode_block: &mut u32,
 ) -> Result<crate::kfs::cache::CachedPathMetadata, StorageError> {
-    let inodes_per_block = BLOCK_SIZE / KFS_INODE_SIZE;
-    let inode_capacity = match unsafe { read_u32(STATE_SUPERBLOCK_INODE_TABLE_BLOCK_COUNT) }
-        .checked_mul(inodes_per_block)
-    {
-        Some(value) => value,
-        None => return Err(StorageError::INVALID_FILESYSTEM),
-    };
-    if inode_id >= inode_capacity {
-        return Err(StorageError::INVALID_FILESYSTEM);
-    }
-    let inode_block =
-        unsafe { read_u32(STATE_SUPERBLOCK_INODE_TABLE_START_BLOCK) } + inode_id / inodes_per_block;
-    let inode_offset = (inode_id % inodes_per_block) * KFS_INODE_SIZE;
+    let location = crate::kfs::inode::locate_inode(
+        inode_id,
+        unsafe { read_u32(STATE_SUPERBLOCK_INODE_TABLE_START_BLOCK) },
+        unsafe { read_u32(STATE_SUPERBLOCK_INODE_TABLE_BLOCK_COUNT) },
+    )?;
+    let inode_block = location.block;
+    let inode_offset = location.offset;
     if *cached_inode_block != inode_block {
         crate::os_stats::record_inode_load();
         unsafe { read_fs_block(inode_block)? };
@@ -1339,19 +1332,13 @@ fn record_profiled_file_path_data_read(file: FileReadProfileFile, bytes: u32) {
 #[inline(always)]
 unsafe fn read_inode(inode_id: u32) -> Result<(), StorageError> {
     crate::os_stats::record_inode_load();
-    let inodes_per_block = BLOCK_SIZE / KFS_INODE_SIZE;
-    let inode_capacity = match unsafe { read_u32(STATE_SUPERBLOCK_INODE_TABLE_BLOCK_COUNT) }
-        .checked_mul(inodes_per_block)
-    {
-        Some(value) => value,
-        None => return Err(StorageError::INVALID_FILESYSTEM),
-    };
-    if inode_id >= inode_capacity {
-        return Err(StorageError::INVALID_FILESYSTEM);
-    }
-    let inode_block =
-        unsafe { read_u32(STATE_SUPERBLOCK_INODE_TABLE_START_BLOCK) } + inode_id / inodes_per_block;
-    let inode_offset = (inode_id % inodes_per_block) * KFS_INODE_SIZE;
+    let location = crate::kfs::inode::locate_inode(
+        inode_id,
+        unsafe { read_u32(STATE_SUPERBLOCK_INODE_TABLE_START_BLOCK) },
+        unsafe { read_u32(STATE_SUPERBLOCK_INODE_TABLE_BLOCK_COUNT) },
+    )?;
+    let inode_block = location.block;
+    let inode_offset = location.offset;
     unsafe { read_fs_block(inode_block)? };
 
     let size_high = scratch_u32(inode_offset + 0x0c);
@@ -1477,22 +1464,16 @@ unsafe fn encode_inode(
     if extent_count as usize > KFS_MAX_INLINE_EXTENTS {
         return Err(StorageError::INVALID_FILESYSTEM);
     }
-    let inodes_per_block = BLOCK_SIZE / KFS_INODE_SIZE;
-    let inode_capacity = match unsafe { read_u32(STATE_SUPERBLOCK_INODE_TABLE_BLOCK_COUNT) }
-        .checked_mul(inodes_per_block)
-    {
-        Some(value) => value,
-        None => return Err(StorageError::INVALID_FILESYSTEM),
-    };
-    if inode_id >= inode_capacity {
-        return Err(StorageError::INVALID_FILESYSTEM);
-    }
-    let inode_block =
-        unsafe { read_u32(STATE_SUPERBLOCK_INODE_TABLE_START_BLOCK) } + inode_id / inodes_per_block;
-    let inode_offset = (inode_id % inodes_per_block) * KFS_INODE_SIZE;
+    let location = crate::kfs::inode::locate_inode(
+        inode_id,
+        unsafe { read_u32(STATE_SUPERBLOCK_INODE_TABLE_START_BLOCK) },
+        unsafe { read_u32(STATE_SUPERBLOCK_INODE_TABLE_BLOCK_COUNT) },
+    )?;
+    let inode_block = location.block;
+    let inode_offset = location.offset;
     unsafe { read_fs_block(inode_block)? };
     let mut offset = 0;
-    while offset < KFS_INODE_SIZE {
+    while offset < crate::kfs::inode::KFS_INODE_SIZE {
         unsafe { write_u8(SCRATCH_ADDR + inode_offset + offset, 0) };
         offset += 1;
     }
@@ -1515,13 +1496,9 @@ unsafe fn encode_inode(
 }
 
 unsafe fn allocate_inode() -> Result<u32, StorageError> {
-    let inodes_per_block = BLOCK_SIZE / KFS_INODE_SIZE;
-    let inode_capacity = match unsafe { read_u32(STATE_SUPERBLOCK_INODE_TABLE_BLOCK_COUNT) }
-        .checked_mul(inodes_per_block)
-    {
-        Some(value) => value,
-        None => return Err(StorageError::INVALID_FILESYSTEM),
-    };
+    let inode_capacity = crate::kfs::inode::inode_capacity(unsafe {
+        read_u32(STATE_SUPERBLOCK_INODE_TABLE_BLOCK_COUNT)
+    })?;
     let mut inode_id = 1;
     while inode_id < inode_capacity {
         unsafe { read_inode(inode_id)? };

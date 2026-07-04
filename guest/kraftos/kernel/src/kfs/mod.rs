@@ -2,6 +2,7 @@ pub mod block_cache;
 pub mod cache;
 pub mod device;
 pub mod error;
+pub mod inode;
 pub mod mount;
 pub mod partition;
 pub mod root;

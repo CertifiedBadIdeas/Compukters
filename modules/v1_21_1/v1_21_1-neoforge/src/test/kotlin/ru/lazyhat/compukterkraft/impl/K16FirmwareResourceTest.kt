@@ -1871,6 +1871,23 @@ class K16FirmwareResourceTest {
     }
 
     @Test
+    fun kraftOsFilesystemInodeLayoutIsNotOwnedByStorageModule() {
+        val kernelKfsDir = Path.of("../../../guest/kraftos/kernel/src/kfs")
+        val modSource = kernelKfsDir.resolve("mod.rs").readText()
+        val storageSource = kernelKfsDir.resolve("storage.rs").readText()
+
+        val inodePath = kernelKfsDir.resolve("inode.rs")
+        assertTrue(inodePath.toFile().isFile, "KFS inode layout should have an explicit module")
+        val inodeSource = inodePath.readText()
+        assertTrue(modSource.contains("pub mod inode;"), "KFS inode module should be exported")
+        assertTrue(inodeSource.contains("pub const KFS_INODE_SIZE"), "inode.rs should own inode record sizing")
+        assertTrue(inodeSource.contains("pub fn locate_inode("), "inode.rs should own inode table addressing")
+        assertTrue(inodeSource.contains("pub fn inode_capacity("), "inode.rs should own inode table capacity")
+        assertFalse(storageSource.contains("const KFS_INODE_SIZE"), "storage.rs should not own inode record sizing")
+        assertTrue(storageSource.contains("crate::kfs::inode::locate_inode("), "storage.rs should use the inode owner for addressing")
+    }
+
+    @Test
     fun k16KernelLegacyShellPathIsRemovedFromCurrentSource() {
         val kernelSourceDir = Path.of("../../../guest/kraftos/kernel/src")
         val mainSource = kernelSourceDir.resolve("main.rs").readText()
