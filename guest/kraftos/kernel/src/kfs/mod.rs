@@ -8,6 +8,7 @@ pub mod directory_mutation;
 pub mod error;
 pub mod file;
 pub mod inode;
+pub mod inode_mutation;
 pub mod mount;
 pub mod open_file;
 pub mod partition;
