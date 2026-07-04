@@ -341,7 +341,9 @@ pub unsafe fn remove_file_from_storage0(
         extent_block_counts: [0; KFS_MAX_INLINE_EXTENTS],
     };
     unsafe { crate::kfs::inode_mutation::encode_deleted_file_inode(deleted)? };
-    unsafe { encode_deleted_directory_entry_at(slot.block, slot.offset) }
+    unsafe {
+        crate::kfs::directory_mutation::encode_deleted_directory_entry_at(slot.block, slot.offset)
+    }
 }
 
 pub unsafe fn rename_file_from_storage0(
@@ -380,7 +382,14 @@ pub unsafe fn rename_file_from_storage0(
     let new_slot = unsafe { crate::kfs::directory_mutation::find_selected_directory_free_slot()? };
     let new_parent_inode_id = unsafe { read_u32(STATE_SELECTED_INODE_ID) };
 
-    unsafe { encode_directory_entry_at(new_slot.block, new_slot.offset, inode_id, new_name)? };
+    unsafe {
+        crate::kfs::directory_mutation::encode_directory_entry_at(
+            new_slot.block,
+            new_slot.offset,
+            inode_id,
+            new_name,
+        )?
+    };
     unsafe { read_inode(new_parent_inode_id)? };
     let new_size = max_u32(
         unsafe { read_u32(STATE_INODE_SIZE_BYTES) },
@@ -389,7 +398,12 @@ pub unsafe fn rename_file_from_storage0(
     unsafe {
         crate::kfs::inode_mutation::encode_selected_inode_size(new_parent_inode_id, new_size)?
     };
-    unsafe { encode_deleted_directory_entry_at(old_slot.block, old_slot.offset) }
+    unsafe {
+        crate::kfs::directory_mutation::encode_deleted_directory_entry_at(
+            old_slot.block,
+            old_slot.offset,
+        )
+    }
 }
 
 pub unsafe fn create_directory_from_storage0(
@@ -440,7 +454,9 @@ pub unsafe fn remove_directory_from_storage0(
         extent_index += 1;
     }
     unsafe { crate::kfs::inode_mutation::encode_deleted_directory_inode(metadata)? };
-    unsafe { encode_deleted_directory_entry_at(slot.block, slot.offset) }
+    unsafe {
+        crate::kfs::directory_mutation::encode_deleted_directory_entry_at(slot.block, slot.offset)
+    }
 }
 
 pub unsafe fn copy_ram_to_file_range(
@@ -634,7 +650,14 @@ unsafe fn create_empty_file(path: &[&[u8]]) -> Result<FileMetadata, StorageError
         extent_block_counts,
     };
     unsafe { crate::kfs::inode_mutation::encode_file_inode(metadata)? };
-    unsafe { encode_directory_entry_at(slot.block, slot.offset, inode_id, name)? };
+    unsafe {
+        crate::kfs::directory_mutation::encode_directory_entry_at(
+            slot.block,
+            slot.offset,
+            inode_id,
+            name,
+        )?
+    };
     unsafe { read_inode(parent_inode_id)? };
     let new_size = max_u32(
         unsafe { read_u32(STATE_INODE_SIZE_BYTES) },
@@ -672,7 +695,14 @@ unsafe fn create_empty_directory(path: &[&[u8]]) -> Result<(), StorageError> {
         extent_block_counts,
     };
     unsafe { crate::kfs::inode_mutation::encode_directory_inode(metadata)? };
-    unsafe { encode_directory_entry_at(slot.block, slot.offset, inode_id, name)? };
+    unsafe {
+        crate::kfs::directory_mutation::encode_directory_entry_at(
+            slot.block,
+            slot.offset,
+            inode_id,
+            name,
+        )?
+    };
     unsafe { read_inode(parent_inode_id)? };
     let new_size = max_u32(
         unsafe { read_u32(STATE_INODE_SIZE_BYTES) },
@@ -1178,43 +1208,6 @@ pub(crate) unsafe fn read_inode(inode_id: u32) -> Result<(), StorageError> {
     }
 
     Ok(())
-}
-
-unsafe fn encode_directory_entry_at(
-    block: u32,
-    offset: u32,
-    inode_id: u32,
-    name: &[u8],
-) -> Result<(), StorageError> {
-    let record = crate::kfs::directory::encode_entry(inode_id, name)?;
-    unsafe { read_fs_block(block)? };
-    let mut cursor = 0;
-    while cursor < KFS_DIRECTORY_ENTRY_SIZE {
-        unsafe {
-            write_u8(
-                SCRATCH_ADDR + offset + cursor,
-                record.bytes[cursor as usize],
-            )
-        };
-        cursor += 1;
-    }
-    unsafe { write_fs_block(block) }
-}
-
-unsafe fn encode_deleted_directory_entry_at(block: u32, offset: u32) -> Result<(), StorageError> {
-    let record = crate::kfs::directory::encode_deleted_entry();
-    unsafe { read_fs_block(block)? };
-    let mut cursor = 0;
-    while cursor < KFS_DIRECTORY_ENTRY_SIZE {
-        unsafe {
-            write_u8(
-                SCRATCH_ADDR + offset + cursor,
-                record.bytes[cursor as usize],
-            )
-        };
-        cursor += 1;
-    }
-    unsafe { write_fs_block(block) }
 }
 
 unsafe fn grow_file_capacity(

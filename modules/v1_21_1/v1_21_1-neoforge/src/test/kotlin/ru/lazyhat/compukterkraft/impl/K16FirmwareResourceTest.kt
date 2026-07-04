@@ -2041,6 +2041,22 @@ class K16FirmwareResourceTest {
     }
 
     @Test
+    fun kraftOsFilesystemDirectoryEntryMutationIsNotOwnedByStorageModule() {
+        val kernelKfsDir = Path.of("../../../guest/kraftos/kernel/src/kfs")
+        val storageSource = kernelKfsDir.resolve("storage.rs").readText()
+
+        val mutationSource = kernelKfsDir.resolve("directory_mutation.rs").readText()
+        assertTrue(mutationSource.contains("pub unsafe fn encode_directory_entry_at("), "directory_mutation.rs should own live directory entry writes")
+        assertTrue(mutationSource.contains("pub unsafe fn encode_deleted_directory_entry_at("), "directory_mutation.rs should own deleted directory entry writes")
+        assertTrue(mutationSource.contains("crate::kfs::directory::encode_entry("), "directory mutation should use the directory record encoder")
+        assertTrue(mutationSource.contains("crate::kfs::directory::encode_deleted_entry("), "directory mutation should use the deleted directory record encoder")
+        assertFalse(storageSource.contains("unsafe fn encode_directory_entry_at("), "storage.rs should not own live directory entry writes")
+        assertFalse(storageSource.contains("unsafe fn encode_deleted_directory_entry_at("), "storage.rs should not own deleted directory entry writes")
+        assertTrue(storageSource.contains("crate::kfs::directory_mutation::encode_directory_entry_at("), "storage.rs should use the directory mutation owner for live entries")
+        assertTrue(storageSource.contains("crate::kfs::directory_mutation::encode_deleted_directory_entry_at("), "storage.rs should use the directory mutation owner for deleted entries")
+    }
+
+    @Test
     fun kraftOsFilesystemAllocationMutationIsNotOwnedByStorageModule() {
         val kernelKfsDir = Path.of("../../../guest/kraftos/kernel/src/kfs")
         val modSource = kernelKfsDir.resolve("mod.rs").readText()
