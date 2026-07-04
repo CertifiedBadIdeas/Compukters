@@ -207,7 +207,7 @@ impl KfsRootFs {
     }
 }
 
-pub unsafe fn select_file_from_storage0(
+pub unsafe fn select_boot_or_test_file_from_storage0(
     partition_type: &[u8; 4],
     path: &[&[u8]],
 ) -> Result<(), StorageError> {

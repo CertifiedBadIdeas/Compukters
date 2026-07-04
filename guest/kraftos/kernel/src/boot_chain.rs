@@ -52,7 +52,7 @@ pub unsafe fn load_k16e_from_storage0(
     expected_abi_kind: K16eAbiKind,
 ) -> Result<LoadedImage, LoadError> {
     unsafe {
-        crate::kfs::root::select_file_from_storage0(partition_type, path)
+        crate::kfs::root::select_boot_or_test_file_from_storage0(partition_type, path)
             .map_err(LoadError::from_storage)?
     };
     unsafe { load_k16e_file(expected_abi_kind) }

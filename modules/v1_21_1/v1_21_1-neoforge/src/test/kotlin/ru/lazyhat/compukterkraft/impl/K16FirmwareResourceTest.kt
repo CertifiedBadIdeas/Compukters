@@ -2201,7 +2201,14 @@ class K16FirmwareResourceTest {
         assertFalse(storageSource.contains("unsafe fn find_path_inode("), "storage.rs should not own generic path traversal")
         assertFalse(storageSource.contains("unsafe fn find_directory_entry_slot("), "storage.rs should not own directory entry slot lookup")
         assertFalse(storageSource.contains("crate::kfs::path::find_file_inode("), "storage.rs should not own path traversal delegation")
-        assertTrue(rootSource.contains("pub unsafe fn select_file_from_storage0("), "root.rs should name direct storage0 file selection explicitly")
+        assertTrue(
+            rootSource.contains("pub unsafe fn select_boot_or_test_file_from_storage0("),
+            "root.rs should name direct storage0 file selection as a boot/test-only path",
+        )
+        assertFalse(
+            rootSource.contains("pub unsafe fn select_file_from_storage0("),
+            "root.rs should not expose generic direct storage0 file selection",
+        )
         assertTrue(rootSource.contains("crate::kfs::path::find_file_inode("), "root.rs should use the path owner for direct storage0 file selection")
         assertFalse(rootSource.contains("pub unsafe fn open_file_from_storage0("), "root.rs should not expose direct storage0 selection as an open-file API")
         assertFalse(rootSource.contains("pub unsafe fn select_directory_inode("), "root.rs should not expose unused direct directory selection helpers")
