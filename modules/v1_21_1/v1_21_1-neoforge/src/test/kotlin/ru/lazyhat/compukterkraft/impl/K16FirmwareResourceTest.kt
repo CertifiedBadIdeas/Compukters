@@ -531,6 +531,37 @@ class K16FirmwareResourceTest {
     }
 
     @Test
+    fun bundledK16FirmwareBuildIncludesYesCoreutil() {
+        val source = Path.of("../../../build-scripts/src/main/kotlin/k16-firmware-convention.gradle.kts").readText()
+
+        assertTrue(source.contains("generatedK16CSystemYesTarget"))
+        assertTrue(source.contains("k16CSystemYesSource"))
+        assertTrue(source.contains("guest/kraftos/userland/coreutils/yes.c"))
+        assertTrue(source.contains("k16YesArtifact"))
+        assertTrue(source.contains("k16YesMapArtifact"))
+        assertTrue(source.contains("compileK16SystemYes"))
+        assertFalse(source.contains("binName = \"k16-yes\""))
+        assertTrue(source.contains("description = \"Compiles and links the bundled C K16 yes utility"))
+        assertTrue(
+            source.contains(
+                "output = k16YesArtifact.get().asFile,\n                mapOutput = k16YesMapArtifact.get(),",
+            ),
+            "production yes should write the production /bin/yes.kx artifact",
+        )
+        assertTrue(
+            source.contains("sources = listOf(k16CSystemYesSource.asFile)"),
+            "production yes should build from the C coreutils source",
+        )
+        assertTrue(source.contains("\"/bin/yes.kx\" to k16YesArtifact"))
+        assertTrue(
+            source.contains(
+                "compileK16SystemWrite, compileK16SystemYes, compileK16SystemRm",
+            ),
+            "production storage image should depend on the yes utility artifact",
+        )
+    }
+
+    @Test
     fun k16SourceBuiltDevToolchainSmokeTaskUsesStagedToolchain() {
         val rootBuildScript = Path.of("../../../build.gradle.kts").readText()
 

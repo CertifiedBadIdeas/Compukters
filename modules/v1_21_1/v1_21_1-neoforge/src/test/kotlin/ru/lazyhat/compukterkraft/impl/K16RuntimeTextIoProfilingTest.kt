@@ -919,6 +919,72 @@ class K16RuntimeTextIoProfilingTest {
     }
 
     @Test
+    fun printsK16YesMassTextOutputRuntimeLatency() {
+        val workspace = createTempDirectory("k16-runtime-yes-profile-")
+        val biosFlashPath = workspace.resolve("bios.kflash")
+        val storage0Path = workspace.resolve("storage0.kv")
+        biosFlashPath.writeBytes(K16BiosFlashWorkspace.loadBiosFlashResource(classLoader = javaClass.classLoader))
+        storage0Path.writeBytes(K16SystemVolumeWorkspace.loadStorage0VolumeResource(classLoader = javaClass.classLoader))
+        val profile = DeviceProfileRegistry.forFamily(DeviceFamily.NORMAL)
+        val metrics = RecordingRuntimeMetricsCollector()
+        val device =
+            K16RuntimeDevice(
+                deviceId = 229,
+                properties = DeviceProperties(DeviceFamily.NORMAL, label = "yes-profiling"),
+                endpointFactory = {
+                    K16ComputerRuntimeFactory.createFromBiosFlash(
+                        biosFlashPath = biosFlashPath,
+                        storage0Path = storage0Path,
+                        maxSteps = profile.resources.cpu.maxStepsPerSlice,
+                        maxTurnsPerTick = profile.resources.cpu.maxTurnsPerTick,
+                    )
+                },
+                stateSink = {},
+                metricsCollector = metrics,
+            )
+
+        try {
+            device.turnOn()
+            waitForTerminal(device, "initial shell prompt") { terminal -> terminal.contains("K16> ") }
+            fillTerminalUntilPromptIsNearBottom(device)
+            val samples =
+                listOf(
+                    ProfiledYesLineWidth(width = 1, payload = "A"),
+                    ProfiledYesLineWidth(width = 8, payload = "B".repeat(8)),
+                    ProfiledYesLineWidth(width = 32, payload = "C".repeat(32)),
+                    ProfiledYesLineWidth(width = 64, payload = "D".repeat(64)),
+                )
+
+            samples.forEach { sample ->
+                val result =
+                    runProfiledYesLineWidthCommand(
+                        device = device,
+                        metrics = metrics,
+                        sample = sample,
+                        lines = 128,
+                    )
+                println(
+                    "k16YesLineWidth: chars=${sample.width}, lines=${result.lines}, " +
+                        "bytesPerLine=${sample.width + 1}, scroll=immediate, command=${result.command}, " +
+                        "inputQueued=${result.inputQueuedNanos} ns, visible=${result.visibleNanos} ns, " +
+                        "ticks=${result.ticks}, slices=${result.slices}, runTime=${result.runNanos} ns, " +
+                        "yieldSignals=${result.yieldSignals}, waitSignals=${result.waitSignals}, " +
+                        "pauseSignals=${result.pauseSignals}, inputWakeups=${result.inputWakeups}, " +
+                        "blits=${result.blitCommands}, presents=${result.presentCommands}, " +
+                        "frames=${result.frames}, tiles=${result.frameTiles}, frameBytes=${result.frameBytes}",
+                )
+                assertTrue(result.blitCommands > 0, "yes ${sample.width}-char lines should exercise terminal GPU blits")
+                assertTrue(
+                    result.presentCommands > 0,
+                    "yes ${sample.width}-char lines should exercise terminal GPU presents",
+                )
+            }
+        } finally {
+            device.close()
+        }
+    }
+
+    @Test
     fun printsK16CoreutilsCommandRuntimeProfile() {
         val workspace = createTempDirectory("k16-runtime-coreutils-profile-")
         val biosFlashPath = workspace.resolve("bios.kflash")
@@ -1096,6 +1162,75 @@ class K16RuntimeTextIoProfilingTest {
         return promptIndex > outputIndex
     }
 
+    private fun countOccurrences(
+        text: String,
+        needle: String,
+    ): Int {
+        var count = 0
+        var index = text.indexOf(needle)
+        while (index >= 0) {
+            count += 1
+            index = text.indexOf(needle, startIndex = index + needle.length)
+        }
+        return count
+    }
+
+    private fun runProfiledYesLineWidthCommand(
+        device: K16RuntimeDevice,
+        metrics: RecordingRuntimeMetricsCollector,
+        sample: ProfiledYesLineWidth,
+        lines: Int,
+    ): ProfiledYesLineWidthResult {
+        val before = metrics.snapshot()
+        val command = "yes -n $lines ${sample.payload}"
+        val startedAt = System.nanoTime()
+        DeviceEvents.dispatch(device, PasteInputEvent(ByteBuffer.wrap("$command\n".encodeToByteArray())))
+        val inputQueuedNanos = System.nanoTime() - startedAt
+        var ticks = 0
+        var visibleNanos: Long? = null
+
+        while (ticks < 520 && visibleNanos == null) {
+            ticks += 1
+            tickAndSync(device)
+            val elapsed = System.nanoTime() - startedAt
+            val terminal = device.snapshotRuntimeState()?.let(::terminalText) ?: ""
+            val repeatedOutputVisible = countOccurrences(terminal, sample.payload) >= 8
+            val lastOutputIndex = terminal.lastIndexOf(sample.payload)
+            val promptReturned =
+                lastOutputIndex >= 0 &&
+                    terminal.indexOf("K16> ", startIndex = lastOutputIndex + sample.payload.length) > lastOutputIndex
+            if (repeatedOutputVisible && promptReturned) {
+                visibleNanos = elapsed
+            }
+            Thread.sleep(1)
+        }
+
+        val visible =
+            visibleNanos
+                ?: error("yes ${sample.width}-char mass text output did not finish and return to the prompt")
+        val after = metrics.snapshot()
+        val gpuBefore = before.k16.gpu
+        val gpuAfter = after.k16.gpu
+        return ProfiledYesLineWidthResult(
+            command = command,
+            lines = lines,
+            inputQueuedNanos = inputQueuedNanos,
+            visibleNanos = visible,
+            ticks = ticks,
+            slices = after.vm.k16RunSlices - before.vm.k16RunSlices,
+            runNanos = after.vm.k16RunNanos - before.vm.k16RunNanos,
+            yieldSignals = after.vm.k16RunYieldSignals - before.vm.k16RunYieldSignals,
+            waitSignals = after.vm.k16RunWaitSignals - before.vm.k16RunWaitSignals,
+            pauseSignals = after.vm.k16RunPauseSignals - before.vm.k16RunPauseSignals,
+            inputWakeups = after.vm.k16WaitInputWakeups - before.vm.k16WaitInputWakeups,
+            blitCommands = gpuAfter.blitBufferCommands - gpuBefore.blitBufferCommands,
+            presentCommands = gpuAfter.presentCommands - gpuBefore.presentCommands,
+            frames = gpuAfter.frames - gpuBefore.frames,
+            frameTiles = gpuAfter.frameTiles - gpuBefore.frameTiles,
+            frameBytes = gpuAfter.framePayloadBytes - gpuBefore.framePayloadBytes,
+        )
+    }
+
     private fun tickAndSync(device: K16RuntimeDevice) {
         device.serverTick()
         device.snapshotRuntimeState()
@@ -1138,6 +1273,30 @@ private data class ProfiledCoreutilsCommand(
     val name: String,
     val command: String,
     val expectedText: String,
+)
+
+private data class ProfiledYesLineWidth(
+    val width: Int,
+    val payload: String,
+)
+
+private data class ProfiledYesLineWidthResult(
+    val command: String,
+    val lines: Int,
+    val inputQueuedNanos: Long,
+    val visibleNanos: Long,
+    val ticks: Int,
+    val slices: Long,
+    val runNanos: Long,
+    val yieldSignals: Long,
+    val waitSignals: Long,
+    val pauseSignals: Long,
+    val inputWakeups: Long,
+    val blitCommands: Long,
+    val presentCommands: Long,
+    val frames: Long,
+    val frameTiles: Long,
+    val frameBytes: Long,
 )
 
 private data class K16ProfiledCommandSample(

@@ -50,6 +50,7 @@ val generatedK16CSystemCpTarget = generatedK16GuestTarget.map { it.dir("c-system
 val generatedK16CSystemMvTarget = generatedK16GuestTarget.map { it.dir("c-system-mv") }
 val generatedK16CSystemStatTarget = generatedK16GuestTarget.map { it.dir("c-system-stat") }
 val generatedK16CSystemWriteTarget = generatedK16GuestTarget.map { it.dir("c-system-write") }
+val generatedK16CSystemYesTarget = generatedK16GuestTarget.map { it.dir("c-system-yes") }
 val generatedK16CSystemRmTarget = generatedK16GuestTarget.map { it.dir("c-system-rm") }
 val generatedK16CSystemMkdirTarget = generatedK16GuestTarget.map { it.dir("c-system-mkdir") }
 val generatedK16CSystemRmdirTarget = generatedK16GuestTarget.map { it.dir("c-system-rmdir") }
@@ -81,6 +82,7 @@ val k16CSystemCpSource = rootProject.layout.projectDirectory.file("guest/kraftos
 val k16CSystemMvSource = rootProject.layout.projectDirectory.file("guest/kraftos/userland/coreutils/mv.c")
 val k16CSystemStatSource = rootProject.layout.projectDirectory.file("guest/kraftos/userland/coreutils/stat.c")
 val k16CSystemWriteSource = rootProject.layout.projectDirectory.file("guest/kraftos/userland/coreutils/write.c")
+val k16CSystemYesSource = rootProject.layout.projectDirectory.file("guest/kraftos/userland/coreutils/yes.c")
 val k16CSystemRmSource = rootProject.layout.projectDirectory.file("guest/kraftos/userland/coreutils/rm.c")
 val k16CSystemMkdirSource = rootProject.layout.projectDirectory.file("guest/kraftos/userland/coreutils/mkdir.c")
 val k16CSystemRmdirSource = rootProject.layout.projectDirectory.file("guest/kraftos/userland/coreutils/rmdir.c")
@@ -110,6 +112,7 @@ val k16CpArtifact = generatedK16FirmwareArtifacts.map { it.file("cp.kx") }
 val k16MvArtifact = generatedK16FirmwareArtifacts.map { it.file("mv.kx") }
 val k16StatArtifact = generatedK16FirmwareArtifacts.map { it.file("stat.kx") }
 val k16WriteArtifact = generatedK16FirmwareArtifacts.map { it.file("write.kx") }
+val k16YesArtifact = generatedK16FirmwareArtifacts.map { it.file("yes.kx") }
 val k16RmArtifact = generatedK16FirmwareArtifacts.map { it.file("rm.kx") }
 val k16MkdirArtifact = generatedK16FirmwareArtifacts.map { it.file("mkdir.kx") }
 val k16RmdirArtifact = generatedK16FirmwareArtifacts.map { it.file("rmdir.kx") }
@@ -125,6 +128,7 @@ val k16CpMapArtifact = k16CpArtifact.map { it.asFile.resolveSibling("${it.asFile
 val k16MvMapArtifact = k16MvArtifact.map { it.asFile.resolveSibling("${it.asFile.nameWithoutExtension}.map") }
 val k16StatMapArtifact = k16StatArtifact.map { it.asFile.resolveSibling("${it.asFile.nameWithoutExtension}.map") }
 val k16WriteMapArtifact = k16WriteArtifact.map { it.asFile.resolveSibling("${it.asFile.nameWithoutExtension}.map") }
+val k16YesMapArtifact = k16YesArtifact.map { it.asFile.resolveSibling("${it.asFile.nameWithoutExtension}.map") }
 val k16RmMapArtifact = k16RmArtifact.map { it.asFile.resolveSibling("${it.asFile.nameWithoutExtension}.map") }
 val k16MkdirMapArtifact = k16MkdirArtifact.map { it.asFile.resolveSibling("${it.asFile.nameWithoutExtension}.map") }
 val k16RmdirMapArtifact = k16RmdirArtifact.map { it.asFile.resolveSibling("${it.asFile.nameWithoutExtension}.map") }
@@ -141,6 +145,7 @@ val k16ProductionUserlandMapArtifacts =
         k16MvMapArtifact,
         k16StatMapArtifact,
         k16WriteMapArtifact,
+        k16YesMapArtifact,
         k16RmMapArtifact,
         k16MkdirMapArtifact,
         k16RmdirMapArtifact,
@@ -169,6 +174,7 @@ val k16ProductionStorageEntries =
         "/bin/mv.kx" to k16MvArtifact,
         "/bin/stat.kx" to k16StatArtifact,
         "/bin/write.kx" to k16WriteArtifact,
+        "/bin/yes.kx" to k16YesArtifact,
         "/bin/rm.kx" to k16RmArtifact,
         "/bin/mkdir.kx" to k16MkdirArtifact,
         "/bin/rmdir.kx" to k16RmdirArtifact,
@@ -1093,6 +1099,37 @@ val compileK16SystemWrite =
         }
     }
 
+val compileK16SystemYes =
+    tasks.register("compileK16SystemYes") {
+        description = "Compiles and links the bundled C K16 yes utility into an imported dynamic K16E program artifact."
+        group = "k16"
+        inputs.dir(k16CLibcIncludeSource)
+        inputs.file(k16CLibcStartupSource)
+        inputs.file(k16CSystemYesSource)
+        inputs.file(k16SharedKraftArtifact)
+        inputs.file(k16ClangExecutable)
+        inputsK16HostTools()
+        inputs.file(k16ToolchainConfig)
+        inputs.property("k16FirmwareProfile", k16FirmwareProfile)
+        outputs.file(k16YesArtifact)
+        outputs.file(k16YesMapArtifact)
+        dependsOn(rootProject.tasks.named("buildK16Llvm"))
+        dependsOn(rootProject.tasks.named("prepareK16Toolchain"))
+        dependsOn("compileK16SharedKraft")
+
+        doLast {
+            project.compileK16GuestCProgram(
+                targetDir = generatedK16CSystemYesTarget.get().asFile,
+                output = k16YesArtifact.get().asFile,
+                mapOutput = k16YesMapArtifact.get(),
+                includeDir = k16CLibcIncludeSource.asFile,
+                startupSource = k16CLibcStartupSource.asFile,
+                sources = listOf(k16CSystemYesSource.asFile),
+                dylibs = listOf(k16SharedKraftArtifact.get().asFile),
+            )
+        }
+    }
+
 val compileK16SystemRm =
     tasks.register("compileK16SystemRm") {
         description = "Compiles and links the bundled C K16 rm utility into an imported dynamic K16E program artifact."
@@ -1295,7 +1332,7 @@ val putK16SystemStorage0Init =
     tasks.register("putK16SystemStorage0Init") {
         description = "Writes the bundled K16 userland layout into ROOT KFS /bin, /lib, and /etc."
         group = "k16"
-        dependsOn(compileK16SystemStorage0, compileK16SystemInit, compileK16SystemShell, compileK16SystemUname, compileK16SystemLs, compileK16SystemCat, compileK16SystemCp, compileK16SystemMv, compileK16SystemStat, compileK16SystemWrite, compileK16SystemRm, compileK16SystemMkdir, compileK16SystemRmdir, compileK16SharedKraft)
+        dependsOn(compileK16SystemStorage0, compileK16SystemInit, compileK16SystemShell, compileK16SystemUname, compileK16SystemLs, compileK16SystemCat, compileK16SystemCp, compileK16SystemMv, compileK16SystemStat, compileK16SystemWrite, compileK16SystemYes, compileK16SystemRm, compileK16SystemMkdir, compileK16SystemRmdir, compileK16SharedKraft)
         dependsOn(rootProject.tasks.named("prepareK16Toolchain"))
         inputs.file(k16ToolchainConfig)
         inputs.file(k16KernelStorage0Artifact)

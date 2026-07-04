@@ -965,6 +965,32 @@ class K16ShellRuntimeSmokeTest {
     }
 
     @Test
+    fun runtimeDeviceRunsBoundedYesThroughUserlandShell() {
+        val device = createDevice(deviceId = 229)
+
+        try {
+            device.turnOn()
+            waitForTerminalText(device, "K16> ")
+
+            dispatchText(device, "yes -n 3 hi\n")
+            waitForTerminal(device, "bounded yes output and returned prompt") { terminal ->
+                val commandIndex = terminal.indexOf("K16> yes -n 3 hi")
+                if (commandIndex < 0) return@waitForTerminal false
+                val first = terminal.indexOf("hi", startIndex = commandIndex + "K16> yes -n 3 hi".length)
+                if (first < 0) return@waitForTerminal false
+                val second = terminal.indexOf("hi", startIndex = first + "hi".length)
+                if (second < 0) return@waitForTerminal false
+                val third = terminal.indexOf("hi", startIndex = second + "hi".length)
+                if (third < 0) return@waitForTerminal false
+                val prompt = terminal.indexOf("K16> ", startIndex = third + "hi".length)
+                prompt > third
+            }
+        } finally {
+            device.close()
+        }
+    }
+
+    @Test
     fun runtimeDeviceShellExecFailsWhenProgramIsMissingFromRootFilesystem() {
         val device =
             createDevice(deviceId = 232) { storage0Path ->
