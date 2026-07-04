@@ -1888,6 +1888,32 @@ class K16FirmwareResourceTest {
     }
 
     @Test
+    fun kraftOsFilesystemInodeMutationIsNotOwnedByStorageModule() {
+        val kernelKfsDir = Path.of("../../../guest/kraftos/kernel/src/kfs")
+        val modSource = kernelKfsDir.resolve("mod.rs").readText()
+        val storageSource = kernelKfsDir.resolve("storage.rs").readText()
+        val directoryMutationSource = kernelKfsDir.resolve("directory_mutation.rs").readText()
+
+        val mutationPath = kernelKfsDir.resolve("inode_mutation.rs")
+        assertTrue(mutationPath.toFile().isFile, "KFS inode mutation should have an explicit module")
+        val mutationSource = mutationPath.readText()
+        assertTrue(modSource.contains("pub mod inode_mutation;"), "KFS inode mutation module should be exported")
+        assertTrue(mutationSource.contains("pub unsafe fn encode_file_inode("), "inode_mutation.rs should own regular inode encoding")
+        assertTrue(mutationSource.contains("pub unsafe fn encode_directory_inode("), "inode_mutation.rs should own directory inode encoding")
+        assertTrue(mutationSource.contains("pub unsafe fn encode_deleted_file_inode("), "inode_mutation.rs should own deleted regular inode encoding")
+        assertTrue(mutationSource.contains("pub unsafe fn encode_deleted_directory_inode("), "inode_mutation.rs should own deleted directory inode encoding")
+        assertTrue(mutationSource.contains("pub unsafe fn encode_selected_inode_size("), "inode_mutation.rs should own selected inode size updates")
+        assertTrue(mutationSource.contains("unsafe fn encode_inode("), "inode_mutation.rs should own inode record writes")
+        assertFalse(storageSource.contains("unsafe fn encode_file_inode("), "storage.rs should not own regular inode encoding")
+        assertFalse(storageSource.contains("unsafe fn encode_deleted_file_inode("), "storage.rs should not own deleted regular inode encoding")
+        assertFalse(storageSource.contains("unsafe fn encode_deleted_directory_inode("), "storage.rs should not own deleted directory inode encoding")
+        assertFalse(storageSource.contains("unsafe fn encode_selected_inode_size("), "storage.rs should not own selected inode size updates")
+        assertFalse(storageSource.contains("unsafe fn encode_inode("), "storage.rs should not own inode record writes")
+        assertTrue(storageSource.contains("crate::kfs::inode_mutation::encode_file_inode("), "storage.rs should use the inode mutation owner")
+        assertTrue(directoryMutationSource.contains("crate::kfs::inode_mutation::encode_directory_inode("), "directory mutation should use the inode mutation owner")
+    }
+
+    @Test
     fun kraftOsFilesystemDirectoryLayoutIsNotOwnedByStorageModule() {
         val kernelKfsDir = Path.of("../../../guest/kraftos/kernel/src/kfs")
         val modSource = kernelKfsDir.resolve("mod.rs").readText()

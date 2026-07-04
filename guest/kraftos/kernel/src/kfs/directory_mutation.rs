@@ -85,7 +85,7 @@ pub unsafe fn grow_selected_directory_capacity() -> Result<u32, StorageError> {
             Some(value) => value,
             None => return Err(StorageError::INVALID_FILESYSTEM),
         };
-        unsafe { storage::encode_directory_inode(metadata)? };
+        unsafe { crate::kfs::inode_mutation::encode_directory_inode(metadata)? };
         return Ok(grow_block);
     }
 
@@ -102,6 +102,6 @@ pub unsafe fn grow_selected_directory_capacity() -> Result<u32, StorageError> {
         Some(value) => value,
         None => return Err(StorageError::INVALID_FILESYSTEM),
     };
-    unsafe { storage::encode_directory_inode(metadata)? };
+    unsafe { crate::kfs::inode_mutation::encode_directory_inode(metadata)? };
     Ok(new_extent_block)
 }
