@@ -20,6 +20,56 @@ impl MountedKfs {
     }
 }
 
+pub unsafe fn read_root_partition_superblock(partition_type: &[u8; 4]) -> Result<(), StorageError> {
+    unsafe { mount_root_partition_superblock(partition_type).map(|_| ()) }
+}
+
+pub unsafe fn mount_root_partition_superblock(
+    partition_type: &[u8; 4],
+) -> Result<MountedKfs, StorageError> {
+    let partition = unsafe { read_partition(partition_type)? };
+    let superblock = unsafe { read_superblock()? };
+    MountedKfs::new(partition, superblock)
+}
+
+pub(crate) unsafe fn read_partition(
+    partition_type: &[u8; 4],
+) -> Result<KfsPartition, StorageError> {
+    unsafe { crate::kfs::block_io::read_storage_block(0)? };
+    let block = unsafe { crate::kfs::block_io::scratch_block_bytes() };
+    let capacity_low = unsafe { crate::kfs::device::capacity_blocks_u32()? };
+    let partition = crate::kfs::partition::KfsPartition::decode_from_k16pt(
+        &block,
+        partition_type,
+        capacity_low,
+    )?;
+    let old_start_lba = unsafe { crate::kfs::filesystem_state::partition_start_lba() };
+    let old_block_count = unsafe { crate::kfs::filesystem_state::partition_block_count() };
+    if old_start_lba != partition.start_lba || old_block_count != partition.block_count {
+        unsafe { crate::kfs::block_io::invalidate_block_cache() };
+    }
+    unsafe { crate::kfs::filesystem_state::store_partition(partition) };
+    Ok(partition)
+}
+
+pub(crate) unsafe fn read_superblock() -> Result<KfsSuperblock, StorageError> {
+    unsafe { crate::kfs::block_io::read_fs_block(0)? };
+    let block = unsafe { crate::kfs::block_io::scratch_block_bytes() };
+    let superblock = crate::kfs::superblock::KfsSuperblock::decode(&block, unsafe {
+        crate::kfs::filesystem_state::partition_block_count()
+    })?;
+    unsafe {
+        crate::kfs::filesystem_state::store_superblock(superblock);
+        crate::kfs::inode::load_inode(superblock.root_inode_id)?;
+    }
+    if unsafe { crate::kfs::selected_inode::selected_inode_state() }
+        != crate::kfs::selected_inode::INODE_STATE_DIRECTORY
+    {
+        return Err(StorageError::INVALID_FILESYSTEM);
+    }
+    Ok(superblock)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
