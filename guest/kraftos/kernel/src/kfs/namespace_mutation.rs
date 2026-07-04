@@ -1,7 +1,7 @@
 use crate::kfs::directory::KFS_DIRECTORY_ENTRY_SIZE;
 use crate::kfs::error::StorageError;
-use crate::kfs::storage;
 use crate::kfs::types::{FileMetadata, KFS_MAX_INLINE_EXTENTS};
+use crate::kfs::{block_io, storage};
 
 pub unsafe fn open_file_for_write_from_storage0(
     partition_type: &[u8; 4],
@@ -55,8 +55,8 @@ pub unsafe fn remove_file_from_storage0(
         })?;
         let mut block = start_block;
         while block < start_block + block_count {
-            unsafe { storage::clear_scratch_block() };
-            unsafe { storage::write_fs_block(block)? };
+            unsafe { block_io::clear_scratch_block() };
+            unsafe { block_io::write_fs_block(block)? };
             unsafe { crate::kfs::allocation::mark_block_free(block)? };
             block += 1;
         }
@@ -175,8 +175,8 @@ pub unsafe fn remove_directory_from_storage0(
         })?;
         let mut block = start_block;
         while block < start_block + block_count {
-            unsafe { storage::clear_scratch_block() };
-            unsafe { storage::write_fs_block(block)? };
+            unsafe { block_io::clear_scratch_block() };
+            unsafe { block_io::write_fs_block(block)? };
             unsafe { crate::kfs::allocation::mark_block_free(block)? };
             block += 1;
         }
@@ -201,8 +201,8 @@ unsafe fn create_empty_file(path: &[&[u8]]) -> Result<FileMetadata, StorageError
     let parent_inode_id = unsafe { storage::selected_inode_id() };
     let inode_id = unsafe { crate::kfs::allocation::allocate_inode()? };
     let start_block = unsafe { crate::kfs::allocation::allocate_contiguous_blocks(1)? };
-    unsafe { storage::clear_scratch_block() };
-    unsafe { storage::write_fs_block(start_block)? };
+    unsafe { block_io::clear_scratch_block() };
+    unsafe { block_io::write_fs_block(start_block)? };
     let mut extent_start_blocks = [0; KFS_MAX_INLINE_EXTENTS];
     let mut extent_block_counts = [0; KFS_MAX_INLINE_EXTENTS];
     extent_start_blocks[0] = start_block;
@@ -246,8 +246,8 @@ unsafe fn create_empty_directory(path: &[&[u8]]) -> Result<(), StorageError> {
     let parent_inode_id = unsafe { storage::selected_inode_id() };
     let inode_id = unsafe { crate::kfs::allocation::allocate_inode()? };
     let start_block = unsafe { crate::kfs::allocation::allocate_contiguous_blocks(1)? };
-    unsafe { storage::clear_scratch_block() };
-    unsafe { storage::write_fs_block(start_block)? };
+    unsafe { block_io::clear_scratch_block() };
+    unsafe { block_io::write_fs_block(start_block)? };
     let mut extent_start_blocks = [0; KFS_MAX_INLINE_EXTENTS];
     let mut extent_block_counts = [0; KFS_MAX_INLINE_EXTENTS];
     extent_start_blocks[0] = start_block;

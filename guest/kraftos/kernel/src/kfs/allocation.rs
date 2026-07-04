@@ -1,5 +1,5 @@
 use crate::kfs::error::StorageError;
-use crate::kfs::storage;
+use crate::kfs::{block_io, storage};
 
 pub unsafe fn allocate_inode() -> Result<u32, StorageError> {
     let inode_capacity = crate::kfs::inode::inode_capacity(unsafe {
@@ -40,12 +40,12 @@ pub unsafe fn allocate_contiguous_blocks(count: u32) -> Result<u32, StorageError
     while block < layout.total_blocks {
         let location = crate::kfs::bitmap::locate_block(block, layout)?;
         if loaded_bitmap_block_index != location.bitmap_block_index {
-            unsafe { storage::read_fs_block(location.bitmap_block)? };
+            unsafe { block_io::read_fs_block(location.bitmap_block)? };
             loaded_bitmap_block_index = location.bitmap_block_index;
         }
 
         if crate::kfs::bitmap::byte_marks_allocated(
-            storage::scratch_u8(location.byte_offset),
+            block_io::scratch_u8(location.byte_offset),
             location,
         ) {
             run_start = 0;
@@ -81,7 +81,7 @@ unsafe fn mark_contiguous_blocks_allocated(
     let mut block = start_block;
     while block < end_block {
         let location = crate::kfs::bitmap::locate_block(block, layout)?;
-        unsafe { storage::read_fs_block(location.bitmap_block)? };
+        unsafe { block_io::read_fs_block(location.bitmap_block)? };
 
         let next_bitmap_block_start = match location.bitmap_block_index.checked_add(1) {
             Some(value) => match value.checked_mul(crate::kfs::bitmap::bits_per_bitmap_block()) {
@@ -94,13 +94,13 @@ unsafe fn mark_contiguous_blocks_allocated(
         while block < chunk_end {
             let location = crate::kfs::bitmap::locate_block(block, layout)?;
             let value = crate::kfs::bitmap::mark_byte_allocated(
-                storage::scratch_u8(location.byte_offset),
+                block_io::scratch_u8(location.byte_offset),
                 location,
             );
-            unsafe { storage::write_scratch_u8(location.byte_offset, value) };
+            unsafe { block_io::write_scratch_u8(location.byte_offset, value) };
             block += 1;
         }
-        unsafe { storage::write_fs_block(location.bitmap_block)? };
+        unsafe { block_io::write_fs_block(location.bitmap_block)? };
     }
     Ok(())
 }
@@ -108,9 +108,9 @@ unsafe fn mark_contiguous_blocks_allocated(
 pub unsafe fn is_block_allocated(block: u32) -> Result<bool, StorageError> {
     let layout = selected_bitmap_layout();
     let location = crate::kfs::bitmap::locate_block(block, layout)?;
-    unsafe { storage::read_fs_block(location.bitmap_block)? };
+    unsafe { block_io::read_fs_block(location.bitmap_block)? };
     Ok(crate::kfs::bitmap::byte_marks_allocated(
-        storage::scratch_u8(location.byte_offset),
+        block_io::scratch_u8(location.byte_offset),
         location,
     ))
 }
@@ -118,13 +118,13 @@ pub unsafe fn is_block_allocated(block: u32) -> Result<bool, StorageError> {
 pub unsafe fn mark_block_allocated(block: u32) -> Result<(), StorageError> {
     let layout = selected_bitmap_layout();
     let location = crate::kfs::bitmap::locate_block(block, layout)?;
-    unsafe { storage::read_fs_block(location.bitmap_block)? };
+    unsafe { block_io::read_fs_block(location.bitmap_block)? };
     let value = crate::kfs::bitmap::mark_byte_allocated(
-        storage::scratch_u8(location.byte_offset),
+        block_io::scratch_u8(location.byte_offset),
         location,
     );
-    unsafe { storage::write_scratch_u8(location.byte_offset, value) };
-    unsafe { storage::write_fs_block(location.bitmap_block) }
+    unsafe { block_io::write_scratch_u8(location.byte_offset, value) };
+    unsafe { block_io::write_fs_block(location.bitmap_block) }
 }
 
 pub unsafe fn mark_block_free(block: u32) -> Result<(), StorageError> {
@@ -133,11 +133,11 @@ pub unsafe fn mark_block_free(block: u32) -> Result<(), StorageError> {
         return Err(StorageError::INVALID_FILESYSTEM);
     }
     let location = crate::kfs::bitmap::locate_block(block, layout)?;
-    unsafe { storage::read_fs_block(location.bitmap_block)? };
+    unsafe { block_io::read_fs_block(location.bitmap_block)? };
     let value =
-        crate::kfs::bitmap::mark_byte_free(storage::scratch_u8(location.byte_offset), location);
-    unsafe { storage::write_scratch_u8(location.byte_offset, value) };
-    unsafe { storage::write_fs_block(location.bitmap_block) }
+        crate::kfs::bitmap::mark_byte_free(block_io::scratch_u8(location.byte_offset), location);
+    unsafe { block_io::write_scratch_u8(location.byte_offset, value) };
+    unsafe { block_io::write_fs_block(location.bitmap_block) }
 }
 
 fn min_u32(a: u32, b: u32) -> u32 {

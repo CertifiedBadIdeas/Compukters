@@ -1875,6 +1875,41 @@ class K16FirmwareResourceTest {
     }
 
     @Test
+    fun kraftOsFilesystemBlockIoIsNotOwnedByStorageModule() {
+        val kernelKfsDir = Path.of("../../../guest/kraftos/kernel/src/kfs")
+        val modSource = kernelKfsDir.resolve("mod.rs").readText()
+        val storageSource = kernelKfsDir.resolve("storage.rs").readText()
+
+        val blockIoPath = kernelKfsDir.resolve("block_io.rs")
+        assertTrue(blockIoPath.toFile().isFile, "KFS block I/O should have an explicit module")
+        val blockIoSource = blockIoPath.readText()
+        assertTrue(modSource.contains("pub mod block_io;"), "KFS block I/O module should be exported")
+        assertTrue(blockIoSource.contains("pub const SCRATCH_ADDR"), "block_io.rs should own the scratch block address")
+        assertTrue(blockIoSource.contains("pub const BLOCK_SIZE"), "block_io.rs should own the block size")
+        assertTrue(blockIoSource.contains("struct KernelKfsBlockCache"), "block_io.rs should own the block cache state")
+        assertTrue(blockIoSource.contains("pub(crate) unsafe fn read_fs_block("), "block_io.rs should own single block reads")
+        assertTrue(blockIoSource.contains("pub(crate) unsafe fn read_fs_blocks_to_ram("), "block_io.rs should own batched block reads")
+        assertTrue(blockIoSource.contains("pub(crate) unsafe fn write_fs_block("), "block_io.rs should own block writes")
+        assertTrue(blockIoSource.contains("pub(crate) unsafe fn clear_scratch_block("), "block_io.rs should own scratch clearing")
+        assertTrue(blockIoSource.contains("pub(crate) fn scratch_u8("), "block_io.rs should own scratch byte reads")
+        assertTrue(blockIoSource.contains("pub(crate) fn scratch_u32("), "block_io.rs should own scratch word reads")
+        assertTrue(blockIoSource.contains("pub(crate) unsafe fn copy_ram_to_ram("), "block_io.rs should own RAM copies")
+        assertFalse(storageSource.contains("pub const SCRATCH_ADDR"), "storage.rs should not own the scratch block address")
+        assertFalse(storageSource.contains("pub const BLOCK_SIZE"), "storage.rs should not own the block size")
+        assertFalse(storageSource.contains("struct KernelKfsBlockCache"), "storage.rs should not own the block cache state")
+        assertFalse(storageSource.contains("pub(crate) unsafe fn read_fs_block("), "storage.rs should not own single block reads")
+        assertFalse(storageSource.contains("pub(crate) unsafe fn read_fs_blocks_to_ram("), "storage.rs should not own batched block reads")
+        assertFalse(storageSource.contains("pub(crate) unsafe fn write_fs_block("), "storage.rs should not own block writes")
+        assertFalse(storageSource.contains("pub(crate) unsafe fn clear_scratch_block("), "storage.rs should not own scratch clearing")
+        assertFalse(storageSource.contains("pub(crate) fn scratch_u8("), "storage.rs should not own scratch byte reads")
+        assertFalse(storageSource.contains("pub(crate) fn scratch_u32("), "storage.rs should not own scratch word reads")
+        assertFalse(storageSource.contains("pub(crate) unsafe fn copy_ram_to_ram("), "storage.rs should not own RAM copies")
+        assertTrue(storageSource.contains("crate::kfs::block_io::read_storage_block("), "storage.rs should use the block I/O owner for partition reads")
+        assertTrue(storageSource.contains("crate::kfs::block_io::read_fs_block("), "storage.rs should use the block I/O owner for filesystem reads")
+        assertTrue(storageSource.contains("crate::kfs::block_io::invalidate_block_cache("), "storage.rs should use the block I/O owner for cache invalidation")
+    }
+
+    @Test
     fun kraftOsFilesystemInodeLayoutIsNotOwnedByStorageModule() {
         val kernelKfsDir = Path.of("../../../guest/kraftos/kernel/src/kfs")
         val modSource = kernelKfsDir.resolve("mod.rs").readText()

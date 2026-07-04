@@ -1,5 +1,5 @@
+use crate::kfs::block_io::BLOCK_SIZE;
 use crate::kfs::error::StorageError;
-use crate::kfs::storage::BLOCK_SIZE;
 use crate::kfs::types::{FileMetadata, KFS_MAX_INLINE_EXTENTS};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

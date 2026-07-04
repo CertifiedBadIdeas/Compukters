@@ -1,6 +1,6 @@
 use crate::kfs::error::StorageError;
-use crate::kfs::storage;
 use crate::kfs::types::FileMetadata;
+use crate::kfs::{block_io, storage};
 
 pub unsafe fn copy_ram_to_file_range(
     metadata: FileMetadata,
@@ -32,21 +32,21 @@ pub unsafe fn copy_ram_to_file_range(
             let mut cursor = overlap.copy_start;
             while cursor < overlap.copy_end {
                 let within_extent = cursor - overlap.extent_file_start;
-                let block_delta = within_extent / storage::BLOCK_SIZE;
-                let block_offset = within_extent % storage::BLOCK_SIZE;
+                let block_delta = within_extent / block_io::BLOCK_SIZE;
+                let block_offset = within_extent % block_io::BLOCK_SIZE;
                 let available = min_u32(
-                    storage::BLOCK_SIZE - block_offset,
+                    block_io::BLOCK_SIZE - block_offset,
                     overlap.copy_end - cursor,
                 );
-                unsafe { storage::read_fs_block(overlap.extent_start_block + block_delta)? };
+                unsafe { block_io::read_fs_block(overlap.extent_start_block + block_delta)? };
                 unsafe {
-                    storage::copy_ram_to_ram(
+                    block_io::copy_ram_to_ram(
                         src_addr + copied,
-                        storage::SCRATCH_ADDR + block_offset,
+                        block_io::SCRATCH_ADDR + block_offset,
                         available,
                     )
                 };
-                unsafe { storage::write_fs_block(overlap.extent_start_block + block_delta)? };
+                unsafe { block_io::write_fs_block(overlap.extent_start_block + block_delta)? };
                 copied += available;
                 cursor += available;
             }
@@ -88,8 +88,8 @@ unsafe fn grow_file_capacity(
         block = plan.grow_start;
         while block < plan.grow_end {
             unsafe { crate::kfs::allocation::mark_block_allocated(block)? };
-            unsafe { storage::clear_scratch_block() };
-            unsafe { storage::write_fs_block(block)? };
+            unsafe { block_io::clear_scratch_block() };
+            unsafe { block_io::write_fs_block(block)? };
             block += 1;
         }
 
@@ -104,8 +104,8 @@ unsafe fn grow_file_capacity(
         None => return Err(StorageError::INVALID_FILESYSTEM),
     };
     while block < new_extent_end {
-        unsafe { storage::clear_scratch_block() };
-        unsafe { storage::write_fs_block(block)? };
+        unsafe { block_io::clear_scratch_block() };
+        unsafe { block_io::write_fs_block(block)? };
         block += 1;
     }
 
