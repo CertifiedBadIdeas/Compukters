@@ -692,7 +692,7 @@ pub unsafe fn copy_ram_to_file_fd_range_for_process(
             .write_plan_for_process(owner_pid, fd, len)?
     };
     let updated = unsafe {
-        crate::kfs::storage::copy_ram_to_file_range(metadata.into(), offset, ptr, write_len)
+        crate::kfs::file_write::copy_ram_to_file_range(metadata.into(), offset, ptr, write_len)
             .map_err(storage_error_to_fs_error)?
     };
     unsafe {
