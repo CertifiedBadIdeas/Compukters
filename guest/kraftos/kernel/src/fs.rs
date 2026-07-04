@@ -564,7 +564,7 @@ pub unsafe fn remove_root_file_for_process(path: &[u8]) -> Result<(), FsError> {
     let path = RootFilePath::parse(path)?;
     let components = path.components();
     unsafe {
-        crate::kfs::storage::open_file_from_storage0(ROOT_PARTITION, components.as_slice())
+        crate::kfs::root::open_file_from_storage0(ROOT_PARTITION, components.as_slice())
             .map_err(storage_error_to_fs_error)?;
     }
     let metadata = unsafe { crate::kfs::selected_inode::selected_file_metadata() };
@@ -748,7 +748,7 @@ pub unsafe fn open_root_file_cached_components(
     components: &[&[u8]],
 ) -> Result<crate::kfs::types::FileMetadata, FsError> {
     unsafe {
-        crate::kfs::storage::open_file_from_storage0(b"ROOT", components)
+        crate::kfs::root::open_file_from_storage0(b"ROOT", components)
             .map_err(storage_error_to_fs_error)?;
         Ok(crate::kfs::selected_inode::selected_file_metadata())
     }
@@ -803,7 +803,7 @@ fn storage_error_to_fs_error(error: crate::kfs::error::StorageError) -> FsError 
 
 #[cfg(any(not(test), feature = "host-test"))]
 unsafe fn flush_root_storage() -> Result<(), FsError> {
-    unsafe { crate::kfs::storage::flush_storage0().map_err(storage_error_to_fs_error) }
+    unsafe { crate::kfs::device::flush_storage0().map_err(storage_error_to_fs_error) }
 }
 
 #[cfg(any(not(test), feature = "host-test"))]

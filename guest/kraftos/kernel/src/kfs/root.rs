@@ -1,6 +1,6 @@
 use crate::kfs::cache::{CachedName, CachedPathMetadata, KfsCache};
 use crate::kfs::error::StorageError;
-use crate::kfs::types::{DirectoryListingSink, FileMetadata};
+use crate::kfs::types::{DirectoryListingSink, FileMetadata, PathMetadata};
 
 pub struct KfsRootFs {
     cache: KfsCache,
@@ -120,8 +120,7 @@ impl KfsRootFs {
                     unsafe {
                         crate::kfs::selected_inode::select_inode_metadata_for_cache(inode_id)?
                     };
-                    let child_inode_id =
-                        unsafe { crate::kfs::storage::selected_directory_entry_inode(component)? };
+                    let child_inode_id = unsafe { selected_directory_entry_inode(component)? };
                     let child_metadata = unsafe {
                         crate::kfs::selected_inode::select_inode_metadata_for_cache(child_inode_id)?
                     };
@@ -143,4 +142,33 @@ impl KfsRootFs {
 
         Ok((inode_id, metadata))
     }
+}
+
+pub unsafe fn open_file_from_storage0(
+    partition_type: &[u8; 4],
+    path: &[&[u8]],
+) -> Result<(), StorageError> {
+    unsafe { crate::kfs::mount::read_partition(partition_type)? };
+    unsafe { crate::kfs::mount::read_superblock()? };
+    unsafe { crate::kfs::path::find_file_inode(path)? };
+    Ok(())
+}
+
+pub unsafe fn selected_directory_entry_inode(name: &[u8]) -> Result<u32, StorageError> {
+    unsafe { crate::kfs::path::find_directory_entry(name) }
+}
+
+pub unsafe fn select_directory_inode(path: &[&[u8]]) -> Result<u32, StorageError> {
+    unsafe { crate::kfs::path::find_directory_inode(path)? };
+    Ok(unsafe { crate::kfs::selected_inode::selected_inode_id() })
+}
+
+pub unsafe fn stat_path_from_storage0(
+    partition_type: &[u8; 4],
+    path: &[&[u8]],
+) -> Result<PathMetadata, StorageError> {
+    unsafe { crate::kfs::mount::read_partition(partition_type)? };
+    unsafe { crate::kfs::mount::read_superblock()? };
+    unsafe { crate::kfs::path::find_path_inode(path)? };
+    unsafe { crate::kfs::selected_inode::selected_path_metadata() }
 }

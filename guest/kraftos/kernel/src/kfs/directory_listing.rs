@@ -4,7 +4,7 @@ use crate::kfs::directory::{
 };
 use crate::kfs::error::StorageError;
 use crate::kfs::types::{DirectoryListingSink, KFS_MAX_INLINE_EXTENTS};
-use crate::kfs::{block_io, filesystem_state, inode, selected_inode, storage};
+use crate::kfs::{block_io, file, filesystem_state, inode, selected_inode};
 
 const INVALID_CACHED_INODE_BLOCK: u32 = u32::MAX;
 
@@ -30,7 +30,7 @@ pub unsafe fn copy_selected_directory_listing_into_cached<S: DirectoryListingSin
     while extent_index < directory.extent_count as usize {
         let extent_start_block = directory.extent_start_blocks[extent_index];
         let extent_block_count = directory.extent_block_counts[extent_index];
-        storage::validate_extent(extent_start_block, extent_block_count, unsafe {
+        file::validate_extent(extent_start_block, extent_block_count, unsafe {
             filesystem_state::superblock_total_blocks()
         })?;
         let mut block_index = 0;
@@ -126,7 +126,7 @@ pub unsafe fn copy_selected_directory_listing_into<S: DirectoryListingSink>(
     while extent_index < directory.extent_count as usize {
         let extent_start_block = directory.extent_start_blocks[extent_index];
         let extent_block_count = directory.extent_block_counts[extent_index];
-        storage::validate_extent(extent_start_block, extent_block_count, unsafe {
+        file::validate_extent(extent_start_block, extent_block_count, unsafe {
             filesystem_state::superblock_total_blocks()
         })?;
         let mut block_index = 0;
@@ -202,7 +202,7 @@ pub unsafe fn ensure_selected_directory_is_empty() -> Result<(), StorageError> {
     while extent_index < directory.extent_count as usize {
         let extent_start_block = directory.extent_start_blocks[extent_index];
         let extent_block_count = directory.extent_block_counts[extent_index];
-        storage::validate_extent(extent_start_block, extent_block_count, unsafe {
+        file::validate_extent(extent_start_block, extent_block_count, unsafe {
             filesystem_state::superblock_total_blocks()
         })?;
         let mut block_index = 0;
@@ -278,7 +278,7 @@ unsafe fn read_inode_path_metadata_cached(
         let offset = inode_offset + 0x20 + index as u32 * 8;
         let start_block = block_io::scratch_u32(offset);
         let block_count = block_io::scratch_u32(offset + 4);
-        storage::validate_extent(start_block, block_count, unsafe {
+        file::validate_extent(start_block, block_count, unsafe {
             filesystem_state::superblock_total_blocks()
         })?;
         index += 1;

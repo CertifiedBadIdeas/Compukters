@@ -64,7 +64,7 @@ pub(crate) unsafe fn load_inode(inode_id: u32) -> Result<(), StorageError> {
         let offset = inode_offset + 0x20 + index as u32 * 8;
         let start_block = crate::kfs::block_io::scratch_u32(offset);
         let block_count = crate::kfs::block_io::scratch_u32(offset + 4);
-        crate::kfs::storage::validate_extent(start_block, block_count, unsafe {
+        crate::kfs::file::validate_extent(start_block, block_count, unsafe {
             crate::kfs::filesystem_state::superblock_total_blocks()
         })?;
         extent_start_blocks[index] = start_block;

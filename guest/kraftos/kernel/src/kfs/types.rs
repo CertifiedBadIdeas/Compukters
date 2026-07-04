@@ -81,3 +81,28 @@ impl DirectoryListingSink for RamDirectoryListingSink {
 unsafe fn write_u8(address: u32, value: u8) {
     unsafe { core::ptr::write_volatile(address as usize as *mut u8, value) }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn path_metadata_kind_values_are_stable_for_kernel_stat_abi() {
+        assert_eq!(
+            PathKind::Regular as u32,
+            k16_abi::syscall::FILE_TYPE_REGULAR
+        );
+        assert_eq!(
+            PathKind::Directory as u32,
+            k16_abi::syscall::FILE_TYPE_DIRECTORY
+        );
+
+        let metadata = PathMetadata {
+            kind: PathKind::Regular,
+            size_bytes: 42,
+        };
+
+        assert_eq!(metadata.kind, PathKind::Regular);
+        assert_eq!(metadata.size_bytes, 42);
+    }
+}

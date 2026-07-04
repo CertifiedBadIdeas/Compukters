@@ -46,6 +46,22 @@ pub fn validate_write_range(file_offset: u32, len: u32) -> Result<KfsFileRange, 
     Ok(KfsFileRange { end })
 }
 
+#[inline(always)]
+pub(crate) fn validate_extent(
+    start_block: u32,
+    block_count: u32,
+    total_blocks: u32,
+) -> Result<(), StorageError> {
+    let end = match start_block.checked_add(block_count) {
+        Some(value) => value,
+        None => return Err(StorageError::INVALID_FILESYSTEM),
+    };
+    if block_count == 0 || end > total_blocks {
+        return Err(StorageError::INVALID_FILESYSTEM);
+    }
+    Ok(())
+}
+
 pub fn file_capacity_bytes(metadata: FileMetadata) -> Result<u32, StorageError> {
     let mut capacity: u32 = 0;
     let mut index = 0;
@@ -230,6 +246,23 @@ mod tests {
         assert_eq!(
             validate_read_range(20, 10, 11),
             Err(StorageError::INVALID_FILESYSTEM),
+        );
+    }
+
+    #[test]
+    fn validate_extent_rejects_empty_overflowing_or_out_of_bounds_extents() {
+        assert_eq!(validate_extent(4, 2, 8), Ok(()));
+        assert_eq!(
+            validate_extent(4, 0, 8),
+            Err(StorageError::INVALID_FILESYSTEM)
+        );
+        assert_eq!(
+            validate_extent(u32::MAX, 1, u32::MAX),
+            Err(StorageError::INVALID_FILESYSTEM),
+        );
+        assert_eq!(
+            validate_extent(7, 2, 8),
+            Err(StorageError::INVALID_FILESYSTEM)
         );
     }
 
