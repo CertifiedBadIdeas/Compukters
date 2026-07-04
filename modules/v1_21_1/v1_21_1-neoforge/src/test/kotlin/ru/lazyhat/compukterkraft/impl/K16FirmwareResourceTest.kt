@@ -1973,6 +1973,28 @@ class K16FirmwareResourceTest {
     }
 
     @Test
+    fun kraftOsFilesystemPathTraversalIsNotOwnedByStorageModule() {
+        val kernelKfsDir = Path.of("../../../guest/kraftos/kernel/src/kfs")
+        val modSource = kernelKfsDir.resolve("mod.rs").readText()
+        val storageSource = kernelKfsDir.resolve("storage.rs").readText()
+
+        val pathPath = kernelKfsDir.resolve("path.rs")
+        assertTrue(pathPath.toFile().isFile, "KFS path traversal should have an explicit module")
+        val pathSource = pathPath.readText()
+        assertTrue(modSource.contains("pub mod path;"), "KFS path module should be exported")
+        assertTrue(pathSource.contains("pub struct KfsDirectoryEntrySlot"), "path.rs should own directory slot lookup output")
+        assertTrue(pathSource.contains("pub unsafe fn find_file_inode("), "path.rs should own regular file traversal")
+        assertTrue(pathSource.contains("pub unsafe fn find_directory_inode("), "path.rs should own directory traversal")
+        assertTrue(pathSource.contains("pub unsafe fn find_path_inode("), "path.rs should own generic path traversal")
+        assertTrue(pathSource.contains("pub unsafe fn find_directory_entry_slot("), "path.rs should own directory entry slot lookup")
+        assertFalse(storageSource.contains("unsafe fn find_file_inode("), "storage.rs should not own regular file traversal")
+        assertFalse(storageSource.contains("unsafe fn find_directory_inode("), "storage.rs should not own directory traversal")
+        assertFalse(storageSource.contains("unsafe fn find_path_inode("), "storage.rs should not own generic path traversal")
+        assertFalse(storageSource.contains("unsafe fn find_directory_entry_slot("), "storage.rs should not own directory entry slot lookup")
+        assertTrue(storageSource.contains("crate::kfs::path::find_file_inode("), "storage.rs should use the path owner")
+    }
+
+    @Test
     fun k16KernelLegacyShellPathIsRemovedFromCurrentSource() {
         val kernelSourceDir = Path.of("../../../guest/kraftos/kernel/src")
         val mainSource = kernelSourceDir.resolve("main.rs").readText()
