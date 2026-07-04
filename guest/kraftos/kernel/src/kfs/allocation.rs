@@ -1,5 +1,5 @@
 use crate::kfs::error::StorageError;
-use crate::kfs::{block_io, filesystem_state, selected_inode, storage};
+use crate::kfs::{block_io, filesystem_state, inode, selected_inode};
 
 pub unsafe fn allocate_inode() -> Result<u32, StorageError> {
     let inode_capacity = crate::kfs::inode::inode_capacity(unsafe {
@@ -7,7 +7,7 @@ pub unsafe fn allocate_inode() -> Result<u32, StorageError> {
     })?;
     let mut inode_id = 1;
     while inode_id < inode_capacity {
-        unsafe { storage::read_inode(inode_id)? };
+        unsafe { inode::load_inode(inode_id)? };
         match unsafe { selected_inode::selected_inode_state() } {
             0 | 3 => return Ok(inode_id),
             selected_inode::INODE_STATE_REGULAR | selected_inode::INODE_STATE_DIRECTORY => {}

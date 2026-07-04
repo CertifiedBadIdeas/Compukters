@@ -4,7 +4,7 @@ use crate::kfs::directory::{
 };
 use crate::kfs::error::StorageError;
 use crate::kfs::types::{DirectoryListingSink, KFS_MAX_INLINE_EXTENTS};
-use crate::kfs::{block_io, filesystem_state, selected_inode, storage};
+use crate::kfs::{block_io, filesystem_state, inode, selected_inode, storage};
 
 const INVALID_CACHED_INODE_BLOCK: u32 = u32::MAX;
 
@@ -156,7 +156,7 @@ pub unsafe fn copy_selected_directory_listing_into<S: DirectoryListingSink>(
                                 block_io::scratch_u8(offset + 8 + name_offset as u32);
                             name_offset += 1;
                         }
-                        unsafe { storage::read_inode(inode_id)? };
+                        unsafe { inode::load_inode(inode_id)? };
                         let child = unsafe { selected_inode::selected_path_metadata()? };
                         unsafe {
                             push_directory_entry(

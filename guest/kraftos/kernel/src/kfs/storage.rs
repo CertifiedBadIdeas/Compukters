@@ -1,5 +1,5 @@
 use crate::kfs::error::StorageError;
-use crate::kfs::types::{PathMetadata, KFS_MAX_INLINE_EXTENTS};
+use crate::kfs::types::PathMetadata;
 
 pub unsafe fn open_file_from_storage0(
     partition_type: &[u8; 4],
@@ -75,7 +75,7 @@ pub(crate) unsafe fn read_superblock() -> Result<crate::kfs::superblock::KfsSupe
     })?;
     unsafe {
         crate::kfs::filesystem_state::store_superblock(superblock);
-        read_inode(superblock.root_inode_id)?;
+        crate::kfs::inode::load_inode(superblock.root_inode_id)?;
     }
     if unsafe { crate::kfs::selected_inode::selected_inode_state() }
         != crate::kfs::selected_inode::INODE_STATE_DIRECTORY
@@ -83,55 +83,6 @@ pub(crate) unsafe fn read_superblock() -> Result<crate::kfs::superblock::KfsSupe
         return Err(StorageError::INVALID_FILESYSTEM);
     }
     Ok(superblock)
-}
-
-#[inline(always)]
-pub(crate) unsafe fn read_inode(inode_id: u32) -> Result<(), StorageError> {
-    crate::os_stats::record_inode_load();
-    let location = crate::kfs::inode::locate_inode(
-        inode_id,
-        unsafe { crate::kfs::filesystem_state::superblock_inode_table_start_block() },
-        unsafe { crate::kfs::filesystem_state::superblock_inode_table_block_count() },
-    )?;
-    let inode_block = location.block;
-    let inode_offset = location.offset;
-    unsafe { crate::kfs::block_io::read_fs_block(inode_block)? };
-
-    let size_high = crate::kfs::block_io::scratch_u32(inode_offset + 0x0c);
-    let extent_count = crate::kfs::block_io::scratch_u8(inode_offset + 0x10) as usize;
-    if size_high != 0 || extent_count > KFS_MAX_INLINE_EXTENTS {
-        return Err(StorageError::INVALID_FILESYSTEM);
-    }
-
-    let state = crate::kfs::block_io::scratch_u8(inode_offset);
-    let size_bytes = crate::kfs::block_io::scratch_u32(inode_offset + 0x08);
-    let mut extent_start_blocks = [0; KFS_MAX_INLINE_EXTENTS];
-    let mut extent_block_counts = [0; KFS_MAX_INLINE_EXTENTS];
-    let mut index = 0;
-    while index < extent_count {
-        let offset = inode_offset + 0x20 + index as u32 * 8;
-        let start_block = crate::kfs::block_io::scratch_u32(offset);
-        let block_count = crate::kfs::block_io::scratch_u32(offset + 4);
-        validate_extent(start_block, block_count, unsafe {
-            crate::kfs::filesystem_state::superblock_total_blocks()
-        })?;
-        extent_start_blocks[index] = start_block;
-        extent_block_counts[index] = block_count;
-        index += 1;
-    }
-
-    unsafe {
-        crate::kfs::selected_inode::store_loaded_inode(
-            inode_id,
-            state,
-            size_bytes,
-            extent_count,
-            &extent_start_blocks,
-            &extent_block_counts,
-        )
-    };
-
-    Ok(())
 }
 
 pub unsafe fn flush_storage0() -> Result<(), StorageError> {

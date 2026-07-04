@@ -1,5 +1,6 @@
 use crate::kfs::block_io::BLOCK_SIZE;
 use crate::kfs::error::StorageError;
+use crate::kfs::types::KFS_MAX_INLINE_EXTENTS;
 
 pub const KFS_INODE_SIZE: u32 = 64;
 
@@ -34,6 +35,55 @@ pub fn locate_inode(
     };
     let offset = (inode_id % inodes_per_block) * KFS_INODE_SIZE;
     Ok(KfsInodeLocation { block, offset })
+}
+
+#[inline(always)]
+pub(crate) unsafe fn load_inode(inode_id: u32) -> Result<(), StorageError> {
+    crate::os_stats::record_inode_load();
+    let location = locate_inode(
+        inode_id,
+        unsafe { crate::kfs::filesystem_state::superblock_inode_table_start_block() },
+        unsafe { crate::kfs::filesystem_state::superblock_inode_table_block_count() },
+    )?;
+    let inode_block = location.block;
+    let inode_offset = location.offset;
+    unsafe { crate::kfs::block_io::read_fs_block(inode_block)? };
+
+    let size_high = crate::kfs::block_io::scratch_u32(inode_offset + 0x0c);
+    let extent_count = crate::kfs::block_io::scratch_u8(inode_offset + 0x10) as usize;
+    if size_high != 0 || extent_count > KFS_MAX_INLINE_EXTENTS {
+        return Err(StorageError::INVALID_FILESYSTEM);
+    }
+
+    let state = crate::kfs::block_io::scratch_u8(inode_offset);
+    let size_bytes = crate::kfs::block_io::scratch_u32(inode_offset + 0x08);
+    let mut extent_start_blocks = [0; KFS_MAX_INLINE_EXTENTS];
+    let mut extent_block_counts = [0; KFS_MAX_INLINE_EXTENTS];
+    let mut index = 0;
+    while index < extent_count {
+        let offset = inode_offset + 0x20 + index as u32 * 8;
+        let start_block = crate::kfs::block_io::scratch_u32(offset);
+        let block_count = crate::kfs::block_io::scratch_u32(offset + 4);
+        crate::kfs::storage::validate_extent(start_block, block_count, unsafe {
+            crate::kfs::filesystem_state::superblock_total_blocks()
+        })?;
+        extent_start_blocks[index] = start_block;
+        extent_block_counts[index] = block_count;
+        index += 1;
+    }
+
+    unsafe {
+        crate::kfs::selected_inode::store_loaded_inode(
+            inode_id,
+            state,
+            size_bytes,
+            extent_count,
+            &extent_start_blocks,
+            &extent_block_counts,
+        )
+    };
+
+    Ok(())
 }
 
 #[cfg(test)]

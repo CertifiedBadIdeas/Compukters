@@ -38,7 +38,7 @@ pub(crate) unsafe fn selected_inode_id() -> u32 {
 pub unsafe fn select_inode_metadata_for_cache(
     inode_id: u32,
 ) -> Result<crate::kfs::cache::CachedPathMetadata, StorageError> {
-    unsafe { crate::kfs::storage::read_inode(inode_id)? };
+    unsafe { crate::kfs::inode::load_inode(inode_id)? };
     unsafe { selected_metadata_for_cache() }
 }
 
@@ -87,7 +87,7 @@ pub unsafe fn selected_file_metadata() -> FileMetadata {
 }
 
 pub unsafe fn select_file_metadata(metadata: FileMetadata) -> Result<(), StorageError> {
-    unsafe { crate::kfs::storage::read_inode(metadata.inode_id)? };
+    unsafe { crate::kfs::inode::load_inode(metadata.inode_id)? };
     if unsafe { selected_inode_state() } != INODE_STATE_REGULAR {
         return Err(StorageError::PATH_NOT_FOUND);
     }
