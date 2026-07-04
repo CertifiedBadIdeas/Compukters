@@ -7,6 +7,7 @@ pub mod error;
 pub mod file;
 pub mod inode;
 pub mod mount;
+pub mod open_file;
 pub mod partition;
 pub mod root;
 pub mod storage;

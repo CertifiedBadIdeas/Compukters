@@ -1950,6 +1950,29 @@ class K16FirmwareResourceTest {
     }
 
     @Test
+    fun kraftOsFilesystemOpenFileStateIsNotOwnedByFsTable() {
+        val kernelKfsDir = Path.of("../../../guest/kraftos/kernel/src/kfs")
+        val modSource = kernelKfsDir.resolve("mod.rs").readText()
+        val fsSource = Path.of("../../../guest/kraftos/kernel/src/fs.rs").readText()
+
+        val openFilePath = kernelKfsDir.resolve("open_file.rs")
+        assertTrue(openFilePath.toFile().isFile, "KFS open file state should have an explicit module")
+        val openFileSource = openFilePath.readText()
+        assertTrue(modSource.contains("pub mod open_file;"), "KFS open file module should be exported")
+        assertTrue(openFileSource.contains("pub struct KfsOpenFile"), "open_file.rs should own KFS open file state")
+        assertTrue(openFileSource.contains("pub fn regular_file("), "open_file.rs should own regular-file construction")
+        assertTrue(openFileSource.contains("pub fn read_plan("), "open_file.rs should own read offset planning")
+        assertTrue(openFileSource.contains("pub fn finish_read("), "open_file.rs should own read offset advancement")
+        assertTrue(openFileSource.contains("pub fn write_plan("), "open_file.rs should own write offset planning")
+        assertTrue(openFileSource.contains("pub fn finish_write("), "open_file.rs should own write metadata refresh and offset advancement")
+        assertFalse(
+            fsSource.contains("    metadata: FileMetadata,\n    offset: u32,"),
+            "fs.rs fd table should not own KFS file metadata plus offsets",
+        )
+        assertTrue(fsSource.contains("crate::kfs::open_file::KfsOpenFile"), "fs.rs should use the KFS open-file owner")
+    }
+
+    @Test
     fun k16KernelLegacyShellPathIsRemovedFromCurrentSource() {
         val kernelSourceDir = Path.of("../../../guest/kraftos/kernel/src")
         val mainSource = kernelSourceDir.resolve("main.rs").readText()
