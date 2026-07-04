@@ -105,3 +105,33 @@ pub unsafe fn grow_selected_directory_capacity() -> Result<u32, StorageError> {
     unsafe { crate::kfs::inode_mutation::encode_directory_inode(metadata)? };
     Ok(new_extent_block)
 }
+
+pub unsafe fn encode_directory_entry_at(
+    block: u32,
+    offset: u32,
+    inode_id: u32,
+    name: &[u8],
+) -> Result<(), StorageError> {
+    let record = crate::kfs::directory::encode_entry(inode_id, name)?;
+    unsafe { storage::read_fs_block(block)? };
+    let mut cursor = 0;
+    while cursor < KFS_DIRECTORY_ENTRY_SIZE {
+        unsafe { storage::write_scratch_u8(offset + cursor, record.bytes[cursor as usize]) };
+        cursor += 1;
+    }
+    unsafe { storage::write_fs_block(block) }
+}
+
+pub unsafe fn encode_deleted_directory_entry_at(
+    block: u32,
+    offset: u32,
+) -> Result<(), StorageError> {
+    let record = crate::kfs::directory::encode_deleted_entry();
+    unsafe { storage::read_fs_block(block)? };
+    let mut cursor = 0;
+    while cursor < KFS_DIRECTORY_ENTRY_SIZE {
+        unsafe { storage::write_scratch_u8(offset + cursor, record.bytes[cursor as usize]) };
+        cursor += 1;
+    }
+    unsafe { storage::write_fs_block(block) }
+}
