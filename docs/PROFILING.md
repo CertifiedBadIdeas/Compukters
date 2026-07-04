@@ -90,7 +90,9 @@ Use these phase lines when deciding whether a slowdown is in command dispatch, c
 frame production, guest filesystem/path/stat work, or post-command idle work. The older `k16LsCommand*` aggregate lines
 remain available for comparison with previous profiling runs.
 
-The coreutils profile also prints a sorted KFS hotspot summary:
+The coreutils profile also prints a sorted KFS hotspot summary. It includes read-only bundled-file access through
+`cat /etc/motd`, repeated `ls /bin`, and repeated `uname` samples so cold and warm path/program-load behavior can be
+compared in one run:
 
 ```text
 k16FsHotspots: metadataOps=[ls:..., stat:..., ...], dataReadBlocks=[cat:..., ls:..., ...], readCommands=[ls:..., ...], mediaReadBlocks=[cat:..., ...], pathLookups=[...], inodeLoads=[...], dirEntryScans=[...], fileOpens=[...], fileReads=[...], statCalls=[...], readDirCalls=[...], genericFileDataReadBlocks=[...], readDirDataReadBlocks=[...], programDataReadBlocks=[...], dynamicImportDataReadBlocks=[...], libraryDataReadBlocks=[...], storageWriteCommands=[...], mediaWriteBlocks=[...], blockCacheHits=[...], blockCacheMisses=[...], blockCacheBatchReads=[...]
