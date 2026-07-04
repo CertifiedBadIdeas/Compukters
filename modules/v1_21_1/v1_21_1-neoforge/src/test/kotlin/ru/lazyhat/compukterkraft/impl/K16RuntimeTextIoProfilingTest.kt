@@ -946,8 +946,11 @@ class K16RuntimeTextIoProfilingTest {
         val commands =
             listOf(
                 ProfiledCoreutilsCommand("uname", "uname", "K16"),
+                ProfiledCoreutilsCommand("uname-warm", "uname", "K16"),
                 ProfiledCoreutilsCommand("stat", "stat /bin/ls.kx", "FILE "),
                 ProfiledCoreutilsCommand("ls", "ls /bin", "ls.kx"),
+                ProfiledCoreutilsCommand("ls-warm", "ls /bin", "ls.kx"),
+                ProfiledCoreutilsCommand("motd", "cat /etc/motd", "K16 FS OK"),
                 ProfiledCoreutilsCommand("write", "write /profile.txt hello", "WROTE 5 /profile.txt"),
                 ProfiledCoreutilsCommand("cat", "cat /profile.txt", "hello"),
                 ProfiledCoreutilsCommand("cp", "cp /profile.txt /profile-copy.txt", "COPIED /profile.txt /profile-copy.txt"),
@@ -968,18 +971,18 @@ class K16RuntimeTextIoProfilingTest {
             val hotspotSummary = formatKfsHotspotSummary(samples)
             println(hotspotSummary)
 
-            val unameLine = lines.single { it.contains("name=uname") }
+            val unameLine = lines.singleCommandLine("uname")
             assertTrue(
                 metricValue(unameLine, "storageMediaReadBlocks") <= 9,
                 "uname should not reopen the dynamic executable after reading imports: $unameLine",
             )
-            val lsLine = lines.single { it.contains("name=ls") }
+            val lsLine = lines.singleCommandLine("ls")
             assertTrue(lsLine.contains("readDirCalls=1"))
             assertTrue(
                 metricValue(lsLine, "inodeLoads") <= 22,
                 "ls /bin should reuse cached inode metadata while listing directory entries: $lsLine",
             )
-            val writeLine = lines.single { it.contains("name=write") }
+            val writeLine = lines.singleCommandLine("write")
             assertTrue(
                 metricValue(writeLine, "storageReadCommands") <= 80,
                 "write should not scan KFS allocation bitmap through hundreds of storage transfers: $writeLine",
@@ -987,6 +990,9 @@ class K16RuntimeTextIoProfilingTest {
             assertTrue(lines.any { it.contains("name=stat") && it.contains("statCalls=1") })
             assertTrue(lines.any { it.contains("name=mv") && it.contains("statCalls=1") })
             assertTrue(lines.any { it.contains("name=cat") && it.contains("fileReads=") })
+            assertTrue(lines.any { it.contains("name=motd") && it.contains("fileReads=") })
+            assertTrue(lines.any { it.contains("name=ls-warm") && it.contains("readDirCalls=1") })
+            assertTrue(lines.any { it.contains("name=uname-warm") && it.contains("processSpawns=1") })
             assertTrue(lines.all { it.contains("processSpawns=1") })
             assertTrue(lines.all { it.contains("programLoads=1") })
             assertTrue(hotspotSummary.contains("k16FsHotspots: "))
@@ -1412,6 +1418,8 @@ private fun metricValue(line: String, name: String): Long {
     require(match != null) { "missing metric `$name` in line: $line" }
     return match.groupValues[1].toLong()
 }
+
+private fun List<String>.singleCommandLine(name: String): String = single { it.contains("name=$name,") }
 
 private class CapturingDisplayNetworkBridge : DisplayNetworkBridge {
     private val sentFrames = CopyOnWriteArrayList<TimedDisplayFrame>()

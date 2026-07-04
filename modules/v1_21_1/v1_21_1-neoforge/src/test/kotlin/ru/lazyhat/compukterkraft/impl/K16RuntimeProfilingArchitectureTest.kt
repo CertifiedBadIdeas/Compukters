@@ -87,6 +87,15 @@ class K16RuntimeProfilingArchitectureTest {
         assertTrue(textIoProfilingSource.contains("shell.prompt.after_splash"))
         assertTrue(textIoProfilingSource.contains("shell.prompt.after_splash_to_prompt_visible"))
         assertTrue(textIoProfilingSource.contains("shell.prompt.prompt_visible_to_input_ready"))
+        assertTrue(
+            textIoProfilingSource.contains("""ProfiledCoreutilsCommand("motd", "cat /etc/motd", "K16 FS OK")"""),
+        )
+        assertTrue(
+            textIoProfilingSource.contains("""ProfiledCoreutilsCommand("ls-warm", "ls /bin", "ls.kx")"""),
+        )
+        assertTrue(
+            textIoProfilingSource.contains("""ProfiledCoreutilsCommand("uname-warm", "uname", "K16")"""),
+        )
         assertTrue(manyVmProfilingSource.contains("k16ManyVmSplash"))
         assertTrue(manyVmProfilingSource.contains("k16ManyVmBootAfterSplash"))
         assertTrue(manyVmProfilingSource.contains("k16ManyVmCpuHighload"))
