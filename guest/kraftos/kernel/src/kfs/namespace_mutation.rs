@@ -1,10 +1,9 @@
 use crate::kfs::directory::KFS_DIRECTORY_ENTRY_SIZE;
 use crate::kfs::error::StorageError;
 use crate::kfs::types::{FileMetadata, KFS_MAX_INLINE_EXTENTS};
-use crate::kfs::{block_io, file, filesystem_state, inode, mount, selected_inode};
+use crate::kfs::{block_io, file, filesystem_state, inode, selected_inode};
 
-pub unsafe fn open_file_for_write_from_storage0(
-    partition_type: &[u8; 4],
+pub unsafe fn open_file_for_write(
     path: &[&[u8]],
     create: bool,
     truncate: bool,
@@ -12,8 +11,6 @@ pub unsafe fn open_file_for_write_from_storage0(
     if path.is_empty() {
         return Err(StorageError::PATH_NOT_FOUND);
     }
-    unsafe { mount::read_partition(partition_type)? };
-    unsafe { mount::read_superblock()? };
     match unsafe { crate::kfs::path::find_file_inode(path) } {
         Ok(()) => {
             if truncate {
@@ -28,15 +25,13 @@ pub unsafe fn open_file_for_write_from_storage0(
     }
 }
 
-pub unsafe fn remove_file_from_storage0(
-    partition_type: &[u8; 4],
+pub unsafe fn remove_file(
     path: &[&[u8]],
+    source_inode_is_busy: impl FnOnce(u32) -> bool,
 ) -> Result<(), StorageError> {
     if path.is_empty() {
         return Err(StorageError::PATH_NOT_FOUND);
     }
-    unsafe { mount::read_partition(partition_type)? };
-    unsafe { mount::read_superblock()? };
     let parent_len = path.len() - 1;
     unsafe { crate::kfs::path::find_directory_inode(&path[..parent_len])? };
     let slot = unsafe { crate::kfs::path::find_directory_entry_slot(path[parent_len])? };
@@ -44,6 +39,9 @@ pub unsafe fn remove_file_from_storage0(
     unsafe { inode::load_inode(inode_id)? };
     if unsafe { selected_inode::selected_inode_state() } != selected_inode::INODE_STATE_REGULAR {
         return Err(StorageError::PATH_NOT_FOUND);
+    }
+    if source_inode_is_busy(inode_id) {
+        return Err(StorageError::PATH_BUSY);
     }
     let metadata = unsafe { selected_inode::selected_file_metadata() };
     let mut extent_index = 0;
@@ -75,8 +73,7 @@ pub unsafe fn remove_file_from_storage0(
     }
 }
 
-pub unsafe fn rename_file_from_storage0(
-    partition_type: &[u8; 4],
+pub unsafe fn rename_file(
     old_path: &[&[u8]],
     new_path: &[&[u8]],
     source_inode_is_busy: impl FnOnce(u32) -> bool,
@@ -84,8 +81,6 @@ pub unsafe fn rename_file_from_storage0(
     if old_path.is_empty() || new_path.is_empty() {
         return Err(StorageError::PATH_NOT_FOUND);
     }
-    unsafe { mount::read_partition(partition_type)? };
-    unsafe { mount::read_superblock()? };
 
     let old_parent_len = old_path.len() - 1;
     unsafe { crate::kfs::path::find_directory_inode(&old_path[..old_parent_len])? };
@@ -135,27 +130,17 @@ pub unsafe fn rename_file_from_storage0(
     }
 }
 
-pub unsafe fn create_directory_from_storage0(
-    partition_type: &[u8; 4],
-    path: &[&[u8]],
-) -> Result<(), StorageError> {
+pub unsafe fn create_directory(path: &[&[u8]]) -> Result<(), StorageError> {
     if path.is_empty() {
         return Err(StorageError::PATH_NOT_FOUND);
     }
-    unsafe { mount::read_partition(partition_type)? };
-    unsafe { mount::read_superblock()? };
     unsafe { create_empty_directory(path) }
 }
 
-pub unsafe fn remove_directory_from_storage0(
-    partition_type: &[u8; 4],
-    path: &[&[u8]],
-) -> Result<(), StorageError> {
+pub unsafe fn remove_directory(path: &[&[u8]]) -> Result<(), StorageError> {
     if path.is_empty() {
         return Err(StorageError::PATH_NOT_FOUND);
     }
-    unsafe { mount::read_partition(partition_type)? };
-    unsafe { mount::read_superblock()? };
     let parent_len = path.len() - 1;
     unsafe { crate::kfs::path::find_directory_inode(&path[..parent_len])? };
     let slot = unsafe { crate::kfs::path::find_directory_entry_slot(path[parent_len])? };

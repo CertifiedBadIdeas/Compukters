@@ -77,6 +77,69 @@ impl KfsRootFs {
         Ok(unsafe { crate::kfs::selected_inode::selected_file_metadata() })
     }
 
+    pub unsafe fn open_file_for_write(
+        &mut self,
+        partition_type: &[u8; 4],
+        path: &[&[u8]],
+        create: bool,
+        truncate: bool,
+    ) -> Result<FileMetadata, StorageError> {
+        unsafe { self.ensure_mounted(partition_type)? };
+        let metadata =
+            unsafe { crate::kfs::namespace_mutation::open_file_for_write(path, create, truncate)? };
+        self.invalidate_all();
+        Ok(metadata)
+    }
+
+    pub unsafe fn remove_file(
+        &mut self,
+        partition_type: &[u8; 4],
+        path: &[&[u8]],
+        source_inode_is_busy: impl FnOnce(u32) -> bool,
+    ) -> Result<(), StorageError> {
+        unsafe { self.ensure_mounted(partition_type)? };
+        unsafe { crate::kfs::namespace_mutation::remove_file(path, source_inode_is_busy)? };
+        self.invalidate_all();
+        Ok(())
+    }
+
+    pub unsafe fn rename_file(
+        &mut self,
+        partition_type: &[u8; 4],
+        old_path: &[&[u8]],
+        new_path: &[&[u8]],
+        source_inode_is_busy: impl FnOnce(u32) -> bool,
+    ) -> Result<(), StorageError> {
+        unsafe { self.ensure_mounted(partition_type)? };
+        unsafe {
+            crate::kfs::namespace_mutation::rename_file(old_path, new_path, source_inode_is_busy)?
+        };
+        self.invalidate_all();
+        Ok(())
+    }
+
+    pub unsafe fn create_directory(
+        &mut self,
+        partition_type: &[u8; 4],
+        path: &[&[u8]],
+    ) -> Result<(), StorageError> {
+        unsafe { self.ensure_mounted(partition_type)? };
+        unsafe { crate::kfs::namespace_mutation::create_directory(path)? };
+        self.invalidate_all();
+        Ok(())
+    }
+
+    pub unsafe fn remove_directory(
+        &mut self,
+        partition_type: &[u8; 4],
+        path: &[&[u8]],
+    ) -> Result<(), StorageError> {
+        unsafe { self.ensure_mounted(partition_type)? };
+        unsafe { crate::kfs::namespace_mutation::remove_directory(path)? };
+        self.invalidate_all();
+        Ok(())
+    }
+
     unsafe fn ensure_mounted(&mut self, partition_type: &[u8; 4]) -> Result<(), StorageError> {
         if self.mounted.is_some() && self.mounted_partition_type == Some(*partition_type) {
             return Ok(());

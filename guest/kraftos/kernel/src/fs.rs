@@ -514,16 +514,12 @@ pub unsafe fn open_root_file_for_process(
     } else {
         let truncate = flags == OPEN_CREATE_TRUNCATE_FLAGS;
         let metadata = unsafe {
-            crate::kfs::namespace_mutation::open_file_for_write_from_storage0(
-                ROOT_PARTITION,
-                components.as_slice(),
-                true,
-                truncate,
-            )
-            .map_err(storage_error_to_fs_error)?
+            ROOT_FS
+                .get()
+                .open_file_for_write(ROOT_PARTITION, components.as_slice(), true, truncate)
+                .map_err(storage_error_to_fs_error)?
         };
         unsafe { flush_root_storage()? };
-        unsafe { invalidate_root_fs_cache() };
         metadata
     };
     unsafe {
@@ -564,21 +560,13 @@ pub unsafe fn remove_root_file_for_process(path: &[u8]) -> Result<(), FsError> {
     let path = RootFilePath::parse(path)?;
     let components = path.components();
     unsafe {
-        crate::kfs::root::open_file_from_storage0(ROOT_PARTITION, components.as_slice())
+        ROOT_FS
+            .get()
+            .remove_file(ROOT_PARTITION, components.as_slice(), |inode_id| {
+                RUNTIME_FD_TABLE.get().has_open_inode(inode_id)
+            })
             .map_err(storage_error_to_fs_error)?;
-    }
-    let metadata = unsafe { crate::kfs::selected_inode::selected_file_metadata() };
-    if unsafe { RUNTIME_FD_TABLE.get().has_open_inode(metadata.inode_id) } {
-        return Err(FsError::Busy);
-    }
-    unsafe {
-        crate::kfs::namespace_mutation::remove_file_from_storage0(
-            ROOT_PARTITION,
-            components.as_slice(),
-        )
-        .map_err(storage_error_to_fs_error)?;
         flush_root_storage()?;
-        invalidate_root_fs_cache();
     }
     Ok(())
 }
@@ -594,15 +582,16 @@ pub unsafe fn rename_root_file_for_process(
     let new_path = RootFilePath::parse(new_path)?;
     let new_components = new_path.components();
     unsafe {
-        crate::kfs::namespace_mutation::rename_file_from_storage0(
-            ROOT_PARTITION,
-            old_components.as_slice(),
-            new_components.as_slice(),
-            |inode_id| RUNTIME_FD_TABLE.get().has_open_inode(inode_id),
-        )
-        .map_err(storage_error_to_fs_error)?;
+        ROOT_FS
+            .get()
+            .rename_file(
+                ROOT_PARTITION,
+                old_components.as_slice(),
+                new_components.as_slice(),
+                |inode_id| RUNTIME_FD_TABLE.get().has_open_inode(inode_id),
+            )
+            .map_err(storage_error_to_fs_error)?;
         flush_root_storage()?;
-        invalidate_root_fs_cache();
     }
     Ok(())
 }
@@ -612,13 +601,11 @@ pub unsafe fn create_root_directory(path: &[u8]) -> Result<(), FsError> {
     let path = RootFilePath::parse(path)?;
     let components = path.components();
     unsafe {
-        crate::kfs::namespace_mutation::create_directory_from_storage0(
-            ROOT_PARTITION,
-            components.as_slice(),
-        )
-        .map_err(storage_error_to_fs_error)?;
+        ROOT_FS
+            .get()
+            .create_directory(ROOT_PARTITION, components.as_slice())
+            .map_err(storage_error_to_fs_error)?;
         flush_root_storage()?;
-        invalidate_root_fs_cache();
     }
     Ok(())
 }
@@ -628,13 +615,11 @@ pub unsafe fn remove_root_directory(path: &[u8]) -> Result<(), FsError> {
     let path = RootFilePath::parse(path)?;
     let components = path.components();
     unsafe {
-        crate::kfs::namespace_mutation::remove_directory_from_storage0(
-            ROOT_PARTITION,
-            components.as_slice(),
-        )
-        .map_err(storage_error_to_fs_error)?;
+        ROOT_FS
+            .get()
+            .remove_directory(ROOT_PARTITION, components.as_slice())
+            .map_err(storage_error_to_fs_error)?;
         flush_root_storage()?;
-        invalidate_root_fs_cache();
     }
     Ok(())
 }
