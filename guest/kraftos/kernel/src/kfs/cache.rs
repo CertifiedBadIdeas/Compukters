@@ -1,5 +1,5 @@
-const INODE_CACHE_SLOTS: usize = 32;
-const DIRECTORY_CACHE_SLOTS: usize = 32;
+pub(crate) const INODE_CACHE_SLOTS: usize = 32;
+pub(crate) const DIRECTORY_CACHE_SLOTS: usize = 32;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct CachedPathMetadata {
