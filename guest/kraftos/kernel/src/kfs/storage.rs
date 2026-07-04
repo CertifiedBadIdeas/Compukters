@@ -410,12 +410,10 @@ pub unsafe fn copy_ram_to_file_range(
     src_addr: u32,
     len: u32,
 ) -> Result<FileMetadata, StorageError> {
-    let range_end = match file_offset.checked_add(len) {
-        Some(value) => value,
-        None => return Err(StorageError::INVALID_FILESYSTEM),
-    };
+    let range = crate::kfs::file::validate_write_range(file_offset, len)?;
+    let range_end = range.end;
     let mut updated = metadata;
-    if range_end > file_capacity_bytes(updated)? {
+    if range_end > crate::kfs::file::file_capacity_bytes(updated)? {
         updated = unsafe { grow_file_capacity(updated, range_end)? };
     }
 
@@ -425,35 +423,33 @@ pub unsafe fn copy_ram_to_file_range(
     while extent_index < updated.extent_count as usize && copied < len {
         let extent_start_block = updated.extent_start_blocks[extent_index];
         let extent_block_count = updated.extent_block_counts[extent_index];
-        let extent_bytes = match extent_block_count.checked_mul(BLOCK_SIZE) {
-            Some(value) => value,
-            None => return Err(StorageError::INVALID_FILESYSTEM),
-        };
-        let extent_file_end = match extent_file_start.checked_add(extent_bytes) {
-            Some(value) => value,
-            None => return Err(StorageError::INVALID_FILESYSTEM),
-        };
-
-        if range_end > extent_file_start && file_offset < extent_file_end {
-            let copy_start = max_u32(file_offset, extent_file_start);
-            let copy_end = min_u32(range_end, extent_file_end);
-            let mut cursor = copy_start;
-            while cursor < copy_end {
-                let within_extent = cursor - extent_file_start;
+        let extent_overlap = crate::kfs::file::extent_overlap(
+            file_offset,
+            range_end,
+            extent_file_start,
+            extent_start_block,
+            extent_block_count,
+        )?;
+        if let Some(overlap) = extent_overlap {
+            let mut cursor = overlap.copy_start;
+            while cursor < overlap.copy_end {
+                let within_extent = cursor - overlap.extent_file_start;
                 let block_delta = within_extent / BLOCK_SIZE;
                 let block_offset = within_extent % BLOCK_SIZE;
-                let available = min_u32(BLOCK_SIZE - block_offset, copy_end - cursor);
-                unsafe { read_fs_block(extent_start_block + block_delta)? };
+                let available = min_u32(BLOCK_SIZE - block_offset, overlap.copy_end - cursor);
+                unsafe { read_fs_block(overlap.extent_start_block + block_delta)? };
                 unsafe {
                     copy_ram_to_ram(src_addr + copied, SCRATCH_ADDR + block_offset, available)
                 };
-                unsafe { write_fs_block(extent_start_block + block_delta)? };
+                unsafe { write_fs_block(overlap.extent_start_block + block_delta)? };
                 copied += available;
                 cursor += available;
             }
+            extent_file_start = overlap.extent_file_end;
+        } else {
+            extent_file_start =
+                crate::kfs::file::extent_file_end(extent_file_start, extent_block_count)?;
         }
-
-        extent_file_start = extent_file_end;
         extent_index += 1;
     }
 
@@ -1108,13 +1104,12 @@ pub unsafe fn copy_selected_file_range_to_ram_profiled(
     len: u32,
     profile_kind: FileReadProfileKind,
 ) -> Result<(), StorageError> {
-    let range_end = match file_offset.checked_add(len) {
-        Some(value) => value,
-        None => return Err(StorageError::INVALID_FILESYSTEM),
-    };
-    if range_end > unsafe { read_u32(STATE_INODE_SIZE_BYTES) } {
-        return Err(StorageError::INVALID_FILESYSTEM);
-    }
+    let range = crate::kfs::file::validate_read_range(
+        unsafe { read_u32(STATE_INODE_SIZE_BYTES) },
+        file_offset,
+        len,
+    )?;
+    let range_end = range.end;
 
     let mut copied = 0;
     let mut extent_file_start: u32 = 0;
@@ -1124,32 +1119,30 @@ pub unsafe fn copy_selected_file_range_to_ram_profiled(
             unsafe { read_u32(STATE_INODE_EXTENT_START_BLOCKS + extent_index as u32 * 4) };
         let extent_block_count =
             unsafe { read_u32(STATE_INODE_EXTENT_BLOCK_COUNTS + extent_index as u32 * 4) };
-        let extent_bytes = match extent_block_count.checked_mul(BLOCK_SIZE) {
-            Some(value) => value,
-            None => return Err(StorageError::INVALID_FILESYSTEM),
-        };
-        let extent_file_end = match extent_file_start.checked_add(extent_bytes) {
-            Some(value) => value,
-            None => return Err(StorageError::INVALID_FILESYSTEM),
-        };
-
-        if range_end > extent_file_start && file_offset < extent_file_end {
-            let copy_start = max_u32(file_offset, extent_file_start);
-            let copy_end = min_u32(range_end, extent_file_end);
+        let extent_overlap = crate::kfs::file::extent_overlap(
+            file_offset,
+            range_end,
+            extent_file_start,
+            extent_start_block,
+            extent_block_count,
+        )?;
+        if let Some(overlap) = extent_overlap {
             unsafe {
                 copy_extent_range_to_ram(
-                    extent_start_block,
-                    extent_file_start,
-                    copy_start,
-                    copy_end,
+                    overlap.extent_start_block,
+                    overlap.extent_file_start,
+                    overlap.copy_start,
+                    overlap.copy_end,
                     dst_addr,
                     &mut copied,
                     profile_kind,
                 )?
             };
+            extent_file_start = overlap.extent_file_end;
+        } else {
+            extent_file_start =
+                crate::kfs::file::extent_file_end(extent_file_start, extent_block_count)?;
         }
-
-        extent_file_start = extent_file_end;
         extent_index += 1;
     }
 
@@ -1183,13 +1176,8 @@ pub unsafe fn copy_file_range_to_ram_profiled(
     len: u32,
     profile_kind: FileReadProfileKind,
 ) -> Result<(), StorageError> {
-    let range_end = match file_offset.checked_add(len) {
-        Some(value) => value,
-        None => return Err(StorageError::INVALID_FILESYSTEM),
-    };
-    if range_end > metadata.size_bytes {
-        return Err(StorageError::INVALID_FILESYSTEM);
-    }
+    let range = crate::kfs::file::validate_read_range(metadata.size_bytes, file_offset, len)?;
+    let range_end = range.end;
 
     let mut copied = 0;
     let mut extent_file_start: u32 = 0;
@@ -1197,32 +1185,30 @@ pub unsafe fn copy_file_range_to_ram_profiled(
     while extent_index < metadata.extent_count as usize && copied < len {
         let extent_start_block = metadata.extent_start_blocks[extent_index];
         let extent_block_count = metadata.extent_block_counts[extent_index];
-        let extent_bytes = match extent_block_count.checked_mul(BLOCK_SIZE) {
-            Some(value) => value,
-            None => return Err(StorageError::INVALID_FILESYSTEM),
-        };
-        let extent_file_end = match extent_file_start.checked_add(extent_bytes) {
-            Some(value) => value,
-            None => return Err(StorageError::INVALID_FILESYSTEM),
-        };
-
-        if range_end > extent_file_start && file_offset < extent_file_end {
-            let copy_start = max_u32(file_offset, extent_file_start);
-            let copy_end = min_u32(range_end, extent_file_end);
+        let extent_overlap = crate::kfs::file::extent_overlap(
+            file_offset,
+            range_end,
+            extent_file_start,
+            extent_start_block,
+            extent_block_count,
+        )?;
+        if let Some(overlap) = extent_overlap {
             unsafe {
                 copy_extent_range_to_ram(
-                    extent_start_block,
-                    extent_file_start,
-                    copy_start,
-                    copy_end,
+                    overlap.extent_start_block,
+                    overlap.extent_file_start,
+                    overlap.copy_start,
+                    overlap.copy_end,
                     dst_addr,
                     &mut copied,
                     profile_kind,
                 )?
             };
+            extent_file_start = overlap.extent_file_end;
+        } else {
+            extent_file_start =
+                crate::kfs::file::extent_file_end(extent_file_start, extent_block_count)?;
         }
-
-        extent_file_start = extent_file_end;
         extent_index += 1;
     }
 
@@ -1667,50 +1653,15 @@ unsafe fn encode_deleted_directory_entry_at(block: u32, offset: u32) -> Result<(
     unsafe { write_fs_block(block) }
 }
 
-fn file_capacity_bytes(metadata: FileMetadata) -> Result<u32, StorageError> {
-    let mut capacity: u32 = 0;
-    let mut index = 0;
-    while index < metadata.extent_count as usize {
-        let bytes = match metadata.extent_block_counts[index].checked_mul(BLOCK_SIZE) {
-            Some(value) => value,
-            None => return Err(StorageError::INVALID_FILESYSTEM),
-        };
-        capacity = match capacity.checked_add(bytes) {
-            Some(value) => value,
-            None => return Err(StorageError::INVALID_FILESYSTEM),
-        };
-        index += 1;
-    }
-    Ok(capacity)
-}
-
 unsafe fn grow_file_capacity(
-    mut metadata: FileMetadata,
+    metadata: FileMetadata,
     required_size: u32,
 ) -> Result<FileMetadata, StorageError> {
-    if metadata.extent_count == 0
-        || metadata.extent_count as usize > KFS_MAX_INLINE_EXTENTS
-        || required_size <= file_capacity_bytes(metadata)?
-    {
-        return Err(StorageError::INVALID_FILESYSTEM);
-    }
-    let last_extent_index = metadata.extent_count as usize - 1;
-    let last_start = metadata.extent_start_blocks[last_extent_index];
-    let last_count = metadata.extent_block_counts[last_extent_index];
-    let current_capacity = file_capacity_bytes(metadata)?;
-    let additional_bytes = required_size - current_capacity;
-    let additional_blocks = div_ceil_u32(additional_bytes, BLOCK_SIZE)?;
-    let grow_start = match last_start.checked_add(last_count) {
-        Some(value) => value,
-        None => return Err(StorageError::INVALID_FILESYSTEM),
-    };
-    let grow_end = match grow_start.checked_add(additional_blocks) {
-        Some(value) => value,
-        None => return Err(StorageError::INVALID_FILESYSTEM),
-    };
-    let mut can_extend_last_extent = grow_end <= unsafe { read_u32(STATE_SUPERBLOCK_TOTAL_BLOCKS) };
-    let mut block = grow_start;
-    while can_extend_last_extent && block < grow_end {
+    let plan = crate::kfs::file::plan_file_growth(metadata, required_size)?;
+    let mut can_extend_last_extent =
+        plan.grow_end <= unsafe { read_u32(STATE_SUPERBLOCK_TOTAL_BLOCKS) };
+    let mut block = plan.grow_start;
+    while can_extend_last_extent && block < plan.grow_end {
         if unsafe { is_block_allocated(block)? } {
             can_extend_last_extent = false;
         } else {
@@ -1719,29 +1670,20 @@ unsafe fn grow_file_capacity(
     }
 
     if can_extend_last_extent {
-        block = grow_start;
-        while block < grow_end {
+        block = plan.grow_start;
+        while block < plan.grow_end {
             unsafe { mark_block_allocated(block)? };
             unsafe { clear_scratch_block() };
             unsafe { write_fs_block(block)? };
             block += 1;
         }
 
-        metadata.extent_block_counts[last_extent_index] =
-            match last_count.checked_add(additional_blocks) {
-                Some(value) => value,
-                None => return Err(StorageError::INVALID_FILESYSTEM),
-            };
-        return Ok(metadata);
+        return crate::kfs::file::apply_extended_last_extent(metadata, plan);
     }
 
-    let new_extent_index = metadata.extent_count as usize;
-    if new_extent_index >= KFS_MAX_INLINE_EXTENTS {
-        return Err(StorageError::OUTPUT_BUFFER_TOO_SMALL);
-    }
-    let new_extent_start = unsafe { allocate_contiguous_blocks(additional_blocks)? };
+    let new_extent_start = unsafe { allocate_contiguous_blocks(plan.additional_blocks)? };
     block = new_extent_start;
-    let new_extent_end = match new_extent_start.checked_add(additional_blocks) {
+    let new_extent_end = match new_extent_start.checked_add(plan.additional_blocks) {
         Some(value) => value,
         None => return Err(StorageError::INVALID_FILESYSTEM),
     };
@@ -1751,28 +1693,11 @@ unsafe fn grow_file_capacity(
         block += 1;
     }
 
-    metadata.extent_start_blocks[new_extent_index] = new_extent_start;
-    metadata.extent_block_counts[new_extent_index] = additional_blocks;
-    metadata.extent_count = match metadata.extent_count.checked_add(1) {
-        Some(value) => value,
-        None => return Err(StorageError::INVALID_FILESYSTEM),
-    };
-    Ok(metadata)
+    crate::kfs::file::apply_new_extent(metadata, new_extent_start, plan)
 }
 
 pub unsafe fn flush_storage0() -> Result<(), StorageError> {
     unsafe { crate::kfs::device::flush_storage0() }
-}
-
-fn div_ceil_u32(value: u32, divisor: u32) -> Result<u32, StorageError> {
-    if divisor == 0 {
-        return Err(StorageError::INVALID_FILESYSTEM);
-    }
-    let adjusted = match value.checked_add(divisor - 1) {
-        Some(value) => value,
-        None => return Err(StorageError::INVALID_FILESYSTEM),
-    };
-    Ok(adjusted / divisor)
 }
 
 #[inline(always)]

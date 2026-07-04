@@ -4,6 +4,7 @@ pub mod cache;
 pub mod device;
 pub mod directory;
 pub mod error;
+pub mod file;
 pub mod inode;
 pub mod mount;
 pub mod partition;

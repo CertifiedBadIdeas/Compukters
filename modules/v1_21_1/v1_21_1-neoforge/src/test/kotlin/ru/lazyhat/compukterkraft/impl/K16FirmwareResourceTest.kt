@@ -1930,6 +1930,26 @@ class K16FirmwareResourceTest {
     }
 
     @Test
+    fun kraftOsFilesystemFilePlanningIsNotOwnedByStorageModule() {
+        val kernelKfsDir = Path.of("../../../guest/kraftos/kernel/src/kfs")
+        val modSource = kernelKfsDir.resolve("mod.rs").readText()
+        val storageSource = kernelKfsDir.resolve("storage.rs").readText()
+
+        val filePath = kernelKfsDir.resolve("file.rs")
+        assertTrue(filePath.toFile().isFile, "KFS file extent planning should have an explicit module")
+        val fileSource = filePath.readText()
+        assertTrue(modSource.contains("pub mod file;"), "KFS file module should be exported")
+        assertTrue(fileSource.contains("pub fn file_capacity_bytes("), "file.rs should own file capacity calculation")
+        assertTrue(fileSource.contains("pub fn validate_read_range("), "file.rs should own read range validation")
+        assertTrue(fileSource.contains("pub fn validate_write_range("), "file.rs should own write range validation")
+        assertTrue(fileSource.contains("pub fn extent_overlap("), "file.rs should own extent overlap planning")
+        assertTrue(fileSource.contains("pub fn plan_file_growth("), "file.rs should own file growth planning")
+        assertFalse(storageSource.contains("fn file_capacity_bytes("), "storage.rs should not own file capacity calculation")
+        assertFalse(storageSource.contains("fn div_ceil_u32("), "storage.rs should not own file growth rounding")
+        assertTrue(storageSource.contains("crate::kfs::file::extent_overlap("), "storage.rs should use the file owner for range planning")
+    }
+
+    @Test
     fun k16KernelLegacyShellPathIsRemovedFromCurrentSource() {
         val kernelSourceDir = Path.of("../../../guest/kraftos/kernel/src")
         val mainSource = kernelSourceDir.resolve("main.rs").readText()
