@@ -12,6 +12,7 @@ pub mod file_io;
 pub mod inode;
 pub mod inode_mutation;
 pub mod mount;
+pub mod namespace_mutation;
 pub mod open_file;
 pub mod partition;
 pub mod path;
