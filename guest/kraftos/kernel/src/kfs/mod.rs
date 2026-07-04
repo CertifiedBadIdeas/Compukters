@@ -3,6 +3,7 @@ pub mod block_cache;
 pub mod cache;
 pub mod device;
 pub mod directory;
+pub mod directory_mutation;
 pub mod error;
 pub mod file;
 pub mod inode;
