@@ -1910,6 +1910,26 @@ class K16FirmwareResourceTest {
     }
 
     @Test
+    fun kraftOsFilesystemBitmapLayoutIsNotOwnedByStorageModule() {
+        val kernelKfsDir = Path.of("../../../guest/kraftos/kernel/src/kfs")
+        val modSource = kernelKfsDir.resolve("mod.rs").readText()
+        val storageSource = kernelKfsDir.resolve("storage.rs").readText()
+
+        val bitmapPath = kernelKfsDir.resolve("bitmap.rs")
+        assertTrue(bitmapPath.toFile().isFile, "KFS bitmap layout should have an explicit module")
+        val bitmapSource = bitmapPath.readText()
+        assertTrue(modSource.contains("pub mod bitmap;"), "KFS bitmap module should be exported")
+        assertTrue(bitmapSource.contains("pub struct KfsBitmapLayout"), "bitmap.rs should own bitmap layout inputs")
+        assertTrue(bitmapSource.contains("pub fn locate_block("), "bitmap.rs should own block-to-bitmap addressing")
+        assertTrue(bitmapSource.contains("pub fn block_is_metadata("), "bitmap.rs should own metadata block classification")
+        assertTrue(bitmapSource.contains("pub fn mark_byte_allocated("), "bitmap.rs should own allocated-bit mutation")
+        assertTrue(bitmapSource.contains("pub fn mark_byte_free("), "bitmap.rs should own free-bit mutation")
+        assertFalse(storageSource.contains("fn block_in_range("), "storage.rs should not own bitmap range classification")
+        assertFalse(storageSource.contains("fn bitmap_block_scratch_marks_allocated("), "storage.rs should not own bitmap bit decoding")
+        assertTrue(storageSource.contains("crate::kfs::bitmap::locate_block("), "storage.rs should use the bitmap owner for addressing")
+    }
+
+    @Test
     fun k16KernelLegacyShellPathIsRemovedFromCurrentSource() {
         val kernelSourceDir = Path.of("../../../guest/kraftos/kernel/src")
         val mainSource = kernelSourceDir.resolve("main.rs").readText()
