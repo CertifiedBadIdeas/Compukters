@@ -76,9 +76,9 @@ pub unsafe fn grow_selected_directory_capacity() -> Result<u32, StorageError> {
         None => return Err(StorageError::INVALID_FILESYSTEM),
     };
     if grow_block < unsafe { storage::superblock_total_blocks() }
-        && !unsafe { storage::is_block_allocated(grow_block)? }
+        && !unsafe { crate::kfs::allocation::is_block_allocated(grow_block)? }
     {
-        unsafe { storage::mark_block_allocated(grow_block)? };
+        unsafe { crate::kfs::allocation::mark_block_allocated(grow_block)? };
         unsafe { storage::clear_scratch_block() };
         unsafe { storage::write_fs_block(grow_block)? };
         metadata.extent_block_counts[last_extent_index] = match last_count.checked_add(1) {
@@ -93,7 +93,7 @@ pub unsafe fn grow_selected_directory_capacity() -> Result<u32, StorageError> {
     if new_extent_index >= KFS_MAX_INLINE_EXTENTS {
         return Err(StorageError::OUTPUT_BUFFER_TOO_SMALL);
     }
-    let new_extent_block = unsafe { storage::allocate_contiguous_blocks(1)? };
+    let new_extent_block = unsafe { crate::kfs::allocation::allocate_contiguous_blocks(1)? };
     unsafe { storage::clear_scratch_block() };
     unsafe { storage::write_fs_block(new_extent_block)? };
     metadata.extent_start_blocks[new_extent_index] = new_extent_block;
