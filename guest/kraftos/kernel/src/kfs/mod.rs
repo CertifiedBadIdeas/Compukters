@@ -1,3 +1,4 @@
+pub mod bitmap;
 pub mod block_cache;
 pub mod cache;
 pub mod device;
