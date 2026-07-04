@@ -648,7 +648,7 @@ pub unsafe fn copy_file_fd_range_to_ram_for_process(
     }
     let metadata = unsafe { RUNTIME_FD_TABLE.get().metadata_for_process(owner_pid, fd)? };
     unsafe {
-        crate::kfs::storage::copy_file_range_to_ram(metadata.into(), file_offset, ptr, read_len)
+        crate::kfs::file_io::copy_file_range_to_ram(metadata.into(), file_offset, ptr, read_len)
             .map_err(storage_error_to_fs_error)?;
     }
     Ok(read_len)

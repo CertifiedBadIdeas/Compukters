@@ -2088,6 +2088,42 @@ class K16FirmwareResourceTest {
     }
 
     @Test
+    fun kraftOsFilesystemFileDataReadIsNotOwnedByStorageModule() {
+        val kernelDir = Path.of("../../../guest/kraftos/kernel/src")
+        val kernelKfsDir = kernelDir.resolve("kfs")
+        val modSource = kernelKfsDir.resolve("mod.rs").readText()
+        val storageSource = kernelKfsDir.resolve("storage.rs").readText()
+        val processSource = kernelDir.resolve("process.rs").readText()
+        val fsSource = kernelDir.resolve("fs.rs").readText()
+        val bootChainSource = kernelDir.resolve("boot_chain.rs").readText()
+
+        val fileIoPath = kernelKfsDir.resolve("file_io.rs")
+        assertTrue(fileIoPath.toFile().isFile, "KFS file data reads should have an explicit module")
+        val fileIoSource = fileIoPath.readText()
+        assertTrue(modSource.contains("pub mod file_io;"), "KFS file I/O module should be exported")
+        assertTrue(fileIoSource.contains("pub unsafe fn copy_selected_file_range_to_ram"), "file_io.rs should own selected file reads")
+        assertTrue(fileIoSource.contains("pub unsafe fn copy_selected_file_range_to_ram_profiled"), "file_io.rs should own profiled selected file reads")
+        assertTrue(fileIoSource.contains("pub unsafe fn copy_file_range_to_ram"), "file_io.rs should own metadata-based file reads")
+        assertTrue(fileIoSource.contains("pub unsafe fn copy_file_range_to_ram_profiled"), "file_io.rs should own profiled metadata-based file reads")
+        assertTrue(fileIoSource.contains("unsafe fn copy_extent_range_to_ram("), "file_io.rs should own extent copy planning")
+        assertTrue(fileIoSource.contains("fn record_profiled_file_data_read("), "file_io.rs should own read profile accounting")
+        assertTrue(fileIoSource.contains("fn record_profiled_file_path_data_read("), "file_io.rs should own path-specific read profile accounting")
+        assertFalse(storageSource.contains("pub unsafe fn copy_selected_file_range_to_ram"), "storage.rs should not own selected file reads")
+        assertFalse(storageSource.contains("pub unsafe fn copy_selected_file_range_to_ram_profiled"), "storage.rs should not own profiled selected file reads")
+        assertFalse(storageSource.contains("pub unsafe fn copy_file_range_to_ram"), "storage.rs should not own metadata-based file reads")
+        assertFalse(storageSource.contains("pub unsafe fn copy_file_range_to_ram_profiled"), "storage.rs should not own profiled metadata-based file reads")
+        assertFalse(storageSource.contains("unsafe fn copy_extent_range_to_ram("), "storage.rs should not own extent copy planning")
+        assertFalse(storageSource.contains("fn record_profiled_file_data_read("), "storage.rs should not own read profile accounting")
+        assertFalse(storageSource.contains("fn record_profiled_file_path_data_read("), "storage.rs should not own path-specific read profile accounting")
+        assertFalse(processSource.contains("crate::kfs::storage::copy_selected_file_range_to_ram"), "process.rs should not use storage-owned selected file reads")
+        assertFalse(processSource.contains("crate::kfs::storage::copy_file_range_to_ram"), "process.rs should not use storage-owned metadata file reads")
+        assertTrue(processSource.contains("crate::kfs::file_io::copy_selected_file_range_to_ram"), "process.rs should use the file I/O owner for selected file reads")
+        assertTrue(processSource.contains("crate::kfs::file_io::copy_file_range_to_ram"), "process.rs should use the file I/O owner for metadata file reads")
+        assertTrue(fsSource.contains("crate::kfs::file_io::copy_file_range_to_ram("), "fs.rs should use the file I/O owner")
+        assertTrue(bootChainSource.contains("crate::kfs::file_io::copy_selected_file_range_to_ram("), "boot_chain.rs should use the file I/O owner")
+    }
+
+    @Test
     fun kraftOsFilesystemAllocationMutationIsNotOwnedByStorageModule() {
         val kernelKfsDir = Path.of("../../../guest/kraftos/kernel/src/kfs")
         val modSource = kernelKfsDir.resolve("mod.rs").readText()

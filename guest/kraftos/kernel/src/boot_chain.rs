@@ -84,7 +84,7 @@ pub unsafe fn user_memory_end_from_current_boot_info(image: LoadedImage) -> Resu
 
 unsafe fn load_k16e_file(expected_abi_kind: K16eAbiKind) -> Result<LoadedImage, LoadError> {
     unsafe {
-        crate::kfs::storage::copy_selected_file_range_to_ram(
+        crate::kfs::file_io::copy_selected_file_range_to_ram(
             0,
             SCRATCH_ADDR,
             crate::image::FIXED_K16E_V1_HEADER_SIZE,
@@ -105,7 +105,7 @@ unsafe fn load_k16e_file(expected_abi_kind: K16eAbiKind) -> Result<LoadedImage, 
         .map_err(LoadError::from_image)?;
 
     unsafe {
-        crate::kfs::storage::copy_selected_file_range_to_ram(
+        crate::kfs::file_io::copy_selected_file_range_to_ram(
             crate::image::FIXED_K16E_V1_PAYLOAD_OFFSET,
             plan.load_addr,
             plan.file_size,
