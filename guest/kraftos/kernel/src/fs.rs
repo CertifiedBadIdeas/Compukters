@@ -97,10 +97,10 @@ struct StorageDirectoryByteSink<'a, S: DirectoryByteSink> {
 }
 
 #[cfg(any(not(test), feature = "host-test"))]
-impl<S: DirectoryByteSink> crate::kfs::storage::DirectoryListingSink
+impl<S: DirectoryByteSink> crate::kfs::types::DirectoryListingSink
     for StorageDirectoryByteSink<'_, S>
 {
-    unsafe fn push_byte(&mut self, byte: u8) -> Result<(), crate::kfs::storage::StorageError> {
+    unsafe fn push_byte(&mut self, byte: u8) -> Result<(), crate::kfs::error::StorageError> {
         self.sink
             .push_byte(byte)
             .map_err(fs_error_to_storage_output_error)
@@ -244,8 +244,8 @@ impl FileMetadata {
     }
 }
 
-impl From<crate::kfs::storage::FileMetadata> for FileMetadata {
-    fn from(metadata: crate::kfs::storage::FileMetadata) -> Self {
+impl From<crate::kfs::types::FileMetadata> for FileMetadata {
+    fn from(metadata: crate::kfs::types::FileMetadata) -> Self {
         Self {
             inode_id: metadata.inode_id,
             size_bytes: metadata.size_bytes,
@@ -256,7 +256,7 @@ impl From<crate::kfs::storage::FileMetadata> for FileMetadata {
     }
 }
 
-impl From<FileMetadata> for crate::kfs::storage::FileMetadata {
+impl From<FileMetadata> for crate::kfs::types::FileMetadata {
     fn from(metadata: FileMetadata) -> Self {
         Self {
             inode_id: metadata.inode_id,
@@ -722,7 +722,7 @@ pub unsafe fn read_root_directory_into<S: DirectoryByteSink>(
 #[cfg(any(not(test), feature = "host-test"))]
 pub unsafe fn open_root_file_cached_components(
     components: &[&[u8]],
-) -> Result<crate::kfs::storage::FileMetadata, FsError> {
+) -> Result<crate::kfs::types::FileMetadata, FsError> {
     unsafe {
         ROOT_FS
             .get()
@@ -734,7 +734,7 @@ pub unsafe fn open_root_file_cached_components(
 #[cfg(all(test, not(feature = "host-test")))]
 pub unsafe fn open_root_file_cached_components(
     components: &[&[u8]],
-) -> Result<crate::kfs::storage::FileMetadata, FsError> {
+) -> Result<crate::kfs::types::FileMetadata, FsError> {
     unsafe {
         crate::kfs::storage::open_file_from_storage0(b"ROOT", components)
             .map_err(storage_error_to_fs_error)?;
@@ -769,20 +769,20 @@ pub unsafe fn close_file_fds_for_process(owner_pid: u32) {
     unsafe { RUNTIME_FD_TABLE.get().close_all_for_process(owner_pid) }
 }
 
-fn storage_error_to_fs_error(error: crate::kfs::storage::StorageError) -> FsError {
-    if error == crate::kfs::storage::StorageError::PATH_NOT_FOUND {
+fn storage_error_to_fs_error(error: crate::kfs::error::StorageError) -> FsError {
+    if error == crate::kfs::error::StorageError::PATH_NOT_FOUND {
         FsError::NoEntry
-    } else if error == crate::kfs::storage::StorageError::OUTPUT_BUFFER_TOO_SMALL {
+    } else if error == crate::kfs::error::StorageError::OUTPUT_BUFFER_TOO_SMALL {
         FsError::NoMemory
-    } else if error == crate::kfs::storage::StorageError::OUTPUT_TRANSFER {
+    } else if error == crate::kfs::error::StorageError::OUTPUT_TRANSFER {
         FsError::Fault
-    } else if error == crate::kfs::storage::StorageError::PATH_NOT_EMPTY {
+    } else if error == crate::kfs::error::StorageError::PATH_NOT_EMPTY {
         FsError::NotEmpty
-    } else if error == crate::kfs::storage::StorageError::PATH_EXISTS {
+    } else if error == crate::kfs::error::StorageError::PATH_EXISTS {
         FsError::InvalidPath
-    } else if error == crate::kfs::storage::StorageError::PATH_NOT_REGULAR {
+    } else if error == crate::kfs::error::StorageError::PATH_NOT_REGULAR {
         FsError::InvalidPath
-    } else if error == crate::kfs::storage::StorageError::PATH_BUSY {
+    } else if error == crate::kfs::error::StorageError::PATH_BUSY {
         FsError::Busy
     } else {
         FsError::Storage
@@ -800,13 +800,13 @@ unsafe fn invalidate_root_fs_cache() {
 }
 
 #[cfg(any(not(test), feature = "host-test"))]
-fn fs_error_to_storage_output_error(error: FsError) -> crate::kfs::storage::StorageError {
+fn fs_error_to_storage_output_error(error: FsError) -> crate::kfs::error::StorageError {
     if error == FsError::NoMemory {
-        crate::kfs::storage::StorageError::OUTPUT_BUFFER_TOO_SMALL
+        crate::kfs::error::StorageError::OUTPUT_BUFFER_TOO_SMALL
     } else if error == FsError::Fault {
-        crate::kfs::storage::StorageError::OUTPUT_TRANSFER
+        crate::kfs::error::StorageError::OUTPUT_TRANSFER
     } else {
-        crate::kfs::storage::StorageError::INVALID_FILESYSTEM
+        crate::kfs::error::StorageError::INVALID_FILESYSTEM
     }
 }
 

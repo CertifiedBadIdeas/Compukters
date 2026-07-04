@@ -1,115 +1,18 @@
 pub const SCRATCH_ADDR: u32 = 0x0000_0600;
 pub const BLOCK_SIZE: u32 = 512;
 
+use crate::kfs::error::StorageError;
+use crate::kfs::types::{
+    DirectoryListingSink, FileMetadata, FileReadProfileFile, FileReadProfileKind, PathKind,
+    PathMetadata, RamDirectoryListingSink, KFS_MAX_INLINE_EXTENTS,
+};
+
 const KFS_BLOCK_CACHE_SLOTS: usize = 16;
 const KFS_INODE_SIZE: u32 = 64;
 const KFS_DIRECTORY_ENTRY_SIZE: u32 = 64;
 const KFS_MAX_NAME_BYTES: usize = 56;
-const KFS_MAX_INLINE_EXTENTS: usize = 4;
 const KFS_DIRECTORY_ENTRIES_PER_BLOCK: usize = (BLOCK_SIZE / KFS_DIRECTORY_ENTRY_SIZE) as usize;
 const INVALID_CACHED_INODE_BLOCK: u32 = u32::MAX;
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct FileMetadata {
-    pub inode_id: u32,
-    pub size_bytes: u32,
-    pub extent_count: u32,
-    pub extent_start_blocks: [u32; KFS_MAX_INLINE_EXTENTS],
-    pub extent_block_counts: [u32; KFS_MAX_INLINE_EXTENTS],
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum FileReadProfileKind {
-    GenericFile,
-    Program(FileReadProfileFile),
-    DynamicImport(FileReadProfileFile),
-    Library(FileReadProfileFile),
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum FileReadProfileFile {
-    Generic,
-    InitProgram,
-    ShellProgram,
-    OtherProgram,
-    LibkraftLibrary,
-    OtherLibrary,
-}
-
-#[repr(u32)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum PathKind {
-    Regular = k16_abi::syscall::FILE_TYPE_REGULAR,
-    Directory = k16_abi::syscall::FILE_TYPE_DIRECTORY,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct PathMetadata {
-    pub kind: PathKind,
-    pub size_bytes: u32,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub struct StorageError {
-    code: i32,
-}
-
-impl StorageError {
-    pub const STORAGE_VERSION: Self = Self { code: 10 };
-    pub const INVALID_PARTITION_TABLE: Self = Self { code: 11 };
-    pub const PARTITION_NOT_FOUND: Self = Self { code: 12 };
-    pub const INVALID_FILESYSTEM: Self = Self { code: 13 };
-    pub const PATH_NOT_FOUND: Self = Self { code: 14 };
-    pub const STORAGE_TRANSFER: Self = Self { code: 16 };
-    pub const STORAGE_BLOCK_SIZE: Self = Self { code: 17 };
-    pub const STORAGE_MEDIA: Self = Self { code: 18 };
-    pub const OUTPUT_BUFFER_TOO_SMALL: Self = Self { code: 19 };
-    pub const OUTPUT_TRANSFER: Self = Self { code: 20 };
-    pub const PATH_NOT_EMPTY: Self = Self { code: 21 };
-    pub const PATH_EXISTS: Self = Self { code: 22 };
-    pub const PATH_NOT_REGULAR: Self = Self { code: 23 };
-    pub const PATH_BUSY: Self = Self { code: 24 };
-
-    pub const fn code(self) -> i32 {
-        self.code
-    }
-}
-
-pub trait DirectoryListingSink {
-    unsafe fn push_byte(&mut self, byte: u8) -> Result<(), StorageError>;
-    fn written(&self) -> u32;
-}
-
-pub struct RamDirectoryListingSink {
-    dst_addr: u32,
-    len: u32,
-    written: u32,
-}
-
-impl RamDirectoryListingSink {
-    pub const fn new(dst_addr: u32, len: u32) -> Self {
-        Self {
-            dst_addr,
-            len,
-            written: 0,
-        }
-    }
-}
-
-impl DirectoryListingSink for RamDirectoryListingSink {
-    unsafe fn push_byte(&mut self, byte: u8) -> Result<(), StorageError> {
-        if self.written >= self.len {
-            return Err(StorageError::OUTPUT_BUFFER_TOO_SMALL);
-        }
-        unsafe { write_u8(self.dst_addr + self.written, byte) };
-        self.written += 1;
-        Ok(())
-    }
-
-    fn written(&self) -> u32 {
-        self.written
-    }
-}
 
 const STATE_PARTITION_START_LBA: u32 = 0x0000_0200;
 const STATE_PARTITION_BLOCK_COUNT: u32 = 0x0000_0204;

@@ -1,5 +1,6 @@
 use crate::kfs::cache::{CachedName, CachedPathMetadata, KfsCache};
-use crate::kfs::storage::{DirectoryListingSink, FileMetadata, StorageError};
+use crate::kfs::error::StorageError;
+use crate::kfs::types::{DirectoryListingSink, FileMetadata};
 
 pub struct KfsRootFs {
     cache: KfsCache,

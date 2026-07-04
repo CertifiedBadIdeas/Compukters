@@ -1,4 +1,4 @@
-use crate::kfs::storage::StorageError;
+use crate::kfs::error::StorageError;
 
 const K16PT_MAGIC: &[u8; 5] = b"K16PT";
 const K16PT_VERSION: u8 = 1;
@@ -125,7 +125,7 @@ mod tests {
 
         assert_eq!(
             KfsPartition::decode_from_k16pt(&block, b"ROOT", 64),
-            Err(crate::kfs::storage::StorageError::INVALID_PARTITION_TABLE),
+            Err(crate::kfs::error::StorageError::INVALID_PARTITION_TABLE),
         );
     }
 
@@ -135,7 +135,7 @@ mod tests {
 
         assert_eq!(
             KfsPartition::decode_from_k16pt(&block, b"ROOT", 64),
-            Err(crate::kfs::storage::StorageError::INVALID_PARTITION_TABLE),
+            Err(crate::kfs::error::StorageError::INVALID_PARTITION_TABLE),
         );
     }
 }
