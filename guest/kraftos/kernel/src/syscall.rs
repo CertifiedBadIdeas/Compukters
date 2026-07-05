@@ -427,9 +427,7 @@ fn write_guest_bytes(ptr: u32, len: u32) -> Result<u32, u32> {
         let chunk_len = min_u32(len - written, USER_IO_CHUNK_BYTES as u32);
         let mut chunk = [0_u8; USER_IO_CHUNK_BYTES];
         let chunk = user_buffer::copy_from_user_into(ptr + written, chunk_len, &mut chunk)?;
-        for byte in chunk {
-            console::write_byte(*byte);
-        }
+        console::write_bytes(chunk);
         written += chunk_len;
     }
     console::flush();

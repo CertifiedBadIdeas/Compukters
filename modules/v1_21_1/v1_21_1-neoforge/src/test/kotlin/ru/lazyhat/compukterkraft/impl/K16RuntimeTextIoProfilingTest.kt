@@ -978,6 +978,11 @@ class K16RuntimeTextIoProfilingTest {
                     result.presentCommands > 0,
                     "yes ${sample.width}-char lines should exercise terminal GPU presents",
                 )
+                assertTrue(
+                    result.blitCommands <= result.lines * 4L,
+                    "yes ${sample.width}-char lines should batch terminal glyph blits by printable runs; " +
+                        "blits=${result.blitCommands}, lines=${result.lines}",
+                )
             }
         } finally {
             device.close()

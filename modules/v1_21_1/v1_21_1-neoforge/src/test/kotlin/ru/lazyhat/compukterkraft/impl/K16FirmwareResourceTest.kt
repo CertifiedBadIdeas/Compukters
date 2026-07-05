@@ -1794,9 +1794,14 @@ class K16FirmwareResourceTest {
             "bottom overflow must not wrap to row zero",
         )
 
-        assertTrue(terminalRenderSource.contains("static mut CELL_BUFFER:"), "terminal renderer should own cell buffers")
-        assertTrue(terminalRenderSource.contains("fn render_glyph("), "terminal renderer should rasterize glyphs")
-        assertTrue(terminalRenderSource.contains("fn blit_glyph("), "terminal renderer should blit glyphs")
+        assertTrue(terminalSource.contains("fn write_printable_run("), "terminal should batch printable runs")
+        assertTrue(
+            terminalSource.contains("terminal_render::repaint_run("),
+            "terminal should repaint contiguous printable runs with one renderer call",
+        )
+        assertTrue(terminalRenderSource.contains("static mut ROW_BUFFER:"), "terminal renderer should own row/run buffers")
+        assertTrue(terminalRenderSource.contains("fn render_glyph_run("), "terminal renderer should rasterize glyph runs")
+        assertTrue(terminalRenderSource.contains("fn blit_glyph_run("), "terminal renderer should blit glyph runs")
         assertTrue(
             terminalRenderSource.contains("gpu::blit_buffer("),
             "terminal renderer should keep visible output on gpu0",
