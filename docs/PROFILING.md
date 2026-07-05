@@ -131,6 +131,19 @@ miss ranges that reached storage0 as batched reads after the KFS cache check. Th
 the loaded executable/shared-object file. They include headers, import metadata, relocations, and payload reads while
 preserving the older semantic `programDataRead*`, `dynamicImportDataRead*`, and `libraryDataRead*` buckets.
 
+The attached-display transport profile prints a dedicated line for the native display batch path:
+
+```text
+k16DisplayTransport: command=..., visible=..., ticks=..., nativeBatches=..., nativeBytes=..., nativeFrames=..., clientFrames=..., serverDecodedFallbackFrames=..., clientTiles=..., clientPayloadBytes=..., clientOperations=..., testDecodeNanos=..., sentFrames=..., sentTiles=..., sentPayloadBytes=..., sentOperations=...
+```
+
+`nativeBatches` and `nativeBytes` are the server-to-client native display payloads emitted by the runtime for an
+attached display session. `client*` counters describe the frame stream observed by the profiling bridge after native
+payload decode for inspection. `serverDecodedFallbackFrames` counts frames that still reached the bridge through the
+decoded `sendDisplayFrame` path instead of `sendNativeDisplayFrameBytes`. `testDecodeNanos` is useful as an estimate of
+the decode work avoided on the server hot path by native batch passthrough. The runtime still reports sent display
+frame/tile/payload/operation counters from the native batch summary.
+
 Use `profileK16ManyVmServerBudget` for a server-focused workload that boots several K16 runtime devices, measures idle
 tick cost after all shells are waiting, then runs active production-path command scenarios. The printed lines include
 both server-tick wall time and a `sync` time that waits for worker snapshots after the timed tick loop:

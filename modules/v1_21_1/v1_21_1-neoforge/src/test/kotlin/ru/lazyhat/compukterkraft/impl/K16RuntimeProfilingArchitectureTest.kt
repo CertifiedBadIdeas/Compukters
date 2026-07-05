@@ -80,6 +80,7 @@ class K16RuntimeProfilingArchitectureTest {
         assertTrue(textIoProfilingSource.contains("programDataReadBlocks="))
         assertTrue(textIoProfilingSource.contains("initProgramFileDataReadBlocks="))
         assertTrue(textIoProfilingSource.contains("blockCacheHits="))
+        assertTrue(docs.contains("k16DisplayTransport: command="))
         assertTrue(textIoProfilingSource.contains("formatKfsHotspotSummary"))
         assertTrue(docs.contains("k16Wait: entries="))
         assertTrue(textIoProfilingSource.contains("bios.splash.visible"))
@@ -87,6 +88,7 @@ class K16RuntimeProfilingArchitectureTest {
         assertTrue(textIoProfilingSource.contains("shell.prompt.after_splash"))
         assertTrue(textIoProfilingSource.contains("shell.prompt.after_splash_to_prompt_visible"))
         assertTrue(textIoProfilingSource.contains("shell.prompt.prompt_visible_to_input_ready"))
+        assertTrue(textIoProfilingSource.contains("k16DisplayTransport"))
         assertTrue(
             textIoProfilingSource.contains("""ProfiledCoreutilsCommand("motd", "cat /etc/motd", "K16 FS OK")"""),
         )
@@ -131,8 +133,8 @@ class K16RuntimeProfilingArchitectureTest {
             "K16 runtime should keep no-viewer display flushes on a cheap server path",
         )
         assertTrue(
-            source.contains("pendingDisplayFrames.addAll(frames)"),
-            "K16 runtime should still keep pending display frames for later session attach",
+            source.contains("pendingDisplayBatches.addAll(current.drainDisplayBatches())"),
+            "K16 runtime should still keep pending display batches for later session attach",
         )
         assertTrue(
             source.contains("displaySessions.attach("),
