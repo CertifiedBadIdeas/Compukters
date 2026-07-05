@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-DEFAULT_ARTIFACT="$ROOT/modules/v1_21_1/v1_21_1-neoforge/build/generated/k16-firmware-artifacts/display-ok.kx"
+DEFAULT_ARTIFACT="$ROOT/modules/v1_21_1/v1_21_1-neoforge/build/generated/k16-firmware-artifacts/kernel.kx"
 ARTIFACT="${1:-$DEFAULT_ARTIFACT}"
 
 KERNEL_LOAD_ADDR=0x00004000

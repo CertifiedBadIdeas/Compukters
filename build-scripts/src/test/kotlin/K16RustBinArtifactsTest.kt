@@ -32,11 +32,11 @@ class K16RustBinArtifactsTest {
     fun findsSingleLinkedCargoBinArtifactByK16TargetProfileAndUnderscorePrefix() {
         val workspace = createTempDirectory("k16-rust-bin-artifact-test-")
         val deps = workspace.resolve("k16-unknown-kraftos/release/deps").createDirectories()
-        val artifact = deps.resolve("display_ok-1234567890abcdef")
+        val artifact = deps.resolve("k16_kernel-1234567890abcdef")
         artifact.writeBytes(byteArrayOf(1, 2, 3))
-        deps.resolve("display_ok-1234567890abcdef.d").writeBytes(byteArrayOf(4, 5, 6))
+        deps.resolve("k16_kernel-1234567890abcdef.d").writeBytes(byteArrayOf(4, 5, 6))
 
-        assertEquals(artifact.toFile(), K16RustBinArtifacts.find(workspace.toFile(), "display-ok", "release"))
+        assertEquals(artifact.toFile(), K16RustBinArtifacts.find(workspace.toFile(), "k16-kernel", "release"))
     }
 
     @Test
