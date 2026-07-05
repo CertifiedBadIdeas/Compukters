@@ -60,6 +60,9 @@ class K16RuntimeTextIoProfilingTest {
                         k16RunNanos = 10,
                         k16RunWaitSignals = 1,
                         k16GpuFrameBytes = 100,
+                        k16DisplayFramesSent = 2,
+                        k16DisplayTilesSent = 3,
+                        k16DisplayPayloadBytesSent = 64,
                         k16TextInputBytes = 2,
                     ),
                 k16 =
@@ -136,6 +139,9 @@ class K16RuntimeTextIoProfilingTest {
                         k16RunNanos = 60,
                         k16RunWaitSignals = 2,
                         k16GpuFrameBytes = 180,
+                        k16DisplayFramesSent = 5,
+                        k16DisplayTilesSent = 8,
+                        k16DisplayPayloadBytesSent = 160,
                         k16TextInputBytes = 7,
                     ),
                 k16 =
@@ -215,6 +221,9 @@ class K16RuntimeTextIoProfilingTest {
         assertTrue(line.contains("gpuFrameBytes=80"))
         assertTrue(line.contains("displayFrames=5"))
         assertTrue(line.contains("displayBytes=256"))
+        assertTrue(line.contains("sentDisplayFrames=3"))
+        assertTrue(line.contains("sentDisplayTiles=5"))
+        assertTrue(line.contains("sentDisplayBytes=96"))
         assertTrue(line.contains("storageReadCommands=2"))
         assertTrue(line.contains("storageRequestedReadBlocks=10"))
         assertTrue(line.contains("storageRequestedReadBytes=5120"))
@@ -927,6 +936,8 @@ class K16RuntimeTextIoProfilingTest {
         storage0Path.writeBytes(K16SystemVolumeWorkspace.loadStorage0VolumeResource(classLoader = javaClass.classLoader))
         val profile = DeviceProfileRegistry.forFamily(DeviceFamily.NORMAL)
         val metrics = RecordingRuntimeMetricsCollector()
+        val displayNetwork = CapturingDisplayNetworkBridge()
+        val playerUuid = UUID.fromString("00000000-0000-0000-0000-000000000229")
         val device =
             K16RuntimeDevice(
                 deviceId = 229,
@@ -940,10 +951,12 @@ class K16RuntimeTextIoProfilingTest {
                     )
                 },
                 stateSink = {},
+                displayNetwork = displayNetwork,
                 metricsCollector = metrics,
             )
 
         try {
+            device.attachDisplaySession(playerUuid, containerId = 229, displayId = 1, width = 320, height = 200)
             device.turnOn()
             waitForTerminal(device, "initial shell prompt") { terminal -> terminal.contains("K16> ") }
             fillTerminalUntilPromptIsNearBottom(device)
@@ -971,7 +984,8 @@ class K16RuntimeTextIoProfilingTest {
                         "yieldSignals=${result.yieldSignals}, waitSignals=${result.waitSignals}, " +
                         "pauseSignals=${result.pauseSignals}, inputWakeups=${result.inputWakeups}, " +
                         "blits=${result.blitCommands}, presents=${result.presentCommands}, " +
-                        "frames=${result.frames}, tiles=${result.frameTiles}, frameBytes=${result.frameBytes}",
+                        "frames=${result.frames}, tiles=${result.frameTiles}, frameBytes=${result.frameBytes}, " +
+                        "sentFrames=${result.sentFrames}, sentTiles=${result.sentTiles}, sentFrameBytes=${result.sentFrameBytes}",
                 )
                 assertTrue(result.blitCommands > 0, "yes ${sample.width}-char lines should exercise terminal GPU blits")
                 assertTrue(
@@ -983,6 +997,8 @@ class K16RuntimeTextIoProfilingTest {
                     "yes ${sample.width}-char lines should batch terminal glyph blits by printable runs; " +
                         "blits=${result.blitCommands}, lines=${result.lines}",
                 )
+                assertTrue(result.sentFrames > 0, "yes ${sample.width}-char lines should report sent display frames")
+                assertTrue(result.sentFrameBytes > 0, "yes ${sample.width}-char lines should report sent display bytes")
             }
         } finally {
             device.close()
@@ -1233,6 +1249,9 @@ class K16RuntimeTextIoProfilingTest {
             frames = gpuAfter.frames - gpuBefore.frames,
             frameTiles = gpuAfter.frameTiles - gpuBefore.frameTiles,
             frameBytes = gpuAfter.framePayloadBytes - gpuBefore.framePayloadBytes,
+            sentFrames = after.vm.k16DisplayFramesSent - before.vm.k16DisplayFramesSent,
+            sentTiles = after.vm.k16DisplayTilesSent - before.vm.k16DisplayTilesSent,
+            sentFrameBytes = after.vm.k16DisplayPayloadBytesSent - before.vm.k16DisplayPayloadBytesSent,
         )
     }
 
@@ -1302,6 +1321,9 @@ private data class ProfiledYesLineWidthResult(
     val frames: Long,
     val frameTiles: Long,
     val frameBytes: Long,
+    val sentFrames: Long,
+    val sentTiles: Long,
+    val sentFrameBytes: Long,
 )
 
 private data class K16ProfiledCommandSample(
@@ -1379,6 +1401,9 @@ private fun formatK16RuntimePhase(
         "displayFrames=${gpuAfter.frames - gpuBefore.frames}, " +
         "displayTiles=${gpuAfter.frameTiles - gpuBefore.frameTiles}, " +
         "displayBytes=${gpuAfter.framePayloadBytes - gpuBefore.framePayloadBytes}, " +
+        "sentDisplayFrames=${vmAfter.k16DisplayFramesSent - vmBefore.k16DisplayFramesSent}, " +
+        "sentDisplayTiles=${vmAfter.k16DisplayTilesSent - vmBefore.k16DisplayTilesSent}, " +
+        "sentDisplayBytes=${vmAfter.k16DisplayPayloadBytesSent - vmBefore.k16DisplayPayloadBytesSent}, " +
         "storageReadCommands=${storageAfter.readCommands - storageBefore.readCommands}, " +
         "storageRequestedReadBlocks=${storageAfter.requestedReadBlocks - storageBefore.requestedReadBlocks}, " +
         "storageRequestedReadBytes=${storageAfter.requestedReadBytes - storageBefore.requestedReadBytes}, " +

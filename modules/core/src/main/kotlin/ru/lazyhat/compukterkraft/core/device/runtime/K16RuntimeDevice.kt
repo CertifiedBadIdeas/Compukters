@@ -348,6 +348,10 @@ class K16RuntimeDevice(
                 continue
             }
             displayNetwork.sendDisplayFrame(session.playerUuid, session.containerId, frame)
+            metricsCollector.recordK16DisplayFrameSent(
+                tileCount = frame.tiles.size,
+                payloadBytes = frame.tiles.sumOf { tile -> tile.payload.size },
+            )
             sent = true
         }
         toDetach.forEach { (playerUuid, detachedDisplayId) -> detachDisplaySession(playerUuid, detachedDisplayId) }

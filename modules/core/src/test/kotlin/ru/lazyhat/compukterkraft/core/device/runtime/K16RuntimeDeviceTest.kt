@@ -522,6 +522,7 @@ class K16RuntimeDeviceTest {
     fun coalescesFramebufferFramesBeforeSendingToAttachedDisplaySessions() {
         val endpoint = RecordingK16Endpoint()
         val displayNetwork = RecordingDisplayNetworkBridge()
+        val metrics = RecordingRuntimeMetricsCollector()
         val device =
             K16RuntimeDevice(
                 deviceId = 22,
@@ -529,6 +530,7 @@ class K16RuntimeDeviceTest {
                 endpointFactory = { endpoint },
                 stateSink = {},
                 displayNetwork = displayNetwork,
+                metricsCollector = metrics,
             )
         val playerUuid = UUID.randomUUID()
         val oldTile =
@@ -604,6 +606,11 @@ class K16RuntimeDeviceTest {
             ),
             displayNetwork.sentFrames.single().frame,
         )
+        val snapshot = metrics.snapshot()
+        assertEquals(2, snapshot.vm.k16GpuFramesDecoded)
+        assertEquals(1, snapshot.vm.k16DisplayFramesSent)
+        assertEquals(2, snapshot.vm.k16DisplayTilesSent)
+        assertEquals(4, snapshot.vm.k16DisplayPayloadBytesSent)
     }
 
     @Test
