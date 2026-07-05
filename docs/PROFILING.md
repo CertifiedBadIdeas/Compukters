@@ -79,7 +79,9 @@ individual character input, sends another command as paste input, compares a nor
 
 The `k16Phase` lines split selected text-I/O scenarios into named checkpoints such as `bios.splash.visible`,
 `bios.splash.wait`, `shell.prompt.after_splash_to_prompt_visible`, `shell.prompt.prompt_visible_to_input_ready`,
-`*.input`, `*.visible`, and `*.idle`. Each line reports elapsed wall time and deltas between two runtime metric
+`*.input`, `*.visible`, and `*.idle`. The startup signal diagnostic also prints `bios.bootloader.visible` and
+`bootloader.kernel.visible` with one native turn per profiled tick so BIOS/bootloader/kernel storage can be separated
+without changing normal runtime budgets. Each line reports elapsed wall time and deltas between two runtime metric
 snapshots:
 
 ```text
@@ -106,11 +108,14 @@ storage bucket. Allocation/free internals are not exposed as their own OS counte
 `mediaWriteBlocks` as the write-side signal until explicit allocation counters exist.
 
 The bundled BIOS intentionally shows a splash frame and waits for 20 game ticks before loading the bootloader.
-`bios.splash.wait` isolates the pure wait portion before the release tick; bootloader/kernel/shell work after the splash
-deadline is counted under `shell.prompt.after_splash_to_prompt_visible`, followed by a narrow
-`shell.prompt.prompt_visible_to_input_ready` marker before scripted input starts. Treat the splash wait as intentional
-startup latency, not as bootloader/kernel/shell execution cost. Use these post-splash startup phases and later
-command-specific phases when comparing real responsiveness. In startup phases, compare `programLoadBytes`,
+`bios.splash.wait` isolates the pure wait portion before the release tick. The production-like text profile keeps
+bootloader/kernel/shell work under `shell.prompt.after_splash_to_prompt_visible`; the startup signal diagnostic splits the
+same boot path with `bios.bootloader.visible` for BIOS storage work through the bootloader debug banner and
+`bootloader.kernel.visible` for bootloader storage work through the kernel debug banner. The narrow
+`shell.prompt.prompt_visible_to_input_ready` marker follows before scripted input starts. Treat the splash wait as
+intentional startup latency, not as bootloader/kernel/shell execution cost. Use these post-splash startup phases and later
+command-specific phases when comparing real responsiveness. In startup phases, compare
+`programLoadBytes`,
 `dynamicImportBytes`, and
 `libraryLoadBytes` against `storageBytesRead` to distinguish executable payload reads, dynamic import metadata reads, and
 shared-library payload reads. Compare `storageUniqueReadBlocks` and `storageRepeatedReadBlocks` to identify whether

@@ -606,6 +606,55 @@ class K16RuntimeTextIoProfilingTest {
     }
 
     @Test
+    fun printsK16StartupSignalProfile() {
+        val workspace = createTempDirectory("k16-runtime-startup-signal-profile-")
+        val biosFlashPath = workspace.resolve("bios.kflash")
+        val storage0Path = workspace.resolve("storage0.kv")
+        biosFlashPath.writeBytes(K16BiosFlashWorkspace.loadBiosFlashResource(classLoader = javaClass.classLoader))
+        storage0Path.writeBytes(K16SystemVolumeWorkspace.loadStorage0VolumeResource(classLoader = javaClass.classLoader))
+        val profile = DeviceProfileRegistry.forFamily(DeviceFamily.NORMAL)
+        val metrics = RecordingRuntimeMetricsCollector()
+        val device =
+            K16RuntimeDevice(
+                deviceId = 227,
+                properties = DeviceProperties(DeviceFamily.NORMAL, label = "startup-signal-profiling"),
+                endpointFactory = {
+                    K16ComputerRuntimeFactory.createFromBiosFlash(
+                        biosFlashPath = biosFlashPath,
+                        storage0Path = storage0Path,
+                        maxSteps = profile.resources.cpu.maxStepsPerSlice,
+                        maxTurnsPerTick = 1,
+                    )
+                },
+                stateSink = {},
+                metricsCollector = metrics,
+            )
+
+        try {
+            device.turnOn()
+            val phases = K16RuntimePhaseProfiler(metrics)
+            tickAndSync(device)
+            val splashVisiblePhase = phases.mark("bios.splash.visible")
+            repeat(K16_BIOS_SPLASH_WAIT_PROFILE_TICKS) { tickAndSync(device) }
+            val splashWaitPhase = phases.mark("bios.splash.wait")
+            waitForDebugOutput(device, "bootloader debug banner") { debug -> debug.contains("K16 BOOT\n") }
+            val bootloaderVisiblePhase = phases.mark("bios.bootloader.visible")
+            waitForDebugOutput(device, "kernel debug banner") { debug -> debug.contains("KERNEL OK\n") }
+            val kernelVisiblePhase = phases.mark("bootloader.kernel.visible")
+            waitForTerminal(device, "initial shell prompt") { terminal -> terminal.contains("K16> ") }
+            val promptVisiblePhase = phases.mark("shell.prompt.after_splash_to_prompt_visible")
+
+            assertTrue(splashVisiblePhase.contains("name=bios.splash.visible"))
+            assertTrue(splashWaitPhase.contains("name=bios.splash.wait"))
+            assertTrue(bootloaderVisiblePhase.contains("name=bios.bootloader.visible"))
+            assertTrue(kernelVisiblePhase.contains("name=bootloader.kernel.visible"))
+            assertTrue(promptVisiblePhase.contains("name=shell.prompt.after_splash_to_prompt_visible"))
+        } finally {
+            device.close()
+        }
+    }
+
+    @Test
     fun printsK16KeyBurstRenderLatency() {
         val workspace = createTempDirectory("k16-runtime-key-burst-profile-")
         val biosFlashPath = workspace.resolve("bios.kflash")
@@ -1250,6 +1299,21 @@ class K16RuntimeTextIoProfilingTest {
         val snapshot = device.snapshotRuntimeState()
         val terminal = snapshot?.let(::terminalText) ?: "<no snapshot>"
         error("K16 text IO profiling did not observe $description; terminal: $terminal")
+    }
+
+    private fun waitForDebugOutput(
+        device: K16RuntimeDevice,
+        description: String,
+        predicate: (String) -> Boolean,
+    ) {
+        repeat(400) {
+            tickAndSync(device)
+            val debug = device.serialOutputSnapshot().decodeToString()
+            if (predicate(debug)) return
+            Thread.sleep(10)
+        }
+        val debug = device.serialOutputSnapshot().decodeToString()
+        error("K16 text IO profiling did not observe $description; debug: $debug")
     }
 
     private fun runProfiledCoreutilsCommand(
