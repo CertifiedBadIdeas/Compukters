@@ -649,6 +649,10 @@ class K16RuntimeTextIoProfilingTest {
             assertTrue(bootloaderVisiblePhase.contains("name=bios.bootloader.visible"))
             assertTrue(kernelVisiblePhase.contains("name=bootloader.kernel.visible"))
             assertTrue(promptVisiblePhase.contains("name=shell.prompt.after_splash_to_prompt_visible"))
+            assertTrue(
+                metricValue(bootloaderVisiblePhase, "storageReadCommands") <= 80,
+                "boot-chain should batch contiguous boot/kernel payload reads instead of issuing one command per block: $bootloaderVisiblePhase",
+            )
         } finally {
             device.close()
         }

@@ -87,6 +87,14 @@ static int checked_add_u32(u32 lhs, u32 rhs, u32 *out) {
   return 1;
 }
 
+static int checked_mul_u32(u32 lhs, u32 rhs, u32 *out) {
+  if (lhs != 0u && rhs > 0xffffffffu / lhs) {
+    return 0;
+  }
+  *out = lhs * rhs;
+  return 1;
+}
+
 static void copy_ram_to_ram(u32 src_addr, u32 dst_addr, u32 len) {
   u32 offset = 0;
   while (offset < len) {
@@ -119,7 +127,7 @@ static int validate_extent(u32 start_block, u32 block_count, u32 total_blocks) {
   return 0;
 }
 
-static int read_storage_block(u32 lba) {
+static int validate_storage_device(void) {
   int media;
   if (read_i32(STORAGE_VERSION) != 1) {
     return ERR_STORAGE_VERSION;
@@ -131,19 +139,39 @@ static int read_storage_block(u32 lba) {
   if (media != STORAGE_MEDIA_PRESENT && media != STORAGE_MEDIA_READ_ONLY) {
     return ERR_STORAGE_MEDIA;
   }
+  return 0;
+}
+
+static int read_storage_blocks_to_ram(u32 lba, u32 block_count, u32 dst_addr) {
+  u32 bytes_done;
+  int error;
+  if (block_count == 0u) {
+    return 0;
+  }
+  if (!checked_mul_u32(block_count, BLOCK_SIZE, &bytes_done)) {
+    return ERR_STORAGE_TRANSFER;
+  }
+  error = validate_storage_device();
+  if (error != 0) {
+    return error;
+  }
 
   write_u32(STORAGE_LBA_LOW, lba);
   write_u32(STORAGE_LBA_HIGH, 0);
-  write_u32(STORAGE_BLOCK_COUNT, 1);
-  write_u32(STORAGE_BUFFER_ADDR, SCRATCH_ADDR);
+  write_u32(STORAGE_BLOCK_COUNT, block_count);
+  write_u32(STORAGE_BUFFER_ADDR, dst_addr);
   write_i32(STORAGE_COMMAND, STORAGE_COMMAND_READ_BLOCKS);
 
   if (read_i32(STORAGE_STATUS) != STORAGE_STATUS_DONE ||
       read_i32(STORAGE_ERROR) != STORAGE_ERROR_NONE ||
-      read_u32(STORAGE_BYTES_DONE) != BLOCK_SIZE) {
+      read_u32(STORAGE_BYTES_DONE) != bytes_done) {
     return ERR_STORAGE_TRANSFER;
   }
   return 0;
+}
+
+static int read_storage_block(u32 lba) {
+  return read_storage_blocks_to_ram(lba, 1u, SCRATCH_ADDR);
 }
 
 static int read_fs_block(u32 block) {
@@ -153,6 +181,22 @@ static int read_fs_block(u32 block) {
     return ERR_INVALID_FILESYSTEM;
   }
   return read_storage_block(lba);
+}
+
+static int read_fs_blocks_to_ram(u32 start_block, u32 block_count,
+                                 u32 dst_addr) {
+  u32 end_block;
+  u32 lba;
+  if (block_count == 0u) {
+    return 0;
+  }
+  if (!checked_add_u32(start_block, block_count, &end_block) ||
+      end_block > read_u32(STATE_PARTITION_BLOCK_COUNT) ||
+      !checked_add_u32(read_u32(STATE_PARTITION_START_LBA), start_block,
+                       &lba)) {
+    return ERR_INVALID_FILESYSTEM;
+  }
+  return read_storage_blocks_to_ram(lba, block_count, dst_addr);
 }
 
 static int read_partition(const char *partition_type) {
@@ -402,6 +446,26 @@ static int copy_selected_file_range_to_ram(u32 file_offset, u32 dst_addr,
         u32 within_extent = cursor - extent_file_start;
         u32 block_delta = within_extent / BLOCK_SIZE;
         u32 block_offset = within_extent % BLOCK_SIZE;
+        if (block_offset == 0u) {
+          u32 full_block_count = (copy_end - cursor) / BLOCK_SIZE;
+          if (full_block_count > 0u) {
+            u32 batch_bytes;
+            u32 block;
+            u32 dst;
+            if (!checked_mul_u32(full_block_count, BLOCK_SIZE, &batch_bytes) ||
+                !checked_add_u32(extent_start_block, block_delta, &block) ||
+                !checked_add_u32(dst_addr, copied, &dst)) {
+              return ERR_INVALID_FILESYSTEM;
+            }
+            int error = read_fs_blocks_to_ram(block, full_block_count, dst);
+            if (error != 0) {
+              return error;
+            }
+            copied += batch_bytes;
+            cursor += batch_bytes;
+            continue;
+          }
+        }
         u32 available = min_u32(BLOCK_SIZE - block_offset, copy_end - cursor);
         int error = read_fs_block(extent_start_block + block_delta);
         if (error != 0) {
