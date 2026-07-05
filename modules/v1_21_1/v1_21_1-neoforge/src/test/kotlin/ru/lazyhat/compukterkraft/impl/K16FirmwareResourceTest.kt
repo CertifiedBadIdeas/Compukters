@@ -4086,6 +4086,14 @@ private class FirmwareCapturingDisplayNetworkBridge : DisplayNetworkBridge {
         frames += frame
     }
 
+    override fun sendNativeDisplayFrameBytes(
+        playerUuid: UUID,
+        containerId: Int,
+        payload: ByteArray,
+    ) {
+        frames += NativeDisplayFrameCodec.decodeFrames(payload)
+    }
+
     fun sentFrames(): List<DisplayFrameDelta> = frames.toList()
 }
 
