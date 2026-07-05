@@ -580,7 +580,7 @@ class K16RuntimeDeviceTest {
     }
 
     @Test
-    fun coalescesFramebufferFramesBeforeSendingToAttachedDisplaySessions() {
+    fun sendsMergedNativeFramebufferBatchesToAttachedDisplaySessions() {
         val endpoint = RecordingK16Endpoint()
         val displayNetwork = RecordingDisplayNetworkBridge()
         val metrics = RecordingRuntimeMetricsCollector()
@@ -656,31 +656,24 @@ class K16RuntimeDeviceTest {
         device.attachDisplaySession(playerUuid, containerId = 23, displayId = 1, width = 320, height = 200)
         waitUntil {
             device.serverTick()
-            displayNetwork.sentFrames.isNotEmpty()
+            displayNetwork.sentNativePayloads.size == 1
         }
 
-        assertEquals(1, displayNetwork.sentFrames.size)
+        assertEquals(emptyList(), displayNetwork.sentFrames)
+        assertEquals(1, displayNetwork.sentNativePayloads.size)
         assertEquals(
-            DisplayFrameDelta(
-                displayId = 1,
-                sequence = 8,
-                width = 320,
-                height = 200,
-                pixelFormat = DisplayPixelFormat.RGB565,
-                fullRefresh = false,
-                tiles = listOf(replacementTile, secondTile),
-            ),
-            displayNetwork.sentFrames.single().frame,
+            listOf(firstFrame, secondFrame),
+            NativeDisplayFrameCodec.decodeFrames(displayNetwork.sentNativePayloads.single().payload),
         )
         val snapshot = metrics.snapshot()
         assertEquals(2, snapshot.vm.k16GpuFramesDecoded)
-        assertEquals(1, snapshot.vm.k16DisplayFramesSent)
-        assertEquals(2, snapshot.vm.k16DisplayTilesSent)
-        assertEquals(4, snapshot.vm.k16DisplayPayloadBytesSent)
+        assertEquals(2, snapshot.vm.k16DisplayFramesSent)
+        assertEquals(3, snapshot.vm.k16DisplayTilesSent)
+        assertEquals(6, snapshot.vm.k16DisplayPayloadBytesSent)
     }
 
     @Test
-    fun coalescesOperationOnlyDisplayFramesBeforeSendingToAttachedDisplaySessions() {
+    fun sendsMergedNativeOperationBatchesToAttachedDisplaySessions() {
         val endpoint = RecordingK16Endpoint()
         val displayNetwork = RecordingDisplayNetworkBridge()
         val metrics = RecordingRuntimeMetricsCollector()
@@ -747,25 +740,17 @@ class K16RuntimeDeviceTest {
         device.attachDisplaySession(playerUuid, containerId = 23, displayId = 1, width = 320, height = 200)
         waitUntil {
             device.serverTick()
-            displayNetwork.sentFrames.isNotEmpty()
+            displayNetwork.sentNativePayloads.size == 1
         }
 
-        assertEquals(1, displayNetwork.sentFrames.size)
+        assertEquals(emptyList(), displayNetwork.sentFrames)
+        assertEquals(1, displayNetwork.sentNativePayloads.size)
         assertEquals(
-            DisplayFrameDelta(
-                displayId = 1,
-                sequence = 8,
-                width = 320,
-                height = 200,
-                pixelFormat = DisplayPixelFormat.RGB565,
-                fullRefresh = false,
-                tiles = emptyList(),
-                operations = firstFrame.operations + secondFrame.operations,
-            ),
-            displayNetwork.sentFrames.single().frame,
+            listOf(firstFrame, secondFrame),
+            NativeDisplayFrameCodec.decodeFrames(displayNetwork.sentNativePayloads.single().payload),
         )
         val snapshot = metrics.snapshot()
-        assertEquals(1, snapshot.vm.k16DisplayFramesSent)
+        assertEquals(2, snapshot.vm.k16DisplayFramesSent)
         assertEquals(0, snapshot.vm.k16DisplayTilesSent)
         assertEquals(0, snapshot.vm.k16DisplayPayloadBytesSent)
         assertEquals(2, snapshot.vm.k16DisplayOperationsSent)

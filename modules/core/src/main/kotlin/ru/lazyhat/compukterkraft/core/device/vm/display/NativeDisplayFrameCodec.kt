@@ -34,9 +34,35 @@ data class NativeDisplayFrameBatchSummary(
 )
 
 object NativeDisplayFrameCodec {
+    fun mergeFrameBatches(batches: List<ByteArray>): ByteArray {
+        val nonEmptyBatches = batches.filter { it.isNotEmpty() }
+        if (nonEmptyBatches.isEmpty()) return ByteArray(0)
+
+        val scans = nonEmptyBatches.map(::scanFrames)
+        val output = ByteArray(4 + scans.sumOf { it.endOffset - 4 })
+        ByteBuffer.wrap(output).order(ByteOrder.LITTLE_ENDIAN).putInt(scans.sumOf { it.frameCount })
+        var outputOffset = 4
+        for ((index, bytes) in nonEmptyBatches.withIndex()) {
+            val endOffset = scans[index].endOffset
+            bytes.copyInto(output, destinationOffset = outputOffset, startIndex = 4, endIndex = endOffset)
+            outputOffset += endOffset - 4
+        }
+        return output
+    }
+
     fun summarizeFrames(bytes: ByteArray): NativeDisplayFrameBatchSummary {
+        val scan = scanFrames(bytes)
+        return NativeDisplayFrameBatchSummary(
+            frameCount = scan.frameCount,
+            tileCount = scan.tileCount,
+            payloadBytes = scan.payloadBytes,
+            operationCount = scan.operationCount,
+        )
+    }
+
+    private fun scanFrames(bytes: ByteArray): NativeFrameBatchScan {
         if (bytes.isEmpty()) {
-            return NativeDisplayFrameBatchSummary(frameCount = 0, tileCount = 0, payloadBytes = 0, operationCount = 0)
+            return NativeFrameBatchScan(frameCount = 0, tileCount = 0, payloadBytes = 0, operationCount = 0, endOffset = 0)
         }
         val input = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
         val frameCount = input.int
@@ -63,7 +89,13 @@ object NativeDisplayFrameCodec {
                 }
             }
         }
-        return NativeDisplayFrameBatchSummary(frameCount, tileCountTotal, payloadBytesTotal, operationCountTotal)
+        return NativeFrameBatchScan(
+            frameCount = frameCount,
+            tileCount = tileCountTotal,
+            payloadBytes = payloadBytesTotal,
+            operationCount = operationCountTotal,
+            endOffset = input.position(),
+        )
     }
 
     fun decodeFrames(bytes: ByteArray): List<DisplayFrameDelta> {
@@ -97,7 +129,7 @@ object NativeDisplayFrameCodec {
             val operations =
                 List(input.int) {
                     when (val operation = input.get().toInt()) {
-                        1 ->
+                        1 -> {
                             DisplayFrameOperation.FillRect(
                                 x = input.int,
                                 y = input.int,
@@ -105,7 +137,9 @@ object NativeDisplayFrameCodec {
                                 height = input.int,
                                 rgb565 = input.int,
                             )
-                        2 ->
+                        }
+
+                        2 -> {
                             DisplayFrameOperation.CopyRect(
                                 srcX = input.int,
                                 srcY = input.int,
@@ -114,10 +148,22 @@ object NativeDisplayFrameCodec {
                                 dstX = input.int,
                                 dstY = input.int,
                             )
-                        else -> error("Unknown native display operation $operation")
+                        }
+
+                        else -> {
+                            error("Unknown native display operation $operation")
+                        }
                     }
                 }
             DisplayFrameDelta(displayId, sequence, width, height, pixelFormat, fullRefresh, tiles, operations)
         }
     }
+
+    private data class NativeFrameBatchScan(
+        val frameCount: Int,
+        val tileCount: Int,
+        val payloadBytes: Int,
+        val operationCount: Int,
+        val endOffset: Int,
+    )
 }

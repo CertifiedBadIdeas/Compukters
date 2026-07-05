@@ -123,4 +123,103 @@ class NativeDisplayFrameCodecTest {
             frame.operations,
         )
     }
+
+    @Test
+    fun mergesNativeFrameBatchesWithoutDecodingFrames() {
+        val rawFirstBatch =
+            operationFrameBatch(
+                sequence = 42,
+                operation = DisplayFrameOperation.FillRect(x = 0, y = 192, width = 320, height = 8, rgb565 = 0x07E0),
+            )
+        val firstBatch = rawFirstBatch.copyOf(rawFirstBatch.size + 3)
+        val secondBatch =
+            operationFrameBatch(
+                sequence = 43,
+                operation =
+                    DisplayFrameOperation.CopyRect(
+                        srcX = 0,
+                        srcY = 8,
+                        width = 320,
+                        height = 192,
+                        dstX = 0,
+                        dstY = 0,
+                    ),
+            )
+
+        val merged = NativeDisplayFrameCodec.mergeFrameBatches(listOf(firstBatch, secondBatch))
+        val frames = NativeDisplayFrameCodec.decodeFrames(merged)
+
+        assertEquals(2, ByteBuffer.wrap(merged).order(ByteOrder.LITTLE_ENDIAN).int)
+        assertEquals(
+            NativeDisplayFrameBatchSummary(
+                frameCount = 2,
+                tileCount = 0,
+                payloadBytes = 0,
+                operationCount = 2,
+            ),
+            NativeDisplayFrameCodec.summarizeFrames(merged),
+        )
+        assertEquals(listOf(42L, 43L), frames.map { it.sequence })
+        assertEquals(
+            listOf(
+                DisplayFrameOperation.FillRect(x = 0, y = 192, width = 320, height = 8, rgb565 = 0x07E0),
+                DisplayFrameOperation.CopyRect(
+                    srcX = 0,
+                    srcY = 8,
+                    width = 320,
+                    height = 192,
+                    dstX = 0,
+                    dstY = 0,
+                ),
+            ),
+            frames.flatMap { it.operations },
+        )
+    }
+
+    private fun operationFrameBatch(
+        sequence: Long,
+        operation: DisplayFrameOperation,
+    ): ByteArray {
+        val operationBytes =
+            when (operation) {
+                is DisplayFrameOperation.FillRect -> 1 + 5 * 4
+                is DisplayFrameOperation.CopyRect -> 1 + 6 * 4
+            }
+        val buffer =
+            ByteBuffer
+                .allocate(4 + 4 + 8 + 4 + 4 + 1 + 1 + 4 + 4 + operationBytes)
+                .order(ByteOrder.LITTLE_ENDIAN)
+                .putInt(1)
+                .putInt(7)
+                .putLong(sequence)
+                .putInt(320)
+                .putInt(200)
+                .put(0)
+                .put(0)
+                .putInt(0)
+                .putInt(1)
+        when (operation) {
+            is DisplayFrameOperation.FillRect -> {
+                buffer
+                    .put(1)
+                    .putInt(operation.x)
+                    .putInt(operation.y)
+                    .putInt(operation.width)
+                    .putInt(operation.height)
+                    .putInt(operation.rgb565)
+            }
+
+            is DisplayFrameOperation.CopyRect -> {
+                buffer
+                    .put(2)
+                    .putInt(operation.srcX)
+                    .putInt(operation.srcY)
+                    .putInt(operation.width)
+                    .putInt(operation.height)
+                    .putInt(operation.dstX)
+                    .putInt(operation.dstY)
+            }
+        }
+        return buffer.array()
+    }
 }
