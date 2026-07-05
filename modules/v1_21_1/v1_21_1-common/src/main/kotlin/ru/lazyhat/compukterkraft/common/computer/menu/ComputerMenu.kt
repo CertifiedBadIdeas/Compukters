@@ -52,4 +52,7 @@ interface ComputerMenu {
 
     /** Apply a pixel display-frame delta to the client-side display buffer. */
     fun handleDisplayFrame(frame: DisplayFrameDelta)
+
+    /** Apply native K16 display-frame bytes to the client-side display buffer. */
+    fun handleNativeDisplayFrameBytes(payload: ByteArray)
 }

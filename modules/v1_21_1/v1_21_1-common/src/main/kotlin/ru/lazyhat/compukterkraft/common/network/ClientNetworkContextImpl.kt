@@ -23,7 +23,6 @@ import net.minecraft.client.Minecraft
 import ru.lazyhat.compukterkraft.common.computer.menu.ComputerMenu
 import ru.lazyhat.compukterkraft.common.network.text.ClientTableFormatter
 import ru.lazyhat.compukterkraft.common.network.text.TableBuilder
-import ru.lazyhat.compukterkraft.core.device.vm.display.NativeDisplayFrameCodec
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
 
 class ClientNetworkContextImpl : ClientNetworkContext {
@@ -57,8 +56,6 @@ class ClientNetworkContextImpl : ClientNetworkContext {
         containerId: Int,
         payload: ByteArray,
     ) = withCheckedContainerMenu(containerId) {
-        for (frame in NativeDisplayFrameCodec.decodeFrames(payload)) {
-            handleDisplayFrame(frame)
-        }
+        handleNativeDisplayFrameBytes(payload)
     }
 }

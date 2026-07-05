@@ -20,6 +20,7 @@
 package ru.lazyhat.compukterkraft.core.device.vm.display
 
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameOperation
+import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayPixelFormat
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import kotlin.test.Test
@@ -122,6 +123,86 @@ class NativeDisplayFrameCodecTest {
             ),
             frame.operations,
         )
+    }
+
+    @Test
+    fun visitsDisplayFrameOperationsBeforeTiles() {
+        val bytes =
+            ByteBuffer
+                .allocate(4 + 26 + 28 + 2 + 4 + 1 + 5 * 4)
+                .order(ByteOrder.LITTLE_ENDIAN)
+                .putInt(1)
+                .putInt(7)
+                .putLong(42)
+                .putInt(320)
+                .putInt(200)
+                .put(0)
+                .put(0)
+                .putInt(1)
+                .putInt(0)
+                .putInt(0)
+                .putInt(0)
+                .putInt(0)
+                .putInt(1)
+                .putInt(1)
+                .putInt(2)
+                .put(byteArrayOf(0xF8.toByte(), 0x00))
+                .putInt(1)
+                .put(1)
+                .putInt(0)
+                .putInt(0)
+                .putInt(1)
+                .putInt(1)
+                .putInt(0x07E0)
+                .array()
+        val events = mutableListOf<String>()
+
+        NativeDisplayFrameCodec.visitFrames(
+            bytes,
+            object : NativeDisplayFrameCodec.FrameVisitor {
+                override fun beginFrame(
+                    displayId: Int,
+                    sequence: Long,
+                    width: Int,
+                    height: Int,
+                    pixelFormat: DisplayPixelFormat,
+                    fullRefresh: Boolean,
+                ): Boolean {
+                    events.add("begin")
+                    return true
+                }
+
+                override fun fillRect(
+                    x: Int,
+                    y: Int,
+                    width: Int,
+                    height: Int,
+                    rgb565: Int,
+                ) {
+                    events.add("fill")
+                }
+
+                override fun tile(
+                    tileX: Int,
+                    tileY: Int,
+                    x: Int,
+                    y: Int,
+                    width: Int,
+                    height: Int,
+                    payload: ByteArray,
+                    payloadOffset: Int,
+                    payloadLength: Int,
+                ) {
+                    events.add("tile")
+                }
+
+                override fun endFrame() {
+                    events.add("end")
+                }
+            },
+        )
+
+        assertEquals(listOf("begin", "fill", "tile", "end"), events)
     }
 
     @Test

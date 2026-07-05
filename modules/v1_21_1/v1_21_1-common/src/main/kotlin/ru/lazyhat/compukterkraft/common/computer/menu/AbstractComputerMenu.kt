@@ -75,6 +75,10 @@ sealed interface MenuSide {
         fun applyDisplayFrame(frame: DisplayFrameDelta) {
             displayBuffer?.apply(frame)
         }
+
+        fun applyNativeDisplayFrameBytes(payload: ByteArray) {
+            displayBuffer?.applyNativeFrameBatch(payload)
+        }
     }
 }
 
@@ -134,6 +138,13 @@ abstract class AbstractComputerMenu(
             side as? MenuSide.Client
                 ?: throw UnsupportedOperationException("Cannot apply display frame on the server")
         client.applyDisplayFrame(frame)
+    }
+
+    override fun handleNativeDisplayFrameBytes(payload: ByteArray) {
+        val client =
+            side as? MenuSide.Client
+                ?: throw UnsupportedOperationException("Cannot apply native display frame bytes on the server")
+        client.applyNativeDisplayFrameBytes(payload)
     }
 
     override fun removed(player: Player) {

@@ -23,6 +23,8 @@ import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameOperation
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayPixelFormat
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayTile
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -196,6 +198,56 @@ class ClientDisplayBufferTest {
     }
 
     @Test
+    fun appliesNativeFrameBatchWithoutMaterializingDisplayFrames() {
+        val buffer = ClientDisplayBuffer(displayId = 1, width = 4, height = 2)
+        val red565 = byteArrayOf(0xF8.toByte(), 0x00)
+        val green565 = byteArrayOf(0x07, 0xE0.toByte())
+        val batch =
+            encodeNativeFrameBatch(
+                frame(
+                    sequence = 1,
+                    fullRefresh = true,
+                    tiles = listOf(NativeTile(0, 0, 0, 0, 4, 2, ByteArray(4 * 2 * 2))),
+                ),
+                frame(
+                    sequence = 2,
+                    operations =
+                        listOf(
+                            DisplayFrameOperation.FillRect(x = 0, y = 0, width = 2, height = 1, rgb565 = 0xF800),
+                            DisplayFrameOperation.CopyRect(srcX = 0, srcY = 0, width = 2, height = 1, dstX = 2, dstY = 1),
+                        ),
+                    tiles = listOf(NativeTile(1, 0, 1, 0, 1, 1, green565)),
+                ),
+            )
+
+        assertTrue(buffer.applyNativeFrameBatch(batch))
+        assertTrue(buffer.swapIfDirty())
+
+        assertEquals(
+            listOf(
+                0xFFFF0000.toInt(),
+                0xFF00FF00.toInt(),
+                0xFF000000.toInt(),
+                0xFF000000.toInt(),
+                0xFF000000.toInt(),
+                0xFF000000.toInt(),
+                0xFFFF0000.toInt(),
+                0xFFFF0000.toInt(),
+            ),
+            buffer.frontArgb().toList(),
+        )
+        assertEquals(
+            listOf(
+                ClientDisplayBuffer.Region(0, 0, 4, 2),
+                ClientDisplayBuffer.Region(0, 0, 2, 1),
+                ClientDisplayBuffer.Region(2, 1, 2, 1),
+                ClientDisplayBuffer.Region(1, 0, 1, 1),
+            ),
+            buffer.frontDirtyRegions(),
+        )
+    }
+
+    @Test
     fun cacheReusesReceivedBufferForSameComputerDisplayGeometry() {
         val cache = ClientDisplayBufferCache()
         val firstBuffer = cache.getOrCreate(computerId = 42, displayId = 1, width = 2, height = 1)
@@ -231,5 +283,100 @@ class ClientDisplayBufferTest {
 
         assertFalse(nextBuffer === firstBuffer)
         assertFalse(nextBuffer.hasReceivedFrames)
+    }
+
+    private data class NativeFrame(
+        val sequence: Long,
+        val fullRefresh: Boolean = false,
+        val operations: List<DisplayFrameOperation> = emptyList(),
+        val tiles: List<NativeTile> = emptyList(),
+    )
+
+    private data class NativeTile(
+        val tileX: Int,
+        val tileY: Int,
+        val x: Int,
+        val y: Int,
+        val width: Int,
+        val height: Int,
+        val payload: ByteArray,
+    )
+
+    private fun frame(
+        sequence: Long,
+        fullRefresh: Boolean = false,
+        operations: List<DisplayFrameOperation> = emptyList(),
+        tiles: List<NativeTile> = emptyList(),
+    ): NativeFrame =
+        NativeFrame(
+            sequence = sequence,
+            fullRefresh = fullRefresh,
+            operations = operations,
+            tiles = tiles,
+        )
+
+    private fun encodeNativeFrameBatch(vararg frames: NativeFrame): ByteArray {
+        val payloadBytes = frames.sumOf { frame -> frame.tiles.sumOf { it.payload.size } }
+        val operationBytes =
+            frames.sumOf { frame ->
+                frame.operations.sumOf { operation ->
+                    when (operation) {
+                        is DisplayFrameOperation.FillRect -> 1 + 5 * 4
+                        is DisplayFrameOperation.CopyRect -> 1 + 6 * 4
+                    }
+                }
+            }
+        val buffer =
+            ByteBuffer
+                .allocate(4 + frames.size * 35 + frames.sumOf { it.tiles.size * 28 } + payloadBytes + operationBytes)
+                .order(ByteOrder.LITTLE_ENDIAN)
+                .putInt(frames.size)
+        for (frame in frames) {
+            buffer
+                .putInt(1)
+                .putLong(frame.sequence)
+                .putInt(4)
+                .putInt(2)
+                .put(0)
+                .put(if (frame.fullRefresh) 1 else 0)
+                .putInt(frame.tiles.size)
+            for (tile in frame.tiles) {
+                buffer
+                    .putInt(tile.tileX)
+                    .putInt(tile.tileY)
+                    .putInt(tile.x)
+                    .putInt(tile.y)
+                    .putInt(tile.width)
+                    .putInt(tile.height)
+                    .putInt(tile.payload.size)
+                    .put(tile.payload)
+            }
+            buffer.putInt(frame.operations.size)
+            for (operation in frame.operations) {
+                when (operation) {
+                    is DisplayFrameOperation.FillRect -> {
+                        buffer
+                            .put(1)
+                            .putInt(operation.x)
+                            .putInt(operation.y)
+                            .putInt(operation.width)
+                            .putInt(operation.height)
+                            .putInt(operation.rgb565)
+                    }
+
+                    is DisplayFrameOperation.CopyRect -> {
+                        buffer
+                            .put(2)
+                            .putInt(operation.srcX)
+                            .putInt(operation.srcY)
+                            .putInt(operation.width)
+                            .putInt(operation.height)
+                            .putInt(operation.dstX)
+                            .putInt(operation.dstY)
+                    }
+                }
+            }
+        }
+        return buffer.array()
     }
 }
