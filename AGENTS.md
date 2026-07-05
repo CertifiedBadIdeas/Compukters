@@ -15,6 +15,11 @@ crates live in `host/k16-vm` and `host/k16-tools`; guest-side Rust crates live u
   `GRADLE_USER_HOME` in `.gradle-sandbox`, disables the Gradle daemon, and avoids sharing host Gradle lock files.
 - For normal source-built development runs, prefer `./gradlew-sandbox-dev-parallel <tasks>`. It delegates to
   `./gradlew-sandbox-dev --parallel <tasks> -Pk16BuildJobs=$(nproc)`.
+- `./gradlew-sandbox-dev-parallel verifyLocalFast` is the default local verification entrypoint for build-script tests
+  and JVM tests across Gradle modules.
+- `./gradlew-sandbox-dev-parallel verifyK16Firmware` runs the focused K16 firmware/image architecture slice.
+- `./gradlew-sandbox-dev-parallel verifyK16Runtime` runs the K16 native runtime shell smoke slice.
+- `./gradlew-sandbox-dev-parallel verifyLocalFull` runs `verifyLocalFast`, focused K16 slices, and host Rust crate tests.
 - `./gradlew build` builds all Gradle modules and runs standard checks.
 - `./gradlew test` runs JVM unit tests across Kotlin modules.
 - `./gradlew :core:test` or `./gradlew :native-runtime:test` runs focused module tests.

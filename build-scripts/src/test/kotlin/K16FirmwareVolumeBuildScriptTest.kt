@@ -87,4 +87,38 @@ class K16FirmwareVolumeBuildScriptTest {
         assertFalse(createTask.contains("outputs.file(k16SystemStorage0Resource)"))
         assertFalse(putKernelTask.contains("outputs.file(k16SystemStorage0Resource)"))
     }
+
+    @Test
+    fun localVerificationEntrypointsAreCentralized() {
+        val rootBuildScript = root.resolve("build.gradle.kts").readText()
+        val conventionScript = root.resolve("build-scripts/src/main/kotlin/k16-firmware-convention.gradle.kts").readText()
+        val agentDocs = root.resolve("AGENTS.md").readText()
+
+        assertTrue(rootBuildScript.contains("""tasks.register("verifyLocalFast")"""))
+        assertTrue(rootBuildScript.contains("""tasks.register("verifyLocalFull")"""))
+        assertTrue(rootBuildScript.contains("""tasks.register("verifyK16Runtime")"""))
+        assertTrue(rootBuildScript.contains("""tasks.register("verifyK16Firmware")"""))
+        assertTrue(rootBuildScript.contains("""gradle.includedBuild("build-scripts").task(":test")"""))
+        assertTrue(rootBuildScript.contains(""":core:test"""))
+        assertTrue(rootBuildScript.contains(""":native-runtime:test"""))
+        assertTrue(rootBuildScript.contains(""":v1_21_1-common:test"""))
+        assertTrue(rootBuildScript.contains(""":v1_21_1-neoforge:test"""))
+        assertTrue(rootBuildScript.contains("""tasks.register<Exec>("testK16HostVmRust")"""))
+        assertTrue(rootBuildScript.contains("""tasks.register<Exec>("testK16HostToolsRust")"""))
+        assertTrue(rootBuildScript.contains("""dependsOn(testK16HostVmRust)"""))
+        assertTrue(rootBuildScript.contains("""dependsOn(testK16HostToolsRust)"""))
+        assertTrue(rootBuildScript.contains("""dependsOn(":v1_21_1-neoforge:verifyK16Runtime")"""))
+        assertTrue(rootBuildScript.contains("""dependsOn(":v1_21_1-neoforge:verifyK16FirmwareArchitecture")"""))
+
+        assertTrue(conventionScript.contains("""tasks.register<Test>("verifyK16Runtime")"""))
+        assertTrue(conventionScript.contains("""tasks.register<Test>("verifyK16FirmwareArchitecture")"""))
+        assertTrue(conventionScript.contains("K16ShellRuntimeSmokeTest"))
+        assertTrue(conventionScript.contains("K16DynamicLoaderArchitectureTest"))
+        assertTrue(conventionScript.contains("K16StorageDurabilityArchitectureTest"))
+        assertTrue(conventionScript.contains("systemProperty(\"k16.vm.native.library\""))
+
+        assertTrue(agentDocs.contains("./gradlew-sandbox-dev-parallel verifyLocalFast"))
+        assertTrue(agentDocs.contains("./gradlew-sandbox-dev-parallel verifyK16Runtime"))
+        assertTrue(agentDocs.contains("./gradlew-sandbox-dev-parallel verifyLocalFull"))
+    }
 }

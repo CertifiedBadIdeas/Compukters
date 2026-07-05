@@ -347,8 +347,8 @@ class K16FirmwareResourceTest {
             "production init should build from the C init source",
         )
         assertTrue(
-            source.contains("sources = listOf(k16CLibcSyscallSource.asFile, k16CSystemInitSource.asFile)"),
-            "production init should build from libc-lite and the C init source",
+            source.contains("sources = listOf(k16CSystemInitSource.asFile)"),
+            "production init should build from the C init source and import libc/syscall wrappers from libkraft",
         )
         assertTrue(
             source.contains("dylibs = listOf(k16SharedKraftArtifact.get().asFile)"),
@@ -361,13 +361,13 @@ class K16FirmwareResourceTest {
             "production shell should build from the C shell source",
         )
         assertTrue(
-            source.contains("sources = listOf(k16CLibcSyscallSource.asFile, k16CSystemShellSource.asFile)"),
-            "production shell should build from libc-lite and the C shell source",
+            source.contains("sources = listOf(k16CSystemShellSource.asFile)"),
+            "production shell should build from the C shell source and import libc/syscall wrappers from libkraft",
         )
         assertFalse(source.contains("binName = \"k16-ls\""))
         assertTrue(source.contains("description = \"Compiles and links the bundled C K16 ls utility"))
         assertTrue(
-            source.contains("sources = listOf(k16CLibcSyscallSource.asFile, k16CSystemLsSource.asFile)"),
+            source.contains("sources = listOf(k16CSystemLsSource.asFile)"),
             "production ls should build from the C coreutils source",
         )
         assertFalse(source.contains("binName = \"k16-uname\""))
@@ -379,7 +379,7 @@ class K16FirmwareResourceTest {
             "production uname should write the production /bin/uname.kx artifact",
         )
         assertTrue(
-            source.contains("sources = listOf(k16CLibcSyscallSource.asFile, k16CSystemUnameSource.asFile)"),
+            source.contains("sources = listOf(k16CSystemUnameSource.asFile)"),
             "production uname should build from the C coreutils source",
         )
         assertFalse(source.contains("binName = \"k16-cat\""))
@@ -391,25 +391,25 @@ class K16FirmwareResourceTest {
             "production cat should write the production /bin/cat.kx artifact",
         )
         assertTrue(
-            source.contains("sources = listOf(k16CLibcSyscallSource.asFile, k16CSystemCatSource.asFile)"),
+            source.contains("sources = listOf(k16CSystemCatSource.asFile)"),
             "production cat should build from the C coreutils source",
         )
         assertFalse(source.contains("binName = \"k16-cp\""))
         assertTrue(source.contains("description = \"Compiles and links the bundled C K16 cp utility"))
         assertTrue(
-            source.contains("sources = listOf(k16CLibcSyscallSource.asFile, k16CSystemCpSource.asFile)"),
+            source.contains("sources = listOf(k16CSystemCpSource.asFile)"),
             "production cp should build from the C coreutils source",
         )
         assertFalse(source.contains("binName = \"k16-mv\""))
         assertTrue(source.contains("description = \"Compiles and links the bundled C K16 mv utility"))
         assertTrue(
-            source.contains("sources = listOf(k16CLibcSyscallSource.asFile, k16CSystemMvSource.asFile)"),
+            source.contains("sources = listOf(k16CSystemMvSource.asFile)"),
             "production mv should build from the C coreutils source",
         )
         assertFalse(source.contains("binName = \"k16-stat\""))
         assertTrue(source.contains("description = \"Compiles and links the bundled C K16 stat utility"))
         assertTrue(
-            source.contains("sources = listOf(k16CLibcSyscallSource.asFile, k16CSystemStatSource.asFile)"),
+            source.contains("sources = listOf(k16CSystemStatSource.asFile)"),
             "production stat should build from the C coreutils source",
         )
         assertFalse(source.contains("binName = \"k16-write\""))
@@ -421,25 +421,25 @@ class K16FirmwareResourceTest {
             "production write should write the production /bin/write.kx artifact",
         )
         assertTrue(
-            source.contains("sources = listOf(k16CLibcSyscallSource.asFile, k16CSystemWriteSource.asFile)"),
+            source.contains("sources = listOf(k16CSystemWriteSource.asFile)"),
             "production write should build from the C coreutils source",
         )
         assertFalse(source.contains("binName = \"k16-rm\""))
         assertTrue(source.contains("description = \"Compiles and links the bundled C K16 rm utility"))
         assertTrue(
-            source.contains("sources = listOf(k16CLibcSyscallSource.asFile, k16CSystemRmSource.asFile)"),
+            source.contains("sources = listOf(k16CSystemRmSource.asFile)"),
             "production rm should build from the C coreutils source",
         )
         assertFalse(source.contains("binName = \"k16-mkdir\""))
         assertTrue(source.contains("description = \"Compiles and links the bundled C K16 mkdir utility"))
         assertTrue(
-            source.contains("sources = listOf(k16CLibcSyscallSource.asFile, k16CSystemMkdirSource.asFile)"),
+            source.contains("sources = listOf(k16CSystemMkdirSource.asFile)"),
             "production mkdir should build from the C coreutils source",
         )
         assertFalse(source.contains("binName = \"k16-rmdir\""))
         assertTrue(source.contains("description = \"Compiles and links the bundled C K16 rmdir utility"))
         assertTrue(
-            source.contains("sources = listOf(k16CLibcSyscallSource.asFile, k16CSystemRmdirSource.asFile)"),
+            source.contains("sources = listOf(k16CSystemRmdirSource.asFile)"),
             "production rmdir should build from the C coreutils source",
         )
         assertFalse(source.contains("binName = \"k16-shared-runtime\""))
@@ -803,7 +803,7 @@ class K16FirmwareResourceTest {
             metadata.contains("libkraft.kso"),
             "bundled /bin/cat.kx should declare libkraft.kso as a needed library",
         )
-        listOf("kraft_sys_open", "kraft_sys_read", "kraft_sys_write", "kraft_sys_close").forEach { symbol ->
+        listOf("kraft_open", "kraft_sys_read", "kraft_sys_write", "kraft_sys_close").forEach { symbol ->
             assertTrue(
                 metadata.contains(symbol),
                 "bundled /bin/cat.kx should import $symbol from libkraft",
@@ -878,7 +878,7 @@ class K16FirmwareResourceTest {
         assertEquals(3, abiKind, "bundled /bin/cp.kx must use K16E abi kind program")
         val metadata = bytes.decodeToString()
         assertTrue(metadata.contains("libkraft.kso"), "bundled /bin/cp.kx should declare libkraft.kso")
-        listOf("kraft_sys_open", "kraft_sys_read", "kraft_sys_write", "kraft_sys_close").forEach { symbol ->
+        listOf("kraft_open", "kraft_sys_read", "kraft_sys_write", "kraft_sys_close").forEach { symbol ->
             assertTrue(metadata.contains(symbol), "bundled /bin/cp.kx should import $symbol from libkraft")
         }
     }
@@ -919,7 +919,7 @@ class K16FirmwareResourceTest {
         assertEquals(3, abiKind, "bundled /bin/mv.kx must use K16E abi kind program")
         val metadata = bytes.decodeToString()
         assertTrue(metadata.contains("libkraft.kso"), "bundled /bin/mv.kx should declare libkraft.kso")
-        listOf("kraft_sys_stat", "kraft_sys_rename", "kraft_sys_write").forEach { symbol ->
+        listOf("kraft_stat", "kraft_rename", "kraft_sys_write").forEach { symbol ->
             assertTrue(metadata.contains(symbol), "bundled /bin/mv.kx should import $symbol from libkraft")
         }
     }
@@ -960,7 +960,7 @@ class K16FirmwareResourceTest {
         assertEquals(3, abiKind, "bundled /bin/ls.kx must use K16E abi kind program")
         val metadata = bytes.decodeToString()
         assertTrue(metadata.contains("libkraft.kso"), "bundled /bin/ls.kx should declare libkraft.kso")
-        listOf("kraft_sys_read_dir", "kraft_sys_stat", "kraft_sys_write").forEach { symbol ->
+        listOf("kraft_read_dir", "kraft_sys_write").forEach { symbol ->
             assertTrue(metadata.contains(symbol), "bundled /bin/ls.kx should import $symbol from libkraft")
         }
     }
@@ -1001,7 +1001,7 @@ class K16FirmwareResourceTest {
         assertEquals(3, abiKind, "bundled /bin/stat.kx must use K16E abi kind program")
         val metadata = bytes.decodeToString()
         assertTrue(metadata.contains("libkraft.kso"), "bundled /bin/stat.kx should declare libkraft.kso")
-        listOf("kraft_sys_stat", "kraft_sys_write").forEach { symbol ->
+        listOf("kraft_stat", "kraft_sys_write").forEach { symbol ->
             assertTrue(metadata.contains(symbol), "bundled /bin/stat.kx should import $symbol from libkraft")
         }
     }
@@ -1045,7 +1045,7 @@ class K16FirmwareResourceTest {
             metadata.contains("libkraft.kso"),
             "bundled /bin/write.kx should declare libkraft.kso as a needed library",
         )
-        listOf("kraft_sys_open", "kraft_sys_write", "kraft_sys_close").forEach { symbol ->
+        listOf("kraft_open", "kraft_sys_write", "kraft_sys_close").forEach { symbol ->
             assertTrue(
                 metadata.contains(symbol),
                 "bundled /bin/write.kx should import $symbol from libkraft",

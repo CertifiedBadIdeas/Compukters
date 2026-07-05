@@ -1571,15 +1571,44 @@ fun org.gradle.api.tasks.testing.Test.inputsK16RuntimeFirmwareResources() {
     inputs.file(k16DevelopmentStorage0Resource)
 }
 
+fun org.gradle.api.tasks.testing.Test.useK16NeoforgeTestRuntime() {
+    dependsOn(tasks.named("testClasses"))
+    val testSourceSet = sourceSets.getByName("test")
+    testClassesDirs = testSourceSet.output.classesDirs
+    classpath = testSourceSet.runtimeClasspath
+    useJUnitPlatform()
+}
+
+tasks.register<Test>("verifyK16FirmwareArchitecture") {
+    description = "Runs focused K16 firmware build-surface and image architecture tests."
+    group = "verification"
+    inputsK16RuntimeFirmwareResources()
+    useK16NeoforgeTestRuntime()
+    filter {
+        includeTestsMatching("ru.lazyhat.compukterkraft.impl.K16DynamicLoaderArchitectureTest")
+        includeTestsMatching("ru.lazyhat.compukterkraft.impl.K16RuntimeProfilingArchitectureTest")
+        includeTestsMatching("ru.lazyhat.compukterkraft.impl.K16StorageDurabilityArchitectureTest")
+    }
+}
+
+tasks.register<Test>("verifyK16Runtime") {
+    description = "Runs the K16 native runtime shell smoke test against bundled firmware resources."
+    group = "verification"
+    dependsOn(tasks.named("buildK16VmNativeLibrary"))
+    inputsK16RuntimeFirmwareResources()
+    useK16NeoforgeTestRuntime()
+    filter {
+        includeTestsMatching("ru.lazyhat.compukterkraft.impl.K16ShellRuntimeSmokeTest")
+    }
+    systemProperty("k16.vm.native.library", k16VmNativeLibrary.asFile.absolutePath)
+}
+
 tasks.register<Test>("profileK16RuntimeWait") {
     description = "Runs the bundled K16 runtime wait profiling workload and prints runtime metrics."
     group = "verification"
     dependsOn(tasks.named("buildK16VmNativeLibrary"))
     inputsK16RuntimeFirmwareResources()
-    val testSourceSet = sourceSets.getByName("test")
-    testClassesDirs = testSourceSet.output.classesDirs
-    classpath = testSourceSet.runtimeClasspath
-    useJUnitPlatform()
+    useK16NeoforgeTestRuntime()
     filter {
         includeTestsMatching("ru.lazyhat.compukterkraft.impl.K16RuntimeWaitProfilingTest")
     }
@@ -1594,10 +1623,7 @@ tasks.register<Test>("profileK16RuntimeTextIo") {
     group = "verification"
     dependsOn(tasks.named("buildK16VmNativeLibrary"))
     inputsK16RuntimeFirmwareResources()
-    val testSourceSet = sourceSets.getByName("test")
-    testClassesDirs = testSourceSet.output.classesDirs
-    classpath = testSourceSet.runtimeClasspath
-    useJUnitPlatform()
+    useK16NeoforgeTestRuntime()
     filter {
         includeTestsMatching("ru.lazyhat.compukterkraft.impl.K16RuntimeTextIoProfilingTest")
     }
@@ -1612,10 +1638,7 @@ tasks.register<Test>("profileK16ManyVmServerBudget") {
     group = "verification"
     dependsOn(tasks.named("buildK16VmNativeLibrary"))
     inputsK16RuntimeFirmwareResources()
-    val testSourceSet = sourceSets.getByName("test")
-    testClassesDirs = testSourceSet.output.classesDirs
-    classpath = testSourceSet.runtimeClasspath
-    useJUnitPlatform()
+    useK16NeoforgeTestRuntime()
     filter {
         includeTestsMatching("ru.lazyhat.compukterkraft.impl.K16ManyVmServerBudgetProfilingTest")
     }
