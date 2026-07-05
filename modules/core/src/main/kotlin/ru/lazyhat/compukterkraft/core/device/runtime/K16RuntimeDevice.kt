@@ -30,8 +30,6 @@ import ru.lazyhat.compukterkraft.core.device.vm.display.NativeDisplayFrameCodec
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16ComputerEndpoint
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16ComputerControl
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16ComputerSignal
-import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
-import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayTile
 import java.nio.ByteBuffer
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
@@ -64,7 +62,7 @@ class K16RuntimeDevice(
 
     private var endpoint: K16EndpointWorker? = null
     private val displaySessions = DisplaySessionTracker()
-    private val pendingDisplayBatches = mutableListOf<PendingDisplayBatch>()
+    private val pendingDisplayBatches = mutableListOf<NativePendingDisplayBatch>()
     private var labelBacking: String? = properties.label
     private var terminalControlReached = false
     private var runtimeFailureMessageBacking: String? = null
@@ -278,116 +276,9 @@ class K16RuntimeDevice(
         if (displaySessions.isEmpty()) {
             return false
         }
-        val nativeBatches = pendingDisplayBatches.filterIsInstance<NativePendingDisplayBatch>()
-        if (nativeBatches.size == pendingDisplayBatches.size) {
-            val batch = mergeNativeBatches(nativeBatches)
-            if (sendNativeBatch(batch)) {
-                pendingDisplayBatches.clear()
-                return true
-            }
-        }
-        val frames = coalesceDisplayFrames(pendingDisplayBatches.flatMap { it.decodeFrames() })
+        val batch = mergeNativeBatches(pendingDisplayBatches)
         pendingDisplayBatches.clear()
-        var sentAny = false
-        val unsentFrames = mutableListOf<DisplayFrameDelta>()
-        for (frame in frames) {
-            if (sendFrame(frame.displayId, frame)) {
-                sentAny = true
-            } else {
-                unsentFrames += frame
-            }
-        }
-        if (unsentFrames.isNotEmpty()) {
-            pendingDisplayBatches += DecodedPendingDisplayBatch(unsentFrames)
-        }
-        return sentAny
-    }
-
-    private fun coalesceDisplayFrames(frames: List<DisplayFrameDelta>): List<DisplayFrameDelta> {
-        if (frames.size < 2) return frames.toList()
-        val coalesced = mutableListOf<DisplayFrameDelta>()
-        var group = mutableListOf<DisplayFrameDelta>()
-        for (frame in frames) {
-            if (group.isNotEmpty() && !group.last().canCoalesceWith(frame)) {
-                coalesced += coalesceCompatibleDisplayFrames(group)
-                group = mutableListOf()
-            }
-            group += frame
-        }
-        if (group.isNotEmpty()) {
-            coalesced += coalesceCompatibleDisplayFrames(group)
-        }
-        return coalesced
-    }
-
-    private fun DisplayFrameDelta.canCoalesceWith(next: DisplayFrameDelta): Boolean =
-        displayId == next.displayId &&
-            width == next.width &&
-            height == next.height &&
-            pixelFormat == next.pixelFormat &&
-            (
-                (isTileOnly() && next.isTileOnly()) ||
-                    (isOperationOnly() && next.isOperationOnly())
-            )
-
-    private fun coalesceCompatibleDisplayFrames(frames: List<DisplayFrameDelta>): DisplayFrameDelta {
-        if (frames.size == 1) return frames.single()
-        if (frames.all { it.isOperationOnly() }) {
-            val last = frames.last()
-            return DisplayFrameDelta(
-                displayId = last.displayId,
-                sequence = last.sequence,
-                width = last.width,
-                height = last.height,
-                pixelFormat = last.pixelFormat,
-                fullRefresh = frames.any { it.fullRefresh },
-                tiles = emptyList(),
-                operations = frames.flatMap { it.operations },
-            )
-        }
-        val tilesByCoordinate = linkedMapOf<Pair<Int, Int>, DisplayTile>()
-        for (frame in frames) {
-            for (tile in frame.tiles) {
-                tilesByCoordinate[tile.tileX to tile.tileY] = tile
-            }
-        }
-        val last = frames.last()
-        return DisplayFrameDelta(
-            displayId = last.displayId,
-            sequence = last.sequence,
-            width = last.width,
-            height = last.height,
-            pixelFormat = last.pixelFormat,
-            fullRefresh = frames.any { it.fullRefresh },
-            tiles = tilesByCoordinate.values.toList(),
-        )
-    }
-
-    private fun DisplayFrameDelta.isTileOnly(): Boolean = operations.isEmpty()
-
-    private fun DisplayFrameDelta.isOperationOnly(): Boolean = tiles.isEmpty() && operations.isNotEmpty()
-
-    private fun sendFrame(
-        displayId: Int,
-        frame: DisplayFrameDelta,
-    ): Boolean {
-        val toDetach = mutableListOf<Pair<UUID, Int>>()
-        var sent = false
-        for (session in displaySessions.sessionsSnapshot().filter { it.displayId == displayId }) {
-            if (!displayNetwork.isDisplaySessionStillBound(session.playerUuid, session.containerId, deviceId, session.displayId)) {
-                toDetach += session.playerUuid to session.displayId
-                continue
-            }
-            displayNetwork.sendDisplayFrame(session.playerUuid, session.containerId, frame)
-            metricsCollector.recordK16DisplayFrameSent(
-                tileCount = frame.tiles.size,
-                payloadBytes = frame.tiles.sumOf { tile -> tile.payload.size },
-                operationCount = frame.operations.size,
-            )
-            sent = true
-        }
-        toDetach.forEach { (playerUuid, detachedDisplayId) -> detachDisplaySession(playerUuid, detachedDisplayId) }
-        return sent
+        return sendNativeBatch(batch)
     }
 
     private fun mergeNativeBatches(batches: List<NativePendingDisplayBatch>): NativePendingDisplayBatch {
@@ -426,26 +317,11 @@ class K16RuntimeDevice(
         return sent
     }
 
-    private sealed interface PendingDisplayBatch {
-        fun decodeFrames(): List<DisplayFrameDelta>
-    }
-
     private class NativePendingDisplayBatch(
         payload: ByteArray,
         val summary: NativeDisplayFrameBatchSummary,
-    ) : PendingDisplayBatch {
+    ) {
         val payload: ByteArray = payload.copyOf()
-        private val decodedFrames: List<DisplayFrameDelta> by lazy { NativeDisplayFrameCodec.decodeFrames(this.payload) }
-
-        override fun decodeFrames(): List<DisplayFrameDelta> = decodedFrames
-    }
-
-    private class DecodedPendingDisplayBatch(
-        frames: List<DisplayFrameDelta>,
-    ) : PendingDisplayBatch {
-        private val frames = frames.toList()
-
-        override fun decodeFrames(): List<DisplayFrameDelta> = frames
     }
 
     private class K16EndpointWorker(
@@ -466,7 +342,7 @@ class K16RuntimeDevice(
         @Volatile
         private var outputCache: ByteArray = ByteArray(0)
 
-        private val displayBatchCache = ConcurrentLinkedQueue<PendingDisplayBatch>()
+        private val displayBatchCache = ConcurrentLinkedQueue<NativePendingDisplayBatch>()
 
         @Volatile
         var terminalControlReached: Boolean = false
@@ -529,7 +405,7 @@ class K16RuntimeDevice(
 
         fun outputSnapshot(): ByteArray = outputCache.copyOf()
 
-        fun drainDisplayBatches(): List<PendingDisplayBatch> =
+        fun drainDisplayBatches(): List<NativePendingDisplayBatch> =
             buildList {
                 while (true) {
                     add(displayBatchCache.poll() ?: break)

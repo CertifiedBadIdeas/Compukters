@@ -153,6 +153,51 @@ class K16RuntimeDeviceTest {
     }
 
     @Test
+    fun productionDisplayPathKeepsNativeBatchesOpaque() {
+        val runtimeSource =
+            root.resolve(
+                Path.of(
+                    "modules",
+                    "core",
+                    "src",
+                    "main",
+                    "kotlin",
+                    "ru",
+                    "lazyhat",
+                    "compukterkraft",
+                    "core",
+                    "device",
+                    "runtime",
+                    "K16RuntimeDevice.kt",
+                ),
+            ).readText()
+        val bridgeSource =
+            root.resolve(
+                Path.of(
+                    "modules",
+                    "core",
+                    "src",
+                    "main",
+                    "kotlin",
+                    "ru",
+                    "lazyhat",
+                    "compukterkraft",
+                    "core",
+                    "device",
+                    "runtime",
+                    "ports",
+                    "DisplayNetworkBridge.kt",
+                ),
+            ).readText()
+
+        assertFalse(runtimeSource.contains("decodeFrames("))
+        assertFalse(runtimeSource.contains("DecodedPendingDisplayBatch"))
+        assertFalse(runtimeSource.contains("coalesceDisplayFrames"))
+        assertFalse(bridgeSource.contains("NativeDisplayFrameCodec"))
+        assertFalse(bridgeSource.contains("decodeFrames("))
+    }
+
+    @Test
     fun ownsK16EndpointAndTicksItWhilePoweredOn() {
         val endpoint = RecordingK16Endpoint()
         val powerChanges = mutableListOf<Boolean>()
