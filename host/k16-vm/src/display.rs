@@ -118,18 +118,15 @@ impl DisplayEngine {
                 self.pixels[index] = rgb565;
             }
         }
-        if self.dirty_tiles.is_empty() {
-            self.pending_operations
-                .push(DisplayFrameOperation::FillRect {
-                    x,
-                    y,
-                    width,
-                    height,
-                    rgb565,
-                });
-        } else {
-            self.mark_rect_dirty(x, y, width, height);
-        }
+        self.pending_operations
+            .push(DisplayFrameOperation::FillRect {
+                x,
+                y,
+                width,
+                height,
+                rgb565,
+            });
+        self.clear_dirty_tiles_fully_covered_by_rect(x, y, width, height);
     }
 
     pub fn copy_rect(
@@ -166,7 +163,9 @@ impl DisplayEngine {
                 }
             }
         }
-        if self.dirty_tiles.is_empty() {
+        if self.dirty_tiles_overlap_rect(src_x, src_y, width, height) {
+            self.mark_rect_dirty(dst_x, dst_y, width, height);
+        } else {
             self.pending_operations
                 .push(DisplayFrameOperation::CopyRect {
                     src_x,
@@ -176,8 +175,7 @@ impl DisplayEngine {
                     dst_x,
                     dst_y,
                 });
-        } else {
-            self.mark_rect_dirty(dst_x, dst_y, width, height);
+            self.clear_dirty_tiles_fully_covered_by_rect(dst_x, dst_y, width, height);
         }
     }
 
@@ -357,6 +355,46 @@ impl DisplayEngine {
         }
     }
 
+    fn clear_dirty_tiles_fully_covered_by_rect(&mut self, x: i32, y: i32, width: i32, height: i32) {
+        let display_width = self.width;
+        let display_height = self.height;
+        self.dirty_tiles.retain(|&(tile_x, tile_y)| {
+            let tile_origin_x = tile_x * TILE_SIZE;
+            let tile_origin_y = tile_y * TILE_SIZE;
+            let tile_width = TILE_SIZE.min(display_width - tile_origin_x);
+            let tile_height = TILE_SIZE.min(display_height - tile_origin_y);
+            !rect_fully_covers(
+                x,
+                y,
+                width,
+                height,
+                tile_origin_x,
+                tile_origin_y,
+                tile_width,
+                tile_height,
+            )
+        });
+    }
+
+    fn dirty_tiles_overlap_rect(&self, x: i32, y: i32, width: i32, height: i32) -> bool {
+        self.dirty_tiles.iter().any(|&(tile_x, tile_y)| {
+            let tile_origin_x = tile_x * TILE_SIZE;
+            let tile_origin_y = tile_y * TILE_SIZE;
+            let tile_width = TILE_SIZE.min(self.width - tile_origin_x);
+            let tile_height = TILE_SIZE.min(self.height - tile_origin_y);
+            rects_overlap(
+                x,
+                y,
+                width,
+                height,
+                tile_origin_x,
+                tile_origin_y,
+                tile_width,
+                tile_height,
+            )
+        })
+    }
+
     fn in_bounds(&self, x: i32, y: i32) -> bool {
         x >= 0 && y >= 0 && x < self.width && y < self.height
     }
@@ -364,6 +402,38 @@ impl DisplayEngine {
     fn index(&self, x: i32, y: i32) -> usize {
         (y * self.width + x) as usize
     }
+}
+
+fn rect_fully_covers(
+    outer_x: i32,
+    outer_y: i32,
+    outer_width: i32,
+    outer_height: i32,
+    inner_x: i32,
+    inner_y: i32,
+    inner_width: i32,
+    inner_height: i32,
+) -> bool {
+    outer_x <= inner_x
+        && outer_y <= inner_y
+        && outer_x + outer_width >= inner_x + inner_width
+        && outer_y + outer_height >= inner_y + inner_height
+}
+
+fn rects_overlap(
+    left_x: i32,
+    left_y: i32,
+    left_width: i32,
+    left_height: i32,
+    right_x: i32,
+    right_y: i32,
+    right_width: i32,
+    right_height: i32,
+) -> bool {
+    left_x < right_x + right_width
+        && right_x < left_x + left_width
+        && left_y < right_y + right_height
+        && right_y < left_y + left_height
 }
 
 pub struct DeviceDisplayRegistry {

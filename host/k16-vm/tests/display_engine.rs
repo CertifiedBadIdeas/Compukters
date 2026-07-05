@@ -90,6 +90,57 @@ fn fill_and_copy_rect_emit_operations_without_pixel_tiles() {
 }
 
 #[test]
+fn fill_rect_after_dirty_pixels_emits_operation_and_drops_fully_covered_dirty_tile() {
+    let mut display = DisplayEngine::new(9, 16, 16, PixelFormat::Rgb565).unwrap();
+
+    display.set_pixel(0, 0, 0xF800);
+    display.fill_rect(0, 0, 16, 16, 0x07E0);
+    let frame = display.present().expect("operation frame");
+
+    assert_eq!(
+        frame.operations,
+        vec![DisplayFrameOperation::FillRect {
+            x: 0,
+            y: 0,
+            width: 16,
+            height: 16,
+            rgb565: 0x07E0,
+        }],
+    );
+    assert!(
+        frame.tiles.is_empty(),
+        "covered dirty tile should not be serialized as raw pixels",
+    );
+}
+
+#[test]
+fn copy_rect_after_clean_source_emits_operation_and_drops_fully_covered_dirty_tile() {
+    let mut display = DisplayEngine::new(10, 32, 16, PixelFormat::Rgb565).unwrap();
+
+    display.fill_rect(16, 0, 16, 16, 0x07E0);
+    display.present().expect("prime clean source");
+    display.set_pixel(0, 0, 0xF800);
+    display.copy_rect(16, 0, 16, 16, 0, 0);
+    let frame = display.present().expect("mixed frame");
+
+    assert_eq!(
+        frame.operations,
+        vec![DisplayFrameOperation::CopyRect {
+            src_x: 16,
+            src_y: 0,
+            width: 16,
+            height: 16,
+            dst_x: 0,
+            dst_y: 0,
+        }],
+    );
+    assert!(
+        frame.tiles.is_empty(),
+        "destination fully covered by copy operation should remove the earlier dirty tile",
+    );
+}
+
+#[test]
 fn blit_mono_draws_foreground_and_background() {
     let mut display = DisplayEngine::new(3, 8, 4, PixelFormat::Rgb565).unwrap();
 
