@@ -27,6 +27,63 @@ import kotlin.test.assertEquals
 
 class NativeDisplayFrameCodecTest {
     @Test
+    fun summarizesFramesWithoutDecodingTiles() {
+        val bytes =
+            ByteBuffer
+                .allocate(4 + 26 + 28 + 4 + 4 + 1 + 5 * 4 + 26 + 4 + 1 + 6 * 4)
+                .order(ByteOrder.LITTLE_ENDIAN)
+                .putInt(2)
+                .putInt(7)
+                .putLong(42)
+                .putInt(320)
+                .putInt(200)
+                .put(0)
+                .put(0)
+                .putInt(1)
+                .putInt(0)
+                .putInt(0)
+                .putInt(0)
+                .putInt(0)
+                .putInt(2)
+                .putInt(1)
+                .putInt(4)
+                .put(byteArrayOf(0xF8.toByte(), 0x00, 0x07, 0xE0.toByte()))
+                .putInt(1)
+                .put(1)
+                .putInt(0)
+                .putInt(192)
+                .putInt(320)
+                .putInt(8)
+                .putInt(0x07E0)
+                .putInt(7)
+                .putLong(43)
+                .putInt(320)
+                .putInt(200)
+                .put(0)
+                .put(0)
+                .putInt(0)
+                .putInt(1)
+                .put(2)
+                .putInt(0)
+                .putInt(8)
+                .putInt(320)
+                .putInt(192)
+                .putInt(0)
+                .putInt(0)
+                .array()
+
+        assertEquals(
+            NativeDisplayFrameBatchSummary(
+                frameCount = 2,
+                tileCount = 1,
+                payloadBytes = 4,
+                operationCount = 2,
+            ),
+            NativeDisplayFrameCodec.summarizeFrames(bytes),
+        )
+    }
+
+    @Test
     fun decodesDisplayFrameOperationsAfterTiles() {
         val bytes =
             ByteBuffer

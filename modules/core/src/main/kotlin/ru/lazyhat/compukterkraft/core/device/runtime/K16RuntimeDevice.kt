@@ -25,6 +25,7 @@ import ru.lazyhat.compukterkraft.core.device.DeviceProperties
 import ru.lazyhat.compukterkraft.core.device.runtime.ports.DeviceStateSink
 import ru.lazyhat.compukterkraft.core.device.runtime.ports.DisplayNetworkBridge
 import ru.lazyhat.compukterkraft.core.device.runtime.ports.NoopDisplayNetworkBridge
+import ru.lazyhat.compukterkraft.core.device.vm.display.NativeDisplayFrameBatchSummary
 import ru.lazyhat.compukterkraft.core.device.vm.display.NativeDisplayFrameCodec
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16ComputerEndpoint
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16ComputerControl
@@ -63,7 +64,7 @@ class K16RuntimeDevice(
 
     private var endpoint: K16EndpointWorker? = null
     private val displaySessions = DisplaySessionTracker()
-    private val pendingDisplayFrames = mutableListOf<DisplayFrameDelta>()
+    private val pendingDisplayBatches = mutableListOf<PendingDisplayBatch>()
     private var labelBacking: String? = properties.label
     private var terminalControlReached = false
     private var runtimeFailureMessageBacking: String? = null
@@ -100,7 +101,7 @@ class K16RuntimeDevice(
         val current = endpoint ?: return
         endpoint = null
         terminalControlReached = false
-        pendingDisplayFrames.clear()
+        pendingDisplayBatches.clear()
         current.close()
         stateSink.onPowerStateChanged(false)
     }
@@ -268,25 +269,35 @@ class K16RuntimeDevice(
     private fun argumentBoolean(value: Any?): Boolean? = value as? Boolean
 
     private fun flushFramebufferFrames(current: K16EndpointWorker): Boolean {
-        pendingDisplayFrames.addAll(current.drainDisplayFrames())
+        pendingDisplayBatches.addAll(current.drainDisplayBatches())
         return flushPendingDisplayFrames()
     }
 
     private fun flushPendingDisplayFrames(): Boolean {
-        if (pendingDisplayFrames.isEmpty()) return false
-        val frames = coalesceDisplayFrames(pendingDisplayFrames)
-        pendingDisplayFrames.clear()
+        if (pendingDisplayBatches.isEmpty()) return false
         if (displaySessions.isEmpty()) {
-            pendingDisplayFrames.addAll(frames)
             return false
         }
+        if (pendingDisplayBatches.size == 1) {
+            val batch = pendingDisplayBatches.single()
+            if (batch is NativePendingDisplayBatch && sendNativeBatch(batch)) {
+                pendingDisplayBatches.clear()
+                return true
+            }
+        }
+        val frames = coalesceDisplayFrames(pendingDisplayBatches.flatMap { it.decodeFrames() })
+        pendingDisplayBatches.clear()
         var sentAny = false
+        val unsentFrames = mutableListOf<DisplayFrameDelta>()
         for (frame in frames) {
             if (sendFrame(frame.displayId, frame)) {
                 sentAny = true
             } else {
-                pendingDisplayFrames += frame
+                unsentFrames += frame
             }
+        }
+        if (unsentFrames.isNotEmpty()) {
+            pendingDisplayBatches += DecodedPendingDisplayBatch(unsentFrames)
         }
         return sentAny
     }
@@ -378,6 +389,49 @@ class K16RuntimeDevice(
         return sent
     }
 
+    private fun sendNativeBatch(batch: NativePendingDisplayBatch): Boolean {
+        val toDetach = mutableListOf<Pair<UUID, Int>>()
+        var sent = false
+        for (session in displaySessions.sessionsSnapshot()) {
+            if (!displayNetwork.isDisplaySessionStillBound(session.playerUuid, session.containerId, deviceId, session.displayId)) {
+                toDetach += session.playerUuid to session.displayId
+                continue
+            }
+            displayNetwork.sendNativeDisplayFrameBytes(session.playerUuid, session.containerId, batch.payload)
+            metricsCollector.recordK16DisplayFramesSent(
+                frameCount = batch.summary.frameCount,
+                tileCount = batch.summary.tileCount,
+                payloadBytes = batch.summary.payloadBytes,
+                operationCount = batch.summary.operationCount,
+            )
+            sent = true
+        }
+        toDetach.forEach { (playerUuid, detachedDisplayId) -> detachDisplaySession(playerUuid, detachedDisplayId) }
+        return sent
+    }
+
+    private sealed interface PendingDisplayBatch {
+        fun decodeFrames(): List<DisplayFrameDelta>
+    }
+
+    private class NativePendingDisplayBatch(
+        payload: ByteArray,
+        val summary: NativeDisplayFrameBatchSummary,
+    ) : PendingDisplayBatch {
+        val payload: ByteArray = payload.copyOf()
+        private val decodedFrames: List<DisplayFrameDelta> by lazy { NativeDisplayFrameCodec.decodeFrames(this.payload) }
+
+        override fun decodeFrames(): List<DisplayFrameDelta> = decodedFrames
+    }
+
+    private class DecodedPendingDisplayBatch(
+        frames: List<DisplayFrameDelta>,
+    ) : PendingDisplayBatch {
+        private val frames = frames.toList()
+
+        override fun decodeFrames(): List<DisplayFrameDelta> = frames
+    }
+
     private class K16EndpointWorker(
         deviceId: Int,
         private val endpointFactory: () -> K16ComputerEndpoint,
@@ -396,7 +450,7 @@ class K16RuntimeDevice(
         @Volatile
         private var outputCache: ByteArray = ByteArray(0)
 
-        private val displayFrameCache = ConcurrentLinkedQueue<DisplayFrameDelta>()
+        private val displayBatchCache = ConcurrentLinkedQueue<PendingDisplayBatch>()
 
         @Volatile
         var terminalControlReached: Boolean = false
@@ -459,10 +513,10 @@ class K16RuntimeDevice(
 
         fun outputSnapshot(): ByteArray = outputCache.copyOf()
 
-        fun drainDisplayFrames(): List<DisplayFrameDelta> =
+        fun drainDisplayBatches(): List<PendingDisplayBatch> =
             buildList {
                 while (true) {
-                    add(displayFrameCache.poll() ?: break)
+                    add(displayBatchCache.poll() ?: break)
                 }
             }
 
@@ -620,20 +674,20 @@ class K16RuntimeDevice(
             val startedAt = System.nanoTime()
             val outputBytes = endpoint.outputSnapshot()
             val frameBytes = endpoint.drainGpu0Frames()
-            val frames =
+            val frameSummary =
                 if (frameBytes.isEmpty()) {
-                    emptyList()
+                    NativeDisplayFrameBatchSummary(frameCount = 0, tileCount = 0, payloadBytes = 0, operationCount = 0)
                 } else {
-                    NativeDisplayFrameCodec.decodeFrames(frameBytes)
+                    NativeDisplayFrameCodec.summarizeFrames(frameBytes)
                 }
             outputCache = outputBytes
-            if (frames.isNotEmpty()) {
-                displayFrameCache.addAll(frames)
+            if (frameSummary.frameCount > 0) {
+                displayBatchCache += NativePendingDisplayBatch(frameBytes, frameSummary)
             }
             metricsCollector.recordK16OutputRefresh(
                 serialOutputBytes = outputBytes.size,
                 gpuFrameBytes = frameBytes.size,
-                gpuFrameCount = frames.size,
+                gpuFrameCount = frameSummary.frameCount,
                 nanos = System.nanoTime() - startedAt,
             )
             if (metricsCollector.recordsK16StatsSnapshots) {

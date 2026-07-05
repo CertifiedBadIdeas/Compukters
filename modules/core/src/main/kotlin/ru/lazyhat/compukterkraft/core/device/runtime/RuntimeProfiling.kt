@@ -116,6 +116,19 @@ interface RuntimeMetricsCollector {
         operationCount: Int,
     )
 
+    fun recordK16DisplayFramesSent(
+        frameCount: Int,
+        tileCount: Int,
+        payloadBytes: Int,
+        operationCount: Int,
+    ) {
+        val sanitizedFrameCount = frameCount.coerceAtLeast(0)
+        if (sanitizedFrameCount == 0) return
+        repeat(sanitizedFrameCount) {
+            recordK16DisplayFrameSent(tileCount = 0, payloadBytes = 0, operationCount = 0)
+        }
+    }
+
     fun recordK16TextInput(
         byteCount: Int,
         nanos: Long,
@@ -873,7 +886,21 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
         payloadBytes: Int,
         operationCount: Int,
     ) {
-        k16DisplayFramesSent.incrementAndGet()
+        recordK16DisplayFramesSent(
+            frameCount = 1,
+            tileCount = tileCount,
+            payloadBytes = payloadBytes,
+            operationCount = operationCount,
+        )
+    }
+
+    override fun recordK16DisplayFramesSent(
+        frameCount: Int,
+        tileCount: Int,
+        payloadBytes: Int,
+        operationCount: Int,
+    ) {
+        k16DisplayFramesSent.addAndGet(frameCount.coerceAtLeast(0).toLong())
         k16DisplayTilesSent.addAndGet(tileCount.coerceAtLeast(0).toLong())
         k16DisplayPayloadBytesSent.addAndGet(payloadBytes.coerceAtLeast(0).toLong())
         k16DisplayOperationsSent.addAndGet(operationCount.coerceAtLeast(0).toLong())
