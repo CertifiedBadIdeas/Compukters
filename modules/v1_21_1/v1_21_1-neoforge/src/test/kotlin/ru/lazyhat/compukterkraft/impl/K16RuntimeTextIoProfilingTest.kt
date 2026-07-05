@@ -36,6 +36,7 @@ import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeProfilingSnapshot
 import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeVmMetrics
 import ru.lazyhat.compukterkraft.core.device.runtime.ports.DisplayNetworkBridge
 import ru.lazyhat.compukterkraft.core.device.vm.DeviceProfileRegistry
+import ru.lazyhat.compukterkraft.core.device.vm.display.NativeDisplayFrameCodec
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16BiosFlashWorkspace
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16ComputerRuntimeFactory
 import ru.lazyhat.compukterkraft.lang.runtime.storage.K16SystemVolumeWorkspace
@@ -703,6 +704,112 @@ class K16RuntimeTextIoProfilingTest {
     }
 
     @Test
+    fun printsK16AttachedDisplayTransportProfile() {
+        val workspace = createTempDirectory("k16-runtime-display-transport-profile-")
+        val biosFlashPath = workspace.resolve("bios.kflash")
+        val storage0Path = workspace.resolve("storage0.kv")
+        biosFlashPath.writeBytes(K16BiosFlashWorkspace.loadBiosFlashResource(classLoader = javaClass.classLoader))
+        storage0Path.writeBytes(K16SystemVolumeWorkspace.loadStorage0VolumeResource(classLoader = javaClass.classLoader))
+        val profile = DeviceProfileRegistry.forFamily(DeviceFamily.NORMAL)
+        val metrics = RecordingRuntimeMetricsCollector()
+        val displayNetwork = CapturingDisplayNetworkBridge()
+        val playerUuid = UUID.fromString("00000000-0000-0000-0000-000000000227")
+        val containerId = 227
+        val device =
+            K16RuntimeDevice(
+                deviceId = 227,
+                properties = DeviceProperties(DeviceFamily.NORMAL, label = "display-transport-profiling"),
+                endpointFactory = {
+                    K16ComputerRuntimeFactory.createFromBiosFlash(
+                        biosFlashPath = biosFlashPath,
+                        storage0Path = storage0Path,
+                        maxSteps = profile.resources.cpu.maxStepsPerSlice,
+                        maxTurnsPerTick = profile.resources.cpu.maxTurnsPerTick,
+                    )
+                },
+                stateSink = {},
+                displayNetwork = displayNetwork,
+                metricsCollector = metrics,
+            )
+
+        try {
+            device.turnOn()
+            waitForTerminal(device, "initial shell prompt") { terminal -> terminal.contains("K16> ") }
+            device.attachDisplaySession(
+                playerUuid = playerUuid,
+                containerId = containerId,
+                displayId = K16_DISPLAY_ID,
+                width = K16_DISPLAY_WIDTH,
+                height = K16_DISPLAY_HEIGHT,
+            )
+            tickAndSync(device)
+            fillTerminalUntilPromptIsNearBottom(device)
+            displayNetwork.clear()
+            val before = metrics.snapshot()
+            val command = "yes -n 48 ${"T".repeat(32)}"
+            val startedAt = System.nanoTime()
+            DeviceEvents.dispatch(device, PasteInputEvent(ByteBuffer.wrap("$command\n".encodeToByteArray())))
+            var ticks = 0
+            var visibleNanos: Long? = null
+
+            while (ticks < 240 && visibleNanos == null) {
+                ticks += 1
+                tickAndSync(device)
+                val elapsed = System.nanoTime() - startedAt
+                val terminal = device.snapshotRuntimeState()?.let(::terminalText) ?: ""
+                val lastOutputIndex = terminal.lastIndexOf("T".repeat(32))
+                val promptReturned =
+                    lastOutputIndex >= 0 &&
+                        terminal.indexOf("K16> ", startIndex = lastOutputIndex + 32) > lastOutputIndex
+                if (promptReturned) {
+                    visibleNanos = elapsed
+                }
+                Thread.sleep(1)
+            }
+
+            val visible =
+                visibleNanos
+                    ?: error("attached display transport command did not finish and return to the prompt")
+            val after = metrics.snapshot()
+            val nativeBatches = displayNetwork.nativeBatches()
+            val sentFrames = displayNetwork.sentFrames()
+            val decodedFallbackFrames = displayNetwork.decodedFallbackFrames()
+            val nativeFrameCount = nativeBatches.sumOf { it.frameCount }
+            val nativeBytes = nativeBatches.sumOf { it.payloadBytes }
+            val clientTiles = sentFrames.sumOf { it.frame.tiles.size }
+            val clientPayloadBytes = sentFrames.sumOf { frame -> frame.frame.tiles.sumOf { it.payload.size } }
+            val clientOperations = sentFrames.sumOf { it.frame.operations.size }
+            val testDecodeNanos = nativeBatches.sumOf { it.decodeNanos }
+            val vmBefore = before.vm
+            val vmAfter = after.vm
+            println(
+                "k16DisplayTransport: command=$command, visible=$visible ns, ticks=$ticks, " +
+                    "nativeBatches=${nativeBatches.size}, nativeBytes=$nativeBytes, " +
+                    "nativeFrames=$nativeFrameCount, clientFrames=${sentFrames.size}, " +
+                    "serverDecodedFallbackFrames=${decodedFallbackFrames.size}, " +
+                    "clientTiles=$clientTiles, clientPayloadBytes=$clientPayloadBytes, " +
+                    "clientOperations=$clientOperations, testDecodeNanos=$testDecodeNanos, " +
+                    "sentFrames=${vmAfter.k16DisplayFramesSent - vmBefore.k16DisplayFramesSent}, " +
+                    "sentTiles=${vmAfter.k16DisplayTilesSent - vmBefore.k16DisplayTilesSent}, " +
+                    "sentPayloadBytes=${vmAfter.k16DisplayPayloadBytesSent - vmBefore.k16DisplayPayloadBytesSent}, " +
+                    "sentOperations=${vmAfter.k16DisplayOperationsSent - vmBefore.k16DisplayOperationsSent}",
+            )
+
+            assertTrue(nativeBatches.isNotEmpty(), "attached display transport should send native display batches")
+            assertTrue(nativeBytes > 0, "attached display transport should report native payload bytes")
+            assertTrue(nativeFrameCount > 0, "attached display transport should carry at least one native frame")
+            assertTrue(sentFrames.isNotEmpty(), "test-side client decode should observe display frames")
+            assertTrue(testDecodeNanos >= 0, "test-side native decode timing should be non-negative")
+            assertTrue(
+                vmAfter.k16DisplayFramesSent > vmBefore.k16DisplayFramesSent,
+                "runtime metrics should report sent display frames",
+            )
+        } finally {
+            device.close()
+        }
+    }
+
+    @Test
     fun printsK16LsCommandRuntimeLatency() {
         val workspace = createTempDirectory("k16-runtime-ls-profile-")
         val biosFlashPath = workspace.resolve("bios.kflash")
@@ -1296,6 +1403,13 @@ private data class TimedDisplayFrame(
     val frame: DisplayFrameDelta,
 )
 
+private data class TimedNativeDisplayBatch(
+    val nanos: Long,
+    val payloadBytes: Int,
+    val frameCount: Int,
+    val decodeNanos: Long,
+)
+
 private data class ProfiledCoreutilsCommand(
     val name: String,
     val command: String,
@@ -1616,6 +1730,8 @@ private fun List<String>.singleCommandLine(name: String): String = single { it.c
 
 private class CapturingDisplayNetworkBridge : DisplayNetworkBridge {
     private val sentFrames = CopyOnWriteArrayList<TimedDisplayFrame>()
+    private val decodedFallbackFrames = CopyOnWriteArrayList<TimedDisplayFrame>()
+    private val nativeBatches = CopyOnWriteArrayList<TimedNativeDisplayBatch>()
 
     override fun isDisplaySessionStillBound(
         playerUuid: UUID,
@@ -1629,12 +1745,40 @@ private class CapturingDisplayNetworkBridge : DisplayNetworkBridge {
         containerId: Int,
         frame: DisplayFrameDelta,
     ) {
-        sentFrames += TimedDisplayFrame(System.nanoTime(), frame)
+        val timedFrame = TimedDisplayFrame(System.nanoTime(), frame)
+        sentFrames += timedFrame
+        decodedFallbackFrames += timedFrame
+    }
+
+    override fun sendNativeDisplayFrameBytes(
+        playerUuid: UUID,
+        containerId: Int,
+        payload: ByteArray,
+    ) {
+        val startedAt = System.nanoTime()
+        val frames = NativeDisplayFrameCodec.decodeFrames(payload)
+        val decodeNanos = System.nanoTime() - startedAt
+        nativeBatches +=
+            TimedNativeDisplayBatch(
+                nanos = System.nanoTime(),
+                payloadBytes = payload.size,
+                frameCount = frames.size,
+                decodeNanos = decodeNanos,
+            )
+        for (frame in frames) {
+            sentFrames += TimedDisplayFrame(System.nanoTime(), frame)
+        }
     }
 
     fun clear() {
         sentFrames.clear()
+        decodedFallbackFrames.clear()
+        nativeBatches.clear()
     }
 
     fun sentFrames(): List<TimedDisplayFrame> = sentFrames.toList()
+
+    fun decodedFallbackFrames(): List<TimedDisplayFrame> = decodedFallbackFrames.toList()
+
+    fun nativeBatches(): List<TimedNativeDisplayBatch> = nativeBatches.toList()
 }
