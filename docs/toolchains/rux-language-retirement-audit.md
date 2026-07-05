@@ -62,7 +62,7 @@ storage images from:
 
 - `k16_bios.rx` -> `firmware/k16-bios.kflash`;
 - `kernel_loader.rx` -> `kernel-loader.kb`;
-- `display_ok.rx` -> `display-ok.kx`.
+- `display_ok.rx` -> `kernel.kx`.
 
 Those source inputs are retired from the active bundled firmware path. BIOS and
 bootloader firmware are C-owned under `guest/kraftos`; the kernel remains Rust-owned
@@ -72,7 +72,7 @@ The active NeoForge resource generation path now builds:
 
 - `guest/firmware/bios/bios.c` -> `firmware/k16-bios.kflash`;
 - `guest/firmware/boot/boot.c` plus `guest/firmware/boot-chain` -> `kernel-loader.kb`;
-- `guest/kraftos/kernel` -> `display-ok.kx`.
+- `guest/kraftos/kernel` -> `kernel.kx`.
 
 These builds resolve a prepared K16 toolchain through Gradle
 `prepareK16Toolchain`. C firmware links through `k16 link`; the Rust kernel

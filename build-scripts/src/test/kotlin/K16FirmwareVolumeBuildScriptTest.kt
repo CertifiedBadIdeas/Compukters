@@ -33,6 +33,8 @@ class K16FirmwareVolumeBuildScriptTest {
 
         assertTrue(neoforgeBuildScript.contains("alias(libs.plugins.k16FirmwareConvention)"))
         assertTrue(conventionScript.contains("val compileK16SystemKernel ="))
+        assertTrue(conventionScript.contains("""val k16KernelArtifact = generatedK16FirmwareArtifacts.map { it.file("kernel.kx") }"""))
+        assertFalse(conventionScript.contains("""it.file("display-ok.kx")"""))
         assertTrue(conventionScript.contains("val createK16SystemStorage0 ="))
         assertTrue(conventionScript.contains("tasks.register<Test>(\"profileK16RuntimeTextIo\")"))
         assertFalse(neoforgeBuildScript.contains("val compileK16SystemKernel ="))

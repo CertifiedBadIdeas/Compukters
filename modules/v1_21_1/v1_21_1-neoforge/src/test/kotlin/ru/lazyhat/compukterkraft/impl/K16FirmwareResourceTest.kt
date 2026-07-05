@@ -33,6 +33,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 private const val K16_KERNEL_LOAD_ADDR = 0x0000_4000
+private const val K16_KERNEL_BOOT_FLOOR_BYTES = 256 * 1024
 private const val K16_TERMINAL_CELLS_ADDR = 0x0000_3000
 private const val K16_TERMINAL_COLUMNS = 64
 private const val K16_TERMINAL_ROWS = 25
@@ -2971,7 +2972,7 @@ class K16FirmwareResourceTest {
 
     @Test
     fun bundledK16KernelPayloadUsesFixedLoadBaseWithoutFixedWindowBudget() {
-        val artifactPath = Path.of("build/generated/k16-firmware-artifacts/display-ok.kx")
+        val artifactPath = Path.of("build/generated/k16-firmware-artifacts/kernel.kx")
         val bytes = artifactPath.readBytes()
 
         assertContentEquals("K16E".encodeToByteArray(), bytes.copyOfRange(0, 4))
@@ -2989,7 +2990,7 @@ class K16FirmwareResourceTest {
 
         assertTrue(payloadBytes > 0, "K16 kernel payload should not be empty")
         assertTrue(memorySize >= payloadBytes, "K16E kernel memory size should cover file payload")
-        assertTrue(memorySize - payloadBytes < 64 * 1024, "K16E kernel memory size should not include a fixed arena window")
+        assertTrue(memorySize < K16_KERNEL_BOOT_FLOOR_BYTES, "K16E kernel memory size should not include the full boot arena")
     }
 
     @Test

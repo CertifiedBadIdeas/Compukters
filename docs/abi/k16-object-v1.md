@@ -98,7 +98,7 @@ Bundled K16 guest artifacts use this driver directly:
 ```text
 guest/firmware/bios/bios.c                -> k16 link --target bios   -> firmware/k16-bios.kflash
 guest/firmware/boot/boot.c + boot-chain   -> k16 link --target boot   -> kernel-loader.kb
-guest/kraftos/kernel              -> k16-ld --k16-target=kernel -> display-ok.kx
+guest/kraftos/kernel              -> k16-ld --k16-target=kernel -> kernel.kx
 ```
 
 The BIOS and bootloader are freestanding C firmware sources compiled with the
