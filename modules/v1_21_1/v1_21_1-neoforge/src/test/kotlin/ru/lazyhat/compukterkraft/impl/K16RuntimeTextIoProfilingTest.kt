@@ -48,6 +48,7 @@ import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.io.path.createTempDirectory
 import kotlin.io.path.writeBytes
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class K16RuntimeTextIoProfilingTest {
@@ -799,6 +800,7 @@ class K16RuntimeTextIoProfilingTest {
             assertTrue(nativeBytes > 0, "attached display transport should report native payload bytes")
             assertTrue(nativeFrameCount > 0, "attached display transport should carry at least one native frame")
             assertTrue(sentFrames.isNotEmpty(), "test-side client decode should observe display frames")
+            assertEquals(emptyList(), decodedFallbackFrames, "runtime should not decode native display batches before sending")
             assertTrue(testDecodeNanos >= 0, "test-side native decode timing should be non-negative")
             assertTrue(
                 vmAfter.k16DisplayFramesSent > vmBefore.k16DisplayFramesSent,
