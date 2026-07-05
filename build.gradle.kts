@@ -47,6 +47,8 @@ val k16RustSourceRoot = rootProject.file(providers.gradleProperty("k16RustSource
 val k16RustBuildRoot = rootProject.file(providers.gradleProperty("k16RustBuildDir").orElse(".toolchain/build/rust/k16").get())
 val k16HostToolsTargetRoot =
     rootProject.file(providers.gradleProperty("k16HostToolsTargetDir").orElse(".toolchain/build/cargo/k16-tools").get())
+val k16HostVmTargetRoot =
+    rootProject.file(providers.gradleProperty("k16HostVmTargetDir").orElse(".toolchain/build/cargo/k16-vm").get())
 val k16RustBootstrapConfig = k16RustBuildRoot.resolve("bootstrap.toml")
 val k16RustBootstrapProbeMarker = k16RustBuildRoot.resolve("bootstrap-probe.ok")
 val k16PrepareToolchainMarker = rootProject.file(".toolchain/build/k16-prepare/${k16ToolchainModeName()}.ok")
@@ -194,6 +196,88 @@ val cleanWorkspace =
 
 tasks.named("clean") {
     dependsOn(cleanWorkspace)
+}
+
+val testK16HostVmRust =
+    tasks.register<Exec>("testK16HostVmRust") {
+        description = "Runs host/k16-vm Rust tests."
+        group = "verification"
+        workingDir(rootProject.file("host/k16-vm"))
+        inputs.file(rootProject.file("host/k16-vm/Cargo.toml"))
+        inputs.file(rootProject.file("host/k16-vm/Cargo.lock"))
+        inputs.dir(rootProject.file("host/k16-vm/src"))
+        inputs.property("k16BuildJobs", k16BuildJobs)
+        commandLine("cargo", "test", "-j", k16BuildJobs)
+        environment("CARGO_TARGET_DIR", k16HostVmTargetRoot.absolutePath)
+    }
+
+val testK16HostToolsRust =
+    tasks.register<Exec>("testK16HostToolsRust") {
+        description = "Runs host/k16-tools Rust tests."
+        group = "verification"
+        dependsOn("prepareK16Toolchain")
+        workingDir(rootProject.file("host/k16-tools"))
+        inputs.file(rootProject.file("host/k16-tools/Cargo.toml"))
+        inputs.file(rootProject.file("host/k16-tools/Cargo.lock"))
+        inputs.dir(rootProject.file("host/k16-tools/src"))
+        inputs.file(rootProject.file("host/k16-vm/Cargo.toml"))
+        inputs.file(rootProject.file("host/k16-vm/Cargo.lock"))
+        inputs.dir(rootProject.file("host/k16-vm/src"))
+        inputs.file(rootProject.file("guest/kraftos/abi/Cargo.toml"))
+        inputs.dir(rootProject.file("guest/kraftos/abi/src"))
+        inputs.property("k16BuildJobs", k16BuildJobs)
+        commandLine("cargo", "test", "-j", k16BuildJobs)
+        environment("CARGO_TARGET_DIR", k16HostToolsTargetRoot.absolutePath)
+
+        doFirst {
+            val toolchain = resolveK16Toolchain()
+            environment("K16_CARGO", toolchain.cargo.absolutePath)
+            environment("K16_RUSTC", toolchain.rustc.absolutePath)
+            environment("K16_LD", toolchain.linker.absolutePath)
+            environment("K16_TOOL", toolchain.cli.absolutePath)
+        }
+    }
+
+val buildScriptsTest = gradle.includedBuild("build-scripts").task(":test")
+
+tasks.register("verifyLocalFast") {
+    description = "Runs the standard local JVM and build-script verification slice."
+    group = "verification"
+    dependsOn(buildScriptsTest)
+    dependsOn(":core:test")
+    dependsOn(":native-runtime:test")
+    dependsOn(":v1_21_1-common:test")
+    dependsOn(":v1_21_1-neoforge:test")
+}
+
+tasks.register("verifyK16Firmware") {
+    description = "Runs focused K16 firmware build-surface and image architecture verification."
+    group = "verification"
+    dependsOn(":v1_21_1-neoforge:verifyK16FirmwareArchitecture")
+}
+
+tasks.register("verifyK16Runtime") {
+    description = "Runs the K16 native runtime shell smoke verification slice."
+    group = "verification"
+    dependsOn(":v1_21_1-neoforge:verifyK16Runtime")
+}
+
+tasks.register("verifyK16Profiling") {
+    description = "Runs all dedicated K16 profiling verification workloads."
+    group = "verification"
+    dependsOn("profileK16RuntimeWait")
+    dependsOn("profileK16RuntimeTextIo")
+    dependsOn("profileK16ManyVmServerBudget")
+}
+
+tasks.register("verifyLocalFull") {
+    description = "Runs local JVM tests, K16 focused verification, and host Rust tests."
+    group = "verification"
+    dependsOn("verifyLocalFast")
+    dependsOn("verifyK16Firmware")
+    dependsOn("verifyK16Runtime")
+    dependsOn(testK16HostVmRust)
+    dependsOn(testK16HostToolsRust)
 }
 
 tasks.register("profileK16RuntimeWait") {
