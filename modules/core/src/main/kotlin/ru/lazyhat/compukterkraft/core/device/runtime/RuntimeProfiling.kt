@@ -113,6 +113,7 @@ interface RuntimeMetricsCollector {
     fun recordK16DisplayFrameSent(
         tileCount: Int,
         payloadBytes: Int,
+        operationCount: Int,
     )
 
     fun recordK16TextInput(
@@ -214,6 +215,7 @@ data class RuntimeVmMetrics(
     val k16DisplayFramesSent: Long = 0,
     val k16DisplayTilesSent: Long = 0,
     val k16DisplayPayloadBytesSent: Long = 0,
+    val k16DisplayOperationsSent: Long = 0,
     val k16TextInputEvents: Long = 0,
     val k16TextInputBytes: Long = 0,
     val k16TextInputNanos: Long = 0,
@@ -427,7 +429,7 @@ data class RuntimeProfilingSnapshot(
                 "    k16DisplayFrames: batches=${vm.k16GpuFrameBatches}, bytes=${vm.k16GpuFrameBytes}, frames=${vm.k16GpuFramesDecoded}",
             )
             appendLine(
-                "    k16DisplaySent: frames=${vm.k16DisplayFramesSent}, tiles=${vm.k16DisplayTilesSent}, payloadBytes=${vm.k16DisplayPayloadBytesSent}",
+                "    k16DisplaySent: frames=${vm.k16DisplayFramesSent}, tiles=${vm.k16DisplayTilesSent}, payloadBytes=${vm.k16DisplayPayloadBytesSent}, operations=${vm.k16DisplayOperationsSent}",
             )
             appendLine(
                 "    k16Gpu: blits=${k16.gpu.blitBufferCommands}, blitPixels=${k16.gpu.blitPixels}, " +
@@ -598,6 +600,7 @@ object NoOpRuntimeMetricsCollector : RuntimeMetricsCollector {
     override fun recordK16DisplayFrameSent(
         tileCount: Int,
         payloadBytes: Int,
+        operationCount: Int,
     ) = Unit
 
     override fun recordK16TextInput(
@@ -691,6 +694,7 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
     private val k16DisplayFramesSent = AtomicLong()
     private val k16DisplayTilesSent = AtomicLong()
     private val k16DisplayPayloadBytesSent = AtomicLong()
+    private val k16DisplayOperationsSent = AtomicLong()
     private val k16TextInputEvents = AtomicLong()
     private val k16TextInputBytes = AtomicLong()
     private val k16TextInputNanos = AtomicLong()
@@ -867,10 +871,12 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
     override fun recordK16DisplayFrameSent(
         tileCount: Int,
         payloadBytes: Int,
+        operationCount: Int,
     ) {
         k16DisplayFramesSent.incrementAndGet()
         k16DisplayTilesSent.addAndGet(tileCount.coerceAtLeast(0).toLong())
         k16DisplayPayloadBytesSent.addAndGet(payloadBytes.coerceAtLeast(0).toLong())
+        k16DisplayOperationsSent.addAndGet(operationCount.coerceAtLeast(0).toLong())
     }
 
     override fun recordK16TextInput(
@@ -966,6 +972,7 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
                     k16DisplayFramesSent = k16DisplayFramesSent.get(),
                     k16DisplayTilesSent = k16DisplayTilesSent.get(),
                     k16DisplayPayloadBytesSent = k16DisplayPayloadBytesSent.get(),
+                    k16DisplayOperationsSent = k16DisplayOperationsSent.get(),
                     k16TextInputEvents = k16TextInputEvents.get(),
                     k16TextInputBytes = k16TextInputBytes.get(),
                     k16TextInputNanos = k16TextInputNanos.get(),

@@ -63,6 +63,7 @@ class K16RuntimeTextIoProfilingTest {
                         k16DisplayFramesSent = 2,
                         k16DisplayTilesSent = 3,
                         k16DisplayPayloadBytesSent = 64,
+                        k16DisplayOperationsSent = 4,
                         k16TextInputBytes = 2,
                     ),
                 k16 =
@@ -142,6 +143,7 @@ class K16RuntimeTextIoProfilingTest {
                         k16DisplayFramesSent = 5,
                         k16DisplayTilesSent = 8,
                         k16DisplayPayloadBytesSent = 160,
+                        k16DisplayOperationsSent = 11,
                         k16TextInputBytes = 7,
                     ),
                 k16 =
@@ -224,6 +226,7 @@ class K16RuntimeTextIoProfilingTest {
         assertTrue(line.contains("sentDisplayFrames=3"))
         assertTrue(line.contains("sentDisplayTiles=5"))
         assertTrue(line.contains("sentDisplayBytes=96"))
+        assertTrue(line.contains("sentDisplayOperations=7"))
         assertTrue(line.contains("storageReadCommands=2"))
         assertTrue(line.contains("storageRequestedReadBlocks=10"))
         assertTrue(line.contains("storageRequestedReadBytes=5120"))
@@ -1404,6 +1407,7 @@ private fun formatK16RuntimePhase(
         "sentDisplayFrames=${vmAfter.k16DisplayFramesSent - vmBefore.k16DisplayFramesSent}, " +
         "sentDisplayTiles=${vmAfter.k16DisplayTilesSent - vmBefore.k16DisplayTilesSent}, " +
         "sentDisplayBytes=${vmAfter.k16DisplayPayloadBytesSent - vmBefore.k16DisplayPayloadBytesSent}, " +
+        "sentDisplayOperations=${vmAfter.k16DisplayOperationsSent - vmBefore.k16DisplayOperationsSent}, " +
         "storageReadCommands=${storageAfter.readCommands - storageBefore.readCommands}, " +
         "storageRequestedReadBlocks=${storageAfter.requestedReadBlocks - storageBefore.requestedReadBlocks}, " +
         "storageRequestedReadBytes=${storageAfter.requestedReadBytes - storageBefore.requestedReadBytes}, " +

@@ -313,11 +313,26 @@ class K16RuntimeDevice(
             width == next.width &&
             height == next.height &&
             pixelFormat == next.pixelFormat &&
-            operations.isEmpty() &&
-            next.operations.isEmpty()
+            (
+                isTileOnly() && next.isTileOnly() ||
+                    isOperationOnly() && next.isOperationOnly()
+            )
 
     private fun coalesceCompatibleDisplayFrames(frames: List<DisplayFrameDelta>): DisplayFrameDelta {
         if (frames.size == 1) return frames.single()
+        if (frames.all { it.isOperationOnly() }) {
+            val last = frames.last()
+            return DisplayFrameDelta(
+                displayId = last.displayId,
+                sequence = last.sequence,
+                width = last.width,
+                height = last.height,
+                pixelFormat = last.pixelFormat,
+                fullRefresh = frames.any { it.fullRefresh },
+                tiles = emptyList(),
+                operations = frames.flatMap { it.operations },
+            )
+        }
         val tilesByCoordinate = linkedMapOf<Pair<Int, Int>, DisplayTile>()
         for (frame in frames) {
             for (tile in frame.tiles) {
@@ -336,6 +351,10 @@ class K16RuntimeDevice(
         )
     }
 
+    private fun DisplayFrameDelta.isTileOnly(): Boolean = operations.isEmpty()
+
+    private fun DisplayFrameDelta.isOperationOnly(): Boolean = tiles.isEmpty() && operations.isNotEmpty()
+
     private fun sendFrame(
         displayId: Int,
         frame: DisplayFrameDelta,
@@ -351,6 +370,7 @@ class K16RuntimeDevice(
             metricsCollector.recordK16DisplayFrameSent(
                 tileCount = frame.tiles.size,
                 payloadBytes = frame.tiles.sumOf { tile -> tile.payload.size },
+                operationCount = frame.operations.size,
             )
             sent = true
         }
