@@ -19,8 +19,12 @@ pub fn clear() {
 pub fn write_bytes(bytes: &[u8]) {
     let mut index = 0;
     while index < bytes.len() {
-        write_byte(bytes[index]);
-        index += 1;
+        if is_printable_byte(bytes[index]) {
+            index = write_printable_run(bytes, index);
+        } else {
+            write_byte(bytes[index]);
+            index += 1;
+        }
     }
 }
 
@@ -72,6 +76,36 @@ fn put_printable_byte(byte: u8) {
         repaint_cell(x, y);
         CURSOR_X += 1;
     }
+}
+
+fn write_printable_run(bytes: &[u8], start: usize) -> usize {
+    let mut index = start;
+    while index < bytes.len() && is_printable_byte(bytes[index]) {
+        unsafe {
+            if CURSOR_X >= COLUMNS {
+                move_to_next_line();
+            }
+            let column = CURSOR_X;
+            let row = CURSOR_Y;
+            let remaining_columns = COLUMNS - column;
+            let mut run_len = 0;
+            while run_len < remaining_columns
+                && index + run_len < bytes.len()
+                && is_printable_byte(bytes[index + run_len])
+            {
+                set_cell(column + run_len, row, bytes[index + run_len]);
+                run_len += 1;
+            }
+            terminal_render::repaint_run(column, row, &bytes[index..index + run_len]);
+            CURSOR_X += run_len;
+            index += run_len;
+        }
+    }
+    index
+}
+
+fn is_printable_byte(byte: u8) -> bool {
+    (0x20..=0x7e).contains(&byte)
 }
 
 fn move_to_next_line() {
