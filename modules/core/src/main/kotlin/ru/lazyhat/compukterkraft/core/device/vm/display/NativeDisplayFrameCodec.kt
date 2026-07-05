@@ -34,6 +34,48 @@ data class NativeDisplayFrameBatchSummary(
 )
 
 object NativeDisplayFrameCodec {
+    interface FrameVisitor {
+        fun beginFrame(
+            displayId: Int,
+            sequence: Long,
+            width: Int,
+            height: Int,
+            pixelFormat: DisplayPixelFormat,
+            fullRefresh: Boolean,
+        ): Boolean = true
+
+        fun tile(
+            tileX: Int,
+            tileY: Int,
+            x: Int,
+            y: Int,
+            width: Int,
+            height: Int,
+            payload: ByteArray,
+            payloadOffset: Int,
+            payloadLength: Int,
+        ) = Unit
+
+        fun fillRect(
+            x: Int,
+            y: Int,
+            width: Int,
+            height: Int,
+            rgb565: Int,
+        ) = Unit
+
+        fun copyRect(
+            srcX: Int,
+            srcY: Int,
+            width: Int,
+            height: Int,
+            dstX: Int,
+            dstY: Int,
+        ) = Unit
+
+        fun endFrame() = Unit
+    }
+
     fun mergeFrameBatches(batches: List<ByteArray>): ByteArray {
         val nonEmptyBatches = batches.filter { it.isNotEmpty() }
         if (nonEmptyBatches.isEmpty()) return ByteArray(0)
@@ -96,6 +138,101 @@ object NativeDisplayFrameCodec {
             operationCount = operationCountTotal,
             endOffset = input.position(),
         )
+    }
+
+    fun visitFrames(
+        bytes: ByteArray,
+        visitor: FrameVisitor,
+    ) {
+        if (bytes.isEmpty()) return
+        val input = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
+        val count = input.int
+        repeat(count) {
+            val displayId = input.int
+            val sequence = input.long
+            val width = input.int
+            val height = input.int
+            val pixelFormat =
+                when (input.get().toInt()) {
+                    0 -> DisplayPixelFormat.RGB565
+                    else -> error("Unknown native display pixel format")
+                }
+            val fullRefresh = input.get().toInt() != 0
+            val accepted = visitor.beginFrame(displayId, sequence, width, height, pixelFormat, fullRefresh)
+            val tileCount = input.int
+            val tileRecords = if (accepted) IntArray(tileCount * TILE_RECORD_INTS) else null
+            repeat(tileCount) {
+                val tileX = input.int
+                val tileY = input.int
+                val x = input.int
+                val y = input.int
+                val tileWidth = input.int
+                val tileHeight = input.int
+                val payloadLength = input.int
+                val payloadOffset = input.position()
+                if (accepted) {
+                    val recordOffset = it * TILE_RECORD_INTS
+                    tileRecords?.set(recordOffset, tileX)
+                    tileRecords?.set(recordOffset + 1, tileY)
+                    tileRecords?.set(recordOffset + 2, x)
+                    tileRecords?.set(recordOffset + 3, y)
+                    tileRecords?.set(recordOffset + 4, tileWidth)
+                    tileRecords?.set(recordOffset + 5, tileHeight)
+                    tileRecords?.set(recordOffset + 6, payloadOffset)
+                    tileRecords?.set(recordOffset + 7, payloadLength)
+                }
+                input.position(payloadOffset + payloadLength)
+            }
+            val operationCount = input.int
+            repeat(operationCount) {
+                when (val operation = input.get().toInt()) {
+                    1 -> {
+                        val x = input.int
+                        val y = input.int
+                        val operationWidth = input.int
+                        val operationHeight = input.int
+                        val rgb565 = input.int
+                        if (accepted) {
+                            visitor.fillRect(x, y, operationWidth, operationHeight, rgb565)
+                        }
+                    }
+
+                    2 -> {
+                        val srcX = input.int
+                        val srcY = input.int
+                        val operationWidth = input.int
+                        val operationHeight = input.int
+                        val dstX = input.int
+                        val dstY = input.int
+                        if (accepted) {
+                            visitor.copyRect(srcX, srcY, operationWidth, operationHeight, dstX, dstY)
+                        }
+                    }
+
+                    else -> {
+                        error("Unknown native display operation $operation")
+                    }
+                }
+            }
+            if (accepted) {
+                checkNotNull(tileRecords)
+                repeat(tileCount) {
+                    val recordOffset = it * TILE_RECORD_INTS
+                    visitor.tile(
+                        tileRecords[recordOffset],
+                        tileRecords[recordOffset + 1],
+                        tileRecords[recordOffset + 2],
+                        tileRecords[recordOffset + 3],
+                        tileRecords[recordOffset + 4],
+                        tileRecords[recordOffset + 5],
+                        bytes,
+                        tileRecords[recordOffset + 6],
+                        tileRecords[recordOffset + 7],
+                    )
+                }
+                visitor.endFrame()
+            }
+        }
     }
 
     fun decodeFrames(bytes: ByteArray): List<DisplayFrameDelta> {
@@ -166,4 +303,6 @@ object NativeDisplayFrameCodec {
         val operationCount: Int,
         val endOffset: Int,
     )
+
+    private const val TILE_RECORD_INTS = 8
 }

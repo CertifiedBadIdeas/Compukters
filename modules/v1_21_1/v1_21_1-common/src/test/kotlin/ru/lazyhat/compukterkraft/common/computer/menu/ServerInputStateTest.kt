@@ -162,6 +162,8 @@ class ServerInputStateTest {
 
         override fun handleDisplayFrame(frame: DisplayFrameDelta) = Unit
 
+        override fun handleNativeDisplayFrameBytes(payload: ByteArray) = Unit
+
         override fun quickMoveStack(
             player: Player,
             index: Int,

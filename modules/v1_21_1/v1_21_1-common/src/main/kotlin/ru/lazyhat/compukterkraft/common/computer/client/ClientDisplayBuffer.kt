@@ -19,6 +19,7 @@
 
 package ru.lazyhat.compukterkraft.common.computer.client
 
+import ru.lazyhat.compukterkraft.core.device.vm.display.NativeDisplayFrameCodec
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameOperation
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayPixelFormat
@@ -95,6 +96,87 @@ class ClientDisplayBuffer(
         dirty = true
         metricsCollector.recordApply(frame, accepted = true, nanos = System.nanoTime() - started)
         return true
+    }
+
+    @Synchronized
+    fun applyNativeFrameBatch(payload: ByteArray): Boolean {
+        var acceptedAny = false
+        var currentSequence = 0L
+        var currentFullRefresh = false
+        NativeDisplayFrameCodec.visitFrames(
+            payload,
+            object : NativeDisplayFrameCodec.FrameVisitor {
+                override fun beginFrame(
+                    displayId: Int,
+                    sequence: Long,
+                    width: Int,
+                    height: Int,
+                    pixelFormat: DisplayPixelFormat,
+                    fullRefresh: Boolean,
+                ): Boolean {
+                    val accepted =
+                        displayId == this@ClientDisplayBuffer.displayId &&
+                        width == this@ClientDisplayBuffer.width &&
+                        height == this@ClientDisplayBuffer.height &&
+                        pixelFormat == DisplayPixelFormat.RGB565 &&
+                        (fullRefresh || sequence >= expectedSequence)
+                    currentSequence = sequence
+                    currentFullRefresh = fullRefresh
+                    if (accepted && fullRefresh) {
+                        staging.fill(OPAQUE_BLACK)
+                        pendingDirtyRegions.clear()
+                        pendingDirtyRegions.add(Region(0, 0, this@ClientDisplayBuffer.width, this@ClientDisplayBuffer.height))
+                    }
+                    return accepted
+                }
+
+                override fun tile(
+                    tileX: Int,
+                    tileY: Int,
+                    x: Int,
+                    y: Int,
+                    width: Int,
+                    height: Int,
+                    payload: ByteArray,
+                    payloadOffset: Int,
+                    payloadLength: Int,
+                ) {
+                    applyTile(x, y, width, height, payload, payloadOffset)
+                    if (!currentFullRefresh) {
+                        pendingDirtyRegions.add(Region(x, y, width, height))
+                    }
+                }
+
+                override fun fillRect(
+                    x: Int,
+                    y: Int,
+                    width: Int,
+                    height: Int,
+                    rgb565: Int,
+                ) {
+                    applyFillRect(x, y, width, height, rgb565)
+                }
+
+                override fun copyRect(
+                    srcX: Int,
+                    srcY: Int,
+                    width: Int,
+                    height: Int,
+                    dstX: Int,
+                    dstY: Int,
+                ) {
+                    applyCopyRect(srcX, srcY, width, height, dstX, dstY)
+                }
+
+                override fun endFrame() {
+                    expectedSequence = currentSequence + 1
+                    hasReceivedFrames = true
+                    dirty = true
+                    acceptedAny = true
+                }
+            },
+        )
+        return acceptedAny
     }
 
     @Synchronized
@@ -184,13 +266,23 @@ class ClientDisplayBuffer(
     }
 
     private fun applyFillRect(operation: DisplayFrameOperation.FillRect) {
-        val region = clippedRegion(operation.x, operation.y, operation.width, operation.height) ?: return
-        val argb = rgb565ToArgb(operation.rgb565)
+        applyFillRect(operation.x, operation.y, operation.width, operation.height, operation.rgb565)
+    }
+
+    private fun applyFillRect(
+        x: Int,
+        y: Int,
+        width: Int,
+        height: Int,
+        rgb565: Int,
+    ) {
+        val region = clippedRegion(x, y, width, height) ?: return
+        val argb = rgb565ToArgb(rgb565)
         var row = region.y
         while (row < region.y + region.height) {
             var col = region.x
             while (col < region.x + region.width) {
-                staging[row * width + col] = argb
+                staging[row * this.width + col] = argb
                 col += 1
             }
             row += 1
@@ -199,18 +291,29 @@ class ClientDisplayBuffer(
     }
 
     private fun applyCopyRect(operation: DisplayFrameOperation.CopyRect) {
-        val region = clippedRegion(operation.dstX, operation.dstY, operation.width, operation.height) ?: return
+        applyCopyRect(operation.srcX, operation.srcY, operation.width, operation.height, operation.dstX, operation.dstY)
+    }
+
+    private fun applyCopyRect(
+        srcX: Int,
+        srcY: Int,
+        width: Int,
+        height: Int,
+        dstX: Int,
+        dstY: Int,
+    ) {
+        val region = clippedRegion(dstX, dstY, width, height) ?: return
         val copied = IntArray(region.width * region.height)
         var copiedOffset = 0
         var row = region.y
         while (row < region.y + region.height) {
             var col = region.x
             while (col < region.x + region.width) {
-                val srcX = operation.srcX + (col - operation.dstX)
-                val srcY = operation.srcY + (row - operation.dstY)
+                val sourceX = srcX + (col - dstX)
+                val sourceY = srcY + (row - dstY)
                 copied[copiedOffset] =
-                    if (srcX in 0 until width && srcY in 0 until height) {
-                        staging[srcY * width + srcX]
+                    if (sourceX in 0 until this.width && sourceY in 0 until this.height) {
+                        staging[sourceY * this.width + sourceX]
                     } else {
                         OPAQUE_BLACK
                     }
@@ -224,13 +327,31 @@ class ClientDisplayBuffer(
         while (row < region.y + region.height) {
             var col = region.x
             while (col < region.x + region.width) {
-                staging[row * width + col] = copied[copiedOffset]
+                staging[row * this.width + col] = copied[copiedOffset]
                 copiedOffset += 1
                 col += 1
             }
             row += 1
         }
         pendingDirtyRegions.add(region)
+    }
+
+    private fun applyTile(
+        x: Int,
+        y: Int,
+        width: Int,
+        height: Int,
+        payload: ByteArray,
+        payloadOffset: Int,
+    ) {
+        var offset = payloadOffset
+        for (row in y until y + height) {
+            for (col in x until x + width) {
+                val hi = payload[offset++].toInt() and 0xFF
+                val lo = payload[offset++].toInt() and 0xFF
+                staging[row * this.width + col] = rgb565ToArgb((hi shl 8) or lo)
+            }
+        }
     }
 
     private fun clippedRegion(
