@@ -85,9 +85,12 @@ class K16RuntimeProfilingArchitectureTest {
         assertTrue(docs.contains("k16Wait: entries="))
         assertTrue(textIoProfilingSource.contains("bios.splash.visible"))
         assertTrue(textIoProfilingSource.contains("bios.splash.wait"))
+        assertTrue(textIoProfilingSource.contains("bios.bootloader.visible"))
+        assertTrue(textIoProfilingSource.contains("bootloader.kernel.visible"))
         assertTrue(textIoProfilingSource.contains("shell.prompt.after_splash"))
         assertTrue(textIoProfilingSource.contains("shell.prompt.after_splash_to_prompt_visible"))
         assertTrue(textIoProfilingSource.contains("shell.prompt.prompt_visible_to_input_ready"))
+        assertTrue(textIoProfilingSource.contains("waitForDebugOutput"))
         assertTrue(textIoProfilingSource.contains("k16DisplayTransport"))
         assertTrue(
             textIoProfilingSource.contains("""ProfiledCoreutilsCommand("motd", "cat /etc/motd", "K16 FS OK")"""),
@@ -104,6 +107,8 @@ class K16RuntimeProfilingArchitectureTest {
         assertTrue(manyVmProfilingSource.contains("k16ManyVmTextDisplayHighload"))
         assertTrue(manyVmProfilingSource.contains("k16ManyVmStorageHighload"))
         assertTrue(docs.contains("bios.splash.wait"))
+        assertTrue(docs.contains("bios.bootloader.visible"))
+        assertTrue(docs.contains("bootloader.kernel.visible"))
         assertTrue(docs.contains("k16ManyVmBootAfterSplash"))
         assertTrue(docs.contains("k16ManyVmCpuHighload"))
         assertTrue(docs.contains("k16ManyVmTextDisplayHighload"))
