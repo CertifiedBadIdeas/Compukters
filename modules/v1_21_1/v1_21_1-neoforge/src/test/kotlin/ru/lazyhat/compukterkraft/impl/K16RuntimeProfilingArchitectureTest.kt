@@ -175,6 +175,16 @@ class K16RuntimeProfilingArchitectureTest {
     }
 
     @Test
+    fun k16BootChainBatchesContiguousFullBlockStorageReads() {
+        val bootChainSource = Path.of("../../../guest/firmware/boot-chain/boot_chain.c").readText()
+
+        assertTrue(bootChainSource.contains("static int read_storage_blocks_to_ram("))
+        assertTrue(bootChainSource.contains("write_u32(STORAGE_BLOCK_COUNT, block_count)"))
+        assertTrue(bootChainSource.contains("read_fs_blocks_to_ram("))
+        assertTrue(bootChainSource.contains("full_block_count"))
+    }
+
+    @Test
     fun k16RootFsReusesMountedRootPartitionForCachedReadPaths() {
         val rootSource = Path.of("../../../guest/kraftos/kernel/src/kfs/root.rs").readText()
         val mountSource = Path.of("../../../guest/kraftos/kernel/src/kfs/mount.rs").readText()
