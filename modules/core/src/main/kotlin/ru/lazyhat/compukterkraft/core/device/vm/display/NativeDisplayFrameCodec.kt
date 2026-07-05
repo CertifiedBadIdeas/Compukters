@@ -26,7 +26,46 @@ import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayTile
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
+data class NativeDisplayFrameBatchSummary(
+    val frameCount: Int,
+    val tileCount: Int,
+    val payloadBytes: Int,
+    val operationCount: Int,
+)
+
 object NativeDisplayFrameCodec {
+    fun summarizeFrames(bytes: ByteArray): NativeDisplayFrameBatchSummary {
+        if (bytes.isEmpty()) {
+            return NativeDisplayFrameBatchSummary(frameCount = 0, tileCount = 0, payloadBytes = 0, operationCount = 0)
+        }
+        val input = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
+        val frameCount = input.int
+        var tileCountTotal = 0
+        var payloadBytesTotal = 0
+        var operationCountTotal = 0
+        repeat(frameCount) {
+            input.position(input.position() + 4 + 8 + 4 + 4 + 1 + 1)
+            val tileCount = input.int
+            tileCountTotal += tileCount
+            repeat(tileCount) {
+                input.position(input.position() + 6 * 4)
+                val payloadLength = input.int
+                payloadBytesTotal += payloadLength
+                input.position(input.position() + payloadLength)
+            }
+            val operationCount = input.int
+            operationCountTotal += operationCount
+            repeat(operationCount) {
+                when (val operation = input.get().toInt()) {
+                    1 -> input.position(input.position() + 5 * 4)
+                    2 -> input.position(input.position() + 6 * 4)
+                    else -> error("Unknown native display operation $operation")
+                }
+            }
+        }
+        return NativeDisplayFrameBatchSummary(frameCount, tileCountTotal, payloadBytesTotal, operationCountTotal)
+    }
+
     fun decodeFrames(bytes: ByteArray): List<DisplayFrameDelta> {
         val input = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
         val count = input.int

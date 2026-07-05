@@ -25,6 +25,7 @@ import ru.lazyhat.compukterkraft.core.device.DeviceProperties
 import ru.lazyhat.compukterkraft.core.device.input.KeyInputEvent
 import ru.lazyhat.compukterkraft.core.device.input.PasteInputEvent
 import ru.lazyhat.compukterkraft.core.device.runtime.ports.DisplayNetworkBridge
+import ru.lazyhat.compukterkraft.core.device.vm.display.NativeDisplayFrameCodec
 import ru.lazyhat.compukterkraft.core.input.KeyCodes
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16ComputerEndpoint
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16ComputerTickResult
@@ -504,18 +505,78 @@ class K16RuntimeDeviceTest {
                         ),
                     ),
             )
+        val encodedFrame = encodeDisplayFrames(listOf(frame))
 
         device.attachDisplaySession(playerUuid, containerId = 22, displayId = 1, width = 320, height = 200)
         device.turnOn()
-        endpoint.enqueueFramebufferFrames(encodeDisplayFrames(listOf(frame)))
+        endpoint.enqueueFramebufferFrames(encodedFrame)
         device.serverTick()
         waitUntil {
             device.serverTick()
-            displayNetwork.sentFrames.size == 1
+            displayNetwork.sentNativePayloads.size == 1
         }
 
-        assertEquals(1, displayNetwork.sentFrames.size)
-        assertEquals(frame, displayNetwork.sentFrames.single().frame)
+        assertEquals(1, displayNetwork.sentNativePayloads.size)
+        assertContentEquals(encodedFrame, displayNetwork.sentNativePayloads.single().payload)
+        assertEquals(listOf(frame), NativeDisplayFrameCodec.decodeFrames(displayNetwork.sentNativePayloads.single().payload))
+        assertEquals(emptyList(), displayNetwork.sentFrames)
+    }
+
+    @Test
+    fun sendsSingleFramebufferBatchToAttachedDisplaySessionsAsNativeBytes() {
+        val endpoint = RecordingK16Endpoint()
+        val displayNetwork = RecordingDisplayNetworkBridge()
+        val metrics = RecordingRuntimeMetricsCollector()
+        val device =
+            K16RuntimeDevice(
+                deviceId = 29,
+                properties = DeviceProperties(DeviceFamily.NORMAL, label = null),
+                endpointFactory = { endpoint },
+                stateSink = {},
+                displayNetwork = displayNetwork,
+                metricsCollector = metrics,
+            )
+        val playerUuid = UUID.randomUUID()
+        val frame =
+            DisplayFrameDelta(
+                displayId = 1,
+                sequence = 7,
+                width = 320,
+                height = 200,
+                pixelFormat = DisplayPixelFormat.RGB565,
+                fullRefresh = false,
+                tiles =
+                    listOf(
+                        DisplayTile(
+                            tileX = 0,
+                            tileY = 0,
+                            x = 0,
+                            y = 0,
+                            width = 2,
+                            height = 1,
+                            payload = byteArrayOf(0xF8.toByte(), 0x00, 0x07, 0xE0.toByte()),
+                        ),
+                    ),
+            )
+        val encodedFrame = encodeDisplayFrames(listOf(frame))
+
+        device.attachDisplaySession(playerUuid, containerId = 22, displayId = 1, width = 320, height = 200)
+        device.turnOn()
+        endpoint.enqueueFramebufferFrames(encodedFrame)
+        device.serverTick()
+        waitUntil {
+            device.serverTick()
+            displayNetwork.sentNativePayloads.size == 1
+        }
+
+        assertEquals(1, displayNetwork.sentNativePayloads.size)
+        assertContentEquals(encodedFrame, displayNetwork.sentNativePayloads.single().payload)
+        assertEquals(emptyList(), displayNetwork.sentFrames)
+        val snapshot = metrics.snapshot()
+        assertEquals(1, snapshot.vm.k16GpuFramesDecoded)
+        assertEquals(1, snapshot.vm.k16DisplayFramesSent)
+        assertEquals(1, snapshot.vm.k16DisplayTilesSent)
+        assertEquals(4, snapshot.vm.k16DisplayPayloadBytesSent)
     }
 
     @Test
@@ -584,10 +645,15 @@ class K16RuntimeDeviceTest {
                 tiles = listOf(replacementTile, secondTile),
             )
 
-        device.attachDisplaySession(playerUuid, containerId = 23, displayId = 1, width = 320, height = 200)
         device.turnOn()
-        endpoint.enqueueFramebufferFrames(encodeDisplayFrames(listOf(firstFrame, secondFrame)))
+        endpoint.enqueueFramebufferFrames(encodeDisplayFrames(listOf(firstFrame)))
+        endpoint.enqueueFramebufferFrames(encodeDisplayFrames(listOf(secondFrame)))
         device.serverTick()
+        waitUntil { metrics.snapshot().vm.k16GpuFrameBatches == 1L }
+        device.serverTick()
+        waitUntil { metrics.snapshot().vm.k16GpuFrameBatches == 2L }
+        device.serverTick()
+        device.attachDisplaySession(playerUuid, containerId = 23, displayId = 1, width = 320, height = 200)
         waitUntil {
             device.serverTick()
             displayNetwork.sentFrames.isNotEmpty()
@@ -670,10 +736,15 @@ class K16RuntimeDeviceTest {
                     ),
             )
 
-        device.attachDisplaySession(playerUuid, containerId = 23, displayId = 1, width = 320, height = 200)
         device.turnOn()
-        endpoint.enqueueFramebufferFrames(encodeDisplayFrames(listOf(firstFrame, secondFrame)))
+        endpoint.enqueueFramebufferFrames(encodeDisplayFrames(listOf(firstFrame)))
+        endpoint.enqueueFramebufferFrames(encodeDisplayFrames(listOf(secondFrame)))
         device.serverTick()
+        waitUntil { metrics.snapshot().vm.k16GpuFrameBatches == 1L }
+        device.serverTick()
+        waitUntil { metrics.snapshot().vm.k16GpuFrameBatches == 2L }
+        device.serverTick()
+        device.attachDisplaySession(playerUuid, containerId = 23, displayId = 1, width = 320, height = 200)
         waitUntil {
             device.serverTick()
             displayNetwork.sentFrames.isNotEmpty()
@@ -846,9 +917,10 @@ class K16RuntimeDeviceTest {
                         ),
                     ),
             )
+        val encodedFrame = encodeDisplayFrames(listOf(frame))
 
         device.turnOn()
-        endpoint.enqueueFramebufferFrames(encodeDisplayFrames(listOf(frame)))
+        endpoint.enqueueFramebufferFrames(encodedFrame)
         device.serverTick()
         waitUntil { endpoint.tickCalls == 1 }
 
@@ -857,8 +929,9 @@ class K16RuntimeDeviceTest {
         device.attachDisplaySession(playerUuid, containerId = 32, displayId = 1, width = 320, height = 200)
         device.serverTick()
 
-        assertEquals(1, displayNetwork.sentFrames.size)
-        assertEquals(frame, displayNetwork.sentFrames.single().frame)
+        assertEquals(1, displayNetwork.sentNativePayloads.size)
+        assertContentEquals(encodedFrame, displayNetwork.sentNativePayloads.single().payload)
+        assertEquals(emptyList(), displayNetwork.sentFrames)
     }
 
     @Test
@@ -1289,8 +1362,28 @@ class K16RuntimeDeviceTest {
         val frame: DisplayFrameDelta,
     )
 
+    private data class SentNativePayload(
+        val playerUuid: UUID,
+        val containerId: Int,
+        val payload: ByteArray,
+    ) {
+        override fun equals(other: Any?): Boolean =
+            other is SentNativePayload &&
+                playerUuid == other.playerUuid &&
+                containerId == other.containerId &&
+                payload.contentEquals(other.payload)
+
+        override fun hashCode(): Int {
+            var result = playerUuid.hashCode()
+            result = 31 * result + containerId
+            result = 31 * result + payload.contentHashCode()
+            return result
+        }
+    }
+
     private class RecordingDisplayNetworkBridge : DisplayNetworkBridge {
         val sentFrames = mutableListOf<SentFrame>()
+        val sentNativePayloads = mutableListOf<SentNativePayload>()
 
         override fun isDisplaySessionStillBound(
             playerUuid: UUID,
@@ -1305,6 +1398,14 @@ class K16RuntimeDeviceTest {
             frame: DisplayFrameDelta,
         ) {
             sentFrames += SentFrame(playerUuid, containerId, frame)
+        }
+
+        override fun sendNativeDisplayFrameBytes(
+            playerUuid: UUID,
+            containerId: Int,
+            payload: ByteArray,
+        ) {
+            sentNativePayloads += SentNativePayload(playerUuid, containerId, payload.copyOf())
         }
     }
 }
