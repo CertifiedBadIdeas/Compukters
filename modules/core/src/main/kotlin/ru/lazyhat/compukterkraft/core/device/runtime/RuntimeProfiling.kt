@@ -110,6 +110,11 @@ interface RuntimeMetricsCollector {
         nanos: Long,
     )
 
+    fun recordK16DisplayFrameSent(
+        tileCount: Int,
+        payloadBytes: Int,
+    )
+
     fun recordK16TextInput(
         byteCount: Int,
         nanos: Long,
@@ -206,6 +211,9 @@ data class RuntimeVmMetrics(
     val k16GpuFrameBatches: Long = 0,
     val k16GpuFrameBytes: Long = 0,
     val k16GpuFramesDecoded: Long = 0,
+    val k16DisplayFramesSent: Long = 0,
+    val k16DisplayTilesSent: Long = 0,
+    val k16DisplayPayloadBytesSent: Long = 0,
     val k16TextInputEvents: Long = 0,
     val k16TextInputBytes: Long = 0,
     val k16TextInputNanos: Long = 0,
@@ -419,6 +427,9 @@ data class RuntimeProfilingSnapshot(
                 "    k16DisplayFrames: batches=${vm.k16GpuFrameBatches}, bytes=${vm.k16GpuFrameBytes}, frames=${vm.k16GpuFramesDecoded}",
             )
             appendLine(
+                "    k16DisplaySent: frames=${vm.k16DisplayFramesSent}, tiles=${vm.k16DisplayTilesSent}, payloadBytes=${vm.k16DisplayPayloadBytesSent}",
+            )
+            appendLine(
                 "    k16Gpu: blits=${k16.gpu.blitBufferCommands}, blitPixels=${k16.gpu.blitPixels}, " +
                     "blitBytes=${k16.gpu.blitSourceBytes}, presents=${k16.gpu.presentCommands}, " +
                     "frames=${k16.gpu.frames}, tiles=${k16.gpu.frameTiles}, " +
@@ -584,6 +595,11 @@ object NoOpRuntimeMetricsCollector : RuntimeMetricsCollector {
         nanos: Long,
     ) = Unit
 
+    override fun recordK16DisplayFrameSent(
+        tileCount: Int,
+        payloadBytes: Int,
+    ) = Unit
+
     override fun recordK16TextInput(
         byteCount: Int,
         nanos: Long,
@@ -672,6 +688,9 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
     private val k16GpuFrameBatches = AtomicLong()
     private val k16GpuFrameBytes = AtomicLong()
     private val k16GpuFramesDecoded = AtomicLong()
+    private val k16DisplayFramesSent = AtomicLong()
+    private val k16DisplayTilesSent = AtomicLong()
+    private val k16DisplayPayloadBytesSent = AtomicLong()
     private val k16TextInputEvents = AtomicLong()
     private val k16TextInputBytes = AtomicLong()
     private val k16TextInputNanos = AtomicLong()
@@ -845,6 +864,15 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
         k16GpuFramesDecoded.addAndGet(sanitizedGpuFrameCount.toLong())
     }
 
+    override fun recordK16DisplayFrameSent(
+        tileCount: Int,
+        payloadBytes: Int,
+    ) {
+        k16DisplayFramesSent.incrementAndGet()
+        k16DisplayTilesSent.addAndGet(tileCount.coerceAtLeast(0).toLong())
+        k16DisplayPayloadBytesSent.addAndGet(payloadBytes.coerceAtLeast(0).toLong())
+    }
+
     override fun recordK16TextInput(
         byteCount: Int,
         nanos: Long,
@@ -935,6 +963,9 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
                     k16GpuFrameBatches = k16GpuFrameBatches.get(),
                     k16GpuFrameBytes = k16GpuFrameBytes.get(),
                     k16GpuFramesDecoded = k16GpuFramesDecoded.get(),
+                    k16DisplayFramesSent = k16DisplayFramesSent.get(),
+                    k16DisplayTilesSent = k16DisplayTilesSent.get(),
+                    k16DisplayPayloadBytesSent = k16DisplayPayloadBytesSent.get(),
                     k16TextInputEvents = k16TextInputEvents.get(),
                     k16TextInputBytes = k16TextInputBytes.get(),
                     k16TextInputNanos = k16TextInputNanos.get(),
