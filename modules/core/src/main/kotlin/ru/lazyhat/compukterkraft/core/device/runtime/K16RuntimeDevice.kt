@@ -278,9 +278,10 @@ class K16RuntimeDevice(
         if (displaySessions.isEmpty()) {
             return false
         }
-        if (pendingDisplayBatches.size == 1) {
-            val batch = pendingDisplayBatches.single()
-            if (batch is NativePendingDisplayBatch && sendNativeBatch(batch)) {
+        val nativeBatches = pendingDisplayBatches.filterIsInstance<NativePendingDisplayBatch>()
+        if (nativeBatches.size == pendingDisplayBatches.size) {
+            val batch = mergeNativeBatches(nativeBatches)
+            if (sendNativeBatch(batch)) {
                 pendingDisplayBatches.clear()
                 return true
             }
@@ -325,8 +326,8 @@ class K16RuntimeDevice(
             height == next.height &&
             pixelFormat == next.pixelFormat &&
             (
-                isTileOnly() && next.isTileOnly() ||
-                    isOperationOnly() && next.isOperationOnly()
+                (isTileOnly() && next.isTileOnly()) ||
+                    (isOperationOnly() && next.isOperationOnly())
             )
 
     private fun coalesceCompatibleDisplayFrames(frames: List<DisplayFrameDelta>): DisplayFrameDelta {
@@ -387,6 +388,21 @@ class K16RuntimeDevice(
         }
         toDetach.forEach { (playerUuid, detachedDisplayId) -> detachDisplaySession(playerUuid, detachedDisplayId) }
         return sent
+    }
+
+    private fun mergeNativeBatches(batches: List<NativePendingDisplayBatch>): NativePendingDisplayBatch {
+        check(batches.isNotEmpty()) { "Expected at least one native display batch." }
+        if (batches.size == 1) return batches.single()
+        return NativePendingDisplayBatch(
+            payload = NativeDisplayFrameCodec.mergeFrameBatches(batches.map { it.payload }),
+            summary =
+                NativeDisplayFrameBatchSummary(
+                    frameCount = batches.sumOf { it.summary.frameCount },
+                    tileCount = batches.sumOf { it.summary.tileCount },
+                    payloadBytes = batches.sumOf { it.summary.payloadBytes },
+                    operationCount = batches.sumOf { it.summary.operationCount },
+                ),
+        )
     }
 
     private fun sendNativeBatch(batch: NativePendingDisplayBatch): Boolean {
