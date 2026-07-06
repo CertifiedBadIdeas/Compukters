@@ -123,7 +123,9 @@ class K16FirmwareResourceTest {
 
     @Test
     fun bundledK16FirmwareBuildUsesK16GradleSurface() {
-        val source = Path.of("../../../build-scripts/src/main/kotlin/k16-firmware-convention.gradle.kts").readText()
+        val source =
+            Path.of("../../../build-scripts/src/main/kotlin/k16-firmware-producer-convention.gradle.kts").readText()
+        val consumerSource = Path.of("../../../build-scripts/src/main/kotlin/k16-firmware-convention.gradle.kts").readText()
         val neoforgeBuildScript = Path.of("build.gradle.kts").readText()
         val rootBuildScript = Path.of("../../../build.gradle.kts").readText()
         val k16ToolchainSupport =
@@ -131,6 +133,7 @@ class K16FirmwareResourceTest {
 
         assertTrue(neoforgeBuildScript.contains("alias(libs.plugins.k16FirmwareConvention)"))
         assertFalse(neoforgeBuildScript.contains("tasks.register(\"linkK16BiosFlash\")"))
+        assertTrue(consumerSource.contains("id(\"k16-firmware-producer-convention\")"))
         assertTrue(source.contains("generated/k16-firmware-resources"))
         assertTrue(source.contains("generated/k16-firmware-artifacts"))
         assertTrue(source.contains("tasks.register(\"linkK16BiosFlash\")"))
@@ -534,23 +537,26 @@ class K16FirmwareResourceTest {
 
     @Test
     fun kraftOsProductionBundleIsResourcePackagingBoundary() {
-        val source = Path.of("../../../build-scripts/src/main/kotlin/k16-firmware-convention.gradle.kts").readText()
+        val producerSource =
+            Path.of("../../../build-scripts/src/main/kotlin/k16-firmware-producer-convention.gradle.kts").readText()
+        val consumerSource = Path.of("../../../build-scripts/src/main/kotlin/k16-firmware-convention.gradle.kts").readText()
 
-        assertTrue(source.contains("val generatedKraftOsBundles ="))
-        assertTrue(source.contains("val generatedKraftOsProductionBundle ="))
-        assertTrue(source.contains("generated/kraftos-bundles"))
-        assertTrue(source.contains("production"))
-        assertTrue(source.contains("tasks.register<org.gradle.api.tasks.Sync>(\"assembleKraftOsProductionBundle\")"))
-        assertTrue(source.contains("from(generatedK16FirmwareResources)"))
-        assertTrue(source.contains("into(generatedKraftOsProductionBundle)"))
-        assertTrue(source.contains("resources.srcDir(generatedKraftOsProductionBundle)"))
-        assertFalse(source.contains("resources.srcDir(generatedK16FirmwareResources)"))
-        assertTrue(source.contains("dependsOn(assembleKraftOsProductionBundle)"))
+        assertTrue(producerSource.contains("val generatedKraftOsBundles ="))
+        assertTrue(producerSource.contains("val generatedKraftOsProductionBundle ="))
+        assertTrue(producerSource.contains("generated/kraftos-bundles"))
+        assertTrue(producerSource.contains("production"))
+        assertTrue(producerSource.contains("tasks.register<org.gradle.api.tasks.Sync>(\"assembleKraftOsProductionBundle\")"))
+        assertTrue(producerSource.contains("from(generatedK16FirmwareResources)"))
+        assertTrue(producerSource.contains("into(generatedKraftOsProductionBundle)"))
+        assertTrue(consumerSource.contains("resources.srcDir(generatedKraftOsProductionBundle)"))
+        assertFalse(consumerSource.contains("resources.srcDir(generatedK16FirmwareResources)"))
+        assertTrue(consumerSource.contains("dependsOn(\"assembleKraftOsProductionBundle\")"))
     }
 
     @Test
     fun bundledK16FirmwareBuildIncludesYesCoreutil() {
-        val source = Path.of("../../../build-scripts/src/main/kotlin/k16-firmware-convention.gradle.kts").readText()
+        val source =
+            Path.of("../../../build-scripts/src/main/kotlin/k16-firmware-producer-convention.gradle.kts").readText()
 
         assertTrue(source.contains("generatedK16CSystemYesTarget"))
         assertTrue(source.contains("k16CSystemYesSource"))
@@ -609,7 +615,8 @@ class K16FirmwareResourceTest {
 
     @Test
     fun bundledK16UserlandMapArtifactsAreGeneratedWithoutHostedRustProofs() {
-        val source = Path.of("../../../build-scripts/src/main/kotlin/k16-firmware-convention.gradle.kts").readText()
+        val source =
+            Path.of("../../../build-scripts/src/main/kotlin/k16-firmware-producer-convention.gradle.kts").readText()
 
         assertFalse(source.contains("val k16HostedCatMapArtifact ="))
         assertFalse(source.contains("val k16HostedHelloMapArtifact ="))
@@ -624,7 +631,8 @@ class K16FirmwareResourceTest {
 
     @Test
     fun bundledK16UserlandSizeReportTaskUsesProductionMaps() {
-        val source = Path.of("../../../build-scripts/src/main/kotlin/k16-firmware-convention.gradle.kts").readText()
+        val source =
+            Path.of("../../../build-scripts/src/main/kotlin/k16-firmware-producer-convention.gradle.kts").readText()
         val docs = Path.of("../../../docs/toolchains/k16-userland-size-report.md").readText()
 
         assertTrue(source.contains("tasks.register(\"reportK16UserlandSize\")"))

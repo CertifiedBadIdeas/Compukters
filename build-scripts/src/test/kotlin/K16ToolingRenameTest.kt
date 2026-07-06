@@ -173,7 +173,8 @@ class K16ToolingRenameTest {
 
     @Test
     fun neoforgeFirmwareBuildDoesNotUseRuxCompilerOrDeletedGuestExamples() {
-        val buildScript = root.resolve("build-scripts/src/main/kotlin/k16-firmware-convention.gradle.kts").readText()
+        val buildScript =
+            root.resolve("build-scripts/src/main/kotlin/k16-firmware-producer-convention.gradle.kts").readText()
         val neoforgeBuildScript = root.resolve("modules/v1_21_1/v1_21_1-neoforge/build.gradle.kts").readText()
 
         assertTrue(buildScript.contains("guest/firmware/bios/bios.c"))
@@ -219,7 +220,8 @@ class K16ToolingRenameTest {
 
     @Test
     fun rustFirmwareGradleBuildsConfiguredCoreOrAllocArtifacts() {
-        val buildScript = root.resolve("build-scripts/src/main/kotlin/k16-firmware-convention.gradle.kts").readText()
+        val buildScript =
+            root.resolve("build-scripts/src/main/kotlin/k16-firmware-producer-convention.gradle.kts").readText()
 
         assertTrue(buildScript.contains("buildStd: String = \"core\""))
         assertTrue(buildScript.contains("-Zbuild-std=\$buildStd"))

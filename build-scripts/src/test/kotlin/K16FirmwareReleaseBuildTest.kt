@@ -28,7 +28,8 @@ class K16FirmwareReleaseBuildTest {
 
     @Test
     fun productionBuildUsesReleaseFirmwareProfileWithoutDebugFallback() {
-        val buildScript = root.resolve("build-scripts/src/main/kotlin/k16-firmware-convention.gradle.kts").readText()
+        val buildScript =
+            root.resolve("build-scripts/src/main/kotlin/k16-firmware-producer-convention.gradle.kts").readText()
         val rustBinArtifacts = root.resolve("build-scripts/src/main/kotlin/K16RustBinArtifacts.kt").readText()
         val docs = root.resolve("docs/toolchains/k16-firmware-release-builds.md").readText()
 
