@@ -14,6 +14,7 @@ import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16ComputerRuntimeFactory
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16ComputerControl
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayPixelFormat
+import ru.lazyhat.compukterkraft.lang.runtime.kraftos.KraftOsArtifactManifest
 import ru.lazyhat.compukterkraft.lang.runtime.storage.K16SystemVolumeWorkspace
 import ru.lazyhat.compukterkraft.lang.runtime.storage.K16_VOLUME_MAGIC_BYTES
 import java.nio.ByteBuffer
@@ -662,6 +663,26 @@ class K16FirmwareResourceTest {
         assertContentEquals(
             bytes,
             K16BiosFlashWorkspace.loadBiosFlashResource(classLoader = javaClass.classLoader),
+        )
+    }
+
+    @Test
+    fun bundledKraftOsArtifactManifestResourceExists() {
+        val manifest = KraftOsArtifactManifest.load(classLoader = javaClass.classLoader)
+
+        assertEquals(1, manifest.schema)
+        assertEquals("k16", manifest.target)
+        assertEquals("firmware/k16-bios.kflash", manifest.biosFlash.resource)
+        assertEquals("kflash", manifest.biosFlash.format)
+        assertEquals("firmware/k16-system-storage0.kv", manifest.systemStorage0.resource)
+        assertEquals("kfs-kv", manifest.systemStorage0.format)
+        assertTrue(
+            javaClass.classLoader.getResource(manifest.biosFlash.resource) != null,
+            "manifest BIOS flash resource should exist",
+        )
+        assertTrue(
+            javaClass.classLoader.getResource(manifest.systemStorage0.resource) != null,
+            "manifest storage0 resource should exist",
         )
     }
 

@@ -7,6 +7,8 @@ the `guest/kraftos` source tree.
 
 ## Runtime Artifacts
 
+- `firmware/kraftos-artifacts.properties` is the bundled manifest that names the
+  runtime artifact resources and their formats.
 - `firmware/k16-bios.kflash` is the bundled BIOS flash image.
 - `firmware/k16-system-storage0.kv` is the bundled initial system storage
   volume.
@@ -17,10 +19,27 @@ the `guest/kraftos` source tree.
 preparation steps. Upper layers should depend on that contract instead of
 calling low-level BIOS or storage workspace helpers directly.
 
+## Manifest Schema
+
+The current manifest uses Java `Properties` syntax and schema `1`:
+
+```properties
+schema=1
+target=k16
+artifact.biosFlash.resource=firmware/k16-bios.kflash
+artifact.biosFlash.format=kflash
+artifact.systemStorage0.resource=firmware/k16-system-storage0.kv
+artifact.systemStorage0.format=kfs-kv
+```
+
+The manifest is generated with the bundled firmware resources. Runtime code
+loads and validates it before using default artifact paths.
+
 ## Repository Split Direction
 
 When KraftOS moves into an independent repository, this contract is the
 integration point that should remain stable inside the mod repository. The
-producer side may change how the BIOS flash and system volume are built, but
-the consumer side should continue to consume explicit artifacts with the same
-runtime meaning.
+producer side may change how the BIOS flash and system volume are built, but it
+must still publish a manifest-backed bundle with the same runtime meaning. The
+consumer side should discover artifact resources through the manifest instead of
+depending on the source tree or on producer-internal build paths.
