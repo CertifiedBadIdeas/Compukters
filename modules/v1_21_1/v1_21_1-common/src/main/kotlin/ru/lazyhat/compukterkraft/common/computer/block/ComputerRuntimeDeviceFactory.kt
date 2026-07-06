@@ -26,11 +26,10 @@ import ru.lazyhat.compukterkraft.core.device.DeviceProperties
 import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeDevice
 import ru.lazyhat.compukterkraft.core.device.runtime.K16RuntimeDevice
 import ru.lazyhat.compukterkraft.core.device.vm.DeviceProfileRegistry
-import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16BiosFlashWorkspace
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16ComputerRuntimeFactory
+import ru.lazyhat.compukterkraft.lang.runtime.kraftos.KraftOsArtifacts
 import ru.lazyhat.compukterkraft.lang.runtime.storage.FileK16VolumeStore
 import ru.lazyhat.compukterkraft.lang.runtime.storage.K16RuntimeSnapshotStore
-import ru.lazyhat.compukterkraft.lang.runtime.storage.K16SystemVolumeWorkspace
 import ru.lazyhat.compukterkraft.lang.runtime.storage.K16VolumeBlob
 import java.nio.file.Path
 
@@ -63,9 +62,9 @@ object ComputerRuntimeDeviceFactory {
                     )
                 val maxSteps = k16MaxSteps(profile.resources.cpu.maxStepsPerSlice)
                 val maxTurnsPerTick = k16MaxTurnsPerTick(profile.resources.cpu.maxTurnsPerTick)
-                K16SystemVolumeWorkspace.prepareStorage0Volume(workspace)
+                KraftOsArtifacts.prepareStorage0Volume(workspace)
                 val storage0 = volumeStore.openOrCreateComputerVolume(deviceId, "storage0")
-                val biosFlashPath = K16BiosFlashWorkspace.prepareBiosFlash(workspace)
+                val biosFlashPath = KraftOsArtifacts.prepareBiosFlash(workspace)
                 createK16ComputerEndpoint(biosFlashPath, storage0, snapshot, memorySize, maxSteps, maxTurnsPerTick)
             },
             stateSink = host.stateSink,
