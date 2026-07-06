@@ -37,9 +37,10 @@ class ComputerRuntimeDeviceFactoryArchitectureTest {
                 .of("src/main/kotlin/ru/lazyhat/compukterkraft/common/computer/block/ComputerRuntimeDeviceFactory.kt")
                 .readText()
 
-        assertTrue(source.contains("K16BiosFlashWorkspace.prepareBiosFlash"))
+        assertTrue(source.contains("KraftOsArtifacts.prepareBiosFlash"))
         assertTrue(source.contains("K16ComputerRuntimeFactory.createFromBiosFlash"))
         assertFalse(source.contains("K16ComputerRuntimeFactory.createFromResource(storage0Path"))
+        assertFalse(source.contains("import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16BiosFlashWorkspace"))
     }
 
     @Test
@@ -49,10 +50,12 @@ class ComputerRuntimeDeviceFactoryArchitectureTest {
                 .of("src/main/kotlin/ru/lazyhat/compukterkraft/common/computer/block/ComputerRuntimeDeviceFactory.kt")
                 .readText()
 
-        val seedIndex = source.indexOf("K16SystemVolumeWorkspace.prepareStorage0Volume(workspace)")
+        val seedIndex = source.indexOf("KraftOsArtifacts.prepareStorage0Volume(workspace)")
         val openIndex = source.indexOf("volumeStore.openOrCreateComputerVolume(deviceId, \"storage0\")")
 
         assertTrue(source.contains("FileK16VolumeStore(worldRoot)"))
+        assertTrue(source.contains("import ru.lazyhat.compukterkraft.lang.runtime.kraftos.KraftOsArtifacts"))
+        assertFalse(source.contains("import ru.lazyhat.compukterkraft.lang.runtime.storage.K16SystemVolumeWorkspace"))
         assertTrue(seedIndex >= 0, "storage0 should be seeded from the bundled system volume resource")
         assertTrue(openIndex >= 0, "storage0 should still be opened through FileK16VolumeStore")
         assertTrue(seedIndex < openIndex, "storage0 must be seeded before FileK16VolumeStore can create an empty volume")
