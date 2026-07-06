@@ -100,82 +100,102 @@ class ClientDisplayBuffer(
 
     @Synchronized
     fun applyNativeFrameBatch(payload: ByteArray): Boolean {
+        val started = System.nanoTime()
         var acceptedAny = false
+        var acceptedFrames = 0
+        var acceptedTiles = 0
+        var acceptedPayloadBytes = 0
+        var acceptedOperations = 0
         var currentSequence = 0L
         var currentFullRefresh = false
-        NativeDisplayFrameCodec.visitFrames(
-            payload,
-            object : NativeDisplayFrameCodec.FrameVisitor {
-                override fun beginFrame(
-                    displayId: Int,
-                    sequence: Long,
-                    width: Int,
-                    height: Int,
-                    pixelFormat: DisplayPixelFormat,
-                    fullRefresh: Boolean,
-                ): Boolean {
-                    val accepted =
-                        displayId == this@ClientDisplayBuffer.displayId &&
-                        width == this@ClientDisplayBuffer.width &&
-                        height == this@ClientDisplayBuffer.height &&
-                        pixelFormat == DisplayPixelFormat.RGB565 &&
-                        (fullRefresh || sequence >= expectedSequence)
-                    currentSequence = sequence
-                    currentFullRefresh = fullRefresh
-                    if (accepted && fullRefresh) {
-                        staging.fill(OPAQUE_BLACK)
-                        pendingDirtyRegions.clear()
-                        pendingDirtyRegions.add(Region(0, 0, this@ClientDisplayBuffer.width, this@ClientDisplayBuffer.height))
+        try {
+            NativeDisplayFrameCodec.visitFrames(
+                payload,
+                object : NativeDisplayFrameCodec.FrameVisitor {
+                    override fun beginFrame(
+                        displayId: Int,
+                        sequence: Long,
+                        width: Int,
+                        height: Int,
+                        pixelFormat: DisplayPixelFormat,
+                        fullRefresh: Boolean,
+                    ): Boolean {
+                        val accepted =
+                            displayId == this@ClientDisplayBuffer.displayId &&
+                                width == this@ClientDisplayBuffer.width &&
+                                height == this@ClientDisplayBuffer.height &&
+                                pixelFormat == DisplayPixelFormat.RGB565 &&
+                                (fullRefresh || sequence >= expectedSequence)
+                        currentSequence = sequence
+                        currentFullRefresh = fullRefresh
+                        if (accepted && fullRefresh) {
+                            staging.fill(OPAQUE_BLACK)
+                            pendingDirtyRegions.clear()
+                            pendingDirtyRegions.add(Region(0, 0, this@ClientDisplayBuffer.width, this@ClientDisplayBuffer.height))
+                        }
+                        return accepted
                     }
-                    return accepted
-                }
 
-                override fun tile(
-                    tileX: Int,
-                    tileY: Int,
-                    x: Int,
-                    y: Int,
-                    width: Int,
-                    height: Int,
-                    payload: ByteArray,
-                    payloadOffset: Int,
-                    payloadLength: Int,
-                ) {
-                    applyTile(x, y, width, height, payload, payloadOffset)
-                    if (!currentFullRefresh) {
-                        pendingDirtyRegions.add(Region(x, y, width, height))
+                    override fun tile(
+                        tileX: Int,
+                        tileY: Int,
+                        x: Int,
+                        y: Int,
+                        width: Int,
+                        height: Int,
+                        payload: ByteArray,
+                        payloadOffset: Int,
+                        payloadLength: Int,
+                    ) {
+                        applyTile(x, y, width, height, payload, payloadOffset)
+                        acceptedTiles += 1
+                        acceptedPayloadBytes += payloadLength
+                        if (!currentFullRefresh) {
+                            pendingDirtyRegions.add(Region(x, y, width, height))
+                        }
                     }
-                }
 
-                override fun fillRect(
-                    x: Int,
-                    y: Int,
-                    width: Int,
-                    height: Int,
-                    rgb565: Int,
-                ) {
-                    applyFillRect(x, y, width, height, rgb565)
-                }
+                    override fun fillRect(
+                        x: Int,
+                        y: Int,
+                        width: Int,
+                        height: Int,
+                        rgb565: Int,
+                    ) {
+                        applyFillRect(x, y, width, height, rgb565)
+                        acceptedOperations += 1
+                    }
 
-                override fun copyRect(
-                    srcX: Int,
-                    srcY: Int,
-                    width: Int,
-                    height: Int,
-                    dstX: Int,
-                    dstY: Int,
-                ) {
-                    applyCopyRect(srcX, srcY, width, height, dstX, dstY)
-                }
+                    override fun copyRect(
+                        srcX: Int,
+                        srcY: Int,
+                        width: Int,
+                        height: Int,
+                        dstX: Int,
+                        dstY: Int,
+                    ) {
+                        applyCopyRect(srcX, srcY, width, height, dstX, dstY)
+                        acceptedOperations += 1
+                    }
 
-                override fun endFrame() {
-                    expectedSequence = currentSequence + 1
-                    hasReceivedFrames = true
-                    dirty = true
-                    acceptedAny = true
-                }
-            },
-        )
+                    override fun endFrame() {
+                        expectedSequence = currentSequence + 1
+                        hasReceivedFrames = true
+                        dirty = true
+                        acceptedAny = true
+                        acceptedFrames += 1
+                    }
+                },
+            )
+        } finally {
+            metricsCollector.recordNativeBatchApply(
+                frameCount = acceptedFrames,
+                tileCount = acceptedTiles,
+                payloadBytes = acceptedPayloadBytes,
+                operationCount = acceptedOperations,
+                nanos = System.nanoTime() - started,
+            )
+        }
         return acceptedAny
     }
 
