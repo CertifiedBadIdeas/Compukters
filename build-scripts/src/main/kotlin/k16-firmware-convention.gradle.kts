@@ -101,6 +101,7 @@ val k16HostVmSource = rootProject.layout.projectDirectory.dir("host/k16-vm/src")
 val k16RustTargetSpec = rootProject.layout.projectDirectory.file("tools/k16-unknown-kraftos.json")
 val k16ToolchainConfig = rootProject.layout.projectDirectory.file("config/k16-toolchain.json")
 val k16BiosFlashResource = generatedK16FirmwareResources.map { it.file("firmware/k16-bios.kflash") }
+val k16ArtifactManifestResource = generatedK16FirmwareResources.map { it.file("firmware/kraftos-artifacts.properties") }
 val k16BootArtifact = generatedK16FirmwareArtifacts.map { it.file("kernel-loader.kb") }
 val k16KernelArtifact = generatedK16FirmwareArtifacts.map { it.file("kernel.kx") }
 val k16InitArtifact = generatedK16FirmwareArtifacts.map { it.file("init.kx") }
@@ -1413,6 +1414,31 @@ val putK16SystemStorage0Init =
         }
     }
 
+val generateKraftOsArtifactManifest =
+    tasks.register("generateKraftOsArtifactManifest") {
+        description = "Writes the bundled KraftOS artifact manifest resource."
+        group = "k16"
+        dependsOn(linkK16BiosFlash, putK16SystemStorage0Init)
+        inputs.file(k16BiosFlashResource)
+        inputs.file(k16SystemStorage0Resource)
+        outputs.file(k16ArtifactManifestResource)
+
+        doLast {
+            val manifest = k16ArtifactManifestResource.get().asFile
+            manifest.parentFile.mkdirs()
+            manifest.writeText(
+                """
+                schema=1
+                target=k16
+                artifact.biosFlash.resource=firmware/k16-bios.kflash
+                artifact.biosFlash.format=kflash
+                artifact.systemStorage0.resource=firmware/k16-system-storage0.kv
+                artifact.systemStorage0.format=kfs-kv
+                """.trimIndent() + "\n",
+            )
+        }
+    }
+
 sourceSets.getByName("main") {
     resources.srcDir(generatedK16FirmwareResources)
 }
@@ -1558,6 +1584,7 @@ val reportK16UserlandSize =
 tasks.named("processResources") {
     dependsOn(linkK16BiosFlash)
     dependsOn(putK16SystemStorage0Init)
+    dependsOn(generateKraftOsArtifactManifest)
 }
 
 tasks.named("processTestResources") {

@@ -67,6 +67,38 @@ class KraftOsArtifactsTest {
         assertContentEquals(storageBytes, paths.storage0VolumePath.readBytes())
     }
 
+    @Test
+    fun preparesDefaultWorkspaceArtifactsFromBundledManifest() {
+        val workspace = createTempDirectory("kraftos-artifacts-")
+        val biosBytes = byteArrayOf(0x01, 0x10, 0x01, 0xe0.toByte())
+        val storageBytes = "K16VOL".encodeToByteArray() + byteArrayOf(1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+        val loader =
+            resourceClassLoader(
+                mapOf(
+                    KraftOsArtifactManifest.DEFAULT_RESOURCE to
+                        """
+                        schema=1
+                        target=k16
+                        artifact.biosFlash.resource=firmware/manifest-bios.kflash
+                        artifact.biosFlash.format=kflash
+                        artifact.systemStorage0.resource=firmware/manifest-storage0.kv
+                        artifact.systemStorage0.format=kfs-kv
+                        """.trimIndent().encodeToByteArray(),
+                    "firmware/manifest-bios.kflash" to biosBytes,
+                    "firmware/manifest-storage0.kv" to storageBytes,
+                ),
+            )
+
+        val paths =
+            KraftOsArtifacts.prepareWorkspace(
+                workspace = workspace,
+                classLoader = loader,
+            )
+
+        assertContentEquals(biosBytes, paths.biosFlashPath.readBytes())
+        assertContentEquals(storageBytes, paths.storage0VolumePath.readBytes())
+    }
+
     private fun resourceClassLoader(resources: Map<String, ByteArray>): ClassLoader =
         object : ClassLoader(null) {
             override fun getResourceAsStream(name: String): InputStream? =

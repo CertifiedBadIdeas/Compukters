@@ -36,8 +36,21 @@ object KraftOsArtifacts {
 
     fun prepareWorkspace(
         workspace: Path,
-        biosFlashResource: String = BIOS_FLASH_RESOURCE,
-        storage0VolumeResource: String = STORAGE0_VOLUME_RESOURCE,
+        classLoader: ClassLoader = KraftOsArtifacts::class.java.classLoader,
+    ): KraftOsArtifactPaths {
+        val manifest = loadBundledManifest(classLoader)
+        return prepareWorkspace(
+            workspace = workspace,
+            biosFlashResource = manifest.biosFlash.resource,
+            storage0VolumeResource = manifest.systemStorage0.resource,
+            classLoader = classLoader,
+        )
+    }
+
+    fun prepareWorkspace(
+        workspace: Path,
+        biosFlashResource: String,
+        storage0VolumeResource: String,
         classLoader: ClassLoader = KraftOsArtifacts::class.java.classLoader,
     ): KraftOsArtifactPaths =
         KraftOsArtifactPaths(
@@ -54,6 +67,11 @@ object KraftOsArtifacts {
                     classLoader = classLoader,
                 ),
         )
+
+    fun loadBundledManifest(
+        classLoader: ClassLoader = KraftOsArtifacts::class.java.classLoader,
+    ): KraftOsArtifactManifest =
+        KraftOsArtifactManifest.load(classLoader = classLoader)
 
     fun prepareBiosFlash(
         workspace: Path,
