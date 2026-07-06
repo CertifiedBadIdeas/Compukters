@@ -14,6 +14,13 @@ bundle published into the main NeoForge resources today. The older
 output; runtime resource packaging consumes the production bundle boundary
 instead of that producer-internal directory.
 
+In the current in-repository Gradle build, `k16-firmware-producer-convention`
+owns KraftOS source paths, toolchain invocation, firmware linking, storage
+image assembly, and `assembleKraftOsProductionBundle`. The mod-facing
+`k16-firmware-convention` applies that producer convention and only wires the
+generated production bundle and development test resource directory into the
+NeoForge resource/test tasks.
+
 The production bundle currently contains:
 
 - `firmware/kraftos-artifacts.properties`
@@ -64,3 +71,11 @@ producer side may change how the BIOS flash and system volume are built, but it
 must still publish a manifest-backed bundle with the same runtime meaning. The
 consumer side should discover artifact resources through the manifest instead of
 depending on the source tree or on producer-internal build paths.
+
+The expected physical split is:
+
+- KraftOS repository: owns `guest/kraftos`, `guest/firmware`, and the producer
+  build surface that emits a production bundle with this manifest schema.
+- Mod repository: owns runtime resource packaging and consumes either an
+  in-repo generated bundle during development or a published KraftOS bundle in
+  the future, without depending on KraftOS source-tree paths.

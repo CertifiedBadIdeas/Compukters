@@ -149,7 +149,8 @@ class K16RuntimeProfilingArchitectureTest {
 
     @Test
     fun k16SharedKraftOwnsCUserlandSyscallWrappers() {
-        val source = Path.of("../../../build-scripts/src/main/kotlin/k16-firmware-convention.gradle.kts").readText()
+        val source =
+            Path.of("../../../build-scripts/src/main/kotlin/k16-firmware-producer-convention.gradle.kts").readText()
 
         assertTrue(source.contains("sources = listOf(k16CLibkraftSource.asFile, k16CLibcSyscallSource.asFile)"))
         assertFalse(source.contains("k16CLibcSyscallSource.asFile, k16CSystem"))

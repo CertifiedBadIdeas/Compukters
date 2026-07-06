@@ -29,14 +29,16 @@ class K16FirmwareVolumeBuildScriptTest {
     @Test
     fun k16FirmwareOrchestrationLivesInSharedConvention() {
         val neoforgeBuildScript = root.resolve("modules/v1_21_1/v1_21_1-neoforge/build.gradle.kts").readText()
-        val conventionScript = root.resolve("build-scripts/src/main/kotlin/k16-firmware-convention.gradle.kts").readText()
+        val producerScript =
+            root.resolve("build-scripts/src/main/kotlin/k16-firmware-producer-convention.gradle.kts").readText()
+        val consumerScript = root.resolve("build-scripts/src/main/kotlin/k16-firmware-convention.gradle.kts").readText()
 
         assertTrue(neoforgeBuildScript.contains("alias(libs.plugins.k16FirmwareConvention)"))
-        assertTrue(conventionScript.contains("val compileK16SystemKernel ="))
-        assertTrue(conventionScript.contains("""val k16KernelArtifact = generatedK16FirmwareArtifacts.map { it.file("kernel.kx") }"""))
-        assertFalse(conventionScript.contains("""it.file("display-ok.kx")"""))
-        assertTrue(conventionScript.contains("val createK16SystemStorage0 ="))
-        assertTrue(conventionScript.contains("tasks.register<Test>(\"profileK16RuntimeTextIo\")"))
+        assertTrue(producerScript.contains("val compileK16SystemKernel ="))
+        assertTrue(producerScript.contains("""val k16KernelArtifact = generatedK16FirmwareArtifacts.map { it.file("kernel.kx") }"""))
+        assertFalse(producerScript.contains("""it.file("display-ok.kx")"""))
+        assertTrue(producerScript.contains("val createK16SystemStorage0 ="))
+        assertTrue(consumerScript.contains("tasks.register<Test>(\"profileK16RuntimeTextIo\")"))
         assertFalse(neoforgeBuildScript.contains("val compileK16SystemKernel ="))
         assertFalse(neoforgeBuildScript.contains("val createK16SystemStorage0 ="))
         assertFalse(neoforgeBuildScript.contains("tasks.register<Test>(\"profileK16RuntimeTextIo\")"))
@@ -45,7 +47,7 @@ class K16FirmwareVolumeBuildScriptTest {
     @Test
     fun systemStorage0TaskCreatesPartitionedVolumeBeforePutBoot() {
         val buildScript =
-            root.resolve("build-scripts/src/main/kotlin/k16-firmware-convention.gradle.kts").readText()
+            root.resolve("build-scripts/src/main/kotlin/k16-firmware-producer-convention.gradle.kts").readText()
         val taskBody =
             buildScript.substringAfter("val createK16SystemStorage0 =")
                 .substringBefore("val putK16SystemStorage0Boot =")
@@ -60,7 +62,7 @@ class K16FirmwareVolumeBuildScriptTest {
     @Test
     fun systemStorage0StagesUseDistinctGradleOutputs() {
         val buildScript =
-            root.resolve("build-scripts/src/main/kotlin/k16-firmware-convention.gradle.kts").readText()
+            root.resolve("build-scripts/src/main/kotlin/k16-firmware-producer-convention.gradle.kts").readText()
         val createTask =
             buildScript.substringAfter("val createK16SystemStorage0 =")
                 .substringBefore("val putK16SystemStorage0Boot =")
@@ -72,7 +74,7 @@ class K16FirmwareVolumeBuildScriptTest {
                 .substringBefore("val putK16SystemStorage0Init =")
         val putInitTask =
             buildScript.substringAfter("val putK16SystemStorage0Init =")
-                .substringBefore("sourceSets.main")
+                .substringBefore("val generateKraftOsArtifactManifest =")
 
         assertTrue(buildScript.contains("val k16EmptyStorage0Artifact"))
         assertTrue(buildScript.contains("val k16BootStorage0Artifact"))
