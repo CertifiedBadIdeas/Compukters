@@ -1,7 +1,7 @@
 use crate::generated::terminal_font::{
     terminal_font_glyph, CELL_HEIGHT, CELL_WIDTH, GLYPH_HEIGHT, GLYPH_WIDTH, GLYPH_X, GLYPH_Y,
 };
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 const TILE_SIZE: i32 = 16;
 const BYTES_PER_PIXEL_RGB565: usize = 2;
@@ -59,7 +59,10 @@ pub struct DisplayEngine {
     height: i32,
     pixel_format: PixelFormat,
     pixels: Vec<u16>,
-    dirty_tiles: BTreeSet<(i32, i32)>,
+    tile_columns: i32,
+    tile_rows: i32,
+    dirty_tiles: Vec<bool>,
+    dirty_tile_indices: Vec<usize>,
     pending_operations: Vec<DisplayFrameOperation>,
     sequence: i64,
 }
@@ -81,13 +84,23 @@ impl DisplayEngine {
             .ok_or_else(|| "display size overflows i32".to_string())?;
         let len =
             usize::try_from(pixel_count).map_err(|_| "display size overflows usize".to_string())?;
+        let tile_columns = div_ceil_positive_i32(width, TILE_SIZE);
+        let tile_rows = div_ceil_positive_i32(height, TILE_SIZE);
+        let tile_count = tile_columns
+            .checked_mul(tile_rows)
+            .ok_or_else(|| "display tile count overflows i32".to_string())?;
+        let tile_len = usize::try_from(tile_count)
+            .map_err(|_| "display tile count overflows usize".to_string())?;
         Ok(Self {
             display_id,
             width,
             height,
             pixel_format,
             pixels: vec![0; len],
-            dirty_tiles: BTreeSet::new(),
+            tile_columns,
+            tile_rows,
+            dirty_tiles: vec![false; tile_len],
+            dirty_tile_indices: Vec::new(),
             pending_operations: Vec::new(),
             sequence: 0,
         })
@@ -297,13 +310,13 @@ impl DisplayEngine {
     }
 
     pub fn present(&mut self) -> Option<DisplayFrameDelta> {
-        if self.dirty_tiles.is_empty() && self.pending_operations.is_empty() {
+        if self.dirty_tile_indices.is_empty() && self.pending_operations.is_empty() {
             return None;
         }
         self.sequence += 1;
         let tiles = self.build_tiles();
         let operations = std::mem::take(&mut self.pending_operations);
-        self.dirty_tiles.clear();
+        self.clear_dirty_tiles();
         Some(DisplayFrameDelta {
             display_id: self.display_id,
             sequence: self.sequence,
@@ -325,37 +338,52 @@ impl DisplayEngine {
     }
 
     fn build_tiles(&self) -> Vec<DisplayTile> {
-        self.dirty_tiles
-            .iter()
-            .map(|&(tile_x, tile_y)| {
-                let x = tile_x * TILE_SIZE;
-                let y = tile_y * TILE_SIZE;
-                let width = TILE_SIZE.min(self.width - x);
-                let height = TILE_SIZE.min(self.height - y);
-                let mut payload =
-                    Vec::with_capacity(width as usize * height as usize * BYTES_PER_PIXEL_RGB565);
-                for row in y..y + height {
-                    for col in x..x + width {
-                        let value = self.pixels[self.index(col, row)];
-                        payload.push((value >> 8) as u8);
-                        payload.push(value as u8);
-                    }
+        let mut tiles = Vec::with_capacity(self.dirty_tile_count());
+        for &index in &self.dirty_tile_indices {
+            let tile_x = index as i32 % self.tile_columns;
+            let tile_y = index as i32 / self.tile_columns;
+            if !self.dirty_tiles[index] {
+                continue;
+            }
+            let x = tile_x * TILE_SIZE;
+            let y = tile_y * TILE_SIZE;
+            let width = TILE_SIZE.min(self.width - x);
+            let height = TILE_SIZE.min(self.height - y);
+            let mut payload =
+                Vec::with_capacity(width as usize * height as usize * BYTES_PER_PIXEL_RGB565);
+            for row in y..y + height {
+                for col in x..x + width {
+                    let value = self.pixels[self.index(col, row)];
+                    payload.push((value >> 8) as u8);
+                    payload.push(value as u8);
                 }
-                DisplayTile {
-                    tile_x,
-                    tile_y,
-                    x,
-                    y,
-                    width,
-                    height,
-                    payload,
-                }
-            })
-            .collect()
+            }
+            tiles.push(DisplayTile {
+                tile_x,
+                tile_y,
+                x,
+                y,
+                width,
+                height,
+                payload,
+            });
+        }
+        tiles
     }
 
     fn mark_all_dirty(&mut self) {
         self.mark_rect_dirty(0, 0, self.width, self.height);
+    }
+
+    fn clear_dirty_tiles(&mut self) {
+        for &index in &self.dirty_tile_indices {
+            self.dirty_tiles[index] = false;
+        }
+        self.dirty_tile_indices.clear();
+    }
+
+    fn dirty_tile_count(&self) -> usize {
+        self.dirty_tile_indices.len()
     }
 
     fn mark_rect_dirty(&mut self, x: i32, y: i32, width: i32, height: i32) {
@@ -371,7 +399,11 @@ impl DisplayEngine {
         }
         for tile_y in (min_y / TILE_SIZE)..=(max_y / TILE_SIZE) {
             for tile_x in (min_x / TILE_SIZE)..=(max_x / TILE_SIZE) {
-                self.dirty_tiles.insert((tile_x, tile_y));
+                let index = self.dirty_tile_index(tile_x, tile_y);
+                if !self.dirty_tiles[index] {
+                    self.dirty_tiles[index] = true;
+                    self.dirty_tile_indices.push(index);
+                }
             }
         }
     }
@@ -379,12 +411,16 @@ impl DisplayEngine {
     fn clear_dirty_tiles_fully_covered_by_rect(&mut self, x: i32, y: i32, width: i32, height: i32) {
         let display_width = self.width;
         let display_height = self.height;
-        self.dirty_tiles.retain(|&(tile_x, tile_y)| {
+        let tile_columns = self.tile_columns;
+        let dirty_tiles = &mut self.dirty_tiles;
+        self.dirty_tile_indices.retain(|&index| {
+            let tile_x = index as i32 % tile_columns;
+            let tile_y = index as i32 / tile_columns;
             let tile_origin_x = tile_x * TILE_SIZE;
             let tile_origin_y = tile_y * TILE_SIZE;
             let tile_width = TILE_SIZE.min(display_width - tile_origin_x);
             let tile_height = TILE_SIZE.min(display_height - tile_origin_y);
-            !rect_fully_covers(
+            let covered = rect_fully_covers(
                 x,
                 y,
                 width,
@@ -393,12 +429,21 @@ impl DisplayEngine {
                 tile_origin_y,
                 tile_width,
                 tile_height,
-            )
+            );
+            if covered {
+                dirty_tiles[index] = false;
+            }
+            !covered
         });
     }
 
     fn dirty_tiles_overlap_rect(&self, x: i32, y: i32, width: i32, height: i32) -> bool {
-        self.dirty_tiles.iter().any(|&(tile_x, tile_y)| {
+        self.dirty_tile_indices.iter().any(|&index| {
+            if !self.dirty_tiles[index] {
+                return false;
+            }
+            let tile_x = index as i32 % self.tile_columns;
+            let tile_y = index as i32 / self.tile_columns;
             let tile_origin_x = tile_x * TILE_SIZE;
             let tile_origin_y = tile_y * TILE_SIZE;
             let tile_width = TILE_SIZE.min(self.width - tile_origin_x);
@@ -423,6 +468,16 @@ impl DisplayEngine {
     fn index(&self, x: i32, y: i32) -> usize {
         (y * self.width + x) as usize
     }
+
+    fn dirty_tile_index(&self, tile_x: i32, tile_y: i32) -> usize {
+        debug_assert!(tile_x >= 0 && tile_x < self.tile_columns);
+        debug_assert!(tile_y >= 0 && tile_y < self.tile_rows);
+        (tile_y * self.tile_columns + tile_x) as usize
+    }
+}
+
+fn div_ceil_positive_i32(value: i32, divisor: i32) -> i32 {
+    1 + (value - 1) / divisor
 }
 
 fn rect_fully_covers(

@@ -3,11 +3,26 @@ use k16_vm::generated::terminal_font::{
     has_terminal_font_glyph, terminal_font_glyph, CELL_HEIGHT, CELL_WIDTH, GLYPH_HEIGHT,
     GLYPH_WIDTH, GLYPH_X, GLYPH_Y,
 };
+use std::fs;
 
 fn payload_contains_rgb565(payload: &[u8], rgb565: u16) -> bool {
     let hi = (rgb565 >> 8) as u8;
     let lo = rgb565 as u8;
     payload.windows(2).any(|pair| pair == [hi, lo])
+}
+
+#[test]
+fn display_dirty_tiles_use_dense_map_not_btree_set() {
+    let source = fs::read_to_string("src/display.rs").expect("display source");
+
+    assert!(
+        !source.contains("BTreeSet"),
+        "dirty tile tracking should use a dense geometry-derived map, not BTreeSet"
+    );
+    assert!(
+        source.contains("dirty_tile_indices"),
+        "dense dirty tile tracking should keep a compact dirty-index list"
+    );
 }
 
 #[test]
