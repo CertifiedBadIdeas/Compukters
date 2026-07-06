@@ -38,6 +38,8 @@ val k16ClangExecutable = k16LlvmBuildRoot.file("bin/clang")
 val generatedK16FirmwareResources = layout.buildDirectory.dir("generated/k16-firmware-resources")
 val generatedK16FirmwareTestResources = layout.buildDirectory.dir("generated/k16-firmware-test-resources")
 val generatedK16FirmwareArtifacts = layout.buildDirectory.dir("generated/k16-firmware-artifacts")
+val generatedKraftOsBundles = layout.buildDirectory.dir("generated/kraftos-bundles")
+val generatedKraftOsProductionBundle = generatedKraftOsBundles.map { it.dir("production") }
 val generatedK16GuestTarget = layout.buildDirectory.dir("generated/k16-guest-target")
 val generatedK16BiosTarget = generatedK16GuestTarget.map { it.dir("bios") }
 val generatedK16BootTarget = generatedK16GuestTarget.map { it.dir("boot") }
@@ -1440,8 +1442,17 @@ val generateKraftOsArtifactManifest =
         }
     }
 
+val assembleKraftOsProductionBundle =
+    tasks.register<org.gradle.api.tasks.Sync>("assembleKraftOsProductionBundle") {
+        description = "Assembles the generated production KraftOS runtime bundle."
+        group = "k16"
+        dependsOn(linkK16BiosFlash, putK16SystemStorage0Init, generateKraftOsArtifactManifest)
+        from(generatedK16FirmwareResources)
+        into(generatedKraftOsProductionBundle)
+    }
+
 sourceSets.getByName("main") {
-    resources.srcDir(generatedK16FirmwareResources)
+    resources.srcDir(generatedKraftOsProductionBundle)
 }
 
 sourceSets.getByName("test") {
@@ -1583,9 +1594,7 @@ val reportK16UserlandSize =
     }
 
 tasks.named("processResources") {
-    dependsOn(linkK16BiosFlash)
-    dependsOn(putK16SystemStorage0Init)
-    dependsOn(generateKraftOsArtifactManifest)
+    dependsOn(assembleKraftOsProductionBundle)
 }
 
 tasks.named("processTestResources") {

@@ -5,6 +5,21 @@
 The Minecraft/runtime side consumes KraftOS as built runtime artifacts, not as
 the `guest/kraftos` source tree.
 
+## Bundle Boundary
+
+The generated production runtime bundle is assembled under
+`build/generated/kraftos-bundles/production` and is the only generated KraftOS
+bundle published into the main NeoForge resources today. The older
+`build/generated/k16-firmware-resources` directory remains an internal producer
+output; runtime resource packaging consumes the production bundle boundary
+instead of that producer-internal directory.
+
+The production bundle currently contains:
+
+- `firmware/kraftos-artifacts.properties`
+- `firmware/k16-bios.kflash`
+- `firmware/k16-system-storage0.kv`
+
 ## Runtime Artifacts
 
 - `firmware/kraftos-artifacts.properties` is the bundled manifest that names the
