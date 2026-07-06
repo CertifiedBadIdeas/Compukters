@@ -533,6 +533,22 @@ class K16FirmwareResourceTest {
     }
 
     @Test
+    fun kraftOsProductionBundleIsResourcePackagingBoundary() {
+        val source = Path.of("../../../build-scripts/src/main/kotlin/k16-firmware-convention.gradle.kts").readText()
+
+        assertTrue(source.contains("val generatedKraftOsBundles ="))
+        assertTrue(source.contains("val generatedKraftOsProductionBundle ="))
+        assertTrue(source.contains("generated/kraftos-bundles"))
+        assertTrue(source.contains("production"))
+        assertTrue(source.contains("tasks.register<org.gradle.api.tasks.Sync>(\"assembleKraftOsProductionBundle\")"))
+        assertTrue(source.contains("from(generatedK16FirmwareResources)"))
+        assertTrue(source.contains("into(generatedKraftOsProductionBundle)"))
+        assertTrue(source.contains("resources.srcDir(generatedKraftOsProductionBundle)"))
+        assertFalse(source.contains("resources.srcDir(generatedK16FirmwareResources)"))
+        assertTrue(source.contains("dependsOn(assembleKraftOsProductionBundle)"))
+    }
+
+    @Test
     fun bundledK16FirmwareBuildIncludesYesCoreutil() {
         val source = Path.of("../../../build-scripts/src/main/kotlin/k16-firmware-convention.gradle.kts").readText()
 
@@ -685,6 +701,21 @@ class K16FirmwareResourceTest {
             javaClass.classLoader.getResource(manifest.systemStorage0.resource) != null,
             "manifest storage0 resource should exist",
         )
+    }
+
+    @Test
+    fun generatedKraftOsProductionBundleContainsRuntimeArtifacts() {
+        val bundle = Path.of("build/generated/kraftos-bundles/production")
+        val manifest = bundle.resolve("firmware/kraftos-artifacts.properties")
+        val biosFlash = bundle.resolve("firmware/k16-bios.kflash")
+        val systemStorage0 = bundle.resolve("firmware/k16-system-storage0.kv")
+
+        assertTrue(Files.exists(manifest), "production bundle should contain the artifact manifest")
+        assertTrue(Files.exists(biosFlash), "production bundle should contain the BIOS flash image")
+        assertTrue(Files.exists(systemStorage0), "production bundle should contain the initial system storage volume")
+        assertTrue(manifest.readText().contains("profile=production"))
+        assertTrue(biosFlash.readBytes().size > 8, "bundled BIOS flash should not be empty")
+        assertTrue(systemStorage0.readBytes().size > 512, "bundled storage0 volume should not be empty")
     }
 
     @Test
