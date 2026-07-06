@@ -1430,6 +1430,7 @@ val generateKraftOsArtifactManifest =
                 """
                 schema=1
                 target=k16
+                profile=production
                 artifact.biosFlash.resource=firmware/k16-bios.kflash
                 artifact.biosFlash.format=kflash
                 artifact.systemStorage0.resource=firmware/k16-system-storage0.kv

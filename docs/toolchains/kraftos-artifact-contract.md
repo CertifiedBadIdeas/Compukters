@@ -26,6 +26,7 @@ The current manifest uses Java `Properties` syntax and schema `1`:
 ```properties
 schema=1
 target=k16
+profile=production
 artifact.biosFlash.resource=firmware/k16-bios.kflash
 artifact.biosFlash.format=kflash
 artifact.systemStorage0.resource=firmware/k16-system-storage0.kv
@@ -34,6 +35,11 @@ artifact.systemStorage0.format=kfs-kv
 
 The manifest is generated with the bundled firmware resources. Runtime code
 loads and validates it before using default artifact paths.
+
+`profile=production` is the only generated bundled runtime profile today.
+`profile=development` is accepted by the manifest contract so a future KraftOS
+producer can publish a development bundle without changing the parser, but this
+repository does not generate or package a development runtime bundle yet.
 
 ## Repository Split Direction
 

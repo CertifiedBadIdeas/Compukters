@@ -79,6 +79,7 @@ class KraftOsArtifactsTest {
                         """
                         schema=1
                         target=k16
+                        profile=production
                         artifact.biosFlash.resource=firmware/manifest-bios.kflash
                         artifact.biosFlash.format=kflash
                         artifact.systemStorage0.resource=firmware/manifest-storage0.kv

@@ -30,6 +30,7 @@ data class KraftOsArtifactRef(
 data class KraftOsArtifactManifest(
     val schema: Int,
     val target: String,
+    val profile: String,
     val biosFlash: KraftOsArtifactRef,
     val systemStorage0: KraftOsArtifactRef,
 ) {
@@ -37,6 +38,8 @@ data class KraftOsArtifactManifest(
         const val DEFAULT_RESOURCE: String = "firmware/kraftos-artifacts.properties"
         const val SUPPORTED_SCHEMA: Int = 1
         const val SUPPORTED_TARGET: String = "k16"
+        const val PRODUCTION_PROFILE: String = "production"
+        const val DEVELOPMENT_PROFILE: String = "development"
         const val BIOS_FLASH_FORMAT: String = "kflash"
         const val SYSTEM_STORAGE0_FORMAT: String = "kfs-kv"
 
@@ -69,9 +72,14 @@ data class KraftOsArtifactManifest(
             check(target == SUPPORTED_TARGET) {
                 "unsupported KraftOS artifact manifest target: $target in $source"
             }
+            val profile = required(properties, "profile", source)
+            check(profile == PRODUCTION_PROFILE || profile == DEVELOPMENT_PROFILE) {
+                "unsupported KraftOS artifact manifest profile: $profile in $source"
+            }
             return KraftOsArtifactManifest(
                 schema = schema,
                 target = target,
+                profile = profile,
                 biosFlash =
                     artifactRef(
                         properties = properties,

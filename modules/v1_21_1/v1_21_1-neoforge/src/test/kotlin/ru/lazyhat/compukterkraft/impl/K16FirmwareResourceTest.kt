@@ -672,6 +672,7 @@ class K16FirmwareResourceTest {
 
         assertEquals(1, manifest.schema)
         assertEquals("k16", manifest.target)
+        assertEquals("production", manifest.profile)
         assertEquals("firmware/k16-bios.kflash", manifest.biosFlash.resource)
         assertEquals("kflash", manifest.biosFlash.format)
         assertEquals("firmware/k16-system-storage0.kv", manifest.systemStorage0.resource)
