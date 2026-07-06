@@ -108,6 +108,27 @@ impl DisplayEngine {
         self.mark_rect_dirty(x, y, 1, 1);
     }
 
+    pub fn blit_rgb565_rect<F>(&mut self, x: i32, y: i32, width: i32, height: i32, mut pixel: F)
+    where
+        F: FnMut(i32, i32) -> u16,
+    {
+        if width <= 0 || height <= 0 {
+            return;
+        }
+        for row in 0..height {
+            for col in 0..width {
+                let target_x = x + col;
+                let target_y = y + row;
+                if !self.in_bounds(target_x, target_y) {
+                    continue;
+                }
+                let index = self.index(target_x, target_y);
+                self.pixels[index] = pixel(col, row);
+            }
+        }
+        self.mark_rect_dirty(x, y, width, height);
+    }
+
     pub fn fill_rect(&mut self, x: i32, y: i32, width: i32, height: i32, rgb565: u16) {
         if width <= 0 || height <= 0 {
             return;

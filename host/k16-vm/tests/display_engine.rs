@@ -90,6 +90,32 @@ fn fill_and_copy_rect_emit_operations_without_pixel_tiles() {
 }
 
 #[test]
+fn blit_rgb565_rect_copies_pixel_rect_into_dirty_tiles() {
+    let mut display = DisplayEngine::new(11, 20, 10, PixelFormat::Rgb565).unwrap();
+
+    display.blit_rgb565_rect(2, 3, 3, 2, |col, row| {
+        if col == 1 && row == 0 {
+            0x07E0
+        } else {
+            0xF800
+        }
+    });
+    let frame = display.present().expect("bulk blit frame");
+    let payload = frame
+        .tiles
+        .iter()
+        .flat_map(|tile| tile.payload.iter())
+        .copied()
+        .collect::<Vec<_>>();
+
+    assert_eq!(frame.tiles.len(), 1);
+    assert!(frame.operations.is_empty());
+    assert!(payload_contains_rgb565(&payload, 0xF800));
+    assert!(payload_contains_rgb565(&payload, 0x07E0));
+    assert!(display.present().is_none());
+}
+
+#[test]
 fn fill_rect_after_dirty_pixels_emits_operation_and_drops_fully_covered_dirty_tile() {
     let mut display = DisplayEngine::new(9, 16, 16, PixelFormat::Rgb565).unwrap();
 

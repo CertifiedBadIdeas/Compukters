@@ -253,20 +253,25 @@ impl GpuDevice {
         self.stats.blit_buffer_commands += 1;
         self.stats.blit_pixels += (self.rect_width as u64) * (self.rect_height as u64);
         self.stats.blit_source_bytes += u64::from(byte_len);
-        for row in 0..self.rect_height {
-            let row_offset = row as u32 * self.buffer_stride_bytes;
-            for col in 0..self.rect_width {
-                let source = self.buffer_addr + row_offset + col as u32 * Self::BYTES_PER_PIXEL;
+        let buffer_addr = self.buffer_addr;
+        let buffer_stride_bytes = self.buffer_stride_bytes;
+        self.display.blit_rgb565_rect(
+            self.x,
+            self.y,
+            self.rect_width,
+            self.rect_height,
+            |col, row| {
+                let row_offset = row as u32 * buffer_stride_bytes;
+                let source = buffer_addr + row_offset + col as u32 * Self::BYTES_PER_PIXEL;
                 let lo = memory
                     .load_u8(source)
                     .expect("gpu0 source range was prevalidated");
                 let hi = memory
                     .load_u8(source + 1)
                     .expect("gpu0 source range was prevalidated");
-                let rgb565 = u16::from_le_bytes([lo, hi]);
-                self.display.set_pixel(self.x + col, self.y + row, rgb565);
-            }
-        }
+                u16::from_le_bytes([lo, hi])
+            },
+        );
         self.status = computer_abi::GPU0_STATUS_DONE;
     }
 
