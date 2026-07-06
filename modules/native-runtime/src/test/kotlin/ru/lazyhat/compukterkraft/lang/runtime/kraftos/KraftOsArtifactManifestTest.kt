@@ -35,6 +35,7 @@ class KraftOsArtifactManifestTest {
                     """
                     schema=1
                     target=k16
+                    profile=production
                     artifact.biosFlash.resource=firmware/k16-bios.kflash
                     artifact.biosFlash.format=kflash
                     artifact.systemStorage0.resource=firmware/k16-system-storage0.kv
@@ -45,10 +46,32 @@ class KraftOsArtifactManifestTest {
 
         assertEquals(1, manifest.schema)
         assertEquals("k16", manifest.target)
+        assertEquals("production", manifest.profile)
         assertEquals("firmware/k16-bios.kflash", manifest.biosFlash.resource)
         assertEquals("kflash", manifest.biosFlash.format)
         assertEquals("firmware/k16-system-storage0.kv", manifest.systemStorage0.resource)
         assertEquals("kfs-kv", manifest.systemStorage0.format)
+    }
+
+    @Test
+    fun parsesReservedDevelopmentProfileManifest() {
+        val manifest =
+            KraftOsArtifactManifest.parse(
+                text =
+                    """
+                    schema=1
+                    target=k16
+                    profile=development
+                    artifact.biosFlash.resource=firmware/k16-bios.kflash
+                    artifact.biosFlash.format=kflash
+                    artifact.systemStorage0.resource=firmware/k16-system-storage0-dev.kv
+                    artifact.systemStorage0.format=kfs-kv
+                    """.trimIndent(),
+                source = "test manifest",
+            )
+
+        assertEquals("development", manifest.profile)
+        assertEquals("firmware/k16-system-storage0-dev.kv", manifest.systemStorage0.resource)
     }
 
     @Test
@@ -59,6 +82,7 @@ class KraftOsArtifactManifestTest {
                 """
                 schema=1
                 target=k16
+                profile=production
                 artifact.biosFlash.resource=firmware/test-bios.kflash
                 artifact.biosFlash.format=kflash
                 artifact.systemStorage0.resource=firmware/test-storage0.kv
@@ -74,6 +98,7 @@ class KraftOsArtifactManifestTest {
 
         assertEquals("firmware/test-bios.kflash", manifest.biosFlash.resource)
         assertEquals("firmware/test-storage0.kv", manifest.systemStorage0.resource)
+        assertEquals("production", manifest.profile)
     }
 
     @Test
@@ -85,6 +110,7 @@ class KraftOsArtifactManifestTest {
                         """
                         schema=2
                         target=k16
+                        profile=production
                         artifact.biosFlash.resource=firmware/k16-bios.kflash
                         artifact.biosFlash.format=kflash
                         artifact.systemStorage0.resource=firmware/k16-system-storage0.kv
@@ -98,6 +124,28 @@ class KraftOsArtifactManifestTest {
     }
 
     @Test
+    fun rejectsUnsupportedProfile() {
+        val error =
+            assertFailsWith<IllegalStateException> {
+                KraftOsArtifactManifest.parse(
+                    text =
+                        """
+                        schema=1
+                        target=k16
+                        profile=test
+                        artifact.biosFlash.resource=firmware/k16-bios.kflash
+                        artifact.biosFlash.format=kflash
+                        artifact.systemStorage0.resource=firmware/k16-system-storage0.kv
+                        artifact.systemStorage0.format=kfs-kv
+                        """.trimIndent(),
+                    source = "test manifest",
+                )
+            }
+
+        assertTrue(error.message.orEmpty().contains("unsupported KraftOS artifact manifest profile"))
+    }
+
+    @Test
     fun rejectsMissingRequiredResource() {
         val error =
             assertFailsWith<IllegalStateException> {
@@ -106,6 +154,7 @@ class KraftOsArtifactManifestTest {
                         """
                         schema=1
                         target=k16
+                        profile=production
                         artifact.biosFlash.format=kflash
                         artifact.systemStorage0.resource=firmware/k16-system-storage0.kv
                         artifact.systemStorage0.format=kfs-kv
@@ -126,6 +175,7 @@ class KraftOsArtifactManifestTest {
                         """
                         schema=1
                         target=k16
+                        profile=production
                         artifact.biosFlash.resource=firmware/k16-bios.kflash
                         artifact.biosFlash.format=elf
                         artifact.systemStorage0.resource=firmware/k16-system-storage0.kv
