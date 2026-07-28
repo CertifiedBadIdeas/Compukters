@@ -12,7 +12,6 @@ pub mod computer_machine {
     };
 }
 pub mod display;
-pub mod generated;
 pub mod jni;
 pub mod k16;
 pub mod k16e;

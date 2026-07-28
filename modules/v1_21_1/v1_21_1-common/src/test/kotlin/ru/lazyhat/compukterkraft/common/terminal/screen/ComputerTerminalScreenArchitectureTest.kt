@@ -34,6 +34,10 @@ class ComputerTerminalScreenArchitectureTest {
         Paths
             .get("src/main/kotlin/ru/lazyhat/compukterkraft/common/computer/screen/ComputerDisplayScreen.kt")
             .readText()
+    private val displayBufferSource =
+        Paths
+            .get("src/main/kotlin/ru/lazyhat/compukterkraft/common/computer/client/ClientDisplayBuffer.kt")
+            .readText()
     private val notebookSource =
         Paths
             .get("src/main/kotlin/ru/lazyhat/compukterkraft/common/notebook/screen/NotebookScreen.kt")
@@ -62,6 +66,16 @@ class ComputerTerminalScreenArchitectureTest {
         assertFalse(displaySource.contains("frontArgb()"))
         assertFalse(displaySource.contains("while (x < buffer.width)"))
         assertFalse(displaySource.contains("fillRect(px, py, pw, ph, color)"))
+    }
+
+    @Test
+    fun clientDisplayPathCompositesGenericOperationsWithoutOwningFonts() {
+        for (source in listOf(displaySource, displayBufferSource)) {
+            assertFalse(source.contains("FixedWidthFontRenderer"))
+            assertFalse(source.contains("TerminalFontConstants"))
+            assertFalse(source.contains("terminal_font"))
+            assertFalse(source.contains("drawString("))
+        }
     }
 
     @Test

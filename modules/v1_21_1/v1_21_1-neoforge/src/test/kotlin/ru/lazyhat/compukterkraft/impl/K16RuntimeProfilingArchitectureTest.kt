@@ -261,7 +261,7 @@ class K16RuntimeProfilingArchitectureTest {
         assertTrue(hostStorageSource.contains("requested_read_blocks"))
         assertTrue(hostStorageSource.contains("u64::from(self.block_count)"))
         assertTrue(hostStorageSource.contains("u64::from(byte_count)"))
-        assertTrue(jniSource.contains("values.push(14)"))
+        assertTrue(jniSource.contains("values.push(15)"))
         assertTrue(jniSource.contains("storage.requested_read_blocks"))
         assertTrue(jniSource.contains("storage.requested_read_bytes"))
         assertTrue(nativeBindingsSource.contains("VERSION_V13"))

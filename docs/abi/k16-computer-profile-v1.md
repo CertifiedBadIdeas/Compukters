@@ -140,12 +140,12 @@ empty, it returns `0`.
 
 ## Gpu0 MMIO
 
-The gpu0 range provides a simple 2D pixel graphics adapter for firmware and
-kernel graphics. It is the only display-output device in the active K16
-computer profile. Pixel output does not go through text cells or host text
-rendering. The VM does not render fonts, glyphs, terminal state, windows,
-shaders, or 3D; guest software owns those layers and writes pixels through
-gpu0.
+The gpu0 range provides a simple 2D graphics adapter for firmware and kernel
+graphics. It is the only display-output device in the active K16 computer
+profile. Output does not go through text cells or host text rendering. Guest
+software owns font selection, glyph lookup, text layout, and mask rasterization.
+The VM and client do not rasterize fonts. They composite generic gpu0 pixel and
+mono-mask operations into the same canonical RGB565 surface.
 
 Initial dimensions:
 
@@ -153,9 +153,10 @@ Initial dimensions:
 320 x 200 pixels
 ```
 
-The only pixel format in profile v1 is RGB565. Guest RAM source buffers store
-RGB565 pixels as little-endian `u16` values. Host display frames serialize
-RGB565 payload bytes in the existing display-frame network format.
+The only canonical pixel format in profile v1 is RGB565. Guest RAM
+`blit_buffer` source buffers store RGB565 pixels as little-endian `u16` values.
+Host display frames can carry RGB565 tiles or generic drawing operations; a
+full refresh always serializes the canonical surface as RGB565 tiles.
 
 All multi-byte registers are little-endian.
 
@@ -179,6 +180,7 @@ offset  size  access  name
 0x3C    4     R       sequence_high
 0x40    4     R/W     src_x
 0x44    4     R/W     src_y
+0x48    4     R/W     background_color
 ```
 
 Pixel format values:
@@ -214,6 +216,7 @@ Commands:
 3  present
 4  fill_rect
 5  copy_rect
+6  blit_mono_buffer
 ```
 
 `clear` fills the gpu0 pixel surface with `color`. `color` uses the low 16 bits
@@ -232,9 +235,39 @@ bytes. `buffer_stride_bytes` must be at least `rect_width * 2`.
 `src_y`, `rect_width`, and `rect_height` to destination `x`, `y`. Overlapping
 source and destination rectangles are supported.
 
-`present` emits dirty gpu0 tiles to the host display-frame path and increments
-the gpu0 sequence if a frame is emitted. Dirty pixels are not
-sent to the host until firmware writes `command = present`.
+`blit_mono_buffer` composites an opaque packed 1bpp rectangle. Firmware writes
+`x`, `y`, `rect_width`, `rect_height`, `buffer_addr`,
+`buffer_stride_bytes`, foreground `color`, and `background_color`, then writes
+`command = blit_mono_buffer`. Both colors use their low 16 bits as RGB565.
+
+Each source row has:
+
+```text
+row_bytes = (rect_width + 7) / 8
+```
+
+Pixels are MSB-first within each byte: bit `0x80` selects the first pixel,
+`0x40` the second, and so on. A set bit selects `color`; a clear bit selects
+`background_color`. The operation is opaque: clear bits always write the
+background color. Unused low bits after the final pixel in a row are ignored.
+
+`rect_width` and `rect_height` must be positive.
+`buffer_stride_bytes` must be at least `row_bytes`. The complete used source
+range through the last row must fit guest RAM with checked address arithmetic.
+Invalid dimensions report `invalid_rect`, a short stride reports
+`invalid_stride`, and an overflowing or out-of-bounds source reports
+`buffer_out_of_bounds`. The VM validates the complete source range before
+changing the display, then strips row padding into a tight
+`row_bytes * rect_height` operation payload. Pixels outside the gpu0 surface
+are clipped.
+
+The VM immediately composites successful gpu0 commands into its canonical
+RGB565 surface. `present` emits ordered drawing operations plus any remaining
+dirty RGB565 tiles and increments the gpu0 sequence if a frame is emitted. The
+client applies the same generic mono mask; it does not know which font or glyph
+produced it. Full refreshes contain RGB565 tiles reconstructed from canonical
+VM state and contain no mono operation. Pending changes are not sent to the
+host until firmware writes `command = present`.
 
 ## Timer0 MMIO
 
