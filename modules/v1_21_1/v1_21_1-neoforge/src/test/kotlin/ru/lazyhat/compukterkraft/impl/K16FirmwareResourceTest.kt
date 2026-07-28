@@ -13,6 +13,7 @@ import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16ComputerRuntime
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16ComputerRuntimeFactory
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16ComputerControl
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
+import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameOperation
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayPixelFormat
 import ru.lazyhat.compukterkraft.lang.runtime.kraftos.KraftOsArtifactManifest
 import ru.lazyhat.compukterkraft.lang.runtime.storage.K16SystemVolumeWorkspace
@@ -1748,12 +1749,16 @@ class K16FirmwareResourceTest {
                 var control = runRuntimeServerTick(runtime)
                 var frames = NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
                 var sawVisibleFrame = frames.any { it.pixelFormat == DisplayPixelFormat.RGB565 && it.hasVisiblePixels() }
+                var sawMonoBlit = frames.any { frame -> frame.operations.any { it is DisplayFrameOperation.MonoBlit } }
 
                 var tick = 1
                 while (tick < 24 && control.status != NativeK16ComputerControl.STATUS_READY) {
                     control = runRuntimeServerTick(runtime)
                     frames = NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
                     sawVisibleFrame = sawVisibleFrame || frames.any { it.pixelFormat == DisplayPixelFormat.RGB565 && it.hasVisiblePixels() }
+                    sawMonoBlit =
+                        sawMonoBlit ||
+                        frames.any { frame -> frame.operations.any { it is DisplayFrameOperation.MonoBlit } }
                     tick += 1
                 }
 
@@ -1769,6 +1774,7 @@ class K16FirmwareResourceTest {
                     sawVisibleFrame,
                     "default runtime ticks should produce gpu0 console frames; tick: $tick, panic code: ${control.panicCode}, debug: $debug",
                 )
+                assertTrue(sawMonoBlit, "KraftOS terminal output should travel as generic MonoBlit operations")
             }
     }
 
@@ -1861,12 +1867,16 @@ class K16FirmwareResourceTest {
             terminalSource.contains("terminal_render::repaint_run("),
             "terminal should repaint contiguous printable runs with one renderer call",
         )
-        assertTrue(terminalRenderSource.contains("static mut ROW_BUFFER:"), "terminal renderer should own row/run buffers")
-        assertTrue(terminalRenderSource.contains("fn render_glyph_run("), "terminal renderer should rasterize glyph runs")
+        assertTrue(terminalRenderSource.contains("static mut ROW_MASK:"), "terminal renderer should own packed row masks")
+        assertTrue(terminalRenderSource.contains("fn render_glyph_run_mask("), "terminal renderer should pack glyph runs")
         assertTrue(terminalRenderSource.contains("fn blit_glyph_run("), "terminal renderer should blit glyph runs")
         assertTrue(
+            terminalRenderSource.contains("gpu::blit_mono_buffer("),
+            "terminal renderer should submit packed masks through generic gpu0 mono blits",
+        )
+        assertFalse(
             terminalRenderSource.contains("gpu::blit_buffer("),
-            "terminal renderer should keep visible output on gpu0",
+            "terminal renderer must not expand glyph runs into RGB565 buffers",
         )
         assertTrue(
             terminalRenderSource.contains("pub fn scroll_up()"),
@@ -3777,9 +3787,7 @@ class K16FirmwareResourceTest {
     }
 
     private fun DisplayFrameDelta.hasVisiblePixels(): Boolean =
-        tiles.any { tile ->
-            tile.payload.asSequence().any { it != 0.toByte() }
-        }
+        composeRgb565Framebuffer(listOf(this), width, height).any { it != 0 }
 
     private fun List<DisplayFrameDelta>.describeDisplayFrames(): String =
         joinToString(prefix = "frames=[", postfix = "]") { frame ->
@@ -3807,6 +3815,61 @@ class K16FirmwareResourceTest {
             require(frame.width == width && frame.height == height)
             require(frame.pixelFormat == DisplayPixelFormat.RGB565)
             if (frame.fullRefresh) pixels.fill(0)
+            for (operation in frame.operations) {
+                when (operation) {
+                    is DisplayFrameOperation.FillRect -> {
+                        val minX = operation.x.coerceAtLeast(0)
+                        val minY = operation.y.coerceAtLeast(0)
+                        val maxX = (operation.x + operation.width).coerceAtMost(width)
+                        val maxY = (operation.y + operation.height).coerceAtMost(height)
+                        for (row in minY until maxY) {
+                            pixels.fill(operation.rgb565, row * width + minX, row * width + maxX)
+                        }
+                    }
+
+                    is DisplayFrameOperation.CopyRect -> {
+                        val copied = IntArray(operation.width * operation.height)
+                        for (row in 0 until operation.height) {
+                            for (column in 0 until operation.width) {
+                                val sourceX = operation.srcX + column
+                                val sourceY = operation.srcY + row
+                                copied[row * operation.width + column] =
+                                    if (sourceX in 0 until width && sourceY in 0 until height) {
+                                        pixels[sourceY * width + sourceX]
+                                    } else {
+                                        0
+                                    }
+                            }
+                        }
+                        for (row in 0 until operation.height) {
+                            for (column in 0 until operation.width) {
+                                val targetX = operation.dstX + column
+                                val targetY = operation.dstY + row
+                                if (targetX in 0 until width && targetY in 0 until height) {
+                                    pixels[targetY * width + targetX] = copied[row * operation.width + column]
+                                }
+                            }
+                        }
+                    }
+
+                    is DisplayFrameOperation.MonoBlit -> {
+                        val rowBytes = (operation.width + 7) / 8
+                        for (row in 0 until operation.height) {
+                            for (column in 0 until operation.width) {
+                                val targetX = operation.x + column
+                                val targetY = operation.y + row
+                                if (targetX in 0 until width && targetY in 0 until height) {
+                                    val mask = 0x80 ushr (column % 8)
+                                    val set =
+                                        operation.packedMask[row * rowBytes + column / 8].toInt() and mask != 0
+                                    pixels[targetY * width + targetX] =
+                                        if (set) operation.foregroundRgb565 else operation.backgroundRgb565
+                                }
+                            }
+                        }
+                    }
+                }
+            }
             for (tile in frame.tiles) {
                 var offset = 0
                 var row = 0
@@ -3876,24 +3939,13 @@ class K16FirmwareResourceTest {
         assertTrue(frames.isEmpty() || frames.any { it.pixelFormat == DisplayPixelFormat.RGB565 })
     }
 
-    private fun DisplayFrameDelta.hasVisiblePixelsAtOrBelow(globalY: Int): Boolean =
-        tiles.any { tile ->
-            var row = 0
-            while (row < tile.height) {
-                if (tile.y + row >= globalY) {
-                    var column = 0
-                    while (column < tile.width) {
-                        val offset = (row * tile.width + column) * 2
-                        if (tile.payload[offset] != 0.toByte() || tile.payload[offset + 1] != 0.toByte()) {
-                            return@any true
-                        }
-                        column += 1
-                    }
-                }
-                row += 1
-            }
-            false
-        }
+    private fun DisplayFrameDelta.hasVisiblePixelsAtOrBelow(globalY: Int): Boolean {
+        val pixels = composeRgb565Framebuffer(listOf(this), width, height)
+        return pixels
+            .asSequence()
+            .drop(globalY.coerceAtLeast(0) * width)
+            .any { it != 0 }
+    }
 
     private fun runThroughBiosSplashAndBoot(runtime: K16ComputerRuntime): NativeK16ComputerControl {
         val splashControl = runRuntimeServerTick(runtime)
