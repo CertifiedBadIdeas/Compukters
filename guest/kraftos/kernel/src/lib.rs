@@ -14,3 +14,12 @@ pub mod page_alloc;
 pub mod process;
 pub mod trap_policy;
 pub mod user_buffer;
+
+#[cfg(test)]
+mod font;
+#[cfg(test)]
+mod generated;
+#[cfg(test)]
+mod gpu;
+#[cfg(test)]
+mod terminal_render;
