@@ -18,6 +18,7 @@ pub(crate) struct GpuDevice {
     buffer_addr: u32,
     buffer_stride_bytes: u32,
     color: u16,
+    background_color: u16,
     sequence: u64,
     stats: K16ComputerGpuStatsSnapshot,
 }
@@ -50,6 +51,7 @@ impl GpuDevice {
             buffer_addr: 0,
             buffer_stride_bytes: (Self::WIDTH as u32) * Self::BYTES_PER_PIXEL,
             color: 0,
+            background_color: 0,
             sequence: 0,
             stats: K16ComputerGpuStatsSnapshot::default(),
         }
@@ -82,6 +84,7 @@ impl GpuDevice {
             60 => Ok((self.sequence >> 32) as u32 as i32),
             64 => Ok(self.src_x),
             68 => Ok(self.src_y),
+            72 => Ok(i32::from(self.background_color)),
             _ => Err(MemoryFault::new(format!(
                 "computer gpu0 offset {offset} is not readable",
             ))),
@@ -127,6 +130,11 @@ impl GpuDevice {
                 self.src_y = value;
                 Ok(())
             }
+            72 => {
+                self.background_color =
+                    u16::from_le_bytes([value.to_le_bytes()[0], value.to_le_bytes()[1]]);
+                Ok(())
+            }
             _ => Err(MemoryFault::new(format!(
                 "computer gpu0 offset {offset} is not writable",
             ))),
@@ -153,6 +161,14 @@ impl GpuDevice {
                     return Ok(());
                 };
                 self.blit_buffer(memory);
+                Ok(())
+            }
+            computer_abi::GPU0_COMMAND_BLIT_MONO_BUFFER => {
+                let Some(memory) = memory else {
+                    self.set_error(computer_abi::GPU0_ERROR_BUFFER_OUT_OF_BOUNDS);
+                    return Ok(());
+                };
+                self.blit_mono_buffer(memory);
                 Ok(())
             }
             computer_abi::GPU0_COMMAND_FILL_RECT => {
@@ -196,6 +212,16 @@ impl GpuDevice {
                         .tiles
                         .iter()
                         .map(|tile| tile.payload.len() as u64)
+                        .sum::<u64>();
+                    self.stats.frame_mono_payload_bytes += frame
+                        .operations
+                        .iter()
+                        .map(|operation| match operation {
+                            crate::display::DisplayFrameOperation::MonoBlit {
+                                packed_mask, ..
+                            } => packed_mask.len() as u64,
+                            _ => 0,
+                        })
                         .sum::<u64>();
                     self.pending_frames.push(frame);
                 }
@@ -271,6 +297,81 @@ impl GpuDevice {
                     .expect("gpu0 source range was prevalidated");
                 u16::from_le_bytes([lo, hi])
             },
+        );
+        self.status = computer_abi::GPU0_STATUS_DONE;
+    }
+
+    fn blit_mono_buffer(&mut self, memory: &MachineMemory) {
+        if self.rect_width <= 0 || self.rect_height <= 0 {
+            self.set_error(computer_abi::GPU0_ERROR_INVALID_RECT);
+            return;
+        }
+        let row_bytes = match u32::try_from(self.rect_width)
+            .ok()
+            .and_then(|width| width.checked_add(7))
+            .map(|width| width / 8)
+        {
+            Some(value) => value,
+            None => {
+                self.set_error(computer_abi::GPU0_ERROR_INVALID_RECT);
+                return;
+            }
+        };
+        if self.buffer_stride_bytes < row_bytes {
+            self.set_error(computer_abi::GPU0_ERROR_INVALID_STRIDE);
+            return;
+        }
+        let rows = self.rect_height as u32;
+        let last_row_offset = match rows
+            .checked_sub(1)
+            .and_then(|row| row.checked_mul(self.buffer_stride_bytes))
+        {
+            Some(value) => value,
+            None => {
+                self.set_error(computer_abi::GPU0_ERROR_BUFFER_OUT_OF_BOUNDS);
+                return;
+            }
+        };
+        let source_range_len = match last_row_offset.checked_add(row_bytes) {
+            Some(value) => value,
+            None => {
+                self.set_error(computer_abi::GPU0_ERROR_BUFFER_OUT_OF_BOUNDS);
+                return;
+            }
+        };
+        let tight_len = match row_bytes.checked_mul(rows) {
+            Some(value) => value,
+            None => {
+                self.set_error(computer_abi::GPU0_ERROR_BUFFER_OUT_OF_BOUNDS);
+                return;
+            }
+        };
+        if !ram_range_in_bounds(self.buffer_addr, source_range_len, memory.len()) {
+            self.set_error(computer_abi::GPU0_ERROR_BUFFER_OUT_OF_BOUNDS);
+            return;
+        }
+        let mut packed_mask = Vec::with_capacity(tight_len as usize);
+        for row in 0..rows {
+            let row_address = self.buffer_addr + row * self.buffer_stride_bytes;
+            for byte in 0..row_bytes {
+                packed_mask.push(
+                    memory
+                        .load_u8(row_address + byte)
+                        .expect("gpu0 mono source range was prevalidated"),
+                );
+            }
+        }
+        self.stats.blit_mono_commands += 1;
+        self.stats.blit_mono_pixels += (self.rect_width as u64) * (self.rect_height as u64);
+        self.stats.blit_mono_source_bytes += u64::from(tight_len);
+        self.display.blit_mono_mask(
+            self.x,
+            self.y,
+            self.rect_width,
+            self.rect_height,
+            &packed_mask,
+            self.color,
+            self.background_color,
         );
         self.status = computer_abi::GPU0_STATUS_DONE;
     }

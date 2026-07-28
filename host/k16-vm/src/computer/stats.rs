@@ -94,8 +94,12 @@ pub struct K16ComputerGpuStatsSnapshot {
     pub blit_buffer_commands: u64,
     pub blit_pixels: u64,
     pub blit_source_bytes: u64,
+    pub blit_mono_commands: u64,
+    pub blit_mono_pixels: u64,
+    pub blit_mono_source_bytes: u64,
     pub present_commands: u64,
     pub frames: u64,
     pub frame_tiles: u64,
     pub frame_payload_bytes: u64,
+    pub frame_mono_payload_bytes: u64,
 }

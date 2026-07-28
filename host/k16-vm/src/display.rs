@@ -39,6 +39,15 @@ pub enum DisplayFrameOperation {
         dst_x: i32,
         dst_y: i32,
     },
+    MonoBlit {
+        x: i32,
+        y: i32,
+        width: i32,
+        height: i32,
+        foreground_rgb565: u16,
+        background_rgb565: u16,
+        packed_mask: Vec<u8>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -140,6 +149,58 @@ impl DisplayEngine {
             }
         }
         self.mark_rect_dirty(x, y, width, height);
+    }
+
+    pub fn blit_mono_mask(
+        &mut self,
+        x: i32,
+        y: i32,
+        width: i32,
+        height: i32,
+        packed_mask: &[u8],
+        foreground_rgb565: u16,
+        background_rgb565: u16,
+    ) {
+        let Some(expected_len) = packed_mono_mask_len(width, height) else {
+            return;
+        };
+        if packed_mask.len() != expected_len {
+            return;
+        }
+        let row_bytes = (width as usize + 7) / 8;
+        for row in 0..height {
+            for col in 0..width {
+                let target_x = i64::from(x) + i64::from(col);
+                let target_y = i64::from(y) + i64::from(row);
+                if target_x < 0
+                    || target_y < 0
+                    || target_x >= i64::from(self.width)
+                    || target_y >= i64::from(self.height)
+                {
+                    continue;
+                }
+                let mask_index = row as usize * row_bytes + col as usize / 8;
+                let mask = 0x80 >> (col as usize % 8);
+                let rgb565 = if packed_mask[mask_index] & mask != 0 {
+                    foreground_rgb565
+                } else {
+                    background_rgb565
+                };
+                let index = self.index(target_x as i32, target_y as i32);
+                self.pixels[index] = rgb565;
+            }
+        }
+        self.pending_operations
+            .push(DisplayFrameOperation::MonoBlit {
+                x,
+                y,
+                width,
+                height,
+                foreground_rgb565,
+                background_rgb565,
+                packed_mask: packed_mask.to_vec(),
+            });
+        self.clear_dirty_tiles_fully_covered_by_rect(x, y, width, height);
     }
 
     pub fn fill_rect(&mut self, x: i32, y: i32, width: i32, height: i32, rgb565: u16) {
@@ -480,6 +541,12 @@ fn div_ceil_positive_i32(value: i32, divisor: i32) -> i32 {
     1 + (value - 1) / divisor
 }
 
+fn packed_mono_mask_len(width: i32, height: i32) -> Option<usize> {
+    let width = usize::try_from(width).ok().filter(|width| *width > 0)?;
+    let height = usize::try_from(height).ok().filter(|height| *height > 0)?;
+    width.checked_add(7)?.checked_div(8)?.checked_mul(height)
+}
+
 fn rect_fully_covers(
     outer_x: i32,
     outer_y: i32,
@@ -490,10 +557,12 @@ fn rect_fully_covers(
     inner_width: i32,
     inner_height: i32,
 ) -> bool {
-    outer_x <= inner_x
-        && outer_y <= inner_y
-        && outer_x + outer_width >= inner_x + inner_width
-        && outer_y + outer_height >= inner_y + inner_height
+    i64::from(outer_x) <= i64::from(inner_x)
+        && i64::from(outer_y) <= i64::from(inner_y)
+        && i64::from(outer_x) + i64::from(outer_width)
+            >= i64::from(inner_x) + i64::from(inner_width)
+        && i64::from(outer_y) + i64::from(outer_height)
+            >= i64::from(inner_y) + i64::from(inner_height)
 }
 
 fn rects_overlap(
