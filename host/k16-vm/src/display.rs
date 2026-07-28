@@ -1,6 +1,3 @@
-use crate::generated::terminal_font::{
-    terminal_font_glyph, CELL_HEIGHT, CELL_WIDTH, GLYPH_HEIGHT, GLYPH_WIDTH, GLYPH_X, GLYPH_Y,
-};
 use std::collections::BTreeMap;
 
 const TILE_SIZE: i32 = 16;
@@ -309,67 +306,6 @@ impl DisplayEngine {
         self.mark_rect_dirty(x, y, width, height);
     }
 
-    pub fn blit_terminal_text(
-        &mut self,
-        x: i32,
-        y: i32,
-        text: &str,
-        foreground: u16,
-        background: Option<u16>,
-    ) {
-        if text.is_empty() {
-            return;
-        }
-        for (index, ch) in text.chars().enumerate() {
-            self.blit_terminal_packed(
-                x + index as i32 * CELL_WIDTH,
-                y,
-                terminal_font_glyph(ch),
-                foreground,
-                background,
-            );
-        }
-        let dirty_width = text.chars().count() as i32 * CELL_WIDTH;
-        self.mark_rect_dirty(x, y, dirty_width, CELL_HEIGHT);
-    }
-
-    pub fn blit_terminal_packed(
-        &mut self,
-        x: i32,
-        y: i32,
-        glyph: u64,
-        foreground: u16,
-        background: Option<u16>,
-    ) {
-        let row_mask = (1_u64 << GLYPH_WIDTH) - 1;
-        for row in 0..CELL_HEIGHT {
-            let glyph_row = row - GLYPH_Y;
-            let bits = if (GLYPH_Y..GLYPH_Y + GLYPH_HEIGHT).contains(&row) {
-                ((glyph >> ((GLYPH_HEIGHT - 1 - glyph_row) * GLYPH_WIDTH)) & row_mask) as i32
-            } else {
-                0
-            };
-            for col in 0..CELL_WIDTH {
-                let glyph_col = col - GLYPH_X;
-                let target_x = x + col;
-                let target_y = y + row;
-                if !self.in_bounds(target_x, target_y) {
-                    continue;
-                }
-                if (GLYPH_X..GLYPH_X + GLYPH_WIDTH).contains(&col)
-                    && bits & (1 << (GLYPH_WIDTH - 1 - glyph_col)) != 0
-                {
-                    let index = self.index(target_x, target_y);
-                    self.pixels[index] = foreground;
-                } else if let Some(background) = background {
-                    let index = self.index(target_x, target_y);
-                    self.pixels[index] = background;
-                }
-            }
-        }
-        self.mark_rect_dirty(x, y, CELL_WIDTH, CELL_HEIGHT);
-    }
-
     pub fn present(&mut self) -> Option<DisplayFrameDelta> {
         if self.dirty_tile_indices.is_empty() && self.pending_operations.is_empty() {
             return None;
@@ -673,20 +609,6 @@ impl DeviceDisplayRegistry {
         }
     }
 
-    pub fn blit_terminal_text(
-        &mut self,
-        display_id: i32,
-        x: i32,
-        y: i32,
-        text: &str,
-        foreground: u16,
-        background: Option<u16>,
-    ) {
-        if let Some(display) = self.displays.get_mut(&display_id) {
-            display.blit_terminal_text(x, y, text, foreground, background);
-        }
-    }
-
     pub fn blit_mono(
         &mut self,
         display_id: i32,
@@ -700,20 +622,6 @@ impl DeviceDisplayRegistry {
     ) {
         if let Some(display) = self.displays.get_mut(&display_id) {
             display.blit_mono(x, y, width, height, mask, foreground, background);
-        }
-    }
-
-    pub fn blit_terminal_packed(
-        &mut self,
-        display_id: i32,
-        x: i32,
-        y: i32,
-        glyph: u64,
-        foreground: u16,
-        background: Option<u16>,
-    ) {
-        if let Some(display) = self.displays.get_mut(&display_id) {
-            display.blit_terminal_packed(x, y, glyph, foreground, background);
         }
     }
 

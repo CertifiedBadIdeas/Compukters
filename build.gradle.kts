@@ -595,7 +595,6 @@ tasks.register<GenerateK16FontTablesTask>("generateK16FontTables") {
     description = "Generates Rust terminal font tables from the K16 bitmap font source."
     group = "k16"
     fontFile.set(layout.projectDirectory.file("assets/k16/fonts/k16-terminal.font"))
-    rustOutput.set(layout.projectDirectory.file("host/k16-vm/src/generated/terminal_font.rs"))
     guestRustOutput.set(layout.projectDirectory.file("guest/kraftos/kernel/src/generated/terminal_font.rs"))
 }
 

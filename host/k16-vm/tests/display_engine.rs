@@ -1,8 +1,4 @@
 use k16_vm::display::{DeviceDisplayRegistry, DisplayEngine, DisplayFrameOperation, PixelFormat};
-use k16_vm::generated::terminal_font::{
-    has_terminal_font_glyph, terminal_font_glyph, CELL_HEIGHT, CELL_WIDTH, GLYPH_HEIGHT,
-    GLYPH_WIDTH, GLYPH_X, GLYPH_Y,
-};
 use std::fs;
 
 fn payload_contains_rgb565(payload: &[u8], rgb565: u16) -> bool {
@@ -14,6 +10,7 @@ fn payload_contains_rgb565(payload: &[u8], rgb565: u16) -> bool {
 #[test]
 fn display_dirty_tiles_use_dense_map_not_btree_set() {
     let source = fs::read_to_string("src/display.rs").expect("display source");
+    let lib_source = fs::read_to_string("src/lib.rs").expect("library source");
 
     assert!(
         !source.contains("BTreeSet"),
@@ -23,6 +20,53 @@ fn display_dirty_tiles_use_dense_map_not_btree_set() {
         source.contains("dirty_tile_indices"),
         "dense dirty tile tracking should keep a compact dirty-index list"
     );
+    assert!(
+        !source.contains("terminal_font") && !source.contains("blit_terminal_"),
+        "host display engine must not own terminal fonts or glyph rasterization"
+    );
+    assert!(
+        !lib_source.contains("pub mod generated"),
+        "host VM must not expose a generated terminal font module"
+    );
+}
+
+#[test]
+fn active_display_docs_define_guest_owned_opaque_mono_masks() {
+    let profile =
+        fs::read_to_string("../../docs/abi/k16-computer-profile-v1.md").expect("computer profile");
+    let changelog = fs::read_to_string("../../docs/abi/CHANGELOG.md").expect("ABI changelog");
+    let profiling = fs::read_to_string("../../docs/PROFILING.md").expect("profiling guide");
+    let normalized_profile = profile.split_whitespace().collect::<Vec<_>>().join(" ");
+
+    for required in [
+        "0x48 4 R/W background_color",
+        "6 blit_mono_buffer",
+        "MSB-first",
+        "opaque",
+        "row_bytes = (rect_width + 7) / 8",
+        "Guest software owns font selection, glyph lookup, text layout, and mask rasterization.",
+        "The VM and client do not rasterize fonts.",
+    ] {
+        assert!(
+            normalized_profile.contains(required),
+            "active computer profile must contain `{required}`"
+        );
+    }
+    assert!(
+        changelog.contains("blit_mono_buffer"),
+        "ABI changelog must record the mono-mask command"
+    );
+    for required in [
+        "monoBlits",
+        "monoPayloadBytes",
+        "textureUpload",
+        "tilePayloadBytes",
+    ] {
+        assert!(
+            profiling.contains(required),
+            "profiling guide must document `{required}`"
+        );
+    }
 }
 
 #[test]
@@ -245,111 +289,6 @@ fn blit_mono_draws_foreground_and_background() {
 
     assert!(payload_contains_rgb565(&payload, 0x07E0));
     assert!(payload_contains_rgb565(&payload, 0x0000));
-}
-
-#[test]
-fn blit_terminal_text_draws_glyph_run() {
-    let mut display = DisplayEngine::new(4, 18, 12, PixelFormat::Rgb565).unwrap();
-
-    display.blit_terminal_text(0, 1, "AB", 0x07E0, None);
-    let frame = display.present().expect("text frame");
-    let payload = frame
-        .tiles
-        .iter()
-        .flat_map(|tile| tile.payload.iter())
-        .copied()
-        .collect::<Vec<_>>();
-
-    assert!(payload_contains_rgb565(&payload, 0x07E0));
-}
-
-#[test]
-fn generated_terminal_font_uses_spleen_5x8_cell() {
-    assert_eq!(GLYPH_WIDTH, 5);
-    assert_eq!(GLYPH_HEIGHT, 8);
-    assert_eq!(CELL_WIDTH, 5);
-    assert_eq!(CELL_HEIGHT, 8);
-    assert_eq!(GLYPH_X, 0);
-    assert_eq!(GLYPH_Y, 0);
-}
-
-#[test]
-fn generated_terminal_font_matches_spleen_reference_glyphs() {
-    assert_eq!(
-        terminal_font_glyph('A'),
-        0b00000_01100_10010_10010_11110_10010_10010_00000,
-    );
-    assert_eq!(
-        terminal_font_glyph('g'),
-        0b00000_00000_01110_10010_10010_01100_00010_11100,
-    );
-    assert_eq!(
-        terminal_font_glyph('─'),
-        0b00000_00000_00000_11111_00000_00000_00000_00000
-    );
-}
-
-#[test]
-fn text_run_supports_digits_lowercase_and_punctuation() {
-    fn single_text_payload(text: &str) -> Vec<u8> {
-        let mut display = DisplayEngine::new(6, 18, 12, PixelFormat::Rgb565).unwrap();
-        display.blit_terminal_text(0, 1, text, 0x07E0, Some(0x0000));
-        display
-            .present()
-            .expect("text frame")
-            .tiles
-            .iter()
-            .flat_map(|tile| tile.payload.iter())
-            .copied()
-            .collect::<Vec<_>>()
-    }
-
-    assert_ne!(single_text_payload("a"), single_text_payload("A"));
-    assert_ne!(single_text_payload("x"), single_text_payload("X"));
-    assert_ne!(single_text_payload("1"), single_text_payload("@"));
-    assert_ne!(single_text_payload("-"), single_text_payload("@"));
-}
-
-#[test]
-fn generated_font_covers_printable_ascii_and_terminal_box_glyphs() {
-    for byte in 0x20u8..=0x7e {
-        let ch = byte as char;
-        assert!(
-            has_terminal_font_glyph(ch),
-            "missing glyph for printable ASCII `{ch}`",
-        );
-    }
-
-    for ch in ['─', '│', '┌', '┐', '└', '┘', '┼'] {
-        assert!(
-            has_terminal_font_glyph(ch),
-            "missing box drawing glyph `{ch}`",
-        );
-    }
-}
-
-#[test]
-fn generated_font_keeps_lowercase_distinct_from_uppercase() {
-    for (lower, upper) in [('a', 'A'), ('e', 'E'), ('o', 'O'), ('x', 'X')] {
-        assert_ne!(
-            terminal_font_glyph(lower),
-            terminal_font_glyph(upper),
-            "glyph `{lower}` should not collapse to `{upper}`",
-        );
-    }
-}
-
-#[test]
-fn generated_font_uses_explicit_fallback_for_unknown_glyphs() {
-    assert_eq!(
-        terminal_font_glyph('\u{2603}'),
-        terminal_font_glyph('\u{fffd}')
-    );
-}
-
-#[test]
-fn generated_font_hash_has_strokes() {
-    assert_ne!(terminal_font_glyph('#'), 0);
 }
 
 #[test]

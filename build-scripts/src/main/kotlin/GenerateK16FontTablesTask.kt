@@ -28,16 +28,12 @@ abstract class GenerateK16FontTablesTask : DefaultTask() {
     abstract val fontFile: RegularFileProperty
 
     @get:OutputFile
-    abstract val rustOutput: RegularFileProperty
-
-    @get:OutputFile
     abstract val guestRustOutput: RegularFileProperty
 
     @TaskAction
     fun generateSources() {
         val generated = K16FontTableGenerator().generate(fontFile.get().asFile.readText())
 
-        rustOutput.get().asFile.writeGeneratedText(generated.rustSource)
         guestRustOutput.get().asFile.writeGeneratedText(generated.guestRustSource)
     }
 

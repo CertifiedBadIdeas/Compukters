@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- `gpu0` now defines command `6`, `blit_mono_buffer`, plus the
+  `background_color` register at offset `0x48`. Guest software supplies an
+  opaque MSB-first 1bpp mask and foreground/background RGB565 colors. The VM
+  validates and normalizes the mask, updates its canonical RGB565 surface, and
+  forwards a generic mono operation to clients; font selection, glyph lookup,
+  layout, and rasterization remain exclusively guest-owned. Full refreshes
+  remain canonical RGB565 tiles.
 - K16E v7 now defines shareable shared-object metadata: a read-only shared load
   section, a private writable load section, relocation records, and exports.
   The host decoder, inspector, and kernel image parser reject v7 relocations
