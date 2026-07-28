@@ -227,6 +227,7 @@ abstract class ComputerDisplayScreen<T : AbstractComputerMenu>(
         private var location: ResourceLocation? = null
         private var width: Int = 0
         private var height: Int = 0
+        private var uploadScratch = IntArray(0)
         private var uploadedVersion: Long = Long.MIN_VALUE
 
         fun draw(
@@ -265,6 +266,7 @@ abstract class ComputerDisplayScreen<T : AbstractComputerMenu>(
             image = newImage
             texture = newTexture
             location = Minecraft.getInstance().textureManager.register("compukterkraft_display_$displayId", newTexture)
+            uploadScratch = IntArray(width * height)
             uploadedVersion = Long.MIN_VALUE
         }
 
@@ -272,18 +274,23 @@ abstract class ComputerDisplayScreen<T : AbstractComputerMenu>(
             val currentImage = image ?: return
             val currentTexture = texture ?: return
             if (buffer.frontVersion == uploadedVersion) return
-            val snapshot = buffer.copyFrontSnapshotSince(uploadedVersion)
-            if (snapshot.version == uploadedVersion) return
-            for (region in snapshot.regions) {
+            val changes = buffer.copyFrontChangesSince(uploadedVersion, uploadScratch)
+            if (changes.version == uploadedVersion) return
+            for (packedRegion in changes.regions) {
+                val region = packedRegion.region
                 var row = region.y
                 while (row < region.y + region.height) {
                     var columnOffset = 0
                     while (columnOffset < region.width) {
+                        val scratchOffset =
+                            packedRegion.scratchOffset +
+                                (row - region.y) * region.width +
+                                columnOffset
                         currentImage.setPixelRGBA(
                             region.x + columnOffset,
                             row,
                             FastColor.ABGR32.fromArgb32(
-                                snapshot.pixels[row * buffer.width + region.x + columnOffset],
+                                uploadScratch[scratchOffset],
                             ),
                         )
                         columnOffset = columnOffset + 1
@@ -291,11 +298,18 @@ abstract class ComputerDisplayScreen<T : AbstractComputerMenu>(
                     row = row + 1
                 }
             }
+            val uploadStarted = System.nanoTime()
             currentTexture.bind()
-            for (region in snapshot.regions) {
+            for (packedRegion in changes.regions) {
+                val region = packedRegion.region
                 currentImage.upload(0, region.x, region.y, region.x, region.y, region.width, region.height, false, false)
             }
-            uploadedVersion = snapshot.version
+            buffer.recordTextureUpload(
+                regions = changes.regions.size,
+                pixels = changes.copiedPixels,
+                nanos = System.nanoTime() - uploadStarted,
+            )
+            uploadedVersion = changes.version
         }
 
         override fun close() {
@@ -305,6 +319,7 @@ abstract class ComputerDisplayScreen<T : AbstractComputerMenu>(
             location = null
             width = 0
             height = 0
+            uploadScratch = IntArray(0)
             uploadedVersion = Long.MIN_VALUE
         }
     }

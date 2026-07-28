@@ -39,8 +39,9 @@ import ru.lazyhat.compukterkraft.core.device.vm.DeviceProfileRegistry
 import ru.lazyhat.compukterkraft.core.device.vm.display.NativeDisplayFrameCodec
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16BiosFlashWorkspace
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16ComputerRuntimeFactory
-import ru.lazyhat.compukterkraft.lang.runtime.storage.K16SystemVolumeWorkspace
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
+import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameOperation
+import ru.lazyhat.compukterkraft.lang.runtime.storage.K16SystemVolumeWorkspace
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.UUID
@@ -65,6 +66,7 @@ class K16RuntimeTextIoProfilingTest {
                         k16DisplayFramesSent = 2,
                         k16DisplayTilesSent = 3,
                         k16DisplayPayloadBytesSent = 64,
+                        k16DisplayMonoPayloadBytesSent = 10,
                         k16DisplayOperationsSent = 4,
                         k16TextInputBytes = 2,
                     ),
@@ -129,7 +131,12 @@ class K16RuntimeTextIoProfilingTest {
                                             requestedReadBlocks = 7,
                                             requestedReadBytes = 3584,
                                         ),
-                                    gpu = RuntimeK16GpuMetrics(frames = 4, framePayloadBytes = 128),
+                                    gpu =
+                                        RuntimeK16GpuMetrics(
+                                            frames = 4,
+                                            framePayloadBytes = 128,
+                                            frameMonoPayloadBytes = 16,
+                                        ),
                                 ),
                             ),
                     ),
@@ -145,6 +152,7 @@ class K16RuntimeTextIoProfilingTest {
                         k16DisplayFramesSent = 5,
                         k16DisplayTilesSent = 8,
                         k16DisplayPayloadBytesSent = 160,
+                        k16DisplayMonoPayloadBytesSent = 30,
                         k16DisplayOperationsSent = 11,
                         k16TextInputBytes = 7,
                     ),
@@ -209,7 +217,12 @@ class K16RuntimeTextIoProfilingTest {
                                             requestedReadBlocks = 17,
                                             requestedReadBytes = 8704,
                                         ),
-                                    gpu = RuntimeK16GpuMetrics(frames = 9, framePayloadBytes = 384),
+                                    gpu =
+                                        RuntimeK16GpuMetrics(
+                                            frames = 9,
+                                            framePayloadBytes = 384,
+                                            frameMonoPayloadBytes = 48,
+                                        ),
                                 ),
                             ),
                     ),
@@ -224,10 +237,12 @@ class K16RuntimeTextIoProfilingTest {
         assertTrue(line.contains("inputBytes=5"))
         assertTrue(line.contains("gpuFrameBytes=80"))
         assertTrue(line.contains("displayFrames=5"))
-        assertTrue(line.contains("displayBytes=256"))
+        assertTrue(line.contains("displayTileBytes=256"))
+        assertTrue(line.contains("displayMonoBytes=32"))
         assertTrue(line.contains("sentDisplayFrames=3"))
         assertTrue(line.contains("sentDisplayTiles=5"))
-        assertTrue(line.contains("sentDisplayBytes=96"))
+        assertTrue(line.contains("sentDisplayTileBytes=96"))
+        assertTrue(line.contains("sentDisplayMonoBytes=20"))
         assertTrue(line.contains("sentDisplayOperations=7"))
         assertTrue(line.contains("storageReadCommands=2"))
         assertTrue(line.contains("storageRequestedReadBlocks=10"))
@@ -583,13 +598,13 @@ class K16RuntimeTextIoProfilingTest {
             assertTrue(snapshot.vm.k16TextInputNanos >= 0)
             assertTrue(snapshot.vm.k16SerialOutputSnapshots > 0)
             assertTrue(snapshot.vm.k16SerialOutputSnapshotBytes > 0)
-            assertTrue(snapshot.k16.gpu.blitBufferCommands > 0)
-            assertTrue(snapshot.k16.gpu.blitSourceBytes > 0)
+            assertTrue(snapshot.k16.gpu.blitMonoCommands > 0)
+            assertTrue(snapshot.k16.gpu.blitMonoSourceBytes > 0)
             assertTrue(snapshot.k16.gpu.presentCommands > 0)
             assertTrue(snapshot.k16.gpu.frames > 0)
-            assertTrue(snapshot.k16.gpu.framePayloadBytes > 0)
+            assertTrue(snapshot.k16.gpu.frameMonoPayloadBytes > 0)
             assertTrue(summary.contains("k16TextOutput: snapshots="))
-            assertTrue(summary.contains("k16Gpu: blits="))
+            assertTrue(summary.contains("k16Gpu: rawBlits="))
             assertTrue(summary.contains("k16TextInput: events="))
             assertTrue(splashVisiblePhase.contains("name=bios.splash.visible"))
             assertTrue(splashWaitPhase.contains("name=bios.splash.wait"))
@@ -729,7 +744,7 @@ class K16RuntimeTextIoProfilingTest {
             val gpuBefore = before.k16.gpu
             val gpuAfter = after.k16.gpu
             println(
-                "k16KeyBurst: chars=${burst.length}, inputQueued=${inputQueuedNanos} ns, " +
+                "k16KeyBurst: chars=${burst.length}, inputQueued=$inputQueuedNanos ns, " +
                     "visible=${visibleNanos ?: -1} ns, framesSent=${framesSentNanos ?: -1} ns, ticks=$ticks",
             )
             println(
@@ -740,13 +755,15 @@ class K16RuntimeTextIoProfilingTest {
                     "inputWakeups=${after.vm.k16WaitInputWakeups - before.vm.k16WaitInputWakeups}",
             )
             println(
-                "k16KeyBurstGpu: blits=${gpuAfter.blitBufferCommands - gpuBefore.blitBufferCommands}, " +
+                "k16KeyBurstGpu: monoBlits=${gpuAfter.blitMonoCommands - gpuBefore.blitMonoCommands}, " +
                     "presents=${gpuAfter.presentCommands - gpuBefore.presentCommands}, " +
                     "frames=${gpuAfter.frames - gpuBefore.frames}, " +
                     "tiles=${gpuAfter.frameTiles - gpuBefore.frameTiles}, " +
-                    "frameBytes=${gpuAfter.framePayloadBytes - gpuBefore.framePayloadBytes}, " +
+                    "tilePayloadBytes=${gpuAfter.framePayloadBytes - gpuBefore.framePayloadBytes}, " +
+                    "monoPayloadBytes=${gpuAfter.frameMonoPayloadBytes - gpuBefore.frameMonoPayloadBytes}, " +
                     "sentFrames=${sentFrames.size}, sentTiles=${sentFrames.sumOf { it.frame.tiles.size }}, " +
-                    "sentPayloadBytes=${sentFrames.sumOf { frame -> frame.frame.tiles.sumOf { it.payload.size } }}",
+                    "sentTilePayloadBytes=${sentFrames.sumOf { frame -> frame.frame.tiles.sumOf { it.payload.size } }}, " +
+                    "sentMonoPayloadBytes=${sentFrames.sumOf { timed -> timed.frame.operations.sumOf(::monoPayloadBytes) }}",
             )
 
             assertTrue(visibleNanos != null, "Burst did not become visible in terminal snapshot")
@@ -830,8 +847,11 @@ class K16RuntimeTextIoProfilingTest {
             val decodedFallbackFrames = displayNetwork.decodedFallbackFrames()
             val nativeFrameCount = nativeBatches.sumOf { it.frameCount }
             val nativeBytes = nativeBatches.sumOf { it.payloadBytes }
+            val nativeTilePayloadBytes = nativeBatches.sumOf { it.tilePayloadBytes }
+            val nativeMonoPayloadBytes = nativeBatches.sumOf { it.monoPayloadBytes }
             val clientTiles = sentFrames.sumOf { it.frame.tiles.size }
-            val clientPayloadBytes = sentFrames.sumOf { frame -> frame.frame.tiles.sumOf { it.payload.size } }
+            val clientTilePayloadBytes = sentFrames.sumOf { frame -> frame.frame.tiles.sumOf { it.payload.size } }
+            val clientMonoPayloadBytes = sentFrames.sumOf { timed -> timed.frame.operations.sumOf(::monoPayloadBytes) }
             val clientOperations = sentFrames.sumOf { it.frame.operations.size }
             val testDecodeNanos = nativeBatches.sumOf { it.decodeNanos }
             val vmBefore = before.vm
@@ -839,13 +859,17 @@ class K16RuntimeTextIoProfilingTest {
             println(
                 "k16DisplayTransport: command=$command, visible=$visible ns, ticks=$ticks, " +
                     "nativeBatches=${nativeBatches.size}, nativeBytes=$nativeBytes, " +
-                    "nativeFrames=$nativeFrameCount, clientFrames=${sentFrames.size}, " +
+                    "nativeFrames=$nativeFrameCount, nativeTilePayloadBytes=$nativeTilePayloadBytes, " +
+                    "nativeMonoPayloadBytes=$nativeMonoPayloadBytes, clientFrames=${sentFrames.size}, " +
                     "serverDecodedFallbackFrames=${decodedFallbackFrames.size}, " +
-                    "clientTiles=$clientTiles, clientPayloadBytes=$clientPayloadBytes, " +
+                    "clientTiles=$clientTiles, clientTilePayloadBytes=$clientTilePayloadBytes, " +
+                    "clientMonoPayloadBytes=$clientMonoPayloadBytes, " +
                     "clientOperations=$clientOperations, testDecodeNanos=$testDecodeNanos, " +
                     "sentFrames=${vmAfter.k16DisplayFramesSent - vmBefore.k16DisplayFramesSent}, " +
                     "sentTiles=${vmAfter.k16DisplayTilesSent - vmBefore.k16DisplayTilesSent}, " +
-                    "sentPayloadBytes=${vmAfter.k16DisplayPayloadBytesSent - vmBefore.k16DisplayPayloadBytesSent}, " +
+                    "sentTilePayloadBytes=${vmAfter.k16DisplayPayloadBytesSent - vmBefore.k16DisplayPayloadBytesSent}, " +
+                    "sentMonoPayloadBytes=" +
+                    "${vmAfter.k16DisplayMonoPayloadBytesSent - vmBefore.k16DisplayMonoPayloadBytesSent}, " +
                     "sentOperations=${vmAfter.k16DisplayOperationsSent - vmBefore.k16DisplayOperationsSent}",
             )
 
@@ -936,7 +960,7 @@ class K16RuntimeTextIoProfilingTest {
             val storageAfter = after.k16.storage0
             val storageReadCommands = storageAfter.readCommands - storageBefore.readCommands
             println(
-                "k16LsCommand: command=ls /bin, inputQueued=${inputQueuedNanos} ns, " +
+                "k16LsCommand: command=ls /bin, inputQueued=$inputQueuedNanos ns, " +
                     "visible=${visibleNanos ?: -1} ns, ticks=$ticks",
             )
             println(
@@ -957,11 +981,12 @@ class K16RuntimeTextIoProfilingTest {
                     "bytesWritten=${storageAfter.bytesWritten - storageBefore.bytesWritten}",
             )
             println(
-                "k16LsCommandGpu: blits=${gpuAfter.blitBufferCommands - gpuBefore.blitBufferCommands}, " +
+                "k16LsCommandGpu: monoBlits=${gpuAfter.blitMonoCommands - gpuBefore.blitMonoCommands}, " +
                     "presents=${gpuAfter.presentCommands - gpuBefore.presentCommands}, " +
                     "frames=${gpuAfter.frames - gpuBefore.frames}, " +
                     "tiles=${gpuAfter.frameTiles - gpuBefore.frameTiles}, " +
-                    "frameBytes=${gpuAfter.framePayloadBytes - gpuBefore.framePayloadBytes}",
+                    "tilePayloadBytes=${gpuAfter.framePayloadBytes - gpuBefore.framePayloadBytes}, " +
+                    "monoPayloadBytes=${gpuAfter.frameMonoPayloadBytes - gpuBefore.frameMonoPayloadBytes}",
             )
 
             assertTrue(visibleNanos != null, "ls /bin did not finish and return to the prompt")
@@ -1044,9 +1069,11 @@ class K16RuntimeTextIoProfilingTest {
             val storageBefore = before.k16.storage0
             val storageAfter = after.k16.storage0
             val storageReadCommands = storageAfter.readCommands - storageBefore.readCommands
-            val scrollFrameBytes = gpuAfter.framePayloadBytes - gpuBefore.framePayloadBytes
+            val scrollDisplayBytes =
+                (gpuAfter.framePayloadBytes - gpuBefore.framePayloadBytes) +
+                    (gpuAfter.frameMonoPayloadBytes - gpuBefore.frameMonoPayloadBytes)
             println(
-                "k16LsScrollCommand: command=ls /bin, inputQueued=${inputQueuedNanos} ns, " +
+                "k16LsScrollCommand: command=ls /bin, inputQueued=$inputQueuedNanos ns, " +
                     "visible=${visibleNanos ?: -1} ns, ticks=$ticks",
             )
             println(
@@ -1067,16 +1094,18 @@ class K16RuntimeTextIoProfilingTest {
                     "bytesWritten=${storageAfter.bytesWritten - storageBefore.bytesWritten}",
             )
             println(
-                "k16LsScrollCommandGpu: blits=${gpuAfter.blitBufferCommands - gpuBefore.blitBufferCommands}, " +
+                "k16LsScrollCommandGpu: monoBlits=${gpuAfter.blitMonoCommands - gpuBefore.blitMonoCommands}, " +
                     "presents=${gpuAfter.presentCommands - gpuBefore.presentCommands}, " +
                     "frames=${gpuAfter.frames - gpuBefore.frames}, " +
                     "tiles=${gpuAfter.frameTiles - gpuBefore.frameTiles}, " +
-                    "frameBytes=$scrollFrameBytes",
+                    "tilePayloadBytes=${gpuAfter.framePayloadBytes - gpuBefore.framePayloadBytes}, " +
+                    "monoPayloadBytes=${gpuAfter.frameMonoPayloadBytes - gpuBefore.frameMonoPayloadBytes}, " +
+                    "displayBytes=$scrollDisplayBytes",
             )
 
             assertTrue(visibleNanos != null, "scroll-positioned ls /bin did not finish and return to the prompt")
             assertTrue(
-                scrollFrameBytes < 100_000,
+                scrollDisplayBytes < 100_000,
                 "scroll-positioned ls /bin should use display ops instead of serializing full-screen tile payloads",
             )
             assertTrue(storageReadCommands < 60, "scroll-positioned ls /bin should keep storage0 transfer commands bounded")
@@ -1148,22 +1177,31 @@ class K16RuntimeTextIoProfilingTest {
                         "ticks=${result.ticks}, slices=${result.slices}, runTime=${result.runNanos} ns, " +
                         "yieldSignals=${result.yieldSignals}, waitSignals=${result.waitSignals}, " +
                         "pauseSignals=${result.pauseSignals}, inputWakeups=${result.inputWakeups}, " +
-                        "blits=${result.blitCommands}, presents=${result.presentCommands}, " +
-                        "frames=${result.frames}, tiles=${result.frameTiles}, frameBytes=${result.frameBytes}, " +
-                        "sentFrames=${result.sentFrames}, sentTiles=${result.sentTiles}, sentFrameBytes=${result.sentFrameBytes}",
+                        "monoBlits=${result.monoBlitCommands}, presents=${result.presentCommands}, " +
+                        "frames=${result.frames}, tiles=${result.frameTiles}, " +
+                        "tilePayloadBytes=${result.tilePayloadBytes}, monoPayloadBytes=${result.monoPayloadBytes}, " +
+                        "sentFrames=${result.sentFrames}, sentTiles=${result.sentTiles}, " +
+                        "sentTilePayloadBytes=${result.sentTilePayloadBytes}, " +
+                        "sentMonoPayloadBytes=${result.sentMonoPayloadBytes}",
                 )
-                assertTrue(result.blitCommands > 0, "yes ${sample.width}-char lines should exercise terminal GPU blits")
+                assertTrue(
+                    result.monoBlitCommands > 0,
+                    "yes ${sample.width}-char lines should exercise terminal GPU mono blits",
+                )
                 assertTrue(
                     result.presentCommands > 0,
                     "yes ${sample.width}-char lines should exercise terminal GPU presents",
                 )
                 assertTrue(
-                    result.blitCommands <= result.lines * 4L,
+                    result.monoBlitCommands <= result.lines * 4L,
                     "yes ${sample.width}-char lines should batch terminal glyph blits by printable runs; " +
-                        "blits=${result.blitCommands}, lines=${result.lines}",
+                        "monoBlits=${result.monoBlitCommands}, lines=${result.lines}",
                 )
                 assertTrue(result.sentFrames > 0, "yes ${sample.width}-char lines should report sent display frames")
-                assertTrue(result.sentFrameBytes > 0, "yes ${sample.width}-char lines should report sent display bytes")
+                assertTrue(
+                    result.sentMonoPayloadBytes > 0,
+                    "yes ${sample.width}-char lines should report sent mono display bytes",
+                )
             }
         } finally {
             device.close()
@@ -1424,14 +1462,17 @@ class K16RuntimeTextIoProfilingTest {
             waitSignals = after.vm.k16RunWaitSignals - before.vm.k16RunWaitSignals,
             pauseSignals = after.vm.k16RunPauseSignals - before.vm.k16RunPauseSignals,
             inputWakeups = after.vm.k16WaitInputWakeups - before.vm.k16WaitInputWakeups,
-            blitCommands = gpuAfter.blitBufferCommands - gpuBefore.blitBufferCommands,
+            monoBlitCommands = gpuAfter.blitMonoCommands - gpuBefore.blitMonoCommands,
             presentCommands = gpuAfter.presentCommands - gpuBefore.presentCommands,
             frames = gpuAfter.frames - gpuBefore.frames,
             frameTiles = gpuAfter.frameTiles - gpuBefore.frameTiles,
-            frameBytes = gpuAfter.framePayloadBytes - gpuBefore.framePayloadBytes,
+            tilePayloadBytes = gpuAfter.framePayloadBytes - gpuBefore.framePayloadBytes,
+            monoPayloadBytes = gpuAfter.frameMonoPayloadBytes - gpuBefore.frameMonoPayloadBytes,
             sentFrames = after.vm.k16DisplayFramesSent - before.vm.k16DisplayFramesSent,
             sentTiles = after.vm.k16DisplayTilesSent - before.vm.k16DisplayTilesSent,
-            sentFrameBytes = after.vm.k16DisplayPayloadBytesSent - before.vm.k16DisplayPayloadBytesSent,
+            sentTilePayloadBytes = after.vm.k16DisplayPayloadBytesSent - before.vm.k16DisplayPayloadBytesSent,
+            sentMonoPayloadBytes =
+                after.vm.k16DisplayMonoPayloadBytesSent - before.vm.k16DisplayMonoPayloadBytesSent,
         )
     }
 
@@ -1477,6 +1518,8 @@ private data class TimedNativeDisplayBatch(
     val nanos: Long,
     val payloadBytes: Int,
     val frameCount: Int,
+    val tilePayloadBytes: Int,
+    val monoPayloadBytes: Int,
     val decodeNanos: Long,
 )
 
@@ -1503,14 +1546,16 @@ private data class ProfiledYesLineWidthResult(
     val waitSignals: Long,
     val pauseSignals: Long,
     val inputWakeups: Long,
-    val blitCommands: Long,
+    val monoBlitCommands: Long,
     val presentCommands: Long,
     val frames: Long,
     val frameTiles: Long,
-    val frameBytes: Long,
+    val tilePayloadBytes: Long,
+    val monoPayloadBytes: Long,
     val sentFrames: Long,
     val sentTiles: Long,
-    val sentFrameBytes: Long,
+    val sentTilePayloadBytes: Long,
+    val sentMonoPayloadBytes: Long,
 )
 
 private data class K16ProfiledCommandSample(
@@ -1587,10 +1632,12 @@ private fun formatK16RuntimePhase(
         "gpuFrameBytes=${vmAfter.k16GpuFrameBytes - vmBefore.k16GpuFrameBytes}, " +
         "displayFrames=${gpuAfter.frames - gpuBefore.frames}, " +
         "displayTiles=${gpuAfter.frameTiles - gpuBefore.frameTiles}, " +
-        "displayBytes=${gpuAfter.framePayloadBytes - gpuBefore.framePayloadBytes}, " +
+        "displayTileBytes=${gpuAfter.framePayloadBytes - gpuBefore.framePayloadBytes}, " +
+        "displayMonoBytes=${gpuAfter.frameMonoPayloadBytes - gpuBefore.frameMonoPayloadBytes}, " +
         "sentDisplayFrames=${vmAfter.k16DisplayFramesSent - vmBefore.k16DisplayFramesSent}, " +
         "sentDisplayTiles=${vmAfter.k16DisplayTilesSent - vmBefore.k16DisplayTilesSent}, " +
-        "sentDisplayBytes=${vmAfter.k16DisplayPayloadBytesSent - vmBefore.k16DisplayPayloadBytesSent}, " +
+        "sentDisplayTileBytes=${vmAfter.k16DisplayPayloadBytesSent - vmBefore.k16DisplayPayloadBytesSent}, " +
+        "sentDisplayMonoBytes=${vmAfter.k16DisplayMonoPayloadBytesSent - vmBefore.k16DisplayMonoPayloadBytesSent}, " +
         "sentDisplayOperations=${vmAfter.k16DisplayOperationsSent - vmBefore.k16DisplayOperationsSent}, " +
         "storageReadCommands=${storageAfter.readCommands - storageBefore.readCommands}, " +
         "storageRequestedReadBlocks=${storageAfter.requestedReadBlocks - storageBefore.requestedReadBlocks}, " +
@@ -1790,11 +1837,17 @@ private fun formatKfsHotspotSummary(samples: List<K16ProfiledCommandSample>): St
         "blockCacheBatchReads=${ranked { it.blockCacheBatchReads }}"
 }
 
-private fun metricValue(line: String, name: String): Long {
+private fun metricValue(
+    line: String,
+    name: String,
+): Long {
     val match = Regex("""(?:^|, )$name=(\d+)""").find(line)
     require(match != null) { "missing metric `$name` in line: $line" }
     return match.groupValues[1].toLong()
 }
+
+private fun monoPayloadBytes(operation: DisplayFrameOperation): Int =
+    if (operation is DisplayFrameOperation.MonoBlit) operation.packedMask.size else 0
 
 private fun List<String>.singleCommandLine(name: String): String = single { it.contains("name=$name,") }
 
@@ -1828,11 +1881,14 @@ private class CapturingDisplayNetworkBridge : DisplayNetworkBridge {
         val startedAt = System.nanoTime()
         val frames = NativeDisplayFrameCodec.decodeFrames(payload)
         val decodeNanos = System.nanoTime() - startedAt
+        val summary = NativeDisplayFrameCodec.summarizeFrames(payload)
         nativeBatches +=
             TimedNativeDisplayBatch(
                 nanos = System.nanoTime(),
                 payloadBytes = payload.size,
                 frameCount = frames.size,
+                tilePayloadBytes = summary.payloadBytes,
+                monoPayloadBytes = summary.monoPayloadBytes,
                 decodeNanos = decodeNanos,
             )
         for (frame in frames) {

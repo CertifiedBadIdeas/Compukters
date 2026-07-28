@@ -105,7 +105,7 @@ class K16ComputerRuntimeTest {
         val snapshot =
             NativeK16ComputerStatsSnapshot.from(
                 longArrayOf(
-                    14,
+                    15,
                     2, 3, 4, 5,
                     6, 7, 8, 9,
                     31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44,
@@ -119,7 +119,7 @@ class K16ComputerRuntimeTest {
                     16, 17, 18, 19, 20, 21, 22, 23,
                     24, 25, 26, 27, 28, 29, 30, 31,
                     32, 33,
-                    34, 35, 36, 37, 38, 39, 40,
+                    34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44,
                 ),
             )
 
@@ -201,10 +201,14 @@ class K16ComputerRuntimeTest {
                             blitBufferCommands = 34,
                             blitPixels = 35,
                             blitSourceBytes = 36,
-                            presentCommands = 37,
-                            frames = 38,
-                            frameTiles = 39,
-                            framePayloadBytes = 40,
+                            blitMonoCommands = 37,
+                            blitMonoPixels = 38,
+                            blitMonoSourceBytes = 39,
+                            presentCommands = 40,
+                            frames = 41,
+                            frameTiles = 42,
+                            framePayloadBytes = 43,
+                            frameMonoPayloadBytes = 44,
                         ),
                 ),
             ),

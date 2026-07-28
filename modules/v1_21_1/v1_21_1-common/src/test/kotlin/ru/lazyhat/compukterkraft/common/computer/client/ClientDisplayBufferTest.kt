@@ -94,11 +94,25 @@ class ClientDisplayBufferTest {
         assertEquals(2L, buffer.frontVersion)
         assertEquals(listOf(ClientDisplayBuffer.Region(1, 1, 2, 1)), buffer.frontDirtyRegions())
 
-        val snapshot = buffer.copyFrontSnapshotSince(uploadedVersion = 1)
-        assertEquals(2L, snapshot.version)
-        assertEquals(listOf(ClientDisplayBuffer.Region(1, 1, 2, 1)), snapshot.regions)
-        assertEquals(0xFFFF0000.toInt(), snapshot.pixels[1 + 1 * 4])
-        assertEquals(0xFF00FF00.toInt(), snapshot.pixels[2 + 1 * 4])
+        val scratch = IntArray(8)
+        val changes = buffer.copyFrontChangesSince(uploadedVersion = 1, destination = scratch)
+        assertEquals(2L, changes.version)
+        assertEquals(
+            listOf(
+                ClientDisplayBuffer.PackedRegion(
+                    region = ClientDisplayBuffer.Region(1, 1, 2, 1),
+                    scratchOffset = 0,
+                ),
+            ),
+            changes.regions,
+        )
+        assertEquals(2, changes.copiedPixels)
+        assertEquals(0xFFFF0000.toInt(), scratch[0])
+        assertEquals(0xFF00FF00.toInt(), scratch[1])
+
+        val missed = buffer.copyFrontChangesSince(uploadedVersion = 0, destination = scratch)
+        assertEquals(listOf(ClientDisplayBuffer.PackedRegion(ClientDisplayBuffer.Region(0, 0, 4, 2), 0)), missed.regions)
+        assertEquals(8, missed.copiedPixels)
 
         val copied = IntArray(2)
         buffer.copyFrontArgbRegion(ClientDisplayBuffer.Region(1, 1, 2, 1), copied)
@@ -306,6 +320,39 @@ class ClientDisplayBufferTest {
             ),
             nativeBuffer.frontArgb().toList(),
         )
+    }
+
+    @Test
+    fun copyRectScratchGrowsOnceAndIsReused() {
+        val buffer = ClientDisplayBuffer(displayId = 1, width = 4, height = 2)
+        val initial =
+            DisplayFrameDelta(
+                displayId = 1,
+                sequence = 1,
+                width = 4,
+                height = 2,
+                pixelFormat = DisplayPixelFormat.RGB565,
+                fullRefresh = true,
+                tiles = listOf(DisplayTile(0, 0, 0, 0, 4, 2, ByteArray(16))),
+            )
+        val largeCopy =
+            initial.copy(
+                sequence = 2,
+                fullRefresh = false,
+                tiles = emptyList(),
+                operations = listOf(DisplayFrameOperation.CopyRect(0, 0, 3, 2, 1, 0)),
+            )
+        val smallCopy =
+            largeCopy.copy(
+                sequence = 3,
+                operations = listOf(DisplayFrameOperation.CopyRect(0, 0, 1, 1, 3, 1)),
+            )
+
+        assertTrue(buffer.apply(initial))
+        assertTrue(buffer.apply(largeCopy))
+        assertEquals(6, buffer.copyRectScratchCapacityForTests)
+        assertTrue(buffer.apply(smallCopy))
+        assertEquals(6, buffer.copyRectScratchCapacityForTests)
     }
 
     @Test
