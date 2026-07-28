@@ -1314,6 +1314,7 @@ class K16RuntimeDeviceTest {
                     when (operation) {
                         is DisplayFrameOperation.FillRect -> 1 + 5 * 4
                         is DisplayFrameOperation.CopyRect -> 1 + 6 * 4
+                        is DisplayFrameOperation.MonoBlit -> 1 + 7 * 4 + operation.packedMask.size
                     }
                 }
             }
@@ -1363,6 +1364,17 @@ class K16RuntimeDeviceTest {
                         buffer.putInt(operation.height)
                         buffer.putInt(operation.dstX)
                         buffer.putInt(operation.dstY)
+                    }
+                    is DisplayFrameOperation.MonoBlit -> {
+                        buffer.put(3)
+                        buffer.putInt(operation.x)
+                        buffer.putInt(operation.y)
+                        buffer.putInt(operation.width)
+                        buffer.putInt(operation.height)
+                        buffer.putInt(operation.foregroundRgb565)
+                        buffer.putInt(operation.backgroundRgb565)
+                        buffer.putInt(operation.packedMask.size)
+                        buffer.put(operation.packedMask)
                     }
                 }
             }

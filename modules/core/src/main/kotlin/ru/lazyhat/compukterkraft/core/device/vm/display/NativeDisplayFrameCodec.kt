@@ -73,6 +73,18 @@ object NativeDisplayFrameCodec {
             dstY: Int,
         ) = Unit
 
+        fun monoBlit(
+            x: Int,
+            y: Int,
+            width: Int,
+            height: Int,
+            foregroundRgb565: Int,
+            backgroundRgb565: Int,
+            payload: ByteArray,
+            payloadOffset: Int,
+            payloadLength: Int,
+        ) = Unit
+
         fun endFrame() = Unit
     }
 
@@ -125,9 +137,29 @@ object NativeDisplayFrameCodec {
             operationCountTotal += operationCount
             repeat(operationCount) {
                 when (val operation = input.get().toInt()) {
-                    1 -> input.position(input.position() + 5 * 4)
-                    2 -> input.position(input.position() + 6 * 4)
-                    else -> error("Unknown native display operation $operation")
+                    1 -> {
+                        input.position(input.position() + 5 * 4)
+                    }
+
+                    2 -> {
+                        input.position(input.position() + 6 * 4)
+                    }
+
+                    3 -> {
+                        input.position(input.position() + 2 * 4)
+                        val width = input.int
+                        val height = input.int
+                        input.position(input.position() + 2 * 4)
+                        val payloadLength = input.int
+                        require(payloadLength == packedMonoMaskLength(width, height)) {
+                            "Native mono mask length $payloadLength does not match ${packedMonoMaskLength(width, height)}"
+                        }
+                        advancePayload(input, payloadLength)
+                    }
+
+                    else -> {
+                        error("Unknown native display operation $operation")
+                    }
                 }
             }
         }
@@ -209,6 +241,35 @@ object NativeDisplayFrameCodec {
                         }
                     }
 
+                    3 -> {
+                        val x = input.int
+                        val y = input.int
+                        val operationWidth = input.int
+                        val operationHeight = input.int
+                        val foregroundRgb565 = input.int
+                        val backgroundRgb565 = input.int
+                        val payloadLength = input.int
+                        val expectedLength = packedMonoMaskLength(operationWidth, operationHeight)
+                        require(payloadLength == expectedLength) {
+                            "Native mono mask length $payloadLength does not match $expectedLength"
+                        }
+                        val payloadOffset = input.position()
+                        advancePayload(input, payloadLength)
+                        if (accepted) {
+                            visitor.monoBlit(
+                                x,
+                                y,
+                                operationWidth,
+                                operationHeight,
+                                foregroundRgb565,
+                                backgroundRgb565,
+                                bytes,
+                                payloadOffset,
+                                payloadLength,
+                            )
+                        }
+                    }
+
                     else -> {
                         error("Unknown native display operation $operation")
                     }
@@ -287,6 +348,34 @@ object NativeDisplayFrameCodec {
                             )
                         }
 
+                        3 -> {
+                            val x = input.int
+                            val y = input.int
+                            val operationWidth = input.int
+                            val operationHeight = input.int
+                            val foregroundRgb565 = input.int
+                            val backgroundRgb565 = input.int
+                            val payloadLength = input.int
+                            val expectedLength = packedMonoMaskLength(operationWidth, operationHeight)
+                            require(payloadLength == expectedLength) {
+                                "Native mono mask length $payloadLength does not match $expectedLength"
+                            }
+                            require(input.remaining() >= payloadLength) {
+                                "Native mono mask payload is truncated"
+                            }
+                            val packedMask = ByteArray(payloadLength)
+                            input.get(packedMask)
+                            DisplayFrameOperation.MonoBlit(
+                                x = x,
+                                y = y,
+                                width = operationWidth,
+                                height = operationHeight,
+                                foregroundRgb565 = foregroundRgb565,
+                                backgroundRgb565 = backgroundRgb565,
+                                packedMask = packedMask,
+                            )
+                        }
+
                         else -> {
                             error("Unknown native display operation $operation")
                         }
@@ -303,6 +392,31 @@ object NativeDisplayFrameCodec {
         val operationCount: Int,
         val endOffset: Int,
     )
+
+    private fun packedMonoMaskLength(
+        width: Int,
+        height: Int,
+    ): Int {
+        require(width > 0 && height > 0) {
+            "Native mono mask dimensions must be positive, got ${width}x$height"
+        }
+        val rowBytes = (width.toLong() + 7L) / 8L
+        val payloadLength = rowBytes * height.toLong()
+        require(payloadLength <= Int.MAX_VALUE) {
+            "Native mono mask payload length overflows Int"
+        }
+        return payloadLength.toInt()
+    }
+
+    private fun advancePayload(
+        input: ByteBuffer,
+        payloadLength: Int,
+    ) {
+        require(payloadLength >= 0 && input.remaining() >= payloadLength) {
+            "Native display payload is truncated"
+        }
+        input.position(input.position() + payloadLength)
+    }
 
     private const val TILE_RECORD_INTS = 8
 }

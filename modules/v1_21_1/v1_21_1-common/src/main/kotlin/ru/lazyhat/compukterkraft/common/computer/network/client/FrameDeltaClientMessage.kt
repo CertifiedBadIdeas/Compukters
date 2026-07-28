@@ -61,7 +61,7 @@ class FrameDeltaClientMessage : NetworkMessage<ClientNetworkContext> {
         val operations =
             List(buf.readVarInt()) {
                 when (val operation = buf.readVarInt()) {
-                    1 ->
+                    1 -> {
                         DisplayFrameOperation.FillRect(
                             x = buf.readVarInt(),
                             y = buf.readVarInt(),
@@ -69,7 +69,9 @@ class FrameDeltaClientMessage : NetworkMessage<ClientNetworkContext> {
                             height = buf.readVarInt(),
                             rgb565 = buf.readVarInt(),
                         )
-                    2 ->
+                    }
+
+                    2 -> {
                         DisplayFrameOperation.CopyRect(
                             srcX = buf.readVarInt(),
                             srcY = buf.readVarInt(),
@@ -78,7 +80,33 @@ class FrameDeltaClientMessage : NetworkMessage<ClientNetworkContext> {
                             dstX = buf.readVarInt(),
                             dstY = buf.readVarInt(),
                         )
-                    else -> error("Unknown display frame operation $operation")
+                    }
+
+                    3 -> {
+                        val x = buf.readVarInt()
+                        val y = buf.readVarInt()
+                        val width = buf.readVarInt()
+                        val height = buf.readVarInt()
+                        val foregroundRgb565 = buf.readVarInt()
+                        val backgroundRgb565 = buf.readVarInt()
+                        val packedMask = buf.readByteArray()
+                        require(packedMask.size == packedMonoMaskLength(width, height)) {
+                            "Mono mask payload length ${packedMask.size} does not match dimensions ${width}x$height"
+                        }
+                        DisplayFrameOperation.MonoBlit(
+                            x = x,
+                            y = y,
+                            width = width,
+                            height = height,
+                            foregroundRgb565 = foregroundRgb565,
+                            backgroundRgb565 = backgroundRgb565,
+                            packedMask = packedMask,
+                        )
+                    }
+
+                    else -> {
+                        error("Unknown display frame operation $operation")
+                    }
                 }
             }
         frame = DisplayFrameDelta(displayId, sequence, width, height, format, fullRefresh, tiles, operations)
@@ -113,6 +141,7 @@ class FrameDeltaClientMessage : NetworkMessage<ClientNetworkContext> {
                     buf.writeVarInt(operation.height)
                     buf.writeVarInt(operation.rgb565)
                 }
+
                 is DisplayFrameOperation.CopyRect -> {
                     buf.writeVarInt(2)
                     buf.writeVarInt(operation.srcX)
@@ -121,6 +150,21 @@ class FrameDeltaClientMessage : NetworkMessage<ClientNetworkContext> {
                     buf.writeVarInt(operation.height)
                     buf.writeVarInt(operation.dstX)
                     buf.writeVarInt(operation.dstY)
+                }
+
+                is DisplayFrameOperation.MonoBlit -> {
+                    require(operation.packedMask.size == packedMonoMaskLength(operation.width, operation.height)) {
+                        "Mono mask payload length ${operation.packedMask.size} does not match dimensions " +
+                            "${operation.width}x${operation.height}"
+                    }
+                    buf.writeVarInt(3)
+                    buf.writeVarInt(operation.x)
+                    buf.writeVarInt(operation.y)
+                    buf.writeVarInt(operation.width)
+                    buf.writeVarInt(operation.height)
+                    buf.writeVarInt(operation.foregroundRgb565)
+                    buf.writeVarInt(operation.backgroundRgb565)
+                    buf.writeByteArray(operation.packedMask)
                 }
             }
         }
@@ -131,4 +175,18 @@ class FrameDeltaClientMessage : NetworkMessage<ClientNetworkContext> {
     }
 
     override fun type(): MessageType<FrameDeltaClientMessage> = NetworkMessages.FRAME_DELTA
+
+    private fun packedMonoMaskLength(
+        width: Int,
+        height: Int,
+    ): Int {
+        require(width > 0 && height > 0) {
+            "Mono mask dimensions must be positive, got ${width}x$height"
+        }
+        val length = ((width.toLong() + 7L) / 8L) * height.toLong()
+        require(length <= Int.MAX_VALUE) {
+            "Mono mask payload length overflows Int"
+        }
+        return length.toInt()
+    }
 }
