@@ -78,6 +78,37 @@ sealed interface DisplayFrameOperation {
         val dstX: Int,
         val dstY: Int,
     ) : DisplayFrameOperation
+
+    data class MonoBlit(
+        val x: Int,
+        val y: Int,
+        val width: Int,
+        val height: Int,
+        val foregroundRgb565: Int,
+        val backgroundRgb565: Int,
+        val packedMask: ByteArray,
+    ) : DisplayFrameOperation {
+        override fun equals(other: Any?): Boolean =
+            other is MonoBlit &&
+                x == other.x &&
+                y == other.y &&
+                width == other.width &&
+                height == other.height &&
+                foregroundRgb565 == other.foregroundRgb565 &&
+                backgroundRgb565 == other.backgroundRgb565 &&
+                packedMask.contentEquals(other.packedMask)
+
+        override fun hashCode(): Int {
+            var result = x
+            result = 31 * result + y
+            result = 31 * result + width
+            result = 31 * result + height
+            result = 31 * result + foregroundRgb565
+            result = 31 * result + backgroundRgb565
+            result = 31 * result + packedMask.contentHashCode()
+            return result
+        }
+    }
 }
 
 data class DisplayFrameDelta(

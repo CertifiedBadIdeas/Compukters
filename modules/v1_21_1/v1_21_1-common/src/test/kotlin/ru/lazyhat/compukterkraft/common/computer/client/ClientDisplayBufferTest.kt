@@ -248,6 +248,67 @@ class ClientDisplayBufferTest {
     }
 
     @Test
+    fun nativeAndDecodedMonoBlitsProduceIdenticalPixelsAndTilesOverrideOperations() {
+        val mono =
+            DisplayFrameOperation.MonoBlit(
+                x = 0,
+                y = 0,
+                width = 5,
+                height = 2,
+                foregroundRgb565 = 0xffff,
+                backgroundRgb565 = 0x001f,
+                packedMask = byteArrayOf(0b1010_1000.toByte(), 0b0101_0000),
+            )
+        val green565 = byteArrayOf(0x07, 0xE0.toByte())
+        val decodedBuffer = ClientDisplayBuffer(displayId = 1, width = 5, height = 2)
+        val nativeBuffer = ClientDisplayBuffer(displayId = 1, width = 5, height = 2)
+        val decodedFrame =
+            DisplayFrameDelta(
+                displayId = 1,
+                sequence = 1,
+                width = 5,
+                height = 2,
+                pixelFormat = DisplayPixelFormat.RGB565,
+                fullRefresh = false,
+                tiles = listOf(DisplayTile(0, 0, 0, 0, 1, 1, green565)),
+                operations = listOf(mono),
+            )
+        val nativeBatch =
+            encodeNativeFrameBatch(
+                frame(
+                    sequence = 1,
+                    operations = listOf(mono),
+                    tiles = listOf(NativeTile(0, 0, 0, 0, 1, 1, green565)),
+                ),
+                displayWidth = 5,
+                displayHeight = 2,
+            )
+
+        assertTrue(decodedBuffer.apply(decodedFrame))
+        assertTrue(nativeBuffer.applyNativeFrameBatch(nativeBatch))
+        assertTrue(decodedBuffer.swapIfDirty())
+        assertTrue(nativeBuffer.swapIfDirty())
+
+        assertEquals(decodedBuffer.frontArgb().toList(), nativeBuffer.frontArgb().toList())
+        assertEquals(0xFF00FF00.toInt(), nativeBuffer.frontArgb().first())
+        assertEquals(
+            listOf(
+                0xFF00FF00.toInt(),
+                0xFF0000FF.toInt(),
+                0xFFFFFFFF.toInt(),
+                0xFF0000FF.toInt(),
+                0xFFFFFFFF.toInt(),
+                0xFF0000FF.toInt(),
+                0xFFFFFFFF.toInt(),
+                0xFF0000FF.toInt(),
+                0xFFFFFFFF.toInt(),
+                0xFF0000FF.toInt(),
+            ),
+            nativeBuffer.frontArgb().toList(),
+        )
+    }
+
+    @Test
     fun cacheReusesReceivedBufferForSameComputerDisplayGeometry() {
         val cache = ClientDisplayBufferCache()
         val firstBuffer = cache.getOrCreate(computerId = 42, displayId = 1, width = 2, height = 1)
@@ -315,7 +376,11 @@ class ClientDisplayBufferTest {
             tiles = tiles,
         )
 
-    private fun encodeNativeFrameBatch(vararg frames: NativeFrame): ByteArray {
+    private fun encodeNativeFrameBatch(
+        vararg frames: NativeFrame,
+        displayWidth: Int = 4,
+        displayHeight: Int = 2,
+    ): ByteArray {
         val payloadBytes = frames.sumOf { frame -> frame.tiles.sumOf { it.payload.size } }
         val operationBytes =
             frames.sumOf { frame ->
@@ -323,6 +388,7 @@ class ClientDisplayBufferTest {
                     when (operation) {
                         is DisplayFrameOperation.FillRect -> 1 + 5 * 4
                         is DisplayFrameOperation.CopyRect -> 1 + 6 * 4
+                        is DisplayFrameOperation.MonoBlit -> 1 + 7 * 4 + operation.packedMask.size
                     }
                 }
             }
@@ -335,8 +401,8 @@ class ClientDisplayBufferTest {
             buffer
                 .putInt(1)
                 .putLong(frame.sequence)
-                .putInt(4)
-                .putInt(2)
+                .putInt(displayWidth)
+                .putInt(displayHeight)
                 .put(0)
                 .put(if (frame.fullRefresh) 1 else 0)
                 .putInt(frame.tiles.size)
@@ -373,6 +439,19 @@ class ClientDisplayBufferTest {
                             .putInt(operation.height)
                             .putInt(operation.dstX)
                             .putInt(operation.dstY)
+                    }
+
+                    is DisplayFrameOperation.MonoBlit -> {
+                        buffer
+                            .put(3)
+                            .putInt(operation.x)
+                            .putInt(operation.y)
+                            .putInt(operation.width)
+                            .putInt(operation.height)
+                            .putInt(operation.foregroundRgb565)
+                            .putInt(operation.backgroundRgb565)
+                            .putInt(operation.packedMask.size)
+                            .put(operation.packedMask)
                     }
                 }
             }

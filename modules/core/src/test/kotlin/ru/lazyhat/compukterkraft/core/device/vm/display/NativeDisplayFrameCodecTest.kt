@@ -24,7 +24,10 @@ import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayPixelFormat
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFails
+import kotlin.test.assertSame
 
 class NativeDisplayFrameCodecTest {
     @Test
@@ -206,6 +209,101 @@ class NativeDisplayFrameCodecTest {
     }
 
     @Test
+    fun visitsAndDecodesTightMonoMaskWithoutCopyingVisitorPayload() {
+        val bytes =
+            monoFrameBatch(
+                width = 5,
+                height = 2,
+                foregroundRgb565 = 0xffff,
+                backgroundRgb565 = 0x001f,
+                mask = byteArrayOf(0b1010_1000.toByte(), 0b0101_0000),
+            )
+        var visitedPayload: ByteArray? = null
+        var visitedOffset = -1
+        var visitedLength = -1
+
+        NativeDisplayFrameCodec.visitFrames(
+            bytes,
+            object : NativeDisplayFrameCodec.FrameVisitor {
+                override fun monoBlit(
+                    x: Int,
+                    y: Int,
+                    width: Int,
+                    height: Int,
+                    foregroundRgb565: Int,
+                    backgroundRgb565: Int,
+                    payload: ByteArray,
+                    payloadOffset: Int,
+                    payloadLength: Int,
+                ) {
+                    assertEquals(1, x)
+                    assertEquals(2, y)
+                    assertEquals(5, width)
+                    assertEquals(2, height)
+                    assertEquals(0xffff, foregroundRgb565)
+                    assertEquals(0x001f, backgroundRgb565)
+                    visitedPayload = payload
+                    visitedOffset = payloadOffset
+                    visitedLength = payloadLength
+                }
+            },
+        )
+
+        assertSame(bytes, visitedPayload)
+        assertEquals(2, visitedLength)
+        assertContentEquals(
+            byteArrayOf(0b1010_1000.toByte(), 0b0101_0000),
+            bytes.copyOfRange(visitedOffset, visitedOffset + visitedLength),
+        )
+        assertEquals(
+            NativeDisplayFrameBatchSummary(
+                frameCount = 1,
+                tileCount = 0,
+                payloadBytes = 0,
+                operationCount = 1,
+            ),
+            NativeDisplayFrameCodec.summarizeFrames(bytes),
+        )
+        assertEquals(
+            DisplayFrameOperation.MonoBlit(
+                x = 1,
+                y = 2,
+                width = 5,
+                height = 2,
+                foregroundRgb565 = 0xffff,
+                backgroundRgb565 = 0x001f,
+                packedMask = byteArrayOf(0b1010_1000.toByte(), 0b0101_0000),
+            ),
+            NativeDisplayFrameCodec.decodeFrames(bytes).single().operations.single(),
+        )
+    }
+
+    @Test
+    fun rejectsMalformedMonoMaskLengthsAndDimensions() {
+        assertFails {
+            NativeDisplayFrameCodec.visitFrames(
+                monoFrameBatch(width = 9, height = 1, mask = byteArrayOf(0x80.toByte())),
+                object : NativeDisplayFrameCodec.FrameVisitor {},
+            )
+        }
+        assertFails {
+            NativeDisplayFrameCodec.summarizeFrames(
+                monoFrameBatch(width = 0, height = 1, mask = byteArrayOf()),
+            )
+        }
+        assertFails {
+            NativeDisplayFrameCodec.decodeFrames(
+                monoFrameBatch(
+                    width = 9,
+                    height = 1,
+                    declaredPayloadLength = 2,
+                    mask = byteArrayOf(0x80.toByte()),
+                ),
+            )
+        }
+    }
+
+    @Test
     fun mergesNativeFrameBatchesWithoutDecodingFrames() {
         val rawFirstBatch =
             operationFrameBatch(
@@ -265,6 +363,7 @@ class NativeDisplayFrameCodecTest {
             when (operation) {
                 is DisplayFrameOperation.FillRect -> 1 + 5 * 4
                 is DisplayFrameOperation.CopyRect -> 1 + 6 * 4
+                is DisplayFrameOperation.MonoBlit -> 1 + 7 * 4 + operation.packedMask.size
             }
         val buffer =
             ByteBuffer
@@ -300,7 +399,51 @@ class NativeDisplayFrameCodecTest {
                     .putInt(operation.dstX)
                     .putInt(operation.dstY)
             }
+
+            is DisplayFrameOperation.MonoBlit -> {
+                buffer
+                    .put(3)
+                    .putInt(operation.x)
+                    .putInt(operation.y)
+                    .putInt(operation.width)
+                    .putInt(operation.height)
+                    .putInt(operation.foregroundRgb565)
+                    .putInt(operation.backgroundRgb565)
+                    .putInt(operation.packedMask.size)
+                    .put(operation.packedMask)
+            }
         }
         return buffer.array()
     }
+
+    private fun monoFrameBatch(
+        width: Int,
+        height: Int,
+        foregroundRgb565: Int = 0xffff,
+        backgroundRgb565: Int = 0,
+        declaredPayloadLength: Int = ((width + 7) / 8) * height,
+        mask: ByteArray,
+    ): ByteArray =
+        ByteBuffer
+            .allocate(4 + 4 + 8 + 4 + 4 + 1 + 1 + 4 + 4 + 1 + 7 * 4 + mask.size)
+            .order(ByteOrder.LITTLE_ENDIAN)
+            .putInt(1)
+            .putInt(7)
+            .putLong(42)
+            .putInt(320)
+            .putInt(200)
+            .put(0)
+            .put(0)
+            .putInt(0)
+            .putInt(1)
+            .put(3)
+            .putInt(1)
+            .putInt(2)
+            .putInt(width)
+            .putInt(height)
+            .putInt(foregroundRgb565)
+            .putInt(backgroundRgb565)
+            .putInt(declaredPayloadLength)
+            .put(mask)
+            .array()
 }

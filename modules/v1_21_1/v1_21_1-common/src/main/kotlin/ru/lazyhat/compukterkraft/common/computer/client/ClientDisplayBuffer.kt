@@ -178,6 +178,31 @@ class ClientDisplayBuffer(
                         acceptedOperations += 1
                     }
 
+                    override fun monoBlit(
+                        x: Int,
+                        y: Int,
+                        width: Int,
+                        height: Int,
+                        foregroundRgb565: Int,
+                        backgroundRgb565: Int,
+                        payload: ByteArray,
+                        payloadOffset: Int,
+                        payloadLength: Int,
+                    ) {
+                        applyMonoBlit(
+                            x,
+                            y,
+                            width,
+                            height,
+                            foregroundRgb565,
+                            backgroundRgb565,
+                            payload,
+                            payloadOffset,
+                            payloadLength,
+                        )
+                        acceptedOperations += 1
+                    }
+
                     override fun endFrame() {
                         expectedSequence = currentSequence + 1
                         hasReceivedFrames = true
@@ -282,6 +307,7 @@ class ClientDisplayBuffer(
         when (operation) {
             is DisplayFrameOperation.FillRect -> applyFillRect(operation)
             is DisplayFrameOperation.CopyRect -> applyCopyRect(operation)
+            is DisplayFrameOperation.MonoBlit -> applyMonoBlit(operation)
         }
     }
 
@@ -356,6 +382,54 @@ class ClientDisplayBuffer(
         pendingDirtyRegions.add(region)
     }
 
+    private fun applyMonoBlit(operation: DisplayFrameOperation.MonoBlit) {
+        applyMonoBlit(
+            operation.x,
+            operation.y,
+            operation.width,
+            operation.height,
+            operation.foregroundRgb565,
+            operation.backgroundRgb565,
+            operation.packedMask,
+            0,
+            operation.packedMask.size,
+        )
+    }
+
+    private fun applyMonoBlit(
+        x: Int,
+        y: Int,
+        width: Int,
+        height: Int,
+        foregroundRgb565: Int,
+        backgroundRgb565: Int,
+        payload: ByteArray,
+        payloadOffset: Int,
+        payloadLength: Int,
+    ) {
+        val rowBytes = packedMonoMaskRowBytes(width, height)
+        val expectedLength = rowBytes * height
+        require(payloadLength == expectedLength)
+        require(payloadOffset >= 0 && payloadOffset.toLong() + payloadLength <= payload.size)
+        val region = clippedRegion(x, y, width, height) ?: return
+        val foregroundArgb = rgb565ToArgb(foregroundRgb565)
+        val backgroundArgb = rgb565ToArgb(backgroundRgb565)
+        var targetY = region.y
+        while (targetY < region.y + region.height) {
+            val sourceRow = targetY - y
+            var targetX = region.x
+            while (targetX < region.x + region.width) {
+                val sourceColumn = targetX - x
+                val maskByte = payload[payloadOffset + sourceRow * rowBytes + sourceColumn / 8].toInt() and 0xff
+                val set = maskByte and (0x80 ushr (sourceColumn % 8)) != 0
+                staging[targetY * this.width + targetX] = if (set) foregroundArgb else backgroundArgb
+                targetX += 1
+            }
+            targetY += 1
+        }
+        pendingDirtyRegions.add(region)
+    }
+
     private fun applyTile(
         x: Int,
         y: Int,
@@ -383,8 +457,8 @@ class ClientDisplayBuffer(
         if (width <= 0 || height <= 0) return null
         val minX = x.coerceAtLeast(0)
         val minY = y.coerceAtLeast(0)
-        val maxX = (x + width).coerceAtMost(this.width)
-        val maxY = (y + height).coerceAtMost(this.height)
+        val maxX = (x.toLong() + width.toLong()).coerceAtMost(this.width.toLong()).toInt()
+        val maxY = (y.toLong() + height.toLong()).coerceAtMost(this.height.toLong()).toInt()
         if (minX >= maxX || minY >= maxY) return null
         return Region(minX, minY, maxX - minX, maxY - minY)
     }
@@ -397,6 +471,16 @@ class ClientDisplayBuffer(
         val g = (g6 shl 2) or (g6 ushr 4)
         val b = (b5 shl 3) or (b5 ushr 2)
         return (0xFF shl 24) or (r shl 16) or (g shl 8) or b
+    }
+
+    private fun packedMonoMaskRowBytes(
+        width: Int,
+        height: Int,
+    ): Int {
+        require(width > 0 && height > 0)
+        val rowBytes = (width.toLong() + 7L) / 8L
+        require(rowBytes * height.toLong() <= Int.MAX_VALUE)
+        return rowBytes.toInt()
     }
 
     companion object {

@@ -98,6 +98,15 @@ class DisplayMessageCodecTest {
                     listOf(
                         DisplayFrameOperation.FillRect(x = 0, y = 8, width = 32, height = 8, rgb565 = 0x07E0),
                         DisplayFrameOperation.CopyRect(srcX = 0, srcY = 8, width = 32, height = 8, dstX = 0, dstY = 0),
+                        DisplayFrameOperation.MonoBlit(
+                            x = 3,
+                            y = 4,
+                            width = 5,
+                            height = 2,
+                            foregroundRgb565 = 0xffff,
+                            backgroundRgb565 = 0,
+                            packedMask = byteArrayOf(0b1010_1000.toByte(), 0b0101_0000),
+                        ),
                     ),
             )
         val message = FrameDeltaClientMessage(containerId = 4, frame = frame)
