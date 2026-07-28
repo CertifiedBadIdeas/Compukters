@@ -37,14 +37,20 @@ class ClientDisplayBuffer(
         val height: Int,
     )
 
-    data class FrontSnapshot(
+    data class PackedRegion(
+        val region: Region,
+        val scratchOffset: Int,
+    )
+
+    data class FrontChanges(
         val version: Long,
-        val regions: List<Region>,
-        val pixels: IntArray,
+        val regions: List<PackedRegion>,
+        val copiedPixels: Int,
     )
 
     private val front = IntArray(width * height) { OPAQUE_BLACK }
     private val staging = IntArray(width * height) { OPAQUE_BLACK }
+    private var copyRectScratch = IntArray(0)
     private val pendingDirtyRegions = mutableListOf<Region>()
     private val swappedDirtyRegions = mutableListOf<Region>()
     private var expectedSequence: Long = 1
@@ -106,6 +112,7 @@ class ClientDisplayBuffer(
         var acceptedTiles = 0
         var acceptedPayloadBytes = 0
         var acceptedOperations = 0
+        var acceptedMonoPayloadBytes = 0
         var currentSequence = 0L
         var currentFullRefresh = false
         try {
@@ -201,6 +208,7 @@ class ClientDisplayBuffer(
                             payloadLength,
                         )
                         acceptedOperations += 1
+                        acceptedMonoPayloadBytes += payloadLength
                     }
 
                     override fun endFrame() {
@@ -218,6 +226,7 @@ class ClientDisplayBuffer(
                 tileCount = acceptedTiles,
                 payloadBytes = acceptedPayloadBytes,
                 operationCount = acceptedOperations,
+                monoPayloadBytes = acceptedMonoPayloadBytes,
                 nanos = System.nanoTime() - started,
             )
         }
@@ -250,17 +259,41 @@ class ClientDisplayBuffer(
     fun frontDirtyRegions(): List<Region> = swappedDirtyRegions.toList()
 
     @Synchronized
-    fun copyFrontSnapshotSince(uploadedVersion: Long): FrontSnapshot {
+    fun copyFrontChangesSince(
+        uploadedVersion: Long,
+        destination: IntArray,
+    ): FrontChanges {
         val started = System.nanoTime()
-        val regions =
+        var regions =
             if (frontVersion != uploadedVersion + 1) {
                 listOf(Region(0, 0, width, height))
             } else {
                 swappedDirtyRegions.ifEmpty { listOf(Region(0, 0, width, height)) }
             }
-        val pixels = front.copyOf()
+        var copiedPixels = regions.sumOf { it.width.toLong() * it.height.toLong() }
+        if (copiedPixels > destination.size) {
+            regions = listOf(Region(0, 0, width, height))
+            copiedPixels = width.toLong() * height.toLong()
+        }
+        require(copiedPixels <= destination.size)
+        val packedRegions = ArrayList<PackedRegion>(regions.size)
+        var destinationOffset = 0
+        for (region in regions) {
+            packedRegions += PackedRegion(region, destinationOffset)
+            var row = region.y
+            while (row < region.y + region.height) {
+                front.copyInto(
+                    destination,
+                    destinationOffset,
+                    row * width + region.x,
+                    row * width + region.x + region.width,
+                )
+                destinationOffset += region.width
+                row += 1
+            }
+        }
         metricsCollector.recordSnapshotCopy(regions, width, height, System.nanoTime() - started)
-        return FrontSnapshot(frontVersion, regions, pixels)
+        return FrontChanges(frontVersion, packedRegions, destinationOffset)
     }
 
     @Synchronized
@@ -349,7 +382,10 @@ class ClientDisplayBuffer(
         dstY: Int,
     ) {
         val region = clippedRegion(dstX, dstY, width, height) ?: return
-        val copied = IntArray(region.width * region.height)
+        val requiredScratch = region.width * region.height
+        if (copyRectScratch.size < requiredScratch) {
+            copyRectScratch = IntArray(requiredScratch)
+        }
         var copiedOffset = 0
         var row = region.y
         while (row < region.y + region.height) {
@@ -357,7 +393,7 @@ class ClientDisplayBuffer(
             while (col < region.x + region.width) {
                 val sourceX = srcX + (col - dstX)
                 val sourceY = srcY + (row - dstY)
-                copied[copiedOffset] =
+                copyRectScratch[copiedOffset] =
                     if (sourceX in 0 until this.width && sourceY in 0 until this.height) {
                         staging[sourceY * this.width + sourceX]
                     } else {
@@ -373,13 +409,24 @@ class ClientDisplayBuffer(
         while (row < region.y + region.height) {
             var col = region.x
             while (col < region.x + region.width) {
-                staging[row * this.width + col] = copied[copiedOffset]
+                staging[row * this.width + col] = copyRectScratch[copiedOffset]
                 copiedOffset += 1
                 col += 1
             }
             row += 1
         }
         pendingDirtyRegions.add(region)
+    }
+
+    internal val copyRectScratchCapacityForTests: Int
+        get() = copyRectScratch.size
+
+    fun recordTextureUpload(
+        regions: Int,
+        pixels: Int,
+        nanos: Long,
+    ) {
+        metricsCollector.recordTextureUpload(regions, pixels, nanos)
     }
 
     private fun applyMonoBlit(operation: DisplayFrameOperation.MonoBlit) {

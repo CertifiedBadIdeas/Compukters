@@ -76,10 +76,14 @@ data class NativeK16GpuStats(
     val blitBufferCommands: Long = 0,
     val blitPixels: Long = 0,
     val blitSourceBytes: Long = 0,
+    val blitMonoCommands: Long = 0,
+    val blitMonoPixels: Long = 0,
+    val blitMonoSourceBytes: Long = 0,
     val presentCommands: Long = 0,
     val frames: Long = 0,
     val frameTiles: Long = 0,
     val framePayloadBytes: Long = 0,
+    val frameMonoPayloadBytes: Long = 0,
 )
 
 data class NativeK16OsStats(
@@ -158,6 +162,7 @@ data class NativeK16ComputerStatsSnapshot(
         private const val VERSION_V12: Long = 12
         private const val VERSION_V13: Long = 13
         private const val VERSION_V14: Long = 14
+        private const val VERSION_V15: Long = 15
         private const val HEADER_LONGS_V2: Int = 10
         private const val HEADER_LONGS_V4: Int = 16
         private const val HEADER_LONGS_V5: Int = 21
@@ -172,6 +177,7 @@ data class NativeK16ComputerStatsSnapshot(
         private const val DEVICE_LONGS_V9: Int = 28
         private const val DEVICE_LONGS_V11: Int = 30
         private const val DEVICE_LONGS_V13: Int = 32
+        private const val DEVICE_LONGS_V15: Int = 36
 
         fun from(values: LongArray): NativeK16ComputerStatsSnapshot {
             require(values.size >= HEADER_LONGS_V2) {
@@ -191,13 +197,14 @@ data class NativeK16ComputerStatsSnapshot(
                     version == VERSION_V11 ||
                     version == VERSION_V12 ||
                     version == VERSION_V13 ||
-                    version == VERSION_V14,
+                    version == VERSION_V14 ||
+                    version == VERSION_V15,
             ) {
                 "Unsupported native K16 stats snapshot version: $version"
             }
             val headerLongs =
                 when (version) {
-                    VERSION_V14 -> HEADER_LONGS_V14
+                    VERSION_V15, VERSION_V14 -> HEADER_LONGS_V14
                     VERSION_V13, VERSION_V12 -> HEADER_LONGS_V12
                     VERSION_V11, VERSION_V10 -> HEADER_LONGS_V10
                     VERSION_V9, VERSION_V8, VERSION_V7 -> HEADER_LONGS_V7
@@ -211,6 +218,7 @@ data class NativeK16ComputerStatsSnapshot(
             val deviceLongs =
                 when (version) {
                     VERSION_V2 -> DEVICE_LONGS_V2
+                    VERSION_V15 -> DEVICE_LONGS_V15
                     VERSION_V14, VERSION_V13 -> DEVICE_LONGS_V13
                     VERSION_V12, VERSION_V11 -> DEVICE_LONGS_V11
                     VERSION_V10, VERSION_V9 -> DEVICE_LONGS_V9
@@ -310,10 +318,19 @@ data class NativeK16ComputerStatsSnapshot(
                                     blitBufferCommands = values[gpuOffset],
                                     blitPixels = values[gpuOffset + 1],
                                     blitSourceBytes = values[gpuOffset + 2],
-                                    presentCommands = values[gpuOffset + 3],
-                                    frames = values[gpuOffset + 4],
-                                    frameTiles = values[gpuOffset + 5],
-                                    framePayloadBytes = values[gpuOffset + 6],
+                                    blitMonoCommands = if (version >= VERSION_V15) values[gpuOffset + 3] else 0,
+                                    blitMonoPixels = if (version >= VERSION_V15) values[gpuOffset + 4] else 0,
+                                    blitMonoSourceBytes = if (version >= VERSION_V15) values[gpuOffset + 5] else 0,
+                                    presentCommands =
+                                        if (version >= VERSION_V15) values[gpuOffset + 6] else values[gpuOffset + 3],
+                                    frames =
+                                        if (version >= VERSION_V15) values[gpuOffset + 7] else values[gpuOffset + 4],
+                                    frameTiles =
+                                        if (version >= VERSION_V15) values[gpuOffset + 8] else values[gpuOffset + 5],
+                                    framePayloadBytes =
+                                        if (version >= VERSION_V15) values[gpuOffset + 9] else values[gpuOffset + 6],
+                                    frameMonoPayloadBytes =
+                                        if (version >= VERSION_V15) values[gpuOffset + 10] else 0,
                                 )
                             } else {
                                 NativeK16GpuStats()
@@ -346,7 +363,8 @@ data class NativeK16ComputerStatsSnapshot(
                         version == VERSION_V11 ||
                         version == VERSION_V12 ||
                         version == VERSION_V13 ||
-                        version == VERSION_V14
+                        version == VERSION_V14 ||
+                        version == VERSION_V15
                     ) {
                         NativeK16OsStats(
                             pathLookups = values[9],
@@ -400,7 +418,8 @@ data class NativeK16ComputerStatsSnapshot(
                         version == VERSION_V11 ||
                         version == VERSION_V12 ||
                         version == VERSION_V13 ||
-                        version == VERSION_V14
+                        version == VERSION_V14 ||
+                        version == VERSION_V15
                     ) {
                         val offset =
                             when {

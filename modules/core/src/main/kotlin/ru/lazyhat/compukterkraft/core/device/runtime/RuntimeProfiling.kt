@@ -114,6 +114,7 @@ interface RuntimeMetricsCollector {
         tileCount: Int,
         payloadBytes: Int,
         operationCount: Int,
+        monoPayloadBytes: Int = 0,
     )
 
     fun recordK16DisplayFramesSent(
@@ -121,6 +122,7 @@ interface RuntimeMetricsCollector {
         tileCount: Int,
         payloadBytes: Int,
         operationCount: Int,
+        monoPayloadBytes: Int = 0,
     ) {
         val sanitizedFrameCount = frameCount.coerceAtLeast(0)
         if (sanitizedFrameCount == 0) return
@@ -228,6 +230,7 @@ data class RuntimeVmMetrics(
     val k16DisplayFramesSent: Long = 0,
     val k16DisplayTilesSent: Long = 0,
     val k16DisplayPayloadBytesSent: Long = 0,
+    val k16DisplayMonoPayloadBytesSent: Long = 0,
     val k16DisplayOperationsSent: Long = 0,
     val k16TextInputEvents: Long = 0,
     val k16TextInputBytes: Long = 0,
@@ -281,10 +284,14 @@ data class RuntimeK16GpuMetrics(
     val blitBufferCommands: Long = 0,
     val blitPixels: Long = 0,
     val blitSourceBytes: Long = 0,
+    val blitMonoCommands: Long = 0,
+    val blitMonoPixels: Long = 0,
+    val blitMonoSourceBytes: Long = 0,
     val presentCommands: Long = 0,
     val frames: Long = 0,
     val frameTiles: Long = 0,
     val framePayloadBytes: Long = 0,
+    val frameMonoPayloadBytes: Long = 0,
 )
 
 data class RuntimeK16OsMetrics(
@@ -373,10 +380,14 @@ data class RuntimeK16StatsMetrics(
             blitBufferCommands = devices.sumOf { it.gpu.blitBufferCommands },
             blitPixels = devices.sumOf { it.gpu.blitPixels },
             blitSourceBytes = devices.sumOf { it.gpu.blitSourceBytes },
+            blitMonoCommands = devices.sumOf { it.gpu.blitMonoCommands },
+            blitMonoPixels = devices.sumOf { it.gpu.blitMonoPixels },
+            blitMonoSourceBytes = devices.sumOf { it.gpu.blitMonoSourceBytes },
             presentCommands = devices.sumOf { it.gpu.presentCommands },
             frames = devices.sumOf { it.gpu.frames },
             frameTiles = devices.sumOf { it.gpu.frameTiles },
             framePayloadBytes = devices.sumOf { it.gpu.framePayloadBytes },
+            frameMonoPayloadBytes = devices.sumOf { it.gpu.frameMonoPayloadBytes },
         )
 }
 
@@ -442,13 +453,16 @@ data class RuntimeProfilingSnapshot(
                 "    k16DisplayFrames: batches=${vm.k16GpuFrameBatches}, bytes=${vm.k16GpuFrameBytes}, frames=${vm.k16GpuFramesDecoded}",
             )
             appendLine(
-                "    k16DisplaySent: frames=${vm.k16DisplayFramesSent}, tiles=${vm.k16DisplayTilesSent}, payloadBytes=${vm.k16DisplayPayloadBytesSent}, operations=${vm.k16DisplayOperationsSent}",
+                "    k16DisplaySent: frames=${vm.k16DisplayFramesSent}, tiles=${vm.k16DisplayTilesSent}, " +
+                    "tilePayloadBytes=${vm.k16DisplayPayloadBytesSent}, monoPayloadBytes=${vm.k16DisplayMonoPayloadBytesSent}, " +
+                    "operations=${vm.k16DisplayOperationsSent}",
             )
             appendLine(
-                "    k16Gpu: blits=${k16.gpu.blitBufferCommands}, blitPixels=${k16.gpu.blitPixels}, " +
-                    "blitBytes=${k16.gpu.blitSourceBytes}, presents=${k16.gpu.presentCommands}, " +
-                    "frames=${k16.gpu.frames}, tiles=${k16.gpu.frameTiles}, " +
-                    "frameBytes=${k16.gpu.framePayloadBytes}",
+                "    k16Gpu: rawBlits=${k16.gpu.blitBufferCommands}, rawBlitPixels=${k16.gpu.blitPixels}, " +
+                    "rawBlitBytes=${k16.gpu.blitSourceBytes}, monoBlits=${k16.gpu.blitMonoCommands}, " +
+                    "monoPixels=${k16.gpu.blitMonoPixels}, monoSourceBytes=${k16.gpu.blitMonoSourceBytes}, " +
+                    "presents=${k16.gpu.presentCommands}, frames=${k16.gpu.frames}, tiles=${k16.gpu.frameTiles}, " +
+                    "tilePayloadBytes=${k16.gpu.framePayloadBytes}, monoPayloadBytes=${k16.gpu.frameMonoPayloadBytes}",
             )
             appendLine(
                 "    k16TextInput: events=${vm.k16TextInputEvents}, bytes=${vm.k16TextInputBytes}, time=${vm.k16TextInputNanos.nanos()}",
@@ -614,6 +628,7 @@ object NoOpRuntimeMetricsCollector : RuntimeMetricsCollector {
         tileCount: Int,
         payloadBytes: Int,
         operationCount: Int,
+        monoPayloadBytes: Int,
     ) = Unit
 
     override fun recordK16TextInput(
@@ -707,6 +722,7 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
     private val k16DisplayFramesSent = AtomicLong()
     private val k16DisplayTilesSent = AtomicLong()
     private val k16DisplayPayloadBytesSent = AtomicLong()
+    private val k16DisplayMonoPayloadBytesSent = AtomicLong()
     private val k16DisplayOperationsSent = AtomicLong()
     private val k16TextInputEvents = AtomicLong()
     private val k16TextInputBytes = AtomicLong()
@@ -885,12 +901,14 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
         tileCount: Int,
         payloadBytes: Int,
         operationCount: Int,
+        monoPayloadBytes: Int,
     ) {
         recordK16DisplayFramesSent(
             frameCount = 1,
             tileCount = tileCount,
             payloadBytes = payloadBytes,
             operationCount = operationCount,
+            monoPayloadBytes = monoPayloadBytes,
         )
     }
 
@@ -899,10 +917,12 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
         tileCount: Int,
         payloadBytes: Int,
         operationCount: Int,
+        monoPayloadBytes: Int,
     ) {
         k16DisplayFramesSent.addAndGet(frameCount.coerceAtLeast(0).toLong())
         k16DisplayTilesSent.addAndGet(tileCount.coerceAtLeast(0).toLong())
         k16DisplayPayloadBytesSent.addAndGet(payloadBytes.coerceAtLeast(0).toLong())
+        k16DisplayMonoPayloadBytesSent.addAndGet(monoPayloadBytes.coerceAtLeast(0).toLong())
         k16DisplayOperationsSent.addAndGet(operationCount.coerceAtLeast(0).toLong())
     }
 
@@ -999,6 +1019,7 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
                     k16DisplayFramesSent = k16DisplayFramesSent.get(),
                     k16DisplayTilesSent = k16DisplayTilesSent.get(),
                     k16DisplayPayloadBytesSent = k16DisplayPayloadBytesSent.get(),
+                    k16DisplayMonoPayloadBytesSent = k16DisplayMonoPayloadBytesSent.get(),
                     k16DisplayOperationsSent = k16DisplayOperationsSent.get(),
                     k16TextInputEvents = k16TextInputEvents.get(),
                     k16TextInputBytes = k16TextInputBytes.get(),
@@ -1098,10 +1119,14 @@ private fun NativeK16GpuStats.toRuntimeMetrics(): RuntimeK16GpuMetrics =
         blitBufferCommands = blitBufferCommands,
         blitPixels = blitPixels,
         blitSourceBytes = blitSourceBytes,
+        blitMonoCommands = blitMonoCommands,
+        blitMonoPixels = blitMonoPixels,
+        blitMonoSourceBytes = blitMonoSourceBytes,
         presentCommands = presentCommands,
         frames = frames,
         frameTiles = frameTiles,
         framePayloadBytes = framePayloadBytes,
+        frameMonoPayloadBytes = frameMonoPayloadBytes,
     )
 
 private fun NativeK16OsStats.toRuntimeMetrics(): RuntimeK16OsMetrics =

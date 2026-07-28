@@ -31,6 +31,7 @@ data class NativeDisplayFrameBatchSummary(
     val tileCount: Int,
     val payloadBytes: Int,
     val operationCount: Int,
+    val monoPayloadBytes: Int = 0,
 )
 
 object NativeDisplayFrameCodec {
@@ -111,18 +112,27 @@ object NativeDisplayFrameCodec {
             tileCount = scan.tileCount,
             payloadBytes = scan.payloadBytes,
             operationCount = scan.operationCount,
+            monoPayloadBytes = scan.monoPayloadBytes,
         )
     }
 
     private fun scanFrames(bytes: ByteArray): NativeFrameBatchScan {
         if (bytes.isEmpty()) {
-            return NativeFrameBatchScan(frameCount = 0, tileCount = 0, payloadBytes = 0, operationCount = 0, endOffset = 0)
+            return NativeFrameBatchScan(
+                frameCount = 0,
+                tileCount = 0,
+                payloadBytes = 0,
+                operationCount = 0,
+                monoPayloadBytes = 0,
+                endOffset = 0,
+            )
         }
         val input = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
         val frameCount = input.int
         var tileCountTotal = 0
         var payloadBytesTotal = 0
         var operationCountTotal = 0
+        var monoPayloadBytesTotal = 0
         repeat(frameCount) {
             input.position(input.position() + 4 + 8 + 4 + 4 + 1 + 1)
             val tileCount = input.int
@@ -154,6 +164,7 @@ object NativeDisplayFrameCodec {
                         require(payloadLength == packedMonoMaskLength(width, height)) {
                             "Native mono mask length $payloadLength does not match ${packedMonoMaskLength(width, height)}"
                         }
+                        monoPayloadBytesTotal += payloadLength
                         advancePayload(input, payloadLength)
                     }
 
@@ -168,6 +179,7 @@ object NativeDisplayFrameCodec {
             tileCount = tileCountTotal,
             payloadBytes = payloadBytesTotal,
             operationCount = operationCountTotal,
+            monoPayloadBytes = monoPayloadBytesTotal,
             endOffset = input.position(),
         )
     }
@@ -390,6 +402,7 @@ object NativeDisplayFrameCodec {
         val tileCount: Int,
         val payloadBytes: Int,
         val operationCount: Int,
+        val monoPayloadBytes: Int,
         val endOffset: Int,
     )
 

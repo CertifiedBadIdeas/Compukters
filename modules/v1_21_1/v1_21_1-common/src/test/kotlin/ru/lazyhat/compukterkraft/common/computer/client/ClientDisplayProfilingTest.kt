@@ -58,7 +58,8 @@ class ClientDisplayProfilingTest {
 
         assertTrue(buffer.apply(frame))
         assertTrue(buffer.swapIfDirty())
-        buffer.copyFrontSnapshotSince(uploadedVersion = 0)
+        buffer.copyFrontChangesSince(uploadedVersion = 0, destination = IntArray(4))
+        buffer.recordTextureUpload(regions = 1, pixels = 4, nanos = 7)
 
         val snapshot = metrics.snapshot()
         assertEquals(1, snapshot.framesApplied)
@@ -68,9 +69,14 @@ class ClientDisplayProfilingTest {
         assertEquals(1, snapshot.swapCalls)
         assertEquals(1, snapshot.snapshotsCopied)
         assertEquals(4, snapshot.snapshotPixels)
+        assertEquals(1, snapshot.textureUploads)
+        assertEquals(1, snapshot.textureRegionsUploaded)
+        assertEquals(4, snapshot.texturePixelsUploaded)
+        assertEquals(7, snapshot.textureUploadNanos)
         assertTrue(snapshot.applyNanos >= 0)
         assertTrue(snapshot.swapNanos >= 0)
         assertTrue(snapshot.snapshotCopyNanos >= 0)
+        assertTrue(snapshot.summary().contains("textureUpload: uploads=1, regions=1, pixels=4"))
     }
 
     @Test
@@ -100,6 +106,15 @@ class ClientDisplayProfilingTest {
                 operations =
                     listOf(
                         DisplayFrameOperation.FillRect(x = 0, y = 0, width = 1, height = 1, rgb565 = 0xFFFF),
+                        DisplayFrameOperation.MonoBlit(
+                            x = 0,
+                            y = 1,
+                            width = 2,
+                            height = 1,
+                            foregroundRgb565 = 0xffff,
+                            backgroundRgb565 = 0,
+                            packedMask = byteArrayOf(0x80.toByte()),
+                        ),
                     ),
             )
 
@@ -110,9 +125,10 @@ class ClientDisplayProfilingTest {
         assertEquals(1, snapshot.nativeFramesApplied)
         assertEquals(1, snapshot.nativeTilesApplied)
         assertEquals(8, snapshot.nativePayloadBytes)
-        assertEquals(1, snapshot.nativeOperationsApplied)
+        assertEquals(2, snapshot.nativeOperationsApplied)
+        assertEquals(1, snapshot.nativeMonoPayloadBytes)
         assertTrue(snapshot.nativeApplyNanos >= 0)
-        assertTrue(snapshot.summary().contains("nativeBatchApply: batches=1, frames=1, tiles=1, payloadBytes=8, operations=1"))
+        assertTrue(snapshot.summary().contains("monoPayloadBytes=1"))
     }
 
     @Test

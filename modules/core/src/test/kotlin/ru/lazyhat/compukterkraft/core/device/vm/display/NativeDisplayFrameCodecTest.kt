@@ -261,6 +261,7 @@ class NativeDisplayFrameCodecTest {
                 tileCount = 0,
                 payloadBytes = 0,
                 operationCount = 1,
+                monoPayloadBytes = 2,
             ),
             NativeDisplayFrameCodec.summarizeFrames(bytes),
         )

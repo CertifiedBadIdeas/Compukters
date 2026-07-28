@@ -292,6 +292,7 @@ class K16RuntimeDevice(
                     tileCount = batches.sumOf { it.summary.tileCount },
                     payloadBytes = batches.sumOf { it.summary.payloadBytes },
                     operationCount = batches.sumOf { it.summary.operationCount },
+                    monoPayloadBytes = batches.sumOf { it.summary.monoPayloadBytes },
                 ),
         )
     }
@@ -310,6 +311,7 @@ class K16RuntimeDevice(
                 tileCount = batch.summary.tileCount,
                 payloadBytes = batch.summary.payloadBytes,
                 operationCount = batch.summary.operationCount,
+                monoPayloadBytes = batch.summary.monoPayloadBytes,
             )
             sent = true
         }
@@ -318,11 +320,9 @@ class K16RuntimeDevice(
     }
 
     private class NativePendingDisplayBatch(
-        payload: ByteArray,
+        val payload: ByteArray,
         val summary: NativeDisplayFrameBatchSummary,
-    ) {
-        val payload: ByteArray = payload.copyOf()
-    }
+    )
 
     private class K16EndpointWorker(
         deviceId: Int,

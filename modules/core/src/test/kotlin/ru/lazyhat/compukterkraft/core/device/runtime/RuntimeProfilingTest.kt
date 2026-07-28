@@ -229,10 +229,14 @@ class RuntimeProfilingTest {
                                     blitBufferCommands = 22,
                                     blitPixels = 23,
                                     blitSourceBytes = 24,
-                                    presentCommands = 25,
-                                    frames = 26,
-                                    frameTiles = 27,
-                                    framePayloadBytes = 28,
+                                    blitMonoCommands = 25,
+                                    blitMonoPixels = 26,
+                                    blitMonoSourceBytes = 27,
+                                    presentCommands = 28,
+                                    frames = 29,
+                                    frameTiles = 30,
+                                    framePayloadBytes = 31,
+                                    frameMonoPayloadBytes = 32,
                                 ),
                         ),
                     ),
@@ -345,10 +349,14 @@ class RuntimeProfilingTest {
                 blitBufferCommands = 22,
                 blitPixels = 23,
                 blitSourceBytes = 24,
-                presentCommands = 25,
-                frames = 26,
-                frameTiles = 27,
-                framePayloadBytes = 28,
+                blitMonoCommands = 25,
+                blitMonoPixels = 26,
+                blitMonoSourceBytes = 27,
+                presentCommands = 28,
+                frames = 29,
+                frameTiles = 30,
+                framePayloadBytes = 31,
+                frameMonoPayloadBytes = 32,
             ),
             snapshot.k16.gpu,
         )
@@ -404,7 +412,9 @@ class RuntimeProfilingTest {
         )
         assertTrue(
             summary.contains(
-                "    k16Gpu: blits=22, blitPixels=23, blitBytes=24, presents=25, frames=26, tiles=27, frameBytes=28",
+                "    k16Gpu: rawBlits=22, rawBlitPixels=23, rawBlitBytes=24, monoBlits=25, " +
+                    "monoPixels=26, monoSourceBytes=27, presents=28, frames=29, tiles=30, " +
+                    "tilePayloadBytes=31, monoPayloadBytes=32",
             ),
             summary,
         )

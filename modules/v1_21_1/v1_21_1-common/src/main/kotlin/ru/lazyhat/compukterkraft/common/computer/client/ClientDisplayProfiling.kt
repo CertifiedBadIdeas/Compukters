@@ -46,6 +46,13 @@ interface ClientDisplayMetricsCollector {
         tileCount: Int,
         payloadBytes: Int,
         operationCount: Int,
+        monoPayloadBytes: Int,
+        nanos: Long,
+    )
+
+    fun recordTextureUpload(
+        regions: Int,
+        pixels: Int,
         nanos: Long,
     )
 
@@ -72,12 +79,18 @@ data class ClientDisplayProfilingSnapshot(
     val nativeTilesApplied: Long = 0,
     val nativePayloadBytes: Long = 0,
     val nativeOperationsApplied: Long = 0,
+    val nativeMonoPayloadBytes: Long = 0,
     val nativeApplyNanos: Long = 0,
+    val textureUploads: Long = 0,
+    val textureRegionsUploaded: Long = 0,
+    val texturePixelsUploaded: Long = 0,
+    val textureUploadNanos: Long = 0,
 ) {
     val averageApplyNanos: Long get() = average(applyNanos, framesReceived)
     val averageSwapNanos: Long get() = average(swapNanos, swapCalls)
     val averageSnapshotCopyNanos: Long get() = average(snapshotCopyNanos, snapshotsCopied)
     val averageNativeApplyNanos: Long get() = average(nativeApplyNanos, nativeBatchesApplied)
+    val averageTextureUploadNanos: Long get() = average(textureUploadNanos, textureUploads)
 
     fun summary(): String =
         buildString {
@@ -90,14 +103,19 @@ data class ClientDisplayProfilingSnapshot(
             appendLine(
                 "  nativeBatchApply: batches=$nativeBatchesApplied, frames=$nativeFramesApplied, " +
                     "tiles=$nativeTilesApplied, payloadBytes=$nativePayloadBytes, operations=$nativeOperationsApplied, " +
+                    "monoPayloadBytes=$nativeMonoPayloadBytes, " +
                     "time=$nativeApplyNanos ns, avg=$averageNativeApplyNanos ns",
             )
             appendLine(
                 "  swap: calls=$swapCalls, dirty=$dirtySwaps, time=$swapNanos ns, avg=$averageSwapNanos ns",
             )
-            append(
+            appendLine(
                 "  snapshotCopy: copies=$snapshotsCopied, regions=$snapshotRegions, pixels=$snapshotPixels, " +
                     "time=$snapshotCopyNanos ns, avg=$averageSnapshotCopyNanos ns",
+            )
+            append(
+                "  textureUpload: uploads=$textureUploads, regions=$textureRegionsUploaded, " +
+                    "pixels=$texturePixelsUploaded, time=$textureUploadNanos ns, avg=$averageTextureUploadNanos ns",
             )
         }
 }
@@ -126,6 +144,13 @@ object NoOpClientDisplayMetricsCollector : ClientDisplayMetricsCollector {
         tileCount: Int,
         payloadBytes: Int,
         operationCount: Int,
+        monoPayloadBytes: Int,
+        nanos: Long,
+    ) = Unit
+
+    override fun recordTextureUpload(
+        regions: Int,
+        pixels: Int,
         nanos: Long,
     ) = Unit
 
@@ -152,7 +177,12 @@ class RecordingClientDisplayMetricsCollector : ClientDisplayMetricsCollector {
     private val nativeTilesApplied = AtomicLong()
     private val nativePayloadBytes = AtomicLong()
     private val nativeOperationsApplied = AtomicLong()
+    private val nativeMonoPayloadBytes = AtomicLong()
     private val nativeApplyNanos = AtomicLong()
+    private val textureUploads = AtomicLong()
+    private val textureRegionsUploaded = AtomicLong()
+    private val texturePixelsUploaded = AtomicLong()
+    private val textureUploadNanos = AtomicLong()
 
     override fun recordApply(
         frame: DisplayFrameDelta,
@@ -201,6 +231,7 @@ class RecordingClientDisplayMetricsCollector : ClientDisplayMetricsCollector {
         tileCount: Int,
         payloadBytes: Int,
         operationCount: Int,
+        monoPayloadBytes: Int,
         nanos: Long,
     ) {
         nativeBatchesApplied.incrementAndGet()
@@ -208,7 +239,19 @@ class RecordingClientDisplayMetricsCollector : ClientDisplayMetricsCollector {
         nativeTilesApplied.addAndGet(tileCount.coerceAtLeast(0).toLong())
         nativePayloadBytes.addAndGet(payloadBytes.coerceAtLeast(0).toLong())
         nativeOperationsApplied.addAndGet(operationCount.coerceAtLeast(0).toLong())
+        nativeMonoPayloadBytes.addAndGet(monoPayloadBytes.coerceAtLeast(0).toLong())
         nativeApplyNanos.addAndGet(nanos.coerceAtLeast(0))
+    }
+
+    override fun recordTextureUpload(
+        regions: Int,
+        pixels: Int,
+        nanos: Long,
+    ) {
+        textureUploads.incrementAndGet()
+        textureRegionsUploaded.addAndGet(regions.coerceAtLeast(0).toLong())
+        texturePixelsUploaded.addAndGet(pixels.coerceAtLeast(0).toLong())
+        textureUploadNanos.addAndGet(nanos.coerceAtLeast(0))
     }
 
     override fun snapshot(): ClientDisplayProfilingSnapshot =
@@ -232,7 +275,12 @@ class RecordingClientDisplayMetricsCollector : ClientDisplayMetricsCollector {
             nativeTilesApplied = nativeTilesApplied.get(),
             nativePayloadBytes = nativePayloadBytes.get(),
             nativeOperationsApplied = nativeOperationsApplied.get(),
+            nativeMonoPayloadBytes = nativeMonoPayloadBytes.get(),
             nativeApplyNanos = nativeApplyNanos.get(),
+            textureUploads = textureUploads.get(),
+            textureRegionsUploaded = textureRegionsUploaded.get(),
+            texturePixelsUploaded = texturePixelsUploaded.get(),
+            textureUploadNanos = textureUploadNanos.get(),
         )
 }
 

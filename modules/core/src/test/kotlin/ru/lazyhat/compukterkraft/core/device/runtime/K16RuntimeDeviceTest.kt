@@ -52,6 +52,7 @@ import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class K16RuntimeDeviceTest {
@@ -562,6 +563,7 @@ class K16RuntimeDeviceTest {
         }
 
         assertEquals(1, displayNetwork.sentNativePayloads.size)
+        assertSame(encodedFrame, displayNetwork.sentNativePayloads.single().payload)
         assertContentEquals(encodedFrame, displayNetwork.sentNativePayloads.single().payload)
         assertEquals(listOf(frame), NativeDisplayFrameCodec.decodeFrames(displayNetwork.sentNativePayloads.single().payload))
         assertEquals(emptyList(), displayNetwork.sentFrames)
@@ -1296,7 +1298,7 @@ class K16RuntimeDeviceTest {
         }
 
         fun enqueueFramebufferFrames(bytes: ByteArray) {
-            gpuFrameBatches += bytes.copyOf()
+            gpuFrameBatches += bytes
         }
     }
 
@@ -1447,7 +1449,7 @@ class K16RuntimeDeviceTest {
             containerId: Int,
             payload: ByteArray,
         ) {
-            sentNativePayloads += SentNativePayload(playerUuid, containerId, payload.copyOf())
+            sentNativePayloads += SentNativePayload(playerUuid, containerId, payload)
         }
     }
 }
