@@ -131,6 +131,55 @@ fn blit_rgb565_rect_copies_pixel_rect_into_dirty_tiles() {
 }
 
 #[test]
+fn blit_mono_mask_emits_tight_operation_and_updates_canonical_pixels() {
+    let mut display = DisplayEngine::new(12, 8, 4, PixelFormat::Rgb565).unwrap();
+
+    display.blit_mono_mask(1, 1, 5, 2, &[0b1010_1000, 0b0101_0000], 0xffff, 0x001f);
+    let frame = display.present().expect("mono frame");
+
+    assert!(frame.tiles.is_empty());
+    assert_eq!(
+        frame.operations,
+        vec![DisplayFrameOperation::MonoBlit {
+            x: 1,
+            y: 1,
+            width: 5,
+            height: 2,
+            foreground_rgb565: 0xffff,
+            background_rgb565: 0x001f,
+            packed_mask: vec![0b1010_1000, 0b0101_0000],
+        }],
+    );
+
+    let refresh = display.full_refresh().expect("canonical refresh");
+    assert!(refresh.full_refresh);
+    assert!(refresh.operations.is_empty());
+    assert_eq!(refresh.tiles.len(), 1);
+    let payload = &refresh.tiles[0].payload;
+    let pixel = |x: usize, y: usize| {
+        let offset = (y * 8 + x) * 2;
+        u16::from_be_bytes([payload[offset], payload[offset + 1]])
+    };
+    assert_eq!(pixel(1, 1), 0xffff);
+    assert_eq!(pixel(2, 1), 0x001f);
+    assert_eq!(pixel(3, 1), 0xffff);
+    assert_eq!(pixel(1, 2), 0x001f);
+    assert_eq!(pixel(2, 2), 0xffff);
+}
+
+#[test]
+fn blit_mono_mask_drops_fully_covered_dirty_tiles() {
+    let mut display = DisplayEngine::new(13, 16, 16, PixelFormat::Rgb565).unwrap();
+
+    display.set_pixel(0, 0, 0xf800);
+    display.blit_mono_mask(0, 0, 16, 16, &[0xff; 32], 0x07e0, 0x0000);
+    let frame = display.present().expect("mono frame");
+
+    assert!(frame.tiles.is_empty());
+    assert_eq!(frame.operations.len(), 1);
+}
+
+#[test]
 fn fill_rect_after_dirty_pixels_emits_operation_and_drops_fully_covered_dirty_tile() {
     let mut display = DisplayEngine::new(9, 16, 16, PixelFormat::Rgb565).unwrap();
 

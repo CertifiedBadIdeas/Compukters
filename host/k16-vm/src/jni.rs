@@ -546,6 +546,25 @@ fn encode_display_frame_deltas(frames: &[DisplayFrameDelta]) -> Vec<u8> {
                     push_i32(&mut out, *dst_x);
                     push_i32(&mut out, *dst_y);
                 }
+                DisplayFrameOperation::MonoBlit {
+                    x,
+                    y,
+                    width,
+                    height,
+                    foreground_rgb565,
+                    background_rgb565,
+                    packed_mask,
+                } => {
+                    out.push(3);
+                    push_i32(&mut out, *x);
+                    push_i32(&mut out, *y);
+                    push_i32(&mut out, *width);
+                    push_i32(&mut out, *height);
+                    push_i32(&mut out, i32::from(*foreground_rgb565));
+                    push_i32(&mut out, i32::from(*background_rgb565));
+                    push_i32(&mut out, packed_mask.len() as i32);
+                    out.extend_from_slice(packed_mask);
+                }
             }
         }
     }
@@ -588,12 +607,54 @@ fn long_array_or_throw(env: &mut JNIEnv<'_>, values: &[jlong]) -> jlongArray {
 
 #[cfg(test)]
 mod tests {
-    use super::k16_computer_stats_snapshot_values;
+    use super::{encode_display_frame_deltas, k16_computer_stats_snapshot_values};
     use crate::computer::stats::{
         K16ComputerDecodeCacheStatsSnapshot, K16ComputerDeviceStats, K16ComputerGpuStatsSnapshot,
         K16ComputerOsStatsSnapshot, K16ComputerStatsSnapshot, K16ComputerStorageStatsSnapshot,
     };
+    use crate::display::{DisplayFrameDelta, DisplayFrameOperation, PixelFormat};
     use crate::low_bus::{MachineBusStatsSnapshot, MachineBusTrafficSnapshot};
+
+    #[test]
+    fn display_frame_encoder_uses_tag_three_for_tight_mono_masks() {
+        let encoded = encode_display_frame_deltas(&[DisplayFrameDelta {
+            display_id: 7,
+            sequence: 9,
+            width: 8,
+            height: 4,
+            pixel_format: PixelFormat::Rgb565,
+            full_refresh: false,
+            tiles: Vec::new(),
+            operations: vec![DisplayFrameOperation::MonoBlit {
+                x: 1,
+                y: 2,
+                width: 5,
+                height: 2,
+                foreground_rgb565: 0xffff,
+                background_rgb565: 0x001f,
+                packed_mask: vec![0b1010_1000, 0b0101_0000],
+            }],
+        }]);
+
+        assert_eq!(encoded.len(), 65);
+        assert_eq!(i32::from_le_bytes(encoded[0..4].try_into().unwrap()), 1);
+        assert_eq!(i32::from_le_bytes(encoded[30..34].try_into().unwrap()), 1);
+        assert_eq!(encoded[34], 3);
+        assert_eq!(i32::from_le_bytes(encoded[35..39].try_into().unwrap()), 1);
+        assert_eq!(i32::from_le_bytes(encoded[39..43].try_into().unwrap()), 2);
+        assert_eq!(i32::from_le_bytes(encoded[43..47].try_into().unwrap()), 5);
+        assert_eq!(i32::from_le_bytes(encoded[47..51].try_into().unwrap()), 2);
+        assert_eq!(
+            i32::from_le_bytes(encoded[51..55].try_into().unwrap()),
+            0xffff,
+        );
+        assert_eq!(
+            i32::from_le_bytes(encoded[55..59].try_into().unwrap()),
+            0x001f,
+        );
+        assert_eq!(i32::from_le_bytes(encoded[59..63].try_into().unwrap()), 2);
+        assert_eq!(&encoded[63..], &[0b1010_1000, 0b0101_0000]);
+    }
 
     #[test]
     fn k16_computer_stats_snapshot_values_encode_versioned_long_array() {
@@ -692,10 +753,14 @@ mod tests {
                     blit_buffer_commands: 34,
                     blit_pixels: 35,
                     blit_source_bytes: 36,
+                    blit_mono_commands: 0,
+                    blit_mono_pixels: 0,
+                    blit_mono_source_bytes: 0,
                     present_commands: 37,
                     frames: 38,
                     frame_tiles: 39,
                     frame_payload_bytes: 40,
+                    frame_mono_payload_bytes: 0,
                 },
             }],
         };

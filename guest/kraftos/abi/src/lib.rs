@@ -341,6 +341,7 @@ pub mod computer {
         pub const SEQUENCE_HIGH: u32 = 0x1000_053c;
         pub const SRC_X: u32 = 0x1000_0540;
         pub const SRC_Y: u32 = 0x1000_0544;
+        pub const BACKGROUND_COLOR: u32 = 0x1000_0548;
         pub const SIZE: u32 = 256;
 
         pub const PIXEL_FORMAT_RGB565: i32 = 1;
@@ -361,6 +362,7 @@ pub mod computer {
         pub const COMMAND_PRESENT: i32 = 3;
         pub const COMMAND_FILL_RECT: i32 = 4;
         pub const COMMAND_COPY_RECT: i32 = 5;
+        pub const COMMAND_BLIT_MONO_BUFFER: i32 = 6;
     }
 
     pub mod timer0 {
@@ -482,8 +484,10 @@ mod tests {
         assert_eq!(computer::gpu0::COMMAND, 0x1000_0510);
         assert_eq!(computer::gpu0::SRC_X, 0x1000_0540);
         assert_eq!(computer::gpu0::SRC_Y, 0x1000_0544);
+        assert_eq!(computer::gpu0::BACKGROUND_COLOR, 0x1000_0548);
         assert_eq!(computer::gpu0::COMMAND_FILL_RECT, 4);
         assert_eq!(computer::gpu0::COMMAND_COPY_RECT, 5);
+        assert_eq!(computer::gpu0::COMMAND_BLIT_MONO_BUFFER, 6);
         assert_eq!(computer::timer0::BASE, 0x1000_0600);
         assert_eq!(computer::timer0::VERSION, 0x1000_0600);
         assert_eq!(computer::timer0::GAME_TICKS_LOW, 0x1000_0604);
