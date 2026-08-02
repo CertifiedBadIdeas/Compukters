@@ -117,10 +117,19 @@ pub fn replace_draw_list(background: u16, commands: &[Vec<u8>]) -> Vec<u8> {
 }
 
 pub fn draw_mask_instances(mask_id: u32, instances_id: u32, count: u16) -> Vec<u8> {
+    draw_mask_instances_range(mask_id, instances_id, 0, count)
+}
+
+pub fn draw_mask_instances_range(
+    mask_id: u32,
+    instances_id: u32,
+    first: u16,
+    count: u16,
+) -> Vec<u8> {
     let mut body = Vec::new();
     u32_value(&mut body, mask_id);
     u32_value(&mut body, instances_id);
-    u16_value(&mut body, 0);
+    u16_value(&mut body, first);
     u16_value(&mut body, count);
     i16_value(&mut body, 0);
     i16_value(&mut body, 0);

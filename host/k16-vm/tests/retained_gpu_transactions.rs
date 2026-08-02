@@ -251,3 +251,32 @@ fn aggregate_resource_quotas_roll_back_the_whole_transaction() {
     assert_eq!(rejection.operation_index, 128);
     assert!(gpu.resources().is_empty());
 }
+
+#[test]
+fn representative_terminal_uses_exactly_40_504_authoritative_payload_bytes() {
+    let mut gpu = RetainedGpu::try_new().expect("gpu");
+    let atlas = vec![0u8; 128 * 128 / 8];
+    let records = vec![instance(0); 1_600];
+    committed(
+        gpu.submit(&packet(
+            0,
+            &[
+                create_mask(1, 128, 128, &atlas),
+                create_instances(2, &records),
+                replace_draw_list(
+                    0,
+                    &[
+                        draw_mask_instances_range(1, 2, 0, 800),
+                        draw_mask_instances_range(1, 2, 800, 800),
+                    ],
+                ),
+            ],
+        ))
+        .expect("terminal state"),
+    );
+
+    assert_eq!(gpu.resources()[0].value.payload_bytes(), 2_048);
+    assert_eq!(gpu.resources()[1].value.payload_bytes(), 38_400);
+    assert_eq!(gpu.draw_list().encoded_byte_len(), 56);
+    assert_eq!(gpu.authoritative_payload_bytes(), 40_504);
+}
