@@ -3,8 +3,8 @@ use super::{
     ResourceManifest, RetainedGpu,
 };
 
-const NETWORK_MAGIC: u32 = 0x5053_444b;
-const NETWORK_VERSION: u16 = 1;
+pub(super) const NETWORK_MAGIC: u32 = 0x5053_444b;
+pub(super) const NETWORK_VERSION: u16 = 1;
 const SNAPSHOT_KIND: u16 = 1;
 const DELTA_KIND: u16 = 2;
 
@@ -106,9 +106,20 @@ pub fn encode_delta(
     push_header(&mut bytes, DELTA_KIND, 0, computer_id, viewer_epoch)?;
     push_u64(&mut bytes, damage.base_sequence());
     push_u64(&mut bytes, damage.target_sequence());
+    let outer_change_count = damage
+        .changes()
+        .iter()
+        .try_fold(0usize, |count, change| {
+            count.checked_add(if matches!(change, ResourceDamage::Recreated { .. }) {
+                2
+            } else {
+                1
+            })
+        })
+        .ok_or(NetworkEncodeError::LengthOverflow)?;
     push_u32(
         &mut bytes,
-        u32::try_from(damage.changes().len()).map_err(|_| NetworkEncodeError::LengthOverflow)?,
+        u32::try_from(outer_change_count).map_err(|_| NetworkEncodeError::LengthOverflow)?,
     );
     push_u32(
         &mut bytes,
@@ -139,6 +150,16 @@ fn encode_resource_change(
             incarnation,
         } => {
             let entry = current_entry(gpu, *resource_id, *incarnation)?;
+            encode_resource(bytes, *resource_id, &entry.value)
+        }
+        ResourceDamage::Recreated {
+            resource_id,
+            dropped_incarnation: _,
+            created_incarnation,
+        } => {
+            push_envelope(bytes, 0x0020, 0, 12);
+            push_u32(bytes, *resource_id);
+            let entry = current_entry(gpu, *resource_id, *created_incarnation)?;
             encode_resource(bytes, *resource_id, &entry.value)
         }
         ResourceDamage::Dropped { resource_id, .. } => {

@@ -90,6 +90,11 @@ pub enum ResourceDamage {
         resource_id: u32,
         incarnation: u64,
     },
+    Recreated {
+        resource_id: u32,
+        dropped_incarnation: u64,
+        created_incarnation: u64,
+    },
     ImagePatches {
         resource_id: u32,
         incarnation: u64,
@@ -115,6 +120,7 @@ impl ResourceDamage {
     pub fn resource_id(&self) -> u32 {
         match self {
             Self::Created { resource_id, .. }
+            | Self::Recreated { resource_id, .. }
             | Self::ImagePatches { resource_id, .. }
             | Self::MaskPatches { resource_id, .. }
             | Self::InstancePatches { resource_id, .. }
@@ -168,6 +174,20 @@ impl CommittedDamage {
 
     pub fn descriptor_payload_bytes(&self) -> usize {
         0
+    }
+
+    pub(crate) fn descriptor_count(&self) -> usize {
+        self.changes
+            .iter()
+            .map(|change| match change {
+                ResourceDamage::ImagePatches { rectangles, .. }
+                | ResourceDamage::MaskPatches { rectangles, .. } => rectangles.len(),
+                ResourceDamage::InstancePatches { ranges, .. } => ranges.len(),
+                ResourceDamage::Created { .. }
+                | ResourceDamage::Recreated { .. }
+                | ResourceDamage::Dropped { .. } => 1,
+            })
+            .sum()
     }
 
     pub(crate) fn push_created(&mut self, resource_id: u32, incarnation: u64) {
@@ -277,6 +297,345 @@ impl CommittedDamage {
             .sort_unstable_by_key(ResourceDamage::resource_id);
         self
     }
+
+    pub(crate) fn try_clone_metadata(&self) -> Result<Self, RetainedGpuFault> {
+        let mut changes = Vec::new();
+        changes
+            .try_reserve_exact(self.changes.len())
+            .map_err(|_| RetainedGpuFault::Allocation)?;
+        for change in &self.changes {
+            changes.push(try_clone_change(change)?);
+        }
+        Ok(Self {
+            base_sequence: self.base_sequence,
+            target_sequence: self.target_sequence,
+            changes,
+            draw_list_replaced: self.draw_list_replaced,
+        })
+    }
+
+    pub(crate) fn try_merge(
+        &mut self,
+        next: &Self,
+        base: &ResourceManifest,
+        gpu: &RetainedGpu,
+    ) -> Result<(), RetainedGpuFault> {
+        if self.target_sequence != next.base_sequence || self.base_sequence != base.sequence() {
+            return Err(RetainedGpuFault::CorruptState);
+        }
+        for next_change in &next.changes {
+            merge_change(&mut self.changes, next_change, base)?;
+        }
+        self.target_sequence = next.target_sequence;
+        self.draw_list_replaced |= next.draw_list_replaced;
+        self.changes
+            .sort_unstable_by_key(ResourceDamage::resource_id);
+        collapse_fragmented_damage(&mut self.changes, gpu)?;
+        Ok(())
+    }
+}
+
+fn try_clone_change(change: &ResourceDamage) -> Result<ResourceDamage, RetainedGpuFault> {
+    Ok(match change {
+        ResourceDamage::Created {
+            resource_id,
+            incarnation,
+        } => ResourceDamage::Created {
+            resource_id: *resource_id,
+            incarnation: *incarnation,
+        },
+        ResourceDamage::Recreated {
+            resource_id,
+            dropped_incarnation,
+            created_incarnation,
+        } => ResourceDamage::Recreated {
+            resource_id: *resource_id,
+            dropped_incarnation: *dropped_incarnation,
+            created_incarnation: *created_incarnation,
+        },
+        ResourceDamage::ImagePatches {
+            resource_id,
+            incarnation,
+            rectangles,
+        } => ResourceDamage::ImagePatches {
+            resource_id: *resource_id,
+            incarnation: *incarnation,
+            rectangles: try_copy_descriptors(rectangles)?,
+        },
+        ResourceDamage::MaskPatches {
+            resource_id,
+            incarnation,
+            rectangles,
+        } => ResourceDamage::MaskPatches {
+            resource_id: *resource_id,
+            incarnation: *incarnation,
+            rectangles: try_copy_descriptors(rectangles)?,
+        },
+        ResourceDamage::InstancePatches {
+            resource_id,
+            incarnation,
+            ranges,
+        } => ResourceDamage::InstancePatches {
+            resource_id: *resource_id,
+            incarnation: *incarnation,
+            ranges: try_copy_descriptors(ranges)?,
+        },
+        ResourceDamage::Dropped {
+            resource_id,
+            incarnation,
+        } => ResourceDamage::Dropped {
+            resource_id: *resource_id,
+            incarnation: *incarnation,
+        },
+    })
+}
+
+fn try_copy_descriptors<T: Copy>(source: &[T]) -> Result<Vec<T>, RetainedGpuFault> {
+    let mut copy = Vec::new();
+    copy.try_reserve_exact(source.len())
+        .map_err(|_| RetainedGpuFault::Allocation)?;
+    copy.extend_from_slice(source);
+    Ok(copy)
+}
+
+fn merge_change(
+    changes: &mut Vec<ResourceDamage>,
+    next: &ResourceDamage,
+    base: &ResourceManifest,
+) -> Result<(), RetainedGpuFault> {
+    let resource_id = next.resource_id();
+    let existing_index = changes
+        .iter()
+        .position(|change| change.resource_id() == resource_id);
+    match next {
+        ResourceDamage::Created { incarnation, .. } => {
+            if let Some(index) = existing_index {
+                match changes[index] {
+                    ResourceDamage::Dropped {
+                        incarnation: dropped_incarnation,
+                        ..
+                    } => {
+                        changes[index] = ResourceDamage::Recreated {
+                            resource_id,
+                            dropped_incarnation,
+                            created_incarnation: *incarnation,
+                        };
+                    }
+                    _ => return Err(RetainedGpuFault::CorruptState),
+                }
+            } else if base.entry(resource_id).is_some() {
+                return Err(RetainedGpuFault::CorruptState);
+            } else {
+                changes
+                    .try_reserve(1)
+                    .map_err(|_| RetainedGpuFault::Allocation)?;
+                changes.push(try_clone_change(next)?);
+            }
+        }
+        ResourceDamage::Dropped { incarnation, .. } => {
+            if let Some(index) = existing_index {
+                match changes[index] {
+                    ResourceDamage::Created { .. } => {
+                        changes.remove(index);
+                    }
+                    ResourceDamage::Recreated {
+                        dropped_incarnation,
+                        ..
+                    } => {
+                        changes[index] = ResourceDamage::Dropped {
+                            resource_id,
+                            incarnation: dropped_incarnation,
+                        };
+                    }
+                    ResourceDamage::ImagePatches { .. }
+                    | ResourceDamage::MaskPatches { .. }
+                    | ResourceDamage::InstancePatches { .. } => {
+                        changes[index] = ResourceDamage::Dropped {
+                            resource_id,
+                            incarnation: *incarnation,
+                        };
+                    }
+                    ResourceDamage::Dropped { .. } => {
+                        return Err(RetainedGpuFault::CorruptState);
+                    }
+                }
+            } else {
+                changes
+                    .try_reserve(1)
+                    .map_err(|_| RetainedGpuFault::Allocation)?;
+                changes.push(try_clone_change(next)?);
+            }
+        }
+        ResourceDamage::ImagePatches {
+            incarnation,
+            rectangles,
+            ..
+        } => merge_patch_rectangles(
+            changes,
+            existing_index,
+            resource_id,
+            *incarnation,
+            rectangles,
+            true,
+        )?,
+        ResourceDamage::MaskPatches {
+            incarnation,
+            rectangles,
+            ..
+        } => merge_patch_rectangles(
+            changes,
+            existing_index,
+            resource_id,
+            *incarnation,
+            rectangles,
+            false,
+        )?,
+        ResourceDamage::InstancePatches {
+            incarnation,
+            ranges,
+            ..
+        } => {
+            if let Some(index) = existing_index {
+                match &mut changes[index] {
+                    ResourceDamage::Created { .. } | ResourceDamage::Recreated { .. } => {}
+                    ResourceDamage::InstancePatches {
+                        incarnation: current_incarnation,
+                        ranges: current_ranges,
+                        ..
+                    } if current_incarnation == incarnation => {
+                        for range in ranges {
+                            merge_range(current_ranges, *range)?;
+                        }
+                    }
+                    _ => return Err(RetainedGpuFault::CorruptState),
+                }
+            } else {
+                changes
+                    .try_reserve(1)
+                    .map_err(|_| RetainedGpuFault::Allocation)?;
+                changes.push(try_clone_change(next)?);
+            }
+        }
+        ResourceDamage::Recreated { .. } => return Err(RetainedGpuFault::CorruptState),
+    }
+    Ok(())
+}
+
+fn merge_patch_rectangles(
+    changes: &mut Vec<ResourceDamage>,
+    existing_index: Option<usize>,
+    resource_id: u32,
+    incarnation: u64,
+    rectangles: &[DamageRect],
+    image: bool,
+) -> Result<(), RetainedGpuFault> {
+    if let Some(index) = existing_index {
+        let current = &mut changes[index];
+        if matches!(
+            current,
+            ResourceDamage::Created { .. } | ResourceDamage::Recreated { .. }
+        ) {
+            return Ok(());
+        }
+        let (current_incarnation, current_rectangles) = match current {
+            ResourceDamage::ImagePatches {
+                incarnation,
+                rectangles,
+                ..
+            } if image => (incarnation, rectangles),
+            ResourceDamage::MaskPatches {
+                incarnation,
+                rectangles,
+                ..
+            } if !image => (incarnation, rectangles),
+            _ => return Err(RetainedGpuFault::CorruptState),
+        };
+        if *current_incarnation != incarnation {
+            return Err(RetainedGpuFault::CorruptState);
+        }
+        for rectangle in rectangles {
+            merge_rect(current_rectangles, *rectangle)?;
+        }
+    } else {
+        changes
+            .try_reserve(1)
+            .map_err(|_| RetainedGpuFault::Allocation)?;
+        changes.push(if image {
+            ResourceDamage::ImagePatches {
+                resource_id,
+                incarnation,
+                rectangles: try_copy_descriptors(rectangles)?,
+            }
+        } else {
+            ResourceDamage::MaskPatches {
+                resource_id,
+                incarnation,
+                rectangles: try_copy_descriptors(rectangles)?,
+            }
+        });
+    }
+    Ok(())
+}
+
+fn collapse_fragmented_damage(
+    changes: &mut [ResourceDamage],
+    gpu: &RetainedGpu,
+) -> Result<(), RetainedGpuFault> {
+    let total_patches = changes
+        .iter()
+        .map(|change| match change {
+            ResourceDamage::ImagePatches { rectangles, .. }
+            | ResourceDamage::MaskPatches { rectangles, .. } => rectangles.len(),
+            ResourceDamage::InstancePatches { ranges, .. } => ranges.len(),
+            _ => 0,
+        })
+        .sum::<usize>();
+    if total_patches <= 2_048 {
+        return Ok(());
+    }
+    for change in changes {
+        let resource_id = change.resource_id();
+        let entry = gpu
+            .resources()
+            .binary_search_by_key(&resource_id, |entry| entry.id)
+            .ok()
+            .map(|index| &gpu.resources()[index])
+            .ok_or(RetainedGpuFault::CorruptState)?;
+        match (change, &entry.value) {
+            (ResourceDamage::ImagePatches { rectangles, .. }, Resource::ImageRgb565(image)) => {
+                rectangles.clear();
+                rectangles.push(DamageRect {
+                    x: 0,
+                    y: 0,
+                    width: image.width(),
+                    height: image.height(),
+                });
+            }
+            (ResourceDamage::MaskPatches { rectangles, .. }, Resource::Mask1Bpp(mask)) => {
+                rectangles.clear();
+                rectangles.push(DamageRect {
+                    x: 0,
+                    y: 0,
+                    width: mask.width(),
+                    height: mask.height(),
+                });
+            }
+            (
+                ResourceDamage::InstancePatches { ranges, .. },
+                Resource::MaskInstanceBuffer(buffer),
+            ) => {
+                ranges.clear();
+                ranges.push(DamageRange {
+                    start_index: 0,
+                    count: buffer.capacity(),
+                });
+            }
+            (ResourceDamage::Created { .. } | ResourceDamage::Recreated { .. }, _)
+            | (ResourceDamage::Dropped { .. }, _) => {}
+            _ => return Err(RetainedGpuFault::CorruptState),
+        }
+    }
+    Ok(())
 }
 
 fn merge_range(ranges: &mut Vec<DamageRange>, next: DamageRange) -> Result<(), RetainedGpuFault> {
