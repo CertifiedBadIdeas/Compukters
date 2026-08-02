@@ -148,6 +148,10 @@ class K16ComputerRuntimeFactoryTest {
                 "k16ComputerMachineSnapshotNative",
                 "k16ComputerStatsSnapshotNative",
                 "pushK16ComputerSerialInputNative",
+                "attachK16ComputerRetainedDisplayViewerNative",
+                "detachK16ComputerRetainedDisplayViewerNative",
+                "acceptK16ComputerRetainedDisplayServerboundNative",
+                "drainK16ComputerRetainedDisplayPayloadNative",
                 "freeK16ComputerNative",
             )
         ) {

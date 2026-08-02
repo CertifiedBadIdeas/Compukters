@@ -537,6 +537,45 @@ object NativeVmBindings {
         return drainK16ComputerGpu0FramesNative(handle)
     }
 
+    fun attachK16ComputerRetainedDisplayViewer(
+        handle: Long,
+        viewerToken: Long,
+        computerId: Int,
+    ): Long {
+        require(handle != 0L) { "Native K16 computer handle is zero" }
+        require(viewerToken > 0) { "Retained display viewer token must be positive" }
+        require(computerId > 0) { "Retained display computer id must be positive" }
+        return attachK16ComputerRetainedDisplayViewerNative(handle, viewerToken, computerId)
+    }
+
+    fun detachK16ComputerRetainedDisplayViewer(
+        handle: Long,
+        viewerToken: Long,
+    ): Boolean {
+        require(handle != 0L) { "Native K16 computer handle is zero" }
+        require(viewerToken > 0) { "Retained display viewer token must be positive" }
+        return detachK16ComputerRetainedDisplayViewerNative(handle, viewerToken)
+    }
+
+    fun acceptK16ComputerRetainedDisplayServerbound(
+        handle: Long,
+        viewerToken: Long,
+        payload: ByteArray,
+    ): Int {
+        require(handle != 0L) { "Native K16 computer handle is zero" }
+        require(viewerToken > 0) { "Retained display viewer token must be positive" }
+        return acceptK16ComputerRetainedDisplayServerboundNative(handle, viewerToken, payload)
+    }
+
+    fun drainK16ComputerRetainedDisplayPayload(
+        handle: Long,
+        viewerToken: Long,
+    ): ByteArray {
+        require(handle != 0L) { "Native K16 computer handle is zero" }
+        require(viewerToken > 0) { "Retained display viewer token must be positive" }
+        return drainK16ComputerRetainedDisplayPayloadNative(handle, viewerToken)
+    }
+
     fun k16ComputerStorage0MediaSnapshot(handle: Long): ByteArray? {
         require(handle != 0L) { "Native K16 computer handle is zero" }
         return k16ComputerStorage0MediaSnapshotNative(handle).takeIf { it.isNotEmpty() }
@@ -648,6 +687,32 @@ object NativeVmBindings {
 
     @JvmStatic
     private external fun drainK16ComputerGpu0FramesNative(handle: Long): ByteArray
+
+    @JvmStatic
+    private external fun attachK16ComputerRetainedDisplayViewerNative(
+        handle: Long,
+        viewerToken: Long,
+        computerId: Int,
+    ): Long
+
+    @JvmStatic
+    private external fun detachK16ComputerRetainedDisplayViewerNative(
+        handle: Long,
+        viewerToken: Long,
+    ): Boolean
+
+    @JvmStatic
+    private external fun acceptK16ComputerRetainedDisplayServerboundNative(
+        handle: Long,
+        viewerToken: Long,
+        payload: ByteArray,
+    ): Int
+
+    @JvmStatic
+    private external fun drainK16ComputerRetainedDisplayPayloadNative(
+        handle: Long,
+        viewerToken: Long,
+    ): ByteArray
 
     @JvmStatic
     private external fun k16ComputerStorage0MediaSnapshotNative(handle: Long): ByteArray

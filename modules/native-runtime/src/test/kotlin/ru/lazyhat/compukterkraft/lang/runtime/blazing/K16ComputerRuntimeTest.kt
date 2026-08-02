@@ -257,6 +257,25 @@ class K16ComputerRuntimeTest {
     }
 
     @Test
+    fun forwardsRetainedViewerControlAndPayloadBytesWithoutDecoding() {
+        val bindings = EchoBindings()
+        bindings.retainedViewerEpoch = 77L
+        bindings.retainedPayload = byteArrayOf(0x4b, 0x44, 0x53, 0x50)
+        val runtime = K16ComputerRuntime(handle = 19L, bindings = bindings)
+        val serverbound = byteArrayOf(1, 2, 3, 4)
+
+        assertEquals(77L, runtime.attachRetainedDisplayViewer(viewerToken = 101L, computerId = 42))
+        assertEquals(2, runtime.acceptRetainedDisplayServerbound(viewerToken = 101L, payload = serverbound))
+        assertContentEquals(bindings.retainedPayload, runtime.drainRetainedDisplayPayload(viewerToken = 101L))
+        assertEquals(true, runtime.detachRetainedDisplayViewer(viewerToken = 101L))
+
+        assertEquals(listOf(Triple(19L, 101L, 42)), bindings.retainedViewerAttaches)
+        assertEquals(listOf(Triple(19L, 101L, serverbound.toList())), bindings.retainedServerbound)
+        assertEquals(listOf(19L to 101L), bindings.retainedPayloadDrains)
+        assertEquals(listOf(19L to 101L), bindings.retainedViewerDetaches)
+    }
+
+    @Test
     fun skipsNativeExecutionAfterHaltSignal() {
         val bindings = EchoBindings()
         bindings.control = NativeK16ComputerControl(status = 3, exitCode = 0, panicCode = 2)
@@ -425,6 +444,10 @@ class K16ComputerRuntimeTest {
         val machineSnapshotHandles = mutableListOf<Long>()
         val statsSnapshotHandles = mutableListOf<Long>()
         val advanceGameTickHandles = mutableListOf<Long>()
+        val retainedViewerAttaches = mutableListOf<Triple<Long, Long, Int>>()
+        val retainedViewerDetaches = mutableListOf<Pair<Long, Long>>()
+        val retainedServerbound = mutableListOf<Triple<Long, Long, List<Byte>>>()
+        val retainedPayloadDrains = mutableListOf<Pair<Long, Long>>()
         val callOrder = mutableListOf<String>()
         var gpuFrames: ByteArray = ByteArray(0)
         var storage0Media: ByteArray? = null
@@ -432,6 +455,8 @@ class K16ComputerRuntimeTest {
         var statsSnapshot: NativeK16ComputerStatsSnapshot = NativeK16ComputerStatsSnapshot()
         var control: NativeK16ComputerControl = NativeK16ComputerControl(status = 1, exitCode = 0, panicCode = 0)
         var signal: NativeK16ComputerSignal = NativeK16ComputerSignal.Pause
+        var retainedViewerEpoch: Long = 1L
+        var retainedPayload: ByteArray = ByteArray(0)
         val signals = ArrayDeque<NativeK16ComputerSignal>()
         var runUntilSignalCalls = 0
             private set
@@ -501,6 +526,40 @@ class K16ComputerRuntimeTest {
             }
 
         override fun drainGpu0Frames(handle: Long): ByteArray = gpuFrames.copyOf()
+
+        override fun attachRetainedDisplayViewer(
+            handle: Long,
+            viewerToken: Long,
+            computerId: Int,
+        ): Long {
+            retainedViewerAttaches += Triple(handle, viewerToken, computerId)
+            return retainedViewerEpoch
+        }
+
+        override fun detachRetainedDisplayViewer(
+            handle: Long,
+            viewerToken: Long,
+        ): Boolean {
+            retainedViewerDetaches += handle to viewerToken
+            return true
+        }
+
+        override fun acceptRetainedDisplayServerbound(
+            handle: Long,
+            viewerToken: Long,
+            payload: ByteArray,
+        ): Int {
+            retainedServerbound += Triple(handle, viewerToken, payload.toList())
+            return 2
+        }
+
+        override fun drainRetainedDisplayPayload(
+            handle: Long,
+            viewerToken: Long,
+        ): ByteArray {
+            retainedPayloadDrains += handle to viewerToken
+            return retainedPayload.copyOf()
+        }
 
         override fun storage0MediaSnapshot(handle: Long): ByteArray? = storage0Media?.copyOf()
 

@@ -4,6 +4,7 @@ use crate::computer::{
 use crate::display::DisplayFrameDelta;
 use crate::k16::K16Signal;
 use crate::k16e;
+use crate::retained_gpu::{RetainedDisplayHost, ServerboundOutcome, ServerboundRejection};
 use std::fs;
 use std::path::Path;
 
@@ -17,6 +18,7 @@ pub struct K16ComputerControl {
 pub struct K16ComputerHandle {
     machine: ComputerMachine,
     boot_cpu: CpuId,
+    retained_display: RetainedDisplayHost,
 }
 
 impl K16ComputerHandle {
@@ -27,7 +29,7 @@ impl K16ComputerHandle {
     ) -> Result<Self, String> {
         let (machine, boot_cpu) =
             ComputerMachine::from_k16_bios_flash(bios_flash, memory_size, max_steps)?;
-        Ok(Self { machine, boot_cpu })
+        Self::from_machine(machine, boot_cpu)
     }
 
     pub fn create_k16_bios_flash_with_storage0_media(
@@ -43,7 +45,7 @@ impl K16ComputerHandle {
         );
         let (machine, boot_cpu) =
             ComputerMachine::from_k16_bios_flash_with_profile(bios_flash, profile, max_steps)?;
-        Ok(Self { machine, boot_cpu })
+        Self::from_machine(machine, boot_cpu)
     }
 
     pub fn create_k16_bios_flash_with_storage0_path(
@@ -56,7 +58,7 @@ impl K16ComputerHandle {
             ComputerMachineProfile::computer_v1_with_storage0_path(memory_size, storage0_path);
         let (machine, boot_cpu) =
             ComputerMachine::from_k16_bios_flash_with_profile(bios_flash, profile, max_steps)?;
-        Ok(Self { machine, boot_cpu })
+        Self::from_machine(machine, boot_cpu)
     }
 
     pub fn restore_k16_bios_flash_snapshot_with_storage0_path(
@@ -75,7 +77,7 @@ impl K16ComputerHandle {
         let boot_cpu = machine
             .boot_cpu_id()
             .ok_or_else(|| "K16 computer snapshot has no boot CPU".to_string())?;
-        Ok(Self { machine, boot_cpu })
+        Self::from_machine(machine, boot_cpu)
     }
 
     pub fn create_k16_bios_flash_path_with_storage0_path(
@@ -124,8 +126,49 @@ impl K16ComputerHandle {
         self.machine.run_boot_k16_until_signal(self.boot_cpu)
     }
 
-    pub fn advance_game_tick(&mut self) {
+    pub fn advance_game_tick(&mut self) -> Result<(), String> {
         self.machine.advance_game_tick();
+        self.retained_display
+            .advance_tick()
+            .map_err(|error| error.to_string())
+    }
+
+    pub fn attach_retained_display_viewer(
+        &mut self,
+        viewer_token: u64,
+        computer_id: u32,
+    ) -> Result<u64, String> {
+        self.retained_display
+            .attach_viewer(viewer_token, computer_id)
+            .map_err(|error| error.to_string())
+    }
+
+    pub fn detach_retained_display_viewer(&mut self, viewer_token: u64) -> bool {
+        self.retained_display.detach_viewer(viewer_token)
+    }
+
+    pub fn accept_retained_display_serverbound(
+        &mut self,
+        viewer_token: u64,
+        payload: &[u8],
+    ) -> Result<i32, String> {
+        let outcome = self
+            .retained_display
+            .accept_serverbound(viewer_token, payload)
+            .map_err(|error| error.to_string())?;
+        Ok(match outcome {
+            ServerboundOutcome::Acknowledged => 1,
+            ServerboundOutcome::Resynchronized { .. } => 2,
+            ServerboundOutcome::Rejected(ServerboundRejection::UnknownViewer) => -1,
+            ServerboundOutcome::Rejected(ServerboundRejection::Malformed) => -2,
+            ServerboundOutcome::Rejected(ServerboundRejection::AckMismatch) => -3,
+        })
+    }
+
+    pub fn drain_retained_display_payload(&mut self, viewer_token: u64) -> Vec<u8> {
+        self.retained_display
+            .drain_payload(viewer_token)
+            .unwrap_or_default()
     }
 
     pub fn control(&self) -> K16ComputerControl {
@@ -235,5 +278,13 @@ impl K16ComputerHandle {
         self.machine
             .boot_handoff_k16_from_ram(executable.entry_pc, 2, max_steps)
             .map_err(|error| error.to_string())
+    }
+
+    fn from_machine(machine: ComputerMachine, boot_cpu: CpuId) -> Result<Self, String> {
+        Ok(Self {
+            machine,
+            boot_cpu,
+            retained_display: RetainedDisplayHost::try_new().map_err(|error| error.to_string())?,
+        })
     }
 }
