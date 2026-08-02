@@ -30,6 +30,16 @@ import kotlin.test.assertTrue
 
 class RetainedDisplayReplicaTest {
     @Test
+    fun snapshotReportsFullReplacementDamage() {
+        val installed =
+            assertIs<RetainedDisplayApplyResult.Installed>(
+                RetainedDisplayReplica().apply(snapshotImage(sequence = 1uL)),
+            )
+
+        assertIs<RetainedDisplayInstallDamage.FullReplacement>(installed.damage)
+    }
+
+    @Test
     fun appliesImagePatchAtomicallyAndPreservesLocalIdentity() {
         val replica = RetainedDisplayReplica()
         val installed = assertIs<RetainedDisplayApplyResult.Installed>(replica.apply(snapshotImage(sequence = 1uL)))
@@ -43,6 +53,13 @@ class RetainedDisplayReplicaTest {
         assertEquals(0x4321, after.pixelAt(0, 0))
         assertEquals(identity, patched.state.resource(1u)?.localIdentity)
         assertEquals(2uL, patched.state.sequence)
+
+        val damage = assertIs<RetainedDisplayInstallDamage.Delta>(patched.damage)
+        assertFalse(damage.drawListReplaced)
+        val imageDamage = assertIs<RetainedResourceDamage.ImagePatched>(damage.resourceChanges.single())
+        assertEquals(1u, imageDamage.resourceId)
+        assertEquals(identity, imageDamage.localIdentity)
+        assertEquals(listOf(RetainedPatchRectangle(0, 0, 1, 1)), imageDamage.rectangles)
     }
 
     @Test
@@ -105,6 +122,16 @@ class RetainedDisplayReplicaTest {
         assertNotEquals(oldResource.localIdentity, newResource.localIdentity)
         assertEquals(oldBinding.resourceId, newBinding.resourceId)
         assertEquals(newResource.localIdentity, newBinding.localIdentity)
+
+        val damage = assertIs<RetainedDisplayInstallDamage.Delta>(recreated.damage)
+        assertTrue(damage.drawListReplaced)
+        assertEquals(
+            listOf(
+                RetainedResourceDamage.Dropped(1u, oldResource.localIdentity),
+                RetainedResourceDamage.Created(1u, newResource.localIdentity),
+            ),
+            damage.resourceChanges,
+        )
     }
 
     @Test
@@ -148,6 +175,18 @@ class RetainedDisplayReplicaTest {
         assertEquals(0x07e0, patchedInstances.instances.single().foregroundRgb565)
         assertEquals(initialDraw.mask, patchedDraw.mask)
         assertEquals(initialDraw.instances, patchedDraw.instances)
+
+        val damage = assertIs<RetainedDisplayInstallDamage.Delta>(patched.damage)
+        assertFalse(damage.drawListReplaced)
+        assertEquals(2, damage.resourceChanges.size)
+        assertEquals(
+            listOf(RetainedPatchRectangle(0, 0, 1, 1)),
+            assertIs<RetainedResourceDamage.MaskPatched>(damage.resourceChanges[0]).rectangles,
+        )
+        assertEquals(
+            listOf(RetainedPatchRange(0, 1)),
+            assertIs<RetainedResourceDamage.InstancesPatched>(damage.resourceChanges[1]).ranges,
+        )
     }
 
     @Test
