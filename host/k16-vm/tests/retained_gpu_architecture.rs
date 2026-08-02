@@ -47,3 +47,41 @@ fn transaction_atomicity_does_not_clone_canonical_resources() {
         "validated existing-resource patches must commit through the resource's in-place API"
     );
 }
+
+#[test]
+fn retained_replication_has_no_framebuffer_translation_or_per_viewer_resource_copy() {
+    let handle = fs::read_to_string("src/computer/handle.rs").expect("computer handle source");
+    let replication =
+        fs::read_to_string("src/retained_gpu/replication.rs").expect("replication source");
+    let damage = fs::read_to_string("src/retained_gpu/damage.rs").expect("damage source");
+    let resource_damage = damage
+        .split("pub enum ResourceDamage")
+        .nth(1)
+        .and_then(|source| source.split("impl ResourceDamage").next())
+        .expect("resource damage declaration");
+
+    assert!(handle.contains("retained_display: RetainedDisplayHost"));
+    assert!(
+        !handle.contains("retained_display.submit"),
+        "the retained host must not receive framebuffer-derived submissions before #460"
+    );
+    for forbidden in ["DisplayFrame", "PixelFormat", "framebuffer", "gpu0_frames"] {
+        assert!(
+            !replication.contains(forbidden),
+            "replication must not depend on legacy display concept `{forbidden}`"
+        );
+    }
+    for forbidden in [
+        "Vec<u8>",
+        "Vec<u16>",
+        "ResourceEntry",
+        "ImageRgb565",
+        "Mask1Bpp",
+    ] {
+        assert!(
+            !resource_damage.contains(forbidden),
+            "per-viewer damage metadata must not own resource payload type `{forbidden}`"
+        );
+    }
+    assert!(damage.contains("pub fn descriptor_payload_bytes(&self) -> usize {\n        0\n    }"));
+}
