@@ -576,6 +576,12 @@ object NativeVmBindings {
         return drainK16ComputerRetainedDisplayPayloadNative(handle, viewerToken)
     }
 
+    fun drainK16ComputerRetainedDisplayPayloads(handle: Long): List<NativeRetainedDisplayPayload> {
+        require(handle != 0L) { "Native K16 computer handle is zero" }
+        val batch = drainK16ComputerRetainedDisplayPayloadsNative(handle) ?: return emptyList()
+        return decodeRetainedDisplayPayloadBatch(batch)
+    }
+
     fun k16ComputerStorage0MediaSnapshot(handle: Long): ByteArray? {
         require(handle != 0L) { "Native K16 computer handle is zero" }
         return k16ComputerStorage0MediaSnapshotNative(handle).takeIf { it.isNotEmpty() }
@@ -638,6 +644,55 @@ object NativeVmBindings {
         if (handle != 0L) {
             freeK16ComputerNative(handle)
         }
+    }
+
+    internal fun decodeRetainedDisplayPayloadBatch(batch: ByteArray): List<NativeRetainedDisplayPayload> {
+        var offset = 0
+
+        fun fail(): Nothing = error("Native retained display payload batch is malformed")
+
+        fun requireBytes(count: Int) {
+            if (count < 0 || offset > batch.size - count) fail()
+        }
+
+        fun readU16(): Int {
+            requireBytes(2)
+            val value = (batch[offset].toInt() and 0xff) or ((batch[offset + 1].toInt() and 0xff) shl 8)
+            offset += 2
+            return value
+        }
+
+        fun readU32(): Long {
+            requireBytes(4)
+            var value = 0L
+            repeat(4) { index -> value = value or ((batch[offset + index].toLong() and 0xff) shl (index * 8)) }
+            offset += 4
+            return value
+        }
+
+        fun readI64(): Long {
+            requireBytes(8)
+            var value = 0L
+            repeat(8) { index -> value = value or ((batch[offset + index].toLong() and 0xff) shl (index * 8)) }
+            offset += 8
+            return value
+        }
+
+        if (batch.size < 16 || readU32() != 0x4e52_444bL || readU16() != 1 || readU16() != 0) fail()
+        if (readU32() != batch.size.toLong()) fail()
+        val count = readU32().takeIf { it in 1..64 }?.toInt() ?: fail()
+        val payloads = ArrayList<NativeRetainedDisplayPayload>(count)
+        repeat(count) {
+            val viewerToken = readI64().takeIf { it > 0 } ?: fail()
+            val payloadLength = readU32().takeIf { it in 24..(512L * 1024L) }?.toInt() ?: fail()
+            if (readU32() != 0L) fail()
+            requireBytes(payloadLength)
+            val payload = batch.copyOfRange(offset, offset + payloadLength)
+            offset += payloadLength
+            payloads += NativeRetainedDisplayPayload(viewerToken, payload)
+        }
+        if (offset != batch.size) fail()
+        return payloads
     }
 
     private fun load(libraryPath: String) {
@@ -713,6 +768,9 @@ object NativeVmBindings {
         handle: Long,
         viewerToken: Long,
     ): ByteArray
+
+    @JvmStatic
+    private external fun drainK16ComputerRetainedDisplayPayloadsNative(handle: Long): ByteArray?
 
     @JvmStatic
     private external fun k16ComputerStorage0MediaSnapshotNative(handle: Long): ByteArray

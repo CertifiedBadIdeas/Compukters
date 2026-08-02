@@ -7,6 +7,10 @@ use super::{
 
 pub const MAX_VIEWERS: usize = 64;
 const ACK_DEADLINE_TICKS: u64 = 100;
+const DRAIN_BATCH_MAGIC: u32 = 0x4e52_444b;
+const DRAIN_BATCH_VERSION: u16 = 1;
+const DRAIN_BATCH_HEADER_BYTES: usize = 16;
+const DRAIN_BATCH_ENTRY_HEADER_BYTES: usize = 16;
 
 #[derive(Debug, thiserror::Error)]
 pub enum RetainedDisplayHostFault {
@@ -153,19 +157,60 @@ impl RetainedDisplayHost {
         Some(payload)
     }
 
+    pub fn drain_payload_batch(&mut self) -> Result<Option<Vec<u8>>, RetainedDisplayHostFault> {
+        let mut payload_count = 0usize;
+        let mut total_len = DRAIN_BATCH_HEADER_BYTES;
+        for viewer in &self.viewers {
+            let Some(payload) = viewer.outbound.as_ref() else {
+                continue;
+            };
+            payload_count = payload_count
+                .checked_add(1)
+                .ok_or(NetworkEncodeError::LengthOverflow)?;
+            total_len = total_len
+                .checked_add(DRAIN_BATCH_ENTRY_HEADER_BYTES)
+                .and_then(|length| length.checked_add(payload.len()))
+                .ok_or(NetworkEncodeError::LengthOverflow)?;
+        }
+        if payload_count == 0 {
+            return Ok(None);
+        }
+        let total_len_u32 =
+            u32::try_from(total_len).map_err(|_| NetworkEncodeError::LengthOverflow)?;
+        let payload_count_u32 =
+            u32::try_from(payload_count).map_err(|_| NetworkEncodeError::LengthOverflow)?;
+        let mut batch = Vec::new();
+        batch
+            .try_reserve_exact(total_len)
+            .map_err(|_| NetworkEncodeError::Allocation)?;
+        batch.extend_from_slice(&DRAIN_BATCH_MAGIC.to_le_bytes());
+        batch.extend_from_slice(&DRAIN_BATCH_VERSION.to_le_bytes());
+        batch.extend_from_slice(&0u16.to_le_bytes());
+        batch.extend_from_slice(&total_len_u32.to_le_bytes());
+        batch.extend_from_slice(&payload_count_u32.to_le_bytes());
+        for viewer in &mut self.viewers {
+            let Some(payload) = viewer.outbound.take() else {
+                continue;
+            };
+            let payload_len =
+                u32::try_from(payload.len()).map_err(|_| NetworkEncodeError::LengthOverflow)?;
+            batch.extend_from_slice(&viewer.token.to_le_bytes());
+            batch.extend_from_slice(&payload_len.to_le_bytes());
+            batch.extend_from_slice(&0u32.to_le_bytes());
+            batch.extend_from_slice(&payload);
+            if let Some(in_flight) = &mut viewer.in_flight {
+                in_flight.delivered = true;
+            }
+        }
+        debug_assert_eq!(batch.len(), total_len);
+        Ok(Some(batch))
+    }
+
     pub fn accept_serverbound(
         &mut self,
         token: u64,
         payload: &[u8],
     ) -> Result<ServerboundOutcome, RetainedDisplayHostFault> {
-        let Ok(index) = self
-            .viewers
-            .binary_search_by_key(&token, |viewer| viewer.token)
-        else {
-            return Ok(ServerboundOutcome::Rejected(
-                ServerboundRejection::UnknownViewer,
-            ));
-        };
         let message = match decode_serverbound(payload) {
             Ok(message) => message,
             Err(()) => {
@@ -173,6 +218,16 @@ impl RetainedDisplayHost {
                     ServerboundRejection::Malformed,
                 ));
             }
+        };
+        let Ok(index) = self
+            .viewers
+            .binary_search_by_key(&token, |viewer| viewer.token)
+        else {
+            return Ok(if matches!(message, ServerboundMessage::Resync { .. }) {
+                ServerboundOutcome::ReattachRequired
+            } else {
+                ServerboundOutcome::Rejected(ServerboundRejection::UnknownViewer)
+            });
         };
         let viewer = &self.viewers[index];
         let (computer_id, viewer_epoch) = match message {

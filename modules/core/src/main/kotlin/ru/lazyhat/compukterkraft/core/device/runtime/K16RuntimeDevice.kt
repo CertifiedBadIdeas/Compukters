@@ -30,6 +30,7 @@ import ru.lazyhat.compukterkraft.core.device.vm.display.NativeDisplayFrameCodec
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16ComputerEndpoint
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16ComputerControl
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16ComputerSignal
+import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeRetainedDisplayPayload
 import java.nio.ByteBuffer
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
@@ -254,7 +255,7 @@ class K16RuntimeDevice(
         val session = retainedDisplaySessions.attach(playerUuid, containerId, displayId)
         return try {
             current.attachRetainedDisplayViewer(session.viewerToken, deviceId)
-            flushRetainedDisplayPayload(current, session)
+            flushRetainedDisplayPayloads(current)
             true
         } catch (error: Throwable) {
             retainedDisplaySessions.detach(playerUuid, containerId, displayId)
@@ -277,10 +278,7 @@ class K16RuntimeDevice(
         return try {
             val outcome = current.acceptRetainedDisplayServerbound(viewerToken, payload)
             if (outcome > 0) {
-                retainedDisplaySessions
-                    .sessionsSnapshot()
-                    .firstOrNull { it.viewerToken == viewerToken }
-                    ?.let { flushRetainedDisplayPayload(current, it) }
+                flushRetainedDisplayPayloads(current)
                 true
             } else {
                 false
@@ -348,7 +346,9 @@ class K16RuntimeDevice(
     }
 
     private fun flushRetainedDisplayPayloads(current: K16EndpointWorker) {
-        for (session in retainedDisplaySessions.sessionsSnapshot()) {
+        while (true) {
+            val publication = current.pollRetainedDisplayPayload() ?: return
+            val session = retainedDisplaySessions.sessionForToken(publication.viewerToken) ?: continue
             if (!displayNetwork.isDisplaySessionStillBound(
                     session.playerUuid,
                     session.containerId,
@@ -359,17 +359,7 @@ class K16RuntimeDevice(
                 detachRetainedDisplaySession(session.playerUuid, session.containerId, session.displayId)
                 continue
             }
-            flushRetainedDisplayPayload(current, session)
-        }
-    }
-
-    private fun flushRetainedDisplayPayload(
-        current: K16EndpointWorker,
-        session: RetainedDisplaySession,
-    ) {
-        val payload = current.drainRetainedDisplayPayload(session.viewerToken)
-        if (payload.isNotEmpty()) {
-            displayNetwork.sendRetainedDisplayPayload(session.playerUuid, session.containerId, payload)
+            displayNetwork.sendRetainedDisplayPayload(session.playerUuid, session.containerId, publication.payload)
         }
     }
 
@@ -417,7 +407,7 @@ class K16RuntimeDevice(
     )
 
     private class K16EndpointWorker(
-        deviceId: Int,
+        private val deviceId: Int,
         private val endpointFactory: () -> K16ComputerEndpoint,
         private val metricsCollector: RuntimeMetricsCollector,
     ) : AutoCloseable {
@@ -435,6 +425,7 @@ class K16RuntimeDevice(
         private var outputCache: ByteArray = ByteArray(0)
 
         private val displayBatchCache = ConcurrentLinkedQueue<NativePendingDisplayBatch>()
+        private val retainedDisplayPayloadCache = ConcurrentLinkedQueue<NativeRetainedDisplayPayload>()
 
         @Volatile
         var terminalControlReached: Boolean = false
@@ -545,12 +536,7 @@ class K16RuntimeDevice(
             return response.join()
         }
 
-        fun drainRetainedDisplayPayload(viewerToken: Long): ByteArray {
-            check(!closed.get()) { "K16 endpoint worker is closed" }
-            val response = CompletableFuture<ByteArray>()
-            commands.offer(Command.DrainRetainedDisplayPayload(viewerToken, response))
-            return response.join()
-        }
+        fun pollRetainedDisplayPayload(): NativeRetainedDisplayPayload? = retainedDisplayPayloadCache.poll()
 
         override fun close() {
             if (closed.compareAndSet(false, true)) {
@@ -561,6 +547,7 @@ class K16RuntimeDevice(
 
         private fun runWorker() {
             var endpoint: K16ComputerEndpoint? = null
+            var retainedViewerTokens: MutableSet<Long>? = null
             try {
                 endpoint = endpointFactory()
                 refreshCaches(endpoint)
@@ -589,6 +576,9 @@ class K16RuntimeDevice(
                                 } else {
                                     metricsCollector.recordK16WaitIdleSkip()
                                 }
+                            }
+                            if (!retainedViewerTokens.isNullOrEmpty()) {
+                                captureRetainedDisplayPayloads(endpoint)
                             }
                         }
 
@@ -653,25 +643,32 @@ class K16RuntimeDevice(
 
                         is Command.AttachRetainedDisplayViewer -> {
                             complete(command.response) {
-                                endpoint.attachRetainedDisplayViewer(command.viewerToken, command.computerId)
+                                endpoint.attachRetainedDisplayViewer(command.viewerToken, command.computerId).also {
+                                    val tokens = retainedViewerTokens ?: linkedSetOf<Long>().also { retainedViewerTokens = it }
+                                    tokens += command.viewerToken
+                                    captureRetainedDisplayPayloads(endpoint)
+                                }
                             }
                         }
 
                         is Command.DetachRetainedDisplayViewer -> {
                             complete(command.response) {
-                                endpoint.detachRetainedDisplayViewer(command.viewerToken)
+                                endpoint.detachRetainedDisplayViewer(command.viewerToken).also {
+                                    retainedViewerTokens?.remove(command.viewerToken)
+                                    if (retainedViewerTokens?.isEmpty() == true) retainedViewerTokens = null
+                                }
                             }
                         }
 
                         is Command.AcceptRetainedDisplayServerbound -> {
                             complete(command.response) {
-                                endpoint.acceptRetainedDisplayServerbound(command.viewerToken, command.payload)
-                            }
-                        }
-
-                        is Command.DrainRetainedDisplayPayload -> {
-                            complete(command.response) {
-                                endpoint.drainRetainedDisplayPayload(command.viewerToken)
+                                val outcome =
+                                    endpoint.acceptRetainedDisplayServerbound(command.viewerToken, command.payload)
+                                if (outcome == 3) {
+                                    endpoint.attachRetainedDisplayViewer(command.viewerToken, deviceId)
+                                }
+                                captureRetainedDisplayPayloads(endpoint)
+                                outcome
                             }
                         }
 
@@ -701,6 +698,12 @@ class K16RuntimeDevice(
                 metricsCollector.recordK16WaitEnter()
             }
             return waitingForEvent
+        }
+
+        private fun captureRetainedDisplayPayloads(endpoint: K16ComputerEndpoint) {
+            for (payload in endpoint.drainRetainedDisplayPayloads()) {
+                retainedDisplayPayloadCache += payload
+            }
         }
 
         private inline fun recordTextInput(
@@ -795,11 +798,6 @@ class K16RuntimeDevice(
                 val viewerToken: Long,
                 val payload: ByteArray,
                 val response: CompletableFuture<Int>,
-            ) : Command
-
-            data class DrainRetainedDisplayPayload(
-                val viewerToken: Long,
-                val response: CompletableFuture<ByteArray>,
             ) : Command
 
             data object Close : Command

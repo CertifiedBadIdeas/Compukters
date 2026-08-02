@@ -85,6 +85,9 @@ class RetainedDisplayArchitectureTest {
             assertFalse(bridge.contains(forbidden), "server bridge must not own or decode $forbidden")
         }
         assertTrue(runtime.contains("sendRetainedDisplayPayload"))
+        assertTrue(runtime.contains("pollRetainedDisplayPayload"))
+        assertFalse(runtime.contains("Command.DrainRetainedDisplayPayload"))
+        assertFalse(runtime.contains("retainedDisplaySessions.sessionsSnapshot()"))
         assertTrue(bridge.contains("fun sendRetainedDisplayPayload"))
     }
 }

@@ -210,6 +210,52 @@ fn unacknowledged_viewer_times_out_after_100_ticks() {
             .expect("unknown"),
         ServerboundOutcome::Rejected(ServerboundRejection::UnknownViewer),
     );
+
+    let request =
+        encode_resync_request(42, 1, Some(0), ResyncReason::ReplicaStateLost).expect("resync");
+    assert_eq!(
+        host.accept_serverbound(11, &request)
+            .expect("reattach request"),
+        ServerboundOutcome::ReattachRequired,
+    );
+    let mut malformed = request;
+    malformed[36] = 1;
+    assert_eq!(
+        host.accept_serverbound(11, &malformed)
+            .expect("malformed request"),
+        ServerboundOutcome::Rejected(ServerboundRejection::Malformed),
+    );
+}
+
+#[test]
+fn batched_drain_is_all_or_none_and_allocates_nothing_when_idle() {
+    let mut host = RetainedDisplayHost::try_new().expect("host");
+
+    let idle = host.drain_payload_batch().expect("idle drain");
+    assert!(idle.is_none());
+
+    host.attach_viewer(11, 42).expect("attach a");
+    host.attach_viewer(12, 42).expect("attach b");
+    let batch = host
+        .drain_payload_batch()
+        .expect("payload drain")
+        .expect("payload batch");
+
+    assert_eq!(&batch[0..4], b"KDRN");
+    assert_eq!(u16_at(&batch, 4), 1);
+    assert_eq!(u32_at(&batch, 8) as usize, batch.len());
+    assert_eq!(u32_at(&batch, 12), 2);
+    assert_eq!(u64_at(&batch, 16), 11);
+    let first_len = u32_at(&batch, 24) as usize;
+    let second_offset = 32 + first_len;
+    assert_eq!(u64_at(&batch, second_offset), 12);
+    assert_eq!(u32_at(&batch, second_offset + 12), 0);
+    assert_eq!(
+        host.accept_serverbound(11, &encode_ack(42, 1, 0).expect("ack"))
+            .expect("batched delivery ack"),
+        ServerboundOutcome::Acknowledged,
+    );
+    assert!(host.drain_payload_batch().expect("drained idle").is_none());
 }
 
 #[test]

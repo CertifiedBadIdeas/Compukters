@@ -261,18 +261,44 @@ class K16ComputerRuntimeTest {
         val bindings = EchoBindings()
         bindings.retainedViewerEpoch = 77L
         bindings.retainedPayload = byteArrayOf(0x4b, 0x44, 0x53, 0x50)
+        bindings.retainedPayloadBatch = listOf(NativeRetainedDisplayPayload(101L, byteArrayOf(9, 8, 7)))
         val runtime = K16ComputerRuntime(handle = 19L, bindings = bindings)
         val serverbound = byteArrayOf(1, 2, 3, 4)
 
         assertEquals(77L, runtime.attachRetainedDisplayViewer(viewerToken = 101L, computerId = 42))
         assertEquals(2, runtime.acceptRetainedDisplayServerbound(viewerToken = 101L, payload = serverbound))
         assertContentEquals(bindings.retainedPayload, runtime.drainRetainedDisplayPayload(viewerToken = 101L))
+        val batched = runtime.drainRetainedDisplayPayloads().single()
+        assertEquals(101L, batched.viewerToken)
+        assertContentEquals(byteArrayOf(9, 8, 7), batched.payload)
         assertEquals(true, runtime.detachRetainedDisplayViewer(viewerToken = 101L))
 
         assertEquals(listOf(Triple(19L, 101L, 42)), bindings.retainedViewerAttaches)
         assertEquals(listOf(Triple(19L, 101L, serverbound.toList())), bindings.retainedServerbound)
         assertEquals(listOf(19L to 101L), bindings.retainedPayloadDrains)
         assertEquals(listOf(19L to 101L), bindings.retainedViewerDetaches)
+    }
+
+    @Test
+    fun validatesNativeRetainedPayloadBatchEnvelope() {
+        val payload = ByteArray(24) { it.toByte() }
+        val batch = ByteArray(32 + payload.size)
+        putU32(batch, 0, 0x4e52_444b)
+        putU16(batch, 4, 1)
+        putU32(batch, 8, batch.size)
+        putU32(batch, 12, 1)
+        putU64(batch, 16, 101L)
+        putU32(batch, 24, payload.size)
+        payload.copyInto(batch, 32)
+
+        val decoded = NativeVmBindings.decodeRetainedDisplayPayloadBatch(batch).single()
+        assertEquals(101L, decoded.viewerToken)
+        assertContentEquals(payload, decoded.payload)
+
+        batch[28] = 1
+        assertFailsWith<IllegalStateException> {
+            NativeVmBindings.decodeRetainedDisplayPayloadBatch(batch)
+        }
     }
 
     @Test
@@ -457,6 +483,7 @@ class K16ComputerRuntimeTest {
         var signal: NativeK16ComputerSignal = NativeK16ComputerSignal.Pause
         var retainedViewerEpoch: Long = 1L
         var retainedPayload: ByteArray = ByteArray(0)
+        var retainedPayloadBatch: List<NativeRetainedDisplayPayload> = emptyList()
         val signals = ArrayDeque<NativeK16ComputerSignal>()
         var runUntilSignalCalls = 0
             private set
@@ -561,6 +588,8 @@ class K16ComputerRuntimeTest {
             return retainedPayload.copyOf()
         }
 
+        override fun drainRetainedDisplayPayloads(handle: Long): List<NativeRetainedDisplayPayload> = retainedPayloadBatch
+
         override fun storage0MediaSnapshot(handle: Long): ByteArray? = storage0Media?.copyOf()
 
         override fun machineSnapshot(handle: Long): ByteArray {
@@ -576,6 +605,31 @@ class K16ComputerRuntimeTest {
         override fun free(handle: Long) {
             freedHandles += handle
         }
+    }
+
+    private fun putU16(
+        bytes: ByteArray,
+        offset: Int,
+        value: Int,
+    ) {
+        bytes[offset] = value.toByte()
+        bytes[offset + 1] = (value ushr 8).toByte()
+    }
+
+    private fun putU32(
+        bytes: ByteArray,
+        offset: Int,
+        value: Int,
+    ) {
+        repeat(4) { index -> bytes[offset + index] = (value ushr (index * 8)).toByte() }
+    }
+
+    private fun putU64(
+        bytes: ByteArray,
+        offset: Int,
+        value: Long,
+    ) {
+        repeat(8) { index -> bytes[offset + index] = (value ushr (index * 8)).toByte() }
     }
 
     private data class KeyboardKeyDown(

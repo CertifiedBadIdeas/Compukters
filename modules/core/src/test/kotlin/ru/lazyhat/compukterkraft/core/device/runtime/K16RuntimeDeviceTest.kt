@@ -28,6 +28,7 @@ import ru.lazyhat.compukterkraft.core.device.runtime.ports.DisplayNetworkBridge
 import ru.lazyhat.compukterkraft.core.device.vm.display.NativeDisplayFrameCodec
 import ru.lazyhat.compukterkraft.core.input.KeyCodes
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16ComputerEndpoint
+import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeRetainedDisplayPayload
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16ComputerTickResult
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16BusTraffic
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16ComputerControl
@@ -245,7 +246,7 @@ class K16RuntimeDeviceTest {
             )
         val playerUuid = UUID.fromString("00000000-0000-0000-0000-000000000073")
         val callerThreadId = Thread.currentThread().id
-        endpoint.retainedPayloads += byteArrayOf(0x4b, 0x44, 0x53, 0x50)
+        endpoint.retainedPayloads += NativeRetainedDisplayPayload(1L, byteArrayOf(0x4b, 0x44, 0x53, 0x50))
 
         device.turnOn()
 
@@ -260,7 +261,7 @@ class K16RuntimeDeviceTest {
         val serverbound = byteArrayOf(1, 2, 3, 4)
         assertFalse(device.acceptRetainedDisplayServerbound(playerUuid, containerId = 40, displayId = 9, payload = serverbound))
         endpoint.retainedServerboundOutcome = 2
-        endpoint.retainedPayloads += byteArrayOf(9, 8, 7)
+        endpoint.retainedPayloads += NativeRetainedDisplayPayload(1L, byteArrayOf(9, 8, 7))
         assertTrue(device.acceptRetainedDisplayServerbound(playerUuid, containerId = 41, displayId = 9, payload = serverbound))
         assertEquals(listOf(1L to serverbound.toList()), endpoint.retainedServerbound)
         assertEquals(
@@ -268,7 +269,10 @@ class K16RuntimeDeviceTest {
             displayNetwork.sentRetainedPayloads.last(),
         )
 
-        endpoint.retainedPayloads += byteArrayOf(6, 5, 4)
+        endpoint.retainedPayloads += NativeRetainedDisplayPayload(1L, byteArrayOf(6, 5, 4))
+        val drainCallsBeforeTick = endpoint.retainedPayloadBatchDrainCalls
+        device.serverTick()
+        waitUntil { endpoint.retainedPayloadBatchDrainCalls > drainCallsBeforeTick }
         device.serverTick()
         assertEquals(
             SentNativePayload(playerUuid, 41, byteArrayOf(6, 5, 4)),
@@ -278,6 +282,45 @@ class K16RuntimeDeviceTest {
         assertFalse(device.detachRetainedDisplaySession(playerUuid, containerId = 40, displayId = 9))
         assertTrue(device.detachRetainedDisplaySession(playerUuid, containerId = 41, displayId = 9))
         assertEquals(listOf(1L), endpoint.retainedViewerDetaches)
+        device.shutdown()
+    }
+
+    @Test
+    fun idleRetainedViewersUseOneWorkerBatchDrainAndTimedOutResyncReattaches() {
+        val endpoint = RecordingK16Endpoint()
+        val displayNetwork = RecordingDisplayNetworkBridge()
+        val device =
+            K16RuntimeDevice(
+                deviceId = 73,
+                properties = DeviceProperties(DeviceFamily.NORMAL, label = "K16"),
+                endpointFactory = { endpoint },
+                stateSink = {},
+                displayNetwork = displayNetwork,
+            )
+        val first = UUID.fromString("00000000-0000-0000-0000-000000000071")
+        val second = UUID.fromString("00000000-0000-0000-0000-000000000072")
+
+        device.turnOn()
+        assertTrue(device.attachRetainedDisplaySession(first, containerId = 41, displayId = 9))
+        assertTrue(device.attachRetainedDisplaySession(second, containerId = 42, displayId = 9))
+        endpoint.retainedPayloadBatchDrainCalls = 0
+
+        device.serverTick()
+        waitUntil { endpoint.tickCalls == 1 }
+        assertEquals(1, endpoint.retainedPayloadBatchDrainCalls)
+
+        endpoint.retainedServerboundOutcome = 3
+        endpoint.retainedPayloads += NativeRetainedDisplayPayload(1L, byteArrayOf(9, 8, 7))
+        assertTrue(
+            device.acceptRetainedDisplayServerbound(
+                first,
+                containerId = 41,
+                displayId = 9,
+                payload = byteArrayOf(1, 2, 3),
+            ),
+        )
+        assertEquals(listOf(1L to 73, 2L to 73, 1L to 73), endpoint.retainedViewerAttaches)
+        assertEquals(SentNativePayload(first, 41, byteArrayOf(9, 8, 7)), displayNetwork.sentRetainedPayloads.last())
         device.shutdown()
     }
 
@@ -1244,7 +1287,9 @@ class K16RuntimeDeviceTest {
         val retainedViewerDetaches: MutableList<Long> = Collections.synchronizedList(mutableListOf())
         val retainedServerbound: MutableList<Pair<Long, List<Byte>>> = Collections.synchronizedList(mutableListOf())
         val retainedCallThreadIds: MutableList<Long> = Collections.synchronizedList(mutableListOf())
-        val retainedPayloads = ArrayDeque<ByteArray>()
+        val retainedPayloads = ArrayDeque<NativeRetainedDisplayPayload>()
+        @Volatile
+        var retainedPayloadBatchDrainCalls = 0
         var retainedServerboundOutcome = 1
         @Volatile
         var tickCalls = 0
@@ -1362,7 +1407,14 @@ class K16RuntimeDeviceTest {
 
         override fun drainRetainedDisplayPayload(viewerToken: Long): ByteArray {
             retainedCallThreadIds += Thread.currentThread().id
-            return if (retainedPayloads.isEmpty()) ByteArray(0) else retainedPayloads.removeFirst()
+            return retainedPayloads.firstOrNull { it.viewerToken == viewerToken }?.payload ?: ByteArray(0)
+        }
+
+        override fun drainRetainedDisplayPayloads(): List<NativeRetainedDisplayPayload> {
+            retainedPayloadBatchDrainCalls += 1
+            return buildList {
+                while (retainedPayloads.isNotEmpty()) add(retainedPayloads.removeFirst())
+            }
         }
 
         override fun clearOutput() = Unit

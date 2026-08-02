@@ -40,8 +40,10 @@ class RetainedDisplaySessionTrackerTest {
         assertEquals(first.viewerToken, reopened.viewerToken)
         assertNull(tracker.authorize(firstPlayer, containerId = 11, displayId = 4))
         assertEquals(1L, tracker.authorize(firstPlayer, containerId = 13, displayId = 4))
+        assertEquals(reopened, tracker.sessionForToken(1L))
         assertNull(tracker.detach(firstPlayer, containerId = 11, displayId = 4))
         assertEquals(1L, tracker.detach(firstPlayer, containerId = 13, displayId = 4))
         assertNull(tracker.authorize(firstPlayer, containerId = 13, displayId = 4))
+        assertNull(tracker.sessionForToken(1L))
     }
 }
