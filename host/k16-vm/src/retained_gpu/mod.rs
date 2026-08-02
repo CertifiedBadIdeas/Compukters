@@ -3,7 +3,9 @@ mod draw_list;
 mod network;
 #[allow(dead_code)] // Wired into the transaction engine in the next implementation task.
 mod packet;
+mod replication;
 mod resource;
+mod serverbound;
 mod transaction;
 
 pub use draw_list::{
@@ -12,9 +14,13 @@ pub use draw_list::{
 };
 pub use network::{encode_delta, encode_snapshot, NetworkEncodeError, MAX_NETWORK_MESSAGE_BYTES};
 pub use packet::ResultCode;
+pub use replication::{RetainedDisplayHost, RetainedDisplayHostFault, MAX_VIEWERS};
 pub use resource::{
     ImageRgb565, Mask1Bpp, MaskInstance, MaskInstanceBuffer, MaskInstanceRecord, Resource,
     ResourceValidationError, MASK_INSTANCE_OPAQUE_BACKGROUND,
+};
+pub use serverbound::{
+    encode_ack, encode_resync_request, ResyncReason, ServerboundOutcome, ServerboundRejection,
 };
 pub use transaction::{
     DamageSubmissionOutcome, GuestRejection, RetainedGpu, RetainedGpuFault, SubmissionOutcome,
