@@ -73,6 +73,7 @@ fn rejection_rolls_back_every_counter_and_resource_change() {
     };
     assert_eq!(rejection.code, ResultCode::OutOfBounds);
     assert_eq!(rejection.operation_index, 1);
+    assert_eq!(rejection.byte_offset, 56);
     assert_eq!(gpu.commit_sequence(), 0);
     assert!(gpu.resources().is_empty());
 
@@ -163,6 +164,7 @@ fn per_resource_payload_quota_rejects_before_allocation() {
         panic!("expected rejection");
     };
     assert_eq!(rejection.code, ResultCode::QuotaExceeded);
+    assert_eq!(rejection.byte_offset, 38);
     assert_eq!(gpu.commit_sequence(), 0);
 }
 
@@ -215,8 +217,52 @@ fn invalid_final_draw_list_rolls_back_preceding_resource_creation() {
     };
     assert_eq!(rejection.code, ResultCode::InvalidDrawList);
     assert_eq!(rejection.operation_index, 1);
+    assert_eq!(rejection.byte_offset, 68);
     assert!(gpu.resources().is_empty());
     assert_eq!(gpu.commit_sequence(), 0);
+}
+
+#[test]
+fn invalid_draw_geometry_reports_the_exact_nested_field() {
+    let mut gpu = RetainedGpu::try_new().expect("gpu");
+    let outcome = gpu
+        .submit(&packet(
+            0,
+            &[
+                create_image(1, 1, 1, &[0]),
+                replace_draw_list(0, &[draw_image(1, 2, 1)]),
+            ],
+        ))
+        .expect("guest rejection");
+
+    let SubmissionOutcome::Rejected(rejection) = outcome else {
+        panic!("expected rejection");
+    };
+    assert_eq!(rejection.code, ResultCode::InvalidDrawList);
+    assert_eq!(rejection.operation_index, 1);
+    assert_eq!(rejection.byte_offset, 76);
+    assert!(gpu.resources().is_empty());
+}
+
+#[test]
+fn unclosed_clip_reports_the_unmatched_push_command() {
+    let mut gpu = RetainedGpu::try_new().expect("gpu");
+    let outcome = gpu
+        .submit(&packet(
+            0,
+            &[
+                create_image(1, 1, 1, &[0]),
+                replace_draw_list(0, &[push_clip(1, 1), draw_image(1, 1, 1)]),
+            ],
+        ))
+        .expect("guest rejection");
+
+    let SubmissionOutcome::Rejected(rejection) = outcome else {
+        panic!("expected rejection");
+    };
+    assert_eq!(rejection.code, ResultCode::InvalidDrawList);
+    assert_eq!(rejection.operation_index, 1);
+    assert_eq!(rejection.byte_offset, 60);
 }
 
 #[test]
@@ -279,4 +325,78 @@ fn representative_terminal_uses_exactly_40_504_authoritative_payload_bytes() {
     assert_eq!(gpu.resources()[1].value.payload_bytes(), 38_400);
     assert_eq!(gpu.draw_list().encoded_byte_len(), 56);
     assert_eq!(gpu.authoritative_payload_bytes(), 40_504);
+}
+
+#[test]
+fn resource_only_instance_patch_must_keep_the_installed_draw_list_valid() {
+    let mut gpu = RetainedGpu::try_new().expect("gpu");
+    committed(
+        gpu.submit(&packet(
+            0,
+            &[
+                create_mask(1, 8, 8, &[0xff; 8]),
+                create_instances(2, &[instance(0)]),
+                replace_draw_list(0, &[draw_mask_instances(1, 2, 1)]),
+            ],
+        ))
+        .expect("initial state"),
+    );
+
+    let outcome = gpu
+        .submit(&packet(
+            1,
+            &[
+                patch_instances(2, 0, &[instance(0)]),
+                patch_instances(2, 0, &[instance(8)]),
+            ],
+        ))
+        .expect("guest rejection");
+
+    let SubmissionOutcome::Rejected(rejection) = outcome else {
+        panic!("expected rejection");
+    };
+    assert_eq!(rejection.code, ResultCode::InvalidDrawList);
+    assert_eq!(rejection.operation_index, 1);
+    assert_eq!(rejection.byte_offset, 80);
+    assert_eq!(gpu.commit_sequence(), 1);
+    assert_eq!(gpu.resources()[1].revision, 1);
+}
+
+#[test]
+fn invalid_instance_geometry_is_a_guest_rejection_not_a_host_fault() {
+    let mut gpu = RetainedGpu::try_new().expect("gpu");
+    let mut invalid = instance(0);
+    invalid[4..6].copy_from_slice(&0u16.to_le_bytes());
+
+    let outcome = gpu
+        .submit(&packet(0, &[create_instances(1, &[invalid])]))
+        .expect("guest validation must not become a host fault");
+
+    let SubmissionOutcome::Rejected(rejection) = outcome else {
+        panic!("expected rejection");
+    };
+    assert_eq!(rejection.code, ResultCode::InvalidArgument);
+    assert_eq!(rejection.operation_index, 0);
+    assert!(gpu.resources().is_empty());
+}
+
+#[test]
+fn full_resource_table_can_drop_and_create_without_commit_time_growth() {
+    let mut gpu = RetainedGpu::try_new().expect("gpu");
+    let initial: Vec<Vec<u8>> = (1..=128)
+        .map(|id| create_image(id, 1, 1, &[id as u16]))
+        .collect();
+    committed(gpu.submit(&packet(0, &initial)).expect("full table"));
+
+    committed(
+        gpu.submit(&packet(
+            1,
+            &[drop_resource(1), create_image(129, 1, 1, &[129])],
+        ))
+        .expect("replace table entry"),
+    );
+
+    assert_eq!(gpu.resources().len(), 128);
+    assert!(gpu.resources().iter().all(|entry| entry.id != 1));
+    assert!(gpu.resources().iter().any(|entry| entry.id == 129));
 }

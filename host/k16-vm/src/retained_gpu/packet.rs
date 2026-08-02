@@ -492,6 +492,13 @@ fn decode_draw_list(
             (body + 2) as u32,
         ));
     }
+    if length - 8 > MAX_DRAW_LIST_BYTES {
+        return Err(rejected(
+            ResultCode::QuotaExceeded,
+            operation_index,
+            (operation_offset + 4) as u32,
+        ));
+    }
     let command_count = read_u32(packet, body + 4) as usize;
     if command_count > MAX_DRAW_COMMANDS {
         return Err(rejected(
@@ -688,6 +695,15 @@ fn validate_instance_records(
 ) -> Result<(), PacketDecodeError> {
     for (record_index, record) in records.chunks_exact(24).enumerate() {
         let offset = payload_offset + record_index * 24;
+        for field_offset in [4usize, 6, 12, 14] {
+            if read_u16(record, field_offset) == 0 {
+                return Err(rejected(
+                    ResultCode::InvalidArgument,
+                    operation_index,
+                    (offset + field_offset) as u32,
+                ));
+            }
+        }
         let background = read_u16(record, 18);
         let flags = read_u16(record, 20);
         let reserved = read_u16(record, 22);
@@ -698,18 +714,18 @@ fn validate_instance_records(
                 (offset + 20) as u32,
             ));
         }
-        if reserved != 0 {
-            return Err(rejected(
-                ResultCode::MalformedPacket,
-                operation_index,
-                (offset + 22) as u32,
-            ));
-        }
         if flags & 1 == 0 && background != 0 {
             return Err(rejected(
                 ResultCode::InvalidArgument,
                 operation_index,
                 (offset + 18) as u32,
+            ));
+        }
+        if reserved != 0 {
+            return Err(rejected(
+                ResultCode::MalformedPacket,
+                operation_index,
+                (offset + 22) as u32,
             ));
         }
     }
@@ -831,4 +847,4 @@ fn read_u64(bytes: &[u8], offset: usize) -> u64 {
 
 #[cfg(test)]
 mod tests;
-use super::MAX_DRAW_COMMANDS;
+use super::{MAX_DRAW_COMMANDS, MAX_DRAW_LIST_BYTES};
