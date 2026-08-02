@@ -184,6 +184,7 @@ sealed interface RetainedDisplayApplyResult {
     data class Installed(
         val state: RetainedDisplayState,
         val acknowledgement: ByteArray,
+        val damage: RetainedDisplayInstallDamage,
     ) : RetainedDisplayApplyResult
 
     data class ResyncRequired(
@@ -218,6 +219,7 @@ class RetainedDisplayReplica {
                     staged.state.viewerEpoch,
                     staged.state.sequence,
                 ),
+                staged.damage,
             )
         } catch (failure: ReplicaValidationFailure) {
             RetainedDisplayApplyResult.ResyncRequired(
@@ -293,6 +295,7 @@ private data class NetworkHeader(
 private data class StagedReplica(
     val state: RetainedDisplayState,
     val nextLocalIdentity: Long,
+    val damage: RetainedDisplayInstallDamage,
 )
 
 private class ReplicaValidationFailure(
@@ -348,6 +351,7 @@ private fun decodeSnapshot(
     return StagedReplica(
         RetainedDisplayState(header.computerId, header.viewerEpoch, sequence, resources, drawList),
         nextIdentity,
+        RetainedDisplayInstallDamage.FullReplacement,
     )
 }
 
@@ -377,6 +381,7 @@ private fun decodeDelta(
     var previousChangeId = 0u
     var previousWasDrop = false
     var patchCount = 0
+    val resourceChanges = ArrayList<RetainedResourceDamage>(changeCount)
     repeat(changeCount) { index ->
         val opcode = reader.peekU16()
         val result =
@@ -386,7 +391,12 @@ private fun decodeDelta(
                     nextIdentity = incrementIdentity(nextIdentity)
                     if (created.content.kindOpcode() != opcode) validationFailure()
                     if (resources.putIfAbsent(created.resourceId, created) != null) validationFailure()
-                    ChangeResult(created.resourceId, false, 0)
+                    ChangeResult(
+                        created.resourceId,
+                        false,
+                        0,
+                        RetainedResourceDamage.Created(created.resourceId, created.localIdentity),
+                    )
                 }
 
                 0x0010 -> {
@@ -418,6 +428,7 @@ private fun decodeDelta(
         previousChangeId = result.resourceId
         previousWasDrop = result.wasDrop
         patchCount = checkedPatchCount(patchCount, result.patchCount)
+        resourceChanges += result.damage
     }
     if (reader.remaining != drawListBytes) validationFailure()
     if (resources.size > MAX_RESOURCES) validationFailure()
@@ -440,6 +451,7 @@ private fun decodeDelta(
             drawList,
         ),
         nextIdentity,
+        RetainedDisplayInstallDamage.Delta(resourceChanges, drawListBytes != 0),
     )
 }
 
@@ -447,6 +459,7 @@ private data class ChangeResult(
     val resourceId: UInt,
     val wasDrop: Boolean,
     val patchCount: Int,
+    val damage: RetainedResourceDamage,
 )
 
 private fun readFullResource(
@@ -541,8 +554,10 @@ private fun patchImage(
     val entry = resources[record.resourceId] ?: validationFailure()
     val image = entry.content as? RetainedImageRgb565 ?: validationFailure()
     val pixels = image.copyPixels()
+    val rectangles = ArrayList<RetainedPatchRectangle>(record.patchCount)
     repeat(record.patchCount) {
         val rectangle = readPatchRectangle(record.reader, image.width, image.height)
+        rectangles += rectangle.toPublicRectangle()
         for (row in 0 until rectangle.height) {
             val destination = (rectangle.y + row) * image.width + rectangle.x
             repeat(rectangle.width) { column -> pixels[destination + column] = record.reader.readU16().toShort() }
@@ -551,7 +566,12 @@ private fun patchImage(
     }
     record.reader.requireEnd()
     resources[record.resourceId] = entry.copy(content = RetainedImageRgb565(image.width, image.height, pixels))
-    return ChangeResult(record.resourceId, false, record.patchCount)
+    return ChangeResult(
+        record.resourceId,
+        false,
+        record.patchCount,
+        RetainedResourceDamage.ImagePatched(record.resourceId, entry.localIdentity, rectangles),
+    )
 }
 
 private fun patchMask(
@@ -563,8 +583,10 @@ private fun patchMask(
     val mask = entry.content as? RetainedMask1Bpp ?: validationFailure()
     val rows = mask.copyRows()
     val destinationRowBytes = checkedMaskRowBytes(mask.width)
+    val rectangles = ArrayList<RetainedPatchRectangle>(record.patchCount)
     repeat(record.patchCount) {
         val rectangle = readPatchRectangle(record.reader, mask.width, mask.height)
+        rectangles += rectangle.toPublicRectangle()
         val patchRowBytes = checkedMaskRowBytes(rectangle.width)
         val patchRows = record.reader.readBytes(patchRowBytes * rectangle.height)
         validateMaskPadding(rectangle.width, rectangle.height, patchRows)
@@ -586,7 +608,12 @@ private fun patchMask(
     }
     record.reader.requireEnd()
     resources[record.resourceId] = entry.copy(content = RetainedMask1Bpp(mask.width, mask.height, rows))
-    return ChangeResult(record.resourceId, false, record.patchCount)
+    return ChangeResult(
+        record.resourceId,
+        false,
+        record.patchCount,
+        RetainedResourceDamage.MaskPatched(record.resourceId, entry.localIdentity, rectangles),
+    )
 }
 
 private fun patchInstances(
@@ -597,15 +624,22 @@ private fun patchInstances(
     val entry = resources[record.resourceId] ?: validationFailure()
     val buffer = entry.content as? RetainedMaskInstanceBuffer ?: validationFailure()
     val instances = buffer.instances.toMutableList()
+    val ranges = ArrayList<RetainedPatchRange>(record.patchCount)
     repeat(record.patchCount) {
         val start = record.reader.readU16()
         val count = record.reader.readU16()
         if (count == 0 || start + count > buffer.capacity) validationFailure()
+        ranges += RetainedPatchRange(start, count)
         repeat(count) { offset -> instances[start + offset] = readInstance(record.reader) }
     }
     record.reader.requireEnd()
     resources[record.resourceId] = entry.copy(content = RetainedMaskInstanceBuffer(buffer.capacity, instances))
-    return ChangeResult(record.resourceId, false, record.patchCount)
+    return ChangeResult(
+        record.resourceId,
+        false,
+        record.patchCount,
+        RetainedResourceDamage.InstancesPatched(record.resourceId, entry.localIdentity, ranges),
+    )
 }
 
 private data class PatchRecord(
@@ -638,8 +672,14 @@ private fun dropResource(
     }
     val resourceId = record.readU32()
     record.requireEnd()
-    if (resourceId == 0u || resources.remove(resourceId) == null) validationFailure()
-    return ChangeResult(resourceId, true, 0)
+    if (resourceId == 0u) validationFailure()
+    val dropped = resources.remove(resourceId) ?: validationFailure()
+    return ChangeResult(
+        resourceId,
+        true,
+        0,
+        RetainedResourceDamage.Dropped(resourceId, dropped.localIdentity),
+    )
 }
 
 private data class PatchRectangle(
@@ -648,6 +688,9 @@ private data class PatchRectangle(
     val width: Int,
     val height: Int,
 )
+
+private fun PatchRectangle.toPublicRectangle(): RetainedPatchRectangle =
+    RetainedPatchRectangle(x, y, width, height)
 
 private fun readPatchRectangle(
     reader: LeReader,
