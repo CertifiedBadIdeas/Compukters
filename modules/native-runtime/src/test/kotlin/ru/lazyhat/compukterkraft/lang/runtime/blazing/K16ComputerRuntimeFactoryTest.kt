@@ -186,6 +186,9 @@ class K16ComputerRuntimeFactoryTest {
             rustJniSource.contains("NativeVmBindings_k16ComputerStatsSnapshotNative"),
             "jni.rs should export k16ComputerStatsSnapshotNative",
         )
+        assertFalse(rustJniSource.contains("decode_serverbound"))
+        assertFalse(rustJniSource.contains("NETWORK_MAGIC"))
+        assertFalse(rustJniSource.contains("ResourceDamage"))
     }
 
     @Test
