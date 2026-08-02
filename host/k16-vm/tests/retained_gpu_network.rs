@@ -2,8 +2,8 @@
 mod wire;
 
 use k16_vm::retained_gpu::{
-    encode_delta, encode_snapshot, DamageSubmissionOutcome, NetworkEncodeError, ResourceManifest,
-    RetainedGpu, SubmissionOutcome,
+    encode_ack, encode_delta, encode_snapshot, DamageSubmissionOutcome, NetworkEncodeError,
+    ResourceManifest, RetainedDisplayHost, RetainedGpu, SubmissionOutcome,
 };
 use wire::*;
 
@@ -163,6 +163,103 @@ fn one_instance_delta_is_92_bytes_and_row_delta_is_1_604_bytes() {
         assert_eq!(u16_at(&bytes, 64), 0);
         assert_eq!(u16_at(&bytes, 66), count as u16);
     }
+}
+
+#[test]
+fn kotlin_replica_golden_vectors_match_the_rust_encoder() {
+    let mut gpu = RetainedGpu::try_new().expect("gpu");
+    committed(
+        gpu.submit(&packet(
+            0,
+            &[
+                create_image(1, 2, 1, &[0x1234, 0xabcd]),
+                replace_draw_list(0, &[draw_image(1, 2, 1)]),
+            ],
+        ))
+        .expect("initial"),
+    );
+    assert_eq!(
+        encode_snapshot(42, 7, &gpu).expect("snapshot"),
+        hex(
+            "4b44535001000100600000002a00000007000000000000000100000000000000\
+             0100000024000000010000001400000001000000020001003412cdab00000000\
+             01000000200000001c0000000100000000000000020001000000000002000100",
+        ),
+    );
+
+    let base = ResourceManifest::try_from_gpu(&gpu).expect("manifest");
+    let DamageSubmissionOutcome::Committed { damage, .. } = gpu
+        .submit_with_damage(&packet(1, &[patch_image(1, 0, 0, 1, 1, &[0x4321])]))
+        .expect("patch")
+    else {
+        panic!("expected patch commit");
+    };
+    assert_eq!(
+        encode_delta(42, 7, &base, &damage, &gpu).expect("delta"),
+        hex(
+            "4b445350010002004c0000002a00000007000000000000000100000000000000\
+             02000000000000000100000000000000100000001c0000000100000001000000\
+             000000000100010021430000",
+        ),
+    );
+
+    let mut host = RetainedDisplayHost::try_new().expect("host");
+    committed(
+        host.submit(&packet(
+            0,
+            &[
+                create_image(1, 2, 1, &[0x1234, 0xabcd]),
+                replace_draw_list(0, &[draw_image(1, 2, 1)]),
+            ],
+        ))
+        .expect("initial"),
+    );
+    for token in 1..7 {
+        host.attach_viewer(token, 42).expect("dummy attach");
+        assert!(host.detach_viewer(token));
+    }
+    let epoch = host.attach_viewer(7, 42).expect("attach");
+    host.drain_payload(7).expect("snapshot");
+    committed(
+        host.submit(&packet(1, &[drop_resource(1), replace_draw_list(0, &[])]))
+            .expect("drop"),
+    );
+    committed(
+        host.submit(&packet(
+            2,
+            &[
+                create_image(1, 2, 1, &[0x9999, 0x8888]),
+                replace_draw_list(0, &[draw_image(1, 2, 1)]),
+            ],
+        ))
+        .expect("recreate"),
+    );
+    host.accept_serverbound(7, &encode_ack(42, epoch, 1).expect("ACK"))
+        .expect("accept ACK");
+    host.advance_tick().expect("publish");
+    assert_eq!(
+        host.drain_payload(7).expect("recreate delta"),
+        hex(
+            "4b44535001000200740000002a00000007000000000000000100000000000000\
+             03000000000000000200000024000000200000000c0000000100000001000000\
+             140000000100000002000100999988880000000001000000200000001c000000\
+             0100000000000000020001000000000002000100",
+        ),
+    );
+}
+
+fn hex(value: &str) -> Vec<u8> {
+    let compact: String = value
+        .chars()
+        .filter(|character| !character.is_whitespace())
+        .collect();
+    compact
+        .as_bytes()
+        .chunks_exact(2)
+        .map(|pair| {
+            u8::from_str_radix(std::str::from_utf8(pair).expect("hex pair"), 16).expect("hex byte")
+        })
+        .collect()
 }
 
 fn u16_at(bytes: &[u8], offset: usize) -> u16 {
