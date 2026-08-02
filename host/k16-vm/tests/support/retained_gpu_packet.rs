@@ -159,6 +159,20 @@ pub fn draw_image(resource_id: u32, width: u16, height: u16) -> Vec<u8> {
     command
 }
 
+pub fn push_clip(width: u16, height: u16) -> Vec<u8> {
+    let mut body = Vec::new();
+    i16_value(&mut body, 0);
+    i16_value(&mut body, 0);
+    u16_value(&mut body, width);
+    u16_value(&mut body, height);
+    let mut command = Vec::new();
+    u16_value(&mut command, 0x0001);
+    u16_value(&mut command, 0);
+    u32_value(&mut command, 16);
+    command.extend_from_slice(&body);
+    command
+}
+
 fn patch_rect(
     opcode: u16,
     id: u32,

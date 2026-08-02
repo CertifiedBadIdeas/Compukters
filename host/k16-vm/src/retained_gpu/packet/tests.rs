@@ -2,7 +2,7 @@ use super::{
     decode_packet, DecodedDrawCommandKind, DecodedOperationKind, PacketDecodeError,
     PacketRejection, ResultCode, MAX_PACKET_BYTES, MAX_TRANSACTION_OPERATIONS,
 };
-use crate::retained_gpu::MAX_DRAW_COMMANDS;
+use crate::retained_gpu::{MAX_DRAW_COMMANDS, MAX_DRAW_LIST_BYTES};
 
 const MAGIC: u32 = 0x5550_474b;
 
@@ -320,6 +320,16 @@ fn packet_and_operation_quotas_are_checked_before_record_parsing() {
     assert_eq!(rejection.code, ResultCode::QuotaExceeded);
     assert_eq!(rejection.operation_index, 0);
     assert_eq!(rejection.byte_offset, 36);
+
+    let mut oversized_draw_list = vec![0; MAX_DRAW_LIST_BYTES + 1];
+    oversized_draw_list[4..8].copy_from_slice(&0u32.to_le_bytes());
+    let rejection = into_rejection(
+        decode_packet(&packet(0, &[record(0x0030, 0, &oversized_draw_list)]))
+            .expect_err("oversized draw list"),
+    );
+    assert_eq!(rejection.code, ResultCode::QuotaExceeded);
+    assert_eq!(rejection.operation_index, 0);
+    assert_eq!(rejection.byte_offset, 28);
 }
 
 #[test]
@@ -397,6 +407,24 @@ fn reserved_fields_and_mask_unused_bits_report_exact_offsets() {
         .expect_err("instance reserved"),
     );
     assert_eq!(rejection.byte_offset, 62);
+
+    let mut multiply_invalid_instance = instance_record();
+    multiply_invalid_instance[18..20].copy_from_slice(&1u16.to_le_bytes());
+    multiply_invalid_instance[20..22].copy_from_slice(&0u16.to_le_bytes());
+    multiply_invalid_instance[22..24].copy_from_slice(&1u16.to_le_bytes());
+    let rejection = into_rejection(
+        decode_packet(&packet(
+            0,
+            &[record(
+                0x0012,
+                0,
+                &patch_instances_body(1, 0, &[multiply_invalid_instance]),
+            )],
+        ))
+        .expect_err("cutout background precedes reserved field"),
+    );
+    assert_eq!(rejection.code, ResultCode::InvalidArgument);
+    assert_eq!(rejection.byte_offset, 58);
 
     let rejection = into_rejection(
         decode_packet(&packet(

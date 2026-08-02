@@ -32,12 +32,16 @@ fn transaction_atomicity_does_not_clone_canonical_resources() {
         "gpu.resources.clone()",
         "RetainedGpu: Clone",
         "derive(Clone)]\npub struct RetainedGpu",
+        ".sort_by_key(PreparedAction::operation_index)",
     ] {
         assert!(
             !source.contains(forbidden),
             "transaction engine must not contain `{forbidden}`"
         );
     }
+    assert!(source.contains("try_reserve_exact(MAX_RESOURCES * 2)"));
+    assert!(source.contains("partition_point"));
+    assert!(!source.contains("actions.iter().rev().find"));
     assert!(
         source.matches(".patch_rect").count() >= 4 && source.matches(".patch(").count() >= 2,
         "validated existing-resource patches must commit through the resource's in-place API"

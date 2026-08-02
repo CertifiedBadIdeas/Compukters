@@ -5,8 +5,7 @@ use super::packet::{
 use super::{
     DestinationRect, DrawCommand, DrawList, ImageRgb565, Mask1Bpp, MaskInstance,
     MaskInstanceBuffer, MaskInstanceRecord, Resource, ResourceEntry, ResourceRef, ResultCode,
-    SourceRect, MAX_CLIP_DEPTH, MAX_DRAW_LIST_BYTES, MAX_RESOURCES, MAX_RESOURCE_BYTES,
-    MAX_TOTAL_RESOURCE_BYTES,
+    SourceRect, MAX_CLIP_DEPTH, MAX_RESOURCES, MAX_RESOURCE_BYTES, MAX_TOTAL_RESOURCE_BYTES,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -103,17 +102,14 @@ impl RetainedGpu {
             + self.draw_list.encoded_byte_len()
     }
 
-    fn commit(&mut self, mut prepared: PreparedTransaction<'_>) -> Result<(), RetainedGpuFault> {
-        prepared
-            .actions
-            .sort_by_key(PreparedAction::operation_index);
+    fn commit(&mut self, prepared: PreparedTransaction<'_>) -> Result<(), RetainedGpuFault> {
         for action in prepared.actions {
             match action {
                 PreparedAction::Create { entry, .. } => {
                     let index = self
                         .resources
                         .binary_search_by_key(&entry.id, |resource| resource.id)
-                        .unwrap_or_else(|index| index);
+                        .map_or_else(Ok, |_| Err(RetainedGpuFault::CorruptState))?;
                     if self.resources.len() == self.resources.capacity() {
                         return Err(RetainedGpuFault::CorruptState);
                     }
@@ -203,11 +199,9 @@ struct PreparedTransaction<'a> {
 
 enum PreparedAction<'a> {
     Create {
-        operation_index: usize,
         entry: ResourceEntry,
     },
     PatchImage {
-        operation_index: usize,
         resource_id: u32,
         x: u16,
         y: u16,
@@ -216,7 +210,6 @@ enum PreparedAction<'a> {
         pixels: Vec<u16>,
     },
     PatchMask {
-        operation_index: usize,
         resource_id: u32,
         x: u16,
         y: u16,
@@ -225,37 +218,13 @@ enum PreparedAction<'a> {
         rows: &'a [u8],
     },
     PatchInstances {
-        operation_index: usize,
         resource_id: u32,
         start_index: u16,
         instances: Vec<MaskInstance>,
     },
     Drop {
-        operation_index: usize,
         resource_id: u32,
     },
-}
-
-impl PreparedAction<'_> {
-    fn operation_index(&self) -> usize {
-        match self {
-            Self::Create {
-                operation_index, ..
-            }
-            | Self::PatchImage {
-                operation_index, ..
-            }
-            | Self::PatchMask {
-                operation_index, ..
-            }
-            | Self::PatchInstances {
-                operation_index, ..
-            }
-            | Self::Drop {
-                operation_index, ..
-            } => *operation_index,
-        }
-    }
 }
 
 #[derive(Clone, Copy)]
@@ -273,6 +242,15 @@ struct StagedResource {
     drop_operation: Option<usize>,
 }
 
+#[derive(Clone, Copy)]
+struct InstanceOverride {
+    resource_id: u32,
+    instance_index: usize,
+    operation_index: usize,
+    byte_offset: u32,
+    value: MaskInstance,
+}
+
 impl<'a> PreparedTransaction<'a> {
     fn build(
         gpu: &RetainedGpu,
@@ -284,7 +262,20 @@ impl<'a> PreparedTransaction<'a> {
             .map_err(|_| RetainedGpuFault::Allocation)?;
         let mut staged = Vec::new();
         staged
-            .try_reserve_exact(MAX_RESOURCES)
+            .try_reserve_exact(MAX_RESOURCES * 2)
+            .map_err(|_| RetainedGpuFault::Allocation)?;
+        let override_capacity: usize = operations
+            .iter()
+            .filter_map(|operation| match &operation.kind {
+                DecodedOperationKind::PatchMaskInstances { records, .. } => {
+                    Some(records.len() / 24)
+                }
+                _ => None,
+            })
+            .sum();
+        let mut instance_overrides = Vec::new();
+        instance_overrides
+            .try_reserve_exact(override_capacity)
             .map_err(|_| RetainedGpuFault::Allocation)?;
         for (index, entry) in gpu.resources.iter().enumerate() {
             staged.push(StagedResource {
@@ -305,6 +296,22 @@ impl<'a> PreparedTransaction<'a> {
         let mut draw_list = None;
 
         for (operation_index, operation) in operations.iter().enumerate() {
+            let patched_resource_id = match &operation.kind {
+                DecodedOperationKind::PatchImageRect { resource_id, .. }
+                | DecodedOperationKind::PatchMaskRect { resource_id, .. }
+                | DecodedOperationKind::PatchMaskInstances { resource_id, .. } => {
+                    Some(*resource_id)
+                }
+                _ => None,
+            };
+            if patched_resource_id.is_some_and(|resource_id| {
+                staged.iter().any(|entry| {
+                    entry.id == resource_id && entry.live && entry.revision == u64::MAX
+                })
+            }) && patch_semantics_are_valid(gpu, &staged, &actions, operation)
+            {
+                return Err(RetainedGpuFault::CounterExhausted);
+            }
             let result = match &operation.kind {
                 DecodedOperationKind::CreateImageRgb565 {
                     resource_id,
@@ -329,10 +336,11 @@ impl<'a> PreparedTransaction<'a> {
                     let resource = match ImageRgb565::new(*width, *height, values) {
                         Ok(image) => Resource::ImageRgb565(image),
                         Err(_) => {
-                            return Ok(Err(operation_rejection(
+                            return Ok(Err(operation_rejection_at(
                                 operation,
                                 operation_index,
                                 ResultCode::InvalidArgument,
+                                if *width == 0 { 12 } else { 14 },
                             )))
                         }
                     };
@@ -370,10 +378,11 @@ impl<'a> PreparedTransaction<'a> {
                     let resource = match Mask1Bpp::new(*width, *height, copied) {
                         Ok(mask) => Resource::Mask1Bpp(mask),
                         Err(_) => {
-                            return Ok(Err(operation_rejection(
+                            return Ok(Err(operation_rejection_at(
                                 operation,
                                 operation_index,
                                 ResultCode::InvalidArgument,
+                                if *width == 0 { 12 } else { 14 },
                             )))
                         }
                     };
@@ -410,10 +419,11 @@ impl<'a> PreparedTransaction<'a> {
                     let resource = match MaskInstanceBuffer::new(*capacity, values) {
                         Ok(buffer) => Resource::MaskInstanceBuffer(buffer),
                         Err(_) => {
-                            return Ok(Err(operation_rejection(
+                            return Ok(Err(operation_rejection_at(
                                 operation,
                                 operation_index,
                                 ResultCode::InvalidArgument,
+                                12,
                             )))
                         }
                     };
@@ -482,6 +492,7 @@ impl<'a> PreparedTransaction<'a> {
                         gpu,
                         &mut staged,
                         &mut actions,
+                        &mut instance_overrides,
                         operation_index,
                         operation,
                         *resource_id,
@@ -499,12 +510,17 @@ impl<'a> PreparedTransaction<'a> {
                     &mut total_payload,
                 ),
                 DecodedOperationKind::ReplaceDrawList { draw_list: decoded } => {
-                    match resolve_draw_list(gpu, &staged, &actions, decoded)? {
+                    sort_instance_overrides(&mut instance_overrides);
+                    match resolve_draw_list(gpu, &staged, &actions, &instance_overrides, decoded)? {
                         Ok(resolved) => {
                             draw_list = Some(resolved);
                             Ok(())
                         }
-                        Err(code) => Err(operation_rejection(operation, operation_index, code)),
+                        Err(error) => Err(GuestRejection {
+                            code: error.code,
+                            operation_index: operation_index as u32,
+                            byte_offset: error.byte_offset,
+                        }),
                     }
                 }
             };
@@ -512,6 +528,8 @@ impl<'a> PreparedTransaction<'a> {
                 return Ok(Err(rejection));
             }
         }
+
+        sort_instance_overrides(&mut instance_overrides);
 
         for entry in staged.iter().filter(|entry| !entry.live) {
             let reference = ResourceRef {
@@ -531,12 +549,98 @@ impl<'a> PreparedTransaction<'a> {
                 )));
             }
         }
+        if draw_list.is_none() {
+            if let Some((operation_index, byte_offset)) = invalidating_patch_operation(
+                gpu,
+                &staged,
+                &actions,
+                &instance_overrides,
+                &gpu.draw_list,
+            ) {
+                return Ok(Err(GuestRejection {
+                    code: ResultCode::InvalidDrawList,
+                    operation_index: operation_index as u32,
+                    byte_offset,
+                }));
+            }
+        }
         Ok(Ok(Self {
             actions,
             draw_list,
             next_incarnation,
         }))
     }
+}
+
+fn invalidating_patch_operation(
+    gpu: &RetainedGpu,
+    staged: &[StagedResource],
+    actions: &[PreparedAction<'_>],
+    instance_overrides: &[InstanceOverride],
+    draw_list: &DrawList,
+) -> Option<(usize, u32)> {
+    for command in draw_list.commands() {
+        let DrawCommand::DrawMaskInstances {
+            mask,
+            instances,
+            first_instance,
+            instance_count,
+            ..
+        } = command
+        else {
+            continue;
+        };
+        let Some((resolved_mask, mask_resource)) = staged_resource(gpu, staged, actions, mask.id)
+        else {
+            continue;
+        };
+        let Some((resolved_instances, instances_resource)) =
+            staged_resource(gpu, staged, actions, instances.id)
+        else {
+            continue;
+        };
+        if resolved_mask != *mask || resolved_instances != *instances {
+            continue;
+        }
+        let Resource::Mask1Bpp(mask_resource) = mask_resource else {
+            continue;
+        };
+        let Resource::MaskInstanceBuffer(instance_buffer) = instances_resource else {
+            continue;
+        };
+        let start = usize::from(*first_instance);
+        let end = start + usize::from(*instance_count);
+        if end > instance_buffer.instances().len() {
+            continue;
+        }
+        for index in start..end {
+            let (instance, contributor) = final_instance(
+                instance_overrides,
+                instances.id,
+                instance_buffer.instances()[index],
+                index,
+            );
+            let record = instance.record();
+            let invalid = u32::from(record.source_x) + u32::from(record.source_width)
+                > u32::from(mask_resource.width())
+                || u32::from(record.source_y) + u32::from(record.source_height)
+                    > u32::from(mask_resource.height());
+            if invalid {
+                let contributor = contributor
+                    .expect("an installed valid draw list can only be invalidated by an override");
+                let relative_offset = invalid_instance_field_offset(
+                    record,
+                    mask_resource.width(),
+                    mask_resource.height(),
+                );
+                return Some((
+                    contributor.operation_index,
+                    contributor.byte_offset + relative_offset,
+                ));
+            }
+        }
+    }
+    None
 }
 
 fn stage_create(
@@ -564,23 +668,36 @@ fn stage_create(
         ));
     }
     let payload = resource.payload_bytes();
-    if payload > MAX_RESOURCE_BYTES
-        || staged.iter().filter(|entry| entry.live).count() == MAX_RESOURCES
-    {
+    if staged.iter().filter(|entry| entry.live).count() == MAX_RESOURCES {
         return Err(operation_rejection(
             operation,
             operation_index,
             ResultCode::QuotaExceeded,
         ));
     }
-    let next_total = total_payload.checked_add(payload).ok_or_else(|| {
-        operation_rejection(operation, operation_index, ResultCode::QuotaExceeded)
-    })?;
-    if next_total > MAX_TOTAL_RESOURCE_BYTES {
-        return Err(operation_rejection(
+    let quota_offset = create_quota_field_offset(operation);
+    if payload > MAX_RESOURCE_BYTES {
+        return Err(operation_rejection_at(
             operation,
             operation_index,
             ResultCode::QuotaExceeded,
+            quota_offset,
+        ));
+    }
+    let next_total = total_payload.checked_add(payload).ok_or_else(|| {
+        operation_rejection_at(
+            operation,
+            operation_index,
+            ResultCode::QuotaExceeded,
+            quota_offset,
+        )
+    })?;
+    if next_total > MAX_TOTAL_RESOURCE_BYTES {
+        return Err(operation_rejection_at(
+            operation,
+            operation_index,
+            ResultCode::QuotaExceeded,
+            quota_offset,
         ));
     }
     let incarnation = *next_incarnation;
@@ -589,7 +706,6 @@ fn stage_create(
         .expect("counter exhaustion checked before resource allocation");
     let created_index = actions.len();
     actions.push(PreparedAction::Create {
-        operation_index,
         entry: ResourceEntry {
             id: resource_id,
             incarnation,
@@ -617,6 +733,14 @@ fn precheck_create(
     payload_bytes: usize,
     total_payload: usize,
 ) -> Result<(), GuestRejection> {
+    if let Some(relative_offset) = create_shape_error_offset(operation) {
+        return Err(operation_rejection_at(
+            operation,
+            operation_index,
+            ResultCode::InvalidArgument,
+            relative_offset,
+        ));
+    }
     if resource_id == 0 {
         return Err(operation_rejection(
             operation,
@@ -631,19 +755,52 @@ fn precheck_create(
             ResultCode::InvalidResource,
         ));
     }
-    if payload_bytes > MAX_RESOURCE_BYTES
-        || staged.iter().filter(|entry| entry.live).count() == MAX_RESOURCES
-        || total_payload
-            .checked_add(payload_bytes)
-            .is_none_or(|total| total > MAX_TOTAL_RESOURCE_BYTES)
-    {
+    if staged.iter().filter(|entry| entry.live).count() == MAX_RESOURCES {
         return Err(operation_rejection(
             operation,
             operation_index,
             ResultCode::QuotaExceeded,
         ));
     }
+    if payload_bytes > MAX_RESOURCE_BYTES
+        || total_payload
+            .checked_add(payload_bytes)
+            .is_none_or(|total| total > MAX_TOTAL_RESOURCE_BYTES)
+    {
+        return Err(operation_rejection_at(
+            operation,
+            operation_index,
+            ResultCode::QuotaExceeded,
+            create_quota_field_offset(operation),
+        ));
+    }
     Ok(())
+}
+
+fn create_shape_error_offset(operation: &DecodedOperation<'_>) -> Option<u32> {
+    match &operation.kind {
+        DecodedOperationKind::CreateImageRgb565 { width, height, .. }
+        | DecodedOperationKind::CreateMask1Bpp { width, height, .. } => {
+            if *width == 0 {
+                Some(12)
+            } else if *height == 0 {
+                Some(14)
+            } else {
+                None
+            }
+        }
+        DecodedOperationKind::CreateMaskInstanceBuffer { capacity: 0, .. } => Some(12),
+        _ => None,
+    }
+}
+
+fn create_quota_field_offset(operation: &DecodedOperation<'_>) -> u32 {
+    match &operation.kind {
+        DecodedOperationKind::CreateImageRgb565 { .. }
+        | DecodedOperationKind::CreateMask1Bpp { .. } => 14,
+        DecodedOperationKind::CreateMaskInstanceBuffer { .. } => 12,
+        _ => unreachable!("quota offset is only requested for create operations"),
+    }
 }
 
 fn stage_patch_image(
@@ -672,10 +829,25 @@ fn stage_patch_image(
                     ResultCode::InvalidResource,
                 ));
             };
+            validate_rect(
+                image.width(),
+                image.height(),
+                x,
+                y,
+                width,
+                height,
+                pixels.len(),
+                usize::from(width) * usize::from(height),
+                operation,
+                operation_index,
+            )?;
             image
                 .patch_rect(x, y, width, height, &pixels)
-                .map_err(|error| resource_patch_rejection(operation, operation_index, error))?;
-            entry.revision += 1;
+                .expect("created image patch was validated before mutation");
+            entry.revision = entry
+                .revision
+                .checked_add(1)
+                .expect("revision exhaustion checked before patch validation");
         }
         StagedSource::Existing(index) => {
             let Resource::ImageRgb565(image) = &gpu.resources[index].value else {
@@ -698,7 +870,6 @@ fn stage_patch_image(
                 operation_index,
             )?;
             actions.push(PreparedAction::PatchImage {
-                operation_index,
                 resource_id,
                 x,
                 y,
@@ -708,9 +879,10 @@ fn stage_patch_image(
             });
         }
     }
-    staged_entry.revision = staged_entry.revision.checked_add(1).ok_or_else(|| {
-        operation_rejection(operation, operation_index, ResultCode::QuotaExceeded)
-    })?;
+    staged_entry.revision = staged_entry
+        .revision
+        .checked_add(1)
+        .expect("revision exhaustion checked before patch validation");
     Ok(())
 }
 
@@ -740,9 +912,24 @@ fn stage_patch_mask<'a>(
                     ResultCode::InvalidResource,
                 ));
             };
+            validate_rect(
+                mask.width(),
+                mask.height(),
+                x,
+                y,
+                width,
+                height,
+                rows.len(),
+                usize::from(width).div_ceil(8) * usize::from(height),
+                operation,
+                operation_index,
+            )?;
             mask.patch_rect(x, y, width, height, rows)
-                .map_err(|error| resource_patch_rejection(operation, operation_index, error))?;
-            entry.revision += 1;
+                .expect("created mask patch was validated before mutation");
+            entry.revision = entry
+                .revision
+                .checked_add(1)
+                .expect("revision exhaustion checked before patch validation");
         }
         StagedSource::Existing(index) => {
             let Resource::Mask1Bpp(mask) = &gpu.resources[index].value else {
@@ -765,7 +952,6 @@ fn stage_patch_mask<'a>(
                 operation_index,
             )?;
             actions.push(PreparedAction::PatchMask {
-                operation_index,
                 resource_id,
                 x,
                 y,
@@ -775,7 +961,10 @@ fn stage_patch_mask<'a>(
             });
         }
     }
-    staged_entry.revision += 1;
+    staged_entry.revision = staged_entry
+        .revision
+        .checked_add(1)
+        .expect("revision exhaustion checked before patch validation");
     Ok(())
 }
 
@@ -783,6 +972,7 @@ fn stage_patch_instances(
     gpu: &RetainedGpu,
     staged: &mut [StagedResource],
     actions: &mut Vec<PreparedAction<'_>>,
+    instance_overrides: &mut Vec<InstanceOverride>,
     operation_index: usize,
     operation: &DecodedOperation<'_>,
     resource_id: u32,
@@ -802,10 +992,27 @@ fn stage_patch_instances(
                     ResultCode::InvalidResource,
                 ));
             };
+            if instances.is_empty()
+                || usize::from(start_index) + instances.len() > buffer.instances().len()
+            {
+                return Err(operation_rejection_at(
+                    operation,
+                    operation_index,
+                    if instances.is_empty() {
+                        ResultCode::InvalidArgument
+                    } else {
+                        ResultCode::OutOfBounds
+                    },
+                    if instances.is_empty() { 14 } else { 12 },
+                ));
+            }
             buffer
                 .patch(start_index, &instances)
-                .map_err(|error| resource_patch_rejection(operation, operation_index, error))?;
-            entry.revision += 1;
+                .expect("created instance patch was validated before mutation");
+            entry.revision = entry
+                .revision
+                .checked_add(1)
+                .expect("revision exhaustion checked before patch validation");
         }
         StagedSource::Existing(index) => {
             let Resource::MaskInstanceBuffer(buffer) = &gpu.resources[index].value else {
@@ -818,7 +1025,7 @@ fn stage_patch_instances(
             if instances.is_empty()
                 || usize::from(start_index) + instances.len() > buffer.instances().len()
             {
-                return Err(operation_rejection(
+                return Err(operation_rejection_at(
                     operation,
                     operation_index,
                     if instances.is_empty() {
@@ -826,17 +1033,29 @@ fn stage_patch_instances(
                     } else {
                         ResultCode::OutOfBounds
                     },
+                    if instances.is_empty() { 14 } else { 12 },
                 ));
             }
+            for (relative_index, value) in instances.iter().copied().enumerate() {
+                instance_overrides.push(InstanceOverride {
+                    resource_id,
+                    instance_index: usize::from(start_index) + relative_index,
+                    operation_index,
+                    byte_offset: operation.byte_offset + 16 + relative_index as u32 * 24,
+                    value,
+                });
+            }
             actions.push(PreparedAction::PatchInstances {
-                operation_index,
                 resource_id,
                 start_index,
                 instances,
             });
         }
     }
-    staged_entry.revision += 1;
+    staged_entry.revision = staged_entry
+        .revision
+        .checked_add(1)
+        .expect("revision exhaustion checked before patch validation");
     Ok(())
 }
 
@@ -863,10 +1082,7 @@ fn stage_drop(
     entry.live = false;
     entry.drop_operation = Some(operation_index);
     *total_payload -= payload;
-    actions.push(PreparedAction::Drop {
-        operation_index,
-        resource_id,
-    });
+    actions.push(PreparedAction::Drop { resource_id });
     Ok(())
 }
 
@@ -886,15 +1102,14 @@ fn resolve_draw_list(
     gpu: &RetainedGpu,
     staged: &[StagedResource],
     actions: &[PreparedAction<'_>],
+    instance_overrides: &[InstanceOverride],
     decoded: &DecodedDrawList,
-) -> Result<Result<DrawList, ResultCode>, RetainedGpuFault> {
-    if decoded.encoded_byte_len > MAX_DRAW_LIST_BYTES {
-        return Ok(Err(ResultCode::QuotaExceeded));
-    }
+) -> Result<Result<DrawList, SemanticError>, RetainedGpuFault> {
     let mut commands = Vec::new();
     commands
         .try_reserve_exact(decoded.commands.len())
         .map_err(|_| RetainedGpuFault::Allocation)?;
+    let mut clip_offsets = [0u32; MAX_CLIP_DEPTH];
     let mut depth = 0usize;
     for command in &decoded.commands {
         let resolved = match command.kind {
@@ -905,12 +1120,13 @@ fn resolve_draw_list(
                 height,
             } => {
                 if width == 0 || height == 0 {
-                    return Ok(Err(ResultCode::InvalidDrawList));
+                    return Ok(Err(draw_error(command, if width == 0 { 12 } else { 14 })));
                 }
+                if depth == MAX_CLIP_DEPTH {
+                    return Ok(Err(draw_error(command, 0)));
+                }
+                clip_offsets[depth] = command.byte_offset;
                 depth += 1;
-                if depth > MAX_CLIP_DEPTH {
-                    return Ok(Err(ResultCode::InvalidDrawList));
-                }
                 DrawCommand::PushClip {
                     x,
                     y,
@@ -920,7 +1136,7 @@ fn resolve_draw_list(
             }
             DecodedDrawCommandKind::PopClip => {
                 if depth == 0 {
-                    return Ok(Err(ResultCode::InvalidDrawList));
+                    return Ok(Err(draw_error(command, 0)));
                 }
                 depth -= 1;
                 DrawCommand::PopClip
@@ -933,7 +1149,7 @@ fn resolve_draw_list(
                 rgb565,
             } => {
                 if width == 0 || height == 0 {
-                    return Ok(Err(ResultCode::InvalidDrawList));
+                    return Ok(Err(draw_error(command, if width == 0 { 12 } else { 14 })));
                 }
                 DrawCommand::FillRect {
                     x,
@@ -957,10 +1173,10 @@ fn resolve_draw_list(
                 let Some((reference, resource)) =
                     staged_resource(gpu, staged, actions, resource_id)
                 else {
-                    return Ok(Err(ResultCode::InvalidDrawList));
+                    return Ok(Err(draw_error(command, 8)));
                 };
                 let Resource::ImageRgb565(image) = resource else {
-                    return Ok(Err(ResultCode::InvalidDrawList));
+                    return Ok(Err(draw_error(command, 8)));
                 };
                 let source = SourceRect {
                     x: source_x,
@@ -968,11 +1184,16 @@ fn resolve_draw_list(
                     width: source_width,
                     height: source_height,
                 };
-                if !source_valid(source, image.width(), image.height())
-                    || destination_width == 0
-                    || destination_height == 0
+                if let Some(relative_offset) =
+                    source_rect_error_offset(source, image.width(), image.height())
                 {
-                    return Ok(Err(ResultCode::InvalidDrawList));
+                    return Ok(Err(draw_error(command, relative_offset)));
+                }
+                if destination_width == 0 || destination_height == 0 {
+                    return Ok(Err(draw_error(
+                        command,
+                        if destination_width == 0 { 24 } else { 26 },
+                    )));
                 }
                 DrawCommand::DrawImage {
                     image: reference,
@@ -1002,10 +1223,10 @@ fn resolve_draw_list(
                 let Some((reference, resource)) =
                     staged_resource(gpu, staged, actions, resource_id)
                 else {
-                    return Ok(Err(ResultCode::InvalidDrawList));
+                    return Ok(Err(draw_error(command, 8)));
                 };
                 let Resource::Mask1Bpp(mask) = resource else {
-                    return Ok(Err(ResultCode::InvalidDrawList));
+                    return Ok(Err(draw_error(command, 8)));
                 };
                 let source = SourceRect {
                     x: source_x,
@@ -1013,12 +1234,19 @@ fn resolve_draw_list(
                     width: source_width,
                     height: source_height,
                 };
-                if !source_valid(source, mask.width(), mask.height())
-                    || destination_width == 0
-                    || destination_height == 0
-                    || (!opaque_background && background_rgb565 != 0)
+                if let Some(relative_offset) =
+                    source_rect_error_offset(source, mask.width(), mask.height())
                 {
-                    return Ok(Err(ResultCode::InvalidDrawList));
+                    return Ok(Err(draw_error(command, relative_offset)));
+                }
+                if destination_width == 0 || destination_height == 0 {
+                    return Ok(Err(draw_error(
+                        command,
+                        if destination_width == 0 { 24 } else { 26 },
+                    )));
+                }
+                if !opaque_background && background_rgb565 != 0 {
+                    return Ok(Err(draw_error(command, 30)));
                 }
                 DrawCommand::DrawMask {
                     mask: reference,
@@ -1045,27 +1273,30 @@ fn resolve_draw_list(
                 let Some((mask_ref, mask_resource)) =
                     staged_resource(gpu, staged, actions, mask_resource_id)
                 else {
-                    return Ok(Err(ResultCode::InvalidDrawList));
+                    return Ok(Err(draw_error(command, 8)));
                 };
                 let Resource::Mask1Bpp(mask) = mask_resource else {
-                    return Ok(Err(ResultCode::InvalidDrawList));
+                    return Ok(Err(draw_error(command, 8)));
                 };
                 let Some((instances_ref, instances_resource)) =
                     staged_resource(gpu, staged, actions, instance_buffer_resource_id)
                 else {
-                    return Ok(Err(ResultCode::InvalidDrawList));
+                    return Ok(Err(draw_error(command, 12)));
                 };
                 let Resource::MaskInstanceBuffer(buffer) = instances_resource else {
-                    return Ok(Err(ResultCode::InvalidDrawList));
+                    return Ok(Err(draw_error(command, 12)));
                 };
                 let start = usize::from(first_instance);
                 let end = start + usize::from(instance_count);
                 if instance_count == 0 || end > buffer.instances().len() {
-                    return Ok(Err(ResultCode::InvalidDrawList));
+                    return Ok(Err(draw_error(
+                        command,
+                        if instance_count == 0 { 18 } else { 16 },
+                    )));
                 }
                 for index in start..end {
-                    let instance = final_instance(
-                        actions,
+                    let (instance, _) = final_instance(
+                        instance_overrides,
                         instance_buffer_resource_id,
                         buffer.instances()[index],
                         index,
@@ -1076,7 +1307,7 @@ fn resolve_draw_list(
                         || u32::from(record.source_y) + u32::from(record.source_height)
                             > u32::from(mask.height())
                     {
-                        return Ok(Err(ResultCode::InvalidDrawList));
+                        return Ok(Err(draw_error(command, 8)));
                     }
                 }
                 DrawCommand::DrawMaskInstances {
@@ -1092,13 +1323,29 @@ fn resolve_draw_list(
         commands.push(resolved);
     }
     if depth != 0 {
-        return Ok(Err(ResultCode::InvalidDrawList));
+        return Ok(Err(SemanticError {
+            code: ResultCode::InvalidDrawList,
+            byte_offset: clip_offsets[0],
+        }));
     }
     Ok(Ok(DrawList::from_validated_parts(
         decoded.background_rgb565,
         commands,
         decoded.encoded_byte_len,
     )))
+}
+
+#[derive(Clone, Copy)]
+struct SemanticError {
+    code: ResultCode,
+    byte_offset: u32,
+}
+
+fn draw_error(command: &super::packet::DecodedDrawCommand, relative_offset: u32) -> SemanticError {
+    SemanticError {
+        code: ResultCode::InvalidDrawList,
+        byte_offset: command.byte_offset + relative_offset,
+    }
 }
 
 fn staged_resource<'a>(
@@ -1124,34 +1371,124 @@ fn staged_resource<'a>(
     ))
 }
 
-fn final_instance(
+fn patch_semantics_are_valid(
+    gpu: &RetainedGpu,
+    staged: &[StagedResource],
     actions: &[PreparedAction<'_>],
+    operation: &DecodedOperation<'_>,
+) -> bool {
+    match &operation.kind {
+        DecodedOperationKind::PatchImageRect {
+            resource_id,
+            x,
+            y,
+            width,
+            height,
+            ..
+        } => matches!(
+            staged_resource(gpu, staged, actions, *resource_id),
+            Some((_, Resource::ImageRgb565(image)))
+                if rect_fits(image.width(), image.height(), *x, *y, *width, *height)
+        ),
+        DecodedOperationKind::PatchMaskRect {
+            resource_id,
+            x,
+            y,
+            width,
+            height,
+            ..
+        } => matches!(
+            staged_resource(gpu, staged, actions, *resource_id),
+            Some((_, Resource::Mask1Bpp(mask)))
+                if rect_fits(mask.width(), mask.height(), *x, *y, *width, *height)
+        ),
+        DecodedOperationKind::PatchMaskInstances {
+            resource_id,
+            start_index,
+            count,
+            ..
+        } => matches!(
+            staged_resource(gpu, staged, actions, *resource_id),
+            Some((_, Resource::MaskInstanceBuffer(buffer)))
+                if *count != 0
+                    && usize::from(*start_index) + usize::from(*count)
+                        <= buffer.instances().len()
+        ),
+        _ => false,
+    }
+}
+
+fn rect_fits(
+    resource_width: u16,
+    resource_height: u16,
+    x: u16,
+    y: u16,
+    width: u16,
+    height: u16,
+) -> bool {
+    width != 0
+        && height != 0
+        && u32::from(x) + u32::from(width) <= u32::from(resource_width)
+        && u32::from(y) + u32::from(height) <= u32::from(resource_height)
+}
+
+fn final_instance(
+    instance_overrides: &[InstanceOverride],
     resource_id: u32,
     mut value: MaskInstance,
     index: usize,
-) -> MaskInstance {
-    for action in actions {
-        if let PreparedAction::PatchInstances {
-            resource_id: id,
-            start_index,
-            instances,
-            ..
-        } = action
-        {
-            let start = usize::from(*start_index);
-            if *id == resource_id && (start..start + instances.len()).contains(&index) {
-                value = instances[index - start];
-            }
-        }
+) -> (MaskInstance, Option<InstanceOverride>) {
+    let start = instance_overrides
+        .partition_point(|entry| (entry.resource_id, entry.instance_index) < (resource_id, index));
+    let end = instance_overrides
+        .partition_point(|entry| (entry.resource_id, entry.instance_index) <= (resource_id, index));
+    let contributor = instance_overrides[start..end].last();
+    if let Some(contributor) = contributor {
+        value = contributor.value;
     }
-    value
+    (value, contributor.copied())
 }
 
-fn source_valid(source: SourceRect, width: u16, height: u16) -> bool {
-    source.width != 0
-        && source.height != 0
-        && u32::from(source.x) + u32::from(source.width) <= u32::from(width)
-        && u32::from(source.y) + u32::from(source.height) <= u32::from(height)
+fn invalid_instance_field_offset(
+    record: MaskInstanceRecord,
+    mask_width: u16,
+    mask_height: u16,
+) -> u32 {
+    if u32::from(record.source_x) + u32::from(record.source_width) > u32::from(mask_width) {
+        if record.source_x >= mask_width {
+            0
+        } else {
+            4
+        }
+    } else if record.source_y >= mask_height {
+        2
+    } else {
+        6
+    }
+}
+
+fn sort_instance_overrides(instance_overrides: &mut [InstanceOverride]) {
+    instance_overrides.sort_unstable_by_key(|entry| {
+        (
+            entry.resource_id,
+            entry.instance_index,
+            entry.operation_index,
+        )
+    });
+}
+
+fn source_rect_error_offset(source: SourceRect, width: u16, height: u16) -> Option<u32> {
+    if source.width == 0 {
+        Some(16)
+    } else if source.height == 0 {
+        Some(18)
+    } else if u32::from(source.x) + u32::from(source.width) > u32::from(width) {
+        Some(if source.x >= width { 12 } else { 16 })
+    } else if u32::from(source.y) + u32::from(source.height) > u32::from(height) {
+        Some(if source.y >= height { 14 } else { 18 })
+    } else {
+        None
+    }
 }
 
 fn decode_pixels(bytes: &[u8]) -> Result<Vec<u16>, RetainedGpuFault> {
@@ -1212,44 +1549,56 @@ fn validate_rect(
     operation_index: usize,
 ) -> Result<(), GuestRejection> {
     if width == 0 || height == 0 || actual != expected {
-        return Err(operation_rejection(
+        let relative_offset = if width == 0 {
+            16
+        } else if height == 0 {
+            18
+        } else {
+            20
+        };
+        return Err(operation_rejection_at(
             operation,
             operation_index,
             ResultCode::InvalidArgument,
+            relative_offset,
         ));
     }
-    if u32::from(x) + u32::from(width) > u32::from(resource_width)
-        || u32::from(y) + u32::from(height) > u32::from(resource_height)
-    {
-        return Err(operation_rejection(
+    if u32::from(x) + u32::from(width) > u32::from(resource_width) {
+        return Err(operation_rejection_at(
             operation,
             operation_index,
             ResultCode::OutOfBounds,
+            if x >= resource_width { 12 } else { 16 },
+        ));
+    }
+    if u32::from(y) + u32::from(height) > u32::from(resource_height) {
+        return Err(operation_rejection_at(
+            operation,
+            operation_index,
+            ResultCode::OutOfBounds,
+            if y >= resource_height { 14 } else { 18 },
         ));
     }
     Ok(())
 }
 
-fn resource_patch_rejection(
-    operation: &DecodedOperation<'_>,
-    operation_index: usize,
-    error: super::ResourceValidationError,
-) -> GuestRejection {
-    let code = match error {
-        super::ResourceValidationError::OutOfBounds => ResultCode::OutOfBounds,
-        _ => ResultCode::InvalidArgument,
-    };
-    operation_rejection(operation, operation_index, code)
-}
 fn operation_rejection(
     operation: &DecodedOperation<'_>,
     operation_index: usize,
     code: ResultCode,
 ) -> GuestRejection {
+    operation_rejection_at(operation, operation_index, code, 8)
+}
+fn operation_rejection_at(
+    operation: &DecodedOperation<'_>,
+    operation_index: usize,
+    code: ResultCode,
+    relative_offset: u32,
+) -> GuestRejection {
     GuestRejection {
         code,
         operation_index: operation_index as u32,
-        byte_offset: operation.byte_offset + 8,
+        byte_offset: operation.byte_offset + relative_offset,
     }
 }
 fn reject(code: ResultCode, operation_index: u32, byte_offset: u32) -> SubmissionOutcome {
@@ -1267,4 +1616,201 @@ fn find_resource_mut(
         .iter_mut()
         .find(|entry| entry.id == resource_id)
         .ok_or(RetainedGpuFault::CorruptState)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const CREATE_IMAGE: u16 = 0x0001;
+    const CREATE_MASK: u16 = 0x0002;
+    const CREATE_INSTANCES: u16 = 0x0003;
+    const PATCH_IMAGE: u16 = 0x0010;
+    const PATCH_MASK: u16 = 0x0011;
+    const PATCH_INSTANCES: u16 = 0x0012;
+
+    #[test]
+    fn every_valid_patch_kind_reports_revision_exhaustion_as_a_host_fault() {
+        for (create, patch) in [
+            (create_image(), patch_rect(PATCH_IMAGE, 0, 0, 1, 1, &[1, 0])),
+            (create_mask(), patch_rect(PATCH_MASK, 0, 0, 8, 1, &[0xff])),
+            (create_instances(), patch_instances(0, 1)),
+        ] {
+            let mut gpu = RetainedGpu::try_new().expect("gpu");
+            assert!(matches!(
+                gpu.submit(&packet(0, &[create])).expect("create"),
+                SubmissionOutcome::Committed { sequence: 1 }
+            ));
+            gpu.resources[0].revision = u64::MAX;
+
+            assert!(matches!(
+                gpu.submit(&packet(1, &[patch])),
+                Err(RetainedGpuFault::CounterExhausted)
+            ));
+            assert_eq!(gpu.commit_sequence, 1);
+            assert_eq!(gpu.resources[0].revision, u64::MAX);
+        }
+    }
+
+    #[test]
+    fn invalid_patch_semantics_precede_revision_exhaustion() {
+        let mut gpu = RetainedGpu::try_new().expect("gpu");
+        assert!(matches!(
+            gpu.submit(&packet(0, &[create_image()])).expect("create"),
+            SubmissionOutcome::Committed { sequence: 1 }
+        ));
+        gpu.resources[0].revision = u64::MAX;
+
+        let SubmissionOutcome::Rejected(wrong_kind) = gpu
+            .submit(&packet(1, &[patch_rect(PATCH_MASK, 0, 0, 8, 1, &[0xff])]))
+            .expect("wrong-kind rejection")
+        else {
+            panic!("expected rejection");
+        };
+        assert_eq!(wrong_kind.code, ResultCode::InvalidResource);
+        assert_eq!(wrong_kind.byte_offset, 32);
+
+        let SubmissionOutcome::Rejected(out_of_bounds) = gpu
+            .submit(&packet(1, &[patch_rect(PATCH_IMAGE, 1, 0, 1, 1, &[1, 0])]))
+            .expect("out-of-bounds rejection")
+        else {
+            panic!("expected rejection");
+        };
+        assert_eq!(out_of_bounds.code, ResultCode::OutOfBounds);
+        assert_eq!(out_of_bounds.byte_offset, 36);
+        assert_eq!(gpu.commit_sequence, 1);
+        assert_eq!(gpu.resources[0].revision, u64::MAX);
+    }
+
+    #[test]
+    fn invalid_create_shape_precedes_incarnation_exhaustion() {
+        for (create, byte_offset) in [
+            (create_image_with_size(0, 1), 36),
+            (create_mask_with_size(8, 0), 38),
+            (create_instances_with_capacity(0), 36),
+        ] {
+            let mut gpu = RetainedGpu::try_new().expect("gpu");
+            gpu.next_incarnation = u64::MAX;
+
+            let SubmissionOutcome::Rejected(rejection) =
+                gpu.submit(&packet(0, &[create])).expect("shape rejection")
+            else {
+                panic!("expected rejection");
+            };
+            assert_eq!(rejection.code, ResultCode::InvalidArgument);
+            assert_eq!(rejection.byte_offset, byte_offset);
+            assert_eq!(gpu.commit_sequence, 0);
+            assert_eq!(gpu.next_incarnation, u64::MAX);
+        }
+    }
+
+    fn create_image() -> Vec<u8> {
+        create_image_with_size(1, 1)
+    }
+
+    fn create_image_with_size(width: u16, height: u16) -> Vec<u8> {
+        let mut body = Vec::new();
+        push_u32(&mut body, 1);
+        push_u16(&mut body, width);
+        push_u16(&mut body, height);
+        body.resize(8 + usize::from(width) * usize::from(height) * 2, 0);
+        operation(CREATE_IMAGE, &body)
+    }
+
+    fn create_mask() -> Vec<u8> {
+        create_mask_with_size(8, 1)
+    }
+
+    fn create_mask_with_size(width: u16, height: u16) -> Vec<u8> {
+        let mut body = Vec::new();
+        push_u32(&mut body, 1);
+        push_u16(&mut body, width);
+        push_u16(&mut body, height);
+        body.resize(
+            8 + usize::from(width).div_ceil(8) * usize::from(height),
+            0xff,
+        );
+        operation(CREATE_MASK, &body)
+    }
+
+    fn create_instances() -> Vec<u8> {
+        create_instances_with_capacity(1)
+    }
+
+    fn create_instances_with_capacity(capacity: u16) -> Vec<u8> {
+        let mut body = Vec::new();
+        push_u32(&mut body, 1);
+        push_u16(&mut body, capacity);
+        push_u16(&mut body, 0);
+        for _ in 0..capacity {
+            body.extend_from_slice(&instance_record());
+        }
+        operation(CREATE_INSTANCES, &body)
+    }
+
+    fn patch_rect(opcode: u16, x: u16, y: u16, width: u16, height: u16, payload: &[u8]) -> Vec<u8> {
+        let mut body = Vec::new();
+        push_u32(&mut body, 1);
+        for value in [x, y, width, height] {
+            push_u16(&mut body, value);
+        }
+        body.extend_from_slice(payload);
+        operation(opcode, &body)
+    }
+
+    fn patch_instances(start: u16, count: u16) -> Vec<u8> {
+        let mut body = Vec::new();
+        push_u32(&mut body, 1);
+        push_u16(&mut body, start);
+        push_u16(&mut body, count);
+        for _ in 0..count {
+            body.extend_from_slice(&instance_record());
+        }
+        operation(PATCH_INSTANCES, &body)
+    }
+
+    fn instance_record() -> [u8; 24] {
+        let mut bytes = [0; 24];
+        bytes[4..6].copy_from_slice(&8u16.to_le_bytes());
+        bytes[6..8].copy_from_slice(&1u16.to_le_bytes());
+        bytes[12..14].copy_from_slice(&8u16.to_le_bytes());
+        bytes[14..16].copy_from_slice(&1u16.to_le_bytes());
+        bytes[16..18].copy_from_slice(&u16::MAX.to_le_bytes());
+        bytes[20..22].copy_from_slice(&1u16.to_le_bytes());
+        bytes
+    }
+
+    fn operation(opcode: u16, body: &[u8]) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        push_u16(&mut bytes, opcode);
+        push_u16(&mut bytes, 0);
+        push_u32(&mut bytes, (8 + body.len()) as u32);
+        bytes.extend_from_slice(body);
+        bytes
+    }
+
+    fn packet(base: u64, operations: &[Vec<u8>]) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        push_u32(&mut bytes, 0x5550_474b);
+        push_u16(&mut bytes, 1);
+        push_u16(&mut bytes, 0);
+        push_u32(&mut bytes, 0);
+        push_u32(&mut bytes, operations.len() as u32);
+        bytes.extend_from_slice(&base.to_le_bytes());
+        for operation in operations {
+            bytes.extend_from_slice(operation);
+            bytes.resize(bytes.len().next_multiple_of(4), 0);
+        }
+        let length = bytes.len() as u32;
+        bytes[8..12].copy_from_slice(&length.to_le_bytes());
+        bytes
+    }
+
+    fn push_u16(bytes: &mut Vec<u8>, value: u16) {
+        bytes.extend_from_slice(&value.to_le_bytes());
+    }
+
+    fn push_u32(bytes: &mut Vec<u8>, value: u32) {
+        bytes.extend_from_slice(&value.to_le_bytes());
+    }
 }
