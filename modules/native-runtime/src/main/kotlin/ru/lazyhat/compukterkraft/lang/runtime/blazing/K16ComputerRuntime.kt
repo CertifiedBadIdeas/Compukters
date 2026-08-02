@@ -61,6 +61,28 @@ interface K16ComputerRuntimeBindings {
 
     fun drainGpu0Frames(handle: Long): ByteArray
 
+    fun attachRetainedDisplayViewer(
+        handle: Long,
+        viewerToken: Long,
+        computerId: Int,
+    ): Long
+
+    fun detachRetainedDisplayViewer(
+        handle: Long,
+        viewerToken: Long,
+    ): Boolean
+
+    fun acceptRetainedDisplayServerbound(
+        handle: Long,
+        viewerToken: Long,
+        payload: ByteArray,
+    ): Int
+
+    fun drainRetainedDisplayPayload(
+        handle: Long,
+        viewerToken: Long,
+    ): ByteArray
+
     fun storage0MediaSnapshot(handle: Long): ByteArray?
 
     fun machineSnapshot(handle: Long): ByteArray
@@ -108,6 +130,28 @@ object NativeK16ComputerRuntimeBindings : K16ComputerRuntimeBindings {
     override fun drainDebugOutput(handle: Long): ByteArray = NativeVmBindings.drainK16ComputerDebugOutput(handle)
 
     override fun drainGpu0Frames(handle: Long): ByteArray = NativeVmBindings.drainK16ComputerGpu0Frames(handle)
+
+    override fun attachRetainedDisplayViewer(
+        handle: Long,
+        viewerToken: Long,
+        computerId: Int,
+    ): Long = NativeVmBindings.attachK16ComputerRetainedDisplayViewer(handle, viewerToken, computerId)
+
+    override fun detachRetainedDisplayViewer(
+        handle: Long,
+        viewerToken: Long,
+    ): Boolean = NativeVmBindings.detachK16ComputerRetainedDisplayViewer(handle, viewerToken)
+
+    override fun acceptRetainedDisplayServerbound(
+        handle: Long,
+        viewerToken: Long,
+        payload: ByteArray,
+    ): Int = NativeVmBindings.acceptK16ComputerRetainedDisplayServerbound(handle, viewerToken, payload)
+
+    override fun drainRetainedDisplayPayload(
+        handle: Long,
+        viewerToken: Long,
+    ): ByteArray = NativeVmBindings.drainK16ComputerRetainedDisplayPayload(handle, viewerToken)
 
     override fun storage0MediaSnapshot(handle: Long): ByteArray? = NativeVmBindings.k16ComputerStorage0MediaSnapshot(handle)
 
@@ -206,6 +250,20 @@ interface K16ComputerEndpoint : AutoCloseable {
     fun outputSnapshot(): ByteArray
 
     fun drainGpu0Frames(): ByteArray
+
+    fun attachRetainedDisplayViewer(
+        viewerToken: Long,
+        computerId: Int,
+    ): Long
+
+    fun detachRetainedDisplayViewer(viewerToken: Long): Boolean
+
+    fun acceptRetainedDisplayServerbound(
+        viewerToken: Long,
+        payload: ByteArray,
+    ): Int
+
+    fun drainRetainedDisplayPayload(viewerToken: Long): ByteArray
 
     fun clearOutput()
 
@@ -342,6 +400,37 @@ class K16ComputerRuntime(
     override fun drainGpu0Frames(): ByteArray {
         ensureOpen()
         return bindings.drainGpu0Frames(handle)
+    }
+
+    override fun attachRetainedDisplayViewer(
+        viewerToken: Long,
+        computerId: Int,
+    ): Long {
+        ensureOpen()
+        require(viewerToken > 0) { "viewerToken must be positive" }
+        require(computerId > 0) { "computerId must be positive" }
+        return bindings.attachRetainedDisplayViewer(handle, viewerToken, computerId)
+    }
+
+    override fun detachRetainedDisplayViewer(viewerToken: Long): Boolean {
+        ensureOpen()
+        require(viewerToken > 0) { "viewerToken must be positive" }
+        return bindings.detachRetainedDisplayViewer(handle, viewerToken)
+    }
+
+    override fun acceptRetainedDisplayServerbound(
+        viewerToken: Long,
+        payload: ByteArray,
+    ): Int {
+        ensureOpen()
+        require(viewerToken > 0) { "viewerToken must be positive" }
+        return bindings.acceptRetainedDisplayServerbound(handle, viewerToken, payload)
+    }
+
+    override fun drainRetainedDisplayPayload(viewerToken: Long): ByteArray {
+        ensureOpen()
+        require(viewerToken > 0) { "viewerToken must be positive" }
+        return bindings.drainRetainedDisplayPayload(handle, viewerToken)
     }
 
     override fun clearOutput() {

@@ -8,6 +8,7 @@ use k16_vm::k16::{
     K16_INTERRUPT_SOURCE_TIMER0, K16_TRAP_CAUSE_KEYBOARD0_INTERRUPT,
 };
 use k16_vm::k16_computer::{K16ComputerControl, K16ComputerHandle};
+use k16_vm::retained_gpu::{encode_ack, encode_resync_request, ResyncReason};
 use std::fs;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -23,6 +24,43 @@ fn k16_computer_handle_fails_when_memory_is_too_small() {
         error.contains("smaller than profile page size"),
         "unexpected error: {error}",
     );
+}
+
+#[test]
+fn k16_computer_handle_forwards_retained_viewer_protocol_without_framebuffer_translation() {
+    let bios = k16_words(&[k16_halt()]);
+    let mut handle = K16ComputerHandle::create_k16_bios_flash(&bios, 64 * 1024, 128)
+        .expect("K16 BIOS flash computer creates");
+
+    let epoch = handle
+        .attach_retained_display_viewer(101, 42)
+        .expect("viewer attaches");
+    let snapshot = handle.drain_retained_display_payload(101);
+
+    assert_eq!(&snapshot[..4], b"KDSP");
+    assert_eq!(
+        handle
+            .accept_retained_display_serverbound(
+                101,
+                &encode_ack(42, epoch, 0).expect("ACK encodes"),
+            )
+            .expect("ACK is accepted"),
+        1,
+    );
+    assert!(handle.drain_retained_display_payload(101).is_empty());
+
+    assert_eq!(
+        handle
+            .accept_retained_display_serverbound(
+                101,
+                &encode_resync_request(42, epoch, Some(0), ResyncReason::ReplicaStateLost)
+                    .expect("resync request encodes"),
+            )
+            .expect("resync is accepted"),
+        2,
+    );
+    assert!(!handle.drain_retained_display_payload(101).is_empty());
+    assert!(handle.detach_retained_display_viewer(101));
 }
 
 #[test]
@@ -153,8 +191,8 @@ fn k16_computer_handle_guest_reads_timer0_game_ticks_after_host_advance() {
     let mut handle = K16ComputerHandle::create_k16_bios_flash(&bios, 64 * 1024, 128)
         .expect("K16 BIOS flash computer creates");
 
-    handle.advance_game_tick();
-    handle.advance_game_tick();
+    handle.advance_game_tick().expect("game tick advances");
+    handle.advance_game_tick().expect("game tick advances");
 
     assert_eq!(handle.run_k16_until_signal().unwrap(), K16Signal::Halt);
     assert_eq!(handle.control().panic_code, 2);
@@ -245,7 +283,7 @@ fn k16_computer_handle_advance_game_tick_requests_timer0_interrupt() {
         K16Signal::StepLimitExceeded,
     );
 
-    handle.advance_game_tick();
+    handle.advance_game_tick().expect("game tick advances");
 
     assert_eq!(handle.run_k16_until_signal().unwrap(), K16Signal::Halt);
     assert_eq!(handle.control().panic_code, 1);

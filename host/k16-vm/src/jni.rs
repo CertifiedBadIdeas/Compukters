@@ -136,7 +136,120 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
         Some(handle) => handle,
         None => return,
     };
-    handle.advance_game_tick();
+    if let Err(error) = handle.advance_game_tick() {
+        let _ = env.throw_new("java/lang/IllegalStateException", error);
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_attachK16ComputerRetainedDisplayViewerNative(
+    mut env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    handle: jlong,
+    viewer_token: jlong,
+    computer_id: jint,
+) -> jlong {
+    if viewer_token <= 0 || computer_id <= 0 {
+        let _ = env.throw_new(
+            "java/lang/IllegalArgumentException",
+            "Retained display viewer token and computer id must be positive",
+        );
+        return 0;
+    }
+    let handle = match k16_computer_handle_mut(&mut env, handle) {
+        Some(handle) => handle,
+        None => return 0,
+    };
+    match handle.attach_retained_display_viewer(viewer_token as u64, computer_id as u32) {
+        Ok(epoch) => epoch as jlong,
+        Err(error) => {
+            let _ = env.throw_new("java/lang/IllegalStateException", error);
+            0
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_detachK16ComputerRetainedDisplayViewerNative(
+    mut env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    handle: jlong,
+    viewer_token: jlong,
+) -> jboolean {
+    if viewer_token <= 0 {
+        let _ = env.throw_new(
+            "java/lang/IllegalArgumentException",
+            "Retained display viewer token must be positive",
+        );
+        return 0;
+    }
+    let handle = match k16_computer_handle_mut(&mut env, handle) {
+        Some(handle) => handle,
+        None => return 0,
+    };
+    jboolean::from(handle.detach_retained_display_viewer(viewer_token as u64))
+}
+
+#[no_mangle]
+pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_acceptK16ComputerRetainedDisplayServerboundNative(
+    mut env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    handle: jlong,
+    viewer_token: jlong,
+    payload: JByteArray<'_>,
+) -> jint {
+    if viewer_token <= 0 {
+        let _ = env.throw_new(
+            "java/lang/IllegalArgumentException",
+            "Retained display viewer token must be positive",
+        );
+        return 0;
+    }
+    let payload = match env.convert_byte_array(&payload) {
+        Ok(payload) => payload,
+        Err(error) => {
+            let _ = env.throw_new(
+                "java/lang/IllegalArgumentException",
+                format!("Cannot read retained display serverbound payload: {error}"),
+            );
+            return 0;
+        }
+    };
+    let handle = match k16_computer_handle_mut(&mut env, handle) {
+        Some(handle) => handle,
+        None => return 0,
+    };
+    match handle.accept_retained_display_serverbound(viewer_token as u64, &payload) {
+        Ok(outcome) => outcome,
+        Err(error) => {
+            let _ = env.throw_new("java/lang/IllegalStateException", error);
+            0
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_drainK16ComputerRetainedDisplayPayloadNative(
+    mut env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    handle: jlong,
+    viewer_token: jlong,
+) -> jbyteArray {
+    if viewer_token <= 0 {
+        let _ = env.throw_new(
+            "java/lang/IllegalArgumentException",
+            "Retained display viewer token must be positive",
+        );
+        return null_mut();
+    }
+    let handle = match k16_computer_handle_mut(&mut env, handle) {
+        Some(handle) => handle,
+        None => return null_mut(),
+    };
+    byte_array_or_throw(
+        &mut env,
+        &handle.drain_retained_display_payload(viewer_token as u64),
+    )
 }
 
 #[no_mangle]
