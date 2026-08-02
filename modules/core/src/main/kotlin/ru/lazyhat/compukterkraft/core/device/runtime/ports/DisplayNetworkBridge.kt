@@ -41,6 +41,12 @@ interface DisplayNetworkBridge {
         containerId: Int,
         payload: ByteArray,
     )
+
+    fun sendRetainedDisplayPayload(
+        playerUuid: UUID,
+        containerId: Int,
+        payload: ByteArray,
+    )
 }
 
 object NoopDisplayNetworkBridge : DisplayNetworkBridge {
@@ -58,6 +64,12 @@ object NoopDisplayNetworkBridge : DisplayNetworkBridge {
     ) = Unit
 
     override fun sendNativeDisplayFrameBytes(
+        playerUuid: UUID,
+        containerId: Int,
+        payload: ByteArray,
+    ) = Unit
+
+    override fun sendRetainedDisplayPayload(
         playerUuid: UUID,
         containerId: Int,
         payload: ByteArray,

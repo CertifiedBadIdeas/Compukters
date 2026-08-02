@@ -1896,6 +1896,12 @@ private class CapturingDisplayNetworkBridge : DisplayNetworkBridge {
         }
     }
 
+    override fun sendRetainedDisplayPayload(
+        playerUuid: UUID,
+        containerId: Int,
+        payload: ByteArray,
+    ) = Unit
+
     fun clear() {
         sentFrames.clear()
         decodedFallbackFrames.clear()

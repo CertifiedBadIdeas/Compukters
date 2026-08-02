@@ -62,6 +62,7 @@ class K16RuntimeDevice(
 
     private var endpoint: K16EndpointWorker? = null
     private val displaySessions = DisplaySessionTracker()
+    private val retainedDisplaySessions = RetainedDisplaySessionTracker()
     private val pendingDisplayBatches = mutableListOf<NativePendingDisplayBatch>()
     private var labelBacking: String? = properties.label
     private var terminalControlReached = false
@@ -100,6 +101,7 @@ class K16RuntimeDevice(
         endpoint = null
         terminalControlReached = false
         pendingDisplayBatches.clear()
+        retainedDisplaySessions.clear()
         current.close()
         stateSink.onPowerStateChanged(false)
     }
@@ -114,6 +116,7 @@ class K16RuntimeDevice(
         current.requestTick()
         terminalControlReached = current.terminalControlReached
         flushFramebufferFrames(current)
+        flushRetainedDisplayPayloads(current)
     }
 
     override fun close() = shutdown()
@@ -242,6 +245,69 @@ class K16RuntimeDevice(
         displaySessions.detach(playerUuid, displayId)
     }
 
+    override fun attachRetainedDisplaySession(
+        playerUuid: UUID,
+        containerId: Int,
+        displayId: Int,
+    ): Boolean {
+        val current = endpoint ?: return false
+        val session = retainedDisplaySessions.attach(playerUuid, containerId, displayId)
+        return try {
+            current.attachRetainedDisplayViewer(session.viewerToken, deviceId)
+            flushRetainedDisplayPayload(current, session)
+            true
+        } catch (error: Throwable) {
+            retainedDisplaySessions.detach(playerUuid, containerId, displayId)
+            runCatching { current.detachRetainedDisplayViewer(session.viewerToken) }
+            recordRuntimeFailure(error, "attach retained display viewer")
+            false
+        }
+    }
+
+    override fun acceptRetainedDisplayServerbound(
+        playerUuid: UUID,
+        containerId: Int,
+        displayId: Int,
+        payload: ByteArray,
+    ): Boolean {
+        val current = endpoint ?: return false
+        val viewerToken =
+            retainedDisplaySessions.authorize(playerUuid, containerId, displayId)
+                ?: return false
+        return try {
+            val outcome = current.acceptRetainedDisplayServerbound(viewerToken, payload)
+            if (outcome > 0) {
+                retainedDisplaySessions
+                    .sessionsSnapshot()
+                    .firstOrNull { it.viewerToken == viewerToken }
+                    ?.let { flushRetainedDisplayPayload(current, it) }
+                true
+            } else {
+                false
+            }
+        } catch (error: Throwable) {
+            recordRuntimeFailure(error, "accept retained display message")
+            false
+        }
+    }
+
+    override fun detachRetainedDisplaySession(
+        playerUuid: UUID,
+        containerId: Int,
+        displayId: Int,
+    ): Boolean {
+        val viewerToken =
+            retainedDisplaySessions.detach(playerUuid, containerId, displayId)
+                ?: return false
+        val current = endpoint ?: return true
+        return try {
+            current.detachRetainedDisplayViewer(viewerToken)
+        } catch (error: Throwable) {
+            recordRuntimeFailure(error, "detach retained display viewer")
+            false
+        }
+    }
+
     private fun argumentBytes(value: Any?): ByteArray? =
         when (value) {
             is ByteArray -> {
@@ -279,6 +345,32 @@ class K16RuntimeDevice(
         val batch = mergeNativeBatches(pendingDisplayBatches)
         pendingDisplayBatches.clear()
         return sendNativeBatch(batch)
+    }
+
+    private fun flushRetainedDisplayPayloads(current: K16EndpointWorker) {
+        for (session in retainedDisplaySessions.sessionsSnapshot()) {
+            if (!displayNetwork.isDisplaySessionStillBound(
+                    session.playerUuid,
+                    session.containerId,
+                    deviceId,
+                    session.displayId,
+                )
+            ) {
+                detachRetainedDisplaySession(session.playerUuid, session.containerId, session.displayId)
+                continue
+            }
+            flushRetainedDisplayPayload(current, session)
+        }
+    }
+
+    private fun flushRetainedDisplayPayload(
+        current: K16EndpointWorker,
+        session: RetainedDisplaySession,
+    ) {
+        val payload = current.drainRetainedDisplayPayload(session.viewerToken)
+        if (payload.isNotEmpty()) {
+            displayNetwork.sendRetainedDisplayPayload(session.playerUuid, session.containerId, payload)
+        }
     }
 
     private fun mergeNativeBatches(batches: List<NativePendingDisplayBatch>): NativePendingDisplayBatch {
@@ -426,6 +518,40 @@ class K16RuntimeDevice(
             return response.join()
         }
 
+        fun attachRetainedDisplayViewer(
+            viewerToken: Long,
+            computerId: Int,
+        ): Long {
+            check(!closed.get()) { "K16 endpoint worker is closed" }
+            val response = CompletableFuture<Long>()
+            commands.offer(Command.AttachRetainedDisplayViewer(viewerToken, computerId, response))
+            return response.join()
+        }
+
+        fun detachRetainedDisplayViewer(viewerToken: Long): Boolean {
+            check(!closed.get()) { "K16 endpoint worker is closed" }
+            val response = CompletableFuture<Boolean>()
+            commands.offer(Command.DetachRetainedDisplayViewer(viewerToken, response))
+            return response.join()
+        }
+
+        fun acceptRetainedDisplayServerbound(
+            viewerToken: Long,
+            payload: ByteArray,
+        ): Int {
+            check(!closed.get()) { "K16 endpoint worker is closed" }
+            val response = CompletableFuture<Int>()
+            commands.offer(Command.AcceptRetainedDisplayServerbound(viewerToken, payload.copyOf(), response))
+            return response.join()
+        }
+
+        fun drainRetainedDisplayPayload(viewerToken: Long): ByteArray {
+            check(!closed.get()) { "K16 endpoint worker is closed" }
+            val response = CompletableFuture<ByteArray>()
+            commands.offer(Command.DrainRetainedDisplayPayload(viewerToken, response))
+            return response.join()
+        }
+
         override fun close() {
             if (closed.compareAndSet(false, true)) {
                 commands.offer(Command.Close)
@@ -525,6 +651,30 @@ class K16RuntimeDevice(
                             }
                         }
 
+                        is Command.AttachRetainedDisplayViewer -> {
+                            complete(command.response) {
+                                endpoint.attachRetainedDisplayViewer(command.viewerToken, command.computerId)
+                            }
+                        }
+
+                        is Command.DetachRetainedDisplayViewer -> {
+                            complete(command.response) {
+                                endpoint.detachRetainedDisplayViewer(command.viewerToken)
+                            }
+                        }
+
+                        is Command.AcceptRetainedDisplayServerbound -> {
+                            complete(command.response) {
+                                endpoint.acceptRetainedDisplayServerbound(command.viewerToken, command.payload)
+                            }
+                        }
+
+                        is Command.DrainRetainedDisplayPayload -> {
+                            complete(command.response) {
+                                endpoint.drainRetainedDisplayPayload(command.viewerToken)
+                            }
+                        }
+
                         Command.Close -> {
                             break
                         }
@@ -560,6 +710,17 @@ class K16RuntimeDevice(
             val startedAt = System.nanoTime()
             push()
             metricsCollector.recordK16TextInput(byteCount, System.nanoTime() - startedAt)
+        }
+
+        private inline fun <T> complete(
+            response: CompletableFuture<T>,
+            operation: () -> T,
+        ) {
+            try {
+                response.complete(operation())
+            } catch (error: Throwable) {
+                response.completeExceptionally(error)
+            }
         }
 
         private fun refreshCaches(endpoint: K16ComputerEndpoint) {
@@ -616,6 +777,28 @@ class K16RuntimeDevice(
             data object ClearOutput : Command
 
             data class MachineSnapshot(
+                val response: CompletableFuture<ByteArray>,
+            ) : Command
+
+            data class AttachRetainedDisplayViewer(
+                val viewerToken: Long,
+                val computerId: Int,
+                val response: CompletableFuture<Long>,
+            ) : Command
+
+            data class DetachRetainedDisplayViewer(
+                val viewerToken: Long,
+                val response: CompletableFuture<Boolean>,
+            ) : Command
+
+            data class AcceptRetainedDisplayServerbound(
+                val viewerToken: Long,
+                val payload: ByteArray,
+                val response: CompletableFuture<Int>,
+            ) : Command
+
+            data class DrainRetainedDisplayPayload(
+                val viewerToken: Long,
                 val response: CompletableFuture<ByteArray>,
             ) : Command
 

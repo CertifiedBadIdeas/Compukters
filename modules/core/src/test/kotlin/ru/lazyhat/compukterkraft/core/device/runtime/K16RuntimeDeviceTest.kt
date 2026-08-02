@@ -194,6 +194,9 @@ class K16RuntimeDeviceTest {
         assertFalse(runtimeSource.contains("decodeFrames("))
         assertFalse(runtimeSource.contains("DecodedPendingDisplayBatch"))
         assertFalse(runtimeSource.contains("coalesceDisplayFrames"))
+        assertFalse(runtimeSource.contains("RetainedDisplayProtocol"))
+        assertFalse(runtimeSource.contains("\"KDSP\""))
+        assertTrue(runtimeSource.contains("sendRetainedDisplayPayload"))
         assertFalse(bridgeSource.contains("NativeDisplayFrameCodec"))
         assertFalse(bridgeSource.contains("decodeFrames("))
     }
@@ -226,6 +229,56 @@ class K16RuntimeDeviceTest {
         assertFalse(device.isOn)
         assertEquals(1, endpoint.closeCalls)
         assertEquals(listOf(true, false), powerChanges)
+    }
+
+    @Test
+    fun routesAuthorizedRetainedViewerBytesThroughTheEndpointWorker() {
+        val endpoint = RecordingK16Endpoint()
+        val displayNetwork = RecordingDisplayNetworkBridge()
+        val device =
+            K16RuntimeDevice(
+                deviceId = 73,
+                properties = DeviceProperties(DeviceFamily.NORMAL, label = "K16"),
+                endpointFactory = { endpoint },
+                stateSink = {},
+                displayNetwork = displayNetwork,
+            )
+        val playerUuid = UUID.fromString("00000000-0000-0000-0000-000000000073")
+        val callerThreadId = Thread.currentThread().id
+        endpoint.retainedPayloads += byteArrayOf(0x4b, 0x44, 0x53, 0x50)
+
+        device.turnOn()
+
+        assertTrue(device.attachRetainedDisplaySession(playerUuid, containerId = 41, displayId = 9))
+        assertEquals(listOf(1L to 73), endpoint.retainedViewerAttaches)
+        assertFalse(endpoint.retainedCallThreadIds.contains(callerThreadId))
+        assertEquals(
+            listOf(SentNativePayload(playerUuid, 41, byteArrayOf(0x4b, 0x44, 0x53, 0x50))),
+            displayNetwork.sentRetainedPayloads,
+        )
+
+        val serverbound = byteArrayOf(1, 2, 3, 4)
+        assertFalse(device.acceptRetainedDisplayServerbound(playerUuid, containerId = 40, displayId = 9, payload = serverbound))
+        endpoint.retainedServerboundOutcome = 2
+        endpoint.retainedPayloads += byteArrayOf(9, 8, 7)
+        assertTrue(device.acceptRetainedDisplayServerbound(playerUuid, containerId = 41, displayId = 9, payload = serverbound))
+        assertEquals(listOf(1L to serverbound.toList()), endpoint.retainedServerbound)
+        assertEquals(
+            SentNativePayload(playerUuid, 41, byteArrayOf(9, 8, 7)),
+            displayNetwork.sentRetainedPayloads.last(),
+        )
+
+        endpoint.retainedPayloads += byteArrayOf(6, 5, 4)
+        device.serverTick()
+        assertEquals(
+            SentNativePayload(playerUuid, 41, byteArrayOf(6, 5, 4)),
+            displayNetwork.sentRetainedPayloads.last(),
+        )
+
+        assertFalse(device.detachRetainedDisplaySession(playerUuid, containerId = 40, displayId = 9))
+        assertTrue(device.detachRetainedDisplaySession(playerUuid, containerId = 41, displayId = 9))
+        assertEquals(listOf(1L), endpoint.retainedViewerDetaches)
+        device.shutdown()
     }
 
     @Test
@@ -1187,6 +1240,12 @@ class K16RuntimeDeviceTest {
         val keyboardKeyUps: MutableList<Int> = Collections.synchronizedList(mutableListOf())
         val keyboardChars: MutableList<Byte> = Collections.synchronizedList(mutableListOf())
         val keyboardPasteBytes: MutableList<ByteArray> = Collections.synchronizedList(mutableListOf())
+        val retainedViewerAttaches: MutableList<Pair<Long, Int>> = Collections.synchronizedList(mutableListOf())
+        val retainedViewerDetaches: MutableList<Long> = Collections.synchronizedList(mutableListOf())
+        val retainedServerbound: MutableList<Pair<Long, List<Byte>>> = Collections.synchronizedList(mutableListOf())
+        val retainedCallThreadIds: MutableList<Long> = Collections.synchronizedList(mutableListOf())
+        val retainedPayloads = ArrayDeque<ByteArray>()
+        var retainedServerboundOutcome = 1
         @Volatile
         var tickCalls = 0
             private set
@@ -1276,6 +1335,35 @@ class K16RuntimeDeviceTest {
             } else {
                 gpuFrameBatches.removeFirst()
             }
+
+        override fun attachRetainedDisplayViewer(
+            viewerToken: Long,
+            computerId: Int,
+        ): Long {
+            retainedViewerAttaches += viewerToken to computerId
+            retainedCallThreadIds += Thread.currentThread().id
+            return 1L
+        }
+
+        override fun detachRetainedDisplayViewer(viewerToken: Long): Boolean {
+            retainedViewerDetaches += viewerToken
+            retainedCallThreadIds += Thread.currentThread().id
+            return true
+        }
+
+        override fun acceptRetainedDisplayServerbound(
+            viewerToken: Long,
+            payload: ByteArray,
+        ): Int {
+            retainedServerbound += viewerToken to payload.toList()
+            retainedCallThreadIds += Thread.currentThread().id
+            return retainedServerboundOutcome
+        }
+
+        override fun drainRetainedDisplayPayload(viewerToken: Long): ByteArray {
+            retainedCallThreadIds += Thread.currentThread().id
+            return if (retainedPayloads.isEmpty()) ByteArray(0) else retainedPayloads.removeFirst()
+        }
 
         override fun clearOutput() = Unit
 
@@ -1428,6 +1516,7 @@ class K16RuntimeDeviceTest {
     private class RecordingDisplayNetworkBridge : DisplayNetworkBridge {
         val sentFrames = mutableListOf<SentFrame>()
         val sentNativePayloads = mutableListOf<SentNativePayload>()
+        val sentRetainedPayloads = mutableListOf<SentNativePayload>()
 
         override fun isDisplaySessionStillBound(
             playerUuid: UUID,
@@ -1450,6 +1539,14 @@ class K16RuntimeDeviceTest {
             payload: ByteArray,
         ) {
             sentNativePayloads += SentNativePayload(playerUuid, containerId, payload)
+        }
+
+        override fun sendRetainedDisplayPayload(
+            playerUuid: UUID,
+            containerId: Int,
+            payload: ByteArray,
+        ) {
+            sentRetainedPayloads += SentNativePayload(playerUuid, containerId, payload)
         }
     }
 }

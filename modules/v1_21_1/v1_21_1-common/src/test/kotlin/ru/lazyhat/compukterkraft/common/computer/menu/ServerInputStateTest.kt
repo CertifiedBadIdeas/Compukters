@@ -146,6 +146,25 @@ class ServerInputStateTest {
             playerUuid: UUID,
             displayId: Int,
         ) = Unit
+
+        override fun attachRetainedDisplaySession(
+            playerUuid: UUID,
+            containerId: Int,
+            displayId: Int,
+        ): Boolean = false
+
+        override fun acceptRetainedDisplayServerbound(
+            playerUuid: UUID,
+            containerId: Int,
+            displayId: Int,
+            payload: ByteArray,
+        ): Boolean = false
+
+        override fun detachRetainedDisplaySession(
+            playerUuid: UUID,
+            containerId: Int,
+            displayId: Int,
+        ): Boolean = false
     }
 
     private class TestComputerMenu(
