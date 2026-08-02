@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 pub const CREATE_IMAGE: u16 = 0x0001;
 pub const CREATE_MASK: u16 = 0x0002;
 pub const CREATE_INSTANCES: u16 = 0x0003;
