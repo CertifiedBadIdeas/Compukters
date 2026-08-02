@@ -2,6 +2,7 @@ mod draw_list;
 #[allow(dead_code)] // Wired into the transaction engine in the next implementation task.
 mod packet;
 mod resource;
+mod transaction;
 
 pub use draw_list::{
     DestinationRect, DrawCommand, DrawList, DrawListValidationError, SourceRect,
@@ -12,6 +13,7 @@ pub use resource::{
     ImageRgb565, Mask1Bpp, MaskInstance, MaskInstanceBuffer, MaskInstanceRecord, Resource,
     ResourceValidationError, MASK_INSTANCE_OPAQUE_BACKGROUND,
 };
+pub use transaction::{GuestRejection, RetainedGpu, RetainedGpuFault, SubmissionOutcome};
 
 pub const DISPLAY_WIDTH: u16 = 320;
 pub const DISPLAY_HEIGHT: u16 = 200;

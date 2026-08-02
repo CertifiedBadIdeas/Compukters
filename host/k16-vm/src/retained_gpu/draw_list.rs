@@ -106,6 +106,18 @@ pub struct DrawList {
 }
 
 impl DrawList {
+    pub(crate) fn from_validated_parts(
+        background_rgb565: u16,
+        commands: Vec<DrawCommand>,
+        encoded_byte_len: usize,
+    ) -> Self {
+        Self {
+            background_rgb565,
+            commands,
+            encoded_byte_len,
+        }
+    }
+
     pub fn resolve(
         background_rgb565: u16,
         commands: Vec<UnresolvedDrawCommand>,
@@ -299,6 +311,19 @@ impl DrawList {
 
     pub fn encoded_byte_len(&self) -> usize {
         self.encoded_byte_len
+    }
+
+    pub(crate) fn references(&self, reference: ResourceRef) -> bool {
+        self.commands.iter().any(|command| match command {
+            DrawCommand::DrawImage { image, .. } => *image == reference,
+            DrawCommand::DrawMask { mask, .. } => *mask == reference,
+            DrawCommand::DrawMaskInstances {
+                mask, instances, ..
+            } => *mask == reference || *instances == reference,
+            DrawCommand::PushClip { .. } | DrawCommand::PopClip | DrawCommand::FillRect { .. } => {
+                false
+            }
+        })
     }
 }
 
