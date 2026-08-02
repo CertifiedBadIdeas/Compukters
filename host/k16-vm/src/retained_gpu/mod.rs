@@ -1,10 +1,13 @@
 mod draw_list;
+#[allow(dead_code)] // Wired into the transaction engine in the next implementation task.
+mod packet;
 mod resource;
 
 pub use draw_list::{
     DestinationRect, DrawCommand, DrawList, DrawListValidationError, SourceRect,
     UnresolvedDrawCommand, MAX_CLIP_DEPTH, MAX_DRAW_COMMANDS, MAX_DRAW_LIST_BYTES,
 };
+pub use packet::ResultCode;
 pub use resource::{
     ImageRgb565, Mask1Bpp, MaskInstance, MaskInstanceBuffer, MaskInstanceRecord, Resource,
     ResourceValidationError, MASK_INSTANCE_OPAQUE_BACKGROUND,
