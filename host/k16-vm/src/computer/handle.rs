@@ -159,6 +159,7 @@ impl K16ComputerHandle {
         Ok(match outcome {
             ServerboundOutcome::Acknowledged => 1,
             ServerboundOutcome::Resynchronized { .. } => 2,
+            ServerboundOutcome::ReattachRequired => 3,
             ServerboundOutcome::Rejected(ServerboundRejection::UnknownViewer) => -1,
             ServerboundOutcome::Rejected(ServerboundRejection::Malformed) => -2,
             ServerboundOutcome::Rejected(ServerboundRejection::AckMismatch) => -3,
@@ -169,6 +170,12 @@ impl K16ComputerHandle {
         self.retained_display
             .drain_payload(viewer_token)
             .unwrap_or_default()
+    }
+
+    pub fn drain_retained_display_payloads(&mut self) -> Result<Option<Vec<u8>>, String> {
+        self.retained_display
+            .drain_payload_batch()
+            .map_err(|error| error.to_string())
     }
 
     pub fn control(&self) -> K16ComputerControl {

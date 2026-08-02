@@ -24,9 +24,11 @@ pub enum ServerboundRejection {
 pub enum ServerboundOutcome {
     Acknowledged,
     Resynchronized { viewer_epoch: u64 },
+    ReattachRequired,
     Rejected(ServerboundRejection),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum ServerboundMessage {
     Ack {
         computer_id: u32,

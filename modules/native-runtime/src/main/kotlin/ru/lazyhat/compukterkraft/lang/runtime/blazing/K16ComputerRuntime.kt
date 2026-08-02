@@ -83,6 +83,8 @@ interface K16ComputerRuntimeBindings {
         viewerToken: Long,
     ): ByteArray
 
+    fun drainRetainedDisplayPayloads(handle: Long): List<NativeRetainedDisplayPayload>
+
     fun storage0MediaSnapshot(handle: Long): ByteArray?
 
     fun machineSnapshot(handle: Long): ByteArray
@@ -152,6 +154,9 @@ object NativeK16ComputerRuntimeBindings : K16ComputerRuntimeBindings {
         handle: Long,
         viewerToken: Long,
     ): ByteArray = NativeVmBindings.drainK16ComputerRetainedDisplayPayload(handle, viewerToken)
+
+    override fun drainRetainedDisplayPayloads(handle: Long): List<NativeRetainedDisplayPayload> =
+        NativeVmBindings.drainK16ComputerRetainedDisplayPayloads(handle)
 
     override fun storage0MediaSnapshot(handle: Long): ByteArray? = NativeVmBindings.k16ComputerStorage0MediaSnapshot(handle)
 
@@ -265,6 +270,8 @@ interface K16ComputerEndpoint : AutoCloseable {
 
     fun drainRetainedDisplayPayload(viewerToken: Long): ByteArray
 
+    fun drainRetainedDisplayPayloads(): List<NativeRetainedDisplayPayload>
+
     fun clearOutput()
 
     fun machineSnapshot(): ByteArray
@@ -276,6 +283,11 @@ data class K16ComputerTickResult(
     val signal: NativeK16ComputerSignal,
     val control: NativeK16ComputerControl,
     val yieldSignals: Long = 0,
+)
+
+data class NativeRetainedDisplayPayload(
+    val viewerToken: Long,
+    val payload: ByteArray,
 )
 
 class K16ComputerRuntime(
@@ -431,6 +443,11 @@ class K16ComputerRuntime(
         ensureOpen()
         require(viewerToken > 0) { "viewerToken must be positive" }
         return bindings.drainRetainedDisplayPayload(handle, viewerToken)
+    }
+
+    override fun drainRetainedDisplayPayloads(): List<NativeRetainedDisplayPayload> {
+        ensureOpen()
+        return bindings.drainRetainedDisplayPayloads(handle)
     }
 
     override fun clearOutput() {

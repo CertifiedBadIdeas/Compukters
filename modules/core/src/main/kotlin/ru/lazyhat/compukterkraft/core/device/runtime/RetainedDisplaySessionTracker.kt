@@ -66,7 +66,7 @@ internal class RetainedDisplaySessionTracker {
     }
 
     @Synchronized
-    fun sessionsSnapshot(): List<RetainedDisplaySession> = sessions.values.toList()
+    fun sessionForToken(viewerToken: Long): RetainedDisplaySession? = sessions.values.firstOrNull { it.viewerToken == viewerToken }
 
     @Synchronized
     fun clear() {

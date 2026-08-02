@@ -152,6 +152,7 @@ class K16ComputerRuntimeFactoryTest {
                 "detachK16ComputerRetainedDisplayViewerNative",
                 "acceptK16ComputerRetainedDisplayServerboundNative",
                 "drainK16ComputerRetainedDisplayPayloadNative",
+                "drainK16ComputerRetainedDisplayPayloadsNative",
                 "freeK16ComputerNative",
             )
         ) {
