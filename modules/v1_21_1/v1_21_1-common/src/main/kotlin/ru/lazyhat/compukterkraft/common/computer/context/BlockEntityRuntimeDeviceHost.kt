@@ -81,6 +81,14 @@ class BlockEntityRuntimeDeviceHost(
                     player,
                 )
             }
+
+            override fun sendRetainedDisplayPayload(
+                playerUuid: UUID,
+                containerId: Int,
+                payload: ByteArray,
+            ) {
+                error("Retained display Minecraft transport is implemented by issue #459")
+            }
         }
 
     val stateSink: DeviceStateSink =

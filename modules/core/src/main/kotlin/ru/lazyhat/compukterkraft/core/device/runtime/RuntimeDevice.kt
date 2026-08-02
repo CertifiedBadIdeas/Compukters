@@ -64,6 +64,25 @@ interface RuntimeDeviceDisplaySessions {
         playerUuid: UUID,
         displayId: Int,
     )
+
+    fun attachRetainedDisplaySession(
+        playerUuid: UUID,
+        containerId: Int,
+        displayId: Int,
+    ): Boolean
+
+    fun acceptRetainedDisplayServerbound(
+        playerUuid: UUID,
+        containerId: Int,
+        displayId: Int,
+        payload: ByteArray,
+    ): Boolean
+
+    fun detachRetainedDisplaySession(
+        playerUuid: UUID,
+        containerId: Int,
+        displayId: Int,
+    ): Boolean
 }
 
 /** Metadata role: family/label. Access checks belong to the carrier
