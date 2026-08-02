@@ -1,7 +1,10 @@
 #[path = "support/retained_gpu_packet.rs"]
 mod wire;
 
-use k16_vm::retained_gpu::{encode_snapshot, NetworkEncodeError, RetainedGpu, SubmissionOutcome};
+use k16_vm::retained_gpu::{
+    encode_delta, encode_snapshot, DamageSubmissionOutcome, NetworkEncodeError, ResourceManifest,
+    RetainedGpu, SubmissionOutcome,
+};
 use wire::*;
 
 fn committed(outcome: SubmissionOutcome) {
@@ -118,6 +121,48 @@ fn snapshot_rejects_zero_transport_identity() {
         encode_snapshot(1, 0, &gpu),
         Err(NetworkEncodeError::InvalidIdentity)
     ));
+}
+
+#[test]
+fn one_instance_delta_is_92_bytes_and_row_delta_is_1_604_bytes() {
+    for (count, expected_length) in [(1usize, 92usize), (64, 1_604)] {
+        let mut gpu = RetainedGpu::try_new().expect("gpu");
+        committed(
+            gpu.submit(&packet(
+                0,
+                &[
+                    create_mask(1, 8, 8, &[0xff; 8]),
+                    create_instances(2, &vec![instance(0); 64]),
+                    replace_draw_list(0, &[draw_mask_instances(1, 2, 64)]),
+                ],
+            ))
+            .expect("initial submit"),
+        );
+        let base = ResourceManifest::try_from_gpu(&gpu).expect("manifest");
+        let DamageSubmissionOutcome::Committed { damage, .. } = gpu
+            .submit_with_damage(&packet(
+                1,
+                &[patch_instances(2, 0, &vec![instance(0); count])],
+            ))
+            .expect("patch")
+        else {
+            panic!("expected commit");
+        };
+
+        let bytes = encode_delta(42, 9, &base, &damage, &gpu).expect("delta");
+
+        assert_eq!(bytes.len(), expected_length);
+        assert_eq!(u16_at(&bytes, 6), 2);
+        assert_eq!(u64_at(&bytes, 24), 1);
+        assert_eq!(u64_at(&bytes, 32), 2);
+        assert_eq!(u32_at(&bytes, 40), 1);
+        assert_eq!(u32_at(&bytes, 44), 0);
+        assert_eq!(u16_at(&bytes, 48), 0x0012);
+        assert_eq!(u32_at(&bytes, 56), 2);
+        assert_eq!(u32_at(&bytes, 60), 1);
+        assert_eq!(u16_at(&bytes, 64), 0);
+        assert_eq!(u16_at(&bytes, 66), count as u16);
+    }
 }
 
 fn u16_at(bytes: &[u8], offset: usize) -> u16 {

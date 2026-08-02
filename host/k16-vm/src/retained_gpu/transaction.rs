@@ -3,9 +3,10 @@ use super::packet::{
     PacketDecodeError,
 };
 use super::{
-    DestinationRect, DrawCommand, DrawList, ImageRgb565, Mask1Bpp, MaskInstance,
-    MaskInstanceBuffer, MaskInstanceRecord, Resource, ResourceEntry, ResourceRef, ResultCode,
-    SourceRect, MAX_CLIP_DEPTH, MAX_RESOURCES, MAX_RESOURCE_BYTES, MAX_TOTAL_RESOURCE_BYTES,
+    CommittedDamage, DamageRange, DamageRect, DestinationRect, DrawCommand, DrawList, ImageRgb565,
+    Mask1Bpp, MaskInstance, MaskInstanceBuffer, MaskInstanceRecord, Resource, ResourceEntry,
+    ResourceRef, ResultCode, SourceRect, MAX_CLIP_DEPTH, MAX_RESOURCES, MAX_RESOURCE_BYTES,
+    MAX_TOTAL_RESOURCE_BYTES,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -18,6 +19,15 @@ pub struct GuestRejection {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SubmissionOutcome {
     Committed { sequence: u64 },
+    Rejected(GuestRejection),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DamageSubmissionOutcome {
+    Committed {
+        sequence: u64,
+        damage: CommittedDamage,
+    },
     Rejected(GuestRejection),
 }
 
@@ -53,10 +63,38 @@ impl RetainedGpu {
     }
 
     pub fn submit(&mut self, packet: &[u8]) -> Result<SubmissionOutcome, RetainedGpuFault> {
+        let prepared = match self.prepare_submission(packet)? {
+            Ok(prepared) => prepared,
+            Err(rejection) => return Ok(SubmissionOutcome::Rejected(rejection)),
+        };
+        let sequence = prepared.0;
+        self.commit(prepared.1)?;
+        self.commit_sequence = sequence;
+        Ok(SubmissionOutcome::Committed { sequence })
+    }
+
+    pub fn submit_with_damage(
+        &mut self,
+        packet: &[u8],
+    ) -> Result<DamageSubmissionOutcome, RetainedGpuFault> {
+        let (sequence, prepared) = match self.prepare_submission(packet)? {
+            Ok(prepared) => prepared,
+            Err(rejection) => return Ok(DamageSubmissionOutcome::Rejected(rejection)),
+        };
+        let damage = prepared.try_build_damage(self, self.commit_sequence, sequence)?;
+        self.commit(prepared)?;
+        self.commit_sequence = sequence;
+        Ok(DamageSubmissionOutcome::Committed { sequence, damage })
+    }
+
+    fn prepare_submission<'a>(
+        &self,
+        packet: &'a [u8],
+    ) -> Result<Result<(u64, PreparedTransaction<'a>), GuestRejection>, RetainedGpuFault> {
         let decoded = match decode_packet(packet) {
             Ok(packet) => packet,
             Err(PacketDecodeError::Rejected(rejection)) => {
-                return Ok(SubmissionOutcome::Rejected(GuestRejection {
+                return Ok(Err(GuestRejection {
                     code: rejection.code,
                     operation_index: rejection.operation_index,
                     byte_offset: rejection.byte_offset,
@@ -65,7 +103,12 @@ impl RetainedGpu {
             Err(PacketDecodeError::Allocation) => return Err(RetainedGpuFault::Allocation),
         };
         if decoded.expected_base_sequence != self.commit_sequence {
-            return Ok(reject(ResultCode::StaleBase, u32::MAX, 16));
+            let SubmissionOutcome::Rejected(rejection) =
+                reject(ResultCode::StaleBase, u32::MAX, 16)
+            else {
+                unreachable!()
+            };
+            return Ok(Err(rejection));
         }
         let next_sequence = self
             .commit_sequence
@@ -73,13 +116,9 @@ impl RetainedGpu {
             .ok_or(RetainedGpuFault::CounterExhausted)?;
         let prepared = match PreparedTransaction::build(self, &decoded.operations)? {
             Ok(prepared) => prepared,
-            Err(rejection) => return Ok(SubmissionOutcome::Rejected(rejection)),
+            Err(rejection) => return Ok(Err(rejection)),
         };
-        self.commit(prepared)?;
-        self.commit_sequence = next_sequence;
-        Ok(SubmissionOutcome::Committed {
-            sequence: next_sequence,
-        })
+        Ok(Ok((next_sequence, prepared)))
     }
 
     pub fn commit_sequence(&self) -> u64 {
@@ -252,6 +291,103 @@ struct InstanceOverride {
 }
 
 impl<'a> PreparedTransaction<'a> {
+    fn try_build_damage(
+        &self,
+        gpu: &RetainedGpu,
+        base_sequence: u64,
+        target_sequence: u64,
+    ) -> Result<CommittedDamage, RetainedGpuFault> {
+        let mut damage = CommittedDamage::try_new(
+            base_sequence,
+            target_sequence,
+            self.actions.len(),
+            self.draw_list.is_some(),
+        )?;
+        for action in &self.actions {
+            match action {
+                PreparedAction::Create { entry } => {
+                    damage.push_created(entry.id, entry.incarnation);
+                }
+                PreparedAction::PatchImage {
+                    resource_id,
+                    x,
+                    y,
+                    width,
+                    height,
+                    ..
+                } => {
+                    let entry = gpu
+                        .resources
+                        .iter()
+                        .find(|entry| entry.id == *resource_id)
+                        .ok_or(RetainedGpuFault::CorruptState)?;
+                    damage.try_push_image_patch(
+                        *resource_id,
+                        entry.incarnation,
+                        DamageRect {
+                            x: *x,
+                            y: *y,
+                            width: *width,
+                            height: *height,
+                        },
+                    )?;
+                }
+                PreparedAction::PatchMask {
+                    resource_id,
+                    x,
+                    y,
+                    width,
+                    height,
+                    ..
+                } => {
+                    let entry = gpu
+                        .resources
+                        .iter()
+                        .find(|entry| entry.id == *resource_id)
+                        .ok_or(RetainedGpuFault::CorruptState)?;
+                    damage.try_push_mask_patch(
+                        *resource_id,
+                        entry.incarnation,
+                        DamageRect {
+                            x: *x,
+                            y: *y,
+                            width: *width,
+                            height: *height,
+                        },
+                    )?;
+                }
+                PreparedAction::PatchInstances {
+                    resource_id,
+                    start_index,
+                    instances,
+                } => {
+                    let entry = gpu
+                        .resources
+                        .iter()
+                        .find(|entry| entry.id == *resource_id)
+                        .ok_or(RetainedGpuFault::CorruptState)?;
+                    damage.try_push_instance_patch(
+                        *resource_id,
+                        entry.incarnation,
+                        DamageRange {
+                            start_index: *start_index,
+                            count: instances.len() as u16,
+                        },
+                    )?;
+                }
+                PreparedAction::Drop { resource_id } => {
+                    let entry = gpu
+                        .resources
+                        .iter()
+                        .find(|entry| entry.id == *resource_id)
+                        .ok_or(RetainedGpuFault::CorruptState)?;
+                    damage.push_dropped(*resource_id, entry.incarnation);
+                }
+            }
+        }
+        Ok(damage.finish())
+    }
+
     fn build(
         gpu: &RetainedGpu,
         operations: &[DecodedOperation<'a>],
