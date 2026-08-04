@@ -25,4 +25,8 @@ import software.bernie.geckolib.renderer.GeoBlockRenderer
 
 class NotebookBlockEntityRenderer(
     context: BlockEntityRendererProvider.Context,
-) : GeoBlockRenderer<NeoForgeNotebookBlockEntity>(NotebookGeoModel())
+) : GeoBlockRenderer<NeoForgeNotebookBlockEntity>(NotebookGeoModel()) {
+    init {
+        addRenderLayer(NotebookRetainedDisplayLayer(this, presentationLookup = { null }))
+    }
+}
