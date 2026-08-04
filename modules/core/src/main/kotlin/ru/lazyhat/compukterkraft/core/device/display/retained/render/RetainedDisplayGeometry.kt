@@ -26,6 +26,47 @@ data class RetainedFloatRect(
     val height: Float,
 )
 
+data class RetainedIntegerRect(
+    val left: Int,
+    val top: Int,
+    val right: Int,
+    val bottom: Int,
+) {
+    val width: Int get() = right - left
+    val height: Int get() = bottom - top
+
+    fun intersection(other: RetainedIntegerRect): RetainedIntegerRect? {
+        val result =
+            RetainedIntegerRect(
+                maxOf(left, other.left),
+                maxOf(top, other.top),
+                minOf(right, other.right),
+                minOf(bottom, other.bottom),
+            )
+        return result.takeIf { it.width > 0 && it.height > 0 }
+    }
+
+    fun contains(other: RetainedIntegerRect): Boolean =
+        other.left >= left && other.top >= top && other.right <= right && other.bottom <= bottom
+
+    fun overlaps(other: RetainedIntegerRect): Boolean =
+        left < other.right && right > other.left && top < other.bottom && bottom > other.top
+
+    fun toFloatRect(): RetainedFloatRect =
+        RetainedFloatRect(left.toFloat(), top.toFloat(), width.toFloat(), height.toFloat())
+
+    companion object {
+        val EMPTY = RetainedIntegerRect(0, 0, 0, 0)
+
+        fun from(
+            x: Int,
+            y: Int,
+            width: Int,
+            height: Int,
+        ): RetainedIntegerRect = RetainedIntegerRect(x, y, x + width, y + height)
+    }
+}
+
 data class RetainedQuad(
     val destination: RetainedFloatRect,
     val sourceUv: RetainedFloatRect?,
@@ -59,6 +100,11 @@ sealed interface RetainedInstanceSpan {
     data class Direct(
         val firstInstance: Int,
         val instanceCount: Int,
+        val maskIdentity: Long,
+        val instanceBufferIdentity: Long,
+        val translationX: Int,
+        val translationY: Int,
+        val clip: RetainedIntegerRect,
         val batches: List<RetainedGeometryBatch>,
     ) : RetainedInstanceSpan
 }

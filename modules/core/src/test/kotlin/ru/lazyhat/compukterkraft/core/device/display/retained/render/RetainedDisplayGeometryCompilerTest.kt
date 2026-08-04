@@ -37,6 +37,8 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNull
+import kotlin.test.assertNotSame
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class RetainedDisplayGeometryCompilerTest {
@@ -162,6 +164,53 @@ class RetainedDisplayGeometryCompilerTest {
 
         assertEquals(setOf(chunkKey(0)), RetainedDisplayGeometryCompiler.affectedInstanceChunks(state, cellDamage))
         assertEquals(setOf(chunkKey(64)), RetainedDisplayGeometryCompiler.affectedInstanceChunks(state, rowDamage))
+    }
+
+    @Test
+    fun incrementalInstallRecompilesOnlyTheDamagedChunk() {
+        val draws = listOf(instanceDraw(first = 0, count = 128))
+        val initialInstances = List(128) { index -> instance(index % 64, index / 64, background = 0x001f) }
+        val initial = instanceState(initialInstances, draws)
+        val presentation = RetainedDisplayGeometryCompiler.compile(initial)
+        val patchedInstances = initialInstances.toMutableList()
+        patchedInstances[10] = instance(10, foreground = 0xf800, background = 0x001f)
+        val patched = instanceState(patchedInstances, draws)
+        val damage =
+            RetainedDisplayInstallDamage.Delta(
+                listOf(RetainedResourceDamage.InstancesPatched(2u, 22L, listOf(RetainedPatchRange(10, 1)))),
+                drawListReplaced = false,
+            )
+
+        val updated = RetainedDisplayGeometryCompiler.update(presentation, patched, damage)
+
+        assertNotSame(presentation.instanceChunks.getValue(chunkKey(0)), updated.instanceChunks.getValue(chunkKey(0)))
+        assertSame(presentation.instanceChunks.getValue(chunkKey(64)), updated.instanceChunks.getValue(chunkKey(64)))
+        assertSame(presentation.commands, updated.commands)
+    }
+
+    @Test
+    fun incrementalInstallCombinesRepeatedDamageForTheSameInstanceBuffer() {
+        val draws = listOf(instanceDraw(first = 0, count = 128))
+        val initialInstances = List(128) { index -> instance(index % 64, index / 64, background = 0x001f) }
+        val initial = instanceState(initialInstances, draws)
+        val presentation = RetainedDisplayGeometryCompiler.compile(initial)
+        val patchedInstances = initialInstances.toMutableList()
+        patchedInstances[10] = instance(10, foreground = 0xf800, background = 0x001f)
+        patchedInstances[70] = instance(6, 1, foreground = 0x07e0, background = 0x001f)
+        val patched = instanceState(patchedInstances, draws)
+        val damage =
+            RetainedDisplayInstallDamage.Delta(
+                listOf(
+                    RetainedResourceDamage.InstancesPatched(2u, 22L, listOf(RetainedPatchRange(10, 1))),
+                    RetainedResourceDamage.InstancesPatched(2u, 22L, listOf(RetainedPatchRange(70, 1))),
+                ),
+                drawListReplaced = false,
+            )
+
+        val updated = RetainedDisplayGeometryCompiler.update(presentation, patched, damage)
+
+        assertNotSame(presentation.instanceChunks.getValue(chunkKey(0)), updated.instanceChunks.getValue(chunkKey(0)))
+        assertNotSame(presentation.instanceChunks.getValue(chunkKey(64)), updated.instanceChunks.getValue(chunkKey(64)))
     }
 
     @Test
