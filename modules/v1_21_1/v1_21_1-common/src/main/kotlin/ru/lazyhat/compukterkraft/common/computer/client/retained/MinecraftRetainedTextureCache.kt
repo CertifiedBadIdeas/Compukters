@@ -20,10 +20,10 @@
 package ru.lazyhat.compukterkraft.common.computer.client.retained
 
 import com.mojang.blaze3d.platform.NativeImage
-import net.minecraft.resources.ResourceLocation
-import net.minecraft.util.FastColor
 import net.minecraft.client.renderer.texture.DynamicTexture
 import net.minecraft.client.renderer.texture.TextureManager
+import net.minecraft.resources.ResourceLocation
+import net.minecraft.util.FastColor
 import ru.lazyhat.compukterkraft.core.device.display.retained.RetainedDisplayInstallDamage
 import ru.lazyhat.compukterkraft.core.device.display.retained.RetainedDisplayResource
 import ru.lazyhat.compukterkraft.core.device.display.retained.RetainedDisplayResourceEntry
@@ -57,12 +57,12 @@ interface MinecraftRetainedTextureTarget : AutoCloseable {
 class MinecraftRetainedTextureCache(
     private val targetFactory: MinecraftRetainedTextureTargetFactory,
     private val metrics: RetainedDisplayRenderMetrics,
-) : RetainedDisplayNativeCache {
+) : AutoCloseable {
     private val textures = mutableMapOf<Long, MinecraftRetainedTextureTarget>()
 
     fun texture(localIdentity: Long): MinecraftRetainedTextureTarget? = textures[localIdentity]
 
-    override fun install(
+    fun install(
         state: RetainedDisplayState,
         damage: RetainedDisplayInstallDamage,
     ) {
@@ -80,12 +80,15 @@ class MinecraftRetainedTextureCache(
                             createTextureIfNeeded(entry)
                         }
 
-                        is RetainedResourceDamage.Dropped -> release(change.localIdentity)
+                        is RetainedResourceDamage.Dropped -> {
+                            release(change.localIdentity)
+                        }
 
                         is RetainedResourceDamage.ImagePatched -> {
                             val entry = requireResource(state, change.resourceId, change.localIdentity)
-                            val image = entry.content as? RetainedImageRgb565
-                                ?: error("Retained image damage does not resolve to an image")
+                            val image =
+                                entry.content as? RetainedImageRgb565
+                                    ?: error("Retained image damage does not resolve to an image")
                             patchTexture(change.localIdentity, change.rectangles) { x, y ->
                                 retainedRgb565ToArgb(image.pixelAt(x, y))
                             }
@@ -93,19 +96,22 @@ class MinecraftRetainedTextureCache(
 
                         is RetainedResourceDamage.MaskPatched -> {
                             val entry = requireResource(state, change.resourceId, change.localIdentity)
-                            val mask = entry.content as? RetainedMask1Bpp
-                                ?: error("Retained mask damage does not resolve to a mask")
+                            val mask =
+                                entry.content as? RetainedMask1Bpp
+                                    ?: error("Retained mask damage does not resolve to a mask")
                             patchTexture(change.localIdentity, change.rectangles) { x, y -> maskArgb(mask.bitAt(x, y)) }
                         }
 
-                        is RetainedResourceDamage.InstancesPatched -> Unit
+                        is RetainedResourceDamage.InstancesPatched -> {
+                            Unit
+                        }
                     }
                 }
             }
         }
     }
 
-    override fun invalidate() {
+    fun invalidate() {
         releaseAll()
     }
 
@@ -117,8 +123,17 @@ class MinecraftRetainedTextureCache(
         val textureData = textureData(entry.content) ?: return
         check(entry.localIdentity !in textures) { "Retained texture identity is already installed: ${entry.localIdentity}" }
         val target = targetFactory.create(entry.localIdentity, textureData.width, textureData.height, textureData.argb)
-        check(target.width == textureData.width && target.height == textureData.height) {
-            "Retained texture target dimensions do not match resource ${entry.resourceId}"
+        try {
+            check(target.width == textureData.width && target.height == textureData.height) {
+                "Retained texture target dimensions do not match resource ${entry.resourceId}"
+            }
+        } catch (failure: Throwable) {
+            try {
+                target.close()
+            } catch (closeFailure: Throwable) {
+                failure.addSuppressed(closeFailure)
+            }
+            throw failure
         }
         textures[entry.localIdentity] = target
         metrics.recordTextureCreation(textureData.argb.size)
@@ -144,7 +159,7 @@ class MinecraftRetainedTextureCache(
 
     private fun textureData(resource: RetainedDisplayResource): TextureData? =
         when (resource) {
-            is RetainedImageRgb565 ->
+            is RetainedImageRgb565 -> {
                 TextureData(
                     resource.width,
                     resource.height,
@@ -152,8 +167,9 @@ class MinecraftRetainedTextureCache(
                         retainedRgb565ToArgb(resource.pixelAt(index % resource.width, index / resource.width))
                     },
                 )
+            }
 
-            is RetainedMask1Bpp ->
+            is RetainedMask1Bpp -> {
                 TextureData(
                     resource.width,
                     resource.height,
@@ -161,8 +177,11 @@ class MinecraftRetainedTextureCache(
                         maskArgb(resource.bitAt(index % resource.width, index / resource.width))
                     },
                 )
+            }
 
-            else -> null
+            else -> {
+                null
+            }
         }
 
     private fun requireResource(
@@ -187,7 +206,7 @@ class MinecraftRetainedTextureCache(
     private fun releaseAll() {
         val closing = textures.values.toList()
         textures.clear()
-        closing.forEach {
+        cleanupAll(closing) {
             it.close()
             metrics.recordTextureRelease()
         }
@@ -216,12 +235,23 @@ class NativeImageRetainedTextureTargetFactory(
     ): MinecraftRetainedTextureTarget {
         require(initialArgb.size == width * height)
         val image = NativeImage(width, height, false)
-        initialArgb.forEachIndexed { index, argb ->
-            image.setPixelRGBA(index % width, index / width, FastColor.ABGR32.fromArgb32(argb))
+        var texture: DynamicTexture? = null
+        try {
+            initialArgb.forEachIndexed { index, argb ->
+                image.setPixelRGBA(index % width, index / width, FastColor.ABGR32.fromArgb32(argb))
+            }
+            val createdTexture = DynamicTexture(image).apply { setFilter(false, false) }
+            texture = createdTexture
+            val location = textureManager.register("${namePrefix}_$localIdentity", createdTexture)
+            return NativeImageRetainedTextureTarget(textureManager, location, createdTexture, image, width, height)
+        } catch (failure: Throwable) {
+            try {
+                texture?.close() ?: image.close()
+            } catch (closeFailure: Throwable) {
+                if (failure !== closeFailure) failure.addSuppressed(closeFailure)
+            }
+            throw failure
         }
-        val texture = DynamicTexture(image).apply { setFilter(false, false) }
-        val location = textureManager.register("${namePrefix}_$localIdentity", texture)
-        return NativeImageRetainedTextureTarget(textureManager, location, texture, image, width, height)
     }
 }
 

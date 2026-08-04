@@ -27,6 +27,7 @@ import ru.lazyhat.compukterkraft.core.gui.TerminalRect
 import java.io.ByteArrayOutputStream
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertNotSame
 import kotlin.test.assertSame
@@ -133,6 +134,65 @@ class RetainedDisplayMenuRendererTest {
         assertEquals(3, metrics.snapshot().batchReleases)
     }
 
+    @Test
+    fun closeAttemptsEveryBatchWhenEarlierTargetsFailToClose() {
+        val targets = mutableListOf<RecordingBatchTarget>()
+        val cache = MinecraftRetainedBatchCache(recordingFactory(targets), RetainedDisplayRenderMetrics())
+        val installed = assertIs<RetainedDisplayApplyResult.Installed>(RetainedDisplayReplica().apply(snapshot(64)))
+        cache.install(installed.state, installed.damage)
+        targets[0].failClose = true
+        targets[1].failClose = true
+
+        val failure = assertFailsWith<IllegalStateException> { cache.close() }
+
+        assertEquals("synthetic batch close failure", failure.message)
+        assertEquals(1, failure.suppressed.size)
+        assertEquals(listOf(1, 1, 1), targets.map { it.closes })
+    }
+
+    @Test
+    fun failedSupersededReleaseClosesEveryNewReplacementBeforeRethrow() {
+        val targets = mutableListOf<RecordingBatchTarget>()
+        val cache = MinecraftRetainedBatchCache(recordingFactory(targets), RetainedDisplayRenderMetrics())
+        val replica = RetainedDisplayReplica()
+        val initial = assertIs<RetainedDisplayApplyResult.Installed>(replica.apply(snapshot(64)))
+        cache.install(initial.state, initial.damage)
+        targets[2].failClose = true
+
+        val patched = assertIs<RetainedDisplayApplyResult.Installed>(replica.apply(instancePatch(2uL, 10, 1)))
+        assertFailsWith<IllegalStateException> { cache.install(patched.state, patched.damage) }
+
+        assertEquals(4, targets.size)
+        assertEquals(1, targets[3].closes)
+        targets[2].failClose = false
+        cache.close()
+        assertEquals(listOf(1, 1, 2, 1), targets.map { it.closes })
+    }
+
+    @Test
+    fun factoryFailureAttemptsEveryEarlierCreatedBatchEvenWhenCleanupAlsoFails() {
+        val targets = mutableListOf<RecordingBatchTarget>()
+        var creations = 0
+        val cache =
+            MinecraftRetainedBatchCache(
+                MinecraftRetainedBatchTargetFactory { batch ->
+                    creations += 1
+                    if (creations == 3) error("synthetic batch factory failure")
+                    RecordingBatchTarget(batch)
+                        .also { it.failClose = creations == 1 }
+                        .also(targets::add)
+                },
+                RetainedDisplayRenderMetrics(),
+            )
+        val installed = assertIs<RetainedDisplayApplyResult.Installed>(RetainedDisplayReplica().apply(snapshot(64)))
+
+        val failure = assertFailsWith<IllegalStateException> { cache.install(installed.state, installed.damage) }
+
+        assertEquals("synthetic batch factory failure", failure.message)
+        assertEquals(listOf("synthetic batch close failure"), failure.suppressed.map { it.message })
+        assertEquals(listOf(1, 1), targets.map { it.closes })
+    }
+
     private fun submitted(cache: MinecraftRetainedBatchCache): List<SubmittedTarget> =
         buildList {
             cache.presentation().submit { target, translationX, translationY ->
@@ -153,6 +213,7 @@ class RetainedDisplayMenuRendererTest {
         val batch: RetainedGeometryBatch,
     ) : MinecraftRetainedBatchTarget {
         var closes = 0
+        var failClose = false
 
         override fun draw(
             modelView: Matrix4f,
@@ -161,6 +222,7 @@ class RetainedDisplayMenuRendererTest {
 
         override fun close() {
             closes += 1
+            if (failClose) error("synthetic batch close failure")
         }
     }
 

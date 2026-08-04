@@ -124,6 +124,8 @@ class MinecraftRetainedBatchCache(
     fun presentation(): MinecraftRetainedNativePresentation =
         checkNotNull(nativePresentation) { "Retained batch presentation is not installed" }
 
+    fun presentationOrNull(): MinecraftRetainedNativePresentation? = nativePresentation
+
     fun invalidate() {
         releaseAll()
         logicalPresentation = null
@@ -178,12 +180,24 @@ class MinecraftRetainedBatchCache(
                 next[key] = record
             }
         } catch (failure: Throwable) {
-            created.forEach(::release)
+            try {
+                cleanupAll(created, ::release)
+            } catch (cleanupFailure: Throwable) {
+                if (failure !== cleanupFailure) failure.addSuppressed(cleanupFailure)
+            }
             throw failure
         }
 
-        for ((key, record) in targets) {
-            if (next[key] !== record) release(record)
+        val superseded = targets.filter { (key, record) -> next[key] !== record }.values
+        try {
+            cleanupAll(superseded, ::release)
+        } catch (failure: Throwable) {
+            try {
+                cleanupAll(created, ::release)
+            } catch (createdFailure: Throwable) {
+                if (failure !== createdFailure) failure.addSuppressed(createdFailure)
+            }
+            throw failure
         }
         return next
     }
@@ -191,7 +205,7 @@ class MinecraftRetainedBatchCache(
     private fun releaseAll() {
         val releasing = targets.values.toList()
         targets.clear()
-        releasing.forEach(::release)
+        cleanupAll(releasing, ::release)
     }
 
     private fun release(record: TargetRecord) {
@@ -415,8 +429,11 @@ private class NativeVertexBufferRetainedBatchTarget(
                 }
             }
         vertexBuffer.bind()
-        vertexBuffer.drawWithShader(modelView, projection, checkNotNull(shader) { "Retained batch shader is not loaded" })
-        VertexBuffer.unbind()
+        try {
+            vertexBuffer.drawWithShader(modelView, projection, checkNotNull(shader) { "Retained batch shader is not loaded" })
+        } finally {
+            VertexBuffer.unbind()
+        }
     }
 
     override fun close() {

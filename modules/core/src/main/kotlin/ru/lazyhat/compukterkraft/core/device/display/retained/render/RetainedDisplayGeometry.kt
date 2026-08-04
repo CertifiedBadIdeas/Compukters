@@ -49,11 +49,9 @@ data class RetainedIntegerRect(
     fun contains(other: RetainedIntegerRect): Boolean =
         other.left >= left && other.top >= top && other.right <= right && other.bottom <= bottom
 
-    fun overlaps(other: RetainedIntegerRect): Boolean =
-        left < other.right && right > other.left && top < other.bottom && bottom > other.top
+    fun overlaps(other: RetainedIntegerRect): Boolean = left < other.right && right > other.left && top < other.bottom && bottom > other.top
 
-    fun toFloatRect(): RetainedFloatRect =
-        RetainedFloatRect(left.toFloat(), top.toFloat(), width.toFloat(), height.toFloat())
+    fun toFloatRect(): RetainedFloatRect = RetainedFloatRect(left.toFloat(), top.toFloat(), width.toFloat(), height.toFloat())
 
     companion object {
         val EMPTY = RetainedIntegerRect(0, 0, 0, 0)
@@ -124,6 +122,35 @@ data class RetainedCompiledPresentation(
     val commands: List<RetainedCompiledCommand>,
     val instanceChunks: Map<RetainedInstanceChunkKey, RetainedInstanceChunk>,
 )
+
+class RetainedDisplaySubmissionLimitExceeded(
+    val attempted: Int,
+    val limit: Int,
+) : IllegalStateException("Retained display requires $attempted batch submissions; limit is $limit")
+
+fun RetainedCompiledPresentation.batchSubmissionCount(): Int =
+    1 + commands.sumOf { command -> command.batchSubmissionCount(instanceChunks) }
+
+internal fun RetainedCompiledCommand.batchSubmissionCount(chunks: Map<RetainedInstanceChunkKey, RetainedInstanceChunk>): Int =
+    when (this) {
+        is RetainedCompiledCommand.Direct -> {
+            batches.size
+        }
+
+        is RetainedCompiledCommand.InstanceRange -> {
+            spans.sumOf { span ->
+                when (span) {
+                    is RetainedInstanceSpan.Cached -> {
+                        chunks.getValue(span.key).batches.size
+                    }
+
+                    is RetainedInstanceSpan.Direct -> {
+                        span.batches.size
+                    }
+                }
+            }
+        }
+    }
 
 fun retainedRgb565ToArgb(rgb565: Int): Int {
     val red5 = rgb565 ushr 11 and 0x1f

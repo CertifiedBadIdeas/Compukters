@@ -17,38 +17,34 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package ru.lazyhat.compukterkraft.impl.notebook.render
+package ru.lazyhat.compukterkraft.common.notebook.render
 
 import com.mojang.blaze3d.systems.RenderSystem
 import com.mojang.blaze3d.vertex.PoseStack
-import com.mojang.math.Axis
+import org.joml.Matrix4f
 import ru.lazyhat.compukterkraft.common.computer.client.retained.MinecraftRetainedBatchSubmitter
 import ru.lazyhat.compukterkraft.common.computer.client.retained.MinecraftRetainedNativePresentation
 import ru.lazyhat.compukterkraft.core.device.display.retained.render.RetainedDisplayGeometryCompiler
 
 class NotebookRetainedDisplayPlane {
-    private var activePose: PoseStack? = null
+    private val baseModelView = Matrix4f()
+    private val batchModelView = Matrix4f()
+    private var activeModelView: Matrix4f? = null
     private val batchSubmitter =
         MinecraftRetainedBatchSubmitter { target, translationX, translationY ->
-            val pose = checkNotNull(activePose)
-            pose.pushPose()
-            try {
-                pose.translate(translationX.toFloat(), translationY.toFloat(), 0f)
-                target.draw(pose.last().pose(), RenderSystem.getProjectionMatrix())
-            } finally {
-                pose.popPose()
-            }
+            batchModelView
+                .set(checkNotNull(activeModelView))
+                .translate(translationX.toFloat(), translationY.toFloat(), 0f)
+            target.draw(batchModelView, RenderSystem.getProjectionMatrix())
         }
 
     fun draw(
         pose: PoseStack,
         presentation: MinecraftRetainedNativePresentation,
     ) {
-        check(activePose == null) { "Retained notebook display plane cannot be entered recursively" }
-        activePose = pose
-        pose.pushPose()
+        check(activeModelView == null) { "Retained notebook display plane cannot be entered recursively" }
+        activeModelView = transformToScreenSurface(pose)
         try {
-            transformToScreenSurface(pose)
             RenderSystem.enableDepthTest()
             RenderSystem.depthMask(true)
             RenderSystem.enableBlend()
@@ -57,35 +53,36 @@ class NotebookRetainedDisplayPlane {
             RenderSystem.setShaderColor(1f, 1f, 1f, 1f)
             presentation.submit(batchSubmitter)
         } finally {
+            RenderSystem.setShaderColor(1f, 1f, 1f, 1f)
+            RenderSystem.disableBlend()
             RenderSystem.enableCull()
-            pose.popPose()
-            activePose = null
+            RenderSystem.depthMask(true)
+            RenderSystem.enableDepthTest()
+            activeModelView = null
         }
     }
 
-    private fun transformToScreenSurface(pose: PoseStack) {
-        pose.translate(
-            SCREEN_CUBE_PIVOT_X / MODEL_PIXELS_PER_BLOCK,
-            SCREEN_CUBE_PIVOT_Y / MODEL_PIXELS_PER_BLOCK,
-            SCREEN_CUBE_PIVOT_Z / MODEL_PIXELS_PER_BLOCK,
-        )
-        pose.mulPose(Axis.XP.rotationDegrees(SCREEN_CUBE_ROTATION_DEGREES))
-        pose.translate(
-            -SCREEN_CUBE_PIVOT_X / MODEL_PIXELS_PER_BLOCK,
-            -SCREEN_CUBE_PIVOT_Y / MODEL_PIXELS_PER_BLOCK,
-            -SCREEN_CUBE_PIVOT_Z / MODEL_PIXELS_PER_BLOCK,
-        )
-        pose.translate(
-            PLANE_LEFT_MODEL_PIXELS / MODEL_PIXELS_PER_BLOCK,
-            PLANE_TOP_MODEL_PIXELS / MODEL_PIXELS_PER_BLOCK,
-            PLANE_SURFACE_MODEL_PIXELS / MODEL_PIXELS_PER_BLOCK,
-        )
-        pose.scale(
-            PLANE_WIDTH_MODEL_PIXELS / MODEL_PIXELS_PER_BLOCK / RetainedDisplayGeometryCompiler.LOGICAL_WIDTH,
-            -PLANE_HEIGHT_MODEL_PIXELS / MODEL_PIXELS_PER_BLOCK / RetainedDisplayGeometryCompiler.LOGICAL_HEIGHT,
-            1f,
-        )
-    }
+    private fun transformToScreenSurface(pose: PoseStack): Matrix4f =
+        baseModelView
+            .set(pose.last().pose())
+            .translate(
+                SCREEN_CUBE_PIVOT_X / MODEL_PIXELS_PER_BLOCK,
+                SCREEN_CUBE_PIVOT_Y / MODEL_PIXELS_PER_BLOCK,
+                SCREEN_CUBE_PIVOT_Z / MODEL_PIXELS_PER_BLOCK,
+            ).rotateX(Math.toRadians(SCREEN_CUBE_ROTATION_DEGREES.toDouble()).toFloat())
+            .translate(
+                -SCREEN_CUBE_PIVOT_X / MODEL_PIXELS_PER_BLOCK,
+                -SCREEN_CUBE_PIVOT_Y / MODEL_PIXELS_PER_BLOCK,
+                -SCREEN_CUBE_PIVOT_Z / MODEL_PIXELS_PER_BLOCK,
+            ).translate(
+                PLANE_LEFT_MODEL_PIXELS / MODEL_PIXELS_PER_BLOCK,
+                PLANE_TOP_MODEL_PIXELS / MODEL_PIXELS_PER_BLOCK,
+                PLANE_SURFACE_MODEL_PIXELS / MODEL_PIXELS_PER_BLOCK,
+            ).scale(
+                PLANE_WIDTH_MODEL_PIXELS / MODEL_PIXELS_PER_BLOCK / RetainedDisplayGeometryCompiler.LOGICAL_WIDTH,
+                -PLANE_HEIGHT_MODEL_PIXELS / MODEL_PIXELS_PER_BLOCK / RetainedDisplayGeometryCompiler.LOGICAL_HEIGHT,
+                1f,
+            )
 
     private companion object {
         const val MODEL_PIXELS_PER_BLOCK = 16f

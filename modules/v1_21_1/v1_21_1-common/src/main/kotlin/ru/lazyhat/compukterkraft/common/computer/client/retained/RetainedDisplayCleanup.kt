@@ -19,23 +19,21 @@
 
 package ru.lazyhat.compukterkraft.common.computer.client.retained
 
-import ru.lazyhat.compukterkraft.core.device.display.retained.RetainedDisplayInstallDamage
-import ru.lazyhat.compukterkraft.core.device.display.retained.RetainedDisplayState
-
-interface RetainedDisplayNativeCache : AutoCloseable {
-    fun retainView(
-        viewKind: RetainedDisplayViewKind,
-        state: RetainedDisplayState?,
-    )
-
-    fun releaseView(viewKind: RetainedDisplayViewKind)
-
-    fun presentation(viewKind: RetainedDisplayViewKind): MinecraftRetainedNativePresentation?
-
-    fun install(
-        state: RetainedDisplayState,
-        damage: RetainedDisplayInstallDamage,
-    )
-
-    fun invalidate()
+internal inline fun <T> cleanupAll(
+    resources: Iterable<T>,
+    cleanup: (T) -> Unit,
+) {
+    var firstFailure: Throwable? = null
+    for (resource in resources) {
+        try {
+            cleanup(resource)
+        } catch (failure: Throwable) {
+            if (firstFailure == null) {
+                firstFailure = failure
+            } else if (firstFailure !== failure) {
+                firstFailure.addSuppressed(failure)
+            }
+        }
+    }
+    firstFailure?.let { throw it }
 }

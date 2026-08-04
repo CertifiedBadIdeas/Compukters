@@ -35,6 +35,7 @@ import ru.lazyhat.compukterkraft.core.device.display.retained.RetainedResourceDa
 import ru.lazyhat.compukterkraft.core.device.display.retained.RetainedSourceRect
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertNotSame
@@ -268,6 +269,31 @@ class RetainedDisplayGeometryCompilerTest {
         )
     }
 
+    @Test
+    fun compiledSubmissionBudgetAcceptsItsExactMaximumEnvelope() {
+        val repeatedChunk = instanceDraw(first = 0, count = 64)
+        val draws = List(255) { repeatedChunk } + RetainedDrawCommand.FillRect(0, 0, 1, 1, 0xffff)
+
+        val instances = List(64) { index -> instance(x = index, background = 0x001f) }
+        val presentation = RetainedDisplayGeometryCompiler.compile(instanceStateWithCommands(instances, draws))
+
+        assertEquals(RetainedDisplayGeometryCompiler.MAX_BATCH_SUBMISSIONS, presentation.batchSubmissionCount())
+    }
+
+    @Test
+    fun compiledSubmissionBudgetRejectsRepeatedPathologicalChunks() {
+        val overlapping = List(64) { instance(x = 0, background = 0x001f) }
+        val draws = List(4) { instanceDraw(first = 0, count = 64) }
+
+        val failure =
+            assertFailsWith<RetainedDisplaySubmissionLimitExceeded> {
+                RetainedDisplayGeometryCompiler.compile(instanceState(overlapping, draws))
+            }
+
+        assertEquals(RetainedDisplayGeometryCompiler.MAX_BATCH_SUBMISSIONS, failure.limit)
+        assertEquals(513, failure.attempted)
+    }
+
     private fun state(
         resources: List<RetainedDisplayResourceEntry> = emptyList(),
         commands: List<RetainedDrawCommand>,
@@ -300,6 +326,19 @@ class RetainedDisplayGeometryCompilerTest {
                     RetainedDisplayResourceEntry(2u, 22L, RetainedMaskInstanceBuffer(instances.size, instances)),
                 ),
             commands = draws,
+        )
+
+    private fun instanceStateWithCommands(
+        instances: List<RetainedMaskInstance>,
+        commands: List<RetainedDrawCommand>,
+    ): RetainedDisplayState =
+        state(
+            resources =
+                listOf(
+                    RetainedDisplayResourceEntry(1u, 11L, RetainedMask1Bpp(8, 1, byteArrayOf(0x80.toByte()))),
+                    RetainedDisplayResourceEntry(2u, 22L, RetainedMaskInstanceBuffer(instances.size, instances)),
+                ),
+            commands = commands,
         )
 
     private fun instanceDraw(

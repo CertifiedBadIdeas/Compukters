@@ -26,6 +26,7 @@ import ru.lazyhat.compukterkraft.core.device.display.retained.RetainedPatchRecta
 import java.io.ByteArrayOutputStream
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
@@ -114,6 +115,38 @@ class MinecraftRetainedTextureCacheTest {
         assertEquals(2, metrics.snapshot().textureReleases)
     }
 
+    @Test
+    fun invalidationAttemptsEveryTextureWhenAnEarlierTargetFailsToClose() {
+        val targets = mutableListOf<RecordingTextureTarget>()
+        val cache = MinecraftRetainedTextureCache(recordingFactory(targets), RetainedDisplayRenderMetrics())
+        val installed = assertIs<RetainedDisplayApplyResult.Installed>(RetainedDisplayReplica().apply(snapshot()))
+        cache.install(installed.state, installed.damage)
+        targets.first().failClose = true
+
+        assertFailsWith<IllegalStateException> { cache.invalidate() }
+
+        assertEquals(listOf(1, 1), targets.map { it.closes })
+    }
+
+    @Test
+    fun rejectedTextureTargetDimensionsCloseTheUnownedNativeTarget() {
+        lateinit var target: RecordingTextureTarget
+        val metrics = RetainedDisplayRenderMetrics()
+        val cache =
+            MinecraftRetainedTextureCache(
+                MinecraftRetainedTextureTargetFactory { identity, width, height, pixels ->
+                    RecordingTextureTarget(identity, width + 1, height, pixels).also { target = it }
+                },
+                metrics,
+            )
+        val installed = assertIs<RetainedDisplayApplyResult.Installed>(RetainedDisplayReplica().apply(snapshot()))
+
+        assertFailsWith<IllegalStateException> { cache.install(installed.state, installed.damage) }
+
+        assertEquals(1, target.closes)
+        assertEquals(0, metrics.snapshot().textureCreations)
+    }
+
     private fun recordingFactory(targets: MutableList<RecordingTextureTarget>) =
         MinecraftRetainedTextureTargetFactory { localIdentity, width, height, pixels ->
             RecordingTextureTarget(localIdentity, width, height, pixels).also(targets::add)
@@ -130,6 +163,7 @@ class MinecraftRetainedTextureCacheTest {
         val pixels = initialPixels.copyOf()
         val patches = mutableListOf<RetainedPatchRectangle>()
         var closes = 0
+        var failClose = false
 
         override fun patch(
             rectangle: RetainedPatchRectangle,
@@ -146,6 +180,7 @@ class MinecraftRetainedTextureCacheTest {
 
         override fun close() {
             closes += 1
+            if (failClose) error("synthetic texture close failure")
         }
     }
 
