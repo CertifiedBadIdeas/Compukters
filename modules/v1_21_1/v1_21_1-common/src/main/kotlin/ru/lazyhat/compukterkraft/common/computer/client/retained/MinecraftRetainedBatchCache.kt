@@ -26,6 +26,7 @@ import com.mojang.blaze3d.vertex.DefaultVertexFormat
 import com.mojang.blaze3d.vertex.VertexBuffer
 import com.mojang.blaze3d.vertex.VertexFormat
 import net.minecraft.client.renderer.GameRenderer
+import net.minecraft.client.renderer.LightTexture
 import net.minecraft.resources.ResourceLocation
 import org.joml.Matrix4f
 import ru.lazyhat.compukterkraft.core.device.display.retained.RetainedDisplayInstallDamage
@@ -33,6 +34,7 @@ import ru.lazyhat.compukterkraft.core.device.display.retained.RetainedDisplaySta
 import ru.lazyhat.compukterkraft.core.device.display.retained.render.RetainedCompiledCommand
 import ru.lazyhat.compukterkraft.core.device.display.retained.render.RetainedCompiledPresentation
 import ru.lazyhat.compukterkraft.core.device.display.retained.render.RetainedDisplayGeometryCompiler
+import ru.lazyhat.compukterkraft.core.device.display.retained.render.RetainedFloatRect
 import ru.lazyhat.compukterkraft.core.device.display.retained.render.RetainedGeometryBatch
 import ru.lazyhat.compukterkraft.core.device.display.retained.render.RetainedInstanceChunkKey
 import ru.lazyhat.compukterkraft.core.device.display.retained.render.RetainedInstanceSpan
@@ -46,6 +48,11 @@ interface MinecraftRetainedBatchTarget : AutoCloseable {
         modelView: Matrix4f,
         projection: Matrix4f,
     )
+}
+
+enum class RetainedBatchRenderFlavor {
+    MENU,
+    WORLD_EMISSIVE,
 }
 
 fun interface MinecraftRetainedBatchSubmitter {
@@ -274,22 +281,27 @@ class MinecraftRetainedBatchCache(
 
 class NativeVertexBufferRetainedBatchTargetFactory(
     private val textureLocation: (Long) -> ResourceLocation,
+    private val flavor: RetainedBatchRenderFlavor = RetainedBatchRenderFlavor.MENU,
 ) : MinecraftRetainedBatchTargetFactory {
-    constructor(textureCache: MinecraftRetainedTextureCache) : this(
+    constructor(
+        textureCache: MinecraftRetainedTextureCache,
+        flavor: RetainedBatchRenderFlavor = RetainedBatchRenderFlavor.MENU,
+    ) : this(
         { identity ->
             textureCache.texture(identity)?.location
                 ?: error("Retained batch texture is not installed: $identity")
         },
+        flavor,
     )
 
     override fun create(batch: RetainedGeometryBatch): MinecraftRetainedBatchTarget {
         RenderSystem.assertOnRenderThread()
         val texture = batch.textureIdentity?.let(textureLocation)
-        val format = if (texture == null) DefaultVertexFormat.POSITION_COLOR else DefaultVertexFormat.POSITION_TEX_COLOR
+        val format = vertexFormat(texture != null, flavor)
         val byteBuffer = ByteBufferBuilder(format.vertexSize * batch.quads.size * VERTICES_PER_QUAD)
         try {
             val builder = BufferBuilder(byteBuffer, VertexFormat.Mode.QUADS, format)
-            for (quad in batch.quads) appendQuad(builder, quad.destination, quad.sourceUv, quad.argb)
+            for (quad in batch.quads) appendQuad(builder, quad.destination, quad.sourceUv, quad.argb, flavor)
             val vertexBuffer = VertexBuffer(VertexBuffer.Usage.STATIC)
             try {
                 builder.buildOrThrow().use(vertexBuffer::upload)
@@ -297,7 +309,7 @@ class NativeVertexBufferRetainedBatchTargetFactory(
                 vertexBuffer.close()
                 throw failure
             }
-            return NativeVertexBufferRetainedBatchTarget(vertexBuffer, texture)
+            return NativeVertexBufferRetainedBatchTarget(vertexBuffer, texture, flavor)
         } finally {
             byteBuffer.close()
         }
@@ -306,31 +318,74 @@ class NativeVertexBufferRetainedBatchTargetFactory(
     private companion object {
         const val VERTICES_PER_QUAD = 4
 
+        fun vertexFormat(
+            textured: Boolean,
+            flavor: RetainedBatchRenderFlavor,
+        ): VertexFormat =
+            when (flavor) {
+                RetainedBatchRenderFlavor.MENU -> {
+                    if (textured) DefaultVertexFormat.POSITION_TEX_COLOR else DefaultVertexFormat.POSITION_COLOR
+                }
+
+                RetainedBatchRenderFlavor.WORLD_EMISSIVE -> {
+                    if (textured) {
+                        DefaultVertexFormat.POSITION_COLOR_TEX_LIGHTMAP
+                    } else {
+                        DefaultVertexFormat.POSITION_COLOR_LIGHTMAP
+                    }
+                }
+            }
+
         fun appendQuad(
             builder: BufferBuilder,
-            destination: ru.lazyhat.compukterkraft.core.device.display.retained.render.RetainedFloatRect,
-            sourceUv: ru.lazyhat.compukterkraft.core.device.display.retained.render.RetainedFloatRect?,
+            destination: RetainedFloatRect,
+            sourceUv: RetainedFloatRect?,
             argb: Int,
+            flavor: RetainedBatchRenderFlavor,
         ) {
             val left = destination.x
             val top = destination.y
             val right = left + destination.width
             val bottom = top + destination.height
             if (sourceUv == null) {
-                builder.addVertex(left, bottom, 0f).setColor(argb)
-                builder.addVertex(right, bottom, 0f).setColor(argb)
-                builder.addVertex(right, top, 0f).setColor(argb)
-                builder.addVertex(left, top, 0f).setColor(argb)
+                solidVertex(builder, left, bottom, argb, flavor)
+                solidVertex(builder, right, bottom, argb, flavor)
+                solidVertex(builder, right, top, argb, flavor)
+                solidVertex(builder, left, top, argb, flavor)
             } else {
                 val u0 = sourceUv.x
                 val v0 = sourceUv.y
                 val u1 = u0 + sourceUv.width
                 val v1 = v0 + sourceUv.height
-                builder.addVertex(left, bottom, 0f).setUv(u0, v1).setColor(argb)
-                builder.addVertex(right, bottom, 0f).setUv(u1, v1).setColor(argb)
-                builder.addVertex(right, top, 0f).setUv(u1, v0).setColor(argb)
-                builder.addVertex(left, top, 0f).setUv(u0, v0).setColor(argb)
+                texturedVertex(builder, left, bottom, u0, v1, argb, flavor)
+                texturedVertex(builder, right, bottom, u1, v1, argb, flavor)
+                texturedVertex(builder, right, top, u1, v0, argb, flavor)
+                texturedVertex(builder, left, top, u0, v0, argb, flavor)
             }
+        }
+
+        fun solidVertex(
+            builder: BufferBuilder,
+            x: Float,
+            y: Float,
+            argb: Int,
+            flavor: RetainedBatchRenderFlavor,
+        ) {
+            val vertex = builder.addVertex(x, y, 0f).setColor(argb)
+            if (flavor == RetainedBatchRenderFlavor.WORLD_EMISSIVE) vertex.setLight(LightTexture.FULL_BRIGHT)
+        }
+
+        fun texturedVertex(
+            builder: BufferBuilder,
+            x: Float,
+            y: Float,
+            u: Float,
+            v: Float,
+            argb: Int,
+            flavor: RetainedBatchRenderFlavor,
+        ) {
+            val vertex = builder.addVertex(x, y, 0f).setColor(argb).setUv(u, v)
+            if (flavor == RetainedBatchRenderFlavor.WORLD_EMISSIVE) vertex.setLight(LightTexture.FULL_BRIGHT)
         }
     }
 }
@@ -338,17 +393,26 @@ class NativeVertexBufferRetainedBatchTargetFactory(
 private class NativeVertexBufferRetainedBatchTarget(
     private val vertexBuffer: VertexBuffer,
     private val texture: ResourceLocation?,
+    private val flavor: RetainedBatchRenderFlavor,
 ) : MinecraftRetainedBatchTarget {
     override fun draw(
         modelView: Matrix4f,
         projection: Matrix4f,
     ) {
+        if (texture != null) RenderSystem.setShaderTexture(0, texture)
         val shader =
-            if (texture == null) {
-                GameRenderer.getPositionColorShader()
-            } else {
-                RenderSystem.setShaderTexture(0, texture)
-                GameRenderer.getPositionTexColorShader()
+            when (flavor) {
+                RetainedBatchRenderFlavor.MENU -> {
+                    if (texture == null) GameRenderer.getPositionColorShader() else GameRenderer.getPositionTexColorShader()
+                }
+
+                RetainedBatchRenderFlavor.WORLD_EMISSIVE -> {
+                    if (texture == null) {
+                        GameRenderer.getPositionColorLightmapShader()
+                    } else {
+                        GameRenderer.getPositionColorTexLightmapShader()
+                    }
+                }
             }
         vertexBuffer.bind()
         vertexBuffer.drawWithShader(modelView, projection, checkNotNull(shader) { "Retained batch shader is not loaded" })
