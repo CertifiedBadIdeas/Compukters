@@ -28,6 +28,7 @@ import ru.lazyhat.compukterkraft.core.device.display.retained.RetainedImageRgb56
 import ru.lazyhat.compukterkraft.core.device.display.retained.RetainedMask1Bpp
 import ru.lazyhat.compukterkraft.core.device.display.retained.RetainedMaskInstance
 import ru.lazyhat.compukterkraft.core.device.display.retained.RetainedMaskInstanceBuffer
+import ru.lazyhat.compukterkraft.core.device.display.retained.RetainedPatchRange
 import ru.lazyhat.compukterkraft.core.device.display.retained.RetainedResourceBinding
 import ru.lazyhat.compukterkraft.core.device.display.retained.RetainedResourceDamage
 import ru.lazyhat.compukterkraft.core.device.display.retained.RetainedSourceRect
@@ -40,23 +41,23 @@ object RetainedDisplayGeometryCompiler {
 
     fun compile(state: RetainedDisplayState): RetainedCompiledPresentation {
         val resources = state.resources.associateBy { it.localIdentity }
-        val initialClip = IntRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT)
-        val clips = ArrayDeque<IntRect>().apply { addLast(initialClip) }
+        val initialClip = RetainedIntegerRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT)
+        val clips = ArrayDeque<RetainedIntegerRect>().apply { addLast(initialClip) }
         val commands = mutableListOf<RetainedCompiledCommand>()
         val chunks = linkedMapOf<RetainedInstanceChunkKey, RetainedInstanceChunk>()
 
         for (command in state.drawList.commands) {
             when (command) {
                 is RetainedDrawCommand.PushClip -> {
-                    val requested = IntRect.from(command.x, command.y, command.width, command.height)
-                    clips.addLast(clips.last().intersection(requested) ?: IntRect.EMPTY)
+                    val requested = RetainedIntegerRect.from(command.x, command.y, command.width, command.height)
+                    clips.addLast(clips.last().intersection(requested) ?: RetainedIntegerRect.EMPTY)
                 }
 
                 RetainedDrawCommand.PopClip -> clips.removeLast()
 
                 is RetainedDrawCommand.FillRect -> {
                     solidQuad(
-                        IntRect.from(command.x, command.y, command.width, command.height),
+                        RetainedIntegerRect.from(command.x, command.y, command.width, command.height),
                         clips.last(),
                         command.rgb565,
                     )?.let { commands += RetainedCompiledCommand.Direct(listOf(batch(null, listOf(it)))) }
@@ -112,6 +113,50 @@ object RetainedDisplayGeometryCompiler {
         )
     }
 
+    fun update(
+        previous: RetainedCompiledPresentation,
+        state: RetainedDisplayState,
+        damage: RetainedDisplayInstallDamage,
+    ): RetainedCompiledPresentation {
+        if (damage !is RetainedDisplayInstallDamage.Delta || damage.drawListReplaced) return compile(state)
+        val instanceDamage = damage.resourceChanges.filterIsInstance<RetainedResourceDamage.InstancesPatched>()
+        if (instanceDamage.isEmpty()) return previous
+        val rangesByIdentity = instanceDamage.groupBy({ it.localIdentity }, { it.ranges }).mapValues { it.value.flatten() }
+        val affectedChunks = affectedInstanceChunks(state, damage)
+        val chunks = LinkedHashMap(previous.instanceChunks)
+        for (key in affectedChunks) {
+            if (key in chunks) chunks[key] = compileChunk(state, key)
+        }
+
+        var commandsChanged = false
+        val commands =
+            previous.commands.map commandMap@{ command ->
+                if (command !is RetainedCompiledCommand.InstanceRange) return@commandMap command
+                var spansChanged = false
+                val spans =
+                    command.spans.map spanMap@{ span ->
+                        if (span !is RetainedInstanceSpan.Direct) return@spanMap span
+                        val patchedRanges = rangesByIdentity[span.instanceBufferIdentity] ?: return@spanMap span
+                        if (patchedRanges.none { it.intersects(span.firstInstance, span.instanceCount) }) {
+                            return@spanMap span
+                        }
+                        spansChanged = true
+                        recompileDirectSpan(state, span)
+                    }
+                if (spansChanged) {
+                    commandsChanged = true
+                    RetainedCompiledCommand.InstanceRange(spans)
+                } else {
+                    command
+                }
+            }
+        return RetainedCompiledPresentation(
+            previous.background,
+            if (commandsChanged) commands else previous.commands,
+            chunks,
+        )
+    }
+
     fun affectedInstanceChunks(
         state: RetainedDisplayState,
         damage: RetainedDisplayInstallDamage,
@@ -119,11 +164,11 @@ object RetainedDisplayGeometryCompiler {
         if (damage !is RetainedDisplayInstallDamage.Delta) return emptySet()
         val patched = damage.resourceChanges.filterIsInstance<RetainedResourceDamage.InstancesPatched>()
         if (patched.isEmpty()) return emptySet()
-        val byIdentity = patched.associateBy { it.localIdentity }
+        val rangesByIdentity = patched.groupBy({ it.localIdentity }, { it.ranges }).mapValues { it.value.flatten() }
         val affected = linkedSetOf<RetainedInstanceChunkKey>()
         for (command in state.drawList.commands.filterIsInstance<RetainedDrawCommand.DrawMaskInstances>()) {
-            val resourceDamage = byIdentity[command.instances.localIdentity] ?: continue
-            for (range in resourceDamage.ranges) {
+            val ranges = rangesByIdentity[command.instances.localIdentity] ?: continue
+            for (range in ranges) {
                 val first = maxOf(range.first, command.firstInstance)
                 val end = minOf(range.first + range.count, command.firstInstance + command.instanceCount)
                 var chunkFirst = first / INSTANCE_CHUNK_SIZE * INSTANCE_CHUNK_SIZE
@@ -145,7 +190,7 @@ object RetainedDisplayGeometryCompiler {
         command: RetainedDrawCommand.DrawMaskInstances,
         maskEntry: RetainedDisplayResourceEntry,
         instancesEntry: RetainedDisplayResourceEntry,
-        clip: IntRect,
+        clip: RetainedIntegerRect,
         chunks: MutableMap<RetainedInstanceChunkKey, RetainedInstanceChunk>,
     ): RetainedCompiledCommand.InstanceRange {
         val mask = maskEntry.content as RetainedMask1Bpp
@@ -163,7 +208,7 @@ object RetainedDisplayGeometryCompiler {
                     spanEnd - cursor == INSTANCE_CHUNK_SIZE &&
                     spanInstances.all {
                         clip.contains(
-                            IntRect.from(
+                            RetainedIntegerRect.from(
                                 it.destinationX + command.translationX,
                                 it.destinationY + command.translationY,
                                 it.destinationWidth,
@@ -193,6 +238,11 @@ object RetainedDisplayGeometryCompiler {
                     RetainedInstanceSpan.Direct(
                         firstInstance = cursor,
                         instanceCount = spanEnd - cursor,
+                        maskIdentity = maskEntry.localIdentity,
+                        instanceBufferIdentity = instancesEntry.localIdentity,
+                        translationX = command.translationX,
+                        translationY = command.translationY,
+                        clip = clip,
                         batches =
                             compileInstances(
                                 spanInstances,
@@ -210,6 +260,57 @@ object RetainedDisplayGeometryCompiler {
         return RetainedCompiledCommand.InstanceRange(spans)
     }
 
+    private fun compileChunk(
+        state: RetainedDisplayState,
+        key: RetainedInstanceChunkKey,
+    ): RetainedInstanceChunk {
+        val resources = state.resources.associateBy { it.localIdentity }
+        val maskEntry = resources[key.maskIdentity]
+            ?.takeIf { it.content is RetainedMask1Bpp }
+            ?: error("Retained instance chunk mask is not installed: ${key.maskIdentity}")
+        val instancesEntry = resources[key.instanceBufferIdentity]
+            ?.takeIf { it.content is RetainedMaskInstanceBuffer }
+            ?: error("Retained instance chunk buffer is not installed: ${key.instanceBufferIdentity}")
+        val mask = maskEntry.content as RetainedMask1Bpp
+        val instances = instancesEntry.content as RetainedMaskInstanceBuffer
+        check(key.firstInstance >= 0 && key.firstInstance + INSTANCE_CHUNK_SIZE <= instances.capacity)
+        return RetainedInstanceChunk(
+            key,
+            compileInstances(
+                instances.instances.subList(key.firstInstance, key.firstInstance + INSTANCE_CHUNK_SIZE),
+                key.maskIdentity,
+                mask.width,
+                mask.height,
+                translationX = 0,
+                translationY = 0,
+                clip = null,
+            ),
+        )
+    }
+
+    private fun recompileDirectSpan(
+        state: RetainedDisplayState,
+        span: RetainedInstanceSpan.Direct,
+    ): RetainedInstanceSpan.Direct {
+        val resources = state.resources.associateBy { it.localIdentity }
+        val mask = resources[span.maskIdentity]?.content as? RetainedMask1Bpp
+            ?: error("Retained direct span mask is not installed: ${span.maskIdentity}")
+        val instances = resources[span.instanceBufferIdentity]?.content as? RetainedMaskInstanceBuffer
+            ?: error("Retained direct span buffer is not installed: ${span.instanceBufferIdentity}")
+        return span.copy(
+            batches =
+                compileInstances(
+                    instances.instances.subList(span.firstInstance, span.firstInstance + span.instanceCount),
+                    span.maskIdentity,
+                    mask.width,
+                    mask.height,
+                    span.translationX,
+                    span.translationY,
+                    span.clip,
+                ),
+        )
+    }
+
     private fun compileInstances(
         instances: List<RetainedMaskInstance>,
         maskIdentity: Long,
@@ -217,7 +318,7 @@ object RetainedDisplayGeometryCompiler {
         maskHeight: Int,
         translationX: Int,
         translationY: Int,
-        clip: IntRect?,
+        clip: RetainedIntegerRect?,
     ): List<RetainedGeometryBatch> {
         val compiled =
             instances.mapNotNull { instance ->
@@ -228,7 +329,7 @@ object RetainedDisplayGeometryCompiler {
                         instance.destinationWidth,
                         instance.destinationHeight,
                     )
-                val visible = IntRect.from(destination.x, destination.y, destination.width, destination.height)
+                val visible = RetainedIntegerRect.from(destination.x, destination.y, destination.width, destination.height)
                     .let { if (clip == null) it else it.intersection(clip) }
                     ?: return@mapNotNull null
                 val background =
@@ -281,7 +382,7 @@ object RetainedDisplayGeometryCompiler {
     private fun compileMask(
         source: RetainedSourceRect,
         destination: RetainedDestinationRect,
-        clip: IntRect,
+        clip: RetainedIntegerRect,
         maskEntry: RetainedDisplayResourceEntry,
         foregroundRgb565: Int,
         backgroundRgb565: Int,
@@ -299,7 +400,7 @@ object RetainedDisplayGeometryCompiler {
                 mask.height,
             ) ?: return emptyList()
         if (!opaqueBackground) return listOf(batch(maskEntry.localIdentity, listOf(foreground)))
-        val visible = IntRect.from(destination.x, destination.y, destination.width, destination.height).intersection(clip)
+        val visible = RetainedIntegerRect.from(destination.x, destination.y, destination.width, destination.height).intersection(clip)
             ?: return emptyList()
         val background =
             RetainedQuad(
@@ -312,8 +413,8 @@ object RetainedDisplayGeometryCompiler {
     }
 
     private fun solidQuad(
-        destination: IntRect,
-        clip: IntRect,
+        destination: RetainedIntegerRect,
+        clip: RetainedIntegerRect,
         rgb565: Int,
     ): RetainedQuad? {
         val visible = destination.intersection(clip) ?: return null
@@ -328,13 +429,13 @@ object RetainedDisplayGeometryCompiler {
     private fun texturedQuad(
         source: RetainedSourceRect,
         destination: RetainedDestinationRect,
-        clip: IntRect,
+        clip: RetainedIntegerRect,
         textureIdentity: Long,
         argb: Int,
         textureWidth: Int,
         textureHeight: Int,
     ): RetainedQuad? {
-        val destinationRect = IntRect.from(destination.x, destination.y, destination.width, destination.height)
+        val destinationRect = RetainedIntegerRect.from(destination.x, destination.y, destination.width, destination.height)
         val visible = destinationRect.intersection(clip) ?: return null
         val sourceX = source.x + (visible.left - destinationRect.left).toFloat() * source.width / destination.width
         val sourceY = source.y + (visible.top - destinationRect.top).toFloat() * source.height / destination.height
@@ -370,43 +471,13 @@ object RetainedDisplayGeometryCompiler {
     }
 
     private data class CompiledInstance(
-        val destination: IntRect,
+        val destination: RetainedIntegerRect,
         val background: RetainedQuad?,
         val foreground: RetainedQuad,
     )
 
-    private data class IntRect(
-        val left: Int,
-        val top: Int,
-        val right: Int,
-        val bottom: Int,
-    ) {
-        val width: Int get() = right - left
-        val height: Int get() = bottom - top
-
-        fun intersection(other: IntRect): IntRect? {
-            val result = IntRect(maxOf(left, other.left), maxOf(top, other.top), minOf(right, other.right), minOf(bottom, other.bottom))
-            return result.takeIf { it.width > 0 && it.height > 0 }
-        }
-
-        fun contains(other: IntRect): Boolean =
-            other.left >= left && other.top >= top && other.right <= right && other.bottom <= bottom
-
-        fun overlaps(other: IntRect): Boolean =
-            left < other.right && right > other.left && top < other.bottom && bottom > other.top
-
-        fun toFloatRect(): RetainedFloatRect =
-            RetainedFloatRect(left.toFloat(), top.toFloat(), width.toFloat(), height.toFloat())
-
-        companion object {
-            val EMPTY = IntRect(0, 0, 0, 0)
-
-            fun from(
-                x: Int,
-                y: Int,
-                width: Int,
-                height: Int,
-            ): IntRect = IntRect(x, y, x + width, y + height)
-        }
-    }
+    private fun RetainedPatchRange.intersects(
+        firstInstance: Int,
+        instanceCount: Int,
+    ): Boolean = first < firstInstance + instanceCount && first + count > firstInstance
 }
