@@ -24,6 +24,7 @@ import com.mojang.blaze3d.vertex.VertexConsumer
 import net.minecraft.client.renderer.MultiBufferSource
 import net.minecraft.client.renderer.RenderType
 import ru.lazyhat.compukterkraft.common.computer.client.retained.MinecraftRetainedNativePresentation
+import ru.lazyhat.compukterkraft.common.notebook.render.NotebookRetainedDisplayPlane
 import ru.lazyhat.compukterkraft.impl.notebook.block.NeoForgeNotebookBlockEntity
 import software.bernie.geckolib.cache.`object`.GeoBone
 import software.bernie.geckolib.renderer.GeoRenderer

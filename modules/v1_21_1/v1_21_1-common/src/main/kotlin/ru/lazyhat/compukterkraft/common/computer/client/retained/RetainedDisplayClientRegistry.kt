@@ -55,16 +55,44 @@ class RetainedDisplayClientRegistry(
         observerKey: RetainedDisplayObserverKey,
     ): RetainedDisplayObserverHandle {
         require(computerId != 0u) { "Retained display computer ID must be non-zero" }
-        val entry =
-            entries.getOrPut(computerId) {
-                RetainedDisplayClientEntry(computerId, nativeCacheFactory(computerId))
-            }
-        require(entry.attach(observerKey)) { "Retained display observer is already attached: $observerKey" }
-        return RetainedDisplayObserverHandle(entry) {
-            if (entry.detach(observerKey)) {
+        val existing = entries[computerId]
+        val entry = existing ?: RetainedDisplayClientEntry(computerId, nativeCacheFactory(computerId))
+        if (existing == null) entries[computerId] = entry
+        try {
+            require(entry.attach(observerKey)) { "Retained display observer is already attached: $observerKey" }
+        } catch (failure: Throwable) {
+            if (existing == null && entry.observerCount == 0) {
                 entries.remove(computerId, entry)
-                entry.close()
+                try {
+                    entry.close()
+                } catch (closeFailure: Throwable) {
+                    if (failure !== closeFailure) failure.addSuppressed(closeFailure)
+                }
             }
+            throw failure
+        }
+        return RetainedDisplayObserverHandle(entry, observerKey.viewKind) {
+            var releaseFailure: Throwable? = null
+            val lastObserver =
+                try {
+                    entry.detach(observerKey)
+                } catch (failure: Throwable) {
+                    releaseFailure = failure
+                    entry.observerCount == 0
+                }
+            if (lastObserver) {
+                entries.remove(computerId, entry)
+                try {
+                    entry.close()
+                } catch (closeFailure: Throwable) {
+                    if (releaseFailure == null) {
+                        releaseFailure = closeFailure
+                    } else if (releaseFailure !== closeFailure) {
+                        releaseFailure.addSuppressed(closeFailure)
+                    }
+                }
+            }
+            releaseFailure?.let { throw it }
         }
     }
 
@@ -73,15 +101,18 @@ class RetainedDisplayClientRegistry(
     override fun close() {
         val closing = entries.values.toList()
         entries.clear()
-        closing.forEach(RetainedDisplayClientEntry::close)
+        cleanupAll(closing, RetainedDisplayClientEntry::close)
     }
 }
 
 class RetainedDisplayObserverHandle internal constructor(
     val entry: RetainedDisplayClientEntry,
+    private val viewKind: RetainedDisplayViewKind,
     private val detach: () -> Unit,
 ) : AutoCloseable {
     private var closed = false
+
+    fun presentation(): MinecraftRetainedNativePresentation? = entry.presentation(viewKind)
 
     override fun close() {
         if (closed) return
@@ -104,13 +135,19 @@ class RetainedDisplayClientEntry internal constructor(
     val observerCount: Int
         get() = observers.size
 
+    internal fun presentation(viewKind: RetainedDisplayViewKind): MinecraftRetainedNativePresentation? = nativeCache.presentation(viewKind)
+
     internal fun attach(observerKey: RetainedDisplayObserverKey): Boolean {
         check(!closed) { "Retained display client entry is closed" }
-        return observers.add(observerKey)
+        if (observerKey in observers) return false
+        nativeCache.retainView(observerKey.viewKind, replica.state)
+        observers += observerKey
+        return true
     }
 
     internal fun detach(observerKey: RetainedDisplayObserverKey): Boolean {
         if (closed || !observers.remove(observerKey)) return false
+        nativeCache.releaseView(observerKey.viewKind)
         return observers.isEmpty()
     }
 
@@ -128,11 +165,17 @@ class RetainedDisplayClientEntry internal constructor(
                     }
                     nativeCache.install(result.state, result.damage)
                     RetainedDisplayClientInstallResult.Installed(result.acknowledgement)
-                } catch (_: Throwable) {
-                    nativeCache.invalidate()
+                } catch (installFailure: Throwable) {
+                    val request = replica.clearAndRequestResync(RetainedDisplayResyncReason.ATOMIC_INSTALL_FAILED)
+                    try {
+                        nativeCache.invalidate()
+                    } catch (invalidateFailure: Throwable) {
+                        if (invalidateFailure !== installFailure) invalidateFailure.addSuppressed(installFailure)
+                        throw invalidateFailure
+                    }
                     RetainedDisplayClientInstallResult.ResyncRequired(
                         RetainedDisplayResyncReason.ATOMIC_INSTALL_FAILED,
-                        replica.clearAndRequestResync(RetainedDisplayResyncReason.ATOMIC_INSTALL_FAILED),
+                        request,
                     )
                 }
             }
@@ -141,11 +184,13 @@ class RetainedDisplayClientEntry internal constructor(
 
     fun invalidateRenderResources(): RetainedDisplayClientInstallResult.ResyncRequired {
         check(!closed) { "Retained display client entry is closed" }
+        val result =
+            RetainedDisplayClientInstallResult.ResyncRequired(
+                RetainedDisplayResyncReason.RENDER_RESOURCE_LOST,
+                replica.clearAndRequestResync(RetainedDisplayResyncReason.RENDER_RESOURCE_LOST),
+            )
         nativeCache.invalidate()
-        return RetainedDisplayClientInstallResult.ResyncRequired(
-            RetainedDisplayResyncReason.RENDER_RESOURCE_LOST,
-            replica.clearAndRequestResync(RetainedDisplayResyncReason.RENDER_RESOURCE_LOST),
-        )
+        return result
     }
 
     override fun close() {

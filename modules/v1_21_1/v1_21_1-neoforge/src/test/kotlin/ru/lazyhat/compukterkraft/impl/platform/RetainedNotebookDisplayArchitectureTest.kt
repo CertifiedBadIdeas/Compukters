@@ -27,12 +27,19 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class RetainedNotebookDisplayArchitectureTest {
-    private val root = generateSequence(Path.of(System.getProperty("user.dir")).toAbsolutePath()) { it.parent }
-        .first { it.resolve("gradle/libs.versions.toml").exists() }
-    private val renderRoot = root.resolve(
-        "modules/v1_21_1/v1_21_1-neoforge/src/main/kotlin/" +
-            "ru/lazyhat/compukterkraft/impl/notebook/render",
-    )
+    private val root =
+        generateSequence(Path.of(System.getProperty("user.dir")).toAbsolutePath()) { it.parent }
+            .first { it.resolve("gradle/libs.versions.toml").exists() }
+    private val renderRoot =
+        root.resolve(
+            "modules/v1_21_1/v1_21_1-neoforge/src/main/kotlin/" +
+                "ru/lazyhat/compukterkraft/impl/notebook/render",
+        )
+    private val commonPlane =
+        root.resolve(
+            "modules/v1_21_1/v1_21_1-common/src/main/kotlin/" +
+                "ru/lazyhat/compukterkraft/common/notebook/render/NotebookRetainedDisplayPlane.kt",
+        )
 
     @Test
     fun rendererComposesAnInactiveRetainedLayerUntilTheHardCutover() {
@@ -51,16 +58,23 @@ class RetainedNotebookDisplayArchitectureTest {
 
     @Test
     fun displayPlaneIsMinecraftNativeDepthTestedAndIndependentOfGeckoLib() {
-        val plane = renderRoot.resolve("NotebookRetainedDisplayPlane.kt").readText()
-        val batchCache = root.resolve(
-            "modules/v1_21_1/v1_21_1-common/src/main/kotlin/" +
-                "ru/lazyhat/compukterkraft/common/computer/client/retained/MinecraftRetainedBatchCache.kt",
-        ).readText()
+        val plane = commonPlane.readText()
+        val batchCache =
+            root
+                .resolve(
+                    "modules/v1_21_1/v1_21_1-common/src/main/kotlin/" +
+                        "ru/lazyhat/compukterkraft/common/computer/client/retained/MinecraftRetainedBatchCache.kt",
+                ).readText()
 
         assertTrue(plane.contains("RenderSystem.enableDepthTest()"))
         assertTrue(plane.contains("SCREEN_CUBE_ROTATION_DEGREES = -90f"))
         assertTrue(plane.contains("PLANE_WIDTH_MODEL_PIXELS = 13f"))
         assertTrue(plane.contains("PLANE_HEIGHT_MODEL_PIXELS = 8f"))
+        assertFalse(plane.contains("pose.pushPose()"))
+        assertTrue(plane.contains("private val batchModelView = Matrix4f()"))
+        assertTrue(plane.contains(".set(checkNotNull(activeModelView))"))
+        assertTrue(plane.contains("RenderSystem.disableBlend()"))
+        assertTrue(plane.contains("RenderSystem.enableCull()"))
         assertFalse(plane.contains("software.bernie.geckolib"))
         assertTrue(batchCache.contains("WORLD_EMISSIVE"))
         assertTrue(batchCache.contains("LightTexture.FULL_BRIGHT"))

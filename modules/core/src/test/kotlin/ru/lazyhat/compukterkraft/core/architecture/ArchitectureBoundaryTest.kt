@@ -141,6 +141,7 @@ class ArchitectureBoundaryTest {
                         "ru/lazyhat/compukterkraft/impl/notebook/render/NotebookGeoModel.kt",
                         "ru/lazyhat/compukterkraft/impl/notebook/render/NotebookItemGeoModel.kt",
                         "ru/lazyhat/compukterkraft/impl/notebook/render/NotebookItemRenderer.kt",
+                        "ru/lazyhat/compukterkraft/impl/notebook/render/NotebookRetainedDisplayLayer.kt",
                         "ru/lazyhat/compukterkraft/impl/platform/NetworkHandler.kt",
                     ),
             )

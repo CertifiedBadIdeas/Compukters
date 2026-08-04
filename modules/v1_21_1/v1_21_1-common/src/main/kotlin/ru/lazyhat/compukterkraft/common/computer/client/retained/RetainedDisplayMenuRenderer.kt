@@ -20,8 +20,8 @@
 package ru.lazyhat.compukterkraft.common.computer.client.retained
 
 import com.mojang.blaze3d.systems.RenderSystem
-import com.mojang.blaze3d.vertex.PoseStack
 import net.minecraft.client.gui.GuiGraphics
+import org.joml.Matrix4f
 import ru.lazyhat.compukterkraft.core.device.display.retained.render.RetainedDisplayGeometryCompiler
 import ru.lazyhat.compukterkraft.core.gui.TerminalRect
 import kotlin.math.floor
@@ -36,21 +36,19 @@ data class RetainedDisplayViewport(
 )
 
 class RetainedDisplayMenuRenderer {
-    private var activePose: PoseStack? = null
+    private val baseModelView = Matrix4f()
+    private val batchModelView = Matrix4f()
+    private var activeModelView: Matrix4f? = null
     private var activePresentation: MinecraftRetainedNativePresentation? = null
     private var lastBounds: TerminalRect? = null
     private var lastViewport: RetainedDisplayViewport? = null
     private val managedDraw = Runnable(::drawActive)
     private val batchSubmitter =
         MinecraftRetainedBatchSubmitter { target, translationX, translationY ->
-            val pose = checkNotNull(activePose)
-            pose.pushPose()
-            try {
-                pose.translate(translationX.toFloat(), translationY.toFloat(), 0f)
-                target.draw(pose.last().pose(), RenderSystem.getProjectionMatrix())
-            } finally {
-                pose.popPose()
-            }
+            batchModelView
+                .set(checkNotNull(activeModelView))
+                .translate(translationX.toFloat(), translationY.toFloat(), 0f)
+            target.draw(batchModelView, RenderSystem.getProjectionMatrix())
         }
 
     fun draw(
@@ -58,33 +56,34 @@ class RetainedDisplayMenuRenderer {
         bounds: TerminalRect,
         presentation: MinecraftRetainedNativePresentation,
     ) {
-        check(activePose == null) { "Retained menu renderer cannot be entered recursively" }
-        cachedViewport(bounds)
-        activePose = guiGraphics.pose()
+        check(activeModelView == null) { "Retained menu renderer cannot be entered recursively" }
+        val viewport = cachedViewport(bounds)
+        baseModelView
+            .set(guiGraphics.pose().last().pose())
+            .translate(viewport.x, viewport.y, 0f)
+            .scale(viewport.scale, viewport.scale, 1f)
+        activeModelView = baseModelView
         activePresentation = presentation
         try {
             @Suppress("DEPRECATION")
             guiGraphics.drawManaged(managedDraw)
         } finally {
             activePresentation = null
-            activePose = null
+            activeModelView = null
         }
     }
 
     private fun drawActive() {
-        val pose = checkNotNull(activePose)
         val presentation = checkNotNull(activePresentation)
-        val viewport = checkNotNull(lastViewport)
-        pose.pushPose()
+        checkNotNull(activeModelView)
+        RenderSystem.enableBlend()
+        RenderSystem.defaultBlendFunc()
+        RenderSystem.setShaderColor(1f, 1f, 1f, 1f)
         try {
-            pose.translate(viewport.x, viewport.y, 0f)
-            pose.scale(viewport.scale, viewport.scale, 1f)
-            RenderSystem.enableBlend()
-            RenderSystem.defaultBlendFunc()
-            RenderSystem.setShaderColor(1f, 1f, 1f, 1f)
             presentation.submit(batchSubmitter)
         } finally {
-            pose.popPose()
+            RenderSystem.setShaderColor(1f, 1f, 1f, 1f)
+            RenderSystem.disableBlend()
         }
     }
 

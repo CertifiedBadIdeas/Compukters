@@ -23,6 +23,15 @@ import ru.lazyhat.compukterkraft.core.device.display.retained.RetainedDisplayIns
 import ru.lazyhat.compukterkraft.core.device.display.retained.RetainedDisplayState
 
 interface RetainedDisplayNativeCache : AutoCloseable {
+    fun retainView(
+        viewKind: RetainedDisplayViewKind,
+        state: RetainedDisplayState?,
+    )
+
+    fun releaseView(viewKind: RetainedDisplayViewKind)
+
+    fun presentation(viewKind: RetainedDisplayViewKind): MinecraftRetainedNativePresentation?
+
     fun install(
         state: RetainedDisplayState,
         damage: RetainedDisplayInstallDamage,

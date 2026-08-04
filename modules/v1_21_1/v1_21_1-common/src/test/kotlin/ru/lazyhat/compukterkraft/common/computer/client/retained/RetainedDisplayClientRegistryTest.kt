@@ -43,15 +43,52 @@ class RetainedDisplayClientRegistryTest {
         assertSame(menu.entry, world.entry)
         assertEquals(1, caches.size)
         assertEquals(2, menu.entry.observerCount)
+        assertEquals(
+            listOf<Pair<RetainedDisplayViewKind, ULong?>>(
+                RetainedDisplayViewKind.MENU to null,
+                RetainedDisplayViewKind.WORLD to null,
+            ),
+            caches.single().retainedViews,
+        )
 
         menu.close()
         menu.close()
         assertEquals(1, world.entry.observerCount)
         assertSame(world.entry, registry.entry(42u))
+        assertEquals(listOf(RetainedDisplayViewKind.MENU), caches.single().releasedViews)
 
         world.close()
         assertNull(registry.entry(42u))
+        assertEquals(
+            listOf(RetainedDisplayViewKind.MENU, RetainedDisplayViewKind.WORLD),
+            caches.single().releasedViews,
+        )
         assertEquals(1, caches.single().closes)
+    }
+
+    @Test
+    fun lateViewAttachReceivesTheAlreadyInstalledReplicaState() {
+        val cache = RecordingNativeCache()
+        val registry = RetainedDisplayClientRegistry { cache }
+        val menu = registry.attach(42u, RetainedDisplayObserverKey("menu", RetainedDisplayViewKind.MENU))
+        assertIs<RetainedDisplayClientInstallResult.Installed>(menu.entry.apply(emptySnapshot()))
+
+        val world = registry.attach(42u, RetainedDisplayObserverKey("block", RetainedDisplayViewKind.WORLD))
+
+        assertEquals(RetainedDisplayViewKind.WORLD to 1uL, cache.retainedViews.last())
+        world.close()
+        menu.close()
+    }
+
+    @Test
+    fun observerHandleExposesOnlyItsViewFlavorPresentation() {
+        val cache = RecordingNativeCache()
+        val registry = RetainedDisplayClientRegistry { cache }
+        val menu = registry.attach(42u, RetainedDisplayObserverKey("menu", RetainedDisplayViewKind.MENU))
+
+        assertSame(cache.presentation, menu.presentation())
+        assertEquals(listOf(RetainedDisplayViewKind.MENU), cache.presentationRequests)
+        menu.close()
     }
 
     @Test
@@ -92,6 +129,18 @@ class RetainedDisplayClientRegistryTest {
     }
 
     @Test
+    fun nativeInstallFailureClearsReplicaEvenWhenNativeInvalidationAlsoFails() {
+        val cache = RecordingNativeCache(failInstall = true, failInvalidate = true)
+        val registry = RetainedDisplayClientRegistry { cache }
+        val entry = registry.attach(42u, RetainedDisplayObserverKey("menu", RetainedDisplayViewKind.MENU)).entry
+
+        assertFailsWith<IllegalStateException> { entry.apply(emptySnapshot()) }
+
+        assertEquals(1, cache.invalidations)
+        assertNull(entry.state)
+    }
+
+    @Test
     fun renderResourceLossInvalidatesNativeStateAndRequestsIndependentResync() {
         val cache = RecordingNativeCache()
         val registry = RetainedDisplayClientRegistry { cache }
@@ -101,6 +150,19 @@ class RetainedDisplayClientRegistryTest {
         val result = assertIs<RetainedDisplayClientInstallResult.ResyncRequired>(entry.invalidateRenderResources())
 
         assertEquals(RetainedDisplayResyncReason.RENDER_RESOURCE_LOST, result.reason)
+        assertEquals(1, cache.invalidations)
+        assertNull(entry.state)
+    }
+
+    @Test
+    fun renderResourceLossClearsReplicaBeforeFailingNativeInvalidation() {
+        val cache = RecordingNativeCache(failInvalidate = true)
+        val registry = RetainedDisplayClientRegistry { cache }
+        val entry = registry.attach(42u, RetainedDisplayObserverKey("block", RetainedDisplayViewKind.WORLD)).entry
+        entry.apply(emptySnapshot())
+
+        assertFailsWith<IllegalStateException> { entry.invalidateRenderResources() }
+
         assertEquals(1, cache.invalidations)
         assertNull(entry.state)
     }
@@ -120,6 +182,38 @@ class RetainedDisplayClientRegistryTest {
     }
 
     @Test
+    fun finalDetachRemovesEntryAndAttemptsCompositeCloseWhenViewReleaseFails() {
+        val cache = RecordingNativeCache(failRelease = true, failClose = true)
+        val registry = RetainedDisplayClientRegistry { cache }
+        val observer = registry.attach(42u, RetainedDisplayObserverKey("menu", RetainedDisplayViewKind.MENU))
+
+        val failure = assertFailsWith<IllegalStateException> { observer.close() }
+
+        assertEquals("synthetic view release failure", failure.message)
+        assertEquals(listOf("synthetic native close failure"), failure.suppressed.map { it.message })
+        assertNull(registry.entry(42u))
+        assertEquals(0, observer.entry.observerCount)
+        assertEquals(1, cache.closes)
+    }
+
+    @Test
+    fun registryCloseAttemptsEveryEntryAfterAnEarlierCloseFailure() {
+        val caches = mutableListOf<RecordingNativeCache>()
+        val registry =
+            RetainedDisplayClientRegistry { computerId ->
+                RecordingNativeCache(failClose = computerId == 42u).also(caches::add)
+            }
+        registry.attach(42u, RetainedDisplayObserverKey("first", RetainedDisplayViewKind.MENU))
+        registry.attach(43u, RetainedDisplayObserverKey("second", RetainedDisplayViewKind.WORLD))
+
+        assertFailsWith<IllegalStateException> { registry.close() }
+
+        assertNull(registry.entry(42u))
+        assertNull(registry.entry(43u))
+        assertEquals(listOf(1, 1), caches.map { it.closes })
+    }
+
+    @Test
     fun zeroComputerIdIsRejected() {
         val registry = RetainedDisplayClientRegistry { RecordingNativeCache() }
 
@@ -130,10 +224,34 @@ class RetainedDisplayClientRegistryTest {
 
     private class RecordingNativeCache(
         private val failInstall: Boolean = false,
+        private val failInvalidate: Boolean = false,
+        private val failRelease: Boolean = false,
+        private val failClose: Boolean = false,
     ) : RetainedDisplayNativeCache {
+        val presentation = MinecraftRetainedNativePresentation(emptyList(), RetainedDisplayRenderMetrics())
         val installedSequences = mutableListOf<ULong>()
+        val retainedViews = mutableListOf<Pair<RetainedDisplayViewKind, ULong?>>()
+        val releasedViews = mutableListOf<RetainedDisplayViewKind>()
+        val presentationRequests = mutableListOf<RetainedDisplayViewKind>()
         var invalidations = 0
         var closes = 0
+
+        override fun presentation(viewKind: RetainedDisplayViewKind): MinecraftRetainedNativePresentation? {
+            presentationRequests += viewKind
+            return presentation
+        }
+
+        override fun retainView(
+            viewKind: RetainedDisplayViewKind,
+            state: RetainedDisplayState?,
+        ) {
+            retainedViews += viewKind to state?.sequence
+        }
+
+        override fun releaseView(viewKind: RetainedDisplayViewKind) {
+            releasedViews += viewKind
+            if (failRelease) error("synthetic view release failure")
+        }
 
         override fun install(
             state: RetainedDisplayState,
@@ -145,10 +263,12 @@ class RetainedDisplayClientRegistryTest {
 
         override fun invalidate() {
             invalidations += 1
+            if (failInvalidate) error("synthetic native invalidation failure")
         }
 
         override fun close() {
             closes += 1
+            if (failClose) error("synthetic native close failure")
         }
     }
 

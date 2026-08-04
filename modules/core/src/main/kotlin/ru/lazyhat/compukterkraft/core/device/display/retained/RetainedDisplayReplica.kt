@@ -689,8 +689,7 @@ private data class PatchRectangle(
     val height: Int,
 )
 
-private fun PatchRectangle.toPublicRectangle(): RetainedPatchRectangle =
-    RetainedPatchRectangle(x, y, width, height)
+private fun PatchRectangle.toPublicRectangle(): RetainedPatchRectangle = RetainedPatchRectangle(x, y, width, height)
 
 private fun readPatchRectangle(
     reader: LeReader,
