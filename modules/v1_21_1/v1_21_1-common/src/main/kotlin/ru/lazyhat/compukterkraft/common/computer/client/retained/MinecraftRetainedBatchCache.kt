@@ -318,7 +318,12 @@ class NativeVertexBufferRetainedBatchTargetFactory(
             for (quad in batch.quads) appendQuad(builder, quad.destination, quad.sourceUv, quad.argb, flavor)
             val vertexBuffer = VertexBuffer(VertexBuffer.Usage.STATIC)
             try {
-                builder.buildOrThrow().use(vertexBuffer::upload)
+                vertexBuffer.bind()
+                try {
+                    builder.buildOrThrow().use(vertexBuffer::upload)
+                } finally {
+                    VertexBuffer.unbind()
+                }
             } catch (failure: Throwable) {
                 vertexBuffer.close()
                 throw failure
