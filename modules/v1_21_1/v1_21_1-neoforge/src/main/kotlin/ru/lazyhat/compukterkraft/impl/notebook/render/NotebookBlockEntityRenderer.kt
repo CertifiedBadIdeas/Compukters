@@ -27,6 +27,11 @@ class NotebookBlockEntityRenderer(
     context: BlockEntityRendererProvider.Context,
 ) : GeoBlockRenderer<NeoForgeNotebookBlockEntity>(NotebookGeoModel()) {
     init {
-        addRenderLayer(NotebookRetainedDisplayLayer(this, presentationLookup = { null }))
+        addRenderLayer(
+            NotebookRetainedDisplayLayer(
+                this,
+                presentationLookup = NotebookRetainedDisplayObservers::presentation,
+            ),
+        )
     }
 }

@@ -76,12 +76,13 @@ class RetainedDisplayRenderingArchitectureTest {
     }
 
     @Test
-    fun productionScreenRemainsUnboundUntilIssue460HardCutover() {
+    fun productionScreenUsesTheRetainedRendererAfterIssue460HardCutover() {
         val displayScreen = mainRoot.resolve("computer/screen/ComputerDisplayScreen.kt").readText()
 
-        assertFalse(displayScreen.contains("RetainedDisplayClientRegistry"))
-        assertFalse(displayScreen.contains("RetainedDisplayMenuRenderer"))
-        assertTrue(displayScreen.contains("DisplayTextureCache"), "Issue #460 owns the hard replacement of the old screen path")
+        assertTrue(displayScreen.contains("ClientRetainedDisplays.attachMenu"))
+        assertTrue(displayScreen.contains("RetainedDisplayMenuRenderer"))
+        assertFalse(displayScreen.contains("DisplayTextureCache"))
+        assertFalse(displayScreen.contains("ClientDisplayBuffer"))
     }
 
     private fun retainedSources(): String =

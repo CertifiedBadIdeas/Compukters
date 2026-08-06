@@ -16,36 +16,33 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-package ru.lazyhat.compukterkraft.common.computer.network.client
+
+package ru.lazyhat.compukterkraft.common.computer.network.retained
 
 import net.minecraft.network.FriendlyByteBuf
-import ru.lazyhat.compukterkraft.common.network.ClientNetworkContext
+import ru.lazyhat.compukterkraft.common.computer.context.ServerContext
 import ru.lazyhat.compukterkraft.common.network.MessageType
 import ru.lazyhat.compukterkraft.common.network.NetworkMessage
 import ru.lazyhat.compukterkraft.common.network.NetworkMessages
+import ru.lazyhat.compukterkraft.common.network.ServerNetworkContext
 
-class NativeFrameBatchClientMessage : NetworkMessage<ClientNetworkContext> {
-    val containerId: Int
-    val payload: ByteArray
+class RetainedDisplayDetachServerMessage : NetworkMessage<ServerNetworkContext> {
+    val computerId: Int
 
-    constructor(containerId: Int, payload: ByteArray) {
-        this.containerId = containerId
-        this.payload = payload
+    constructor(computerId: Int) {
+        requireComputerId(computerId)
+        this.computerId = computerId
     }
 
-    constructor(buf: FriendlyByteBuf) {
-        containerId = buf.readVarInt()
-        payload = buf.readByteArray()
-    }
+    constructor(buffer: FriendlyByteBuf) : this(buffer.readVarInt())
 
     override fun write(buf: FriendlyByteBuf) {
-        buf.writeVarInt(containerId)
-        buf.writeByteArray(payload)
+        buf.writeVarInt(computerId)
     }
 
-    override fun handle(context: ClientNetworkContext) {
-        context.handleNativeDisplayFrameBytes(containerId, payload)
+    override fun handle(context: ServerNetworkContext) {
+        ServerContext.get(computerId)?.detachRetainedDisplayViewer(context.sender().uuid)
     }
 
-    override fun type(): MessageType<NativeFrameBatchClientMessage> = NetworkMessages.NATIVE_FRAME_BATCH
+    override fun type(): MessageType<RetainedDisplayDetachServerMessage> = NetworkMessages.RETAINED_DISPLAY_DETACH
 }

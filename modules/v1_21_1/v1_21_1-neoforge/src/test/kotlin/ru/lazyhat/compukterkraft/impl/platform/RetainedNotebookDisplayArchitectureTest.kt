@@ -42,13 +42,17 @@ class RetainedNotebookDisplayArchitectureTest {
         )
 
     @Test
-    fun rendererComposesAnInactiveRetainedLayerUntilTheHardCutover() {
+    fun rendererActivatesTheConnectionScopedNotebookObserverAtTheHardCutover() {
         val renderer = renderRoot.resolve("NotebookBlockEntityRenderer.kt").readText()
         val layer = renderRoot.resolve("NotebookRetainedDisplayLayer.kt").readText()
+        val observers = renderRoot.resolve("NotebookRetainedDisplayObservers.kt").readText()
 
-        assertTrue(renderer.contains("addRenderLayer(NotebookRetainedDisplayLayer"))
-        assertTrue(renderer.contains("{ null }"), "Issue #459 must not activate a production observer lookup")
-        assertFalse(renderer.contains("RetainedDisplayClientRegistry"))
+        assertTrue(renderer.contains("NotebookRetainedDisplayLayer("))
+        assertTrue(renderer.contains("NotebookRetainedDisplayObservers::presentation"))
+        assertFalse(renderer.contains("{ null }"))
+        assertTrue(observers.contains("ClientRetainedDisplays.attachNotebook"))
+        assertTrue(observers.contains("INVISIBLE_GRACE_TICKS"))
+        assertTrue(observers.contains("observation.handle.close()"))
         assertTrue(layer.contains("GeoRenderLayer<NeoForgeNotebookBlockEntity>"))
         assertTrue(layer.contains("renderForBone"))
         assertTrue(layer.contains("bone.name != SCREEN_BONE"))

@@ -34,17 +34,13 @@ class ComputerTerminalScreenArchitectureTest {
         Paths
             .get("src/main/kotlin/ru/lazyhat/compukterkraft/common/computer/screen/ComputerDisplayScreen.kt")
             .readText()
-    private val displayBufferSource =
-        Paths
-            .get("src/main/kotlin/ru/lazyhat/compukterkraft/common/computer/client/ClientDisplayBuffer.kt")
-            .readText()
     private val notebookSource =
         Paths
             .get("src/main/kotlin/ru/lazyhat/compukterkraft/common/notebook/screen/NotebookScreen.kt")
             .readText()
 
     @Test
-    fun computerScreenUsesDisplayBufferNotTerminalBuffer() {
+    fun computerScreenUsesOneConnectionScopedRetainedDisplayEntry() {
         assertFalse(terminalSource.contains("ClientTerminalBuffer"))
         assertFalse(displaySource.contains("ClientTerminalBuffer"))
         assertFalse(terminalSource.contains("AttachTerminalServerMessage"))
@@ -53,16 +49,20 @@ class ComputerTerminalScreenArchitectureTest {
         assertFalse(displaySource.contains("ResizeTerminalServerMessage"))
         assertFalse(terminalSource.contains("terminalSurface("))
         assertFalse(displaySource.contains("terminalSurface("))
-        assertTrue(displaySource.contains("ClientDisplayBuffer"))
-        assertTrue(displaySource.contains("DisplayAttachServerMessage"))
-        assertTrue(displaySource.contains("DisplayResizeServerMessage"))
+        assertTrue(displaySource.contains("ClientRetainedDisplays.attachMenu"))
+        assertTrue(displaySource.contains("RetainedDisplayObserverHandle"))
+        assertTrue(displaySource.contains("RetainedDisplayMenuRenderer"))
+        assertFalse(displaySource.contains("ClientDisplayBuffer"))
+        assertFalse(displaySource.contains("DisplayAttachServerMessage"))
+        assertFalse(displaySource.contains("DisplayResizeServerMessage"))
     }
 
     @Test
-    fun computerScreenRendersDisplayAsTextureNotPerPixelGuiRects() {
-        assertTrue(displaySource.contains("NativeImage"))
-        assertTrue(displaySource.contains("DynamicTexture"))
-        assertTrue(displaySource.contains("drawDisplayTexture"))
+    fun computerScreenSubmitsRetainedBatchesInsteadOfUploadingAFramebufferTexture() {
+        assertFalse(displaySource.contains("NativeImage"))
+        assertFalse(displaySource.contains("DynamicTexture"))
+        assertTrue(displaySource.contains("drawRetainedDisplay"))
+        assertTrue(displaySource.contains("retainedRenderer.draw"))
         assertFalse(displaySource.contains("frontArgb()"))
         assertFalse(displaySource.contains("while (x < buffer.width)"))
         assertFalse(displaySource.contains("fillRect(px, py, pw, ph, color)"))
@@ -70,12 +70,10 @@ class ComputerTerminalScreenArchitectureTest {
 
     @Test
     fun clientDisplayPathCompositesGenericOperationsWithoutOwningFonts() {
-        for (source in listOf(displaySource, displayBufferSource)) {
-            assertFalse(source.contains("FixedWidthFontRenderer"))
-            assertFalse(source.contains("TerminalFontConstants"))
-            assertFalse(source.contains("terminal_font"))
-            assertFalse(source.contains("drawString("))
-        }
+        assertFalse(displaySource.contains("FixedWidthFontRenderer"))
+        assertFalse(displaySource.contains("TerminalFontConstants"))
+        assertFalse(displaySource.contains("terminal_font"))
+        assertFalse(displaySource.contains("drawString("))
     }
 
     @Test
@@ -104,31 +102,30 @@ class ComputerTerminalScreenArchitectureTest {
     @Test
     fun computerScreenHidesDisplayTextureWhilePoweredOff() {
         assertTrue(displaySource.contains("if (!menu.isComputerOn) return"))
-        assertTrue(displaySource.contains("if (!buffer.hasReceivedFrames) return"))
+        assertTrue(displaySource.contains("retainedObserver?.presentation() ?: return"))
     }
 
     @Test
-    fun computerScreenResetsClientDisplayBufferWhenPowerTurnsOff() {
-        assertTrue(displaySource.contains("lastMenuPowerState"))
-        assertTrue(displaySource.contains("if (lastPowerState == true && !currentPowerState)"))
-        assertTrue(displaySource.contains("menu.clientSide.detachDisplayBuffer()"))
-        assertTrue(displaySource.contains("menu.clientSide.attachDisplayBuffer(ClientDisplayBuffer(displayId, displayWidth, displayHeight))"))
-        assertTrue(displaySource.contains("if (!buffer.hasReceivedFrames) return"))
+    fun computerScreenLeavesReplicaLifetimeToTheObserverRegistry() {
+        assertTrue(displaySource.contains("retainedObserver?.close()"))
+        assertFalse(displaySource.contains("lastMenuPowerState"))
+        assertFalse(displaySource.contains("resetDisplayBuffer"))
+        assertFalse(displaySource.contains("clientSide"))
     }
 
     @Test
-    fun computerScreenResetsClientDisplayBufferBeforeRebootAction() {
-        assertTrue(displaySource.contains("protected fun resetDisplayBufferForRuntimeRestart()"))
-        assertTrue(terminalSource.contains("resetDisplayBufferForRuntimeRestart()"))
+    fun computerScreenReliesOnRetainedStateChangesAcrossReboot() {
+        assertFalse(displaySource.contains("resetDisplayBufferForRuntimeRestart"))
+        assertFalse(terminalSource.contains("resetDisplayBufferForRuntimeRestart"))
         assertTrue(terminalSource.contains("ControlInputEvent(ComputerControlAction.REBOOT)"))
-        assertTrue(notebookSource.contains("resetDisplayBufferForRuntimeRestart()"))
+        assertFalse(notebookSource.contains("resetDisplayBufferForRuntimeRestart"))
         assertTrue(notebookSource.contains("ComputerControlAction.REBOOT"))
     }
 
     @Test
     fun computerScreenUsesGpu0ResolutionForDisplayEndpoint() {
-        assertTrue(displaySource.contains("K16_GPU0_WIDTH"))
-        assertTrue(displaySource.contains("K16_GPU0_HEIGHT"))
+        assertTrue(displaySource.contains("RetainedDisplayGeometryCompiler.LOGICAL_WIDTH"))
+        assertTrue(displaySource.contains("RetainedDisplayGeometryCompiler.LOGICAL_HEIGHT"))
         assertFalse(displaySource.contains("terminalColumns * TerminalFontConstants.FONT_WIDTH"))
         assertFalse(displaySource.contains("terminalRows * TerminalFontConstants.FONT_HEIGHT"))
         assertTrue(notebookSource.contains("displayResolutionText(currentDisplayWidth(), currentDisplayHeight())"))
@@ -140,11 +137,11 @@ class ComputerTerminalScreenArchitectureTest {
     fun computerScreenDisplaysGpu0AtNativeSizeInsideTerminalSurface() {
         assertTrue(displaySource.contains("currentDisplayBounds(layout: WorkbenchTerminalLayout)"))
         assertTrue(displaySource.contains("layout.terminalSurfaceBounds"))
-        assertTrue(displaySource.contains("displayTexture.draw(guiGraphics, buffer, currentDisplayBounds(currentLayout()))"))
+        assertTrue(displaySource.contains("retainedRenderer.draw(guiGraphics, currentDisplayBounds(currentLayout()), presentation)"))
         assertTrue(terminalSource.contains("val displayBounds = currentDisplayBounds(layout)"))
         assertTrue(terminalSource.contains(".size(displayBounds.width, displayBounds.height)"))
         assertTrue(notebookSource.contains("val displayBounds = currentDisplayBounds(layout)"))
         assertTrue(notebookSource.contains(".size(displayBounds.width, displayBounds.height)"))
-        assertFalse(displaySource.contains("displayTexture.draw(guiGraphics, buffer, currentLayout().terminalBounds)"))
+        assertFalse(displaySource.contains("DisplayTextureCache"))
     }
 }

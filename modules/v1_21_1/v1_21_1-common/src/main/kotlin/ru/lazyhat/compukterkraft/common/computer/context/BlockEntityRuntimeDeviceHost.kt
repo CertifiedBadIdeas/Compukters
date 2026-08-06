@@ -22,13 +22,12 @@ package ru.lazyhat.compukterkraft.common.computer.context
 import net.minecraft.server.level.ServerLevel
 import ru.lazyhat.compukterkraft.common.computer.block.AbstractComputerBlockEntity
 import ru.lazyhat.compukterkraft.common.computer.menu.ComputerMenu
-import ru.lazyhat.compukterkraft.common.computer.network.client.FrameDeltaClientMessage
-import ru.lazyhat.compukterkraft.common.computer.network.client.NativeFrameBatchClientMessage
+import ru.lazyhat.compukterkraft.common.computer.network.retained.RetainedDisplayStateClientMessage
 import ru.lazyhat.compukterkraft.common.network.ServerNetworking
+import ru.lazyhat.compukterkraft.common.notebook.block.NotebookBlockEntity
 import ru.lazyhat.compukterkraft.core.device.runtime.ports.DeviceStateSink
 import ru.lazyhat.compukterkraft.core.device.runtime.ports.DisplayNetworkBridge
 import ru.lazyhat.compukterkraft.core.device.runtime.ports.GameTimeSource
-import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
 import java.util.UUID
 
 /**
@@ -45,52 +44,42 @@ class BlockEntityRuntimeDeviceHost(
 
     val displayNetwork: DisplayNetworkBridge =
         object : DisplayNetworkBridge {
-            override fun isDisplaySessionStillBound(
+            override fun isRetainedDisplayViewerAuthorized(
                 playerUuid: UUID,
-                containerId: Int,
                 deviceId: Int,
-                displayId: Int,
             ): Boolean {
                 val player = level.server.playerList.getPlayer(playerUuid) ?: return false
                 val menu = player.containerMenu
-                return menu is ComputerMenu &&
-                    menu.containerId == containerId &&
-                    menu.serverSide.device.deviceId == deviceId
-            }
-
-            override fun sendDisplayFrame(
-                playerUuid: UUID,
-                containerId: Int,
-                frame: DisplayFrameDelta,
-            ) {
-                val player = level.server.playerList.getPlayer(playerUuid) ?: return
-                ServerNetworking.sendToPlayer(
-                    FrameDeltaClientMessage(containerId, frame),
-                    player,
-                )
-            }
-
-            override fun sendNativeDisplayFrameBytes(
-                playerUuid: UUID,
-                containerId: Int,
-                payload: ByteArray,
-            ) {
-                val player = level.server.playerList.getPlayer(playerUuid) ?: return
-                ServerNetworking.sendToPlayer(
-                    NativeFrameBatchClientMessage(containerId, payload),
-                    player,
-                )
+                val menuAuthorized =
+                    menu is ComputerMenu && menu.serverSide.device.deviceId == deviceId
+                val notebookAuthorized =
+                    blockEntity is NotebookBlockEntity &&
+                        blockEntity.computerID == deviceId &&
+                        player.serverLevel() === level &&
+                        level.isLoaded(blockEntity.blockPos) &&
+                        level.getBlockEntity(blockEntity.blockPos) === blockEntity &&
+                        player.distanceToSqr(
+                            blockEntity.blockPos.x + 0.5,
+                            blockEntity.blockPos.y + 0.5,
+                            blockEntity.blockPos.z + 0.5,
+                        ) <= MAX_NOTEBOOK_OBSERVE_DISTANCE_SQUARED
+                return menuAuthorized || notebookAuthorized
             }
 
             override fun sendRetainedDisplayPayload(
                 playerUuid: UUID,
-                containerId: Int,
+                deviceId: Int,
                 payload: ByteArray,
             ) {
-                error("Retained display Minecraft transport is implemented by issue #459")
+                val player = level.server.playerList.getPlayer(playerUuid) ?: return
+                ServerNetworking.sendToPlayer(RetainedDisplayStateClientMessage(deviceId, payload), player)
             }
         }
 
     val stateSink: DeviceStateSink =
         DeviceStateSink { isOn -> blockEntity.updateBlockState(isOn) }
+
+    private companion object {
+        const val MAX_NOTEBOOK_OBSERVE_DISTANCE_SQUARED = 64.0 * 64.0
+    }
 }

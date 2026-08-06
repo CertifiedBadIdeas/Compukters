@@ -18,26 +18,20 @@
  */
 package ru.lazyhat.compukterkraft.common.computer.screen
 
-import com.mojang.blaze3d.platform.NativeImage
 import net.minecraft.client.Minecraft
 import net.minecraft.client.gui.GuiGraphics
-import net.minecraft.client.renderer.texture.DynamicTexture
 import net.minecraft.network.chat.Component
-import net.minecraft.resources.ResourceLocation
-import net.minecraft.util.FastColor
 import net.minecraft.world.entity.player.Inventory
-import ru.lazyhat.compukterkraft.common.computer.client.ClientDisplayBuffer
-import ru.lazyhat.compukterkraft.common.computer.client.ClientDisplayBuffers
+import ru.lazyhat.compukterkraft.common.computer.client.retained.ClientRetainedDisplays
+import ru.lazyhat.compukterkraft.common.computer.client.retained.RetainedDisplayMenuRenderer
+import ru.lazyhat.compukterkraft.common.computer.client.retained.RetainedDisplayObserverHandle
 import ru.lazyhat.compukterkraft.common.computer.input.ClientInputHandler
 import ru.lazyhat.compukterkraft.common.computer.menu.AbstractComputerMenu
-import ru.lazyhat.compukterkraft.common.computer.network.server.DisplayAttachServerMessage
-import ru.lazyhat.compukterkraft.common.computer.network.server.DisplayDetachServerMessage
-import ru.lazyhat.compukterkraft.common.computer.network.server.DisplayResizeServerMessage
-import ru.lazyhat.compukterkraft.common.network.ClientNetworking
 import ru.lazyhat.compukterkraft.common.platform.MinecraftInputProvider
 import ru.lazyhat.compukterkraft.common.ui.program.DslContainerScreen
 import ru.lazyhat.compukterkraft.common.utils.computerDataTagCopy
 import ru.lazyhat.compukterkraft.common.utils.computerID
+import ru.lazyhat.compukterkraft.core.device.display.retained.render.RetainedDisplayGeometryCompiler
 import ru.lazyhat.compukterkraft.core.gui.TerminalRect
 import ru.lazyhat.compukterkraft.core.gui.WorkbenchTerminalInputController
 import ru.lazyhat.compukterkraft.core.gui.WorkbenchTerminalLayout
@@ -52,23 +46,20 @@ abstract class ComputerDisplayScreen<T : AbstractComputerMenu>(
     protected val inputHandler = ClientInputHandler(container)
     protected val terminalInput = WorkbenchTerminalInputController(inputHandler, MinecraftInputProvider)
 
-    protected abstract val displayId: Int
-    protected abstract val terminalColumns: Int
-    protected abstract val terminalRows: Int
-
-    private val displayTexture: DisplayTextureCache by lazy { DisplayTextureCache(displayId) }
-    private var lastMenuPowerState: Boolean? = null
+    private val retainedRenderer = RetainedDisplayMenuRenderer()
+    private var retainedObserver: RetainedDisplayObserverHandle? = null
 
     override fun init() {
         super.init()
-        attachDisplayEndpoint()
-        lastMenuPowerState = menu.isComputerOn
+        if (retainedObserver == null) {
+            retainedObserver = ClientRetainedDisplays.attachMenu(computerId(), menu.containerId)
+        }
         focusFirstNodeIfUnfocused()
     }
 
     override fun removed() {
-        displayTexture.close()
-        ClientNetworking.sendToServer(DisplayDetachServerMessage(menu, displayId))
+        retainedObserver?.close()
+        retainedObserver = null
         super.removed()
     }
 
@@ -79,14 +70,11 @@ abstract class ComputerDisplayScreen<T : AbstractComputerMenu>(
         mouseY: Int,
     ) {
         super.renderBg(guiGraphics, partialTick, mouseX, mouseY)
-        drawDisplayTexture(guiGraphics)
+        drawRetainedDisplay(guiGraphics)
     }
 
     override fun containerTick() {
         super.containerTick()
-        syncDisplayPowerState()
-        menu.clientSide.displayBuffer?.swapIfDirty()
-        syncDisplayEndpoint()
         focusFirstNodeIfUnfocused()
     }
 
@@ -132,15 +120,16 @@ abstract class ComputerDisplayScreen<T : AbstractComputerMenu>(
         targetWidth: Int,
         targetHeight: Int,
     ) {
-        val buffer = menu.clientSide.displayBuffer
-        if (buffer == null || !buffer.hasReceivedFrames) {
+        if (!hasRetainedDisplayPresentation()) {
             fillRect(0, 0, targetWidth, targetHeight, DISPLAY_PLACEHOLDER)
         }
     }
 
-    protected fun currentDisplayWidth(): Int = K16_GPU0_WIDTH
+    protected fun hasRetainedDisplayPresentation(): Boolean = retainedObserver?.presentation() != null
 
-    protected fun currentDisplayHeight(): Int = K16_GPU0_HEIGHT
+    protected fun currentDisplayWidth(): Int = RetainedDisplayGeometryCompiler.LOGICAL_WIDTH
+
+    protected fun currentDisplayHeight(): Int = RetainedDisplayGeometryCompiler.LOGICAL_HEIGHT
 
     protected fun displayResolutionText(
         width: Int,
@@ -159,174 +148,30 @@ abstract class ComputerDisplayScreen<T : AbstractComputerMenu>(
         )
     }
 
-    private fun attachDisplayEndpoint() {
-        val displayWidth = currentDisplayWidth()
-        val displayHeight = currentDisplayHeight()
-        menu.clientSide.attachDisplayBuffer(displayBuffer(displayWidth, displayHeight))
-        ClientNetworking.sendToServer(DisplayAttachServerMessage(menu, displayId, displayWidth, displayHeight))
-    }
-
-    private fun syncDisplayEndpoint() {
-        val displayWidth = currentDisplayWidth()
-        val displayHeight = currentDisplayHeight()
-        val buffer = menu.clientSide.displayBuffer
-        if (buffer == null || buffer.width != displayWidth || buffer.height != displayHeight) {
-            menu.clientSide.attachDisplayBuffer(displayBuffer(displayWidth, displayHeight))
-            ClientNetworking.sendToServer(DisplayResizeServerMessage(menu, displayId, displayWidth, displayHeight))
-        }
-    }
-
-    private fun syncDisplayPowerState() {
-        val currentPowerState = menu.isComputerOn
-        val lastPowerState = lastMenuPowerState
-        if (lastPowerState == true && !currentPowerState) {
-            resetDisplayBuffer()
-        }
-        lastMenuPowerState = currentPowerState
-    }
-
-    protected fun resetDisplayBufferForRuntimeRestart() {
-        resetDisplayBuffer()
-    }
-
-    private fun resetDisplayBuffer() {
-        val displayWidth = currentDisplayWidth()
-        val displayHeight = currentDisplayHeight()
-        menu.displayStack.computerDataTagCopy()?.computerID?.let { computerId ->
-            ClientDisplayBuffers.remove(computerId, displayId, displayWidth, displayHeight)
-        }
-        menu.clientSide.detachDisplayBuffer()
-        menu.clientSide.attachDisplayBuffer(ClientDisplayBuffer(displayId, displayWidth, displayHeight))
-    }
-
-    private fun displayBuffer(
-        displayWidth: Int,
-        displayHeight: Int,
-    ): ClientDisplayBuffer =
-        menu.displayStack.computerDataTagCopy()?.computerID?.let { computerId ->
-            ClientDisplayBuffers.getOrCreate(computerId, displayId, displayWidth, displayHeight)
-        } ?: ClientDisplayBuffer(displayId, displayWidth, displayHeight)
-
-    private fun drawDisplayTexture(guiGraphics: GuiGraphics) {
+    private fun drawRetainedDisplay(guiGraphics: GuiGraphics) {
         if (!menu.isComputerOn) return
-        val buffer = menu.clientSide.displayBuffer ?: return
-        if (!buffer.hasReceivedFrames) return
-        displayTexture.draw(guiGraphics, buffer, currentDisplayBounds(currentLayout()))
+        val presentation = retainedObserver?.presentation() ?: return
+        retainedRenderer.draw(guiGraphics, currentDisplayBounds(currentLayout()), presentation)
     }
+
+    private fun computerId(): Int =
+        requireNotNull(menu.displayStack.computerDataTagCopy()?.computerID) {
+            "Computer display menu does not contain a computer ID"
+        }.also {
+            require(it > 0) { "Computer display menu contains invalid computer ID: $it" }
+        }
 
     private fun isInventoryKey(
         keyCode: Int,
         scanCode: Int,
-    ): Boolean = minecraft?.options?.keyInventory?.matches(keyCode, scanCode) == true
-
-    private class DisplayTextureCache(
-        private val displayId: Int,
-    ) : AutoCloseable {
-        private var image: NativeImage? = null
-        private var texture: DynamicTexture? = null
-        private var location: ResourceLocation? = null
-        private var width: Int = 0
-        private var height: Int = 0
-        private var uploadScratch = IntArray(0)
-        private var uploadedVersion: Long = Long.MIN_VALUE
-
-        fun draw(
-            guiGraphics: GuiGraphics,
-            buffer: ClientDisplayBuffer,
-            bounds: TerminalRect,
-        ) {
-            ensureTexture(buffer.width, buffer.height)
-            uploadIfNeeded(buffer)
-            val textureLocation = location ?: return
-            guiGraphics.blit(
-                textureLocation,
-                bounds.x,
-                bounds.y,
-                bounds.width,
-                bounds.height,
-                0f,
-                0f,
-                buffer.width,
-                buffer.height,
-                buffer.width,
-                buffer.height,
-            )
-        }
-
-        private fun ensureTexture(
-            width: Int,
-            height: Int,
-        ) {
-            if (image != null && this.width == width && this.height == height) return
-            close()
-            this.width = width
-            this.height = height
-            val newImage = NativeImage(width, height, false)
-            val newTexture = DynamicTexture(newImage)
-            image = newImage
-            texture = newTexture
-            location = Minecraft.getInstance().textureManager.register("compukterkraft_display_$displayId", newTexture)
-            uploadScratch = IntArray(width * height)
-            uploadedVersion = Long.MIN_VALUE
-        }
-
-        private fun uploadIfNeeded(buffer: ClientDisplayBuffer) {
-            val currentImage = image ?: return
-            val currentTexture = texture ?: return
-            if (buffer.frontVersion == uploadedVersion) return
-            val changes = buffer.copyFrontChangesSince(uploadedVersion, uploadScratch)
-            if (changes.version == uploadedVersion) return
-            for (packedRegion in changes.regions) {
-                val region = packedRegion.region
-                var row = region.y
-                while (row < region.y + region.height) {
-                    var columnOffset = 0
-                    while (columnOffset < region.width) {
-                        val scratchOffset =
-                            packedRegion.scratchOffset +
-                                (row - region.y) * region.width +
-                                columnOffset
-                        currentImage.setPixelRGBA(
-                            region.x + columnOffset,
-                            row,
-                            FastColor.ABGR32.fromArgb32(
-                                uploadScratch[scratchOffset],
-                            ),
-                        )
-                        columnOffset = columnOffset + 1
-                    }
-                    row = row + 1
-                }
-            }
-            val uploadStarted = System.nanoTime()
-            currentTexture.bind()
-            for (packedRegion in changes.regions) {
-                val region = packedRegion.region
-                currentImage.upload(0, region.x, region.y, region.x, region.y, region.width, region.height, false, false)
-            }
-            buffer.recordTextureUpload(
-                regions = changes.regions.size,
-                pixels = changes.copiedPixels,
-                nanos = System.nanoTime() - uploadStarted,
-            )
-            uploadedVersion = changes.version
-        }
-
-        override fun close() {
-            location?.let { Minecraft.getInstance().textureManager.release(it) }
-            image = null
-            texture = null
-            location = null
-            width = 0
-            height = 0
-            uploadScratch = IntArray(0)
-            uploadedVersion = Long.MIN_VALUE
-        }
-    }
+    ): Boolean =
+        Minecraft
+            .getInstance()
+            .options
+            .keyInventory
+            .matches(keyCode, scanCode)
 
     private companion object {
-        private const val K16_GPU0_WIDTH = 320
-        private const val K16_GPU0_HEIGHT = 200
         private val DISPLAY_PLACEHOLDER = Color.hex(0xFF05070AU)
     }
 }

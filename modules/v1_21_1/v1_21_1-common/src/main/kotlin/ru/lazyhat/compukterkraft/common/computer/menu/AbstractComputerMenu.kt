@@ -25,13 +25,11 @@ import net.minecraft.world.inventory.MenuType
 import net.minecraft.world.inventory.SimpleContainerData
 import net.minecraft.world.item.ItemStack
 import ru.lazyhat.compukterkraft.common.computer.block.checkUsable
-import ru.lazyhat.compukterkraft.common.computer.client.ClientDisplayBuffer
 import ru.lazyhat.compukterkraft.common.computer.data.ComputerContainerData
 import ru.lazyhat.compukterkraft.core.Config
 import ru.lazyhat.compukterkraft.core.block.DeviceFamily
 import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeDevice
 import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeDeviceFailureState
-import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
 
 /**
  * Type-safe representation of which side of the network this menu lives on.
@@ -45,41 +43,8 @@ sealed interface MenuSide {
         val input: ServerInputState<out AbstractComputerMenu>,
     ) : MenuSide
 
-    /**
-     * Client-side state: owns the [ClientDisplayBuffer] attached by the
-     * currently-open computer screen.
-     */
-    class Client : MenuSide {
-        var displayBuffer: ClientDisplayBuffer? = null
-            private set
-
-        fun attachDisplayBuffer(buffer: ClientDisplayBuffer) {
-            val current = displayBuffer
-            displayBuffer =
-                if (
-                    current == null ||
-                    current.displayId != buffer.displayId ||
-                    current.width != buffer.width ||
-                    current.height != buffer.height
-                ) {
-                    buffer
-                } else {
-                    current
-                }
-        }
-
-        fun detachDisplayBuffer() {
-            displayBuffer = null
-        }
-
-        fun applyDisplayFrame(frame: DisplayFrameDelta) {
-            displayBuffer?.apply(frame)
-        }
-
-        fun applyNativeDisplayFrameBytes(payload: ByteArray) {
-            displayBuffer?.applyNativeFrameBatch(payload)
-        }
-    }
+    /** Client-side marker. Retained display state is connection-scoped, not menu-owned. */
+    data object Client : MenuSide
 }
 
 abstract class AbstractComputerMenu(
@@ -104,15 +69,14 @@ abstract class AbstractComputerMenu(
     /**
      * Type-safe side discriminator.
      * On the server: [MenuSide.Server] — holds the [RuntimeDevice] + input.
-     * On the client: [MenuSide.Client] — holds the [ClientDisplayBuffer]
-     * attached by the open computer screen.
+     * On the client: [MenuSide.Client] — retained display state lives in the connection-scoped registry.
      */
 
     override val side: MenuSide =
         if (computer != null) {
             MenuSide.Server(computer, ServerInputState(this))
         } else {
-            MenuSide.Client()
+            MenuSide.Client
         }
 
     /** Whether the computer is currently on (synced from server via [ContainerData]). */
@@ -131,20 +95,6 @@ abstract class AbstractComputerMenu(
     override fun stillValid(player: Player): Boolean {
         val server = side as? MenuSide.Server
         return (server == null || server.device.family.checkUsable(player)) && canUse(player)
-    }
-
-    override fun handleDisplayFrame(frame: DisplayFrameDelta) {
-        val client =
-            side as? MenuSide.Client
-                ?: throw UnsupportedOperationException("Cannot apply display frame on the server")
-        client.applyDisplayFrame(frame)
-    }
-
-    override fun handleNativeDisplayFrameBytes(payload: ByteArray) {
-        val client =
-            side as? MenuSide.Client
-                ?: throw UnsupportedOperationException("Cannot apply native display frame bytes on the server")
-        client.applyNativeDisplayFrameBytes(payload)
     }
 
     override fun removed(player: Player) {

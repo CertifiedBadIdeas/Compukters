@@ -52,10 +52,6 @@ class NotebookScreen(
     inventory: Inventory,
     title: Component,
 ) : ComputerDisplayScreen<ComputerMenuWithoutInventory>(menu, inventory, title) {
-    override val displayId: Int = NOTEBOOK_DISPLAY_ID
-    override val terminalColumns: Int = TERMINAL_COLUMNS
-    override val terminalRows: Int = TERMINAL_ROWS
-
     init {
         imageWidth = WorkbenchTerminalMetrics.imageWidth(TERMINAL_COLUMNS)
         imageHeight = WorkbenchTerminalMetrics.imageHeight(TERMINAL_ROWS, contentTopInset = NOTEBOOK_CONTENT_TOP)
@@ -139,7 +135,6 @@ class NotebookScreen(
                 y = statusRelY + 3,
                 label = { "REBOOT" },
                 enabled = { menu.isComputerOn },
-                beforeAction = { resetDisplayBufferForRuntimeRestart() },
                 action = { ComputerControlAction.REBOOT },
             )
         }
@@ -161,14 +156,12 @@ class NotebookScreen(
         y: Int,
         label: () -> String,
         enabled: () -> Boolean,
-        beforeAction: () -> Unit = {},
         action: () -> ComputerControlAction,
     ) {
         button(
             modifier = Modifier.offset(x, y).size(68, 14),
             onClick = {
                 if (enabled()) {
-                    beforeAction()
                     inputHandler.accept(ControlInputEvent(action()))
                 }
             },
@@ -215,7 +208,7 @@ class NotebookScreen(
         when {
             menu.hasComputerRuntimeFailure -> NotebookRuntimeState.FAILED
             !menu.isComputerOn -> NotebookRuntimeState.OFF
-            menu.clientSide.displayBuffer?.hasReceivedFrames == true -> NotebookRuntimeState.RUNNING
+            hasRetainedDisplayPresentation() -> NotebookRuntimeState.RUNNING
             else -> NotebookRuntimeState.CONNECTING
         }
 
@@ -228,7 +221,6 @@ class NotebookScreen(
         }
 
     companion object {
-        private const val NOTEBOOK_DISPLAY_ID = 1
         private val TERMINAL_COLUMNS = Config.DEFAULT_COMPUTER_TERM_WIDTH
         private val TERMINAL_ROWS = Config.DEFAULT_COMPUTER_TERM_HEIGHT
         private const val NOTEBOOK_CONTENT_TOP = 32

@@ -32,8 +32,9 @@ class ClientNativeDisplayTransportArchitectureTest {
             .readText()
 
     @Test
-    fun clientNativeDisplayTransportDoesNotMaterializeDisplayFrameLists() {
-        assertTrue(contextSource.contains("handleNativeDisplayFrameBytes(payload)"))
+    fun clientRetainedDisplayTransportInstallsOpaqueStateThroughTheConnectionRegistry() {
+        assertTrue(contextSource.contains("ClientRetainedDisplays.apply(computerId, payload)"))
+        assertFalse(contextSource.contains("handleNativeDisplayFrameBytes"))
         assertFalse(contextSource.contains("NativeDisplayFrameCodec.decodeFrames"))
     }
 }

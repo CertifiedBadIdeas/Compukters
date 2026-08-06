@@ -19,7 +19,6 @@
 package ru.lazyhat.compukterkraft.common.computer.menu
 
 import ru.lazyhat.compukterkraft.core.block.DeviceFamily
-import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
 
 /**
  * An instance of [AbstractContainerMenu] which provides a computer. You should implement this if you provide
@@ -27,7 +26,7 @@ import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
  *
  * Server-only and client-only operations are accessed through [side]:
  * - `menu.serverSide.device` / `menu.serverSide.input` — server-side only
- * - `menu.clientSide.displayBuffer` — client-side only, nullable until the screen attaches a buffer
+ * Client retained-display state is connection-scoped and intentionally does not live in the menu.
  */
 interface ComputerMenu {
     /** Type-safe side discriminator. */
@@ -42,17 +41,4 @@ interface ComputerMenu {
      */
     val serverSide: MenuSide.Server
         get() = side as MenuSide.Server
-
-    /**
-     * Convenience accessor for the client side.
-     * @throws ClassCastException When called on the server.
-     */
-    val clientSide: MenuSide.Client
-        get() = side as MenuSide.Client
-
-    /** Apply a pixel display-frame delta to the client-side display buffer. */
-    fun handleDisplayFrame(frame: DisplayFrameDelta)
-
-    /** Apply native K16 display-frame bytes to the client-side display buffer. */
-    fun handleNativeDisplayFrameBytes(payload: ByteArray)
 }
