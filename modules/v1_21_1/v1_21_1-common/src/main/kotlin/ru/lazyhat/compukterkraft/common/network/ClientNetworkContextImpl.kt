@@ -20,42 +20,22 @@
 package ru.lazyhat.compukterkraft.common.network
 
 import net.minecraft.client.Minecraft
-import ru.lazyhat.compukterkraft.common.computer.menu.ComputerMenu
+import ru.lazyhat.compukterkraft.common.computer.client.retained.ClientRetainedDisplays
 import ru.lazyhat.compukterkraft.common.network.text.ClientTableFormatter
 import ru.lazyhat.compukterkraft.common.network.text.TableBuilder
-import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
 
 class ClientNetworkContextImpl : ClientNetworkContext {
     private val minecraft: Minecraft
         get() = Minecraft.getInstance()
 
-    private inline fun withCheckedContainerMenu(
-        deviceId: Int,
-        block: ComputerMenu.() -> Unit,
-    ) {
-        minecraft
-            .player
-            ?.containerMenu
-            ?.takeIf { it.containerId == deviceId }
-            ?.let { it as? ComputerMenu }
-            ?.run(block)
-    }
-
     override fun handleChatTable(table: TableBuilder) {
         ClientTableFormatter(minecraft).display(table)
     }
 
-    override fun handleDisplayFrame(
-        containerId: Int,
-        frame: DisplayFrameDelta,
-    ) = withCheckedContainerMenu(containerId) {
-        handleDisplayFrame(frame)
-    }
-
-    override fun handleNativeDisplayFrameBytes(
-        containerId: Int,
+    override fun handleRetainedDisplayState(
+        computerId: Int,
         payload: ByteArray,
-    ) = withCheckedContainerMenu(containerId) {
-        handleNativeDisplayFrameBytes(payload)
+    ) {
+        ClientRetainedDisplays.apply(computerId, payload)
     }
 }

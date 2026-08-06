@@ -21,12 +21,11 @@ package ru.lazyhat.compukterkraft.common.network
 import it.unimi.dsi.fastutil.ints.IntOpenHashSet
 import it.unimi.dsi.fastutil.ints.IntSet
 import net.minecraft.network.FriendlyByteBuf
-import ru.lazyhat.compukterkraft.common.computer.network.client.FrameDeltaClientMessage
-import ru.lazyhat.compukterkraft.common.computer.network.client.NativeFrameBatchClientMessage
+import ru.lazyhat.compukterkraft.common.computer.network.retained.RetainedDisplayAttachServerMessage
+import ru.lazyhat.compukterkraft.common.computer.network.retained.RetainedDisplayControlServerMessage
+import ru.lazyhat.compukterkraft.common.computer.network.retained.RetainedDisplayDetachServerMessage
+import ru.lazyhat.compukterkraft.common.computer.network.retained.RetainedDisplayStateClientMessage
 import ru.lazyhat.compukterkraft.common.computer.network.server.ComputerActionServerMessage
-import ru.lazyhat.compukterkraft.common.computer.network.server.DisplayAttachServerMessage
-import ru.lazyhat.compukterkraft.common.computer.network.server.DisplayDetachServerMessage
-import ru.lazyhat.compukterkraft.common.computer.network.server.DisplayResizeServerMessage
 import ru.lazyhat.compukterkraft.common.computer.network.server.KeyEventServerMessage
 import ru.lazyhat.compukterkraft.common.computer.network.server.MouseEventServerMessage
 import ru.lazyhat.compukterkraft.common.computer.network.server.PasteEventComputerMessage
@@ -51,16 +50,14 @@ object NetworkMessages {
         registerServerbound(3, "paste_event") { PasteEventComputerMessage(it) }
     val CHAT_TABLE: MessageType<ChatTableClientMessage> =
         registerClientbound(10, "chat_table") { ChatTableClientMessage(it) }
-    val DISPLAY_ATTACH: MessageType<DisplayAttachServerMessage> =
-        registerServerbound(22, "display_attach") { DisplayAttachServerMessage(it) }
-    val DISPLAY_RESIZE: MessageType<DisplayResizeServerMessage> =
-        registerServerbound(23, "display_resize") { DisplayResizeServerMessage(it) }
-    val DISPLAY_DETACH: MessageType<DisplayDetachServerMessage> =
-        registerServerbound(24, "display_detach") { DisplayDetachServerMessage(it) }
-    val FRAME_DELTA: MessageType<FrameDeltaClientMessage> =
-        registerClientbound(25, "frame_delta") { FrameDeltaClientMessage(it) }
-    val NATIVE_FRAME_BATCH: MessageType<NativeFrameBatchClientMessage> =
-        registerClientbound(26, "native_frame_batch") { NativeFrameBatchClientMessage(it) }
+    val RETAINED_DISPLAY_ATTACH: MessageType<RetainedDisplayAttachServerMessage> =
+        registerServerbound(22, "retained_display_attach") { RetainedDisplayAttachServerMessage(it) }
+    val RETAINED_DISPLAY_DETACH: MessageType<RetainedDisplayDetachServerMessage> =
+        registerServerbound(23, "retained_display_detach") { RetainedDisplayDetachServerMessage(it) }
+    val RETAINED_DISPLAY_CONTROL: MessageType<RetainedDisplayControlServerMessage> =
+        registerServerbound(24, "retained_display_control") { RetainedDisplayControlServerMessage(it) }
+    val RETAINED_DISPLAY_STATE: MessageType<RetainedDisplayStateClientMessage> =
+        registerClientbound(25, "retained_display_state") { RetainedDisplayStateClientMessage(it) }
 
     @Suppress("UNCHECKED_CAST")
     private fun <C, T : NetworkMessage<C>> register(

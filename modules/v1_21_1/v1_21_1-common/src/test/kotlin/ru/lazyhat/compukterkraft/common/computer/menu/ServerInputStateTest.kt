@@ -28,7 +28,6 @@ import ru.lazyhat.compukterkraft.core.device.input.ComputerControlAction
 import ru.lazyhat.compukterkraft.core.device.input.ControlInputEvent
 import ru.lazyhat.compukterkraft.core.device.input.KeyInputEvent
 import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeDevice
-import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
 import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -127,44 +126,14 @@ class ServerInputStateTest {
             events += QueuedEvent(event, arguments.toList())
         }
 
-        override fun attachDisplaySession(
-            playerUuid: UUID,
-            containerId: Int,
-            displayId: Int,
-            width: Int,
-            height: Int,
-        ) = Unit
-
-        override fun resizeDisplaySession(
-            playerUuid: UUID,
-            displayId: Int,
-            width: Int,
-            height: Int,
-        ) = Unit
-
-        override fun detachDisplaySession(
-            playerUuid: UUID,
-            displayId: Int,
-        ) = Unit
-
-        override fun attachRetainedDisplaySession(
-            playerUuid: UUID,
-            containerId: Int,
-            displayId: Int,
-        ): Boolean = false
+        override fun attachRetainedDisplayViewer(playerUuid: UUID): Boolean = false
 
         override fun acceptRetainedDisplayServerbound(
             playerUuid: UUID,
-            containerId: Int,
-            displayId: Int,
             payload: ByteArray,
         ): Boolean = false
 
-        override fun detachRetainedDisplaySession(
-            playerUuid: UUID,
-            containerId: Int,
-            displayId: Int,
-        ): Boolean = false
+        override fun detachRetainedDisplayViewer(playerUuid: UUID): Boolean = false
     }
 
     private class TestComputerMenu(
@@ -178,10 +147,6 @@ class ServerInputStateTest {
                 ServerInputState(this) as ServerInputState<out AbstractComputerMenu>,
             )
         override val family: DeviceFamily = DeviceFamily.NORMAL
-
-        override fun handleDisplayFrame(frame: DisplayFrameDelta) = Unit
-
-        override fun handleNativeDisplayFrameBytes(payload: ByteArray) = Unit
 
         override fun quickMoveStack(
             player: Player,

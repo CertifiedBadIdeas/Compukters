@@ -19,7 +19,6 @@
 package ru.lazyhat.compukterkraft.common.network
 
 import ru.lazyhat.compukterkraft.common.network.text.TableBuilder
-import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
 
 /**
  * The context under which clientbound packets are evaluated.
@@ -27,13 +26,8 @@ import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
 interface ClientNetworkContext {
     fun handleChatTable(table: TableBuilder)
 
-    fun handleDisplayFrame(
-        containerId: Int,
-        frame: DisplayFrameDelta,
-    )
-
-    fun handleNativeDisplayFrameBytes(
-        containerId: Int,
+    fun handleRetainedDisplayState(
+        computerId: Int,
         payload: ByteArray,
     )
 }

@@ -18,16 +18,20 @@
  */
 package ru.lazyhat.compukterkraft.impl
 
+import net.minecraft.client.Minecraft
 import net.neoforged.api.distmarker.Dist
 import net.neoforged.bus.api.SubscribeEvent
 import net.neoforged.fml.common.EventBusSubscriber
 import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent
+import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent
 import net.neoforged.neoforge.client.event.ClientTickEvent
 import net.neoforged.neoforge.client.event.RenderFrameEvent
+import ru.lazyhat.compukterkraft.common.computer.client.retained.ClientRetainedDisplays
 import ru.lazyhat.compukterkraft.core.ClientHooks
 import ru.lazyhat.compukterkraft.core.LOGGER
 import ru.lazyhat.compukterkraft.core.MOD_ID
 import ru.lazyhat.compukterkraft.core.MOD_NAME
+import ru.lazyhat.compukterkraft.impl.notebook.render.NotebookRetainedDisplayObservers
 
 /**
  * Forge-specific dispatch for [ClientHooks].
@@ -44,11 +48,33 @@ object ForgeClientHooks {
     @JvmStatic
     fun onTick(event: ClientTickEvent.Pre) {
         ClientHooks.onTick()
+        NotebookRetainedDisplayObservers.tick(Minecraft.getInstance().level)
     }
 
     @SubscribeEvent
     @JvmStatic
     fun onRenderTick(event: RenderFrameEvent.Pre) {
         ClientHooks.onRenderTick()
+    }
+
+    @SubscribeEvent
+    @JvmStatic
+    fun onLoggingOut(event: ClientPlayerNetworkEvent.LoggingOut) {
+        var failure: Throwable? = null
+        try {
+            ClientRetainedDisplays.close()
+        } catch (caught: Throwable) {
+            failure = caught
+        }
+        try {
+            NotebookRetainedDisplayObservers.close()
+        } catch (caught: Throwable) {
+            if (failure == null) {
+                failure = caught
+            } else if (failure !== caught) {
+                failure.addSuppressed(caught)
+            }
+        }
+        failure?.let { throw it }
     }
 }

@@ -47,6 +47,8 @@ sealed interface RetainedDisplayClientInstallResult {
 
 class RetainedDisplayClientRegistry(
     private val nativeCacheFactory: (UInt) -> RetainedDisplayNativeCache,
+    private val onFirstObserver: (UInt, RetainedDisplayObserverKey) -> Unit,
+    private val onLastObserver: (UInt) -> Unit,
 ) : AutoCloseable {
     private val entries = mutableMapOf<UInt, RetainedDisplayClientEntry>()
 
@@ -60,9 +62,15 @@ class RetainedDisplayClientRegistry(
         if (existing == null) entries[computerId] = entry
         try {
             require(entry.attach(observerKey)) { "Retained display observer is already attached: $observerKey" }
+            if (existing == null) onFirstObserver(computerId, observerKey)
         } catch (failure: Throwable) {
-            if (existing == null && entry.observerCount == 0) {
+            if (existing == null) {
                 entries.remove(computerId, entry)
+                try {
+                    entry.detach(observerKey)
+                } catch (detachFailure: Throwable) {
+                    if (failure !== detachFailure) failure.addSuppressed(detachFailure)
+                }
                 try {
                     entry.close()
                 } catch (closeFailure: Throwable) {
@@ -91,6 +99,15 @@ class RetainedDisplayClientRegistry(
                         releaseFailure.addSuppressed(closeFailure)
                     }
                 }
+                try {
+                    onLastObserver(computerId)
+                } catch (callbackFailure: Throwable) {
+                    if (releaseFailure == null) {
+                        releaseFailure = callbackFailure
+                    } else if (releaseFailure !== callbackFailure) {
+                        releaseFailure.addSuppressed(callbackFailure)
+                    }
+                }
             }
             releaseFailure?.let { throw it }
         }
@@ -98,10 +115,39 @@ class RetainedDisplayClientRegistry(
 
     fun entry(computerId: UInt): RetainedDisplayClientEntry? = entries[computerId]
 
+    fun entriesSnapshot(): List<Pair<UInt, RetainedDisplayClientEntry>> = entries.entries.map { it.key to it.value }
+
     override fun close() {
-        val closing = entries.values.toList()
+        closeEntries(notifyLastObservers = true)
+    }
+
+    fun discardConnection() {
+        closeEntries(notifyLastObservers = false)
+    }
+
+    private fun closeEntries(notifyLastObservers: Boolean) {
+        val closing = entries.entries.map { it.key to it.value }
         entries.clear()
-        cleanupAll(closing, RetainedDisplayClientEntry::close)
+        cleanupAll(closing) { (computerId, entry) ->
+            var failure: Throwable? = null
+            try {
+                entry.close()
+            } catch (caught: Throwable) {
+                failure = caught
+            }
+            if (notifyLastObservers) {
+                try {
+                    onLastObserver(computerId)
+                } catch (caught: Throwable) {
+                    if (failure == null) {
+                        failure = caught
+                    } else if (failure !== caught) {
+                        failure.addSuppressed(caught)
+                    }
+                }
+            }
+            failure?.let { throw it }
+        }
     }
 }
 

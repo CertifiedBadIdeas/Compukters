@@ -66,9 +66,6 @@ open class ComputerTerminalScreen<T : AbstractComputerMenu>(
     player: Inventory,
     title: Component,
 ) : ComputerDisplayScreen<T>(container, player, title) {
-    override val displayId: Int = SHARED_TERMINAL_DISPLAY_ID
-    override val terminalColumns: Int = DEFAULT_COLS
-    override val terminalRows: Int = DEFAULT_ROWS
     private val powerHover = HoverState()
     private val rebootHover = HoverState()
 
@@ -124,7 +121,7 @@ open class ComputerTerminalScreen<T : AbstractComputerMenu>(
                     translatable {
                         when {
                             !menu.isComputerOn -> CompukterKeys.Gui.Terminal.POWERED_OFF
-                            menu.clientSide.displayBuffer?.hasReceivedFrames == true -> CompukterKeys.Gui.Terminal.FOCUSED
+                            hasRetainedDisplayPresentation() -> CompukterKeys.Gui.Terminal.FOCUSED
                             else -> CompukterKeys.Gui.Terminal.CONNECTING
                         }
                     },
@@ -140,8 +137,11 @@ open class ComputerTerminalScreen<T : AbstractComputerMenu>(
                     color = STATUS_TEXT_COLOR,
                     text =
                         value {
-                            val buffer = menu.clientSide.displayBuffer
-                            buffer?.let { displayResolutionText(it.width, it.height) } ?: ""
+                            if (hasRetainedDisplayPresentation()) {
+                                displayResolutionText(currentDisplayWidth(), currentDisplayHeight())
+                            } else {
+                                ""
+                            }
                         },
                 )
 
@@ -207,7 +207,6 @@ open class ComputerTerminalScreen<T : AbstractComputerMenu>(
                         .hoverable(rebootHover)
                         .tooltip(CompukterTranslatable.Gui.Control.reboot),
                 onClick = {
-                    resetDisplayBufferForRuntimeRestart()
                     inputHandler.accept(ControlInputEvent(ComputerControlAction.REBOOT))
                 },
             ) {
@@ -292,7 +291,6 @@ open class ComputerTerminalScreen<T : AbstractComputerMenu>(
     }
 
     private companion object {
-        private const val SHARED_TERMINAL_DISPLAY_ID = 1
         private val DEFAULT_COLS = Config.DEFAULT_COMPUTER_TERM_WIDTH
         private val DEFAULT_ROWS = Config.DEFAULT_COMPUTER_TERM_HEIGHT
         private const val COMPUTER_CONTENT_TOP = 8

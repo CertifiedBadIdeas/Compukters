@@ -19,11 +19,14 @@
 
 package ru.lazyhat.compukterkraft.impl
 
+import net.minecraft.server.packs.resources.ResourceManagerReloadListener
 import net.neoforged.api.distmarker.Dist
 import net.neoforged.bus.api.SubscribeEvent
 import net.neoforged.fml.common.EventBusSubscriber
 import net.neoforged.neoforge.client.event.EntityRenderersEvent
+import net.neoforged.neoforge.client.event.RegisterClientReloadListenersEvent
 import net.neoforged.neoforge.client.event.RegisterMenuScreensEvent
+import ru.lazyhat.compukterkraft.common.computer.client.retained.ClientRetainedDisplays
 import ru.lazyhat.compukterkraft.core.MOD_ID
 import ru.lazyhat.compukterkraft.impl.notebook.render.NotebookBlockEntityRenderer
 
@@ -39,5 +42,13 @@ object ForgeClientRegistry {
     @JvmStatic
     fun onRegisterBlockEntityRenderers(event: EntityRenderersEvent.RegisterRenderers) {
         event.registerBlockEntityRenderer(ModRegistry.BlockEntities.NOTEBOOK.get(), ::NotebookBlockEntityRenderer)
+    }
+
+    @SubscribeEvent
+    @JvmStatic
+    fun onRegisterClientReloadListeners(event: RegisterClientReloadListenersEvent) {
+        event.registerReloadListener(
+            ResourceManagerReloadListener { ClientRetainedDisplays.invalidateAllRenderResources() },
+        )
     }
 }
