@@ -1,10 +1,8 @@
 use crate::computer::{
     BootHandoffError, ComputerMachine, ComputerMachineProfile, CpuId, K16ComputerStatsSnapshot,
 };
-use crate::display::DisplayFrameDelta;
 use crate::k16::K16Signal;
 use crate::k16e;
-use crate::retained_gpu::{RetainedDisplayHost, ServerboundOutcome, ServerboundRejection};
 use std::fs;
 use std::path::Path;
 
@@ -18,7 +16,6 @@ pub struct K16ComputerControl {
 pub struct K16ComputerHandle {
     machine: ComputerMachine,
     boot_cpu: CpuId,
-    retained_display: RetainedDisplayHost,
 }
 
 impl K16ComputerHandle {
@@ -128,9 +125,7 @@ impl K16ComputerHandle {
 
     pub fn advance_game_tick(&mut self) -> Result<(), String> {
         self.machine.advance_game_tick();
-        self.retained_display
-            .advance_tick()
-            .map_err(|error| error.to_string())
+        self.machine.advance_retained_display_tick()
     }
 
     pub fn attach_retained_display_viewer(
@@ -138,13 +133,14 @@ impl K16ComputerHandle {
         viewer_token: u64,
         computer_id: u32,
     ) -> Result<u64, String> {
-        self.retained_display
-            .attach_viewer(viewer_token, computer_id)
-            .map_err(|error| error.to_string())
+        self.machine
+            .attach_retained_display_viewer(viewer_token, computer_id)
     }
 
     pub fn detach_retained_display_viewer(&mut self, viewer_token: u64) -> bool {
-        self.retained_display.detach_viewer(viewer_token)
+        self.machine
+            .detach_retained_display_viewer(viewer_token)
+            .expect("K16 computer handle profile must contain gpu0")
     }
 
     pub fn accept_retained_display_serverbound(
@@ -152,30 +148,19 @@ impl K16ComputerHandle {
         viewer_token: u64,
         payload: &[u8],
     ) -> Result<i32, String> {
-        let outcome = self
-            .retained_display
-            .accept_serverbound(viewer_token, payload)
-            .map_err(|error| error.to_string())?;
-        Ok(match outcome {
-            ServerboundOutcome::Acknowledged => 1,
-            ServerboundOutcome::Resynchronized { .. } => 2,
-            ServerboundOutcome::ReattachRequired => 3,
-            ServerboundOutcome::Rejected(ServerboundRejection::UnknownViewer) => -1,
-            ServerboundOutcome::Rejected(ServerboundRejection::Malformed) => -2,
-            ServerboundOutcome::Rejected(ServerboundRejection::AckMismatch) => -3,
-        })
+        self.machine
+            .accept_retained_display_serverbound(viewer_token, payload)
     }
 
     pub fn drain_retained_display_payload(&mut self, viewer_token: u64) -> Vec<u8> {
-        self.retained_display
-            .drain_payload(viewer_token)
+        self.machine
+            .drain_retained_display_payload(viewer_token)
+            .expect("K16 computer handle profile must contain gpu0")
             .unwrap_or_default()
     }
 
     pub fn drain_retained_display_payloads(&mut self) -> Result<Option<Vec<u8>>, String> {
-        self.retained_display
-            .drain_payload_batch()
-            .map_err(|error| error.to_string())
+        self.machine.drain_retained_display_payloads()
     }
 
     pub fn control(&self) -> K16ComputerControl {
@@ -192,10 +177,6 @@ impl K16ComputerHandle {
 
     pub fn drain_debug_output_bytes(&mut self) -> Vec<u8> {
         self.machine.drain_debug_output_bytes()
-    }
-
-    pub fn drain_gpu0_frames(&mut self) -> Vec<DisplayFrameDelta> {
-        self.machine.drain_gpu0_frames()
     }
 
     pub fn push_serial_input(&mut self, bytes: &[u8]) {
@@ -288,10 +269,6 @@ impl K16ComputerHandle {
     }
 
     fn from_machine(machine: ComputerMachine, boot_cpu: CpuId) -> Result<Self, String> {
-        Ok(Self {
-            machine,
-            boot_cpu,
-            retained_display: RetainedDisplayHost::try_new().map_err(|error| error.to_string())?,
-        })
+        Ok(Self { machine, boot_cpu })
     }
 }

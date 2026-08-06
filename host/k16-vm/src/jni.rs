@@ -5,7 +5,6 @@ use jni::sys::{jboolean, jbyte, jbyteArray, jint, jlong, jlongArray};
 use jni::JNIEnv;
 
 use crate::computer::stats::{K16ComputerGpuStatsSnapshot, K16ComputerStorageStatsSnapshot};
-use crate::display::{DisplayFrameDelta, DisplayFrameOperation, PixelFormat};
 use crate::k16::K16Signal;
 use crate::k16_computer::{K16ComputerHandle, K16ComputerStatsSnapshot};
 use crate::low_bus::MachineBusTrafficSnapshot;
@@ -320,20 +319,6 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
 }
 
 #[no_mangle]
-pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_drainK16ComputerGpu0FramesNative(
-    mut env: JNIEnv<'_>,
-    _class: JClass<'_>,
-    handle: jlong,
-) -> jbyteArray {
-    let handle = match k16_computer_handle_mut(&mut env, handle) {
-        Some(handle) => handle,
-        None => return null_mut(),
-    };
-    let frames = handle.drain_gpu0_frames();
-    byte_array_or_throw(&mut env, &encode_display_frame_deltas(&frames))
-}
-
-#[no_mangle]
 pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_k16ComputerStorage0MediaSnapshotNative(
     mut env: JNIEnv<'_>,
     _class: JClass<'_>,
@@ -619,95 +604,6 @@ fn push_gpu_values(values: &mut Vec<jlong>, gpu: K16ComputerGpuStatsSnapshot) {
     values.push(gpu.frame_mono_payload_bytes as jlong);
 }
 
-fn push_i64(out: &mut Vec<u8>, value: i64) {
-    out.extend_from_slice(&value.to_le_bytes());
-}
-
-fn push_i32(out: &mut Vec<u8>, value: i32) {
-    out.extend_from_slice(&value.to_le_bytes());
-}
-
-fn encode_display_frame_deltas(frames: &[DisplayFrameDelta]) -> Vec<u8> {
-    let mut out = Vec::new();
-    push_i32(&mut out, frames.len() as i32);
-    for frame in frames {
-        push_i32(&mut out, frame.display_id);
-        push_i64(&mut out, frame.sequence);
-        push_i32(&mut out, frame.width);
-        push_i32(&mut out, frame.height);
-        out.push(match frame.pixel_format {
-            PixelFormat::Rgb565 => 0,
-        });
-        out.push(u8::from(frame.full_refresh));
-        push_i32(&mut out, frame.tiles.len() as i32);
-        for tile in &frame.tiles {
-            push_i32(&mut out, tile.tile_x);
-            push_i32(&mut out, tile.tile_y);
-            push_i32(&mut out, tile.x);
-            push_i32(&mut out, tile.y);
-            push_i32(&mut out, tile.width);
-            push_i32(&mut out, tile.height);
-            push_i32(&mut out, tile.payload.len() as i32);
-            out.extend_from_slice(&tile.payload);
-        }
-        push_i32(&mut out, frame.operations.len() as i32);
-        for operation in &frame.operations {
-            match operation {
-                DisplayFrameOperation::FillRect {
-                    x,
-                    y,
-                    width,
-                    height,
-                    rgb565,
-                } => {
-                    out.push(1);
-                    push_i32(&mut out, *x);
-                    push_i32(&mut out, *y);
-                    push_i32(&mut out, *width);
-                    push_i32(&mut out, *height);
-                    push_i32(&mut out, i32::from(*rgb565));
-                }
-                DisplayFrameOperation::CopyRect {
-                    src_x,
-                    src_y,
-                    width,
-                    height,
-                    dst_x,
-                    dst_y,
-                } => {
-                    out.push(2);
-                    push_i32(&mut out, *src_x);
-                    push_i32(&mut out, *src_y);
-                    push_i32(&mut out, *width);
-                    push_i32(&mut out, *height);
-                    push_i32(&mut out, *dst_x);
-                    push_i32(&mut out, *dst_y);
-                }
-                DisplayFrameOperation::MonoBlit {
-                    x,
-                    y,
-                    width,
-                    height,
-                    foreground_rgb565,
-                    background_rgb565,
-                    packed_mask,
-                } => {
-                    out.push(3);
-                    push_i32(&mut out, *x);
-                    push_i32(&mut out, *y);
-                    push_i32(&mut out, *width);
-                    push_i32(&mut out, *height);
-                    push_i32(&mut out, i32::from(*foreground_rgb565));
-                    push_i32(&mut out, i32::from(*background_rgb565));
-                    push_i32(&mut out, packed_mask.len() as i32);
-                    out.extend_from_slice(packed_mask);
-                }
-            }
-        }
-    }
-    out
-}
-
 fn byte_array_or_throw(env: &mut JNIEnv<'_>, bytes: &[u8]) -> jbyteArray {
     match env.byte_array_from_slice(bytes) {
         Ok(array) => array.into_raw(),
@@ -744,54 +640,12 @@ fn long_array_or_throw(env: &mut JNIEnv<'_>, values: &[jlong]) -> jlongArray {
 
 #[cfg(test)]
 mod tests {
-    use super::{encode_display_frame_deltas, k16_computer_stats_snapshot_values};
+    use super::k16_computer_stats_snapshot_values;
     use crate::computer::stats::{
         K16ComputerDecodeCacheStatsSnapshot, K16ComputerDeviceStats, K16ComputerGpuStatsSnapshot,
         K16ComputerOsStatsSnapshot, K16ComputerStatsSnapshot, K16ComputerStorageStatsSnapshot,
     };
-    use crate::display::{DisplayFrameDelta, DisplayFrameOperation, PixelFormat};
     use crate::low_bus::{MachineBusStatsSnapshot, MachineBusTrafficSnapshot};
-
-    #[test]
-    fn display_frame_encoder_uses_tag_three_for_tight_mono_masks() {
-        let encoded = encode_display_frame_deltas(&[DisplayFrameDelta {
-            display_id: 7,
-            sequence: 9,
-            width: 8,
-            height: 4,
-            pixel_format: PixelFormat::Rgb565,
-            full_refresh: false,
-            tiles: Vec::new(),
-            operations: vec![DisplayFrameOperation::MonoBlit {
-                x: 1,
-                y: 2,
-                width: 5,
-                height: 2,
-                foreground_rgb565: 0xffff,
-                background_rgb565: 0x001f,
-                packed_mask: vec![0b1010_1000, 0b0101_0000],
-            }],
-        }]);
-
-        assert_eq!(encoded.len(), 65);
-        assert_eq!(i32::from_le_bytes(encoded[0..4].try_into().unwrap()), 1);
-        assert_eq!(i32::from_le_bytes(encoded[30..34].try_into().unwrap()), 1);
-        assert_eq!(encoded[34], 3);
-        assert_eq!(i32::from_le_bytes(encoded[35..39].try_into().unwrap()), 1);
-        assert_eq!(i32::from_le_bytes(encoded[39..43].try_into().unwrap()), 2);
-        assert_eq!(i32::from_le_bytes(encoded[43..47].try_into().unwrap()), 5);
-        assert_eq!(i32::from_le_bytes(encoded[47..51].try_into().unwrap()), 2);
-        assert_eq!(
-            i32::from_le_bytes(encoded[51..55].try_into().unwrap()),
-            0xffff,
-        );
-        assert_eq!(
-            i32::from_le_bytes(encoded[55..59].try_into().unwrap()),
-            0x001f,
-        );
-        assert_eq!(i32::from_le_bytes(encoded[59..63].try_into().unwrap()), 2);
-        assert_eq!(&encoded[63..], &[0b1010_1000, 0b0101_0000]);
-    }
 
     #[test]
     fn k16_computer_stats_snapshot_values_encode_versioned_long_array() {

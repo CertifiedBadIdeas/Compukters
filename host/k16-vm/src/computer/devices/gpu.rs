@@ -1,384 +1,190 @@
 use crate::computer::stats::K16ComputerGpuStatsSnapshot;
 use crate::computer_abi;
-use crate::display::{DisplayEngine, DisplayFrameDelta, PixelFormat};
 use crate::low_bus::MmioDevice;
 use crate::low_machine::{MachineMemory, MemoryFault};
+use crate::retained_gpu::{
+    ResultCode, RetainedDisplayHost, RetainedDisplayHostFault, ServerboundOutcome,
+    SubmissionOutcome, DISPLAY_HEIGHT, DISPLAY_WIDTH, MAX_CLIP_DEPTH, MAX_DRAW_COMMANDS,
+    MAX_DRAW_LIST_BYTES, MAX_PACKET_BYTES, MAX_RESOURCES, MAX_RESOURCE_BYTES,
+    MAX_TOTAL_RESOURCE_BYTES, MAX_TRANSACTION_OPERATIONS,
+};
 
 pub(crate) struct GpuDevice {
-    display: DisplayEngine,
-    pending_frames: Vec<DisplayFrameDelta>,
-    status: i32,
-    error: i32,
-    x: i32,
-    y: i32,
-    src_x: i32,
-    src_y: i32,
-    rect_width: i32,
-    rect_height: i32,
-    buffer_addr: u32,
-    buffer_stride_bytes: u32,
-    color: u16,
-    background_color: u16,
-    sequence: u64,
+    retained: RetainedDisplayHost,
+    submission_address: u32,
+    submission_length: u32,
+    result_code: ResultCode,
+    error_operation_index: u32,
+    error_byte_offset: u32,
     stats: K16ComputerGpuStatsSnapshot,
 }
 
 impl GpuDevice {
     pub(crate) const SIZE: u32 = computer_abi::GPU0_SIZE;
-    const DISPLAY_ID: i32 = 1;
-    const WIDTH: i32 = 320;
-    const HEIGHT: i32 = 200;
-    const BYTES_PER_PIXEL: u32 = 2;
+    const PACKET_HEADER_BYTES: u32 = 24;
 
-    pub(crate) fn new() -> Self {
-        Self {
-            display: DisplayEngine::new(
-                Self::DISPLAY_ID,
-                Self::WIDTH,
-                Self::HEIGHT,
-                PixelFormat::Rgb565,
-            )
-            .expect("gpu0 default geometry must be valid"),
-            pending_frames: Vec::new(),
-            status: computer_abi::GPU0_STATUS_READY,
-            error: computer_abi::GPU0_ERROR_NONE,
-            x: 0,
-            y: 0,
-            src_x: 0,
-            src_y: 0,
-            rect_width: Self::WIDTH,
-            rect_height: Self::HEIGHT,
-            buffer_addr: 0,
-            buffer_stride_bytes: (Self::WIDTH as u32) * Self::BYTES_PER_PIXEL,
-            color: 0,
-            background_color: 0,
-            sequence: 0,
+    pub(crate) fn new() -> Result<Self, MemoryFault> {
+        Ok(Self {
+            retained: RetainedDisplayHost::try_new().map_err(|error| {
+                MemoryFault::new(format!("computer gpu0 construction failed: {error}"))
+            })?,
+            submission_address: 0,
+            submission_length: 0,
+            result_code: ResultCode::Ok,
+            error_operation_index: u32::MAX,
+            error_byte_offset: u32::MAX,
             stats: K16ComputerGpuStatsSnapshot::default(),
-        }
-    }
-
-    pub(crate) fn drain_frames(&mut self) -> Vec<DisplayFrameDelta> {
-        std::mem::take(&mut self.pending_frames)
+        })
     }
 
     pub(crate) fn stats_snapshot(&self) -> K16ComputerGpuStatsSnapshot {
         self.stats
     }
 
+    pub(crate) fn attach_viewer(
+        &mut self,
+        token: u64,
+        computer_id: u32,
+    ) -> Result<u64, RetainedDisplayHostFault> {
+        self.retained.attach_viewer(token, computer_id)
+    }
+
+    pub(crate) fn detach_viewer(&mut self, token: u64) -> bool {
+        self.retained.detach_viewer(token)
+    }
+
+    pub(crate) fn accept_serverbound(
+        &mut self,
+        token: u64,
+        payload: &[u8],
+    ) -> Result<ServerboundOutcome, RetainedDisplayHostFault> {
+        self.retained.accept_serverbound(token, payload)
+    }
+
+    pub(crate) fn drain_payload(&mut self, token: u64) -> Option<Vec<u8>> {
+        self.retained.drain_payload(token)
+    }
+
+    pub(crate) fn drain_payload_batch(
+        &mut self,
+    ) -> Result<Option<Vec<u8>>, RetainedDisplayHostFault> {
+        self.retained.drain_payload_batch()
+    }
+
+    pub(crate) fn advance_tick(&mut self) -> Result<(), RetainedDisplayHostFault> {
+        self.retained.advance_tick()
+    }
+
+    pub(crate) fn authoritative_payload_bytes(&self) -> usize {
+        self.retained.gpu().authoritative_payload_bytes()
+    }
+
     fn load_register(&self, offset: u32) -> Result<i32, MemoryFault> {
-        match offset {
-            0 => Ok(Self::WIDTH),
-            4 => Ok(Self::HEIGHT),
-            8 => Ok((Self::WIDTH as u32 * Self::BYTES_PER_PIXEL) as i32),
-            12 => Ok(computer_abi::GPU0_PIXEL_FORMAT_RGB565),
-            20 => Ok(self.status),
-            24 => Ok(self.error),
-            28 => Ok(self.x),
-            32 => Ok(self.y),
-            36 => Ok(self.rect_width),
-            40 => Ok(self.rect_height),
-            44 => Ok(self.buffer_addr as i32),
-            48 => Ok(self.buffer_stride_bytes as i32),
-            52 => Ok(i32::from(self.color)),
-            56 => Ok((self.sequence as u32) as i32),
-            60 => Ok((self.sequence >> 32) as u32 as i32),
-            64 => Ok(self.src_x),
-            68 => Ok(self.src_y),
-            72 => Ok(i32::from(self.background_color)),
-            _ => Err(MemoryFault::new(format!(
-                "computer gpu0 offset {offset} is not readable",
-            ))),
-        }
+        let value = match offset {
+            0 => computer_abi::GPU0_DEVICE_ABI_VERSION_VALUE,
+            4 => i32::from(DISPLAY_WIDTH),
+            8 => i32::from(DISPLAY_HEIGHT),
+            12 => computer_abi::GPU0_PACKET_VERSION_VALUE,
+            16 => MAX_PACKET_BYTES as i32,
+            20 => MAX_TRANSACTION_OPERATIONS as i32,
+            24 => MAX_RESOURCES as i32,
+            28 => MAX_RESOURCE_BYTES as i32,
+            32 => MAX_TOTAL_RESOURCE_BYTES as i32,
+            36 => MAX_DRAW_LIST_BYTES as i32,
+            40 => MAX_DRAW_COMMANDS as i32,
+            44 => MAX_CLIP_DEPTH as i32,
+            48 => self.submission_address as i32,
+            52 => self.submission_length as i32,
+            60 => self.result_code as u32 as i32,
+            64 => self.error_operation_index as i32,
+            68 => self.error_byte_offset as i32,
+            72 => self.retained.gpu().commit_sequence() as u32 as i32,
+            76 => (self.retained.gpu().commit_sequence() >> 32) as u32 as i32,
+            _ => {
+                return Err(MemoryFault::new(format!(
+                    "computer gpu0 offset {offset} is not readable",
+                )))
+            }
+        };
+        Ok(value)
     }
 
     fn store_register(&mut self, offset: u32, value: i32) -> Result<(), MemoryFault> {
         match offset {
-            16 => self.execute_command(value, None),
-            28 => {
-                self.x = value;
-                Ok(())
-            }
-            32 => {
-                self.y = value;
-                Ok(())
-            }
-            36 => {
-                self.rect_width = value;
-                Ok(())
-            }
-            40 => {
-                self.rect_height = value;
-                Ok(())
-            }
-            44 => {
-                self.buffer_addr = u32::from_le_bytes(value.to_le_bytes());
-                Ok(())
-            }
             48 => {
-                self.buffer_stride_bytes = u32::from_le_bytes(value.to_le_bytes());
+                self.submission_address = u32::from_le_bytes(value.to_le_bytes());
                 Ok(())
             }
             52 => {
-                self.color = u16::from_le_bytes([value.to_le_bytes()[0], value.to_le_bytes()[1]]);
+                self.submission_length = u32::from_le_bytes(value.to_le_bytes());
                 Ok(())
             }
-            64 => {
-                self.src_x = value;
-                Ok(())
-            }
-            68 => {
-                self.src_y = value;
-                Ok(())
-            }
-            72 => {
-                self.background_color =
-                    u16::from_le_bytes([value.to_le_bytes()[0], value.to_le_bytes()[1]]);
-                Ok(())
-            }
+            56 => Err(MemoryFault::new(
+                "computer gpu0 SUBMIT requires guest RAM access".to_string(),
+            )),
             _ => Err(MemoryFault::new(format!(
                 "computer gpu0 offset {offset} is not writable",
             ))),
         }
     }
 
-    fn execute_command(
-        &mut self,
-        command: i32,
-        memory: Option<&mut MachineMemory>,
-    ) -> Result<(), MemoryFault> {
-        self.error = computer_abi::GPU0_ERROR_NONE;
-        self.status = computer_abi::GPU0_STATUS_READY;
-        match command {
-            computer_abi::GPU0_COMMAND_NOP => Ok(()),
-            computer_abi::GPU0_COMMAND_CLEAR => {
-                self.display.clear(self.color);
-                self.status = computer_abi::GPU0_STATUS_DONE;
-                Ok(())
-            }
-            computer_abi::GPU0_COMMAND_BLIT_BUFFER => {
-                let Some(memory) = memory else {
-                    self.set_error(computer_abi::GPU0_ERROR_BUFFER_OUT_OF_BOUNDS);
-                    return Ok(());
-                };
-                self.blit_buffer(memory);
-                Ok(())
-            }
-            computer_abi::GPU0_COMMAND_BLIT_MONO_BUFFER => {
-                let Some(memory) = memory else {
-                    self.set_error(computer_abi::GPU0_ERROR_BUFFER_OUT_OF_BOUNDS);
-                    return Ok(());
-                };
-                self.blit_mono_buffer(memory);
-                Ok(())
-            }
-            computer_abi::GPU0_COMMAND_FILL_RECT => {
-                if self.rect_width <= 0 || self.rect_height <= 0 {
-                    self.set_error(computer_abi::GPU0_ERROR_INVALID_RECT);
-                    return Ok(());
-                }
-                self.display.fill_rect(
-                    self.x,
-                    self.y,
-                    self.rect_width,
-                    self.rect_height,
-                    self.color,
-                );
-                self.status = computer_abi::GPU0_STATUS_DONE;
-                Ok(())
-            }
-            computer_abi::GPU0_COMMAND_COPY_RECT => {
-                if self.rect_width <= 0 || self.rect_height <= 0 {
-                    self.set_error(computer_abi::GPU0_ERROR_INVALID_RECT);
-                    return Ok(());
-                }
-                self.display.copy_rect(
-                    self.src_x,
-                    self.src_y,
-                    self.rect_width,
-                    self.rect_height,
-                    self.x,
-                    self.y,
-                );
-                self.status = computer_abi::GPU0_STATUS_DONE;
-                Ok(())
-            }
-            computer_abi::GPU0_COMMAND_PRESENT => {
-                self.stats.present_commands += 1;
-                if let Some(frame) = self.display.present() {
-                    self.sequence = frame.sequence as u64;
-                    self.stats.frames += 1;
-                    self.stats.frame_tiles += frame.tiles.len() as u64;
-                    self.stats.frame_payload_bytes += frame
-                        .tiles
-                        .iter()
-                        .map(|tile| tile.payload.len() as u64)
-                        .sum::<u64>();
-                    self.stats.frame_mono_payload_bytes += frame
-                        .operations
-                        .iter()
-                        .map(|operation| match operation {
-                            crate::display::DisplayFrameOperation::MonoBlit {
-                                packed_mask, ..
-                            } => packed_mask.len() as u64,
-                            _ => 0,
-                        })
-                        .sum::<u64>();
-                    self.pending_frames.push(frame);
-                }
-                self.status = computer_abi::GPU0_STATUS_DONE;
-                Ok(())
-            }
-            _ => {
-                self.set_error(computer_abi::GPU0_ERROR_INVALID_COMMAND);
-                Ok(())
+    fn submit(&mut self, memory: &MachineMemory) -> Result<(), MemoryFault> {
+        self.reset_result();
+        if self.submission_address % 4 != 0
+            || self.submission_length % 4 != 0
+            || !(Self::PACKET_HEADER_BYTES..=MAX_PACKET_BYTES as u32)
+                .contains(&self.submission_length)
+        {
+            self.reject_copy(ResultCode::InvalidArgument);
+            return Ok(());
+        }
+        let Some(end) = self.submission_address.checked_add(self.submission_length) else {
+            self.reject_copy(ResultCode::OutOfBounds);
+            return Ok(());
+        };
+        if end as usize > memory.len() {
+            self.reject_copy(ResultCode::OutOfBounds);
+            return Ok(());
+        }
+
+        let packet_len = self.submission_length as usize;
+        let mut packet = Vec::new();
+        packet.try_reserve_exact(packet_len).map_err(|_| {
+            MemoryFault::new("computer gpu0 packet copy allocation failed".to_string())
+        })?;
+        for offset in 0..self.submission_length {
+            packet.push(
+                memory
+                    .load_u8(self.submission_address + offset)
+                    .expect("gpu0 guest packet range was prevalidated"),
+            );
+        }
+
+        match self
+            .retained
+            .submit(&packet)
+            .map_err(|error| MemoryFault::new(format!("computer gpu0 host fault: {error}")))?
+        {
+            SubmissionOutcome::Committed { .. } => self.reset_result(),
+            SubmissionOutcome::Rejected(rejection) => {
+                self.result_code = rejection.code;
+                self.error_operation_index = rejection.operation_index;
+                self.error_byte_offset = rejection.byte_offset;
             }
         }
+        Ok(())
     }
 
-    fn blit_buffer(&mut self, memory: &MachineMemory) {
-        if self.rect_width <= 0 || self.rect_height <= 0 {
-            self.set_error(computer_abi::GPU0_ERROR_INVALID_RECT);
-            return;
-        }
-        let min_stride = match u32::try_from(self.rect_width)
-            .ok()
-            .and_then(|width| width.checked_mul(Self::BYTES_PER_PIXEL))
-        {
-            Some(value) => value,
-            None => {
-                self.set_error(computer_abi::GPU0_ERROR_INVALID_RECT);
-                return;
-            }
-        };
-        if self.buffer_stride_bytes < min_stride {
-            self.set_error(computer_abi::GPU0_ERROR_INVALID_STRIDE);
-            return;
-        }
-        let rows = self.rect_height as u32;
-        let last_row_offset = match rows
-            .checked_sub(1)
-            .and_then(|row| row.checked_mul(self.buffer_stride_bytes))
-        {
-            Some(value) => value,
-            None => {
-                self.set_error(computer_abi::GPU0_ERROR_BUFFER_OUT_OF_BOUNDS);
-                return;
-            }
-        };
-        let byte_len = match last_row_offset.checked_add(min_stride) {
-            Some(value) => value,
-            None => {
-                self.set_error(computer_abi::GPU0_ERROR_BUFFER_OUT_OF_BOUNDS);
-                return;
-            }
-        };
-        if !ram_range_in_bounds(self.buffer_addr, byte_len, memory.len()) {
-            self.set_error(computer_abi::GPU0_ERROR_BUFFER_OUT_OF_BOUNDS);
-            return;
-        }
-        self.stats.blit_buffer_commands += 1;
-        self.stats.blit_pixels += (self.rect_width as u64) * (self.rect_height as u64);
-        self.stats.blit_source_bytes += u64::from(byte_len);
-        let buffer_addr = self.buffer_addr;
-        let buffer_stride_bytes = self.buffer_stride_bytes;
-        self.display.blit_rgb565_rect(
-            self.x,
-            self.y,
-            self.rect_width,
-            self.rect_height,
-            |col, row| {
-                let row_offset = row as u32 * buffer_stride_bytes;
-                let source = buffer_addr + row_offset + col as u32 * Self::BYTES_PER_PIXEL;
-                let lo = memory
-                    .load_u8(source)
-                    .expect("gpu0 source range was prevalidated");
-                let hi = memory
-                    .load_u8(source + 1)
-                    .expect("gpu0 source range was prevalidated");
-                u16::from_le_bytes([lo, hi])
-            },
-        );
-        self.status = computer_abi::GPU0_STATUS_DONE;
+    fn reset_result(&mut self) {
+        self.result_code = ResultCode::Ok;
+        self.error_operation_index = u32::MAX;
+        self.error_byte_offset = u32::MAX;
     }
 
-    fn blit_mono_buffer(&mut self, memory: &MachineMemory) {
-        if self.rect_width <= 0 || self.rect_height <= 0 {
-            self.set_error(computer_abi::GPU0_ERROR_INVALID_RECT);
-            return;
-        }
-        let row_bytes = match u32::try_from(self.rect_width)
-            .ok()
-            .and_then(|width| width.checked_add(7))
-            .map(|width| width / 8)
-        {
-            Some(value) => value,
-            None => {
-                self.set_error(computer_abi::GPU0_ERROR_INVALID_RECT);
-                return;
-            }
-        };
-        if self.buffer_stride_bytes < row_bytes {
-            self.set_error(computer_abi::GPU0_ERROR_INVALID_STRIDE);
-            return;
-        }
-        let rows = self.rect_height as u32;
-        let last_row_offset = match rows
-            .checked_sub(1)
-            .and_then(|row| row.checked_mul(self.buffer_stride_bytes))
-        {
-            Some(value) => value,
-            None => {
-                self.set_error(computer_abi::GPU0_ERROR_BUFFER_OUT_OF_BOUNDS);
-                return;
-            }
-        };
-        let source_range_len = match last_row_offset.checked_add(row_bytes) {
-            Some(value) => value,
-            None => {
-                self.set_error(computer_abi::GPU0_ERROR_BUFFER_OUT_OF_BOUNDS);
-                return;
-            }
-        };
-        let tight_len = match row_bytes.checked_mul(rows) {
-            Some(value) => value,
-            None => {
-                self.set_error(computer_abi::GPU0_ERROR_BUFFER_OUT_OF_BOUNDS);
-                return;
-            }
-        };
-        if !ram_range_in_bounds(self.buffer_addr, source_range_len, memory.len()) {
-            self.set_error(computer_abi::GPU0_ERROR_BUFFER_OUT_OF_BOUNDS);
-            return;
-        }
-        let mut packed_mask = Vec::with_capacity(tight_len as usize);
-        for row in 0..rows {
-            let row_address = self.buffer_addr + row * self.buffer_stride_bytes;
-            for byte in 0..row_bytes {
-                packed_mask.push(
-                    memory
-                        .load_u8(row_address + byte)
-                        .expect("gpu0 mono source range was prevalidated"),
-                );
-            }
-        }
-        self.stats.blit_mono_commands += 1;
-        self.stats.blit_mono_pixels += (self.rect_width as u64) * (self.rect_height as u64);
-        self.stats.blit_mono_source_bytes += u64::from(tight_len);
-        self.display.blit_mono_mask(
-            self.x,
-            self.y,
-            self.rect_width,
-            self.rect_height,
-            &packed_mask,
-            self.color,
-            self.background_color,
-        );
-        self.status = computer_abi::GPU0_STATUS_DONE;
-    }
-
-    fn set_error(&mut self, error: i32) {
-        self.status = computer_abi::GPU0_STATUS_ERROR;
-        self.error = error;
+    fn reject_copy(&mut self, code: ResultCode) {
+        self.result_code = code;
+        self.error_operation_index = u32::MAX;
+        self.error_byte_offset = u32::MAX;
     }
 }
 
@@ -401,18 +207,10 @@ impl MmioDevice for GpuDevice {
         value: i32,
         memory: &mut MachineMemory,
     ) -> Result<(), MemoryFault> {
-        if offset == 16 {
-            return self.execute_command(value, Some(memory));
+        if offset == 56 {
+            let _ = value;
+            return self.submit(memory);
         }
         self.store_register(offset, value)
     }
-}
-
-fn ram_range_in_bounds(address: u32, byte_len: u32, ram_len: usize) -> bool {
-    let Some(end) = address.checked_add(byte_len) else {
-        return false;
-    };
-    let start = address as usize;
-    let end = end as usize;
-    start <= ram_len && end <= ram_len
 }

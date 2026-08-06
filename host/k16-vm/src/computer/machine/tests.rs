@@ -5,7 +5,6 @@ use crate::computer::devices::{
 };
 use crate::computer::profile::{ComputerHardwareConfig, ComputerMachineProfile};
 use crate::computer_abi;
-use crate::display::DisplayFrameOperation;
 use crate::k16::{
     K16AddressMode, K16PrivilegeMode, K16Signal, K16_CSR_TRAP_FRAME_INDEX,
     K16_CSR_TRAP_FRAME_REGISTER, K16_CSR_TRAP_RESUME_PC, K16_CSR_TRAP_VECTOR,
@@ -1343,354 +1342,6 @@ fn computer_machine_writes_gpu0_hardware_entry() {
 }
 
 #[test]
-fn computer_gpu0_blits_guest_ram_to_frame_delta() {
-    let mut machine = ComputerMachine::new(1024).unwrap();
-    machine
-        .write_guest_ram_bytes(0x0100, &[0x00, 0xF8, 0xE0, 0x07, 0x1F, 0x00, 0xFF, 0xFF])
-        .unwrap();
-
-    machine.bus.store_i32(ComputerMachine::GPU0_X, 0).unwrap();
-    machine.bus.store_i32(ComputerMachine::GPU0_Y, 0).unwrap();
-    machine
-        .bus
-        .store_i32(ComputerMachine::GPU0_RECT_WIDTH, 2)
-        .unwrap();
-    machine
-        .bus
-        .store_i32(ComputerMachine::GPU0_RECT_HEIGHT, 2)
-        .unwrap();
-    machine
-        .bus
-        .store_i32(ComputerMachine::GPU0_BUFFER_ADDR, 0x0100)
-        .unwrap();
-    machine
-        .bus
-        .store_i32(ComputerMachine::GPU0_BUFFER_STRIDE_BYTES, 4)
-        .unwrap();
-    machine
-        .bus
-        .store_i32(
-            ComputerMachine::GPU0_COMMAND,
-            ComputerMachine::GPU0_COMMAND_BLIT_BUFFER,
-        )
-        .unwrap();
-    machine
-        .bus
-        .store_i32(
-            ComputerMachine::GPU0_COMMAND,
-            ComputerMachine::GPU0_COMMAND_PRESENT,
-        )
-        .unwrap();
-
-    let frames = machine.drain_gpu0_frames();
-
-    assert_eq!(frames.len(), 1);
-    let frame = &frames[0];
-    assert_eq!(frame.display_id, 1);
-    assert_eq!(frame.width, 320);
-    assert_eq!(frame.height, 200);
-    assert_eq!(frame.tiles.len(), 1);
-    assert_eq!(&frame.tiles[0].payload[0..4], &[0xF8, 0x00, 0x07, 0xE0]);
-    assert_eq!(&frame.tiles[0].payload[32..36], &[0x00, 0x1F, 0xFF, 0xFF]);
-}
-
-#[test]
-fn computer_gpu0_blits_packed_mono_guest_ram_to_operation() {
-    let mut machine = ComputerMachine::new(1024).unwrap();
-    machine
-        .write_guest_ram_bytes(0x0100, &[0b1010_1000, 0xee, 0b0101_0000])
-        .unwrap();
-
-    machine.bus.store_i32(ComputerMachine::GPU0_X, 1).unwrap();
-    machine.bus.store_i32(ComputerMachine::GPU0_Y, 1).unwrap();
-    machine
-        .bus
-        .store_i32(ComputerMachine::GPU0_RECT_WIDTH, 5)
-        .unwrap();
-    machine
-        .bus
-        .store_i32(ComputerMachine::GPU0_RECT_HEIGHT, 2)
-        .unwrap();
-    machine
-        .bus
-        .store_i32(ComputerMachine::GPU0_BUFFER_ADDR, 0x0100)
-        .unwrap();
-    machine
-        .bus
-        .store_i32(ComputerMachine::GPU0_BUFFER_STRIDE_BYTES, 2)
-        .unwrap();
-    machine
-        .bus
-        .store_i32(ComputerMachine::GPU0_COLOR, 0xffff)
-        .unwrap();
-    machine
-        .bus
-        .store_i32(ComputerMachine::GPU0_BACKGROUND_COLOR, 0x001f)
-        .unwrap();
-    assert_eq!(
-        machine
-            .bus
-            .load_i32(ComputerMachine::GPU0_BACKGROUND_COLOR)
-            .unwrap(),
-        0x001f,
-    );
-    machine
-        .bus
-        .store_i32(
-            ComputerMachine::GPU0_COMMAND,
-            ComputerMachine::GPU0_COMMAND_BLIT_MONO_BUFFER,
-        )
-        .unwrap();
-    machine
-        .bus
-        .store_i32(
-            ComputerMachine::GPU0_COMMAND,
-            ComputerMachine::GPU0_COMMAND_PRESENT,
-        )
-        .unwrap();
-
-    let frames = machine.drain_gpu0_frames();
-
-    assert_eq!(frames.len(), 1);
-    assert!(frames[0].tiles.is_empty());
-    assert_eq!(
-        frames[0].operations,
-        vec![DisplayFrameOperation::MonoBlit {
-            x: 1,
-            y: 1,
-            width: 5,
-            height: 2,
-            foreground_rgb565: 0xffff,
-            background_rgb565: 0x001f,
-            packed_mask: vec![0b1010_1000, 0b0101_0000],
-        }],
-    );
-
-    let gpu = machine
-        .stats_snapshot()
-        .devices
-        .into_iter()
-        .find(|device| device.name == "gpu0")
-        .unwrap()
-        .gpu;
-    assert_eq!(gpu.blit_mono_commands, 1);
-    assert_eq!(gpu.blit_mono_pixels, 10);
-    assert_eq!(gpu.blit_mono_source_bytes, 2);
-    assert_eq!(gpu.frame_mono_payload_bytes, 2);
-}
-
-#[test]
-fn computer_gpu0_rejects_invalid_mono_sources_without_partial_apply() {
-    fn configure(machine: &mut ComputerMachine, address: i32, stride: i32) {
-        machine.bus.store_i32(ComputerMachine::GPU0_X, 0).unwrap();
-        machine.bus.store_i32(ComputerMachine::GPU0_Y, 0).unwrap();
-        machine
-            .bus
-            .store_i32(ComputerMachine::GPU0_RECT_WIDTH, 9)
-            .unwrap();
-        machine
-            .bus
-            .store_i32(ComputerMachine::GPU0_RECT_HEIGHT, 2)
-            .unwrap();
-        machine
-            .bus
-            .store_i32(ComputerMachine::GPU0_BUFFER_ADDR, address)
-            .unwrap();
-        machine
-            .bus
-            .store_i32(ComputerMachine::GPU0_BUFFER_STRIDE_BYTES, stride)
-            .unwrap();
-        machine
-            .bus
-            .store_i32(
-                ComputerMachine::GPU0_COMMAND,
-                ComputerMachine::GPU0_COMMAND_BLIT_MONO_BUFFER,
-            )
-            .unwrap();
-    }
-
-    let mut short_stride = ComputerMachine::new(1024).unwrap();
-    configure(&mut short_stride, 0x0100, 1);
-    assert_eq!(
-        short_stride
-            .bus
-            .load_i32(ComputerMachine::GPU0_ERROR)
-            .unwrap(),
-        ComputerMachine::GPU0_ERROR_INVALID_STRIDE,
-    );
-    assert!(short_stride.drain_gpu0_frames().is_empty());
-
-    let mut outside_ram = ComputerMachine::new(1024).unwrap();
-    configure(&mut outside_ram, 1022, 2);
-    assert_eq!(
-        outside_ram
-            .bus
-            .load_i32(ComputerMachine::GPU0_ERROR)
-            .unwrap(),
-        ComputerMachine::GPU0_ERROR_BUFFER_OUT_OF_BOUNDS,
-    );
-    outside_ram
-        .bus
-        .store_i32(
-            ComputerMachine::GPU0_COMMAND,
-            ComputerMachine::GPU0_COMMAND_PRESENT,
-        )
-        .unwrap();
-    assert!(
-        outside_ram.drain_gpu0_frames().is_empty(),
-        "invalid source must not dirty or partially mutate the display",
-    );
-
-    let mut overflow = ComputerMachine::new(1024).unwrap();
-    configure(&mut overflow, -2, 2);
-    assert_eq!(
-        overflow.bus.load_i32(ComputerMachine::GPU0_ERROR).unwrap(),
-        ComputerMachine::GPU0_ERROR_BUFFER_OUT_OF_BOUNDS,
-    );
-    assert!(overflow.drain_gpu0_frames().is_empty());
-}
-
-#[test]
-fn computer_gpu0_fills_and_copies_rectangles() {
-    let mut machine = ComputerMachine::new(1024).unwrap();
-
-    machine
-        .bus
-        .store_i32(ComputerMachine::GPU0_COLOR, 0x07e0)
-        .unwrap();
-    machine.bus.store_i32(ComputerMachine::GPU0_X, 2).unwrap();
-    machine.bus.store_i32(ComputerMachine::GPU0_Y, 3).unwrap();
-    machine
-        .bus
-        .store_i32(ComputerMachine::GPU0_RECT_WIDTH, 2)
-        .unwrap();
-    machine
-        .bus
-        .store_i32(ComputerMachine::GPU0_RECT_HEIGHT, 2)
-        .unwrap();
-    machine
-        .bus
-        .store_i32(
-            ComputerMachine::GPU0_COMMAND,
-            ComputerMachine::GPU0_COMMAND_FILL_RECT,
-        )
-        .unwrap();
-    machine
-        .bus
-        .store_i32(
-            ComputerMachine::GPU0_COMMAND,
-            ComputerMachine::GPU0_COMMAND_PRESENT,
-        )
-        .unwrap();
-    machine.drain_gpu0_frames();
-
-    machine
-        .bus
-        .store_i32(ComputerMachine::GPU0_SRC_X, 2)
-        .unwrap();
-    machine
-        .bus
-        .store_i32(ComputerMachine::GPU0_SRC_Y, 3)
-        .unwrap();
-    machine.bus.store_i32(ComputerMachine::GPU0_X, 6).unwrap();
-    machine.bus.store_i32(ComputerMachine::GPU0_Y, 1).unwrap();
-    machine
-        .bus
-        .store_i32(ComputerMachine::GPU0_RECT_WIDTH, 2)
-        .unwrap();
-    machine
-        .bus
-        .store_i32(ComputerMachine::GPU0_RECT_HEIGHT, 2)
-        .unwrap();
-    machine
-        .bus
-        .store_i32(
-            ComputerMachine::GPU0_COMMAND,
-            ComputerMachine::GPU0_COMMAND_COPY_RECT,
-        )
-        .unwrap();
-    machine
-        .bus
-        .store_i32(
-            ComputerMachine::GPU0_COMMAND,
-            ComputerMachine::GPU0_COMMAND_PRESENT,
-        )
-        .unwrap();
-
-    let frames = machine.drain_gpu0_frames();
-
-    assert_eq!(frames.len(), 1);
-    assert!(frames[0].tiles.is_empty());
-    assert_eq!(
-        frames[0].operations,
-        vec![DisplayFrameOperation::CopyRect {
-            src_x: 2,
-            src_y: 3,
-            width: 2,
-            height: 2,
-            dst_x: 6,
-            dst_y: 1,
-        }],
-    );
-}
-
-#[test]
-fn computer_gpu0_stats_snapshot_counts_blit_and_present_traffic() {
-    let mut machine = ComputerMachine::new(1024).unwrap();
-    machine
-        .write_guest_ram_bytes(0x0100, &[0x00, 0xF8, 0xE0, 0x07, 0x1F, 0x00, 0xFF, 0xFF])
-        .unwrap();
-
-    machine.bus.store_i32(ComputerMachine::GPU0_X, 0).unwrap();
-    machine.bus.store_i32(ComputerMachine::GPU0_Y, 0).unwrap();
-    machine
-        .bus
-        .store_i32(ComputerMachine::GPU0_RECT_WIDTH, 2)
-        .unwrap();
-    machine
-        .bus
-        .store_i32(ComputerMachine::GPU0_RECT_HEIGHT, 2)
-        .unwrap();
-    machine
-        .bus
-        .store_i32(ComputerMachine::GPU0_BUFFER_ADDR, 0x0100)
-        .unwrap();
-    machine
-        .bus
-        .store_i32(ComputerMachine::GPU0_BUFFER_STRIDE_BYTES, 4)
-        .unwrap();
-    machine
-        .bus
-        .store_i32(
-            ComputerMachine::GPU0_COMMAND,
-            ComputerMachine::GPU0_COMMAND_BLIT_BUFFER,
-        )
-        .unwrap();
-    machine
-        .bus
-        .store_i32(
-            ComputerMachine::GPU0_COMMAND,
-            ComputerMachine::GPU0_COMMAND_PRESENT,
-        )
-        .unwrap();
-
-    let snapshot = machine.stats_snapshot();
-    let gpu = snapshot
-        .devices
-        .iter()
-        .find(|device| device.name == "gpu0")
-        .unwrap();
-
-    assert_eq!(gpu.gpu.blit_buffer_commands, 1);
-    assert_eq!(gpu.gpu.blit_pixels, 4);
-    assert_eq!(gpu.gpu.blit_source_bytes, 8);
-    assert_eq!(gpu.gpu.present_commands, 1);
-    assert_eq!(gpu.gpu.frames, 1);
-    assert_eq!(gpu.gpu.frame_tiles, 1);
-    assert_eq!(gpu.gpu.frame_payload_bytes, 512);
-}
-
-#[test]
 fn computer_debug_serial_output_can_be_drained_incrementally() {
     let mut machine = ComputerMachine::new(1024).unwrap();
 
@@ -2778,32 +2429,26 @@ fn computer_machine_constants_match_profile_v2_abi() {
         computer_abi::SERIAL_INPUT_SIZE,
     );
     assert_eq!(ComputerMachine::GPU0_BASE, computer_abi::GPU0_BASE,);
-    assert_eq!(ComputerMachine::GPU0_COMMAND, computer_abi::GPU0_COMMAND,);
-    assert_eq!(ComputerMachine::GPU0_SRC_X, computer_abi::GPU0_SRC_X,);
-    assert_eq!(ComputerMachine::GPU0_SRC_Y, computer_abi::GPU0_SRC_Y,);
     assert_eq!(
-        ComputerMachine::GPU0_BACKGROUND_COLOR,
-        computer_abi::GPU0_BACKGROUND_COLOR,
+        ComputerMachine::GPU0_DEVICE_ABI_VERSION,
+        computer_abi::GPU0_DEVICE_ABI_VERSION,
     );
     assert_eq!(
-        ComputerMachine::GPU0_COMMAND_BLIT_BUFFER,
-        computer_abi::GPU0_COMMAND_BLIT_BUFFER,
+        ComputerMachine::GPU0_SUBMISSION_ADDRESS,
+        computer_abi::GPU0_SUBMISSION_ADDRESS,
     );
     assert_eq!(
-        ComputerMachine::GPU0_COMMAND_PRESENT,
-        computer_abi::GPU0_COMMAND_PRESENT,
+        ComputerMachine::GPU0_SUBMISSION_LENGTH,
+        computer_abi::GPU0_SUBMISSION_LENGTH,
+    );
+    assert_eq!(ComputerMachine::GPU0_SUBMIT, computer_abi::GPU0_SUBMIT,);
+    assert_eq!(
+        ComputerMachine::GPU0_RESULT_CODE,
+        computer_abi::GPU0_RESULT_CODE,
     );
     assert_eq!(
-        ComputerMachine::GPU0_COMMAND_FILL_RECT,
-        computer_abi::GPU0_COMMAND_FILL_RECT,
-    );
-    assert_eq!(
-        ComputerMachine::GPU0_COMMAND_COPY_RECT,
-        computer_abi::GPU0_COMMAND_COPY_RECT,
-    );
-    assert_eq!(
-        ComputerMachine::GPU0_COMMAND_BLIT_MONO_BUFFER,
-        computer_abi::GPU0_COMMAND_BLIT_MONO_BUFFER,
+        ComputerMachine::GPU0_COMMITTED_SEQUENCE_HIGH,
+        computer_abi::GPU0_COMMITTED_SEQUENCE_HIGH,
     );
     assert_eq!(ComputerMachine::STATUS_RESET, computer_abi::STATUS_RESET);
     assert_eq!(
@@ -2913,7 +2558,7 @@ fn computer_mmio_device_sizes_match_profile_v2_abi() {
     let control = ComputerControlDevice::new();
     let debug = DebugSerialDevice::new();
     let serial_input = SerialInputDevice::new();
-    let gpu = GpuDevice::new();
+    let gpu = GpuDevice::new().unwrap();
     let keyboard = KeyboardDevice::new();
     let mmu = MmuControlDevice::new();
 

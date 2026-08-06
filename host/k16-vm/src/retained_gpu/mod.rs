@@ -13,7 +13,7 @@ pub use draw_list::{
     UnresolvedDrawCommand, MAX_CLIP_DEPTH, MAX_DRAW_COMMANDS, MAX_DRAW_LIST_BYTES,
 };
 pub use network::{encode_delta, encode_snapshot, NetworkEncodeError, MAX_NETWORK_MESSAGE_BYTES};
-pub use packet::ResultCode;
+pub use packet::{ResultCode, MAX_PACKET_BYTES, MAX_TRANSACTION_OPERATIONS};
 pub use replication::{RetainedDisplayHost, RetainedDisplayHostFault, MAX_VIEWERS};
 pub use resource::{
     ImageRgb565, Mask1Bpp, MaskInstance, MaskInstanceBuffer, MaskInstanceRecord, Resource,

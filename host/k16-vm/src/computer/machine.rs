@@ -9,7 +9,6 @@ use crate::computer::stats::{
     K16ComputerOsStatsSnapshot, K16ComputerStatsSnapshot, K16ComputerStorageStatsSnapshot,
 };
 use crate::computer_abi;
-use crate::display::DisplayFrameDelta;
 use crate::k16::{
     K16AddressMode, K16CachedDecoder, K16Cpu, K16PrivilegeMode, K16Signal,
     K16_INTERRUPT_SOURCE_KEYBOARD0, K16_INTERRUPT_SOURCE_TIMER0,
@@ -17,6 +16,7 @@ use crate::k16::{
 use crate::low_bus::{MachineBus, MachineBusStatsSnapshot};
 use crate::low_machine::{MachineMemory, MemoryFault};
 use crate::mmu::{MmuAddressSpaceId, MmuAddressSpaces, MmuFault, MmuMapFlags};
+use crate::retained_gpu::{ServerboundOutcome, ServerboundRejection};
 use std::fmt::{Display, Formatter};
 
 mod boot_flow;
@@ -153,42 +153,29 @@ impl ComputerMachine {
     pub const SERIAL_INPUT_READ: u32 = computer_abi::SERIAL_INPUT_READ;
     pub const SERIAL_INPUT_SIZE: u32 = computer_abi::SERIAL_INPUT_SIZE;
     pub const GPU0_BASE: u32 = computer_abi::GPU0_BASE;
+    pub const GPU0_DEVICE_ABI_VERSION: u32 = computer_abi::GPU0_DEVICE_ABI_VERSION;
     pub const GPU0_WIDTH: u32 = computer_abi::GPU0_WIDTH;
     pub const GPU0_HEIGHT: u32 = computer_abi::GPU0_HEIGHT;
-    pub const GPU0_STRIDE_BYTES: u32 = computer_abi::GPU0_STRIDE_BYTES;
-    pub const GPU0_PIXEL_FORMAT: u32 = computer_abi::GPU0_PIXEL_FORMAT;
-    pub const GPU0_COMMAND: u32 = computer_abi::GPU0_COMMAND;
-    pub const GPU0_STATUS: u32 = computer_abi::GPU0_STATUS;
-    pub const GPU0_ERROR: u32 = computer_abi::GPU0_ERROR;
-    pub const GPU0_X: u32 = computer_abi::GPU0_X;
-    pub const GPU0_Y: u32 = computer_abi::GPU0_Y;
-    pub const GPU0_RECT_WIDTH: u32 = computer_abi::GPU0_RECT_WIDTH;
-    pub const GPU0_RECT_HEIGHT: u32 = computer_abi::GPU0_RECT_HEIGHT;
-    pub const GPU0_BUFFER_ADDR: u32 = computer_abi::GPU0_BUFFER_ADDR;
-    pub const GPU0_BUFFER_STRIDE_BYTES: u32 = computer_abi::GPU0_BUFFER_STRIDE_BYTES;
-    pub const GPU0_COLOR: u32 = computer_abi::GPU0_COLOR;
-    pub const GPU0_SEQUENCE_LOW: u32 = computer_abi::GPU0_SEQUENCE_LOW;
-    pub const GPU0_SEQUENCE_HIGH: u32 = computer_abi::GPU0_SEQUENCE_HIGH;
-    pub const GPU0_SRC_X: u32 = computer_abi::GPU0_SRC_X;
-    pub const GPU0_SRC_Y: u32 = computer_abi::GPU0_SRC_Y;
-    pub const GPU0_BACKGROUND_COLOR: u32 = computer_abi::GPU0_BACKGROUND_COLOR;
+    pub const GPU0_PACKET_VERSION: u32 = computer_abi::GPU0_PACKET_VERSION;
+    pub const GPU0_MAX_PACKET_BYTES: u32 = computer_abi::GPU0_MAX_PACKET_BYTES;
+    pub const GPU0_MAX_TRANSACTION_OPERATIONS: u32 = computer_abi::GPU0_MAX_TRANSACTION_OPERATIONS;
+    pub const GPU0_MAX_RESOURCES: u32 = computer_abi::GPU0_MAX_RESOURCES;
+    pub const GPU0_MAX_RESOURCE_BYTES: u32 = computer_abi::GPU0_MAX_RESOURCE_BYTES;
+    pub const GPU0_MAX_TOTAL_RESOURCE_BYTES: u32 = computer_abi::GPU0_MAX_TOTAL_RESOURCE_BYTES;
+    pub const GPU0_MAX_DRAW_LIST_BYTES: u32 = computer_abi::GPU0_MAX_DRAW_LIST_BYTES;
+    pub const GPU0_MAX_DRAW_COMMANDS: u32 = computer_abi::GPU0_MAX_DRAW_COMMANDS;
+    pub const GPU0_MAX_CLIP_DEPTH: u32 = computer_abi::GPU0_MAX_CLIP_DEPTH;
+    pub const GPU0_SUBMISSION_ADDRESS: u32 = computer_abi::GPU0_SUBMISSION_ADDRESS;
+    pub const GPU0_SUBMISSION_LENGTH: u32 = computer_abi::GPU0_SUBMISSION_LENGTH;
+    pub const GPU0_SUBMIT: u32 = computer_abi::GPU0_SUBMIT;
+    pub const GPU0_RESULT_CODE: u32 = computer_abi::GPU0_RESULT_CODE;
+    pub const GPU0_ERROR_OPERATION_INDEX: u32 = computer_abi::GPU0_ERROR_OPERATION_INDEX;
+    pub const GPU0_ERROR_BYTE_OFFSET: u32 = computer_abi::GPU0_ERROR_BYTE_OFFSET;
+    pub const GPU0_COMMITTED_SEQUENCE_LOW: u32 = computer_abi::GPU0_COMMITTED_SEQUENCE_LOW;
+    pub const GPU0_COMMITTED_SEQUENCE_HIGH: u32 = computer_abi::GPU0_COMMITTED_SEQUENCE_HIGH;
     pub const GPU0_SIZE: u32 = computer_abi::GPU0_SIZE;
-    pub const GPU0_PIXEL_FORMAT_RGB565: i32 = computer_abi::GPU0_PIXEL_FORMAT_RGB565;
-    pub const GPU0_STATUS_READY: i32 = computer_abi::GPU0_STATUS_READY;
-    pub const GPU0_STATUS_DONE: i32 = computer_abi::GPU0_STATUS_DONE;
-    pub const GPU0_STATUS_ERROR: i32 = computer_abi::GPU0_STATUS_ERROR;
-    pub const GPU0_ERROR_NONE: i32 = computer_abi::GPU0_ERROR_NONE;
-    pub const GPU0_ERROR_INVALID_COMMAND: i32 = computer_abi::GPU0_ERROR_INVALID_COMMAND;
-    pub const GPU0_ERROR_BUFFER_OUT_OF_BOUNDS: i32 = computer_abi::GPU0_ERROR_BUFFER_OUT_OF_BOUNDS;
-    pub const GPU0_ERROR_INVALID_RECT: i32 = computer_abi::GPU0_ERROR_INVALID_RECT;
-    pub const GPU0_ERROR_INVALID_STRIDE: i32 = computer_abi::GPU0_ERROR_INVALID_STRIDE;
-    pub const GPU0_COMMAND_NOP: i32 = computer_abi::GPU0_COMMAND_NOP;
-    pub const GPU0_COMMAND_CLEAR: i32 = computer_abi::GPU0_COMMAND_CLEAR;
-    pub const GPU0_COMMAND_BLIT_BUFFER: i32 = computer_abi::GPU0_COMMAND_BLIT_BUFFER;
-    pub const GPU0_COMMAND_PRESENT: i32 = computer_abi::GPU0_COMMAND_PRESENT;
-    pub const GPU0_COMMAND_FILL_RECT: i32 = computer_abi::GPU0_COMMAND_FILL_RECT;
-    pub const GPU0_COMMAND_COPY_RECT: i32 = computer_abi::GPU0_COMMAND_COPY_RECT;
-    pub const GPU0_COMMAND_BLIT_MONO_BUFFER: i32 = computer_abi::GPU0_COMMAND_BLIT_MONO_BUFFER;
+    pub const GPU0_DEVICE_ABI_VERSION_VALUE: i32 = computer_abi::GPU0_DEVICE_ABI_VERSION_VALUE;
+    pub const GPU0_PACKET_VERSION_VALUE: i32 = computer_abi::GPU0_PACKET_VERSION_VALUE;
     pub const STORAGE0_BASE: u32 = computer_abi::STORAGE0_BASE;
     pub const STORAGE0_VERSION: u32 = computer_abi::STORAGE0_VERSION;
     pub const STORAGE0_STATUS: u32 = computer_abi::STORAGE0_STATUS;
@@ -693,9 +680,61 @@ impl ComputerMachine {
             .unwrap_or(0)
     }
 
-    pub fn drain_gpu0_frames(&mut self) -> Vec<DisplayFrameDelta> {
-        self.gpu0_device_mut()
-            .map(GpuDevice::drain_frames)
+    pub fn attach_retained_display_viewer(
+        &mut self,
+        viewer_token: u64,
+        computer_id: u32,
+    ) -> Result<u64, String> {
+        self.required_gpu0_mut()?
+            .attach_viewer(viewer_token, computer_id)
+            .map_err(|error| error.to_string())
+    }
+
+    pub fn detach_retained_display_viewer(&mut self, viewer_token: u64) -> Result<bool, String> {
+        Ok(self.required_gpu0_mut()?.detach_viewer(viewer_token))
+    }
+
+    pub fn accept_retained_display_serverbound(
+        &mut self,
+        viewer_token: u64,
+        payload: &[u8],
+    ) -> Result<i32, String> {
+        let outcome = self
+            .required_gpu0_mut()?
+            .accept_serverbound(viewer_token, payload)
+            .map_err(|error| error.to_string())?;
+        Ok(match outcome {
+            ServerboundOutcome::Acknowledged => 1,
+            ServerboundOutcome::Resynchronized { .. } => 2,
+            ServerboundOutcome::ReattachRequired => 3,
+            ServerboundOutcome::Rejected(ServerboundRejection::UnknownViewer) => -1,
+            ServerboundOutcome::Rejected(ServerboundRejection::Malformed) => -2,
+            ServerboundOutcome::Rejected(ServerboundRejection::AckMismatch) => -3,
+        })
+    }
+
+    pub fn drain_retained_display_payload(
+        &mut self,
+        viewer_token: u64,
+    ) -> Result<Option<Vec<u8>>, String> {
+        Ok(self.required_gpu0_mut()?.drain_payload(viewer_token))
+    }
+
+    pub fn drain_retained_display_payloads(&mut self) -> Result<Option<Vec<u8>>, String> {
+        self.required_gpu0_mut()?
+            .drain_payload_batch()
+            .map_err(|error| error.to_string())
+    }
+
+    pub fn advance_retained_display_tick(&mut self) -> Result<(), String> {
+        self.required_gpu0_mut()?
+            .advance_tick()
+            .map_err(|error| error.to_string())
+    }
+
+    pub fn gpu0_authoritative_payload_bytes(&self) -> usize {
+        self.gpu0_device()
+            .map(GpuDevice::authoritative_payload_bytes)
             .unwrap_or_default()
     }
 
@@ -822,6 +861,11 @@ impl ComputerMachine {
 
     fn gpu0_device(&self) -> Option<&GpuDevice> {
         self.devices.gpu0(&self.bus)
+    }
+
+    fn required_gpu0_mut(&mut self) -> Result<&mut GpuDevice, String> {
+        self.gpu0_device_mut()
+            .ok_or_else(|| "computer profile has no gpu0 retained display".to_string())
     }
 
     fn mmu0_device_mut(&mut self) -> Option<&mut MmuControlDevice> {
