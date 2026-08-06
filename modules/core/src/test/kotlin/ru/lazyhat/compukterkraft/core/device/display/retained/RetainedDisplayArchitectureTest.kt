@@ -87,7 +87,11 @@ class RetainedDisplayArchitectureTest {
         assertTrue(runtime.contains("sendRetainedDisplayPayload"))
         assertTrue(runtime.contains("pollRetainedDisplayPayload"))
         assertFalse(runtime.contains("Command.DrainRetainedDisplayPayload"))
-        assertFalse(runtime.contains("retainedDisplaySessions.sessionsSnapshot()"))
+        assertTrue(runtime.contains("retainedDisplaySessions.sessionsSnapshot()"))
+        assertTrue(runtime.contains("pruneRetainedDisplayViewers(current)"))
+        assertFalse(runtime.contains("flushFramebufferFrames"))
+        assertFalse(runtime.contains("private val displaySessions"))
+        assertTrue(bridge.contains("fun isRetainedDisplayViewerAuthorized"))
         assertTrue(bridge.contains("fun sendRetainedDisplayPayload"))
     }
 }

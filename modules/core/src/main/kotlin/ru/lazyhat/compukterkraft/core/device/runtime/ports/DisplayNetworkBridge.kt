@@ -19,59 +19,30 @@
 
 package ru.lazyhat.compukterkraft.core.device.runtime.ports
 
-import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
 import java.util.UUID
 
 interface DisplayNetworkBridge {
-    fun isDisplaySessionStillBound(
+    fun isRetainedDisplayViewerAuthorized(
         playerUuid: UUID,
-        containerId: Int,
         deviceId: Int,
-        displayId: Int,
     ): Boolean
-
-    fun sendDisplayFrame(
-        playerUuid: UUID,
-        containerId: Int,
-        frame: DisplayFrameDelta,
-    )
-
-    fun sendNativeDisplayFrameBytes(
-        playerUuid: UUID,
-        containerId: Int,
-        payload: ByteArray,
-    )
 
     fun sendRetainedDisplayPayload(
         playerUuid: UUID,
-        containerId: Int,
+        deviceId: Int,
         payload: ByteArray,
     )
 }
 
 object NoopDisplayNetworkBridge : DisplayNetworkBridge {
-    override fun isDisplaySessionStillBound(
+    override fun isRetainedDisplayViewerAuthorized(
         playerUuid: UUID,
-        containerId: Int,
         deviceId: Int,
-        displayId: Int,
     ): Boolean = false
-
-    override fun sendDisplayFrame(
-        playerUuid: UUID,
-        containerId: Int,
-        frame: DisplayFrameDelta,
-    ) = Unit
-
-    override fun sendNativeDisplayFrameBytes(
-        playerUuid: UUID,
-        containerId: Int,
-        payload: ByteArray,
-    ) = Unit
 
     override fun sendRetainedDisplayPayload(
         playerUuid: UUID,
-        containerId: Int,
+        deviceId: Int,
         payload: ByteArray,
     ) = Unit
 }

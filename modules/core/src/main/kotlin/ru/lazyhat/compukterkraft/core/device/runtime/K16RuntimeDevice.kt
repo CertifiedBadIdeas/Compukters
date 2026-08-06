@@ -25,8 +25,6 @@ import ru.lazyhat.compukterkraft.core.device.DeviceProperties
 import ru.lazyhat.compukterkraft.core.device.runtime.ports.DeviceStateSink
 import ru.lazyhat.compukterkraft.core.device.runtime.ports.DisplayNetworkBridge
 import ru.lazyhat.compukterkraft.core.device.runtime.ports.NoopDisplayNetworkBridge
-import ru.lazyhat.compukterkraft.core.device.vm.display.NativeDisplayFrameBatchSummary
-import ru.lazyhat.compukterkraft.core.device.vm.display.NativeDisplayFrameCodec
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16ComputerEndpoint
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16ComputerControl
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16ComputerSignal
@@ -62,9 +60,7 @@ class K16RuntimeDevice(
     override val family: DeviceFamily = properties.family
 
     private var endpoint: K16EndpointWorker? = null
-    private val displaySessions = DisplaySessionTracker()
     private val retainedDisplaySessions = RetainedDisplaySessionTracker()
-    private val pendingDisplayBatches = mutableListOf<NativePendingDisplayBatch>()
     private var labelBacking: String? = properties.label
     private var terminalControlReached = false
     private var runtimeFailureMessageBacking: String? = null
@@ -101,8 +97,10 @@ class K16RuntimeDevice(
         val current = endpoint ?: return
         endpoint = null
         terminalControlReached = false
-        pendingDisplayBatches.clear()
-        retainedDisplaySessions.clear()
+        for (viewerToken in retainedDisplaySessions.clear()) {
+            runCatching { current.detachRetainedDisplayViewer(viewerToken) }
+                .onFailure { recordRuntimeFailure(it, "detach retained display viewer during shutdown") }
+        }
         current.close()
         stateSink.onPowerStateChanged(false)
     }
@@ -114,9 +112,9 @@ class K16RuntimeDevice(
 
     override fun serverTick() {
         val current = endpoint ?: return
+        pruneRetainedDisplayViewers(current)
         current.requestTick()
         terminalControlReached = current.terminalControlReached
-        flushFramebufferFrames(current)
         flushRetainedDisplayPayloads(current)
     }
 
@@ -218,47 +216,16 @@ class K16RuntimeDevice(
         }
     }
 
-    override fun attachDisplaySession(
-        playerUuid: UUID,
-        containerId: Int,
-        displayId: Int,
-        width: Int,
-        height: Int,
-    ) {
-        displaySessions.attach(playerUuid, containerId, displayId, width, height)
-        flushPendingDisplayFrames()
-    }
-
-    override fun resizeDisplaySession(
-        playerUuid: UUID,
-        displayId: Int,
-        width: Int,
-        height: Int,
-    ) {
-        displaySessions.resize(playerUuid, displayId, width, height)
-        flushPendingDisplayFrames()
-    }
-
-    override fun detachDisplaySession(
-        playerUuid: UUID,
-        displayId: Int,
-    ) {
-        displaySessions.detach(playerUuid, displayId)
-    }
-
-    override fun attachRetainedDisplaySession(
-        playerUuid: UUID,
-        containerId: Int,
-        displayId: Int,
-    ): Boolean {
+    override fun attachRetainedDisplayViewer(playerUuid: UUID): Boolean {
         val current = endpoint ?: return false
-        val session = retainedDisplaySessions.attach(playerUuid, containerId, displayId)
+        if (retainedDisplaySessions.authorize(playerUuid) != null) return true
+        val session = retainedDisplaySessions.attach(playerUuid)
         return try {
             current.attachRetainedDisplayViewer(session.viewerToken, deviceId)
             flushRetainedDisplayPayloads(current)
             true
         } catch (error: Throwable) {
-            retainedDisplaySessions.detach(playerUuid, containerId, displayId)
+            retainedDisplaySessions.detach(playerUuid)
             runCatching { current.detachRetainedDisplayViewer(session.viewerToken) }
             recordRuntimeFailure(error, "attach retained display viewer")
             false
@@ -267,14 +234,10 @@ class K16RuntimeDevice(
 
     override fun acceptRetainedDisplayServerbound(
         playerUuid: UUID,
-        containerId: Int,
-        displayId: Int,
         payload: ByteArray,
     ): Boolean {
         val current = endpoint ?: return false
-        val viewerToken =
-            retainedDisplaySessions.authorize(playerUuid, containerId, displayId)
-                ?: return false
+        val viewerToken = retainedDisplaySessions.authorize(playerUuid) ?: return false
         return try {
             val outcome = current.acceptRetainedDisplayServerbound(viewerToken, payload)
             if (outcome > 0) {
@@ -289,14 +252,8 @@ class K16RuntimeDevice(
         }
     }
 
-    override fun detachRetainedDisplaySession(
-        playerUuid: UUID,
-        containerId: Int,
-        displayId: Int,
-    ): Boolean {
-        val viewerToken =
-            retainedDisplaySessions.detach(playerUuid, containerId, displayId)
-                ?: return false
+    override fun detachRetainedDisplayViewer(playerUuid: UUID): Boolean {
+        val viewerToken = retainedDisplaySessions.detach(playerUuid) ?: return false
         val current = endpoint ?: return true
         return try {
             current.detachRetainedDisplayViewer(viewerToken)
@@ -330,81 +287,23 @@ class K16RuntimeDevice(
 
     private fun argumentBoolean(value: Any?): Boolean? = value as? Boolean
 
-    private fun flushFramebufferFrames(current: K16EndpointWorker): Boolean {
-        pendingDisplayBatches.addAll(current.drainDisplayBatches())
-        return flushPendingDisplayFrames()
-    }
-
-    private fun flushPendingDisplayFrames(): Boolean {
-        if (pendingDisplayBatches.isEmpty()) return false
-        if (displaySessions.isEmpty()) {
-            return false
-        }
-        val batch = mergeNativeBatches(pendingDisplayBatches)
-        pendingDisplayBatches.clear()
-        return sendNativeBatch(batch)
-    }
-
     private fun flushRetainedDisplayPayloads(current: K16EndpointWorker) {
         while (true) {
             val publication = current.pollRetainedDisplayPayload() ?: return
             val session = retainedDisplaySessions.sessionForToken(publication.viewerToken) ?: continue
-            if (!displayNetwork.isDisplaySessionStillBound(
-                    session.playerUuid,
-                    session.containerId,
-                    deviceId,
-                    session.displayId,
-                )
-            ) {
-                detachRetainedDisplaySession(session.playerUuid, session.containerId, session.displayId)
-                continue
-            }
-            displayNetwork.sendRetainedDisplayPayload(session.playerUuid, session.containerId, publication.payload)
+            displayNetwork.sendRetainedDisplayPayload(session.playerUuid, deviceId, publication.payload)
         }
     }
 
-    private fun mergeNativeBatches(batches: List<NativePendingDisplayBatch>): NativePendingDisplayBatch {
-        check(batches.isNotEmpty()) { "Expected at least one native display batch." }
-        if (batches.size == 1) return batches.single()
-        return NativePendingDisplayBatch(
-            payload = NativeDisplayFrameCodec.mergeFrameBatches(batches.map { it.payload }),
-            summary =
-                NativeDisplayFrameBatchSummary(
-                    frameCount = batches.sumOf { it.summary.frameCount },
-                    tileCount = batches.sumOf { it.summary.tileCount },
-                    payloadBytes = batches.sumOf { it.summary.payloadBytes },
-                    operationCount = batches.sumOf { it.summary.operationCount },
-                    monoPayloadBytes = batches.sumOf { it.summary.monoPayloadBytes },
-                ),
-        )
-    }
-
-    private fun sendNativeBatch(batch: NativePendingDisplayBatch): Boolean {
-        val toDetach = mutableListOf<Pair<UUID, Int>>()
-        var sent = false
-        for (session in displaySessions.sessionsSnapshot()) {
-            if (!displayNetwork.isDisplaySessionStillBound(session.playerUuid, session.containerId, deviceId, session.displayId)) {
-                toDetach += session.playerUuid to session.displayId
-                continue
+    private fun pruneRetainedDisplayViewers(current: K16EndpointWorker) {
+        for (session in retainedDisplaySessions.sessionsSnapshot()) {
+            if (!displayNetwork.isRetainedDisplayViewerAuthorized(session.playerUuid, deviceId)) {
+                val viewerToken = retainedDisplaySessions.detach(session.playerUuid) ?: continue
+                runCatching { current.detachRetainedDisplayViewer(viewerToken) }
+                    .onFailure { recordRuntimeFailure(it, "prune retained display viewer") }
             }
-            displayNetwork.sendNativeDisplayFrameBytes(session.playerUuid, session.containerId, batch.payload)
-            metricsCollector.recordK16DisplayFramesSent(
-                frameCount = batch.summary.frameCount,
-                tileCount = batch.summary.tileCount,
-                payloadBytes = batch.summary.payloadBytes,
-                operationCount = batch.summary.operationCount,
-                monoPayloadBytes = batch.summary.monoPayloadBytes,
-            )
-            sent = true
         }
-        toDetach.forEach { (playerUuid, detachedDisplayId) -> detachDisplaySession(playerUuid, detachedDisplayId) }
-        return sent
     }
-
-    private class NativePendingDisplayBatch(
-        val payload: ByteArray,
-        val summary: NativeDisplayFrameBatchSummary,
-    )
 
     private class K16EndpointWorker(
         private val deviceId: Int,
@@ -424,7 +323,6 @@ class K16RuntimeDevice(
         @Volatile
         private var outputCache: ByteArray = ByteArray(0)
 
-        private val displayBatchCache = ConcurrentLinkedQueue<NativePendingDisplayBatch>()
         private val retainedDisplayPayloadCache = ConcurrentLinkedQueue<NativeRetainedDisplayPayload>()
 
         @Volatile
@@ -487,13 +385,6 @@ class K16RuntimeDevice(
         }
 
         fun outputSnapshot(): ByteArray = outputCache.copyOf()
-
-        fun drainDisplayBatches(): List<NativePendingDisplayBatch> =
-            buildList {
-                while (true) {
-                    add(displayBatchCache.poll() ?: break)
-                }
-            }
 
         fun clearOutput() {
             outputCache = ByteArray(0)
@@ -729,21 +620,11 @@ class K16RuntimeDevice(
         private fun refreshCaches(endpoint: K16ComputerEndpoint) {
             val startedAt = System.nanoTime()
             val outputBytes = endpoint.outputSnapshot()
-            val frameBytes = endpoint.drainGpu0Frames()
-            val frameSummary =
-                if (frameBytes.isEmpty()) {
-                    NativeDisplayFrameBatchSummary(frameCount = 0, tileCount = 0, payloadBytes = 0, operationCount = 0)
-                } else {
-                    NativeDisplayFrameCodec.summarizeFrames(frameBytes)
-                }
             outputCache = outputBytes
-            if (frameSummary.frameCount > 0) {
-                displayBatchCache += NativePendingDisplayBatch(frameBytes, frameSummary)
-            }
             metricsCollector.recordK16OutputRefresh(
                 serialOutputBytes = outputBytes.size,
-                gpuFrameBytes = frameBytes.size,
-                gpuFrameCount = frameSummary.frameCount,
+                gpuFrameBytes = 0,
+                gpuFrameCount = 0,
                 nanos = System.nanoTime() - startedAt,
             )
             if (metricsCollector.recordsK16StatsSnapshots) {

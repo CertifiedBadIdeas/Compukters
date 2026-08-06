@@ -26,24 +26,24 @@ import kotlin.test.assertNull
 
 class RetainedDisplaySessionTrackerTest {
     @Test
-    fun allocatesDeterministicTokensAndReauthorizesReopenedDisplay() {
+    fun ownsOneStableViewerSessionPerPlayer() {
         val tracker = RetainedDisplaySessionTracker()
         val firstPlayer = UUID.fromString("00000000-0000-0000-0000-000000000001")
         val secondPlayer = UUID.fromString("00000000-0000-0000-0000-000000000002")
 
-        val first = tracker.attach(firstPlayer, containerId = 11, displayId = 4)
-        val second = tracker.attach(secondPlayer, containerId = 12, displayId = 4)
-        val reopened = tracker.attach(firstPlayer, containerId = 13, displayId = 4)
+        val first = tracker.attach(firstPlayer)
+        val second = tracker.attach(secondPlayer)
+        val reopened = tracker.attach(firstPlayer)
 
         assertEquals(1L, first.viewerToken)
         assertEquals(2L, second.viewerToken)
-        assertEquals(first.viewerToken, reopened.viewerToken)
-        assertNull(tracker.authorize(firstPlayer, containerId = 11, displayId = 4))
-        assertEquals(1L, tracker.authorize(firstPlayer, containerId = 13, displayId = 4))
+        assertEquals(first, reopened)
+        assertEquals(1L, tracker.authorize(firstPlayer))
+        assertNull(tracker.authorize(UUID.fromString("00000000-0000-0000-0000-000000000003")))
         assertEquals(reopened, tracker.sessionForToken(1L))
-        assertNull(tracker.detach(firstPlayer, containerId = 11, displayId = 4))
-        assertEquals(1L, tracker.detach(firstPlayer, containerId = 13, displayId = 4))
-        assertNull(tracker.authorize(firstPlayer, containerId = 13, displayId = 4))
+        assertEquals(1L, tracker.detach(firstPlayer))
+        assertNull(tracker.detach(firstPlayer))
+        assertNull(tracker.authorize(firstPlayer))
         assertNull(tracker.sessionForToken(1L))
     }
 }
