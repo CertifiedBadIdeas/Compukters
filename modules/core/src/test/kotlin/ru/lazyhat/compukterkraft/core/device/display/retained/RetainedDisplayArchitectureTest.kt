@@ -19,6 +19,7 @@
 
 package ru.lazyhat.compukterkraft.core.device.display.retained
 
+import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.io.path.readText
 import kotlin.test.Test
@@ -93,5 +94,51 @@ class RetainedDisplayArchitectureTest {
         assertFalse(runtime.contains("private val displaySessions"))
         assertTrue(bridge.contains("fun isRetainedDisplayViewerAuthorized"))
         assertTrue(bridge.contains("fun sendRetainedDisplayPayload"))
+    }
+
+    @Test
+    fun productionSourcesDoNotRetainFramebufferTransport() {
+        val productionRoots =
+            listOf(
+                "modules/core/src/main",
+                "modules/native-runtime/src/main",
+                "modules/v1_21_1/v1_21_1-common/src/main",
+                "modules/v1_21_1/v1_21_1-neoforge/src/main",
+            ).map(root::resolve)
+        val forbidden =
+            listOf(
+                "DisplayFrameDelta",
+                "NativeDisplayFrameCodec",
+                "drainGpu0Frames",
+                "sendNativeDisplayFrameBytes",
+                "ClientDisplayBuffer",
+                "ClientDisplayProfiling",
+            )
+
+        for (productionRoot in productionRoots) {
+            Files.walk(productionRoot).use { paths ->
+                paths
+                    .filter { path -> Files.isRegularFile(path) }
+                    .filter { path -> path.toString().endsWith(".kt") || path.toString().endsWith(".java") }
+                    .forEach { path ->
+                        val source = path.readText()
+                        for (legacyName in forbidden) {
+                            assertFalse(source.contains(legacyName), "$path must not retain $legacyName")
+                        }
+                    }
+            }
+        }
+        for (removed in
+            listOf(
+                "modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/display/" +
+                    "NativeDisplayFrameCodec.kt",
+                "modules/native-runtime/src/main/kotlin/ru/lazyhat/compukterkraft/lang/runtime/display/" +
+                    "DisplayModels.kt",
+                "modules/v1_21_1/v1_21_1-common/src/main/kotlin/ru/lazyhat/compukterkraft/common/computer/" +
+                    "client/ClientDisplayBuffer.kt",
+            )
+        ) {
+            assertFalse(Files.exists(root.resolve(removed)), "$removed must stay deleted")
+        }
     }
 }

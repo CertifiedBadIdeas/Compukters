@@ -292,6 +292,7 @@ class K16RuntimeDevice(
             val publication = current.pollRetainedDisplayPayload() ?: return
             val session = retainedDisplaySessions.sessionForToken(publication.viewerToken) ?: continue
             displayNetwork.sendRetainedDisplayPayload(session.playerUuid, deviceId, publication.payload)
+            metricsCollector.recordK16RetainedPayloadSent(publication.payload.size)
         }
     }
 
@@ -623,8 +624,6 @@ class K16RuntimeDevice(
             outputCache = outputBytes
             metricsCollector.recordK16OutputRefresh(
                 serialOutputBytes = outputBytes.size,
-                gpuFrameBytes = 0,
-                gpuFrameCount = 0,
                 nanos = System.nanoTime() - startedAt,
             )
             if (metricsCollector.recordsK16StatsSnapshots) {

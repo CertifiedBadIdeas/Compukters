@@ -105,7 +105,7 @@ It owns:
 - the boot CPU id;
 - snapshot creation and restore;
 - host-visible accessors for control, debug output, serial input, keyboard
-  input, and gpu0 display frames.
+  input, and retained gpu0 viewer publications.
 
 It does not decode instructions itself. It delegates execution to `K16Cpu` and
 reacts to the returned signal or error.
@@ -127,7 +127,8 @@ Device state is host-owned. For example:
 
 - `DebugSerialDevice` collects bytes for host-side draining.
 - `SerialInputDevice` consumes bytes pushed by the host.
-- `GpuDevice` turns guest RAM blits into `DisplayFrameDelta` values.
+- `GpuDevice` validates guest retained transactions and owns the authoritative
+  resource table, draw list, commit sequence, and per-viewer replication state.
 - `StoragePortDevice` copies blocks between guest RAM and storage media.
 - `BiosFlashDevice` exposes read-only firmware bytes at the high BIOS address.
 

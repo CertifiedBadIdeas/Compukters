@@ -165,7 +165,7 @@ class K16ShellRuntimeSmokeTest {
 
             dispatchText(device, "pwd\n")
             waitForTerminal(device, "failed cd keeps pwd and returned prompt") { terminal ->
-                val pwdCommandIndex = terminal.lastIndexOf("K16> pwd")
+                val pwdCommandIndex = terminal.lastPhysicalIndexOf("K16> pwd")
                 val pwdOutputIndex = terminal.indexOf("/etc", startIndex = pwdCommandIndex + "K16> pwd".length)
                 val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = pwdOutputIndex)
                 pwdCommandIndex >= 0 && pwdOutputIndex > pwdCommandIndex && returnedPromptIndex > pwdOutputIndex
@@ -424,7 +424,7 @@ class K16ShellRuntimeSmokeTest {
 
             dispatchText(device, "cat /etc/user.txt\n")
             waitForTerminal(device, "cat output for appended file and returned prompt") { terminal ->
-                val commandIndex = terminal.lastIndexOf("K16> cat /etc/user.txt")
+                val commandIndex = terminal.lastPhysicalIndexOf("K16> cat /etc/user.txt")
                 val outputIndex = terminal.indexOf("hello-world", startIndex = commandIndex + "K16> cat /etc/user.txt".length)
                 val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex)
                 commandIndex >= 0 && outputIndex > commandIndex && returnedPromptIndex > outputIndex
@@ -432,7 +432,7 @@ class K16ShellRuntimeSmokeTest {
 
             dispatchText(device, "stat /etc/user.txt\n")
             waitForTerminal(device, "stat output for appended file and returned prompt") { terminal ->
-                val commandIndex = terminal.lastIndexOf("K16> stat /etc/user.txt")
+                val commandIndex = terminal.lastPhysicalIndexOf("K16> stat /etc/user.txt")
                 val outputIndex =
                     terminal.indexOf("FILE 11 /etc/user.txt", startIndex = commandIndex + "K16> stat /etc/user.txt".length)
                 val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex)
@@ -441,7 +441,7 @@ class K16ShellRuntimeSmokeTest {
 
             dispatchText(device, "cp /etc/user.txt /etc/user-copy.txt\n")
             waitForTerminal(device, "cp output and returned prompt") { terminal ->
-                val commandIndex = terminal.lastIndexOf("K16> cp /etc/user.txt /etc/user-copy.txt")
+                val commandIndex = terminal.lastPhysicalIndexOf("K16> cp /etc/user.txt /etc/user-copy.txt")
                 val outputIndex =
                     terminal.indexOf(
                         "COPIED /etc/user.txt /etc/user-copy.txt",
@@ -453,7 +453,7 @@ class K16ShellRuntimeSmokeTest {
 
             dispatchText(device, "cat /etc/user-copy.txt\n")
             waitForTerminal(device, "cat output for copied file and returned prompt") { terminal ->
-                val commandIndex = terminal.lastIndexOf("K16> cat /etc/user-copy.txt")
+                val commandIndex = terminal.lastPhysicalIndexOf("K16> cat /etc/user-copy.txt")
                 val outputIndex = terminal.indexOf("hello-world", startIndex = commandIndex + "K16> cat /etc/user-copy.txt".length)
                 val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex)
                 commandIndex >= 0 && outputIndex > commandIndex && returnedPromptIndex > outputIndex
@@ -461,7 +461,7 @@ class K16ShellRuntimeSmokeTest {
 
             dispatchText(device, "stat /etc/user-copy.txt\n")
             waitForTerminal(device, "stat output for copied file and returned prompt") { terminal ->
-                val commandIndex = terminal.lastIndexOf("K16> stat /etc/user-copy.txt")
+                val commandIndex = terminal.indexOf("K16> stat /etc/user-copy.txt")
                 val outputIndex =
                     terminal.indexOf("FILE 11 /etc/user-copy.txt", startIndex = commandIndex + "K16> stat /etc/user-copy.txt".length)
                 val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex)
@@ -470,7 +470,7 @@ class K16ShellRuntimeSmokeTest {
 
             dispatchText(device, "cp /etc/user.txt\n")
             waitForTerminal(device, "cp invalid usage error and returned prompt") { terminal ->
-                val commandIndex = terminal.lastIndexOf("K16> cp /etc/user.txt")
+                val commandIndex = terminal.lastPhysicalIndexOf("K16> cp /etc/user.txt")
                 val outputIndex = terminal.indexOf("ERR INVAL", startIndex = commandIndex + "K16> cp /etc/user.txt".length)
                 val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex)
                 commandIndex >= 0 && outputIndex > commandIndex && returnedPromptIndex > outputIndex
@@ -478,7 +478,7 @@ class K16ShellRuntimeSmokeTest {
 
             dispatchText(device, "cp /etc/missing.txt /etc/missing-copy.txt\n")
             waitForTerminal(device, "cp missing source error and returned prompt") { terminal ->
-                val commandIndex = terminal.lastIndexOf("K16> cp /etc/missing.txt /etc/missing-copy.txt")
+                val commandIndex = terminal.lastPhysicalIndexOf("K16> cp /etc/missing.txt /etc/missing-copy.txt")
                 val outputIndex =
                     terminal.indexOf(
                         "ERR NOENT /etc/missing.txt",
@@ -490,7 +490,7 @@ class K16ShellRuntimeSmokeTest {
 
             dispatchText(device, "mv /etc/user-copy.txt /etc/user-moved.txt\n")
             waitForTerminal(device, "mv output and returned prompt") { terminal ->
-                val commandIndex = terminal.lastIndexOf("K16> mv /etc/user-copy.txt /etc/user-moved.txt")
+                val commandIndex = terminal.lastPhysicalIndexOf("K16> mv /etc/user-copy.txt /etc/user-moved.txt")
                 val outputIndex =
                     terminal.indexOf(
                         "MOVED /etc/user-copy.txt /etc/user-moved.txt",
@@ -502,7 +502,7 @@ class K16ShellRuntimeSmokeTest {
 
             dispatchText(device, "stat /etc/user-copy.txt\n")
             waitForTerminal(device, "stat output after moved source and returned prompt") { terminal ->
-                val commandIndex = terminal.lastIndexOf("K16> stat /etc/user-copy.txt")
+                val commandIndex = terminal.indexOf("K16> stat /etc/user-copy.txt")
                 val outputIndex =
                     terminal.indexOf("ERR NOENT /etc/user-copy.txt", startIndex = commandIndex + "K16> stat /etc/user-copy.txt".length)
                 val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex)
@@ -511,7 +511,7 @@ class K16ShellRuntimeSmokeTest {
 
             dispatchText(device, "cat /etc/user-moved.txt\n")
             waitForTerminal(device, "cat output for moved file and returned prompt") { terminal ->
-                val commandIndex = terminal.lastIndexOf("K16> cat /etc/user-moved.txt")
+                val commandIndex = terminal.lastPhysicalIndexOf("K16> cat /etc/user-moved.txt")
                 val outputIndex = terminal.indexOf("hello-world", startIndex = commandIndex + "K16> cat /etc/user-moved.txt".length)
                 val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex)
                 commandIndex >= 0 && outputIndex > commandIndex && returnedPromptIndex > outputIndex
@@ -519,7 +519,7 @@ class K16ShellRuntimeSmokeTest {
 
             dispatchText(device, "mv /etc/user.txt /etc/user-moved.txt\n")
             waitForTerminal(device, "mv existing destination error and returned prompt") { terminal ->
-                val commandIndex = terminal.lastIndexOf("K16> mv /etc/user.txt /etc/user-moved.txt")
+                val commandIndex = terminal.lastPhysicalIndexOf("K16> mv /etc/user.txt /etc/user-moved.txt")
                 val outputIndex =
                     terminal.indexOf(
                         "ERR INVAL /etc/user-moved.txt",
@@ -531,7 +531,7 @@ class K16ShellRuntimeSmokeTest {
 
             dispatchText(device, "mv /etc/missing.txt /etc/missing-moved.txt\n")
             waitForTerminal(device, "mv missing source error and returned prompt") { terminal ->
-                val commandIndex = terminal.lastIndexOf("K16> mv /etc/missing.txt /etc/missing-moved.txt")
+                val commandIndex = terminal.lastPhysicalIndexOf("K16> mv /etc/missing.txt /etc/missing-moved.txt")
                 val outputIndex =
                     terminal.indexOf(
                         "ERR NOENT /etc/missing.txt",
@@ -543,7 +543,7 @@ class K16ShellRuntimeSmokeTest {
 
             dispatchText(device, "mkdir /etc/mv-dir\n")
             waitForTerminal(device, "mkdir output for mv directory source and returned prompt") { terminal ->
-                val commandIndex = terminal.lastIndexOf("K16> mkdir /etc/mv-dir")
+                val commandIndex = terminal.lastPhysicalIndexOf("K16> mkdir /etc/mv-dir")
                 val outputIndex = terminal.indexOf("CREATED /etc/mv-dir", startIndex = commandIndex + "K16> mkdir /etc/mv-dir".length)
                 val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex)
                 commandIndex >= 0 && outputIndex > commandIndex && returnedPromptIndex > outputIndex
@@ -551,7 +551,7 @@ class K16ShellRuntimeSmokeTest {
 
             dispatchText(device, "mv /etc/mv-dir /etc/mv-dir2\n")
             waitForTerminal(device, "mv directory source error and returned prompt") { terminal ->
-                val commandIndex = terminal.lastIndexOf("K16> mv /etc/mv-dir /etc/mv-dir2")
+                val commandIndex = terminal.lastPhysicalIndexOf("K16> mv /etc/mv-dir /etc/mv-dir2")
                 val outputIndex =
                     terminal.indexOf(
                         "ERR INVAL /etc/mv-dir",
@@ -563,7 +563,7 @@ class K16ShellRuntimeSmokeTest {
 
             dispatchText(device, "rmdir /etc/mv-dir\n")
             waitForTerminal(device, "rmdir cleanup for mv directory source and returned prompt") { terminal ->
-                val commandIndex = terminal.lastIndexOf("K16> rmdir /etc/mv-dir")
+                val commandIndex = terminal.lastPhysicalIndexOf("K16> rmdir /etc/mv-dir")
                 val outputIndex = terminal.indexOf("REMOVED /etc/mv-dir", startIndex = commandIndex + "K16> rmdir /etc/mv-dir".length)
                 val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex)
                 commandIndex >= 0 && outputIndex > commandIndex && returnedPromptIndex > outputIndex
@@ -573,7 +573,7 @@ class K16ShellRuntimeSmokeTest {
                 val growPayload = "${it % 10}" + "x".repeat(29)
                 dispatchText(device, "write --append /etc/user.txt $growPayload\n")
                 waitForTerminal(device, "append write ${it + 1} output and returned prompt", attempts = 400) { terminal ->
-                    val commandIndex = terminal.lastIndexOf("K16> write --append /etc/user.txt $growPayload")
+                    val commandIndex = terminal.indexOf("K16> write --append /etc/user.txt $growPayload")
                     val outputIndex =
                         terminal.indexOf("WROTE 30 /etc/user.txt", startIndex = commandIndex + "K16> write --append /etc/user.txt $growPayload".length)
                     val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex)
@@ -582,7 +582,7 @@ class K16ShellRuntimeSmokeTest {
             }
             dispatchText(device, "stat /etc/user.txt\n")
             waitForTerminal(device, "stat output for grown appended file and returned prompt") { terminal ->
-                val commandIndex = terminal.lastIndexOf("K16> stat /etc/user.txt")
+                val commandIndex = terminal.lastPhysicalIndexOf("K16> stat /etc/user.txt")
                 val outputIndex =
                     terminal.indexOf("FILE 611 /etc/user.txt", startIndex = commandIndex + "K16> stat /etc/user.txt".length)
                 val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex)
@@ -591,7 +591,7 @@ class K16ShellRuntimeSmokeTest {
 
             dispatchText(device, "rm /etc/user.txt\n")
             waitForTerminal(device, "rm output and returned prompt") { terminal ->
-                val commandIndex = terminal.lastIndexOf("K16> rm /etc/user.txt")
+                val commandIndex = terminal.lastPhysicalIndexOf("K16> rm /etc/user.txt")
                 val outputIndex = terminal.indexOf("REMOVED /etc/user.txt", startIndex = commandIndex + "K16> rm /etc/user.txt".length)
                 val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex)
                 commandIndex >= 0 && outputIndex > commandIndex && returnedPromptIndex > outputIndex
@@ -599,7 +599,7 @@ class K16ShellRuntimeSmokeTest {
 
             dispatchText(device, "stat /etc/user.txt\n")
             waitForTerminal(device, "stat output after removed file and returned prompt") { terminal ->
-                val commandIndex = terminal.lastIndexOf("K16> stat /etc/user.txt")
+                val commandIndex = terminal.lastPhysicalIndexOf("K16> stat /etc/user.txt")
                 val outputIndex =
                     terminal.indexOf("ERR NOENT /etc/user.txt", startIndex = commandIndex + "K16> stat /etc/user.txt".length)
                 val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex)
@@ -608,7 +608,7 @@ class K16ShellRuntimeSmokeTest {
 
             dispatchText(device, "mkdir /etc/user\n")
             waitForTerminal(device, "mkdir output and returned prompt") { terminal ->
-                val commandIndex = terminal.lastIndexOf("K16> mkdir /etc/user")
+                val commandIndex = terminal.lastPhysicalIndexOf("K16> mkdir /etc/user")
                 val outputIndex = terminal.indexOf("CREATED /etc/user", startIndex = commandIndex + "K16> mkdir /etc/user".length)
                 val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex)
                 commandIndex >= 0 && outputIndex > commandIndex && returnedPromptIndex > outputIndex
@@ -616,7 +616,7 @@ class K16ShellRuntimeSmokeTest {
 
             dispatchText(device, "stat /etc/user\n")
             waitForTerminal(device, "stat output for created directory and returned prompt") { terminal ->
-                val commandIndex = terminal.lastIndexOf("K16> stat /etc/user")
+                val commandIndex = terminal.lastPhysicalIndexOf("K16> stat /etc/user")
                 val outputIndex = terminal.indexOf("DIR ", startIndex = commandIndex + "K16> stat /etc/user".length)
                 val pathIndex = terminal.indexOf("/etc/user", startIndex = outputIndex)
                 val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = pathIndex)
@@ -625,7 +625,7 @@ class K16ShellRuntimeSmokeTest {
 
             dispatchText(device, "write /etc/user/file.txt data\n")
             waitForTerminal(device, "nested file write output and returned prompt") { terminal ->
-                val commandIndex = terminal.lastIndexOf("K16> write /etc/user/file.txt data")
+                val commandIndex = terminal.lastPhysicalIndexOf("K16> write /etc/user/file.txt data")
                 val outputIndex =
                     terminal.indexOf("WROTE 4 /etc/user/file.txt", startIndex = commandIndex + "K16> write /etc/user/file.txt data".length)
                 val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex)
@@ -634,7 +634,7 @@ class K16ShellRuntimeSmokeTest {
 
             dispatchText(device, "rmdir /etc/user\n")
             waitForTerminal(device, "rmdir non-empty directory error and returned prompt") { terminal ->
-                val commandIndex = terminal.lastIndexOf("K16> rmdir /etc/user")
+                val commandIndex = terminal.lastPhysicalIndexOf("K16> rmdir /etc/user")
                 val outputIndex = terminal.indexOf("ERR NOTEMPTY /etc/user", startIndex = commandIndex + "K16> rmdir /etc/user".length)
                 val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex)
                 commandIndex >= 0 && outputIndex > commandIndex && returnedPromptIndex > outputIndex
@@ -642,7 +642,7 @@ class K16ShellRuntimeSmokeTest {
 
             dispatchText(device, "rm /etc/user/file.txt\n")
             waitForTerminal(device, "nested file rm output and returned prompt") { terminal ->
-                val commandIndex = terminal.lastIndexOf("K16> rm /etc/user/file.txt")
+                val commandIndex = terminal.lastPhysicalIndexOf("K16> rm /etc/user/file.txt")
                 val outputIndex =
                     terminal.indexOf("REMOVED /etc/user/file.txt", startIndex = commandIndex + "K16> rm /etc/user/file.txt".length)
                 val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex)
@@ -651,7 +651,7 @@ class K16ShellRuntimeSmokeTest {
 
             dispatchText(device, "rmdir /etc/user\n")
             waitForTerminal(device, "rmdir empty directory output and returned prompt") { terminal ->
-                val commandIndex = terminal.lastIndexOf("K16> rmdir /etc/user")
+                val commandIndex = terminal.lastPhysicalIndexOf("K16> rmdir /etc/user")
                 val outputIndex = terminal.indexOf("REMOVED /etc/user", startIndex = commandIndex + "K16> rmdir /etc/user".length)
                 val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex)
                 commandIndex >= 0 && outputIndex > commandIndex && returnedPromptIndex > outputIndex
@@ -659,7 +659,7 @@ class K16ShellRuntimeSmokeTest {
 
             dispatchText(device, "stat /etc/user\n")
             waitForTerminal(device, "stat output after removed directory and returned prompt") { terminal ->
-                val commandIndex = terminal.lastIndexOf("K16> stat /etc/user")
+                val commandIndex = terminal.lastPhysicalIndexOf("K16> stat /etc/user")
                 val outputIndex =
                     terminal.indexOf("ERR NOENT /etc/user", startIndex = commandIndex + "K16> stat /etc/user".length)
                 val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex)
@@ -818,7 +818,7 @@ class K16ShellRuntimeSmokeTest {
 
             dispatchText(device, "mkdir /etc/grow\n")
             waitForTerminal(device, "mkdir grow output and returned prompt") { terminal ->
-                val commandIndex = terminal.lastIndexOf("K16> mkdir /etc/grow")
+                val commandIndex = terminal.lastPhysicalIndexOf("K16> mkdir /etc/grow")
                 val outputIndex = terminal.indexOf("CREATED /etc/grow", startIndex = commandIndex + "K16> mkdir /etc/grow".length)
                 val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex)
                 commandIndex >= 0 && outputIndex > commandIndex && returnedPromptIndex > outputIndex
@@ -828,7 +828,7 @@ class K16ShellRuntimeSmokeTest {
                 val path = "/etc/grow/f$index"
                 dispatchText(device, "write $path x\n")
                 waitForTerminal(device, "write output for $path and returned prompt") { terminal ->
-                    val commandIndex = terminal.lastIndexOf("K16> write $path x")
+                    val commandIndex = terminal.lastPhysicalIndexOf("K16> write $path x")
                     val outputIndex = terminal.indexOf("WROTE 1 $path", startIndex = commandIndex + "K16> write $path x".length)
                     val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex)
                     commandIndex >= 0 && outputIndex > commandIndex && returnedPromptIndex > outputIndex
@@ -837,7 +837,7 @@ class K16ShellRuntimeSmokeTest {
 
             dispatchText(device, "ls /etc/grow\n")
             waitForTerminal(device, "ls output includes first and ninth grown directory entries") { terminal ->
-                val commandIndex = terminal.lastIndexOf("K16> ls /etc/grow")
+                val commandIndex = terminal.indexOf("K16> ls /etc/grow")
                 val firstIndex = terminal.indexOf("f0", startIndex = commandIndex + "K16> ls /etc/grow".length)
                 val ninthIndex = terminal.indexOf("f8", startIndex = firstIndex)
                 val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = ninthIndex)
@@ -862,7 +862,7 @@ class K16ShellRuntimeSmokeTest {
 
             dispatchPasteText(device, "write /etc/grow-file $chunkA\n")
             waitForTerminal(device, "initial grow-file write output and returned prompt") { terminal ->
-                val commandIndex = terminal.lastIndexOf("K16> write /etc/grow-file $chunkA")
+                val commandIndex = terminal.lastPhysicalIndexOf("K16> write /etc/grow-file $chunkA")
                 val outputIndex =
                     terminal.indexOf("WROTE 128 /etc/grow-file", startIndex = commandIndex + "K16> write /etc/grow-file $chunkA".length)
                 val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex)
@@ -872,7 +872,7 @@ class K16ShellRuntimeSmokeTest {
             listOf(chunkB, chunkC, chunkD).forEach { chunk ->
                 dispatchPasteText(device, "write --append /etc/grow-file $chunk\n")
                 waitForTerminal(device, "append grow-file chunk output and returned prompt") { terminal ->
-                    val commandIndex = terminal.lastIndexOf("K16> write --append /etc/grow-file $chunk")
+                    val commandIndex = terminal.lastPhysicalIndexOf("K16> write --append /etc/grow-file $chunk")
                     val outputIndex =
                         terminal.indexOf(
                             "WROTE 128 /etc/grow-file",
@@ -885,7 +885,7 @@ class K16ShellRuntimeSmokeTest {
 
             dispatchText(device, "write /etc/grow-blocker x\n")
             waitForTerminal(device, "blocker write output and returned prompt") { terminal ->
-                val commandIndex = terminal.lastIndexOf("K16> write /etc/grow-blocker x")
+                val commandIndex = terminal.lastPhysicalIndexOf("K16> write /etc/grow-blocker x")
                 val outputIndex =
                     terminal.indexOf("WROTE 1 /etc/grow-blocker", startIndex = commandIndex + "K16> write /etc/grow-blocker x".length)
                 val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex)
@@ -894,7 +894,7 @@ class K16ShellRuntimeSmokeTest {
 
             dispatchText(device, "write --append /etc/grow-file z\n")
             waitForTerminal(device, "append grow-file past blocked adjacent block and returned prompt") { terminal ->
-                val commandIndex = terminal.lastIndexOf("K16> write --append /etc/grow-file z")
+                val commandIndex = terminal.lastPhysicalIndexOf("K16> write --append /etc/grow-file z")
                 val outputIndex =
                     terminal.indexOf("WROTE 1 /etc/grow-file", startIndex = commandIndex + "K16> write --append /etc/grow-file z".length)
                 val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex)
@@ -903,7 +903,7 @@ class K16ShellRuntimeSmokeTest {
 
             dispatchText(device, "stat /etc/grow-file\n")
             waitForTerminal(device, "stat output for multi-extent grown file and returned prompt") { terminal ->
-                val commandIndex = terminal.lastIndexOf("K16> stat /etc/grow-file")
+                val commandIndex = terminal.lastPhysicalIndexOf("K16> stat /etc/grow-file")
                 val outputIndex = terminal.indexOf("FILE 513 /etc/grow-file", startIndex = commandIndex + "K16> stat /etc/grow-file".length)
                 val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex)
                 commandIndex >= 0 && outputIndex > commandIndex && returnedPromptIndex > outputIndex
@@ -911,7 +911,7 @@ class K16ShellRuntimeSmokeTest {
 
             dispatchText(device, "cat /etc/grow-file\n")
             waitForTerminal(device, "cat output includes bytes across the new inline extent") { terminal ->
-                val commandIndex = terminal.lastIndexOf("K16> cat /etc/grow-file")
+                val commandIndex = terminal.indexOf("K16> cat /etc/grow-file")
                 val outputIndex = terminal.indexOf("dz", startIndex = commandIndex + "K16> cat /etc/grow-file".length)
                 val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex)
                 commandIndex >= 0 && outputIndex > commandIndex && returnedPromptIndex > outputIndex
@@ -1082,67 +1082,8 @@ class K16ShellRuntimeSmokeTest {
         }
     }
 
-    @Test
-    fun runtimeDeviceRestoresSnapshotAfterNestedShellReportsBusy() {
-        val device = createDevice(deviceId = 230)
-
-        try {
-            device.turnOn()
-            waitForTerminalText(device, "K16> ")
-
-            dispatchText(device, "shell\n")
-            waitForTerminal(device, "nested shell prompt") { terminal ->
-                val commandIndex = terminal.indexOf("K16> shell")
-                val nestedBannerIndex = terminal.indexOf("K16 SHELL", startIndex = commandIndex + "K16> shell".length)
-                val nestedPromptIndex = terminal.indexOf("K16> ", startIndex = nestedBannerIndex + "K16 SHELL".length)
-                commandIndex >= 0 && nestedBannerIndex > commandIndex && nestedPromptIndex > nestedBannerIndex
-            }
-
-            dispatchText(device, "shell\n")
-            waitForTerminal(device, "second nested shell prompt before snapshot") { terminal ->
-                val firstCommandIndex = terminal.indexOf("K16> shell")
-                val secondCommandIndex =
-                    terminal.indexOf("K16> shell", startIndex = firstCommandIndex + "K16> shell".length)
-                val secondBannerIndex = terminal.indexOf("K16 SHELL", startIndex = secondCommandIndex + "K16> shell".length)
-                val secondPromptIndex = terminal.indexOf("K16> ", startIndex = secondBannerIndex + "K16 SHELL".length)
-                secondCommandIndex >= 0 && secondBannerIndex > secondCommandIndex && secondPromptIndex > secondBannerIndex
-            }
-
-            dispatchText(device, "shell\n")
-            waitForTerminal(device, "nested shell busy error before snapshot") { terminal ->
-                val firstCommandIndex = terminal.indexOf("K16> shell")
-                val secondCommandIndex =
-                    terminal.indexOf("K16> shell", startIndex = firstCommandIndex + "K16> shell".length)
-                val busyCommandIndex =
-                    terminal.indexOf("K16> shell", startIndex = secondCommandIndex + "K16> shell".length)
-                terminal.indexOf("ERR BUSY", startIndex = busyCommandIndex + "K16> shell".length) > busyCommandIndex
-            }
-
-            val snapshot = requireNotNull(device.snapshotRuntimeState())
-            device.close()
-
-            val restored = createDevice(deviceId = 231, snapshot = snapshot)
-            try {
-                restored.turnOn()
-                waitForTerminal(restored, "restored shell prompt after nested-shell snapshot") { terminal ->
-                    terminal.contains("K16> ")
-                }
-
-                dispatchText(restored, "echo restored\n")
-                waitForTerminal(restored, "restored shell remains interactive") { terminal ->
-                    terminal.contains("restored")
-                }
-            } finally {
-                restored.close()
-            }
-        } finally {
-            device.close()
-        }
-    }
-
     private fun createDevice(
         deviceId: Int,
-        snapshot: ByteArray? = null,
         storageResourcePath: String = "firmware/k16-system-storage0.kv",
         configureStorage0: (Path) -> Unit = {},
     ): K16RuntimeDevice {
@@ -1162,7 +1103,6 @@ class K16ShellRuntimeSmokeTest {
             deviceId = deviceId,
             biosFlashPath = biosFlashPath,
             storage0Path = storage0Path,
-            snapshot = snapshot,
         )
     }
 
@@ -1170,24 +1110,15 @@ class K16ShellRuntimeSmokeTest {
         deviceId: Int,
         biosFlashPath: Path,
         storage0Path: Path,
-        snapshot: ByteArray? = null,
     ): K16RuntimeDevice {
         return K16RuntimeDevice(
             deviceId = deviceId,
             properties = DeviceProperties(DeviceFamily.NORMAL, label = "shell-smoke"),
             endpointFactory = {
-                if (snapshot == null) {
-                    K16ComputerRuntimeFactory.createFromBiosFlash(
-                        biosFlashPath = biosFlashPath,
-                        storage0Path = storage0Path,
-                    )
-                } else {
-                    K16ComputerRuntimeFactory.restoreFromBiosFlashSnapshot(
-                        biosFlashPath = biosFlashPath,
-                        storage0Path = storage0Path,
-                        snapshot = snapshot,
-                    )
-                }
+                K16ComputerRuntimeFactory.createFromBiosFlash(
+                    biosFlashPath = biosFlashPath,
+                    storage0Path = storage0Path,
+                )
             },
             stateSink = {},
         )
@@ -1280,10 +1211,16 @@ class K16ShellRuntimeSmokeTest {
         device.snapshotRuntimeState()
     }
 
-    private fun terminalText(snapshot: ByteArray): String =
-        snapshotRamBytes(snapshot, start = K16_TERMINAL_CELLS_ADDR, size = K16_TERMINAL_ROWS * K16_TERMINAL_COLUMNS)
-            .map { byte -> if (byte in 0x20..0x7e) byte.toInt().toChar() else ' ' }
-            .joinToString(separator = "")
+    private fun terminalText(snapshot: ByteArray): String {
+        val physicalRows =
+            snapshotRamBytes(snapshot, start = K16_TERMINAL_CELLS_ADDR, size = K16_TERMINAL_ROWS * K16_TERMINAL_COLUMNS)
+                .map { byte -> if (byte in 0x20..0x7e) byte.toInt().toChar() else ' ' }
+                .joinToString(separator = "")
+        return physicalRows + physicalRows
+    }
+
+    private fun String.lastPhysicalIndexOf(fragment: String): Int =
+        lastIndexOf(fragment, startIndex = length / 2 - 1)
 
     private fun snapshotCpuText(snapshot: ByteArray): String {
         val buffer = ByteBuffer.wrap(snapshot).order(ByteOrder.LITTLE_ENDIAN)

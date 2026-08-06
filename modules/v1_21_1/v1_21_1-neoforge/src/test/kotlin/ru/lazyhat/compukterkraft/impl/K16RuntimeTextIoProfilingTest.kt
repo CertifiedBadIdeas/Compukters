@@ -22,6 +22,9 @@ package ru.lazyhat.compukterkraft.impl
 import ru.lazyhat.compukterkraft.core.block.DeviceFamily
 import ru.lazyhat.compukterkraft.core.device.DeviceEvents
 import ru.lazyhat.compukterkraft.core.device.DeviceProperties
+import ru.lazyhat.compukterkraft.core.device.display.retained.RetainedDisplayApplyResult
+import ru.lazyhat.compukterkraft.core.device.display.retained.RetainedDisplayInstallDamage
+import ru.lazyhat.compukterkraft.core.device.display.retained.RetainedDisplayReplica
 import ru.lazyhat.compukterkraft.core.device.input.KeyInputEvent
 import ru.lazyhat.compukterkraft.core.device.input.PasteInputEvent
 import ru.lazyhat.compukterkraft.core.device.runtime.K16RuntimeDevice
@@ -36,11 +39,8 @@ import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeProfilingSnapshot
 import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeVmMetrics
 import ru.lazyhat.compukterkraft.core.device.runtime.ports.DisplayNetworkBridge
 import ru.lazyhat.compukterkraft.core.device.vm.DeviceProfileRegistry
-import ru.lazyhat.compukterkraft.core.device.vm.display.NativeDisplayFrameCodec
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16BiosFlashWorkspace
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16ComputerRuntimeFactory
-import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
-import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameOperation
 import ru.lazyhat.compukterkraft.lang.runtime.storage.K16SystemVolumeWorkspace
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -50,6 +50,7 @@ import kotlin.io.path.createTempDirectory
 import kotlin.io.path.writeBytes
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class K16RuntimeTextIoProfilingTest {
@@ -62,12 +63,8 @@ class K16RuntimeTextIoProfilingTest {
                         k16RunSlices = 1,
                         k16RunNanos = 10,
                         k16RunWaitSignals = 1,
-                        k16GpuFrameBytes = 100,
-                        k16DisplayFramesSent = 2,
-                        k16DisplayTilesSent = 3,
-                        k16DisplayPayloadBytesSent = 64,
-                        k16DisplayMonoPayloadBytesSent = 10,
-                        k16DisplayOperationsSent = 4,
+                        k16RetainedPayloadsSent = 2,
+                        k16RetainedPayloadBytesSent = 64,
                         k16TextInputBytes = 2,
                     ),
                 k16 =
@@ -133,9 +130,14 @@ class K16RuntimeTextIoProfilingTest {
                                         ),
                                     gpu =
                                         RuntimeK16GpuMetrics(
-                                            frames = 4,
-                                            framePayloadBytes = 128,
-                                            frameMonoPayloadBytes = 16,
+                                            committedSubmissions = 4,
+                                            submittedBytes = 128,
+                                            resourceCount = 2,
+                                            authoritativePayloadBytes = 100,
+                                            viewerCount = 1,
+                                            snapshotPayloads = 1,
+                                            deltaPayloads = 2,
+                                            networkPayloadBytes = 90,
                                         ),
                                 ),
                             ),
@@ -148,12 +150,8 @@ class K16RuntimeTextIoProfilingTest {
                         k16RunSlices = 6,
                         k16RunNanos = 60,
                         k16RunWaitSignals = 2,
-                        k16GpuFrameBytes = 180,
-                        k16DisplayFramesSent = 5,
-                        k16DisplayTilesSent = 8,
-                        k16DisplayPayloadBytesSent = 160,
-                        k16DisplayMonoPayloadBytesSent = 30,
-                        k16DisplayOperationsSent = 11,
+                        k16RetainedPayloadsSent = 5,
+                        k16RetainedPayloadBytesSent = 160,
                         k16TextInputBytes = 7,
                     ),
                 k16 =
@@ -219,9 +217,14 @@ class K16RuntimeTextIoProfilingTest {
                                         ),
                                     gpu =
                                         RuntimeK16GpuMetrics(
-                                            frames = 9,
-                                            framePayloadBytes = 384,
-                                            frameMonoPayloadBytes = 48,
+                                            committedSubmissions = 9,
+                                            submittedBytes = 384,
+                                            resourceCount = 2,
+                                            authoritativePayloadBytes = 100,
+                                            viewerCount = 1,
+                                            snapshotPayloads = 1,
+                                            deltaPayloads = 7,
+                                            networkPayloadBytes = 300,
                                         ),
                                 ),
                             ),
@@ -235,15 +238,12 @@ class K16RuntimeTextIoProfilingTest {
         assertTrue(line.contains("runTime=50 ns"))
         assertTrue(line.contains("waitSignals=1"))
         assertTrue(line.contains("inputBytes=5"))
-        assertTrue(line.contains("gpuFrameBytes=80"))
-        assertTrue(line.contains("displayFrames=5"))
-        assertTrue(line.contains("displayTileBytes=256"))
-        assertTrue(line.contains("displayMonoBytes=32"))
-        assertTrue(line.contains("sentDisplayFrames=3"))
-        assertTrue(line.contains("sentDisplayTiles=5"))
-        assertTrue(line.contains("sentDisplayTileBytes=96"))
-        assertTrue(line.contains("sentDisplayMonoBytes=20"))
-        assertTrue(line.contains("sentDisplayOperations=7"))
+        assertTrue(line.contains("gpuSubmissions=5"))
+        assertTrue(line.contains("gpuSubmittedBytes=256"))
+        assertTrue(line.contains("gpuDeltas=5"))
+        assertTrue(line.contains("gpuNetworkBytes=210"))
+        assertTrue(line.contains("sentRetainedPayloads=3"))
+        assertTrue(line.contains("sentRetainedPayloadBytes=96"))
         assertTrue(line.contains("storageReadCommands=2"))
         assertTrue(line.contains("storageRequestedReadBlocks=10"))
         assertTrue(line.contains("storageRequestedReadBytes=5120"))
@@ -598,13 +598,12 @@ class K16RuntimeTextIoProfilingTest {
             assertTrue(snapshot.vm.k16TextInputNanos >= 0)
             assertTrue(snapshot.vm.k16SerialOutputSnapshots > 0)
             assertTrue(snapshot.vm.k16SerialOutputSnapshotBytes > 0)
-            assertTrue(snapshot.k16.gpu.blitMonoCommands > 0)
-            assertTrue(snapshot.k16.gpu.blitMonoSourceBytes > 0)
-            assertTrue(snapshot.k16.gpu.presentCommands > 0)
-            assertTrue(snapshot.k16.gpu.frames > 0)
-            assertTrue(snapshot.k16.gpu.frameMonoPayloadBytes > 0)
+            assertTrue(snapshot.k16.gpu.committedSubmissions > 0)
+            assertTrue(snapshot.k16.gpu.submittedBytes > 0)
+            assertTrue(snapshot.k16.gpu.resourceCount > 0)
+            assertTrue(snapshot.k16.gpu.authoritativePayloadBytes > 0)
             assertTrue(summary.contains("k16TextOutput: snapshots="))
-            assertTrue(summary.contains("k16Gpu: rawBlits="))
+            assertTrue(summary.contains("k16Gpu: submissions="))
             assertTrue(summary.contains("k16TextInput: events="))
             assertTrue(splashVisiblePhase.contains("name=bios.splash.visible"))
             assertTrue(splashWaitPhase.contains("name=bios.splash.wait"))
@@ -684,7 +683,6 @@ class K16RuntimeTextIoProfilingTest {
         val metrics = RecordingRuntimeMetricsCollector()
         val displayNetwork = CapturingDisplayNetworkBridge()
         val playerUuid = UUID.fromString("00000000-0000-0000-0000-000000000226")
-        val containerId = 226
         val device =
             K16RuntimeDevice(
                 deviceId = 226,
@@ -705,15 +703,9 @@ class K16RuntimeTextIoProfilingTest {
         try {
             device.turnOn()
             waitForTerminal(device, "initial shell prompt") { terminal -> terminal.contains("K16> ") }
-            device.attachDisplaySession(
-                playerUuid = playerUuid,
-                containerId = containerId,
-                displayId = K16_DISPLAY_ID,
-                width = K16_DISPLAY_WIDTH,
-                height = K16_DISPLAY_HEIGHT,
-            )
-            tickAndSync(device)
-            displayNetwork.clear()
+            val display = RetainedDisplayProbe(device, playerUuid, displayNetwork)
+            display.attach()
+            val payloadBaseline = displayNetwork.payloadCount()
             val before = metrics.snapshot()
             val burst = "abcdef"
             val startedAt = System.nanoTime()
@@ -723,9 +715,9 @@ class K16RuntimeTextIoProfilingTest {
             val inputQueuedNanos = System.nanoTime() - startedAt
             var ticks = 0
             var visibleNanos: Long? = null
-            var framesSentNanos: Long? = null
+            var payloadSentNanos: Long? = null
 
-            while (ticks < 80 && (visibleNanos == null || framesSentNanos == null)) {
+            while (ticks < 80 && (visibleNanos == null || payloadSentNanos == null)) {
                 ticks += 1
                 tickAndSync(device)
                 val elapsed = System.nanoTime() - startedAt
@@ -733,19 +725,18 @@ class K16RuntimeTextIoProfilingTest {
                 if (visibleNanos == null && terminal.contains("K16> $burst")) {
                     visibleNanos = elapsed
                 }
-                if (framesSentNanos == null && displayNetwork.sentFrames().isNotEmpty()) {
-                    framesSentNanos = elapsed
+                display.installAvailable()
+                if (payloadSentNanos == null && displayNetwork.payloadCount() > payloadBaseline) {
+                    payloadSentNanos = elapsed
                 }
                 Thread.sleep(1)
             }
 
             val after = metrics.snapshot()
-            val sentFrames = displayNetwork.sentFrames()
-            val gpuBefore = before.k16.gpu
-            val gpuAfter = after.k16.gpu
+            val sentPayloads = displayNetwork.payloadsFrom(payloadBaseline)
             println(
                 "k16KeyBurst: chars=${burst.length}, inputQueued=$inputQueuedNanos ns, " +
-                    "visible=${visibleNanos ?: -1} ns, framesSent=${framesSentNanos ?: -1} ns, ticks=$ticks",
+                    "visible=${visibleNanos ?: -1} ns, payloadSent=${payloadSentNanos ?: -1} ns, ticks=$ticks",
             )
             println(
                 "k16KeyBurstVm: slices=${after.vm.k16RunSlices - before.vm.k16RunSlices}, " +
@@ -755,20 +746,14 @@ class K16RuntimeTextIoProfilingTest {
                     "inputWakeups=${after.vm.k16WaitInputWakeups - before.vm.k16WaitInputWakeups}",
             )
             println(
-                "k16KeyBurstGpu: monoBlits=${gpuAfter.blitMonoCommands - gpuBefore.blitMonoCommands}, " +
-                    "presents=${gpuAfter.presentCommands - gpuBefore.presentCommands}, " +
-                    "frames=${gpuAfter.frames - gpuBefore.frames}, " +
-                    "tiles=${gpuAfter.frameTiles - gpuBefore.frameTiles}, " +
-                    "tilePayloadBytes=${gpuAfter.framePayloadBytes - gpuBefore.framePayloadBytes}, " +
-                    "monoPayloadBytes=${gpuAfter.frameMonoPayloadBytes - gpuBefore.frameMonoPayloadBytes}, " +
-                    "sentFrames=${sentFrames.size}, sentTiles=${sentFrames.sumOf { it.frame.tiles.size }}, " +
-                    "sentTilePayloadBytes=${sentFrames.sumOf { frame -> frame.frame.tiles.sumOf { it.payload.size } }}, " +
-                    "sentMonoPayloadBytes=${sentFrames.sumOf { timed -> timed.frame.operations.sumOf(::monoPayloadBytes) }}",
+                "k16KeyBurstRetained: payloads=${sentPayloads.size}, " +
+                    "payloadBytes=${sentPayloads.sumOf { it.payload.size }}, " +
+                    "fullReplacements=${display.fullReplacementCount}, deltas=${display.deltaCount}",
             )
 
             assertTrue(visibleNanos != null, "Burst did not become visible in terminal snapshot")
-            assertTrue(framesSentNanos != null, "Burst did not produce a sent display frame")
-            assertTrue(sentFrames.isNotEmpty())
+            assertTrue(payloadSentNanos != null, "Burst did not produce a retained display payload")
+            assertTrue(sentPayloads.isNotEmpty())
         } finally {
             device.close()
         }
@@ -785,7 +770,6 @@ class K16RuntimeTextIoProfilingTest {
         val metrics = RecordingRuntimeMetricsCollector()
         val displayNetwork = CapturingDisplayNetworkBridge()
         val playerUuid = UUID.fromString("00000000-0000-0000-0000-000000000227")
-        val containerId = 227
         val device =
             K16RuntimeDevice(
                 deviceId = 227,
@@ -806,16 +790,11 @@ class K16RuntimeTextIoProfilingTest {
         try {
             device.turnOn()
             waitForTerminal(device, "initial shell prompt") { terminal -> terminal.contains("K16> ") }
-            device.attachDisplaySession(
-                playerUuid = playerUuid,
-                containerId = containerId,
-                displayId = K16_DISPLAY_ID,
-                width = K16_DISPLAY_WIDTH,
-                height = K16_DISPLAY_HEIGHT,
-            )
-            tickAndSync(device)
+            val display = RetainedDisplayProbe(device, playerUuid, displayNetwork)
+            display.attach()
             fillTerminalUntilPromptIsNearBottom(device)
-            displayNetwork.clear()
+            display.installAvailable()
+            val payloadBaseline = displayNetwork.payloadCount()
             val before = metrics.snapshot()
             val command = "yes -n 48 ${"T".repeat(32)}"
             val startedAt = System.nanoTime()
@@ -826,12 +805,11 @@ class K16RuntimeTextIoProfilingTest {
             while (ticks < 240 && visibleNanos == null) {
                 ticks += 1
                 tickAndSync(device)
+                display.installAvailable()
                 val elapsed = System.nanoTime() - startedAt
                 val terminal = device.snapshotRuntimeState()?.let(::terminalText) ?: ""
-                val lastOutputIndex = terminal.lastIndexOf("T".repeat(32))
                 val promptReturned =
-                    lastOutputIndex >= 0 &&
-                        terminal.indexOf("K16> ", startIndex = lastOutputIndex + 32) > lastOutputIndex
+                    countOccurrences(terminal, "T".repeat(32)) >= 8 && terminal.contains("K16> ")
                 if (promptReturned) {
                     visibleNanos = elapsed
                 }
@@ -840,49 +818,26 @@ class K16RuntimeTextIoProfilingTest {
 
             val visible =
                 visibleNanos
-                    ?: error("attached display transport command did not finish and return to the prompt")
+                    ?: error(
+                        "attached display transport command did not finish and return to the prompt; terminal=" +
+                            (device.snapshotRuntimeState()?.let(::terminalText) ?: "<no snapshot>"),
+                    )
             val after = metrics.snapshot()
-            val nativeBatches = displayNetwork.nativeBatches()
-            val sentFrames = displayNetwork.sentFrames()
-            val decodedFallbackFrames = displayNetwork.decodedFallbackFrames()
-            val nativeFrameCount = nativeBatches.sumOf { it.frameCount }
-            val nativeBytes = nativeBatches.sumOf { it.payloadBytes }
-            val nativeTilePayloadBytes = nativeBatches.sumOf { it.tilePayloadBytes }
-            val nativeMonoPayloadBytes = nativeBatches.sumOf { it.monoPayloadBytes }
-            val clientTiles = sentFrames.sumOf { it.frame.tiles.size }
-            val clientTilePayloadBytes = sentFrames.sumOf { frame -> frame.frame.tiles.sumOf { it.payload.size } }
-            val clientMonoPayloadBytes = sentFrames.sumOf { timed -> timed.frame.operations.sumOf(::monoPayloadBytes) }
-            val clientOperations = sentFrames.sumOf { it.frame.operations.size }
-            val testDecodeNanos = nativeBatches.sumOf { it.decodeNanos }
+            val sentPayloads = displayNetwork.payloadsFrom(payloadBaseline)
+            val payloadBytes = sentPayloads.sumOf { it.payload.size }
             val vmBefore = before.vm
             val vmAfter = after.vm
             println(
                 "k16DisplayTransport: command=$command, visible=$visible ns, ticks=$ticks, " +
-                    "nativeBatches=${nativeBatches.size}, nativeBytes=$nativeBytes, " +
-                    "nativeFrames=$nativeFrameCount, nativeTilePayloadBytes=$nativeTilePayloadBytes, " +
-                    "nativeMonoPayloadBytes=$nativeMonoPayloadBytes, clientFrames=${sentFrames.size}, " +
-                    "serverDecodedFallbackFrames=${decodedFallbackFrames.size}, " +
-                    "clientTiles=$clientTiles, clientTilePayloadBytes=$clientTilePayloadBytes, " +
-                    "clientMonoPayloadBytes=$clientMonoPayloadBytes, " +
-                    "clientOperations=$clientOperations, testDecodeNanos=$testDecodeNanos, " +
-                    "sentFrames=${vmAfter.k16DisplayFramesSent - vmBefore.k16DisplayFramesSent}, " +
-                    "sentTiles=${vmAfter.k16DisplayTilesSent - vmBefore.k16DisplayTilesSent}, " +
-                    "sentTilePayloadBytes=${vmAfter.k16DisplayPayloadBytesSent - vmBefore.k16DisplayPayloadBytesSent}, " +
-                    "sentMonoPayloadBytes=" +
-                    "${vmAfter.k16DisplayMonoPayloadBytesSent - vmBefore.k16DisplayMonoPayloadBytesSent}, " +
-                    "sentOperations=${vmAfter.k16DisplayOperationsSent - vmBefore.k16DisplayOperationsSent}",
+                    "payloads=${sentPayloads.size}, payloadBytes=$payloadBytes, " +
+                    "fullReplacements=${display.fullReplacementCount}, deltas=${display.deltaCount}, " +
+                    "runSlices=${vmAfter.k16RunSlices - vmBefore.k16RunSlices}, " +
+                    "runTime=${vmAfter.k16RunNanos - vmBefore.k16RunNanos} ns",
             )
 
-            assertTrue(nativeBatches.isNotEmpty(), "attached display transport should send native display batches")
-            assertTrue(nativeBytes > 0, "attached display transport should report native payload bytes")
-            assertTrue(nativeFrameCount > 0, "attached display transport should carry at least one native frame")
-            assertTrue(sentFrames.isNotEmpty(), "test-side client decode should observe display frames")
-            assertEquals(emptyList(), decodedFallbackFrames, "runtime should not decode native display batches before sending")
-            assertTrue(testDecodeNanos >= 0, "test-side native decode timing should be non-negative")
-            assertTrue(
-                vmAfter.k16DisplayFramesSent > vmBefore.k16DisplayFramesSent,
-                "runtime metrics should report sent display frames",
-            )
+            assertTrue(sentPayloads.isNotEmpty(), "attached display transport should send retained deltas")
+            assertTrue(payloadBytes > 0, "attached display transport should report retained payload bytes")
+            assertTrue(display.deltaCount > 0, "client replica should install at least one retained delta")
         } finally {
             device.close()
         }
@@ -981,12 +936,9 @@ class K16RuntimeTextIoProfilingTest {
                     "bytesWritten=${storageAfter.bytesWritten - storageBefore.bytesWritten}",
             )
             println(
-                "k16LsCommandGpu: monoBlits=${gpuAfter.blitMonoCommands - gpuBefore.blitMonoCommands}, " +
-                    "presents=${gpuAfter.presentCommands - gpuBefore.presentCommands}, " +
-                    "frames=${gpuAfter.frames - gpuBefore.frames}, " +
-                    "tiles=${gpuAfter.frameTiles - gpuBefore.frameTiles}, " +
-                    "tilePayloadBytes=${gpuAfter.framePayloadBytes - gpuBefore.framePayloadBytes}, " +
-                    "monoPayloadBytes=${gpuAfter.frameMonoPayloadBytes - gpuBefore.frameMonoPayloadBytes}",
+                "k16LsCommandGpu: submissions=${gpuAfter.committedSubmissions - gpuBefore.committedSubmissions}, " +
+                    "submittedBytes=${gpuAfter.submittedBytes - gpuBefore.submittedBytes}, " +
+                    "resources=${gpuAfter.resourceCount}, authoritativeBytes=${gpuAfter.authoritativePayloadBytes}",
             )
 
             assertTrue(visibleNanos != null, "ls /bin did not finish and return to the prompt")
@@ -1069,9 +1021,7 @@ class K16RuntimeTextIoProfilingTest {
             val storageBefore = before.k16.storage0
             val storageAfter = after.k16.storage0
             val storageReadCommands = storageAfter.readCommands - storageBefore.readCommands
-            val scrollDisplayBytes =
-                (gpuAfter.framePayloadBytes - gpuBefore.framePayloadBytes) +
-                    (gpuAfter.frameMonoPayloadBytes - gpuBefore.frameMonoPayloadBytes)
+            val scrollSubmittedBytes = gpuAfter.submittedBytes - gpuBefore.submittedBytes
             println(
                 "k16LsScrollCommand: command=ls /bin, inputQueued=$inputQueuedNanos ns, " +
                     "visible=${visibleNanos ?: -1} ns, ticks=$ticks",
@@ -1094,19 +1044,16 @@ class K16RuntimeTextIoProfilingTest {
                     "bytesWritten=${storageAfter.bytesWritten - storageBefore.bytesWritten}",
             )
             println(
-                "k16LsScrollCommandGpu: monoBlits=${gpuAfter.blitMonoCommands - gpuBefore.blitMonoCommands}, " +
-                    "presents=${gpuAfter.presentCommands - gpuBefore.presentCommands}, " +
-                    "frames=${gpuAfter.frames - gpuBefore.frames}, " +
-                    "tiles=${gpuAfter.frameTiles - gpuBefore.frameTiles}, " +
-                    "tilePayloadBytes=${gpuAfter.framePayloadBytes - gpuBefore.framePayloadBytes}, " +
-                    "monoPayloadBytes=${gpuAfter.frameMonoPayloadBytes - gpuBefore.frameMonoPayloadBytes}, " +
-                    "displayBytes=$scrollDisplayBytes",
+                "k16LsScrollCommandGpu: submissions=" +
+                    "${gpuAfter.committedSubmissions - gpuBefore.committedSubmissions}, " +
+                    "submittedBytes=$scrollSubmittedBytes, resources=${gpuAfter.resourceCount}, " +
+                    "authoritativeBytes=${gpuAfter.authoritativePayloadBytes}",
             )
 
             assertTrue(visibleNanos != null, "scroll-positioned ls /bin did not finish and return to the prompt")
             assertTrue(
-                scrollDisplayBytes < 100_000,
-                "scroll-positioned ls /bin should use display ops instead of serializing full-screen tile payloads",
+                scrollSubmittedBytes < 100_000,
+                "scroll-positioned ls /bin should keep retained submissions bounded",
             )
             assertTrue(storageReadCommands < 60, "scroll-positioned ls /bin should keep storage0 transfer commands bounded")
             assertTrue(inputPhase.contains("name=ls:/bin:scroll.input"))
@@ -1150,10 +1097,12 @@ class K16RuntimeTextIoProfilingTest {
             )
 
         try {
-            device.attachDisplaySession(playerUuid, containerId = 229, displayId = 1, width = 320, height = 200)
             device.turnOn()
             waitForTerminal(device, "initial shell prompt") { terminal -> terminal.contains("K16> ") }
+            val display = RetainedDisplayProbe(device, playerUuid, displayNetwork)
+            display.attach()
             fillTerminalUntilPromptIsNearBottom(device)
+            display.installAvailable()
             val samples =
                 listOf(
                     ProfiledYesLineWidth(width = 1, payload = "A"),
@@ -1167,6 +1116,7 @@ class K16RuntimeTextIoProfilingTest {
                     runProfiledYesLineWidthCommand(
                         device = device,
                         metrics = metrics,
+                        display = display,
                         sample = sample,
                         lines = 128,
                     )
@@ -1177,30 +1127,17 @@ class K16RuntimeTextIoProfilingTest {
                         "ticks=${result.ticks}, slices=${result.slices}, runTime=${result.runNanos} ns, " +
                         "yieldSignals=${result.yieldSignals}, waitSignals=${result.waitSignals}, " +
                         "pauseSignals=${result.pauseSignals}, inputWakeups=${result.inputWakeups}, " +
-                        "monoBlits=${result.monoBlitCommands}, presents=${result.presentCommands}, " +
-                        "frames=${result.frames}, tiles=${result.frameTiles}, " +
-                        "tilePayloadBytes=${result.tilePayloadBytes}, monoPayloadBytes=${result.monoPayloadBytes}, " +
-                        "sentFrames=${result.sentFrames}, sentTiles=${result.sentTiles}, " +
-                        "sentTilePayloadBytes=${result.sentTilePayloadBytes}, " +
-                        "sentMonoPayloadBytes=${result.sentMonoPayloadBytes}",
+                        "retainedPayloads=${result.retainedPayloads}, " +
+                        "retainedPayloadBytes=${result.retainedPayloadBytes}, " +
+                        "retainedDeltas=${result.retainedDeltas}",
                 )
                 assertTrue(
-                    result.monoBlitCommands > 0,
-                    "yes ${sample.width}-char lines should exercise terminal GPU mono blits",
+                    result.retainedDeltas > 0,
+                    "yes ${sample.width}-char lines should update the retained terminal state",
                 )
                 assertTrue(
-                    result.presentCommands > 0,
-                    "yes ${sample.width}-char lines should exercise terminal GPU presents",
-                )
-                assertTrue(
-                    result.monoBlitCommands <= result.lines * 4L,
-                    "yes ${sample.width}-char lines should batch terminal glyph blits by printable runs; " +
-                        "monoBlits=${result.monoBlitCommands}, lines=${result.lines}",
-                )
-                assertTrue(result.sentFrames > 0, "yes ${sample.width}-char lines should report sent display frames")
-                assertTrue(
-                    result.sentMonoPayloadBytes > 0,
-                    "yes ${sample.width}-char lines should report sent mono display bytes",
+                    result.retainedPayloadBytes > 0,
+                    "yes ${sample.width}-char lines should send retained payload bytes",
                 )
             }
         } finally {
@@ -1373,7 +1310,11 @@ class K16RuntimeTextIoProfilingTest {
             ticks += 1
             tickAndSync(device)
             val terminal = device.snapshotRuntimeState()?.let(::terminalText) ?: ""
-            visible = terminalContainsCommandResult(terminal, command.command, command.expectedText)
+            val current = metrics.snapshot()
+            visible =
+                current.vm.k16RunWaitSignals > before.vm.k16RunWaitSignals &&
+                terminal.contains(command.expectedText) &&
+                terminal.contains("K16> ")
             Thread.sleep(1)
         }
         assertTrue(visible, "coreutils command did not finish: ${command.command}")
@@ -1382,23 +1323,6 @@ class K16RuntimeTextIoProfilingTest {
         println(line)
         samples += K16ProfiledCommandSample(command.name, before, after)
         return line
-    }
-
-    private fun terminalContainsCommandResult(
-        terminal: String,
-        command: String,
-        expectedText: String,
-    ): Boolean {
-        val commandIndex = terminal.lastIndexOf("K16> $command")
-        if (commandIndex < 0) {
-            return false
-        }
-        val outputIndex = terminal.indexOf(expectedText, startIndex = commandIndex + command.length)
-        if (outputIndex < 0) {
-            return false
-        }
-        val promptIndex = terminal.indexOf("K16> ", startIndex = outputIndex + expectedText.length)
-        return promptIndex > outputIndex
     }
 
     private fun countOccurrences(
@@ -1417,10 +1341,13 @@ class K16RuntimeTextIoProfilingTest {
     private fun runProfiledYesLineWidthCommand(
         device: K16RuntimeDevice,
         metrics: RecordingRuntimeMetricsCollector,
+        display: RetainedDisplayProbe,
         sample: ProfiledYesLineWidth,
         lines: Int,
     ): ProfiledYesLineWidthResult {
         val before = metrics.snapshot()
+        val payloadBaseline = display.network.payloadCount()
+        val deltaBaseline = display.deltaCount
         val command = "yes -n $lines ${sample.payload}"
         val startedAt = System.nanoTime()
         DeviceEvents.dispatch(device, PasteInputEvent(ByteBuffer.wrap("$command\n".encodeToByteArray())))
@@ -1431,13 +1358,11 @@ class K16RuntimeTextIoProfilingTest {
         while (ticks < 520 && visibleNanos == null) {
             ticks += 1
             tickAndSync(device)
+            display.installAvailable()
             val elapsed = System.nanoTime() - startedAt
             val terminal = device.snapshotRuntimeState()?.let(::terminalText) ?: ""
             val repeatedOutputVisible = countOccurrences(terminal, sample.payload) >= 8
-            val lastOutputIndex = terminal.lastIndexOf(sample.payload)
-            val promptReturned =
-                lastOutputIndex >= 0 &&
-                    terminal.indexOf("K16> ", startIndex = lastOutputIndex + sample.payload.length) > lastOutputIndex
+            val promptReturned = terminal.contains("K16> ")
             if (repeatedOutputVisible && promptReturned) {
                 visibleNanos = elapsed
             }
@@ -1446,10 +1371,12 @@ class K16RuntimeTextIoProfilingTest {
 
         val visible =
             visibleNanos
-                ?: error("yes ${sample.width}-char mass text output did not finish and return to the prompt")
+                ?: error(
+                    "yes ${sample.width}-char mass text output did not finish and return to the prompt; terminal=" +
+                        (device.snapshotRuntimeState()?.let(::terminalText) ?: "<no snapshot>"),
+                )
         val after = metrics.snapshot()
-        val gpuBefore = before.k16.gpu
-        val gpuAfter = after.k16.gpu
+        val retainedPayloads = display.network.payloadsFrom(payloadBaseline)
         return ProfiledYesLineWidthResult(
             command = command,
             lines = lines,
@@ -1462,17 +1389,9 @@ class K16RuntimeTextIoProfilingTest {
             waitSignals = after.vm.k16RunWaitSignals - before.vm.k16RunWaitSignals,
             pauseSignals = after.vm.k16RunPauseSignals - before.vm.k16RunPauseSignals,
             inputWakeups = after.vm.k16WaitInputWakeups - before.vm.k16WaitInputWakeups,
-            monoBlitCommands = gpuAfter.blitMonoCommands - gpuBefore.blitMonoCommands,
-            presentCommands = gpuAfter.presentCommands - gpuBefore.presentCommands,
-            frames = gpuAfter.frames - gpuBefore.frames,
-            frameTiles = gpuAfter.frameTiles - gpuBefore.frameTiles,
-            tilePayloadBytes = gpuAfter.framePayloadBytes - gpuBefore.framePayloadBytes,
-            monoPayloadBytes = gpuAfter.frameMonoPayloadBytes - gpuBefore.frameMonoPayloadBytes,
-            sentFrames = after.vm.k16DisplayFramesSent - before.vm.k16DisplayFramesSent,
-            sentTiles = after.vm.k16DisplayTilesSent - before.vm.k16DisplayTilesSent,
-            sentTilePayloadBytes = after.vm.k16DisplayPayloadBytesSent - before.vm.k16DisplayPayloadBytesSent,
-            sentMonoPayloadBytes =
-                after.vm.k16DisplayMonoPayloadBytesSent - before.vm.k16DisplayMonoPayloadBytesSent,
+            retainedPayloads = retainedPayloads.size,
+            retainedPayloadBytes = retainedPayloads.sumOf { it.payload.size },
+            retainedDeltas = display.deltaCount - deltaBaseline,
         )
     }
 
@@ -1505,22 +1424,10 @@ private const val K16_TERMINAL_COLUMNS = 64
 private const val K16_TERMINAL_ROWS = 25
 private const val K16_BIOS_SPLASH_TICKS = 20
 private const val K16_BIOS_SPLASH_WAIT_PROFILE_TICKS = K16_BIOS_SPLASH_TICKS - 1
-private const val K16_DISPLAY_ID = 1
-private const val K16_DISPLAY_WIDTH = 320
-private const val K16_DISPLAY_HEIGHT = 200
 
-private data class TimedDisplayFrame(
+private data class TimedRetainedDisplayPayload(
     val nanos: Long,
-    val frame: DisplayFrameDelta,
-)
-
-private data class TimedNativeDisplayBatch(
-    val nanos: Long,
-    val payloadBytes: Int,
-    val frameCount: Int,
-    val tilePayloadBytes: Int,
-    val monoPayloadBytes: Int,
-    val decodeNanos: Long,
+    val payload: ByteArray,
 )
 
 private data class ProfiledCoreutilsCommand(
@@ -1546,16 +1453,9 @@ private data class ProfiledYesLineWidthResult(
     val waitSignals: Long,
     val pauseSignals: Long,
     val inputWakeups: Long,
-    val monoBlitCommands: Long,
-    val presentCommands: Long,
-    val frames: Long,
-    val frameTiles: Long,
-    val tilePayloadBytes: Long,
-    val monoPayloadBytes: Long,
-    val sentFrames: Long,
-    val sentTiles: Long,
-    val sentTilePayloadBytes: Long,
-    val sentMonoPayloadBytes: Long,
+    val retainedPayloads: Int,
+    val retainedPayloadBytes: Int,
+    val retainedDeltas: Int,
 )
 
 private data class K16ProfiledCommandSample(
@@ -1628,17 +1528,13 @@ private fun formatK16RuntimePhase(
         "pauseSignals=${vmAfter.k16RunPauseSignals - vmBefore.k16RunPauseSignals}, " +
         "inputWakeups=${vmAfter.k16WaitInputWakeups - vmBefore.k16WaitInputWakeups}, " +
         "inputBytes=${vmAfter.k16TextInputBytes - vmBefore.k16TextInputBytes}, " +
-        "gpuFrameBatches=${vmAfter.k16GpuFrameBatches - vmBefore.k16GpuFrameBatches}, " +
-        "gpuFrameBytes=${vmAfter.k16GpuFrameBytes - vmBefore.k16GpuFrameBytes}, " +
-        "displayFrames=${gpuAfter.frames - gpuBefore.frames}, " +
-        "displayTiles=${gpuAfter.frameTiles - gpuBefore.frameTiles}, " +
-        "displayTileBytes=${gpuAfter.framePayloadBytes - gpuBefore.framePayloadBytes}, " +
-        "displayMonoBytes=${gpuAfter.frameMonoPayloadBytes - gpuBefore.frameMonoPayloadBytes}, " +
-        "sentDisplayFrames=${vmAfter.k16DisplayFramesSent - vmBefore.k16DisplayFramesSent}, " +
-        "sentDisplayTiles=${vmAfter.k16DisplayTilesSent - vmBefore.k16DisplayTilesSent}, " +
-        "sentDisplayTileBytes=${vmAfter.k16DisplayPayloadBytesSent - vmBefore.k16DisplayPayloadBytesSent}, " +
-        "sentDisplayMonoBytes=${vmAfter.k16DisplayMonoPayloadBytesSent - vmBefore.k16DisplayMonoPayloadBytesSent}, " +
-        "sentDisplayOperations=${vmAfter.k16DisplayOperationsSent - vmBefore.k16DisplayOperationsSent}, " +
+        "gpuSubmissions=${gpuAfter.committedSubmissions - gpuBefore.committedSubmissions}, " +
+        "gpuSubmittedBytes=${gpuAfter.submittedBytes - gpuBefore.submittedBytes}, " +
+        "gpuDeltas=${gpuAfter.deltaPayloads - gpuBefore.deltaPayloads}, " +
+        "gpuNetworkBytes=${gpuAfter.networkPayloadBytes - gpuBefore.networkPayloadBytes}, " +
+        "sentRetainedPayloads=${vmAfter.k16RetainedPayloadsSent - vmBefore.k16RetainedPayloadsSent}, " +
+        "sentRetainedPayloadBytes=" +
+        "${vmAfter.k16RetainedPayloadBytesSent - vmBefore.k16RetainedPayloadBytesSent}, " +
         "storageReadCommands=${storageAfter.readCommands - storageBefore.readCommands}, " +
         "storageRequestedReadBlocks=${storageAfter.requestedReadBlocks - storageBefore.requestedReadBlocks}, " +
         "storageRequestedReadBytes=${storageAfter.requestedReadBytes - storageBefore.requestedReadBytes}, " +
@@ -1846,71 +1742,58 @@ private fun metricValue(
     return match.groupValues[1].toLong()
 }
 
-private fun monoPayloadBytes(operation: DisplayFrameOperation): Int =
-    if (operation is DisplayFrameOperation.MonoBlit) operation.packedMask.size else 0
-
 private fun List<String>.singleCommandLine(name: String): String = single { it.contains("name=$name,") }
 
 private class CapturingDisplayNetworkBridge : DisplayNetworkBridge {
-    private val sentFrames = CopyOnWriteArrayList<TimedDisplayFrame>()
-    private val decodedFallbackFrames = CopyOnWriteArrayList<TimedDisplayFrame>()
-    private val nativeBatches = CopyOnWriteArrayList<TimedNativeDisplayBatch>()
+    private val payloads = CopyOnWriteArrayList<TimedRetainedDisplayPayload>()
 
-    override fun isDisplaySessionStillBound(
+    override fun isRetainedDisplayViewerAuthorized(
         playerUuid: UUID,
-        containerId: Int,
         deviceId: Int,
-        displayId: Int,
     ): Boolean = true
-
-    override fun sendDisplayFrame(
-        playerUuid: UUID,
-        containerId: Int,
-        frame: DisplayFrameDelta,
-    ) {
-        val timedFrame = TimedDisplayFrame(System.nanoTime(), frame)
-        sentFrames += timedFrame
-        decodedFallbackFrames += timedFrame
-    }
-
-    override fun sendNativeDisplayFrameBytes(
-        playerUuid: UUID,
-        containerId: Int,
-        payload: ByteArray,
-    ) {
-        val startedAt = System.nanoTime()
-        val frames = NativeDisplayFrameCodec.decodeFrames(payload)
-        val decodeNanos = System.nanoTime() - startedAt
-        val summary = NativeDisplayFrameCodec.summarizeFrames(payload)
-        nativeBatches +=
-            TimedNativeDisplayBatch(
-                nanos = System.nanoTime(),
-                payloadBytes = payload.size,
-                frameCount = frames.size,
-                tilePayloadBytes = summary.payloadBytes,
-                monoPayloadBytes = summary.monoPayloadBytes,
-                decodeNanos = decodeNanos,
-            )
-        for (frame in frames) {
-            sentFrames += TimedDisplayFrame(System.nanoTime(), frame)
-        }
-    }
 
     override fun sendRetainedDisplayPayload(
         playerUuid: UUID,
-        containerId: Int,
+        deviceId: Int,
         payload: ByteArray,
-    ) = Unit
-
-    fun clear() {
-        sentFrames.clear()
-        decodedFallbackFrames.clear()
-        nativeBatches.clear()
+    ) {
+        payloads += TimedRetainedDisplayPayload(System.nanoTime(), payload.copyOf())
     }
 
-    fun sentFrames(): List<TimedDisplayFrame> = sentFrames.toList()
+    fun payloadCount(): Int = payloads.size
 
-    fun decodedFallbackFrames(): List<TimedDisplayFrame> = decodedFallbackFrames.toList()
+    fun payloadsFrom(index: Int): List<TimedRetainedDisplayPayload> = payloads.drop(index)
+}
 
-    fun nativeBatches(): List<TimedNativeDisplayBatch> = nativeBatches.toList()
+private class RetainedDisplayProbe(
+    private val device: K16RuntimeDevice,
+    private val playerUuid: UUID,
+    val network: CapturingDisplayNetworkBridge,
+) {
+    private val replica = RetainedDisplayReplica()
+    private var nextPayload = 0
+
+    var fullReplacementCount = 0
+        private set
+    var deltaCount = 0
+        private set
+
+    fun attach() {
+        assertTrue(device.attachRetainedDisplayViewer(playerUuid))
+        installAvailable()
+        assertTrue(replica.state != null, "late retained viewer should install an authoritative snapshot")
+    }
+
+    fun installAvailable() {
+        while (nextPayload < network.payloadCount()) {
+            val timedPayload = network.payloadsFrom(nextPayload).first()
+            nextPayload += 1
+            val installed = assertIs<RetainedDisplayApplyResult.Installed>(replica.apply(timedPayload.payload))
+            when (installed.damage) {
+                RetainedDisplayInstallDamage.FullReplacement -> fullReplacementCount += 1
+                is RetainedDisplayInstallDamage.Delta -> deltaCount += 1
+            }
+            assertTrue(device.acceptRetainedDisplayServerbound(playerUuid, installed.acknowledgement))
+        }
+    }
 }

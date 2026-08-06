@@ -140,134 +140,95 @@ empty, it returns `0`.
 
 ## Gpu0 MMIO
 
-The gpu0 range provides a simple 2D graphics adapter for firmware and kernel
-graphics. It is the only display-output device in the active K16 computer
-profile. Output does not go through text cells or host text rendering. Guest
-software owns font selection, glyph lookup, text layout, and mask rasterization.
-The VM and client do not rasterize fonts. They composite generic gpu0 pixel and
-mono-mask operations into the same canonical RGB565 surface.
+`gpu0` ABI v2 is a retained transaction device. It is the only active display
+ABI. The VM stores guest-created resources and a draw list; it does not own a
+pixel framebuffer. Minecraft clients receive snapshots/deltas and rasterize
+the retained state through their normal renderer. Fonts, glyph lookup, text
+layout, scrolling, colors, and resource IDs remain guest-owned.
 
-Initial dimensions:
-
-```text
-320 x 200 pixels
-```
-
-The only canonical pixel format in profile v1 is RGB565. Guest RAM
-`blit_buffer` source buffers store RGB565 pixels as little-endian `u16` values.
-Host display frames can carry RGB565 tiles or generic drawing operations; a
-full refresh always serializes the canonical surface as RGB565 tiles.
-
-All multi-byte registers are little-endian.
+The logical viewport is 320 x 200. Multi-byte values are little-endian.
 
 ```text
 offset  size  access  name
-0x00    4     R       width
-0x04    4     R       height
-0x08    4     R       stride_bytes
-0x0C    4     R       pixel_format
-0x10    4     W       command
-0x14    4     R       status
-0x18    4     R       error
-0x1C    4     R/W     x
-0x20    4     R/W     y
-0x24    4     R/W     rect_width
-0x28    4     R/W     rect_height
-0x2C    4     R/W     buffer_addr
-0x30    4     R/W     buffer_stride_bytes
-0x34    4     R/W     color
-0x38    4     R       sequence_low
-0x3C    4     R       sequence_high
-0x40    4     R/W     src_x
-0x44    4     R/W     src_y
-0x48    4     R/W     background_color
+0x00    4     R       device_abi_version: 2
+0x04    4     R       width: 320
+0x08    4     R       height: 200
+0x0C    4     R       packet_version: 1
+0x10    4     R       max_packet_bytes: 524288
+0x14    4     R       max_transaction_operations: 2048
+0x18    4     R       max_resources: 128
+0x1C    4     R       max_resource_bytes: 131072
+0x20    4     R       max_total_resource_bytes: 262144
+0x24    4     R       max_draw_list_bytes: 65536
+0x28    4     R       max_draw_commands: 2048
+0x2C    4     R       max_clip_depth: 32
+0x30    4     R/W     submission_address
+0x34    4     R/W     submission_length
+0x38    4     W       submit doorbell
+0x3C    4     R       result_code
+0x40    4     R       error_operation_index
+0x44    4     R       error_byte_offset
+0x48    4     R       committed_sequence_low
+0x4C    4     R       committed_sequence_high
 ```
 
-Pixel format values:
+`submission_address` and `submission_length` must be 4-byte aligned. The
+complete packet must fit guest RAM and `submission_length` must be between 24
+and `max_packet_bytes`. Writing the `submit` doorbell copies, validates, and
+commits one packet atomically. A rejected transaction changes no retained
+resource, draw-list, identity counter, or committed sequence.
+
+Packet header:
 
 ```text
-1  rgb565
+offset  size  field
+0x00    4     magic: "KGPU"
+0x04    2     version: 1
+0x06    2     reserved: 0
+0x08    4     total byte length
+0x0C    4     operation count
+0x10    8     expected base committed sequence
+0x18    ...   operations, each 4-byte aligned
 ```
 
-Status values:
+Each operation begins with `u16 opcode`, `u16 reserved = 0`, and `u32 byte
+length` including its 8-byte header. The active operations are:
 
 ```text
-0  ready
-1  done
-2  error
+0x0001  create RGB565 image
+0x0002  create MSB-first 1bpp mask
+0x0003  create mask-instance buffer
+0x0010  patch image rectangle
+0x0011  patch mask rectangle
+0x0012  patch mask-instance range
+0x0020  drop resource
+0x0030  replace draw list (must be the final operation)
 ```
 
-Error values:
+Image payload colors are little-endian RGB565 values. A 1bpp mask row occupies
+`ceil(width / 8)` bytes; unused low bits in the final byte must be zero. Each
+mask-instance record is 24 bytes and contains source rectangle, destination
+rectangle, foreground/background RGB565, flags, and a zero reserved field.
+Flag bit 0 enables an opaque background; without it, background must be zero.
 
-```text
-0  none
-1  invalid_command
-2  buffer_out_of_bounds
-3  invalid_rect
-4  invalid_stride
-```
+The draw list begins with a background RGB565 value, a zero reserved field,
+and a command count. Its commands are `push_clip` (`0x0001`), `pop_clip`
+(`0x0002`), `fill_rect` (`0x0010`), `draw_image` (`0x0020`), `draw_mask`
+(`0x0021`), and `draw_mask_instances` (`0x0022`). Clip commands must balance,
+all referenced resources and source ranges must exist in the transaction's
+final state, and the installed draw list binds to the resource incarnations
+resolved at commit time.
 
-Commands:
+Result codes are `0 ok`, `1 unsupported_version`, `2 malformed_packet`,
+`3 stale_base`, `4 invalid_argument`, `5 invalid_resource`,
+`6 resource_in_use`, `7 out_of_bounds`, `8 quota_exceeded`, and
+`9 invalid_draw_list`. On rejection, the error fields identify the first
+offending operation and byte when available; `0xffffffff` means not
+applicable.
 
-```text
-0  nop
-1  clear
-2  blit_buffer
-3  present
-4  fill_rect
-5  copy_rect
-6  blit_mono_buffer
-```
-
-`clear` fills the gpu0 pixel surface with `color`. `color` uses the low 16 bits
-as an RGB565 value.
-
-`blit_buffer` copies a rectangle from guest RAM into the gpu0 pixel surface.
-Firmware writes `x`, `y`, `rect_width`, `rect_height`, `buffer_addr`, and
-`buffer_stride_bytes`, then writes `command = blit_buffer`. The source buffer
-must contain at least `rect_height` rows, each with `buffer_stride_bytes`
-bytes. `buffer_stride_bytes` must be at least `rect_width * 2`.
-
-`fill_rect` fills the rectangle described by `x`, `y`, `rect_width`, and
-`rect_height` with `color`. `color` uses the low 16 bits as an RGB565 value.
-
-`copy_rect` copies a rectangle inside the gpu0 pixel surface from `src_x`,
-`src_y`, `rect_width`, and `rect_height` to destination `x`, `y`. Overlapping
-source and destination rectangles are supported.
-
-`blit_mono_buffer` composites an opaque packed 1bpp rectangle. Firmware writes
-`x`, `y`, `rect_width`, `rect_height`, `buffer_addr`,
-`buffer_stride_bytes`, foreground `color`, and `background_color`, then writes
-`command = blit_mono_buffer`. Both colors use their low 16 bits as RGB565.
-
-Each source row has:
-
-```text
-row_bytes = (rect_width + 7) / 8
-```
-
-Pixels are MSB-first within each byte: bit `0x80` selects the first pixel,
-`0x40` the second, and so on. A set bit selects `color`; a clear bit selects
-`background_color`. The operation is opaque: clear bits always write the
-background color. Unused low bits after the final pixel in a row are ignored.
-
-`rect_width` and `rect_height` must be positive.
-`buffer_stride_bytes` must be at least `row_bytes`. The complete used source
-range through the last row must fit guest RAM with checked address arithmetic.
-Invalid dimensions report `invalid_rect`, a short stride reports
-`invalid_stride`, and an overflowing or out-of-bounds source reports
-`buffer_out_of_bounds`. The VM validates the complete source range before
-changing the display, then strips row padding into a tight
-`row_bytes * rect_height` operation payload. Pixels outside the gpu0 surface
-are clipped.
-
-The VM immediately composites successful gpu0 commands into its canonical
-RGB565 surface. `present` emits ordered drawing operations plus any remaining
-dirty RGB565 tiles and increments the gpu0 sequence if a frame is emitted. The
-client applies the same generic mono mask; it does not know which font or glyph
-produced it. Full refreshes contain RGB565 tiles reconstructed from canonical
-VM state and contain no mono operation. Pending changes are not sent to the
-host until firmware writes `command = present`.
+Resource incarnation/revision values are host-assigned retained-state
+identities. Guest packets contain only resource IDs and the expected global
+base sequence; guests never predict or submit incarnation/revision values.
 
 ## Timer0 MMIO
 

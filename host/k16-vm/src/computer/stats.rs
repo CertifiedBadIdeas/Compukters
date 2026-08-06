@@ -91,15 +91,15 @@ pub struct K16ComputerOsStatsSnapshot {
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct K16ComputerGpuStatsSnapshot {
-    pub blit_buffer_commands: u64,
-    pub blit_pixels: u64,
-    pub blit_source_bytes: u64,
-    pub blit_mono_commands: u64,
-    pub blit_mono_pixels: u64,
-    pub blit_mono_source_bytes: u64,
-    pub present_commands: u64,
-    pub frames: u64,
-    pub frame_tiles: u64,
-    pub frame_payload_bytes: u64,
-    pub frame_mono_payload_bytes: u64,
+    pub submission_attempts: u64,
+    pub committed_submissions: u64,
+    pub rejected_submissions: u64,
+    pub submitted_bytes: u64,
+    pub resource_count: u64,
+    pub authoritative_payload_bytes: u64,
+    pub viewer_count: u64,
+    pub snapshot_payloads: u64,
+    pub delta_payloads: u64,
+    pub network_payload_bytes: u64,
+    pub resync_requests: u64,
 }

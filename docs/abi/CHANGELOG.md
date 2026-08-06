@@ -2,13 +2,15 @@
 
 ## Unreleased
 
-- `gpu0` now defines command `6`, `blit_mono_buffer`, plus the
-  `background_color` register at offset `0x48`. Guest software supplies an
-  opaque MSB-first 1bpp mask and foreground/background RGB565 colors. The VM
-  validates and normalizes the mask, updates its canonical RGB565 surface, and
-  forwards a generic mono operation to clients; font selection, glyph lookup,
-  layout, and rasterization remain exclusively guest-owned. Full refreshes
-  remain canonical RGB565 tiles.
+- `gpu0` was hard-replaced by retained ABI v2. Guest transactions create and
+  patch RGB565 images, 1bpp masks, mask-instance buffers, and one draw list;
+  the VM stores authoritative resources while Minecraft clients rasterize
+  snapshots/deltas. The former clear/blit/present registers, canonical pixel
+  framebuffer, tile drains, JNI frame codec, and client dynamic texture path
+  are no longer active or accepted.
+- K16 runtime snapshot-v1 resume now fails explicitly because the format does
+  not preserve retained `gpu0` state. There is no empty-display resume or
+  hidden cold-boot fallback.
 - K16E v7 now defines shareable shared-object metadata: a read-only shared load
   section, a private writable load section, relocation records, and exports.
   The host decoder, inspector, and kernel image parser reject v7 relocations

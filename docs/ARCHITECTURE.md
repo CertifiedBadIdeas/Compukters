@@ -77,11 +77,11 @@ RuntimeDevice.boot()
               ├─ storage0 boot media
               ├─ flat RAM + MMIO bus (control, debug-serial, serial-input,
               │   gpu0, storage0, keyboard0, timer0, bios-flash)
-              └─ exposes control / debug bytes / gpu0 display frames over JNI
+              └─ exposes control / debug bytes / retained gpu0 payloads over JNI
 
 RuntimeDevice.serverTick(gameTime)
   ├─ advance native VM until pause / halt
-  ├─ drain gpu0 display frames
+  ├─ drain retained gpu0 publications for authorized viewers
   └─ cache debug serial bytes for diagnostics
 
 RuntimeDevice.close()
@@ -100,7 +100,7 @@ RuntimeDevice.close()
 │    ├─ MMIO serial input    ◄──  player keyboard events               │
 │    ├─ MMIO storage0        ◄──► boot media                           │
 │    ├─ MMIO bios flash      ──►  read-only firmware mapping           │
-│    └─ MMIO gpu0            ──►  DisplayFrameDelta values             │
+│    └─ MMIO gpu0            ──►  retained resources + draw list       │
 └──────────────────────────────────────────┬──────────────────────────┘
                                            │ JNI run-until-signal
                                            ▼
@@ -109,8 +109,8 @@ RuntimeDevice.close()
 │                                                                     │
 │  RuntimeDevice.serverTick()                                          │
 │    ├─ NativeVmBindings advances the VM until pause / halt            │
-│    ├─ drain gpu0 frames / cache debug output                          │
-│    ├─ flushDisplaySessions → FrameDeltaClientMessage                 │
+│    ├─ drain retained payloads / cache debug output                    │
+│    ├─ forward opaque snapshot/delta bytes to authorized observers    │
 │    └─ react to control register (halt / crash / reboot)              │
 └──────────────────────────────────────────┬──────────────────────────┘
                                            │ network
@@ -118,14 +118,16 @@ RuntimeDevice.close()
 ┌─────────────────────────────────────────────────────────────────────┐
 │  Client (render thread)                                             │
 │                                                                     │
-│  ComputerMenu.handleDisplayFrame(frame)                              │
-│    └─ ClientDisplayBuffer.apply(frame)                               │
-│  NotebookScreen.renderBg() → draws ClientDisplayBuffer               │
+│  ClientRetainedDisplays installs snapshot/delta into one replica     │
+│    └─ sends ACK or an explicit resync request                        │
+│  Menu/block observers compile damage and render through GuiGraphics │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-The gpu0 device converts guest RAM pixel blits into display frame deltas. Debug
-serial output remains a byte stream for diagnostics and is not rendered into
-display frames by the host. The client sends discrete input events into guest
-input devices. There is no multi-process scheduling and no host-call opcode;
-host-side interaction happens purely through memory-mapped registers.
+The gpu0 device validates atomic guest transactions and owns canonical retained
+resources, not a framebuffer. Late observers receive a full snapshot; ACKs
+gate coalesced deltas independently per viewer. Debug serial output remains a
+byte stream for diagnostics and is not interpreted as display content by the
+host. The client sends discrete input events into guest input devices. There is
+no multi-process scheduling and no host-call opcode; host-side interaction
+happens purely through memory-mapped registers.

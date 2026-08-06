@@ -40,16 +40,6 @@ interface RuntimeMetricsCollector {
 
     fun recordRequestSlice(nanos: Long)
 
-    fun recordDisplayFrameDrain(
-        frameCount: Int,
-        nanos: Long,
-    )
-
-    fun recordDisplayFlush(
-        frameCount: Int,
-        nanos: Long,
-    )
-
     fun recordSliceRequest()
 
     fun recordNativeExecutionQuotaRefill(
@@ -82,13 +72,6 @@ interface RuntimeMetricsCollector {
         woke: Boolean = true,
     )
 
-    fun recordNativeDisplayPumpWait(
-        nanos: Long,
-        woke: Boolean = true,
-    )
-
-    fun recordNativeDisplayFrameBytes(bytes: Int)
-
     fun recordNativeDaemonTick(
         activeNanos: Long,
         turns: Long,
@@ -105,31 +88,10 @@ interface RuntimeMetricsCollector {
 
     fun recordK16OutputRefresh(
         serialOutputBytes: Int,
-        gpuFrameBytes: Int,
-        gpuFrameCount: Int,
         nanos: Long,
     )
 
-    fun recordK16DisplayFrameSent(
-        tileCount: Int,
-        payloadBytes: Int,
-        operationCount: Int,
-        monoPayloadBytes: Int = 0,
-    )
-
-    fun recordK16DisplayFramesSent(
-        frameCount: Int,
-        tileCount: Int,
-        payloadBytes: Int,
-        operationCount: Int,
-        monoPayloadBytes: Int = 0,
-    ) {
-        val sanitizedFrameCount = frameCount.coerceAtLeast(0)
-        if (sanitizedFrameCount == 0) return
-        repeat(sanitizedFrameCount) {
-            recordK16DisplayFrameSent(tileCount = 0, payloadBytes = 0, operationCount = 0)
-        }
-    }
+    fun recordK16RetainedPayloadSent(bytes: Int)
 
     fun recordK16TextInput(
         byteCount: Int,
@@ -161,27 +123,11 @@ data class RuntimeTickMetrics(
     val serverTickNanos: Long = 0,
     val requestSliceCalls: Long = 0,
     val requestSliceNanos: Long = 0,
-    val displayFrameDrainCalls: Long = 0,
-    val displayFramesDrained: Long = 0,
-    val displayFrameDrainNanos: Long = 0,
-    val displayFlushCalls: Long = 0,
-    val displayFramesFlushed: Long = 0,
-    val displayFlushNanos: Long = 0,
 ) {
-    val allCalls =
-        serverTickCalls +
-            requestSliceCalls +
-            displayFrameDrainCalls +
-            displayFlushCalls
-    val allNanos =
-        serverTickNanos +
-            requestSliceNanos +
-            displayFrameDrainNanos +
-            displayFlushNanos
+    val allCalls = serverTickCalls + requestSliceCalls
+    val allNanos = serverTickNanos + requestSliceNanos
     val tickCalls = serverTickCalls + requestSliceCalls
     val tickNanos = serverTickNanos + requestSliceNanos
-    val displayCalls = displayFrameDrainCalls + displayFlushCalls
-    val displayNanos = displayFrameDrainNanos + displayFlushNanos
 }
 
 data class RuntimeVmMetrics(
@@ -202,12 +148,6 @@ data class RuntimeVmMetrics(
     val nativeWaitNanos: Long = 0,
     val nativeWaitWakeups: Long = 0,
     val nativeWaitTimeouts: Long = 0,
-    val nativeDisplayPumpWaitCalls: Long = 0,
-    val nativeDisplayPumpWaitNanos: Long = 0,
-    val nativeDisplayPumpWakeups: Long = 0,
-    val nativeDisplayPumpTimeouts: Long = 0,
-    val nativeDisplayFrameByteBatches: Long = 0,
-    val nativeDisplayFrameBytes: Long = 0,
     val nativeDaemonTicks: Long = 0,
     val nativeDaemonActiveNanos: Long = 0,
     val nativeDaemonIdleTicks: Long = 0,
@@ -224,14 +164,8 @@ data class RuntimeVmMetrics(
     val k16OutputRefreshNanos: Long = 0,
     val k16SerialOutputSnapshots: Long = 0,
     val k16SerialOutputSnapshotBytes: Long = 0,
-    val k16GpuFrameBatches: Long = 0,
-    val k16GpuFrameBytes: Long = 0,
-    val k16GpuFramesDecoded: Long = 0,
-    val k16DisplayFramesSent: Long = 0,
-    val k16DisplayTilesSent: Long = 0,
-    val k16DisplayPayloadBytesSent: Long = 0,
-    val k16DisplayMonoPayloadBytesSent: Long = 0,
-    val k16DisplayOperationsSent: Long = 0,
+    val k16RetainedPayloadsSent: Long = 0,
+    val k16RetainedPayloadBytesSent: Long = 0,
     val k16TextInputEvents: Long = 0,
     val k16TextInputBytes: Long = 0,
     val k16TextInputNanos: Long = 0,
@@ -281,17 +215,17 @@ data class RuntimeK16StorageMetrics(
 )
 
 data class RuntimeK16GpuMetrics(
-    val blitBufferCommands: Long = 0,
-    val blitPixels: Long = 0,
-    val blitSourceBytes: Long = 0,
-    val blitMonoCommands: Long = 0,
-    val blitMonoPixels: Long = 0,
-    val blitMonoSourceBytes: Long = 0,
-    val presentCommands: Long = 0,
-    val frames: Long = 0,
-    val frameTiles: Long = 0,
-    val framePayloadBytes: Long = 0,
-    val frameMonoPayloadBytes: Long = 0,
+    val submissionAttempts: Long = 0,
+    val committedSubmissions: Long = 0,
+    val rejectedSubmissions: Long = 0,
+    val submittedBytes: Long = 0,
+    val resourceCount: Long = 0,
+    val authoritativePayloadBytes: Long = 0,
+    val viewerCount: Long = 0,
+    val snapshotPayloads: Long = 0,
+    val deltaPayloads: Long = 0,
+    val networkPayloadBytes: Long = 0,
+    val resyncRequests: Long = 0,
 )
 
 data class RuntimeK16OsMetrics(
@@ -377,17 +311,17 @@ data class RuntimeK16StatsMetrics(
         )
     val gpu: RuntimeK16GpuMetrics =
         RuntimeK16GpuMetrics(
-            blitBufferCommands = devices.sumOf { it.gpu.blitBufferCommands },
-            blitPixels = devices.sumOf { it.gpu.blitPixels },
-            blitSourceBytes = devices.sumOf { it.gpu.blitSourceBytes },
-            blitMonoCommands = devices.sumOf { it.gpu.blitMonoCommands },
-            blitMonoPixels = devices.sumOf { it.gpu.blitMonoPixels },
-            blitMonoSourceBytes = devices.sumOf { it.gpu.blitMonoSourceBytes },
-            presentCommands = devices.sumOf { it.gpu.presentCommands },
-            frames = devices.sumOf { it.gpu.frames },
-            frameTiles = devices.sumOf { it.gpu.frameTiles },
-            framePayloadBytes = devices.sumOf { it.gpu.framePayloadBytes },
-            frameMonoPayloadBytes = devices.sumOf { it.gpu.frameMonoPayloadBytes },
+            submissionAttempts = devices.sumOf { it.gpu.submissionAttempts },
+            committedSubmissions = devices.sumOf { it.gpu.committedSubmissions },
+            rejectedSubmissions = devices.sumOf { it.gpu.rejectedSubmissions },
+            submittedBytes = devices.sumOf { it.gpu.submittedBytes },
+            resourceCount = devices.sumOf { it.gpu.resourceCount },
+            authoritativePayloadBytes = devices.sumOf { it.gpu.authoritativePayloadBytes },
+            viewerCount = devices.sumOf { it.gpu.viewerCount },
+            snapshotPayloads = devices.sumOf { it.gpu.snapshotPayloads },
+            deltaPayloads = devices.sumOf { it.gpu.deltaPayloads },
+            networkPayloadBytes = devices.sumOf { it.gpu.networkPayloadBytes },
+            resyncRequests = devices.sumOf { it.gpu.resyncRequests },
         )
 }
 
@@ -425,13 +359,6 @@ data class RuntimeProfilingSnapshot(
             appendLine("  tick: calls=${tick.tickCalls}, time=${tick.tickNanos.nanos()}")
             appendLine("    server: calls=${tick.serverTickCalls}, time=${tick.serverTickNanos.nanos()}")
             appendLine("    requestSlice: calls=${tick.requestSliceCalls}, time=${tick.requestSliceNanos.nanos()}")
-            appendLine("  display-runtime: calls=${tick.displayCalls}, time=${tick.displayNanos.nanos()}")
-            appendLine(
-                "    drain: calls=${tick.displayFrameDrainCalls}, frames=${tick.displayFramesDrained}, time=${tick.displayFrameDrainNanos.nanos()}",
-            )
-            appendLine(
-                "    flush: calls=${tick.displayFlushCalls}, frames=${tick.displayFramesFlushed}, time=${tick.displayFlushNanos.nanos()}",
-            )
             appendLine("  vm:")
             appendLine("    slices: requests=${vm.sliceRequests}")
             appendLine(
@@ -450,19 +377,16 @@ data class RuntimeProfilingSnapshot(
                 "    k16TextOutput: snapshots=${vm.k16SerialOutputSnapshots}, snapshotBytes=${vm.k16SerialOutputSnapshotBytes}",
             )
             appendLine(
-                "    k16DisplayFrames: batches=${vm.k16GpuFrameBatches}, bytes=${vm.k16GpuFrameBytes}, frames=${vm.k16GpuFramesDecoded}",
+                "    k16RetainedDisplaySent: payloads=${vm.k16RetainedPayloadsSent}, " +
+                    "bytes=${vm.k16RetainedPayloadBytesSent}",
             )
             appendLine(
-                "    k16DisplaySent: frames=${vm.k16DisplayFramesSent}, tiles=${vm.k16DisplayTilesSent}, " +
-                    "tilePayloadBytes=${vm.k16DisplayPayloadBytesSent}, monoPayloadBytes=${vm.k16DisplayMonoPayloadBytesSent}, " +
-                    "operations=${vm.k16DisplayOperationsSent}",
-            )
-            appendLine(
-                "    k16Gpu: rawBlits=${k16.gpu.blitBufferCommands}, rawBlitPixels=${k16.gpu.blitPixels}, " +
-                    "rawBlitBytes=${k16.gpu.blitSourceBytes}, monoBlits=${k16.gpu.blitMonoCommands}, " +
-                    "monoPixels=${k16.gpu.blitMonoPixels}, monoSourceBytes=${k16.gpu.blitMonoSourceBytes}, " +
-                    "presents=${k16.gpu.presentCommands}, frames=${k16.gpu.frames}, tiles=${k16.gpu.frameTiles}, " +
-                    "tilePayloadBytes=${k16.gpu.framePayloadBytes}, monoPayloadBytes=${k16.gpu.frameMonoPayloadBytes}",
+                "    k16Gpu: submissions=${k16.gpu.submissionAttempts}, committed=${k16.gpu.committedSubmissions}, " +
+                    "rejected=${k16.gpu.rejectedSubmissions}, submittedBytes=${k16.gpu.submittedBytes}, " +
+                    "resources=${k16.gpu.resourceCount}, authoritativeBytes=${k16.gpu.authoritativePayloadBytes}, " +
+                    "viewers=${k16.gpu.viewerCount}, snapshots=${k16.gpu.snapshotPayloads}, " +
+                    "deltas=${k16.gpu.deltaPayloads}, networkBytes=${k16.gpu.networkPayloadBytes}, " +
+                    "resyncs=${k16.gpu.resyncRequests}",
             )
             appendLine(
                 "    k16TextInput: events=${vm.k16TextInputEvents}, bytes=${vm.k16TextInputBytes}, time=${vm.k16TextInputNanos.nanos()}",
@@ -488,9 +412,6 @@ data class RuntimeProfilingSnapshot(
             )
             appendLine(
                 "  signals: halt=${vm.haltSignals}, pause=${vm.pauseSignals}, yield=${vm.yieldSignals}, sleep=${vm.sleepSignals}, waitEvent=${vm.waitEventSignals}, waitPoll=${vm.waitPollSignals}, waitProcess=${vm.waitProcessSignals}, hostCall=${vm.hostCallSignals}",
-            )
-            appendLine(
-                "    nativeDisplayPump: waits=${vm.nativeDisplayPumpWaitCalls}, waitTime=${vm.nativeDisplayPumpWaitNanos.nanos()}, wakeups=${vm.nativeDisplayPumpWakeups}, timeouts=${vm.nativeDisplayPumpTimeouts}, byteBatches=${vm.nativeDisplayFrameByteBatches}, bytes=${vm.nativeDisplayFrameBytes}",
             )
             appendHostCallSummary()
             appendInstructionSummary()
@@ -554,16 +475,6 @@ object NoOpRuntimeMetricsCollector : RuntimeMetricsCollector {
 
     override fun recordRequestSlice(nanos: Long) = Unit
 
-    override fun recordDisplayFrameDrain(
-        frameCount: Int,
-        nanos: Long,
-    ) = Unit
-
-    override fun recordDisplayFlush(
-        frameCount: Int,
-        nanos: Long,
-    ) = Unit
-
     override fun recordSliceRequest() = Unit
 
     override fun recordNativeExecutionQuotaRefill(
@@ -596,13 +507,6 @@ object NoOpRuntimeMetricsCollector : RuntimeMetricsCollector {
         woke: Boolean,
     ) = Unit
 
-    override fun recordNativeDisplayPumpWait(
-        nanos: Long,
-        woke: Boolean,
-    ) = Unit
-
-    override fun recordNativeDisplayFrameBytes(bytes: Int) = Unit
-
     override fun recordNativeDaemonTick(
         activeNanos: Long,
         turns: Long,
@@ -619,17 +523,10 @@ object NoOpRuntimeMetricsCollector : RuntimeMetricsCollector {
 
     override fun recordK16OutputRefresh(
         serialOutputBytes: Int,
-        gpuFrameBytes: Int,
-        gpuFrameCount: Int,
         nanos: Long,
     ) = Unit
 
-    override fun recordK16DisplayFrameSent(
-        tileCount: Int,
-        payloadBytes: Int,
-        operationCount: Int,
-        monoPayloadBytes: Int,
-    ) = Unit
+    override fun recordK16RetainedPayloadSent(bytes: Int) = Unit
 
     override fun recordK16TextInput(
         byteCount: Int,
@@ -672,12 +569,6 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
     private val serverTickNanos = AtomicLong()
     private val requestSliceCalls = AtomicLong()
     private val requestSliceNanos = AtomicLong()
-    private val displayFrameDrainCalls = AtomicLong()
-    private val displayFramesDrained = AtomicLong()
-    private val displayFrameDrainNanos = AtomicLong()
-    private val displayFlushCalls = AtomicLong()
-    private val displayFramesFlushed = AtomicLong()
-    private val displayFlushNanos = AtomicLong()
     private val sliceRequests = AtomicLong()
     private val nativeExecutionQuotaRefills = AtomicLong()
     private val nativeExecutionQuotaWallNanos = AtomicLong()
@@ -694,12 +585,6 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
     private val nativeWaitNanos = AtomicLong()
     private val nativeWaitWakeups = AtomicLong()
     private val nativeWaitTimeouts = AtomicLong()
-    private val nativeDisplayPumpWaitCalls = AtomicLong()
-    private val nativeDisplayPumpWaitNanos = AtomicLong()
-    private val nativeDisplayPumpWakeups = AtomicLong()
-    private val nativeDisplayPumpTimeouts = AtomicLong()
-    private val nativeDisplayFrameByteBatches = AtomicLong()
-    private val nativeDisplayFrameBytes = AtomicLong()
     private val nativeDaemonTicks = AtomicLong()
     private val nativeDaemonActiveNanos = AtomicLong()
     private val nativeDaemonIdleTicks = AtomicLong()
@@ -716,14 +601,8 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
     private val k16OutputRefreshNanos = AtomicLong()
     private val k16SerialOutputSnapshots = AtomicLong()
     private val k16SerialOutputSnapshotBytes = AtomicLong()
-    private val k16GpuFrameBatches = AtomicLong()
-    private val k16GpuFrameBytes = AtomicLong()
-    private val k16GpuFramesDecoded = AtomicLong()
-    private val k16DisplayFramesSent = AtomicLong()
-    private val k16DisplayTilesSent = AtomicLong()
-    private val k16DisplayPayloadBytesSent = AtomicLong()
-    private val k16DisplayMonoPayloadBytesSent = AtomicLong()
-    private val k16DisplayOperationsSent = AtomicLong()
+    private val k16RetainedPayloadsSent = AtomicLong()
+    private val k16RetainedPayloadBytesSent = AtomicLong()
     private val k16TextInputEvents = AtomicLong()
     private val k16TextInputBytes = AtomicLong()
     private val k16TextInputNanos = AtomicLong()
@@ -743,24 +622,6 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
     override fun recordRequestSlice(nanos: Long) {
         requestSliceCalls.incrementAndGet()
         requestSliceNanos.addAndGet(nanos.coerceAtLeast(0))
-    }
-
-    override fun recordDisplayFrameDrain(
-        frameCount: Int,
-        nanos: Long,
-    ) {
-        displayFrameDrainCalls.incrementAndGet()
-        displayFramesDrained.addAndGet(frameCount.coerceAtLeast(0).toLong())
-        displayFrameDrainNanos.addAndGet(nanos.coerceAtLeast(0))
-    }
-
-    override fun recordDisplayFlush(
-        frameCount: Int,
-        nanos: Long,
-    ) {
-        displayFlushCalls.incrementAndGet()
-        displayFramesFlushed.addAndGet(frameCount.coerceAtLeast(0).toLong())
-        displayFlushNanos.addAndGet(nanos.coerceAtLeast(0))
     }
 
     override fun recordSliceRequest() {
@@ -826,24 +687,6 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
         }
     }
 
-    override fun recordNativeDisplayPumpWait(
-        nanos: Long,
-        woke: Boolean,
-    ) {
-        nativeDisplayPumpWaitCalls.incrementAndGet()
-        nativeDisplayPumpWaitNanos.addAndGet(nanos.coerceAtLeast(0))
-        if (woke) {
-            nativeDisplayPumpWakeups.incrementAndGet()
-        } else {
-            nativeDisplayPumpTimeouts.incrementAndGet()
-        }
-    }
-
-    override fun recordNativeDisplayFrameBytes(bytes: Int) {
-        nativeDisplayFrameByteBatches.incrementAndGet()
-        nativeDisplayFrameBytes.addAndGet(bytes.coerceAtLeast(0).toLong())
-    }
-
     override fun recordNativeDaemonTick(
         activeNanos: Long,
         turns: Long,
@@ -877,8 +720,6 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
 
     override fun recordK16OutputRefresh(
         serialOutputBytes: Int,
-        gpuFrameBytes: Int,
-        gpuFrameCount: Int,
         nanos: Long,
     ) {
         k16OutputRefreshes.incrementAndGet()
@@ -888,42 +729,11 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
             k16SerialOutputSnapshots.incrementAndGet()
         }
         k16SerialOutputSnapshotBytes.addAndGet(sanitizedSerialOutputBytes.toLong())
-        val sanitizedGpuFrameBytes = gpuFrameBytes.coerceAtLeast(0)
-        val sanitizedGpuFrameCount = gpuFrameCount.coerceAtLeast(0)
-        if (sanitizedGpuFrameBytes > 0 || sanitizedGpuFrameCount > 0) {
-            k16GpuFrameBatches.incrementAndGet()
-        }
-        k16GpuFrameBytes.addAndGet(sanitizedGpuFrameBytes.toLong())
-        k16GpuFramesDecoded.addAndGet(sanitizedGpuFrameCount.toLong())
     }
 
-    override fun recordK16DisplayFrameSent(
-        tileCount: Int,
-        payloadBytes: Int,
-        operationCount: Int,
-        monoPayloadBytes: Int,
-    ) {
-        recordK16DisplayFramesSent(
-            frameCount = 1,
-            tileCount = tileCount,
-            payloadBytes = payloadBytes,
-            operationCount = operationCount,
-            monoPayloadBytes = monoPayloadBytes,
-        )
-    }
-
-    override fun recordK16DisplayFramesSent(
-        frameCount: Int,
-        tileCount: Int,
-        payloadBytes: Int,
-        operationCount: Int,
-        monoPayloadBytes: Int,
-    ) {
-        k16DisplayFramesSent.addAndGet(frameCount.coerceAtLeast(0).toLong())
-        k16DisplayTilesSent.addAndGet(tileCount.coerceAtLeast(0).toLong())
-        k16DisplayPayloadBytesSent.addAndGet(payloadBytes.coerceAtLeast(0).toLong())
-        k16DisplayMonoPayloadBytesSent.addAndGet(monoPayloadBytes.coerceAtLeast(0).toLong())
-        k16DisplayOperationsSent.addAndGet(operationCount.coerceAtLeast(0).toLong())
+    override fun recordK16RetainedPayloadSent(bytes: Int) {
+        k16RetainedPayloadsSent.incrementAndGet()
+        k16RetainedPayloadBytesSent.addAndGet(bytes.coerceAtLeast(0).toLong())
     }
 
     override fun recordK16TextInput(
@@ -966,12 +776,6 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
                     serverTickNanos = serverTickNanos.get(),
                     requestSliceCalls = requestSliceCalls.get(),
                     requestSliceNanos = requestSliceNanos.get(),
-                    displayFrameDrainCalls = displayFrameDrainCalls.get(),
-                    displayFramesDrained = displayFramesDrained.get(),
-                    displayFrameDrainNanos = displayFrameDrainNanos.get(),
-                    displayFlushCalls = displayFlushCalls.get(),
-                    displayFramesFlushed = displayFramesFlushed.get(),
-                    displayFlushNanos = displayFlushNanos.get(),
                 ),
             vm =
                 RuntimeVmMetrics(
@@ -991,12 +795,6 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
                     nativeWaitNanos = nativeWaitNanos.get(),
                     nativeWaitWakeups = nativeWaitWakeups.get(),
                     nativeWaitTimeouts = nativeWaitTimeouts.get(),
-                    nativeDisplayPumpWaitCalls = nativeDisplayPumpWaitCalls.get(),
-                    nativeDisplayPumpWaitNanos = nativeDisplayPumpWaitNanos.get(),
-                    nativeDisplayPumpWakeups = nativeDisplayPumpWakeups.get(),
-                    nativeDisplayPumpTimeouts = nativeDisplayPumpTimeouts.get(),
-                    nativeDisplayFrameByteBatches = nativeDisplayFrameByteBatches.get(),
-                    nativeDisplayFrameBytes = nativeDisplayFrameBytes.get(),
                     nativeDaemonTicks = nativeDaemonTicks.get(),
                     nativeDaemonActiveNanos = nativeDaemonActiveNanos.get(),
                     nativeDaemonIdleTicks = nativeDaemonIdleTicks.get(),
@@ -1013,14 +811,8 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
                     k16OutputRefreshNanos = k16OutputRefreshNanos.get(),
                     k16SerialOutputSnapshots = k16SerialOutputSnapshots.get(),
                     k16SerialOutputSnapshotBytes = k16SerialOutputSnapshotBytes.get(),
-                    k16GpuFrameBatches = k16GpuFrameBatches.get(),
-                    k16GpuFrameBytes = k16GpuFrameBytes.get(),
-                    k16GpuFramesDecoded = k16GpuFramesDecoded.get(),
-                    k16DisplayFramesSent = k16DisplayFramesSent.get(),
-                    k16DisplayTilesSent = k16DisplayTilesSent.get(),
-                    k16DisplayPayloadBytesSent = k16DisplayPayloadBytesSent.get(),
-                    k16DisplayMonoPayloadBytesSent = k16DisplayMonoPayloadBytesSent.get(),
-                    k16DisplayOperationsSent = k16DisplayOperationsSent.get(),
+                    k16RetainedPayloadsSent = k16RetainedPayloadsSent.get(),
+                    k16RetainedPayloadBytesSent = k16RetainedPayloadBytesSent.get(),
                     k16TextInputEvents = k16TextInputEvents.get(),
                     k16TextInputBytes = k16TextInputBytes.get(),
                     k16TextInputNanos = k16TextInputNanos.get(),
@@ -1116,17 +908,17 @@ private fun NativeK16StorageStats.toRuntimeMetrics(): RuntimeK16StorageMetrics =
 
 private fun NativeK16GpuStats.toRuntimeMetrics(): RuntimeK16GpuMetrics =
     RuntimeK16GpuMetrics(
-        blitBufferCommands = blitBufferCommands,
-        blitPixels = blitPixels,
-        blitSourceBytes = blitSourceBytes,
-        blitMonoCommands = blitMonoCommands,
-        blitMonoPixels = blitMonoPixels,
-        blitMonoSourceBytes = blitMonoSourceBytes,
-        presentCommands = presentCommands,
-        frames = frames,
-        frameTiles = frameTiles,
-        framePayloadBytes = framePayloadBytes,
-        frameMonoPayloadBytes = frameMonoPayloadBytes,
+        submissionAttempts = submissionAttempts,
+        committedSubmissions = committedSubmissions,
+        rejectedSubmissions = rejectedSubmissions,
+        submittedBytes = submittedBytes,
+        resourceCount = resourceCount,
+        authoritativePayloadBytes = authoritativePayloadBytes,
+        viewerCount = viewerCount,
+        snapshotPayloads = snapshotPayloads,
+        deltaPayloads = deltaPayloads,
+        networkPayloadBytes = networkPayloadBytes,
+        resyncRequests = resyncRequests,
     )
 
 private fun NativeK16OsStats.toRuntimeMetrics(): RuntimeK16OsMetrics =

@@ -67,14 +67,11 @@ impl K16ComputerHandle {
         if bios_flash.is_empty() {
             return Err("K16 BIOS flash is empty".to_string());
         }
-        let profile =
-            ComputerMachineProfile::computer_v1_with_storage0_path(memory_size, storage0_path);
-        let mut machine = ComputerMachine::restore_snapshot_v1(profile, snapshot)?;
-        machine.map_k16_bios_flash(bios_flash.to_vec())?;
-        let boot_cpu = machine
-            .boot_cpu_id()
-            .ok_or_else(|| "K16 computer snapshot has no boot CPU".to_string())?;
-        Self::from_machine(machine, boot_cpu)
+        let _ = (memory_size, storage0_path.as_ref(), snapshot);
+        Err(
+            "K16 runtime snapshot resume is rejected because K16SNAP v1 cannot preserve retained gpu0 state"
+                .to_string(),
+        )
     }
 
     pub fn create_k16_bios_flash_path_with_storage0_path(

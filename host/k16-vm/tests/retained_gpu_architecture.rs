@@ -8,6 +8,8 @@ fn gpu0_v2_is_the_only_active_display_abi() {
     let jni = fs::read_to_string("src/jni.rs").expect("JNI source");
 
     assert!(library.contains("pub mod retained_gpu;"));
+    assert!(!library.contains("pub mod display;"));
+    assert!(!std::path::Path::new("src/display.rs").exists());
     for declaration in [
         "pub const GPU0_DEVICE_ABI_VERSION: u32 = GPU0_BASE;",
         "pub const GPU0_SUBMISSION_ADDRESS: u32 = GPU0_BASE + 48;",
@@ -40,6 +42,15 @@ fn gpu0_v2_is_the_only_active_display_abi() {
             "active gpu0 ABI must not retain `{forbidden}`"
         );
     }
+}
+
+#[test]
+fn k16_runtime_snapshot_resume_rejects_missing_retained_gpu_state() {
+    let handle = fs::read_to_string("src/computer/handle.rs").expect("computer handle source");
+
+    assert!(handle.contains("K16 runtime snapshot resume is rejected"));
+    assert!(handle.contains("cannot preserve retained gpu0 state"));
+    assert!(!handle.contains("ComputerMachine::restore_snapshot_v1(profile, snapshot)"));
 }
 
 #[test]

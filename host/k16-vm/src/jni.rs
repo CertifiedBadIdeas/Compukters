@@ -507,7 +507,7 @@ fn k16_signal_values(signal: K16Signal) -> [jlong; 2] {
 
 fn k16_computer_stats_snapshot_values(snapshot: &K16ComputerStatsSnapshot) -> Vec<jlong> {
     let mut values = Vec::with_capacity(50 + snapshot.devices.len() * 36);
-    values.push(15);
+    values.push(16);
     push_traffic_values(&mut values, snapshot.bus.ram);
     push_traffic_values(&mut values, snapshot.bus.mmio);
     values.push(snapshot.os.path_lookups as jlong);
@@ -591,17 +591,17 @@ fn push_storage_values(values: &mut Vec<jlong>, storage: K16ComputerStorageStats
 }
 
 fn push_gpu_values(values: &mut Vec<jlong>, gpu: K16ComputerGpuStatsSnapshot) {
-    values.push(gpu.blit_buffer_commands as jlong);
-    values.push(gpu.blit_pixels as jlong);
-    values.push(gpu.blit_source_bytes as jlong);
-    values.push(gpu.blit_mono_commands as jlong);
-    values.push(gpu.blit_mono_pixels as jlong);
-    values.push(gpu.blit_mono_source_bytes as jlong);
-    values.push(gpu.present_commands as jlong);
-    values.push(gpu.frames as jlong);
-    values.push(gpu.frame_tiles as jlong);
-    values.push(gpu.frame_payload_bytes as jlong);
-    values.push(gpu.frame_mono_payload_bytes as jlong);
+    values.push(gpu.submission_attempts as jlong);
+    values.push(gpu.committed_submissions as jlong);
+    values.push(gpu.rejected_submissions as jlong);
+    values.push(gpu.submitted_bytes as jlong);
+    values.push(gpu.resource_count as jlong);
+    values.push(gpu.authoritative_payload_bytes as jlong);
+    values.push(gpu.viewer_count as jlong);
+    values.push(gpu.snapshot_payloads as jlong);
+    values.push(gpu.delta_payloads as jlong);
+    values.push(gpu.network_payload_bytes as jlong);
+    values.push(gpu.resync_requests as jlong);
 }
 
 fn byte_array_or_throw(env: &mut JNIEnv<'_>, bytes: &[u8]) -> jbyteArray {
@@ -741,17 +741,17 @@ mod tests {
                     requested_read_bytes: 33,
                 },
                 gpu: K16ComputerGpuStatsSnapshot {
-                    blit_buffer_commands: 34,
-                    blit_pixels: 35,
-                    blit_source_bytes: 36,
-                    blit_mono_commands: 37,
-                    blit_mono_pixels: 38,
-                    blit_mono_source_bytes: 39,
-                    present_commands: 40,
-                    frames: 41,
-                    frame_tiles: 42,
-                    frame_payload_bytes: 43,
-                    frame_mono_payload_bytes: 44,
+                    submission_attempts: 34,
+                    committed_submissions: 35,
+                    rejected_submissions: 36,
+                    submitted_bytes: 37,
+                    resource_count: 38,
+                    authoritative_payload_bytes: 39,
+                    viewer_count: 40,
+                    snapshot_payloads: 41,
+                    delta_payloads: 42,
+                    network_payload_bytes: 43,
+                    resync_requests: 44,
                 },
             }],
         };
@@ -759,7 +759,7 @@ mod tests {
         assert_eq!(
             k16_computer_stats_snapshot_values(&snapshot),
             vec![
-                15, 2, 3, 4, 5, 6, 7, 8, 9, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36,
+                16, 2, 3, 4, 5, 6, 7, 8, 9, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36,
                 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57,
                 58, 59, 60, 61, 62, 1, 11, 0x1000, 64, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22,
                 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43,

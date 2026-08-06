@@ -85,11 +85,11 @@ without changing normal runtime budgets. Each line reports elapsed wall time and
 snapshots:
 
 ```text
-k16Phase: name=ls:/bin.visible, elapsed=..., slices=..., runTime=..., inputBytes=..., gpuFrameBytes=..., displayFrames=..., displayTiles=..., displayTileBytes=..., displayMonoBytes=..., sentDisplayFrames=..., sentDisplayTiles=..., sentDisplayTileBytes=..., sentDisplayMonoBytes=..., sentDisplayOperations=..., storageReadCommands=..., storageRequestedReadBlocks=..., storageRequestedReadBytes=..., storageWriteCommands=..., storageMediaReadBlocks=..., storageMediaWriteBlocks=..., storageUniqueReadBlocks=..., storageRepeatedReadBlocks=..., storagePartitionTableReadBlocks=..., storageBootMetadataReadBlocks=..., storageBootDataReadBlocks=..., storageRootMetadataReadBlocks=..., storageRootDataReadBlocks=..., storageUnknownReadBlocks=..., storageBytesRead=..., pathLookups=..., inodeLoads=..., dirEntryScans=..., fileOpens=..., fileReads=..., statCalls=..., programLoadBytes=..., dynamicImportBytes=..., libraryLoadBytes=..., genericFileDataReadBlocks=..., genericFileDataReadBytes=..., readDirDataReadBlocks=..., readDirDataReadBytes=..., programDataReadBlocks=..., programDataReadBytes=..., dynamicImportDataReadBlocks=..., dynamicImportDataReadBytes=..., libraryDataReadBlocks=..., libraryDataReadBytes=..., blockCacheHits=..., blockCacheMisses=..., blockCacheBatchReads=..., initProgramFileDataReadBlocks=..., initProgramFileDataReadBytes=..., shellProgramFileDataReadBlocks=..., shellProgramFileDataReadBytes=..., otherProgramFileDataReadBlocks=..., otherProgramFileDataReadBytes=..., libkraftLibraryFileDataReadBlocks=..., libkraftLibraryFileDataReadBytes=..., otherLibraryFileDataReadBlocks=..., otherLibraryFileDataReadBytes=...
+k16Phase: name=ls:/bin.visible, elapsed=..., slices=..., runTime=..., inputBytes=..., gpuSubmissions=..., gpuSubmittedBytes=..., gpuDeltas=..., gpuNetworkBytes=..., sentRetainedPayloads=..., sentRetainedPayloadBytes=..., storageReadCommands=..., storageRequestedReadBlocks=..., storageRequestedReadBytes=..., storageWriteCommands=..., storageMediaReadBlocks=..., storageMediaWriteBlocks=..., storageUniqueReadBlocks=..., storageRepeatedReadBlocks=..., storagePartitionTableReadBlocks=..., storageBootMetadataReadBlocks=..., storageBootDataReadBlocks=..., storageRootMetadataReadBlocks=..., storageRootDataReadBlocks=..., storageUnknownReadBlocks=..., storageBytesRead=..., pathLookups=..., inodeLoads=..., dirEntryScans=..., fileOpens=..., fileReads=..., statCalls=..., programLoadBytes=..., dynamicImportBytes=..., libraryLoadBytes=..., genericFileDataReadBlocks=..., genericFileDataReadBytes=..., readDirDataReadBlocks=..., readDirDataReadBytes=..., programDataReadBlocks=..., programDataReadBytes=..., dynamicImportDataReadBlocks=..., dynamicImportDataReadBytes=..., libraryDataReadBlocks=..., libraryDataReadBytes=..., blockCacheHits=..., blockCacheMisses=..., blockCacheBatchReads=..., initProgramFileDataReadBlocks=..., initProgramFileDataReadBytes=..., shellProgramFileDataReadBlocks=..., shellProgramFileDataReadBytes=..., otherProgramFileDataReadBlocks=..., otherProgramFileDataReadBytes=..., libkraftLibraryFileDataReadBlocks=..., libkraftLibraryFileDataReadBytes=..., otherLibraryFileDataReadBlocks=..., otherLibraryFileDataReadBytes=...
 ```
 
-Use these phase lines when deciding whether a slowdown is in command dispatch, command execution/storage reads, display
-frame production, guest filesystem/path/stat work, or post-command idle work. The older `k16LsCommand*` aggregate lines
+Use these phase lines when deciding whether a slowdown is in command dispatch, command execution/storage reads, retained
+GPU submission or forwarding, guest filesystem/path/stat work, or post-command idle work. The older `k16LsCommand*` aggregate lines
 remain available for comparison with previous profiling runs.
 
 The coreutils profile also prints a sorted KFS hotspot summary. It includes read-only bundled-file access through
@@ -107,7 +107,7 @@ lists show which commands contribute to each path, inode, directory, file, progr
 storage bucket. Allocation/free internals are not exposed as their own OS counters yet; use `storageWriteCommands` and
 `mediaWriteBlocks` as the write-side signal until explicit allocation counters exist.
 
-The bundled BIOS intentionally shows a splash frame and waits for 20 game ticks before loading the bootloader.
+The bundled BIOS intentionally publishes a retained splash state and waits for 20 game ticks before loading the bootloader.
 `bios.splash.wait` isolates the pure wait portion before the release tick. The production-like text profile keeps
 bootloader/kernel/shell work under `shell.prompt.after_splash_to_prompt_visible`; the startup signal diagnostic splits the
 same boot path with `bios.bootloader.visible` for BIOS storage work through the bootloader debug banner and
@@ -136,21 +136,19 @@ miss ranges that reached storage0 as batched reads after the KFS cache check. Th
 the loaded executable/shared-object file. They include headers, import metadata, relocations, and payload reads while
 preserving the older semantic `programDataRead*`, `dynamicImportDataRead*`, and `libraryDataRead*` buckets.
 
-The attached-display transport profile prints a dedicated line for the native display batch path:
+The attached-display transport profile prints a dedicated line for the opaque retained payload path:
 
 ```text
-k16DisplayTransport: command=..., visible=..., ticks=..., nativeBatches=..., nativeBytes=..., nativeFrames=..., nativeTilePayloadBytes=..., nativeMonoPayloadBytes=..., clientFrames=..., serverDecodedFallbackFrames=..., clientTiles=..., clientTilePayloadBytes=..., clientMonoPayloadBytes=..., clientOperations=..., testDecodeNanos=..., sentFrames=..., sentTiles=..., sentTilePayloadBytes=..., sentMonoPayloadBytes=..., sentOperations=...
+k16DisplayTransport: command=..., visible=... ns, ticks=..., payloads=..., payloadBytes=..., fullReplacements=..., deltas=..., runSlices=..., runTime=... ns
 ```
 
-`nativeBatches` and `nativeBytes` are the server-to-client native display payloads emitted by the runtime for an
-attached display session. `client*` counters describe the frame stream observed by the profiling bridge after native
-payload decode for inspection. `serverDecodedFallbackFrames` counts frames that still reached the bridge through the
-decoded `sendDisplayFrame` path instead of `sendNativeDisplayFrameBytes`. `testDecodeNanos` is useful as an estimate of
-the decode work avoided on the server hot path by native batch passthrough.
-Tile and mono payload bytes are deliberately separate: terminal rendering
-should increase mono bytes while leaving tile bytes at zero after the initial
-full refresh. The runtime reports the same split sent-display counters from the
-native batch summary.
+`payloads` and `payloadBytes` count the opaque KDSP deltas forwarded after the
+viewer baseline; the server does not decode them. `fullReplacements` and
+`deltas` describe what the profiling client replica installed. The initial
+snapshot is installed before the baseline, so the measured command must add at
+least one delta without requiring a full replacement. `runSlices` and
+`runTime` isolate guest execution while the transport counters expose the
+additional observer cost.
 
 Use `profileK16ManyVmServerBudget` for a server-focused workload that boots several K16 runtime devices, measures idle
 tick cost after all shells are waiting, then runs active production-path command scenarios. The printed lines include
@@ -194,8 +192,8 @@ k16ManyVmOneActive: ...
 - `k16ManyVmIdle` measures ordinary server ticks while all VMs are waiting at the shell prompt.
 - `k16ManyVmCpuHighload` dispatches `ticks` to every VM and is the first place to look for interpreter, cached decode,
   and scheduler budget costs under active CPU work.
-- `k16ManyVmTextDisplayHighload` dispatches `ls /bin` to every VM and is the first place to look for terminal text
-  rendering, dirty display payloads, and frame drain costs.
+- `k16ManyVmTextDisplayHighload` dispatches `ls /bin` to every VM and is the first place to look for terminal retained
+  transactions, authoritative resource memory, and publication costs.
 - `k16ManyVmStorageHighload` dispatches `cat /etc/motd` to every VM and is the first place to look for storage0, KFS,
   and host storage media costs.
 - `k16ManyVmOneActive` keeps the older mixed workload where one VM is active while the rest stay idle.
@@ -212,13 +210,12 @@ k16Execution: slices=..., time=..., haltSignals=..., waitSignals=..., yieldSigna
 - `haltSignals`, `waitSignals`, `yieldSignals`, and `pauseSignals` classify the signal that returned control to the
   worker.
 
-The K16 output lines show host-side output cache refresh work and split text output from display frame payloads:
+The K16 output lines show host-side output cache refresh work and retained payload forwarding:
 
 ```text
 k16Output: refreshes=..., time=...
 k16TextOutput: snapshots=..., snapshotBytes=...
-k16DisplayFrames: batches=..., bytes=..., frames=...
-k16DisplaySent: frames=..., tiles=..., tilePayloadBytes=..., monoPayloadBytes=..., operations=...
+k16RetainedDisplaySent: payloads=..., bytes=...
 k16TextInput: events=..., bytes=..., time=...
 ```
 
@@ -226,11 +223,8 @@ k16TextInput: events=..., bytes=..., time=...
 - `time` is wall-clock time spent refreshing the host-side output caches.
 - `k16TextOutput.snapshots` counts refreshes that observed a non-empty serial/stdout snapshot.
 - `k16TextOutput.snapshotBytes` sums the serial/stdout snapshot sizes observed during refreshes.
-- `k16DisplayFrames.batches`, `bytes`, and `frames` count non-empty GPU frame drain batches, raw frame payload bytes, and
-  decoded display frames.
-- `k16DisplaySent` counts frames and operations forwarded to attached display
-  sessions without server-side decode. `tilePayloadBytes` is raw RGB565 tile
-  data and `monoPayloadBytes` is packed 1bpp operation data.
+- `k16RetainedDisplaySent` counts opaque snapshot/delta payloads forwarded to
+  authorized observers without server-side decode.
 - `k16TextInput.events` counts accepted text input enqueue operations: character input, paste input, and legacy raw
   serial input.
 - `k16TextInput.bytes` counts the text input bytes delivered by those operations.
@@ -310,37 +304,28 @@ must not call into Kotlin.
 Runtime profiling also folds selected device counters into the human-readable summary:
 
 ```text
-k16Gpu: rawBlits=..., rawBlitPixels=..., rawBlitBytes=..., monoBlits=..., monoPixels=..., monoSourceBytes=..., presents=..., frames=..., tiles=..., tilePayloadBytes=..., monoPayloadBytes=...
+k16Gpu: submissions=..., committed=..., rejected=..., submittedBytes=..., resources=..., authoritativeBytes=..., viewers=..., snapshots=..., deltas=..., networkBytes=..., resyncs=...
+k16RetainedDisplaySent: payloads=..., bytes=...
 ```
 
-- `rawBlits`, `rawBlitPixels`, and `rawBlitBytes` count guest `gpu0`
-  `BLIT_BUFFER` commands and their little-endian RGB565 source payload.
-- `monoBlits`, `monoPixels`, and `monoSourceBytes` count guest `gpu0`
-  `BLIT_MONO_BUFFER` commands, covered pixels, and tight packed source bytes.
-- `presents` counts guest `PRESENT` commands.
-- `frames` counts display frames produced by VM-side `PRESENT` handling.
-  `tiles` and `tilePayloadBytes` count raw RGB565 tiles;
-  `monoPayloadBytes` counts packed 1bpp operation data.
+- `submissions`, `committed`, `rejected`, and `submittedBytes` describe guest
+  `gpu0` transaction traffic.
+- `resources` and `authoritativeBytes` are current host-memory gauges for the
+  canonical retained state; `viewers` is the current replication fan-out.
+- `snapshots`, `deltas`, `networkBytes`, and `resyncs` describe native retained
+  publication work. `k16RetainedDisplaySent` counts the individual payloads
+  forwarded by the Kotlin runtime to Minecraft networking.
 
-For terminal workloads, compare `k16TextOutput.snapshotBytes`,
-`k16Gpu.monoSourceBytes`, and `k16Gpu.monoPayloadBytes`. After the initial full
-refresh, normal text updates should use mono operations rather than raw
-`BLIT_BUFFER`/tile payloads.
+For terminal workloads, compare committed transaction bytes with retained
+network bytes and client damage. Key bursts and row scroll should patch the
+mask-instance buffer and produce deltas after the one late-attach snapshot.
 
 Minecraft-side display profiling adds the client apply, staging, and upload
 costs:
 
-```text
-nativeBatchApply: batches=..., frames=..., tiles=..., payloadBytes=..., operations=..., monoPayloadBytes=..., time=..., avg=...
-snapshotCopy: copies=..., regions=..., pixels=..., time=..., avg=...
-textureUpload: uploads=..., regions=..., pixels=..., time=..., avg=...
-```
-
-`nativeBatchApply.monoPayloadBytes` counts accepted packed masks.
-`snapshotCopy` counts only pixels copied into reusable region-packed staging,
-not an implicit full-front snapshot. `textureUpload` counts actual uploaded
-regions and pixels so an incremental update can be distinguished from a full
-320x200 upload.
+Client profiling is expressed in retained install/compile/render terms. A full
+replacement should occur only for attach/resync/resource reload; normal output
+reports resource patch ranges/rectangles and reuses compiled draw commands.
 
 ## JFR
 
@@ -438,10 +423,10 @@ passes `k16.vm.native.library=...` to the JVM.
 
 - High operation counts with low total nanos usually do not justify native code.
 - High total nanos in small per-call operations suggests batching before native code.
-- High tile or mono payload bytes with high serialization nanos may justify
-  native serialization or compression.
+- High retained payload bytes with high submission or forwarding time may justify
+  batching or compression after profiling identifies the responsible transaction shape.
 - High VM execution nanos plus many pause/yield signals points to VM interpreter work.
-- K16 guest/host interaction is MMIO-driven; high device costs usually point to a specific MMIO device implementation or host-side frame/storage plumbing.
+- K16 guest/host interaction is MMIO-driven; high device costs usually point to a specific MMIO device implementation or host-side retained-display/storage plumbing.
 - High K16 benchmark `vs_native` ratios identify interpreter overhead to inspect before rewriting guest algorithms.
 - High `instructions:` nanos or counts in older profiling reports identify interpreter opcode families to inspect with JFR before rewriting the VM.
 - Compiler phase timings affect startup and IDE latency, not steady-state display FPS.
