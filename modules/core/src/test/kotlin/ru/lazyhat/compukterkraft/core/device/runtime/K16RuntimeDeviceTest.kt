@@ -285,6 +285,94 @@ class K16RuntimeDeviceTest {
     }
 
     @Test
+    fun observerAttachedWhileOffBindsWhenPoweredOn() {
+        val endpoint = RecordingK16Endpoint()
+        val displayNetwork = RecordingDisplayNetworkBridge()
+        val player = UUID.fromString("00000000-0000-0000-0000-000000000075")
+        val snapshot = byteArrayOf(0x4b, 0x44, 0x53, 0x50)
+        val device =
+            K16RuntimeDevice(
+                deviceId = 73,
+                properties = DeviceProperties(DeviceFamily.NORMAL, label = "K16"),
+                endpointFactory = { endpoint },
+                stateSink = {},
+                displayNetwork = displayNetwork,
+            )
+        displayNetwork.authorizedPlayers += player
+        endpoint.retainedPayloads += NativeRetainedDisplayPayload(1L, snapshot)
+
+        assertTrue(device.attachRetainedDisplayViewer(player))
+        assertTrue(endpoint.retainedViewerAttaches.isEmpty())
+
+        device.turnOn()
+
+        assertEquals(listOf(1L to 73), endpoint.retainedViewerAttaches)
+        assertEquals(listOf(SentNativePayload(player, 73, snapshot)), displayNetwork.sentRetainedPayloads)
+    }
+
+    @Test
+    fun rebootRebindsExistingObserverIntentToReplacementEndpoint() {
+        val endpoints = mutableListOf<RecordingK16Endpoint>()
+        val displayNetwork = RecordingDisplayNetworkBridge()
+        val player = UUID.fromString("00000000-0000-0000-0000-000000000076")
+        val device =
+            K16RuntimeDevice(
+                deviceId = 73,
+                properties = DeviceProperties(DeviceFamily.NORMAL, label = "K16"),
+                endpointFactory = { RecordingK16Endpoint().also(endpoints::add) },
+                stateSink = {},
+                displayNetwork = displayNetwork,
+            )
+        displayNetwork.authorizedPlayers += player
+
+        device.turnOn()
+        assertTrue(device.attachRetainedDisplayViewer(player))
+
+        device.reboot()
+
+        assertEquals(listOf(1L), endpoints[0].retainedViewerDetaches)
+        assertEquals(listOf(1L to 73), endpoints[1].retainedViewerAttaches)
+    }
+
+    @Test
+    fun detachWhilePoweredOffCancelsPendingObserverIntent() {
+        val endpoint = RecordingK16Endpoint()
+        val player = UUID.fromString("00000000-0000-0000-0000-000000000077")
+        val device =
+            K16RuntimeDevice(
+                deviceId = 73,
+                properties = DeviceProperties(DeviceFamily.NORMAL, label = "K16"),
+                endpointFactory = { endpoint },
+                stateSink = {},
+            )
+
+        assertTrue(device.attachRetainedDisplayViewer(player))
+        assertTrue(device.detachRetainedDisplayViewer(player))
+
+        device.turnOn()
+
+        assertTrue(endpoint.retainedViewerAttaches.isEmpty())
+    }
+
+    @Test
+    fun closeClearsPoweredOffObserverIntent() {
+        val player = UUID.fromString("00000000-0000-0000-0000-000000000078")
+        val device =
+            K16RuntimeDevice(
+                deviceId = 73,
+                properties = DeviceProperties(DeviceFamily.NORMAL, label = "K16"),
+                endpointFactory = { RecordingK16Endpoint() },
+                stateSink = {},
+            )
+
+        assertTrue(device.attachRetainedDisplayViewer(player))
+
+        device.close()
+
+        assertFalse(device.detachRetainedDisplayViewer(player))
+    }
+
+    @Test
     fun serverTickPrunesLostAuthorizationAndTimedOutResyncReattaches() {
         val endpoint = RecordingK16Endpoint()
         val displayNetwork = RecordingDisplayNetworkBridge()
