@@ -323,46 +323,30 @@ pub mod computer {
 
     pub mod gpu0 {
         pub const BASE: u32 = 0x1000_0500;
-        pub const WIDTH: u32 = 0x1000_0500;
-        pub const HEIGHT: u32 = 0x1000_0504;
-        pub const STRIDE_BYTES: u32 = 0x1000_0508;
-        pub const PIXEL_FORMAT: u32 = 0x1000_050c;
-        pub const COMMAND: u32 = 0x1000_0510;
-        pub const STATUS: u32 = 0x1000_0514;
-        pub const ERROR: u32 = 0x1000_0518;
-        pub const X: u32 = 0x1000_051c;
-        pub const Y: u32 = 0x1000_0520;
-        pub const RECT_WIDTH: u32 = 0x1000_0524;
-        pub const RECT_HEIGHT: u32 = 0x1000_0528;
-        pub const BUFFER_ADDR: u32 = 0x1000_052c;
-        pub const BUFFER_STRIDE_BYTES: u32 = 0x1000_0530;
-        pub const COLOR: u32 = 0x1000_0534;
-        pub const SEQUENCE_LOW: u32 = 0x1000_0538;
-        pub const SEQUENCE_HIGH: u32 = 0x1000_053c;
-        pub const SRC_X: u32 = 0x1000_0540;
-        pub const SRC_Y: u32 = 0x1000_0544;
-        pub const BACKGROUND_COLOR: u32 = 0x1000_0548;
+        pub const DEVICE_ABI_VERSION: u32 = 0x1000_0500;
+        pub const WIDTH: u32 = 0x1000_0504;
+        pub const HEIGHT: u32 = 0x1000_0508;
+        pub const PACKET_VERSION: u32 = 0x1000_050c;
+        pub const MAX_PACKET_BYTES: u32 = 0x1000_0510;
+        pub const MAX_TRANSACTION_OPERATIONS: u32 = 0x1000_0514;
+        pub const MAX_RESOURCES: u32 = 0x1000_0518;
+        pub const MAX_RESOURCE_BYTES: u32 = 0x1000_051c;
+        pub const MAX_TOTAL_RESOURCE_BYTES: u32 = 0x1000_0520;
+        pub const MAX_DRAW_LIST_BYTES: u32 = 0x1000_0524;
+        pub const MAX_DRAW_COMMANDS: u32 = 0x1000_0528;
+        pub const MAX_CLIP_DEPTH: u32 = 0x1000_052c;
+        pub const SUBMISSION_ADDRESS: u32 = 0x1000_0530;
+        pub const SUBMISSION_LENGTH: u32 = 0x1000_0534;
+        pub const SUBMIT: u32 = 0x1000_0538;
+        pub const RESULT_CODE: u32 = 0x1000_053c;
+        pub const ERROR_OPERATION_INDEX: u32 = 0x1000_0540;
+        pub const ERROR_BYTE_OFFSET: u32 = 0x1000_0544;
+        pub const COMMITTED_SEQUENCE_LOW: u32 = 0x1000_0548;
+        pub const COMMITTED_SEQUENCE_HIGH: u32 = 0x1000_054c;
         pub const SIZE: u32 = 256;
 
-        pub const PIXEL_FORMAT_RGB565: i32 = 1;
-
-        pub const STATUS_READY: i32 = 0;
-        pub const STATUS_DONE: i32 = 1;
-        pub const STATUS_ERROR: i32 = 2;
-
-        pub const ERROR_NONE: i32 = 0;
-        pub const ERROR_INVALID_COMMAND: i32 = 1;
-        pub const ERROR_BUFFER_OUT_OF_BOUNDS: i32 = 2;
-        pub const ERROR_INVALID_RECT: i32 = 3;
-        pub const ERROR_INVALID_STRIDE: i32 = 4;
-
-        pub const COMMAND_NOP: i32 = 0;
-        pub const COMMAND_CLEAR: i32 = 1;
-        pub const COMMAND_BLIT_BUFFER: i32 = 2;
-        pub const COMMAND_PRESENT: i32 = 3;
-        pub const COMMAND_FILL_RECT: i32 = 4;
-        pub const COMMAND_COPY_RECT: i32 = 5;
-        pub const COMMAND_BLIT_MONO_BUFFER: i32 = 6;
+        pub const DEVICE_ABI_VERSION_VALUE: i32 = 2;
+        pub const PACKET_VERSION_VALUE: i32 = 1;
     }
 
     pub mod timer0 {
@@ -481,13 +465,13 @@ mod tests {
         assert_eq!(computer::debug::WRITE, 0x1000_0100);
         assert_eq!(computer::serial_input::READ, 0x1000_0204);
         assert_eq!(computer::storage0::COMMAND, 0x1000_040c);
-        assert_eq!(computer::gpu0::COMMAND, 0x1000_0510);
-        assert_eq!(computer::gpu0::SRC_X, 0x1000_0540);
-        assert_eq!(computer::gpu0::SRC_Y, 0x1000_0544);
-        assert_eq!(computer::gpu0::BACKGROUND_COLOR, 0x1000_0548);
-        assert_eq!(computer::gpu0::COMMAND_FILL_RECT, 4);
-        assert_eq!(computer::gpu0::COMMAND_COPY_RECT, 5);
-        assert_eq!(computer::gpu0::COMMAND_BLIT_MONO_BUFFER, 6);
+        assert_eq!(computer::gpu0::DEVICE_ABI_VERSION, 0x1000_0500);
+        assert_eq!(computer::gpu0::SUBMISSION_ADDRESS, 0x1000_0530);
+        assert_eq!(computer::gpu0::SUBMIT, 0x1000_0538);
+        assert_eq!(computer::gpu0::RESULT_CODE, 0x1000_053c);
+        assert_eq!(computer::gpu0::COMMITTED_SEQUENCE_HIGH, 0x1000_054c);
+        assert_eq!(computer::gpu0::DEVICE_ABI_VERSION_VALUE, 2);
+        assert_eq!(computer::gpu0::PACKET_VERSION_VALUE, 1);
         assert_eq!(computer::timer0::BASE, 0x1000_0600);
         assert_eq!(computer::timer0::VERSION, 0x1000_0600);
         assert_eq!(computer::timer0::GAME_TICKS_LOW, 0x1000_0604);
@@ -716,8 +700,8 @@ mod tests {
 
     #[test]
     fn mmio_helper_preserves_typed_address() {
-        let register = unsafe { mmio::<u32>(computer::gpu0::COMMAND) };
+        let register = unsafe { mmio::<u32>(computer::gpu0::SUBMIT) };
 
-        assert_eq!(register.as_ptr() as usize, 0x1000_0510);
+        assert_eq!(register.as_ptr() as usize, 0x1000_0538);
     }
 }

@@ -7,9 +7,15 @@ const CELLS_ADDR: u32 = memory_layout::TERMINAL_CELLS_ADDR;
 
 static mut CURSOR_X: usize = 0;
 static mut CURSOR_Y: usize = 0;
+static mut ROW_HEAD: usize = 0;
 
 pub fn init() {
-    clear_terminal();
+    reset_cursor();
+    unsafe {
+        ROW_HEAD = 0;
+        clear_cells();
+    }
+    terminal_render::init();
 }
 
 pub fn clear() {
@@ -47,9 +53,10 @@ pub fn flush() {
 fn clear_terminal() {
     reset_cursor();
     unsafe {
+        ROW_HEAD = 0;
         clear_cells();
     }
-    terminal_render::clear_screen();
+    terminal_render::reset();
 }
 
 fn reset_cursor() {
@@ -73,7 +80,6 @@ fn put_printable_byte(byte: u8) {
         let x = CURSOR_X;
         let y = CURSOR_Y;
         set_cell(x, y, byte);
-        repaint_cell(x, y);
         CURSOR_X += 1;
     }
 }
@@ -96,7 +102,6 @@ fn write_printable_run(bytes: &[u8], start: usize) -> usize {
                 set_cell(column + run_len, row, bytes[index + run_len]);
                 run_len += 1;
             }
-            terminal_render::repaint_run(column, row, &bytes[index..index + run_len]);
             CURSOR_X += run_len;
             index += run_len;
         }
@@ -132,7 +137,6 @@ fn erase_previous_cell() {
         let x = CURSOR_X;
         let y = CURSOR_Y;
         set_cell(x, y, b' ');
-        repaint_cell(x, y);
     }
 }
 
@@ -155,22 +159,9 @@ unsafe fn clear_cells() {
 }
 
 unsafe fn scroll_up() {
-    copy_scrolled_cells();
+    ROW_HEAD = (ROW_HEAD + 1) % ROWS;
     clear_last_row();
     terminal_render::scroll_up();
-}
-
-unsafe fn copy_scrolled_cells() {
-    let mut row = 1;
-    while row < ROWS {
-        let mut column = 0;
-        while column < COLUMNS {
-            let value = read_cell(cell_index(column, row));
-            write_cell(cell_index(column, row - 1), value);
-            column += 1;
-        }
-        row += 1;
-    }
 }
 
 unsafe fn clear_last_row() {
@@ -185,19 +176,11 @@ fn set_cell(column: usize, row: usize, byte: u8) {
     unsafe {
         write_cell(cell_index(column, row), byte);
     }
-}
-
-fn repaint_cell(column: usize, row: usize) {
-    let byte = unsafe { read_cell(cell_index(column, row)) };
-    terminal_render::repaint_cell(column, row, byte);
+    terminal_render::set_cell(column, row, byte);
 }
 
 fn cell_index(column: usize, row: usize) -> usize {
-    row * COLUMNS + column
-}
-
-unsafe fn read_cell(index: usize) -> u8 {
-    unsafe { core::ptr::read_volatile((CELLS_ADDR + index as u32) as usize as *const u8) }
+    unsafe { ((ROW_HEAD + row) % ROWS) * COLUMNS + column }
 }
 
 unsafe fn write_cell(index: usize, value: u8) {
