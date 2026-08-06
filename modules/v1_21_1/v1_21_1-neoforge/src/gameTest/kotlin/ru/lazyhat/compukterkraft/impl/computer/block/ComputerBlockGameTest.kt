@@ -35,9 +35,7 @@ import ru.lazyhat.compukterkraft.common.utils.computerID
 import ru.lazyhat.compukterkraft.common.utils.computerLabel
 import ru.lazyhat.compukterkraft.common.utils.runtimeSnapshot
 import ru.lazyhat.compukterkraft.core.MOD_ID
-import ru.lazyhat.compukterkraft.core.device.DeviceEvents
-import ru.lazyhat.compukterkraft.core.device.input.KeyInputEvent
-import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeDevice
+import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeDeviceFailureState
 import ru.lazyhat.compukterkraft.impl.ModRegistry
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -93,10 +91,9 @@ class ComputerBlockGameTest {
     }
 
     @GameTest(template = "computer_platform", templateNamespace = MOD_ID)
-    fun runtimeSnapshotSurvivesBlockEntityReload(helper: GameTestHelper) {
+    fun runtimeSnapshotResumeFailsClosedAfterBlockEntityReload(helper: GameTestHelper) {
         val pos = BlockPos(1, 2, 1)
         val absolutePos = helper.absolutePos(pos)
-        val marker = "reload-marker"
         placeComputer(helper, pos)
 
         helper.runAfterDelay(5L) {
@@ -110,13 +107,8 @@ class ComputerBlockGameTest {
                 requireNotNull(originalComputer.computerID) {
                     "Expected placed computer block entity to keep an allocated id"
                 }
-            val originalDevice = originalComputer.getOrCreateRuntimeDevice()
             waitForSavedTerminalSnapshot(helper, originalComputer, "initial shell prompt") { terminal ->
                 terminal.contains("K16> ")
-            }
-            dispatchText(originalDevice, "echo $marker\n")
-            waitForSavedTerminalSnapshot(helper, originalComputer, "echoed reload marker") { terminal ->
-                terminal.contains(marker)
             }
 
             val savedTag = originalComputer.saveWithFullMetadata(helper.level.registryAccess())
@@ -152,23 +144,20 @@ class ComputerBlockGameTest {
                 "Expected reloaded computer to preserve id $expectedId, actual ${reloadedComputer.computerID}",
             )
 
-            reloadedComputer.getOrCreateRuntimeDevice().turnOn()
-            val restoredSnapshot =
-                waitForSavedTerminalSnapshot(helper, reloadedComputer, "restored reload marker") { terminal ->
-                    terminal.contains(marker)
-                }
-            val reloadedSnapshot = reloadedComputer.saveWithFullMetadata(helper.level.registryAccess()).runtimeSnapshot
+            val reloadedDevice = reloadedComputer.getOrCreateRuntimeDevice()
+            reloadedDevice.turnOn()
+            val failure = (reloadedDevice as RuntimeDeviceFailureState).runtimeFailureMessage
             helper.assertTrue(
                 ComputerGameTestEnvironment.hasRegisteredServerComputer(helper.level, absolutePos),
                 "Expected reloaded computer to recreate a registered runtime device",
             )
-            helper.assertTrue(
-                reloadedSnapshot?.isNotEmpty() == true,
-                "Expected reloaded computer to expose a runtime snapshot after recreation",
+            helper.assertFalse(
+                reloadedDevice.isOn,
+                "Expected display-less K16SNAP v1 resume to leave the runtime powered off",
             )
             helper.assertTrue(
-                terminalText(restoredSnapshot).contains(marker),
-                "Expected restored K16 runtime terminal state to contain '$marker'",
+                failure?.contains("cannot preserve retained gpu0 state") == true,
+                "Expected explicit retained gpu0 snapshot failure, actual: $failure",
             )
             helper.succeed()
         }
@@ -229,15 +218,6 @@ class ComputerBlockGameTest {
                 )
             }
             helper.succeed()
-        }
-    }
-
-    private fun dispatchText(
-        device: RuntimeDevice,
-        text: String,
-    ) {
-        for (byte in text.encodeToByteArray()) {
-            DeviceEvents.dispatch(device, KeyInputEvent.Character(byte))
         }
     }
 

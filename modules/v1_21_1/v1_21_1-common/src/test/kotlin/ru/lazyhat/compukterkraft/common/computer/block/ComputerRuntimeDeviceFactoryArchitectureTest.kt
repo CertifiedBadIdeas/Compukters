@@ -62,7 +62,7 @@ class ComputerRuntimeDeviceFactoryArchitectureTest {
     }
 
     @Test
-    fun inGameK16ComputerRestoresPendingRuntimeSnapshotBeforeFreshBoot() {
+    fun inGameK16ComputerRoutesPendingSnapshotOnlyToFailClosedRestorePath() {
         val source =
             Path
                 .of("src/main/kotlin/ru/lazyhat/compukterkraft/common/computer/block/ComputerRuntimeDeviceFactory.kt")
@@ -73,12 +73,18 @@ class ComputerRuntimeDeviceFactoryArchitectureTest {
             source.indexOf("createK16ComputerEndpoint(biosFlashPath, storage0, snapshot, memorySize, maxSteps, maxTurnsPerTick)")
         val restoreIndex = source.indexOf("K16ComputerRuntimeFactory.restoreFromBiosFlashSnapshot")
         val freshBootIndex = source.indexOf("K16ComputerRuntimeFactory.createFromBiosFlash")
+        val catchIndex = source.indexOf("catch (error: Throwable)")
 
         assertTrue(consumeIndex >= 0, "factory should consume pending runtime snapshot before endpoint creation")
         assertTrue(endpointIndex > consumeIndex, "factory should pass the consumed snapshot into endpoint creation")
-        assertTrue(restoreIndex >= 0, "factory should expose a restore branch")
-        assertTrue(freshBootIndex >= 0, "factory should keep a fresh boot branch")
-        assertTrue(restoreIndex > freshBootIndex, "restore should remain the non-null snapshot branch after fresh boot")
+        assertTrue(restoreIndex >= 0, "non-null snapshots should reach the explicit native rejection path")
+        assertTrue(freshBootIndex >= 0, "snapshot-free computers should keep a fresh boot branch")
+        assertTrue(restoreIndex > freshBootIndex, "the restore call must stay confined to the non-null snapshot branch")
+        assertTrue(catchIndex > restoreIndex, "endpoint creation should preserve its resource-cleanup catch")
+        assertTrue(
+            source.indexOf("K16ComputerRuntimeFactory.createFromBiosFlash", catchIndex) < 0,
+            "restore failure must not cold-boot a fresh machine",
+        )
         assertFalse(source.contains("var pendingRuntimeSnapshot"))
     }
 
