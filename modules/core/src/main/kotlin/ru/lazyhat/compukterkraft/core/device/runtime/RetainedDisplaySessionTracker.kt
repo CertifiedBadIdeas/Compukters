@@ -23,54 +23,36 @@ import java.util.UUID
 
 internal data class RetainedDisplaySession(
     val playerUuid: UUID,
-    val containerId: Int,
-    val displayId: Int,
     val viewerToken: Long,
 )
 
 internal class RetainedDisplaySessionTracker {
-    private val sessions = linkedMapOf<Pair<UUID, Int>, RetainedDisplaySession>()
+    private val sessions = linkedMapOf<UUID, RetainedDisplaySession>()
     private var nextViewerToken = 1L
 
     @Synchronized
-    fun attach(
-        playerUuid: UUID,
-        containerId: Int,
-        displayId: Int,
-    ): RetainedDisplaySession {
-        val key = playerUuid to displayId
-        val token = sessions[key]?.viewerToken ?: allocateViewerToken()
-        return RetainedDisplaySession(playerUuid, containerId, displayId, token).also { sessions[key] = it }
-    }
+    fun attach(playerUuid: UUID): RetainedDisplaySession =
+        sessions.getOrPut(playerUuid) {
+            RetainedDisplaySession(playerUuid, allocateViewerToken())
+        }
 
     @Synchronized
-    fun authorize(
-        playerUuid: UUID,
-        containerId: Int,
-        displayId: Int,
-    ): Long? =
-        sessions[playerUuid to displayId]
-            ?.takeIf { it.containerId == containerId }
-            ?.viewerToken
+    fun authorize(playerUuid: UUID): Long? = sessions[playerUuid]?.viewerToken
 
     @Synchronized
-    fun detach(
-        playerUuid: UUID,
-        containerId: Int,
-        displayId: Int,
-    ): Long? {
-        val key = playerUuid to displayId
-        val session = sessions[key]?.takeIf { it.containerId == containerId } ?: return null
-        sessions.remove(key)
-        return session.viewerToken
-    }
+    fun detach(playerUuid: UUID): Long? = sessions.remove(playerUuid)?.viewerToken
 
     @Synchronized
     fun sessionForToken(viewerToken: Long): RetainedDisplaySession? = sessions.values.firstOrNull { it.viewerToken == viewerToken }
 
     @Synchronized
-    fun clear() {
+    fun sessionsSnapshot(): List<RetainedDisplaySession> = sessions.values.toList()
+
+    @Synchronized
+    fun clear(): List<Long> {
+        val tokens = sessions.values.map(RetainedDisplaySession::viewerToken)
         sessions.clear()
+        return tokens
     }
 
     private fun allocateViewerToken(): Long {

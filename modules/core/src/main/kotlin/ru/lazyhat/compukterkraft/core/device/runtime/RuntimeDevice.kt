@@ -43,46 +43,16 @@ interface RuntimeDeviceLifecycle {
  *  device implementations can plug into the existing event-dispatch pipeline. */
 interface RuntimeDeviceInput : DeviceEvents.Receiver
 
-/** Display-session role: per-player pixel display endpoint attachments. */
+/** Display-session role: one retained gpu0 viewer per observing player. */
 interface RuntimeDeviceDisplaySessions {
-    fun attachDisplaySession(
-        playerUuid: UUID,
-        containerId: Int,
-        displayId: Int,
-        width: Int,
-        height: Int,
-    )
-
-    fun resizeDisplaySession(
-        playerUuid: UUID,
-        displayId: Int,
-        width: Int,
-        height: Int,
-    )
-
-    fun detachDisplaySession(
-        playerUuid: UUID,
-        displayId: Int,
-    )
-
-    fun attachRetainedDisplaySession(
-        playerUuid: UUID,
-        containerId: Int,
-        displayId: Int,
-    ): Boolean
+    fun attachRetainedDisplayViewer(playerUuid: UUID): Boolean
 
     fun acceptRetainedDisplayServerbound(
         playerUuid: UUID,
-        containerId: Int,
-        displayId: Int,
         payload: ByteArray,
     ): Boolean
 
-    fun detachRetainedDisplaySession(
-        playerUuid: UUID,
-        containerId: Int,
-        displayId: Int,
-    ): Boolean
+    fun detachRetainedDisplayViewer(playerUuid: UUID): Boolean
 }
 
 /** Metadata role: family/label. Access checks belong to the carrier
