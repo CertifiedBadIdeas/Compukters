@@ -105,7 +105,7 @@ class K16ComputerRuntimeTest {
         val snapshot =
             NativeK16ComputerStatsSnapshot.from(
                 longArrayOf(
-                    15,
+                    16,
                     2, 3, 4, 5,
                     6, 7, 8, 9,
                     31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44,
@@ -198,17 +198,17 @@ class K16ComputerRuntimeTest {
                         ),
                     gpu =
                         NativeK16GpuStats(
-                            blitBufferCommands = 34,
-                            blitPixels = 35,
-                            blitSourceBytes = 36,
-                            blitMonoCommands = 37,
-                            blitMonoPixels = 38,
-                            blitMonoSourceBytes = 39,
-                            presentCommands = 40,
-                            frames = 41,
-                            frameTiles = 42,
-                            framePayloadBytes = 43,
-                            frameMonoPayloadBytes = 44,
+                            submissionAttempts = 34,
+                            committedSubmissions = 35,
+                            rejectedSubmissions = 36,
+                            submittedBytes = 37,
+                            resourceCount = 38,
+                            authoritativePayloadBytes = 39,
+                            viewerCount = 40,
+                            snapshotPayloads = 41,
+                            deltaPayloads = 42,
+                            networkPayloadBytes = 43,
+                            resyncRequests = 44,
                         ),
                 ),
             ),

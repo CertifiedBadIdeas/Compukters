@@ -42,6 +42,23 @@ fn computer_gpu0_retained_commits_guest_packet_and_late_attach_sees_it() {
     assert_eq!(read_u64(&snapshot, 24), 1);
     assert_eq!(read_u32(&snapshot, 36), 8);
     assert_eq!(read_u16(&snapshot, 40), 0x1234);
+    let stats = machine.stats_snapshot();
+    let gpu = stats
+        .devices
+        .iter()
+        .find(|device| device.name == "gpu0")
+        .expect("gpu0 stats are present")
+        .gpu;
+    assert_eq!(gpu.submission_attempts, 1);
+    assert_eq!(gpu.committed_submissions, 1);
+    assert_eq!(gpu.rejected_submissions, 0);
+    assert_eq!(gpu.submitted_bytes, packet.len() as u64);
+    assert_eq!(gpu.resource_count, 0);
+    assert_eq!(gpu.authoritative_payload_bytes, 8);
+    assert_eq!(gpu.viewer_count, 1);
+    assert_eq!(gpu.snapshot_payloads, 1);
+    assert_eq!(gpu.delta_payloads, 0);
+    assert_eq!(gpu.network_payload_bytes, snapshot.len() as u64);
 }
 
 #[test]

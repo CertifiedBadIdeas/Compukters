@@ -299,7 +299,7 @@ fn aggregate_resource_quotas_roll_back_the_whole_transaction() {
 }
 
 #[test]
-fn representative_terminal_uses_exactly_40_504_authoritative_payload_bytes() {
+fn representative_terminal_and_1_000_vm_scale_match_the_accepted_memory_model() {
     let mut gpu = RetainedGpu::try_new().expect("gpu");
     let atlas = vec![0u8; 128 * 128 / 8];
     let records = vec![instance(0); 1_600];
@@ -324,7 +324,12 @@ fn representative_terminal_uses_exactly_40_504_authoritative_payload_bytes() {
     assert_eq!(gpu.resources()[0].value.payload_bytes(), 2_048);
     assert_eq!(gpu.resources()[1].value.payload_bytes(), 38_400);
     assert_eq!(gpu.draw_list().encoded_byte_len(), 56);
-    assert_eq!(gpu.authoritative_payload_bytes(), 40_504);
+    let authoritative_payload_bytes = gpu.authoritative_payload_bytes();
+    assert_eq!(authoritative_payload_bytes, 40_504);
+
+    let one_thousand_vm_payload_bytes = authoritative_payload_bytes * 1_000;
+    assert_eq!(one_thousand_vm_payload_bytes, 40_504_000);
+    assert!(one_thousand_vm_payload_bytes < 39 * 1024 * 1024);
 }
 
 #[test]

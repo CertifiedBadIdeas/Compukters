@@ -124,7 +124,7 @@ class K16RuntimeDeviceTest {
     }
 
     @Test
-    fun runtimeDeviceDoesNotRenderSerialOutputAsDisplayFrames() {
+    fun runtimeDeviceDoesNotRenderSerialOutputAsRetainedDisplayState() {
         val source =
             root.resolve(
                 Path.of(
@@ -148,7 +148,7 @@ class K16RuntimeDeviceTest {
     }
 
     @Test
-    fun productionDisplayPathKeepsNativeBatchesOpaque() {
+    fun productionDisplayPathKeepsRetainedPayloadsOpaque() {
         val runtimeSource =
             root.resolve(
                 Path.of(

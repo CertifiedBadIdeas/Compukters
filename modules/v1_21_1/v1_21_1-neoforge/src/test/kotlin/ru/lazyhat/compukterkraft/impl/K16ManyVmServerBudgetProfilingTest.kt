@@ -324,12 +324,12 @@ class K16ManyVmServerBudgetProfilingTest {
     ) {
         val syncSuffix = syncNanos?.let { ", sync=$it ns" } ?: ""
         println(
-            "$label: vms=$vmCount, ticks=$ticks, wall=${nanos} ns$syncSuffix, " +
+            "$label: vms=$vmCount, ticks=$ticks, wall=$nanos ns$syncSuffix, " +
                 "perVmTick=${perVmTick(nanos, vmCount, ticks)} ns, " +
                 "slices=${snapshot.slices}, waits=${snapshot.waitSignals}, yields=${snapshot.yieldSignals}, " +
                 "idleSkips=${snapshot.idleSkips}, storageReadCommands=${snapshot.storageReadCommands}, " +
                 "storageMediaReadBlocks=${snapshot.storageMediaReadBlocks}, storageBytes=${snapshot.storageBytes}, " +
-                "gpuFrames=${snapshot.gpuFrames}, gpuFrameBytes=${snapshot.gpuFrameBytes}",
+                "gpuSubmissions=${snapshot.gpuSubmissions}, gpuSubmittedBytes=${snapshot.gpuSubmittedBytes}",
         )
     }
 
@@ -388,8 +388,8 @@ private data class ManyVmSnapshot(
     val storageReadCommands: Long = 0,
     val storageMediaReadBlocks: Long = 0,
     val storageBytes: Long = 0,
-    val gpuFrames: Long = 0,
-    val gpuFrameBytes: Long = 0,
+    val gpuSubmissions: Long = 0,
+    val gpuSubmittedBytes: Long = 0,
 ) {
     operator fun plus(snapshot: RuntimeProfilingSnapshot): ManyVmSnapshot =
         copy(
@@ -400,8 +400,8 @@ private data class ManyVmSnapshot(
             storageReadCommands = storageReadCommands + snapshot.k16.storage0.readCommands,
             storageMediaReadBlocks = storageMediaReadBlocks + snapshot.k16.storage0.mediaReadBlocks,
             storageBytes = storageBytes + snapshot.k16.storage0.bytesRead,
-            gpuFrames = gpuFrames + snapshot.k16.gpu.frames,
-            gpuFrameBytes = gpuFrameBytes + snapshot.k16.gpu.framePayloadBytes,
+            gpuSubmissions = gpuSubmissions + snapshot.k16.gpu.committedSubmissions,
+            gpuSubmittedBytes = gpuSubmittedBytes + snapshot.k16.gpu.submittedBytes,
         )
 
     operator fun minus(other: ManyVmSnapshot): ManyVmSnapshot =
@@ -413,8 +413,8 @@ private data class ManyVmSnapshot(
             storageReadCommands = storageReadCommands - other.storageReadCommands,
             storageMediaReadBlocks = storageMediaReadBlocks - other.storageMediaReadBlocks,
             storageBytes = storageBytes - other.storageBytes,
-            gpuFrames = gpuFrames - other.gpuFrames,
-            gpuFrameBytes = gpuFrameBytes - other.gpuFrameBytes,
+            gpuSubmissions = gpuSubmissions - other.gpuSubmissions,
+            gpuSubmittedBytes = gpuSubmittedBytes - other.gpuSubmittedBytes,
         )
 }
 

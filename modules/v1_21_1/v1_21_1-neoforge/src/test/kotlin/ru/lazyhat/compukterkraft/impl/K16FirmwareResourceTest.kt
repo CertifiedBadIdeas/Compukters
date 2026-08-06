@@ -1,23 +1,21 @@
 package ru.lazyhat.compukterkraft.impl
 
-import org.junit.jupiter.api.Disabled
-import ru.lazyhat.compukterkraft.common.computer.client.ClientDisplayBuffer
 import ru.lazyhat.compukterkraft.core.block.DeviceFamily
 import ru.lazyhat.compukterkraft.core.device.DeviceProperties
+import ru.lazyhat.compukterkraft.core.device.display.retained.RetainedDisplayApplyResult
+import ru.lazyhat.compukterkraft.core.device.display.retained.RetainedDisplayReplica
+import ru.lazyhat.compukterkraft.core.device.display.retained.RetainedDisplayState
+import ru.lazyhat.compukterkraft.core.device.display.retained.RetainedMask1Bpp
+import ru.lazyhat.compukterkraft.core.device.display.retained.RetainedMaskInstanceBuffer
 import ru.lazyhat.compukterkraft.core.device.runtime.K16RuntimeDevice
 import ru.lazyhat.compukterkraft.core.device.runtime.ports.DisplayNetworkBridge
-import ru.lazyhat.compukterkraft.core.device.vm.display.NativeDisplayFrameCodec
-import ru.lazyhat.compukterkraft.core.input.KeyCodes
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16BiosFlashWorkspace
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16ComputerRuntime
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16ComputerRuntimeFactory
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16ComputerControl
-import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
-import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameOperation
-import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayPixelFormat
 import ru.lazyhat.compukterkraft.lang.runtime.kraftos.KraftOsArtifactManifest
-import ru.lazyhat.compukterkraft.lang.runtime.storage.K16SystemVolumeWorkspace
 import ru.lazyhat.compukterkraft.lang.runtime.storage.K16_VOLUME_MAGIC_BYTES
+import ru.lazyhat.compukterkraft.lang.runtime.storage.K16SystemVolumeWorkspace
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.file.Files
@@ -31,16 +29,20 @@ import kotlin.io.path.writeBytes
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 private const val K16_KERNEL_LOAD_ADDR = 0x0000_4000
-private const val K16_KERNEL_BOOT_FLOOR_BYTES = 256 * 1024
+private const val K16_COMPUTER_MEMORY_BYTES = 1024 * 1024
 private const val K16_TERMINAL_CELLS_ADDR = 0x0000_3000
 private const val K16_TERMINAL_COLUMNS = 64
 private const val K16_TERMINAL_ROWS = 25
-private const val LEGACY_KERNEL_SHELL_DISABLED =
-    "Legacy kernel shell runtime path is no longer active; shell behavior is owned by a userland shell program."
+private const val BIOS_FONT_MASK_ID = 0xffff_ff01u
+private const val BIOS_INSTANCES_ID = 0xffff_ff02u
+private const val KRAFTOS_FONT_MASK_ID = 1u
+private const val KRAFTOS_INSTANCES_ID = 2u
 
 private fun optionalSource(path: Path): String =
     path.takeIf { it.toFile().isFile }
@@ -1358,7 +1360,7 @@ class K16FirmwareResourceTest {
                 val readyControl = runUntilTerminalText(runtime, "K16> ")
                 assertEquals(NativeK16ComputerControl.STATUS_READY, readyControl.status)
 
-                runShellCommand(runtime, "uname", expectVisiblePixels = true)
+                runShellCommand(runtime, "uname")
                 val terminal = terminalText(runtime.machineSnapshot())
 
                 assertTrue(
@@ -1393,7 +1395,7 @@ class K16FirmwareResourceTest {
                 val readyControl = runUntilTerminalText(runtime, "K16> ")
                 assertEquals(NativeK16ComputerControl.STATUS_READY, readyControl.status)
 
-                runShellCommand(runtime, "cat /etc/motd", expectVisiblePixels = true)
+                runShellCommand(runtime, "cat /etc/motd")
                 var terminal = terminalText(runtime.machineSnapshot())
                 var waitTurns = 0
                 while (!terminal.contains("K16 FS OK") && !terminal.contains("ERR") && waitTurns < 64) {
@@ -1435,9 +1437,9 @@ class K16FirmwareResourceTest {
                 val readyControl = runUntilTerminalText(runtime, "K16> ")
                 assertEquals(NativeK16ComputerControl.STATUS_READY, readyControl.status)
 
-                runShellCommand(runtime, "write /tmp.txt hi", expectVisiblePixels = true)
-                runShellCommand(runtime, "write --append /tmp.txt there", expectVisiblePixels = true)
-                runShellCommand(runtime, "cat /tmp.txt", expectVisiblePixels = true)
+                runShellCommand(runtime, "write /tmp.txt hi")
+                runShellCommand(runtime, "write --append /tmp.txt there")
+                runShellCommand(runtime, "cat /tmp.txt")
                 var terminal = terminalText(runtime.machineSnapshot())
                 var waitTurns = 0
                 while (!terminal.contains("hithere") && !terminal.contains("ERR") && waitTurns < 64) {
@@ -1520,7 +1522,7 @@ class K16FirmwareResourceTest {
                 )
                 assertTrue(debug.contains("K16 BOOT\n"), "bootloader debug output should remain visible; debug: $debug")
                 assertFalse(debug.contains("K16 SHELL\n"), "shell output should go through stdout, not debug; debug: $debug")
-                assertKernelGpuConsoleVisible(runtime, control, debug)
+                assertKernelRetainedConsoleVisible(runtime, control, debug)
             }
     }
 
@@ -1629,10 +1631,10 @@ class K16FirmwareResourceTest {
             ).use { runtime ->
                 val readyControl = runUntilTerminalText(runtime, "K16> ")
                 assertEquals(NativeK16ComputerControl.STATUS_READY, readyControl.status)
-                runShellCommand(runtime, "clear", expectVisiblePixels = false)
+                runShellCommand(runtime, "clear")
 
                 val ticksBeforeCommand = snapshotTimer0GameTicks(runtime.machineSnapshot())
-                runShellCommand(runtime, "ticks", expectVisiblePixels = true)
+                runShellCommand(runtime, "ticks")
                 val expectedTicks = ticksBeforeCommand + 1
                 assertEquals(
                     expectedTicks,
@@ -1657,7 +1659,7 @@ class K16FirmwareResourceTest {
     }
 
     @Test
-    fun bundledK16ShellTicksCommandPrintsFullWidthTimer0GameTicks() {
+    fun bundledK16RuntimeRejectsHighTimerSnapshotResumeWithoutRetainedGpuState() {
         val workspace = createTempDirectory("k16-shell-ticks-u64-command-test-")
         val biosFlashPath = workspace.resolve("bios.kflash")
         val storage0Path = workspace.resolve("storage0.kv")
@@ -1677,33 +1679,15 @@ class K16FirmwareResourceTest {
         val restoredGameTicks = 0x0000_0001_0000_002aL
         val highTimerSnapshot = snapshotWithTimer0GameTicks(bootedSnapshot, restoredGameTicks)
 
-        K16ComputerRuntimeFactory
-            .restoreFromBiosFlashSnapshot(
-                biosFlashPath = biosFlashPath,
-                storage0Path = storage0Path,
-                snapshot = highTimerSnapshot,
-            ).use { runtime ->
-                NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
-                runShellCommand(runtime, "clear", expectVisiblePixels = false)
-
-                val ticksBeforeCommand = snapshotTimer0GameTicks(runtime.machineSnapshot())
-                runShellCommand(runtime, "ticks", expectVisiblePixels = true)
-                val expectedTicks = ticksBeforeCommand + 1
-                val terminal = terminalText(runtime.machineSnapshot())
-                val actualTicks =
-                    Regex("""TICKS ([0-9]+)""")
-                        .find(terminal)
-                        ?.groupValues
-                        ?.get(1)
-                        ?.toLong()
-                        ?: error("ticks command should print decimal timer0 ticks; terminal: $terminal")
-
-                assertEquals(
-                    expectedTicks,
-                    actualTicks,
-                    "ticks command should print full-width timer0 game ticks from K16SNAP; terminal: $terminal",
+        val failure =
+            assertFailsWith<IllegalArgumentException> {
+                K16ComputerRuntimeFactory.restoreFromBiosFlashSnapshot(
+                    biosFlashPath = biosFlashPath,
+                    storage0Path = storage0Path,
+                    snapshot = highTimerSnapshot,
                 )
             }
+        assertTrue(failure.message.orEmpty().contains("cannot preserve retained gpu0 state"))
     }
 
     @Test
@@ -1729,7 +1713,7 @@ class K16FirmwareResourceTest {
                 )
                 assertTrue(debug.contains("K16 BOOT\n"), "bootloader debug output should remain visible; debug: $debug")
                 assertFalse(debug.contains("K16 SHELL\n"), "shell output should go through stdout, not debug; debug: $debug")
-                assertKernelGpuConsoleVisible(runtime, control, debug)
+                assertKernelRetainedConsoleVisible(runtime, control, debug)
             }
     }
 
@@ -1747,18 +1731,10 @@ class K16FirmwareResourceTest {
                 storage0Path = storage0Path,
             ).use { runtime ->
                 var control = runRuntimeServerTick(runtime)
-                var frames = NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
-                var sawVisibleFrame = frames.any { it.pixelFormat == DisplayPixelFormat.RGB565 && it.hasVisiblePixels() }
-                var sawMonoBlit = frames.any { frame -> frame.operations.any { it is DisplayFrameOperation.MonoBlit } }
 
                 var tick = 1
                 while (tick < 24 && control.status != NativeK16ComputerControl.STATUS_READY) {
                     control = runRuntimeServerTick(runtime)
-                    frames = NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
-                    sawVisibleFrame = sawVisibleFrame || frames.any { it.pixelFormat == DisplayPixelFormat.RGB565 && it.hasVisiblePixels() }
-                    sawMonoBlit =
-                        sawMonoBlit ||
-                        frames.any { frame -> frame.operations.any { it is DisplayFrameOperation.MonoBlit } }
                     tick += 1
                 }
 
@@ -1770,11 +1746,7 @@ class K16FirmwareResourceTest {
                 )
                 assertTrue(debug.contains("K16 BOOT\n"), "bootloader debug output should remain visible; debug: $debug")
                 assertFalse(debug.contains("K16 SHELL\n"), "shell output should go through stdout, not debug; debug: $debug")
-                assertTrue(
-                    sawVisibleFrame,
-                    "default runtime ticks should produce gpu0 console frames; tick: $tick, panic code: ${control.panicCode}, debug: $debug",
-                )
-                assertTrue(sawMonoBlit, "KraftOS terminal output should travel as generic MonoBlit operations")
+                assertKraftOsRetainedConsole(retainedState(runtime))
             }
     }
 
@@ -1806,7 +1778,8 @@ class K16FirmwareResourceTest {
         val biosSource = Path.of("../../../guest/firmware/bios/bios.c").readText()
 
         assertFalse(biosSource.contains("display0"), "K16 BIOS must render through gpu0 only")
-        assertTrue(biosSource.contains("GPU_COMMAND"), "K16 BIOS should use the gpu0 display path")
+        assertTrue(biosSource.contains("GPU_SUBMIT"), "K16 BIOS should submit retained gpu0 transactions")
+        assertTrue(biosSource.contains("GPU_DEVICE_ABI_VERSION_VALUE 2u"))
         assertTrue(biosSource.contains("#define BIOS_BOOT_PARTITION \"BOOT\""), "K16 BIOS should name the BOOT KFS partition")
         assertTrue(biosSource.contains("#define BIOS_BOOT_DIR \"boot\""), "K16 BIOS should name the boot directory")
         assertTrue(biosSource.contains("#define BIOS_BOOTLOADER_FILE \"loader.kb\""), "K16 BIOS should name the bootloader K16E file")
@@ -1842,16 +1815,16 @@ class K16FirmwareResourceTest {
             "terminal cells must not overlap the program load address",
         )
         assertTrue(terminalSource.contains("static mut CURSOR_X:"), "terminal should own cursor state")
-        assertTrue(terminalSource.contains("fn read_cell("), "terminal should read cells from guest RAM")
         assertTrue(terminalSource.contains("fn write_cell("), "terminal should write cells into guest RAM")
+        assertTrue(terminalSource.contains("static mut ROW_HEAD:"), "terminal should own the circular row head")
         assertTrue(terminalSource.contains("fn scroll_up("), "terminal should keep a bottom-overflow boundary")
         assertTrue(
-            terminalSource.contains("copy_scrolled_cells();"),
-            "bottom overflow should preserve true scroll contents in guest cell state",
+            terminalSource.contains("ROW_HEAD = (ROW_HEAD + 1) % ROWS;"),
+            "bottom overflow should rotate guest cell rows without copying the whole grid",
         )
         assertTrue(
             terminalSource.contains("terminal_render::scroll_up();"),
-            "bottom overflow should scroll visible gpu0 pixels without repainting every terminal cell",
+            "bottom overflow should rotate the retained instance presentation",
         )
         assertFalse(
             terminalSource.contains("repaint_all_cells();"),
@@ -1864,31 +1837,30 @@ class K16FirmwareResourceTest {
 
         assertTrue(terminalSource.contains("fn write_printable_run("), "terminal should batch printable runs")
         assertTrue(
-            terminalSource.contains("terminal_render::repaint_run("),
-            "terminal should repaint contiguous printable runs with one renderer call",
+            terminalSource.contains("terminal_render::set_cell("),
+            "terminal should update retained instances while mutating guest cell state",
         )
-        assertTrue(terminalRenderSource.contains("static mut ROW_MASK:"), "terminal renderer should own packed row masks")
-        assertTrue(terminalRenderSource.contains("fn render_glyph_run_mask("), "terminal renderer should pack glyph runs")
-        assertTrue(terminalRenderSource.contains("fn blit_glyph_run("), "terminal renderer should blit glyph runs")
+        assertTrue(terminalRenderSource.contains("struct TerminalRenderState"))
+        assertTrue(terminalRenderSource.contains("instances: [MaskInstance; INSTANCE_COUNT]"))
         assertTrue(
-            terminalRenderSource.contains("gpu::blit_mono_buffer("),
-            "terminal renderer should submit packed masks through generic gpu0 mono blits",
+            terminalRenderSource.contains("patch_mask_instances("),
+            "terminal renderer should patch retained mask instances",
         )
         assertFalse(
-            terminalRenderSource.contains("gpu::blit_buffer("),
-            "terminal renderer must not expand glyph runs into RGB565 buffers",
+            terminalRenderSource.contains("blit_mono_buffer("),
+            "terminal renderer must not retain the removed raster blit path",
         )
         assertTrue(
             terminalRenderSource.contains("pub fn scroll_up()"),
-            "terminal renderer should expose a gpu-backed scroll primitive",
+            "terminal renderer should expose a retained scroll primitive",
         )
         assertTrue(
-            terminalRenderSource.contains("gpu::copy_rect("),
-            "terminal renderer should scroll existing pixels through gpu0 copy_rect",
+            terminalRenderSource.contains("self.row_head = (self.row_head + 1) % ROWS;"),
+            "terminal renderer should rotate the retained instance rows",
         )
         assertTrue(
-            terminalRenderSource.contains("gpu::fill_rect("),
-            "terminal renderer should clear the exposed bottom row through gpu0 fill_rect",
+            terminalRenderSource.contains("replace_draw_list("),
+            "terminal renderer should publish the new logical row order",
         )
     }
 
@@ -3061,560 +3033,10 @@ class K16FirmwareResourceTest {
 
         assertTrue(payloadBytes > 0, "K16 kernel payload should not be empty")
         assertTrue(memorySize >= payloadBytes, "K16E kernel memory size should cover file payload")
-        assertTrue(memorySize < K16_KERNEL_BOOT_FLOOR_BYTES, "K16E kernel memory size should not include the full boot arena")
-    }
-
-    @Test
-    @Disabled(LEGACY_KERNEL_SHELL_DISABLED)
-    fun bundledK16KernelEchoesKeyboardCharThroughGpuConsole() {
-        val workspace = createTempDirectory("k16-keyboard-console-test-")
-        val biosFlashPath = workspace.resolve("bios.kflash")
-        val storage0Path = workspace.resolve("storage0.kv")
-        biosFlashPath.writeBytes(K16BiosFlashWorkspace.loadBiosFlashResource(classLoader = javaClass.classLoader))
-        storage0Path.writeBytes(K16SystemVolumeWorkspace.loadStorage0VolumeResource(classLoader = javaClass.classLoader))
-
-        K16ComputerRuntimeFactory
-            .createFromBiosFlash(
-                biosFlashPath = biosFlashPath,
-                storage0Path = storage0Path,
-            ).use { runtime ->
-                val control = runThroughBiosSplashAndBoot(runtime)
-                assertEquals(NativeK16ComputerControl.STATUS_READY, control.status)
-                NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
-
-                runtime.pushKeyboardChar('O'.code.toByte())
-                val afterInputControl = runRuntimeServerTick(runtime, maxTurns = 64)
-                val frames = NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
-
-                assertEquals(NativeK16ComputerControl.STATUS_READY, afterInputControl.status)
-                assertTrue(
-                    frames.any { it.pixelFormat == DisplayPixelFormat.RGB565 && it.hasVisiblePixels() },
-                    "keyboard char input should produce a new visible gpu0 console frame",
-                )
-            }
-    }
-
-    @Test
-    @Disabled(LEGACY_KERNEL_SHELL_DISABLED)
-    fun bundledK16KernelShellHandoffHandlesEnterWithoutPanic() {
-        val workspace = createTempDirectory("k16-shell-handoff-test-")
-        val biosFlashPath = workspace.resolve("bios.kflash")
-        val storage0Path = workspace.resolve("storage0.kv")
-        biosFlashPath.writeBytes(K16BiosFlashWorkspace.loadBiosFlashResource(classLoader = javaClass.classLoader))
-        storage0Path.writeBytes(K16SystemVolumeWorkspace.loadStorage0VolumeResource(classLoader = javaClass.classLoader))
-
-        K16ComputerRuntimeFactory
-            .createFromBiosFlash(
-                biosFlashPath = biosFlashPath,
-                storage0Path = storage0Path,
-            ).use { runtime ->
-                val control = runThroughBiosSplashAndBoot(runtime)
-                assertEquals(NativeK16ComputerControl.STATUS_READY, control.status)
-                NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
-
-                runtime.pushKeyboardChar('\n'.code.toByte())
-                val afterInputControl = runRuntimeServerTick(runtime, maxTurns = 128)
-
-                assertEquals(NativeK16ComputerControl.STATUS_READY, afterInputControl.status)
-                assertEquals(0, afterInputControl.panicCode)
-            }
-    }
-
-    @Test
-    @Disabled(LEGACY_KERNEL_SHELL_DISABLED)
-    fun bundledK16KernelShellRunsBasicCommandsWithoutPanic() {
-        val workspace = createTempDirectory("k16-shell-commands-test-")
-        val biosFlashPath = workspace.resolve("bios.kflash")
-        val storage0Path = workspace.resolve("storage0.kv")
-        biosFlashPath.writeBytes(K16BiosFlashWorkspace.loadBiosFlashResource(classLoader = javaClass.classLoader))
-        storage0Path.writeBytes(K16SystemVolumeWorkspace.loadStorage0VolumeResource(classLoader = javaClass.classLoader))
-
-        K16ComputerRuntimeFactory
-            .createFromBiosFlash(
-                biosFlashPath = biosFlashPath,
-                storage0Path = storage0Path,
-            ).use { runtime ->
-                val control = runThroughBiosSplashAndBoot(runtime)
-                assertEquals(NativeK16ComputerControl.STATUS_READY, control.status)
-                NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
-
-                runShellCommand(runtime, "ok", expectVisiblePixels = true)
-                runShellCommand(runtime, "help", expectVisiblePixels = true)
-                runShellCommand(runtime, "clear", expectVisiblePixels = false)
-                runShellCommand(runtime, "echo ok", expectVisiblePixels = true)
-                runShellCommand(runtime, "ticks", expectVisiblePixels = true)
-                runShellCommand(runtime, "wat", expectVisiblePixels = true)
-            }
-    }
-
-    @Test
-    @Disabled(LEGACY_KERNEL_SHELL_DISABLED)
-    fun bundledK16KernelTicksCommandReadsAdvancingTimer0() {
-        val workspace = createTempDirectory("k16-shell-ticks-output-test-")
-        val biosFlashPath = workspace.resolve("bios.kflash")
-        val storage0Path = workspace.resolve("storage0.kv")
-        biosFlashPath.writeBytes(K16BiosFlashWorkspace.loadBiosFlashResource(classLoader = javaClass.classLoader))
-        storage0Path.writeBytes(K16SystemVolumeWorkspace.loadStorage0VolumeResource(classLoader = javaClass.classLoader))
-
-        K16ComputerRuntimeFactory
-            .createFromBiosFlash(
-                biosFlashPath = biosFlashPath,
-                storage0Path = storage0Path,
-            ).use { runtime ->
-                val control = runThroughBiosSplashAndBoot(runtime)
-                assertEquals(NativeK16ComputerControl.STATUS_READY, control.status)
-                NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
-                runShellCommand(runtime, "clear", expectVisiblePixels = false)
-                NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
-
-                val currentTicks = snapshotTimer0GameTicks(runtime.machineSnapshot())
-                val deltaToMakeCommandPrintKnownValue = 14L
-                val ticksAfterManualAdvance = currentTicks + deltaToMakeCommandPrintKnownValue
-                val expectedTicksAfterCommand = ticksAfterManualAdvance + 1
-                runtime.advanceGameTicks(deltaToMakeCommandPrintKnownValue)
-                assertEquals(
-                    ticksAfterManualAdvance,
-                    snapshotTimer0GameTicks(runtime.machineSnapshot()),
-                    "runtime.advanceGameTicks should advance timer0 in the machine snapshot before the shell command runs",
-                )
-                for (byte in "ticks\n".encodeToByteArray()) {
-                    runtime.pushKeyboardChar(byte)
-                }
-                val afterTicksControl = runRuntimeServerTick(runtime, maxTurns = 256)
-                assertEquals(
-                    expectedTicksAfterCommand,
-                    snapshotTimer0GameTicks(runtime.machineSnapshot()),
-                    "server tick should add one timer0 game tick before executing the shell command",
-                )
-                val terminalRow =
-                    snapshotRamBytes(runtime.machineSnapshot(), start = 0x1_3000 + 53, size = 53)
-                        .toString(Charsets.US_ASCII)
-                val expectedTerminalPrefix = "TICKS ${expectedTicksAfterCommand and 0xffff_ffffL}"
-
-                assertEquals(NativeK16ComputerControl.STATUS_READY, afterTicksControl.status)
-                assertTrue(
-                    terminalRow.startsWith(expectedTerminalPrefix),
-                    "ticks output should read the current timer0 value; expected prefix: $expectedTerminalPrefix, " +
-                        "actual terminal row: $terminalRow",
-                )
-            }
-    }
-
-    @Test
-    @Disabled(LEGACY_KERNEL_SHELL_DISABLED)
-    fun bundledK16KernelTicksCommandReadsFullWidthTimer0FromMmio() {
-        val workspace = createTempDirectory("k16-shell-ticks-u64-output-test-")
-        val biosFlashPath = workspace.resolve("bios.kflash")
-        val storage0Path = workspace.resolve("storage0.kv")
-        biosFlashPath.writeBytes(K16BiosFlashWorkspace.loadBiosFlashResource(classLoader = javaClass.classLoader))
-        storage0Path.writeBytes(K16SystemVolumeWorkspace.loadStorage0VolumeResource(classLoader = javaClass.classLoader))
-
-        val bootedSnapshot =
-            K16ComputerRuntimeFactory
-                .createFromBiosFlash(
-                    biosFlashPath = biosFlashPath,
-                    storage0Path = storage0Path,
-                ).use { runtime ->
-                    val control = runThroughBiosSplashAndBoot(runtime)
-                    assertEquals(NativeK16ComputerControl.STATUS_READY, control.status)
-                    runtime.machineSnapshot()
-                }
-        val restoredGameTicks = 0x0000_0001_0000_002aL
-        val expectedTicksAfterCommand = restoredGameTicks + 2
-        val highTimerSnapshot = snapshotWithTimer0GameTicks(bootedSnapshot, restoredGameTicks)
-
-        K16ComputerRuntimeFactory
-            .restoreFromBiosFlashSnapshot(
-                biosFlashPath = biosFlashPath,
-                storage0Path = storage0Path,
-                snapshot = highTimerSnapshot,
-            ).use { runtime ->
-                NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
-                runShellCommand(runtime, "clear", expectVisiblePixels = false)
-                NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
-
-                for (byte in "ticks\n".encodeToByteArray()) {
-                    runtime.pushKeyboardChar(byte)
-                }
-                val afterTicksControl = runRuntimeServerTick(runtime, maxTurns = 256)
-                val terminalRow =
-                    snapshotRamBytes(runtime.machineSnapshot(), start = 0x1_3000 + 53, size = 53)
-                        .toString(Charsets.US_ASCII)
-                val expectedTerminalPrefix = "TICKS $expectedTicksAfterCommand"
-
-                assertEquals(NativeK16ComputerControl.STATUS_READY, afterTicksControl.status)
-                assertTrue(
-                    terminalRow.startsWith(expectedTerminalPrefix),
-                    "ticks output should read full timer0 MMIO value; expected prefix: $expectedTerminalPrefix, " +
-                        "actual terminal row: $terminalRow",
-                )
-            }
-    }
-
-    @Test
-    @Disabled(LEGACY_KERNEL_SHELL_DISABLED)
-    fun bundledK16KernelShellDispatcherKeepsCurrentCommandsAlive() {
-        val workspace = createTempDirectory("k16-shell-dispatcher-test-")
-        val biosFlashPath = workspace.resolve("bios.kflash")
-        val storage0Path = workspace.resolve("storage0.kv")
-        biosFlashPath.writeBytes(K16BiosFlashWorkspace.loadBiosFlashResource(classLoader = javaClass.classLoader))
-        storage0Path.writeBytes(K16SystemVolumeWorkspace.loadStorage0VolumeResource(classLoader = javaClass.classLoader))
-
-        K16ComputerRuntimeFactory
-            .createFromBiosFlash(
-                biosFlashPath = biosFlashPath,
-                storage0Path = storage0Path,
-            ).use { runtime ->
-                val control = runThroughBiosSplashAndBoot(runtime)
-                assertEquals(NativeK16ComputerControl.STATUS_READY, control.status)
-                NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
-
-                runShellCommand(runtime, "", expectVisiblePixels = true)
-                runShellCommand(runtime, "ok", expectVisiblePixels = true)
-                runShellCommand(runtime, "help", expectVisiblePixels = true)
-                runShellCommand(runtime, "clear", expectVisiblePixels = false)
-                runShellCommand(runtime, "echo ok", expectVisiblePixels = true)
-                runShellCommand(runtime, "ticks", expectVisiblePixels = true)
-                runShellCommand(runtime, "wat", expectVisiblePixels = true)
-            }
-    }
-
-    @Test
-    @Disabled(LEGACY_KERNEL_SHELL_DISABLED)
-    fun bundledK16KernelShellRendersPrintableAsciiInputThroughGpuConsole() {
-        val workspace = createTempDirectory("k16-shell-printable-ascii-test-")
-        val biosFlashPath = workspace.resolve("bios.kflash")
-        val storage0Path = workspace.resolve("storage0.kv")
-        biosFlashPath.writeBytes(K16BiosFlashWorkspace.loadBiosFlashResource(classLoader = javaClass.classLoader))
-        storage0Path.writeBytes(K16SystemVolumeWorkspace.loadStorage0VolumeResource(classLoader = javaClass.classLoader))
-
-        K16ComputerRuntimeFactory
-            .createFromBiosFlash(
-                biosFlashPath = biosFlashPath,
-                storage0Path = storage0Path,
-            ).use { runtime ->
-                val control = runThroughBiosSplashAndBoot(runtime)
-                assertEquals(NativeK16ComputerControl.STATUS_READY, control.status)
-                NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
-
-                for (byte in "echo abc xyz 0123456789 !?\n".encodeToByteArray()) {
-                    runtime.pushKeyboardChar(byte)
-                }
-                val afterInputControl = runRuntimeServerTick(runtime, maxTurns = 512)
-                val frames = NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
-                val framebuffer = composeRgb565Framebuffer(frames, width = 320, height = 200)
-
-                assertEquals(NativeK16ComputerControl.STATUS_READY, afterInputControl.status)
-                assertContentEquals(
-                    intArrayOf(0, 0, 0, 0, 0, 0, 0),
-                    framebuffer.glyphRowsAt(x = 9 * 6, y = 9),
-                    "printable ASCII input should render space as a blank glyph",
-                )
-                assertContentEquals(
-                    intArrayOf(0b00000, 0b01110, 0b00001, 0b01111, 0b10001, 0b01111, 0b00000),
-                    framebuffer.glyphRowsAt(x = 10 * 6, y = 9),
-                    "printable ASCII input should render lowercase a through the guest kernel font",
-                )
-            }
-    }
-
-    @Test
-    @Disabled(LEGACY_KERNEL_SHELL_DISABLED)
-    fun bundledK16KernelLineDisciplineHandlesBackspaceAndEnter() {
-        val workspace = createTempDirectory("k16-line-discipline-test-")
-        val biosFlashPath = workspace.resolve("bios.kflash")
-        val storage0Path = workspace.resolve("storage0.kv")
-        biosFlashPath.writeBytes(K16BiosFlashWorkspace.loadBiosFlashResource(classLoader = javaClass.classLoader))
-        storage0Path.writeBytes(K16SystemVolumeWorkspace.loadStorage0VolumeResource(classLoader = javaClass.classLoader))
-
-        K16ComputerRuntimeFactory
-            .createFromBiosFlash(
-                biosFlashPath = biosFlashPath,
-                storage0Path = storage0Path,
-            ).use { runtime ->
-                val control = runThroughBiosSplashAndBoot(runtime)
-                assertEquals(NativeK16ComputerControl.STATUS_READY, control.status)
-                NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
-
-                runtime.pushKeyboardChar('A'.code.toByte())
-                runtime.pushKeyboardChar('B'.code.toByte())
-                runtime.pushKeyboardChar('\b'.code.toByte())
-                runtime.pushKeyboardChar('C'.code.toByte())
-                runtime.pushKeyboardChar('\n'.code.toByte())
-                val afterInputControl = runRuntimeServerTick(runtime, maxTurns = 128)
-                val frames = NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
-
-                assertEquals(NativeK16ComputerControl.STATUS_READY, afterInputControl.status)
-                assertEquals(0, afterInputControl.panicCode)
-                assertTrue(
-                    frames.any { it.pixelFormat == DisplayPixelFormat.RGB565 && it.hasVisiblePixels() },
-                    "line discipline editing should produce visible gpu0 console frames",
-                )
-            }
-    }
-
-    @Test
-    @Disabled(LEGACY_KERNEL_SHELL_DISABLED)
-    fun bundledK16KernelLineDisciplineHandlesEmptyBackspaceCarriageReturnAndOverflow() {
-        val workspace = createTempDirectory("k16-line-contract-test-")
-        val biosFlashPath = workspace.resolve("bios.kflash")
-        val storage0Path = workspace.resolve("storage0.kv")
-        biosFlashPath.writeBytes(K16BiosFlashWorkspace.loadBiosFlashResource(classLoader = javaClass.classLoader))
-        storage0Path.writeBytes(K16SystemVolumeWorkspace.loadStorage0VolumeResource(classLoader = javaClass.classLoader))
-
-        K16ComputerRuntimeFactory
-            .createFromBiosFlash(
-                biosFlashPath = biosFlashPath,
-                storage0Path = storage0Path,
-            ).use { runtime ->
-                val control = runThroughBiosSplashAndBoot(runtime)
-                assertEquals(NativeK16ComputerControl.STATUS_READY, control.status)
-                NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
-
-                runtime.pushKeyboardChar('\b'.code.toByte())
-                runtime.pushKeyboardChar('A'.code.toByte())
-                var afterInputControl = runRuntimeServerTick(runtime, maxTurns = 128)
-                var frames = NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
-                val framebuffer = composeRgb565Framebuffer(frames, width = 320, height = 200)
-
-                assertEquals(NativeK16ComputerControl.STATUS_READY, afterInputControl.status)
-                assertEquals(0, afterInputControl.panicCode)
-                assertContentEquals(
-                    intArrayOf(0b01110, 0b10001, 0b10001, 0b11111, 0b10001, 0b10001, 0b10001),
-                    framebuffer.glyphRowsAt(x = 5 * 6, y = 9),
-                    "empty-line backspace should not move the cursor before the first input cell",
-                )
-
-                NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
-                runtime.pushKeyboardChar('\r'.code.toByte())
-                afterInputControl = runRuntimeServerTick(runtime, maxTurns = 128)
-                frames = NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
-
-                assertEquals(NativeK16ComputerControl.STATUS_READY, afterInputControl.status)
-                assertEquals(0, afterInputControl.panicCode)
-                assertTrue(
-                    frames.any { it.pixelFormat == DisplayPixelFormat.RGB565 },
-                    "carriage return should complete the line and produce gpu0 terminal frames",
-                )
-
-                NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
-                repeat(140) {
-                    runtime.pushKeyboardChar('a'.code.toByte())
-                }
-                runtime.pushKeyboardChar('\n'.code.toByte())
-                afterInputControl = runRuntimeServerTick(runtime, maxTurns = 1_024)
-                frames = NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
-
-                assertEquals(NativeK16ComputerControl.STATUS_READY, afterInputControl.status)
-                assertEquals(0, afterInputControl.panicCode)
-                assertTrue(
-                    frames.any { it.pixelFormat == DisplayPixelFormat.RGB565 && it.hasVisiblePixels() },
-                    "line overflow should reject extra input without panicking or losing gpu0 output",
-                )
-            }
-    }
-
-    @Test
-    @Disabled(LEGACY_KERNEL_SHELL_DISABLED)
-    fun bundledK16KernelBackspaceAfterAutoWrapReturnsToPreviousRow() {
-        val workspace = createTempDirectory("k16-line-wrap-backspace-test-")
-        val biosFlashPath = workspace.resolve("bios.kflash")
-        val storage0Path = workspace.resolve("storage0.kv")
-        biosFlashPath.writeBytes(K16BiosFlashWorkspace.loadBiosFlashResource(classLoader = javaClass.classLoader))
-        storage0Path.writeBytes(K16SystemVolumeWorkspace.loadStorage0VolumeResource(classLoader = javaClass.classLoader))
-
-        K16ComputerRuntimeFactory
-            .createFromBiosFlash(
-                biosFlashPath = biosFlashPath,
-                storage0Path = storage0Path,
-            ).use { runtime ->
-                val control = runThroughBiosSplashAndBoot(runtime)
-                assertEquals(NativeK16ComputerControl.STATUS_READY, control.status)
-                NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
-
-                repeat(49) {
-                    runtime.pushKeyboardChar('a'.code.toByte())
-                }
-                runtime.pushKeyboardChar('\b'.code.toByte())
-                runtime.pushKeyboardChar('\b'.code.toByte())
-                runtime.pushKeyboardChar('z'.code.toByte())
-                val afterInputControl = runRuntimeServerTick(runtime, maxTurns = 512)
-                val secondTerminalRow = snapshotRamBytes(runtime.machineSnapshot(), start = 0x1_3000 + 53, size = 53)
-                val thirdTerminalRow = snapshotRamBytes(runtime.machineSnapshot(), start = 0x1_3000 + 53 * 2, size = 53)
-
-                assertEquals(NativeK16ComputerControl.STATUS_READY, afterInputControl.status)
-                assertEquals(0, afterInputControl.panicCode)
-                assertEquals(
-                    'z'.code.toByte(),
-                    secondTerminalRow[52],
-                    "backspace at the start of an auto-wrapped row should return to the previous row",
-                )
-                assertEquals(
-                    ' '.code.toByte(),
-                    thirdTerminalRow[0],
-                    "the wrapped row should be blank after erasing the wrapped character and previous-row character",
-                )
-            }
-    }
-
-    @Test
-    @Disabled(LEGACY_KERNEL_SHELL_DISABLED)
-    fun bundledK16KernelTerminalEditingClearAndScrollStayVisible() {
-        val workspace = createTempDirectory("k16-terminal-contract-test-")
-        val biosFlashPath = workspace.resolve("bios.kflash")
-        val storage0Path = workspace.resolve("storage0.kv")
-        biosFlashPath.writeBytes(K16BiosFlashWorkspace.loadBiosFlashResource(classLoader = javaClass.classLoader))
-        storage0Path.writeBytes(K16SystemVolumeWorkspace.loadStorage0VolumeResource(classLoader = javaClass.classLoader))
-
-        K16ComputerRuntimeFactory
-            .createFromBiosFlash(
-                biosFlashPath = biosFlashPath,
-                storage0Path = storage0Path,
-            ).use { runtime ->
-                val control = runThroughBiosSplashAndBoot(runtime)
-                assertEquals(NativeK16ComputerControl.STATUS_READY, control.status)
-                NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
-
-                for (byte in byteArrayOf('A'.code.toByte(), 'B'.code.toByte(), '\b'.code.toByte(), 'C'.code.toByte(), '\n'.code.toByte())) {
-                    runtime.pushKeyboardChar(byte)
-                }
-                var afterInputControl = runRuntimeServerTick(runtime, maxTurns = 128)
-                var frames = NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
-                var framebuffer = composeRgb565Framebuffer(frames, width = 320, height = 200)
-
-                assertEquals(NativeK16ComputerControl.STATUS_READY, afterInputControl.status)
-                assertEquals(0, afterInputControl.panicCode)
-                assertContentEquals(
-                    intArrayOf(0b01110, 0b10001, 0b10001, 0b11111, 0b10001, 0b10001, 0b10001),
-                    framebuffer.glyphRowsAt(x = 5 * 6, y = 9),
-                    "editable terminal input should leave the first typed glyph after the prompt",
-                )
-                assertContentEquals(
-                    intArrayOf(0b01111, 0b10000, 0b10000, 0b10000, 0b10000, 0b10000, 0b01111),
-                    framebuffer.glyphRowsAt(x = 6 * 6, y = 9),
-                    "backspace should erase B so C occupies the second typed cell",
-                )
-                assertContentEquals(
-                    intArrayOf(0, 0, 0, 0, 0, 0, 0),
-                    framebuffer.glyphRowsAt(x = 7 * 6, y = 9),
-                    "backspace editing should not leave a stale third glyph",
-                )
-
-                NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
-                for (byte in "clear\n".encodeToByteArray()) {
-                    runtime.pushKeyboardChar(byte)
-                }
-                afterInputControl = runRuntimeServerTick(runtime, maxTurns = 256)
-                frames = NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
-                framebuffer = composeRgb565Framebuffer(frames, width = 320, height = 200)
-
-                assertEquals(NativeK16ComputerControl.STATUS_READY, afterInputControl.status)
-                assertEquals(0, afterInputControl.panicCode)
-                assertContentEquals(
-                    intArrayOf(0b10001, 0b10010, 0b10100, 0b11000, 0b10100, 0b10010, 0b10001),
-                    framebuffer.glyphRowsAt(x = 0, y = 1),
-                    "clear should redraw the shell prompt at the first terminal row",
-                )
-                assertContentEquals(
-                    intArrayOf(0, 0, 0, 0, 0, 0, 0),
-                    framebuffer.glyphRowsAt(x = 0, y = 9),
-                    "clear should leave the second terminal row blank",
-                )
-
-                NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
-                repeat(30) {
-                    runtime.pushKeyboardChar('\n'.code.toByte())
-                }
-                afterInputControl = runRuntimeServerTick(runtime, maxTurns = 2_048)
-                frames = NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
-
-                assertEquals(NativeK16ComputerControl.STATUS_READY, afterInputControl.status)
-                assertEquals(0, afterInputControl.panicCode)
-                assertTrue(
-                    frames.any { it.pixelFormat == DisplayPixelFormat.RGB565 && it.hasVisiblePixelsAtOrBelow(globalY = 24 * 8) },
-                    "blank-line overflow should keep rendering visible terminal pixels on the bottom row after scroll",
-                )
-            }
-    }
-
-    @Test
-    @Disabled(LEGACY_KERNEL_SHELL_DISABLED)
-    fun bundledK16KernelConsumesKeyboardKeyEventsWithoutPanic() {
-        val workspace = createTempDirectory("k16-keyboard-key-test-")
-        val biosFlashPath = workspace.resolve("bios.kflash")
-        val storage0Path = workspace.resolve("storage0.kv")
-        biosFlashPath.writeBytes(K16BiosFlashWorkspace.loadBiosFlashResource(classLoader = javaClass.classLoader))
-        storage0Path.writeBytes(K16SystemVolumeWorkspace.loadStorage0VolumeResource(classLoader = javaClass.classLoader))
-
-        K16ComputerRuntimeFactory
-            .createFromBiosFlash(
-                biosFlashPath = biosFlashPath,
-                storage0Path = storage0Path,
-            ).use { runtime ->
-                val control = runThroughBiosSplashAndBoot(runtime)
-                assertEquals(NativeK16ComputerControl.STATUS_READY, control.status)
-
-                runtime.pushKeyboardKeyDown(key = 65, repeat = false)
-                runtime.pushKeyboardKeyUp(key = 65)
-                val afterInputControl = runRuntimeServerTick(runtime, maxTurns = 64)
-
-                assertEquals(NativeK16ComputerControl.STATUS_READY, afterInputControl.status)
-                assertEquals(0, afterInputControl.panicCode)
-            }
-    }
-
-    @Test
-    @Disabled(LEGACY_KERNEL_SHELL_DISABLED)
-    fun bundledK16KernelShellHandlesEnterAndBackspaceKeyEvents() {
-        val workspace = createTempDirectory("k16-shell-special-keys-test-")
-        val biosFlashPath = workspace.resolve("bios.kflash")
-        val storage0Path = workspace.resolve("storage0.kv")
-        biosFlashPath.writeBytes(K16BiosFlashWorkspace.loadBiosFlashResource(classLoader = javaClass.classLoader))
-        storage0Path.writeBytes(K16SystemVolumeWorkspace.loadStorage0VolumeResource(classLoader = javaClass.classLoader))
-
-        K16ComputerRuntimeFactory
-            .createFromBiosFlash(
-                biosFlashPath = biosFlashPath,
-                storage0Path = storage0Path,
-            ).use { runtime ->
-                val control = runThroughBiosSplashAndBoot(runtime)
-                assertEquals(NativeK16ComputerControl.STATUS_READY, control.status)
-                NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
-
-                "cleax".forEach { runtime.pushKeyboardChar(it.code.toByte()) }
-                assertEquals(NativeK16ComputerControl.STATUS_READY, runRuntimeServerTick(runtime, maxTurns = 256).status)
-                NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
-
-                runtime.pushKeyboardKeyDown(key = KeyCodes.KEY_BACKSPACE, repeat = false)
-                assertEquals(NativeK16ComputerControl.STATUS_READY, runRuntimeServerTick(runtime, maxTurns = 256).status)
-                NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
-
-                runtime.pushKeyboardChar('r'.code.toByte())
-                assertEquals(NativeK16ComputerControl.STATUS_READY, runRuntimeServerTick(runtime, maxTurns = 256).status)
-                NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
-
-                runtime.pushKeyboardKeyDown(key = KeyCodes.KEY_ENTER, repeat = false)
-                val afterEnterControl = runRuntimeServerTick(runtime, maxTurns = 256)
-                val frames = NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
-                val framebuffer = composeRgb565Framebuffer(frames, width = 320, height = 200)
-
-                assertEquals(NativeK16ComputerControl.STATUS_READY, afterEnterControl.status)
-                assertEquals(0, afterEnterControl.panicCode)
-                assertTrue(
-                    frames.any { it.pixelFormat == DisplayPixelFormat.RGB565 },
-                    "Enter key-down should complete the clear command and produce a gpu0 frame",
-                )
-                assertContentEquals(
-                    intArrayOf(0b10001, 0b10010, 0b10100, 0b11000, 0b10100, 0b10010, 0b10001),
-                    framebuffer.glyphRowsAt(x = 0, y = 1),
-                    "Backspace key-down should erase x so cleax+r becomes clear and redraws the prompt",
-                )
-                assertContentEquals(
-                    intArrayOf(0, 0, 0, 0, 0, 0, 0),
-                    framebuffer.glyphRowsAt(x = 0, y = 9),
-                    "clear via Enter key-down should leave the second terminal row blank",
-                )
-            }
+        assertTrue(
+            memorySize < K16_COMPUTER_MEMORY_BYTES - K16_KERNEL_LOAD_ADDR,
+            "K16E kernel memory size should leave guest RAM outside the loaded image",
+        )
     }
 
     @Test
@@ -3631,13 +3053,9 @@ class K16FirmwareResourceTest {
                 storage0Path = storage0Path,
             ).use { runtime ->
                 val splashControl = runRuntimeServerTick(runtime)
-                val splashFrames = NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
 
                 assertEquals(NativeK16ComputerControl.STATUS_BOOTING, splashControl.status)
-                assertTrue(
-                    splashFrames.any { it.pixelFormat == DisplayPixelFormat.RGB565 && it.hasVisiblePixels() },
-                    "BIOS splash should be visible through gpu0",
-                )
+                assertBiosRetainedConsole(retainedState(runtime))
 
                 var bootControl = splashControl
                 var tick = 1
@@ -3650,12 +3068,12 @@ class K16FirmwareResourceTest {
                 assertEquals(NativeK16ComputerControl.STATUS_READY, bootControl.status)
                 assertTrue(debug.contains("K16 BOOT\n"), "bootloader debug output should remain visible; debug: $debug")
                 assertFalse(debug.contains("K16 SHELL\n"), "shell output should go through stdout, not debug; debug: $debug")
-                assertKernelGpuConsoleVisible(runtime, bootControl, debug)
+                assertKernelRetainedConsoleVisible(runtime, bootControl, debug)
             }
     }
 
     @Test
-    fun runtimeDeviceDisplaySessionReplacesBiosSplashWithShellFrames() {
+    fun runtimeDeviceLateViewerReceivesKraftOsRetainedSnapshot() {
         val workspace = createTempDirectory("k16-runtime-device-splash-display-test-")
         val biosFlashPath = workspace.resolve("bios.kflash")
         val storage0Path = workspace.resolve("storage0.kv")
@@ -3678,34 +3096,23 @@ class K16FirmwareResourceTest {
 
         try {
             device.turnOn()
-            device.attachDisplaySession(
-                playerUuid = UUID.fromString("00000000-0000-0000-0000-000000000219"),
-                containerId = 219,
-                displayId = 1,
-                width = 320,
-                height = 200,
-            )
             repeat(80) {
                 device.serverTick()
                 val snapshot = device.snapshotRuntimeState()
                 if (snapshot != null && terminalText(snapshot).contains("K16> ")) {
-                    device.serverTick()
-                    val frames = displayNetwork.sentFrames()
-                    val buffer = ClientDisplayBuffer(displayId = 1, width = 320, height = 200)
-                    for (frame in frames) {
-                        assertTrue(
-                            buffer.apply(frame),
-                            "client display buffer should accept shell display frame; ${frames.describeDisplayFrames()}",
-                        )
+                    val playerUuid = UUID.fromString("00000000-0000-0000-0000-000000000219")
+                    assertTrue(device.attachRetainedDisplayViewer(playerUuid))
+                    repeat(16) {
+                        device.serverTick()
+                        val payload = displayNetwork.sentPayloads().singleOrNull()
+                        if (payload != null) {
+                            val installed =
+                                assertIs<RetainedDisplayApplyResult.Installed>(RetainedDisplayReplica().apply(payload))
+                            assertKraftOsRetainedConsole(installed.state)
+                            return
+                        }
                     }
-                    buffer.swapIfDirty()
-                    val framebuffer = buffer.frontArgb()
-                    assertContentEquals(
-                        intArrayOf(0, 0, 0, 0, 0, 0, 0),
-                        framebuffer.biosGreenRowsAt(x = 8, y = 8),
-                        "client display buffer should replace the old green BIOS banner once the shell prompt is visible; ${frames.describeDisplayFrames()}",
-                    )
-                    return
+                    error("late retained viewer did not receive a KraftOS snapshot")
                 }
             }
             val snapshot = device.snapshotRuntimeState()
@@ -3729,31 +3136,21 @@ class K16FirmwareResourceTest {
                 storage0Path = storage0Path,
             ).use { runtime ->
                 runRuntimeServerTick(runtime)
-                val splashFrames = NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
-                val framebuffer = composeRgb565Framebuffer(splashFrames, width = 320, height = 200)
-
-                val expectedGlyphs =
-                    mapOf(
-                        0 to intArrayOf(0b10001, 0b10010, 0b10100, 0b11000, 0b10100, 0b10010, 0b10001),
-                        1 to intArrayOf(0b00100, 0b01100, 0b00100, 0b00100, 0b00100, 0b00100, 0b01110),
-                        2 to intArrayOf(0b01110, 0b10000, 0b10000, 0b11110, 0b10001, 0b10001, 0b01110),
-                        4 to intArrayOf(0b11110, 0b10001, 0b10001, 0b11110, 0b10001, 0b10001, 0b11110),
-                        5 to intArrayOf(0b11111, 0b00100, 0b00100, 0b00100, 0b00100, 0b00100, 0b11111),
-                        6 to intArrayOf(0b01110, 0b10001, 0b10001, 0b10001, 0b10001, 0b10001, 0b01110),
-                        7 to intArrayOf(0b01111, 0b10000, 0b10000, 0b01110, 0b00001, 0b00001, 0b11110),
-                    )
-                for ((column, rows) in expectedGlyphs) {
-                    assertContentEquals(
-                        rows,
-                        framebuffer.glyphRowsAt(x = 8 + column * 8, y = 8),
-                        "BIOS banner glyph column $column should match K16 BIOS text instead of fallback glyphs",
-                    )
+                val state = retainedState(runtime)
+                assertBiosRetainedConsole(state)
+                val instances = assertIs<RetainedMaskInstanceBuffer>(state.resource(BIOS_INSTANCES_ID)?.content)
+                val biosGlyphCodes = "16ABCDEIKLNOSTV "
+                for ((index, byte) in "K16 BIOS".encodeToByteArray().withIndex()) {
+                    val instance = instances.instances[index]
+                    assertEquals(0, instance.sourceX)
+                    assertEquals(biosGlyphCodes.indexOf(byte.toInt().toChar()) * 8, instance.sourceY)
+                    assertEquals(8 + index * 8, instance.destinationX)
                 }
             }
     }
 
     @Test
-    fun bundledK16SystemStorage0RestoresRustKernelRuntimeSnapshot() {
+    fun bundledK16SystemStorage0RejectsRuntimeSnapshotResumeWithoutRetainedGpuState() {
         val workspace = createTempDirectory("k16-firmware-restore-test-")
         val biosFlashPath = workspace.resolve("bios.kflash")
         val storage0Path = workspace.resolve("storage0.kv")
@@ -3772,179 +3169,51 @@ class K16FirmwareResourceTest {
                 }
         val storage0BeforeRestore = storage0Path.readBytes()
 
-        K16ComputerRuntimeFactory
-            .restoreFromBiosFlashSnapshot(
-                biosFlashPath = biosFlashPath,
-                storage0Path = storage0Path,
-                snapshot = machineSnapshot,
-            ).use { restored ->
-                val control = restored.control()
-
-                assertEquals(NativeK16ComputerControl.STATUS_READY, control.status)
-                assertEquals(0, control.panicCode)
+        val failure =
+            assertFailsWith<IllegalArgumentException> {
+                K16ComputerRuntimeFactory.restoreFromBiosFlashSnapshot(
+                    biosFlashPath = biosFlashPath,
+                    storage0Path = storage0Path,
+                    snapshot = machineSnapshot,
+                )
             }
+        assertTrue(failure.message.orEmpty().contains("cannot preserve retained gpu0 state"))
         assertContentEquals(storage0BeforeRestore, storage0Path.readBytes())
     }
 
-    private fun DisplayFrameDelta.hasVisiblePixels(): Boolean =
-        composeRgb565Framebuffer(listOf(this), width, height).any { it != 0 }
-
-    private fun List<DisplayFrameDelta>.describeDisplayFrames(): String =
-        joinToString(prefix = "frames=[", postfix = "]") { frame ->
-            val hasTopLeftTile = frame.tiles.any { it.tileX == 0 && it.tileY == 0 }
-            "seq=${frame.sequence},full=${frame.fullRefresh},tiles=${frame.tiles.size},topLeft=$hasTopLeftTile"
+    private fun retainedState(runtime: K16ComputerRuntime): RetainedDisplayState {
+        val viewerToken = 1L
+        assertTrue(runtime.attachRetainedDisplayViewer(viewerToken, computerId = 1) > 0)
+        try {
+            val payload = runtime.drainRetainedDisplayPayload(viewerToken)
+            assertTrue(payload.isNotEmpty(), "late retained viewer should receive an atomic snapshot")
+            return assertIs<RetainedDisplayApplyResult.Installed>(RetainedDisplayReplica().apply(payload)).state
+        } finally {
+            assertTrue(runtime.detachRetainedDisplayViewer(viewerToken))
         }
-
-    private fun ByteArray.u16Le(offset: Int): Int =
-        (this[offset].toInt() and 0xFF) or
-            ((this[offset + 1].toInt() and 0xFF) shl 8)
-
-    private fun ByteArray.u32Le(offset: Int): Int =
-        (this[offset].toInt() and 0xFF) or
-            ((this[offset + 1].toInt() and 0xFF) shl 8) or
-            ((this[offset + 2].toInt() and 0xFF) shl 16) or
-            ((this[offset + 3].toInt() and 0xFF) shl 24)
-
-    private fun composeRgb565Framebuffer(
-        frames: List<DisplayFrameDelta>,
-        width: Int,
-        height: Int,
-    ): IntArray {
-        val pixels = IntArray(width * height)
-        for (frame in frames) {
-            require(frame.width == width && frame.height == height)
-            require(frame.pixelFormat == DisplayPixelFormat.RGB565)
-            if (frame.fullRefresh) pixels.fill(0)
-            for (operation in frame.operations) {
-                when (operation) {
-                    is DisplayFrameOperation.FillRect -> {
-                        val minX = operation.x.coerceAtLeast(0)
-                        val minY = operation.y.coerceAtLeast(0)
-                        val maxX = (operation.x + operation.width).coerceAtMost(width)
-                        val maxY = (operation.y + operation.height).coerceAtMost(height)
-                        for (row in minY until maxY) {
-                            pixels.fill(operation.rgb565, row * width + minX, row * width + maxX)
-                        }
-                    }
-
-                    is DisplayFrameOperation.CopyRect -> {
-                        val copied = IntArray(operation.width * operation.height)
-                        for (row in 0 until operation.height) {
-                            for (column in 0 until operation.width) {
-                                val sourceX = operation.srcX + column
-                                val sourceY = operation.srcY + row
-                                copied[row * operation.width + column] =
-                                    if (sourceX in 0 until width && sourceY in 0 until height) {
-                                        pixels[sourceY * width + sourceX]
-                                    } else {
-                                        0
-                                    }
-                            }
-                        }
-                        for (row in 0 until operation.height) {
-                            for (column in 0 until operation.width) {
-                                val targetX = operation.dstX + column
-                                val targetY = operation.dstY + row
-                                if (targetX in 0 until width && targetY in 0 until height) {
-                                    pixels[targetY * width + targetX] = copied[row * operation.width + column]
-                                }
-                            }
-                        }
-                    }
-
-                    is DisplayFrameOperation.MonoBlit -> {
-                        val rowBytes = (operation.width + 7) / 8
-                        for (row in 0 until operation.height) {
-                            for (column in 0 until operation.width) {
-                                val targetX = operation.x + column
-                                val targetY = operation.y + row
-                                if (targetX in 0 until width && targetY in 0 until height) {
-                                    val mask = 0x80 ushr (column % 8)
-                                    val set =
-                                        operation.packedMask[row * rowBytes + column / 8].toInt() and mask != 0
-                                    pixels[targetY * width + targetX] =
-                                        if (set) operation.foregroundRgb565 else operation.backgroundRgb565
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            for (tile in frame.tiles) {
-                var offset = 0
-                var row = 0
-                while (row < tile.height) {
-                    var column = 0
-                    while (column < tile.width) {
-                        val hi = tile.payload[offset++].toInt() and 0xFF
-                        val lo = tile.payload[offset++].toInt() and 0xFF
-                        pixels[(tile.y + row) * width + tile.x + column] = (hi shl 8) or lo
-                        column += 1
-                    }
-                    row += 1
-                }
-            }
-        }
-        return pixels
     }
 
-    private fun IntArray.glyphRowsAt(
-        x: Int,
-        y: Int,
-    ): IntArray {
-        val rows = IntArray(7)
-        var row = 0
-        while (row < rows.size) {
-            var bits = 0
-            var column = 0
-            while (column < 5) {
-                if (this[(y + row) * 320 + x + column] != 0) {
-                    bits = bits or (1 shl (4 - column))
-                }
-                column += 1
-            }
-            rows[row] = bits
-            row += 1
-        }
-        return rows
+    private fun assertBiosRetainedConsole(state: RetainedDisplayState) {
+        assertIs<RetainedMask1Bpp>(state.resource(BIOS_FONT_MASK_ID)?.content)
+        val instances = assertIs<RetainedMaskInstanceBuffer>(state.resource(BIOS_INSTANCES_ID)?.content)
+        assertEquals(18, instances.capacity)
+        assertTrue(state.drawList.commands.isNotEmpty())
     }
 
-    private fun IntArray.biosGreenRowsAt(
-        x: Int,
-        y: Int,
-    ): IntArray {
-        val rows = IntArray(7)
-        var row = 0
-        while (row < rows.size) {
-            var bits = 0
-            var column = 0
-            while (column < 5) {
-                if (this[(y + row) * 320 + x + column] == 0xFF00FF00.toInt()) {
-                    bits = bits or (1 shl (4 - column))
-                }
-                column += 1
-            }
-            rows[row] = bits
-            row += 1
-        }
-        return rows
+    private fun assertKraftOsRetainedConsole(state: RetainedDisplayState) {
+        assertIs<RetainedMask1Bpp>(state.resource(KRAFTOS_FONT_MASK_ID)?.content)
+        val instances = assertIs<RetainedMaskInstanceBuffer>(state.resource(KRAFTOS_INSTANCES_ID)?.content)
+        assertEquals(K16_TERMINAL_COLUMNS * K16_TERMINAL_ROWS, instances.capacity)
+        assertTrue(state.drawList.commands.isNotEmpty())
     }
 
-    private fun assertKernelGpuConsoleVisible(
+    private fun assertKernelRetainedConsoleVisible(
         runtime: K16ComputerRuntime,
         control: NativeK16ComputerControl,
         debug: String,
     ) {
-        val frames = NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
-        assertTrue(frames.isEmpty() || frames.any { it.pixelFormat == DisplayPixelFormat.RGB565 })
-    }
-
-    private fun DisplayFrameDelta.hasVisiblePixelsAtOrBelow(globalY: Int): Boolean {
-        val pixels = composeRgb565Framebuffer(listOf(this), width, height)
-        return pixels
-            .asSequence()
-            .drop(globalY.coerceAtLeast(0) * width)
-            .any { it != 0 }
+        assertEquals(NativeK16ComputerControl.STATUS_READY, control.status, "debug: $debug")
+        assertKraftOsRetainedConsole(retainedState(runtime))
     }
 
     private fun runThroughBiosSplashAndBoot(runtime: K16ComputerRuntime): NativeK16ComputerControl {
@@ -3955,7 +3224,7 @@ class K16FirmwareResourceTest {
         while (tick < 24 && control.status != NativeK16ComputerControl.STATUS_READY &&
             control.status != NativeK16ComputerControl.STATUS_HALTED
         ) {
-            control = runRuntimeServerTick(runtime, maxTurns = 1)
+            control = runRuntimeServerTick(runtime, maxTurns = 1_000_000)
             tick += 1
         }
         return control
@@ -4003,50 +3272,33 @@ class K16FirmwareResourceTest {
     private fun runShellCommand(
         runtime: K16ComputerRuntime,
         command: String,
-        expectVisiblePixels: Boolean,
     ) {
-        NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
         for (byte in "$command\n".encodeToByteArray()) {
             runtime.pushKeyboardChar(byte)
         }
         runtime.advanceGameTicks(1)
         var control = runtime.tick(maxTurns = 256)
-        val frames = mutableListOf<DisplayFrameDelta>()
-        frames += NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
         var snapshot = runtime.machineSnapshot()
         var turns = 1
-        while (
-            turns < 32 &&
-            (snapshotKeyboard0EventCount(snapshot) != 0 || !frames.hasExpectedShellCommandFrame(expectVisiblePixels))
-        ) {
+        while (turns < 32 && snapshotKeyboard0EventCount(snapshot) != 0) {
             control = runtime.tick(maxTurns = 256)
-            frames += NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
             snapshot = runtime.machineSnapshot()
             turns += 1
         }
         repeat(4) {
             control = runtime.tick(maxTurns = 256)
-            frames += NativeDisplayFrameCodec.decodeFrames(runtime.drainGpu0Frames())
             snapshot = runtime.machineSnapshot()
         }
         val terminal = terminalText(snapshot)
 
         assertEquals(NativeK16ComputerControl.STATUS_READY, control.status, "command: $command")
         assertEquals(0, control.panicCode, "command: $command")
-        assertTrue(
-            frames.any { it.pixelFormat == DisplayPixelFormat.RGB565 },
-            "shell command should produce gpu0 frames; command: $command; frames: ${frames.size}; " +
-                "keyboard0Events: ${snapshotKeyboard0EventCount(snapshot)}; terminal: $terminal",
-        )
-        assertTrue(
-            !expectVisiblePixels || frames.any { it.pixelFormat == DisplayPixelFormat.RGB565 && it.hasVisiblePixels() },
-            "shell command should produce visible gpu0 frames; command: $command",
+        assertEquals(
+            0,
+            snapshotKeyboard0EventCount(snapshot),
+            "shell command should consume all keyboard input; command: $command; terminal: $terminal",
         )
     }
-
-    private fun List<DisplayFrameDelta>.hasExpectedShellCommandFrame(expectVisiblePixels: Boolean): Boolean =
-        any { it.pixelFormat == DisplayPixelFormat.RGB565 } &&
-            (!expectVisiblePixels || any { it.pixelFormat == DisplayPixelFormat.RGB565 && it.hasVisiblePixels() })
 
     private fun snapshotTimer0GameTicks(snapshot: ByteArray): Long {
         val buffer = ByteBuffer.wrap(snapshot).order(ByteOrder.LITTLE_ENDIAN)
@@ -4155,6 +3407,15 @@ class K16FirmwareResourceTest {
         ).map { byte -> if (byte in 0x20..0x7e) byte.toInt().toChar() else ' ' }
             .joinToString(separator = "")
 
+    private fun ByteArray.u16Le(offset: Int): Int =
+        (this[offset].toInt() and 0xff) or ((this[offset + 1].toInt() and 0xff) shl 8)
+
+    private fun ByteArray.u32Le(offset: Int): Int =
+        (this[offset].toInt() and 0xff) or
+            ((this[offset + 1].toInt() and 0xff) shl 8) or
+            ((this[offset + 2].toInt() and 0xff) shl 16) or
+            ((this[offset + 3].toInt() and 0xff) shl 24)
+
     private fun runK16Tool(vararg args: String) {
         val (exitCode, output) = runK16ToolProcess(*args)
         assertEquals(0, exitCode, "k16 ${args.joinToString(" ")} failed:\n$output")
@@ -4183,38 +3444,22 @@ class K16FirmwareResourceTest {
 }
 
 private class FirmwareCapturingDisplayNetworkBridge : DisplayNetworkBridge {
-    private val frames = CopyOnWriteArrayList<DisplayFrameDelta>()
+    private val payloads = CopyOnWriteArrayList<ByteArray>()
 
-    override fun isDisplaySessionStillBound(
+    override fun isRetainedDisplayViewerAuthorized(
         playerUuid: UUID,
-        containerId: Int,
         deviceId: Int,
-        displayId: Int,
     ): Boolean = true
-
-    override fun sendDisplayFrame(
-        playerUuid: UUID,
-        containerId: Int,
-        frame: DisplayFrameDelta,
-    ) {
-        frames += frame
-    }
-
-    override fun sendNativeDisplayFrameBytes(
-        playerUuid: UUID,
-        containerId: Int,
-        payload: ByteArray,
-    ) {
-        frames += NativeDisplayFrameCodec.decodeFrames(payload)
-    }
 
     override fun sendRetainedDisplayPayload(
         playerUuid: UUID,
-        containerId: Int,
+        deviceId: Int,
         payload: ByteArray,
-    ) = Unit
+    ) {
+        payloads += payload.copyOf()
+    }
 
-    fun sentFrames(): List<DisplayFrameDelta> = frames.toList()
+    fun sentPayloads(): List<ByteArray> = payloads.map(ByteArray::copyOf)
 }
 
 private const val K16_SNAPSHOT_CPU_RECORD_SIZE = 208

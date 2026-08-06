@@ -117,8 +117,6 @@ class RuntimeProfilingTest {
 
         collector.recordServerTick(nanos = 100)
         collector.recordRequestSlice(nanos = 10)
-        collector.recordDisplayFrameDrain(frameCount = 3, nanos = 50)
-        collector.recordDisplayFlush(frameCount = 3, nanos = 60)
         collector.recordSliceRequest()
         collector.recordSliceRequest()
         collector.recordNativeExecutionQuotaRefill(wallNanos = 250, serverTick = 12)
@@ -137,9 +135,6 @@ class RuntimeProfilingTest {
         collector.recordVmHostCall("events", "tryPull", nanos = 30)
         collector.recordNativeWait("runtime.poll", nanos = 100)
         collector.recordNativeWait("runtime.poll", nanos = 50, woke = false)
-        collector.recordNativeDisplayPumpWait(nanos = 100)
-        collector.recordNativeDisplayPumpWait(nanos = 50, woke = false)
-        collector.recordNativeDisplayFrameBytes(bytes = 128)
         collector.recordNativeDaemonTick(activeNanos = 100, turns = 2, halted = 1, hostRequests = 3, idle = false)
         collector.recordNativeDaemonTick(activeNanos = 50, turns = 0, halted = 0, hostRequests = 0, idle = true)
         collector.recordK16RunSlice(K16RuntimeSignal.WAIT, nanos = 1000)
@@ -147,8 +142,10 @@ class RuntimeProfilingTest {
         collector.recordK16RunSlice(K16RuntimeSignal.YIELD, nanos = 250)
         collector.recordK16RunSlice(K16RuntimeSignal.PAUSE, nanos = 125)
         collector.recordK16RunSlice(K16RuntimeSignal.HALT, nanos = 75)
-        collector.recordK16OutputRefresh(serialOutputBytes = 4, gpuFrameBytes = 64, gpuFrameCount = 2, nanos = 100)
-        collector.recordK16OutputRefresh(serialOutputBytes = 8, gpuFrameBytes = 0, gpuFrameCount = 0, nanos = 50)
+        collector.recordK16OutputRefresh(serialOutputBytes = 4, nanos = 100)
+        collector.recordK16OutputRefresh(serialOutputBytes = 8, nanos = 50)
+        collector.recordK16RetainedPayloadSent(bytes = 64)
+        collector.recordK16RetainedPayloadSent(bytes = 128)
         collector.recordK16TextInput(byteCount = 1, nanos = 7)
         collector.recordK16TextInput(byteCount = 3, nanos = 11)
         collector.recordK16StatsSnapshot(
@@ -226,17 +223,17 @@ class RuntimeProfilingTest {
                                 ),
                             gpu =
                                 NativeK16GpuStats(
-                                    blitBufferCommands = 22,
-                                    blitPixels = 23,
-                                    blitSourceBytes = 24,
-                                    blitMonoCommands = 25,
-                                    blitMonoPixels = 26,
-                                    blitMonoSourceBytes = 27,
-                                    presentCommands = 28,
-                                    frames = 29,
-                                    frameTiles = 30,
-                                    framePayloadBytes = 31,
-                                    frameMonoPayloadBytes = 32,
+                                    submissionAttempts = 22,
+                                    committedSubmissions = 23,
+                                    rejectedSubmissions = 24,
+                                    submittedBytes = 25,
+                                    resourceCount = 26,
+                                    authoritativePayloadBytes = 27,
+                                    viewerCount = 28,
+                                    snapshotPayloads = 29,
+                                    deltaPayloads = 30,
+                                    networkPayloadBytes = 31,
+                                    resyncRequests = 32,
                                 ),
                         ),
                     ),
@@ -259,12 +256,6 @@ class RuntimeProfilingTest {
         assertEquals(100, snapshot.tick.serverTickNanos)
         assertEquals(1, snapshot.tick.requestSliceCalls)
         assertEquals(10, snapshot.tick.requestSliceNanos)
-        assertEquals(1, snapshot.tick.displayFrameDrainCalls)
-        assertEquals(3, snapshot.tick.displayFramesDrained)
-        assertEquals(50, snapshot.tick.displayFrameDrainNanos)
-        assertEquals(1, snapshot.tick.displayFlushCalls)
-        assertEquals(3, snapshot.tick.displayFramesFlushed)
-        assertEquals(60, snapshot.tick.displayFlushNanos)
         assertEquals(2, snapshot.vm.sliceRequests)
         assertEquals(2, snapshot.vm.nativeExecutionQuotaRefills)
         assertEquals(375, snapshot.vm.nativeExecutionQuotaWallNanos)
@@ -280,12 +271,6 @@ class RuntimeProfilingTest {
         assertEquals(150, snapshot.vm.nativeWaitNanos)
         assertEquals(1, snapshot.vm.nativeWaitWakeups)
         assertEquals(1, snapshot.vm.nativeWaitTimeouts)
-        assertEquals(2, snapshot.vm.nativeDisplayPumpWaitCalls)
-        assertEquals(150, snapshot.vm.nativeDisplayPumpWaitNanos)
-        assertEquals(1, snapshot.vm.nativeDisplayPumpWakeups)
-        assertEquals(1, snapshot.vm.nativeDisplayPumpTimeouts)
-        assertEquals(1, snapshot.vm.nativeDisplayFrameByteBatches)
-        assertEquals(128, snapshot.vm.nativeDisplayFrameBytes)
         assertEquals(2, snapshot.vm.nativeDaemonTicks)
         assertEquals(150, snapshot.vm.nativeDaemonActiveNanos)
         assertEquals(1, snapshot.vm.nativeDaemonIdleTicks)
@@ -302,9 +287,8 @@ class RuntimeProfilingTest {
         assertEquals(150, snapshot.vm.k16OutputRefreshNanos)
         assertEquals(2, snapshot.vm.k16SerialOutputSnapshots)
         assertEquals(12, snapshot.vm.k16SerialOutputSnapshotBytes)
-        assertEquals(1, snapshot.vm.k16GpuFrameBatches)
-        assertEquals(64, snapshot.vm.k16GpuFrameBytes)
-        assertEquals(2, snapshot.vm.k16GpuFramesDecoded)
+        assertEquals(2, snapshot.vm.k16RetainedPayloadsSent)
+        assertEquals(192, snapshot.vm.k16RetainedPayloadBytesSent)
         assertEquals(2, snapshot.vm.k16TextInputEvents)
         assertEquals(4, snapshot.vm.k16TextInputBytes)
         assertEquals(31, snapshot.k16.os.pathLookups)
@@ -346,17 +330,17 @@ class RuntimeProfilingTest {
         assertEquals(12288, snapshot.k16.storage0.requestedReadBytes)
         assertEquals(
             RuntimeK16GpuMetrics(
-                blitBufferCommands = 22,
-                blitPixels = 23,
-                blitSourceBytes = 24,
-                blitMonoCommands = 25,
-                blitMonoPixels = 26,
-                blitMonoSourceBytes = 27,
-                presentCommands = 28,
-                frames = 29,
-                frameTiles = 30,
-                framePayloadBytes = 31,
-                frameMonoPayloadBytes = 32,
+                submissionAttempts = 22,
+                committedSubmissions = 23,
+                rejectedSubmissions = 24,
+                submittedBytes = 25,
+                resourceCount = 26,
+                authoritativePayloadBytes = 27,
+                viewerCount = 28,
+                snapshotPayloads = 29,
+                deltaPayloads = 30,
+                networkPayloadBytes = 31,
+                resyncRequests = 32,
             ),
             snapshot.k16.gpu,
         )
@@ -387,10 +371,6 @@ class RuntimeProfilingTest {
             summary,
         )
         assertTrue(
-            summary.contains("    nativeDisplayPump: waits=2, waitTime=150 ns, wakeups=1, timeouts=1, byteBatches=1, bytes=128"),
-            summary,
-        )
-        assertTrue(
             summary.contains("    nativeDaemon: ticks=2, active=150 ns, idle=1, turns=2, halted=1, hostRequests=3"),
             summary,
         )
@@ -407,14 +387,14 @@ class RuntimeProfilingTest {
             summary,
         )
         assertTrue(
-            summary.contains("    k16DisplayFrames: batches=1, bytes=64, frames=2"),
+            summary.contains("    k16RetainedDisplaySent: payloads=2, bytes=192"),
             summary,
         )
         assertTrue(
             summary.contains(
-                "    k16Gpu: rawBlits=22, rawBlitPixels=23, rawBlitBytes=24, monoBlits=25, " +
-                    "monoPixels=26, monoSourceBytes=27, presents=28, frames=29, tiles=30, " +
-                    "tilePayloadBytes=31, monoPayloadBytes=32",
+                "    k16Gpu: submissions=22, committed=23, rejected=24, submittedBytes=25, " +
+                    "resources=26, authoritativeBytes=27, viewers=28, snapshots=29, " +
+                    "deltas=30, networkBytes=31, resyncs=32",
             ),
             summary,
         )
@@ -465,18 +445,15 @@ class RuntimeProfilingTest {
 
         collector.recordServerTick(nanos = 100)
         collector.recordRequestSlice(nanos = 10)
-        collector.recordDisplayFrameDrain(frameCount = 3, nanos = 50)
-        collector.recordDisplayFlush(frameCount = 3, nanos = 60)
         collector.recordSliceRequest()
         collector.recordVmSignal(VmSignalKind.PAUSE)
         collector.recordVmHostCallWait("display", "present", nanos = 50)
         collector.recordVmHostCall("display", "present", nanos = 80)
         collector.recordNativeWait("runtime.poll", nanos = 100)
-        collector.recordNativeDisplayPumpWait(nanos = 100)
-        collector.recordNativeDisplayFrameBytes(bytes = 128)
         collector.recordNativeDaemonTick(activeNanos = 100, turns = 2, halted = 1, hostRequests = 3, idle = false)
         collector.recordK16RunSlice(K16RuntimeSignal.WAIT, nanos = 100)
-        collector.recordK16OutputRefresh(serialOutputBytes = 4, gpuFrameBytes = 8, gpuFrameCount = 1, nanos = 10)
+        collector.recordK16OutputRefresh(serialOutputBytes = 4, nanos = 10)
+        collector.recordK16RetainedPayloadSent(bytes = 128)
         collector.recordK16StatsSnapshot(
             NativeK16ComputerStatsSnapshot(ram = NativeK16BusTraffic(loads = 1), devices = emptyList()),
         )

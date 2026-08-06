@@ -831,10 +831,6 @@ impl ComputerMachine {
         }
     }
 
-    pub(crate) fn map_k16_bios_flash(&mut self, bytes: Vec<u8>) -> Result<(), String> {
-        boot_flow::map_k16_bios_flash(self, bytes)
-    }
-
     fn control_device(&self) -> Option<&ComputerControlDevice> {
         self.devices.control(&self.bus)
     }

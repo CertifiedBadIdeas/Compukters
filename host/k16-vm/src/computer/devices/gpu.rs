@@ -38,7 +38,12 @@ impl GpuDevice {
     }
 
     pub(crate) fn stats_snapshot(&self) -> K16ComputerGpuStatsSnapshot {
-        self.stats
+        K16ComputerGpuStatsSnapshot {
+            resource_count: self.retained.gpu().resources().len() as u64,
+            authoritative_payload_bytes: self.retained.gpu().authoritative_payload_bytes() as u64,
+            viewer_count: self.retained.viewer_count() as u64,
+            ..self.stats
+        }
     }
 
     pub(crate) fn attach_viewer(
@@ -58,17 +63,43 @@ impl GpuDevice {
         token: u64,
         payload: &[u8],
     ) -> Result<ServerboundOutcome, RetainedDisplayHostFault> {
-        self.retained.accept_serverbound(token, payload)
+        let outcome = self.retained.accept_serverbound(token, payload)?;
+        if matches!(outcome, ServerboundOutcome::Resynchronized { .. }) {
+            self.stats.resync_requests = self.stats.resync_requests.saturating_add(1);
+        }
+        Ok(outcome)
     }
 
     pub(crate) fn drain_payload(&mut self, token: u64) -> Option<Vec<u8>> {
-        self.retained.drain_payload(token)
+        let payload = self.retained.drain_payload(token)?;
+        self.record_publication(&payload);
+        Some(payload)
     }
 
     pub(crate) fn drain_payload_batch(
         &mut self,
     ) -> Result<Option<Vec<u8>>, RetainedDisplayHostFault> {
-        self.retained.drain_payload_batch()
+        let batch = self.retained.drain_payload_batch()?;
+        if let Some(bytes) = batch.as_ref() {
+            let count = u32::from_le_bytes(
+                bytes[12..16]
+                    .try_into()
+                    .expect("validated retained batch header"),
+            );
+            let mut offset = 16usize;
+            for _ in 0..count {
+                let payload_len = u32::from_le_bytes(
+                    bytes[offset + 8..offset + 12]
+                        .try_into()
+                        .expect("validated retained batch entry"),
+                ) as usize;
+                let payload_start = offset + 16;
+                let payload_end = payload_start + payload_len;
+                self.record_publication(&bytes[payload_start..payload_end]);
+                offset = payload_end;
+            }
+        }
+        Ok(batch)
     }
 
     pub(crate) fn advance_tick(&mut self) -> Result<(), RetainedDisplayHostFault> {
@@ -129,20 +160,24 @@ impl GpuDevice {
     }
 
     fn submit(&mut self, memory: &MachineMemory) -> Result<(), MemoryFault> {
+        self.stats.submission_attempts = self.stats.submission_attempts.saturating_add(1);
         self.reset_result();
         if self.submission_address % 4 != 0
             || self.submission_length % 4 != 0
             || !(Self::PACKET_HEADER_BYTES..=MAX_PACKET_BYTES as u32)
                 .contains(&self.submission_length)
         {
+            self.stats.rejected_submissions = self.stats.rejected_submissions.saturating_add(1);
             self.reject_copy(ResultCode::InvalidArgument);
             return Ok(());
         }
         let Some(end) = self.submission_address.checked_add(self.submission_length) else {
+            self.stats.rejected_submissions = self.stats.rejected_submissions.saturating_add(1);
             self.reject_copy(ResultCode::OutOfBounds);
             return Ok(());
         };
         if end as usize > memory.len() {
+            self.stats.rejected_submissions = self.stats.rejected_submissions.saturating_add(1);
             self.reject_copy(ResultCode::OutOfBounds);
             return Ok(());
         }
@@ -159,14 +194,20 @@ impl GpuDevice {
                     .expect("gpu0 guest packet range was prevalidated"),
             );
         }
+        self.stats.submitted_bytes = self.stats.submitted_bytes.saturating_add(packet_len as u64);
 
         match self
             .retained
             .submit(&packet)
             .map_err(|error| MemoryFault::new(format!("computer gpu0 host fault: {error}")))?
         {
-            SubmissionOutcome::Committed { .. } => self.reset_result(),
+            SubmissionOutcome::Committed { .. } => {
+                self.stats.committed_submissions =
+                    self.stats.committed_submissions.saturating_add(1);
+                self.reset_result();
+            }
             SubmissionOutcome::Rejected(rejection) => {
+                self.stats.rejected_submissions = self.stats.rejected_submissions.saturating_add(1);
                 self.result_code = rejection.code;
                 self.error_operation_index = rejection.operation_index;
                 self.error_byte_offset = rejection.byte_offset;
@@ -185,6 +226,24 @@ impl GpuDevice {
         self.result_code = code;
         self.error_operation_index = u32::MAX;
         self.error_byte_offset = u32::MAX;
+    }
+
+    fn record_publication(&mut self, payload: &[u8]) {
+        self.stats.network_payload_bytes = self
+            .stats
+            .network_payload_bytes
+            .saturating_add(payload.len() as u64);
+        match payload
+            .get(6..8)
+            .and_then(|bytes| bytes.try_into().ok())
+            .map(u16::from_le_bytes)
+        {
+            Some(1) => {
+                self.stats.snapshot_payloads = self.stats.snapshot_payloads.saturating_add(1)
+            }
+            Some(2) => self.stats.delta_payloads = self.stats.delta_payloads.saturating_add(1),
+            _ => {}
+        }
     }
 }
 

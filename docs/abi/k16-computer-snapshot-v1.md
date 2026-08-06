@@ -15,6 +15,13 @@ explicit device records for `control`, `debug`, serial input, the `storage0`
 controller, `timer0` game ticks, pending `keyboard0` events, and optional
 `mmu0` translated address-space state.
 
+Snapshot v1 does not contain retained `gpu0` resources, draw-list state,
+incarnation/revision counters, publication sequence, or viewer state. The
+public K16 runtime restore path therefore rejects every snapshot-v1 resume
+explicitly with `cannot preserve retained gpu0 state`. It must not resume the
+saved CPU/RAM state against a newly empty `gpu0`. Persisting retained display
+state requires a future snapshot format and has no cold-boot fallback.
+
 ## File Layout
 
 All integers are little-endian.

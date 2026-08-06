@@ -127,23 +127,23 @@ class K16RuntimeProfilingArchitectureTest {
     }
 
     @Test
-    fun k16RuntimeSkipsDisplaySendWorkWhenNoDisplaySessionIsAttached() {
+    fun k16RuntimeForwardsOnlyHostPublishedRetainedPayloads() {
         val source =
             Path
                 .of("../../../modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/runtime/K16RuntimeDevice.kt")
                 .readText()
 
         assertTrue(
-            source.contains("if (displaySessions.isEmpty())"),
-            "K16 runtime should keep no-viewer display flushes on a cheap server path",
+            source.contains("current.pollRetainedDisplayPayload() ?: return"),
+            "K16 runtime should forward only payloads materialized by the retained host",
+        )
+        assertFalse(
+            source.contains("pendingDisplayBatches"),
+            "K16 runtime must not keep a server-side framebuffer-era pending queue",
         )
         assertTrue(
-            source.contains("pendingDisplayBatches.addAll(current.drainDisplayBatches())"),
-            "K16 runtime should still keep pending display batches for later session attach",
-        )
-        assertTrue(
-            source.contains("displaySessions.attach("),
-            "K16 runtime should flush pending display frames when a display session attaches",
+            source.contains("retainedDisplaySessions.attach("),
+            "K16 runtime should attach an explicit retained viewer before the host can publish payloads",
         )
     }
 
@@ -261,7 +261,7 @@ class K16RuntimeProfilingArchitectureTest {
         assertTrue(hostStorageSource.contains("requested_read_blocks"))
         assertTrue(hostStorageSource.contains("u64::from(self.block_count)"))
         assertTrue(hostStorageSource.contains("u64::from(byte_count)"))
-        assertTrue(jniSource.contains("values.push(15)"))
+        assertTrue(jniSource.contains("values.push(16)"))
         assertTrue(jniSource.contains("storage.requested_read_blocks"))
         assertTrue(jniSource.contains("storage.requested_read_bytes"))
         assertTrue(nativeBindingsSource.contains("VERSION_V13"))
