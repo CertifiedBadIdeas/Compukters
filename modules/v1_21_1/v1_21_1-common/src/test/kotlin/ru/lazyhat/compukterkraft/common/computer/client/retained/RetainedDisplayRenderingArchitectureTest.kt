@@ -76,6 +76,28 @@ class RetainedDisplayRenderingArchitectureTest {
     }
 
     @Test
+    fun nativeBatchUploadBindsItsOwnVertexArrayAndAlwaysUnbinds() {
+        val batches = retainedRoot.resolve("MinecraftRetainedBatchCache.kt").readText()
+        val factoryStart = batches.indexOf("class NativeVertexBufferRetainedBatchTargetFactory")
+        val targetStart = batches.indexOf("private class NativeVertexBufferRetainedBatchTarget", factoryStart)
+        val factory = batches.substring(factoryStart, targetStart)
+        val bind = factory.indexOf("vertexBuffer.bind()")
+        val upload = factory.indexOf("vertexBuffer::upload")
+        val unbind = factory.indexOf("VertexBuffer.unbind()", upload)
+        val close = factory.indexOf("vertexBuffer.close()", unbind)
+        val rethrow = factory.indexOf("throw failure", close)
+
+        assertTrue(bind >= 0 && bind < upload, "A retained VBO must bind its own VAO before upload")
+        assertTrue(unbind > upload, "A retained VBO upload must restore the previous unbound state")
+        assertTrue(
+            factory.substring(upload, unbind).contains("finally {"),
+            "A failed retained VBO upload must still unbind its VAO",
+        )
+        assertTrue(close > unbind, "A failed retained VBO upload must release the partial GPU buffer")
+        assertTrue(rethrow > close, "A retained VBO upload failure must remain explicit")
+    }
+
+    @Test
     fun productionScreenUsesTheRetainedRendererAfterIssue460HardCutover() {
         val displayScreen = mainRoot.resolve("computer/screen/ComputerDisplayScreen.kt").readText()
 
