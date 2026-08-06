@@ -20,6 +20,7 @@
 package ru.lazyhat.compukterkraft.common.computer.client.retained
 
 import org.joml.Matrix4f
+import org.joml.Vector3f
 import ru.lazyhat.compukterkraft.core.device.display.retained.RetainedDisplayApplyResult
 import ru.lazyhat.compukterkraft.core.device.display.retained.RetainedDisplayReplica
 import ru.lazyhat.compukterkraft.core.device.display.retained.render.RetainedGeometryBatch
@@ -117,6 +118,19 @@ class RetainedDisplayMenuRendererTest {
             RetainedDisplayViewport(120f, 0f, 160f, 100f, 0.5f),
             RetainedDisplayMenuRenderer.viewport(TerminalRect(0, 0, 400, 100)),
         )
+    }
+
+    @Test
+    fun modelViewPreservesMinecraftGuiTransformBeforeViewportTransform() {
+        val globalModelView = Matrix4f().translation(0f, 0f, -11_000f)
+        val guiPose = Matrix4f().translation(7f, 11f, 3f)
+        val viewport = RetainedDisplayViewport(13f, 17f, 320f, 200f, 2f)
+        val actual =
+            RetainedDisplayMenuRenderer
+                .composeModelView(Matrix4f(), globalModelView, guiPose, viewport)
+                .transformPosition(Vector3f(2f, 3f, 0f))
+
+        assertEquals(Vector3f(24f, 34f, -10_997f), actual)
     }
 
     @Test

@@ -58,10 +58,12 @@ class RetainedDisplayMenuRenderer {
     ) {
         check(activeModelView == null) { "Retained menu renderer cannot be entered recursively" }
         val viewport = cachedViewport(bounds)
-        baseModelView
-            .set(guiGraphics.pose().last().pose())
-            .translate(viewport.x, viewport.y, 0f)
-            .scale(viewport.scale, viewport.scale, 1f)
+        composeModelView(
+            baseModelView,
+            RenderSystem.getModelViewMatrix(),
+            guiGraphics.pose().last().pose(),
+            viewport,
+        )
         activeModelView = baseModelView
         activePresentation = presentation
         try {
@@ -96,6 +98,18 @@ class RetainedDisplayMenuRenderer {
     }
 
     companion object {
+        internal fun composeModelView(
+            target: Matrix4f,
+            globalModelView: Matrix4f,
+            guiPose: Matrix4f,
+            viewport: RetainedDisplayViewport,
+        ): Matrix4f =
+            target
+                .set(globalModelView)
+                .mul(guiPose)
+                .translate(viewport.x, viewport.y, 0f)
+                .scale(viewport.scale, viewport.scale, 1f)
+
         fun viewport(bounds: TerminalRect): RetainedDisplayViewport {
             require(bounds.width > 0 && bounds.height > 0)
             val fit =
