@@ -532,11 +532,6 @@ object NativeVmBindings {
         return drainK16ComputerDebugOutputNative(handle)
     }
 
-    fun drainK16ComputerGpu0Frames(handle: Long): ByteArray {
-        require(handle != 0L) { "Native K16 computer handle is zero" }
-        return drainK16ComputerGpu0FramesNative(handle)
-    }
-
     fun attachK16ComputerRetainedDisplayViewer(
         handle: Long,
         viewerToken: Long,
@@ -739,9 +734,6 @@ object NativeVmBindings {
 
     @JvmStatic
     private external fun drainK16ComputerDebugOutputNative(handle: Long): ByteArray
-
-    @JvmStatic
-    private external fun drainK16ComputerGpu0FramesNative(handle: Long): ByteArray
 
     @JvmStatic
     private external fun attachK16ComputerRetainedDisplayViewerNative(

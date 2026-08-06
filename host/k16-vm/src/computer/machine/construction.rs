@@ -70,7 +70,7 @@ fn map_hardware_device(
         ComputerHardwareDevice::Control => Box::new(ComputerControlDevice::new()),
         ComputerHardwareDevice::DebugSerial => Box::new(DebugSerialDevice::new()),
         ComputerHardwareDevice::SerialInput => Box::new(SerialInputDevice::new()),
-        ComputerHardwareDevice::Gpu => Box::new(GpuDevice::new()),
+        ComputerHardwareDevice::Gpu => Box::new(GpuDevice::new()?),
         ComputerHardwareDevice::StoragePort(config) => Box::new(storage_port_device(config)?),
         ComputerHardwareDevice::Timer => Box::new(TimerDevice::new()),
         ComputerHardwareDevice::Keyboard => Box::new(KeyboardDevice::new()),

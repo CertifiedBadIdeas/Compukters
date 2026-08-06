@@ -12,6 +12,9 @@ use k16_vm::retained_gpu::{encode_ack, encode_resync_request, ResyncReason};
 use std::fs;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+#[path = "support/retained_gpu_packet.rs"]
+mod retained_wire;
+
 #[test]
 fn k16_computer_handle_fails_when_memory_is_too_small() {
     let bios = k16_words(&[k16_halt()]);
@@ -28,9 +31,26 @@ fn k16_computer_handle_fails_when_memory_is_too_small() {
 
 #[test]
 fn k16_computer_handle_forwards_retained_viewer_protocol_without_framebuffer_translation() {
-    let bios = k16_words(&[k16_halt()]);
+    const PACKET_ADDRESS: u32 = 0x1000;
+    let packet = retained_wire::packet(0, &[retained_wire::replace_draw_list(0x1234, &[])]);
+    let mut program = Vec::new();
+    program.extend(k16_const32(0, ComputerMachine::GPU0_SUBMISSION_ADDRESS));
+    program.extend(k16_const32(1, PACKET_ADDRESS));
+    program.push(k16_store32(0, 1));
+    program.extend(k16_const32(0, ComputerMachine::GPU0_SUBMISSION_LENGTH));
+    program.extend(k16_const32(1, packet.len() as u32));
+    program.push(k16_store32(0, 1));
+    program.extend(k16_const32(0, ComputerMachine::GPU0_SUBMIT));
+    program.extend(k16_const32(1, 1));
+    program.push(k16_store32(0, 1));
+    program.push(k16_halt());
+    let bios = k16_words(&program);
     let mut handle = K16ComputerHandle::create_k16_bios_flash(&bios, 64 * 1024, 128)
         .expect("K16 BIOS flash computer creates");
+    handle
+        .write_guest_ram_bytes(PACKET_ADDRESS, &packet)
+        .expect("retained packet fits guest RAM");
+    assert_eq!(handle.run_k16_until_signal().unwrap(), K16Signal::Halt);
 
     let epoch = handle
         .attach_retained_display_viewer(101, 42)
@@ -38,11 +58,17 @@ fn k16_computer_handle_forwards_retained_viewer_protocol_without_framebuffer_tra
     let snapshot = handle.drain_retained_display_payload(101);
 
     assert_eq!(&snapshot[..4], b"KDSP");
+    assert_eq!(read_u64(&snapshot, 24), 1);
+    assert_eq!(read_u32_slice(&snapshot, 36), 8);
+    assert_eq!(
+        u16::from_le_bytes(snapshot[40..42].try_into().unwrap()),
+        0x1234
+    );
     assert_eq!(
         handle
             .accept_retained_display_serverbound(
                 101,
-                &encode_ack(42, epoch, 0).expect("ACK encodes"),
+                &encode_ack(42, epoch, 1).expect("ACK encodes"),
             )
             .expect("ACK is accepted"),
         1,
@@ -53,7 +79,7 @@ fn k16_computer_handle_forwards_retained_viewer_protocol_without_framebuffer_tra
         handle
             .accept_retained_display_serverbound(
                 101,
-                &encode_resync_request(42, epoch, Some(0), ResyncReason::ReplicaStateLost)
+                &encode_resync_request(42, epoch, Some(1), ResyncReason::ReplicaStateLost)
                     .expect("resync request encodes"),
             )
             .expect("resync is accepted"),
@@ -61,6 +87,10 @@ fn k16_computer_handle_forwards_retained_viewer_protocol_without_framebuffer_tra
     );
     assert!(!handle.drain_retained_display_payload(101).is_empty());
     assert!(handle.detach_retained_display_viewer(101));
+
+    let source = fs::read_to_string("src/computer/handle.rs").expect("handle source");
+    assert!(!source.contains("retained_display: RetainedDisplayHost"));
+    assert!(!source.contains("drain_gpu0_frames"));
 }
 
 #[test]
@@ -785,6 +815,14 @@ fn snapshot_timer0_game_ticks(snapshot: &[u8]) -> u64 {
 
 fn read_u32(memory: &k16_vm::low_machine::MachineMemory, address: u32) -> u32 {
     u32::from_le_bytes(memory.load_i32(address).unwrap().to_le_bytes())
+}
+
+fn read_u32_slice(bytes: &[u8], offset: usize) -> u32 {
+    u32::from_le_bytes(bytes[offset..offset + 4].try_into().unwrap())
+}
+
+fn read_u64(bytes: &[u8], offset: usize) -> u64 {
+    u64::from_le_bytes(bytes[offset..offset + 8].try_into().unwrap())
 }
 
 fn assert_hardware_entry_with_irq(

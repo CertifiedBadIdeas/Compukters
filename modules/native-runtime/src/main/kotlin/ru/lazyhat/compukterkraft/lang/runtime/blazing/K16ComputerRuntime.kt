@@ -59,8 +59,6 @@ interface K16ComputerRuntimeBindings {
 
     fun drainDebugOutput(handle: Long): ByteArray
 
-    fun drainGpu0Frames(handle: Long): ByteArray
-
     fun attachRetainedDisplayViewer(
         handle: Long,
         viewerToken: Long,
@@ -130,8 +128,6 @@ object NativeK16ComputerRuntimeBindings : K16ComputerRuntimeBindings {
     ) = NativeVmBindings.pushK16ComputerKeyboardPasteBytes(handle, bytes)
 
     override fun drainDebugOutput(handle: Long): ByteArray = NativeVmBindings.drainK16ComputerDebugOutput(handle)
-
-    override fun drainGpu0Frames(handle: Long): ByteArray = NativeVmBindings.drainK16ComputerGpu0Frames(handle)
 
     override fun attachRetainedDisplayViewer(
         handle: Long,
@@ -253,8 +249,6 @@ interface K16ComputerEndpoint : AutoCloseable {
         )
 
     fun outputSnapshot(): ByteArray
-
-    fun drainGpu0Frames(): ByteArray
 
     fun attachRetainedDisplayViewer(
         viewerToken: Long,
@@ -407,11 +401,6 @@ class K16ComputerRuntime(
     override fun outputSnapshot(): ByteArray {
         ensureOpen()
         return terminalOutput.toByteArray()
-    }
-
-    override fun drainGpu0Frames(): ByteArray {
-        ensureOpen()
-        return bindings.drainGpu0Frames(handle)
     }
 
     override fun attachRetainedDisplayViewer(

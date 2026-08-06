@@ -1,24 +1,43 @@
 use std::fs;
 
 #[test]
-fn retained_gpu_core_is_inactive_until_the_hard_cutover() {
+fn gpu0_v2_is_the_only_active_display_abi() {
     let library = fs::read_to_string("src/lib.rs").expect("library source");
     let active_gpu = fs::read_to_string("src/computer/devices/gpu.rs").expect("gpu source");
     let active_abi = fs::read_to_string("src/computer_abi.rs").expect("host ABI source");
     let jni = fs::read_to_string("src/jni.rs").expect("JNI source");
-    let guest_abi =
-        fs::read_to_string("../../guest/kraftos/abi/src/lib.rs").expect("guest ABI source");
 
     assert!(library.contains("pub mod retained_gpu;"));
-    for (name, source) in [
-        ("active gpu0 device", active_gpu),
-        ("active host ABI", active_abi),
-        ("JNI bridge", jni),
-        ("guest ABI", guest_abi),
+    for declaration in [
+        "pub const GPU0_DEVICE_ABI_VERSION: u32 = GPU0_BASE;",
+        "pub const GPU0_SUBMISSION_ADDRESS: u32 = GPU0_BASE + 48;",
+        "pub const GPU0_SUBMIT: u32 = GPU0_BASE + 56;",
+        "pub const GPU0_RESULT_CODE: u32 = GPU0_BASE + 60;",
+        "pub const GPU0_COMMITTED_SEQUENCE_HIGH: u32 = GPU0_BASE + 76;",
     ] {
         assert!(
-            !source.contains("RetainedGpu") && !source.contains("retained_gpu"),
-            "{name} must not activate gpu0 v2 before the hard-cut issue"
+            active_abi.contains(declaration),
+            "active gpu0 ABI must declare `{declaration}`"
+        );
+    }
+    assert!(active_gpu.contains("RetainedDisplayHost"));
+    for (name, source) in [("active gpu0 device", active_gpu), ("JNI bridge", jni)] {
+        for forbidden in ["DisplayFrameDelta", "drain_gpu0_frames"] {
+            assert!(
+                !source.contains(forbidden),
+                "{name} must not expose legacy display concept `{forbidden}`"
+            );
+        }
+    }
+    for forbidden in [
+        "GPU0_COMMAND_PRESENT",
+        "GPU0_COMMAND_BLIT_BUFFER",
+        "GPU0_COMMAND_BLIT_MONO_BUFFER",
+        "GPU0_PIXEL_FORMAT_RGB565",
+    ] {
+        assert!(
+            !active_abi.contains(forbidden),
+            "active gpu0 ABI must not retain `{forbidden}`"
         );
     }
 }
@@ -50,6 +69,7 @@ fn transaction_atomicity_does_not_clone_canonical_resources() {
 
 #[test]
 fn retained_replication_has_no_framebuffer_translation_or_per_viewer_resource_copy() {
+    let active_gpu = fs::read_to_string("src/computer/devices/gpu.rs").expect("gpu source");
     let handle = fs::read_to_string("src/computer/handle.rs").expect("computer handle source");
     let replication =
         fs::read_to_string("src/retained_gpu/replication.rs").expect("replication source");
@@ -60,10 +80,10 @@ fn retained_replication_has_no_framebuffer_translation_or_per_viewer_resource_co
         .and_then(|source| source.split("impl ResourceDamage").next())
         .expect("resource damage declaration");
 
-    assert!(handle.contains("retained_display: RetainedDisplayHost"));
+    assert!(active_gpu.contains("retained: RetainedDisplayHost"));
     assert!(
-        !handle.contains("retained_display.submit"),
-        "the retained host must not receive framebuffer-derived submissions before #460"
+        !handle.contains("retained_display: RetainedDisplayHost"),
+        "gpu0 must be the only owner of retained display state"
     );
     for forbidden in ["DisplayFrame", "PixelFormat", "framebuffer", "gpu0_frames"] {
         assert!(

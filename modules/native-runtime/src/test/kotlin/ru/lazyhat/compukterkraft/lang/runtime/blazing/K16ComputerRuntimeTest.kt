@@ -475,7 +475,6 @@ class K16ComputerRuntimeTest {
         val retainedServerbound = mutableListOf<Triple<Long, Long, List<Byte>>>()
         val retainedPayloadDrains = mutableListOf<Pair<Long, Long>>()
         val callOrder = mutableListOf<String>()
-        var gpuFrames: ByteArray = ByteArray(0)
         var storage0Media: ByteArray? = null
         var machineSnapshot: ByteArray = ByteArray(0)
         var statsSnapshot: NativeK16ComputerStatsSnapshot = NativeK16ComputerStatsSnapshot()
@@ -551,8 +550,6 @@ class K16ComputerRuntimeTest {
             } else {
                 pendingOutput.removeFirst()
             }
-
-        override fun drainGpu0Frames(handle: Long): ByteArray = gpuFrames.copyOf()
 
         override fun attachRetainedDisplayViewer(
             handle: Long,
