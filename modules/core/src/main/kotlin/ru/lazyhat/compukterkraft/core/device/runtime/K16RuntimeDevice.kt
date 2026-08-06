@@ -87,6 +87,15 @@ class K16RuntimeDevice(
                 stateSink.onPowerStateChanged(false)
                 return
             }
+        try {
+            attachRetainedDisplayViewers(worker)
+        } catch (error: Throwable) {
+            runCatching { worker.close() }
+                .onFailure { closeFailure -> error.addSuppressed(closeFailure) }
+            recordRuntimeFailure(error, "attach retained display viewers during start")
+            stateSink.onPowerStateChanged(false)
+            return
+        }
         endpoint = worker
         runtimeFailureMessageBacking = null
         terminalControlReached = false
@@ -97,8 +106,8 @@ class K16RuntimeDevice(
         val current = endpoint ?: return
         endpoint = null
         terminalControlReached = false
-        for (viewerToken in retainedDisplaySessions.clear()) {
-            runCatching { current.detachRetainedDisplayViewer(viewerToken) }
+        for (session in retainedDisplaySessions.sessionsSnapshot()) {
+            runCatching { current.detachRetainedDisplayViewer(session.viewerToken) }
                 .onFailure { recordRuntimeFailure(it, "detach retained display viewer during shutdown") }
         }
         current.close()
@@ -118,7 +127,10 @@ class K16RuntimeDevice(
         flushRetainedDisplayPayloads(current)
     }
 
-    override fun close() = shutdown()
+    override fun close() {
+        shutdown()
+        retainedDisplaySessions.clear()
+    }
 
     override fun queueEvent(
         event: String,
@@ -217,9 +229,9 @@ class K16RuntimeDevice(
     }
 
     override fun attachRetainedDisplayViewer(playerUuid: UUID): Boolean {
-        val current = endpoint ?: return false
         if (retainedDisplaySessions.authorize(playerUuid) != null) return true
         val session = retainedDisplaySessions.attach(playerUuid)
+        val current = endpoint ?: return true
         return try {
             current.attachRetainedDisplayViewer(session.viewerToken, deviceId)
             flushRetainedDisplayPayloads(current)
@@ -294,6 +306,17 @@ class K16RuntimeDevice(
             displayNetwork.sendRetainedDisplayPayload(session.playerUuid, deviceId, publication.payload)
             metricsCollector.recordK16RetainedPayloadSent(publication.payload.size)
         }
+    }
+
+    private fun attachRetainedDisplayViewers(current: K16EndpointWorker) {
+        for (session in retainedDisplaySessions.sessionsSnapshot()) {
+            if (!displayNetwork.isRetainedDisplayViewerAuthorized(session.playerUuid, deviceId)) {
+                retainedDisplaySessions.detach(session.playerUuid)
+                continue
+            }
+            current.attachRetainedDisplayViewer(session.viewerToken, deviceId)
+        }
+        flushRetainedDisplayPayloads(current)
     }
 
     private fun pruneRetainedDisplayViewers(current: K16EndpointWorker) {
