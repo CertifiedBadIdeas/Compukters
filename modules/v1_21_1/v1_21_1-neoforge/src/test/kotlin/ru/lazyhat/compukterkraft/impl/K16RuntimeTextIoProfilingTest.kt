@@ -54,6 +54,8 @@ import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class K16RuntimeTextIoProfilingTest {
+    private val serverThreadDispatcher = RecordingServerThreadDispatcher()
+
     @Test
     fun formatsK16RuntimePhaseBreakdownWithStorageAndDisplayDeltas() {
         val before =
@@ -561,7 +563,7 @@ class K16RuntimeTextIoProfilingTest {
                     )
                 },
                 stateSink = {},
-                serverThreadDispatcher = directServerThreadDispatcher,
+                serverThreadDispatcher = serverThreadDispatcher,
                 metricsCollector = metrics,
             )
 
@@ -642,7 +644,7 @@ class K16RuntimeTextIoProfilingTest {
                     )
                 },
                 stateSink = {},
-                serverThreadDispatcher = directServerThreadDispatcher,
+                serverThreadDispatcher = serverThreadDispatcher,
                 metricsCollector = metrics,
             )
 
@@ -698,7 +700,7 @@ class K16RuntimeTextIoProfilingTest {
                     )
                 },
                 stateSink = {},
-                serverThreadDispatcher = directServerThreadDispatcher,
+                serverThreadDispatcher = serverThreadDispatcher,
                 displayNetwork = displayNetwork,
                 metricsCollector = metrics,
             )
@@ -706,7 +708,7 @@ class K16RuntimeTextIoProfilingTest {
         try {
             device.turnOn()
             waitForTerminal(device, "initial shell prompt") { terminal -> terminal.contains("K16> ") }
-            val display = RetainedDisplayProbe(device, playerUuid, displayNetwork)
+            val display = RetainedDisplayProbe(device, playerUuid, displayNetwork, serverThreadDispatcher)
             display.attach()
             val payloadBaseline = displayNetwork.payloadCount()
             val before = metrics.snapshot()
@@ -756,6 +758,7 @@ class K16RuntimeTextIoProfilingTest {
 
             assertTrue(visibleNanos != null, "Burst did not become visible in terminal snapshot")
             assertTrue(payloadSentNanos != null, "Burst did not produce a retained display payload")
+            assertEquals(1, ticks, "Ready retained payload should not require a second discovery tick")
             assertTrue(sentPayloads.isNotEmpty())
         } finally {
             device.close()
@@ -786,7 +789,7 @@ class K16RuntimeTextIoProfilingTest {
                     )
                 },
                 stateSink = {},
-                serverThreadDispatcher = directServerThreadDispatcher,
+                serverThreadDispatcher = serverThreadDispatcher,
                 displayNetwork = displayNetwork,
                 metricsCollector = metrics,
             )
@@ -794,7 +797,7 @@ class K16RuntimeTextIoProfilingTest {
         try {
             device.turnOn()
             waitForTerminal(device, "initial shell prompt") { terminal -> terminal.contains("K16> ") }
-            val display = RetainedDisplayProbe(device, playerUuid, displayNetwork)
+            val display = RetainedDisplayProbe(device, playerUuid, displayNetwork, serverThreadDispatcher)
             display.attach()
             fillTerminalUntilPromptIsNearBottom(device)
             display.installAvailable()
@@ -869,7 +872,7 @@ class K16RuntimeTextIoProfilingTest {
                     )
                 },
                 stateSink = {},
-                serverThreadDispatcher = directServerThreadDispatcher,
+                serverThreadDispatcher = serverThreadDispatcher,
                 metricsCollector = metrics,
             )
 
@@ -982,7 +985,7 @@ class K16RuntimeTextIoProfilingTest {
                     )
                 },
                 stateSink = {},
-                serverThreadDispatcher = directServerThreadDispatcher,
+                serverThreadDispatcher = serverThreadDispatcher,
                 metricsCollector = metrics,
             )
 
@@ -1098,7 +1101,7 @@ class K16RuntimeTextIoProfilingTest {
                     )
                 },
                 stateSink = {},
-                serverThreadDispatcher = directServerThreadDispatcher,
+                serverThreadDispatcher = serverThreadDispatcher,
                 displayNetwork = displayNetwork,
                 metricsCollector = metrics,
             )
@@ -1106,7 +1109,7 @@ class K16RuntimeTextIoProfilingTest {
         try {
             device.turnOn()
             waitForTerminal(device, "initial shell prompt") { terminal -> terminal.contains("K16> ") }
-            val display = RetainedDisplayProbe(device, playerUuid, displayNetwork)
+            val display = RetainedDisplayProbe(device, playerUuid, displayNetwork, serverThreadDispatcher)
             display.attach()
             fillTerminalUntilPromptIsNearBottom(device)
             display.installAvailable()
@@ -1174,7 +1177,7 @@ class K16RuntimeTextIoProfilingTest {
                     )
                 },
                 stateSink = {},
-                serverThreadDispatcher = directServerThreadDispatcher,
+                serverThreadDispatcher = serverThreadDispatcher,
                 metricsCollector = metrics,
             )
 
@@ -1406,6 +1409,7 @@ class K16RuntimeTextIoProfilingTest {
     private fun tickAndSync(device: K16RuntimeDevice) {
         device.serverTick()
         device.snapshotRuntimeState()
+        serverThreadDispatcher.runAll()
     }
 
     private fun terminalText(snapshot: ByteArray): String =
@@ -1777,6 +1781,7 @@ private class RetainedDisplayProbe(
     private val device: K16RuntimeDevice,
     private val playerUuid: UUID,
     val network: CapturingDisplayNetworkBridge,
+    private val serverThreadDispatcher: RecordingServerThreadDispatcher,
 ) {
     private val replica = RetainedDisplayReplica()
     private var nextPayload = 0
@@ -1788,6 +1793,7 @@ private class RetainedDisplayProbe(
 
     fun attach() {
         assertTrue(device.attachRetainedDisplayViewer(playerUuid))
+        serverThreadDispatcher.runAll()
         installAvailable()
         assertTrue(replica.state != null, "late retained viewer should install an authoritative snapshot")
     }

@@ -20,5 +20,23 @@
 package ru.lazyhat.compukterkraft.impl
 
 import ru.lazyhat.compukterkraft.core.device.runtime.ports.ServerThreadDispatcher
+import java.util.concurrent.ConcurrentLinkedQueue
 
 internal val directServerThreadDispatcher = ServerThreadDispatcher { task -> task() }
+
+internal class RecordingServerThreadDispatcher : ServerThreadDispatcher {
+    private val tasks = ConcurrentLinkedQueue<() -> Unit>()
+
+    val pendingTaskCount: Int
+        get() = tasks.size
+
+    override fun dispatch(task: () -> Unit) {
+        tasks += task
+    }
+
+    fun runAll() {
+        while (true) {
+            tasks.poll()?.invoke() ?: return
+        }
+    }
+}
