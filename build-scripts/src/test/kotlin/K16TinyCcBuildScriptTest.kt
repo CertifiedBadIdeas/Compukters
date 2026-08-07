@@ -21,6 +21,7 @@ import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.nio.file.Path
+import kotlin.io.path.exists
 import kotlin.io.path.readText
 
 class K16TinyCcBuildScriptTest {
@@ -52,5 +53,43 @@ class K16TinyCcBuildScriptTest {
         assertFalse(buildScript.contains("curl"))
         assertFalse(buildScript.contains("wget"))
         assertFalse(buildScript.contains("https://repo.or.cz/tinycc.git"))
+    }
+
+    @Test
+    fun tinyCcK16BackendVerificationUsesTheCheckedInCorpus() {
+        val buildScript = root.resolve("build.gradle.kts").readText()
+        val taskBody =
+            buildScript
+                .substringAfter("tasks.register<Exec>(\"verifyK16TinyCcBackend\")")
+                .substringBefore("tasks.register(\"verifyK16TinyCc\")")
+
+        assertTrue(taskBody.contains("dependsOn(buildK16TinyCc)"))
+        assertTrue(taskBody.contains("dependsOn(buildK16Llvm)"))
+        assertTrue(taskBody.contains("dependsOn(prepareK16Toolchain)"))
+        assertTrue(taskBody.contains("tools/k16-tinycc-smoke.sh"))
+        assertTrue(taskBody.contains("environment(\"K16_TINYCC\""))
+        assertTrue(taskBody.contains("environment(\"K16_CLANG\""))
+        assertTrue(taskBody.contains("environment(\"K16_LLVM_READOBJ\""))
+        assertTrue(taskBody.contains("environment(\"K16_TOOL\""))
+
+        assertTrue(root.resolve("tools/k16-tinycc-smoke.sh").exists())
+        listOf(
+            "arithmetic.c",
+            "compiler-runtime.c",
+            "narrow-memory.c",
+            "pointers-locals.c",
+            "control-flow.c",
+            "calls.c",
+            "relocations.c",
+            "external-add.c",
+            "asm-label.c",
+            "reject-float.c",
+            "reject-varargs.c",
+            "reject-asm.c",
+            "reject-wide.c",
+            "reject-aggregate.c",
+        ).forEach { fixture ->
+            assertTrue(root.resolve("tools/fixtures/k16-tinycc/$fixture").exists(), fixture)
+        }
     }
 }

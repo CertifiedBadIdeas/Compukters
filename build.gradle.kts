@@ -1007,6 +1007,8 @@ val verifyK16TinyCcBackend =
             environment("K16_CLANG", k16LlvmBuildRoot.resolve("bin/clang").absolutePath)
             environment("K16_LLVM_READOBJ", k16LlvmBuildRoot.resolve("bin/llvm-readobj").absolutePath)
             environment("K16_TOOL", toolchain.cli.absolutePath)
+            environment("K16_RUSTC", toolchain.rustc.absolutePath)
+            environment("K16_LLVM_BIN_DIR", k16LlvmBuildRoot.resolve("bin").absolutePath)
         }
     }
 
