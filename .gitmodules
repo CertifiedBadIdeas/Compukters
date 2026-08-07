@@ -9,3 +9,7 @@
 [submodule "vendor/ui-dsl"]
 	path = vendor/ui-dsl
 	url = https://github.com/CertifiedBadIdeas/ui-dsl
+[submodule "toolchains/Compukter-Kraft-tinycc"]
+	path = toolchains/Compukter-Kraft-tinycc
+	url = git@github.com:CertifiedBadIdeas/Compukter-Kraft-tinycc.git
+	branch = k16
