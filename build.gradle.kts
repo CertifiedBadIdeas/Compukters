@@ -1016,6 +1016,7 @@ tasks.register("verifyK16TinyCc") {
     description = "Runs the focused K16 TinyCC backend and runtime verification slice."
     group = "verification"
     dependsOn(verifyK16TinyCcBackend)
+    dependsOn(":v1_21_1-neoforge:verifyK16TinyCcRuntime")
 }
 
 tasks.register("printK16ToolchainEnv") {

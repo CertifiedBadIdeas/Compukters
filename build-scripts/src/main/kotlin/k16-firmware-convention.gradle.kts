@@ -34,6 +34,7 @@ val k16VmNativeLibrary =
 val generatedK16FirmwareResources = layout.buildDirectory.dir("generated/k16-firmware-resources")
 val generatedK16FirmwareTestResources = layout.buildDirectory.dir("generated/k16-firmware-test-resources")
 val generatedKraftOsProductionBundle = layout.buildDirectory.dir("generated/kraftos-bundles/production")
+val k16TinyCcUnameProof = layout.buildDirectory.file("generated/k16-tinycc-proof/uname.kx")
 val k16BiosFlashResource = generatedK16FirmwareResources.map { it.file("firmware/k16-bios.kflash") }
 val k16DevelopmentStorage0Resource =
     generatedK16FirmwareTestResources.map { it.file("firmware/k16-system-storage0-dev.kv") }
@@ -91,6 +92,29 @@ tasks.register<Test>("verifyK16Runtime") {
         includeTestsMatching("ru.lazyhat.compukterkraft.impl.K16ShellRuntimeSmokeTest")
     }
     systemProperty("k16.vm.native.library", k16VmNativeLibrary.asFile.absolutePath)
+}
+
+tasks.named<Test>("test") {
+    filter {
+        excludeTestsMatching("ru.lazyhat.compukterkraft.impl.K16TinyCcRuntimeSmokeTest")
+    }
+}
+
+tasks.register<Test>("verifyK16TinyCcRuntime") {
+    description = "Runs the TinyCC-built uname inside the real bundled KraftOS runtime."
+    group = "verification"
+    dependsOn(tasks.named("buildK16VmNativeLibrary"))
+    dependsOn(tasks.named("compileK16TinyCcUnameProof"))
+    dependsOn(tasks.named("assembleKraftOsProductionBundle"))
+    inputsK16RuntimeFirmwareResources()
+    inputs.file(k16TinyCcUnameProof)
+    inputs.dir(generatedKraftOsProductionBundle)
+    useK16NeoforgeTestRuntime()
+    filter {
+        includeTestsMatching("ru.lazyhat.compukterkraft.impl.K16TinyCcRuntimeSmokeTest")
+    }
+    systemProperty("k16.vm.native.library", k16VmNativeLibrary.asFile.absolutePath)
+    systemProperty("k16.tinycc.uname.path", k16TinyCcUnameProof.get().asFile.absolutePath)
 }
 
 tasks.register<Test>("profileK16RuntimeWait") {
