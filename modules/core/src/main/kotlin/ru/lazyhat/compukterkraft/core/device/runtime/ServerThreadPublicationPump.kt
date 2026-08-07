@@ -21,34 +21,47 @@ package ru.lazyhat.compukterkraft.core.device.runtime
 
 import ru.lazyhat.compukterkraft.core.device.runtime.ports.ServerThreadDispatcher
 import java.util.concurrent.ConcurrentLinkedQueue
-import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicBoolean
 
 internal class ServerThreadPublicationPump<T>(
     private val dispatcher: ServerThreadDispatcher,
     private val consume: (T) -> Unit,
 ) {
     private val ready = ConcurrentLinkedQueue<T>()
-    private val workInProgress = AtomicInteger()
+    private val scheduled = AtomicBoolean()
 
     fun offer(value: T) {
         ready += value
-        if (workInProgress.getAndIncrement() != 0) return
+        scheduleIfIdle()
+    }
+
+    private fun scheduleIfIdle() {
+        if (!scheduled.compareAndSet(false, true)) return
         try {
             dispatcher.dispatch(::drain)
         } catch (error: Throwable) {
-            workInProgress.decrementAndGet()
+            scheduled.set(false)
             throw error
         }
     }
 
     private fun drain() {
-        var completedOffers = 1
         while (true) {
-            while (true) {
-                consume(ready.poll() ?: break)
+            try {
+                while (true) {
+                    consume(ready.poll() ?: break)
+                }
+            } catch (error: Throwable) {
+                scheduled.set(false)
+                try {
+                    if (ready.isNotEmpty()) scheduleIfIdle()
+                } catch (dispatchError: Throwable) {
+                    error.addSuppressed(dispatchError)
+                }
+                throw error
             }
-            completedOffers = workInProgress.addAndGet(-completedOffers)
-            if (completedOffers == 0) return
+            scheduled.set(false)
+            if (ready.isEmpty() || !scheduled.compareAndSet(false, true)) return
         }
     }
 }

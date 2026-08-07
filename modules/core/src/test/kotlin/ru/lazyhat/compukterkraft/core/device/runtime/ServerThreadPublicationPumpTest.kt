@@ -73,6 +73,28 @@ class ServerThreadPublicationPumpTest {
         assertEquals(listOf(1, 2), consumed)
     }
 
+    @Test
+    fun consumerFailureDoesNotLeaveDoorbellPermanentlyArmed() {
+        val dispatcher = RecordingServerThreadDispatcher()
+        val consumed = mutableListOf<Int>()
+        var reject = true
+        val pump =
+            ServerThreadPublicationPump<Int>(dispatcher) { value ->
+                if (reject) {
+                    reject = false
+                    throw IllegalStateException("consumer rejected publication")
+                }
+                consumed += value
+            }
+
+        pump.offer(1)
+        assertFailsWith<IllegalStateException> { dispatcher.runNext() }
+        pump.offer(2)
+        dispatcher.runNext()
+
+        assertEquals(listOf(2), consumed)
+    }
+
     private open class RecordingServerThreadDispatcher : ServerThreadDispatcher {
         private val tasks = ArrayDeque<() -> Unit>()
 
