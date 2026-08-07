@@ -17,6 +17,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.nio.file.Path
@@ -32,5 +33,24 @@ class K16TinyCcBuildScriptTest {
         assertTrue(gitmodules.contains("[submodule \"toolchains/Compukter-Kraft-tinycc\"]"))
         assertTrue(gitmodules.contains("url = git@github.com:CertifiedBadIdeas/Compukter-Kraft-tinycc.git"))
         assertTrue(gitmodules.contains("branch = k16"))
+    }
+
+    @Test
+    fun tinyCcK16BuildIsOutOfTreePinnedAndHostOnly() {
+        val buildScript = root.resolve("build.gradle.kts").readText()
+
+        assertTrue(buildScript.contains("tasks.register<Exec>(\"configureK16TinyCc\")"))
+        assertTrue(buildScript.contains("tasks.register<Exec>(\"compileK16TinyCc\")"))
+        assertTrue(buildScript.contains("tasks.register<Sync>(\"buildK16TinyCc\")"))
+        assertTrue(buildScript.contains("tasks.register<Exec>(\"verifyK16TinyCcBackend\")"))
+        assertTrue(buildScript.contains("tasks.register(\"verifyK16TinyCc\")"))
+        assertTrue(buildScript.contains("toolchains/Compukter-Kraft-tinycc"))
+        assertTrue(buildScript.contains(".toolchain/build/tinycc/k16"))
+        assertTrue(buildScript.contains("bin/tcc-k16"))
+        assertTrue(buildScript.contains("k16-tcc"))
+        assertTrue(buildScript.contains("--cpu=k16"))
+        assertFalse(buildScript.contains("curl"))
+        assertFalse(buildScript.contains("wget"))
+        assertFalse(buildScript.contains("https://repo.or.cz/tinycc.git"))
     }
 }
