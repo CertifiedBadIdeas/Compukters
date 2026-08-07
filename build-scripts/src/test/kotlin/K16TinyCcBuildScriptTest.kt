@@ -127,4 +127,42 @@ class K16TinyCcBuildScriptTest {
         assertFalse(productionUnameBody.contains("TinyCc"))
         assertFalse(productionUnameBody.contains("tinycc"))
     }
+
+    @Test
+    fun tinyCcRuntimeProofHasADedicatedIntegrationTask() {
+        val firmwareConvention =
+            root
+                .resolve("build-scripts/src/main/kotlin/k16-firmware-convention.gradle.kts")
+                .readText()
+        val rootBuild = root.resolve("build.gradle.kts").readText()
+        val runtimeTaskBody =
+            firmwareConvention
+                .substringAfter("tasks.register<Test>(\"verifyK16TinyCcRuntime\")")
+                .substringBefore("tasks.register<Test>(\"profileK16RuntimeWait\")")
+        val rootTaskBody =
+            rootBuild
+                .substringAfter("tasks.register(\"verifyK16TinyCc\")")
+                .substringBefore("tasks.register(\"printK16ToolchainEnv\")")
+
+        assertTrue(runtimeTaskBody.contains("buildK16VmNativeLibrary"))
+        assertTrue(runtimeTaskBody.contains("inputsK16RuntimeFirmwareResources"))
+        assertTrue(runtimeTaskBody.contains("compileK16TinyCcUnameProof"))
+        assertTrue(runtimeTaskBody.contains("K16TinyCcRuntimeSmokeTest"))
+        assertTrue(runtimeTaskBody.contains("k16.vm.native.library"))
+        assertTrue(runtimeTaskBody.contains("k16.tinycc.uname.path"))
+        assertTrue(
+            firmwareConvention.contains(
+                "excludeTestsMatching(\"ru.lazyhat.compukterkraft.impl.K16TinyCcRuntimeSmokeTest\")",
+            ),
+        )
+        assertTrue(rootTaskBody.contains("dependsOn(verifyK16TinyCcBackend)"))
+        assertTrue(rootTaskBody.contains("dependsOn(\":v1_21_1-neoforge:verifyK16TinyCcRuntime\")"))
+        assertTrue(
+            root
+                .resolve(
+                    "modules/v1_21_1/v1_21_1-neoforge/src/test/kotlin/" +
+                        "ru/lazyhat/compukterkraft/impl/K16TinyCcRuntimeSmokeTest.kt",
+                ).exists(),
+        )
+    }
 }
