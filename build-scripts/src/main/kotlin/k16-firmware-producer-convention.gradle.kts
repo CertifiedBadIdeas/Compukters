@@ -21,6 +21,7 @@
 
 import org.gradle.api.file.RegularFile
 import org.gradle.api.provider.Provider
+import java.nio.file.Files
 import java.time.OffsetDateTime
 import java.time.format.DateTimeFormatter
 
@@ -29,6 +30,8 @@ val k16LlvmBuildRoot =
         providers.gradleProperty("k16LlvmBuildDir").orElse(".toolchain/build/llvm/k16-min").get(),
     )
 val k16ClangExecutable = k16LlvmBuildRoot.file("bin/clang")
+val k16TinyCcExecutable =
+    rootProject.layout.projectDirectory.file(".toolchain/build/tinycc/k16/bin/tcc-k16")
 val generatedK16FirmwareResources = layout.buildDirectory.dir("generated/k16-firmware-resources")
 val generatedK16FirmwareTestResources = layout.buildDirectory.dir("generated/k16-firmware-test-resources")
 val generatedK16FirmwareArtifacts = layout.buildDirectory.dir("generated/k16-firmware-artifacts")
@@ -52,6 +55,7 @@ val generatedK16CSystemMkdirTarget = generatedK16GuestTarget.map { it.dir("c-sys
 val generatedK16CSystemRmdirTarget = generatedK16GuestTarget.map { it.dir("c-system-rmdir") }
 val generatedK16SharedKraftTarget = generatedK16GuestTarget.map { it.dir("shared-kraft") }
 val generatedK16CSystemCatTarget = generatedK16GuestTarget.map { it.dir("c-system-cat") }
+val generatedK16TinyCcUnameProofTarget = layout.buildDirectory.dir("generated/k16-tinycc-proof")
 val k16FirmwareProfile =
     providers
         .gradleProperty("k16FirmwareProfile")
@@ -114,6 +118,11 @@ val k16RmArtifact = generatedK16FirmwareArtifacts.map { it.file("rm.kx") }
 val k16MkdirArtifact = generatedK16FirmwareArtifacts.map { it.file("mkdir.kx") }
 val k16RmdirArtifact = generatedK16FirmwareArtifacts.map { it.file("rmdir.kx") }
 val k16SharedKraftArtifact = generatedK16FirmwareArtifacts.map { it.file("libkraft.kso") }
+val k16TinyCcUnameProofArtifact = generatedK16TinyCcUnameProofTarget.map { it.file("uname.kx") }
+val k16TinyCcUnameProofMap = generatedK16TinyCcUnameProofTarget.map { it.file("uname.map") }
+val k16TinyCcUnameProofStartupObject = generatedK16TinyCcUnameProofTarget.map { it.file("k16-startup.o") }
+val k16TinyCcUnameProofCrt0Object = generatedK16TinyCcUnameProofTarget.map { it.file("crt0.o") }
+val k16TinyCcUnameProofUnameObject = generatedK16TinyCcUnameProofTarget.map { it.file("uname.o") }
 val k16BootMapArtifact = k16BootArtifact.map { it.asFile.resolveSibling("${it.asFile.nameWithoutExtension}.map") }
 val k16KernelMapArtifact = k16KernelArtifact.map { it.asFile.resolveSibling("${it.asFile.nameWithoutExtension}.map") }
 val k16InitMapArtifact = k16InitArtifact.map { it.asFile.resolveSibling("${it.asFile.nameWithoutExtension}.map") }
@@ -811,6 +820,119 @@ val compileK16SystemKernel =
                 k16Target = "kernel",
                 output = k16KernelArtifact.get().asFile,
                 mapOutput = k16KernelMapArtifact.get(),
+            )
+        }
+}
+
+val compileK16TinyCcUnameProof =
+    tasks.register("compileK16TinyCcUnameProof") {
+        description = "Builds an isolated TinyCC-compiled KraftOS uname proof without changing production firmware."
+        group = "k16"
+        inputs.dir(k16CLibcIncludeSource)
+        inputs.file(k16CLibcStartupSource)
+        inputs.file(k16CSystemUnameSource)
+        inputs.file(k16SharedKraftArtifact)
+        inputs.file(k16TinyCcExecutable)
+        inputsK16HostTools()
+        inputs.file(k16ToolchainConfig)
+        outputs.file(k16TinyCcUnameProofStartupObject)
+        outputs.file(k16TinyCcUnameProofCrt0Object)
+        outputs.file(k16TinyCcUnameProofUnameObject)
+        outputs.file(k16TinyCcUnameProofMap)
+        outputs.file(k16TinyCcUnameProofArtifact)
+        dependsOn(rootProject.tasks.named("buildK16TinyCc"))
+        dependsOn(rootProject.tasks.named("prepareK16Toolchain"))
+        dependsOn("compileK16SharedKraft")
+
+        doLast {
+            val toolchain = resolveK16Toolchain()
+            val tinyCc = k16TinyCcExecutable.asFile
+            check(tinyCc.isFile && tinyCc.canExecute() && !Files.isSymbolicLink(tinyCc.toPath())) {
+                "Pinned K16 TinyCC is missing, not executable, or a symlink at $tinyCc; run buildK16TinyCc"
+            }
+
+            val targetDir = generatedK16TinyCcUnameProofTarget.get().asFile
+            val startupObject = k16TinyCcUnameProofStartupObject.get().asFile
+            val crt0Object = k16TinyCcUnameProofCrt0Object.get().asFile
+            val unameObject = k16TinyCcUnameProofUnameObject.get().asFile
+            val mapOutput = k16TinyCcUnameProofMap.get().asFile
+            val output = k16TinyCcUnameProofArtifact.get().asFile
+            targetDir.mkdirs()
+            listOf(startupObject, crt0Object, unameObject, mapOutput, output).forEach(File::delete)
+
+            fun runProofCommand(
+                stage: String,
+                command: List<String>,
+            ) {
+                val exitCode =
+                    ProcessBuilder(command)
+                        .directory(projectDir)
+                        .inheritIO()
+                        .start()
+                        .waitFor()
+                check(exitCode == 0) {
+                    "K16 TinyCC uname proof $stage failed with exit code $exitCode: ${command.joinToString(" ")}"
+                }
+            }
+
+            runProofCommand(
+                "crt0 compile",
+                listOf(
+                    tinyCc.absolutePath,
+                    "-ffreestanding",
+                    "-nostdlib",
+                    "-I",
+                    k16CLibcIncludeSource.asFile.absolutePath,
+                    "-c",
+                    k16CLibcStartupSource.asFile.absolutePath,
+                    "-o",
+                    crt0Object.absolutePath,
+                ),
+            )
+            runProofCommand(
+                "uname compile",
+                listOf(
+                    tinyCc.absolutePath,
+                    "-ffreestanding",
+                    "-nostdlib",
+                    "-I",
+                    k16CLibcIncludeSource.asFile.absolutePath,
+                    "-Dmain=kraft_main",
+                    "-c",
+                    k16CSystemUnameSource.asFile.absolutePath,
+                    "-o",
+                    unameObject.absolutePath,
+                ),
+            )
+            runProofCommand(
+                "startup build",
+                listOf(
+                    toolchain.cli.absolutePath,
+                    "runtime",
+                    "k16-startup",
+                    "--target",
+                    "program-dynamic",
+                    "-o",
+                    startupObject.absolutePath,
+                ),
+            )
+            runProofCommand(
+                "link",
+                listOf(
+                    toolchain.cli.absolutePath,
+                    "link",
+                    "--target",
+                    "program-dynamic",
+                    "--map",
+                    mapOutput.absolutePath,
+                    "--dylib",
+                    k16SharedKraftArtifact.get().asFile.absolutePath,
+                    startupObject.absolutePath,
+                    crt0Object.absolutePath,
+                    unameObject.absolutePath,
+                    "-o",
+                    output.absolutePath,
+                ),
             )
         }
     }

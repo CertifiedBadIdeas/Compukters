@@ -143,6 +143,7 @@ positive_fixtures=(
     "arithmetic:42"
     "narrow-memory:91"
     "pointers-locals:42"
+    "rodata:42"
     "control-flow:42"
     "calls:42"
 )
