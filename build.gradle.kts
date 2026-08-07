@@ -49,6 +49,11 @@ val k16HostToolsTargetRoot =
     rootProject.file(providers.gradleProperty("k16HostToolsTargetDir").orElse(".toolchain/build/cargo/k16-tools").get())
 val k16HostVmTargetRoot =
     rootProject.file(providers.gradleProperty("k16HostVmTargetDir").orElse(".toolchain/build/cargo/k16-vm").get())
+val k16TinyCcSourceRoot = rootProject.file("toolchains/Compukter-Kraft-tinycc")
+val k16TinyCcRoot = rootProject.file(".toolchain/build/tinycc/k16")
+val k16TinyCcBuildRoot = k16TinyCcRoot.resolve("build")
+val k16TinyCcBuiltCompiler = k16TinyCcBuildRoot.resolve("k16-tcc")
+val k16TinyCcInstalledCompiler = k16TinyCcRoot.resolve("bin/tcc-k16")
 val k16RustBootstrapConfig = k16RustBuildRoot.resolve("bootstrap.toml")
 val k16RustBootstrapProbeMarker = k16RustBuildRoot.resolve("bootstrap-probe.ok")
 val k16PrepareToolchainMarker = rootProject.file(".toolchain/build/k16-prepare/${k16ToolchainModeName()}.ok")
@@ -914,6 +919,102 @@ val prepareK16Toolchain =
             )
         }
     }
+
+val configureK16TinyCc =
+    tasks.register<Exec>("configureK16TinyCc") {
+        description = "Configures the pinned TinyCC fork for the K16 host cross-compiler."
+        group = "k16"
+        workingDir(k16TinyCcBuildRoot)
+        inputs.files(
+            fileTree(k16TinyCcSourceRoot) {
+                exclude(".git/**")
+            },
+        )
+        inputs.property("k16TinyCcSourceRoot", k16TinyCcSourceRoot.absolutePath)
+        outputs.file(k16TinyCcBuildRoot.resolve("config.mak"))
+        outputs.file(k16TinyCcBuildRoot.resolve("config.h"))
+        commandLine(
+            k16TinyCcSourceRoot.resolve("configure").absolutePath,
+            "--source-path=${k16TinyCcSourceRoot.absolutePath}",
+            "--cpu=k16",
+            "--config-bcheck=no",
+            "--config-backtrace=no",
+        )
+
+        doFirst {
+            check(k16TinyCcSourceRoot.resolve("configure").isFile) {
+                "TinyCC K16 source checkout is missing at $k16TinyCcSourceRoot; " +
+                    "run git submodule update --init toolchains/Compukter-Kraft-tinycc"
+            }
+            check(k16TinyCcSourceRoot.resolve("Makefile").isFile) {
+                "TinyCC K16 source checkout is missing at $k16TinyCcSourceRoot; " +
+                    "run git submodule update --init toolchains/Compukter-Kraft-tinycc"
+            }
+            k16TinyCcBuildRoot.mkdirs()
+        }
+    }
+
+val compileK16TinyCc =
+    tasks.register<Exec>("compileK16TinyCc") {
+        description = "Builds the host-running TinyCC K16 cross-compiler."
+        group = "k16"
+        dependsOn(configureK16TinyCc)
+        workingDir(k16TinyCcBuildRoot)
+        inputs.file(k16TinyCcBuildRoot.resolve("config.mak"))
+        inputs.file(k16TinyCcBuildRoot.resolve("config.h"))
+        inputs.files(
+            fileTree(k16TinyCcSourceRoot) {
+                exclude(".git/**")
+            },
+        )
+        inputs.property("k16BuildJobs", k16BuildJobs)
+        outputs.file(k16TinyCcBuiltCompiler)
+        commandLine("make", "k16-tcc", "-j", k16BuildJobs)
+    }
+
+val buildK16TinyCc =
+    tasks.register<Sync>("buildK16TinyCc") {
+        description = "Installs the host-running TinyCC K16 cross-compiler."
+        group = "k16"
+        dependsOn(compileK16TinyCc)
+        from(k16TinyCcBuiltCompiler)
+        into(k16TinyCcInstalledCompiler.parentFile)
+        rename("k16-tcc", "tcc-k16")
+        outputs.file(k16TinyCcInstalledCompiler)
+
+        doLast {
+            requireBuiltFile(
+                k16TinyCcInstalledCompiler,
+                "tcc-k16",
+                "buildK16TinyCc",
+                executable = true,
+            )
+        }
+    }
+
+val verifyK16TinyCcBackend =
+    tasks.register<Exec>("verifyK16TinyCcBackend") {
+        description = "Runs the K16 TinyCC host-backend metadata and differential ABI smoke."
+        group = "verification"
+        dependsOn(buildK16TinyCc)
+        dependsOn(buildK16Llvm)
+        dependsOn(prepareK16Toolchain)
+        commandLine(rootProject.file("tools/k16-tinycc-smoke.sh").absolutePath)
+
+        doFirst {
+            val toolchain = resolveK16Toolchain()
+            environment("K16_TINYCC", k16TinyCcInstalledCompiler.absolutePath)
+            environment("K16_CLANG", k16LlvmBuildRoot.resolve("bin/clang").absolutePath)
+            environment("K16_LLVM_READOBJ", k16LlvmBuildRoot.resolve("bin/llvm-readobj").absolutePath)
+            environment("K16_TOOL", toolchain.cli.absolutePath)
+        }
+    }
+
+tasks.register("verifyK16TinyCc") {
+    description = "Runs the focused K16 TinyCC backend and runtime verification slice."
+    group = "verification"
+    dependsOn(verifyK16TinyCcBackend)
+}
 
 tasks.register("printK16ToolchainEnv") {
     description = "Prints shell exports for the selected K16 toolchain."
