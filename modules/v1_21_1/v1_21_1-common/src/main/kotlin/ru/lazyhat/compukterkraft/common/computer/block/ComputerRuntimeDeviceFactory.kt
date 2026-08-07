@@ -68,6 +68,7 @@ object ComputerRuntimeDeviceFactory {
                 createK16ComputerEndpoint(biosFlashPath, storage0, snapshot, memorySize, maxSteps, maxTurnsPerTick)
             },
             stateSink = host.stateSink,
+            serverThreadDispatcher = host.serverThreadDispatcher,
             displayNetwork = host.displayNetwork,
         )
     }

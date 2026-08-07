@@ -25,6 +25,7 @@ import ru.lazyhat.compukterkraft.core.device.DeviceProperties
 import ru.lazyhat.compukterkraft.core.device.runtime.ports.DeviceStateSink
 import ru.lazyhat.compukterkraft.core.device.runtime.ports.DisplayNetworkBridge
 import ru.lazyhat.compukterkraft.core.device.runtime.ports.NoopDisplayNetworkBridge
+import ru.lazyhat.compukterkraft.core.device.runtime.ports.ServerThreadDispatcher
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16ComputerEndpoint
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16ComputerControl
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16ComputerSignal
@@ -33,7 +34,6 @@ import java.nio.ByteBuffer
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CompletionException
-import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
@@ -51,6 +51,7 @@ class K16RuntimeDevice(
     properties: DeviceProperties,
     private val endpointFactory: () -> K16ComputerEndpoint,
     private val stateSink: DeviceStateSink,
+    serverThreadDispatcher: ServerThreadDispatcher,
     private val displayNetwork: DisplayNetworkBridge = NoopDisplayNetworkBridge,
     private val metricsCollector: RuntimeMetricsCollector = NoOpRuntimeMetricsCollector,
 ) : RuntimeDevice,
@@ -64,6 +65,11 @@ class K16RuntimeDevice(
     private var labelBacking: String? = properties.label
     private var terminalControlReached = false
     private var runtimeFailureMessageBacking: String? = null
+    private val retainedDisplayPublicationPump =
+        ServerThreadPublicationPump(
+            serverThreadDispatcher,
+            ::sendReadyRetainedDisplayPublication,
+        )
 
     override var label: String?
         get() = labelBacking
@@ -81,7 +87,12 @@ class K16RuntimeDevice(
         if (endpoint != null) return
         val worker =
             try {
-                K16EndpointWorker(deviceId, endpointFactory, metricsCollector).also { it.start() }
+                K16EndpointWorker(
+                    deviceId,
+                    endpointFactory,
+                    metricsCollector,
+                    ::offerReadyRetainedDisplayPublication,
+                ).also { it.start() }
             } catch (error: Throwable) {
                 recordRuntimeFailure(error, "start")
                 stateSink.onPowerStateChanged(false)
@@ -124,7 +135,6 @@ class K16RuntimeDevice(
         pruneRetainedDisplayViewers(current)
         current.requestTick()
         terminalControlReached = current.terminalControlReached
-        flushRetainedDisplayPayloads(current)
     }
 
     override fun close() {
@@ -234,7 +244,6 @@ class K16RuntimeDevice(
         val current = endpoint ?: return true
         return try {
             current.attachRetainedDisplayViewer(session.viewerToken, deviceId)
-            flushRetainedDisplayPayloads(current)
             true
         } catch (error: Throwable) {
             retainedDisplaySessions.detach(playerUuid)
@@ -253,7 +262,6 @@ class K16RuntimeDevice(
         return try {
             val outcome = current.acceptRetainedDisplayServerbound(viewerToken, payload)
             if (outcome > 0) {
-                flushRetainedDisplayPayloads(current)
                 true
             } else {
                 false
@@ -299,13 +307,24 @@ class K16RuntimeDevice(
 
     private fun argumentBoolean(value: Any?): Boolean? = value as? Boolean
 
-    private fun flushRetainedDisplayPayloads(current: K16EndpointWorker) {
-        while (true) {
-            val publication = current.pollRetainedDisplayPayload() ?: return
-            val session = retainedDisplaySessions.sessionForToken(publication.viewerToken) ?: continue
-            displayNetwork.sendRetainedDisplayPayload(session.playerUuid, deviceId, publication.payload)
-            metricsCollector.recordK16RetainedPayloadSent(publication.payload.size)
+    private fun offerReadyRetainedDisplayPublication(
+        worker: K16EndpointWorker,
+        publication: NativeRetainedDisplayPayload,
+    ) {
+        runCatching {
+            retainedDisplayPublicationPump.offer(ReadyRetainedDisplayPublication(worker, publication))
+        }.onFailure { error ->
+            recordRuntimeFailure(error, "schedule retained display publication")
         }
+    }
+
+    private fun sendReadyRetainedDisplayPublication(ready: ReadyRetainedDisplayPublication) {
+        if (endpoint !== ready.worker) return
+        val publication = ready.publication
+        val session = retainedDisplaySessions.sessionForToken(publication.viewerToken) ?: return
+        if (!displayNetwork.isRetainedDisplayViewerAuthorized(session.playerUuid, deviceId)) return
+        displayNetwork.sendRetainedDisplayPayload(session.playerUuid, deviceId, publication.payload)
+        metricsCollector.recordK16RetainedPayloadSent(publication.payload.size)
     }
 
     private fun attachRetainedDisplayViewers(current: K16EndpointWorker) {
@@ -316,7 +335,6 @@ class K16RuntimeDevice(
             }
             current.attachRetainedDisplayViewer(session.viewerToken, deviceId)
         }
-        flushRetainedDisplayPayloads(current)
     }
 
     private fun pruneRetainedDisplayViewers(current: K16EndpointWorker) {
@@ -329,10 +347,16 @@ class K16RuntimeDevice(
         }
     }
 
+    private data class ReadyRetainedDisplayPublication(
+        val worker: K16EndpointWorker,
+        val publication: NativeRetainedDisplayPayload,
+    )
+
     private class K16EndpointWorker(
         private val deviceId: Int,
         private val endpointFactory: () -> K16ComputerEndpoint,
         private val metricsCollector: RuntimeMetricsCollector,
+        private val onRetainedDisplayPayloadReady: (K16EndpointWorker, NativeRetainedDisplayPayload) -> Unit,
     ) : AutoCloseable {
         private val commands = LinkedBlockingQueue<Command>()
         private val startup = CompletableFuture<Unit>()
@@ -346,8 +370,6 @@ class K16RuntimeDevice(
 
         @Volatile
         private var outputCache: ByteArray = ByteArray(0)
-
-        private val retainedDisplayPayloadCache = ConcurrentLinkedQueue<NativeRetainedDisplayPayload>()
 
         @Volatile
         var terminalControlReached: Boolean = false
@@ -450,8 +472,6 @@ class K16RuntimeDevice(
             commands.offer(Command.AcceptRetainedDisplayServerbound(viewerToken, payload.copyOf(), response))
             return response.join()
         }
-
-        fun pollRetainedDisplayPayload(): NativeRetainedDisplayPayload? = retainedDisplayPayloadCache.poll()
 
         override fun close() {
             if (closed.compareAndSet(false, true)) {
@@ -617,7 +637,7 @@ class K16RuntimeDevice(
 
         private fun captureRetainedDisplayPayloads(endpoint: K16ComputerEndpoint) {
             for (payload in endpoint.drainRetainedDisplayPayloads()) {
-                retainedDisplayPayloadCache += payload
+                onRetainedDisplayPayloadReady(this, payload)
             }
         }
 

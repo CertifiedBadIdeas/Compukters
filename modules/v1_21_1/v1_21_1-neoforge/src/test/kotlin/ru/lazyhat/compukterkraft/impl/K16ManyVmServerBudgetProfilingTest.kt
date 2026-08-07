@@ -69,6 +69,7 @@ class K16ManyVmServerBudgetProfilingTest {
                             )
                         },
                         stateSink = {},
+                        serverThreadDispatcher = directServerThreadDispatcher,
                         metricsCollector = metrics,
                     )
                 ProfiledRuntime(device, metrics)

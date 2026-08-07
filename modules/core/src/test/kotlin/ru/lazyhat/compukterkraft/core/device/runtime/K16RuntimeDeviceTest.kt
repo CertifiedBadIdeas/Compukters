@@ -25,6 +25,7 @@ import ru.lazyhat.compukterkraft.core.device.DeviceProperties
 import ru.lazyhat.compukterkraft.core.device.input.KeyInputEvent
 import ru.lazyhat.compukterkraft.core.device.input.PasteInputEvent
 import ru.lazyhat.compukterkraft.core.device.runtime.ports.DisplayNetworkBridge
+import ru.lazyhat.compukterkraft.core.device.runtime.ports.ServerThreadDispatcher
 import ru.lazyhat.compukterkraft.core.input.KeyCodes
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16ComputerEndpoint
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeRetainedDisplayPayload
@@ -38,6 +39,7 @@ import java.nio.ByteBuffer
 import java.nio.file.Path
 import java.util.Collections
 import java.util.concurrent.CompletableFuture
+import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.UUID
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -52,6 +54,7 @@ import kotlin.test.assertTrue
 class K16RuntimeDeviceTest {
     private val root = generateSequence(Path.of(System.getProperty("user.dir")).toAbsolutePath()) { it.parent }
         .first { it.resolve("gradle/libs.versions.toml").exists() }
+    private val directServerThreadDispatcher = ServerThreadDispatcher { task -> task() }
 
     @Test
     fun runtimeDeviceUsesK16TypeName() {
@@ -205,6 +208,7 @@ class K16RuntimeDeviceTest {
                 properties = DeviceProperties(DeviceFamily.NORMAL, label = "K16"),
                 endpointFactory = { endpoint },
                 stateSink = { powerChanges += it },
+                serverThreadDispatcher = directServerThreadDispatcher,
             )
 
         device.turnOn()
@@ -235,6 +239,7 @@ class K16RuntimeDeviceTest {
                 properties = DeviceProperties(DeviceFamily.NORMAL, label = "K16"),
                 endpointFactory = { endpoint },
                 stateSink = {},
+                serverThreadDispatcher = directServerThreadDispatcher,
                 displayNetwork = displayNetwork,
             )
         val firstPlayer = UUID.fromString("00000000-0000-0000-0000-000000000073")
@@ -285,8 +290,121 @@ class K16RuntimeDeviceTest {
     }
 
     @Test
+    fun workerCompletionSchedulesReadyPayloadWithoutAnotherDeviceTick() {
+        val endpoint = RecordingK16Endpoint()
+        val dispatcher = RecordingServerThreadDispatcher()
+        val displayNetwork = RecordingDisplayNetworkBridge()
+        val player = UUID.fromString("00000000-0000-0000-0000-000000000461")
+        val device =
+            K16RuntimeDevice(
+                deviceId = 73,
+                properties = DeviceProperties(DeviceFamily.NORMAL, label = "K16"),
+                endpointFactory = { endpoint },
+                stateSink = {},
+                displayNetwork = displayNetwork,
+                serverThreadDispatcher = dispatcher,
+            )
+        displayNetwork.authorizedPlayers += player
+
+        device.turnOn()
+        assertTrue(device.attachRetainedDisplayViewer(player))
+        dispatcher.runAll()
+        displayNetwork.sentRetainedPayloads.clear()
+
+        val payload = byteArrayOf(4, 6, 1)
+        endpoint.retainedPayloads += NativeRetainedDisplayPayload(1L, payload)
+        val drainsBefore = endpoint.retainedPayloadBatchDrainCalls
+        device.serverTick()
+        waitUntil { endpoint.retainedPayloadBatchDrainCalls > drainsBefore }
+
+        assertTrue(displayNetwork.sentRetainedPayloads.isEmpty())
+        assertEquals(1, dispatcher.pendingTaskCount)
+        dispatcher.runAll()
+        assertContentEquals(payload, displayNetwork.sentRetainedPayloads.single().payload)
+    }
+
+    @Test
+    fun scheduledFlushDiscardsOldWorkerAndDeliversReplacementWorkerPayload() {
+        val endpoints = mutableListOf<RecordingK16Endpoint>()
+        val dispatcher = RecordingServerThreadDispatcher()
+        val displayNetwork = RecordingDisplayNetworkBridge()
+        val player = UUID.fromString("00000000-0000-0000-0000-000000000462")
+        val replacementPayload = byteArrayOf(4, 6, 2)
+        val device =
+            K16RuntimeDevice(
+                deviceId = 73,
+                properties = DeviceProperties(DeviceFamily.NORMAL, label = "K16"),
+                endpointFactory = {
+                    RecordingK16Endpoint()
+                        .also { endpoint ->
+                            if (endpoints.isNotEmpty()) {
+                                endpoint.retainedPayloads += NativeRetainedDisplayPayload(1L, replacementPayload)
+                            }
+                            endpoints += endpoint
+                        }
+                },
+                stateSink = {},
+                displayNetwork = displayNetwork,
+                serverThreadDispatcher = dispatcher,
+            )
+        displayNetwork.authorizedPlayers += player
+
+        device.turnOn()
+        assertTrue(device.attachRetainedDisplayViewer(player))
+        dispatcher.runAll()
+        displayNetwork.sentRetainedPayloads.clear()
+
+        val oldPayload = byteArrayOf(4, 6, 0)
+        endpoints.single().retainedPayloads += NativeRetainedDisplayPayload(1L, oldPayload)
+        val drainsBefore = endpoints.single().retainedPayloadBatchDrainCalls
+        device.serverTick()
+        waitUntil { endpoints.single().retainedPayloadBatchDrainCalls > drainsBefore }
+        assertEquals(1, dispatcher.pendingTaskCount)
+
+        device.reboot()
+        dispatcher.runAll()
+
+        assertEquals(2, endpoints.size)
+        assertEquals(1, displayNetwork.sentRetainedPayloads.size)
+        assertContentEquals(replacementPayload, displayNetwork.sentRetainedPayloads.single().payload)
+    }
+
+    @Test
+    fun scheduledFlushRevalidatesViewerAuthorizationBeforeSending() {
+        val endpoint = RecordingK16Endpoint()
+        val dispatcher = RecordingServerThreadDispatcher()
+        val displayNetwork = RecordingDisplayNetworkBridge()
+        val player = UUID.fromString("00000000-0000-0000-0000-000000000463")
+        val device =
+            K16RuntimeDevice(
+                deviceId = 73,
+                properties = DeviceProperties(DeviceFamily.NORMAL, label = "K16"),
+                endpointFactory = { endpoint },
+                stateSink = {},
+                displayNetwork = displayNetwork,
+                serverThreadDispatcher = dispatcher,
+            )
+        displayNetwork.authorizedPlayers += player
+
+        device.turnOn()
+        assertTrue(device.attachRetainedDisplayViewer(player))
+        dispatcher.runAll()
+        displayNetwork.sentRetainedPayloads.clear()
+
+        endpoint.retainedPayloads += NativeRetainedDisplayPayload(1L, byteArrayOf(4, 6, 3))
+        val drainsBefore = endpoint.retainedPayloadBatchDrainCalls
+        device.serverTick()
+        waitUntil { endpoint.retainedPayloadBatchDrainCalls > drainsBefore }
+        displayNetwork.authorizedPlayers -= player
+        dispatcher.runAll()
+
+        assertTrue(displayNetwork.sentRetainedPayloads.isEmpty())
+    }
+
+    @Test
     fun observerAttachedWhileOffBindsWhenPoweredOn() {
         val endpoint = RecordingK16Endpoint()
+        val dispatcher = RecordingServerThreadDispatcher()
         val displayNetwork = RecordingDisplayNetworkBridge()
         val player = UUID.fromString("00000000-0000-0000-0000-000000000075")
         val snapshot = byteArrayOf(0x4b, 0x44, 0x53, 0x50)
@@ -296,6 +414,7 @@ class K16RuntimeDeviceTest {
                 properties = DeviceProperties(DeviceFamily.NORMAL, label = "K16"),
                 endpointFactory = { endpoint },
                 stateSink = {},
+                serverThreadDispatcher = dispatcher,
                 displayNetwork = displayNetwork,
             )
         displayNetwork.authorizedPlayers += player
@@ -305,6 +424,7 @@ class K16RuntimeDeviceTest {
         assertTrue(endpoint.retainedViewerAttaches.isEmpty())
 
         device.turnOn()
+        dispatcher.runAll()
 
         assertEquals(listOf(1L to 73), endpoint.retainedViewerAttaches)
         assertEquals(listOf(SentNativePayload(player, 73, snapshot)), displayNetwork.sentRetainedPayloads)
@@ -321,6 +441,7 @@ class K16RuntimeDeviceTest {
                 properties = DeviceProperties(DeviceFamily.NORMAL, label = "K16"),
                 endpointFactory = { RecordingK16Endpoint().also(endpoints::add) },
                 stateSink = {},
+                serverThreadDispatcher = directServerThreadDispatcher,
                 displayNetwork = displayNetwork,
             )
         displayNetwork.authorizedPlayers += player
@@ -344,6 +465,7 @@ class K16RuntimeDeviceTest {
                 properties = DeviceProperties(DeviceFamily.NORMAL, label = "K16"),
                 endpointFactory = { endpoint },
                 stateSink = {},
+                serverThreadDispatcher = directServerThreadDispatcher,
             )
 
         assertTrue(device.attachRetainedDisplayViewer(player))
@@ -363,6 +485,7 @@ class K16RuntimeDeviceTest {
                 properties = DeviceProperties(DeviceFamily.NORMAL, label = "K16"),
                 endpointFactory = { RecordingK16Endpoint() },
                 stateSink = {},
+                serverThreadDispatcher = directServerThreadDispatcher,
             )
 
         assertTrue(device.attachRetainedDisplayViewer(player))
@@ -382,6 +505,7 @@ class K16RuntimeDeviceTest {
                 properties = DeviceProperties(DeviceFamily.NORMAL, label = "K16"),
                 endpointFactory = { endpoint },
                 stateSink = {},
+                serverThreadDispatcher = directServerThreadDispatcher,
                 displayNetwork = displayNetwork,
             )
         val first = UUID.fromString("00000000-0000-0000-0000-000000000071")
@@ -422,6 +546,7 @@ class K16RuntimeDeviceTest {
                     RecordingK16Endpoint().also { endpoints += it }
                 },
                 stateSink = { powerChanges += it },
+                serverThreadDispatcher = directServerThreadDispatcher,
             )
 
         device.turnOn()
@@ -446,6 +571,7 @@ class K16RuntimeDeviceTest {
                 properties = DeviceProperties(DeviceFamily.NORMAL, label = null),
                 endpointFactory = { endpoint },
                 stateSink = {},
+                serverThreadDispatcher = directServerThreadDispatcher,
             )
         val callerThreadId = Thread.currentThread().id
 
@@ -475,6 +601,7 @@ class K16RuntimeDeviceTest {
                 properties = DeviceProperties(DeviceFamily.NORMAL, label = null),
                 endpointFactory = { endpoint },
                 stateSink = {},
+                serverThreadDispatcher = directServerThreadDispatcher,
             )
 
         device.turnOn()
@@ -519,6 +646,7 @@ class K16RuntimeDeviceTest {
                 properties = DeviceProperties(DeviceFamily.NORMAL, label = null),
                 endpointFactory = { endpoint },
                 stateSink = {},
+                serverThreadDispatcher = directServerThreadDispatcher,
             )
 
         device.turnOn()
@@ -560,6 +688,7 @@ class K16RuntimeDeviceTest {
                 properties = DeviceProperties(DeviceFamily.NORMAL, label = null),
                 endpointFactory = { endpoint },
                 stateSink = {},
+                serverThreadDispatcher = directServerThreadDispatcher,
             )
 
         device.turnOn()
@@ -590,6 +719,7 @@ class K16RuntimeDeviceTest {
                 properties = DeviceProperties(DeviceFamily.NORMAL, label = null),
                 endpointFactory = { endpoint },
                 stateSink = {},
+                serverThreadDispatcher = directServerThreadDispatcher,
                 metricsCollector = metrics,
             )
 
@@ -630,6 +760,7 @@ class K16RuntimeDeviceTest {
                 properties = DeviceProperties(DeviceFamily.NORMAL, label = null),
                 endpointFactory = { endpoint },
                 stateSink = {},
+                serverThreadDispatcher = directServerThreadDispatcher,
                 metricsCollector = metrics,
             )
 
@@ -663,6 +794,7 @@ class K16RuntimeDeviceTest {
                 properties = DeviceProperties(DeviceFamily.NORMAL, label = null),
                 endpointFactory = { endpoint },
                 stateSink = {},
+                serverThreadDispatcher = directServerThreadDispatcher,
             )
         val paste = ByteBuffer.wrap("Hi".encodeToByteArray())
 
@@ -699,6 +831,7 @@ class K16RuntimeDeviceTest {
                 properties = DeviceProperties(DeviceFamily.NORMAL, label = null),
                 endpointFactory = { endpoint },
                 stateSink = {},
+                serverThreadDispatcher = directServerThreadDispatcher,
                 metricsCollector = metrics,
             )
 
@@ -725,6 +858,7 @@ class K16RuntimeDeviceTest {
                 properties = DeviceProperties(DeviceFamily.NORMAL, label = null),
                 endpointFactory = { endpoint },
                 stateSink = {},
+                serverThreadDispatcher = directServerThreadDispatcher,
             )
 
         device.turnOn()
@@ -744,6 +878,7 @@ class K16RuntimeDeviceTest {
                 properties = DeviceProperties(DeviceFamily.NORMAL, label = null),
                 endpointFactory = { endpoint },
                 stateSink = {},
+                serverThreadDispatcher = directServerThreadDispatcher,
             )
 
         device.turnOn()
@@ -763,6 +898,7 @@ class K16RuntimeDeviceTest {
                 properties = DeviceProperties(DeviceFamily.NORMAL, label = null),
                 endpointFactory = { endpoint },
                 stateSink = {},
+                serverThreadDispatcher = directServerThreadDispatcher,
             )
 
         device.turnOn()
@@ -782,6 +918,7 @@ class K16RuntimeDeviceTest {
                 properties = DeviceProperties(DeviceFamily.NORMAL, label = null),
                 endpointFactory = { endpoint },
                 stateSink = {},
+                serverThreadDispatcher = directServerThreadDispatcher,
             )
 
         device.turnOn()
@@ -802,6 +939,7 @@ class K16RuntimeDeviceTest {
                 properties = DeviceProperties(DeviceFamily.NORMAL, label = null),
                 endpointFactory = { endpoint },
                 stateSink = {},
+                serverThreadDispatcher = directServerThreadDispatcher,
                 metricsCollector = metrics,
             )
 
@@ -829,6 +967,7 @@ class K16RuntimeDeviceTest {
                 properties = DeviceProperties(DeviceFamily.NORMAL, label = null),
                 endpointFactory = { endpoint },
                 stateSink = {},
+                serverThreadDispatcher = directServerThreadDispatcher,
             )
 
         device.turnOn()
@@ -848,6 +987,7 @@ class K16RuntimeDeviceTest {
                 properties = DeviceProperties(DeviceFamily.NORMAL, label = null),
                 endpointFactory = { endpoint },
                 stateSink = {},
+                serverThreadDispatcher = directServerThreadDispatcher,
             )
 
         device.turnOn()
@@ -868,6 +1008,7 @@ class K16RuntimeDeviceTest {
                 properties = DeviceProperties(DeviceFamily.NORMAL, label = null),
                 endpointFactory = { endpoint },
                 stateSink = {},
+                serverThreadDispatcher = directServerThreadDispatcher,
             )
 
         assertEquals(null, device.snapshotRuntimeState())
@@ -894,6 +1035,7 @@ class K16RuntimeDeviceTest {
                     error("unsupported snapshot version")
                 },
                 stateSink = { powerChanges += it },
+                serverThreadDispatcher = directServerThreadDispatcher,
             )
 
         device.turnOn()
@@ -915,6 +1057,7 @@ class K16RuntimeDeviceTest {
                 properties = DeviceProperties(DeviceFamily.NORMAL, label = null),
                 endpointFactory = { endpoint },
                 stateSink = {},
+                serverThreadDispatcher = directServerThreadDispatcher,
             )
 
         device.turnOn()
@@ -1150,6 +1293,23 @@ class K16RuntimeDeviceTest {
             payload: ByteArray,
         ) {
             sentRetainedPayloads += SentNativePayload(playerUuid, deviceId, payload)
+        }
+    }
+
+    private class RecordingServerThreadDispatcher : ServerThreadDispatcher {
+        private val tasks = ConcurrentLinkedQueue<() -> Unit>()
+
+        val pendingTaskCount: Int
+            get() = tasks.size
+
+        override fun dispatch(task: () -> Unit) {
+            tasks += task
+        }
+
+        fun runAll() {
+            while (true) {
+                tasks.poll()?.invoke() ?: return
+            }
         }
     }
 }

@@ -1480,6 +1480,7 @@ class K16FirmwareResourceTest {
                     )
                 },
                 stateSink = {},
+                serverThreadDispatcher = directServerThreadDispatcher,
             )
 
         try {
@@ -3091,6 +3092,7 @@ class K16FirmwareResourceTest {
                     )
                 },
                 stateSink = {},
+                serverThreadDispatcher = directServerThreadDispatcher,
                 displayNetwork = displayNetwork,
             )
 
