@@ -127,15 +127,23 @@ class K16RuntimeProfilingArchitectureTest {
     }
 
     @Test
-    fun k16RuntimeForwardsOnlyHostPublishedRetainedPayloads() {
+    fun k16RuntimeForwardsHostPayloadsOnWorkerCompletion() {
         val source =
             Path
                 .of("../../../modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/runtime/K16RuntimeDevice.kt")
                 .readText()
 
         assertTrue(
-            source.contains("current.pollRetainedDisplayPayload() ?: return"),
-            "K16 runtime should forward only payloads materialized by the retained host",
+            source.contains("captureRetainedDisplayPayloads(endpoint)"),
+            "K16 worker should capture payloads materialized by the retained host after command completion",
+        )
+        assertTrue(
+            source.contains("retainedDisplayPublicationPump.offer("),
+            "K16 runtime should hand ready payloads to the server-thread publication pump",
+        )
+        assertFalse(
+            source.contains("pollRetainedDisplayPayload"),
+            "K16 runtime must not rediscover ready payloads during a later server tick",
         )
         assertFalse(
             source.contains("pendingDisplayBatches"),
