@@ -47,7 +47,7 @@ interface RuntimeDeviceInput : DeviceEvents.Receiver
 interface RuntimeDeviceDisplaySessions {
     fun attachRetainedDisplayViewer(playerUuid: UUID): Boolean
 
-    fun acceptRetainedDisplayServerbound(
+    fun queueRetainedDisplayServerbound(
         playerUuid: UUID,
         payload: ByteArray,
     ): Boolean

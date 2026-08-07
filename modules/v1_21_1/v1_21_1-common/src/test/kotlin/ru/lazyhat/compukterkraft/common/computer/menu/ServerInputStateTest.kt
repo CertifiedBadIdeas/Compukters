@@ -128,7 +128,7 @@ class ServerInputStateTest {
 
         override fun attachRetainedDisplayViewer(playerUuid: UUID): Boolean = false
 
-        override fun acceptRetainedDisplayServerbound(
+        override fun queueRetainedDisplayServerbound(
             playerUuid: UUID,
             payload: ByteArray,
         ): Boolean = false

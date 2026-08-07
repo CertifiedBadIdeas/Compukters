@@ -47,7 +47,7 @@ class RetainedDisplayControlServerMessage : NetworkMessage<ServerNetworkContext>
     }
 
     override fun handle(context: ServerNetworkContext) {
-        ServerContext.get(computerId)?.acceptRetainedDisplayServerbound(context.sender().uuid, payload)
+        ServerContext.get(computerId)?.queueRetainedDisplayServerbound(context.sender().uuid, payload)
     }
 
     override fun type(): MessageType<RetainedDisplayControlServerMessage> = NetworkMessages.RETAINED_DISPLAY_CONTROL

@@ -262,11 +262,13 @@ class K16RuntimeDeviceTest {
         )
 
         val serverbound = byteArrayOf(1, 2, 3, 4)
-        assertFalse(device.acceptRetainedDisplayServerbound(UUID.randomUUID(), serverbound))
+        assertFalse(device.queueRetainedDisplayServerbound(UUID.randomUUID(), serverbound))
         endpoint.retainedServerboundOutcome = 2
         endpoint.retainedPayloads += NativeRetainedDisplayPayload(1L, byteArrayOf(9, 8, 7))
-        assertTrue(device.acceptRetainedDisplayServerbound(firstPlayer, serverbound))
+        assertTrue(device.queueRetainedDisplayServerbound(firstPlayer, serverbound))
+        waitUntil { endpoint.retainedServerbound.isNotEmpty() }
         assertEquals(listOf(1L to serverbound.toList()), endpoint.retainedServerbound)
+        waitUntil { displayNetwork.sentRetainedPayloads.size == 2 }
         assertEquals(
             SentNativePayload(firstPlayer, 73, byteArrayOf(9, 8, 7)),
             displayNetwork.sentRetainedPayloads.last(),
@@ -523,15 +525,48 @@ class K16RuntimeDeviceTest {
         waitUntil { endpoint.tickCalls == 1 }
         assertEquals(listOf(2L), endpoint.retainedViewerDetaches)
         assertEquals(1, endpoint.retainedPayloadBatchDrainCalls)
-        assertFalse(device.acceptRetainedDisplayServerbound(second, byteArrayOf(1)))
+        assertFalse(device.queueRetainedDisplayServerbound(second, byteArrayOf(1)))
 
         endpoint.retainedServerboundOutcome = 3
         endpoint.retainedPayloads += NativeRetainedDisplayPayload(1L, byteArrayOf(9, 8, 7))
-        assertTrue(device.acceptRetainedDisplayServerbound(first, byteArrayOf(1, 2, 3)))
+        assertTrue(device.queueRetainedDisplayServerbound(first, byteArrayOf(1, 2, 3)))
+        waitUntil { endpoint.retainedViewerAttaches.size == 3 }
         assertEquals(listOf(1L to 73, 2L to 73, 1L to 73), endpoint.retainedViewerAttaches)
+        waitUntil { displayNetwork.sentRetainedPayloads.isNotEmpty() }
         assertEquals(SentNativePayload(first, 73, byteArrayOf(9, 8, 7)), displayNetwork.sentRetainedPayloads.last())
         device.shutdown()
         assertEquals(listOf(2L, 1L), endpoint.retainedViewerDetaches)
+    }
+
+    @Test
+    fun retainedControlQueueDoesNotWaitForBusyWorker() {
+        val controlEntered = CountDownLatch(1)
+        val releaseControl = CountDownLatch(1)
+        val endpoint = BlockingRetainedControlK16Endpoint(controlEntered, releaseControl)
+        val displayNetwork = RecordingDisplayNetworkBridge()
+        val player = UUID.fromString("00000000-0000-0000-0000-000000000464")
+        val device =
+            K16RuntimeDevice(
+                deviceId = 73,
+                properties = DeviceProperties(DeviceFamily.NORMAL, label = "K16"),
+                endpointFactory = { endpoint },
+                stateSink = {},
+                serverThreadDispatcher = directServerThreadDispatcher,
+                displayNetwork = displayNetwork,
+            )
+        displayNetwork.authorizedPlayers += player
+
+        device.turnOn()
+        assertTrue(device.attachRetainedDisplayViewer(player))
+
+        try {
+            assertTrue(device.queueRetainedDisplayServerbound(player, byteArrayOf(1, 2, 3)))
+            assertTrue(controlEntered.await(2, TimeUnit.SECONDS))
+            assertTrue(device.isOn)
+        } finally {
+            releaseControl.countDown()
+        }
+        waitUntil { endpoint.retainedServerbound.isNotEmpty() }
     }
 
     @Test
@@ -1194,7 +1229,7 @@ class K16RuntimeDeviceTest {
             return true
         }
 
-        override fun acceptRetainedDisplayServerbound(
+        override open fun acceptRetainedDisplayServerbound(
             viewerToken: Long,
             payload: ByteArray,
         ): Int {
@@ -1256,6 +1291,20 @@ class K16RuntimeDeviceTest {
                 releaseTick.await(2, TimeUnit.SECONDS)
             }
             super.beforeTick()
+        }
+    }
+
+    private class BlockingRetainedControlK16Endpoint(
+        private val controlEntered: CountDownLatch,
+        private val releaseControl: CountDownLatch,
+    ) : RecordingK16Endpoint() {
+        override fun acceptRetainedDisplayServerbound(
+            viewerToken: Long,
+            payload: ByteArray,
+        ): Int {
+            controlEntered.countDown()
+            releaseControl.await(2, TimeUnit.SECONDS)
+            return super.acceptRetainedDisplayServerbound(viewerToken, payload)
         }
     }
 
