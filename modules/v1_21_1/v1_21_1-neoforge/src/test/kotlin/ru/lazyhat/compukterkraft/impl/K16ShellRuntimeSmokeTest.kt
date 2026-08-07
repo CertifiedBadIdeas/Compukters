@@ -1121,6 +1121,7 @@ class K16ShellRuntimeSmokeTest {
                 )
             },
             stateSink = {},
+            serverThreadDispatcher = directServerThreadDispatcher,
         )
     }
 

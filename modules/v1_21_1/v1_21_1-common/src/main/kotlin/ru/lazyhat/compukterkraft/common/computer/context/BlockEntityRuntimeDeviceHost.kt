@@ -28,6 +28,7 @@ import ru.lazyhat.compukterkraft.common.notebook.block.NotebookBlockEntity
 import ru.lazyhat.compukterkraft.core.device.runtime.ports.DeviceStateSink
 import ru.lazyhat.compukterkraft.core.device.runtime.ports.DisplayNetworkBridge
 import ru.lazyhat.compukterkraft.core.device.runtime.ports.GameTimeSource
+import ru.lazyhat.compukterkraft.core.device.runtime.ports.ServerThreadDispatcher
 import java.util.UUID
 
 /**
@@ -41,6 +42,7 @@ class BlockEntityRuntimeDeviceHost(
     private val blockEntity: AbstractComputerBlockEntity,
 ) {
     val gameTime: GameTimeSource = GameTimeSource { level.gameTime }
+    val serverThreadDispatcher = ServerThreadDispatcher { task -> level.server.execute(task) }
 
     val displayNetwork: DisplayNetworkBridge =
         object : DisplayNetworkBridge {

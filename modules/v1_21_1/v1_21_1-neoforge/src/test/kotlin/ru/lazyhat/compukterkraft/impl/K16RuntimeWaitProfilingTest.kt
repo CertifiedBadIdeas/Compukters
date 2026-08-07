@@ -53,6 +53,7 @@ class K16RuntimeWaitProfilingTest {
                     )
                 },
                 stateSink = {},
+                serverThreadDispatcher = directServerThreadDispatcher,
                 metricsCollector = metrics,
             )
 

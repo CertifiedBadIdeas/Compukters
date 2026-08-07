@@ -561,6 +561,7 @@ class K16RuntimeTextIoProfilingTest {
                     )
                 },
                 stateSink = {},
+                serverThreadDispatcher = directServerThreadDispatcher,
                 metricsCollector = metrics,
             )
 
@@ -641,6 +642,7 @@ class K16RuntimeTextIoProfilingTest {
                     )
                 },
                 stateSink = {},
+                serverThreadDispatcher = directServerThreadDispatcher,
                 metricsCollector = metrics,
             )
 
@@ -696,6 +698,7 @@ class K16RuntimeTextIoProfilingTest {
                     )
                 },
                 stateSink = {},
+                serverThreadDispatcher = directServerThreadDispatcher,
                 displayNetwork = displayNetwork,
                 metricsCollector = metrics,
             )
@@ -783,6 +786,7 @@ class K16RuntimeTextIoProfilingTest {
                     )
                 },
                 stateSink = {},
+                serverThreadDispatcher = directServerThreadDispatcher,
                 displayNetwork = displayNetwork,
                 metricsCollector = metrics,
             )
@@ -865,6 +869,7 @@ class K16RuntimeTextIoProfilingTest {
                     )
                 },
                 stateSink = {},
+                serverThreadDispatcher = directServerThreadDispatcher,
                 metricsCollector = metrics,
             )
 
@@ -977,6 +982,7 @@ class K16RuntimeTextIoProfilingTest {
                     )
                 },
                 stateSink = {},
+                serverThreadDispatcher = directServerThreadDispatcher,
                 metricsCollector = metrics,
             )
 
@@ -1092,6 +1098,7 @@ class K16RuntimeTextIoProfilingTest {
                     )
                 },
                 stateSink = {},
+                serverThreadDispatcher = directServerThreadDispatcher,
                 displayNetwork = displayNetwork,
                 metricsCollector = metrics,
             )
@@ -1167,6 +1174,7 @@ class K16RuntimeTextIoProfilingTest {
                     )
                 },
                 stateSink = {},
+                serverThreadDispatcher = directServerThreadDispatcher,
                 metricsCollector = metrics,
             )
 
