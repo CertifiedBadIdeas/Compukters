@@ -78,6 +78,7 @@ class K16TinyCcBuildScriptTest {
             "compiler-runtime.c",
             "narrow-memory.c",
             "pointers-locals.c",
+            "rodata.c",
             "control-flow.c",
             "calls.c",
             "relocations.c",
@@ -91,5 +92,39 @@ class K16TinyCcBuildScriptTest {
         ).forEach { fixture ->
             assertTrue(root.resolve("tools/fixtures/k16-tinycc/$fixture").exists(), fixture)
         }
+    }
+
+    @Test
+    fun tinyCcUnameProofIsIsolatedFromTheProductionClangBuild() {
+        val producerConvention =
+            root
+                .resolve("build-scripts/src/main/kotlin/k16-firmware-producer-convention.gradle.kts")
+                .readText()
+        val proofBody =
+            producerConvention
+                .substringAfter("val compileK16TinyCcUnameProof =")
+                .substringBefore("val compileK16SystemInit =")
+        val productionUnameBody =
+            producerConvention
+                .substringAfter("val compileK16SystemUname =")
+                .substringBefore("val compileK16SystemLs =")
+
+        assertTrue(proofBody.contains("tasks.register(\"compileK16TinyCcUnameProof\")"))
+        assertTrue(producerConvention.contains("generated/k16-tinycc-proof"))
+        assertTrue(proofBody.contains("k16TinyCcUnameProofArtifact"))
+        assertTrue(producerConvention.contains(".toolchain/build/tinycc/k16/bin/tcc-k16"))
+        assertTrue(proofBody.contains("k16TinyCcExecutable"))
+        assertTrue(proofBody.contains("k16CLibcStartupSource"))
+        assertTrue(proofBody.contains("k16CSystemUnameSource"))
+        assertTrue(proofBody.contains("-Dmain=kraft_main"))
+        assertTrue(proofBody.contains("k16-startup"))
+        assertTrue(proofBody.contains("program-dynamic"))
+        assertTrue(proofBody.contains("--dylib"))
+        assertTrue(proofBody.contains("compileK16SharedKraft"))
+
+        assertTrue(productionUnameBody.contains("compileK16GuestCProgram"))
+        assertTrue(productionUnameBody.contains("k16ClangExecutable"))
+        assertFalse(productionUnameBody.contains("TinyCc"))
+        assertFalse(productionUnameBody.contains("tinycc"))
     }
 }
