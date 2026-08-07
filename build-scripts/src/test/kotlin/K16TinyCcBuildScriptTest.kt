@@ -165,4 +165,38 @@ class K16TinyCcBuildScriptTest {
                 ).exists(),
         )
     }
+
+    @Test
+    fun tinyCcK16BackendDocumentationStatesTheProvenBoundary() {
+        val documentationPath = root.resolve("docs/toolchains/k16-tinycc-backend.md")
+        assertTrue(documentationPath.exists())
+        val documentation = documentationPath.readText()
+
+        assertTrue(documentation.contains("64552b3faa39ee7948a9ea21bfcc11045b90c70d"))
+        assertTrue(documentation.contains("toolchains/Compukter-Kraft-tinycc"))
+        assertTrue(documentation.contains("./gradlew-sandbox-dev-parallel buildK16TinyCc"))
+        assertTrue(documentation.contains("./gradlew-sandbox-dev-parallel verifyK16TinyCc"))
+        assertTrue(documentation.contains(".toolchain/build/tinycc/k16/bin/tcc-k16"))
+        assertTrue(documentation.contains("ELF32"))
+        assertTrue(documentation.contains("ET_REL"))
+        assertTrue(documentation.contains("RELA"))
+        assertTrue(documentation.contains("k16 link"))
+        assertTrue(documentation.contains("scalar"))
+        assertTrue(documentation.contains("narrow"))
+        assertTrue(documentation.contains("pointer"))
+        assertTrue(documentation.contains("control flow"))
+        assertTrue(documentation.contains("stack arguments"))
+        assertTrue(documentation.contains("global"))
+        assertTrue(documentation.contains("floating-point"))
+        assertTrue(documentation.contains("variadic"))
+        assertTrue(documentation.contains("integrated assembly"))
+        assertTrue(documentation.contains("wide integer"))
+        assertTrue(documentation.contains("aggregate"))
+        assertTrue(documentation.contains("JIT"))
+        assertTrue(documentation.contains("production KraftOS remains Clang-built"))
+        assertTrue(documentation.contains("guest TinyCC"))
+        assertTrue(documentation.contains("C SDK module"))
+        assertTrue(documentation.contains("libc packaging"))
+        assertTrue(documentation.contains("-run"))
+    }
 }

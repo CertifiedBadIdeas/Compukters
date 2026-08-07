@@ -8,6 +8,10 @@ the normative contracts remain in `k16-cpu-v1.md`, `k16-object-v1.md`, and
 `k16e-v1.md`. Its job is to make the supported subset and its regression
 coverage explicit before publishing a K16 toolchain archive.
 
+The LLVM/Rust rows below describe the production toolchain. The separate
+TinyCC proof table records only the narrower host-backend subset demonstrated
+by issue #464 and does not widen the normative ABI.
+
 ## Supported Patterns
 
 | Pattern | Status | Coverage |
@@ -24,6 +28,21 @@ coverage explicit before publishing a K16 toolchain archive.
 | runtime helper symbols | Supported when supplied by `k16 runtime k16-startup`, `k16 runtime k16-memory-helpers`, and `k16 runtime k16-cpu-helpers`. Missing symbols are link-time errors. | `k16_runtime_cli`; `k16_rust_smoke_artifacts`; `k16_object_abi_docs`. |
 | i64 integer helper calls | Supported through explicit helper functions for div/rem and shift cases used by current Rust output. | `libcall-i64-divrem.ll`, `i64-shift-parts.ll`; `k16_rust_smoke_artifacts`. |
 
+## TinyCC K16 Proof Backend
+
+| Pattern | TinyCC status | Coverage |
+| --- | --- | --- |
+| ELF object boundary | Supported for little-endian ELF32 `ET_REL`, `.text.k16`, `.rodata`, `.data`, `.bss`, and explicit RELA records. TinyCC does not produce K16E. | `return-42.c`, `rodata.c`, `relocations.c`; `verifyK16TinyCcBackend`. |
+| scalar arguments and returns | Supported for one 32-bit ABI slot per value: `r1` through `r3` arguments and `r0` return. | `calls.c`; TinyCC/Clang mixed-link execution. |
+| stack-passed arguments | Supported for caller-owned arguments after the first three registers, including required stack alignment and callee frame access. | Six-argument call in `calls.c`. |
+| narrow integer memory | Supported for byte and half-word loads/stores, signed extension, unsigned extension, and casts. | `narrow-memory.c`. |
+| scalar locals and pointers | Supported for frame locals, local arrays, pointer arithmetic, dereference, globals, symbol addends, and writable pointer initializers. | `pointers-locals.c`, `relocations.c`. |
+| integer operations | Supported for 32-bit arithmetic, bitwise operations, shifts, comparisons, division, and remainder. | `arithmetic.c`; freestanding `compiler-runtime.c` for Clang libcall parity. |
+| structured control flow | Supported for conditions, loops, switches, and internal long branches using canonical K16 relocations. | `control-flow.c`. |
+| direct and indirect calls | Supported for scalar signatures. Direct calls use `R_K16_CALL32`; function pointers use `call r14` without a symbol relocation. | `calls.c`; exact byte and relocation checks in `tools/k16-tinycc-smoke.sh`. |
+| dynamic KraftOS importer | Proven for the existing `crt0.c` plus `uname.c`, linked by `k16 link` against `libkraft.kso` and executed inside a copied real KraftOS volume. | `compileK16TinyCcUnameProof`; `K16TinyCcRuntimeSmokeTest`. |
+| floating point, varargs, wide values, aggregate ABI, integrated assembly, JIT/`-run` | Unsupported and rejected with stable K16-specific diagnostics before an output object is accepted. GNU declaration symbol labels remain supported. | `reject-*.c`, `asm-label.c`; `verifyK16TinyCcBackend`. |
+
 ## Unsupported Patterns
 
 These shapes are intentionally outside the current conformance target:
@@ -32,7 +51,8 @@ These shapes are intentionally outside the current conformance target:
   larger aggregate ABI than the active small-register-return subset.
 - varargs are unsupported.
 - exceptions and unwinding are unsupported.
-- dynamic linking is unsupported.
+- compiler-driver-owned dynamic linking is unsupported; final imported dynamic
+  K16E linkage remains owned by the explicit `k16 link` path.
 - position-independent code is unsupported.
 - tail calls are unsupported as a stable ABI promise.
 - callee cleanup is unsupported.
