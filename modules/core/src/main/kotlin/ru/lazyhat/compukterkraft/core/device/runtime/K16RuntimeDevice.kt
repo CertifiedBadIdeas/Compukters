@@ -64,6 +64,7 @@ class K16RuntimeDevice(
     private val retainedDisplaySessions = RetainedDisplaySessionTracker()
     private var labelBacking: String? = properties.label
     private var terminalControlReached = false
+    @Volatile
     private var runtimeFailureMessageBacking: String? = null
     private val retainedDisplayPublicationPump =
         ServerThreadPublicationPump(
@@ -92,6 +93,7 @@ class K16RuntimeDevice(
                     endpointFactory,
                     metricsCollector,
                     ::offerReadyRetainedDisplayPublication,
+                    ::recordRuntimeFailure,
                 ).also { it.start() }
             } catch (error: Throwable) {
                 recordRuntimeFailure(error, "start")
@@ -253,21 +255,17 @@ class K16RuntimeDevice(
         }
     }
 
-    override fun acceptRetainedDisplayServerbound(
+    override fun queueRetainedDisplayServerbound(
         playerUuid: UUID,
         payload: ByteArray,
     ): Boolean {
         val current = endpoint ?: return false
         val viewerToken = retainedDisplaySessions.authorize(playerUuid) ?: return false
         return try {
-            val outcome = current.acceptRetainedDisplayServerbound(viewerToken, payload)
-            if (outcome > 0) {
-                true
-            } else {
-                false
-            }
+            current.queueRetainedDisplayServerbound(viewerToken, payload)
+            true
         } catch (error: Throwable) {
-            recordRuntimeFailure(error, "accept retained display message")
+            recordRuntimeFailure(error, "queue retained display message")
             false
         }
     }
@@ -357,6 +355,7 @@ class K16RuntimeDevice(
         private val endpointFactory: () -> K16ComputerEndpoint,
         private val metricsCollector: RuntimeMetricsCollector,
         private val onRetainedDisplayPayloadReady: (K16EndpointWorker, NativeRetainedDisplayPayload) -> Unit,
+        private val onFailure: (Throwable, String) -> Unit,
     ) : AutoCloseable {
         private val commands = LinkedBlockingQueue<Command>()
         private val startup = CompletableFuture<Unit>()
@@ -463,14 +462,12 @@ class K16RuntimeDevice(
             return response.join()
         }
 
-        fun acceptRetainedDisplayServerbound(
+        fun queueRetainedDisplayServerbound(
             viewerToken: Long,
             payload: ByteArray,
-        ): Int {
+        ) {
             check(!closed.get()) { "K16 endpoint worker is closed" }
-            val response = CompletableFuture<Int>()
-            commands.offer(Command.AcceptRetainedDisplayServerbound(viewerToken, payload.copyOf(), response))
-            return response.join()
+            commands.offer(Command.AcceptRetainedDisplayServerbound(viewerToken, payload.copyOf()))
         }
 
         override fun close() {
@@ -596,14 +593,15 @@ class K16RuntimeDevice(
                         }
 
                         is Command.AcceptRetainedDisplayServerbound -> {
-                            complete(command.response) {
+                            try {
                                 val outcome =
                                     endpoint.acceptRetainedDisplayServerbound(command.viewerToken, command.payload)
                                 if (outcome == 3) {
                                     endpoint.attachRetainedDisplayViewer(command.viewerToken, deviceId)
                                 }
                                 captureRetainedDisplayPayloads(endpoint)
-                                outcome
+                            } catch (error: Throwable) {
+                                onFailure(error, "accept retained display message")
                             }
                         }
 
@@ -720,7 +718,6 @@ class K16RuntimeDevice(
             data class AcceptRetainedDisplayServerbound(
                 val viewerToken: Long,
                 val payload: ByteArray,
-                val response: CompletableFuture<Int>,
             ) : Command
 
             data object Close : Command

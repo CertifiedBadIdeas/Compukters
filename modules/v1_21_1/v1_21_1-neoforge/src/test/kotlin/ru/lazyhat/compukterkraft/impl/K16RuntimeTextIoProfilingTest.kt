@@ -1801,7 +1801,7 @@ private class RetainedDisplayProbe(
                 RetainedDisplayInstallDamage.FullReplacement -> fullReplacementCount += 1
                 is RetainedDisplayInstallDamage.Delta -> deltaCount += 1
             }
-            assertTrue(device.acceptRetainedDisplayServerbound(playerUuid, installed.acknowledgement))
+            assertTrue(device.queueRetainedDisplayServerbound(playerUuid, installed.acknowledgement))
         }
     }
 }
