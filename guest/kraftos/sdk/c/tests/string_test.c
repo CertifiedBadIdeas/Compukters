@@ -20,6 +20,8 @@
 int main(void) {
   char text[8] = "abcdef";
   char bounded[5];
+  char joined[12] = "kraft";
+  const char search_text[] = "kraftos";
 
   memmove(text + 1, text, 5);
   if (memcmp(text, "aabcde", 6) != 0) return 20;
@@ -32,5 +34,11 @@ int main(void) {
   if (strcmp(strerror(ENOENT), "No such file or directory") != 0) return 26;
   if (strcmp(strerror(EINVAL), "Invalid argument") != 0) return 27;
   if (strcmp(strerror(999), "Unknown error") != 0) return 28;
+  if (strpbrk(search_text, "xyzf") != search_text + 3) return 29;
+  if (strpbrk(search_text, "xyz") != NULL) return 30;
+  if (strpbrk("", "abc") != NULL) return 31;
+  if (strpbrk(search_text, "") != NULL) return 32;
+  if (strcat(joined, "os") != joined) return 33;
+  if (strcmp(joined, "kraftos") != 0) return 34;
   return 0;
 }
