@@ -188,6 +188,74 @@ class KraftOsArtifactManifestTest {
         assertTrue(error.message.orEmpty().contains("unsupported artifact.biosFlash.format"))
     }
 
+    @Test
+    fun resolvesExactlyOneImmutableSdkIdentity() {
+        val manifest =
+            KraftOsArtifactManifest.parse(
+                text =
+                    """
+                    schema=1
+                    target=k16
+                    profile=development
+                    artifact.biosFlash.resource=firmware/k16-bios.kflash
+                    artifact.biosFlash.format=kflash
+                    artifact.systemStorage0.resource=firmware/k16-system-storage0-dev.kv
+                    artifact.systemStorage0.format=kfs-kv
+                    artifact.sdk.sdk_fixture_v1.resource=firmware/sdk-fixture-v1.kv
+                    artifact.sdk.sdk_fixture_v1.format=kfs-kv
+                    """.trimIndent(),
+                source = "test SDK manifest",
+            )
+
+        assertEquals("firmware/sdk-fixture-v1.kv", manifest.sdkArtifact("sdk_fixture_v1").resource)
+        assertFailsWith<IllegalArgumentException> { manifest.sdkArtifact("missing") }
+    }
+
+    @Test
+    fun rejectsIncompleteInvalidAndDuplicateSdkEntries() {
+        fun manifest(sdkLines: String): String =
+            """
+            schema=1
+            target=k16
+            profile=development
+            artifact.biosFlash.resource=firmware/k16-bios.kflash
+            artifact.biosFlash.format=kflash
+            artifact.systemStorage0.resource=firmware/k16-system-storage0-dev.kv
+            artifact.systemStorage0.format=kfs-kv
+            $sdkLines
+            """.trimIndent()
+
+        assertFailsWith<IllegalStateException> {
+            KraftOsArtifactManifest.parse(
+                manifest("artifact.sdk.sdk_fixture_v1.resource=firmware/sdk-fixture-v1.kv"),
+                "missing SDK format",
+            )
+        }
+        assertFailsWith<IllegalStateException> {
+            KraftOsArtifactManifest.parse(
+                manifest(
+                    """
+                    artifact.sdk.Invalid.resource=firmware/sdk-fixture-v1.kv
+                    artifact.sdk.Invalid.format=kfs-kv
+                    """.trimIndent(),
+                ),
+                "invalid SDK identity",
+            )
+        }
+        assertFailsWith<IllegalStateException> {
+            KraftOsArtifactManifest.parse(
+                manifest(
+                    """
+                    artifact.sdk.sdk_fixture_v1.resource=firmware/first.kv
+                    artifact.sdk.sdk_fixture_v1.resource=firmware/second.kv
+                    artifact.sdk.sdk_fixture_v1.format=kfs-kv
+                    """.trimIndent(),
+                ),
+                "duplicate SDK key",
+            )
+        }
+    }
+
     private fun resourceClassLoader(
         path: String,
         content: ByteArray,

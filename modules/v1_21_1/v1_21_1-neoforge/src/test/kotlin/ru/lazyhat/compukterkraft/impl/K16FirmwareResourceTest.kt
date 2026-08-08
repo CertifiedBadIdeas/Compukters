@@ -699,11 +699,12 @@ class K16FirmwareResourceTest {
 
         assertEquals(1, manifest.schema)
         assertEquals("k16", manifest.target)
-        assertEquals("production", manifest.profile)
+        assertEquals("development", manifest.profile)
         assertEquals("firmware/k16-bios.kflash", manifest.biosFlash.resource)
         assertEquals("kflash", manifest.biosFlash.format)
-        assertEquals("firmware/k16-system-storage0.kv", manifest.systemStorage0.resource)
+        assertEquals("firmware/k16-system-storage0-dev.kv", manifest.systemStorage0.resource)
         assertEquals("kfs-kv", manifest.systemStorage0.format)
+        assertEquals("firmware/sdk-fixture-v1.kv", manifest.sdkArtifact("sdk_fixture_v1").resource)
         assertTrue(
             javaClass.classLoader.getResource(manifest.biosFlash.resource) != null,
             "manifest BIOS flash resource should exist",
@@ -711,6 +712,10 @@ class K16FirmwareResourceTest {
         assertTrue(
             javaClass.classLoader.getResource(manifest.systemStorage0.resource) != null,
             "manifest storage0 resource should exist",
+        )
+        assertTrue(
+            javaClass.classLoader.getResource(manifest.sdkArtifact("sdk_fixture_v1").resource) != null,
+            "manifest SDK fixture resource should exist",
         )
     }
 
@@ -725,6 +730,8 @@ class K16FirmwareResourceTest {
         assertTrue(Files.exists(biosFlash), "production bundle should contain the BIOS flash image")
         assertTrue(Files.exists(systemStorage0), "production bundle should contain the initial system storage volume")
         assertTrue(manifest.readText().contains("profile=production"))
+        assertFalse(manifest.readText().contains("artifact.sdk."))
+        assertFalse(Files.exists(bundle.resolve("firmware/sdk-fixture-v1.kv")))
         assertTrue(biosFlash.readBytes().size > 8, "bundled BIOS flash should not be empty")
         assertTrue(systemStorage0.readBytes().size > 512, "bundled storage0 volume should not be empty")
     }

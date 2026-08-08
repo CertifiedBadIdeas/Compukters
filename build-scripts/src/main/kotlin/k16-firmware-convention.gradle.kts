@@ -38,28 +38,52 @@ val k16TinyCcUnameProof = layout.buildDirectory.file("generated/k16-tinycc-proof
 val k16BiosFlashResource = generatedK16FirmwareResources.map { it.file("firmware/k16-bios.kflash") }
 val k16DevelopmentStorage0Resource =
     generatedK16FirmwareTestResources.map { it.file("firmware/k16-system-storage0-dev.kv") }
+val k16SdkFixtureResource =
+    generatedK16FirmwareTestResources.map { it.file("firmware/sdk-fixture-v1.kv") }
+val k16TestArtifactManifestResource =
+    generatedK16FirmwareTestResources.map { it.file("firmware/kraftos-artifacts.properties") }
 
 sourceSets.getByName("main") {
     resources.srcDir(generatedKraftOsProductionBundle)
 }
 
-sourceSets.getByName("test") {
-    resources.srcDir(generatedK16FirmwareTestResources)
+sourceSets.configureEach {
+    if (name == "test" || name == "gameTest") {
+        resources.srcDir(generatedK16FirmwareTestResources)
+        val originalRuntimeClasspath = runtimeClasspath
+        runtimeClasspath = output + originalRuntimeClasspath
+    }
 }
 
 tasks.named("processResources") {
     dependsOn("assembleKraftOsProductionBundle")
 }
 
-tasks.named("processTestResources") {
+fun org.gradle.api.Task.dependsOnK16SdkTestResources() {
     dependsOn("putK16DevelopmentStorage0TestPrograms")
+    dependsOn("putK16SdkFixture")
+    dependsOn("generateKraftOsTestArtifactManifest")
+}
+
+tasks.named("processTestResources") {
+    dependsOnK16SdkTestResources()
+}
+
+tasks.configureEach {
+    if (name == "processGameTestResources") {
+        dependsOnK16SdkTestResources()
+    }
 }
 
 fun Test.inputsK16RuntimeFirmwareResources() {
     dependsOn("linkK16BiosFlash")
     dependsOn("putK16DevelopmentStorage0TestPrograms")
+    dependsOn("putK16SdkFixture")
+    dependsOn("generateKraftOsTestArtifactManifest")
     inputs.file(k16BiosFlashResource)
     inputs.file(k16DevelopmentStorage0Resource)
+    inputs.file(k16SdkFixtureResource)
+    inputs.file(k16TestArtifactManifestResource)
 }
 
 fun Test.useK16NeoforgeTestRuntime() {
