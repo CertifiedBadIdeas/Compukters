@@ -20,13 +20,14 @@ pub const COMPUTER_SNAPSHOT_V1_STORAGE0_DEVICE_KIND: u32 = 5;
 pub const COMPUTER_SNAPSHOT_V1_TIMER0_DEVICE_KIND: u32 = 6;
 pub const COMPUTER_SNAPSHOT_V1_KEYBOARD0_DEVICE_KIND: u32 = 7;
 pub const COMPUTER_SNAPSHOT_V1_MMU0_DEVICE_KIND: u32 = 9;
+pub const COMPUTER_SNAPSHOT_V1_STORAGE1_DEVICE_KIND: u32 = 10;
 const NO_BOOT_CPU: u32 = u32::MAX;
 const K16_CPU_STATE_RUNNING: u32 = 1;
 const K16_CPU_STATE_HALTED: u32 = 2;
 const K16_CPU_STATE_TRAPPED: u32 = 3;
 const CONTROL_DEVICE_PAYLOAD_SIZE_V1: usize = 12;
 const CONTROL_DEVICE_PAYLOAD_SIZE: usize = 20;
-const STORAGE0_DEVICE_PAYLOAD_SIZE: usize = 36;
+const STORAGE_DEVICE_PAYLOAD_SIZE: usize = 36;
 const TIMER0_DEVICE_PAYLOAD_SIZE: usize = 8;
 const KEYBOARD0_DEVICE_PAYLOAD_HEADER_SIZE: usize = 16;
 const KEYBOARD0_EVENT_RECORD_SIZE: usize = 16;
@@ -75,6 +76,16 @@ pub enum ComputerDeviceSnapshotRecord {
         bytes: Vec<u8>,
     },
     Storage0 {
+        status: i32,
+        error: i32,
+        lba_low: u32,
+        lba_high: u32,
+        block_count: u32,
+        buffer_addr: u32,
+        bytes_done: u32,
+        sequence: u64,
+    },
+    Storage1 {
         status: i32,
         error: i32,
         lba_low: u32,
@@ -322,7 +333,8 @@ fn device_record_size(record: &ComputerDeviceSnapshotRecord) -> usize {
         ComputerDeviceSnapshotRecord::Control { .. } => CONTROL_DEVICE_PAYLOAD_SIZE,
         ComputerDeviceSnapshotRecord::DebugSerial { bytes } => bytes.len(),
         ComputerDeviceSnapshotRecord::SerialInput { bytes } => bytes.len(),
-        ComputerDeviceSnapshotRecord::Storage0 { .. } => STORAGE0_DEVICE_PAYLOAD_SIZE,
+        ComputerDeviceSnapshotRecord::Storage0 { .. }
+        | ComputerDeviceSnapshotRecord::Storage1 { .. } => STORAGE_DEVICE_PAYLOAD_SIZE,
         ComputerDeviceSnapshotRecord::Timer0 { .. } => TIMER0_DEVICE_PAYLOAD_SIZE,
         ComputerDeviceSnapshotRecord::Keyboard0 { events, .. } => {
             KEYBOARD0_DEVICE_PAYLOAD_HEADER_SIZE + events.len() * KEYBOARD0_EVENT_RECORD_SIZE
@@ -393,15 +405,44 @@ fn encode_device_record(
             sequence,
         } => {
             write_u32(bytes, COMPUTER_SNAPSHOT_V1_STORAGE0_DEVICE_KIND);
-            write_u32(bytes, STORAGE0_DEVICE_PAYLOAD_SIZE as u32);
-            write_i32(bytes, *status);
-            write_i32(bytes, *error);
-            write_u32(bytes, *lba_low);
-            write_u32(bytes, *lba_high);
-            write_u32(bytes, *block_count);
-            write_u32(bytes, *buffer_addr);
-            write_u32(bytes, *bytes_done);
-            write_u64(bytes, *sequence);
+            encode_storage_device_payload(
+                bytes,
+                StorageDeviceSnapshotFields {
+                    status: *status,
+                    error: *error,
+                    lba_low: *lba_low,
+                    lba_high: *lba_high,
+                    block_count: *block_count,
+                    buffer_addr: *buffer_addr,
+                    bytes_done: *bytes_done,
+                    sequence: *sequence,
+                },
+            );
+        }
+        ComputerDeviceSnapshotRecord::Storage1 {
+            status,
+            error,
+            lba_low,
+            lba_high,
+            block_count,
+            buffer_addr,
+            bytes_done,
+            sequence,
+        } => {
+            write_u32(bytes, COMPUTER_SNAPSHOT_V1_STORAGE1_DEVICE_KIND);
+            encode_storage_device_payload(
+                bytes,
+                StorageDeviceSnapshotFields {
+                    status: *status,
+                    error: *error,
+                    lba_low: *lba_low,
+                    lba_high: *lba_high,
+                    block_count: *block_count,
+                    buffer_addr: *buffer_addr,
+                    bytes_done: *bytes_done,
+                    sequence: *sequence,
+                },
+            );
         }
         ComputerDeviceSnapshotRecord::Timer0 { game_ticks } => {
             write_u32(bytes, COMPUTER_SNAPSHOT_V1_TIMER0_DEVICE_KIND);
@@ -514,6 +555,52 @@ fn encode_device_record(
     Ok(())
 }
 
+#[derive(Clone, Copy)]
+struct StorageDeviceSnapshotFields {
+    status: i32,
+    error: i32,
+    lba_low: u32,
+    lba_high: u32,
+    block_count: u32,
+    buffer_addr: u32,
+    bytes_done: u32,
+    sequence: u64,
+}
+
+fn encode_storage_device_payload(bytes: &mut Vec<u8>, storage: StorageDeviceSnapshotFields) {
+    write_u32(bytes, STORAGE_DEVICE_PAYLOAD_SIZE as u32);
+    write_i32(bytes, storage.status);
+    write_i32(bytes, storage.error);
+    write_u32(bytes, storage.lba_low);
+    write_u32(bytes, storage.lba_high);
+    write_u32(bytes, storage.block_count);
+    write_u32(bytes, storage.buffer_addr);
+    write_u32(bytes, storage.bytes_done);
+    write_u64(bytes, storage.sequence);
+}
+
+fn decode_storage_device_payload(
+    payload: &[u8],
+    name: &str,
+) -> Result<StorageDeviceSnapshotFields, String> {
+    if payload.len() != STORAGE_DEVICE_PAYLOAD_SIZE {
+        return Err(format!(
+            "ComputerMachine snapshot {name} device payload has {} bytes but expected {STORAGE_DEVICE_PAYLOAD_SIZE}",
+            payload.len()
+        ));
+    }
+    Ok(StorageDeviceSnapshotFields {
+        status: read_i32(payload, 0)?,
+        error: read_i32(payload, 4)?,
+        lba_low: read_u32(payload, 8)?,
+        lba_high: read_u32(payload, 12)?,
+        block_count: read_u32(payload, 16)?,
+        buffer_addr: read_u32(payload, 20)?,
+        bytes_done: read_u32(payload, 24)?,
+        sequence: read_u64(payload, 28)?,
+    })
+}
+
 fn decode_device_record(
     bytes: &[u8],
     offset: usize,
@@ -577,21 +664,29 @@ fn decode_device_record(
             }
         }
         COMPUTER_SNAPSHOT_V1_STORAGE0_DEVICE_KIND => {
-            if payload.len() != STORAGE0_DEVICE_PAYLOAD_SIZE {
-                return Err(format!(
-                    "ComputerMachine snapshot storage0 device payload has {} bytes but expected {STORAGE0_DEVICE_PAYLOAD_SIZE}",
-                    payload.len()
-                ));
-            }
+            let storage = decode_storage_device_payload(payload, "storage0")?;
             ComputerDeviceSnapshotRecord::Storage0 {
-                status: read_i32(payload, 0)?,
-                error: read_i32(payload, 4)?,
-                lba_low: read_u32(payload, 8)?,
-                lba_high: read_u32(payload, 12)?,
-                block_count: read_u32(payload, 16)?,
-                buffer_addr: read_u32(payload, 20)?,
-                bytes_done: read_u32(payload, 24)?,
-                sequence: read_u64(payload, 28)?,
+                status: storage.status,
+                error: storage.error,
+                lba_low: storage.lba_low,
+                lba_high: storage.lba_high,
+                block_count: storage.block_count,
+                buffer_addr: storage.buffer_addr,
+                bytes_done: storage.bytes_done,
+                sequence: storage.sequence,
+            }
+        }
+        COMPUTER_SNAPSHOT_V1_STORAGE1_DEVICE_KIND => {
+            let storage = decode_storage_device_payload(payload, "storage1")?;
+            ComputerDeviceSnapshotRecord::Storage1 {
+                status: storage.status,
+                error: storage.error,
+                lba_low: storage.lba_low,
+                lba_high: storage.lba_high,
+                block_count: storage.block_count,
+                buffer_addr: storage.buffer_addr,
+                bytes_done: storage.bytes_done,
+                sequence: storage.sequence,
             }
         }
         COMPUTER_SNAPSHOT_V1_TIMER0_DEVICE_KIND => {

@@ -150,6 +150,14 @@ impl ComputerDeviceIds {
             .and_then(|id| bus.device::<StoragePortDevice>(id))
     }
 
+    pub(crate) fn storage1_mut<'a>(
+        &self,
+        bus: &'a mut MachineBus,
+    ) -> Option<&'a mut StoragePortDevice> {
+        self.storage1
+            .and_then(|id| bus.device_mut::<StoragePortDevice>(id))
+    }
+
     pub(crate) fn timer0<'a>(&self, bus: &'a MachineBus) -> Option<&'a TimerDevice> {
         self.timer0.and_then(|id| bus.device::<TimerDevice>(id))
     }

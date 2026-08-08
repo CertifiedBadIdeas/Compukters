@@ -46,6 +46,19 @@ pub(crate) fn snapshot_device_records(
             sequence: snapshot.sequence,
         });
     }
+    if let Some(storage1) = devices.storage1(bus) {
+        let snapshot = storage1.controller_snapshot();
+        records.push(ComputerDeviceSnapshotRecord::Storage1 {
+            status: snapshot.status,
+            error: snapshot.error,
+            lba_low: snapshot.lba_low,
+            lba_high: snapshot.lba_high,
+            block_count: snapshot.block_count,
+            buffer_addr: snapshot.buffer_addr,
+            bytes_done: snapshot.bytes_done,
+            sequence: snapshot.sequence,
+        });
+    }
     if let Some(timer0) = devices.timer0(bus) {
         records.push(ComputerDeviceSnapshotRecord::Timer0 {
             game_ticks: timer0.game_ticks(),
@@ -115,6 +128,32 @@ pub(crate) fn restore_device_snapshot_record(
                     .to_string()
             })?;
             storage0.restore_controller_snapshot(StoragePortControllerSnapshot {
+                status,
+                error,
+                lba_low,
+                lba_high,
+                block_count,
+                buffer_addr,
+                bytes_done,
+                sequence,
+            });
+            Ok(())
+        }
+        ComputerDeviceSnapshotRecord::Storage1 {
+            status,
+            error,
+            lba_low,
+            lba_high,
+            block_count,
+            buffer_addr,
+            bytes_done,
+            sequence,
+        } => {
+            let storage1 = devices.storage1_mut(bus).ok_or_else(|| {
+                "ComputerMachine snapshot contains storage1 device state but profile has no storage1 device"
+                    .to_string()
+            })?;
+            storage1.restore_controller_snapshot(StoragePortControllerSnapshot {
                 status,
                 error,
                 lba_low,
