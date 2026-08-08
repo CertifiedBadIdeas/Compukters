@@ -23,3 +23,4 @@ pub mod root;
 pub mod selected_inode;
 pub mod superblock;
 pub mod types;
+pub mod volume;

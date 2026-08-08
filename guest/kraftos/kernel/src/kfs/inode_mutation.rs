@@ -1,10 +1,14 @@
 use crate::kfs::error::StorageError;
 use crate::kfs::types::{FileMetadata, KFS_MAX_INLINE_EXTENTS};
-use crate::kfs::{block_io, filesystem_state, selected_inode};
+use crate::kfs::{block_io, selected_inode};
 
-pub unsafe fn encode_file_inode(metadata: FileMetadata) -> Result<(), StorageError> {
+pub unsafe fn encode_file_inode(
+    volume: &mut crate::kfs::volume::KfsVolume,
+    metadata: FileMetadata,
+) -> Result<(), StorageError> {
     unsafe {
         encode_inode(
+            volume,
             metadata.inode_id,
             selected_inode::INODE_STATE_REGULAR,
             metadata.size_bytes,
@@ -15,9 +19,13 @@ pub unsafe fn encode_file_inode(metadata: FileMetadata) -> Result<(), StorageErr
     }
 }
 
-pub unsafe fn encode_directory_inode(metadata: FileMetadata) -> Result<(), StorageError> {
+pub unsafe fn encode_directory_inode(
+    volume: &mut crate::kfs::volume::KfsVolume,
+    metadata: FileMetadata,
+) -> Result<(), StorageError> {
     unsafe {
         encode_inode(
+            volume,
             metadata.inode_id,
             selected_inode::INODE_STATE_DIRECTORY,
             metadata.size_bytes,
@@ -28,9 +36,13 @@ pub unsafe fn encode_directory_inode(metadata: FileMetadata) -> Result<(), Stora
     }
 }
 
-pub unsafe fn encode_deleted_file_inode(metadata: FileMetadata) -> Result<(), StorageError> {
+pub unsafe fn encode_deleted_file_inode(
+    volume: &mut crate::kfs::volume::KfsVolume,
+    metadata: FileMetadata,
+) -> Result<(), StorageError> {
     unsafe {
         encode_inode(
+            volume,
             metadata.inode_id,
             3,
             metadata.size_bytes,
@@ -41,9 +53,13 @@ pub unsafe fn encode_deleted_file_inode(metadata: FileMetadata) -> Result<(), St
     }
 }
 
-pub unsafe fn encode_deleted_directory_inode(metadata: FileMetadata) -> Result<(), StorageError> {
+pub unsafe fn encode_deleted_directory_inode(
+    volume: &mut crate::kfs::volume::KfsVolume,
+    metadata: FileMetadata,
+) -> Result<(), StorageError> {
     unsafe {
         encode_inode(
+            volume,
             metadata.inode_id,
             3,
             0,
@@ -55,14 +71,16 @@ pub unsafe fn encode_deleted_directory_inode(metadata: FileMetadata) -> Result<(
 }
 
 pub unsafe fn encode_selected_inode_size(
+    volume: &mut crate::kfs::volume::KfsVolume,
     inode_id: u32,
     size_bytes: u32,
 ) -> Result<(), StorageError> {
-    let metadata = unsafe { selected_inode::selected_file_metadata() };
+    let metadata = volume.selected_inode.file_metadata();
     unsafe {
         encode_inode(
+            volume,
             inode_id,
-            selected_inode::selected_inode_state(),
+            volume.selected_inode.state(),
             size_bytes,
             metadata.extent_count,
             &metadata.extent_start_blocks,
@@ -72,6 +90,7 @@ pub unsafe fn encode_selected_inode_size(
 }
 
 unsafe fn encode_inode(
+    volume: &mut crate::kfs::volume::KfsVolume,
     inode_id: u32,
     state: u8,
     size_bytes: u32,
@@ -84,12 +103,12 @@ unsafe fn encode_inode(
     }
     let location = crate::kfs::inode::locate_inode(
         inode_id,
-        unsafe { filesystem_state::superblock_inode_table_start_block() },
-        unsafe { filesystem_state::superblock_inode_table_block_count() },
+        volume.filesystem.superblock_inode_table_start_block(),
+        volume.filesystem.superblock_inode_table_block_count(),
     )?;
     let inode_block = location.block;
     let inode_offset = location.offset;
-    unsafe { block_io::read_fs_block(inode_block)? };
+    unsafe { block_io::read_fs_block(volume, inode_block)? };
     let mut offset = 0;
     while offset < crate::kfs::inode::KFS_INODE_SIZE {
         unsafe { block_io::write_scratch_u8(inode_offset + offset, 0) };
@@ -110,5 +129,5 @@ unsafe fn encode_inode(
         }
         index += 1;
     }
-    unsafe { block_io::write_fs_block(inode_block) }
+    unsafe { block_io::write_fs_block(volume, inode_block) }
 }

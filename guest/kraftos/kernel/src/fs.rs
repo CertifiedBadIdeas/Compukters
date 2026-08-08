@@ -18,14 +18,15 @@ pub const MAX_OPEN_PATH_BYTES: u32 =
 pub const MAX_READ_DIR_PATH_BYTES: u32 = MAX_OPEN_PATH_BYTES;
 pub const MAX_STAT_PATH_BYTES: u32 = MAX_OPEN_PATH_BYTES;
 
-#[cfg(any(not(test), feature = "host-test"))]
 use core::cell::UnsafeCell;
 
 #[cfg(any(not(test), feature = "host-test"))]
 static RUNTIME_FD_TABLE: KernelFileDescriptorTable =
     KernelFileDescriptorTable::new(FileDescriptorTable::new());
-#[cfg(any(not(test), feature = "host-test"))]
-static ROOT_FS: KernelRootFs = KernelRootFs::new(crate::kfs::root::KfsRootFs::new());
+static ROOT_FS: KernelRootFs = KernelRootFs::new(crate::kfs::volume::KfsVolume::new(
+    crate::kfs::device::KfsDevice::storage0(),
+    false,
+));
 
 #[cfg(any(not(test), feature = "host-test"))]
 struct KernelFileDescriptorTable {
@@ -35,12 +36,10 @@ struct KernelFileDescriptorTable {
 #[cfg(any(not(test), feature = "host-test"))]
 unsafe impl Sync for KernelFileDescriptorTable {}
 
-#[cfg(any(not(test), feature = "host-test"))]
 struct KernelRootFs {
-    fs: UnsafeCell<crate::kfs::root::KfsRootFs>,
+    fs: UnsafeCell<crate::kfs::volume::KfsVolume>,
 }
 
-#[cfg(any(not(test), feature = "host-test"))]
 unsafe impl Sync for KernelRootFs {}
 
 #[cfg(any(not(test), feature = "host-test"))]
@@ -56,17 +55,20 @@ impl KernelFileDescriptorTable {
     }
 }
 
-#[cfg(any(not(test), feature = "host-test"))]
 impl KernelRootFs {
-    const fn new(fs: crate::kfs::root::KfsRootFs) -> Self {
+    const fn new(fs: crate::kfs::volume::KfsVolume) -> Self {
         Self {
             fs: UnsafeCell::new(fs),
         }
     }
 
-    unsafe fn get(&self) -> &mut crate::kfs::root::KfsRootFs {
+    unsafe fn get(&self) -> &mut crate::kfs::volume::KfsVolume {
         unsafe { &mut *self.fs.get() }
     }
+}
+
+pub(crate) unsafe fn root_volume() -> &'static mut crate::kfs::volume::KfsVolume {
+    unsafe { ROOT_FS.get() }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -642,8 +644,14 @@ pub unsafe fn copy_file_fd_range_to_ram_for_process(
     }
     let metadata = unsafe { RUNTIME_FD_TABLE.get().metadata_for_process(owner_pid, fd)? };
     unsafe {
-        crate::kfs::file_io::copy_file_range_to_ram(metadata.into(), file_offset, ptr, read_len)
-            .map_err(storage_error_to_fs_error)?;
+        crate::kfs::file_io::copy_file_range_to_ram(
+            ROOT_FS.get(),
+            metadata.into(),
+            file_offset,
+            ptr,
+            read_len,
+        )
+        .map_err(storage_error_to_fs_error)?;
     }
     Ok(read_len)
 }
@@ -677,8 +685,14 @@ pub unsafe fn copy_ram_to_file_fd_range_for_process(
             .write_plan_for_process(owner_pid, fd, len)?
     };
     let updated = unsafe {
-        crate::kfs::file_write::copy_ram_to_file_range(metadata.into(), offset, ptr, write_len)
-            .map_err(storage_error_to_fs_error)?
+        crate::kfs::file_write::copy_ram_to_file_range(
+            ROOT_FS.get(),
+            metadata.into(),
+            offset,
+            ptr,
+            write_len,
+        )
+        .map_err(storage_error_to_fs_error)?
     };
     unsafe {
         RUNTIME_FD_TABLE.get().finish_write_for_process(
@@ -732,10 +746,12 @@ pub unsafe fn open_root_file_cached_components(
 pub unsafe fn open_root_file_cached_components(
     components: &[&[u8]],
 ) -> Result<crate::kfs::types::FileMetadata, FsError> {
+    let mut volume =
+        crate::kfs::volume::KfsVolume::new(crate::kfs::device::KfsDevice::storage0(), false);
     unsafe {
-        crate::kfs::root::select_boot_or_test_file_from_storage0(b"ROOT", components)
+        crate::kfs::root::select_boot_or_test_file_from_storage0(&mut volume, b"ROOT", components)
             .map_err(storage_error_to_fs_error)?;
-        Ok(crate::kfs::selected_inode::selected_file_metadata())
+        Ok(volume.selected_inode.file_metadata())
     }
 }
 

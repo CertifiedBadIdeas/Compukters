@@ -1,136 +1,123 @@
 use crate::kfs::error::StorageError;
 use crate::kfs::types::{FileMetadata, PathKind, PathMetadata, KFS_MAX_INLINE_EXTENTS};
 
-const STATE_INODE_STATE: u32 = 0x0000_0218;
-const STATE_INODE_SIZE_BYTES: u32 = 0x0000_021c;
-const STATE_INODE_EXTENT_COUNT: u32 = 0x0000_0220;
-const STATE_INODE_EXTENT_START_BLOCKS: u32 = 0x0000_0224;
-const STATE_INODE_EXTENT_BLOCK_COUNTS: u32 = 0x0000_0234;
-const STATE_SELECTED_INODE_ID: u32 = 0x0000_024c;
-
 pub(crate) const INODE_STATE_REGULAR: u8 = 1;
 pub(crate) const INODE_STATE_DIRECTORY: u8 = 2;
 
-pub(crate) unsafe fn selected_inode_state() -> u8 {
-    unsafe { read_u32(STATE_INODE_STATE) as u8 }
-}
-
-pub(crate) unsafe fn selected_inode_size() -> u32 {
-    unsafe { read_u32(STATE_INODE_SIZE_BYTES) }
-}
-
-pub(crate) unsafe fn selected_inode_extent_count() -> u32 {
-    unsafe { read_u32(STATE_INODE_EXTENT_COUNT) }
-}
-
-pub(crate) unsafe fn selected_inode_extent_start_block(index: usize) -> u32 {
-    unsafe { read_u32(STATE_INODE_EXTENT_START_BLOCKS + index as u32 * 4) }
-}
-
-pub(crate) unsafe fn selected_inode_extent_block_count(index: usize) -> u32 {
-    unsafe { read_u32(STATE_INODE_EXTENT_BLOCK_COUNTS + index as u32 * 4) }
-}
-
-pub(crate) unsafe fn selected_inode_id() -> u32 {
-    unsafe { read_u32(STATE_SELECTED_INODE_ID) }
-}
-
-pub unsafe fn select_inode_metadata_for_cache(
-    inode_id: u32,
-) -> Result<crate::kfs::cache::CachedPathMetadata, StorageError> {
-    unsafe { crate::kfs::inode::load_inode(inode_id)? };
-    unsafe { selected_metadata_for_cache() }
-}
-
-pub unsafe fn selected_metadata_for_cache(
-) -> Result<crate::kfs::cache::CachedPathMetadata, StorageError> {
-    let metadata = unsafe { selected_path_metadata()? };
-    Ok(crate::kfs::cache::CachedPathMetadata {
-        file_type: metadata.kind as u32,
-        size_bytes: metadata.size_bytes,
-    })
-}
-
-pub unsafe fn selected_file_size() -> u32 {
-    unsafe { selected_inode_size() }
-}
-
-pub unsafe fn selected_path_metadata() -> Result<PathMetadata, StorageError> {
-    let kind = match unsafe { selected_inode_state() } {
-        INODE_STATE_REGULAR => PathKind::Regular,
-        INODE_STATE_DIRECTORY => PathKind::Directory,
-        _ => return Err(StorageError::INVALID_FILESYSTEM),
-    };
-    Ok(PathMetadata {
-        kind,
-        size_bytes: unsafe { selected_file_size() },
-    })
-}
-
-pub unsafe fn selected_file_metadata() -> FileMetadata {
-    let mut extent_start_blocks = [0; KFS_MAX_INLINE_EXTENTS];
-    let mut extent_block_counts = [0; KFS_MAX_INLINE_EXTENTS];
-    let extent_count = unsafe { selected_inode_extent_count() };
-    let mut index = 0;
-    while index < KFS_MAX_INLINE_EXTENTS {
-        extent_start_blocks[index] = unsafe { selected_inode_extent_start_block(index) };
-        extent_block_counts[index] = unsafe { selected_inode_extent_block_count(index) };
-        index += 1;
-    }
-    FileMetadata {
-        inode_id: unsafe { selected_inode_id() },
-        size_bytes: unsafe { selected_file_size() },
-        extent_count,
-        extent_start_blocks,
-        extent_block_counts,
-    }
-}
-
-pub unsafe fn select_file_metadata(metadata: FileMetadata) -> Result<(), StorageError> {
-    unsafe { crate::kfs::inode::load_inode(metadata.inode_id)? };
-    if unsafe { selected_inode_state() } != INODE_STATE_REGULAR {
-        return Err(StorageError::PATH_NOT_FOUND);
-    }
-    if unsafe { selected_file_metadata() } != metadata {
-        return Err(StorageError::INVALID_FILESYSTEM);
-    }
-    Ok(())
-}
-
-pub(crate) unsafe fn store_loaded_inode(
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SelectedInodeState {
     inode_id: u32,
     state: u8,
     size_bytes: u32,
-    extent_count: usize,
-    extent_start_blocks: &[u32; KFS_MAX_INLINE_EXTENTS],
-    extent_block_counts: &[u32; KFS_MAX_INLINE_EXTENTS],
-) {
-    unsafe {
-        write_u32(STATE_SELECTED_INODE_ID, inode_id);
-        write_u32(STATE_INODE_STATE, state as u32);
-        write_u32(STATE_INODE_SIZE_BYTES, size_bytes);
-        write_u32(STATE_INODE_EXTENT_COUNT, extent_count as u32);
-    }
-    let mut index = 0;
-    while index < KFS_MAX_INLINE_EXTENTS {
-        unsafe {
-            write_u32(
-                STATE_INODE_EXTENT_START_BLOCKS + index as u32 * 4,
-                extent_start_blocks[index],
-            );
-            write_u32(
-                STATE_INODE_EXTENT_BLOCK_COUNTS + index as u32 * 4,
-                extent_block_counts[index],
-            );
+    extent_count: u32,
+    extent_start_blocks: [u32; KFS_MAX_INLINE_EXTENTS],
+    extent_block_counts: [u32; KFS_MAX_INLINE_EXTENTS],
+}
+
+impl SelectedInodeState {
+    pub const fn new() -> Self {
+        Self {
+            inode_id: 0,
+            state: 0,
+            size_bytes: 0,
+            extent_count: 0,
+            extent_start_blocks: [0; KFS_MAX_INLINE_EXTENTS],
+            extent_block_counts: [0; KFS_MAX_INLINE_EXTENTS],
         }
-        index += 1;
+    }
+
+    pub const fn state(&self) -> u8 {
+        self.state
+    }
+
+    pub const fn size(&self) -> u32 {
+        self.size_bytes
+    }
+
+    pub const fn extent_count(&self) -> u32 {
+        self.extent_count
+    }
+
+    pub const fn extent_start_block(&self, index: usize) -> u32 {
+        self.extent_start_blocks[index]
+    }
+
+    pub const fn extent_block_count(&self, index: usize) -> u32 {
+        self.extent_block_counts[index]
+    }
+
+    pub const fn inode_id(&self) -> u32 {
+        self.inode_id
+    }
+
+    pub fn metadata_for_cache(
+        &self,
+    ) -> Result<crate::kfs::cache::CachedPathMetadata, StorageError> {
+        let metadata = self.path_metadata()?;
+        Ok(crate::kfs::cache::CachedPathMetadata {
+            file_type: metadata.kind as u32,
+            size_bytes: metadata.size_bytes,
+        })
+    }
+
+    pub fn path_metadata(&self) -> Result<PathMetadata, StorageError> {
+        let kind = match self.state {
+            INODE_STATE_REGULAR => PathKind::Regular,
+            INODE_STATE_DIRECTORY => PathKind::Directory,
+            _ => return Err(StorageError::INVALID_FILESYSTEM),
+        };
+        Ok(PathMetadata {
+            kind,
+            size_bytes: self.size_bytes,
+        })
+    }
+
+    pub fn file_metadata(&self) -> FileMetadata {
+        FileMetadata {
+            inode_id: self.inode_id,
+            size_bytes: self.size_bytes,
+            extent_count: self.extent_count,
+            extent_start_blocks: self.extent_start_blocks,
+            extent_block_counts: self.extent_block_counts,
+        }
+    }
+
+    pub fn store_loaded_inode(
+        &mut self,
+        inode_id: u32,
+        state: u8,
+        size_bytes: u32,
+        extent_count: usize,
+        extent_start_blocks: &[u32; KFS_MAX_INLINE_EXTENTS],
+        extent_block_counts: &[u32; KFS_MAX_INLINE_EXTENTS],
+    ) {
+        self.inode_id = inode_id;
+        self.state = state;
+        self.size_bytes = size_bytes;
+        self.extent_count = extent_count as u32;
+        self.extent_start_blocks = *extent_start_blocks;
+        self.extent_block_counts = *extent_block_counts;
     }
 }
 
-unsafe fn read_u32(address: u32) -> u32 {
-    unsafe { core::ptr::read_volatile(address as usize as *const u32) }
+pub unsafe fn select_inode_metadata_for_cache(
+    volume: &mut crate::kfs::volume::KfsVolume,
+    inode_id: u32,
+) -> Result<crate::kfs::cache::CachedPathMetadata, StorageError> {
+    unsafe { crate::kfs::inode::load_inode(volume, inode_id)? };
+    volume.selected_inode.metadata_for_cache()
 }
 
-unsafe fn write_u32(address: u32, value: u32) {
-    unsafe { core::ptr::write_volatile(address as usize as *mut u32, value) }
+pub unsafe fn select_file_metadata(
+    volume: &mut crate::kfs::volume::KfsVolume,
+    metadata: FileMetadata,
+) -> Result<(), StorageError> {
+    unsafe { crate::kfs::inode::load_inode(volume, metadata.inode_id)? };
+    if volume.selected_inode.state() != INODE_STATE_REGULAR {
+        return Err(StorageError::PATH_NOT_FOUND);
+    }
+    if volume.selected_inode.file_metadata() != metadata {
+        return Err(StorageError::INVALID_FILESYSTEM);
+    }
+    Ok(())
 }
