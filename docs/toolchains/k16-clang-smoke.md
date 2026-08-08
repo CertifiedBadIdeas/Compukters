@@ -12,9 +12,9 @@
   K16 code without decoding any following non-code payload bytes.
 - `k16 run` executes the `K16E` in the VM and observes `42` as
   `debug_bytes=2a`.
-- stack-passed arguments and indirect calls lower to the documented K16 call
-  ABI; unsupported C shapes such as `long long` return and varargs still fail
-  explicitly.
+- stack-passed arguments, indirect calls, `long long` returns, and variadic
+  calls lower to the documented K16 C ABI. The varargs smoke compiles, links,
+  and executes a promoted integer cursor path with result `42`.
 
 The bundled source-built-dev Gradle path also uses Clang now. `buildK16Llvm`
 enables the LLVM `clang` project, tracks both `llvm/` and `clang/` source

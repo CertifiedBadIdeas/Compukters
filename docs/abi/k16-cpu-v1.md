@@ -86,8 +86,9 @@ slot itself does not carry signedness.
 The first value model supports up to four scalar `i32` return slots in
 `r0..r3`. This covers `i64` returns and LLVM/Rust scalar pair-style returns
 such as small result/status aggregates without adding a hidden return pointer.
-Aggregate-by-value arguments, memory-returned structs, varargs, and implicit
-return slots are unsupported in v1.
+The K16 C ABI additionally defines multiword scalar transport,
+aggregate-by-value arguments, and variadic calls below. Memory-returned structs
+and implicit return slots remain outside the active ABI.
 
 ### LLVM-Facing Register Calling Convention
 
@@ -190,6 +191,73 @@ sp = sp + 4
 ret
 ```
 
+### K16 C Value Classification
+
+The K16 C data model is little-endian with 32-bit pointers and `long` values.
+`long long`, `double`, and `long double` are eight bytes with eight-byte
+alignment; K16 `long double` uses the IEEE binary64 representation rather than
+an extended host format. The maximum C ABI alignment is eight bytes.
+
+Every C argument is classified before registers or stack locations are
+assigned:
+
+- scalar integer, pointer, `float`, `double`, and `long double` values are
+  direct and carry their object representation;
+- a direct value occupies `ceil(sizeof(T) / 4)` consecutive ABI slots and uses
+  its natural K16 alignment, which cannot exceed eight bytes;
+- an aggregate passed by value is indirect and carries one 32-bit guest pointer
+  to a caller-owned copy of the complete object;
+- the aggregate copy uses the aggregate's natural K16 alignment and remains
+  alive until the call returns;
+- multiword direct values use normal little-endian memory order, so the
+  low-address 32-bit word is transported first.
+
+No host pointer or host-owned object may appear in a K16 argument. C vectors,
+complex values, empty GNU aggregates, and values requiring alignment greater
+than eight bytes have no K16 C ABI classification and must be rejected before
+an output object is accepted. Floating object representations are transportable
+without implying hardware floating point or bundled soft-float arithmetic.
+
+Fixed parameters retain the ordinary calling convention. Classified slots are
+consumed in source order: the first three available fixed slots use `r1` through
+`r3`, and remaining fixed storage uses the caller-owned outgoing stack area.
+An indirect aggregate consumes one pointer slot; its copy storage is not part
+of the logical argument slot sequence.
+
+### K16 C Variadic Stack Stream
+
+Every unnamed argument after `...` is stack-only. The caller first assigns all
+fixed parameters and records the high-water mark of fixed stack storage. The
+unnamed stream starts immediately after that high-water mark; unused argument
+registers are not filled by unnamed values, and fixed register arguments are
+not duplicated into stack homes.
+
+Before classification, the caller applies the C default argument promotions:
+`float` becomes `double`, and integer types narrower than `int` undergo the
+integer promotions. For each promoted unnamed value in source order, the
+caller:
+
+1. classifies it with the ordinary K16 C classifier;
+2. aligns its guest address to the classification alignment;
+3. writes a direct object representation, or one guest pointer to an aligned
+   caller-owned aggregate copy;
+4. advances by the classified size rounded up to the four-byte ABI slot size.
+
+Eight-byte alignment is applied to the actual guest address, not merely to an
+offset starting at zero. This matters because the call-site stack pointer is
+`4 mod 8` and `call` then pushes the four-byte return PC. Trailing call-frame
+padding may follow the logical stream, but it is not visible to a variadic
+callee. Aggregate copy storage is also outside the stream and cannot be reached
+by advancing a `va_list`.
+
+K16 C defines `va_list` as a `char *` cursor. `va_start` initializes it to the
+first unnamed entry after fixed stack storage. `va_arg(ap, T)` classifies `T`,
+aligns the cursor's guest address, loads the direct value or follows the
+indirect aggregate pointer, and advances the cursor by the rounded entry
+extent. `va_copy` copies the cursor value and `va_end` is a no-op. These
+operations allocate no register-save area and do not change the non-variadic
+call ABI.
+
 ### Current Rux Compiler Boundary
 
 The current Rux source compiler helper-call lowering supports only `r1`-`r3`
@@ -197,8 +265,8 @@ arguments. It must reject helper calls that need stack-passed arguments until
 stack-argument lowering is deliberately implemented. It still supports
 stack-backed helper locals and local byte arrays inside helper frames.
 
-The initial target must reject or lower through deliberate helper/runtime
-symbols, not silent fallback behavior:
+The current Rux compiler path must reject or lower through deliberate
+helper/runtime symbols, not silent fallback behavior:
 
 - aggregate-by-value arguments;
 - struct returns;

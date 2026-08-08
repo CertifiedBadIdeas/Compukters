@@ -33,6 +33,6 @@ The script fails explicitly if required tools are missing. It checks that:
   non-code payload bytes.
 - LLVM emits `R_K16_CALL32` for a direct external call, and `k16 link` resolves it across LLVM-produced objects.
 - LLVM lowers a volatile stack local through K16 stack adjustment, `store32`, and `load32`, then `k16 link` packages it as normal program `K16E`.
-- Stack-passed arguments, indirect calls, and `i64` returns lower to the
-  documented K16 call ABI; unsupported varargs still fail explicitly before any
-  object is produced.
+- Stack-passed arguments, indirect calls, `i64` returns, and variadic stack
+  streams lower to the documented K16 call ABI. The varargs object is linked
+  and executed through the ordinary K16 runtime path with result `42`.

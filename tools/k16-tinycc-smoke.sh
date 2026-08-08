@@ -232,6 +232,14 @@ require_not_contains "$WORK_DIR/predefines.txt" "__CHAR_UNSIGNED__"
 
 require_tinycc_failure "reject-float" \
     "K16 TinyCC does not support floating-point code yet"
+require_tinycc_failure "reject-vector" \
+    "K16 TinyCC does not support vector values"
+require_tinycc_failure "reject-complex" \
+    "K16 TinyCC does not support complex values"
+require_tinycc_failure "reject-empty-aggregate" \
+    "K16 TinyCC does not support empty aggregate arguments"
+require_tinycc_failure "reject-overaligned" \
+    "K16 TinyCC arguments cannot require alignment above 8 bytes"
 require_tinycc_failure "reject-asm" \
     "K16 TinyCC does not support integrated assembly"
 if "$TINYCC" -run "$FIXTURES/return-42.c" > /dev/null 2> "$WORK_DIR/run.stderr"; then
