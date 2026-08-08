@@ -79,7 +79,12 @@ pub(crate) unsafe fn write_fs_block(block: u32) -> Result<(), StorageError> {
 
 #[inline(always)]
 pub(crate) unsafe fn read_storage_block(lba: u32) -> Result<(), StorageError> {
-    unsafe { crate::kfs::device::read_storage_block_to_scratch(lba) }
+    unsafe {
+        crate::kfs::device::read_storage_block_to_scratch(
+            crate::kfs::device::KfsDevice::storage0(),
+            lba,
+        )
+    }
 }
 
 #[inline(always)]
@@ -88,12 +93,24 @@ unsafe fn read_storage_blocks_to_ram(
     block_count: u32,
     dst_addr: u32,
 ) -> Result<(), StorageError> {
-    unsafe { crate::kfs::device::read_storage_blocks_to_ram(lba, block_count, dst_addr) }
+    unsafe {
+        crate::kfs::device::read_storage_blocks_to_ram(
+            crate::kfs::device::KfsDevice::storage0(),
+            lba,
+            block_count,
+            dst_addr,
+        )
+    }
 }
 
 #[inline(always)]
 unsafe fn write_storage_block(lba: u32) -> Result<(), StorageError> {
-    unsafe { crate::kfs::device::write_scratch_block_to_storage(lba) }
+    unsafe {
+        crate::kfs::device::write_scratch_block_to_storage(
+            crate::kfs::device::KfsDevice::storage0(),
+            lba,
+        )
+    }
 }
 
 pub(crate) unsafe fn clear_scratch_block() {

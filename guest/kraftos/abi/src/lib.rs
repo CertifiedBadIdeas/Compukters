@@ -154,6 +154,7 @@ pub mod syscall {
     pub const ERROR_NO_ENTRY: u32 = 0xffff_fffe;
     pub const ERROR_NO_MEMORY: u32 = 0xffff_fff4;
     pub const ERROR_NOT_EMPTY: u32 = 0xffff_ffef;
+    pub const ERROR_READ_ONLY: u32 = 0xffff_ffe2;
     pub const DEBUG_MARKER_RETURN: u32 = 0x53;
     pub const STATUS_OK: u32 = 0;
 }
@@ -241,6 +242,7 @@ pub mod computer {
         pub const TIMER0: u32 = 7;
         pub const KEYBOARD0: u32 = 8;
         pub const MMU0: u32 = 9;
+        pub const STORAGE1: u32 = 10;
     }
 
     pub mod control {
@@ -275,32 +277,28 @@ pub mod computer {
         pub const SIZE: u32 = 256;
     }
 
-    pub mod storage0 {
-        pub const BASE: u32 = 0x1000_0400;
-        pub const VERSION: u32 = 0x1000_0400;
-        pub const STATUS: u32 = 0x1000_0404;
-        pub const ERROR: u32 = 0x1000_0408;
-        pub const COMMAND: u32 = 0x1000_040c;
-        pub const BLOCK_SIZE: u32 = 0x1000_0410;
-        pub const CAPACITY_BLOCKS_LOW: u32 = 0x1000_0414;
-        pub const CAPACITY_BLOCKS_HIGH: u32 = 0x1000_0418;
-        pub const LBA_LOW: u32 = 0x1000_041c;
-        pub const LBA_HIGH: u32 = 0x1000_0420;
-        pub const BLOCK_COUNT: u32 = 0x1000_0424;
-        pub const BUFFER_ADDR: u32 = 0x1000_0428;
-        pub const BYTES_DONE: u32 = 0x1000_042c;
-        pub const SEQUENCE_LOW: u32 = 0x1000_0430;
-        pub const SEQUENCE_HIGH: u32 = 0x1000_0434;
-        pub const MEDIA_STATUS: u32 = 0x1000_0438;
+    pub mod storage {
+        pub const VERSION_OFFSET: u32 = 0;
+        pub const STATUS_OFFSET: u32 = 4;
+        pub const ERROR_OFFSET: u32 = 8;
+        pub const COMMAND_OFFSET: u32 = 12;
+        pub const BLOCK_SIZE_OFFSET: u32 = 16;
+        pub const CAPACITY_BLOCKS_LOW_OFFSET: u32 = 20;
+        pub const CAPACITY_BLOCKS_HIGH_OFFSET: u32 = 24;
+        pub const LBA_LOW_OFFSET: u32 = 28;
+        pub const LBA_HIGH_OFFSET: u32 = 32;
+        pub const BLOCK_COUNT_OFFSET: u32 = 36;
+        pub const BUFFER_ADDR_OFFSET: u32 = 40;
+        pub const BYTES_DONE_OFFSET: u32 = 44;
+        pub const SEQUENCE_LOW_OFFSET: u32 = 48;
+        pub const SEQUENCE_HIGH_OFFSET: u32 = 52;
+        pub const MEDIA_STATUS_OFFSET: u32 = 56;
         pub const SIZE: u32 = 256;
-
         pub const STORAGE_VERSION: i32 = 1;
-
         pub const STATUS_READY: i32 = 0;
         pub const STATUS_BUSY: i32 = 1;
         pub const STATUS_DONE: i32 = 2;
         pub const STATUS_ERROR: i32 = 3;
-
         pub const ERROR_NONE: i32 = 0;
         pub const ERROR_INVALID_COMMAND: i32 = 1;
         pub const ERROR_MEDIA_ABSENT: i32 = 2;
@@ -309,16 +307,66 @@ pub mod computer {
         pub const ERROR_BYTE_COUNT_OVERFLOW: i32 = 5;
         pub const ERROR_WRITE_PROTECTED: i32 = 6;
         pub const ERROR_IO_ERROR: i32 = 7;
-
         pub const COMMAND_NOP: i32 = 0;
         pub const COMMAND_READ_BLOCKS: i32 = 1;
         pub const COMMAND_WRITE_BLOCKS: i32 = 2;
         pub const COMMAND_FLUSH: i32 = 3;
-
         pub const MEDIA_ABSENT: i32 = 0;
         pub const MEDIA_PRESENT: i32 = 1;
         pub const MEDIA_READ_ONLY: i32 = 2;
         pub const MEDIA_ERROR: i32 = 3;
+    }
+
+    pub mod storage0 {
+        pub const BASE: u32 = 0x1000_0400;
+        pub const VERSION: u32 = BASE + super::storage::VERSION_OFFSET;
+        pub const STATUS: u32 = BASE + super::storage::STATUS_OFFSET;
+        pub const ERROR: u32 = BASE + super::storage::ERROR_OFFSET;
+        pub const COMMAND: u32 = BASE + super::storage::COMMAND_OFFSET;
+        pub const BLOCK_SIZE: u32 = BASE + super::storage::BLOCK_SIZE_OFFSET;
+        pub const CAPACITY_BLOCKS_LOW: u32 = BASE + super::storage::CAPACITY_BLOCKS_LOW_OFFSET;
+        pub const CAPACITY_BLOCKS_HIGH: u32 = BASE + super::storage::CAPACITY_BLOCKS_HIGH_OFFSET;
+        pub const LBA_LOW: u32 = BASE + super::storage::LBA_LOW_OFFSET;
+        pub const LBA_HIGH: u32 = BASE + super::storage::LBA_HIGH_OFFSET;
+        pub const BLOCK_COUNT: u32 = BASE + super::storage::BLOCK_COUNT_OFFSET;
+        pub const BUFFER_ADDR: u32 = BASE + super::storage::BUFFER_ADDR_OFFSET;
+        pub const BYTES_DONE: u32 = BASE + super::storage::BYTES_DONE_OFFSET;
+        pub const SEQUENCE_LOW: u32 = BASE + super::storage::SEQUENCE_LOW_OFFSET;
+        pub const SEQUENCE_HIGH: u32 = BASE + super::storage::SEQUENCE_HIGH_OFFSET;
+        pub const MEDIA_STATUS: u32 = BASE + super::storage::MEDIA_STATUS_OFFSET;
+        pub use super::storage::{
+            COMMAND_FLUSH, COMMAND_NOP, COMMAND_READ_BLOCKS, COMMAND_WRITE_BLOCKS,
+            ERROR_BUFFER_OUT_OF_BOUNDS, ERROR_BYTE_COUNT_OVERFLOW, ERROR_INVALID_COMMAND,
+            ERROR_IO_ERROR, ERROR_LBA_OUT_OF_BOUNDS, ERROR_MEDIA_ABSENT, ERROR_NONE,
+            ERROR_WRITE_PROTECTED, MEDIA_ABSENT, MEDIA_ERROR, MEDIA_PRESENT, MEDIA_READ_ONLY, SIZE,
+            STATUS_BUSY, STATUS_DONE, STATUS_ERROR, STATUS_READY, STORAGE_VERSION,
+        };
+    }
+
+    pub mod storage1 {
+        pub const BASE: u32 = 0x1000_0900;
+        pub const VERSION: u32 = BASE + super::storage::VERSION_OFFSET;
+        pub const STATUS: u32 = BASE + super::storage::STATUS_OFFSET;
+        pub const ERROR: u32 = BASE + super::storage::ERROR_OFFSET;
+        pub const COMMAND: u32 = BASE + super::storage::COMMAND_OFFSET;
+        pub const BLOCK_SIZE: u32 = BASE + super::storage::BLOCK_SIZE_OFFSET;
+        pub const CAPACITY_BLOCKS_LOW: u32 = BASE + super::storage::CAPACITY_BLOCKS_LOW_OFFSET;
+        pub const CAPACITY_BLOCKS_HIGH: u32 = BASE + super::storage::CAPACITY_BLOCKS_HIGH_OFFSET;
+        pub const LBA_LOW: u32 = BASE + super::storage::LBA_LOW_OFFSET;
+        pub const LBA_HIGH: u32 = BASE + super::storage::LBA_HIGH_OFFSET;
+        pub const BLOCK_COUNT: u32 = BASE + super::storage::BLOCK_COUNT_OFFSET;
+        pub const BUFFER_ADDR: u32 = BASE + super::storage::BUFFER_ADDR_OFFSET;
+        pub const BYTES_DONE: u32 = BASE + super::storage::BYTES_DONE_OFFSET;
+        pub const SEQUENCE_LOW: u32 = BASE + super::storage::SEQUENCE_LOW_OFFSET;
+        pub const SEQUENCE_HIGH: u32 = BASE + super::storage::SEQUENCE_HIGH_OFFSET;
+        pub const MEDIA_STATUS: u32 = BASE + super::storage::MEDIA_STATUS_OFFSET;
+        pub use super::storage::{
+            COMMAND_FLUSH, COMMAND_NOP, COMMAND_READ_BLOCKS, COMMAND_WRITE_BLOCKS,
+            ERROR_BUFFER_OUT_OF_BOUNDS, ERROR_BYTE_COUNT_OVERFLOW, ERROR_INVALID_COMMAND,
+            ERROR_IO_ERROR, ERROR_LBA_OUT_OF_BOUNDS, ERROR_MEDIA_ABSENT, ERROR_NONE,
+            ERROR_WRITE_PROTECTED, MEDIA_ABSENT, MEDIA_ERROR, MEDIA_PRESENT, MEDIA_READ_ONLY, SIZE,
+            STATUS_BUSY, STATUS_DONE, STATUS_ERROR, STATUS_READY, STORAGE_VERSION,
+        };
     }
 
     pub mod gpu0 {
@@ -558,6 +606,15 @@ mod tests {
         assert_eq!(computer::hardware_id::TIMER0, 7);
         assert_eq!(computer::hardware_id::KEYBOARD0, 8);
         assert_eq!(computer::hardware_id::MMU0, 9);
+    }
+
+    #[test]
+    fn storage1_and_read_only_filesystem_contract_is_stable() {
+        assert_eq!(computer::hardware_id::STORAGE1, 10);
+        assert_eq!(computer::storage1::BASE, 0x1000_0900);
+        assert_eq!(computer::storage1::COMMAND, 0x1000_090c);
+        assert_eq!(computer::storage1::MEDIA_STATUS, 0x1000_0938);
+        assert_eq!(syscall::ERROR_READ_ONLY, 0xffff_ffe2);
     }
 
     #[test]
