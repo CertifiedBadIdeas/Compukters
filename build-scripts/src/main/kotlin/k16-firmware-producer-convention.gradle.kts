@@ -102,6 +102,8 @@ val k16RustTargetSpec = rootProject.layout.projectDirectory.file("tools/k16-unkn
 val k16ToolchainConfig = rootProject.layout.projectDirectory.file("config/k16-toolchain.json")
 val k16BiosFlashResource = generatedK16FirmwareResources.map { it.file("firmware/k16-bios.kflash") }
 val k16ArtifactManifestResource = generatedK16FirmwareResources.map { it.file("firmware/kraftos-artifacts.properties") }
+val k16TestArtifactManifestResource =
+    generatedK16FirmwareTestResources.map { it.file("firmware/kraftos-artifacts.properties") }
 val k16BootArtifact = generatedK16FirmwareArtifacts.map { it.file("kernel-loader.kb") }
 val k16KernelArtifact = generatedK16FirmwareArtifacts.map { it.file("kernel.kx") }
 val k16InitArtifact = generatedK16FirmwareArtifacts.map { it.file("init.kx") }
@@ -168,6 +170,8 @@ val k16KernelStorage0Artifact = generatedK16FirmwareArtifacts.map { it.file("sto
 val k16SystemStorage0Resource = generatedK16FirmwareResources.map { it.file("firmware/k16-system-storage0.kv") }
 val k16DevelopmentStorage0Resource =
     generatedK16FirmwareTestResources.map { it.file("firmware/k16-system-storage0-dev.kv") }
+val k16SdkFixtureResource =
+    generatedK16FirmwareTestResources.map { it.file("firmware/sdk-fixture-v1.kv") }
 
 val k16ProductionStorageEntries =
     listOf(
@@ -1628,6 +1632,92 @@ val putK16DevelopmentStorage0TestPrograms =
                 devStorage.absolutePath,
                 "ROOT",
                 rootPartition.absolutePath,
+            )
+        }
+    }
+
+val putK16SdkFixture =
+    tasks.register("putK16SdkFixture") {
+        description = "Creates the immutable test-only K16 SDK fixture volume."
+        group = "k16"
+        dependsOn(putK16SystemStorage0Init)
+        dependsOn(rootProject.tasks.named("prepareK16Toolchain"))
+        inputs.file(k16ToolchainConfig)
+        inputs.file(k16SystemStorage0Resource)
+        inputs.property("fixtureText", "sdk fixture\n")
+        outputs.file(k16SdkFixtureResource)
+
+        doLast {
+            val toolchain = resolveK16Toolchain()
+            val sdkFixture = k16SdkFixtureResource.get().asFile
+            val rootPartition = temporaryDir.resolve("root.kfs")
+            val fixtureText = temporaryDir.resolve("fixture.txt")
+            fun runK16Command(vararg args: String) {
+                val command = listOf(toolchain.cli.absolutePath) + args.toList()
+                val exitCode =
+                    ProcessBuilder(command)
+                        .directory(projectDir)
+                        .inheritIO()
+                        .start()
+                        .waitFor()
+                check(exitCode == 0) {
+                    "K16 SDK fixture command failed with exit code $exitCode: ${command.joinToString(" ")}"
+                }
+            }
+
+            sdkFixture.parentFile.mkdirs()
+            k16SystemStorage0Resource.get().asFile.copyTo(sdkFixture, overwrite = true)
+            fixtureText.writeText("sdk fixture\n")
+            runK16Command(
+                "volume",
+                "extract-partition",
+                sdkFixture.absolutePath,
+                "ROOT",
+                rootPartition.absolutePath,
+            )
+            runK16Command(
+                "fs",
+                "kfs",
+                "put",
+                rootPartition.absolutePath,
+                "/fixture.txt",
+                fixtureText.absolutePath,
+            )
+            runK16Command(
+                "volume",
+                "replace-partition",
+                sdkFixture.absolutePath,
+                "ROOT",
+                rootPartition.absolutePath,
+            )
+        }
+    }
+
+val generateKraftOsTestArtifactManifest =
+    tasks.register("generateKraftOsTestArtifactManifest") {
+        description = "Writes the test-only KraftOS artifact manifest with sdk_fixture_v1."
+        group = "k16"
+        dependsOn(linkK16BiosFlash, putK16DevelopmentStorage0TestPrograms, putK16SdkFixture)
+        inputs.file(k16BiosFlashResource)
+        inputs.file(k16DevelopmentStorage0Resource)
+        inputs.file(k16SdkFixtureResource)
+        outputs.file(k16TestArtifactManifestResource)
+
+        doLast {
+            val manifest = k16TestArtifactManifestResource.get().asFile
+            manifest.parentFile.mkdirs()
+            manifest.writeText(
+                """
+                schema=1
+                target=k16
+                profile=development
+                artifact.biosFlash.resource=firmware/k16-bios.kflash
+                artifact.biosFlash.format=kflash
+                artifact.systemStorage0.resource=firmware/k16-system-storage0-dev.kv
+                artifact.systemStorage0.format=kfs-kv
+                artifact.sdk.sdk_fixture_v1.resource=firmware/sdk-fixture-v1.kv
+                artifact.sdk.sdk_fixture_v1.format=kfs-kv
+                """.trimIndent() + "\n",
             )
         }
     }

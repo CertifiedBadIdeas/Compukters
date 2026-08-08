@@ -27,13 +27,24 @@ data class KraftOsArtifactRef(
     val format: String,
 )
 
+data class K16SdkArtifact(
+    val identity: String,
+    val resource: String,
+    val format: String,
+)
+
 data class KraftOsArtifactManifest(
     val schema: Int,
     val target: String,
     val profile: String,
     val biosFlash: KraftOsArtifactRef,
     val systemStorage0: KraftOsArtifactRef,
+    val sdkArtifacts: Map<String, K16SdkArtifact> = emptyMap(),
 ) {
+    fun sdkArtifact(identity: String): K16SdkArtifact =
+        sdkArtifacts[identity]
+            ?: throw IllegalArgumentException("unknown K16 SDK artifact identity: $identity")
+
     companion object {
         const val DEFAULT_RESOURCE: String = "firmware/kraftos-artifacts.properties"
         const val SUPPORTED_SCHEMA: Int = 1
@@ -42,6 +53,10 @@ data class KraftOsArtifactManifest(
         const val DEVELOPMENT_PROFILE: String = "development"
         const val BIOS_FLASH_FORMAT: String = "kflash"
         const val SYSTEM_STORAGE0_FORMAT: String = "kfs-kv"
+        const val SDK_FORMAT: String = "kfs-kv"
+
+        private val SDK_IDENTITY = Regex("[a-z][a-z0-9_]*")
+        private val SDK_PROPERTY = Regex("artifact\\.sdk\\.([a-z][a-z0-9_]*)\\.(resource|format)")
 
         fun load(
             resourcePath: String = DEFAULT_RESOURCE,
@@ -60,11 +75,22 @@ data class KraftOsArtifactManifest(
             source: String,
         ): KraftOsArtifactManifest {
             val properties =
-                Properties().apply {
+                object : Properties() {
+                    override fun put(
+                        key: Any,
+                        value: Any,
+                    ): Any? {
+                        check(!containsKey(key)) {
+                            "duplicate KraftOS artifact manifest key: $key in $source"
+                        }
+                        return super.put(key, value)
+                    }
+                }.apply {
                     load(StringReader(text))
                 }
-            val schema = required(properties, "schema", source).toIntOrNull()
-                ?: error("KraftOS artifact manifest schema must be an integer: $source")
+            val schema =
+                required(properties, "schema", source).toIntOrNull()
+                    ?: error("KraftOS artifact manifest schema must be an integer: $source")
             check(schema == SUPPORTED_SCHEMA) {
                 "unsupported KraftOS artifact manifest schema: $schema in $source"
             }
@@ -94,7 +120,43 @@ data class KraftOsArtifactManifest(
                         expectedFormat = SYSTEM_STORAGE0_FORMAT,
                         source = source,
                     ),
+                sdkArtifacts = sdkArtifacts(properties, source),
             )
+        }
+
+        private fun sdkArtifacts(
+            properties: Properties,
+            source: String,
+        ): Map<String, K16SdkArtifact> {
+            val sdkIdentities =
+                properties
+                    .stringPropertyNames()
+                    .asSequence()
+                    .filter { it.startsWith("artifact.sdk.") }
+                    .map { key ->
+                        val match = SDK_PROPERTY.matchEntire(key)
+                        check(match != null) {
+                            "invalid K16 SDK artifact key: $key in $source"
+                        }
+                        match.groupValues[1]
+                    }.toSortedSet()
+
+            return sdkIdentities.associateWith { identity ->
+                check(SDK_IDENTITY.matches(identity)) {
+                    "invalid K16 SDK artifact identity: $identity in $source"
+                }
+                val prefix = "artifact.sdk.$identity"
+                val resource = required(properties, "$prefix.resource", source)
+                val format = required(properties, "$prefix.format", source)
+                check(format == SDK_FORMAT) {
+                    "unsupported $prefix.format: $format in $source"
+                }
+                K16SdkArtifact(
+                    identity = identity,
+                    resource = resource,
+                    format = format,
+                )
+            }
         }
 
         private fun artifactRef(

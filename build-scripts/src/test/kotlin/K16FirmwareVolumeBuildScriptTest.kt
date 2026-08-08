@@ -91,6 +91,43 @@ class K16FirmwareVolumeBuildScriptTest {
     }
 
     @Test
+    fun sdkFixtureIsTestOnlyAndHasDeterministicManifestSelection() {
+        val producerScript =
+            root.resolve("build-scripts/src/main/kotlin/k16-firmware-producer-convention.gradle.kts").readText()
+        val consumerScript = root.resolve("build-scripts/src/main/kotlin/k16-firmware-convention.gradle.kts").readText()
+        val productionManifest =
+            producerScript.substringAfter("val generateKraftOsArtifactManifest =")
+                .substringBefore("val assembleKraftOsProductionBundle =")
+        val testManifest =
+            producerScript.substringAfter("val generateKraftOsTestArtifactManifest =")
+                .substringBefore("val reportK16UserlandSize =")
+
+        assertTrue(
+            producerScript.contains(
+                "generatedK16FirmwareTestResources.map { it.file(\"firmware/sdk-fixture-v1.kv\") }",
+            ),
+        )
+        assertTrue(producerScript.contains("val putK16SdkFixture ="))
+        assertTrue(producerScript.contains("/fixture.txt"))
+        assertTrue(producerScript.contains("val generateKraftOsTestArtifactManifest ="))
+        assertFalse(productionManifest.contains("artifact.sdk."))
+        assertTrue(testManifest.contains("artifact.sdk.sdk_fixture_v1.resource=firmware/sdk-fixture-v1.kv"))
+        assertTrue(testManifest.contains("artifact.sdk.sdk_fixture_v1.format=kfs-kv"))
+        assertFalse(
+            producerScript.substringAfter("val assembleKraftOsProductionBundle =")
+                .substringBefore("val putK16DevelopmentStorage0TestPrograms =")
+                .contains("k16SdkFixtureResource"),
+        )
+
+        assertTrue(consumerScript.contains("sourceSets.configureEach"))
+        assertTrue(consumerScript.contains("name == \"gameTest\""))
+        assertTrue(consumerScript.contains("runtimeClasspath = output + originalRuntimeClasspath"))
+        assertTrue(consumerScript.contains("name == \"processGameTestResources\""))
+        assertTrue(consumerScript.contains("dependsOn(\"putK16SdkFixture\")"))
+        assertTrue(consumerScript.contains("dependsOn(\"generateKraftOsTestArtifactManifest\")"))
+    }
+
+    @Test
     fun localVerificationEntrypointsAreCentralized() {
         val rootBuildScript = root.resolve("build.gradle.kts").readText()
         val conventionScript = root.resolve("build-scripts/src/main/kotlin/k16-firmware-convention.gradle.kts").readText()
