@@ -20,10 +20,15 @@
 package ru.lazyhat.compukterkraft.common.notebook.block
 
 import net.minecraft.core.BlockPos
+import net.minecraft.core.HolderLookup
+import net.minecraft.core.NonNullList
+import net.minecraft.nbt.CompoundTag
 import net.minecraft.server.level.ServerLevel
+import net.minecraft.world.ContainerHelper
 import net.minecraft.world.entity.player.Inventory
 import net.minecraft.world.entity.player.Player
 import net.minecraft.world.inventory.AbstractContainerMenu
+import net.minecraft.world.item.ItemStack
 import net.minecraft.world.level.block.Block
 import net.minecraft.world.level.block.entity.BlockEntityType
 import net.minecraft.world.level.block.state.BlockState
@@ -33,6 +38,8 @@ import ru.lazyhat.compukterkraft.common.computer.block.AbstractComputerBlockEnti
 import ru.lazyhat.compukterkraft.common.computer.block.ComputerRuntimeDeviceFactory
 import ru.lazyhat.compukterkraft.common.computer.block.ComputerState
 import ru.lazyhat.compukterkraft.common.computer.menu.ComputerMenuWithoutInventory
+import ru.lazyhat.compukterkraft.common.computer.module.SdkModuleBay
+import ru.lazyhat.compukterkraft.common.computer.module.sdkArtifactIdentity
 import ru.lazyhat.compukterkraft.core.block.DeviceFamily
 import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeDevice
 
@@ -41,6 +48,15 @@ open class NotebookBlockEntity(
     pos: BlockPos,
     state: BlockState,
 ) : AbstractComputerBlockEntity(type, pos, state, DeviceFamily.NORMAL) {
+    private val sdkModuleItems: NonNullList<ItemStack> = NonNullList.withSize(1, ItemStack.EMPTY)
+    val sdkModuleBay =
+        SdkModuleBay(
+            items = sdkModuleItems,
+            artifactIdentity = { it.sdkArtifactIdentity },
+            isKnownArtifact = ModObjects.isKnownSdkArtifactIdentity,
+            isRuntimeOn = ::isRuntimeDeviceOn,
+            commitMutation = ::commitPoweredOffHardwareChange,
+        )
     private var notebookMenuViewers: Int = 0
 
     override fun createComputer(id: Int): RuntimeDevice =
@@ -75,6 +91,28 @@ open class NotebookBlockEntity(
             notebookMenuOpened()
         }
 
+    override fun saveAdditional(
+        tag: CompoundTag,
+        registries: HolderLookup.Provider,
+    ) {
+        super.saveAdditional(tag, registries)
+        val bayTag = CompoundTag()
+        ContainerHelper.saveAllItems(bayTag, sdkModuleItems, registries)
+        tag.put(SDK_MODULE_BAY_TAG, bayTag)
+    }
+
+    override fun loadAdditional(
+        tag: CompoundTag,
+        registries: HolderLookup.Provider,
+    ) {
+        super.loadAdditional(tag, registries)
+        sdkModuleItems[0] = ItemStack.EMPTY
+        if (tag.contains(SDK_MODULE_BAY_TAG)) {
+            ContainerHelper.loadAllItems(tag.getCompound(SDK_MODULE_BAY_TAG), sdkModuleItems, registries)
+        }
+        sdkModuleBay.restoreStoredItem(sdkModuleItems[0])
+    }
+
     fun notebookMenuOpened() {
         val level = level ?: return
         if (level.isClientSide) return
@@ -96,4 +134,8 @@ open class NotebookBlockEntity(
     }
 
     protected open fun setNotebookLidOpen(open: Boolean) = Unit
+
+    private companion object {
+        const val SDK_MODULE_BAY_TAG: String = "SdkModuleBay"
+    }
 }

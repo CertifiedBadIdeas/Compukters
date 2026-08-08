@@ -84,6 +84,18 @@ class K16DurableByteStore(
             backup.payload
         }
 
+    fun delete(): Boolean =
+        try {
+            val backupDeleted = Files.deleteIfExists(backupPath)
+            Files.deleteIfExists(path) || backupDeleted
+        } catch (error: IOException) {
+            throw K16DurableByteStoreException(
+                K16DurableByteStoreError.IoFailure,
+                "Cannot delete K16 durable bytes at $path",
+                error,
+            )
+        }
+
     private fun preserveCurrentAsBackup() {
         if (!path.exists()) return
         val current =

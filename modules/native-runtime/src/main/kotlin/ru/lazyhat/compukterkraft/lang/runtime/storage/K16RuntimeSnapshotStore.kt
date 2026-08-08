@@ -40,8 +40,7 @@ class K16RuntimeSnapshotStore(
         snapshotStore(computerId).write(snapshot)
     }
 
-    fun readComputerSnapshot(computerId: Int): ByteArray =
-        snapshotStore(computerId).read()
+    fun readComputerSnapshot(computerId: Int): ByteArray = snapshotStore(computerId).read()
 
     fun readComputerSnapshotOrNull(computerId: Int): ByteArray? =
         try {
@@ -54,8 +53,9 @@ class K16RuntimeSnapshotStore(
             }
         }
 
-    private fun snapshotStore(computerId: Int): K16DurableByteStore =
-        K16DurableByteStore(snapshotPath(computerId))
+    fun deleteComputerSnapshot(computerId: Int): Boolean = snapshotStore(computerId).delete()
+
+    private fun snapshotStore(computerId: Int): K16DurableByteStore = K16DurableByteStore(snapshotPath(computerId))
 
     private fun snapshotPath(computerId: Int): Path {
         if (computerId <= 0) {
