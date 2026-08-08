@@ -18,6 +18,7 @@ impl StorageError {
     pub const PATH_EXISTS: Self = Self { code: 22 };
     pub const PATH_NOT_REGULAR: Self = Self { code: 23 };
     pub const PATH_BUSY: Self = Self { code: 24 };
+    pub const READ_ONLY: Self = Self { code: 25 };
 
     pub const fn code(self) -> i32 {
         self.code
@@ -35,5 +36,6 @@ mod tests {
         assert_eq!(StorageError::PATH_EXISTS.code(), 22);
         assert_eq!(StorageError::PATH_NOT_REGULAR.code(), 23);
         assert_eq!(StorageError::PATH_BUSY.code(), 24);
+        assert_eq!(StorageError::READ_ONLY.code(), 25);
     }
 }

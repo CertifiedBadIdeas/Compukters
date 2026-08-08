@@ -1,14 +1,16 @@
+use crate::kfs::block_io;
 use crate::kfs::error::StorageError;
 use crate::kfs::types::{FileMetadata, FileReadProfileFile, FileReadProfileKind};
-use crate::kfs::{block_io, selected_inode};
 
 pub unsafe fn copy_selected_file_range_to_ram(
+    volume: &mut crate::kfs::volume::KfsVolume,
     file_offset: u32,
     dst_addr: u32,
     len: u32,
 ) -> Result<(), StorageError> {
     unsafe {
         copy_selected_file_range_to_ram_profiled(
+            volume,
             file_offset,
             dst_addr,
             len,
@@ -18,28 +20,22 @@ pub unsafe fn copy_selected_file_range_to_ram(
 }
 
 pub unsafe fn copy_selected_file_range_to_ram_profiled(
+    volume: &mut crate::kfs::volume::KfsVolume,
     file_offset: u32,
     dst_addr: u32,
     len: u32,
     profile_kind: FileReadProfileKind,
 ) -> Result<(), StorageError> {
-    let range = crate::kfs::file::validate_read_range(
-        unsafe { selected_inode::selected_inode_size() },
-        file_offset,
-        len,
-    )?;
+    let range =
+        crate::kfs::file::validate_read_range(volume.selected_inode.size(), file_offset, len)?;
     let range_end = range.end;
 
     let mut copied = 0;
     let mut extent_file_start: u32 = 0;
     let mut extent_index = 0;
-    while extent_index < unsafe { selected_inode::selected_inode_extent_count() as usize }
-        && copied < len
-    {
-        let extent_start_block =
-            unsafe { selected_inode::selected_inode_extent_start_block(extent_index) };
-        let extent_block_count =
-            unsafe { selected_inode::selected_inode_extent_block_count(extent_index) };
+    while extent_index < volume.selected_inode.extent_count() as usize && copied < len {
+        let extent_start_block = volume.selected_inode.extent_start_block(extent_index);
+        let extent_block_count = volume.selected_inode.extent_block_count(extent_index);
         let extent_overlap = crate::kfs::file::extent_overlap(
             file_offset,
             range_end,
@@ -50,6 +46,7 @@ pub unsafe fn copy_selected_file_range_to_ram_profiled(
         if let Some(overlap) = extent_overlap {
             unsafe {
                 copy_extent_range_to_ram(
+                    volume,
                     overlap.extent_start_block,
                     overlap.extent_file_start,
                     overlap.copy_start,
@@ -74,6 +71,7 @@ pub unsafe fn copy_selected_file_range_to_ram_profiled(
 }
 
 pub unsafe fn copy_file_range_to_ram(
+    volume: &mut crate::kfs::volume::KfsVolume,
     metadata: FileMetadata,
     file_offset: u32,
     dst_addr: u32,
@@ -81,6 +79,7 @@ pub unsafe fn copy_file_range_to_ram(
 ) -> Result<(), StorageError> {
     unsafe {
         copy_file_range_to_ram_profiled(
+            volume,
             metadata,
             file_offset,
             dst_addr,
@@ -91,6 +90,7 @@ pub unsafe fn copy_file_range_to_ram(
 }
 
 pub unsafe fn copy_file_range_to_ram_profiled(
+    volume: &mut crate::kfs::volume::KfsVolume,
     metadata: FileMetadata,
     file_offset: u32,
     dst_addr: u32,
@@ -116,6 +116,7 @@ pub unsafe fn copy_file_range_to_ram_profiled(
         if let Some(overlap) = extent_overlap {
             unsafe {
                 copy_extent_range_to_ram(
+                    volume,
                     overlap.extent_start_block,
                     overlap.extent_file_start,
                     overlap.copy_start,
@@ -140,6 +141,7 @@ pub unsafe fn copy_file_range_to_ram_profiled(
 }
 
 unsafe fn copy_extent_range_to_ram(
+    volume: &mut crate::kfs::volume::KfsVolume,
     extent_start_block: u32,
     extent_file_start: u32,
     copy_start: u32,
@@ -168,7 +170,7 @@ unsafe fn copy_extent_range_to_ram(
                     Some(value) => value,
                     None => return Err(StorageError::INVALID_FILESYSTEM),
                 };
-                unsafe { block_io::read_fs_blocks_to_ram(block, full_block_count, dst)? };
+                unsafe { block_io::read_fs_blocks_to_ram(volume, block, full_block_count, dst)? };
                 record_profiled_file_data_read(profile_kind, batch_bytes);
                 *copied = match (*copied).checked_add(batch_bytes) {
                     Some(value) => value,
@@ -184,7 +186,7 @@ unsafe fn copy_extent_range_to_ram(
             Some(value) => value,
             None => return Err(StorageError::INVALID_FILESYSTEM),
         };
-        unsafe { block_io::read_fs_block(block)? };
+        unsafe { block_io::read_fs_block(volume, block)? };
         record_profiled_file_data_read(profile_kind, available);
         let dst = match dst_addr.checked_add(*copied) {
             Some(value) => value,

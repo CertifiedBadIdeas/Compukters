@@ -1,6 +1,6 @@
 use crate::kfs::directory::{KfsDirectoryEntryHeader, KFS_DIRECTORY_ENTRY_SIZE};
 use crate::kfs::error::StorageError;
-use crate::kfs::{block_io, file, filesystem_state, inode, selected_inode};
+use crate::kfs::{block_io, file, inode, selected_inode};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct KfsDirectoryEntrySlot {
@@ -9,106 +9,111 @@ pub struct KfsDirectoryEntrySlot {
     pub offset: u32,
 }
 
-pub unsafe fn find_file_inode(path: &[&[u8]]) -> Result<(), StorageError> {
+pub unsafe fn find_file_inode(
+    volume: &mut crate::kfs::volume::KfsVolume,
+    path: &[&[u8]],
+) -> Result<(), StorageError> {
     crate::os_stats::record_path_lookup();
     if path.is_empty() {
         return Err(StorageError::PATH_NOT_FOUND);
     }
 
-    let mut inode_id = unsafe { filesystem_state::root_inode_id() };
+    let mut inode_id = volume.filesystem.root_inode_id();
     let mut index = 0;
     while index < path.len() {
         let component = path[index];
-        unsafe { inode::load_inode(inode_id)? };
-        if unsafe { selected_inode::selected_inode_state() }
-            != selected_inode::INODE_STATE_DIRECTORY
-        {
+        unsafe { inode::load_inode(volume, inode_id)? };
+        if volume.selected_inode.state() != selected_inode::INODE_STATE_DIRECTORY {
             return Err(StorageError::PATH_NOT_FOUND);
         }
-        inode_id = unsafe { find_directory_entry(component)? };
+        inode_id = unsafe { find_directory_entry(volume, component)? };
         index += 1;
     }
 
-    unsafe { inode::load_inode(inode_id)? };
-    if unsafe { selected_inode::selected_inode_state() } != selected_inode::INODE_STATE_REGULAR {
+    unsafe { inode::load_inode(volume, inode_id)? };
+    if volume.selected_inode.state() != selected_inode::INODE_STATE_REGULAR {
         return Err(StorageError::PATH_NOT_FOUND);
     }
     Ok(())
 }
 
-pub unsafe fn find_directory_inode(path: &[&[u8]]) -> Result<(), StorageError> {
+pub unsafe fn find_directory_inode(
+    volume: &mut crate::kfs::volume::KfsVolume,
+    path: &[&[u8]],
+) -> Result<(), StorageError> {
     crate::os_stats::record_path_lookup();
-    let mut inode_id = unsafe { filesystem_state::root_inode_id() };
+    let mut inode_id = volume.filesystem.root_inode_id();
     let mut index = 0;
     while index < path.len() {
-        unsafe { inode::load_inode(inode_id)? };
-        if unsafe { selected_inode::selected_inode_state() }
-            != selected_inode::INODE_STATE_DIRECTORY
-        {
+        unsafe { inode::load_inode(volume, inode_id)? };
+        if volume.selected_inode.state() != selected_inode::INODE_STATE_DIRECTORY {
             return Err(StorageError::PATH_NOT_FOUND);
         }
-        inode_id = unsafe { find_directory_entry(path[index])? };
+        inode_id = unsafe { find_directory_entry(volume, path[index])? };
         index += 1;
     }
 
-    unsafe { inode::load_inode(inode_id)? };
-    if unsafe { selected_inode::selected_inode_state() } != selected_inode::INODE_STATE_DIRECTORY {
+    unsafe { inode::load_inode(volume, inode_id)? };
+    if volume.selected_inode.state() != selected_inode::INODE_STATE_DIRECTORY {
         return Err(StorageError::PATH_NOT_FOUND);
     }
     Ok(())
 }
 
-pub unsafe fn find_path_inode(path: &[&[u8]]) -> Result<(), StorageError> {
+pub unsafe fn find_path_inode(
+    volume: &mut crate::kfs::volume::KfsVolume,
+    path: &[&[u8]],
+) -> Result<(), StorageError> {
     crate::os_stats::record_path_lookup();
-    let mut inode_id = unsafe { filesystem_state::root_inode_id() };
+    let mut inode_id = volume.filesystem.root_inode_id();
     if path.is_empty() {
-        unsafe { inode::load_inode(inode_id)? };
+        unsafe { inode::load_inode(volume, inode_id)? };
         return Ok(());
     }
 
     let mut index = 0;
     while index < path.len() {
-        unsafe { inode::load_inode(inode_id)? };
-        if unsafe { selected_inode::selected_inode_state() }
-            != selected_inode::INODE_STATE_DIRECTORY
-        {
+        unsafe { inode::load_inode(volume, inode_id)? };
+        if volume.selected_inode.state() != selected_inode::INODE_STATE_DIRECTORY {
             return Err(StorageError::PATH_NOT_FOUND);
         }
-        inode_id = unsafe { find_directory_entry(path[index])? };
+        inode_id = unsafe { find_directory_entry(volume, path[index])? };
         index += 1;
     }
 
-    unsafe { inode::load_inode(inode_id) }
+    unsafe { inode::load_inode(volume, inode_id) }
 }
 
-pub unsafe fn find_directory_entry(name: &[u8]) -> Result<u32, StorageError> {
-    let slot = unsafe { find_directory_entry_slot(name)? };
+pub unsafe fn find_directory_entry(
+    volume: &mut crate::kfs::volume::KfsVolume,
+    name: &[u8],
+) -> Result<u32, StorageError> {
+    let slot = unsafe { find_directory_entry_slot(volume, name)? };
     Ok(slot.inode_id)
 }
 
 pub unsafe fn find_directory_entry_slot(
+    volume: &mut crate::kfs::volume::KfsVolume,
     name: &[u8],
 ) -> Result<KfsDirectoryEntrySlot, StorageError> {
     crate::kfs::directory::validate_name(name)?;
-    if !crate::kfs::directory::directory_size_is_aligned(unsafe {
-        selected_inode::selected_inode_size()
-    }) {
+    if !crate::kfs::directory::directory_size_is_aligned(volume.selected_inode.size()) {
         return Err(StorageError::INVALID_FILESYSTEM);
     }
 
-    let mut remaining = unsafe { selected_inode::selected_inode_size() };
+    let mut remaining = volume.selected_inode.size();
     let mut extent_index = 0;
-    while extent_index < unsafe { selected_inode::selected_inode_extent_count() as usize } {
-        let extent_start_block =
-            unsafe { selected_inode::selected_inode_extent_start_block(extent_index) };
-        let extent_block_count =
-            unsafe { selected_inode::selected_inode_extent_block_count(extent_index) };
-        file::validate_extent(extent_start_block, extent_block_count, unsafe {
-            filesystem_state::superblock_total_blocks()
-        })?;
+    while extent_index < volume.selected_inode.extent_count() as usize {
+        let extent_start_block = volume.selected_inode.extent_start_block(extent_index);
+        let extent_block_count = volume.selected_inode.extent_block_count(extent_index);
+        file::validate_extent(
+            extent_start_block,
+            extent_block_count,
+            volume.filesystem.superblock_total_blocks(),
+        )?;
         let mut block_index = 0;
         while block_index < extent_block_count && remaining > 0 {
-            unsafe { block_io::read_fs_block(extent_start_block + block_index)? };
+            unsafe { block_io::read_fs_block(volume, extent_start_block + block_index)? };
             let mut offset = 0;
             while offset < block_io::BLOCK_SIZE && remaining > 0 {
                 crate::os_stats::record_dir_entry_scan();

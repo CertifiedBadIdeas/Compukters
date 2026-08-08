@@ -1,8 +1,9 @@
+use crate::kfs::block_io;
 use crate::kfs::error::StorageError;
 use crate::kfs::types::FileMetadata;
-use crate::kfs::{block_io, filesystem_state};
 
 pub unsafe fn copy_ram_to_file_range(
+    volume: &mut crate::kfs::volume::KfsVolume,
     metadata: FileMetadata,
     file_offset: u32,
     src_addr: u32,
@@ -12,7 +13,7 @@ pub unsafe fn copy_ram_to_file_range(
     let range_end = range.end;
     let mut updated = metadata;
     if range_end > crate::kfs::file::file_capacity_bytes(updated)? {
-        updated = unsafe { grow_file_capacity(updated, range_end)? };
+        updated = unsafe { grow_file_capacity(volume, updated, range_end)? };
     }
 
     let mut copied = 0;
@@ -38,7 +39,9 @@ pub unsafe fn copy_ram_to_file_range(
                     block_io::BLOCK_SIZE - block_offset,
                     overlap.copy_end - cursor,
                 );
-                unsafe { block_io::read_fs_block(overlap.extent_start_block + block_delta)? };
+                unsafe {
+                    block_io::read_fs_block(volume, overlap.extent_start_block + block_delta)?
+                };
                 unsafe {
                     block_io::copy_ram_to_ram(
                         src_addr + copied,
@@ -46,7 +49,9 @@ pub unsafe fn copy_ram_to_file_range(
                         available,
                     )
                 };
-                unsafe { block_io::write_fs_block(overlap.extent_start_block + block_delta)? };
+                unsafe {
+                    block_io::write_fs_block(volume, overlap.extent_start_block + block_delta)?
+                };
                 copied += available;
                 cursor += available;
             }
@@ -65,20 +70,20 @@ pub unsafe fn copy_ram_to_file_range(
     if range_end > updated.size_bytes {
         updated.size_bytes = range_end;
     }
-    unsafe { crate::kfs::inode_mutation::encode_file_inode(updated)? };
+    unsafe { crate::kfs::inode_mutation::encode_file_inode(volume, updated)? };
     Ok(updated)
 }
 
 unsafe fn grow_file_capacity(
+    volume: &mut crate::kfs::volume::KfsVolume,
     metadata: FileMetadata,
     required_size: u32,
 ) -> Result<FileMetadata, StorageError> {
     let plan = crate::kfs::file::plan_file_growth(metadata, required_size)?;
-    let mut can_extend_last_extent =
-        plan.grow_end <= unsafe { filesystem_state::superblock_total_blocks() };
+    let mut can_extend_last_extent = plan.grow_end <= volume.filesystem.superblock_total_blocks();
     let mut block = plan.grow_start;
     while can_extend_last_extent && block < plan.grow_end {
-        if unsafe { crate::kfs::allocation::is_block_allocated(block)? } {
+        if unsafe { crate::kfs::allocation::is_block_allocated(volume, block)? } {
             can_extend_last_extent = false;
         } else {
             block += 1;
@@ -88,17 +93,18 @@ unsafe fn grow_file_capacity(
     if can_extend_last_extent {
         block = plan.grow_start;
         while block < plan.grow_end {
-            unsafe { crate::kfs::allocation::mark_block_allocated(block)? };
+            unsafe { crate::kfs::allocation::mark_block_allocated(volume, block)? };
             unsafe { block_io::clear_scratch_block() };
-            unsafe { block_io::write_fs_block(block)? };
+            unsafe { block_io::write_fs_block(volume, block)? };
             block += 1;
         }
 
         return crate::kfs::file::apply_extended_last_extent(metadata, plan);
     }
 
-    let new_extent_start =
-        unsafe { crate::kfs::allocation::allocate_contiguous_blocks(plan.additional_blocks)? };
+    let new_extent_start = unsafe {
+        crate::kfs::allocation::allocate_contiguous_blocks(volume, plan.additional_blocks)?
+    };
     block = new_extent_start;
     let new_extent_end = match new_extent_start.checked_add(plan.additional_blocks) {
         Some(value) => value,
@@ -106,7 +112,7 @@ unsafe fn grow_file_capacity(
     };
     while block < new_extent_end {
         unsafe { block_io::clear_scratch_block() };
-        unsafe { block_io::write_fs_block(block)? };
+        unsafe { block_io::write_fs_block(volume, block)? };
         block += 1;
     }
 

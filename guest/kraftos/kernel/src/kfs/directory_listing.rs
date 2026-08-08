@@ -4,23 +4,21 @@ use crate::kfs::directory::{
 };
 use crate::kfs::error::StorageError;
 use crate::kfs::types::{DirectoryListingSink, KFS_MAX_INLINE_EXTENTS};
-use crate::kfs::{block_io, file, filesystem_state, inode, selected_inode};
+use crate::kfs::{block_io, file, inode, selected_inode};
 
 const INVALID_CACHED_INODE_BLOCK: u32 = u32::MAX;
 
 pub unsafe fn copy_selected_directory_listing_into_cached<S: DirectoryListingSink>(
+    volume: &mut crate::kfs::volume::KfsVolume,
     sink: &mut S,
-    cache: &mut crate::kfs::cache::KfsCache,
 ) -> Result<u32, StorageError> {
-    if unsafe { selected_inode::selected_inode_state() } != selected_inode::INODE_STATE_DIRECTORY
-        || !crate::kfs::directory::directory_size_is_aligned(unsafe {
-            selected_inode::selected_inode_size()
-        })
+    if volume.selected_inode.state() != selected_inode::INODE_STATE_DIRECTORY
+        || !crate::kfs::directory::directory_size_is_aligned(volume.selected_inode.size())
     {
         return Err(StorageError::INVALID_FILESYSTEM);
     }
 
-    let directory = unsafe { selected_inode::selected_file_metadata() };
+    let directory = volume.selected_inode.file_metadata();
     if directory.extent_count as usize > KFS_MAX_INLINE_EXTENTS {
         return Err(StorageError::INVALID_FILESYSTEM);
     }
@@ -30,13 +28,15 @@ pub unsafe fn copy_selected_directory_listing_into_cached<S: DirectoryListingSin
     while extent_index < directory.extent_count as usize {
         let extent_start_block = directory.extent_start_blocks[extent_index];
         let extent_block_count = directory.extent_block_counts[extent_index];
-        file::validate_extent(extent_start_block, extent_block_count, unsafe {
-            filesystem_state::superblock_total_blocks()
-        })?;
+        file::validate_extent(
+            extent_start_block,
+            extent_block_count,
+            volume.filesystem.superblock_total_blocks(),
+        )?;
         let mut block_index = 0;
         while block_index < extent_block_count && remaining > 0 {
             let fs_block = extent_start_block + block_index;
-            unsafe { block_io::read_fs_block(fs_block)? };
+            unsafe { block_io::read_fs_block(volume, fs_block)? };
             crate::os_stats::record_read_dir_data_read(min_u32(block_io::BLOCK_SIZE, remaining));
             let mut entry_inode_ids = [0_u32; KFS_DIRECTORY_ENTRIES_PER_BLOCK];
             let mut entry_name_lengths = [0_u8; KFS_DIRECTORY_ENTRIES_PER_BLOCK];
@@ -73,13 +73,17 @@ pub unsafe fn copy_selected_directory_listing_into_cached<S: DirectoryListingSin
             let mut entry_index = 0;
             while entry_index < entry_count {
                 let inode_id = entry_inode_ids[entry_index];
-                let child = match cache.lookup_inode(inode_id) {
+                let child = match volume.cache.lookup_inode(inode_id) {
                     Some(metadata) => metadata,
                     None => {
                         let metadata = unsafe {
-                            read_inode_path_metadata_cached(inode_id, &mut cached_inode_block)?
+                            read_inode_path_metadata_cached(
+                                volume,
+                                inode_id,
+                                &mut cached_inode_block,
+                            )?
                         };
-                        cache.store_inode(inode_id, metadata);
+                        volume.cache.store_inode(inode_id, metadata);
                         metadata
                     }
                 };
@@ -106,17 +110,16 @@ pub unsafe fn copy_selected_directory_listing_into_cached<S: DirectoryListingSin
 }
 
 pub unsafe fn copy_selected_directory_listing_into<S: DirectoryListingSink>(
+    volume: &mut crate::kfs::volume::KfsVolume,
     sink: &mut S,
 ) -> Result<u32, StorageError> {
-    if unsafe { selected_inode::selected_inode_state() } != selected_inode::INODE_STATE_DIRECTORY
-        || !crate::kfs::directory::directory_size_is_aligned(unsafe {
-            selected_inode::selected_inode_size()
-        })
+    if volume.selected_inode.state() != selected_inode::INODE_STATE_DIRECTORY
+        || !crate::kfs::directory::directory_size_is_aligned(volume.selected_inode.size())
     {
         return Err(StorageError::INVALID_FILESYSTEM);
     }
 
-    let directory = unsafe { selected_inode::selected_file_metadata() };
+    let directory = volume.selected_inode.file_metadata();
     if directory.extent_count as usize > KFS_MAX_INLINE_EXTENTS {
         return Err(StorageError::INVALID_FILESYSTEM);
     }
@@ -126,9 +129,11 @@ pub unsafe fn copy_selected_directory_listing_into<S: DirectoryListingSink>(
     while extent_index < directory.extent_count as usize {
         let extent_start_block = directory.extent_start_blocks[extent_index];
         let extent_block_count = directory.extent_block_counts[extent_index];
-        file::validate_extent(extent_start_block, extent_block_count, unsafe {
-            filesystem_state::superblock_total_blocks()
-        })?;
+        file::validate_extent(
+            extent_start_block,
+            extent_block_count,
+            volume.filesystem.superblock_total_blocks(),
+        )?;
         let mut block_index = 0;
         while block_index < extent_block_count && remaining > 0 {
             let fs_block = extent_start_block + block_index;
@@ -136,7 +141,7 @@ pub unsafe fn copy_selected_directory_listing_into<S: DirectoryListingSink>(
             let mut offset = 0;
             while offset < block_io::BLOCK_SIZE && remaining > 0 {
                 if !block_loaded {
-                    unsafe { block_io::read_fs_block(fs_block)? };
+                    unsafe { block_io::read_fs_block(volume, fs_block)? };
                     block_loaded = true;
                 }
                 crate::os_stats::record_dir_entry_scan();
@@ -156,8 +161,8 @@ pub unsafe fn copy_selected_directory_listing_into<S: DirectoryListingSink>(
                                 block_io::scratch_u8(offset + 8 + name_offset as u32);
                             name_offset += 1;
                         }
-                        unsafe { inode::load_inode(inode_id)? };
-                        let child = unsafe { selected_inode::selected_path_metadata()? };
+                        unsafe { inode::load_inode(volume, inode_id)? };
+                        let child = volume.selected_inode.path_metadata()?;
                         unsafe {
                             push_directory_entry(
                                 sink,
@@ -183,16 +188,16 @@ pub unsafe fn copy_selected_directory_listing_into<S: DirectoryListingSink>(
     Ok(sink.written())
 }
 
-pub unsafe fn ensure_selected_directory_is_empty() -> Result<(), StorageError> {
-    if unsafe { selected_inode::selected_inode_state() } != selected_inode::INODE_STATE_DIRECTORY
-        || !crate::kfs::directory::directory_size_is_aligned(unsafe {
-            selected_inode::selected_inode_size()
-        })
+pub unsafe fn ensure_selected_directory_is_empty(
+    volume: &mut crate::kfs::volume::KfsVolume,
+) -> Result<(), StorageError> {
+    if volume.selected_inode.state() != selected_inode::INODE_STATE_DIRECTORY
+        || !crate::kfs::directory::directory_size_is_aligned(volume.selected_inode.size())
     {
         return Err(StorageError::INVALID_FILESYSTEM);
     }
 
-    let directory = unsafe { selected_inode::selected_file_metadata() };
+    let directory = volume.selected_inode.file_metadata();
     if directory.extent_count as usize > KFS_MAX_INLINE_EXTENTS {
         return Err(StorageError::INVALID_FILESYSTEM);
     }
@@ -202,12 +207,14 @@ pub unsafe fn ensure_selected_directory_is_empty() -> Result<(), StorageError> {
     while extent_index < directory.extent_count as usize {
         let extent_start_block = directory.extent_start_blocks[extent_index];
         let extent_block_count = directory.extent_block_counts[extent_index];
-        file::validate_extent(extent_start_block, extent_block_count, unsafe {
-            filesystem_state::superblock_total_blocks()
-        })?;
+        file::validate_extent(
+            extent_start_block,
+            extent_block_count,
+            volume.filesystem.superblock_total_blocks(),
+        )?;
         let mut block_index = 0;
         while block_index < extent_block_count {
-            unsafe { block_io::read_fs_block(extent_start_block + block_index)? };
+            unsafe { block_io::read_fs_block(volume, extent_start_block + block_index)? };
             let mut offset = 0;
             while offset < block_io::BLOCK_SIZE && remaining > 0 {
                 match crate::kfs::directory::decode_entry_header(
@@ -253,19 +260,20 @@ unsafe fn push_directory_entry<S: DirectoryListingSink>(
 }
 
 unsafe fn read_inode_path_metadata_cached(
+    volume: &mut crate::kfs::volume::KfsVolume,
     inode_id: u32,
     cached_inode_block: &mut u32,
 ) -> Result<crate::kfs::cache::CachedPathMetadata, StorageError> {
     let location = crate::kfs::inode::locate_inode(
         inode_id,
-        unsafe { filesystem_state::superblock_inode_table_start_block() },
-        unsafe { filesystem_state::superblock_inode_table_block_count() },
+        volume.filesystem.superblock_inode_table_start_block(),
+        volume.filesystem.superblock_inode_table_block_count(),
     )?;
     let inode_block = location.block;
     let inode_offset = location.offset;
     if *cached_inode_block != inode_block {
         crate::os_stats::record_inode_load();
-        unsafe { block_io::read_fs_block(inode_block)? };
+        unsafe { block_io::read_fs_block(volume, inode_block)? };
         *cached_inode_block = inode_block;
     }
     let size_high = block_io::scratch_u32(inode_offset + 0x0c);
@@ -278,9 +286,11 @@ unsafe fn read_inode_path_metadata_cached(
         let offset = inode_offset + 0x20 + index as u32 * 8;
         let start_block = block_io::scratch_u32(offset);
         let block_count = block_io::scratch_u32(offset + 4);
-        file::validate_extent(start_block, block_count, unsafe {
-            filesystem_state::superblock_total_blocks()
-        })?;
+        file::validate_extent(
+            start_block,
+            block_count,
+            volume.filesystem.superblock_total_blocks(),
+        )?;
         index += 1;
     }
     let file_type = match block_io::scratch_u8(inode_offset) {
