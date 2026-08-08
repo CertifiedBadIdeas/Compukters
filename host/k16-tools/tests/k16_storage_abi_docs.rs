@@ -53,6 +53,35 @@ fn kfs_abi_docs_use_k16_cli_and_kfs_extension() {
     }
 }
 
+#[test]
+fn storage_abi_docs_define_the_read_only_sdk_mount_without_a_second_format() {
+    let storage_docs = normalized_doc("docs/abi/k16-storage-volume-v1.md");
+    let kfs_docs = normalized_doc("docs/abi/kfs-v1.md");
+
+    for required in [
+        "immutable `storage1`",
+        "KraftOS mounts that tree at `/sdk`",
+        "on-disk K16VOL, K16PT, and KFS encodings are unchanged",
+    ] {
+        assert!(
+            storage_docs.contains(required),
+            "storage volume ABI docs must contain `{required}`"
+        );
+    }
+
+    for required in [
+        "/sdk -> optional storage1 ROOT/KFS, read-only",
+        "Open file descriptors retain their volume identity",
+        "fail with `ERROR_READ_ONLY` before block I/O",
+        "`/sdk/bin/*.kx`",
+    ] {
+        assert!(
+            kfs_docs.contains(required),
+            "KFS ABI docs must contain `{required}`"
+        );
+    }
+}
+
 fn normalized_doc(path: &str) -> String {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()

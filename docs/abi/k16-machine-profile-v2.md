@@ -216,7 +216,9 @@ mean.
 
 A concrete target machine profile defines those meanings. For example, the
 current K16 computer profile defines hardware entry `1` as its control device
-and entry `5` as its storage0 block device.
+and entry `5` as its storage0 block device. It may append entry `10` for an
+optional storage1 block device before boot; omission of that optional entry is
+part of the target profile and is not hotplug state.
 
 Guest images are expected to be compiled or linked for a target machine profile,
 not for profile v2 alone.

@@ -4,9 +4,9 @@
 
 Status: experimental.
 
-`K16VOL` is the current block-media container used by `storage0` test and
-tooling flows. The VM exposes the payload bytes as the storage device media;
-the 16-byte host file header is not visible to the guest.
+`K16VOL` is the current block-media container used by `storage0` and immutable
+`storage1` test/tooling flows. The VM exposes the payload bytes as storage
+device media; the 16-byte host file header is not visible to the guest.
 
 All multi-byte fields are little-endian.
 
@@ -48,6 +48,12 @@ inside the `ROOT` KFS partition. The partitioned layout does not use fixed
 `k16 volume create` creates an unpartitioned volume for non-boot data and tests.
 Boot installation commands must reject unpartitioned volumes instead of writing
 fixed boot records.
+
+An SDK artifact attached as storage1 uses a partitioned K16VOL whose `ROOT`
+partition contains its KFS tree. KraftOS mounts that tree at `/sdk`; BIOS and
+bootloader continue to use storage0 exclusively. The storage1 controller and
+the mounted KFS volume are read-only even though the on-disk K16VOL, K16PT, and
+KFS encodings are unchanged.
 
 General filesystem operations are not part of `k16 volume`. Tooling for KFS
 uses `k16 fs kfs ...`; future filesystems should use their own `k16 fs

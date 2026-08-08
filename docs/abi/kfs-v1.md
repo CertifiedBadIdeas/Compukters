@@ -4,10 +4,11 @@
 
 Status: experimental.
 
-KFS v1 is the filesystem intended for the `ROOT` partition in the
-partitioned `K16PT` storage0 layout. It is an extent-based filesystem with a
-fixed 512-byte block size, one superblock, one allocation bitmap, and one inode
-table.
+KFS v1 is the filesystem used for the `ROOT` partition in partitioned `K16PT`
+storage media. KraftOS uses one writable instance for storage0 and may mount a
+second read-only instance from storage1 at `/sdk`. KFS is an extent-based
+filesystem with a fixed 512-byte block size, one superblock, one allocation
+bitmap, and one inode table.
 
 All multi-byte fields are little-endian. Implementations must reject invalid
 metadata explicitly rather than probing alternate layouts.
@@ -199,6 +200,25 @@ init       -> storage0 ROOT/KFS /bin/shell.kx   -> shell
 shell      -> storage0 ROOT/KFS /bin/*.kx       -> foreground utility
 ```
 
+After the kernel takes control, its VFS owns independent KFS volume instances:
+
+```text
+/       -> storage0 ROOT/KFS, writable
+/sdk    -> optional storage1 ROOT/KFS, read-only
+```
+
+Each instance owns its storage-device descriptor, mounted partition and
+superblock, selected-inode state, path cache, and block cache. Open file
+descriptors retain their volume identity, so root and SDK files may remain open
+and be read or sought concurrently. VFS path routing never switches one global
+active disk.
+
+When storage1 is absent, no SDK volume is mounted. When its hardware entry is
+present, an invalid storage profile, K16PT, ROOT partition, or KFS superblock is
+a boot failure rather than a root-only fallback. Mutating operations whose
+source or destination routes to `/sdk` fail with `ERROR_READ_ONLY` before block
+I/O; the storage1 controller independently rejects write commands.
+
 Guest loaders treat missing paths, malformed metadata, or wrong executable ABI
 kinds as hard load failures. Shell-launched foreground utilities use the same
 K16 `RUN` kernel boundary as init-launched shell startup: the shell resolves the
@@ -212,6 +232,11 @@ child completion. The bundled shell prints non-zero child statuses as
 builtin statuses and `STATUS <error-name>` for known negative K16 errors such
 as `NOENT`, `BUSY`, and `FAULT`. There is no bundled-program fallback when the
 file is missing.
+
+An explicit executable path matching `/sdk/bin/*.kx` passes through the same
+`RUN` loader, K16E validation, shared-object resolution, and child-process
+creation path. It is executed from storage1 without copying the executable into
+storage0. Imported shared objects continue to resolve from storage0 `/lib`.
 
 For bundled filesystem utilities, the shell resolves relative path arguments
 against its current working directory before calling `RUN_ARGV`. This includes

@@ -18,10 +18,10 @@ Current specifications:
   stack pointer convention.
 - `k16-virtual-memory-v1.md`: planned K16 virtual-memory and process
   address-space contract for a later CPU/MMU ABI slice.
-- `k16-storage-volume-v1.md`: current storage0 volume and partitioned `K16PT`
-  layout.
-- `kfs-v1.md`: extent-based filesystem targeted for the `ROOT` partition in
-  the partitioned storage0 layout.
+- `k16-storage-volume-v1.md`: current storage-media container and partitioned
+  `K16PT` layout used by writable `storage0` and immutable `storage1` media.
+- `kfs-v1.md`: extent-based filesystem used by the `ROOT` partition on
+  `storage0` and by the optional read-only `/sdk` volume on `storage1`.
 - `k16-machine-profile-v2.md`: machine boot info, RAM layout, MMIO allocation,
   and hardware table contract.
 - `k16-computer-profile-v1.md`: concrete hardware IDs and MMIO register layout
@@ -31,4 +31,5 @@ Current specifications:
 - `CHANGELOG.md`: active ABI history.
 
 The supported execution model is K16 guest instruction-memory execution from
-BIOS flash with optional storage0 boot media.
+BIOS flash with optional `storage0` boot media and an optional immutable
+`storage1` SDK volume mounted by KraftOS at `/sdk`.
