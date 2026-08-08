@@ -29,6 +29,7 @@ mod timer;
 mod trap;
 mod trap_policy;
 mod user_buffer;
+mod vfs;
 
 use core::panic::PanicInfo;
 

@@ -53,6 +53,9 @@ static const char *status_name(int status, const char *fallback) {
   if (raw == 0xfffffff0u) {
     return "BUSY";
   }
+  if (raw == 0xffffffe2u) {
+    return "ROFS";
+  }
   return fallback;
 }
 

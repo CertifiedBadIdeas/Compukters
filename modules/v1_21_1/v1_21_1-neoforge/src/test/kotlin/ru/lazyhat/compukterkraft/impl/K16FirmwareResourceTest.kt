@@ -2761,6 +2761,27 @@ class K16FirmwareResourceTest {
     }
 
     @Test
+    fun k16MutatingUtilitiesRenderReadOnlyFilesystemErrors() {
+        val fsHeader = Path.of("../../../guest/kraftos/libc/include/kraft/fs.h").readText()
+        val shellSource = Path.of("../../../guest/kraftos/userland/shell/shell.c").readText()
+        val mutatingSources = listOf("cp", "mkdir", "mv", "rm", "rmdir").associateWith { utility ->
+            Path.of("../../../guest/kraftos/userland/coreutils/$utility.c").readText()
+        }
+        val writeSource = Path.of("../../../guest/kraftos/userland/coreutils/write.c").readText()
+
+        assertTrue(fsHeader.contains("#define KRAFT_ERROR_READ_ONLY 0xffffffe2u"))
+        assertTrue(shellSource.contains("return \"ROFS\";"))
+        mutatingSources.forEach { (utility, source) ->
+            assertTrue(source.contains("return \"ROFS\";"), "$utility should render ERROR_READ_ONLY as ROFS")
+        }
+        assertTrue(writeSource.contains("static int write_all"))
+        assertTrue(writeSource.contains("return result < 0 ? result : (int)0xfffffff2u;"))
+        assertTrue(writeSource.contains("status_name(status, \"IO\")"))
+        assertTrue(writeSource.contains("write_path_error(write_status, path)"))
+        assertFalse(writeSource.contains("write: open failed:"))
+    }
+
+    @Test
     fun k16RmUtilityRemovesRegularFileThroughCLibc() {
         val rmSource = Path.of("../../../guest/kraftos/userland/coreutils/rm.c").readText()
         val unistdHeader = Path.of("../../../guest/kraftos/libc/include/unistd.h").readText()

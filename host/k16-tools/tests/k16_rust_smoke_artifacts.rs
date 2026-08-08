@@ -198,13 +198,13 @@ fn kfs_storage_helper_is_kfs_owned() {
     assert!(!kernel_manifest.contains("k16-storage"));
     assert!(kernel_error.contains("pub struct StorageError"));
     assert!(kernel_types.contains("pub trait DirectoryListingSink"));
-    assert!(kernel_fs.contains("crate::kfs::device::flush_storage0"));
+    assert!(kernel_fs.contains("crate::kfs::device::flush_storage("));
     assert!(!kernel_error.contains("use k16_abi::computer::storage0"));
     assert!(!kernel_types.contains("use k16_abi::computer::storage0"));
-    assert!(kernel_device.contains("pub unsafe fn flush_storage0"));
-    assert!(kernel_device.contains("storage0::COMMAND_READ_BLOCKS"));
-    assert!(kernel_device.contains("storage0::COMMAND_WRITE_BLOCKS"));
-    assert!(kernel_device.contains("storage0::COMMAND_FLUSH"));
+    assert!(kernel_device.contains("pub unsafe fn flush_storage(device: KfsDevice)"));
+    assert!(kernel_device.contains("storage::COMMAND_READ_BLOCKS"));
+    assert!(kernel_device.contains("storage::COMMAND_WRITE_BLOCKS"));
+    assert!(kernel_device.contains("storage::COMMAND_FLUSH"));
 }
 
 #[test]
@@ -402,9 +402,9 @@ fn k16_c_libc_cat_has_minimal_libkraft_abi_sources() {
     assert!(process_header.contains("#define KRAFT_SPAWN_ARGV_REQUEST_MAGIC 0x57415053u"));
     assert!(process_header.contains("#define KRAFT_RUN_ARGV_REQUEST_MAGIC 0x47524152u"));
     assert!(process_header.contains("#define KRAFT_MAX_PROCESS_ARGS 4"));
-    assert!(process_header.contains("#define KRAFT_MAX_PROCESS_PATH_BYTES 61"));
+    assert!(process_header.contains("#define KRAFT_MAX_PROCESS_PATH_BYTES 65"));
     assert!(process_header.contains("#define KRAFT_MAX_PROCESS_ARG_BYTES 128"));
-    assert!(process_header.contains("#define KRAFT_MAX_SPAWN_ARGV_REQUEST_BYTES 601"));
+    assert!(process_header.contains("#define KRAFT_MAX_SPAWN_ARGV_REQUEST_BYTES 605"));
     assert!(process_header.contains(
         "int kraft_spawn_with_args(const char *path, int argc, const char *const *argv);"
     ));
