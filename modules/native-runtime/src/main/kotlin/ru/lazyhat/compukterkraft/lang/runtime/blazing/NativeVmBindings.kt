@@ -473,6 +473,7 @@ object NativeVmBindings {
         memorySize: Int,
         maxSteps: Long,
         storage0Path: Path,
+        storage1Path: Path? = null,
     ): Long {
         load(libraryPath)
         val handle =
@@ -481,6 +482,7 @@ object NativeVmBindings {
                 memorySize.coerceAtLeast(1),
                 maxSteps.coerceAtLeast(1),
                 storage0Path.toAbsolutePath().normalize().toString(),
+                storage1Path?.toAbsolutePath()?.normalize()?.toString(),
             )
         check(handle != 0L) { "Native K16 BIOS flash computer create returned a zero handle" }
         return handle
@@ -492,6 +494,7 @@ object NativeVmBindings {
         memorySize: Int,
         storage0Path: Path,
         snapshot: ByteArray,
+        storage1Path: Path? = null,
     ): Long {
         load(libraryPath)
         require(snapshot.isNotEmpty()) { "K16 computer snapshot must not be empty" }
@@ -500,6 +503,7 @@ object NativeVmBindings {
                 biosFlashPath.toAbsolutePath().normalize().toString(),
                 memorySize.coerceAtLeast(1),
                 storage0Path.toAbsolutePath().normalize().toString(),
+                storage1Path?.toAbsolutePath()?.normalize()?.toString(),
                 snapshot,
             )
         check(handle != 0L) { "Native K16 BIOS flash computer restore returned a zero handle" }
@@ -709,6 +713,7 @@ object NativeVmBindings {
         memorySize: Int,
         maxSteps: Long,
         storage0Path: String,
+        storage1Path: String?,
     ): Long
 
     @JvmStatic
@@ -716,6 +721,7 @@ object NativeVmBindings {
         biosFlashPath: String,
         memorySize: Int,
         storage0Path: String,
+        storage1Path: String?,
         snapshot: ByteArray,
     ): Long
 

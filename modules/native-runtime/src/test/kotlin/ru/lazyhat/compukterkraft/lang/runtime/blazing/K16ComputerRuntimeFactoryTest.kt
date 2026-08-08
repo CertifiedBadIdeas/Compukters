@@ -20,11 +20,15 @@
 package ru.lazyhat.compukterkraft.lang.runtime.blazing
 
 import java.nio.file.Path
+import kotlin.io.path.absolute
+import kotlin.io.path.createTempFile
 import kotlin.io.path.exists
 import kotlin.io.path.readText
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class K16ComputerRuntimeFactoryTest {
@@ -81,6 +85,70 @@ class K16ComputerRuntimeFactoryTest {
     @Test
     fun defaultMaxTurnsPerTickDocumentsStandaloneRuntimeBudget() {
         assertEquals(8, K16ComputerRuntimeFactory.DEFAULT_MAX_TURNS_PER_TICK)
+    }
+
+    @Test
+    fun handleFactoryPassesNormalizedOptionalStorage1WithoutChangingMemory() {
+        val bindings = RecordingK16ComputerHandleFactoryBindings()
+        val factory = K16ComputerRuntimeHandleFactory(bindings, libraryPath = "native-test")
+        val bios = createTempFile("k16-bios-")
+        val storage0 = createTempFile("k16-storage0-")
+        val storage1 = createTempFile("k16-storage1-")
+
+        val handle =
+            factory.createFromBiosFlash(
+                biosFlashPath = bios,
+                storage0Path = storage0,
+                storage1 = K16StaticStorageAttachment(storage1.resolve("../${storage1.fileName}")),
+                memorySize = 1024 * 1024,
+                maxSteps = 77,
+            )
+
+        assertEquals(41, handle)
+        assertEquals(1024 * 1024, bindings.lastMemorySize)
+        assertEquals(storage1.absolute().normalize(), bindings.lastStorage1Path)
+    }
+
+    @Test
+    fun handleFactoryPreservesAbsentStorage1() {
+        val bindings = RecordingK16ComputerHandleFactoryBindings()
+        val factory = K16ComputerRuntimeHandleFactory(bindings, libraryPath = "native-test")
+
+        factory.createFromBiosFlash(
+            biosFlashPath = createTempFile("k16-bios-"),
+            storage0Path = createTempFile("k16-storage0-"),
+            storage1 = null,
+            memorySize = 512 * 1024,
+            maxSteps = 33,
+        )
+
+        assertNull(bindings.lastStorage1Path)
+    }
+
+    @Test
+    fun restoreCarriesStorage1ToTheRetainedGpuGuard() {
+        val bindings =
+            RecordingK16ComputerHandleFactoryBindings(
+                restoreFailure =
+                    "K16 runtime snapshot resume is rejected because K16SNAP v1 " +
+                        "cannot preserve retained gpu0 state",
+            )
+        val factory = K16ComputerRuntimeHandleFactory(bindings, libraryPath = "native-test")
+        val storage1 = createTempFile("k16-storage1-")
+
+        val error =
+            assertFailsWith<IllegalArgumentException> {
+                factory.restoreFromBiosFlashSnapshot(
+                    biosFlashPath = createTempFile("k16-bios-"),
+                    storage0Path = createTempFile("k16-storage0-"),
+                    storage1 = K16StaticStorageAttachment(storage1),
+                    snapshot = byteArrayOf(1),
+                    memorySize = 1024 * 1024,
+                )
+            }
+
+        assertTrue(error.message.orEmpty().contains("cannot preserve retained gpu0 state"))
+        assertEquals(storage1.absolute().normalize(), bindings.lastStorage1Path)
     }
 
     @Test
@@ -289,5 +357,39 @@ class K16ComputerRuntimeFactoryTest {
 
         assertTrue(source.contains("K16 IDE"))
         assertFalse(source.contains("Rux IDE"))
+    }
+}
+
+private class RecordingK16ComputerHandleFactoryBindings(
+    private val restoreFailure: String? = null,
+) : K16ComputerHandleFactoryBindings {
+    var lastMemorySize: Int? = null
+    var lastStorage1Path: Path? = null
+
+    override fun createFromBiosFlash(
+        libraryPath: String,
+        biosFlashPath: Path,
+        memorySize: Int,
+        maxSteps: Long,
+        storage0Path: Path,
+        storage1Path: Path?,
+    ): Long {
+        lastMemorySize = memorySize
+        lastStorage1Path = storage1Path
+        return 41
+    }
+
+    override fun restoreFromBiosFlashSnapshot(
+        libraryPath: String,
+        biosFlashPath: Path,
+        memorySize: Int,
+        storage0Path: Path,
+        storage1Path: Path?,
+        snapshot: ByteArray,
+    ): Long {
+        lastMemorySize = memorySize
+        lastStorage1Path = storage1Path
+        restoreFailure?.let { throw IllegalArgumentException(it) }
+        return 42
     }
 }

@@ -12,6 +12,7 @@ import ru.lazyhat.compukterkraft.core.device.runtime.ports.DisplayNetworkBridge
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16BiosFlashWorkspace
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16ComputerRuntime
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16ComputerRuntimeFactory
+import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16StaticStorageAttachment
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeK16ComputerControl
 import ru.lazyhat.compukterkraft.lang.runtime.kraftos.KraftOsArtifactManifest
 import ru.lazyhat.compukterkraft.lang.runtime.storage.K16_VOLUME_MAGIC_BYTES
@@ -1382,6 +1383,49 @@ class K16FirmwareResourceTest {
     }
 
     @Test
+    fun bundledK16RuntimeValidatesAndAttachesHostReadOnlyStorage1() {
+        val workspace = createTempDirectory("k16-static-storage1-test-")
+        val biosFlashPath = workspace.resolve("bios.kflash")
+        val storage0Path = workspace.resolve("storage0.kv")
+        val missingStorage1Path = workspace.resolve("missing-storage1.kv")
+        val invalidStorage1Path = workspace.resolve("invalid-storage1.kv")
+        val storage1Path = workspace.resolve("storage1.kv")
+        biosFlashPath.writeBytes(K16BiosFlashWorkspace.loadBiosFlashResource(classLoader = javaClass.classLoader))
+        storage0Path.writeBytes(K16SystemVolumeWorkspace.loadStorage0VolumeResource(classLoader = javaClass.classLoader))
+        invalidStorage1Path.writeBytes("not a K16 volume".encodeToByteArray())
+        storage1Path.writeBytes(
+            javaClass.classLoader
+                .getResourceAsStream("firmware/sdk-fixture-v1.kv")
+                ?.use { it.readBytes() }
+                ?: error("test SDK fixture resource should exist"),
+        )
+        assertTrue(storage1Path.toFile().setReadOnly())
+
+        assertFailsWith<IllegalArgumentException> {
+            K16ComputerRuntimeFactory.createFromBiosFlash(
+                biosFlashPath = biosFlashPath,
+                storage0Path = storage0Path,
+                storage1 = K16StaticStorageAttachment(missingStorage1Path),
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            K16ComputerRuntimeFactory.createFromBiosFlash(
+                biosFlashPath = biosFlashPath,
+                storage0Path = storage0Path,
+                storage1 = K16StaticStorageAttachment(invalidStorage1Path),
+            )
+        }
+        K16ComputerRuntimeFactory
+            .createFromBiosFlash(
+                biosFlashPath = biosFlashPath,
+                storage0Path = storage0Path,
+                storage1 = K16StaticStorageAttachment(storage1Path),
+            ).use { runtime ->
+                assertTrue(runtime.statsSnapshot().devices.any { it.base == 0x1000_0900L })
+            }
+    }
+
+    @Test
     fun bundledK16SystemCatRunsThroughKernelLoader() {
         val workspace = createTempDirectory("k16-c-system-cat-test-")
         val biosFlashPath = workspace.resolve("bios.kflash")
@@ -1671,8 +1715,15 @@ class K16FirmwareResourceTest {
         val workspace = createTempDirectory("k16-shell-ticks-u64-command-test-")
         val biosFlashPath = workspace.resolve("bios.kflash")
         val storage0Path = workspace.resolve("storage0.kv")
+        val storage1Path = workspace.resolve("storage1.kv")
         biosFlashPath.writeBytes(K16BiosFlashWorkspace.loadBiosFlashResource(classLoader = javaClass.classLoader))
         storage0Path.writeBytes(K16SystemVolumeWorkspace.loadStorage0VolumeResource(classLoader = javaClass.classLoader))
+        storage1Path.writeBytes(
+            javaClass.classLoader
+                .getResourceAsStream("firmware/sdk-fixture-v1.kv")
+                ?.use { it.readBytes() }
+                ?: error("test SDK fixture resource should exist"),
+        )
 
         val bootedSnapshot =
             K16ComputerRuntimeFactory
@@ -1693,6 +1744,7 @@ class K16FirmwareResourceTest {
                     biosFlashPath = biosFlashPath,
                     storage0Path = storage0Path,
                     snapshot = highTimerSnapshot,
+                    storage1 = K16StaticStorageAttachment(storage1Path),
                 )
             }
         assertTrue(failure.message.orEmpty().contains("cannot preserve retained gpu0 state"))

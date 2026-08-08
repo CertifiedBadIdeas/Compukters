@@ -163,6 +163,103 @@ object NativeK16ComputerRuntimeBindings : K16ComputerRuntimeBindings {
     override fun free(handle: Long) = NativeVmBindings.freeK16Computer(handle)
 }
 
+data class K16StaticStorageAttachment(
+    val path: Path,
+)
+
+internal interface K16ComputerHandleFactoryBindings {
+    fun createFromBiosFlash(
+        libraryPath: String,
+        biosFlashPath: Path,
+        memorySize: Int,
+        maxSteps: Long,
+        storage0Path: Path,
+        storage1Path: Path?,
+    ): Long
+
+    fun restoreFromBiosFlashSnapshot(
+        libraryPath: String,
+        biosFlashPath: Path,
+        memorySize: Int,
+        storage0Path: Path,
+        storage1Path: Path?,
+        snapshot: ByteArray,
+    ): Long
+}
+
+internal object NativeK16ComputerHandleFactoryBindings : K16ComputerHandleFactoryBindings {
+    override fun createFromBiosFlash(
+        libraryPath: String,
+        biosFlashPath: Path,
+        memorySize: Int,
+        maxSteps: Long,
+        storage0Path: Path,
+        storage1Path: Path?,
+    ): Long =
+        NativeVmBindings.createK16ComputerFromBiosFlash(
+            libraryPath = libraryPath,
+            biosFlashPath = biosFlashPath,
+            memorySize = memorySize,
+            maxSteps = maxSteps,
+            storage0Path = storage0Path,
+            storage1Path = storage1Path,
+        )
+
+    override fun restoreFromBiosFlashSnapshot(
+        libraryPath: String,
+        biosFlashPath: Path,
+        memorySize: Int,
+        storage0Path: Path,
+        storage1Path: Path?,
+        snapshot: ByteArray,
+    ): Long =
+        NativeVmBindings.restoreK16ComputerFromBiosFlashSnapshot(
+            libraryPath = libraryPath,
+            biosFlashPath = biosFlashPath,
+            memorySize = memorySize,
+            storage0Path = storage0Path,
+            storage1Path = storage1Path,
+            snapshot = snapshot,
+        )
+}
+
+internal class K16ComputerRuntimeHandleFactory(
+    private val bindings: K16ComputerHandleFactoryBindings,
+    private val libraryPath: String,
+) {
+    fun createFromBiosFlash(
+        biosFlashPath: Path,
+        storage0Path: Path,
+        storage1: K16StaticStorageAttachment?,
+        memorySize: Int,
+        maxSteps: Long,
+    ): Long =
+        bindings.createFromBiosFlash(
+            libraryPath = libraryPath,
+            biosFlashPath = biosFlashPath.toAbsolutePath().normalize(),
+            memorySize = memorySize,
+            maxSteps = maxSteps,
+            storage0Path = storage0Path.toAbsolutePath().normalize(),
+            storage1Path = storage1?.path?.toAbsolutePath()?.normalize(),
+        )
+
+    fun restoreFromBiosFlashSnapshot(
+        biosFlashPath: Path,
+        storage0Path: Path,
+        storage1: K16StaticStorageAttachment?,
+        snapshot: ByteArray,
+        memorySize: Int,
+    ): Long =
+        bindings.restoreFromBiosFlashSnapshot(
+            libraryPath = libraryPath,
+            biosFlashPath = biosFlashPath.toAbsolutePath().normalize(),
+            memorySize = memorySize,
+            storage0Path = storage0Path.toAbsolutePath().normalize(),
+            storage1Path = storage1?.path?.toAbsolutePath()?.normalize(),
+            snapshot = snapshot,
+        )
+}
+
 object K16ComputerRuntimeFactory {
     const val MINIMUM_BOOT_MEMORY_SIZE: Int = 256 * 1024
     const val DEFAULT_MEMORY_SIZE: Int = 1024 * 1024
@@ -172,17 +269,21 @@ object K16ComputerRuntimeFactory {
     fun createFromBiosFlash(
         biosFlashPath: Path,
         storage0Path: Path,
+        storage1: K16StaticStorageAttachment? = null,
         memorySize: Int = DEFAULT_MEMORY_SIZE,
         maxSteps: Long = DEFAULT_SLICE_BUDGET_NANOS,
         maxTurnsPerTick: Int = DEFAULT_MAX_TURNS_PER_TICK,
     ): K16ComputerRuntime {
         val handle =
-            NativeVmBindings.createK16ComputerFromBiosFlash(
+            K16ComputerRuntimeHandleFactory(
+                bindings = NativeK16ComputerHandleFactoryBindings,
                 libraryPath = NativeLibraryLocator.requireLibraryPath(),
+            ).createFromBiosFlash(
                 biosFlashPath = biosFlashPath,
+                storage0Path = storage0Path,
+                storage1 = storage1,
                 memorySize = memorySize,
                 maxSteps = maxSteps,
-                storage0Path = storage0Path,
             )
         return K16ComputerRuntime(
             handle,
@@ -195,15 +296,19 @@ object K16ComputerRuntimeFactory {
         biosFlashPath: Path,
         storage0Path: Path,
         snapshot: ByteArray,
+        storage1: K16StaticStorageAttachment? = null,
         memorySize: Int = DEFAULT_MEMORY_SIZE,
         maxTurnsPerTick: Int = DEFAULT_MAX_TURNS_PER_TICK,
     ): K16ComputerRuntime {
         val handle =
-            NativeVmBindings.restoreK16ComputerFromBiosFlashSnapshot(
+            K16ComputerRuntimeHandleFactory(
+                bindings = NativeK16ComputerHandleFactoryBindings,
                 libraryPath = NativeLibraryLocator.requireLibraryPath(),
+            ).restoreFromBiosFlashSnapshot(
                 biosFlashPath = biosFlashPath,
-                memorySize = memorySize,
                 storage0Path = storage0Path,
+                storage1 = storage1,
+                memorySize = memorySize,
                 snapshot = snapshot,
             )
         return K16ComputerRuntime(
