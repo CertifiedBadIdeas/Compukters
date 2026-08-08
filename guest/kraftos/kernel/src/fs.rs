@@ -788,7 +788,10 @@ fn storage_error_to_fs_error(error: crate::kfs::error::StorageError) -> FsError 
 
 #[cfg(any(not(test), feature = "host-test"))]
 unsafe fn flush_root_storage() -> Result<(), FsError> {
-    unsafe { crate::kfs::device::flush_storage0().map_err(storage_error_to_fs_error) }
+    unsafe {
+        crate::kfs::device::flush_storage(crate::kfs::device::KfsDevice::storage0())
+            .map_err(storage_error_to_fs_error)
+    }
 }
 
 #[cfg(any(not(test), feature = "host-test"))]

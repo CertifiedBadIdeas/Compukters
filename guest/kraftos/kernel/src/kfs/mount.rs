@@ -37,7 +37,9 @@ pub(crate) unsafe fn read_partition(
 ) -> Result<KfsPartition, StorageError> {
     unsafe { crate::kfs::block_io::read_storage_block(0)? };
     let block = unsafe { crate::kfs::block_io::scratch_block_bytes() };
-    let capacity_low = unsafe { crate::kfs::device::capacity_blocks_u32()? };
+    let capacity_low = unsafe {
+        crate::kfs::device::capacity_blocks_u32(crate::kfs::device::KfsDevice::storage0())?
+    };
     let partition = crate::kfs::partition::KfsPartition::decode_from_k16pt(
         &block,
         partition_type,
