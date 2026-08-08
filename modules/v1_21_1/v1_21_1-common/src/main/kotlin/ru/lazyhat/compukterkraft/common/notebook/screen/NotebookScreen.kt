@@ -21,7 +21,8 @@ package ru.lazyhat.compukterkraft.common.notebook.screen
 
 import net.minecraft.network.chat.Component
 import net.minecraft.world.entity.player.Inventory
-import ru.lazyhat.compukterkraft.common.computer.menu.ComputerMenuWithoutInventory
+import ru.lazyhat.compukterkraft.common.computer.menu.NotebookComputerMenu
+import ru.lazyhat.compukterkraft.common.computer.module.sdkArtifactIdentity
 import ru.lazyhat.compukterkraft.common.computer.screen.ComputerDisplayScreen
 import ru.lazyhat.compukterkraft.core.Config
 import ru.lazyhat.compukterkraft.core.device.input.ComputerControlAction
@@ -48,13 +49,13 @@ private enum class NotebookRuntimeState(
 }
 
 class NotebookScreen(
-    menu: ComputerMenuWithoutInventory,
+    menu: NotebookComputerMenu,
     inventory: Inventory,
     title: Component,
-) : ComputerDisplayScreen<ComputerMenuWithoutInventory>(menu, inventory, title) {
+) : ComputerDisplayScreen<NotebookComputerMenu>(menu, inventory, title) {
     init {
         imageWidth = WorkbenchTerminalMetrics.imageWidth(TERMINAL_COLUMNS)
-        imageHeight = WorkbenchTerminalMetrics.imageHeight(TERMINAL_ROWS, contentTopInset = NOTEBOOK_CONTENT_TOP)
+        imageHeight = TERMINAL_PANEL_HEIGHT + INVENTORY_PANEL_HEIGHT
     }
 
     override fun content(): UiElement {
@@ -66,8 +67,6 @@ class NotebookScreen(
         val surfaceRelY = layout.terminalSurfaceBounds.y - topPos
         val statusRelX = layout.statusBounds.x - leftPos
         val statusRelY = layout.statusBounds.y - topPos
-        val moduleBayX = statusRelX + 104
-        val moduleBayY = statusRelY + 3
 
         return ui(Modifier.size(imageWidth, imageHeight).background(BACKGROUND)) {
             text(
@@ -121,7 +120,8 @@ class NotebookScreen(
             ) {
                 displayResolutionText(currentDisplayWidth(), currentDisplayHeight())
             }
-            moduleBay(moduleBayX, moduleBayY)
+            moduleBay(NotebookComputerMenu.MODULE_SLOT_X, NotebookComputerMenu.MODULE_SLOT_Y)
+            inventoryPanel()
 
             laptopButton(
                 x = imageWidth - 154,
@@ -145,7 +145,7 @@ class NotebookScreen(
             leftPos = leftPos,
             topPos = topPos,
             imageWidth = imageWidth,
-            imageHeight = imageHeight,
+            imageHeight = TERMINAL_PANEL_HEIGHT,
             terminalColumns = TERMINAL_COLUMNS,
             terminalRows = TERMINAL_ROWS,
             contentTopInset = NOTEBOOK_CONTENT_TOP,
@@ -181,18 +181,43 @@ class NotebookScreen(
         x: Int,
         y: Int,
     ) {
-        canvas(Modifier.offset(x, y).size(126, 14)) {
-            fillRect(0, 0, 126, 14, MODULE_BAY)
-            fillRect(0, 0, 126, 1, MODULE_BAY_BORDER)
-            fillRect(0, 13, 126, 1, MODULE_BAY_BORDER)
-            fillRect(0, 0, 1, 14, MODULE_BAY_BORDER)
-            fillRect(125, 0, 1, 14, MODULE_BAY_BORDER)
-        }
+        slotChrome(x, y)
         text(
-            modifier = Modifier.offset(x + 6, y + 3),
+            modifier = Modifier.offset(x + 22, y + 5),
             color = DIM,
         ) {
-            "MODULE BAY: EMPTY"
+            "MODULE BAY: ${menu.moduleStack.sdkArtifactIdentity ?: "EMPTY"}"
+        }
+    }
+
+    private fun ru.lazyhat.kraftui.foundation.UiScope.inventoryPanel() {
+        canvas(Modifier.offset(0, TERMINAL_PANEL_HEIGHT).size(imageWidth, INVENTORY_PANEL_HEIGHT)) {
+            fillRect(0, 0, imageWidth, INVENTORY_PANEL_HEIGHT, INVENTORY_PANEL)
+            fillRect(0, 0, imageWidth, 1, INVENTORY_PANEL_BORDER)
+        }
+        repeat(3) { row ->
+            repeat(9) { column ->
+                slotChrome(
+                    NotebookComputerMenu.PLAYER_INVENTORY_X + column * 18,
+                    NotebookComputerMenu.PLAYER_INVENTORY_Y + row * 18,
+                )
+            }
+        }
+        repeat(9) { column ->
+            slotChrome(
+                NotebookComputerMenu.PLAYER_INVENTORY_X + column * 18,
+                NotebookComputerMenu.HOTBAR_Y,
+            )
+        }
+    }
+
+    private fun ru.lazyhat.kraftui.foundation.UiScope.slotChrome(
+        x: Int,
+        y: Int,
+    ) {
+        canvas(Modifier.offset(x - 1, y - 1).size(18, 18)) {
+            fillRect(0, 0, 18, 18, MODULE_BAY_BORDER)
+            fillRect(1, 1, 16, 16, MODULE_BAY)
         }
     }
 
@@ -224,6 +249,9 @@ class NotebookScreen(
         private val TERMINAL_COLUMNS = Config.DEFAULT_COMPUTER_TERM_WIDTH
         private val TERMINAL_ROWS = Config.DEFAULT_COMPUTER_TERM_HEIGHT
         private const val NOTEBOOK_CONTENT_TOP = 32
+        private val TERMINAL_PANEL_HEIGHT =
+            WorkbenchTerminalMetrics.imageHeight(TERMINAL_ROWS, contentTopInset = NOTEBOOK_CONTENT_TOP)
+        private const val INVENTORY_PANEL_HEIGHT = 96
         private val BACKGROUND = Color.hex(0xFF101318U)
         private val TITLE = Color.hex(0xFFE6ECF5U)
         private val STATUS = Color.hex(0xFF7CFFB2U)
@@ -236,5 +264,7 @@ class NotebookScreen(
         private val BUTTON_TEXT_DISABLED = Color.hex(0xFF606A78U)
         private val MODULE_BAY = Color.hex(0xFF151A22U)
         private val MODULE_BAY_BORDER = Color.hex(0xFF2C3444U)
+        private val INVENTORY_PANEL = Color.hex(0xFF101318U)
+        private val INVENTORY_PANEL_BORDER = Color.hex(0xFF2C3444U)
     }
 }

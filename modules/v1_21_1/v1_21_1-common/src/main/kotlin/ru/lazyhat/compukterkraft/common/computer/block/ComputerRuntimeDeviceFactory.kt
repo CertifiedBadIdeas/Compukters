@@ -23,12 +23,16 @@ import net.minecraft.server.level.ServerLevel
 import net.minecraft.world.level.storage.LevelResource
 import ru.lazyhat.compukterkraft.common.computer.context.BlockEntityRuntimeDeviceHost
 import ru.lazyhat.compukterkraft.core.device.DeviceProperties
-import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeDevice
 import ru.lazyhat.compukterkraft.core.device.runtime.K16RuntimeDevice
+import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeDevice
 import ru.lazyhat.compukterkraft.core.device.vm.DeviceProfileRegistry
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16ComputerRuntimeFactory
+import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16StaticStorageAttachment
+import ru.lazyhat.compukterkraft.lang.runtime.kraftos.K16SdkArtifacts
+import ru.lazyhat.compukterkraft.lang.runtime.kraftos.KraftOsArtifactManifest
 import ru.lazyhat.compukterkraft.lang.runtime.kraftos.KraftOsArtifacts
 import ru.lazyhat.compukterkraft.lang.runtime.storage.FileK16VolumeStore
+import ru.lazyhat.compukterkraft.lang.runtime.storage.K16ImmutableArtifactWorkspace
 import ru.lazyhat.compukterkraft.lang.runtime.storage.K16RuntimeSnapshotStore
 import ru.lazyhat.compukterkraft.lang.runtime.storage.K16VolumeBlob
 import java.nio.file.Path
@@ -38,22 +42,36 @@ object ComputerRuntimeDeviceFactory {
         level: ServerLevel,
         tile: AbstractComputerBlockEntity,
         deviceId: Int,
+        moduleIdentity: () -> String?,
     ): RuntimeDevice {
         val host = BlockEntityRuntimeDeviceHost(level, tile)
         val worldRoot = level.server.getWorldPath(LevelResource.ROOT)
         val volumeStore = FileK16VolumeStore(worldRoot)
         val snapshotStore = K16RuntimeSnapshotStore(worldRoot)
         val workspace = worldRoot.resolve("compukterkraft").resolve("computers").resolve(deviceId.toString())
-        val startupSnapshot =
-            tile.consumePendingRuntimeSnapshot()
-                ?: snapshotStore.readComputerSnapshotOrNull(deviceId)
-        var pendingStartupSnapshot = startupSnapshot
+        val sdkArtifacts by lazy {
+            K16SdkArtifacts(
+                manifest = KraftOsArtifactManifest.load(),
+                workspace = K16ImmutableArtifactWorkspace(worldRoot),
+            )
+        }
+        var startupSnapshotAvailable = true
         return K16RuntimeDevice(
             deviceId = deviceId,
             properties = DeviceProperties(tile.family, tile.label),
             endpointFactory = {
-                val snapshot = pendingStartupSnapshot
-                pendingStartupSnapshot = null
+                val snapshot =
+                    if (startupSnapshotAvailable) {
+                        startupSnapshotAvailable = false
+                        tile.consumePendingRuntimeSnapshot()
+                            ?: snapshotStore.readComputerSnapshotOrNull(deviceId)
+                    } else {
+                        null
+                    }
+                val storage1 =
+                    moduleIdentity()?.let { identity ->
+                        K16StaticStorageAttachment(sdkArtifacts.resolve(identity))
+                    }
                 val profile = DeviceProfileRegistry.forFamily(tile.family)
                 val memorySize =
                     k16MemorySizeBytes(
@@ -65,7 +83,15 @@ object ComputerRuntimeDeviceFactory {
                 KraftOsArtifacts.prepareStorage0Volume(workspace)
                 val storage0 = volumeStore.openOrCreateComputerVolume(deviceId, "storage0")
                 val biosFlashPath = KraftOsArtifacts.prepareBiosFlash(workspace)
-                createK16ComputerEndpoint(biosFlashPath, storage0, snapshot, memorySize, maxSteps, maxTurnsPerTick)
+                createK16ComputerEndpoint(
+                    biosFlashPath = biosFlashPath,
+                    storage0 = storage0,
+                    storage1 = storage1,
+                    snapshot = snapshot,
+                    memorySize = memorySize,
+                    maxSteps = maxSteps,
+                    maxTurnsPerTick = maxTurnsPerTick,
+                )
             },
             stateSink = host.stateSink,
             serverThreadDispatcher = host.serverThreadDispatcher,
@@ -103,33 +129,35 @@ object ComputerRuntimeDeviceFactory {
     private fun createK16ComputerEndpoint(
         biosFlashPath: Path,
         storage0: K16VolumeBlob,
+        storage1: K16StaticStorageAttachment?,
         snapshot: ByteArray?,
         memorySize: Int,
         maxSteps: Long,
         maxTurnsPerTick: Int,
-    ) =
-        try {
-            val storage0Path = storage0.path
-            storage0.close()
-            if (snapshot == null) {
-                K16ComputerRuntimeFactory.createFromBiosFlash(
-                    biosFlashPath = biosFlashPath,
-                    storage0Path = storage0Path,
-                    memorySize = memorySize,
-                    maxSteps = maxSteps,
-                    maxTurnsPerTick = maxTurnsPerTick,
-                )
-            } else {
-                K16ComputerRuntimeFactory.restoreFromBiosFlashSnapshot(
-                    biosFlashPath = biosFlashPath,
-                    storage0Path = storage0Path,
-                    snapshot = snapshot,
-                    memorySize = memorySize,
-                    maxTurnsPerTick = maxTurnsPerTick,
-                )
-            }
-        } catch (error: Throwable) {
-            storage0.close()
-            throw error
+    ) = try {
+        val storage0Path = storage0.path
+        storage0.close()
+        if (snapshot == null) {
+            K16ComputerRuntimeFactory.createFromBiosFlash(
+                biosFlashPath = biosFlashPath,
+                storage0Path = storage0Path,
+                storage1 = storage1,
+                memorySize = memorySize,
+                maxSteps = maxSteps,
+                maxTurnsPerTick = maxTurnsPerTick,
+            )
+        } else {
+            K16ComputerRuntimeFactory.restoreFromBiosFlashSnapshot(
+                biosFlashPath = biosFlashPath,
+                storage0Path = storage0Path,
+                snapshot = snapshot,
+                storage1 = storage1,
+                memorySize = memorySize,
+                maxTurnsPerTick = maxTurnsPerTick,
+            )
         }
+    } catch (error: Throwable) {
+        storage0.close()
+        throw error
+    }
 }
