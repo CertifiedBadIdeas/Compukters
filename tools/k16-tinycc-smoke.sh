@@ -130,6 +130,11 @@ compile_clang "$FIXTURES/compiler-runtime.c" "$WORK_DIR/compiler-runtime-clang.o
 inspect_object "$WORK_DIR/compiler-runtime-tinycc.o" "$WORK_DIR/compiler-runtime-tinycc.txt"
 inspect_object "$WORK_DIR/compiler-runtime-clang.o" "$WORK_DIR/compiler-runtime-clang.txt"
 
+compile_tinycc "$FIXTURES/type-layout.c" "$WORK_DIR/type-layout-tinycc.o"
+compile_clang "$FIXTURES/type-layout.c" "$WORK_DIR/type-layout-clang.o"
+inspect_object "$WORK_DIR/type-layout-tinycc.o" "$WORK_DIR/type-layout-tinycc.txt"
+inspect_object "$WORK_DIR/type-layout-clang.o" "$WORK_DIR/type-layout-clang.txt"
+
 compile_tinycc "$FIXTURES/return-42.c" "$WORK_DIR/return-42-tinycc.o"
 inspect_object "$WORK_DIR/return-42-tinycc.o" "$WORK_DIR/return-42-tinycc.txt"
 "$LLVM_OBJCOPY" --dump-section .text.k16="$WORK_DIR/return-42-tinycc.bin" \
