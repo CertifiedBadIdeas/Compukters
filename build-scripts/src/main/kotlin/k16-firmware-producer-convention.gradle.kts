@@ -74,6 +74,8 @@ val k16CLibcSyscallSource = rootProject.layout.projectDirectory.file("guest/kraf
 val k16CSdkIncludeSource = rootProject.layout.projectDirectory.dir("guest/kraftos/sdk/c/include")
 val k16CSdkLibcSource = rootProject.layout.projectDirectory.dir("guest/kraftos/sdk/c/src")
 val k16CSdkTestSource = rootProject.layout.projectDirectory.dir("guest/kraftos/sdk/c/tests")
+val k16CompilerRtBuiltinsSource =
+    rootProject.layout.projectDirectory.dir("toolchains/Compukter-Kraft-llvm/compiler-rt/lib/builtins")
 val generatedK16CSdkTarget = generatedK16GuestTarget.map { it.dir("c-sdk") }
 val k16CArchRuntimeSource = rootProject.layout.projectDirectory.file("guest/platform/k16/cpu-helpers.kasm")
 val k16CLibkraftSource = rootProject.layout.projectDirectory.file("guest/kraftos/lib/libkraft/libkraft.c")
@@ -1007,6 +1009,7 @@ val verifyK16CSdkFoundation =
         inputs.dir(k16CSdkIncludeSource)
         inputs.dir(k16CSdkLibcSource)
         inputs.dir(k16CSdkTestSource)
+        inputs.dir(k16CompilerRtBuiltinsSource)
         inputs.file(k16ClangExecutable)
         inputs.file(rootProject.layout.projectDirectory.file("tools/fixtures/k16-tinycc/compiler-runtime.c"))
         inputsK16HostTools()
@@ -1026,11 +1029,27 @@ val verifyK16CSdkFoundation =
                 }
             }
 
-            listOf("allocator_test.c", "string_test.c", "unistd_test.c").forEach { testName ->
+            listOf("allocator_test.c", "string_test.c", "unistd_test.c", "stdio_test.c").forEach { testName ->
                 val targetDirectory = outputDirectory.resolve(testName.removeSuffix(".c"))
                 targetDirectory.mkdirs()
                 val sources =
                     k16CSdkLibcSource.asFileTree.matching { include("*.c") }.files.sortedBy(File::getName) +
+                        listOf(
+                            "adddf3.c",
+                            "ashldi3.c",
+                            "comparedf2.c",
+                            "divdf3.c",
+                            "fixunsdfdi.c",
+                            "fixunsdfsi.c",
+                            "floatundidf.c",
+                            "floatunsidf.c",
+                            "fp_mode.c",
+                            "lshrdi3.c",
+                            "muldf3.c",
+                            "subdf3.c",
+                            "udivdi3.c",
+                            "umoddi3.c",
+                        ).map { k16CompilerRtBuiltinsSource.file(it).asFile } +
                         listOf(
                             k16CSdkTestSource.file("foundation_test_support.c").asFile,
                             rootProject.file("tools/fixtures/k16-tinycc/compiler-runtime.c"),
@@ -1051,6 +1070,8 @@ val verifyK16CSdkFoundation =
                                 "-Oz",
                                 "-I",
                                 k16CSdkIncludeSource.asFile.absolutePath,
+                                "-I",
+                                k16CompilerRtBuiltinsSource.asFile.absolutePath,
                                 "-c",
                                 source.absolutePath,
                                 "-o",
