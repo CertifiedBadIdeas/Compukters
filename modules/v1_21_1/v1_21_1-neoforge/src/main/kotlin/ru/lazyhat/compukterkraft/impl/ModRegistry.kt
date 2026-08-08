@@ -20,6 +20,7 @@
 package ru.lazyhat.compukterkraft.impl
 
 import net.minecraft.core.BlockPos
+import net.minecraft.core.component.DataComponentType
 import net.minecraft.core.registries.Registries
 import net.minecraft.network.chat.Component
 import net.minecraft.world.inventory.MenuType
@@ -44,6 +45,8 @@ import ru.lazyhat.compukterkraft.common.computer.loot.HasComputerIdLootCondition
 import ru.lazyhat.compukterkraft.common.computer.loot.PlayerCreativeLootCondition
 import ru.lazyhat.compukterkraft.common.computer.menu.ComputerControlMenu
 import ru.lazyhat.compukterkraft.common.computer.menu.ComputerMenuWithoutInventory
+import ru.lazyhat.compukterkraft.common.computer.module.SDK_ARTIFACT_IDENTITY_CODEC
+import ru.lazyhat.compukterkraft.common.computer.module.SDK_ARTIFACT_IDENTITY_STREAM_CODEC
 import ru.lazyhat.compukterkraft.common.notebook.block.NotebookBlock
 import ru.lazyhat.compukterkraft.common.notebook.item.NotebookItem
 import ru.lazyhat.compukterkraft.core.LOGGER
@@ -75,6 +78,18 @@ object ModRegistry {
                     NotebookBlock(notebookProperties().mapColor(MapColor.METAL))
                 },
             )
+    }
+
+    object DataComponents {
+        val REGISTRY: DeferredRegister.DataComponents =
+            DeferredRegister.createDataComponents(Registries.DATA_COMPONENT_TYPE, MOD_ID)
+
+        val SDK_ARTIFACT_IDENTITY: DeferredHolder<DataComponentType<*>, DataComponentType<String>> =
+            REGISTRY.registerComponentType("sdk_artifact_identity") { builder ->
+                builder
+                    .persistent(SDK_ARTIFACT_IDENTITY_CODEC)
+                    .networkSynchronized(SDK_ARTIFACT_IDENTITY_STREAM_CODEC)
+            }
     }
 
     object BlockEntities {
@@ -207,6 +222,7 @@ object ModRegistry {
 
     fun register(modEventBus: IEventBus) {
         Blocks.REGISTRY.register(modEventBus)
+        DataComponents.REGISTRY.register(modEventBus)
         BlockEntities.REGISTRY.register(modEventBus)
         Items.REGISTRY.register(modEventBus)
         Menus.REGISTRY.register(modEventBus)

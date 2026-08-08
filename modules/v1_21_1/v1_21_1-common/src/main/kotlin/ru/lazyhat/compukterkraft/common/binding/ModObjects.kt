@@ -19,6 +19,7 @@
 
 package ru.lazyhat.compukterkraft.common.binding
 
+import net.minecraft.core.component.DataComponentType
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.world.inventory.MenuType
 import net.minecraft.world.level.block.entity.BlockEntityType
@@ -30,6 +31,8 @@ import ru.lazyhat.compukterkraft.common.computer.menu.ComputerMenuWithoutInvento
 import ru.lazyhat.compukterkraft.common.notebook.block.NotebookBlockEntity
 
 object ModObjects {
+    lateinit var sdkArtifactIdentityComponentType: () -> DataComponentType<String>
+    lateinit var isKnownSdkArtifactIdentity: (String) -> Boolean
     lateinit var notebookBlockEntityType: () -> BlockEntityType<out NotebookBlockEntity>
     lateinit var computerMenuType: () -> MenuType<ComputerMenuWithoutInventory>
     lateinit var openComputerMenu: (ServerPlayer, AbstractComputerBlockEntity, ComputerContainerData) -> Unit

@@ -180,6 +180,25 @@ abstract class AbstractComputerBlockEntity(
             !isRemoved &&
             currentState.block == blockState.block
 
+    protected fun isRuntimeDeviceOn(): Boolean =
+        _computerID
+            ?.takeIf { ServerContext.isInitialized }
+            ?.let(ServerContext::get)
+            ?.isOn == true
+
+    protected fun commitPoweredOffHardwareChange(change: () -> Unit): Boolean {
+        val serverLevel = level as? ServerLevel ?: return false
+        if (isRuntimeDeviceOn()) return false
+        _computerID?.let { computerId ->
+            val worldRoot = serverLevel.server.getWorldPath(LevelResource.ROOT)
+            K16RuntimeSnapshotStore(worldRoot).deleteComputerSnapshot(computerId)
+        }
+        pendingRuntimeSnapshot = null
+        change()
+        setChanged()
+        return true
+    }
+
     private fun runtimeSnapshotForSave(): ByteArray? {
         val snapshot =
             _computerID

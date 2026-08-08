@@ -19,8 +19,8 @@
 
 package ru.lazyhat.compukterkraft.impl
 
-import net.minecraft.server.level.ServerPlayer
 import net.minecraft.network.chat.Component
+import net.minecraft.server.level.ServerPlayer
 import net.minecraft.world.SimpleMenuProvider
 import net.neoforged.api.distmarker.Dist
 import net.neoforged.bus.api.IEventBus
@@ -36,6 +36,7 @@ import ru.lazyhat.compukterkraft.core.LOGGER
 import ru.lazyhat.compukterkraft.core.MOD_ID
 import ru.lazyhat.compukterkraft.core.MOD_NAME
 import ru.lazyhat.compukterkraft.impl.platform.NetworkHandler
+import ru.lazyhat.compukterkraft.lang.runtime.kraftos.KraftOsArtifactManifest
 
 @Mod(MOD_ID)
 class CompukterKraftMod(
@@ -46,6 +47,11 @@ class CompukterKraftMod(
         LOGGER.debug { "$MOD_ID has started!" }
 
         ModRegistry.register(modEventBus)
+        val kraftOsArtifactManifest = lazy(KraftOsArtifactManifest::load)
+        ModObjects.sdkArtifactIdentityComponentType = { ModRegistry.DataComponents.SDK_ARTIFACT_IDENTITY.get() }
+        ModObjects.isKnownSdkArtifactIdentity = { identity ->
+            identity in kraftOsArtifactManifest.value.sdkArtifacts
+        }
         ModObjects.notebookBlockEntityType = { ModRegistry.BlockEntities.NOTEBOOK.get() }
         ModObjects.computerMenuType = { ModRegistry.Menus.COMPUTER.get() }
         ModObjects.openComputerMenu = { player: ServerPlayer, computer, menuData: ComputerContainerData ->

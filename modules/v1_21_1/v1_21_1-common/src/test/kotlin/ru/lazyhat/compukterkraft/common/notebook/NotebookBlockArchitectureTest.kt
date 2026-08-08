@@ -139,4 +139,24 @@ class NotebookBlockArchitectureTest {
             "Notebook control menus should open and close the notebook lid around the menu lifecycle.",
         )
     }
+
+    @Test
+    fun notebookOwnsPersistentSdkModuleBayWithPoweredOffMutationBoundary() {
+        val blockEntitySource =
+            Path
+                .of("src/main/kotlin/ru/lazyhat/compukterkraft/common/notebook/block/NotebookBlockEntity.kt")
+                .readText()
+        val abstractComputerSource =
+            Path
+                .of("src/main/kotlin/ru/lazyhat/compukterkraft/common/computer/block/AbstractComputerBlockEntity.kt")
+                .readText()
+
+        assertTrue(blockEntitySource.contains("NonNullList.withSize(1, ItemStack.EMPTY)"))
+        assertTrue(blockEntitySource.contains("ContainerHelper.saveAllItems"))
+        assertTrue(blockEntitySource.contains("ContainerHelper.loadAllItems"))
+        assertTrue(blockEntitySource.contains("commitMutation = ::commitPoweredOffHardwareChange"))
+        assertTrue(abstractComputerSource.contains("if (isRuntimeDeviceOn()) return false"))
+        assertTrue(abstractComputerSource.contains("deleteComputerSnapshot(computerId)"))
+        assertTrue(abstractComputerSource.contains("pendingRuntimeSnapshot = null"))
+    }
 }
