@@ -85,7 +85,7 @@ class NotebookBlockArchitectureTest {
         )
         assertTrue(
             screenSource.contains("class NotebookScreen") &&
-                screenSource.contains("ComputerDisplayScreen<ComputerMenuWithoutInventory>"),
+                screenSource.contains("ComputerDisplayScreen<NotebookComputerMenu>"),
             "Notebook should have its own screen class so laptop-only UI can grow independently.",
         )
         assertTrue(
@@ -106,6 +106,10 @@ class NotebookBlockArchitectureTest {
                 displayScreenSource.contains("protected val terminalInput"),
             "ComputerDisplayScreen should expose narrow hooks for laptop-specific screen layouts.",
         )
+        assertTrue(screenSource.contains("imageHeight = TERMINAL_PANEL_HEIGHT + INVENTORY_PANEL_HEIGHT"))
+        assertTrue(screenSource.contains("imageHeight = TERMINAL_PANEL_HEIGHT"))
+        assertTrue(screenSource.contains("menu.moduleStack.sdkArtifactIdentity"))
+        assertTrue(screenSource.contains("inventoryPanel()"))
     }
 
     @Test

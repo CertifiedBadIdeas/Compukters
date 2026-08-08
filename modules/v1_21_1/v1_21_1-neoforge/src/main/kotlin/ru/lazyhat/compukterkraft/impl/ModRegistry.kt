@@ -44,7 +44,7 @@ import ru.lazyhat.compukterkraft.common.computer.loot.ConstantLootConditionSeria
 import ru.lazyhat.compukterkraft.common.computer.loot.HasComputerIdLootCondition
 import ru.lazyhat.compukterkraft.common.computer.loot.PlayerCreativeLootCondition
 import ru.lazyhat.compukterkraft.common.computer.menu.ComputerControlMenu
-import ru.lazyhat.compukterkraft.common.computer.menu.ComputerMenuWithoutInventory
+import ru.lazyhat.compukterkraft.common.computer.menu.NotebookComputerMenu
 import ru.lazyhat.compukterkraft.common.computer.module.SDK_ARTIFACT_IDENTITY_CODEC
 import ru.lazyhat.compukterkraft.common.computer.module.SDK_ARTIFACT_IDENTITY_STREAM_CODEC
 import ru.lazyhat.compukterkraft.common.notebook.block.NotebookBlock
@@ -168,18 +168,18 @@ object ModRegistry {
     object Menus {
         val REGISTRY = DeferredRegister.create(Registries.MENU, MOD_ID)
 
-        val COMPUTER: DeferredHolder<MenuType<*>, MenuType<ComputerMenuWithoutInventory>> =
+        val COMPUTER: DeferredHolder<MenuType<*>, MenuType<NotebookComputerMenu>> =
             REGISTRY.register(
                 Names.COMPUTER,
                 Supplier {
                     IMenuTypeExtension.create { id, playerInventory, data ->
-                        ComputerMenuWithoutInventory(
+                        NotebookComputerMenu(
                             COMPUTER.get(),
                             id,
                             playerInventory,
                             ComputerContainerData(data),
                         ).also {
-                            LOGGER.debug { "ClientRegistry: ComputerMenuWithoutInventory from buffer created" }
+                            LOGGER.debug { "ClientRegistry: NotebookComputerMenu from buffer created" }
                         }
                     }
                 },

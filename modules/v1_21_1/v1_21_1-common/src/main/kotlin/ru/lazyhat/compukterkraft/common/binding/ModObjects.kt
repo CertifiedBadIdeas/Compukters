@@ -27,14 +27,14 @@ import net.minecraft.world.level.storage.loot.predicates.LootItemConditionType
 import ru.lazyhat.compukterkraft.common.computer.block.AbstractComputerBlockEntity
 import ru.lazyhat.compukterkraft.common.computer.data.ComputerContainerData
 import ru.lazyhat.compukterkraft.common.computer.menu.ComputerControlMenu
-import ru.lazyhat.compukterkraft.common.computer.menu.ComputerMenuWithoutInventory
+import ru.lazyhat.compukterkraft.common.computer.menu.NotebookComputerMenu
 import ru.lazyhat.compukterkraft.common.notebook.block.NotebookBlockEntity
 
 object ModObjects {
     lateinit var sdkArtifactIdentityComponentType: () -> DataComponentType<String>
     lateinit var isKnownSdkArtifactIdentity: (String) -> Boolean
     lateinit var notebookBlockEntityType: () -> BlockEntityType<out NotebookBlockEntity>
-    lateinit var computerMenuType: () -> MenuType<ComputerMenuWithoutInventory>
+    lateinit var computerMenuType: () -> MenuType<NotebookComputerMenu>
     lateinit var openComputerMenu: (ServerPlayer, AbstractComputerBlockEntity, ComputerContainerData) -> Unit
     lateinit var computerControlMenuType: () -> MenuType<ComputerControlMenu>
     lateinit var openComputerControlMenu: (ServerPlayer, AbstractComputerBlockEntity, ComputerContainerData) -> Unit

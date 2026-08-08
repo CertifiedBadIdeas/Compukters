@@ -37,7 +37,7 @@ import ru.lazyhat.compukterkraft.common.computer.block.AbstractComputerBlock
 import ru.lazyhat.compukterkraft.common.computer.block.AbstractComputerBlockEntity
 import ru.lazyhat.compukterkraft.common.computer.block.ComputerRuntimeDeviceFactory
 import ru.lazyhat.compukterkraft.common.computer.block.ComputerState
-import ru.lazyhat.compukterkraft.common.computer.menu.ComputerMenuWithoutInventory
+import ru.lazyhat.compukterkraft.common.computer.menu.NotebookComputerMenu
 import ru.lazyhat.compukterkraft.common.computer.module.SdkModuleBay
 import ru.lazyhat.compukterkraft.common.computer.module.sdkArtifactIdentity
 import ru.lazyhat.compukterkraft.core.block.DeviceFamily
@@ -60,7 +60,12 @@ open class NotebookBlockEntity(
     private var notebookMenuViewers: Int = 0
 
     override fun createComputer(id: Int): RuntimeDevice =
-        ComputerRuntimeDeviceFactory.createK16Computer(level as ServerLevel, this, id)
+        ComputerRuntimeDeviceFactory.createK16Computer(
+            level = level as ServerLevel,
+            tile = this,
+            deviceId = id,
+            moduleIdentity = { sdkModuleBay.installedArtifactIdentity },
+        )
 
     override fun updateBlockState(newState: ComputerState) {
         val currentState = level?.getBlockState(blockPos) ?: return
@@ -81,11 +86,12 @@ open class NotebookBlockEntity(
         playerInventory: Inventory,
         player: Player,
     ): AbstractContainerMenu =
-        ComputerMenuWithoutInventory(
+        NotebookComputerMenu(
             ModObjects.computerMenuType(),
             containerId,
             playerInventory,
             getOrCreateRuntimeDevice(),
+            sdkModuleBay,
             onRemoved = ::notebookMenuClosed,
         ).also {
             notebookMenuOpened()
