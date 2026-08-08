@@ -25,4 +25,15 @@ typedef unsigned int uintptr_t;
 #define INT64_MAX 9223372036854775807ll
 #define UINT64_MAX 18446744073709551615ull
 
+#define INT8_C(value) value
+#define UINT8_C(value) value
+#define INT16_C(value) value
+#define UINT16_C(value) value
+#define INT32_C(value) value
+#define UINT32_C(value) value##u
+#define INT64_C(value) value##ll
+#define UINT64_C(value) value##ull
+#define INTMAX_C(value) value##ll
+#define UINTMAX_C(value) value##ull
+
 #endif

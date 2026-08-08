@@ -17,4 +17,7 @@ struct tm {
   int tm_isdst;
 };
 
+time_t time(time_t *result);
+struct tm *localtime(const time_t *value);
+
 #endif
