@@ -5,7 +5,6 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LLVM_BIN_DIR="${K16_LLVM_BIN_DIR:-$ROOT/.toolchain/build/llvm/k16-min/bin}"
 LLC="$LLVM_BIN_DIR/llc"
 LLVM_READOBJ="$LLVM_BIN_DIR/llvm-readobj"
-LLVM_NOT="$LLVM_BIN_DIR/not"
 K16_CARGO_MANIFEST="$ROOT/host/k16-tools/Cargo.toml"
 K16_HOST_CARGO_TARGET_DIR="${K16_HOST_CARGO_TARGET_DIR:-${CARGO_TARGET_DIR:-$ROOT/.toolchain/build/cargo/k16-tools}}"
 export CARGO_TARGET_DIR="$K16_HOST_CARGO_TARGET_DIR"
@@ -29,31 +28,12 @@ require_contains() {
     fi
 }
 
-require_llc_failure() {
-    local input="$1"
-    local expected="$2"
-    local object="$WORK_DIR/$(basename "$input" .ll).o"
-    local stderr="$WORK_DIR/$(basename "$input" .ll).stderr"
-
-    if ! "$LLVM_NOT" --crash "$LLC" -mtriple=k16 -filetype=obj "$input" -o "$object" \
-        > /dev/null 2> "$stderr"; then
-        echo "expected llc to reject $input" >&2
-        exit 1
-    fi
-    if [[ -e "$object" ]]; then
-        echo "llc produced unexpected object for rejected input: $object" >&2
-        exit 1
-    fi
-    require_contains "$stderr" "$expected"
-}
-
 run_k16() {
     cargo run --quiet --manifest-path "$K16_CARGO_MANIFEST" --bin k16 -- "$@"
 }
 
 require_file "$LLC"
 require_file "$LLVM_READOBJ"
-require_file "$LLVM_NOT"
 
 WORK_DIR="$(mktemp -d)"
 trap 'rm -rf "$WORK_DIR"' EXIT
@@ -123,9 +103,25 @@ IR
 cat > "$WORK_DIR/varargs.ll" <<'IR'
 target triple = "k16"
 
-define i32 @sum(i32 %first, ...) {
+declare void @llvm.va_start(ptr)
+declare void @llvm.va_end(ptr)
+
+define i32 @sum(i32 %fixed, ...) {
 entry:
-  ret i32 %first
+  %args = alloca ptr
+  call void @llvm.va_start(ptr %args)
+  %first = va_arg ptr %args, i32
+  %second = va_arg ptr %args, i32
+  call void @llvm.va_end(ptr %args)
+  %partial = add i32 %fixed, %first
+  %result = add i32 %partial, %second
+  ret i32 %result
+}
+
+define i32 @main() {
+entry:
+  %result = call i32 (i32, ...) @sum(i32 10, i32 11, i32 21)
+  ret i32 %result
 }
 IR
 
@@ -185,21 +181,20 @@ run_k16 link --target program "$WORK_DIR/startup.o" "$WORK_DIR/main-calls-helper
 run_k16 disasm --target program --start 0x15000 --count 128 "$WORK_DIR/call-helper.kx" > "$WORK_DIR/call-helper-kx.disasm"
 require_contains "$WORK_DIR/call-helper-kx.disasm" "const32 r1, 0x00000028"
 require_contains "$WORK_DIR/call-helper-kx.disasm" "call r14"
-require_contains "$WORK_DIR/call-helper-kx.disasm" "add r0, r0, r1"
-require_contains "$WORK_DIR/call-helper-kx.disasm" "add r0, r1, r13"
+require_contains "$WORK_DIR/call-helper-kx.disasm" "addi r0, r0, 2"
+require_contains "$WORK_DIR/call-helper-kx.disasm" "addi r0, r1, 0"
 
 "$LLC" -mtriple=k16 -filetype=obj "$WORK_DIR/stack-local-main.ll" -o "$WORK_DIR/stack-local-main.o"
 run_k16 link --target program "$WORK_DIR/startup.o" "$WORK_DIR/stack-local-main.o" -o "$WORK_DIR/stack-local-main.kx"
 run_k16 disasm --target program --start 0x15000 --count 96 "$WORK_DIR/stack-local-main.kx" > "$WORK_DIR/stack-local-main-kx.disasm"
-require_contains "$WORK_DIR/stack-local-main-kx.disasm" "sub r15, r15, r13"
-require_contains "$WORK_DIR/stack-local-main-kx.disasm" "store32 [r13], r0"
-require_contains "$WORK_DIR/stack-local-main-kx.disasm" "load32 r0, [r13]"
-require_contains "$WORK_DIR/stack-local-main-kx.disasm" "add r15, r15, r13"
+require_contains "$WORK_DIR/stack-local-main-kx.disasm" "addi r15, r15, -8"
+require_contains "$WORK_DIR/stack-local-main-kx.disasm" "store32 [r15 + 4], r0"
+require_contains "$WORK_DIR/stack-local-main-kx.disasm" "load32 r0, [r15 + 4]"
+require_contains "$WORK_DIR/stack-local-main-kx.disasm" "addi r15, r15, 8"
 
 "$LLC" -mtriple=k16 -filetype=asm "$WORK_DIR/four-args.ll" -o "$WORK_DIR/four-args.s"
-require_contains "$WORK_DIR/four-args.s" "const32 r13, 4"
-require_contains "$WORK_DIR/four-args.s" "add r13, r15, r13"
-require_contains "$WORK_DIR/four-args.s" "load32"
+require_contains "$WORK_DIR/four-args.s" "load32 r0, [r15 + 4]"
+require_contains "$WORK_DIR/four-args.s" "add r0, r3, r0"
 
 "$LLC" -mtriple=k16 -filetype=asm "$WORK_DIR/indirect-call.ll" -o "$WORK_DIR/indirect-call.s"
 require_contains "$WORK_DIR/indirect-call.s" "call r1"
@@ -208,9 +203,12 @@ require_contains "$WORK_DIR/indirect-call.s" "call r1"
 require_contains "$WORK_DIR/i64-return.s" "const32 r0, 42"
 require_contains "$WORK_DIR/i64-return.s" "const32 r1, 0"
 
-require_llc_failure "$WORK_DIR/varargs.ll" "LLVM ERROR: K16 varargs are not implemented"
+"$LLC" -mtriple=k16 -filetype=obj "$WORK_DIR/varargs.ll" -o "$WORK_DIR/varargs.o"
+run_k16 link --target program "$WORK_DIR/startup.o" "$WORK_DIR/varargs.o" -o "$WORK_DIR/varargs.kx"
+run_k16 run "$WORK_DIR/varargs.kx" > "$WORK_DIR/varargs-run.txt"
+require_contains "$WORK_DIR/varargs-run.txt" "signal=halt exit_status=42"
 
 echo "direct LLVM call relocation checks passed"
 echo "stack-local LLVM lowering checks passed"
-echo "unsupported LLVM feature checks passed"
+echo "LLVM variadic execution checks passed"
 echo "K16 LLVM smoke passed"

@@ -28,24 +28,6 @@ require_contains() {
     fi
 }
 
-require_clang_failure() {
-    local input="$1"
-    local expected="$2"
-    local object="$WORK_DIR/$(basename "$input" .c).o"
-    local stderr="$WORK_DIR/$(basename "$input" .c).stderr"
-
-    if "$CLANG" --target=k16 -ffreestanding -fno-builtin -nostdlib \
-        -c "$input" -o "$object" > /dev/null 2> "$stderr"; then
-        echo "expected clang to reject $input" >&2
-        exit 1
-    fi
-    if [[ -e "$object" ]]; then
-        echo "clang produced unexpected object for rejected input: $object" >&2
-        exit 1
-    fi
-    require_contains "$stderr" "$expected"
-}
-
 run_k16() {
     cargo run --quiet --manifest-path "$K16_CARGO_MANIFEST" --bin k16 -- "$@"
 }
@@ -69,8 +51,19 @@ long long wide_return(void) {
 C
 
 cat > "$WORK_DIR/varargs.c" <<'C'
-int sum(int first, ...) {
-  return first;
+typedef __builtin_va_list va_list;
+
+static int sum(int fixed, ...) {
+  va_list args;
+  __builtin_va_start(args, fixed);
+  int first = __builtin_va_arg(args, int);
+  int second = __builtin_va_arg(args, int);
+  __builtin_va_end(args);
+  return fixed + first + second;
+}
+
+int main(void) {
+  return sum(10, 11, 21);
 }
 C
 
@@ -109,7 +102,7 @@ require_contains "$WORK_DIR/main-kx.disasm" "const32 r0, 0x0000002a"
 require_contains "$WORK_DIR/main-kx.disasm" "ret"
 
 run_k16 run "$WORK_DIR/main.kx" > "$WORK_DIR/main-run.txt"
-require_contains "$WORK_DIR/main-run.txt" "signal=halt debug_bytes=2a"
+require_contains "$WORK_DIR/main-run.txt" "signal=halt exit_status=42"
 
 "$CLANG" --target=k16 -ffreestanding -fno-builtin -nostdlib \
     -c "$WORK_DIR/i64-return.c" -o "$WORK_DIR/i64-return.o"
@@ -120,9 +113,14 @@ require_contains "$WORK_DIR/main-run.txt" "signal=halt debug_bytes=2a"
 "$CLANG" --target=k16 -ffreestanding -fno-builtin -nostdlib \
     -c "$WORK_DIR/indirect-call.c" -o "$WORK_DIR/indirect-call.o"
 
-require_clang_failure "$WORK_DIR/varargs.c" "K16 varargs are not implemented"
+"$CLANG" --target=k16 -ffreestanding -fno-builtin -nostdlib \
+    -c "$WORK_DIR/varargs.c" -o "$WORK_DIR/varargs.o"
+
+run_k16 link --target program "$WORK_DIR/startup.o" "$WORK_DIR/varargs.o" -o "$WORK_DIR/varargs.kx"
+run_k16 run "$WORK_DIR/varargs.kx" > "$WORK_DIR/varargs-run.txt"
+require_contains "$WORK_DIR/varargs-run.txt" "signal=halt exit_status=42"
 
 echo "freestanding C compile checks passed"
 echo "KX link and execution checks passed"
-echo "unsupported C varargs check passed"
+echo "C variadic execution checks passed"
 echo "K16 clang smoke passed"
