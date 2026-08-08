@@ -134,6 +134,9 @@ fn k16_computer_handle_accepts_optional_read_only_storage1_volume_path() {
     let storage1_path = temp_volume_path("handle-storage1-paths");
     write_k16_volume(&storage0_path, &[0; 1024]);
     write_k16_volume(&storage1_path, &[0xA5; 1024]);
+    let mut permissions = fs::metadata(&storage1_path).unwrap().permissions();
+    permissions.set_readonly(true);
+    fs::set_permissions(&storage1_path, permissions).unwrap();
 
     let handle = K16ComputerHandle::create_k16_bios_flash_with_storage_paths(
         &bios,
@@ -150,6 +153,36 @@ fn k16_computer_handle_accepts_optional_read_only_storage1_volume_path() {
 
     fs::remove_file(storage0_path).unwrap();
     fs::remove_file(storage1_path).unwrap();
+}
+
+#[test]
+fn k16_computer_handle_rejects_missing_and_invalid_storage1_volumes() {
+    let bios = k16_words(&[k16_halt()]);
+    let storage0_path = temp_volume_path("handle-storage0-validation");
+    let missing_storage1_path = temp_volume_path("handle-storage1-missing");
+    let invalid_storage1_path = temp_volume_path("handle-storage1-invalid");
+    write_k16_volume(&storage0_path, &[0; 1024]);
+    fs::write(&invalid_storage1_path, b"not a K16 volume").unwrap();
+
+    assert!(K16ComputerHandle::create_k16_bios_flash_with_storage_paths(
+        &bios,
+        64 * 1024,
+        128,
+        &storage0_path,
+        Some(missing_storage1_path),
+    )
+    .is_err());
+    assert!(K16ComputerHandle::create_k16_bios_flash_with_storage_paths(
+        &bios,
+        64 * 1024,
+        128,
+        &storage0_path,
+        Some(invalid_storage1_path.clone()),
+    )
+    .is_err());
+
+    fs::remove_file(storage0_path).unwrap();
+    fs::remove_file(invalid_storage1_path).unwrap();
 }
 
 #[test]
@@ -279,10 +312,13 @@ fn k16_computer_handle_rejects_high_timer_snapshot_resume_without_retained_gpu0_
         &handle.snapshot_v1().expect("snapshot encodes"),
         0x0000_0001_0000_002a,
     );
-    let error = match K16ComputerHandle::restore_k16_bios_flash_snapshot_with_storage0_path(
+    let storage1_path = temp_volume_path("k16-restore-storage1-path");
+    write_k16_volume(&storage1_path, &[0xA5; 1024]);
+    let error = match K16ComputerHandle::restore_k16_bios_flash_snapshot_with_storage_paths(
         &bios,
         64 * 1024,
         &storage_path,
+        Some(storage1_path.clone()),
         &snapshot,
     ) {
         Ok(_) => panic!("display-less K16 runtime resume unexpectedly succeeded"),
@@ -293,6 +329,7 @@ fn k16_computer_handle_rejects_high_timer_snapshot_resume_without_retained_gpu0_
         "{error}"
     );
     fs::remove_file(storage_path).unwrap();
+    fs::remove_file(storage1_path).unwrap();
 }
 
 #[test]

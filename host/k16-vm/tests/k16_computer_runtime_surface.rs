@@ -107,6 +107,21 @@ fn k16_computer_handle_source_does_not_expose_low_image_startup_or_handoff() {
 }
 
 #[test]
+fn jni_surface_carries_nullable_storage1_into_create_and_restore() {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let handle_source = fs::read_to_string(manifest_dir.join("src/computer/handle.rs")).unwrap();
+    let jni_source = fs::read_to_string(manifest_dir.join("src/jni.rs")).unwrap();
+
+    assert!(jni_source.contains("storage1_path: JString<'_>"));
+    assert!(jni_source.contains("storage1_path.is_null()"));
+    assert!(jni_source.contains("Some(PathBuf::from"));
+    assert!(jni_source.contains("create_k16_bios_flash_path_with_storage_paths"));
+    assert!(jni_source.contains("restore_k16_bios_flash_snapshot_path_with_storage_paths"));
+    assert!(handle_source.contains("restore_k16_bios_flash_snapshot_with_storage_paths"));
+    assert!(handle_source.contains("storage1_path.as_deref()"));
+}
+
+#[test]
 fn computer_machine_source_does_not_expose_low_image_cpu_path() {
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
     let machine_source = fs::read_to_string(manifest_dir.join("src/computer/machine.rs")).unwrap();

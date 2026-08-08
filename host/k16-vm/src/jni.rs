@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::ptr::null_mut;
 
 use jni::objects::{JByteArray, JClass, JString};
@@ -17,6 +18,7 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
     memory_size: jint,
     max_steps: jlong,
     storage0_path: JString<'_>,
+    storage1_path: JString<'_>,
 ) -> jlong {
     let bios_flash_path = match env.get_string(&bios_flash_path) {
         Ok(path) => path.to_string_lossy().into_owned(),
@@ -38,11 +40,26 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
             return 0;
         }
     };
-    match K16ComputerHandle::create_k16_bios_flash_path_with_storage0_path(
+    let storage1_path = if storage1_path.is_null() {
+        None
+    } else {
+        match env.get_string(&storage1_path) {
+            Ok(path) => Some(PathBuf::from(path.to_string_lossy().into_owned())),
+            Err(error) => {
+                let _ = env.throw_new(
+                    "java/lang/IllegalArgumentException",
+                    format!("Cannot read K16 computer storage1 path: {error}"),
+                );
+                return 0;
+            }
+        }
+    };
+    match K16ComputerHandle::create_k16_bios_flash_path_with_storage_paths(
         bios_flash_path,
         memory_size.max(1) as usize,
         max_steps.max(1) as u64,
         storage0_path,
+        storage1_path,
     ) {
         Ok(handle) => Box::into_raw(Box::new(handle)) as jlong,
         Err(error) => {
@@ -59,6 +76,7 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
     bios_flash_path: JString<'_>,
     memory_size: jint,
     storage0_path: JString<'_>,
+    storage1_path: JString<'_>,
     snapshot: JByteArray<'_>,
 ) -> jlong {
     let bios_flash_path = match env.get_string(&bios_flash_path) {
@@ -81,6 +99,20 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
             return 0;
         }
     };
+    let storage1_path = if storage1_path.is_null() {
+        None
+    } else {
+        match env.get_string(&storage1_path) {
+            Ok(path) => Some(PathBuf::from(path.to_string_lossy().into_owned())),
+            Err(error) => {
+                let _ = env.throw_new(
+                    "java/lang/IllegalArgumentException",
+                    format!("Cannot read K16 computer storage1 path: {error}"),
+                );
+                return 0;
+            }
+        }
+    };
     let snapshot = match env.convert_byte_array(&snapshot) {
         Ok(bytes) => bytes,
         Err(error) => {
@@ -91,10 +123,11 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
             return 0;
         }
     };
-    match K16ComputerHandle::restore_k16_bios_flash_snapshot_path_with_storage0_path(
+    match K16ComputerHandle::restore_k16_bios_flash_snapshot_path_with_storage_paths(
         bios_flash_path,
         memory_size.max(1) as usize,
         storage0_path,
+        storage1_path,
         &snapshot,
     ) {
         Ok(handle) => Box::into_raw(Box::new(handle)) as jlong,

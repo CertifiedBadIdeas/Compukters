@@ -83,10 +83,31 @@ impl K16ComputerHandle {
         storage0_path: impl AsRef<Path>,
         snapshot: &[u8],
     ) -> Result<Self, String> {
+        Self::restore_k16_bios_flash_snapshot_with_storage_paths(
+            bios_flash,
+            memory_size,
+            storage0_path,
+            None,
+            snapshot,
+        )
+    }
+
+    pub fn restore_k16_bios_flash_snapshot_with_storage_paths(
+        bios_flash: &[u8],
+        memory_size: usize,
+        storage0_path: impl AsRef<Path>,
+        storage1_path: Option<PathBuf>,
+        snapshot: &[u8],
+    ) -> Result<Self, String> {
         if bios_flash.is_empty() {
             return Err("K16 BIOS flash is empty".to_string());
         }
-        let _ = (memory_size, storage0_path.as_ref(), snapshot);
+        let _ = (
+            memory_size,
+            storage0_path.as_ref(),
+            storage1_path.as_deref(),
+            snapshot,
+        );
         Err(
             "K16 runtime snapshot resume is rejected because K16SNAP v1 cannot preserve retained gpu0 state"
                 .to_string(),
@@ -137,6 +158,22 @@ impl K16ComputerHandle {
         storage0_path: impl AsRef<Path>,
         snapshot: &[u8],
     ) -> Result<Self, String> {
+        Self::restore_k16_bios_flash_snapshot_path_with_storage_paths(
+            bios_flash_path,
+            memory_size,
+            storage0_path,
+            None,
+            snapshot,
+        )
+    }
+
+    pub fn restore_k16_bios_flash_snapshot_path_with_storage_paths(
+        bios_flash_path: impl AsRef<Path>,
+        memory_size: usize,
+        storage0_path: impl AsRef<Path>,
+        storage1_path: Option<PathBuf>,
+        snapshot: &[u8],
+    ) -> Result<Self, String> {
         let bios_flash_path = bios_flash_path.as_ref();
         let bios_flash = fs::read(bios_flash_path).map_err(|error| {
             format!(
@@ -144,10 +181,11 @@ impl K16ComputerHandle {
                 bios_flash_path.display(),
             )
         })?;
-        Self::restore_k16_bios_flash_snapshot_with_storage0_path(
+        Self::restore_k16_bios_flash_snapshot_with_storage_paths(
             &bios_flash,
             memory_size,
             storage0_path,
+            storage1_path,
             snapshot,
         )
     }

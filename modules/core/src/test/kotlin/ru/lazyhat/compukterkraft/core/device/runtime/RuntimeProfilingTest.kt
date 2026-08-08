@@ -197,7 +197,7 @@ class RuntimeProfilingTest {
                     listOf(
                         NativeK16MmioDeviceStats(
                             deviceId = 3,
-                            base = 0x2000,
+                            base = 0x1000_0400,
                             size = 64,
                             traffic = NativeK16BusTraffic(loads = 4, stores = 5, bytesRead = 6, bytesWritten = 7),
                             storage =
@@ -323,7 +323,7 @@ class RuntimeProfilingTest {
         assertEquals(RuntimeK16BusTrafficMetrics(loads = 20, stores = 21, bytesRead = 22, bytesWritten = 23), snapshot.k16.mmio)
         assertEquals(1, snapshot.k16.devices.size)
         assertEquals(3, snapshot.k16.devices.single().deviceId)
-        assertEquals(0x2000, snapshot.k16.devices.single().base)
+        assertEquals(0x1000_0400, snapshot.k16.devices.single().base)
         assertEquals(64, snapshot.k16.devices.single().size)
         assertEquals(RuntimeK16BusTrafficMetrics(loads = 4, stores = 5, bytesRead = 6, bytesWritten = 7), snapshot.k16.devices.single().traffic)
         assertEquals(24, snapshot.k16.storage0.requestedReadBlocks)
@@ -418,12 +418,13 @@ class RuntimeProfilingTest {
             summary.contains("    k16Storage0: readCommands=8, writeCommands=9, flushes=10, bytesRead=11, bytesWritten=12, failed=13, mediaReadBlocks=14, mediaWriteBlocks=15, uniqueReadBlocks=16, repeatedReadBlocks=17, partitionTableReadBlocks=18, bootMetadataReadBlocks=19, bootDataReadBlocks=20, rootMetadataReadBlocks=21, rootDataReadBlocks=22, unknownReadBlocks=23, requestedReadBlocks=24, requestedReadBytes=12288"),
             summary,
         )
+        assertTrue(summary.contains("    k16Storage1: readCommands=0"), summary)
         assertTrue(
             summary.contains("    k16Os: pathLookups=31, inodeLoads=32, dirEntryScans=33, fileOpens=34, fileReads=35, statCalls=36, processSpawns=37, programLoads=38, dynamicImportLoads=39, libraryLoads=40, readDirCalls=41, programLoadBytes=42, dynamicImportBytes=43, libraryLoadBytes=44, genericFileDataReadBlocks=45, genericFileDataReadBytes=46, readDirDataReadBlocks=47, readDirDataReadBytes=48, programDataReadBlocks=49, programDataReadBytes=50, dynamicImportDataReadBlocks=51, dynamicImportDataReadBytes=52, libraryDataReadBlocks=53, libraryDataReadBytes=54, blockCacheHits=55, blockCacheMisses=56, blockCacheBatchReads=57, initProgramFileDataReadBlocks=58, initProgramFileDataReadBytes=59, shellProgramFileDataReadBlocks=60, shellProgramFileDataReadBytes=61, otherProgramFileDataReadBlocks=62, otherProgramFileDataReadBytes=63, libkraftLibraryFileDataReadBlocks=64, libkraftLibraryFileDataReadBytes=65, otherLibraryFileDataReadBlocks=66, otherLibraryFileDataReadBytes=67"),
             summary,
         )
         assertTrue(
-            summary.contains("      device[3]: base=8192, size=64, loads=4, stores=5, bytesRead=6, bytesWritten=7"),
+            summary.contains("      device[3]: base=268436480, size=64, loads=4, stores=5, bytesRead=6, bytesWritten=7"),
             summary,
         )
         assertTrue(
@@ -437,6 +438,43 @@ class RuntimeProfilingTest {
         )
         assertTrue(summary.contains("  instructions: count="), summary)
         assertTrue(summary.contains("    CALL_BUILTIN: count=2, time=100 ns, avg=50 ns"), summary)
+    }
+
+    @Test
+    fun storageMetricsRemainBoundToTheirMmioDevices() {
+        val metrics =
+            RuntimeK16StatsMetrics(
+                devices =
+                    listOf(
+                        RuntimeK16MmioDeviceMetrics(
+                            deviceId = 5,
+                            base = 0x1000_0400,
+                            size = 0x100,
+                            traffic = RuntimeK16BusTrafficMetrics(),
+                            storage = RuntimeK16StorageMetrics(readCommands = 11, requestedReadBytes = 111),
+                        ),
+                        RuntimeK16MmioDeviceMetrics(
+                            deviceId = 10,
+                            base = 0x1000_0900,
+                            size = 0x100,
+                            traffic = RuntimeK16BusTrafficMetrics(),
+                            storage = RuntimeK16StorageMetrics(readCommands = 22, requestedReadBytes = 222),
+                        ),
+                        RuntimeK16MmioDeviceMetrics(
+                            deviceId = 99,
+                            base = 0x2000_0000,
+                            size = 0x100,
+                            traffic = RuntimeK16BusTrafficMetrics(),
+                            storage = RuntimeK16StorageMetrics(readCommands = 99, requestedReadBytes = 999),
+                        ),
+                    ),
+            )
+
+        assertEquals(11, metrics.storage0.readCommands)
+        assertEquals(111, metrics.storage0.requestedReadBytes)
+        assertEquals(22, metrics.storage1.readCommands)
+        assertEquals(222, metrics.storage1.requestedReadBytes)
+        assertEquals(RuntimeK16StorageMetrics(), RuntimeK16StatsMetrics().storage1)
     }
 
     @Test
