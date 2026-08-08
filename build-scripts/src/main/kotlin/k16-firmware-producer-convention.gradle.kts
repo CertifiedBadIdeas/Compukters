@@ -71,6 +71,10 @@ val k16KernelSource = rootProject.layout.projectDirectory.dir("guest/kraftos/ker
 val k16CLibcIncludeSource = rootProject.layout.projectDirectory.dir("guest/kraftos/libc/include")
 val k16CLibcStartupSource = rootProject.layout.projectDirectory.file("guest/kraftos/libc/crt0.c")
 val k16CLibcSyscallSource = rootProject.layout.projectDirectory.file("guest/kraftos/libc/syscalls.c")
+val k16CSdkIncludeSource = rootProject.layout.projectDirectory.dir("guest/kraftos/sdk/c/include")
+val k16CSdkLibcSource = rootProject.layout.projectDirectory.dir("guest/kraftos/sdk/c/src")
+val k16CSdkTestSource = rootProject.layout.projectDirectory.dir("guest/kraftos/sdk/c/tests")
+val generatedK16CSdkTarget = generatedK16GuestTarget.map { it.dir("c-sdk") }
 val k16CArchRuntimeSource = rootProject.layout.projectDirectory.file("guest/platform/k16/cpu-helpers.kasm")
 val k16CLibkraftSource = rootProject.layout.projectDirectory.file("guest/kraftos/lib/libkraft/libkraft.c")
 val k16CSystemInitSource = rootProject.layout.projectDirectory.file("guest/kraftos/userland/init/init.c")
@@ -938,6 +942,156 @@ val compileK16TinyCcUnameProof =
                     output.absolutePath,
                 ),
             )
+        }
+    }
+
+val compileK16CSdkLibc =
+    tasks.register("compileK16CSdkLibc") {
+        description = "Compiles the compiler-owned KraftOS C SDK libc objects."
+        group = "k16"
+        inputs.dir(k16CSdkIncludeSource)
+        inputs.dir(k16CSdkLibcSource)
+        inputs.file(k16ClangExecutable)
+        inputs.file(k16ToolchainConfig)
+        inputsK16HostTools()
+        outputs.dir(generatedK16CSdkTarget.map { it.dir("libc-objects") })
+        dependsOn(rootProject.tasks.named("prepareK16Toolchain"))
+
+        doLast {
+            val clang = k16ClangExecutable.asFile
+            check(clang.isFile && clang.canExecute()) {
+                "K16 clang is missing or not executable at $clang; run buildK16Llvm through ./gradlew-sandbox-dev"
+            }
+            val outputDirectory = generatedK16CSdkTarget.get().dir("libc-objects").asFile
+            project.delete(outputDirectory)
+            outputDirectory.mkdirs()
+            k16CSdkLibcSource.asFileTree
+                .matching { include("*.c") }
+                .files
+                .sortedBy(File::getName)
+                .forEach { source ->
+                    val output = outputDirectory.resolve("${source.nameWithoutExtension}.o")
+                    val command =
+                        listOf(
+                            clang.absolutePath,
+                            "--target=k16",
+                            "-ffreestanding",
+                            "-fno-builtin",
+                            "-fno-stack-protector",
+                            "-nostdlib",
+                            "-Oz",
+                            "-I",
+                            k16CSdkIncludeSource.asFile.absolutePath,
+                            "-c",
+                            source.absolutePath,
+                            "-o",
+                            output.absolutePath,
+                        )
+                    val exitCode =
+                        ProcessBuilder(command)
+                            .directory(projectDir)
+                            .inheritIO()
+                            .start()
+                            .waitFor()
+                    check(exitCode == 0) {
+                        "K16 C SDK libc compile failed with exit code $exitCode: ${command.joinToString(" ")}"
+                    }
+                }
+        }
+    }
+
+val verifyK16CSdkFoundation =
+    tasks.register("verifyK16CSdkFoundation") {
+        description = "Builds and runs the C SDK foundation contracts on the K16 VM."
+        group = "verification"
+        inputs.dir(k16CSdkIncludeSource)
+        inputs.dir(k16CSdkLibcSource)
+        inputs.dir(k16CSdkTestSource)
+        inputs.file(k16ClangExecutable)
+        inputs.file(rootProject.layout.projectDirectory.file("tools/fixtures/k16-tinycc/compiler-runtime.c"))
+        inputsK16HostTools()
+        outputs.dir(generatedK16CSdkTarget.map { it.dir("foundation-tests") })
+        dependsOn("compileK16CSdkLibc")
+
+        doLast {
+            val toolchain = resolveK16Toolchain()
+            val clang = k16ClangExecutable.asFile
+            val outputDirectory = generatedK16CSdkTarget.get().dir("foundation-tests").asFile
+            project.delete(outputDirectory)
+            outputDirectory.mkdirs()
+            fun runCommand(stage: String, command: List<String>) {
+                val exitCode = ProcessBuilder(command).directory(projectDir).inheritIO().start().waitFor()
+                check(exitCode == 0) {
+                    "K16 C SDK foundation $stage failed with exit code $exitCode: ${command.joinToString(" ")}"
+                }
+            }
+
+            listOf("allocator_test.c", "string_test.c", "unistd_test.c").forEach { testName ->
+                val targetDirectory = outputDirectory.resolve(testName.removeSuffix(".c"))
+                targetDirectory.mkdirs()
+                val sources =
+                    k16CSdkLibcSource.asFileTree.matching { include("*.c") }.files.sortedBy(File::getName) +
+                        listOf(
+                            k16CSdkTestSource.file("foundation_test_support.c").asFile,
+                            rootProject.file("tools/fixtures/k16-tinycc/compiler-runtime.c"),
+                            k16CSdkTestSource.file(testName).asFile,
+                        )
+                val objects =
+                    sources.mapIndexed { index, source ->
+                        val output = targetDirectory.resolve("$index-${source.nameWithoutExtension}.o")
+                        runCommand(
+                            "$testName compile",
+                            listOf(
+                                clang.absolutePath,
+                                "--target=k16",
+                                "-ffreestanding",
+                                "-fno-builtin",
+                                "-fno-stack-protector",
+                                "-nostdlib",
+                                "-Oz",
+                                "-I",
+                                k16CSdkIncludeSource.asFile.absolutePath,
+                                "-c",
+                                source.absolutePath,
+                                "-o",
+                                output.absolutePath,
+                            ),
+                        )
+                        output
+                    }
+                val startup = targetDirectory.resolve("k16-startup.o")
+                val image = outputDirectory.resolve(testName.removeSuffix(".c") + ".kx")
+                val runReport = targetDirectory.resolve("run.txt")
+                runCommand(
+                    "$testName startup",
+                    listOf(toolchain.cli.absolutePath, "runtime", "k16-startup", "-o", startup.absolutePath),
+                )
+                runCommand(
+                    "$testName link",
+                    buildList {
+                        add(toolchain.cli.absolutePath)
+                        add("link")
+                        add("--target")
+                        add("program")
+                        add(startup.absolutePath)
+                        objects.forEach { add(it.absolutePath) }
+                        add("-o")
+                        add(image.absolutePath)
+                    },
+                )
+                val runProcess =
+                    ProcessBuilder(toolchain.cli.absolutePath, "run", image.absolutePath)
+                        .directory(projectDir)
+                        .redirectOutput(runReport)
+                        .redirectErrorStream(true)
+                        .start()
+                check(runProcess.waitFor() == 0) {
+                    "K16 C SDK foundation VM run failed for $testName: ${runReport.readText()}"
+                }
+                check(runReport.readText().contains("signal=halt exit_status=0")) {
+                    "K16 C SDK foundation contract failed for $testName: ${runReport.readText()}"
+                }
+            }
         }
     }
 

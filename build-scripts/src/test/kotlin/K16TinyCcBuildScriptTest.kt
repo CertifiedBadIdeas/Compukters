@@ -167,6 +167,50 @@ class K16TinyCcBuildScriptTest {
     }
 
     @Test
+    fun nativeTinyCcUsesOneCompilerOwnedCSdkSysroot() {
+        val producerConvention =
+            root
+                .resolve("build-scripts/src/main/kotlin/k16-firmware-producer-convention.gradle.kts")
+                .readText()
+        val rootBuildScript = root.resolve("build.gradle.kts").readText()
+        val sdkInclude = root.resolve("guest/kraftos/sdk/c/include")
+
+        assertTrue(producerConvention.contains("guest/kraftos/sdk/c/include"))
+        assertTrue(producerConvention.contains("guest/kraftos/sdk/c/src"))
+        assertTrue(producerConvention.contains("val compileK16CSdkLibc ="))
+        assertTrue(producerConvention.contains("tasks.register(\"compileK16CSdkLibc\")"))
+        assertTrue(producerConvention.contains("allocator_test.c"))
+        assertTrue(producerConvention.contains("string_test.c"))
+        assertTrue(producerConvention.contains("unistd_test.c"))
+        assertTrue(producerConvention.contains("k16CSdkIncludeSource"))
+        assertFalse(producerConvention.contains("from(\"guest/kraftos/libc/include\")"))
+        assertTrue(rootBuildScript.contains(":v1_21_1-neoforge:verifyK16CSdkFoundation"))
+        listOf(
+            "assert.h",
+            "ctype.h",
+            "errno.h",
+            "fcntl.h",
+            "limits.h",
+            "setjmp.h",
+            "stdarg.h",
+            "stdbool.h",
+            "stddef.h",
+            "stdint.h",
+            "stdio.h",
+            "stdlib.h",
+            "string.h",
+            "time.h",
+            "unistd.h",
+            "kraft/syscalls.h",
+            "sys/stat.h",
+            "sys/time.h",
+            "sys/types.h",
+        ).forEach { header ->
+            assertTrue(sdkInclude.resolve(header).exists(), header)
+        }
+    }
+
+    @Test
     fun tinyCcK16BackendDocumentationStatesTheProvenBoundary() {
         val documentationPath = root.resolve("docs/toolchains/k16-tinycc-backend.md")
         assertTrue(documentationPath.exists())
