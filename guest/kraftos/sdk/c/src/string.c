@@ -117,6 +117,20 @@ char *strstr(const char *text, const char *needle) {
   return NULL;
 }
 
+char *strcat(char *destination, const char *source) {
+  char *end = destination + strlen(destination);
+  strcpy(end, source);
+  return destination;
+}
+
+char *strpbrk(const char *text, const char *characters) {
+  while (*text != 0) {
+    if (strchr(characters, (unsigned char)*text) != NULL) return (char *)text;
+    text += 1;
+  }
+  return NULL;
+}
+
 char *strerror(int error) {
   switch (error) {
     case ENOENT: return "No such file or directory";
