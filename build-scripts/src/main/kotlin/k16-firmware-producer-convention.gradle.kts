@@ -1035,6 +1035,9 @@ val verifyK16CSdkFoundation =
                 "unistd_test.c",
                 "stdio_test.c",
                 "stdio_file_test.c",
+                "stdlib_test.c",
+                "time_test.c",
+                "paths_test.c",
             ).forEach { testName ->
                 val targetDirectory = outputDirectory.resolve(testName.removeSuffix(".c"))
                 targetDirectory.mkdirs()
@@ -1044,15 +1047,18 @@ val verifyK16CSdkFoundation =
                             "adddf3.c",
                             "ashldi3.c",
                             "comparedf2.c",
+                            "comparesf2.c",
                             "divdf3.c",
                             "fixunsdfdi.c",
                             "fixunsdfsi.c",
+                            "floatsidf.c",
                             "floatundidf.c",
                             "floatunsidf.c",
                             "fp_mode.c",
                             "lshrdi3.c",
                             "muldf3.c",
                             "subdf3.c",
+                            "truncdfsf2.c",
                             "udivdi3.c",
                             "umoddi3.c",
                         ).map { k16CompilerRtBuiltinsSource.file(it).asFile } +

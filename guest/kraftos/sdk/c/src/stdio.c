@@ -1,6 +1,8 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
+#include <kraft/fs.h>
+#include <kraft/syscalls.h>
 #include <stdarg.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -13,6 +15,19 @@
 #define FILE_WRITABLE 2u
 #define FILE_APPEND 4u
 #define FILE_UNBUFFERED 8u
+
+static void put_u32_le(unsigned char *output, unsigned int value) {
+  output[0] = (unsigned char)(value & 0xffu);
+  output[1] = (unsigned char)((value >> 8) & 0xffu);
+  output[2] = (unsigned char)((value >> 16) & 0xffu);
+  output[3] = (unsigned char)((value >> 24) & 0xffu);
+}
+
+static int syscall_status(int status) {
+  if (status >= 0) return status;
+  errno = -status;
+  return -1;
+}
 
 struct __kraft_file {
   int descriptor;
@@ -447,6 +462,33 @@ int fileno(FILE *stream) {
     return -1;
   }
   return stream->descriptor;
+}
+
+int remove(const char *path) { return unlink(path); }
+
+int rename(const char *old_path, const char *new_path) {
+  unsigned char request[KRAFT_MAX_RENAME_REQUEST_BYTES];
+  size_t old_length;
+  size_t new_length;
+  size_t request_length;
+  if (old_path == NULL || new_path == NULL) {
+    errno = EINVAL;
+    return -1;
+  }
+  old_length = strlen(old_path);
+  new_length = strlen(new_path);
+  if (old_length == 0 || new_length == 0 ||
+      old_length > KRAFT_MAX_PATH_BYTES || new_length > KRAFT_MAX_PATH_BYTES) {
+    errno = EINVAL;
+    return -1;
+  }
+  put_u32_le(request, KRAFT_RENAME_REQUEST_MAGIC);
+  put_u32_le(request + 4, (unsigned int)old_length);
+  put_u32_le(request + 8, (unsigned int)new_length);
+  memcpy(request + 12, old_path, old_length);
+  memcpy(request + 12 + old_length, new_path, new_length);
+  request_length = 12 + old_length + new_length;
+  return syscall_status(__kraft_sys_rename(request, (unsigned int)request_length));
 }
 
 int vfprintf(FILE *stream, const char *format, va_list arguments) {

@@ -724,6 +724,18 @@ All `/sdk` mutations are rejected before filesystem block I/O. The storage1
 controller's independent write protection remains a second boundary rather
 than a fallback mutation path.
 
+The compiler-owned KraftOS C SDK exposes these filesystem calls without a host
+filesystem path. `getcwd` returns the deterministic root directory `/` because
+KraftOS has no `chdir`; it requires caller storage and reports `EINVAL` for a
+null buffer or `ERANGE` when fewer than two bytes are available. `realpath`
+resolves both absolute and root-relative guest paths, removes repeated `/`, `.`
+and `..` components without traversing above root, enforces the 228-byte K16
+path limit, and verifies the result through `STAT`. A null result buffer causes
+an exact-sized allocation. `unlink` calls `UNLINK`, `remove` delegates to
+`unlink`, and `rename` sends the bounded `RNAM` request described above. All
+negative syscall statuses are returned through the corresponding positive C
+`errno`; these wrappers do not inspect or fall back to the host filesystem.
+
 These names describe the current ABI proof surface. They are not a complete OS
 service table, scheduler API, filesystem API, or process model.
 

@@ -10,6 +10,7 @@
 #define EINVAL 22
 #define EMFILE 24
 #define EROFS 30
+#define ERANGE 34
 #define ENOTEMPTY 39
 
 int *__errno_location(void);
