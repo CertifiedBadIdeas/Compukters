@@ -1,13 +1,15 @@
 use k16_vm::computer_machine::{
-    decode_snapshot_v1, ComputerCpuSnapshotRecord, ComputerMachine, ComputerMachineProfile,
-    COMPUTER_SNAPSHOT_V1_HEADER_SIZE, COMPUTER_SNAPSHOT_V1_K16_CPU_RECORD_SIZE,
-    COMPUTER_SNAPSHOT_V1_MAGIC,
+    decode_snapshot_v1, ComputerCpuSnapshotRecord, ComputerDeviceSnapshotRecord, ComputerMachine,
+    ComputerMachineProfile, COMPUTER_SNAPSHOT_V1_HEADER_SIZE,
+    COMPUTER_SNAPSHOT_V1_K16_CPU_RECORD_SIZE, COMPUTER_SNAPSHOT_V1_MAGIC,
 };
 use k16_vm::k16::{
     K16Signal, K16_CSR_INTERRUPT_ENABLE, K16_CSR_INTERRUPT_MASK, K16_CSR_TRAP_VALUE,
     K16_CSR_TRAP_VECTOR, K16_INTERRUPT_SOURCE_TIMER0, K16_STACK_POINTER_REGISTER,
 };
 use k16_vm::mmu::MmuMapFlags;
+use std::fs;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 const CONTROL_DEVICE_RECORD_SIZE: usize = 28;
 const EMPTY_DEBUG_DEVICE_RECORD_SIZE: usize = 8;
@@ -558,6 +560,102 @@ fn computer_machine_snapshot_v1_restores_storage0_controller_state() {
 }
 
 #[test]
+fn computer_machine_snapshot_v1_preserves_independent_storage1_controller_state() {
+    let storage0_path = temp_volume_path("snapshot-storage0");
+    let storage1_path = temp_volume_path("snapshot-storage1");
+    write_k16_volume(&storage0_path, &[0x5A; 1024]);
+    write_k16_volume(&storage1_path, &[0xA5; 1024]);
+    let profile = ComputerMachineProfile::computer_v1_with_storage_paths(
+        2048,
+        &storage0_path,
+        Some(storage1_path.clone()),
+    );
+    let mut machine = ComputerMachine::from_profile(profile.clone()).expect("machine creates");
+    machine
+        .bus_store_i32(ComputerMachine::STORAGE0_LBA_LOW, 11)
+        .unwrap();
+    machine
+        .bus_store_i32(ComputerMachine::STORAGE1_LBA_LOW, 29)
+        .unwrap();
+    for _ in 0..11 {
+        machine
+            .bus_store_i32(
+                ComputerMachine::STORAGE0_COMMAND,
+                k16_vm::computer_abi::STORAGE_COMMAND_NOP,
+            )
+            .unwrap();
+    }
+    for _ in 0..29 {
+        machine
+            .bus_store_i32(
+                ComputerMachine::STORAGE1_COMMAND,
+                k16_vm::computer_abi::STORAGE_COMMAND_NOP,
+            )
+            .unwrap();
+    }
+
+    let snapshot = machine.snapshot_v1().expect("snapshot encodes");
+    let decoded = decode_snapshot_v1(&snapshot).expect("snapshot decodes");
+    let storage1_payload = snapshot_device_payload(&snapshot, 10);
+
+    assert_eq!(storage1_payload.len(), 36);
+    assert!(decoded.devices.iter().any(|record| matches!(
+        record,
+        ComputerDeviceSnapshotRecord::Storage0 {
+            lba_low: 11,
+            sequence: 11,
+            ..
+        }
+    )));
+    assert!(decoded.devices.iter().any(|record| matches!(
+        record,
+        ComputerDeviceSnapshotRecord::Storage1 {
+            lba_low: 29,
+            sequence: 29,
+            ..
+        }
+    )));
+    assert!(!snapshot
+        .windows(b"K16VOL".len())
+        .any(|window| window == b"K16VOL"));
+
+    let topology_error = match ComputerMachine::restore_snapshot_v1(
+        ComputerMachineProfile::computer_v1_with_storage0_path(2048, &storage0_path),
+        &snapshot,
+    ) {
+        Ok(_) => panic!("storage1 snapshot requires matching profile topology"),
+        Err(error) => error,
+    };
+    assert_eq!(
+        topology_error,
+        "ComputerMachine snapshot contains storage1 device state but profile has no storage1 device"
+    );
+
+    let restored = ComputerMachine::restore_snapshot_v1(profile, &snapshot).expect("restores");
+    assert_eq!(
+        restored
+            .bus_load_i32(ComputerMachine::STORAGE0_SEQUENCE_LOW)
+            .unwrap(),
+        11
+    );
+    assert_eq!(
+        restored
+            .bus_load_i32(ComputerMachine::STORAGE1_SEQUENCE_LOW)
+            .unwrap(),
+        29
+    );
+    assert_eq!(
+        restored
+            .bus_load_i32(ComputerMachine::STORAGE1_MEDIA_STATUS)
+            .unwrap(),
+        k16_vm::computer_abi::STORAGE_MEDIA_READ_ONLY
+    );
+
+    fs::remove_file(storage0_path).unwrap();
+    fs::remove_file(storage1_path).unwrap();
+}
+
+#[test]
 fn computer_machine_snapshot_v1_restores_timer0_game_ticks() {
     let mut machine = ComputerMachine::new(1024).expect("machine creates");
     machine.advance_game_tick();
@@ -802,4 +900,44 @@ fn snapshot_with_timer0_game_ticks(snapshot: &[u8], game_ticks: u64) -> Vec<u8> 
         offset = payload_offset + payload_size;
     }
     panic!("K16SNAP did not contain a timer0 device record");
+}
+
+fn snapshot_device_payload(snapshot: &[u8], target_kind: u32) -> &[u8] {
+    let header_size = u16::from_le_bytes(snapshot[0x0a..0x0c].try_into().unwrap()) as usize;
+    let ram_size = u64::from_le_bytes(snapshot[0x10..0x18].try_into().unwrap()) as usize;
+    let cpu_count = u32::from_le_bytes(snapshot[0x18..0x1c].try_into().unwrap()) as usize;
+    let device_count = u32::from_le_bytes(snapshot[0x20..0x24].try_into().unwrap()) as usize;
+    let mut offset = header_size + ram_size + cpu_count * COMPUTER_SNAPSHOT_V1_K16_CPU_RECORD_SIZE;
+    for _ in 0..device_count {
+        let kind = u32::from_le_bytes(snapshot[offset..offset + 4].try_into().unwrap());
+        let payload_size =
+            u32::from_le_bytes(snapshot[offset + 4..offset + 8].try_into().unwrap()) as usize;
+        let payload_start = offset + 8;
+        let payload_end = payload_start + payload_size;
+        if kind == target_kind {
+            return &snapshot[payload_start..payload_end];
+        }
+        offset = payload_end;
+    }
+    panic!("K16SNAP did not contain device kind {target_kind}");
+}
+
+fn write_k16_volume(path: &std::path::Path, payload: &[u8]) {
+    let mut bytes = Vec::with_capacity(16 + payload.len());
+    bytes.extend_from_slice(b"K16VOL");
+    bytes.extend_from_slice(&1_u16.to_le_bytes());
+    bytes.extend_from_slice(&(payload.len() as u64).to_le_bytes());
+    bytes.extend_from_slice(payload);
+    fs::write(path, bytes).unwrap();
+}
+
+fn temp_volume_path(name: &str) -> std::path::PathBuf {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    std::env::temp_dir().join(format!(
+        "k16-vm-{name}-{}-{nanos}.k16vol",
+        std::process::id(),
+    ))
 }
