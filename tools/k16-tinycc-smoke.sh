@@ -196,6 +196,27 @@ link_and_run "relocations-tinycc-clang" 42 \
 link_and_run "relocations-clang-tinycc" 42 \
     "$WORK_DIR/relocations-clang.o" "$WORK_DIR/external-add-tinycc.o"
 
+compile_tinycc "$FIXTURES/varargs-caller.c" "$WORK_DIR/varargs-caller-tinycc.o"
+compile_tinycc "$FIXTURES/varargs-callee.c" "$WORK_DIR/varargs-callee-tinycc.o"
+compile_clang "$FIXTURES/varargs-caller.c" "$WORK_DIR/varargs-caller-clang.o"
+compile_clang "$FIXTURES/varargs-callee.c" "$WORK_DIR/varargs-callee-clang.o"
+inspect_object "$WORK_DIR/varargs-caller-tinycc.o" \
+    "$WORK_DIR/varargs-caller-tinycc.txt"
+inspect_object "$WORK_DIR/varargs-callee-tinycc.o" \
+    "$WORK_DIR/varargs-callee-tinycc.txt"
+inspect_object "$WORK_DIR/varargs-caller-clang.o" \
+    "$WORK_DIR/varargs-caller-clang.txt"
+inspect_object "$WORK_DIR/varargs-callee-clang.o" \
+    "$WORK_DIR/varargs-callee-clang.txt"
+
+for caller in tinycc clang; do
+    for callee in tinycc clang; do
+        link_and_run "varargs-$caller-$callee" 42 \
+            "$WORK_DIR/varargs-caller-$caller.o" \
+            "$WORK_DIR/varargs-callee-$callee.o"
+    done
+done
+
 compile_tinycc "$FIXTURES/asm-label.c" "$WORK_DIR/asm-label.o"
 "$LLVM_READOBJ" -s "$WORK_DIR/asm-label.o" > "$WORK_DIR/asm-label.txt"
 require_contains "$WORK_DIR/asm-label.txt" "Name: kraft_sys_write"
