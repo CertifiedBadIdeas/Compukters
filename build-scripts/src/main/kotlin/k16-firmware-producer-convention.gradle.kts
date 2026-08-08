@@ -73,10 +73,13 @@ val k16CLibcStartupSource = rootProject.layout.projectDirectory.file("guest/kraf
 val k16CLibcSyscallSource = rootProject.layout.projectDirectory.file("guest/kraftos/libc/syscalls.c")
 val k16CSdkIncludeSource = rootProject.layout.projectDirectory.dir("guest/kraftos/sdk/c/include")
 val k16CSdkLibcSource = rootProject.layout.projectDirectory.dir("guest/kraftos/sdk/c/src")
+val k16CSdkArchRuntimeSource =
+    rootProject.layout.projectDirectory.file("guest/kraftos/sdk/c/arch/k16/setjmp.kasm")
 val k16CSdkTestSource = rootProject.layout.projectDirectory.dir("guest/kraftos/sdk/c/tests")
 val k16CompilerRtBuiltinsSource =
     rootProject.layout.projectDirectory.dir("toolchains/Compukter-Kraft-llvm/compiler-rt/lib/builtins")
 val generatedK16CSdkTarget = generatedK16GuestTarget.map { it.dir("c-sdk") }
+val k16CSdkArchRuntimeObject = generatedK16CSdkTarget.map { it.file("libc-objects/arch-k16/setjmp.o") }
 val k16CArchRuntimeSource = rootProject.layout.projectDirectory.file("guest/platform/k16/cpu-helpers.kasm")
 val k16CLibkraftSource = rootProject.layout.projectDirectory.file("guest/kraftos/lib/libkraft/libkraft.c")
 val k16CSystemInitSource = rootProject.layout.projectDirectory.file("guest/kraftos/userland/init/init.c")
@@ -953,6 +956,7 @@ val compileK16CSdkLibc =
         group = "k16"
         inputs.dir(k16CSdkIncludeSource)
         inputs.dir(k16CSdkLibcSource)
+        inputs.file(k16CSdkArchRuntimeSource)
         inputs.file(k16ClangExecutable)
         inputs.file(k16ToolchainConfig)
         inputsK16HostTools()
@@ -999,6 +1003,10 @@ val compileK16CSdkLibc =
                         "K16 C SDK libc compile failed with exit code $exitCode: ${command.joinToString(" ")}"
                     }
                 }
+            project.compileK16ArchRuntimeObject(
+                outputDirectory.resolve("arch-k16"),
+                k16CSdkArchRuntimeSource.asFile,
+            )
         }
     }
 
@@ -1008,6 +1016,7 @@ val verifyK16CSdkFoundation =
         group = "verification"
         inputs.dir(k16CSdkIncludeSource)
         inputs.dir(k16CSdkLibcSource)
+        inputs.file(k16CSdkArchRuntimeObject)
         inputs.dir(k16CSdkTestSource)
         inputs.dir(k16CompilerRtBuiltinsSource)
         inputs.file(k16ClangExecutable)
@@ -1022,6 +1031,7 @@ val verifyK16CSdkFoundation =
             val outputDirectory = generatedK16CSdkTarget.get().dir("foundation-tests").asFile
             project.delete(outputDirectory)
             outputDirectory.mkdirs()
+            val archRuntimeObject = k16CSdkArchRuntimeObject.get().asFile
             fun runCommand(stage: String, command: List<String>) {
                 val exitCode = ProcessBuilder(command).directory(projectDir).inheritIO().start().waitFor()
                 check(exitCode == 0) {
@@ -1038,6 +1048,7 @@ val verifyK16CSdkFoundation =
                 "stdlib_test.c",
                 "time_test.c",
                 "paths_test.c",
+                "setjmp_test.c",
             ).forEach { testName ->
                 val targetDirectory = outputDirectory.resolve(testName.removeSuffix(".c"))
                 targetDirectory.mkdirs()
@@ -1107,6 +1118,7 @@ val verifyK16CSdkFoundation =
                         add("--target")
                         add("program")
                         add(startup.absolutePath)
+                        add(archRuntimeObject.absolutePath)
                         objects.forEach { add(it.absolutePath) }
                         add("-o")
                         add(image.absolutePath)
