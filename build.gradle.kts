@@ -267,6 +267,12 @@ tasks.register("verifyK16Runtime") {
     dependsOn(":v1_21_1-neoforge:verifyK16Runtime")
 }
 
+tasks.register("verifyK16SdkMount") {
+    description = "Runs the K16 immutable SDK module mount verification slice."
+    group = "verification"
+    dependsOn(":v1_21_1-neoforge:verifyK16SdkMount")
+}
+
 tasks.register("verifyK16Profiling") {
     description = "Runs all dedicated K16 profiling verification workloads."
     group = "verification"
@@ -281,6 +287,7 @@ tasks.register("verifyLocalFull") {
     dependsOn("verifyLocalFast")
     dependsOn("verifyK16Firmware")
     dependsOn("verifyK16Runtime")
+    dependsOn("verifyK16SdkMount")
     dependsOn(testK16HostVmRust)
     dependsOn(testK16HostToolsRust)
 }

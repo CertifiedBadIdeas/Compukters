@@ -21,8 +21,11 @@ package ru.lazyhat.compukterkraft.impl.computer.block
 
 import net.minecraft.core.BlockPos
 import net.minecraft.server.level.ServerLevel
+import net.minecraft.world.level.storage.LevelResource
 import ru.lazyhat.compukterkraft.common.computer.block.AbstractComputerBlockEntity
 import ru.lazyhat.compukterkraft.common.computer.context.ServerContext
+import ru.lazyhat.compukterkraft.common.notebook.block.NotebookBlockEntity
+import java.nio.file.Path
 
 object ComputerGameTestEnvironment {
     fun computerAt(
@@ -31,6 +34,14 @@ object ComputerGameTestEnvironment {
     ): AbstractComputerBlockEntity =
         requireNotNull(level.getBlockEntity(pos) as? AbstractComputerBlockEntity) {
             "Expected computer block entity at $pos"
+        }
+
+    fun notebookAt(
+        level: ServerLevel,
+        pos: BlockPos,
+    ): NotebookBlockEntity =
+        requireNotNull(level.getBlockEntity(pos) as? NotebookBlockEntity) {
+            "Expected notebook block entity at $pos"
         }
 
     fun serverComputerId(
@@ -49,4 +60,22 @@ object ComputerGameTestEnvironment {
         val id = computer.computerID ?: return false
         return ServerContext.get(id) != null
     }
+
+    fun storage0Path(
+        level: ServerLevel,
+        computerId: Int,
+    ): Path = computerDirectory(level, computerId).resolve("volumes/storage0.kv")
+
+    fun runtimeSnapshotPath(
+        level: ServerLevel,
+        computerId: Int,
+    ): Path = computerDirectory(level, computerId).resolve("runtime.ksnap")
+
+    private fun computerDirectory(
+        level: ServerLevel,
+        computerId: Int,
+    ): Path =
+        level.server
+            .getWorldPath(LevelResource.ROOT)
+            .resolve("compukterkraft/computers/$computerId")
 }

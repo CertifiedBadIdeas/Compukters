@@ -24,21 +24,28 @@ import net.minecraft.gametest.framework.GameTest
 import net.minecraft.gametest.framework.GameTestHelper
 import net.minecraft.world.entity.EntityType
 import net.minecraft.world.item.ItemStack
+import net.minecraft.world.item.Items
 import net.minecraft.world.level.GameType
 import net.minecraft.world.level.block.entity.BlockEntity
 import net.neoforged.neoforge.gametest.GameTestHolder
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate
 import ru.lazyhat.compukterkraft.common.computer.block.AbstractComputerBlockEntity
+import ru.lazyhat.compukterkraft.common.computer.module.sdkArtifactIdentity
 import ru.lazyhat.compukterkraft.common.notebook.item.NotebookItem
 import ru.lazyhat.compukterkraft.common.utils.computerDataTagCopy
 import ru.lazyhat.compukterkraft.common.utils.computerID
 import ru.lazyhat.compukterkraft.common.utils.computerLabel
 import ru.lazyhat.compukterkraft.common.utils.runtimeSnapshot
 import ru.lazyhat.compukterkraft.core.MOD_ID
+import ru.lazyhat.compukterkraft.core.device.DeviceEvents
+import ru.lazyhat.compukterkraft.core.device.input.KeyInputEvent
+import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeDevice
 import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeDeviceFailureState
 import ru.lazyhat.compukterkraft.impl.ModRegistry
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.nio.file.Files
+import java.security.MessageDigest
 
 @GameTestHolder(MOD_ID)
 @PrefixGameTestTemplate(false)
@@ -85,6 +92,85 @@ class ComputerBlockGameTest {
             helper.assertTrue(
                 ComputerGameTestEnvironment.hasRegisteredServerComputer(helper.level, absolutePos),
                 "Expected placed computer block to register a server computer after ticking",
+            )
+            helper.succeed()
+        }
+    }
+
+    @GameTest(template = "computer_platform", templateNamespace = MOD_ID)
+    fun sdkModuleBayControlsColdBootMountAndInvalidatesSnapshot(helper: GameTestHelper) {
+        val pos = BlockPos(1, 2, 1)
+        val absolutePos = helper.absolutePos(pos)
+        placeComputer(helper, pos)
+
+        helper.runAfterDelay(5L) {
+            val notebook = ComputerGameTestEnvironment.notebookAt(helper.level, absolutePos)
+            val module = ItemStack(Items.PAPER).apply { sdkArtifactIdentity = SDK_FIXTURE_IDENTITY }
+            helper.assertTrue(
+                notebook.sdkModuleBay.setFromPlayer(module),
+                "Expected powered-off notebook to accept the known SDK fixture module",
+            )
+
+            val device = notebook.getOrCreateRuntimeDevice()
+            device.turnOn()
+            waitForSavedTerminalSnapshot(helper, notebook, "initial shell prompt with SDK module") { terminal ->
+                terminal.contains("K16> ")
+            }
+            dispatchText(device, "cat /sdk/fixture.txt\n")
+            waitForSavedTerminalSnapshot(helper, notebook, "SDK fixture contents") { terminal ->
+                commandResultPresent(terminal, "cat /sdk/fixture.txt", "sdk fixture")
+            }
+
+            val computerId = requireNotNull(notebook.computerID)
+            val storage0Path = ComputerGameTestEnvironment.storage0Path(helper.level, computerId)
+            val storage0DigestBefore = sha256(Files.readAllBytes(storage0Path))
+            val snapshotPath = ComputerGameTestEnvironment.runtimeSnapshotPath(helper.level, computerId)
+            val snapshotBackupPath = snapshotPath.resolveSibling("${snapshotPath.fileName}.bak")
+            helper.assertTrue(Files.isRegularFile(snapshotPath), "Expected running notebook snapshot at $snapshotPath")
+            helper.assertTrue(
+                Files.isRegularFile(snapshotBackupPath),
+                "Expected repeated running snapshot saves to preserve a backup at $snapshotBackupPath",
+            )
+
+            helper.assertTrue(
+                notebook.sdkModuleBay.removeItemNoUpdate(0).isEmpty,
+                "Expected SDK module removal to be rejected while the VM is running",
+            )
+            helper.assertTrue(
+                notebook.sdkModuleBay.installedArtifactIdentity == SDK_FIXTURE_IDENTITY,
+                "Expected rejected removal to preserve the installed SDK module",
+            )
+
+            device.shutdown()
+            val removedModule = notebook.sdkModuleBay.removeItemNoUpdate(0)
+            helper.assertTrue(
+                removedModule.sdkArtifactIdentity == SDK_FIXTURE_IDENTITY,
+                "Expected powered-off notebook to return the installed SDK module",
+            )
+            helper.assertTrue(
+                notebook.sdkModuleBay.installedArtifactIdentity == null,
+                "Expected powered-off SDK module bay to become empty",
+            )
+            helper.assertFalse(Files.exists(snapshotPath), "Expected hardware mutation to delete $snapshotPath")
+            helper.assertFalse(Files.exists(snapshotBackupPath), "Expected hardware mutation to delete $snapshotBackupPath")
+
+            device.turnOn()
+            waitForSavedTerminalSnapshot(helper, notebook, "fresh shell prompt without SDK module") { terminal ->
+                terminal.contains("K16> ")
+            }
+            dispatchText(device, "cat /sdk/fixture.txt\n")
+            waitForSavedTerminalSnapshot(helper, notebook, "missing SDK mount after module removal") { terminal ->
+                commandResultPresent(
+                    terminal,
+                    "cat /sdk/fixture.txt",
+                    "cat: open failed: /sdk/fixture.txt",
+                )
+            }
+            device.shutdown()
+
+            helper.assertTrue(
+                sha256(Files.readAllBytes(storage0Path)).contentEquals(storage0DigestBefore),
+                "Expected SDK module removal and cold restart not to replace or mutate storage0",
             )
             helper.succeed()
         }
@@ -241,6 +327,26 @@ class ComputerBlockGameTest {
         error("Expected $description in K16 terminal snapshot; terminal: $lastTerminal")
     }
 
+    private fun dispatchText(
+        device: RuntimeDevice,
+        text: String,
+    ) {
+        for (byte in text.encodeToByteArray()) {
+            DeviceEvents.dispatch(device, KeyInputEvent.Character(byte))
+        }
+    }
+
+    private fun commandResultPresent(
+        terminal: String,
+        command: String,
+        expectedOutput: String,
+    ): Boolean {
+        val commandIndex = terminal.lastIndexOf("K16> $command")
+        val outputIndex = terminal.indexOf(expectedOutput, startIndex = commandIndex + command.length)
+        val returnedPromptIndex = terminal.indexOf("K16> ", startIndex = outputIndex + expectedOutput.length)
+        return commandIndex >= 0 && outputIndex > commandIndex && returnedPromptIndex > outputIndex
+    }
+
     private fun terminalText(snapshot: ByteArray): String =
         snapshotRamBytes(snapshot, start = K16_TERMINAL_CELLS_ADDR, size = K16_TERMINAL_ROWS * K16_TERMINAL_COLUMNS)
             .map { byte -> if (byte in 0x20..0x7e) byte.toInt().toChar() else ' ' }
@@ -258,8 +364,11 @@ class ComputerBlockGameTest {
         require(start >= 0 && size >= 0 && start + size <= ramSize)
         return snapshot.copyOfRange(headerSize + start, headerSize + start + size)
     }
+
+    private fun sha256(bytes: ByteArray): ByteArray = MessageDigest.getInstance("SHA-256").digest(bytes)
 }
 
+private const val SDK_FIXTURE_IDENTITY = "sdk_fixture_v1"
 private const val K16_TERMINAL_CELLS_ADDR = 0x3000
 private const val K16_TERMINAL_COLUMNS = 64
 private const val K16_TERMINAL_ROWS = 25
