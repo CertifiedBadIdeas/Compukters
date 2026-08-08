@@ -213,6 +213,89 @@ class K16TinyCcBuildScriptTest {
     }
 
     @Test
+    fun cSdkCompilerRuntimeSelectionIsPinnedValidatedAndPartitioned() {
+        val producerConvention =
+            root
+                .resolve("build-scripts/src/main/kotlin/k16-firmware-producer-convention.gradle.kts")
+                .readText()
+        val manifest = root.resolve("guest/kraftos/sdk/c/compiler-rt-sources.txt")
+        val foundationTaskBody =
+            producerConvention
+                .substringAfter("val verifyK16CSdkFoundation =")
+                .substringBefore("val compileK16SystemInit =")
+
+        assertTrue(manifest.exists())
+        val manifestEntries = manifest.readText().lineSequence().filter(String::isNotBlank).toList()
+        assertTrue(manifestEntries.size == 44)
+        assertTrue(manifestEntries.contains("ashrdi3.c"))
+        assertTrue(manifestEntries.contains("muldi3.c"))
+        assertTrue(producerConvention.contains("val k16CompilerRtManifestSource ="))
+        assertTrue(producerConvention.contains("val k16SoftFloatCompilerRtSources ="))
+        assertTrue(producerConvention.contains("val k16NonFloatingCompilerRtSources ="))
+        assertTrue(producerConvention.contains("Compiler runtime manifest must be lexicographically sorted"))
+        assertTrue(producerConvention.contains("Compiler runtime manifest contains duplicate sources"))
+        assertTrue(producerConvention.contains("Compiler runtime source must be a relative .c path"))
+        assertTrue(producerConvention.contains("Compiler runtime source is missing from the pinned LLVM checkout"))
+        assertTrue(producerConvention.contains("Compiler runtime source is not classified exactly once"))
+        assertTrue(producerConvention.contains("toolchains/Compukter-Kraft-llvm/compiler-rt/LICENSE.TXT"))
+        assertTrue(foundationTaskBody.contains("dependsOn(buildK16CSdkArchives)"))
+        assertFalse(foundationTaskBody.contains("\"adddf3.c\""))
+        assertFalse(foundationTaskBody.contains("tools/fixtures/k16-tinycc/compiler-runtime.c"))
+    }
+
+    @Test
+    fun cSdkRuntimeArchivesAreDeterministicAndVerified() {
+        val producerConvention =
+            root
+                .resolve("build-scripts/src/main/kotlin/k16-firmware-producer-convention.gradle.kts")
+                .readText()
+        val taskBody =
+            producerConvention
+                .substringAfter("val buildK16CSdkArchives =")
+                .substringBefore("val verifyK16CSdkFoundation =")
+
+        assertTrue(taskBody.contains("tasks.register(\"buildK16CSdkArchives\")"))
+        assertTrue(taskBody.contains("inputs.dir(k16CSdkIncludeSource)"))
+        assertTrue(taskBody.contains("inputs.file(k16CLibkraftSource)"))
+        assertTrue(taskBody.contains("bin/llvm-ar"))
+        assertTrue(taskBody.contains("bin/llvm-nm"))
+        assertTrue(taskBody.contains("rcsD"))
+        assertTrue(taskBody.contains("lib/libc.a"))
+        assertTrue(taskBody.contains("lib/libsoftfloat.a"))
+        assertTrue(taskBody.contains("lib/libcompiler_rt.a"))
+        assertTrue(taskBody.contains("lib/crt0.o"))
+        assertTrue(taskBody.contains("relativeTo"))
+        assertTrue(taskBody.contains("substringBeforeLast('.')"))
+        assertTrue(taskBody.contains("Archive member order mismatch"))
+        assertTrue(taskBody.contains("Duplicate compiler runtime definition"))
+        assertTrue(taskBody.contains("C SDK libc archive has no defined symbols"))
+        assertTrue(taskBody.contains("libkraft-validation.o"))
+        assertTrue(taskBody.contains("libkraftDefinitions"))
+        assertTrue(taskBody.contains("Unexpected unresolved C SDK archive symbols"))
+        assertTrue(taskBody.contains("share/licenses/compiler-rt/LICENSE.TXT"))
+
+        val foundationTaskBody =
+            producerConvention
+                .substringAfter("val verifyK16CSdkFoundation =")
+                .substringBefore("val compileK16SystemInit =")
+        assertTrue(foundationTaskBody.contains("lib/libc.a"))
+        assertTrue(foundationTaskBody.contains("lib/libsoftfloat.a"))
+        assertTrue(foundationTaskBody.contains("lib/libcompiler_rt.a"))
+        assertFalse(foundationTaskBody.contains("k16CSdkLibcSource.asFileTree"))
+        assertFalse(foundationTaskBody.contains("archRuntimeObject"))
+        assertFalse(foundationTaskBody.contains("compilerRuntimeObjects"))
+
+        val libkraftSource = root.resolve("guest/kraftos/lib/libkraft/libkraft.c").readText()
+        assertTrue(libkraftSource.contains("#define K16_SYSCALL_SEEK 17u"))
+        assertTrue(libkraftSource.contains("int kraft_sys_seek(unsigned int fd, int offset, unsigned int origin)"))
+        assertTrue(
+            libkraftSource.contains(
+                "__k16_syscall3(K16_SYSCALL_SEEK, fd, (unsigned int)offset, origin)",
+            ),
+        )
+    }
+
+    @Test
     fun tinyCcK16BackendDocumentationStatesTheProvenBoundary() {
         val documentationPath = root.resolve("docs/toolchains/k16-tinycc-backend.md")
         assertTrue(documentationPath.exists())

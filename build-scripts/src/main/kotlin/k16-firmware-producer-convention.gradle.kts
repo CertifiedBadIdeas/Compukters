@@ -76,8 +76,64 @@ val k16CSdkLibcSource = rootProject.layout.projectDirectory.dir("guest/kraftos/s
 val k16CSdkArchRuntimeSource =
     rootProject.layout.projectDirectory.file("guest/kraftos/sdk/c/arch/k16/setjmp.kasm")
 val k16CSdkTestSource = rootProject.layout.projectDirectory.dir("guest/kraftos/sdk/c/tests")
+val k16CompilerRtManifestSource =
+    rootProject.layout.projectDirectory.file("guest/kraftos/sdk/c/compiler-rt-sources.txt")
 val k16CompilerRtBuiltinsSource =
     rootProject.layout.projectDirectory.dir("toolchains/Compukter-Kraft-llvm/compiler-rt/lib/builtins")
+val k16CompilerRtLicenseSource =
+    rootProject.layout.projectDirectory.file("toolchains/Compukter-Kraft-llvm/compiler-rt/LICENSE.TXT")
+val k16LlvmArExecutable = k16LlvmBuildRoot.file("bin/llvm-ar")
+val k16LlvmNmExecutable = k16LlvmBuildRoot.file("bin/llvm-nm")
+val k16SoftFloatCompilerRtSources =
+    setOf(
+        "adddf3.c",
+        "addsf3.c",
+        "comparedf2.c",
+        "comparesf2.c",
+        "divdf3.c",
+        "divsf3.c",
+        "extendsfdf2.c",
+        "fixdfdi.c",
+        "fixdfsi.c",
+        "fixsfdi.c",
+        "fixsfsi.c",
+        "fixunsdfdi.c",
+        "fixunsdfsi.c",
+        "fixunssfdi.c",
+        "fixunssfsi.c",
+        "floatdidf.c",
+        "floatdisf.c",
+        "floatsidf.c",
+        "floatsisf.c",
+        "floatundidf.c",
+        "floatundisf.c",
+        "floatunsidf.c",
+        "floatunsisf.c",
+        "fp_mode.c",
+        "muldf3.c",
+        "mulsf3.c",
+        "negdf2.c",
+        "negsf2.c",
+        "subdf3.c",
+        "subsf3.c",
+        "truncdfsf2.c",
+    )
+val k16NonFloatingCompilerRtSources =
+    setOf(
+        "ashldi3.c",
+        "ashrdi3.c",
+        "divdi3.c",
+        "divsi3.c",
+        "lshrdi3.c",
+        "moddi3.c",
+        "modsi3.c",
+        "muldi3.c",
+        "udivdi3.c",
+        "udivmoddi4.c",
+        "udivsi3.c",
+        "umoddi3.c",
+        "umodsi3.c",
+    )
 val generatedK16CSdkTarget = generatedK16GuestTarget.map { it.dir("c-sdk") }
 val k16CSdkArchRuntimeObject = generatedK16CSdkTarget.map { it.file("libc-objects/arch-k16/setjmp.o") }
 val k16CArchRuntimeSource = rootProject.layout.projectDirectory.file("guest/platform/k16/cpu-helpers.kasm")
@@ -972,11 +1028,13 @@ val compileK16CSdkLibc =
             project.delete(outputDirectory)
             outputDirectory.mkdirs()
             k16CSdkLibcSource.asFileTree
-                .matching { include("*.c") }
+                .matching { include("**/*.c") }
                 .files
-                .sortedBy(File::getName)
+                .sortedBy { it.relativeTo(k16CSdkLibcSource.asFile).invariantSeparatorsPath }
                 .forEach { source ->
-                    val output = outputDirectory.resolve("${source.nameWithoutExtension}.o")
+                    val relativeSource = source.relativeTo(k16CSdkLibcSource.asFile).invariantSeparatorsPath
+                    val output = outputDirectory.resolve(relativeSource.removeSuffix(".c") + ".o")
+                    output.parentFile.mkdirs()
                     val command =
                         listOf(
                             clang.absolutePath,
@@ -1010,20 +1068,319 @@ val compileK16CSdkLibc =
         }
     }
 
+val buildK16CSdkArchives =
+    tasks.register("buildK16CSdkArchives") {
+        description = "Builds deterministic libc and compiler-runtime archives for the KraftOS C SDK."
+        group = "k16"
+        inputs.dir(k16CSdkIncludeSource)
+        inputs.dir(k16CSdkLibcSource)
+        inputs.file(k16CSdkArchRuntimeObject)
+        inputs.file(k16CLibcStartupSource)
+        inputs.file(k16CLibkraftSource)
+        inputs.file(k16CompilerRtManifestSource)
+        inputs.dir(k16CompilerRtBuiltinsSource)
+        inputs.file(k16CompilerRtLicenseSource)
+        inputs.file(k16ClangExecutable)
+        inputs.file(k16LlvmArExecutable)
+        inputs.file(k16LlvmNmExecutable)
+        inputsK16HostTools()
+        outputs.dir(generatedK16CSdkTarget.map { it.dir("compiler-rt-objects") })
+        outputs.file(generatedK16CSdkTarget.map { it.file("lib/crt0.o") })
+        outputs.file(generatedK16CSdkTarget.map { it.file("lib/libc.a") })
+        outputs.file(generatedK16CSdkTarget.map { it.file("lib/libsoftfloat.a") })
+        outputs.file(generatedK16CSdkTarget.map { it.file("lib/libcompiler_rt.a") })
+        outputs.file(
+            generatedK16CSdkTarget.map {
+                it.file("share/licenses/compiler-rt/LICENSE.TXT")
+            },
+        )
+        dependsOn(compileK16CSdkLibc)
+
+        doLast {
+            val clang = k16ClangExecutable.asFile
+            val llvmAr = k16LlvmBuildRoot.file("bin/llvm-ar").asFile
+            val llvmNm = k16LlvmBuildRoot.file("bin/llvm-nm").asFile
+            listOf(clang, llvmAr, llvmNm).forEach { executable ->
+                check(executable.isFile && executable.canExecute()) {
+                    "Required K16 LLVM executable is missing or not executable: $executable"
+                }
+            }
+
+            fun runCommand(stage: String, command: List<String>) {
+                val exitCode = ProcessBuilder(command).directory(projectDir).inheritIO().start().waitFor()
+                check(exitCode == 0) {
+                    "K16 C SDK archive $stage failed with exit code $exitCode: ${command.joinToString(" ")}"
+                }
+            }
+
+            fun captureCommand(stage: String, command: List<String>): String {
+                val process =
+                    ProcessBuilder(command)
+                        .directory(projectDir)
+                        .redirectErrorStream(true)
+                        .start()
+                val output = process.inputStream.bufferedReader().use { it.readText() }
+                val exitCode = process.waitFor()
+                check(exitCode == 0) {
+                    "K16 C SDK archive $stage failed with exit code $exitCode: " +
+                        "${command.joinToString(" ")}\n$output"
+                }
+                return output
+            }
+
+            fun externalSymbols(objects: List<File>, definedOnly: Boolean): Set<String> {
+                if (objects.isEmpty()) {
+                    return emptySet()
+                }
+                val command =
+                    buildList {
+                        add(llvmNm.absolutePath)
+                        add(if (definedOnly) "--defined-only" else "--undefined-only")
+                        add("--extern-only")
+                        add("--format=posix")
+                        objects.forEach { add(it.absolutePath) }
+                    }
+                return captureCommand("symbol inspection", command)
+                    .lineSequence()
+                    .map(String::trim)
+                    .filter { it.isNotEmpty() && !it.endsWith(":") }
+                    .map { it.substringBefore(' ') }
+                    .toSet()
+            }
+
+            val manifestEntries =
+                k16CompilerRtManifestSource.asFile
+                    .readLines()
+                    .filter(String::isNotBlank)
+            check(manifestEntries.isNotEmpty()) {
+                "Compiler runtime manifest must not be empty"
+            }
+            check(manifestEntries == manifestEntries.sorted()) {
+                "Compiler runtime manifest must be lexicographically sorted"
+            }
+            check(manifestEntries.size == manifestEntries.toSet().size) {
+                "Compiler runtime manifest contains duplicate sources"
+            }
+            val builtinsRoot = k16CompilerRtBuiltinsSource.asFile.toPath().toAbsolutePath().normalize()
+            manifestEntries.forEach { entry ->
+                val relativePath = java.nio.file.Path.of(entry)
+                check(
+                    entry.endsWith(".c") &&
+                        !entry.contains('\\') &&
+                        !relativePath.isAbsolute &&
+                        relativePath.normalize().toString().replace(File.separatorChar, '/') == entry,
+                ) {
+                    "Compiler runtime source must be a relative .c path: $entry"
+                }
+                val source = builtinsRoot.resolve(relativePath).normalize()
+                check(source.startsWith(builtinsRoot) && Files.isRegularFile(source)) {
+                    "Compiler runtime source is missing from the pinned LLVM checkout: $entry"
+                }
+                val classifications =
+                    listOf(k16SoftFloatCompilerRtSources, k16NonFloatingCompilerRtSources)
+                        .count { entry in it }
+                check(classifications == 1) {
+                    "Compiler runtime source is not classified exactly once: $entry"
+                }
+            }
+            val selectedSources = k16SoftFloatCompilerRtSources + k16NonFloatingCompilerRtSources
+            check(selectedSources == manifestEntries.toSet()) {
+                val outsideManifest = selectedSources - manifestEntries.toSet()
+                val unclassified = manifestEntries.toSet() - selectedSources
+                "Compiler runtime selection must exactly match the manifest; " +
+                    "outside manifest=$outsideManifest, unclassified=$unclassified"
+            }
+
+            val sdkTarget = generatedK16CSdkTarget.get().asFile
+            val runtimeObjectsDirectory = sdkTarget.resolve("compiler-rt-objects")
+            val archiveInputsDirectory = sdkTarget.resolve("archive-inputs")
+            val libDirectory = sdkTarget.resolve("lib")
+            project.delete(runtimeObjectsDirectory, archiveInputsDirectory)
+            runtimeObjectsDirectory.mkdirs()
+            archiveInputsDirectory.mkdirs()
+            libDirectory.mkdirs()
+
+            fun stableObjectName(relativePath: String): String =
+                relativePath.substringBeforeLast('.').replace('/', '-') + ".o"
+
+            fun compileC(source: File, output: File, includeBuiltins: Boolean) {
+                output.parentFile.mkdirs()
+                runCommand(
+                    "compile ${source.name}",
+                    buildList {
+                        add(clang.absolutePath)
+                        add("--target=k16")
+                        add("-ffreestanding")
+                        add("-fno-builtin")
+                        add("-fno-stack-protector")
+                        add("-nostdlib")
+                        add("-Oz")
+                        add("-I")
+                        add(k16CSdkIncludeSource.asFile.absolutePath)
+                        if (includeBuiltins) {
+                            add("-I")
+                            add(k16CompilerRtBuiltinsSource.asFile.absolutePath)
+                        }
+                        add("-c")
+                        add(source.absolutePath)
+                        add("-o")
+                        add(output.absolutePath)
+                    },
+                )
+            }
+
+            val runtimeObjects =
+                manifestEntries.associateWith { entry ->
+                    val archiveClass =
+                        if (entry in k16SoftFloatCompilerRtSources) {
+                            "softfloat"
+                        } else {
+                            "compiler-rt"
+                        }
+                    val output = runtimeObjectsDirectory.resolve("$archiveClass/${stableObjectName(entry)}")
+                    compileC(k16CompilerRtBuiltinsSource.asFile.resolve(entry), output, includeBuiltins = true)
+                    output
+                }
+            val libkraftValidationObject = runtimeObjectsDirectory.resolve("validation/libkraft-validation.o")
+            compileC(k16CLibkraftSource.asFile, libkraftValidationObject, includeBuiltins = false)
+
+            val libcObjectMembers =
+                k16CSdkLibcSource.asFileTree
+                    .matching { include("**/*.c") }
+                    .files
+                    .map { source ->
+                        val relativeSource = source.relativeTo(k16CSdkLibcSource.asFile).invariantSeparatorsPath
+                        val compiledObject =
+                            generatedK16CSdkTarget
+                                .get()
+                                .dir("libc-objects")
+                                .asFile
+                                .resolve(relativeSource.removeSuffix(".c") + ".o")
+                        check(compiledObject.isFile) {
+                            "Compiled C SDK libc object is missing: $compiledObject"
+                        }
+                        "src/$relativeSource" to compiledObject
+                    } +
+                    listOf("arch-k16/setjmp.o" to k16CSdkArchRuntimeObject.get().asFile)
+            val sortedLibcObjectMembers = libcObjectMembers.sortedBy(Pair<String, File>::first)
+            val stagedLibcObjects =
+                sortedLibcObjectMembers.map { (logicalPath, objectFile) ->
+                    val staged = archiveInputsDirectory.resolve("libc/${stableObjectName(logicalPath)}")
+                    staged.parentFile.mkdirs()
+                    objectFile.copyTo(staged, overwrite = true)
+                    staged
+                }
+            check(stagedLibcObjects.map(File::getName).distinct().size == stagedLibcObjects.size) {
+                "C SDK libc archive member names are not unique"
+            }
+
+            val crt0Object = libDirectory.resolve("crt0.o")
+            compileC(k16CLibcStartupSource.asFile, crt0Object, includeBuiltins = false)
+
+            fun buildArchive(archive: File, members: List<File>) {
+                check(members.isNotEmpty()) {
+                    "C SDK archive must contain at least one member: $archive"
+                }
+                check(!archive.exists() || archive.delete()) {
+                    "Could not replace existing C SDK archive: $archive"
+                }
+                runCommand(
+                    "create ${archive.name}",
+                    listOf(llvmAr.absolutePath, "rcsD", archive.absolutePath) +
+                        members.map(File::getAbsolutePath),
+                )
+                val actualMembers =
+                    captureCommand(
+                        "inspect ${archive.name} member order",
+                        listOf(llvmAr.absolutePath, "t", archive.absolutePath),
+                    ).lineSequence().filter(String::isNotBlank).toList()
+                val expectedMembers = members.map(File::getName)
+                check(actualMembers == expectedMembers) {
+                    "Archive member order mismatch for ${archive.name}: " +
+                        "expected=$expectedMembers, actual=$actualMembers"
+                }
+            }
+
+            val softFloatObjects =
+                manifestEntries.filter { it in k16SoftFloatCompilerRtSources }.map(runtimeObjects::getValue)
+            val nonFloatingObjects =
+                manifestEntries.filter { it in k16NonFloatingCompilerRtSources }.map(runtimeObjects::getValue)
+            val libcArchive = libDirectory.resolve("libc.a")
+            val softFloatArchive = libDirectory.resolve("libsoftfloat.a")
+            val compilerRtArchive = libDirectory.resolve("libcompiler_rt.a")
+            buildArchive(libcArchive, stagedLibcObjects)
+            buildArchive(softFloatArchive, softFloatObjects)
+            buildArchive(compilerRtArchive, nonFloatingObjects)
+
+            val libcArchiveDefinitions = externalSymbols(listOf(libcArchive), definedOnly = true)
+            check(libcArchiveDefinitions.isNotEmpty()) {
+                "C SDK libc archive has no defined symbols"
+            }
+            val runtimeArchiveDefinitions =
+                externalSymbols(listOf(softFloatArchive, compilerRtArchive), definedOnly = true)
+
+            val runtimeDefinitionsByObject =
+                runtimeObjects.values.associateWith { externalSymbols(listOf(it), definedOnly = true) }
+            val duplicateRuntimeDefinitions =
+                runtimeDefinitionsByObject
+                    .flatMap { (file, symbols) -> symbols.map { it to file.name } }
+                    .groupBy(Pair<String, String>::first)
+                    .filterValues { it.size > 1 }
+                    .keys
+            check(duplicateRuntimeDefinitions.isEmpty()) {
+                "Duplicate compiler runtime definition(s): ${duplicateRuntimeDefinitions.sorted()}"
+            }
+            val requiredRuntimeSymbols =
+                setOf(
+                    "__adddf3", "__addsf3", "__ashldi3", "__ashrdi3", "__cmpdf2", "__cmpsf2",
+                    "__divdf3", "__divdi3", "__divsf3", "__divsi3", "__eqdf2", "__eqsf2",
+                    "__extendsfdf2", "__fixdfdi", "__fixdfsi", "__fixsfdi", "__fixsfsi",
+                    "__fixunsdfdi", "__fixunsdfsi", "__fixunssfdi", "__fixunssfsi",
+                    "__floatdidf", "__floatdisf", "__floatsidf", "__floatsisf",
+                    "__floatundidf", "__floatundisf", "__floatunsidf", "__floatunsisf",
+                    "__gedf2", "__gesf2", "__gtdf2", "__gtsf2", "__ledf2", "__lesf2",
+                    "__lshrdi3", "__ltdf2", "__ltsf2", "__moddi3", "__modsi3",
+                    "__muldf3", "__muldi3", "__mulsf3", "__nedf2", "__negdf2", "__negsf2", "__nesf2",
+                    "__subdf3", "__subsf3", "__truncdfsf2", "__udivdi3", "__udivmoddi4",
+                    "__udivsi3", "__umoddi3", "__umodsi3", "__unorddf2", "__unordsf2",
+                )
+            check(runtimeArchiveDefinitions.containsAll(requiredRuntimeSymbols)) {
+                "Compiler runtime archives are missing required definitions: " +
+                    "${(requiredRuntimeSymbols - runtimeArchiveDefinitions).sorted()}"
+            }
+
+            val allArchiveObjects = stagedLibcObjects + runtimeObjects.values
+            val allDefinitions = externalSymbols(allArchiveObjects, definedOnly = true)
+            val allUndefined = externalSymbols(allArchiveObjects, definedOnly = false)
+            val libkraftDefinitions = externalSymbols(listOf(libkraftValidationObject), definedOnly = true)
+            val unexpectedUnresolved = allUndefined - allDefinitions - libkraftDefinitions
+            check(unexpectedUnresolved.isEmpty()) {
+                "Unexpected unresolved C SDK archive symbols: ${unexpectedUnresolved.sorted()}"
+            }
+
+            val compilerRtLicense =
+                sdkTarget.resolve("share/licenses/compiler-rt/LICENSE.TXT")
+            compilerRtLicense.parentFile.mkdirs()
+            k16CompilerRtLicenseSource.asFile.copyTo(compilerRtLicense, overwrite = true)
+            check(compilerRtLicense.readBytes().contentEquals(k16CompilerRtLicenseSource.asFile.readBytes())) {
+                "Produced C SDK compiler-rt license does not match the pinned LLVM license"
+            }
+        }
+    }
+
 val verifyK16CSdkFoundation =
     tasks.register("verifyK16CSdkFoundation") {
         description = "Builds and runs the C SDK foundation contracts on the K16 VM."
         group = "verification"
         inputs.dir(k16CSdkIncludeSource)
-        inputs.dir(k16CSdkLibcSource)
-        inputs.file(k16CSdkArchRuntimeObject)
         inputs.dir(k16CSdkTestSource)
-        inputs.dir(k16CompilerRtBuiltinsSource)
+        inputs.file(generatedK16CSdkTarget.map { it.file("lib/libc.a") })
+        inputs.file(generatedK16CSdkTarget.map { it.file("lib/libsoftfloat.a") })
+        inputs.file(generatedK16CSdkTarget.map { it.file("lib/libcompiler_rt.a") })
         inputs.file(k16ClangExecutable)
-        inputs.file(rootProject.layout.projectDirectory.file("tools/fixtures/k16-tinycc/compiler-runtime.c"))
         inputsK16HostTools()
         outputs.dir(generatedK16CSdkTarget.map { it.dir("foundation-tests") })
-        dependsOn("compileK16CSdkLibc")
+        dependsOn(buildK16CSdkArchives)
 
         doLast {
             val toolchain = resolveK16Toolchain()
@@ -1031,7 +1388,15 @@ val verifyK16CSdkFoundation =
             val outputDirectory = generatedK16CSdkTarget.get().dir("foundation-tests").asFile
             project.delete(outputDirectory)
             outputDirectory.mkdirs()
-            val archRuntimeObject = k16CSdkArchRuntimeObject.get().asFile
+            val sdkLibDirectory = generatedK16CSdkTarget.get().dir("lib").asFile
+            val libcArchive = sdkLibDirectory.resolve("libc.a")
+            val softFloatArchive = sdkLibDirectory.resolve("libsoftfloat.a")
+            val compilerRtArchive = sdkLibDirectory.resolve("libcompiler_rt.a")
+            listOf(libcArchive, softFloatArchive, compilerRtArchive).forEach { archive ->
+                check(archive.isFile) {
+                    "K16 C SDK foundation archive is missing: $archive"
+                }
+            }
             fun runCommand(stage: String, command: List<String>) {
                 val exitCode = ProcessBuilder(command).directory(projectDir).inheritIO().start().waitFor()
                 check(exitCode == 0) {
@@ -1053,31 +1418,10 @@ val verifyK16CSdkFoundation =
                 val targetDirectory = outputDirectory.resolve(testName.removeSuffix(".c"))
                 targetDirectory.mkdirs()
                 val sources =
-                    k16CSdkLibcSource.asFileTree.matching { include("*.c") }.files.sortedBy(File::getName) +
-                        listOf(
-                            "adddf3.c",
-                            "ashldi3.c",
-                            "comparedf2.c",
-                            "comparesf2.c",
-                            "divdf3.c",
-                            "fixunsdfdi.c",
-                            "fixunsdfsi.c",
-                            "floatsidf.c",
-                            "floatundidf.c",
-                            "floatunsidf.c",
-                            "fp_mode.c",
-                            "lshrdi3.c",
-                            "muldf3.c",
-                            "subdf3.c",
-                            "truncdfsf2.c",
-                            "udivdi3.c",
-                            "umoddi3.c",
-                        ).map { k16CompilerRtBuiltinsSource.file(it).asFile } +
-                        listOf(
-                            k16CSdkTestSource.file("foundation_test_support.c").asFile,
-                            rootProject.file("tools/fixtures/k16-tinycc/compiler-runtime.c"),
-                            k16CSdkTestSource.file(testName).asFile,
-                        )
+                    listOf(
+                        k16CSdkTestSource.file("foundation_test_support.c").asFile,
+                        k16CSdkTestSource.file(testName).asFile,
+                    )
                 val objects =
                     sources.mapIndexed { index, source ->
                         val output = targetDirectory.resolve("$index-${source.nameWithoutExtension}.o")
@@ -1093,8 +1437,6 @@ val verifyK16CSdkFoundation =
                                 "-Oz",
                                 "-I",
                                 k16CSdkIncludeSource.asFile.absolutePath,
-                                "-I",
-                                k16CompilerRtBuiltinsSource.asFile.absolutePath,
                                 "-c",
                                 source.absolutePath,
                                 "-o",
@@ -1118,8 +1460,10 @@ val verifyK16CSdkFoundation =
                         add("--target")
                         add("program")
                         add(startup.absolutePath)
-                        add(archRuntimeObject.absolutePath)
                         objects.forEach { add(it.absolutePath) }
+                        add(libcArchive.absolutePath)
+                        add(softFloatArchive.absolutePath)
+                        add(compilerRtArchive.absolutePath)
                         add("-o")
                         add(image.absolutePath)
                     },

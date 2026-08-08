@@ -21,6 +21,7 @@ extern unsigned int __k16_write_syscall(unsigned int fd, unsigned int ptr,
 #define K16_SYSCALL_SPAWN 22u
 #define K16_SYSCALL_WAIT 23u
 #define K16_SYSCALL_GAME_TICKS 16u
+#define K16_SYSCALL_SEEK 17u
 #define K16_SYSCALL_RUN 9u
 #define K16_RUN_FORMAT_ARGV 1u
 
@@ -37,6 +38,10 @@ int kraft_sys_write(unsigned int fd, const void *buffer, unsigned int len) {
 }
 
 int kraft_sys_close(unsigned int fd) { return (int)__k16_close_syscall(fd); }
+
+int kraft_sys_seek(unsigned int fd, int offset, unsigned int origin) {
+  return (int)__k16_syscall3(K16_SYSCALL_SEEK, fd, (unsigned int)offset, origin);
+}
 
 int kraft_sys_read_dir(const void *request, unsigned int len) {
   return (int)__k16_syscall3(K16_SYSCALL_READ_DIR, (unsigned int)request, len,
