@@ -54,7 +54,7 @@ fn map_profile_hardware(
 
     for hardware in &profile.hardware {
         let device_id = map_hardware_device(bus, hardware)?;
-        device_ids.remember_hardware_device(&hardware.device, device_id);
+        device_ids.remember_hardware_device(hardware.id, &hardware.device, device_id)?;
     }
 
     Ok(device_ids)
@@ -84,8 +84,10 @@ fn storage_port_device(config: &StoragePortConfig) -> Result<StoragePortDevice, 
         Some(StorageMediaConfig::InMemory { bytes, read_only }) => {
             StoragePortDevice::with_media(bytes.clone(), *read_only)
         }
-        Some(StorageMediaConfig::K16VolumeFile { path }) => {
-            StoragePortDevice::with_media_backend(Box::new(K16VolumeFileStorageMedia::open(path)?))
+        Some(StorageMediaConfig::K16VolumeFile { path, read_only }) => {
+            StoragePortDevice::with_media_backend(Box::new(K16VolumeFileStorageMedia::open(
+                path, *read_only,
+            )?))
         }
         None => Ok(StoragePortDevice::new_absent()),
     }

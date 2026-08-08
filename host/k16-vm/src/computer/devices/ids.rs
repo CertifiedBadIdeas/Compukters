@@ -7,12 +7,14 @@ use super::storage::StoragePortDevice;
 use super::timer::TimerDevice;
 use crate::computer::profile::ComputerHardwareDevice;
 use crate::low_bus::{MachineBus, MmioDeviceId};
+use crate::low_machine::MemoryFault;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ComputerDeviceStatsKind {
     Generic,
     Gpu,
-    Storage,
+    Storage0,
+    Storage1,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -31,6 +33,7 @@ pub(crate) struct ComputerDeviceIds {
     serial_input: Option<MmioDeviceId>,
     gpu0: Option<MmioDeviceId>,
     storage0: Option<MmioDeviceId>,
+    storage1: Option<MmioDeviceId>,
     timer0: Option<MmioDeviceId>,
     keyboard0: Option<MmioDeviceId>,
     mmu0: Option<MmioDeviceId>,
@@ -40,19 +43,33 @@ pub(crate) struct ComputerDeviceIds {
 impl ComputerDeviceIds {
     pub(crate) fn remember_hardware_device(
         &mut self,
+        hardware_id: u32,
         device: &ComputerHardwareDevice,
         device_id: MmioDeviceId,
-    ) {
+    ) -> Result<(), MemoryFault> {
         match device {
             ComputerHardwareDevice::Control => self.control = Some(device_id),
             ComputerHardwareDevice::DebugSerial => self.debug_serial = Some(device_id),
             ComputerHardwareDevice::SerialInput => self.serial_input = Some(device_id),
             ComputerHardwareDevice::Gpu => self.gpu0 = Some(device_id),
-            ComputerHardwareDevice::StoragePort(_) => self.storage0 = Some(device_id),
+            ComputerHardwareDevice::StoragePort(_) => match hardware_id {
+                crate::computer_abi::COMPUTER_HARDWARE_ID_STORAGE0 => {
+                    self.storage0 = Some(device_id)
+                }
+                crate::computer_abi::COMPUTER_HARDWARE_ID_STORAGE1 => {
+                    self.storage1 = Some(device_id)
+                }
+                id => {
+                    return Err(MemoryFault::new(format!(
+                        "unsupported computer storage hardware id {id}",
+                    )))
+                }
+            },
             ComputerHardwareDevice::Timer => self.timer0 = Some(device_id),
             ComputerHardwareDevice::Keyboard => self.keyboard0 = Some(device_id),
             ComputerHardwareDevice::Mmu => self.mmu0 = Some(device_id),
         }
+        Ok(())
     }
 
     pub(crate) fn has_bios_flash(&self) -> bool {
@@ -128,6 +145,11 @@ impl ComputerDeviceIds {
             .and_then(|id| bus.device_mut::<StoragePortDevice>(id))
     }
 
+    pub(crate) fn storage1<'a>(&self, bus: &'a MachineBus) -> Option<&'a StoragePortDevice> {
+        self.storage1
+            .and_then(|id| bus.device::<StoragePortDevice>(id))
+    }
+
     pub(crate) fn timer0<'a>(&self, bus: &'a MachineBus) -> Option<&'a TimerDevice> {
         self.timer0.and_then(|id| bus.device::<TimerDevice>(id))
     }
@@ -149,7 +171,7 @@ impl ComputerDeviceIds {
             .and_then(|id| bus.device_mut::<KeyboardDevice>(id))
     }
 
-    pub(crate) fn descriptors(&self) -> [ComputerDeviceDescriptor; 9] {
+    pub(crate) fn descriptors(&self) -> [ComputerDeviceDescriptor; 10] {
         [
             self.descriptor(
                 self.control,
@@ -178,7 +200,14 @@ impl ComputerDeviceIds {
                 "storage0",
                 true,
                 true,
-                ComputerDeviceStatsKind::Storage,
+                ComputerDeviceStatsKind::Storage0,
+            ),
+            self.descriptor(
+                self.storage1,
+                "storage1",
+                true,
+                false,
+                ComputerDeviceStatsKind::Storage1,
             ),
             self.descriptor(
                 self.timer0,

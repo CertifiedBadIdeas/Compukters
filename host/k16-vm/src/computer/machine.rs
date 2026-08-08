@@ -137,6 +137,7 @@ impl ComputerMachine {
     pub const HARDWARE_ID_TIMER0: u32 = computer_abi::COMPUTER_HARDWARE_ID_TIMER0;
     pub const HARDWARE_ID_KEYBOARD0: u32 = computer_abi::COMPUTER_HARDWARE_ID_KEYBOARD0;
     pub const HARDWARE_ID_MMU0: u32 = computer_abi::COMPUTER_HARDWARE_ID_MMU0;
+    pub const HARDWARE_ID_STORAGE1: u32 = computer_abi::COMPUTER_HARDWARE_ID_STORAGE1;
     pub const CONTROL_BASE: u32 = computer_abi::CONTROL_BASE;
     pub const CONTROL_STATUS: u32 = computer_abi::CONTROL_STATUS;
     pub const CONTROL_PANIC_CODE: u32 = computer_abi::CONTROL_PANIC_CODE;
@@ -193,6 +194,23 @@ impl ComputerMachine {
     pub const STORAGE0_SEQUENCE_HIGH: u32 = computer_abi::STORAGE0_SEQUENCE_HIGH;
     pub const STORAGE0_MEDIA_STATUS: u32 = computer_abi::STORAGE0_MEDIA_STATUS;
     pub const STORAGE0_SIZE: u32 = computer_abi::STORAGE0_SIZE;
+    pub const STORAGE1_BASE: u32 = computer_abi::STORAGE1_BASE;
+    pub const STORAGE1_VERSION: u32 = computer_abi::STORAGE1_VERSION;
+    pub const STORAGE1_STATUS: u32 = computer_abi::STORAGE1_STATUS;
+    pub const STORAGE1_ERROR: u32 = computer_abi::STORAGE1_ERROR;
+    pub const STORAGE1_COMMAND: u32 = computer_abi::STORAGE1_COMMAND;
+    pub const STORAGE1_BLOCK_SIZE: u32 = computer_abi::STORAGE1_BLOCK_SIZE;
+    pub const STORAGE1_CAPACITY_BLOCKS_LOW: u32 = computer_abi::STORAGE1_CAPACITY_BLOCKS_LOW;
+    pub const STORAGE1_CAPACITY_BLOCKS_HIGH: u32 = computer_abi::STORAGE1_CAPACITY_BLOCKS_HIGH;
+    pub const STORAGE1_LBA_LOW: u32 = computer_abi::STORAGE1_LBA_LOW;
+    pub const STORAGE1_LBA_HIGH: u32 = computer_abi::STORAGE1_LBA_HIGH;
+    pub const STORAGE1_BLOCK_COUNT: u32 = computer_abi::STORAGE1_BLOCK_COUNT;
+    pub const STORAGE1_BUFFER_ADDR: u32 = computer_abi::STORAGE1_BUFFER_ADDR;
+    pub const STORAGE1_BYTES_DONE: u32 = computer_abi::STORAGE1_BYTES_DONE;
+    pub const STORAGE1_SEQUENCE_LOW: u32 = computer_abi::STORAGE1_SEQUENCE_LOW;
+    pub const STORAGE1_SEQUENCE_HIGH: u32 = computer_abi::STORAGE1_SEQUENCE_HIGH;
+    pub const STORAGE1_MEDIA_STATUS: u32 = computer_abi::STORAGE1_MEDIA_STATUS;
+    pub const STORAGE1_SIZE: u32 = computer_abi::STORAGE1_SIZE;
     pub const TIMER0_BASE: u32 = computer_abi::TIMER0_BASE;
     pub const TIMER0_VERSION: u32 = computer_abi::TIMER0_VERSION;
     pub const TIMER0_GAME_TICKS_LOW: u32 = computer_abi::TIMER0_GAME_TICKS_LOW;
@@ -806,8 +824,12 @@ impl ComputerMachine {
         stats_kind: ComputerDeviceStatsKind,
     ) -> K16ComputerStorageStatsSnapshot {
         match stats_kind {
-            ComputerDeviceStatsKind::Storage => self
+            ComputerDeviceStatsKind::Storage0 => self
                 .storage0_device()
+                .map(StoragePortDevice::stats_snapshot)
+                .unwrap_or_default(),
+            ComputerDeviceStatsKind::Storage1 => self
+                .storage1_device()
                 .map(StoragePortDevice::stats_snapshot)
                 .unwrap_or_default(),
             ComputerDeviceStatsKind::Generic | ComputerDeviceStatsKind::Gpu => {
@@ -825,9 +847,9 @@ impl ComputerMachine {
                 .gpu0_device()
                 .map(GpuDevice::stats_snapshot)
                 .unwrap_or_default(),
-            ComputerDeviceStatsKind::Generic | ComputerDeviceStatsKind::Storage => {
-                K16ComputerGpuStatsSnapshot::default()
-            }
+            ComputerDeviceStatsKind::Generic
+            | ComputerDeviceStatsKind::Storage0
+            | ComputerDeviceStatsKind::Storage1 => K16ComputerGpuStatsSnapshot::default(),
         }
     }
 
@@ -870,6 +892,10 @@ impl ComputerMachine {
 
     fn storage0_device(&self) -> Option<&StoragePortDevice> {
         self.devices.storage0(&self.bus)
+    }
+
+    fn storage1_device(&self) -> Option<&StoragePortDevice> {
+        self.devices.storage1(&self.bus)
     }
 
     fn timer0_device(&self) -> Option<&TimerDevice> {

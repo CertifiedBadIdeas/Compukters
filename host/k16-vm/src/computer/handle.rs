@@ -4,7 +4,7 @@ use crate::computer::{
 use crate::k16::K16Signal;
 use crate::k16e;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct K16ComputerControl {
@@ -51,8 +51,27 @@ impl K16ComputerHandle {
         max_steps: u64,
         storage0_path: impl AsRef<Path>,
     ) -> Result<Self, String> {
-        let profile =
-            ComputerMachineProfile::computer_v1_with_storage0_path(memory_size, storage0_path);
+        Self::create_k16_bios_flash_with_storage_paths(
+            bios_flash,
+            memory_size,
+            max_steps,
+            storage0_path,
+            None,
+        )
+    }
+
+    pub fn create_k16_bios_flash_with_storage_paths(
+        bios_flash: &[u8],
+        memory_size: usize,
+        max_steps: u64,
+        storage0_path: impl AsRef<Path>,
+        storage1_path: Option<PathBuf>,
+    ) -> Result<Self, String> {
+        let profile = ComputerMachineProfile::computer_v1_with_storage_paths(
+            memory_size,
+            storage0_path,
+            storage1_path,
+        );
         let (machine, boot_cpu) =
             ComputerMachine::from_k16_bios_flash_with_profile(bios_flash, profile, max_steps)?;
         Self::from_machine(machine, boot_cpu)
@@ -80,6 +99,22 @@ impl K16ComputerHandle {
         max_steps: u64,
         storage0_path: impl AsRef<Path>,
     ) -> Result<Self, String> {
+        Self::create_k16_bios_flash_path_with_storage_paths(
+            bios_flash_path,
+            memory_size,
+            max_steps,
+            storage0_path,
+            None,
+        )
+    }
+
+    pub fn create_k16_bios_flash_path_with_storage_paths(
+        bios_flash_path: impl AsRef<Path>,
+        memory_size: usize,
+        max_steps: u64,
+        storage0_path: impl AsRef<Path>,
+        storage1_path: Option<PathBuf>,
+    ) -> Result<Self, String> {
         let bios_flash_path = bios_flash_path.as_ref();
         let bios_flash = fs::read(bios_flash_path).map_err(|error| {
             format!(
@@ -87,11 +122,12 @@ impl K16ComputerHandle {
                 bios_flash_path.display(),
             )
         })?;
-        Self::create_k16_bios_flash_with_storage0_path(
+        Self::create_k16_bios_flash_with_storage_paths(
             &bios_flash,
             memory_size,
             max_steps,
             storage0_path,
+            storage1_path,
         )
     }
 

@@ -107,7 +107,15 @@ impl ComputerMachineProfile {
         memory_size: usize,
         storage0_path: impl AsRef<Path>,
     ) -> Self {
-        Self::new(memory_size)
+        Self::computer_v1_with_storage_paths(memory_size, storage0_path, None)
+    }
+
+    pub fn computer_v1_with_storage_paths(
+        memory_size: usize,
+        storage0_path: impl AsRef<Path>,
+        storage1_path: Option<PathBuf>,
+    ) -> Self {
+        let profile = Self::new(memory_size)
             .with_hardware(ComputerHardwareConfig::control(
                 computer_abi::COMPUTER_HARDWARE_ID_CONTROL,
                 computer_abi::CONTROL_BASE,
@@ -128,6 +136,7 @@ impl ComputerMachineProfile {
                 computer_abi::COMPUTER_HARDWARE_ID_STORAGE0,
                 computer_abi::STORAGE0_BASE,
                 storage0_path,
+                false,
             ))
             .with_hardware(ComputerHardwareConfig::timer(
                 computer_abi::COMPUTER_HARDWARE_ID_TIMER0,
@@ -140,7 +149,18 @@ impl ComputerMachineProfile {
             .with_hardware(ComputerHardwareConfig::mmu(
                 computer_abi::COMPUTER_HARDWARE_ID_MMU0,
                 computer_abi::MMU0_BASE,
-            ))
+            ));
+        match storage1_path {
+            Some(path) => {
+                profile.with_hardware(ComputerHardwareConfig::storage_port_with_k16_volume_file(
+                    computer_abi::COMPUTER_HARDWARE_ID_STORAGE1,
+                    computer_abi::STORAGE1_BASE,
+                    path,
+                    true,
+                ))
+            }
+            None => profile,
+        }
     }
 
     pub fn with_hardware(mut self, hardware: ComputerHardwareConfig) -> Self {
@@ -216,12 +236,13 @@ impl ComputerHardwareConfig {
         id: u32,
         mmio_base: u32,
         path: impl AsRef<Path>,
+        read_only: bool,
     ) -> Self {
         Self {
             id,
             mmio_base,
             device: ComputerHardwareDevice::StoragePort(StoragePortConfig::with_k16_volume_file(
-                path,
+                path, read_only,
             )),
         }
     }
@@ -287,10 +308,11 @@ impl StoragePortConfig {
         }
     }
 
-    fn with_k16_volume_file(path: impl AsRef<Path>) -> Self {
+    fn with_k16_volume_file(path: impl AsRef<Path>, read_only: bool) -> Self {
         Self {
             media: Some(StorageMediaConfig::K16VolumeFile {
                 path: path.as_ref().to_path_buf(),
+                read_only,
             }),
         }
     }
@@ -299,7 +321,7 @@ impl StoragePortConfig {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum StorageMediaConfig {
     InMemory { bytes: Vec<u8>, read_only: bool },
-    K16VolumeFile { path: PathBuf },
+    K16VolumeFile { path: PathBuf, read_only: bool },
 }
 
 impl ComputerHardwareDevice {
