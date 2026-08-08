@@ -110,13 +110,17 @@ fn k16_abi_conformance_matrix_docs_list_supported_backend_contracts() {
         "stack-passed arguments",
         "multi-register returns",
         "small aggregate returns",
+        "C multiword scalar layout and transport",
         "aggregate-by-value arguments",
+        "C variadic calls",
+        "`va_list` is a `char *`",
+        "TinyCC/TinyCC, TinyCC/Clang, Clang/TinyCC, and Clang/Clang",
         "global-address addends",
         "static aggregate field addresses",
         "memory helper libcalls",
         "runtime helper symbols",
         "struct returns are unsupported",
-        "varargs are unsupported",
+        "C vector extensions, complex values, empty GNU aggregates, and alignments greater than eight bytes are unsupported",
         "dynamic linking is unsupported",
         "call-stack-args.ll",
         "multi-return-registers.ll",
@@ -126,6 +130,7 @@ fn k16_abi_conformance_matrix_docs_list_supported_backend_contracts() {
         "mem-intrinsics.ll",
         "k16_runtime_cli",
         "k16_rust_smoke_artifacts",
+        "./gradlew-sandbox-dev-parallel verifyK16TinyCc",
         ".toolchain/build/llvm/k16-min/bin/llvm-lit toolchains/Compukter-Kraft-llvm/llvm/test/CodeGen/K16",
     ] {
         assert!(
@@ -150,6 +155,32 @@ fn k16_abi_conformance_matrix_docs_list_supported_backend_contracts() {
         toolchain_docs.contains("cargo test --test k16_rust_smoke_artifacts"),
         "prebuilt toolchain docs must name the Rust smoke artifact command"
     );
+}
+
+#[test]
+fn k16_cpu_docs_define_interoperable_c_varargs_contract() {
+    let docs = normalized_doc("docs/abi/k16-cpu-v1.md");
+
+    for required in [
+        "K16 C Value Classification",
+        "K16 `long double` uses the IEEE binary64 representation",
+        "aggregate passed by value is indirect",
+        "caller-owned copy of the complete object",
+        "low-address 32-bit word is transported first",
+        "K16 C Variadic Stack Stream",
+        "Every unnamed argument after `...` is stack-only",
+        "fixed stack storage",
+        "default argument promotions",
+        "actual guest address",
+        "K16 C defines `va_list` as a `char *` cursor",
+        "`va_copy` copies the cursor value and `va_end` is a no-op",
+        "no register-save area",
+    ] {
+        assert!(
+            docs.contains(required),
+            "K16 CPU ABI docs must contain `{required}`"
+        );
+    }
 }
 
 #[test]

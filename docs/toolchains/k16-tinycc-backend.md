@@ -1,6 +1,7 @@
 # K16 TinyCC Host Backend
 
-> Issue: [#464](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/464)
+> Issues: [#464](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/464),
+> [#465](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/465)
 
 The K16 TinyCC backend is a host-running cross-compiler proof. It compiles a
 deliberately bounded C subset into K16 relocatable objects quickly enough to be
@@ -56,6 +57,13 @@ The checked-in corpus under `tools/fixtures/k16-tinycc` proves:
 - structured control flow through conditions, loops, and switches;
 - scalar direct and indirect calls, with `r1` through `r3` register arguments,
   caller-owned stack arguments, and a scalar return in `r0`;
+- representation transport for `long long`, binary64 `double`, and binary64
+  `long double`, including paired-register and stack arguments and returns;
+- aggregate-by-value arguments through aligned caller-owned copies and 32-bit
+  guest pointers, with mutation isolation across the call;
+- variadic calls and callees using the shared K16 C stack stream, C default
+  argument promotions, `va_start`, `va_arg`, independent `va_copy` cursors, and
+  no-op `va_end`;
 - global variables, read-only constants, symbol addresses and addends, writable
   pointer initializers, and external calls through K16 RELA records;
 - GNU declaration symbol labels such as `__asm__("kraft_sys_write")`, which
@@ -63,10 +71,12 @@ The checked-in corpus under `tools/fixtures/k16-tinycc` proves:
 
 `tools/k16-tinycc-smoke.sh` compiles the positive corpus with both TinyCC and
 Clang, inspects both objects, links them with `k16 link`, and compares observable
-VM results. It also checks TinyCC/Clang caller-callee combinations and exact
-instruction bytes for constant returns and direct calls. A checked-in
-freestanding compiler-runtime fixture supplies the current Clang 32-bit
-division libcalls; no host libc is linked.
+VM results. Its complete variadic fixture executes TinyCC/TinyCC,
+TinyCC/Clang, Clang/TinyCC, and Clang/Clang caller-callee combinations across
+promoted integers, pointers, wide scalars, floating representations, and
+aggregates. It also checks exact instruction bytes for constant returns and
+direct calls. A checked-in freestanding compiler-runtime fixture supplies the
+current Clang 32-bit division libcalls; no host libc is linked.
 
 The isolated `compileK16TinyCcUnameProof` task additionally compiles the real
 KraftOS `crt0.c` and `uname.c`, links them against the existing
@@ -77,16 +87,20 @@ boots the real OS, and observes `K16` followed by a returned shell prompt.
 
 ## Unsupported Surface
 
-The first backend slice rejects all of these instead of guessing an ABI:
+The backend rejects these boundaries instead of guessing an ABI:
 
-- floating-point values and operations: `K16 TinyCC does not support
-  floating-point code yet`;
-- variadic functions: `K16 TinyCC does not support variadic functions yet`;
+- floating-point arithmetic: `K16 TinyCC does not support floating-point code
+  yet`. Loading, storing, passing, returning, and inspecting floating object
+  representations are supported and do not require arithmetic helpers;
+- C vector extensions: `K16 TinyCC does not support vector values`;
+- complex values: `K16 TinyCC does not support complex values`;
+- empty GNU aggregate arguments: `K16 TinyCC does not support empty aggregate
+  arguments`;
+- values requiring alignment above the K16 maximum: `K16 TinyCC arguments
+  cannot require alignment above 8 bytes`;
 - integrated assembly statements and assembly source files: `K16 TinyCC does
   not support integrated assembly`;
-- wide integer values that require more than one 32-bit ABI slot: `K16 TinyCC
-  does not support values wider than one 32-bit ABI slot yet`;
-- aggregate arguments or returns, including hidden structure returns: `K16
+- aggregate returns that require the unsupported structure-return path: `K16
   TinyCC does not support aggregate arguments or returns yet`;
 - JIT execution and the `-run` option: `K16 TinyCC is a cross-compiler; -run is
   unavailable`.

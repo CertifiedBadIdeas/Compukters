@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- The K16 C ABI now defines one interoperable variadic stack stream for Clang
+  and TinyCC. Fixed arguments retain the ordinary register/stack ABI; unnamed
+  default-promoted scalars use aligned direct object representations, aggregate
+  values use guest pointers to caller-owned copies, and `va_list` is a `char *`
+  cursor. K16 `long double` is binary64 with size and alignment eight. Vectors,
+  complex values, empty GNU aggregates, and alignments above eight remain
+  explicitly unsupported.
 - `gpu0` was hard-replaced by retained ABI v2. Guest transactions create and
   patch RGB565 images, 1bpp masks, mask-instance buffers, and one draw list;
   the VM stores authoritative resources while Minecraft clients rasterize
