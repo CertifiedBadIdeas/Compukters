@@ -20,6 +20,7 @@ extern unsigned int __k16_write_syscall(unsigned int fd, unsigned int ptr,
 #define K16_SYSCALL_RENAME 21u
 #define K16_SYSCALL_SPAWN 22u
 #define K16_SYSCALL_WAIT 23u
+#define K16_SYSCALL_GAME_TICKS 16u
 #define K16_SYSCALL_RUN 9u
 #define K16_RUN_FORMAT_ARGV 1u
 
@@ -64,6 +65,10 @@ int kraft_sys_run(const void *request, unsigned int len) {
 
 int kraft_sys_wait(unsigned int pid, int *status) {
   return (int)__k16_syscall3(K16_SYSCALL_WAIT, pid, (unsigned int)status, 0u);
+}
+
+int kraft_sys_game_ticks(unsigned int words[2]) {
+  return (int)__k16_syscall1(K16_SYSCALL_GAME_TICKS, (unsigned int)words);
 }
 
 int kraft_sys_mkdir(const char *path, unsigned int len) {

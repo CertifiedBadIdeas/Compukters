@@ -1,4 +1,5 @@
 #include <errno.h>
+#include <kraft/fs.h>
 #include <kraft/syscalls.h>
 #include <string.h>
 #include <unistd.h>
@@ -27,6 +28,34 @@ off_t lseek(int fd, off_t offset, int origin) {
 
 int close(int fd) {
   return status_result(__kraft_sys_close(fd));
+}
+
+char *getcwd(char *buffer, size_t size) {
+  if (buffer == NULL) {
+    errno = EINVAL;
+    return NULL;
+  }
+  if (size < 2) {
+    errno = ERANGE;
+    return NULL;
+  }
+  buffer[0] = '/';
+  buffer[1] = 0;
+  return buffer;
+}
+
+int unlink(const char *path) {
+  size_t length;
+  if (path == NULL) {
+    errno = EINVAL;
+    return -1;
+  }
+  length = strlen(path);
+  if (length == 0 || length > KRAFT_MAX_PATH_BYTES) {
+    errno = EINVAL;
+    return -1;
+  }
+  return status_result(__kraft_sys_unlink(path, (unsigned int)length));
 }
 
 void *sbrk(int increment) {

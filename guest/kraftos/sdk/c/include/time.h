@@ -17,6 +17,7 @@ struct tm {
   int tm_isdst;
 };
 
+/* KraftOS time is UTC elapsed time since VM boot, derived at 20 game ticks/s. */
 time_t time(time_t *result);
 struct tm *localtime(const time_t *value);
 
