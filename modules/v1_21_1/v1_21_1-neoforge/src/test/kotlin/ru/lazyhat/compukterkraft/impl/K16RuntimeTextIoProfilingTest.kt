@@ -112,7 +112,7 @@ class K16RuntimeTextIoProfilingTest {
                             listOf(
                                 RuntimeK16MmioDeviceMetrics(
                                     deviceId = 1,
-                                    base = 0,
+                                    base = 0x1000_0400,
                                     size = 1,
                                     traffic = RuntimeK16BusTrafficMetrics(),
                                     storage =
@@ -199,7 +199,7 @@ class K16RuntimeTextIoProfilingTest {
                             listOf(
                                 RuntimeK16MmioDeviceMetrics(
                                     deviceId = 1,
-                                    base = 0,
+                                    base = 0x1000_0400,
                                     size = 1,
                                     traffic = RuntimeK16BusTrafficMetrics(),
                                     storage =
@@ -329,7 +329,7 @@ class K16RuntimeTextIoProfilingTest {
                             listOf(
                                 RuntimeK16MmioDeviceMetrics(
                                     deviceId = 1,
-                                    base = 0,
+                                    base = 0x1000_0400,
                                     size = 1,
                                     traffic = RuntimeK16BusTrafficMetrics(),
                                     storage =
@@ -385,7 +385,7 @@ class K16RuntimeTextIoProfilingTest {
                             listOf(
                                 RuntimeK16MmioDeviceMetrics(
                                     deviceId = 1,
-                                    base = 0,
+                                    base = 0x1000_0400,
                                     size = 1,
                                     traffic = RuntimeK16BusTrafficMetrics(),
                                     storage =
@@ -469,7 +469,7 @@ class K16RuntimeTextIoProfilingTest {
                             listOf(
                                 RuntimeK16MmioDeviceMetrics(
                                     deviceId = 1,
-                                    base = 0,
+                                    base = 0x1000_0400,
                                     size = 1,
                                     traffic = RuntimeK16BusTrafficMetrics(),
                                     storage = RuntimeK16StorageMetrics(readCommands = 9, mediaReadBlocks = 3),
@@ -493,7 +493,7 @@ class K16RuntimeTextIoProfilingTest {
                             listOf(
                                 RuntimeK16MmioDeviceMetrics(
                                     deviceId = 1,
-                                    base = 0,
+                                    base = 0x1000_0400,
                                     size = 1,
                                     traffic = RuntimeK16BusTrafficMetrics(),
                                     storage = RuntimeK16StorageMetrics(readCommands = 36, mediaReadBlocks = 14),
@@ -516,7 +516,7 @@ class K16RuntimeTextIoProfilingTest {
                             listOf(
                                 RuntimeK16MmioDeviceMetrics(
                                     deviceId = 1,
-                                    base = 0,
+                                    base = 0x1000_0400,
                                     size = 1,
                                     traffic = RuntimeK16BusTrafficMetrics(),
                                     storage = RuntimeK16StorageMetrics(readCommands = 12, mediaReadBlocks = 20),
