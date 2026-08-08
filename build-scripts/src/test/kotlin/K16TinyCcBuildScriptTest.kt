@@ -179,6 +179,8 @@ class K16TinyCcBuildScriptTest {
         assertTrue(producerConvention.contains("guest/kraftos/sdk/c/src"))
         assertTrue(producerConvention.contains("val compileK16CSdkLibc ="))
         assertTrue(producerConvention.contains("tasks.register(\"compileK16CSdkLibc\")"))
+        assertTrue(producerConvention.contains("guest/kraftos/sdk/c/arch/k16/setjmp.kasm"))
+        assertTrue(producerConvention.contains("outputDirectory.resolve(\"arch-k16\")"))
         assertTrue(producerConvention.contains("allocator_test.c"))
         assertTrue(producerConvention.contains("string_test.c"))
         assertTrue(producerConvention.contains("unistd_test.c"))
