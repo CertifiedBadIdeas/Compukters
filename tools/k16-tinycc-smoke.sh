@@ -152,6 +152,8 @@ positive_fixtures=(
     "control-flow:42"
     "calls:42"
     "wide-direct:42"
+    "aggregate-args:42"
+    "varargs-basic:42"
 )
 
 for fixture_spec in "${positive_fixtures[@]}"; do
@@ -209,13 +211,8 @@ require_not_contains "$WORK_DIR/predefines.txt" "__CHAR_UNSIGNED__"
 
 require_tinycc_failure "reject-float" \
     "K16 TinyCC does not support floating-point code yet"
-require_tinycc_failure "reject-varargs" \
-    "K16 TinyCC does not support variadic functions yet"
 require_tinycc_failure "reject-asm" \
     "K16 TinyCC does not support integrated assembly"
-require_tinycc_failure "reject-aggregate" \
-    "K16 TinyCC does not support aggregate arguments or returns yet"
-
 if "$TINYCC" -run "$FIXTURES/return-42.c" > /dev/null 2> "$WORK_DIR/run.stderr"; then
     echo "expected tcc-k16 to reject -run" >&2
     exit 1
