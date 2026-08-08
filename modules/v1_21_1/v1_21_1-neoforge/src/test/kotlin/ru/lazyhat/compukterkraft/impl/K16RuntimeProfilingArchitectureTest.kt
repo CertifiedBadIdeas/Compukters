@@ -178,9 +178,9 @@ class K16RuntimeProfilingArchitectureTest {
         assertFalse(blockIoSource.contains("k16_abi::computer::storage0"))
         assertFalse(blockIoSource.contains("write_i32(storage0::COMMAND"))
         assertTrue(deviceSource.contains("pub unsafe fn read_storage_blocks_to_ram("))
-        assertTrue(deviceSource.contains("write_u32(storage0::BLOCK_COUNT, block_count)"))
+        assertTrue(deviceSource.contains("device.register(storage::BLOCK_COUNT_OFFSET), block_count"))
         assertTrue(fileIoSource.contains("full_block_count"))
-        assertTrue(fileIoSource.contains("block_io::read_fs_blocks_to_ram(block, full_block_count, dst)"))
+        assertTrue(fileIoSource.contains("block_io::read_fs_blocks_to_ram(volume, block, full_block_count, dst)"))
     }
 
     @Test
@@ -197,12 +197,13 @@ class K16RuntimeProfilingArchitectureTest {
     fun k16RootFsReusesMountedRootPartitionForCachedReadPaths() {
         val rootSource = Path.of("../../../guest/kraftos/kernel/src/kfs/root.rs").readText()
         val mountSource = Path.of("../../../guest/kraftos/kernel/src/kfs/mount.rs").readText()
+        val volumeSource = Path.of("../../../guest/kraftos/kernel/src/kfs/volume.rs").readText()
         val fsSource = Path.of("../../../guest/kraftos/kernel/src/fs.rs").readText()
 
         assertTrue(mountSource.contains("pub unsafe fn mount_root_partition_superblock("))
-        assertTrue(rootSource.contains("mounted: Option<crate::kfs::mount::MountedKfs>"))
+        assertTrue(volumeSource.contains("pub(crate) mounted: Option<MountedKfs>"))
         assertTrue(rootSource.contains("unsafe fn ensure_mounted("))
-        assertTrue(rootSource.contains("crate::kfs::mount::mount_root_partition_superblock(partition_type)"))
+        assertTrue(rootSource.contains("crate::kfs::mount::mount_root_partition_superblock(self, partition_type)"))
         assertEquals(8, rootSource.split("self.ensure_mounted(partition_type)?").size - 1)
         assertFalse(rootSource.contains("crate::kfs::storage::"))
         assertFalse(rootSource.contains("read_root_partition_superblock"))
@@ -220,11 +221,12 @@ class K16RuntimeProfilingArchitectureTest {
         val blockIoSource = Path.of("../../../guest/kraftos/kernel/src/kfs/block_io.rs").readText()
 
         assertTrue(blockIoSource.contains("KFS_BLOCK_CACHE_SLOTS"))
-        assertTrue(blockIoSource.contains("static KFS_BLOCK_CACHE: KernelKfsBlockCache"))
-        assertTrue(blockIoSource.contains("read_fs_block_from_cache(block)"))
-        assertTrue(blockIoSource.contains("store_scratch_block_in_cache(block)"))
+        val volumeSource = Path.of("../../../guest/kraftos/kernel/src/kfs/volume.rs").readText()
+        assertTrue(volumeSource.contains("block_cache: KfsBlockCache<KFS_BLOCK_CACHE_SLOTS>"))
+        assertTrue(blockIoSource.contains("read_fs_block_from_cache(volume, block)"))
+        assertTrue(blockIoSource.contains("store_scratch_block_in_cache(volume, block)"))
         assertTrue(blockIoSource.contains("write_cached_block_to_scratch(bytes)"))
-        assertTrue(blockIoSource.contains("crate::kfs::block_cache::KfsBlockCache"))
+        assertTrue(blockIoSource.contains("volume.block_cache.get(block)"))
     }
 
     @Test
@@ -243,8 +245,8 @@ class K16RuntimeProfilingArchitectureTest {
         assertTrue(runtimeProfilingSource.contains("blockCacheMisses="))
         assertTrue(runtimeProfilingSource.contains("blockCacheBatchReads="))
         assertTrue(blockIoSource.contains("read_fs_blocks_to_ram_cached"))
-        assertTrue(blockIoSource.contains("copy_cached_block_to_ram(block, dst_cursor)"))
-        assertTrue(blockIoSource.contains("store_ram_blocks_in_cache(block, miss_count, dst_cursor)"))
+        assertTrue(blockIoSource.contains("copy_cached_block_to_ram(volume, block, dst_cursor)"))
+        assertTrue(blockIoSource.contains("store_ram_blocks_in_cache(volume, block, miss_count, dst_cursor)"))
         assertTrue(blockIoSource.contains("record_block_cache_hit()"))
         assertTrue(blockIoSource.contains("record_block_cache_miss()"))
         assertTrue(blockIoSource.contains("record_block_cache_batch_read()"))

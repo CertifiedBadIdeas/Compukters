@@ -12,10 +12,11 @@ const STACK_GUARD_BYTES: u32 = VM_PAGE_SIZE;
 const BIN_COMPONENT: &[u8] = b"bin";
 const LIB_COMPONENT: &[u8] = b"lib";
 const BIN_PREFIX: &[u8] = b"/bin/";
+const SDK_BIN_PREFIX: &[u8] = b"/sdk/bin/";
 const KX_SUFFIX: &[u8] = b".kx";
 const KSO_SUFFIX: &[u8] = b".kso";
 const KFS_MAX_NAME_BYTES: usize = 56;
-pub const MAX_RUN_PATH_BYTES: usize = BIN_PREFIX.len() + KFS_MAX_NAME_BYTES;
+pub const MAX_RUN_PATH_BYTES: usize = SDK_BIN_PREFIX.len() + KFS_MAX_NAME_BYTES;
 const MAX_DYNAMIC_IMPORT_LIBRARIES: usize = 4;
 const DYNAMIC_LOADER_NEEDED_SECTION_BYTES: usize = 256;
 const DYNAMIC_LOADER_IMPORT_SECTION_BYTES: usize = 2048;
@@ -1583,6 +1584,9 @@ pub unsafe fn begin_translated_init_from_storage0(
     path: &[u8],
     boot_info: k16_abi::computer::profile::BootInfo,
 ) -> Result<ChildLaunch, ProcessLoadError> {
+    if UserProgramPath::parse(path)?.volume() != crate::vfs::VolumeId::Root {
+        return Err(ProcessLoadError::InvalidPath);
+    }
     let kernel_image_end = unsafe { initial_user_kernel_image_end() };
     let (arena, kernel_stack_top) =
         translated_init_user_arena(boot_info.program_base, boot_info.ram_size, unsafe {
@@ -1598,7 +1602,7 @@ pub unsafe fn begin_translated_init_from_storage0(
     )
     .map_err(page_alloc_error_to_process_load_error)?;
     let mapped_child_plan =
-        unsafe { load_dynamic_user_program_from_storage0_mapped(path, arena, &mut allocator)? };
+        unsafe { load_dynamic_user_program_mapped(path, arena, &mut allocator)? };
     let child_plan = mapped_child_plan.virtual_plan();
     let translated = match unsafe {
         create_translated_user_launch_from_mapped(mapped_child_plan, kernel_stack_top)
@@ -1649,7 +1653,7 @@ pub unsafe fn begin_loaded_child_from_path(path: &[u8]) -> Result<ChildLaunch, u
         let arena = table
             .child_arena_for_init_frame(init_frame)
             .map_err(run_status_from_load_error)?;
-        let child_plan = unsafe { load_dynamic_user_program_from_storage0(path, arena) }
+        let child_plan = unsafe { load_dynamic_user_program(path, arena) }
             .map_err(run_status_from_load_error)?;
         table
             .begin_child_run_from_frame(child_plan, init_frame)
@@ -1673,7 +1677,7 @@ pub unsafe fn begin_loaded_child_from_argv_request(request: &[u8]) -> Result<Chi
         let arena = table
             .child_arena_for_init_frame(init_frame)
             .map_err(run_status_from_load_error)?;
-        let child_plan = unsafe { load_dynamic_user_program_from_storage0(request.path, arena) }
+        let child_plan = unsafe { load_dynamic_user_program(request.path, arena) }
             .map_err(run_status_from_load_error)?;
         let argv = unsafe { install_child_argv(child_plan, request.args()) }
             .map_err(run_status_from_load_error)?;
@@ -1700,7 +1704,7 @@ pub unsafe fn spawn_loaded_child_from_argv_request(request: &[u8]) -> Result<Pro
         let arena = table
             .child_arena_for_init_frame(caller_frame)
             .map_err(run_status_from_load_error)?;
-        let child_plan = unsafe { load_dynamic_user_program_from_storage0(request.path, arena) }
+        let child_plan = unsafe { load_dynamic_user_program(request.path, arena) }
             .map_err(run_status_from_load_error)?;
         let argv = unsafe { install_child_argv(child_plan, request.args()) }
             .map_err(run_status_from_load_error)?;
@@ -1772,9 +1776,8 @@ unsafe fn load_runtime_child(path: &[u8], args: &[&[u8]]) -> Result<ProcessId, u
     if translated_child {
         let allocator = unsafe { (*RUNTIME_PAGE_ALLOCATOR.get()).as_mut() }
             .ok_or_else(|| run_status_from_load_error(ProcessLoadError::Storage))?;
-        let mapped_child_plan =
-            unsafe { load_dynamic_user_program_from_storage0_mapped(path, arena, allocator) }
-                .map_err(run_status_from_load_error)?;
+        let mapped_child_plan = unsafe { load_dynamic_user_program_mapped(path, arena, allocator) }
+            .map_err(run_status_from_load_error)?;
         let child_plan = mapped_child_plan.virtual_plan();
         let argv = match unsafe { install_mapped_child_argv(mapped_child_plan, args) } {
             Ok(argv) => argv,
@@ -1803,8 +1806,8 @@ unsafe fn load_runtime_child(path: &[u8], args: &[&[u8]]) -> Result<ProcessId, u
             }
         };
     }
-    let child_plan = unsafe { load_dynamic_user_program_from_storage0(path, arena) }
-        .map_err(run_status_from_load_error)?;
+    let child_plan =
+        unsafe { load_dynamic_user_program(path, arena) }.map_err(run_status_from_load_error)?;
     let argv =
         unsafe { install_child_argv(child_plan, args) }.map_err(run_status_from_load_error)?;
     unsafe { spawn_loaded_child_plan_runtime_with_argv(child_plan, argv, None) }
@@ -2757,6 +2760,7 @@ impl HeapState {
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct UserProgramPath<'a> {
+    volume: crate::vfs::VolumeId,
     components: [&'a [u8]; 2],
 }
 
@@ -2767,10 +2771,13 @@ pub struct SharedLibraryPath<'a> {
 
 impl<'a> UserProgramPath<'a> {
     pub fn parse(path: &'a [u8]) -> Result<Self, ProcessLoadError> {
-        if !path.starts_with(BIN_PREFIX) {
+        let (volume, name) = if let Some(name) = path.strip_prefix(BIN_PREFIX) {
+            (crate::vfs::VolumeId::Root, name)
+        } else if let Some(name) = path.strip_prefix(SDK_BIN_PREFIX) {
+            (crate::vfs::VolumeId::Sdk, name)
+        } else {
             return Err(ProcessLoadError::InvalidPath);
-        }
-        let name = &path[BIN_PREFIX.len()..];
+        };
         if name.is_empty()
             || name.len() > KFS_MAX_NAME_BYTES
             || !name.ends_with(KX_SUFFIX)
@@ -2782,12 +2789,17 @@ impl<'a> UserProgramPath<'a> {
             return Err(ProcessLoadError::InvalidPath);
         }
         Ok(Self {
+            volume,
             components: [BIN_COMPONENT, name],
         })
     }
 
     pub const fn components(&self) -> &[&'a [u8]; 2] {
         &self.components
+    }
+
+    pub const fn volume(&self) -> crate::vfs::VolumeId {
+        self.volume
     }
 }
 
@@ -3174,7 +3186,7 @@ const fn empty_file_metadata() -> FileMetadata {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 struct DynamicImportLoadState<'a> {
     image: DynamicUserImportImage,
-    main_file: FileMetadata,
+    main_file: crate::fs::VfsFile,
     needed_libraries: &'a [u8],
     import_relocations: &'a [u8],
     libraries: [DynamicImportLibrary; MAX_DYNAMIC_IMPORT_LIBRARIES],
@@ -4433,41 +4445,46 @@ pub fn plan_dynamic_user_load(
     })
 }
 
-pub unsafe fn load_dynamic_user_program_from_storage0(
+pub unsafe fn load_dynamic_user_program(
     path: &[u8],
     arena: UserArena,
 ) -> Result<DynamicUserLoadPlan, ProcessLoadError> {
     crate::os_stats::record_program_load();
-    let path = UserProgramPath::parse(path)?;
-    let profile_file = program_profile_file(path);
-    unsafe {
-        crate::fs::open_root_file_cached_components(path.components())
-            .map_err(|_| ProcessLoadError::Storage)?;
+    let parsed_path = UserProgramPath::parse(path)?;
+    let profile_file = program_profile_file(parsed_path);
+    let file =
+        unsafe { crate::fs::open_file_cached_path(path).map_err(|_| ProcessLoadError::Storage)? };
+    if file.volume != parsed_path.volume() {
+        return Err(ProcessLoadError::Storage);
     }
-    let version = unsafe { selected_k16e_version(profile_file)? };
+    let version = unsafe { selected_k16e_version(file, profile_file)? };
     if version == 5 || version == 6 {
-        unsafe { load_selected_dynamic_user_program_with_imports(arena, version, profile_file) }
+        unsafe {
+            load_selected_dynamic_user_program_with_imports(file, arena, version, profile_file)
+        }
     } else {
-        unsafe { load_selected_dynamic_user_program(arena, profile_file) }
+        unsafe { load_selected_dynamic_user_program(file, arena, profile_file) }
     }
 }
 
-pub unsafe fn load_dynamic_user_program_from_storage0_mapped(
+pub unsafe fn load_dynamic_user_program_mapped(
     path: &[u8],
     arena: UserArena,
     allocator: &mut crate::page_alloc::PageFrameAllocator,
 ) -> Result<MappedDynamicUserLoadPlan, ProcessLoadError> {
     crate::os_stats::record_program_load();
-    let path = UserProgramPath::parse(path)?;
-    let profile_file = program_profile_file(path);
-    unsafe {
-        crate::fs::open_root_file_cached_components(path.components())
-            .map_err(|_| ProcessLoadError::Storage)?;
+    let parsed_path = UserProgramPath::parse(path)?;
+    let profile_file = program_profile_file(parsed_path);
+    let file =
+        unsafe { crate::fs::open_file_cached_path(path).map_err(|_| ProcessLoadError::Storage)? };
+    if file.volume != parsed_path.volume() {
+        return Err(ProcessLoadError::Storage);
     }
-    let version = unsafe { selected_k16e_version(profile_file)? };
+    let version = unsafe { selected_k16e_version(file, profile_file)? };
     if version == 5 || version == 6 {
         unsafe {
             load_selected_dynamic_user_program_with_imports_mapped(
+                file,
                 arena,
                 allocator,
                 version,
@@ -4475,23 +4492,46 @@ pub unsafe fn load_dynamic_user_program_from_storage0_mapped(
             )
         }
     } else {
-        unsafe { load_selected_dynamic_user_program_mapped(arena, allocator, profile_file) }
+        unsafe { load_selected_dynamic_user_program_mapped(file, arena, allocator, profile_file) }
     }
 }
 
-pub unsafe fn load_selected_dynamic_user_program(
+unsafe fn copy_vfs_file_range_to_ram_profiled(
+    file: crate::fs::VfsFile,
+    file_offset: u32,
+    dst_addr: u32,
+    len: u32,
+    profile_kind: FileReadProfileKind,
+) -> Result<(), ProcessLoadError> {
+    unsafe {
+        crate::vfs::with_volume(file.volume, |volume| {
+            crate::kfs::file_io::copy_file_range_to_ram_profiled(
+                volume,
+                file.metadata,
+                file_offset,
+                dst_addr,
+                len,
+                profile_kind,
+            )
+        })
+    }
+    .ok_or(ProcessLoadError::Storage)?
+    .map_err(|_| ProcessLoadError::Storage)
+}
+
+pub(crate) unsafe fn load_selected_dynamic_user_program(
+    file: crate::fs::VfsFile,
     arena: UserArena,
     profile_file: FileReadProfileFile,
 ) -> Result<DynamicUserLoadPlan, ProcessLoadError> {
     unsafe {
-        crate::kfs::file_io::copy_selected_file_range_to_ram_profiled(
-            crate::fs::root_volume(),
+        copy_vfs_file_range_to_ram_profiled(
+            file,
             0,
             crate::kfs::block_io::SCRATCH_ADDR,
             crate::image::DYNAMIC_K16E_V2_HEADER_SIZE,
             FileReadProfileKind::DynamicImport(profile_file),
-        )
-        .map_err(|_| ProcessLoadError::Storage)?;
+        )?;
     }
     let header = unsafe {
         core::slice::from_raw_parts(
@@ -4499,9 +4539,7 @@ pub unsafe fn load_selected_dynamic_user_program(
             crate::image::DYNAMIC_K16E_V2_HEADER_SIZE as usize,
         )
     };
-    validate_dynamic_header_bytes(header, unsafe {
-        crate::fs::root_volume().selected_inode.size()
-    })?;
+    validate_dynamic_header_bytes(header, file.metadata.size_bytes)?;
     let entry_offset = header_u32(header, 12);
     let payload_offset = header_u32(header, 40);
     let file_size = header_u32(header, 44);
@@ -4514,19 +4552,19 @@ pub unsafe fn load_selected_dynamic_user_program(
     )?;
 
     unsafe {
-        crate::kfs::file_io::copy_selected_file_range_to_ram_profiled(
-            crate::fs::root_volume(),
+        copy_vfs_file_range_to_ram_profiled(
+            file,
             payload_offset,
             plan.payload_dst,
             plan.payload_len,
             FileReadProfileKind::Program(profile_file),
-        )
-        .map_err(|_| ProcessLoadError::Storage)?;
+        )?;
     }
     crate::os_stats::record_program_load_bytes(plan.payload_len);
     unsafe {
         zero_fill_ram(plan.zero_fill_addr, plan.zero_fill_len);
         apply_selected_file_relocations(
+            file,
             relocation_table_offset,
             relocation_count,
             memory_size,
@@ -4538,11 +4576,12 @@ pub unsafe fn load_selected_dynamic_user_program(
 }
 
 unsafe fn load_selected_dynamic_user_program_with_imports(
+    file: crate::fs::VfsFile,
     arena: UserArena,
     version: u16,
     profile_file: FileReadProfileFile,
 ) -> Result<DynamicUserLoadPlan, ProcessLoadError> {
-    let state = unsafe { read_selected_dynamic_import_state(version, profile_file)? };
+    let state = unsafe { read_selected_dynamic_import_state(file, version, profile_file)? };
     let image = state.image;
     let plan = plan_dynamic_user_load(
         arena,
@@ -4550,15 +4589,13 @@ unsafe fn load_selected_dynamic_user_program_with_imports(
     )?;
 
     unsafe {
-        crate::kfs::file_io::copy_file_range_to_ram_profiled(
-            crate::fs::root_volume(),
+        copy_vfs_file_range_to_ram_profiled(
             state.main_file,
             image.payload_offset,
             plan.payload_dst,
             image.file_size,
             FileReadProfileKind::Program(profile_file),
-        )
-        .map_err(|_| ProcessLoadError::Storage)?;
+        )?;
         crate::os_stats::record_program_load_bytes(image.file_size);
         zero_fill_ram(plan.zero_fill_addr, plan.zero_fill_len);
         if image.writable_file_size > 0 {
@@ -4566,15 +4603,13 @@ unsafe fn load_selected_dynamic_user_program_with_imports(
                 .load_base
                 .checked_add(image.writable_offset)
                 .ok_or(ProcessLoadError::AddressOverflow)?;
-            crate::kfs::file_io::copy_file_range_to_ram_profiled(
-                crate::fs::root_volume(),
+            copy_vfs_file_range_to_ram_profiled(
                 state.main_file,
                 image.writable_file_offset,
                 writable_dst,
                 image.writable_file_size,
                 FileReadProfileKind::Program(profile_file),
-            )
-            .map_err(|_| ProcessLoadError::Storage)?;
+            )?;
             crate::os_stats::record_program_load_bytes(image.writable_file_size);
         }
         apply_file_relocations(
@@ -4591,20 +4626,20 @@ unsafe fn load_selected_dynamic_user_program_with_imports(
     Ok(plan)
 }
 
-pub unsafe fn load_selected_dynamic_user_program_mapped(
+pub(crate) unsafe fn load_selected_dynamic_user_program_mapped(
+    file: crate::fs::VfsFile,
     arena: UserArena,
     allocator: &mut crate::page_alloc::PageFrameAllocator,
     profile_file: FileReadProfileFile,
 ) -> Result<MappedDynamicUserLoadPlan, ProcessLoadError> {
     unsafe {
-        crate::kfs::file_io::copy_selected_file_range_to_ram_profiled(
-            crate::fs::root_volume(),
+        copy_vfs_file_range_to_ram_profiled(
+            file,
             0,
             crate::kfs::block_io::SCRATCH_ADDR,
             crate::image::DYNAMIC_K16E_V2_HEADER_SIZE,
             FileReadProfileKind::DynamicImport(profile_file),
-        )
-        .map_err(|_| ProcessLoadError::Storage)?;
+        )?;
     }
     let header = unsafe {
         core::slice::from_raw_parts(
@@ -4612,9 +4647,7 @@ pub unsafe fn load_selected_dynamic_user_program_mapped(
             crate::image::DYNAMIC_K16E_V2_HEADER_SIZE as usize,
         )
     };
-    validate_dynamic_header_bytes(header, unsafe {
-        crate::fs::root_volume().selected_inode.size()
-    })?;
+    validate_dynamic_header_bytes(header, file.metadata.size_bytes)?;
     let entry_offset = header_u32(header, 12);
     let payload_offset = header_u32(header, 40);
     let file_size = header_u32(header, 44);
@@ -4634,14 +4667,13 @@ pub unsafe fn load_selected_dynamic_user_program_mapped(
         }
     };
     if let Err(error) = unsafe {
-        crate::kfs::file_io::copy_selected_file_range_to_ram_profiled(
-            crate::fs::root_volume(),
+        copy_vfs_file_range_to_ram_profiled(
+            file,
             payload_offset,
             payload_dst,
             plan.payload_len,
             FileReadProfileKind::Program(profile_file),
         )
-        .map_err(|_| ProcessLoadError::Storage)
     } {
         let _ = free_mapped_dynamic_user_load_plan(mapped, allocator);
         return Err(error);
@@ -4655,6 +4687,7 @@ pub unsafe fn load_selected_dynamic_user_program_mapped(
     }
     if let Err(error) = unsafe {
         apply_selected_file_relocations_mapped(
+            file,
             relocation_table_offset,
             relocation_count,
             memory_size,
@@ -4669,12 +4702,13 @@ pub unsafe fn load_selected_dynamic_user_program_mapped(
 }
 
 unsafe fn load_selected_dynamic_user_program_with_imports_mapped(
+    file: crate::fs::VfsFile,
     arena: UserArena,
     allocator: &mut crate::page_alloc::PageFrameAllocator,
     version: u16,
     profile_file: FileReadProfileFile,
 ) -> Result<MappedDynamicUserLoadPlan, ProcessLoadError> {
-    let state = unsafe { read_selected_dynamic_import_state(version, profile_file)? };
+    let state = unsafe { read_selected_dynamic_import_state(file, version, profile_file)? };
     let image = state.image;
     let plan = plan_dynamic_user_load(
         arena,
@@ -4702,15 +4736,13 @@ unsafe fn load_selected_dynamic_user_program_with_imports_mapped(
         }
     };
     if let Err(error) = unsafe {
-        crate::kfs::file_io::copy_file_range_to_ram_profiled(
-            crate::fs::root_volume(),
+        copy_vfs_file_range_to_ram_profiled(
             state.main_file,
             image.payload_offset,
             payload_dst,
             image.file_size,
             FileReadProfileKind::Program(profile_file),
         )
-        .map_err(|_| ProcessLoadError::Storage)
     } {
         let _ = free_mapped_dynamic_user_load_plan(mapped, allocator);
         return Err(error);
@@ -4731,15 +4763,13 @@ unsafe fn load_selected_dynamic_user_program_with_imports_mapped(
             }
         };
         if let Err(error) = unsafe {
-            crate::kfs::file_io::copy_file_range_to_ram_profiled(
-                crate::fs::root_volume(),
+            copy_vfs_file_range_to_ram_profiled(
                 state.main_file,
                 image.writable_file_offset,
                 writable_dst,
                 image.writable_file_size,
                 FileReadProfileKind::Program(profile_file),
             )
-            .map_err(|_| ProcessLoadError::Storage)
         } {
             let _ = free_mapped_dynamic_user_load_plan(mapped, allocator);
             return Err(error);
@@ -4774,17 +4804,17 @@ unsafe fn load_selected_dynamic_user_program_with_imports_mapped(
 }
 
 unsafe fn selected_k16e_version(
+    file: crate::fs::VfsFile,
     profile_file: FileReadProfileFile,
 ) -> Result<u16, ProcessLoadError> {
     unsafe {
-        crate::kfs::file_io::copy_selected_file_range_to_ram_profiled(
-            crate::fs::root_volume(),
+        copy_vfs_file_range_to_ram_profiled(
+            file,
             0,
             RELOCATION_RECORD_ADDR,
             6,
             FileReadProfileKind::DynamicImport(profile_file),
-        )
-        .map_err(|_| ProcessLoadError::Storage)?;
+        )?;
     }
     let magic = [
         unsafe { read_u8(RELOCATION_RECORD_ADDR) },
@@ -4802,6 +4832,7 @@ unsafe fn selected_k16e_version(
 }
 
 unsafe fn read_selected_dynamic_import_image(
+    file: crate::fs::VfsFile,
     version: u16,
     profile_file: FileReadProfileFile,
 ) -> Result<DynamicUserImportImage, ProcessLoadError> {
@@ -4811,14 +4842,13 @@ unsafe fn read_selected_dynamic_import_image(
         crate::image::DYNAMIC_K16E_V5_HEADER_SIZE
     };
     unsafe {
-        crate::kfs::file_io::copy_selected_file_range_to_ram_profiled(
-            crate::fs::root_volume(),
+        copy_vfs_file_range_to_ram_profiled(
+            file,
             0,
             crate::kfs::block_io::SCRATCH_ADDR,
             header_size,
             FileReadProfileKind::DynamicImport(profile_file),
-        )
-        .map_err(|_| ProcessLoadError::Storage)?;
+        )?;
     }
     if version == 6 {
         let header = unsafe {
@@ -4830,14 +4860,13 @@ unsafe fn read_selected_dynamic_import_image(
         if header_u32(header, 20) == 5 {
             header_size = crate::image::DYNAMIC_K16E_V6_HEADER_SIZE;
             unsafe {
-                crate::kfs::file_io::copy_selected_file_range_to_ram_profiled(
-                    crate::fs::root_volume(),
+                copy_vfs_file_range_to_ram_profiled(
+                    file,
                     0,
                     crate::kfs::block_io::SCRATCH_ADDR,
                     header_size,
                     FileReadProfileKind::DynamicImport(profile_file),
-                )
-                .map_err(|_| ProcessLoadError::Storage)?;
+                )?;
             }
         }
     }
@@ -4847,9 +4876,7 @@ unsafe fn read_selected_dynamic_import_image(
             header_size as usize,
         )
     };
-    validate_dynamic_header_bytes(header, unsafe {
-        crate::fs::root_volume().selected_inode.size()
-    })?;
+    validate_dynamic_header_bytes(header, file.metadata.size_bytes)?;
     crate::os_stats::record_dynamic_import_bytes(header_size);
     if version == 6 {
         let writable_offset = header_u32(header, 56);
@@ -4924,14 +4951,16 @@ unsafe fn read_selected_dynamic_import_image(
 }
 
 unsafe fn read_selected_dynamic_import_state(
+    file: crate::fs::VfsFile,
     version: u16,
     profile_file: FileReadProfileFile,
 ) -> Result<DynamicImportLoadState<'static>, ProcessLoadError> {
     crate::os_stats::record_dynamic_import_load();
-    let main_file = unsafe { crate::fs::root_volume().selected_inode.file_metadata() };
-    let image = unsafe { read_selected_dynamic_import_image(version, profile_file)? };
+    let main_file = file;
+    let image = unsafe { read_selected_dynamic_import_image(file, version, profile_file)? };
     let needed_libraries = unsafe {
         copy_selected_section_to_loader_needed_buffer(
+            file,
             image.needed_section_offset,
             image.needed_section_size,
             profile_file,
@@ -4940,6 +4969,7 @@ unsafe fn read_selected_dynamic_import_state(
     crate::os_stats::record_dynamic_import_bytes(image.needed_section_size);
     let import_relocations = unsafe {
         copy_selected_section_to_loader_import_buffer(
+            file,
             image.import_section_offset,
             image.import_section_size,
             profile_file,
@@ -5226,7 +5256,11 @@ unsafe fn read_resident_shared_library(
     file: FileMetadata,
     profile_file: FileReadProfileFile,
 ) -> Result<u32, ProcessLoadError> {
-    let image = unsafe { read_selected_shared_library_image(profile_file)? };
+    let file_handle = crate::fs::VfsFile {
+        volume: crate::vfs::VolumeId::Root,
+        metadata: file,
+    };
+    let image = unsafe { read_shared_library_image(file_handle, profile_file)? };
     validate_resident_shared_library_capacity(image)?;
     let entry = unsafe { resident_shared_library_mut(slot)? };
     if entry.valid && entry.readonly_backing_page_count != 0 {
@@ -5244,33 +5278,27 @@ unsafe fn read_resident_shared_library(
     entry.readonly_backing_start = 0;
     entry.readonly_backing_page_count = 0;
     unsafe {
-        crate::kfs::file_io::copy_file_range_to_ram_profiled(
-            crate::fs::root_volume(),
-            file,
+        copy_vfs_file_range_to_ram_profiled(
+            file_handle,
             image.payload_offset,
             entry.payload.as_mut_ptr() as usize as u32,
             image.file_size,
             FileReadProfileKind::Library(profile_file),
-        )
-        .map_err(|_| ProcessLoadError::Storage)?;
-        crate::kfs::file_io::copy_file_range_to_ram_profiled(
-            crate::fs::root_volume(),
-            file,
+        )?;
+        copy_vfs_file_range_to_ram_profiled(
+            file_handle,
             image.relocation_table_offset,
             entry.relocations.as_mut_ptr() as usize as u32,
             shared_library_relocation_table_size(image)?,
             FileReadProfileKind::DynamicImport(profile_file),
-        )
-        .map_err(|_| ProcessLoadError::Storage)?;
-        crate::kfs::file_io::copy_file_range_to_ram_profiled(
-            crate::fs::root_volume(),
-            file,
+        )?;
+        copy_vfs_file_range_to_ram_profiled(
+            file_handle,
             image.export_section_offset,
             entry.exports.as_mut_ptr() as usize as u32,
             image.export_section_size,
             FileReadProfileKind::DynamicImport(profile_file),
-        )
-        .map_err(|_| ProcessLoadError::Storage)?;
+        )?;
     }
     crate::os_stats::record_dynamic_import_bytes(
         shared_library_relocation_table_size(image)?
@@ -5501,12 +5529,14 @@ fn section_u32(section: &[u8], offset: usize) -> Result<u32, ProcessLoadError> {
 }
 
 unsafe fn copy_selected_section_to_loader_needed_buffer(
+    file: crate::fs::VfsFile,
     offset: u32,
     size: u32,
     profile_file: FileReadProfileFile,
 ) -> Result<&'static [u8], ProcessLoadError> {
     unsafe {
         copy_selected_section_to_loader_buffer(
+            file,
             offset,
             size,
             core::ptr::addr_of_mut!(LOADER_NEEDED_SECTION) as *mut u8,
@@ -5517,12 +5547,14 @@ unsafe fn copy_selected_section_to_loader_needed_buffer(
 }
 
 unsafe fn copy_selected_section_to_loader_import_buffer(
+    file: crate::fs::VfsFile,
     offset: u32,
     size: u32,
     profile_file: FileReadProfileFile,
 ) -> Result<&'static [u8], ProcessLoadError> {
     unsafe {
         copy_selected_section_to_loader_buffer(
+            file,
             offset,
             size,
             core::ptr::addr_of_mut!(LOADER_IMPORT_SECTION) as *mut u8,
@@ -5670,6 +5702,7 @@ unsafe fn loader_export_section(index: u32, size: u32) -> Result<&'static [u8], 
 }
 
 unsafe fn copy_selected_section_to_loader_buffer(
+    file: crate::fs::VfsFile,
     offset: u32,
     size: u32,
     dst: *mut u8,
@@ -5681,30 +5714,29 @@ unsafe fn copy_selected_section_to_loader_buffer(
         return Err(ProcessLoadError::InvalidImage);
     }
     unsafe {
-        crate::kfs::file_io::copy_selected_file_range_to_ram_profiled(
-            crate::fs::root_volume(),
+        copy_vfs_file_range_to_ram_profiled(
+            file,
             offset,
             dst as usize as u32,
             size,
             FileReadProfileKind::DynamicImport(profile_file),
-        )
-        .map_err(|_| ProcessLoadError::Storage)?;
+        )?;
     }
     Ok(unsafe { core::slice::from_raw_parts(dst as *const u8, len) })
 }
 
-unsafe fn read_selected_shared_library_image(
+unsafe fn read_shared_library_image(
+    file: crate::fs::VfsFile,
     profile_file: FileReadProfileFile,
 ) -> Result<SharedLibraryImage, ProcessLoadError> {
     unsafe {
-        crate::kfs::file_io::copy_selected_file_range_to_ram_profiled(
-            crate::fs::root_volume(),
+        copy_vfs_file_range_to_ram_profiled(
+            file,
             0,
             crate::kfs::block_io::SCRATCH_ADDR,
             6,
             FileReadProfileKind::DynamicImport(profile_file),
-        )
-        .map_err(|_| ProcessLoadError::Storage)?;
+        )?;
     }
     let prefix = unsafe {
         core::slice::from_raw_parts(crate::kfs::block_io::SCRATCH_ADDR as usize as *const u8, 6)
@@ -5718,14 +5750,13 @@ unsafe fn read_selected_shared_library_image(
         _ => return Err(ProcessLoadError::InvalidImage),
     };
     unsafe {
-        crate::kfs::file_io::copy_selected_file_range_to_ram_profiled(
-            crate::fs::root_volume(),
+        copy_vfs_file_range_to_ram_profiled(
+            file,
             0,
             crate::kfs::block_io::SCRATCH_ADDR,
             header_size,
             FileReadProfileKind::DynamicImport(profile_file),
-        )
-        .map_err(|_| ProcessLoadError::Storage)?;
+        )?;
     }
     let header = unsafe {
         core::slice::from_raw_parts(
@@ -5733,9 +5764,7 @@ unsafe fn read_selected_shared_library_image(
             header_size as usize,
         )
     };
-    let image = shared_library_image_from_header(header, unsafe {
-        crate::fs::root_volume().selected_inode.size()
-    })?;
+    let image = shared_library_image_from_header(header, file.metadata.size_bytes)?;
     crate::os_stats::record_dynamic_import_bytes(header_size);
     Ok(image)
 }
@@ -5832,6 +5861,7 @@ fn min_u32(left: u32, right: u32) -> u32 {
 }
 
 unsafe fn copy_selected_relocation_batch_to_loader_buffer(
+    file: crate::fs::VfsFile,
     relocation_table_offset: u32,
     start_index: u32,
     remaining_records: u32,
@@ -5851,14 +5881,13 @@ unsafe fn copy_selected_relocation_batch_to_loader_buffer(
         .checked_mul(crate::image::K16E_RELOCATION_RECORD_SIZE)
         .ok_or(ProcessLoadError::AddressOverflow)?;
     unsafe {
-        crate::kfs::file_io::copy_selected_file_range_to_ram_profiled(
-            crate::fs::root_volume(),
+        copy_vfs_file_range_to_ram_profiled(
+            file,
             file_offset,
             core::ptr::addr_of_mut!(LOADER_RELOCATION_SECTION) as usize as u32,
             byte_count,
             FileReadProfileKind::DynamicImport(profile_file),
-        )
-        .map_err(|_| ProcessLoadError::Storage)?;
+        )?;
     }
     let len = usize::try_from(byte_count).map_err(|_| ProcessLoadError::AddressOverflow)?;
     let section = unsafe {
@@ -5871,7 +5900,7 @@ unsafe fn copy_selected_relocation_batch_to_loader_buffer(
 }
 
 unsafe fn copy_relocation_batch_to_loader_buffer(
-    metadata: FileMetadata,
+    file: crate::fs::VfsFile,
     relocation_table_offset: u32,
     start_index: u32,
     remaining_records: u32,
@@ -5891,15 +5920,13 @@ unsafe fn copy_relocation_batch_to_loader_buffer(
         .checked_mul(crate::image::K16E_RELOCATION_RECORD_SIZE)
         .ok_or(ProcessLoadError::AddressOverflow)?;
     unsafe {
-        crate::kfs::file_io::copy_file_range_to_ram_profiled(
-            crate::fs::root_volume(),
-            metadata,
+        copy_vfs_file_range_to_ram_profiled(
+            file,
             file_offset,
             core::ptr::addr_of_mut!(LOADER_RELOCATION_SECTION) as usize as u32,
             byte_count,
             FileReadProfileKind::DynamicImport(profile_file),
-        )
-        .map_err(|_| ProcessLoadError::Storage)?;
+        )?;
     }
     let len = usize::try_from(byte_count).map_err(|_| ProcessLoadError::AddressOverflow)?;
     let section = unsafe {
@@ -6034,6 +6061,7 @@ fn validate_dynamic_image(image: DynamicUserImage) -> Result<(), ProcessLoadErro
 }
 
 unsafe fn apply_selected_file_relocations(
+    file: crate::fs::VfsFile,
     relocation_table_offset: u32,
     relocation_count: u32,
     memory_size: u32,
@@ -6044,6 +6072,7 @@ unsafe fn apply_selected_file_relocations(
     while index < relocation_count {
         let (batch, records) = unsafe {
             copy_selected_relocation_batch_to_loader_buffer(
+                file,
                 relocation_table_offset,
                 index,
                 relocation_count - index,
@@ -6064,7 +6093,7 @@ unsafe fn apply_selected_file_relocations(
 }
 
 unsafe fn apply_file_relocations(
-    metadata: FileMetadata,
+    file: crate::fs::VfsFile,
     relocation_table_offset: u32,
     relocation_count: u32,
     memory_size: u32,
@@ -6075,7 +6104,7 @@ unsafe fn apply_file_relocations(
     while index < relocation_count {
         let (batch, records) = unsafe {
             copy_relocation_batch_to_loader_buffer(
-                metadata,
+                file,
                 relocation_table_offset,
                 index,
                 relocation_count - index,
@@ -6096,6 +6125,7 @@ unsafe fn apply_file_relocations(
 }
 
 unsafe fn apply_selected_file_relocations_mapped(
+    file: crate::fs::VfsFile,
     relocation_table_offset: u32,
     relocation_count: u32,
     memory_size: u32,
@@ -6106,6 +6136,7 @@ unsafe fn apply_selected_file_relocations_mapped(
     while index < relocation_count {
         let (batch, records) = unsafe {
             copy_selected_relocation_batch_to_loader_buffer(
+                file,
                 relocation_table_offset,
                 index,
                 relocation_count - index,
@@ -6126,7 +6157,7 @@ unsafe fn apply_selected_file_relocations_mapped(
 }
 
 unsafe fn apply_file_relocations_mapped(
-    metadata: FileMetadata,
+    file: crate::fs::VfsFile,
     relocation_table_offset: u32,
     relocation_count: u32,
     memory_size: u32,
@@ -6137,7 +6168,7 @@ unsafe fn apply_file_relocations_mapped(
     while index < relocation_count {
         let (batch, records) = unsafe {
             copy_relocation_batch_to_loader_buffer(
-                metadata,
+                file,
                 relocation_table_offset,
                 index,
                 relocation_count - index,
@@ -7209,6 +7240,17 @@ mod tests {
             path.components(),
             &[b"bin".as_slice(), b"hello.kx".as_slice()]
         );
+    }
+
+    #[test]
+    fn user_program_path_accepts_sdk_bin_kx_path() {
+        let path = UserProgramPath::parse(b"/sdk/bin/tcc.kx").expect("SDK path parses");
+
+        assert_eq!(
+            path.components(),
+            &[b"bin".as_slice(), b"tcc.kx".as_slice()]
+        );
+        assert_eq!(path.volume(), crate::vfs::VolumeId::Sdk);
     }
 
     #[test]

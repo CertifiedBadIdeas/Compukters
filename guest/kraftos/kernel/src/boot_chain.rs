@@ -25,6 +25,8 @@ impl LoadError {
     pub const STORAGE_BLOCK_SIZE: Self = Self { code: 17 };
     pub const STORAGE_MEDIA: Self = Self { code: 18 };
     pub const INVALID_BOOT_INFO: Self = Self { code: 19 };
+    pub const INVALID_STORAGE1_PROFILE: Self = Self { code: 20 };
+    pub const INVALID_SDK_FILESYSTEM: Self = Self { code: 21 };
 
     pub const fn code(self) -> i32 {
         self.code
@@ -52,12 +54,9 @@ pub unsafe fn load_k16e_from_storage0(
     expected_abi_kind: K16eAbiKind,
 ) -> Result<LoadedImage, LoadError> {
     unsafe {
-        crate::kfs::root::select_boot_or_test_file_from_storage0(
-            crate::fs::root_volume(),
-            partition_type,
-            path,
-        )
-        .map_err(LoadError::from_storage)?
+        with_root_volume(|volume| {
+            crate::kfs::root::select_boot_or_test_file_from_storage0(volume, partition_type, path)
+        })?
     };
     unsafe { load_k16e_file(expected_abi_kind) }
 }
@@ -88,13 +87,14 @@ pub unsafe fn user_memory_end_from_current_boot_info(image: LoadedImage) -> Resu
 
 unsafe fn load_k16e_file(expected_abi_kind: K16eAbiKind) -> Result<LoadedImage, LoadError> {
     unsafe {
-        crate::kfs::file_io::copy_selected_file_range_to_ram(
-            crate::fs::root_volume(),
-            0,
-            SCRATCH_ADDR,
-            crate::image::FIXED_K16E_V1_HEADER_SIZE,
-        )
-        .map_err(LoadError::from_storage)?
+        with_root_volume(|volume| {
+            crate::kfs::file_io::copy_selected_file_range_to_ram(
+                volume,
+                0,
+                SCRATCH_ADDR,
+                crate::image::FIXED_K16E_V1_HEADER_SIZE,
+            )
+        })?
     };
 
     let header = unsafe {
@@ -103,20 +103,20 @@ unsafe fn load_k16e_file(expected_abi_kind: K16eAbiKind) -> Result<LoadedImage, 
             crate::image::FIXED_K16E_V1_HEADER_SIZE as usize,
         )
     };
+    let inode_size = unsafe { with_root_volume(|volume| Ok(volume.selected_inode.size()))? };
     let plan =
-        crate::image::parse_fixed_k16e_v1(header, expected_abi_kind.into_image_kind(), unsafe {
-            crate::fs::root_volume().selected_inode.size()
-        })
-        .map_err(LoadError::from_image)?;
+        crate::image::parse_fixed_k16e_v1(header, expected_abi_kind.into_image_kind(), inode_size)
+            .map_err(LoadError::from_image)?;
 
     unsafe {
-        crate::kfs::file_io::copy_selected_file_range_to_ram(
-            crate::fs::root_volume(),
-            crate::image::FIXED_K16E_V1_PAYLOAD_OFFSET,
-            plan.load_addr,
-            plan.file_size,
-        )
-        .map_err(LoadError::from_storage)?
+        with_root_volume(|volume| {
+            crate::kfs::file_io::copy_selected_file_range_to_ram(
+                volume,
+                crate::image::FIXED_K16E_V1_PAYLOAD_OFFSET,
+                plan.load_addr,
+                plan.file_size,
+            )
+        })?
     };
     unsafe { zero_fill_ram(plan.zero_fill_addr, plan.zero_fill_len) };
     Ok(LoadedImage {
@@ -124,6 +124,14 @@ unsafe fn load_k16e_file(expected_abi_kind: K16eAbiKind) -> Result<LoadedImage, 
         load_addr: plan.load_addr,
         load_end: plan.load_addr + plan.memory_size,
     })
+}
+
+unsafe fn with_root_volume<R>(
+    f: impl FnOnce(&mut crate::kfs::volume::KfsVolume) -> Result<R, crate::kfs::error::StorageError>,
+) -> Result<R, LoadError> {
+    unsafe { crate::vfs::with_volume(crate::vfs::VolumeId::Root, f) }
+        .ok_or(LoadError::STORAGE_MEDIA)?
+        .map_err(LoadError::from_storage)
 }
 
 impl K16eAbiKind {

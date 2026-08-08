@@ -1,20 +1,37 @@
 #include <fcntl.h>
+#include <kraft/fs.h>
 #include <string.h>
 #include <unistd.h>
 
-static void write_all(int fd, const char *buffer, unsigned int len) {
+static int write_all(int fd, const char *buffer, unsigned int len) {
   unsigned int written = 0;
   while (written < len) {
     int result = write(fd, buffer + written, len - written);
     if (result <= 0) {
-      return;
+      return result < 0 ? result : (int)0xfffffff2u;
     }
     written += (unsigned int)result;
   }
+  return 0;
 }
 
 static void write_text(int fd, const char *text) {
-  write_all(fd, text, strlen(text));
+  (void)write_all(fd, text, strlen(text));
+}
+
+static const char *status_name(int status, const char *fallback) {
+  if ((unsigned int)status == KRAFT_ERROR_READ_ONLY) {
+    return "ROFS";
+  }
+  return fallback;
+}
+
+static void write_path_error(int status, const char *path) {
+  write_text(STDOUT_FILENO, "ERR ");
+  write_text(STDOUT_FILENO, status_name(status, "IO"));
+  write_text(STDOUT_FILENO, " ");
+  write_text(STDOUT_FILENO, path);
+  write_text(STDOUT_FILENO, "\n");
 }
 
 static void write_decimal(int fd, unsigned int value) {
@@ -39,7 +56,7 @@ static void write_decimal(int fd, unsigned int value) {
       started = 1;
     }
   }
-  write_all(fd, output, output_len);
+  (void)write_all(fd, output, output_len);
 }
 
 static int write_payload(const char *path, const char *payload, int flags) {
@@ -48,13 +65,16 @@ static int write_payload(const char *path, const char *payload, int flags) {
   int exit_status = 0;
 
   if (fd < 0) {
-    write_text(STDERR_FILENO, "write: open failed: ");
-    write_text(STDERR_FILENO, path);
-    write_text(STDERR_FILENO, "\n");
+    write_path_error(fd, path);
     return 1;
   }
 
-  write_all(fd, payload, len);
+  int write_status = write_all(fd, payload, len);
+  if (write_status < 0) {
+    write_path_error(write_status, path);
+    (void)close(fd);
+    return 1;
+  }
   if (close(fd) < 0) {
     exit_status = 1;
   }

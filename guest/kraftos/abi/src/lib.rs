@@ -113,7 +113,7 @@ pub mod syscall {
     pub const RUN_ARGV_MAGIC: u32 = u32::from_le_bytes(*b"RARG");
     pub const SPAWN_ARGV_MAGIC: u32 = u32::from_le_bytes(*b"SPAW");
     pub const MAX_RUN_ARGS: usize = 4;
-    pub const MAX_RUN_PATH_BYTES: usize = 61;
+    pub const MAX_RUN_PATH_BYTES: usize = 65;
     pub const MAX_RUN_ARG_BYTES: usize = 128;
     pub const MAX_RUN_ARGV_REQUEST_BYTES: usize =
         12 + MAX_RUN_ARGS * 4 + MAX_RUN_PATH_BYTES + MAX_RUN_ARGS * MAX_RUN_ARG_BYTES;
@@ -719,10 +719,10 @@ mod tests {
         assert_eq!(syscall::RUN_ARGV_MAGIC, 0x4752_4152);
         assert_eq!(syscall::SPAWN_ARGV_MAGIC, 0x5741_5053);
         assert_eq!(syscall::MAX_RUN_ARGS, 4);
-        assert_eq!(syscall::MAX_RUN_PATH_BYTES, 61);
+        assert_eq!(syscall::MAX_RUN_PATH_BYTES, 65);
         assert_eq!(syscall::MAX_RUN_ARG_BYTES, 128);
-        assert_eq!(syscall::MAX_RUN_ARGV_REQUEST_BYTES, 601);
-        assert_eq!(syscall::MAX_SPAWN_ARGV_REQUEST_BYTES, 601);
+        assert_eq!(syscall::MAX_RUN_ARGV_REQUEST_BYTES, 605);
+        assert_eq!(syscall::MAX_SPAWN_ARGV_REQUEST_BYTES, 605);
         assert_eq!(syscall::READ_DIR_REQUEST_MAGIC, 0x5249_4452);
         assert_eq!(syscall::MAX_READ_DIR_PATH_BYTES, 228);
         assert_eq!(syscall::MAX_READ_DIR_REQUEST_BYTES, 244);

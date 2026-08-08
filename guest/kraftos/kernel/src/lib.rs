@@ -14,6 +14,7 @@ pub mod page_alloc;
 pub mod process;
 pub mod trap_policy;
 pub mod user_buffer;
+pub mod vfs;
 
 #[cfg(test)]
 mod font;

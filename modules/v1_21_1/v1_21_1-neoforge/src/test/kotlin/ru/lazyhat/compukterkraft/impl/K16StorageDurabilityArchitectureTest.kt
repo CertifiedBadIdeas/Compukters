@@ -26,13 +26,13 @@ import kotlin.test.assertTrue
 
 class K16StorageDurabilityArchitectureTest {
     @Test
-    fun guestStorageExposesStorage0FlushCommand() {
+    fun guestStorageExposesDeviceNeutralFlushCommand() {
         val source = Path.of("../../../guest/kraftos/kernel/src/kfs/device.rs").readText()
 
-        assertTrue(source.contains("pub unsafe fn flush_storage0()"))
-        assertTrue(source.contains("storage0::COMMAND_FLUSH"))
-        assertTrue(source.contains("storage0::STATUS_DONE"))
-        assertTrue(source.contains("storage0::ERROR_NONE"))
+        assertTrue(source.contains("pub unsafe fn flush_storage(device: KfsDevice)"))
+        assertTrue(source.contains("device.register(storage::COMMAND_OFFSET)"))
+        assertTrue(source.contains("device.register(storage::STATUS_OFFSET)"))
+        assertTrue(source.contains("device.register(storage::ERROR_OFFSET)"))
     }
 
     @Test

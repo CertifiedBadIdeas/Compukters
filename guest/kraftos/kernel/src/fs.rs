@@ -2,7 +2,6 @@ const MAX_PATH_COMPONENTS: usize = 4;
 const MAX_NAME_BYTES: usize = 56;
 const FIRST_FILE_FD: u32 = 3;
 const FILE_DESCRIPTOR_CAPACITY: usize = 4;
-#[cfg(any(not(test), feature = "host-test"))]
 const ROOT_PARTITION: &[u8; 4] = b"ROOT";
 pub const OPEN_READ_ONLY: u32 = k16_abi::syscall::OPEN_READ_ONLY;
 pub const OPEN_WRITE_ONLY: u32 = k16_abi::syscall::OPEN_WRITE_ONLY;
@@ -18,15 +17,12 @@ pub const MAX_OPEN_PATH_BYTES: u32 =
 pub const MAX_READ_DIR_PATH_BYTES: u32 = MAX_OPEN_PATH_BYTES;
 pub const MAX_STAT_PATH_BYTES: u32 = MAX_OPEN_PATH_BYTES;
 
+#[cfg(any(not(test), feature = "host-test"))]
 use core::cell::UnsafeCell;
 
 #[cfg(any(not(test), feature = "host-test"))]
 static RUNTIME_FD_TABLE: KernelFileDescriptorTable =
     KernelFileDescriptorTable::new(FileDescriptorTable::new());
-static ROOT_FS: KernelRootFs = KernelRootFs::new(crate::kfs::volume::KfsVolume::new(
-    crate::kfs::device::KfsDevice::storage0(),
-    false,
-));
 
 #[cfg(any(not(test), feature = "host-test"))]
 struct KernelFileDescriptorTable {
@@ -35,12 +31,6 @@ struct KernelFileDescriptorTable {
 
 #[cfg(any(not(test), feature = "host-test"))]
 unsafe impl Sync for KernelFileDescriptorTable {}
-
-struct KernelRootFs {
-    fs: UnsafeCell<crate::kfs::volume::KfsVolume>,
-}
-
-unsafe impl Sync for KernelRootFs {}
 
 #[cfg(any(not(test), feature = "host-test"))]
 impl KernelFileDescriptorTable {
@@ -53,22 +43,6 @@ impl KernelFileDescriptorTable {
     unsafe fn get(&self) -> &mut FileDescriptorTable {
         unsafe { &mut *self.table.get() }
     }
-}
-
-impl KernelRootFs {
-    const fn new(fs: crate::kfs::volume::KfsVolume) -> Self {
-        Self {
-            fs: UnsafeCell::new(fs),
-        }
-    }
-
-    unsafe fn get(&self) -> &mut crate::kfs::volume::KfsVolume {
-        unsafe { &mut *self.fs.get() }
-    }
-}
-
-pub(crate) unsafe fn root_volume() -> &'static mut crate::kfs::volume::KfsVolume {
-    unsafe { ROOT_FS.get() }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -84,6 +58,7 @@ impl FsError {
     pub const NoMemory: Self = Self(k16_abi::syscall::ERROR_NO_MEMORY);
     pub const NotEmpty: Self = Self(k16_abi::syscall::ERROR_NOT_EMPTY);
     pub const Busy: Self = Self(k16_abi::syscall::ERROR_BUSY);
+    pub const ReadOnly: Self = Self(k16_abi::syscall::ERROR_READ_ONLY);
     pub const Fault: Self = Self(k16_abi::syscall::ERROR_FAULT);
     pub const Storage: Self = Self(k16_abi::syscall::ERROR_NO_ENTRY);
 }
@@ -229,6 +204,12 @@ pub struct FileMetadata {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct VfsFile {
+    pub volume: crate::vfs::VolumeId,
+    pub metadata: crate::kfs::types::FileMetadata,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PathMetadata {
     pub file_type: u32,
     pub size_bytes: u32,
@@ -273,6 +254,7 @@ impl From<FileMetadata> for crate::kfs::types::FileMetadata {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct FileDescriptor {
     owner_pid: u32,
+    volume: crate::vfs::VolumeId,
     open_file: crate::kfs::open_file::KfsOpenFile,
     flags: u32,
 }
@@ -299,12 +281,23 @@ impl FileDescriptorTable {
         metadata: FileMetadata,
         flags: u32,
     ) -> Result<u32, FsError> {
+        self.open_for_process_on_volume(owner_pid, crate::vfs::VolumeId::Root, metadata, flags)
+    }
+
+    pub fn open_for_process_on_volume(
+        &mut self,
+        owner_pid: u32,
+        volume: crate::vfs::VolumeId,
+        metadata: FileMetadata,
+        flags: u32,
+    ) -> Result<u32, FsError> {
         let mut index = 0;
         while index < self.slots.len() {
             if self.slots[index].is_none() {
                 let append = append_requested(flags)?;
                 self.slots[index] = Some(FileDescriptor {
                     owner_pid,
+                    volume,
                     open_file: crate::kfs::open_file::KfsOpenFile::regular_file(
                         metadata.into(),
                         append,
@@ -425,6 +418,14 @@ impl FileDescriptorTable {
         ))
     }
 
+    pub fn volume_for_process(
+        &self,
+        owner_pid: u32,
+        fd: u32,
+    ) -> Result<crate::vfs::VolumeId, FsError> {
+        Ok(self.descriptor_for_process(owner_pid, fd)?.volume)
+    }
+
     pub fn close(&mut self, fd: u32) -> Result<(), FsError> {
         self.close_for_process(0, fd)
     }
@@ -459,10 +460,17 @@ impl FileDescriptorTable {
     }
 
     pub fn has_open_inode(&self, inode_id: u32) -> bool {
+        self.has_open_inode_on_volume(crate::vfs::VolumeId::Root, inode_id)
+    }
+
+    pub fn has_open_inode_on_volume(&self, volume: crate::vfs::VolumeId, inode_id: u32) -> bool {
         let mut index = 0;
         while index < self.slots.len() {
-            if matches!(self.slots[index], Some(descriptor) if descriptor.open_file.inode_id() == inode_id)
-            {
+            if matches!(
+                self.slots[index],
+                Some(descriptor)
+                    if descriptor.volume == volume && descriptor.open_file.inode_id() == inode_id
+            ) {
                 return true;
             }
             index += 1;
@@ -504,30 +512,36 @@ pub unsafe fn open_root_file_for_process(
     {
         return Err(FsError::InvalidFlags);
     }
-    let path = RootFilePath::parse(path)?;
-    let components = path.components();
-    let metadata = if flags == OPEN_READ_ONLY {
-        unsafe {
-            ROOT_FS
-                .get()
-                .open_file(ROOT_PARTITION, components.as_slice())
-                .map_err(storage_error_to_fs_error)?
-        }
-    } else {
-        let truncate = flags == OPEN_CREATE_TRUNCATE_FLAGS;
-        let metadata = unsafe {
-            ROOT_FS
-                .get()
-                .open_file_for_write(ROOT_PARTITION, components.as_slice(), true, truncate)
-                .map_err(storage_error_to_fs_error)?
-        };
-        unsafe { flush_root_storage()? };
-        metadata
+    let (volume_id, metadata) = unsafe {
+        with_vfs(|vfs| {
+            let route = vfs.route(path);
+            let volume_id = route.volume();
+            if flags != OPEN_READ_ONLY {
+                writable_route(route)?;
+            }
+            let path = RootFilePath::parse(route.path())?;
+            let components = path.components();
+            let volume = vfs.volume_mut(volume_id).ok_or(FsError::NoEntry)?;
+            let metadata = if flags == OPEN_READ_ONLY {
+                volume.open_file(ROOT_PARTITION, components.as_slice())
+            } else {
+                let truncate = flags == OPEN_CREATE_TRUNCATE_FLAGS;
+                volume.open_file_for_write(ROOT_PARTITION, components.as_slice(), true, truncate)
+            }
+            .map_err(storage_error_to_fs_error)?;
+            Ok((volume_id, metadata))
+        })?
     };
+    if flags != OPEN_READ_ONLY {
+        unsafe { flush_root_storage()? };
+    }
     unsafe {
-        RUNTIME_FD_TABLE
-            .get()
-            .open_for_process(owner_pid, FileMetadata::from(metadata), flags)
+        RUNTIME_FD_TABLE.get().open_for_process_on_volume(
+            owner_pid,
+            volume_id,
+            FileMetadata::from(metadata),
+            flags,
+        )
     }
 }
 
@@ -559,15 +573,22 @@ pub unsafe fn read_file_fd_for_process(
 
 #[cfg(any(not(test), feature = "host-test"))]
 pub unsafe fn remove_root_file_for_process(path: &[u8]) -> Result<(), FsError> {
-    let path = RootFilePath::parse(path)?;
-    let components = path.components();
     unsafe {
-        ROOT_FS
-            .get()
-            .remove_file(ROOT_PARTITION, components.as_slice(), |inode_id| {
-                RUNTIME_FD_TABLE.get().has_open_inode(inode_id)
-            })
-            .map_err(storage_error_to_fs_error)?;
+        with_vfs(|vfs| {
+            let route = vfs.route(path);
+            let volume_id = route.volume();
+            writable_route(route)?;
+            let path = RootFilePath::parse(route.path())?;
+            let components = path.components();
+            vfs.volume_mut(volume_id)
+                .ok_or(FsError::NoEntry)?
+                .remove_file(ROOT_PARTITION, components.as_slice(), |inode_id| {
+                    RUNTIME_FD_TABLE
+                        .get()
+                        .has_open_inode_on_volume(volume_id, inode_id)
+                })
+                .map_err(storage_error_to_fs_error)
+        })?;
         flush_root_storage()?;
     }
     Ok(())
@@ -579,20 +600,29 @@ pub unsafe fn rename_root_file_for_process(
     old_path: &[u8],
     new_path: &[u8],
 ) -> Result<(), FsError> {
-    let old_path = RootFilePath::parse(old_path)?;
-    let old_components = old_path.components();
-    let new_path = RootFilePath::parse(new_path)?;
-    let new_components = new_path.components();
     unsafe {
-        ROOT_FS
-            .get()
-            .rename_file(
-                ROOT_PARTITION,
-                old_components.as_slice(),
-                new_components.as_slice(),
-                |inode_id| RUNTIME_FD_TABLE.get().has_open_inode(inode_id),
-            )
-            .map_err(storage_error_to_fs_error)?;
+        with_vfs(|vfs| {
+            let old_route = vfs.route(old_path);
+            let new_route = vfs.route(new_path);
+            writable_rename_routes(old_route, new_route)?;
+            let old_path = RootFilePath::parse(old_route.path())?;
+            let old_components = old_path.components();
+            let new_path = RootFilePath::parse(new_route.path())?;
+            let new_components = new_path.components();
+            vfs.volume_mut(crate::vfs::VolumeId::Root)
+                .ok_or(FsError::NoEntry)?
+                .rename_file(
+                    ROOT_PARTITION,
+                    old_components.as_slice(),
+                    new_components.as_slice(),
+                    |inode_id| {
+                        RUNTIME_FD_TABLE
+                            .get()
+                            .has_open_inode_on_volume(crate::vfs::VolumeId::Root, inode_id)
+                    },
+                )
+                .map_err(storage_error_to_fs_error)
+        })?;
         flush_root_storage()?;
     }
     Ok(())
@@ -600,13 +630,17 @@ pub unsafe fn rename_root_file_for_process(
 
 #[cfg(any(not(test), feature = "host-test"))]
 pub unsafe fn create_root_directory(path: &[u8]) -> Result<(), FsError> {
-    let path = RootFilePath::parse(path)?;
-    let components = path.components();
     unsafe {
-        ROOT_FS
-            .get()
-            .create_directory(ROOT_PARTITION, components.as_slice())
-            .map_err(storage_error_to_fs_error)?;
+        with_vfs(|vfs| {
+            let route = vfs.route(path);
+            writable_route(route)?;
+            let path = RootFilePath::parse(route.path())?;
+            let components = path.components();
+            vfs.volume_mut(crate::vfs::VolumeId::Root)
+                .ok_or(FsError::NoEntry)?
+                .create_directory(ROOT_PARTITION, components.as_slice())
+                .map_err(storage_error_to_fs_error)
+        })?;
         flush_root_storage()?;
     }
     Ok(())
@@ -614,13 +648,17 @@ pub unsafe fn create_root_directory(path: &[u8]) -> Result<(), FsError> {
 
 #[cfg(any(not(test), feature = "host-test"))]
 pub unsafe fn remove_root_directory(path: &[u8]) -> Result<(), FsError> {
-    let path = RootFilePath::parse(path)?;
-    let components = path.components();
     unsafe {
-        ROOT_FS
-            .get()
-            .remove_directory(ROOT_PARTITION, components.as_slice())
-            .map_err(storage_error_to_fs_error)?;
+        with_vfs(|vfs| {
+            let route = vfs.route(path);
+            writable_route(route)?;
+            let path = RootFilePath::parse(route.path())?;
+            let components = path.components();
+            vfs.volume_mut(crate::vfs::VolumeId::Root)
+                .ok_or(FsError::NoEntry)?
+                .remove_directory(ROOT_PARTITION, components.as_slice())
+                .map_err(storage_error_to_fs_error)
+        })?;
         flush_root_storage()?;
     }
     Ok(())
@@ -643,16 +681,19 @@ pub unsafe fn copy_file_fd_range_to_ram_for_process(
         return Ok(0);
     }
     let metadata = unsafe { RUNTIME_FD_TABLE.get().metadata_for_process(owner_pid, fd)? };
+    let volume_id = unsafe { RUNTIME_FD_TABLE.get().volume_for_process(owner_pid, fd)? };
     unsafe {
-        crate::kfs::file_io::copy_file_range_to_ram(
-            ROOT_FS.get(),
-            metadata.into(),
-            file_offset,
-            ptr,
-            read_len,
-        )
-        .map_err(storage_error_to_fs_error)?;
-    }
+        with_volume(volume_id, |volume| {
+            crate::kfs::file_io::copy_file_range_to_ram(
+                volume,
+                metadata.into(),
+                file_offset,
+                ptr,
+                read_len,
+            )
+            .map_err(storage_error_to_fs_error)
+        })?;
+    };
     Ok(read_len)
 }
 
@@ -684,15 +725,21 @@ pub unsafe fn copy_ram_to_file_fd_range_for_process(
             .get()
             .write_plan_for_process(owner_pid, fd, len)?
     };
+    let volume_id = unsafe { RUNTIME_FD_TABLE.get().volume_for_process(owner_pid, fd)? };
+    if volume_id == crate::vfs::VolumeId::Sdk {
+        return Err(FsError::ReadOnly);
+    }
     let updated = unsafe {
-        crate::kfs::file_write::copy_ram_to_file_range(
-            ROOT_FS.get(),
-            metadata.into(),
-            offset,
-            ptr,
-            write_len,
-        )
-        .map_err(storage_error_to_fs_error)?
+        with_volume(volume_id, |volume| {
+            crate::kfs::file_write::copy_ram_to_file_range(
+                volume,
+                metadata.into(),
+                offset,
+                ptr,
+                write_len,
+            )
+            .map_err(storage_error_to_fs_error)
+        })?
     };
     unsafe {
         RUNTIME_FD_TABLE.get().finish_write_for_process(
@@ -719,14 +766,18 @@ pub unsafe fn read_root_directory_into<S: DirectoryByteSink>(
     sink: &mut S,
 ) -> Result<u32, FsError> {
     crate::os_stats::record_read_dir_call();
-    let path = RootDirectoryPath::parse(path)?;
-    let components = path.components();
     let mut storage_sink = StorageDirectoryByteSink { sink };
     unsafe {
-        ROOT_FS
-            .get()
-            .read_directory_into(ROOT_PARTITION, components.as_slice(), &mut storage_sink)
-            .map_err(storage_error_to_fs_error)
+        with_vfs(|vfs| {
+            let route = vfs.route(path);
+            let volume_id = route.volume();
+            let path = RootDirectoryPath::parse(route.path())?;
+            let components = path.components();
+            vfs.volume_mut(volume_id)
+                .ok_or(FsError::NoEntry)?
+                .read_directory_into(ROOT_PARTITION, components.as_slice(), &mut storage_sink)
+                .map_err(storage_error_to_fs_error)
+        })
     }
 }
 
@@ -735,10 +786,31 @@ pub unsafe fn open_root_file_cached_components(
     components: &[&[u8]],
 ) -> Result<crate::kfs::types::FileMetadata, FsError> {
     unsafe {
-        ROOT_FS
-            .get()
-            .open_file(ROOT_PARTITION, components)
-            .map_err(storage_error_to_fs_error)
+        with_volume(crate::vfs::VolumeId::Root, |volume| {
+            volume
+                .open_file(ROOT_PARTITION, components)
+                .map_err(storage_error_to_fs_error)
+        })
+    }
+}
+
+pub(crate) unsafe fn open_file_cached_path(path: &[u8]) -> Result<VfsFile, FsError> {
+    unsafe {
+        with_vfs(|vfs| {
+            let route = vfs.route(path);
+            let volume_id = route.volume();
+            let path = RootFilePath::parse(route.path())?;
+            let components = path.components();
+            let metadata = vfs
+                .volume_mut(volume_id)
+                .ok_or(FsError::NoEntry)?
+                .open_file(ROOT_PARTITION, components.as_slice())
+                .map_err(storage_error_to_fs_error)?;
+            Ok(VfsFile {
+                volume: volume_id,
+                metadata,
+            })
+        })
     }
 }
 
@@ -758,13 +830,17 @@ pub unsafe fn open_root_file_cached_components(
 #[cfg(any(not(test), feature = "host-test"))]
 pub unsafe fn stat_root_path(path: &[u8]) -> Result<PathMetadata, FsError> {
     crate::os_stats::record_stat_call();
-    let path = RootMetadataPath::parse(path)?;
-    let components = path.components();
     let metadata = unsafe {
-        ROOT_FS
-            .get()
-            .stat_path(ROOT_PARTITION, components.as_slice())
-            .map_err(storage_error_to_fs_error)?
+        with_vfs(|vfs| {
+            let route = vfs.route(path);
+            let volume_id = route.volume();
+            let path = RootMetadataPath::parse(route.path())?;
+            let components = path.components();
+            vfs.volume_mut(volume_id)
+                .ok_or(FsError::NoEntry)?
+                .stat_path(ROOT_PARTITION, components.as_slice())
+                .map_err(storage_error_to_fs_error)
+        })?
     };
     Ok(PathMetadata {
         file_type: metadata.file_type,
@@ -782,6 +858,36 @@ pub unsafe fn close_file_fds_for_process(owner_pid: u32) {
     unsafe { RUNTIME_FD_TABLE.get().close_all_for_process(owner_pid) }
 }
 
+unsafe fn with_vfs<R>(
+    f: impl FnOnce(&mut crate::vfs::KernelVfs) -> Result<R, FsError>,
+) -> Result<R, FsError> {
+    unsafe { crate::vfs::with_vfs(f) }.ok_or(FsError::Storage)?
+}
+
+unsafe fn with_volume<R>(
+    id: crate::vfs::VolumeId,
+    f: impl FnOnce(&mut crate::kfs::volume::KfsVolume) -> Result<R, FsError>,
+) -> Result<R, FsError> {
+    unsafe { crate::vfs::with_volume(id, f) }.ok_or(FsError::NoEntry)?
+}
+
+fn writable_route(route: crate::vfs::Route<'_>) -> Result<crate::vfs::VolumeId, FsError> {
+    if route.is_sdk() {
+        Err(FsError::ReadOnly)
+    } else {
+        Ok(route.volume())
+    }
+}
+
+fn writable_rename_routes(
+    old_route: crate::vfs::Route<'_>,
+    new_route: crate::vfs::Route<'_>,
+) -> Result<(), FsError> {
+    writable_route(old_route)?;
+    writable_route(new_route)?;
+    Ok(())
+}
+
 fn storage_error_to_fs_error(error: crate::kfs::error::StorageError) -> FsError {
     if error == crate::kfs::error::StorageError::PATH_NOT_FOUND {
         FsError::NoEntry
@@ -797,6 +903,8 @@ fn storage_error_to_fs_error(error: crate::kfs::error::StorageError) -> FsError 
         FsError::InvalidPath
     } else if error == crate::kfs::error::StorageError::PATH_BUSY {
         FsError::Busy
+    } else if error == crate::kfs::error::StorageError::READ_ONLY {
+        FsError::ReadOnly
     } else {
         FsError::Storage
     }
@@ -812,7 +920,9 @@ unsafe fn flush_root_storage() -> Result<(), FsError> {
 
 #[cfg(any(not(test), feature = "host-test"))]
 unsafe fn invalidate_root_fs_cache() {
-    unsafe { ROOT_FS.get().invalidate_all() };
+    let _ = unsafe {
+        crate::vfs::with_volume(crate::vfs::VolumeId::Root, |volume| volume.invalidate_all())
+    };
 }
 
 #[cfg(any(not(test), feature = "host-test"))]
@@ -1094,5 +1204,58 @@ mod tests {
         assert!(!table.has_open_inode(43));
         table.close_for_process(1, fd).expect("fd closes");
         assert!(!table.has_open_inode(42));
+    }
+
+    #[test]
+    fn file_descriptors_keep_root_and_sdk_volume_identity_across_seek() {
+        let mut table = FileDescriptorTable::new();
+        let metadata = FileMetadata {
+            inode_id: 7,
+            size_bytes: 20,
+            extent_count: 1,
+            extent_start_blocks: [3, 0, 0, 0],
+            extent_block_counts: [1, 0, 0, 0],
+        };
+        let root_fd = table
+            .open_for_process_on_volume(1, crate::vfs::VolumeId::Root, metadata, OPEN_READ_ONLY)
+            .expect("root fd allocates");
+        let sdk_fd = table
+            .open_for_process_on_volume(1, crate::vfs::VolumeId::Sdk, metadata, OPEN_READ_ONLY)
+            .expect("sdk fd allocates");
+
+        assert_eq!(
+            table.volume_for_process(1, root_fd),
+            Ok(crate::vfs::VolumeId::Root)
+        );
+        assert_eq!(
+            table.volume_for_process(1, sdk_fd),
+            Ok(crate::vfs::VolumeId::Sdk)
+        );
+        assert_eq!(
+            table.seek_for_process(1, sdk_fd, 9, k16_abi::syscall::SEEK_SET),
+            Ok(9)
+        );
+        assert_eq!(table.read_plan_for_process(1, sdk_fd, 4), Ok((9, 4)));
+        assert_eq!(table.read_plan_for_process(1, root_fd, 4), Ok((0, 4)));
+    }
+
+    #[test]
+    fn sdk_mutation_and_cross_volume_rename_are_read_only() {
+        let sdk_file = crate::vfs::route(b"/sdk/blocked.txt", true);
+        let sdk_directory = crate::vfs::route(b"/sdk/blocked", true);
+        let root_file = crate::vfs::route(b"/tmp.txt", true);
+
+        for route in [sdk_file, sdk_directory] {
+            assert_eq!(writable_route(route), Err(FsError::ReadOnly));
+        }
+        assert_eq!(writable_route(root_file), Ok(crate::vfs::VolumeId::Root));
+        assert_eq!(
+            writable_rename_routes(root_file, sdk_file),
+            Err(FsError::ReadOnly)
+        );
+        assert_eq!(
+            writable_rename_routes(sdk_file, root_file),
+            Err(FsError::ReadOnly)
+        );
     }
 }
