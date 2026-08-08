@@ -1029,7 +1029,13 @@ val verifyK16CSdkFoundation =
                 }
             }
 
-            listOf("allocator_test.c", "string_test.c", "unistd_test.c", "stdio_test.c").forEach { testName ->
+            listOf(
+                "allocator_test.c",
+                "string_test.c",
+                "unistd_test.c",
+                "stdio_test.c",
+                "stdio_file_test.c",
+            ).forEach { testName ->
                 val targetDirectory = outputDirectory.resolve(testName.removeSuffix(".c"))
                 targetDirectory.mkdirs()
                 val sources =
