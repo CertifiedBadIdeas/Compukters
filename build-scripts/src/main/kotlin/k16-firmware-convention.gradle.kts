@@ -120,8 +120,21 @@ tasks.register<Test>("verifyK16Runtime") {
 
 tasks.named<Test>("test") {
     filter {
+        excludeTestsMatching("ru.lazyhat.compukterkraft.impl.K16SdkMountRuntimeSmokeTest")
         excludeTestsMatching("ru.lazyhat.compukterkraft.impl.K16TinyCcRuntimeSmokeTest")
     }
+}
+
+tasks.register<Test>("verifyK16SdkMount") {
+    description = "Runs the immutable K16 SDK module through the real bundled KraftOS runtime."
+    group = "verification"
+    dependsOn(tasks.named("buildK16VmNativeLibrary"))
+    inputsK16RuntimeFirmwareResources()
+    useK16NeoforgeTestRuntime()
+    filter {
+        includeTestsMatching("ru.lazyhat.compukterkraft.impl.K16SdkMountRuntimeSmokeTest")
+    }
+    systemProperty("k16.vm.native.library", k16VmNativeLibrary.asFile.absolutePath)
 }
 
 tasks.register<Test>("verifyK16TinyCcRuntime") {
