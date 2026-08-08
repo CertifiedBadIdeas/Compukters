@@ -134,7 +134,8 @@ The production KraftOS remains Clang-built. Existing
 artifact exists only under its dedicated proof directory and is injected only
 into a temporary test volume.
 
-A guest TinyCC port, a C SDK module, libc packaging for that SDK, and an
-in-game editor/compiler workflow are later work. Guest-side `-run` or JIT is
-not implied by this host backend: executing a program remains an explicit
-compile, `k16 link`, load, and KraftOS process operation.
+The immutable module infrastructure can now mount a K16 SDK artifact at
+`/sdk`, but the production `c_sdk_v1` contents, guest TinyCC port, libc
+packaging, and in-game editor/compiler workflow remain later work. Guest-side
+`-run` or JIT is not implied by this host backend: executing a program remains
+an explicit compile, `k16 link`, load, and KraftOS process operation.

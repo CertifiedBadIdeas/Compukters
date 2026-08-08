@@ -19,6 +19,7 @@ crates live in `host/k16-vm` and `host/k16-tools`; guest-side Rust crates live u
   and JVM tests across Gradle modules.
 - `./gradlew-sandbox-dev-parallel verifyK16Firmware` runs the focused K16 firmware/image architecture slice.
 - `./gradlew-sandbox-dev-parallel verifyK16Runtime` runs the K16 native runtime shell smoke slice.
+- `./gradlew-sandbox-dev-parallel verifyK16SdkMount` runs the immutable `storage1` SDK mount and execution slice.
 - `./gradlew-sandbox-dev-parallel verifyK16TinyCc` runs the focused TinyCC K16 backend/runtime slice.
 - `./gradlew-sandbox-dev-parallel verifyLocalFull` runs `verifyLocalFast`, focused K16 slices, and host Rust crate tests.
 - `./gradlew build` builds all Gradle modules and runs standard checks.

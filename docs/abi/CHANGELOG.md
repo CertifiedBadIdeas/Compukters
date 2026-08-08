@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- K16 computer profile v1 now optionally appends read-only `storage1` as
+  hardware id `10` at `0x1000_0900`. KraftOS mounts its ROOT/KFS partition at
+  `/sdk`, keeps root and SDK KFS state independent, routes ordinary file and
+  program operations across both volumes, and returns `ERROR_READ_ONLY`
+  (`0xffff_ffe2`) for SDK mutations.
+- K16SNAP v1 now records the optional storage1 controller as device kind `10`
+  with the same 36-byte controller payload as storage0. SDK artifact identity
+  and media bytes remain outside the snapshot, and restore requires matching
+  storage1 topology.
 - The K16 C ABI now defines one interoperable variadic stack stream for Clang
   and TinyCC. Fixed arguments retain the ordinary register/stack ABI; unnamed
   default-promoted scalars use aligned direct object representations, aggregate

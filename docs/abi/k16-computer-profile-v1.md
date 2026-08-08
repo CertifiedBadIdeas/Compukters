@@ -59,6 +59,7 @@ id  name          mmio_base     mmio_size     irq_source
 7   timer0        0x1000_0600   0x0000_0100   0x0000_0001
 8   keyboard0     0x1000_0700   0x0000_0100   0x0000_0002
 9   mmu0          0x1000_0800   0x0000_0100   0x0000_0000
+10  storage1      0x1000_0900   0x0000_0100   0x0000_0000   optional
 ```
 
 Firmware should discover these ranges through `BootInfo.hardware_table_addr` and
@@ -73,6 +74,11 @@ Firmware should also discover interrupt routing from each entry's `irq_source`.
 `timer0` currently raises CPU interrupt source bit `0x00000001`; `keyboard0`
 raises CPU interrupt source bit `0x00000002` when input becomes available.
 Other devices in this profile do not raise interrupts and expose `0`.
+
+`storage1` is appended only when immutable auxiliary media is attached before
+boot. With no attachment, the hardware table bytes and order remain the base
+table ending at `mmu0`; there is no empty permanent storage1 entry. Attachment
+changes require a cold boot because profile v1 does not support hotplug.
 
 ## Control MMIO
 
@@ -594,3 +600,21 @@ When media is absent, `capacity_blocks_*` return zero, `media_status` returns
 writes `lba_low/high`, `block_count`, and `buffer_addr`, then writes `command`.
 The host copies `block_count * block_size` bytes between the attached media and
 guest RAM.
+
+## Storage1 MMIO
+
+When present, storage1 uses the unchanged storage MMIO v1 register layout and
+command protocol above at base `0x1000_0900`. Its stable hardware id is `10`
+and its range size is `0x100` bytes.
+
+Storage1 media is always attached read-only in the current profile:
+
+- `media_status` reports `read_only`;
+- `read_blocks` uses the ordinary storage transfer path;
+- `write_blocks` completes with `status = error` and
+  `error = write_protected` without changing media bytes;
+- `flush` succeeds as a no-op because no storage1 write can be accepted.
+
+The host must reject a missing or malformed attached volume instead of
+silently omitting storage1. The media's artifact identity and bytes are not
+guest-visible hardware-table fields.

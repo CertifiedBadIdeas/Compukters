@@ -44,6 +44,38 @@ fn runtime_test_and_benchmark_surfaces_use_k16_names() {
 }
 
 #[test]
+fn active_computer_abi_docs_define_optional_storage1_and_its_snapshot_record() {
+    let repo_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(Path::parent)
+        .expect("repo root is above host/k16-vm");
+    let profile = fs::read_to_string(repo_dir.join("docs/abi/k16-computer-profile-v1.md")).unwrap();
+    let snapshot =
+        fs::read_to_string(repo_dir.join("docs/abi/k16-computer-snapshot-v1.md")).unwrap();
+
+    for required in [
+        "10  storage1      0x1000_0900",
+        "unchanged storage MMIO v1 register layout",
+        "error = write_protected",
+    ] {
+        assert!(
+            profile.contains(required),
+            "computer profile ABI docs must contain `{required}`"
+        );
+    }
+    for required in [
+        "10    storage1 controller",
+        "and `storage1` controller payloads",
+        "same storage1 topology",
+    ] {
+        assert!(
+            snapshot.contains(required),
+            "computer snapshot ABI docs must contain `{required}`"
+        );
+    }
+}
+
+#[test]
 fn k16_computer_handle_source_does_not_expose_low_image_startup_or_handoff() {
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
     let lib_source = fs::read_to_string(manifest_dir.join("src/lib.rs")).unwrap();
