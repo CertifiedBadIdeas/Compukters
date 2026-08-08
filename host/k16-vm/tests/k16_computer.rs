@@ -128,6 +128,31 @@ fn k16_computer_handle_accepts_storage0_volume_path() {
 }
 
 #[test]
+fn k16_computer_handle_accepts_optional_read_only_storage1_volume_path() {
+    let bios = k16_words(&[k16_halt()]);
+    let storage0_path = temp_volume_path("handle-storage0-paths");
+    let storage1_path = temp_volume_path("handle-storage1-paths");
+    write_k16_volume(&storage0_path, &[0; 1024]);
+    write_k16_volume(&storage1_path, &[0xA5; 1024]);
+
+    let handle = K16ComputerHandle::create_k16_bios_flash_with_storage_paths(
+        &bios,
+        64 * 1024,
+        128,
+        &storage0_path,
+        Some(storage1_path.clone()),
+    )
+    .expect("K16 BIOS flash computer creates with optional storage1 volume path");
+    let stats = handle.stats_snapshot();
+
+    assert!(stats.devices.iter().any(|device| device.name == "storage0"));
+    assert!(stats.devices.iter().any(|device| device.name == "storage1"));
+
+    fs::remove_file(storage0_path).unwrap();
+    fs::remove_file(storage1_path).unwrap();
+}
+
+#[test]
 fn k16_computer_profile_exposes_timer0_hardware_entry_and_mmio() {
     let mut machine = ComputerMachine::new(1024).expect("machine creates");
 

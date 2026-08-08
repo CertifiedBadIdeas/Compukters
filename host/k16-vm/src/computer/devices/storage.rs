@@ -136,6 +136,7 @@ impl StorageBlockCache {
 pub(crate) struct K16VolumeFileStorageMedia {
     file: File,
     len: u64,
+    read_only: bool,
 }
 
 impl K16VolumeFileStorageMedia {
@@ -143,10 +144,10 @@ impl K16VolumeFileStorageMedia {
     const VERSION: u16 = 1;
     const HEADER_SIZE: u64 = 16;
 
-    pub(crate) fn open(path: impl AsRef<Path>) -> Result<Self, MemoryFault> {
+    pub(crate) fn open(path: impl AsRef<Path>, read_only: bool) -> Result<Self, MemoryFault> {
         let mut file = OpenOptions::new()
             .read(true)
-            .write(true)
+            .write(!read_only)
             .open(path.as_ref())
             .map_err(|error| {
                 MemoryFault::new(format!(
@@ -197,7 +198,11 @@ impl K16VolumeFileStorageMedia {
             )));
         }
 
-        Ok(Self { file, len })
+        Ok(Self {
+            file,
+            len,
+            read_only,
+        })
     }
 
     fn payload_offset(&self, offset: u64, len: usize) -> Result<u64, MemoryFault> {
@@ -224,7 +229,7 @@ impl StorageMedia for K16VolumeFileStorageMedia {
     }
 
     fn is_read_only(&self) -> bool {
-        false
+        self.read_only
     }
 
     fn read_at(&mut self, offset: u64, dst: &mut [u8]) -> Result<(), MemoryFault> {
@@ -238,6 +243,11 @@ impl StorageMedia for K16VolumeFileStorageMedia {
     }
 
     fn write_at(&mut self, offset: u64, src: &[u8]) -> Result<(), MemoryFault> {
+        if self.read_only {
+            return Err(MemoryFault::new(
+                "K16VOL storage media is read-only".to_string(),
+            ));
+        }
         let file_offset = self.payload_offset(offset, src.len())?;
         self.file
             .seek(SeekFrom::Start(file_offset))
@@ -248,6 +258,9 @@ impl StorageMedia for K16VolumeFileStorageMedia {
     }
 
     fn flush(&mut self) -> Result<(), MemoryFault> {
+        if self.read_only {
+            return Ok(());
+        }
         self.file
             .sync_data()
             .map_err(|error| MemoryFault::new(format!("failed to flush K16VOL payload: {error}")))
@@ -279,14 +292,15 @@ impl StorageMedia for InMemoryStorageMedia {
     }
 
     fn read_at(&mut self, offset: u64, dst: &mut [u8]) -> Result<(), MemoryFault> {
-        let offset = usize::try_from(offset)
-            .map_err(|_| MemoryFault::new("storage0 read offset does not fit usize".to_string()))?;
+        let offset = usize::try_from(offset).map_err(|_| {
+            MemoryFault::new("storage media read offset does not fit usize".to_string())
+        })?;
         let end = offset
             .checked_add(dst.len())
-            .ok_or_else(|| MemoryFault::new("storage0 read range overflow".to_string()))?;
+            .ok_or_else(|| MemoryFault::new("storage media read range overflow".to_string()))?;
         let Some(bytes) = self.bytes.get(offset..end) else {
             return Err(MemoryFault::new(
-                "storage0 read range is out of bounds".to_string(),
+                "storage media read range is out of bounds".to_string(),
             ));
         };
         dst.copy_from_slice(bytes);
@@ -295,14 +309,14 @@ impl StorageMedia for InMemoryStorageMedia {
 
     fn write_at(&mut self, offset: u64, src: &[u8]) -> Result<(), MemoryFault> {
         let offset = usize::try_from(offset).map_err(|_| {
-            MemoryFault::new("storage0 write offset does not fit usize".to_string())
+            MemoryFault::new("storage media write offset does not fit usize".to_string())
         })?;
         let end = offset
             .checked_add(src.len())
-            .ok_or_else(|| MemoryFault::new("storage0 write range overflow".to_string()))?;
+            .ok_or_else(|| MemoryFault::new("storage media write range overflow".to_string()))?;
         let Some(bytes) = self.bytes.get_mut(offset..end) else {
             return Err(MemoryFault::new(
-                "storage0 write range is out of bounds".to_string(),
+                "storage media write range is out of bounds".to_string(),
             ));
         };
         bytes.copy_from_slice(src);
@@ -348,7 +362,7 @@ impl StoragePortDevice {
         let len = media.len();
         if len % u64::from(Self::BLOCK_SIZE) != 0 {
             return Err(MemoryFault::new(format!(
-                "storage0 media size {} is not a multiple of block size {}",
+                "storage media size {} is not a multiple of block size {}",
                 len,
                 Self::BLOCK_SIZE,
             )));
@@ -633,7 +647,7 @@ impl StoragePortDevice {
             52 => Ok((self.sequence >> 32) as u32 as i32),
             56 => Ok(self.media_status()),
             _ => Err(MemoryFault::new(format!(
-                "computer storage0 offset {offset} is not readable",
+                "computer storage offset {offset} is not readable",
             ))),
         }
     }
@@ -676,7 +690,7 @@ impl StoragePortDevice {
                 Ok(())
             }
             _ => Err(MemoryFault::new(format!(
-                "computer storage0 offset {offset} is not writable",
+                "computer storage offset {offset} is not writable",
             ))),
         }
     }
@@ -1222,7 +1236,7 @@ mod tests {
     fn k16_volume_file_media_reads_writes_and_flushes_payload() {
         let path = temp_volume_path("read_write_flush");
         write_k16_volume(&path, &[0; 512]);
-        let mut media = K16VolumeFileStorageMedia::open(&path).unwrap();
+        let mut media = K16VolumeFileStorageMedia::open(&path, false).unwrap();
 
         media.write_at(511, &[0xA5]).unwrap();
         media.flush().unwrap();
@@ -1238,11 +1252,35 @@ mod tests {
     }
 
     #[test]
+    fn k16_volume_file_media_opens_read_only_and_rejects_writes() {
+        let path = temp_volume_path("read_only");
+        write_k16_volume(&path, &[0xA5; 512]);
+        let mut permissions = fs::metadata(&path).unwrap().permissions();
+        permissions.set_readonly(true);
+        fs::set_permissions(&path, permissions).unwrap();
+
+        let mut media = K16VolumeFileStorageMedia::open(&path, true).unwrap();
+        let mut read = [0; 1];
+        media.read_at(0, &mut read).unwrap();
+
+        assert!(media.is_read_only());
+        assert_eq!(read, [0xA5]);
+        assert!(media.write_at(0, &[0x7E]).is_err());
+        media.flush().unwrap();
+        assert_eq!(fs::read(&path).unwrap()[16], 0xA5);
+
+        let mut permissions = fs::metadata(&path).unwrap().permissions();
+        permissions.set_readonly(false);
+        fs::set_permissions(&path, permissions).unwrap();
+        fs::remove_file(path).unwrap();
+    }
+
+    #[test]
     fn k16_volume_file_media_rejects_invalid_magic() {
         let path = temp_volume_path("invalid_magic");
         fs::write(&path, b"BADVOL\x01\x00\x00\x02\x00\x00\x00\x00\x00\x00").unwrap();
 
-        let error = K16VolumeFileStorageMedia::open(&path).unwrap_err();
+        let error = K16VolumeFileStorageMedia::open(&path, false).unwrap_err();
 
         assert!(error.to_string().contains("invalid K16VOL magic"));
         fs::remove_file(path).unwrap();

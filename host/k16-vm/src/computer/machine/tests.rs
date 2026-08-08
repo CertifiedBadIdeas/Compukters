@@ -1510,6 +1510,163 @@ fn computer_machine_can_be_created_from_explicit_computer_v1_profile() {
 }
 
 #[test]
+fn computer_v1_storage_paths_without_storage1_preserve_existing_profile_bytes() {
+    let storage0_path = temp_volume_path("profile-storage0-only");
+    write_k16_volume(&storage0_path, &[0; 512]);
+    let existing = ComputerMachine::from_profile(
+        ComputerMachineProfile::computer_v1_with_storage0_path(2048, &storage0_path),
+    )
+    .unwrap();
+    let optional = ComputerMachine::from_profile(
+        ComputerMachineProfile::computer_v1_with_storage_paths(2048, &storage0_path, None),
+    )
+    .unwrap();
+
+    assert_eq!(
+        existing.read_guest_ram_bytes(0, 256).unwrap(),
+        optional.read_guest_ram_bytes(0, 256).unwrap(),
+    );
+    assert!(optional.memory_map().region("storage1").is_none());
+
+    fs::remove_file(storage0_path).unwrap();
+}
+
+#[test]
+fn computer_v1_storage_paths_append_read_only_storage1_hardware() {
+    let storage0_path = temp_volume_path("profile-storage0");
+    let storage1_path = temp_volume_path("profile-storage1");
+    write_k16_volume(&storage0_path, &[0; 512]);
+    write_k16_volume(&storage1_path, &[0xA5; 512]);
+    let machine =
+        ComputerMachine::from_profile(ComputerMachineProfile::computer_v1_with_storage_paths(
+            2048,
+            &storage0_path,
+            Some(storage1_path.clone()),
+        ))
+        .unwrap();
+
+    assert_eq!(read_u32(machine.memory(), 0x18), 9);
+    assert_hardware_entry(
+        machine.memory(),
+        156,
+        computer_abi::COMPUTER_HARDWARE_ID_STORAGE1,
+        computer_abi::STORAGE1_BASE,
+        computer_abi::STORAGE1_SIZE,
+    );
+    assert_eq!(
+        machine
+            .bus_load_i32(computer_abi::STORAGE1_MEDIA_STATUS)
+            .unwrap(),
+        computer_abi::STORAGE_MEDIA_READ_ONLY,
+    );
+    assert_eq!(
+        machine
+            .memory_map()
+            .region("storage1")
+            .expect("storage1 is mapped")
+            .base,
+        computer_abi::STORAGE1_BASE,
+    );
+
+    fs::remove_file(storage0_path).unwrap();
+    fs::remove_file(storage1_path).unwrap();
+}
+
+#[test]
+fn storage1_reads_but_rejects_writes_without_affecting_storage0() {
+    let storage0_path = temp_volume_path("independent-storage0");
+    let storage1_path = temp_volume_path("independent-storage1");
+    write_k16_volume(&storage0_path, &[0; 512]);
+    write_k16_volume(&storage1_path, &[0xA5; 512]);
+    let mut machine =
+        ComputerMachine::from_profile(ComputerMachineProfile::computer_v1_with_storage_paths(
+            4096,
+            &storage0_path,
+            Some(storage1_path.clone()),
+        ))
+        .unwrap();
+
+    machine
+        .bus_store_i32(computer_abi::STORAGE1_BLOCK_COUNT, 1)
+        .unwrap();
+    machine
+        .bus_store_i32(computer_abi::STORAGE1_BUFFER_ADDR, 1024)
+        .unwrap();
+    machine
+        .bus_store_i32(
+            computer_abi::STORAGE1_COMMAND,
+            computer_abi::STORAGE_COMMAND_READ_BLOCKS,
+        )
+        .unwrap();
+    assert_eq!(machine.memory().load_u8(1024).unwrap(), 0xA5);
+    assert_eq!(
+        machine
+            .bus_load_i32(computer_abi::STORAGE1_SEQUENCE_LOW)
+            .unwrap(),
+        1,
+    );
+
+    machine.memory_mut().store_u8(1024, 0x7E).unwrap();
+    machine
+        .bus_store_i32(
+            computer_abi::STORAGE1_COMMAND,
+            computer_abi::STORAGE_COMMAND_WRITE_BLOCKS,
+        )
+        .unwrap();
+    assert_storage_error_at(
+        &machine,
+        computer_abi::STORAGE1_BASE,
+        computer_abi::STORAGE_ERROR_WRITE_PROTECTED,
+    );
+    assert_eq!(
+        machine
+            .bus_load_i32(computer_abi::STORAGE1_SEQUENCE_LOW)
+            .unwrap(),
+        2,
+    );
+
+    machine
+        .bus_store_i32(computer_abi::STORAGE0_BLOCK_COUNT, 1)
+        .unwrap();
+    machine
+        .bus_store_i32(computer_abi::STORAGE0_BUFFER_ADDR, 1024)
+        .unwrap();
+    machine
+        .bus_store_i32(
+            computer_abi::STORAGE0_COMMAND,
+            computer_abi::STORAGE_COMMAND_WRITE_BLOCKS,
+        )
+        .unwrap();
+    machine
+        .bus_store_i32(
+            computer_abi::STORAGE0_COMMAND,
+            computer_abi::STORAGE_COMMAND_FLUSH,
+        )
+        .unwrap();
+
+    let stats = machine.stats_snapshot();
+    let storage0 = stats
+        .devices
+        .iter()
+        .find(|device| device.name == "storage0")
+        .unwrap();
+    let storage1 = stats
+        .devices
+        .iter()
+        .find(|device| device.name == "storage1")
+        .unwrap();
+    assert_eq!(storage0.storage.write_commands, 1);
+    assert_eq!(storage1.storage.read_commands, 1);
+    assert_eq!(storage1.storage.write_commands, 0);
+    assert_eq!(storage1.storage.failed_commands, 1);
+    assert_eq!(fs::read(&storage0_path).unwrap()[16], 0x7E);
+    assert_eq!(fs::read(&storage1_path).unwrap()[16], 0xA5);
+
+    fs::remove_file(storage0_path).unwrap();
+    fs::remove_file(storage1_path).unwrap();
+}
+
+#[test]
 fn computer_profile_can_expose_storage0_without_attached_media() {
     let profile =
         ComputerMachineProfile::new(1024).with_hardware(ComputerHardwareConfig::storage_port(
@@ -1966,6 +2123,7 @@ fn storage0_file_media_write_blocks_flushes_payload_file() {
             computer_abi::COMPUTER_HARDWARE_ID_STORAGE0,
             computer_abi::STORAGE0_BASE,
             &path,
+            false,
         ),
     );
     let mut machine = ComputerMachine::from_profile(profile).unwrap();
@@ -2004,6 +2162,7 @@ fn storage0_file_media_reports_version_and_present_status() {
             computer_abi::COMPUTER_HARDWARE_ID_STORAGE0,
             computer_abi::STORAGE0_BASE,
             &path,
+            false,
         ),
     );
     let machine = ComputerMachine::from_profile(profile).unwrap();
@@ -2902,6 +3061,15 @@ fn assert_storage_error(machine: &ComputerMachine, error: i32) {
             .unwrap(),
         0,
     );
+}
+
+fn assert_storage_error_at(machine: &ComputerMachine, base: u32, error: i32) {
+    assert_eq!(
+        machine.bus_load_i32(base + 4).unwrap(),
+        computer_abi::STORAGE_STATUS_ERROR,
+    );
+    assert_eq!(machine.bus_load_i32(base + 8).unwrap(), error);
+    assert_eq!(machine.bus_load_i32(base + 44).unwrap(), 0);
 }
 
 fn assert_profile_error(profile: ComputerMachineProfile, expected: &str) {
