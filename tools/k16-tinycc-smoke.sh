@@ -151,6 +151,7 @@ positive_fixtures=(
     "rodata:42"
     "control-flow:42"
     "calls:42"
+    "wide-direct:42"
 )
 
 for fixture_spec in "${positive_fixtures[@]}"; do
@@ -212,8 +213,6 @@ require_tinycc_failure "reject-varargs" \
     "K16 TinyCC does not support variadic functions yet"
 require_tinycc_failure "reject-asm" \
     "K16 TinyCC does not support integrated assembly"
-require_tinycc_failure "reject-wide" \
-    "K16 TinyCC does not support values wider than one 32-bit ABI slot yet"
 require_tinycc_failure "reject-aggregate" \
     "K16 TinyCC does not support aggregate arguments or returns yet"
 
