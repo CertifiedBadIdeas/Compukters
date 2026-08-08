@@ -1,3 +1,4 @@
+#include <errno.h>
 #include <string.h>
 
 void *memcpy(void *destination, const void *source, size_t count) {
@@ -114,4 +115,20 @@ char *strstr(const char *text, const char *needle) {
     text += 1;
   }
   return NULL;
+}
+
+char *strerror(int error) {
+  switch (error) {
+    case ENOENT: return "No such file or directory";
+    case ENOEXEC: return "Exec format error";
+    case EBADF: return "Bad file descriptor";
+    case ENOMEM: return "Cannot allocate memory";
+    case EFAULT: return "Bad address";
+    case EBUSY: return "Device or resource busy";
+    case EINVAL: return "Invalid argument";
+    case EMFILE: return "Too many open files";
+    case EROFS: return "Read-only file system";
+    case ENOTEMPTY: return "Directory not empty";
+    default: return "Unknown error";
+  }
 }

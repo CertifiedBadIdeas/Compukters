@@ -29,5 +29,8 @@ int main(void) {
   if (strnlen("abcdef", 3) != 3) return 24;
   strncpy(bounded, "xy", sizeof(bounded));
   if (memcmp(bounded, "xy\0\0\0", sizeof(bounded)) != 0) return 25;
+  if (strcmp(strerror(ENOENT), "No such file or directory") != 0) return 26;
+  if (strcmp(strerror(EINVAL), "Invalid argument") != 0) return 27;
+  if (strcmp(strerror(999), "Unknown error") != 0) return 28;
   return 0;
 }
