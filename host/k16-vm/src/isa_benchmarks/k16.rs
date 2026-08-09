@@ -33,7 +33,7 @@ const COPY_SOURCE: u32 = DATA_BASE;
 const COPY_DESTINATION: u32 = DATA_BASE + 0x0100;
 const PACKET_RING: u32 = DATA_BASE;
 
-pub fn run_candidate(
+pub(super) fn run(
     candidate: IsaBenchmarkCandidate,
     workload: IsaBenchmarkWorkload,
     iterations: u32,
