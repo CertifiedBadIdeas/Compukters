@@ -21,7 +21,8 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use k16_vm::compiled_c::artifact::{
-    load_compiled_c_artifact, validate_artifact_pair, CompiledCArtifact, CompiledCCandidate,
+    load_compiled_c_artifact, validate_artifact_pair, validate_f32r32_artifact_pair,
+    CompiledCArtifact, CompiledCCandidate,
 };
 use k16_vm::isa_benchmarks::IsaBenchmarkWorkload;
 
@@ -84,6 +85,22 @@ fn loads_owned_artifact_from_strict_manifest() {
     assert_eq!(artifact.validation_iterations, 17);
     assert_eq!(artifact.expected_checksum, 35);
     assert_eq!(artifact.image.len(), 8);
+}
+
+#[test]
+fn loads_k16_f32r32_candidate_identity() {
+    let directory = FixtureDirectory::new();
+    let manifest = write_valid_fixture(directory.path());
+    std::fs::write(
+        &manifest,
+        valid_manifest("").replace("candidate=k16-f32", "candidate=k16-f32r32-lr"),
+    )
+    .unwrap();
+
+    let artifact = load_compiled_c_artifact(&manifest).unwrap();
+
+    assert_eq!(artifact.candidate, CompiledCCandidate::K16F32R32LR);
+    assert_eq!(artifact.candidate.name(), "k16-f32r32-lr");
 }
 
 #[test]
@@ -185,6 +202,21 @@ fn artifact_pair_requires_distinct_candidates_and_identical_canonical_ir() {
         .unwrap_err()
         .contains("canonical IR"));
     assert!(validate_artifact_pair(&k16, &k16)
+        .unwrap_err()
+        .contains("candidate"));
+}
+
+#[test]
+fn f32r32_artifact_pair_accepts_only_the_new_candidate_then_rv32im() {
+    let candidate = artifact(CompiledCCandidate::K16F32R32LR, &"b".repeat(64));
+    let old_k16 = artifact(CompiledCCandidate::K16F32, &"b".repeat(64));
+    let rv = artifact(CompiledCCandidate::Rv32im, &"b".repeat(64));
+
+    validate_f32r32_artifact_pair(&candidate, &rv).unwrap();
+    assert!(validate_f32r32_artifact_pair(&old_k16, &rv)
+        .unwrap_err()
+        .contains("k16-f32r32-lr then rv32im"));
+    assert!(validate_f32r32_artifact_pair(&candidate, &candidate)
         .unwrap_err()
         .contains("candidate"));
 }
