@@ -89,6 +89,7 @@ impl K16F32Cpu {
         self.retire_decoded(bus, instruction_pc, instruction)
     }
 
+    #[inline(always)]
     pub(crate) fn retire_decoded(
         &mut self,
         bus: &mut dyn MemoryBus,
@@ -102,6 +103,7 @@ impl K16F32Cpu {
         Ok(stop)
     }
 
+    #[inline(always)]
     fn execute(
         &mut self,
         bus: &mut dyn MemoryBus,
