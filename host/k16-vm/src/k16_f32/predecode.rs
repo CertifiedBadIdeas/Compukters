@@ -38,6 +38,20 @@ impl PredecodedK16F32Program {
                 code.len(),
             ));
         }
+        if !code.is_empty() {
+            let last_offset = u32::try_from(code.len() - 4).map_err(|_| {
+                format!(
+                    "K16-F32 predecode image length {} exceeds the address space",
+                    code.len(),
+                )
+            })?;
+            base.checked_add(last_offset).ok_or_else(|| {
+                format!(
+                    "K16-F32 predecode image at {base:#010x} with length {} wraps the address space",
+                    code.len(),
+                )
+            })?;
+        }
         let instructions = code
             .chunks_exact(4)
             .enumerate()
