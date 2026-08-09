@@ -17,4 +17,6 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+pub mod artifact;
 pub mod k16_f32_assembler;
+pub mod runner;

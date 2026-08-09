@@ -36,10 +36,18 @@ for tool in "$ISA_GATE2_CLANG" "$ISA_GATE2_OPT" "$ISA_GATE2_LLC" "$ISA_GATE2_LLD
     fi
 done
 
-cargo build --quiet --locked --offline --manifest-path "$CRATE_MANIFEST" \
-    --bin isa_gate2_checksum --bin k16_f32_assemble
-CHECKSUM_BIN="$ROOT/host/k16-vm/target/debug/isa_gate2_checksum"
-K16_ASSEMBLER_BIN="$ROOT/host/k16-vm/target/debug/k16_f32_assemble"
+if [[ -z "${ISA_GATE2_CHECKSUM_BIN:-}" || -z "${ISA_GATE2_K16_ASSEMBLER_BIN:-}" ]]; then
+    cargo build --quiet --locked --offline --manifest-path "$CRATE_MANIFEST" \
+        --bin isa_gate2_checksum --bin k16_f32_assemble
+fi
+CHECKSUM_BIN="${ISA_GATE2_CHECKSUM_BIN:-$ROOT/host/k16-vm/target/debug/isa_gate2_checksum}"
+K16_ASSEMBLER_BIN="${ISA_GATE2_K16_ASSEMBLER_BIN:-$ROOT/host/k16-vm/target/debug/k16_f32_assemble}"
+for tool in "$CHECKSUM_BIN" "$K16_ASSEMBLER_BIN"; do
+    if [[ ! -x "$tool" ]]; then
+        echo "required ISA Gate 2 host tool is not executable: $tool" >&2
+        exit 2
+    fi
+done
 workloads=(compute32 branch-mix call-stack memory-sequential memory-random copy-checksum)
 
 for workload in "${workloads[@]}"; do
