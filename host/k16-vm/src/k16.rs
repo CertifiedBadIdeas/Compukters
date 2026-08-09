@@ -188,6 +188,15 @@ impl K16Trap {
         }
     }
 
+    pub(crate) fn invalid_predecoded_pc(pc: u32) -> Self {
+        Self::exception(
+            K16_TRAP_CAUSE_ILLEGAL_INSTRUCTION,
+            pc,
+            pc,
+            format!("invalid predecoded instruction target at pc {pc:#010x}"),
+        )
+    }
+
     pub fn cause(&self) -> u32 {
         self.cause
     }
