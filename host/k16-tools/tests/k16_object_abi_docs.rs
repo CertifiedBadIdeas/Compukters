@@ -188,12 +188,13 @@ fn k16_object_abi_docs_define_freestanding_runtime_boundary() {
     let docs = normalized_doc("docs/abi/k16-object-v1.md");
 
     for required in [
-        "k16 runtime k16-startup [--target <program|program-dynamic>] -o <startup.ko>",
+        "k16 runtime k16-startup [--target <program|program-dynamic>] [--entry <symbol>] -o <startup.ko>",
         "k16 runtime k16-memory-helpers -o <helpers.ko>",
         "k16 runtime k16-cpu-helpers -o <cpu-helpers.ko>",
         "k16 asm <input.kasm> -o <output.ko>",
         "`_start`",
         "`main`",
+        "`--entry <symbol>`",
         "`memcpy`",
         "`memset`",
         "`memmove`",

@@ -35,6 +35,14 @@ val generatedK16FirmwareResources = layout.buildDirectory.dir("generated/k16-fir
 val generatedK16FirmwareTestResources = layout.buildDirectory.dir("generated/k16-firmware-test-resources")
 val generatedKraftOsProductionBundle = layout.buildDirectory.dir("generated/kraftos-bundles/production")
 val k16TinyCcUnameProof = layout.buildDirectory.file("generated/k16-tinycc-proof/uname.kx")
+val k16NativeTinyCcCandidate = layout.buildDirectory.file("generated/k16-native-tinycc/c-sdk-candidate.kv")
+val k16SharedKraftArtifact = layout.buildDirectory.file("generated/k16-firmware-artifacts/libkraft.kso")
+val k16NativeTinyCcTool = rootProject.layout.projectDirectory.file(".toolchain/build/cargo/k16-tools/release/k16")
+val k16NativeTinyCcLlvmReadObj =
+    rootProject.layout.projectDirectory.file(
+        providers.gradleProperty("k16LlvmBuildDir").orElse(".toolchain/build/llvm/k16-min").get() +
+            "/bin/llvm-readobj",
+    )
 val k16BiosFlashResource = generatedK16FirmwareResources.map { it.file("firmware/k16-bios.kflash") }
 val k16DevelopmentStorage0Resource =
     generatedK16FirmwareTestResources.map { it.file("firmware/k16-system-storage0-dev.kv") }
@@ -122,6 +130,7 @@ tasks.named<Test>("test") {
     filter {
         excludeTestsMatching("ru.lazyhat.compukterkraft.impl.K16SdkMountRuntimeSmokeTest")
         excludeTestsMatching("ru.lazyhat.compukterkraft.impl.K16TinyCcRuntimeSmokeTest")
+        excludeTestsMatching("ru.lazyhat.compukterkraft.impl.K16NativeTinyCcCompileTest")
     }
 }
 
@@ -152,6 +161,29 @@ tasks.register<Test>("verifyK16TinyCcRuntime") {
     }
     systemProperty("k16.vm.native.library", k16VmNativeLibrary.asFile.absolutePath)
     systemProperty("k16.tinycc.uname.path", k16TinyCcUnameProof.get().asFile.absolutePath)
+}
+
+tasks.register<Test>("verifyK16NativeTinyCc") {
+    description = "Compiles C inside a 4 MiB KraftOS VM with the unregistered native TinyCC SDK candidate."
+    group = "verification"
+    dependsOn(tasks.named("buildK16VmNativeLibrary"))
+    dependsOn(tasks.named("assembleK16CSdkCandidate"))
+    dependsOn(tasks.named("assembleKraftOsProductionBundle"))
+    inputsK16RuntimeFirmwareResources()
+    inputs.file(k16NativeTinyCcCandidate)
+    inputs.file(k16SharedKraftArtifact)
+    inputs.file(k16NativeTinyCcTool)
+    inputs.file(k16NativeTinyCcLlvmReadObj)
+    inputs.dir(generatedKraftOsProductionBundle)
+    useK16NeoforgeTestRuntime()
+    filter {
+        includeTestsMatching("ru.lazyhat.compukterkraft.impl.K16NativeTinyCcCompileTest")
+    }
+    systemProperty("k16.vm.native.library", k16VmNativeLibrary.asFile.absolutePath)
+    systemProperty("k16.native.tinycc.candidate.path", k16NativeTinyCcCandidate.get().asFile.absolutePath)
+    systemProperty("k16.native.tinycc.libkraft.path", k16SharedKraftArtifact.get().asFile.absolutePath)
+    systemProperty("k16.native.tinycc.tool.path", k16NativeTinyCcTool.asFile.absolutePath)
+    systemProperty("k16.native.tinycc.llvm.readobj.path", k16NativeTinyCcLlvmReadObj.asFile.absolutePath)
 }
 
 tasks.register<Test>("profileK16RuntimeWait") {

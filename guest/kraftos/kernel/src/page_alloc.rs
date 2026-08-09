@@ -1,5 +1,5 @@
 pub const PAGE_SIZE: u32 = 4096;
-const MAX_FRAMES: usize = 256;
+const MAX_FRAMES: usize = 1024;
 const BIT_WORD_BITS: usize = 32;
 const BIT_WORDS: usize = MAX_FRAMES / BIT_WORD_BITS;
 
@@ -250,6 +250,14 @@ mod tests {
 
         assert_eq!(allocator.total_frames(), 48);
         assert_eq!(allocator.free_frames(), 48);
+    }
+
+    #[test]
+    fn allocator_supports_native_compiler_four_mebibyte_ram_profile() {
+        let allocator = PageFrameAllocator::new(4 * 1024 * 1024).expect("allocator initializes");
+
+        assert_eq!(allocator.total_frames(), 1024);
+        assert_eq!(allocator.free_frames(), 1024);
     }
 
     #[test]

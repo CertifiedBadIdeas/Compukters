@@ -33,6 +33,18 @@ pub fn k16_startup_object() -> Vec<u8> {
 }
 
 pub fn k16_startup_object_for_target(target: K16ArtifactTarget) -> Result<Vec<u8>, String> {
+    k16_startup_object_for_target_and_entry(target, MAIN_SYMBOL)
+}
+
+pub fn k16_startup_object_for_target_and_entry(
+    target: K16ArtifactTarget,
+    entry_symbol: &str,
+) -> Result<Vec<u8>, String> {
+    if entry_symbol.is_empty() || entry_symbol.as_bytes().contains(&0) {
+        return Err(
+            "k16-startup entry symbol must be non-empty and contain no NUL bytes".to_string(),
+        );
+    }
     let fixed_stack_top = match target {
         K16ArtifactTarget::Program => Some(K16ArtifactTarget::PROGRAM_INITIAL_STACK_POINTER),
         K16ArtifactTarget::ProgramDynamic => None,
@@ -79,7 +91,7 @@ pub fn k16_startup_object_for_target(target: K16ArtifactTarget) -> Result<Vec<u8
 
     let mut strtab = Vec::from([0]);
     let start_name = push_string(&mut strtab, STARTUP_SYMBOL);
-    let main_name = push_string(&mut strtab, MAIN_SYMBOL);
+    let main_name = push_string(&mut strtab, entry_symbol);
 
     let mut symtab = Vec::new();
     symtab.extend([0u8; 16]);

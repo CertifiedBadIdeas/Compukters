@@ -4,12 +4,20 @@
 #define KRAFT_ARG_MAX 5
 #define KRAFT_ARG_BYTES_MAX 128
 
+#ifndef KRAFT_CRT_ENTRY
+#define KRAFT_CRT_ENTRY main
+#endif
+
+#ifndef KRAFT_CRT_USER_MAIN
+#define KRAFT_CRT_USER_MAIN kraft_main
+#endif
+
 struct kraft_raw_arg {
   const char *ptr;
   unsigned int len;
 };
 
-int kraft_main(int argc, char **argv);
+int KRAFT_CRT_USER_MAIN(int argc, char **argv);
 
 static void copy_arg(char *dst, const struct kraft_raw_arg *src) {
   unsigned int len = src->len;
@@ -23,7 +31,8 @@ static void copy_arg(char *dst, const struct kraft_raw_arg *src) {
   dst[len] = 0;
 }
 
-int main(unsigned int raw_argc, const struct kraft_raw_arg *raw_argv) {
+int KRAFT_CRT_ENTRY(unsigned int raw_argc,
+                    const struct kraft_raw_arg *raw_argv) {
   char arg_storage[KRAFT_RAW_ARG_MAX][KRAFT_ARG_BYTES_MAX + 1];
   char *argv[KRAFT_ARG_MAX + 1];
 
@@ -39,5 +48,5 @@ int main(unsigned int raw_argc, const struct kraft_raw_arg *raw_argv) {
   }
   argv[argc] = 0;
 
-  return kraft_main((int)argc, argv);
+  return KRAFT_CRT_USER_MAIN((int)argc, argv);
 }

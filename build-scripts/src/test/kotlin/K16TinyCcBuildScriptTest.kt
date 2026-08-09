@@ -286,6 +286,8 @@ class K16TinyCcBuildScriptTest {
         assertTrue(taskBody.contains("lib/libsoftfloat.a"))
         assertTrue(taskBody.contains("lib/libcompiler_rt.a"))
         assertTrue(taskBody.contains("lib/crt0.o"))
+        assertTrue(taskBody.contains("-DKRAFT_CRT_ENTRY=kraft_start"))
+        assertTrue(taskBody.contains("-DKRAFT_CRT_USER_MAIN=main"))
         assertTrue(taskBody.contains("relativeTo"))
         assertTrue(taskBody.contains("substringBeforeLast('.')"))
         assertTrue(taskBody.contains("Archive member order mismatch"))
@@ -345,7 +347,7 @@ class K16TinyCcBuildScriptTest {
             "#define CONFIG_TCC_STATIC 1",
             "#define CONFIG_TCC_SEMLOCK 0",
             "#define CONFIG_TCCDIR \\\"/sdk/lib/tcc\\\"",
-            "#define CONFIG_TCC_SYSINCLUDEPATHS \\\"/sdk/include\\\"",
+            "#define CONFIG_TCC_SYSINCLUDEPATHS \\\"/sdk/include:{B}/include\\\"",
             "#define CONFIG_TCC_LIBPATHS \\\"/sdk/lib\\\"",
             "#define CONFIG_TCC_BCHECK 0",
             "#define CONFIG_TCC_BACKTRACE 0",
@@ -356,7 +358,9 @@ class K16TinyCcBuildScriptTest {
         assertTrue(taskBody.contains("-include"))
         assertTrue(taskBody.contains("k16NativeTinyCcConfig"))
         assertTrue(taskBody.contains("-DONE_SOURCE=1"))
-        assertTrue(taskBody.contains("-Dmain=kraft_main"))
+        assertFalse(taskBody.contains("-Dmain=kraft_main"))
+        assertTrue(taskBody.contains("\"--entry\""))
+        assertTrue(taskBody.contains("\"kraft_start\""))
         assertTrue(taskBody.contains("-ffreestanding"))
         assertTrue(taskBody.contains("-fno-builtin"))
         assertTrue(taskBody.contains("-fno-stack-protector"))

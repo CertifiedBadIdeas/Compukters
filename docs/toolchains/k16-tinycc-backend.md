@@ -100,6 +100,13 @@ dynamic K16E program against the compiler-owned C SDK archives and
 absolute host path or an unresolved symbol outside the exact SDK/runtime
 closure fails the build.
 
+Public headers are resolved from `/sdk/include`; TinyCC's installed private
+headers, including `tccdefs.h`, are resolved from `/sdk/lib/tcc/include` via
+its fixed `{B}/include` search root.
+The compiler-owned `crt0.o` exposes the ordinary hosted C `main` contract and
+is entered through the explicit K16 startup symbol `kraft_start`; SDK users do
+not pass KraftOS-internal entrypoint renaming flags.
+
 The native image is a compiler only: TinyCC still emits `ET_REL` objects and
 does not own final K16E linking. Packaging `tcc.kx` into immutable C SDK media
 and proving source-to-object compilation inside a running VM are separate

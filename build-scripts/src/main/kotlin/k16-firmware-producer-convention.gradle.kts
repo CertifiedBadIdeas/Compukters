@@ -35,6 +35,8 @@ val k16TinyCcExecutable =
 val k16TinyCcSourceRoot = rootProject.layout.projectDirectory.dir("toolchains/Compukter-Kraft-tinycc")
 val k16TinyCcNativeSource = k16TinyCcSourceRoot.file("tcc.c")
 val k16TinyCcVersionSource = k16TinyCcSourceRoot.file("VERSION")
+val k16TinyCcInstallIncludeSource = k16TinyCcSourceRoot.dir("include")
+val k16TinyCcLibcHeaderSource = k16TinyCcSourceRoot.file("tcclib.h")
 val generatedK16FirmwareResources = layout.buildDirectory.dir("generated/k16-firmware-resources")
 val generatedK16FirmwareTestResources = layout.buildDirectory.dir("generated/k16-firmware-test-resources")
 val generatedK16FirmwareArtifacts = layout.buildDirectory.dir("generated/k16-firmware-artifacts")
@@ -199,6 +201,9 @@ val k16NativeTinyCcObject = generatedK16NativeTinyCcTarget.map { it.file("tcc.o"
 val k16NativeTinyCcStartupObject = generatedK16NativeTinyCcTarget.map { it.file("k16-startup.o") }
 val k16NativeTinyCcInspect = generatedK16NativeTinyCcTarget.map { it.file("tcc.inspect") }
 val k16NativeTinyCcArtifact = generatedK16NativeTinyCcTarget.map { it.file("tcc.kx") }
+val k16CSdkCandidateArtifact = generatedK16NativeTinyCcTarget.map { it.file("c-sdk-candidate.kv") }
+val k16CSdkCandidatePayloadSizeBytes = 4 * 1024 * 1024
+val k16VolumeHeaderSizeBytes = 16
 val k16BootMapArtifact = k16BootArtifact.map { it.asFile.resolveSibling("${it.asFile.nameWithoutExtension}.map") }
 val k16KernelMapArtifact = k16KernelArtifact.map { it.asFile.resolveSibling("${it.asFile.nameWithoutExtension}.map") }
 val k16InitMapArtifact = k16InitArtifact.map { it.asFile.resolveSibling("${it.asFile.nameWithoutExtension}.map") }
@@ -1212,7 +1217,12 @@ val buildK16CSdkArchives =
             fun stableObjectName(relativePath: String): String =
                 relativePath.substringBeforeLast('.').replace('/', '-') + ".o"
 
-            fun compileC(source: File, output: File, includeBuiltins: Boolean) {
+            fun compileC(
+                source: File,
+                output: File,
+                includeBuiltins: Boolean,
+                extraArguments: List<String> = emptyList(),
+            ) {
                 output.parentFile.mkdirs()
                 runCommand(
                     "compile ${source.name}",
@@ -1230,6 +1240,7 @@ val buildK16CSdkArchives =
                             add("-I")
                             add(k16CompilerRtBuiltinsSource.asFile.absolutePath)
                         }
+                        addAll(extraArguments)
                         add("-c")
                         add(source.absolutePath)
                         add("-o")
@@ -1284,7 +1295,16 @@ val buildK16CSdkArchives =
             }
 
             val crt0Object = libDirectory.resolve("crt0.o")
-            compileC(k16CLibcStartupSource.asFile, crt0Object, includeBuiltins = false)
+            compileC(
+                k16CLibcStartupSource.asFile,
+                crt0Object,
+                includeBuiltins = false,
+                extraArguments =
+                    listOf(
+                        "-DKRAFT_CRT_ENTRY=kraft_start",
+                        "-DKRAFT_CRT_USER_MAIN=main",
+                    ),
+            )
 
             fun buildArchive(archive: File, members: List<File>) {
                 check(members.isNotEmpty()) {
@@ -1459,7 +1479,7 @@ val compileK16NativeTinyCc =
                     "#define CONFIG_TCC_STATIC 1",
                     "#define CONFIG_TCC_SEMLOCK 0",
                     "#define CONFIG_TCCDIR \"/sdk/lib/tcc\"",
-                    "#define CONFIG_TCC_SYSINCLUDEPATHS \"/sdk/include\"",
+                    "#define CONFIG_TCC_SYSINCLUDEPATHS \"/sdk/include:{B}/include\"",
                     "#define CONFIG_TCC_LIBPATHS \"/sdk/lib\"",
                     "#define CONFIG_TCC_BCHECK 0",
                     "#define CONFIG_TCC_BACKTRACE 0",
@@ -1527,7 +1547,6 @@ val compileK16NativeTinyCc =
                     "-include",
                     config.absolutePath,
                     "-DONE_SOURCE=1",
-                    "-Dmain=kraft_main",
                     "-c",
                     tinyCcSource.absolutePath,
                     "-o",
@@ -1571,6 +1590,8 @@ val compileK16NativeTinyCc =
                     "k16-startup",
                     "--target",
                     "program-dynamic",
+                    "--entry",
+                    "kraft_start",
                     "-o",
                     startupObject.absolutePath,
                 ),
@@ -2501,6 +2522,147 @@ val putK16SdkFixture =
                 "ROOT",
                 rootPartition.absolutePath,
             )
+        }
+    }
+
+val assembleK16CSdkCandidate =
+    tasks.register("assembleK16CSdkCandidate") {
+        description = "Assembles and byte-verifies the unregistered native C SDK candidate volume."
+        group = "k16"
+        dependsOn(compileK16NativeTinyCc, buildK16CSdkArchives)
+        dependsOn(rootProject.tasks.named("prepareK16Toolchain"))
+        inputs.file(k16ToolchainConfig)
+        inputs.file(k16NativeTinyCcArtifact)
+        inputs.dir(k16CSdkIncludeSource)
+        inputs.dir(k16TinyCcInstallIncludeSource)
+        inputs.file(k16TinyCcLibcHeaderSource)
+        inputs.file(generatedK16CSdkTarget.map { it.file("lib/crt0.o") })
+        inputs.file(generatedK16CSdkTarget.map { it.file("lib/libc.a") })
+        inputs.file(generatedK16CSdkTarget.map { it.file("lib/libsoftfloat.a") })
+        inputs.file(generatedK16CSdkTarget.map { it.file("lib/libcompiler_rt.a") })
+        inputs.property("candidatePayloadSizeBytes", k16CSdkCandidatePayloadSizeBytes)
+        outputs.file(k16CSdkCandidateArtifact)
+
+        doLast {
+            val toolchain = resolveK16Toolchain()
+            val sdkTarget = generatedK16CSdkTarget.get().asFile
+            val output = k16CSdkCandidateArtifact.get().asFile
+            val k16CSdkCandidateEntries =
+                buildList<Pair<String, File>> {
+                    add("/sdk/bin/tcc.kx" to k16NativeTinyCcArtifact.get().asFile)
+                    k16CSdkIncludeSource.asFileTree.files
+                        .filter(File::isFile)
+                        .sortedBy { it.relativeTo(k16CSdkIncludeSource.asFile).invariantSeparatorsPath }
+                        .forEach { header ->
+                            val relative = header.relativeTo(k16CSdkIncludeSource.asFile).invariantSeparatorsPath
+                            add("/sdk/include/$relative" to header)
+                        }
+                    k16TinyCcInstallIncludeSource.asFileTree.files
+                        .filter(File::isFile)
+                        .sortedBy { it.relativeTo(k16TinyCcInstallIncludeSource.asFile).invariantSeparatorsPath }
+                        .forEach { header ->
+                            val relative = header.relativeTo(k16TinyCcInstallIncludeSource.asFile).invariantSeparatorsPath
+                            add("/sdk/lib/tcc/include/$relative" to header)
+                        }
+                    add("/sdk/lib/tcc/include/tcclib.h" to k16TinyCcLibcHeaderSource.asFile)
+                    add("/sdk/lib/crt0.o" to sdkTarget.resolve("lib/crt0.o"))
+                    add("/sdk/lib/libc.a" to sdkTarget.resolve("lib/libc.a"))
+                    add("/sdk/lib/libsoftfloat.a" to sdkTarget.resolve("lib/libsoftfloat.a"))
+                    add("/sdk/lib/libcompiler_rt.a" to sdkTarget.resolve("lib/libcompiler_rt.a"))
+                }.sortedBy(Pair<String, File>::first)
+            check(k16CSdkCandidateEntries.map(Pair<String, File>::first).toSet().size == k16CSdkCandidateEntries.size) {
+                "C SDK candidate contains duplicate guest paths"
+            }
+            k16CSdkCandidateEntries.forEach { (guestPath, source) ->
+                check(guestPath.startsWith("/sdk/") && source.isFile) {
+                    "Invalid C SDK candidate entry: $guestPath <- $source"
+                }
+            }
+            val k16CSdkCandidateStorageEntries =
+                k16CSdkCandidateEntries.map { (guestPath, source) ->
+                    guestPath.removePrefix("/sdk") to source
+                }
+
+            fun runK16Command(vararg args: String) {
+                val command = listOf(toolchain.cli.absolutePath) + args.toList()
+                val exitCode =
+                    ProcessBuilder(command)
+                        .directory(projectDir)
+                        .inheritIO()
+                        .start()
+                        .waitFor()
+                check(exitCode == 0) {
+                    "K16 C SDK candidate command failed with exit code $exitCode: ${command.joinToString(" ")}"
+                }
+            }
+
+            fun assembleCandidate(
+                candidate: File,
+                assemblyDirectory: File,
+            ) {
+                project.delete(assemblyDirectory)
+                assemblyDirectory.mkdirs()
+                val rootPartition = assemblyDirectory.resolve("root.kfs")
+                runK16Command(
+                    "volume",
+                    "init",
+                    candidate.absolutePath,
+                    "--size",
+                    k16CSdkCandidatePayloadSizeBytes.toString(),
+                )
+                runK16Command(
+                    "volume",
+                    "extract-partition",
+                    candidate.absolutePath,
+                    "ROOT",
+                    rootPartition.absolutePath,
+                )
+                val directories =
+                    buildSet {
+                        k16CSdkCandidateStorageEntries.forEach { (storagePath, _) ->
+                            var parent = storagePath.substringBeforeLast('/')
+                            while (parent.isNotEmpty()) {
+                                add(parent)
+                                parent = parent.substringBeforeLast('/', missingDelimiterValue = "")
+                            }
+                        }
+                    }.sortedWith(compareBy<String>({ it.count { character -> character == '/' } }, { it }))
+                directories.forEach { directory ->
+                    runK16Command("fs", "kfs", "mkdir", rootPartition.absolutePath, directory)
+                }
+                k16CSdkCandidateStorageEntries.forEach { (storagePath, source) ->
+                    runK16Command(
+                        "fs",
+                        "kfs",
+                        "put",
+                        rootPartition.absolutePath,
+                        storagePath,
+                        source.absolutePath,
+                    )
+                }
+                runK16Command(
+                    "volume",
+                    "replace-partition",
+                    candidate.absolutePath,
+                    "ROOT",
+                    rootPartition.absolutePath,
+                )
+            }
+
+            val firstAssembly = temporaryDir.resolve("first/c-sdk-candidate.kv")
+            val secondAssembly = temporaryDir.resolve("second/c-sdk-candidate.kv")
+            assembleCandidate(firstAssembly, firstAssembly.parentFile)
+            assembleCandidate(secondAssembly, secondAssembly.parentFile)
+            val firstBytes = firstAssembly.readBytes()
+            val secondBytes = secondAssembly.readBytes()
+            check(firstBytes.contentEquals(secondBytes)) {
+                "Two clean C SDK candidate assemblies produced different bytes"
+            }
+            output.parentFile.mkdirs()
+            firstAssembly.copyTo(output, overwrite = true)
+            check(output.length() == k16CSdkCandidatePayloadSizeBytes.toLong() + k16VolumeHeaderSizeBytes) {
+                "C SDK candidate has unexpected physical size ${output.length()}"
+            }
         }
     }
 

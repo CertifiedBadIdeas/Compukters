@@ -487,11 +487,11 @@ fn k16_c_libc_cat_has_minimal_libkraft_abi_sources() {
     assert!(string.contains("int strcmp(const char *left, const char *right)"));
 
     let startup = fs::read_to_string(&startup).expect("C hosted startup source exists");
-    assert!(startup.contains("int kraft_main(int argc, char **argv);"));
-    assert!(
-        startup.contains("int main(unsigned int raw_argc, const struct kraft_raw_arg *raw_argv)")
-    );
-    assert!(startup.contains("return kraft_main((int)argc, argv);"));
+    assert!(startup.contains("#define KRAFT_CRT_ENTRY main"));
+    assert!(startup.contains("#define KRAFT_CRT_USER_MAIN kraft_main"));
+    assert!(startup.contains("int KRAFT_CRT_USER_MAIN(int argc, char **argv);"));
+    assert!(startup.contains("int KRAFT_CRT_ENTRY(unsigned int raw_argc,"));
+    assert!(startup.contains("return KRAFT_CRT_USER_MAIN((int)argc, argv);"));
 
     let cat = fs::read_to_string(&cat).expect("C hosted cat source exists");
     assert!(cat.contains("#include <fcntl.h>"));
