@@ -405,6 +405,12 @@ fn rv32_workload(workload: IsaBenchmarkWorkload, iterations: u32) -> Result<Prog
         IsaBenchmarkWorkload::MmioControl => mmio_control_program(iterations),
         IsaBenchmarkWorkload::YieldWake => yield_wake_program(iterations),
         IsaBenchmarkWorkload::PacketRing => packet_ring_program(iterations),
+        IsaBenchmarkWorkload::U64Mix
+        | IsaBenchmarkWorkload::Fixed64Geometry
+        | IsaBenchmarkWorkload::U64Memory => Err(format!(
+            "{} is available only through the compiled-C XLEN gate",
+            workload.name()
+        )),
     }
 }
 

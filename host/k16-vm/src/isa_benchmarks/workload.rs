@@ -30,6 +30,9 @@ pub enum IsaBenchmarkWorkload {
     MmioControl,
     YieldWake,
     PacketRing,
+    U64Mix,
+    Fixed64Geometry,
+    U64Memory,
 }
 
 impl IsaBenchmarkWorkload {
@@ -58,7 +61,14 @@ impl IsaBenchmarkWorkload {
             Self::MmioControl => "mmio-control",
             Self::YieldWake => "yield-wake",
             Self::PacketRing => "packet-ring",
+            Self::U64Mix => "u64-mix",
+            Self::Fixed64Geometry => "fixed64-geometry",
+            Self::U64Memory => "u64-memory",
         }
+    }
+
+    pub const fn u64_compiled_c() -> &'static [Self] {
+        &[Self::U64Mix, Self::Fixed64Geometry, Self::U64Memory]
     }
 }
 
@@ -73,6 +83,9 @@ pub fn native_checksum(workload: IsaBenchmarkWorkload, iterations: u32) -> u32 {
         IsaBenchmarkWorkload::MmioControl => triangular_checksum(iterations),
         IsaBenchmarkWorkload::YieldWake => iterations,
         IsaBenchmarkWorkload::PacketRing => packet_ring(iterations),
+        IsaBenchmarkWorkload::U64Mix => u64_mix(iterations),
+        IsaBenchmarkWorkload::Fixed64Geometry => fixed64_geometry(iterations),
+        IsaBenchmarkWorkload::U64Memory => u64_memory(iterations),
     }
 }
 
@@ -158,4 +171,59 @@ fn packet_ring(iterations: u32) -> u32 {
             .fold(checksum, |sum, byte| sum.wrapping_add(u32::from(*byte)));
     }
     checksum
+}
+
+fn u64_mix(iterations: u32) -> u32 {
+    let mut state = 0x9e37_79b9_7f4a_7c15_u64;
+    for index in 0..iterations {
+        let lane = u64::from(index)
+            .wrapping_mul(0xd6e8_feb8_6659_fd93)
+            .wrapping_add(0xa5a3_564e_27f8_862f);
+        state ^= lane.rotate_left(index & 63);
+        state = state
+            .wrapping_mul(0x9e37_79b1_85eb_ca87)
+            .wrapping_add(0x632b_e59b_d9b4_e019);
+        state ^= state >> 29;
+    }
+    fold_u64(state)
+}
+
+fn fixed64_geometry(iterations: u32) -> u32 {
+    const COS_Q16: i64 = 46_341;
+    const SIN_Q16: i64 = 46_340;
+    let mut checksum = 0x243f_6a88_85a3_08d3_u64;
+    for index in 0..iterations {
+        let x = (i64::from((index & 0xffff) as i32) - 32_768) << 16;
+        let y_index = index.wrapping_mul(17) & 0xffff;
+        let y = (i64::from(y_index as i32) - 32_768) << 16;
+        let rotated_x = (x * COS_Q16 - y * SIN_Q16) >> 16;
+        let rotated_y = (x * SIN_Q16 + y * COS_Q16) >> 16;
+        checksum = checksum.wrapping_add(
+            (rotated_x as u64).wrapping_mul(0x0000_0001_0000_01b3)
+                ^ (rotated_y as u64).rotate_left(index & 63),
+        );
+    }
+    fold_u64(checksum)
+}
+
+fn u64_memory(iterations: u32) -> u32 {
+    let mut cells = [0_u64; 64];
+    let mut slot = 0_u32;
+    for index in 0..iterations {
+        slot = slot.wrapping_mul(17).wrapping_add(11) & 63;
+        let value = cells[slot as usize]
+            .wrapping_add(
+                u64::from(index)
+                    .wrapping_add(1)
+                    .wrapping_mul(0x9e37_79b9_7f4a_7c15),
+            )
+            .rotate_left(index & 63)
+            ^ 0xd6e8_feb8_6659_fd93;
+        cells[slot as usize] = value;
+    }
+    fold_u64(cells.into_iter().fold(0_u64, u64::wrapping_add))
+}
+
+fn fold_u64(value: u64) -> u32 {
+    value as u32 ^ (value >> 32) as u32
 }
