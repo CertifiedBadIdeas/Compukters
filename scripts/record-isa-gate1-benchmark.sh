@@ -38,7 +38,7 @@ benchmark_output="$(
     cargo run --locked --release --example isa_gate1_benchmarks -- "$ITERATIONS" "$SAMPLES"
 )"
 printf '%s\n' "$benchmark_output" | grep -q '^Gate 1 recommendation$'
-for candidate in k16 k16-cached k16-f32 rvsim-rv32im rv32im rv32im-predecoded; do
+for candidate in k16 k16-cached k16-predecoded k16-f32 rvsim-rv32im rv32im rv32im-cached rv32im-predecoded native-rust; do
     printf '%s\n' "$benchmark_output" | grep -q "^$candidate[[:space:]]"
 done
 

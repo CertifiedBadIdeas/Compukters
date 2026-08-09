@@ -9,16 +9,38 @@ The in-code metrics explain what the VM/display/compiler did. External profilers
 
 ## ISA Gate 1 comparison
 
-The Gate 1 benchmark compares the current K16 decoder modes, experimental
-fixed-width K16-F32, the external `rvsim` RV32IM reference, and the specialized
-direct/predecoded RV32IM interpreters on one checksum-validated workload set.
-It records cold construction plus execution, warm median/p95 execution after an
-in-place state reset, bus traffic, retained translation memory, and steady-run
-allocations. Host code is warmed before each fresh cold measurement; warm runs
-are interleaved in deterministic shuffled candidate order to reduce ordering,
-frequency, and thermal bias. Gate 1 keeps the legacy K16 control and the fastest
-specialized RV32 mode. K16-F32 advances only while its normalized result is no
-more than 1.30 times the selected RV32 result. This is a viability window, not
+The Gate 1 benchmark compares K16-v1 and the specialized RV32IM interpreter in
+symmetric direct, lazy cached, and eager predecoded modes. It also retains the
+experimental direct K16-F32 decoder and external `rvsim` RV32IM reference, and
+runs the same semantic workloads as optimized `native-rust` host code. Every
+row is checksum-validated.
+
+Lazy cached modes begin cold with an empty per-PC `HashMap`, populate it only
+for executed instructions, and retain it across warm samples. Eager predecoded
+modes decode the complete immutable code image during preparation and use a
+dense PC-indexed table during execution. Cold time includes construction and
+cache/predecode population; warm median/p95 resets CPU and mutable RAM in place
+while retaining decoded code. Direct modes fetch and decode every instruction.
+Warm cached and predecoded modes therefore report no guest instruction-fetch
+traffic. `translation_bytes` estimates retained key/value or vector payload
+capacity and intentionally excludes allocator and `HashMap` control metadata.
+
+The report records absolute nanoseconds per iteration, bus traffic, retained
+translation memory, and steady-run allocations. `vs_native` divides each warm
+median by the native Rust median for the same workload. Native MMIO and
+yield/wake rows preserve the logical operation through optimizer-opaque host
+boundaries but do not invoke OS I/O or thread scheduling; they are an optimized
+useful-work floor, not a server-capacity prediction. Native rows have no guest
+instruction, bus, CPU-state, or translation metrics and never participate in
+ISA advancement decisions.
+
+Host code is warmed before each fresh cold measurement; warm runs are
+interleaved in deterministic shuffled candidate order to reduce ordering,
+frequency, and thermal bias. `normalized_vm_geomean` excludes native execution
+and selects the fastest K16-v1 mode plus the fastest specialized RV32IM mode.
+K16-F32 advances only while its VM-relative result is no more than 1.30 times
+the selected RV32 result. `host_overhead_geomean` separately reports absolute
+interpreter overhead relative to native Rust. This is a viability window, not
 the final custom-ISA threshold; that decision still requires compiled-C and
 many-VM measurements.
 
