@@ -68,5 +68,6 @@ class CProgrammingSdkItemTest {
         assertFalse(copied.has(DataComponents.CUSTOM_DATA), "copied SDK stacks must still carry identity only")
         assertTrue(itemSource.contains("override fun getDefaultInstance(): ItemStack"))
         assertTrue(itemSource.contains("cProgrammingSdkStack(super.getDefaultInstance())"))
+        assertTrue(itemSource.contains("item.compukterkraft.c_programming_sdk.tooltip"))
     }
 }

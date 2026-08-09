@@ -61,6 +61,12 @@ class NotebookGeckoLibArchitectureTest {
                     "ru/lazyhat/compukterkraft/impl/notebook/render/NotebookGeoModel.kt",
             )
             .readText()
+        val itemModel = root
+            .resolve(
+                "modules/v1_21_1/v1_21_1-neoforge/src/main/kotlin/" +
+                    "ru/lazyhat/compukterkraft/impl/notebook/render/NotebookItemGeoModel.kt",
+            )
+            .readText()
         val block = root
             .resolve(
                 "modules/v1_21_1/v1_21_1-common/src/main/kotlin/" +
@@ -99,8 +105,18 @@ class NotebookGeckoLibArchitectureTest {
         assertTrue(
             model.contains("geo/notebook.geo.json") &&
                 model.contains("textures/block/notebook/notebook.png") &&
+                model.contains("textures/block/notebook/advanced_notebook.png") &&
+                model.contains("DeviceFamily.NORMAL") &&
+                model.contains("DeviceFamily.ADVANCED") &&
+                model.contains("DeviceFamily.COMMAND") &&
                 model.contains("animations/notebook.animation.json"),
-            "Notebook GeckoLib model should point at the copied geometry, texture, and animation resources.",
+            "Notebook block model should select a dedicated texture for every supported family and reject COMMAND.",
+        )
+        assertTrue(
+            itemModel.contains("geo/notebook.geo.json") &&
+                itemModel.contains("notebookTexture(animatable.deviceFamily)") &&
+                itemModel.contains("animations/notebook.animation.json"),
+            "Notebook item model should use the same strict family texture selection as the block renderer.",
         )
         assertTrue(
             blockEntity.contains("GeoBlockEntity") &&

@@ -69,6 +69,7 @@ class NotebookBlockArchitectureTest {
         assertTrue(itemSource.contains("block: NotebookBlock"))
         assertTrue(itemSource.contains("val deviceFamily: DeviceFamily"))
         assertTrue(itemSource.contains("deviceFamilyId = deviceFamily.name.lowercase()"))
+        assertTrue(itemSource.contains("item.compukterkraft.advanced_notebook.tooltip"))
         assertFalse(itemSource.contains("DeviceFamily.NORMAL"))
         assertTrue(neoForgeItemSource.contains("block: NotebookBlock"))
         assertFalse(itemSource.contains("useOn"))

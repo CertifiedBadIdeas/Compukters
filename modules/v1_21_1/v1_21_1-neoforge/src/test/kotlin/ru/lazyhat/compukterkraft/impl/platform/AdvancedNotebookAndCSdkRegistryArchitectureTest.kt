@@ -35,6 +35,8 @@ class AdvancedNotebookAndCSdkRegistryArchitectureTest {
         assertTrue(source.contains("val ADVANCED_NOTEBOOK: DeferredHolder<Block, NotebookBlock>"))
         assertTrue(source.contains("DeviceFamily.ADVANCED"))
         assertTrue(source.contains("val C_PROGRAMMING_SDK: DeferredHolder<Item, CProgrammingSdkItem>"))
+        assertTrue(source.contains("DataComponents.SDK_ARTIFACT_IDENTITY.get()"))
+        assertTrue(source.contains("C_PROGRAMMING_SDK_ARTIFACT_IDENTITY"))
         assertTrue(source.contains("Blocks.ADVANCED_NOTEBOOK.get()"))
         assertTrue(source.contains("out.accept(Items.ADVANCED_NOTEBOOK.get().defaultInstance)"))
         assertTrue(source.contains("out.accept(Items.C_PROGRAMMING_SDK.get().defaultInstance)"))

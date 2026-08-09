@@ -1,5 +1,5 @@
 {
-  "block.compukterkraft.computer_advanced": "Продвинутый компьютер",
+  "block.compukterkraft.advanced_notebook": "Продвинутый ноутбук",
   "block.compukterkraft.notebook": "Ноутбук",
   "block.compukterkraft.workbench": "Верстак",
   "commands.compukterkraft.dump.action": "Показать больше информации об этом компьютере",
@@ -20,7 +20,10 @@
   "gui.compukterkraft.tooltip.copy": "Скопировать в буфер обмена",
   "gui.compukterkraft.tooltip.serial_terminal_link_prompt": "ПКМ по компьютеру, чтобы привязать",
   "gui.compukterkraft.tooltip.serial_terminal_linked_computer": "Привязанный компьютер: %s",
-  "item.compukterkraft.computer_advanced": "Продвинутый компьютер",
+  "item.compukterkraft.advanced_notebook": "Продвинутый ноутбук",
+  "item.compukterkraft.advanced_notebook.tooltip": "Более быстрый ноутбук с 4 МиБ памяти VM",
+  "item.compukterkraft.c_programming_sdk": "SDK для программирования на C",
+  "item.compukterkraft.c_programming_sdk.tooltip": "Нативный TinyCC, заголовки и среда выполнения C для KraftOS",
   "item.compukterkraft.notebook": "Ноутбук",
   "item.compukterkraft.serial_terminal": "Serial-терминал",
   "item.compukterkraft.terminal": "Терминал",
