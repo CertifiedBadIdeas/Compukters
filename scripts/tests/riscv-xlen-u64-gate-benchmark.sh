@@ -23,6 +23,12 @@ workloads=(u64-mix fixed64-geometry u64-memory)
 for workload in "${workloads[@]}"; do
     directory="$ARTIFACTS/$workload"
     repro_directory="$REPRO_ARTIFACTS/$workload"
+    test -x "$directory/native-c-runner"
+    native_output="$("$directory/native-c-runner" 10 3)"
+    test "$(printf '%s\n' "$native_output" | sed -n 's/^checksum=//p')" = \
+        "$(manifest_value expected_checksum "$directory/rv32im.manifest")"
+    test -n "$(printf '%s\n' "$native_output" | sed -n 's/^warm_median_ns=//p')"
+    test -n "$(printf '%s\n' "$native_output" | sed -n 's/^warm_p95_ns=//p')"
     for candidate in rv32im rv64im; do
         manifest="$directory/$candidate.manifest"
         image="$directory/$candidate.bin"
@@ -57,11 +63,12 @@ benchmark_output="$(
         --manifest-path "$ROOT/host/k16-vm/Cargo.toml" \
         --example riscv_xlen_benchmarks -- "$ARTIFACTS" 10 3 u64
 )"
-timing_rows="$(printf '%s\n' "$benchmark_output" | awk -F '\t' '$2 == "rv32im" || $2 == "rv64im" || $2 == "native-rust" { count += 1; if ($16 != 0 || $17 != 0) bad = 1 } END { if (bad) exit 1; print count + 0 }')"
+timing_rows="$(printf '%s\n' "$benchmark_output" | awk -F '\t' '$2 == "rv32im" || $2 == "rv64im" || $2 == "native-c" { count += 1; if ($16 != 0 || $17 != 0) bad = 1 } END { if (bad) exit 1; print count + 0 }')"
 test "$timing_rows" -eq 9
 printf '%s\n' "$benchmark_output" | grep -q '^u64-mix[[:space:]]'
 printf '%s\n' "$benchmark_output" | grep -q '^fixed64-geometry[[:space:]]'
 printf '%s\n' "$benchmark_output" | grep -q '^u64-memory[[:space:]]'
+printf '%s\n' "$benchmark_output" | grep -q $'\tnative-c\t'
 printf '%s\n' "$benchmark_output" | grep -q '^rv64_to_rv32_warm_geomean[[:space:]]'
 if printf '%s\n' "$benchmark_output" | grep -q '^decision[[:space:]]'; then
     echo "RISC-V XLEN u64 benchmark produced an architecture decision" >&2

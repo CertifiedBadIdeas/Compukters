@@ -19,6 +19,7 @@
 
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
 
@@ -107,18 +108,21 @@ fn main() -> Result<(), String> {
             steady_allocated_bytes: 0,
         });
     }
-    let mut native = corpus
-        .workloads()
-        .iter()
-        .copied()
-        .map(|workload| NativeMeasurement {
-            workload,
-            checksum: native_checksum(workload, iterations),
-            warm_nanos: Vec::with_capacity(sample_count),
-            steady_allocations: 0,
-            steady_allocated_bytes: 0,
-        })
-        .collect::<Vec<_>>();
+    let mut native_rust = match corpus {
+        Corpus::Scalar32 => corpus
+            .workloads()
+            .iter()
+            .copied()
+            .map(|workload| NativeMeasurement {
+                workload,
+                checksum: native_checksum(workload, iterations),
+                warm_nanos: Vec::with_capacity(sample_count),
+                steady_allocations: 0,
+                steady_allocated_bytes: 0,
+            })
+            .collect::<Vec<_>>(),
+        Corpus::U64 => Vec::new(),
+    };
 
     for sample_index in 0..sample_count {
         for index in rotated_order(candidates.len(), sample_index) {
@@ -136,8 +140,8 @@ fn main() -> Result<(), String> {
             measurement.observation = observation;
             measurement.warm_nanos.push(elapsed);
         }
-        for index in rotated_order(native.len(), sample_index + 1) {
-            let measurement = &mut native[index];
+        for index in rotated_order(native_rust.len(), sample_index + 1) {
+            let measurement = &mut native_rust[index];
             reset_allocation_counters();
             let started = Instant::now();
             let checksum = native_checksum(measurement.workload, iterations);
@@ -168,10 +172,20 @@ fn main() -> Result<(), String> {
             timing.observation.candidate.name(),
         )
     });
-    let mut native = native
-        .into_iter()
-        .map(finish_native)
-        .collect::<Result<Vec<_>, _>>()?;
+    let mut native = match corpus {
+        Corpus::Scalar32 => native_rust
+            .into_iter()
+            .map(finish_native_rust)
+            .collect::<Result<Vec<_>, _>>()?,
+        Corpus::U64 => corpus
+            .workloads()
+            .iter()
+            .copied()
+            .map(|workload| {
+                load_native_c_timing(&artifact_root, workload, iterations, sample_count)
+            })
+            .collect::<Result<Vec<_>, _>>()?,
+    };
     native.sort_by_key(|timing| workload_index(timing.workload));
     if native
         .iter()
@@ -223,6 +237,7 @@ struct NativeMeasurement {
 
 struct NativeTiming {
     workload: IsaBenchmarkWorkload,
+    candidate: &'static str,
     checksum: u32,
     warm_median_nanos: u128,
     warm_p95_nanos: u128,
@@ -277,7 +292,7 @@ fn finish_candidate(mut measurement: CandidateMeasurement) -> CompiledCTiming {
     }
 }
 
-fn finish_native(mut measurement: NativeMeasurement) -> Result<NativeTiming, String> {
+fn finish_native_rust(mut measurement: NativeMeasurement) -> Result<NativeTiming, String> {
     measurement.warm_nanos.sort_unstable();
     let warm_median_nanos = median(&measurement.warm_nanos);
     if warm_median_nanos == 0 {
@@ -288,6 +303,7 @@ fn finish_native(mut measurement: NativeMeasurement) -> Result<NativeTiming, Str
     }
     Ok(NativeTiming {
         workload: measurement.workload,
+        candidate: "native-rust",
         checksum: measurement.checksum,
         warm_median_nanos,
         warm_p95_nanos: p95(&measurement.warm_nanos),
@@ -296,10 +312,75 @@ fn finish_native(mut measurement: NativeMeasurement) -> Result<NativeTiming, Str
     })
 }
 
+fn load_native_c_timing(
+    artifact_root: &Path,
+    workload: IsaBenchmarkWorkload,
+    iterations: u32,
+    sample_count: usize,
+) -> Result<NativeTiming, String> {
+    let runner = artifact_root.join(workload.name()).join("native-c-runner");
+    let output = Command::new(&runner)
+        .arg(iterations.to_string())
+        .arg(sample_count.to_string())
+        .output()
+        .map_err(|error| format!("cannot execute {}: {error}", runner.display()))?;
+    if !output.status.success() {
+        return Err(format!(
+            "{} failed:\nstdout:\n{}\nstderr:\n{}",
+            runner.display(),
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        ));
+    }
+    let stdout = String::from_utf8(output.stdout)
+        .map_err(|error| format!("{} returned non-UTF-8 output: {error}", runner.display()))?;
+    let checksum = parse_native_c_field::<u32>(&stdout, "checksum")?;
+    let expected = native_checksum(workload, iterations);
+    if checksum != expected {
+        return Err(format!(
+            "native C {} checksum {checksum} does not match oracle {expected}",
+            workload.name()
+        ));
+    }
+    let warm_median_nanos = parse_native_c_field::<u128>(&stdout, "warm_median_ns")?;
+    let warm_p95_nanos = parse_native_c_field::<u128>(&stdout, "warm_p95_ns")?;
+    if warm_median_nanos == 0 {
+        return Err(format!(
+            "native C {} has zero warm duration",
+            workload.name()
+        ));
+    }
+    Ok(NativeTiming {
+        workload,
+        candidate: "native-c",
+        checksum,
+        warm_median_nanos,
+        warm_p95_nanos,
+        steady_allocations: 0,
+        steady_allocated_bytes: 0,
+    })
+}
+
+fn parse_native_c_field<T>(output: &str, key: &str) -> Result<T, String>
+where
+    T: std::str::FromStr,
+    T::Err: std::fmt::Display,
+{
+    let prefix = format!("{key}=");
+    let value = output
+        .lines()
+        .find_map(|line| line.strip_prefix(&prefix))
+        .ok_or_else(|| format!("native C output is missing {key}"))?;
+    value
+        .parse::<T>()
+        .map_err(|error| format!("invalid native C {key} {value:?}: {error}"))
+}
+
 fn format_native_sample(timing: &NativeTiming, iterations: u32) -> String {
     format!(
-        "{}\tnative-rust\t{}\t{}\t0\t{}\t{}\t{:.3}\t0\t0\t0\t0\t0\t0\t0\t{}\t{}\t1.000000",
+        "{}\t{}\t{}\t{}\t0\t{}\t{}\t{:.3}\t0\t0\t0\t0\t0\t0\t0\t{}\t{}\t1.000000",
         timing.workload.name(),
+        timing.candidate,
         iterations,
         timing.checksum,
         timing.warm_median_nanos,

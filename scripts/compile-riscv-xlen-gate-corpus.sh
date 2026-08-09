@@ -125,10 +125,30 @@ compile_candidate() {
     } > "$manifest"
 }
 
+compile_native_c() {
+    local workload="$1"
+    local directory="$2"
+    local source="$SOURCE_ROOT/$workload.c"
+    local kernel_object="$directory/native-c-kernel.o"
+    local runner_object="$directory/native-c-runner.o"
+    local runner="$directory/native-c-runner"
+
+    "$RISCV_XLEN_CLANG" -std=c11 -O2 -ffreestanding -fno-builtin \
+        -fno-stack-protector -fomit-frame-pointer -fno-vectorize -fno-slp-vectorize \
+        -ffunction-sections -c "$source" -o "$kernel_object"
+    "$RISCV_XLEN_CLANG" -std=c11 -O2 -D_POSIX_C_SOURCE=200809L \
+        -c "$RISCV_XLEN_NATIVE_RUNNER_SOURCE" -o "$runner_object"
+    "$RISCV_XLEN_CLANG" "$kernel_object" "$runner_object" -o "$runner"
+}
+
 read -r -a workloads <<< "$WORKLOAD_NAMES"
 for workload in "${workloads[@]}"; do
     directory="$ARTIFACT_ROOT/$workload"
     mkdir -p "$directory"
     compile_candidate "$workload" "$directory" rv32im riscv32-unknown-elf rv32im ilp32 elf32lriscv
     compile_candidate "$workload" "$directory" rv64im riscv64-unknown-elf rv64im lp64 elf64lriscv
+    if [[ "${RISCV_XLEN_BUILD_NATIVE_C:-0}" == 1 ]]; then
+        : "${RISCV_XLEN_NATIVE_RUNNER_SOURCE:?native C runner source is required}"
+        compile_native_c "$workload" "$directory"
+    fi
 done
