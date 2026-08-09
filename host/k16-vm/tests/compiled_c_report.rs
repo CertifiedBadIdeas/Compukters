@@ -19,7 +19,8 @@
 
 use k16_vm::compiled_c::artifact::CompiledCCandidate;
 use k16_vm::compiled_c::report::{
-    populate_vs_native, select_compiled_c, CompiledCDecision, CompiledCTiming,
+    format_decision, format_decision_for_candidate, populate_vs_native, select_compiled_c,
+    select_compiled_c_candidate, CompiledCDecision, CompiledCTiming,
 };
 use k16_vm::compiled_c::runner::CompiledCObservation;
 use k16_vm::isa_benchmarks::IsaBenchmarkWorkload;
@@ -53,12 +54,102 @@ fn timing(
 }
 
 fn rows(k16_nanos: u128, rv_nanos: u128) -> Vec<CompiledCTiming> {
+    rows_for(CompiledCCandidate::K16F32, k16_nanos, rv_nanos)
+}
+
+fn rows_for(
+    custom: CompiledCCandidate,
+    custom_nanos: u128,
+    rv_nanos: u128,
+) -> Vec<CompiledCTiming> {
     let mut rows = Vec::new();
     for workload in IsaBenchmarkWorkload::all().iter().copied().take(6) {
-        rows.push(timing(CompiledCCandidate::K16F32, workload, k16_nanos));
+        rows.push(timing(custom, workload, custom_nanos));
         rows.push(timing(CompiledCCandidate::Rv32im, workload, rv_nanos));
     }
     rows
+}
+
+#[test]
+fn gate2_wrapper_keeps_legacy_decision_rendering() {
+    let rendered = format_decision(&rows(500_000, 1_000_000)).unwrap();
+    assert!(rendered.starts_with(
+        "candidate\tnormalized_warm_geomean\ttotal_code_bytes\ttotal_predecode_bytes\nk16-f32\t"
+    ));
+    assert!(rendered.ends_with("decision\tselect-k16-f32\n"));
+    assert!(!rendered.contains("k16-f32r32-lr"));
+}
+
+#[test]
+fn f32r32_candidate_uses_the_unchanged_thresholds_and_rendering() {
+    let custom = CompiledCCandidate::K16F32R32LR;
+    assert_eq!(
+        select_compiled_c_candidate(&rows_for(custom, 819_900, 1_000_000), custom).unwrap(),
+        CompiledCDecision::SelectK16F32R32LR
+    );
+    assert_eq!(
+        select_compiled_c_candidate(&rows_for(custom, 880_100, 1_000_000), custom).unwrap(),
+        CompiledCDecision::SelectRv32im
+    );
+    for custom_nanos in [880_000, 850_000, 820_000] {
+        assert_eq!(
+            select_compiled_c_candidate(&rows_for(custom, custom_nanos, 1_000_000), custom)
+                .unwrap(),
+            CompiledCDecision::Inconclusive
+        );
+    }
+
+    let rendered =
+        format_decision_for_candidate(&rows_for(custom, 500_000, 1_000_000), custom).unwrap();
+    assert!(rendered.contains("\nk16-f32r32-lr\t"));
+    assert!(rendered.ends_with("decision\tselect-k16-f32r32-lr\n"));
+}
+
+#[test]
+fn f32r32_candidate_keeps_workload_and_retained_size_guardrails() {
+    let custom = CompiledCCandidate::K16F32R32LR;
+    let mut slowdown = rows_for(custom, 500_000, 1_000_000);
+    slowdown
+        .iter_mut()
+        .find(|sample| sample.observation.candidate == custom)
+        .unwrap()
+        .warm_median_nanos = 1_300_100;
+    assert_eq!(
+        select_compiled_c_candidate(&slowdown, custom).unwrap(),
+        CompiledCDecision::SelectRv32im
+    );
+
+    for field in ["code", "predecode"] {
+        let mut samples = rows_for(custom, 500_000, 1_000_000);
+        for sample in &mut samples {
+            if sample.observation.candidate == custom {
+                if field == "code" {
+                    sample.observation.code_bytes = 12_501;
+                } else {
+                    sample.observation.predecode_bytes = 12_501;
+                }
+            } else if field == "code" {
+                sample.observation.code_bytes = 10_000;
+            } else {
+                sample.observation.predecode_bytes = 10_000;
+            }
+        }
+        assert_eq!(
+            select_compiled_c_candidate(&samples, custom).unwrap(),
+            CompiledCDecision::SelectRv32im,
+            "{field}"
+        );
+    }
+}
+
+#[test]
+fn candidate_report_rejects_mixed_custom_rows() {
+    let custom = CompiledCCandidate::K16F32R32LR;
+    let mut mixed = rows_for(custom, 500_000, 1_000_000);
+    mixed[0].observation.candidate = CompiledCCandidate::K16F32;
+    assert!(select_compiled_c_candidate(&mixed, custom)
+        .unwrap_err()
+        .contains("missing k16-f32r32-lr timing"));
 }
 
 #[test]

@@ -32,6 +32,7 @@ const COMPARISON_EPSILON: f64 = 1.0e-12;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CompiledCDecision {
     SelectK16F32,
+    SelectK16F32R32LR,
     SelectRv32im,
     Inconclusive,
 }
@@ -40,6 +41,7 @@ impl CompiledCDecision {
     pub const fn name(self) -> &'static str {
         match self {
             Self::SelectK16F32 => "select-k16-f32",
+            Self::SelectK16F32R32LR => "select-k16-f32r32-lr",
             Self::SelectRv32im => "select-rv32im",
             Self::Inconclusive => "inconclusive-expanded-run",
         }
@@ -127,7 +129,14 @@ pub fn populate_vs_native(
 }
 
 pub fn select_compiled_c(samples: &[CompiledCTiming]) -> Result<CompiledCDecision, String> {
-    let metrics = decision_metrics(samples)?;
+    select_compiled_c_candidate(samples, CompiledCCandidate::K16F32)
+}
+
+pub fn select_compiled_c_candidate(
+    samples: &[CompiledCTiming],
+    custom: CompiledCCandidate,
+) -> Result<CompiledCDecision, String> {
+    let metrics = decision_metrics(samples, custom)?;
     if metrics.speed_advantage + COMPARISON_EPSILON >= INCONCLUSIVE_MINIMUM_ADVANTAGE
         && metrics.speed_advantage <= INCONCLUSIVE_MAXIMUM_ADVANTAGE + COMPARISON_EPSILON
     {
@@ -142,15 +151,29 @@ pub fn select_compiled_c(samples: &[CompiledCTiming]) -> Result<CompiledCDecisio
     {
         return Ok(CompiledCDecision::SelectRv32im);
     }
-    Ok(CompiledCDecision::SelectK16F32)
+    match custom {
+        CompiledCCandidate::K16F32 => Ok(CompiledCDecision::SelectK16F32),
+        CompiledCCandidate::K16F32R32LR => Ok(CompiledCDecision::SelectK16F32R32LR),
+        CompiledCCandidate::Rv32im => {
+            Err("compiled-C custom candidate cannot be rv32im".to_string())
+        }
+    }
 }
 
 pub fn format_decision(samples: &[CompiledCTiming]) -> Result<String, String> {
-    let metrics = decision_metrics(samples)?;
-    let decision = select_compiled_c(samples)?;
+    format_decision_for_candidate(samples, CompiledCCandidate::K16F32)
+}
+
+pub fn format_decision_for_candidate(
+    samples: &[CompiledCTiming],
+    custom: CompiledCCandidate,
+) -> Result<String, String> {
+    let metrics = decision_metrics(samples, custom)?;
+    let decision = select_compiled_c_candidate(samples, custom)?;
     let fastest = metrics.k16_to_rv_geomean.min(1.0);
     Ok(format!(
-        "candidate\tnormalized_warm_geomean\ttotal_code_bytes\ttotal_predecode_bytes\nk16-f32\t{:.6}\t{}\t{}\nrv32im\t{:.6}\t{}\t{}\nmetric\tvalue\nk16_speed_advantage\t{:.6}\nmaximum_k16_workload_slowdown\t{:.6}\nk16_to_rv_code_bytes\t{:.6}\nk16_to_rv_predecode_bytes\t{:.6}\ndecision\t{}\n",
+        "candidate\tnormalized_warm_geomean\ttotal_code_bytes\ttotal_predecode_bytes\n{}\t{:.6}\t{}\t{}\nrv32im\t{:.6}\t{}\t{}\nmetric\tvalue\nk16_speed_advantage\t{:.6}\nmaximum_k16_workload_slowdown\t{:.6}\nk16_to_rv_code_bytes\t{:.6}\nk16_to_rv_predecode_bytes\t{:.6}\ndecision\t{}\n",
+        custom.name(),
         metrics.k16_to_rv_geomean / fastest,
         metrics.k16_code,
         metrics.k16_predecode,
@@ -177,7 +200,13 @@ struct DecisionMetrics {
     rv_predecode: usize,
 }
 
-fn decision_metrics(samples: &[CompiledCTiming]) -> Result<DecisionMetrics, String> {
+fn decision_metrics(
+    samples: &[CompiledCTiming],
+    custom: CompiledCCandidate,
+) -> Result<DecisionMetrics, String> {
+    if custom == CompiledCCandidate::Rv32im {
+        return Err("compiled-C custom candidate cannot be rv32im".to_string());
+    }
     if samples
         .iter()
         .any(|sample| sample.steady_allocations != 0 || sample.steady_allocated_bytes != 0)
@@ -216,8 +245,8 @@ fn decision_metrics(samples: &[CompiledCTiming]) -> Result<DecisionMetrics, Stri
     let mut rv_predecode = 0_usize;
     for workload in workloads {
         let k16 = indexed
-            .get(&(workload, CompiledCCandidate::K16F32))
-            .ok_or_else(|| format!("missing k16-f32 timing for {}", workload.name()))?;
+            .get(&(workload, custom))
+            .ok_or_else(|| format!("missing {} timing for {}", custom.name(), workload.name()))?;
         let rv = indexed
             .get(&(workload, CompiledCCandidate::Rv32im))
             .ok_or_else(|| format!("missing rv32im timing for {}", workload.name()))?;
@@ -226,13 +255,13 @@ fn decision_metrics(samples: &[CompiledCTiming]) -> Result<DecisionMetrics, Stri
         maximum_k16_slowdown = maximum_k16_slowdown.max(ratio);
         k16_code = k16_code
             .checked_add(k16.observation.code_bytes)
-            .ok_or("k16-f32 code total overflow")?;
+            .ok_or_else(|| format!("{} code total overflow", custom.name()))?;
         rv_code = rv_code
             .checked_add(rv.observation.code_bytes)
             .ok_or("rv32im code total overflow")?;
         k16_predecode = k16_predecode
             .checked_add(k16.observation.predecode_bytes)
-            .ok_or("k16-f32 predecode total overflow")?;
+            .ok_or_else(|| format!("{} predecode total overflow", custom.name()))?;
         rv_predecode = rv_predecode
             .checked_add(rv.observation.predecode_bytes)
             .ok_or("rv32im predecode total overflow")?;
