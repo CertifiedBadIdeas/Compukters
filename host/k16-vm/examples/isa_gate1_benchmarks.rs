@@ -68,10 +68,13 @@ fn main() -> Result<(), String> {
 
     let mut timings =
         Vec::with_capacity(IsaBenchmarkCandidate::all().len() * IsaBenchmarkWorkload::all().len());
-    for workload in IsaBenchmarkWorkload::all() {
-        for candidate in IsaBenchmarkCandidate::all() {
-            timings.push(measure(*candidate, *workload, iterations, sample_count)?);
-        }
+    for (workload_index, workload) in IsaBenchmarkWorkload::all().iter().enumerate() {
+        timings.extend(measure_workload(
+            *workload,
+            workload_index,
+            iterations,
+            sample_count,
+        )?);
     }
 
     println!("Gate 1 timing and resource report");
@@ -86,45 +89,104 @@ fn main() -> Result<(), String> {
     Ok(())
 }
 
-fn measure(
+struct CandidateMeasurement {
     candidate: IsaBenchmarkCandidate,
+    prepared: PreparedIsaBenchmark,
+    observation: k16_vm::isa_benchmarks::IsaBenchmarkObservation,
+    cold_nanos: u128,
+    warm_nanos: Vec<u128>,
+    steady_allocations: u64,
+    steady_allocated_bytes: u64,
+}
+
+fn measure_workload(
     workload: IsaBenchmarkWorkload,
+    workload_index: usize,
     iterations: u32,
     sample_count: usize,
-) -> Result<IsaBenchmarkTiming, String> {
-    let cold_started = Instant::now();
-    let mut prepared = PreparedIsaBenchmark::new(candidate, workload, iterations)?;
-    let cold_observation = prepared.execute()?;
-    let cold_nanos = cold_started.elapsed().as_nanos();
-    cold_observation.validate_checksum()?;
+) -> Result<Vec<IsaBenchmarkTiming>, String> {
+    let candidates = IsaBenchmarkCandidate::all();
 
-    let mut warm_nanos = Vec::with_capacity(sample_count);
-    let mut steady_allocations = 0;
-    let mut steady_allocated_bytes = 0;
-    let mut observation = cold_observation;
-    for _ in 0..sample_count {
-        reset_allocation_counters();
-        let started = Instant::now();
-        observation = prepared.execute()?;
-        let elapsed = started.elapsed().as_nanos();
-        observation.validate_checksum()?;
-        warm_nanos.push(elapsed);
-        steady_allocations = steady_allocations.max(ALLOCATIONS.load(Ordering::Relaxed));
-        steady_allocated_bytes =
-            steady_allocated_bytes.max(ALLOCATED_BYTES.load(Ordering::Relaxed));
+    // Populate host instruction/page caches without retaining guest state.
+    for candidate in candidates {
+        let mut warmup = PreparedIsaBenchmark::new(*candidate, workload, iterations.min(100))?;
+        warmup.execute()?.validate_checksum()?;
     }
-    warm_nanos.sort_unstable();
-    let median = warm_nanos[warm_nanos.len() / 2];
-    let p95_index = (warm_nanos.len() * 95).div_ceil(100).saturating_sub(1);
 
-    Ok(IsaBenchmarkTiming {
-        observation,
-        cold_nanos,
+    let mut measurements = Vec::with_capacity(candidates.len());
+    for index in candidate_order(workload_index, usize::MAX, candidates.len()) {
+        let candidate = candidates[index];
+        let cold_started = Instant::now();
+        let mut prepared = PreparedIsaBenchmark::new(candidate, workload, iterations)?;
+        let observation = prepared.execute()?;
+        let cold_nanos = cold_started.elapsed().as_nanos();
+        observation.validate_checksum()?;
+        measurements.push(CandidateMeasurement {
+            candidate,
+            prepared,
+            observation,
+            cold_nanos,
+            warm_nanos: Vec::with_capacity(sample_count),
+            steady_allocations: 0,
+            steady_allocated_bytes: 0,
+        });
+    }
+
+    for sample_index in 0..sample_count {
+        for index in candidate_order(workload_index, sample_index, measurements.len()) {
+            let measurement = &mut measurements[index];
+            reset_allocation_counters();
+            let started = Instant::now();
+            measurement.observation = measurement.prepared.execute()?;
+            let elapsed = started.elapsed().as_nanos();
+            measurement.observation.validate_checksum()?;
+            measurement.warm_nanos.push(elapsed);
+            measurement.steady_allocations = measurement
+                .steady_allocations
+                .max(ALLOCATIONS.load(Ordering::Relaxed));
+            measurement.steady_allocated_bytes = measurement
+                .steady_allocated_bytes
+                .max(ALLOCATED_BYTES.load(Ordering::Relaxed));
+        }
+    }
+
+    measurements.sort_by_key(|measurement| {
+        candidates
+            .iter()
+            .position(|candidate| *candidate == measurement.candidate)
+            .unwrap()
+    });
+    Ok(measurements.into_iter().map(finish_measurement).collect())
+}
+
+fn finish_measurement(mut measurement: CandidateMeasurement) -> IsaBenchmarkTiming {
+    measurement.warm_nanos.sort_unstable();
+    let median = measurement.warm_nanos[measurement.warm_nanos.len() / 2];
+    let p95_index = (measurement.warm_nanos.len() * 95)
+        .div_ceil(100)
+        .saturating_sub(1);
+    IsaBenchmarkTiming {
+        observation: measurement.observation,
+        cold_nanos: measurement.cold_nanos,
         warm_median_nanos: median,
-        warm_p95_nanos: warm_nanos[p95_index],
-        steady_allocations,
-        steady_allocated_bytes,
-    })
+        warm_p95_nanos: measurement.warm_nanos[p95_index],
+        steady_allocations: measurement.steady_allocations,
+        steady_allocated_bytes: measurement.steady_allocated_bytes,
+    }
+}
+
+fn candidate_order(workload_index: usize, sample_index: usize, count: usize) -> Vec<usize> {
+    let mut order = (0..count).collect::<Vec<_>>();
+    let mut state = (workload_index as u64 + 1).wrapping_mul(0x9e37_79b9_7f4a_7c15)
+        ^ (sample_index as u64).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    for index in (1..count).rev() {
+        state ^= state >> 12;
+        state ^= state << 25;
+        state ^= state >> 27;
+        let selected = (state.wrapping_mul(0x2545_f491_4f6c_dd1d) as usize) % (index + 1);
+        order.swap(index, selected);
+    }
+    order
 }
 
 fn reset_allocation_counters() {
@@ -141,4 +203,20 @@ fn parse_positive(name: &str, value: Option<String>) -> Result<u32, String> {
         return Err(format!("{name} must be a positive integer"));
     }
     Ok(parsed)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::candidate_order;
+
+    #[test]
+    fn candidate_order_is_a_reproducible_permutation_that_changes_between_rounds() {
+        let first = candidate_order(0, 0, 6);
+        let second = candidate_order(0, 1, 6);
+        let mut sorted = first.clone();
+        sorted.sort_unstable();
+        assert_eq!(sorted, vec![0, 1, 2, 3, 4, 5]);
+        assert_ne!(first, second);
+        assert_eq!(first, candidate_order(0, 0, 6));
+    }
 }

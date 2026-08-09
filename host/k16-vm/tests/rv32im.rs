@@ -19,7 +19,8 @@
 
 use k16_vm::low_bus::MachineBus;
 use k16_vm::rv32im::encoding::{
-    add, addi, auipc, beq, div, divu, ebreak, jal, jalr, lui, lw, mul, rem, remu, sw,
+    add, addi, auipc, beq, bge, bgeu, blt, bltu, bne, div, divu, ebreak, jal, jalr, lb, lbu, lh,
+    lhu, lui, lw, mul, rem, remu, sb, sh, sw,
 };
 use k16_vm::rv32im::PredecodedRv32imProgram;
 use k16_vm::rv32im::{Rv32imCpu, Rv32imStop};
@@ -96,6 +97,49 @@ fn rv32m_division_corner_cases_follow_the_ratified_rules() {
 }
 
 #[test]
+fn selected_rv32i_architectural_branch_and_load_vectors_match_sign_rules() {
+    let mut bus = MachineBus::new(256).unwrap();
+    write_program(
+        &mut bus,
+        &[
+            addi(1, 0, 128),
+            addi(2, 0, -1),
+            sb(1, 2, 0),
+            sh(1, 2, 2),
+            lb(3, 1, 0),
+            lbu(4, 1, 0),
+            lh(5, 1, 2),
+            lhu(6, 1, 2),
+            blt(2, 0, 8),
+            addi(7, 0, 99),
+            bge(0, 2, 8),
+            addi(8, 0, 99),
+            bltu(0, 2, 8),
+            addi(9, 0, 99),
+            bgeu(2, 0, 8),
+            addi(10, 0, 99),
+            bne(0, 2, 8),
+            addi(11, 0, 99),
+            beq(0, 0, 8),
+            addi(12, 0, 99),
+            ebreak(),
+        ],
+    );
+    let mut cpu = Rv32imCpu::new(0);
+    assert_eq!(
+        cpu.run_until_stop(&mut bus, 32).unwrap(),
+        Rv32imStop::Ebreak
+    );
+    assert_eq!(cpu.register(3), u32::MAX);
+    assert_eq!(cpu.register(4), 255);
+    assert_eq!(cpu.register(5), u32::MAX);
+    assert_eq!(cpu.register(6), 65_535);
+    for register in 7..=12 {
+        assert_eq!(cpu.register(register), 0, "x{register}");
+    }
+}
+
+#[test]
 fn rv32i_control_flow_and_word_memory_use_standard_pc_rules() {
     let mut bus = MachineBus::new(256).unwrap();
     write_program(
@@ -145,6 +189,24 @@ fn rv32im_rejects_illegal_and_misaligned_access_without_retiring_it() {
     let mut data_cpu = Rv32imCpu::new(0);
     assert!(data_cpu.run_until_stop(&mut data_bus, 2).is_err());
     assert_eq!(data_cpu.retired_instructions(), 1);
+    assert_eq!(data_cpu.pc(), 4);
+    assert_eq!(data_cpu.register(2), 0);
+
+    let mut jump_bus = MachineBus::new(32).unwrap();
+    write_program(&mut jump_bus, &[jal(5, 2)]);
+    let mut jump_cpu = Rv32imCpu::new(0);
+    assert!(jump_cpu.step(&mut jump_bus).is_err());
+    assert_eq!(jump_cpu.pc(), 0);
+    assert_eq!(jump_cpu.register(5), 0);
+    assert_eq!(jump_cpu.retired_instructions(), 0);
+}
+
+#[test]
+fn reported_cpu_state_bytes_include_rust_layout_padding() {
+    assert_eq!(
+        Rv32imCpu::cpu_state_bytes(),
+        std::mem::size_of::<Rv32imCpu>()
+    );
 }
 
 #[test]

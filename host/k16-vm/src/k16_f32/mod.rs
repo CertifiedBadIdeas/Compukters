@@ -47,7 +47,7 @@ impl K16F32Cpu {
     }
 
     pub const fn cpu_state_bytes() -> usize {
-        std::mem::size_of::<u32>() + std::mem::size_of::<[u32; 16]>() + std::mem::size_of::<u64>()
+        std::mem::size_of::<Self>()
     }
 
     pub fn pc(&self) -> u32 {

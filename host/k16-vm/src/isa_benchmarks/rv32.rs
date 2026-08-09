@@ -740,3 +740,102 @@ fn subtract(
         bytes_written: after.bytes_written.saturating_sub(before.bytes_written),
     }
 }
+
+#[cfg(test)]
+fn assert_stepwise_differential(mut seed: u64, instruction_count: usize) {
+    use crate::rv32im::encoding::{
+        div, divu, lb, lbu, lh, lhu, lui, mulh, mulhsu, mulhu, ori, rem, remu, sb, sh, slli, slt,
+        slti, sltiu, sltu, srai, srli, xori,
+    };
+
+    let mut words = vec![lui(20, DATA_BASE >> 12)];
+    for register in 1..16_u8 {
+        words.push(addi(register, 0, i32::from(register) * 37 - 211));
+    }
+    for index in 0..instruction_count {
+        seed ^= seed >> 12;
+        seed ^= seed << 25;
+        seed ^= seed >> 27;
+        let random = seed.wrapping_mul(0x2545_f491_4f6c_dd1d);
+        let rd = 1 + ((random >> 8) % 15) as u8;
+        let lhs = 1 + ((random >> 16) % 15) as u8;
+        let rhs = 1 + ((random >> 24) % 15) as u8;
+        let immediate = ((random >> 32) as i32 % 1024).clamp(-1024, 1023);
+        let word = match random % 34 {
+            0 => add(rd, lhs, rhs),
+            1 => sub(rd, lhs, rhs),
+            2 => xor(rd, lhs, rhs),
+            3 => or(rd, lhs, rhs),
+            4 => and(rd, lhs, rhs),
+            5 => mul(rd, lhs, rhs),
+            6 => div(rd, lhs, rhs),
+            7 => divu(rd, lhs, rhs),
+            8 => sll(rd, lhs, rhs),
+            9 => srl(rd, lhs, rhs),
+            10 => slt(rd, lhs, rhs),
+            11 => sltu(rd, lhs, rhs),
+            12 => rem(rd, lhs, rhs),
+            13 => remu(rd, lhs, rhs),
+            14 => mulh(rd, lhs, rhs),
+            15 => mulhsu(rd, lhs, rhs),
+            16 => mulhu(rd, lhs, rhs),
+            17 => addi(rd, lhs, immediate),
+            18 => xori(rd, lhs, immediate),
+            19 => ori(rd, lhs, immediate),
+            20 => andi(rd, lhs, immediate),
+            21 => slti(rd, lhs, immediate),
+            22 => sltiu(rd, lhs, immediate),
+            23 => slli(rd, lhs, (random >> 40) as u8 & 31),
+            24 => srli(rd, lhs, (random >> 40) as u8 & 31),
+            25 => srai(rd, lhs, (random >> 40) as u8 & 31),
+            26 => sw(20, lhs, ((index % 32) * 4) as i32),
+            27 => lw(rd, 20, ((index % 32) * 4) as i32),
+            28 => sb(20, lhs, (index % 128) as i32),
+            29 => lb(rd, 20, (index % 128) as i32),
+            30 => lbu(rd, 20, (index % 128) as i32),
+            31 => sh(20, lhs, ((index % 64) * 2) as i32),
+            32 => lh(rd, 20, ((index % 64) * 2) as i32),
+            _ => lhu(rd, 20, ((index % 64) * 2) as i32),
+        };
+        words.push(word);
+    }
+
+    let (mut direct_bus, _) = new_bus(IsaBenchmarkWorkload::Compute32, &words).unwrap();
+    let (mut reference_bus, _) = new_bus(IsaBenchmarkWorkload::Compute32, &words).unwrap();
+    let mut direct = Rv32imCpu::new(0);
+    let mut reference = CpuState::new(0);
+    let mut clock = QuotaClock::new(words.len() as u64 + 1);
+
+    for step in 0..words.len() {
+        assert_eq!(direct.step(&mut direct_bus).unwrap(), None, "step {step}");
+        let reference_result = {
+            let mut memory = RvsimMemory::new(&mut reference_bus);
+            let mut interp = Interp::new(&mut reference, &mut memory, &mut clock);
+            interp.step()
+        };
+        assert!(reference_result.is_ok(), "rvsim failed at step {step}");
+        assert_eq!(direct.pc(), reference.pc, "PC at step {step}");
+        for register in 0..32 {
+            assert_eq!(
+                direct.register(register),
+                reference.x[register],
+                "x{register} at step {step}",
+            );
+        }
+        assert_eq!(
+            direct_bus.memory(),
+            reference_bus.memory(),
+            "RAM at step {step}",
+        );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::assert_stepwise_differential;
+
+    #[test]
+    fn specialized_rv32im_matches_rvsim_after_every_randomized_instruction() {
+        assert_stepwise_differential(0x6a09_e667_f3bc_c909, 512);
+    }
+}

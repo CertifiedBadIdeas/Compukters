@@ -20,6 +20,8 @@
 use super::{IsaBenchmarkCandidate, IsaBenchmarkObservation, IsaBenchmarkWorkload};
 use std::collections::HashMap;
 
+const GATE1_CUSTOM_VIABILITY_RATIO: f64 = 1.30;
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct IsaBenchmarkTiming {
     pub observation: IsaBenchmarkObservation,
@@ -126,9 +128,10 @@ pub fn format_recommendations(samples: &[IsaBenchmarkTiming]) -> Result<String, 
     );
     let mut output = String::from("candidate\tnormalized_geomean\tdecision\n");
     for candidate in IsaBenchmarkCandidate::all() {
-        let advance = *candidate == IsaBenchmarkCandidate::K16F32
-            || *candidate == k16_winner
-            || *candidate == rv32_winner;
+        let advance = *candidate == k16_winner
+            || *candidate == rv32_winner
+            || (*candidate == IsaBenchmarkCandidate::K16F32
+                && means[candidate] <= means[&rv32_winner] * GATE1_CUSTOM_VIABILITY_RATIO);
         output.push_str(&format!(
             "{}\t{:.6}\t{}\n",
             candidate.name(),

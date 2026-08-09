@@ -31,6 +31,14 @@ fn write_program(bus: &mut MachineBus, words: &[u32]) {
 }
 
 #[test]
+fn reported_cpu_state_bytes_include_rust_layout_padding() {
+    assert_eq!(
+        K16F32Cpu::cpu_state_bytes(),
+        std::mem::size_of::<K16F32Cpu>()
+    );
+}
+
+#[test]
 fn every_instruction_is_one_aligned_u32() {
     let words = [addi(1, 0, 7), branchz(1, -1), halt()];
     let bytes = words

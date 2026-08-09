@@ -49,7 +49,7 @@ impl Rv32imCpu {
         }
     }
     pub const fn cpu_state_bytes() -> usize {
-        std::mem::size_of::<u32>() + std::mem::size_of::<[u32; 32]>() + std::mem::size_of::<u64>()
+        std::mem::size_of::<Self>()
     }
     pub fn pc(&self) -> u32 {
         self.pc
@@ -93,7 +93,14 @@ impl Rv32imCpu {
         instruction_pc: u32,
         instruction: DecodedInstruction,
     ) -> Result<Option<Rv32imStop>, String> {
-        let stop = self.execute_decoded(bus, instruction_pc, instruction)?;
+        let before = self.clone();
+        let stop = match self.execute_decoded(bus, instruction_pc, instruction) {
+            Ok(stop) => stop,
+            Err(error) => {
+                *self = before;
+                return Err(error);
+            }
+        };
         self.registers[0] = 0;
         self.retired_instructions = self.retired_instructions.saturating_add(1);
         Ok(stop)

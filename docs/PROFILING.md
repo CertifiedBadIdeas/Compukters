@@ -14,8 +14,13 @@ fixed-width K16-F32, the external `rvsim` RV32IM reference, and the specialized
 direct/predecoded RV32IM interpreters on one checksum-validated workload set.
 It records cold construction plus execution, warm median/p95 execution after an
 in-place state reset, bus traffic, retained translation memory, and steady-run
-allocations. It is an implementation-selection gate, not the final ISA choice;
-that decision still requires compiled-C and many-VM measurements.
+allocations. Host code is warmed before each fresh cold measurement; warm runs
+are interleaved in deterministic shuffled candidate order to reduce ordering,
+frequency, and thermal bias. Gate 1 keeps the legacy K16 control and the fastest
+specialized RV32 mode. K16-F32 advances only while its normalized result is no
+more than 1.30 times the selected RV32 result. This is a viability window, not
+the final custom-ISA threshold; that decision still requires compiled-C and
+many-VM measurements.
 
 Refresh the tracked machine-local snapshot with:
 
