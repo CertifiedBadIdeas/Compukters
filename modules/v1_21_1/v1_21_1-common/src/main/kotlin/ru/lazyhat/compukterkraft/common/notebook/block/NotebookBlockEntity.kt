@@ -47,7 +47,7 @@ open class NotebookBlockEntity(
     type: BlockEntityType<out NotebookBlockEntity>,
     pos: BlockPos,
     state: BlockState,
-) : AbstractComputerBlockEntity(type, pos, state, DeviceFamily.NORMAL) {
+) : AbstractComputerBlockEntity(type, pos, state, familyOf(state)) {
     private val sdkModuleItems: NonNullList<ItemStack> = NonNullList.withSize(1, ItemStack.EMPTY)
     val sdkModuleBay =
         SdkModuleBay(
@@ -143,5 +143,9 @@ open class NotebookBlockEntity(
 
     private companion object {
         const val SDK_MODULE_BAY_TAG: String = "SdkModuleBay"
+
+        fun familyOf(state: BlockState): DeviceFamily =
+            (state.block as? NotebookBlock)?.deviceFamily
+                ?: error("NotebookBlockEntity requires NotebookBlock state")
     }
 }

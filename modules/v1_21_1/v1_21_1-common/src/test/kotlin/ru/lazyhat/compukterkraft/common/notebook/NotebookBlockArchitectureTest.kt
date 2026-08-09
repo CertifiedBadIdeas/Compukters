@@ -19,16 +19,23 @@
 
 package ru.lazyhat.compukterkraft.common.notebook
 
+import com.google.gson.JsonPrimitive
+import com.mojang.serialization.JsonOps
+import ru.lazyhat.compukterkraft.common.notebook.block.NOTEBOOK_DEVICE_FAMILY_CODEC
+import ru.lazyhat.compukterkraft.common.notebook.block.requireNotebookDeviceFamily
+import ru.lazyhat.compukterkraft.core.block.DeviceFamily
 import java.nio.file.Path
 import kotlin.io.path.exists
 import kotlin.io.path.readText
 import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class NotebookBlockArchitectureTest {
     @Test
-    fun notebookIsAPlacedK16DeviceNotAnInventoryComputer() {
+    fun notebookFamilyFlowsFromProductBlockThroughEntityAndItemData() {
         val blockEntityPath =
             Path.of("src/main/kotlin/ru/lazyhat/compukterkraft/common/notebook/block/NotebookBlockEntity.kt")
         val blockPath =
@@ -43,14 +50,65 @@ class NotebookBlockArchitectureTest {
         val blockEntitySource = blockEntityPath.readText()
         val blockSource = blockPath.readText()
         val itemSource = itemPath.readText()
+        val neoForgeItemSource =
+            Path
+                .of(
+                    "../v1_21_1-neoforge/src/main/kotlin/ru/lazyhat/compukterkraft/impl/notebook/item/" +
+                        "NeoForgeNotebookItem.kt",
+                ).readText()
 
         assertTrue(blockEntitySource.contains("ComputerBlockEntity("))
-        assertTrue(blockEntitySource.contains("DeviceFamily.NORMAL"))
+        assertTrue(blockEntitySource.contains("familyOf(state)"))
+        assertTrue(blockEntitySource.contains("(state.block as? NotebookBlock)?.deviceFamily"))
+        assertTrue(blockEntitySource.contains("NotebookBlockEntity requires NotebookBlock state"))
+        assertFalse(blockEntitySource.contains("DeviceFamily.NORMAL"))
         assertTrue(blockSource.contains("AbstractComputerBlock<NotebookBlockEntity>"))
         assertTrue(blockSource.contains("ModObjects.notebookBlockEntityType"))
-        assertTrue(itemSource.contains("deviceFamilyId = DeviceFamily.NORMAL.name.lowercase()"))
+        assertTrue(blockSource.contains("val deviceFamily: DeviceFamily"))
+        assertTrue(blockSource.contains("check(tile.family == deviceFamily)"))
+        assertTrue(itemSource.contains("block: NotebookBlock"))
+        assertTrue(itemSource.contains("val deviceFamily: DeviceFamily"))
+        assertTrue(itemSource.contains("deviceFamilyId = deviceFamily.name.lowercase()"))
+        assertFalse(itemSource.contains("DeviceFamily.NORMAL"))
+        assertTrue(neoForgeItemSource.contains("block: NotebookBlock"))
         assertFalse(itemSource.contains("useOn"))
         assertFalse(itemSource.contains("openMenu"))
+    }
+
+    @Test
+    fun notebookCodecPersistsOnlyNormalOrAdvancedFamilyWithoutFallback() {
+        val blockSource =
+            Path
+                .of("src/main/kotlin/ru/lazyhat/compukterkraft/common/notebook/block/NotebookBlock.kt")
+                .readText()
+
+        assertTrue(blockSource.contains("RecordCodecBuilder.mapCodec"))
+        assertTrue(blockSource.contains("propertiesCodec()"))
+        assertTrue(blockSource.contains("fieldOf(\"device_family\")"))
+        assertTrue(blockSource.contains("\"normal\" -> DataResult.success(DeviceFamily.NORMAL)"))
+        assertTrue(blockSource.contains("\"advanced\" -> DataResult.success(DeviceFamily.ADVANCED)"))
+        assertTrue(blockSource.contains("unsupported Notebook device family"))
+        assertFalse(blockSource.contains("simpleCodec(::NotebookBlock)"))
+    }
+
+    @Test
+    fun notebookFamilyCodecRejectsCommandAndUnknownValues() {
+        assertEquals(
+            DeviceFamily.NORMAL,
+            NOTEBOOK_DEVICE_FAMILY_CODEC.parse(JsonOps.INSTANCE, JsonPrimitive("normal")).result().orElseThrow(),
+        )
+        assertEquals(
+            DeviceFamily.ADVANCED,
+            NOTEBOOK_DEVICE_FAMILY_CODEC.parse(JsonOps.INSTANCE, JsonPrimitive("advanced")).result().orElseThrow(),
+        )
+        assertTrue(NOTEBOOK_DEVICE_FAMILY_CODEC.parse(JsonOps.INSTANCE, JsonPrimitive("command")).error().isPresent)
+        assertTrue(NOTEBOOK_DEVICE_FAMILY_CODEC.parse(JsonOps.INSTANCE, JsonPrimitive("future")).error().isPresent)
+        assertTrue(NOTEBOOK_DEVICE_FAMILY_CODEC.encodeStart(JsonOps.INSTANCE, DeviceFamily.COMMAND).error().isPresent)
+        assertEquals(DeviceFamily.NORMAL, requireNotebookDeviceFamily(DeviceFamily.NORMAL))
+        assertEquals(DeviceFamily.ADVANCED, requireNotebookDeviceFamily(DeviceFamily.ADVANCED))
+        assertFailsWith<IllegalArgumentException> {
+            requireNotebookDeviceFamily(DeviceFamily.COMMAND)
+        }
     }
 
     @Test
@@ -89,7 +147,7 @@ class NotebookBlockArchitectureTest {
             "Notebook should have its own screen class so laptop-only UI can grow independently.",
         )
         assertTrue(
-                screenSource.contains("override fun content(): UiElement") &&
+            screenSource.contains("override fun content(): UiElement") &&
                 screenSource.contains("override fun currentLayout()") &&
                 screenSource.contains("ComputerControlAction.REBOOT") &&
                 screenSource.contains("ComputerControlAction.SHUTDOWN") &&

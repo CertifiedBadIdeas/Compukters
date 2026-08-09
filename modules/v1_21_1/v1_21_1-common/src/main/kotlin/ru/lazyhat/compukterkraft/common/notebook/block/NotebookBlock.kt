@@ -19,7 +19,10 @@
 
 package ru.lazyhat.compukterkraft.common.notebook.block
 
+import com.mojang.serialization.Codec
+import com.mojang.serialization.DataResult
 import com.mojang.serialization.MapCodec
+import com.mojang.serialization.codecs.RecordCodecBuilder
 import net.minecraft.core.BlockPos
 import net.minecraft.core.Direction
 import net.minecraft.server.level.ServerPlayer
@@ -40,12 +43,51 @@ import ru.lazyhat.compukterkraft.common.computer.block.AbstractComputerBlockEnti
 import ru.lazyhat.compukterkraft.common.computer.block.ComputerState
 import ru.lazyhat.compukterkraft.common.computer.data.ComputerContainerData
 import ru.lazyhat.compukterkraft.common.notebook.item.NotebookItem
+import ru.lazyhat.compukterkraft.core.block.DeviceFamily
+import java.util.function.Supplier
+
+internal val NOTEBOOK_DEVICE_FAMILY_CODEC: Codec<DeviceFamily> =
+    Codec.STRING.flatXmap(
+        { family ->
+            when (family) {
+                "normal" -> DataResult.success(DeviceFamily.NORMAL)
+                "advanced" -> DataResult.success(DeviceFamily.ADVANCED)
+                else -> DataResult.error(Supplier { "unsupported Notebook device family: $family" })
+            }
+        },
+        { family ->
+            when (family) {
+                DeviceFamily.NORMAL -> DataResult.success("normal")
+                DeviceFamily.ADVANCED -> DataResult.success("advanced")
+                DeviceFamily.COMMAND -> DataResult.error(Supplier { "unsupported Notebook device family: command" })
+            }
+        },
+    )
+
+internal fun requireNotebookDeviceFamily(family: DeviceFamily): DeviceFamily {
+    require(family == DeviceFamily.NORMAL || family == DeviceFamily.ADVANCED) {
+        "unsupported Notebook device family: ${family.name.lowercase()}"
+    }
+    return family
+}
 
 class NotebookBlock(
     properties: Properties,
+    deviceFamily: DeviceFamily,
 ) : AbstractComputerBlock<NotebookBlockEntity>(properties) {
+    val deviceFamily: DeviceFamily = requireNotebookDeviceFamily(deviceFamily)
+
     companion object {
-        private val CODEC: MapCodec<NotebookBlock> = simpleCodec(::NotebookBlock)
+        private val CODEC: MapCodec<NotebookBlock> =
+            RecordCodecBuilder.mapCodec { instance ->
+                instance
+                    .group(
+                        propertiesCodec(),
+                        NOTEBOOK_DEVICE_FAMILY_CODEC
+                            .fieldOf("device_family")
+                            .forGetter(NotebookBlock::deviceFamily),
+                    ).apply(instance, ::NotebookBlock)
+            }
     }
 
     init {
@@ -90,7 +132,14 @@ class NotebookBlock(
     }
 
     override fun getItem(tile: AbstractComputerBlockEntity): ItemStack {
-        if (tile !is NotebookBlockEntity) return ItemStack.EMPTY
-        return (asItem() as? NotebookItem)?.create(tile.computerID, tile.label) ?: ItemStack.EMPTY
+        check(tile is NotebookBlockEntity) { "NotebookBlock requires NotebookBlockEntity" }
+        check(tile.family == deviceFamily) {
+            "NotebookBlock family ${deviceFamily.name} does not match block entity family ${tile.family.name}"
+        }
+        val item = asItem() as? NotebookItem ?: error("NotebookBlock requires NotebookItem")
+        check(item.deviceFamily == deviceFamily) {
+            "NotebookBlock family ${deviceFamily.name} does not match item family ${item.deviceFamily.name}"
+        }
+        return item.create(tile.computerID, tile.label)
     }
 }
