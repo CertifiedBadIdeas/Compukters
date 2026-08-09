@@ -107,7 +107,7 @@ benchmark_output="$(
         "${BENCHMARK_CORPUS_ARGS[@]}"
 )"
 
-timing_rows="$(printf '%s\n' "$benchmark_output" | awk -F '\t' '$2 == "rv32im" || $2 == "rv64im" || $2 == "native-rust" { count += 1; if ($16 != 0 || $17 != 0) bad = 1 } END { if (bad) exit 1; print count + 0 }')"
+timing_rows="$(printf '%s\n' "$benchmark_output" | awk -F '\t' '$2 == "rv32im" || $2 == "rv64im" || $2 == "native-rust" || $2 == "native-c" { count += 1; if ($16 != 0 || $17 != 0) bad = 1 } END { if (bad) exit 1; print count + 0 }')"
 if [[ "$timing_rows" -ne "$EXPECTED_ROWS" ]]; then
     echo "RISC-V XLEN benchmark expected $EXPECTED_ROWS allocation-free timing rows, got $timing_rows" >&2
     exit 1
