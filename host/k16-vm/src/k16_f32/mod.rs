@@ -217,6 +217,16 @@ impl K16F32Cpu {
                     self.pc = relative(offset);
                 }
             }
+            DecodedInstruction::BranchLtu { lhs, rhs, offset } => {
+                if self.registers[lhs] < self.registers[rhs] {
+                    self.pc = relative(offset);
+                }
+            }
+            DecodedInstruction::BranchUge { lhs, rhs, offset } => {
+                if self.registers[lhs] >= self.registers[rhs] {
+                    self.pc = relative(offset);
+                }
+            }
             DecodedInstruction::Jump { offset } => self.pc = relative(offset),
             DecodedInstruction::Call { offset } => {
                 self.registers[15] = self.registers[15].wrapping_sub(4);

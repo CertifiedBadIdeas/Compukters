@@ -1,3 +1,4 @@
+pub mod compiled_c;
 pub mod computer;
 pub mod computer_abi;
 pub mod computer_machine {

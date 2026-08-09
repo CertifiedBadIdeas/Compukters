@@ -141,6 +141,16 @@ pub enum DecodedInstruction {
         offset: i32,
     },
     Ret,
+    BranchLtu {
+        lhs: usize,
+        rhs: usize,
+        offset: i32,
+    },
+    BranchUge {
+        lhs: usize,
+        rhs: usize,
+        offset: i32,
+    },
 }
 
 pub fn decode(word: u32) -> Result<DecodedInstruction, String> {
@@ -297,6 +307,16 @@ pub fn decode(word: u32) -> Result<DecodedInstruction, String> {
         0x42 => unconditional(DecodedInstruction::Jump { offset: offset20 }),
         0x43 => unconditional(DecodedInstruction::Call { offset: offset20 }),
         0x44 => none(DecodedInstruction::Ret),
+        0x45 => Ok(DecodedInstruction::BranchLtu {
+            lhs: a,
+            rhs: b,
+            offset: imm16,
+        }),
+        0x46 => Ok(DecodedInstruction::BranchUge {
+            lhs: a,
+            rhs: b,
+            offset: imm16,
+        }),
         _ => Err(format!(
             "illegal K16-F32 opcode {opcode:#04x} in {word:#010x}"
         )),
