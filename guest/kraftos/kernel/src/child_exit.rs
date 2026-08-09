@@ -1,6 +1,6 @@
 use k16_abi::syscall as abi_syscall;
 
-use crate::{control, fs, process, user_buffer};
+use crate::{control, fs, os_stats, process, user_buffer};
 
 pub fn complete_child_exit(status: u32) -> ! {
     let exiting_pid = unsafe { process::current_process_slot() };
@@ -12,6 +12,11 @@ pub fn complete_child_exit(status: u32) -> ! {
             resume.wait_status_ptr = 0;
             resume.child_exit_status = abi_syscall::ERROR_FAULT;
         }
+        let heap_pages = resume
+            .exited_heap_pages
+            .map(|range| u64::from(range.frame_count))
+            .unwrap_or(0);
+        os_stats::record_last_exited_program_heap_pages(heap_pages);
         if unsafe { process::destroy_exited_address_space(&resume) }.is_err() {
             control::set_panic();
             control::set_panic_code(abi_syscall::ERROR_FAULT as i32);

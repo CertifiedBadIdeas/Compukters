@@ -124,6 +124,7 @@ data class NativeK16OsStats(
     val libkraftLibraryFileDataReadBytes: Long = 0,
     val otherLibraryFileDataReadBlocks: Long = 0,
     val otherLibraryFileDataReadBytes: Long = 0,
+    val lastExitedProgramHeapPages: Long = 0,
 )
 
 data class NativeK16MmioDeviceStats(
@@ -146,6 +147,8 @@ data class NativeK16ComputerStatsSnapshot(
     val mmio: NativeK16BusTraffic = NativeK16BusTraffic(),
     val os: NativeK16OsStats = NativeK16OsStats(),
     val decodeCache: NativeK16DecodeCacheStats = NativeK16DecodeCacheStats(),
+    val cpuSteps: Long = 0,
+    val gameTicks: Long = 0,
     val devices: List<NativeK16MmioDeviceStats> = emptyList(),
 ) {
     companion object {
@@ -164,6 +167,7 @@ data class NativeK16ComputerStatsSnapshot(
         private const val VERSION_V14: Long = 14
         private const val VERSION_V15: Long = 15
         private const val VERSION_V16: Long = 16
+        private const val VERSION_V17: Long = 17
         private const val HEADER_LONGS_V2: Int = 10
         private const val HEADER_LONGS_V4: Int = 16
         private const val HEADER_LONGS_V5: Int = 21
@@ -172,6 +176,7 @@ data class NativeK16ComputerStatsSnapshot(
         private const val HEADER_LONGS_V10: Int = 37
         private const val HEADER_LONGS_V12: Int = 40
         private const val HEADER_LONGS_V14: Int = 50
+        private const val HEADER_LONGS_V17: Int = 53
         private const val DEVICE_LONGS_V2: Int = 13
         private const val DEVICE_LONGS_V3: Int = 20
         private const val DEVICE_LONGS_V8: Int = 22
@@ -200,12 +205,14 @@ data class NativeK16ComputerStatsSnapshot(
                     version == VERSION_V13 ||
                     version == VERSION_V14 ||
                     version == VERSION_V15 ||
-                    version == VERSION_V16,
+                    version == VERSION_V16 ||
+                    version == VERSION_V17,
             ) {
                 "Unsupported native K16 stats snapshot version: $version"
             }
             val headerLongs =
                 when (version) {
+                    VERSION_V17 -> HEADER_LONGS_V17
                     VERSION_V16, VERSION_V15, VERSION_V14 -> HEADER_LONGS_V14
                     VERSION_V13, VERSION_V12 -> HEADER_LONGS_V12
                     VERSION_V11, VERSION_V10 -> HEADER_LONGS_V10
@@ -220,7 +227,7 @@ data class NativeK16ComputerStatsSnapshot(
             val deviceLongs =
                 when (version) {
                     VERSION_V2 -> DEVICE_LONGS_V2
-                    VERSION_V16, VERSION_V15 -> DEVICE_LONGS_V15
+                    VERSION_V17, VERSION_V16, VERSION_V15 -> DEVICE_LONGS_V15
                     VERSION_V14, VERSION_V13 -> DEVICE_LONGS_V13
                     VERSION_V12, VERSION_V11 -> DEVICE_LONGS_V11
                     VERSION_V10, VERSION_V9 -> DEVICE_LONGS_V9
@@ -307,7 +314,7 @@ data class NativeK16ComputerStatsSnapshot(
                                 requestedReadBytes = if (version >= VERSION_V13) values[offset + 24] else 0,
                             ),
                         gpu =
-                            if (version == VERSION_V16) {
+                            if (version >= VERSION_V16) {
                                 val gpuOffset =
                                     when {
                                         version >= VERSION_V13 -> offset + 25
@@ -362,7 +369,8 @@ data class NativeK16ComputerStatsSnapshot(
                         version == VERSION_V13 ||
                         version == VERSION_V14 ||
                         version == VERSION_V15 ||
-                        version == VERSION_V16
+                        version == VERSION_V16 ||
+                        version == VERSION_V17
                     ) {
                         NativeK16OsStats(
                             pathLookups = values[9],
@@ -402,6 +410,7 @@ data class NativeK16ComputerStatsSnapshot(
                             libkraftLibraryFileDataReadBytes = if (version >= VERSION_V14) values[43] else 0,
                             otherLibraryFileDataReadBlocks = if (version >= VERSION_V14) values[44] else 0,
                             otherLibraryFileDataReadBytes = if (version >= VERSION_V14) values[45] else 0,
+                            lastExitedProgramHeapPages = if (version >= VERSION_V17) values[46] else 0,
                         )
                     } else {
                         NativeK16OsStats()
@@ -418,10 +427,12 @@ data class NativeK16ComputerStatsSnapshot(
                         version == VERSION_V13 ||
                         version == VERSION_V14 ||
                         version == VERSION_V15 ||
-                        version == VERSION_V16
+                        version == VERSION_V16 ||
+                        version == VERSION_V17
                     ) {
                         val offset =
                             when {
+                                version >= VERSION_V17 -> 47
                                 version >= VERSION_V14 -> 46
                                 version >= VERSION_V12 -> 36
                                 version >= VERSION_V10 -> 33
@@ -436,6 +447,8 @@ data class NativeK16ComputerStatsSnapshot(
                     } else {
                         NativeK16DecodeCacheStats()
                     },
+                cpuSteps = if (version >= VERSION_V17) values[50] else 0,
+                gameTicks = if (version >= VERSION_V17) values[51] else 0,
                 devices = devices,
             )
         }

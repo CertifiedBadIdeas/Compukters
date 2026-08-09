@@ -105,14 +105,16 @@ class K16ComputerRuntimeTest {
         val snapshot =
             NativeK16ComputerStatsSnapshot.from(
                 longArrayOf(
-                    16,
+                    17,
                     2, 3, 4, 5,
                     6, 7, 8, 9,
                     31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44,
                     45, 46, 47, 48, 49, 50, 51, 52, 53, 54,
                     55, 56, 57,
                     58, 59, 60, 61, 62, 63, 64, 65, 66, 67,
-                    68, 69, 70,
+                    68,
+                    69, 70, 71,
+                    72, 73,
                     1,
                     11, 0x1000, 64,
                     12, 13, 14, 15,
@@ -164,10 +166,13 @@ class K16ComputerRuntimeTest {
                 libkraftLibraryFileDataReadBytes = 65,
                 otherLibraryFileDataReadBlocks = 66,
                 otherLibraryFileDataReadBytes = 67,
+                lastExitedProgramHeapPages = 68,
             ),
             snapshot.os,
         )
-        assertEquals(NativeK16DecodeCacheStats(entries = 68, hits = 69, misses = 70), snapshot.decodeCache)
+        assertEquals(NativeK16DecodeCacheStats(entries = 69, hits = 70, misses = 71), snapshot.decodeCache)
+        assertEquals(72, snapshot.cpuSteps)
+        assertEquals(73, snapshot.gameTicks)
         assertEquals(
             listOf(
                 NativeK16MmioDeviceStats(
@@ -214,6 +219,19 @@ class K16ComputerRuntimeTest {
             ),
             snapshot.devices,
         )
+    }
+
+    @Test
+    fun decodesV16NativeStatsWithoutReinterpretingNewMetrics() {
+        val values = LongArray(50)
+        values[0] = 16
+        values[49] = 0
+
+        val snapshot = NativeK16ComputerStatsSnapshot.from(values)
+
+        assertEquals(0, snapshot.os.lastExitedProgramHeapPages)
+        assertEquals(0, snapshot.cpuSteps)
+        assertEquals(0, snapshot.gameTicks)
     }
 
     @Test

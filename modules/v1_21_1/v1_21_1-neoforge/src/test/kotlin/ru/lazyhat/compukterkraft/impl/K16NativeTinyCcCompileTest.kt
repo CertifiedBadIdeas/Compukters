@@ -24,6 +24,9 @@ import ru.lazyhat.compukterkraft.core.device.DeviceEvents
 import ru.lazyhat.compukterkraft.core.device.DeviceProperties
 import ru.lazyhat.compukterkraft.core.device.input.KeyInputEvent
 import ru.lazyhat.compukterkraft.core.device.runtime.K16RuntimeDevice
+import ru.lazyhat.compukterkraft.core.device.runtime.NoOpRuntimeMetricsCollector
+import ru.lazyhat.compukterkraft.core.device.runtime.RecordingRuntimeMetricsCollector
+import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeMetricsCollector
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16BiosFlashWorkspace
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16ComputerRuntimeFactory
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16StaticStorageAttachment
@@ -33,6 +36,7 @@ import java.nio.ByteOrder
 import java.nio.file.Files
 import java.nio.file.Path
 import java.security.MessageDigest
+import java.time.Duration
 import kotlin.io.path.createDirectories
 import kotlin.io.path.createTempDirectory
 import kotlin.io.path.readBytes
@@ -49,6 +53,8 @@ class K16NativeTinyCcCompileTest {
         val libkraftPath = requiredPathProperty("k16.native.tinycc.libkraft.path")
         val k16Tool = requiredExecutableProperty("k16.native.tinycc.tool.path")
         val llvmReadObj = requiredExecutableProperty("k16.native.tinycc.llvm.readobj.path")
+        val compilerPath = candidatePath.resolveSibling("tcc.kx")
+        assertTrue(Files.isRegularFile(compilerPath), "native TinyCC artifact must exist: $compilerPath")
         val candidateDigestBefore = sha256(candidatePath.readBytes())
         val workspace = createTempDirectory("k16-native-tinycc-compile-")
         val biosFlashPath = workspace.resolve("bios.kflash")
@@ -65,7 +71,8 @@ class K16NativeTinyCcCompileTest {
             ),
         )
         helloSource.writeBytes(
-            javaClass.getResourceAsStream("/k16-native-tinycc/hello.c")
+            javaClass
+                .getResourceAsStream("/k16-native-tinycc/hello.c")
                 ?.use { it.readBytes() }
                 ?: error("Missing native TinyCC acceptance source"),
         )
@@ -112,6 +119,7 @@ class K16NativeTinyCcCompileTest {
             compilerRootBefore.toString(),
         )
 
+        val compilerMetrics = RecordingRuntimeMetricsCollector()
         val compilerDevice =
             createDevice(
                 deviceId = 466,
@@ -119,15 +127,33 @@ class K16NativeTinyCcCompileTest {
                 biosFlashPath = biosFlashPath,
                 storage0Path = compilerStorage0,
                 storage1 = K16StaticStorageAttachment(candidatePath),
+                metrics = compilerMetrics,
             )
         try {
             compilerDevice.turnOn()
             waitForTerminalText(compilerDevice, "K16> ", "compiler shell prompt")
+            val beforeCompile = compilerMetrics.snapshot().k16
+            val compileStartedAt = System.nanoTime()
             assertCommandReturnsPrompt(
                 compilerDevice,
                 "/sdk/bin/tcc.kx -c /work/hello.c -o /work/hello.o",
                 "native compiler exit",
             )
+            val compileDuration = Duration.ofNanos(System.nanoTime() - compileStartedAt)
+            val afterCompile = compilerMetrics.snapshot().k16
+            val compileCpuSteps = afterCompile.cpuSteps - beforeCompile.cpuSteps
+            val compileGameTicks = afterCompile.gameTicks - beforeCompile.gameTicks
+            val compileHeapPages = afterCompile.os.lastExitedProgramHeapPages
+            val compileRow =
+                "k16NativeTinyCcCompile: tccBytes=${Files.size(compilerPath)}, " +
+                    "cpuSteps=$compileCpuSteps, gameTicks=$compileGameTicks, " +
+                    "hostDuration=${compileDuration.toNanos()} ns, heapPages=$compileHeapPages"
+            println(compileRow)
+            assertTrue(Files.size(compilerPath) > 0, compileRow)
+            assertTrue(compileCpuSteps > 0, compileRow)
+            assertTrue(compileGameTicks > 0, compileRow)
+            assertTrue(compileDuration > Duration.ZERO, compileRow)
+            assertTrue(compileHeapPages > 0, compileRow)
             assertLastStatusZero(compilerDevice, "native compiler")
             assertCommandOutput(
                 compilerDevice,
@@ -261,6 +287,7 @@ class K16NativeTinyCcCompileTest {
         biosFlashPath: Path,
         storage0Path: Path,
         storage1: K16StaticStorageAttachment? = null,
+        metrics: RuntimeMetricsCollector = NoOpRuntimeMetricsCollector,
     ): K16RuntimeDevice =
         K16RuntimeDevice(
             deviceId = deviceId,
@@ -277,6 +304,7 @@ class K16NativeTinyCcCompileTest {
             },
             stateSink = {},
             serverThreadDispatcher = directServerThreadDispatcher,
+            metricsCollector = metrics,
         )
 
     private fun validateGuestObject(

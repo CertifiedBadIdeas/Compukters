@@ -539,8 +539,8 @@ fn k16_signal_values(signal: K16Signal) -> [jlong; 2] {
 }
 
 fn k16_computer_stats_snapshot_values(snapshot: &K16ComputerStatsSnapshot) -> Vec<jlong> {
-    let mut values = Vec::with_capacity(50 + snapshot.devices.len() * 36);
-    values.push(16);
+    let mut values = Vec::with_capacity(53 + snapshot.devices.len() * 36);
+    values.push(17);
     push_traffic_values(&mut values, snapshot.bus.ram);
     push_traffic_values(&mut values, snapshot.bus.mmio);
     values.push(snapshot.os.path_lookups as jlong);
@@ -580,9 +580,12 @@ fn k16_computer_stats_snapshot_values(snapshot: &K16ComputerStatsSnapshot) -> Ve
     values.push(snapshot.os.libkraft_library_file_data_read_bytes as jlong);
     values.push(snapshot.os.other_library_file_data_read_blocks as jlong);
     values.push(snapshot.os.other_library_file_data_read_bytes as jlong);
+    values.push(snapshot.os.last_exited_program_heap_pages as jlong);
     values.push(snapshot.decode_cache.entries as jlong);
     values.push(snapshot.decode_cache.hits as jlong);
     values.push(snapshot.decode_cache.misses as jlong);
+    values.push(snapshot.cpu_steps as jlong);
+    values.push(snapshot.game_ticks as jlong);
     values.push(snapshot.devices.len() as jlong);
     for device in &snapshot.devices {
         values.push(device.device_id as jlong);
@@ -736,12 +739,15 @@ mod tests {
                 libkraft_library_file_data_read_bytes: 57,
                 other_library_file_data_read_blocks: 58,
                 other_library_file_data_read_bytes: 59,
+                last_exited_program_heap_pages: 60,
             },
             decode_cache: K16ComputerDecodeCacheStatsSnapshot {
-                entries: 60,
-                hits: 61,
-                misses: 62,
+                entries: 61,
+                hits: 62,
+                misses: 63,
             },
+            cpu_steps: 64,
+            game_ticks: 65,
             devices: vec![K16ComputerDeviceStats {
                 name: "debug",
                 device_id: 11,
@@ -792,11 +798,11 @@ mod tests {
         assert_eq!(
             k16_computer_stats_snapshot_values(&snapshot),
             vec![
-                16, 2, 3, 4, 5, 6, 7, 8, 9, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36,
+                17, 2, 3, 4, 5, 6, 7, 8, 9, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36,
                 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57,
-                58, 59, 60, 61, 62, 1, 11, 0x1000, 64, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22,
-                23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43,
-                44,
+                58, 59, 60, 61, 62, 63, 64, 65, 1, 11, 0x1000, 64, 12, 13, 14, 15, 16, 17, 18, 19,
+                20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40,
+                41, 42, 43, 44,
             ],
         );
     }
