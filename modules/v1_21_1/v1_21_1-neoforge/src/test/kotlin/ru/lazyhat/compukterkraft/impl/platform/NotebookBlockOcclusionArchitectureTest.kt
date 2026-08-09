@@ -41,7 +41,7 @@ class NotebookBlockOcclusionArchitectureTest {
             "Notebook model is partial-height, so the placed block must not occlude adjacent block faces.",
         )
         assertTrue(
-            source.contains("NotebookBlock(notebookProperties().mapColor(MapColor.METAL))"),
+            source.contains("NotebookBlock(notebookProperties().mapColor(MapColor.METAL), DeviceFamily.NORMAL)"),
             "Notebook registration should use the non-occluding property factory.",
         )
     }

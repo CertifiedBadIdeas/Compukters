@@ -25,8 +25,8 @@ import net.minecraft.network.chat.Component
 import net.minecraft.world.item.BlockItem
 import net.minecraft.world.item.ItemStack
 import net.minecraft.world.item.TooltipFlag
-import net.minecraft.world.level.block.Block
 import ru.lazyhat.compukterkraft.common.localization.CompukterComponents
+import ru.lazyhat.compukterkraft.common.notebook.block.NotebookBlock
 import ru.lazyhat.compukterkraft.common.utils.computerDataTagCopy
 import ru.lazyhat.compukterkraft.common.utils.computerID
 import ru.lazyhat.compukterkraft.common.utils.computerLabel
@@ -36,9 +36,11 @@ import ru.lazyhat.compukterkraft.common.utils.updateComputerDataTag
 import ru.lazyhat.compukterkraft.core.block.DeviceFamily
 
 open class NotebookItem(
-    block: Block,
+    block: NotebookBlock,
     properties: Properties,
 ) : BlockItem(block, properties) {
+    val deviceFamily: DeviceFamily = block.deviceFamily
+
     override fun appendHoverText(
         stack: ItemStack,
         context: TooltipContext,
@@ -63,7 +65,7 @@ open class NotebookItem(
         ItemStack(this).apply {
             updateComputerDataTag {
                 computerID = id
-                deviceFamilyId = DeviceFamily.NORMAL.name.lowercase()
+                deviceFamilyId = deviceFamily.name.lowercase()
                 computerLabel = label
             }
             label?.let { set(DataComponents.CUSTOM_NAME, Component.literal(it)) }

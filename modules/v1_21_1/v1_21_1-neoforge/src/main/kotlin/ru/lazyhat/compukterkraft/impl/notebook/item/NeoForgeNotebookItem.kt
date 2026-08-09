@@ -21,7 +21,7 @@ package ru.lazyhat.compukterkraft.impl.notebook.item
 
 import net.minecraft.client.renderer.BlockEntityWithoutLevelRenderer
 import net.minecraft.world.item.Item
-import net.minecraft.world.level.block.Block
+import ru.lazyhat.compukterkraft.common.notebook.block.NotebookBlock
 import ru.lazyhat.compukterkraft.common.notebook.item.NotebookItem
 import ru.lazyhat.compukterkraft.impl.notebook.render.NotebookItemRenderer
 import software.bernie.geckolib.animatable.GeoItem
@@ -34,7 +34,7 @@ import software.bernie.geckolib.util.GeckoLibUtil
 import java.util.function.Consumer
 
 class NeoForgeNotebookItem(
-    block: Block,
+    block: NotebookBlock,
     properties: Item.Properties,
 ) : NotebookItem(block, properties),
     GeoItem {

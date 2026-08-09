@@ -51,6 +51,7 @@ import ru.lazyhat.compukterkraft.common.notebook.block.NotebookBlock
 import ru.lazyhat.compukterkraft.common.notebook.item.NotebookItem
 import ru.lazyhat.compukterkraft.core.LOGGER
 import ru.lazyhat.compukterkraft.core.MOD_ID
+import ru.lazyhat.compukterkraft.core.block.DeviceFamily
 import ru.lazyhat.compukterkraft.impl.notebook.block.NeoForgeNotebookBlockEntity
 import ru.lazyhat.compukterkraft.impl.notebook.item.NeoForgeNotebookItem
 import java.util.function.Supplier
@@ -75,7 +76,7 @@ object ModRegistry {
             REGISTRY.register(
                 Names.NOTEBOOK,
                 Supplier {
-                    NotebookBlock(notebookProperties().mapColor(MapColor.METAL))
+                    NotebookBlock(notebookProperties().mapColor(MapColor.METAL), DeviceFamily.NORMAL)
                 },
             )
     }
