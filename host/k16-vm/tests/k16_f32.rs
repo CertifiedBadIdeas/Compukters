@@ -246,6 +246,13 @@ fn predecoded_program_rejects_invalid_images_and_program_counters() {
             .unwrap_err()
             .contains("0x00000000")
     );
+    let wrapping_image = [halt(), halt()]
+        .into_iter()
+        .flat_map(u32::to_le_bytes)
+        .collect::<Vec<_>>();
+    assert!(PredecodedK16F32Program::new(0xffff_fffc, &wrapping_image)
+        .unwrap_err()
+        .contains("wraps"));
 
     let program = PredecodedK16F32Program::new(4, &halt().to_le_bytes()).unwrap();
     let mut bus = MachineBus::new(16).unwrap();
