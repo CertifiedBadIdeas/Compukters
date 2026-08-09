@@ -49,7 +49,10 @@ val k16HostToolsTargetRoot =
     rootProject.file(providers.gradleProperty("k16HostToolsTargetDir").orElse(".toolchain/build/cargo/k16-tools").get())
 val k16HostVmTargetRoot =
     rootProject.file(providers.gradleProperty("k16HostVmTargetDir").orElse(".toolchain/build/cargo/k16-vm").get())
-val k16TinyCcSourceRoot = rootProject.file("toolchains/Compukter-Kraft-tinycc")
+val k16TinyCcSourceRoot =
+    rootProject.file(
+        providers.gradleProperty("k16TinyCcSourceDir").orElse("toolchains/Compukter-Kraft-tinycc").get(),
+    )
 val k16TinyCcRoot = rootProject.file(".toolchain/build/tinycc/k16")
 val k16TinyCcBuildRoot = k16TinyCcRoot.resolve("build")
 val k16TinyCcBuiltCompiler = k16TinyCcBuildRoot.resolve("k16-tcc")

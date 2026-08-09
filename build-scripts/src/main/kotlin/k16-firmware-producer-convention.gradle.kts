@@ -30,10 +30,17 @@ val k16LlvmBuildRoot =
     rootProject.layout.projectDirectory.dir(
         providers.gradleProperty("k16LlvmBuildDir").orElse(".toolchain/build/llvm/k16-min").get(),
     )
+val k16LlvmSourceRoot =
+    rootProject.layout.projectDirectory.dir(
+        providers.gradleProperty("k16LlvmSourceDir").orElse("toolchains/Compukter-Kraft-llvm").get(),
+    )
 val k16ClangExecutable = k16LlvmBuildRoot.file("bin/clang")
 val k16TinyCcExecutable =
     rootProject.layout.projectDirectory.file(".toolchain/build/tinycc/k16/bin/tcc-k16")
-val k16TinyCcSourceRoot = rootProject.layout.projectDirectory.dir("toolchains/Compukter-Kraft-tinycc")
+val k16TinyCcSourceRoot =
+    rootProject.layout.projectDirectory.dir(
+        providers.gradleProperty("k16TinyCcSourceDir").orElse("toolchains/Compukter-Kraft-tinycc").get(),
+    )
 val k16TinyCcNativeSource = k16TinyCcSourceRoot.file("tcc.c")
 val k16TinyCcVersionSource = k16TinyCcSourceRoot.file("VERSION")
 val k16TinyCcInstallIncludeSource = k16TinyCcSourceRoot.dir("include")
@@ -86,9 +93,9 @@ val k16CSdkTestSource = rootProject.layout.projectDirectory.dir("guest/kraftos/s
 val k16CompilerRtManifestSource =
     rootProject.layout.projectDirectory.file("guest/kraftos/sdk/c/compiler-rt-sources.txt")
 val k16CompilerRtBuiltinsSource =
-    rootProject.layout.projectDirectory.dir("toolchains/Compukter-Kraft-llvm/compiler-rt/lib/builtins")
+    k16LlvmSourceRoot.dir("compiler-rt/lib/builtins")
 val k16CompilerRtLicenseSource =
-    rootProject.layout.projectDirectory.file("toolchains/Compukter-Kraft-llvm/compiler-rt/LICENSE.TXT")
+    k16LlvmSourceRoot.file("compiler-rt/LICENSE.TXT")
 val k16LlvmArExecutable = k16LlvmBuildRoot.file("bin/llvm-ar")
 val k16LlvmNmExecutable = k16LlvmBuildRoot.file("bin/llvm-nm")
 val k16SoftFloatCompilerRtSources =
