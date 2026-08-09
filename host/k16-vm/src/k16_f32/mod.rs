@@ -19,6 +19,9 @@
 
 mod decode;
 pub mod encoding;
+mod predecode;
+
+pub use predecode::PredecodedK16F32Program;
 
 use crate::low_machine::MemoryBus;
 use decode::DecodedInstruction;
@@ -83,6 +86,15 @@ impl K16F32Cpu {
         let instruction_pc = self.pc;
         let word = bus.load_i32(self.pc).map_err(|error| error.to_string())? as u32;
         let instruction = decode::decode(word)?;
+        self.retire_decoded(bus, instruction_pc, instruction)
+    }
+
+    pub(crate) fn retire_decoded(
+        &mut self,
+        bus: &mut dyn MemoryBus,
+        instruction_pc: u32,
+        instruction: DecodedInstruction,
+    ) -> Result<Option<K16F32Stop>, String> {
         let next_pc = self.pc.wrapping_add(4);
         self.pc = next_pc;
         let stop = self.execute(bus, instruction_pc, next_pc, instruction)?;

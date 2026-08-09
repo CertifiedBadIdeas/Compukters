@@ -66,6 +66,7 @@ fn required_candidates_are_stable() {
             "k16-cached",
             "k16-predecoded",
             "k16-f32",
+            "k16-f32-predecoded",
             "rvsim-rv32im",
             "rv32im",
             "rv32im-cached",

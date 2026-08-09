@@ -25,7 +25,7 @@ use crate::k16_f32::encoding::{
     add, addi, and, branchz, call, eq, halt, jump, load32, load8, materialize, mul, or, ret, shl,
     shr, store32, store8, sub, xor, yield_now,
 };
-use crate::k16_f32::{K16F32Cpu, K16F32Stop};
+use crate::k16_f32::{K16F32Cpu, K16F32Stop, PredecodedK16F32Program};
 use crate::low_bus::{MachineBus, MmioDevice};
 use crate::low_machine::MemoryFault;
 use std::collections::HashMap;
@@ -35,21 +35,34 @@ const COPY_DESTINATION: u32 = DATA_BASE + 0x0100;
 const PACKET_RING: u32 = DATA_BASE;
 
 pub(super) fn run(
+    candidate: IsaBenchmarkCandidate,
     workload: IsaBenchmarkWorkload,
     iterations: u32,
 ) -> Result<IsaBenchmarkObservation, String> {
-    Prepared::new(workload, iterations)?.execute()
+    Prepared::new(candidate, workload, iterations)?.execute()
 }
 
 pub(super) struct Prepared {
+    candidate: IsaBenchmarkCandidate,
     workload: IsaBenchmarkWorkload,
     iterations: u32,
     image: ProgramImage,
     bus: MachineBus,
+    predecoded: Option<PredecodedK16F32Program>,
 }
 
 impl Prepared {
-    pub(super) fn new(workload: IsaBenchmarkWorkload, iterations: u32) -> Result<Self, String> {
+    pub(super) fn new(
+        candidate: IsaBenchmarkCandidate,
+        workload: IsaBenchmarkWorkload,
+        iterations: u32,
+    ) -> Result<Self, String> {
+        if !candidate.is_k16_f32() {
+            return Err(format!(
+                "candidate {} is not a K16-F32 execution mode",
+                candidate.name()
+            ));
+        }
         let image = k16_f32_workload(workload, iterations)?;
         let mut bus = MachineBus::new(MEMORY_SIZE).map_err(|error| error.to_string())?;
         if workload == IsaBenchmarkWorkload::MmioControl {
@@ -67,11 +80,24 @@ impl Prepared {
             bus.store_i32(index as u32 * 4, word as i32)
                 .map_err(|error| error.to_string())?;
         }
+        let predecoded = if candidate == IsaBenchmarkCandidate::K16F32Predecoded {
+            let code = image
+                .words
+                .iter()
+                .copied()
+                .flat_map(u32::to_le_bytes)
+                .collect::<Vec<_>>();
+            Some(PredecodedK16F32Program::new(0, &code)?)
+        } else {
+            None
+        };
         Ok(Self {
+            candidate,
             workload,
             iterations,
             image,
             bus,
+            predecoded,
         })
     }
 
@@ -84,20 +110,27 @@ impl Prepared {
             .saturating_add(100_000);
         let mut yields = 0_u64;
         loop {
-            match cpu.run_until_stop(&mut self.bus, max_steps)? {
+            let stop = if let Some(predecoded) = self.predecoded.as_ref() {
+                predecoded.run_until_stop(&mut cpu, &mut self.bus, max_steps)?
+            } else {
+                cpu.run_until_stop(&mut self.bus, max_steps)?
+            };
+            match stop {
                 K16F32Stop::Halt => break,
                 K16F32Stop::Yield if self.workload == IsaBenchmarkWorkload::YieldWake => {
                     yields += 1
                 }
                 K16F32Stop::StepLimit => {
                     return Err(format!(
-                        "candidate k16-f32 workload {} exceeded {max_steps} steps",
+                        "candidate {} workload {} exceeded {max_steps} steps",
+                        self.candidate.name(),
                         self.workload.name(),
                     ));
                 }
                 stop => {
                     return Err(format!(
-                        "candidate k16-f32 workload {} returned unexpected stop {stop:?}",
+                        "candidate {} workload {} returned unexpected stop {stop:?}",
+                        self.candidate.name(),
                         self.workload.name(),
                     ));
                 }
@@ -106,14 +139,18 @@ impl Prepared {
         let after = self.bus.aggregate_traffic_snapshot();
         let ram = subtract(after.0, before.0);
         let mmio = subtract(after.1, before.1);
-        let instruction_fetch = IsaTraffic {
-            loads: cpu.retired_instructions(),
-            stores: 0,
-            bytes_read: cpu.retired_instructions().saturating_mul(4),
-            bytes_written: 0,
+        let instruction_fetch = if self.predecoded.is_some() {
+            IsaTraffic::default()
+        } else {
+            IsaTraffic {
+                loads: cpu.retired_instructions(),
+                stores: 0,
+                bytes_read: cpu.retired_instructions().saturating_mul(4),
+                bytes_written: 0,
+            }
         };
         let observation = IsaBenchmarkObservation {
-            candidate: IsaBenchmarkCandidate::K16F32,
+            candidate: self.candidate,
             workload: self.workload,
             iterations: self.iterations,
             checksum: cpu.register(self.image.result_register as usize),
@@ -128,7 +165,10 @@ impl Prepared {
             },
             mmio: IsaTraffic::from(mmio),
             cpu_state_bytes: K16F32Cpu::cpu_state_bytes(),
-            translation_bytes: 0,
+            translation_bytes: self
+                .predecoded
+                .as_ref()
+                .map_or(0, PredecodedK16F32Program::retained_bytes),
         };
         observation.validate_checksum()?;
         Ok(observation)

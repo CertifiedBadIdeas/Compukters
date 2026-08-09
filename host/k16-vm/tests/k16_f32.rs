@@ -21,7 +21,7 @@ use k16_vm::k16_f32::encoding::{
     add, addi, and, branchz, call, eq, halt, load16, load32, load8, lt_s, ltu, materialize, mul,
     ne, or, ret, sar, shl, shr, store16, store32, store8, sub, xor, yield_now,
 };
-use k16_vm::k16_f32::{K16F32Cpu, K16F32Stop};
+use k16_vm::k16_f32::{K16F32Cpu, K16F32Stop, PredecodedK16F32Program};
 use k16_vm::low_bus::MachineBus;
 
 fn write_program(bus: &mut MachineBus, words: &[u32]) {
@@ -189,4 +189,81 @@ fn yield_is_resumable_and_reserved_bits_are_rejected() {
     let mut reserved_cpu = K16F32Cpu::new(0);
     assert!(reserved_cpu.run_until_stop(&mut reserved_bus, 1).is_err());
     assert_eq!(reserved_cpu.retired_instructions(), 0);
+}
+
+#[test]
+fn predecoded_program_matches_direct_execution_and_reports_retained_bytes() {
+    let mut words = Vec::new();
+    words.extend(materialize(1, 128));
+    words.extend(materialize(2, 0x1234_5678));
+    words.extend([store32(1, 2, 0), load32(3, 1, 0), addi(3, 3, 7), halt()]);
+    let bytes = words
+        .iter()
+        .copied()
+        .flat_map(u32::to_le_bytes)
+        .collect::<Vec<_>>();
+    let program = PredecodedK16F32Program::new(0, &bytes).unwrap();
+    assert!(program.retained_bytes() >= words.len());
+
+    let mut direct_bus = MachineBus::new(256).unwrap();
+    let mut predecoded_bus = MachineBus::new(256).unwrap();
+    write_program(&mut direct_bus, &words);
+    write_program(&mut predecoded_bus, &words);
+    let mut direct = K16F32Cpu::new(0);
+    let mut predecoded = K16F32Cpu::new(0);
+
+    assert_eq!(
+        direct.run_until_stop(&mut direct_bus, 16).unwrap(),
+        K16F32Stop::Halt,
+    );
+    assert_eq!(
+        program
+            .run_until_stop(&mut predecoded, &mut predecoded_bus, 16)
+            .unwrap(),
+        K16F32Stop::Halt,
+    );
+    for register in 0..16 {
+        assert_eq!(direct.register(register), predecoded.register(register));
+    }
+    assert_eq!(direct.pc(), predecoded.pc());
+    assert_eq!(
+        direct.retired_instructions(),
+        predecoded.retired_instructions()
+    );
+    assert_eq!(direct_bus.memory(), predecoded_bus.memory());
+}
+
+#[test]
+fn predecoded_program_rejects_invalid_images_and_program_counters() {
+    assert!(PredecodedK16F32Program::new(2, &halt().to_le_bytes())
+        .unwrap_err()
+        .contains("base"));
+    assert!(PredecodedK16F32Program::new(0, &[0, 1, 2])
+        .unwrap_err()
+        .contains("length"));
+    assert!(
+        PredecodedK16F32Program::new(0, &0xff00_0000_u32.to_le_bytes())
+            .unwrap_err()
+            .contains("0x00000000")
+    );
+
+    let program = PredecodedK16F32Program::new(4, &halt().to_le_bytes()).unwrap();
+    let mut bus = MachineBus::new(16).unwrap();
+    let mut before = K16F32Cpu::new(0);
+    assert!(program
+        .step(&mut before, &mut bus)
+        .unwrap_err()
+        .contains("precedes"));
+
+    let program = PredecodedK16F32Program::new(0, &halt().to_le_bytes()).unwrap();
+    let mut misaligned = K16F32Cpu::new(2);
+    assert!(program
+        .step(&mut misaligned, &mut bus)
+        .unwrap_err()
+        .contains("misaligned"));
+    let mut outside = K16F32Cpu::new(4);
+    assert!(program
+        .step(&mut outside, &mut bus)
+        .unwrap_err()
+        .contains("outside"));
 }
