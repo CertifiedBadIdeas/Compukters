@@ -19,6 +19,7 @@
 
 package ru.lazyhat.compukterkraft.core.device.vm
 
+import ru.lazyhat.compukterkraft.core.Config
 import ru.lazyhat.compukterkraft.core.block.DeviceFamily
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceCapability
 import kotlin.test.Test
@@ -27,6 +28,35 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 
 class DeviceProfileRegistryTest {
+    @Test
+    fun notebookFamiliesHaveFixedNamesAndRamIdentities() {
+        val normal = DeviceProfileRegistry.forFamily(DeviceFamily.NORMAL)
+        val advanced = DeviceProfileRegistry.forFamily(DeviceFamily.ADVANCED)
+
+        assertEquals("Normal Notebook", normal.displayName)
+        assertEquals(1 * 1024 * 1024, normal.resources.memory.vmRamBytes)
+        assertEquals("Advanced Notebook", advanced.displayName)
+        assertEquals(4 * 1024 * 1024, advanced.resources.memory.vmRamBytes)
+    }
+
+    @Test
+    fun notebookRamIdentitiesIgnoreGlobalComputerRamLimitWhileCommandPreservesIt() {
+        val previousRamLimit = Config.computerRamLimit
+        try {
+            Config.computerRamLimit = 3 * 1024 * 1024
+            val normal = DeviceProfileRegistry.forFamily(DeviceFamily.NORMAL)
+            val advanced = DeviceProfileRegistry.forFamily(DeviceFamily.ADVANCED)
+            val command = DeviceProfileRegistry.forFamily(DeviceFamily.COMMAND)
+
+            assertEquals(1 * 1024 * 1024, normal.resources.memory.vmRamBytes)
+            assertEquals(4 * 1024 * 1024, advanced.resources.memory.vmRamBytes)
+            assertEquals(3 * 1024 * 1024, command.resources.memory.vmRamBytes)
+            assertEquals("Command Computer", command.displayName)
+        } finally {
+            Config.computerRamLimit = previousRamLimit
+        }
+    }
+
     @Test
     fun computerFamiliesDoNotExposeTerminalCapability() {
         DeviceFamily.entries.forEach { family ->

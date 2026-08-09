@@ -27,6 +27,7 @@ import ru.lazyhat.compukterkraft.core.device.runtime.K16RuntimeDevice
 import ru.lazyhat.compukterkraft.core.device.runtime.NoOpRuntimeMetricsCollector
 import ru.lazyhat.compukterkraft.core.device.runtime.RecordingRuntimeMetricsCollector
 import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeMetricsCollector
+import ru.lazyhat.compukterkraft.core.device.vm.DeviceProfileRegistry
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16BiosFlashWorkspace
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16ComputerRuntimeFactory
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.K16StaticStorageAttachment
@@ -47,6 +48,114 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class K16NativeTinyCcCompileTest {
+    @Test
+    fun normalNotebookRejectsNativeTinyCcCompilationWithoutCreatingObject() {
+        val candidatePath = requiredPathProperty("k16.native.tinycc.candidate.path")
+        val k16Tool = requiredExecutableProperty("k16.native.tinycc.tool.path")
+        val candidateDigestBefore = sha256(candidatePath.readBytes())
+        val workspace = createTempDirectory("k16-native-tinycc-normal-")
+        val biosFlashPath = workspace.resolve("bios.kflash")
+        val storage0Path = workspace.resolve("storage0.kv")
+        val rootBefore = workspace.resolve("root-before.kfs")
+        val rootAfter = workspace.resolve("root-after.kfs")
+        val helloSource = workspace.resolve("hello.c")
+        val missingObject = workspace.resolve("missing-hello.o")
+        biosFlashPath.writeBytes(K16BiosFlashWorkspace.loadBiosFlashResource(classLoader = javaClass.classLoader))
+        storage0Path.writeBytes(
+            K16SystemVolumeWorkspace.loadStorage0VolumeResource(
+                resourcePath = "firmware/k16-system-storage0-dev.kv",
+                classLoader = javaClass.classLoader,
+            ),
+        )
+        helloSource.writeBytes(
+            javaClass
+                .getResourceAsStream("/k16-native-tinycc/hello.c")
+                ?.use { it.readBytes() }
+                ?: error("Missing native TinyCC acceptance source"),
+        )
+        runK16Tool(
+            k16Tool,
+            "volume",
+            "extract-partition",
+            storage0Path.toString(),
+            "ROOT",
+            rootBefore.toString(),
+        )
+        runK16Tool(k16Tool, "fs", "kfs", "mkdir", rootBefore.toString(), "/work")
+        runK16Tool(
+            k16Tool,
+            "fs",
+            "kfs",
+            "put",
+            rootBefore.toString(),
+            "/work/hello.c",
+            helloSource.toString(),
+        )
+        runK16Tool(
+            k16Tool,
+            "volume",
+            "replace-partition",
+            storage0Path.toString(),
+            "ROOT",
+            rootBefore.toString(),
+        )
+
+        val device =
+            createDevice(
+                deviceId = 465,
+                label = "normal-native-tinycc-rejection",
+                biosFlashPath = biosFlashPath,
+                storage0Path = storage0Path,
+                storage1 = K16StaticStorageAttachment(candidatePath),
+                family = DeviceFamily.NORMAL,
+            )
+        try {
+            device.turnOn()
+            waitForTerminalText(device, "K16> ", "normal notebook shell prompt")
+            val output =
+                assertCommandReturnsPrompt(
+                    device,
+                    "/sdk/bin/tcc.kx -c /work/hello.c -o /work/hello.o",
+                    "normal notebook native compiler rejection",
+                )
+            val normalizedOutput = output.normalizedWords().lowercase()
+            println("k16NormalTinyCcRejection: output=${output.normalizedWords()}")
+            assertTrue(
+                normalizedOutput.contains("err nomem") || normalizedOutput.contains("tcc: memory full"),
+                "Normal Notebook must fail through loader or TinyCC allocation: $output",
+            )
+            assertLastStatusNonZero(device, "normal notebook native compiler rejection")
+            assertTrue(device.runtimeFailureMessage == null, device.runtimeFailureMessage)
+            device.shutdown()
+            assertFalse(device.isOn, "normal notebook shutdown should complete")
+        } finally {
+            device.close()
+        }
+
+        assertContentEquals(candidateDigestBefore, sha256(candidatePath.readBytes()))
+        runK16Tool(
+            k16Tool,
+            "volume",
+            "extract-partition",
+            storage0Path.toString(),
+            "ROOT",
+            rootAfter.toString(),
+        )
+        val getObject =
+            runProcess(
+                listOf(
+                    k16Tool.toString(),
+                    "fs",
+                    "kfs",
+                    "get",
+                    rootAfter.toString(),
+                    "/work/hello.o",
+                    missingObject.toString(),
+                ),
+            )
+        assertTrue(getObject.exitCode != 0 && !Files.exists(missingObject), "/work/hello.o must not exist")
+    }
+
     @Test
     fun nativeTinyCcCompilesGuestSourceBeforeHostValidationAndExecution() {
         val candidatePath = requiredPathProperty("k16.native.tinycc.candidate.path")
@@ -288,24 +397,27 @@ class K16NativeTinyCcCompileTest {
         storage0Path: Path,
         storage1: K16StaticStorageAttachment? = null,
         metrics: RuntimeMetricsCollector = NoOpRuntimeMetricsCollector,
-    ): K16RuntimeDevice =
-        K16RuntimeDevice(
+        family: DeviceFamily = DeviceFamily.ADVANCED,
+    ): K16RuntimeDevice {
+        val profile = DeviceProfileRegistry.forFamily(family)
+        return K16RuntimeDevice(
             deviceId = deviceId,
-            properties = DeviceProperties(DeviceFamily.ADVANCED, label = label),
+            properties = DeviceProperties(family, label = label),
             endpointFactory = {
                 K16ComputerRuntimeFactory.createFromBiosFlash(
                     biosFlashPath = biosFlashPath,
                     storage0Path = storage0Path,
                     storage1 = storage1,
-                    memorySize = 4 * 1024 * 1024,
-                    maxSteps = 2_000_000,
-                    maxTurnsPerTick = 32,
+                    memorySize = profile.resources.memory.vmRamBytes.toInt(),
+                    maxSteps = profile.resources.cpu.maxStepsPerSlice,
+                    maxTurnsPerTick = profile.resources.cpu.maxTurnsPerTick,
                 )
             },
             stateSink = {},
             serverThreadDispatcher = directServerThreadDispatcher,
             metricsCollector = metrics,
         )
+    }
 
     private fun validateGuestObject(
         llvmReadObj: Path,
@@ -355,9 +467,10 @@ class K16NativeTinyCcCompileTest {
         device: K16RuntimeDevice,
         command: String,
         description: String,
-    ) {
+    ): String {
         dispatchText(device, "$command\n")
-        waitForTerminal(device, description) { terminal -> commandOutput(terminal, command) != null }
+        val terminal = waitForTerminal(device, description) { snapshot -> commandOutput(snapshot, command) != null }
+        return checkNotNull(commandOutput(terminal, command))
     }
 
     private fun assertLastStatusZero(
@@ -374,6 +487,22 @@ class K16NativeTinyCcCompileTest {
         val cpu = device.snapshotRuntimeState()?.let(::snapshotCpuText) ?: "<no snapshot>"
         val debug = device.serialOutputSnapshot().decodeToString()
         assertTrue(status == "STATUS 0", "$terminal\nCPU: $cpu\nDebug: $debug")
+    }
+
+    private fun assertLastStatusNonZero(
+        device: K16RuntimeDevice,
+        description: String,
+    ) {
+        val command = "status"
+        dispatchText(device, "$command\n")
+        val terminal =
+            waitForTerminal(device, "$description status") { snapshot ->
+                commandOutput(snapshot, command) != null
+            }
+        val status = commandOutput(terminal, command)?.normalizedWords()
+        val cpu = device.snapshotRuntimeState()?.let(::snapshotCpuText) ?: "<no snapshot>"
+        val debug = device.serialOutputSnapshot().decodeToString()
+        assertTrue(status != null && status != "STATUS 0", "$terminal\nCPU: $cpu\nDebug: $debug")
     }
 
     private fun assertCommandOutput(
