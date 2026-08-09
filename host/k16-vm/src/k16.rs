@@ -693,6 +693,12 @@ impl K16CachedDecoder {
             misses: self.misses,
         }
     }
+
+    /// Estimates retained key/value payload capacity without attempting to
+    /// account for implementation-specific `HashMap` control bytes.
+    pub fn estimated_retained_bytes(&self) -> usize {
+        self.cache.capacity() * (std::mem::size_of::<u32>() + std::mem::size_of::<DecodeResult>())
+    }
 }
 
 impl InstructionDecoder for K16CachedDecoder {

@@ -150,8 +150,8 @@ fn packet_ring(iterations: u32) -> u32 {
     let mut checksum = 0_u32;
     for sequence in 0..iterations {
         let slot = sequence as usize % RING_ENTRIES;
-        for offset in 0..PACKET_BYTES {
-            ring[slot][offset] = (sequence as u8).wrapping_mul(13).wrapping_add(offset as u8);
+        for (offset, byte) in ring[slot].iter_mut().enumerate() {
+            *byte = (sequence as u8).wrapping_mul(13).wrapping_add(offset as u8);
         }
         checksum = ring[slot]
             .iter()
