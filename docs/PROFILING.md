@@ -7,6 +7,25 @@ Compukter Kraft profiling has two layers:
 
 The in-code metrics explain what the VM/display/compiler did. External profilers explain where CPU time and allocations were spent.
 
+## ISA Gate 1 comparison
+
+The Gate 1 benchmark compares the current K16 decoder modes, experimental
+fixed-width K16-F32, the external `rvsim` RV32IM reference, and the specialized
+direct/predecoded RV32IM interpreters on one checksum-validated workload set.
+It records cold construction plus execution, warm median/p95 execution after an
+in-place state reset, bus traffic, retained translation memory, and steady-run
+allocations. It is an implementation-selection gate, not the final ISA choice;
+that decision still requires compiled-C and many-VM measurements.
+
+Refresh the tracked machine-local snapshot with:
+
+```bash
+scripts/record-isa-gate1-benchmark.sh 100000 9
+```
+
+The current evidence is in `docs/benchmarks/isa-gate1-current.txt`. Git history
+is the history of these snapshots; timings are diagnostics, not CI thresholds.
+
 ## Kraft16 VM microbenchmarks
 
 The native Kraft16 VM has a dependency-free microbenchmark example for local
