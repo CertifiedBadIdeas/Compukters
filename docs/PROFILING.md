@@ -55,6 +55,39 @@ scripts/record-isa-gate1-benchmark.sh 100000 9
 The current evidence is in `docs/benchmarks/isa-gate1-current.txt`. Git history
 is the history of these snapshots; timings are diagnostics, not CI thresholds.
 
+## ISA Gate 2 compiled-C comparison
+
+Gate 2 compiles the same six freestanding C workloads through one normalized,
+scalar LLVM IR module per workload. The existing K16 LLVM backend lowers that
+IR to textual assembly consumed by the strict benchmark-only K16-F32 assembler;
+stock LLVM and LLD lower and link the same IR for RV32IM. Both images execute as
+OS-free functions through the eager-predecoded interpreters, with checksum,
+return-PC, immutable-code, data-traffic, and steady-allocation validation.
+
+Refresh the tracked machine-local result with:
+
+```bash
+K16_LLVM_BIN_DIR="$PWD/.toolchain/build/llvm/k16-min/bin" \
+    bash scripts/record-isa-gate2-benchmark.sh
+```
+
+The optional arguments override the default `100000` iterations and `9` odd
+warm samples. System `clang`, `opt`, `llc`, and `ld.lld` plus the existing K16
+`llc` must all be LLVM major version 22. The recorder does not download or
+rebuild a compiler. It records tool versions, source and canonical-IR hashes,
+host details, 12 VM rows, six native references, retained code/predecode sizes,
+and the final threshold calculation in
+`docs/benchmarks/isa-gate2-current.txt`.
+
+This is the one-winner experiment tracked by #481. K16-F32 is selected only
+with more than an 18% compiled-C geometric-mean speed advantage after applying
+the agreed uncertainty band, with no workload more than 30% slower and neither
+total code nor total predecode memory more than 25% larger than RV32IM. An
+advantage from 12% through 18% is inconclusive and requires an expanded run;
+below 12%, or when a guardrail fails, RV32IM is selected. Native timings provide
+absolute host context but never affect the ISA decision. This report does not
+change the production VM, KraftOS, BIOS, or machine ABI.
+
 ## Kraft16 VM microbenchmarks
 
 The native Kraft16 VM has a dependency-free microbenchmark example for local

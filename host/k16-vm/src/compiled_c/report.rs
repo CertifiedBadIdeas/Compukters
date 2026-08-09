@@ -148,8 +148,15 @@ pub fn select_compiled_c(samples: &[CompiledCTiming]) -> Result<CompiledCDecisio
 pub fn format_decision(samples: &[CompiledCTiming]) -> Result<String, String> {
     let metrics = decision_metrics(samples)?;
     let decision = select_compiled_c(samples)?;
+    let fastest = metrics.k16_to_rv_geomean.min(1.0);
     Ok(format!(
-        "metric\tvalue\nk16_speed_advantage\t{:.6}\nmaximum_k16_workload_slowdown\t{:.6}\nk16_to_rv_code_bytes\t{:.6}\nk16_to_rv_predecode_bytes\t{:.6}\ndecision\t{}\n",
+        "candidate\tnormalized_warm_geomean\ttotal_code_bytes\ttotal_predecode_bytes\nk16-f32\t{:.6}\t{}\t{}\nrv32im\t{:.6}\t{}\t{}\nmetric\tvalue\nk16_speed_advantage\t{:.6}\nmaximum_k16_workload_slowdown\t{:.6}\nk16_to_rv_code_bytes\t{:.6}\nk16_to_rv_predecode_bytes\t{:.6}\ndecision\t{}\n",
+        metrics.k16_to_rv_geomean / fastest,
+        metrics.k16_code,
+        metrics.k16_predecode,
+        1.0 / fastest,
+        metrics.rv_code,
+        metrics.rv_predecode,
         metrics.speed_advantage,
         metrics.maximum_k16_slowdown,
         metrics.code_ratio,
@@ -159,10 +166,15 @@ pub fn format_decision(samples: &[CompiledCTiming]) -> Result<String, String> {
 }
 
 struct DecisionMetrics {
+    k16_to_rv_geomean: f64,
     speed_advantage: f64,
     maximum_k16_slowdown: f64,
     code_ratio: f64,
     predecode_ratio: f64,
+    k16_code: usize,
+    rv_code: usize,
+    k16_predecode: usize,
+    rv_predecode: usize,
 }
 
 fn decision_metrics(samples: &[CompiledCTiming]) -> Result<DecisionMetrics, String> {
@@ -234,11 +246,17 @@ fn decision_metrics(samples: &[CompiledCTiming]) -> Result<DecisionMetrics, Stri
     if rv_code == 0 || rv_predecode == 0 {
         return Err("rv32im retained-size totals must be positive".to_string());
     }
+    let k16_to_rv_geomean = geometric_mean(&speed_ratios);
     Ok(DecisionMetrics {
-        speed_advantage: 1.0 - geometric_mean(&speed_ratios),
+        k16_to_rv_geomean,
+        speed_advantage: 1.0 - k16_to_rv_geomean,
         maximum_k16_slowdown,
         code_ratio: k16_code as f64 / rv_code as f64,
         predecode_ratio: k16_predecode as f64 / rv_predecode as f64,
+        k16_code,
+        rv_code,
+        k16_predecode,
+        rv_predecode,
     })
 }
 
