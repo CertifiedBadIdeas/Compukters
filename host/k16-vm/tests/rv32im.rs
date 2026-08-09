@@ -21,6 +21,7 @@ use k16_vm::low_bus::MachineBus;
 use k16_vm::rv32im::encoding::{
     add, addi, auipc, beq, div, divu, ebreak, jal, jalr, lui, lw, mul, rem, remu, sw,
 };
+use k16_vm::rv32im::PredecodedRv32imProgram;
 use k16_vm::rv32im::{Rv32imCpu, Rv32imStop};
 
 fn write_program(bus: &mut MachineBus, words: &[u32]) {
@@ -144,4 +145,55 @@ fn rv32im_rejects_illegal_and_misaligned_access_without_retiring_it() {
     let mut data_cpu = Rv32imCpu::new(0);
     assert!(data_cpu.run_until_stop(&mut data_bus, 2).is_err());
     assert_eq!(data_cpu.retired_instructions(), 1);
+}
+
+#[test]
+fn predecoded_program_matches_direct_execution_and_reports_retained_bytes() {
+    let words = [
+        addi(1, 0, 128),
+        addi(2, 0, 21),
+        mul(3, 2, 2),
+        sw(1, 3, 0),
+        lw(4, 1, 0),
+        ebreak(),
+    ];
+    let bytes = words
+        .into_iter()
+        .flat_map(u32::to_le_bytes)
+        .collect::<Vec<_>>();
+    let program = PredecodedRv32imProgram::new(0, &bytes).unwrap();
+    assert!(program.retained_bytes() >= words.len() * std::mem::size_of::<u32>());
+
+    let mut direct_bus = MachineBus::new(256).unwrap();
+    let mut predecoded_bus = MachineBus::new(256).unwrap();
+    write_program(&mut direct_bus, &words);
+    write_program(&mut predecoded_bus, &words);
+    let mut direct = Rv32imCpu::new(0);
+    let mut predecoded = Rv32imCpu::new(0);
+
+    assert_eq!(
+        direct.run_until_stop(&mut direct_bus, 16).unwrap(),
+        Rv32imStop::Ebreak
+    );
+    assert_eq!(
+        program
+            .run_until_stop(&mut predecoded, &mut predecoded_bus, 16)
+            .unwrap(),
+        Rv32imStop::Ebreak,
+    );
+    for register in 0..32 {
+        assert_eq!(direct.register(register), predecoded.register(register));
+    }
+    assert_eq!(direct.pc(), predecoded.pc());
+    assert_eq!(
+        direct.retired_instructions(),
+        predecoded.retired_instructions()
+    );
+    assert_eq!(direct_bus.memory(), predecoded_bus.memory());
+}
+
+#[test]
+fn predecode_rejects_partial_and_illegal_images() {
+    assert!(PredecodedRv32imProgram::new(0, &[0, 1, 2]).is_err());
+    assert!(PredecodedRv32imProgram::new(0, &0xffff_ffff_u32.to_le_bytes()).is_err());
 }
