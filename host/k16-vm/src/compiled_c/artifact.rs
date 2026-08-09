@@ -27,6 +27,7 @@ pub enum CompiledCCandidate {
     K16F32,
     K16F32R32LR,
     Rv32im,
+    Rv64im,
 }
 
 impl CompiledCCandidate {
@@ -35,6 +36,7 @@ impl CompiledCCandidate {
             Self::K16F32 => "k16-f32",
             Self::K16F32R32LR => "k16-f32r32-lr",
             Self::Rv32im => "rv32im",
+            Self::Rv64im => "rv64im",
         }
     }
 }
@@ -69,6 +71,7 @@ pub fn load_compiled_c_artifact(manifest_path: &Path) -> Result<CompiledCArtifac
         "k16-f32" => CompiledCCandidate::K16F32,
         "k16-f32r32-lr" => CompiledCCandidate::K16F32R32LR,
         "rv32im" => CompiledCCandidate::Rv32im,
+        "rv64im" => CompiledCCandidate::Rv64im,
         candidate => return Err(format!("unknown compiled-C candidate {candidate:?}")),
     };
     let source_sha256 = take_hash(&mut fields, "source_sha256")?;
@@ -161,6 +164,40 @@ pub fn validate_f32r32_artifact_pair(
         ));
     }
     validate_artifact_pair_metadata(candidate, rv)
+}
+
+pub fn validate_riscv_xlen_artifact_pair(
+    rv32: &CompiledCArtifact,
+    rv64: &CompiledCArtifact,
+) -> Result<(), String> {
+    if rv32.candidate != CompiledCCandidate::Rv32im || rv64.candidate != CompiledCCandidate::Rv64im
+    {
+        return Err(format!(
+            "artifact pair candidate order must be rv32im then rv64im, got {} then {}",
+            rv32.candidate.name(),
+            rv64.candidate.name()
+        ));
+    }
+    validate_riscv_xlen_pair_metadata(rv32, rv64)
+}
+
+fn validate_riscv_xlen_pair_metadata(
+    rv32: &CompiledCArtifact,
+    rv64: &CompiledCArtifact,
+) -> Result<(), String> {
+    if rv32.workload != rv64.workload {
+        return Err("artifact pair workload mismatch".to_string());
+    }
+    if rv32.source_sha256 != rv64.source_sha256 {
+        return Err("artifact pair source SHA-256 mismatch".to_string());
+    }
+    if rv32.validation_iterations != rv64.validation_iterations {
+        return Err("artifact pair validation iteration mismatch".to_string());
+    }
+    if rv32.expected_checksum != rv64.expected_checksum {
+        return Err("artifact pair expected checksum mismatch".to_string());
+    }
+    Ok(())
 }
 
 fn validate_artifact_pair_metadata(
@@ -322,6 +359,7 @@ fn validate_image_shape(
         CompiledCCandidate::K16F32 => crate::k16_f32::encoding::halt(),
         CompiledCCandidate::K16F32R32LR => crate::k16_f32r32::encoding::halt(),
         CompiledCCandidate::Rv32im => crate::rv32im::encoding::ebreak(),
+        CompiledCCandidate::Rv64im => 0x0010_0073,
     };
     let actual_stop = u32::from_le_bytes(image[code_bytes..].try_into().unwrap());
     if actual_stop != expected_stop {

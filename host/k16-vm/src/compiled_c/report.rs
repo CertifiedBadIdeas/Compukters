@@ -154,9 +154,10 @@ pub fn select_compiled_c_candidate(
     match custom {
         CompiledCCandidate::K16F32 => Ok(CompiledCDecision::SelectK16F32),
         CompiledCCandidate::K16F32R32LR => Ok(CompiledCDecision::SelectK16F32R32LR),
-        CompiledCCandidate::Rv32im => {
-            Err("compiled-C custom candidate cannot be rv32im".to_string())
-        }
+        CompiledCCandidate::Rv32im | CompiledCCandidate::Rv64im => Err(format!(
+            "compiled-C custom candidate cannot be {}",
+            custom.name()
+        )),
     }
 }
 
@@ -204,8 +205,14 @@ fn decision_metrics(
     samples: &[CompiledCTiming],
     custom: CompiledCCandidate,
 ) -> Result<DecisionMetrics, String> {
-    if custom == CompiledCCandidate::Rv32im {
-        return Err("compiled-C custom candidate cannot be rv32im".to_string());
+    if matches!(
+        custom,
+        CompiledCCandidate::Rv32im | CompiledCCandidate::Rv64im
+    ) {
+        return Err(format!(
+            "compiled-C custom candidate cannot be {}",
+            custom.name()
+        ));
     }
     if samples
         .iter()

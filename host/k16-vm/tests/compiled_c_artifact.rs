@@ -22,7 +22,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use k16_vm::compiled_c::artifact::{
     load_compiled_c_artifact, validate_artifact_pair, validate_f32r32_artifact_pair,
-    CompiledCArtifact, CompiledCCandidate,
+    validate_riscv_xlen_artifact_pair, CompiledCArtifact, CompiledCCandidate,
 };
 use k16_vm::isa_benchmarks::IsaBenchmarkWorkload;
 
@@ -219,4 +219,21 @@ fn f32r32_artifact_pair_accepts_only_the_new_candidate_then_rv32im() {
     assert!(validate_f32r32_artifact_pair(&candidate, &candidate)
         .unwrap_err()
         .contains("candidate"));
+}
+
+#[test]
+fn riscv_xlen_pair_allows_target_specific_ir_but_requires_shared_source_and_oracle() {
+    let rv32 = artifact(CompiledCCandidate::Rv32im, &"b".repeat(64));
+    let rv64 = artifact(CompiledCCandidate::Rv64im, &"d".repeat(64));
+
+    validate_riscv_xlen_artifact_pair(&rv32, &rv64).unwrap();
+    assert!(validate_riscv_xlen_artifact_pair(&rv64, &rv32)
+        .unwrap_err()
+        .contains("rv32im then rv64im"));
+
+    let mut wrong_source = rv64.clone();
+    wrong_source.source_sha256 = "e".repeat(64);
+    assert!(validate_riscv_xlen_artifact_pair(&rv32, &wrong_source)
+        .unwrap_err()
+        .contains("source SHA-256"));
 }

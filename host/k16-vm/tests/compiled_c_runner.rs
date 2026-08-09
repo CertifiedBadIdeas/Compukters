@@ -154,6 +154,7 @@ fn harness_installs_architecture_specific_return_addresses() {
         2,
     );
     let rv = artifact(CompiledCCandidate::Rv32im, &[jalr(0, 1, 0), ebreak()], 1);
+    let rv64 = artifact(CompiledCCandidate::Rv64im, &[jalr(0, 1, 0), ebreak()], 1);
     let f32r32 = artifact(
         CompiledCCandidate::K16F32R32LR,
         &[f32r32::addi(0, 0, 0), f32r32::ret(), f32r32::halt()],
@@ -162,14 +163,22 @@ fn harness_installs_architecture_specific_return_addresses() {
 
     let k16_observation = run_compiled_c(&k16, 1, 4).unwrap();
     let rv_observation = run_compiled_c(&rv, 1, 4).unwrap();
+    let rv64_observation = run_compiled_c(&rv64, 1, 4).unwrap();
     let f32r32_observation = run_compiled_c(&f32r32, 1, 4).unwrap();
     assert_eq!(k16_observation.checksum, 1);
     assert_eq!(rv_observation.checksum, 1);
+    assert_eq!(rv64_observation.checksum, 1);
     assert_eq!(f32r32_observation.checksum, 1);
     assert_eq!(k16_observation.data_read_bytes, 4);
     assert_eq!(k16_observation.data_written_bytes, 0);
     assert_eq!(rv_observation.data_read_bytes, 0);
     assert_eq!(rv_observation.data_written_bytes, 0);
+    assert_eq!(rv64_observation.data_read_bytes, 0);
+    assert_eq!(rv64_observation.data_written_bytes, 0);
+    assert_eq!(
+        rv64_observation.cpu_state_bytes,
+        k16_vm::rv64im::Rv64imCpu::cpu_state_bytes()
+    );
     assert_eq!(f32r32_observation.data_read_bytes, 0);
     assert_eq!(f32r32_observation.data_written_bytes, 0);
     assert_eq!(
