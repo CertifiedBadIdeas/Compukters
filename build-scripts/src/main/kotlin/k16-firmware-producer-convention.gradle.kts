@@ -32,6 +32,9 @@ val k16LlvmBuildRoot =
 val k16ClangExecutable = k16LlvmBuildRoot.file("bin/clang")
 val k16TinyCcExecutable =
     rootProject.layout.projectDirectory.file(".toolchain/build/tinycc/k16/bin/tcc-k16")
+val k16TinyCcSourceRoot = rootProject.layout.projectDirectory.dir("toolchains/Compukter-Kraft-tinycc")
+val k16TinyCcNativeSource = k16TinyCcSourceRoot.file("tcc.c")
+val k16TinyCcVersionSource = k16TinyCcSourceRoot.file("VERSION")
 val generatedK16FirmwareResources = layout.buildDirectory.dir("generated/k16-firmware-resources")
 val generatedK16FirmwareTestResources = layout.buildDirectory.dir("generated/k16-firmware-test-resources")
 val generatedK16FirmwareArtifacts = layout.buildDirectory.dir("generated/k16-firmware-artifacts")
@@ -56,6 +59,7 @@ val generatedK16CSystemRmdirTarget = generatedK16GuestTarget.map { it.dir("c-sys
 val generatedK16SharedKraftTarget = generatedK16GuestTarget.map { it.dir("shared-kraft") }
 val generatedK16CSystemCatTarget = generatedK16GuestTarget.map { it.dir("c-system-cat") }
 val generatedK16TinyCcUnameProofTarget = layout.buildDirectory.dir("generated/k16-tinycc-proof")
+val generatedK16NativeTinyCcTarget = layout.buildDirectory.dir("generated/k16-native-tinycc")
 val k16FirmwareProfile =
     providers
         .gradleProperty("k16FirmwareProfile")
@@ -190,6 +194,11 @@ val k16TinyCcUnameProofMap = generatedK16TinyCcUnameProofTarget.map { it.file("u
 val k16TinyCcUnameProofStartupObject = generatedK16TinyCcUnameProofTarget.map { it.file("k16-startup.o") }
 val k16TinyCcUnameProofCrt0Object = generatedK16TinyCcUnameProofTarget.map { it.file("crt0.o") }
 val k16TinyCcUnameProofUnameObject = generatedK16TinyCcUnameProofTarget.map { it.file("uname.o") }
+val k16NativeTinyCcConfig = generatedK16NativeTinyCcTarget.map { it.file("config/config.h") }
+val k16NativeTinyCcObject = generatedK16NativeTinyCcTarget.map { it.file("tcc.o") }
+val k16NativeTinyCcStartupObject = generatedK16NativeTinyCcTarget.map { it.file("k16-startup.o") }
+val k16NativeTinyCcInspect = generatedK16NativeTinyCcTarget.map { it.file("tcc.inspect") }
+val k16NativeTinyCcArtifact = generatedK16NativeTinyCcTarget.map { it.file("tcc.kx") }
 val k16BootMapArtifact = k16BootArtifact.map { it.asFile.resolveSibling("${it.asFile.nameWithoutExtension}.map") }
 val k16KernelMapArtifact = k16KernelArtifact.map { it.asFile.resolveSibling("${it.asFile.nameWithoutExtension}.map") }
 val k16InitMapArtifact = k16InitArtifact.map { it.asFile.resolveSibling("${it.asFile.nameWithoutExtension}.map") }
@@ -1368,6 +1377,264 @@ val buildK16CSdkArchives =
         }
     }
 
+val compileK16NativeTinyCc =
+    tasks.register("compileK16NativeTinyCc") {
+        description = "Cross-builds TinyCC as an ordinary dynamic KraftOS K16 program."
+        group = "k16"
+        inputs.dir(k16TinyCcSourceRoot)
+        inputs.file(k16TinyCcNativeSource)
+        inputs.file(k16TinyCcVersionSource)
+        inputs.dir(k16CSdkIncludeSource)
+        inputs.file(generatedK16CSdkTarget.map { it.file("lib/crt0.o") })
+        inputs.file(generatedK16CSdkTarget.map { it.file("lib/libc.a") })
+        inputs.file(generatedK16CSdkTarget.map { it.file("lib/libsoftfloat.a") })
+        inputs.file(generatedK16CSdkTarget.map { it.file("lib/libcompiler_rt.a") })
+        inputs.file(
+            generatedK16CSdkTarget.map {
+                it.file("compiler-rt-objects/validation/libkraft-validation.o")
+            },
+        )
+        inputs.file(k16SharedKraftArtifact)
+        inputs.file(k16ClangExecutable)
+        inputs.file(k16LlvmNmExecutable)
+        inputsK16HostTools()
+        inputs.file(k16ToolchainConfig)
+        outputs.file(k16NativeTinyCcConfig)
+        outputs.file(k16NativeTinyCcObject)
+        outputs.file(k16NativeTinyCcStartupObject)
+        outputs.file(k16NativeTinyCcInspect)
+        outputs.file(k16NativeTinyCcArtifact)
+        dependsOn(buildK16CSdkArchives)
+        dependsOn("compileK16SharedKraft")
+        dependsOn(rootProject.tasks.named("prepareK16Toolchain"))
+
+        doLast {
+            val toolchain = resolveK16Toolchain()
+            val clang = k16ClangExecutable.asFile
+            val llvmNm = k16LlvmNmExecutable.asFile
+            listOf(clang, llvmNm, toolchain.cli).forEach { executable ->
+                check(executable.isFile && executable.canExecute()) {
+                    "Required native TinyCC build executable is missing or not executable: $executable"
+                }
+            }
+
+            val targetDirectory = generatedK16NativeTinyCcTarget.get().asFile
+            val config = k16NativeTinyCcConfig.get().asFile
+            val objectFile = k16NativeTinyCcObject.get().asFile
+            val startupObject = k16NativeTinyCcStartupObject.get().asFile
+            val inspectOutput = k16NativeTinyCcInspect.get().asFile
+            val output = k16NativeTinyCcArtifact.get().asFile
+            val sdkDirectory = generatedK16CSdkTarget.get().asFile
+            val crt0Object = sdkDirectory.resolve("lib/crt0.o")
+            val libcArchive = sdkDirectory.resolve("lib/libc.a")
+            val softFloatArchive = sdkDirectory.resolve("lib/libsoftfloat.a")
+            val compilerRtArchive = sdkDirectory.resolve("lib/libcompiler_rt.a")
+            val libkraftValidationObject =
+                sdkDirectory.resolve("compiler-rt-objects/validation/libkraft-validation.o")
+            val libkraftSharedObject = k16SharedKraftArtifact.get().asFile
+            val tinyCcSource = k16TinyCcNativeSource.asFile
+            listOf(
+                crt0Object,
+                libcArchive,
+                softFloatArchive,
+                compilerRtArchive,
+                libkraftValidationObject,
+                libkraftSharedObject,
+                tinyCcSource,
+            ).forEach { input ->
+                check(input.isFile) {
+                    "Native TinyCC build input is missing: $input"
+                }
+            }
+
+            project.delete(targetDirectory)
+            config.parentFile.mkdirs()
+            val version = k16TinyCcVersionSource.asFile.readText().trim()
+            check(version.matches(Regex("[0-9A-Za-z][0-9A-Za-z.-]*"))) {
+                "Pinned TinyCC VERSION is not a safe fixed preprocessor string: $version"
+            }
+            val configText =
+                listOf(
+                    "#define TCC_TARGET_K16 1",
+                    "#define CONFIG_TCC_STATIC 1",
+                    "#define CONFIG_TCC_SEMLOCK 0",
+                    "#define CONFIG_TCCDIR \"/sdk/lib/tcc\"",
+                    "#define CONFIG_TCC_SYSINCLUDEPATHS \"/sdk/include\"",
+                    "#define CONFIG_TCC_LIBPATHS \"/sdk/lib\"",
+                    "#define CONFIG_TCC_BCHECK 0",
+                    "#define CONFIG_TCC_BACKTRACE 0",
+                    "#define TCC_VERSION \"$version\"",
+                ).joinToString(separator = "\n", postfix = "\n")
+            config.writeText(configText)
+            val expectedConfigMacros =
+                setOf(
+                    "TCC_TARGET_K16",
+                    "CONFIG_TCC_STATIC",
+                    "CONFIG_TCC_SEMLOCK",
+                    "CONFIG_TCCDIR",
+                    "CONFIG_TCC_SYSINCLUDEPATHS",
+                    "CONFIG_TCC_LIBPATHS",
+                    "CONFIG_TCC_BCHECK",
+                    "CONFIG_TCC_BACKTRACE",
+                    "TCC_VERSION",
+                )
+            val actualConfigMacros =
+                configText
+                    .lineSequence()
+                    .filter { it.startsWith("#define ") }
+                    .map { it.removePrefix("#define ").substringBefore(' ') }
+                    .toSet()
+            check(actualConfigMacros == expectedConfigMacros) {
+                "Native TinyCC private config contains an unexpected host/target macro: $actualConfigMacros"
+            }
+
+            fun runCommand(stage: String, command: List<String>) {
+                val exitCode = ProcessBuilder(command).directory(projectDir).inheritIO().start().waitFor()
+                check(exitCode == 0) {
+                    "Native TinyCC $stage failed with exit code $exitCode: ${command.joinToString(" ")}"
+                }
+            }
+
+            fun captureCommand(stage: String, command: List<String>): String {
+                val process =
+                    ProcessBuilder(command)
+                        .directory(projectDir)
+                        .redirectErrorStream(true)
+                        .start()
+                val captured = process.inputStream.bufferedReader().use { it.readText() }
+                val exitCode = process.waitFor()
+                check(exitCode == 0) {
+                    "Native TinyCC $stage failed with exit code $exitCode: " +
+                        "${command.joinToString(" ")}\n$captured"
+                }
+                return captured
+            }
+
+            runCommand(
+                "one-source compile",
+                listOf(
+                    clang.absolutePath,
+                    "--target=k16",
+                    "-ffreestanding",
+                    "-fno-builtin",
+                    "-fno-stack-protector",
+                    "-nostdlib",
+                    "-Oz",
+                    "-I",
+                    config.parentFile.absolutePath,
+                    "-I",
+                    k16CSdkIncludeSource.asFile.absolutePath,
+                    "-include",
+                    config.absolutePath,
+                    "-DONE_SOURCE=1",
+                    "-Dmain=kraft_main",
+                    "-c",
+                    tinyCcSource.absolutePath,
+                    "-o",
+                    objectFile.absolutePath,
+                ),
+            )
+
+            fun externalSymbols(files: List<File>, definedOnly: Boolean): Set<String> {
+                val command =
+                    buildList {
+                        add(llvmNm.absolutePath)
+                        add(if (definedOnly) "--defined-only" else "--undefined-only")
+                        add("--extern-only")
+                        add("--format=posix")
+                        files.forEach { add(it.absolutePath) }
+                    }
+                return captureCommand("symbol closure inspection", command)
+                    .lineSequence()
+                    .map(String::trim)
+                    .filter { it.isNotEmpty() && !it.endsWith(":") }
+                    .map { it.substringBefore(' ') }
+                    .toSet()
+            }
+
+            val undefinedSymbols = externalSymbols(listOf(objectFile), definedOnly = false)
+            val allowedDefinitions =
+                externalSymbols(
+                    listOf(libcArchive, softFloatArchive, compilerRtArchive, libkraftValidationObject),
+                    definedOnly = true,
+                )
+            val unexpectedUnresolved = undefinedSymbols - allowedDefinitions
+            check(unexpectedUnresolved.isEmpty()) {
+                "Unexpected unresolved native TinyCC symbol(s): ${unexpectedUnresolved.sorted()}"
+            }
+
+            runCommand(
+                "startup build",
+                listOf(
+                    toolchain.cli.absolutePath,
+                    "runtime",
+                    "k16-startup",
+                    "--target",
+                    "program-dynamic",
+                    "-o",
+                    startupObject.absolutePath,
+                ),
+            )
+            runCommand(
+                "dynamic program link",
+                listOf(
+                    toolchain.cli.absolutePath,
+                    "link",
+                    "--target",
+                    "program-dynamic",
+                    "--dylib",
+                    libkraftSharedObject.absolutePath,
+                    startupObject.absolutePath,
+                    crt0Object.absolutePath,
+                    objectFile.absolutePath,
+                    libcArchive.absolutePath,
+                    softFloatArchive.absolutePath,
+                    compilerRtArchive.absolutePath,
+                    "-o",
+                    output.absolutePath,
+                ),
+            )
+            val inspection =
+                captureCommand(
+                    "K16E image inspection",
+                    listOf(toolchain.cli.absolutePath, "inspect", output.absolutePath),
+                )
+            inspectOutput.writeText(inspection)
+            val inspectionLines = inspection.lineSequence().filter(String::isNotBlank).toList()
+            check(inspectionLines.firstOrNull() == "kind=K16E") {
+                "Native TinyCC inspection did not identify a K16E image: $inspection"
+            }
+            val k16eLine = inspectionLines.singleOrNull { it.startsWith("K16E ") }
+            check(k16eLine != null) {
+                "Native TinyCC inspection did not contain exactly one K16E record: $inspection"
+            }
+            val k16eFields = k16eLine.removePrefix("K16E ").split(' ').toSet()
+            check("abi=program" in k16eFields && "dynamic=true" in k16eFields) {
+                "Native TinyCC image is not an ordinary dynamic program: $inspection"
+            }
+            check("needed=1" in k16eFields) {
+                "Native TinyCC image does not declare exactly one shared library: $inspection"
+            }
+
+            val forbiddenHostPaths =
+                setOf(
+                    rootProject.projectDir.absolutePath,
+                    k16TinyCcSourceRoot.asFile.absolutePath,
+                    targetDirectory.absolutePath,
+                    "/usr",
+                    "/home",
+                )
+            listOf(config, objectFile, output, inspectOutput).forEach { producedFile ->
+                val bytePreservingText = producedFile.readBytes().toString(Charsets.ISO_8859_1)
+                forbiddenHostPaths.forEach { forbiddenPath ->
+                    check(!bytePreservingText.contains(forbiddenPath)) {
+                        "Native TinyCC output contains forbidden host path '$forbiddenPath' in $producedFile"
+                    }
+                }
+            }
+        }
+    }
+
 val verifyK16CSdkFoundation =
     tasks.register("verifyK16CSdkFoundation") {
         description = "Builds and runs the C SDK foundation contracts on the K16 VM."
@@ -1414,6 +1681,7 @@ val verifyK16CSdkFoundation =
                 "time_test.c",
                 "paths_test.c",
                 "setjmp_test.c",
+                "compiler_runtime_test.c",
             ).forEach { testName ->
                 val targetDirectory = outputDirectory.resolve(testName.removeSuffix(".c"))
                 targetDirectory.mkdirs()

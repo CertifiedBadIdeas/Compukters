@@ -66,13 +66,22 @@ class K16TinyCcBuildScriptTest {
         assertTrue(taskBody.contains("dependsOn(buildK16TinyCc)"))
         assertTrue(taskBody.contains("dependsOn(buildK16Llvm)"))
         assertTrue(taskBody.contains("dependsOn(prepareK16Toolchain)"))
+        assertTrue(taskBody.contains("dependsOn(\":v1_21_1-neoforge:buildK16CSdkArchives\")"))
         assertTrue(taskBody.contains("tools/k16-tinycc-smoke.sh"))
         assertTrue(taskBody.contains("environment(\"K16_TINYCC\""))
         assertTrue(taskBody.contains("environment(\"K16_CLANG\""))
         assertTrue(taskBody.contains("environment(\"K16_LLVM_READOBJ\""))
         assertTrue(taskBody.contains("environment(\"K16_TOOL\""))
+        assertTrue(taskBody.contains("environment(\"K16_LIBSOFTFLOAT\""))
+        assertTrue(taskBody.contains("environment(\"K16_LIBCOMPILER_RT\""))
 
         assertTrue(root.resolve("tools/k16-tinycc-smoke.sh").exists())
+        val smoke = root.resolve("tools/k16-tinycc-smoke.sh").readText()
+        assertTrue(smoke.contains("for caller in tinycc clang"))
+        assertTrue(smoke.contains("for implementation in tinycc clang"))
+        assertTrue(smoke.contains("float-runtime-${'$'}caller-${'$'}implementation"))
+        assertTrue(smoke.contains("${'$'}LIBSOFTFLOAT"))
+        assertTrue(smoke.contains("${'$'}LIBCOMPILER_RT"))
         listOf(
             "arithmetic.c",
             "compiler-runtime.c",
@@ -84,11 +93,21 @@ class K16TinyCcBuildScriptTest {
             "relocations.c",
             "external-add.c",
             "asm-label.c",
-            "reject-float.c",
-            "reject-varargs.c",
+            "type-layout.c",
+            "return-42.c",
+            "wide-direct.c",
+            "aggregate-args.c",
+            "varargs-basic.c",
+            "varargs-caller.c",
+            "varargs-callee.c",
+            "float-abi.c",
+            "float-varargs.c",
+            "float-runtime.c",
+            "reject-vector.c",
+            "reject-complex.c",
+            "reject-empty-aggregate.c",
+            "reject-overaligned.c",
             "reject-asm.c",
-            "reject-wide.c",
-            "reject-aggregate.c",
         ).forEach { fixture ->
             assertTrue(root.resolve("tools/fixtures/k16-tinycc/$fixture").exists(), fixture)
         }
@@ -156,6 +175,7 @@ class K16TinyCcBuildScriptTest {
             ),
         )
         assertTrue(rootTaskBody.contains("dependsOn(verifyK16TinyCcBackend)"))
+        assertTrue(rootTaskBody.contains("dependsOn(\":v1_21_1-neoforge:compileK16NativeTinyCc\")"))
         assertTrue(rootTaskBody.contains("dependsOn(\":v1_21_1-neoforge:verifyK16TinyCcRuntime\")"))
         assertTrue(
             root
@@ -239,6 +259,8 @@ class K16TinyCcBuildScriptTest {
         assertTrue(producerConvention.contains("Compiler runtime source is not classified exactly once"))
         assertTrue(producerConvention.contains("toolchains/Compukter-Kraft-llvm/compiler-rt/LICENSE.TXT"))
         assertTrue(foundationTaskBody.contains("dependsOn(buildK16CSdkArchives)"))
+        assertTrue(foundationTaskBody.contains("compiler_runtime_test.c"))
+        assertTrue(root.resolve("guest/kraftos/sdk/c/tests/compiler_runtime_test.c").exists())
         assertFalse(foundationTaskBody.contains("\"adddf3.c\""))
         assertFalse(foundationTaskBody.contains("tools/fixtures/k16-tinycc/compiler-runtime.c"))
     }
@@ -296,6 +318,80 @@ class K16TinyCcBuildScriptTest {
     }
 
     @Test
+    fun nativeTinyCcIsCrossBuiltWithAPrivateGuestOnlyConfigurationAndExactSymbolClosure() {
+        val producerConvention =
+            root
+                .resolve("build-scripts/src/main/kotlin/k16-firmware-producer-convention.gradle.kts")
+                .readText()
+        val taskBody =
+            producerConvention
+                .substringAfter("val compileK16NativeTinyCc =")
+                .substringBefore("val verifyK16CSdkFoundation =")
+
+        assertTrue(producerConvention.contains("toolchains/Compukter-Kraft-tinycc"))
+        assertTrue(producerConvention.contains("k16TinyCcSourceRoot.file(\"tcc.c\")"))
+        assertTrue(producerConvention.contains("k16TinyCcSourceRoot.file(\"VERSION\")"))
+        assertTrue(producerConvention.contains("generated/k16-native-tinycc"))
+        assertTrue(taskBody.contains("tasks.register(\"compileK16NativeTinyCc\")"))
+        assertTrue(taskBody.contains("dependsOn(buildK16CSdkArchives)"))
+        assertTrue(taskBody.contains("dependsOn(\"compileK16SharedKraft\")"))
+        assertTrue(taskBody.contains("dependsOn(rootProject.tasks.named(\"prepareK16Toolchain\"))"))
+        assertTrue(taskBody.contains("outputs.file(k16NativeTinyCcConfig)"))
+        assertTrue(taskBody.contains("outputs.file(k16NativeTinyCcObject)"))
+        assertTrue(taskBody.contains("outputs.file(k16NativeTinyCcArtifact)"))
+
+        listOf(
+            "#define TCC_TARGET_K16 1",
+            "#define CONFIG_TCC_STATIC 1",
+            "#define CONFIG_TCC_SEMLOCK 0",
+            "#define CONFIG_TCCDIR \\\"/sdk/lib/tcc\\\"",
+            "#define CONFIG_TCC_SYSINCLUDEPATHS \\\"/sdk/include\\\"",
+            "#define CONFIG_TCC_LIBPATHS \\\"/sdk/lib\\\"",
+            "#define CONFIG_TCC_BCHECK 0",
+            "#define CONFIG_TCC_BACKTRACE 0",
+            "#define TCC_VERSION",
+        ).forEach { configLine ->
+            assertTrue(taskBody.contains(configLine), configLine)
+        }
+        assertTrue(taskBody.contains("-include"))
+        assertTrue(taskBody.contains("k16NativeTinyCcConfig"))
+        assertTrue(taskBody.contains("-DONE_SOURCE=1"))
+        assertTrue(taskBody.contains("-Dmain=kraft_main"))
+        assertTrue(taskBody.contains("-ffreestanding"))
+        assertTrue(taskBody.contains("-fno-builtin"))
+        assertTrue(taskBody.contains("-fno-stack-protector"))
+        assertTrue(taskBody.contains("-nostdlib"))
+        assertTrue(taskBody.contains("-Oz"))
+        assertTrue(taskBody.contains("k16CSdkIncludeSource"))
+
+        assertTrue(taskBody.contains("--undefined-only"))
+        assertTrue(taskBody.contains("--defined-only"))
+        assertTrue(taskBody.contains("--extern-only"))
+        assertTrue(taskBody.contains("lib/libc.a"))
+        assertTrue(taskBody.contains("lib/libsoftfloat.a"))
+        assertTrue(taskBody.contains("lib/libcompiler_rt.a"))
+        assertTrue(taskBody.contains("libkraft-validation.o"))
+        assertTrue(taskBody.contains("Unexpected unresolved native TinyCC symbol(s)"))
+        assertFalse(taskBody.contains("weak"))
+        assertFalse(taskBody.contains("stub"))
+
+        assertTrue(taskBody.contains("program-dynamic"))
+        assertTrue(taskBody.contains("k16-startup"))
+        assertTrue(taskBody.contains("--dylib"))
+        assertTrue(taskBody.contains("k16SharedKraftArtifact"))
+        assertTrue(taskBody.contains("k16NativeTinyCcInspect"))
+        assertTrue(taskBody.contains("val k16eFields ="))
+        assertTrue(taskBody.contains("\"abi=program\" in k16eFields"))
+        assertTrue(taskBody.contains("\"dynamic=true\" in k16eFields"))
+        assertTrue(taskBody.contains("\"needed=1\" in k16eFields"))
+        assertTrue(taskBody.contains("Native TinyCC output contains forbidden host path"))
+        assertTrue(taskBody.contains("\"/usr\""))
+        assertTrue(taskBody.contains("\"/home\""))
+        assertFalse(taskBody.contains("dlopen"))
+        assertFalse(taskBody.contains("pthread"))
+    }
+
+    @Test
     fun tinyCcK16BackendDocumentationStatesTheProvenBoundary() {
         val documentationPath = root.resolve("docs/toolchains/k16-tinycc-backend.md")
         assertTrue(documentationPath.exists())
@@ -323,9 +419,11 @@ class K16TinyCcBuildScriptTest {
         assertTrue(documentation.contains("aggregate"))
         assertTrue(documentation.contains("JIT"))
         assertTrue(documentation.contains("production KraftOS remains Clang-built"))
-        assertTrue(documentation.contains("guest TinyCC"))
-        assertTrue(documentation.contains("C SDK module"))
-        assertTrue(documentation.contains("libc packaging"))
+        assertTrue(documentation.contains("native `tcc.kx` build does not replace"))
+        assertTrue(documentation.contains("immutable module infrastructure"))
+        assertTrue(documentation.contains("compiler-owned libc/runtime archives plus `tcc.kx` are built"))
+        assertTrue(documentation.contains("immutable `c_sdk_v1` volume"))
+        assertTrue(documentation.contains("in-VM source-to-object acceptance"))
         assertTrue(documentation.contains("-run"))
     }
 }

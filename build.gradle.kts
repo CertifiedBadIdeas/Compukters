@@ -54,6 +54,10 @@ val k16TinyCcRoot = rootProject.file(".toolchain/build/tinycc/k16")
 val k16TinyCcBuildRoot = k16TinyCcRoot.resolve("build")
 val k16TinyCcBuiltCompiler = k16TinyCcBuildRoot.resolve("k16-tcc")
 val k16TinyCcInstalledCompiler = k16TinyCcRoot.resolve("bin/tcc-k16")
+val k16CSdkArchiveRoot =
+    rootProject.file("modules/v1_21_1/v1_21_1-neoforge/build/generated/k16-guest-target/c-sdk/lib")
+val k16CSdkSoftFloatArchive = k16CSdkArchiveRoot.resolve("libsoftfloat.a")
+val k16CSdkCompilerRtArchive = k16CSdkArchiveRoot.resolve("libcompiler_rt.a")
 val k16RustBootstrapConfig = k16RustBuildRoot.resolve("bootstrap.toml")
 val k16RustBootstrapProbeMarker = k16RustBuildRoot.resolve("bootstrap-probe.ok")
 val k16PrepareToolchainMarker = rootProject.file(".toolchain/build/k16-prepare/${k16ToolchainModeName()}.ok")
@@ -1006,6 +1010,8 @@ val verifyK16TinyCcBackend =
         dependsOn(buildK16TinyCc)
         dependsOn(buildK16Llvm)
         dependsOn(prepareK16Toolchain)
+        dependsOn(":v1_21_1-neoforge:buildK16CSdkArchives")
+        inputs.files(k16CSdkSoftFloatArchive, k16CSdkCompilerRtArchive)
         commandLine(rootProject.file("tools/k16-tinycc-smoke.sh").absolutePath)
 
         doFirst {
@@ -1016,6 +1022,8 @@ val verifyK16TinyCcBackend =
             environment("K16_TOOL", toolchain.cli.absolutePath)
             environment("K16_RUSTC", toolchain.rustc.absolutePath)
             environment("K16_LLVM_BIN_DIR", k16LlvmBuildRoot.resolve("bin").absolutePath)
+            environment("K16_LIBSOFTFLOAT", k16CSdkSoftFloatArchive.absolutePath)
+            environment("K16_LIBCOMPILER_RT", k16CSdkCompilerRtArchive.absolutePath)
         }
     }
 
@@ -1023,6 +1031,7 @@ tasks.register("verifyK16TinyCc") {
     description = "Runs the focused K16 TinyCC backend and runtime verification slice."
     group = "verification"
     dependsOn(verifyK16TinyCcBackend)
+    dependsOn(":v1_21_1-neoforge:compileK16NativeTinyCc")
     dependsOn(":v1_21_1-neoforge:verifyK16CSdkFoundation")
     dependsOn(":v1_21_1-neoforge:verifyK16TinyCcRuntime")
 }
