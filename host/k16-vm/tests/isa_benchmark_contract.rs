@@ -64,10 +64,13 @@ fn required_candidates_are_stable() {
         vec![
             "k16",
             "k16-cached",
+            "k16-predecoded",
             "k16-f32",
             "rvsim-rv32im",
             "rv32im",
+            "rv32im-cached",
             "rv32im-predecoded",
+            "native-rust",
         ],
     );
 }

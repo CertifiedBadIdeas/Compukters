@@ -17,10 +17,12 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+mod cache;
 mod decode;
 pub mod encoding;
 mod predecode;
 
+pub use cache::CachedRv32imProgram;
 pub use predecode::PredecodedRv32imProgram;
 
 use crate::low_machine::MemoryBus;
