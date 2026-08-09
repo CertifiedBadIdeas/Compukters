@@ -185,11 +185,15 @@ fn run_specialized(
     let after = bus.aggregate_traffic_snapshot();
     let ram = subtract(after.0, before.0);
     let mmio = subtract(after.1, before.1);
-    let instruction_fetch = IsaTraffic {
-        loads: cpu.retired_instructions(),
-        stores: 0,
-        bytes_read: cpu.retired_instructions().saturating_mul(4),
-        bytes_written: 0,
+    let instruction_fetch = if predecoded.is_some() {
+        IsaTraffic::default()
+    } else {
+        IsaTraffic {
+            loads: cpu.retired_instructions(),
+            stores: 0,
+            bytes_read: cpu.retired_instructions().saturating_mul(4),
+            bytes_written: 0,
+        }
     };
     finish_observation(
         candidate,

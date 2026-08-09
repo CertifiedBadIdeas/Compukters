@@ -43,6 +43,19 @@ fn prepared_candidate_can_be_executed_repeatedly() {
 }
 
 #[test]
+fn predecoded_candidate_reports_data_reads_without_fake_bus_fetches() {
+    let mut prepared = PreparedIsaBenchmark::new(
+        IsaBenchmarkCandidate::Rv32imPredecoded,
+        IsaBenchmarkWorkload::MemorySequential,
+        17,
+    )
+    .unwrap();
+    let observation = prepared.execute().unwrap();
+    assert_eq!(observation.instruction_fetch.bytes_read, 0);
+    assert!(observation.data_ram.bytes_read > 0);
+}
+
+#[test]
 fn recommendation_requires_nonzero_samples_and_lists_every_candidate() {
     assert!(format_recommendations(&[]).is_err());
 
