@@ -17,9 +17,11 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+mod k16;
 mod programs;
 mod workload;
 
+pub use k16::run_candidate;
 pub use programs::{DATA_BASE, MEMORY_SIZE, MMIO_BASE, PACKET_BYTES, RING_ENTRIES, STACK_TOP};
 pub use workload::{native_checksum, IsaBenchmarkWorkload};
 

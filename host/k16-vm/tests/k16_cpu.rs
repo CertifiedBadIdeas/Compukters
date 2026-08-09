@@ -51,6 +51,27 @@ fn k16_cached_decoder_reuses_loop_instruction_decodes() {
 }
 
 #[test]
+fn k16_cached_decoder_reports_retained_payload_capacity() {
+    let mut bus = MachineBus::new(16).unwrap();
+    write_words(&mut bus, 0, &[halt()]);
+    let mut cpu = K16Cpu::new(0);
+    let mut decoder = K16CachedDecoder::new();
+
+    assert_eq!(decoder.estimated_retained_bytes(), 0);
+    assert_eq!(
+        cpu.run_until_signal_with_decoder(&mut bus, &mut decoder, 1)
+            .unwrap(),
+        K16Signal::Halt,
+    );
+    let retained_after_decode = decoder.estimated_retained_bytes();
+    assert!(retained_after_decode > 0);
+
+    decoder.clear();
+    assert_eq!(decoder.estimated_retained_bytes(), retained_after_decode);
+    assert_eq!(decoder.stats().entries, 0);
+}
+
+#[test]
 fn k16_yield_signal_is_resumable() {
     let mut bus = MachineBus::new(64).unwrap();
     bus.map_mmio(
