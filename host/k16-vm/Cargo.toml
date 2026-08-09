@@ -8,6 +8,7 @@ crate-type = ["rlib", "cdylib"]
 
 [dependencies]
 jni = "0.21"
+rvsim = { version = "=0.2.2", default-features = false }
 thiserror = "1.0"
 
 [profile.release]

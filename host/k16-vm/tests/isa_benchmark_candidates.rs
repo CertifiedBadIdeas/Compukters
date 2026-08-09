@@ -45,3 +45,30 @@ fn k16_f32_matches_native_checksums() {
         assert_eq!(sample.translation_bytes, 0);
     }
 }
+
+#[test]
+fn all_rv32im_candidates_share_programs_and_checksums() {
+    for workload in IsaBenchmarkWorkload::all() {
+        let external = run_candidate(IsaBenchmarkCandidate::RvsimRv32im, *workload, 19).unwrap();
+        let direct = run_candidate(IsaBenchmarkCandidate::Rv32im, *workload, 19).unwrap();
+        let predecoded =
+            run_candidate(IsaBenchmarkCandidate::Rv32imPredecoded, *workload, 19).unwrap();
+        external.validate_checksum().unwrap();
+        direct.validate_checksum().unwrap();
+        predecoded.validate_checksum().unwrap();
+        assert_eq!(external.checksum, direct.checksum, "{}", workload.name());
+        assert_eq!(direct.checksum, predecoded.checksum, "{}", workload.name());
+        assert_eq!(
+            external.retired_instructions,
+            direct.retired_instructions,
+            "{}",
+            workload.name(),
+        );
+        assert_eq!(
+            direct.retired_instructions,
+            predecoded.retired_instructions,
+            "{}",
+            workload.name(),
+        );
+    }
+}

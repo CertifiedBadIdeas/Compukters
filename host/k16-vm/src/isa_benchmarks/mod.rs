@@ -20,6 +20,7 @@
 mod k16;
 mod k16_f32;
 mod programs;
+mod rv32;
 mod workload;
 
 pub use programs::{DATA_BASE, MEMORY_SIZE, MMIO_BASE, PACKET_BYTES, RING_ENTRIES, STACK_TOP};
@@ -129,6 +130,8 @@ pub fn run_candidate(
             k16::run(candidate, workload, iterations)
         }
         IsaBenchmarkCandidate::K16F32 => k16_f32::run(workload, iterations),
-        _ => Err(format!("candidate {} is not implemented", candidate.name())),
+        IsaBenchmarkCandidate::RvsimRv32im
+        | IsaBenchmarkCandidate::Rv32im
+        | IsaBenchmarkCandidate::Rv32imPredecoded => rv32::run(candidate, workload, iterations),
     }
 }
