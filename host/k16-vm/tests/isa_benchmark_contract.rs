@@ -55,6 +55,30 @@ fn native_checksums_are_deterministic() {
 }
 
 #[test]
+fn u64_compiled_c_catalogue_has_stable_native_oracles() {
+    let workloads = IsaBenchmarkWorkload::u64_compiled_c();
+    assert_eq!(
+        workloads
+            .iter()
+            .map(|workload| workload.name())
+            .collect::<Vec<_>>(),
+        vec!["u64-mix", "fixed64-geometry", "u64-memory"]
+    );
+    for workload in workloads {
+        assert_eq!(
+            native_checksum(*workload, 17),
+            native_checksum(*workload, 17),
+            "{}",
+            workload.name()
+        );
+        assert_ne!(
+            native_checksum(*workload, 17),
+            native_checksum(*workload, 18)
+        );
+    }
+}
+
+#[test]
 fn required_candidates_are_stable() {
     assert_eq!(
         IsaBenchmarkCandidate::all()
