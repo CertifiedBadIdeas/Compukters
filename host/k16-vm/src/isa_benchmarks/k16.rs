@@ -526,13 +526,13 @@ impl PredecodedK16Decoder {
 }
 
 impl InstructionDecoder for PredecodedK16Decoder {
-    fn decode(&mut self, bus: &mut dyn MemoryBus, pc: u32) -> Result<DecodeResult, K16Trap> {
+    fn decode(&mut self, _bus: &mut dyn MemoryBus, pc: u32) -> Result<DecodeResult, K16Trap> {
         if pc.is_multiple_of(2) {
             if let Some(Some(decoded)) = self.slots.get(pc as usize / 2) {
                 return Ok(decoded.clone());
             }
         }
-        K16Decoder::new().decode(bus, u32::MAX)
+        Err(K16Trap::invalid_predecoded_pc(pc))
     }
 }
 
@@ -553,7 +553,10 @@ mod predecoded_tests {
             .expect("compute32 contains an extension word") as u32
             * 2;
 
-        assert!(decoder.decode(&mut bus, extension_pc).is_err());
+        let error = decoder.decode(&mut bus, extension_pc).unwrap_err();
+        assert_eq!(error.pc(), extension_pc);
+        assert_eq!(error.value(), extension_pc);
+        assert!(error.to_string().contains(&format!("{extension_pc:#010x}")));
     }
 }
 
