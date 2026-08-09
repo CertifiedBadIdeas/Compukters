@@ -39,6 +39,16 @@ fn reported_cpu_state_bytes_include_rust_layout_padding() {
 }
 
 #[test]
+fn benchmark_harness_can_initialize_k16_f32_registers() {
+    let mut cpu = K16F32Cpu::new(0x1000);
+    cpu.set_register(1, 77).unwrap();
+    cpu.set_register(15, 0x3ffc).unwrap();
+    assert_eq!(cpu.register(1), 77);
+    assert_eq!(cpu.register(15), 0x3ffc);
+    assert!(cpu.set_register(16, 0).is_err());
+}
+
+#[test]
 fn every_instruction_is_one_aligned_u32() {
     let words = [addi(1, 0, 7), branchz(1, -1), halt()];
     let bytes = words

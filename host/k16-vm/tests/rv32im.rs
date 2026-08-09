@@ -32,6 +32,20 @@ fn write_program(bus: &mut MachineBus, words: &[u32]) {
 }
 
 #[test]
+fn benchmark_harness_can_initialize_rv32im_registers() {
+    let mut cpu = Rv32imCpu::new(0x1000);
+    cpu.set_register(1, 77).unwrap();
+    cpu.set_register(2, 0x3ffc).unwrap();
+    cpu.set_register(10, 99).unwrap();
+    cpu.set_register(0, u32::MAX).unwrap();
+    assert_eq!(cpu.register(0), 0);
+    assert_eq!(cpu.register(1), 77);
+    assert_eq!(cpu.register(2), 0x3ffc);
+    assert_eq!(cpu.register(10), 99);
+    assert!(cpu.set_register(32, 0).is_err());
+}
+
+#[test]
 fn rv32im_executes_integer_multiply_divide_and_preserves_x0() {
     let mut bus = MachineBus::new(256).unwrap();
     write_program(

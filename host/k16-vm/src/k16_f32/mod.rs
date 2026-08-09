@@ -59,6 +59,14 @@ impl K16F32Cpu {
     pub fn register(&self, register: usize) -> u32 {
         self.registers[register]
     }
+    pub fn set_register(&mut self, register: usize, value: u32) -> Result<(), String> {
+        let destination = self
+            .registers
+            .get_mut(register)
+            .ok_or_else(|| format!("K16-F32 register index {register} is outside 0..16"))?;
+        *destination = value;
+        Ok(())
+    }
     pub fn retired_instructions(&self) -> u64 {
         self.retired_instructions
     }

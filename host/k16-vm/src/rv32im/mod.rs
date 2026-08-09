@@ -59,10 +59,14 @@ impl Rv32imCpu {
     pub fn register(&self, register: usize) -> u32 {
         self.registers[register]
     }
-    pub fn set_register(&mut self, register: usize, value: u32) {
+    pub fn set_register(&mut self, register: usize, value: u32) -> Result<(), String> {
+        if register >= self.registers.len() {
+            return Err(format!("RV32IM register index {register} is outside 0..32"));
+        }
         if register != 0 {
             self.registers[register] = value;
         }
+        Ok(())
     }
     pub fn retired_instructions(&self) -> u64 {
         self.retired_instructions
