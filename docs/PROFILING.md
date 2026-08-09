@@ -88,6 +88,37 @@ below 12%, or when a guardrail fails, RV32IM is selected. Native timings provide
 absolute host context but never affect the ISA decision. This report does not
 change the production VM, KraftOS, BIOS, or machine ABI.
 
+## ISA Gate 3 final custom-ISA comparison
+
+Gate 3 repeats the unchanged six-workload Gate 2 C corpus for the final
+K16-F32R32/LR candidate and RV32IM. The custom candidate has 32 ordinary
+registers, a dedicated `r30` stack pointer, an `r31` link register, direct
+calls, fixed 32-bit instructions, and eager predecode. Its LLVM path is enabled
+only by `+f32r32lr`; default K16 code generation remains unchanged.
+
+Refresh the tracked machine-local result with:
+
+```bash
+K16_LLVM_BIN_DIR="$PWD/.toolchain/build/llvm/k16-min/bin" \
+    bash scripts/record-isa-gate3-benchmark.sh 100000 9
+```
+
+The decision rule remains identical to Gate 2: the custom candidate needs more
+than an 18% warm geometric-mean advantage, no workload may be more than 30%
+slower, and neither total code nor retained predecode memory may be more than
+25% larger than RV32IM. A 12% through 18% advantage is inconclusive; a result
+below 12% or any failed guardrail selects RV32IM. Native rows remain diagnostic
+and do not affect the decision.
+
+The current snapshot is `docs/benchmarks/isa-gate3-current.txt`. It selects
+K16-F32R32/LR: 19.6225% geometric-mean speed advantage, 1.121769 maximum
+per-workload slowdown, 1.094488 code-size ratio, and 0.806818 retained-predecode
+ratio relative to RV32IM. All 18 timed rows report zero steady-state host
+allocations. This closes the custom-ISA selection experiment: a failing result
+would have ended further K16 ISA iteration. Selection here is architectural
+evidence only and does not by itself migrate the production VM, KraftOS, BIOS,
+or machine ABI.
+
 ## Kraft16 VM microbenchmarks
 
 The native Kraft16 VM has a dependency-free microbenchmark example for local
