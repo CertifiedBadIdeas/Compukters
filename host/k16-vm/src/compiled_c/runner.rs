@@ -49,93 +49,121 @@ pub fn run_compiled_c(
     iterations: u32,
     max_steps: u64,
 ) -> Result<CompiledCObservation, String> {
-    let manifest_checksum = native_checksum(artifact.workload, artifact.validation_iterations);
-    if artifact.expected_checksum != manifest_checksum {
-        return Err(format!(
-            "{} manifest checksum {} does not match native checksum {manifest_checksum}",
-            artifact.candidate.name(),
-            artifact.expected_checksum
-        ));
+    PreparedCompiledC::new(artifact)?.execute(iterations, max_steps)
+}
+
+enum PreparedProgram {
+    K16F32(PredecodedK16F32Program),
+    Rv32im(PredecodedRv32imProgram),
+}
+
+pub struct PreparedCompiledC {
+    artifact: CompiledCArtifact,
+    program: PreparedProgram,
+    bus: CompiledCBus,
+}
+
+impl PreparedCompiledC {
+    pub fn new(artifact: &CompiledCArtifact) -> Result<Self, String> {
+        let artifact = artifact.clone();
+        let program =
+            match artifact.candidate {
+                CompiledCCandidate::K16F32 => PreparedProgram::K16F32(
+                    PredecodedK16F32Program::new(artifact.image_base, &artifact.image)?,
+                ),
+                CompiledCCandidate::Rv32im => PreparedProgram::Rv32im(
+                    PredecodedRv32imProgram::new(artifact.image_base, &artifact.image)?,
+                ),
+            };
+        let memory = initialize_memory(&artifact)?;
+        let bus = CompiledCBus::new(memory, &artifact)?;
+        Ok(Self {
+            artifact,
+            program,
+            bus,
+        })
     }
-    let expected_checksum = native_checksum(artifact.workload, iterations);
-    match artifact.candidate {
-        CompiledCCandidate::K16F32 => run_k16(artifact, iterations, max_steps, expected_checksum),
-        CompiledCCandidate::Rv32im => {
-            run_rv32im(artifact, iterations, max_steps, expected_checksum)
+
+    pub fn execute(
+        &mut self,
+        iterations: u32,
+        max_steps: u64,
+    ) -> Result<CompiledCObservation, String> {
+        let manifest_checksum =
+            native_checksum(self.artifact.workload, self.artifact.validation_iterations);
+        if self.artifact.expected_checksum != manifest_checksum {
+            return Err(format!(
+                "{} manifest checksum {} does not match native checksum {manifest_checksum}",
+                self.artifact.candidate.name(),
+                self.artifact.expected_checksum
+            ));
+        }
+        let expected_checksum = native_checksum(self.artifact.workload, iterations);
+        let stop_address = stop_address(&self.artifact)?;
+        match &self.program {
+            PreparedProgram::K16F32(program) => {
+                self.bus.prepare_run(Some(stop_address))?;
+                let mut cpu = K16F32Cpu::new(entry_address(&self.artifact)?);
+                cpu.set_register(1, iterations)?;
+                cpu.set_register(15, STACK_TOP)?;
+                let stop = program.run_until_stop(&mut cpu, &mut self.bus, max_steps)?;
+                match stop {
+                    K16F32Stop::Halt => {}
+                    K16F32Stop::StepLimit => {
+                        return Err("k16-f32 instruction limit reached".to_string())
+                    }
+                    other => return Err(format!("k16-f32 returned wrong stop reason {other:?}")),
+                }
+                validate_completion(
+                    &self.artifact,
+                    cpu.pc(),
+                    cpu.register(0),
+                    expected_checksum,
+                    &self.bus,
+                )?;
+                Ok(observation(
+                    &self.artifact,
+                    iterations,
+                    cpu.register(0),
+                    cpu.retired_instructions(),
+                    K16F32Cpu::cpu_state_bytes(),
+                    program.retained_bytes(),
+                    &self.bus,
+                ))
+            }
+            PreparedProgram::Rv32im(program) => {
+                self.bus.prepare_run(None)?;
+                let mut cpu = Rv32imCpu::new(entry_address(&self.artifact)?);
+                cpu.set_register(10, iterations)?;
+                cpu.set_register(1, stop_address)?;
+                cpu.set_register(2, STACK_TOP)?;
+                let stop = program.run_until_stop(&mut cpu, &mut self.bus, max_steps)?;
+                match stop {
+                    Rv32imStop::Ebreak => {}
+                    Rv32imStop::StepLimit => {
+                        return Err("rv32im instruction limit reached".to_string())
+                    }
+                    other => return Err(format!("rv32im returned wrong stop reason {other:?}")),
+                }
+                validate_completion(
+                    &self.artifact,
+                    cpu.pc(),
+                    cpu.register(10),
+                    expected_checksum,
+                    &self.bus,
+                )?;
+                Ok(observation(
+                    &self.artifact,
+                    iterations,
+                    cpu.register(10),
+                    cpu.retired_instructions(),
+                    Rv32imCpu::cpu_state_bytes(),
+                    program.retained_bytes(),
+                    &self.bus,
+                ))
+            }
         }
     }
-}
-
-fn run_k16(
-    artifact: &CompiledCArtifact,
-    iterations: u32,
-    max_steps: u64,
-    expected_checksum: u32,
-) -> Result<CompiledCObservation, String> {
-    let program = PredecodedK16F32Program::new(artifact.image_base, &artifact.image)?;
-    let mut memory = initialize_memory(artifact)?;
-    let stop_address = stop_address(artifact)?;
-    memory
-        .store_i32(STACK_TOP, stop_address as i32)
-        .map_err(|error| error.to_string())?;
-    let mut cpu = K16F32Cpu::new(entry_address(artifact)?);
-    cpu.set_register(1, iterations)?;
-    cpu.set_register(15, STACK_TOP)?;
-    let mut bus = CompiledCBus::new(memory, artifact)?;
-    let stop = program.run_until_stop(&mut cpu, &mut bus, max_steps)?;
-    match stop {
-        K16F32Stop::Halt => {}
-        K16F32Stop::StepLimit => return Err("k16-f32 instruction limit reached".to_string()),
-        other => return Err(format!("k16-f32 returned wrong stop reason {other:?}")),
-    }
-    validate_completion(artifact, cpu.pc(), cpu.register(0), expected_checksum, &bus)?;
-    Ok(observation(
-        artifact,
-        iterations,
-        cpu.register(0),
-        cpu.retired_instructions(),
-        K16F32Cpu::cpu_state_bytes(),
-        program.retained_bytes(),
-        &bus,
-    ))
-}
-
-fn run_rv32im(
-    artifact: &CompiledCArtifact,
-    iterations: u32,
-    max_steps: u64,
-    expected_checksum: u32,
-) -> Result<CompiledCObservation, String> {
-    let program = PredecodedRv32imProgram::new(artifact.image_base, &artifact.image)?;
-    let memory = initialize_memory(artifact)?;
-    let stop_address = stop_address(artifact)?;
-    let mut cpu = Rv32imCpu::new(entry_address(artifact)?);
-    cpu.set_register(10, iterations)?;
-    cpu.set_register(1, stop_address)?;
-    cpu.set_register(2, STACK_TOP)?;
-    let mut bus = CompiledCBus::new(memory, artifact)?;
-    let stop = program.run_until_stop(&mut cpu, &mut bus, max_steps)?;
-    match stop {
-        Rv32imStop::Ebreak => {}
-        Rv32imStop::StepLimit => return Err("rv32im instruction limit reached".to_string()),
-        other => return Err(format!("rv32im returned wrong stop reason {other:?}")),
-    }
-    validate_completion(
-        artifact,
-        cpu.pc(),
-        cpu.register(10),
-        expected_checksum,
-        &bus,
-    )?;
-    Ok(observation(
-        artifact,
-        iterations,
-        cpu.register(10),
-        cpu.retired_instructions(),
-        Rv32imCpu::cpu_state_bytes(),
-        program.retained_bytes(),
-        &bus,
-    ))
 }
 
 fn initialize_memory(artifact: &CompiledCArtifact) -> Result<MachineMemory, String> {
@@ -253,6 +281,17 @@ impl CompiledCBus {
 
     fn code_bytes(&self) -> &[u8] {
         &self.memory.bytes()[self.code_range.clone()]
+    }
+
+    fn prepare_run(&mut self, k16_return_address: Option<u32>) -> Result<(), String> {
+        self.data_read_bytes.set(0);
+        self.data_written_bytes = 0;
+        if let Some(return_address) = k16_return_address {
+            self.memory
+                .store_i32(STACK_TOP, return_address as i32)
+                .map_err(|error| error.to_string())?;
+        }
+        Ok(())
     }
 
     fn reject_code_store(&self, address: u32, size: usize) -> Result<(), MemoryFault> {
