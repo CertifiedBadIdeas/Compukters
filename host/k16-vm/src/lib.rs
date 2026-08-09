@@ -11,6 +11,7 @@ pub mod computer_machine {
         COMPUTER_SNAPSHOT_V1_K16_CPU_RECORD_SIZE, COMPUTER_SNAPSHOT_V1_MAGIC,
     };
 }
+pub mod isa_benchmarks;
 pub mod jni;
 pub mod k16;
 pub mod k16e;
