@@ -19,6 +19,9 @@
 
 mod decode;
 pub mod encoding;
+mod predecode;
+
+pub use predecode::PredecodedRv32imProgram;
 
 use crate::low_machine::MemoryBus;
 use decode::{Branch, DecodedInstruction, ImmOp, Load, Op, Store};
@@ -81,6 +84,15 @@ impl Rv32imCpu {
         let instruction_pc = self.pc;
         let word = bus.load_i32(self.pc).map_err(|error| error.to_string())? as u32;
         let instruction = decode::decode(word)?;
+        self.retire_decoded(bus, instruction_pc, instruction)
+    }
+
+    pub(crate) fn retire_decoded(
+        &mut self,
+        bus: &mut dyn MemoryBus,
+        instruction_pc: u32,
+        instruction: DecodedInstruction,
+    ) -> Result<Option<Rv32imStop>, String> {
         let stop = self.execute_decoded(bus, instruction_pc, instruction)?;
         self.registers[0] = 0;
         self.retired_instructions = self.retired_instructions.saturating_add(1);
