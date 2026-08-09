@@ -29,3 +29,18 @@ XLEN cost on the established corpus, but cannot select the production architectu
 particular, it does not represent KraftOS-scale code, pointer-heavy allocation, many-VM retained
 memory, atomics, privilege levels, CSRs, or virtual memory. The report deliberately contains no
 automatic architecture decision.
+
+## U64-heavy follow-up
+
+Issue #484 adds three workloads designed to exercise native 64-bit arithmetic and memory:
+`u64-mix`, `fixed64-geometry`, and `u64-memory`. They use the same compiler, VM, timing, and native
+oracle contract. LLVM constant pools are disabled symmetrically because the current benchmark flat
+image intentionally contains immutable instructions only; the shell contract rejects linked data
+or rodata payloads instead of silently dropping them.
+
+Run and record this corpus with:
+
+```text
+bash scripts/tests/riscv-xlen-u64-gate-benchmark.sh
+bash scripts/record-riscv-xlen-u64-gate-benchmark.sh 100000 9
+```

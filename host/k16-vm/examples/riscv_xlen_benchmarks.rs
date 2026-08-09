@@ -26,8 +26,8 @@ use k16_vm::compiled_c::artifact::{
     load_compiled_c_artifact, validate_riscv_xlen_artifact_pair, CompiledCArtifact,
 };
 use k16_vm::compiled_c::report::{
-    format_riscv_xlen_comparison, format_timing_sample, populate_vs_native, timing_report_header,
-    CompiledCTiming,
+    format_riscv_xlen_comparison, format_riscv_xlen_u64_comparison, format_timing_sample,
+    populate_vs_native, timing_report_header, CompiledCTiming,
 };
 use k16_vm::compiled_c::runner::{run_compiled_c, CompiledCObservation, PreparedCompiledC};
 use k16_vm::isa_benchmarks::{native_checksum, IsaBenchmarkWorkload};
@@ -72,16 +72,22 @@ fn main() -> Result<(), String> {
     if sample_count % 2 == 0 {
         return Err("warm-samples must be odd".to_string());
     }
+    let corpus = match arguments.next().as_deref() {
+        None => Corpus::Scalar32,
+        Some("u64") => Corpus::U64,
+        Some(value) => return Err(format!("unknown corpus {value:?}")),
+    };
     if arguments.next().is_some() {
         return Err(
-            "usage: riscv_xlen_benchmarks <artifact-root> <iterations> <warm-samples>".to_string(),
+            "usage: riscv_xlen_benchmarks <artifact-root> <iterations> <warm-samples> [u64]"
+                .to_string(),
         );
     }
     let max_steps = u64::from(iterations)
         .checked_mul(10_000)
         .and_then(|steps| steps.checked_add(1_000_000))
         .ok_or("instruction limit calculation overflow")?;
-    let artifacts = load_artifacts(&artifact_root)?;
+    let artifacts = load_artifacts(&artifact_root, corpus)?;
     for artifact in &artifacts {
         run_compiled_c(artifact, iterations, max_steps)?;
     }
@@ -101,10 +107,10 @@ fn main() -> Result<(), String> {
             steady_allocated_bytes: 0,
         });
     }
-    let mut native = IsaBenchmarkWorkload::all()
+    let mut native = corpus
+        .workloads()
         .iter()
         .copied()
-        .take(6)
         .map(|workload| NativeMeasurement {
             workload,
             checksum: native_checksum(workload, iterations),
@@ -178,9 +184,12 @@ fn main() -> Result<(), String> {
         .map(|timing| (timing.workload, timing.warm_median_nanos))
         .collect::<Vec<_>>();
     populate_vs_native(&mut timings, &native_durations)?;
-    let comparison = format_riscv_xlen_comparison(&timings)?;
+    let comparison = match corpus {
+        Corpus::Scalar32 => format_riscv_xlen_comparison(&timings)?,
+        Corpus::U64 => format_riscv_xlen_u64_comparison(&timings)?,
+    };
 
-    println!("RISC-V XLEN compiled-C benchmark");
+    println!("RISC-V XLEN {} compiled-C benchmark", corpus.name());
     println!("warm_samples\t{sample_count}");
     println!("{}", timing_report_header());
     for timing in &timings {
@@ -221,15 +230,36 @@ struct NativeTiming {
     steady_allocated_bytes: u64,
 }
 
-fn load_artifacts(root: &Path) -> Result<Vec<CompiledCArtifact>, String> {
-    let mut artifacts = Vec::with_capacity(12);
-    for workload in IsaBenchmarkWorkload::all().iter().copied().take(6) {
+#[derive(Clone, Copy)]
+enum Corpus {
+    Scalar32,
+    U64,
+}
+
+impl Corpus {
+    fn workloads(self) -> &'static [IsaBenchmarkWorkload] {
+        match self {
+            Self::Scalar32 => &IsaBenchmarkWorkload::all()[..6],
+            Self::U64 => IsaBenchmarkWorkload::u64_compiled_c(),
+        }
+    }
+
+    fn name(self) -> &'static str {
+        match self {
+            Self::Scalar32 => "scalar32",
+            Self::U64 => "u64-heavy",
+        }
+    }
+}
+
+fn load_artifacts(root: &Path, corpus: Corpus) -> Result<Vec<CompiledCArtifact>, String> {
+    let mut artifacts = Vec::with_capacity(corpus.workloads().len() * 2);
+    for workload in corpus.workloads() {
         let directory = root.join(workload.name());
         let rv32 = load_compiled_c_artifact(&directory.join("rv32im.manifest"))?;
         let rv64 = load_compiled_c_artifact(&directory.join("rv64im.manifest"))?;
         validate_riscv_xlen_artifact_pair(&rv32, &rv64)?;
-        artifacts.push(rv32);
-        artifacts.push(rv64);
+        artifacts.extend([rv32, rv64]);
     }
     Ok(artifacts)
 }
@@ -303,6 +333,7 @@ fn rotated_order(count: usize, round: usize) -> Vec<usize> {
 fn workload_index(workload: IsaBenchmarkWorkload) -> usize {
     IsaBenchmarkWorkload::all()
         .iter()
+        .chain(IsaBenchmarkWorkload::u64_compiled_c())
         .position(|candidate| *candidate == workload)
         .unwrap()
 }

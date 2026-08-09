@@ -52,4 +52,20 @@ for workload in "${workloads[@]}"; do
         "$(manifest_value expected_checksum "$directory/rv64im.manifest")"
 done
 
+benchmark_output="$(
+    cargo run --quiet --locked --offline --release \
+        --manifest-path "$ROOT/host/k16-vm/Cargo.toml" \
+        --example riscv_xlen_benchmarks -- "$ARTIFACTS" 10 3 u64
+)"
+timing_rows="$(printf '%s\n' "$benchmark_output" | awk -F '\t' '$2 == "rv32im" || $2 == "rv64im" || $2 == "native-rust" { count += 1; if ($16 != 0 || $17 != 0) bad = 1 } END { if (bad) exit 1; print count + 0 }')"
+test "$timing_rows" -eq 9
+printf '%s\n' "$benchmark_output" | grep -q '^u64-mix[[:space:]]'
+printf '%s\n' "$benchmark_output" | grep -q '^fixed64-geometry[[:space:]]'
+printf '%s\n' "$benchmark_output" | grep -q '^u64-memory[[:space:]]'
+printf '%s\n' "$benchmark_output" | grep -q '^rv64_to_rv32_warm_geomean[[:space:]]'
+if printf '%s\n' "$benchmark_output" | grep -q '^decision[[:space:]]'; then
+    echo "RISC-V XLEN u64 benchmark produced an architecture decision" >&2
+    exit 1
+fi
+
 echo "RISC-V XLEN u64 compilation contract passed"
