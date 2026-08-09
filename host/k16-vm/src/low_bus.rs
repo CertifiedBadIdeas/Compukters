@@ -268,6 +268,13 @@ impl MachineBus {
                 .collect(),
         }
     }
+
+    /// Returns aggregate RAM/MMIO counters without allocating per-device detail.
+    pub fn aggregate_traffic_snapshot(
+        &self,
+    ) -> (MachineBusTrafficSnapshot, MachineBusTrafficSnapshot) {
+        (self.ram_traffic.snapshot(), self.mmio_traffic.snapshot())
+    }
 }
 
 impl MemoryBus for MachineBus {
