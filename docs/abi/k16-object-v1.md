@@ -118,15 +118,17 @@ scripts for the host while it builds freestanding K16 `core`.
 The first freestanding startup object is generated with:
 
 ```text
-k16 runtime k16-startup [--target <program|program-dynamic>] -o <startup.ko>
+k16 runtime k16-startup [--target <program|program-dynamic>] [--entry <symbol>] -o <startup.ko>
 k16 runtime k16-memory-helpers -o <helpers.ko>
 k16 runtime k16-cpu-helpers -o <cpu-helpers.ko>
 k16 asm <input.kasm> -o <output.ko>
 ```
 
-The startup object defines `_start` and requires an application-defined `main`.
+The startup object defines `_start` and requires an application-defined entry
+symbol. It defaults to `main`; `--entry <symbol>` makes the relocation target
+explicit for a CRT wrapper while leaving the user's ordinary `main` untouched.
 The linker uses `_start` as the final `K16E` entry symbol. At runtime `_start`
-initializes `sp` to the program stack top, calls `main`, passes the returned
+initializes `sp` to the program stack top, calls the selected entry, passes the returned
 `r0` value to the K16 `EXIT` syscall as the process status, and keeps a
 trailing `halt` instruction as a fail-closed boundary if a broken kernel
 returns from `EXIT`. For `--target program-dynamic`, startup assumes the kernel

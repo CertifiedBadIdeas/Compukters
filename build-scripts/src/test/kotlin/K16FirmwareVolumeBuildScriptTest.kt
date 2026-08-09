@@ -21,6 +21,7 @@ import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.nio.file.Path
+import kotlin.io.path.exists
 import kotlin.io.path.readText
 
 class K16FirmwareVolumeBuildScriptTest {
@@ -125,6 +126,65 @@ class K16FirmwareVolumeBuildScriptTest {
         assertTrue(consumerScript.contains("name == \"processGameTestResources\""))
         assertTrue(consumerScript.contains("dependsOn(\"putK16SdkFixture\")"))
         assertTrue(consumerScript.contains("dependsOn(\"generateKraftOsTestArtifactManifest\")"))
+    }
+
+    @Test
+    fun cSdkCandidateIsFreshDeterministicFourMiBMediaAndRemainsUnregistered() {
+        val producerScript =
+            root.resolve("build-scripts/src/main/kotlin/k16-firmware-producer-convention.gradle.kts").readText()
+        val candidateTask =
+            producerScript.substringAfter("val assembleK16CSdkCandidate =")
+                .substringBefore("val generateKraftOsTestArtifactManifest =")
+        val productionManifest =
+            producerScript.substringAfter("val generateKraftOsArtifactManifest =")
+                .substringBefore("val assembleKraftOsProductionBundle =")
+        val testManifest =
+            producerScript.substringAfter("val generateKraftOsTestArtifactManifest =")
+                .substringBefore("val reportK16UserlandSize =")
+
+        assertTrue(
+            producerScript.contains(
+                "generatedK16NativeTinyCcTarget.map { it.file(\"c-sdk-candidate.kv\") }",
+            ),
+        )
+        assertTrue(producerScript.contains("val k16CSdkCandidatePayloadSizeBytes = 4 * 1024 * 1024"))
+        assertTrue(producerScript.contains("val k16CSdkCandidateEntries ="))
+        assertTrue(
+            candidateTask.contains("guestPath.removePrefix(\"/sdk\")"),
+            "storage1's KFS root must omit the virtual /sdk mount prefix",
+        )
+        assertTrue(candidateTask.contains("\"volume\""))
+        assertTrue(candidateTask.contains("\"init\""), "the candidate must start as a fresh partitioned volume")
+        assertTrue(candidateTask.contains("k16CSdkCandidatePayloadSizeBytes.toString()"))
+        assertFalse(candidateTask.contains("k16SystemStorage0Resource"), "the SDK must not copy the system disk")
+        assertTrue(candidateTask.contains("firstAssembly"))
+        assertTrue(candidateTask.contains("secondAssembly"))
+        assertTrue(candidateTask.contains("contentEquals"), "two clean candidate assemblies must match byte-for-byte")
+        assertTrue(
+            candidateTask.contains(
+                "check(output.length() == k16CSdkCandidatePayloadSizeBytes.toLong() + k16VolumeHeaderSizeBytes)",
+            ),
+        )
+        assertFalse(productionManifest.contains("artifact.sdk.c_sdk_candidate"))
+        assertFalse(testManifest.contains("artifact.sdk.c_sdk_candidate"))
+    }
+
+    @Test
+    fun nativeTinyCcProofMountsTheCandidateReadOnlyAndValidatesGuestOutput() {
+        val proofSource =
+            root.resolve(
+                "modules/v1_21_1/v1_21_1-neoforge/src/test/kotlin/" +
+                    "ru/lazyhat/compukterkraft/impl/K16NativeTinyCcCompileTest.kt",
+            )
+        assertTrue(proofSource.exists(), "the native compiler proof test must exist")
+        val source = proofSource.readText()
+
+        assertTrue(source.contains("K16StaticStorageAttachment(candidatePath)"))
+        assertTrue(source.contains("/sdk/bin/tcc.kx -c /work/hello.c -o /work/hello.o"))
+        assertTrue(source.contains("/work/hello.o did not exist before launch"))
+        assertTrue(source.contains("ERR ROFS"))
+        assertTrue(source.contains("native tinycc ok\\n"))
+        assertTrue(source.contains("shutdown"))
     }
 
     @Test

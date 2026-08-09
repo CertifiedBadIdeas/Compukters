@@ -1033,6 +1033,7 @@ tasks.register("verifyK16TinyCc") {
     dependsOn(verifyK16TinyCcBackend)
     dependsOn(":v1_21_1-neoforge:compileK16NativeTinyCc")
     dependsOn(":v1_21_1-neoforge:verifyK16CSdkFoundation")
+    dependsOn(":v1_21_1-neoforge:verifyK16NativeTinyCc")
     dependsOn(":v1_21_1-neoforge:verifyK16TinyCcRuntime")
 }
 

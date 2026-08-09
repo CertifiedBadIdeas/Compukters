@@ -47,6 +47,63 @@ fn k16_runtime_startup_accepts_dynamic_program_target_without_fixed_stack_top() 
 }
 
 #[test]
+fn k16_runtime_startup_accepts_an_explicit_entry_symbol() {
+    let startup_path = temp_file("startup-explicit-entry.o");
+    let entry_path = temp_file("kraft-start.o");
+    let output_path = temp_file("explicit-entry-program.k16e");
+    fs::write(
+        &entry_path,
+        k16_object("kraft_start", &[0x01, 0xe0, 42, 0, 0, 0, 0x00, 0x90], None),
+    )
+    .expect("explicit entry object writes");
+
+    let runtime_output = Command::new(k16_binary())
+        .args([
+            "runtime",
+            "k16-startup",
+            "--entry",
+            "kraft_start",
+            "-o",
+            startup_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("k16 runtime runs");
+    assert!(
+        runtime_output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&runtime_output.stderr)
+    );
+
+    let link_output = Command::new(k16_binary())
+        .args([
+            "link",
+            "--target",
+            "program",
+            startup_path.to_str().unwrap(),
+            entry_path.to_str().unwrap(),
+            "-o",
+            output_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("k16 link runs");
+    assert!(
+        link_output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&link_output.stderr)
+    );
+
+    let run_output = Command::new(k16_binary())
+        .args(["run", output_path.to_str().unwrap()])
+        .output()
+        .expect("k16 run runs");
+    assert!(run_output.status.success());
+    assert_eq!(
+        String::from_utf8_lossy(&run_output.stdout),
+        "signal=halt exit_status=42 debug_bytes=\n"
+    );
+}
+
+#[test]
 fn k16_runtime_startup_preserves_program_argv_registers_for_lang_start() {
     let startup_path = temp_file("startup-preserve-argv.o");
 
