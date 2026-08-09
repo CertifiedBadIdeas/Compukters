@@ -207,7 +207,11 @@ fn fixed64_geometry(iterations: u32) -> u32 {
 }
 
 fn u64_memory(iterations: u32) -> u32 {
-    let mut cells = [0_u64; 64];
+    let mut cells = std::array::from_fn::<_, 64, _>(|index| {
+        (index as u64)
+            .wrapping_mul(0xa5a3_564e_27f8_862f)
+            .wrapping_add(7)
+    });
     let mut slot = 0_u32;
     for index in 0..iterations {
         slot = slot.wrapping_mul(17).wrapping_add(11) & 63;

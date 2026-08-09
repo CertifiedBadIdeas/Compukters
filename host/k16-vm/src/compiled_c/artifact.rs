@@ -275,6 +275,7 @@ fn parse_workload(name: &str) -> Result<IsaBenchmarkWorkload, String> {
         .iter()
         .copied()
         .take(6)
+        .chain(IsaBenchmarkWorkload::u64_compiled_c().iter().copied())
         .find(|workload| workload.name() == name)
         .ok_or_else(|| format!("unknown compiled-C workload {name:?}"))
 }

@@ -32,6 +32,7 @@ fn main() -> Result<(), String> {
     }
     let workload = IsaBenchmarkWorkload::all()
         .iter()
+        .chain(IsaBenchmarkWorkload::u64_compiled_c())
         .copied()
         .find(|workload| workload.name() == name)
         .ok_or_else(|| format!("unknown workload {name}"))?;
