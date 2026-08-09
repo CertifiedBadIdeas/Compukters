@@ -90,6 +90,14 @@ change the production VM, KraftOS, BIOS, or machine ABI.
 
 ## ISA Gate 3 final custom-ISA comparison
 
+> Historical invalidation: the recorded Gate 3 run must not be used to select
+> K16. Its canonical IR retained an i386 `frame-pointer=all` attribute honored
+> by RISC-V but ignored by K16, and the RISC-V path disabled linker relaxation
+> while K16 retained a single direct-call instruction. A corrected diagnostic
+> control reversed the winner. [ADR 0001](architecture-decisions/0001-retire-k16-adopt-rv64.md)
+> retires the custom ISA track; the snapshot remains only as evidence of the
+> original flawed run.
+
 Gate 3 repeats the unchanged six-workload Gate 2 C corpus for the final
 K16-F32R32/LR candidate and RV32IM. The custom candidate has 32 ordinary
 registers, a dedicated `r30` stack pointer, an `r31` link register, direct
@@ -110,14 +118,13 @@ slower, and neither total code nor retained predecode memory may be more than
 below 12% or any failed guardrail selects RV32IM. Native rows remain diagnostic
 and do not affect the decision.
 
-The current snapshot is `docs/benchmarks/isa-gate3-current.txt`. It selects
-K16-F32R32/LR: 19.6225% geometric-mean speed advantage, 1.121769 maximum
-per-workload slowdown, 1.094488 code-size ratio, and 0.806818 retained-predecode
-ratio relative to RV32IM. All 18 timed rows report zero steady-state host
-allocations. This closes the custom-ISA selection experiment: a failing result
-would have ended further K16 ISA iteration. Selection here is architectural
-evidence only and does not by itself migrate the production VM, KraftOS, BIOS,
-or machine ABI.
+The historical snapshot is `docs/benchmarks/isa-gate3-current.txt`. It reported
+K16-F32R32/LR as having a 19.6225% geometric-mean speed advantage, 1.121769
+maximum per-workload slowdown, 1.094488 code-size ratio, and 0.806818
+retained-predecode ratio relative to RV32IM. Those numbers describe the flawed
+configuration above and are not architectural evidence. All 18 timed rows did
+report zero steady-state host allocations, which remains a valid property of
+that run.
 
 ## Kraft16 VM microbenchmarks
 
