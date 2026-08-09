@@ -3,10 +3,35 @@ set -euo pipefail
 
 ITERATIONS="${1:-100000}"
 SAMPLES="${2:-9}"
+CORPUS="${3:-scalar32}"
 SCRIPT_DIR="$(cd -- "$(dirname -- "$0")" && pwd -P)"
 ROOT="$(git -C "$SCRIPT_DIR/.." rev-parse --show-toplevel)"
-SNAPSHOT="$ROOT/docs/benchmarks/riscv-xlen-current.txt"
-SOURCE_ROOT="$ROOT/tools/fixtures/isa-gate2-c"
+case "$CORPUS" in
+    scalar32)
+        SNAPSHOT="$ROOT/docs/benchmarks/riscv-xlen-current.txt"
+        SOURCE_ROOT="$ROOT/tools/fixtures/isa-gate2-c"
+        COMPILE_SCRIPT="$ROOT/scripts/compile-riscv-xlen-gate-corpus.sh"
+        WORKLOADS=(compute32 branch-mix call-stack memory-sequential memory-random copy-checksum)
+        EXPECTED_ROWS=18
+        ISSUE=483
+        TITLE="RISC-V XLEN scalar32 compiled-C benchmark current snapshot"
+        BENCHMARK_CORPUS_ARGS=()
+        ;;
+    u64)
+        SNAPSHOT="$ROOT/docs/benchmarks/riscv-xlen-u64-current.txt"
+        SOURCE_ROOT="$ROOT/tools/fixtures/riscv-xlen-u64"
+        COMPILE_SCRIPT="$ROOT/scripts/compile-riscv-xlen-u64-corpus.sh"
+        WORKLOADS=(u64-mix fixed64-geometry u64-memory)
+        EXPECTED_ROWS=9
+        ISSUE=484
+        TITLE="RISC-V XLEN u64-heavy compiled-C benchmark current snapshot"
+        BENCHMARK_CORPUS_ARGS=(u64)
+        ;;
+    *)
+        echo "corpus must be scalar32 or u64" >&2
+        exit 2
+        ;;
+esac
 : "${RISCV_XLEN_CLANG:=clang}"
 : "${RISCV_XLEN_LLD:=ld.lld}"
 
@@ -52,7 +77,7 @@ cleanup() {
 }
 trap cleanup EXIT HUP INT TERM
 
-dirty_paths="$(git -C "$ROOT" status --porcelain -- . ':(exclude)docs/benchmarks/riscv-xlen-current.txt' 2>/dev/null || true)"
+dirty_paths="$(git -C "$ROOT" status --porcelain -- . ":(exclude)${SNAPSHOT#"$ROOT/"}" 2>/dev/null || true)"
 if [[ -n "$dirty_paths" ]]; then
     echo "RISC-V XLEN recording requires a clean worktree except its snapshot:" >&2
     printf '%s\n' "$dirty_paths" >&2
@@ -74,16 +99,17 @@ if [[ -r /proc/cpuinfo ]]; then
 fi
 
 RISCV_XLEN_CLANG="$RISCV_XLEN_CLANG" RISCV_XLEN_LLD="$RISCV_XLEN_LLD" \
-    "$ROOT/scripts/compile-riscv-xlen-gate-corpus.sh" "$ARTIFACTS" "$ITERATIONS"
+    "$COMPILE_SCRIPT" "$ARTIFACTS" "$ITERATIONS"
 benchmark_output="$(
     cargo run --quiet --locked --offline --release \
         --manifest-path "$ROOT/host/k16-vm/Cargo.toml" \
-        --example riscv_xlen_benchmarks -- "$ARTIFACTS" "$ITERATIONS" "$SAMPLES"
+        --example riscv_xlen_benchmarks -- "$ARTIFACTS" "$ITERATIONS" "$SAMPLES" \
+        "${BENCHMARK_CORPUS_ARGS[@]}"
 )"
 
 timing_rows="$(printf '%s\n' "$benchmark_output" | awk -F '\t' '$2 == "rv32im" || $2 == "rv64im" || $2 == "native-rust" { count += 1; if ($16 != 0 || $17 != 0) bad = 1 } END { if (bad) exit 1; print count + 0 }')"
-if [[ "$timing_rows" -ne 18 ]]; then
-    echo "RISC-V XLEN benchmark expected 18 allocation-free timing rows, got $timing_rows" >&2
+if [[ "$timing_rows" -ne "$EXPECTED_ROWS" ]]; then
+    echo "RISC-V XLEN benchmark expected $EXPECTED_ROWS allocation-free timing rows, got $timing_rows" >&2
     exit 1
 fi
 printf '%s\n' "$benchmark_output" | grep -q '^rv32im[[:space:]]'
@@ -95,9 +121,9 @@ if printf '%s\n' "$benchmark_output" | grep -q '^decision[[:space:]]'; then
 fi
 
 {
-    echo "RISC-V XLEN compiled-C benchmark current snapshot"
+    echo "$TITLE"
     echo
-    echo "Issue: #483"
+    echo "Issue: #$ISSUE"
     echo "Recorded at: $recorded_at"
     echo "Commit: $commit (clean)"
     echo "Host: $host"
@@ -106,15 +132,15 @@ fi
     echo "Cargo: $cargo_version"
     echo "Clang: $clang_version"
     echo "LLD: $lld_version"
-    echo "Command: bash scripts/record-riscv-xlen-gate-benchmark.sh $ITERATIONS $SAMPLES"
+    echo "Command: bash scripts/record-riscv-xlen-gate-benchmark.sh $ITERATIONS $SAMPLES $CORPUS"
     echo
     echo "Source corpus SHA-256:"
-    for source in "$SOURCE_ROOT"/*.c "$SOURCE_ROOT"/*.h "$SOURCE_ROOT"/*.ld; do
+    for source in "$SOURCE_ROOT"/*; do
         printf '%s  %s\n' "$(sha256sum "$source" | awk '{print $1}')" "$(basename "$source")"
     done
     echo
     echo "Target LLVM IR SHA-256:"
-    for workload in compute32 branch-mix call-stack memory-sequential memory-random copy-checksum; do
+    for workload in "${WORKLOADS[@]}"; do
         for candidate in rv32im rv64im; do
             printf '%s  %s/%s\n' \
                 "$(sed -n 's/^canonical_ir_sha256=//p' "$ARTIFACTS/$workload/$candidate.manifest")" \

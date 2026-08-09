@@ -190,7 +190,18 @@ pub fn format_decision_for_candidate(
 }
 
 pub fn format_riscv_xlen_comparison(samples: &[CompiledCTiming]) -> Result<String, String> {
-    let metrics = riscv_xlen_metrics(samples)?;
+    format_riscv_xlen_comparison_for(samples, &IsaBenchmarkWorkload::all()[..6])
+}
+
+pub fn format_riscv_xlen_u64_comparison(samples: &[CompiledCTiming]) -> Result<String, String> {
+    format_riscv_xlen_comparison_for(samples, IsaBenchmarkWorkload::u64_compiled_c())
+}
+
+fn format_riscv_xlen_comparison_for(
+    samples: &[CompiledCTiming],
+    workloads: &[IsaBenchmarkWorkload],
+) -> Result<String, String> {
+    let metrics = riscv_xlen_metrics(samples, workloads)?;
     let fastest = metrics.rv64_to_rv32_geomean.min(1.0);
     Ok(format!(
         "candidate\tnormalized_warm_geomean\ttotal_code_bytes\ttotal_predecode_bytes\nrv32im\t{:.6}\t{}\t{}\nrv64im\t{:.6}\t{}\t{}\nmetric\tvalue\nrv64_to_rv32_warm_geomean\t{:.6}\nrv64_to_rv32_code_bytes\t{:.6}\nrv64_to_rv32_predecode_bytes\t{:.6}\n",
@@ -214,7 +225,10 @@ struct RiscvXlenMetrics {
     rv64_predecode: usize,
 }
 
-fn riscv_xlen_metrics(samples: &[CompiledCTiming]) -> Result<RiscvXlenMetrics, String> {
+fn riscv_xlen_metrics(
+    samples: &[CompiledCTiming],
+    workloads: &[IsaBenchmarkWorkload],
+) -> Result<RiscvXlenMetrics, String> {
     if samples
         .iter()
         .any(|sample| sample.steady_allocations != 0 || sample.steady_allocated_bytes != 0)
@@ -240,12 +254,12 @@ fn riscv_xlen_metrics(samples: &[CompiledCTiming]) -> Result<RiscvXlenMetrics, S
         }
     }
 
-    let mut ratios = Vec::with_capacity(6);
+    let mut ratios = Vec::with_capacity(workloads.len());
     let mut rv32_code = 0_usize;
     let mut rv64_code = 0_usize;
     let mut rv32_predecode = 0_usize;
     let mut rv64_predecode = 0_usize;
-    for workload in IsaBenchmarkWorkload::all().iter().copied().take(6) {
+    for workload in workloads.iter().copied() {
         let rv32 = indexed
             .get(&(workload, CompiledCCandidate::Rv32im))
             .ok_or_else(|| format!("missing rv32im timing for {}", workload.name()))?;
@@ -266,9 +280,13 @@ fn riscv_xlen_metrics(samples: &[CompiledCTiming]) -> Result<RiscvXlenMetrics, S
             .checked_add(rv64.observation.predecode_bytes)
             .ok_or("rv64im predecode total overflow")?;
     }
-    if indexed.len() != 12 {
+    let expected_timings = workloads
+        .len()
+        .checked_mul(2)
+        .ok_or("RISC-V XLEN timing count overflow")?;
+    if indexed.len() != expected_timings {
         return Err(format!(
-            "RISC-V XLEN comparison requires exactly 12 VM timings, got {}",
+            "RISC-V XLEN comparison requires exactly {expected_timings} VM timings, got {}",
             indexed.len()
         ));
     }

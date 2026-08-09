@@ -20,8 +20,8 @@
 use k16_vm::compiled_c::artifact::CompiledCCandidate;
 use k16_vm::compiled_c::report::{
     format_decision, format_decision_for_candidate, format_riscv_xlen_comparison,
-    populate_vs_native, select_compiled_c, select_compiled_c_candidate, CompiledCDecision,
-    CompiledCTiming,
+    format_riscv_xlen_u64_comparison, populate_vs_native, select_compiled_c,
+    select_compiled_c_candidate, CompiledCDecision, CompiledCTiming,
 };
 use k16_vm::compiled_c::runner::CompiledCObservation;
 use k16_vm::isa_benchmarks::IsaBenchmarkWorkload;
@@ -278,4 +278,24 @@ fn riscv_xlen_report_rejects_missing_extra_or_allocating_rows() {
     assert!(format_riscv_xlen_comparison(&allocating)
         .unwrap_err()
         .contains("steady allocation"));
+}
+
+#[test]
+fn riscv_xlen_u64_report_uses_exactly_the_three_u64_workloads() {
+    let mut samples = Vec::new();
+    for workload in IsaBenchmarkWorkload::u64_compiled_c() {
+        samples.push(timing(CompiledCCandidate::Rv32im, *workload, 1_000_000));
+        samples.push(timing(CompiledCCandidate::Rv64im, *workload, 500_000));
+    }
+
+    let rendered = format_riscv_xlen_u64_comparison(&samples).unwrap();
+    assert!(rendered.contains("rv64_to_rv32_warm_geomean\t0.500000\n"));
+    assert!(rendered.contains("rv32im\t2.000000\t300\t300\n"));
+    assert!(rendered.contains("rv64im\t1.000000\t300\t300\n"));
+    assert!(!rendered.contains("decision"));
+
+    samples[0].observation.workload = IsaBenchmarkWorkload::Compute32;
+    assert!(format_riscv_xlen_u64_comparison(&samples)
+        .unwrap_err()
+        .contains("missing rv32im timing for u64-mix"));
 }
