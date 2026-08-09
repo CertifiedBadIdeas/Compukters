@@ -14,6 +14,7 @@ pub mod computer_machine {
 pub mod isa_benchmarks;
 pub mod jni;
 pub mod k16;
+pub mod k16_f32;
 pub mod k16e;
 pub mod low_bus;
 pub mod low_machine;
