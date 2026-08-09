@@ -20,10 +20,14 @@
 mod k16;
 mod k16_f32;
 mod programs;
+mod report;
 mod rv32;
 mod workload;
 
 pub use programs::{DATA_BASE, MEMORY_SIZE, MMIO_BASE, PACKET_BYTES, RING_ENTRIES, STACK_TOP};
+pub use report::{
+    format_recommendations, format_timing_sample, timing_report_header, IsaBenchmarkTiming,
+};
 pub use workload::{native_checksum, IsaBenchmarkWorkload};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -133,5 +137,48 @@ pub fn run_candidate(
         IsaBenchmarkCandidate::RvsimRv32im
         | IsaBenchmarkCandidate::Rv32im
         | IsaBenchmarkCandidate::Rv32imPredecoded => rv32::run(candidate, workload, iterations),
+    }
+}
+
+pub struct PreparedIsaBenchmark {
+    inner: PreparedCandidate,
+}
+
+enum PreparedCandidate {
+    K16(k16::Prepared),
+    K16F32(k16_f32::Prepared),
+    Rv32(rv32::Prepared),
+}
+
+impl PreparedIsaBenchmark {
+    pub fn new(
+        candidate: IsaBenchmarkCandidate,
+        workload: IsaBenchmarkWorkload,
+        iterations: u32,
+    ) -> Result<Self, String> {
+        let inner = match candidate {
+            IsaBenchmarkCandidate::K16 | IsaBenchmarkCandidate::K16Cached => {
+                PreparedCandidate::K16(k16::Prepared::new(candidate, workload, iterations)?)
+            }
+            IsaBenchmarkCandidate::K16F32 => {
+                PreparedCandidate::K16F32(k16_f32::Prepared::new(workload, iterations)?)
+            }
+            IsaBenchmarkCandidate::RvsimRv32im
+            | IsaBenchmarkCandidate::Rv32im
+            | IsaBenchmarkCandidate::Rv32imPredecoded => {
+                PreparedCandidate::Rv32(rv32::Prepared::new(candidate, workload, iterations)?)
+            }
+        };
+        Ok(Self { inner })
+    }
+
+    /// Executes from a fresh CPU state while retaining immutable program data
+    /// and candidate-specific decode/translation caches between calls.
+    pub fn execute(&mut self) -> Result<IsaBenchmarkObservation, String> {
+        match &mut self.inner {
+            PreparedCandidate::K16(prepared) => prepared.execute(),
+            PreparedCandidate::K16F32(prepared) => prepared.execute(),
+            PreparedCandidate::Rv32(prepared) => prepared.execute(),
+        }
     }
 }

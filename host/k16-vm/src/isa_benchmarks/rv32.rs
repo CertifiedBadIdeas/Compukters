@@ -41,17 +41,90 @@ pub(super) fn run(
     workload: IsaBenchmarkWorkload,
     iterations: u32,
 ) -> Result<IsaBenchmarkObservation, String> {
-    let image = rv32_workload(workload, iterations)?;
-    match candidate {
-        IsaBenchmarkCandidate::RvsimRv32im => run_rvsim(image, workload, iterations),
-        IsaBenchmarkCandidate::Rv32im | IsaBenchmarkCandidate::Rv32imPredecoded => {
-            run_specialized(candidate, image, workload, iterations)
+    Prepared::new(candidate, workload, iterations)?.execute()
+}
+
+pub(super) struct Prepared {
+    candidate: IsaBenchmarkCandidate,
+    workload: IsaBenchmarkWorkload,
+    iterations: u32,
+    image: ProgramImage,
+    bus: MachineBus,
+    predecoded: Option<PredecodedRv32imProgram>,
+}
+
+impl Prepared {
+    pub(super) fn new(
+        candidate: IsaBenchmarkCandidate,
+        workload: IsaBenchmarkWorkload,
+        iterations: u32,
+    ) -> Result<Self, String> {
+        let image = rv32_workload(workload, iterations)?;
+        if !matches!(
+            candidate,
+            IsaBenchmarkCandidate::RvsimRv32im
+                | IsaBenchmarkCandidate::Rv32im
+                | IsaBenchmarkCandidate::Rv32imPredecoded
+        ) {
+            return Err(format!(
+                "candidate {} is not an RV32IM mode",
+                candidate.name()
+            ));
         }
-        _ => Err(format!(
-            "candidate {} is not an RV32IM mode",
-            candidate.name()
-        )),
+        let (bus, code) = new_bus(workload, &image.words)?;
+        let predecoded = if candidate == IsaBenchmarkCandidate::Rv32imPredecoded {
+            Some(PredecodedRv32imProgram::new(0, &code)?)
+        } else {
+            None
+        };
+        Ok(Self {
+            candidate,
+            workload,
+            iterations,
+            image,
+            bus,
+            predecoded,
+        })
     }
+
+    pub(super) fn execute(&mut self) -> Result<IsaBenchmarkObservation, String> {
+        reset_working_memory(&mut self.bus, self.workload)?;
+        match self.candidate {
+            IsaBenchmarkCandidate::RvsimRv32im => {
+                run_rvsim(&self.image, &mut self.bus, self.workload, self.iterations)
+            }
+            IsaBenchmarkCandidate::Rv32im | IsaBenchmarkCandidate::Rv32imPredecoded => {
+                run_specialized(
+                    self.candidate,
+                    &self.image,
+                    &mut self.bus,
+                    self.predecoded.as_ref(),
+                    self.workload,
+                    self.iterations,
+                )
+            }
+            _ => unreachable!(),
+        }
+    }
+}
+
+fn reset_working_memory(
+    bus: &mut MachineBus,
+    workload: IsaBenchmarkWorkload,
+) -> Result<(), String> {
+    let bytes = match workload {
+        IsaBenchmarkWorkload::MemorySequential | IsaBenchmarkWorkload::MemoryRandom => 64 * 4,
+        IsaBenchmarkWorkload::CopyChecksum => 512,
+        IsaBenchmarkWorkload::PacketRing => super::PACKET_BYTES * super::RING_ENTRIES,
+        _ => 0,
+    };
+    for offset in 0..bytes as u32 {
+        if workload != IsaBenchmarkWorkload::CopyChecksum || offset >= 256 {
+            bus.store_u8(DATA_BASE + offset, 0)
+                .map_err(|error| error.to_string())?;
+        }
+    }
+    Ok(())
 }
 
 fn new_bus(workload: IsaBenchmarkWorkload, words: &[u32]) -> Result<(MachineBus, Vec<u8>), String> {
@@ -81,24 +154,20 @@ fn new_bus(workload: IsaBenchmarkWorkload, words: &[u32]) -> Result<(MachineBus,
 
 fn run_specialized(
     candidate: IsaBenchmarkCandidate,
-    image: ProgramImage,
+    image: &ProgramImage,
+    bus: &mut MachineBus,
+    predecoded: Option<&PredecodedRv32imProgram>,
     workload: IsaBenchmarkWorkload,
     iterations: u32,
 ) -> Result<IsaBenchmarkObservation, String> {
-    let (mut bus, code) = new_bus(workload, &image.words)?;
-    let predecoded = if candidate == IsaBenchmarkCandidate::Rv32imPredecoded {
-        Some(PredecodedRv32imProgram::new(0, &code)?)
-    } else {
-        None
-    };
-    let before = bus.stats_snapshot();
+    let before = bus.aggregate_traffic_snapshot();
     let mut cpu = Rv32imCpu::new(0);
     let max_steps = max_steps(iterations);
     let mut yields = 0_u64;
     loop {
-        let stop = match &predecoded {
-            Some(program) => program.run_until_stop(&mut cpu, &mut bus, max_steps)?,
-            None => cpu.run_until_stop(&mut bus, max_steps)?,
+        let stop = match predecoded {
+            Some(program) => program.run_until_stop(&mut cpu, bus, max_steps)?,
+            None => cpu.run_until_stop(bus, max_steps)?,
         };
         match stop {
             Rv32imStop::Ebreak => break,
@@ -113,9 +182,9 @@ fn run_specialized(
             }
         }
     }
-    let after = bus.stats_snapshot();
-    let ram = subtract(after.ram, before.ram);
-    let mmio = subtract(after.mmio, before.mmio);
+    let after = bus.aggregate_traffic_snapshot();
+    let ram = subtract(after.0, before.0);
+    let mmio = subtract(after.1, before.1);
     let instruction_fetch = IsaTraffic {
         loads: cpu.retired_instructions(),
         stores: 0,
@@ -133,24 +202,22 @@ fn run_specialized(
         ram,
         mmio,
         Rv32imCpu::cpu_state_bytes(),
-        predecoded
-            .as_ref()
-            .map_or(0, PredecodedRv32imProgram::retained_bytes),
+        predecoded.map_or(0, PredecodedRv32imProgram::retained_bytes),
     )
 }
 
 fn run_rvsim(
-    image: ProgramImage,
+    image: &ProgramImage,
+    bus: &mut MachineBus,
     workload: IsaBenchmarkWorkload,
     iterations: u32,
 ) -> Result<IsaBenchmarkObservation, String> {
     let candidate = IsaBenchmarkCandidate::RvsimRv32im;
-    let (mut bus, _) = new_bus(workload, &image.words)?;
-    let before = bus.stats_snapshot();
+    let before = bus.aggregate_traffic_snapshot();
     let mut state = CpuState::new(0);
     let mut clock = QuotaClock::new(max_steps(iterations));
     let (yields, instruction_fetch) = {
-        let mut memory = RvsimMemory::new(&mut bus);
+        let mut memory = RvsimMemory::new(bus);
         let mut interp = Interp::new(&mut state, &mut memory, &mut clock);
         let mut yields = 0_u64;
         loop {
@@ -164,9 +231,9 @@ fn run_rvsim(
         }
         (yields, memory.instruction_fetch)
     };
-    let after = bus.stats_snapshot();
-    let ram = subtract(after.ram, before.ram);
-    let mmio = subtract(after.mmio, before.mmio);
+    let after = bus.aggregate_traffic_snapshot();
+    let ram = subtract(after.0, before.0);
+    let mmio = subtract(after.1, before.1);
     finish_observation(
         candidate,
         workload,

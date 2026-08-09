@@ -27,7 +27,7 @@ use crate::k16::{
 };
 use crate::low_bus::{MachineBus, MachineBusTrafficSnapshot, MmioDevice};
 use crate::low_machine::{MemoryBus, MemoryFault};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 const COPY_SOURCE: u32 = DATA_BASE;
 const COPY_DESTINATION: u32 = DATA_BASE + 0x0100;
@@ -38,85 +38,135 @@ pub(super) fn run(
     workload: IsaBenchmarkWorkload,
     iterations: u32,
 ) -> Result<IsaBenchmarkObservation, String> {
-    if !matches!(
-        candidate,
-        IsaBenchmarkCandidate::K16 | IsaBenchmarkCandidate::K16Cached
-    ) {
-        return Err(format!("candidate {} is not implemented", candidate.name()));
+    Prepared::new(candidate, workload, iterations)?.execute()
+}
+
+pub(super) struct Prepared {
+    candidate: IsaBenchmarkCandidate,
+    workload: IsaBenchmarkWorkload,
+    iterations: u32,
+    image: ProgramImage,
+    bus: MachineBus,
+    decoder: TrackingDecoder,
+}
+
+impl Prepared {
+    pub(super) fn new(
+        candidate: IsaBenchmarkCandidate,
+        workload: IsaBenchmarkWorkload,
+        iterations: u32,
+    ) -> Result<Self, String> {
+        if !matches!(
+            candidate,
+            IsaBenchmarkCandidate::K16 | IsaBenchmarkCandidate::K16Cached
+        ) {
+            return Err(format!("candidate {} is not implemented", candidate.name()));
+        }
+
+        let image = k16_workload(workload, iterations)?;
+        let mut bus = MachineBus::new(MEMORY_SIZE).map_err(|error| error.to_string())?;
+        if workload == IsaBenchmarkWorkload::MmioControl {
+            bus.map_mmio(MMIO_BASE, Box::new(BenchmarkRegisterDevice::default()))
+                .map_err(|error| error.to_string())?;
+        }
+        if workload == IsaBenchmarkWorkload::CopyChecksum {
+            for index in 0..256_u32 {
+                let value = (index as u8).wrapping_mul(29).wrapping_add(7);
+                bus.store_u8(COPY_SOURCE + index, value)
+                    .map_err(|error| error.to_string())?;
+            }
+        }
+        write_words(&mut bus, &image.words)?;
+        Ok(Self {
+            candidate,
+            workload,
+            iterations,
+            image,
+            bus,
+            decoder: TrackingDecoder::new(candidate == IsaBenchmarkCandidate::K16Cached),
+        })
     }
 
-    let image = k16_workload(workload, iterations)?;
-    let mut bus = MachineBus::new(MEMORY_SIZE).map_err(|error| error.to_string())?;
-    if workload == IsaBenchmarkWorkload::MmioControl {
-        bus.map_mmio(MMIO_BASE, Box::new(BenchmarkRegisterDevice::default()))
-            .map_err(|error| error.to_string())?;
+    pub(super) fn execute(&mut self) -> Result<IsaBenchmarkObservation, String> {
+        reset_working_memory(&mut self.bus, self.workload)?;
+        let before = self.bus.aggregate_traffic_snapshot();
+        self.decoder.begin_run();
+        let mut cpu = K16Cpu::new(0);
+        let max_steps = u64::from(self.iterations)
+            .saturating_mul(4_096)
+            .saturating_add(100_000);
+        let mut yields = 0_u64;
+        loop {
+            match cpu
+                .run_until_signal_with_decoder(&mut self.bus, &mut self.decoder, max_steps)
+                .map_err(|error| error.to_string())?
+            {
+                K16Signal::Halt => break,
+                K16Signal::Wait if self.workload == IsaBenchmarkWorkload::YieldWake => {
+                    yields += 1;
+                }
+                K16Signal::StepLimitExceeded => {
+                    return Err(format!(
+                        "candidate {} workload {} exceeded {max_steps} steps",
+                        self.candidate.name(),
+                        self.workload.name(),
+                    ));
+                }
+                signal => {
+                    return Err(format!(
+                        "candidate {} workload {} returned unexpected signal {signal:?}",
+                        self.candidate.name(),
+                        self.workload.name(),
+                    ));
+                }
+            }
+        }
+
+        let after = self.bus.aggregate_traffic_snapshot();
+        let ram = subtract_traffic(after.0, before.0);
+        let mmio = subtract_traffic(after.1, before.1);
+        let instruction_fetch = self.decoder.fetch;
+        let data_ram = IsaTraffic {
+            loads: ram.loads.saturating_sub(instruction_fetch.loads),
+            stores: ram.stores,
+            bytes_read: ram.bytes_read.saturating_sub(instruction_fetch.bytes_read),
+            bytes_written: ram.bytes_written,
+        };
+        let observation = IsaBenchmarkObservation {
+            candidate: self.candidate,
+            workload: self.workload,
+            iterations: self.iterations,
+            checksum: cpu.register(self.image.result_register as usize),
+            retired_instructions: cpu.snapshot().metrics_steps,
+            yields,
+            instruction_fetch,
+            data_ram,
+            mmio: mmio.into(),
+            cpu_state_bytes: std::mem::size_of::<K16CpuSnapshot>(),
+            translation_bytes: self.decoder.retained_bytes(),
+        };
+        observation.validate_checksum()?;
+        Ok(observation)
     }
-    if workload == IsaBenchmarkWorkload::CopyChecksum {
-        for index in 0..256_u32 {
-            let value = (index as u8).wrapping_mul(29).wrapping_add(7);
-            bus.store_u8(COPY_SOURCE + index, value)
+}
+
+fn reset_working_memory(
+    bus: &mut MachineBus,
+    workload: IsaBenchmarkWorkload,
+) -> Result<(), String> {
+    let bytes = match workload {
+        IsaBenchmarkWorkload::MemorySequential | IsaBenchmarkWorkload::MemoryRandom => 64 * 4,
+        IsaBenchmarkWorkload::CopyChecksum => 512,
+        IsaBenchmarkWorkload::PacketRing => super::PACKET_BYTES * super::RING_ENTRIES,
+        _ => 0,
+    };
+    for offset in 0..bytes as u32 {
+        if workload != IsaBenchmarkWorkload::CopyChecksum || offset >= 256 {
+            bus.store_u8(DATA_BASE + offset, 0)
                 .map_err(|error| error.to_string())?;
         }
     }
-    write_words(&mut bus, &image.words)?;
-    let before = bus.stats_snapshot();
-    let mut cpu = K16Cpu::new(0);
-    let mut decoder = TrackingDecoder::new(candidate == IsaBenchmarkCandidate::K16Cached);
-    let max_steps = u64::from(iterations)
-        .saturating_mul(4_096)
-        .saturating_add(100_000);
-    let mut yields = 0_u64;
-    loop {
-        match cpu
-            .run_until_signal_with_decoder(&mut bus, &mut decoder, max_steps)
-            .map_err(|error| error.to_string())?
-        {
-            K16Signal::Halt => break,
-            K16Signal::Wait if workload == IsaBenchmarkWorkload::YieldWake => {
-                yields += 1;
-            }
-            K16Signal::StepLimitExceeded => {
-                return Err(format!(
-                    "candidate {} workload {} exceeded {max_steps} steps",
-                    candidate.name(),
-                    workload.name(),
-                ));
-            }
-            signal => {
-                return Err(format!(
-                    "candidate {} workload {} returned unexpected signal {signal:?}",
-                    candidate.name(),
-                    workload.name(),
-                ));
-            }
-        }
-    }
-
-    let after = bus.stats_snapshot();
-    let ram = subtract_traffic(after.ram, before.ram);
-    let mmio = subtract_traffic(after.mmio, before.mmio);
-    let instruction_fetch = decoder.fetch;
-    let data_ram = IsaTraffic {
-        loads: ram.loads.saturating_sub(instruction_fetch.loads),
-        stores: ram.stores,
-        bytes_read: ram.bytes_read.saturating_sub(instruction_fetch.bytes_read),
-        bytes_written: ram.bytes_written,
-    };
-    let observation = IsaBenchmarkObservation {
-        candidate,
-        workload,
-        iterations,
-        checksum: cpu.register(image.result_register as usize),
-        retired_instructions: cpu.snapshot().metrics_steps,
-        yields,
-        instruction_fetch,
-        data_ram,
-        mmio: mmio.into(),
-        cpu_state_bytes: std::mem::size_of::<K16CpuSnapshot>(),
-        translation_bytes: decoder.retained_bytes(),
-    };
-    observation.validate_checksum()?;
-    Ok(observation)
+    Ok(())
 }
 
 struct ProgramImage {
@@ -447,7 +497,6 @@ impl InstructionDecoder for BenchmarkDecoder {
 
 struct TrackingDecoder {
     decoder: BenchmarkDecoder,
-    seen: HashSet<u32>,
     fetch: IsaTraffic,
 }
 
@@ -459,9 +508,12 @@ impl TrackingDecoder {
             } else {
                 BenchmarkDecoder::Direct(K16Decoder::new())
             },
-            seen: HashSet::new(),
             fetch: IsaTraffic::default(),
         }
+    }
+
+    fn begin_run(&mut self) {
+        self.fetch = IsaTraffic::default();
     }
 
     fn retained_bytes(&self) -> usize {
@@ -474,9 +526,16 @@ impl TrackingDecoder {
 
 impl InstructionDecoder for TrackingDecoder {
     fn decode(&mut self, bus: &mut dyn MemoryBus, pc: u32) -> Result<DecodeResult, K16Trap> {
-        let record_fetch =
-            matches!(self.decoder, BenchmarkDecoder::Direct(_)) || self.seen.insert(pc);
+        let misses_before = match &self.decoder {
+            BenchmarkDecoder::Direct(_) => None,
+            BenchmarkDecoder::Cached(decoder) => Some(decoder.stats().misses),
+        };
         let result = self.decoder.decode(bus, pc)?;
+        let record_fetch = match (&self.decoder, misses_before) {
+            (BenchmarkDecoder::Direct(_), _) => true,
+            (BenchmarkDecoder::Cached(decoder), Some(before)) => decoder.stats().misses > before,
+            (BenchmarkDecoder::Cached(_), None) => unreachable!(),
+        };
         if record_fetch {
             let bytes = u64::from(result.next_pc.wrapping_sub(pc));
             self.fetch.loads += bytes / 2;

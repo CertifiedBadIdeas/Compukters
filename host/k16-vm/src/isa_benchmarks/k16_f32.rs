@@ -38,76 +38,120 @@ pub(super) fn run(
     workload: IsaBenchmarkWorkload,
     iterations: u32,
 ) -> Result<IsaBenchmarkObservation, String> {
-    let image = k16_f32_workload(workload, iterations)?;
-    let mut bus = MachineBus::new(MEMORY_SIZE).map_err(|error| error.to_string())?;
-    if workload == IsaBenchmarkWorkload::MmioControl {
-        bus.map_mmio(MMIO_BASE, Box::new(BenchmarkRegisterDevice::default()))
-            .map_err(|error| error.to_string())?;
+    Prepared::new(workload, iterations)?.execute()
+}
+
+pub(super) struct Prepared {
+    workload: IsaBenchmarkWorkload,
+    iterations: u32,
+    image: ProgramImage,
+    bus: MachineBus,
+}
+
+impl Prepared {
+    pub(super) fn new(workload: IsaBenchmarkWorkload, iterations: u32) -> Result<Self, String> {
+        let image = k16_f32_workload(workload, iterations)?;
+        let mut bus = MachineBus::new(MEMORY_SIZE).map_err(|error| error.to_string())?;
+        if workload == IsaBenchmarkWorkload::MmioControl {
+            bus.map_mmio(MMIO_BASE, Box::new(BenchmarkRegisterDevice::default()))
+                .map_err(|error| error.to_string())?;
+        }
+        if workload == IsaBenchmarkWorkload::CopyChecksum {
+            for index in 0..256_u32 {
+                let value = (index as u8).wrapping_mul(29).wrapping_add(7);
+                bus.store_u8(COPY_SOURCE + index, value)
+                    .map_err(|error| error.to_string())?;
+            }
+        }
+        for (index, word) in image.words.iter().copied().enumerate() {
+            bus.store_i32(index as u32 * 4, word as i32)
+                .map_err(|error| error.to_string())?;
+        }
+        Ok(Self {
+            workload,
+            iterations,
+            image,
+            bus,
+        })
     }
-    if workload == IsaBenchmarkWorkload::CopyChecksum {
-        for index in 0..256_u32 {
-            let value = (index as u8).wrapping_mul(29).wrapping_add(7);
-            bus.store_u8(COPY_SOURCE + index, value)
+
+    pub(super) fn execute(&mut self) -> Result<IsaBenchmarkObservation, String> {
+        reset_working_memory(&mut self.bus, self.workload)?;
+        let before = self.bus.aggregate_traffic_snapshot();
+        let mut cpu = K16F32Cpu::new(0);
+        let max_steps = u64::from(self.iterations)
+            .saturating_mul(4_096)
+            .saturating_add(100_000);
+        let mut yields = 0_u64;
+        loop {
+            match cpu.run_until_stop(&mut self.bus, max_steps)? {
+                K16F32Stop::Halt => break,
+                K16F32Stop::Yield if self.workload == IsaBenchmarkWorkload::YieldWake => {
+                    yields += 1
+                }
+                K16F32Stop::StepLimit => {
+                    return Err(format!(
+                        "candidate k16-f32 workload {} exceeded {max_steps} steps",
+                        self.workload.name(),
+                    ));
+                }
+                stop => {
+                    return Err(format!(
+                        "candidate k16-f32 workload {} returned unexpected stop {stop:?}",
+                        self.workload.name(),
+                    ));
+                }
+            }
+        }
+        let after = self.bus.aggregate_traffic_snapshot();
+        let ram = subtract(after.0, before.0);
+        let mmio = subtract(after.1, before.1);
+        let instruction_fetch = IsaTraffic {
+            loads: cpu.retired_instructions(),
+            stores: 0,
+            bytes_read: cpu.retired_instructions().saturating_mul(4),
+            bytes_written: 0,
+        };
+        let observation = IsaBenchmarkObservation {
+            candidate: IsaBenchmarkCandidate::K16F32,
+            workload: self.workload,
+            iterations: self.iterations,
+            checksum: cpu.register(self.image.result_register as usize),
+            retired_instructions: cpu.retired_instructions(),
+            yields,
+            instruction_fetch,
+            data_ram: IsaTraffic {
+                loads: ram.loads.saturating_sub(instruction_fetch.loads),
+                stores: ram.stores,
+                bytes_read: ram.bytes_read.saturating_sub(instruction_fetch.bytes_read),
+                bytes_written: ram.bytes_written,
+            },
+            mmio: IsaTraffic::from(mmio),
+            cpu_state_bytes: K16F32Cpu::cpu_state_bytes(),
+            translation_bytes: 0,
+        };
+        observation.validate_checksum()?;
+        Ok(observation)
+    }
+}
+
+fn reset_working_memory(
+    bus: &mut MachineBus,
+    workload: IsaBenchmarkWorkload,
+) -> Result<(), String> {
+    let bytes = match workload {
+        IsaBenchmarkWorkload::MemorySequential | IsaBenchmarkWorkload::MemoryRandom => 64 * 4,
+        IsaBenchmarkWorkload::CopyChecksum => 512,
+        IsaBenchmarkWorkload::PacketRing => super::PACKET_BYTES * super::RING_ENTRIES,
+        _ => 0,
+    };
+    for offset in 0..bytes as u32 {
+        if workload != IsaBenchmarkWorkload::CopyChecksum || offset >= 256 {
+            bus.store_u8(DATA_BASE + offset, 0)
                 .map_err(|error| error.to_string())?;
         }
     }
-    for (index, word) in image.words.iter().copied().enumerate() {
-        bus.store_i32(index as u32 * 4, word as i32)
-            .map_err(|error| error.to_string())?;
-    }
-    let before = bus.stats_snapshot();
-    let mut cpu = K16F32Cpu::new(0);
-    let max_steps = u64::from(iterations)
-        .saturating_mul(4_096)
-        .saturating_add(100_000);
-    let mut yields = 0_u64;
-    loop {
-        match cpu.run_until_stop(&mut bus, max_steps)? {
-            K16F32Stop::Halt => break,
-            K16F32Stop::Yield if workload == IsaBenchmarkWorkload::YieldWake => yields += 1,
-            K16F32Stop::StepLimit => {
-                return Err(format!(
-                    "candidate k16-f32 workload {} exceeded {max_steps} steps",
-                    workload.name(),
-                ));
-            }
-            stop => {
-                return Err(format!(
-                    "candidate k16-f32 workload {} returned unexpected stop {stop:?}",
-                    workload.name(),
-                ));
-            }
-        }
-    }
-    let after = bus.stats_snapshot();
-    let ram = subtract(after.ram, before.ram);
-    let mmio = subtract(after.mmio, before.mmio);
-    let instruction_fetch = IsaTraffic {
-        loads: cpu.retired_instructions(),
-        stores: 0,
-        bytes_read: cpu.retired_instructions().saturating_mul(4),
-        bytes_written: 0,
-    };
-    let observation = IsaBenchmarkObservation {
-        candidate: IsaBenchmarkCandidate::K16F32,
-        workload,
-        iterations,
-        checksum: cpu.register(image.result_register as usize),
-        retired_instructions: cpu.retired_instructions(),
-        yields,
-        instruction_fetch,
-        data_ram: IsaTraffic {
-            loads: ram.loads.saturating_sub(instruction_fetch.loads),
-            stores: ram.stores,
-            bytes_read: ram.bytes_read.saturating_sub(instruction_fetch.bytes_read),
-            bytes_written: ram.bytes_written,
-        },
-        mmio: IsaTraffic::from(mmio),
-        cpu_state_bytes: K16F32Cpu::cpu_state_bytes(),
-        translation_bytes: 0,
-    };
-    observation.validate_checksum()?;
-    Ok(observation)
+    Ok(())
 }
 
 struct ProgramImage {
