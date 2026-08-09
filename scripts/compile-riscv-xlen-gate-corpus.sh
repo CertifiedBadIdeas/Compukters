@@ -16,7 +16,9 @@ mkdir -p "$ARTIFACT_ROOT"
 ARTIFACT_ROOT="$(cd "$ARTIFACT_ROOT" && pwd -P)"
 
 ROOT="$(git rev-parse --show-toplevel)"
-SOURCE_ROOT="$ROOT/tools/fixtures/isa-gate2-c"
+SOURCE_ROOT="${RISCV_XLEN_SOURCE_ROOT:-$ROOT/tools/fixtures/isa-gate2-c}"
+LINKER_SCRIPT="${RISCV_XLEN_LINKER_SCRIPT:-$ROOT/tools/fixtures/isa-gate2-c/rv32im.ld}"
+WORKLOAD_NAMES="${RISCV_XLEN_WORKLOADS:-compute32 branch-mix call-stack memory-sequential memory-random copy-checksum}"
 CRATE_MANIFEST="$ROOT/host/k16-vm/Cargo.toml"
 
 : "${RISCV_XLEN_CLANG:=clang}"
@@ -63,13 +65,15 @@ compile_candidate() {
         "$RISCV_XLEN_CLANG" --target="$target" -march="$march" -mabi="$abi" \
             -std=c11 -O2 -ffreestanding -fno-builtin -fno-stack-protector \
             -fomit-frame-pointer -fno-vectorize -fno-slp-vectorize \
+            -mllvm -riscv-disable-using-constant-pool-for-large-ints \
             -ffunction-sections -S -emit-llvm "$workload.c" -o "$llvm_ir"
         "$RISCV_XLEN_CLANG" --target="$target" -march="$march" -mabi="$abi" \
             -std=c11 -O2 -ffreestanding -fno-builtin -fno-stack-protector \
             -fomit-frame-pointer -fno-vectorize -fno-slp-vectorize \
+            -mllvm -riscv-disable-using-constant-pool-for-large-ints \
             -ffunction-sections -c "$workload.c" -o "$object"
     )
-    "$RISCV_XLEN_LLD" -m "$linker_emulation" -T "$SOURCE_ROOT/rv32im.ld" \
+    "$RISCV_XLEN_LLD" -m "$linker_emulation" -T "$LINKER_SCRIPT" \
         --fatal-warnings "$object" -o "$elf"
     if [[ -n "$("$RISCV_XLEN_NM" --undefined-only "$elf")" ]]; then
         echo "linked $candidate artifact contains undefined symbols for $workload" >&2
@@ -121,7 +125,7 @@ compile_candidate() {
     } > "$manifest"
 }
 
-workloads=(compute32 branch-mix call-stack memory-sequential memory-random copy-checksum)
+read -r -a workloads <<< "$WORKLOAD_NAMES"
 for workload in "${workloads[@]}"; do
     directory="$ARTIFACT_ROOT/$workload"
     mkdir -p "$directory"
