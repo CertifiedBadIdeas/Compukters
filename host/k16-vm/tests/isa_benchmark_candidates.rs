@@ -35,3 +35,13 @@ fn current_k16_runs_every_gate1_workload_in_both_decode_modes() {
         );
     }
 }
+
+#[test]
+fn k16_f32_matches_native_checksums() {
+    for workload in IsaBenchmarkWorkload::all() {
+        let sample = run_candidate(IsaBenchmarkCandidate::K16F32, *workload, 19).unwrap();
+        sample.validate_checksum().unwrap();
+        assert_eq!(sample.instruction_fetch.bytes_read % 4, 0);
+        assert_eq!(sample.translation_bytes, 0);
+    }
+}

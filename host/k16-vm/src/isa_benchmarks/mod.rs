@@ -18,10 +18,10 @@
  */
 
 mod k16;
+mod k16_f32;
 mod programs;
 mod workload;
 
-pub use k16::run_candidate;
 pub use programs::{DATA_BASE, MEMORY_SIZE, MMIO_BASE, PACKET_BYTES, RING_ENTRIES, STACK_TOP};
 pub use workload::{native_checksum, IsaBenchmarkWorkload};
 
@@ -116,5 +116,19 @@ impl IsaBenchmarkObservation {
             self.workload.name(),
             self.checksum,
         ))
+    }
+}
+
+pub fn run_candidate(
+    candidate: IsaBenchmarkCandidate,
+    workload: IsaBenchmarkWorkload,
+    iterations: u32,
+) -> Result<IsaBenchmarkObservation, String> {
+    match candidate {
+        IsaBenchmarkCandidate::K16 | IsaBenchmarkCandidate::K16Cached => {
+            k16::run(candidate, workload, iterations)
+        }
+        IsaBenchmarkCandidate::K16F32 => k16_f32::run(workload, iterations),
+        _ => Err(format!("candidate {} is not implemented", candidate.name())),
     }
 }
