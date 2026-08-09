@@ -75,4 +75,44 @@ done
 call_stack_signature="$(grep -E '^define .*@call_stack_inner\(' "$ARTIFACTS/call-stack/canonical.ll")"
 test "$(grep -o 'i32' <<< "$call_stack_signature" | wc -l)" -eq 7
 
+RECORDER_ROOT="$(mktemp -d)"
+trap 'rm -rf "$ARTIFACTS" "$REPRO_ARTIFACTS" "$RECORDER_ROOT"' EXIT HUP INT TERM
+mkdir -p "$RECORDER_ROOT/host/k16-vm" "$RECORDER_ROOT/scripts" \
+    "$RECORDER_ROOT/tools/fixtures" "$RECORDER_ROOT/docs/benchmarks"
+cp "$ROOT/host/k16-vm/Cargo.toml" "$ROOT/host/k16-vm/Cargo.lock" "$RECORDER_ROOT/host/k16-vm/"
+cp -R "$ROOT/host/k16-vm/src" "$ROOT/host/k16-vm/examples" "$RECORDER_ROOT/host/k16-vm/"
+cp "$ROOT/scripts/compile-isa-gate2-corpus.sh" \
+    "$ROOT/scripts/record-isa-gate2-benchmark.sh" "$RECORDER_ROOT/scripts/"
+cp -R "$ROOT/tools/fixtures/isa-gate2-c" "$RECORDER_ROOT/tools/fixtures/"
+git -C "$RECORDER_ROOT" init -q
+git -C "$RECORDER_ROOT" add .
+git -C "$RECORDER_ROOT" -c user.name=test -c user.email=test@example.invalid commit -qm baseline
+
+K16_LLVM_BIN_DIR="$K16_LLVM_BIN_DIR" \
+    "$RECORDER_ROOT/scripts/record-isa-gate2-benchmark.sh" 10 3 >/dev/null
+SNAPSHOT="$RECORDER_ROOT/docs/benchmarks/isa-gate2-current.txt"
+for expected in \
+    'ISA Gate 2 compiled-C benchmark current snapshot' \
+    'Issue: #481' \
+    'Recorded at:' \
+    'Commit:' \
+    'Host:' \
+    'CPU:' \
+    'Rust:' \
+    'Cargo:' \
+    'Clang:' \
+    'LLVM opt:' \
+    'LLVM llc:' \
+    'LLD:' \
+    'K16 LLVM llc:' \
+    'Source corpus SHA-256:' \
+    'Canonical IR SHA-256:' \
+    'ISA Gate 2 decision'; do
+    grep -q "$expected" "$SNAPSHOT"
+done
+test "$(awk -F '\t' '$2 == "k16-f32" || $2 == "rv32im" || $2 == "native-rust" { count += 1; if ($16 != 0 || $17 != 0) bad = 1 } END { if (bad) exit 1; print count + 0 }' "$SNAPSHOT")" -eq 18
+grep -q '^k16-f32[[:space:]]' "$SNAPSHOT"
+grep -q '^rv32im[[:space:]]' "$SNAPSHOT"
+test "$(grep -Ec $'^decision\t(select-k16-f32|select-rv32im|inconclusive-expanded-run)$' "$SNAPSHOT")" -eq 1
+
 echo "ISA Gate 2 compilation contract passed"
