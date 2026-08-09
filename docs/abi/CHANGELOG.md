@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- The concrete K16 computer profile now has two fixed player product families:
+  Normal Notebook exposes 1 MiB RAM and Advanced Notebook exposes 4 MiB RAM.
+  Auxiliary SDK media never changes RAM. Native TinyCC source-to-object
+  compilation is supported on Advanced; Normal fails through ordinary guest
+  allocation/loader semantics without creating an object or invoking a hidden
+  host fallback.
+- Published immutable SDK identity `c_sdk_v1` now resolves to the exact proven
+  4 MiB KFS payload at `firmware/c-sdk-v1.kv`. KraftOS mounts it read-only at
+  `/sdk`; it contains native `/sdk/bin/tcc.kx`, public and private headers,
+  `crt0.o`, `libc.a`, `libsoftfloat.a`, and `libcompiler_rt.a`. Identity byte
+  drift is rejected, and insert/remove changes require a cold boot.
+- Native K16 stats schema v17 adds the last exited program's heap-page count,
+  cumulative CPU steps, and game ticks. The native TinyCC acceptance proof uses
+  these fields to report guest compilation cost. Host `k16 link` remains a
+  post-compile acceptance oracle and is not exposed as a guest service.
 - K16 computer profile v1 now optionally appends read-only `storage1` as
   hardware id `10` at `0x1000_0900`. KraftOS mounts its ROOT/KFS partition at
   `/sdk`, keeps root and SDK KFS state independent, routes ordinary file and
