@@ -266,6 +266,7 @@ data class RuntimeK16OsMetrics(
     val libkraftLibraryFileDataReadBytes: Long = 0,
     val otherLibraryFileDataReadBlocks: Long = 0,
     val otherLibraryFileDataReadBytes: Long = 0,
+    val lastExitedProgramHeapPages: Long = 0,
 )
 
 data class RuntimeK16DecodeCacheMetrics(
@@ -279,6 +280,8 @@ data class RuntimeK16StatsMetrics(
     val mmio: RuntimeK16BusTrafficMetrics = RuntimeK16BusTrafficMetrics(),
     val os: RuntimeK16OsMetrics = RuntimeK16OsMetrics(),
     val decodeCache: RuntimeK16DecodeCacheMetrics = RuntimeK16DecodeCacheMetrics(),
+    val cpuSteps: Long = 0,
+    val gameTicks: Long = 0,
     val devices: List<RuntimeK16MmioDeviceMetrics> = emptyList(),
 ) {
     val deviceTraffic: RuntimeK16BusTrafficMetrics =
@@ -387,12 +390,15 @@ data class RuntimeProfilingSnapshot(
                 "    k16DecodeCache: entries=${k16.decodeCache.entries}, hits=${k16.decodeCache.hits}, misses=${k16.decodeCache.misses}",
             )
             appendLine(
+                "    k16ExecutionCounters: cpuSteps=${k16.cpuSteps}, gameTicks=${k16.gameTicks}",
+            )
+            appendLine(
                 "    k16Devices: mapped=${k16.devices.size}, loads=${k16.deviceTraffic.loads}, stores=${k16.deviceTraffic.stores}, bytesRead=${k16.deviceTraffic.bytesRead}, bytesWritten=${k16.deviceTraffic.bytesWritten}",
             )
             appendK16StorageSummary("k16Storage0", k16.storage0)
             appendK16StorageSummary("k16Storage1", k16.storage1)
             appendLine(
-                "    k16Os: pathLookups=${k16.os.pathLookups}, inodeLoads=${k16.os.inodeLoads}, dirEntryScans=${k16.os.dirEntryScans}, fileOpens=${k16.os.fileOpens}, fileReads=${k16.os.fileReads}, statCalls=${k16.os.statCalls}, processSpawns=${k16.os.processSpawns}, programLoads=${k16.os.programLoads}, dynamicImportLoads=${k16.os.dynamicImportLoads}, libraryLoads=${k16.os.libraryLoads}, readDirCalls=${k16.os.readDirCalls}, programLoadBytes=${k16.os.programLoadBytes}, dynamicImportBytes=${k16.os.dynamicImportBytes}, libraryLoadBytes=${k16.os.libraryLoadBytes}, genericFileDataReadBlocks=${k16.os.genericFileDataReadBlocks}, genericFileDataReadBytes=${k16.os.genericFileDataReadBytes}, readDirDataReadBlocks=${k16.os.readDirDataReadBlocks}, readDirDataReadBytes=${k16.os.readDirDataReadBytes}, programDataReadBlocks=${k16.os.programDataReadBlocks}, programDataReadBytes=${k16.os.programDataReadBytes}, dynamicImportDataReadBlocks=${k16.os.dynamicImportDataReadBlocks}, dynamicImportDataReadBytes=${k16.os.dynamicImportDataReadBytes}, libraryDataReadBlocks=${k16.os.libraryDataReadBlocks}, libraryDataReadBytes=${k16.os.libraryDataReadBytes}, blockCacheHits=${k16.os.blockCacheHits}, blockCacheMisses=${k16.os.blockCacheMisses}, blockCacheBatchReads=${k16.os.blockCacheBatchReads}, initProgramFileDataReadBlocks=${k16.os.initProgramFileDataReadBlocks}, initProgramFileDataReadBytes=${k16.os.initProgramFileDataReadBytes}, shellProgramFileDataReadBlocks=${k16.os.shellProgramFileDataReadBlocks}, shellProgramFileDataReadBytes=${k16.os.shellProgramFileDataReadBytes}, otherProgramFileDataReadBlocks=${k16.os.otherProgramFileDataReadBlocks}, otherProgramFileDataReadBytes=${k16.os.otherProgramFileDataReadBytes}, libkraftLibraryFileDataReadBlocks=${k16.os.libkraftLibraryFileDataReadBlocks}, libkraftLibraryFileDataReadBytes=${k16.os.libkraftLibraryFileDataReadBytes}, otherLibraryFileDataReadBlocks=${k16.os.otherLibraryFileDataReadBlocks}, otherLibraryFileDataReadBytes=${k16.os.otherLibraryFileDataReadBytes}",
+                "    k16Os: pathLookups=${k16.os.pathLookups}, inodeLoads=${k16.os.inodeLoads}, dirEntryScans=${k16.os.dirEntryScans}, fileOpens=${k16.os.fileOpens}, fileReads=${k16.os.fileReads}, statCalls=${k16.os.statCalls}, processSpawns=${k16.os.processSpawns}, programLoads=${k16.os.programLoads}, dynamicImportLoads=${k16.os.dynamicImportLoads}, libraryLoads=${k16.os.libraryLoads}, readDirCalls=${k16.os.readDirCalls}, programLoadBytes=${k16.os.programLoadBytes}, dynamicImportBytes=${k16.os.dynamicImportBytes}, libraryLoadBytes=${k16.os.libraryLoadBytes}, genericFileDataReadBlocks=${k16.os.genericFileDataReadBlocks}, genericFileDataReadBytes=${k16.os.genericFileDataReadBytes}, readDirDataReadBlocks=${k16.os.readDirDataReadBlocks}, readDirDataReadBytes=${k16.os.readDirDataReadBytes}, programDataReadBlocks=${k16.os.programDataReadBlocks}, programDataReadBytes=${k16.os.programDataReadBytes}, dynamicImportDataReadBlocks=${k16.os.dynamicImportDataReadBlocks}, dynamicImportDataReadBytes=${k16.os.dynamicImportDataReadBytes}, libraryDataReadBlocks=${k16.os.libraryDataReadBlocks}, libraryDataReadBytes=${k16.os.libraryDataReadBytes}, blockCacheHits=${k16.os.blockCacheHits}, blockCacheMisses=${k16.os.blockCacheMisses}, blockCacheBatchReads=${k16.os.blockCacheBatchReads}, initProgramFileDataReadBlocks=${k16.os.initProgramFileDataReadBlocks}, initProgramFileDataReadBytes=${k16.os.initProgramFileDataReadBytes}, shellProgramFileDataReadBlocks=${k16.os.shellProgramFileDataReadBlocks}, shellProgramFileDataReadBytes=${k16.os.shellProgramFileDataReadBytes}, otherProgramFileDataReadBlocks=${k16.os.otherProgramFileDataReadBlocks}, otherProgramFileDataReadBytes=${k16.os.otherProgramFileDataReadBytes}, libkraftLibraryFileDataReadBlocks=${k16.os.libkraftLibraryFileDataReadBlocks}, libkraftLibraryFileDataReadBytes=${k16.os.libkraftLibraryFileDataReadBytes}, otherLibraryFileDataReadBlocks=${k16.os.otherLibraryFileDataReadBlocks}, otherLibraryFileDataReadBytes=${k16.os.otherLibraryFileDataReadBytes}, lastExitedProgramHeapPages=${k16.os.lastExitedProgramHeapPages}",
             )
             appendK16DeviceSummary()
             appendLine(
@@ -853,6 +859,8 @@ private fun NativeK16ComputerStatsSnapshot.toRuntimeMetrics(): RuntimeK16StatsMe
         mmio = mmio.toRuntimeMetrics(),
         os = os.toRuntimeMetrics(),
         decodeCache = decodeCache.toRuntimeMetrics(),
+        cpuSteps = cpuSteps,
+        gameTicks = gameTicks,
         devices = devices.map { it.toRuntimeMetrics() },
     )
 
@@ -957,4 +965,5 @@ private fun NativeK16OsStats.toRuntimeMetrics(): RuntimeK16OsMetrics =
         libkraftLibraryFileDataReadBytes = libkraftLibraryFileDataReadBytes,
         otherLibraryFileDataReadBlocks = otherLibraryFileDataReadBlocks,
         otherLibraryFileDataReadBytes = otherLibraryFileDataReadBytes,
+        lastExitedProgramHeapPages = lastExitedProgramHeapPages,
     )

@@ -192,7 +192,10 @@ class RuntimeProfilingTest {
                         libkraftLibraryFileDataReadBytes = 65,
                         otherLibraryFileDataReadBlocks = 66,
                         otherLibraryFileDataReadBytes = 67,
+                        lastExitedProgramHeapPages = 68,
                     ),
+                cpuSteps = 69,
+                gameTicks = 70,
                 devices =
                     listOf(
                         NativeK16MmioDeviceStats(
@@ -318,6 +321,9 @@ class RuntimeProfilingTest {
         assertEquals(65, snapshot.k16.os.libkraftLibraryFileDataReadBytes)
         assertEquals(66, snapshot.k16.os.otherLibraryFileDataReadBlocks)
         assertEquals(67, snapshot.k16.os.otherLibraryFileDataReadBytes)
+        assertEquals(68, snapshot.k16.os.lastExitedProgramHeapPages)
+        assertEquals(69, snapshot.k16.cpuSteps)
+        assertEquals(70, snapshot.k16.gameTicks)
         assertEquals(18, snapshot.vm.k16TextInputNanos)
         assertEquals(RuntimeK16BusTrafficMetrics(loads = 10, stores = 11, bytesRead = 12, bytesWritten = 13), snapshot.k16.ram)
         assertEquals(RuntimeK16BusTrafficMetrics(loads = 20, stores = 21, bytesRead = 22, bytesWritten = 23), snapshot.k16.mmio)
@@ -410,6 +416,7 @@ class RuntimeProfilingTest {
             summary.contains("    k16DecodeCache: entries=42, hits=43, misses=44"),
             summary,
         )
+        assertTrue(summary.contains("    k16ExecutionCounters: cpuSteps=69, gameTicks=70"), summary)
         assertTrue(
             summary.contains("    k16Devices: mapped=1, loads=4, stores=5, bytesRead=6, bytesWritten=7"),
             summary,
@@ -420,7 +427,7 @@ class RuntimeProfilingTest {
         )
         assertTrue(summary.contains("    k16Storage1: readCommands=0"), summary)
         assertTrue(
-            summary.contains("    k16Os: pathLookups=31, inodeLoads=32, dirEntryScans=33, fileOpens=34, fileReads=35, statCalls=36, processSpawns=37, programLoads=38, dynamicImportLoads=39, libraryLoads=40, readDirCalls=41, programLoadBytes=42, dynamicImportBytes=43, libraryLoadBytes=44, genericFileDataReadBlocks=45, genericFileDataReadBytes=46, readDirDataReadBlocks=47, readDirDataReadBytes=48, programDataReadBlocks=49, programDataReadBytes=50, dynamicImportDataReadBlocks=51, dynamicImportDataReadBytes=52, libraryDataReadBlocks=53, libraryDataReadBytes=54, blockCacheHits=55, blockCacheMisses=56, blockCacheBatchReads=57, initProgramFileDataReadBlocks=58, initProgramFileDataReadBytes=59, shellProgramFileDataReadBlocks=60, shellProgramFileDataReadBytes=61, otherProgramFileDataReadBlocks=62, otherProgramFileDataReadBytes=63, libkraftLibraryFileDataReadBlocks=64, libkraftLibraryFileDataReadBytes=65, otherLibraryFileDataReadBlocks=66, otherLibraryFileDataReadBytes=67"),
+            summary.contains("    k16Os: pathLookups=31, inodeLoads=32, dirEntryScans=33, fileOpens=34, fileReads=35, statCalls=36, processSpawns=37, programLoads=38, dynamicImportLoads=39, libraryLoads=40, readDirCalls=41, programLoadBytes=42, dynamicImportBytes=43, libraryLoadBytes=44, genericFileDataReadBlocks=45, genericFileDataReadBytes=46, readDirDataReadBlocks=47, readDirDataReadBytes=48, programDataReadBlocks=49, programDataReadBytes=50, dynamicImportDataReadBlocks=51, dynamicImportDataReadBytes=52, libraryDataReadBlocks=53, libraryDataReadBytes=54, blockCacheHits=55, blockCacheMisses=56, blockCacheBatchReads=57, initProgramFileDataReadBlocks=58, initProgramFileDataReadBytes=59, shellProgramFileDataReadBlocks=60, shellProgramFileDataReadBytes=61, otherProgramFileDataReadBlocks=62, otherProgramFileDataReadBytes=63, libkraftLibraryFileDataReadBlocks=64, libkraftLibraryFileDataReadBytes=65, otherLibraryFileDataReadBlocks=66, otherLibraryFileDataReadBytes=67, lastExitedProgramHeapPages=68"),
             summary,
         )
         assertTrue(

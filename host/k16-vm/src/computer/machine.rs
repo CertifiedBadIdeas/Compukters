@@ -341,6 +341,17 @@ impl ComputerMachine {
         let bus = self.bus.stats_snapshot();
         let os = self.os_stats_snapshot();
         let decode_cache = self.decode_cache_stats_snapshot();
+        let cpu_steps = self
+            .cpus
+            .iter()
+            .map(|cpu| match cpu {
+                ComputerCpuContext::K16 { cpu, .. } => cpu.snapshot().metrics_steps,
+            })
+            .fold(0_u64, u64::saturating_add);
+        let game_ticks = self
+            .timer0_device()
+            .map(TimerDevice::game_ticks)
+            .unwrap_or(0);
         let mut devices = Vec::new();
         for descriptor in self.devices.descriptors() {
             self.push_stats_device(&bus, &mut devices, descriptor);
@@ -349,6 +360,8 @@ impl ComputerMachine {
             bus,
             os,
             decode_cache,
+            cpu_steps,
+            game_ticks,
             devices,
         }
     }
@@ -427,6 +440,7 @@ impl ComputerMachine {
             libkraft_library_file_data_read_bytes: read(272),
             other_library_file_data_read_blocks: read(280),
             other_library_file_data_read_bytes: read(288),
+            last_exited_program_heap_pages: read(296),
         }
     }
 

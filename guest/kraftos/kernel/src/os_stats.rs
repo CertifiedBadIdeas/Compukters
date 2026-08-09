@@ -41,6 +41,7 @@ pub struct OsStats {
     libkraft_library_file_data_read_bytes: u64,
     other_library_file_data_read_blocks: u64,
     other_library_file_data_read_bytes: u64,
+    last_exited_program_heap_pages: u64,
 }
 
 const OS_STATS_SIZE: u32 = core::mem::size_of::<OsStats>() as u32;
@@ -83,6 +84,7 @@ static mut OS_STATS: OsStats = OsStats {
     libkraft_library_file_data_read_bytes: 0,
     other_library_file_data_read_blocks: 0,
     other_library_file_data_read_bytes: 0,
+    last_exited_program_heap_pages: 0,
 };
 
 pub fn register() {
@@ -290,6 +292,15 @@ pub fn record_other_library_file_data_read(bytes: u32) {
     }
 }
 
+pub fn record_last_exited_program_heap_pages(heap_pages: u64) {
+    unsafe {
+        core::ptr::write_volatile(
+            core::ptr::addr_of_mut!(OS_STATS.last_exited_program_heap_pages),
+            heap_pages,
+        )
+    };
+}
+
 unsafe fn increment(counter: *mut u64) {
     unsafe { add(counter, 1) };
 }
@@ -297,4 +308,33 @@ unsafe fn increment(counter: *mut u64) {
 unsafe fn add(counter: *mut u64, amount: u64) {
     let value = unsafe { core::ptr::read_volatile(counter) };
     unsafe { core::ptr::write_volatile(counter, value.wrapping_add(amount)) };
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{record_last_exited_program_heap_pages, OsStats, OS_STATS};
+
+    #[test]
+    fn os_stats_appends_last_exited_heap_gauge_at_byte_296() {
+        assert_eq!(core::mem::size_of::<OsStats>(), 304);
+        assert_eq!(
+            core::mem::offset_of!(OsStats, last_exited_program_heap_pages),
+            296,
+        );
+    }
+
+    #[test]
+    fn last_exited_heap_pages_is_a_last_value_gauge() {
+        record_last_exited_program_heap_pages(7);
+        record_last_exited_program_heap_pages(3);
+
+        assert_eq!(
+            unsafe {
+                core::ptr::read_volatile(core::ptr::addr_of!(
+                    OS_STATS.last_exited_program_heap_pages
+                ))
+            },
+            3,
+        );
+    }
 }

@@ -5,6 +5,8 @@ pub struct K16ComputerStatsSnapshot {
     pub bus: MachineBusStatsSnapshot,
     pub os: K16ComputerOsStatsSnapshot,
     pub decode_cache: K16ComputerDecodeCacheStatsSnapshot,
+    pub cpu_steps: u64,
+    pub game_ticks: u64,
     pub devices: Vec<K16ComputerDeviceStats>,
 }
 
@@ -87,6 +89,7 @@ pub struct K16ComputerOsStatsSnapshot {
     pub libkraft_library_file_data_read_bytes: u64,
     pub other_library_file_data_read_blocks: u64,
     pub other_library_file_data_read_bytes: u64,
+    pub last_exited_program_heap_pages: u64,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]

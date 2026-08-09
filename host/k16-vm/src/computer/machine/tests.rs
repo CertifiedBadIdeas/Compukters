@@ -6,7 +6,7 @@ use crate::computer::devices::{
 use crate::computer::profile::{ComputerHardwareConfig, ComputerMachineProfile};
 use crate::computer_abi;
 use crate::k16::{
-    K16AddressMode, K16PrivilegeMode, K16Signal, K16_CSR_TRAP_FRAME_INDEX,
+    K16AddressMode, K16Cpu, K16PrivilegeMode, K16Signal, K16_CSR_TRAP_FRAME_INDEX,
     K16_CSR_TRAP_FRAME_REGISTER, K16_CSR_TRAP_RESUME_PC, K16_CSR_TRAP_VECTOR,
     K16_STACK_POINTER_REGISTER,
 };
@@ -2059,6 +2059,63 @@ fn stats_snapshot_reads_registered_os_stats_from_guest_ram() {
     assert_eq!(snapshot.os.libkraft_library_file_data_read_bytes, 45);
     assert_eq!(snapshot.os.other_library_file_data_read_blocks, 46);
     assert_eq!(snapshot.os.other_library_file_data_read_bytes, 47);
+    assert_eq!(snapshot.os.last_exited_program_heap_pages, 0);
+}
+
+#[test]
+fn stats_snapshot_reads_appended_os_stats_fields_from_sized_guest_region() {
+    let profile = ComputerMachineProfile::new(2048).with_hardware(ComputerHardwareConfig::control(
+        computer_abi::COMPUTER_HARDWARE_ID_CONTROL,
+        computer_abi::CONTROL_BASE,
+    ));
+    let mut machine = ComputerMachine::from_profile(profile).unwrap();
+    machine.memory_mut().store_u64(512 + 296, 48).unwrap();
+    machine
+        .bus_store_i32(computer_abi::CONTROL_OS_STATS_ADDR, 512)
+        .unwrap();
+    machine
+        .bus_store_i32(computer_abi::CONTROL_OS_STATS_SIZE, 304)
+        .unwrap();
+
+    assert_eq!(
+        machine.stats_snapshot().os.last_exited_program_heap_pages,
+        48,
+    );
+}
+
+#[test]
+fn stats_snapshot_reports_cpu_steps_and_game_ticks() {
+    let bios = k16_words(&[k16_halt()]);
+    let (mut machine, boot_cpu) = ComputerMachine::from_k16_bios_flash(&bios, 1024, 8).unwrap();
+    machine.advance_game_tick();
+    machine.advance_game_tick();
+    assert_eq!(
+        machine.run_boot_k16_until_signal(boot_cpu).unwrap(),
+        K16Signal::Halt,
+    );
+
+    let snapshot = machine.stats_snapshot();
+
+    assert_eq!(snapshot.cpu_steps, 1);
+    assert_eq!(snapshot.game_ticks, 2);
+}
+
+#[test]
+fn stats_snapshot_saturates_cpu_steps_and_defaults_absent_timer_to_zero() {
+    let mut machine = ComputerMachine::new(1024).unwrap();
+    let first_cpu = machine.install_k16_boot_cpu_for_tests(0, 1);
+    let second_cpu = machine.install_k16_boot_cpu_for_tests(0, 1);
+    let mut first_snapshot = machine.k16_cpu_mut(first_cpu).unwrap().snapshot();
+    first_snapshot.metrics_steps = u64::MAX;
+    *machine.k16_cpu_mut(first_cpu).unwrap() = K16Cpu::from_snapshot(first_snapshot);
+    let mut second_snapshot = machine.k16_cpu_mut(second_cpu).unwrap().snapshot();
+    second_snapshot.metrics_steps = 1;
+    *machine.k16_cpu_mut(second_cpu).unwrap() = K16Cpu::from_snapshot(second_snapshot);
+
+    let snapshot = machine.stats_snapshot();
+
+    assert_eq!(snapshot.cpu_steps, u64::MAX);
+    assert_eq!(snapshot.game_ticks, 0);
 }
 
 fn write_k16pt_test_table(
