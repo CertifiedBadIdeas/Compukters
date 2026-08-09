@@ -666,12 +666,10 @@ fn store_value<T: Copy>(bus: &mut MachineBus, address: u32, value: T) -> Result<
                 address,
                 (&value as *const T as *const u32).read_unaligned() as i32,
             ),
-            _ => {
-                return Err(MemoryFault::new(format!(
-                    "unsupported rvsim store width {}",
-                    size_of::<T>()
-                )))
-            }
+            _ => Err(MemoryFault::new(format!(
+                "unsupported rvsim store width {}",
+                size_of::<T>()
+            ))),
         }
     }
 }
