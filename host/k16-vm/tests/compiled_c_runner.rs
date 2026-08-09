@@ -22,7 +22,8 @@ use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use k16_vm::compiled_c::artifact::{
-    load_compiled_c_artifact, validate_artifact_pair, CompiledCArtifact, CompiledCCandidate,
+    load_compiled_c_artifact, validate_artifact_pair, validate_riscv_xlen_artifact_pair,
+    CompiledCArtifact, CompiledCCandidate,
 };
 use k16_vm::compiled_c::runner::run_compiled_c;
 use k16_vm::isa_benchmarks::{native_checksum, IsaBenchmarkWorkload};
@@ -92,6 +93,28 @@ fn compile_corpus(iterations: u32) -> FixtureDirectory {
     artifacts
 }
 
+fn compile_riscv_xlen_corpus(iterations: u32) -> FixtureDirectory {
+    let root = repository_root();
+    let artifacts = FixtureDirectory::new();
+    let output = Command::new("bash")
+        .arg(root.join("scripts/compile-riscv-xlen-gate-corpus.sh"))
+        .arg(&artifacts.0)
+        .arg(iterations.to_string())
+        .env(
+            "RISCV_XLEN_CHECKSUM_BIN",
+            env!("CARGO_BIN_EXE_isa_gate2_checksum"),
+        )
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "compiler failed:\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr),
+    );
+    artifacts
+}
+
 #[test]
 fn every_compiled_workload_matches_manifest_and_native_oracle() {
     let iterations = 17;
@@ -124,6 +147,27 @@ fn every_compiled_workload_matches_manifest_and_native_oracle() {
                 "{}",
                 artifact.candidate.name()
             );
+        }
+    }
+}
+
+#[test]
+fn every_riscv_xlen_workload_matches_the_same_native_oracle() {
+    let iterations = 17;
+    let artifacts = compile_riscv_xlen_corpus(iterations);
+    for workload in IsaBenchmarkWorkload::all().iter().copied().take(6) {
+        let directory = artifacts.0.join(workload.name());
+        let rv32 = load_compiled_c_artifact(&directory.join("rv32im.manifest")).unwrap();
+        let rv64 = load_compiled_c_artifact(&directory.join("rv64im.manifest")).unwrap();
+        validate_riscv_xlen_artifact_pair(&rv32, &rv64).unwrap();
+        let expected = native_checksum(workload, iterations);
+        for artifact in [&rv32, &rv64] {
+            let observation = run_compiled_c(artifact, iterations, 10_000_000).unwrap();
+            assert_eq!(observation.workload, workload);
+            assert_eq!(observation.checksum, expected);
+            assert!(observation.retired_instructions > 0);
+            assert_eq!(observation.code_bytes, artifact.code_bytes);
+            assert_eq!(observation.instruction_count, artifact.instruction_count);
         }
     }
 }
