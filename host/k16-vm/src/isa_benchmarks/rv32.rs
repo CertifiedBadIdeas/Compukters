@@ -27,7 +27,7 @@ use crate::rv32im::encoding::{
     add, addi, and, andi, beq, bne, ebreak, ecall, jal, jalr, lbu, lw, materialize, mul, or, sb,
     sll, srl, sub, sw, xor,
 };
-use crate::rv32im::{PredecodedRv32imProgram, Rv32imCpu, Rv32imStop};
+use crate::rv32im::{CachedRv32imProgram, PredecodedRv32imProgram, Rv32imCpu, Rv32imStop};
 use rvsim::{Clock, CpuError, CpuState, Interp, Memory, MemoryAccess};
 use std::collections::HashMap;
 use std::mem::size_of;
@@ -50,6 +50,7 @@ pub(super) struct Prepared {
     iterations: u32,
     image: ProgramImage,
     bus: MachineBus,
+    cached: Option<CachedRv32imProgram>,
     predecoded: Option<PredecodedRv32imProgram>,
 }
 
@@ -64,6 +65,7 @@ impl Prepared {
             candidate,
             IsaBenchmarkCandidate::RvsimRv32im
                 | IsaBenchmarkCandidate::Rv32im
+                | IsaBenchmarkCandidate::Rv32imCached
                 | IsaBenchmarkCandidate::Rv32imPredecoded
         ) {
             return Err(format!(
@@ -72,6 +74,11 @@ impl Prepared {
             ));
         }
         let (bus, code) = new_bus(workload, &image.words)?;
+        let cached = if candidate == IsaBenchmarkCandidate::Rv32imCached {
+            Some(CachedRv32imProgram::new())
+        } else {
+            None
+        };
         let predecoded = if candidate == IsaBenchmarkCandidate::Rv32imPredecoded {
             Some(PredecodedRv32imProgram::new(0, &code)?)
         } else {
@@ -83,6 +90,7 @@ impl Prepared {
             iterations,
             image,
             bus,
+            cached,
             predecoded,
         })
     }
@@ -93,16 +101,17 @@ impl Prepared {
             IsaBenchmarkCandidate::RvsimRv32im => {
                 run_rvsim(&self.image, &mut self.bus, self.workload, self.iterations)
             }
-            IsaBenchmarkCandidate::Rv32im | IsaBenchmarkCandidate::Rv32imPredecoded => {
-                run_specialized(
-                    self.candidate,
-                    &self.image,
-                    &mut self.bus,
-                    self.predecoded.as_ref(),
-                    self.workload,
-                    self.iterations,
-                )
-            }
+            IsaBenchmarkCandidate::Rv32im
+            | IsaBenchmarkCandidate::Rv32imCached
+            | IsaBenchmarkCandidate::Rv32imPredecoded => run_specialized(
+                self.candidate,
+                &self.image,
+                &mut self.bus,
+                self.cached.as_mut(),
+                self.predecoded.as_ref(),
+                self.workload,
+                self.iterations,
+            ),
             _ => unreachable!(),
         }
     }
@@ -156,6 +165,7 @@ fn run_specialized(
     candidate: IsaBenchmarkCandidate,
     image: &ProgramImage,
     bus: &mut MachineBus,
+    mut cached: Option<&mut CachedRv32imProgram>,
     predecoded: Option<&PredecodedRv32imProgram>,
     workload: IsaBenchmarkWorkload,
     iterations: u32,
@@ -164,10 +174,13 @@ fn run_specialized(
     let mut cpu = Rv32imCpu::new(0);
     let max_steps = max_steps(iterations);
     let mut yields = 0_u64;
+    let misses_before = cached.as_deref().map_or(0, CachedRv32imProgram::misses);
     loop {
-        let stop = match predecoded {
-            Some(program) => program.run_until_stop(&mut cpu, bus, max_steps)?,
-            None => cpu.run_until_stop(bus, max_steps)?,
+        let stop = match (cached.as_deref_mut(), predecoded) {
+            (Some(program), None) => program.run_until_stop(&mut cpu, bus, max_steps)?,
+            (None, Some(program)) => program.run_until_stop(&mut cpu, bus, max_steps)?,
+            (None, None) => cpu.run_until_stop(bus, max_steps)?,
+            (Some(_), Some(_)) => unreachable!(),
         };
         match stop {
             Rv32imStop::Ebreak => break,
@@ -187,6 +200,14 @@ fn run_specialized(
     let mmio = subtract(after.1, before.1);
     let instruction_fetch = if predecoded.is_some() {
         IsaTraffic::default()
+    } else if let Some(program) = cached.as_deref() {
+        let misses = program.misses().saturating_sub(misses_before);
+        IsaTraffic {
+            loads: misses,
+            stores: 0,
+            bytes_read: misses.saturating_mul(4),
+            bytes_written: 0,
+        }
     } else {
         IsaTraffic {
             loads: cpu.retired_instructions(),
@@ -206,7 +227,10 @@ fn run_specialized(
         ram,
         mmio,
         Rv32imCpu::cpu_state_bytes(),
-        predecoded.map_or(0, PredecodedRv32imProgram::retained_bytes),
+        cached.as_deref().map_or_else(
+            || predecoded.map_or(0, PredecodedRv32imProgram::retained_bytes),
+            CachedRv32imProgram::retained_bytes,
+        ),
     )
 }
 

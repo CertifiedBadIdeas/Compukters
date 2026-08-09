@@ -58,7 +58,9 @@ impl Prepared {
     ) -> Result<Self, String> {
         if !matches!(
             candidate,
-            IsaBenchmarkCandidate::K16 | IsaBenchmarkCandidate::K16Cached
+            IsaBenchmarkCandidate::K16
+                | IsaBenchmarkCandidate::K16Cached
+                | IsaBenchmarkCandidate::K16Predecoded
         ) {
             return Err(format!("candidate {} is not implemented", candidate.name()));
         }
@@ -77,13 +79,14 @@ impl Prepared {
             }
         }
         write_words(&mut bus, &image.words)?;
+        let decoder = TrackingDecoder::new(candidate, &mut bus, image.words.len() * 2)?;
         Ok(Self {
             candidate,
             workload,
             iterations,
             image,
             bus,
-            decoder: TrackingDecoder::new(candidate == IsaBenchmarkCandidate::K16Cached),
+            decoder,
         })
     }
 
@@ -484,6 +487,74 @@ fn packet_ring_program(iterations: u32) -> Result<ProgramImage, String> {
 enum BenchmarkDecoder {
     Direct(K16Decoder),
     Cached(K16CachedDecoder),
+    Predecoded(PredecodedK16Decoder),
+}
+
+struct PredecodedK16Decoder {
+    slots: Vec<Option<DecodeResult>>,
+}
+
+impl PredecodedK16Decoder {
+    fn new(bus: &mut dyn MemoryBus, code_bytes: usize) -> Result<Self, String> {
+        if !code_bytes.is_multiple_of(2) {
+            return Err(format!(
+                "K16 predecode image length {code_bytes} is not a multiple of two"
+            ));
+        }
+        let mut slots = vec![None; code_bytes / 2];
+        let mut decoder = K16Decoder::new();
+        let mut pc = 0_u32;
+        while (pc as usize) < code_bytes {
+            let decoded = decoder
+                .decode(bus, pc)
+                .map_err(|error| format!("K16 predecode failed at {pc:#010x}: {error}"))?;
+            if decoded.next_pc <= pc || decoded.next_pc as usize > code_bytes {
+                return Err(format!(
+                    "K16 predecode at {pc:#010x} produced invalid next PC {:#010x}",
+                    decoded.next_pc,
+                ));
+            }
+            slots[pc as usize / 2] = Some(decoded.clone());
+            pc = decoded.next_pc;
+        }
+        Ok(Self { slots })
+    }
+
+    fn retained_bytes(&self) -> usize {
+        self.slots.capacity() * std::mem::size_of::<Option<DecodeResult>>()
+    }
+}
+
+impl InstructionDecoder for PredecodedK16Decoder {
+    fn decode(&mut self, bus: &mut dyn MemoryBus, pc: u32) -> Result<DecodeResult, K16Trap> {
+        if pc.is_multiple_of(2) {
+            if let Some(Some(decoded)) = self.slots.get(pc as usize / 2) {
+                return Ok(decoded.clone());
+            }
+        }
+        K16Decoder::new().decode(bus, u32::MAX)
+    }
+}
+
+#[cfg(test)]
+mod predecoded_tests {
+    use super::*;
+
+    #[test]
+    fn predecoded_k16_rejects_an_extension_word_as_a_program_counter() {
+        let image = k16_workload(IsaBenchmarkWorkload::Compute32, 1).unwrap();
+        let mut bus = MachineBus::new(MEMORY_SIZE).unwrap();
+        write_words(&mut bus, &image.words).unwrap();
+        let mut decoder = PredecodedK16Decoder::new(&mut bus, image.words.len() * 2).unwrap();
+        let extension_pc = decoder
+            .slots
+            .iter()
+            .position(Option::is_none)
+            .expect("compute32 contains an extension word") as u32
+            * 2;
+
+        assert!(decoder.decode(&mut bus, extension_pc).is_err());
+    }
 }
 
 impl InstructionDecoder for BenchmarkDecoder {
@@ -491,6 +562,7 @@ impl InstructionDecoder for BenchmarkDecoder {
         match self {
             Self::Direct(decoder) => decoder.decode(bus, pc),
             Self::Cached(decoder) => decoder.decode(bus, pc),
+            Self::Predecoded(decoder) => decoder.decode(bus, pc),
         }
     }
 }
@@ -501,15 +573,28 @@ struct TrackingDecoder {
 }
 
 impl TrackingDecoder {
-    fn new(cached: bool) -> Self {
-        Self {
-            decoder: if cached {
-                BenchmarkDecoder::Cached(K16CachedDecoder::new())
-            } else {
-                BenchmarkDecoder::Direct(K16Decoder::new())
-            },
+    fn new(
+        candidate: IsaBenchmarkCandidate,
+        bus: &mut dyn MemoryBus,
+        code_bytes: usize,
+    ) -> Result<Self, String> {
+        let decoder = match candidate {
+            IsaBenchmarkCandidate::K16 => BenchmarkDecoder::Direct(K16Decoder::new()),
+            IsaBenchmarkCandidate::K16Cached => BenchmarkDecoder::Cached(K16CachedDecoder::new()),
+            IsaBenchmarkCandidate::K16Predecoded => {
+                BenchmarkDecoder::Predecoded(PredecodedK16Decoder::new(bus, code_bytes)?)
+            }
+            _ => {
+                return Err(format!(
+                    "candidate {} is not a K16-v1 mode",
+                    candidate.name()
+                ))
+            }
+        };
+        Ok(Self {
+            decoder,
             fetch: IsaTraffic::default(),
-        }
+        })
     }
 
     fn begin_run(&mut self) {
@@ -520,6 +605,7 @@ impl TrackingDecoder {
         match &self.decoder {
             BenchmarkDecoder::Direct(_) => 0,
             BenchmarkDecoder::Cached(decoder) => decoder.estimated_retained_bytes(),
+            BenchmarkDecoder::Predecoded(decoder) => decoder.retained_bytes(),
         }
     }
 }
@@ -529,12 +615,14 @@ impl InstructionDecoder for TrackingDecoder {
         let misses_before = match &self.decoder {
             BenchmarkDecoder::Direct(_) => None,
             BenchmarkDecoder::Cached(decoder) => Some(decoder.stats().misses),
+            BenchmarkDecoder::Predecoded(_) => None,
         };
         let result = self.decoder.decode(bus, pc)?;
         let record_fetch = match (&self.decoder, misses_before) {
             (BenchmarkDecoder::Direct(_), _) => true,
             (BenchmarkDecoder::Cached(decoder), Some(before)) => decoder.stats().misses > before,
             (BenchmarkDecoder::Cached(_), None) => unreachable!(),
+            (BenchmarkDecoder::Predecoded(_), _) => false,
         };
         if record_fetch {
             let bytes = u64::from(result.next_pc.wrapping_sub(pc));

@@ -18,8 +18,8 @@
  */
 
 use k16_vm::isa_benchmarks::{
-    format_recommendations, format_timing_sample, timing_report_header, IsaBenchmarkCandidate,
-    IsaBenchmarkTiming, IsaBenchmarkWorkload, PreparedIsaBenchmark,
+    format_recommendations, format_timing_sample, populate_vs_native, timing_report_header,
+    IsaBenchmarkCandidate, IsaBenchmarkTiming, IsaBenchmarkWorkload, PreparedIsaBenchmark,
 };
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -156,7 +156,12 @@ fn measure_workload(
             .position(|candidate| *candidate == measurement.candidate)
             .unwrap()
     });
-    Ok(measurements.into_iter().map(finish_measurement).collect())
+    let mut timings = measurements
+        .into_iter()
+        .map(finish_measurement)
+        .collect::<Vec<_>>();
+    populate_vs_native(&mut timings)?;
+    Ok(timings)
 }
 
 fn finish_measurement(mut measurement: CandidateMeasurement) -> IsaBenchmarkTiming {
@@ -172,6 +177,7 @@ fn finish_measurement(mut measurement: CandidateMeasurement) -> IsaBenchmarkTimi
         warm_p95_nanos: measurement.warm_nanos[p95_index],
         steady_allocations: measurement.steady_allocations,
         steady_allocated_bytes: measurement.steady_allocated_bytes,
+        vs_native: 0.0,
     }
 }
 
