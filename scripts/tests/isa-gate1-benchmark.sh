@@ -12,6 +12,7 @@ cp "$ROOT/scripts/record-isa-gate1-benchmark.sh" "$TEMP_ROOT/scripts/"
 git -C "$TEMP_ROOT" init -q
 git -C "$TEMP_ROOT" add .
 git -C "$TEMP_ROOT" -c user.name=test -c user.email=test@example.invalid commit -qm baseline
+printf 'stale snapshot\n' >"$TEMP_ROOT/docs/benchmarks/isa-gate1-current.txt"
 
 "$TEMP_ROOT/scripts/record-isa-gate1-benchmark.sh" 10 3 >/dev/null
 SNAPSHOT="$TEMP_ROOT/docs/benchmarks/isa-gate1-current.txt"
@@ -28,5 +29,6 @@ for expected in \
     'Gate 1 recommendation'; do
     grep -q "$expected" "$SNAPSHOT"
 done
+grep -q '^Commit: .* (clean)$' "$SNAPSHOT"
 
 echo "ISA Gate 1 recorder contract passed"

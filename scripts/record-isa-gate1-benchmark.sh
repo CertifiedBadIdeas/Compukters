@@ -21,7 +21,7 @@ done
 recorded_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 commit="$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || printf unknown)"
 dirty="clean"
-if [ -n "$(git -C "$ROOT" status --porcelain 2>/dev/null || true)" ]; then
+if [ -n "$(git -C "$ROOT" status --porcelain -- . ':(exclude)docs/benchmarks/isa-gate1-current.txt' 2>/dev/null || true)" ]; then
     dirty="dirty"
 fi
 host="$(uname -srmo)"

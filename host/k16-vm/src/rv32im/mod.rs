@@ -93,11 +93,11 @@ impl Rv32imCpu {
         instruction_pc: u32,
         instruction: DecodedInstruction,
     ) -> Result<Option<Rv32imStop>, String> {
-        let before = self.clone();
+        let previous_pc = self.pc;
         let stop = match self.execute_decoded(bus, instruction_pc, instruction) {
             Ok(stop) => stop,
             Err(error) => {
-                *self = before;
+                self.pc = previous_pc;
                 return Err(error);
             }
         };
@@ -120,13 +120,15 @@ impl Rv32imCpu {
                 self.registers[rd] = instruction_pc.wrapping_add(value)
             }
             DecodedInstruction::Jal { rd, offset } => {
+                let target = checked_target(instruction_pc.wrapping_add_signed(offset))?;
                 self.registers[rd] = next_pc;
-                self.pc = checked_target(instruction_pc.wrapping_add_signed(offset))?;
+                self.pc = target;
             }
             DecodedInstruction::Jalr { rd, rs1, immediate } => {
                 let target = self.registers[rs1].wrapping_add_signed(immediate) & !1;
+                let target = checked_target(target)?;
                 self.registers[rd] = next_pc;
-                self.pc = checked_target(target)?;
+                self.pc = target;
             }
             DecodedInstruction::Branch {
                 kind,
