@@ -705,7 +705,10 @@ class K16FirmwareResourceTest {
         assertEquals("kflash", manifest.biosFlash.format)
         assertEquals("firmware/k16-system-storage0-dev.kv", manifest.systemStorage0.resource)
         assertEquals("kfs-kv", manifest.systemStorage0.format)
+        assertEquals("firmware/c-sdk-v1.kv", manifest.sdkArtifact("c_sdk_v1").resource)
+        assertEquals("kfs-kv", manifest.sdkArtifact("c_sdk_v1").format)
         assertEquals("firmware/sdk-fixture-v1.kv", manifest.sdkArtifact("sdk_fixture_v1").resource)
+        assertEquals(setOf("c_sdk_v1", "sdk_fixture_v1"), manifest.sdkArtifacts.keys)
         assertTrue(
             javaClass.classLoader.getResource(manifest.biosFlash.resource) != null,
             "manifest BIOS flash resource should exist",
@@ -715,9 +718,24 @@ class K16FirmwareResourceTest {
             "manifest storage0 resource should exist",
         )
         assertTrue(
+            javaClass.classLoader.getResource(manifest.sdkArtifact("c_sdk_v1").resource) != null,
+            "manifest C SDK resource should exist",
+        )
+        assertTrue(
             javaClass.classLoader.getResource(manifest.sdkArtifact("sdk_fixture_v1").resource) != null,
             "manifest SDK fixture resource should exist",
         )
+
+        val firstCSdk =
+            javaClass.classLoader.getResourceAsStream(manifest.sdkArtifact("c_sdk_v1").resource)
+                ?.use { it.readBytes() }
+                ?: error("manifest C SDK resource should resolve")
+        val secondCSdk =
+            javaClass.classLoader.getResourceAsStream(manifest.sdkArtifact("c_sdk_v1").resource)
+                ?.use { it.readBytes() }
+                ?: error("manifest C SDK resource should resolve repeatedly")
+        assertContentEquals(firstCSdk, secondCSdk)
+        assertEquals(4 * 1024 * 1024, firstCSdk.size - 16, "C SDK payload should be exactly 4 MiB")
     }
 
     @Test
@@ -726,15 +744,22 @@ class K16FirmwareResourceTest {
         val manifest = bundle.resolve("firmware/kraftos-artifacts.properties")
         val biosFlash = bundle.resolve("firmware/k16-bios.kflash")
         val systemStorage0 = bundle.resolve("firmware/k16-system-storage0.kv")
+        val cSdk = bundle.resolve("firmware/c-sdk-v1.kv")
+        val candidate = Path.of("build/generated/k16-native-tinycc/c-sdk-candidate.kv")
 
         assertTrue(Files.exists(manifest), "production bundle should contain the artifact manifest")
         assertTrue(Files.exists(biosFlash), "production bundle should contain the BIOS flash image")
         assertTrue(Files.exists(systemStorage0), "production bundle should contain the initial system storage volume")
+        assertTrue(Files.exists(cSdk), "production bundle should contain the immutable C SDK volume")
+        assertTrue(Files.exists(candidate), "production C SDK must retain its proven candidate source")
         assertTrue(manifest.readText().contains("profile=production"))
-        assertFalse(manifest.readText().contains("artifact.sdk."))
+        assertTrue(manifest.readText().contains("artifact.sdk.c_sdk_v1.resource=firmware/c-sdk-v1.kv"))
+        assertTrue(manifest.readText().contains("artifact.sdk.c_sdk_v1.format=kfs-kv"))
+        assertFalse(manifest.readText().contains("artifact.sdk.c_sdk_candidate"))
         assertFalse(Files.exists(bundle.resolve("firmware/sdk-fixture-v1.kv")))
         assertTrue(biosFlash.readBytes().size > 8, "bundled BIOS flash should not be empty")
         assertTrue(systemStorage0.readBytes().size > 512, "bundled storage0 volume should not be empty")
+        assertContentEquals(candidate.readBytes(), cSdk.readBytes(), "production C SDK must preserve candidate bytes")
     }
 
     @Test
@@ -1252,13 +1277,14 @@ class K16FirmwareResourceTest {
             "kraft_sys_unlink",
             "kraft_sys_sbrk",
             "kraft_sys_exit",
+            "kraft_sys_game_ticks",
         ).forEach { symbol ->
             assertTrue(
                 kraftMetadata.contains(symbol),
                 "bundled libkraft should export $symbol",
             )
         }
-        listOf("kraft_write_all", "kraft_exit", "__k16_syscall1", "__k16_syscall3", "game_ticks").forEach { symbol ->
+        listOf("kraft_write_all", "kraft_exit", "__k16_syscall1", "__k16_syscall3").forEach { symbol ->
             assertFalse(
                 kraftMetadata.contains(symbol),
                 "bundled libkraft should not export implementation symbol $symbol",
@@ -2702,7 +2728,8 @@ class K16FirmwareResourceTest {
         assertTrue(catSource.contains("read(fd, buffer, sizeof(buffer))"))
         assertTrue(catSource.contains("write_all(STDOUT_FILENO"))
         assertTrue(catSource.contains("close(fd)"))
-        assertTrue(startupSource.contains("return kraft_main((int)argc, argv);"))
+        assertTrue(startupSource.contains("#define KRAFT_CRT_USER_MAIN kraft_main"))
+        assertTrue(startupSource.contains("return KRAFT_CRT_USER_MAIN((int)argc, argv);"))
         assertTrue(syscallHeader.contains("int kraft_open(const char *path, unsigned int flags);"))
     }
 
