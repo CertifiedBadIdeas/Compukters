@@ -19,7 +19,6 @@
 
 package ru.lazyhat.compukterkraft.impl
 
-import net.minecraft.core.BlockPos
 import net.minecraft.core.component.DataComponentType
 import net.minecraft.core.registries.Registries
 import net.minecraft.network.chat.Component
@@ -28,10 +27,8 @@ import net.minecraft.world.item.CreativeModeTab
 import net.minecraft.world.item.Item
 import net.minecraft.world.item.ItemStack
 import net.minecraft.world.level.block.Block
-import net.minecraft.world.level.block.entity.BlockEntity
 import net.minecraft.world.level.block.entity.BlockEntityType
 import net.minecraft.world.level.block.state.BlockBehaviour
-import net.minecraft.world.level.block.state.BlockState
 import net.minecraft.world.level.material.MapColor
 import net.minecraft.world.level.storage.loot.predicates.LootItemConditionType
 import net.neoforged.bus.api.IEventBus
@@ -45,6 +42,7 @@ import ru.lazyhat.compukterkraft.common.computer.loot.HasComputerIdLootCondition
 import ru.lazyhat.compukterkraft.common.computer.loot.PlayerCreativeLootCondition
 import ru.lazyhat.compukterkraft.common.computer.menu.ComputerControlMenu
 import ru.lazyhat.compukterkraft.common.computer.menu.NotebookComputerMenu
+import ru.lazyhat.compukterkraft.common.computer.module.CProgrammingSdkItem
 import ru.lazyhat.compukterkraft.common.computer.module.SDK_ARTIFACT_IDENTITY_CODEC
 import ru.lazyhat.compukterkraft.common.computer.module.SDK_ARTIFACT_IDENTITY_STREAM_CODEC
 import ru.lazyhat.compukterkraft.common.notebook.block.NotebookBlock
@@ -59,6 +57,8 @@ import java.util.function.Supplier
 object ModRegistry {
     object Names {
         const val NOTEBOOK = "notebook"
+        const val ADVANCED_NOTEBOOK = "advanced_notebook"
+        const val C_PROGRAMMING_SDK = "c_programming_sdk"
         const val COMPUTER = "computer"
         const val COMPUTER_CONTROL = "computer_control"
     }
@@ -79,6 +79,14 @@ object ModRegistry {
                     NotebookBlock(notebookProperties().mapColor(MapColor.METAL), DeviceFamily.NORMAL)
                 },
             )
+
+        val ADVANCED_NOTEBOOK: DeferredHolder<Block, NotebookBlock> =
+            REGISTRY.register(
+                Names.ADVANCED_NOTEBOOK,
+                Supplier {
+                    NotebookBlock(notebookProperties().mapColor(MapColor.METAL), DeviceFamily.ADVANCED)
+                },
+            )
     }
 
     object DataComponents {
@@ -97,23 +105,18 @@ object ModRegistry {
         val REGISTRY: DeferredRegister<BlockEntityType<*>> = DeferredRegister.create(Registries.BLOCK_ENTITY_TYPE, MOD_ID)
 
         @Suppress("TYPE_MISMATCH_BASED_ON_JAVA_ANNOTATIONS")
-        private fun <T : BlockEntity, B : Block> ofBlock(
-            block: DeferredHolder<Block, B>,
-            name: String,
-            factory: (BlockPos, BlockState) -> T,
-        ): DeferredHolder<BlockEntityType<*>, BlockEntityType<T>> =
+        val NOTEBOOK: DeferredHolder<BlockEntityType<*>, BlockEntityType<NeoForgeNotebookBlockEntity>> =
             REGISTRY.register(
-                name,
+                Names.NOTEBOOK,
                 Supplier {
-                    BlockEntityType.Builder.of(factory, block.get()).build(null)
+                    BlockEntityType.Builder
+                        .of(
+                            { pos, state -> NeoForgeNotebookBlockEntity(NOTEBOOK.get(), pos, state) },
+                            Blocks.NOTEBOOK.get(),
+                            Blocks.ADVANCED_NOTEBOOK.get(),
+                        ).build(null)
                 },
             )
-
-        val NOTEBOOK: DeferredHolder<BlockEntityType<*>, BlockEntityType<NeoForgeNotebookBlockEntity>> =
-            ofBlock(
-                Blocks.NOTEBOOK,
-                Names.NOTEBOOK,
-            ) { p, s -> NeoForgeNotebookBlockEntity(NOTEBOOK.get(), p, s) }
     }
 
     object Items {
@@ -138,6 +141,18 @@ object ModRegistry {
                 Blocks.NOTEBOOK,
                 Names.NOTEBOOK,
             ) { block, properties -> NeoForgeNotebookItem(block, properties) }
+
+        val ADVANCED_NOTEBOOK: DeferredHolder<Item, NotebookItem> =
+            ofBlock(
+                Blocks.ADVANCED_NOTEBOOK,
+                Names.ADVANCED_NOTEBOOK,
+            ) { block, properties -> NeoForgeNotebookItem(block, properties) }
+
+        val C_PROGRAMMING_SDK: DeferredHolder<Item, CProgrammingSdkItem> =
+            REGISTRY.register(
+                Names.C_PROGRAMMING_SDK,
+                Supplier { CProgrammingSdkItem(properties()) },
+            )
     }
 
     object LootItemConditionTypes {
@@ -215,7 +230,9 @@ object ModRegistry {
                             .icon { ItemStack(Items.NOTEBOOK.get()) }
                             .title(Component.translatable("itemGroup.compukterkraft"))
                             .displayItems { _, out ->
-                                out.accept(ItemStack(Items.NOTEBOOK.get()))
+                                out.accept(Items.NOTEBOOK.get().defaultInstance)
+                                out.accept(Items.ADVANCED_NOTEBOOK.get().defaultInstance)
+                                out.accept(Items.C_PROGRAMMING_SDK.get().defaultInstance)
                             }.build()
                     },
                 )
