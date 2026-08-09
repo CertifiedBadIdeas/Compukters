@@ -44,15 +44,17 @@ fn prepared_candidate_can_be_executed_repeatedly() {
 
 #[test]
 fn predecoded_candidate_reports_data_reads_without_fake_bus_fetches() {
-    let mut prepared = PreparedIsaBenchmark::new(
+    for candidate in [
+        IsaBenchmarkCandidate::K16F32Predecoded,
         IsaBenchmarkCandidate::Rv32imPredecoded,
-        IsaBenchmarkWorkload::MemorySequential,
-        17,
-    )
-    .unwrap();
-    let observation = prepared.execute().unwrap();
-    assert_eq!(observation.instruction_fetch.bytes_read, 0);
-    assert!(observation.data_ram.bytes_read > 0);
+    ] {
+        let mut prepared =
+            PreparedIsaBenchmark::new(candidate, IsaBenchmarkWorkload::MemorySequential, 17)
+                .unwrap();
+        let observation = prepared.execute().unwrap();
+        assert_eq!(observation.instruction_fetch.bytes_read, 0);
+        assert!(observation.data_ram.bytes_read > 0);
+    }
 }
 
 #[test]
@@ -109,19 +111,20 @@ fn recommendation_requires_nonzero_samples_and_lists_every_candidate() {
 
 #[test]
 fn custom_candidate_advances_only_inside_the_gate1_viability_window() {
-    let samples = candidate_samples([400, 300, 250, 131, 105, 120, 110, 100, 10]);
+    let samples = candidate_samples([400, 300, 250, 140, 131, 105, 120, 110, 100, 10]);
     let report = format_recommendations(&samples).unwrap();
-    assert!(report.contains("k16-f32\t1.310000\t13.100000\treject"));
+    assert!(report.contains("k16-f32-predecoded\t1.310000\t13.100000\treject"));
 
-    let samples = candidate_samples([400, 300, 250, 125, 105, 120, 110, 100, 10]);
+    let samples = candidate_samples([400, 300, 250, 140, 125, 105, 120, 110, 100, 10]);
     let report = format_recommendations(&samples).unwrap();
-    assert!(report.contains("k16-f32\t1.250000\t12.500000\tadvance"));
+    assert!(report.contains("k16-f32\t1.400000\t14.000000\treject"));
+    assert!(report.contains("k16-f32-predecoded\t1.250000\t12.500000\tadvance"));
 }
 
 #[test]
 fn native_ratios_are_absolute_and_do_not_change_vm_decisions() {
-    let fast_native = candidate_samples([400, 300, 250, 125, 105, 120, 110, 100, 10]);
-    let slow_native = candidate_samples([400, 300, 250, 125, 105, 120, 110, 100, 20]);
+    let fast_native = candidate_samples([400, 300, 250, 140, 125, 105, 120, 110, 100, 10]);
+    let slow_native = candidate_samples([400, 300, 250, 140, 125, 105, 120, 110, 100, 20]);
 
     assert_eq!(fast_native[0].vs_native, 40.0);
     assert_eq!(fast_native.last().unwrap().vs_native, 1.0);
@@ -135,7 +138,7 @@ fn native_ratios_are_absolute_and_do_not_change_vm_decisions() {
     assert_eq!(fast_decisions, slow_decisions);
 }
 
-fn candidate_samples(nanos: [u128; 9]) -> Vec<IsaBenchmarkTiming> {
+fn candidate_samples(nanos: [u128; 10]) -> Vec<IsaBenchmarkTiming> {
     let mut samples = IsaBenchmarkCandidate::all()
         .iter()
         .zip(nanos)

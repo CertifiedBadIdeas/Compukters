@@ -38,6 +38,7 @@ pub enum IsaBenchmarkCandidate {
     K16Cached,
     K16Predecoded,
     K16F32,
+    K16F32Predecoded,
     RvsimRv32im,
     Rv32im,
     Rv32imCached,
@@ -52,6 +53,7 @@ impl IsaBenchmarkCandidate {
             Self::K16Cached,
             Self::K16Predecoded,
             Self::K16F32,
+            Self::K16F32Predecoded,
             Self::RvsimRv32im,
             Self::Rv32im,
             Self::Rv32imCached,
@@ -66,6 +68,7 @@ impl IsaBenchmarkCandidate {
             Self::K16Cached => "k16-cached",
             Self::K16Predecoded => "k16-predecoded",
             Self::K16F32 => "k16-f32",
+            Self::K16F32Predecoded => "k16-f32-predecoded",
             Self::RvsimRv32im => "rvsim-rv32im",
             Self::Rv32im => "rv32im",
             Self::Rv32imCached => "rv32im-cached",
@@ -87,6 +90,10 @@ impl IsaBenchmarkCandidate {
             self,
             Self::Rv32im | Self::Rv32imCached | Self::Rv32imPredecoded
         )
+    }
+
+    pub const fn is_k16_f32(self) -> bool {
+        matches!(self, Self::K16F32 | Self::K16F32Predecoded)
     }
 }
 
@@ -159,7 +166,9 @@ pub fn run_candidate(
         IsaBenchmarkCandidate::K16
         | IsaBenchmarkCandidate::K16Cached
         | IsaBenchmarkCandidate::K16Predecoded => k16::run(candidate, workload, iterations),
-        IsaBenchmarkCandidate::K16F32 => k16_f32::run(workload, iterations),
+        IsaBenchmarkCandidate::K16F32 | IsaBenchmarkCandidate::K16F32Predecoded => {
+            k16_f32::run(candidate, workload, iterations)
+        }
         IsaBenchmarkCandidate::RvsimRv32im
         | IsaBenchmarkCandidate::Rv32im
         | IsaBenchmarkCandidate::Rv32imCached
@@ -191,8 +200,8 @@ impl PreparedIsaBenchmark {
             | IsaBenchmarkCandidate::K16Predecoded => {
                 PreparedCandidate::K16(k16::Prepared::new(candidate, workload, iterations)?)
             }
-            IsaBenchmarkCandidate::K16F32 => {
-                PreparedCandidate::K16F32(k16_f32::Prepared::new(workload, iterations)?)
+            IsaBenchmarkCandidate::K16F32 | IsaBenchmarkCandidate::K16F32Predecoded => {
+                PreparedCandidate::K16F32(k16_f32::Prepared::new(candidate, workload, iterations)?)
             }
             IsaBenchmarkCandidate::RvsimRv32im
             | IsaBenchmarkCandidate::Rv32im

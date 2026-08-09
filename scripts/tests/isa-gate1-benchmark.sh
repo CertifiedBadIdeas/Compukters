@@ -32,7 +32,7 @@ for expected in \
     grep -q "$expected" "$SNAPSHOT"
 done
 grep -q '^Commit: .* (clean)$' "$SNAPSHOT"
-for candidate in k16 k16-cached k16-predecoded k16-f32 rvsim-rv32im rv32im rv32im-cached rv32im-predecoded native-rust; do
+for candidate in k16 k16-cached k16-predecoded k16-f32 k16-f32-predecoded rvsim-rv32im rv32im rv32im-cached rv32im-predecoded native-rust; do
     grep -q "^$candidate[[:space:]]" "$SNAPSHOT"
     grep -q "$candidate" "$TEMP_ROOT/scripts/record-isa-gate1-benchmark.sh"
 done

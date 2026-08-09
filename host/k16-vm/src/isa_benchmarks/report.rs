@@ -170,6 +170,7 @@ pub fn format_recommendations(samples: &[IsaBenchmarkTiming]) -> Result<String, 
         means.insert(*candidate, (vm_mean, geometric_mean(&host_ratios)));
     }
     let k16_winner = fastest_family(&means, IsaBenchmarkCandidate::is_k16_v1);
+    let k16_f32_winner = fastest_family(&means, IsaBenchmarkCandidate::is_k16_f32);
     let rv32_winner = fastest_family(&means, IsaBenchmarkCandidate::is_specialized_rv32im);
     let mut output =
         String::from("candidate\tnormalized_vm_geomean\thost_overhead_geomean\tdecision\n");
@@ -178,7 +179,7 @@ pub fn format_recommendations(samples: &[IsaBenchmarkTiming]) -> Result<String, 
             "reference"
         } else if *candidate == k16_winner
             || *candidate == rv32_winner
-            || (*candidate == IsaBenchmarkCandidate::K16F32
+            || (*candidate == k16_f32_winner
                 && means[candidate].0.unwrap()
                     <= means[&rv32_winner].0.unwrap() * GATE1_CUSTOM_VIABILITY_RATIO)
         {

@@ -10,10 +10,11 @@ The in-code metrics explain what the VM/display/compiler did. External profilers
 ## ISA Gate 1 comparison
 
 The Gate 1 benchmark compares K16-v1 and the specialized RV32IM interpreter in
-symmetric direct, lazy cached, and eager predecoded modes. It also retains the
-experimental direct K16-F32 decoder and external `rvsim` RV32IM reference, and
-runs the same semantic workloads as optimized `native-rust` host code. Every
-row is checksum-validated.
+symmetric direct, lazy cached, and eager predecoded modes. Experimental K16-F32
+is measured in direct and eager predecoded modes so its fixed-width ISA is not
+penalized by a decoder-strategy mismatch. The matrix also retains the external
+`rvsim` RV32IM reference and runs the same semantic workloads as optimized
+`native-rust` host code. Every row is checksum-validated.
 
 Lazy cached modes begin cold with an empty per-PC `HashMap`, populate it only
 for executed instructions, and retain it across warm samples. Eager predecoded
@@ -38,8 +39,9 @@ Host code is warmed before each fresh cold measurement; warm runs are
 interleaved in deterministic shuffled candidate order to reduce ordering,
 frequency, and thermal bias. `normalized_vm_geomean` excludes native execution
 and selects the fastest K16-v1 mode plus the fastest specialized RV32IM mode.
-K16-F32 advances only while its VM-relative result is no more than 1.30 times
-the selected RV32 result. `host_overhead_geomean` separately reports absolute
+Only the fastest K16-F32 mode advances, and only while its VM-relative result is
+no more than 1.30 times the selected RV32 result. `host_overhead_geomean`
+separately reports absolute
 interpreter overhead relative to native Rust. This is a viability window, not
 the final custom-ISA threshold; that decision still requires compiled-C and
 many-VM measurements.
