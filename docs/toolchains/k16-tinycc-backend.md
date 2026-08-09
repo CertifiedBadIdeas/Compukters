@@ -107,10 +107,17 @@ The compiler-owned `crt0.o` exposes the ordinary hosted C `main` contract and
 is entered through the explicit K16 startup symbol `kraft_start`; SDK users do
 not pass KraftOS-internal entrypoint renaming flags.
 
-The native image is a compiler only: TinyCC still emits `ET_REL` objects and
-does not own final K16E linking. Packaging `tcc.kx` into immutable C SDK media
-and proving source-to-object compilation inside a running VM are separate
-acceptance steps.
+The native image is a compiler only. Inside KraftOS the supported invocation is:
+
+```text
+/sdk/bin/tcc.kx -c /work/hello.c -o /work/hello.o
+```
+
+Source and output paths must be on writable `storage0`; `/sdk` is immutable.
+TinyCC emits an ELF32 `ET_REL` object and does not own final K16E linking. The
+exact native compiler, headers, startup object, libc, soft-float runtime, and
+compiler runtime are published together as the immutable `c_sdk_v1` media
+described in [`kraftos-c-sdk.md`](kraftos-c-sdk.md).
 
 ## Unsupported Surface
 
@@ -159,9 +166,19 @@ artifact exists only under its dedicated proof directory and is injected only
 into a temporary test volume. The native `tcc.kx` build does not replace that
 production compiler path.
 
-The immutable module infrastructure can now mount a K16 SDK artifact at
-`/sdk`, and the compiler-owned libc/runtime archives plus `tcc.kx` are built,
-but the immutable `c_sdk_v1` volume and its in-VM source-to-object acceptance
-proof remain later work. Guest-side `-run` or JIT is not implied: executing a
-program remains an explicit compile, `k16 link`, load, and KraftOS process
-operation.
+The immutable module infrastructure mounts `c_sdk_v1` at `/sdk`. The published
+immutable `c_sdk_v1` volume is made from frozen candidate bytes, and the
+compiler-owned libc/runtime archives plus `tcc.kx` are built into it. The
+in-VM source-to-object acceptance proof boots a 4 MiB Advanced profile,
+compiles `/work/hello.c`, checks a successful guest
+exit, extracts `/work/hello.o`, and validates it as a K16 ELF32 `ET_REL`
+object. The proof then uses host `k16 link` only as an acceptance oracle: host
+linking demonstrates that the guest-produced object is consumable, but is not
+a runtime compiler or linker API.
+
+A 1 MiB Normal profile deliberately fails the same native compile through a
+guest loader/allocation error, returns a non-zero command status, and leaves no
+output object. Attaching the SDK does not upgrade RAM. Guest-side `-run`, JIT,
+`dlopen`, pthreads, and final linking remain unsupported; executing a compiled
+program will require an explicit guest-owned object-to-K16E link step before
+the ordinary KraftOS load/process path.

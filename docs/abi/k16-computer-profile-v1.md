@@ -1,4 +1,4 @@
-# Rux Computer Profile v1
+# K16 Computer Profile v1
 
 ## Status
 
@@ -45,6 +45,23 @@ K16 computer profile v1 uses:
 
 The first RAM page is reserved for boot data.
 
+### Product Families And RAM
+
+The physical Notebook product family fixes RAM before boot:
+
+```text
+family     product              RAM
+NORMAL     Notebook             1 MiB
+ADVANCED   Advanced Notebook    4 MiB
+```
+
+These are hardware-profile contracts, not defaults selected by guest code.
+Attaching immutable auxiliary media does not change the family or RAM size.
+The current native TinyCC SDK needs the 4 MiB Advanced profile. On the 1 MiB
+Normal profile, the same compile must fail through an ordinary guest
+loader/allocation error, return a non-zero command status, and leave no output
+object; the host does not retry with more RAM or another execution path.
+
 ## Hardware IDs
 
 The profile defines these stable hardware IDs for the current boot:
@@ -79,6 +96,12 @@ Other devices in this profile do not raise interrupts and expose `0`.
 boot. With no attachment, the hardware table bytes and order remain the base
 table ending at `mmu0`; there is no empty permanent storage1 entry. Attachment
 changes require a cold boot because profile v1 does not support hotplug.
+
+The published C Programming SDK item resolves identity `c_sdk_v1` to immutable
+server-owned media. KraftOS mounts it at `/sdk`; the supported compiler command
+is `/sdk/bin/tcc.kx -c <storage0-source> -o <storage0-object>`. The compiler
+emits a relocatable object only. No host compiler syscall, JIT, or host final
+link operation is part of this hardware profile.
 
 ## Control MMIO
 
