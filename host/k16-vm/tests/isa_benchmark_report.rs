@@ -82,3 +82,24 @@ fn recommendation_requires_nonzero_samples_and_lists_every_candidate() {
         .skip(1)
         .all(|line| { line.ends_with("\tadvance") || line.ends_with("\treject") }));
 }
+
+#[test]
+fn custom_candidate_advances_only_inside_the_gate1_viability_window() {
+    let samples = candidate_samples([400, 300, 131, 105, 120, 100]);
+    let report = format_recommendations(&samples).unwrap();
+    assert!(report.contains("k16-f32\t1.310000\treject"));
+
+    let samples = candidate_samples([400, 300, 125, 105, 120, 100]);
+    let report = format_recommendations(&samples).unwrap();
+    assert!(report.contains("k16-f32\t1.250000\tadvance"));
+}
+
+fn candidate_samples(nanos: [u128; 6]) -> Vec<IsaBenchmarkTiming> {
+    IsaBenchmarkCandidate::all()
+        .iter()
+        .zip(nanos)
+        .map(|(candidate, nanos)| {
+            IsaBenchmarkTiming::for_test(*candidate, IsaBenchmarkWorkload::Compute32, nanos)
+        })
+        .collect()
+}
