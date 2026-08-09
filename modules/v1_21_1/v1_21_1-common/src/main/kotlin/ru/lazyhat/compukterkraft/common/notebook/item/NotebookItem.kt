@@ -47,6 +47,13 @@ open class NotebookItem(
         list: MutableList<Component>,
         options: TooltipFlag,
     ) {
+        if (deviceFamily == DeviceFamily.ADVANCED) {
+            list.add(
+                Component
+                    .translatable("item.compukterkraft.advanced_notebook.tooltip")
+                    .withStyle(ChatFormatting.DARK_GRAY),
+            )
+        }
         if (options.isAdvanced || stack.computerLabelByHoverName == null) {
             stack.computerDataTagCopy()?.computerID?.let {
                 list.add(

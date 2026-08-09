@@ -37,7 +37,14 @@ class CommonModBootstrapTest {
 
         CommonModBootstrap.registerCommon(blocks, menus, network, clientHooks)
 
-        assertEquals(listOf(CommonBlockDescriptor.ComputerAdvanced, CommonBlockDescriptor.Workbench), blocks.blocks)
+        assertEquals(
+            listOf(
+                CommonBlockDescriptor.Notebook,
+                CommonBlockDescriptor.AdvancedNotebook,
+                CommonBlockDescriptor.Workbench,
+            ),
+            blocks.blocks,
+        )
         assertEquals(listOf(CommonMenuDescriptor.Computer, CommonMenuDescriptor.Workbench), menus.menus)
         assertEquals(
             listOf(

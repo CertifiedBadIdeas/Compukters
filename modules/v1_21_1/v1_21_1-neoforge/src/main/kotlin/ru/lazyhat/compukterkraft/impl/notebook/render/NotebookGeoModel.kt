@@ -23,15 +23,28 @@ package ru.lazyhat.compukterkraft.impl.notebook.render
 
 import net.minecraft.resources.ResourceLocation
 import ru.lazyhat.compukterkraft.core.MOD_ID
+import ru.lazyhat.compukterkraft.core.block.DeviceFamily
 import ru.lazyhat.compukterkraft.impl.notebook.block.NeoForgeNotebookBlockEntity
 import software.bernie.geckolib.model.GeoModel
+
+private val NORMAL_NOTEBOOK_TEXTURE: ResourceLocation =
+    ResourceLocation.fromNamespaceAndPath(MOD_ID, "textures/block/notebook/notebook.png")
+private val ADVANCED_NOTEBOOK_TEXTURE: ResourceLocation =
+    ResourceLocation.fromNamespaceAndPath(MOD_ID, "textures/block/notebook/advanced_notebook.png")
+
+internal fun notebookTexture(family: DeviceFamily): ResourceLocation =
+    when (family) {
+        DeviceFamily.NORMAL -> NORMAL_NOTEBOOK_TEXTURE
+        DeviceFamily.ADVANCED -> ADVANCED_NOTEBOOK_TEXTURE
+        DeviceFamily.COMMAND -> error("unsupported Notebook render family: command")
+    }
 
 class NotebookGeoModel : GeoModel<NeoForgeNotebookBlockEntity>() {
     override fun getModelResource(animatable: NeoForgeNotebookBlockEntity): ResourceLocation =
         ResourceLocation.fromNamespaceAndPath(MOD_ID, "geo/notebook.geo.json")
 
     override fun getTextureResource(animatable: NeoForgeNotebookBlockEntity): ResourceLocation =
-        ResourceLocation.fromNamespaceAndPath(MOD_ID, "textures/block/notebook/notebook.png")
+        notebookTexture(animatable.family)
 
     override fun getAnimationResource(animatable: NeoForgeNotebookBlockEntity): ResourceLocation =
         ResourceLocation.fromNamespaceAndPath(MOD_ID, "animations/notebook.animation.json")

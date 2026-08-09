@@ -1,0 +1,12 @@
+{
+  "variants": {
+    "facing=east,state=off": {"model": "compukterkraft:block/advanced_notebook", "y": 90},
+    "facing=east,state=on": {"model": "compukterkraft:block/advanced_notebook", "y": 90},
+    "facing=north,state=off": {"model": "compukterkraft:block/advanced_notebook", "y": 0},
+    "facing=north,state=on": {"model": "compukterkraft:block/advanced_notebook", "y": 0},
+    "facing=south,state=off": {"model": "compukterkraft:block/advanced_notebook", "y": 180},
+    "facing=south,state=on": {"model": "compukterkraft:block/advanced_notebook", "y": 180},
+    "facing=west,state=off": {"model": "compukterkraft:block/advanced_notebook", "y": 270},
+    "facing=west,state=on": {"model": "compukterkraft:block/advanced_notebook", "y": 270}
+  }
+}

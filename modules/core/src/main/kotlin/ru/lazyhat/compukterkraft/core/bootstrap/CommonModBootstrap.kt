@@ -31,7 +31,8 @@ object CommonModBootstrap {
         network: PlatformNetworkRegistrar,
         clientHooks: PlatformClientHooks,
     ) {
-        blocks.registerBlock(CommonBlockDescriptor.ComputerAdvanced)
+        blocks.registerBlock(CommonBlockDescriptor.Notebook)
+        blocks.registerBlock(CommonBlockDescriptor.AdvancedNotebook)
         blocks.registerBlock(CommonBlockDescriptor.Workbench)
         menus.registerMenu(CommonMenuDescriptor.Computer)
         menus.registerMenu(CommonMenuDescriptor.Workbench)

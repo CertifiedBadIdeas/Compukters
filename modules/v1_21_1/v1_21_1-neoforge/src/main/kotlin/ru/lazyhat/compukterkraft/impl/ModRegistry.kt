@@ -43,6 +43,7 @@ import ru.lazyhat.compukterkraft.common.computer.loot.PlayerCreativeLootConditio
 import ru.lazyhat.compukterkraft.common.computer.menu.ComputerControlMenu
 import ru.lazyhat.compukterkraft.common.computer.menu.NotebookComputerMenu
 import ru.lazyhat.compukterkraft.common.computer.module.CProgrammingSdkItem
+import ru.lazyhat.compukterkraft.common.computer.module.C_PROGRAMMING_SDK_ARTIFACT_IDENTITY
 import ru.lazyhat.compukterkraft.common.computer.module.SDK_ARTIFACT_IDENTITY_CODEC
 import ru.lazyhat.compukterkraft.common.computer.module.SDK_ARTIFACT_IDENTITY_STREAM_CODEC
 import ru.lazyhat.compukterkraft.common.notebook.block.NotebookBlock
@@ -151,7 +152,14 @@ object ModRegistry {
         val C_PROGRAMMING_SDK: DeferredHolder<Item, CProgrammingSdkItem> =
             REGISTRY.register(
                 Names.C_PROGRAMMING_SDK,
-                Supplier { CProgrammingSdkItem(properties()) },
+                Supplier {
+                    CProgrammingSdkItem(
+                        properties().component(
+                            DataComponents.SDK_ARTIFACT_IDENTITY.get(),
+                            C_PROGRAMMING_SDK_ARTIFACT_IDENTITY,
+                        ),
+                    )
+                },
             )
     }
 

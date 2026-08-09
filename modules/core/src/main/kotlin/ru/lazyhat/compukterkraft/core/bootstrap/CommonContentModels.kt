@@ -22,7 +22,8 @@ package ru.lazyhat.compukterkraft.core.bootstrap
 enum class CommonBlockDescriptor(
     val id: String,
 ) {
-    ComputerAdvanced("computer_advanced"),
+    Notebook("notebook"),
+    AdvancedNotebook("advanced_notebook"),
     Workbench("workbench"),
 }
 

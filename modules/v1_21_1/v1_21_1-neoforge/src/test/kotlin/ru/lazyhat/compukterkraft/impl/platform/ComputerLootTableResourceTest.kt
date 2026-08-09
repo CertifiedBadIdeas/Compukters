@@ -24,15 +24,15 @@ import kotlin.test.assertTrue
 
 class ComputerLootTableResourceTest {
     @Test
-    fun advancedComputerLootTableMatchesCcTweakedConditions() {
+    fun advancedNotebookLootTableMatchesCcTweakedConditions() {
         val json =
             checkNotNull(
-                javaClass.classLoader.getResource("data/compukterkraft/loot_table/blocks/computer_advanced.json"),
+                javaClass.classLoader.getResource("data/compukterkraft/loot_table/blocks/advanced_notebook.json"),
             ).readText()
 
         assertTrue(
             json.contains("\"name\": \"compukterkraft:computer\""),
-            "Advanced computer loot table should keep the dynamic computer drop entry.",
+            "Advanced Notebook loot table should keep the dynamic computer drop entry.",
         )
         assertTrue(
             json.contains("compukterkraft:block_named"),

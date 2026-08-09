@@ -22,14 +22,16 @@ package ru.lazyhat.compukterkraft.impl.computer.block
 import net.minecraft.core.BlockPos
 import net.minecraft.gametest.framework.GameTest
 import net.minecraft.gametest.framework.GameTestHelper
+import net.minecraft.resources.ResourceLocation
 import net.minecraft.world.entity.EntityType
 import net.minecraft.world.item.ItemStack
-import net.minecraft.world.item.Items
 import net.minecraft.world.level.GameType
+import net.minecraft.world.level.block.Block
 import net.minecraft.world.level.block.entity.BlockEntity
 import net.neoforged.neoforge.gametest.GameTestHolder
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate
 import ru.lazyhat.compukterkraft.common.computer.block.AbstractComputerBlockEntity
+import ru.lazyhat.compukterkraft.common.computer.module.C_PROGRAMMING_SDK_ARTIFACT_IDENTITY
 import ru.lazyhat.compukterkraft.common.computer.module.sdkArtifactIdentity
 import ru.lazyhat.compukterkraft.common.notebook.item.NotebookItem
 import ru.lazyhat.compukterkraft.common.utils.computerDataTagCopy
@@ -37,6 +39,7 @@ import ru.lazyhat.compukterkraft.common.utils.computerID
 import ru.lazyhat.compukterkraft.common.utils.computerLabel
 import ru.lazyhat.compukterkraft.common.utils.runtimeSnapshot
 import ru.lazyhat.compukterkraft.core.MOD_ID
+import ru.lazyhat.compukterkraft.core.block.DeviceFamily
 import ru.lazyhat.compukterkraft.core.device.DeviceEvents
 import ru.lazyhat.compukterkraft.core.device.input.KeyInputEvent
 import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeDevice
@@ -54,8 +57,8 @@ class ComputerBlockGameTest {
         helper: GameTestHelper,
         pos: BlockPos,
         stack: ItemStack = ItemStack(ModRegistry.Items.NOTEBOOK.get()),
+        block: Block = ModRegistry.Blocks.NOTEBOOK.get(),
     ) {
-        val block = ModRegistry.Blocks.NOTEBOOK.get()
         val player = helper.makeMockPlayer(GameType.SURVIVAL)
         helper.setBlock(pos, block)
         block.setPlacedBy(
@@ -65,6 +68,31 @@ class ComputerBlockGameTest {
             player,
             stack,
         )
+    }
+
+    @GameTest(template = "computer_platform", templateNamespace = MOD_ID)
+    fun normalNotebookBootsWithOneMiBRam(helper: GameTestHelper) {
+        val pos = BlockPos(1, 2, 1)
+        val absolutePos = helper.absolutePos(pos)
+        placeComputer(helper, pos)
+
+        helper.runAfterDelay(5L) {
+            val notebook = ComputerGameTestEnvironment.notebookAt(helper.level, absolutePos)
+            helper.assertTrue(notebook.family == DeviceFamily.NORMAL, "Expected Notebook to derive the NORMAL family")
+
+            val device = notebook.getOrCreateRuntimeDevice()
+            device.turnOn()
+            val snapshot =
+                waitForSavedTerminalSnapshot(helper, notebook, "normal Notebook shell prompt") { terminal ->
+                    terminal.contains("K16> ")
+                }
+            helper.assertTrue(
+                snapshotRamSize(snapshot) == NORMAL_NOTEBOOK_RAM_BYTES,
+                "Expected normal Notebook K16SNAP RAM to be 1 MiB, actual ${snapshotRamSize(snapshot)}",
+            )
+            device.shutdown()
+            helper.succeed()
+        }
     }
 
     @GameTest(template = "computer_platform", templateNamespace = MOD_ID)
@@ -98,27 +126,51 @@ class ComputerBlockGameTest {
     }
 
     @GameTest(template = "computer_platform", templateNamespace = MOD_ID)
-    fun sdkModuleBayControlsColdBootMountAndInvalidatesSnapshot(helper: GameTestHelper) {
+    fun advancedNotebookRunsRealCSdkOnlyWhileCartridgeIsInstalled(helper: GameTestHelper) {
         val pos = BlockPos(1, 2, 1)
         val absolutePos = helper.absolutePos(pos)
-        placeComputer(helper, pos)
+        placeComputer(
+            helper,
+            pos,
+            stack = ModRegistry.Items.ADVANCED_NOTEBOOK.get().defaultInstance,
+            block = ModRegistry.Blocks.ADVANCED_NOTEBOOK.get(),
+        )
 
         helper.runAfterDelay(5L) {
             val notebook = ComputerGameTestEnvironment.notebookAt(helper.level, absolutePos)
-            val module = ItemStack(Items.PAPER).apply { sdkArtifactIdentity = SDK_FIXTURE_IDENTITY }
+            helper.assertTrue(
+                notebook.family == DeviceFamily.ADVANCED,
+                "Expected Advanced Notebook to derive the ADVANCED family",
+            )
+            val recipeResult =
+                helper.level.recipeManager
+                    .byKey(ResourceLocation.fromNamespaceAndPath(MOD_ID, "c_programming_sdk"))
+                    .orElseThrow()
+                    .value
+                    .getResultItem(helper.level.registryAccess())
+            helper.assertTrue(
+                recipeResult.sdkArtifactIdentity == C_PROGRAMMING_SDK_ARTIFACT_IDENTITY,
+                "Expected the loaded C SDK recipe result to inherit the immutable c_sdk_v1 item component",
+            )
+            val module = ModRegistry.Items.C_PROGRAMMING_SDK.get().defaultInstance
             helper.assertTrue(
                 notebook.sdkModuleBay.setFromPlayer(module),
-                "Expected powered-off notebook to accept the known SDK fixture module",
+                "Expected powered-off Advanced Notebook to accept the real C Programming SDK",
             )
 
             val device = notebook.getOrCreateRuntimeDevice()
             device.turnOn()
-            waitForSavedTerminalSnapshot(helper, notebook, "initial shell prompt with SDK module") { terminal ->
-                terminal.contains("K16> ")
-            }
-            dispatchText(device, "cat /sdk/fixture.txt\n")
-            waitForSavedTerminalSnapshot(helper, notebook, "SDK fixture contents") { terminal ->
-                commandResultPresent(terminal, "cat /sdk/fixture.txt", "sdk fixture")
+            val initialSnapshot =
+                waitForSavedTerminalSnapshot(helper, notebook, "initial shell prompt with C SDK") { terminal ->
+                    terminal.contains("K16> ")
+                }
+            helper.assertTrue(
+                snapshotRamSize(initialSnapshot) == ADVANCED_NOTEBOOK_RAM_BYTES,
+                "Expected Advanced Notebook K16SNAP RAM to be 4 MiB, actual ${snapshotRamSize(initialSnapshot)}",
+            )
+            dispatchText(device, "ls /sdk/bin\n")
+            waitForSavedTerminalSnapshot(helper, notebook, "native TinyCC on the C SDK mount") { terminal ->
+                commandResultPresent(terminal, "ls /sdk/bin", "tcc.kx")
             }
 
             val computerId = requireNotNull(notebook.computerID)
@@ -137,15 +189,16 @@ class ComputerBlockGameTest {
                 "Expected SDK module removal to be rejected while the VM is running",
             )
             helper.assertTrue(
-                notebook.sdkModuleBay.installedArtifactIdentity == SDK_FIXTURE_IDENTITY,
+                notebook.sdkModuleBay.installedArtifactIdentity == C_PROGRAMMING_SDK_ARTIFACT_IDENTITY,
                 "Expected rejected removal to preserve the installed SDK module",
             )
 
             device.shutdown()
             val removedModule = notebook.sdkModuleBay.removeItemNoUpdate(0)
             helper.assertTrue(
-                removedModule.sdkArtifactIdentity == SDK_FIXTURE_IDENTITY,
-                "Expected powered-off notebook to return the installed SDK module",
+                removedModule.`is`(ModRegistry.Items.C_PROGRAMMING_SDK.get()) &&
+                    removedModule.sdkArtifactIdentity == C_PROGRAMMING_SDK_ARTIFACT_IDENTITY,
+                "Expected powered-off notebook to return the real C Programming SDK",
             )
             helper.assertTrue(
                 notebook.sdkModuleBay.installedArtifactIdentity == null,
@@ -158,12 +211,12 @@ class ComputerBlockGameTest {
             waitForSavedTerminalSnapshot(helper, notebook, "fresh shell prompt without SDK module") { terminal ->
                 terminal.contains("K16> ")
             }
-            dispatchText(device, "cat /sdk/fixture.txt\n")
+            dispatchText(device, "ls /sdk/bin\n")
             waitForSavedTerminalSnapshot(helper, notebook, "missing SDK mount after module removal") { terminal ->
                 commandResultPresent(
                     terminal,
-                    "cat /sdk/fixture.txt",
-                    "cat: open failed: /sdk/fixture.txt",
+                    "ls /sdk/bin",
+                    "ERR NOENT /sdk/bin",
                 )
             }
             device.shutdown()
@@ -365,10 +418,14 @@ class ComputerBlockGameTest {
         return snapshot.copyOfRange(headerSize + start, headerSize + start + size)
     }
 
+    private fun snapshotRamSize(snapshot: ByteArray): Long =
+        ByteBuffer.wrap(snapshot).order(ByteOrder.LITTLE_ENDIAN).getLong(0x10)
+
     private fun sha256(bytes: ByteArray): ByteArray = MessageDigest.getInstance("SHA-256").digest(bytes)
 }
 
-private const val SDK_FIXTURE_IDENTITY = "sdk_fixture_v1"
+private const val NORMAL_NOTEBOOK_RAM_BYTES = 1024L * 1024L
+private const val ADVANCED_NOTEBOOK_RAM_BYTES = 4L * 1024L * 1024L
 private const val K16_TERMINAL_CELLS_ADDR = 0x3000
 private const val K16_TERMINAL_COLUMNS = 64
 private const val K16_TERMINAL_ROWS = 25

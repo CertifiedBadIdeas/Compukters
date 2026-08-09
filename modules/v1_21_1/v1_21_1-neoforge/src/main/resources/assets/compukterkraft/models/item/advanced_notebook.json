@@ -1,0 +1,97 @@
+{
+  "credit": "Made with Blockbench",
+  "parent": "builtin/entity",
+  "texture_size": [
+    64,
+    64
+  ],
+  "display": {
+    "thirdperson_righthand": {
+      "rotation": [
+        180,
+        0,
+        -90
+      ],
+      "translation": [
+        -1,
+        0,
+        0
+      ]
+    },
+    "thirdperson_lefthand": {
+      "rotation": [
+        180,
+        0,
+        -90
+      ],
+      "translation": [
+        -1,
+        0,
+        0
+      ]
+    },
+    "firstperson_righthand": {
+      "rotation": [
+        180,
+        0,
+        -90
+      ],
+      "translation": [
+        -1,
+        0,
+        0
+      ]
+    },
+    "firstperson_lefthand": {
+      "rotation": [
+        180,
+        0,
+        -90
+      ],
+      "translation": [
+        -1,
+        0,
+        0
+      ]
+    },
+    "gui": {
+      "rotation": [
+        36,
+        153,
+        2
+      ],
+      "translation": [
+        0,
+        -2,
+        0
+      ],
+      "scale": [
+        0.8,
+        0.8,
+        0.8
+      ]
+    },
+    "fixed": {
+      "rotation": [
+        -90,
+        180,
+        0
+      ]
+    },
+    "on_shelf": {
+      "rotation": [
+        90,
+        0,
+        0
+      ],
+      "translation": [
+        0,
+        0,
+        -3.5
+      ]
+    }
+  },
+  "textures": {
+    "particle": "compukterkraft:block/notebook/advanced_notebook"
+  }
+}

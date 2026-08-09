@@ -31,7 +31,7 @@ class NotebookItemGeoModel : GeoModel<NeoForgeNotebookItem>() {
         ResourceLocation.fromNamespaceAndPath(MOD_ID, "geo/notebook.geo.json")
 
     override fun getTextureResource(animatable: NeoForgeNotebookItem): ResourceLocation =
-        ResourceLocation.fromNamespaceAndPath(MOD_ID, "textures/block/notebook/notebook.png")
+        notebookTexture(animatable.deviceFamily)
 
     override fun getAnimationResource(animatable: NeoForgeNotebookItem): ResourceLocation =
         ResourceLocation.fromNamespaceAndPath(MOD_ID, "animations/notebook.animation.json")

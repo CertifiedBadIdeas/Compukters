@@ -19,8 +19,11 @@
 
 package ru.lazyhat.compukterkraft.common.computer.module
 
+import net.minecraft.ChatFormatting
+import net.minecraft.network.chat.Component
 import net.minecraft.world.item.Item
 import net.minecraft.world.item.ItemStack
+import net.minecraft.world.item.TooltipFlag
 
 const val C_PROGRAMMING_SDK_ARTIFACT_IDENTITY: String = "c_sdk_v1"
 
@@ -33,4 +36,17 @@ class CProgrammingSdkItem(
     properties: Properties,
 ) : Item(properties) {
     override fun getDefaultInstance(): ItemStack = cProgrammingSdkStack(super.getDefaultInstance())
+
+    override fun appendHoverText(
+        stack: ItemStack,
+        context: TooltipContext,
+        list: MutableList<Component>,
+        options: TooltipFlag,
+    ) {
+        list.add(
+            Component
+                .translatable("item.compukterkraft.c_programming_sdk.tooltip")
+                .withStyle(ChatFormatting.DARK_GRAY),
+        )
+    }
 }
