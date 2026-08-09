@@ -189,6 +189,101 @@ pub fn format_decision_for_candidate(
     ))
 }
 
+pub fn format_riscv_xlen_comparison(samples: &[CompiledCTiming]) -> Result<String, String> {
+    let metrics = riscv_xlen_metrics(samples)?;
+    let fastest = metrics.rv64_to_rv32_geomean.min(1.0);
+    Ok(format!(
+        "candidate\tnormalized_warm_geomean\ttotal_code_bytes\ttotal_predecode_bytes\nrv32im\t{:.6}\t{}\t{}\nrv64im\t{:.6}\t{}\t{}\nmetric\tvalue\nrv64_to_rv32_warm_geomean\t{:.6}\nrv64_to_rv32_code_bytes\t{:.6}\nrv64_to_rv32_predecode_bytes\t{:.6}\n",
+        1.0 / fastest,
+        metrics.rv32_code,
+        metrics.rv32_predecode,
+        metrics.rv64_to_rv32_geomean / fastest,
+        metrics.rv64_code,
+        metrics.rv64_predecode,
+        metrics.rv64_to_rv32_geomean,
+        metrics.rv64_code as f64 / metrics.rv32_code as f64,
+        metrics.rv64_predecode as f64 / metrics.rv32_predecode as f64,
+    ))
+}
+
+struct RiscvXlenMetrics {
+    rv64_to_rv32_geomean: f64,
+    rv32_code: usize,
+    rv64_code: usize,
+    rv32_predecode: usize,
+    rv64_predecode: usize,
+}
+
+fn riscv_xlen_metrics(samples: &[CompiledCTiming]) -> Result<RiscvXlenMetrics, String> {
+    if samples
+        .iter()
+        .any(|sample| sample.steady_allocations != 0 || sample.steady_allocated_bytes != 0)
+    {
+        return Err("RISC-V XLEN report rejects any steady allocation".to_string());
+    }
+    let mut indexed = HashMap::new();
+    for sample in samples {
+        if sample.warm_median_nanos == 0 {
+            return Err(format!(
+                "{} {} has zero warm duration",
+                sample.observation.workload.name(),
+                sample.observation.candidate.name()
+            ));
+        }
+        let key = (sample.observation.workload, sample.observation.candidate);
+        if indexed.insert(key, sample).is_some() {
+            return Err(format!(
+                "duplicate timing for {} {}",
+                sample.observation.workload.name(),
+                sample.observation.candidate.name()
+            ));
+        }
+    }
+
+    let mut ratios = Vec::with_capacity(6);
+    let mut rv32_code = 0_usize;
+    let mut rv64_code = 0_usize;
+    let mut rv32_predecode = 0_usize;
+    let mut rv64_predecode = 0_usize;
+    for workload in IsaBenchmarkWorkload::all().iter().copied().take(6) {
+        let rv32 = indexed
+            .get(&(workload, CompiledCCandidate::Rv32im))
+            .ok_or_else(|| format!("missing rv32im timing for {}", workload.name()))?;
+        let rv64 = indexed
+            .get(&(workload, CompiledCCandidate::Rv64im))
+            .ok_or_else(|| format!("missing rv64im timing for {}", workload.name()))?;
+        ratios.push(rv64.warm_median_nanos as f64 / rv32.warm_median_nanos as f64);
+        rv32_code = rv32_code
+            .checked_add(rv32.observation.code_bytes)
+            .ok_or("rv32im code total overflow")?;
+        rv64_code = rv64_code
+            .checked_add(rv64.observation.code_bytes)
+            .ok_or("rv64im code total overflow")?;
+        rv32_predecode = rv32_predecode
+            .checked_add(rv32.observation.predecode_bytes)
+            .ok_or("rv32im predecode total overflow")?;
+        rv64_predecode = rv64_predecode
+            .checked_add(rv64.observation.predecode_bytes)
+            .ok_or("rv64im predecode total overflow")?;
+    }
+    if indexed.len() != 12 {
+        return Err(format!(
+            "RISC-V XLEN comparison requires exactly 12 VM timings, got {}",
+            indexed.len()
+        ));
+    }
+    if rv32_code == 0 || rv32_predecode == 0 {
+        return Err("rv32im retained-size totals must be positive".to_string());
+    }
+    Ok(RiscvXlenMetrics {
+        rv64_to_rv32_geomean: geometric_mean(&ratios),
+        rv32_code,
+        rv64_code,
+        rv32_predecode,
+        rv64_predecode,
+    })
+}
+
 struct DecisionMetrics {
     k16_to_rv_geomean: f64,
     speed_advantage: f64,

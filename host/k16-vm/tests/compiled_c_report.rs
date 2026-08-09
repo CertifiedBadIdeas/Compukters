@@ -19,8 +19,9 @@
 
 use k16_vm::compiled_c::artifact::CompiledCCandidate;
 use k16_vm::compiled_c::report::{
-    format_decision, format_decision_for_candidate, populate_vs_native, select_compiled_c,
-    select_compiled_c_candidate, CompiledCDecision, CompiledCTiming,
+    format_decision, format_decision_for_candidate, format_riscv_xlen_comparison,
+    populate_vs_native, select_compiled_c, select_compiled_c_candidate, CompiledCDecision,
+    CompiledCTiming,
 };
 use k16_vm::compiled_c::runner::CompiledCObservation;
 use k16_vm::isa_benchmarks::IsaBenchmarkWorkload;
@@ -245,6 +246,36 @@ fn any_steady_allocation_rejects_the_report() {
     let mut bytes = rows(500_000, 1_000_000);
     bytes[0].steady_allocated_bytes = 1;
     assert!(select_compiled_c(&bytes)
+        .unwrap_err()
+        .contains("steady allocation"));
+}
+
+#[test]
+fn riscv_xlen_report_is_symmetric_and_makes_no_architecture_decision() {
+    let samples = rows_for(CompiledCCandidate::Rv64im, 750_000, 1_000_000);
+    let rendered = format_riscv_xlen_comparison(&samples).unwrap();
+
+    assert!(rendered.starts_with(
+        "candidate\tnormalized_warm_geomean\ttotal_code_bytes\ttotal_predecode_bytes\nrv32im\t"
+    ));
+    assert!(rendered.contains("\nrv64im\t1.000000\t600\t600\n"));
+    assert!(rendered.contains("rv64_to_rv32_warm_geomean\t0.750000\n"));
+    assert!(rendered.contains("rv64_to_rv32_code_bytes\t1.000000\n"));
+    assert!(rendered.contains("rv64_to_rv32_predecode_bytes\t1.000000\n"));
+    assert!(!rendered.contains("decision"));
+}
+
+#[test]
+fn riscv_xlen_report_rejects_missing_extra_or_allocating_rows() {
+    let mut missing = rows_for(CompiledCCandidate::Rv64im, 750_000, 1_000_000);
+    missing.pop();
+    assert!(format_riscv_xlen_comparison(&missing)
+        .unwrap_err()
+        .contains("missing"));
+
+    let mut allocating = rows_for(CompiledCCandidate::Rv64im, 750_000, 1_000_000);
+    allocating[0].steady_allocations = 1;
+    assert!(format_riscv_xlen_comparison(&allocating)
         .unwrap_err()
         .contains("steady allocation"));
 }
