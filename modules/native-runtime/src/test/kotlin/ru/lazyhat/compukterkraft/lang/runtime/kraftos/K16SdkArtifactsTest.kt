@@ -26,6 +26,7 @@ import kotlin.io.path.createTempDirectory
 import kotlin.io.path.readBytes
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
+import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 
 class K16SdkArtifactsTest {
@@ -86,6 +87,43 @@ class K16SdkArtifactsTest {
             )
 
         assertFailsWith<IllegalStateException> { artifacts.resolve("sdk_fixture_v1") }
+    }
+
+    @Test
+    fun repeatedCSdkResolutionKeepsOneImmutableIdentityAndByteSequence() {
+        val firstBytes = "K16VOL-proven-c-sdk".encodeToByteArray()
+        val resources = mutableMapOf("firmware/c-sdk-v1.kv" to firstBytes)
+        val manifest =
+            KraftOsArtifactManifest.parse(
+                text =
+                    """
+                    schema=1
+                    target=k16
+                    profile=production
+                    artifact.biosFlash.resource=firmware/k16-bios.kflash
+                    artifact.biosFlash.format=kflash
+                    artifact.systemStorage0.resource=firmware/k16-system-storage0.kv
+                    artifact.systemStorage0.format=kfs-kv
+                    artifact.sdk.c_sdk_v1.resource=firmware/c-sdk-v1.kv
+                    artifact.sdk.c_sdk_v1.format=kfs-kv
+                    """.trimIndent(),
+                source = "production C SDK manifest",
+            )
+        val artifacts =
+            K16SdkArtifacts(
+                manifest = manifest,
+                workspace = K16ImmutableArtifactWorkspace(createTempDirectory("k16-sdk-artifacts-")),
+                classLoader = resourceClassLoader(resources),
+            )
+
+        val first = artifacts.resolve("c_sdk_v1")
+        val second = artifacts.resolve("c_sdk_v1")
+        assertEquals(first, second)
+        assertContentEquals(firstBytes, second.readBytes())
+
+        resources["firmware/c-sdk-v1.kv"] = "different bytes".encodeToByteArray()
+        val error = assertFailsWith<IllegalStateException> { artifacts.resolve("c_sdk_v1") }
+        assertEquals("immutable K16 SDK artifact identity has different bytes: c_sdk_v1", error.message)
     }
 
     private fun resourceClassLoader(resources: Map<String, ByteArray>): ClassLoader =

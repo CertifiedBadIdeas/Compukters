@@ -22,6 +22,7 @@
 import org.gradle.api.file.RegularFile
 import org.gradle.api.provider.Provider
 import java.nio.file.Files
+import java.security.MessageDigest
 import java.time.OffsetDateTime
 import java.time.format.DateTimeFormatter
 
@@ -202,8 +203,14 @@ val k16NativeTinyCcStartupObject = generatedK16NativeTinyCcTarget.map { it.file(
 val k16NativeTinyCcInspect = generatedK16NativeTinyCcTarget.map { it.file("tcc.inspect") }
 val k16NativeTinyCcArtifact = generatedK16NativeTinyCcTarget.map { it.file("tcc.kx") }
 val k16CSdkCandidateArtifact = generatedK16NativeTinyCcTarget.map { it.file("c-sdk-candidate.kv") }
+val k16CSdkV1Resource = generatedK16FirmwareResources.map { it.file("firmware/c-sdk-v1.kv") }
 val k16CSdkCandidatePayloadSizeBytes = 4 * 1024 * 1024
 val k16VolumeHeaderSizeBytes = 16
+val k16ImmutableSdkSha256Ledger =
+    mapOf(
+        "c_sdk_v1" to "608c971740392ee5ddc192fe17fc067695285d2885e770ae55bd558f47d19e07",
+    )
+val k16CSdkV1ExpectedSha256 = k16ImmutableSdkSha256Ledger.getValue("c_sdk_v1")
 val k16BootMapArtifact = k16BootArtifact.map { it.asFile.resolveSibling("${it.asFile.nameWithoutExtension}.map") }
 val k16KernelMapArtifact = k16KernelArtifact.map { it.asFile.resolveSibling("${it.asFile.nameWithoutExtension}.map") }
 val k16InitMapArtifact = k16InitArtifact.map { it.asFile.resolveSibling("${it.asFile.nameWithoutExtension}.map") }
@@ -2368,13 +2375,52 @@ val putK16SystemStorage0Init =
         }
     }
 
+val freezeK16CSdkV1 =
+    tasks.register("freezeK16CSdkV1") {
+        description = "Freezes the exact proven native C SDK candidate bytes as immutable c_sdk_v1."
+        group = "k16"
+        dependsOn("assembleK16CSdkCandidate")
+        inputs.file(k16CSdkCandidateArtifact)
+        inputs.property("identity", "c_sdk_v1")
+        inputs.property("expectedSha256", k16CSdkV1ExpectedSha256)
+        outputs.file(k16CSdkV1Resource)
+
+        doLast {
+            val candidate = k16CSdkCandidateArtifact.get().asFile
+            val output = k16CSdkV1Resource.get().asFile
+            val candidateBytes = candidate.readBytes()
+            val candidateSha256 =
+                MessageDigest.getInstance("SHA-256")
+                    .digest(candidateBytes)
+                    .joinToString(separator = "") { byte -> "%02x".format(byte) }
+            check(candidateSha256 == k16CSdkV1ExpectedSha256) {
+                "immutable K16 SDK artifact identity has different bytes: c_sdk_v1"
+            }
+            check(candidate.length() == k16CSdkCandidatePayloadSizeBytes.toLong() + k16VolumeHeaderSizeBytes) {
+                "proven C SDK candidate has unexpected physical size ${candidate.length()}"
+            }
+            if (output.isFile) {
+                check(candidateBytes.contentEquals(output.readBytes())) {
+                    "immutable K16 SDK artifact identity has different bytes: c_sdk_v1"
+                }
+            } else {
+                output.parentFile.mkdirs()
+                candidate.copyTo(output, overwrite = true)
+            }
+            check(candidate.readBytes().contentEquals(output.readBytes())) {
+                "published K16 SDK artifact bytes differ from source: c_sdk_v1"
+            }
+        }
+    }
+
 val generateKraftOsArtifactManifest =
     tasks.register("generateKraftOsArtifactManifest") {
         description = "Writes the bundled KraftOS artifact manifest resource."
         group = "k16"
-        dependsOn(linkK16BiosFlash, putK16SystemStorage0Init)
+        dependsOn(linkK16BiosFlash, putK16SystemStorage0Init, freezeK16CSdkV1)
         inputs.file(k16BiosFlashResource)
         inputs.file(k16SystemStorage0Resource)
+        inputs.file(k16CSdkV1Resource)
         outputs.file(k16ArtifactManifestResource)
 
         doLast {
@@ -2389,6 +2435,8 @@ val generateKraftOsArtifactManifest =
                 artifact.biosFlash.format=kflash
                 artifact.systemStorage0.resource=firmware/k16-system-storage0.kv
                 artifact.systemStorage0.format=kfs-kv
+                artifact.sdk.c_sdk_v1.resource=firmware/c-sdk-v1.kv
+                artifact.sdk.c_sdk_v1.format=kfs-kv
                 """.trimIndent() + "\n",
             )
         }
@@ -2398,7 +2446,7 @@ val assembleKraftOsProductionBundle =
     tasks.register<org.gradle.api.tasks.Sync>("assembleKraftOsProductionBundle") {
         description = "Assembles the generated production KraftOS runtime bundle."
         group = "k16"
-        dependsOn(linkK16BiosFlash, putK16SystemStorage0Init, generateKraftOsArtifactManifest)
+        dependsOn(linkK16BiosFlash, putK16SystemStorage0Init, freezeK16CSdkV1, generateKraftOsArtifactManifest)
         from(generatedK16FirmwareResources)
         into(generatedKraftOsProductionBundle)
     }
@@ -2668,11 +2716,12 @@ val assembleK16CSdkCandidate =
 
 val generateKraftOsTestArtifactManifest =
     tasks.register("generateKraftOsTestArtifactManifest") {
-        description = "Writes the test-only KraftOS artifact manifest with sdk_fixture_v1."
+        description = "Writes the KraftOS development manifest with c_sdk_v1 and test-only sdk_fixture_v1."
         group = "k16"
-        dependsOn(linkK16BiosFlash, putK16DevelopmentStorage0TestPrograms, putK16SdkFixture)
+        dependsOn(linkK16BiosFlash, putK16DevelopmentStorage0TestPrograms, putK16SdkFixture, freezeK16CSdkV1)
         inputs.file(k16BiosFlashResource)
         inputs.file(k16DevelopmentStorage0Resource)
+        inputs.file(k16CSdkV1Resource)
         inputs.file(k16SdkFixtureResource)
         outputs.file(k16TestArtifactManifestResource)
 
@@ -2688,6 +2737,8 @@ val generateKraftOsTestArtifactManifest =
                 artifact.biosFlash.format=kflash
                 artifact.systemStorage0.resource=firmware/k16-system-storage0-dev.kv
                 artifact.systemStorage0.format=kfs-kv
+                artifact.sdk.c_sdk_v1.resource=firmware/c-sdk-v1.kv
+                artifact.sdk.c_sdk_v1.format=kfs-kv
                 artifact.sdk.sdk_fixture_v1.resource=firmware/sdk-fixture-v1.kv
                 artifact.sdk.sdk_fixture_v1.format=kfs-kv
                 """.trimIndent() + "\n",

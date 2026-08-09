@@ -212,6 +212,30 @@ class KraftOsArtifactManifestTest {
     }
 
     @Test
+    fun productionManifestOwnsExactlyTheVersionedCProgrammingSdk() {
+        val manifest =
+            KraftOsArtifactManifest.parse(
+                text =
+                    """
+                    schema=1
+                    target=k16
+                    profile=production
+                    artifact.biosFlash.resource=firmware/k16-bios.kflash
+                    artifact.biosFlash.format=kflash
+                    artifact.systemStorage0.resource=firmware/k16-system-storage0.kv
+                    artifact.systemStorage0.format=kfs-kv
+                    artifact.sdk.c_sdk_v1.resource=firmware/c-sdk-v1.kv
+                    artifact.sdk.c_sdk_v1.format=kfs-kv
+                    """.trimIndent(),
+                source = "production C SDK manifest",
+            )
+
+        assertEquals(setOf("c_sdk_v1"), manifest.sdkArtifacts.keys)
+        assertEquals("firmware/c-sdk-v1.kv", manifest.sdkArtifact("c_sdk_v1").resource)
+        assertEquals("kfs-kv", manifest.sdkArtifact("c_sdk_v1").format)
+    }
+
+    @Test
     fun rejectsIncompleteInvalidAndDuplicateSdkEntries() {
         fun manifest(sdkLines: String): String =
             """

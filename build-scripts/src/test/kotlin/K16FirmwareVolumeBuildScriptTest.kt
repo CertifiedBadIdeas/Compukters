@@ -111,7 +111,11 @@ class K16FirmwareVolumeBuildScriptTest {
         assertTrue(producerScript.contains("val putK16SdkFixture ="))
         assertTrue(producerScript.contains("/fixture.txt"))
         assertTrue(producerScript.contains("val generateKraftOsTestArtifactManifest ="))
-        assertFalse(productionManifest.contains("artifact.sdk."))
+        assertTrue(productionManifest.contains("artifact.sdk.c_sdk_v1.resource=firmware/c-sdk-v1.kv"))
+        assertTrue(productionManifest.contains("artifact.sdk.c_sdk_v1.format=kfs-kv"))
+        assertFalse(productionManifest.contains("artifact.sdk.sdk_fixture_v1"))
+        assertTrue(testManifest.contains("artifact.sdk.c_sdk_v1.resource=firmware/c-sdk-v1.kv"))
+        assertTrue(testManifest.contains("artifact.sdk.c_sdk_v1.format=kfs-kv"))
         assertTrue(testManifest.contains("artifact.sdk.sdk_fixture_v1.resource=firmware/sdk-fixture-v1.kv"))
         assertTrue(testManifest.contains("artifact.sdk.sdk_fixture_v1.format=kfs-kv"))
         assertFalse(
@@ -167,6 +171,34 @@ class K16FirmwareVolumeBuildScriptTest {
         )
         assertFalse(productionManifest.contains("artifact.sdk.c_sdk_candidate"))
         assertFalse(testManifest.contains("artifact.sdk.c_sdk_candidate"))
+    }
+
+    @Test
+    fun cSdkV1CopiesOnlyTheProvenCandidateBehindAnImmutableDigestLedger() {
+        val producerScript =
+            root.resolve("build-scripts/src/main/kotlin/k16-firmware-producer-convention.gradle.kts").readText()
+        val freezeTask =
+            producerScript.substringAfter("val freezeK16CSdkV1 =")
+                .substringBefore("val generateKraftOsTestArtifactManifest =")
+        val productionBundle =
+            producerScript.substringAfter("val assembleKraftOsProductionBundle =")
+                .substringBefore("val putK16DevelopmentStorage0TestPrograms =")
+
+        assertTrue(
+            producerScript.contains(
+                "generatedK16FirmwareResources.map { it.file(\"firmware/c-sdk-v1.kv\") }",
+            ),
+        )
+        assertTrue(producerScript.contains("val freezeK16CSdkV1 ="))
+        assertTrue(producerScript.contains("val k16ImmutableSdkSha256Ledger ="))
+        assertTrue(producerScript.contains("k16ImmutableSdkSha256Ledger.getValue(\"c_sdk_v1\")"))
+        assertTrue(freezeTask.contains("dependsOn(\"assembleK16CSdkCandidate\")"))
+        assertTrue(freezeTask.contains("k16CSdkV1ExpectedSha256"))
+        assertTrue(freezeTask.contains("MessageDigest.getInstance(\"SHA-256\")"))
+        assertTrue(freezeTask.contains("immutable K16 SDK artifact identity has different bytes: c_sdk_v1"))
+        assertTrue(freezeTask.contains("candidate.copyTo(output, overwrite = true)"))
+        assertTrue(freezeTask.contains("candidate.readBytes().contentEquals(output.readBytes())"))
+        assertTrue(productionBundle.contains("freezeK16CSdkV1"))
     }
 
     @Test
