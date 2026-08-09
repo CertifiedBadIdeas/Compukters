@@ -26,6 +26,7 @@ use crate::k16_f32::{K16F32Cpu, K16F32Stop, PredecodedK16F32Program};
 use crate::k16_f32r32::{K16F32R32Cpu, K16F32R32Stop, PredecodedK16F32R32Program};
 use crate::low_machine::{MachineMemory, MemoryBus, MemoryFault};
 use crate::rv32im::{PredecodedRv32imProgram, Rv32imCpu, Rv32imStop};
+use crate::rv64im::{PredecodedRv64imProgram, Rv64imCpu, Rv64imStop};
 
 const MEMORY_BYTES: usize = 128 * 1024;
 const STACK_TOP: u32 = 0x0001_ffc0;
@@ -57,6 +58,7 @@ enum PreparedProgram {
     K16F32(PredecodedK16F32Program),
     K16F32R32LR(PredecodedK16F32R32Program),
     Rv32im(PredecodedRv32imProgram),
+    Rv64im(PredecodedRv64imProgram),
 }
 
 pub struct PreparedCompiledC {
@@ -78,6 +80,9 @@ impl PreparedCompiledC {
                 ),
                 CompiledCCandidate::Rv32im => PreparedProgram::Rv32im(
                     PredecodedRv32imProgram::new(artifact.image_base, &artifact.image)?,
+                ),
+                CompiledCCandidate::Rv64im => PreparedProgram::Rv64im(
+                    PredecodedRv64imProgram::new(u64::from(artifact.image_base), &artifact.image)?,
                 ),
             };
         let memory = initialize_memory(&artifact)?;
@@ -202,8 +207,56 @@ impl PreparedCompiledC {
                     &self.bus,
                 ))
             }
+            PreparedProgram::Rv64im(program) => {
+                self.bus.prepare_run(None)?;
+                let mut cpu = Rv64imCpu::new(u64::from(entry_address(&self.artifact)?));
+                cpu.set_register(10, u64::from(iterations))?;
+                cpu.set_register(1, u64::from(stop_address))?;
+                cpu.set_register(2, u64::from(STACK_TOP))?;
+                let stop = program.run_until_stop(&mut cpu, &mut self.bus, max_steps)?;
+                match stop {
+                    Rv64imStop::Ebreak => {}
+                    Rv64imStop::StepLimit => {
+                        return Err("rv64im instruction limit reached".to_string())
+                    }
+                    other => return Err(format!("rv64im returned wrong stop reason {other:?}")),
+                }
+                let checksum = cpu.register(10) as u32;
+                validate_completion_u64(
+                    &self.artifact,
+                    cpu.pc(),
+                    checksum,
+                    expected_checksum,
+                    &self.bus,
+                )?;
+                Ok(observation(
+                    &self.artifact,
+                    iterations,
+                    checksum,
+                    cpu.retired_instructions(),
+                    Rv64imCpu::cpu_state_bytes(),
+                    program.retained_bytes(),
+                    &self.bus,
+                ))
+            }
         }
     }
+}
+
+fn validate_completion_u64(
+    artifact: &CompiledCArtifact,
+    pc: u64,
+    checksum: u32,
+    expected_checksum: u32,
+    bus: &CompiledCBus,
+) -> Result<(), String> {
+    let pc = u32::try_from(pc).map_err(|_| {
+        format!(
+            "{} stop PC {pc:#018x} exceeds the benchmark address space",
+            artifact.candidate.name()
+        )
+    })?;
+    validate_completion(artifact, pc, checksum, expected_checksum, bus)
 }
 
 fn initialize_memory(artifact: &CompiledCArtifact) -> Result<MachineMemory, String> {
