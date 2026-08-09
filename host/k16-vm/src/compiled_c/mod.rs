@@ -19,4 +19,5 @@
 
 pub mod artifact;
 pub mod k16_f32_assembler;
+pub mod report;
 pub mod runner;
