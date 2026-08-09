@@ -1,12 +1,13 @@
 # K16 TinyCC Host Backend
 
 > Issues: [#464](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/464),
-> [#465](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/465)
+> [#465](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/465),
+> [#466](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/466)
 
-The K16 TinyCC backend is a host-running cross-compiler proof. It compiles a
-deliberately bounded C subset into K16 relocatable objects quickly enough to be
-a candidate for future interactive tooling. It is not the production KraftOS
-compiler and it does not run inside KraftOS.
+The K16 TinyCC backend is proven first as a host-running cross-compiler and is
+also cross-built as an ordinary dynamic KraftOS program. It compiles a
+deliberately bounded C subset into K16 relocatable objects quickly enough for
+interactive tooling. It is not the compiler used to build KraftOS itself.
 
 ## Source And Build Boundary
 
@@ -59,6 +60,8 @@ The checked-in corpus under `tools/fixtures/k16-tinycc` proves:
   caller-owned stack arguments, and a scalar return in `r0`;
 - representation transport for `long long`, binary64 `double`, and binary64
   `long double`, including paired-register and stack arguments and returns;
+- wide integer argument and return transport, plus the 64-bit helper calls
+  reached by the native compiler build;
 - aggregate-by-value arguments through aligned caller-owned copies and 32-bit
   guest pointers, with mutation isolation across the call;
 - variadic calls and callees using the shared K16 C stack stream, C default
@@ -68,6 +71,9 @@ The checked-in corpus under `tools/fixtures/k16-tinycc` proves:
   pointer initializers, and external calls through K16 RELA records;
 - GNU declaration symbol labels such as `__asm__("kraft_sys_write")`, which
   rename an ELF symbol but do not contain integrated assembly.
+- `float` and binary64 floating-point arithmetic, comparisons, negation, and
+  integer conversions lowered to ordinary compiler-runtime calls rather than
+  target FPU instructions.
 
 `tools/k16-tinycc-smoke.sh` compiles the positive corpus with both TinyCC and
 Clang, inspects both objects, links them with `k16 link`, and compares observable
@@ -85,13 +91,24 @@ KraftOS `crt0.c` and `uname.c`, links them against the existing
 smoke copies the production KraftOS volume, replaces only `/bin/uname.kx`,
 boots the real OS, and observes `K16` followed by a returned shell prompt.
 
+## Native Compiler Build
+
+The `compileK16NativeTinyCc` task compiles TinyCC's one-source entry with K16
+Clang and a private generated target configuration. It links the result as a
+dynamic K16E program against the compiler-owned C SDK archives and
+`libkraft.kso`. The resulting `tcc.kx` contains only guest `/sdk` paths; an
+absolute host path or an unresolved symbol outside the exact SDK/runtime
+closure fails the build.
+
+The native image is a compiler only: TinyCC still emits `ET_REL` objects and
+does not own final K16E linking. Packaging `tcc.kx` into immutable C SDK media
+and proving source-to-object compilation inside a running VM are separate
+acceptance steps.
+
 ## Unsupported Surface
 
 The backend rejects these boundaries instead of guessing an ABI:
 
-- floating-point arithmetic: `K16 TinyCC does not support floating-point code
-  yet`. Loading, storing, passing, returning, and inspecting floating object
-  representations are supported and do not require arithmetic helpers;
 - C vector extensions: `K16 TinyCC does not support vector values`;
 - complex values: `K16 TinyCC does not support complex values`;
 - empty GNU aggregate arguments: `K16 TinyCC does not support empty aggregate
@@ -132,10 +149,12 @@ The runtime-only proof is available as:
 The production KraftOS remains Clang-built. Existing
 `compileK16System*` tasks still use the K16 LLVM/Clang path; the TinyCC uname
 artifact exists only under its dedicated proof directory and is injected only
-into a temporary test volume.
+into a temporary test volume. The native `tcc.kx` build does not replace that
+production compiler path.
 
 The immutable module infrastructure can now mount a K16 SDK artifact at
-`/sdk`, but the production `c_sdk_v1` contents, guest TinyCC port, libc
-packaging, and in-game editor/compiler workflow remain later work. Guest-side
-`-run` or JIT is not implied by this host backend: executing a program remains
-an explicit compile, `k16 link`, load, and KraftOS process operation.
+`/sdk`, and the compiler-owned libc/runtime archives plus `tcc.kx` are built,
+but the immutable `c_sdk_v1` volume and its in-VM source-to-object acceptance
+proof remain later work. Guest-side `-run` or JIT is not implied: executing a
+program remains an explicit compile, `k16 link`, load, and KraftOS process
+operation.

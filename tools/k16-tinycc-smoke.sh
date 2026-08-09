@@ -7,6 +7,8 @@ TINYCC="${K16_TINYCC:?K16_TINYCC must point to the pinned tcc-k16 executable}"
 CLANG="${K16_CLANG:?K16_CLANG must point to the K16 Clang executable}"
 LLVM_READOBJ="${K16_LLVM_READOBJ:?K16_LLVM_READOBJ must point to llvm-readobj}"
 K16="${K16_TOOL:?K16_TOOL must point to the K16 CLI executable}"
+LIBSOFTFLOAT="${K16_LIBSOFTFLOAT:?K16_LIBSOFTFLOAT must point to libsoftfloat.a}"
+LIBCOMPILER_RT="${K16_LIBCOMPILER_RT:?K16_LIBCOMPILER_RT must point to libcompiler_rt.a}"
 : "${K16_RUSTC:?K16_RUSTC must point to the custom K16 rustc}"
 : "${K16_LLVM_BIN_DIR:?K16_LLVM_BIN_DIR must point to the K16 LLVM bin directory}"
 LLVM_OBJCOPY="$K16_LLVM_BIN_DIR/llvm-objcopy"
@@ -24,6 +26,14 @@ require_regular_executable() {
     require_executable "$path"
     if [[ -L "$path" ]]; then
         echo "required executable must not be a symlink: $path" >&2
+        exit 1
+    fi
+}
+
+require_regular_file() {
+    local path="$1"
+    if [[ ! -f "$path" || -L "$path" ]]; then
+        echo "required regular file is missing or a symlink: $path" >&2
         exit 1
     fi
 }
@@ -118,6 +128,8 @@ require_executable "$LLVM_OBJCOPY"
 require_executable "$K16"
 require_executable "$K16_RUSTC"
 require_executable "$K16_LLVM_BIN_DIR/llc"
+require_regular_file "$LIBSOFTFLOAT"
+require_regular_file "$LIBCOMPILER_RT"
 
 WORK_DIR="$(mktemp -d)"
 trap 'rm -rf "$WORK_DIR"' EXIT
@@ -230,8 +242,40 @@ require_contains "$WORK_DIR/predefines.txt" "#define __SIZEOF_LONG__ 4"
 require_contains "$WORK_DIR/predefines.txt" "#define __CHAR_BIT__ 8"
 require_not_contains "$WORK_DIR/predefines.txt" "__CHAR_UNSIGNED__"
 
-require_tinycc_failure "reject-float" \
-    "K16 TinyCC does not support floating-point code yet"
+compile_tinycc "$FIXTURES/float-abi.c" "$WORK_DIR/float-abi-tinycc.o"
+compile_clang "$FIXTURES/float-abi.c" "$WORK_DIR/float-abi-clang.o"
+inspect_object "$WORK_DIR/float-abi-tinycc.o" "$WORK_DIR/float-abi-tinycc.txt"
+float_helpers=(
+    __addsf3 __subsf3 __mulsf3 __divsf3 __negsf2
+    __adddf3 __subdf3 __muldf3 __divdf3 __negdf2
+    __eqsf2 __nesf2 __ltsf2 __lesf2 __gtsf2 __gesf2
+    __eqdf2 __nedf2 __ltdf2 __ledf2 __gtdf2 __gedf2
+    __floatsisf __floatunsidf __floatdisf __floatundidf
+    __fixsfsi __fixunsdfsi __fixdfdi __fixunssfdi
+    __extendsfdf2 __truncdfsf2
+)
+for helper in "${float_helpers[@]}"; do
+    require_contains "$WORK_DIR/float-abi-tinycc.txt" "R_K16_CALL32 $helper"
+done
+
+compile_tinycc "$FIXTURES/float-varargs.c" "$WORK_DIR/float-varargs-tinycc.o"
+compile_clang "$FIXTURES/float-varargs.c" "$WORK_DIR/float-varargs-clang.o"
+inspect_object "$WORK_DIR/float-varargs-tinycc.o" \
+    "$WORK_DIR/float-varargs-tinycc.txt"
+require_contains "$WORK_DIR/float-varargs-tinycc.txt" "R_K16_CALL32 __adddf3"
+
+compile_tinycc "$FIXTURES/float-runtime.c" "$WORK_DIR/float-runtime-tinycc.o"
+compile_clang "$FIXTURES/float-runtime.c" "$WORK_DIR/float-runtime-clang.o"
+for caller in tinycc clang; do
+    for implementation in tinycc clang; do
+        link_and_run "float-runtime-$caller-$implementation" 42 \
+            "$WORK_DIR/float-runtime-$caller.o" \
+            "$WORK_DIR/float-abi-$implementation.o" \
+            "$WORK_DIR/float-varargs-$implementation.o" \
+            "$LIBSOFTFLOAT" "$LIBCOMPILER_RT"
+    done
+done
+
 require_tinycc_failure "reject-vector" \
     "K16 TinyCC does not support vector values"
 require_tinycc_failure "reject-complex" \
