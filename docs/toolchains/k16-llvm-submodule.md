@@ -1,5 +1,9 @@
 # K16 LLVM Submodule
 
+> Retired product direction: [ADR 0001](../architecture-decisions/0001-retire-k16-adopt-rv64.md)
+> ends new K16 backend work. The fork remains temporarily available only for
+> reproducing the current implementation and migration comparisons.
+
 > Issue: [#136](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/136)
 
 The K16 LLVM fork is tracked as a git submodule at:

@@ -1,5 +1,11 @@
 # Compukter Kraft — Architecture
 
+> Architecture direction: [ADR 0001](architecture-decisions/0001-retire-k16-adopt-rv64.md)
+> retires K16 as the product ISA and selects `RV64IMA_Zicsr_Zifencei` with the
+> standard LP64/ELF64 toolchain. This document describes the still-running K16
+> implementation during the incremental migration; it is not the long-term
+> target contract.
+>
 > Note: as of issue #26 the legacy CKL language / CKIM bytecode VM /
 > in-game Workbench IDE have been removed. As of issue #44 the legacy
 > Image-VM (host-call opcode, multi-process device daemon, runtime
@@ -8,7 +14,7 @@
 > storage-backed boot media. Older revisions in git history describe the
 > previous architectures.
 
-## Overview
+## Current Implementation Overview
 
 Compukter Kraft is a Minecraft mod that adds programmable computers backed
 by a Rust virtual machine (`host/k16-vm`). The mod ships a single

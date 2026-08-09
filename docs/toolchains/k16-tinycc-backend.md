@@ -1,5 +1,9 @@
 # K16 TinyCC Host Backend
 
+> Retired product direction: [ADR 0001](../architecture-decisions/0001-retire-k16-adopt-rv64.md)
+> ends new K16 compiler work. This document describes the completed K16 proof
+> and remains historical migration evidence.
+
 > Issues: [#464](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/464),
 > [#465](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/465),
 > [#466](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/466)

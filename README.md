@@ -1,6 +1,6 @@
 ![Mod logo (Ai generated)](logo_1.png)
 
-**Programmable computers for Minecraft — booted end-to-end on a custom Rust VM.**
+**Programmable computers for Minecraft — booted end-to-end on a native Rust VM.**
 
 Inspired by ComputerCraft. With one big difference: the runtime is not Lua —
 it is a native Rust virtual machine (`k16-vm`) wrapped via JNI.
@@ -22,6 +22,11 @@ the standalone Computer block, the Workbench/Terminal/Serial items, and the
 CKIM bytecode runtime have all been removed. The remaining player-facing
 surface is Notebook, booted through the Kraft16 BIOS path
 (`bios.kflash` → `storage0.kv` boot entry → guest K16 execution).
+
+K16 is now retired as the long-term product ISA. The accepted target is
+`RV64IMA_Zicsr_Zifencei` with LP64/ELF64; the current K16 boot path remains only
+while equivalent RV64 vertical slices replace it. See
+[ADR 0001](docs/architecture-decisions/0001-retire-k16-adopt-rv64.md).
 
 Currently for **NeoForge 1.21.1**.
 
