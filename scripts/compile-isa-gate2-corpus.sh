@@ -12,6 +12,8 @@ if ! [[ "$VALIDATION_ITERATIONS" =~ ^[1-9][0-9]*$ ]] || (( VALIDATION_ITERATIONS
     echo "validation iterations must be an integer in 1..4294967295" >&2
     exit 2
 fi
+mkdir -p "$ARTIFACT_ROOT"
+ARTIFACT_ROOT="$(cd "$ARTIFACT_ROOT" && pwd -P)"
 
 ROOT="$(git rev-parse --show-toplevel)"
 SOURCE_ROOT="$ROOT/tools/fixtures/isa-gate2-c"
@@ -34,10 +36,11 @@ for tool in "$ISA_GATE2_CLANG" "$ISA_GATE2_OPT" "$ISA_GATE2_LLC" "$ISA_GATE2_LLD
     fi
 done
 
-cargo build --quiet --manifest-path "$CRATE_MANIFEST" --bin isa_gate2_checksum
+cargo build --quiet --locked --offline --manifest-path "$CRATE_MANIFEST" \
+    --bin isa_gate2_checksum --bin k16_f32_assemble
 CHECKSUM_BIN="$ROOT/host/k16-vm/target/debug/isa_gate2_checksum"
+K16_ASSEMBLER_BIN="$ROOT/host/k16-vm/target/debug/k16_f32_assemble"
 workloads=(compute32 branch-mix call-stack memory-sequential memory-random copy-checksum)
-mkdir -p "$ARTIFACT_ROOT"
 
 for workload in "${workloads[@]}"; do
     directory="$ARTIFACT_ROOT/$workload"
@@ -46,6 +49,8 @@ for workload in "${workloads[@]}"; do
     neutral_ir="$directory/neutral.ll"
     canonical_ir="$directory/canonical.ll"
     k16_asm="$directory/k16.s"
+    k16_image="$directory/k16-f32.bin"
+    k16_manifest="$directory/k16-f32.manifest"
     rv_object="$directory/rv32im.o"
     rv_elf="$directory/rv32im.elf"
     rv_image="$directory/rv32im.bin"
@@ -70,6 +75,8 @@ for workload in "${workloads[@]}"; do
     fi
 
     "$K16_LLVM_BIN_DIR/llc" -mtriple=k16 -filetype=asm "$canonical_ir" -o "$k16_asm"
+    "$K16_ASSEMBLER_BIN" --base 4096 --entry kernel --input "$k16_asm" \
+        --output "$k16_image" --manifest "$k16_manifest"
     "$ISA_GATE2_LLC" -mtriple=riscv32-unknown-elf -mattr=+m,-a,-c \
         -function-sections -filetype=obj "$canonical_ir" -o "$rv_object"
     "$ISA_GATE2_LLD" -m elf32lriscv -T "$SOURCE_ROOT/rv32im.ld" \
@@ -122,4 +129,14 @@ for workload in "${workloads[@]}"; do
         echo "opt_version=$($ISA_GATE2_OPT --version | sed -n '2s/^  //p')"
         echo "llc_version=$($ISA_GATE2_LLC --version | sed -n '2s/^  //p')"
     } > "$manifest"
+
+    {
+        echo "workload=$workload"
+        echo "source_sha256=$(sha256sum "$source" | awk '{print $1}')"
+        echo "canonical_ir_sha256=$(sha256sum "$canonical_ir" | awk '{print $1}')"
+        echo "image_sha256=$(sha256sum "$k16_image" | awk '{print $1}')"
+        echo "validation_iterations=$VALIDATION_ITERATIONS"
+        echo "expected_checksum=$expected_checksum"
+        echo "k16_llc_version=$($K16_LLVM_BIN_DIR/llc --version | sed -n '2s/^  //p')"
+    } >> "$k16_manifest"
 done

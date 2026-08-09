@@ -123,6 +123,12 @@ pub fn call(offset: i32) -> u32 {
 pub fn ret() -> u32 {
     0x44 << 24
 }
+pub fn branch_ltu(lhs: u8, rhs: u8, offset: i16) -> u32 {
+    ri16(0x45, lhs, rhs, offset)
+}
+pub fn branch_uge(lhs: u8, rhs: u8, offset: i16) -> u32 {
+    ri16(0x46, lhs, rhs, offset)
+}
 
 pub fn materialize(dst: u8, value: u32) -> [u32; 2] {
     let upper = ((u64::from(value) + 0x800) >> 12) as u32 & 0x000f_ffff;

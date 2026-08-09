@@ -18,8 +18,9 @@
  */
 
 use k16_vm::k16_f32::encoding::{
-    add, addi, and, branchz, call, eq, halt, load16, load32, load8, lt_s, ltu, materialize, mul,
-    ne, or, ret, sar, shl, shr, store16, store32, store8, sub, xor, yield_now,
+    add, addi, and, branch_ltu, branch_uge, branchz, call, eq, halt, load16, load32, load8, lt_s,
+    ltu, materialize, mul, ne, or, ret, sar, shl, shr, store16, store32, store8, sub, xor,
+    yield_now,
 };
 use k16_vm::k16_f32::{K16F32Cpu, K16F32Stop, PredecodedK16F32Program};
 use k16_vm::low_bus::MachineBus;
@@ -90,6 +91,29 @@ fn zero_branch_skips_exactly_one_instruction() {
 
     assert_eq!(cpu.run_until_stop(&mut bus, 8).unwrap(), K16F32Stop::Halt,);
     assert_eq!(cpu.register(2), 7);
+}
+
+#[test]
+fn unsigned_two_register_branches_execute_without_a_temporary_register() {
+    let mut bus = MachineBus::new(128).unwrap();
+    let mut words = Vec::new();
+    words.extend(materialize(1, 1));
+    words.extend(materialize(2, 2));
+    words.extend([
+        branch_ltu(1, 2, 1),
+        addi(3, 0, 99),
+        addi(3, 0, 7),
+        branch_uge(2, 1, 1),
+        addi(4, 0, 99),
+        addi(4, 0, 8),
+        halt(),
+    ]);
+    write_program(&mut bus, &words);
+    let mut cpu = K16F32Cpu::new(0);
+
+    assert_eq!(cpu.run_until_stop(&mut bus, 16).unwrap(), K16F32Stop::Halt);
+    assert_eq!(cpu.register(3), 7);
+    assert_eq!(cpu.register(4), 8);
 }
 
 #[test]
