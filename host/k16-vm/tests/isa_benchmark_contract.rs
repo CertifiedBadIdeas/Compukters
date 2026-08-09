@@ -17,7 +17,9 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use k16_vm::isa_benchmarks::{native_checksum, IsaBenchmarkWorkload};
+use k16_vm::isa_benchmarks::{
+    native_checksum, IsaBenchmarkCandidate, IsaBenchmarkObservation, IsaBenchmarkWorkload,
+};
 
 #[test]
 fn gate1_catalogue_has_the_accepted_workloads() {
@@ -50,4 +52,38 @@ fn native_checksums_are_deterministic() {
             native_checksum(*workload, 17),
         );
     }
+}
+
+#[test]
+fn required_candidates_are_stable() {
+    assert_eq!(
+        IsaBenchmarkCandidate::all()
+            .iter()
+            .map(|candidate| candidate.name())
+            .collect::<Vec<_>>(),
+        vec![
+            "k16",
+            "k16-cached",
+            "k16-f32",
+            "rvsim-rv32im",
+            "rv32im",
+            "rv32im-predecoded",
+        ],
+    );
+}
+
+#[test]
+fn observation_rejects_a_wrong_checksum() {
+    let observation = IsaBenchmarkObservation::for_test(
+        IsaBenchmarkCandidate::K16,
+        IsaBenchmarkWorkload::Compute32,
+        3,
+        99,
+    );
+
+    let error = observation.validate_checksum().unwrap_err();
+    assert!(error.contains("k16"), "{error}");
+    assert!(error.contains("compute32"), "{error}");
+    assert!(error.contains("expected"), "{error}");
+    assert!(error.contains("actual 99"), "{error}");
 }
