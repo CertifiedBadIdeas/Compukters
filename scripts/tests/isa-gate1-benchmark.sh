@@ -26,9 +26,16 @@ for expected in \
     'Rust:' \
     'Candidate dependency: rvsim 0.2.2 default-features=false' \
     'workload.candidate.iterations.checksum' \
+    'steady_allocated_bytes.vs_native' \
+    'candidate.normalized_vm_geomean.host_overhead_geomean.decision' \
     'Gate 1 recommendation'; do
     grep -q "$expected" "$SNAPSHOT"
 done
 grep -q '^Commit: .* (clean)$' "$SNAPSHOT"
+for candidate in k16 k16-cached k16-predecoded k16-f32 rvsim-rv32im rv32im rv32im-cached rv32im-predecoded native-rust; do
+    grep -q "^$candidate[[:space:]]" "$SNAPSHOT"
+    grep -q "$candidate" "$TEMP_ROOT/scripts/record-isa-gate1-benchmark.sh"
+done
+grep -q '^native-rust[[:space:]]n/a[[:space:]].*[[:space:]]reference$' "$SNAPSHOT"
 
 echo "ISA Gate 1 recorder contract passed"
