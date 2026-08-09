@@ -25,6 +25,7 @@ use crate::isa_benchmarks::IsaBenchmarkWorkload;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CompiledCCandidate {
     K16F32,
+    K16F32R32LR,
     Rv32im,
 }
 
@@ -32,6 +33,7 @@ impl CompiledCCandidate {
     pub const fn name(self) -> &'static str {
         match self {
             Self::K16F32 => "k16-f32",
+            Self::K16F32R32LR => "k16-f32r32-lr",
             Self::Rv32im => "rv32im",
         }
     }
@@ -65,6 +67,7 @@ pub fn load_compiled_c_artifact(manifest_path: &Path) -> Result<CompiledCArtifac
     let workload = parse_workload(&take(&mut fields, "workload")?)?;
     let candidate = match take(&mut fields, "candidate")?.as_str() {
         "k16-f32" => CompiledCCandidate::K16F32,
+        "k16-f32r32-lr" => CompiledCCandidate::K16F32R32LR,
         "rv32im" => CompiledCCandidate::Rv32im,
         candidate => return Err(format!("unknown compiled-C candidate {candidate:?}")),
     };
@@ -141,6 +144,29 @@ pub fn validate_artifact_pair(
             rv.candidate.name()
         ));
     }
+    validate_artifact_pair_metadata(k16, rv)
+}
+
+pub fn validate_f32r32_artifact_pair(
+    candidate: &CompiledCArtifact,
+    rv: &CompiledCArtifact,
+) -> Result<(), String> {
+    if candidate.candidate != CompiledCCandidate::K16F32R32LR
+        || rv.candidate != CompiledCCandidate::Rv32im
+    {
+        return Err(format!(
+            "artifact pair candidate order must be k16-f32r32-lr then rv32im, got {} then {}",
+            candidate.candidate.name(),
+            rv.candidate.name()
+        ));
+    }
+    validate_artifact_pair_metadata(candidate, rv)
+}
+
+fn validate_artifact_pair_metadata(
+    k16: &CompiledCArtifact,
+    rv: &CompiledCArtifact,
+) -> Result<(), String> {
     if k16.workload != rv.workload {
         return Err("artifact pair workload mismatch".to_string());
     }
@@ -294,6 +320,7 @@ fn validate_image_shape(
         .ok_or_else(|| "compiled-C image address range overflows u32".to_string())?;
     let expected_stop = match candidate {
         CompiledCCandidate::K16F32 => crate::k16_f32::encoding::halt(),
+        CompiledCCandidate::K16F32R32LR => crate::k16_f32r32::encoding::halt(),
         CompiledCCandidate::Rv32im => crate::rv32im::encoding::ebreak(),
     };
     let actual_stop = u32::from_le_bytes(image[code_bytes..].try_into().unwrap());

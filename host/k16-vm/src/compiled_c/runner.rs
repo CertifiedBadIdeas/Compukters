@@ -23,6 +23,7 @@ use std::ops::Range;
 use super::artifact::{CompiledCArtifact, CompiledCCandidate};
 use crate::isa_benchmarks::{native_checksum, IsaBenchmarkWorkload};
 use crate::k16_f32::{K16F32Cpu, K16F32Stop, PredecodedK16F32Program};
+use crate::k16_f32r32::{K16F32R32Cpu, K16F32R32Stop, PredecodedK16F32R32Program};
 use crate::low_machine::{MachineMemory, MemoryBus, MemoryFault};
 use crate::rv32im::{PredecodedRv32imProgram, Rv32imCpu, Rv32imStop};
 
@@ -54,6 +55,7 @@ pub fn run_compiled_c(
 
 enum PreparedProgram {
     K16F32(PredecodedK16F32Program),
+    K16F32R32LR(PredecodedK16F32R32Program),
     Rv32im(PredecodedRv32imProgram),
 }
 
@@ -70,6 +72,9 @@ impl PreparedCompiledC {
             match artifact.candidate {
                 CompiledCCandidate::K16F32 => PreparedProgram::K16F32(
                     PredecodedK16F32Program::new(artifact.image_base, &artifact.image)?,
+                ),
+                CompiledCCandidate::K16F32R32LR => PreparedProgram::K16F32R32LR(
+                    PredecodedK16F32R32Program::new(artifact.image_base, &artifact.image)?,
                 ),
                 CompiledCCandidate::Rv32im => PreparedProgram::Rv32im(
                     PredecodedRv32imProgram::new(artifact.image_base, &artifact.image)?,
@@ -127,6 +132,41 @@ impl PreparedCompiledC {
                     cpu.register(0),
                     cpu.retired_instructions(),
                     K16F32Cpu::cpu_state_bytes(),
+                    program.retained_bytes(),
+                    &self.bus,
+                ))
+            }
+            PreparedProgram::K16F32R32LR(program) => {
+                self.bus.prepare_run(None)?;
+                let mut cpu = K16F32R32Cpu::new(entry_address(&self.artifact)?);
+                cpu.set_register(0, iterations)?;
+                cpu.set_register(30, STACK_TOP)?;
+                cpu.set_register(31, stop_address)?;
+                let stop = program.run_until_stop(&mut cpu, &mut self.bus, max_steps)?;
+                match stop {
+                    K16F32R32Stop::Halt => {}
+                    K16F32R32Stop::StepLimit => {
+                        return Err("k16-f32r32-lr instruction limit reached".to_string())
+                    }
+                    other => {
+                        return Err(format!(
+                            "k16-f32r32-lr returned wrong stop reason {other:?}"
+                        ))
+                    }
+                }
+                validate_completion(
+                    &self.artifact,
+                    cpu.pc(),
+                    cpu.register(0),
+                    expected_checksum,
+                    &self.bus,
+                )?;
+                Ok(observation(
+                    &self.artifact,
+                    iterations,
+                    cpu.register(0),
+                    cpu.retired_instructions(),
+                    K16F32R32Cpu::cpu_state_bytes(),
                     program.retained_bytes(),
                     &self.bus,
                 ))
