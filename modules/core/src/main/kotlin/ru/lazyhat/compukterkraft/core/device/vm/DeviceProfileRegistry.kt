@@ -30,12 +30,15 @@ import ru.lazyhat.compukterkraft.lang.runtime.DeviceResources
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceStorageResources
 
 object DeviceProfileRegistry {
+    const val NORMAL_NOTEBOOK_RAM_BYTES: Int = 1 * 1024 * 1024
+    const val ADVANCED_NOTEBOOK_RAM_BYTES: Int = 4 * 1024 * 1024
+
     fun forFamily(family: DeviceFamily): DeviceProfile =
         when (family) {
             DeviceFamily.NORMAL -> {
                 DeviceProfile(
                     id = "normal",
-                    displayName = "Normal Computer",
+                    displayName = "Normal Notebook",
                     maxStepsPerSlice = 1_000_000,
                     maxEventQueueSize = 32,
                     allowedCapabilities = defaultCapabilities(),
@@ -44,7 +47,7 @@ object DeviceProfileRegistry {
                             maxStepsPerSlice = 1_000_000,
                             maxTurnsPerTick = 32,
                             eventQueueSlots = 32,
-                            vmRamBytes = Config.computerRamLimit.toLong(),
+                            vmRamBytes = NORMAL_NOTEBOOK_RAM_BYTES.toLong(),
                             diskBytes = Config.computerSpaceLimit.toLong(),
                         ),
                 )
@@ -53,7 +56,7 @@ object DeviceProfileRegistry {
             DeviceFamily.ADVANCED -> {
                 DeviceProfile(
                     id = "advanced",
-                    displayName = "Advanced Computer",
+                    displayName = "Advanced Notebook",
                     maxStepsPerSlice = 2_000_000,
                     maxEventQueueSize = 64,
                     allowedCapabilities = defaultCapabilities(),
@@ -62,7 +65,7 @@ object DeviceProfileRegistry {
                             maxStepsPerSlice = 2_000_000,
                             maxTurnsPerTick = 32,
                             eventQueueSlots = 32,
-                            vmRamBytes = Config.computerRamLimit.toLong(),
+                            vmRamBytes = ADVANCED_NOTEBOOK_RAM_BYTES.toLong(),
                             diskBytes = Config.computerSpaceLimit.toLong(),
                         ),
                 )
