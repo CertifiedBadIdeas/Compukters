@@ -68,11 +68,9 @@ fn ram_accesses_enforce_every_touched_page_permission() {
         .unwrap_err()
         .to_string()
         .contains("read"));
-    assert!(space
-        .load_u16(0x1fff)
-        .unwrap_err()
-        .to_string()
-        .contains("read"));
+    let cross_page_fault = space.load_u16(0x1fff).unwrap_err();
+    assert!(cross_page_fault.to_string().contains("read"));
+    assert_eq!(cross_page_fault.address(), Some(0x2000));
 }
 
 #[test]
