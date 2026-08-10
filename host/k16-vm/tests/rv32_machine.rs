@@ -24,7 +24,9 @@ use k16_vm::computer_abi;
 use k16_vm::rv32_machine::{
     Rv32ExecutionBackendConfig, Rv32Machine, Rv32MachineConfig, Rv32MachineOutcome,
 };
-use k16_vm::rv32im::encoding::{addi, csrrs, csrrw, ebreak, ecall, jal, lui, materialize, sb, sw};
+use k16_vm::rv32im::encoding::{
+    addi, csrrs, csrrw, ebreak, ecall, jal, lui, materialize, sb, sh, sw,
+};
 use rv32_elf_support::{halting_machine_elf, machine_program_elf, Elf32Builder, LoadSegment};
 
 const CSR_MTVEC: u16 = 0x305;
@@ -169,6 +171,42 @@ fn bounded_debug_overflow_is_a_guest_trap() {
             }
         );
         assert_eq!(machine.debug_bytes(), b"A");
+    }
+}
+
+#[test]
+fn faulting_halfword_mmio_stores_have_no_partial_device_effects() {
+    let [debug_hi, debug_lo] = materialize(1, computer_abi::DEBUG_BASE);
+    let debug_elf =
+        machine_program_elf(&[debug_hi, debug_lo, addi(2, 0, i32::from(b'A')), sh(1, 2, 0)]);
+    let [control_hi, control_lo] = materialize(1, computer_abi::CONTROL_BASE);
+    let control_elf = machine_program_elf(&[
+        control_hi,
+        control_lo,
+        addi(2, 0, computer_abi::STATUS_HALTED),
+        sh(1, 2, 0),
+    ]);
+
+    for execution in configs() {
+        let mut machine = Rv32Machine::from_elf(&debug_elf, config(execution, 8)).unwrap();
+        assert_eq!(
+            machine.run(8).unwrap(),
+            Rv32MachineOutcome::BudgetExhausted {
+                retired_delta: 3,
+                retired_total: 3,
+            }
+        );
+        assert_eq!(machine.debug_bytes(), b"");
+
+        let mut machine = Rv32Machine::from_elf(&control_elf, config(execution, 0)).unwrap();
+        assert_eq!(
+            machine.run(8).unwrap(),
+            Rv32MachineOutcome::BudgetExhausted {
+                retired_delta: 3,
+                retired_total: 3,
+            }
+        );
+        assert_eq!(machine.control_status(), computer_abi::STATUS_BOOTING);
     }
 }
 

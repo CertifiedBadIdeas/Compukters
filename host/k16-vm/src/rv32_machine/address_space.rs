@@ -162,12 +162,22 @@ impl MemoryBus for Rv32AddressSpace {
     }
 
     fn load_u16(&self, address: u32) -> Result<u16, MemoryFault> {
-        self.require(address, 2, Access::Read)?;
+        if !self.require(address, 2, Access::Read)? {
+            return Err(MemoryFault::at(
+                address,
+                format!("RV32 halfword read at {address:#010x} is unsupported for MMIO"),
+            ));
+        }
         self.bus.load_u16(address)
     }
 
     fn store_u16(&mut self, address: u32, value: u16) -> Result<(), MemoryFault> {
-        self.require(address, 2, Access::Write)?;
+        if !self.require(address, 2, Access::Write)? {
+            return Err(MemoryFault::at(
+                address,
+                format!("RV32 halfword write at {address:#010x} is unsupported for MMIO"),
+            ));
+        }
         self.bus.store_u16(address, value)
     }
 
