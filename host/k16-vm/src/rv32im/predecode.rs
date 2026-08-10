@@ -20,6 +20,7 @@
 use super::decode::{decode, DecodedInstruction};
 use super::{Rv32imCpu, Rv32imStop};
 use crate::low_machine::MemoryBus;
+use std::ops::Range;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PredecodedRv32imProgram {
@@ -93,5 +94,123 @@ impl PredecodedRv32imProgram {
             .copied()
             .ok_or_else(|| format!("RV32IM predecoded PC {:#010x} is outside image", cpu.pc()))?;
         cpu.retire_decoded(bus, cpu.pc(), instruction)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PredecodedSlot {
+    Instruction(DecodedInstruction),
+    Invalid { word: u32 },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct PredecodedRange {
+    start: u32,
+    end: u32,
+    slots: Vec<PredecodedSlot>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PredecodedRv32imImage {
+    ranges: Vec<PredecodedRange>,
+}
+
+impl PredecodedRv32imImage {
+    pub fn new(memory: &[u8], ranges: &[Range<u32>]) -> Result<Self, String> {
+        let mut decoded_ranges = Vec::with_capacity(ranges.len());
+        let mut previous_end = None;
+        for range in ranges {
+            if range.is_empty() {
+                return Err(format!(
+                    "RV32IM predecode range {:#010x}..{:#010x} is empty",
+                    range.start, range.end
+                ));
+            }
+            if !range.start.is_multiple_of(4) || !range.end.is_multiple_of(4) {
+                return Err(format!(
+                    "RV32IM predecode range {:#010x}..{:#010x} is not four-byte aligned",
+                    range.start, range.end
+                ));
+            }
+            if previous_end.is_some_and(|end| range.start < end) {
+                return Err(format!(
+                    "RV32IM predecode range {:#010x}..{:#010x} is unsorted or overlapping",
+                    range.start, range.end
+                ));
+            }
+            let bytes = memory
+                .get(range.start as usize..range.end as usize)
+                .ok_or_else(|| {
+                    format!(
+                        "RV32IM predecode range {:#010x}..{:#010x} exceeds {} bytes",
+                        range.start,
+                        range.end,
+                        memory.len()
+                    )
+                })?;
+            let slots = bytes
+                .chunks_exact(4)
+                .map(|bytes| {
+                    let word = u32::from_le_bytes(bytes.try_into().unwrap());
+                    match decode(word) {
+                        Ok(instruction) => PredecodedSlot::Instruction(instruction),
+                        Err(_) => PredecodedSlot::Invalid { word },
+                    }
+                })
+                .collect();
+            decoded_ranges.push(PredecodedRange {
+                start: range.start,
+                end: range.end,
+                slots,
+            });
+            previous_end = Some(range.end);
+        }
+        if decoded_ranges.is_empty() {
+            return Err("RV32IM predecode image has no executable ranges".to_string());
+        }
+        Ok(Self {
+            ranges: decoded_ranges,
+        })
+    }
+
+    pub fn retained_bytes(&self) -> usize {
+        self.ranges.capacity() * std::mem::size_of::<PredecodedRange>()
+            + self
+                .ranges
+                .iter()
+                .map(|range| range.slots.capacity() * std::mem::size_of::<PredecodedSlot>())
+                .sum::<usize>()
+    }
+
+    pub fn step(
+        &self,
+        cpu: &mut Rv32imCpu,
+        bus: &mut dyn MemoryBus,
+    ) -> Result<Option<Rv32imStop>, String> {
+        let instruction_pc = cpu.pc();
+        if !instruction_pc.is_multiple_of(4) {
+            return Err(format!(
+                "misaligned RV32IM predecoded-image PC {instruction_pc:#010x}"
+            ));
+        }
+        let insertion = self
+            .ranges
+            .partition_point(|range| range.start <= instruction_pc);
+        let range = insertion
+            .checked_sub(1)
+            .and_then(|index| self.ranges.get(index))
+            .filter(|range| instruction_pc < range.end)
+            .ok_or_else(|| {
+                format!("RV32IM predecoded PC {instruction_pc:#010x} is outside executable ranges")
+            })?;
+        let slot = range.slots[((instruction_pc - range.start) / 4) as usize];
+        match slot {
+            PredecodedSlot::Instruction(instruction) => {
+                cpu.retire_decoded(bus, instruction_pc, instruction)
+            }
+            PredecodedSlot::Invalid { word } => Err(format!(
+                "illegal RV32IM instruction {word:#010x} at predecoded PC {instruction_pc:#010x}"
+            )),
+        }
     }
 }

@@ -22,12 +22,18 @@ use k16_vm::rv32im::encoding::{
     add, addi, auipc, beq, bge, bgeu, blt, bltu, bne, div, divu, ebreak, jal, jalr, lb, lbu, lh,
     lhu, lui, lw, mul, rem, remu, sb, sh, sw,
 };
-use k16_vm::rv32im::PredecodedRv32imProgram;
-use k16_vm::rv32im::{Rv32imCpu, Rv32imStop};
+use k16_vm::rv32im::{
+    BoundedCachedRv32imProgram, PredecodedRv32imImage, PredecodedRv32imProgram, Rv32imCacheStats,
+    Rv32imCpu, Rv32imStop,
+};
 
 fn write_program(bus: &mut MachineBus, words: &[u32]) {
+    write_program_at(bus, 0, words);
+}
+
+fn write_program_at(bus: &mut MachineBus, base: u32, words: &[u32]) {
     for (index, word) in words.iter().copied().enumerate() {
-        bus.store_i32(index as u32 * 4, word as i32).unwrap();
+        bus.store_i32(base + index as u32 * 4, word as i32).unwrap();
     }
 }
 
@@ -272,4 +278,96 @@ fn predecoded_program_matches_direct_execution_and_reports_retained_bytes() {
 fn predecode_rejects_partial_and_illegal_images() {
     assert!(PredecodedRv32imProgram::new(0, &[0, 1, 2]).is_err());
     assert!(PredecodedRv32imProgram::new(0, &0xffff_ffff_u32.to_le_bytes()).is_err());
+}
+
+#[test]
+fn bounded_cache_is_two_way_fixed_capacity_and_deterministic() {
+    let mut cache = BoundedCachedRv32imProgram::new(2).unwrap();
+    let retained = cache.retained_bytes();
+    let mut bus = MachineBus::new(64).unwrap();
+    write_program_at(&mut bus, 0, &[addi(1, 0, 1)]);
+    write_program_at(&mut bus, 16, &[addi(2, 0, 2)]);
+    write_program_at(&mut bus, 32, &[addi(3, 0, 3)]);
+
+    for pc in [0, 0, 16, 32, 0] {
+        let mut cpu = Rv32imCpu::new(pc);
+        assert_eq!(cache.step(&mut cpu, &mut bus).unwrap(), None);
+    }
+
+    assert_eq!(cache.capacity(), 4);
+    assert_eq!(
+        cache.stats(),
+        Rv32imCacheStats {
+            hits: 1,
+            misses: 4,
+            evictions: 2,
+        }
+    );
+    assert_eq!(cache.retained_bytes(), retained);
+    assert!(BoundedCachedRv32imProgram::new(0).is_err());
+    assert!(BoundedCachedRv32imProgram::new(3).is_err());
+}
+
+#[test]
+fn bounded_cache_does_not_populate_an_invalid_instruction() {
+    let mut cache = BoundedCachedRv32imProgram::new(1).unwrap();
+    let mut bus = MachineBus::new(16).unwrap();
+    write_program(&mut bus, &[0xffff_ffff]);
+    let mut invalid = Rv32imCpu::new(0);
+    assert!(cache.step(&mut invalid, &mut bus).is_err());
+
+    write_program(&mut bus, &[addi(1, 0, 7)]);
+    let mut valid = Rv32imCpu::new(0);
+    assert_eq!(cache.step(&mut valid, &mut bus).unwrap(), None);
+    assert_eq!(valid.register(1), 7);
+    assert_eq!(cache.stats().hits, 0);
+    assert_eq!(cache.stats().misses, 2);
+}
+
+#[test]
+fn predecoded_image_dispatches_multiple_ranges_and_rejects_holes() {
+    let mut memory = vec![0_u8; 0x3000];
+    memory[0x1000..0x1004].copy_from_slice(&addi(1, 0, 7).to_le_bytes());
+    memory[0x2000..0x2004].copy_from_slice(&ebreak().to_le_bytes());
+    let image = PredecodedRv32imImage::new(&memory, &[0x1000..0x1004, 0x2000..0x2004]).unwrap();
+    let mut bus = MachineBus::new(memory.len()).unwrap();
+    let mut first = Rv32imCpu::new(0x1000);
+
+    assert_eq!(image.step(&mut first, &mut bus).unwrap(), None);
+    assert_eq!(first.register(1), 7);
+    let mut second = Rv32imCpu::new(0x2000);
+    assert_eq!(
+        image.step(&mut second, &mut bus).unwrap(),
+        Some(Rv32imStop::Ebreak)
+    );
+    let mut hole = Rv32imCpu::new(0x1800);
+    assert!(image
+        .step(&mut hole, &mut bus)
+        .unwrap_err()
+        .contains("outside executable ranges"));
+    assert!(image.retained_bytes() < memory.len());
+}
+
+#[test]
+fn predecoded_image_defers_invalid_instruction_failure_until_execution() {
+    let memory = 0xffff_ffff_u32.to_le_bytes();
+    let image = PredecodedRv32imImage::new(&memory, &[0..4]).unwrap();
+    let mut bus = MachineBus::new(4).unwrap();
+    let mut cpu = Rv32imCpu::new(0);
+
+    assert!(image.step(&mut cpu, &mut bus).is_err());
+    assert_eq!(cpu.pc(), 0);
+    assert_eq!(cpu.retired_instructions(), 0);
+}
+
+#[test]
+fn predecoded_image_rejects_invalid_range_layouts() {
+    let memory = vec![0_u8; 16];
+
+    assert!(PredecodedRv32imImage::new(&memory, &[]).is_err());
+    assert!(PredecodedRv32imImage::new(&memory, &[0..0]).is_err());
+    assert!(PredecodedRv32imImage::new(&memory, &[2..4]).is_err());
+    assert!(PredecodedRv32imImage::new(&memory, &[0..20]).is_err());
+    assert!(PredecodedRv32imImage::new(&memory, &[8..12, 0..4]).is_err());
+    assert!(PredecodedRv32imImage::new(&memory, &[0..8, 4..12]).is_err());
 }
