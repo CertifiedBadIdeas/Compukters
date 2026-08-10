@@ -21,6 +21,8 @@ mod address_space;
 #[allow(dead_code)]
 mod csr;
 mod elf;
+#[allow(dead_code)]
+mod hart;
 mod machine;
 
 pub use address_space::{Rv32AddressSpace, Rv32AddressSpaceError};
