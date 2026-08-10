@@ -29,7 +29,7 @@ pub use predecode::{PredecodedRv32imImage, PredecodedRv32imProgram};
 
 use crate::low_machine::MemoryBus;
 use decode::{Branch, ImmOp, Load, Op, Store};
-pub(crate) use decode::{CsrOperation, DecodedInstruction};
+pub(crate) use decode::{CsrOperation, CsrSource, DecodedInstruction};
 use std::fmt::{Display, Formatter};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -111,6 +111,22 @@ impl Rv32imCpu {
         self.retired_instructions
     }
 
+    pub(crate) fn set_pc_internal(&mut self, pc: u32) {
+        self.pc = pc;
+    }
+
+    pub(crate) fn set_decoded_register(&mut self, register: usize, value: u32) {
+        debug_assert!(register < self.registers.len());
+        if register != 0 {
+            self.registers[register] = value;
+        }
+    }
+
+    pub(crate) fn commit_instruction(&mut self) {
+        self.registers[0] = 0;
+        self.retired_instructions = self.retired_instructions.saturating_add(1);
+    }
+
     pub fn run_until_stop(
         &mut self,
         bus: &mut dyn MemoryBus,
@@ -146,8 +162,7 @@ impl Rv32imCpu {
                 return Err(error);
             }
         };
-        self.registers[0] = 0;
-        self.retired_instructions = self.retired_instructions.saturating_add(1);
+        self.commit_instruction();
         Ok(stop)
     }
 
@@ -314,6 +329,11 @@ impl Rv32imCpu {
         }
         Ok(None)
     }
+}
+
+#[allow(dead_code)]
+pub(crate) fn decode_word(word: u32) -> Result<DecodedInstruction, String> {
+    decode::decode(word)
 }
 
 fn execute_op(op: Op, lhs: u32, rhs: u32) -> u32 {

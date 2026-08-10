@@ -111,6 +111,27 @@ impl Rv32MachineCsrs {
             .map(|_| ())
     }
 
+    pub(super) fn enter_trap(&mut self, pc: u32, cause: u32, value: u32) -> u32 {
+        let previous_mie = self.mstatus & MSTATUS_MIE != 0;
+        self.mstatus = MSTATUS_MPP_MACHINE;
+        if previous_mie {
+            self.mstatus |= MSTATUS_MPIE;
+        }
+        self.mepc = pc & !3;
+        self.mcause = cause;
+        self.mtval = value;
+        self.mtvec
+    }
+
+    pub(super) fn return_from_trap(&mut self) -> u32 {
+        let previous_mpie = self.mstatus & MSTATUS_MPIE != 0;
+        self.mstatus = MSTATUS_MPP_MACHINE | MSTATUS_MPIE;
+        if previous_mpie {
+            self.mstatus |= MSTATUS_MIE;
+        }
+        self.mepc
+    }
+
     fn write_mutable(&mut self, csr: u16, value: u32) -> Result<(), Rv32CsrError> {
         match csr {
             CSR_MSTATUS => {
