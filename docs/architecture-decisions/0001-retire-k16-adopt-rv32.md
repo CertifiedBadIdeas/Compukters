@@ -114,8 +114,9 @@ compatibility promise.
 
 The migration proceeds through independently verifiable slices:
 
-1. Establish a production-shaped RV32IMA interpreter, eager predecode path,
-   corrected compiled-C benchmark, standard ELF32 loader, and ILP32 contract.
+1. Establish a production-shaped RV32IMA interpreter, bounded cached and eager
+   predecode paths, corrected compiled-C benchmark, standard ELF32 loader, and
+   ILP32 contract.
 2. Define the RISC-V privileged machine, traps, timer, MMIO map, protection,
    and virtual-memory contract required by KraftOS.
 3. Port BIOS, KraftOS, storage, display, input, networking, libc, and the
@@ -127,6 +128,16 @@ The migration proceeds through independently verifiable slices:
 The repository remains operational on its current K16 boot path until the RV32
 runtime reaches the product cutover slice. Documentation must distinguish this
 temporary implementation fact from the accepted architecture direction.
+
+Issue [#486](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/486)
+implements the RV32IM subset of step 1: strict host-loaded ELF32, the ILP32
+stock-toolchain fixture, runtime W^X, an explicit fixed-capacity two-way cached
+backend, sparse eager predecode, bounded debug/control MMIO, and deterministic
+retired-instruction budgeting. Step 1 remains incomplete until the selected
+`A`, `Zicsr`, and `Zifencei` extensions and their production-shaped execution
+contracts exist. Privileged architecture, KraftOS, JNI/Minecraft integration,
+and removal of K16 remain later steps; #486 does not create an interim product
+ABI or dual-ISA compatibility promise.
 
 ## RV64 And Future 64-Bit Acceleration
 

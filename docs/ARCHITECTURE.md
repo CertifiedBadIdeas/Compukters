@@ -23,6 +23,35 @@ player-facing computer item — **Notebook** — that starts a native
 the Kraft16 guest CPU, can inspect storage0 boot media, and exposes devices
 through memory-mapped peripherals.
 
+### RV32 migration status
+
+Issue [#486](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/486)
+adds the first isolated production-shaped RV32 host machine in `host/k16-vm`.
+It accepts a stock-Clang/LLD little-endian RV32IM/ILP32 `ET_EXEC` ELF32,
+validates and loads page-separated `PT_LOAD` segments, enforces 4 KiB R/W/X
+permissions at runtime, starts at the ELF entry point, and exposes only bounded
+debug-serial plus control MMIO.
+
+Machine construction explicitly selects one of two bounded execution backends:
+
+- a fixed-capacity two-way decoded-instruction cache that decodes only reached
+  executable PCs and uses deterministic replacement; or
+- eager predecode over exact executable ranges without allocating entries for
+  RAM holes or non-executable segments.
+
+Both backends use the same RV32IM architectural execution path, exact X-range
+checks, retired-instruction budget, halt/panic outcomes, and no-fallback error
+semantics. The focused stock-toolchain fixture boots and halts identically in
+both modes. Cache storage, predecode storage, RAM, and debug output are bounded
+before execution; successful steady-state execution performs no heap growth.
+
+This host slice is not wired to JNI or Minecraft and does not boot the BIOS or
+KraftOS. It implements RV32IM only; the selected `A`, `Zicsr`, and `Zifencei`
+extensions, privileged traps, interrupts, timer delivery, persistent firmware
+flash, virtual memory, remaining devices, and product runtime cutover are still
+pending. The existing K16 Notebook path below therefore remains the active
+player-facing implementation during migration.
+
 ## K16 BIOS Flash Workflow
 
 Each K16 computer workspace stores its firmware in `bios.kflash`. On first
@@ -56,7 +85,7 @@ bad.
 
 | Crate            | Purpose                                                                  |
 |------------------|--------------------------------------------------------------------------|
-| `host/k16-vm`  | Rust virtual machine: Kraft16 CPU, memory-mapped devices, `K16Computer` handle, JNI exports |
+| `host/k16-vm`  | Rust virtual machine: active Kraft16 runtime/JNI path plus the isolated permissioned and budgeted RV32 ELF32 machine migration slice |
 | `host/k16-tools` | Legacy Rux source checks plus K16 artifact tooling via `k16` for disassembly, volume, and filesystem commands |
 
 For a code-level map of the active Rust VM path, see
