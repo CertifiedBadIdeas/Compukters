@@ -1,8 +1,8 @@
 # Compukter Kraft — Architecture
 
-> Architecture direction: [ADR 0001](architecture-decisions/0001-retire-k16-adopt-rv64.md)
-> retires K16 as the product ISA and selects `RV64IMA_Zicsr_Zifencei` with the
-> standard LP64/ELF64 toolchain. This document describes the still-running K16
+> Architecture direction: [ADR 0001](architecture-decisions/0001-retire-k16-adopt-rv32.md)
+> retires K16 as the product ISA and selects `RV32IMA_Zicsr_Zifencei` with the
+> standard ILP32/ELF32 toolchain. This document describes the still-running K16
 > implementation during the incremental migration; it is not the long-term
 > target contract.
 >

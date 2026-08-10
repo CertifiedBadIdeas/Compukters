@@ -24,9 +24,10 @@ surface is Notebook, booted through the Kraft16 BIOS path
 (`bios.kflash` → `storage0.kv` boot entry → guest K16 execution).
 
 K16 is now retired as the long-term product ISA. The accepted target is
-`RV64IMA_Zicsr_Zifencei` with LP64/ELF64; the current K16 boot path remains only
-while equivalent RV64 vertical slices replace it. See
-[ADR 0001](docs/architecture-decisions/0001-retire-k16-adopt-rv64.md).
+`RV32IMA_Zicsr_Zifencei` with ILP32/ELF32; the current K16 boot path remains only
+while equivalent RV32 vertical slices replace it. RV64 remains an isolated
+benchmark/reference candidate, not a second product target. See
+[ADR 0001](docs/architecture-decisions/0001-retire-k16-adopt-rv32.md).
 
 Currently for **NeoForge 1.21.1**.
 
