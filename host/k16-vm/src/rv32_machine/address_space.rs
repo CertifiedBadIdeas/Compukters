@@ -26,6 +26,8 @@ use thiserror::Error;
 pub enum Rv32AddressSpaceError {
     #[error("RV32 address-space RAM construction failed: {0}")]
     Ram(#[from] MemoryFault),
+    #[error("RV32 address-space has {actual} permission pages, expected {expected}")]
+    PermissionPageCount { expected: usize, actual: usize },
 }
 
 pub struct Rv32AddressSpace {
@@ -39,10 +41,7 @@ impl Rv32AddressSpace {
         for (address, byte) in image.ram().iter().copied().enumerate() {
             bus.memory_mut().store_u8(address as u32, byte)?;
         }
-        Ok(Self {
-            bus,
-            page_permissions: image.page_table().to_vec(),
-        })
+        Self::from_parts(bus, image.page_table().to_vec())
     }
 
     pub fn page_permissions(&self, address: u32) -> Rv32PagePermissions {
@@ -50,6 +49,27 @@ impl Rv32AddressSpace {
             .get(address as usize / Rv32ElfLoader::PAGE_SIZE as usize)
             .copied()
             .unwrap_or(Rv32PagePermissions::NONE)
+    }
+
+    pub(super) fn from_parts(
+        bus: MachineBus,
+        page_permissions: Vec<Rv32PagePermissions>,
+    ) -> Result<Self, Rv32AddressSpaceError> {
+        let expected = bus.len().div_ceil(Rv32ElfLoader::PAGE_SIZE as usize);
+        if page_permissions.len() != expected {
+            return Err(Rv32AddressSpaceError::PermissionPageCount {
+                expected,
+                actual: page_permissions.len(),
+            });
+        }
+        Ok(Self {
+            bus,
+            page_permissions,
+        })
+    }
+
+    pub(super) fn bus(&self) -> &MachineBus {
+        &self.bus
     }
 
     fn require(&self, address: u32, size: usize, access: Access) -> Result<bool, MemoryFault> {

@@ -19,8 +19,13 @@
 
 mod address_space;
 mod elf;
+mod machine;
 
 pub use address_space::{Rv32AddressSpace, Rv32AddressSpaceError};
 pub use elf::{
     Rv32ElfError, Rv32ElfErrorKind, Rv32ElfLoader, Rv32LoadedImage, Rv32PagePermissions,
+};
+pub use machine::{
+    Rv32ExecutionBackendConfig, Rv32Machine, Rv32MachineBuildError, Rv32MachineConfig,
+    Rv32MachineExecutionError, Rv32MachineOutcome,
 };
