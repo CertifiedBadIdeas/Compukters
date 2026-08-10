@@ -2787,6 +2787,18 @@ fn computer_mmio_device_sizes_match_profile_v2_abi() {
 }
 
 #[test]
+fn bounded_debug_serial_preallocates_and_faults_before_growth() {
+    let mut debug = DebugSerialDevice::with_limit(2);
+    assert!(debug.capacity() >= 2);
+    debug.store_u8(0, b'O').unwrap();
+    debug.store_u8(0, b'K').unwrap();
+
+    let error = debug.store_u8(0, b'!').unwrap_err();
+    assert!(error.to_string().contains("limit 2"));
+    assert_eq!(debug.bytes(), b"OK");
+}
+
+#[test]
 fn computer_memory_map_describes_ram_region() {
     let machine = ComputerMachine::new(1024).unwrap();
     let map = machine.memory_map();
