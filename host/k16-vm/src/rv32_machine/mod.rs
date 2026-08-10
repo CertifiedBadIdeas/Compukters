@@ -18,6 +18,8 @@
  */
 
 mod address_space;
+#[allow(dead_code)]
+mod csr;
 mod elf;
 mod machine;
 
