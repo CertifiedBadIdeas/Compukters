@@ -1,6 +1,6 @@
 # K16 LLVM Submodule
 
-> Retired product direction: [ADR 0001](../architecture-decisions/0001-retire-k16-adopt-rv64.md)
+> Retired product direction: [ADR 0001](../architecture-decisions/0001-retire-k16-adopt-rv32.md)
 > ends new K16 backend work. The fork remains temporarily available only for
 > reproducing the current implementation and migration comparisons.
 

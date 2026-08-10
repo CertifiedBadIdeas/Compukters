@@ -94,7 +94,7 @@ change the production VM, KraftOS, BIOS, or machine ABI.
 > K16. Its canonical IR retained an i386 `frame-pointer=all` attribute honored
 > by RISC-V but ignored by K16, and the RISC-V path disabled linker relaxation
 > while K16 retained a single direct-call instruction. A corrected diagnostic
-> control reversed the winner. [ADR 0001](architecture-decisions/0001-retire-k16-adopt-rv64.md)
+> control reversed the winner. [ADR 0001](architecture-decisions/0001-retire-k16-adopt-rv32.md)
 > retires the custom ISA track; the snapshot remains only as evidence of the
 > original flawed run.
 

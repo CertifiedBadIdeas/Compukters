@@ -1,7 +1,7 @@
 # K16 Rust-First Language Strategy
 
-> Retired: [ADR 0001](../architecture-decisions/0001-retire-k16-adopt-rv64.md)
-> replaces K16 with `RV64IMA_Zicsr_Zifencei`. This document is retained as
+> Retired: [ADR 0001](../architecture-decisions/0001-retire-k16-adopt-rv32.md)
+> replaces K16 with `RV32IMA_Zicsr_Zifencei`. This document is retained as
 > historical context and must not guide new target or toolchain work.
 
 > Issue: [#135](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/135)
