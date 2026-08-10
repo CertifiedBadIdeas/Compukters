@@ -229,8 +229,14 @@ impl Rv32imCpu {
                 let rhs = self.registers[rs2];
                 self.registers[rd] = execute_op(op, lhs, rhs);
             }
+            DecodedInstruction::Csr { .. } => {
+                return Err("RV32 Zicsr instruction requires a machine hart".to_string());
+            }
             DecodedInstruction::Ecall => return Ok(Some(Rv32imStop::Ecall)),
             DecodedInstruction::Ebreak => return Ok(Some(Rv32imStop::Ebreak)),
+            DecodedInstruction::Mret => {
+                return Err("RV32 MRET instruction requires a machine hart".to_string());
+            }
         }
         Ok(None)
     }

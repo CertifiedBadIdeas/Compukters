@@ -19,8 +19,8 @@
 
 use k16_vm::low_bus::MachineBus;
 use k16_vm::rv32im::encoding::{
-    add, addi, auipc, beq, bge, bgeu, blt, bltu, bne, div, divu, ebreak, jal, jalr, lb, lbu, lh,
-    lhu, lui, lw, mul, rem, remu, sb, sh, sw,
+    add, addi, auipc, beq, bge, bgeu, blt, bltu, bne, csrrc, csrrci, csrrs, csrrsi, csrrw, csrrwi,
+    div, divu, ebreak, jal, jalr, lb, lbu, lh, lhu, lui, lw, mret, mul, rem, remu, sb, sh, sw,
 };
 use k16_vm::rv32im::{
     BoundedCachedRv32imProgram, PredecodedRv32imImage, PredecodedRv32imProgram, Rv32imCacheStats,
@@ -49,6 +49,36 @@ fn benchmark_harness_can_initialize_rv32im_registers() {
     assert_eq!(cpu.register(2), 0x3ffc);
     assert_eq!(cpu.register(10), 99);
     assert!(cpu.set_register(32, 0).is_err());
+}
+
+#[test]
+fn zicsr_and_mret_words_decode_but_remain_machine_only_in_direct_benchmarks() {
+    let words = [
+        csrrw(5, 0x340, 6),
+        csrrs(5, 0x342, 0),
+        csrrc(5, 0x300, 6),
+        csrrwi(5, 0x340, 7),
+        csrrsi(5, 0x300, 8),
+        csrrci(5, 0x300, 8),
+        mret(),
+    ];
+    assert_eq!(words[0], 0x3403_12f3);
+    assert_eq!(words[6], 0x3020_0073);
+
+    let bytes = words
+        .into_iter()
+        .flat_map(u32::to_le_bytes)
+        .collect::<Vec<_>>();
+    assert!(PredecodedRv32imProgram::new(0, &bytes).is_ok());
+
+    for word in words {
+        let mut bus = MachineBus::new(16).unwrap();
+        bus.store_i32(0, word as i32).unwrap();
+        let mut cpu = Rv32imCpu::new(0);
+        assert!(cpu.step(&mut bus).is_err());
+        assert_eq!(cpu.pc(), 0);
+        assert_eq!(cpu.retired_instructions(), 0);
+    }
 }
 
 #[test]
