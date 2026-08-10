@@ -4,7 +4,8 @@
 >
 > Previous decision: [#475](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/475)
 >
-> Status: Accepted on 2026-08-09; XLEN and psABI amended by #485 on 2026-08-10
+> Status: Accepted on 2026-08-09; XLEN and psABI amended by #485 and the
+> machine-trap subset recorded by #487 on 2026-08-10
 
 ## Decision
 
@@ -132,12 +133,23 @@ temporary implementation fact from the accepted architecture direction.
 Issue [#486](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/486)
 implements the RV32IM subset of step 1: strict host-loaded ELF32, the ILP32
 stock-toolchain fixture, runtime W^X, an explicit fixed-capacity two-way cached
-backend, sparse eager predecode, bounded debug/control MMIO, and deterministic
-retired-instruction budgeting. Step 1 remains incomplete until the selected
-`A`, `Zicsr`, and `Zifencei` extensions and their production-shaped execution
-contracts exist. Privileged architecture, KraftOS, JNI/Minecraft integration,
-and removal of K16 remain later steps; #486 does not create an interim product
-ABI or dual-ISA compatibility promise.
+backend, sparse eager predecode, and bounded debug/control MMIO.
+
+Issue [#487](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/487)
+adds the first privileged subset shared by both execution backends: all six
+Zicsr forms, an eight-CSR M-only bank, Direct-only `mtvec`, precise synchronous
+causes 0/1/2/3/4/5/6/7/11, and `MRET`. Its instruction-attempt budget is
+deliberately distinct from retired-instruction accounting, and a deterministic
+stock-Clang/LLD firmware proves trap-stack entry, M-mode `ECALL`, and return to
+C code in Cached and Predecoded modes.
+
+Migration step 1 remains incomplete until the selected `A` and `Zifencei`
+extensions and their production-shaped execution contracts exist. Step 2 is
+also incomplete: #487 does not add `Zicntr`, a timer, asynchronous interrupts,
+U/S modes, Sv32 or another final protection model, or the full device platform.
+KraftOS, JNI/Minecraft integration, and removal of K16 remain later steps.
+These slices do not create an interim product ABI or dual-ISA compatibility
+promise.
 
 ## RV64 And Future 64-Bit Acceleration
 

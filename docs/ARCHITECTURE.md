@@ -39,18 +39,33 @@ Machine construction explicitly selects one of two bounded execution backends:
 - eager predecode over exact executable ranges without allocating entries for
   RAM holes or non-executable segments.
 
-Both backends use the same RV32IM architectural execution path, exact X-range
-checks, retired-instruction budget, halt/panic outcomes, and no-fallback error
-semantics. The focused stock-toolchain fixture boots and halts identically in
-both modes. Cache storage, predecode storage, RAM, and debug output are bounded
-before execution; successful steady-state execution performs no heap growth.
+Both backends resolve instructions into the same fixed `Rv32MachineHart` and
+therefore share architectural execution, trap entry, CSR state, and retirement
+semantics. The hart implements RV32IM plus all six Zicsr forms, `MRET`, and an
+M-only bank containing `mstatus`, `misa`, `mtvec`, `mscratch`, `mepc`,
+`mcause`, `mtval`, and `mhartid`. `mtvec` is Direct-only and WARL. Synchronous
+causes 0, 1, 2, 3, 4, 5, 6, 7, and 11 are precise: the faulting instruction
+does not retire, `mepc` records its PC, and `mtval` records the cause-specific
+address, word, breakpoint PC, or zero.
+
+The run budget charges every instruction attempt, including a trap that
+retires nothing. Retired totals remain a separate diagnostic measure, so an
+inaccessible trap vector cannot escape or extend a finite server budget. Both
+Cached and Predecoded modes pass the same stock-Clang/LLD trap firmware: it
+installs `mtvec`, swaps to a trap stack through `mscratch`, handles an M-mode
+`ECALL`, advances `mepc`, returns through `MRET`, and halts only after the
+resumed C program prints its marker. The earlier stock-toolchain boot fixture
+also remains valid. Cache storage, predecode storage, RAM, and debug output are
+bounded before execution; successful steady-state execution performs no heap
+growth.
 
 This host slice is not wired to JNI or Minecraft and does not boot the BIOS or
-KraftOS. It implements RV32IM only; the selected `A`, `Zicsr`, and `Zifencei`
-extensions, privileged traps, interrupts, timer delivery, persistent firmware
-flash, virtual memory, remaining devices, and product runtime cutover are still
-pending. The existing K16 Notebook path below therefore remains the active
-player-facing implementation during migration.
+KraftOS. The selected `A` and `Zifencei` extensions remain pending. `Zicntr`,
+timer delivery, asynchronous interrupts, U/S privilege modes, Sv32 or another
+protection model, persistent firmware flash, remaining devices, KraftOS, and
+the product runtime cutover are also absent. The existing K16 Notebook path
+below therefore remains the active player-facing implementation during
+migration.
 
 ## K16 BIOS Flash Workflow
 
