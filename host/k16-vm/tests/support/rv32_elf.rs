@@ -119,6 +119,33 @@ impl Elf32Builder {
     }
 }
 
+pub fn halting_machine_elf(marker: u8) -> Vec<u8> {
+    use k16_vm::rv32im::encoding::{addi, lui, sb, sw};
+
+    let words = [
+        lui(1, 0x10000),
+        addi(2, 1, 0x100),
+        addi(3, 0, i32::from(marker)),
+        sb(2, 3, 0),
+        sw(1, 0, 8),
+        addi(4, 0, 3),
+        sw(1, 4, 0),
+    ];
+    machine_program_elf(&words)
+}
+
+pub fn machine_program_elf(words: &[u32]) -> Vec<u8> {
+    let code = words
+        .iter()
+        .copied()
+        .flat_map(u32::to_le_bytes)
+        .collect::<Vec<_>>();
+    Elf32Builder::new(0x1000)
+        .load(LoadSegment::rx(0x1000, code))
+        .load(LoadSegment::rw_with_mem_size(0x3000, [], 0x1000))
+        .finish()
+}
+
 fn align_up(value: usize, alignment: usize) -> usize {
     value.div_ceil(alignment) * alignment
 }

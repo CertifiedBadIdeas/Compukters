@@ -125,6 +125,15 @@ impl Rv32LoadedImage {
     pub(super) fn page_table(&self) -> &[Rv32PagePermissions] {
         &self.page_permissions
     }
+
+    pub(super) fn into_parts(self) -> (u32, Vec<u8>, Vec<Rv32PagePermissions>, Vec<Range<u32>>) {
+        (
+            self.entry_point,
+            self.ram,
+            self.page_permissions,
+            self.executable_ranges,
+        )
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

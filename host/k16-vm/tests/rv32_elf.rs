@@ -18,6 +18,7 @@
  */
 
 #[path = "support/rv32_elf.rs"]
+#[allow(dead_code)]
 mod rv32_elf_support;
 
 use k16_vm::rv32_machine::{Rv32ElfErrorKind, Rv32ElfLoader, Rv32PagePermissions};

@@ -19,7 +19,6 @@ impl DebugSerialDevice {
         }
     }
 
-    #[allow(dead_code)] // Used by the RV32 machine construction slice that follows this device slice.
     pub(crate) fn with_limit(limit: usize) -> Self {
         Self {
             bytes: Vec::with_capacity(limit),
