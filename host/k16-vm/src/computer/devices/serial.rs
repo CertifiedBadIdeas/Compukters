@@ -6,13 +6,25 @@ use std::collections::VecDeque;
 
 pub(crate) struct DebugSerialDevice {
     bytes: Vec<u8>,
+    limit: Option<usize>,
 }
 
 impl DebugSerialDevice {
     pub(crate) const SIZE: u32 = computer_abi::DEBUG_SIZE;
 
     pub(crate) fn new() -> Self {
-        Self { bytes: Vec::new() }
+        Self {
+            bytes: Vec::new(),
+            limit: None,
+        }
+    }
+
+    #[allow(dead_code)] // Used by the RV32 machine construction slice that follows this device slice.
+    pub(crate) fn with_limit(limit: usize) -> Self {
+        Self {
+            bytes: Vec::with_capacity(limit),
+            limit: Some(limit),
+        }
     }
 
     pub(crate) fn bytes(&self) -> &[u8] {
@@ -20,11 +32,29 @@ impl DebugSerialDevice {
     }
 
     pub(crate) fn drain(&mut self) -> Vec<u8> {
-        std::mem::take(&mut self.bytes)
+        let replacement = self.limit.map_or_else(Vec::new, Vec::with_capacity);
+        std::mem::replace(&mut self.bytes, replacement)
     }
 
     pub(crate) fn restore_bytes(&mut self, bytes: Vec<u8>) {
+        debug_assert!(self.limit.is_none_or(|limit| bytes.len() <= limit));
         self.bytes = bytes;
+    }
+
+    #[cfg(test)]
+    pub(crate) fn capacity(&self) -> usize {
+        self.bytes.capacity()
+    }
+
+    fn push(&mut self, value: u8) -> Result<(), MemoryFault> {
+        if self.limit.is_some_and(|limit| self.bytes.len() >= limit) {
+            return Err(MemoryFault::new(format!(
+                "computer debug serial output exceeds limit {}",
+                self.limit.unwrap(),
+            )));
+        }
+        self.bytes.push(value);
+        Ok(())
     }
 }
 
@@ -49,8 +79,7 @@ impl MmioDevice for DebugSerialDevice {
                 "computer debug serial offset {offset} is not mapped",
             )));
         }
-        self.bytes.push(value.to_le_bytes()[0]);
-        Ok(())
+        self.push(value.to_le_bytes()[0])
     }
 
     fn store_u8(&mut self, offset: u32, value: u8) -> Result<(), MemoryFault> {
@@ -59,8 +88,7 @@ impl MmioDevice for DebugSerialDevice {
                 "computer debug serial offset {offset} is not mapped",
             )));
         }
-        self.bytes.push(value);
-        Ok(())
+        self.push(value)
     }
 }
 
