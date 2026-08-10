@@ -28,7 +28,8 @@ pub use cache::CachedRv32imProgram;
 pub use predecode::{PredecodedRv32imImage, PredecodedRv32imProgram};
 
 use crate::low_machine::MemoryBus;
-use decode::{Branch, DecodedInstruction, ImmOp, Load, Op, Store};
+use decode::{Branch, ImmOp, Load, Op, Store};
+pub(crate) use decode::{CsrOperation, DecodedInstruction};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Rv32imStop {
