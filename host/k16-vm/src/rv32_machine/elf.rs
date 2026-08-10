@@ -121,6 +121,10 @@ impl Rv32LoadedImage {
     pub fn executable_ranges(&self) -> &[Range<u32>] {
         &self.executable_ranges
     }
+
+    pub(super) fn page_table(&self) -> &[Rv32PagePermissions] {
+        &self.page_permissions
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

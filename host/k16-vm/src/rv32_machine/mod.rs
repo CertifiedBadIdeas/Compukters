@@ -17,8 +17,10 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+mod address_space;
 mod elf;
 
+pub use address_space::{Rv32AddressSpace, Rv32AddressSpaceError};
 pub use elf::{
     Rv32ElfError, Rv32ElfErrorKind, Rv32ElfLoader, Rv32LoadedImage, Rv32PagePermissions,
 };
