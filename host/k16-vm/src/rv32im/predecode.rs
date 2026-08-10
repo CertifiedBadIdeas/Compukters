@@ -18,7 +18,7 @@
  */
 
 use super::decode::{decode, DecodedInstruction};
-use super::{Rv32imCpu, Rv32imStop};
+use super::{Rv32ResolvedInstruction, Rv32imCpu, Rv32imStop};
 use crate::low_machine::MemoryBus;
 use std::ops::Range;
 
@@ -99,8 +99,13 @@ impl PredecodedRv32imProgram {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum PredecodedSlot {
-    Instruction(DecodedInstruction),
-    Invalid { word: u32 },
+    Instruction {
+        word: u32,
+        instruction: DecodedInstruction,
+    },
+    Invalid {
+        word: u32,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -153,7 +158,7 @@ impl PredecodedRv32imImage {
                 .map(|bytes| {
                     let word = u32::from_le_bytes(bytes.try_into().unwrap());
                     match decode(word) {
-                        Ok(instruction) => PredecodedSlot::Instruction(instruction),
+                        Ok(instruction) => PredecodedSlot::Instruction { word, instruction },
                         Err(_) => PredecodedSlot::Invalid { word },
                     }
                 })
@@ -193,6 +198,17 @@ impl PredecodedRv32imImage {
                 "misaligned RV32IM predecoded-image PC {instruction_pc:#010x}"
             ));
         }
+        match self.resolve(instruction_pc)? {
+            Rv32ResolvedInstruction::Valid { instruction, .. } => {
+                cpu.retire_decoded(bus, instruction_pc, instruction)
+            }
+            Rv32ResolvedInstruction::Invalid { word } => Err(format!(
+                "illegal RV32IM instruction {word:#010x} at predecoded PC {instruction_pc:#010x}"
+            )),
+        }
+    }
+
+    pub(crate) fn resolve(&self, instruction_pc: u32) -> Result<Rv32ResolvedInstruction, String> {
         let insertion = self
             .ranges
             .partition_point(|range| range.start <= instruction_pc);
@@ -205,12 +221,10 @@ impl PredecodedRv32imImage {
             })?;
         let slot = range.slots[((instruction_pc - range.start) / 4) as usize];
         match slot {
-            PredecodedSlot::Instruction(instruction) => {
-                cpu.retire_decoded(bus, instruction_pc, instruction)
+            PredecodedSlot::Instruction { word, instruction } => {
+                Ok(Rv32ResolvedInstruction::Valid { word, instruction })
             }
-            PredecodedSlot::Invalid { word } => Err(format!(
-                "illegal RV32IM instruction {word:#010x} at predecoded PC {instruction_pc:#010x}"
-            )),
+            PredecodedSlot::Invalid { word } => Ok(Rv32ResolvedInstruction::Invalid { word }),
         }
     }
 }

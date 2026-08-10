@@ -18,8 +18,8 @@
  */
 
 use super::decode::{decode, DecodedInstruction};
-use super::{Rv32imCpu, Rv32imStop};
-use crate::low_machine::MemoryBus;
+use super::{Rv32ResolvedInstruction, Rv32imCpu, Rv32imStop};
+use crate::low_machine::{MemoryBus, MemoryFault};
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Rv32imCacheStats {
@@ -31,6 +31,7 @@ pub struct Rv32imCacheStats {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct CacheEntry {
     pc: u32,
+    word: u32,
     instruction: DecodedInstruction,
 }
 
@@ -82,23 +83,45 @@ impl BoundedCachedRv32imProgram {
                 "misaligned RV32IM bounded-cache instruction address {instruction_pc:#010x}"
             ));
         }
+        match self
+            .resolve(instruction_pc, bus)
+            .map_err(|error| error.to_string())?
+        {
+            Rv32ResolvedInstruction::Valid { instruction, .. } => {
+                cpu.retire_decoded(bus, instruction_pc, instruction)
+            }
+            Rv32ResolvedInstruction::Invalid { word } => {
+                Err(format!("illegal RV32IM instruction {word:#010x}"))
+            }
+        }
+    }
+
+    pub(crate) fn resolve(
+        &mut self,
+        instruction_pc: u32,
+        bus: &dyn MemoryBus,
+    ) -> Result<Rv32ResolvedInstruction, MemoryFault> {
         let set_index = ((instruction_pc >> 2) as usize) & (self.sets.len() - 1);
-        if let Some(instruction) = self.sets[set_index]
+        if let Some(entry) = self.sets[set_index]
             .ways
             .iter()
             .flatten()
             .find(|entry| entry.pc == instruction_pc)
-            .map(|entry| entry.instruction)
+            .copied()
         {
             self.stats.hits = self.stats.hits.saturating_add(1);
-            return cpu.retire_decoded(bus, instruction_pc, instruction);
+            return Ok(Rv32ResolvedInstruction::Valid {
+                word: entry.word,
+                instruction: entry.instruction,
+            });
         }
 
         self.stats.misses = self.stats.misses.saturating_add(1);
-        let word = bus
-            .load_i32(instruction_pc)
-            .map_err(|error| error.to_string())? as u32;
-        let instruction = decode(word)?;
+        let word = bus.load_i32(instruction_pc)? as u32;
+        let instruction = match decode(word) {
+            Ok(instruction) => instruction,
+            Err(_) => return Ok(Rv32ResolvedInstruction::Invalid { word }),
+        };
         let set = &mut self.sets[set_index];
         let way = match set.ways.iter().position(Option::is_none) {
             Some(empty) => empty,
@@ -111,8 +134,9 @@ impl BoundedCachedRv32imProgram {
         };
         set.ways[way] = Some(CacheEntry {
             pc: instruction_pc,
+            word,
             instruction,
         });
-        cpu.retire_decoded(bus, instruction_pc, instruction)
+        Ok(Rv32ResolvedInstruction::Valid { word, instruction })
     }
 }

@@ -106,6 +106,7 @@ impl Rv32MachineCsrs {
         Ok(old)
     }
 
+    #[cfg(test)]
     pub(super) fn write_software(&mut self, csr: u16, value: u32) -> Result<(), Rv32CsrError> {
         self.access(csr, CsrOperation::Write, value, true)
             .map(|_| ())
