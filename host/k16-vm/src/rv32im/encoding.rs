@@ -56,6 +56,13 @@ fn b(offset: i32, rs2: u8, rs1: u8, funct3: u8) -> u32 {
         | (((immediate >> 11) & 1) << 7)
         | 0x63
 }
+fn system(csr: u16, source: u8, funct3: u8, rd: u8) -> u32 {
+    (u32::from(csr & 0x0fff) << 20)
+        | (u32::from(source & 31) << 15)
+        | (u32::from(funct3 & 7) << 12)
+        | (u32::from(rd & 31) << 7)
+        | 0x73
+}
 
 pub fn lui(rd: u8, immediate: u32) -> u32 {
     (immediate & 0xfffff) << 12 | u32::from(rd & 31) << 7 | 0x37
@@ -205,6 +212,27 @@ pub fn ecall() -> u32 {
 }
 pub fn ebreak() -> u32 {
     0x0010_0073
+}
+pub fn csrrw(rd: u8, csr: u16, rs1: u8) -> u32 {
+    system(csr, rs1, 1, rd)
+}
+pub fn csrrs(rd: u8, csr: u16, rs1: u8) -> u32 {
+    system(csr, rs1, 2, rd)
+}
+pub fn csrrc(rd: u8, csr: u16, rs1: u8) -> u32 {
+    system(csr, rs1, 3, rd)
+}
+pub fn csrrwi(rd: u8, csr: u16, immediate: u8) -> u32 {
+    system(csr, immediate, 5, rd)
+}
+pub fn csrrsi(rd: u8, csr: u16, immediate: u8) -> u32 {
+    system(csr, immediate, 6, rd)
+}
+pub fn csrrci(rd: u8, csr: u16, immediate: u8) -> u32 {
+    system(csr, immediate, 7, rd)
+}
+pub fn mret() -> u32 {
+    0x3020_0073
 }
 
 pub fn materialize(rd: u8, value: u32) -> [u32; 2] {

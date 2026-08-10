@@ -75,6 +75,19 @@ pub(crate) enum Store {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CsrOperation {
+    Write,
+    Set,
+    Clear,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CsrSource {
+    Register(usize),
+    Immediate(u8),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum DecodedInstruction {
     Lui {
         rd: usize,
@@ -123,8 +136,15 @@ pub(crate) enum DecodedInstruction {
         rs1: usize,
         rs2: usize,
     },
+    Csr {
+        operation: CsrOperation,
+        rd: usize,
+        csr: u16,
+        source: CsrSource,
+    },
     Ecall,
     Ebreak,
+    Mret,
 }
 
 pub(crate) fn decode(word: u32) -> Result<DecodedInstruction, String> {
@@ -256,6 +276,26 @@ pub(crate) fn decode(word: u32) -> Result<DecodedInstruction, String> {
         }
         0x73 if word == 0x0000_0073 => Ok(DecodedInstruction::Ecall),
         0x73 if word == 0x0010_0073 => Ok(DecodedInstruction::Ebreak),
+        0x73 if word == 0x3020_0073 => Ok(DecodedInstruction::Mret),
+        0x73 => {
+            let operation = match funct3 {
+                1 | 5 => CsrOperation::Write,
+                2 | 6 => CsrOperation::Set,
+                3 | 7 => CsrOperation::Clear,
+                _ => return illegal(),
+            };
+            let source = if funct3 >= 5 {
+                CsrSource::Immediate(rs1 as u8)
+            } else {
+                CsrSource::Register(rs1)
+            };
+            Ok(DecodedInstruction::Csr {
+                operation,
+                rd,
+                csr: (word >> 20) as u16,
+                source,
+            })
+        }
         _ => illegal(),
     }
 }
