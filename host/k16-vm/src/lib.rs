@@ -22,6 +22,7 @@ pub mod low_bus;
 pub mod low_machine;
 pub mod mmu;
 pub mod retained_gpu;
+pub mod rv32_machine;
 pub mod rv32im;
 pub mod rv64im;
 pub mod k16_computer {
