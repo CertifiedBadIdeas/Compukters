@@ -30,6 +30,7 @@ pub use predecode::{PredecodedRv32imImage, PredecodedRv32imProgram};
 use crate::low_machine::MemoryBus;
 use decode::{Branch, ImmOp, Load, Op, Store};
 pub(crate) use decode::{CsrOperation, DecodedInstruction};
+use std::fmt::{Display, Formatter};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Rv32imStop {
@@ -37,6 +38,41 @@ pub enum Rv32imStop {
     Ebreak,
     StepLimit,
 }
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum Rv32RegularFault {
+    InstructionAddressMisaligned { address: u32 },
+    LoadAddressMisaligned { address: u32 },
+    LoadAccessFault { address: u32, detail: String },
+    StoreAddressMisaligned { address: u32 },
+    StoreAccessFault { address: u32, detail: String },
+    MachineInstructionRequired,
+}
+
+impl Display for Rv32RegularFault {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::InstructionAddressMisaligned { address } => write!(
+                formatter,
+                "misaligned RV32IM control-flow target address {address:#010x}"
+            ),
+            Self::LoadAddressMisaligned { address } => {
+                write!(formatter, "misaligned RV32IM load address {address:#010x}")
+            }
+            Self::LoadAccessFault { detail, .. } | Self::StoreAccessFault { detail, .. } => {
+                formatter.write_str(detail)
+            }
+            Self::StoreAddressMisaligned { address } => {
+                write!(formatter, "misaligned RV32IM store address {address:#010x}")
+            }
+            Self::MachineInstructionRequired => {
+                formatter.write_str("RV32 machine instruction requires a machine hart")
+            }
+        }
+    }
+}
+
+impl std::error::Error for Rv32RegularFault {}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Rv32imCpu {
@@ -121,6 +157,32 @@ impl Rv32imCpu {
         instruction_pc: u32,
         instruction: DecodedInstruction,
     ) -> Result<Option<Rv32imStop>, String> {
+        self.execute_decoded_typed(bus, instruction_pc, instruction)
+            .map_err(|error| error.to_string())
+    }
+
+    pub(crate) fn execute_decoded_typed(
+        &mut self,
+        bus: &mut dyn MemoryBus,
+        instruction_pc: u32,
+        instruction: DecodedInstruction,
+    ) -> Result<Option<Rv32imStop>, Rv32RegularFault> {
+        let previous_pc = self.pc;
+        match self.execute_decoded_unchecked(bus, instruction_pc, instruction) {
+            Ok(stop) => Ok(stop),
+            Err(error) => {
+                self.pc = previous_pc;
+                Err(error)
+            }
+        }
+    }
+
+    fn execute_decoded_unchecked(
+        &mut self,
+        bus: &mut dyn MemoryBus,
+        instruction_pc: u32,
+        instruction: DecodedInstruction,
+    ) -> Result<Option<Rv32imStop>, Rv32RegularFault> {
         let next_pc = instruction_pc.wrapping_add(4);
         self.pc = next_pc;
         match instruction {
@@ -167,21 +229,32 @@ impl Rv32imCpu {
             } => {
                 let address = self.registers[rs1].wrapping_add_signed(immediate);
                 self.registers[rd] = match kind {
-                    Load::Byte => {
-                        bus.load_u8(address).map_err(|e| e.to_string())? as i8 as i32 as u32
-                    }
+                    Load::Byte => bus
+                        .load_u8(address)
+                        .map_err(|error| load_access_fault(address, error))?
+                        as i8 as i32 as u32,
                     Load::Half => {
-                        require_alignment(address, 2, "halfword load")?;
-                        bus.load_u16(address).map_err(|e| e.to_string())? as i16 as i32 as u32
+                        require_load_alignment(address, 2)?;
+                        bus.load_u16(address)
+                            .map_err(|error| load_access_fault(address, error))?
+                            as i16 as i32 as u32
                     }
                     Load::Word => {
-                        require_alignment(address, 4, "word load")?;
-                        bus.load_i32(address).map_err(|e| e.to_string())? as u32
+                        require_load_alignment(address, 4)?;
+                        bus.load_i32(address)
+                            .map_err(|error| load_access_fault(address, error))?
+                            as u32
                     }
-                    Load::ByteU => u32::from(bus.load_u8(address).map_err(|e| e.to_string())?),
+                    Load::ByteU => u32::from(
+                        bus.load_u8(address)
+                            .map_err(|error| load_access_fault(address, error))?,
+                    ),
                     Load::HalfU => {
-                        require_alignment(address, 2, "halfword load")?;
-                        u32::from(bus.load_u16(address).map_err(|e| e.to_string())?)
+                        require_load_alignment(address, 2)?;
+                        u32::from(
+                            bus.load_u16(address)
+                                .map_err(|error| load_access_fault(address, error))?,
+                        )
                     }
                 };
             }
@@ -196,15 +269,15 @@ impl Rv32imCpu {
                 match kind {
                     Store::Byte => bus.store_u8(address, value as u8),
                     Store::Half => {
-                        require_alignment(address, 2, "halfword store")?;
+                        require_store_alignment(address, 2)?;
                         bus.store_u16(address, value as u16)
                     }
                     Store::Word => {
-                        require_alignment(address, 4, "word store")?;
+                        require_store_alignment(address, 4)?;
                         bus.store_i32(address, value as i32)
                     }
                 }
-                .map_err(|e| e.to_string())?;
+                .map_err(|error| store_access_fault(address, error))?;
             }
             DecodedInstruction::Immediate {
                 op,
@@ -231,12 +304,12 @@ impl Rv32imCpu {
                 self.registers[rd] = execute_op(op, lhs, rhs);
             }
             DecodedInstruction::Csr { .. } => {
-                return Err("RV32 Zicsr instruction requires a machine hart".to_string());
+                return Err(Rv32RegularFault::MachineInstructionRequired);
             }
             DecodedInstruction::Ecall => return Ok(Some(Rv32imStop::Ecall)),
             DecodedInstruction::Ebreak => return Ok(Some(Rv32imStop::Ebreak)),
             DecodedInstruction::Mret => {
-                return Err("RV32 MRET instruction requires a machine hart".to_string());
+                return Err(Rv32RegularFault::MachineInstructionRequired);
             }
         }
         Ok(None)
@@ -299,9 +372,38 @@ fn signed_rem(lhs: u32, rhs: u32) -> u32 {
         (a % b) as u32
     }
 }
-fn checked_target(target: u32) -> Result<u32, String> {
-    require_alignment(target, 4, "control-flow target")?;
-    Ok(target)
+fn checked_target(target: u32) -> Result<u32, Rv32RegularFault> {
+    if target.is_multiple_of(4) {
+        Ok(target)
+    } else {
+        Err(Rv32RegularFault::InstructionAddressMisaligned { address: target })
+    }
+}
+fn require_load_alignment(address: u32, alignment: u32) -> Result<(), Rv32RegularFault> {
+    if address.is_multiple_of(alignment) {
+        Ok(())
+    } else {
+        Err(Rv32RegularFault::LoadAddressMisaligned { address })
+    }
+}
+fn require_store_alignment(address: u32, alignment: u32) -> Result<(), Rv32RegularFault> {
+    if address.is_multiple_of(alignment) {
+        Ok(())
+    } else {
+        Err(Rv32RegularFault::StoreAddressMisaligned { address })
+    }
+}
+fn load_access_fault(address: u32, error: crate::low_machine::MemoryFault) -> Rv32RegularFault {
+    Rv32RegularFault::LoadAccessFault {
+        address: error.address().unwrap_or(address),
+        detail: error.to_string(),
+    }
+}
+fn store_access_fault(address: u32, error: crate::low_machine::MemoryFault) -> Rv32RegularFault {
+    Rv32RegularFault::StoreAccessFault {
+        address: error.address().unwrap_or(address),
+        detail: error.to_string(),
+    }
 }
 fn require_alignment(address: u32, alignment: u32, access: &str) -> Result<(), String> {
     if address.is_multiple_of(alignment) {
@@ -310,5 +412,28 @@ fn require_alignment(address: u32, alignment: u32, access: &str) -> Result<(), S
         Err(format!(
             "misaligned RV32IM {access} address {address:#010x}"
         ))
+    }
+}
+
+#[cfg(test)]
+mod typed_fault_tests {
+    use super::{decode, encoding, Rv32RegularFault, Rv32imCpu};
+    use crate::low_bus::MachineBus;
+
+    #[test]
+    fn typed_execution_fault_preserves_precise_cpu_state() {
+        let mut bus = MachineBus::new(32).unwrap();
+        let mut cpu = Rv32imCpu::new(0);
+        cpu.set_register(1, 3).unwrap();
+        cpu.set_register(2, 0xfeed_beef).unwrap();
+        let instruction = decode::decode(encoding::lw(2, 1, 0)).unwrap();
+
+        assert_eq!(
+            cpu.execute_decoded_typed(&mut bus, 0, instruction),
+            Err(Rv32RegularFault::LoadAddressMisaligned { address: 3 })
+        );
+        assert_eq!(cpu.pc(), 0);
+        assert_eq!(cpu.register(2), 0xfeed_beef);
+        assert_eq!(cpu.retired_instructions(), 0);
     }
 }

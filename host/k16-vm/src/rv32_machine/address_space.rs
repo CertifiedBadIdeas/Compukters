@@ -75,17 +75,20 @@ impl Rv32AddressSpace {
     fn require(&self, address: u32, size: usize, access: Access) -> Result<bool, MemoryFault> {
         let start = address as usize;
         let end = start.checked_add(size).ok_or_else(|| {
-            MemoryFault::new(format!(
-                "RV32 {} access at {address:#010x} with size {size} overflows",
-                access.name(),
-            ))
+            MemoryFault::at(
+                address,
+                format!(
+                    "RV32 {} access at {address:#010x} with size {size} overflows",
+                    access.name(),
+                ),
+            )
         })?;
         let ram_size = self.bus.len();
         if start >= ram_size {
             return Ok(false);
         }
         if end > ram_size {
-            return Err(MemoryFault::new(format!(
+            return Err(MemoryFault::at(ram_size as u32, format!(
                 "RV32 {} access {start:#010x}..{end:#010x} crosses the RAM boundary {ram_size:#010x}",
                 access.name(),
             )));
@@ -96,7 +99,8 @@ impl Rv32AddressSpace {
         for page in first_page..=last_page {
             let permissions = self.page_permissions[page];
             if !access.allowed(permissions) {
-                return Err(MemoryFault::new(format!(
+                let denied_address = start.max(page * page_size) as u32;
+                return Err(MemoryFault::at(denied_address, format!(
                     "RV32 {} access {start:#010x}..{end:#010x} requires permission on page {page}, found {permissions:?}",
                     access.name(),
                 )));

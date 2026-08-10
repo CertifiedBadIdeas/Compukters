@@ -4,11 +4,26 @@ use std::fmt::{Display, Formatter};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MemoryFault {
     message: String,
+    address: Option<u32>,
 }
 
 impl MemoryFault {
     pub(crate) fn new(message: String) -> Self {
-        Self { message }
+        Self {
+            message,
+            address: None,
+        }
+    }
+
+    pub(crate) fn at(address: u32, message: String) -> Self {
+        Self {
+            message,
+            address: Some(address),
+        }
+    }
+
+    pub fn address(&self) -> Option<u32> {
+        self.address
     }
 }
 
@@ -42,9 +57,10 @@ pub trait MemoryBus {
 
     fn load_u16(&self, address: u32) -> Result<u16, MemoryFault> {
         let next = address.checked_add(1).ok_or_else(|| {
-            MemoryFault::new(format!(
-                "memory access starts at {address} and overflows u32",
-            ))
+            MemoryFault::at(
+                address,
+                format!("memory access starts at {address} and overflows u32",),
+            )
         })?;
         Ok(u16::from_le_bytes([
             self.load_u8(address)?,
@@ -54,9 +70,10 @@ pub trait MemoryBus {
 
     fn store_u16(&mut self, address: u32, value: u16) -> Result<(), MemoryFault> {
         let next = address.checked_add(1).ok_or_else(|| {
-            MemoryFault::new(format!(
-                "memory access starts at {address} and overflows u32",
-            ))
+            MemoryFault::at(
+                address,
+                format!("memory access starts at {address} and overflows u32",),
+            )
         })?;
         let [lo, hi] = value.to_le_bytes();
         self.store_u8(address, lo)?;
@@ -67,9 +84,10 @@ pub trait MemoryBus {
         let mut bytes = [0_u8; 8];
         for (offset, byte) in bytes.iter_mut().enumerate() {
             let address = address.checked_add(offset as u32).ok_or_else(|| {
-                MemoryFault::new(format!(
-                    "memory access starts at {address} and overflows u32",
-                ))
+                MemoryFault::at(
+                    address,
+                    format!("memory access starts at {address} and overflows u32",),
+                )
             })?;
             *byte = self.load_u8(address)?;
         }
@@ -79,9 +97,10 @@ pub trait MemoryBus {
     fn store_u64(&mut self, address: u32, value: u64) -> Result<(), MemoryFault> {
         for (offset, byte) in value.to_le_bytes().into_iter().enumerate() {
             let address = address.checked_add(offset as u32).ok_or_else(|| {
-                MemoryFault::new(format!(
-                    "memory access starts at {address} and overflows u32",
-                ))
+                MemoryFault::at(
+                    address,
+                    format!("memory access starts at {address} and overflows u32",),
+                )
             })?;
             self.store_u8(address, byte)?;
         }
@@ -179,30 +198,36 @@ impl MachineMemory {
     fn range(&self, address: u32, size: usize) -> Result<&[u8], MemoryFault> {
         let start = address as usize;
         let end = start.checked_add(size).ok_or_else(|| {
-            MemoryFault::new(format!(
-                "memory access starts at {address} and overflows usize",
-            ))
+            MemoryFault::at(
+                address,
+                format!("memory access starts at {address} and overflows usize",),
+            )
         })?;
         self.bytes.get(start..end).ok_or_else(|| {
-            MemoryFault::new(format!(
-                "memory access {start}..{end} is outside {} bytes",
-                self.bytes.len(),
-            ))
+            MemoryFault::at(
+                address,
+                format!(
+                    "memory access {start}..{end} is outside {} bytes",
+                    self.bytes.len(),
+                ),
+            )
         })
     }
 
     fn range_mut(&mut self, address: u32, size: usize) -> Result<&mut [u8], MemoryFault> {
         let start = address as usize;
         let end = start.checked_add(size).ok_or_else(|| {
-            MemoryFault::new(format!(
-                "memory access starts at {address} and overflows usize",
-            ))
+            MemoryFault::at(
+                address,
+                format!("memory access starts at {address} and overflows usize",),
+            )
         })?;
         let len = self.bytes.len();
         self.bytes.get_mut(start..end).ok_or_else(|| {
-            MemoryFault::new(format!(
-                "memory access {start}..{end} is outside {len} bytes"
-            ))
+            MemoryFault::at(
+                address,
+                format!("memory access {start}..{end} is outside {len} bytes"),
+            )
         })
     }
 }
