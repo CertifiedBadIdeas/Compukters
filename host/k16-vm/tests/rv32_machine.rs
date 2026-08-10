@@ -24,8 +24,13 @@ use k16_vm::computer_abi;
 use k16_vm::rv32_machine::{
     Rv32ExecutionBackendConfig, Rv32Machine, Rv32MachineConfig, Rv32MachineOutcome,
 };
-use k16_vm::rv32im::encoding::{addi, ebreak, ecall, jal, lui, materialize, sb, sw};
-use rv32_elf_support::{halting_machine_elf, machine_program_elf};
+use k16_vm::rv32im::encoding::{addi, csrrs, csrrw, ebreak, ecall, jal, lui, materialize, sb, sw};
+use rv32_elf_support::{halting_machine_elf, machine_program_elf, Elf32Builder, LoadSegment};
+
+const CSR_MTVEC: u16 = 0x305;
+const CSR_MEPC: u16 = 0x341;
+const CSR_MCAUSE: u16 = 0x342;
+const CSR_MTVAL: u16 = 0x343;
 
 fn configs() -> [Rv32ExecutionBackendConfig; 2] {
     [
@@ -84,47 +89,67 @@ fn config(execution: Rv32ExecutionBackendConfig, debug_limit: usize) -> Rv32Mach
 }
 
 #[test]
-fn both_backends_reject_execution_from_rw_memory() {
+fn both_backends_turn_execution_from_rw_memory_into_bounded_traps() {
     let elf = machine_program_elf(&[jal(0, 0x2000)]);
 
     for execution in configs() {
         let mut machine = Rv32Machine::from_elf(&elf, config(execution, 8)).unwrap();
-        let error = machine.run(2).unwrap_err();
-        assert_eq!(error.pc(), 0x3000);
-        assert_eq!(error.retired_total(), 1);
-        assert!(error.to_string().contains("outside executable memory"));
+        assert_eq!(
+            machine.run(2).unwrap(),
+            Rv32MachineOutcome::BudgetExhausted {
+                retired_delta: 1,
+                retired_total: 1,
+            }
+        );
+        assert_eq!(machine.pc(), 0);
+        assert_eq!(
+            machine.run(3).unwrap(),
+            Rv32MachineOutcome::BudgetExhausted {
+                retired_delta: 0,
+                retired_total: 1,
+            }
+        );
     }
 }
 
 #[test]
-fn both_backends_reject_guest_writes_to_rx_memory_without_retiring_the_store() {
+fn both_backends_trap_guest_writes_to_rx_memory_without_retiring_the_store() {
     let [address_hi, address_lo] = materialize(1, 0x1000);
     let elf = machine_program_elf(&[address_hi, address_lo, addi(2, 0, 7), sw(1, 2, 0)]);
 
     for execution in configs() {
         let mut machine = Rv32Machine::from_elf(&elf, config(execution, 8)).unwrap();
-        let error = machine.run(8).unwrap_err();
-        assert_eq!(error.pc(), 0x100c);
-        assert_eq!(error.retired_total(), 3);
-        assert!(error.to_string().contains("write"));
+        assert_eq!(
+            machine.run(8).unwrap(),
+            Rv32MachineOutcome::BudgetExhausted {
+                retired_delta: 3,
+                retired_total: 3,
+            }
+        );
+        assert_eq!(machine.pc(), 0);
     }
 }
 
 #[test]
-fn both_backends_report_invalid_and_unsupported_stop_instructions_without_fallback() {
+fn both_backends_turn_invalid_ecall_and_ebreak_into_non_retiring_traps() {
     for word in [0xffff_ffff, ecall(), ebreak()] {
         let elf = machine_program_elf(&[word]);
         for execution in configs() {
             let mut machine = Rv32Machine::from_elf(&elf, config(execution, 8)).unwrap();
-            let error = machine.run(1).unwrap_err();
-            let expected_retired = u64::from(word != 0xffff_ffff);
-            assert_eq!(error.retired_total(), expected_retired);
+            assert_eq!(
+                machine.run(1).unwrap(),
+                Rv32MachineOutcome::BudgetExhausted {
+                    retired_delta: 0,
+                    retired_total: 0,
+                }
+            );
+            assert_eq!(machine.pc(), 0);
         }
     }
 }
 
 #[test]
-fn bounded_debug_overflow_is_a_machine_execution_error() {
+fn bounded_debug_overflow_is_a_guest_trap() {
     let elf = machine_program_elf(&[
         lui(1, 0x10000),
         addi(2, 1, 0x100),
@@ -136,9 +161,76 @@ fn bounded_debug_overflow_is_a_machine_execution_error() {
 
     for execution in configs() {
         let mut machine = Rv32Machine::from_elf(&elf, config(execution, 1)).unwrap();
-        let error = machine.run(16).unwrap_err();
-        assert!(error.to_string().contains("limit 1"));
+        assert_eq!(
+            machine.run(16).unwrap(),
+            Rv32MachineOutcome::BudgetExhausted {
+                retired_delta: 5,
+                retired_total: 5,
+            }
+        );
         assert_eq!(machine.debug_bytes(), b"A");
+    }
+}
+
+#[test]
+fn both_backends_share_precise_trap_entry_and_attempt_budgeting() {
+    let [vector_hi, vector_lo] = materialize(1, 0x2000);
+    let main = [vector_hi, vector_lo, csrrw(0, CSR_MTVEC, 1), ecall()];
+    let [debug_hi, debug_lo] = materialize(5, computer_abi::DEBUG_BASE);
+    let handler = [
+        csrrs(2, CSR_MEPC, 0),
+        csrrs(3, CSR_MCAUSE, 0),
+        csrrs(4, CSR_MTVAL, 0),
+        debug_hi,
+        debug_lo,
+        sb(5, 2, 0),
+        sb(5, 3, 0),
+        sb(5, 4, 0),
+        lui(1, 0x10000),
+        sw(1, 0, 8),
+        addi(6, 0, computer_abi::STATUS_HALTED),
+        sw(1, 6, 0),
+    ];
+    let words = |words: &[u32]| {
+        words
+            .iter()
+            .copied()
+            .flat_map(u32::to_le_bytes)
+            .collect::<Vec<_>>()
+    };
+    let elf = Elf32Builder::new(0x1000)
+        .load(LoadSegment::rx(0x1000, words(&main)))
+        .load(LoadSegment::rx(0x2000, words(&handler)))
+        .load(LoadSegment::rw_with_mem_size(0x3000, [], 0x1000))
+        .finish();
+
+    for execution in configs() {
+        let mut machine = Rv32Machine::from_elf(&elf, config(execution, 3)).unwrap();
+        assert_eq!(
+            machine.run(3).unwrap(),
+            Rv32MachineOutcome::BudgetExhausted {
+                retired_delta: 3,
+                retired_total: 3,
+            }
+        );
+        assert_eq!(machine.pc(), 0x100c);
+        assert_eq!(
+            machine.run(1).unwrap(),
+            Rv32MachineOutcome::BudgetExhausted {
+                retired_delta: 0,
+                retired_total: 3,
+            }
+        );
+        assert_eq!(machine.pc(), 0x2000);
+        assert_eq!(
+            machine.run(32).unwrap(),
+            Rv32MachineOutcome::Halted {
+                exit_code: 0,
+                retired_delta: 12,
+                retired_total: 15,
+            }
+        );
+        assert_eq!(machine.debug_bytes(), &[0x0c, 11, 0]);
     }
 }
 

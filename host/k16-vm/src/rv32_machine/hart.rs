@@ -59,6 +59,7 @@ impl Rv32MachineHart {
         self.cpu.pc()
     }
 
+    #[cfg(test)]
     pub(super) fn register(&self, register: usize) -> u32 {
         self.cpu.register(register)
     }
@@ -122,6 +123,14 @@ impl Rv32MachineHart {
         self.take_trap(
             self.pc(),
             Rv32ExceptionCause::InstructionAccessFault,
+            address,
+        )
+    }
+
+    pub(super) fn take_instruction_address_misaligned(&mut self, address: u32) -> Rv32HartStep {
+        self.take_trap(
+            self.pc(),
+            Rv32ExceptionCause::InstructionAddressMisaligned,
             address,
         )
     }

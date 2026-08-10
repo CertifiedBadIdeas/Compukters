@@ -49,6 +49,17 @@ pub(crate) enum Rv32RegularFault {
     MachineInstructionRequired,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Rv32ResolvedInstruction {
+    Valid {
+        word: u32,
+        instruction: DecodedInstruction,
+    },
+    Invalid {
+        word: u32,
+    },
+}
+
 impl Display for Rv32RegularFault {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -331,7 +342,7 @@ impl Rv32imCpu {
     }
 }
 
-#[allow(dead_code)]
+#[cfg(test)]
 pub(crate) fn decode_word(word: u32) -> Result<DecodedInstruction, String> {
     decode::decode(word)
 }
