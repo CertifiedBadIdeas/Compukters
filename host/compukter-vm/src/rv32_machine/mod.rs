@@ -17,7 +17,19 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-pub mod bus;
-pub mod memory;
-pub mod rv32_machine;
-pub mod rv32im;
+mod address_space;
+mod csr;
+mod elf;
+mod hart;
+mod machine;
+mod platform;
+
+pub use address_space::{Rv32AddressSpace, Rv32AddressSpaceError};
+pub use elf::{
+    Rv32ElfError, Rv32ElfErrorKind, Rv32ElfLoader, Rv32LoadedImage, Rv32PagePermissions,
+};
+pub use machine::{
+    Rv32ExecutionBackendConfig, Rv32Machine, Rv32MachineBuildError, Rv32MachineConfig,
+    Rv32MachineExecutionError, Rv32MachineOutcome,
+};
+pub use platform::{CONTROL_BASE, DEBUG_BASE, STATUS_BOOTING, STATUS_HALTED, STATUS_PANIC};
