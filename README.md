@@ -22,7 +22,7 @@ storage, networking, the in-game programming loop, and Minecraft integration
 will be rebuilt directly for RV32 without binary or source compatibility with
 the retired architecture.
 
-See [ADR 0001](docs/architecture-decisions/0001-retire-k16-adopt-rv32.md)
+See [ADR 0001](docs/architecture-decisions/0001-adopt-rv32.md)
 and [the current architecture](docs/ARCHITECTURE.md).
 
 Currently targets **NeoForge 1.21.1**.
