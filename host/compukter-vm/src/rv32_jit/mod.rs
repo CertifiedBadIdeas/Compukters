@@ -19,6 +19,8 @@
 
 pub(crate) mod abi;
 mod backend;
+pub(crate) mod block;
+pub(crate) mod planner;
 
 #[cfg(test)]
 use backend::{CodeBlob, CodeRelocation};
