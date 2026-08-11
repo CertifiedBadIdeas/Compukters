@@ -18,8 +18,10 @@
  */
 
 use compukter_vm::benchmarks::{
-    native_checksum, product_backend_order, product_percentile, PreparedProductMachine,
-    ProductMachineBackend, ProductMachineImage, ProductMachineWorkload,
+    benchmark_geomean, benchmark_normalize_nanos, benchmark_rotating_order, native_checksum,
+    product_backend_order, product_percentile, PreparedProductMachine, PreparedProductNative,
+    ProductExecutionCandidate, ProductMachineBackend, ProductMachineImage, ProductMachineWorkload,
+    PRODUCT_RESIDENT_REPORT_HEADER,
 };
 
 #[test]
@@ -97,4 +99,36 @@ fn product_sampling_order_is_interleaved_and_percentiles_are_stable() {
     );
     assert_eq!(product_percentile(&[10, 20, 30, 40, 50], 50), 30);
     assert_eq!(product_percentile(&[10, 20, 30, 40, 50], 95), 50);
+}
+
+#[test]
+fn native_product_workloads_match_machine_checksums() {
+    for workload in ProductMachineWorkload::all() {
+        let mut native = PreparedProductNative::new(*workload, 17).unwrap();
+        let observation = native.execute_batch(3).unwrap();
+        let expected = match workload {
+            ProductMachineWorkload::TrapRoundtrip => 17,
+            _ => native_checksum(workload.decoder_workload().unwrap(), 17),
+        };
+        assert_eq!(observation.checksum, expected);
+        assert_eq!(observation.batch, 3);
+    }
+}
+
+#[test]
+fn product_timing_math_is_normalized_and_rotated() {
+    assert_eq!(benchmark_normalize_nanos(10_001, 10).unwrap(), 1_000.1);
+    assert_eq!(benchmark_rotating_order::<3>(0, 0), [0, 1, 2]);
+    assert_eq!(benchmark_rotating_order::<3>(0, 1), [1, 2, 0]);
+    assert_eq!(benchmark_rotating_order::<3>(1, 1), [2, 0, 1]);
+    assert!((benchmark_geomean(&[4.0, 9.0]).unwrap() - 6.0).abs() < 1e-12);
+    assert_eq!(ProductExecutionCandidate::NativeHost.name(), "native-host");
+}
+
+#[test]
+fn resident_report_header_remains_stable() {
+    assert_eq!(
+        PRODUCT_RESIDENT_REPORT_HEADER,
+        "backend\tpopulation\tconstruction_median_ns\tconstruction_p95_ns\tresident_live_bytes\tpeak_construction_bytes\tlive_bytes_per_machine\taggregate_ram_bytes\telf_bytes\texecutable_bytes\trw_initialized_bytes\tram_bytes\tdebug_limit\tcache_sets"
+    );
 }
