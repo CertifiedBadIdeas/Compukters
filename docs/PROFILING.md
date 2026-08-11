@@ -70,13 +70,14 @@ cargo run --manifest-path host/compukter-vm/Cargo.toml --release \
 
 The arguments are workload iterations, warm execution samples, and resident
 construction samples. The runner enforces minima of 21 and seven samples. Its
-active report rotates NativeHost, Cached, and Predecoded sample order. Native
-work is calibrated in batches of at least one millisecond and normalized back
-to one workload invocation; Cached and Predecoded time one fresh
+active report rotates NativeHost, Cached, Predecoded, and BlockCached sample
+order. Native work is calibrated in batches of at least one millisecond and
+normalized back
+to one workload invocation; Cached, Predecoded, and BlockCached time one fresh
 `Rv32Machine::run` and use one byte-identical strict ELF32 image. The report
-includes complete-workload operations per second and VM/native median ratios.
-The resident report remains VM-only and excludes the shared ELF from the
-population heap delta.
+includes complete-workload operations per second, VM/native median ratios, and
+lookup-unit-aware translation statistics. The resident report covers all three
+VM backends and excludes the shared ELF from the population heap delta.
 
 The 2026-08-11 baseline, complete raw output, environment, and interpretation
 are stored in
@@ -110,9 +111,12 @@ focused command is deliberately absent from normal Gradle/Cargo verification,
 Minecraft runs, and production JAR assembly. Missing external tools are a hard
 error; there is no alternate benchmark candidate or fallback.
 
-The preserved 2026-08-11 ceiling, complete report, environment, hashes, and
+The preserved baseline ceiling, complete report, environment, hashes, and
 interpretation are stored in
 [`2026-08-11-rv32-c-qemu-ceiling.md`](benchmarks/2026-08-11-rv32-c-qemu-ceiling.md).
+The decoded-block experiment, including the four-candidate product report,
+five-candidate C/QEMU report, memory cost, and keep/reject decision, is stored
+in [`2026-08-11-rv32-decoded-block-cache.md`](benchmarks/2026-08-11-rv32-decoded-block-cache.md).
 
 Committed Gate and XLEN outputs under `docs/benchmarks/` are immutable
 historical evidence. They are not active benchmark runners and do not select a
