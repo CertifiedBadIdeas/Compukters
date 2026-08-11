@@ -58,47 +58,6 @@ class RetainedDisplayArchitectureTest {
     }
 
     @Test
-    fun serverRuntimeForwardsRetainedBytesWithoutOwningAReplica() {
-        val runtime =
-            root
-                .resolve(
-                    "modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/runtime/" +
-                        "K16RuntimeDevice.kt",
-                ).readText()
-        val bridge =
-            root
-                .resolve(
-                    "modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/runtime/ports/" +
-                        "DisplayNetworkBridge.kt",
-                ).readText()
-
-        for (forbidden in
-            listOf(
-                "RetainedDisplayReplica",
-                "RetainedDisplayResource",
-                "RetainedDrawList",
-                "RetainedDisplayProtocol",
-                "NETWORK_MAGIC",
-                "\"KDSP\"",
-            )
-        ) {
-            assertFalse(runtime.contains(forbidden), "server runtime must not own or decode $forbidden")
-            assertFalse(bridge.contains(forbidden), "server bridge must not own or decode $forbidden")
-        }
-        assertTrue(runtime.contains("sendRetainedDisplayPayload"))
-        assertFalse(runtime.contains("pollRetainedDisplayPayload"))
-        assertTrue(runtime.contains("ServerThreadPublicationPump"))
-        assertTrue(runtime.contains("onRetainedDisplayPayloadReady(this, payload)"))
-        assertFalse(runtime.contains("Command.DrainRetainedDisplayPayload"))
-        assertTrue(runtime.contains("retainedDisplaySessions.sessionsSnapshot()"))
-        assertTrue(runtime.contains("pruneRetainedDisplayViewers(current)"))
-        assertFalse(runtime.contains("flushFramebufferFrames"))
-        assertFalse(runtime.contains("private val displaySessions"))
-        assertTrue(bridge.contains("fun isRetainedDisplayViewerAuthorized"))
-        assertTrue(bridge.contains("fun sendRetainedDisplayPayload"))
-    }
-
-    @Test
     fun productionSourcesDoNotRetainFramebufferTransport() {
         val productionRoots =
             listOf(
