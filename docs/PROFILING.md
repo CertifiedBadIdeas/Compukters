@@ -17,6 +17,12 @@ cargo run --manifest-path host/compukter-vm/Cargo.toml --release \
 The first argument is the positive workload iteration count. The second is the
 requested sample count; the runner always takes at least seven warm samples.
 
+The attributable decoder baseline captured on 2026-08-11 is stored in
+[`rv32-decoder-baseline-2026-08-11.txt`](benchmarks/rv32-decoder-baseline-2026-08-11.txt).
+It records the exact source revision, host, Rust toolchain, command, and complete
+output. Treat it as comparison evidence for later decoder work, not as a stable
+performance promise across hosts.
+
 Committed Gate and XLEN outputs under `docs/benchmarks/` are immutable
 historical evidence. They are not active benchmark runners and do not select a
 supported product architecture. The accepted architecture decision is recorded
