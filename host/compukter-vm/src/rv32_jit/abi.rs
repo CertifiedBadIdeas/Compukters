@@ -17,26 +17,18 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-mod abi;
-mod backend;
-
-#[cfg(test)]
-use backend::{CodeBlob, CodeRelocation};
-
 #[cfg(test)]
 mod tests {
-    use super::{CodeBlob, CodeRelocation};
+    use crate::rv32im::Rv32ArchitecturalState;
 
     #[test]
-    fn code_blob_rejects_relocations_to_non_vm_symbols() {
-        let blob = CodeBlob::new(
-            vec![0xc3],
-            vec![CodeRelocation::External {
-                offset: 0,
-                symbol: "libc_printf".into(),
-            }],
-        );
+    fn architectural_state_preserves_x0_and_register_values() {
+        let mut state = Rv32ArchitecturalState::new(0x1000);
+        state.set_register(0, 0xfeed_beef);
+        state.set_register(7, 42);
 
-        assert!(blob.validate_relocations().is_err());
+        assert_eq!(state.pc(), 0x1000);
+        assert_eq!(state.register(0), 0);
+        assert_eq!(state.register(7), 42);
     }
 }
