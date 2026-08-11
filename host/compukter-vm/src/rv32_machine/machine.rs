@@ -234,6 +234,17 @@ impl Rv32Machine {
         }
     }
 
+    pub fn executable_bytes(&self) -> usize {
+        self.executable_ranges.iter().map(Range::len).sum()
+    }
+
+    pub fn translation_bytes(&self) -> usize {
+        match &self.execution {
+            Rv32ExecutionBackend::Cached(cache) => cache.retained_bytes(),
+            Rv32ExecutionBackend::Predecoded(image) => image.retained_bytes(),
+        }
+    }
+
     fn is_executable_pc(&self, pc: u32) -> bool {
         let in_range = self
             .executable_ranges

@@ -53,3 +53,28 @@ fn product_workloads_halt_with_expected_checksum() {
         }
     }
 }
+
+#[test]
+fn product_observation_reports_backend_owned_storage() {
+    let mut cached = PreparedProductMachine::new(
+        ProductMachineBackend::Cached,
+        ProductMachineWorkload::PacketRing,
+        8,
+    )
+    .unwrap();
+    let cached = cached.execute().unwrap();
+    assert_eq!(cached.ram_bytes, 16 * 1024);
+    assert!(cached.executable_bytes > 0);
+    assert!(cached.translation_bytes > 0);
+    assert!(cached.cache_stats.unwrap().misses > 0);
+
+    let mut predecoded = PreparedProductMachine::new(
+        ProductMachineBackend::Predecoded,
+        ProductMachineWorkload::PacketRing,
+        8,
+    )
+    .unwrap();
+    let predecoded = predecoded.execute().unwrap();
+    assert!(predecoded.translation_bytes >= predecoded.executable_bytes);
+    assert!(predecoded.cache_stats.is_none());
+}
