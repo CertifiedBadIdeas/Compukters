@@ -30,11 +30,12 @@ pub use decoder::{
     PreparedDecoderBenchmark,
 };
 pub use product_machine::{
-    benchmark_geomean, benchmark_normalize_nanos, benchmark_rotating_order, product_backend_order,
-    product_percentile, PreparedProductMachine, PreparedProductNative, ProductExecutionCandidate,
+    benchmark_geomean, benchmark_normalize_nanos, benchmark_rotating_order,
+    format_product_active_row, populate_product_ratios, product_backend_order, product_percentile,
+    PreparedProductMachine, PreparedProductNative, ProductActiveTiming, ProductExecutionCandidate,
     ProductMachineBackend, ProductMachineImage, ProductMachineObservation, ProductMachineWorkload,
-    ProductNativeObservation, PRODUCT_CACHE_SETS, PRODUCT_DEBUG_LIMIT, PRODUCT_RAM_BYTES,
-    PRODUCT_RESIDENT_REPORT_HEADER,
+    ProductNativeObservation, PRODUCT_ACTIVE_REPORT_HEADER, PRODUCT_CACHE_SETS,
+    PRODUCT_DEBUG_LIMIT, PRODUCT_RAM_BYTES, PRODUCT_RESIDENT_REPORT_HEADER,
 };
 pub use programs::{DATA_BASE, MEMORY_SIZE, MMIO_BASE, PACKET_BYTES, RING_ENTRIES, STACK_TOP};
 pub use report::{
