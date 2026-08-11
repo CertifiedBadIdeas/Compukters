@@ -74,3 +74,15 @@ fn paired_decoder_scenarios_share_work_and_stable_checksums() {
         }
     }
 }
+
+#[test]
+fn extraction_gate_preserves_the_accepted_decision_threshold() {
+    let script = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../scripts/tests/rv32-decoder-extraction-gate.sh"
+    ))
+    .unwrap();
+    assert!(script.contains("RUNS=5"));
+    assert!(script.contains("REQUIRED_WINS=4"));
+    assert!(script.contains("MIN_IMPROVEMENT_PERCENT=2"));
+}
