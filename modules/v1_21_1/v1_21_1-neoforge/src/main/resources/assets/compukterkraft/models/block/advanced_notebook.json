@@ -1,6 +1,0 @@
-{
-  "parent": "minecraft:block/block",
-  "textures": {
-    "particle": "compukterkraft:block/notebook/advanced_notebook"
-  }
-}

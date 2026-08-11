@@ -20,7 +20,6 @@
 package ru.lazyhat.compukterkraft.common.network
 
 import net.minecraft.client.Minecraft
-import ru.lazyhat.compukterkraft.common.computer.client.retained.ClientRetainedDisplays
 import ru.lazyhat.compukterkraft.common.network.text.ClientTableFormatter
 import ru.lazyhat.compukterkraft.common.network.text.TableBuilder
 
@@ -30,12 +29,5 @@ class ClientNetworkContextImpl : ClientNetworkContext {
 
     override fun handleChatTable(table: TableBuilder) {
         ClientTableFormatter(minecraft).display(table)
-    }
-
-    override fun handleRetainedDisplayState(
-        computerId: Int,
-        payload: ByteArray,
-    ) {
-        ClientRetainedDisplays.apply(computerId, payload)
     }
 }

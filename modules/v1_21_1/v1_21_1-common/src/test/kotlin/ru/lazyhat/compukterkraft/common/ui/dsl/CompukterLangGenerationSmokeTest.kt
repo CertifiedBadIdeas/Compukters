@@ -31,20 +31,20 @@ class CompukterLangGenerationSmokeTest {
     @Test
     fun generatedLocalizationApisAreAvailableToCommonCode() {
         assertEquals(
-            "gui.compukterkraft.terminal.connecting",
-            CompukterKeys.Gui.Terminal.CONNECTING,
+            "block.compukterkraft.workbench",
+            CompukterKeys.Block.WORKBENCH,
         )
         assertTrue(
-            CompukterTranslatable.Gui.Terminal.connecting.value
+            CompukterTranslatable.Block.workbench.value
                 .isNotBlank(),
         )
         assertEquals(
-            "gui.compukterkraft.terminal.connecting",
-            (CompukterComponents.Gui.Terminal.connecting.contents as TranslatableContents).key,
+            "block.compukterkraft.workbench",
+            (CompukterComponents.Block.workbench.contents as TranslatableContents).key,
         )
         assertEquals(
-            "gui.compukterkraft.tooltip.computer_id",
-            (CompukterComponents.Gui.Tooltip.computerId("42").contents as TranslatableContents).key,
+            "gui.compukterkraft.tooltip.copy",
+            (CompukterComponents.Gui.Tooltip.copy.contents as TranslatableContents).key,
         )
         assertEquals(
             "itemGroup.compukterkraft",
