@@ -18,10 +18,10 @@
  */
 
 pub(crate) mod abi;
-mod arena;
+pub(crate) mod arena;
 mod backend;
 pub(crate) mod block;
-mod cranelift;
+pub(crate) mod cranelift;
 pub(crate) mod planner;
 
 #[cfg(test)]

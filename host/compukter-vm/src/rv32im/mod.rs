@@ -209,8 +209,15 @@ impl Rv32imCpu {
     }
 
     pub(crate) fn commit_instruction(&mut self) {
+        self.commit_instructions(1);
+    }
+
+    pub(crate) fn commit_instructions(&mut self, count: u32) {
         self.state.registers[0] = 0;
-        self.state.retired_instructions = self.state.retired_instructions.saturating_add(1);
+        self.state.retired_instructions = self
+            .state
+            .retired_instructions
+            .saturating_add(u64::from(count));
     }
 
     pub(crate) fn clear_reservation(&mut self) {

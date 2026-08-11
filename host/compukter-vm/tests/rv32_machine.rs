@@ -25,8 +25,8 @@ use compukter_vm::rv32_machine::{
     DEBUG_BASE, STATUS_BOOTING, STATUS_HALTED, STATUS_PANIC,
 };
 use compukter_vm::rv32im::encoding::{
-    addi, amoswap_w, csrrs, csrrw, ebreak, ecall, fence_i, jal, lr_w, lui, materialize, sb, sc_w,
-    sh, sw,
+    add, addi, amoswap_w, csrrs, csrrw, ebreak, ecall, fence_i, jal, lr_w, lui, materialize, sb,
+    sc_w, sh, sw,
 };
 use rv32_elf_support::{halting_machine_elf, machine_program_elf, Elf32Builder, LoadSegment};
 
@@ -127,6 +127,64 @@ fn all_backends_match_cached_for_every_partial_budget_prefix() {
             );
         }
     }
+}
+
+#[test]
+fn jit_preparation_is_explicit_and_short_budgets_keep_the_cached_tail() {
+    let elf = machine_program_elf(&[addi(1, 0, 40), addi(1, 1, 1), add(2, 1, 1), jal(0, -12)]);
+    let mut machine = Rv32Machine::from_elf(
+        &elf,
+        config(
+            Rv32ExecutionBackendConfig::Jit {
+                sets: 8,
+                max_instructions: 8,
+                hotness_threshold: 1,
+                candidate_capacity: 4,
+                request_capacity: 4,
+                code_bytes: 4096,
+            },
+            0,
+        ),
+    )
+    .unwrap();
+
+    assert_eq!(
+        machine.run(4).unwrap(),
+        Rv32MachineOutcome::BudgetExhausted {
+            retired_delta: 4,
+            retired_total: 4,
+        }
+    );
+    assert_eq!(machine.prepare_jit(1).unwrap(), 1);
+    assert_eq!(machine.jit_stats().unwrap().dispatches, 0);
+
+    assert_eq!(
+        machine.run(2).unwrap(),
+        Rv32MachineOutcome::BudgetExhausted {
+            retired_delta: 2,
+            retired_total: 6,
+        }
+    );
+    assert_eq!(machine.pc(), 0x1008);
+    assert_eq!(machine.jit_stats().unwrap().dispatches, 0);
+
+    assert_eq!(
+        machine.run(2).unwrap(),
+        Rv32MachineOutcome::BudgetExhausted {
+            retired_delta: 2,
+            retired_total: 8,
+        }
+    );
+    assert_eq!(machine.pc(), 0x1000);
+    assert_eq!(
+        machine.run(3).unwrap(),
+        Rv32MachineOutcome::BudgetExhausted {
+            retired_delta: 3,
+            retired_total: 11,
+        }
+    );
+    assert_eq!(machine.pc(), 0x100c);
+    assert_eq!(machine.jit_stats().unwrap().dispatches, 1);
 }
 
 #[test]

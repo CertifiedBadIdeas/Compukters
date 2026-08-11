@@ -19,6 +19,7 @@
 
 use super::csr::Rv32MachineCsrs;
 use crate::memory::MemoryBus;
+use crate::rv32_jit::abi::JitEntry;
 use crate::rv32im::{CsrOperation, CsrSource, DecodedInstruction, Rv32RegularFault, Rv32imCpu};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -66,6 +67,18 @@ impl Rv32MachineHart {
 
     pub(super) fn retired_instructions(&self) -> u64 {
         self.cpu.retired_instructions()
+    }
+
+    pub(crate) fn execute_jit_entry(&mut self, entry: JitEntry) -> u32 {
+        let executed = {
+            let state = self.cpu.architectural_state_mut();
+            let state_ptr = state as *mut crate::rv32im::Rv32ArchitecturalState;
+            // SAFETY: entries are emitted by the VM-owned Cranelift backend and
+            // receive only this canonical architectural-state pointer.
+            unsafe { entry(state_ptr.cast()) }
+        };
+        self.cpu.commit_instructions(executed);
+        executed
     }
 
     #[allow(

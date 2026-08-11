@@ -25,6 +25,8 @@ use std::marker::PhantomData;
 )]
 pub(crate) const JIT_ABI_VERSION: u32 = 1;
 
+pub(crate) type JitEntry = unsafe extern "C" fn(*mut u8) -> u32;
+
 /// The contiguous RAM region that a compiled block may access directly.
 ///
 /// Addresses outside `len`, including all MMIO, must leave the compiled block
