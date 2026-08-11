@@ -159,6 +159,12 @@ fn comparison_runner_keeps_qemu_system_tcg_explicit_and_report_stable() {
         );
     }
     assert!(source.contains("candidate\\tmode\\titerations\\tseed\\tbatch\\tchecksum"));
+    assert!(source.contains("rv32-block-cached"));
+    assert!(source.contains("product-machine-block-cached"));
+    assert!(source.contains("lookup_unit\\tcache_hits\\tcache_misses\\tcache_evictions"));
+    assert!(source.contains("blocks_built\\tdecoded_slots_built\\ttranslation_bytes"));
+    assert!(source.contains("steady_allocations\\tsteady_allocated_bytes"));
+    assert!(source.contains("block-cached-calibrated-sha256"));
     assert!(!source.contains("Command::new(\"sh\")"));
     assert!(!source.contains("Command::new(\"bash\")"));
 }
@@ -175,6 +181,9 @@ fn focused_qemu_gate_is_not_hidden_behind_a_normal_verification_fallback() {
     assert!(source.contains("compile-rv32-c-comparison.sh"));
     assert!(source.contains("rv32_c_comparison"));
     assert!(source.contains("--ignored --exact"));
+    assert!(source.contains("rv32-block-cached"));
+    assert!(source.contains("count == 5"));
+    assert!(source.contains("product-block-cached-calibrated-disassembly.txt"));
     assert!(!source.contains("|| true"));
     assert!(!source.contains("qemu-riscv32"));
 }
