@@ -25,7 +25,8 @@ use compukter_vm::rv32_machine::{
     DEBUG_BASE, STATUS_BOOTING, STATUS_HALTED, STATUS_PANIC,
 };
 use compukter_vm::rv32im::encoding::{
-    addi, amoswap_w, csrrs, csrrw, ebreak, ecall, jal, lr_w, lui, materialize, sb, sc_w, sh, sw,
+    addi, amoswap_w, csrrs, csrrw, ebreak, ecall, fence_i, jal, lr_w, lui, materialize, sb, sc_w,
+    sh, sw,
 };
 use rv32_elf_support::{halting_machine_elf, machine_program_elf, Elf32Builder, LoadSegment};
 
@@ -34,15 +35,19 @@ const CSR_MEPC: u16 = 0x341;
 const CSR_MCAUSE: u16 = 0x342;
 const CSR_MTVAL: u16 = 0x343;
 
-fn configs() -> [Rv32ExecutionBackendConfig; 2] {
+fn configs() -> [Rv32ExecutionBackendConfig; 3] {
     [
         Rv32ExecutionBackendConfig::Cached { sets: 64 },
         Rv32ExecutionBackendConfig::Predecoded,
+        Rv32ExecutionBackendConfig::BlockCached {
+            sets: 32,
+            max_instructions: 8,
+        },
     ]
 }
 
 #[test]
-fn both_backends_run_from_elf_entry_under_budget_and_halt_through_mmio() {
+fn all_backends_run_from_elf_entry_under_budget_and_halt_through_mmio() {
     let elf = halting_machine_elf(b'R');
 
     for execution in configs() {
@@ -83,7 +88,65 @@ fn both_backends_run_from_elf_entry_under_budget_and_halt_through_mmio() {
 }
 
 #[test]
-fn both_backends_execute_the_same_rv32a_reservation_and_amo_program() {
+fn all_backends_match_cached_for_every_partial_budget_prefix() {
+    let elf = halting_machine_elf(b'P');
+    for budget in 0..=8 {
+        let mut reference = Rv32Machine::from_elf(
+            &elf,
+            config(Rv32ExecutionBackendConfig::Cached { sets: 64 }, 16),
+        )
+        .unwrap();
+        let expected = reference.run(budget).unwrap();
+        let expected_pc = reference.pc();
+        let expected_retired = reference.retired_instructions();
+        let expected_debug = reference.debug_bytes().to_vec();
+        let expected_status = reference.control_status();
+
+        for execution in configs() {
+            let mut machine = Rv32Machine::from_elf(&elf, config(execution, 16)).unwrap();
+            assert_eq!(
+                machine.run(budget).unwrap(),
+                expected,
+                "{execution:?} budget {budget}"
+            );
+            assert_eq!(machine.pc(), expected_pc, "{execution:?} budget {budget}");
+            assert_eq!(
+                machine.retired_instructions(),
+                expected_retired,
+                "{execution:?} budget {budget}"
+            );
+            assert_eq!(
+                machine.debug_bytes(),
+                expected_debug,
+                "{execution:?} budget {budget}"
+            );
+            assert_eq!(
+                machine.control_status(),
+                expected_status,
+                "{execution:?} budget {budget}"
+            );
+        }
+    }
+}
+
+#[test]
+fn all_backends_treat_fence_i_as_a_retired_execution_boundary() {
+    let elf = machine_program_elf(&[fence_i(), jal(0, 0)]);
+    for execution in configs() {
+        let mut machine = Rv32Machine::from_elf(&elf, config(execution, 0)).unwrap();
+        assert_eq!(
+            machine.run(1).unwrap(),
+            Rv32MachineOutcome::BudgetExhausted {
+                retired_delta: 1,
+                retired_total: 1,
+            }
+        );
+        assert_eq!(machine.pc(), 0x1004);
+    }
+}
+
+#[test]
+fn all_backends_execute_the_same_rv32a_reservation_and_amo_program() {
     let [data_hi, data_lo] = materialize(1, 0x3000);
     let [debug_hi, debug_lo] = materialize(10, DEBUG_BASE);
     let elf = machine_program_elf(&[
@@ -125,7 +188,7 @@ fn both_backends_execute_the_same_rv32a_reservation_and_amo_program() {
 }
 
 #[test]
-fn both_backends_trap_atomic_mmio_without_device_side_effects() {
+fn all_backends_trap_atomic_mmio_without_device_side_effects() {
     let [debug_hi, debug_lo] = materialize(1, DEBUG_BASE);
     let elf = machine_program_elf(&[
         debug_hi,
@@ -149,7 +212,7 @@ fn both_backends_trap_atomic_mmio_without_device_side_effects() {
 }
 
 #[test]
-fn both_backends_trap_atomic_updates_to_rx_memory() {
+fn all_backends_trap_atomic_updates_to_rx_memory() {
     let [code_hi, code_lo] = materialize(1, 0x1000);
     let elf = machine_program_elf(&[
         code_hi,
@@ -180,7 +243,7 @@ fn config(execution: Rv32ExecutionBackendConfig, debug_limit: usize) -> Rv32Mach
 }
 
 #[test]
-fn both_backends_turn_execution_from_rw_memory_into_bounded_traps() {
+fn all_backends_turn_execution_from_rw_memory_into_bounded_traps() {
     let elf = machine_program_elf(&[jal(0, 0x2000)]);
 
     for execution in configs() {
@@ -204,7 +267,7 @@ fn both_backends_turn_execution_from_rw_memory_into_bounded_traps() {
 }
 
 #[test]
-fn both_backends_trap_guest_writes_to_rx_memory_without_retiring_the_store() {
+fn all_backends_trap_guest_writes_to_rx_memory_without_retiring_the_store() {
     let [address_hi, address_lo] = materialize(1, 0x1000);
     let elf = machine_program_elf(&[address_hi, address_lo, addi(2, 0, 7), sw(1, 2, 0)]);
 
@@ -222,7 +285,7 @@ fn both_backends_trap_guest_writes_to_rx_memory_without_retiring_the_store() {
 }
 
 #[test]
-fn both_backends_turn_invalid_ecall_and_ebreak_into_non_retiring_traps() {
+fn all_backends_turn_invalid_ecall_and_ebreak_into_non_retiring_traps() {
     for word in [0xffff_ffff, ecall(), ebreak()] {
         let elf = machine_program_elf(&[word]);
         for execution in configs() {
@@ -300,7 +363,7 @@ fn faulting_halfword_mmio_stores_have_no_partial_device_effects() {
 }
 
 #[test]
-fn both_backends_share_precise_trap_entry_and_attempt_budgeting() {
+fn all_backends_share_precise_trap_entry_and_attempt_budgeting() {
     let [vector_hi, vector_lo] = materialize(1, 0x2000);
     let main = [vector_hi, vector_lo, csrrw(0, CSR_MTVEC, 1), ecall()];
     let [debug_hi, debug_lo] = materialize(5, DEBUG_BASE);
@@ -399,6 +462,39 @@ fn invalid_cache_and_ram_layouts_fail_before_machine_allocation() {
             debug_limit: 8,
             execution: Rv32ExecutionBackendConfig::Predecoded,
         }
+    )
+    .is_err());
+    assert!(Rv32Machine::from_elf(
+        &elf,
+        config(
+            Rv32ExecutionBackendConfig::BlockCached {
+                sets: 3,
+                max_instructions: 8,
+            },
+            8,
+        )
+    )
+    .is_err());
+    assert!(Rv32Machine::from_elf(
+        &elf,
+        config(
+            Rv32ExecutionBackendConfig::BlockCached {
+                sets: 32,
+                max_instructions: 0,
+            },
+            8,
+        )
+    )
+    .is_err());
+    assert!(Rv32Machine::from_elf(
+        &elf,
+        config(
+            Rv32ExecutionBackendConfig::BlockCached {
+                sets: 32,
+                max_instructions: 65,
+            },
+            8,
+        )
     )
     .is_err());
 }
