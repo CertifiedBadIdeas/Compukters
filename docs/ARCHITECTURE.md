@@ -15,7 +15,7 @@ or Minecraft and does not yet boot BIOS or KraftOS.
 
 ## RV32 Host Machine
 
-The host accepts stock-Clang/LLD little-endian RV32IM/ILP32 `ET_EXEC` ELF32.
+The host accepts stock-Clang/LLD little-endian RV32IMA/ILP32 `ET_EXEC` ELF32.
 It validates page-separated `PT_LOAD` segments, enforces 4 KiB R/W/X
 permissions, begins execution at the ELF entry, and exposes only bounded debug
 serial and control MMIO.
@@ -28,19 +28,28 @@ Machine construction selects one of two bounded backends:
   entries for RAM holes or non-executable segments.
 
 Both backends execute through the same `Rv32MachineHart`. The hart implements
-RV32IM, all six Zicsr forms, `MRET`, and an M-only CSR bank. Precise synchronous
-traps preserve the faulting PC and cause-specific `mtval`. Every instruction
-attempt consumes budget even when it traps without retiring, while retired
-instruction totals remain a separate diagnostic counter.
+RV32IMA, all six Zicsr forms, `MRET`, `FENCE`, and `FENCE.I`; `misa` reports the
+implemented `IMA` base extensions. Precise synchronous traps preserve the
+faulting PC and cause-specific `mtval`. Every instruction attempt consumes
+budget even when it traps without retiring, while retired instruction totals
+remain a separate diagnostic counter.
+
+RV32A atomics are naturally aligned, 32-bit, and RAM-only. Each hart owns one
+exact-word LR reservation; overlapping successful local writes, every SC
+attempt, trap entry, and reset clear it as required. AMOs cross one indivisible
+read-modify-write memory boundary. Atomic MMIO is rejected before device side
+effects, and page permissions are checked before RAM mutation. The sequential
+interpreter already orders memory more strongly than `aq`/`rl` require, while
+immutable W^X executable pages keep `FENCE` and `FENCE.I` legal retiring no-ops
+until an explicit executable-image replacement API exists.
 
 Cache storage, predecode storage, RAM, and debug output are bounded before
 execution. Successful steady-state execution performs no heap growth.
 
 ## Pending RV32 Platform Work
 
-The selected `A` and `Zifencei` extensions remain pending. The platform also
-still needs `Zicntr`, timer delivery, asynchronous interrupts, a final
-protection model, persistent firmware flash, storage, display, input,
+The platform still needs `Zicntr`, timer delivery, asynchronous interrupts, a
+final protection model, persistent firmware flash, storage, display, input,
 networking, snapshots, KraftOS, JNI, and Minecraft integration.
 
 KraftOS remains the guest operating-system direction. Its product contracts

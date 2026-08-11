@@ -23,6 +23,15 @@ It records the exact source revision, host, Rust toolchain, command, and complet
 output. Treat it as comparison evidence for later decoder work, not as a stable
 performance promise across hosts.
 
+The post-RV32A measurement is stored in
+[`rv32-decoder-rv32a-2026-08-11.txt`](benchmarks/rv32-decoder-rv32a-2026-08-11.txt).
+Against the baseline on the same host and toolchain, host-overhead geomean moved
+by +3.27% for Direct, +4.52% for Cached, and -1.51% for Predecoded. CPU state
+grew from 144 to 152 bytes for the exact-word reservation, while retained
+translation bytes and steady-state allocation counts stayed unchanged in every
+workload. These small single-run timing movements bound the attributable RV32A
+decoder impact; they are not a cross-host performance guarantee.
+
 Committed Gate and XLEN outputs under `docs/benchmarks/` are immutable
 historical evidence. They are not active benchmark runners and do not select a
 supported product architecture. The accepted architecture decision is recorded
