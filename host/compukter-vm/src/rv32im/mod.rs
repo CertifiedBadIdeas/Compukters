@@ -17,6 +17,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+mod atomic;
 mod bounded_cache;
 mod cache;
 mod decode;
@@ -27,7 +28,8 @@ pub use bounded_cache::{BoundedCachedRv32imProgram, Rv32imCacheStats};
 pub use cache::CachedRv32imProgram;
 pub use predecode::{PredecodedRv32imImage, PredecodedRv32imProgram};
 
-use crate::memory::MemoryBus;
+use crate::memory::{AtomicWordAccess, MemoryBus};
+use atomic::{apply_atomic, Rv32Reservation};
 use decode::{Branch, ImmOp, Load, Op, Store};
 pub(crate) use decode::{CsrOperation, CsrSource, DecodedInstruction};
 use std::fmt::{Display, Formatter};
@@ -90,6 +92,7 @@ pub struct Rv32imCpu {
     pc: u32,
     registers: [u32; 32],
     retired_instructions: u64,
+    reservation: Option<Rv32Reservation>,
 }
 
 impl Rv32imCpu {
@@ -98,6 +101,7 @@ impl Rv32imCpu {
             pc,
             registers: [0; 32],
             retired_instructions: 0,
+            reservation: None,
         }
     }
     pub const fn cpu_state_bytes() -> usize {
@@ -136,6 +140,19 @@ impl Rv32imCpu {
     pub(crate) fn commit_instruction(&mut self) {
         self.registers[0] = 0;
         self.retired_instructions = self.retired_instructions.saturating_add(1);
+    }
+
+    pub(crate) fn clear_reservation(&mut self) {
+        self.reservation = None;
+    }
+
+    pub(crate) fn invalidate_reservation(&mut self, address: u32, size: u32) {
+        if self
+            .reservation
+            .is_some_and(|reservation| reservation.intersects(address, size))
+        {
+            self.reservation = None;
+        }
     }
 
     pub fn run_until_stop(
@@ -292,6 +309,11 @@ impl Rv32imCpu {
             } => {
                 let address = self.registers[rs1].wrapping_add_signed(immediate);
                 let value = self.registers[rs2];
+                let size = match kind {
+                    Store::Byte => 1,
+                    Store::Half => 2,
+                    Store::Word => 4,
+                };
                 match kind {
                     Store::Byte => bus.store_u8(address, value as u8),
                     Store::Half => {
@@ -304,6 +326,7 @@ impl Rv32imCpu {
                     }
                 }
                 .map_err(|error| store_access_fault(address, error))?;
+                self.invalidate_reservation(address, size);
             }
             DecodedInstruction::Immediate {
                 op,
@@ -328,6 +351,59 @@ impl Rv32imCpu {
                 let lhs = self.registers[rs1];
                 let rhs = self.registers[rs2];
                 self.registers[rd] = execute_op(op, lhs, rhs);
+            }
+            DecodedInstruction::Fence | DecodedInstruction::FenceI => {}
+            DecodedInstruction::LoadReserved { rd, rs1, ordering } => {
+                let _ordering = ordering;
+                let address = self.registers[rs1];
+                self.clear_reservation();
+                require_load_alignment(address, 4)?;
+                let value = bus
+                    .atomic_load_i32(address)
+                    .map_err(|error| load_access_fault(address, error))?
+                    as u32;
+                self.reservation = Some(Rv32Reservation::new(address));
+                self.registers[rd] = value;
+            }
+            DecodedInstruction::StoreConditional {
+                rd,
+                rs1,
+                rs2,
+                ordering,
+            } => {
+                let _ordering = ordering;
+                let address = self.registers[rs1];
+                let value = self.registers[rs2];
+                let reservation = self.reservation.take();
+                require_store_alignment(address, 4)?;
+                bus.validate_atomic_i32(address, AtomicWordAccess::Store)
+                    .map_err(|error| store_access_fault(address, error))?;
+                if reservation.is_some_and(|reservation| reservation.matches(address)) {
+                    bus.atomic_store_i32(address, value as i32)
+                        .map_err(|error| store_access_fault(address, error))?;
+                    self.registers[rd] = 0;
+                } else {
+                    self.registers[rd] = 1;
+                }
+            }
+            DecodedInstruction::Atomic {
+                operation,
+                rd,
+                rs1,
+                rs2,
+                ordering,
+            } => {
+                let _ordering = ordering;
+                let address = self.registers[rs1];
+                let operand = self.registers[rs2];
+                require_store_alignment(address, 4)?;
+                let mut update = |old: i32| apply_atomic(operation, old as u32, operand) as i32;
+                let old = bus
+                    .atomic_update_i32(address, &mut update)
+                    .map_err(|error| store_access_fault(address, error))?
+                    as u32;
+                self.invalidate_reservation(address, 4);
+                self.registers[rd] = old;
             }
             DecodedInstruction::Csr { .. } => {
                 return Err(Rv32RegularFault::MachineInstructionRequired);

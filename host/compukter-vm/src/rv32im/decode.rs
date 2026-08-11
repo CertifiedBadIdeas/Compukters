@@ -17,6 +17,8 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+use super::atomic::{AtomicOp, MemoryOrdering};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Op {
     Add,
@@ -135,6 +137,26 @@ pub(crate) enum DecodedInstruction {
         rd: usize,
         rs1: usize,
         rs2: usize,
+    },
+    Fence,
+    FenceI,
+    LoadReserved {
+        rd: usize,
+        rs1: usize,
+        ordering: MemoryOrdering,
+    },
+    StoreConditional {
+        rd: usize,
+        rs1: usize,
+        rs2: usize,
+        ordering: MemoryOrdering,
+    },
+    Atomic {
+        operation: AtomicOp,
+        rd: usize,
+        rs1: usize,
+        rs2: usize,
+        ordering: MemoryOrdering,
     },
     Csr {
         operation: CsrOperation,
@@ -273,6 +295,44 @@ pub(crate) fn decode(word: u32) -> Result<DecodedInstruction, String> {
                 _ => return illegal(),
             };
             Ok(DecodedInstruction::Register { op, rd, rs1, rs2 })
+        }
+        0x0f if funct3 == 0 => Ok(DecodedInstruction::Fence),
+        0x0f if funct3 == 1 => Ok(DecodedInstruction::FenceI),
+        0x2f if funct3 == 0b010 => {
+            let ordering = MemoryOrdering {
+                acquire: word & (1 << 26) != 0,
+                release: word & (1 << 25) != 0,
+            };
+            match word >> 27 {
+                0b00010 if rs2 == 0 => Ok(DecodedInstruction::LoadReserved { rd, rs1, ordering }),
+                0b00011 => Ok(DecodedInstruction::StoreConditional {
+                    rd,
+                    rs1,
+                    rs2,
+                    ordering,
+                }),
+                funct5 => {
+                    let operation = match funct5 {
+                        0b00001 => AtomicOp::Swap,
+                        0b00000 => AtomicOp::Add,
+                        0b00100 => AtomicOp::Xor,
+                        0b01100 => AtomicOp::And,
+                        0b01000 => AtomicOp::Or,
+                        0b10000 => AtomicOp::Min,
+                        0b10100 => AtomicOp::Max,
+                        0b11000 => AtomicOp::MinU,
+                        0b11100 => AtomicOp::MaxU,
+                        _ => return illegal(),
+                    };
+                    Ok(DecodedInstruction::Atomic {
+                        operation,
+                        rd,
+                        rs1,
+                        rs2,
+                        ordering,
+                    })
+                }
+            }
         }
         0x73 if word == 0x0000_0073 => Ok(DecodedInstruction::Ecall),
         0x73 if word == 0x0010_0073 => Ok(DecodedInstruction::Ebreak),

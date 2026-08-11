@@ -19,8 +19,10 @@
 
 use compukter_vm::bus::MachineBus;
 use compukter_vm::rv32im::encoding::{
-    add, addi, auipc, beq, bge, bgeu, blt, bltu, bne, csrrc, csrrci, csrrs, csrrsi, csrrw, csrrwi,
-    div, divu, ebreak, jal, jalr, lb, lbu, lh, lhu, lui, lw, mret, mul, rem, remu, sb, sh, sw,
+    add, addi, amoadd_w, amoand_w, amomax_w, amomaxu_w, amomin_w, amominu_w, amoor_w, amoswap_w,
+    amoxor_w, auipc, beq, bge, bgeu, blt, bltu, bne, csrrc, csrrci, csrrs, csrrsi, csrrw, csrrwi,
+    div, divu, ebreak, fence, fence_i, jal, jalr, lb, lbu, lh, lhu, lr_w, lui, lw, mret, mul, rem,
+    remu, sb, sc_w, sh, sw,
 };
 use compukter_vm::rv32im::{
     BoundedCachedRv32imProgram, PredecodedRv32imImage, PredecodedRv32imProgram, Rv32imCacheStats,
@@ -35,6 +37,122 @@ fn write_program_at(bus: &mut MachineBus, base: u32, words: &[u32]) {
     for (index, word) in words.iter().copied().enumerate() {
         bus.store_i32(base + index as u32 * 4, word as i32).unwrap();
     }
+}
+
+fn atomic_word(funct5: u8, acquire: bool, release: bool, rs2: u8, rs1: u8, rd: u8) -> u32 {
+    (u32::from(funct5 & 0x1f) << 27)
+        | (u32::from(acquire) << 26)
+        | (u32::from(release) << 25)
+        | (u32::from(rs2 & 31) << 20)
+        | (u32::from(rs1 & 31) << 15)
+        | (0b010 << 12)
+        | (u32::from(rd & 31) << 7)
+        | 0x2f
+}
+
+fn run_atomic(word: u32, old: u32, operand: u32) -> (u32, u32) {
+    let mut bus = MachineBus::new(256).unwrap();
+    write_program(&mut bus, &[word, ebreak()]);
+    bus.store_i32(128, old as i32).unwrap();
+    let mut cpu = Rv32imCpu::new(0);
+    cpu.set_register(1, 128).unwrap();
+    cpu.set_register(2, operand).unwrap();
+
+    assert_eq!(cpu.run_until_stop(&mut bus, 4).unwrap(), Rv32imStop::Ebreak);
+    (cpu.register(3), bus.load_i32(128).unwrap() as u32)
+}
+
+#[test]
+fn rv32a_lr_sc_tracks_exact_word_reservation_and_consumes_each_sc() {
+    let mut bus = MachineBus::new(256).unwrap();
+    write_program(
+        &mut bus,
+        &[
+            lr_w(3, 1, false, false),
+            sw(6, 0, 0),
+            sc_w(4, 1, 2, false, false),
+            addi(10, 4, 0),
+            lr_w(3, 1, true, false),
+            sw(1, 5, 0),
+            sc_w(4, 1, 7, false, true),
+            sc_w(9, 1, 8, true, true),
+            ebreak(),
+        ],
+    );
+    bus.store_i32(128, 10).unwrap();
+    let mut cpu = Rv32imCpu::new(0);
+    cpu.set_register(1, 128).unwrap();
+    cpu.set_register(2, 11).unwrap();
+    cpu.set_register(5, 12).unwrap();
+    cpu.set_register(6, 132).unwrap();
+    cpu.set_register(7, 13).unwrap();
+    cpu.set_register(8, 14).unwrap();
+
+    assert_eq!(
+        cpu.run_until_stop(&mut bus, 16).unwrap(),
+        Rv32imStop::Ebreak
+    );
+    assert_eq!(cpu.register(3), 11);
+    assert_eq!(cpu.register(10), 0);
+    assert_eq!(cpu.register(4), 1);
+    assert_eq!(cpu.register(9), 1);
+    assert_eq!(bus.load_i32(128).unwrap(), 12);
+    assert_eq!(cpu.retired_instructions(), 9);
+}
+
+#[test]
+fn rv32a_amo_word_family_returns_old_value_and_commits_ratified_result() {
+    let cases = [
+        (amoswap_w(3, 1, 2, false, false), 7, 5, 5),
+        (amoadd_w(3, 1, 2, false, false), u32::MAX, 2, 1),
+        (amoxor_w(3, 1, 2, false, false), 0b1100, 0b1010, 0b0110),
+        (amoand_w(3, 1, 2, false, false), 0b1100, 0b1010, 0b1000),
+        (amoor_w(3, 1, 2, false, false), 0b1100, 0b1010, 0b1110),
+        (
+            amomin_w(3, 1, 2, true, false),
+            (-2_i32) as u32,
+            1,
+            (-2_i32) as u32,
+        ),
+        (amomax_w(3, 1, 2, false, true), (-2_i32) as u32, 1, 1),
+        (amominu_w(3, 1, 2, true, true), u32::MAX, 1, 1),
+        (amomaxu_w(3, 1, 2, false, false), u32::MAX, 1, u32::MAX),
+    ];
+
+    for (word, old, operand, expected) in cases {
+        assert_eq!(run_atomic(word, old, operand), (old, expected));
+    }
+}
+
+#[test]
+fn rv32a_rejects_reserved_atomic_encodings() {
+    let lr_with_rs2 = atomic_word(0b00010, false, false, 3, 1, 2);
+    let reserved_funct5 = atomic_word(0b00101, false, false, 2, 1, 3);
+
+    for word in [lr_with_rs2, reserved_funct5] {
+        assert!(PredecodedRv32imProgram::new(0, &word.to_le_bytes()).is_err());
+    }
+}
+
+#[test]
+fn fence_variants_ignore_forward_compatible_fields_and_retire() {
+    let noncanonical_fence = (0xabc << 20) | (3 << 15) | (4 << 7) | 0x0f;
+    let noncanonical_fence_i = (0xabc << 20) | (3 << 15) | (1 << 12) | (4 << 7) | 0x0f;
+    let mut bus = MachineBus::new(64).unwrap();
+    write_program(
+        &mut bus,
+        &[
+            fence(),
+            noncanonical_fence,
+            fence_i(),
+            noncanonical_fence_i,
+            ebreak(),
+        ],
+    );
+    let mut cpu = Rv32imCpu::new(0);
+
+    assert_eq!(cpu.run_until_stop(&mut bus, 8).unwrap(), Rv32imStop::Ebreak);
+    assert_eq!(cpu.retired_instructions(), 5);
 }
 
 #[test]

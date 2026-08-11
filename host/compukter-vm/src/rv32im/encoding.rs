@@ -63,6 +63,16 @@ fn system(csr: u16, source: u8, funct3: u8, rd: u8) -> u32 {
         | (u32::from(rd & 31) << 7)
         | 0x73
 }
+fn atomic(funct5: u8, rd: u8, rs1: u8, rs2: u8, acquire: bool, release: bool) -> u32 {
+    (u32::from(funct5 & 0x1f) << 27)
+        | (u32::from(acquire) << 26)
+        | (u32::from(release) << 25)
+        | (u32::from(rs2 & 31) << 20)
+        | (u32::from(rs1 & 31) << 15)
+        | (0b010 << 12)
+        | (u32::from(rd & 31) << 7)
+        | 0x2f
+}
 
 pub fn lui(rd: u8, immediate: u32) -> u32 {
     (immediate & 0xfffff) << 12 | u32::from(rd & 31) << 7 | 0x37
@@ -233,6 +243,45 @@ pub fn csrrci(rd: u8, csr: u16, immediate: u8) -> u32 {
 }
 pub fn mret() -> u32 {
     0x3020_0073
+}
+pub fn fence() -> u32 {
+    0x0ff0_000f
+}
+pub fn fence_i() -> u32 {
+    0x0000_100f
+}
+pub fn lr_w(rd: u8, rs1: u8, acquire: bool, release: bool) -> u32 {
+    atomic(0b00010, rd, rs1, 0, acquire, release)
+}
+pub fn sc_w(rd: u8, rs1: u8, rs2: u8, acquire: bool, release: bool) -> u32 {
+    atomic(0b00011, rd, rs1, rs2, acquire, release)
+}
+pub fn amoswap_w(rd: u8, rs1: u8, rs2: u8, acquire: bool, release: bool) -> u32 {
+    atomic(0b00001, rd, rs1, rs2, acquire, release)
+}
+pub fn amoadd_w(rd: u8, rs1: u8, rs2: u8, acquire: bool, release: bool) -> u32 {
+    atomic(0b00000, rd, rs1, rs2, acquire, release)
+}
+pub fn amoxor_w(rd: u8, rs1: u8, rs2: u8, acquire: bool, release: bool) -> u32 {
+    atomic(0b00100, rd, rs1, rs2, acquire, release)
+}
+pub fn amoand_w(rd: u8, rs1: u8, rs2: u8, acquire: bool, release: bool) -> u32 {
+    atomic(0b01100, rd, rs1, rs2, acquire, release)
+}
+pub fn amoor_w(rd: u8, rs1: u8, rs2: u8, acquire: bool, release: bool) -> u32 {
+    atomic(0b01000, rd, rs1, rs2, acquire, release)
+}
+pub fn amomin_w(rd: u8, rs1: u8, rs2: u8, acquire: bool, release: bool) -> u32 {
+    atomic(0b10000, rd, rs1, rs2, acquire, release)
+}
+pub fn amomax_w(rd: u8, rs1: u8, rs2: u8, acquire: bool, release: bool) -> u32 {
+    atomic(0b10100, rd, rs1, rs2, acquire, release)
+}
+pub fn amominu_w(rd: u8, rs1: u8, rs2: u8, acquire: bool, release: bool) -> u32 {
+    atomic(0b11000, rd, rs1, rs2, acquire, release)
+}
+pub fn amomaxu_w(rd: u8, rs1: u8, rs2: u8, acquire: bool, release: bool) -> u32 {
+    atomic(0b11100, rd, rs1, rs2, acquire, release)
 }
 
 pub fn materialize(rd: u8, value: u32) -> [u32; 2] {
