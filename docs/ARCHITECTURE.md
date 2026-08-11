@@ -26,7 +26,10 @@ through memory-mapped peripherals.
 ### RV32 migration status
 
 Issue [#486](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/486)
-adds the first isolated production-shaped RV32 host machine in `host/k16-vm`.
+established the first isolated production-shaped RV32 host machine. Issue
+[#489](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/489)
+transfers ownership of that machine, its execution core, and its decoder
+benchmarks to the neutral `host/compukter-vm` crate.
 It accepts a stock-Clang/LLD little-endian RV32IM/ILP32 `ET_EXEC` ELF32,
 validates and loads page-separated `PT_LOAD` segments, enforces 4 KiB R/W/X
 permissions at runtime, starts at the ELF entry point, and exposes only bounded
@@ -60,7 +63,9 @@ bounded before execution; successful steady-state execution performs no heap
 growth.
 
 This host slice is not wired to JNI or Minecraft and does not boot the BIOS or
-KraftOS. The selected `A` and `Zifencei` extensions remain pending. `Zicntr`,
+KraftOS. During the remaining cutover, `host/k16-vm` temporarily consumes its
+RV32 modules from `host/compukter-vm`; it no longer owns a second RV32
+implementation. The selected `A` and `Zifencei` extensions remain pending. `Zicntr`,
 timer delivery, asynchronous interrupts, U/S privilege modes, Sv32 or another
 protection model, persistent firmware flash, remaining devices, KraftOS, and
 the product runtime cutover are also absent. The existing K16 Notebook path
@@ -98,10 +103,11 @@ bad.
 
 ## Native crates
 
-| Crate            | Purpose                                                                  |
-|------------------|--------------------------------------------------------------------------|
-| `host/k16-vm`  | Rust virtual machine: active Kraft16 runtime/JNI path plus the isolated permissioned and budgeted RV32 ELF32 machine migration slice |
-| `host/k16-tools` | Legacy Rux source checks plus K16 artifact tooling via `k16` for disassembly, volume, and filesystem commands |
+| Crate                | Purpose                                                                  |
+|----------------------|--------------------------------------------------------------------------|
+| `host/compukter-vm`  | Neutral RV32 execution core, permissioned and budgeted ELF32 machine, and RV32 decoder benchmarks; no JNI or Minecraft ownership |
+| `host/k16-vm`        | Temporary active Kraft16 runtime/JNI product path; consumes neutral RV32 modules only while the product cutover remains incomplete |
+| `host/k16-tools`     | Legacy Rux source checks plus K16 artifact tooling via `k16` for disassembly, volume, and filesystem commands |
 
 For a code-level map of the active Rust VM path, see
 [`k16-vm-code-flow.md`](k16-vm-code-flow.md).

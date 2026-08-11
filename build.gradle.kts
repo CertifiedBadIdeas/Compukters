@@ -49,6 +49,7 @@ val k16HostToolsTargetRoot =
     rootProject.file(providers.gradleProperty("k16HostToolsTargetDir").orElse(".toolchain/build/cargo/k16-tools").get())
 val k16HostVmTargetRoot =
     rootProject.file(providers.gradleProperty("k16HostVmTargetDir").orElse(".toolchain/build/cargo/k16-vm").get())
+val compukterVmTargetRoot = rootProject.file(".toolchain/build/cargo/compukter-vm")
 val k16TinyCcSourceRoot =
     rootProject.file(
         providers.gradleProperty("k16TinyCcSourceDir").orElse("toolchains/Compukter-Kraft-tinycc").get(),
@@ -73,6 +74,10 @@ val k16LlvmHostTarget =
     }
 val k16BuildJobs =
     providers.gradleProperty("k16BuildJobs")
+        .orElse(Runtime.getRuntime().availableProcessors().toString())
+        .get()
+val compukterVmBuildJobs =
+    providers.gradleProperty("compukterVmBuildJobs")
         .orElse(Runtime.getRuntime().availableProcessors().toString())
         .get()
 val k16LlvmBuildJobs =
@@ -223,6 +228,21 @@ val testK16HostVmRust =
         environment("CARGO_TARGET_DIR", k16HostVmTargetRoot.absolutePath)
     }
 
+val testCompukterVmRust =
+    tasks.register<Exec>("testCompukterVmRust") {
+        description = "Runs host/compukter-vm Rust tests."
+        group = "verification"
+        workingDir(rootProject.file("host/compukter-vm"))
+        inputs.file(rootProject.file("host/compukter-vm/Cargo.toml"))
+        inputs.file(rootProject.file("host/compukter-vm/Cargo.lock"))
+        inputs.dir(rootProject.file("host/compukter-vm/src"))
+        inputs.dir(rootProject.file("host/compukter-vm/tests"))
+        inputs.dir(rootProject.file("host/compukter-vm/examples"))
+        inputs.property("compukterVmBuildJobs", compukterVmBuildJobs)
+        commandLine("cargo", "test", "--locked", "--offline", "-j", compukterVmBuildJobs)
+        environment("CARGO_TARGET_DIR", compukterVmTargetRoot.absolutePath)
+    }
+
 val testK16HostToolsRust =
     tasks.register<Exec>("testK16HostToolsRust") {
         description = "Runs host/k16-tools Rust tests."
@@ -295,6 +315,7 @@ tasks.register("verifyLocalFull") {
     dependsOn("verifyK16Firmware")
     dependsOn("verifyK16Runtime")
     dependsOn("verifyK16SdkMount")
+    dependsOn(testCompukterVmRust)
     dependsOn(testK16HostVmRust)
     dependsOn(testK16HostToolsRust)
 }
