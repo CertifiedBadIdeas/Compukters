@@ -21,18 +21,10 @@ package ru.lazyhat.compukterkraft.common.network
 import it.unimi.dsi.fastutil.ints.IntOpenHashSet
 import it.unimi.dsi.fastutil.ints.IntSet
 import net.minecraft.network.FriendlyByteBuf
-import ru.lazyhat.compukterkraft.common.computer.network.retained.RetainedDisplayAttachServerMessage
-import ru.lazyhat.compukterkraft.common.computer.network.retained.RetainedDisplayControlServerMessage
-import ru.lazyhat.compukterkraft.common.computer.network.retained.RetainedDisplayDetachServerMessage
-import ru.lazyhat.compukterkraft.common.computer.network.retained.RetainedDisplayStateClientMessage
-import ru.lazyhat.compukterkraft.common.computer.network.server.ComputerActionServerMessage
-import ru.lazyhat.compukterkraft.common.computer.network.server.KeyEventServerMessage
-import ru.lazyhat.compukterkraft.common.computer.network.server.MouseEventServerMessage
-import ru.lazyhat.compukterkraft.common.computer.network.server.PasteEventComputerMessage
 import ru.lazyhat.compukterkraft.common.network.text.ChatTableClientMessage
 
 /**
- * Registry of all network message types used by the mod (CKL stack removed; computer-only).
+ * Registry of all network message types used by the loadable mod shell.
  */
 object NetworkMessages {
     private val seenIds: IntSet = IntOpenHashSet()
@@ -40,24 +32,8 @@ object NetworkMessages {
     private val serverMessages = mutableListOf<MessageType<out NetworkMessage<ServerNetworkContext>>>()
     private val clientMessages = mutableListOf<MessageType<out NetworkMessage<ClientNetworkContext>>>()
 
-    val COMPUTER_ACTION: MessageType<ComputerActionServerMessage> =
-        registerServerbound(0, "computer_action") { ComputerActionServerMessage(it) }
-    val KEY_EVENT: MessageType<KeyEventServerMessage> =
-        registerServerbound(1, "key_event") { KeyEventServerMessage(it) }
-    val MOUSE_EVENT: MessageType<MouseEventServerMessage> =
-        registerServerbound(2, "mouse_event") { MouseEventServerMessage(it) }
-    val PASTE_EVENT: MessageType<PasteEventComputerMessage> =
-        registerServerbound(3, "paste_event") { PasteEventComputerMessage(it) }
     val CHAT_TABLE: MessageType<ChatTableClientMessage> =
         registerClientbound(10, "chat_table") { ChatTableClientMessage(it) }
-    val RETAINED_DISPLAY_ATTACH: MessageType<RetainedDisplayAttachServerMessage> =
-        registerServerbound(22, "retained_display_attach") { RetainedDisplayAttachServerMessage(it) }
-    val RETAINED_DISPLAY_DETACH: MessageType<RetainedDisplayDetachServerMessage> =
-        registerServerbound(23, "retained_display_detach") { RetainedDisplayDetachServerMessage(it) }
-    val RETAINED_DISPLAY_CONTROL: MessageType<RetainedDisplayControlServerMessage> =
-        registerServerbound(24, "retained_display_control") { RetainedDisplayControlServerMessage(it) }
-    val RETAINED_DISPLAY_STATE: MessageType<RetainedDisplayStateClientMessage> =
-        registerClientbound(25, "retained_display_state") { RetainedDisplayStateClientMessage(it) }
 
     @Suppress("UNCHECKED_CAST")
     private fun <C, T : NetworkMessage<C>> register(

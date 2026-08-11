@@ -25,9 +25,4 @@ import ru.lazyhat.compukterkraft.common.network.text.TableBuilder
  */
 interface ClientNetworkContext {
     fun handleChatTable(table: TableBuilder)
-
-    fun handleRetainedDisplayState(
-        computerId: Int,
-        payload: ByteArray,
-    )
 }
