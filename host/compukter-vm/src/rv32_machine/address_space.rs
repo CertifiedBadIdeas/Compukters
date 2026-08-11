@@ -19,7 +19,7 @@
 
 use super::{Rv32ElfLoader, Rv32LoadedImage, Rv32PagePermissions};
 use crate::bus::MachineBus;
-use crate::memory::{MemoryBus, MemoryFault};
+use crate::memory::{AtomicWordAccess, MemoryBus, MemoryFault};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -114,6 +114,7 @@ impl Rv32AddressSpace {
 enum Access {
     Read,
     Write,
+    ReadWrite,
 }
 
 impl Access {
@@ -121,6 +122,7 @@ impl Access {
         match self {
             Self::Read => "read",
             Self::Write => "write",
+            Self::ReadWrite => "read/write",
         }
     }
 
@@ -128,6 +130,7 @@ impl Access {
         match self {
             Self::Read => permissions.readable(),
             Self::Write => permissions.writable(),
+            Self::ReadWrite => permissions.readable() && permissions.writable(),
         }
     }
 }
@@ -149,6 +152,39 @@ impl MemoryBus for Rv32AddressSpace {
     fn store_i32(&mut self, address: u32, value: i32) -> Result<(), MemoryFault> {
         self.require(address, 4, Access::Write)?;
         self.bus.store_i32(address, value)
+    }
+
+    fn validate_atomic_i32(
+        &self,
+        address: u32,
+        access: AtomicWordAccess,
+    ) -> Result<(), MemoryFault> {
+        let permission = match access {
+            AtomicWordAccess::Load => Access::Read,
+            AtomicWordAccess::Store => Access::Write,
+            AtomicWordAccess::ReadModifyWrite => Access::ReadWrite,
+        };
+        self.require(address, 4, permission)?;
+        self.bus.validate_atomic_i32(address, access)
+    }
+
+    fn atomic_load_i32(&self, address: u32) -> Result<i32, MemoryFault> {
+        self.validate_atomic_i32(address, AtomicWordAccess::Load)?;
+        self.bus.atomic_load_i32(address)
+    }
+
+    fn atomic_store_i32(&mut self, address: u32, value: i32) -> Result<(), MemoryFault> {
+        self.validate_atomic_i32(address, AtomicWordAccess::Store)?;
+        self.bus.atomic_store_i32(address, value)
+    }
+
+    fn atomic_update_i32(
+        &mut self,
+        address: u32,
+        update: &mut dyn FnMut(i32) -> i32,
+    ) -> Result<i32, MemoryFault> {
+        self.validate_atomic_i32(address, AtomicWordAccess::ReadModifyWrite)?;
+        self.bus.atomic_update_i32(address, update)
     }
 
     fn load_u8(&self, address: u32) -> Result<u8, MemoryFault> {
@@ -243,5 +279,32 @@ mod tests {
     #[test]
     fn page_size_matches_the_elf_loader_contract() {
         assert_eq!(Rv32ElfLoader::PAGE_SIZE, 4096);
+    }
+
+    #[test]
+    fn atomic_update_requires_read_and_write_permission() {
+        let mut space = Rv32AddressSpace {
+            bus: MachineBus::new(0x1000).unwrap(),
+            page_permissions: vec![Rv32PagePermissions::READ],
+        };
+        let mut increment = |old: i32| old.wrapping_add(1);
+
+        let error = space.atomic_update_i32(0, &mut increment).unwrap_err();
+
+        assert_eq!(error.address(), Some(0));
+        assert_eq!(space.bus.memory().load_i32(0).unwrap(), 0);
+    }
+
+    #[test]
+    fn atomic_update_commits_after_complete_permission_validation() {
+        let mut space = Rv32AddressSpace {
+            bus: MachineBus::new(0x1000).unwrap(),
+            page_permissions: vec![Rv32PagePermissions::READ_WRITE],
+        };
+        space.bus.memory_mut().store_i32(0, 11).unwrap();
+        let mut increment = |old: i32| old.wrapping_add(1);
+
+        assert_eq!(space.atomic_update_i32(0, &mut increment).unwrap(), 11);
+        assert_eq!(space.bus.memory().load_i32(0).unwrap(), 12);
     }
 }

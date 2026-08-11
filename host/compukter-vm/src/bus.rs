@@ -1,4 +1,4 @@
-use crate::memory::{MachineMemory, MemoryBus, MemoryFault};
+use crate::memory::{AtomicWordAccess, MachineMemory, MemoryBus, MemoryFault};
 use std::any::Any;
 use std::cell::Cell;
 
@@ -112,6 +112,16 @@ impl MmioRegion {
         } else {
             None
         }
+    }
+
+    fn overlaps_i32(&self, address: u32) -> bool {
+        let Some(region_end) = self.end().ok() else {
+            return false;
+        };
+        let Some(access_end) = address.checked_add(4) else {
+            return false;
+        };
+        address < region_end && self.base < access_end
     }
 
     fn offset_for_u8(&self, address: u32) -> Option<u32> {
@@ -318,6 +328,50 @@ impl MemoryBus for MachineBus {
         Ok(())
     }
 
+    fn validate_atomic_i32(
+        &self,
+        address: u32,
+        _access: AtomicWordAccess,
+    ) -> Result<(), MemoryFault> {
+        if self
+            .regions
+            .iter()
+            .any(|region| region.overlaps_i32(address))
+        {
+            return Err(MemoryFault::at(
+                address,
+                format!("atomic word access to MMIO at {address:#010x} is unsupported"),
+            ));
+        }
+        self.memory.validate_atomic_i32(address)
+    }
+
+    fn atomic_load_i32(&self, address: u32) -> Result<i32, MemoryFault> {
+        self.validate_atomic_i32(address, AtomicWordAccess::Load)?;
+        let value = self.memory.atomic_load_i32(address)?;
+        self.ram_traffic.record_load(4);
+        Ok(value)
+    }
+
+    fn atomic_store_i32(&mut self, address: u32, value: i32) -> Result<(), MemoryFault> {
+        self.validate_atomic_i32(address, AtomicWordAccess::Store)?;
+        self.memory.atomic_store_i32(address, value)?;
+        self.ram_traffic.record_store(4);
+        Ok(())
+    }
+
+    fn atomic_update_i32(
+        &mut self,
+        address: u32,
+        update: &mut dyn FnMut(i32) -> i32,
+    ) -> Result<i32, MemoryFault> {
+        self.validate_atomic_i32(address, AtomicWordAccess::ReadModifyWrite)?;
+        let old = self.memory.atomic_update_i32(address, update)?;
+        self.ram_traffic.record_load(4);
+        self.ram_traffic.record_store(4);
+        Ok(old)
+    }
+
     fn load_u8(&self, address: u32) -> Result<u8, MemoryFault> {
         for region in &self.regions {
             if let Some(offset) = region.offset_for_u8(address) {
@@ -416,7 +470,7 @@ impl MemoryBus for MachineBus {
 #[cfg(test)]
 mod tests {
     use crate::bus::{MachineBus, MmioDevice};
-    use crate::memory::MemoryFault;
+    use crate::memory::{MemoryBus, MemoryFault};
     use std::fs;
     use std::path::Path;
 
@@ -551,6 +605,44 @@ mod tests {
 
         let device = bus.device::<RegisterDevice>(device_id).unwrap();
         assert_eq!(device.value, 9);
+    }
+
+    #[test]
+    fn machine_bus_rejects_atomic_mmio_before_device_access() {
+        let mut bus = MachineBus::new(16).unwrap();
+        let device_id = bus
+            .map_mmio(
+                8,
+                Box::new(RegisterDevice {
+                    value: 7,
+                    read_only: false,
+                }),
+            )
+            .unwrap();
+        let mut increment = |old: i32| old.wrapping_add(1);
+
+        let error = bus.atomic_update_i32(8, &mut increment).unwrap_err();
+
+        assert_eq!(error.address(), Some(8));
+        assert_eq!(bus.device::<RegisterDevice>(device_id).unwrap().value, 7);
+        assert_eq!(bus.stats_snapshot().mmio.loads, 0);
+        assert_eq!(bus.stats_snapshot().mmio.stores, 0);
+    }
+
+    #[test]
+    fn machine_bus_atomic_update_counts_one_ram_load_and_store() {
+        let mut bus = MachineBus::new(16).unwrap();
+        bus.memory_mut().store_i32(4, 7).unwrap();
+        let mut increment = |old: i32| old.wrapping_add(1);
+
+        assert_eq!(bus.atomic_update_i32(4, &mut increment).unwrap(), 7);
+
+        let stats = bus.stats_snapshot();
+        assert_eq!(stats.ram.loads, 1);
+        assert_eq!(stats.ram.stores, 1);
+        assert_eq!(stats.ram.bytes_read, 4);
+        assert_eq!(stats.ram.bytes_written, 4);
+        assert_eq!(bus.memory().load_i32(4).unwrap(), 8);
     }
 
     #[test]
