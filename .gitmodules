@@ -1,3 +1,7 @@
 [submodule "vendor/ui-dsl"]
 	path = vendor/ui-dsl
 	url = https://github.com/CertifiedBadIdeas/ui-dsl
+[submodule "host/compukter-vm"]
+	path = host/compukter-vm
+	url = git@github.com:CertifiedBadIdeas/Compukter-VM.git
+	branch = main

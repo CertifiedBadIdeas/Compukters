@@ -71,15 +71,25 @@ tasks.named("clean") {
 
 val testCompukterVmRust =
     tasks.register<Exec>("testCompukterVmRust") {
-        description = "Runs host/compukter-vm Rust tests."
+        description = "Runs Compukter-VM submodule Rust tests."
         group = "verification"
-        workingDir(rootProject.file("host/compukter-vm"))
-        inputs.file(rootProject.file("host/compukter-vm/Cargo.toml"))
-        inputs.file(rootProject.file("host/compukter-vm/Cargo.lock"))
-        inputs.dir(rootProject.file("host/compukter-vm/src"))
-        inputs.dir(rootProject.file("host/compukter-vm/tests"))
-        inputs.dir(rootProject.file("host/compukter-vm/examples"))
+        val vmRoot = rootProject.file("host/compukter-vm")
+        val vmManifest = vmRoot.resolve("Cargo.toml")
+        workingDir(vmRoot)
+        inputs.file(vmManifest)
+        inputs.file(vmRoot.resolve("Cargo.lock"))
+        inputs.dir(vmRoot.resolve("src"))
+        inputs.dir(vmRoot.resolve("tests"))
+        inputs.dir(vmRoot.resolve("examples"))
+        inputs.dir(rootProject.file("host/compukter-vm/benchmarks"))
+        inputs.dir(rootProject.file("host/compukter-vm/scripts"))
+        inputs.dir(rootProject.file("host/compukter-vm/fixtures"))
         inputs.property("compukterVmBuildJobs", compukterVmBuildJobs)
+        doFirst {
+            check(vmManifest.isFile) {
+                "Compukter-VM submodule is not initialized; run: git submodule update --init --recursive"
+            }
+        }
         commandLine("cargo", "test", "--locked", "--offline", "-j", compukterVmBuildJobs)
         environment("CARGO_TARGET_DIR", compukterVmTargetRoot.absolutePath)
     }

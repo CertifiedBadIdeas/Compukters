@@ -142,21 +142,9 @@ object Rv32OnlyRepositoryGuard {
 
     private val immutableBenchmarkDigests =
         mapOf(
-            "docs/benchmarks/isa-gate1-current.txt" to
-                "82c6db7dd20b26ef0d14642e17f8a236672f43e4fe777ed6d36d85f0b6eea72a",
-            "docs/benchmarks/isa-gate2-current.txt" to
-                "935c488e70b839609df1d266bb9f39ec387e10bd42618a9427f00687ce4f8bfc",
-            "docs/benchmarks/isa-gate3-current.txt" to
-                "28f1d2166b50c07a7841f7a8d6efe8515dfa0ec3725668877410532014b43219",
             "docs/benchmarks/${retiredIsa}-vm-baseline-2026-05-29.md" to
                 "4af3c1c0abd6765d63bf2e5bf43aa6d905ae12c02a56c3245d321203c6fb573f",
             "docs/benchmarks/${retiredIsa}-vm-current.txt" to
                 "549823ea3b0b01b9de3e53943d5454482a60266217fe9cb8565c9f6348b43528",
-            "docs/benchmarks/riscv-xlen-current.txt" to
-                "646c8c2637b854001581d9cd83bfdc85e0c23134a8475280024a2d8ddf1bd661",
-            "docs/benchmarks/riscv-xlen-u64-current.txt" to
-                "58f431a17037ff514eae17b248c13eec98881c81b04a6f5c7fffbab116779686",
-            "docs/benchmarks/riscv-xlen.md" to
-                "6f940716b45ce614eb1d76a7538f75f3c5b446a026088ae80b7f2abd81548874",
         )
 }
