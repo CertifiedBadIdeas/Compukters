@@ -168,6 +168,14 @@ impl MachineMemory {
         &self.bytes
     }
 
+    #[allow(
+        dead_code,
+        reason = "the RV32 JIT dispatcher consumes the direct RAM pointer in a later slice"
+    )]
+    pub(crate) fn as_mut_ptr(&mut self) -> *mut u8 {
+        self.bytes.as_mut_ptr()
+    }
+
     pub fn len(&self) -> usize {
         self.bytes.len()
     }
