@@ -12,6 +12,10 @@
 use std::fs;
 use std::path::PathBuf;
 
+use compukter_vm::rv32_machine::{
+    Rv32ExecutionBackendConfig, Rv32Machine, Rv32MachineConfig, Rv32MachineOutcome,
+};
+
 fn workload_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tools/benchmarks/rv32-c-comparison")
 }
@@ -43,5 +47,54 @@ fn portable_c_kernel_has_one_platform_neutral_entrypoint() {
             !source.contains(forbidden),
             "portable kernel contains forbidden platform/libc token {forbidden}"
         );
+    }
+}
+
+#[test]
+fn comparison_build_keeps_one_rv32_kernel_object_for_both_platforms() {
+    let script = fs::read_to_string(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../scripts/compile-rv32-c-comparison.sh"),
+    )
+    .unwrap();
+
+    assert_eq!(script.matches("-c \"$SOURCE_ROOT/kernel.c\"").count(), 1);
+    assert!(script.matches("\"$BUILD_DIR/kernel-rv32.o\"").count() >= 3);
+    assert!(script.contains("-O3 -march=native -flto"));
+    assert!(script.contains("-march=rv32im_zicsr"));
+    assert!(script.contains("-mabi=ilp32"));
+    assert!(script.contains("kernel-object-sha256"));
+    assert!(script.contains("product.elf"));
+    assert!(script.contains("qemu.elf"));
+}
+
+#[test]
+#[ignore = "requires the focused Clang/LLD C comparison artifacts"]
+fn product_c_artifact_matches_the_fixed_native_and_qemu_oracle() {
+    let path = std::env::var_os("RV32_C_PRODUCT_ELF")
+        .expect("RV32_C_PRODUCT_ELF must name the product comparison ELF");
+    let elf = fs::read(path).unwrap();
+
+    for execution in [
+        Rv32ExecutionBackendConfig::Cached { sets: 64 },
+        Rv32ExecutionBackendConfig::Predecoded,
+    ] {
+        let mut machine = Rv32Machine::from_elf(
+            &elf,
+            Rv32MachineConfig {
+                ram_size: 16 * 1024,
+                debug_limit: 0,
+                execution,
+            },
+        )
+        .unwrap();
+        let outcome = machine.run(20_000_000).unwrap();
+        assert!(matches!(
+            outcome,
+            Rv32MachineOutcome::Halted {
+                exit_code: -301_646_504,
+                ..
+            }
+        ));
     }
 }
