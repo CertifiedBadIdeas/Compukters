@@ -9,6 +9,10 @@ crate-type = ["rlib"]
 [dependencies]
 rvsim = { version = "=0.2.2", default-features = false }
 thiserror = "1.0"
+memmap2 = "=0.9.9"
+cranelift-codegen = "=0.134.2"
+cranelift-frontend = "=0.134.2"
+cranelift-native = "=0.134.2"
 
 [profile.release]
 codegen-units = 1
