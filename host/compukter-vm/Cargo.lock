@@ -47,6 +47,7 @@ name = "compukter-vm"
 version = "0.1.0"
 dependencies = [
  "cranelift-codegen",
+ "cranelift-control",
  "cranelift-frontend",
  "cranelift-native",
  "memmap2",

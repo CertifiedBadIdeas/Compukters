@@ -22,7 +22,7 @@
     reason = "the planner is introduced before the machine-owned JIT dispatcher"
 )]
 
-use crate::rv32im::{DecodedInstruction, Rv32ResolvedInstruction};
+use crate::rv32im::{DecodedInstruction, ImmOp, Op, Rv32ResolvedInstruction};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct JitBlockSlot {
@@ -97,11 +97,8 @@ impl JitBlockInput {
         self.slots.iter().all(|slot| {
             matches!(
                 slot.instruction,
-                DecodedInstruction::Lui { .. }
-                    | DecodedInstruction::Auipc { .. }
-                    | DecodedInstruction::Immediate { .. }
-                    | DecodedInstruction::Register { .. }
-                    | DecodedInstruction::Fence
+                DecodedInstruction::Immediate { op: ImmOp::Add, .. }
+                    | DecodedInstruction::Register { op: Op::Add, .. }
             )
         })
     }
