@@ -33,6 +33,10 @@ fn stock_toolchain_rv32_elf_handles_ecall_and_returns() {
     for execution in [
         Rv32ExecutionBackendConfig::Cached { sets: 128 },
         Rv32ExecutionBackendConfig::Predecoded,
+        Rv32ExecutionBackendConfig::BlockCached {
+            sets: 32,
+            max_instructions: 8,
+        },
     ] {
         let config = Rv32MachineConfig {
             ram_size: 64 * 1024,

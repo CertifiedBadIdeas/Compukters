@@ -82,6 +82,10 @@ fn product_c_artifact_matches_the_fixed_native_and_qemu_oracle() {
     for execution in [
         Rv32ExecutionBackendConfig::Cached { sets: 64 },
         Rv32ExecutionBackendConfig::Predecoded,
+        Rv32ExecutionBackendConfig::BlockCached {
+            sets: 32,
+            max_instructions: 8,
+        },
     ] {
         let mut machine = Rv32Machine::from_elf(
             &elf,
