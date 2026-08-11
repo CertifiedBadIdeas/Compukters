@@ -19,6 +19,7 @@ impl DebugSerialDevice {
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn with_limit(limit: usize) -> Self {
         Self {
             bytes: Vec::with_capacity(limit),
