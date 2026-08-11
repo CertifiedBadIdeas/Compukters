@@ -1,0 +1,77 @@
+RV32 opcode-first decoder extraction result
+Date: 2026-08-11
+Issue: https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/494
+Revision under decision: 2dc7d85c
+Gate/harness revision: ea362797f6ac6e06a68de66935f341047e3a7a46
+Host: Linux 7.1.6-zen1-1-zen x86_64
+rustc: 1.94.1 (e408947bf 2026-03-25)
+rustc commit: e408947bfd200af42db322daf0fadfe7e26d3bd1
+rustc host: x86_64-unknown-linux-gnu
+LLVM: 21.1.8
+cargo: 1.94.1 (29ea6fb6a 2026-03-24)
+Command: bash scripts/tests/rv32-decoder-extraction-gate.sh 1000 21
+Decoder operations per sample: 1024000
+Warm samples per implementation and process: 21
+
+The automatic gate required at least four wins in five processes and a median
+improvement of at least 2% in both scenarios. Opcode-first won every process in
+both scenarios, but the median effect was smaller than 2%, so the script exited
+1 and reported rejected. The project owner explicitly retained opcode-first:
+the direction was consistent in all ten paired process outcomes, semantics and
+resources were unchanged, and the opcode-first structure does not carry a
+maintenance penalty over eager extraction.
+
+===== decoder extraction run 1 =====
+scenario	implementation	operations	warm_median_ns	warm_p95_ns	nanos_per_operation	retained_bytes	steady_allocations	steady_allocated_bytes	vs_eager
+legal-decode	eager	1024000	7306851	7444169	7.135597	228	0	0	1.000000
+legal-decode	opcode-first	1024000	7173270	7343360	7.005146	228	0	0	0.981718
+bounded-cache-forced-miss	eager	1024000	7463979	7995996	7.289042	228	0	0	1.000000
+bounded-cache-forced-miss	opcode-first	1024000	7351220	7502109	7.178926	228	0	0	0.984893
+
+===== decoder extraction run 2 =====
+scenario	implementation	operations	warm_median_ns	warm_p95_ns	nanos_per_operation	retained_bytes	steady_allocations	steady_allocated_bytes	vs_eager
+legal-decode	eager	1024000	7264700	7801546	7.094434	228	0	0	1.000000
+legal-decode	opcode-first	1024000	7203110	7346920	7.034287	228	0	0	0.991522
+bounded-cache-forced-miss	eager	1024000	7464130	7935396	7.289189	228	0	0	1.000000
+bounded-cache-forced-miss	opcode-first	1024000	7379930	8352453	7.206963	228	0	0	0.988719
+
+===== decoder extraction run 3 =====
+scenario	implementation	operations	warm_median_ns	warm_p95_ns	nanos_per_operation	retained_bytes	steady_allocations	steady_allocated_bytes	vs_eager
+legal-decode	eager	1024000	7643298	7746527	7.464158	228	0	0	1.000000
+legal-decode	opcode-first	1024000	7437119	7598828	7.262812	228	0	0	0.973025
+bounded-cache-forced-miss	eager	1024000	7466450	7678958	7.291455	228	0	0	1.000000
+bounded-cache-forced-miss	opcode-first	1024000	7366580	7617548	7.193926	228	0	0	0.986624
+
+===== decoder extraction run 4 =====
+scenario	implementation	operations	warm_median_ns	warm_p95_ns	nanos_per_operation	retained_bytes	steady_allocations	steady_allocated_bytes	vs_eager
+legal-decode	eager	1024000	7257311	7328070	7.087218	228	0	0	1.000000
+legal-decode	opcode-first	1024000	7160871	7201581	6.993038	228	0	0	0.986711
+bounded-cache-forced-miss	eager	1024000	7428590	7501549	7.254482	228	0	0	1.000000
+bounded-cache-forced-miss	opcode-first	1024000	7332250	7415540	7.160400	228	0	0	0.987031
+
+===== decoder extraction run 5 =====
+scenario	implementation	operations	warm_median_ns	warm_p95_ns	nanos_per_operation	retained_bytes	steady_allocations	steady_allocated_bytes	vs_eager
+legal-decode	eager	1024000	7270890	7341561	7.100479	228	0	0	1.000000
+legal-decode	opcode-first	1024000	7143372	7311580	6.975949	228	0	0	0.982462
+bounded-cache-forced-miss	eager	1024000	7436620	7820418	7.262324	228	0	0	1.000000
+bounded-cache-forced-miss	opcode-first	1024000	7301200	7645298	7.130078	228	0	0	0.981790
+
+===== decoder extraction gate summary =====
+scenario	wins	median_improvement_percent	automatic_decision	owner_decision
+legal-decode	5	1.753816	rejected	retained
+bounded-cache-forced-miss	5	1.337583	rejected	retained
+
+The end-to-end report remained regression context rather than gate input. Across
+the same five processes its host-overhead geomeans were:
+
+run	rv32-direct	rv32-cached	rv32-predecoded	native-rust
+1	252.785516	198.940748	73.699976	1.000000
+2	254.776238	205.452619	73.983866	1.000000
+3	244.976653	201.140870	73.756715	1.000000
+4	249.848015	201.586950	74.329393	1.000000
+5	252.045052	203.990678	75.302875	1.000000
+
+The historical rv32-cached end-to-end candidate uses CachedRv32imProgram's
+HashMap. The bounded-cache-forced-miss extraction scenario above uses the
+product BoundedCachedRv32imProgram with one two-way set, three conflicting PCs,
+and a reset before every timed execute.
