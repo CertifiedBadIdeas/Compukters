@@ -40,6 +40,13 @@ pub struct MachineMemory {
     bytes: Vec<u8>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AtomicWordAccess {
+    Load,
+    Store,
+    ReadModifyWrite,
+}
+
 pub trait MemoryBus {
     fn len(&self) -> usize;
 
@@ -50,6 +57,22 @@ pub trait MemoryBus {
     fn load_i32(&self, address: u32) -> Result<i32, MemoryFault>;
 
     fn store_i32(&mut self, address: u32, value: i32) -> Result<(), MemoryFault>;
+
+    fn validate_atomic_i32(
+        &self,
+        address: u32,
+        access: AtomicWordAccess,
+    ) -> Result<(), MemoryFault>;
+
+    fn atomic_load_i32(&self, address: u32) -> Result<i32, MemoryFault>;
+
+    fn atomic_store_i32(&mut self, address: u32, value: i32) -> Result<(), MemoryFault>;
+
+    fn atomic_update_i32(
+        &mut self,
+        address: u32,
+        update: &mut dyn FnMut(i32) -> i32,
+    ) -> Result<i32, MemoryFault>;
 
     fn load_u8(&self, address: u32) -> Result<u8, MemoryFault>;
 
@@ -162,6 +185,31 @@ impl MachineMemory {
         Ok(())
     }
 
+    pub fn validate_atomic_i32(&self, address: u32) -> Result<(), MemoryFault> {
+        self.range(address, 4).map(|_| ())
+    }
+
+    pub fn atomic_load_i32(&self, address: u32) -> Result<i32, MemoryFault> {
+        self.validate_atomic_i32(address)?;
+        self.load_i32(address)
+    }
+
+    pub fn atomic_store_i32(&mut self, address: u32, value: i32) -> Result<(), MemoryFault> {
+        self.validate_atomic_i32(address)?;
+        self.store_i32(address, value)
+    }
+
+    pub fn atomic_update_i32(
+        &mut self,
+        address: u32,
+        update: &mut dyn FnMut(i32) -> i32,
+    ) -> Result<i32, MemoryFault> {
+        let bytes = self.range_mut(address, 4)?;
+        let old = i32::from_le_bytes(bytes.try_into().expect("atomic word has four bytes"));
+        bytes.copy_from_slice(&update(old).to_le_bytes());
+        Ok(old)
+    }
+
     pub fn load_u8(&self, address: u32) -> Result<u8, MemoryFault> {
         Ok(self.range(address, 1)?[0])
     }
@@ -245,6 +293,30 @@ impl MemoryBus for MachineMemory {
         self.store_i32(address, value)
     }
 
+    fn validate_atomic_i32(
+        &self,
+        address: u32,
+        _access: AtomicWordAccess,
+    ) -> Result<(), MemoryFault> {
+        self.validate_atomic_i32(address)
+    }
+
+    fn atomic_load_i32(&self, address: u32) -> Result<i32, MemoryFault> {
+        self.atomic_load_i32(address)
+    }
+
+    fn atomic_store_i32(&mut self, address: u32, value: i32) -> Result<(), MemoryFault> {
+        self.atomic_store_i32(address, value)
+    }
+
+    fn atomic_update_i32(
+        &mut self,
+        address: u32,
+        update: &mut dyn FnMut(i32) -> i32,
+    ) -> Result<i32, MemoryFault> {
+        self.atomic_update_i32(address, update)
+    }
+
     fn load_u8(&self, address: u32) -> Result<u8, MemoryFault> {
         self.load_u8(address)
     }
@@ -302,6 +374,18 @@ mod tests {
 
         assert_eq!(memory.load_i32(2).unwrap(), 0x11223344);
         assert_eq!(&memory.bytes()[2..6], &[0x44, 0x33, 0x22, 0x11]);
+    }
+
+    #[test]
+    fn machine_memory_atomic_word_update_returns_old_value_and_commits_once() {
+        let mut memory = MachineMemory::zeroed(16).unwrap();
+        memory.store_i32(4, 7).unwrap();
+        let mut add_five = |old: i32| old.wrapping_add(5);
+
+        let old = memory.atomic_update_i32(4, &mut add_five).unwrap();
+
+        assert_eq!(old, 7);
+        assert_eq!(memory.load_i32(4).unwrap(), 12);
     }
 
     #[test]
