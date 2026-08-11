@@ -1,38 +1,36 @@
-![Mod logo (Ai generated)](logo_1.png)
+![Mod logo (AI generated)](logo_1.png)
 
-**Programmable computers for Minecraft — booted end-to-end on a native Rust VM.**
+**Programmable computers for Minecraft with deterministic, resource-bounded execution.**
 
-Inspired by ComputerCraft. With one big difference: the runtime is not Lua —
-it is a native Rust virtual machine (`k16-vm`) wrapped via JNI.
-
-## What you get
-
-- 💻 **Notebook** — a portable player-facing computer item that boots its own
-  Kraft16 VM instance on a background daemon thread.
-- 🖥 **Kraft16 VM** — a deterministic, sandboxed virtual machine implemented in
-  Rust. Boots K16 code from per-computer `bios.kflash` files and storage0
-  `.kv` boot media.
-- 🔌 **Display + input devices** — retained `gpu0` resources rendered by the
-  Minecraft client, keyboard/input queues, and a per-device runtime workspace.
+Compukter Kraft is rebuilding its computer platform around a native Rust
+RISC-V virtual machine. The selected product architecture is
+`RV32IMA_Zicsr_Zifencei`, little-endian ELF32 with the standard ILP32 ABI.
 
 ## Status
 
-Mid-rewrite. The legacy in-game CKL language stack, the Workbench IDE,
-the standalone Computer block, the Workbench/Terminal/Serial items, and the
-CKIM bytecode runtime have all been removed. The remaining player-facing
-surface is Notebook, booted through the Kraft16 BIOS path
-(`bios.kflash` → `storage0.kv` boot entry → guest K16 execution).
+The project is in an intentional clean-break migration interval. The retired
+custom ISA and its Minecraft runtime have been removed; no VM-backed computer
+is currently registered in the loadable mod.
 
-K16 is now retired as the long-term product ISA. The accepted target is
-`RV32IMA_Zicsr_Zifencei` with ILP32/ELF32; the current K16 boot path remains only
-while equivalent RV32 vertical slices replace it. RV64 remains an isolated
-benchmark/reference candidate, not a second product target. See
-[ADR 0001](docs/architecture-decisions/0001-retire-k16-adopt-rv32.md).
+The active VM implementation is `host/compukter-vm`. It currently provides a
+bounded RV32IM interpreter, Cached and Predecoded execution backends, Zicsr and
+machine-mode traps, a strict stock-toolchain ELF32 loader, and deterministic
+instruction accounting.
 
-Currently for **NeoForge 1.21.1**.
+KraftOS remains the guest operating-system direction. BIOS, KraftOS, devices,
+storage, networking, the in-game programming loop, and Minecraft integration
+will be rebuilt directly for RV32 without binary or source compatibility with
+the retired architecture.
+
+See [ADR 0001](docs/architecture-decisions/0001-retire-k16-adopt-rv32.md)
+and [the current architecture](docs/ARCHITECTURE.md).
+
+Currently targets **NeoForge 1.21.1**.
 
 ---
 
-Devlog (in russian): https://t.me/lazyhatdev
+Devlog (in Russian): https://t.me/lazyhatdev
+
 Source: https://github.com/CertifiedBadIdeas/Compukter-Kraft
+
 License: GPL-3.0

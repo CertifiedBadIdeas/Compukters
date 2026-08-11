@@ -12,7 +12,7 @@ second="$ARTIFACTS/rv32-trap-second.elf"
 cmp "$first" "$second"
 
 RV32_ELF_TRAP_FIXTURE="$first" \
-    cargo test --locked --offline --manifest-path "$ROOT/host/k16-vm/Cargo.toml" \
+    cargo test --locked --offline --manifest-path "$ROOT/host/compukter-vm/Cargo.toml" \
     --test rv32_elf_trap stock_toolchain_rv32_elf_handles_ecall_and_returns -- --ignored --exact
 
 echo "RV32 ELF trap contract passed"

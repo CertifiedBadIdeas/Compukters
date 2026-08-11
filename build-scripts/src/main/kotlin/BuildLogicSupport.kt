@@ -33,11 +33,6 @@ data class BuildContext(
     val javaVersion: Int,
 )
 
-data class K16VmNativePlatform(
-    val id: String,
-    val libraryName: String,
-)
-
 enum class LoaderKind(
     val lowercase: String,
 ) {
@@ -139,27 +134,6 @@ fun Project.effectiveBuildVersion(): String {
     val effective = computeEffectiveBuildVersion(baseVersion, headTags, shortHash)
     extra[EFFECTIVE_BUILD_VERSION_KEY] = effective
     return effective
-}
-
-fun currentK16VmNativePlatform(
-    osName: String = System.getProperty("os.name"),
-    osArch: String = System.getProperty("os.arch"),
-): K16VmNativePlatform {
-    val arch =
-        when (osArch.lowercase()) {
-            "amd64", "x86_64" -> "x86_64"
-            "aarch64", "arm64" -> "aarch64"
-            else -> error("Unsupported K16 VM native architecture: $osArch")
-        }
-    return when {
-        osName.startsWith("linux", ignoreCase = true) ->
-            K16VmNativePlatform(id = "linux-$arch", libraryName = "libk16_vm.so")
-        osName.startsWith("windows", ignoreCase = true) ->
-            K16VmNativePlatform(id = "windows-$arch", libraryName = "k16_vm.dll")
-        osName.startsWith("mac", ignoreCase = true) || osName.startsWith("darwin", ignoreCase = true) ->
-            K16VmNativePlatform(id = "macos-$arch", libraryName = "libk16_vm.dylib")
-        else -> error("Unsupported K16 VM native OS: $osName")
-    }
 }
 
 private fun gitCaptureOrNull(

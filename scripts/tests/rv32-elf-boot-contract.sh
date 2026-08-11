@@ -12,7 +12,7 @@ second="$ARTIFACTS/rv32-boot-second.elf"
 cmp "$first" "$second"
 
 RV32_ELF_BOOT_FIXTURE="$first" \
-    cargo test --locked --offline --manifest-path "$ROOT/host/k16-vm/Cargo.toml" \
+    cargo test --locked --offline --manifest-path "$ROOT/host/compukter-vm/Cargo.toml" \
     --test rv32_elf_boot stock_toolchain_rv32_elf_boots_and_halts -- --ignored --exact
 
 echo "RV32 ELF boot contract passed"

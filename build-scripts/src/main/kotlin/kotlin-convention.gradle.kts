@@ -70,9 +70,6 @@ kotlin {
 
 tasks.test {
     useJUnitPlatform()
-    System.getProperty("k16.vm.native.library")?.takeIf { it.isNotBlank() }?.let { libraryPath ->
-        systemProperty("k16.vm.native.library", libraryPath)
-    }
 }
 
 tasks.withType<ConfigurableKtLintTask>().configureEach {
