@@ -17,6 +17,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+pub mod benchmarks;
 pub mod bus;
 pub mod memory;
 pub mod rv32_machine;
