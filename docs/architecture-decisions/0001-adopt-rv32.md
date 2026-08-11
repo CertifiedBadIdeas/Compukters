@@ -42,8 +42,7 @@ debugger support, language ports, and optimization quality. Standard RISC-V
 provides mature LLVM, Clang, LLD, GCC, Rust, ELF, and psABI support while still
 allowing the VM to retain deterministic execution and resource control.
 
-The recorded Gate 3 result in `docs/benchmarks/isa-gate3-current.txt` is not a
-valid basis for selecting K16. The comparison inherited an i386
+The recorded [Gate 3 result](https://github.com/CertifiedBadIdeas/Compukter-VM/blob/main/docs/benchmarks/isa-gate3-current.txt) is not a valid basis for selecting K16. The comparison inherited an i386
 `frame-pointer=all` attribute that the RISC-V backend honored while the K16
 backend ignored it, and it disabled RISC-V linker relaxation while K16 used a
 single direct-call instruction. Correcting those controls reversed the
@@ -56,15 +55,13 @@ The original #475 decision selected RV64IMA, ELF64, and LP64 provisionally.
 The later symmetric XLEN gates provide the evidence needed to amend that
 choice.
 
-The scalar32 compiled-C snapshot in
-`docs/benchmarks/riscv-xlen-current.txt` records an RV64/RV32 warm-time
+The scalar32 compiled-C [snapshot](https://github.com/CertifiedBadIdeas/Compukter-VM/blob/main/docs/benchmarks/riscv-xlen-current.txt) records an RV64/RV32 warm-time
 geometric mean of `1.158598`. Both candidates retire the same instruction
 counts and use the same code and predecode bytes, so the current RV64
 interpreter pays about 15.9 percent more host time on these predominantly
 32-bit workloads.
 
-The deliberately u64-heavy snapshot in
-`docs/benchmarks/riscv-xlen-u64-current.txt` records an RV64/RV32 warm-time
+The deliberately u64-heavy [snapshot](https://github.com/CertifiedBadIdeas/Compukter-VM/blob/main/docs/benchmarks/riscv-xlen-u64-current.txt) records an RV64/RV32 warm-time
 geometric mean of `0.427173`. RV64 retires 59 to 72 percent fewer instructions
 and is about 2.34 times faster across those kernels. This establishes the
 64-bit boundary, but the synthetic corpus is not a KraftOS workload model.

@@ -31,6 +31,10 @@ class CompukterVmBuildConventionTest {
 
         assertTrue(rootBuildScript.contains("testCompukterVmRust"))
         assertTrue(rootBuildScript.contains("host/compukter-vm"))
+        assertTrue(rootBuildScript.contains("Compukter-VM submodule"))
+        assertTrue(rootBuildScript.contains("host/compukter-vm/benchmarks"))
+        assertTrue(rootBuildScript.contains("host/compukter-vm/scripts"))
+        assertTrue(rootBuildScript.contains("host/compukter-vm/fixtures"))
         assertTrue(rootBuildScript.contains("dependsOn(testCompukterVmRust)"))
         assertFalse(rootBuildScript.contains("libcompukter_vm"))
         assertFalse(rootBuildScript.contains("buildCompukterVmNativeLibrary"))

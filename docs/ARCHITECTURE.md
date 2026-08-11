@@ -10,8 +10,10 @@ computer, notebook, terminal, SDK item, computer menu, or VM-backed block
 entity. This empty interval is deliberate: the retired architecture is not a
 fallback while the RV32 platform is integrated.
 
-`host/compukter-vm` is the sole active VM crate. It is not yet connected to JNI
-or Minecraft and does not yet boot BIOS or KraftOS.
+`host/compukter-vm` is the pinned
+[Compukter-VM](https://github.com/CertifiedBadIdeas/Compukter-VM) submodule.
+It is not yet connected to JNI or Minecraft and does not yet boot BIOS or
+KraftOS.
 
 ## RV32 Host Machine
 
@@ -63,7 +65,7 @@ compatibility layer for the retired architecture.
 
 | Module | Purpose |
 |---|---|
-| `host/compukter-vm` | RV32 execution, permissioned ELF32 machine, and decoder benchmarks |
+| `host/compukter-vm` | Pinned Compukter-VM submodule: RV32 execution and permissioned ELF32 machine |
 | `native-runtime` | Architecture-neutral device and VM data models |
 | `core` | Shared platform-neutral logic and future runtime contracts |
 | `v1_21_1-common` | Minecraft 1.21.1 common support |
