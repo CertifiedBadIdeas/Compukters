@@ -29,7 +29,6 @@ pub use predecode::{PredecodedRv32imImage, PredecodedRv32imProgram};
 
 use crate::memory::MemoryBus;
 use decode::{Branch, ImmOp, Load, Op, Store};
-#[allow(unused_imports)] // Consumed by rv32_machine in the next ownership slice.
 pub(crate) use decode::{CsrOperation, CsrSource, DecodedInstruction};
 use std::fmt::{Display, Formatter};
 
@@ -123,12 +122,10 @@ impl Rv32imCpu {
         self.retired_instructions
     }
 
-    #[allow(dead_code)] // Consumed by rv32_machine in the next ownership slice.
     pub(crate) fn set_pc_internal(&mut self, pc: u32) {
         self.pc = pc;
     }
 
-    #[allow(dead_code)] // Consumed by rv32_machine in the next ownership slice.
     pub(crate) fn set_decoded_register(&mut self, register: usize, value: u32) {
         debug_assert!(register < self.registers.len());
         if register != 0 {
@@ -346,7 +343,6 @@ impl Rv32imCpu {
 }
 
 #[cfg(test)]
-#[allow(dead_code)] // Consumed by rv32_machine unit tests in the next ownership slice.
 pub(crate) fn decode_word(word: u32) -> Result<DecodedInstruction, String> {
     decode::decode(word)
 }

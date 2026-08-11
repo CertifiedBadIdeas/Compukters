@@ -19,4 +19,5 @@
 
 pub mod bus;
 pub mod memory;
+pub mod rv32_machine;
 pub mod rv32im;
