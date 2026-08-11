@@ -169,7 +169,7 @@ pub(crate) enum DecodedInstruction {
     Mret,
 }
 
-pub(crate) fn decode(word: u32) -> Result<DecodedInstruction, String> {
+pub(crate) fn decode_eager_reference(word: u32) -> Result<DecodedInstruction, String> {
     let opcode = word & 0x7f;
     let rd = ((word >> 7) & 31) as usize;
     let funct3 = (word >> 12) & 7;
@@ -357,5 +357,142 @@ pub(crate) fn decode(word: u32) -> Result<DecodedInstruction, String> {
             })
         }
         _ => illegal(),
+    }
+}
+
+pub(crate) fn decode(word: u32) -> Result<DecodedInstruction, String> {
+    decode_eager_reference(word)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::encoding as e;
+    use super::{decode, decode_eager_reference, DecodedInstruction};
+
+    fn normalized(result: Result<DecodedInstruction, String>) -> Result<DecodedInstruction, ()> {
+        result.map_err(|_| ())
+    }
+
+    fn assert_matches_eager(word: u32) {
+        assert_eq!(
+            normalized(decode(word)),
+            normalized(decode_eager_reference(word)),
+            "decoder mismatch for {word:#010x}",
+        );
+    }
+
+    fn architectural_words() -> Vec<u32> {
+        let mut words = vec![
+            e::lui(0, 0),
+            e::lui(31, 0x000f_ffff),
+            e::auipc(0, 0),
+            e::auipc(31, 0x000f_ffff),
+            e::jal(0, -(1 << 20)),
+            e::jal(31, (1 << 20) - 2),
+            e::jalr(0, 31, -2048),
+            e::jalr(31, 0, 2047),
+            e::beq(0, 31, -4096),
+            e::bne(31, 0, 4094),
+            e::blt(1, 30, -2),
+            e::bge(2, 29, 2),
+            e::bltu(3, 28, -4),
+            e::bgeu(4, 27, 4),
+            e::lb(0, 31, -2048),
+            e::lh(31, 0, 2047),
+            e::lw(1, 30, -1),
+            e::lbu(30, 1, 1),
+            e::lhu(2, 29, 0),
+            e::sb(0, 31, -2048),
+            e::sh(31, 0, 2047),
+            e::sw(1, 30, -1),
+            e::addi(0, 31, -2048),
+            e::slti(31, 0, 2047),
+            e::sltiu(1, 30, -1),
+            e::xori(30, 1, 1),
+            e::ori(2, 29, 0),
+            e::andi(29, 2, 0x555),
+            e::slli(0, 31, 0),
+            e::srli(31, 0, 31),
+            e::srai(1, 30, 17),
+            e::add(0, 31, 1),
+            e::sub(31, 0, 30),
+            e::sll(1, 30, 2),
+            e::slt(30, 1, 29),
+            e::sltu(2, 29, 3),
+            e::xor(29, 2, 28),
+            e::srl(3, 28, 4),
+            e::sra(28, 3, 27),
+            e::or(4, 27, 5),
+            e::and(27, 4, 26),
+            e::mul(5, 26, 6),
+            e::mulh(26, 5, 25),
+            e::mulhsu(6, 25, 7),
+            e::mulhu(25, 6, 24),
+            e::div(7, 24, 8),
+            e::divu(24, 7, 23),
+            e::rem(8, 23, 9),
+            e::remu(23, 8, 22),
+            e::ecall(),
+            e::ebreak(),
+            e::csrrw(0, 0, 31),
+            e::csrrs(31, 0x0fff, 0),
+            e::csrrc(1, 0x0555, 30),
+            e::csrrwi(30, 0x0aaa, 31),
+            e::csrrsi(2, 1, 0),
+            e::csrrci(29, 0x0ffe, 17),
+            e::mret(),
+            e::fence(),
+            e::fence_i(),
+            0,
+            u32::MAX,
+            e::jalr(1, 2, 3) | (1 << 12),
+            e::add(1, 2, 3) | (2 << 25),
+            e::lr_w(1, 2, false, false) | (1 << 20),
+        ];
+
+        let atomic_encoders: [fn(u8, u8, u8, bool, bool) -> u32; 10] = [
+            e::sc_w,
+            e::amoswap_w,
+            e::amoadd_w,
+            e::amoxor_w,
+            e::amoand_w,
+            e::amoor_w,
+            e::amomin_w,
+            e::amomax_w,
+            e::amominu_w,
+            e::amomaxu_w,
+        ];
+        for acquire in [false, true] {
+            for release in [false, true] {
+                words.push(e::lr_w(31, 30, acquire, release));
+                for encode in atomic_encoders {
+                    words.push(encode(31, 30, 29, acquire, release));
+                }
+            }
+        }
+        words.extend(e::materialize(31, 0x8000_07ff));
+        words
+    }
+
+    #[test]
+    fn eager_reference_matches_architectural_words() {
+        for word in architectural_words() {
+            assert_matches_eager(word);
+        }
+    }
+
+    #[test]
+    fn eager_reference_matches_the_product_decoder_over_stratified_words() {
+        let mut state = 0x6a09_e667_f3bc_c909_u64;
+        for opcode in 0_u32..128 {
+            for _ in 0..2048 {
+                state ^= state >> 12;
+                state ^= state << 25;
+                state ^= state >> 27;
+                let upper = state.wrapping_mul(0x2545_f491_4f6c_dd1d) as u32;
+                let word = upper & !0x7f | opcode;
+                assert_matches_eager(word);
+            }
+        }
     }
 }
