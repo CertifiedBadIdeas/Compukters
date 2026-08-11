@@ -107,7 +107,7 @@ class K16PrebuiltToolchainBuildScriptTest {
         assertFalse(neoforgeBuildScript.contains("stageK16Toolchain"))
         assertFalse(neoforgeBuildScript.contains("packageK16Toolchain"))
         assertFalse(neoforgeBuildScript.contains("printK16ToolchainEnv"))
-        assertTrue(neoforgeBuildScript.contains("alias(libs.plugins.k16FirmwareConvention)"))
+        assertFalse(neoforgeBuildScript.contains("alias(libs.plugins.k16FirmwareConvention)"))
         assertFalse(neoforgeBuildScript.contains("rootProject.tasks.named(\"prepareK16Toolchain\")"))
         assertFalse(neoforgeBuildScript.contains("resolveK16Toolchain()"))
         assertFalse(neoforgeBuildScript.contains("processBuilder.environment()[\"RUSTC_BOOTSTRAP\"] = \"1\""))

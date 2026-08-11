@@ -282,60 +282,13 @@ tasks.register("verifyLocalFast") {
     dependsOn(":v1_21_1-neoforge:test")
 }
 
-tasks.register("verifyK16Firmware") {
-    description = "Runs focused K16 firmware build-surface and image architecture verification."
-    group = "verification"
-    dependsOn(":v1_21_1-neoforge:verifyK16FirmwareArchitecture")
-}
-
-tasks.register("verifyK16Runtime") {
-    description = "Runs the K16 native runtime shell smoke verification slice."
-    group = "verification"
-    dependsOn(":v1_21_1-neoforge:verifyK16Runtime")
-}
-
-tasks.register("verifyK16SdkMount") {
-    description = "Runs the K16 immutable SDK module mount verification slice."
-    group = "verification"
-    dependsOn(":v1_21_1-neoforge:verifyK16SdkMount")
-}
-
-tasks.register("verifyK16Profiling") {
-    description = "Runs all dedicated K16 profiling verification workloads."
-    group = "verification"
-    dependsOn("profileK16RuntimeWait")
-    dependsOn("profileK16RuntimeTextIo")
-    dependsOn("profileK16ManyVmServerBudget")
-}
-
 tasks.register("verifyLocalFull") {
-    description = "Runs local JVM tests, K16 focused verification, and host Rust tests."
+    description = "Runs local JVM tests and host Rust tests."
     group = "verification"
     dependsOn("verifyLocalFast")
-    dependsOn("verifyK16Firmware")
-    dependsOn("verifyK16Runtime")
-    dependsOn("verifyK16SdkMount")
     dependsOn(testCompukterVmRust)
     dependsOn(testK16HostVmRust)
     dependsOn(testK16HostToolsRust)
-}
-
-tasks.register("profileK16RuntimeWait") {
-    description = "Runs the bundled K16 runtime wait profiling workload."
-    group = "verification"
-    dependsOn(":v1_21_1-neoforge:profileK16RuntimeWait")
-}
-
-tasks.register("profileK16RuntimeTextIo") {
-    description = "Runs the bundled K16 runtime terminal text IO profiling workload."
-    group = "verification"
-    dependsOn(":v1_21_1-neoforge:profileK16RuntimeTextIo")
-}
-
-tasks.register("profileK16ManyVmServerBudget") {
-    description = "Runs the bundled K16 many-VM server budget profiling workload."
-    group = "verification"
-    dependsOn(":v1_21_1-neoforge:profileK16ManyVmServerBudget")
 }
 
 val configureK16Llvm =

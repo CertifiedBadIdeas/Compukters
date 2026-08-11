@@ -24,7 +24,6 @@ plugins {
     alias(libs.plugins.v1211)
     alias(libs.plugins.neoforgeConvention)
     alias(libs.plugins.metadataConvention)
-    alias(libs.plugins.k16FirmwareConvention)
 }
 
 val gameTest by sourceSets.creating
