@@ -103,6 +103,22 @@ pub(crate) struct Rv32ArchitecturalState {
 }
 
 impl Rv32ArchitecturalState {
+    #[allow(
+        dead_code,
+        reason = "the first generated RV32 block consumes the state layout in a later slice"
+    )]
+    pub(crate) const ABI_VERSION: u32 = crate::rv32_jit::abi::JIT_ABI_VERSION;
+    #[allow(
+        dead_code,
+        reason = "the first generated RV32 block consumes the state layout in a later slice"
+    )]
+    pub(crate) const PC_OFFSET: usize = std::mem::offset_of!(Self, pc);
+    #[allow(
+        dead_code,
+        reason = "the first generated RV32 block consumes the state layout in a later slice"
+    )]
+    pub(crate) const REGISTERS_OFFSET: usize = std::mem::offset_of!(Self, registers);
+
     pub(crate) fn new(pc: u32) -> Self {
         Self {
             pc,
@@ -118,6 +134,14 @@ impl Rv32ArchitecturalState {
 
     pub(crate) fn register(&self, register: usize) -> u32 {
         self.registers[register]
+    }
+
+    #[allow(
+        dead_code,
+        reason = "the first generated RV32 block consumes register offsets in a later slice"
+    )]
+    pub(crate) const fn register_offset(register: usize) -> usize {
+        Self::REGISTERS_OFFSET + register * std::mem::size_of::<u32>()
     }
 
     pub(crate) fn set_register(&mut self, register: usize, value: u32) {
@@ -157,6 +181,22 @@ impl Rv32imCpu {
     }
     pub fn retired_instructions(&self) -> u64 {
         self.state.retired_instructions
+    }
+
+    #[allow(
+        dead_code,
+        reason = "the first generated RV32 block mutates canonical state in a later slice"
+    )]
+    pub(crate) fn architectural_state(&self) -> &Rv32ArchitecturalState {
+        &self.state
+    }
+
+    #[allow(
+        dead_code,
+        reason = "the first generated RV32 block mutates canonical state in a later slice"
+    )]
+    pub(crate) fn architectural_state_mut(&mut self) -> &mut Rv32ArchitecturalState {
+        &mut self.state
     }
 
     pub(crate) fn set_pc_internal(&mut self, pc: u32) {

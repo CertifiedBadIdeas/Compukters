@@ -19,6 +19,12 @@
 
 use std::marker::PhantomData;
 
+#[allow(
+    dead_code,
+    reason = "the first generated RV32 block consumes the ABI version in a later slice"
+)]
+pub(crate) const JIT_ABI_VERSION: u32 = 1;
+
 /// The contiguous RAM region that a compiled block may access directly.
 ///
 /// Addresses outside `len`, including all MMIO, must leave the compiled block
@@ -76,16 +82,25 @@ impl<'memory> JitRamView<'memory> {
 
 #[cfg(test)]
 mod tests {
-    use crate::rv32im::Rv32ArchitecturalState;
+    use super::JIT_ABI_VERSION;
+    use crate::rv32im::{Rv32ArchitecturalState, Rv32imCpu};
 
     #[test]
     fn architectural_state_preserves_x0_and_register_values() {
-        let mut state = Rv32ArchitecturalState::new(0x1000);
+        let mut cpu = Rv32imCpu::new(0x1000);
+        let state = cpu.architectural_state_mut();
         state.set_register(0, 0xfeed_beef);
         state.set_register(7, 42);
 
         assert_eq!(state.pc(), 0x1000);
         assert_eq!(state.register(0), 0);
         assert_eq!(state.register(7), 42);
+        assert_eq!(cpu.architectural_state().register(7), 42);
+        assert_eq!(Rv32ArchitecturalState::ABI_VERSION, JIT_ABI_VERSION);
+        assert_eq!(Rv32ArchitecturalState::PC_OFFSET, 0);
+        assert_eq!(
+            Rv32ArchitecturalState::register_offset(7),
+            Rv32ArchitecturalState::REGISTERS_OFFSET + 7 * std::mem::size_of::<u32>(),
+        );
     }
 }
