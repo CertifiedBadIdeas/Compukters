@@ -17,6 +17,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+mod c_comparison;
 mod decoder;
 mod native;
 mod product_machine;
@@ -25,6 +26,10 @@ mod report;
 mod rv32;
 mod workload;
 
+pub use c_comparison::{
+    c_comparison_next_batch, c_comparison_qemu_target_nanos, c_comparison_timeout_nanos,
+    parse_c_comparison_result,
+};
 pub use decoder::{
     DecoderBenchmarkImplementation, DecoderBenchmarkObservation, DecoderBenchmarkScenario,
     PreparedDecoderBenchmark,

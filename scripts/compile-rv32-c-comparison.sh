@@ -13,8 +13,9 @@ BUILD_DIR="$1"
 : "${RV32_C_LLD:=ld.lld}"
 : "${RV32_C_READOBJ:=llvm-readobj}"
 : "${RV32_C_OBJDUMP:=llvm-objdump}"
+: "${RV32_C_SIZE:=llvm-size}"
 
-for tool in "$RV32_C_CLANG" "$RV32_C_LLD" "$RV32_C_READOBJ" "$RV32_C_OBJDUMP" sha256sum; do
+for tool in "$RV32_C_CLANG" "$RV32_C_LLD" "$RV32_C_READOBJ" "$RV32_C_OBJDUMP" "$RV32_C_SIZE" sha256sum; do
     if ! command -v "$tool" >/dev/null 2>&1; then
         echo "required RV32 C comparison tool is unavailable: $tool" >&2
         exit 2
@@ -71,6 +72,9 @@ kernel_hash="$(sha256sum "$BUILD_DIR/kernel-rv32.o" | cut -d' ' -f1)"
 native_hash="$(sha256sum "$BUILD_DIR/native-kernel" | cut -d' ' -f1)"
 product_hash="$(sha256sum "$BUILD_DIR/product.elf" | cut -d' ' -f1)"
 qemu_hash="$(sha256sum "$BUILD_DIR/qemu.elf" | cut -d' ' -f1)"
+native_text_bytes="$("$RV32_C_SIZE" --format=berkeley "$BUILD_DIR/native-kernel" | tail -n 1 | awk '{print $1}')"
+product_text_bytes="$("$RV32_C_SIZE" --format=berkeley "$BUILD_DIR/product.elf" | tail -n 1 | awk '{print $1}')"
+qemu_text_bytes="$("$RV32_C_SIZE" --format=berkeley "$BUILD_DIR/qemu.elf" | tail -n 1 | awk '{print $1}')"
 
 {
     echo -e "key\tvalue"
@@ -80,6 +84,9 @@ qemu_hash="$(sha256sum "$BUILD_DIR/qemu.elf" | cut -d' ' -f1)"
     echo -e "native-sha256\t$native_hash"
     echo -e "product-sha256\t$product_hash"
     echo -e "qemu-sha256\t$qemu_hash"
+    echo -e "native-text-bytes\t$native_text_bytes"
+    echo -e "product-text-bytes\t$product_text_bytes"
+    echo -e "qemu-text-bytes\t$qemu_text_bytes"
     echo -e "product-elf\t$BUILD_DIR/product.elf"
     echo -e "qemu-elf\t$BUILD_DIR/qemu.elf"
 } >"$BUILD_DIR/manifest.tsv"

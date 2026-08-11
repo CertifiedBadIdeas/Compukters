@@ -13,7 +13,13 @@ SECTIONS
     . = 0x0000;
     .text : ALIGN(4) { KEEP(*(.text.start)) *(.text .text.*) . = ALIGN(4); } :text
     . = ALIGN(0x1000);
-    .rodata : ALIGN(4) { *(.rodata .rodata.*) . = ALIGN(4); } :rodata
+    .rodata : ALIGN(4)
+    {
+        ck_batch_value = .;
+        LONG(__ck_batch)
+        *(.rodata .rodata.*)
+        . = ALIGN(4);
+    } :rodata
     . = ALIGN(0x1000);
     .data : ALIGN(4) { *(.sdata .sdata.*) *(.data .data.*) . = ALIGN(4); } :data
     .bss (NOLOAD) : ALIGN(16)
