@@ -30,6 +30,6 @@ pub use elf::{
 };
 pub use machine::{
     Rv32ExecutionBackendConfig, Rv32Machine, Rv32MachineBuildError, Rv32MachineConfig,
-    Rv32MachineExecutionError, Rv32MachineOutcome,
+    Rv32MachineExecutionError, Rv32MachineOutcome, Rv32TranslationLookupUnit, Rv32TranslationStats,
 };
 pub use platform::{CONTROL_BASE, DEBUG_BASE, STATUS_BOOTING, STATUS_HALTED, STATUS_PANIC};

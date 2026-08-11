@@ -26,6 +26,7 @@ pub mod encoding;
 mod predecode;
 
 pub use bounded_block_cache::Rv32BlockCacheStats;
+pub(crate) use bounded_block_cache::{ends_basic_block, BoundedDecodedBlockCache};
 pub use bounded_cache::{BoundedCachedRv32imProgram, Rv32imCacheStats};
 pub use cache::CachedRv32imProgram;
 pub use predecode::{PredecodedRv32imImage, PredecodedRv32imProgram};
