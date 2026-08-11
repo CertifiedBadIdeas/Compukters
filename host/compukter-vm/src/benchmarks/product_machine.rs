@@ -25,6 +25,7 @@ use crate::rv32_machine::{
 };
 use crate::rv32im::encoding::{addi, bne, csrrs, csrrw, ebreak, ecall, jal, materialize, mret, sw};
 use crate::rv32im::Rv32imCacheStats;
+use std::hint::black_box;
 
 const ELF32_HEADER_SIZE: usize = 52;
 const ELF32_PROGRAM_HEADER_SIZE: usize = 32;
@@ -36,6 +37,50 @@ const COPY_SOURCE_BYTES: usize = 256;
 pub const PRODUCT_RAM_BYTES: usize = 16 * 1024;
 pub const PRODUCT_CACHE_SETS: usize = 64;
 pub const PRODUCT_DEBUG_LIMIT: usize = 0;
+pub const PRODUCT_RESIDENT_REPORT_HEADER: &str = "backend\tpopulation\tconstruction_median_ns\tconstruction_p95_ns\tresident_live_bytes\tpeak_construction_bytes\tlive_bytes_per_machine\taggregate_ram_bytes\telf_bytes\texecutable_bytes\trw_initialized_bytes\tram_bytes\tdebug_limit\tcache_sets";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProductExecutionCandidate {
+    NativeHost,
+    Cached,
+    Predecoded,
+}
+
+impl ProductExecutionCandidate {
+    pub const fn all() -> &'static [Self] {
+        &[Self::NativeHost, Self::Cached, Self::Predecoded]
+    }
+
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::NativeHost => "native-host",
+            Self::Cached => "rv32-cached",
+            Self::Predecoded => "rv32-predecoded",
+        }
+    }
+}
+
+pub fn benchmark_rotating_order<const N: usize>(group: usize, sample: usize) -> [usize; N] {
+    std::array::from_fn(|index| (index + group + sample) % N)
+}
+
+pub fn benchmark_normalize_nanos(total: u128, batch: u64) -> Result<f64, String> {
+    if batch == 0 {
+        return Err("benchmark batch must be positive".to_string());
+    }
+    Ok(total as f64 / batch as f64)
+}
+
+pub fn benchmark_geomean(values: &[f64]) -> Result<f64, String> {
+    if values.is_empty()
+        || values
+            .iter()
+            .any(|value| !value.is_finite() || *value <= 0.0)
+    {
+        return Err("benchmark geomean requires finite positive values".to_string());
+    }
+    Ok((values.iter().map(|value| value.ln()).sum::<f64>() / values.len() as f64).exp())
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProductMachineBackend {
@@ -102,6 +147,70 @@ pub enum ProductMachineWorkload {
     MmioControl,
     PacketRing,
     TrapRoundtrip,
+}
+
+pub struct ProductNativeObservation {
+    pub workload: ProductMachineWorkload,
+    pub iterations: u32,
+    pub batch: u64,
+    pub checksum: u32,
+}
+
+pub struct PreparedProductNative {
+    workload: ProductMachineWorkload,
+    iterations: u32,
+    mapped: Option<super::native::Prepared>,
+}
+
+impl PreparedProductNative {
+    pub fn new(workload: ProductMachineWorkload, iterations: u32) -> Result<Self, String> {
+        if iterations == 0 {
+            return Err("product native benchmark iterations must be positive".to_string());
+        }
+        let mapped = workload
+            .decoder_workload()
+            .map(|mapped| super::native::Prepared::new(mapped, iterations));
+        Ok(Self {
+            workload,
+            iterations,
+            mapped,
+        })
+    }
+
+    pub fn execute_batch(&mut self, batch: u64) -> Result<ProductNativeObservation, String> {
+        if batch == 0 {
+            return Err("product native benchmark batch must be positive".to_string());
+        }
+        let expected = self.workload.expected_checksum(self.iterations);
+        let mut checksum = 0_u32;
+        for _ in 0..batch {
+            checksum = match &mut self.mapped {
+                Some(prepared) => prepared.execute()?.checksum,
+                None => native_trap_roundtrip(self.iterations),
+            };
+            checksum = black_box(checksum);
+            if checksum != expected {
+                return Err(format!(
+                    "native workload {} checksum mismatch: expected {expected}, actual {checksum}",
+                    self.workload.name(),
+                ));
+            }
+        }
+        Ok(ProductNativeObservation {
+            workload: self.workload,
+            iterations: self.iterations,
+            batch,
+            checksum,
+        })
+    }
+}
+
+fn native_trap_roundtrip(iterations: u32) -> u32 {
+    let mut checksum = 0_u32;
+    for _ in 0..black_box(iterations) {
+        checksum = black_box(checksum.wrapping_add(1));
+    }
+    checksum
 }
 
 impl ProductMachineWorkload {
