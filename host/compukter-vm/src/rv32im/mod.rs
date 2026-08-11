@@ -93,16 +93,17 @@ impl Display for Rv32RegularFault {
 
 impl std::error::Error for Rv32RegularFault {}
 
+#[repr(C)]
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Rv32imCpu {
+pub(crate) struct Rv32ArchitecturalState {
     pc: u32,
     registers: [u32; 32],
     retired_instructions: u64,
     reservation: Option<Rv32Reservation>,
 }
 
-impl Rv32imCpu {
-    pub fn new(pc: u32) -> Self {
+impl Rv32ArchitecturalState {
+    pub(crate) fn new(pc: u32) -> Self {
         Self {
             pc,
             registers: [0; 32],
@@ -110,54 +111,78 @@ impl Rv32imCpu {
             reservation: None,
         }
     }
-    pub const fn cpu_state_bytes() -> usize {
-        std::mem::size_of::<Self>()
-    }
-    pub fn pc(&self) -> u32 {
+
+    pub(crate) fn pc(&self) -> u32 {
         self.pc
     }
-    pub fn register(&self, register: usize) -> u32 {
+
+    pub(crate) fn register(&self, register: usize) -> u32 {
         self.registers[register]
     }
-    pub fn set_register(&mut self, register: usize, value: u32) -> Result<(), String> {
-        if register >= self.registers.len() {
-            return Err(format!("RV32IM register index {register} is outside 0..32"));
-        }
-        if register != 0 {
-            self.registers[register] = value;
-        }
-        Ok(())
-    }
-    pub fn retired_instructions(&self) -> u64 {
-        self.retired_instructions
-    }
 
-    pub(crate) fn set_pc_internal(&mut self, pc: u32) {
-        self.pc = pc;
-    }
-
-    pub(crate) fn set_decoded_register(&mut self, register: usize, value: u32) {
+    pub(crate) fn set_register(&mut self, register: usize, value: u32) {
         debug_assert!(register < self.registers.len());
         if register != 0 {
             self.registers[register] = value;
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Rv32imCpu {
+    state: Rv32ArchitecturalState,
+}
+
+impl Rv32imCpu {
+    pub fn new(pc: u32) -> Self {
+        Self {
+            state: Rv32ArchitecturalState::new(pc),
+        }
+    }
+    pub const fn cpu_state_bytes() -> usize {
+        std::mem::size_of::<Self>()
+    }
+    pub fn pc(&self) -> u32 {
+        self.state.pc()
+    }
+    pub fn register(&self, register: usize) -> u32 {
+        self.state.register(register)
+    }
+    pub fn set_register(&mut self, register: usize, value: u32) -> Result<(), String> {
+        if register >= self.state.registers.len() {
+            return Err(format!("RV32IM register index {register} is outside 0..32"));
+        }
+        self.state.set_register(register, value);
+        Ok(())
+    }
+    pub fn retired_instructions(&self) -> u64 {
+        self.state.retired_instructions
+    }
+
+    pub(crate) fn set_pc_internal(&mut self, pc: u32) {
+        self.state.pc = pc;
+    }
+
+    pub(crate) fn set_decoded_register(&mut self, register: usize, value: u32) {
+        self.state.set_register(register, value);
+    }
 
     pub(crate) fn commit_instruction(&mut self) {
-        self.registers[0] = 0;
-        self.retired_instructions = self.retired_instructions.saturating_add(1);
+        self.state.registers[0] = 0;
+        self.state.retired_instructions = self.state.retired_instructions.saturating_add(1);
     }
 
     pub(crate) fn clear_reservation(&mut self) {
-        self.reservation = None;
+        self.state.reservation = None;
     }
 
     pub(crate) fn invalidate_reservation(&mut self, address: u32, size: u32) {
         if self
+            .state
             .reservation
             .is_some_and(|reservation| reservation.intersects(address, size))
         {
-            self.reservation = None;
+            self.state.reservation = None;
         }
     }
 
@@ -175,9 +200,11 @@ impl Rv32imCpu {
     }
 
     pub fn step(&mut self, bus: &mut dyn MemoryBus) -> Result<Option<Rv32imStop>, String> {
-        require_alignment(self.pc, 4, "instruction")?;
-        let instruction_pc = self.pc;
-        let word = bus.load_i32(self.pc).map_err(|error| error.to_string())? as u32;
+        require_alignment(self.state.pc, 4, "instruction")?;
+        let instruction_pc = self.state.pc;
+        let word = bus
+            .load_i32(self.state.pc)
+            .map_err(|error| error.to_string())? as u32;
         let instruction = decode::decode(word)?;
         self.retire_decoded(bus, instruction_pc, instruction)
     }
@@ -188,11 +215,11 @@ impl Rv32imCpu {
         instruction_pc: u32,
         instruction: DecodedInstruction,
     ) -> Result<Option<Rv32imStop>, String> {
-        let previous_pc = self.pc;
+        let previous_pc = self.state.pc;
         let stop = match self.execute_decoded(bus, instruction_pc, instruction) {
             Ok(stop) => stop,
             Err(error) => {
-                self.pc = previous_pc;
+                self.state.pc = previous_pc;
                 return Err(error);
             }
         };
@@ -216,11 +243,11 @@ impl Rv32imCpu {
         instruction_pc: u32,
         instruction: DecodedInstruction,
     ) -> Result<Option<Rv32imStop>, Rv32RegularFault> {
-        let previous_pc = self.pc;
+        let previous_pc = self.state.pc;
         match self.execute_decoded_unchecked(bus, instruction_pc, instruction) {
             Ok(stop) => Ok(stop),
             Err(error) => {
-                self.pc = previous_pc;
+                self.state.pc = previous_pc;
                 Err(error)
             }
         }
@@ -233,22 +260,22 @@ impl Rv32imCpu {
         instruction: DecodedInstruction,
     ) -> Result<Option<Rv32imStop>, Rv32RegularFault> {
         let next_pc = instruction_pc.wrapping_add(4);
-        self.pc = next_pc;
+        self.state.pc = next_pc;
         match instruction {
-            DecodedInstruction::Lui { rd, value } => self.registers[rd] = value,
+            DecodedInstruction::Lui { rd, value } => self.state.registers[rd] = value,
             DecodedInstruction::Auipc { rd, value } => {
-                self.registers[rd] = instruction_pc.wrapping_add(value)
+                self.state.registers[rd] = instruction_pc.wrapping_add(value)
             }
             DecodedInstruction::Jal { rd, offset } => {
                 let target = checked_target(instruction_pc.wrapping_add_signed(offset))?;
-                self.registers[rd] = next_pc;
-                self.pc = target;
+                self.state.registers[rd] = next_pc;
+                self.state.pc = target;
             }
             DecodedInstruction::Jalr { rd, rs1, immediate } => {
-                let target = self.registers[rs1].wrapping_add_signed(immediate) & !1;
+                let target = self.state.registers[rs1].wrapping_add_signed(immediate) & !1;
                 let target = checked_target(target)?;
-                self.registers[rd] = next_pc;
-                self.pc = target;
+                self.state.registers[rd] = next_pc;
+                self.state.pc = target;
             }
             DecodedInstruction::Branch {
                 kind,
@@ -256,8 +283,8 @@ impl Rv32imCpu {
                 rs2,
                 offset,
             } => {
-                let lhs = self.registers[rs1];
-                let rhs = self.registers[rs2];
+                let lhs = self.state.registers[rs1];
+                let rhs = self.state.registers[rs2];
                 let take = match kind {
                     Branch::Eq => lhs == rhs,
                     Branch::Ne => lhs != rhs,
@@ -267,7 +294,7 @@ impl Rv32imCpu {
                     Branch::Geu => lhs >= rhs,
                 };
                 if take {
-                    self.pc = checked_target(instruction_pc.wrapping_add_signed(offset))?;
+                    self.state.pc = checked_target(instruction_pc.wrapping_add_signed(offset))?;
                 }
             }
             DecodedInstruction::Load {
@@ -276,8 +303,8 @@ impl Rv32imCpu {
                 rs1,
                 immediate,
             } => {
-                let address = self.registers[rs1].wrapping_add_signed(immediate);
-                self.registers[rd] = match kind {
+                let address = self.state.registers[rs1].wrapping_add_signed(immediate);
+                self.state.registers[rd] = match kind {
                     Load::Byte => bus
                         .load_u8(address)
                         .map_err(|error| load_access_fault(address, error))?
@@ -313,8 +340,8 @@ impl Rv32imCpu {
                 rs2,
                 immediate,
             } => {
-                let address = self.registers[rs1].wrapping_add_signed(immediate);
-                let value = self.registers[rs2];
+                let address = self.state.registers[rs1].wrapping_add_signed(immediate);
+                let value = self.state.registers[rs2];
                 let size = match kind {
                     Store::Byte => 1,
                     Store::Half => 2,
@@ -340,8 +367,8 @@ impl Rv32imCpu {
                 rs1,
                 immediate,
             } => {
-                let lhs = self.registers[rs1];
-                self.registers[rd] = match op {
+                let lhs = self.state.registers[rs1];
+                self.state.registers[rd] = match op {
                     ImmOp::Add => lhs.wrapping_add_signed(immediate),
                     ImmOp::Slt => u32::from((lhs as i32) < immediate),
                     ImmOp::Sltu => u32::from(lhs < immediate as u32),
@@ -354,22 +381,22 @@ impl Rv32imCpu {
                 };
             }
             DecodedInstruction::Register { op, rd, rs1, rs2 } => {
-                let lhs = self.registers[rs1];
-                let rhs = self.registers[rs2];
-                self.registers[rd] = execute_op(op, lhs, rhs);
+                let lhs = self.state.registers[rs1];
+                let rhs = self.state.registers[rs2];
+                self.state.registers[rd] = execute_op(op, lhs, rhs);
             }
             DecodedInstruction::Fence | DecodedInstruction::FenceI => {}
             DecodedInstruction::LoadReserved { rd, rs1, ordering } => {
                 let _ordering = ordering;
-                let address = self.registers[rs1];
+                let address = self.state.registers[rs1];
                 self.clear_reservation();
                 require_load_alignment(address, 4)?;
                 let value = bus
                     .atomic_load_i32(address)
                     .map_err(|error| load_access_fault(address, error))?
                     as u32;
-                self.reservation = Some(Rv32Reservation::new(address));
-                self.registers[rd] = value;
+                self.state.reservation = Some(Rv32Reservation::new(address));
+                self.state.registers[rd] = value;
             }
             DecodedInstruction::StoreConditional {
                 rd,
@@ -378,18 +405,18 @@ impl Rv32imCpu {
                 ordering,
             } => {
                 let _ordering = ordering;
-                let address = self.registers[rs1];
-                let value = self.registers[rs2];
-                let reservation = self.reservation.take();
+                let address = self.state.registers[rs1];
+                let value = self.state.registers[rs2];
+                let reservation = self.state.reservation.take();
                 require_store_alignment(address, 4)?;
                 bus.validate_atomic_i32(address, AtomicWordAccess::Store)
                     .map_err(|error| store_access_fault(address, error))?;
                 if reservation.is_some_and(|reservation| reservation.matches(address)) {
                     bus.atomic_store_i32(address, value as i32)
                         .map_err(|error| store_access_fault(address, error))?;
-                    self.registers[rd] = 0;
+                    self.state.registers[rd] = 0;
                 } else {
-                    self.registers[rd] = 1;
+                    self.state.registers[rd] = 1;
                 }
             }
             DecodedInstruction::Atomic {
@@ -400,8 +427,8 @@ impl Rv32imCpu {
                 ordering,
             } => {
                 let _ordering = ordering;
-                let address = self.registers[rs1];
-                let operand = self.registers[rs2];
+                let address = self.state.registers[rs1];
+                let operand = self.state.registers[rs2];
                 require_store_alignment(address, 4)?;
                 let mut update = |old: i32| apply_atomic(operation, old as u32, operand) as i32;
                 let old = bus
@@ -409,7 +436,7 @@ impl Rv32imCpu {
                     .map_err(|error| store_access_fault(address, error))?
                     as u32;
                 self.invalidate_reservation(address, 4);
-                self.registers[rd] = old;
+                self.state.registers[rd] = old;
             }
             DecodedInstruction::Csr { .. } => {
                 return Err(Rv32RegularFault::MachineInstructionRequired);
