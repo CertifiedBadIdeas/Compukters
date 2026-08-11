@@ -65,6 +65,32 @@ impl ProductMachineBackend {
     }
 }
 
+pub fn product_backend_order(
+    group_index: usize,
+    sample_index: usize,
+) -> [ProductMachineBackend; 2] {
+    if (group_index + sample_index).is_multiple_of(2) {
+        [
+            ProductMachineBackend::Cached,
+            ProductMachineBackend::Predecoded,
+        ]
+    } else {
+        [
+            ProductMachineBackend::Predecoded,
+            ProductMachineBackend::Cached,
+        ]
+    }
+}
+
+pub fn product_percentile(sorted_values: &[u128], percentile: usize) -> u128 {
+    assert!(!sorted_values.is_empty());
+    assert!((1..=100).contains(&percentile));
+    let index = (sorted_values.len() * percentile)
+        .div_ceil(100)
+        .saturating_sub(1);
+    sorted_values[index]
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProductMachineWorkload {
     Compute32,
@@ -127,13 +153,22 @@ impl ProductMachineWorkload {
     }
 }
 
+pub struct ProductMachineImage {
+    workload: ProductMachineWorkload,
+    iterations: u32,
+    elf: Vec<u8>,
+    executable_bytes: usize,
+    rw_initialized_bytes: usize,
+    fingerprint: u64,
+}
+
 pub struct PreparedProductMachine {
     backend: ProductMachineBackend,
     workload: ProductMachineWorkload,
     iterations: u32,
-    elf: Vec<u8>,
     machine: Rv32Machine,
     executable_bytes: usize,
+    image_fingerprint: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -150,18 +185,29 @@ pub struct ProductMachineObservation {
     pub complete_machine: bool,
 }
 
-impl PreparedProductMachine {
-    pub fn new(
-        backend: ProductMachineBackend,
-        workload: ProductMachineWorkload,
-        iterations: u32,
-    ) -> Result<Self, String> {
+impl ProductMachineImage {
+    pub fn new(workload: ProductMachineWorkload, iterations: u32) -> Result<Self, String> {
         if iterations == 0 {
             return Err("product machine benchmark iterations must be positive".to_string());
         }
-        let (elf, executable_bytes) = product_elf(workload, iterations)?;
+        let (elf, executable_bytes, rw_initialized_bytes) = product_elf(workload, iterations)?;
+        let fingerprint = elf_fingerprint(&elf);
+        Ok(Self {
+            workload,
+            iterations,
+            elf,
+            executable_bytes,
+            rw_initialized_bytes,
+            fingerprint,
+        })
+    }
+
+    pub fn prepare(
+        &self,
+        backend: ProductMachineBackend,
+    ) -> Result<PreparedProductMachine, String> {
         let machine = Rv32Machine::from_elf(
-            &elf,
+            &self.elf,
             Rv32MachineConfig {
                 ram_size: PRODUCT_RAM_BYTES,
                 debug_limit: PRODUCT_DEBUG_LIMIT,
@@ -169,18 +215,40 @@ impl PreparedProductMachine {
             },
         )
         .map_err(|error| error.to_string())?;
-        Ok(Self {
+        Ok(PreparedProductMachine {
             backend,
-            workload,
-            iterations,
-            elf,
+            workload: self.workload,
+            iterations: self.iterations,
             machine,
-            executable_bytes,
+            executable_bytes: self.executable_bytes,
+            image_fingerprint: self.fingerprint,
         })
     }
 
     pub fn elf_bytes(&self) -> &[u8] {
         &self.elf
+    }
+
+    pub fn executable_bytes(&self) -> usize {
+        self.executable_bytes
+    }
+
+    pub fn rw_initialized_bytes(&self) -> usize {
+        self.rw_initialized_bytes
+    }
+}
+
+impl PreparedProductMachine {
+    pub fn new(
+        backend: ProductMachineBackend,
+        workload: ProductMachineWorkload,
+        iterations: u32,
+    ) -> Result<Self, String> {
+        ProductMachineImage::new(workload, iterations)?.prepare(backend)
+    }
+
+    pub fn image_fingerprint(&self) -> u64 {
+        self.image_fingerprint
     }
 
     pub fn execute(&mut self) -> Result<ProductMachineObservation, String> {
@@ -230,7 +298,7 @@ impl PreparedProductMachine {
 fn product_elf(
     workload: ProductMachineWorkload,
     iterations: u32,
-) -> Result<(Vec<u8>, usize), String> {
+) -> Result<(Vec<u8>, usize, usize), String> {
     let image = match workload {
         ProductMachineWorkload::TrapRoundtrip => trap_roundtrip_program(iterations),
         ProductMachineWorkload::MmioControl => mmio_control_program(iterations, 8)?,
@@ -246,7 +314,18 @@ fn product_elf(
     } else {
         Vec::new()
     };
-    Ok((strict_elf32(code, initialized_data), executable_bytes))
+    let rw_initialized_bytes = initialized_data.len();
+    Ok((
+        strict_elf32(code, initialized_data),
+        executable_bytes,
+        rw_initialized_bytes,
+    ))
+}
+
+fn elf_fingerprint(bytes: &[u8]) -> u64 {
+    bytes.iter().fold(0xcbf2_9ce4_8422_2325, |hash, byte| {
+        (hash ^ u64::from(*byte)).wrapping_mul(0x0000_0100_0000_01b3)
+    })
 }
 
 fn add_product_termination(mut image: ProgramImage) -> Vec<u32> {

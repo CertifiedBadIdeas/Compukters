@@ -18,21 +18,21 @@
  */
 
 use compukter_vm::benchmarks::{
-    native_checksum, PreparedProductMachine, ProductMachineBackend, ProductMachineWorkload,
+    native_checksum, product_backend_order, product_percentile, PreparedProductMachine,
+    ProductMachineBackend, ProductMachineImage, ProductMachineWorkload,
 };
 
 #[test]
 fn cached_and_predecoded_use_identical_strict_elf() {
     for workload in ProductMachineWorkload::all() {
-        let cached =
-            PreparedProductMachine::new(ProductMachineBackend::Cached, *workload, 17).unwrap();
-        let predecoded =
-            PreparedProductMachine::new(ProductMachineBackend::Predecoded, *workload, 17).unwrap();
+        let image = ProductMachineImage::new(*workload, 17).unwrap();
+        let cached = image.prepare(ProductMachineBackend::Cached).unwrap();
+        let predecoded = image.prepare(ProductMachineBackend::Predecoded).unwrap();
 
-        assert_eq!(cached.elf_bytes(), predecoded.elf_bytes());
-        assert_eq!(&cached.elf_bytes()[..4], b"\x7fELF");
-        assert_eq!(cached.elf_bytes()[4], 1, "ELFCLASS32");
-        assert_eq!(cached.elf_bytes()[5], 1, "ELFDATA2LSB");
+        assert_eq!(cached.image_fingerprint(), predecoded.image_fingerprint());
+        assert_eq!(&image.elf_bytes()[..4], b"\x7fELF");
+        assert_eq!(image.elf_bytes()[4], 1, "ELFCLASS32");
+        assert_eq!(image.elf_bytes()[5], 1, "ELFDATA2LSB");
     }
 }
 
@@ -77,4 +77,24 @@ fn product_observation_reports_backend_owned_storage() {
     let predecoded = predecoded.execute().unwrap();
     assert!(predecoded.translation_bytes >= predecoded.executable_bytes);
     assert!(predecoded.cache_stats.is_none());
+}
+
+#[test]
+fn product_sampling_order_is_interleaved_and_percentiles_are_stable() {
+    assert_eq!(
+        product_backend_order(0, 0),
+        [
+            ProductMachineBackend::Cached,
+            ProductMachineBackend::Predecoded
+        ]
+    );
+    assert_eq!(
+        product_backend_order(0, 1),
+        [
+            ProductMachineBackend::Predecoded,
+            ProductMachineBackend::Cached
+        ]
+    );
+    assert_eq!(product_percentile(&[10, 20, 30, 40, 50], 50), 30);
+    assert_eq!(product_percentile(&[10, 20, 30, 40, 50], 95), 50);
 }
