@@ -18,9 +18,12 @@
  */
 
 use compukter_vm::benchmarks::{
-    product_backend_order, product_percentile, PreparedProductMachine, ProductMachineBackend,
-    ProductMachineImage, ProductMachineObservation, ProductMachineWorkload, PRODUCT_CACHE_SETS,
-    PRODUCT_DEBUG_LIMIT, PRODUCT_RAM_BYTES,
+    benchmark_geomean, benchmark_normalize_nanos, benchmark_rotating_order,
+    format_product_active_row, populate_product_ratios, product_backend_order, product_percentile,
+    PreparedProductMachine, PreparedProductNative, ProductActiveTiming, ProductExecutionCandidate,
+    ProductMachineBackend, ProductMachineImage, ProductMachineObservation, ProductMachineWorkload,
+    PRODUCT_ACTIVE_REPORT_HEADER, PRODUCT_CACHE_SETS, PRODUCT_DEBUG_LIMIT, PRODUCT_RAM_BYTES,
+    PRODUCT_RESIDENT_REPORT_HEADER,
 };
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
@@ -111,57 +114,87 @@ fn main() -> Result<(), String> {
 }
 
 struct ActiveMeasurement {
-    backend: ProductMachineBackend,
+    candidate: ProductExecutionCandidate,
     workload: ProductMachineWorkload,
-    cold: PreparedProductMachine,
-    warm: Vec<PreparedProductMachine>,
+    prepared: ActivePrepared,
+    batch: u64,
     cold_nanos: u128,
     warm_nanos: Vec<u128>,
     observation: Option<ProductMachineObservation>,
+    checksum: u32,
     steady_allocations: u64,
     steady_allocated_bytes: u64,
 }
 
+enum ActivePrepared {
+    Native(PreparedProductNative),
+    Machine {
+        cold: PreparedProductMachine,
+        warm: Vec<PreparedProductMachine>,
+    },
+}
+
 fn measure_active(iterations: u32, warm_samples: usize) -> Result<Vec<ActiveMeasurement>, String> {
-    let mut completed = Vec::with_capacity(ProductMachineWorkload::all().len() * 2);
+    let mut completed = Vec::with_capacity(
+        ProductMachineWorkload::all().len() * ProductExecutionCandidate::all().len(),
+    );
     for (workload_index, workload) in ProductMachineWorkload::all().iter().copied().enumerate() {
         let image = ProductMachineImage::new(workload, iterations)?;
-        let mut measurements = ProductMachineBackend::all()
+        let mut measurements = ProductExecutionCandidate::all()
             .iter()
             .copied()
-            .map(|backend| {
+            .map(|candidate| {
+                let prepared = match candidate {
+                    ProductExecutionCandidate::NativeHost => {
+                        ActivePrepared::Native(PreparedProductNative::new(workload, iterations)?)
+                    }
+                    ProductExecutionCandidate::Cached | ProductExecutionCandidate::Predecoded => {
+                        let backend = candidate_backend(candidate);
+                        ActivePrepared::Machine {
+                            cold: image.prepare(backend)?,
+                            warm: (0..warm_samples)
+                                .map(|_| image.prepare(backend))
+                                .collect::<Result<Vec<_>, String>>()?,
+                        }
+                    }
+                };
                 Ok(ActiveMeasurement {
-                    backend,
+                    candidate,
                     workload,
-                    cold: image.prepare(backend)?,
-                    warm: (0..warm_samples)
-                        .map(|_| image.prepare(backend))
-                        .collect::<Result<Vec<_>, String>>()?,
+                    prepared,
+                    batch: 1,
                     cold_nanos: 0,
                     warm_nanos: Vec::with_capacity(warm_samples),
                     observation: None,
+                    checksum: 0,
                     steady_allocations: 0,
                     steady_allocated_bytes: 0,
                 })
             })
             .collect::<Result<Vec<_>, String>>()?;
 
-        for backend in product_backend_order(workload_index, 0) {
-            let measurement = active_for_backend(&mut measurements, backend);
-            let (observation, nanos, allocations, allocated_bytes) =
-                measure_execution(&mut measurement.cold)?;
+        let native = active_for_candidate(&mut measurements, ProductExecutionCandidate::NativeHost);
+        native.batch = calibrate_native(native)?;
+        for candidate_index in benchmark_rotating_order::<3>(workload_index, 0) {
+            let candidate = ProductExecutionCandidate::all()[candidate_index];
+            let measurement = active_for_candidate(&mut measurements, candidate);
+            let (checksum, observation, nanos, allocations, allocated_bytes) =
+                measure_active_execution(measurement, None)?;
             measurement.cold_nanos = nanos;
-            measurement.observation = Some(observation);
+            measurement.checksum = checksum;
+            measurement.observation = observation;
             measurement.steady_allocations = allocations;
             measurement.steady_allocated_bytes = allocated_bytes;
         }
         for sample_index in 0..warm_samples {
-            for backend in product_backend_order(workload_index, sample_index + 1) {
-                let measurement = active_for_backend(&mut measurements, backend);
-                let (observation, nanos, allocations, allocated_bytes) =
-                    measure_execution(&mut measurement.warm[sample_index])?;
+            for candidate_index in benchmark_rotating_order::<3>(workload_index, sample_index + 1) {
+                let candidate = ProductExecutionCandidate::all()[candidate_index];
+                let measurement = active_for_candidate(&mut measurements, candidate);
+                let (checksum, observation, nanos, allocations, allocated_bytes) =
+                    measure_active_execution(measurement, Some(sample_index))?;
                 measurement.warm_nanos.push(nanos);
-                measurement.observation = Some(observation);
+                measurement.checksum = checksum;
+                measurement.observation = observation;
                 measurement.steady_allocations = measurement.steady_allocations.max(allocations);
                 measurement.steady_allocated_bytes =
                     measurement.steady_allocated_bytes.max(allocated_bytes);
@@ -173,7 +206,7 @@ fn measure_active(iterations: u32, warm_samples: usize) -> Result<Vec<ActiveMeas
                 return Err(format!(
                     "{} {} allocated during run: {} allocations, {} bytes",
                     measurement.workload.name(),
-                    measurement.backend.name(),
+                    measurement.candidate.name(),
                     measurement.steady_allocations,
                     measurement.steady_allocated_bytes,
                 ));
@@ -184,25 +217,62 @@ fn measure_active(iterations: u32, warm_samples: usize) -> Result<Vec<ActiveMeas
     Ok(completed)
 }
 
-fn active_for_backend(
+fn active_for_candidate(
     measurements: &mut [ActiveMeasurement],
-    backend: ProductMachineBackend,
+    candidate: ProductExecutionCandidate,
 ) -> &mut ActiveMeasurement {
     measurements
         .iter_mut()
-        .find(|measurement| measurement.backend == backend)
+        .find(|measurement| measurement.candidate == candidate)
         .unwrap()
 }
 
-fn measure_execution(
-    prepared: &mut PreparedProductMachine,
-) -> Result<(ProductMachineObservation, u128, u64, u64), String> {
+fn candidate_backend(candidate: ProductExecutionCandidate) -> ProductMachineBackend {
+    match candidate {
+        ProductExecutionCandidate::Cached => ProductMachineBackend::Cached,
+        ProductExecutionCandidate::Predecoded => ProductMachineBackend::Predecoded,
+        ProductExecutionCandidate::NativeHost => unreachable!(),
+    }
+}
+
+fn calibrate_native(measurement: &mut ActiveMeasurement) -> Result<u64, String> {
+    let ActivePrepared::Native(prepared) = &mut measurement.prepared else {
+        return Err("native calibration requires a native candidate".to_string());
+    };
+    let mut batch = 1_u64;
+    loop {
+        let started = Instant::now();
+        prepared.execute_batch(batch)?;
+        if started.elapsed().as_nanos() >= 1_000_000 {
+            return Ok(batch);
+        }
+        batch = batch
+            .checked_mul(2)
+            .ok_or_else(|| "native calibration batch overflow".to_string())?;
+    }
+}
+
+fn measure_active_execution(
+    measurement: &mut ActiveMeasurement,
+    warm_index: Option<usize>,
+) -> Result<(u32, Option<ProductMachineObservation>, u128, u64, u64), String> {
     ALLOCATIONS.store(0, Ordering::Relaxed);
     ALLOCATED_BYTES.store(0, Ordering::Relaxed);
     let started = Instant::now();
-    let observation = prepared.execute()?;
+    let (checksum, observation) = match &mut measurement.prepared {
+        ActivePrepared::Native(prepared) => {
+            let observation = prepared.execute_batch(measurement.batch)?;
+            (observation.checksum, None)
+        }
+        ActivePrepared::Machine { cold, warm } => {
+            let prepared = warm_index.map_or(cold, |index| &mut warm[index]);
+            let observation = prepared.execute()?;
+            (observation.checksum, Some(observation))
+        }
+    };
     let nanos = started.elapsed().as_nanos();
     Ok((
+        checksum,
         observation,
         nanos,
         ALLOCATIONS.load(Ordering::Relaxed),
@@ -218,33 +288,50 @@ fn print_active_report(iterations: u32, warm_samples: usize, rows: &[ActiveMeasu
     println!("debug_limit\t{PRODUCT_DEBUG_LIMIT}");
     println!("cached_sets\t{PRODUCT_CACHE_SETS}");
     println!("cached_entries\t{}", PRODUCT_CACHE_SETS * 2);
-    println!("workload\tbackend\titerations\tchecksum\tcold_ns\twarm_median_ns\twarm_p95_ns\tns_per_iteration\tretired_instructions\tcache_hits\tcache_misses\tram_bytes\texecutable_bytes\ttranslation_bytes\tsteady_allocations\tsteady_allocated_bytes");
-    for row in rows {
-        let observation = row.observation.as_ref().unwrap();
-        let median = product_percentile(&row.warm_nanos, 50);
-        let p95 = product_percentile(&row.warm_nanos, 95);
-        let (cache_hits, cache_misses) = observation.cache_stats.map_or_else(
-            || ("-".to_string(), "-".to_string()),
-            |stats| (stats.hits.to_string(), stats.misses.to_string()),
-        );
+    println!("{PRODUCT_ACTIVE_REPORT_HEADER}");
+    let timings = rows
+        .iter()
+        .map(|row| {
+            Ok(ProductActiveTiming {
+                candidate: row.candidate,
+                workload: row.workload,
+                iterations,
+                checksum: row.checksum,
+                batch: row.batch,
+                cold_nanos: benchmark_normalize_nanos(row.cold_nanos, row.batch)?,
+                warm_median_nanos: benchmark_normalize_nanos(
+                    product_percentile(&row.warm_nanos, 50),
+                    row.batch,
+                )?,
+                warm_p95_nanos: benchmark_normalize_nanos(
+                    product_percentile(&row.warm_nanos, 95),
+                    row.batch,
+                )?,
+                machine: row.observation.clone(),
+                steady_allocations: row.steady_allocations,
+                steady_allocated_bytes: row.steady_allocated_bytes,
+                vs_native: 0.0,
+            })
+        })
+        .collect::<Result<Vec<_>, String>>()
+        .and_then(populate_product_ratios)
+        .unwrap();
+    for timing in &timings {
+        println!("{}", format_product_active_row(timing));
+    }
+    println!();
+    println!("RV32 product machine native summary");
+    println!("candidate\thost_overhead_geomean");
+    for candidate in ProductExecutionCandidate::all() {
+        let ratios = timings
+            .iter()
+            .filter(|timing| timing.candidate == *candidate)
+            .map(|timing| timing.vs_native)
+            .collect::<Vec<_>>();
         println!(
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{:.3}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
-            row.workload.name(),
-            row.backend.name(),
-            observation.iterations,
-            observation.checksum,
-            row.cold_nanos,
-            median,
-            p95,
-            median as f64 / f64::from(iterations),
-            observation.retired_instructions,
-            cache_hits,
-            cache_misses,
-            observation.ram_bytes,
-            observation.executable_bytes,
-            observation.translation_bytes,
-            row.steady_allocations,
-            row.steady_allocated_bytes,
+            "{}\t{:.6}",
+            candidate.name(),
+            benchmark_geomean(&ratios).unwrap()
         );
     }
     println!();
@@ -326,7 +413,7 @@ fn print_resident_report(iterations: u32, sample_count: usize, rows: &[ResidentM
     println!("RV32 resident population report");
     println!("resident_samples\t{sample_count}");
     println!("workload\t{}", ProductMachineWorkload::PacketRing.name());
-    println!("backend\tpopulation\tconstruction_median_ns\tconstruction_p95_ns\tresident_live_bytes\tpeak_construction_bytes\tlive_bytes_per_machine\taggregate_ram_bytes\telf_bytes\texecutable_bytes\trw_initialized_bytes\tram_bytes\tdebug_limit\tcache_sets");
+    println!("{PRODUCT_RESIDENT_REPORT_HEADER}");
     for row in rows {
         let mut nanos = row
             .samples

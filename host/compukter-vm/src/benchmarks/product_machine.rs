@@ -25,6 +25,7 @@ use crate::rv32_machine::{
 };
 use crate::rv32im::encoding::{addi, bne, csrrs, csrrw, ebreak, ecall, jal, materialize, mret, sw};
 use crate::rv32im::Rv32imCacheStats;
+use std::collections::HashMap;
 use std::hint::black_box;
 
 const ELF32_HEADER_SIZE: usize = 52;
@@ -38,6 +39,7 @@ pub const PRODUCT_RAM_BYTES: usize = 16 * 1024;
 pub const PRODUCT_CACHE_SETS: usize = 64;
 pub const PRODUCT_DEBUG_LIMIT: usize = 0;
 pub const PRODUCT_RESIDENT_REPORT_HEADER: &str = "backend\tpopulation\tconstruction_median_ns\tconstruction_p95_ns\tresident_live_bytes\tpeak_construction_bytes\tlive_bytes_per_machine\taggregate_ram_bytes\telf_bytes\texecutable_bytes\trw_initialized_bytes\tram_bytes\tdebug_limit\tcache_sets";
+pub const PRODUCT_ACTIVE_REPORT_HEADER: &str = "workload\tcandidate\titerations\tchecksum\tbatch\tcold_ns\twarm_median_ns\twarm_p95_ns\toperations_per_second\tretired_instructions\tcache_hits\tcache_misses\tram_bytes\texecutable_bytes\ttranslation_bytes\tsteady_allocations\tsteady_allocated_bytes\tvs_native";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProductExecutionCandidate {
@@ -58,6 +60,145 @@ impl ProductExecutionCandidate {
             Self::Predecoded => "rv32-predecoded",
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ProductActiveTiming {
+    pub candidate: ProductExecutionCandidate,
+    pub workload: ProductMachineWorkload,
+    pub iterations: u32,
+    pub checksum: u32,
+    pub batch: u64,
+    pub cold_nanos: f64,
+    pub warm_median_nanos: f64,
+    pub warm_p95_nanos: f64,
+    pub machine: Option<ProductMachineObservation>,
+    pub steady_allocations: u64,
+    pub steady_allocated_bytes: u64,
+    pub vs_native: f64,
+}
+
+impl ProductActiveTiming {
+    pub fn native(
+        workload: ProductMachineWorkload,
+        iterations: u32,
+        batch: u64,
+        median_nanos: f64,
+        p95_nanos: f64,
+        checksum: u32,
+    ) -> Self {
+        Self {
+            candidate: ProductExecutionCandidate::NativeHost,
+            workload,
+            iterations,
+            checksum,
+            batch,
+            cold_nanos: median_nanos,
+            warm_median_nanos: median_nanos,
+            warm_p95_nanos: p95_nanos,
+            machine: None,
+            steady_allocations: 0,
+            steady_allocated_bytes: 0,
+            vs_native: 0.0,
+        }
+    }
+
+    pub fn machine(
+        candidate: ProductExecutionCandidate,
+        workload: ProductMachineWorkload,
+        iterations: u32,
+        median_nanos: f64,
+        p95_nanos: f64,
+        checksum: u32,
+    ) -> Self {
+        assert!(candidate != ProductExecutionCandidate::NativeHost);
+        Self {
+            candidate,
+            workload,
+            iterations,
+            checksum,
+            batch: 1,
+            cold_nanos: median_nanos,
+            warm_median_nanos: median_nanos,
+            warm_p95_nanos: p95_nanos,
+            machine: None,
+            steady_allocations: 0,
+            steady_allocated_bytes: 0,
+            vs_native: 0.0,
+        }
+    }
+
+    pub fn operations_per_second(&self) -> f64 {
+        1_000_000_000.0 / self.warm_median_nanos
+    }
+}
+
+pub fn populate_product_ratios(
+    mut rows: Vec<ProductActiveTiming>,
+) -> Result<Vec<ProductActiveTiming>, String> {
+    let native = rows
+        .iter()
+        .filter(|row| row.candidate == ProductExecutionCandidate::NativeHost)
+        .map(|row| (row.workload, row.warm_median_nanos))
+        .collect::<HashMap<_, _>>();
+    for row in &mut rows {
+        let reference = native
+            .get(&row.workload)
+            .copied()
+            .filter(|value| value.is_finite() && *value > 0.0)
+            .ok_or_else(|| format!("missing native timing for {}", row.workload.name()))?;
+        row.vs_native = row.warm_median_nanos / reference;
+    }
+    Ok(rows)
+}
+
+pub fn format_product_active_row(row: &ProductActiveTiming) -> String {
+    let (retired, cache_hits, cache_misses, ram, executable, translation) =
+        match row.machine.as_ref() {
+            Some(machine) => {
+                let (hits, misses) = machine.cache_stats.map_or_else(
+                    || ("-".to_string(), "-".to_string()),
+                    |stats| (stats.hits.to_string(), stats.misses.to_string()),
+                );
+                (
+                    machine.retired_instructions.to_string(),
+                    hits,
+                    misses,
+                    machine.ram_bytes.to_string(),
+                    machine.executable_bytes.to_string(),
+                    machine.translation_bytes.to_string(),
+                )
+            }
+            None => (
+                "-".to_string(),
+                "-".to_string(),
+                "-".to_string(),
+                "-".to_string(),
+                "-".to_string(),
+                "-".to_string(),
+            ),
+        };
+    format!(
+        "{}\t{}\t{}\t{}\t{}\t{:.3}\t{:.3}\t{:.3}\t{:.3}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{:.6}",
+        row.workload.name(),
+        row.candidate.name(),
+        row.iterations,
+        row.checksum,
+        row.batch,
+        row.cold_nanos,
+        row.warm_median_nanos,
+        row.warm_p95_nanos,
+        row.operations_per_second(),
+        retired,
+        cache_hits,
+        cache_misses,
+        ram,
+        executable,
+        translation,
+        row.steady_allocations,
+        row.steady_allocated_bytes,
+        row.vs_native,
+    )
 }
 
 pub fn benchmark_rotating_order<const N: usize>(group: usize, sample: usize) -> [usize; N] {
@@ -136,7 +277,7 @@ pub fn product_percentile(sorted_values: &[u128], percentile: usize) -> u128 {
     sorted_values[index]
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ProductMachineWorkload {
     Compute32,
     BranchMix,

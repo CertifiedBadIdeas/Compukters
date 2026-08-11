@@ -18,8 +18,9 @@
  */
 
 use compukter_vm::benchmarks::{
-    benchmark_geomean, benchmark_normalize_nanos, benchmark_rotating_order, native_checksum,
-    product_backend_order, product_percentile, PreparedProductMachine, PreparedProductNative,
+    benchmark_geomean, benchmark_normalize_nanos, benchmark_rotating_order,
+    format_product_active_row, native_checksum, populate_product_ratios, product_backend_order,
+    product_percentile, PreparedProductMachine, PreparedProductNative, ProductActiveTiming,
     ProductExecutionCandidate, ProductMachineBackend, ProductMachineImage, ProductMachineWorkload,
     PRODUCT_RESIDENT_REPORT_HEADER,
 };
@@ -131,4 +132,28 @@ fn resident_report_header_remains_stable() {
         PRODUCT_RESIDENT_REPORT_HEADER,
         "backend\tpopulation\tconstruction_median_ns\tconstruction_p95_ns\tresident_live_bytes\tpeak_construction_bytes\tlive_bytes_per_machine\taggregate_ram_bytes\telf_bytes\texecutable_bytes\trw_initialized_bytes\tram_bytes\tdebug_limit\tcache_sets"
     );
+}
+
+#[test]
+fn native_rows_use_dashes_and_vm_ratios_use_normalized_medians() {
+    let native = ProductActiveTiming::native(
+        ProductMachineWorkload::Compute32,
+        1000,
+        7,
+        2_500.0,
+        2_700.0,
+        42,
+    );
+    let cached = ProductActiveTiming::machine(
+        ProductExecutionCandidate::Cached,
+        ProductMachineWorkload::Compute32,
+        1000,
+        100_000.0,
+        110_000.0,
+        1_133_597_426,
+    );
+    let rows = populate_product_ratios(vec![native, cached]).unwrap();
+    assert_eq!(rows[0].vs_native, 1.0);
+    assert_eq!(rows[1].vs_native, 40.0);
+    assert!(format_product_active_row(&rows[0]).contains("\t-\t-\t-\t-\t-\t-\t"));
 }
