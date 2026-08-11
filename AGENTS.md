@@ -6,7 +6,7 @@ Compukter Kraft is a Gradle multi-module Kotlin project with native Rust VM comp
 `modules/`: `core` contains shared device/runtime logic, `native-runtime` contains architecture-neutral runtime models, and
 `v1_21_1/v1_21_1-common` plus `v1_21_1/v1_21_1-neoforge` contain the Minecraft 1.21.1 integration. Host-side Rust
 VM code lives in `host/compukter-vm`. Documentation is in
-`docs/`, active machine ABI references are in `docs/abi`, mod metadata is in `config/`, and visual/model assets are in
+`docs/`, mod metadata is in `config/`, and visual/model assets are in
 `models/` and top-level logo files.
 
 ## Build, Test, and Development Commands

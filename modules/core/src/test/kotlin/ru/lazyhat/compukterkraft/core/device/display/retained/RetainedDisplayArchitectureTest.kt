@@ -48,7 +48,6 @@ class RetainedDisplayArchitectureTest {
                 "NativeDisplayFrameCodec",
                 "DisplayFrameDelta",
                 "DisplayFrameOperation",
-                "K16ComputerEndpoint",
             )
         ) {
             assertFalse(source.contains(forbidden), "logical replica must not depend on $forbidden")

@@ -8,7 +8,6 @@ commonConvention = { id = "common-convention" }
 fabricConvention = { id = "fabric-convention" }
 neoforgeConvention = { id = "neoforge-convention" }
 metadataConvention = { id = "metadata" }
-k16FirmwareConvention = { id = "k16-firmware-convention" }
 releaseConvention = { id = "release-convention" }
 
 # external

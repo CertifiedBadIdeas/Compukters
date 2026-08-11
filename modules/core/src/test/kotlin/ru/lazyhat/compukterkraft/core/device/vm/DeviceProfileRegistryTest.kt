@@ -77,16 +77,16 @@ class DeviceProfileRegistryTest {
     }
 
     @Test
-    fun allComputerFamiliesExposeK16TurnBudget() {
+    fun allComputerFamiliesExposeTurnBudget() {
         DeviceFamily.entries.forEach { family ->
             val profile = DeviceProfileRegistry.forFamily(family)
 
-            assertEquals(32, profile.resources.cpu.maxTurnsPerTick, "$family K16 turn budget should avoid one-pause-per-game-tick command latency")
+            assertEquals(32, profile.resources.cpu.maxTurnsPerTick, "$family turn budget should avoid one-pause-per-game-tick command latency")
         }
     }
 
     @Test
-    fun computerFamiliesExposeK16StepBudgetsForBundledOsWorkloads() {
+    fun computerFamiliesExposeStepBudgetsForGuestWorkloads() {
         assertEquals(1_000_000, DeviceProfileRegistry.forFamily(DeviceFamily.NORMAL).resources.cpu.maxStepsPerSlice)
         assertEquals(2_000_000, DeviceProfileRegistry.forFamily(DeviceFamily.ADVANCED).resources.cpu.maxStepsPerSlice)
         assertEquals(4_000_000, DeviceProfileRegistry.forFamily(DeviceFamily.COMMAND).resources.cpu.maxStepsPerSlice)
