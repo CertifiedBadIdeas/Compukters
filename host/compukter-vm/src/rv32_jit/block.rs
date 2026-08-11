@@ -53,6 +53,19 @@ pub(crate) struct JitBlockInput {
 }
 
 impl JitBlockInput {
+    pub(crate) fn supported_prefix(
+        start_pc: u32,
+        slots: &[Rv32ResolvedInstruction],
+    ) -> Option<Self> {
+        let prefix = slots
+            .iter()
+            .copied()
+            .take_while(|slot| is_supported_slot(*slot))
+            .collect::<Vec<_>>();
+        (!prefix.is_empty())
+            .then(|| Self::from_resolved(start_pc, prefix).expect("supported JIT prefix is valid"))
+    }
+
     pub(crate) fn from_resolved(
         start_pc: u32,
         slots: Vec<Rv32ResolvedInstruction>,
@@ -94,14 +107,25 @@ impl JitBlockInput {
     }
 
     pub(crate) fn is_supported(&self) -> bool {
-        self.slots.iter().all(|slot| {
-            matches!(
-                slot.instruction,
-                DecodedInstruction::Immediate { op: ImmOp::Add, .. }
-                    | DecodedInstruction::Register { op: Op::Add, .. }
-            )
-        })
+        self.slots
+            .iter()
+            .all(|slot| is_supported_instruction(slot.instruction))
     }
+}
+
+fn is_supported_slot(slot: Rv32ResolvedInstruction) -> bool {
+    matches!(
+        slot,
+        Rv32ResolvedInstruction::Valid { instruction, .. } if is_supported_instruction(instruction)
+    )
+}
+
+fn is_supported_instruction(instruction: DecodedInstruction) -> bool {
+    matches!(
+        instruction,
+        DecodedInstruction::Immediate { op: ImmOp::Add, .. }
+            | DecodedInstruction::Register { op: Op::Add, .. }
+    )
 }
 
 #[cfg(test)]
