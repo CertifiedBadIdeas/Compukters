@@ -210,6 +210,8 @@ impl PreparedProductMachine {
                 self.workload.name(),
             ));
         }
+        let executable_bytes = self.machine.executable_bytes();
+        debug_assert_eq!(executable_bytes, self.executable_bytes);
         Ok(ProductMachineObservation {
             backend: self.backend,
             workload: self.workload,
@@ -218,8 +220,8 @@ impl PreparedProductMachine {
             retired_instructions,
             cache_stats: self.machine.cache_stats(),
             ram_bytes: PRODUCT_RAM_BYTES,
-            executable_bytes: self.executable_bytes,
-            translation_bytes: 0,
+            executable_bytes,
+            translation_bytes: self.machine.translation_bytes(),
             complete_machine: true,
         })
     }
