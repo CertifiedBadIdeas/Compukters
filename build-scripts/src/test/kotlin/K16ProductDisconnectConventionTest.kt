@@ -71,6 +71,14 @@ class K16ProductDisconnectConventionTest {
         assertFalse(source.contains("RETAINED_DISPLAY_"))
     }
 
+    @Test
+    fun metadataGenerationCannotRecreateFirmwareDirectory() {
+        val source = root.resolve("build-scripts/src/main/kotlin/metadata.gradle.kts").readText()
+
+        assertFalse(source.contains("listOf(\"rom\", \"firmware\")"))
+        assertTrue(source.contains("delete(outputRoot)"))
+    }
+
     private fun repositoryRoot(): Path {
         val start = Path.of(System.getProperty("user.dir")).toAbsolutePath().normalize()
         return generateSequence(start) { it.parent }

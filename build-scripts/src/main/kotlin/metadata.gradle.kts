@@ -39,7 +39,7 @@ val generateCklResourceIndexes =
     tasks.register("generateCklResourceIndexes") {
         val resourcesRoot = layout.projectDirectory.dir("src/main/resources")
         val outputRoot = layout.buildDirectory.dir("generated/ckl-resource-indexes")
-        val indexedRoots = listOf("rom", "firmware")
+        val indexedRoots = listOf("rom")
 
         inputs.files(
             indexedRoots.map { rootName -> fileTree(resourcesRoot.dir(rootName)) },
@@ -47,6 +47,7 @@ val generateCklResourceIndexes =
         outputs.dir(outputRoot)
 
         doLast {
+            delete(outputRoot)
             for (rootName in indexedRoots) {
                 val sourceRoot = resourcesRoot.dir(rootName).asFile
                 val files =
