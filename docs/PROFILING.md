@@ -69,14 +69,21 @@ cargo run --manifest-path host/compukter-vm/Cargo.toml --release \
 ```
 
 The arguments are workload iterations, warm execution samples, and resident
-construction samples. The runner enforces minima of 21 and seven samples. It
-uses one byte-identical strict ELF32 image for Cached and Predecoded, times only
-`Rv32Machine::run` in the active report, and excludes the shared ELF from the
-resident population heap delta.
+construction samples. The runner enforces minima of 21 and seven samples. Its
+active report rotates NativeHost, Cached, and Predecoded sample order. Native
+work is calibrated in batches of at least one millisecond and normalized back
+to one workload invocation; Cached and Predecoded time one fresh
+`Rv32Machine::run` and use one byte-identical strict ELF32 image. The report
+includes complete-workload operations per second and VM/native median ratios.
+The resident report remains VM-only and excludes the shared ELF from the
+population heap delta.
 
 The 2026-08-11 baseline, complete raw output, environment, and interpretation
 are stored in
 [`2026-08-11-rv32-product-machine-baseline.md`](benchmarks/2026-08-11-rv32-product-machine-baseline.md).
+The subsequent same-process native reference and normalized absolute ratios are
+stored in
+[`2026-08-11-rv32-product-native-reference.md`](benchmarks/2026-08-11-rv32-product-native-reference.md).
 Absolute timings are host-specific comparison evidence, not a server-capacity
 promise.
 
