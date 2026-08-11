@@ -17,12 +17,14 @@ use compukter_vm::benchmarks::{
 use compukter_vm::rv32_machine::{
     Rv32ExecutionBackendConfig, Rv32Machine, Rv32MachineConfig, Rv32MachineOutcome,
 };
+use std::alloc::{GlobalAlloc, Layout, System};
 use std::collections::BTreeMap;
 use std::env;
 use std::ffi::{OsStr, OsString};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -34,6 +36,40 @@ const STARTUP_SAMPLES: usize = 7;
 const SAMPLE_TARGET_NANOS: u128 = 250_000_000;
 const PRODUCT_RAM_BYTES: usize = 16 * 1024;
 const PRODUCT_CACHE_SETS: usize = 64;
+const PRODUCT_BLOCK_CACHE_SETS: usize = 32;
+const PRODUCT_BLOCK_MAX_INSTRUCTIONS: usize = 8;
+
+struct CountingAllocator;
+
+static ALLOCATIONS: AtomicU64 = AtomicU64::new(0);
+static ALLOCATED_BYTES: AtomicU64 = AtomicU64::new(0);
+
+unsafe impl GlobalAlloc for CountingAllocator {
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        ALLOCATIONS.fetch_add(1, Ordering::Relaxed);
+        ALLOCATED_BYTES.fetch_add(layout.size() as u64, Ordering::Relaxed);
+        unsafe { System.alloc(layout) }
+    }
+
+    unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
+        ALLOCATIONS.fetch_add(1, Ordering::Relaxed);
+        ALLOCATED_BYTES.fetch_add(layout.size() as u64, Ordering::Relaxed);
+        unsafe { System.alloc_zeroed(layout) }
+    }
+
+    unsafe fn dealloc(&self, pointer: *mut u8, layout: Layout) {
+        unsafe { System.dealloc(pointer, layout) }
+    }
+
+    unsafe fn realloc(&self, pointer: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
+        ALLOCATIONS.fetch_add(1, Ordering::Relaxed);
+        ALLOCATED_BYTES.fetch_add(new_size as u64, Ordering::Relaxed);
+        unsafe { System.realloc(pointer, layout, new_size) }
+    }
+}
+
+#[global_allocator]
+static GLOBAL: CountingAllocator = CountingAllocator;
 
 #[derive(Clone, Copy)]
 enum Candidate {
@@ -41,10 +77,17 @@ enum Candidate {
     Qemu,
     Cached,
     Predecoded,
+    BlockCached,
 }
 
 impl Candidate {
-    const ALL: [Self; 4] = [Self::Native, Self::Qemu, Self::Cached, Self::Predecoded];
+    const ALL: [Self; 5] = [
+        Self::Native,
+        Self::Qemu,
+        Self::Cached,
+        Self::Predecoded,
+        Self::BlockCached,
+    ];
 
     fn name(self) -> &'static str {
         match self {
@@ -52,6 +95,7 @@ impl Candidate {
             Self::Qemu => "qemu-rv32-tcg",
             Self::Cached => "rv32-cached",
             Self::Predecoded => "rv32-predecoded",
+            Self::BlockCached => "rv32-block-cached",
         }
     }
 }
@@ -64,10 +108,16 @@ struct ProcessObservation {
 #[derive(Default, Clone, Copy)]
 struct ProductDetails {
     retired_instructions: u64,
+    lookup_unit: Option<&'static str>,
     cache_hits: Option<u64>,
     cache_misses: Option<u64>,
+    cache_evictions: Option<u64>,
+    blocks_built: Option<u64>,
+    decoded_slots_built: Option<u64>,
     translation_bytes: usize,
     executable_bytes: usize,
+    steady_allocations: u64,
+    steady_allocated_bytes: u64,
 }
 
 struct CandidateMeasurements {
@@ -140,6 +190,15 @@ fn run() -> Result<(), String> {
         &build_dir,
         Rv32ExecutionBackendConfig::Predecoded,
     )?;
+    let block_cached_batch = calibrate_product(
+        &linker,
+        &source_root,
+        &build_dir,
+        Rv32ExecutionBackendConfig::BlockCached {
+            sets: PRODUCT_BLOCK_CACHE_SETS,
+            max_instructions: PRODUCT_BLOCK_MAX_INSTRUCTIONS,
+        },
+    )?;
 
     let qemu_elf = link_platform(&linker, &source_root, &build_dir, "qemu", qemu_batch)?;
     let cached_elf = link_platform(&linker, &source_root, &build_dir, "product", cached_batch)?;
@@ -150,8 +209,21 @@ fn run() -> Result<(), String> {
         "product",
         predecoded_batch,
     )?;
+    let block_cached_elf = link_platform(
+        &linker,
+        &source_root,
+        &build_dir,
+        "product",
+        block_cached_batch,
+    )?;
 
-    let batches = [native_batch, qemu_batch, cached_batch, predecoded_batch];
+    let batches = [
+        native_batch,
+        qemu_batch,
+        cached_batch,
+        predecoded_batch,
+        block_cached_batch,
+    ];
     let mut measurements = Candidate::ALL
         .into_iter()
         .zip(batches)
@@ -165,7 +237,7 @@ fn run() -> Result<(), String> {
 
     let qemu_timeout = duration_from_nanos(c_comparison_timeout_nanos(qemu_target))?;
     for sample in 0..samples {
-        for candidate_index in benchmark_rotating_order::<4>(0, sample) {
+        for candidate_index in benchmark_rotating_order::<5>(0, sample) {
             let measurement = &mut measurements[candidate_index];
             let (elapsed, details) = match measurement.candidate {
                 Candidate::Native => (
@@ -187,6 +259,14 @@ fn run() -> Result<(), String> {
                     &predecoded_elf,
                     measurement.batch,
                     Rv32ExecutionBackendConfig::Predecoded,
+                )?,
+                Candidate::BlockCached => run_product(
+                    &block_cached_elf,
+                    measurement.batch,
+                    Rv32ExecutionBackendConfig::BlockCached {
+                        sets: PRODUCT_BLOCK_CACHE_SETS,
+                        max_instructions: PRODUCT_BLOCK_MAX_INSTRUCTIONS,
+                    },
                 )?,
             };
             measurement.samples.push(elapsed);
@@ -223,7 +303,11 @@ fn run() -> Result<(), String> {
         sha256_file(&predecoded_elf)?
     );
     println!(
-        "candidate\tmode\titerations\tseed\tbatch\tchecksum\ttotal_median_ns\ttotal_p95_ns\tns_per_kernel\tkernels_per_second\tvs_native\tvs_qemu\ttext_bytes\tqemu_startup_median_ns\tretired_instructions\tcache_hits\tcache_misses\ttranslation_bytes"
+        "block-cached-calibrated-sha256\t{}",
+        sha256_file(&block_cached_elf)?
+    );
+    println!(
+        "candidate\tmode\titerations\tseed\tbatch\tchecksum\ttotal_median_ns\ttotal_p95_ns\tns_per_kernel\tkernels_per_second\tvs_native\tvs_qemu\ttext_bytes\tqemu_startup_median_ns\tretired_instructions\tlookup_unit\tcache_hits\tcache_misses\tcache_evictions\tblocks_built\tdecoded_slots_built\ttranslation_bytes\tsteady_allocations\tsteady_allocated_bytes"
     );
 
     let normalized = measurements
@@ -246,7 +330,7 @@ fn run() -> Result<(), String> {
         let text_bytes = match measurement.candidate {
             Candidate::Native => manifest_value(&manifest, "native-text-bytes")?.to_string(),
             Candidate::Qemu => manifest_value(&manifest, "qemu-text-bytes")?.to_string(),
-            Candidate::Cached | Candidate::Predecoded => {
+            Candidate::Cached | Candidate::Predecoded | Candidate::BlockCached => {
                 measurement.details.executable_bytes.to_string()
             }
         };
@@ -255,9 +339,10 @@ fn run() -> Result<(), String> {
             Candidate::Qemu => "virt-system-tcg",
             Candidate::Cached => "product-machine-cached",
             Candidate::Predecoded => "product-machine-predecoded",
+            Candidate::BlockCached => "product-machine-block-cached",
         };
         println!(
-            "{}\t{}\t{}\t0x{:08x}\t{}\t{:08x}\t{}\t{}\t{:.3}\t{:.3}\t{:.6}\t{:.6}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t0x{:08x}\t{}\t{:08x}\t{}\t{}\t{:.3}\t{:.3}\t{:.6}\t{:.6}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             measurement.candidate.name(),
             mode,
             ITERATIONS,
@@ -276,14 +361,20 @@ fn run() -> Result<(), String> {
             } else {
                 "-".to_string()
             },
-            option_u64(matches!(measurement.candidate, Candidate::Cached | Candidate::Predecoded).then_some(measurement.details.retired_instructions)),
+            option_u64(matches!(measurement.candidate, Candidate::Cached | Candidate::Predecoded | Candidate::BlockCached).then_some(measurement.details.retired_instructions)),
+            measurement.details.lookup_unit.unwrap_or("-"),
             option_u64(measurement.details.cache_hits),
             option_u64(measurement.details.cache_misses),
-            if matches!(measurement.candidate, Candidate::Cached | Candidate::Predecoded) {
+            option_u64(measurement.details.cache_evictions),
+            option_u64(measurement.details.blocks_built),
+            option_u64(measurement.details.decoded_slots_built),
+            if matches!(measurement.candidate, Candidate::Cached | Candidate::Predecoded | Candidate::BlockCached) {
                 measurement.details.translation_bytes.to_string()
             } else {
                 "-".to_string()
             },
+            option_u64(matches!(measurement.candidate, Candidate::Cached | Candidate::Predecoded | Candidate::BlockCached).then_some(measurement.details.steady_allocations)),
+            option_u64(matches!(measurement.candidate, Candidate::Cached | Candidate::Predecoded | Candidate::BlockCached).then_some(measurement.details.steady_allocated_bytes)),
         );
     }
     Ok(())
@@ -448,9 +539,18 @@ fn run_product(
         .checked_mul(batch)
         .and_then(|value| value.checked_add(100_000))
         .ok_or_else(|| "product instruction budget overflowed".to_string())?;
+    ALLOCATIONS.store(0, Ordering::Relaxed);
+    ALLOCATED_BYTES.store(0, Ordering::Relaxed);
     let start = Instant::now();
     let outcome = machine.run(budget).map_err(|error| error.to_string())?;
     let elapsed = start.elapsed().as_nanos();
+    let steady_allocations = ALLOCATIONS.load(Ordering::Relaxed);
+    let steady_allocated_bytes = ALLOCATED_BYTES.load(Ordering::Relaxed);
+    if steady_allocations != 0 || steady_allocated_bytes != 0 {
+        return Err(format!(
+            "product C comparison allocated during run: {steady_allocations} allocations, {steady_allocated_bytes} bytes"
+        ));
+    }
     let (checksum, retired_instructions) = match outcome {
         Rv32MachineOutcome::Halted {
             exit_code,
@@ -464,15 +564,21 @@ fn run_product(
             "product checksum mismatch: expected {EXPECTED_CHECKSUM:08x}, actual {checksum:08x}"
         ));
     }
-    let stats = machine.cache_stats();
+    let stats = machine.translation_stats();
     Ok((
         elapsed,
         ProductDetails {
             retired_instructions,
+            lookup_unit: stats.map(|value| value.lookup_unit.name()),
             cache_hits: stats.map(|value| value.hits),
             cache_misses: stats.map(|value| value.misses),
+            cache_evictions: stats.map(|value| value.evictions),
+            blocks_built: stats.map(|value| value.blocks_built),
+            decoded_slots_built: stats.map(|value| value.decoded_slots_built),
             translation_bytes: machine.translation_bytes(),
             executable_bytes: machine.executable_bytes(),
+            steady_allocations,
+            steady_allocated_bytes,
         },
     ))
 }
