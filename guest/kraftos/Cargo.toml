@@ -1,7 +1,0 @@
-[workspace]
-members = [
-    "abi",
-    "kernel",
-    "runtime",
-]
-resolver = "2"
