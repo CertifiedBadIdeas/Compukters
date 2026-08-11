@@ -114,6 +114,7 @@ impl Rv32MachineHart {
         cause: Rv32ExceptionCause,
         value: u32,
     ) -> Rv32HartStep {
+        self.cpu.clear_reservation();
         let vector = self.csrs.enter_trap(instruction_pc, cause as u32, value);
         self.cpu.set_pc_internal(vector);
         Rv32HartStep::TrapTaken
@@ -226,7 +227,8 @@ mod tests {
         MSTATUS_MIE, MSTATUS_MPIE, MSTATUS_MPP_MACHINE,
     };
     use crate::rv32im::encoding::{
-        csrrc, csrrci, csrrs, csrrsi, csrrw, csrrwi, ebreak, ecall, jal, lw, mret, sw,
+        amoswap_w, csrrc, csrrci, csrrs, csrrsi, csrrw, csrrwi, ebreak, ecall, jal, lr_w, lw, mret,
+        sc_w, sw,
     };
 
     #[test]
@@ -318,6 +320,24 @@ mod tests {
     }
 
     #[test]
+    fn trap_entry_clears_the_hart_reservation() {
+        let mut hart = Rv32MachineHart::new(0x1000);
+        hart.set_register_for_test(1, 0).unwrap();
+        hart.set_register_for_test(2, 42).unwrap();
+
+        assert_eq!(
+            hart.execute_word_for_test(lr_w(3, 1, false, false)),
+            Rv32HartStep::Retired
+        );
+        assert_eq!(hart.execute_word_for_test(ecall()), Rv32HartStep::TrapTaken);
+        assert_eq!(
+            hart.execute_word_for_test(sc_w(4, 1, 2, false, false)),
+            Rv32HartStep::Retired
+        );
+        assert_eq!(hart.register(4), 1);
+    }
+
+    #[test]
     fn regular_and_fetch_failures_map_to_exact_machine_causes() {
         let cases = [
             (jal(0, 2), None, 0, 0x1002),
@@ -326,6 +346,12 @@ mod tests {
             (lw(2, 1, 0), Some(8), 5, 8),
             (sw(1, 2, 0), Some(3), 6, 3),
             (sw(1, 2, 0), Some(8), 7, 8),
+            (lr_w(2, 1, false, false), Some(3), 4, 3),
+            (lr_w(2, 1, false, false), Some(8), 5, 8),
+            (sc_w(2, 1, 3, false, false), Some(3), 6, 3),
+            (sc_w(2, 1, 3, false, false), Some(8), 7, 8),
+            (amoswap_w(2, 1, 3, false, false), Some(3), 6, 3),
+            (amoswap_w(2, 1, 3, false, false), Some(8), 7, 8),
         ];
         for (word, address, cause, value) in cases {
             let mut hart = Rv32MachineHart::new(0x1000);
