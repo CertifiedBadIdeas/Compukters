@@ -35,9 +35,10 @@ pub(super) const MSTATUS_MPP_MACHINE: u32 = 3 << 11;
 const MSTATUS_WRITABLE: u32 = MSTATUS_MIE | MSTATUS_MPIE;
 
 const MISA_MXL_RV32: u32 = 1 << 30;
+const MISA_A: u32 = 1 << 0;
 const MISA_I: u32 = 1 << 8;
 const MISA_M: u32 = 1 << 12;
-const MISA_RV32IM: u32 = MISA_MXL_RV32 | MISA_I | MISA_M;
+const MISA_RV32IMA: u32 = MISA_MXL_RV32 | MISA_A | MISA_I | MISA_M;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
 pub(super) enum Rv32CsrError {
@@ -72,7 +73,7 @@ impl Rv32MachineCsrs {
     pub(super) fn read(&self, csr: u16) -> Result<u32, Rv32CsrError> {
         match csr {
             CSR_MSTATUS => Ok(self.mstatus),
-            CSR_MISA => Ok(MISA_RV32IM),
+            CSR_MISA => Ok(MISA_RV32IMA),
             CSR_MTVEC => Ok(self.mtvec),
             CSR_MSCRATCH => Ok(self.mscratch),
             CSR_MEPC => Ok(self.mepc),
@@ -155,11 +156,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn csr_bank_reports_rv32im_and_canonicalizes_warl_fields() {
+    fn csr_bank_reports_rv32ima_and_canonicalizes_warl_fields() {
         let mut csrs = Rv32MachineCsrs::new();
         assert_eq!(
             csrs.read(CSR_MISA).unwrap(),
-            MISA_MXL_RV32 | MISA_I | MISA_M
+            MISA_MXL_RV32 | MISA_A | MISA_I | MISA_M
         );
         assert_eq!(csrs.read(CSR_MHARTID).unwrap(), 0);
         assert_eq!(csrs.read(CSR_MSTATUS).unwrap(), MSTATUS_MPP_MACHINE);

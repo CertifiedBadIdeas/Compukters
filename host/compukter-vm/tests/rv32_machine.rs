@@ -25,7 +25,7 @@ use compukter_vm::rv32_machine::{
     DEBUG_BASE, STATUS_BOOTING, STATUS_HALTED, STATUS_PANIC,
 };
 use compukter_vm::rv32im::encoding::{
-    addi, csrrs, csrrw, ebreak, ecall, jal, lui, materialize, sb, sh, sw,
+    addi, amoswap_w, csrrs, csrrw, ebreak, ecall, jal, lr_w, lui, materialize, sb, sc_w, sh, sw,
 };
 use rv32_elf_support::{halting_machine_elf, machine_program_elf, Elf32Builder, LoadSegment};
 
@@ -79,6 +79,95 @@ fn both_backends_run_from_elf_entry_under_budget_and_halt_through_mmio() {
         assert_eq!(machine.debug_bytes(), b"R");
         assert_eq!(machine.control_status(), STATUS_HALTED);
         assert_eq!(machine.retired_instructions(), 7);
+    }
+}
+
+#[test]
+fn both_backends_execute_the_same_rv32a_reservation_and_amo_program() {
+    let [data_hi, data_lo] = materialize(1, 0x3000);
+    let [debug_hi, debug_lo] = materialize(10, DEBUG_BASE);
+    let elf = machine_program_elf(&[
+        data_hi,
+        data_lo,
+        addi(2, 0, 41),
+        amoswap_w(3, 1, 2, true, true),
+        lr_w(4, 1, true, false),
+        addi(5, 0, 42),
+        sc_w(6, 1, 5, false, true),
+        lr_w(7, 1, false, false),
+        sw(1, 5, 0),
+        sc_w(8, 1, 2, false, false),
+        debug_hi,
+        debug_lo,
+        sb(10, 3, 0),
+        sb(10, 4, 0),
+        sb(10, 6, 0),
+        sb(10, 7, 0),
+        sb(10, 8, 0),
+        addi(10, 10, -0x100),
+        sw(10, 0, 8),
+        addi(11, 0, STATUS_HALTED),
+        sw(10, 11, 0),
+    ]);
+
+    for execution in configs() {
+        let mut machine = Rv32Machine::from_elf(&elf, config(execution, 8)).unwrap();
+        assert_eq!(
+            machine.run(64).unwrap(),
+            Rv32MachineOutcome::Halted {
+                exit_code: 0,
+                retired_delta: 21,
+                retired_total: 21,
+            }
+        );
+        assert_eq!(machine.debug_bytes(), &[0, 41, 0, 42, 1]);
+    }
+}
+
+#[test]
+fn both_backends_trap_atomic_mmio_without_device_side_effects() {
+    let [debug_hi, debug_lo] = materialize(1, DEBUG_BASE);
+    let elf = machine_program_elf(&[
+        debug_hi,
+        debug_lo,
+        addi(2, 0, i32::from(b'A')),
+        amoswap_w(3, 1, 2, false, false),
+    ]);
+
+    for execution in configs() {
+        let mut machine = Rv32Machine::from_elf(&elf, config(execution, 8)).unwrap();
+        assert_eq!(
+            machine.run(8).unwrap(),
+            Rv32MachineOutcome::BudgetExhausted {
+                retired_delta: 3,
+                retired_total: 3,
+            }
+        );
+        assert_eq!(machine.debug_bytes(), b"");
+        assert_eq!(machine.pc(), 0);
+    }
+}
+
+#[test]
+fn both_backends_trap_atomic_updates_to_rx_memory() {
+    let [code_hi, code_lo] = materialize(1, 0x1000);
+    let elf = machine_program_elf(&[
+        code_hi,
+        code_lo,
+        addi(2, 0, 42),
+        amoswap_w(3, 1, 2, false, false),
+    ]);
+
+    for execution in configs() {
+        let mut machine = Rv32Machine::from_elf(&elf, config(execution, 0)).unwrap();
+        assert_eq!(
+            machine.run(8).unwrap(),
+            Rv32MachineOutcome::BudgetExhausted {
+                retired_delta: 3,
+                retired_total: 3,
+            }
+        );
+        assert_eq!(machine.pc(), 0);
     }
 }
 

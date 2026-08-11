@@ -24,7 +24,9 @@ mod rv32_elf_support;
 use compukter_vm::rv32_machine::{
     Rv32ExecutionBackendConfig, Rv32Machine, Rv32MachineConfig, Rv32MachineOutcome,
 };
-use compukter_vm::rv32im::encoding::{addi, csrrs, csrrw, ecall, jal, materialize, mret};
+use compukter_vm::rv32im::encoding::{
+    addi, bne, csrrs, csrrw, ecall, jal, lr_w, materialize, mret, sc_w,
+};
 use rv32_elf_support::{Elf32Builder, LoadSegment};
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -64,8 +66,7 @@ unsafe impl GlobalAlloc for CountingAllocator {
 #[global_allocator]
 static GLOBAL: CountingAllocator = CountingAllocator;
 
-#[test]
-fn steady_state_trap_entry_and_return_allocate_nothing() {
+fn assert_steady_state_trap_entry_and_return_allocate_nothing() {
     let [vector_hi, vector_lo] = materialize(1, 0x2000);
     let main = [
         vector_hi,
@@ -127,4 +128,66 @@ fn steady_state_trap_entry_and_return_allocate_nothing() {
             "{execution:?} allocated bytes in steady state"
         );
     }
+}
+
+fn assert_steady_state_atomic_increment_loop_allocates_nothing() {
+    let [data_hi, data_lo] = materialize(1, 0x3000);
+    let words = [
+        data_hi,
+        data_lo,
+        lr_w(2, 1, true, false),
+        addi(2, 2, 1),
+        sc_w(3, 1, 2, false, true),
+        bne(3, 0, -12),
+        jal(0, -16),
+    ];
+    let code = words
+        .into_iter()
+        .flat_map(u32::to_le_bytes)
+        .collect::<Vec<_>>();
+    let elf = Elf32Builder::new(0x1000)
+        .load(LoadSegment::rx(0x1000, code))
+        .load(LoadSegment::rw_with_mem_size(0x3000, [], 0x1000))
+        .finish();
+
+    for execution in [
+        Rv32ExecutionBackendConfig::Cached { sets: 64 },
+        Rv32ExecutionBackendConfig::Predecoded,
+    ] {
+        let mut machine = Rv32Machine::from_elf(
+            &elf,
+            Rv32MachineConfig {
+                ram_size: 0x10_000,
+                debug_limit: 0,
+                execution,
+            },
+        )
+        .unwrap();
+        assert!(matches!(
+            machine.run(128).unwrap(),
+            Rv32MachineOutcome::BudgetExhausted { .. }
+        ));
+
+        ALLOCATIONS.store(0, Ordering::Relaxed);
+        ALLOCATED_BYTES.store(0, Ordering::Relaxed);
+        let outcome = machine.run(4096).unwrap();
+        let allocations = ALLOCATIONS.load(Ordering::Relaxed);
+        let allocated_bytes = ALLOCATED_BYTES.load(Ordering::Relaxed);
+
+        assert!(matches!(
+            outcome,
+            Rv32MachineOutcome::BudgetExhausted { .. }
+        ));
+        assert_eq!(allocations, 0, "{execution:?} allocated in atomic loop");
+        assert_eq!(
+            allocated_bytes, 0,
+            "{execution:?} allocated bytes in atomic loop"
+        );
+    }
+}
+
+#[test]
+fn steady_state_machine_paths_allocate_nothing() {
+    assert_steady_state_trap_entry_and_return_allocate_nothing();
+    assert_steady_state_atomic_increment_loop_allocates_nothing();
 }
