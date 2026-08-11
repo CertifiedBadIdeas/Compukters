@@ -97,6 +97,10 @@ fn assert_steady_state_trap_entry_and_return_allocate_nothing() {
     for execution in [
         Rv32ExecutionBackendConfig::Cached { sets: 64 },
         Rv32ExecutionBackendConfig::Predecoded,
+        Rv32ExecutionBackendConfig::BlockCached {
+            sets: 32,
+            max_instructions: 8,
+        },
     ] {
         let mut machine = Rv32Machine::from_elf(
             &elf,
@@ -153,6 +157,10 @@ fn assert_steady_state_atomic_increment_loop_allocates_nothing() {
     for execution in [
         Rv32ExecutionBackendConfig::Cached { sets: 64 },
         Rv32ExecutionBackendConfig::Predecoded,
+        Rv32ExecutionBackendConfig::BlockCached {
+            sets: 32,
+            max_instructions: 8,
+        },
     ] {
         let mut machine = Rv32Machine::from_elf(
             &elf,
@@ -186,8 +194,58 @@ fn assert_steady_state_atomic_increment_loop_allocates_nothing() {
     }
 }
 
+fn assert_block_cache_evictions_allocate_nothing() {
+    let mut words = vec![addi(1, 1, 1); 7];
+    words.push(jal(0, 4));
+    words.push(jal(0, 4));
+    words.extend([addi(2, 2, 1); 4]);
+    words.push(jal(0, -52));
+    let code = words
+        .into_iter()
+        .flat_map(u32::to_le_bytes)
+        .collect::<Vec<_>>();
+    let elf = Elf32Builder::new(0x1000)
+        .load(LoadSegment::rx(0x1000, code))
+        .load(LoadSegment::rw_with_mem_size(0x3000, [], 0x1000))
+        .finish();
+    let execution = Rv32ExecutionBackendConfig::BlockCached {
+        sets: 1,
+        max_instructions: 8,
+    };
+    let mut machine = Rv32Machine::from_elf(
+        &elf,
+        Rv32MachineConfig {
+            ram_size: 0x10_000,
+            debug_limit: 0,
+            execution,
+        },
+    )
+    .unwrap();
+    assert!(matches!(
+        machine.run(128).unwrap(),
+        Rv32MachineOutcome::BudgetExhausted { .. }
+    ));
+
+    ALLOCATIONS.store(0, Ordering::Relaxed);
+    ALLOCATED_BYTES.store(0, Ordering::Relaxed);
+    let outcome = machine.run(4096).unwrap();
+    let allocations = ALLOCATIONS.load(Ordering::Relaxed);
+    let allocated_bytes = ALLOCATED_BYTES.load(Ordering::Relaxed);
+
+    assert!(matches!(
+        outcome,
+        Rv32MachineOutcome::BudgetExhausted { .. }
+    ));
+    assert_eq!(allocations, 0, "{execution:?} allocated while evicting");
+    assert_eq!(
+        allocated_bytes, 0,
+        "{execution:?} allocated bytes while evicting"
+    );
+}
+
 #[test]
 fn steady_state_machine_paths_allocate_nothing() {
     assert_steady_state_trap_entry_and_return_allocate_nothing();
     assert_steady_state_atomic_increment_loop_allocates_nothing();
+    assert_block_cache_evictions_allocate_nothing();
 }
