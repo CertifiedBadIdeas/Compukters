@@ -17,8 +17,9 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-pub mod benchmarks;
-pub mod bus;
-pub mod memory;
-pub mod rv32_machine;
-pub mod rv32im;
+pub const MEMORY_SIZE: usize = 16 * 1024;
+pub const DATA_BASE: u32 = 0x0000_2000;
+pub const STACK_TOP: u32 = 0x0000_3ff0;
+pub const MMIO_BASE: u32 = 0x1000_0000;
+pub const PACKET_BYTES: usize = 16;
+pub const RING_ENTRIES: usize = 8;
