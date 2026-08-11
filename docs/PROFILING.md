@@ -110,6 +110,10 @@ focused command is deliberately absent from normal Gradle/Cargo verification,
 Minecraft runs, and production JAR assembly. Missing external tools are a hard
 error; there is no alternate benchmark candidate or fallback.
 
+The preserved 2026-08-11 ceiling, complete report, environment, hashes, and
+interpretation are stored in
+[`2026-08-11-rv32-c-qemu-ceiling.md`](benchmarks/2026-08-11-rv32-c-qemu-ceiling.md).
+
 Committed Gate and XLEN outputs under `docs/benchmarks/` are immutable
 historical evidence. They are not active benchmark runners and do not select a
 supported product architecture. The accepted architecture decision is recorded
