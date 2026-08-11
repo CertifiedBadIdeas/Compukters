@@ -101,6 +101,18 @@ impl BoundedCachedRv32imProgram {
         instruction_pc: u32,
         bus: &dyn MemoryBus,
     ) -> Result<Rv32ResolvedInstruction, MemoryFault> {
+        self.resolve_with_decoder(instruction_pc, bus, decode)
+    }
+
+    pub(crate) fn resolve_with_decoder<D>(
+        &mut self,
+        instruction_pc: u32,
+        bus: &dyn MemoryBus,
+        decoder: D,
+    ) -> Result<Rv32ResolvedInstruction, MemoryFault>
+    where
+        D: FnOnce(u32) -> Result<DecodedInstruction, String>,
+    {
         let set_index = ((instruction_pc >> 2) as usize) & (self.sets.len() - 1);
         if let Some(entry) = self.sets[set_index]
             .ways
@@ -118,7 +130,7 @@ impl BoundedCachedRv32imProgram {
 
         self.stats.misses = self.stats.misses.saturating_add(1);
         let word = bus.load_i32(instruction_pc)? as u32;
-        let instruction = match decode(word) {
+        let instruction = match decoder(word) {
             Ok(instruction) => instruction,
             Err(_) => return Ok(Rv32ResolvedInstruction::Invalid { word }),
         };
@@ -138,5 +150,12 @@ impl BoundedCachedRv32imProgram {
             instruction,
         });
         Ok(Rv32ResolvedInstruction::Valid { word, instruction })
+    }
+
+    pub(crate) fn reset_for_benchmark(&mut self) {
+        for set in &mut self.sets {
+            *set = CacheSet::default();
+        }
+        self.stats = Rv32imCacheStats::default();
     }
 }

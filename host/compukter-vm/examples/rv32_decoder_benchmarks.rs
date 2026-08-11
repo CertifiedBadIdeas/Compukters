@@ -19,7 +19,9 @@
 
 use compukter_vm::benchmarks::{
     format_summary, format_timing_sample, populate_vs_native, timing_report_header,
-    BenchmarkCandidate, BenchmarkTiming, BenchmarkWorkload, PreparedBenchmark,
+    BenchmarkCandidate, BenchmarkTiming, BenchmarkWorkload, DecoderBenchmarkImplementation,
+    DecoderBenchmarkObservation, DecoderBenchmarkScenario, PreparedBenchmark,
+    PreparedDecoderBenchmark,
 };
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -66,6 +68,23 @@ fn main() -> Result<(), String> {
     }
     let sample_count = requested_samples.max(7);
 
+    let decoder_operations = iterations
+        .checked_mul(1024)
+        .ok_or_else(|| "decoder benchmark operation count overflows u32".to_string())?;
+    let decoder_sample_count = requested_samples.max(21);
+    let decoder_measurements = measure_decoders(decoder_operations, decoder_sample_count)?;
+
+    println!("RV32 decoder extraction report");
+    println!("decoder_warm_samples\t{decoder_sample_count}");
+    println!("{}", decoder_report_header());
+    for measurement in &decoder_measurements {
+        println!(
+            "{}",
+            format_decoder_measurement(measurement, &decoder_measurements)
+        );
+    }
+    println!();
+
     let mut timings =
         Vec::with_capacity(BenchmarkCandidate::all().len() * BenchmarkWorkload::all().len());
     for (workload_index, workload) in BenchmarkWorkload::all().iter().enumerate() {
@@ -97,6 +116,109 @@ struct CandidateMeasurement {
     warm_nanos: Vec<u128>,
     steady_allocations: u64,
     steady_allocated_bytes: u64,
+}
+
+struct DecoderMeasurement {
+    implementation: DecoderBenchmarkImplementation,
+    scenario: DecoderBenchmarkScenario,
+    prepared: PreparedDecoderBenchmark,
+    observation: DecoderBenchmarkObservation,
+    warm_nanos: Vec<u128>,
+    steady_allocations: u64,
+    steady_allocated_bytes: u64,
+}
+
+fn measure_decoders(
+    operations: u32,
+    sample_count: usize,
+) -> Result<Vec<DecoderMeasurement>, String> {
+    let mut measurements = Vec::with_capacity(
+        DecoderBenchmarkScenario::all().len() * DecoderBenchmarkImplementation::all().len(),
+    );
+    for &scenario in DecoderBenchmarkScenario::all() {
+        for &implementation in DecoderBenchmarkImplementation::all() {
+            let mut prepared = PreparedDecoderBenchmark::new(implementation, scenario, operations)?;
+            let observation = prepared.execute()?;
+            measurements.push(DecoderMeasurement {
+                implementation,
+                scenario,
+                prepared,
+                observation,
+                warm_nanos: Vec::with_capacity(sample_count),
+                steady_allocations: 0,
+                steady_allocated_bytes: 0,
+            });
+        }
+    }
+
+    for sample_index in 0..sample_count {
+        for index in candidate_order(10_000, sample_index, measurements.len()) {
+            let measurement = &mut measurements[index];
+            reset_allocation_counters();
+            let started = Instant::now();
+            measurement.observation = measurement.prepared.execute()?;
+            measurement.warm_nanos.push(started.elapsed().as_nanos());
+            measurement.steady_allocations = measurement
+                .steady_allocations
+                .max(ALLOCATIONS.load(Ordering::Relaxed));
+            measurement.steady_allocated_bytes = measurement
+                .steady_allocated_bytes
+                .max(ALLOCATED_BYTES.load(Ordering::Relaxed));
+        }
+    }
+
+    for measurement in &mut measurements {
+        measurement.warm_nanos.sort_unstable();
+    }
+    for &scenario in DecoderBenchmarkScenario::all() {
+        let mut matching = measurements
+            .iter()
+            .filter(|measurement| measurement.scenario == scenario);
+        let eager = matching.next().unwrap();
+        let product = matching.next().unwrap();
+        if eager.observation.checksum != product.observation.checksum {
+            return Err(format!(
+                "decoder implementations disagree for scenario {}",
+                scenario.name()
+            ));
+        }
+    }
+    Ok(measurements)
+}
+
+fn decoder_report_header() -> &'static str {
+    "scenario\timplementation\toperations\twarm_median_ns\twarm_p95_ns\tnanos_per_operation\tretained_bytes\tsteady_allocations\tsteady_allocated_bytes\tvs_eager"
+}
+
+fn format_decoder_measurement(
+    measurement: &DecoderMeasurement,
+    measurements: &[DecoderMeasurement],
+) -> String {
+    let median = measurement.warm_nanos[measurement.warm_nanos.len() / 2];
+    let p95_index = (measurement.warm_nanos.len() * 95)
+        .div_ceil(100)
+        .saturating_sub(1);
+    let eager_median = measurements
+        .iter()
+        .find(|candidate| {
+            candidate.scenario == measurement.scenario
+                && candidate.implementation == DecoderBenchmarkImplementation::Eager
+        })
+        .map(|candidate| candidate.warm_nanos[candidate.warm_nanos.len() / 2])
+        .unwrap();
+    format!(
+        "{}\t{}\t{}\t{}\t{}\t{:.6}\t{}\t{}\t{}\t{:.6}",
+        measurement.scenario.name(),
+        measurement.implementation.name(),
+        measurement.observation.operations,
+        median,
+        measurement.warm_nanos[p95_index],
+        median as f64 / f64::from(measurement.observation.operations),
+        measurement.observation.retained_bytes,
+        measurement.steady_allocations,
+        measurement.steady_allocated_bytes,
+        median as f64 / eager_median as f64,
+    )
 }
 
 fn measure_workload(
@@ -213,7 +335,7 @@ fn parse_positive(name: &str, value: Option<String>) -> Result<u32, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::candidate_order;
+    use super::{candidate_order, decoder_report_header};
 
     #[test]
     fn candidate_order_is_a_reproducible_permutation_that_changes_between_rounds() {
@@ -224,5 +346,13 @@ mod tests {
         assert_eq!(sorted, vec![0, 1, 2, 3, 4, 5]);
         assert_ne!(first, second);
         assert_eq!(first, candidate_order(0, 0, 6));
+    }
+
+    #[test]
+    fn decoder_report_has_stable_tab_separated_columns() {
+        assert_eq!(
+            decoder_report_header(),
+            "scenario\timplementation\toperations\twarm_median_ns\twarm_p95_ns\tnanos_per_operation\tretained_bytes\tsteady_allocations\tsteady_allocated_bytes\tvs_eager",
+        );
     }
 }

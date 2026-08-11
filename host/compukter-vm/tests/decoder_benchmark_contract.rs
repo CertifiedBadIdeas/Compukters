@@ -17,7 +17,10 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use compukter_vm::benchmarks::{native_checksum, BenchmarkCandidate, BenchmarkWorkload};
+use compukter_vm::benchmarks::{
+    native_checksum, BenchmarkCandidate, BenchmarkWorkload, DecoderBenchmarkImplementation,
+    DecoderBenchmarkScenario, PreparedDecoderBenchmark,
+};
 
 #[test]
 fn decoder_candidates_exclude_retired_architectures() {
@@ -41,5 +44,33 @@ fn decoder_workloads_keep_stable_native_oracles() {
     for &workload in BenchmarkWorkload::all() {
         assert_eq!(native_checksum(workload, 17), native_checksum(workload, 17),);
         assert_ne!(native_checksum(workload, 17), native_checksum(workload, 18),);
+    }
+}
+
+#[test]
+fn paired_decoder_scenarios_share_work_and_stable_checksums() {
+    assert_eq!(
+        DecoderBenchmarkScenario::all(),
+        &[
+            DecoderBenchmarkScenario::LegalDecode,
+            DecoderBenchmarkScenario::BoundedCacheForcedMiss,
+        ],
+    );
+    for &scenario in DecoderBenchmarkScenario::all() {
+        let mut eager =
+            PreparedDecoderBenchmark::new(DecoderBenchmarkImplementation::Eager, scenario, 4096)
+                .unwrap();
+        let mut product =
+            PreparedDecoderBenchmark::new(DecoderBenchmarkImplementation::Product, scenario, 4096)
+                .unwrap();
+        let eager_observation = eager.execute().unwrap();
+        let product_observation = product.execute().unwrap();
+        assert_eq!(eager_observation.operations, 4096);
+        assert_eq!(product_observation.operations, 4096);
+        assert_eq!(eager_observation.checksum, product_observation.checksum);
+        if scenario == DecoderBenchmarkScenario::BoundedCacheForcedMiss {
+            assert_eq!(eager_observation.cache_misses, 4096);
+            assert_eq!(product_observation.cache_misses, 4096);
+        }
     }
 }

@@ -30,8 +30,11 @@ pub use predecode::{PredecodedRv32imImage, PredecodedRv32imProgram};
 
 use crate::memory::{AtomicWordAccess, MemoryBus};
 use atomic::{apply_atomic, Rv32Reservation};
+pub(crate) use decode::{
+    decode as decode_product_word, decode_eager_reference, CsrOperation, CsrSource,
+    DecodedInstruction,
+};
 use decode::{Branch, ImmOp, Load, Op, Store};
-pub(crate) use decode::{CsrOperation, CsrSource, DecodedInstruction};
 use std::fmt::{Display, Formatter};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
