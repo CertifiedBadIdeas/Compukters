@@ -19,6 +19,7 @@
 
 mod decoder;
 mod native;
+mod product_machine;
 mod programs;
 mod report;
 mod rv32;
@@ -27,6 +28,10 @@ mod workload;
 pub use decoder::{
     DecoderBenchmarkImplementation, DecoderBenchmarkObservation, DecoderBenchmarkScenario,
     PreparedDecoderBenchmark,
+};
+pub use product_machine::{
+    PreparedProductMachine, ProductMachineBackend, ProductMachineObservation,
+    ProductMachineWorkload, PRODUCT_CACHE_SETS, PRODUCT_DEBUG_LIMIT, PRODUCT_RAM_BYTES,
 };
 pub use programs::{DATA_BASE, MEMORY_SIZE, MMIO_BASE, PACKET_BYTES, RING_ENTRIES, STACK_TOP};
 pub use report::{

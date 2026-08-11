@@ -322,9 +322,9 @@ fn step_limit_error(
     )
 }
 
-struct ProgramImage {
-    words: Vec<u32>,
-    result_register: u8,
+pub(super) struct ProgramImage {
+    pub(super) words: Vec<u32>,
+    pub(super) result_register: u8,
 }
 #[derive(Clone, Copy)]
 enum FixupKind {
@@ -386,7 +386,10 @@ impl ProgramBuilder {
     }
 }
 
-fn rv32_workload(workload: IsaBenchmarkWorkload, iterations: u32) -> Result<ProgramImage, String> {
+pub(super) fn rv32_workload(
+    workload: IsaBenchmarkWorkload,
+    iterations: u32,
+) -> Result<ProgramImage, String> {
     match workload {
         IsaBenchmarkWorkload::Compute32 => compute32_program(iterations),
         IsaBenchmarkWorkload::BranchMix => branch_mix_program(iterations),
@@ -394,7 +397,7 @@ fn rv32_workload(workload: IsaBenchmarkWorkload, iterations: u32) -> Result<Prog
         IsaBenchmarkWorkload::MemorySequential => memory_program(iterations, false),
         IsaBenchmarkWorkload::MemoryRandom => memory_program(iterations, true),
         IsaBenchmarkWorkload::CopyChecksum => copy_checksum_program(iterations),
-        IsaBenchmarkWorkload::MmioControl => mmio_control_program(iterations),
+        IsaBenchmarkWorkload::MmioControl => mmio_control_program(iterations, 0),
         IsaBenchmarkWorkload::YieldWake => yield_wake_program(iterations),
         IsaBenchmarkWorkload::PacketRing => packet_ring_program(iterations),
         IsaBenchmarkWorkload::U64Mix
@@ -562,7 +565,10 @@ fn copy_checksum_program(iterations: u32) -> Result<ProgramImage, String> {
     p.jump("outer");
     p.finish(7)
 }
-fn mmio_control_program(iterations: u32) -> Result<ProgramImage, String> {
+pub(super) fn mmio_control_program(
+    iterations: u32,
+    register_offset: i32,
+) -> Result<ProgramImage, String> {
     let mut p = ProgramBuilder::default();
     p.words(materialize(5, iterations));
     p.words(materialize(6, 0));
@@ -572,8 +578,8 @@ fn mmio_control_program(iterations: u32) -> Result<ProgramImage, String> {
     p.bne(6, 5, "body");
     p.word(ebreak());
     p.label("body");
-    p.word(sw(8, 6, 0));
-    p.word(lw(9, 8, 0));
+    p.word(sw(8, 6, register_offset));
+    p.word(lw(9, 8, register_offset));
     p.word(add(7, 7, 9));
     p.word(addi(6, 6, 1));
     p.jump("loop");
