@@ -189,6 +189,82 @@ impl Rv32Machine {
         &mut self,
         instruction_budget: u64,
     ) -> Result<Rv32MachineOutcome, Rv32MachineExecutionError> {
+        if matches!(self.execution, Rv32ExecutionBackend::BlockCached(_)) {
+            self.run_block_cached(instruction_budget)
+        } else {
+            self.run_single_instruction(instruction_budget)
+        }
+    }
+
+    fn run_single_instruction(
+        &mut self,
+        instruction_budget: u64,
+    ) -> Result<Rv32MachineOutcome, Rv32MachineExecutionError> {
+        let retired_before = self.hart.retired_instructions();
+        if let Some(outcome) = self.terminal_outcome(retired_before) {
+            return Ok(outcome);
+        }
+        for _ in 0..instruction_budget {
+            let instruction_pc = self.hart.pc();
+            if !instruction_pc.is_multiple_of(4) {
+                self.hart
+                    .take_instruction_address_misaligned(instruction_pc);
+            } else if !self.is_executable_pc(instruction_pc) {
+                self.hart.take_instruction_access_fault(instruction_pc);
+            } else {
+                let resolved = match &mut self.execution {
+                    Rv32ExecutionBackend::Cached(cache) => {
+                        match cache.resolve(instruction_pc, &self.address_space) {
+                            Ok(resolved) => resolved,
+                            Err(error) => {
+                                self.hart.take_instruction_access_fault(
+                                    error.address().unwrap_or(instruction_pc),
+                                );
+                                if let Some(outcome) = self.terminal_outcome(retired_before) {
+                                    return Ok(outcome);
+                                }
+                                continue;
+                            }
+                        }
+                    }
+                    Rv32ExecutionBackend::Predecoded(image) => image
+                        .resolve(instruction_pc)
+                        .map_err(|message| self.execution_error(instruction_pc, message))?,
+                    Rv32ExecutionBackend::BlockCached(_) => {
+                        unreachable!("block backend uses the block execution loop")
+                    }
+                };
+                match resolved {
+                    Rv32ResolvedInstruction::Valid { word, instruction } => {
+                        self.hart.execute_resolved(
+                            &mut self.address_space,
+                            instruction_pc,
+                            word,
+                            instruction,
+                        );
+                    }
+                    Rv32ResolvedInstruction::Invalid { word } => {
+                        self.hart.take_illegal_instruction(word);
+                    }
+                }
+            }
+            if let Some(outcome) = self.terminal_outcome(retired_before) {
+                return Ok(outcome);
+            }
+        }
+        Ok(Rv32MachineOutcome::BudgetExhausted {
+            retired_delta: self
+                .hart
+                .retired_instructions()
+                .saturating_sub(retired_before),
+            retired_total: self.hart.retired_instructions(),
+        })
+    }
+
+    fn run_block_cached(
+        &mut self,
+        instruction_budget: u64,
+    ) -> Result<Rv32MachineOutcome, Rv32MachineExecutionError> {
         let retired_before = self.hart.retired_instructions();
         if let Some(outcome) = terminal_outcome(
             &self.hart,
@@ -212,98 +288,51 @@ impl Rv32Machine {
                 let executable_end = self
                     .executable_range_end(instruction_pc)
                     .expect("executable PC has an owning ELF range");
-                match &mut self.execution {
-                    Rv32ExecutionBackend::Cached(cache) => {
+                let Rv32ExecutionBackend::BlockCached(cache) = &mut self.execution else {
+                    unreachable!("block execution loop requires the block backend")
+                };
+                let block = match cache.resolve(instruction_pc, executable_end, &self.address_space)
+                {
+                    Ok(block) => block,
+                    Err(error) => {
                         attempted += 1;
-                        let resolved = match cache.resolve(instruction_pc, &self.address_space) {
-                            Ok(resolved) => resolved,
-                            Err(error) => {
-                                self.hart.take_instruction_access_fault(
-                                    error.address().unwrap_or(instruction_pc),
-                                );
-                                if let Some(outcome) = terminal_outcome(
-                                    &self.hart,
-                                    &self.address_space,
-                                    self.control_device,
-                                    retired_before,
-                                ) {
-                                    return Ok(outcome);
-                                }
-                                continue;
-                            }
-                        };
-                        execute_slot(
-                            &mut self.hart,
-                            &mut self.address_space,
-                            instruction_pc,
-                            resolved,
+                        self.hart.take_instruction_access_fault(
+                            error.address().unwrap_or(instruction_pc),
                         );
-                    }
-                    Rv32ExecutionBackend::Predecoded(image) => {
-                        attempted += 1;
-                        let resolved = image.resolve(instruction_pc).map_err(|message| {
-                            execution_error(&self.hart, instruction_pc, message)
-                        })?;
-                        execute_slot(
-                            &mut self.hart,
-                            &mut self.address_space,
-                            instruction_pc,
-                            resolved,
-                        );
-                    }
-                    Rv32ExecutionBackend::BlockCached(cache) => {
-                        let block = match cache.resolve(
-                            instruction_pc,
-                            executable_end,
+                        if let Some(outcome) = terminal_outcome(
+                            &self.hart,
                             &self.address_space,
+                            self.control_device,
+                            retired_before,
                         ) {
-                            Ok(block) => block,
-                            Err(error) => {
-                                attempted += 1;
-                                self.hart.take_instruction_access_fault(
-                                    error.address().unwrap_or(instruction_pc),
-                                );
-                                if let Some(outcome) = terminal_outcome(
-                                    &self.hart,
-                                    &self.address_space,
-                                    self.control_device,
-                                    retired_before,
-                                ) {
-                                    return Ok(outcome);
-                                }
-                                continue;
-                            }
-                        };
-                        for (slot_index, slot) in block.iter().copied().enumerate() {
-                            if attempted >= instruction_budget {
-                                break;
-                            }
-                            let slot_pc = instruction_pc.wrapping_add((slot_index as u32) * 4);
-                            if self.hart.pc() != slot_pc {
-                                break;
-                            }
-                            attempted += 1;
-                            let step = execute_slot(
-                                &mut self.hart,
-                                &mut self.address_space,
-                                slot_pc,
-                                slot,
-                            );
-                            if let Some(outcome) = terminal_outcome(
-                                &self.hart,
-                                &self.address_space,
-                                self.control_device,
-                                retired_before,
-                            ) {
-                                return Ok(outcome);
-                            }
-                            if step == Rv32HartStep::TrapTaken
-                                || ends_basic_block(slot)
-                                || self.hart.pc() != slot_pc.wrapping_add(4)
-                            {
-                                break;
-                            }
+                            return Ok(outcome);
                         }
+                        continue;
+                    }
+                };
+                for (slot_index, slot) in block.iter().copied().enumerate() {
+                    if attempted >= instruction_budget {
+                        break;
+                    }
+                    let slot_pc = instruction_pc.wrapping_add((slot_index as u32) * 4);
+                    if self.hart.pc() != slot_pc {
+                        break;
+                    }
+                    attempted += 1;
+                    let step = execute_slot(&mut self.hart, &mut self.address_space, slot_pc, slot);
+                    if let Some(outcome) = terminal_outcome(
+                        &self.hart,
+                        &self.address_space,
+                        self.control_device,
+                        retired_before,
+                    ) {
+                        return Ok(outcome);
+                    }
+                    if step == Rv32HartStep::TrapTaken
+                        || ends_basic_block(slot)
+                        || self.hart.pc() != slot_pc.wrapping_add(4)
+                    {
+                        break;
                     }
                 }
             }
@@ -402,11 +431,47 @@ impl Rv32Machine {
         page_executable.then_some(range_end)
     }
 
+    fn is_executable_pc(&self, pc: u32) -> bool {
+        let in_range = self
+            .executable_ranges
+            .iter()
+            .any(|range| range.contains(&pc));
+        let page_executable = self.address_space.page_permissions(pc).executable();
+        in_range && page_executable
+    }
+
+    fn terminal_outcome(&self, retired_before: u64) -> Option<Rv32MachineOutcome> {
+        let retired_total = self.hart.retired_instructions();
+        let retired_delta = retired_total.saturating_sub(retired_before);
+        let control = self.control();
+        match control.status {
+            platform::STATUS_HALTED => Some(Rv32MachineOutcome::Halted {
+                exit_code: control.exit_code,
+                retired_delta,
+                retired_total,
+            }),
+            platform::STATUS_PANIC => Some(Rv32MachineOutcome::Panicked {
+                panic_code: control.panic_code,
+                retired_delta,
+                retired_total,
+            }),
+            _ => None,
+        }
+    }
+
     fn control(&self) -> &ControlDevice {
         self.address_space
             .bus()
             .device::<ControlDevice>(self.control_device)
             .expect("RV32 machine control device invariant")
+    }
+
+    fn execution_error(&self, pc: u32, message: String) -> Rv32MachineExecutionError {
+        Rv32MachineExecutionError {
+            pc,
+            retired_total: self.hart.retired_instructions(),
+            message,
+        }
     }
 }
 
@@ -448,14 +513,6 @@ fn terminal_outcome(
             retired_total,
         }),
         _ => None,
-    }
-}
-
-fn execution_error(hart: &Rv32MachineHart, pc: u32, message: String) -> Rv32MachineExecutionError {
-    Rv32MachineExecutionError {
-        pc,
-        retired_total: hart.retired_instructions(),
-        message,
     }
 }
 
