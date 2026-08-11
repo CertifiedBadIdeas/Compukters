@@ -20,11 +20,10 @@
 use super::rv32::{mmio_control_program, rv32_workload, ProgramImage};
 use super::{native_checksum, BenchmarkWorkload, DATA_BASE};
 use crate::rv32_machine::{
-    Rv32ExecutionBackendConfig, Rv32Machine, Rv32MachineConfig, Rv32MachineOutcome, CONTROL_BASE,
-    STATUS_HALTED,
+    Rv32ExecutionBackendConfig, Rv32Machine, Rv32MachineConfig, Rv32MachineOutcome,
+    Rv32TranslationStats, CONTROL_BASE, STATUS_HALTED,
 };
 use crate::rv32im::encoding::{addi, bne, csrrs, csrrw, ebreak, ecall, jal, materialize, mret, sw};
-use crate::rv32im::Rv32imCacheStats;
 use std::collections::HashMap;
 use std::hint::black_box;
 
@@ -37,20 +36,28 @@ const COPY_SOURCE_BYTES: usize = 256;
 
 pub const PRODUCT_RAM_BYTES: usize = 16 * 1024;
 pub const PRODUCT_CACHE_SETS: usize = 64;
+pub const PRODUCT_BLOCK_CACHE_SETS: usize = 32;
+pub const PRODUCT_BLOCK_MAX_INSTRUCTIONS: usize = 8;
 pub const PRODUCT_DEBUG_LIMIT: usize = 0;
-pub const PRODUCT_RESIDENT_REPORT_HEADER: &str = "backend\tpopulation\tconstruction_median_ns\tconstruction_p95_ns\tresident_live_bytes\tpeak_construction_bytes\tlive_bytes_per_machine\taggregate_ram_bytes\telf_bytes\texecutable_bytes\trw_initialized_bytes\tram_bytes\tdebug_limit\tcache_sets";
-pub const PRODUCT_ACTIVE_REPORT_HEADER: &str = "workload\tcandidate\titerations\tchecksum\tbatch\tcold_ns\twarm_median_ns\twarm_p95_ns\toperations_per_second\tretired_instructions\tcache_hits\tcache_misses\tram_bytes\texecutable_bytes\ttranslation_bytes\tsteady_allocations\tsteady_allocated_bytes\tvs_native";
+pub const PRODUCT_RESIDENT_REPORT_HEADER: &str = "backend\tpopulation\tconstruction_median_ns\tconstruction_p95_ns\tresident_live_bytes\tpeak_construction_bytes\tlive_bytes_per_machine\taggregate_ram_bytes\telf_bytes\texecutable_bytes\trw_initialized_bytes\tram_bytes\tdebug_limit\tcache_sets\tblock_cache_sets\tblock_max_instructions";
+pub const PRODUCT_ACTIVE_REPORT_HEADER: &str = "workload\tcandidate\titerations\tchecksum\tbatch\tcold_ns\twarm_median_ns\twarm_p95_ns\toperations_per_second\tretired_instructions\tlookup_unit\tcache_hits\tcache_misses\tcache_evictions\tblocks_built\tdecoded_slots_built\tram_bytes\texecutable_bytes\ttranslation_bytes\tsteady_allocations\tsteady_allocated_bytes\tvs_native";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProductExecutionCandidate {
     NativeHost,
     Cached,
     Predecoded,
+    BlockCached,
 }
 
 impl ProductExecutionCandidate {
     pub const fn all() -> &'static [Self] {
-        &[Self::NativeHost, Self::Cached, Self::Predecoded]
+        &[
+            Self::NativeHost,
+            Self::Cached,
+            Self::Predecoded,
+            Self::BlockCached,
+        ]
     }
 
     pub const fn name(self) -> &'static str {
@@ -58,6 +65,7 @@ impl ProductExecutionCandidate {
             Self::NativeHost => "native-host",
             Self::Cached => "rv32-cached",
             Self::Predecoded => "rv32-predecoded",
+            Self::BlockCached => "rv32-block-cached",
         }
     }
 }
@@ -153,33 +161,49 @@ pub fn populate_product_ratios(
 }
 
 pub fn format_product_active_row(row: &ProductActiveTiming) -> String {
-    let (retired, cache_hits, cache_misses, ram, executable, translation) =
-        match row.machine.as_ref() {
-            Some(machine) => {
-                let (hits, misses) = machine.cache_stats.map_or_else(
-                    || ("-".to_string(), "-".to_string()),
-                    |stats| (stats.hits.to_string(), stats.misses.to_string()),
-                );
-                (
-                    machine.retired_instructions.to_string(),
-                    hits,
-                    misses,
-                    machine.ram_bytes.to_string(),
-                    machine.executable_bytes.to_string(),
-                    machine.translation_bytes.to_string(),
-                )
-            }
-            None => (
-                "-".to_string(),
-                "-".to_string(),
-                "-".to_string(),
-                "-".to_string(),
-                "-".to_string(),
-                "-".to_string(),
-            ),
-        };
+    let unavailable = || "-".to_string();
+    let (
+        retired,
+        lookup_unit,
+        cache_hits,
+        cache_misses,
+        cache_evictions,
+        blocks_built,
+        decoded_slots_built,
+        ram,
+        executable,
+        translation,
+    ) = match row.machine.as_ref() {
+        Some(machine) => {
+            let stats = machine.translation_stats;
+            (
+                machine.retired_instructions.to_string(),
+                stats.map_or_else(unavailable, |value| value.lookup_unit.name().to_string()),
+                stats.map_or_else(unavailable, |value| value.hits.to_string()),
+                stats.map_or_else(unavailable, |value| value.misses.to_string()),
+                stats.map_or_else(unavailable, |value| value.evictions.to_string()),
+                stats.map_or_else(unavailable, |value| value.blocks_built.to_string()),
+                stats.map_or_else(unavailable, |value| value.decoded_slots_built.to_string()),
+                machine.ram_bytes.to_string(),
+                machine.executable_bytes.to_string(),
+                machine.translation_bytes.to_string(),
+            )
+        }
+        None => (
+            unavailable(),
+            unavailable(),
+            unavailable(),
+            unavailable(),
+            unavailable(),
+            unavailable(),
+            unavailable(),
+            unavailable(),
+            unavailable(),
+            unavailable(),
+        ),
+    };
     format!(
-        "{}\t{}\t{}\t{}\t{}\t{:.3}\t{:.3}\t{:.3}\t{:.3}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{:.6}",
+        "{}\t{}\t{}\t{}\t{}\t{:.3}\t{:.3}\t{:.3}\t{:.3}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{:.6}",
         row.workload.name(),
         row.candidate.name(),
         row.iterations,
@@ -190,8 +214,12 @@ pub fn format_product_active_row(row: &ProductActiveTiming) -> String {
         row.warm_p95_nanos,
         row.operations_per_second(),
         retired,
+        lookup_unit,
         cache_hits,
         cache_misses,
+        cache_evictions,
+        blocks_built,
+        decoded_slots_built,
         ram,
         executable,
         translation,
@@ -227,17 +255,19 @@ pub fn benchmark_geomean(values: &[f64]) -> Result<f64, String> {
 pub enum ProductMachineBackend {
     Cached,
     Predecoded,
+    BlockCached,
 }
 
 impl ProductMachineBackend {
     pub const fn all() -> &'static [Self] {
-        &[Self::Cached, Self::Predecoded]
+        &[Self::Cached, Self::Predecoded, Self::BlockCached]
     }
 
     pub const fn name(self) -> &'static str {
         match self {
             Self::Cached => "cached",
             Self::Predecoded => "predecoded",
+            Self::BlockCached => "block-cached",
         }
     }
 
@@ -247,6 +277,10 @@ impl ProductMachineBackend {
                 sets: PRODUCT_CACHE_SETS,
             },
             Self::Predecoded => Rv32ExecutionBackendConfig::Predecoded,
+            Self::BlockCached => Rv32ExecutionBackendConfig::BlockCached {
+                sets: PRODUCT_BLOCK_CACHE_SETS,
+                max_instructions: PRODUCT_BLOCK_MAX_INSTRUCTIONS,
+            },
         }
     }
 }
@@ -254,18 +288,9 @@ impl ProductMachineBackend {
 pub fn product_backend_order(
     group_index: usize,
     sample_index: usize,
-) -> [ProductMachineBackend; 2] {
-    if (group_index + sample_index).is_multiple_of(2) {
-        [
-            ProductMachineBackend::Cached,
-            ProductMachineBackend::Predecoded,
-        ]
-    } else {
-        [
-            ProductMachineBackend::Predecoded,
-            ProductMachineBackend::Cached,
-        ]
-    }
+) -> [ProductMachineBackend; 3] {
+    let all = ProductMachineBackend::all();
+    benchmark_rotating_order::<3>(group_index, sample_index).map(|index| all[index])
 }
 
 pub fn product_percentile(sorted_values: &[u128], percentile: usize) -> u128 {
@@ -428,7 +453,7 @@ pub struct ProductMachineObservation {
     pub iterations: u32,
     pub checksum: u32,
     pub retired_instructions: u64,
-    pub cache_stats: Option<Rv32imCacheStats>,
+    pub translation_stats: Option<Rv32TranslationStats>,
     pub ram_bytes: usize,
     pub executable_bytes: usize,
     pub translation_bytes: usize,
@@ -536,7 +561,7 @@ impl PreparedProductMachine {
             iterations: self.iterations,
             checksum: exit_code,
             retired_instructions,
-            cache_stats: self.machine.cache_stats(),
+            translation_stats: self.machine.translation_stats(),
             ram_bytes: PRODUCT_RAM_BYTES,
             executable_bytes,
             translation_bytes: self.machine.translation_bytes(),
