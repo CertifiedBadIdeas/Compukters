@@ -12,6 +12,10 @@
 use std::fs;
 use std::path::PathBuf;
 
+use compukter_vm::benchmarks::{
+    c_comparison_next_batch, c_comparison_qemu_target_nanos, c_comparison_timeout_nanos,
+    parse_c_comparison_result,
+};
 use compukter_vm::rv32_machine::{
     Rv32ExecutionBackendConfig, Rv32Machine, Rv32MachineConfig, Rv32MachineOutcome,
 };
@@ -97,4 +101,60 @@ fn product_c_artifact_matches_the_fixed_native_and_qemu_oracle() {
             }
         ));
     }
+}
+
+#[test]
+fn comparison_parser_and_calibration_reject_ambiguous_measurements() {
+    assert_eq!(
+        parse_c_comparison_result(b"CK_RESULT\tee053d58\n").unwrap(),
+        0xee05_3d58
+    );
+    assert_eq!(
+        parse_c_comparison_result(b"CK_RESULT\tee053d58\r\n").unwrap(),
+        0xee05_3d58
+    );
+    assert!(parse_c_comparison_result(b"CK_RESULT\tee053d58\nextra\n").is_err());
+    assert!(parse_c_comparison_result(b"CK_RESULT\tee053d5\n").is_err());
+    assert!(parse_c_comparison_result(b"").is_err());
+
+    assert_eq!(c_comparison_next_batch(1, 249, 250).unwrap(), Some(2));
+    assert_eq!(c_comparison_next_batch(8, 250, 250).unwrap(), None);
+    assert!(c_comparison_next_batch(u64::MAX / 2 + 1, 1, 250).is_err());
+    assert_eq!(
+        c_comparison_qemu_target_nanos(8_000_000).unwrap(),
+        400_000_000
+    );
+    assert_eq!(
+        c_comparison_qemu_target_nanos(1_000_000).unwrap(),
+        250_000_000
+    );
+    assert_eq!(c_comparison_timeout_nanos(400_000_000), 6_600_000_000);
+}
+
+#[test]
+fn comparison_runner_keeps_qemu_system_tcg_explicit_and_report_stable() {
+    let source = fs::read_to_string(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("examples/rv32_c_comparison.rs"),
+    )
+    .unwrap();
+
+    for token in [
+        "qemu-system-riscv32",
+        "\"-M\".into()",
+        "\"virt\".into()",
+        "\"-bios\".into()",
+        "\"none\".into()",
+        "\"-accel\".into()",
+        "\"tcg\".into()",
+        "\"-nographic\".into()",
+        "\"-monitor\".into()",
+    ] {
+        assert!(
+            source.contains(token),
+            "runner lacks required QEMU token {token}"
+        );
+    }
+    assert!(source.contains("candidate\\tmode\\titerations\\tseed\\tbatch\\tchecksum"));
+    assert!(!source.contains("Command::new(\"sh\")"));
+    assert!(!source.contains("Command::new(\"bash\")"));
 }

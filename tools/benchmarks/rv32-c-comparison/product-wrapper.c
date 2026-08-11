@@ -11,10 +11,10 @@
 #define CONTROL_STATUS (*(volatile uint32_t *)0x10000000u)
 #define CONTROL_EXIT_CODE (*(volatile uint32_t *)0x10000008u)
 
-extern const char __ck_batch[];
+extern const uint32_t ck_batch_value;
 
 __attribute__((noreturn)) void platform_main(void) {
-    uint32_t batch = (uint32_t)(uintptr_t)__ck_batch;
+    uint32_t batch = ck_batch_value;
     uint32_t checksum = 0u;
     volatile uint32_t runtime_seed = CK_ORACLE_SEED;
     volatile uint32_t sink = 0u;

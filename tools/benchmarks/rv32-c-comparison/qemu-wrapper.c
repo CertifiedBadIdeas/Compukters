@@ -13,7 +13,7 @@
 #define UART_THR_EMPTY 0x20u
 #define SIFIVE_TEST (*(volatile uint32_t *)0x00100000u)
 
-extern const char __ck_batch[];
+extern const uint32_t ck_batch_value;
 
 static void uart_putc(uint8_t value) {
     while ((UART_LSR & UART_THR_EMPTY) == 0u) {
@@ -38,7 +38,7 @@ static void uart_hex32(uint32_t value) {
 }
 
 __attribute__((noreturn)) void platform_main(void) {
-    uint32_t batch = (uint32_t)(uintptr_t)__ck_batch;
+    uint32_t batch = ck_batch_value;
     uint32_t checksum = 0u;
     volatile uint32_t runtime_seed = CK_ORACLE_SEED;
     volatile uint32_t sink = 0u;
