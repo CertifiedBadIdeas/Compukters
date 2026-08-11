@@ -178,7 +178,7 @@ class K16ToolingRenameTest {
         val neoforgeBuildScript = root.resolve("modules/v1_21_1/v1_21_1-neoforge/build.gradle.kts").readText()
 
         assertTrue(buildScript.contains("guest/firmware/bios/bios.c"))
-        assertTrue(neoforgeBuildScript.contains("alias(libs.plugins.k16FirmwareConvention)"))
+        assertFalse(neoforgeBuildScript.contains("alias(libs.plugins.k16FirmwareConvention)"))
         assertFalse(buildScript.contains("guest/kraftos/k16-bios"))
         assertTrue(buildScript.contains("guest/firmware/boot/boot.c"))
         assertTrue(buildScript.contains("guest/firmware/boot-chain/boot_chain.c"))

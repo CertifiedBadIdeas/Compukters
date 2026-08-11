@@ -34,7 +34,7 @@ class K16FirmwareVolumeBuildScriptTest {
             root.resolve("build-scripts/src/main/kotlin/k16-firmware-producer-convention.gradle.kts").readText()
         val consumerScript = root.resolve("build-scripts/src/main/kotlin/k16-firmware-convention.gradle.kts").readText()
 
-        assertTrue(neoforgeBuildScript.contains("alias(libs.plugins.k16FirmwareConvention)"))
+        assertFalse(neoforgeBuildScript.contains("alias(libs.plugins.k16FirmwareConvention)"))
         assertTrue(producerScript.contains("val compileK16SystemKernel ="))
         assertTrue(producerScript.contains("""val k16KernelArtifact = generatedK16FirmwareArtifacts.map { it.file("kernel.kx") }"""))
         assertFalse(producerScript.contains("""it.file("display-ok.kx")"""))
@@ -202,24 +202,6 @@ class K16FirmwareVolumeBuildScriptTest {
     }
 
     @Test
-    fun nativeTinyCcProofMountsTheCandidateReadOnlyAndValidatesGuestOutput() {
-        val proofSource =
-            root.resolve(
-                "modules/v1_21_1/v1_21_1-neoforge/src/test/kotlin/" +
-                    "ru/lazyhat/compukterkraft/impl/K16NativeTinyCcCompileTest.kt",
-            )
-        assertTrue(proofSource.exists(), "the native compiler proof test must exist")
-        val source = proofSource.readText()
-
-        assertTrue(source.contains("K16StaticStorageAttachment(candidatePath)"))
-        assertTrue(source.contains("/sdk/bin/tcc.kx -c /work/hello.c -o /work/hello.o"))
-        assertTrue(source.contains("/work/hello.o did not exist before launch"))
-        assertTrue(source.contains("ERR ROFS"))
-        assertTrue(source.contains("native tinycc ok\\n"))
-        assertTrue(source.contains("shutdown"))
-    }
-
-    @Test
     fun localVerificationEntrypointsAreCentralized() {
         val rootBuildScript = root.resolve("build.gradle.kts").readText()
         val conventionScript = root.resolve("build-scripts/src/main/kotlin/k16-firmware-convention.gradle.kts").readText()
@@ -227,8 +209,8 @@ class K16FirmwareVolumeBuildScriptTest {
 
         assertTrue(rootBuildScript.contains("""tasks.register("verifyLocalFast")"""))
         assertTrue(rootBuildScript.contains("""tasks.register("verifyLocalFull")"""))
-        assertTrue(rootBuildScript.contains("""tasks.register("verifyK16Runtime")"""))
-        assertTrue(rootBuildScript.contains("""tasks.register("verifyK16Firmware")"""))
+        assertFalse(rootBuildScript.contains("""tasks.register("verifyK16Runtime")"""))
+        assertFalse(rootBuildScript.contains("""tasks.register("verifyK16Firmware")"""))
         assertTrue(rootBuildScript.contains("""gradle.includedBuild("build-scripts").task(":test")"""))
         assertTrue(rootBuildScript.contains(""":core:test"""))
         assertTrue(rootBuildScript.contains(""":native-runtime:test"""))
@@ -238,8 +220,8 @@ class K16FirmwareVolumeBuildScriptTest {
         assertTrue(rootBuildScript.contains("""tasks.register<Exec>("testK16HostToolsRust")"""))
         assertTrue(rootBuildScript.contains("""dependsOn(testK16HostVmRust)"""))
         assertTrue(rootBuildScript.contains("""dependsOn(testK16HostToolsRust)"""))
-        assertTrue(rootBuildScript.contains("""dependsOn(":v1_21_1-neoforge:verifyK16Runtime")"""))
-        assertTrue(rootBuildScript.contains("""dependsOn(":v1_21_1-neoforge:verifyK16FirmwareArchitecture")"""))
+        assertFalse(rootBuildScript.contains("""dependsOn(":v1_21_1-neoforge:verifyK16Runtime")"""))
+        assertFalse(rootBuildScript.contains("""dependsOn(":v1_21_1-neoforge:verifyK16FirmwareArchitecture")"""))
 
         assertTrue(conventionScript.contains("""tasks.register<Test>("verifyK16Runtime")"""))
         assertTrue(conventionScript.contains("""tasks.register<Test>("verifyK16FirmwareArchitecture")"""))
@@ -249,7 +231,7 @@ class K16FirmwareVolumeBuildScriptTest {
         assertTrue(conventionScript.contains("systemProperty(\"k16.vm.native.library\""))
 
         assertTrue(agentDocs.contains("./gradlew-sandbox-dev-parallel verifyLocalFast"))
-        assertTrue(agentDocs.contains("./gradlew-sandbox-dev-parallel verifyK16Runtime"))
+        assertFalse(agentDocs.contains("./gradlew-sandbox-dev-parallel verifyK16Runtime"))
         assertTrue(agentDocs.contains("./gradlew-sandbox-dev-parallel verifyLocalFull"))
     }
 }

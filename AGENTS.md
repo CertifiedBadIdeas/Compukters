@@ -17,17 +17,12 @@ crates live in `host/k16-vm` and `host/k16-tools`; guest-side Rust crates live u
   `./gradlew-sandbox-dev --parallel <tasks> -Pk16BuildJobs=$(nproc)`.
 - `./gradlew-sandbox-dev-parallel verifyLocalFast` is the default local verification entrypoint for build-script tests
   and JVM tests across Gradle modules.
-- `./gradlew-sandbox-dev-parallel verifyK16Firmware` runs the focused K16 firmware/image architecture slice.
-- `./gradlew-sandbox-dev-parallel verifyK16Runtime` runs the K16 native runtime shell smoke slice.
-- `./gradlew-sandbox-dev-parallel verifyK16SdkMount` runs the immutable `storage1` SDK mount and execution slice.
-- `./gradlew-sandbox-dev-parallel verifyK16TinyCc` runs the focused TinyCC K16 backend/runtime slice.
-- `./gradlew-sandbox-dev-parallel verifyLocalFull` runs `verifyLocalFast`, focused K16 slices, and host Rust crate tests.
+- `./gradlew-sandbox-dev-parallel verifyLocalFull` runs `verifyLocalFast` and host Rust crate tests.
 - `./gradlew build` builds all Gradle modules and runs standard checks.
 - `./gradlew test` runs JVM unit tests across Kotlin modules.
 - `./gradlew :core:test` or `./gradlew :native-runtime:test` runs focused module tests.
 - `./gradlew :v1_21_1-neoforge:runClient` launches the NeoForge dev client.
-- `./gradlew :v1_21_1-neoforge:buildK16VmNativeLibrary` builds the debug Rust JNI library used by dev runs.
-- `./gradlew :v1_21_1-neoforge:buildProductionUniversalJar` builds a production jar with release native VM artifacts.
+- `./gradlew :v1_21_1-neoforge:buildProductionUniversalJar` builds the production remapped mod jar.
 - `cargo test` from `host/k16-vm`, `host/k16-tools`, or `guest/kraftos` runs Rust crate tests.
 
 ## Coding Style & Naming Conventions

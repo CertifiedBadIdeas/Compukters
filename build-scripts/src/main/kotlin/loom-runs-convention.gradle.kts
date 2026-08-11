@@ -53,124 +53,10 @@ fun RunConfigSettings.applyShared() {
 
 private val DEV_CLIENT_USERNAMES = listOf("DevA", "DevB", "DevC")
 
-private val k16VmCrateDir = rootProject.layout.projectDirectory.dir("host/k16-vm")
-private val k16VmCargoTargetDir = rootProject.layout.projectDirectory.dir(".toolchain/build/cargo/k16-vm")
-private val k16VmNativePlatform = currentK16VmNativePlatform()
-private val k16VmNativeLibrary = k16VmCargoTargetDir.file("debug/${k16VmNativePlatform.libraryName}")
-private val k16VmReleaseNativeLibrary = k16VmCargoTargetDir.file("release/${k16VmNativePlatform.libraryName}")
-private val k16VmWindowsX64Target = "x86_64-pc-windows-gnu"
-private val k16VmWindowsX64NativeLibrary = k16VmCargoTargetDir.file("$k16VmWindowsX64Target/release/k16_vm.dll")
-private val k16VmNativeDistDir = k16VmCrateDir.dir("dist/natives")
-private val productionK16VmNativeResources = layout.buildDirectory.dir("generated/production-k16-vm-native-resources")
-private val isProductionUniversalJarRequested =
-    gradle.startParameter.taskNames.any { taskName ->
-        taskName == "buildProductionUniversalJar" || taskName.endsWith(":buildProductionUniversalJar")
-    }
-
-val buildK16VmNativeLibrary =
-    tasks.register<Exec>("buildK16VmNativeLibrary") {
-        group = "loom"
-        description = "Build the local K16 VM JNI library used by K16 VM dev run configurations."
-        workingDir = k16VmCrateDir.asFile
-        commandLine("cargo", "build")
-        environment("CARGO_TARGET_DIR", k16VmCargoTargetDir.asFile.absolutePath)
-        inputs.file(k16VmCrateDir.file("Cargo.toml"))
-        inputs.file(k16VmCrateDir.file("Cargo.lock"))
-        inputs.dir(k16VmCrateDir.dir("src"))
-        outputs.file(k16VmNativeLibrary)
-    }
-
-val buildK16VmNativeLibraryRelease =
-    tasks.register<Exec>("buildK16VmNativeLibraryRelease") {
-        group = "build"
-        description = "Build the release K16 VM JNI library for bundling into production mod jars."
-        workingDir = k16VmCrateDir.asFile
-        commandLine("cargo", "build", "--release")
-        environment("CARGO_TARGET_DIR", k16VmCargoTargetDir.asFile.absolutePath)
-        inputs.file(k16VmCrateDir.file("Cargo.toml"))
-        inputs.file(k16VmCrateDir.file("Cargo.lock"))
-        inputs.dir(k16VmCrateDir.dir("src"))
-        outputs.file(k16VmReleaseNativeLibrary)
-    }
-
-val buildK16VmWindowsX64NativeLibraryRelease =
-    tasks.register<Exec>("buildK16VmWindowsX64NativeLibraryRelease") {
-        group = "build"
-        description = "Cross-build the release K16 VM JNI library for Windows x64 production jars."
-        workingDir = k16VmCrateDir.asFile
-        commandLine("cargo", "build", "--release", "--target", k16VmWindowsX64Target)
-        environment("CARGO_TARGET_DIR", k16VmCargoTargetDir.asFile.absolutePath)
-        environment("CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER", "x86_64-w64-mingw32-gcc")
-        inputs.file(k16VmCrateDir.file("Cargo.toml"))
-        inputs.file(k16VmCrateDir.file("Cargo.lock"))
-        inputs.dir(k16VmCrateDir.dir("src"))
-        outputs.file(k16VmWindowsX64NativeLibrary)
-        doFirst {
-            require(commandAvailable("x86_64-w64-mingw32-gcc")) {
-                "Missing x86_64-w64-mingw32-gcc. Install MinGW-w64 and run " +
-                    "`rustup target add $k16VmWindowsX64Target` before building a production universal jar."
-            }
-        }
-    }
-
-val prepareBundledK16VmNativeLibraries =
-    tasks.register<Sync>("prepareBundledK16VmNativeLibraries") {
-        group = "build"
-        description = "Stage K16 VM native libraries under natives/<os-arch>/ for universal mod jars."
-        dependsOn(buildK16VmNativeLibraryRelease)
-
-        from(k16VmReleaseNativeLibrary) {
-            into("natives/${k16VmNativePlatform.id}")
-            rename { k16VmNativePlatform.libraryName }
-        }
-        from(k16VmNativeDistDir) {
-            include("**/*")
-        }
-        into(layout.buildDirectory.dir("generated/k16-vm-native-resources"))
-    }
-
-val stageProductionK16VmNativeLibraries =
-    tasks.register<Sync>("stageProductionK16VmNativeLibraries") {
-        group = "build"
-        description = "Stage current-platform and Windows x64 K16 VM natives for production universal jars."
-        dependsOn(buildK16VmNativeLibraryRelease)
-        if (k16VmNativePlatform.id != "windows-x86_64") {
-            dependsOn(buildK16VmWindowsX64NativeLibraryRelease)
-        }
-
-        from(k16VmReleaseNativeLibrary) {
-            into("natives/${k16VmNativePlatform.id}")
-            rename { k16VmNativePlatform.libraryName }
-        }
-        from(if (k16VmNativePlatform.id == "windows-x86_64") k16VmReleaseNativeLibrary else k16VmWindowsX64NativeLibrary) {
-            into("natives/windows-x86_64")
-            rename { "k16_vm.dll" }
-        }
-        from(k16VmNativeDistDir) {
-            include("**/*")
-        }
-        into(productionK16VmNativeResources)
-    }
-
-tasks.named<ProcessResources>("processResources") {
-    dependsOn(prepareBundledK16VmNativeLibraries)
-    from(prepareBundledK16VmNativeLibraries)
-    if (isProductionUniversalJarRequested) {
-        dependsOn(stageProductionK16VmNativeLibraries)
-        from(productionK16VmNativeResources)
-    }
-}
-
 tasks.register("buildProductionUniversalJar") {
     group = "build"
-    description = "Build a production mod jar with current-platform and Windows x64 K16 VM natives bundled."
-    dependsOn(stageProductionK16VmNativeLibraries)
+    description = "Build the production remapped mod jar."
     dependsOn(tasks.named("remapJar"))
-}
-
-fun RunConfigSettings.applyK16Vm() {
-    property("k16.vm.native.display", "true")
-    property("k16.vm.native.daemon", "true")
 }
 
 val loom = extensions.getByType<LoomGradleExtensionAPI>()
@@ -180,7 +66,6 @@ val runs = loom.runs
 runs.named("client") {
     runDir("run/client")
     applyShared()
-    applyK16Vm()
     programArgs("--username", DEV_CLIENT_USERNAMES[0])
 }
 
@@ -193,7 +78,6 @@ runs.register("client2") {
     configName = "Minecraft Client 2"
     runDir("run/client2")
     applyShared()
-    applyK16Vm()
     programArgs("--username", DEV_CLIENT_USERNAMES[1])
 }
 
@@ -206,7 +90,6 @@ runs.register("client3") {
     configName = "Minecraft Client 3"
     runDir("run/client3")
     applyShared()
-    applyK16Vm()
     programArgs("--username", DEV_CLIENT_USERNAMES[2])
 }
 
@@ -218,7 +101,6 @@ runs.register("client3") {
 runs.named("server") {
     runDir("run/server")
     applyShared()
-    applyK16Vm()
 }
 
 private val DEV_SERVER_SEED = "compukterkraft"
@@ -290,7 +172,7 @@ val prepareServerDev =
     }
 
 tasks.matching { it.name == "runServer" }.configureEach {
-    dependsOn(prepareServerDev, buildK16VmNativeLibrary)
+    dependsOn(prepareServerDev)
 }
 
 // ---------------------------------------------------------------------------
@@ -362,7 +244,7 @@ private val CLIENT_RUN_TASKS =
     )
 
 tasks.matching { it.name in CLIENT_RUN_TASKS }.configureEach {
-    dependsOn(prepareClientDev, buildK16VmNativeLibrary)
+    dependsOn(prepareClientDev)
 }
 
 private fun seedOptionsTxt(file: File) {
@@ -446,12 +328,3 @@ private fun seedOpsJson(file: File) {
         }
     file.writeText("[\n$entries\n]\n")
 }
-
-private fun commandAvailable(command: String): Boolean =
-    runCatching {
-        ProcessBuilder(command, "--version")
-            .redirectOutput(ProcessBuilder.Redirect.DISCARD)
-            .redirectError(ProcessBuilder.Redirect.DISCARD)
-            .start()
-            .waitFor() == 0
-    }.getOrDefault(false)
