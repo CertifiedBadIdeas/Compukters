@@ -3,9 +3,9 @@
 ## Project Structure & Module Organization
 
 Compukter Kraft is a Gradle multi-module Kotlin project with native Rust VM components. Kotlin modules live under
-`modules/`: `core` contains shared device/runtime logic, `native-runtime` wraps the Rust VM through JNI, and
+`modules/`: `core` contains shared device/runtime logic, `native-runtime` contains architecture-neutral runtime models, and
 `v1_21_1/v1_21_1-common` plus `v1_21_1/v1_21_1-neoforge` contain the Minecraft 1.21.1 integration. Host-side Rust
-crates live in `host/k16-vm` and `host/k16-tools`; guest-side Rust crates live under `guest/kraftos`. Documentation is in
+VM code lives in `host/compukter-vm`. Documentation is in
 `docs/`, active machine ABI references are in `docs/abi`, mod metadata is in `config/`, and visual/model assets are in
 `models/` and top-level logo files.
 
@@ -14,7 +14,7 @@ crates live in `host/k16-vm` and `host/k16-tools`; guest-side Rust crates live u
 - AI agents running Gradle from the sandbox should use `./gradlew-sandbox` instead of `./gradlew`. It keeps
   `GRADLE_USER_HOME` in `.gradle-sandbox`, disables the Gradle daemon, and avoids sharing host Gradle lock files.
 - For normal source-built development runs, prefer `./gradlew-sandbox-dev-parallel <tasks>`. It delegates to
-  `./gradlew-sandbox-dev --parallel <tasks> -Pk16BuildJobs=$(nproc)`.
+  `./gradlew-sandbox-dev --parallel <tasks> -PcompukterVmBuildJobs=$(nproc)`.
 - `./gradlew-sandbox-dev-parallel verifyLocalFast` is the default local verification entrypoint for build-script tests
   and JVM tests across Gradle modules.
 - `./gradlew-sandbox-dev-parallel verifyLocalFull` runs `verifyLocalFast` and host Rust crate tests.
@@ -23,7 +23,7 @@ crates live in `host/k16-vm` and `host/k16-tools`; guest-side Rust crates live u
 - `./gradlew :core:test` or `./gradlew :native-runtime:test` runs focused module tests.
 - `./gradlew :v1_21_1-neoforge:runClient` launches the NeoForge dev client.
 - `./gradlew :v1_21_1-neoforge:buildProductionUniversalJar` builds the production remapped mod jar.
-- `cargo test` from `host/k16-vm`, `host/k16-tools`, or `guest/kraftos` runs Rust crate tests.
+- `cargo test --manifest-path host/compukter-vm/Cargo.toml --locked --offline` runs the RV32 host VM tests.
 
 ## Coding Style & Naming Conventions
 
@@ -37,8 +37,7 @@ Rust crates use edition 2021 conventions: `snake_case` modules/functions, `Pasca
 
 Kotlin tests use `kotlin.test` on JUnit Platform; build-script tests use JUnit Jupiter. Place tests beside the owning
 module in `src/test/kotlin`. NeoForge game tests live under `src/gameTest/kotlin` and are compiled by `check`; run
-`:v1_21_1-neoforge:runGameTestServer` when validating in-game behavior. For JNI-dependent tests, pass
-`-Dk16.vm.native.library=/path/to/libk16_vm.so` after building the Rust library.
+`:v1_21_1-neoforge:runGameTestServer` when validating in-game behavior.
 
 ## Commit & Pull Request Guidelines
 
