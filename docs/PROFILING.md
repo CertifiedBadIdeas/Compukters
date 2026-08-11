@@ -55,6 +55,31 @@ The historical `rv32-cached` end-to-end candidate still uses the HashMap-backed
 `BoundedCachedRv32imProgram`; do not use the former to attribute decoder
 extraction cost in the latter.
 
+## RV32 Product Machine Benchmark
+
+The Direct, Cached, and Predecoded rows in `rv32_decoder_benchmarks` use the
+lightweight ISA executor. They do not include the complete product machine
+loop, ELF-owned address space, machine-mode traps, or platform MMIO.
+
+Measure public `Rv32Machine::run` and resident many-VM construction separately:
+
+```bash
+cargo run --manifest-path host/compukter-vm/Cargo.toml --release \
+  --example rv32_machine_benchmarks --locked --offline -- 1000 21 7
+```
+
+The arguments are workload iterations, warm execution samples, and resident
+construction samples. The runner enforces minima of 21 and seven samples. It
+uses one byte-identical strict ELF32 image for Cached and Predecoded, times only
+`Rv32Machine::run` in the active report, and excludes the shared ELF from the
+resident population heap delta.
+
+The 2026-08-11 baseline, complete raw output, environment, and interpretation
+are stored in
+[`2026-08-11-rv32-product-machine-baseline.md`](benchmarks/2026-08-11-rv32-product-machine-baseline.md).
+Absolute timings are host-specific comparison evidence, not a server-capacity
+promise.
+
 Committed Gate and XLEN outputs under `docs/benchmarks/` are immutable
 historical evidence. They are not active benchmark runners and do not select a
 supported product architecture. The accepted architecture decision is recorded
