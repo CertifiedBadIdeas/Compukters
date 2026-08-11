@@ -2,26 +2,24 @@
 
 > Architecture direction: [ADR 0001](architecture-decisions/0001-retire-k16-adopt-rv32.md)
 > retires K16 as the product ISA and selects `RV32IMA_Zicsr_Zifencei` with the
-> standard ILP32/ELF32 toolchain. This document describes the still-running K16
-> implementation during the incremental migration; it is not the long-term
-> target contract.
+> standard ILP32/ELF32 toolchain. Issue #490 physically disconnected the K16
+> implementation from the loadable Minecraft product. There is intentionally
+> no VM-backed computer product until the RV32 integration replaces it.
 >
 > Note: as of issue #26 the legacy CKL language / CKIM bytecode VM /
 > in-game Workbench IDE have been removed. As of issue #44 the legacy
 > Image-VM (host-call opcode, multi-process device daemon, runtime
-> kernel, host-imported filesystem) has also been retired. The active
-> computer boot path is now Kraft16 guest execution from BIOS flash and
-> storage-backed boot media. Older revisions in git history describe the
-> previous architectures.
+> kernel, host-imported filesystem) has also been retired. Older revisions in
+> git history describe those previous architectures.
 
 ## Current Implementation Overview
 
-Compukter Kraft is a Minecraft mod that adds programmable computers backed
-by a Rust virtual machine (`host/k16-vm`). The mod ships a single
-player-facing computer item — **Notebook** — that starts a native
-`K16Computer` from a per-computer `bios.kflash` file. The BIOS executes on
-the Kraft16 guest CPU, can inspect storage0 boot media, and exposes devices
-through memory-mapped peripherals.
+The loadable NeoForge mod is currently a platform shell: it initializes the
+remaining generic networking surface but registers no computer, notebook,
+terminal, SDK item, computer menu, block entity, or K16 runtime. Development
+runs and production jars do not build, load, or package a K16 JNI library or
+KraftOS firmware. This empty product interval is deliberate: K16 is not a
+fallback while the selected RV32 platform is integrated.
 
 ### RV32 migration status
 
@@ -62,17 +60,18 @@ also remains valid. Cache storage, predecode storage, RAM, and debug output are
 bounded before execution; successful steady-state execution performs no heap
 growth.
 
-This host slice is not wired to JNI or Minecraft and does not boot the BIOS or
-KraftOS. During the remaining cutover, `host/k16-vm` temporarily consumes its
-RV32 modules from `host/compukter-vm`; it no longer owns a second RV32
-implementation. The selected `A` and `Zifencei` extensions remain pending. `Zicntr`,
+This host slice is not wired to JNI or Minecraft and does not boot firmware or
+KraftOS. The selected `A` and `Zifencei` extensions remain pending. `Zicntr`,
 timer delivery, asynchronous interrupts, U/S privilege modes, Sv32 or another
 protection model, persistent firmware flash, remaining devices, KraftOS, and
-the product runtime cutover are also absent. The existing K16 Notebook path
-below therefore remains the active player-facing implementation during
-migration.
+the product runtime integration are also absent.
 
-## K16 BIOS Flash Workflow
+## Historical K16 BIOS Flash Workflow
+
+The remainder of this section documents removed behavior for archaeological
+reference only. None of these Kotlin/JNI/product paths exists or executes after
+issue #490; standalone K16 host, guest, and toolchain sources remain only until
+issue #491 removes them.
 
 Each K16 computer workspace stores its firmware in `bios.kflash`. On first
 boot, `K16BiosFlashWorkspace.prepareBiosFlash` seeds that file from the bundled
@@ -95,10 +94,10 @@ bad.
 
 | Module                  | Purpose                                                                          |
 |-------------------------|----------------------------------------------------------------------------------|
-| `native-runtime`        | Kotlin types shared with the Rust VM: device profile, VM state/events, JNI bindings (`NativeVmBindings`), IDE stub types kept for residual UI surfaces |
-| `core`                  | Shared mod logic: server context / device registry, runtime device interfaces, platform port interfaces, no Minecraft deps |
-| `v1_21_1-common`        | Minecraft 1.21.1 common code: blocks, items, menus, networking, rendering        |
-| `v1_21_1-neoforge`      | NeoForge bootstrap, registries, network handler, native library packaging         |
+| `native-runtime`        | Neutral device/VM data models; no JNI binding or concrete K16 runtime             |
+| `core`                  | Shared platform-neutral logic and future device/runtime contracts; no Minecraft deps |
+| `v1_21_1-common`        | Minecraft 1.21.1 common support; currently retains only generic non-computer surfaces |
+| `v1_21_1-neoforge`      | Minimal NeoForge bootstrap and generic network handler; no computer registration or native packaging |
 | `v1_21_1-create-neoforge` | Optional Create mod compatibility (NeoForge-only)                              |
 
 ## Native crates
@@ -106,10 +105,10 @@ bad.
 | Crate                | Purpose                                                                  |
 |----------------------|--------------------------------------------------------------------------|
 | `host/compukter-vm`  | Neutral RV32 execution core, permissioned and budgeted ELF32 machine, and RV32 decoder benchmarks; no JNI or Minecraft ownership |
-| `host/k16-vm`        | Temporary active Kraft16 runtime/JNI product path; consumes neutral RV32 modules only while the product cutover remains incomplete |
+| `host/k16-vm`        | Disconnected historical Kraft16 host/JNI sources pending deletion in issue #491 |
 | `host/k16-tools`     | Legacy Rux source checks plus K16 artifact tooling via `k16` for disassembly, volume, and filesystem commands |
 
-For a code-level map of the active Rust VM path, see
+For a code-level map of the removed K16 VM path, see the historical
 [`k16-vm-code-flow.md`](k16-vm-code-flow.md).
 
 ## Module ownership rules
@@ -119,7 +118,7 @@ For a code-level map of the active Rust VM path, see
   network handler, hooks, and small unavoidable platform shims.
 - Boundary rules are enforced by `ArchitectureBoundaryTest` in `modules/core`.
 
-## Device lifecycle
+## Historical K16 device lifecycle
 
 ```
 NotebookItem.use()
@@ -144,7 +143,7 @@ RuntimeDevice.close()
   └─ NativeVmBindings.freeK16Computer(handle)
 ```
 
-## Data flow
+## Historical K16 data flow
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
