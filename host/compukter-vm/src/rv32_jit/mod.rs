@@ -18,6 +18,7 @@
  */
 
 pub(crate) mod abi;
+mod arena;
 mod backend;
 pub(crate) mod block;
 pub(crate) mod planner;

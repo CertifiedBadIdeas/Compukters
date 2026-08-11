@@ -50,7 +50,6 @@ impl CodeBlob {
         reason = "the backend-neutral JIT contract is introduced before its planner and arena consumers"
     )]
     pub(crate) fn validate_relocations(&self) -> Result<(), String> {
-        let _ = &self.bytes;
         for relocation in &self.relocations {
             let CodeRelocation::External { symbol, .. } = relocation;
             return Err(format!(
@@ -58,5 +57,13 @@ impl CodeBlob {
             ));
         }
         Ok(())
+    }
+
+    #[allow(
+        dead_code,
+        reason = "the arena is introduced before the machine-owned JIT dispatcher"
+    )]
+    pub(crate) fn bytes(&self) -> &[u8] {
+        &self.bytes
     }
 }
