@@ -22,8 +22,8 @@ use compukter_vm::benchmarks::{
     format_product_active_row, populate_product_ratios, product_backend_order, product_percentile,
     PreparedProductMachine, PreparedProductNative, ProductActiveTiming, ProductExecutionCandidate,
     ProductMachineBackend, ProductMachineImage, ProductMachineObservation, ProductMachineWorkload,
-    PRODUCT_ACTIVE_REPORT_HEADER, PRODUCT_CACHE_SETS, PRODUCT_DEBUG_LIMIT, PRODUCT_RAM_BYTES,
-    PRODUCT_RESIDENT_REPORT_HEADER,
+    PRODUCT_ACTIVE_REPORT_HEADER, PRODUCT_BLOCK_CACHE_SETS, PRODUCT_BLOCK_MAX_INSTRUCTIONS,
+    PRODUCT_CACHE_SETS, PRODUCT_DEBUG_LIMIT, PRODUCT_RAM_BYTES, PRODUCT_RESIDENT_REPORT_HEADER,
 };
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
@@ -148,7 +148,9 @@ fn measure_active(iterations: u32, warm_samples: usize) -> Result<Vec<ActiveMeas
                     ProductExecutionCandidate::NativeHost => {
                         ActivePrepared::Native(PreparedProductNative::new(workload, iterations)?)
                     }
-                    ProductExecutionCandidate::Cached | ProductExecutionCandidate::Predecoded => {
+                    ProductExecutionCandidate::Cached
+                    | ProductExecutionCandidate::Predecoded
+                    | ProductExecutionCandidate::BlockCached => {
                         let backend = candidate_backend(candidate);
                         ActivePrepared::Machine {
                             cold: image.prepare(backend)?,
@@ -175,7 +177,7 @@ fn measure_active(iterations: u32, warm_samples: usize) -> Result<Vec<ActiveMeas
 
         let native = active_for_candidate(&mut measurements, ProductExecutionCandidate::NativeHost);
         native.batch = calibrate_native(native)?;
-        for candidate_index in benchmark_rotating_order::<3>(workload_index, 0) {
+        for candidate_index in benchmark_rotating_order::<4>(workload_index, 0) {
             let candidate = ProductExecutionCandidate::all()[candidate_index];
             let measurement = active_for_candidate(&mut measurements, candidate);
             let (checksum, observation, nanos, allocations, allocated_bytes) =
@@ -187,7 +189,7 @@ fn measure_active(iterations: u32, warm_samples: usize) -> Result<Vec<ActiveMeas
             measurement.steady_allocated_bytes = allocated_bytes;
         }
         for sample_index in 0..warm_samples {
-            for candidate_index in benchmark_rotating_order::<3>(workload_index, sample_index + 1) {
+            for candidate_index in benchmark_rotating_order::<4>(workload_index, sample_index + 1) {
                 let candidate = ProductExecutionCandidate::all()[candidate_index];
                 let measurement = active_for_candidate(&mut measurements, candidate);
                 let (checksum, observation, nanos, allocations, allocated_bytes) =
@@ -231,6 +233,7 @@ fn candidate_backend(candidate: ProductExecutionCandidate) -> ProductMachineBack
     match candidate {
         ProductExecutionCandidate::Cached => ProductMachineBackend::Cached,
         ProductExecutionCandidate::Predecoded => ProductMachineBackend::Predecoded,
+        ProductExecutionCandidate::BlockCached => ProductMachineBackend::BlockCached,
         ProductExecutionCandidate::NativeHost => unreachable!(),
     }
 }
@@ -288,6 +291,8 @@ fn print_active_report(iterations: u32, warm_samples: usize, rows: &[ActiveMeasu
     println!("debug_limit\t{PRODUCT_DEBUG_LIMIT}");
     println!("cached_sets\t{PRODUCT_CACHE_SETS}");
     println!("cached_entries\t{}", PRODUCT_CACHE_SETS * 2);
+    println!("block_cached_sets\t{PRODUCT_BLOCK_CACHE_SETS}");
+    println!("block_max_instructions\t{PRODUCT_BLOCK_MAX_INSTRUCTIONS}");
     println!("{PRODUCT_ACTIVE_REPORT_HEADER}");
     let timings = rows
         .iter()
@@ -354,7 +359,7 @@ fn measure_resident(
     sample_count: usize,
 ) -> Result<Vec<ResidentMeasurement>, String> {
     let image = ProductMachineImage::new(ProductMachineWorkload::PacketRing, iterations)?;
-    let mut completed = Vec::with_capacity(8);
+    let mut completed = Vec::with_capacity(12);
     for (population_index, population) in [1_usize, 32, 256, 1024].into_iter().enumerate() {
         let mut measurements = ProductMachineBackend::all()
             .iter()
@@ -436,10 +441,21 @@ fn print_resident_report(iterations: u32, sample_count: usize, rows: &[ResidentM
         let resident_live_bytes = product_percentile(&live, 50);
         let cache_sets = match row.backend {
             ProductMachineBackend::Cached => PRODUCT_CACHE_SETS.to_string(),
-            ProductMachineBackend::Predecoded => "-".to_string(),
+            ProductMachineBackend::Predecoded | ProductMachineBackend::BlockCached => {
+                "-".to_string()
+            }
+        };
+        let (block_cache_sets, block_max_instructions) = match row.backend {
+            ProductMachineBackend::BlockCached => (
+                PRODUCT_BLOCK_CACHE_SETS.to_string(),
+                PRODUCT_BLOCK_MAX_INSTRUCTIONS.to_string(),
+            ),
+            ProductMachineBackend::Cached | ProductMachineBackend::Predecoded => {
+                ("-".to_string(), "-".to_string())
+            }
         };
         println!(
-            "{}\t{}\t{}\t{}\t{}\t{}\t{:.3}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{:.3}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             row.backend.name(),
             row.population,
             product_percentile(&nanos, 50),
@@ -454,6 +470,8 @@ fn print_resident_report(iterations: u32, sample_count: usize, rows: &[ResidentM
             PRODUCT_RAM_BYTES,
             PRODUCT_DEBUG_LIMIT,
             cache_sets,
+            block_cache_sets,
+            block_max_instructions,
         );
     }
 }

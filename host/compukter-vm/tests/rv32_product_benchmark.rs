@@ -22,17 +22,20 @@ use compukter_vm::benchmarks::{
     format_product_active_row, native_checksum, populate_product_ratios, product_backend_order,
     product_percentile, PreparedProductMachine, PreparedProductNative, ProductActiveTiming,
     ProductExecutionCandidate, ProductMachineBackend, ProductMachineImage, ProductMachineWorkload,
-    PRODUCT_RESIDENT_REPORT_HEADER,
+    PRODUCT_ACTIVE_REPORT_HEADER, PRODUCT_RESIDENT_REPORT_HEADER,
 };
+use compukter_vm::rv32_machine::Rv32TranslationLookupUnit;
 
 #[test]
-fn cached_and_predecoded_use_identical_strict_elf() {
+fn all_vm_backends_use_identical_strict_elf() {
     for workload in ProductMachineWorkload::all() {
         let image = ProductMachineImage::new(*workload, 17).unwrap();
         let cached = image.prepare(ProductMachineBackend::Cached).unwrap();
         let predecoded = image.prepare(ProductMachineBackend::Predecoded).unwrap();
+        let block_cached = image.prepare(ProductMachineBackend::BlockCached).unwrap();
 
         assert_eq!(cached.image_fingerprint(), predecoded.image_fingerprint());
+        assert_eq!(cached.image_fingerprint(), block_cached.image_fingerprint());
         assert_eq!(&image.elf_bytes()[..4], b"\x7fELF");
         assert_eq!(image.elf_bytes()[4], 1, "ELFCLASS32");
         assert_eq!(image.elf_bytes()[5], 1, "ELFDATA2LSB");
@@ -69,7 +72,12 @@ fn product_observation_reports_backend_owned_storage() {
     assert_eq!(cached.ram_bytes, 16 * 1024);
     assert!(cached.executable_bytes > 0);
     assert!(cached.translation_bytes > 0);
-    assert!(cached.cache_stats.unwrap().misses > 0);
+    let cached_stats = cached.translation_stats.unwrap();
+    assert_eq!(
+        cached_stats.lookup_unit,
+        Rv32TranslationLookupUnit::Instruction
+    );
+    assert!(cached_stats.misses > 0);
 
     let mut predecoded = PreparedProductMachine::new(
         ProductMachineBackend::Predecoded,
@@ -79,7 +87,20 @@ fn product_observation_reports_backend_owned_storage() {
     .unwrap();
     let predecoded = predecoded.execute().unwrap();
     assert!(predecoded.translation_bytes >= predecoded.executable_bytes);
-    assert!(predecoded.cache_stats.is_none());
+    assert!(predecoded.translation_stats.is_none());
+
+    let mut block_cached = PreparedProductMachine::new(
+        ProductMachineBackend::BlockCached,
+        ProductMachineWorkload::PacketRing,
+        8,
+    )
+    .unwrap();
+    let block_cached = block_cached.execute().unwrap();
+    let block_stats = block_cached.translation_stats.unwrap();
+    assert_eq!(block_stats.lookup_unit, Rv32TranslationLookupUnit::Block);
+    assert!(block_stats.blocks_built > 0);
+    assert!(block_stats.decoded_slots_built >= block_stats.blocks_built);
+    assert!(block_cached.translation_bytes > 0);
 }
 
 #[test]
@@ -88,14 +109,16 @@ fn product_sampling_order_is_interleaved_and_percentiles_are_stable() {
         product_backend_order(0, 0),
         [
             ProductMachineBackend::Cached,
-            ProductMachineBackend::Predecoded
+            ProductMachineBackend::Predecoded,
+            ProductMachineBackend::BlockCached,
         ]
     );
     assert_eq!(
         product_backend_order(0, 1),
         [
             ProductMachineBackend::Predecoded,
-            ProductMachineBackend::Cached
+            ProductMachineBackend::BlockCached,
+            ProductMachineBackend::Cached,
         ]
     );
     assert_eq!(product_percentile(&[10, 20, 30, 40, 50], 50), 30);
@@ -122,15 +145,24 @@ fn product_timing_math_is_normalized_and_rotated() {
     assert_eq!(benchmark_rotating_order::<3>(0, 0), [0, 1, 2]);
     assert_eq!(benchmark_rotating_order::<3>(0, 1), [1, 2, 0]);
     assert_eq!(benchmark_rotating_order::<3>(1, 1), [2, 0, 1]);
+    assert_eq!(benchmark_rotating_order::<4>(0, 1), [1, 2, 3, 0]);
     assert!((benchmark_geomean(&[4.0, 9.0]).unwrap() - 6.0).abs() < 1e-12);
     assert_eq!(ProductExecutionCandidate::NativeHost.name(), "native-host");
+    assert_eq!(
+        ProductExecutionCandidate::BlockCached.name(),
+        "rv32-block-cached"
+    );
 }
 
 #[test]
 fn resident_report_header_remains_stable() {
     assert_eq!(
         PRODUCT_RESIDENT_REPORT_HEADER,
-        "backend\tpopulation\tconstruction_median_ns\tconstruction_p95_ns\tresident_live_bytes\tpeak_construction_bytes\tlive_bytes_per_machine\taggregate_ram_bytes\telf_bytes\texecutable_bytes\trw_initialized_bytes\tram_bytes\tdebug_limit\tcache_sets"
+        "backend\tpopulation\tconstruction_median_ns\tconstruction_p95_ns\tresident_live_bytes\tpeak_construction_bytes\tlive_bytes_per_machine\taggregate_ram_bytes\telf_bytes\texecutable_bytes\trw_initialized_bytes\tram_bytes\tdebug_limit\tcache_sets\tblock_cache_sets\tblock_max_instructions"
+    );
+    assert_eq!(
+        PRODUCT_ACTIVE_REPORT_HEADER,
+        "workload\tcandidate\titerations\tchecksum\tbatch\tcold_ns\twarm_median_ns\twarm_p95_ns\toperations_per_second\tretired_instructions\tlookup_unit\tcache_hits\tcache_misses\tcache_evictions\tblocks_built\tdecoded_slots_built\tram_bytes\texecutable_bytes\ttranslation_bytes\tsteady_allocations\tsteady_allocated_bytes\tvs_native"
     );
 }
 
