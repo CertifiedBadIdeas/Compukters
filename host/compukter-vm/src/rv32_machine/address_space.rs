@@ -20,6 +20,7 @@
 use super::{Rv32ElfLoader, Rv32LoadedImage, Rv32PagePermissions};
 use crate::bus::MachineBus;
 use crate::memory::{AtomicWordAccess, MemoryBus, MemoryFault};
+use crate::rv32_jit::abi::JitRamView;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -70,6 +71,24 @@ impl Rv32AddressSpace {
 
     pub(super) fn bus(&self) -> &MachineBus {
         &self.bus
+    }
+
+    #[allow(
+        dead_code,
+        reason = "the RV32 JIT dispatcher consumes the direct RAM view in a later slice"
+    )]
+    pub(crate) fn jit_ram_view(&mut self) -> JitRamView<'_> {
+        let (base, len) = {
+            let memory = self.bus.memory_mut();
+            let len = memory.len();
+            (memory.as_mut_ptr(), len)
+        };
+        JitRamView::new(
+            base,
+            len,
+            self.page_permissions.as_ptr().cast(),
+            self.page_permissions.len(),
+        )
     }
 
     fn require(&self, address: u32, size: usize, access: Access) -> Result<bool, MemoryFault> {
@@ -306,5 +325,25 @@ mod tests {
 
         assert_eq!(space.atomic_update_i32(0, &mut increment).unwrap(), 11);
         assert_eq!(space.bus.memory().load_i32(0).unwrap(), 12);
+    }
+
+    #[test]
+    fn jit_ram_view_exposes_only_ram_and_its_page_permissions() {
+        let mut space = Rv32AddressSpace {
+            bus: MachineBus::new(0x1000).unwrap(),
+            page_permissions: vec![Rv32PagePermissions::READ_EXECUTE],
+        };
+        space.bus.memory_mut().store_u8(17, 0xa5).unwrap();
+        space
+            .bus
+            .map_mmio(0x1000, Box::new(RegisterDevice(0)))
+            .unwrap();
+
+        let view = space.jit_ram_view();
+
+        assert_eq!(view.len(), 0x1000);
+        assert_eq!(view.page_permission_bits(0), 0b101);
+        assert_eq!(view.page_permission_bits(1), 0);
+        assert_eq!(unsafe { *view.base().add(17) }, 0xa5);
     }
 }
