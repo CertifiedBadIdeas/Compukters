@@ -68,6 +68,14 @@ impl Rv32MachineHart {
         self.cpu.retired_instructions()
     }
 
+    #[allow(
+        dead_code,
+        reason = "machine-owned writers use this when multi-hart or DMA support is added"
+    )]
+    pub(super) fn invalidate_reservation(&mut self, address: u32, size: u32) {
+        self.cpu.invalidate_reservation(address, size);
+    }
+
     pub(super) fn execute_resolved(
         &mut self,
         bus: &mut dyn MemoryBus,
@@ -330,6 +338,35 @@ mod tests {
             Rv32HartStep::Retired
         );
         assert_eq!(hart.execute_word_for_test(ecall()), Rv32HartStep::TrapTaken);
+        assert_eq!(
+            hart.execute_word_for_test(sc_w(4, 1, 2, false, false)),
+            Rv32HartStep::Retired
+        );
+        assert_eq!(hart.register(4), 1);
+    }
+
+    #[test]
+    fn machine_owned_write_ranges_can_invalidate_the_hart_reservation() {
+        let mut hart = Rv32MachineHart::new(0x1000);
+        hart.set_register_for_test(1, 0).unwrap();
+        hart.set_register_for_test(2, 42).unwrap();
+
+        assert_eq!(
+            hart.execute_word_for_test(lr_w(3, 1, false, false)),
+            Rv32HartStep::Retired
+        );
+        hart.invalidate_reservation(4, 4);
+        assert_eq!(
+            hart.execute_word_for_test(sc_w(4, 1, 2, false, false)),
+            Rv32HartStep::Retired
+        );
+        assert_eq!(hart.register(4), 0);
+
+        assert_eq!(
+            hart.execute_word_for_test(lr_w(3, 1, false, false)),
+            Rv32HartStep::Retired
+        );
+        hart.invalidate_reservation(0, 1);
         assert_eq!(
             hart.execute_word_for_test(sc_w(4, 1, 2, false, false)),
             Rv32HartStep::Retired
