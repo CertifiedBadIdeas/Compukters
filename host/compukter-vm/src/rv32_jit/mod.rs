@@ -17,9 +17,25 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-pub mod benchmarks;
-pub mod bus;
-pub mod memory;
-mod rv32_jit;
-pub mod rv32_machine;
-pub mod rv32im;
+mod backend;
+
+#[cfg(test)]
+use backend::{CodeBlob, CodeRelocation};
+
+#[cfg(test)]
+mod tests {
+    use super::{CodeBlob, CodeRelocation};
+
+    #[test]
+    fn code_blob_rejects_relocations_to_non_vm_symbols() {
+        let blob = CodeBlob::new(
+            vec![0xc3],
+            vec![CodeRelocation::External {
+                offset: 0,
+                symbol: "libc_printf".into(),
+            }],
+        );
+
+        assert!(blob.validate_relocations().is_err());
+    }
+}
