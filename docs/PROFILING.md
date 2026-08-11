@@ -20,4 +20,4 @@ requested sample count; the runner always takes at least seven warm samples.
 Committed Gate and XLEN outputs under `docs/benchmarks/` are immutable
 historical evidence. They are not active benchmark runners and do not select a
 supported product architecture. The accepted architecture decision is recorded
-in [ADR 0001](architecture-decisions/0001-retire-k16-adopt-rv32.md).
+in [ADR 0001](architecture-decisions/0001-adopt-rv32.md).
