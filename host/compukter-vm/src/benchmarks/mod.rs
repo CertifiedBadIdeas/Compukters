@@ -17,12 +17,17 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+mod decoder;
 mod native;
 mod programs;
 mod report;
 mod rv32;
 mod workload;
 
+pub use decoder::{
+    DecoderBenchmarkImplementation, DecoderBenchmarkObservation, DecoderBenchmarkScenario,
+    PreparedDecoderBenchmark,
+};
 pub use programs::{DATA_BASE, MEMORY_SIZE, MMIO_BASE, PACKET_BYTES, RING_ENTRIES, STACK_TOP};
 pub use report::{
     format_summary, format_timing_sample, populate_vs_native, timing_report_header, BenchmarkTiming,
