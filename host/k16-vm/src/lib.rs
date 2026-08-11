@@ -18,12 +18,15 @@ pub mod k16;
 pub mod k16_f32;
 pub mod k16_f32r32;
 pub mod k16e;
-pub mod low_bus;
-pub mod low_machine;
+pub mod low_bus {
+    pub use compukter_vm::bus::*;
+}
+pub mod low_machine {
+    pub use compukter_vm::memory::*;
+}
 pub mod mmu;
 pub mod retained_gpu;
-pub mod rv32_machine;
-pub mod rv32im;
+pub use compukter_vm::{rv32_machine, rv32im};
 pub mod rv64im;
 pub mod k16_computer {
     pub use crate::computer::handle::{K16ComputerControl, K16ComputerHandle};

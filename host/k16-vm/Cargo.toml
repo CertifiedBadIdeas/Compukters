@@ -7,6 +7,7 @@ edition = "2021"
 crate-type = ["rlib", "cdylib"]
 
 [dependencies]
+compukter-vm = { path = "../compukter-vm" }
 jni = "0.21"
 rvsim = { version = "=0.2.2", default-features = false }
 thiserror = "1.0"
