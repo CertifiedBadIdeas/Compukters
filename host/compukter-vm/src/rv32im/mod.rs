@@ -18,12 +18,14 @@
  */
 
 mod atomic;
+mod bounded_block_cache;
 mod bounded_cache;
 mod cache;
 mod decode;
 pub mod encoding;
 mod predecode;
 
+pub use bounded_block_cache::Rv32BlockCacheStats;
 pub use bounded_cache::{BoundedCachedRv32imProgram, Rv32imCacheStats};
 pub use cache::CachedRv32imProgram;
 pub use predecode::{PredecodedRv32imImage, PredecodedRv32imProgram};
