@@ -87,6 +87,29 @@ stored in
 Absolute timings are host-specific comparison evidence, not a server-capacity
 promise.
 
+## Optimized C and QEMU Ceiling
+
+The focused external comparison compiles one portable C translation unit for
+maximum native host execution and once as an RV32IM/Zicsr ILP32 object. That
+same RV32 object is linked into the product and QEMU platform images:
+
+```bash
+bash scripts/tests/rv32-c-qemu-comparison.sh
+```
+
+The gate requires stock Clang, LLD, LLVM inspection tools, and
+`qemu-system-riscv32`. It uses QEMU `virt` system emulation with bare-metal
+machine mode and TCG; it does not use Linux, OpenSBI, user-mode QEMU, KVM, or a
+host sysroot. Each candidate receives an independent power-of-two batch. QEMU
+calibration requires at least 250 ms total and 50 times measured startup, and
+the report does not subtract startup.
+
+Generated objects, calibrated images, optimization remarks, disassemblies, and
+the raw report remain under `host/compukter-vm/target/rv32-c-comparison/`. This
+focused command is deliberately absent from normal Gradle/Cargo verification,
+Minecraft runs, and production JAR assembly. Missing external tools are a hard
+error; there is no alternate benchmark candidate or fallback.
+
 Committed Gate and XLEN outputs under `docs/benchmarks/` are immutable
 historical evidence. They are not active benchmark runners and do not select a
 supported product architecture. The accepted architecture decision is recorded

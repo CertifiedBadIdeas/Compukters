@@ -158,3 +158,19 @@ fn comparison_runner_keeps_qemu_system_tcg_explicit_and_report_stable() {
     assert!(!source.contains("Command::new(\"sh\")"));
     assert!(!source.contains("Command::new(\"bash\")"));
 }
+
+#[test]
+fn focused_qemu_gate_is_not_hidden_behind_a_normal_verification_fallback() {
+    let source = fs::read_to_string(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../scripts/tests/rv32-c-qemu-comparison.sh"),
+    )
+    .unwrap();
+
+    assert!(source.contains("qemu-system-riscv32"));
+    assert!(source.contains("compile-rv32-c-comparison.sh"));
+    assert!(source.contains("rv32_c_comparison"));
+    assert!(source.contains("--ignored --exact"));
+    assert!(!source.contains("|| true"));
+    assert!(!source.contains("qemu-riscv32"));
+}
