@@ -1,4 +1,4 @@
-# Copilot / agent instructions for Compukter-Kraft
+# Copilot / agent instructions for Compukters
 
 All non-trivial work in this repo (anything that produces a commit on `dev` or `main`) MUST be bound to a GitHub issue that lives on the **Roadmap** project board. Use the `superpowers:using-github-roadmap` skill to create/select an issue, embed `Issue: #N` in every spec and plan header, move the issue through `Inbox → Backlog → Next → Now → Done`, and close it when the work is integrated.
 
@@ -14,7 +14,7 @@ issue, pull request, repository, and Projects v2 operations. When a first-class 
 
 ```yaml roadmap
 owner: CertifiedBadIdeas
-repo: CertifiedBadIdeas/Compukter-Kraft
+repo: CertifiedBadIdeas/Compukters
 project_number: 1
 project_id: PVT_kwDODHkEV84BYh0b
 status_field_id: PVTSSF_lADODHkEV84BYh0bzhTnEZo
@@ -40,7 +40,7 @@ statuses:
 - Put agent specs under `.agents/tmp/specs/YYYY-MM-DD-issue-N-<topic>-design.md`.
 - Put agent plans under `.agents/tmp/plans/YYYY-MM-DD-issue-N-<topic>.md`.
 - `.agents/tmp/` is intentionally ignored and must not be committed by default.
-- First content line under the `# Title` MUST be `> Issue: [#N](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/N)`.
+- First content line under the `# Title` MUST be `> Issue: [#N](https://github.com/CertifiedBadIdeas/Compukters/issues/N)`.
 - Keep durable decisions, scope, acceptance criteria, verification, and commit links in the GitHub issue.
 - Only create files under `docs/` when they are real project documentation, such as ABI references, architecture docs, profiling docs, or user-facing docs.
 

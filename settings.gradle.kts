@@ -1,5 +1,5 @@
 /*
- * The Compukter Kraft Developers
+ * The Compukters Developers
  *
  * Copyright (C) 2026 Vsevolod Petrov (lazyhat)
  *
@@ -62,4 +62,4 @@ include("v1_21_1-common", v1_21_1Dir)
 include("v1_21_1-neoforge", v1_21_1Dir)
 // include("v1_21_1-fabric", v1_21_1Dir)
 
-rootProject.name = "Compukter-Kraft"
+rootProject.name = "Compukters"

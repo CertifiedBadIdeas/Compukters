@@ -78,10 +78,13 @@ common/<device>/
 - `computer/` — loader-specific block entity shims (NeoForgeComputerBlockEntity)
 - Root — bootstrap, registry, hooks (small files, rarely grow)
 
-### compiler (standalone)
-- `frontend/` — parser, analyzer, compiler, IDE features
-- `runtime/` — VM execution, screen buffer, host bridge
-- `api/` — AST nodes, tokens, operators
+### compiler integration (planned)
+- `frontend/` — pinned K2 entry points and script-source integration
+- `backend/` — custom Kotlin IR lowering and Compukter artifact emission
+- `artifact/` — versioned artifact models shared with the verifier boundary
+
+VM execution remains in `host/compukter-vm`; compiler packages must not own a
+second runtime implementation.
 
 ## Anti-Patterns
 

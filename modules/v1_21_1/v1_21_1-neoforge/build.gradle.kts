@@ -1,5 +1,5 @@
 /*
- * The Compukter Kraft Developers
+ * The Compukters Developers
  *
  * Copyright (C) 2026 Vsevolod Petrov (lazyhat)
  *
@@ -52,7 +52,7 @@ loom {
             server()
             runDir("run/gameTestServer")
             property("neoforge.enableGameTest", "true")
-            property("neoforge.enabledGameTestNamespaces", "compukterkraft,minecraft")
+            property("neoforge.enabledGameTestNamespaces", "compukters,minecraft")
             property("neoforge.gameTestServer", "true")
             property("kotlinx.coroutines.debug", "off")
             ideConfigGenerated(true)

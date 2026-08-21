@@ -1,5 +1,5 @@
 /*
- * The Compukter Kraft Developers
+ * The Compukters Developers
  *
  * Copyright (C) 2026 Vsevolod Petrov (lazyhat)
  *
@@ -73,7 +73,7 @@ class LocalizationApiGenerator(
             appendLine("package $packageName")
             appendLine()
             appendLine("import ru.lazyhat.kraftui.foundation.Value")
-            appendLine("import ru.lazyhat.compukterkraft.common.ui.dsl.translatable")
+            appendLine("import ru.lazyhat.compukters.common.ui.dsl.translatable")
             appendLine()
             append(
                 renderObject(
@@ -181,7 +181,7 @@ class LocalizationApiGenerator(
         key
             .split('.')
             .dropLast(1)
-            .filterNot { it == "compukterkraft" }
+            .filterNot { it == "compukters" }
             .map(::pascalCase)
 
     private fun constantNameFor(key: String): String = key.substringAfterLast('.').uppercase().replace('-', '_')

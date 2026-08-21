@@ -1,36 +1,36 @@
+# Compukters
+
 ![Mod logo (AI generated)](logo_1.png)
 
-**Programmable computers for Minecraft with deterministic, resource-bounded execution.**
+**Programmable computers for Minecraft with deterministic, resource-bounded Kotlin execution.**
 
-Compukter Kraft is rebuilding its computer platform around a native Rust
-RISC-V virtual machine. The selected product architecture is
-`RV32IMA_Zicsr_Zifencei`, little-endian ELF32 with the standard ILP32 ABI.
+Compukters is an in-game programming platform built around Kotlin `.kts`
+scripts, a pinned Kotlin K2/IR compiler pipeline, versioned Compukter bytecode,
+and a managed Rust VM. The intended product loop runs from an in-game IDE to a
+shell and programs executing on a computer inside Minecraft.
 
 ## Status
 
-The project is in an intentional clean-break migration interval. The retired
-custom ISA and its Minecraft runtime have been removed; no VM-backed computer
-is currently registered in the loadable mod.
-
-The active VM implementation is `host/compukter-vm`. It currently provides a
-bounded RV32IM interpreter, Cached and Predecoded execution backends, Zicsr and
-machine-mode traps, a strict stock-toolchain ELF32 loader, and deterministic
-instruction accounting.
-
-KraftOS remains the guest operating-system direction. BIOS, KraftOS, devices,
-storage, networking, the in-game programming loop, and Minecraft integration
-will be rebuilt directly for RV32 without binary or source compatibility with
-the retired architecture.
-
-See [ADR 0001](docs/architecture-decisions/0001-adopt-rv32.md)
-and [the current architecture](docs/ARCHITECTURE.md).
+The project is in a clean-break managed-runtime bootstrap. The retired custom
+ISA, RISC-V machine, ELF/KraftOS runtime, and standalone Playground are not
+fallback execution paths. The loadable NeoForge mod is temporarily a platform
+shell while the verified artifact loader and Tier 0 runtime are built.
 
 Currently targets **NeoForge 1.21.1**.
 
----
+## Runtime boundary
 
-Devlog (in Russian): https://t.me/lazyhatdev
+`host/compukter-vm` is the pinned
+[Compukter VM](https://github.com/CertifiedBadIdeas/Compukter-VM) submodule.
+Kotlin compiler internals remain on the trusted JVM side; immutable verified
+Compukter artifacts cross into the Rust runtime, which owns execution, quotas,
+managed memory, scheduling, snapshots, and future optimization tiers.
 
-Source: https://github.com/CertifiedBadIdeas/Compukter-Kraft
+See [the current architecture](docs/ARCHITECTURE.md).
 
-License: GPL-3.0
+## Links and credits
+
+- Devlog (in Russian): https://t.me/lazyhatdev
+- Source: https://github.com/CertifiedBadIdeas/Compukters
+- Texture tools: [Piskel](https://www.piskelapp.com) and [LibreSprite](https://libresprite.github.io/)
+- License: GPL-3.0

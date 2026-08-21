@@ -1,5 +1,5 @@
 /*
- * The Compukter Kraft Developers
+ * The Compukters Developers
  *
  * Copyright (C) 2026 Vsevolod Petrov (lazyhat)
  *
@@ -20,7 +20,7 @@
 import org.jmailen.gradle.kotlinter.tasks.ConfigurableKtLintTask
 
 /*
- * The Compukter Kraft Developers
+ * The Compukters Developers
  *
  * Copyright (C) 2026 Vsevolod Petrov (lazyhat)
  *
