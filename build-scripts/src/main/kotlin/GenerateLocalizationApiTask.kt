@@ -1,5 +1,5 @@
 /*
- * The Compukter Kraft Developers
+ * The Compukters Developers
  *
  * Copyright (C) 2026 Vsevolod Petrov (lazyhat)
  *
@@ -38,6 +38,8 @@ abstract class GenerateLocalizationApiTask : DefaultTask() {
 
     @TaskAction
     fun generateSources() {
+        outputDirectory.get().asFile.deleteRecursively()
+
         val entries = parseLangEntries(langFile.get().asFile.readText())
         val renderedFiles = LocalizationApiGenerator(packageName.get()).generate(entries)
         val relativePackagePath = packageName.get().replace('.', '/')

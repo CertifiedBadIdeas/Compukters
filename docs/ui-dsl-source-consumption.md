@@ -1,6 +1,6 @@
 # UI DSL Source Consumption
 
-The reusable UI DSL lives in the Git submodule `vendor/ui-dsl`. Compukter Kraft
+The reusable UI DSL lives in the Git submodule `vendor/ui-dsl`. Compukters
 still exposes it to the main Gradle build as the project `:ui-dsl`.
 
 The first supported external consumption mode is source-based. It does not
@@ -8,7 +8,7 @@ require Maven Central, GitHub Packages, JitPack, or any other artifact host.
 
 ## Git Submodule
 
-Clone Compukter Kraft with submodules or initialize the DSL submodule after
+Clone Compukters with submodules or initialize the DSL submodule after
 checkout:
 
 ```bash
@@ -51,7 +51,7 @@ dependencies {
 }
 ```
 
-Compukter Kraft consumes the submodule as a normal Gradle project dependency:
+Compukters consumes the submodule as a normal Gradle project dependency:
 
 ```kotlin
 dependencies {
@@ -60,7 +60,7 @@ dependencies {
 ```
 
 `implementation("ru.lazyhat:kraft-ui-dsl")` is the standalone included-build
-coordinate. In-tree Compukter Kraft usage remains `projects.uiDsl` while
+coordinate. In-tree Compukters usage remains `projects.uiDsl` while
 `settings.gradle.kts` maps `:ui-dsl` to `vendor/ui-dsl`.
 
 ## Consumer Fixture

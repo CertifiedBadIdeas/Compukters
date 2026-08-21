@@ -1,5 +1,5 @@
 /*
- * The Compukter Kraft Developers
+ * The Compukters Developers
  *
  * Copyright (C) 2026 Vsevolod Petrov (lazyhat)
  *
@@ -80,10 +80,6 @@ val testCompukterVmRust =
         inputs.file(vmRoot.resolve("Cargo.lock"))
         inputs.dir(vmRoot.resolve("src"))
         inputs.dir(vmRoot.resolve("tests"))
-        inputs.dir(vmRoot.resolve("examples"))
-        inputs.dir(rootProject.file("host/compukter-vm/benchmarks"))
-        inputs.dir(rootProject.file("host/compukter-vm/scripts"))
-        inputs.dir(rootProject.file("host/compukter-vm/fixtures"))
         inputs.property("compukterVmBuildJobs", compukterVmBuildJobs)
         doFirst {
             check(vmManifest.isFile) {
@@ -107,7 +103,7 @@ tasks.register("verifyLocalFast") {
 }
 
 tasks.register("verifyLocalFull") {
-    description = "Runs local JVM tests and the RV32 host VM tests."
+    description = "Runs local JVM tests and the managed Compukter VM tests."
     group = "verification"
     dependsOn("verifyLocalFast")
     dependsOn(testCompukterVmRust)

@@ -1,5 +1,5 @@
 /*
- * The Compukter Kraft Developers
+ * The Compukters Developers
  *
  * Copyright (C) 2026 Vsevolod Petrov (lazyhat)
  *
@@ -103,13 +103,13 @@ runs.named("server") {
     applyShared()
 }
 
-private val DEV_SERVER_SEED = "compukterkraft"
+private val DEV_SERVER_SEED = "compukters"
 private val DEV_SERVER_PROPERTIES =
     mapOf(
         "online-mode" to "false",
         "level-seed" to DEV_SERVER_SEED,
         "level-name" to "world",
-        "motd" to "Compukter Kraft dev server",
+        "motd" to "Compukters dev server",
         "max-players" to "8",
         "spawn-protection" to "0",
         "enable-command-block" to "true",
@@ -207,7 +207,7 @@ private data class DevServerEntry(
 
 private val DEV_CLIENT_SERVERS =
     listOf(
-        DevServerEntry(name = "Compukter Kraft (dev)", ip = "localhost"),
+        DevServerEntry(name = "Compukters (dev)", ip = "localhost"),
     )
 
 private val CLIENT_RUN_DIRS =

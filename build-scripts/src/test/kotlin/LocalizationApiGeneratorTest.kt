@@ -1,5 +1,5 @@
 /*
- * The Compukter Kraft Developers
+ * The Compukters Developers
  *
  * Copyright (C) 2026 Vsevolod Petrov (lazyhat)
  *
@@ -27,10 +27,10 @@ class LocalizationApiGeneratorTest {
     fun generatesSplitApisForPlainStrings() {
         val rendered =
             LocalizationApiGenerator(
-                packageName = "ru.lazyhat.compukterkraft.common.ui.dsl",
+                packageName = "ru.lazyhat.compukters.common.ui.dsl",
             ).generate(
                 mapOf(
-                    "gui.compukterkraft.terminal.connecting" to "Connecting...",
+                    "gui.compukters.terminal.connecting" to "Connecting...",
                 ),
             )
 
@@ -40,7 +40,7 @@ class LocalizationApiGeneratorTest {
 
         assertTrue(keys.contains("object CompukterKeys"))
         assertTrue(keys.contains("object Gui"))
-        assertTrue(keys.contains("const val CONNECTING = \"gui.compukterkraft.terminal.connecting\""))
+        assertTrue(keys.contains("const val CONNECTING = \"gui.compukters.terminal.connecting\""))
 
         assertTrue(values.contains("object CompukterTranslatable"))
         assertTrue(values.contains("val connecting: Value<String>"))
@@ -55,10 +55,10 @@ class LocalizationApiGeneratorTest {
     fun skipsTranslatableForParameterizedEntriesAndGeneratesComponentFactory() {
         val rendered =
             LocalizationApiGenerator(
-                packageName = "ru.lazyhat.compukterkraft.common.ui.dsl",
+                packageName = "ru.lazyhat.compukters.common.ui.dsl",
             ).generate(
                 mapOf(
-                    "gui.compukterkraft.tooltip.computer_id" to "Computer ID: %s",
+                    "gui.compukters.tooltip.computer_id" to "Computer ID: %s",
                 ),
             )
 
@@ -74,17 +74,17 @@ class LocalizationApiGeneratorTest {
     fun preservesFirstSegmentForNonModidPrefixedKeys() {
         val rendered =
             LocalizationApiGenerator(
-                packageName = "ru.lazyhat.compukterkraft.common.ui.dsl",
+                packageName = "ru.lazyhat.compukters.common.ui.dsl",
             ).generate(
                 mapOf(
-                    "itemGroup.compukterkraft" to "Compukter Kraft",
+                    "itemGroup.compukters" to "Compukters",
                 ),
             )
 
         val keys = rendered.getValue("CompukterKeys.kt")
 
         assertTrue(keys.contains("object ItemGroup"))
-        assertTrue(keys.contains("const val COMPUKTERKRAFT = \"itemGroup.compukterkraft\""))
+        assertTrue(keys.contains("const val COMPUKTERS = \"itemGroup.compukters\""))
     }
 
     @Test
@@ -92,11 +92,11 @@ class LocalizationApiGeneratorTest {
         val error =
             assertThrows(IllegalArgumentException::class.java) {
                 LocalizationApiGenerator(
-                    packageName = "ru.lazyhat.compukterkraft.common.ui.dsl",
+                    packageName = "ru.lazyhat.compukters.common.ui.dsl",
                 ).generate(
                     mapOf(
-                        "gui.compukterkraft.terminal.foo-bar" to "A",
-                        "gui.compukterkraft.terminal.foo_bar" to "B",
+                        "gui.compukters.terminal.foo-bar" to "A",
+                        "gui.compukters.terminal.foo_bar" to "B",
                     ),
                 )
             }

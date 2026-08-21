@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-Compukter Kraft is a Gradle multi-module Kotlin project with native Rust VM components. Kotlin modules live under
+Compukters is a Gradle multi-module Kotlin project with native Rust VM components. Kotlin modules live under
 `modules/`: `core` contains shared device/runtime logic, `native-runtime` contains architecture-neutral runtime models, and
 `v1_21_1/v1_21_1-common` plus `v1_21_1/v1_21_1-neoforge` contain the Minecraft 1.21.1 integration. Host-side Rust
 VM code lives in `host/compukter-vm`. Documentation is in
@@ -23,12 +23,12 @@ VM code lives in `host/compukter-vm`. Documentation is in
 - `./gradlew :core:test` or `./gradlew :native-runtime:test` runs focused module tests.
 - `./gradlew :v1_21_1-neoforge:runClient` launches the NeoForge dev client.
 - `./gradlew :v1_21_1-neoforge:buildProductionUniversalJar` builds the production remapped mod jar.
-- `cargo test --manifest-path host/compukter-vm/Cargo.toml --locked --offline` runs the RV32 host VM tests.
+- `cargo test --manifest-path host/compukter-vm/Cargo.toml --locked --offline` runs the managed Compukter VM tests.
 
 ## Coding Style & Naming Conventions
 
 Kotlin targets JVM 17 and uses the `org.jmailen.kotlinter` plugin. Keep Kotlin package paths under
-`ru.lazyhat.compukterkraft`, use four-space indentation, `PascalCase` for types, `camelCase` for members, and `*Test.kt`
+`ru.lazyhat.compukters`, use four-space indentation, `PascalCase` for types, `camelCase` for members, and `*Test.kt`
 for tests. Existing source files carry a GPL header; preserve it when editing or adding comparable Kotlin/Gradle files.
 Rust crates use edition 2021 conventions: `snake_case` modules/functions, `PascalCase` types, and integration tests in
 `tests/*.rs`.

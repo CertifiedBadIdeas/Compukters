@@ -1,5 +1,5 @@
 /*
- * The Compukter Kraft Developers
+ * The Compukters Developers
  *
  * Copyright (C) 2026 Vsevolod Petrov (lazyhat)
  *
@@ -34,9 +34,9 @@ val generateLocalizationApi =
             project(projects.v1211Neoforge.path)
                 .layout
                 .projectDirectory
-                .file("src/main/resources/assets/compukterkraft/lang/en_us.json"),
+                .file("src/main/resources/assets/compukters/lang/en_us.json"),
         )
-        packageName.set("ru.lazyhat.compukterkraft.common.localization")
+        packageName.set("ru.lazyhat.compukters.common.localization")
         outputDirectory.set(layout.buildDirectory.dir("generated/sources/localizationApi/kotlin"))
     }
 

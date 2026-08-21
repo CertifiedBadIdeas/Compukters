@@ -1,0 +1,69 @@
+/*
+ * The Compukters Developers
+ *
+ * Copyright (C) 2026 Vsevolod Petrov (lazyhat)
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
+package ru.lazyhat.compukters.lang.runtime
+
+/**
+ * Minimal IDE primitives kept after the CKL language stack removal so the
+ * existing `EditorViewModel` / `CodeEditor` UI contract still compiles.
+ * The in-game IDE will populate these later; today the editor always renders
+ * empty highlights and diagnostics.
+ */
+
+data class SourcePosition(
+    val line: Int,
+    val column: Int,
+)
+
+data class SourceRange(
+    val start: SourcePosition,
+    val end: SourcePosition,
+)
+
+enum class HighlightTokenKind {
+    KEYWORD,
+    STRING,
+    NUMBER,
+    BOOLEAN,
+    NULL,
+    IDENTIFIER,
+    FUNCTION,
+    TYPE,
+    MODULE,
+    FIELD,
+    OPERATOR,
+    PUNCTUATION,
+}
+
+data class HighlightToken(
+    val range: SourceRange,
+    val kind: HighlightTokenKind,
+)
+
+enum class IdeDiagnosticSeverity {
+    ERROR,
+    WARNING,
+    INFO,
+}
+
+data class Diagnostic(
+    val message: String,
+    val severity: IdeDiagnosticSeverity,
+    val range: SourceRange? = null,
+)

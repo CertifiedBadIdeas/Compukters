@@ -1,5 +1,5 @@
 /*
- * The Compukter Kraft Developers
+ * The Compukters Developers
  *
  * Copyright (C) 2026 Vsevolod Petrov (lazyhat)
  *
@@ -34,7 +34,7 @@ class UiDslSubmoduleBuildScriptTest {
         val fixtureBuild = root.resolve("fixtures/ui-dsl-consumer/build.gradle.kts")
         val docs = root.resolve("docs/ui-dsl-source-consumption.md").readText()
 
-        assertTrue(Files.exists(gitmodules), "Compukter Kraft should track external UI DSL as a git submodule")
+        assertTrue(Files.exists(gitmodules), "Compukters should track external UI DSL as a git submodule")
         assertTrue(Files.exists(fixtureSettings), "standalone UI DSL consumer fixture settings must exist")
         assertTrue(Files.exists(fixtureBuild), "standalone UI DSL consumer fixture build file must exist")
 
