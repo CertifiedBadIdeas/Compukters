@@ -20,6 +20,7 @@
 package ru.lazyhat.compukters.core.device.computer
 
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeHost
+import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeState
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramStartResult
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramTerminalLimits
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramTickBudget
@@ -65,9 +66,30 @@ class ProgramComputer internal constructor(
         }
     }
 
-    fun serverTick(): ProgramComputerState = state
+    fun serverTick(): ProgramComputerState {
+        if (!state.isPoweredOn()) return state
+        val runtimeState = host.serverTick()
+        val output = host.drainOutput()
+        if (output.isNotEmpty()) terminalSink.publishOutput(deviceId, output)
+        return transitionFrom(runtimeState)
+    }
 
-    fun submitLine(line: String): Boolean = false
+    fun submitLine(line: String): Boolean {
+        if (state != ProgramComputerState.WaitingForInput) return false
+        val accepted = host.submitLine(line)
+        if (accepted) {
+            transitionTo(ProgramComputerState.Running)
+            return true
+        }
+        when (host.state) {
+            ProgramRuntimeState.WaitingForInput,
+            ProgramRuntimeState.Running,
+            -> Unit
+
+            else -> transitionFrom(host.state)
+        }
+        return false
+    }
 
     fun shutdown() = Unit
 
@@ -84,6 +106,19 @@ class ProgramComputer internal constructor(
 
     private fun failure(failure: ProgramComputerFailure): ProgramComputerState.PoweredOff =
         ProgramComputerState.PoweredOff(ProgramComputerStopReason.Failure(failure))
+
+    private fun transitionFrom(runtimeState: ProgramRuntimeState): ProgramComputerState =
+        when (runtimeState) {
+            ProgramRuntimeState.Running -> transitionTo(ProgramComputerState.Running)
+            ProgramRuntimeState.WaitingForInput -> transitionTo(ProgramComputerState.WaitingForInput)
+            is ProgramRuntimeState.Halted ->
+                transitionTo(ProgramComputerState.PoweredOff(ProgramComputerStopReason.Halted(runtimeState.value)))
+
+            is ProgramRuntimeState.Failed -> transitionTo(failure(ProgramComputerFailure.Runtime(runtimeState.failure)))
+            ProgramRuntimeState.Idle,
+            ProgramRuntimeState.Closed,
+            -> transitionTo(failure(ProgramComputerFailure.RuntimeContract(runtimeState)))
+        }
 
     private fun ProgramComputerState.isPoweredOn(): Boolean =
         this == ProgramComputerState.Running || this == ProgramComputerState.WaitingForInput
