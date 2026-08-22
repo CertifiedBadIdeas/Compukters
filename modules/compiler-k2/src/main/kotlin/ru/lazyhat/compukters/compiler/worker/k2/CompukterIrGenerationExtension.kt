@@ -28,6 +28,8 @@ class CompukterIrGenerationExtension : IrGenerationExtension {
         moduleFragment: IrModuleFragment,
         pluginContext: IrPluginContext,
     ) {
-        CompilationBridge.requireSession().irSink.accept(moduleFragment, pluginContext)
+        val session = CompilationBridge.requireSession()
+        session.irSink.accept(moduleFragment, pluginContext)
+        MinimalScriptLowering.lower(moduleFragment, pluginContext, session)
     }
 }

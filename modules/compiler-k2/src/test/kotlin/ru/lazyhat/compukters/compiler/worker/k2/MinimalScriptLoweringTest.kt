@@ -1,0 +1,208 @@
+/*
+ * The Compukters Developers
+ *
+ * Copyright (C) 2026 Vsevolod Petrov (lazyhat)
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
+package ru.lazyhat.compukters.compiler.worker.k2
+
+import ru.lazyhat.compukters.compiler.artifact.model.Artifact
+import ru.lazyhat.compukters.compiler.artifact.model.Block
+import ru.lazyhat.compukters.compiler.artifact.model.BlockId
+import ru.lazyhat.compukters.compiler.artifact.model.Constant
+import ru.lazyhat.compukters.compiler.artifact.model.ConstantId
+import ru.lazyhat.compukters.compiler.artifact.model.Destination
+import ru.lazyhat.compukters.compiler.artifact.model.EntryPoint
+import ru.lazyhat.compukters.compiler.artifact.model.Function
+import ru.lazyhat.compukters.compiler.artifact.model.FunctionFlag
+import ru.lazyhat.compukters.compiler.artifact.model.FunctionId
+import ru.lazyhat.compukters.compiler.artifact.model.Instruction
+import ru.lazyhat.compukters.compiler.artifact.model.Manifest
+import ru.lazyhat.compukters.compiler.artifact.model.MetadataText
+import ru.lazyhat.compukters.compiler.artifact.model.Module
+import ru.lazyhat.compukters.compiler.artifact.model.ModuleId
+import ru.lazyhat.compukters.compiler.artifact.model.ModuleKind
+import ru.lazyhat.compukters.compiler.artifact.model.NominalType
+import ru.lazyhat.compukters.compiler.artifact.model.RegisterId
+import ru.lazyhat.compukters.compiler.artifact.model.StringId
+import ru.lazyhat.compukters.compiler.artifact.model.TypeId
+import ru.lazyhat.compukters.compiler.artifact.model.TypeRef
+import ru.lazyhat.compukters.compiler.artifact.model.ValueType
+import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriteResult
+import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriter
+import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
+import ru.lazyhat.compukters.compiler.worker.protocol.CompileRequest
+import ru.lazyhat.compukters.compiler.worker.protocol.DiagnosticCategory
+import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
+import ru.lazyhat.compukters.compiler.worker.protocol.RequestId
+import ru.lazyhat.compukters.compiler.worker.protocol.TargetSettings
+import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
+import ru.lazyhat.compukters.compiler.worker.protocol.WorkerIdentity
+import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
+import java.nio.file.Path
+import java.security.MessageDigest
+import kotlin.io.path.createTempDirectory
+import kotlin.test.Test
+import kotlin.test.assertContentEquals
+import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+
+class MinimalScriptLoweringTest {
+    @Test
+    fun `typed Int constant lowers to deterministic minimal artifact`() =
+        withAdapter { adapter ->
+            val first = assertNotNull(adapter.compile(request("val answer: Int = 42")).artifact).toByteArray()
+            val second = assertNotNull(adapter.compile(request("val answer: Int = 42")).artifact).toByteArray()
+            val expected =
+                (ArtifactWriter.write(expectedArtifact()) as ArtifactWriteResult.Success)
+                    .bytes
+
+            assertContentEquals(expected, first)
+            assertContentEquals(first, second)
+            assertContentEquals(sha256(first), sha256(second))
+        }
+
+    @Test
+    fun `unsupported source IR produces one stable target diagnostic and no artifact`() =
+        withAdapter { adapter ->
+            listOf(
+                "val answer: Long = 42L",
+                "val answer: Int = 41 + 1",
+                "val answer: Int = 42\nval other: Int = 7",
+            ).forEach { source ->
+                val result = adapter.compile(request(source))
+                val target = result.diagnostics.filter { it.category == DiagnosticCategory.TARGET }
+
+                assertNull(result.artifact, source)
+                assertEquals(1, target.size, source)
+                assertEquals("UNSUPPORTED_IR", target.single().code, source)
+                assertEquals("source IR is outside the minimal script subset", target.single().message, source)
+                assertTrue(result.hasErrors, source)
+            }
+        }
+
+    @Test
+    fun `artifact writer failure becomes a bounded internal diagnostic`() =
+        withAdapter { adapter ->
+            val result =
+                adapter.compile(
+                    request(
+                        source = "val answer: Int = 42",
+                        limits = WorkerLimits(artifactBytes = 1, diagnostics = 1, diagnosticTextBytes = 32),
+                    ),
+                )
+
+            assertNull(result.artifact)
+            assertEquals(1, result.diagnostics.size)
+            val diagnostic = result.diagnostics.single()
+            assertEquals(DiagnosticCategory.INTERNAL, diagnostic.category)
+            assertTrue(diagnostic.code?.startsWith("ARTIFACT_WRITE_") == true)
+            assertTrue(diagnostic.message.encodeToByteArray().size <= 32)
+        }
+
+    private fun expectedArtifact(): Artifact =
+        Artifact(
+            manifest = Manifest.minimal(maximumBlockCost = 2u),
+            entry = EntryPoint(ModuleId.of(0u), FunctionId.of(0u)),
+            modules =
+                listOf(
+                    Module(
+                        name = StringId.of(0u),
+                        kind = ModuleKind.APPLICATION,
+                        strings = listOf(MetadataText.of("app"), MetadataText.of("entry")),
+                        types =
+                            listOf(
+                                NominalType.Function(
+                                    name = StringId.of(1u),
+                                    suspending = false,
+                                    result = ValueType.Unit,
+                                    parameters = emptyList(),
+                                ),
+                            ),
+                        constants = listOf(Constant.I32(42)),
+                        functions =
+                            listOf(
+                                Function(
+                                    owner = null,
+                                    name = StringId.of(1u),
+                                    signature = TypeRef.Local(TypeId.of(0u)),
+                                    flags = setOf(FunctionFlag.STATIC),
+                                    registers = listOf(ValueType.I32),
+                                    parameterCount = 0u,
+                                    firstBlock = BlockId.of(0u),
+                                    blockCount = 1u,
+                                    firstException = 0u,
+                                    exceptionCount = 0u,
+                                ),
+                            ),
+                        blocks =
+                            listOf(
+                                Block(
+                                    owner = FunctionId.of(0u),
+                                    loopHeaderSafepoint = false,
+                                    instructions =
+                                        listOf(
+                                            Instruction.Const(RegisterId.of(0u), ConstantId.of(0u)),
+                                            Instruction.Return(Destination.Unit),
+                                        ),
+                                ),
+                            ),
+                    ),
+                ),
+        )
+
+    private fun withAdapter(block: (K2CompilerAdapter) -> Unit) {
+        val root = createTempDirectory("compukters-minimal-lowering-test-")
+        try {
+            block(
+                K2CompilerAdapter(
+                    K2CompilerInputs(
+                        temporaryRoot = root,
+                        workerJar = Path.of(checkNotNull(System.getProperty("compukters.worker.jar"))),
+                        standardLibrary =
+                            Path.of(
+                                Unit::class.java.protectionDomain.codeSource.location
+                                    .toURI(),
+                            ),
+                        jdkHome = Path.of(System.getProperty("java.home")),
+                        expectedIdentity = identity(),
+                    ),
+                ),
+            )
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+
+    private fun request(
+        source: String,
+        limits: WorkerLimits = WorkerLimits(),
+    ): CompileRequest =
+        CompileRequest(
+            RequestId.of(1u),
+            VirtualSourcePath.of("project/main.kts"),
+            BinaryValue.of(source.encodeToByteArray()),
+            TargetSettings.KOTLIN_2_4_JVM_17,
+            identity(),
+            limits,
+        )
+
+    private fun identity() = WorkerIdentity("2.4.10", "2.4", 1u, 1u, Hash256.zero(), Hash256.zero())
+
+    private fun sha256(bytes: ByteArray): ByteArray = MessageDigest.getInstance("SHA-256").digest(bytes)
+}
