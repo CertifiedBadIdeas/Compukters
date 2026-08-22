@@ -61,12 +61,8 @@ class CompilerDiagnosticCollector(
                 severity.isWarning -> DiagnosticSeverity.WARNING
                 else -> DiagnosticSeverity.INFO
             }
-        errors = errors || mappedSeverity == DiagnosticSeverity.ERROR
-        if (collected.size >= limits.diagnostics || textBytes >= limits.diagnosticTextBytes) return
         val sanitized = message.replace(physicalPath.toString(), virtualPath.value)
         val diagnosticCategory = category(sanitized)
-        val admitted = truncateUtf8(sanitized, limits.diagnosticTextBytes - textBytes)
-        textBytes += admitted.encodeToByteArray().size
         val sourceLocation =
             location?.takeIf {
                 runCatching {
@@ -76,16 +72,27 @@ class CompilerDiagnosticCollector(
                         ).normalize() == physicalPath.normalize()
                 }.getOrDefault(false)
             }
-        collected +=
+        admit(
             WorkerDiagnostic(
                 mappedSeverity,
                 diagnosticCategory,
                 null,
-                admitted,
+                sanitized,
                 sourceLocation?.let { virtualPath },
                 sourceLocation?.let { offset(it.line, it.column) },
                 sourceLocation?.let { offset(it.lineEnd, it.columnEnd) },
-            )
+            ),
+        )
+    }
+
+    fun report(diagnostic: WorkerDiagnostic) = admit(diagnostic)
+
+    private fun admit(diagnostic: WorkerDiagnostic) {
+        errors = errors || diagnostic.severity == DiagnosticSeverity.ERROR
+        if (collected.size >= limits.diagnostics || textBytes >= limits.diagnosticTextBytes) return
+        val admitted = truncateUtf8(diagnostic.message, limits.diagnosticTextBytes - textBytes)
+        textBytes += admitted.encodeToByteArray().size
+        collected += diagnostic.copy(message = admitted)
     }
 
     private fun offset(

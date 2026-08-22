@@ -97,6 +97,9 @@ class K2CompilerAdapter(
                     CompilationSession(
                         irSink = { _, _ -> reachedIr = true },
                         artifactSink = { artifact = it },
+                        diagnosticSink = collector::report,
+                        sourcePath = request.path,
+                        limits = request.limits,
                     ),
                 ) {
                     K2JVMCompiler().also { it.isReadingSettingsFromEnvironmentAllowed = false }.exec(collector, Services.EMPTY, arguments)

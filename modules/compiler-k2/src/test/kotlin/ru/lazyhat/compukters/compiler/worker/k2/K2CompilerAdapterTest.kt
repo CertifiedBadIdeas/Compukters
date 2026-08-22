@@ -37,6 +37,7 @@ import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -47,7 +48,7 @@ class K2CompilerAdapterTest {
             val result = adapter.compile(request("val answer: Int = 42"))
             assertTrue(result.reachedIr)
             assertFalse(result.hasErrors)
-            assertNull(result.artifact)
+            assertNotNull(result.artifact)
             Files.list(root).use { assertEquals(0, it.count()) }
         }
 

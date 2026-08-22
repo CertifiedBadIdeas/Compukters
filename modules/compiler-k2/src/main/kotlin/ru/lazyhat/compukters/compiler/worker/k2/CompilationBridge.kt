@@ -22,7 +22,9 @@ package ru.lazyhat.compukters.compiler.worker.k2
 import org.jetbrains.kotlin.backend.common.extensions.IrPluginContext
 import org.jetbrains.kotlin.ir.declarations.IrModuleFragment
 import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
+import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerDiagnostic
+import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
 
 fun interface CompilationIrSink {
     fun accept(
@@ -35,6 +37,8 @@ class CompilationSession(
     val irSink: CompilationIrSink,
     val artifactSink: (BinaryValue) -> Unit = {},
     val diagnosticSink: (WorkerDiagnostic) -> Unit = {},
+    val sourcePath: VirtualSourcePath? = null,
+    val limits: WorkerLimits = WorkerLimits(),
 )
 
 object CompilationBridge {
