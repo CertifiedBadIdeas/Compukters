@@ -23,6 +23,8 @@ import org.jetbrains.kotlin.backend.common.extensions.IrPluginContext
 import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.declarations.IrField
 import org.jetbrains.kotlin.ir.declarations.IrModuleFragment
+import org.jetbrains.kotlin.ir.declarations.IrSimpleFunction
+import org.jetbrains.kotlin.ir.expressions.IrBlockBody
 import org.jetbrains.kotlin.ir.expressions.IrConst
 import org.jetbrains.kotlin.ir.util.file
 import org.jetbrains.kotlin.ir.visitors.IrVisitorVoid
@@ -44,6 +46,7 @@ import ru.lazyhat.compukters.compiler.artifact.model.ModuleId
 import ru.lazyhat.compukters.compiler.artifact.model.ModuleKind
 import ru.lazyhat.compukters.compiler.artifact.model.NominalType
 import ru.lazyhat.compukters.compiler.artifact.model.RegisterId
+import ru.lazyhat.compukters.compiler.artifact.model.SemanticFeature
 import ru.lazyhat.compukters.compiler.artifact.model.StringId
 import ru.lazyhat.compukters.compiler.artifact.model.TypeId
 import ru.lazyhat.compukters.compiler.artifact.model.TypeRef
@@ -62,6 +65,28 @@ internal object MinimalScriptLowering {
         pluginContext: IrPluginContext,
         session: CompilationSession,
     ) {
+        val functions = SourceFunctionCollector().also { module.accept(it, null) }.functions
+        val namedMain = functions.filter { it.name.asString() == "main" }
+        if (namedMain.isNotEmpty()) {
+            val validMain =
+                namedMain.filter { function ->
+                    function.parameters.isEmpty() &&
+                        function.returnType == pluginContext.irBuiltIns.unitType
+                }
+            if (validMain.size != 1 || namedMain.size != 1) {
+                session.diagnosticSink(invalidEntry(session, namedMain.firstOrNull()))
+                return
+            }
+            val entry = validMain.single()
+            val body = entry.body as? IrBlockBody
+            if (body == null || body.statements.isNotEmpty()) {
+                session.diagnosticSink(unsupported(session, entry))
+                return
+            }
+            writeArtifact(session, mainArtifact(entry.isSuspend))
+            return
+        }
+
         val fields = SourceFieldCollector().also { module.accept(it, null) }.fields
         val field = fields.singleOrNull()
         val constant = field?.initializer?.expression as? IrConst
@@ -71,16 +96,14 @@ internal object MinimalScriptLowering {
             return
         }
 
-        when (
-            val result =
-                ArtifactWriter.write(
-                    artifact(value),
-                    ArtifactWriteLimits(
-                        artifactBytes = session.limits.artifactBytes,
-                        diagnostics = session.limits.diagnostics,
-                    ),
-                )
-        ) {
+        writeArtifact(session, artifact(value))
+    }
+
+    private fun writeArtifact(
+        session: CompilationSession,
+        artifact: Artifact,
+    ) {
+        when (val result = ArtifactWriter.write(artifact, writeLimits(session))) {
             is ArtifactWriteResult.Success -> {
                 session.artifactSink(BinaryValue.of(result.bytes))
             }
@@ -103,18 +126,77 @@ internal object MinimalScriptLowering {
         }
     }
 
+    private fun writeLimits(session: CompilationSession) =
+        ArtifactWriteLimits(
+            artifactBytes = session.limits.artifactBytes,
+            diagnostics = session.limits.diagnostics,
+        )
+
+    private fun invalidEntry(
+        session: CompilationSession,
+        function: IrSimpleFunction?,
+    ) = WorkerDiagnostic(
+        DiagnosticSeverity.ERROR,
+        DiagnosticCategory.TARGET,
+        "INVALID_ENTRY_POINT",
+        "project must declare exactly one zero-argument fun main() or suspend fun main() returning Unit",
+        session.virtualSourcePath(function?.file?.fileEntry?.name),
+        function?.startOffset?.takeIf { it >= 0 }?.toUInt(),
+        function?.endOffset?.takeIf { it >= 0 }?.toUInt(),
+    )
+
     private fun unsupported(
         session: CompilationSession,
-        field: IrField?,
+        element: IrElement?,
     ) = WorkerDiagnostic(
         DiagnosticSeverity.ERROR,
         DiagnosticCategory.TARGET,
         "UNSUPPORTED_IR",
         "source IR is outside the minimal script subset",
-        session.virtualSourcePath(field?.file?.fileEntry?.name),
-        field?.startOffset?.takeIf { it >= 0 }?.toUInt(),
-        field?.endOffset?.takeIf { it >= 0 }?.toUInt(),
+        session.virtualSourcePath((element as? org.jetbrains.kotlin.ir.declarations.IrDeclaration)?.file?.fileEntry?.name),
+        element?.startOffset?.takeIf { it >= 0 }?.toUInt(),
+        element?.endOffset?.takeIf { it >= 0 }?.toUInt(),
     )
+
+    private fun mainArtifact(suspending: Boolean): Artifact =
+        Artifact(
+            semanticFeatures = if (suspending) setOf(SemanticFeature.COROUTINES) else emptySet(),
+            manifest = Manifest.minimal(maximumBlockCost = 1u),
+            entry = EntryPoint(ModuleId.of(0u), FunctionId.of(0u)),
+            modules =
+                listOf(
+                    Module(
+                        name = StringId.of(0u),
+                        kind = ModuleKind.APPLICATION,
+                        strings = listOf(MetadataText.of("app"), MetadataText.of("main")),
+                        types =
+                            listOf(
+                                NominalType.Function(
+                                    name = StringId.of(1u),
+                                    suspending = suspending,
+                                    result = ValueType.Unit,
+                                    parameters = emptyList(),
+                                ),
+                            ),
+                        functions =
+                            listOf(
+                                Function(
+                                    owner = null,
+                                    name = StringId.of(1u),
+                                    signature = TypeRef.Local(TypeId.of(0u)),
+                                    flags = setOfNotNull(FunctionFlag.STATIC, FunctionFlag.SUSPENDING.takeIf { suspending }),
+                                    registers = emptyList(),
+                                    parameterCount = 0u,
+                                    firstBlock = BlockId.of(0u),
+                                    blockCount = 1u,
+                                    firstException = 0u,
+                                    exceptionCount = 0u,
+                                ),
+                            ),
+                        blocks = listOf(Block(FunctionId.of(0u), false, listOf(Instruction.Return(Destination.Unit)))),
+                    ),
+                ),
+        )
 
     private fun artifact(value: Int): Artifact =
         Artifact(
@@ -168,6 +250,21 @@ internal object MinimalScriptLowering {
         )
 
     private const val BLOCK_COST = 2u
+}
+
+private class SourceFunctionCollector : IrVisitorVoid() {
+    val functions = mutableListOf<IrSimpleFunction>()
+
+    override fun visitElement(element: IrElement) {
+        element.acceptChildren(this, null)
+    }
+
+    override fun visitSimpleFunction(declaration: IrSimpleFunction) {
+        if (declaration.startOffset >= 0 && declaration.parent is org.jetbrains.kotlin.ir.declarations.IrFile) {
+            functions += declaration
+        }
+        super.visitSimpleFunction(declaration)
+    }
 }
 
 private class SourceFieldCollector : IrVisitorVoid() {
