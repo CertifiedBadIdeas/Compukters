@@ -26,25 +26,25 @@ dependencies {
     testImplementation(kotlin("test"))
 }
 
+val allowedRuntimeModules =
+    setOf(
+        "org.jetbrains.kotlin:kotlin-stdlib",
+        "org.jetbrains:annotations",
+    )
+
 val assertNoK2CompilerRuntime = tasks.register("assertNoK2CompilerRuntime") {
     group = "verification"
-    description = "Fails when compiler or scripting artifacts enter compiler-client runtimeClasspath."
+    description = "Fails when dependencies outside compiler-client's production runtime allowlist are resolved."
 
     doLast {
-        val forbidden =
+        val disallowed =
             configurations
                 .getByName("runtimeClasspath")
                 .resolvedConfiguration
                 .resolvedArtifacts
-                .map { it.moduleVersion.id.group to it.moduleVersion.id.name }
-                .filter { (group, name) ->
-                    group == "org.jetbrains.kotlin" &&
-                        (name == "kotlin-compiler" ||
-                            name.startsWith("kotlin-compiler-") ||
-                            name.startsWith("kotlin-scripting") ||
-                            name == "kotlin-script-runtime")
-                }
-        check(forbidden.isEmpty()) { "compiler-client runtimeClasspath contains compiler or scripting dependencies: $forbidden" }
+                .map { "${it.moduleVersion.id.group}:${it.moduleVersion.id.name}" }
+                .filterNot(allowedRuntimeModules::contains)
+        check(disallowed.isEmpty()) { "compiler-client runtimeClasspath contains disallowed dependencies: $disallowed" }
     }
 }
 
