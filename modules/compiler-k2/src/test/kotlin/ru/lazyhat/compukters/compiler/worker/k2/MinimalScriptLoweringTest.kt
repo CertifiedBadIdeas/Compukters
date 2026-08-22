@@ -55,7 +55,9 @@ import ru.lazyhat.compukters.compiler.worker.protocol.WorkerIdentity
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
 import java.nio.file.Path
 import java.security.MessageDigest
+import kotlin.io.path.createDirectories
 import kotlin.io.path.createTempDirectory
+import kotlin.io.path.writeBytes
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -97,6 +99,49 @@ class MinimalScriptLoweringTest {
                 assertNull(result.artifact)
                 assertTrue(result.diagnostics.any { it.category == DiagnosticCategory.TARGET && it.code == "INVALID_ENTRY_POINT" })
             }
+        }
+
+    @Test
+    fun `multi-file terminal program lowers through trusted symbols`() =
+        withAdapter { adapter ->
+            val request =
+                request(
+                    "project/greeting.kt" to
+                        "fun greeting(name: String): String = \"Hello, \" + name + \"!\"",
+                    "project/main.kt" to
+                        """
+                        suspend fun main() {
+                            print("Your name: ")
+                            val name = readln()
+                            println(greeting(name))
+                        }
+                        """.trimIndent(),
+                )
+            val result = adapter.compile(request)
+            val repeated = adapter.compile(request)
+
+            val artifact = assertNotNull(result.artifact, result.diagnostics.joinToString())
+            assertTrue(result.diagnostics.none { it.severity.name == "ERROR" }, result.diagnostics.toString())
+            assertContentEquals(artifact.toByteArray(), assertNotNull(repeated.artifact).toByteArray())
+            System.getProperty("compukter.vm.kotlinSubsetArtifact")?.let { output ->
+                Path.of(output).also { it.parent.createDirectories() }.writeBytes(artifact.toByteArray())
+            }
+        }
+
+    @Test
+    fun `same-named guest function remains an ordinary project call`() =
+        withAdapter { adapter ->
+            val result =
+                adapter.compile(
+                    request(
+                        "project/main.kt" to
+                            "suspend fun main() { println(readln(\"guest\")) }",
+                        "project/read.kt" to "fun readln(value: String): String = value",
+                    ),
+                )
+
+            assertNotNull(result.artifact, result.diagnostics.joinToString())
+            assertTrue(result.diagnostics.none { it.severity.name == "ERROR" }, result.diagnostics.toString())
         }
 
     @Test

@@ -79,11 +79,19 @@ internal object MinimalScriptLowering {
             }
             val entry = validMain.single()
             val body = entry.body as? IrBlockBody
-            if (body == null || body.statements.isNotEmpty()) {
+            if (body == null) {
                 session.diagnosticSink(unsupported(session, entry))
                 return
             }
-            writeArtifact(session, mainArtifact(entry.isSuspend))
+            if (body.statements.isEmpty()) {
+                writeArtifact(session, mainArtifact(entry.isSuspend))
+                return
+            }
+            try {
+                writeArtifact(session, KotlinProjectLowering.lower(functions, entry, pluginContext, session))
+            } catch (unsupported: UnsupportedKotlinIr) {
+                session.diagnosticSink(unsupported(session, unsupported.element, unsupported.message))
+            }
             return
         }
 
@@ -148,11 +156,13 @@ internal object MinimalScriptLowering {
     private fun unsupported(
         session: CompilationSession,
         element: IrElement?,
+        detail: String? = null,
     ) = WorkerDiagnostic(
         DiagnosticSeverity.ERROR,
         DiagnosticCategory.TARGET,
         "UNSUPPORTED_IR",
-        "source IR is outside the minimal script subset",
+        detail?.let { "source IR is outside the minimal script subset: $it" }
+            ?: "source IR is outside the minimal script subset",
         session.virtualSourcePath((element as? org.jetbrains.kotlin.ir.declarations.IrDeclaration)?.file?.fileEntry?.name),
         element?.startOffset?.takeIf { it >= 0 }?.toUInt(),
         element?.endOffset?.takeIf { it >= 0 }?.toUInt(),
