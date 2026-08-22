@@ -52,11 +52,15 @@ class ProgramComputer internal constructor(
 
     fun turnOn(): ProgramComputerState {
         if (state == ProgramComputerState.Closed || state.isPoweredOn()) return state
+        return startInstalledImage()
+    }
+
+    private fun startInstalledImage(): ProgramComputerState {
         val artifact =
             try {
                 imageSource.loadInstalledArtifact(deviceId)
             } catch (error: Exception) {
-                return transitionTo(failure(ProgramComputerFailure.ImageSource(error.message ?: "image source failure")))
+                return transitionTo(failure(ProgramComputerFailure.ImageSource(error.diagnostic("image source failure"))))
             } ?: return transitionTo(failure(ProgramComputerFailure.MissingImage))
 
         return when (val result = host.start(artifact)) {
@@ -70,7 +74,16 @@ class ProgramComputer internal constructor(
         if (!state.isPoweredOn()) return state
         val runtimeState = host.serverTick()
         val output = host.drainOutput()
-        if (output.isNotEmpty()) terminalSink.publishOutput(deviceId, output)
+        if (output.isNotEmpty()) {
+            try {
+                terminalSink.publishOutput(deviceId, output)
+            } catch (error: Exception) {
+                host.shutdown()
+                return transitionTo(
+                    failure(ProgramComputerFailure.TerminalPublication(error.diagnostic("terminal publication failure"))),
+                )
+            }
+        }
         return transitionFrom(runtimeState)
     }
 
@@ -91,11 +104,23 @@ class ProgramComputer internal constructor(
         return false
     }
 
-    fun shutdown() = Unit
+    fun shutdown() {
+        if (state == ProgramComputerState.Closed || state == SHUTDOWN_STATE) return
+        host.shutdown()
+        transitionTo(SHUTDOWN_STATE)
+    }
 
-    fun reboot(): ProgramComputerState = state
+    fun reboot(): ProgramComputerState {
+        if (state == ProgramComputerState.Closed) return state
+        host.shutdown()
+        return startInstalledImage()
+    }
 
-    override fun close() = Unit
+    override fun close() {
+        if (state == ProgramComputerState.Closed) return
+        host.close()
+        transitionTo(ProgramComputerState.Closed)
+    }
 
     private fun transitionTo(next: ProgramComputerState): ProgramComputerState {
         if (next == state) return state
@@ -109,17 +134,40 @@ class ProgramComputer internal constructor(
 
     private fun transitionFrom(runtimeState: ProgramRuntimeState): ProgramComputerState =
         when (runtimeState) {
-            ProgramRuntimeState.Running -> transitionTo(ProgramComputerState.Running)
-            ProgramRuntimeState.WaitingForInput -> transitionTo(ProgramComputerState.WaitingForInput)
-            is ProgramRuntimeState.Halted ->
-                transitionTo(ProgramComputerState.PoweredOff(ProgramComputerStopReason.Halted(runtimeState.value)))
+            ProgramRuntimeState.Running -> {
+                transitionTo(ProgramComputerState.Running)
+            }
 
-            is ProgramRuntimeState.Failed -> transitionTo(failure(ProgramComputerFailure.Runtime(runtimeState.failure)))
+            ProgramRuntimeState.WaitingForInput -> {
+                transitionTo(ProgramComputerState.WaitingForInput)
+            }
+
+            is ProgramRuntimeState.Halted -> {
+                transitionTo(ProgramComputerState.PoweredOff(ProgramComputerStopReason.Halted(runtimeState.value)))
+            }
+
+            is ProgramRuntimeState.Failed -> {
+                transitionTo(failure(ProgramComputerFailure.Runtime(runtimeState.failure)))
+            }
+
             ProgramRuntimeState.Idle,
             ProgramRuntimeState.Closed,
-            -> transitionTo(failure(ProgramComputerFailure.RuntimeContract(runtimeState)))
+            -> {
+                transitionTo(failure(ProgramComputerFailure.RuntimeContract(runtimeState)))
+            }
         }
 
     private fun ProgramComputerState.isPoweredOn(): Boolean =
         this == ProgramComputerState.Running || this == ProgramComputerState.WaitingForInput
+
+    private fun Exception.diagnostic(fallback: String): String {
+        val raw = message ?: this::class.simpleName ?: fallback
+        val lineEnd = raw.indexOfAny(charArrayOf('\r', '\n')).let { if (it < 0) raw.length else it }
+        return raw.substring(0, lineEnd).ifEmpty { fallback }.take(MAXIMUM_DIAGNOSTIC_CODE_UNITS)
+    }
+
+    private companion object {
+        const val MAXIMUM_DIAGNOSTIC_CODE_UNITS = 256
+        val SHUTDOWN_STATE = ProgramComputerState.PoweredOff(ProgramComputerStopReason.Shutdown)
+    }
 }
