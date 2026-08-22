@@ -1,0 +1,16 @@
+[package]
+name = "compukter-jni"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+compukter-vm = { path = "../compukter-vm" }
+jni = "0.22.4"
+
+[profile.release]
+codegen-units = 1
+lto = "thin"
