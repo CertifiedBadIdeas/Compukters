@@ -29,6 +29,7 @@ import ru.lazyhat.compukters.compiler.artifact.model.Instruction
 import ru.lazyhat.compukters.compiler.artifact.model.ModuleKind
 import ru.lazyhat.compukters.compiler.artifact.model.NominalType
 import ru.lazyhat.compukters.compiler.artifact.model.RegisterId
+import ru.lazyhat.compukters.compiler.artifact.model.SemanticFeature
 import ru.lazyhat.compukters.compiler.artifact.model.SymbolKind
 import ru.lazyhat.compukters.compiler.artifact.model.TypeRef
 import ru.lazyhat.compukters.compiler.artifact.model.ValueType
@@ -239,10 +240,99 @@ internal fun validateArtifact(
         return matches.singleOrNull()
     }
 
+    fun Instruction.readRegisters(): List<RegisterId> =
+        when (this) {
+            is Instruction.Const,
+            is Instruction.Null,
+            is Instruction.NewObject,
+            is Instruction.Jump,
+            -> emptyList()
+
+            is Instruction.NewArray -> listOf(length)
+
+            is Instruction.ArrayLoad -> listOf(array, index)
+
+            is Instruction.ArrayStore -> listOf(array, index, value)
+
+            is Instruction.IsType -> listOf(value)
+
+            is Instruction.Call -> arguments
+
+            is Instruction.CallSuspend -> arguments
+
+            is Instruction.StringConcat -> listOf(left, right)
+
+            is Instruction.CapabilityCallAsync -> arguments
+
+            is Instruction.Branch -> listOf(condition)
+
+            is Instruction.Return -> (value as? Destination.Register)?.let { listOf(it.id) }.orEmpty()
+
+            is Instruction.Throw -> listOf(exception)
+        }
+
+    fun Instruction.writtenRegisters(): List<RegisterId> =
+        when (this) {
+            is Instruction.Const -> listOf(destination)
+
+            is Instruction.Null -> listOf(destination)
+
+            is Instruction.NewObject -> listOf(destination)
+
+            is Instruction.NewArray -> listOf(destination)
+
+            is Instruction.ArrayLoad -> listOf(destination)
+
+            is Instruction.IsType -> listOf(destination)
+
+            is Instruction.Call -> (destination as? Destination.Register)?.let { listOf(it.id) }.orEmpty()
+
+            is Instruction.CallSuspend -> (destination as? Destination.Register)?.let { listOf(it.id) }.orEmpty()
+
+            is Instruction.StringConcat -> listOf(destination)
+
+            is Instruction.CapabilityCallAsync -> (destination as? Destination.Register)?.let { listOf(it.id) }.orEmpty()
+
+            is Instruction.ArrayStore,
+            is Instruction.Jump,
+            is Instruction.Branch,
+            is Instruction.Return,
+            is Instruction.Throw,
+            -> emptyList()
+        }
+
+    fun Instruction.successors(): List<BlockId> =
+        when (this) {
+            is Instruction.Jump -> listOf(target)
+            is Instruction.Branch -> listOf(trueTarget, falseTarget)
+            is Instruction.CallSuspend -> listOf(resumeBlock)
+            is Instruction.CapabilityCallAsync -> listOf(resumeBlock)
+            else -> emptyList()
+        }
+
+    fun Instruction.mayThrow(): Boolean =
+        this is Instruction.NewObject ||
+            this is Instruction.NewArray ||
+            this is Instruction.ArrayLoad ||
+            this is Instruction.ArrayStore ||
+            this is Instruction.Call ||
+            this is Instruction.CallSuspend ||
+            this is Instruction.CapabilityCallAsync ||
+            this is Instruction.Throw
+
     if (artifact.entry.module.value
             .toLong() >= artifact.modules.size
     ) {
         add(ArtifactWriteErrorCode.BAD_REFERENCE, "entry module is outside the module table")
+    } else if (
+        artifact.entry.function.value
+            .toLong() >=
+        artifact.modules[
+            artifact.entry.module.value
+                .toInt(),
+        ].functions.size
+    ) {
+        add(ArtifactWriteErrorCode.BAD_REFERENCE, "entry function is outside the function table")
     }
     if (artifact.modules.size > limits.modules) {
         add(ArtifactWriteErrorCode.LIMIT_EXCEEDED, "module count exceeds ${limits.modules}")
@@ -259,6 +349,39 @@ internal fun validateArtifact(
     if (artifact.manifest.minimumSliceCost < artifact.manifest.maximumBlockCost) {
         add(ArtifactWriteErrorCode.INVALID_RANGE, "minimum slice cost is below maximum block cost")
     }
+    val expectedFeatures = mutableSetOf<SemanticFeature>()
+    artifact.modules.forEach { module ->
+        if (module.exceptions.isNotEmpty() || module.blocks.any { block -> block.instructions.any { it is Instruction.Throw } }) {
+            expectedFeatures += SemanticFeature.EXCEPTIONS
+        }
+        if (
+            module.functions.any { FunctionFlag.SUSPENDING in it.flags } ||
+            module.blocks.any { block ->
+                block.instructions.any { it is Instruction.CallSuspend || it is Instruction.CapabilityCallAsync }
+            }
+        ) {
+            expectedFeatures += SemanticFeature.COROUTINES
+        }
+        if (module.imports.isNotEmpty()) expectedFeatures += SemanticFeature.MODULE_IMPORTS
+    }
+    if (artifact.capabilities.isNotEmpty() ||
+        artifact.modules.any { module ->
+            module.blocks.any { block -> block.instructions.any { it is Instruction.CapabilityCallAsync } }
+        }
+    ) {
+        expectedFeatures += SemanticFeature.CAPABILITIES
+    }
+    if (artifact.semanticFeatures != expectedFeatures) {
+        add(
+            ArtifactWriteErrorCode.INCOMPATIBLE_FEATURE_SET,
+            "semantic feature bits do not exactly match artifact use",
+        )
+    }
+
+    val semanticHashes =
+        artifact.modules.map { module ->
+            runCatching { encodeModuleSections(module, limits).semanticHash }.getOrNull()
+        }
 
     artifact.modules.forEachIndexed { moduleIndex, module ->
         val moduleLocation = moduleIndex.toUInt()
@@ -290,6 +413,16 @@ internal fun validateArtifact(
                 ArtifactWriteLocation(module = moduleLocation, table = "UTF16_LITERALS"),
             )
         }
+        module.imports.forEachIndexed { importIndex, import ->
+            val actual = semanticHashes.getOrNull(import.targetModule.value.toInt())
+            if (actual != null && !import.targetModuleHash.contentEquals(actual)) {
+                add(
+                    ArtifactWriteErrorCode.BAD_REFERENCE,
+                    "import target semantic hash does not match",
+                    ArtifactWriteLocation(moduleLocation, "IMPORTS", importIndex.toUInt()),
+                )
+            }
+        }
         module.functions.forEachIndexed { functionIndex, function ->
             if (function.registers.size > limits.registersPerFunction || function.parameterCount.toLong() > function.registers.size) {
                 add(
@@ -306,8 +439,60 @@ internal fun validateArtifact(
                     ArtifactWriteLocation(moduleLocation, "FUNCTIONS", functionIndex.toUInt()),
                 )
             }
+            val isAbstract = FunctionFlag.ABSTRACT in function.flags
+            val isEntry =
+                artifact.entry.module.value
+                    .toInt() == moduleIndex && artifact.entry.function.value
+                    .toInt() == functionIndex
+            if (isAbstract && (function.blockCount != 0u || isEntry)) {
+                add(
+                    ArtifactWriteErrorCode.INCONSISTENT_RANGE,
+                    "abstract function has blocks or is the entry function",
+                    ArtifactWriteLocation(moduleLocation, "FUNCTIONS", functionIndex.toUInt()),
+                )
+            } else if (!isAbstract && function.blockCount == 0u) {
+                add(
+                    ArtifactWriteErrorCode.INCONSISTENT_RANGE,
+                    "non-abstract function has no blocks",
+                    ArtifactWriteLocation(moduleLocation, "FUNCTIONS", functionIndex.toUInt()),
+                )
+            }
+            val start = function.firstBlock.value.toInt()
+            val end = blockEnd.toInt().coerceAtMost(module.blocks.size)
+            if (start in 0..end) {
+                for (blockIndex in start until end) {
+                    if (module.blocks[blockIndex]
+                            .owner.value
+                            .toInt() != functionIndex
+                    ) {
+                        add(
+                            ArtifactWriteErrorCode.INCONSISTENT_RANGE,
+                            "function blocks are not contiguous or have the wrong owner",
+                            ArtifactWriteLocation(moduleLocation, "FUNCTIONS", functionIndex.toUInt()),
+                        )
+                        break
+                    }
+                }
+            }
         }
         module.blocks.forEachIndexed { blockIndex, block ->
+            var fixedCost = 0uL
+            block.instructions.forEach { instruction ->
+                fixedCost += instructionFixedCost(instruction).toULong()
+            }
+            if (fixedCost > UInt.MAX_VALUE.toULong()) {
+                add(
+                    ArtifactWriteErrorCode.OVERFLOW,
+                    "block fixed cost overflows u32",
+                    ArtifactWriteLocation(moduleLocation, "BLOCKS", blockIndex.toUInt()),
+                )
+            } else if (fixedCost > artifact.manifest.maximumBlockCost.toULong()) {
+                add(
+                    ArtifactWriteErrorCode.INVALID_RANGE,
+                    "block fixed cost exceeds manifest maximumBlockCost",
+                    ArtifactWriteLocation(moduleLocation, "BLOCKS", blockIndex.toUInt()),
+                )
+            }
             if (block.owner.value.toLong() >= module.functions.size) {
                 add(
                     ArtifactWriteErrorCode.BAD_REFERENCE,
@@ -557,6 +742,137 @@ internal fun validateArtifact(
                         else -> {}
                     }
                 }
+            }
+        }
+        module.functions.forEachIndexed { functionIndex, function ->
+            if (FunctionFlag.ABSTRACT in function.flags || function.blockCount == 0u) return@forEachIndexed
+            val blockStart = function.firstBlock.value.toInt()
+            val blockCount = function.blockCount.toInt()
+            val blockEnd = blockStart.toLong() + blockCount.toLong()
+            if (blockStart !in module.blocks.indices || blockEnd > module.blocks.size) return@forEachIndexed
+
+            val exceptionStart = function.firstException.toLong()
+            val exceptionEnd = exceptionStart + function.exceptionCount.toLong()
+            val declaredHandlers =
+                if (exceptionStart > module.exceptions.size || exceptionEnd > module.exceptions.size) {
+                    add(
+                        ArtifactWriteErrorCode.INCONSISTENT_RANGE,
+                        "function exception range is outside the exception table",
+                        ArtifactWriteLocation(moduleLocation, "FUNCTIONS", functionIndex.toUInt()),
+                    )
+                    emptyList()
+                } else {
+                    module.exceptions.subList(exceptionStart.toInt(), exceptionEnd.toInt())
+                }
+            val handlers =
+                declaredHandlers.filter { exception ->
+                    val protectedStart = exception.firstProtectedBlock.value.toLong()
+                    val protectedEnd = protectedStart + exception.protectedBlockCount.toLong()
+                    val structurallyValid =
+                        exception.owner.value.toInt() == functionIndex &&
+                            exception.protectedBlockCount != 0u &&
+                            protectedStart >= blockStart.toLong() &&
+                            protectedEnd <= blockEnd &&
+                            exception.handlerBlock.value.toLong() in blockStart.toLong() until blockEnd &&
+                            exception.exceptionRegister.value.toLong() < function.registers.size.toLong()
+                    if (!structurallyValid) {
+                        add(
+                            ArtifactWriteErrorCode.INCONSISTENT_RANGE,
+                            "exception owner, range, handler, or register is outside the function",
+                            ArtifactWriteLocation(moduleLocation, "EXCEPTIONS"),
+                        )
+                    }
+                    structurallyValid
+                }
+            val handlerBlocks = handlers.mapTo(mutableSetOf()) { it.handlerBlock.value.toInt() }
+
+            val states = arrayOfNulls<MutableSet<Int>>(blockCount)
+            states[0] = (0 until function.parameterCount.toInt().coerceAtMost(function.registers.size)).toMutableSet()
+            val queue = ArrayDeque<Int>()
+            queue += 0
+
+            fun merge(
+                target: Int,
+                incoming: Set<Int>,
+            ) {
+                if (target !in states.indices) return
+                val existing = states[target]
+                if (existing == null) {
+                    states[target] = incoming.toMutableSet()
+                    queue += target
+                } else {
+                    val intersection = existing intersect incoming
+                    if (intersection.size != existing.size) {
+                        existing.retainAll(intersection)
+                        queue += target
+                    }
+                }
+            }
+
+            while (queue.isNotEmpty()) {
+                val localBlock = queue.removeFirst()
+                val blockIndex = blockStart + localBlock
+                val block = module.blocks[blockIndex]
+                val state = requireNotNull(states[localBlock]).toMutableSet()
+                block.instructions.forEachIndexed { instructionIndex, instruction ->
+                    if (instruction.mayThrow()) {
+                        handlers
+                            .filter { exception ->
+                                blockIndex >= exception.firstProtectedBlock.value.toInt() &&
+                                    blockIndex <
+                                    exception.firstProtectedBlock.value.toLong() + exception.protectedBlockCount.toLong()
+                            }.forEach { exception ->
+                                val incoming = state.toMutableSet()
+                                repeat(function.parameterCount.toInt().coerceAtMost(function.registers.size)) { incoming += it }
+                                incoming += exception.exceptionRegister.value.toInt()
+                                merge(exception.handlerBlock.value.toInt() - blockStart, incoming)
+                            }
+                    }
+                    instruction.readRegisters().forEach { register ->
+                        val registerIndex = register.value.toInt()
+                        if (registerIndex in function.registers.indices && registerIndex !in state) {
+                            add(
+                                ArtifactWriteErrorCode.INVALID_RANGE,
+                                "instruction reads an uninitialized register",
+                                ArtifactWriteLocation(
+                                    module = moduleLocation,
+                                    table = "CODE",
+                                    record = blockIndex.toUInt(),
+                                    instruction = instructionIndex.toUInt(),
+                                ),
+                            )
+                        }
+                    }
+                    instruction.writtenRegisters().forEach { register ->
+                        if (register.value.toInt() in function.registers.indices) state += register.value.toInt()
+                    }
+                }
+                block.instructions.lastOrNull()?.successors()?.forEach { successor ->
+                    val target = successor.value.toInt()
+                    if (target in blockStart until (blockStart + blockCount)) {
+                        if (target in handlerBlocks) {
+                            add(
+                                ArtifactWriteErrorCode.INCONSISTENT_RANGE,
+                                "ordinary control flow targets an exception handler",
+                                ArtifactWriteLocation(moduleLocation, "BLOCKS", blockIndex.toUInt()),
+                            )
+                        } else if (target <= blockIndex && !module.blocks[target].loopHeaderSafepoint) {
+                            add(
+                                ArtifactWriteErrorCode.INCONSISTENT_RANGE,
+                                "backedge target is not a loop-header safepoint",
+                                ArtifactWriteLocation(moduleLocation, "BLOCKS", blockIndex.toUInt()),
+                            )
+                        }
+                        if (target !in handlerBlocks) merge(target - blockStart, state)
+                    }
+                }
+            }
+            if (states.any { it == null }) {
+                add(
+                    ArtifactWriteErrorCode.INCONSISTENT_RANGE,
+                    "function contains an unreachable block or handler without a throwing predecessor",
+                    ArtifactWriteLocation(moduleLocation, "FUNCTIONS", functionIndex.toUInt()),
+                )
             }
         }
     }

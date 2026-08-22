@@ -32,6 +32,7 @@ import ru.lazyhat.compukters.compiler.artifact.model.TypeRef
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 
 class InstructionEncoderTest {
     @Test
@@ -236,15 +237,23 @@ class InstructionEncoderTest {
 
     @Test
     fun `instruction argument lists are defensive snapshots`() {
-        val arguments = mutableListOf(RegisterId.of(1u))
+        val arguments = mutableListOf(RegisterId.of(1u), RegisterId.of(2u))
         val call = Instruction.Call(Destination.Unit, FunctionRef.Local(FunctionId.of(0u)), arguments)
         val suspended = Instruction.CallSuspend(Destination.Unit, FunctionRef.Local(FunctionId.of(0u)), arguments, BlockId.of(0u))
         val capability = Instruction.CapabilityCallAsync(Destination.Unit, CapabilityId.of(0u), 0u, arguments, BlockId.of(0u))
 
-        arguments += RegisterId.of(2u)
+        arguments += RegisterId.of(3u)
 
-        assertEquals(listOf(RegisterId.of(1u)), call.arguments)
-        assertEquals(listOf(RegisterId.of(1u)), suspended.arguments)
-        assertEquals(listOf(RegisterId.of(1u)), capability.arguments)
+        val expected = listOf(RegisterId.of(1u), RegisterId.of(2u))
+        assertEquals(expected, call.arguments)
+        assertEquals(expected, suspended.arguments)
+        assertEquals(expected, capability.arguments)
+
+        listOf(call.arguments, suspended.arguments, capability.arguments).forEach { exposedArguments ->
+            assertFailsWith<UnsupportedOperationException> {
+                @Suppress("UNCHECKED_CAST")
+                (exposedArguments as MutableList<RegisterId>) += RegisterId.of(4u)
+            }
+        }
     }
 }
