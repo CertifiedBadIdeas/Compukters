@@ -228,6 +228,7 @@ tasks.register("verifyLocalFull") {
     dependsOn(fmtCompukterJniRust)
     dependsOn(clippyCompukterJniRust)
     dependsOn(cargoBuildCompukterJni)
+    dependsOn(":native-runtime:nativeIntegrationTest")
     dependsOn(testCompilerArtifactVmConformance)
     dependsOn(testKotlinSubsetVmConformance)
 }

@@ -32,7 +32,33 @@ dependencies {
 }
 
 tasks.test {
+    filter.excludeTestsMatching("ru.lazyhat.compukters.lang.runtime.integration.*")
     System.getProperty("ckl.low.image.golden.path")?.takeIf { it.isNotBlank() }?.let { path ->
         systemProperty("ckl.low.image.golden.path", path)
     }
+}
+
+val compukterJniLibrary =
+    rootProject.file(".toolchain/build/cargo/compukter-jni/release/${System.mapLibraryName("compukter_jni")}")
+val terminalFixture = rootProject.file("host/compukter-vm/tests/fixtures/terminal-session.hex")
+
+val nativeIntegrationTest =
+    tasks.register<Test>("nativeIntegrationTest") {
+        description = "Runs Kotlin-to-JNI-to-Rust Compukter VM integration tests."
+        group = "verification"
+        dependsOn(rootProject.tasks.named("cargoBuildCompukterJni"))
+        useJUnitPlatform()
+        testClassesDirs = sourceSets.test.get().output.classesDirs
+        classpath = sourceSets.test.get().runtimeClasspath
+        filter.includeTestsMatching("ru.lazyhat.compukters.lang.runtime.integration.*")
+        inputs.file(compukterJniLibrary)
+        inputs.file(terminalFixture)
+        doFirst {
+            systemProperty("compukter.jni.library", compukterJniLibrary.absolutePath)
+            systemProperty("compukter.vm.terminalFixture", terminalFixture.absolutePath)
+        }
+    }
+
+tasks.check {
+    dependsOn(nativeIntegrationTest)
 }
