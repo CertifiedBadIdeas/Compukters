@@ -20,6 +20,7 @@
 package ru.lazyhat.compukters.compiler.artifact.write
 
 import ru.lazyhat.compukters.compiler.artifact.model.Destination
+import ru.lazyhat.compukters.compiler.artifact.model.FunctionRef
 import ru.lazyhat.compukters.compiler.artifact.model.Instruction
 import ru.lazyhat.compukters.compiler.artifact.model.RegisterId
 import ru.lazyhat.compukters.compiler.artifact.model.TypeRef
@@ -90,6 +91,41 @@ internal fun encodeInstruction(
             operands.writeUleb128(encodeTypeRef(instruction.type))
         }
 
+        is Instruction.Call -> {
+            opcode = 0x40u
+            cost = variableCost(4u, instruction.arguments.size)
+            operands.writeDestination(instruction.destination)
+            operands.writeUleb128(encodeFunctionRef(instruction.function))
+            operands.writeArguments(instruction.arguments)
+        }
+
+        is Instruction.CallSuspend -> {
+            opcode = 0xe5u
+            cost = variableCost(5u, instruction.arguments.size)
+            operands.writeDestination(instruction.destination)
+            operands.writeUleb128(encodeFunctionRef(instruction.function))
+            operands.writeArguments(instruction.arguments)
+            operands.writeUleb128(instruction.resumeBlock.value)
+        }
+
+        is Instruction.StringConcat -> {
+            opcode = 0x65u
+            cost = 1u
+            operands.writeRegister(instruction.destination)
+            operands.writeRegister(instruction.left)
+            operands.writeRegister(instruction.right)
+        }
+
+        is Instruction.CapabilityCallAsync -> {
+            opcode = 0xe9u
+            cost = variableCost(6u, instruction.arguments.size)
+            operands.writeDestination(instruction.destination)
+            operands.writeUleb128(instruction.capability.value)
+            operands.writeUleb128(instruction.operation)
+            operands.writeArguments(instruction.arguments)
+            operands.writeUleb128(instruction.resumeBlock.value)
+        }
+
         is Instruction.Jump -> {
             opcode = 0xe0u
             cost = 1u
@@ -107,10 +143,7 @@ internal fun encodeInstruction(
         is Instruction.Return -> {
             opcode = 0xe3u
             cost = 1u
-            when (val value = instruction.value) {
-                is Destination.Register -> operands.writeRegister(value.id)
-                Destination.Unit -> operands.writeU16(UShort.MAX_VALUE.toUInt())
-            }
+            operands.writeDestination(instruction.value)
         }
 
         is Instruction.Throw -> {
@@ -137,8 +170,37 @@ private fun BinarySink.writeRegister(register: RegisterId) {
     writeU16(register.value.toUInt())
 }
 
+private fun BinarySink.writeDestination(destination: Destination) {
+    when (destination) {
+        is Destination.Register -> writeRegister(destination.id)
+        Destination.Unit -> writeU16(UShort.MAX_VALUE.toUInt())
+    }
+}
+
+private fun BinarySink.writeArguments(arguments: List<RegisterId>) {
+    writeUleb128(arguments.size.toUInt())
+    arguments.forEach(::writeRegister)
+}
+
+private fun variableCost(
+    base: UInt,
+    argumentCount: Int,
+): UInt {
+    val cost = base.toULong() + argumentCount.toULong()
+    if (cost > UInt.MAX_VALUE.toULong()) {
+        throw ArtifactEncodingException(ArtifactWriteErrorCode.OVERFLOW, "instruction fixed cost exceeds u32")
+    }
+    return cost.toUInt()
+}
+
 internal fun encodeTypeRef(reference: TypeRef): UInt =
     when (reference) {
         is TypeRef.Local -> reference.id.value
         is TypeRef.Imported -> reference.id.value or 0x8000_0000u
+    }
+
+internal fun encodeFunctionRef(reference: FunctionRef): UInt =
+    when (reference) {
+        is FunctionRef.Local -> reference.id.value
+        is FunctionRef.Imported -> reference.id.value or 0x8000_0000u
     }
