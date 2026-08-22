@@ -61,7 +61,7 @@ class K2CompilerAdapter(
         require(Files.isRegularFile(inputs.workerJar)) { "validated worker jar is missing" }
         require(Files.isRegularFile(inputs.standardLibrary)) { "fixed standard library is missing" }
         require(Files.isDirectory(inputs.jdkHome)) { "fixed JDK home is missing" }
-        val source = request.source.decodeUtf8()
+        val source = request.source.toByteArray().decodeToString()
         if (DEPENDENCY_ANNOTATION.containsMatchIn(source)) {
             return K2CompilationResult(
                 ExitCode.COMPILATION_ERROR,

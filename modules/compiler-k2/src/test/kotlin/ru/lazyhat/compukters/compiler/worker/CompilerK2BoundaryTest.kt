@@ -25,8 +25,8 @@ import kotlin.test.assertEquals
 
 class CompilerK2BoundaryTest {
     @Test
-    fun `worker can decode client protocol source`() {
-        assertEquals("val answer = 42", BinaryValue.of("val answer = 42".encodeToByteArray()).decodeUtf8())
+    fun `worker can read client protocol source bytes`() {
+        assertEquals("val answer = 42", BinaryValue.of("val answer = 42".encodeToByteArray()).toByteArray().decodeToString())
     }
 
     @Test
