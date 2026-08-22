@@ -53,6 +53,8 @@ class Hash256 private constructor(
 ) {
     fun toByteArray(): ByteArray = value.toByteArray()
 
+    fun hex(): String = toByteArray().joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
+
     override fun equals(other: Any?): Boolean = other is Hash256 && value == other.value
 
     override fun hashCode(): Int = value.hashCode()
