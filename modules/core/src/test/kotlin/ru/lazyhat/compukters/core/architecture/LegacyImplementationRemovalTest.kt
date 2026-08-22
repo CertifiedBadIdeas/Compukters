@@ -71,13 +71,21 @@ class LegacyImplementationRemovalTest {
     }
 
     @Test
-    fun activeOwnedFilesUseTheCompuktersName() {
+    fun activeOwnedFilesExcludeLegacyNames() {
         val repoRoot = findRepoRoot()
-        val oldNames =
+        val forbiddenNames =
             listOf(
                 "compukter" + "kraft",
                 "compukter" + "craft",
                 "Compukter" + " Kraft",
+                "CC" + ":Tweaked",
+                "Computer" + "Craft",
+                "Craft" + "OS",
+                "dan" + "200",
+                "RISC" + "-V",
+                "RV" + "32",
+                "K" + "16",
+                "Kraft" + "OS",
             )
         val searchableExtensions = setOf("kt", "kts", "rs", "md", "toml", "json")
 
@@ -90,15 +98,16 @@ class LegacyImplementationRemovalTest {
                         val relative = repoRoot.relativize(path).invariantSeparatorsPathString
                         !(
                             relative.startsWith(".git/") ||
-                            relative.startsWith(".gradle/") ||
-                            relative.startsWith(".agents/") ||
-                            relative.startsWith("build/") ||
+                                relative.startsWith(".gradle/") ||
+                                relative.startsWith(".agents/") ||
+                                relative.startsWith("docs/superpowers/") ||
+                                relative.startsWith("build/") ||
                             relative.contains("/build/") ||
                                 relative.contains("/.gradle/")
                         )
                     }.filter { path ->
                         val text = Files.readString(path)
-                        oldNames.any(text::contains)
+                        forbiddenNames.any { name -> text.contains(name, ignoreCase = true) }
                     }.map { repoRoot.relativize(it).invariantSeparatorsPathString }
                     .sorted()
                     .toList()

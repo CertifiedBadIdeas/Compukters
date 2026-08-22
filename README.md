@@ -11,10 +11,10 @@ shell and programs executing on a computer inside Minecraft.
 
 ## Status
 
-The project is in a clean-break managed-runtime bootstrap. The retired custom
-ISA, RISC-V machine, and ELF/KraftOS runtime are not fallback execution paths.
-The loadable NeoForge mod is temporarily a platform shell while the managed
-runtime is integrated.
+The compiler, canonical artifact, JNI session, managed Rust VM, standalone
+playground, and loader-independent `ProgramRuntimeHost` form an executable
+vertical slice. The loadable NeoForge mod is temporarily a minimal bootstrap
+while the server computer carrier and Minecraft integration are added.
 
 Currently targets **NeoForge 1.21.1**.
 
@@ -56,5 +56,4 @@ or native platform failure.
 
 - Devlog (in Russian): https://t.me/lazyhatdev
 - Source: https://github.com/CertifiedBadIdeas/Compukters
-- Texture tools: [Piskel](https://www.piskelapp.com) and [LibreSprite](https://libresprite.github.io/)
 - License: GPL-3.0
