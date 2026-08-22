@@ -21,9 +21,9 @@ package ru.lazyhat.compukters.compiler.worker.k2
 
 import org.jetbrains.kotlin.cli.common.ExitCode
 import org.jetbrains.kotlin.cli.common.arguments.K2JVMCompilerArguments
-import org.jetbrains.kotlin.cli.jvm.K2JVMCompiler
 import org.jetbrains.kotlin.config.Services
 import ru.lazyhat.compukters.compiler.worker.controller.TemporaryBudget
+import ru.lazyhat.compukters.compiler.worker.controller.TemporaryUsage
 import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
 import ru.lazyhat.compukters.compiler.worker.protocol.CompileRequest
 import ru.lazyhat.compukters.compiler.worker.protocol.DiagnosticCategory
@@ -86,13 +86,14 @@ class K2CompilerAdapter(
                 true,
             )
         }
-        return TemporaryBudget(inputs.temporaryRoot, request.limits).useRequestDirectory { requestRoot ->
+        val temporaryBudget = TemporaryBudget(inputs.temporaryRoot, request.limits)
+        temporaryBudget.requireCapacity(sourceFootprint(request))
+        return temporaryBudget.useRequestDirectory { requestRoot ->
             val sourceRoot = requestRoot.resolve("source").toAbsolutePath().normalize()
             val output = requestRoot.resolve("output").toAbsolutePath().normalize()
             var reachedIr = false
             var artifact: BinaryValue? = null
             sourceRoot.createDirectories()
-            output.createDirectories()
             val physicalSources =
                 request.sources.map { source ->
                     val physical = sourceRoot.resolve(source.path.value).normalize()
@@ -116,11 +117,26 @@ class K2CompilerAdapter(
                         limits = request.limits,
                     ),
                 ) {
-                    K2JVMCompiler().also { it.isReadingSettingsFromEnvironmentAllowed = false }.exec(collector, Services.EMPTY, arguments)
+                    IrOnlyJvmCliPipeline().execute(arguments, Services.EMPTY, collector)
                 }
             val failed = collector.hasErrors() || exitCode != ExitCode.OK
             K2CompilationResult(exitCode, collector.diagnostics, reachedIr, artifact?.takeIf { !failed }, failed)
         }
+    }
+
+    private fun sourceFootprint(request: CompileRequest): TemporaryUsage {
+        val directories = mutableSetOf("source")
+        request.sources.forEach { source ->
+            var parent = Path.of(source.path.value).parent
+            while (parent != null) {
+                directories += "source/$parent"
+                parent = parent.parent
+            }
+        }
+        return TemporaryUsage(
+            files = Math.addExact(request.sources.size, directories.size),
+            bytes = request.sources.sumOf { it.content.size.toLong() },
+        )
     }
 
     private fun fixedArguments(

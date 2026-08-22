@@ -16,6 +16,7 @@ import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
 import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
+import java.nio.CharBuffer
 import java.nio.channels.Channels
 import java.nio.charset.CodingErrorAction
 import java.nio.charset.StandardCharsets
@@ -69,6 +70,7 @@ object ProjectSnapshotLoader {
     ) {
         directory.forEach { entry ->
             val name = entry.fileName
+            validateFilename(name)
             val relative = relativeDirectory.resolve(name)
             val attrs = attributes(directory, name)
             when {
@@ -90,6 +92,23 @@ object ProjectSnapshotLoader {
                     throw ProjectSnapshotException("project contains a non-regular file")
                 }
             }
+        }
+    }
+
+    private fun validateFilename(name: Path) {
+        val decoded = name.toString()
+        val reconstructed = name.fileSystem.getPath(decoded)
+        if (reconstructed != name) {
+            throw ProjectSnapshotException("project filename is not strict UTF-8")
+        }
+        try {
+            StandardCharsets.UTF_8
+                .newEncoder()
+                .onMalformedInput(CodingErrorAction.REPORT)
+                .onUnmappableCharacter(CodingErrorAction.REPORT)
+                .encode(CharBuffer.wrap(decoded))
+        } catch (exception: Exception) {
+            throw ProjectSnapshotException("project filename is not strict UTF-8", exception)
         }
     }
 

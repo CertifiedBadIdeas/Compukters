@@ -19,6 +19,7 @@
 
 package ru.lazyhat.compukters.compiler.worker.server
 
+import ru.lazyhat.compukters.compiler.worker.controller.TemporaryBudgetException
 import ru.lazyhat.compukters.compiler.worker.k2.K2CompilationResult
 import ru.lazyhat.compukters.compiler.worker.protocol.CompilationMetrics
 import ru.lazyhat.compukters.compiler.worker.protocol.CompileRequest
@@ -90,6 +91,12 @@ class CompilerWorkerServer(
         val result =
             try {
                 compiler.compile(request)
+            } catch (exception: TemporaryBudgetException) {
+                return PlatformFailure(
+                    request.requestId,
+                    PlatformFailureClass.OUTPUT_LIMIT,
+                    bounded(exception.message ?: "temporary storage limit exceeded", request.limits.diagnosticTextBytes),
+                )
             } catch (exception: Exception) {
                 return PlatformFailure(
                     request.requestId,

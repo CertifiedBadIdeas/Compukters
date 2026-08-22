@@ -21,6 +21,7 @@ package ru.lazyhat.compukters.compiler.worker.server
 
 import org.jetbrains.kotlin.cli.common.ExitCode
 import ru.lazyhat.compukters.compiler.project.ProjectSource
+import ru.lazyhat.compukters.compiler.worker.controller.TemporaryBudgetException
 import ru.lazyhat.compukters.compiler.worker.k2.K2CompilationResult
 import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
 import ru.lazyhat.compukters.compiler.worker.protocol.CompileRequest
@@ -103,6 +104,17 @@ class CompilerWorkerServerTest {
         assertEquals(PlatformFailureClass.INTERNAL_COMPILER, failure.failureClass)
         assertTrue(failure.detail.isNotBlank())
         assertEquals(2, messages.size)
+    }
+
+    @Test
+    fun `temporary storage exhaustion becomes an output limit failure`() {
+        val request = request(12uL, "val answer: Int = 42")
+        val messages = serve(listOf(request)) { throw TemporaryBudgetException("request bytes exceed limit") }
+
+        val failure = assertIs<PlatformFailure>(messages[1])
+        assertEquals(request.requestId, failure.requestId)
+        assertEquals(PlatformFailureClass.OUTPUT_LIMIT, failure.failureClass)
+        assertEquals("request bytes exceed limit", failure.detail)
     }
 
     @Test

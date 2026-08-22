@@ -38,11 +38,22 @@ import java.nio.file.Path
 import java.util.concurrent.TimeUnit
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
+import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class ForkedWorkerRecoveryTest {
+    @Test
+    fun `oversized hostile frame exercises protocol v2 size rejection`() {
+        withController { controller ->
+            val failure = assertIs<PlatformFailure>(compile(controller, "OVERSIZED"))
+
+            assertEquals(PlatformFailureClass.PROTOCOL, failure.failureClass)
+            assertContains(failure.detail, "frame exceeds payload limit")
+        }
+    }
+
     @Test
     fun `hostile processes are classified and a later process succeeds`() {
         scenario("WRONG_ID", PlatformFailureClass.PROTOCOL)
