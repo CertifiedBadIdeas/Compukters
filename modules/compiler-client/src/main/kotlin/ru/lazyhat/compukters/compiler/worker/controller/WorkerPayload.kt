@@ -271,12 +271,12 @@ private fun forceDirectory(path: Path) {
     }
 }
 
-private fun validatePayloadPath(path: String) {
+internal fun validatePayloadPath(path: String) {
     VirtualSourcePath.of(path)
     require(path.startsWith("lib/") && path.endsWith(".jar")) { "payload entries must be jars below lib/" }
 }
 
-private fun hashManifest(
+internal fun hashManifest(
     identity: WorkerIdentity,
     mainClass: String,
     files: List<WorkerPayloadFile>,
