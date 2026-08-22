@@ -24,23 +24,56 @@ import ru.lazyhat.compukters.compiler.worker.protocol.CompileRequest
 import ru.lazyhat.compukters.compiler.worker.protocol.CompileResult
 import ru.lazyhat.compukters.compiler.worker.protocol.CompileSuccess
 import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
+import java.io.ByteArrayOutputStream
 import java.security.MessageDigest
 
 object CompilationIdentity {
     fun compute(request: CompileRequest): Hash256 {
         val digest = MessageDigest.getInstance("SHA-256")
-        digest.update("Compukter compilation identity v1\u0000".encodeToByteArray())
+        digest.update("Compukter compilation identity v2\u0000".encodeToByteArray())
         val identity = request.expectedIdentity
-        digest.field(1, request.source.toByteArray())
-        digest.field(2, request.path.value.encodeToByteArray())
-        digest.field(3, request.target.name.encodeToByteArray())
-        digest.field(4, identity.compilerVersion.encodeToByteArray())
-        digest.field(5, identity.languageVersion.encodeToByteArray())
-        digest.field(6, identity.codegenAbi.littleEndian())
-        digest.field(7, identity.payloadHash.toByteArray())
-        digest.field(8, identity.standardLibraryAbi.toByteArray())
-        digest.field(9, identity.artifactWriterVersion.littleEndian())
+        request.sources.forEach { source ->
+            digest.field(1, entry(source.path.value.encodeToByteArray(), source.content.toByteArray()))
+        }
+        digest.field(2, request.target.name.encodeToByteArray())
+        digest.field(3, identity.compilerVersion.encodeToByteArray())
+        digest.field(4, identity.languageVersion.encodeToByteArray())
+        digest.field(5, identity.codegenAbi.littleEndian())
+        digest.field(6, identity.payloadHash.toByteArray())
+        digest.field(7, identity.standardLibraryAbi.toByteArray())
+        digest.field(8, identity.artifactWriterVersion.littleEndian())
+        request.trustedApiBundles.forEach { bundle -> digest.field(9, entry(bundle.name.encodeToByteArray(), bundle.hash.toByteArray())) }
+        request.trustedAddonBundles.forEach { bundle ->
+            digest.field(10, entry(bundle.name.encodeToByteArray(), bundle.hash.toByteArray()))
+        }
+        digest.field(
+            11,
+            request.limits.sourceFiles
+                .toUInt()
+                .littleEndian(),
+        )
+        digest.field(
+            12,
+            request.limits.sourceFileBytes
+                .toUInt()
+                .littleEndian(),
+        )
+        digest.field(
+            13,
+            request.limits.sourceBytes
+                .toUInt()
+                .littleEndian(),
+        )
         return Hash256.of(digest.digest())
+    }
+
+    private fun entry(vararg fields: ByteArray): ByteArray {
+        val output = ByteArrayOutputStream()
+        fields.forEach { bytes ->
+            output.write(bytes.size.toUInt().littleEndian())
+            output.write(bytes)
+        }
+        return output.toByteArray()
     }
 }
 

@@ -25,6 +25,7 @@ import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerDiagnostic
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
+import java.nio.file.Path
 
 fun interface CompilationIrSink {
     fun accept(
@@ -37,9 +38,22 @@ class CompilationSession(
     val irSink: CompilationIrSink,
     val artifactSink: (BinaryValue) -> Unit = {},
     val diagnosticSink: (WorkerDiagnostic) -> Unit = {},
-    val sourcePath: VirtualSourcePath? = null,
+    sourcePaths: Map<String, VirtualSourcePath> = emptyMap(),
     val limits: WorkerLimits = WorkerLimits(),
-)
+) {
+    private val sourcePaths = sourcePaths.mapKeys { (path, _) -> normalize(path) }
+
+    fun virtualSourcePath(physicalPath: String?): VirtualSourcePath? = physicalPath?.let { sourcePaths[normalize(it)] }
+
+    private fun normalize(path: String): String =
+        runCatching {
+            Path
+                .of(path)
+                .toAbsolutePath()
+                .normalize()
+                .toString()
+        }.getOrDefault(path)
+}
 
 object CompilationBridge {
     private val active = ThreadLocal<CompilationSession?>()

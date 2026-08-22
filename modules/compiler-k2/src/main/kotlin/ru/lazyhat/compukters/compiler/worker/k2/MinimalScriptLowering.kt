@@ -24,6 +24,7 @@ import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.declarations.IrField
 import org.jetbrains.kotlin.ir.declarations.IrModuleFragment
 import org.jetbrains.kotlin.ir.expressions.IrConst
+import org.jetbrains.kotlin.ir.util.file
 import org.jetbrains.kotlin.ir.visitors.IrVisitorVoid
 import ru.lazyhat.compukters.compiler.artifact.model.Artifact
 import ru.lazyhat.compukters.compiler.artifact.model.Block
@@ -92,7 +93,7 @@ internal object MinimalScriptLowering {
                             DiagnosticCategory.INTERNAL,
                             "ARTIFACT_WRITE_${error.code}",
                             "artifact writer rejected lowered IR: ${error.detail}",
-                            session.sourcePath,
+                            null,
                             null,
                             null,
                         ),
@@ -110,7 +111,7 @@ internal object MinimalScriptLowering {
         DiagnosticCategory.TARGET,
         "UNSUPPORTED_IR",
         "source IR is outside the minimal script subset",
-        session.sourcePath,
+        session.virtualSourcePath(field?.file?.fileEntry?.name),
         field?.startOffset?.takeIf { it >= 0 }?.toUInt(),
         field?.endOffset?.takeIf { it >= 0 }?.toUInt(),
     )

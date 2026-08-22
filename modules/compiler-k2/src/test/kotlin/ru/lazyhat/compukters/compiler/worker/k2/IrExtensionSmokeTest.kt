@@ -43,7 +43,7 @@ class IrExtensionSmokeTest {
     fun `pinned K2 loads only the worker plugin and reaches typed script IR`() {
         val root = createTempDirectory("compukters-k2-ir-test-")
         try {
-            val source = root.resolve("project/main.kts")
+            val source = root.resolve("project/main.kt")
             source.parent.createDirectories()
             source.writeText("val answer: Int = 42")
             val output = root.resolve("classes")
@@ -69,7 +69,7 @@ class IrExtensionSmokeTest {
             assertEquals(ExitCode.OK, exitCode)
             assertEquals(1, modules.size)
             val facts = IrFacts().also { modules.single().accept(it, null) }
-            assertTrue(facts.sourceFiles.any { it.replace('\\', '/').endsWith("/project/main.kts") })
+            assertTrue(facts.sourceFiles.any { it.replace('\\', '/').endsWith("/project/main.kt") })
             assertTrue(42 in facts.intConstants, "typed IR must contain the Int constant 42")
             assertFailsWith<IllegalStateException> { CompilationBridge.requireSession() }
         } finally {

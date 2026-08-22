@@ -29,12 +29,16 @@ import ru.lazyhat.compukters.compiler.worker.protocol.WorkerDiagnostic
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
 import java.nio.file.Path
 
+data class DiagnosticSource(
+    val content: String,
+    val virtualPath: VirtualSourcePath,
+)
+
 class CompilerDiagnosticCollector(
-    private val source: String,
-    private val physicalPath: Path,
-    private val virtualPath: VirtualSourcePath,
+    sources: Map<Path, DiagnosticSource>,
     private val limits: WorkerLimits,
 ) : MessageCollector {
+    private val sources = sources.mapKeys { (path, _) -> path.toAbsolutePath().normalize() }
     private val collected = mutableListOf<WorkerDiagnostic>()
     private var textBytes = 0
     private var errors = false
@@ -61,31 +65,28 @@ class CompilerDiagnosticCollector(
                 severity.isWarning -> DiagnosticSeverity.WARNING
                 else -> DiagnosticSeverity.INFO
             }
-        val sanitized = message.replace(physicalPath.toString(), virtualPath.value)
-        val diagnosticCategory = category(sanitized)
-        val sourceLocation =
-            location?.takeIf {
-                runCatching {
-                    Path
-                        .of(
-                            it.path,
-                        ).normalize() == physicalPath.normalize()
-                }.getOrDefault(false)
+        val sanitized =
+            sources.entries.fold(message) { text, (physical, source) ->
+                text.replace(physical.toString(), source.virtualPath.value)
             }
+        val diagnosticCategory = category(sanitized)
+        val sourceLocation = location?.let { locate(it.path) }
         admit(
             WorkerDiagnostic(
                 mappedSeverity,
                 diagnosticCategory,
                 null,
                 sanitized,
-                sourceLocation?.let { virtualPath },
-                sourceLocation?.let { offset(it.line, it.column) },
-                sourceLocation?.let { offset(it.lineEnd, it.columnEnd) },
+                sourceLocation?.virtualPath,
+                sourceLocation?.let { offset(it.content, location.line, location.column) },
+                sourceLocation?.let { offset(it.content, location.lineEnd, location.columnEnd) },
             ),
         )
     }
 
     fun report(diagnostic: WorkerDiagnostic) = admit(diagnostic)
+
+    private fun locate(path: String): DiagnosticSource? = runCatching { sources[Path.of(path).toAbsolutePath().normalize()] }.getOrNull()
 
     private fun admit(diagnostic: WorkerDiagnostic) {
         errors = errors || diagnostic.severity == DiagnosticSeverity.ERROR
@@ -96,6 +97,7 @@ class CompilerDiagnosticCollector(
     }
 
     private fun offset(
+        source: String,
         line: Int,
         column: Int,
     ): UInt? {
@@ -106,6 +108,13 @@ class CompilerDiagnosticCollector(
         if (currentLine != line) return null
         return (index + column - 1).coerceAtMost(source.length).toUInt()
     }
+
+    constructor(
+        source: String,
+        physicalPath: Path,
+        virtualPath: VirtualSourcePath,
+        limits: WorkerLimits,
+    ) : this(mapOf(physicalPath to DiagnosticSource(source, virtualPath)), limits)
 
     private fun category(message: String): DiagnosticCategory =
         if (

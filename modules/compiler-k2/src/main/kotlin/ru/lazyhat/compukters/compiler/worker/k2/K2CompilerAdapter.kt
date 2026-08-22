@@ -61,8 +61,13 @@ class K2CompilerAdapter(
         require(Files.isRegularFile(inputs.workerJar)) { "validated worker jar is missing" }
         require(Files.isRegularFile(inputs.standardLibrary)) { "fixed standard library is missing" }
         require(Files.isDirectory(inputs.jdkHome)) { "fixed JDK home is missing" }
-        val source = request.source.toByteArray().decodeToString()
-        if (DEPENDENCY_ANNOTATION.containsMatchIn(source)) {
+        val forbiddenSource =
+            request.sources.firstOrNull {
+                DEPENDENCY_ANNOTATION.containsMatchIn(
+                    it.content.toByteArray().decodeToString(),
+                )
+            }
+        if (forbiddenSource != null) {
             return K2CompilationResult(
                 ExitCode.COMPILATION_ERROR,
                 listOf(
@@ -71,7 +76,7 @@ class K2CompilerAdapter(
                         DiagnosticCategory.TARGET,
                         null,
                         "script dependency refinement is unsupported",
-                        request.path,
+                        forbiddenSource.path,
                         0u,
                         0u,
                     ),
@@ -82,22 +87,32 @@ class K2CompilerAdapter(
             )
         }
         return TemporaryBudget(inputs.temporaryRoot, request.limits).useRequestDirectory { requestRoot ->
-            val physicalSource = requestRoot.resolve("source/main.kts")
-            val output = requestRoot.resolve("output")
+            val sourceRoot = requestRoot.resolve("source").toAbsolutePath().normalize()
+            val output = requestRoot.resolve("output").toAbsolutePath().normalize()
             var reachedIr = false
             var artifact: BinaryValue? = null
-            physicalSource.parent.createDirectories()
+            sourceRoot.createDirectories()
             output.createDirectories()
-            physicalSource.writeBytes(request.source.toByteArray())
-            val collector = CompilerDiagnosticCollector(source, physicalSource, request.path, request.limits)
-            val arguments = fixedArguments(physicalSource, output)
+            val physicalSources =
+                request.sources.map { source ->
+                    val physical = sourceRoot.resolve(source.path.value).normalize()
+                    require(physical.startsWith(sourceRoot)) { "source path escapes request tree" }
+                    physical.parent.createDirectories()
+                    physical.writeBytes(source.content.toByteArray())
+                    physical to DiagnosticSource(source.content.toByteArray().decodeToString(), source.path)
+                }
+            val collector = CompilerDiagnosticCollector(physicalSources.toMap(), request.limits)
+            val arguments = fixedArguments(physicalSources.map { it.first }, output)
             val exitCode =
                 CompilationBridge.withSession(
                     CompilationSession(
                         irSink = { _, _ -> reachedIr = true },
                         artifactSink = { artifact = it },
                         diagnosticSink = collector::report,
-                        sourcePath = request.path,
+                        sourcePaths =
+                            physicalSources.associate { (physical, source) ->
+                                physical.toString() to source.virtualPath
+                            },
                         limits = request.limits,
                     ),
                 ) {
@@ -109,12 +124,12 @@ class K2CompilerAdapter(
     }
 
     private fun fixedArguments(
-        source: Path,
+        sources: List<Path>,
         output: Path,
     ) = K2JVMCompilerArguments().apply {
-        freeArgs = listOf(source.toString())
+        freeArgs = sources.map(Path::toString)
         destination = output.toString()
-        moduleName = "compukter-script"
+        moduleName = "compukter-project"
         languageVersion = "2.4"
         apiVersion = "2.4"
         jvmTarget = "17"

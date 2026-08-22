@@ -19,6 +19,7 @@
 
 package ru.lazyhat.compukters.compiler.worker.protocol
 
+import ru.lazyhat.compukters.compiler.project.ProjectSource
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -35,7 +36,7 @@ class WorkerCodecTest {
                 0x50,
                 0x4b,
                 0x57,
-                0x01,
+                0x02,
                 0x00,
                 0x02,
                 0x00,
@@ -100,11 +101,16 @@ class WorkerCodecTest {
 
         val messages =
             listOf<WorkerMessage>(
-                WorkerHandshake(identity, setOf(WorkerFeature.SINGLE_SCRIPT, WorkerFeature.KOTLIN_IR), limits),
+                WorkerHandshake(identity, setOf(WorkerFeature.PROJECT_SNAPSHOT, WorkerFeature.KOTLIN_IR), limits),
                 CompileRequest(
                     requestId = requestId,
-                    path = VirtualSourcePath.of("project/main.kts"),
-                    source = BinaryValue.of("val answer: Int = 42".encodeToByteArray()),
+                    sources =
+                        listOf(
+                            ProjectSource(
+                                VirtualSourcePath.kotlin("project/main.kt"),
+                                BinaryValue.of("val answer: Int = 42".encodeToByteArray()),
+                            ),
+                        ),
                     target = TargetSettings.KOTLIN_2_4_JVM_17,
                     expectedIdentity = identity,
                     limits = limits,
@@ -132,8 +138,10 @@ class WorkerCodecTest {
         assertFailsWith<IllegalArgumentException> {
             CompileRequest(
                 requestId = RequestId.of(1uL),
-                path = VirtualSourcePath.of("project/main.kts"),
-                source = BinaryValue.of(byteArrayOf(0xc3.toByte(), 0x28)),
+                sources =
+                    listOf(
+                        ProjectSource(VirtualSourcePath.kotlin("project/main.kt"), BinaryValue.of(byteArrayOf(0xc3.toByte(), 0x28))),
+                    ),
                 target = TargetSettings.KOTLIN_2_4_JVM_17,
                 expectedIdentity = testIdentity(),
                 limits = WorkerLimits(),
@@ -146,8 +154,7 @@ class WorkerCodecTest {
         val request =
             CompileRequest(
                 RequestId.of(1uL),
-                VirtualSourcePath.of("a.kts"),
-                BinaryValue.of("ok".encodeToByteArray()),
+                listOf(ProjectSource(VirtualSourcePath.kotlin("a.kt"), BinaryValue.of("ok".encodeToByteArray()))),
                 TargetSettings.KOTLIN_2_4_JVM_17,
                 testIdentity(),
                 WorkerLimits(),
@@ -155,13 +162,13 @@ class WorkerCodecTest {
         val payload = WorkerMessageCodec.encode(request).payload
         val invalidUtf8 =
             payload.copyOf().also {
-                it[21] = 0xc3.toByte()
-                it[22] = 0x28
+                it[24] = 0xc3.toByte()
+                it[25] = 0x28
             }
         val unknownTarget =
             payload.copyOf().also {
-                it[23] = 0xff.toByte()
-                it[24] = 0xff.toByte()
+                it[26] = 0xff.toByte()
+                it[27] = 0xff.toByte()
             }
 
         assertEquals(

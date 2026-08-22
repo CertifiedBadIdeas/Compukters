@@ -1,0 +1,86 @@
+/*
+ * The Compukters Developers
+ *
+ * Copyright (C) 2026 Vsevolod Petrov (lazyhat)
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ */
+
+package ru.lazyhat.compukters.compiler.worker.protocol
+
+import ru.lazyhat.compukters.compiler.project.ProjectSource
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+
+class ProjectWorkerProtocolTest {
+    @Test
+    fun `multi-source request with trusted bundle identities round trips canonically`() {
+        val request =
+            CompileRequest(
+                requestId = RequestId.of(9uL),
+                sources = listOf(source("api/A.kt", "package api\nclass A"), source("main.kt", "val a = api.A()")),
+                target = TargetSettings.KOTLIN_2_4_JVM_17,
+                expectedIdentity = identity(),
+                limits = WorkerLimits(),
+                trustedApiBundles = listOf(TrustedBundleIdentity.of("core-api", Hash256.of(ByteArray(32) { 1 }))),
+                trustedAddonBundles = listOf(TrustedBundleIdentity.of("redstone", Hash256.of(ByteArray(32) { 2 }))),
+            )
+
+        assertEquals(request, WorkerMessageCodec.decode(WorkerMessageCodec.encode(request)))
+    }
+
+    @Test
+    fun `request rejects empty unordered duplicate invalid and over-limit source projects`() {
+        val limits = WorkerLimits(sourceFiles = 1, sourceFileBytes = 1, sourceBytes = 1)
+        assertFailsWith<IllegalArgumentException> { request(emptyList(), WorkerLimits()) }
+        assertFailsWith<IllegalArgumentException> { request(listOf(source("b.kt", "b"), source("a.kt", "a")), WorkerLimits()) }
+        assertFailsWith<IllegalArgumentException> { request(listOf(source("a.kt", "a"), source("a.kt", "a")), WorkerLimits()) }
+        assertFailsWith<IllegalArgumentException> { request(listOf(source("a.kt", "aa")), limits) }
+        assertFailsWith<IllegalArgumentException> {
+            request(
+                listOf(ProjectSource(VirtualSourcePath.kotlin("a.kt"), BinaryValue.of(byteArrayOf(0xc3.toByte(), 0x28)))),
+                WorkerLimits(),
+            )
+        }
+    }
+
+    @Test
+    fun `request rejects noncanonical trusted bundle identities`() {
+        val z = TrustedBundleIdentity.of("z", Hash256.zero())
+        val a = TrustedBundleIdentity.of("a", Hash256.zero())
+        assertFailsWith<IllegalArgumentException> { request(listOf(source("main.kt", "x")), WorkerLimits(), listOf(z, a)) }
+        assertFailsWith<IllegalArgumentException> { request(listOf(source("main.kt", "x")), WorkerLimits(), listOf(a, a)) }
+        assertFailsWith<IllegalArgumentException> { TrustedBundleIdentity.of("", Hash256.zero()) }
+    }
+
+    @Test
+    fun `protocol v2 explicitly rejects a v1 frame`() {
+        val encoded = WorkerCodec.encodeFrame(WorkerMessageCodec.encode(request(listOf(source("main.kt", "x")), WorkerLimits())))
+        val v1 =
+            encoded.copyOf().also { bytes ->
+                bytes[4] = 1
+                bytes[5] = 0
+            }
+
+        val failure = assertFailsWith<WorkerProtocolException> { WorkerCodec.decodeFrame(v1, WorkerLimits().frameBytes) }
+
+        assertEquals(WorkerProtocolError.WRONG_VERSION, failure.error)
+    }
+
+    private fun request(
+        sources: List<ProjectSource>,
+        limits: WorkerLimits,
+        api: List<TrustedBundleIdentity> = emptyList(),
+    ) = CompileRequest(RequestId.of(1uL), sources, TargetSettings.KOTLIN_2_4_JVM_17, identity(), limits, api, emptyList())
+
+    private fun source(
+        path: String,
+        text: String,
+    ) = ProjectSource(VirtualSourcePath.kotlin(path), BinaryValue.of(text.encodeToByteArray()))
+
+    private fun identity() = WorkerIdentity("2.4.10", "2.4", 1u, 1u, Hash256.zero(), Hash256.zero())
+}

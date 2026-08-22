@@ -19,6 +19,7 @@
 
 package ru.lazyhat.compukters.compiler.worker.integration
 
+import ru.lazyhat.compukters.compiler.project.ProjectSource
 import ru.lazyhat.compukters.compiler.worker.controller.JdkWorkerProcessFactory
 import ru.lazyhat.compukters.compiler.worker.controller.PublishedWorkerPayload
 import ru.lazyhat.compukters.compiler.worker.controller.WorkerLaunch
@@ -120,8 +121,7 @@ class WorkerMeasurementTest {
         limits: WorkerLimits,
     ) = CompileRequest(
         RequestId.of(id),
-        VirtualSourcePath.of("project/main.kts"),
-        BinaryValue.of("val answer: Int = 42".encodeToByteArray()),
+        listOf(ProjectSource(VirtualSourcePath.kotlin("project/main.kt"), BinaryValue.of("val answer: Int = 42".encodeToByteArray()))),
         TargetSettings.KOTLIN_2_4_JVM_17,
         identity,
         limits,

@@ -58,7 +58,7 @@ class CompilerWorkerServer(
         write(
             WorkerHandshake(
                 identity,
-                setOf(WorkerFeature.SINGLE_SCRIPT, WorkerFeature.KOTLIN_IR),
+                setOf(WorkerFeature.PROJECT_SNAPSHOT, WorkerFeature.KOTLIN_IR),
                 hardLimits,
             ),
         )
@@ -125,9 +125,13 @@ class CompilerWorkerServer(
     }
 
     private fun admit(request: CompileRequest): CompileRequest? {
-        if (request.expectedIdentity != identity || request.source.size > hardLimits.sourceBytes) return null
+        if (request.expectedIdentity != identity || request.sources.size > hardLimits.sourceFiles) return null
+        if (request.sources.any { it.content.size > hardLimits.sourceFileBytes }) return null
+        if (request.sources.sumOf { it.content.size.toLong() } > hardLimits.sourceBytes.toLong()) return null
         val tightened = request.limits.tightenedWith(hardLimits)
-        if (request.source.size > tightened.sourceBytes) return null
+        if (request.sources.size > tightened.sourceFiles) return null
+        if (request.sources.any { it.content.size > tightened.sourceFileBytes }) return null
+        if (request.sources.sumOf { it.content.size.toLong() } > tightened.sourceBytes.toLong()) return null
         return request.copy(limits = tightened)
     }
 
@@ -199,6 +203,8 @@ private fun InputStream.readExactly(count: Int): ByteArray {
 
 private fun WorkerLimits.tightenedWith(hard: WorkerLimits): WorkerLimits =
     WorkerLimits(
+        sourceFiles = minOf(sourceFiles, hard.sourceFiles),
+        sourceFileBytes = minOf(sourceFileBytes, hard.sourceFileBytes),
         sourceBytes = minOf(sourceBytes, hard.sourceBytes),
         frameBytes = minOf(frameBytes, hard.frameBytes),
         artifactBytes = minOf(artifactBytes, hard.artifactBytes),

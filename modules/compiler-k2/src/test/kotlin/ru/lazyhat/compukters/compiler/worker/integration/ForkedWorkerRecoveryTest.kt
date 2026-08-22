@@ -19,6 +19,8 @@
 
 package ru.lazyhat.compukters.compiler.worker.integration
 
+import ru.lazyhat.compukters.compiler.project.ProjectSnapshot
+import ru.lazyhat.compukters.compiler.project.ProjectSource
 import ru.lazyhat.compukters.compiler.worker.controller.CompilerWorkerController
 import ru.lazyhat.compukters.compiler.worker.controller.CompilerWorkerPolicy
 import ru.lazyhat.compukters.compiler.worker.controller.JdkWorkerProcessFactory
@@ -29,6 +31,7 @@ import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
 import ru.lazyhat.compukters.compiler.worker.protocol.CompileSuccess
 import ru.lazyhat.compukters.compiler.worker.protocol.PlatformFailure
 import ru.lazyhat.compukters.compiler.worker.protocol.PlatformFailureClass
+import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
 import java.io.File
 import java.nio.file.Path
@@ -109,7 +112,13 @@ class ForkedWorkerRecoveryTest {
     private fun compile(
         controller: CompilerWorkerController,
         source: String,
-    ) = controller.compile(BinaryValue.of(source.encodeToByteArray())).get(15, TimeUnit.SECONDS)
+    ) = controller
+        .compile(
+            ProjectSnapshot.of(
+                listOf(ProjectSource(VirtualSourcePath.kotlin("project/main.kt"), BinaryValue.of(source.encodeToByteArray()))),
+                WorkerLimits(),
+            ),
+        ).get(15, TimeUnit.SECONDS)
 
     private fun hostilePayload(): PublishedWorkerPayload {
         val classpath = checkNotNull(System.getProperty("compukters.worker.test-classpath")).split(File.pathSeparator).map(Path::of)

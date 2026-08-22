@@ -21,7 +21,7 @@ package ru.lazyhat.compukters.compiler.worker.protocol
 
 object WorkerCodec {
     private const val HEADER_BYTES = 12
-    private const val VERSION = 1
+    private const val VERSION = 2
     private val magic = byteArrayOf(0x43, 0x50, 0x4b, 0x57)
 
     fun encodeFrame(frame: WorkerFrame): ByteArray {
