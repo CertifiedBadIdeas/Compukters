@@ -102,7 +102,7 @@ class LegacyImplementationRemovalTest {
                                 relative.startsWith(".agents/") ||
                                 relative.startsWith("docs/superpowers/") ||
                                 relative.startsWith("build/") ||
-                            relative.contains("/build/") ||
+                                relative.contains("/build/") ||
                                 relative.contains("/.gradle/")
                         )
                     }.filter { path ->
