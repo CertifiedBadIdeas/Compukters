@@ -21,6 +21,7 @@ package ru.lazyhat.compukters.compiler.worker.k2
 
 import org.jetbrains.kotlin.cli.common.messages.CompilerMessageLocation
 import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity
+import ru.lazyhat.compukters.compiler.project.ProjectSource
 import ru.lazyhat.compukters.compiler.worker.controller.TemporaryBudgetException
 import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
 import ru.lazyhat.compukters.compiler.worker.protocol.CompileRequest
@@ -45,7 +46,7 @@ import kotlin.test.assertTrue
 
 class K2CompilerAdapterTest {
     @Test
-    fun `valid script reaches IR and request files are removed`() =
+    fun `valid Kotlin source reaches IR and request files are removed`() =
         withAdapter { adapter, root ->
             val result = adapter.compile(request("val answer: Int = 42"))
             assertTrue(result.reachedIr)
@@ -63,7 +64,7 @@ class K2CompilerAdapterTest {
                     it.severity == DiagnosticSeverity.ERROR && it.category == DiagnosticCategory.SYNTAX
                 }
             assertEquals(DiagnosticCategory.SYNTAX, syntaxError.category, syntax.diagnostics.toString())
-            assertEquals("project/virtual.kts", syntaxError.path?.value)
+            assertEquals("project/virtual.kt", syntaxError.path?.value)
             assertTrue(syntaxError.startUtf16 != null)
             assertNull(syntax.artifact)
 
@@ -85,13 +86,33 @@ class K2CompilerAdapterTest {
         }
 
     @Test
+    fun `cross-file reference participates in one K2 session before bounded lowering`() =
+        withAdapter { adapter, _ ->
+            val result =
+                adapter.compile(
+                    request(
+                        listOf(
+                            source("project/Helper.kt", "package project\nfun shared() = 41"),
+                            source("project/Main.kt", "package project\nval answer = shared() + 1"),
+                        ),
+                    ),
+                )
+
+            assertTrue(result.reachedIr)
+            val unsupported = result.diagnostics.single { it.code == "UNSUPPORTED_IR" }
+            assertEquals("project/Main.kt", unsupported.path?.value)
+            assertTrue(unsupported.startUtf16 != null)
+            assertFalse(result.diagnostics.any { it.message.contains("unresolved reference", ignoreCase = true) })
+        }
+
+    @Test
     fun `diagnostic count text and physical paths are bounded`() {
-        val physical = Path.of("private/request/source/main.kts")
+        val physical = Path.of("private/request/source/main.kt")
         val collector =
             CompilerDiagnosticCollector(
                 "val x = 1",
                 physical,
-                VirtualSourcePath.of("project/main.kts"),
+                VirtualSourcePath.kotlin("project/main.kt"),
                 WorkerLimits(diagnostics = 1, diagnosticTextBytes = 8),
             )
         repeat(3) {
@@ -154,15 +175,24 @@ class K2CompilerAdapterTest {
     private fun request(
         source: String,
         limits: WorkerLimits = WorkerLimits(),
+    ): CompileRequest = request(listOf(source("project/virtual.kt", source)), limits)
+
+    private fun request(
+        sources: List<ProjectSource>,
+        limits: WorkerLimits = WorkerLimits(),
     ): CompileRequest =
         CompileRequest(
             RequestId.of(1u),
-            VirtualSourcePath.of("project/virtual.kts"),
-            BinaryValue.of(source.encodeToByteArray()),
+            sources,
             TargetSettings.KOTLIN_2_4_JVM_17,
             identity(),
             limits,
         )
+
+    private fun source(
+        path: String,
+        content: String,
+    ) = ProjectSource(VirtualSourcePath.kotlin(path), BinaryValue.of(content.encodeToByteArray()))
 
     private fun identity() = WorkerIdentity("2.4.10", "2.4", 1u, 1u, Hash256.zero(), Hash256.zero())
 }

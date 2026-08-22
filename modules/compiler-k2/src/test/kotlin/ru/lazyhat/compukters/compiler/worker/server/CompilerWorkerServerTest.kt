@@ -20,6 +20,7 @@
 package ru.lazyhat.compukters.compiler.worker.server
 
 import org.jetbrains.kotlin.cli.common.ExitCode
+import ru.lazyhat.compukters.compiler.project.ProjectSource
 import ru.lazyhat.compukters.compiler.worker.k2.K2CompilationResult
 import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
 import ru.lazyhat.compukters.compiler.worker.protocol.CompileRequest
@@ -77,7 +78,7 @@ class CompilerWorkerServerTest {
                 DiagnosticCategory.SYNTAX,
                 null,
                 "expecting an expression",
-                request.path,
+                request.sources.single().path,
                 13u,
                 14u,
             )
@@ -153,8 +154,7 @@ class CompilerWorkerServerTest {
         source: String,
     ) = CompileRequest(
         RequestId.of(id),
-        VirtualSourcePath.of("project/main.kts"),
-        BinaryValue.of(source.encodeToByteArray()),
+        listOf(ProjectSource(VirtualSourcePath.kotlin("project/main.kt"), BinaryValue.of(source.encodeToByteArray()))),
         TargetSettings.KOTLIN_2_4_JVM_17,
         identity(),
         HARD_LIMITS,

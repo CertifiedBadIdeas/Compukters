@@ -19,6 +19,8 @@
 
 package ru.lazyhat.compukters.compiler.worker.integration
 
+import ru.lazyhat.compukters.compiler.project.ProjectSnapshot
+import ru.lazyhat.compukters.compiler.project.ProjectSource
 import ru.lazyhat.compukters.compiler.worker.controller.CompilerWorkerController
 import ru.lazyhat.compukters.compiler.worker.controller.CompilerWorkerPolicy
 import ru.lazyhat.compukters.compiler.worker.controller.JdkWorkerProcessFactory
@@ -32,6 +34,7 @@ import ru.lazyhat.compukters.compiler.worker.protocol.CompileSuccess
 import ru.lazyhat.compukters.compiler.worker.protocol.CompilerFailure
 import ru.lazyhat.compukters.compiler.worker.protocol.DiagnosticCategory
 import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
+import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerIdentity
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
 import java.nio.file.Files
@@ -95,7 +98,13 @@ class ForkedCompilerWorkerTest {
     private fun compile(
         controller: CompilerWorkerController,
         source: String,
-    ) = controller.compile(BinaryValue.of(source.encodeToByteArray())).get(90, TimeUnit.SECONDS)
+    ) = controller
+        .compile(
+            ProjectSnapshot.of(
+                listOf(ProjectSource(VirtualSourcePath.kotlin("project/main.kt"), BinaryValue.of(source.encodeToByteArray()))),
+                WorkerLimits(),
+            ),
+        ).get(90, TimeUnit.SECONDS)
 
     private fun payload(root: Path): PublishedWorkerPayload {
         val lines = Files.readAllLines(root.resolve("worker.payload"))

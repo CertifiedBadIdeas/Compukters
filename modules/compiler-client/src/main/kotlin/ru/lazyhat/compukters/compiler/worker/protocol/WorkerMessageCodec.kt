@@ -19,6 +19,7 @@
 
 package ru.lazyhat.compukters.compiler.worker.protocol
 
+import ru.lazyhat.compukters.compiler.project.ProjectSource
 import java.io.ByteArrayOutputStream
 import java.nio.CharBuffer
 import java.nio.charset.CharacterCodingException
@@ -26,6 +27,8 @@ import java.nio.charset.CodingErrorAction
 import java.nio.charset.StandardCharsets
 
 private const val MAX_WIRE_DIAGNOSTICS = 4096
+private const val MAX_WIRE_SOURCES = 4096
+private const val MAX_WIRE_BUNDLES = 1024
 
 object WorkerMessageCodec {
     fun encode(message: WorkerMessage): WorkerFrame {
@@ -39,11 +42,12 @@ object WorkerMessageCodec {
 
             is CompileRequest -> {
                 sink.u64(message.requestId.value)
-                sink.string(message.path.value)
-                sink.bytes(message.source)
+                sink.sources(message.sources)
                 sink.u16(message.target.ordinal)
                 sink.identity(message.expectedIdentity)
                 sink.limits(message.limits)
+                sink.bundles(message.trustedApiBundles)
+                sink.bundles(message.trustedAddonBundles)
             }
 
             is CompileSuccess -> {
@@ -154,7 +158,27 @@ private class MessageSink {
         hash(value.standardLibraryAbi)
     }
 
+    fun sources(values: List<ProjectSource>) {
+        require(values.size <= MAX_WIRE_SOURCES) { "source count exceeds wire limit" }
+        u32(values.size)
+        values.forEach { source ->
+            string(source.path.value)
+            bytes(source.content)
+        }
+    }
+
+    fun bundles(values: List<TrustedBundleIdentity>) {
+        require(values.size <= MAX_WIRE_BUNDLES) { "trusted bundle count exceeds wire limit" }
+        u32(values.size)
+        values.forEach { bundle ->
+            string(bundle.name)
+            hash(bundle.hash)
+        }
+    }
+
     fun limits(value: WorkerLimits) {
+        u32(value.sourceFiles)
+        u32(value.sourceFileBytes)
         u32(value.sourceBytes)
         u32(value.frameBytes)
         u32(value.artifactBytes)
@@ -259,7 +283,19 @@ private class MessageSource(
 
     fun identity() = WorkerIdentity(string(), string(), u32Bits(), u32Bits(), hash(), hash())
 
-    fun limits() = WorkerLimits(u32(), u32(), u32(), u32(), u32(), u32(), u64().toLongChecked(), u32())
+    fun limits() =
+        WorkerLimits(
+            sourceFiles = u32(),
+            sourceFileBytes = u32(),
+            sourceBytes = u32(),
+            frameBytes = u32(),
+            artifactBytes = u32(),
+            diagnostics = u32(),
+            diagnosticTextBytes = u32(),
+            stderrBytes = u32(),
+            temporaryBytes = u64().toLongChecked(),
+            temporaryFiles = u32(),
+        )
 
     fun features(): Set<WorkerFeature> {
         val bits = u64()
@@ -270,26 +306,56 @@ private class MessageSource(
 
     fun compileRequest(): CompileRequest {
         val requestId = RequestId.of(u64())
-        val path =
-            try {
-                VirtualSourcePath.of(string())
-            } catch (exception: IllegalArgumentException) {
-                fail(WorkerProtocolError.INVALID_PATH, exception.message ?: "invalid virtual path")
-            }
-        val sourceBytes = bytes()
-        try {
-            sourceBytes.decodeUtf8()
-        } catch (_: CharacterCodingException) {
-            fail(WorkerProtocolError.INVALID_UTF8, "source is not strict UTF-8")
-        }
+        val sources = sources()
         val target = enumValue<TargetSettings>()
         val identity = identity()
         val limits = limits()
+        val apiBundles = bundles()
+        val addonBundles = bundles()
         return try {
-            CompileRequest(requestId, path, sourceBytes, target, identity, limits)
+            CompileRequest(requestId, sources, target, identity, limits, apiBundles, addonBundles)
         } catch (exception: IllegalArgumentException) {
             fail(WorkerProtocolError.INVALID_MESSAGE_VALUE, exception.message ?: "invalid compile request")
         }
+    }
+
+    fun sources(): List<ProjectSource> {
+        val count = boundedCount(MAX_WIRE_SOURCES, "source")
+        return List(count) {
+            val path =
+                try {
+                    VirtualSourcePath.kotlin(string())
+                } catch (exception: IllegalArgumentException) {
+                    fail(WorkerProtocolError.INVALID_PATH, exception.message ?: "invalid virtual source path")
+                }
+            val content = bytes()
+            try {
+                content.decodeUtf8()
+            } catch (_: CharacterCodingException) {
+                fail(WorkerProtocolError.INVALID_UTF8, "source is not strict UTF-8")
+            }
+            ProjectSource(path, content)
+        }
+    }
+
+    fun bundles(): List<TrustedBundleIdentity> {
+        val count = boundedCount(MAX_WIRE_BUNDLES, "trusted bundle")
+        return List(count) {
+            try {
+                TrustedBundleIdentity.of(string(), hash())
+            } catch (exception: IllegalArgumentException) {
+                fail(WorkerProtocolError.INVALID_MESSAGE_VALUE, exception.message ?: "invalid trusted bundle identity")
+            }
+        }
+    }
+
+    private fun boundedCount(
+        maximum: Int,
+        description: String,
+    ): Int {
+        val count = u32()
+        if (count > maximum) fail(WorkerProtocolError.COUNT_LIMIT, "$description count exceeds wire limit")
+        return count
     }
 
     fun diagnostics(): List<WorkerDiagnostic> {

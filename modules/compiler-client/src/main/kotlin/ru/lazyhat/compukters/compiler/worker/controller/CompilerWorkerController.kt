@@ -19,7 +19,7 @@
 
 package ru.lazyhat.compukters.compiler.worker.controller
 
-import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
+import ru.lazyhat.compukters.compiler.project.ProjectSnapshot
 import ru.lazyhat.compukters.compiler.worker.protocol.CompileRequest
 import ru.lazyhat.compukters.compiler.worker.protocol.CompileResult
 import ru.lazyhat.compukters.compiler.worker.protocol.CompileSuccess
@@ -28,7 +28,7 @@ import ru.lazyhat.compukters.compiler.worker.protocol.PlatformFailure
 import ru.lazyhat.compukters.compiler.worker.protocol.PlatformFailureClass
 import ru.lazyhat.compukters.compiler.worker.protocol.RequestId
 import ru.lazyhat.compukters.compiler.worker.protocol.TargetSettings
-import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
+import ru.lazyhat.compukters.compiler.worker.protocol.TrustedBundleIdentity
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerCodec
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerFeature
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerHandshake
@@ -85,9 +85,10 @@ class CompilerWorkerController(
         get() = synchronized(lock) { state }
 
     fun compile(
-        source: BinaryValue,
-        path: VirtualSourcePath = VirtualSourcePath.of("project/main.kts"),
+        snapshot: ProjectSnapshot,
         target: TargetSettings = TargetSettings.KOTLIN_2_4_JVM_17,
+        trustedApiBundles: List<TrustedBundleIdentity> = emptyList(),
+        trustedAddonBundles: List<TrustedBundleIdentity> = emptyList(),
     ): CompletableFuture<CompileResult> {
         val future = CompletableFuture<CompileResult>()
         var startDrain = false
@@ -103,7 +104,19 @@ class CompilerWorkerController(
             check(nextRequestId != 0uL) { "request ID space exhausted" }
             val requestId = RequestId.of(nextRequestId)
             nextRequestId++
-            val pending = Pending(CompileRequest(requestId, path, source, target, launch.expectedIdentity, limits), future)
+            val pending =
+                Pending(
+                    CompileRequest(
+                        requestId,
+                        snapshot.sources,
+                        target,
+                        launch.expectedIdentity,
+                        limits,
+                        trustedApiBundles,
+                        trustedAddonBundles,
+                    ),
+                    future,
+                )
             if (active == null) {
                 active = pending
                 startDrain = true
@@ -360,7 +373,7 @@ class CompilerWorkerController(
 
     private companion object {
         const val MAX_FAILURE_DETAIL_BYTES = 4096
-        val REQUIRED_FEATURES = setOf(WorkerFeature.SINGLE_SCRIPT, WorkerFeature.KOTLIN_IR)
+        val REQUIRED_FEATURES = setOf(WorkerFeature.PROJECT_SNAPSHOT, WorkerFeature.KOTLIN_IR)
         val MEMORY_FAILURE_MARKERS = listOf("OutOfMemoryError", "Java heap space", "Metaspace")
     }
 

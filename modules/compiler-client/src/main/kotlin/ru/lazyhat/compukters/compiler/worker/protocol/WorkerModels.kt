@@ -19,7 +19,11 @@
 
 package ru.lazyhat.compukters.compiler.worker.protocol
 
+import ru.lazyhat.compukters.compiler.project.ProjectSnapshot
+import ru.lazyhat.compukters.compiler.project.ProjectSource
 import java.nio.ByteBuffer
+import java.nio.CharBuffer
+import java.nio.charset.CharacterCodingException
 import java.nio.charset.CodingErrorAction
 import java.nio.charset.StandardCharsets
 
@@ -82,6 +86,8 @@ value class RequestId private constructor(
 }
 
 data class WorkerLimits(
+    val sourceFiles: Int = 64,
+    val sourceFileBytes: Int = 256 * 1024,
     val sourceBytes: Int = 256 * 1024,
     val frameBytes: Int = 20 * 1024 * 1024,
     val artifactBytes: Int = 16 * 1024 * 1024,
@@ -93,7 +99,7 @@ data class WorkerLimits(
 ) {
     init {
         require(
-            sourceBytes >= 0 && frameBytes >= 0 && artifactBytes >= 0 && diagnostics >= 0 &&
+            sourceFiles >= 0 && sourceFileBytes >= 0 && sourceBytes >= 0 && frameBytes >= 0 && artifactBytes >= 0 && diagnostics >= 0 &&
                 diagnosticTextBytes >= 0 && stderrBytes >= 0 && temporaryBytes >= 0 && temporaryFiles >= 0,
         ) { "worker limits must be non-negative" }
     }
@@ -108,7 +114,7 @@ data class WorkerIdentity(
     val standardLibraryAbi: Hash256,
 )
 
-enum class WorkerFeature { SINGLE_SCRIPT, KOTLIN_IR }
+enum class WorkerFeature { PROJECT_SNAPSHOT, KOTLIN_IR }
 
 enum class TargetSettings { KOTLIN_2_4_JVM_17 }
 
@@ -159,24 +165,87 @@ sealed interface CompileResult : WorkerMessage {
     val requestId: RequestId
 }
 
-data class CompileRequest(
+class TrustedBundleIdentity private constructor(
+    val name: String,
+    val hash: Hash256,
+) {
+    override fun equals(other: Any?): Boolean = other is TrustedBundleIdentity && name == other.name && hash == other.hash
+
+    override fun hashCode(): Int = 31 * name.hashCode() + hash.hashCode()
+
+    companion object {
+        fun of(
+            name: String,
+            hash: Hash256,
+        ): TrustedBundleIdentity {
+            require(name.isNotEmpty()) { "trusted bundle name must not be empty" }
+            require('\u0000' !in name) { "trusted bundle name contains NUL" }
+            require(name.encodeToByteArray().decodeToString() == name) { "trusted bundle name must be strict UTF-8" }
+            return TrustedBundleIdentity(name, hash)
+        }
+    }
+}
+
+class CompileRequest(
     val requestId: RequestId,
-    val path: VirtualSourcePath,
-    val source: BinaryValue,
+    sources: List<ProjectSource>,
     val target: TargetSettings,
     val expectedIdentity: WorkerIdentity,
     val limits: WorkerLimits,
+    trustedApiBundles: List<TrustedBundleIdentity> = emptyList(),
+    trustedAddonBundles: List<TrustedBundleIdentity> = emptyList(),
 ) : WorkerMessage {
     override val type = WorkerMessageType.COMPILE_REQUEST
+    val sources: List<ProjectSource> = ProjectSnapshot.of(sources, limits).sources
+    val trustedApiBundles: List<TrustedBundleIdentity> = trustedApiBundles.toList()
+    val trustedAddonBundles: List<TrustedBundleIdentity> = trustedAddonBundles.toList()
 
     init {
-        try {
-            source.decodeUtf8()
-        } catch (exception: Exception) {
-            throw IllegalArgumentException("source must be strict UTF-8", exception)
-        }
-        require(source.size <= limits.sourceBytes) { "source exceeds request limit" }
+        requireCanonicalBundles(this.trustedApiBundles, "trusted API bundles")
+        requireCanonicalBundles(this.trustedAddonBundles, "trusted add-on bundles")
     }
+
+    fun copy(
+        requestId: RequestId = this.requestId,
+        sources: List<ProjectSource> = this.sources,
+        target: TargetSettings = this.target,
+        expectedIdentity: WorkerIdentity = this.expectedIdentity,
+        limits: WorkerLimits = this.limits,
+        trustedApiBundles: List<TrustedBundleIdentity> = this.trustedApiBundles,
+        trustedAddonBundles: List<TrustedBundleIdentity> = this.trustedAddonBundles,
+    ): CompileRequest = CompileRequest(requestId, sources, target, expectedIdentity, limits, trustedApiBundles, trustedAddonBundles)
+
+    override fun equals(other: Any?): Boolean =
+        other is CompileRequest &&
+            requestId == other.requestId &&
+            sources == other.sources &&
+            target == other.target &&
+            expectedIdentity == other.expectedIdentity &&
+            limits == other.limits &&
+            trustedApiBundles == other.trustedApiBundles &&
+            trustedAddonBundles == other.trustedAddonBundles
+
+    override fun hashCode(): Int =
+        listOf(requestId, sources, target, expectedIdentity, limits, trustedApiBundles, trustedAddonBundles).hashCode()
+
+    private fun requireCanonicalBundles(
+        bundles: List<TrustedBundleIdentity>,
+        description: String,
+    ) {
+        bundles.zipWithNext().forEach { (left, right) ->
+            require(left.name.encodeToByteArray().compareUnsigned(right.name.encodeToByteArray()) < 0) {
+                "$description must be uniquely ordered by UTF-8 name"
+            }
+        }
+    }
+}
+
+private fun ByteArray.compareUnsigned(other: ByteArray): Int {
+    repeat(minOf(size, other.size)) { index ->
+        val result = (this[index].toInt() and 0xff).compareTo(other[index].toInt() and 0xff)
+        if (result != 0) return result
+    }
+    return size.compareTo(other.size)
 }
 
 data class CompileSuccess(
@@ -217,8 +286,30 @@ value class VirtualSourcePath private constructor(
             require(value.split('/').none { it.isEmpty() || it == "." || it == ".." }) {
                 "virtual source path contains a non-canonical segment"
             }
+            try {
+                StandardCharsets.UTF_8
+                    .newEncoder()
+                    .onMalformedInput(CodingErrorAction.REPORT)
+                    .onUnmappableCharacter(CodingErrorAction.REPORT)
+                    .encode(CharBuffer.wrap(value))
+            } catch (exception: CharacterCodingException) {
+                throw IllegalArgumentException("virtual source path must be strict UTF-8", exception)
+            }
             return VirtualSourcePath(value)
         }
+
+        /**
+         * Creates a canonical guest Kotlin source path. Protocol diagnostic paths use [of]
+         * because diagnostics may refer to non-source virtual files.
+         */
+        fun kotlin(value: String): VirtualSourcePath {
+            val path = of(value)
+            require(!DRIVE_PATH.matches(value)) { "virtual source path must not be drive-qualified" }
+            require(value.endsWith(".kt")) { "guest source path must end in .kt" }
+            return path
+        }
+
+        private val DRIVE_PATH = Regex("^[A-Za-z]:.*")
     }
 }
 

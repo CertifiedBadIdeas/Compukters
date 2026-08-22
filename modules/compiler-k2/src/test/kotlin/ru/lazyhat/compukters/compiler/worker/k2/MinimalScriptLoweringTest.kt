@@ -43,6 +43,7 @@ import ru.lazyhat.compukters.compiler.artifact.model.TypeRef
 import ru.lazyhat.compukters.compiler.artifact.model.ValueType
 import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriteResult
 import ru.lazyhat.compukters.compiler.artifact.write.ArtifactWriter
+import ru.lazyhat.compukters.compiler.project.ProjectSource
 import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
 import ru.lazyhat.compukters.compiler.worker.protocol.CompileRequest
 import ru.lazyhat.compukters.compiler.worker.protocol.DiagnosticCategory
@@ -195,8 +196,7 @@ class MinimalScriptLoweringTest {
     ): CompileRequest =
         CompileRequest(
             RequestId.of(1u),
-            VirtualSourcePath.of("project/main.kts"),
-            BinaryValue.of(source.encodeToByteArray()),
+            listOf(ProjectSource(VirtualSourcePath.kotlin("project/main.kt"), BinaryValue.of(source.encodeToByteArray()))),
             TargetSettings.KOTLIN_2_4_JVM_17,
             identity(),
             limits,

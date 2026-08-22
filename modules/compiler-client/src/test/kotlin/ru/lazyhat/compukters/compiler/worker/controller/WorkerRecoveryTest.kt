@@ -19,6 +19,8 @@
 
 package ru.lazyhat.compukters.compiler.worker.controller
 
+import ru.lazyhat.compukters.compiler.project.ProjectSnapshot
+import ru.lazyhat.compukters.compiler.project.ProjectSource
 import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
 import ru.lazyhat.compukters.compiler.worker.protocol.CompilationMetrics
 import ru.lazyhat.compukters.compiler.worker.protocol.CompileRequest
@@ -27,6 +29,7 @@ import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
 import ru.lazyhat.compukters.compiler.worker.protocol.PlatformFailure
 import ru.lazyhat.compukters.compiler.worker.protocol.PlatformFailureClass
 import ru.lazyhat.compukters.compiler.worker.protocol.RequestId
+import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerFeature
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerHandshake
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerIdentity
@@ -152,12 +155,16 @@ class WorkerRecoveryTest {
         }
     }
 
-    private fun source(text: String) = BinaryValue.of(text.encodeToByteArray())
+    private fun source(text: String): ProjectSnapshot =
+        ProjectSnapshot.of(
+            listOf(ProjectSource(VirtualSourcePath.kotlin("main.kt"), BinaryValue.of(text.encodeToByteArray()))),
+            WorkerLimits(),
+        )
 
     private fun handshake(
         identity: WorkerIdentity,
         limits: WorkerLimits,
-    ) = WorkerHandshake(identity, setOf(WorkerFeature.SINGLE_SCRIPT, WorkerFeature.KOTLIN_IR), limits)
+    ) = WorkerHandshake(identity, setOf(WorkerFeature.PROJECT_SNAPSHOT, WorkerFeature.KOTLIN_IR), limits)
 
     private fun success(requestId: RequestId): CompileSuccess {
         val artifact = byteArrayOf(1)

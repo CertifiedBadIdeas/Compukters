@@ -19,6 +19,8 @@
 
 package ru.lazyhat.compukters.compiler.worker.controller
 
+import ru.lazyhat.compukters.compiler.project.ProjectSnapshot
+import ru.lazyhat.compukters.compiler.project.ProjectSource
 import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
 import ru.lazyhat.compukters.compiler.worker.protocol.CompilationMetrics
 import ru.lazyhat.compukters.compiler.worker.protocol.CompileRequest
@@ -28,6 +30,8 @@ import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
 import ru.lazyhat.compukters.compiler.worker.protocol.PlatformFailure
 import ru.lazyhat.compukters.compiler.worker.protocol.PlatformFailureClass
 import ru.lazyhat.compukters.compiler.worker.protocol.RequestId
+import ru.lazyhat.compukters.compiler.worker.protocol.TrustedBundleIdentity
+import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerFeature
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerHandshake
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerIdentity
@@ -43,6 +47,23 @@ import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class CompilerWorkerControllerTest {
+    @Test
+    fun `trusted bundle identities are forwarded with the canonical snapshot`() =
+        withController(1) { controller, _, processes, identity, limits ->
+            val worker = processes.single()
+            worker.enqueue(handshake(identity, limits))
+            val api = TrustedBundleIdentity.of("api", Hash256.of(ByteArray(32) { 1 }))
+            val addon = TrustedBundleIdentity.of("addon", Hash256.of(ByteArray(32) { 2 }))
+
+            val future = controller.compile(source("first"), trustedApiBundles = listOf(api), trustedAddonBundles = listOf(addon))
+            val request = assertIs<CompileRequest>(worker.awaitWrite())
+            worker.enqueue(success(request.requestId, byteArrayOf(1)))
+
+            assertIs<CompileSuccess>(future.get(5, TimeUnit.SECONDS))
+            assertEquals(listOf(api), request.trustedApiBundles)
+            assertEquals(listOf(addon), request.trustedAddonBundles)
+        }
+
     @Test
     fun `worker starts lazily handshakes before compiling and is reused`() =
         withController(1) { controller, factory, processes, identity, limits ->
@@ -208,12 +229,16 @@ class CompilerWorkerControllerTest {
         }
     }
 
-    private fun source(text: String): BinaryValue = BinaryValue.of(text.encodeToByteArray())
+    private fun source(text: String): ProjectSnapshot =
+        ProjectSnapshot.of(
+            listOf(ProjectSource(VirtualSourcePath.kotlin("main.kt"), BinaryValue.of(text.encodeToByteArray()))),
+            WorkerLimits(),
+        )
 
     private fun handshake(
         identity: WorkerIdentity,
         limits: WorkerLimits,
-    ) = WorkerHandshake(identity, setOf(WorkerFeature.SINGLE_SCRIPT, WorkerFeature.KOTLIN_IR), limits)
+    ) = WorkerHandshake(identity, setOf(WorkerFeature.PROJECT_SNAPSHOT, WorkerFeature.KOTLIN_IR), limits)
 
     private fun success(
         requestId: RequestId,

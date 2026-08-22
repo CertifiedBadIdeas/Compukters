@@ -19,6 +19,7 @@
 
 package ru.lazyhat.compukters.compiler.worker.controller
 
+import ru.lazyhat.compukters.compiler.project.ProjectSource
 import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
 import ru.lazyhat.compukters.compiler.worker.protocol.CompilationMetrics
 import ru.lazyhat.compukters.compiler.worker.protocol.CompileRequest
@@ -27,6 +28,7 @@ import ru.lazyhat.compukters.compiler.worker.protocol.CompilerFailure
 import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
 import ru.lazyhat.compukters.compiler.worker.protocol.RequestId
 import ru.lazyhat.compukters.compiler.worker.protocol.TargetSettings
+import ru.lazyhat.compukters.compiler.worker.protocol.TrustedBundleIdentity
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerIdentity
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
@@ -44,8 +46,20 @@ class CompilationIdentityTest {
         val baseKey = CompilationIdentity.compute(base)
         val variants =
             listOf(
-                base.copy(source = BinaryValue.of("val answer = 43".encodeToByteArray())),
-                base.copy(path = VirtualSourcePath.of("project/other.kts")),
+                base.copy(
+                    sources =
+                        listOf(
+                            source("project/helper.kt", "val helper = 1"),
+                            source("project/main.kt", "val answer = 43"),
+                        ),
+                ),
+                base.copy(
+                    sources =
+                        listOf(
+                            source("project/helper.kt", "val helper = 1"),
+                            source("project/other.kt", "val answer = 42"),
+                        ),
+                ),
                 base.copy(
                     target = TargetSettings.KOTLIN_2_4_JVM_17,
                     expectedIdentity = base.expectedIdentity.copy(languageVersion = "2.4-x"),
@@ -55,6 +69,11 @@ class CompilationIdentityTest {
                 base.copy(expectedIdentity = base.expectedIdentity.copy(codegenAbi = 2u)),
                 base.copy(expectedIdentity = base.expectedIdentity.copy(standardLibraryAbi = hash(2))),
                 base.copy(expectedIdentity = base.expectedIdentity.copy(artifactWriterVersion = 2u)),
+                base.copy(trustedApiBundles = listOf(TrustedBundleIdentity.of("api", hash(5)))),
+                base.copy(trustedAddonBundles = listOf(TrustedBundleIdentity.of("addon", hash(6)))),
+                base.copy(limits = base.limits.copy(sourceFiles = base.limits.sourceFiles - 1)),
+                base.copy(limits = base.limits.copy(sourceFileBytes = base.limits.sourceFileBytes - 1)),
+                base.copy(limits = base.limits.copy(sourceBytes = base.limits.sourceBytes - 1)),
             )
 
         variants.forEach { variant -> assertNotEquals(baseKey, CompilationIdentity.compute(variant)) }
@@ -74,12 +93,16 @@ class CompilationIdentityTest {
     private fun request(): CompileRequest =
         CompileRequest(
             RequestId.of(1uL),
-            VirtualSourcePath.of("project/main.kts"),
-            BinaryValue.of("val answer = 42".encodeToByteArray()),
+            listOf(source("project/helper.kt", "val helper = 1"), source("project/main.kt", "val answer = 42")),
             TargetSettings.KOTLIN_2_4_JVM_17,
             WorkerIdentity("2.4.10", "2.4", 1u, 1u, hash(3), hash(4)),
             WorkerLimits(),
         )
+
+    private fun source(
+        path: String,
+        content: String,
+    ) = ProjectSource(VirtualSourcePath.kotlin(path), BinaryValue.of(content.encodeToByteArray()))
 
     private fun hash(value: Byte): Hash256 = Hash256.of(ByteArray(32) { value })
 
