@@ -155,6 +155,10 @@ data class WorkerHandshake(
     override val type = WorkerMessageType.HANDSHAKE
 }
 
+sealed interface CompileResult : WorkerMessage {
+    val requestId: RequestId
+}
+
 data class CompileRequest(
     val requestId: RequestId,
     val path: VirtualSourcePath,
@@ -176,28 +180,28 @@ data class CompileRequest(
 }
 
 data class CompileSuccess(
-    val requestId: RequestId,
+    override val requestId: RequestId,
     val artifact: BinaryValue,
     val artifactHash: Hash256,
     val warnings: List<WorkerDiagnostic>,
     val metrics: CompilationMetrics,
-) : WorkerMessage {
+) : CompileResult {
     override val type = WorkerMessageType.COMPILE_SUCCESS
 }
 
 data class CompilerFailure(
-    val requestId: RequestId,
+    override val requestId: RequestId,
     val diagnostics: List<WorkerDiagnostic>,
     val metrics: CompilationMetrics,
-) : WorkerMessage {
+) : CompileResult {
     override val type = WorkerMessageType.COMPILER_FAILURE
 }
 
 data class PlatformFailure(
-    val requestId: RequestId,
+    override val requestId: RequestId,
     val failureClass: PlatformFailureClass,
     val detail: String,
-) : WorkerMessage {
+) : CompileResult {
     override val type = WorkerMessageType.PLATFORM_FAILURE
 }
 
