@@ -65,6 +65,41 @@ import kotlin.test.assertTrue
 
 class MinimalScriptLoweringTest {
     @Test
+    fun `ordinary and suspend zero argument Unit main lower deterministically`() =
+        withAdapter { adapter ->
+            listOf(false, true).forEach { suspending ->
+                val source = if (suspending) "suspend fun main() {}" else "fun main() {}"
+                val first = adapter.compile(request(source))
+                val second = adapter.compile(request(source))
+                val expected =
+                    (ArtifactWriter.write(expectedMainArtifact(suspending)) as ArtifactWriteResult.Success)
+                        .bytes
+
+                assertContentEquals(expected, assertNotNull(first.artifact).toByteArray())
+                assertContentEquals(expected, assertNotNull(second.artifact).toByteArray())
+                assertTrue(first.diagnostics.none { it.severity.name == "ERROR" })
+            }
+        }
+
+    @Test
+    fun `entry policy rejects duplicate and invalid main functions`() =
+        withAdapter { adapter ->
+            val duplicate =
+                adapter.compile(
+                    request(
+                        "a/Main.kt" to "package a\nfun main() {}",
+                        "b/Main.kt" to "package b\nsuspend fun main() {}",
+                    ),
+                )
+            val invalid = adapter.compile(request("fun main(value: String) {}"))
+
+            listOf(duplicate, invalid).forEach { result ->
+                assertNull(result.artifact)
+                assertTrue(result.diagnostics.any { it.category == DiagnosticCategory.TARGET && it.code == "INVALID_ENTRY_POINT" })
+            }
+        }
+
+    @Test
     fun `typed Int constant lowers to deterministic minimal artifact`() =
         withAdapter { adapter ->
             val first = assertNotNull(adapter.compile(request("val answer: Int = 42")).artifact).toByteArray()
@@ -167,6 +202,57 @@ class MinimalScriptLoweringTest {
                 ),
         )
 
+    private fun expectedMainArtifact(suspending: Boolean): Artifact =
+        Artifact(
+            semanticFeatures =
+                if (suspending) {
+                    setOf(
+                        ru.lazyhat.compukters.compiler.artifact.model.SemanticFeature.COROUTINES,
+                    )
+                } else {
+                    emptySet()
+                },
+            manifest = Manifest.minimal(maximumBlockCost = 1u),
+            entry = EntryPoint(ModuleId.of(0u), FunctionId.of(0u)),
+            modules =
+                listOf(
+                    Module(
+                        name = StringId.of(0u),
+                        kind = ModuleKind.APPLICATION,
+                        strings = listOf(MetadataText.of("app"), MetadataText.of("main")),
+                        types =
+                            listOf(
+                                NominalType.Function(
+                                    name = StringId.of(1u),
+                                    suspending = suspending,
+                                    result = ValueType.Unit,
+                                    parameters = emptyList(),
+                                ),
+                            ),
+                        functions =
+                            listOf(
+                                Function(
+                                    owner = null,
+                                    name = StringId.of(1u),
+                                    signature = TypeRef.Local(TypeId.of(0u)),
+                                    flags =
+                                        setOfNotNull(
+                                            FunctionFlag.STATIC,
+                                            FunctionFlag.SUSPENDING.takeIf { suspending },
+                                        ),
+                                    registers = emptyList(),
+                                    parameterCount = 0u,
+                                    firstBlock = BlockId.of(0u),
+                                    blockCount = 1u,
+                                    firstException = 0u,
+                                    exceptionCount = 0u,
+                                ),
+                            ),
+                        blocks = listOf(Block(FunctionId.of(0u), false, listOf(Instruction.Return(Destination.Unit)))),
+                    ),
+                ),
+        )
+
     private fun withAdapter(block: (K2CompilerAdapter) -> Unit) {
         val root = createTempDirectory("compukters-minimal-lowering-test-")
         try {
@@ -193,10 +279,19 @@ class MinimalScriptLoweringTest {
     private fun request(
         source: String,
         limits: WorkerLimits = WorkerLimits(),
+    ): CompileRequest = request(listOf("project/main.kt" to source), limits)
+
+    private fun request(vararg sources: Pair<String, String>): CompileRequest = request(sources.toList(), WorkerLimits())
+
+    private fun request(
+        sources: List<Pair<String, String>>,
+        limits: WorkerLimits,
     ): CompileRequest =
         CompileRequest(
             RequestId.of(1u),
-            listOf(ProjectSource(VirtualSourcePath.kotlin("project/main.kt"), BinaryValue.of(source.encodeToByteArray()))),
+            sources.map { (path, source) ->
+                ProjectSource(VirtualSourcePath.kotlin(path), BinaryValue.of(source.encodeToByteArray()))
+            },
             TargetSettings.KOTLIN_2_4_JVM_17,
             identity(),
             limits,
