@@ -116,3 +116,13 @@ tasks.register<Zip>("compilerWorkerPayload") {
     isPreserveFileTimestamps = false
     isReproducibleFileOrder = true
 }
+
+val workerJar = tasks.jar.flatMap { it.archiveFile }
+
+tasks.test {
+    dependsOn(tasks.jar)
+    inputs.file(workerJar)
+    doFirst {
+        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+    }
+}
