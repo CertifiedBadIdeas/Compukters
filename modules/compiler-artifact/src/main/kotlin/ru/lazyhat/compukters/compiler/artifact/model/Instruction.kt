@@ -19,6 +19,8 @@
 
 package ru.lazyhat.compukters.compiler.artifact.model
 
+import java.util.Collections
+
 sealed interface Instruction {
     data class Const(
         val destination: RegisterId,
@@ -63,7 +65,7 @@ sealed interface Instruction {
         val function: FunctionRef,
         arguments: List<RegisterId>,
     ) : Instruction {
-        val arguments: List<RegisterId> = arguments.toList()
+        val arguments: List<RegisterId> = Collections.unmodifiableList(ArrayList(arguments))
 
         override fun equals(other: Any?): Boolean =
             other is Call && destination == other.destination && function == other.function && arguments == other.arguments
@@ -79,7 +81,7 @@ sealed interface Instruction {
         arguments: List<RegisterId>,
         val resumeBlock: BlockId,
     ) : Instruction {
-        val arguments: List<RegisterId> = arguments.toList()
+        val arguments: List<RegisterId> = Collections.unmodifiableList(ArrayList(arguments))
 
         override fun equals(other: Any?): Boolean =
             other is CallSuspend &&
@@ -108,7 +110,7 @@ sealed interface Instruction {
         arguments: List<RegisterId>,
         val resumeBlock: BlockId,
     ) : Instruction {
-        val arguments: List<RegisterId> = arguments.toList()
+        val arguments: List<RegisterId> = Collections.unmodifiableList(ArrayList(arguments))
 
         override fun equals(other: Any?): Boolean =
             other is CapabilityCallAsync &&

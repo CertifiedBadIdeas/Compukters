@@ -43,6 +43,7 @@ import ru.lazyhat.compukters.compiler.artifact.model.ModuleId
 import ru.lazyhat.compukters.compiler.artifact.model.ModuleKind
 import ru.lazyhat.compukters.compiler.artifact.model.NominalType
 import ru.lazyhat.compukters.compiler.artifact.model.RegisterId
+import ru.lazyhat.compukters.compiler.artifact.model.SemanticFeature
 import ru.lazyhat.compukters.compiler.artifact.model.StringId
 import ru.lazyhat.compukters.compiler.artifact.model.SymbolKind
 import ru.lazyhat.compukters.compiler.artifact.model.TypeId
@@ -84,6 +85,128 @@ class ArtifactValidatorTest {
     fun `block and output limits are checked before encoding`() {
         val errors = validateArtifact(minimalArtifact(), ArtifactWriteLimits(blocks = 0, artifactBytes = 100))
         assertTrue(errors.any { it.code == ArtifactWriteErrorCode.LIMIT_EXCEEDED && it.detail.contains("blocks") })
+    }
+
+    @Test
+    fun `semantic feature bits exactly match tables functions and instructions`() {
+        val artifact =
+            executableArtifact(
+                Instruction.CapabilityCallAsync(Destination.Unit, CapabilityId.of(0u), 0u, emptyList(), BlockId.of(1u)),
+            )
+        val expected = setOf(SemanticFeature.COROUTINES, SemanticFeature.CAPABILITIES, SemanticFeature.MODULE_IMPORTS)
+
+        assertEquals(emptyList(), validateArtifact(artifact.copy(semanticFeatures = expected), ArtifactWriteLimits()))
+        assertTrue(
+            validateArtifact(
+                artifact.copy(semanticFeatures = expected - SemanticFeature.CAPABILITIES),
+                ArtifactWriteLimits(),
+            ).any { it.detail.contains("semantic feature") },
+        )
+        assertTrue(
+            validateArtifact(
+                artifact.copy(semanticFeatures = expected + SemanticFeature.EXCEPTIONS),
+                ArtifactWriteLimits(),
+            ).any { it.detail.contains("semantic feature") },
+        )
+    }
+
+    @Test
+    fun `imports require the exact target module semantic hash`() {
+        val artifact =
+            executableArtifact(
+                Instruction.Call(
+                    Destination.Register(RegisterId.of(0u)),
+                    FunctionRef.Imported(ImportId.of(1u)),
+                    listOf(RegisterId.of(0u), RegisterId.of(1u)),
+                ),
+            )
+        val source = artifact.modules[0]
+        val stale =
+            artifact.copy(
+                modules =
+                    listOf(
+                        source.copy(
+                            imports = source.imports.map { it.copy(targetModuleHash = ByteArray(32)) },
+                        ),
+                        artifact.modules[1],
+                    ),
+            )
+
+        assertTrue(validateArtifact(artifact, ArtifactWriteLimits()).none { it.detail.contains("semantic hash") })
+        assertTrue(validateArtifact(stale, ArtifactWriteLimits()).any { it.detail.contains("semantic hash") })
+    }
+
+    @Test
+    fun `block fixed cost is bounded by the manifest before serialization`() {
+        val artifact =
+            executableArtifact(
+                Instruction.Call(
+                    Destination.Register(RegisterId.of(0u)),
+                    FunctionRef.Local(FunctionId.of(1u)),
+                    listOf(RegisterId.of(0u), RegisterId.of(1u)),
+                ),
+            )
+
+        assertTrue(
+            validateArtifact(
+                artifact.copy(manifest = Manifest.minimal(maximumBlockCost = 7u)),
+                ArtifactWriteLimits(),
+            ).none { it.detail.contains("fixed cost") },
+        )
+        assertTrue(
+            validateArtifact(
+                artifact.copy(manifest = Manifest.minimal(maximumBlockCost = 6u)),
+                ArtifactWriteLimits(),
+            ).any { it.detail.contains("fixed cost") },
+        )
+    }
+
+    @Test
+    fun `entry and function block metadata match pinned CFG rules`() {
+        val artifact = executableArtifact(Instruction.StringConcat(RegisterId.of(3u), RegisterId.of(1u), RegisterId.of(2u)))
+        val module = artifact.modules[0]
+        val badEntry = artifact.copy(entry = EntryPoint(ModuleId.of(0u), FunctionId.of(9u)))
+        val zeroBlocks =
+            artifact.copy(
+                modules =
+                    listOf(
+                        module.copy(
+                            functions = module.functions.toMutableList().also { it[1] = it[1].copy(blockCount = 0u) },
+                        ),
+                        artifact.modules[1],
+                    ),
+            )
+        val abstractWithBlocks =
+            artifact.copy(
+                modules =
+                    listOf(
+                        module.copy(
+                            functions =
+                                module.functions.toMutableList().also {
+                                    it[1] = it[1].copy(flags = it[1].flags + FunctionFlag.ABSTRACT)
+                                },
+                        ),
+                        artifact.modules[1],
+                    ),
+            )
+        val overlapping =
+            artifact.copy(
+                modules =
+                    listOf(
+                        module.copy(
+                            functions =
+                                module.functions.toMutableList().also {
+                                    it[1] = it[1].copy(firstBlock = BlockId.of(1u), blockCount = 2u)
+                                },
+                        ),
+                        artifact.modules[1],
+                    ),
+            )
+
+        assertTrue(validateArtifact(badEntry, ArtifactWriteLimits()).any { it.detail.contains("entry function") })
+        assertTrue(validateArtifact(zeroBlocks, ArtifactWriteLimits()).any { it.detail.contains("non-abstract function has no blocks") })
+        assertTrue(validateArtifact(abstractWithBlocks, ArtifactWriteLimits()).any { it.detail.contains("abstract function") })
+        assertTrue(validateArtifact(overlapping, ArtifactWriteLimits()).any { it.detail.contains("contiguous") })
     }
 
     @Test
@@ -424,6 +547,170 @@ class ArtifactValidatorTest {
 
         assertTrue(validateArtifact(invalid, ArtifactWriteLimits()).any { it.detail.contains("non-suspending function") })
     }
+
+    @Test
+    fun `new instruction reads require definite assignment`() {
+        val cases =
+            listOf(
+                Instruction.Call(
+                    Destination.Register(RegisterId.of(0u)),
+                    FunctionRef.Local(FunctionId.of(1u)),
+                    listOf(RegisterId.of(0u), RegisterId.of(1u)),
+                ),
+                Instruction.CallSuspend(
+                    Destination.Register(RegisterId.of(0u)),
+                    FunctionRef.Local(FunctionId.of(1u)),
+                    listOf(RegisterId.of(0u), RegisterId.of(1u)),
+                    BlockId.of(1u),
+                ),
+                Instruction.StringConcat(RegisterId.of(3u), RegisterId.of(1u), RegisterId.of(2u)),
+                Instruction.CapabilityCallAsync(
+                    Destination.Unit,
+                    CapabilityId.of(0u),
+                    0u,
+                    listOf(RegisterId.of(0u)),
+                    BlockId.of(1u),
+                ),
+            )
+
+        cases.forEach { instruction ->
+            val artifact = executableArtifact(instruction)
+            val module = artifact.modules[0]
+            val callerSignature = module.types[0] as NominalType.Function
+            val invalid =
+                artifact.copy(
+                    modules =
+                        listOf(
+                            module.copy(
+                                types =
+                                    module.types.toMutableList().also {
+                                        it[0] = callerSignature.copy(parameters = emptyList())
+                                    },
+                                functions =
+                                    module.functions.toMutableList().also {
+                                        it[0] = it[0].copy(parameterCount = 0u)
+                                    },
+                            ),
+                            artifact.modules[1],
+                        ),
+                )
+
+            assertTrue(
+                validateArtifact(invalid, ArtifactWriteLimits()).any { it.detail.contains("uninitialized register") },
+                instruction.toString(),
+            )
+        }
+    }
+
+    @Test
+    fun `definite assignment intersects predecessor states at a join`() {
+        val artifact = executableArtifact(Instruction.StringConcat(RegisterId.of(3u), RegisterId.of(1u), RegisterId.of(2u)))
+        val module = artifact.modules[0]
+        val callerSignature = module.types[0] as NominalType.Function
+        val caller = module.functions[0]
+        val callee = module.functions[1]
+        val invalid =
+            artifact.copy(
+                modules =
+                    listOf(
+                        module.copy(
+                            types =
+                                module.types.toMutableList().also {
+                                    it[0] = callerSignature.copy(parameters = listOf(ValueType.Bool))
+                                },
+                            constants =
+                                listOf(
+                                    ru.lazyhat.compukters.compiler.artifact.model.Constant
+                                        .I32(1),
+                                ),
+                            functions =
+                                listOf(
+                                    caller.copy(
+                                        registers = listOf(ValueType.Bool, ValueType.I32),
+                                        parameterCount = 1u,
+                                        blockCount = 4u,
+                                    ),
+                                    callee.copy(firstBlock = BlockId.of(4u)),
+                                ),
+                            blocks =
+                                listOf(
+                                    Block(
+                                        FunctionId.of(0u),
+                                        false,
+                                        listOf(Instruction.Branch(RegisterId.of(0u), BlockId.of(1u), BlockId.of(2u))),
+                                    ),
+                                    Block(
+                                        FunctionId.of(0u),
+                                        false,
+                                        listOf(
+                                            Instruction.Const(
+                                                RegisterId.of(1u),
+                                                ru.lazyhat.compukters.compiler.artifact.model.ConstantId
+                                                    .of(0u),
+                                            ),
+                                            Instruction.Jump(BlockId.of(3u)),
+                                        ),
+                                    ),
+                                    Block(FunctionId.of(0u), false, listOf(Instruction.Jump(BlockId.of(3u)))),
+                                    Block(
+                                        FunctionId.of(0u),
+                                        false,
+                                        listOf(
+                                            Instruction.ArrayStore(RegisterId.of(0u), RegisterId.of(1u), RegisterId.of(1u)),
+                                            Instruction.Return(Destination.Unit),
+                                        ),
+                                    ),
+                                    module.blocks[2],
+                                ),
+                        ),
+                        artifact.modules[1],
+                    ),
+            )
+
+        assertTrue(validateArtifact(invalid, ArtifactWriteLimits()).any { it.detail.contains("uninitialized register") })
+    }
+
+    @Test
+    fun `ordinary control flow cannot target an exception handler`() {
+        val artifact = languageRuntimeArtifact()
+        val module = artifact.modules.single()
+        val protectedBlock = module.blocks[2]
+        val invalid =
+            artifact.copy(
+                modules =
+                    listOf(
+                        module.copy(
+                            blocks =
+                                module.blocks.toMutableList().also {
+                                    it[2] =
+                                        protectedBlock.copy(
+                                            instructions =
+                                                protectedBlock.instructions.dropLast(1) + Instruction.Jump(BlockId.of(4u)),
+                                        )
+                                },
+                        ),
+                    ),
+            )
+
+        assertTrue(validateArtifact(invalid, ArtifactWriteLimits()).any { it.detail.contains("exception handler") })
+    }
+
+    @Test
+    fun `dataflow uses only the function declared exception slice`() {
+        val artifact = languageRuntimeArtifact()
+        val module = artifact.modules.single()
+        val invalid =
+            artifact.copy(
+                modules =
+                    listOf(
+                        module.copy(
+                            functions = listOf(module.functions.single().copy(exceptionCount = 0u)),
+                        ),
+                    ),
+            )
+
+        assertTrue(validateArtifact(invalid, ArtifactWriteLimits()).any { it.detail.contains("unreachable") })
+    }
 }
 
 private fun executableArtifact(
@@ -440,130 +727,147 @@ private fun executableArtifact(
     val strings = listOf("app", "callee", "entry").map(MetadataText::of)
     val stringType = ValueType.Ref(nullable = false, TypeRef.Imported(ImportId.of(0u)))
     val calleeSuspending = instruction is Instruction.CallSuspend
-    return Artifact(
-        manifest = Manifest.minimal(maximumBlockCost = 16u),
-        entry = EntryPoint(ModuleId.of(0u), FunctionId.of(0u)),
+    val artifact =
+        Artifact(
+            semanticFeatures = setOf(SemanticFeature.COROUTINES, SemanticFeature.CAPABILITIES, SemanticFeature.MODULE_IMPORTS),
+            manifest = Manifest.minimal(maximumBlockCost = 16u),
+            entry = EntryPoint(ModuleId.of(0u), FunctionId.of(0u)),
+            modules =
+                listOf(
+                    Module(
+                        name = StringId.of(0u),
+                        kind = ModuleKind.APPLICATION,
+                        strings = strings,
+                        types =
+                            listOf(
+                                NominalType.Function(
+                                    StringId.of(2u),
+                                    true,
+                                    ValueType.Unit,
+                                    listOf(ValueType.I32, stringType, stringType, stringType),
+                                ),
+                                NominalType.Function(StringId.of(1u), calleeSuspending, ValueType.I32, listOf(ValueType.I32, stringType)),
+                            ),
+                        imports =
+                            listOf(
+                                Import(
+                                    SymbolKind.TYPE,
+                                    ModuleId.of(1u),
+                                    StringId.of(1u),
+                                    TypeRef.Imported(ImportId.of(0u)),
+                                    ByteArray(32),
+                                ),
+                                Import(
+                                    SymbolKind.FUNCTION,
+                                    ModuleId.of(1u),
+                                    StringId.of(0u),
+                                    TypeRef.Local(TypeId.of(1u)),
+                                    ByteArray(32),
+                                ),
+                            ),
+                        functions =
+                            listOf(
+                                Function(
+                                    null,
+                                    StringId.of(2u),
+                                    TypeRef.Local(TypeId.of(0u)),
+                                    setOf(FunctionFlag.STATIC, FunctionFlag.SUSPENDING),
+                                    listOf(ValueType.I32, stringType, stringType, stringType),
+                                    4u,
+                                    BlockId.of(0u),
+                                    2u,
+                                    0u,
+                                    0u,
+                                ),
+                                Function(
+                                    null,
+                                    StringId.of(1u),
+                                    TypeRef.Local(TypeId.of(1u)),
+                                    setOfNotNull(FunctionFlag.STATIC, FunctionFlag.SUSPENDING.takeIf { calleeSuspending }),
+                                    listOf(ValueType.I32, stringType),
+                                    2u,
+                                    BlockId.of(2u),
+                                    1u,
+                                    0u,
+                                    0u,
+                                ),
+                            ),
+                        blocks =
+                            listOf(
+                                Block(FunctionId.of(0u), false, firstInstructions),
+                                Block(FunctionId.of(0u), false, listOf(Instruction.Return(Destination.Unit))),
+                                Block(FunctionId.of(1u), false, listOf(Instruction.Return(Destination.Register(RegisterId.of(0u))))),
+                            ),
+                    ),
+                    Module(
+                        name = StringId.of(0u),
+                        kind = ModuleKind.LIBRARY,
+                        strings = listOf(MetadataText.of("callee"), MetadataText.of("kotlin.String")),
+                        types =
+                            listOf(
+                                NominalType.Class(name = StringId.of(1u), final = true),
+                                NominalType.Function(
+                                    StringId.of(0u),
+                                    false,
+                                    ValueType.I32,
+                                    listOf(ValueType.I32, ValueType.Ref(false, TypeRef.Local(TypeId.of(0u)))),
+                                ),
+                            ),
+                        exports =
+                            listOf(
+                                Export(
+                                    SymbolKind.TYPE,
+                                    ExportVisibility.PUBLIC_LIBRARY,
+                                    StringId.of(1u),
+                                    0u,
+                                    TypeRef.Local(TypeId.of(0u)),
+                                ),
+                                Export(
+                                    SymbolKind.FUNCTION,
+                                    ExportVisibility.PUBLIC_LIBRARY,
+                                    StringId.of(0u),
+                                    0u,
+                                    TypeRef.Local(TypeId.of(1u)),
+                                ),
+                            ),
+                        functions =
+                            listOf(
+                                Function(
+                                    null,
+                                    StringId.of(0u),
+                                    TypeRef.Local(TypeId.of(1u)),
+                                    setOf(FunctionFlag.STATIC),
+                                    listOf(ValueType.I32, ValueType.Ref(false, TypeRef.Local(TypeId.of(0u)))),
+                                    2u,
+                                    BlockId.of(0u),
+                                    1u,
+                                    0u,
+                                    0u,
+                                ),
+                            ),
+                        blocks =
+                            listOf(
+                                Block(
+                                    FunctionId.of(0u),
+                                    false,
+                                    listOf(Instruction.Return(Destination.Register(RegisterId.of(0u)))),
+                                ),
+                            ),
+                    ),
+                ),
+            capabilities =
+                listOf(
+                    Capability(StringId.of(0u), StringId.of(1u), AbiVersion(1u, 0u), required = true, operationCount = 2u),
+                ),
+        )
+    val targetHash = encodeModuleSections(artifact.modules[1], ArtifactWriteLimits()).semanticHash
+    return artifact.copy(
         modules =
             listOf(
-                Module(
-                    name = StringId.of(0u),
-                    kind = ModuleKind.APPLICATION,
-                    strings = strings,
-                    types =
-                        listOf(
-                            NominalType.Function(StringId.of(2u), true, ValueType.Unit, emptyList()),
-                            NominalType.Function(StringId.of(1u), calleeSuspending, ValueType.I32, listOf(ValueType.I32, stringType)),
-                        ),
-                    imports =
-                        listOf(
-                            Import(
-                                SymbolKind.TYPE,
-                                ModuleId.of(1u),
-                                StringId.of(1u),
-                                TypeRef.Imported(ImportId.of(0u)),
-                                ByteArray(32),
-                            ),
-                            Import(
-                                SymbolKind.FUNCTION,
-                                ModuleId.of(1u),
-                                StringId.of(0u),
-                                TypeRef.Local(TypeId.of(1u)),
-                                ByteArray(32),
-                            ),
-                        ),
-                    functions =
-                        listOf(
-                            Function(
-                                null,
-                                StringId.of(2u),
-                                TypeRef.Local(TypeId.of(0u)),
-                                setOf(FunctionFlag.STATIC, FunctionFlag.SUSPENDING),
-                                listOf(ValueType.I32, stringType, stringType, stringType),
-                                0u,
-                                BlockId.of(0u),
-                                2u,
-                                0u,
-                                0u,
-                            ),
-                            Function(
-                                null,
-                                StringId.of(1u),
-                                TypeRef.Local(TypeId.of(1u)),
-                                setOfNotNull(FunctionFlag.STATIC, FunctionFlag.SUSPENDING.takeIf { calleeSuspending }),
-                                listOf(ValueType.I32, stringType),
-                                2u,
-                                BlockId.of(2u),
-                                1u,
-                                0u,
-                                0u,
-                            ),
-                        ),
-                    blocks =
-                        listOf(
-                            Block(FunctionId.of(0u), false, firstInstructions),
-                            Block(FunctionId.of(0u), false, listOf(Instruction.Return(Destination.Unit))),
-                            Block(FunctionId.of(1u), false, listOf(Instruction.Return(Destination.Register(RegisterId.of(0u))))),
-                        ),
+                artifact.modules[0].copy(
+                    imports = artifact.modules[0].imports.map { it.copy(targetModuleHash = targetHash) },
                 ),
-                Module(
-                    name = StringId.of(0u),
-                    kind = ModuleKind.LIBRARY,
-                    strings = listOf(MetadataText.of("callee"), MetadataText.of("kotlin.String")),
-                    types =
-                        listOf(
-                            NominalType.Class(name = StringId.of(1u), final = true),
-                            NominalType.Function(
-                                StringId.of(0u),
-                                false,
-                                ValueType.I32,
-                                listOf(ValueType.I32, ValueType.Ref(false, TypeRef.Local(TypeId.of(0u)))),
-                            ),
-                        ),
-                    exports =
-                        listOf(
-                            Export(
-                                SymbolKind.TYPE,
-                                ExportVisibility.PUBLIC_LIBRARY,
-                                StringId.of(1u),
-                                0u,
-                                TypeRef.Local(TypeId.of(0u)),
-                            ),
-                            Export(
-                                SymbolKind.FUNCTION,
-                                ExportVisibility.PUBLIC_LIBRARY,
-                                StringId.of(0u),
-                                0u,
-                                TypeRef.Local(TypeId.of(1u)),
-                            ),
-                        ),
-                    functions =
-                        listOf(
-                            Function(
-                                null,
-                                StringId.of(0u),
-                                TypeRef.Local(TypeId.of(1u)),
-                                setOf(FunctionFlag.STATIC),
-                                listOf(ValueType.I32, ValueType.Ref(false, TypeRef.Local(TypeId.of(0u)))),
-                                2u,
-                                BlockId.of(0u),
-                                1u,
-                                0u,
-                                0u,
-                            ),
-                        ),
-                    blocks =
-                        listOf(
-                            Block(
-                                FunctionId.of(0u),
-                                false,
-                                listOf(Instruction.Return(Destination.Register(RegisterId.of(0u)))),
-                            ),
-                        ),
-                ),
-            ),
-        capabilities =
-            listOf(
-                Capability(StringId.of(0u), StringId.of(1u), AbiVersion(1u, 0u), required = true, operationCount = 2u),
+                artifact.modules[1],
             ),
     )
 }

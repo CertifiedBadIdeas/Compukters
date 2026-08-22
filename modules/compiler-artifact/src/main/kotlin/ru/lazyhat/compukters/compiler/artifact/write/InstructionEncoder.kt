@@ -36,32 +36,28 @@ internal fun encodeInstruction(
 ): EncodedInstruction {
     val operands = BinarySink(maximumBytes)
     val opcode: UInt
-    val cost: UInt
+    val cost = instructionFixedCost(instruction)
 
     when (instruction) {
         is Instruction.Const -> {
             opcode = 0x02u
-            cost = 1u
             operands.writeRegister(instruction.destination)
             operands.writeUleb128(instruction.constant.value)
         }
 
         is Instruction.Null -> {
             opcode = 0x03u
-            cost = 1u
             operands.writeRegister(instruction.destination)
         }
 
         is Instruction.NewObject -> {
             opcode = 0x30u
-            cost = 4u
             operands.writeRegister(instruction.destination)
             operands.writeUleb128(encodeTypeRef(instruction.type))
         }
 
         is Instruction.NewArray -> {
             opcode = 0x31u
-            cost = 4u
             operands.writeRegister(instruction.destination)
             operands.writeUleb128(encodeTypeRef(instruction.type))
             operands.writeRegister(instruction.length)
@@ -69,7 +65,6 @@ internal fun encodeInstruction(
 
         is Instruction.ArrayLoad -> {
             opcode = 0x33u
-            cost = 2u
             operands.writeRegister(instruction.destination)
             operands.writeRegister(instruction.array)
             operands.writeRegister(instruction.index)
@@ -77,7 +72,6 @@ internal fun encodeInstruction(
 
         is Instruction.ArrayStore -> {
             opcode = 0x34u
-            cost = 2u
             operands.writeRegister(instruction.array)
             operands.writeRegister(instruction.index)
             operands.writeRegister(instruction.value)
@@ -85,7 +79,6 @@ internal fun encodeInstruction(
 
         is Instruction.IsType -> {
             opcode = 0x39u
-            cost = 2u
             operands.writeRegister(instruction.destination)
             operands.writeRegister(instruction.value)
             operands.writeUleb128(encodeTypeRef(instruction.type))
@@ -93,7 +86,6 @@ internal fun encodeInstruction(
 
         is Instruction.Call -> {
             opcode = 0x40u
-            cost = variableCost(4u, instruction.arguments.size)
             operands.writeDestination(instruction.destination)
             operands.writeUleb128(encodeFunctionRef(instruction.function))
             operands.writeArguments(instruction.arguments)
@@ -101,7 +93,6 @@ internal fun encodeInstruction(
 
         is Instruction.CallSuspend -> {
             opcode = 0xe5u
-            cost = variableCost(5u, instruction.arguments.size)
             operands.writeDestination(instruction.destination)
             operands.writeUleb128(encodeFunctionRef(instruction.function))
             operands.writeArguments(instruction.arguments)
@@ -110,7 +101,6 @@ internal fun encodeInstruction(
 
         is Instruction.StringConcat -> {
             opcode = 0x65u
-            cost = 1u
             operands.writeRegister(instruction.destination)
             operands.writeRegister(instruction.left)
             operands.writeRegister(instruction.right)
@@ -118,7 +108,6 @@ internal fun encodeInstruction(
 
         is Instruction.CapabilityCallAsync -> {
             opcode = 0xe9u
-            cost = variableCost(6u, instruction.arguments.size)
             operands.writeDestination(instruction.destination)
             operands.writeUleb128(instruction.capability.value)
             operands.writeUleb128(instruction.operation)
@@ -128,13 +117,11 @@ internal fun encodeInstruction(
 
         is Instruction.Jump -> {
             opcode = 0xe0u
-            cost = 1u
             operands.writeUleb128(instruction.target.value)
         }
 
         is Instruction.Branch -> {
             opcode = 0xe1u
-            cost = 1u
             operands.writeRegister(instruction.condition)
             operands.writeUleb128(instruction.trueTarget.value)
             operands.writeUleb128(instruction.falseTarget.value)
@@ -142,13 +129,11 @@ internal fun encodeInstruction(
 
         is Instruction.Return -> {
             opcode = 0xe3u
-            cost = 1u
             operands.writeDestination(instruction.value)
         }
 
         is Instruction.Throw -> {
             opcode = 0xe4u
-            cost = 2u
             operands.writeRegister(instruction.exception)
         }
     }
@@ -192,6 +177,33 @@ private fun variableCost(
     }
     return cost.toUInt()
 }
+
+internal fun instructionFixedCost(instruction: Instruction): UInt =
+    when (instruction) {
+        is Instruction.Const,
+        is Instruction.Null,
+        is Instruction.StringConcat,
+        is Instruction.Jump,
+        is Instruction.Branch,
+        is Instruction.Return,
+        -> 1u
+
+        is Instruction.ArrayLoad,
+        is Instruction.ArrayStore,
+        is Instruction.IsType,
+        is Instruction.Throw,
+        -> 2u
+
+        is Instruction.NewObject,
+        is Instruction.NewArray,
+        -> 4u
+
+        is Instruction.Call -> variableCost(4u, instruction.arguments.size)
+
+        is Instruction.CallSuspend -> variableCost(5u, instruction.arguments.size)
+
+        is Instruction.CapabilityCallAsync -> variableCost(6u, instruction.arguments.size)
+    }
 
 internal fun encodeTypeRef(reference: TypeRef): UInt =
     when (reference) {
