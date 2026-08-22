@@ -31,7 +31,7 @@ class BinaryValue private constructor(
 
     fun toByteArray(): ByteArray = bytes.copyOf()
 
-    internal fun decodeUtf8(): String =
+    fun decodeUtf8(): String =
         StandardCharsets.UTF_8
             .newDecoder()
             .onMalformedInput(CodingErrorAction.REPORT)
