@@ -94,12 +94,13 @@ class ProgramComputer internal constructor(
             transitionTo(ProgramComputerState.Running)
             return true
         }
-        when (host.state) {
-            ProgramRuntimeState.WaitingForInput,
-            ProgramRuntimeState.Running,
-            -> Unit
-
-            else -> transitionFrom(host.state)
+        val runtimeState = host.state
+        if (runtimeState != ProgramRuntimeState.WaitingForInput) {
+            if (runtimeState == ProgramRuntimeState.Running) {
+                transitionTo(failure(ProgramComputerFailure.RuntimeContract(ProgramRuntimeState.Running)))
+            } else {
+                transitionFrom(runtimeState)
+            }
         }
         return false
     }

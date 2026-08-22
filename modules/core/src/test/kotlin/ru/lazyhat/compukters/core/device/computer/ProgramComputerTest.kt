@@ -199,6 +199,47 @@ class ProgramComputerTest {
     }
 
     @Test
+    fun `rejected line with running host becomes contract failure`() {
+        val host =
+            FakeProgramHost(
+                tickStates = listOf(ProgramRuntimeState.WaitingForInput),
+                submitResult = false,
+                submitState = ProgramRuntimeState.Running,
+            )
+        val fixture = fixture(image = byteArrayOf(1), host = host)
+        fixture.computer.turnOn()
+        fixture.computer.serverTick()
+
+        assertFalse(fixture.computer.submitLine("Ada"))
+        assertEquals(
+            ProgramComputerState.PoweredOff(
+                ProgramComputerStopReason.Failure(
+                    ProgramComputerFailure.RuntimeContract(ProgramRuntimeState.Running),
+                ),
+            ),
+            fixture.computer.state,
+        )
+    }
+
+    @Test
+    fun `unexpected inactive host state after tick becomes contract failure`() {
+        listOf(ProgramRuntimeState.Idle, ProgramRuntimeState.Closed).forEach { runtimeState ->
+            val host = FakeProgramHost(tickStates = listOf(runtimeState))
+            val fixture = fixture(image = byteArrayOf(1), host = host)
+            fixture.computer.turnOn()
+
+            assertEquals(
+                ProgramComputerState.PoweredOff(
+                    ProgramComputerStopReason.Failure(
+                        ProgramComputerFailure.RuntimeContract(runtimeState),
+                    ),
+                ),
+                fixture.computer.serverTick(),
+            )
+        }
+    }
+
+    @Test
     fun `rejected host start publishes typed runtime failure`() {
         val failure = ProgramFailure.Verification
         val host = FakeProgramHost(startResult = ProgramStartResult.Rejected(failure))
