@@ -20,7 +20,11 @@
 package ru.lazyhat.compukters.compiler.artifact.write
 
 import ru.lazyhat.compukters.compiler.artifact.model.BlockId
+import ru.lazyhat.compukters.compiler.artifact.model.CapabilityId
 import ru.lazyhat.compukters.compiler.artifact.model.Destination
+import ru.lazyhat.compukters.compiler.artifact.model.FunctionId
+import ru.lazyhat.compukters.compiler.artifact.model.FunctionRef
+import ru.lazyhat.compukters.compiler.artifact.model.ImportId
 import ru.lazyhat.compukters.compiler.artifact.model.Instruction
 import ru.lazyhat.compukters.compiler.artifact.model.RegisterId
 import ru.lazyhat.compukters.compiler.artifact.model.TypeId
@@ -60,5 +64,187 @@ class InstructionEncoderTest {
                 64,
             ).bytes,
         )
+    }
+
+    @Test
+    fun `direct calls encode optional destination function reference and arguments canonically`() {
+        val local =
+            encodeInstruction(
+                Instruction.Call(
+                    Destination.Register(RegisterId.of(1u)),
+                    FunctionRef.Local(FunctionId.of(128u)),
+                    emptyList(),
+                ),
+                64,
+            )
+        val imported =
+            encodeInstruction(
+                Instruction.Call(
+                    Destination.Unit,
+                    FunctionRef.Imported(ImportId.of(2u)),
+                    listOf(RegisterId.of(3u), RegisterId.of(4u)),
+                ),
+                64,
+            )
+
+        assertContentEquals(byteArrayOf(0x40, 0, 9, 0, 1, 0, 0x80.toByte(), 0x01, 0), local.bytes)
+        assertEquals(4u, local.fixedCost)
+        assertContentEquals(
+            byteArrayOf(
+                0x40,
+                0,
+                16,
+                0,
+                0xff.toByte(),
+                0xff.toByte(),
+                0x82.toByte(),
+                0x80.toByte(),
+                0x80.toByte(),
+                0x80.toByte(),
+                0x08,
+                0x02,
+                0x03,
+                0,
+                0x04,
+                0,
+            ),
+            imported.bytes,
+        )
+        assertEquals(6u, imported.fixedCost)
+    }
+
+    @Test
+    fun `suspending calls encode resume block after canonical arguments`() {
+        val localUnit =
+            encodeInstruction(
+                Instruction.CallSuspend(
+                    Destination.Unit,
+                    FunctionRef.Local(FunctionId.of(0u)),
+                    emptyList(),
+                    BlockId.of(1u),
+                ),
+                64,
+            )
+        val importedRegister =
+            encodeInstruction(
+                Instruction.CallSuspend(
+                    Destination.Register(RegisterId.of(5u)),
+                    FunctionRef.Imported(ImportId.of(2u)),
+                    listOf(RegisterId.of(3u), RegisterId.of(4u)),
+                    BlockId.of(128u),
+                ),
+                64,
+            )
+
+        assertContentEquals(
+            byteArrayOf(0xe5.toByte(), 0, 9, 0, 0xff.toByte(), 0xff.toByte(), 0, 0, 1),
+            localUnit.bytes,
+        )
+        assertEquals(5u, localUnit.fixedCost)
+        assertContentEquals(
+            byteArrayOf(
+                0xe5.toByte(),
+                0,
+                18,
+                0,
+                5,
+                0,
+                0x82.toByte(),
+                0x80.toByte(),
+                0x80.toByte(),
+                0x80.toByte(),
+                0x08,
+                2,
+                3,
+                0,
+                4,
+                0,
+                0x80.toByte(),
+                1,
+            ),
+            importedRegister.bytes,
+        )
+        assertEquals(7u, importedRegister.fixedCost)
+    }
+
+    @Test
+    fun `string concat encodes three registers at fixed cost one`() {
+        val encoded =
+            encodeInstruction(
+                Instruction.StringConcat(RegisterId.of(2u), RegisterId.of(3u), RegisterId.of(4u)),
+                64,
+            )
+
+        assertContentEquals(byteArrayOf(0x65, 0, 10, 0, 2, 0, 3, 0, 4, 0), encoded.bytes)
+        assertEquals(1u, encoded.fixedCost)
+    }
+
+    @Test
+    fun `async capability calls encode optional destination operation arguments and resume`() {
+        val unit =
+            encodeInstruction(
+                Instruction.CapabilityCallAsync(
+                    Destination.Unit,
+                    CapabilityId.of(0u),
+                    1u,
+                    emptyList(),
+                    BlockId.of(2u),
+                ),
+                64,
+            )
+        val register =
+            encodeInstruction(
+                Instruction.CapabilityCallAsync(
+                    Destination.Register(RegisterId.of(5u)),
+                    CapabilityId.of(128u),
+                    129u,
+                    listOf(RegisterId.of(3u), RegisterId.of(4u)),
+                    BlockId.of(128u),
+                ),
+                64,
+            )
+
+        assertContentEquals(
+            byteArrayOf(0xe9.toByte(), 0, 10, 0, 0xff.toByte(), 0xff.toByte(), 0, 1, 0, 2),
+            unit.bytes,
+        )
+        assertEquals(6u, unit.fixedCost)
+        assertContentEquals(
+            byteArrayOf(
+                0xe9.toByte(),
+                0,
+                17,
+                0,
+                5,
+                0,
+                0x80.toByte(),
+                1,
+                0x81.toByte(),
+                1,
+                2,
+                3,
+                0,
+                4,
+                0,
+                0x80.toByte(),
+                1,
+            ),
+            register.bytes,
+        )
+        assertEquals(8u, register.fixedCost)
+    }
+
+    @Test
+    fun `instruction argument lists are defensive snapshots`() {
+        val arguments = mutableListOf(RegisterId.of(1u))
+        val call = Instruction.Call(Destination.Unit, FunctionRef.Local(FunctionId.of(0u)), arguments)
+        val suspended = Instruction.CallSuspend(Destination.Unit, FunctionRef.Local(FunctionId.of(0u)), arguments, BlockId.of(0u))
+        val capability = Instruction.CapabilityCallAsync(Destination.Unit, CapabilityId.of(0u), 0u, arguments, BlockId.of(0u))
+
+        arguments += RegisterId.of(2u)
+
+        assertEquals(listOf(RegisterId.of(1u)), call.arguments)
+        assertEquals(listOf(RegisterId.of(1u)), suspended.arguments)
+        assertEquals(listOf(RegisterId.of(1u)), capability.arguments)
     }
 }

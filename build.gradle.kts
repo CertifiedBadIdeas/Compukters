@@ -90,6 +90,26 @@ val testCompukterVmRust =
         environment("CARGO_TARGET_DIR", compukterVmTargetRoot.absolutePath)
     }
 
+val testCompilerArtifactVmConformance =
+    tasks.register<Exec>("testCompilerArtifactVmConformance") {
+        description = "Verifies Kotlin executable Artifact v1 output with the pinned Compukter VM."
+        group = "verification"
+        dependsOn(":compiler-artifact:test")
+        val harness = rootProject.file("modules/compiler-artifact/src/test/rust/executable-conformance/Cargo.toml")
+        val artifact = project(":compiler-artifact").layout.buildDirectory.file("generated/conformance/executable-instructions.cpkt")
+        val target = rootProject.file(".toolchain/build/cargo/compiler-artifact-conformance")
+        inputs.file(harness)
+        inputs.file(rootProject.file("modules/compiler-artifact/src/test/rust/executable-conformance/Cargo.lock"))
+        inputs.file(rootProject.file("modules/compiler-artifact/src/test/rust/executable-conformance/kotlin_writer.rs"))
+        inputs.file(artifact)
+        doFirst {
+            check(harness.isFile) { "compiler artifact Rust conformance harness is missing" }
+        }
+        commandLine("cargo", "test", "--locked", "--offline", "--manifest-path", harness.absolutePath)
+        environment("CARGO_TARGET_DIR", target.absolutePath)
+        environment("COMPUKTER_KOTLIN_EXECUTABLE_ARTIFACT", artifact.get().asFile.absolutePath)
+    }
+
 val buildScriptsTest = gradle.includedBuild("build-scripts").task(":test")
 
 tasks.register("verifyLocalFast") {
@@ -107,4 +127,5 @@ tasks.register("verifyLocalFull") {
     group = "verification"
     dependsOn("verifyLocalFast")
     dependsOn(testCompukterVmRust)
+    dependsOn(testCompilerArtifactVmConformance)
 }

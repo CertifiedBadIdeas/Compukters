@@ -58,6 +58,80 @@ sealed interface Instruction {
         val type: TypeRef,
     ) : Instruction
 
+    class Call(
+        val destination: Destination,
+        val function: FunctionRef,
+        arguments: List<RegisterId>,
+    ) : Instruction {
+        val arguments: List<RegisterId> = arguments.toList()
+
+        override fun equals(other: Any?): Boolean =
+            other is Call && destination == other.destination && function == other.function && arguments == other.arguments
+
+        override fun hashCode(): Int = 31 * (31 * destination.hashCode() + function.hashCode()) + arguments.hashCode()
+
+        override fun toString(): String = "Call(destination=$destination, function=$function, arguments=$arguments)"
+    }
+
+    class CallSuspend(
+        val destination: Destination,
+        val function: FunctionRef,
+        arguments: List<RegisterId>,
+        val resumeBlock: BlockId,
+    ) : Instruction {
+        val arguments: List<RegisterId> = arguments.toList()
+
+        override fun equals(other: Any?): Boolean =
+            other is CallSuspend &&
+                destination == other.destination &&
+                function == other.function &&
+                arguments == other.arguments &&
+                resumeBlock == other.resumeBlock
+
+        override fun hashCode(): Int =
+            31 * (31 * (31 * destination.hashCode() + function.hashCode()) + arguments.hashCode()) + resumeBlock.hashCode()
+
+        override fun toString(): String =
+            "CallSuspend(destination=$destination, function=$function, arguments=$arguments, resumeBlock=$resumeBlock)"
+    }
+
+    data class StringConcat(
+        val destination: RegisterId,
+        val left: RegisterId,
+        val right: RegisterId,
+    ) : Instruction
+
+    class CapabilityCallAsync(
+        val destination: Destination,
+        val capability: CapabilityId,
+        val operation: UInt,
+        arguments: List<RegisterId>,
+        val resumeBlock: BlockId,
+    ) : Instruction {
+        val arguments: List<RegisterId> = arguments.toList()
+
+        override fun equals(other: Any?): Boolean =
+            other is CapabilityCallAsync &&
+                destination == other.destination &&
+                capability == other.capability &&
+                operation == other.operation &&
+                arguments == other.arguments &&
+                resumeBlock == other.resumeBlock
+
+        override fun hashCode(): Int =
+            31 *
+                (
+                    31 *
+                        (31 * (31 * destination.hashCode() + capability.hashCode()) + operation.hashCode()) +
+                        arguments.hashCode()
+                ) +
+                resumeBlock.hashCode()
+
+        override fun toString(): String =
+            "CapabilityCallAsync(destination=$destination, capability=$capability, operation=$operation, " +
+                "arguments=$arguments, resumeBlock=$resumeBlock)"
+    }
+
     data class Jump(
         val target: BlockId,
     ) : Instruction

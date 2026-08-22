@@ -1,0 +1,222 @@
+/*
+ * The Compukters Developers
+ *
+ * Copyright (C) 2026 Vsevolod Petrov (lazyhat)
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ */
+
+package ru.lazyhat.compukters.compiler.artifact.write
+
+import ru.lazyhat.compukters.compiler.artifact.model.AbiVersion
+import ru.lazyhat.compukters.compiler.artifact.model.Artifact
+import ru.lazyhat.compukters.compiler.artifact.model.Block
+import ru.lazyhat.compukters.compiler.artifact.model.BlockId
+import ru.lazyhat.compukters.compiler.artifact.model.Capability
+import ru.lazyhat.compukters.compiler.artifact.model.CapabilityId
+import ru.lazyhat.compukters.compiler.artifact.model.Constant
+import ru.lazyhat.compukters.compiler.artifact.model.ConstantId
+import ru.lazyhat.compukters.compiler.artifact.model.Destination
+import ru.lazyhat.compukters.compiler.artifact.model.EntryPoint
+import ru.lazyhat.compukters.compiler.artifact.model.Export
+import ru.lazyhat.compukters.compiler.artifact.model.ExportVisibility
+import ru.lazyhat.compukters.compiler.artifact.model.Function
+import ru.lazyhat.compukters.compiler.artifact.model.FunctionFlag
+import ru.lazyhat.compukters.compiler.artifact.model.FunctionId
+import ru.lazyhat.compukters.compiler.artifact.model.FunctionRef
+import ru.lazyhat.compukters.compiler.artifact.model.Import
+import ru.lazyhat.compukters.compiler.artifact.model.ImportId
+import ru.lazyhat.compukters.compiler.artifact.model.Instruction
+import ru.lazyhat.compukters.compiler.artifact.model.Manifest
+import ru.lazyhat.compukters.compiler.artifact.model.MetadataText
+import ru.lazyhat.compukters.compiler.artifact.model.Module
+import ru.lazyhat.compukters.compiler.artifact.model.ModuleId
+import ru.lazyhat.compukters.compiler.artifact.model.ModuleKind
+import ru.lazyhat.compukters.compiler.artifact.model.NominalType
+import ru.lazyhat.compukters.compiler.artifact.model.RegisterId
+import ru.lazyhat.compukters.compiler.artifact.model.SemanticFeature
+import ru.lazyhat.compukters.compiler.artifact.model.StringId
+import ru.lazyhat.compukters.compiler.artifact.model.SymbolKind
+import ru.lazyhat.compukters.compiler.artifact.model.TypeId
+import ru.lazyhat.compukters.compiler.artifact.model.TypeRef
+import ru.lazyhat.compukters.compiler.artifact.model.Utf16Literal
+import ru.lazyhat.compukters.compiler.artifact.model.ValueType
+import java.nio.file.Path
+import kotlin.io.path.createDirectories
+import kotlin.io.path.writeBytes
+import kotlin.test.Test
+import kotlin.test.assertIs
+
+class ExecutableInstructionsConformanceTest {
+    @Test
+    fun `writes representative executable artifact for the pinned Rust verifier`() {
+        val result = assertIs<ArtifactWriteResult.Success>(ArtifactWriter.write(executableInstructionsArtifact()))
+        val output = Path.of(requireNotNull(System.getProperty("compukter.vm.executableArtifact")))
+        output.parent.createDirectories()
+        output.writeBytes(result.bytes)
+    }
+}
+
+private fun executableInstructionsArtifact(): Artifact {
+    val limits = ArtifactWriteLimits()
+    val library =
+        Module(
+            name = StringId.of(0u),
+            kind = ModuleKind.LIBRARY,
+            strings = listOf(MetadataText.of("kotlin.String")),
+            types = listOf(NominalType.Class(name = StringId.of(0u), final = true)),
+            exports =
+                listOf(
+                    Export(
+                        SymbolKind.TYPE,
+                        ExportVisibility.PUBLIC_LIBRARY,
+                        StringId.of(0u),
+                        0u,
+                        TypeRef.Local(TypeId.of(0u)),
+                    ),
+                ),
+        )
+    val libraryHash = encodeModuleSections(library, limits).semanticHash
+    val stringType = ValueType.Ref(false, TypeRef.Imported(ImportId.of(0u)))
+    val app =
+        Module(
+            name = StringId.of(0u),
+            kind = ModuleKind.APPLICATION,
+            strings = listOf("app", "callee", "entry", "host", "terminal").map(MetadataText::of),
+            utf16Literals = listOf(Utf16Literal.fromString("x")),
+            types =
+                listOf(
+                    NominalType.Function(StringId.of(2u), true, ValueType.Unit, emptyList()),
+                    NominalType.Function(StringId.of(1u), false, ValueType.I32, listOf(ValueType.I32, stringType)),
+                    NominalType.Function(StringId.of(1u), true, ValueType.Unit, emptyList()),
+                ),
+            constants =
+                listOf(
+                    Constant.I32(7),
+                    Constant.StringLiteral(
+                        ru.lazyhat.compukters.compiler.artifact.model.Utf16LiteralId
+                            .of(0u),
+                    ),
+                ),
+            imports =
+                listOf(
+                    Import(
+                        SymbolKind.TYPE,
+                        ModuleId.of(1u),
+                        StringId.of(0u),
+                        TypeRef.Imported(ImportId.of(0u)),
+                        libraryHash,
+                    ),
+                ),
+            functions =
+                listOf(
+                    Function(
+                        null,
+                        StringId.of(2u),
+                        TypeRef.Local(TypeId.of(0u)),
+                        setOf(FunctionFlag.STATIC, FunctionFlag.SUSPENDING),
+                        listOf(ValueType.I32, stringType, stringType, stringType),
+                        0u,
+                        BlockId.of(0u),
+                        5u,
+                        0u,
+                        0u,
+                    ),
+                    Function(
+                        null,
+                        StringId.of(1u),
+                        TypeRef.Local(TypeId.of(1u)),
+                        setOf(FunctionFlag.STATIC),
+                        listOf(ValueType.I32, stringType),
+                        2u,
+                        BlockId.of(5u),
+                        1u,
+                        0u,
+                        0u,
+                    ),
+                    Function(
+                        null,
+                        StringId.of(1u),
+                        TypeRef.Local(TypeId.of(2u)),
+                        setOf(FunctionFlag.STATIC, FunctionFlag.SUSPENDING),
+                        emptyList(),
+                        0u,
+                        BlockId.of(6u),
+                        1u,
+                        0u,
+                        0u,
+                    ),
+                ),
+            blocks =
+                listOf(
+                    Block(
+                        FunctionId.of(0u),
+                        false,
+                        listOf(
+                            Instruction.Const(RegisterId.of(0u), ConstantId.of(0u)),
+                            Instruction.Const(RegisterId.of(1u), ConstantId.of(1u)),
+                            Instruction.Const(RegisterId.of(2u), ConstantId.of(1u)),
+                            Instruction.Jump(BlockId.of(1u)),
+                        ),
+                    ),
+                    Block(
+                        FunctionId.of(0u),
+                        false,
+                        listOf(
+                            Instruction.StringConcat(RegisterId.of(3u), RegisterId.of(1u), RegisterId.of(2u)),
+                            Instruction.Jump(BlockId.of(2u)),
+                        ),
+                    ),
+                    Block(
+                        FunctionId.of(0u),
+                        false,
+                        listOf(
+                            Instruction.Call(
+                                Destination.Register(RegisterId.of(0u)),
+                                FunctionRef.Local(FunctionId.of(1u)),
+                                listOf(RegisterId.of(0u), RegisterId.of(3u)),
+                            ),
+                            Instruction.CallSuspend(Destination.Unit, FunctionRef.Local(FunctionId.of(2u)), emptyList(), BlockId.of(3u)),
+                        ),
+                    ),
+                    Block(
+                        FunctionId.of(0u),
+                        false,
+                        listOf(
+                            Instruction.CapabilityCallAsync(
+                                Destination.Unit,
+                                CapabilityId.of(0u),
+                                0u,
+                                listOf(RegisterId.of(3u)),
+                                BlockId.of(4u),
+                            ),
+                        ),
+                    ),
+                    Block(FunctionId.of(0u), false, listOf(Instruction.Return(Destination.Unit))),
+                    Block(FunctionId.of(1u), false, listOf(Instruction.Return(Destination.Register(RegisterId.of(0u))))),
+                    Block(FunctionId.of(2u), false, listOf(Instruction.Return(Destination.Unit))),
+                ),
+        )
+    return Artifact(
+        semanticFeatures = setOf(SemanticFeature.COROUTINES, SemanticFeature.CAPABILITIES, SemanticFeature.MODULE_IMPORTS),
+        manifest =
+            Manifest(
+                requiredHeapBytes = 0u,
+                requiredStackBytes = 0u,
+                maximumCoroutines = 1u,
+                maximumCallDepth = 2u,
+                maximumHostRequests = 1u,
+                maximumEvents = 0u,
+                maximumBlockCost = 11u,
+                minimumSliceCost = 11u,
+                compilerAbi = ByteArray(32),
+                standardLibraryAbi = ByteArray(32),
+            ),
+        entry = EntryPoint(ModuleId.of(0u), FunctionId.of(0u)),
+        modules = listOf(app, library),
+        capabilities = listOf(Capability(StringId.of(3u), StringId.of(4u), AbiVersion(1u, 0u), true, 1u)),
+    )
+}
