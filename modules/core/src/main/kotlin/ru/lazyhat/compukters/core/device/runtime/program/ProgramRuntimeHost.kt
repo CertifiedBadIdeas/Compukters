@@ -81,28 +81,45 @@ class ProgramRuntimeHost internal constructor(
                     return finish(ProgramRuntimeState.Failed(ProgramFailure.Bridge(error.bridgeDetail())))
                 }
             when (outcome) {
-                VmOutcome.SliceExhausted -> Unit
-                is VmOutcome.Halted -> return finish(ProgramRuntimeState.Halted(outcome.value))
-                is VmOutcome.AllocationExhausted ->
+                VmOutcome.SliceExhausted -> {
+                    return@repeat
+                }
+
+                is VmOutcome.Halted -> {
+                    return finish(ProgramRuntimeState.Halted(outcome.value))
+                }
+
+                is VmOutcome.AllocationExhausted -> {
                     return finish(
                         ProgramRuntimeState.Failed(ProgramFailure.Allocation(outcome.collectionAttempted)),
                     )
+                }
 
-                is VmOutcome.QuotaExhausted ->
+                is VmOutcome.QuotaExhausted -> {
                     return finish(
                         ProgramRuntimeState.Failed(
                             ProgramFailure.Quota(outcome.kind, outcome.limit, outcome.consumed),
                         ),
                     )
+                }
 
-                is VmOutcome.Crashed -> return finish(ProgramRuntimeState.Failed(ProgramFailure.Trap(outcome.trap)))
-                is VmOutcome.Faulted -> return finish(ProgramRuntimeState.Failed(ProgramFailure.Fault(outcome.fault)))
-                is VmOutcome.HostFailed ->
+                is VmOutcome.Crashed -> {
+                    return finish(ProgramRuntimeState.Failed(ProgramFailure.Trap(outcome.trap)))
+                }
+
+                is VmOutcome.Faulted -> {
+                    return finish(ProgramRuntimeState.Failed(ProgramFailure.Fault(outcome.fault)))
+                }
+
+                is VmOutcome.HostFailed -> {
                     return finish(
                         ProgramRuntimeState.Failed(ProgramFailure.Host(outcome.kind, outcome.code)),
                     )
+                }
 
-                is VmOutcome.HostRequest -> if (!handleHostRequest(outcome.request)) return state
+                is VmOutcome.HostRequest -> {
+                    if (!handleHostRequest(outcome.request)) return state
+                }
             }
         }
         return state
@@ -155,8 +172,9 @@ class ProgramRuntimeHost internal constructor(
         request: VmHostRequest,
         newline: Boolean,
     ): Boolean {
-        val value = (request.arguments.singleOrNull() as? VmValue.StringValue)?.value
-            ?: return resume(request, invalidRequest())
+        val value =
+            (request.arguments.singleOrNull() as? VmValue.StringValue)?.value
+                ?: return resume(request, invalidRequest())
         val newlineLength = if (newline) 1 else 0
         val remaining = terminalLimits.maximumPendingOutputCodeUnits - output.length
         if (newlineLength > remaining || value.length > remaining - newlineLength) {

@@ -37,8 +37,8 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
-import kotlin.test.assertNull
 import kotlin.test.assertNotSame
+import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
@@ -67,7 +67,11 @@ class RetainedDisplayGeometryCompilerTest {
 
         val presentation = RetainedDisplayGeometryCompiler.compile(state)
         val direct = assertIs<RetainedCompiledCommand.Direct>(presentation.commands.single())
-        val quad = direct.batches.single().quads.single()
+        val quad =
+            direct.batches
+                .single()
+                .quads
+                .single()
 
         assertEquals(RetainedFloatRect(4f, 2f, 2f, 4f), quad.destination)
         assertNull(quad.sourceUv)
@@ -92,7 +96,12 @@ class RetainedDisplayGeometryCompilerTest {
             )
 
         val presentation = RetainedDisplayGeometryCompiler.compile(state)
-        val quad = assertIs<RetainedCompiledCommand.Direct>(presentation.commands.single()).batches.single().quads.single()
+        val quad =
+            assertIs<RetainedCompiledCommand.Direct>(presentation.commands.single())
+                .batches
+                .single()
+                .quads
+                .single()
 
         assertEquals(RetainedFloatRect(0f, 0f, 5f, 1f), quad.destination)
         assertEquals(RetainedFloatRect(0.5f, 0f, 0.5f, 1f), quad.sourceUv)
@@ -125,9 +134,21 @@ class RetainedDisplayGeometryCompilerTest {
 
         assertEquals(2, direct.batches.size)
         assertNull(direct.batches[0].textureIdentity)
-        assertEquals(0xff0000ff.toInt(), direct.batches[0].quads.single().argb)
+        assertEquals(
+            0xff0000ff.toInt(),
+            direct.batches[0]
+                .quads
+                .single()
+                .argb,
+        )
         assertEquals(12L, direct.batches[1].textureIdentity)
-        assertEquals(0xffffffff.toInt(), direct.batches[1].quads.single().argb)
+        assertEquals(
+            0xffffffff.toInt(),
+            direct.batches[1]
+                .quads
+                .single()
+                .argb,
+        )
     }
 
     @Test
@@ -145,7 +166,12 @@ class RetainedDisplayGeometryCompilerTest {
             ),
             command.spans,
         )
-        assertEquals(2, presentation.instanceChunks.getValue(chunkKey(0)).batches.size)
+        assertEquals(
+            2,
+            presentation.instanceChunks
+                .getValue(chunkKey(0))
+                .batches.size,
+        )
     }
 
     @Test

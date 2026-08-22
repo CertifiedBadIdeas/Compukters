@@ -40,15 +40,16 @@ class RetainedDisplayArchitectureTest {
                         "RetainedDisplayReplica.kt",
                 ).readText()
 
-        for (forbidden in
-            listOf(
-                "net.minecraft",
-                "GuiGraphics",
-                "PoseStack",
-                "NativeDisplayFrameCodec",
-                "DisplayFrameDelta",
-                "DisplayFrameOperation",
-            )
+        for (
+        forbidden in
+        listOf(
+            "net.minecraft",
+            "GuiGraphics",
+            "PoseStack",
+            "NativeDisplayFrameCodec",
+            "DisplayFrameDelta",
+            "DisplayFrameOperation",
+        )
         ) {
             assertFalse(source.contains(forbidden), "logical replica must not depend on $forbidden")
         }
@@ -88,15 +89,16 @@ class RetainedDisplayArchitectureTest {
                     }
             }
         }
-        for (removed in
-            listOf(
-                "modules/core/src/main/kotlin/ru/lazyhat/compukters/core/device/vm/display/" +
-                    "NativeDisplayFrameCodec.kt",
-                "modules/native-runtime/src/main/kotlin/ru/lazyhat/compukters/lang/runtime/display/" +
-                    "DisplayModels.kt",
-                "modules/v1_21_1/v1_21_1-common/src/main/kotlin/ru/lazyhat/compukters/common/computer/" +
-                    "client/ClientDisplayBuffer.kt",
-            )
+        for (
+        removed in
+        listOf(
+            "modules/core/src/main/kotlin/ru/lazyhat/compukters/core/device/vm/display/" +
+                "NativeDisplayFrameCodec.kt",
+            "modules/native-runtime/src/main/kotlin/ru/lazyhat/compukters/lang/runtime/display/" +
+                "DisplayModels.kt",
+            "modules/v1_21_1/v1_21_1-common/src/main/kotlin/ru/lazyhat/compukters/common/computer/" +
+                "client/ClientDisplayBuffer.kt",
+        )
         ) {
             assertFalse(Files.exists(root.resolve(removed)), "$removed must stay deleted")
         }
