@@ -59,8 +59,7 @@ runs.named("client") {
     programArgs("--username", DEV_CLIENT_USERNAMES[0])
 }
 
-// Second client instance for local multiplayer testing of the
-// workbench's CRDT sync. Reuses the main mod classpath, so any
+// Second client instance for local multiplayer testing. Reuses the main mod classpath, so any
 // change picked up by `runClient` is also picked up here on
 // restart — no jar build / sideload needed.
 runs.register("client2") {
@@ -71,8 +70,7 @@ runs.register("client2") {
     programArgs("--username", DEV_CLIENT_USERNAMES[1])
 }
 
-// Second client instance for local multiplayer testing of the
-// workbench's CRDT sync. Reuses the main mod classpath, so any
+// Third client instance for local multiplayer testing. Reuses the main mod classpath, so any
 // change picked up by `runClient` is also picked up here on
 // restart — no jar build / sideload needed.
 runs.register("client3") {
@@ -86,7 +84,7 @@ runs.register("client3") {
 // One-shot dev server: same as `server` but with a separate run dir whose
 // `eula.txt` and `server.properties` are pre-seeded by `prepareServerDev`,
 // so it boots in a single command without manual EULA / world setup. Use
-// for collaborative CRDT testing where two `runClient*` instances connect
+// for local multiplayer testing where `runClient*` instances connect
 // to `localhost:25565`.
 runs.named("server") {
     runDir("run/server")

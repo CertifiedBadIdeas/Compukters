@@ -32,6 +32,7 @@ class LegacyImplementationRemovalTest {
         val forbiddenPaths =
             listOf(
                 "models",
+                "fixtures/ui-dsl-consumer",
                 "modules/core/src/main/kotlin/ru/lazyhat/compukters/core/ClientHooks.kt",
                 "modules/core/src/main/kotlin/ru/lazyhat/compukters/core/Config.kt",
                 "modules/core/src/main/kotlin/ru/lazyhat/compukters/core/block",
@@ -61,9 +62,10 @@ class LegacyImplementationRemovalTest {
                 "modules/v1_21_1/v1_21_1-neoforge/src/main/resources/META-INF/services",
                 "modules/v1_21_1/v1_21_1-neoforge/src/main/resources/assets/compukters",
                 "modules/v1_21_1/v1_21_1-neoforge/src/main/resources/" + "compukter" + "craft.mixins.json",
+                "vendor/ui-dsl",
             )
 
-        val present = forbiddenPaths.filter { Files.exists(repoRoot.resolve(it)) }
+        val present = forbiddenPaths.filter { hasMaterialContent(repoRoot.resolve(it)) }
 
         assertTrue(present.isEmpty(), "Obsolete product paths remain: ${present.joinToString()}")
     }
@@ -110,6 +112,25 @@ class LegacyImplementationRemovalTest {
         while (true) {
             if (Files.isRegularFile(current.resolve("settings.gradle.kts"))) return current
             current = current.parent ?: error("Could not locate repository root")
+        }
+    }
+
+    private fun hasMaterialContent(path: Path): Boolean {
+        if (Files.isRegularFile(path)) return true
+        if (!Files.isDirectory(path)) return false
+        return Files.walk(path).use { paths ->
+            paths.anyMatch { candidate ->
+                if (!Files.isRegularFile(candidate)) return@anyMatch false
+                val relative = path.relativize(candidate).invariantSeparatorsPathString
+                !(
+                    relative.startsWith("build/") ||
+                        relative.startsWith(".gradle/") ||
+                        relative.startsWith(".gradle-sandbox/") ||
+                        relative.contains("/build/") ||
+                        relative.contains("/.gradle/") ||
+                        relative.contains("/.gradle-sandbox/")
+                )
+            }
         }
     }
 }
