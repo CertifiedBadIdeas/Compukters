@@ -53,6 +53,7 @@ fun include(
 }
 
 include("native-runtime", modulesDir)
+include("compiler-artifact", modulesDir)
 include("ui-dsl")
 project(":ui-dsl").projectDir = rootDir.resolve("vendor/ui-dsl")
 include("core", modulesDir)
