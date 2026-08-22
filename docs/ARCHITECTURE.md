@@ -1,53 +1,51 @@
 # Compukters Architecture
 
-## Current product boundary
+## Product boundary
 
-The loadable NeoForge mod is temporarily a platform shell while the managed
-runtime is built. Retired K16 and RISC-V implementations are not fallback
-paths. The product target is an in-game IDE, shell, and Kotlin `.kts` programs
-running on programmable Minecraft computers and smaller controller devices.
+Compukters is an in-game Kotlin programming platform. The first source contract is an ordinary bounded `.kt` project with a top-level `fun main()`. The current standalone playground and the future Minecraft computer use the same compiler artifact and VM session boundary.
 
-## Compilation and execution boundary
+## Compilation and execution
 
-Kotlin `.kts` source is parsed and type-checked by a pinned K2 frontend. A
-custom Kotlin IR backend emits a versioned Compukter artifact. The standalone
-Rust Compukter VM verifies the complete artifact before constructing mutable
-execution state.
+```text
+Kotlin .kt project
+  -> isolated pinned K2 worker
+  -> Kotlin IR lowering
+  -> canonical Compukter artifact
+  -> ProgramRuntimeHost / VM session
+  -> JNI
+  -> Rust Compukter VM
+```
 
-Kotlin compiler internals do not cross the JNI boundary. The JVM side owns
-source handling, compiler integration, and artifact production; the native
-side receives a stable artifact format rather than FIR, IR, or JVM bytecode.
+The trusted JVM side owns source snapshots, compiler isolation, diagnostics, Kotlin IR lowering, and artifact production. Kotlin compiler internals do not cross JNI. The Rust side receives immutable artifact bytes, verifies the complete container, admits it under explicit limits, and owns execution state.
+
+The guest-visible terminal capability is asynchronous at the VM boundary. `print` and `println` resume immediately after a bounded host response; `readln` suspends the guest until the host supplies a line. The server host never blocks the Minecraft thread.
 
 ## Runtime ownership
 
-Each device owns one VM instance, address space, managed heap, root shell, and
-initially at most one foreground child program. `process.run` loads and runs a
-compiled `.kts` program within that computer. Deterministic block costs,
-cooperative coroutines, bounded capabilities, snapshots, and future execution
-tiers remain native-runtime responsibilities.
+`ProgramRuntimeHost` owns one current VM session, advances it with bounded guest and maintenance budgets, translates terminal capability requests, buffers bounded UTF-16 output, and exposes typed terminal states and failures. It is loader-independent and server-thread confined.
 
-The first product model is intentionally single-tasking at the device level,
-while the artifact and runtime design preserve room for future parallelism.
-Interpreter performance remains a design constraint; JIT and AOT tiers may be
-added behind the same verified artifact contract.
+The next Minecraft layer is a single-computer carrier which owns exactly one host, loads one installed artifact, advances it once per server tick, publishes output before state transitions, and accepts a line only while waiting for input. Threads, coroutines, a shell/process model, persistence, menus, and networking are separate later slices.
+
+The Rust VM owns verification, the Tier 0 interpreter, managed memory and collection, quotas, traps/faults, capability suspension, and host-neutral sessions. Future JIT/AOT tiers must remain behind the same verified artifact and session contract.
 
 ## Module ownership
 
 | Module | Purpose |
 |---|---|
-| `host/compukter-vm` | Pinned Compukter VM submodule: artifact verification and managed execution runtime |
-| `native-runtime` | Architecture-neutral JVM-side runtime and device models |
-| `core` | Minecraft-independent product logic and runtime boundary contracts |
-| `v1_21_1-common` | Minecraft 1.21.1 common integration |
-| `v1_21_1-neoforge` | NeoForge bootstrap, resources, networking, and platform integration |
+| `compiler-artifact` | Canonical artifact model, validation, and encoding |
+| `compiler-client` | Bounded controller and protocol for the isolated compiler worker |
+| `compiler-k2` | Pinned K2/IR integration and Compukter lowering |
+| `native-runtime` | Kotlin-facing JNI VM session and trusted host capabilities |
+| `core` | Loader-independent server behavior and `ProgramRuntimeHost` |
+| `playground` | Standalone compile-and-run entry point with stdin/stdout |
+| `v1_21_1-common` | Reserved for loader-independent Minecraft adapters |
+| `v1_21_1-neoforge` | Minimal NeoForge bootstrap and future loader adapters |
+| `host/compukter-vm` | Artifact verification and managed Rust execution runtime |
 
 Ownership rules:
 
 - `core` must not import `net.minecraft.*`.
-- Loader modules own bootstrap, registry, networking, hooks, resources, and
-  small unavoidable platform shims.
-- Artifact verification, execution, quotas, managed memory, scheduling, and
-  snapshots belong to `host/compukter-vm`.
-- Kotlin compiler integration stays on the trusted JVM side and must not leak
-  compiler-internal representations into the native runtime contract.
-- Boundary rules are enforced by `ArchitectureBoundaryTest` in `modules/core`.
+- Kotlin modules must not implement another interpreter or mutable guest machine model.
+- Minecraft protocol, UI, and assets require deliberate feature designs and live next to their owning feature.
+- Compiler-internal FIR/IR types must not leak into the artifact, JNI, or native runtime contract.
+- `LegacyImplementationRemovalTest` prevents removed product contours and old package identities from returning.
