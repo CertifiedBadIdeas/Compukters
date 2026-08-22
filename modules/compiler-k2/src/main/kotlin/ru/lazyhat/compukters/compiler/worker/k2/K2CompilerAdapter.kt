@@ -23,6 +23,7 @@ import org.jetbrains.kotlin.cli.common.ExitCode
 import org.jetbrains.kotlin.cli.common.arguments.K2JVMCompilerArguments
 import org.jetbrains.kotlin.cli.jvm.K2JVMCompiler
 import org.jetbrains.kotlin.config.Services
+import ru.lazyhat.compukters.compiler.worker.controller.TemporaryBudget
 import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
 import ru.lazyhat.compukters.compiler.worker.protocol.CompileRequest
 import ru.lazyhat.compukters.compiler.worker.protocol.DiagnosticCategory
@@ -31,7 +32,6 @@ import ru.lazyhat.compukters.compiler.worker.protocol.WorkerDiagnostic
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerIdentity
 import java.nio.file.Files
 import java.nio.file.Path
-import java.util.UUID
 import kotlin.io.path.createDirectories
 import kotlin.io.path.writeBytes
 
@@ -81,12 +81,11 @@ class K2CompilerAdapter(
                 true,
             )
         }
-        val requestRoot = inputs.temporaryRoot.resolve("request-${UUID.randomUUID()}")
-        val physicalSource = requestRoot.resolve("source/main.kts")
-        val output = requestRoot.resolve("output")
-        var reachedIr = false
-        var artifact: BinaryValue? = null
-        try {
+        return TemporaryBudget(inputs.temporaryRoot, request.limits).useRequestDirectory { requestRoot ->
+            val physicalSource = requestRoot.resolve("source/main.kts")
+            val output = requestRoot.resolve("output")
+            var reachedIr = false
+            var artifact: BinaryValue? = null
             physicalSource.parent.createDirectories()
             output.createDirectories()
             physicalSource.writeBytes(request.source.toByteArray())
@@ -105,9 +104,7 @@ class K2CompilerAdapter(
                     K2JVMCompiler().also { it.isReadingSettingsFromEnvironmentAllowed = false }.exec(collector, Services.EMPTY, arguments)
                 }
             val failed = collector.hasErrors() || exitCode != ExitCode.OK
-            return K2CompilationResult(exitCode, collector.diagnostics, reachedIr, artifact?.takeIf { !failed }, failed)
-        } finally {
-            deleteTree(requestRoot)
+            K2CompilationResult(exitCode, collector.diagnostics, reachedIr, artifact?.takeIf { !failed }, failed)
         }
     }
 
@@ -131,9 +128,4 @@ class K2CompilerAdapter(
     private companion object {
         val DEPENDENCY_ANNOTATION = Regex("(?m)^\\s*@file:(DependsOn|Repository)\\b")
     }
-}
-
-private fun deleteTree(root: Path) {
-    if (!Files.exists(root)) return
-    Files.walk(root).use { paths -> paths.sorted(Comparator.reverseOrder()).forEach(Files::deleteIfExists) }
 }

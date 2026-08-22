@@ -21,6 +21,7 @@ package ru.lazyhat.compukters.compiler.worker.k2
 
 import org.jetbrains.kotlin.cli.common.messages.CompilerMessageLocation
 import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity
+import ru.lazyhat.compukters.compiler.worker.controller.TemporaryBudgetException
 import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
 import ru.lazyhat.compukters.compiler.worker.protocol.CompileRequest
 import ru.lazyhat.compukters.compiler.worker.protocol.DiagnosticCategory
@@ -36,6 +37,7 @@ import java.nio.file.Path
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -117,6 +119,15 @@ class K2CompilerAdapterTest {
         assertTrue(collector.hasErrors())
     }
 
+    @Test
+    fun `request temporary storage budget is enforced and cleaned`() =
+        withAdapter { adapter, root ->
+            assertFailsWith<TemporaryBudgetException> {
+                adapter.compile(request("val answer: Int = 42", WorkerLimits(temporaryBytes = 0)))
+            }
+            Files.list(root).use { assertEquals(0, it.count()) }
+        }
+
     private fun withAdapter(block: (K2CompilerAdapter, Path) -> Unit) {
         val root = createTempDirectory("compukters-k2-adapter-test-")
         try {
@@ -140,14 +151,17 @@ class K2CompilerAdapterTest {
         }
     }
 
-    private fun request(source: String): CompileRequest =
+    private fun request(
+        source: String,
+        limits: WorkerLimits = WorkerLimits(),
+    ): CompileRequest =
         CompileRequest(
             RequestId.of(1u),
             VirtualSourcePath.of("project/virtual.kts"),
             BinaryValue.of(source.encodeToByteArray()),
             TargetSettings.KOTLIN_2_4_JVM_17,
             identity(),
-            WorkerLimits(),
+            limits,
         )
 
     private fun identity() = WorkerIdentity("2.4.10", "2.4", 1u, 1u, Hash256.zero(), Hash256.zero())
