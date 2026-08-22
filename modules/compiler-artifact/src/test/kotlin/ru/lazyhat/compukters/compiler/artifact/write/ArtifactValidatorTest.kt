@@ -27,6 +27,7 @@ import ru.lazyhat.compukters.compiler.artifact.model.Capability
 import ru.lazyhat.compukters.compiler.artifact.model.CapabilityId
 import ru.lazyhat.compukters.compiler.artifact.model.Destination
 import ru.lazyhat.compukters.compiler.artifact.model.EntryPoint
+import ru.lazyhat.compukters.compiler.artifact.model.ExceptionEntry
 import ru.lazyhat.compukters.compiler.artifact.model.Export
 import ru.lazyhat.compukters.compiler.artifact.model.ExportVisibility
 import ru.lazyhat.compukters.compiler.artifact.model.Function
@@ -51,6 +52,7 @@ import ru.lazyhat.compukters.compiler.artifact.model.TypeRef
 import ru.lazyhat.compukters.compiler.artifact.model.ValueType
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class ArtifactValidatorTest {
@@ -710,6 +712,117 @@ class ArtifactValidatorTest {
             )
 
         assertTrue(validateArtifact(invalid, ArtifactWriteLimits()).any { it.detail.contains("unreachable") })
+    }
+
+    @Test
+    fun `exception slices are validated for abstract functions`() {
+        val artifact = languageRuntimeArtifact()
+        val module = artifact.modules.single()
+        val abstractFunction =
+            module.functions.single().copy(
+                flags = setOf(FunctionFlag.ABSTRACT),
+                firstBlock = BlockId.of(module.blocks.size.toUInt()),
+                blockCount = 0u,
+                firstException = UInt.MAX_VALUE,
+                exceptionCount = 1u,
+            )
+        val invalid =
+            artifact.copy(
+                modules = listOf(module.copy(functions = module.functions + abstractFunction)),
+            )
+
+        val errors = validateArtifact(invalid, ArtifactWriteLimits())
+
+        assertTrue(errors.any { it.detail.contains("exception range") }, errors.toString())
+    }
+
+    @Test
+    fun `exception entries require compatible non-null reference types`() {
+        val artifact = languageRuntimeArtifact()
+        val module = artifact.modules.single()
+        val function = module.functions.single()
+        val exception = module.exceptions.single()
+
+        val nullableRegister =
+            artifact.copy(
+                modules =
+                    listOf(
+                        module.copy(
+                            functions =
+                                listOf(
+                                    function.copy(
+                                        registers =
+                                            function.registers.toMutableList().also {
+                                                it[exception.exceptionRegister.value.toInt()] =
+                                                    ValueType.Ref(true, TypeRef.Local(TypeId.of(0u)))
+                                            },
+                                    ),
+                                ),
+                        ),
+                    ),
+            )
+        val nonReferenceCatch =
+            artifact.copy(
+                modules = listOf(module.copy(exceptions = listOf(exception.copy(catchType = TypeRef.Local(TypeId.of(1u)))))),
+            )
+        val incompatibleCatch =
+            artifact.copy(
+                modules =
+                    listOf(
+                        module.copy(
+                            types = module.types + NominalType.Class(name = StringId.of(0u), final = true),
+                            exceptions = listOf(exception.copy(catchType = TypeRef.Local(TypeId.of(3u)))),
+                        ),
+                    ),
+            )
+
+        assertTrue(validateArtifact(nullableRegister, ArtifactWriteLimits()).any { it.detail.contains("non-null reference") })
+        assertTrue(validateArtifact(nonReferenceCatch, ArtifactWriteLimits()).any { it.detail.contains("catch type") })
+        assertTrue(validateArtifact(incompatibleCatch, ArtifactWriteLimits()).any { it.detail.contains("incompatible") })
+    }
+
+    @Test
+    fun `exception protected ranges may nest but never cross`() {
+        val artifact = languageRuntimeArtifact()
+        val module = artifact.modules.single()
+        val base = module.exceptions.single().copy(catchType = null)
+        val outer = base.copy(firstProtectedBlock = BlockId.of(0u), protectedBlockCount = 3u)
+        val nested = base.copy(firstProtectedBlock = BlockId.of(1u), protectedBlockCount = 1u)
+        val crossing = base.copy(firstProtectedBlock = BlockId.of(2u), protectedBlockCount = 2u)
+
+        fun withExceptions(entries: List<ExceptionEntry>) =
+            artifact.copy(
+                modules =
+                    listOf(
+                        module.copy(
+                            functions = listOf(module.functions.single().copy(exceptionCount = entries.size.toUInt())),
+                            exceptions = entries,
+                        ),
+                    ),
+            )
+
+        assertTrue(validateArtifact(withExceptions(listOf(outer, nested)), ArtifactWriteLimits()).none { it.detail.contains("cross") })
+        assertTrue(validateArtifact(withExceptions(listOf(outer, crossing)), ArtifactWriteLimits()).any { it.detail.contains("cross") })
+    }
+
+    @Test
+    fun `writer reports oversized parameter count instead of throwing`() {
+        val artifact = languageRuntimeArtifact()
+        val module = artifact.modules.single()
+        val invalid =
+            artifact.copy(
+                modules =
+                    listOf(
+                        module.copy(
+                            functions = listOf(module.functions.single().copy(parameterCount = UInt.MAX_VALUE)),
+                        ),
+                    ),
+            )
+
+        val result = ArtifactWriter.write(invalid)
+
+        val failure = assertIs<ArtifactWriteResult.Failure>(result)
+        assertTrue(failure.errors.any { it.detail.contains("parameter count") })
     }
 }
 
