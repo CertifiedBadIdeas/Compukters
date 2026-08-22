@@ -24,6 +24,7 @@ import java.nio.file.Path
 
 interface WorkerProcess : AutoCloseable {
     val isAlive: Boolean
+    val exitCode: Int?
 
     fun writeFrame(frame: ByteArray)
 
@@ -33,6 +34,8 @@ interface WorkerProcess : AutoCloseable {
 
     fun terminate(graceMillis: Long)
 }
+
+class WorkerDeadlineExceededException : IllegalStateException("worker read deadline exceeded")
 
 fun interface WorkerProcessFactory {
     fun start(
@@ -47,9 +50,13 @@ data class WorkerLaunch(
     val maximumMetaspaceMiB: Int,
     val temporaryDirectory: Path,
     val expectedIdentity: WorkerIdentity,
+    val maximumFrameBytes: Int = 20 * 1024 * 1024,
+    val maximumStderrBytes: Int = 64 * 1024,
 ) {
     init {
         require(maximumHeapMiB > 0) { "maximum heap must be positive" }
         require(maximumMetaspaceMiB > 0) { "maximum metaspace must be positive" }
+        require(maximumFrameBytes >= 0) { "maximum frame bytes must not be negative" }
+        require(maximumStderrBytes >= 0) { "maximum stderr bytes must not be negative" }
     }
 }
