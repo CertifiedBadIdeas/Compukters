@@ -1,0 +1,174 @@
+/*
+ * The Compukters Developers
+ *
+ * Copyright (C) 2026 Vsevolod Petrov (lazyhat)
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
+package ru.lazyhat.compukters.compiler.worker.controller
+
+import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
+import ru.lazyhat.compukters.compiler.worker.protocol.CompilationMetrics
+import ru.lazyhat.compukters.compiler.worker.protocol.CompileRequest
+import ru.lazyhat.compukters.compiler.worker.protocol.CompileSuccess
+import ru.lazyhat.compukters.compiler.worker.protocol.Hash256
+import ru.lazyhat.compukters.compiler.worker.protocol.PlatformFailure
+import ru.lazyhat.compukters.compiler.worker.protocol.PlatformFailureClass
+import ru.lazyhat.compukters.compiler.worker.protocol.RequestId
+import ru.lazyhat.compukters.compiler.worker.protocol.WorkerFeature
+import ru.lazyhat.compukters.compiler.worker.protocol.WorkerHandshake
+import ru.lazyhat.compukters.compiler.worker.protocol.WorkerIdentity
+import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
+import java.nio.file.Path
+import java.security.MessageDigest
+import java.util.concurrent.TimeUnit
+import kotlin.test.Test
+import kotlin.test.assertContentEquals
+import kotlin.test.assertEquals
+import kotlin.test.assertIs
+
+class WorkerRecoveryTest {
+    @Test
+    fun `bounded stderr ring retains only newest bytes`() {
+        val ring = BoundedByteRing(5)
+        ring.append(byteArrayOf(1, 2, 3))
+        ring.append(byteArrayOf(4, 5, 6, 7))
+        assertContentEquals(byteArrayOf(3, 4, 5, 6, 7), ring.snapshot())
+    }
+
+    @Test
+    fun `startup and compilation timeouts are distinct and terminate after grace`() {
+        withController(2) { controller, processes, identity, limits ->
+            processes[0].enqueueTimeout()
+            val startup = assertIs<PlatformFailure>(controller.compile(source("startup")).get(5, TimeUnit.SECONDS))
+            assertEquals(PlatformFailureClass.WORKER_STARTUP, startup.failureClass)
+            assertEquals(listOf(37L), processes[0].terminationGraces)
+            assertEquals(listOf(111L), processes[0].readDeadlines)
+
+            processes[1].enqueue(handshake(identity, limits))
+            val timed = controller.compile(source("compile"))
+            assertIs<CompileRequest>(processes[1].awaitWrite())
+            processes[1].enqueueTimeout()
+            assertEquals(PlatformFailureClass.TIMEOUT, assertIs<PlatformFailure>(timed.get(5, TimeUnit.SECONDS)).failureClass)
+            assertEquals(listOf(37L), processes[1].terminationGraces)
+            assertEquals(listOf(111L, 123L), processes[1].readDeadlines)
+        }
+    }
+
+    @Test
+    fun `cancellation invalidates active worker and next request restarts`() =
+        withController(2) { controller, processes, identity, limits ->
+            processes[0].enqueue(handshake(identity, limits))
+            val cancelled = controller.compile(source("cancel"))
+            assertIs<CompileRequest>(processes[0].awaitWrite())
+            assertEquals(true, controller.cancel(cancelled))
+            assertEquals(PlatformFailureClass.CANCELLED, assertIs<PlatformFailure>(cancelled.get(5, TimeUnit.SECONDS)).failureClass)
+            assertEquals(listOf(37L), processes[0].terminationGraces)
+
+            processes[1].enqueue(handshake(identity, limits))
+            val recovered = controller.compile(source("recover"))
+            val request = assertIs<CompileRequest>(processes[1].awaitWrite())
+            processes[1].enqueue(success(request.requestId))
+            assertIs<CompileSuccess>(recovered.get(5, TimeUnit.SECONDS))
+        }
+
+    @Test
+    fun `OOM-like stderr is classified separately from an unexpected exit`() {
+        withController(1) { controller, processes, identity, limits ->
+            val worker = processes.single()
+            worker.stderr = "java.lang.OutOfMemoryError: Java heap space".encodeToByteArray()
+            worker.exitCode = 1
+            worker.enqueue(handshake(identity, limits))
+            val result = controller.compile(source("oom"))
+            assertIs<CompileRequest>(worker.awaitWrite())
+            worker.enqueueEof()
+            assertEquals(PlatformFailureClass.MEMORY_LIMIT, assertIs<PlatformFailure>(result.get(5, TimeUnit.SECONDS)).failureClass)
+        }
+
+        withController(1) { controller, processes, identity, limits ->
+            val worker = processes.single()
+            worker.stderr = "worker stopped".encodeToByteArray()
+            worker.exitCode = 7
+            worker.enqueue(handshake(identity, limits))
+            val result = controller.compile(source("exit"))
+            assertIs<CompileRequest>(worker.awaitWrite())
+            worker.enqueueEof()
+            assertEquals(PlatformFailureClass.WORKER_EXIT, assertIs<PlatformFailure>(result.get(5, TimeUnit.SECONDS)).failureClass)
+        }
+    }
+
+    @Test
+    fun `JDK launch command contains only fixed controller-owned arguments`() {
+        val manifest = WorkerPayloadManifest.create(baseIdentity(), "example.WorkerMain", emptyMap())
+        val payload = PublishedWorkerPayload(Path.of("payload"), manifest, listOf(Path.of("payload/lib/worker.jar")))
+        val launch = WorkerLaunch(Path.of("jdk/bin/java"), 256, 128, Path.of("worker-tmp"), manifest.identity)
+
+        assertEquals(
+            listOf(
+                "jdk/bin/java",
+                "-Xms16m",
+                "-Xmx256m",
+                "-XX:MaxMetaspaceSize=128m",
+                "-Djava.io.tmpdir=worker-tmp",
+                "-cp",
+                "payload/lib/worker.jar",
+                "example.WorkerMain",
+            ),
+            JdkWorkerProcessFactory.command(payload, launch),
+        )
+        assertEquals(
+            mapOf("SystemRoot" to "safe"),
+            JdkWorkerProcessFactory.admittedEnvironment(
+                mapOf("SystemRoot" to "safe", "SECRET" to "must-not-leak"),
+                setOf("SystemRoot", "WINDIR"),
+            ),
+        )
+    }
+
+    private fun withController(
+        processCount: Int,
+        block: (CompilerWorkerController, List<FakeWorkerProcess>, WorkerIdentity, WorkerLimits) -> Unit,
+    ) {
+        val manifest = WorkerPayloadManifest.create(baseIdentity(), "example.WorkerMain", emptyMap())
+        val payload = PublishedWorkerPayload(Path.of("payload"), manifest, emptyList())
+        val processes = List(processCount) { FakeWorkerProcess() }
+        val limits = WorkerLimits()
+        val launch = WorkerLaunch(Path.of("java"), 256, 128, Path.of("tmp"), manifest.identity)
+        val policy = CompilerWorkerPolicy(startupTimeoutNanos = 11, compilationTimeoutNanos = 23, terminationGraceMillis = 37)
+        CompilerWorkerController(payload, launch, limits, FakeWorkerProcessFactory(processes), policy) { 100 }.use { controller ->
+            block(controller, processes, manifest.identity, limits)
+        }
+    }
+
+    private fun source(text: String) = BinaryValue.of(text.encodeToByteArray())
+
+    private fun handshake(
+        identity: WorkerIdentity,
+        limits: WorkerLimits,
+    ) = WorkerHandshake(identity, setOf(WorkerFeature.SINGLE_SCRIPT, WorkerFeature.KOTLIN_IR), limits)
+
+    private fun success(requestId: RequestId): CompileSuccess {
+        val artifact = byteArrayOf(1)
+        return CompileSuccess(
+            requestId,
+            BinaryValue.of(artifact),
+            Hash256.of(MessageDigest.getInstance("SHA-256").digest(artifact)),
+            emptyList(),
+            CompilationMetrics(1u, 2u, 3u),
+        )
+    }
+
+    private fun baseIdentity() = WorkerIdentity("2.4.10", "2.4", 1u, 1u, Hash256.zero(), Hash256.zero())
+}

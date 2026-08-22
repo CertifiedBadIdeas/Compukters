@@ -29,7 +29,11 @@ internal class FakeWorkerProcess : WorkerProcess {
     private val reads = LinkedBlockingQueue<Read>()
     private val writes = LinkedBlockingQueue<WorkerMessage>()
     val operations = mutableListOf<String>()
+    val readDeadlines = mutableListOf<Long>()
     var terminationCount = 0
+    val terminationGraces = mutableListOf<Long>()
+    var stderr = ByteArray(0)
+    override var exitCode: Int? = null
     override var isAlive = true
 
     fun enqueue(message: WorkerMessage) {
@@ -40,6 +44,10 @@ internal class FakeWorkerProcess : WorkerProcess {
         reads.put(Read.Eof)
     }
 
+    fun enqueueTimeout() {
+        reads.put(Read.Timeout)
+    }
+
     fun awaitWrite(): WorkerMessage = checkNotNull(writes.poll(5, TimeUnit.SECONDS)) { "worker request was not written" }
 
     override fun writeFrame(frame: ByteArray) {
@@ -48,8 +56,9 @@ internal class FakeWorkerProcess : WorkerProcess {
         writes.put(message)
     }
 
-    override fun readFrame(deadlineNanos: Long): ByteArray? =
-        when (val read = reads.take()) {
+    override fun readFrame(deadlineNanos: Long): ByteArray? {
+        readDeadlines += deadlineNanos
+        return when (val read = reads.take()) {
             is Read.Frame -> {
                 val message = decode(read.bytes)
                 synchronized(operations) { operations += "read:${message.type}" }
@@ -59,12 +68,18 @@ internal class FakeWorkerProcess : WorkerProcess {
             Read.Eof -> {
                 null
             }
-        }
 
-    override fun stderrSnapshot(): ByteArray = ByteArray(0)
+            Read.Timeout -> {
+                throw WorkerDeadlineExceededException()
+            }
+        }
+    }
+
+    override fun stderrSnapshot(): ByteArray = stderr.copyOf()
 
     override fun terminate(graceMillis: Long) {
         terminationCount++
+        terminationGraces += graceMillis
         isAlive = false
         reads.offer(Read.Eof)
     }
@@ -79,6 +94,8 @@ internal class FakeWorkerProcess : WorkerProcess {
         ) : Read
 
         data object Eof : Read
+
+        data object Timeout : Read
     }
 }
 

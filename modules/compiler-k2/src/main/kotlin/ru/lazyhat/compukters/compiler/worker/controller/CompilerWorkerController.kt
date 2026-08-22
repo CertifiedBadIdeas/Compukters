@@ -43,11 +43,25 @@ enum class CompilerWorkerState { STOPPED, STARTING, IDLE, COMPILING, INVALID }
 
 class WorkerQueueFullException : IllegalStateException("compiler worker queue is full")
 
+data class CompilerWorkerPolicy(
+    val startupTimeoutNanos: Long = 10_000_000_000,
+    val compilationTimeoutNanos: Long = 30_000_000_000,
+    val terminationGraceMillis: Long = 250,
+) {
+    init {
+        require(startupTimeoutNanos >= 0) { "startup timeout must not be negative" }
+        require(compilationTimeoutNanos >= 0) { "compilation timeout must not be negative" }
+        require(terminationGraceMillis >= 0) { "termination grace must not be negative" }
+    }
+}
+
 class CompilerWorkerController(
     private val payload: PublishedWorkerPayload,
     private val launch: WorkerLaunch,
     private val limits: WorkerLimits,
     private val processFactory: WorkerProcessFactory,
+    private val policy: CompilerWorkerPolicy = CompilerWorkerPolicy(),
+    private val nanoTime: () -> Long = System::nanoTime,
 ) : AutoCloseable {
     private val lock = Any()
     private val executor =
@@ -63,6 +77,8 @@ class CompilerWorkerController(
 
     init {
         require(launch.expectedIdentity == payload.manifest.identity) { "launch and payload identities must match" }
+        require(launch.maximumFrameBytes == limits.frameBytes) { "launch and controller frame limits must match" }
+        require(launch.maximumStderrBytes == limits.stderrBytes) { "launch and controller stderr limits must match" }
     }
 
     val currentState: CompilerWorkerState
@@ -99,6 +115,45 @@ class CompilerWorkerController(
         return future
     }
 
+    fun cancel(future: CompletableFuture<CompileResult>): Boolean {
+        val pending: Pending
+        val child: WorkerProcess?
+        val activeCancellation: Boolean
+        synchronized(lock) {
+            if (future.isDone) return false
+            val activePending = active
+            val queuedPending = queued
+            pending =
+                when {
+                    activePending?.future === future -> {
+                        activePending.cancelled = true
+                        state = CompilerWorkerState.INVALID
+                        activePending
+                    }
+
+                    queuedPending?.future === future -> {
+                        queued = null
+                        queuedPending
+                    }
+
+                    else -> {
+                        return false
+                    }
+                }
+            child = if (pending === activePending) process.also { process = null } else null
+            activeCancellation = pending === activePending
+        }
+        child?.terminate(policy.terminationGraceMillis)
+        if (activeCancellation) {
+            synchronized(lock) {
+                if (!closed) state = CompilerWorkerState.STOPPED
+            }
+        }
+        return pending.future.complete(
+            PlatformFailure(pending.request.requestId, PlatformFailureClass.CANCELLED, "compilation cancelled"),
+        )
+    }
+
     override fun close() {
         val pending: List<Pending>
         val child: WorkerProcess?
@@ -112,7 +167,7 @@ class CompilerWorkerController(
             child = process
             process = null
         }
-        child?.terminate(0)
+        child?.terminate(policy.terminationGraceMillis)
         pending.forEach { item ->
             item.future.complete(PlatformFailure(item.request.requestId, PlatformFailureClass.CANCELLED, "controller closed"))
         }
@@ -122,7 +177,7 @@ class CompilerWorkerController(
     private fun drain() {
         while (true) {
             val pending = synchronized(lock) { active } ?: return
-            val result = runRequest(pending.request)
+            val result = runRequest(pending)
             pending.future.complete(result)
             synchronized(lock) {
                 if (active === pending) {
@@ -134,9 +189,12 @@ class CompilerWorkerController(
         }
     }
 
-    private fun runRequest(request: CompileRequest): CompileResult =
+    private fun runRequest(pending: Pending): CompileResult =
         try {
-            val child = ensureWorker()
+            val request = pending.request
+            if (pending.cancelled) throw ControllerFault(PlatformFailureClass.CANCELLED, "compilation cancelled")
+            val child = ensureWorker(pending)
+            if (pending.cancelled) throw ControllerFault(PlatformFailureClass.CANCELLED, "compilation cancelled")
             setState(CompilerWorkerState.COMPILING)
             val outbound = encode(request)
             try {
@@ -146,26 +204,31 @@ class CompilerWorkerController(
             }
             val frame =
                 try {
-                    child.readFrame(Long.MAX_VALUE)
+                    child.readFrame(deadlineAfter(policy.compilationTimeoutNanos))
+                } catch (_: WorkerDeadlineExceededException) {
+                    throw ControllerFault(PlatformFailureClass.TIMEOUT, "compilation deadline exceeded")
                 } catch (exception: Exception) {
                     throw ControllerFault(PlatformFailureClass.WORKER_EXIT, exception.message ?: "worker output failed")
-                } ?: throw ControllerFault(PlatformFailureClass.WORKER_EXIT, "worker closed stdout")
+                } ?: throw exitFault(child)
             val message = decode(frame)
             val result =
                 message as? CompileResult ?: throw ControllerFault(PlatformFailureClass.PROTOCOL, "unexpected message while compiling")
             if (result.requestId != request.requestId) throw ControllerFault(PlatformFailureClass.PROTOCOL, "terminal request ID mismatch")
             validateResult(result)
-            setState(CompilerWorkerState.IDLE)
+            synchronized(lock) {
+                if (pending.cancelled) throw ControllerFault(PlatformFailureClass.CANCELLED, "compilation cancelled")
+                state = CompilerWorkerState.IDLE
+            }
             result
         } catch (fault: ControllerFault) {
             invalidate()
-            PlatformFailure(request.requestId, fault.failureClass, fault.message.orEmpty().take(MAX_FAILURE_DETAIL_CHARS))
+            PlatformFailure(pending.request.requestId, fault.failureClass, boundedDetail(fault.message.orEmpty()))
         } catch (exception: Exception) {
             invalidate()
-            PlatformFailure(request.requestId, PlatformFailureClass.PROTOCOL, exception.message.orEmpty().take(MAX_FAILURE_DETAIL_CHARS))
+            PlatformFailure(pending.request.requestId, PlatformFailureClass.PROTOCOL, boundedDetail(exception.message.orEmpty()))
         }
 
-    private fun ensureWorker(): WorkerProcess {
+    private fun ensureWorker(pending: Pending): WorkerProcess {
         synchronized(lock) {
             process?.takeIf(WorkerProcess::isAlive)?.let { return it }
             state = CompilerWorkerState.STARTING
@@ -176,10 +239,24 @@ class CompilerWorkerController(
             } catch (exception: Exception) {
                 throw ControllerFault(PlatformFailureClass.WORKER_STARTUP, exception.message ?: "worker failed to start")
             }
-        synchronized(lock) { process = child }
+        val cancelled =
+            synchronized(lock) {
+                if (pending.cancelled || closed) {
+                    true
+                } else {
+                    process = child
+                    false
+                }
+            }
+        if (cancelled) {
+            child.terminate(policy.terminationGraceMillis)
+            throw ControllerFault(PlatformFailureClass.CANCELLED, "compilation cancelled")
+        }
         val frame =
             try {
-                child.readFrame(Long.MAX_VALUE)
+                child.readFrame(deadlineAfter(policy.startupTimeoutNanos))
+            } catch (_: WorkerDeadlineExceededException) {
+                throw ControllerFault(PlatformFailureClass.WORKER_STARTUP, "worker handshake deadline exceeded")
             } catch (exception: Exception) {
                 throw ControllerFault(PlatformFailureClass.WORKER_STARTUP, exception.message ?: "worker handshake failed")
             } ?: throw ControllerFault(PlatformFailureClass.WORKER_STARTUP, "worker exited before handshake")
@@ -254,7 +331,7 @@ class CompilerWorkerController(
                 state = CompilerWorkerState.INVALID
                 process.also { process = null }
             }
-        child?.terminate(0)
+        child?.terminate(policy.terminationGraceMillis)
         synchronized(lock) {
             if (!closed) state = CompilerWorkerState.STOPPED
         }
@@ -267,6 +344,7 @@ class CompilerWorkerController(
     private data class Pending(
         val request: CompileRequest,
         val future: CompletableFuture<CompileResult>,
+        @Volatile var cancelled: Boolean = false,
     )
 
     private class ControllerFault(
@@ -281,7 +359,36 @@ class CompilerWorkerController(
     }
 
     private companion object {
-        const val MAX_FAILURE_DETAIL_CHARS = 1024
+        const val MAX_FAILURE_DETAIL_BYTES = 4096
         val REQUIRED_FEATURES = setOf(WorkerFeature.SINGLE_SCRIPT, WorkerFeature.KOTLIN_IR)
+        val MEMORY_FAILURE_MARKERS = listOf("OutOfMemoryError", "Java heap space", "Metaspace")
+    }
+
+    private fun deadlineAfter(durationNanos: Long): Long = nanoTime() + durationNanos
+
+    private fun boundedDetail(value: String): String {
+        val maximumBytes = minOf(MAX_FAILURE_DETAIL_BYTES, limits.diagnosticTextBytes)
+        val result = StringBuilder()
+        var index = 0
+        var bytes = 0
+        while (index < value.length) {
+            val codePoint = value.codePointAt(index)
+            val text = String(Character.toChars(codePoint))
+            val encodedBytes = text.encodeToByteArray().size
+            if (bytes + encodedBytes > maximumBytes) break
+            result.append(text)
+            bytes += encodedBytes
+            index += Character.charCount(codePoint)
+        }
+        return result.toString()
+    }
+
+    private fun exitFault(child: WorkerProcess): ControllerFault {
+        val stderr = child.stderrSnapshot().decodeToString()
+        val memoryLimit = MEMORY_FAILURE_MARKERS.any(stderr::contains)
+        val failureClass = if (memoryLimit) PlatformFailureClass.MEMORY_LIMIT else PlatformFailureClass.WORKER_EXIT
+        val exit = child.exitCode?.let { " (exit $it)" }.orEmpty()
+        val detail = stderr.ifBlank { "worker closed stdout$exit" }
+        return ControllerFault(failureClass, boundedDetail(detail))
     }
 }
