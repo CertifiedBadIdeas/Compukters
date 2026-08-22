@@ -27,6 +27,7 @@ import kotlin.test.assertContains
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertTrue
 
 class ProjectSnapshotTest {
     @Test
@@ -127,6 +128,49 @@ class ProjectSnapshotTest {
         assertFailsWith<ProjectSnapshotException> { ProjectSnapshotLoader.load(bounded, WorkerLimits(sourceFiles = 1)) }
         assertFailsWith<ProjectSnapshotException> { ProjectSnapshotLoader.load(bounded, WorkerLimits(sourceFileBytes = 1)) }
         assertFailsWith<ProjectSnapshotException> { ProjectSnapshotLoader.load(bounded, WorkerLimits(sourceBytes = 3)) }
+    }
+
+    @Test
+    fun `loader rejects a Kotlin filename whose raw bytes are not UTF-8`() {
+        val root = createTempDirectory("compukter-raw-filename-")
+        val fixture =
+            ProcessBuilder(
+                "sh",
+                "-c",
+                "name=\$(printf '\\303'); printf 'val answer = 42' > \"\$RAW_PROJECT/\$name.kt\"",
+            ).apply {
+                environment()["RAW_PROJECT"] = root.toString()
+            }.start()
+        assertEquals(0, fixture.waitFor(), fixture.errorStream.bufferedReader().readText())
+        val rawName = Files.list(root).use { it.toList().single().fileName }
+        // Some providers cannot preserve non-UTF-8 names. The behavior is only applicable when they can.
+        if (rawName == rawName.fileSystem.getPath(rawName.toString())) return
+
+        val failure = assertFailsWith<ProjectSnapshotException> { ProjectSnapshotLoader.load(root, WorkerLimits()) }
+
+        assertTrue(failure.message.orEmpty().contains("filename"))
+    }
+
+    @Test
+    fun `distinct lossy filename decodings cannot collapse to one virtual path`() {
+        val root = createTempDirectory("compukter-lossy-filenames-")
+        val fixture =
+            ProcessBuilder(
+                "sh",
+                "-c",
+                "first=\$(printf '\\303'); second=\$(printf '\\304'); " +
+                    "printf 'val first = 1' > \"\$RAW_PROJECT/\$first.kt\"; " +
+                    "printf 'val second = 2' > \"\$RAW_PROJECT/\$second.kt\"",
+            ).apply {
+                environment()["RAW_PROJECT"] = root.toString()
+            }.start()
+        assertEquals(0, fixture.waitFor(), fixture.errorStream.bufferedReader().readText())
+        val rawNames = Files.list(root).use { entries -> entries.map { it.fileName }.toList() }
+        if (rawNames.all { it == it.fileSystem.getPath(it.toString()) }) return
+
+        val failure = assertFailsWith<ProjectSnapshotException> { ProjectSnapshotLoader.load(root, WorkerLimits()) }
+
+        assertTrue(failure.message.orEmpty().contains("filename"))
     }
 
     @Test

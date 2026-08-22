@@ -53,7 +53,7 @@ fun main() {
         }
 
         "OVERSIZED" -> {
-            System.out.write(byteArrayOf(0x43, 0x50, 0x4b, 0x57, 1, 0, 3, 0, -1, -1, -1, 127))
+            System.out.write(byteArrayOf(0x43, 0x50, 0x4b, 0x57, 2, 0, 3, 0, -1, -1, -1, 127))
         }
 
         "STDERR" -> {

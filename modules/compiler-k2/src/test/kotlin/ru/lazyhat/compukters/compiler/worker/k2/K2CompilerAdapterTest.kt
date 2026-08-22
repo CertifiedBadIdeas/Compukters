@@ -35,6 +35,7 @@ import ru.lazyhat.compukters.compiler.worker.protocol.WorkerIdentity
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.StandardWatchEventKinds
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -146,6 +147,46 @@ class K2CompilerAdapterTest {
             assertFailsWith<TemporaryBudgetException> {
                 adapter.compile(request("val answer: Int = 42", WorkerLimits(temporaryBytes = 0)))
             }
+            Files.list(root).use { assertEquals(0, it.count()) }
+        }
+
+    @Test
+    fun `source footprint is rejected before temporary materialization`() {
+        val source = "val answer: Int = 42"
+        listOf(
+            WorkerLimits(temporaryBytes = source.encodeToByteArray().size.toLong() - 1),
+            WorkerLimits(temporaryFiles = 0),
+        ).forEach { limits ->
+            withAdapter { adapter, root ->
+                root.fileSystem.newWatchService().use { watcher ->
+                    root.register(watcher, StandardWatchEventKinds.ENTRY_CREATE)
+
+                    assertFailsWith<TemporaryBudgetException> { adapter.compile(request(source, limits)) }
+
+                    assertNull(watcher.poll(), "temporary storage was created before rejecting $limits")
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `IR compilation writes no temporary output beyond its exact source footprint`() =
+        withAdapter { adapter, root ->
+            val source = "val answer: Int = 42"
+            val result =
+                adapter.compile(
+                    request(
+                        source,
+                        WorkerLimits(
+                            temporaryBytes = source.encodeToByteArray().size.toLong(),
+                            temporaryFiles = 3, // source/, source/project/, and the Kotlin file
+                        ),
+                    ),
+                )
+
+            assertTrue(result.reachedIr)
+            assertFalse(result.hasErrors)
+            assertNotNull(result.artifact)
             Files.list(root).use { assertEquals(0, it.count()) }
         }
 

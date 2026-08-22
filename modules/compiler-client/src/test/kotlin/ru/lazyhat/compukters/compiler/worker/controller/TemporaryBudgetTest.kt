@@ -21,6 +21,7 @@ package ru.lazyhat.compukters.compiler.worker.controller
 
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
 import java.nio.file.Files
+import kotlin.io.path.createDirectories
 import kotlin.io.path.createTempDirectory
 import kotlin.io.path.writeBytes
 import kotlin.io.path.writeText
@@ -74,6 +75,19 @@ class TemporaryBudgetTest {
         }
         assertTrue(Files.exists(outside))
         assertFalse(Files.isSymbolicLink(outside))
+        root.toFile().deleteRecursively()
+    }
+
+    @Test
+    fun `temporary file count includes directories below the request root`() {
+        val root = createTempDirectory("compukters-temporary-directories-")
+        val budget = TemporaryBudget(root, WorkerLimits(temporaryFiles = 0))
+
+        assertFailsWith<TemporaryBudgetException> {
+            budget.useRequestDirectory { request -> request.resolve("source").createDirectories() }
+        }
+
+        assertTrue(Files.list(root).use { it.findAny().isEmpty })
         root.toFile().deleteRecursively()
     }
 }

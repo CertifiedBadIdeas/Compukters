@@ -28,6 +28,7 @@ import java.nio.file.attribute.BasicFileAttributes
 import java.util.UUID
 import kotlin.io.path.createDirectories
 
+/** The request root is free; every child file or directory is one entry, and only regular-file payload contributes bytes. */
 data class TemporaryUsage(
     val files: Int,
     val bytes: Long,
@@ -66,6 +67,17 @@ class TemporaryBudget(
         Files.walkFileTree(
             normalized,
             object : SimpleFileVisitor<Path>() {
+                override fun preVisitDirectory(
+                    directory: Path,
+                    attributes: BasicFileAttributes,
+                ): FileVisitResult {
+                    if (directory != normalized) {
+                        files = Math.addExact(files, 1)
+                        requireFileCapacity(files)
+                    }
+                    return FileVisitResult.CONTINUE
+                }
+
                 override fun visitFile(
                     file: Path,
                     attributes: BasicFileAttributes,
@@ -75,13 +87,22 @@ class TemporaryBudget(
                     }
                     files = Math.addExact(files, 1)
                     bytes = Math.addExact(bytes, attributes.size())
-                    if (files > limits.temporaryFiles) throw TemporaryBudgetException("request file count exceeds limit")
+                    requireFileCapacity(files)
                     if (bytes > limits.temporaryBytes) throw TemporaryBudgetException("request bytes exceed limit")
                     return FileVisitResult.CONTINUE
                 }
             },
         )
         return TemporaryUsage(files, bytes)
+    }
+
+    fun requireCapacity(usage: TemporaryUsage) {
+        requireFileCapacity(usage.files)
+        if (usage.bytes > limits.temporaryBytes) throw TemporaryBudgetException("request bytes exceed limit")
+    }
+
+    private fun requireFileCapacity(files: Int) {
+        if (files > limits.temporaryFiles) throw TemporaryBudgetException("request file count exceeds limit")
     }
 
     private fun deleteExact(request: Path) {
