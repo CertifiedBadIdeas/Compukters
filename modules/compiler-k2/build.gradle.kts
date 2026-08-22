@@ -121,8 +121,28 @@ val workerJar = tasks.jar.flatMap { it.archiveFile }
 
 tasks.test {
     dependsOn(tasks.jar)
+    filter.excludeTestsMatching("ru.lazyhat.compukters.compiler.worker.integration.*")
     inputs.file(workerJar)
     doFirst {
         systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
     }
+}
+
+val forkedWorkerTest = tasks.register<Test>("forkedWorkerTest") {
+    dependsOn(prepareCompilerWorkerPayload)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("ru.lazyhat.compukters.compiler.worker.integration.*")
+    shouldRunAfter(tasks.test)
+    inputs.dir(workerPayloadDirectory)
+    doFirst {
+        systemProperty("compukters.worker.payload", workerPayloadDirectory.get().asFile.absolutePath)
+        systemProperty("compukters.worker.java", javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(17) }.get().executablePath)
+        systemProperty("compukters.worker.test-classpath", sourceSets.test.get().runtimeClasspath.asPath)
+    }
+}
+
+tasks.check {
+    dependsOn(forkedWorkerTest)
 }
