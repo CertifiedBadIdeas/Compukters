@@ -22,6 +22,7 @@ package ru.lazyhat.compukters.compiler.artifact.write
 import ru.lazyhat.compukters.compiler.artifact.model.Artifact
 import ru.lazyhat.compukters.compiler.artifact.model.BlockId
 import ru.lazyhat.compukters.compiler.artifact.model.Destination
+import ru.lazyhat.compukters.compiler.artifact.model.ExceptionEntry
 import ru.lazyhat.compukters.compiler.artifact.model.ExportVisibility
 import ru.lazyhat.compukters.compiler.artifact.model.FunctionFlag
 import ru.lazyhat.compukters.compiler.artifact.model.FunctionRef
@@ -458,8 +459,8 @@ internal fun validateArtifact(
                 )
             }
             val start = function.firstBlock.value.toInt()
-            val end = blockEnd.toInt().coerceAtMost(module.blocks.size)
-            if (start in 0..end) {
+            val end = blockEnd.takeIf { it <= module.blocks.size.toLong() }?.toInt()
+            if (end != null && start in 0..end) {
                 for (blockIndex in start until end) {
                     if (module.blocks[blockIndex]
                             .owner.value
@@ -620,7 +621,7 @@ internal fun validateArtifact(
                             return
                         }
                         val metadataIsConsistent =
-                            target.parameterCount.toInt() == signature.parameters.size &&
+                            target.parameterCount.toLong() == signature.parameters.size.toLong() &&
                                 target.registers.size >= signature.parameters.size &&
                                 (FunctionFlag.SUSPENDING in target.flags) == signature.suspending &&
                                 target.registers
@@ -745,11 +746,12 @@ internal fun validateArtifact(
             }
         }
         module.functions.forEachIndexed { functionIndex, function ->
-            if (FunctionFlag.ABSTRACT in function.flags || function.blockCount == 0u) return@forEachIndexed
             val blockStart = function.firstBlock.value.toInt()
-            val blockCount = function.blockCount.toInt()
-            val blockEnd = blockStart.toLong() + blockCount.toLong()
-            if (blockStart !in module.blocks.indices || blockEnd > module.blocks.size) return@forEachIndexed
+            val blockCountLong = function.blockCount.toLong()
+            val blockEnd = blockStart.toLong() + blockCountLong
+            val blockRangeValid =
+                blockStart.toLong() <= module.blocks.size.toLong() &&
+                    blockEnd <= module.blocks.size.toLong()
 
             val exceptionStart = function.firstException.toLong()
             val exceptionEnd = exceptionStart + function.exceptionCount.toLong()
@@ -782,12 +784,74 @@ internal fun validateArtifact(
                             ArtifactWriteLocation(moduleLocation, "EXCEPTIONS"),
                         )
                     }
+                    val registerType = function.registers.getOrNull(exception.exceptionRegister.value.toInt())
+                    if (registerType != null && (registerType !is ValueType.Ref || registerType.nullable)) {
+                        add(
+                            ArtifactWriteErrorCode.INVALID_RANGE,
+                            "exception register is not a non-null reference",
+                            ArtifactWriteLocation(moduleLocation, "EXCEPTIONS"),
+                        )
+                    }
+                    exception.catchType?.let { catchType ->
+                        val catchIdentity = resolveType(moduleIndex, catchType)
+                        val catchNominal = catchIdentity?.let { artifact.modules[it.module].types[it.type] }
+                        if (catchNominal !is NominalType.Class && catchNominal !is NominalType.Interface) {
+                            add(
+                                ArtifactWriteErrorCode.BAD_REFERENCE,
+                                "catch type does not resolve to a reference nominal type",
+                                ArtifactWriteLocation(moduleLocation, "EXCEPTIONS"),
+                            )
+                        } else if (registerType is ValueType.Ref && !registerType.nullable) {
+                            val catchValue = ValueType.Ref(nullable = false, type = catchType)
+                            if (!valueAssignable(moduleIndex, registerType, moduleIndex, catchValue) &&
+                                !valueAssignable(moduleIndex, catchValue, moduleIndex, registerType)
+                            ) {
+                                add(
+                                    ArtifactWriteErrorCode.INVALID_RANGE,
+                                    "exception register and catch type are incompatible",
+                                    ArtifactWriteLocation(moduleLocation, "EXCEPTIONS"),
+                                )
+                            }
+                        }
+                    }
                     structurallyValid
                 }
+            val orderedHandlers =
+                handlers.sortedWith(
+                    compareBy<ExceptionEntry> {
+                        it.firstProtectedBlock.value
+                    }.thenByDescending {
+                        it.firstProtectedBlock.value.toLong() + it.protectedBlockCount.toLong()
+                    },
+                )
+            val containingRanges = ArrayDeque<Long>()
+            orderedHandlers.forEach { exception ->
+                val start = exception.firstProtectedBlock.value.toLong()
+                val end = start + exception.protectedBlockCount.toLong()
+                while (containingRanges.lastOrNull()?.let { it <= start } == true) containingRanges.removeLast()
+                if (containingRanges.lastOrNull()?.let { end > it } == true) {
+                    add(
+                        ArtifactWriteErrorCode.INCONSISTENT_RANGE,
+                        "exception protected ranges cross without nesting",
+                        ArtifactWriteLocation(moduleLocation, "EXCEPTIONS"),
+                    )
+                }
+                containingRanges.addLast(end)
+            }
+
+            if (FunctionFlag.ABSTRACT in function.flags || function.blockCount == 0u || !blockRangeValid) {
+                return@forEachIndexed
+            }
+            val blockCount = blockCountLong.toInt()
             val handlerBlocks = handlers.mapTo(mutableSetOf()) { it.handlerBlock.value.toInt() }
 
             val states = arrayOfNulls<MutableSet<Int>>(blockCount)
-            states[0] = (0 until function.parameterCount.toInt().coerceAtMost(function.registers.size)).toMutableSet()
+            val parameterCount =
+                function.parameterCount
+                    .toLong()
+                    .takeIf { it <= function.registers.size.toLong() }
+                    ?.toInt() ?: 0
+            states[0] = (0 until parameterCount).toMutableSet()
             val queue = ArrayDeque<Int>()
             queue += 0
 
@@ -823,7 +887,7 @@ internal fun validateArtifact(
                                     exception.firstProtectedBlock.value.toLong() + exception.protectedBlockCount.toLong()
                             }.forEach { exception ->
                                 val incoming = state.toMutableSet()
-                                repeat(function.parameterCount.toInt().coerceAtMost(function.registers.size)) { incoming += it }
+                                repeat(parameterCount) { incoming += it }
                                 incoming += exception.exceptionRegister.value.toInt()
                                 merge(exception.handlerBlock.value.toInt() - blockStart, incoming)
                             }
