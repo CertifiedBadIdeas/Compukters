@@ -24,7 +24,9 @@ import java.nio.charset.CharacterCodingException
 import java.nio.charset.CodingErrorAction
 import java.nio.charset.StandardCharsets
 
-class MetadataText private constructor(private val bytes: ByteArray) : Comparable<MetadataText> {
+class MetadataText private constructor(
+    private val bytes: ByteArray,
+) : Comparable<MetadataText> {
     fun toByteArray(): ByteArray = bytes.copyOf()
 
     override fun compareTo(other: MetadataText): Int = compareUnsigned(bytes, other.bytes)
@@ -55,7 +57,9 @@ class MetadataText private constructor(private val bytes: ByteArray) : Comparabl
     }
 }
 
-class Utf16Literal private constructor(private val codeUnits: CharArray) : Comparable<Utf16Literal> {
+class Utf16Literal private constructor(
+    private val codeUnits: CharArray,
+) : Comparable<Utf16Literal> {
     val size: Int
         get() = codeUnits.size
 
@@ -68,8 +72,7 @@ class Utf16Literal private constructor(private val codeUnits: CharArray) : Compa
             }
         }
 
-    override fun compareTo(other: Utf16Literal): Int =
-        compareUnsigned(toLittleEndianByteArray(), other.toLittleEndianByteArray())
+    override fun compareTo(other: Utf16Literal): Int = compareUnsigned(toLittleEndianByteArray(), other.toLittleEndianByteArray())
 
     override fun equals(other: Any?): Boolean = other is Utf16Literal && codeUnits.contentEquals(other.codeUnits)
 

@@ -37,7 +37,9 @@ internal fun validateArtifact(
         if (errors.size < limits.diagnostics) errors += ArtifactWriteError(code, location, detail)
     }
 
-    if (artifact.entry.module.value.toLong() >= artifact.modules.size) {
+    if (artifact.entry.module.value
+            .toLong() >= artifact.modules.size
+    ) {
         add(ArtifactWriteErrorCode.BAD_REFERENCE, "entry module is outside the module table")
     }
     if (artifact.modules.size > limits.modules) {

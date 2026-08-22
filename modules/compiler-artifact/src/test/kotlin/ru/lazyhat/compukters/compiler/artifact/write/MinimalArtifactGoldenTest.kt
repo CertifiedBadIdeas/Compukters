@@ -41,7 +41,6 @@ class MinimalArtifactGoldenTest {
     }
 }
 
-internal fun fixture(name: String): ByteArray =
-    Path.of(requireNotNull(System.getProperty("compukter.vm.fixtures")), name).readBytes()
+internal fun fixture(name: String): ByteArray = Path.of(requireNotNull(System.getProperty("compukter.vm.fixtures")), name).readBytes()
 
 internal fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it) }

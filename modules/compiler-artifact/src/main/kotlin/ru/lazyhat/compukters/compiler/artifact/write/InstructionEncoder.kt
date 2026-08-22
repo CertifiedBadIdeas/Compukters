@@ -44,17 +44,20 @@ internal fun encodeInstruction(
             operands.writeRegister(instruction.destination)
             operands.writeUleb128(instruction.constant.value)
         }
+
         is Instruction.Null -> {
             opcode = 0x03u
             cost = 1u
             operands.writeRegister(instruction.destination)
         }
+
         is Instruction.NewObject -> {
             opcode = 0x30u
             cost = 4u
             operands.writeRegister(instruction.destination)
             operands.writeUleb128(encodeTypeRef(instruction.type))
         }
+
         is Instruction.NewArray -> {
             opcode = 0x31u
             cost = 4u
@@ -62,6 +65,7 @@ internal fun encodeInstruction(
             operands.writeUleb128(encodeTypeRef(instruction.type))
             operands.writeRegister(instruction.length)
         }
+
         is Instruction.ArrayLoad -> {
             opcode = 0x33u
             cost = 2u
@@ -69,6 +73,7 @@ internal fun encodeInstruction(
             operands.writeRegister(instruction.array)
             operands.writeRegister(instruction.index)
         }
+
         is Instruction.ArrayStore -> {
             opcode = 0x34u
             cost = 2u
@@ -76,6 +81,7 @@ internal fun encodeInstruction(
             operands.writeRegister(instruction.index)
             operands.writeRegister(instruction.value)
         }
+
         is Instruction.IsType -> {
             opcode = 0x39u
             cost = 2u
@@ -83,11 +89,13 @@ internal fun encodeInstruction(
             operands.writeRegister(instruction.value)
             operands.writeUleb128(encodeTypeRef(instruction.type))
         }
+
         is Instruction.Jump -> {
             opcode = 0xe0u
             cost = 1u
             operands.writeUleb128(instruction.target.value)
         }
+
         is Instruction.Branch -> {
             opcode = 0xe1u
             cost = 1u
@@ -95,6 +103,7 @@ internal fun encodeInstruction(
             operands.writeUleb128(instruction.trueTarget.value)
             operands.writeUleb128(instruction.falseTarget.value)
         }
+
         is Instruction.Return -> {
             opcode = 0xe3u
             cost = 1u
@@ -103,6 +112,7 @@ internal fun encodeInstruction(
                 Destination.Unit -> operands.writeU16(UShort.MAX_VALUE.toUInt())
             }
         }
+
         is Instruction.Throw -> {
             opcode = 0xe4u
             cost = 2u

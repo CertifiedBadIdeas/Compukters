@@ -25,7 +25,9 @@ sealed interface Instruction {
         val constant: ConstantId,
     ) : Instruction
 
-    data class Null(val destination: RegisterId) : Instruction
+    data class Null(
+        val destination: RegisterId,
+    ) : Instruction
 
     data class NewObject(
         val destination: RegisterId,
@@ -56,7 +58,9 @@ sealed interface Instruction {
         val type: TypeRef,
     ) : Instruction
 
-    data class Jump(val target: BlockId) : Instruction
+    data class Jump(
+        val target: BlockId,
+    ) : Instruction
 
     data class Branch(
         val condition: RegisterId,
@@ -64,7 +68,11 @@ sealed interface Instruction {
         val falseTarget: BlockId,
     ) : Instruction
 
-    data class Return(val value: Destination) : Instruction
+    data class Return(
+        val value: Destination,
+    ) : Instruction
 
-    data class Throw(val exception: RegisterId) : Instruction
+    data class Throw(
+        val exception: RegisterId,
+    ) : Instruction
 }

@@ -82,31 +82,45 @@ sealed interface NominalType {
 sealed interface Constant {
     val tag: Int
 
-    data class I32(val value: Int) : Constant {
+    data class I32(
+        val value: Int,
+    ) : Constant {
         override val tag: Int = 0
     }
 
-    data class I64(val value: Long) : Constant {
+    data class I64(
+        val value: Long,
+    ) : Constant {
         override val tag: Int = 1
     }
 
-    data class F32(val bits: UInt) : Constant {
+    data class F32(
+        val bits: UInt,
+    ) : Constant {
         override val tag: Int = 2
     }
 
-    data class F64(val bits: ULong) : Constant {
+    data class F64(
+        val bits: ULong,
+    ) : Constant {
         override val tag: Int = 3
     }
 
-    data class Bool(val value: Boolean) : Constant {
+    data class Bool(
+        val value: Boolean,
+    ) : Constant {
         override val tag: Int = 4
     }
 
-    data class Char(val codeUnit: UShort) : Constant {
+    data class Char(
+        val codeUnit: UShort,
+    ) : Constant {
         override val tag: Int = 5
     }
 
-    data class StringLiteral(val literal: Utf16LiteralId) : Constant {
+    data class StringLiteral(
+        val literal: Utf16LiteralId,
+    ) : Constant {
         override val tag: Int = 6
     }
 
