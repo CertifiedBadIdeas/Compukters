@@ -22,16 +22,11 @@ plugins {
 }
 
 dependencies {
-    api(projects.uiDsl)
     implementation(projects.nativeRuntime)
-    implementation(libs.kotlinx.coroutines.core)
-    api(libs.kotlinx.collections.immutable)
-    implementation(libs.kotlin.stdlib)
     implementation(libs.kotlin.logging)
     implementation(libs.slf4j.api)
 
     testImplementation(kotlin("test"))
-    testImplementation(libs.kotlinx.coroutines.test)
 }
 
 val compukterJniLibrary =
