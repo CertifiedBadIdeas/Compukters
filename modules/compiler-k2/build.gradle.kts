@@ -150,3 +150,46 @@ val forkedWorkerTest = tasks.register<Test>("forkedWorkerTest") {
 tasks.check {
     dependsOn(forkedWorkerTest)
 }
+
+val compilerModuleNames = setOf("kotlin-compiler-embeddable", "kotlin-scripting-compiler-embeddable")
+val nonWorkerIsolationChecks =
+    rootProject.allprojects.filter { it != project }.map { candidate ->
+        candidate.tasks.register("assertNoK2CompilerRuntime") {
+            doLast {
+                candidate.configurations.findByName("runtimeClasspath")?.takeIf { it.isCanBeResolved }?.let { runtime ->
+                    val leaked = runtime.resolvedConfiguration.resolvedArtifacts.filter { it.moduleVersion.id.name in compilerModuleNames }
+                    check(leaked.isEmpty()) { "${candidate.path} production runtime leaks compiler artifacts: $leaked" }
+                }
+            }
+        }
+    }
+
+val assertCompilerWorkerIsolation = tasks.register("assertCompilerWorkerIsolation") {
+    dependsOn(prepareCompilerWorkerPayload, nonWorkerIsolationChecks)
+    doLast {
+        val workerArtifacts = workerRuntimeClasspath.resolvedConfiguration.resolvedArtifacts
+        compilerModuleNames.forEach { module ->
+            val versions = workerArtifacts.filter { it.moduleVersion.id.name == module }.map { it.moduleVersion.id.version }.toSet()
+            check(versions == setOf(pinnedKotlinVersion)) { "$module must resolve exactly to $pinnedKotlinVersion, got $versions" }
+        }
+
+        val registrarPath = "META-INF/services/org.jetbrains.kotlin.compiler.plugin.CompilerPluginRegistrar"
+        val registrars = zipTree(workerJar.get().asFile).matching { include(registrarPath) }.files
+        check(registrars.size == 1) { "worker jar must contain exactly one compiler registrar service" }
+        check(registrars.single().readLines().filter(String::isNotBlank) == listOf("ru.lazyhat.compukters.compiler.worker.k2.CompukterCompilerPluginRegistrar")) {
+            "worker jar contains an unexpected compiler registrar"
+        }
+
+        val payloadLibraries = workerPayloadDirectory.get().asFile.toPath().resolve("lib")
+        val actualNames = Files.list(payloadLibraries).use { paths -> paths.map { it.fileName.toString() }.toList().toSet() }
+        val expectedNames = (workerRuntimeClasspath.files + workerJar.get().asFile).map { it.name }.toSet()
+        check(actualNames == expectedNames) { "worker payload differs from its fixed resolved runtime classpath" }
+        val forbiddenGroups = listOf("minecraft", "neoforge", "fabric", "architectury")
+        val forbidden = workerArtifacts.filter { artifact -> forbiddenGroups.any { it in artifact.moduleVersion.id.group.lowercase() } }
+        check(forbidden.isEmpty()) { "worker payload contains game or mod-loader artifacts: $forbidden" }
+    }
+}
+
+tasks.check {
+    dependsOn(assertCompilerWorkerIsolation)
+}
