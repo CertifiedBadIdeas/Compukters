@@ -28,6 +28,7 @@ plugins {
 }
 
 dependencies {
+    implementation(projects.compilerClient)
     implementation(projects.compilerArtifact)
     implementation(libs.kotlin.stdlib)
     implementation(libs.kotlin.compiler.embeddable)
@@ -153,7 +154,7 @@ tasks.check {
 
 val compilerModuleNames = setOf("kotlin-compiler-embeddable", "kotlin-scripting-compiler-embeddable")
 val nonWorkerIsolationChecks =
-    rootProject.allprojects.filter { it != project }.map { candidate ->
+    rootProject.allprojects.filter { it != project && it.path != ":compiler-client" }.map { candidate ->
         candidate.tasks.register("assertNoK2CompilerRuntime") {
             doLast {
                 candidate.configurations.findByName("runtimeClasspath")?.takeIf { it.isCanBeResolved }?.let { runtime ->
@@ -165,7 +166,7 @@ val nonWorkerIsolationChecks =
     }
 
 val assertCompilerWorkerIsolation = tasks.register("assertCompilerWorkerIsolation") {
-    dependsOn(prepareCompilerWorkerPayload, nonWorkerIsolationChecks)
+    dependsOn(prepareCompilerWorkerPayload, nonWorkerIsolationChecks, ":compiler-client:assertNoK2CompilerRuntime")
     doLast {
         val workerArtifacts = workerRuntimeClasspath.resolvedConfiguration.resolvedArtifacts
         compilerModuleNames.forEach { module ->

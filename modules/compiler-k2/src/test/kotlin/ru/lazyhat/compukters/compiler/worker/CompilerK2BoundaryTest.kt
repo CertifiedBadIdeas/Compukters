@@ -19,10 +19,16 @@
 
 package ru.lazyhat.compukters.compiler.worker
 
+import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
 class CompilerK2BoundaryTest {
+    @Test
+    fun `worker can decode client protocol source`() {
+        assertEquals("val answer = 42", BinaryValue.of("val answer = 42".encodeToByteArray()).decodeUtf8())
+    }
+
     @Test
     fun `worker owns the pinned K2 compiler`() {
         val compiler = Class.forName("org.jetbrains.kotlin.cli.jvm.K2JVMCompiler")
