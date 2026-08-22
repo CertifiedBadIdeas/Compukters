@@ -17,6 +17,27 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+import org.gradle.api.DefaultTask
+import org.gradle.api.artifacts.component.ModuleComponentIdentifier
+import org.gradle.api.provider.ListProperty
+import org.gradle.api.provider.SetProperty
+import org.gradle.api.tasks.Input
+import org.gradle.api.tasks.TaskAction
+
+abstract class AssertNoK2CompilerRuntime : DefaultTask() {
+    @get:Input
+    abstract val allowedRuntimeModules: SetProperty<String>
+
+    @get:Input
+    abstract val runtimeModules: ListProperty<String>
+
+    @TaskAction
+    fun verify() {
+        val disallowed = runtimeModules.get().filterNot(allowedRuntimeModules.get()::contains)
+        check(disallowed.isEmpty()) { "compiler-client runtimeClasspath contains disallowed dependencies: $disallowed" }
+    }
+}
+
 plugins {
     alias(libs.plugins.kotlinConvention)
 }
@@ -26,26 +47,25 @@ dependencies {
     testImplementation(kotlin("test"))
 }
 
-val allowedRuntimeModules =
+val allowedClientRuntimeModules =
     setOf(
         "org.jetbrains.kotlin:kotlin-stdlib",
         "org.jetbrains:annotations",
     )
+val resolvedRuntimeModules =
+    configurations.named("runtimeClasspath").map { runtimeClasspath ->
+        runtimeClasspath.incoming.resolutionResult.allComponents
+            .mapNotNull { component ->
+                (component.id as? ModuleComponentIdentifier)?.let { "${it.group}:${it.module}" }
+            }
+            .sorted()
+    }
 
-val assertNoK2CompilerRuntime = tasks.register("assertNoK2CompilerRuntime") {
+val assertNoK2CompilerRuntime = tasks.register<AssertNoK2CompilerRuntime>("assertNoK2CompilerRuntime") {
     group = "verification"
     description = "Fails when dependencies outside compiler-client's production runtime allowlist are resolved."
-
-    doLast {
-        val disallowed =
-            configurations
-                .getByName("runtimeClasspath")
-                .resolvedConfiguration
-                .resolvedArtifacts
-                .map { "${it.moduleVersion.id.group}:${it.moduleVersion.id.name}" }
-                .filterNot(allowedRuntimeModules::contains)
-        check(disallowed.isEmpty()) { "compiler-client runtimeClasspath contains disallowed dependencies: $disallowed" }
-    }
+    allowedRuntimeModules.set(allowedClientRuntimeModules)
+    runtimeModules.set(resolvedRuntimeModules)
 }
 
 tasks.check {
