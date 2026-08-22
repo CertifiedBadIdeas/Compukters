@@ -33,3 +33,36 @@ dependencies {
     testImplementation(kotlin("test"))
     testImplementation(libs.kotlinx.coroutines.test)
 }
+
+val compukterJniLibrary =
+    rootProject.file(".toolchain/build/cargo/compukter-jni/release/${System.mapLibraryName("compukter_jni")}")
+val programRuntimeArtifact =
+    project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-subset.cpkt")
+
+tasks.test {
+    filter.excludeTestsMatching("ru.lazyhat.compukters.core.device.runtime.program.integration.*")
+}
+
+val programRuntimeIntegrationTest =
+    tasks.register<Test>("programRuntimeIntegrationTest") {
+        description = "Runs a compiler-produced Kotlin artifact through the server runtime host and native VM."
+        group = "verification"
+        dependsOn(
+            ":compiler-k2:generateKotlinSubsetConformanceArtifact",
+            rootProject.tasks.named("cargoBuildCompukterJni"),
+        )
+        useJUnitPlatform()
+        testClassesDirs = sourceSets.test.get().output.classesDirs
+        classpath = sourceSets.test.get().runtimeClasspath
+        filter.includeTestsMatching("ru.lazyhat.compukters.core.device.runtime.program.integration.*")
+        inputs.file(compukterJniLibrary)
+        inputs.file(programRuntimeArtifact)
+        doFirst {
+            systemProperty("compukters.jni.library", compukterJniLibrary.absolutePath)
+            systemProperty("compukters.programRuntime.artifact", programRuntimeArtifact.get().asFile.absolutePath)
+        }
+    }
+
+tasks.check {
+    dependsOn(programRuntimeIntegrationTest)
+}
