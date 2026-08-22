@@ -10,9 +10,6 @@ displayURL="${homepage_url}"
 authors="${mod_authors}"
 description='''${mod_description}'''
 
-[[mixins]]
-config="compuktercraft.mixins.json"
-
 [[dependencies.${mod_id}]]
 modId="neoforge"
 mandatory=true
@@ -25,11 +22,4 @@ modId="minecraft"
 mandatory=true
 versionRange="${minecraft_version_range}"
 ordering="NONE"
-side="BOTH"
-
-[[dependencies.${mod_id}]]
-modId="geckolib"
-mandatory=true
-versionRange="[4.8.3,5)"
-ordering="AFTER"
 side="BOTH"

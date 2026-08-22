@@ -29,5 +29,4 @@ dependencies {
 
     implementation(libs.findLibrary("kotlin-stdlib").get())
     implementation(libs.findLibrary("kotlin-logging").get())
-    implementation(libs.findLibrary("kotlinx-coroutines-core").get())
 }
