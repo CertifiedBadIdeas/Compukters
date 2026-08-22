@@ -39,7 +39,10 @@ val assertNoK2CompilerRuntime = tasks.register("assertNoK2CompilerRuntime") {
                 .map { it.moduleVersion.id.group to it.moduleVersion.id.name }
                 .filter { (group, name) ->
                     group == "org.jetbrains.kotlin" &&
-                        (name.startsWith("kotlin-compiler-") || name.startsWith("kotlin-scripting") || name == "kotlin-script-runtime")
+                        (name == "kotlin-compiler" ||
+                            name.startsWith("kotlin-compiler-") ||
+                            name.startsWith("kotlin-scripting") ||
+                            name == "kotlin-script-runtime")
                 }
         check(forbidden.isEmpty()) { "compiler-client runtimeClasspath contains compiler or scripting dependencies: $forbidden" }
     }
