@@ -49,6 +49,31 @@ import kotlin.test.assertTrue
 
 class ForkedCompilerWorkerTest {
     @Test
+    fun `forked worker resolves two project sources in one K2 session before lowering`() =
+        withRealWorker { controller ->
+            val snapshot =
+                ProjectSnapshot.of(
+                    listOf(
+                        ProjectSource(
+                            VirtualSourcePath.kotlin("project/Helper.kt"),
+                            BinaryValue.of("package project\nfun shared() = 41".encodeToByteArray()),
+                        ),
+                        ProjectSource(
+                            VirtualSourcePath.kotlin("project/Main.kt"),
+                            BinaryValue.of("package project\nval answer = shared() + 1".encodeToByteArray()),
+                        ),
+                    ),
+                    WorkerLimits(),
+                )
+
+            val failure = assertIs<CompilerFailure>(controller.compile(snapshot).get(90, TimeUnit.SECONDS))
+            val unsupported = failure.diagnostics.single { it.code == "UNSUPPORTED_IR" }
+
+            assertEquals("project/Main.kt", unsupported.path?.value)
+            assertTrue(failure.diagnostics.none { it.message.contains("unresolved reference", ignoreCase = true) })
+        }
+
+    @Test
     fun `real worker is deterministic and remains healthy after compiler failures`() {
         val payload = payload(Path.of(checkNotNull(System.getProperty("compukters.worker.payload"))))
         val temporaryRoot = createTempDirectory("compukters-forked-worker-")
@@ -105,6 +130,33 @@ class ForkedCompilerWorkerTest {
                 WorkerLimits(),
             ),
         ).get(90, TimeUnit.SECONDS)
+
+    private fun withRealWorker(block: (CompilerWorkerController) -> Unit) {
+        val payload = payload(Path.of(checkNotNull(System.getProperty("compukters.worker.payload"))))
+        val temporaryRoot = createTempDirectory("compukters-forked-project-")
+        val limits = WorkerLimits()
+        val launch =
+            WorkerLaunch(
+                Path.of(checkNotNull(System.getProperty("compukters.worker.java"))),
+                512,
+                256,
+                temporaryRoot.resolve("child"),
+                payload.manifest.identity,
+                limits.frameBytes,
+                limits.stderrBytes,
+            )
+        try {
+            CompilerWorkerController(
+                payload,
+                launch,
+                limits,
+                JdkWorkerProcessFactory(),
+                CompilerWorkerPolicy(startupTimeoutNanos = 30_000_000_000, compilationTimeoutNanos = 60_000_000_000),
+            ).use(block)
+        } finally {
+            temporaryRoot.toFile().deleteRecursively()
+        }
+    }
 
     private fun payload(root: Path): PublishedWorkerPayload {
         val lines = Files.readAllLines(root.resolve("worker.payload"))

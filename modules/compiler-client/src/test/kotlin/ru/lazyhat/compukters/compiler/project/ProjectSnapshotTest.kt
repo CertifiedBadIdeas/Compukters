@@ -14,12 +14,16 @@ package ru.lazyhat.compukters.compiler.project
 import ru.lazyhat.compukters.compiler.worker.protocol.BinaryValue
 import ru.lazyhat.compukters.compiler.worker.protocol.VirtualSourcePath
 import ru.lazyhat.compukters.compiler.worker.protocol.WorkerLimits
+import java.nio.file.DirectoryStream
 import java.nio.file.Files
+import java.nio.file.Path
 import kotlin.io.path.createDirectories
 import kotlin.io.path.createTempDirectory
+import kotlin.io.path.moveTo
 import kotlin.io.path.writeBytes
 import kotlin.io.path.writeText
 import kotlin.test.Test
+import kotlin.test.assertContains
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -133,6 +137,63 @@ class ProjectSnapshotTest {
         Files.createSymbolicLink(source, outside)
 
         assertFailsWith<Exception> { ProjectSnapshotLoader.readSourceBytes(source, WorkerLimits().sourceFileBytes) }
+    }
+
+    @Test
+    fun `loader remains anchored when an opened parent is replaced by a symlink`() {
+        val root = createTempDirectory("compukter-parent-swap-")
+        val project = root.resolve("project").also { it.createDirectories() }
+        val nested = project.resolve("nested").also { it.createDirectories() }
+        nested.resolve("main.kt").writeText("val value = 1")
+        val outside = root.resolve("outside").also { it.createDirectories() }
+        outside.resolve("main.kt").writeText("val value = 2")
+        var swapped = false
+        val original = project.resolve("nested-original")
+
+        val snapshot =
+            ProjectSnapshotLoader.load(project, WorkerLimits()) { path, open ->
+                if (!swapped && path.value == "nested/main.kt") {
+                    swapped = true
+                    nested.moveTo(original)
+                    Files.createSymbolicLink(nested, outside)
+                }
+                try {
+                    open()
+                } finally {
+                    if (Files.isSymbolicLink(nested)) {
+                        Files.delete(nested)
+                        original.moveTo(nested)
+                    }
+                }
+            }
+
+        assertEquals(true, swapped)
+        assertEquals(
+            "val value = 1",
+            snapshot.sources
+                .single()
+                .content
+                .toByteArray()
+                .decodeToString(),
+        )
+    }
+
+    @Test
+    fun `loader closes and rejects a filesystem without secure directory streams`() {
+        var closed = false
+        val unsupported =
+            object : DirectoryStream<Path> {
+                override fun iterator(): MutableIterator<Path> = mutableListOf<Path>().iterator()
+
+                override fun close() {
+                    closed = true
+                }
+            }
+
+        val failure = assertFailsWith<ProjectSnapshotException> { ProjectSnapshotLoader.requireSecure(unsupported) }
+
+        assertContains(failure.message.orEmpty(), "secure project traversal")
+        assertEquals(true, closed)
     }
 
     private fun source(

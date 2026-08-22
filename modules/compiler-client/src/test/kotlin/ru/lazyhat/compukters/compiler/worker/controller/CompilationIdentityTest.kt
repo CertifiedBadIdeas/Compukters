@@ -71,13 +71,33 @@ class CompilationIdentityTest {
                 base.copy(expectedIdentity = base.expectedIdentity.copy(artifactWriterVersion = 2u)),
                 base.copy(trustedApiBundles = listOf(TrustedBundleIdentity.of("api", hash(5)))),
                 base.copy(trustedAddonBundles = listOf(TrustedBundleIdentity.of("addon", hash(6)))),
-                base.copy(limits = base.limits.copy(sourceFiles = base.limits.sourceFiles - 1)),
-                base.copy(limits = base.limits.copy(sourceFileBytes = base.limits.sourceFileBytes - 1)),
-                base.copy(limits = base.limits.copy(sourceBytes = base.limits.sourceBytes - 1)),
             )
 
         variants.forEach { variant -> assertNotEquals(baseKey, CompilationIdentity.compute(variant)) }
         assertEquals(baseKey, CompilationIdentity.compute(request()))
+    }
+
+    @Test
+    fun `every request limit that can change admission or a bounded result changes identity`() {
+        val base = request()
+        val baseKey = CompilationIdentity.compute(base)
+        val variants =
+            mapOf(
+                "sourceFiles" to base.limits.copy(sourceFiles = base.limits.sourceFiles - 1),
+                "sourceFileBytes" to base.limits.copy(sourceFileBytes = base.limits.sourceFileBytes - 1),
+                "sourceBytes" to base.limits.copy(sourceBytes = base.limits.sourceBytes - 1),
+                "frameBytes" to base.limits.copy(frameBytes = base.limits.frameBytes - 1),
+                "artifactBytes" to base.limits.copy(artifactBytes = base.limits.artifactBytes - 1),
+                "diagnostics" to base.limits.copy(diagnostics = base.limits.diagnostics - 1),
+                "diagnosticTextBytes" to base.limits.copy(diagnosticTextBytes = base.limits.diagnosticTextBytes - 1),
+                "stderrBytes" to base.limits.copy(stderrBytes = base.limits.stderrBytes - 1),
+                "temporaryBytes" to base.limits.copy(temporaryBytes = base.limits.temporaryBytes - 1),
+                "temporaryFiles" to base.limits.copy(temporaryFiles = base.limits.temporaryFiles - 1),
+            )
+
+        variants.forEach { (name, limits) ->
+            assertNotEquals(baseKey, CompilationIdentity.compute(base.copy(limits = limits)), name)
+        }
     }
 
     @Test

@@ -30,7 +30,7 @@ import java.security.MessageDigest
 object CompilationIdentity {
     fun compute(request: CompileRequest): Hash256 {
         val digest = MessageDigest.getInstance("SHA-256")
-        digest.update("Compukter compilation identity v2\u0000".encodeToByteArray())
+        digest.update("Compukter compilation identity v3\u0000".encodeToByteArray())
         val identity = request.expectedIdentity
         request.sources.forEach { source ->
             digest.field(1, entry(source.path.value.encodeToByteArray(), source.content.toByteArray()))
@@ -61,6 +61,50 @@ object CompilationIdentity {
         digest.field(
             13,
             request.limits.sourceBytes
+                .toUInt()
+                .littleEndian(),
+        )
+        // Every request limit participates: each one can change admission, bounded
+        // diagnostics/failure detail, temporary execution, or accepted output.
+        digest.field(
+            14,
+            request.limits.frameBytes
+                .toUInt()
+                .littleEndian(),
+        )
+        digest.field(
+            15,
+            request.limits.artifactBytes
+                .toUInt()
+                .littleEndian(),
+        )
+        digest.field(
+            16,
+            request.limits.diagnostics
+                .toUInt()
+                .littleEndian(),
+        )
+        digest.field(
+            17,
+            request.limits.diagnosticTextBytes
+                .toUInt()
+                .littleEndian(),
+        )
+        digest.field(
+            18,
+            request.limits.stderrBytes
+                .toUInt()
+                .littleEndian(),
+        )
+        digest.field(
+            19,
+            request.limits.temporaryBytes
+                .toULong()
+                .littleEndian(),
+        )
+        digest.field(
+            20,
+            request.limits.temporaryFiles
                 .toUInt()
                 .littleEndian(),
         )
@@ -101,3 +145,5 @@ private fun MessageDigest.field(
 }
 
 private fun UInt.littleEndian(): ByteArray = ByteArray(4) { index -> (this shr (index * 8)).toByte() }
+
+private fun ULong.littleEndian(): ByteArray = ByteArray(8) { index -> (this shr (index * 8)).toByte() }
