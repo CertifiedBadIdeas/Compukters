@@ -39,11 +39,15 @@ class CompilationSession(
     val artifactSink: (BinaryValue) -> Unit = {},
     val diagnosticSink: (WorkerDiagnostic) -> Unit = {},
     sourcePaths: Map<String, VirtualSourcePath> = emptyMap(),
+    trustedApiSourceIdentities: Map<String, String> = emptyMap(),
     val limits: WorkerLimits = WorkerLimits(),
 ) {
     private val sourcePaths = sourcePaths.mapKeys { (path, _) -> normalize(path) }
+    private val trustedApiSourceIdentities = trustedApiSourceIdentities.mapKeys { (path, _) -> normalize(path) }
 
     fun virtualSourcePath(physicalPath: String?): VirtualSourcePath? = physicalPath?.let { sourcePaths[normalize(it)] }
+
+    fun trustedApiIdentity(physicalPath: String?): String? = physicalPath?.let { trustedApiSourceIdentities[normalize(it)] }
 
     private fun normalize(path: String): String =
         runCatching {

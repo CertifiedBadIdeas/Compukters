@@ -21,11 +21,17 @@ package ru.lazyhat.compukters.compiler.artifact.write
 
 import ru.lazyhat.compukters.compiler.artifact.model.Artifact
 import ru.lazyhat.compukters.compiler.artifact.model.Capability
+import ru.lazyhat.compukters.compiler.artifact.model.Module
 import ru.lazyhat.compukters.compiler.artifact.model.ModuleKind
 import ru.lazyhat.compukters.compiler.artifact.model.SemanticFeature
 import java.security.MessageDigest
 
 object ArtifactWriter {
+    fun moduleSemanticHash(
+        module: Module,
+        limits: ArtifactWriteLimits = ArtifactWriteLimits(),
+    ): ByteArray = encodeModuleSections(module, limits).semanticHash.copyOf()
+
     fun write(
         artifact: Artifact,
         limits: ArtifactWriteLimits = ArtifactWriteLimits(),

@@ -33,6 +33,17 @@ import kotlin.test.assertTrue
 
 class ArtifactWriterFailureTest {
     @Test
+    fun `module semantic identity is deterministic and defensively copied`() {
+        val module = languageRuntimeArtifact().modules.single()
+
+        val first = ArtifactWriter.moduleSemanticHash(module)
+        val expected = first.copyOf()
+        first[0] = (first[0].toInt() xor 0xff).toByte()
+
+        assertContentEquals(expected, ArtifactWriter.moduleSemanticHash(module))
+    }
+
+    @Test
     fun `repeated encoding is byte deterministic`() {
         val first = assertIs<ArtifactWriteResult.Success>(ArtifactWriter.write(languageRuntimeArtifact()))
         val second = assertIs<ArtifactWriteResult.Success>(ArtifactWriter.write(languageRuntimeArtifact()))

@@ -129,6 +129,22 @@ tasks.test {
     }
 }
 
+val kotlinSubsetConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-subset.cpkt")
+
+val generateKotlinSubsetConformanceArtifact = tasks.register<Test>("generateKotlinSubsetConformanceArtifact") {
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*multi-file terminal program lowers through trusted symbols*")
+    inputs.file(workerJar)
+    outputs.file(kotlinSubsetConformanceArtifact)
+    doFirst {
+        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+        systemProperty("compukter.vm.kotlinSubsetArtifact", kotlinSubsetConformanceArtifact.get().asFile.absolutePath)
+    }
+}
+
 val workerMeasurementReport = layout.buildDirectory.file("reports/worker/measurements.json")
 
 val forkedWorkerTest = tasks.register<Test>("forkedWorkerTest") {

@@ -173,13 +173,16 @@ class K2CompilerAdapterTest {
     fun `IR compilation writes no temporary output beyond its exact source footprint`() =
         withAdapter { adapter, root ->
             val source = "val answer: Int = 42"
+            val trustedApiBytes =
+                checkNotNull(K2CompilerAdapter::class.java.getResourceAsStream("/compukter-api/terminal.kt"))
+                    .use { it.readBytes().size }
             val result =
                 adapter.compile(
                     request(
                         source,
                         WorkerLimits(
-                            temporaryBytes = source.encodeToByteArray().size.toLong(),
-                            temporaryFiles = 3, // source/, source/project/, and the Kotlin file
+                            temporaryBytes = source.encodeToByteArray().size.toLong() + trustedApiBytes,
+                            temporaryFiles = 5, // source/, source/project/, trusted/, and both Kotlin files
                         ),
                     ),
                 )
