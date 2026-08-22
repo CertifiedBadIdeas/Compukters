@@ -55,8 +55,6 @@ dependencies {
     implementation(project(":core"))
     shadowBundle(project(":core")) { isTransitive = false }
 
-    neoForgeImplementation(libs.findLibrary("kotlinx-coroutines-core").get())
-    neoForgeImplementation(libs.findLibrary("kotlinx-collections-immutable").get())
     neoForgeImplementation(libs.findLibrary("kotlin-stdlib").get())
     neoForgeImplementation(libs.findLibrary("kotlin-logging").get())
 }

@@ -54,14 +54,12 @@ loom {
             property("neoforge.enableGameTest", "true")
             property("neoforge.enabledGameTestNamespaces", "compukters,minecraft")
             property("neoforge.gameTestServer", "true")
-            property("kotlinx.coroutines.debug", "off")
             ideConfigGenerated(true)
         }
     }
 
     mods {
         maybeCreate("main").apply {
-            sourceSet("main", project(projects.uiDsl.path))
             sourceSet("main", project(projects.v1211Common.path))
             sourceSet("main", project(projects.core.path))
             sourceSet("main", project(":native-runtime"))
@@ -72,10 +70,8 @@ loom {
 
 dependencies {
     common(project(path = projects.v1211Common.path, configuration = "namedElements")) { isTransitive = false }
-    shadowBundle(project(path = projects.uiDsl.path)) { isTransitive = false }
     shadowBundle(project(path = projects.v1211Common.path, configuration = "transformProductionNeoForge"))
     testImplementation(project(path = projects.v1211Common.path, configuration = "namedElements"))
-    modImplementation(libs.geckolib.neoforge.v1211)
 
     add(gameTest.implementationConfigurationName, sourceSets.main.get().output)
     add(gameTest.implementationConfigurationName, project(path = projects.v1211Common.path, configuration = "namedElements"))

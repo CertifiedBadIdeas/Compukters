@@ -19,36 +19,13 @@
 
 package ru.lazyhat.compukters.impl
 
-import net.neoforged.api.distmarker.Dist
-import net.neoforged.bus.api.IEventBus
 import net.neoforged.fml.common.Mod
-import net.neoforged.fml.event.lifecycle.FMLDedicatedServerSetupEvent
-import ru.lazyhat.compukters.common.network.ClientNetworking
-import ru.lazyhat.compukters.common.network.ServerNetworking
 import ru.lazyhat.compukters.core.LOGGER
 import ru.lazyhat.compukters.core.MOD_ID
-import ru.lazyhat.compukters.core.MOD_NAME
-import ru.lazyhat.compukters.impl.platform.NetworkHandler
 
 @Mod(MOD_ID)
-class CompuktersMod(
-    modEventBus: IEventBus,
-    dist: Dist,
-) {
+class CompuktersMod {
     init {
         LOGGER.debug { "$MOD_ID has started!" }
-
-        NetworkHandler.setup(modEventBus)
-        ServerNetworking.playerSender = NetworkHandler::sendToPlayer
-        ClientNetworking.serverSender = NetworkHandler::sendToServer
-
-        if (dist != Dist.CLIENT) {
-            modEventBus.addListener(::onServerSetup)
-        }
-    }
-
-    @Suppress("UNUSED_PARAMETER")
-    private fun onServerSetup(event: FMLDedicatedServerSetupEvent) {
-        LOGGER.info { "Initializing server... with $MOD_NAME!" }
     }
 }

@@ -33,21 +33,11 @@ plugins {
 // Goals:
 //  * Keep `run/client`, `run/client2`, `run/server` at the same depth so the
 //    layout is symmetric and easy to wipe selectively.
-//  * Apply the same JVM properties (e.g. coroutine debug switch) to every
-//    run without copy-pasting in each loader build script.
 //  * Enable two parallel client instances out of the box for local
 //    multiplayer testing without rebuilding/sideloading jars.
 // ---------------------------------------------------------------------------
 
-val sharedRunProperties: Map<String, String> =
-    mapOf(
-        // Coroutine debug agent doubles allocation and slows ticks; off by
-        // default for dev runs. Override per-run with `-D...=on` if needed.
-        "kotlinx.coroutines.debug" to "off",
-    )
-
 fun RunConfigSettings.applyShared() {
-    sharedRunProperties.forEach { (k, v) -> property(k, v) }
     ideConfigGenerated(true)
 }
 
