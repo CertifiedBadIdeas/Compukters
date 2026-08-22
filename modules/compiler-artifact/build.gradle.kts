@@ -31,3 +31,24 @@ tasks.test {
     inputs.dir(rustFixtures)
     systemProperty("compukter.vm.fixtures", rustFixtures.asFile.absolutePath)
 }
+
+val assertCompilerArtifactIsolation = tasks.register("assertCompilerArtifactIsolation") {
+    group = "verification"
+    description = "Fails when compiler implementation artifacts enter compiler-artifact production classpaths."
+
+    doLast {
+        val forbidden =
+            listOf("compileClasspath", "runtimeClasspath")
+                .flatMap { name -> configurations.getByName(name).resolvedConfiguration.resolvedArtifacts }
+                .map { it.moduleVersion.id.group to it.moduleVersion.id.name }
+                .filter { (group, name) ->
+                    group == "org.jetbrains.kotlin" &&
+                        (name.startsWith("kotlin-compiler") || name.startsWith("kotlin-scripting-compiler"))
+                }
+        check(forbidden.isEmpty()) { "compiler-artifact contains compiler implementation dependencies: $forbidden" }
+    }
+}
+
+tasks.check {
+    dependsOn(assertCompilerArtifactIsolation)
+}

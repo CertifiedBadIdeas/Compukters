@@ -19,8 +19,6 @@
 
 package ru.lazyhat.compukters.compiler.artifact.write
 
-import java.nio.charset.StandardCharsets
-import java.security.MessageDigest
 import ru.lazyhat.compukters.compiler.artifact.model.Constant
 import ru.lazyhat.compukters.compiler.artifact.model.DebugEntry
 import ru.lazyhat.compukters.compiler.artifact.model.Destination
@@ -31,6 +29,8 @@ import ru.lazyhat.compukters.compiler.artifact.model.NominalType
 import ru.lazyhat.compukters.compiler.artifact.model.SymbolKind
 import ru.lazyhat.compukters.compiler.artifact.model.TypeRef
 import ru.lazyhat.compukters.compiler.artifact.model.ValueType
+import java.nio.charset.StandardCharsets
+import java.security.MessageDigest
 
 internal const val STRINGS = 0x0100
 internal const val TYPES = 0x0101
@@ -76,11 +76,19 @@ internal fun encodeModuleSections(
         listOf(
             EncodedSection(STRINGS, encodeIndexed(module.strings.map { it.toByteArray() }, maximum), module.strings.size.toUInt()),
             EncodedSection(TYPES, encodeIndexed(module.types.map { encodeType(it, maximum) }, maximum), module.types.size.toUInt()),
-            EncodedSection(CONSTANTS, encodeIndexed(module.constants.map { encodeConstant(it, maximum) }, maximum), module.constants.size.toUInt()),
+            EncodedSection(
+                CONSTANTS,
+                encodeIndexed(module.constants.map { encodeConstant(it, maximum) }, maximum),
+                module.constants.size.toUInt(),
+            ),
             EncodedSection(IMPORTS, encodeIndexed(module.imports.map { encodeImport(it, maximum) }, maximum), module.imports.size.toUInt()),
             EncodedSection(EXPORTS, encodeIndexed(module.exports.map { encodeExport(it, maximum) }, maximum), module.exports.size.toUInt()),
             EncodedSection(FIELDS, encodeIndexed(module.fields.map { encodeField(it, maximum) }, maximum), module.fields.size.toUInt()),
-            EncodedSection(FUNCTIONS, encodeIndexed(module.functions.map { encodeFunction(it, maximum) }, maximum), module.functions.size.toUInt()),
+            EncodedSection(
+                FUNCTIONS,
+                encodeIndexed(module.functions.map { encodeFunction(it, maximum) }, maximum),
+                module.functions.size.toUInt(),
+            ),
             EncodedSection(
                 BLOCKS,
                 encodeIndexed(
@@ -102,17 +110,21 @@ internal fun encodeModuleSections(
             EncodedSection(CODE, encodeIndexed(codeRecords, maximum), codeRecords.size.toUInt()),
             EncodedSection(
                 EXCEPTIONS,
-                encodeIndexed(module.exceptions.map { exception ->
-                    BinarySink(maximum).apply {
-                        writeU32(exception.owner.value)
-                        writeU32(exception.firstProtectedBlock.value)
-                        writeU32(exception.protectedBlockCount)
-                        writeU32(exception.catchType?.let(::encodeTypeRef) ?: UInt.MAX_VALUE)
-                        writeU32(exception.handlerBlock.value)
-                        writeU16(exception.exceptionRegister.value.toUInt())
-                        writeU16(0u)
-                    }.toByteArray()
-                }, maximum),
+                encodeIndexed(
+                    module.exceptions.map { exception ->
+                        BinarySink(maximum)
+                            .apply {
+                                writeU32(exception.owner.value)
+                                writeU32(exception.firstProtectedBlock.value)
+                                writeU32(exception.protectedBlockCount)
+                                writeU32(exception.catchType?.let(::encodeTypeRef) ?: UInt.MAX_VALUE)
+                                writeU32(exception.handlerBlock.value)
+                                writeU16(exception.exceptionRegister.value.toUInt())
+                                writeU16(0u)
+                            }.toByteArray()
+                    },
+                    maximum,
+                ),
                 module.exceptions.size.toUInt(),
             ),
             EncodedSection(
@@ -132,41 +144,45 @@ private fun encodeType(
     type: NominalType,
     maximum: Int,
 ): ByteArray =
-    BinarySink(maximum).apply {
-        when (type) {
-            is NominalType.Class -> {
-                writeU8(0u)
-                writeU8((if (type.abstract) 1u else 0u) or (if (type.final) 2u else 0u))
-                writeU16(type.genericArity.toUInt())
-                writeU32(type.name.value)
-                writeClassLike(type.superType, type.interfaces, type.fieldStart, type.fieldCount, type.methodStart, type.methodCount)
+    BinarySink(maximum)
+        .apply {
+            when (type) {
+                is NominalType.Class -> {
+                    writeU8(0u)
+                    writeU8((if (type.abstract) 1u else 0u) or (if (type.final) 2u else 0u))
+                    writeU16(type.genericArity.toUInt())
+                    writeU32(type.name.value)
+                    writeClassLike(type.superType, type.interfaces, type.fieldStart, type.fieldCount, type.methodStart, type.methodCount)
+                }
+
+                is NominalType.Interface -> {
+                    writeU8(1u)
+                    writeU8(if (type.sealed) 1u else 0u)
+                    writeU16(type.genericArity.toUInt())
+                    writeU32(type.name.value)
+                    writeClassLike(type.superType, type.interfaces, 0u, 0u, type.methodStart, type.methodCount)
+                }
+
+                is NominalType.Array -> {
+                    writeU8(2u)
+                    writeU8(0u)
+                    writeU16(0u)
+                    writeU32(type.name.value)
+                    writeValueType(type.element)
+                }
+
+                is NominalType.Function -> {
+                    writeU8(3u)
+                    writeU8(0u)
+                    writeU16(0u)
+                    writeU32(type.name.value)
+                    writeU16(type.parameters.size.toUInt())
+                    writeU16(if (type.suspending) 1u else 0u)
+                    writeValueType(type.result)
+                    type.parameters.forEach(::writeValueType)
+                }
             }
-            is NominalType.Interface -> {
-                writeU8(1u)
-                writeU8(if (type.sealed) 1u else 0u)
-                writeU16(type.genericArity.toUInt())
-                writeU32(type.name.value)
-                writeClassLike(type.superType, type.interfaces, 0u, 0u, type.methodStart, type.methodCount)
-            }
-            is NominalType.Array -> {
-                writeU8(2u)
-                writeU8(0u)
-                writeU16(0u)
-                writeU32(type.name.value)
-                writeValueType(type.element)
-            }
-            is NominalType.Function -> {
-                writeU8(3u)
-                writeU8(0u)
-                writeU16(0u)
-                writeU32(type.name.value)
-                writeU16(type.parameters.size.toUInt())
-                writeU16(if (type.suspending) 1u else 0u)
-                writeValueType(type.result)
-                type.parameters.forEach(::writeValueType)
-            }
-        }
-    }.toByteArray()
+        }.toByteArray()
 
 private fun BinarySink.writeClassLike(
     superType: TypeRef?,
@@ -207,86 +223,104 @@ private fun encodeConstant(
     constant: Constant,
     maximum: Int,
 ): ByteArray =
-    BinarySink(maximum).apply {
-        writeU8(constant.tag.toUInt())
-        when (constant) {
-            is Constant.I32 -> writeU32(constant.value.toUInt())
-            is Constant.I64 -> writeU64(constant.value.toULong())
-            is Constant.F32 -> writeU32(constant.bits)
-            is Constant.F64 -> writeU64(constant.bits)
-            is Constant.Bool -> writeU8(if (constant.value) 1u else 0u)
-            is Constant.Char -> writeU16(constant.codeUnit.toUInt())
-            is Constant.StringLiteral -> writeU32(constant.literal.value)
-            Constant.Null -> Unit
-        }
-    }.toByteArray()
+    BinarySink(maximum)
+        .apply {
+            writeU8(constant.tag.toUInt())
+            when (constant) {
+                is Constant.I32 -> writeU32(constant.value.toUInt())
+                is Constant.I64 -> writeU64(constant.value.toULong())
+                is Constant.F32 -> writeU32(constant.bits)
+                is Constant.F64 -> writeU64(constant.bits)
+                is Constant.Bool -> writeU8(if (constant.value) 1u else 0u)
+                is Constant.Char -> writeU16(constant.codeUnit.toUInt())
+                is Constant.StringLiteral -> writeU32(constant.literal.value)
+                Constant.Null -> Unit
+            }
+        }.toByteArray()
 
-private fun encodeImport(value: ru.lazyhat.compukters.compiler.artifact.model.Import, maximum: Int): ByteArray =
-    BinarySink(maximum).apply {
-        writeU8(value.kind.ordinal.toUInt())
-        writeU8(0u)
-        writeU16(0u)
-        writeU32(value.targetModule.value)
-        writeU32(value.targetName.value)
-        writeU32(encodeTypeRef(value.expectedSignature))
-        require(value.targetModuleHash.size == 32) { "target module hash must contain 32 bytes" }
-        writeBytes(value.targetModuleHash)
-    }.toByteArray()
+private fun encodeImport(
+    value: ru.lazyhat.compukters.compiler.artifact.model.Import,
+    maximum: Int,
+): ByteArray =
+    BinarySink(maximum)
+        .apply {
+            writeU8(value.kind.ordinal.toUInt())
+            writeU8(0u)
+            writeU16(0u)
+            writeU32(value.targetModule.value)
+            writeU32(value.targetName.value)
+            writeU32(encodeTypeRef(value.expectedSignature))
+            require(value.targetModuleHash.size == 32) { "target module hash must contain 32 bytes" }
+            writeBytes(value.targetModuleHash)
+        }.toByteArray()
 
-private fun encodeExport(value: ru.lazyhat.compukters.compiler.artifact.model.Export, maximum: Int): ByteArray =
-    BinarySink(maximum).apply {
-        writeU8(value.kind.ordinal.toUInt())
-        writeU8(if (value.visibility == ExportVisibility.PUBLIC_LIBRARY) 1u else 0u)
-        writeU16(0u)
-        writeU32(value.name.value)
-        writeU32(value.localSymbol)
-        writeU32(encodeTypeRef(value.signature))
-    }.toByteArray()
+private fun encodeExport(
+    value: ru.lazyhat.compukters.compiler.artifact.model.Export,
+    maximum: Int,
+): ByteArray =
+    BinarySink(maximum)
+        .apply {
+            writeU8(value.kind.ordinal.toUInt())
+            writeU8(if (value.visibility == ExportVisibility.PUBLIC_LIBRARY) 1u else 0u)
+            writeU16(0u)
+            writeU32(value.name.value)
+            writeU32(value.localSymbol)
+            writeU32(encodeTypeRef(value.signature))
+        }.toByteArray()
 
-private fun encodeField(value: ru.lazyhat.compukters.compiler.artifact.model.Field, maximum: Int): ByteArray =
-    BinarySink(maximum).apply {
-        writeU32(encodeTypeRef(value.owner))
-        writeU32(value.name.value)
-        writeValueType(value.type)
-        writeU32((if (value.mutable) 1u else 0u) or (if (value.static) 2u else 0u))
-        writeU32(0u)
-    }.toByteArray()
+private fun encodeField(
+    value: ru.lazyhat.compukters.compiler.artifact.model.Field,
+    maximum: Int,
+): ByteArray =
+    BinarySink(maximum)
+        .apply {
+            writeU32(encodeTypeRef(value.owner))
+            writeU32(value.name.value)
+            writeValueType(value.type)
+            writeU32((if (value.mutable) 1u else 0u) or (if (value.static) 2u else 0u))
+            writeU32(0u)
+        }.toByteArray()
 
-private fun encodeFunction(value: ru.lazyhat.compukters.compiler.artifact.model.Function, maximum: Int): ByteArray =
-    BinarySink(maximum).apply {
-        writeU32(value.owner?.let(::encodeTypeRef) ?: UInt.MAX_VALUE)
-        writeU32(value.name.value)
-        writeU32(encodeTypeRef(value.signature))
-        writeU32(
-            (if (FunctionFlag.SUSPENDING in value.flags) 1u else 0u) or
-                (if (FunctionFlag.STATIC in value.flags) 2u else 0u) or
-                (if (FunctionFlag.VIRTUAL in value.flags) 4u else 0u) or
-                (if (FunctionFlag.ABSTRACT in value.flags) 8u else 0u),
-        )
-        writeU16(value.registers.size.toUInt())
-        writeU16(value.parameterCount)
-        writeU32(value.firstBlock.value)
-        writeU32(value.blockCount)
-        writeU32(value.firstException)
-        writeU32(value.exceptionCount)
-        value.registers.forEach(::writeValueType)
-    }.toByteArray()
+private fun encodeFunction(
+    value: ru.lazyhat.compukters.compiler.artifact.model.Function,
+    maximum: Int,
+): ByteArray =
+    BinarySink(maximum)
+        .apply {
+            writeU32(value.owner?.let(::encodeTypeRef) ?: UInt.MAX_VALUE)
+            writeU32(value.name.value)
+            writeU32(encodeTypeRef(value.signature))
+            writeU32(
+                (if (FunctionFlag.SUSPENDING in value.flags) 1u else 0u) or
+                    (if (FunctionFlag.STATIC in value.flags) 2u else 0u) or
+                    (if (FunctionFlag.VIRTUAL in value.flags) 4u else 0u) or
+                    (if (FunctionFlag.ABSTRACT in value.flags) 8u else 0u),
+            )
+            writeU16(value.registers.size.toUInt())
+            writeU16(value.parameterCount)
+            writeU32(value.firstBlock.value)
+            writeU32(value.blockCount)
+            writeU32(value.firstException)
+            writeU32(value.exceptionCount)
+            value.registers.forEach(::writeValueType)
+        }.toByteArray()
 
 private fun encodeDebug(
     value: DebugEntry,
     maximum: Int,
 ): ByteArray =
-    BinarySink(maximum).apply {
-        writeU32(value.function.value)
-        writeU32(value.block.value)
-        writeU32(value.instruction)
-        writeU32(value.startUtf16)
-        writeU32(value.endUtf16)
-        writeU32(value.inlineParent?.value ?: UInt.MAX_VALUE)
-        val path = value.sourcePath.toByteArray()
-        writeU32(path.size.toUInt())
-        writeBytes(path)
-    }.toByteArray()
+    BinarySink(maximum)
+        .apply {
+            writeU32(value.function.value)
+            writeU32(value.block.value)
+            writeU32(value.instruction)
+            writeU32(value.startUtf16)
+            writeU32(value.endUtf16)
+            writeU32(value.inlineParent?.value ?: UInt.MAX_VALUE)
+            val path = value.sourcePath.toByteArray()
+            writeU32(path.size.toUInt())
+            writeBytes(path)
+        }.toByteArray()
 
 private fun semanticHash(sections: List<EncodedSection>): ByteArray {
     val digest = MessageDigest.getInstance("SHA-256")

@@ -55,7 +55,9 @@ sealed interface ArtifactWriteResult {
         val sha256: ByteArray = sha256.copyOf()
     }
 
-    data class Failure(val errors: List<ArtifactWriteError>) : ArtifactWriteResult {
+    data class Failure(
+        val errors: List<ArtifactWriteError>,
+    ) : ArtifactWriteResult {
         init {
             require(errors.isNotEmpty()) { "writer failure must contain at least one diagnostic" }
         }

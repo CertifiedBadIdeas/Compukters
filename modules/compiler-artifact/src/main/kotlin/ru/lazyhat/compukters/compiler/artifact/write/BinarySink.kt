@@ -21,7 +21,9 @@ package ru.lazyhat.compukters.compiler.artifact.write
 
 import java.io.ByteArrayOutputStream
 
-internal class BinarySink(private val maximumBytes: Int) {
+internal class BinarySink(
+    private val maximumBytes: Int,
+) {
     private val output = ByteArrayOutputStream(minOf(maximumBytes, 4_096))
 
     val size: Int

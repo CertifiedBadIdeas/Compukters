@@ -103,6 +103,14 @@ class ArtifactModelTest {
             )
 
         assertEquals(ModuleKind.APPLICATION, artifact.modules.single().kind)
-        assertEquals(Instruction.Return(Destination.Unit), artifact.modules.single().blocks.single().instructions.single())
+        assertEquals(
+            Instruction.Return(Destination.Unit),
+            artifact.modules
+                .single()
+                .blocks
+                .single()
+                .instructions
+                .single(),
+        )
     }
 }

@@ -19,11 +19,11 @@
 
 package ru.lazyhat.compukters.compiler.artifact.write
 
-import java.security.MessageDigest
 import ru.lazyhat.compukters.compiler.artifact.model.Artifact
 import ru.lazyhat.compukters.compiler.artifact.model.Capability
 import ru.lazyhat.compukters.compiler.artifact.model.ModuleKind
 import ru.lazyhat.compukters.compiler.artifact.model.SemanticFeature
+import java.security.MessageDigest
 
 object ArtifactWriter {
     fun write(
@@ -78,7 +78,14 @@ private fun encodeArtifact(
     val sections = mutableListOf<PhysicalSection>()
     sections += PhysicalSection(MANIFEST, CORE_FLAGS, 0u, encodeManifest(artifact, limits), 1u)
     sections += PhysicalSection(MODULES, CORE_FLAGS, 0u, encodeModules(artifact, encodedModules, limits), artifact.modules.size.toUInt())
-    sections += PhysicalSection(CAPABILITIES, CORE_FLAGS, 0u, encodeCapabilities(artifact.capabilities, limits), artifact.capabilities.size.toUInt())
+    sections +=
+        PhysicalSection(
+            CAPABILITIES,
+            CORE_FLAGS,
+            0u,
+            encodeCapabilities(artifact.capabilities, limits),
+            artifact.capabilities.size.toUInt(),
+        )
     encodedModules.forEachIndexed { moduleIndex, module ->
         val scope = moduleIndex.toUInt() + 1u
         module.semantic.forEach { sections += PhysicalSection(it.kind, CORE_FLAGS, scope, it.payload, it.count) }
@@ -125,7 +132,10 @@ private fun encodeArtifact(
         sink.writeU16(entry.section.flags.toUInt())
         sink.writeU32(entry.section.scope)
         sink.writeU64(entry.offset.toULong())
-        sink.writeU64(entry.section.payload.size.toULong())
+        sink.writeU64(
+            entry.section.payload.size
+                .toULong(),
+        )
         sink.writeU32(entry.section.count)
         sink.writeU32(0u)
     }
@@ -148,22 +158,23 @@ private fun encodeManifest(
 ): ByteArray {
     val requiredCapabilities = artifact.capabilities.count(Capability::required).toUInt()
     val optionalCapabilities = artifact.capabilities.size.toUInt() - requiredCapabilities
-    return BinarySink(limits.artifactBytes).apply {
-        val manifest = artifact.manifest
-        writeU32(manifest.requiredHeapBytes)
-        writeU32(manifest.requiredStackBytes)
-        writeU32(manifest.maximumCoroutines)
-        writeU32(manifest.maximumCallDepth)
-        writeU32(manifest.maximumHostRequests)
-        writeU32(manifest.maximumEvents)
-        writeU32(manifest.maximumBlockCost)
-        writeU32(manifest.minimumSliceCost)
-        writeU32(requiredCapabilities)
-        writeU32(optionalCapabilities)
-        writeBytes(manifest.compilerAbi)
-        writeBytes(manifest.standardLibraryAbi)
-        writeU64(0u)
-    }.toByteArray()
+    return BinarySink(limits.artifactBytes)
+        .apply {
+            val manifest = artifact.manifest
+            writeU32(manifest.requiredHeapBytes)
+            writeU32(manifest.requiredStackBytes)
+            writeU32(manifest.maximumCoroutines)
+            writeU32(manifest.maximumCallDepth)
+            writeU32(manifest.maximumHostRequests)
+            writeU32(manifest.maximumEvents)
+            writeU32(manifest.maximumBlockCost)
+            writeU32(manifest.minimumSliceCost)
+            writeU32(requiredCapabilities)
+            writeU32(optionalCapabilities)
+            writeBytes(manifest.compilerAbi)
+            writeBytes(manifest.standardLibraryAbi)
+            writeU64(0u)
+        }.toByteArray()
 }
 
 private fun encodeModules(
@@ -173,16 +184,17 @@ private fun encodeModules(
 ): ByteArray =
     encodeIndexed(
         artifact.modules.zip(encoded).map { (module, sections) ->
-            BinarySink(limits.artifactBytes).apply {
-                writeU32(module.name.value)
-                writeU32(if (module.kind == ModuleKind.APPLICATION) 1u else 2u)
-                writeBytes(sections.semanticHash)
-                writeU32(module.imports.size.toUInt())
-                writeU32(module.exports.size.toUInt())
-                writeU32(module.types.size.toUInt())
-                writeU32(module.functions.size.toUInt())
-                writeU32(0u)
-            }.toByteArray()
+            BinarySink(limits.artifactBytes)
+                .apply {
+                    writeU32(module.name.value)
+                    writeU32(if (module.kind == ModuleKind.APPLICATION) 1u else 2u)
+                    writeBytes(sections.semanticHash)
+                    writeU32(module.imports.size.toUInt())
+                    writeU32(module.exports.size.toUInt())
+                    writeU32(module.types.size.toUInt())
+                    writeU32(module.functions.size.toUInt())
+                    writeU32(0u)
+                }.toByteArray()
         },
         limits.artifactBytes,
     )
@@ -193,18 +205,18 @@ private fun encodeCapabilities(
 ): ByteArray =
     encodeIndexed(
         capabilities.map { capability ->
-            BinarySink(limits.artifactBytes).apply {
-                writeU32(capability.namespace.value)
-                writeU32(capability.name.value)
-                writeU16(capability.abi.major.toUInt())
-                writeU16(capability.abi.minor.toUInt())
-                writeU32(if (capability.required) 1u else 2u)
-                writeU32(capability.operationCount)
-                writeU32(0u)
-            }.toByteArray()
+            BinarySink(limits.artifactBytes)
+                .apply {
+                    writeU32(capability.namespace.value)
+                    writeU32(capability.name.value)
+                    writeU16(capability.abi.major.toUInt())
+                    writeU16(capability.abi.minor.toUInt())
+                    writeU32(if (capability.required) 1u else 2u)
+                    writeU32(capability.operationCount)
+                    writeU32(0u)
+                }.toByteArray()
         },
         limits.artifactBytes,
     )
 
-private fun featureMask(features: Set<SemanticFeature>): UInt =
-    features.fold(0u) { mask, feature -> mask or (1u shl feature.ordinal) }
+private fun featureMask(features: Set<SemanticFeature>): UInt = features.fold(0u) { mask, feature -> mask or (1u shl feature.ordinal) }

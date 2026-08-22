@@ -30,91 +30,117 @@ private fun checkedLocalId(
 }
 
 @JvmInline
-value class ModuleId private constructor(val value: UInt) {
+value class ModuleId private constructor(
+    val value: UInt,
+) {
     companion object {
         fun of(value: UInt) = ModuleId(checkedLocalId("ModuleId", value))
     }
 }
 
 @JvmInline
-value class TypeId private constructor(val value: UInt) {
+value class TypeId private constructor(
+    val value: UInt,
+) {
     companion object {
         fun of(value: UInt) = TypeId(checkedLocalId("TypeId", value))
     }
 }
 
 @JvmInline
-value class FunctionId private constructor(val value: UInt) {
+value class FunctionId private constructor(
+    val value: UInt,
+) {
     companion object {
         fun of(value: UInt) = FunctionId(checkedLocalId("FunctionId", value))
     }
 }
 
 @JvmInline
-value class FieldId private constructor(val value: UInt) {
+value class FieldId private constructor(
+    val value: UInt,
+) {
     companion object {
         fun of(value: UInt) = FieldId(checkedLocalId("FieldId", value))
     }
 }
 
 @JvmInline
-value class BlockId private constructor(val value: UInt) {
+value class BlockId private constructor(
+    val value: UInt,
+) {
     companion object {
         fun of(value: UInt) = BlockId(checkedLocalId("BlockId", value))
     }
 }
 
 @JvmInline
-value class StringId private constructor(val value: UInt) {
+value class StringId private constructor(
+    val value: UInt,
+) {
     companion object {
         fun of(value: UInt) = StringId(checkedLocalId("StringId", value))
     }
 }
 
 @JvmInline
-value class Utf16LiteralId private constructor(val value: UInt) {
+value class Utf16LiteralId private constructor(
+    val value: UInt,
+) {
     companion object {
         fun of(value: UInt) = Utf16LiteralId(checkedLocalId("Utf16LiteralId", value))
     }
 }
 
 @JvmInline
-value class ConstantId private constructor(val value: UInt) {
+value class ConstantId private constructor(
+    val value: UInt,
+) {
     companion object {
         fun of(value: UInt) = ConstantId(checkedLocalId("ConstantId", value))
     }
 }
 
 @JvmInline
-value class CapabilityId private constructor(val value: UInt) {
+value class CapabilityId private constructor(
+    val value: UInt,
+) {
     companion object {
         fun of(value: UInt) = CapabilityId(checkedLocalId("CapabilityId", value))
     }
 }
 
 @JvmInline
-value class ImportId private constructor(val value: UInt) {
+value class ImportId private constructor(
+    val value: UInt,
+) {
     companion object {
         fun of(value: UInt) = ImportId(checkedLocalId("ImportId", value))
     }
 }
 
 @JvmInline
-value class ExportId private constructor(val value: UInt) {
+value class ExportId private constructor(
+    val value: UInt,
+) {
     companion object {
         fun of(value: UInt) = ExportId(checkedLocalId("ExportId", value))
     }
 }
 
 @JvmInline
-value class DebugEntryId private constructor(val value: UInt) {
+value class DebugEntryId private constructor(
+    val value: UInt,
+) {
     companion object {
         fun of(value: UInt) = DebugEntryId(checkedLocalId("DebugEntryId", value))
     }
 }
 
 @JvmInline
-value class RegisterId private constructor(val value: UShort) {
+value class RegisterId private constructor(
+    val value: UShort,
+) {
     companion object {
         fun of(value: UInt): RegisterId {
             require(value < UShort.MAX_VALUE.toUInt()) {
@@ -126,25 +152,39 @@ value class RegisterId private constructor(val value: UShort) {
 }
 
 sealed interface TypeRef {
-    data class Local(val id: TypeId) : TypeRef
+    data class Local(
+        val id: TypeId,
+    ) : TypeRef
 
-    data class Imported(val id: ImportId) : TypeRef
+    data class Imported(
+        val id: ImportId,
+    ) : TypeRef
 }
 
 sealed interface FunctionRef {
-    data class Local(val id: FunctionId) : FunctionRef
+    data class Local(
+        val id: FunctionId,
+    ) : FunctionRef
 
-    data class Imported(val id: ImportId) : FunctionRef
+    data class Imported(
+        val id: ImportId,
+    ) : FunctionRef
 }
 
 sealed interface FieldRef {
-    data class Local(val id: FieldId) : FieldRef
+    data class Local(
+        val id: FieldId,
+    ) : FieldRef
 
-    data class Imported(val id: ImportId) : FieldRef
+    data class Imported(
+        val id: ImportId,
+    ) : FieldRef
 }
 
 sealed interface Destination {
-    data class Register(val id: RegisterId) : Destination
+    data class Register(
+        val id: RegisterId,
+    ) : Destination
 
     data object Unit : Destination
 }

@@ -22,11 +22,11 @@ package ru.lazyhat.compukters.compiler.artifact.write
 import ru.lazyhat.compukters.compiler.artifact.model.Artifact
 import ru.lazyhat.compukters.compiler.artifact.model.Block
 import ru.lazyhat.compukters.compiler.artifact.model.BlockId
+import ru.lazyhat.compukters.compiler.artifact.model.Constant
+import ru.lazyhat.compukters.compiler.artifact.model.ConstantId
 import ru.lazyhat.compukters.compiler.artifact.model.Destination
 import ru.lazyhat.compukters.compiler.artifact.model.EntryPoint
 import ru.lazyhat.compukters.compiler.artifact.model.ExceptionEntry
-import ru.lazyhat.compukters.compiler.artifact.model.Constant
-import ru.lazyhat.compukters.compiler.artifact.model.ConstantId
 import ru.lazyhat.compukters.compiler.artifact.model.Function
 import ru.lazyhat.compukters.compiler.artifact.model.FunctionFlag
 import ru.lazyhat.compukters.compiler.artifact.model.FunctionId
@@ -37,16 +37,14 @@ import ru.lazyhat.compukters.compiler.artifact.model.Module
 import ru.lazyhat.compukters.compiler.artifact.model.ModuleId
 import ru.lazyhat.compukters.compiler.artifact.model.ModuleKind
 import ru.lazyhat.compukters.compiler.artifact.model.NominalType
-import ru.lazyhat.compukters.compiler.artifact.model.StringId
-import ru.lazyhat.compukters.compiler.artifact.model.SemanticFeature
 import ru.lazyhat.compukters.compiler.artifact.model.RegisterId
+import ru.lazyhat.compukters.compiler.artifact.model.SemanticFeature
+import ru.lazyhat.compukters.compiler.artifact.model.StringId
 import ru.lazyhat.compukters.compiler.artifact.model.TypeId
 import ru.lazyhat.compukters.compiler.artifact.model.TypeRef
 import ru.lazyhat.compukters.compiler.artifact.model.ValueType
 
-internal fun minimalArtifact(
-    instructions: List<Instruction> = listOf(Instruction.Return(Destination.Unit)),
-): Artifact =
+internal fun minimalArtifact(instructions: List<Instruction> = listOf(Instruction.Return(Destination.Unit))): Artifact =
     Artifact(
         manifest = Manifest.minimal(),
         entry = EntryPoint(ModuleId.of(0u), FunctionId.of(0u)),
