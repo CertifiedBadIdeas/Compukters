@@ -31,7 +31,11 @@ class ForkedPlaygroundCompiler(
     payloadRoot: Path,
     javaExecutable: Path,
     private val limits: WorkerLimits = WorkerLimits(),
-    policy: CompilerWorkerPolicy = CompilerWorkerPolicy(),
+    policy: CompilerWorkerPolicy =
+        CompilerWorkerPolicy(
+            startupTimeoutNanos = 30_000_000_000,
+            compilationTimeoutNanos = 60_000_000_000,
+        ),
 ) : PlaygroundCompiler {
     private val temporaryRoot = Files.createTempDirectory("compukters-playground-worker-")
     private val controller: CompilerWorkerController

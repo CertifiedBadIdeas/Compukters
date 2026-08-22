@@ -214,6 +214,7 @@ tasks.register("verifyLocalFast") {
     dependsOn(buildScriptsTest)
     dependsOn(":core:test")
     dependsOn(":native-runtime:test")
+    dependsOn(":playground:test")
     dependsOn(":v1_21_1-common:test")
     dependsOn(":v1_21_1-neoforge:test")
 }
@@ -229,6 +230,7 @@ tasks.register("verifyLocalFull") {
     dependsOn(clippyCompukterJniRust)
     dependsOn(cargoBuildCompukterJni)
     dependsOn(":native-runtime:nativeIntegrationTest")
+    dependsOn(":playground:endToEndTest")
     dependsOn(testCompilerArtifactVmConformance)
     dependsOn(testKotlinSubsetVmConformance)
 }

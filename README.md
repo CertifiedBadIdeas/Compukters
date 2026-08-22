@@ -4,17 +4,17 @@
 
 **Programmable computers for Minecraft with deterministic, resource-bounded Kotlin execution.**
 
-Compukters is an in-game programming platform built around Kotlin `.kts`
-scripts, a pinned Kotlin K2/IR compiler pipeline, versioned Compukter bytecode,
+Compukters is an in-game programming platform built around Kotlin `.kt`
+projects, a pinned Kotlin K2/IR compiler pipeline, versioned Compukter bytecode,
 and a managed Rust VM. The intended product loop runs from an in-game IDE to a
 shell and programs executing on a computer inside Minecraft.
 
 ## Status
 
 The project is in a clean-break managed-runtime bootstrap. The retired custom
-ISA, RISC-V machine, ELF/KraftOS runtime, and standalone Playground are not
-fallback execution paths. The loadable NeoForge mod is temporarily a platform
-shell while the verified artifact loader and Tier 0 runtime are built.
+ISA, RISC-V machine, and ELF/KraftOS runtime are not fallback execution paths.
+The loadable NeoForge mod is temporarily a platform shell while the managed
+runtime is integrated.
 
 Currently targets **NeoForge 1.21.1**.
 
@@ -27,6 +27,30 @@ Compukter artifacts cross into the Rust runtime, which owns execution, quotas,
 managed memory, scheduling, snapshots, and future optimization tiers.
 
 See [the current architecture](docs/ARCHITECTURE.md).
+
+## Standalone playground
+
+The playground exercises the same isolated compiler, artifact verifier, JNI
+adapter, Rust VM, and terminal capability that the mod will use. Run the
+included multi-file example from the repository root:
+
+```bash
+./gradlew :playground:run --args examples/hello
+```
+
+It prompts on stdout, reads one UTF-8 line from stdin, and executes the emitted
+Compukter bytecode. To retain the verified compiler output for inspection:
+
+```bash
+./gradlew :playground:run --args="examples/hello --emit build/hello.cpkt"
+```
+
+Compilation diagnostics and runtime failures go to stderr. Add `--debug` to
+show launcher stack traces. The process uses stable exit categories: `2` usage,
+`3` project input, `4` compilation, `5` compiler platform, `6` artifact
+verification, `7` VM admission/start, `8` guest trap, `9` VM fault, `10` host
+failure or EOF, `11` quota, `12` allocation resource failure, and `13` launcher
+or native platform failure.
 
 ## Links and credits
 
