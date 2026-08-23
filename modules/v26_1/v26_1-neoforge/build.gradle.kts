@@ -113,6 +113,41 @@ dependencies {
     add(gameTest.implementationConfigurationName, project(path = projects.v261Common.path))
 }
 
+val cozetteBdf = rootProject.layout.projectDirectory.file("tools/fonts/cozette/v.1.30.0/cozette.bdf")
+val cozetteFontJson = layout.projectDirectory.file("src/main/resources/assets/compukters/font/terminal/cozette.json")
+val cozetteAtlasPng = layout.projectDirectory.file("src/main/resources/assets/compukters/textures/font/terminal/cozette.png")
+val cozetteManifest =
+    layout.projectDirectory.file("src/main/resources/assets/compukters/font/terminal/cozette-codepoints.txt")
+val cozetteCoverageKotlin =
+    layout.projectDirectory.file("src/main/kotlin/ru/lazyhat/compukters/impl/terminal/CozetteFontCoverage.kt")
+
+val generateCozetteTerminalFont =
+    tasks.register<GenerateCozetteTerminalFont>("generateCozetteTerminalFont") {
+        description = "Regenerates committed Cozette terminal font resources from the pinned BDF."
+        group = "build setup"
+        bdfFile.set(cozetteBdf)
+        fontJsonFile.set(cozetteFontJson)
+        atlasPngFile.set(cozetteAtlasPng)
+        manifestFile.set(cozetteManifest)
+        coverageKotlinFile.set(cozetteCoverageKotlin)
+    }
+
+val verifyCozetteTerminalFont =
+    tasks.register<VerifyCozetteTerminalFont>("verifyCozetteTerminalFont") {
+        description = "Rejects committed Cozette terminal font resources that have drifted from the pinned BDF."
+        group = "verification"
+        bdfFile.set(cozetteBdf)
+        fontJsonFile.set(cozetteFontJson)
+        atlasPngFile.set(cozetteAtlasPng)
+        manifestFile.set(cozetteManifest)
+        coverageKotlinFile.set(cozetteCoverageKotlin)
+        mustRunAfter(generateCozetteTerminalFont)
+    }
+
+tasks.named("check") {
+    dependsOn(verifyCozetteTerminalFont)
+}
+
 val nativeOs =
     when {
         System.getProperty("os.name").trim().lowercase(Locale.ROOT).startsWith("linux") -> "linux"
@@ -180,6 +215,21 @@ val verifyPackagedCompukterFfi =
             }
             check("assets/compukters/items/compukter.json" in entries) {
                 "26.1 item model is missing from ${archive.name}"
+            }
+            listOf(
+                "assets/compukters/font/terminal/cozette.json",
+                "assets/compukters/font/terminal/cozette-codepoints.txt",
+                "assets/compukters/textures/font/terminal/cozette.png",
+                "META-INF/licenses/Cozette-MIT.txt",
+                "META-INF/licenses/Cozette-PROVENANCE.txt",
+            ).forEach { required ->
+                check(required in entries) { "$required is missing from ${archive.name}" }
+            }
+            check("assets/compukters/textures/gui/term_font.png" !in entries) {
+                "legacy terminal font atlas leaked into ${archive.name}"
+            }
+            check(entries.none { it.contains("Spleen", ignoreCase = true) }) {
+                "legacy Spleen font attribution leaked into ${archive.name}"
             }
             check("assets/compukters/models/item/compukter.json" !in entries) {
                 "legacy item model leaked into ${archive.name}"
