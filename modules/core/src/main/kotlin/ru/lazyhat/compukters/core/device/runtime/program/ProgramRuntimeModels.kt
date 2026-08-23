@@ -39,11 +39,9 @@ data class ProgramTickBudget(
 
 data class ProgramTerminalLimits(
     val maximumInputLineCodeUnits: Int = 4_096,
-    val maximumPendingOutputCodeUnits: Int = 65_536,
 ) {
     init {
         require(maximumInputLineCodeUnits > 0) { "maximum input line code units must be positive" }
-        require(maximumPendingOutputCodeUnits > 0) { "maximum pending output code units must be positive" }
     }
 }
 

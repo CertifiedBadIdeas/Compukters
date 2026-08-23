@@ -193,19 +193,19 @@ git commit -m "feat(vm): own terminal for computer lifetime (#516)"
 - Delete: `modules/v26_1/v26_1-common/src/main/kotlin/ru/lazyhat/compukters/minecraft/computer/TerminalTranscript.kt`
 - Delete: `modules/v26_1/v26_1-common/src/test/kotlin/ru/lazyhat/compukters/minecraft/computer/TerminalTranscriptTest.kt`
 
-- [ ] **Step 1: Write failing lifecycle/facade tests**
+- [x] **Step 1: Write failing lifecycle/facade tests**
 
 Assert one terminal commit per server tick, full/delta delegation, screen
 preservation after halt, input forwarding without Kotlin echo, and blank state
 after install/reboot creates a new machine.
 
-- [ ] **Step 2: Replace output plumbing**
+- [x] **Step 2: Replace output plumbing**
 
 Delete `StringBuilder`, `drainOutput`, `ProgramTerminalSink`, transcript state,
 and Kotlin terminal capability dispatch. Forward terminal state/input through
 the FFM machine and do not close it on ordinary halt.
 
-- [ ] **Step 3: Verify and commit**
+- [x] **Step 3: Verify and commit**
 
 Run: `./gradlew-sandbox-dev-parallel :core:test :v26_1-common:test --rerun-tasks`
 

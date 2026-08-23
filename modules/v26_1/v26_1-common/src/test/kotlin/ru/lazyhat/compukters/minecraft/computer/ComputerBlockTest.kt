@@ -20,7 +20,11 @@ import ru.lazyhat.compukters.core.device.computer.ProgramComputerState
 import ru.lazyhat.compukters.core.device.computer.ProgramComputerStateSink
 import ru.lazyhat.compukters.core.device.computer.ProgramComputerStopReason
 import ru.lazyhat.compukters.core.device.computer.ProgramImageSource
-import ru.lazyhat.compukters.core.device.computer.ProgramTerminalSink
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalKey
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalKeyAction
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalModifier
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalState
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalUpdate
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -56,11 +60,10 @@ class ComputerBlockTest {
             TEST_TYPE,
             BlockPos.ZERO,
             Blocks.FURNACE.defaultBlockState(),
-            ComputerCarrierFactory { _, imageSource, terminalSink, stateSink ->
-                carrier.attach(imageSource, terminalSink, stateSink)
+            ComputerCarrierFactory { _, imageSource, stateSink ->
+                carrier.attach(imageSource, stateSink)
             },
             InstalledProgramStorage(maximumArtifactBytes = 16),
-            TerminalTranscript(maximumCodeUnits = 16),
         )
 
     private class CountingCarrier : ComputerCarrier {
@@ -72,11 +75,9 @@ class ComputerBlockTest {
 
         fun attach(
             imageSource: ProgramImageSource,
-            terminalSink: ProgramTerminalSink,
             stateSink: ProgramComputerStateSink,
         ): ComputerCarrier {
             imageSource.hashCode()
-            terminalSink.hashCode()
             this.stateSink = stateSink
             return this
         }
@@ -94,6 +95,18 @@ class ComputerBlockTest {
         }
 
         override fun submitLine(line: String): Boolean = false
+
+        override fun terminalFullState(): TerminalState? = null
+
+        override fun terminalChangesSince(revision: Long): TerminalUpdate? = null
+
+        override fun sendTerminalKey(
+            key: TerminalKey,
+            action: TerminalKeyAction,
+            modifiers: Set<TerminalModifier>,
+        ): Boolean = false
+
+        override fun sendTerminalText(value: String): Boolean = false
 
         override fun reboot(): ProgramComputerState = turnOn()
 

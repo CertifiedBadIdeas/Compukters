@@ -23,13 +23,6 @@ fun interface ProgramImageSource {
     fun loadInstalledArtifact(deviceId: Int): ByteArray?
 }
 
-fun interface ProgramTerminalSink {
-    fun publishOutput(
-        deviceId: Int,
-        text: String,
-    )
-}
-
 fun interface ProgramComputerStateSink {
     fun publishState(
         deviceId: Int,

@@ -24,8 +24,8 @@ import ru.lazyhat.compukters.core.device.computer.ProgramComputerState
 import ru.lazyhat.compukters.core.device.computer.ProgramComputerStateSink
 import ru.lazyhat.compukters.core.device.computer.ProgramComputerStopReason
 import ru.lazyhat.compukters.core.device.computer.ProgramImageSource
-import ru.lazyhat.compukters.core.device.computer.ProgramTerminalSink
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramTickBudget
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalState
 import ru.lazyhat.compukters.lang.runtime.vm.VmRuntime
 import java.nio.file.Path
 import kotlin.io.path.readBytes
@@ -44,11 +44,6 @@ class ProgramComputerIntegrationTest {
             ProgramComputer(
                 deviceId = DEVICE_ID,
                 imageSource = ProgramImageSource { deviceId -> artifact.also { assertEquals(DEVICE_ID, deviceId) } },
-                terminalSink =
-                    ProgramTerminalSink { deviceId, text ->
-                        assertEquals(DEVICE_ID, deviceId)
-                        events += ObservedEvent.Output(text)
-                    },
                 stateSink =
                     ProgramComputerStateSink { deviceId, state ->
                         assertEquals(DEVICE_ID, deviceId)
@@ -60,12 +55,10 @@ class ProgramComputerIntegrationTest {
         assertEquals(ProgramComputerState.Running, computer.turnOn())
         advanceUntil(computer) { it == ProgramComputerState.WaitingForInput }
         assertEquals(
-            listOf(
-                ObservedEvent.Output("Your name: "),
-                ObservedEvent.State(ProgramComputerState.WaitingForInput),
-            ),
-            events.takeLast(2),
+            ObservedEvent.State(ProgramComputerState.WaitingForInput),
+            events.last(),
         )
+        assertEquals("Your name:\n", terminalText(requireNotNull(computer.terminalFullState())))
 
         assertTrue(computer.submitLine("Ada"))
         val finalState = advanceUntil(computer) { it is ProgramComputerState.PoweredOff }
@@ -73,12 +66,10 @@ class ProgramComputerIntegrationTest {
         val poweredOff = assertIs<ProgramComputerState.PoweredOff>(finalState)
         assertIs<ProgramComputerStopReason.Halted>(poweredOff.reason)
         assertEquals(
-            listOf(
-                ObservedEvent.Output("Hello, Ada!\n"),
-                ObservedEvent.State(poweredOff),
-            ),
-            events.takeLast(2),
+            ObservedEvent.State(poweredOff),
+            events.last(),
         )
+        assertEquals("Your name: Hello, Ada!\n", terminalText(requireNotNull(computer.terminalFullState())))
         computer.close()
     }
 
@@ -96,11 +87,16 @@ class ProgramComputerIntegrationTest {
 
     private fun requiredProperty(name: String): String = requireNotNull(System.getProperty(name)) { "missing test system property $name" }
 
-    private sealed interface ObservedEvent {
-        data class Output(
-            val text: String,
-        ) : ObservedEvent
+    private fun terminalText(state: TerminalState): String {
+        val text = StringBuilder()
+        repeat(state.height) { y ->
+            repeat(state.width) { x -> text.appendCodePoint(state.cells[y * state.width + x].codePoint) }
+            text.append('\n')
+        }
+        return text.toString().trimEnd(' ', '\n') + '\n'
+    }
 
+    private sealed interface ObservedEvent {
         data class State(
             val state: ProgramComputerState,
         ) : ObservedEvent

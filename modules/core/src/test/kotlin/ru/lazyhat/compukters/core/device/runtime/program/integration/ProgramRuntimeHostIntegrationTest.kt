@@ -23,6 +23,7 @@ import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeHost
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramRuntimeState
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramStartResult
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramTickBudget
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalState
 import ru.lazyhat.compukters.lang.runtime.vm.VmRuntime
 import java.nio.file.Path
 import kotlin.io.path.readBytes
@@ -40,13 +41,13 @@ class ProgramRuntimeHostIntegrationTest {
 
         assertEquals(ProgramStartResult.Started, host.start(artifact))
         advanceUntil(host) { it == ProgramRuntimeState.WaitingForInput }
-        assertEquals("Your name: ", host.drainOutput())
+        assertEquals("Your name:\n", terminalText(requireNotNull(host.terminalFullState())))
 
         assertTrue(host.submitLine("Ada"))
         val finalState = advanceUntil(host) { it is ProgramRuntimeState.Halted }
 
         assertIs<ProgramRuntimeState.Halted>(finalState)
-        assertEquals("Hello, Ada!\n", host.drainOutput())
+        assertEquals("Your name: Hello, Ada!\n", terminalText(requireNotNull(host.terminalFullState())))
         host.close()
     }
 
@@ -63,6 +64,15 @@ class ProgramRuntimeHostIntegrationTest {
     }
 
     private fun requiredProperty(name: String): String = requireNotNull(System.getProperty(name)) { "missing test system property $name" }
+
+    private fun terminalText(state: TerminalState): String {
+        val text = StringBuilder()
+        repeat(state.height) { y ->
+            repeat(state.width) { x -> text.appendCodePoint(state.cells[y * state.width + x].codePoint) }
+            text.append('\n')
+        }
+        return text.toString().trimEnd(' ', '\n') + '\n'
+    }
 
     private companion object {
         const val MAXIMUM_TICKS = 10_000

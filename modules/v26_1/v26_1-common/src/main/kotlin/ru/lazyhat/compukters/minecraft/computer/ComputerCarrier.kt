@@ -15,7 +15,11 @@ import ru.lazyhat.compukters.core.device.computer.ProgramComputer
 import ru.lazyhat.compukters.core.device.computer.ProgramComputerState
 import ru.lazyhat.compukters.core.device.computer.ProgramComputerStateSink
 import ru.lazyhat.compukters.core.device.computer.ProgramImageSource
-import ru.lazyhat.compukters.core.device.computer.ProgramTerminalSink
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalKey
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalKeyAction
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalModifier
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalState
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalUpdate
 
 internal interface ComputerCarrier : AutoCloseable {
     val state: ProgramComputerState
@@ -26,6 +30,18 @@ internal interface ComputerCarrier : AutoCloseable {
 
     fun submitLine(line: String): Boolean
 
+    fun terminalFullState(): TerminalState?
+
+    fun terminalChangesSince(revision: Long): TerminalUpdate?
+
+    fun sendTerminalKey(
+        key: TerminalKey,
+        action: TerminalKeyAction,
+        modifiers: Set<TerminalModifier>,
+    ): Boolean
+
+    fun sendTerminalText(value: String): Boolean
+
     fun reboot(): ProgramComputerState
 
     fun shutdown()
@@ -35,7 +51,6 @@ internal fun interface ComputerCarrierFactory {
     fun create(
         deviceId: Int,
         imageSource: ProgramImageSource,
-        terminalSink: ProgramTerminalSink,
         stateSink: ProgramComputerStateSink,
     ): ComputerCarrier
 }
@@ -44,14 +59,12 @@ internal object RuntimeComputerCarrierFactory : ComputerCarrierFactory {
     override fun create(
         deviceId: Int,
         imageSource: ProgramImageSource,
-        terminalSink: ProgramTerminalSink,
         stateSink: ProgramComputerStateSink,
     ): ComputerCarrier =
         ProgramComputerCarrier(
             ProgramComputer(
                 deviceId = deviceId,
                 imageSource = imageSource,
-                terminalSink = terminalSink,
                 stateSink = stateSink,
             ),
         )
@@ -68,6 +81,18 @@ private class ProgramComputerCarrier(
     override fun serverTick(): ProgramComputerState = delegate.serverTick()
 
     override fun submitLine(line: String): Boolean = delegate.submitLine(line)
+
+    override fun terminalFullState(): TerminalState? = delegate.terminalFullState()
+
+    override fun terminalChangesSince(revision: Long): TerminalUpdate? = delegate.terminalChangesSince(revision)
+
+    override fun sendTerminalKey(
+        key: TerminalKey,
+        action: TerminalKeyAction,
+        modifiers: Set<TerminalModifier>,
+    ): Boolean = delegate.sendTerminalKey(key, action, modifiers)
+
+    override fun sendTerminalText(value: String): Boolean = delegate.sendTerminalText(value)
 
     override fun reboot(): ProgramComputerState = delegate.reboot()
 
