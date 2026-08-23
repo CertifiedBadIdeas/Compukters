@@ -76,12 +76,12 @@ loom {
 }
 
 dependencies {
-    common(project(path = projects.v261Common.path, configuration = "namedElements")) { isTransitive = false }
+    common(project(path = projects.v261Common.path, configuration = "apiElements")) { isTransitive = false }
     shadowBundle(project(path = projects.v261Common.path, configuration = "transformProductionNeoForge"))
-    testImplementation(project(path = projects.v261Common.path, configuration = "namedElements"))
+    testImplementation(project(path = projects.v261Common.path, configuration = "apiElements"))
 
     add(gameTest.implementationConfigurationName, sourceSets.main.get().output)
-    add(gameTest.implementationConfigurationName, project(path = projects.v261Common.path, configuration = "namedElements"))
+    add(gameTest.implementationConfigurationName, project(path = projects.v261Common.path, configuration = "apiElements"))
 }
 
 tasks.test {
