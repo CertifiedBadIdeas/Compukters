@@ -4,7 +4,7 @@
 
 Compukters is a Gradle multi-module Kotlin project with native Rust VM components. Kotlin modules live under
 `modules/`: `core` contains shared device/runtime logic, `native-runtime` contains architecture-neutral runtime models, and
-`v1_21_1/v1_21_1-common` plus `v1_21_1/v1_21_1-neoforge` contain the Minecraft 1.21.1 integration. Host-side Rust
+`v26_1/v26_1-common` plus `v26_1/v26_1-neoforge` contain the Minecraft 26.1.2 integration. Host-side Rust
 VM code lives in `host/compukter-vm`. Documentation is in
 `docs/`, mod metadata is in `config/`, and visual/model assets are in
 `models/` and top-level logo files.
@@ -21,13 +21,15 @@ VM code lives in `host/compukter-vm`. Documentation is in
 - `./gradlew build` builds all Gradle modules and runs standard checks.
 - `./gradlew test` runs JVM unit tests across Kotlin modules.
 - `./gradlew :core:test` or `./gradlew :native-runtime:test` runs focused module tests.
-- `./gradlew :v1_21_1-neoforge:runClient` launches the NeoForge dev client.
-- `./gradlew :v1_21_1-neoforge:buildProductionUniversalJar` builds the production remapped mod jar.
+- `./gradlew-sandbox-dev-parallel :v26_1-neoforge:runClient` launches the NeoForge dev client.
+- `./gradlew-sandbox-dev-parallel :v26_1-neoforge:runGameTestServer` runs the real NeoForge GameTest server.
+- `./gradlew-sandbox-dev-parallel :v26_1-neoforge:buildProductionUniversalJar` builds the official-name production mod jar without a remap stage.
 - `cargo test --manifest-path host/compukter-vm/Cargo.toml --locked --offline` runs the managed Compukter VM tests.
 
 ## Coding Style & Naming Conventions
 
-Kotlin targets JVM 17 and uses the `org.jmailen.kotlinter` plugin. Keep Kotlin package paths under
+Kotlin targets JVM 25 and uses the `org.jmailen.kotlinter` plugin. Run Gradle with JDK 25 selected through `JAVA_HOME`
+or a Gradle-discoverable installation. Keep Kotlin package paths under
 `ru.lazyhat.compukters`, use four-space indentation, `PascalCase` for types, `camelCase` for members, and `*Test.kt`
 for tests. Existing source files carry a GPL header; preserve it when editing or adding comparable Kotlin/Gradle files.
 Rust crates use edition 2021 conventions: `snake_case` modules/functions, `PascalCase` types, and integration tests in
@@ -37,7 +39,7 @@ Rust crates use edition 2021 conventions: `snake_case` modules/functions, `Pasca
 
 Kotlin tests use `kotlin.test` on JUnit Platform; build-script tests use JUnit Jupiter. Place tests beside the owning
 module in `src/test/kotlin`. NeoForge game tests live under `src/gameTest/kotlin` and are compiled by `check`; run
-`:v1_21_1-neoforge:runGameTestServer` when validating in-game behavior.
+`:v26_1-neoforge:runGameTestServer` when validating in-game behavior.
 
 ## Commit & Pull Request Guidelines
 
@@ -52,3 +54,6 @@ Respect user changes in the worktree. Prefer focused edits, run the narrowest us
 active machine ABI references when behavior changes.
 For GitHub operations in this repository, do not use the GitHub MCP server or GitHub app connector tools. Use the
 `gh` CLI instead, including `gh api` for REST or GraphQL operations that are not covered by first-class `gh` commands.
+All `gh` commands and Git commands which access a remote repository must run outside the sandbox. If an SSH remote
+cannot use an SSH agent, use the authenticated GitHub CLI HTTPS credential helper for that command instead of retrying
+SSH; do not change the stored remote merely to work around the sandbox.

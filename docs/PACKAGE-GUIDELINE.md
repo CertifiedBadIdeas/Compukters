@@ -10,15 +10,15 @@ Compukters product code uses the root package `ru.lazyhat.compukters`. New code 
 - `native-runtime` owns the Kotlin-facing JNI VM session and trusted host capabilities.
 - `core` owns loader-independent server product behavior, including `ProgramRuntimeHost` and future computer carriers.
 - `playground` owns the standalone compiler-and-VM executable used outside Minecraft.
-- `v1_21_1-common` is reserved for loader-independent Minecraft adapters.
-- `v1_21_1-neoforge` owns only NeoForge bootstrap and loader-specific adapters.
+- `v26_1-common` owns loader-independent Minecraft 26.1 adapters.
+- `v26_1-neoforge` owns NeoForge 26.1 bootstrap, registration, resources, and loader-specific adapters.
 - `host/compukter-vm` owns verification, interpretation, memory management, quotas, and VM execution.
 
 ## Placement rules
 
 1. Put VM semantics in `host/compukter-vm`; Kotlin modules must not implement a second interpreter or machine state model.
 2. Put server-thread lifecycle and device policy in `core`; do not expose Minecraft types there.
-3. Put Minecraft-neutral adapters in `v1_21_1-common` and NeoForge registration/wiring in `v1_21_1-neoforge`.
+3. Put Minecraft-neutral adapters in `v26_1-common` and NeoForge registration/wiring in `v26_1-neoforge`.
 4. Define network protocols next to the feature which owns them. Do not restore the removed global CC-style network package.
 5. Introduce UI, terminal rendering, and assets from a new accepted design. Do not restore the removed UI DSL, retained display, palette, font, or workbench implementation.
 6. Prefer focused feature packages such as `device/runtime/program` and the future `device/computer` over generic `utils`, `platform`, or `events` dumping grounds.
