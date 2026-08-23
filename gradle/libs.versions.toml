@@ -5,7 +5,6 @@
 # buildSrc
 kotlinConvention = { id = "kotlin-convention" }
 commonConvention = { id = "common-convention" }
-fabricConvention = { id = "fabric-convention" }
 neoforgeConvention = { id = "neoforge-convention" }
 metadataConvention = { id = "metadata" }
 releaseConvention = { id = "release-convention" }
@@ -16,11 +15,10 @@ kotlinSerialization = { id = "org.jetbrains.kotlin.plugin.serialization", versio
 kotlinter = { id = "org.jmailen.kotlinter", version = "5.7.0" }
 shadow = { id = "com.gradleup.shadow", version = "9.6.1" }
 
-architectury-loom = { id = "dev.architectury.loom", version = "1.14.473" }
-architectury-plugin = { id = "architectury-plugin", version = "3.5.163" }
+architectury-loom-no-remap = { id = "dev.architectury.loom-no-remap", version = "1.17.491" }
+architectury-plugin = { id = "architectury-plugin", version = "3.5.169" }
 
-v1211 = { id = "1.21.1-convention" }
-v12111 = { id = "1.21.11-convention" }
+v261 = { id = "26.1-convention" }
 
 [versions]
 
@@ -31,11 +29,8 @@ kotlin-logging = "8.0.4"
 slf4j = "2.0.18"
 kotlinx-collections-immutable = "0.5.0"
 
-# 1.21.1
-minecraft-v1211 = "1.21.1"
-
-# 1.21.11
-minecraft-v12111 = "1.21.11"
+# 26.1
+minecraft-v261 = "26.1.2"
 
 [libraries]
 
@@ -49,25 +44,6 @@ kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-c
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
 kotlinx-collections-immutable = { module = "org.jetbrains.kotlinx:kotlinx-collections-immutable-jvm", version.ref = "kotlinx-collections-immutable" }
 
-# 1.21.1
-minecraft-v1211 = { module = "net.minecraft:minecraft", version.ref = "minecraft-v1211" }
-parchment-v1211 = "org.parchmentmc.data:parchment-1.21.1:2024.11.17"
-
-architectury-neoforge-v1211 = "dev.architectury:architectury-neoforge:13.0.2"
-neoforge-v1211 = "net.neoforged:neoforge:21.1.228"
-create-neoforge-v1211 = "maven.modrinth:create:mc1.21.1-6.0.9"
-
-architectury-fabric-v1211 = "dev.architectury:architectury-fabric:13.0.2"
-fabric-loader-v1211 = "net.fabricmc:fabric-loader:0.16.14"
-fabric-api-v1211 = "net.fabricmc.fabric-api:fabric-api:0.110.0+1.21.1"
-
-# 1.21.11
-minecraft-v12111 = { module = "net.minecraft:minecraft", version.ref = "minecraft-v12111" }
-parchment-v12111 = "org.parchmentmc.data:parchment-1.21.11:2025.12.20"
-
-architectury-neoforge-v12111 = "dev.architectury:architectury-neoforge:19.0.1"
-neoforge-v12111 = "net.neoforged:neoforge:21.11.42"
-
-architectury-fabric-v12111 = "dev.architectury:architectury-fabric:19.0.1"
-fabric-loader-v12111 = "net.fabricmc:fabric-loader:0.18.6"
-fabric-api-v12111 = "net.fabricmc.fabric-api:fabric-api:0.141.3+1.21.11"
+# 26.1
+minecraft-v261 = { module = "net.minecraft:minecraft", version.ref = "minecraft-v261" }
+neoforge-v261 = "net.neoforged:neoforge:26.1.2.97"

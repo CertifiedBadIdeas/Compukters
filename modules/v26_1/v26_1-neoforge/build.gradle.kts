@@ -19,13 +19,13 @@
 
 @file:Suppress("PropertyName")
 
-import net.fabricmc.loom.task.RemapJarTask
+import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
 import java.util.Locale
 import java.util.zip.ZipFile
 
 plugins {
     idea
-    alias(libs.plugins.v1211)
+    alias(libs.plugins.v261)
     alias(libs.plugins.neoforgeConvention)
     alias(libs.plugins.metadataConvention)
 }
@@ -67,7 +67,7 @@ loom {
 
     mods {
         maybeCreate("main").apply {
-            sourceSet("main", project(projects.v1211Common.path))
+            sourceSet("main", project(projects.v261Common.path))
             sourceSet("main", project(projects.core.path))
             sourceSet("main", project(":native-runtime"))
             sourceSet(gameTest.name)
@@ -76,12 +76,12 @@ loom {
 }
 
 dependencies {
-    common(project(path = projects.v1211Common.path, configuration = "namedElements")) { isTransitive = false }
-    shadowBundle(project(path = projects.v1211Common.path, configuration = "transformProductionNeoForge"))
-    testImplementation(project(path = projects.v1211Common.path, configuration = "namedElements"))
+    common(project(path = projects.v261Common.path, configuration = "namedElements")) { isTransitive = false }
+    shadowBundle(project(path = projects.v261Common.path, configuration = "transformProductionNeoForge"))
+    testImplementation(project(path = projects.v261Common.path, configuration = "namedElements"))
 
     add(gameTest.implementationConfigurationName, sourceSets.main.get().output)
-    add(gameTest.implementationConfigurationName, project(path = projects.v1211Common.path, configuration = "namedElements"))
+    add(gameTest.implementationConfigurationName, project(path = projects.v261Common.path, configuration = "namedElements"))
 }
 
 tasks.test {
@@ -112,7 +112,7 @@ val nativeFilename =
         else -> error("unreachable native build operating system: $nativeOs")
     }
 val nativeResourcePath = "META-INF/natives/$nativeOs/$nativeArch/$nativeFilename"
-val productionJar = tasks.named<RemapJarTask>("remapJar")
+val productionJar = tasks.named<ShadowJar>("shadowJar")
 val verifyPackagedCompukterJni =
     tasks.register("verifyPackagedCompukterJni") {
         description = "Checks that the production NeoForge jar contains exactly one current-host JNI resource."

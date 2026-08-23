@@ -19,7 +19,7 @@
 
 plugins {
     id("kotlin-convention")
-    id("dev.architectury.loom")
+    id("dev.architectury.loom-no-remap")
     id("loom-runs-convention")
     id("architectury-plugin")
     id("com.gradleup.shadow")
@@ -37,8 +37,8 @@ architectury {
     neoForge()
 }
 
-val common: Configuration by configurations.creating
-val shadowBundle: Configuration by configurations.creating
+val common = configurations.create("common")
+val shadowBundle = configurations.create("shadowBundle")
 
 configurations {
     compileClasspath { extendsFrom(common) }
@@ -47,7 +47,6 @@ configurations {
 
 dependencies {
     add("neoForge", versionLibrary("neoforge"))
-    modImplementation(versionLibrary("architectury-neoforge"))
 
     implementation(project(":native-runtime"))
     shadowBundle(project(path = ":native-runtime")) { isTransitive = false }
@@ -60,14 +59,19 @@ dependencies {
     neoForgeImplementation(libs.findLibrary("kotlinx-coroutines-core").get())
 }
 
-tasks.named<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("shadowJar") {
+val productionJar = tasks.named<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("shadowJar") {
     configurations = listOf(shadowBundle)
-    archiveClassifier.set("dev-shadow")
+    archiveClassifier.set("")
+    duplicatesStrategy = DuplicatesStrategy.FAIL
+    exclude("META-INF/*.SF", "META-INF/*.RSA", "META-INF/*.DSA")
 }
 
-tasks.named<net.fabricmc.loom.task.RemapJarTask>("remapJar") {
-    inputFile.set(tasks.named<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("shadowJar").flatMap { it.archiveFile })
-    dependsOn(tasks.named("shadowJar"))
+loom {
+    nestJars(productionJar, configurations.named("include"))
+}
+
+tasks.named("assemble") {
+    dependsOn(productionJar)
 }
 
 fun <T : ModuleDependency> DependencyHandler.neoForgeImplementation(dependency: Provider<T>) {

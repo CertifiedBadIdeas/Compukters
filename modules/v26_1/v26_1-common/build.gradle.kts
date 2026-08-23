@@ -18,7 +18,7 @@
  */
 
 plugins {
-    alias(libs.plugins.v1211)
+    alias(libs.plugins.v261)
     alias(libs.plugins.commonConvention)
 }
 

@@ -24,7 +24,7 @@ import java.io.DataOutputStream
 import java.util.UUID
 
 plugins {
-    id("dev.architectury.loom")
+    id("dev.architectury.loom-no-remap")
 }
 
 // ---------------------------------------------------------------------------
@@ -45,8 +45,8 @@ private val DEV_CLIENT_USERNAMES = listOf("DevA", "DevB", "DevC")
 
 tasks.register("buildProductionUniversalJar") {
     group = "build"
-    description = "Build the production remapped mod jar."
-    dependsOn(tasks.named("remapJar"))
+    description = "Build the unobfuscated production mod jar."
+    dependsOn(tasks.named("shadowJar"))
 }
 
 val loom = extensions.getByType<LoomGradleExtensionAPI>()

@@ -30,7 +30,6 @@ import java.io.File
 data class BuildContext(
     val versionKey: String,
     val minecraftVersion: String,
-    val javaVersion: Int,
 )
 
 enum class LoaderKind(
@@ -49,13 +48,11 @@ fun ExtensionAware.libsCatalog(): VersionCatalog = extensions.getByType<VersionC
 fun ExtensionAware.setBuildContext(
     versionKey: String,
     minecraftVersion: String,
-    javaVersion: Int,
 ) {
     extraProperties()[BUILD_CONTEXT_KEY] =
         BuildContext(
             versionKey = versionKey,
             minecraftVersion = minecraftVersion,
-            javaVersion = javaVersion,
         )
 }
 

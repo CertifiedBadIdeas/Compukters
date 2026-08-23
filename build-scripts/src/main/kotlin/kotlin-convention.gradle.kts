@@ -18,6 +18,7 @@
  */
 
 import org.jmailen.gradle.kotlinter.tasks.ConfigurableKtLintTask
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 /*
  * The Compukters Developers
@@ -53,16 +54,20 @@ repositories {
     maven("https://maven.neoforged.net/releases/") {
         name = "NeoForged"
     }
-    maven("https://maven.parchmentmc.org/") {
-        name = "Parchment MC"
-    }
 }
 
 group = readAllModProperties().getValue("common_mod_group_id")
 version = rootProject.version
 
 kotlin {
-    jvmToolchain(17)
+    jvmToolchain(25)
+    compilerOptions.jvmTarget.set(JvmTarget.JVM_25)
+}
+
+java {
+    toolchain.languageVersion.set(JavaLanguageVersion.of(25))
+    sourceCompatibility = JavaVersion.VERSION_25
+    targetCompatibility = JavaVersion.VERSION_25
 }
 
 tasks.test {
