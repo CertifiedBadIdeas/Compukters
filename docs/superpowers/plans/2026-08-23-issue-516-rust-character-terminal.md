@@ -87,7 +87,7 @@ git commit -m "refactor(native): replace JNI with JDK 25 FFM (#516)"
 - Modify: `host/compukter-vm/src/lib.rs`
 - Test: `host/compukter-vm/tests/terminal_device.rs`
 
-- [ ] **Step 1: Write failing state tests**
+- [x] **Step 1: Write failing state tests**
 
 Cover a blank 51x19 grid, zero-based bounds, Unicode scalar validation,
 16-color cells, cursor, fill, patch, wrapping, newline, ring-row scrolling,
@@ -99,20 +99,20 @@ terminal.write_utf16(&['A' as u16, 'B' as u16]).unwrap();
 assert_eq!('B' as u32, terminal.cell(0, 18).unwrap().code_point());
 ```
 
-- [ ] **Step 2: Run the missing-type failure**
+- [x] **Step 2: Run the missing-type failure**
 
 Run: `cargo test --manifest-path host/compukter-vm/Cargo.toml --locked --offline --test terminal_device`
 
 Expected: compile failure for the new public terminal types.
 
-- [ ] **Step 3: Implement synchronous retained state**
+- [x] **Step 3: Implement synchronous retained state**
 
 Use `Cell { code_point: u32, foreground: u8, background: u8 }`, exactly 969
 cells, current colors, cursor, and an internal row head. Mutations, dimension
 queries, and polling are synchronous; large writes consume bounded interpreter
 slices without exposing guest `suspend`.
 
-- [ ] **Step 4: Add and implement input/replication tests**
+- [x] **Step 4: Add and implement input/replication tests**
 
 Test stable keys, Press/Repeat, atomic text, FIFO merge, bounded rejection,
 one committed revision per batch, coalesced patches, ordered scroll changes,
@@ -130,7 +130,7 @@ pub enum TerminalChange {
 
 Waiting on an absent event is the only suspending terminal operation.
 
-- [ ] **Step 5: Verify and commit**
+- [x] **Step 5: Verify and commit**
 
 Run: `cargo test --manifest-path host/compukter-vm/Cargo.toml --locked --offline`
 
