@@ -16,13 +16,13 @@
 
 package ru.lazyhat.compukters.impl.terminal
 
-import com.google.gson.JsonParser
+import com.google.gson.GsonBuilder
+import com.google.gson.JsonObject
 import java.nio.file.Files
 import java.nio.file.Path
 import java.security.MessageDigest
 import javax.imageio.ImageIO
 import kotlin.io.path.inputStream
-import kotlin.io.path.readText
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -31,21 +31,18 @@ import kotlin.test.assertTrue
 class CozetteFontResourceTest {
     @Test
     fun `committed Cozette resources match the terminal font contract`() {
-        val root = repositoryRoot()
-        val resources = root.resolve("modules/v26_1/v26_1-neoforge/src/main/resources")
-        val jsonPath = resources.resolve("assets/compukters/font/terminal/cozette.json")
-        val pngPath = resources.resolve("assets/compukters/textures/font/terminal/cozette.png")
-        val json = jsonPath.readText()
+        val json = runtimeResource("/assets/compukters/font/terminal/cozette.json").reader().use { it.readText() }
+        val minecraftFontGson = GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create()
         val provider =
-            JsonParser
-                .parseString(json)
+            minecraftFontGson
+                .fromJson(json, JsonObject::class.java)
                 .asJsonObject
                 .getAsJsonArray("providers")
                 .single()
                 .asJsonObject
         val characterRows = provider.getAsJsonArray("chars").map { it.asString }
         val codePoints = characterRows.flatMap { it.codePoints().boxed().toList() }.filterNot { it == 0 }.toSet()
-        val image = pngPath.inputStream().use(ImageIO::read)
+        val image = runtimeResource("/assets/compukters/textures/font/terminal/cozette.png").use(ImageIO::read)
 
         assertEquals("bitmap", provider.get("type").asString)
         assertEquals("compukters:font/terminal/cozette.png", provider.get("file").asString)
@@ -59,6 +56,8 @@ class CozetteFontResourceTest {
                 .plus(0xFFFD)
                 .all(codePoints::contains),
         )
+        assertTrue('"'.code in codePoints)
+        assertTrue('\\'.code in codePoints)
         assertFalse(json.contains("minecraft:uniform"))
         assertFalse(json.contains("minecraft:default"))
     }
@@ -78,4 +77,9 @@ class CozetteFontResourceTest {
         generateSequence(Path.of("").toAbsolutePath()) { it.parent }
             .firstOrNull { Files.isRegularFile(it.resolve("settings.gradle.kts")) }
             ?: error("Could not locate repository root")
+
+    private fun runtimeResource(path: String) =
+        requireNotNull(CozetteFontResourceTest::class.java.getResourceAsStream(path)) {
+            "Missing runtime resource $path"
+        }
 }
