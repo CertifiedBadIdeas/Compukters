@@ -59,6 +59,13 @@ class TerminalRenderGeometry(
     val originY: Int = grid.top
     val titleX: Int = panel.left + PANEL_PADDING
     val titleY: Int = panel.top + TITLE_TOP
+    val fontButton: TerminalRect =
+        TerminalRect(
+            panel.right - PANEL_PADDING - FONT_BUTTON_WIDTH,
+            panel.top + (TITLE_HEIGHT - FONT_BUTTON_HEIGHT) / 2,
+            panel.right - PANEL_PADDING,
+            panel.top + (TITLE_HEIGHT - FONT_BUTTON_HEIGHT) / 2 + FONT_BUTTON_HEIGHT,
+        )
 
     fun cell(
         x: Int,
@@ -86,6 +93,8 @@ class TerminalRenderGeometry(
         const val PANEL_PADDING = 8
         const val TITLE_HEIGHT = 18
         const val TITLE_TOP = 5
+        private const val FONT_BUTTON_WIDTH = 96
+        private const val FONT_BUTTON_HEIGHT = 14
         private const val CURSOR_HEIGHT = 1
         private const val CURSOR_HALF_PERIOD_MILLISECONDS = 500L
         private val PALETTE =
