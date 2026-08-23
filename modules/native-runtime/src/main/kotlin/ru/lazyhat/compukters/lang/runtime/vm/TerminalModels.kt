@@ -75,7 +75,7 @@ sealed interface TerminalUpdate {
 }
 
 enum class TerminalKey(
-    internal val wireCode: Int,
+    val wireCode: Int,
 ) {
     ESCAPE(1),
     BACKSPACE(8),
@@ -106,14 +106,14 @@ enum class TerminalKey(
 }
 
 enum class TerminalKeyAction(
-    internal val wireCode: Int,
+    val wireCode: Int,
 ) {
     PRESS(0),
     REPEAT(1),
 }
 
 enum class TerminalModifier(
-    internal val mask: Int,
+    val mask: Int,
 ) {
     SHIFT(1),
     CONTROL(2),
