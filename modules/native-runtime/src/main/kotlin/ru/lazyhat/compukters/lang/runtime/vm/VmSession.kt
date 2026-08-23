@@ -69,7 +69,7 @@ class VmSession private constructor(
     companion object {
         private const val CLOSED = 0L
 
-        fun open(artifact: ByteArray): VmSession = open(artifact, NativeBridge)
+        fun open(artifact: ByteArray): VmSession = open(artifact, VmRuntime.bridge())
 
         internal fun open(
             artifact: ByteArray,

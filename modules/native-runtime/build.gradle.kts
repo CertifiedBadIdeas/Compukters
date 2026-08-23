@@ -55,25 +55,25 @@ val nativeArch =
     }
 val nativeFilename =
     when (nativeOs) {
-        "linux" -> "libcompukter_jni.so"
-        "windows" -> "compukter_jni.dll"
-        "macos" -> "libcompukter_jni.dylib"
+        "linux" -> "libcompukter_ffi.so"
+        "windows" -> "compukter_ffi.dll"
+        "macos" -> "libcompukter_ffi.dylib"
         else -> error("unreachable native build operating system: $nativeOs")
     }
 val nativeResourcePath = "META-INF/natives/$nativeOs/$nativeArch/$nativeFilename"
-val compukterJniLibrary = rootProject.file(".toolchain/build/cargo/compukter-jni/release/$nativeFilename")
+val compukterFfiLibrary = rootProject.file(".toolchain/build/cargo/compukter-ffi/release/$nativeFilename")
 val generatedNativeResources = layout.buildDirectory.dir("generated/native-resources")
 val terminalFixture = rootProject.file("host/compukter-vm/tests/fixtures/terminal-session.hex")
 
-val preparePackagedCompukterJni =
-    tasks.register<Sync>("preparePackagedCompukterJni") {
-        description = "Copies the current-host Compukter JNI library into its stable classpath resource."
-        dependsOn(rootProject.tasks.named("cargoBuildCompukterJni"))
+val preparePackagedCompukterFfi =
+    tasks.register<Sync>("preparePackagedCompukterFfi") {
+        description = "Copies the current-host Compukter FFM library into its stable classpath resource."
+        dependsOn(rootProject.tasks.named("cargoBuildCompukterFfi"))
         inputs.property("nativeOs", nativeOs)
         inputs.property("nativeArch", nativeArch)
-        inputs.file(compukterJniLibrary)
+        inputs.file(compukterFfiLibrary)
         into(generatedNativeResources)
-        from(compukterJniLibrary) {
+        from(compukterFfiLibrary) {
             into("META-INF/natives/$nativeOs/$nativeArch")
         }
     }
@@ -83,36 +83,38 @@ sourceSets.main {
 }
 
 tasks.processResources {
-    dependsOn(preparePackagedCompukterJni)
+    dependsOn(preparePackagedCompukterFfi)
 }
 
 val nativeIntegrationTest =
     tasks.register<Test>("nativeIntegrationTest") {
-        description = "Runs Kotlin-to-JNI-to-Rust Compukter VM integration tests."
+        description = "Runs Kotlin-to-FFM-to-Rust Compukter VM integration tests."
         group = "verification"
-        dependsOn(rootProject.tasks.named("cargoBuildCompukterJni"))
+        dependsOn(rootProject.tasks.named("cargoBuildCompukterFfi"))
         useJUnitPlatform()
         testClassesDirs = sourceSets.test.get().output.classesDirs
         classpath = sourceSets.test.get().runtimeClasspath
         filter.includeTestsMatching("ru.lazyhat.compukters.lang.runtime.integration.*")
-        inputs.file(compukterJniLibrary)
+        inputs.file(compukterFfiLibrary)
         inputs.file(terminalFixture)
+        jvmArgs("--enable-native-access=ALL-UNNAMED", "--illegal-native-access=deny")
         doFirst {
-            systemProperty("compukter.jni.library", compukterJniLibrary.absolutePath)
+            systemProperty("compukter.ffi.library", compukterFfiLibrary.absolutePath)
             systemProperty("compukter.vm.terminalFixture", terminalFixture.absolutePath)
         }
     }
 
 val packagedNativeIntegrationTest =
     tasks.register<Test>("packagedNativeIntegrationTest") {
-        description = "Extracts the packaged current-host JNI library and runs the terminal fixture in a fresh JVM."
+        description = "Extracts the packaged current-host FFM library and runs the terminal fixture in a fresh JVM."
         group = "verification"
-        dependsOn(rootProject.tasks.named("cargoBuildCompukterJni"))
+        dependsOn(rootProject.tasks.named("cargoBuildCompukterFfi"))
         useJUnitPlatform()
         testClassesDirs = sourceSets.test.get().output.classesDirs
         classpath = sourceSets.test.get().runtimeClasspath
-        filter.includeTestsMatching("ru.lazyhat.compukters.lang.runtime.integration.PackagedNativeBridgeIntegrationTest")
+        filter.includeTestsMatching("ru.lazyhat.compukters.lang.runtime.integration.PackagedFfmRuntimeIntegrationTest")
         inputs.file(terminalFixture)
+        jvmArgs("--enable-native-access=ALL-UNNAMED", "--illegal-native-access=deny")
         doFirst {
             systemProperty("compukter.vm.terminalFixture", terminalFixture.absolutePath)
         }
@@ -121,7 +123,7 @@ val packagedNativeIntegrationTest =
 val runtimeJar = tasks.named<Jar>("jar")
 val verifyNativeRuntimeJarResource =
     tasks.register("verifyNativeRuntimeJarResource") {
-        description = "Checks that native-runtime.jar contains exactly one current-host JNI resource."
+        description = "Checks that native-runtime.jar contains exactly one current-host FFM resource."
         group = "verification"
         dependsOn(runtimeJar)
         inputs.file(runtimeJar.flatMap { it.archiveFile })
@@ -146,4 +148,10 @@ val verifyNativeRuntimeJarResource =
 
 tasks.check {
     dependsOn(nativeIntegrationTest, packagedNativeIntegrationTest, verifyNativeRuntimeJarResource)
+}
+
+tasks.register("verifyNativeRuntime") {
+    description = "Runs JVM, explicit FFM, packaged FFM, and native resource verification."
+    group = "verification"
+    dependsOn(tasks.test, nativeIntegrationTest, packagedNativeIntegrationTest, verifyNativeRuntimeJarResource)
 }

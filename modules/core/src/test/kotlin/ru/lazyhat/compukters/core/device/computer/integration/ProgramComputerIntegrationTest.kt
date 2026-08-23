@@ -37,7 +37,7 @@ import kotlin.test.assertTrue
 class ProgramComputerIntegrationTest {
     @Test
     fun `compiled Kotlin terminal artifact runs through server computer carrier`() {
-        VmRuntime.loadNativeLibrary(Path.of(requiredProperty("compukters.jni.library")))
+        VmRuntime.loadNativeLibrary(Path.of(requiredProperty("compukters.ffi.library")))
         val artifact = Path.of(requiredProperty("compukters.programRuntime.artifact")).readBytes()
         val events = mutableListOf<ObservedEvent>()
         val computer =

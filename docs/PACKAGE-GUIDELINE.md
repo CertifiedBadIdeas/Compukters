@@ -7,12 +7,13 @@ Compukters product code uses the root package `ru.lazyhat.compukters`. New code 
 - `compiler-artifact` owns the canonical artifact model, validation, and encoding.
 - `compiler-client` owns bounded communication with the isolated compiler worker.
 - `compiler-k2` owns Kotlin frontend/IR integration and artifact lowering.
-- `native-runtime` owns the Kotlin-facing JNI VM session and trusted host capabilities.
+- `native-runtime` owns the Kotlin-facing JDK 25 FFM VM session and trusted host capabilities.
 - `core` owns loader-independent server product behavior, including `ProgramRuntimeHost` and future computer carriers.
 - `playground` owns the standalone compiler-and-VM executable used outside Minecraft.
 - `v26_1-common` owns loader-independent Minecraft 26.1 adapters.
 - `v26_1-neoforge` owns NeoForge 26.1 bootstrap, registration, resources, and loader-specific adapters.
 - `host/compukter-vm` owns verification, interpretation, memory management, quotas, and VM execution.
+- `host/compukter-ffi` owns the versioned C ABI and opaque machine-handle adapter.
 
 ## Placement rules
 
@@ -32,7 +33,7 @@ Kotlin source
   -> isolated K2 worker
   -> canonical Compukter artifact
   -> Kotlin VM session / ProgramRuntimeHost
-  -> JNI
+  -> JDK 25 FFM / versioned Rust C ABI
   -> Rust VM
 ```
 

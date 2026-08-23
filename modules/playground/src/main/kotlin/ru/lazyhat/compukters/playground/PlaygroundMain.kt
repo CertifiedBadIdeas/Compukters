@@ -20,7 +20,7 @@ fun main(arguments: Array<String>) {
     val exit =
         try {
             val payload = Path.of(requiredProperty("compukters.worker.payload"))
-            val library = Path.of(requiredProperty("compukters.jni.library"))
+            val library = Path.of(requiredProperty("compukters.ffi.library"))
             val java =
                 Path.of(
                     System.getProperty("java.home"),

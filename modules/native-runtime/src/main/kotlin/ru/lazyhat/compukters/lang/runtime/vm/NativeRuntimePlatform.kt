@@ -80,9 +80,9 @@ private enum class NativeOperatingSystem(
     val id: String,
     val filename: String,
 ) {
-    LINUX("linux", "libcompukter_jni.so"),
-    WINDOWS("windows", "compukter_jni.dll"),
-    MACOS("macos", "libcompukter_jni.dylib"),
+    LINUX("linux", "libcompukter_ffi.so"),
+    WINDOWS("windows", "compukter_ffi.dll"),
+    MACOS("macos", "libcompukter_ffi.dylib"),
 }
 
 internal const val MAXIMUM_RUNTIME_DIAGNOSTIC_CODE_UNITS = 256

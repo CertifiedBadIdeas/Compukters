@@ -11,7 +11,7 @@ shell and programs executing on a computer inside Minecraft.
 
 ## Status
 
-The compiler, canonical artifact, JNI session, managed Rust VM, standalone
+The compiler, canonical artifact, JDK 25 FFM session, managed Rust VM, standalone
 playground, loader-independent `ProgramRuntimeHost`, and server computer block
 form an executable vertical slice. A real NeoForge GameTest covers registration,
 automatic boot, ticking, removal, and VM shutdown.
@@ -43,7 +43,7 @@ See [the current architecture](docs/ARCHITECTURE.md).
 
 ## Standalone playground
 
-The playground exercises the same isolated compiler, artifact verifier, JNI
+The playground exercises the same isolated compiler, artifact verifier, FFM
 adapter, Rust VM, and terminal capability that the mod will use. Run the
 included multi-file example from the repository root:
 

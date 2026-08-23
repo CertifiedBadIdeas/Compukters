@@ -12,11 +12,11 @@ Kotlin .kt project
   -> Kotlin IR lowering
   -> canonical Compukter artifact
   -> ProgramRuntimeHost / VM session
-  -> JNI
+  -> JDK 25 FFM / versioned Rust C ABI
   -> Rust Compukter VM
 ```
 
-The trusted JVM side owns source snapshots, compiler isolation, diagnostics, Kotlin IR lowering, and artifact production. Kotlin compiler internals do not cross JNI. The Rust side receives immutable artifact bytes, verifies the complete container, admits it under explicit limits, and owns execution state.
+The trusted JVM side owns source snapshots, compiler isolation, diagnostics, Kotlin IR lowering, and artifact production. Kotlin compiler internals do not cross the bounded FFM boundary. The Rust side receives immutable artifact bytes, verifies the complete container, admits it under explicit limits, and owns execution state. Native buffers remain caller-owned and no Rust pointer enters Kotlin.
 
 The guest-visible terminal capability is asynchronous at the VM boundary. `print` and `println` resume immediately after a bounded host response; `readln` suspends the guest until the host supplies a line. The server host never blocks the Minecraft thread.
 
@@ -35,17 +35,18 @@ The Rust VM owns verification, the Tier 0 interpreter, managed memory and collec
 | `compiler-artifact` | Canonical artifact model, validation, and encoding |
 | `compiler-client` | Bounded controller and protocol for the isolated compiler worker |
 | `compiler-k2` | Pinned K2/IR integration and Compukter lowering |
-| `native-runtime` | Kotlin-facing JNI VM session and trusted host capabilities |
+| `native-runtime` | Kotlin-facing JDK 25 FFM VM session and trusted host capabilities |
 | `core` | Loader-independent server behavior and `ProgramRuntimeHost` |
 | `playground` | Standalone compile-and-run entry point with stdin/stdout |
 | `v26_1-common` | Loader-independent Minecraft 26.1 adapters and computer carrier |
 | `v26_1-neoforge` | NeoForge 26.1 registration, resources, GameTest, and production archive |
 | `host/compukter-vm` | Artifact verification and managed Rust execution runtime |
+| `host/compukter-ffi` | Versioned C ABI and opaque machine-handle adapter |
 
 Ownership rules:
 
 - `core` must not import `net.minecraft.*`.
 - Kotlin modules must not implement another interpreter or mutable guest machine model.
 - Minecraft protocol, UI, and assets require deliberate feature designs and live next to their owning feature.
-- Compiler-internal FIR/IR types must not leak into the artifact, JNI, or native runtime contract.
+- Compiler-internal FIR/IR types must not leak into the artifact, FFM, or native runtime contract.
 - `LegacyImplementationRemovalTest` prevents removed product contours and old package identities from returning.

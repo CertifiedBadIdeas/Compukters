@@ -27,8 +27,8 @@ application {
 }
 
 val workerPayload = project(":compiler-k2").layout.buildDirectory.dir("worker-payload/content")
-val compukterJniLibrary =
-    rootProject.file(".toolchain/build/cargo/compukter-jni/release/${System.mapLibraryName("compukter_jni")}")
+val compukterFfiLibrary =
+    rootProject.file(".toolchain/build/cargo/compukter-ffi/release/${System.mapLibraryName("compukter_ffi")}")
 val repositoryRoot = rootProject.layout.projectDirectory
 
 tasks.test {
@@ -36,30 +36,32 @@ tasks.test {
 }
 
 tasks.named<JavaExec>("run") {
-    dependsOn(":compiler-k2:prepareCompilerWorkerPayload", rootProject.tasks.named("cargoBuildCompukterJni"))
+    dependsOn(":compiler-k2:prepareCompilerWorkerPayload", rootProject.tasks.named("cargoBuildCompukterFfi"))
     workingDir(rootProject.projectDir)
     standardInput = System.`in`
+    jvmArgs("--enable-native-access=ALL-UNNAMED", "--illegal-native-access=deny")
     doFirst {
         systemProperty("compukters.worker.payload", workerPayload.get().asFile.absolutePath)
-        systemProperty("compukters.jni.library", compukterJniLibrary.absolutePath)
+        systemProperty("compukters.ffi.library", compukterFfiLibrary.absolutePath)
     }
 }
 
 val endToEndTest =
     tasks.register<Test>("endToEndTest") {
-        description = "Compiles and executes the standalone Kotlin example through the real worker, JNI, and Rust VM."
+        description = "Compiles and executes the standalone Kotlin example through the real worker, FFM, and Rust VM."
         group = "verification"
-        dependsOn(":compiler-k2:prepareCompilerWorkerPayload", rootProject.tasks.named("cargoBuildCompukterJni"))
+        dependsOn(":compiler-k2:prepareCompilerWorkerPayload", rootProject.tasks.named("cargoBuildCompukterFfi"))
         useJUnitPlatform()
         testClassesDirs = sourceSets.test.get().output.classesDirs
         classpath = sourceSets.test.get().runtimeClasspath
         filter.includeTestsMatching("ru.lazyhat.compukters.playground.integration.*")
+        jvmArgs("--enable-native-access=ALL-UNNAMED", "--illegal-native-access=deny")
         inputs.dir(workerPayload)
-        inputs.file(compukterJniLibrary)
+        inputs.file(compukterFfiLibrary)
         inputs.dir(repositoryRoot.dir("examples/hello"))
         doFirst {
             systemProperty("compukters.worker.payload", workerPayload.get().asFile.absolutePath)
-            systemProperty("compukters.jni.library", compukterJniLibrary.absolutePath)
+            systemProperty("compukters.ffi.library", compukterFfiLibrary.absolutePath)
             systemProperty("compukters.project.root", repositoryRoot.asFile.absolutePath)
         }
     }

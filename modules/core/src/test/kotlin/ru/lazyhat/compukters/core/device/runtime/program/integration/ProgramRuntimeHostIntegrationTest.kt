@@ -34,7 +34,7 @@ import kotlin.test.assertTrue
 class ProgramRuntimeHostIntegrationTest {
     @Test
     fun `compiled Kotlin terminal program runs across bounded server ticks`() {
-        VmRuntime.loadNativeLibrary(Path.of(requiredProperty("compukters.jni.library")))
+        VmRuntime.loadNativeLibrary(Path.of(requiredProperty("compukters.ffi.library")))
         val artifact = Path.of(requiredProperty("compukters.programRuntime.artifact")).readBytes()
         val host = ProgramRuntimeHost(ProgramTickBudget(64, 64, 4))
 
