@@ -22,6 +22,11 @@
 
 import de.fayard.refreshVersions.core.internal.InternalRefreshVersionsApi
 
+check(JavaVersion.current().isCompatibleWith(JavaVersion.VERSION_25)) {
+    "Compukters requires Gradle to run on JDK 25 or newer; current JVM is ${System.getProperty("java.version")}. " +
+        "Set JAVA_HOME to a JDK 25 installation and retry."
+}
+
 pluginManagement {
     repositories {
         mavenCentral()
@@ -59,9 +64,8 @@ include("compiler-k2", modulesDir)
 include("playground", modulesDir)
 include("core", modulesDir)
 
-val v1_21_1Dir = modulesDir.resolve("v1_21_1")
-include("v1_21_1-common", v1_21_1Dir)
-include("v1_21_1-neoforge", v1_21_1Dir)
-// include("v1_21_1-fabric", v1_21_1Dir)
+val v26_1Dir = modulesDir.resolve("v26_1")
+include("v26_1-common", v26_1Dir)
+include("v26_1-neoforge", v26_1Dir)
 
 rootProject.name = "Compukters"

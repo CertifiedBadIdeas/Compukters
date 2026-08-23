@@ -19,35 +19,24 @@
 
 plugins {
     id("kotlin-convention")
-    id("dev.architectury.loom")
+    id("dev.architectury.loom-no-remap")
     id("architectury-plugin")
 }
 
-val libVersion = "v1211"
+val libVersion = "v261"
 
 val libs = the<VersionCatalogsExtension>().named("libs")
 val minecraftVersion = libs.findVersion("minecraft-$libVersion").get().toString()
 val minecraftLibrary = libs.findLibrary("minecraft-$libVersion").get()
-val parchmentMappings = libs.findLibrary("parchment-$libVersion").get()
 
 setBuildContext(
     versionKey = libVersion,
     minecraftVersion = minecraftVersion,
-    javaVersion = 21,
 )
 
 // Common (Architectury) module: archive version = "<mc>-<modVersion>".
 // Loader-specific conventions override this with "<mc>-<loader>-<modVersion>".
 version = computeModVersion()
-
-kotlin {
-    jvmToolchain(21)
-}
-
-java {
-    sourceCompatibility = JavaVersion.VERSION_21
-    targetCompatibility = JavaVersion.VERSION_21
-}
 
 architectury {
     minecraft = minecraftVersion
@@ -55,12 +44,6 @@ architectury {
 
 dependencies {
     minecraft(minecraftLibrary)
-    mappings(
-        loom.layered {
-            officialMojangMappings()
-            parchment(parchmentMappings)
-        },
-    )
 
     testImplementation(kotlin("test"))
     testImplementation(libs.findLibrary("kotlinx-coroutines-test").get())

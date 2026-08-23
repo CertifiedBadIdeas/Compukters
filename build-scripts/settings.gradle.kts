@@ -17,6 +17,11 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+check(JavaVersion.current().isCompatibleWith(JavaVersion.VERSION_25)) {
+    "Compukters requires Gradle to run on JDK 25 or newer; current JVM is ${System.getProperty("java.version")}. " +
+        "Set JAVA_HOME to a JDK 25 installation and retry."
+}
+
 pluginManagement {
     repositories {
         gradlePluginPortal()

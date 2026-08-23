@@ -33,7 +33,7 @@ repositories {
 dependencies {
     implementation(plugin(libs.plugins.kotlin))
     implementation(plugin(libs.plugins.kotlinter))
-    implementation(plugin(libs.plugins.architectury.loom))
+    implementation(plugin(libs.plugins.architectury.loom.no.remap))
     implementation(plugin(libs.plugins.architectury.plugin))
     implementation(plugin(libs.plugins.shadow))
 

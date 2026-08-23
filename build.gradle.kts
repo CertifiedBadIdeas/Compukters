@@ -208,6 +208,62 @@ val testKotlinSubsetVmConformance =
 
 val buildScriptsTest = gradle.includedBuild("build-scripts").task(":test")
 
+val verifyActiveMinecraftBaseline =
+    tasks.register("verifyActiveMinecraftBaseline") {
+        group = "verification"
+        description = "Rejects stale Minecraft and JDK baseline configuration."
+        val activeFiles =
+            fileTree(rootDir) {
+                include(
+                    "*.gradle.kts",
+                    "*.properties",
+                    "gradle/*.toml",
+                    "build-scripts/**/*.gradle.kts",
+                    "build-scripts/**/*.kt",
+                    "build-scripts/**/*.properties",
+                    "config/**/*.properties",
+                    "modules/**/*.gradle.kts",
+                    "modules/**/*.json",
+                    "modules/**/*.kt",
+                    "modules/**/*.properties",
+                    "modules/**/*.toml",
+                )
+                exclude(
+                    "**/build/**",
+                    "**/.gradle/**",
+                    "docs/superpowers/specs/**",
+                    "docs/superpowers/plans/**",
+                )
+            }
+        val forbiddenTokens =
+            listOf(
+                "v1" + "_21_1",
+                "1.21." + "1",
+                "Parch" + "ment",
+                "Java " + "17",
+                "Java " + "21",
+                "JDK " + "17",
+                "JDK " + "21",
+                "JVM " + "17",
+                "JVM " + "21",
+            )
+
+        inputs.files(activeFiles)
+        doLast {
+            val matches =
+                activeFiles.files
+                    .asSequence()
+                    .filter(File::isFile)
+                    .filter { file -> forbiddenTokens.any(file.readText()::contains) }
+                    .map { it.relativeTo(rootDir).path }
+                    .sorted()
+                    .toList()
+            check(matches.isEmpty()) {
+                "stale Minecraft/JDK baseline references: ${matches.joinToString()}"
+            }
+        }
+    }
+
 tasks.register("verifyLocalFast") {
     description = "Runs the standard local JVM and build-script verification slice."
     group = "verification"
@@ -215,8 +271,8 @@ tasks.register("verifyLocalFast") {
     dependsOn(":core:test")
     dependsOn(":native-runtime:test")
     dependsOn(":playground:test")
-    dependsOn(":v1_21_1-common:test")
-    dependsOn(":v1_21_1-neoforge:test")
+    dependsOn(":v26_1-common:test")
+    dependsOn(":v26_1-neoforge:test")
 }
 
 tasks.register("verifyLocalFull") {
