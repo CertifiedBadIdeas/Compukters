@@ -93,6 +93,5 @@ class FfmBridgeIntegrationTest {
         }
     }
 
-    private fun requiredProperty(name: String): String =
-        requireNotNull(System.getProperty(name)) { "missing $name test property" }
+    private fun requiredProperty(name: String): String = requireNotNull(System.getProperty(name)) { "missing $name test property" }
 }

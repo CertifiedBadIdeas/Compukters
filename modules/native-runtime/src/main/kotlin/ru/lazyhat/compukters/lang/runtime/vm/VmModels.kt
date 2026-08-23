@@ -104,6 +104,8 @@ sealed interface VmOutcome {
 
     data object WaitingForLine : VmOutcome
 
+    data object WaitingForTerminalEvent : VmOutcome
+
     data class HostRequest(
         val request: VmHostRequest,
     ) : VmOutcome

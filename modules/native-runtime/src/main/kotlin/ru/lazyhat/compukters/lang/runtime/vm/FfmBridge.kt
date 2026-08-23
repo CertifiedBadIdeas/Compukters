@@ -108,16 +108,14 @@ internal class FfmBridge private constructor(
         requestId: Long,
         kind: Int,
         code: Long,
-    ) =
-        requireSuccess(
-            "resume failure",
-            resumeFailureHandle.invokeExact(handle, requestId, kind, code.toInt()) as Int,
-        )
+    ) = requireSuccess(
+        "resume failure",
+        resumeFailureHandle.invokeExact(handle, requestId, kind, code.toInt()) as Int,
+    )
 
     override fun close(handle: Long) = requireSuccess("close", closeHandle.invokeExact(handle) as Int)
 
-    override fun terminalCommit(handle: Long) =
-        requireSuccess("terminal commit", terminalCommitHandle.invokeExact(handle) as Int)
+    override fun terminalCommit(handle: Long) = requireSuccess("terminal commit", terminalCommitHandle.invokeExact(handle) as Int)
 
     override fun terminalFullState(handle: Long): ByteArray =
         terminalOutput("terminal full state") { output, maximum, written ->
@@ -137,11 +135,10 @@ internal class FfmBridge private constructor(
         key: Int,
         action: Int,
         modifiers: Int,
-    ) =
-        requireSuccess(
-            "terminal key",
-            terminalKeyHandle.invokeExact(handle, key.toShort(), action, modifiers) as Int,
-        )
+    ) = requireSuccess(
+        "terminal key",
+        terminalKeyHandle.invokeExact(handle, key.toShort(), action, modifiers) as Int,
+    )
 
     override fun terminalText(
         handle: Long,
@@ -255,6 +252,7 @@ internal class FfmBridge private constructor(
             try {
                 val lookup = SymbolLookup.libraryLookup(library, arena)
                 val linker = Linker.nativeLinker()
+
                 fun downcall(
                     name: String,
                     descriptor: FunctionDescriptor,
@@ -388,6 +386,5 @@ internal class FfmBridge private constructor(
                 throw error
             }
         }
-
     }
 }

@@ -91,7 +91,11 @@ class NativeRuntimeLoaderTest {
         val cases = listOf(temporaryDirectory.resolve("missing"), temporaryDirectory.resolve("directory").createDirectory())
 
         cases.forEach { path ->
-            val result = loader(nativeLoad = { nativeCalls.incrementAndGet(); FakeBridge() }).ensureExplicitLoaded(path)
+            val result =
+                loader(nativeLoad = {
+                    nativeCalls.incrementAndGet()
+                    FakeBridge()
+                }).ensureExplicitLoaded(path)
 
             assertIs<VmRuntimeLoadFailure.InvalidExplicitPath>(assertIs<VmRuntimeLoadResult.Failed>(result).failure)
         }
@@ -175,7 +179,10 @@ class NativeRuntimeLoaderTest {
             loader(
                 resource = { ByteArrayInputStream(ByteArray(5)) },
                 createTempDirectory = { extractionDirectory.createDirectory() },
-                nativeLoad = { nativeCalls.incrementAndGet(); FakeBridge() },
+                nativeLoad = {
+                    nativeCalls.incrementAndGet()
+                    FakeBridge()
+                },
                 maximumPackagedNativeBytes = 4,
             )
 
@@ -237,7 +244,11 @@ class NativeRuntimeLoaderTest {
     @Test
     fun `success and failure are cached by identity`() {
         val successCalls = AtomicInteger()
-        val successLoader = loader(nativeLoad = { successCalls.incrementAndGet(); FakeBridge() })
+        val successLoader =
+            loader(nativeLoad = {
+                successCalls.incrementAndGet()
+                FakeBridge()
+            })
         val explicit = temporaryDirectory.resolve("later.so").createFile()
 
         val firstSuccess = successLoader.ensurePackagedLoaded()
@@ -326,11 +337,23 @@ class NativeRuntimeLoaderTest {
             maintenanceBudget: Int,
         ): ByteArray = error("unused")
 
-        override fun resumeUnit(handle: Long, requestId: Long) = error("unused")
+        override fun resumeUnit(
+            handle: Long,
+            requestId: Long,
+        ) = error("unused")
 
-        override fun resumeString(handle: Long, requestId: Long, value: CharArray) = error("unused")
+        override fun resumeString(
+            handle: Long,
+            requestId: Long,
+            value: CharArray,
+        ) = error("unused")
 
-        override fun resumeFailure(handle: Long, requestId: Long, kind: Int, code: Long) = error("unused")
+        override fun resumeFailure(
+            handle: Long,
+            requestId: Long,
+            kind: Int,
+            code: Long,
+        ) = error("unused")
 
         override fun close(handle: Long) = error("unused")
     }

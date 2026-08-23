@@ -44,6 +44,7 @@ class ProgramRuntimeHost internal constructor(
     ) : this(NativeProgramVmSessionFactory, tickBudget, terminalLimits)
 
     private var session: ProgramVmSession? = null
+    private var waitingForTerminalEvent = false
 
     var state: ProgramRuntimeState = ProgramRuntimeState.Idle
         private set
@@ -52,6 +53,7 @@ class ProgramRuntimeHost internal constructor(
         if (state == ProgramRuntimeState.Closed) return ProgramStartResult.Closed
         releaseSession()
         state = ProgramRuntimeState.Idle
+        waitingForTerminalEvent = false
         return try {
             session = sessionFactory.open(artifact)
             state = ProgramRuntimeState.Running
@@ -98,6 +100,13 @@ class ProgramRuntimeHost internal constructor(
                 }
 
                 VmOutcome.WaitingForLine -> {
+                    waitingForTerminalEvent = false
+                    state = ProgramRuntimeState.WaitingForInput
+                    return
+                }
+
+                VmOutcome.WaitingForTerminalEvent -> {
+                    waitingForTerminalEvent = true
                     state = ProgramRuntimeState.WaitingForInput
                     return
                 }
@@ -148,10 +157,11 @@ class ProgramRuntimeHost internal constructor(
     }
 
     fun submitLine(line: String): Boolean {
-        if (state != ProgramRuntimeState.WaitingForInput) return false
+        if (state != ProgramRuntimeState.WaitingForInput || waitingForTerminalEvent) return false
         if (line.length > terminalLimits.maximumInputLineCodeUnits) return false
         return try {
             requireNotNull(session).provideCompatibilityLine(line)
+            waitingForTerminalEvent = false
             state = ProgramRuntimeState.Running
             true
         } catch (error: VmBridgeException) {
@@ -211,6 +221,10 @@ class ProgramRuntimeHost internal constructor(
         val activeSession = session ?: return false
         return try {
             activeSession.input()
+            if (state == ProgramRuntimeState.WaitingForInput && waitingForTerminalEvent) {
+                waitingForTerminalEvent = false
+                state = ProgramRuntimeState.Running
+            }
             true
         } catch (error: VmBridgeException) {
             finish(ProgramRuntimeState.Failed(ProgramFailure.Bridge(error.bridgeDetail())))
@@ -232,6 +246,7 @@ class ProgramRuntimeHost internal constructor(
     private fun releaseSession() {
         session?.close()
         session = null
+        waitingForTerminalEvent = false
     }
 
     private fun VmBridgeException.bridgeDetail(): String = message ?: "native VM bridge failure"
