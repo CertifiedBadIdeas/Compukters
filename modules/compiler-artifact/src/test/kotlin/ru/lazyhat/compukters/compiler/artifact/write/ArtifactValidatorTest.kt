@@ -232,6 +232,21 @@ class ArtifactValidatorTest {
                     BlockId.of(1u),
                 ),
                 Instruction.StringConcat(RegisterId.of(3u), RegisterId.of(1u), RegisterId.of(2u)),
+                Instruction.Move(RegisterId.of(2u), RegisterId.of(1u)),
+                Instruction.AddI32(RegisterId.of(0u), RegisterId.of(0u), RegisterId.of(0u)),
+                Instruction.StringLength(RegisterId.of(0u), RegisterId.of(1u)),
+                Instruction.StringSubstring(
+                    RegisterId.of(3u),
+                    RegisterId.of(1u),
+                    RegisterId.of(0u),
+                    RegisterId.of(0u),
+                ),
+                Instruction.CapabilityCallSync(
+                    Destination.Unit,
+                    CapabilityId.of(0u),
+                    1u,
+                    listOf(RegisterId.of(0u)),
+                ),
                 Instruction.CapabilityCallAsync(
                     Destination.Unit,
                     CapabilityId.of(0u),
@@ -243,6 +258,23 @@ class ArtifactValidatorTest {
 
         cases.forEach { instruction ->
             assertEquals(emptyList(), validateArtifact(executableArtifact(instruction), ArtifactWriteLimits()), instruction.toString())
+        }
+    }
+
+    @Test
+    fun `new typed instructions reject mismatched registers and capability operations`() {
+        val cases =
+            listOf(
+                Instruction.Move(RegisterId.of(0u), RegisterId.of(1u)) to "move source and destination types differ",
+                Instruction.AddI32(RegisterId.of(1u), RegisterId.of(0u), RegisterId.of(0u)) to "I32 add register",
+                Instruction.StringLength(RegisterId.of(1u), RegisterId.of(1u)) to "string length destination",
+                Instruction.CapabilityCallSync(Destination.Unit, CapabilityId.of(0u), 2u, emptyList()) to
+                    "capability operation",
+            )
+
+        cases.forEach { (instruction, expected) ->
+            val errors = validateArtifact(executableArtifact(instruction), ArtifactWriteLimits())
+            assertTrue(errors.any { it.detail.contains(expected) }, "$instruction: $errors")
         }
     }
 

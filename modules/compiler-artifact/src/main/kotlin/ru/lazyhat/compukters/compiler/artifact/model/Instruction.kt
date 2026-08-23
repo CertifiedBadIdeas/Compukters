@@ -22,6 +22,11 @@ package ru.lazyhat.compukters.compiler.artifact.model
 import java.util.Collections
 
 sealed interface Instruction {
+    data class Move(
+        val destination: RegisterId,
+        val source: RegisterId,
+    ) : Instruction
+
     data class Const(
         val destination: RegisterId,
         val constant: ConstantId,
@@ -29,6 +34,53 @@ sealed interface Instruction {
 
     data class Null(
         val destination: RegisterId,
+    ) : Instruction
+
+    data class AddI32(
+        val destination: RegisterId,
+        val left: RegisterId,
+        val right: RegisterId,
+    ) : Instruction
+
+    data class SubtractI32(
+        val destination: RegisterId,
+        val left: RegisterId,
+        val right: RegisterId,
+    ) : Instruction
+
+    data class Equal(
+        val type: ScalarValueType,
+        val destination: RegisterId,
+        val left: RegisterId,
+        val right: RegisterId,
+    ) : Instruction
+
+    data class Less(
+        val type: OrderedScalarValueType,
+        val destination: RegisterId,
+        val left: RegisterId,
+        val right: RegisterId,
+    ) : Instruction
+
+    data class LessOrEqual(
+        val type: OrderedScalarValueType,
+        val destination: RegisterId,
+        val left: RegisterId,
+        val right: RegisterId,
+    ) : Instruction
+
+    data class Greater(
+        val type: OrderedScalarValueType,
+        val destination: RegisterId,
+        val left: RegisterId,
+        val right: RegisterId,
+    ) : Instruction
+
+    data class GreaterOrEqual(
+        val type: OrderedScalarValueType,
+        val destination: RegisterId,
+        val left: RegisterId,
+        val right: RegisterId,
     ) : Instruction
 
     data class NewObject(
@@ -102,6 +154,52 @@ sealed interface Instruction {
         val left: RegisterId,
         val right: RegisterId,
     ) : Instruction
+
+    data class StringLength(
+        val destination: RegisterId,
+        val string: RegisterId,
+    ) : Instruction
+
+    data class StringGet(
+        val destination: RegisterId,
+        val string: RegisterId,
+        val index: RegisterId,
+    ) : Instruction
+
+    data class StringEquals(
+        val destination: RegisterId,
+        val left: RegisterId,
+        val right: RegisterId,
+    ) : Instruction
+
+    data class StringSubstring(
+        val destination: RegisterId,
+        val string: RegisterId,
+        val start: RegisterId,
+        val end: RegisterId,
+    ) : Instruction
+
+    class CapabilityCallSync(
+        val destination: Destination,
+        val capability: CapabilityId,
+        val operation: UInt,
+        arguments: List<RegisterId>,
+    ) : Instruction {
+        val arguments: List<RegisterId> = Collections.unmodifiableList(ArrayList(arguments))
+
+        override fun equals(other: Any?): Boolean =
+            other is CapabilityCallSync &&
+                destination == other.destination &&
+                capability == other.capability &&
+                operation == other.operation &&
+                arguments == other.arguments
+
+        override fun hashCode(): Int =
+            31 * (31 * (31 * destination.hashCode() + capability.hashCode()) + operation.hashCode()) + arguments.hashCode()
+
+        override fun toString(): String =
+            "CapabilityCallSync(destination=$destination, capability=$capability, operation=$operation, arguments=$arguments)"
+    }
 
     class CapabilityCallAsync(
         val destination: Destination,

@@ -26,7 +26,9 @@ import ru.lazyhat.compukters.compiler.artifact.model.FunctionId
 import ru.lazyhat.compukters.compiler.artifact.model.FunctionRef
 import ru.lazyhat.compukters.compiler.artifact.model.ImportId
 import ru.lazyhat.compukters.compiler.artifact.model.Instruction
+import ru.lazyhat.compukters.compiler.artifact.model.OrderedScalarValueType
 import ru.lazyhat.compukters.compiler.artifact.model.RegisterId
+import ru.lazyhat.compukters.compiler.artifact.model.ScalarValueType
 import ru.lazyhat.compukters.compiler.artifact.model.TypeId
 import ru.lazyhat.compukters.compiler.artifact.model.TypeRef
 import kotlin.test.Test
@@ -181,6 +183,84 @@ class InstructionEncoderTest {
     }
 
     @Test
+    fun `move and typed scalar operations encode canonical forms`() {
+        val cases =
+            listOf(
+                Instruction.Move(RegisterId.of(1u), RegisterId.of(2u)) to
+                    byteArrayOf(0x01, 0, 8, 0, 1, 0, 2, 0),
+                Instruction.AddI32(RegisterId.of(1u), RegisterId.of(2u), RegisterId.of(3u)) to
+                    byteArrayOf(0x10, 1, 10, 0, 1, 0, 2, 0, 3, 0),
+                Instruction.SubtractI32(RegisterId.of(1u), RegisterId.of(2u), RegisterId.of(3u)) to
+                    byteArrayOf(0x11, 1, 10, 0, 1, 0, 2, 0, 3, 0),
+                Instruction.Equal(
+                    ScalarValueType.CHAR,
+                    RegisterId.of(1u),
+                    RegisterId.of(2u),
+                    RegisterId.of(3u),
+                ) to byteArrayOf(0x20, 6, 10, 0, 1, 0, 2, 0, 3, 0),
+                Instruction.Less(OrderedScalarValueType.I32, RegisterId.of(1u), RegisterId.of(2u), RegisterId.of(3u)) to
+                    byteArrayOf(0x22, 1, 10, 0, 1, 0, 2, 0, 3, 0),
+                Instruction.LessOrEqual(OrderedScalarValueType.I32, RegisterId.of(1u), RegisterId.of(2u), RegisterId.of(3u)) to
+                    byteArrayOf(0x23, 1, 10, 0, 1, 0, 2, 0, 3, 0),
+                Instruction.Greater(OrderedScalarValueType.I32, RegisterId.of(1u), RegisterId.of(2u), RegisterId.of(3u)) to
+                    byteArrayOf(0x24, 1, 10, 0, 1, 0, 2, 0, 3, 0),
+                Instruction.GreaterOrEqual(OrderedScalarValueType.I32, RegisterId.of(1u), RegisterId.of(2u), RegisterId.of(3u)) to
+                    byteArrayOf(0x25, 1, 10, 0, 1, 0, 2, 0, 3, 0),
+            )
+
+        cases.forEach { (instruction, expected) ->
+            val encoded = encodeInstruction(instruction, 64)
+            assertContentEquals(expected, encoded.bytes)
+            assertEquals(1u, encoded.fixedCost)
+        }
+    }
+
+    @Test
+    fun `string primitive instructions encode canonical registers`() {
+        val cases =
+            listOf(
+                Instruction.StringLength(RegisterId.of(1u), RegisterId.of(2u)) to
+                    byteArrayOf(0x60, 0, 8, 0, 1, 0, 2, 0),
+                Instruction.StringGet(RegisterId.of(1u), RegisterId.of(2u), RegisterId.of(3u)) to
+                    byteArrayOf(0x61, 0, 10, 0, 1, 0, 2, 0, 3, 0),
+                Instruction.StringEquals(RegisterId.of(1u), RegisterId.of(2u), RegisterId.of(3u)) to
+                    byteArrayOf(0x62, 0, 10, 0, 1, 0, 2, 0, 3, 0),
+                Instruction.StringSubstring(
+                    RegisterId.of(1u),
+                    RegisterId.of(2u),
+                    RegisterId.of(3u),
+                    RegisterId.of(4u),
+                ) to byteArrayOf(0x66, 0, 12, 0, 1, 0, 2, 0, 3, 0, 4, 0),
+            )
+
+        cases.forEach { (instruction, expected) ->
+            val encoded = encodeInstruction(instruction, 64)
+            assertContentEquals(expected, encoded.bytes)
+            assertEquals(1u, encoded.fixedCost)
+        }
+    }
+
+    @Test
+    fun `sync capability calls encode optional destination and variable cost`() {
+        val encoded =
+            encodeInstruction(
+                Instruction.CapabilityCallSync(
+                    Destination.Register(RegisterId.of(5u)),
+                    CapabilityId.of(128u),
+                    129u,
+                    listOf(RegisterId.of(3u), RegisterId.of(4u)),
+                ),
+                64,
+            )
+
+        assertContentEquals(
+            byteArrayOf(0x51, 0, 15, 0, 5, 0, 0x80.toByte(), 1, 0x81.toByte(), 1, 2, 3, 0, 4, 0),
+            encoded.bytes,
+        )
+        assertEquals(7u, encoded.fixedCost)
+    }
+
+    @Test
     fun `async capability calls encode optional destination operation arguments and resume`() {
         val unit =
             encodeInstruction(
@@ -241,6 +321,7 @@ class InstructionEncoderTest {
         val call = Instruction.Call(Destination.Unit, FunctionRef.Local(FunctionId.of(0u)), arguments)
         val suspended = Instruction.CallSuspend(Destination.Unit, FunctionRef.Local(FunctionId.of(0u)), arguments, BlockId.of(0u))
         val capability = Instruction.CapabilityCallAsync(Destination.Unit, CapabilityId.of(0u), 0u, arguments, BlockId.of(0u))
+        val syncCapability = Instruction.CapabilityCallSync(Destination.Unit, CapabilityId.of(0u), 0u, arguments)
 
         arguments += RegisterId.of(3u)
 
@@ -249,7 +330,7 @@ class InstructionEncoderTest {
         assertEquals(expected, suspended.arguments)
         assertEquals(expected, capability.arguments)
 
-        listOf(call.arguments, suspended.arguments, capability.arguments).forEach { exposedArguments ->
+        listOf(call.arguments, suspended.arguments, capability.arguments, syncCapability.arguments).forEach { exposedArguments ->
             assertFailsWith<UnsupportedOperationException> {
                 @Suppress("UNCHECKED_CAST")
                 (exposedArguments as MutableList<RegisterId>) += RegisterId.of(4u)

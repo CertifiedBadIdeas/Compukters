@@ -249,6 +249,22 @@ internal fun validateArtifact(
             is Instruction.Jump,
             -> emptyList()
 
+            is Instruction.Move -> listOf(source)
+
+            is Instruction.AddI32 -> listOf(left, right)
+
+            is Instruction.SubtractI32 -> listOf(left, right)
+
+            is Instruction.Equal -> listOf(left, right)
+
+            is Instruction.Less -> listOf(left, right)
+
+            is Instruction.LessOrEqual -> listOf(left, right)
+
+            is Instruction.Greater -> listOf(left, right)
+
+            is Instruction.GreaterOrEqual -> listOf(left, right)
+
             is Instruction.NewArray -> listOf(length)
 
             is Instruction.ArrayLoad -> listOf(array, index)
@@ -263,6 +279,16 @@ internal fun validateArtifact(
 
             is Instruction.StringConcat -> listOf(left, right)
 
+            is Instruction.StringLength -> listOf(string)
+
+            is Instruction.StringGet -> listOf(string, index)
+
+            is Instruction.StringEquals -> listOf(left, right)
+
+            is Instruction.StringSubstring -> listOf(string, start, end)
+
+            is Instruction.CapabilityCallSync -> arguments
+
             is Instruction.CapabilityCallAsync -> arguments
 
             is Instruction.Branch -> listOf(condition)
@@ -274,9 +300,25 @@ internal fun validateArtifact(
 
     fun Instruction.writtenRegisters(): List<RegisterId> =
         when (this) {
+            is Instruction.Move -> listOf(destination)
+
             is Instruction.Const -> listOf(destination)
 
             is Instruction.Null -> listOf(destination)
+
+            is Instruction.AddI32 -> listOf(destination)
+
+            is Instruction.SubtractI32 -> listOf(destination)
+
+            is Instruction.Equal -> listOf(destination)
+
+            is Instruction.Less -> listOf(destination)
+
+            is Instruction.LessOrEqual -> listOf(destination)
+
+            is Instruction.Greater -> listOf(destination)
+
+            is Instruction.GreaterOrEqual -> listOf(destination)
 
             is Instruction.NewObject -> listOf(destination)
 
@@ -291,6 +333,16 @@ internal fun validateArtifact(
             is Instruction.CallSuspend -> (destination as? Destination.Register)?.let { listOf(it.id) }.orEmpty()
 
             is Instruction.StringConcat -> listOf(destination)
+
+            is Instruction.StringLength -> listOf(destination)
+
+            is Instruction.StringGet -> listOf(destination)
+
+            is Instruction.StringEquals -> listOf(destination)
+
+            is Instruction.StringSubstring -> listOf(destination)
+
+            is Instruction.CapabilityCallSync -> (destination as? Destination.Register)?.let { listOf(it.id) }.orEmpty()
 
             is Instruction.CapabilityCallAsync -> (destination as? Destination.Register)?.let { listOf(it.id) }.orEmpty()
 
@@ -318,7 +370,11 @@ internal fun validateArtifact(
             this is Instruction.ArrayStore ||
             this is Instruction.Call ||
             this is Instruction.CallSuspend ||
+            this is Instruction.CapabilityCallSync ||
             this is Instruction.CapabilityCallAsync ||
+            this is Instruction.StringGet ||
+            this is Instruction.StringConcat ||
+            this is Instruction.StringSubstring ||
             this is Instruction.Throw
 
     if (artifact.entry.module.value
@@ -367,7 +423,9 @@ internal fun validateArtifact(
     }
     if (artifact.capabilities.isNotEmpty() ||
         artifact.modules.any { module ->
-            module.blocks.any { block -> block.instructions.any { it is Instruction.CapabilityCallAsync } }
+            module.blocks.any { block ->
+                block.instructions.any { it is Instruction.CapabilityCallSync || it is Instruction.CapabilityCallAsync }
+            }
         }
     ) {
         expectedFeatures += SemanticFeature.CAPABILITIES
@@ -530,7 +588,8 @@ internal fun validateArtifact(
                     block.instructions.withIndex().filter { (_, instruction) ->
                         instruction is Instruction.NewObject ||
                             instruction is Instruction.NewArray ||
-                            instruction is Instruction.StringConcat
+                            instruction is Instruction.StringConcat ||
+                            instruction is Instruction.StringSubstring
                     }
                 if (allocations.size > 1 || allocations.singleOrNull()?.index?.let { it != 0 } == true) {
                     add(
@@ -670,6 +729,21 @@ internal fun validateArtifact(
                         }
                     }
 
+                    fun stringRegister(actual: ValueType?) {
+                        val expected = stringIdentity()
+                        val actualIdentity =
+                            (actual as? ValueType.Ref)?.takeIf { !it.nullable }?.let {
+                                resolveType(moduleIndex, it.type)
+                            }
+                        if (actual != null && (expected == null || actualIdentity != expected)) {
+                            add(
+                                ArtifactWriteErrorCode.INVALID_RANGE,
+                                "string register is not the non-null kotlin.String type",
+                                location,
+                            )
+                        }
+                    }
+
                     if (
                         instruction.isSuspendingTerminator() &&
                         FunctionFlag.SUSPENDING !in owner.flags
@@ -682,6 +756,90 @@ internal fun validateArtifact(
                     }
 
                     when (instruction) {
+                        is Instruction.Move -> {
+                            val destinationType = register(instruction.destination, "destination")
+                            val sourceType = register(instruction.source, "source")
+                            if (destinationType != null && sourceType != null &&
+                                !valueTypesMatch(moduleIndex, destinationType, moduleIndex, sourceType)
+                            ) {
+                                add(ArtifactWriteErrorCode.INVALID_RANGE, "move source and destination types differ", location)
+                            }
+                        }
+
+                        is Instruction.AddI32 -> {
+                            listOf(
+                                register(instruction.destination, "destination"),
+                                register(instruction.left, "source"),
+                                register(instruction.right, "source"),
+                            ).filterNotNull().forEach { actual ->
+                                if (actual != ValueType.I32) {
+                                    add(ArtifactWriteErrorCode.INVALID_RANGE, "I32 add register is not I32", location)
+                                }
+                            }
+                        }
+
+                        is Instruction.SubtractI32 -> {
+                            listOf(
+                                register(instruction.destination, "destination"),
+                                register(instruction.left, "source"),
+                                register(instruction.right, "source"),
+                            ).filterNotNull().forEach { actual ->
+                                if (actual != ValueType.I32) {
+                                    add(ArtifactWriteErrorCode.INVALID_RANGE, "I32 subtract register is not I32", location)
+                                }
+                            }
+                        }
+
+                        is Instruction.Equal,
+                        is Instruction.Less,
+                        is Instruction.LessOrEqual,
+                        is Instruction.Greater,
+                        is Instruction.GreaterOrEqual,
+                        -> {
+                            val expectedSourceType =
+                                when (instruction) {
+                                    is Instruction.Equal -> instruction.type.valueType
+                                    is Instruction.Less -> instruction.type.valueType
+                                    is Instruction.LessOrEqual -> instruction.type.valueType
+                                    is Instruction.Greater -> instruction.type.valueType
+                                    is Instruction.GreaterOrEqual -> instruction.type.valueType
+                                }
+                            val destinationRegister =
+                                when (instruction) {
+                                    is Instruction.Equal -> instruction.destination
+                                    is Instruction.Less -> instruction.destination
+                                    is Instruction.LessOrEqual -> instruction.destination
+                                    is Instruction.Greater -> instruction.destination
+                                    is Instruction.GreaterOrEqual -> instruction.destination
+                                }
+                            val leftRegister =
+                                when (instruction) {
+                                    is Instruction.Equal -> instruction.left
+                                    is Instruction.Less -> instruction.left
+                                    is Instruction.LessOrEqual -> instruction.left
+                                    is Instruction.Greater -> instruction.left
+                                    is Instruction.GreaterOrEqual -> instruction.left
+                                }
+                            val rightRegister =
+                                when (instruction) {
+                                    is Instruction.Equal -> instruction.right
+                                    is Instruction.Less -> instruction.right
+                                    is Instruction.LessOrEqual -> instruction.right
+                                    is Instruction.Greater -> instruction.right
+                                    is Instruction.GreaterOrEqual -> instruction.right
+                                }
+                            val destinationType = register(destinationRegister, "destination")
+                            if (destinationType != null && destinationType != ValueType.Bool) {
+                                add(ArtifactWriteErrorCode.INVALID_RANGE, "comparison destination is not Bool", location)
+                            }
+                            listOf(leftRegister, rightRegister).forEach { source ->
+                                val actual = register(source, "source")
+                                if (actual != null && actual != expectedSourceType) {
+                                    add(ArtifactWriteErrorCode.INVALID_RANGE, "comparison source disagrees with scalar form", location)
+                                }
+                            }
+                        }
+
                         is Instruction.Call -> {
                             call(instruction.function, instruction.destination, instruction.arguments, suspending = false)
                         }
@@ -712,6 +870,64 @@ internal fun validateArtifact(
                                         location,
                                     )
                                 }
+                            }
+                        }
+
+                        is Instruction.StringLength -> {
+                            val result = register(instruction.destination, "destination")
+                            if (result != null && result != ValueType.I32) {
+                                add(ArtifactWriteErrorCode.INVALID_RANGE, "string length destination is not I32", location)
+                            }
+                            stringRegister(register(instruction.string, "source"))
+                        }
+
+                        is Instruction.StringGet -> {
+                            val result = register(instruction.destination, "destination")
+                            val index = register(instruction.index, "index")
+                            if (result != null && result != ValueType.Char) {
+                                add(ArtifactWriteErrorCode.INVALID_RANGE, "string get destination is not Char", location)
+                            }
+                            if (index != null && index != ValueType.I32) {
+                                add(ArtifactWriteErrorCode.INVALID_RANGE, "string index is not I32", location)
+                            }
+                            stringRegister(register(instruction.string, "source"))
+                        }
+
+                        is Instruction.StringEquals -> {
+                            val result = register(instruction.destination, "destination")
+                            if (result != null && result != ValueType.Bool) {
+                                add(ArtifactWriteErrorCode.INVALID_RANGE, "string equality destination is not Bool", location)
+                            }
+                            listOf(instruction.left, instruction.right).forEach { source ->
+                                stringRegister(register(source, "source"))
+                            }
+                        }
+
+                        is Instruction.StringSubstring -> {
+                            listOf(instruction.start, instruction.end).forEach { indexRegister ->
+                                val index = register(indexRegister, "index")
+                                if (index != null && index != ValueType.I32) {
+                                    add(ArtifactWriteErrorCode.INVALID_RANGE, "substring index is not I32", location)
+                                }
+                            }
+                            listOf(instruction.destination, instruction.string).forEach { registerId ->
+                                stringRegister(
+                                    register(
+                                        registerId,
+                                        if (registerId == instruction.destination) "destination" else "source",
+                                    ),
+                                )
+                            }
+                        }
+
+                        is Instruction.CapabilityCallSync -> {
+                            destination(instruction.destination)
+                            instruction.arguments.forEach { register(it, "argument") }
+                            val capability = artifact.capabilities.getOrNull(instruction.capability.value.toInt())
+                            if (capability == null) {
+                                add(ArtifactWriteErrorCode.BAD_REFERENCE, "capability id is outside the capability table", location)
+                            } else if (instruction.operation >= capability.operationCount) {
+                                add(ArtifactWriteErrorCode.BAD_REFERENCE, "capability operation is outside the descriptor range", location)
                             }
                         }
 
