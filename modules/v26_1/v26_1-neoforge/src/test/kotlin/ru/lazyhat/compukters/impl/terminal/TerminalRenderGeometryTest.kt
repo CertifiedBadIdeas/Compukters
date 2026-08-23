@@ -20,20 +20,20 @@ import kotlin.test.assertTrue
 class TerminalRenderGeometryTest {
     @Test
     fun `compact panel keeps one fixed 51 by 19 grid centered after resize`() {
-        val small = TerminalRenderGeometry(640, 360)
-        val large = TerminalRenderGeometry(1_280, 720)
+        val small = TerminalRenderGeometry(640, 360, TerminalFontProfile.DEFAULT)
+        val large = TerminalRenderGeometry(1_280, 720, TerminalFontProfile.DEFAULT)
 
         assertEquals(51, small.columns)
         assertEquals(19, small.rows)
         assertEquals(306, small.grid.width)
-        assertEquals(171, small.grid.height)
+        assertEquals(247, small.grid.height)
         assertEquals(322, small.panel.width)
-        assertEquals(197, small.panel.height)
-        assertEquals(TerminalRect(159, 81, 481, 278), small.panel)
-        assertEquals(TerminalRect(167, 99, 473, 270), small.grid)
-        assertEquals(TerminalRect(167, 99, 173, 108), small.cell(0, 0))
+        assertEquals(273, small.panel.height)
+        assertEquals(TerminalRect(159, 43, 481, 316), small.panel)
+        assertEquals(TerminalRect(167, 61, 473, 308), small.grid)
+        assertEquals(TerminalRect(167, 61, 173, 74), small.cell(0, 0))
         assertEquals(
-            TerminalRect(467, 261, 473, 270),
+            TerminalRect(467, 295, 473, 308),
             small.cell(50, 18),
         )
         assertEquals(small.panel.width, large.panel.width)
@@ -43,17 +43,17 @@ class TerminalRenderGeometryTest {
 
     @Test
     fun `small viewport preserves scale and centers the overflowing panel`() {
-        val geometry = TerminalRenderGeometry(300, 180)
+        val geometry = TerminalRenderGeometry(300, 180, TerminalFontProfile.DEFAULT)
 
-        assertEquals(TerminalRect(-11, -8, 311, 189), geometry.panel)
-        assertEquals(TerminalRect(-3, 10, 303, 181), geometry.grid)
+        assertEquals(TerminalRect(-11, -46, 311, 227), geometry.panel)
+        assertEquals(TerminalRect(-3, -28, 303, 219), geometry.grid)
         assertEquals(-3, geometry.titleX)
-        assertEquals(-3, geometry.titleY)
+        assertEquals(-41, geometry.titleY)
     }
 
     @Test
     fun `palette mapping and cursor projection are exact and pure`() {
-        val geometry = TerminalRenderGeometry(640, 360)
+        val geometry = TerminalRenderGeometry(640, 360, TerminalFontProfile.DEFAULT)
         assertEquals(
             listOf(
                 0xFF000000.toInt(),
