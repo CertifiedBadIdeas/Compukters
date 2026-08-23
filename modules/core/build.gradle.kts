@@ -32,7 +32,7 @@ dependencies {
 val compukterFfiLibrary =
     rootProject.file(".toolchain/build/cargo/compukter-ffi/release/${System.mapLibraryName("compukter_ffi")}")
 val programRuntimeArtifact =
-    project(":compiler-k2").layout.buildDirectory.file("generated/conformance/kotlin-subset.cpkt")
+    project(":compiler-k2").layout.buildDirectory.file("generated/system/shell.cpkt")
 
 tasks.test {
     filter.excludeTestsMatching("ru.lazyhat.compukters.core.device.runtime.program.integration.*")
@@ -44,7 +44,7 @@ val programRuntimeIntegrationTest =
         description = "Runs a compiler-produced Kotlin artifact through the server runtime host and native VM."
         group = "verification"
         dependsOn(
-            ":compiler-k2:generateKotlinSubsetConformanceArtifact",
+            ":compiler-k2:generateShellArtifact",
             rootProject.tasks.named("cargoBuildCompukterFfi"),
         )
         useJUnitPlatform()

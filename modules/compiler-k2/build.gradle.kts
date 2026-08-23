@@ -130,6 +130,7 @@ tasks.test {
 }
 
 val kotlinSubsetConformanceArtifact = layout.buildDirectory.file("generated/conformance/kotlin-subset.cpkt")
+val shellArtifact = layout.buildDirectory.file("generated/system/shell.cpkt")
 
 val generateKotlinSubsetConformanceArtifact = tasks.register<Test>("generateKotlinSubsetConformanceArtifact") {
     dependsOn(tasks.jar)
@@ -142,6 +143,23 @@ val generateKotlinSubsetConformanceArtifact = tasks.register<Test>("generateKotl
     doFirst {
         systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
         systemProperty("compukter.vm.kotlinSubsetArtifact", kotlinSubsetConformanceArtifact.get().asFile.absolutePath)
+    }
+}
+
+val generateShellArtifact = tasks.register<Test>("generateShellArtifact") {
+    description = "Compiles the checked-in no-std Kotlin shell into a deterministic Compukter Artifact."
+    group = "build"
+    dependsOn(tasks.jar)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching("*checked in shell compiles deterministically*")
+    inputs.file(rootProject.file("system/programs/shell.kt"))
+    inputs.file(workerJar)
+    outputs.file(shellArtifact)
+    doFirst {
+        systemProperty("compukters.worker.jar", workerJar.get().asFile.absolutePath)
+        systemProperty("compukters.shell.artifact", shellArtifact.get().asFile.absolutePath)
     }
 }
 

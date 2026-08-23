@@ -22,16 +22,16 @@ package ru.lazyhat.compukters.core.device.computer.integration
 import ru.lazyhat.compukters.core.device.computer.ProgramComputer
 import ru.lazyhat.compukters.core.device.computer.ProgramComputerState
 import ru.lazyhat.compukters.core.device.computer.ProgramComputerStateSink
-import ru.lazyhat.compukters.core.device.computer.ProgramComputerStopReason
 import ru.lazyhat.compukters.core.device.computer.ProgramImageSource
 import ru.lazyhat.compukters.core.device.runtime.program.ProgramTickBudget
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalKey
+import ru.lazyhat.compukters.lang.runtime.vm.TerminalKeyAction
 import ru.lazyhat.compukters.lang.runtime.vm.TerminalState
 import ru.lazyhat.compukters.lang.runtime.vm.VmRuntime
 import java.nio.file.Path
 import kotlin.io.path.readBytes
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class ProgramComputerIntegrationTest {
@@ -58,18 +58,18 @@ class ProgramComputerIntegrationTest {
             ObservedEvent.State(ProgramComputerState.WaitingForInput),
             events.last(),
         )
-        assertEquals("Your name:\n", terminalText(requireNotNull(computer.terminalFullState())))
+        assertEquals(">\n", terminalText(requireNotNull(computer.terminalFullState())))
 
-        assertTrue(computer.submitLine("Ada"))
-        val finalState = advanceUntil(computer) { it is ProgramComputerState.PoweredOff }
+        assertTrue(computer.sendTerminalText("echo carrier"))
+        advanceUntil(computer) { it == ProgramComputerState.WaitingForInput }
+        assertTrue(computer.sendTerminalKey(TerminalKey.ENTER, TerminalKeyAction.PRESS))
+        advanceUntil(computer) { it == ProgramComputerState.WaitingForInput }
 
-        val poweredOff = assertIs<ProgramComputerState.PoweredOff>(finalState)
-        assertIs<ProgramComputerStopReason.Halted>(poweredOff.reason)
         assertEquals(
-            ObservedEvent.State(poweredOff),
+            ObservedEvent.State(ProgramComputerState.WaitingForInput),
             events.last(),
         )
-        assertEquals("Your name: Hello, Ada!\n", terminalText(requireNotNull(computer.terminalFullState())))
+        assertEquals("> echo carrier\ncarrier\n>\n", terminalText(requireNotNull(computer.terminalFullState())))
         computer.close()
     }
 
@@ -90,10 +90,11 @@ class ProgramComputerIntegrationTest {
     private fun terminalText(state: TerminalState): String {
         val text = StringBuilder()
         repeat(state.height) { y ->
-            repeat(state.width) { x -> text.appendCodePoint(state.cells[y * state.width + x].codePoint) }
-            text.append('\n')
+            val row = StringBuilder()
+            repeat(state.width) { x -> row.appendCodePoint(state.cells[y * state.width + x].codePoint) }
+            text.append(row.toString().trimEnd()).append('\n')
         }
-        return text.toString().trimEnd(' ', '\n') + '\n'
+        return text.toString().trimEnd('\n') + '\n'
     }
 
     private sealed interface ObservedEvent {
