@@ -44,6 +44,33 @@ tasks.named("check") {
     dependsOn(gameTest.classesTaskName)
 }
 
+val verifyGameTestRunIsolation =
+    tasks.register("verifyGameTestRunIsolation") {
+        group = "verification"
+        description = "Checks that GameTest classes are visible only to the GameTest run."
+        doLast {
+            val gameTestFiles = gameTest.output.files.map(File::getCanonicalFile).toSet()
+
+            fun effectiveModFiles(runName: String): Set<File> {
+                val run = loom.runs.named(runName).get()
+                val mods = if (run.mods.isEmpty()) loom.mods else run.mods
+                return mods.flatMap { it.modFiles.files }.map(File::getCanonicalFile).toSet()
+            }
+
+            listOf("client", "client2", "client3", "server").forEach { runName ->
+                val leaked = effectiveModFiles(runName).intersect(gameTestFiles)
+                check(leaked.isEmpty()) { "GameTest output leaked into $runName: $leaked" }
+            }
+            check(effectiveModFiles("gameTestServer").intersect(gameTestFiles).isNotEmpty()) {
+                "GameTest output is missing from gameTestServer"
+            }
+        }
+    }
+
+tasks.named("check") {
+    dependsOn(verifyGameTestRunIsolation)
+}
+
 tasks.configureEach {
     if (name == "runGameTestServer") {
         dependsOn(gameTest.classesTaskName)
@@ -66,13 +93,19 @@ loom {
             property("neoforge.enabledGameTestNamespaces", "compukters")
             property("compukter.vm.terminalFixture", terminalFixture.absolutePath)
             ideConfigGenerated(true)
+            mods {
+                maybeCreate("main").apply {
+                    sourceSet("main")
+                    sourceSet("main", projects.v261Common.path)
+                    sourceSet(gameTest.name)
+                }
+            }
         }
     }
 
     mods {
         maybeCreate("main").apply {
             sourceSet("main", project(projects.v261Common.path))
-            sourceSet(gameTest.name)
         }
     }
 }
